@@ -245,7 +245,7 @@ func updateBase(c: ForkedChainRef, pvarc: PivotArc) =
   ##
   var newCursorHeads: seq[CursorDesc]       # Will become new `c.cursorHeads`
   for ch in c.cursorHeads:
-    if pvarc.pvHeader.number < ch.forkJunction:
+    if pvarc.pvNumber < ch.forkJunction:
       # On the example, this would be any of chain `D` or `E`.
       newCursorHeads.add ch
 
@@ -253,7 +253,7 @@ func updateBase(c: ForkedChainRef, pvarc: PivotArc) =
       # On the example, this would be chain `B`.
       newCursorHeads.add CursorDesc(
         hash:         ch.hash,
-        forkJunction: pvarc.pvHeader.number + 1)
+        forkJunction: pvarc.pvNumber + 1)
 
     else:
       # On the example, this would be either chain `A` or `B`.
@@ -323,21 +323,19 @@ func findHeader(
 
   err("Block not in argument head ancestor lineage")
 
-func calculateNewBase(c: ForkedChainRef,
-               finalized: BlockNumber,
-               pvarc: PivotArc): BaseDesc =
+func calculateNewBase(
+    c: ForkedChainRef;
+    finalized: BlockNumber;
+    pvarc: PivotArc;
+      ): PivotArc =
   ## Search for `finalized` searching backwards starting at `pvarc.pvHead`.
   ##
   ## It is required that `finalized` is on the `pvarc` arc, i.e.
-  ## `pvarc.cursor.forkJunction <= finalized`.
+  ## `pvarc.cursor.forkJunction <= finalized`. The `finalized` entry might be
+  ## moved backwards so that a minimum distance applies.
   ##
-  ## The `finalized` entry might be moved backwards so that a minimum
-  ## distance applies.
-  ##
-  ## Discussion:
-  ##   If the distance `finalized..head` is too short, `finalized` will be
-  ##   adjusted backwards and may fall outside the `head` arc. In that case,
-  ##   base remains un-moved.
+  ## The function returns the effective new `finalized` block as `result.pv`
+  ## and the containing curor arc as `result.cursor`.
   ##
   # It's important to have base at least `baseDistance` behind head
   # so we can answer state queries about history that deep.
@@ -346,20 +344,33 @@ func calculateNewBase(c: ForkedChainRef,
 
   # The distance is less than `baseDistance`, don't move the base
   if target <= c.baseHeader.number + c.baseDistance:
-    return BaseDesc(hash: c.baseHash, header: c.baseHeader)
+    return PivotArc(
+      pvHash:         c.baseHash,
+      pvHeader:       c.baseHeader,
+      cursor: CursorDesc(
+        forkJunction: c.baseHeader.number,
+        hash:         c.baseHash))
 
   # Verify that `target` does not fall outside the `pvarc` segment. It is
   # assumed that `finalized` is within the `head` arc.
   if target < pvarc.cursor.forkJunction:
     # Noting to do here
-    return BaseDesc(hash: c.baseHash, header: c.baseHeader)
+    return PivotArc(
+      pvHash:         c.baseHash,
+      pvHeader:       c.baseHeader,
+      cursor: CursorDesc(
+        forkJunction: c.baseHeader.number,
+        hash:         c.baseHash))
 
   var prevHash = pvarc.pvHash
   while true:
     c.blocks.withValue(prevHash, val):
       # Note that `cursorHead.forkJunction <= target`
       if target == val.blk.header.number:
-        return BaseDesc(hash: prevHash, header: val.blk.header)
+        return PivotArc(
+          pvHash:   prevHash,
+          pvHeader: val.blk.header,
+          cursor:   pvarc.cursor)
       prevHash = val.blk.header.parentHash
       continue
     break
@@ -538,13 +549,13 @@ proc forkChoice*(c: ForkedChainRef,
 
   let newBase = c.calculateNewBase(finalizedHeader.number, pvarc)
 
-  if newBase.hash == c.baseHash:
+  if newBase.pvHash == c.baseHash:
     # The base is not updated but the cursor maybe need update
     c.updateHeadIfNecessary(pvarc)
     return ok()
 
   # At this point cursorHeader.number > baseHeader.number
-  if newBase.hash == c.cursorHash:
+  if newBase.pvHash == c.cursorHash:
     # Paranoid check, guaranteed by `newBase.hash == c.cursorHash`
     doAssert(not c.stagingTx.isNil)
 
@@ -553,20 +564,17 @@ proc forkChoice*(c: ForkedChainRef,
       c.replaySegment(pvarc.pvHash, c.cursorHeader, c.cursorHash)
 
     # Current segment is canonical chain
-    c.writeBaggage(newBase.hash)
+    c.writeBaggage(newBase.pvHash)
     c.setHead(pvarc)
 
     c.stagingTx.commit()
     c.stagingTx = nil
 
     # Move base to newBase
-    c.updateBase PivotArc(
-      pvHash:   newBase.hash,
-      pvHeader: newBase.header,
-      cursor:   pvarc.cursor)
+    c.updateBase(newBase)
 
     # Save and record the block number before the last saved block state.
-    c.db.persistent(newBase.header.number).isOkOr:
+    c.db.persistent(newBase.pvNumber).isOkOr:
       return err("Failed to save state: " & $$error)
 
     return ok()
@@ -574,23 +582,20 @@ proc forkChoice*(c: ForkedChainRef,
   # At this point finalizedHeader.number is <= headHeader.number
   # and possibly switched to other chain beside the one with cursor
   doAssert(finalizedHeader.number <= pvarc.pvNumber)
-  doAssert(newBase.header.number <= finalizedHeader.number)
+  doAssert(newBase.pvNumber <= finalizedHeader.number)
 
   # Write segment from base+1 to newBase into database
   c.stagingTx.rollback()
   c.stagingTx = c.db.ctx.newTransaction()
 
-  if newBase.header.number > c.baseHeader.number:
-    c.replaySegment(newBase.hash)
-    c.writeBaggage(newBase.hash)
+  if newBase.pvNumber > c.baseHeader.number:
+    c.replaySegment(newBase.pvHash)
+    c.writeBaggage(newBase.pvHash)
     c.stagingTx.commit()
     c.stagingTx = nil
     # Update base forward to newBase
-    c.updateBase PivotArc(
-      pvHash:   newBase.hash,
-      pvHeader: newBase.header,
-      cursor:   pvarc.cursor)
-    c.db.persistent(newBase.header.number).isOkOr:
+    c.updateBase(newBase)
+    c.db.persistent(newBase.pvNumber).isOkOr:
       return err("Failed to save state: " & $$error)
 
   if c.stagingTx.isNil:
@@ -599,7 +604,7 @@ proc forkChoice*(c: ForkedChainRef,
     c.stagingTx = c.db.ctx.newTransaction()
 
   # Move chain state forward to current head
-  if newBase.header.number < pvarc.pvNumber:
+  if newBase.pvNumber < pvarc.pvNumber:
     c.replaySegment(pvarc.pvHash)
 
   c.setHead(pvarc)

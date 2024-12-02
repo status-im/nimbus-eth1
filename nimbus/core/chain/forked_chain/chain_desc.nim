@@ -24,10 +24,6 @@ type
     blk*: Block
     receipts*: seq[Receipt]
 
-  BaseDesc* = object
-    hash*: Hash32
-    header*: Header
-
   PivotArc* = object
     pvHash*: Hash32                 ## Pivot item on cursor arc (e.g. new base)
     pvHeader*: Header               ## Ditto

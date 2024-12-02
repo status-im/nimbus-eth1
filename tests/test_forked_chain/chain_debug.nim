@@ -90,7 +90,8 @@ func pp*(n: BlockNumber): string = n.bnStr
 func pp*(h: Header): string = h.bnStr
 func pp*(b: Block): string = b.bnStr
 func pp*(h: Hash32): string = h.short
-func pp*(d: BaseDesc): string = d.header.pp
+func pp*(d: BlockDesc): string = d.blk.header.pp
+func pp*(d: ptr BlockDesc): string = d[].pp
 
 func pp*(q: openArray[Block]): string = q.ppImpl
 func pp*(q: openArray[Header]): string = q.ppImpl
