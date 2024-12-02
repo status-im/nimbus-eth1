@@ -145,8 +145,7 @@ proc setupCollectingHeaders(ctx: BeaconCtxRef; info: static[string]) =
     doAssert ctx.headersUnprocTotal() == 0
     doAssert ctx.headersUnprocBorrowed() == 0
     doAssert ctx.headersStagedQueueIsEmpty()
-    doAssert ctx.blocksUnprocTotal() == 0
-    doAssert ctx.blocksUnprocBorrowed() == 0
+    doAssert ctx.blocksUnprocIsEmpty()
     doAssert ctx.blocksStagedQueueIsEmpty()
 
     ctx.sst.layout = SyncStateLayout(
@@ -242,8 +241,7 @@ proc setupProcessingBlocks(ctx: BeaconCtxRef; info: static[string]) =
   doAssert ctx.headersUnprocTotal() == 0
   doAssert ctx.headersUnprocBorrowed() == 0
   doAssert ctx.headersStagedQueueIsEmpty()
-  doAssert ctx.blocksUnprocTotal() == 0
-  doAssert ctx.blocksUnprocBorrowed() == 0
+  doAssert ctx.blocksUnprocIsEmpty()
   doAssert ctx.blocksStagedQueueIsEmpty()
 
   let
@@ -278,8 +276,7 @@ proc updateSyncState*(ctx: BeaconCtxRef; info: static[string]) =
       return
     of processingBlocks:
       if not ctx.blocksStagedQueueIsEmpty() or
-         0 < ctx.blocksUnprocChunks() or
-         0 < ctx.blocksUnprocBorrowed:
+         not ctx.blocksUnprocIsEmpty():
         return
       # Set to idle
       debug info & ": blocks processing cancelled",

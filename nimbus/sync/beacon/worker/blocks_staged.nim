@@ -122,16 +122,26 @@ proc fetchAndCheck(
 func blocksStagedCanImportOk*(ctx: BeaconCtxRef): bool =
   ## Check whether the queue is at its maximum size so import can start with
   ## a full queue.
-  if ctx.pool.blocksStagedQuLenMax <= ctx.blk.staged.len:
-    return true
-
+  ##
   if 0 < ctx.blk.staged.len:
-    # Import if what is on the queue is all we have got.
-    if ctx.blocksUnprocIsEmpty() and ctx.blocksUnprocBorrowed() == 0:
+    # Import if what is on the queue is all we have got. Note that the function
+    # `blocksUnprocIsEmpty()` returns `true` only if all blocks possible have
+    # been fetched (i.e. the `borrowed` list is also empty.)
+    if ctx.blocksUnprocIsEmpty():
       return true
-    # Import if there is currently no peer active
-    if ctx.pool.nBuddies == 0:
-      return true
+
+    # Make sure that the lowest block is available, already. Or the other way
+    # round: no unprocessed block number range precedes the least staged block.
+    if ctx.blk.staged.ge(0).value.key < ctx.blocksUnprocTotalBottom():
+      # Also suggest importing blocks if there is currently no peer active.
+      # The `unprocessed` ranges will contain some higher number block ranges,
+      # but these can be fetched later.
+      if ctx.pool.nBuddies == 0:
+        return true
+
+      # Start importing if the queue is long enough.
+      if ctx.pool.blocksStagedQuLenMax <= ctx.blk.staged.len:
+        return true
 
   false
 
@@ -139,16 +149,15 @@ func blocksStagedCanImportOk*(ctx: BeaconCtxRef): bool =
 func blocksStagedFetchOk*(ctx: BeaconCtxRef): bool =
   ## Check whether body records can be fetched and stored on the `staged` queue.
   ##
-  let uBottom = ctx.blocksUnprocBottom()
-  if uBottom < high(BlockNumber):
+  if 0 < ctx.blocksUnprocAvail():
     # Not to start fetching while the queue is busy (i.e. larger than Lwm)
     # so that import might still be running strong.
     if ctx.blk.staged.len < ctx.pool.blocksStagedQuLenMax:
       return true
 
     # Make sure that there is no gap at the bottom which needs to be
-    # addressed regardless of the length of the queue.
-    if uBottom < ctx.blk.staged.ge(0).value.key:
+    # fetched regardless of the length of the queue.
+    if ctx.blocksUnprocAvailBottom() < ctx.blk.staged.ge(0).value.key:
       return true
 
   false
@@ -160,7 +169,7 @@ proc blocksStagedCollect*(
       ): Future[bool] {.async: (raises: []).} =
   ## Collect bodies and stage them.
   ##
-  if buddy.ctx.blocksUnprocIsEmpty():
+  if buddy.ctx.blocksUnprocAvail() == 0:
     # Nothing to do
     return false
 
@@ -381,7 +390,7 @@ proc blocksStagedReorg*(ctx: BeaconCtxRef; info: static[string]) =
   ## the block queues as there won't be mant data cached, then.
   ##
   if ctx.blk.staged.len == 0 and
-     ctx.blocksUnprocChunks() == 0:
+     ctx.blocksUnprocIsEmpty():
     # nothing to do
     return
 

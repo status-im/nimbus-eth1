@@ -70,8 +70,7 @@ template updateMetricsImpl(ctx: BeaconCtxRef) =
               (ctx.headersUnprocTotal() + ctx.headersUnprocBorrowed()).int64)
 
   metrics.set(nec_sync_block_lists_staged, ctx.blocksStagedQueueLen())
-  metrics.set(nec_sync_blocks_unprocessed,
-              (ctx.blocksUnprocTotal() + ctx.blocksUnprocBorrowed()).int64)
+  metrics.set(nec_sync_blocks_unprocessed, ctx.blocksUnprocTotal().int64)
 
   metrics.set(nec_sync_peers, ctx.pool.nBuddies)
 
