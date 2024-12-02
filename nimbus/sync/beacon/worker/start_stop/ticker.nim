@@ -89,12 +89,16 @@ proc tickerLogger(t: TickerRef) {.gcsafe.} =
       hS = if data.nHdrStaged == 0: "n/a"
            else: data.hdrStagedTop.bnStr & "(" & $data.nHdrStaged & ")"
       hU = if data.nHdrUnprocFragm == 0 and data.nHdrUnprocessed == 0: "n/a"
+           elif data.hdrUnprocTop == 0:
+             "(" & data.nHdrUnprocessed.toSI & "," & $data.nHdrUnprocFragm & ")"
            else: data.hdrUnprocTop.bnStr & "(" &
                  data.nHdrUnprocessed.toSI & "," & $data.nHdrUnprocFragm & ")"
 
       bS = if data.nBlkStaged == 0: "n/a"
            else: data.blkStagedBottom.bnStr & "(" & $data.nBlkStaged & ")"
       bU = if data.nBlkUnprocFragm == 0 and data.nBlkUnprocessed == 0: "n/a"
+           elif data.blkUnprocBottom == high(BlockNumber):
+             "(" & data.nBlkUnprocessed.toSI & "," & $data.nBlkUnprocFragm & ")"
            else: data.blkUnprocBottom.bnStr & "(" &
                  data.nBlkUnprocessed.toSI & "," & $data.nBlkUnprocFragm & ")"
 

@@ -87,7 +87,7 @@ proc start*(buddy: BeaconBuddyRef; info: static[string]): bool =
 proc stop*(buddy: BeaconBuddyRef; info: static[string]) =
   ## Clean up this peer
   if not buddy.ctx.hibernate: debug info & ": release peer", peer=buddy.peer,
-    ctrl=buddy.ctrl.state, nInvocations=buddy.only.nMultiLoop,
+    ctrl=buddy.ctrl.state, nLaps=buddy.only.nMultiLoop,
     lastIdleGap=buddy.only.multiRunIdle.toStr
   buddy.stopBuddy()
 
