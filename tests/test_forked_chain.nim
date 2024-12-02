@@ -9,12 +9,14 @@
 # according to those terms.
 
 import
+  pkg/chronicles,
+  pkg/unittest2,
   ../nimbus/common,
   ../nimbus/config,
   ../nimbus/utils/utils,
   ../nimbus/core/chain/forked_chain,
   ../nimbus/db/ledger,
-  unittest2
+  ./test_forked_chain/chain_debug
 
 const
   genesisFile = "tests/customgenesis/cancun123.json"
@@ -128,6 +130,7 @@ proc forkedChainMain*() =
       B7 = cc.makeBlk(7, B6)
 
     test "newBase == oldBase":
+      const info = "newBase == oldBase"
       let com = env.newCom()
 
       var chain = newForkedChain(com, com.genesisHeader)
@@ -139,15 +142,18 @@ proc forkedChainMain*() =
       check chain.importBlock(blk2).isOk
 
       check chain.importBlock(blk3).isOk
+      check chain.validate info & " (1)"
 
       # no parent
       check chain.importBlock(blk5).isErr
 
       check com.headHash == genesisHash
       check chain.latestHash == blk3.blockHash
+      check chain.validate info & " (2)"
 
       # finalized > head -> error
       check chain.forkChoice(blk1.blockHash, blk3.blockHash).isErr
+      check chain.validate info & " (3)"
 
       # blk4 is not part of chain
       check chain.forkChoice(blk4.blockHash, blk2.blockHash).isErr
@@ -162,17 +168,21 @@ proc forkedChainMain*() =
       check chain.forkChoice(blk2.blockHash, blk1.blockHash).isOk
       check com.headHash == blk2.blockHash
       check chain.latestHash == blk2.blockHash
+      check chain.validate info & " (7)"
 
       # finalized == head -> ok
       check chain.forkChoice(blk2.blockHash, blk2.blockHash).isOk
       check com.headHash == blk2.blockHash
       check chain.latestHash == blk2.blockHash
+      check chain.validate info & " (8)"
 
       # no baggage written
       check com.wdWritten(blk1) == 0
       check com.wdWritten(blk2) == 0
+      check chain.validate info & " (9)"
 
     test "newBase == cursor":
+      const info = "newBase == cursor"
       let com = env.newCom()
 
       var chain = newForkedChain(com, com.genesisHeader, baseDistance = 3)
@@ -185,9 +195,11 @@ proc forkedChainMain*() =
       check chain.importBlock(blk7).isOk
 
       check chain.importBlock(blk4).isOk
+      check chain.validate info & " (1)"
 
       # newbase == cursor
       check chain.forkChoice(blk7.blockHash, blk6.blockHash).isOk
+      check chain.validate info & " (2)"
 
       check com.headHash == blk7.blockHash
       check chain.latestHash == blk7.blockHash
@@ -198,8 +210,10 @@ proc forkedChainMain*() =
       check com.wdWritten(blk4) == 4
       # make sure aristo not wiped out baggage
       check com.wdWritten(blk3) == 3
+      check chain.validate info & " (9)"
 
     test "newBase between oldBase and cursor":
+      const info = "newBase between oldBase and cursor"
       let com = env.newCom()
 
       var chain = newForkedChain(com, com.genesisHeader, baseDistance = 3)
@@ -210,8 +224,10 @@ proc forkedChainMain*() =
       check chain.importBlock(blk5).isOk
       check chain.importBlock(blk6).isOk
       check chain.importBlock(blk7).isOk
+      check chain.validate info & " (1)"
 
       check chain.forkChoice(blk7.blockHash, blk6.blockHash).isOk
+      check chain.validate info & " (2)"
 
       check com.headHash == blk7.blockHash
       check chain.latestHash == blk7.blockHash
@@ -223,8 +239,10 @@ proc forkedChainMain*() =
       check com.wdWritten(blk4) == 4
       # make sure aristo not wiped out baggage
       check com.wdWritten(blk3) == 3
+      check chain.validate info & " (9)"
 
     test "newBase == oldBase, fork and keep on that fork":
+      const info = "newBase == oldBase, fork .."
       let com = env.newCom()
 
       var chain = newForkedChain(com, com.genesisHeader)
@@ -240,13 +258,16 @@ proc forkedChainMain*() =
       check chain.importBlock(B5).isOk
       check chain.importBlock(B6).isOk
       check chain.importBlock(B7).isOk
+      check chain.validate info & " (1)"
 
       check chain.forkChoice(B7.blockHash, B5.blockHash).isOk
 
       check com.headHash == B7.blockHash
       check chain.latestHash == B7.blockHash
+      check chain.validate info & " (9)"
 
     test "newBase == cursor, fork and keep on that fork":
+      const info = "newBase == cursor, fork .."
       let com = env.newCom()
 
       var chain = newForkedChain(com, com.genesisHeader, baseDistance = 3)
@@ -264,13 +285,17 @@ proc forkedChainMain*() =
       check chain.importBlock(B7).isOk
 
       check chain.importBlock(B4).isOk
+      check chain.validate info & " (1)"
 
       check chain.forkChoice(B7.blockHash, B6.blockHash).isOk
+      check chain.validate info & " (2)"
 
       check com.headHash == B7.blockHash
       check chain.latestHash == B7.blockHash
+      check chain.validate info & " (9)"
 
     test "newBase between oldBase and cursor, fork and keep on that fork":
+      const info = "newBase between oldBase .."
       let com = env.newCom()
 
       var chain = newForkedChain(com, com.genesisHeader, baseDistance = 3)
@@ -286,13 +311,17 @@ proc forkedChainMain*() =
       check chain.importBlock(B5).isOk
       check chain.importBlock(B6).isOk
       check chain.importBlock(B7).isOk
+      check chain.validate info & " (1)"
 
       check chain.forkChoice(B7.blockHash, B5.blockHash).isOk
+      check chain.validate info & " (2)"
 
       check com.headHash == B7.blockHash
       check chain.latestHash == B7.blockHash
+      check chain.validate info & " (9)"
 
     test "newBase == oldBase, fork and return to old chain":
+      const info = "newBase == oldBase, fork .."
       let com = env.newCom()
 
       var chain = newForkedChain(com, com.genesisHeader)
@@ -308,13 +337,17 @@ proc forkedChainMain*() =
       check chain.importBlock(B5).isOk
       check chain.importBlock(B6).isOk
       check chain.importBlock(B7).isOk
+      check chain.validate info & " (1)"
 
       check chain.forkChoice(blk7.blockHash, blk5.blockHash).isOk
+      check chain.validate info & " (2)"
 
       check com.headHash == blk7.blockHash
       check chain.latestHash == blk7.blockHash
+      check chain.validate info & " (9)"
 
     test "newBase == cursor, fork and return to old chain":
+      const info = "newBase == cursor, fork .."
       let com = env.newCom()
 
       var chain = newForkedChain(com, com.genesisHeader, baseDistance = 3)
@@ -332,13 +365,17 @@ proc forkedChainMain*() =
       check chain.importBlock(B7).isOk
 
       check chain.importBlock(blk4).isOk
+      check chain.validate info & " (1)"
 
       check chain.forkChoice(blk7.blockHash, blk5.blockHash).isOk
+      check chain.validate info & " (2)"
 
       check com.headHash == blk7.blockHash
       check chain.latestHash == blk7.blockHash
+      check chain.validate info & " (9)"
 
     test "newBase between oldBase and cursor, fork and return to old chain, switch to new chain":
+      const info = "newBase between oldBase and .."
       let com = env.newCom()
 
       var chain = newForkedChain(com, com.genesisHeader, baseDistance = 3)
@@ -356,13 +393,17 @@ proc forkedChainMain*() =
       check chain.importBlock(B7).isOk
 
       check chain.importBlock(blk4).isOk
+      check chain.validate info & " (1)"
 
       check chain.forkChoice(B7.blockHash, B5.blockHash).isOk
+      check chain.validate info & " (2)"
 
       check com.headHash == B7.blockHash
       check chain.latestHash == B7.blockHash
+      check chain.validate info & " (9)"
 
     test "newBase between oldBase and cursor, fork and return to old chain":
+      const info = "newBase between oldBase and .."
       let com = env.newCom()
 
       var chain = newForkedChain(com, com.genesisHeader, baseDistance = 3)
@@ -378,13 +419,17 @@ proc forkedChainMain*() =
       check chain.importBlock(B5).isOk
       check chain.importBlock(B6).isOk
       check chain.importBlock(B7).isOk
+      check chain.validate info & " (1)"
 
       check chain.forkChoice(blk7.blockHash, blk5.blockHash).isOk
+      check chain.validate info & " (2)"
 
       check com.headHash == blk7.blockHash
       check chain.latestHash == blk7.blockHash
+      check chain.validate info & " (9)"
 
     test "headerByNumber":
+      const info = "headerByNumber"
       let com = env.newCom()
 
       var chain = newForkedChain(com, com.genesisHeader, baseDistance = 3)
@@ -400,8 +445,10 @@ proc forkedChainMain*() =
       check chain.importBlock(B5).isOk
       check chain.importBlock(B6).isOk
       check chain.importBlock(B7).isOk
+      check chain.validate info & " (1)"
 
       check chain.forkChoice(blk7.blockHash, blk5.blockHash).isOk
+      check chain.validate info & " (2)"
 
       # cursor
       check chain.headerByNumber(8).isErr
@@ -419,8 +466,10 @@ proc forkedChainMain*() =
       # from cache
       check chain.headerByNumber(5).expect("OK").number == 5
       check chain.headerByNumber(5).expect("OK").blockHash == blk5.blockHash
+      check chain.validate info & " (9)"
 
     test "Import after Replay Segment":
+      const info = "Import after Replay Segment"
       let com = env.newCom()
       var chain = newForkedChain(com, com.genesisHeader, baseDistance = 3)
 
@@ -429,12 +478,15 @@ proc forkedChainMain*() =
       check chain.importBlock(blk3).isOk
       check chain.importBlock(blk4).isOk
       check chain.importBlock(blk5).isOk
+      check chain.validate info & " (1)"
 
       chain.replaySegment(blk2.header.blockHash)
       chain.replaySegment(blk5.header.blockHash)
+      check chain.validate info & " (2)"
 
       check chain.importBlock(blk6).isOk
       check chain.importBlock(blk7).isOk
+      check chain.validate info & " (9)"
 
 when isMainModule:
   forkedChainMain()
