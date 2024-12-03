@@ -79,6 +79,15 @@ type
       startVid*: VertexID
       used*: uint16
 
+  AccountLeaf* = object
+    pfx*: NibblesBuf
+    account*: AristoAccount
+    stoID*: StorageID
+
+  StoLeaf* = object
+    pfx*: NibblesBuf
+    stoData*: UInt256
+
   NodeRef* = ref object of RootRef
     ## Combined record for a *traditional* ``Merkle Patricia Tree` node merged
     ## with a structural `VertexRef` type object.
@@ -125,8 +134,8 @@ type
     kMap*: Table[RootedVertexID,HashKey]   ## Merkle hash key mapping
     vTop*: VertexID                        ## Last used vertex ID
 
-    accLeaves*: Table[Hash32, VertexRef]   ## Account path -> VertexRef
-    stoLeaves*: Table[Hash32, VertexRef]   ## Storage path -> VertexRef
+    accLeaves*: Table[Hash32, Opt[AccountLeaf]]   ## Account path -> VertexRef
+    stoLeaves*: Table[Hash32, Opt[StoLeaf]]   ## Storage path -> VertexRef
 
     txUid*: uint                           ## Transaction identifier if positive
 
@@ -195,6 +204,18 @@ proc `==`*(a, b: VertexRef): bool =
       if a.pfx != b.pfx or a.startVid != b.startVid or a.used != b.used:
         return false
   true
+
+func to*(v: VertexRef, _: type AccountLeaf): AccountLeaf =
+  AccountLeaf(pfx: v.pfx, account: v.lData.account, stoID: v.lData.stoID)
+
+func to*(v: VertexRef, _: type StoLeaf): StoLeaf =
+  StoLeaf(pfx: v.pfx, stoData: v.lData.stoData)
+
+func to*(v: AccountLeaf, _: type VertexRef): VertexRef =
+  VertexRef(pfx: v.pfx, vType: Leaf, lData: LeafPayload(pType: AccountData, account: v.account, stoID: v.stoID))
+
+func to*(v: StoLeaf, _: type VertexRef): VertexRef =
+  VertexRef(pfx: v.pfx, vType: Leaf, lData: LeafPayload(pType: StoData, stoData: v.stoData))
 
 iterator pairs*(vtx: VertexRef): tuple[nibble: uint8, vid: VertexID] =
   ## Iterates over the sub-vids of a branch (does nothing for leaves)

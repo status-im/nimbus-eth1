@@ -153,7 +153,7 @@ proc testCreatePortalProof(node: JsonNode, testStatusIMPL: var TestStatus) {.dep
     let
       path = a.data.keccak256
     var hike: Hike
-    let rc = path.hikeUp(VertexID(1), ps.db, Opt.none(VertexRef), hike)
+    let rc = path.hikeUp(VertexID(1), ps.db, Opt.none(void), hike)
     sample[path] = ProofData(
       error: (if rc.isErr: rc.error[1] else: AristoError(0)),
       hike: hike) # keep `hike` for potential debugging

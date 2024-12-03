@@ -125,26 +125,16 @@ proc ctxAcceptChange(psc: PartStateCtx): Result[bool,AristoError] =
 
 proc ctxMergeBegin*(
     ps: PartStateRef;
-    root: VertexID;
-    path: openArray[byte];
+    accPath: Hash32;
       ): Result[PartStateCtx,AristoError] =
-  ## This function clears the way for mering some payload at the argument
-  ## path `(root,path)`.
+  ## Variant of `partMergeBegin()` for different path representation
   var hike: Hike
-  path.hikeUp(root,ps.db, Opt.none(VertexRef), hike).isOkOr:
+  accPath.hikeUp(VertexID(1),ps.db, Opt.none(Opt[AccountLeaf]), hike).isOkOr:
     if error[1] != HikeDanglingEdge:
       return err error[1] # Cannot help here
     return ps.newCtx hike
 
   ok PartStateCtx(nil) # Nothing to do
-
-proc ctxMergeBegin*(
-    ps: PartStateRef;
-    accPath: Hash32;
-      ): Result[PartStateCtx,AristoError] =
-  ## Variant of `partMergeBegin()` for different path representation
-  ps.ctxMergeBegin(VertexID(1), accPath.data)
-
 
 proc ctxMergeCommit*(psc: PartStateCtx): Result[bool,AristoError] =
   ##

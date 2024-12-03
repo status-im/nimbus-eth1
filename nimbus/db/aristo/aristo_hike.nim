@@ -124,11 +124,11 @@ iterator stepUp*(
       if path.len == 0:
         break
 
-proc hikeUp*(
+proc hikeUp*[T](
     path: NibblesBuf;                            # Partial path
     root: VertexID;                              # Start vertex
     db: AristoDbRef;                             # Database
-    leaf: Opt[VertexRef];
+    leaf: Opt[T];
     hike: var Hike;
       ): Result[void,(VertexID,AristoError)] =
   ## For the argument `path`, find and return the logest possible path in the
@@ -147,10 +147,11 @@ proc hikeUp*(
 
   var vid = root
   while true:
-    if leaf.isSome() and leaf[].isValid and path == leaf[].pfx:
-      hike.legs.add Leg(wp: VidVtxPair(vid: vid, vtx: leaf[]), nibble: -1)
-      reset(hike.tail)
-      break
+    when T is Opt[AccountLeaf] or T is Opt[StoLeaf]:
+      if leaf.isSome() and leaf[].isSome and path == leaf[][].pfx:
+        hike.legs.add Leg(wp: VidVtxPair(vid: vid, vtx: leaf[][].to(VertexRef)), nibble: -1)
+        reset(hike.tail)
+        break
 
     let (vtx, path, next) = step(hike.tail, (root, vid), db).valueOr:
       return err((vid,error))
@@ -173,30 +174,30 @@ proc hikeUp*(
 
   ok()
 
-proc hikeUp*(
+proc hikeUp*[T](
     lty: LeafTie;
     db: AristoDbRef;
-    leaf: Opt[VertexRef];
+    leaf: Opt[T];
     hike: var Hike
       ): Result[void,(VertexID,AristoError)] =
   ## Variant of `hike()`
   lty.path.to(NibblesBuf).hikeUp(lty.root, db, leaf, hike)
 
-proc hikeUp*(
+proc hikeUp*[T](
     path: openArray[byte];
     root: VertexID;
     db: AristoDbRef;
-    leaf: Opt[VertexRef];
+    leaf: Opt[T];
     hike: var Hike
       ): Result[void,(VertexID,AristoError)] =
   ## Variant of `hike()`
   NibblesBuf.fromBytes(path).hikeUp(root, db, leaf, hike)
 
-proc hikeUp*(
+proc hikeUp*[T](
     path: Hash32;
     root: VertexID;
     db: AristoDbRef;
-    leaf: Opt[VertexRef];
+    leaf: Opt[T];
     hike: var Hike
       ): Result[void,(VertexID,AristoError)] =
   ## Variant of `hike()`
