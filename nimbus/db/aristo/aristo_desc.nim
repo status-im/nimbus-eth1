@@ -64,7 +64,7 @@ type
     txUidGen*: uint                   ## Tx-relative unique number generator
     dudes: DudesRef                   ## Related DB descriptors
 
-    accLeaves*: LruCache[Hash32, VertexRef]
+    accLeaves*: LruCache[Hash32, Opt[AccountLeaf]]
       ## Account path to payload cache - accounts are frequently accessed by
       ## account path when contracts interact with them - this cache ensures
       ## that we don't have to re-traverse the storage trie for every such
@@ -72,7 +72,7 @@ type
       ## TODO a better solution would probably be to cache this in a type
       ## exposed to the high-level API
 
-    stoLeaves*: LruCache[Hash32, VertexRef]
+    stoLeaves*: LruCache[Hash32, Opt[StoLeaf]]
       ## Mixed account/storage path to payload cache - same as above but caches
       ## the full lookup of storage slots
 

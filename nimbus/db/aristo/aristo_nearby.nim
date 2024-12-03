@@ -145,9 +145,9 @@ proc zeroAdjust(
 
   proc toHike(pfx: NibblesBuf, root: VertexID, db: AristoDbRef): Hike =
     when doLeast:
-      discard pfx.pathPfxPad(0).hikeUp(root, db, Opt.none(VertexRef), result)
+      discard pfx.pathPfxPad(0).hikeUp(root, db, Opt.none(void), result)
     else:
-      discard pfx.pathPfxPad(255).hikeUp(root, db, Opt.none(VertexRef), result)
+      discard pfx.pathPfxPad(255).hikeUp(root, db, Opt.none(void), result)
 
   if 0 < hike.legs.len:
     return ok(hike)
@@ -354,7 +354,7 @@ proc nearbyNextLeafTie(
       ): Result[PathID,(VertexID,AristoError)] =
   ## Variant of `nearbyNext()`, convenience wrapper
   var hike: Hike
-  discard lty.hikeUp(db, Opt.none(VertexRef), hike)
+  discard lty.hikeUp(db, Opt.none(void), hike)
   hike = ?hike.nearbyNext(db, hikeLenMax, moveRight)
 
   if 0 < hike.legs.len:
@@ -403,7 +403,7 @@ iterator rightPairs*(
   ## Traverse the sub-trie implied by the argument `start` with increasing
   ## order.
   var hike: Hike
-  discard start.hikeUp(db, Opt.none(VertexRef), hike)
+  discard start.hikeUp(db, Opt.none(void), hike)
   var rc = hike.right db
   while rc.isOk:
     hike = rc.value
@@ -431,7 +431,7 @@ iterator rightPairs*(
           hike.legs.setLen(hike.legs.len - 1)
           break reuseHike
       # Fall back to default method
-      discard key.next.hikeUp(db, Opt.none(VertexRef), hike)
+      discard key.next.hikeUp(db, Opt.none(void), hike)
 
     rc = hike.right db
     # End while
@@ -488,7 +488,7 @@ iterator leftPairs*(
   ## the `path` field decremented by `1`.
   var
     hike: Hike
-  discard start.hikeUp(db, Opt.none(VertexRef), hike)
+  discard start.hikeUp(db, Opt.none(void), hike)
 
   var rc = hike.left db
   while rc.isOk:
@@ -517,7 +517,7 @@ iterator leftPairs*(
           hike.legs.setLen(hike.legs.len - 1)
           break reuseHike
       # Fall back to default method
-      discard key.prev.hikeUp(db, Opt.none(VertexRef), hike)
+      discard key.prev.hikeUp(db, Opt.none(void), hike)
 
     rc = hike.left db
     # End while

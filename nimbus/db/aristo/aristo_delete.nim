@@ -48,7 +48,8 @@ proc branchStillNeeded(vtx: VertexRef, removed: int8): Result[int8,void] =
 proc deleteImpl(
     db: AristoDbRef;                   # Database, top layer
     hike: Hike;                        # Fully expanded path
-      ): Result[VertexRef,AristoError] =
+    T: type
+      ): Result[Opt[T],AristoError] =
   ## Removes the last node in the hike and returns the updated leaf in case
   ## a branch collapsed
 
@@ -62,7 +63,7 @@ proc deleteImpl(
   if hike.legs.len == 1:
     # This was the last node in the trie, meaning we don't have any branches or
     # leaves to update
-    return ok(default(VertexRef))
+    return ok(default(Opt[T]))
 
   if hike.legs[^2].wp.vtx.vType != Branch:
     return err(DelBranchExpexted)
@@ -111,16 +112,16 @@ proc deleteImpl(
     db.layersPutVtx((hike.root, br.vid), vtx)
 
     if vtx.vType == Leaf:
-      ok(vtx)
+      ok(Opt.some(vtx.to(T)))
     else:
-      ok(default(VertexRef))
+      ok(Opt.none(T))
   else:
     # Clear the removed leaf from the branch (that still contains other children)
     var brDup = br.vtx.dup
     discard brDup.setUsed(uint8 hike.legs[^2].nibble, false)
     db.layersPutVtx((hike.root, br.vid), brDup)
 
-    ok(default(VertexRef))
+    ok(Opt.none(T))
 
 # ------------------------------------------------------------------------------
 # Public functions
@@ -145,63 +146,16 @@ proc deleteAccountRecord*(
   if stoID.isValid:
     ? db.delStoTreeImpl((stoID.vid, stoID.vid), accPath)
 
-  let otherLeaf = ?db.deleteImpl(accHike)
+  let otherLeaf = ?db.deleteImpl(accHike, AccountLeaf)
 
-  db.layersPutAccLeaf(accPath, default(VertexRef))
+  db.layersPutAccLeaf(accPath, default(Opt[AccountLeaf]))
 
-  if otherLeaf.isValid:
+  if otherLeaf.isSome:
     db.layersPutAccLeaf(
-      Hash32(getBytes(NibblesBuf.fromBytes(accPath.data).replaceSuffix(otherLeaf.pfx))),
+      Hash32(getBytes(NibblesBuf.fromBytes(accPath.data).replaceSuffix(otherLeaf[].pfx))),
       otherLeaf)
 
   ok()
-
-proc deleteGenericData*(
-    db: AristoDbRef;
-    root: VertexID;
-    path: openArray[byte];
-      ): Result[bool,AristoError] =
-  ## Delete the leaf data entry addressed by the argument `path`.  The MPT
-  ## sub-tree the leaf data entry is subsumed under is passed as argument
-  ## `root` which must be greater than `VertexID(1)` and smaller than
-  ## `LEAST_FREE_VID`.
-  ##
-  ## The return value is `true` if the argument `path` deleted was the last
-  ## one and the tree does not exist anymore.
-  ##
-  # Verify that `root` is neither an accounts tree nor a strorage tree.
-  if not root.isValid:
-    return err(DelRootVidMissing)
-  elif root == VertexID(1):
-    return err(DelAccRootNotAccepted)
-  elif LEAST_FREE_VID <= root.distinctBase:
-    return err(DelStoRootNotAccepted)
-
-  var hike: Hike
-  path.hikeUp(root, db, Opt.none(VertexRef), hike).isOkOr:
-    if error[1] in HikeAcceptableStopsNotFound:
-      return err(DelPathNotFound)
-    return err(error[1])
-
-  discard ?db.deleteImpl(hike)
-
-  ok(not db.getVtx((root, root)).isValid)
-
-proc deleteGenericTree*(
-    db: AristoDbRef;                   # Database, top layer
-    root: VertexID;                    # Root vertex
-      ): Result[void,AristoError] =
-  ## Variant of `deleteGenericData()` for purging the whole MPT sub-tree.
-  ##
-  # Verify that `root` is neither an accounts tree nor a strorage tree.
-  if not root.isValid:
-    return err(DelRootVidMissing)
-  elif root == VertexID(1):
-    return err(DelAccRootNotAccepted)
-  elif LEAST_FREE_VID <= root.distinctBase:
-    return err(DelStoRootNotAccepted)
-
-  db.delSubTreeImpl root
 
 proc deleteStorageData*(
     db: AristoDbRef;
@@ -220,7 +174,7 @@ proc deleteStorageData*(
     mixPath = mixUp(accPath, stoPath)
     stoLeaf = db.cachedStoLeaf(mixPath)
 
-  if stoLeaf == Opt.some(default(VertexRef)):
+  if stoLeaf == Opt.some(default(Opt[StoLeaf])):
     return err(DelPathNotFound)
 
   var accHike: Hike
@@ -246,13 +200,13 @@ proc deleteStorageData*(
   # Mark account path Merkle keys for update
   db.layersResKeys accHike
 
-  let otherLeaf = ?db.deleteImpl(stoHike)
-  db.layersPutStoLeaf(mixPath, default(VertexRef))
+  let otherLeaf = ?db.deleteImpl(stoHike, StoLeaf)
+  db.layersPutStoLeaf(mixPath, default(Opt[StoLeaf]))
 
-  if otherLeaf.isValid:
+  if otherLeaf.isSome:
     let leafMixPath = mixUp(
       accPath,
-      Hash32(getBytes(stoNibbles.replaceSuffix(otherLeaf.pfx))))
+      Hash32(getBytes(stoNibbles.replaceSuffix(otherLeaf[].pfx))))
     db.layersPutStoLeaf(leafMixPath, otherLeaf)
 
   # If there was only one item (that got deleted), update the account as well
@@ -262,7 +216,7 @@ proc deleteStorageData*(
   # De-register the deleted storage tree from the account record
   var leaf = wpAcc.vtx.dup           # Dup on modify
   leaf.lData.stoID.isValid = false
-  db.layersPutAccLeaf(accPath, leaf)
+  db.layersPutAccLeaf(accPath, Opt.some(leaf.to(AccountLeaf)))
   db.layersPutVtx((accHike.root, wpAcc.vid), leaf)
   ok(true)
 
@@ -294,7 +248,7 @@ proc deleteStorageTree*(
   # De-register the deleted storage tree from the accounts record
   var leaf = wpAcc.vtx.dup             # Dup on modify
   leaf.lData.stoID.isValid = false
-  db.layersPutAccLeaf(accPath, leaf)
+  db.layersPutAccLeaf(accPath, Opt.some(leaf.to(AccountLeaf)))
   db.layersPutVtx((accHike.root, wpAcc.vid), leaf)
   ok()
 

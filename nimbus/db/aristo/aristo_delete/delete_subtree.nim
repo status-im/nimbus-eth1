@@ -61,7 +61,7 @@ proc delStoTreeNow(
 
   of Leaf:
     let stoPath = Hash32((stoPath & vtx.pfx).getBytes())
-    db.layersPutStoLeaf(mixUp(accPath, stoPath), default(VertexRef))
+    db.layersPutStoLeaf(mixUp(accPath, stoPath), default(Opt[StoLeaf]))
 
   db.layersResVtx(rvid)
 
