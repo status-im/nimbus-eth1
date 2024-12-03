@@ -30,7 +30,7 @@ proc revSubTree(
       if rc.isOk:
         rc.value
       elif rc.error == GetVtxNotFound:
-        VertexRef(nil)
+        default(VertexRef)
       else:
         return err((rvid.vid,rc.error))
 
@@ -83,7 +83,7 @@ proc revFilter*(
     if rc.isOk:
       rev.sTab[rvid] = rc.value
     elif rc.error == GetVtxNotFound:
-      rev.sTab[rvid] = VertexRef(nil)
+      rev.sTab[rvid] = default(VertexRef)
     else:
       return err((rvid.vid,rc.error))
 

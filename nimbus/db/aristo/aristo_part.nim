@@ -239,6 +239,7 @@ proc partPut*(
           # loop local, they need to be updated because another `chain` might
           # merge into this one at exactly this node.
           case node.vtx.vType:
+          of Empty: raiseAssert "unexpected empty vtx"
           of Leaf:
             node.vtx.lData = vtx.lData
           of Branch:
@@ -259,6 +260,7 @@ proc partPut*(
       # only local to this loop local, they need to be updated because another
       # `chain` might merge into this one at exactly this node.
       case node.vtx.vType:
+      of Empty: raiseAssert "unexpected empty vtx"
       of Leaf:
         let lKey = node.key[0]
         if node.vtx.lData.pType == AccountData and lKey.isValid:

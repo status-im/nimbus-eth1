@@ -104,7 +104,7 @@ proc getKeyFn(db: MemBackendRef): GetKeyFn =
           let vtx = data.deblobify(VertexRef).valueOr:
             return err(GetKeyNotFound)
           return ok((VOID_HASH_KEY, vtx))
-        return ok((key, nil))
+        return ok((key, default(VertexRef)))
       err(GetKeyNotFound)
 
 proc getTuvFn(db: MemBackendRef): GetTuvFn =

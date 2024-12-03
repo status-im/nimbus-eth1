@@ -31,6 +31,7 @@ type
 
   VertexType* = enum
     ## Type of `Aristo Trie` vertex
+    Empty
     Leaf
     Branch
 
@@ -64,12 +65,14 @@ type
     of StoData:
       stoData*: UInt256
 
-  VertexRef* = ref object
+  VertexRef* = object
     ## Vertex for building a hexary Patricia or Merkle Patricia Trie
     pfx*: NibblesBuf
       ## Portion of path segment - extension nodes are branch nodes with
       ## non-empty prefix
     case vType*: VertexType
+    of Empty:
+      discard
     of Leaf:
       lData*: LeafPayload            ## Reference to data payload
     of Branch:
@@ -142,7 +145,7 @@ func bVid*(vtx: VertexRef, nibble: uint8): VertexID =
   else:
     default(VertexID)
 
-func setUsed*(vtx: VertexRef, nibble: uint8, used: static bool): VertexID =
+func setUsed*(vtx: var VertexRef, nibble: uint8, used: static bool): VertexID =
   vtx.used =
     when used:
       vtx.used or (1'u16 shl nibble)
@@ -179,14 +182,12 @@ proc `==`*(a, b: LeafPayload): bool =
 
 proc `==`*(a, b: VertexRef): bool =
   ## Beware, potential deep comparison
-  if a.isNil:
-    return b.isNil
-  if b.isNil:
-    return false
-  if unsafeAddr(a[]) != unsafeAddr(b[]):
+  if unsafeAddr(a) != unsafeAddr(b):
     if a.vType != b.vType:
       return false
     case a.vType:
+    of Empty:
+      return true
     of Leaf:
       if a.pfx != b.pfx or a.lData != b.lData:
         return false
@@ -198,7 +199,7 @@ proc `==`*(a, b: VertexRef): bool =
 iterator pairs*(vtx: VertexRef): tuple[nibble: uint8, vid: VertexID] =
   ## Iterates over the sub-vids of a branch (does nothing for leaves)
   case vtx.vType:
-  of Leaf:
+  of Empty, Leaf:
     discard
   of Branch:
     for n in 0'u8 .. 15'u8:
@@ -208,8 +209,8 @@ iterator pairs*(vtx: VertexRef): tuple[nibble: uint8, vid: VertexID] =
 iterator allPairs*(vtx: VertexRef): tuple[nibble: uint8, vid: VertexID] =
   ## Iterates over the sub-vids of a branch (does nothing for leaves) including
   ## currently unset nodes
-  case vtx.vType:
-  of Leaf:
+  case vtx.vType
+  of Empty, Leaf:
     discard
   of Branch:
     for n in 0'u8 .. 15'u8:
@@ -253,21 +254,21 @@ func dup*(pld: LeafPayload): LeafPayload =
 func dup*(vtx: VertexRef): VertexRef =
   ## Duplicate vertex.
   # Not using `deepCopy()` here (some `gc` needs `--deepcopy:on`.)
-  if vtx.isNil:
-    VertexRef(nil)
-  else:
-    case vtx.vType:
-    of Leaf:
-      VertexRef(
-        vType: Leaf,
-        pfx:   vtx.pfx,
-        lData: vtx.lData.dup)
-    of Branch:
-      VertexRef(
-        vType: Branch,
-        pfx:   vtx.pfx,
-        startVid: vtx.startVid,
-        used: vtx.used)
+  case vtx.vType:
+  of Empty:
+    VertexRef(
+      vType: Empty)
+  of Leaf:
+    VertexRef(
+      vType: Leaf,
+      pfx:   vtx.pfx,
+      lData: vtx.lData.dup)
+  of Branch:
+    VertexRef(
+      vType: Branch,
+      pfx:   vtx.pfx,
+      startVid: vtx.startVid,
+      used: vtx.used)
 
 func dup*(node: NodeRef): NodeRef =
   ## Duplicate node.

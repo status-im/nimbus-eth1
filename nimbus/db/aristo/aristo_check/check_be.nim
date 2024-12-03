@@ -37,7 +37,7 @@ proc checkBE*[T: RdbBackendRef|MemBackendRef|VoidBackendRef](
     if not vtx.isValid:
       return err((rvid.vid,CheckBeVtxInvalid))
     case vtx.vType:
-    of Leaf:
+    of Empty, Leaf:
       discard
     of Branch:
       block check42Links:

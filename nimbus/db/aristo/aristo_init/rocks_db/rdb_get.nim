@@ -126,7 +126,7 @@ proc getKey*(
 
     if rc.isOk:
       rdbKeyLruStats[rvid.to(RdbStateType)].inc(true)
-      return ok((rc.value, nil))
+      return ok((rc.value, default(VertexRef)))
 
     rdbKeyLruStats[rvid.to(RdbStateType)].inc(false)
 
@@ -156,7 +156,7 @@ proc getKey*(
     return err((errSym, error))
 
   if not gotData:
-    return ok((VOID_HASH_KEY, nil))
+    return ok((VOID_HASH_KEY, default(VertexRef)))
 
   # Update cache and return - in peek mode, avoid evicting cache items
   if res.isSome() and
@@ -167,7 +167,7 @@ proc getKey*(
       (GetVtxFlag.PeekCache notin flags or rdb.rdVtxLru.len < rdb.rdVtxLru.capacity):
     rdb.rdVtxLru.put(rvid.vid, vtx.value())
 
-  ok (res.valueOr(VOID_HASH_KEY), vtx.valueOr(nil))
+  ok (res.valueOr(VOID_HASH_KEY), vtx.valueOr(default(VertexRef)))
 
 proc getVtx*(
     rdb: var RdbInst, rvid: RootedVertexID, flags: set[GetVtxFlag]
@@ -209,7 +209,7 @@ proc getVtx*(
   if not gotData:
     # As a hack, we count missing data as leaf nodes
     rdbVtxLruStats[rvid.to(RdbStateType)][VertexType.Leaf].inc(false)
-    return ok(VertexRef(nil))
+    return ok(default(VertexRef))
 
   if res.isErr():
     return err((res.error(), "Parsing failed")) # Parsing failed

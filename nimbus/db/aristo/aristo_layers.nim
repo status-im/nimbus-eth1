@@ -130,7 +130,7 @@ func layersResVtx*(
       ) =
   ## Shortcut for `db.layersPutVtx(vid, VertexRef(nil))`. It is sort of the
   ## equivalent of a delete function.
-  db.layersPutVtx(rvid, VertexRef(nil))
+  db.layersPutVtx(rvid, default(VertexRef))
 
 
 func layersPutKey*(

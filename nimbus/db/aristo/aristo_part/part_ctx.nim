@@ -34,7 +34,7 @@ proc newCtx(ps: PartStateRef; hike: Hike): Result[PartStateCtx,AristoError]  =
   if not ps.isPerimeter(fromVid) or ps.isExtension(fromVid):
     return err(PartCtxNotAvailable)
 
-  let
+  var
     vtx2 = wp.vtx.dup
     psc = PartStateCtx(
       ps:       ps,
@@ -53,7 +53,7 @@ proc removedCompletedNode(
     key: HashKey;
       ): bool =
   let vtx = ps.db.getVtx rvid
-  if vtx.isNil:
+  if not vtx.isValid:
     return false
 
   var subVids: seq[VertexID]
