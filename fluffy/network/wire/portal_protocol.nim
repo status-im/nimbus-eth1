@@ -407,6 +407,9 @@ proc handleFindContent(
     int64(logDistance), labelValues = [$p.protocolId]
   )
 
+  # Clear out the timed out connections and pending transfers
+  p.stream.pruneAllowedRequestConnections()
+
   # Check first if content is in range, as this is a cheaper operation
   if p.inRange(contentId) and p.stream.canAddPendingTransfer(srcId, contentId):
     let contentResult = p.dbGet(fc.contentKey, contentId)
@@ -448,6 +451,9 @@ proc handleOffer(p: PortalProtocol, o: OfferMessage, srcId: NodeId): seq[byte] =
         contentKeys: ContentKeysBitList.init(o.contentKeys.len),
       )
     )
+
+  # Clear out the timed out connections and pending transfers
+  p.stream.pruneAllowedOfferConnections()
 
   var
     contentKeysBitList = ContentKeysBitList.init(o.contentKeys.len)

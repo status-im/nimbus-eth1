@@ -42,7 +42,7 @@ proc initPortalProtocol(
     )
     manager = StreamManager.new(d)
     q = newAsyncQueue[(Opt[NodeId], ContentKeysList, seq[seq[byte]])](50)
-    stream = manager.registerNewStream(q)
+    stream = manager.registerNewStream(q, connectionTimeout = 2.seconds)
 
     proto = PortalProtocol.new(
       d,
@@ -162,6 +162,53 @@ procSuite "Portal Wire Protocol Tests":
       accept.isOk()
       accept.get().connectionId.len == 2
       accept.get().contentKeys.len == contentKeys.len
+
+    await proto1.stopPortalProtocol()
+    await proto2.stopPortalProtocol()
+
+  asyncTest "Offer/Accept limit reached for the same content key":
+    let (proto1, proto2) = defaultTestSetup(rng)
+    let contentKeys = ContentKeysList(@[ContentKeyByteList(@[byte 0x01, 0x02, 0x03])])
+
+    let accept = await proto1.offerImpl(proto2.baseProtocol.localNode, contentKeys)
+    var expectedBitlist = ContentKeysBitList.init(contentKeys.len)
+    expectedBitlist.setBit(0)
+
+    check:
+      accept.isOk()
+      # Content accepted
+      accept.get().contentKeys == expectedBitlist
+
+    let accept2 = await proto1.offerImpl(proto2.baseProtocol.localNode, contentKeys)
+
+    check:
+      accept2.isOk()
+      # Content not accepted
+      accept2.get().contentKeys == ContentKeysBitList.init(contentKeys.len)
+
+    await proto1.stopPortalProtocol()
+    await proto2.stopPortalProtocol()
+
+  asyncTest "Offer/Accept trigger pruning of timed out offer":
+    let (proto1, proto2) = defaultTestSetup(rng)
+    let contentKeys = ContentKeysList(@[ContentKeyByteList(@[byte 0x01, 0x02, 0x03])])
+
+    let accept = await proto1.offerImpl(proto2.baseProtocol.localNode, contentKeys)
+    var expectedBitlist = ContentKeysBitList.init(contentKeys.len)
+    expectedBitlist.setBit(0)
+
+    check:
+      accept.isOk()
+      # Content accepted
+      accept.get().contentKeys == expectedBitlist
+
+    await sleepAsync(chronos.seconds(5))
+
+    let accept2 = await proto1.offerImpl(proto2.baseProtocol.localNode, contentKeys)
+    check:
+      accept2.isOk()
+      # Content accepted because previous offer was pruned
+      accept2.get().contentKeys == expectedBitlist
 
     await proto1.stopPortalProtocol()
     await proto2.stopPortalProtocol()

@@ -146,20 +146,24 @@ template removePendingTransfer*(
 ) =
   removePendingTransfer(stream.pendingTransfers, nodeId, contentId)
 
-proc pruneAllowedConnections(stream: PortalStream) =
-  # Prune requests and offers that didn't receive a connection request
+proc pruneAllowedRequestConnections*(stream: PortalStream) =
+  # Prune requests that didn't receive a connection request
   # before `connectionTimeout`.
   let now = Moment.now()
 
-  block:
-    var i = 0
-    while i < stream.contentRequests.len():
-      let request = stream.contentRequests[i]
-      if request.timeout <= now:
-        stream.removePendingTransfer(request.nodeId, request.contentId)
-        stream.contentRequests.del(i)
-      else:
-        inc i
+  var i = 0
+  while i < stream.contentRequests.len():
+    let request = stream.contentRequests[i]
+    if request.timeout <= now:
+      stream.removePendingTransfer(request.nodeId, request.contentId)
+      stream.contentRequests.del(i)
+    else:
+      inc i
+
+proc pruneAllowedOfferConnections*(stream: PortalStream) =
+  # Prune offers that didn't receive a connection request
+  # before `connectionTimeout`.
+  let now = Moment.now()
 
   var i = 0
   while i < stream.contentOffers.len():
@@ -177,8 +181,6 @@ proc addContentOffer*(
     contentKeys: ContentKeysList,
     contentIds: seq[ContentId],
 ): Bytes2 =
-  stream.pruneAllowedConnections()
-
   # TODO: Should we check if `NodeId` & `connectionId` combo already exists?
   # What happens if we get duplicates?
   var connectionId: Bytes2
@@ -203,8 +205,6 @@ proc addContentOffer*(
 proc addContentRequest*(
     stream: PortalStream, nodeId: NodeId, contentId: ContentId, content: seq[byte]
 ): Bytes2 =
-  stream.pruneAllowedConnections()
-
   # TODO: Should we check if `NodeId` & `connectionId` combo already exists?
   # What happens if we get duplicates?
   var connectionId: Bytes2
