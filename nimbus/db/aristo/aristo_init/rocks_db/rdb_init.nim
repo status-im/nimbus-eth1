@@ -102,7 +102,7 @@ proc initImpl(
     opts.rdbKeyCacheSize div (sizeof(VertexID) + sizeof(HashKey) + lruOverhead)
   rdb.rdVtxSize =
     opts.rdbVtxCacheSize div
-    (sizeof(VertexID) + sizeof(default(VertexRef)[]) + lruOverhead)
+    (sizeof(VertexID) + sizeof(default(VertexRef)) + lruOverhead)
 
   rdb.rdBranchSize =
     opts.rdbBranchCacheSize div (sizeof(typeof(rdb.rdBranchLru).V) + lruOverhead)

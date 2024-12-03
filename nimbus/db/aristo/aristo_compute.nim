@@ -131,6 +131,8 @@ proc getKey(
 template childVid(v: VertexRef): VertexID =
   # If we have to recurse into a child, where would that recusion start?
   case v.vType
+  of Empty:
+    default(VertexID)
   of Leaf:
     if v.lData.pType == AccountData and v.lData.stoID.isValid:
       v.lData.stoID.vid
@@ -158,6 +160,8 @@ proc computeKeyImpl(
 
   let key =
     case vtx.vType
+    of Empty:
+      raiseAssert "unexpected empty vtx"
     of Leaf:
       writer.encodeLeaf(vtx.pfx):
         case vtx.lData.pType

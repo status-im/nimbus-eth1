@@ -87,6 +87,7 @@ proc checkTopCommon*(
       if topVid < rvid.vid:
         topVid = rvid.vid
       case vtx.vType:
+      of Empty: discard
       of Leaf:
         if vtx.lData.pType == AccountData:
           let stoID = vtx.lData.stoID

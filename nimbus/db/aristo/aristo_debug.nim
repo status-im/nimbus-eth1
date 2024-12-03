@@ -196,6 +196,8 @@ func ppVtx(nd: VertexRef, db: AristoDbRef, rvid: RootedVertexID): string =
     else:
       result = ["ł(", "þ("][nd.vType.ord]
     case nd.vType:
+    of Empty:
+      result &= "Vertex(Empty)"
     of Leaf:
       result &= nd.pfx.ppPathPfx & "," & nd.lData.ppPayload(db)
     of Branch:
@@ -223,6 +225,8 @@ proc ppNode(
     else:
       result = ["ł(", "þ("][nd.vtx.vType.ord]
     case nd.vtx.vType:
+    of Empty:
+      result &= "VertexRef(Empty)"
     of Leaf:
       result &= nd.vtx.pfx.ppPathPfx & ","
       if nd.vtx.lData.pType == AccountData:

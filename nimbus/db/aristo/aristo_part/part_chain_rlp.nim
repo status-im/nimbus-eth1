@@ -46,6 +46,7 @@ proc chainRlpNodes*(
 
   # Follow up child node
   case vtx.vType:
+  of Empty: raiseAssert "unexpected empty vtx"
   of Leaf:
     if path != vtx.pfx:
       err(PartChnLeafPathMismatch)

@@ -39,7 +39,8 @@ proc toNode*(
   ## storage root.
   ##
 
-  case vtx.vType:
+  case vtx.vType
+  of Empty: raiseAssert "unexpected empty vtx"
   of Leaf:
     let node = NodeRef(vtx: vtx.dup())
     # Need to resolve storage root for account leaf
@@ -62,7 +63,8 @@ proc toNode*(
 
 iterator subVids*(vtx: VertexRef): VertexID =
   ## Returns the list of all sub-vertex IDs for the argument `vtx`.
-  case vtx.vType:
+  case vtx.vType
+  of Empty: raiseAssert "unexpected empty vtx"
   of Leaf:
     if vtx.lData.pType == AccountData:
       let stoID = vtx.lData.stoID
@@ -74,7 +76,8 @@ iterator subVids*(vtx: VertexRef): VertexID =
 
 iterator subVidKeys*(node: NodeRef): (VertexID,HashKey) =
   ## Simolar to `subVids()` but for nodes
-  case node.vtx.vType:
+  case node.vtx.vType
+  of Empty: raiseAssert "unexpected empty vtx"
   of Leaf:
     if node.vtx.lData.pType == AccountData:
       let stoID = node.vtx.lData.stoID

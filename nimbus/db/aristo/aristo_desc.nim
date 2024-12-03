@@ -107,7 +107,7 @@ template mixUp*(accPath, stoPath: Hash32): Hash32 =
   v
 
 func getOrVoid*[W](tab: Table[W,VertexRef]; w: W): VertexRef =
-  tab.getOrDefault(w, VertexRef(nil))
+  tab.getOrDefault(w, default(VertexRef))
 
 func getOrVoid*[W](tab: Table[W,NodeRef]; w: W): NodeRef =
   tab.getOrDefault(w, NodeRef(nil))
@@ -124,7 +124,7 @@ func getOrVoid*[W](tab: Table[W,HashSet[RootedVertexID]]; w: W): HashSet[RootedV
 # --------
 
 func isValid*(vtx: VertexRef): bool =
-  vtx != VertexRef(nil)
+  vtx.vType != VertexType.Empty
 
 func isValid*(nd: NodeRef): bool =
   nd != NodeRef(nil)

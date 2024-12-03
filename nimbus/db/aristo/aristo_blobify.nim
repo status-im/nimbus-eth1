@@ -181,11 +181,11 @@ proc blobifyTo*(vtx: VertexRef, key: HashKey, data: var seq[byte]) =
   ## ::
   ##   8 * n * ((access shr (n * 4)) and 15)
   ##
-  doAssert vtx.isValid
-
   let
     bits =
       case vtx.vType
+      of Empty:
+        raiseAssert "Can't store empty vtx"
       of Branch:
         let bits =
           if key.isValid and key.len == 32:
@@ -307,6 +307,7 @@ proc deblobify*(
       NibblesBuf.fromHexPrefix record.toOpenArray(psPos, record.len - 2)
 
   ok case vType
+  of Empty: raiseAssert "Unexpected vType"
   of Branch:
     var pos = start
     let
@@ -318,7 +319,7 @@ proc deblobify*(
 
     VertexRef(vType: Branch, pfx: pathSegment, startVid: startVid, used: used)
   of Leaf:
-    let vtx = VertexRef(vType: Leaf, pfx: pathSegment)
+    var vtx = VertexRef(vType: Leaf, pfx: pathSegment)
 
     ?record.toOpenArray(start, psPos - 1).deblobify(vtx.lData)
     vtx
