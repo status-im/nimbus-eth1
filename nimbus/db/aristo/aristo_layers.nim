@@ -91,7 +91,7 @@ func layersGetKeyOrVoid*(db: AristoDbRef; rvid: RootedVertexID): HashKey =
   ## Simplified version of `layersGetKey()`
   (db.layersGetKey(rvid).valueOr (VOID_HASH_KEY, 0))[0]
 
-func layersGetAccLeaf*(db: AristoDbRef; accPath: Hash32): Opt[VertexRef] =
+func layersGetAccLeaf*(db: AristoDbRef; accPath: Hash32): Opt[Opt[AccountLeaf]] =
   db.top.accLeaves.withValue(accPath, item):
     return Opt.some(item[])
 
@@ -99,9 +99,9 @@ func layersGetAccLeaf*(db: AristoDbRef; accPath: Hash32): Opt[VertexRef] =
     w.accLeaves.withValue(accPath, item):
       return Opt.some(item[])
 
-  Opt.none(VertexRef)
+  Opt.none(Opt[AccountLeaf])
 
-func layersGetStoLeaf*(db: AristoDbRef; mixPath: Hash32): Opt[VertexRef] =
+func layersGetStoLeaf*(db: AristoDbRef; mixPath: Hash32): Opt[Opt[StoLeaf]] =
   db.top.stoLeaves.withValue(mixPath, item):
     return Opt.some(item[])
 
@@ -109,7 +109,7 @@ func layersGetStoLeaf*(db: AristoDbRef; mixPath: Hash32): Opt[VertexRef] =
     w.stoLeaves.withValue(mixPath, item):
       return Opt.some(item[])
 
-  Opt.none(VertexRef)
+  Opt.none(Opt[StoLeaf])
 
 # ------------------------------------------------------------------------------
 # Public functions: setter variants
@@ -153,10 +153,10 @@ func layersResKeys*(db: AristoDbRef; hike: Hike) =
   for i in 1..hike.legs.len:
     db.layersResKey((hike.root, hike.legs[^i].wp.vid), hike.legs[^i].wp.vtx)
 
-func layersPutAccLeaf*(db: AristoDbRef; accPath: Hash32; leafVtx: VertexRef) =
+func layersPutAccLeaf*(db: AristoDbRef; accPath: Hash32; leafVtx: Opt[AccountLeaf]) =
   db.top.accLeaves[accPath] = leafVtx
 
-func layersPutStoLeaf*(db: AristoDbRef; mixPath: Hash32; leafVtx: VertexRef) =
+func layersPutStoLeaf*(db: AristoDbRef; mixPath: Hash32; leafVtx: Opt[StoLeaf]) =
   db.top.stoLeaves[mixPath] = leafVtx
 
 # ------------------------------------------------------------------------------

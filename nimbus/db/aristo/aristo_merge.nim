@@ -38,13 +38,13 @@ proc layersPutLeaf(
   db.layersPutVtx(rvid, vtx)
   vtx
 
-proc mergePayloadImpl(
+proc mergePayloadImpl[T](
     db: AristoDbRef, # Database, top layer
     root: VertexID, # MPT state root
     path: Hash32, # Leaf item to add to the database
-    leaf: Opt[VertexRef],
+    leaf: Opt[Opt[T]],
     payload: LeafPayload, # Payload value
-): Result[(VertexRef, VertexRef, VertexRef), AristoError] =
+): Result[(T, Opt[NibblesBuf], Opt[T]), AristoError] =
   ## Merge the argument `(root,path)` key-value-pair into the top level vertex
   ## table of the database `db`. The `path` argument is used to address the
   ## leaf vertex with the payload. It is stored or updated on the database
@@ -59,7 +59,7 @@ proc mergePayloadImpl(
 
       # We're at the root vertex and there is no data - this must be a fresh
       # VertexID!
-      return ok (db.layersPutLeaf((root, cur), path, payload), default(VertexRef), default(VertexRef))
+      return ok (db.layersPutLeaf((root, cur), path, payload).to(T), Opt.none(NibblesBuf), Opt.none(T))
     vids: ArrayBuf[NibblesBuf.high + 1, VertexID]
     vtxs: ArrayBuf[NibblesBuf.high + 1, VertexRef]
 
@@ -93,7 +93,7 @@ proc mergePayloadImpl(
             db.layersPutLeaf((root, cur), path, payload)
           else:
             db.layersPutLeaf((root, cur), path, payload)
-          (leafVtx, default(VertexRef), default(VertexRef))
+          (leafVtx.to(T), Opt.none(NibblesBuf), Opt.none(T))
         else:
           # Turn leaf into a branch (or extension) then insert the two leaves
           # into the branch
@@ -111,7 +111,7 @@ proc mergePayloadImpl(
 
           # We need to return vtx here because its pfx member hasn't yet been
           # sliced off and is therefore shared with the hike
-          (leafVtx, vtx, other)
+          (leafVtx.to(T), Opt.some(vtx.pfx), Opt.some(other.to(T)))
 
       resetKeys()
       return ok(res)
@@ -126,8 +126,8 @@ proc mergePayloadImpl(
           cur = next
           path = path.slice(n + 1)
           vtx =
-            if leaf.isSome and leaf[].isValid and leaf[].pfx == path:
-              leaf[]
+            if leaf.isSome and leaf[].isSome and leaf[][].pfx == path:
+              leaf[][].to(VertexRef)
             else:
               (?db.getVtxRc((root, next)))[0]
 
@@ -143,7 +143,7 @@ proc mergePayloadImpl(
             leafVtx = db.layersPutLeaf((root, local), path.slice(n + 1), payload)
 
           resetKeys()
-          return ok((leafVtx, default(VertexRef), default(VertexRef)))
+          return ok((leafVtx.to(T), Opt.none(NibblesBuf), Opt.none(T)))
       else:
         # Partial path match - we need to split the existing branch at
         # the point of divergence, inserting a new branch
@@ -163,7 +163,7 @@ proc mergePayloadImpl(
         db.layersPutVtx((root, cur), branch)
 
         resetKeys()
-        return ok((leafVtx, default(VertexRef), default(VertexRef)))
+        return ok((leafVtx.to(T), Opt.none(NibblesBuf), Opt.none(T)))
 
   err(MergeHikeFailed)
 
@@ -193,10 +193,10 @@ proc mergeAccountRecord*(
 
   # Update leaf cache both of the merged value and potentially the displaced
   # leaf resulting from splitting a leaf into a branch with two leaves
-  db.layersPutAccLeaf(accPath, updated[0])
-  if updated[1].isValid:
+  db.layersPutAccLeaf(accPath, Opt.some(updated[0]))
+  if updated[1].isSome:
     let otherPath = Hash32(getBytes(
-      NibblesBuf.fromBytes(accPath.data).replaceSuffix(updated[1].pfx)))
+      NibblesBuf.fromBytes(accPath.data).replaceSuffix(updated[1][])))
     db.layersPutAccLeaf(otherPath, updated[2])
 
   ok true
@@ -239,18 +239,18 @@ proc mergeStorageData*(
 
   # Update leaf cache both of the merged value and potentially the displaced
   # leaf resulting from splitting a leaf into a branch with two leaves
-  db.layersPutStoLeaf(mixPath, updated[0])
+  db.layersPutStoLeaf(mixPath, Opt.some(updated[0]))
 
-  if updated[1].isValid:
+  if updated[1].isSome:
     let otherPath = Hash32(getBytes(
-      NibblesBuf.fromBytes(stoPath.data).replaceSuffix(updated[1].pfx)))
+      NibblesBuf.fromBytes(stoPath.data).replaceSuffix(updated[1][])))
     db.layersPutStoLeaf(mixUp(accPath, otherPath), updated[2])
 
   if not stoID.isValid:
     # Make sure that there is an account that refers to that storage trie
     var leaf = accHike.legs[^1].wp.vtx.dup # Dup on modify
     leaf.lData.stoID = useID
-    db.layersPutAccLeaf(accPath, leaf)
+    db.layersPutAccLeaf(accPath, Opt.some(leaf.to(AccountLeaf)))
     db.layersPutVtx((VertexID(1), accHike.legs[^1].wp.vid), leaf)
 
   ok()
