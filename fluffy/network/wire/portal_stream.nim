@@ -151,16 +151,25 @@ proc pruneAllowedConnections(stream: PortalStream) =
   # before `connectionTimeout`.
   let now = Moment.now()
 
-  for i, request in stream.contentRequests:
-    if request.timeout <= now:
-      stream.removePendingTransfer(request.nodeId, request.contentId)
-      stream.contentRequests.del(i)
+  block:
+    var i = 0
+    while i < stream.contentRequests.len():
+      let request = stream.contentRequests[i]
+      if request.timeout <= now:
+        stream.removePendingTransfer(request.nodeId, request.contentId)
+        stream.contentRequests.del(i)
+      else:
+        inc i
 
-  for i, offer in stream.contentOffers:
+  var i = 0
+  while i < stream.contentOffers.len():
+    let offer = stream.contentOffers[i]
     if offer.timeout <= now:
       for contentId in offer.contentIds:
         stream.removePendingTransfer(offer.nodeId, contentId)
       stream.contentOffers.del(i)
+    else:
+      inc i
 
 proc addContentOffer*(
     stream: PortalStream,
