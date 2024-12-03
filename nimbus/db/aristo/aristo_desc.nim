@@ -124,7 +124,7 @@ func getOrVoid*[W](tab: Table[W,HashSet[RootedVertexID]]; w: W): HashSet[RootedV
 # --------
 
 func isValid*(vtx: VertexRef): bool =
-  vtx != VertexRef(nil)
+  vtx.vType != VertexType.Empty
 
 func isValid*(nd: NodeRef): bool =
   nd != NodeRef(nil)

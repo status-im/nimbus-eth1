@@ -102,6 +102,7 @@ proc complete(
   while uHike.legs.len < hikeLenMax:
     var leg = Leg(wp: VidVtxPair(vid: vid, vtx: vtx), nibble: -1)
     case vtx.vType:
+    of Empty: raiseAssert "unexpected empty vtx"
     of Leaf:
       uHike.legs.add leg
       return ok(uHike) # done
@@ -156,6 +157,7 @@ proc zeroAdjust(
     block fail:
       var pfx: NibblesBuf
       case rootVtx.vType:
+      of Empty: raiseAssert "unexpected empty vtx"
       of Branch:
         # Find first non-dangling link and assign it
         let nibbleID = block:
@@ -232,6 +234,7 @@ proc finalise(
 
       let pfx =
         case vtx.vType:
+        of Empty: raiseAssert "unexpected empty vtx"
         of Leaf:
           vtx.pfx
         of Branch:
@@ -284,6 +287,7 @@ proc nearbyNext(
   while 0 < uHike.legs.len:
     let top = uHike.legs[^1]
     case top.wp.vtx.vType:
+    of Empty: raiseAssert "unexpected empty vtx"
     of Leaf:
       return ok(uHike)
     of Branch:
@@ -307,6 +311,7 @@ proc nearbyNext(
         return err((vid,GetVtxNotFound)) # error
 
       case vtx.vType
+      of Empty: raiseAssert "unexpected empty vtx"
       of Leaf:
         if uHike.accept vtx.pfx:
           return uHike.complete(vid, db, hikeLenMax, doLeast=moveRight)
@@ -559,6 +564,7 @@ proc rightMissing*(
     return err(GetVtxNotFound) # error
 
   case vtx.vType
+  of Empty: raiseAssert "unexpected empty vtx"
   of Leaf:
     return ok(vtx.pfx < hike.tail)
   of Branch:

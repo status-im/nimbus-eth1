@@ -159,7 +159,7 @@ proc findTx*(
 
   # Try `(vid,key)` on unfiltered backend
   block:
-    let beKey = db.getKeyUbe(rvid, {}).valueOr: (VOID_HASH_KEY, nil)
+    let beKey = db.getKeyUbe(rvid, {}).valueOr: (VOID_HASH_KEY, default(VertexRef))
     if beKey[0] == key:
       return ok(-2)
 

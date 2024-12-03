@@ -71,7 +71,7 @@ func layersGetVtx*(db: AristoDbRef; rvid: RootedVertexID): Opt[(VertexRef, int)]
 
 func layersGetVtxOrVoid*(db: AristoDbRef; rvid: RootedVertexID): VertexRef =
   ## Simplified version of `layersGetVtx()`
-  db.layersGetVtx(rvid).valueOr((VertexRef(nil), 0))[0]
+  db.layersGetVtx(rvid).valueOr((default(VertexRef), 0))[0]
 
 
 func layersGetKey*(db: AristoDbRef; rvid: RootedVertexID): Opt[(HashKey, int)] =
@@ -135,7 +135,7 @@ func layersResVtx*(
       ) =
   ## Shortcut for `db.layersPutVtx(vid, VertexRef(nil))`. It is sort of the
   ## equivalent of a delete function.
-  db.layersPutVtx(rvid, VertexRef(nil))
+  db.layersPutVtx(rvid, default(VertexRef))
 
 
 func layersPutKey*(

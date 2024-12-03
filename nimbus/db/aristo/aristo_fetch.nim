@@ -67,7 +67,7 @@ proc retrieveAccountLeaf(
   let
     leafVtx = db.retrieveLeaf(VertexID(1), accPath).valueOr:
       if error == FetchPathNotFound:
-        db.accLeaves.put(accPath, nil)
+        db.accLeaves.put(accPath, default(VertexRef))
       return err(error)
 
   db.accLeaves.put(accPath, leafVtx)
@@ -105,7 +105,7 @@ proc fetchStorageIdImpl(
   ## Helper function for retrieving a storage (vertex) ID for a given account.
   let
     leafVtx = ?db.retrieveAccountLeaf(accPath)
-    stoID = leafVtx[].lData.stoID
+    stoID = leafVtx.lData.stoID
 
   if stoID.isValid:
     ok stoID.vid
@@ -127,7 +127,7 @@ proc fetchAccountHike*(
 
   # Prefer the leaf cache so as not to burden the lower layers
   let leaf = db.cachedAccLeaf(accPath)
-  if leaf == Opt.some(VertexRef(nil)):
+  if leaf == Opt.some(default(VertexRef)):
     return err(FetchAccInaccessible)
 
   accPath.hikeUp(VertexID(1), db, leaf, accHike).isOkOr:
@@ -167,7 +167,7 @@ proc retrieveStoragePayload(
   # it must have been in the database
   let leafVtx = db.retrieveLeaf(? db.fetchStorageIdImpl(accPath), stoPath).valueOr:
     if error == FetchPathNotFound:
-      db.stoLeaves.put(mixPath, nil)
+      db.stoLeaves.put(mixPath, default(VertexRef))
     return err(error)
 
   db.stoLeaves.put(mixPath, leafVtx)

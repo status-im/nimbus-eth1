@@ -51,6 +51,8 @@ proc delStoTreeNow(
     return err(error)
 
   case vtx.vType
+  of Empty:
+    raiseAssert "Unexpected"
   of Branch:
     for n, subvid in vtx.pairs():
       ? db.delStoTreeNow(
@@ -59,7 +61,7 @@ proc delStoTreeNow(
 
   of Leaf:
     let stoPath = Hash32((stoPath & vtx.pfx).getBytes())
-    db.layersPutStoLeaf(mixUp(accPath, stoPath), nil)
+    db.layersPutStoLeaf(mixUp(accPath, stoPath), default(VertexRef))
 
   db.layersResVtx(rvid)
 

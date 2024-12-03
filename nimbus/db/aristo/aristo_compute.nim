@@ -146,6 +146,7 @@ proc computeKeyImpl(
 
   let key =
     case vtx.vType
+    of Empty: raiseAssert "unexpected empty vtx"
     of Leaf:
       writer.encodeLeaf(vtx.pfx):
         case vtx.lData.pType

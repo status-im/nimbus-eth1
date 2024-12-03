@@ -59,7 +59,7 @@ proc mergePayloadImpl(
 
       # We're at the root vertex and there is no data - this must be a fresh
       # VertexID!
-      return ok (db.layersPutLeaf((root, cur), path, payload), nil, nil)
+      return ok (db.layersPutLeaf((root, cur), path, payload), default(VertexRef), default(VertexRef))
     vids: ArrayBuf[NibblesBuf.high + 1, VertexID]
     vtxs: ArrayBuf[NibblesBuf.high + 1, VertexRef]
 
@@ -75,6 +75,7 @@ proc mergePayloadImpl(
 
     let n = path.sharedPrefixLen(vtx.pfx)
     case vtx.vType
+    of Empty: raiseAssert "unexpected empty vtx"
     of Leaf:
       let res =
         if n == vtx.pfx.len:
@@ -92,16 +93,16 @@ proc mergePayloadImpl(
             db.layersPutLeaf((root, cur), path, payload)
           else:
             db.layersPutLeaf((root, cur), path, payload)
-          (leafVtx, nil, nil)
+          (leafVtx, default(VertexRef), default(VertexRef))
         else:
           # Turn leaf into a branch (or extension) then insert the two leaves
           # into the branch
-          let branch = VertexRef(vType: Branch, pfx: path.slice(0, n), startVid: db.vidFetch(16))
+          var branch = VertexRef(vType: Branch, pfx: path.slice(0, n), startVid: db.vidFetch(16))
           let other = block: # Copy of existing leaf node, now one level deeper
             let local = branch.setUsed(vtx.pfx[n], true)
             db.layersPutLeaf((root, local), vtx.pfx.slice(n + 1), vtx.lData)
 
-          let leafVtx = block: # Newly inserted leaf node
+          var leafVtx = block: # Newly inserted leaf node
             let local = branch.setUsed(path[n], true)
             db.layersPutLeaf((root, local), path.slice(n + 1), payload)
 
@@ -134,7 +135,7 @@ proc mergePayloadImpl(
           # There's no vertex at the branch point - insert the payload as a new
           # leaf and update the existing branch
 
-          let brDup = vtx.dup()
+          var brDup = vtx.dup()
           let local = brDup.setUsed(nibble, true)
           db.layersPutVtx((root, cur), brDup)
 
@@ -142,11 +143,11 @@ proc mergePayloadImpl(
             leafVtx = db.layersPutLeaf((root, local), path.slice(n + 1), payload)
 
           resetKeys()
-          return ok((leafVtx, nil, nil))
+          return ok((leafVtx, default(VertexRef), default(VertexRef)))
       else:
         # Partial path match - we need to split the existing branch at
         # the point of divergence, inserting a new branch
-        let branch = VertexRef(vType: Branch, pfx: path.slice(0, n), startVid: db.vidFetch(16))
+        var branch = VertexRef(vType: Branch, pfx: path.slice(0, n), startVid: db.vidFetch(16))
         block: # Copy the existing vertex and add it to the new branch
           let local = branch.setUsed(vtx.pfx[n], true)
 
@@ -162,7 +163,7 @@ proc mergePayloadImpl(
         db.layersPutVtx((root, cur), branch)
 
         resetKeys()
-        return ok((leafVtx, nil, nil))
+        return ok((leafVtx, default(VertexRef), default(VertexRef)))
 
   err(MergeHikeFailed)
 
@@ -247,7 +248,7 @@ proc mergeStorageData*(
 
   if not stoID.isValid:
     # Make sure that there is an account that refers to that storage trie
-    let leaf = accHike.legs[^1].wp.vtx.dup # Dup on modify
+    var leaf = accHike.legs[^1].wp.vtx.dup # Dup on modify
     leaf.lData.stoID = useID
     db.layersPutAccLeaf(accPath, leaf)
     db.layersPutVtx((VertexID(1), accHike.legs[^1].wp.vid), leaf)
