@@ -25,7 +25,7 @@ const
   defaultProtectedHeader     = "eyJ0eXAiOiJKV1QiLCJhbGciOiJIUzI1NiJ9"
 
 createRpcSigsFromNim(RpcClient):
-  proc engine_getClientVersionV1(version: ClientVersionV1): ClientVersionV1
+  proc engine_getClientVersionV1(version: ClientVersionV1): seq[ClientVersionV1]
 
 func base64urlEncode(x: auto): string =
   base64.encode(x, safe = true).replace("=", "")
