@@ -145,12 +145,8 @@ proc startTasks*(
 # ------
 
 when isMainModule:
-  info "Starting Nimbus"
-  ## TODO
-  ## - file limits
-  ## - setup logging
-  ## - read configuration (check nimbus_configs file anottations)
-  ## - implement config reader for all components
+  notice "Starting Nimbus"
+
   let nimbusConfigs = NimbusConfig()
   var tasksList: NimbusTasks = NimbusTasks.new
 
