@@ -104,6 +104,7 @@ type
   NimbusCmd* {.pure.} = enum
     noCommand
     `import`
+    `import-rlp`
 
   RpcFlag* {.pure.} = enum
     ## RPC flags
@@ -485,11 +486,6 @@ type
         name: "jwt-secret" .}: Option[InputFile]
 
     of `import`:
-      blocksFile* {.
-        argument
-        desc: "One or more RLP encoded block(s) files"
-        name: "blocks-file" }: seq[InputFile]
-
       maxBlocks* {.
         desc: "Maximum number of blocks to import"
         defaultValue: uint64.high()
@@ -539,6 +535,12 @@ type
         desc: "Store reverse slot hashes in database"
         defaultValue: false
         name: "debug-store-slot-hashes".}: bool
+
+    of `import-rlp`:
+      blocksFile* {.
+        argument
+        desc: "One or more RLP encoded block(s) files"
+        name: "blocks-file" }: seq[InputFile]
 
 func parseCmdArg(T: type NetworkId, p: string): T
     {.gcsafe, raises: [ValueError].} =
