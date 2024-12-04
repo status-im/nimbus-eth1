@@ -8,7 +8,7 @@
 {.push raises: [].}
 
 import
-  std/sequtils,
+  std/sets,
   chronos,
   stew/[byteutils, leb128, endians2],
   chronicles,
@@ -35,17 +35,20 @@ const
   talkReqOverhead = getTalkReqOverhead(utpProtocolId)
   utpHeaderOverhead = 20
   maxUtpPayloadSize = maxDiscv5PacketSize - talkReqOverhead - utpHeaderOverhead
+  maxPendingTransfersPerPeer = 128
 
 type
+  ConnectionId* = uint16
+
   ContentRequest = object
-    connectionId: uint16
     nodeId: NodeId
+    contentId: ContentId
     content: seq[byte]
     timeout: Moment
 
   ContentOffer = object
-    connectionId: uint16
     nodeId: NodeId
+    contentIds: seq[ContentId]
     contentKeys: ContentKeysList
     timeout: Moment
 
@@ -64,11 +67,12 @@ type
     # values of the discovery v5 talkresp message.
     # TODO: Should the content key also be stored to be able to validate the
     # received data?
-    contentRequests: seq[ContentRequest]
-    contentOffers: seq[ContentOffer]
+    contentRequests: TableRef[ConnectionId, ContentRequest]
+    contentOffers: TableRef[ConnectionId, ContentOffer]
     connectionTimeout: Duration
     contentReadTimeout*: Duration
     rng: ref HmacDrbgContext
+    pendingTransfers: TableRef[NodeId, HashSet[ContentId]]
     contentQueue*: AsyncQueue[(Opt[NodeId], ContentKeysList, seq[seq[byte]])]
 
   StreamManager* = ref object
@@ -76,68 +80,159 @@ type
     streams: seq[PortalStream]
     rng: ref HmacDrbgContext
 
-proc pruneAllowedConnections(stream: PortalStream) =
-  # Prune requests and offers that didn't receive a connection request
+proc canAddPendingTransfer(
+    transfers: TableRef[NodeId, HashSet[ContentId]],
+    nodeId: NodeId,
+    contentId: ContentId,
+    limit: int,
+): bool =
+  if not transfers.contains(nodeId):
+    return true
+
+  try:
+    let contentIds = transfers[nodeId]
+    if (contentIds.len() < limit) and not contentIds.contains(contentId):
+      return true
+    else:
+      debug "Pending transfer limit reached for peer", nodeId, contentId
+      return false
+  except KeyError as e:
+    raiseAssert(e.msg)
+
+proc addPendingTransfer(
+    transfers: TableRef[NodeId, HashSet[ContentId]],
+    nodeId: NodeId,
+    contentId: ContentId,
+) =
+  if transfers.contains(nodeId):
+    try:
+      transfers[nodeId].incl(contentId)
+    except KeyError as e:
+      raiseAssert(e.msg)
+  else:
+    var contentIds = initHashSet[ContentId]()
+    contentIds.incl(contentId)
+    transfers[nodeId] = contentIds
+
+proc removePendingTransfer(
+    transfers: TableRef[NodeId, HashSet[ContentId]],
+    nodeId: NodeId,
+    contentId: ContentId,
+) =
+  doAssert transfers.contains(nodeId)
+
+  try:
+    transfers[nodeId].excl(contentId)
+
+    if transfers[nodeId].len() == 0:
+      transfers.del(nodeId)
+  except KeyError as e:
+    raiseAssert(e.msg)
+
+template canAddPendingTransfer*(
+    stream: PortalStream, nodeId: NodeId, contentId: ContentId
+): bool =
+  stream.pendingTransfers.canAddPendingTransfer(
+    srcId, contentId, maxPendingTransfersPerPeer
+  )
+
+template addPendingTransfer*(
+    stream: PortalStream, nodeId: NodeId, contentId: ContentId
+) =
+  addPendingTransfer(stream.pendingTransfers, nodeId, contentId)
+
+template removePendingTransfer*(
+    stream: PortalStream, nodeId: NodeId, contentId: ContentId
+) =
+  removePendingTransfer(stream.pendingTransfers, nodeId, contentId)
+
+proc pruneAllowedRequestConnections*(stream: PortalStream) =
+  # Prune requests that didn't receive a connection request
   # before `connectionTimeout`.
   let now = Moment.now()
-  stream.contentRequests.keepIf(
-    proc(x: ContentRequest): bool =
-      x.timeout > now
-  )
-  stream.contentOffers.keepIf(
-    proc(x: ContentOffer): bool =
-      x.timeout > now
-  )
+
+  var connectionIdsToPrune = newSeq[ConnectionId]()
+  for connectionId, request in stream.contentRequests:
+    if request.timeout <= now:
+      stream.removePendingTransfer(request.nodeId, request.contentId)
+      connectionIdsToPrune.add(connectionId)
+
+  for connectionId in connectionIdsToPrune:
+    stream.contentRequests.del(connectionId)
+
+proc pruneAllowedOfferConnections*(stream: PortalStream) =
+  # Prune offers that didn't receive a connection request
+  # before `connectionTimeout`.
+  let now = Moment.now()
+
+  var connectionIdsToPrune = newSeq[ConnectionId]()
+  for connectionId, offer in stream.contentOffers:
+    if offer.timeout <= now:
+      for contentId in offer.contentIds:
+        stream.removePendingTransfer(offer.nodeId, contentId)
+      connectionIdsToPrune.add(connectionId)
+
+  for connectionId in connectionIdsToPrune:
+    stream.contentOffers.del(connectionId)
 
 proc addContentOffer*(
-    stream: PortalStream, nodeId: NodeId, contentKeys: ContentKeysList
+    stream: PortalStream,
+    nodeId: NodeId,
+    contentKeys: ContentKeysList,
+    contentIds: seq[ContentId],
 ): Bytes2 =
-  stream.pruneAllowedConnections()
-
   # TODO: Should we check if `NodeId` & `connectionId` combo already exists?
   # What happens if we get duplicates?
   var connectionId: Bytes2
   stream.rng[].generate(connectionId)
 
   # uTP protocol uses BE for all values in the header, incl. connection id.
-  let id = uint16.fromBytesBE(connectionId)
+  var id = ConnectionId.fromBytesBE(connectionId)
+
+  # Generate a new id if already existing to avoid using a duplicate
+  if stream.contentOffers.contains(id):
+    stream.rng[].generate(connectionId)
+    id = ConnectionId.fromBytesBE(connectionId)
 
   debug "Register new incoming offer", contentKeys
 
   let contentOffer = ContentOffer(
-    connectionId: id,
     nodeId: nodeId,
+    contentIds: contentIds,
     contentKeys: contentKeys,
     timeout: Moment.now() + stream.connectionTimeout,
   )
-  stream.contentOffers.add(contentOffer)
+  stream.contentOffers[id] = contentOffer
 
   return connectionId
 
 proc addContentRequest*(
-    stream: PortalStream, nodeId: NodeId, content: seq[byte]
+    stream: PortalStream, nodeId: NodeId, contentId: ContentId, content: seq[byte]
 ): Bytes2 =
-  stream.pruneAllowedConnections()
-
   # TODO: Should we check if `NodeId` & `connectionId` combo already exists?
   # What happens if we get duplicates?
   var connectionId: Bytes2
-  stream.rng[].generate(connectionId)
 
   # uTP protocol uses BE for all values in the header, incl. connection id.
-  let id = uint16.fromBytesBE(connectionId)
+  var id = ConnectionId.fromBytesBE(connectionId)
+
+  # Generate a new id if already existing to avoid using a duplicate
+  if stream.contentRequests.contains(id):
+    stream.rng[].generate(connectionId)
+    id = ConnectionId.fromBytesBE(connectionId)
+
   let contentRequest = ContentRequest(
-    connectionId: id,
     nodeId: nodeId,
+    contentId: contentId,
     content: content,
     timeout: Moment.now() + stream.connectionTimeout,
   )
-  stream.contentRequests.add(contentRequest)
+  stream.contentRequests[id] = contentRequest
 
   return connectionId
 
 proc connectTo*(
-    stream: PortalStream, nodeAddress: NodeAddress, connectionId: uint16
+    stream: PortalStream, nodeAddress: NodeAddress, connectionId: ConnectionId
 ): Future[Result[UtpSocket[NodeAddress], string]] {.async: (raises: [CancelledError]).} =
   let connectRes = await stream.transport.connectTo(nodeAddress, connectionId)
   if connectRes.isErr():
@@ -283,8 +378,11 @@ proc new(
 ): T =
   let stream = PortalStream(
     transport: transport,
+    contentRequests: newTable[ConnectionId, ContentRequest](),
+    contentOffers: newTable[ConnectionId, ContentOffer](),
     connectionTimeout: connectionTimeout,
     contentReadTimeout: contentReadTimeout,
+    pendingTransfers: newTable[NodeId, HashSet[ContentId]](),
     contentQueue: contentQueue,
     rng: rng,
   )
@@ -292,17 +390,17 @@ proc new(
   stream
 
 proc allowedConnection(
-    stream: PortalStream, address: NodeAddress, connectionId: uint16
+    stream: PortalStream, address: NodeAddress, connectionId: ConnectionId
 ): bool =
-  return
-    stream.contentRequests.any(
-      proc(x: ContentRequest): bool =
-        x.connectionId == connectionId and x.nodeId == address.nodeId
-    ) or
-    stream.contentOffers.any(
-      proc(x: ContentOffer): bool =
-        x.connectionId == connectionId and x.nodeId == address.nodeId
-    )
+  if stream.contentRequests.contains(connectionId) and
+      stream.contentRequests.getOrDefault(connectionId).nodeId == address.nodeId:
+    return true
+
+  if stream.contentOffers.contains(connectionId) and
+      stream.contentOffers.getOrDefault(connectionId).nodeId == address.nodeId:
+    return true
+
+  return false
 
 proc handleIncomingConnection(
     server: UtpRouter[NodeAddress], socket: UtpSocket[NodeAddress]
@@ -313,18 +411,24 @@ proc handleIncomingConnection(
     # Note: Connection id of uTP SYN is different from other packets, it is
     # actually the peers `send_conn_id`, opposed to `receive_conn_id` for all
     # other packets.
-    for i, request in stream.contentRequests:
-      if request.connectionId == socket.connectionId and
-          request.nodeId == socket.remoteAddress.nodeId:
+
+    if stream.contentRequests.contains(socket.connectionId):
+      let request = stream.contentRequests.getOrDefault(socket.connectionId)
+      if request.nodeId == socket.remoteAddress.nodeId:
         let fut = socket.writeContentRequest(stream, request)
-        stream.contentRequests.del(i)
+
+        stream.removePendingTransfer(request.nodeId, request.contentId)
+        stream.contentRequests.del(socket.connectionId)
         return noCancel(fut)
 
-    for i, offer in stream.contentOffers:
-      if offer.connectionId == socket.connectionId and
-          offer.nodeId == socket.remoteAddress.nodeId:
+    if stream.contentOffers.contains(socket.connectionId):
+      let offer = stream.contentOffers.getOrDefault(socket.connectionId)
+      if offer.nodeId == socket.remoteAddress.nodeId:
         let fut = socket.readContentOffer(stream, offer)
-        stream.contentOffers.del(i)
+
+        for contentId in offer.contentIds:
+          stream.removePendingTransfer(offer.nodeId, contentId)
+        stream.contentOffers.del(socket.connectionId)
         return noCancel(fut)
 
   # TODO: Is there a scenario where this can happen,
@@ -334,7 +438,7 @@ proc handleIncomingConnection(
   return fut
 
 proc allowIncomingConnection(
-    r: UtpRouter[NodeAddress], remoteAddress: NodeAddress, connectionId: uint16
+    r: UtpRouter[NodeAddress], remoteAddress: NodeAddress, connectionId: ConnectionId
 ): bool =
   let manager = getUserData[NodeAddress, StreamManager](r)
   for stream in manager.streams:
