@@ -747,21 +747,18 @@ proc findContent*(
     let m = contentMessageResponse.get()
     case m.contentMessageType
     of connectionIdType:
-      let nodeAddress = NodeAddress.init(dst)
-      if nodeAddress.isNone():
-        # It should not happen as we are already after the succesfull
-        # talkreq/talkresp cycle
-        error "Trying to connect to node with unknown address", id = dst.id
-        return err("Trying to connect to node with unknown address")
+      let nodeAddress = NodeAddress.init(dst).valueOr:
+        # This should not happen as it comes a after succesfull talkreq/talkresp
+        return err("Trying to connect to node with unknown address: " & $dst.id)
 
-      # uTP protocol uses BE for all values in the header, incl. connection id
-      let socket = (
-        await p.stream.connectTo(
-          nodeAddress.unsafeGet(), uint16.fromBytesBE(m.connectionId)
+      let socket =
+        ?(
+          await p.stream.connectTo(
+            # uTP protocol uses BE for all values in the header, incl. connection id
+            nodeAddress,
+            uint16.fromBytesBE(m.connectionId),
+          )
         )
-      ).valueOr:
-        debug "uTP connection error for find content", error
-        return err("Error connecting uTP socket")
 
       try:
         # Read all bytes from the socket
@@ -816,7 +813,7 @@ proc findContent*(
       else:
         return err("Content message returned invalid ENRs")
   else:
-    warn "FindContent failed due to find content request failure ",
+    debug "FindContent failed due to find content request failure ",
       error = contentMessageResponse.error
 
     return err("No content response")
@@ -905,20 +902,12 @@ proc offer(
       # Don't open an uTP stream if no content was requested
       return ok(m.contentKeys)
 
-    let nodeAddress = NodeAddress.init(o.dst)
-    if nodeAddress.isNone():
-      # It should not happen as we are already after succesfull talkreq/talkresp
-      # cycle
-      error "Trying to connect to node with unknown address", id = o.dst.id
-      return err("Trying to connect to node with unknown address")
+    let nodeAddress = NodeAddress.init(o.dst).valueOr:
+      # This should not happen as it comes a after succesfull talkreq/talkresp
+      return err("Trying to connect to node with unknown address: " & $o.dst.id)
 
-    let socket = (
-      await p.stream.connectTo(
-        nodeAddress.unsafeGet(), uint16.fromBytesBE(m.connectionId)
-      )
-    ).valueOr:
-      debug "uTP connection error for offer content", error
-      return err("Error connecting uTP socket")
+    let socket =
+      ?(await p.stream.connectTo(nodeAddress, uint16.fromBytesBE(m.connectionId)))
 
     template lenu32(x: untyped): untyped =
       uint32(len(x))
@@ -928,7 +917,6 @@ proc offer(
       for i, b in m.contentKeys:
         if b:
           let content = o.contentList[i].content
-          # TODO: stop using faststreams for this
           var output = memoryOutput()
           try:
             output.write(toBytes(content.lenu32, Leb128).toOpenArray())
@@ -1248,8 +1236,9 @@ proc contentLookup*(
           )
         )
     else:
-      # TODO: Should we do something with the node that failed responding our
-      # query?
+      # Note: Not doing any retries here as retries can/should be done on a
+      # higher layer. However, depending on the failure we could attempt a retry,
+      # e.g. on uTP specific errors.
       discard
 
   portal_lookup_content_failures.inc(labelValues = [$p.protocolId])
@@ -1271,8 +1260,21 @@ proc traceContentLookup*(
   # first for the same request.
   p.baseProtocol.rng[].shuffle(closestNodes)
 
-  var responses = Table[string, TraceResponse]()
-  var metadata = Table[string, NodeMetadata]()
+  # Sort closestNodes so that nodes that are in range of the target content
+  # are queried first
+  proc nodesCmp(x, y: Node): int =
+    let
+      xRadius = p.radiusCache.get(x.id)
+      yRadius = p.radiusCache.get(y.id)
+
+    if xRadius.isSome() and p.inRange(x.id, xRadius.unsafeGet(), targetId):
+      -1
+    elif yRadius.isSome() and p.inRange(y.id, yRadius.unsafeGet(), targetId):
+      1
+    else:
+      0
+
+  closestNodes.sort(nodesCmp)
 
   var asked, seen = HashSet[NodeId]()
   asked.incl(p.localNode.id) # No need to ask our own node
@@ -1280,19 +1282,19 @@ proc traceContentLookup*(
   for node in closestNodes:
     seen.incl(node.id)
 
+  # Trace data
+  var responses = Table[string, TraceResponse]()
+  var metadata = Table[string, NodeMetadata]()
   # Local node should be part of the responses
   responses["0x" & $p.localNode.id] =
     TraceResponse(durationMs: 0, respondedWith: seen.toSeq())
-
   metadata["0x" & $p.localNode.id] = NodeMetadata(
     enr: p.localNode.record, distance: p.distance(p.localNode.id, targetId)
   )
-
-  # We should also have metadata for all the closes nodes
-  # in order to be able to show cancelled requests
-  for cn in closestNodes:
-    metadata["0x" & $cn.id] =
-      NodeMetadata(enr: cn.record, distance: p.distance(cn.id, targetId))
+  # And metadata for all the nodes local node closestNodes
+  for node in closestNodes:
+    metadata["0x" & $node.id] =
+      NodeMetadata(enr: node.record, distance: p.distance(node.id, targetId))
 
   var pendingQueries = newSeqOfCap[
     Future[PortalResult[FoundContent]].Raising([CancelledError])
@@ -1419,8 +1421,12 @@ proc traceContentLookup*(
           ),
         )
     else:
-      # TODO: Should we do something with the node that failed responding our
-      # query?
+      # Note: Not doing any retries here as retries can/should be done on a
+      # higher layer. However, depending on the failure we could attempt a retry,
+      # e.g. on uTP specific errors.
+      # TODO: Ideally we get an empty response added to the responses table
+      # and the metadata for the node that failed to respond. In the current
+      # implementation there is no access to the node information however.
       discard
 
   portal_lookup_content_failures.inc(labelValues = [$p.protocolId])
