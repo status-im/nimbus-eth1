@@ -13,7 +13,7 @@
 import
   eth/[common, rlp],
   results,
-  "."/[aristo_constants, aristo_desc, aristo_get]
+  "."/[aristo_constants, aristo_desc, aristo_compute]
 
 type
   ResolveVidFn = proc(
@@ -54,14 +54,6 @@ proc serialise(
 # ------------------------------------------------------------------------------
 # Public RLP transcoder mixins
 # ------------------------------------------------------------------------------
-
-func append*(w: var RlpWriter; key: HashKey) =
-  if 1 < key.len and key.len < 32:
-    w.appendRawBytes key.data
-  else:
-    w.append key.data
-
-# ---------------------
 
 proc to*(node: NodeRef; T: type seq[seq[byte]]): T =
   ## Convert the argument pait `w` to a single or a double item list item of
@@ -150,7 +142,7 @@ proc serialise*(
   ## of account type, otherwise pass the data as is.
   ##
   proc getKey(vid: VertexID): Result[HashKey,AristoError] =
-    ok (?db.getKeyRc((root, vid)))[0]
+    ok (?db.computeKey((root, vid)))
 
   pyl.serialise getKey
 

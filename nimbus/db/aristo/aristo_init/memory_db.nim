@@ -97,13 +97,14 @@ proc getVtxFn(db: MemBackendRef): GetVtxFn =
 
 proc getKeyFn(db: MemBackendRef): GetKeyFn =
   result =
-    proc(rvid: RootedVertexID): Result[HashKey,AristoError] =
+    proc(rvid: RootedVertexID, flags: set[GetVtxFlag]): Result[(HashKey, VertexRef),AristoError] =
       let data = db.mdb.sTab.getOrDefault(rvid, EmptyBlob)
       if 0 < data.len:
         let key = data.deblobify(HashKey).valueOr:
-          return err(GetKeyNotFound)
-        if key.isValid:
-          return ok(key)
+          let vtx = data.deblobify(VertexRef).valueOr:
+            return err(GetKeyNotFound)
+          return ok((VOID_HASH_KEY, vtx))
+        return ok((key, nil))
       err(GetKeyNotFound)
 
 proc getTuvFn(db: MemBackendRef): GetTuvFn =
@@ -150,14 +151,7 @@ proc putLstFn(db: MemBackendRef): PutLstFn =
     proc(hdl: PutHdlRef; lst: SavedState) =
       let hdl = hdl.getSession db
       if hdl.error.isNil:
-        let rc = lst.blobify # test
-        if rc.isOk:
-          hdl.lSst = Opt.some(lst)
-        else:
-          hdl.error = TypedPutHdlErrRef(
-            pfx:  AdmPfx,
-            aid:  AdmTabIdLst,
-            code: rc.error)
+        hdl.lSst = Opt.some(lst)
 
 proc putEndFn(db: MemBackendRef): PutEndFn =
   result =

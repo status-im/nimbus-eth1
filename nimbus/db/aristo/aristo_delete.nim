@@ -25,14 +25,14 @@ import
 # Private heplers
 # ------------------------------------------------------------------------------
 
-proc branchStillNeeded(vtx: VertexRef, removed: int): Result[int,void] =
+proc branchStillNeeded(vtx: VertexRef, removed: int8): Result[int8,void] =
   ## Returns the nibble if there is only one reference left.
-  var nibble = -1
-  for n in 0 .. 15:
+  var nibble = -1'i8
+  for n in 0'i8 .. 15'i8:
     if n == removed:
       continue
 
-    if vtx.bVid[n].isValid:
+    if vtx.bVid(uint8 n).isValid:
       if 0 <= nibble:
         return ok(-1)
       nibble = n
@@ -84,7 +84,7 @@ proc deleteImpl(
 
     # Get child vertex (there must be one after a `Branch` node)
     let
-      vid = br.vtx.bVid[nbl]
+      vid = br.vtx.bVid(uint8 nbl)
       nxt = db.getVtx (hike.root, vid)
     if not nxt.isValid:
       return err(DelVidStaleVtx)
@@ -103,7 +103,8 @@ proc deleteImpl(
         VertexRef(
           vType: Branch,
           pfx:  br.vtx.pfx & NibblesBuf.nibble(nbl.byte) & nxt.pfx,
-          bVid: nxt.bVid)
+          startVid: nxt.startVid,
+          used: nxt.used)
 
     # Put the new vertex at the id of the obsolete branch
     db.layersPutVtx((hike.root, br.vid), vtx)
@@ -115,7 +116,7 @@ proc deleteImpl(
   else:
     # Clear the removed leaf from the branch (that still contains other children)
     let brDup = br.vtx.dup
-    brDup.bVid[hike.legs[^2].nibble] = VertexID(0)
+    discard brDup.setUsed(uint8 hike.legs[^2].nibble, false)
     db.layersPutVtx((hike.root, br.vid), brDup)
 
     ok(nil)

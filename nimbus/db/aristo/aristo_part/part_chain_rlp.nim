@@ -62,10 +62,10 @@ proc chainRlpNodes*(
       let
         nibble = path[nChewOff]
         rest = path.slice(nChewOff+1)
-      if not vtx.bVid[nibble].isValid:
+      if not vtx.bVid(nibble).isValid:
         return err(PartChnBranchVoidEdge)
       # Recursion!
-      db.chainRlpNodes((rvid.root,vtx.bVid[nibble]), rest, chain)
+      db.chainRlpNodes((rvid.root,vtx.bVid(nibble)), rest, chain)
 
 
 proc trackRlpNodes*(

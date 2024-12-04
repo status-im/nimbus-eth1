@@ -200,9 +200,9 @@ func ppVtx(nd: VertexRef, db: AristoDbRef, rvid: RootedVertexID): string =
       result &= nd.pfx.ppPathPfx & "," & nd.lData.ppPayload(db)
     of Branch:
       result &= nd.pfx.ppPathPfx & ":"
-      for n in 0..15:
-        if nd.bVid[n].isValid:
-          result &= nd.bVid[n].ppVid
+      for n in 0'u8..15'u8:
+        if nd.bVid(n).isValid:
+          result &= nd.bVid(n).ppVid
         if n < 15:
           result &= ","
     result &= ")"
@@ -238,12 +238,12 @@ proc ppNode(
       else:
         result &= nd.vtx.lData.ppPayload(db)
     of Branch:
-      let keyOnly = nd.vtx.bVid.toSeq.filterIt(it.isValid).len == 0
+      let keyOnly = nd.vtx.subVids.toSeq.filterIt(it.isValid).len == 0
       result &= nd.vtx.pfx.ppPathPfx & ":"
-      for n in 0..15:
-        if nd.vtx.bVid[n].isValid:
-          let tag = db.ppKeyOk(nd.key[n],(rvid.root,nd.vtx.bVid[n]))
-          result &= nd.vtx.bVid[n].ppVid & tag
+      for n in 0'u8..15'u8:
+        if nd.vtx.bVid(n).isValid:
+          let tag = db.ppKeyOk(nd.key[n],(rvid.root,nd.vtx.bVid(n)))
+          result &= nd.vtx.bVid(n).ppVid & tag
         elif keyOnly and nd.key[n].isValid:
           result &= nd.key[n].ppKey(db)
         if n < 15:

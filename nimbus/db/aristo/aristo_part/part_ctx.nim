@@ -29,7 +29,7 @@ proc newCtx(ps: PartStateRef; hike: Hike): Result[PartStateCtx,AristoError]  =
   let
     wp = hike.legs[^1].wp
     nibble = hike.legs[^1].nibble
-    fromVid = wp.vtx.bVid[nibble]
+    fromVid = wp.vtx.bVid(uint8 nibble)
 
   if not ps.isPerimeter(fromVid) or ps.isExtension(fromVid):
     return err(PartCtxNotAvailable)
@@ -43,7 +43,7 @@ proc newCtx(ps: PartStateRef; hike: Hike): Result[PartStateCtx,AristoError]  =
       fromVid:  fromVid)
 
   # Update database so that is space for adding a new sub-tree here
-  vtx2.bVid[nibble] = VertexID(0)
+  discard vtx2.setUsed(uint8 nibble, false)
   ps.db.layersPutVtx(psc.location,vtx2)
   ok psc
 
@@ -97,12 +97,12 @@ proc ctxAcceptChange(psc: PartStateCtx): Result[bool,AristoError] =
     ps = psc.ps
     db = ps.db
     (vtx,_) = ? db.getVtxRc psc.location
-    toVid = vtx.bVid[psc.nibble]
+    toVid = vtx.bVid(uint8 psc.nibble)
 
   if not toVid.isValid:
     # Nothing changed, so restore
     let vtx2 = vtx.dup
-    vtx2.bVid[psc.nibble] = psc.fromVid
+    doAssert false, "TODO vtx2.bVid[psc.nibble] = psc.fromVid"
     db.layersPutVtx(psc.location, vtx2)
     ok(false)
 

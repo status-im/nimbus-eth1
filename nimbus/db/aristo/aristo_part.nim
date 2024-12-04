@@ -242,7 +242,8 @@ proc partPut*(
           of Leaf:
             node.vtx.lData = vtx.lData
           of Branch:
-            node.vtx.bVid = vtx.bVid
+            node.vtx.startVid = vtx.startVid
+            node.vtx.used = vtx.used
           ps.addCore(root, key)                # register core node
           ps.pureExt.del key                   # core node can't be an extension
           continue
@@ -266,7 +267,7 @@ proc partPut*(
         for n in 0 .. 15:
           let bKey = node.key[n]
           if bKey.isValid:
-            node.vtx.bVid[n] = (? ps.getRvid(root, bKey))[0].vid
+            doAssert false, "TODO node.vtx.bVid[n] = (? ps.getRvid(root, bKey))[0].vid"
       ps.addCore(root, key)                    # register core node
       ps.pureExt.del key                       # core node can't be an extension
 
@@ -444,7 +445,7 @@ proc partWithExtEnd*(ps: PartStateRef): Result[void,AristoError] =
       return err(PartExtVtxHasVanished)
     if vtx.vType != Branch or
        vtx.pfx != ext.xPfx or
-       vtx.bVid != array[16,VertexID].default:
+       vtx.used != uint16.default:
       restore()
       return err(PartExtVtxWasModified)
     rollback.add (rvid,ext)

@@ -90,15 +90,15 @@ proc getVtxFn(db: RdbBackendRef): GetVtxFn =
 
 proc getKeyFn(db: RdbBackendRef): GetKeyFn =
   result =
-    proc(rvid: RootedVertexID): Result[HashKey,AristoError] =
+    proc(rvid: RootedVertexID, flags: set[GetVtxFlag]): Result[(HashKey, VertexRef),AristoError] =
 
       # Fetch serialised data record
-      let key = db.rdb.getKey(rvid).valueOr:
+      let key = db.rdb.getKey(rvid, flags).valueOr:
         when extraTraceMessages:
           trace logTxt "getKeyFn: failed", rvid, error=error[0], info=error[1]
         return err(error[0])
 
-      if key.isValid:
+      if (key[0].isValid or key[1].isValid):
         return ok(key)
 
       err(GetKeyNotFound)
@@ -173,12 +173,7 @@ proc putLstFn(db: RdbBackendRef): PutLstFn =
     proc(hdl: PutHdlRef; lst: SavedState) =
       let hdl = hdl.getSession db
       if hdl.error.isNil:
-        let data = lst.blobify.valueOr:
-          hdl.error = TypedPutHdlErrRef(
-            pfx:  AdmPfx,
-            aid:  AdmTabIdLst,
-            code: error)
-          return
+        let data = lst.blobify
         db.rdb.putAdm(AdmTabIdLst, data).isOkOr:
           hdl.error = TypedPutHdlErrRef(
             pfx:  AdmPfx,

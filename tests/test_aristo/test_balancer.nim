@@ -204,15 +204,15 @@ proc isDbEq(a, b: LayerRef; db: AristoDbRef; noisy = true): bool =
         if aKey.isValid and bKey.isValid:
           return false
         # The valid one must match the backend data
-        let rc = db.getKeyUbe vid
+        let rc = db.getKeyUbe(vid, {})
         if rc.isErr:
           return false
         let key = if aKey.isValid: aKey else: bKey
-        if key != rc.value:
+        if key != rc.value[0]:
           return false
 
       elif not vid.isValid and not bMap.hasKey vid:
-        let rc = db.getKeyUbe vid
+        let rc = db.getKeyUbe(vid, {})
         if rc.isOk:
           return false # Exists on backend but missing on `bMap[]`
         elif rc.error != GetKeyNotFound:

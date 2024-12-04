@@ -73,7 +73,8 @@ type
     of Leaf:
       lData*: LeafPayload            ## Reference to data payload
     of Branch:
-      bVid*: array[16,VertexID]      ## Edge list with vertex IDs
+      startVid*: VertexID
+      used*: uint16
 
   NodeRef* = ref object of RootRef
     ## Combined record for a *traditional* ``Merkle Patricia Tree` node merged
@@ -135,6 +136,20 @@ type
 # Public helpers (misc)
 # ------------------------------------------------------------------------------
 
+func bVid*(vtx: VertexRef, nibble: uint8): VertexID =
+  if (vtx.used and (1'u16 shl nibble)) > 0:
+    VertexID(uint64(vtx.startVid) + nibble)
+  else:
+    default(VertexID)
+
+func setUsed*(vtx: VertexRef, nibble: uint8, used: static bool): VertexID =
+  vtx.used =
+    when used:
+      vtx.used or (1'u16 shl nibble)
+    else:
+      vtx.used and (not (1'u16 shl nibble))
+  vtx.bVid(nibble)
+
 func init*(T: type LayerRef): T =
   ## Constructor, returns empty layer
   T()
@@ -176,9 +191,32 @@ proc `==`*(a, b: VertexRef): bool =
       if a.pfx != b.pfx or a.lData != b.lData:
         return false
     of Branch:
-      if a.pfx != b.pfx or a.bVid != b.bVid:
+      if a.pfx != b.pfx or a.startVid != b.startVid or a.used != b.used:
         return false
   true
+
+iterator pairs*(vtx: VertexRef): tuple[nibble: uint8, vid: VertexID] =
+  ## Iterates over the sub-vids of a branch (does nothing for leaves)
+  case vtx.vType:
+  of Leaf:
+    discard
+  of Branch:
+    for n in 0'u8 .. 15'u8:
+      if (vtx.used and (1'u16 shl n)) > 0:
+        yield (n, VertexID(uint64(vtx.startVid) + n))
+
+iterator allPairs*(vtx: VertexRef): tuple[nibble: uint8, vid: VertexID] =
+  ## Iterates over the sub-vids of a branch (does nothing for leaves) including
+  ## currently unset nodes
+  case vtx.vType:
+  of Leaf:
+    discard
+  of Branch:
+    for n in 0'u8 .. 15'u8:
+      if (vtx.used and (1'u16 shl n)) > 0:
+        yield (n, VertexID(uint64(vtx.startVid) + n))
+      else:
+        yield (n, default(VertexID))
 
 proc `==`*(a, b: NodeRef): bool =
   ## Beware, potential deep comparison
@@ -186,8 +224,8 @@ proc `==`*(a, b: NodeRef): bool =
     return false
   case a.vtx.vType:
   of Branch:
-    for n in 0..15:
-      if a.vtx.bVid[n] != 0.VertexID or b.vtx.bVid[n] != 0.VertexID:
+    for n in 0'u8..15'u8:
+      if a.vtx.bVid(n) != 0.VertexID or b.vtx.bVid(n) != 0.VertexID:
         if a.key[n] != b.key[n]:
           return false
   else:
@@ -228,7 +266,8 @@ func dup*(vtx: VertexRef): VertexRef =
       VertexRef(
         vType: Branch,
         pfx:   vtx.pfx,
-        bVid:  vtx.bVid)
+        startVid: vtx.startVid,
+        used: vtx.used)
 
 func dup*(node: NodeRef): NodeRef =
   ## Duplicate node.
