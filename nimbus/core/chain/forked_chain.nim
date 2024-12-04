@@ -328,33 +328,27 @@ func calculateNewBase(
     finalized: BlockNumber;
     pvarc: PivotArc;
       ): PivotArc =
-  ## Search for `finalized` searching backwards starting at `pvarc.pvHead`.
+  ## It is required that the `finalized` argument is on the `pvarc` arc, i.e.
+  ## it ranges beween `pvarc.cursor.forkJunction` and
+  ## `c.blocks[pvarc.cursor.head].number`.
   ##
-  ## It is required that `finalized` is on the `pvarc` arc, i.e.
-  ## `pvarc.cursor.forkJunction <= finalized`. The `finalized` entry might be
-  ## moved backwards so that a minimum distance applies.
+  ## The function returns a cursor arc containing a new base position. It is
+  ## calculated as follows.
   ##
-  ## The function returns the effective new `finalized` block as `result.pv`
-  ## and the containing curor arc as `result.cursor`.
+  ## Starting at the argument `pvarc.pvHead` searching backwards, the new base
+  ## is the position of the block with number `finalized`.
+  ##
+  ## Before searching backwards, the `finalized` argument might be adjusted
+  ## and made smaller so that a minimum distance to the head on the cursor arc
+  ## applies.
   ##
   # It's important to have base at least `baseDistance` behind head
   # so we can answer state queries about history that deep.
   let target = min(finalized,
     max(pvarc.pvNumber, c.baseDistance) - c.baseDistance)
 
-  # The distance is less than `baseDistance`, don't move the base
-  if target <= c.baseHeader.number + c.baseDistance:
-    return PivotArc(
-      pvHash:         c.baseHash,
-      pvHeader:       c.baseHeader,
-      cursor: CursorDesc(
-        forkJunction: c.baseHeader.number,
-        hash:         c.baseHash))
-
-  # Verify that `target` does not fall outside the `pvarc` segment. It is
-  # assumed that `finalized` is within the `head` arc.
-  if target < pvarc.cursor.forkJunction:
-    # Noting to do here
+  # Can only increase base block number.
+  if target <= c.baseHeader.number:
     return PivotArc(
       pvHash:         c.baseHash,
       pvHeader:       c.baseHeader,
@@ -365,12 +359,33 @@ func calculateNewBase(
   var prevHash = pvarc.pvHash
   while true:
     c.blocks.withValue(prevHash, val):
-      # Note that `cursorHead.forkJunction <= target`
       if target == val.blk.header.number:
-        return PivotArc(
-          pvHash:   prevHash,
-          pvHeader: val.blk.header,
-          cursor:   pvarc.cursor)
+        if pvarc.cursor.forkJunction <= target:
+          # OK, new base stays on the argument pivot arc.
+          # ::
+          #                 B1 - B2 - B3 - B4
+          #                /      ^    ^    ^
+          #   base - A1 - A2 - A3 |    |    |
+          #                       |    pv   CCH
+          #                       |
+          #                       target
+          #
+          return PivotArc(
+            pvHash:   prevHash,
+            pvHeader: val.blk.header,
+            cursor:   pvarc.cursor)
+        else:
+          # The new base (aka target) falls out of the argument pivot branch,
+          # ending up somewhere on a parent branch.
+          # ::
+          #                 B1 - B2 - B3 - B4
+          #                /           ^    ^
+          #   base - A1 - A2 - A3      |    |
+          #           ^                pv   CCH
+          #           |
+          #           target
+          #
+          return c.findCursorArc(prevHash).expect "valid cursor arc"
       prevHash = val.blk.header.parentHash
       continue
     break
