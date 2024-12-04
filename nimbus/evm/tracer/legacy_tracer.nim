@@ -34,7 +34,7 @@ type
     gas: GasInt
 
 proc hash*(x: UInt256): Hash =
-  result = hash(x.toByteArrayBE)
+  result = hash(x.toBytesBE)
 
 proc rememberStorageKey(ctx: LegacyTracer, compDepth: int, key: UInt256) =
   ctx.storageKeys[compDepth].incl key
