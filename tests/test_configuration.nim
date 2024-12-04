@@ -46,11 +46,11 @@ proc configurationMain*() =
       let ff = makeConfig(@["--chaindb:ariPrune"])
       check ff.chainDbMode == ChainDbMode.AriPrune
 
-    test "import":
+    test "import-rlp":
       let aa = makeTestConfig()
       check aa.cmd == NimbusCmd.noCommand
 
-      let bb = makeConfig(@["import", genesisFile])
+      let bb = makeConfig(@["import-rlp", genesisFile])
       check bb.cmd == NimbusCmd.`import`
       check bb.blocksFile[0].string == genesisFile
 

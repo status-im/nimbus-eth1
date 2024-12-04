@@ -19,7 +19,7 @@ import
   beacon_chain/networking/network_metadata,
   ./config,
   ./common/common,
-  ./core/[block_import, chain],
+  ./core/chain,
   ./db/era1_db,
   ./utils/era_helpers
 
@@ -341,5 +341,3 @@ proc importBlocks*(conf: NimbusConf, com: CommonRef) =
 
       if blocks.len > 0:
         process()
-
-  importRlpBlocks(conf, com)

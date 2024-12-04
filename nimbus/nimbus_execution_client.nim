@@ -23,6 +23,7 @@ import
   ./constants,
   ./nimbus_desc,
   ./nimbus_import,
+  ./core/block_import,
   ./core/eip4844,
   ./db/core_db/persistent,
   ./db/storage_types,
@@ -235,6 +236,8 @@ proc run(nimbus: NimbusNode, conf: NimbusConf) =
   case conf.cmd
   of NimbusCmd.`import`:
     importBlocks(conf, com)
+  of NimbusCmd.`import-rlp`:
+    importRlpBlocks(conf, com)
   else:
     basicServices(nimbus, conf, com)
     manageAccounts(nimbus, conf)
