@@ -238,21 +238,19 @@ proc connectTo*(
   if connectRes.isErr():
     case connectRes.error
     of SocketAlreadyExists:
-      # This means that there is already a socket to this nodeAddress with given
-      # connection id. This means that a peer sent us a connection id which is
-      # already in use. The connection is failed and an error returned.
-      let msg =
-        "Socket to " & $nodeAddress & "with connection id: " & $connectionId &
-        " already exists"
-      return err(msg)
+      # There is already a socket to this nodeAddress with given connection id.
+      # This means that a peer sent a connection id which is already in use.
+      err(
+        "Socket to " & $nodeAddress & " with connection id " & $connectionId &
+          " already exists"
+      )
     of ConnectionTimedOut:
-      # A time-out here means that a uTP SYN packet was re-sent 3 times and
-      # failed to be acked. This should be enough of indication that the
-      # remote host is not reachable and no new connections are attempted.
-      let msg = "uTP timeout while trying to connect to " & $nodeAddress
-      return err(msg)
+      # A time-out here means that a uTP SYN packet was sent 3 times and failed
+      # to be acked. This should be enough of indication that the remote host is
+      # not reachable and no new connections are attempted.
+      err("uTP connection timeout when connecting to node: " & $nodeAddress)
   else:
-    return ok(connectRes.get())
+    ok(connectRes.value())
 
 proc writeContentRequest(
     socket: UtpSocket[NodeAddress], stream: PortalStream, request: ContentRequest
