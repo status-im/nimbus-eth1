@@ -78,7 +78,7 @@ func toAddress*(x: UInt256): Address =
 const ZeroAddr* = default(Address)
 
 func toHash*(x: UInt256): Hash32 =
-  Hash32(x.toByteArrayBE)
+  Hash32(x.toBytesBE)
 
 func timestampToBeaconRoot*(timestamp: Quantity): Hash32 =
   # Generates a deterministic hash from the timestamp
@@ -347,4 +347,3 @@ func toExecutableData*(payload: ExecutionPayload, attr: PayloadAttributes): Exec
     beaconRoot: attr.parentBeaconBlockRoot,
     versionedHashes: Opt.some(collectBlobHashes(payload.transactions)),
   )
-  

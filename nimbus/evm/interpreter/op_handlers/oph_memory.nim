@@ -170,7 +170,7 @@ proc mstore8Op(cpt: VmCpt): EvmResultVoid =
     reason = "MSTORE8: GasVeryLow + memory expansion")
 
   cpt.memory.extend(memPos, 1)
-  cpt.memory.write(memPos, value.toByteArrayBE[31])
+  cpt.memory.write(memPos, value.toBytesBE[31])
 
 
 # -------
