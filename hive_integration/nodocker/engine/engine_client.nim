@@ -40,6 +40,8 @@ template wrapTry(body: untyped) =
     return err(e.msg)
   except JsonRpcError as ex:
     return err(ex.msg)
+  except JsonReaderError as ex:
+    return err(ex.formatMsg("rpc"))
   except CatchableError as ex:
     return err(ex.msg)
 
@@ -448,6 +450,18 @@ proc latestBlock*(client: RpcClient): Result[Block, string] =
     let res = waitFor client.eth_getBlockByNumber(blockId("latest"), true)
     if res.isNil:
       return err("failed to get latest blockHeader")
+    let output = Block(
+      header: toBlockHeader(res),
+      transactions: toTransactions(res.transactions),
+      withdrawals: res.withdrawals,
+    )
+    return ok(output)
+
+proc blockByNumber*(client: RpcClient, number: uint64): Result[Block, string] =
+  wrapTry:
+    let res = waitFor client.eth_getBlockByNumber(blockId(number), true)
+    if res.isNil:
+      return err("failed to get block " & $number)
     let output = Block(
       header: toBlockHeader(res),
       transactions: toTransactions(res.transactions),
