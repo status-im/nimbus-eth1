@@ -355,7 +355,7 @@ proc getUnclesCount*(
     let encodedUncles = block:
       let key = genericHashKey(ommersHash)
       db.ctx.getKvt().get(key.toOpenArray).valueOr:
-        if error.error == KvtNotFound:
+        if error.error != KvtNotFound:
           warn info, ommersHash, error=($$error)
         return ok(0)
     return ok(rlpFromBytes(encodedUncles).listLen)
@@ -372,7 +372,7 @@ proc getUncles*(
     let  encodedUncles = block:
       let key = genericHashKey(ommersHash)
       db.ctx.getKvt().get(key.toOpenArray).valueOr:
-        if error.error == KvtNotFound:
+        if error.error != KvtNotFound:
           warn info, ommersHash, error=($$error)
         return ok(default(seq[Header]))
     return ok(rlp.decode(encodedUncles, seq[Header]))
@@ -474,7 +474,7 @@ proc getUncleHashes*(
     let
       key = genericHashKey(header.ommersHash)
       encodedUncles = db.ctx.getKvt().get(key.toOpenArray).valueOr:
-        if error.error == KvtNotFound:
+        if error.error != KvtNotFound:
           warn "getUncleHashes()", ommersHash=header.ommersHash, error=($$error)
         return ok(default(seq[Hash32]))
     return ok(rlp.decode(encodedUncles, seq[Header]).mapIt(it.rlpHash))
@@ -487,7 +487,7 @@ proc getTransactionKey*(
     let
       txKey = transactionHashToBlockKey(transactionHash)
       tx = db.ctx.getKvt().get(txKey.toOpenArray).valueOr:
-        if error.error == KvtNotFound:
+        if error.error != KvtNotFound:
           warn "getTransactionKey()", transactionHash, error=($$error)
         return ok(default(TransactionKey))
     return ok(rlp.decode(tx, TransactionKey))
@@ -495,7 +495,8 @@ proc getTransactionKey*(
 proc headerExists*(db: CoreDbRef; blockHash: Hash32): bool =
   ## Returns True if the header with the given block hash is in our DB.
   db.ctx.getKvt().hasKeyRc(genericHashKey(blockHash).toOpenArray).valueOr:
-    warn "headerExists()", blockHash, error=($$error)
+    if error.error != KvtNotFound:
+      warn "headerExists()", blockHash, error=($$error)
     return false
   # => true/false
 
