@@ -70,11 +70,8 @@ proc purgeOlderBlocksFromHistory(db: CoreDbRef, bn: BlockNumber) =
   if 0 < bn:
     var blkNum = bn - 1
     while 0 < blkNum:
-      try:
-        if not db.forgetHistory blkNum:
-          break
-      except RlpError as exc:
-        warn "Error forgetting history", err = exc.msg
+      if not db.forgetHistory blkNum:
+        break
       blkNum = blkNum - 1
 
 proc persistBlocksImpl(

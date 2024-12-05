@@ -122,9 +122,7 @@ func jumpImpl(c: Computation; jumpTarget: UInt256): EvmResultVoid =
 
 proc popOp(cpt: VmCpt): EvmResultVoid =
   ## 0x50, Remove item from stack.
-  cpt.stack.popInt.isOkOr:
-    return err(error)
-  ok()
+  cpt.stack.pop()
 
 proc mloadOp(cpt: VmCpt): EvmResultVoid =
   ## 0x51, Load word from memory
