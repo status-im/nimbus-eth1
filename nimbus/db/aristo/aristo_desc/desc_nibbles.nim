@@ -33,7 +33,7 @@ type
 func high*(T: type NibblesBuf): int =
   63
 
-func nibble*(T: type NibblesBuf, nibble: byte): T =
+func nibble*(T: type NibblesBuf, nibble: byte): T {.noinit.} =
   result.limbs[0] = uint64(nibble) shl (64 - 4)
   result.iend = 1
 
