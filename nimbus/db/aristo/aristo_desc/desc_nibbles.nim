@@ -8,7 +8,7 @@
 # at your option. This file may not be copied, modified, or distributed
 # except according to those terms.
 
-{.push raises: [], gcsafe, inline.}
+{.push raises: [], gcsafe, noinline.}
 
 import stew/[arraybuf, arrayops, bitops2, endians2, staticfor]
 
@@ -98,9 +98,10 @@ func `==`*(lhs, rhs: NibblesBuf): bool =
   if lhs.iend != rhs.iend:
     return false
 
-  let last = (lhs.iend + 15).limb # Last limb containing any data
   staticFor i, 0 ..< lhs.limbs.len:
-    if uint8(i) < last and lhs.limbs[i] != rhs.limbs[i]:
+    if uint8(i * 16) >= lhs.iend:
+      return true
+    if lhs.limbs[i] != rhs.limbs[i]:
       return false
   true
 
@@ -141,29 +142,29 @@ func slice*(r: NibblesBuf, ibegin: int, iend = -1): NibblesBuf {.noinit.} =
     let shift = (ibegin mod 16) shl 2
     if shift == 0: # Must be careful not to shift by 64 which is UB!
       staticFor i, 0 ..< result.limbs.len:
-        if uint8(i) >= (result.iend + 15).limb:
+        if uint8(i * 16) >= result.iend:
           break done
         result.limbs[i] = r.limbs[ilimb]
         ilimb += 1
     else:
       staticFor i, 0 ..< result.limbs.len:
-        if uint8(i) >= (result.iend + 15).limb:
+        if uint8(i * 16) >= result.iend:
           break done
 
-        var cur = r.limbs[ilimb]
+        let cur = r.limbs[ilimb] shl shift
         ilimb += 1
-        var next =
-          if ilimb < uint8 r.limbs.len:
-            r.limbs[ilimb]
-          else:
-            0'u64
 
-        result.limbs[i] = (cur shl shift) or (next shr (64 - shift))
+        result.limbs[i] =
+          if (ilimb * 16) < uint8 r.iend:
+            let next = r.limbs[ilimb] shr (64 - shift)
+            cur or next
+          else:
+            cur
 
 template copyshr(aend: uint8) =
   block adone: # copy aend nibbles of a
     staticFor i, 0 ..< result.limbs.len:
-      if uint8(i) >= ((aend + 15).limb):
+      if uint8(i * 16) >= aend:
         break adone
 
       result.limbs[i] = a.limbs[i]
@@ -175,17 +176,17 @@ template copyshr(aend: uint8) =
 
     if shift == 0:
       staticFor i, 0 ..< result.limbs.len:
-        if uint8(i) >= ((b.iend + 15).limb):
+        if uint8(i * 16) >= b.iend:
           break bdone
 
-        result.limbs[alimb] = b[i]
+        result.limbs[alimb] = b.limbs[i]
         alimb += 1
     else:
       # remove the part of a that should be b from the last a limb
       result.limbs[alimb] = result.limbs[alimb] and ((not 0'u64) shl (64 - shift))
 
       staticFor i, 0 ..< result.limbs.len:
-        if uint8(i) >= ((b.iend + 15).limb):
+        if uint8(i * 16) >= b.iend:
           break bdone
 
         # reading result.limbs here is safe because because the previous loop
@@ -193,7 +194,7 @@ template copyshr(aend: uint8) =
         result.limbs[alimb] = result.limbs[alimb] or b.limbs[i] shr shift
 
         alimb += 1
-        if alimb < (result.iend + 15).limb:
+        if (alimb * 16) < result.iend:
           result.limbs[alimb] = b.limbs[i] shl (64 - shift)
 
 func `&`*(a, b: NibblesBuf): NibblesBuf {.noinit.} =
@@ -217,7 +218,7 @@ func toHexPrefix*(r: NibblesBuf, isLeaf = false): HexPrefixBuf {.noinit.} =
   # We'll adjust to the actual length below, but this hack allows us to write
   # full limbs
 
-  result.setLen(33)
+  result.n = 33 # careful with noinit, to not call setlen
   let
     limbs = (r.iend + 15).limb
     isOdd = (r.iend and 1) > 0
