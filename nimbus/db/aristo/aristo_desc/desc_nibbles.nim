@@ -137,21 +137,28 @@ func slice*(r: NibblesBuf, ibegin: int, iend = -1): NibblesBuf {.noinit.} =
   result.iend = uint8(e - ibegin)
 
   var ilimb = ibegin.limb
-  let shift = (ibegin mod 16) shl 2
   block done:
-    staticFor i, 0 ..< result.limbs.len:
-      if uint8(i) >= (result.iend + 15).limb:
-        break done
+    let shift = (ibegin mod 16) shl 2
+    if shift == 0: # Must be careful not to shift by 64 which is UB!
+      staticFor i, 0 ..< result.limbs.len:
+        if uint8(i) >= (result.iend + 15).limb:
+          break done
+        result.limbs[i] = r.limbs[ilimb]
+        ilimb += 1
+    else:
+      staticFor i, 0 ..< result.limbs.len:
+        if uint8(i) >= (result.iend + 15).limb:
+          break done
 
-      var cur = r.limbs[ilimb]
-      ilimb += 1
-      var next =
-        if shift != 0 and ilimb < uint8 r.limbs.len:
-          r.limbs[ilimb]
-        else:
-          0'u64
+        var cur = r.limbs[ilimb]
+        ilimb += 1
+        var next =
+          if ilimb < uint8 r.limbs.len:
+            r.limbs[ilimb]
+          else:
+            0'u64
 
-      result.limbs[i] = (cur shl shift) or (next shr (64 - shift))
+        result.limbs[i] = (cur shl shift) or (next shr (64 - shift))
 
 template copyshr(aend: uint8) =
   block adone: # copy aend nibbles of a
@@ -163,25 +170,31 @@ template copyshr(aend: uint8) =
 
   block bdone:
     let shift = (aend mod 16) shl 2
-    if shift > 0:
+
+    var alimb = aend.limb
+
+    if shift == 0:
+      staticFor i, 0 ..< result.limbs.len:
+        if uint8(i) >= ((b.iend + 15).limb):
+          break bdone
+
+        result.limbs[alimb] = b[i]
+        alimb += 1
+    else:
       # remove the part of a that should be b from the last a limb
-      result.limbs[aend.limb] =
-        result.limbs[aend.limb] and ((not 0'u64) shl (64 - shift))
+      result.limbs[alimb] = result.limbs[alimb] and ((not 0'u64) shl (64 - shift))
 
-    staticFor i, 0 ..< result.limbs.len:
-      if uint8(i) >= ((b.iend + 15).limb):
-        break bdone
+      staticFor i, 0 ..< result.limbs.len:
+        if uint8(i) >= ((b.iend + 15).limb):
+          break bdone
 
-      if shift > 0:
         # reading result.limbs here is safe because because the previous loop
         # iteration will have initialized it (or the a copy on initial iteration)
-        result.limbs[i + aend.limb] =
-          result.limbs[i + aend.limb] or b.limbs[i] shr shift
+        result.limbs[alimb] = result.limbs[alimb] or b.limbs[i] shr shift
 
-        if i + aend.limb + 1 < (result.iend + 15).limb:
-          result.limbs[i + aend.limb + 1] = b.limbs[i] shl (64 - shift)
-      else:
-        result.limbs[i + aend.limb] = b.limbs[i]
+        alimb += 1
+        if alimb < (result.iend + 15).limb:
+          result.limbs[alimb] = b.limbs[i] shl (64 - shift)
 
 func `&`*(a, b: NibblesBuf): NibblesBuf {.noinit.} =
   result.iend = min(64'u8, a.iend + b.iend)
