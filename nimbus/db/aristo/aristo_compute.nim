@@ -11,7 +11,7 @@
 {.push raises: [].}
 
 import
-  std/[strformat, math],
+  std/strformat,
   chronicles,
   eth/common,
   results,

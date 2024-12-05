@@ -244,11 +244,6 @@ proc maybeChainId(n: Opt[Quantity]): Opt[ChainId] =
     return Opt.none(ChainId)
   Opt.some(n.get.ChainId)
 
-proc maybeInt(n: Opt[Quantity]): Opt[int] =
-  if n.isNone:
-    return Opt.none(int)
-  Opt.some(n.get.int)
-
 proc toBlockHeader*(bc: BlockObject): Header =
   Header(
     number         : distinctBase(bc.number),
@@ -311,7 +306,7 @@ proc toTransactions*(txs: openArray[TxOrHash]): seq[Transaction] =
 type
   RPCReceipt* = object
     txHash*: Hash32
-    txIndex*: int
+    txIndex*: uint64
     blockHash*: Hash32
     blockNumber*: uint64
     sender*: Address
@@ -341,7 +336,7 @@ type
     payload*: seq[byte]
     nonce*: AccountNonce
     to*: Opt[Address]
-    txIndex*: Opt[int]
+    txIndex*: Opt[uint64]
     value*: UInt256
     v*: uint64
     r*: UInt256
@@ -355,7 +350,7 @@ type
 proc toRPCReceipt(rec: ReceiptObject): RPCReceipt =
   RPCReceipt(
     txHash: rec.transactionHash,
-    txIndex: rec.transactionIndex.int,
+    txIndex: rec.transactionIndex.uint64,
     blockHash: rec.blockHash,
     blockNumber: rec.blockNumber.uint64,
     sender: rec.`from`,
@@ -387,7 +382,7 @@ proc toRPCTx(tx: eth_api.TransactionObject): RPCTx =
     payload: tx.input,
     nonce: tx.nonce.AccountNonce,
     to: tx.to,
-    txIndex: maybeInt(tx.transactionIndex),
+    txIndex: maybeU64(tx.transactionIndex),
     value: tx.value,
     v: tx.v.uint64,
     r: tx.r,
@@ -509,6 +504,13 @@ proc txReceipt*(client: RpcClient, txHash: Hash32): Result[RPCReceipt, string] =
       return err("failed to get receipt: " & txHash.data.toHex)
     return ok(res.toRPCReceipt)
 
+proc getReceipt*(client: RpcClient, txHash: Hash32): Result[ReceiptObject, string] =
+  wrapTry:
+    let res = waitFor client.eth_getTransactionReceipt(txHash)
+    if res.isNil:
+      return err("failed to get receipt: " & txHash.data.toHex)
+    return ok(res)
+    
 proc txByHash*(client: RpcClient, txHash: Hash32): Result[RPCTx, string] =
   wrapTry:
     let res = waitFor client.eth_getTransactionByHash(txHash)

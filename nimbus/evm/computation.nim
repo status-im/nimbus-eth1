@@ -456,8 +456,14 @@ func getGasRefund*(c: Computation): GasInt =
   # EIP-2183 guarantee that sum of all child gasRefund
   # should never go below zero
   doAssert(c.msg.depth == 0 and c.gasMeter.gasRefunded >= 0)
+  var gasRefunded = c.vmState.gasRefunded
   if c.isSuccess:
-    result = GasInt c.gasMeter.gasRefunded
+    gasRefunded += c.gasMeter.gasRefunded
+
+  GasInt gasRefunded
+
+func addRefund*(c: Computation, amount: int64) =
+  c.vmState.gasRefunded += amount
 
 # Using `proc` as `selfDestructLen()` might be `proc` in logging mode
 proc refundSelfDestruct*(c: Computation) =

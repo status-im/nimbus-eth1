@@ -71,6 +71,7 @@ type
     gasCosts*         : GasCosts
     blobGasUsed*      : uint64
     allLogs*          : seq[Log] # EIP-6110
+    gasRefunded*      : int64    # Global gasRefunded counter
 
   Computation* = ref object
     # The execution computation
