@@ -74,6 +74,20 @@ func checkInStaticContext*(c: Computation): EvmResultVoid =
 
   ok()
 
+proc delegateResolutionCost*(c: Computation, address: Address): GasInt =
+  when defined(evmc_enabled):
+    if c.host.accessAccount(address) == EVMC_ACCESS_COLD:
+      ColdAccountAccessCost
+    else:
+      WarmStorageReadCost
+  else:
+    c.vmState.mutateStateDB:
+      if not db.inAccessList(address):
+        db.accessList(address)
+        return ColdAccountAccessCost
+      else:
+        return WarmStorageReadCost
+
 proc gasEip7702CodeCheck*(c: Computation; address: Address): GasInt =
   let code = when defined(evmc_enabled):
                CodeBytesRef.init(c.host.copyCode(address))
@@ -81,7 +95,7 @@ proc gasEip7702CodeCheck*(c: Computation; address: Address): GasInt =
                c.vmState.readOnlyStateDB.getCode(address)
   let delegateTo = parseDelegationAddress(code).valueOr:
     return 0
-  c.gasEip2929AccountCheck(delegateTo)
+  c.delegateResolutionCost(delegateTo)
 
 # ------------------------------------------------------------------------------
 # End

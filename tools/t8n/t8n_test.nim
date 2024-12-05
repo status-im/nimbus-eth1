@@ -664,6 +664,24 @@ const
       output: T8nOutput(alloc: true, result: true),
       expOut: "exp.json",
     ),
+    TestSpec(
+      name: "Mekong test, EIP-7702 gasRefunded",
+      base: "testdata/00-526",
+      input: t8nInput(
+        "alloc.json", "txs.rlp", "env.json", "Prague", "", "7078815900"
+      ),
+      output: T8nOutput(alloc: true, result: true),
+      expOut: "exp.json",
+    ),
+    TestSpec(
+      name: "Mekong test, EIP-7702 gasRefunded when computation fails",
+      base: "testdata/00-527",
+      input: t8nInput(
+        "alloc.json", "txs.rlp", "env.json", "Prague", "", "7078815900"
+      ),
+      output: T8nOutput(alloc: true, result: true),
+      expOut: "exp.json",
+    ),    
   ]
 
 proc main() =

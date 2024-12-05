@@ -160,6 +160,9 @@ proc setupHost(call: CallParams, keepStack: bool): TransactionHost =
     # All other defaults in `TransactionHost` are fine.
   )
 
+  # reset global gasRefund counter each time
+  # EVM called for a new transaction
+  vmState.gasRefunded = 0
   let gasRefund = if call.sysCall: 0
                   else: preExecComputation(vmState, call)
   let isPrecompile =
@@ -213,7 +216,7 @@ proc setupHost(call: CallParams, keepStack: bool): TransactionHost =
     host.computation = newComputation(
       vmState, call.sysCall, cMsg, isPrecompile = isPrecompile, keepStack = keepStack)
 
-  host.computation.gasMeter.refundGas(gasRefund)
+  host.computation.addRefund(gasRefund)
   vmState.captureStart(host.computation, call.sender, call.to,
                        call.isCreate, call.input,
                        call.gasLimit, call.value)
@@ -278,7 +281,9 @@ proc calculateAndPossiblyRefundGas(host: TransactionHost, call: CallParams): Gas
   # Calculated gas used, taking into account refund rules.
   if call.noRefund:
     result = c.gasMeter.gasRemaining
-  elif not c.shouldBurnGas:
+  else:
+    if c.shouldBurnGas:
+      c.gasMeter.gasRemaining = 0
     let maxRefund = (call.gasLimit - c.gasMeter.gasRemaining) div MaxRefundQuotient
     let refund = min(c.getGasRefund(), maxRefund)
     c.gasMeter.returnGas(refund)

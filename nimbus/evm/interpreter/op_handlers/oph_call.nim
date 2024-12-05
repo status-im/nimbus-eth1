@@ -29,6 +29,7 @@ import
   ../op_codes,
   ../utils/utils_numeric,
   ./oph_defs,
+  ./oph_helpers,
   chronicles,
   eth/common,
   eth/common/eth_types,
@@ -75,20 +76,6 @@ proc gasCallEIP2929(c: Computation, address: Address): GasInt =
         # The WarmStorageReadCostEIP2929 (100) is already deducted in
         # the form of a constant `gasCall`
         return ColdAccountAccessCost - WarmStorageReadCost
-
-proc delegateResolutionCost(c: Computation, address: Address): GasInt =
-  when evmc_enabled:
-    if c.host.accessAccount(address) == EVMC_ACCESS_COLD:
-      ColdAccountAccessCost
-    else:
-      WarmStorageReadCost
-  else:
-    c.vmState.mutateStateDB:
-      if not db.inAccessList(address):
-        db.accessList(address)
-        return ColdAccountAccessCost
-      else:
-        return WarmStorageReadCost
 
 proc updateStackAndParams(q: var LocalParams; c: Computation) =
   c.stack.lsTop(0)
