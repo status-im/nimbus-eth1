@@ -241,7 +241,7 @@ proc forkedChainMain*() =
       check com.wdWritten(blk3) == 3
       check chain.validate info & " (9)"
 
-    test "newBase == oldBase, fork and keep on that fork":
+    test "newBase == oldBase, fork and stay on that fork":
       const info = "newBase == oldBase, fork .."
       let com = env.newCom()
 
@@ -266,7 +266,7 @@ proc forkedChainMain*() =
       check chain.latestHash == B7.blockHash
       check chain.validate info & " (9)"
 
-    test "newBase == cursor, fork and keep on that fork":
+    test "newBase == cursor, fork and stay on that fork":
       const info = "newBase == cursor, fork .."
       let com = env.newCom()
 
@@ -294,8 +294,8 @@ proc forkedChainMain*() =
       check chain.latestHash == B7.blockHash
       check chain.validate info & " (9)"
 
-    test "newBase between oldBase and cursor, fork and keep on that fork":
-      const info = "newBase between oldBase .."
+    test "newBase on shorter canonical arc, discard arc with oldBase":
+      const info = "newBase on shorter canonical .."
       let com = env.newCom()
 
       var chain = newForkedChain(com, com.genesisHeader, baseDistance = 3)
@@ -318,6 +318,37 @@ proc forkedChainMain*() =
 
       check com.headHash == B7.blockHash
       check chain.latestHash == B7.blockHash
+      check chain.baseNumber >= B4.header.number
+      check chain.cursorHeads.len == 1
+      check chain.validate info & " (9)"
+
+    test "newBase on curbed non-canonical arc":
+      const info = "newBase on curbed non-canonical .."
+      let com = env.newCom()
+
+      var chain = newForkedChain(com, com.genesisHeader, baseDistance = 5)
+      check chain.importBlock(blk1).isOk
+      check chain.importBlock(blk2).isOk
+      check chain.importBlock(blk3).isOk
+      check chain.importBlock(blk4).isOk
+      check chain.importBlock(blk5).isOk
+      check chain.importBlock(blk6).isOk
+      check chain.importBlock(blk7).isOk
+
+      check chain.importBlock(B4).isOk
+      check chain.importBlock(B5).isOk
+      check chain.importBlock(B6).isOk
+      check chain.importBlock(B7).isOk
+      check chain.validate info & " (1)"
+
+      check chain.forkChoice(B7.blockHash, B5.blockHash).isOk
+      check chain.validate info & " (2)"
+
+      check com.headHash == B7.blockHash
+      check chain.latestHash == B7.blockHash
+      check chain.baseNumber > 0
+      check chain.baseNumber < B4.header.number
+      check chain.cursorHeads.len == 2
       check chain.validate info & " (9)"
 
     test "newBase == oldBase, fork and return to old chain":
@@ -374,8 +405,9 @@ proc forkedChainMain*() =
       check chain.latestHash == blk7.blockHash
       check chain.validate info & " (9)"
 
-    test "newBase between oldBase and cursor, fork and return to old chain, switch to new chain":
-      const info = "newBase between oldBase and .."
+    test "newBase on shorter canonical arc, discard arc with oldBase" &
+         " (ign dup block)":
+      const info = "newBase on shorter canonical .."
       let com = env.newCom()
 
       var chain = newForkedChain(com, com.genesisHeader, baseDistance = 3)
@@ -400,10 +432,12 @@ proc forkedChainMain*() =
 
       check com.headHash == B7.blockHash
       check chain.latestHash == B7.blockHash
+      check chain.baseNumber >= B4.header.number
+      check chain.cursorHeads.len == 1
       check chain.validate info & " (9)"
 
-    test "newBase between oldBase and cursor, fork and return to old chain":
-      const info = "newBase between oldBase and .."
+    test "newBase on longer canonical arc, discard arc with oldBase":
+      const info = "newBase on longer canonical .."
       let com = env.newCom()
 
       var chain = newForkedChain(com, com.genesisHeader, baseDistance = 3)
@@ -426,6 +460,9 @@ proc forkedChainMain*() =
 
       check com.headHash == blk7.blockHash
       check chain.latestHash == blk7.blockHash
+      check chain.baseNumber > 0
+      check chain.baseNumber < blk5.header.number
+      check chain.cursorHeads.len == 1
       check chain.validate info & " (9)"
 
     test "headerByNumber":

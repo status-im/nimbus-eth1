@@ -17,22 +17,17 @@ import
 
 type
   CursorDesc* = object
-    forkJunction*: BlockNumber
-    hash*: Hash32
+    forkJunction*: BlockNumber      ## Bottom or left end of cursor arc
+    hash*: Hash32                   ## Top or right end of cursor arc
 
   BlockDesc* = object
     blk*: Block
     receipts*: seq[Receipt]
 
-  BaseDesc* = object
-    hash*: Hash32
-    header*: Header
-
-  CanonicalDesc* = object
-    ## Designate some `header` entry on a `CursorDesc` sub-chain named
-    ## `cursorDesc` identified by `cursorHash == cursorDesc.hash`.
-    cursorHash*: Hash32
-    header*: Header
+  PivotArc* = object
+    pvHash*: Hash32                 ## Pivot item on cursor arc (e.g. new base)
+    pvHeader*: Header               ## Ditto
+    cursor*: CursorDesc             ## Cursor arc containing `pv` item
 
   ForkedChainRef* = ref object
     stagingTx*: CoreDbTxRef
@@ -49,6 +44,10 @@ type
     baseDistance*: uint64
 
 # ----------------
+
+func pvNumber*(pva: PivotArc): BlockNumber =
+  ## Getter
+  pva.pvHeader.number
 
 func txRecords*(c: ForkedChainRef): var Table[Hash32, (Hash32, uint64)] =
   ## Avoid clash with `forked_chain.txRecords()`

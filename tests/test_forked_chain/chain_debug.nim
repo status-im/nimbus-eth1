@@ -90,7 +90,8 @@ func pp*(n: BlockNumber): string = n.bnStr
 func pp*(h: Header): string = h.bnStr
 func pp*(b: Block): string = b.bnStr
 func pp*(h: Hash32): string = h.short
-func pp*(d: BaseDesc): string = d.header.pp
+func pp*(d: BlockDesc): string = d.blk.header.pp
+func pp*(d: ptr BlockDesc): string = d[].pp
 
 func pp*(q: openArray[Block]): string = q.ppImpl
 func pp*(q: openArray[Header]): string = q.ppImpl
@@ -107,14 +108,14 @@ func pp*(h: Hash32; c: ForkedChainRef): string =
     return c.baseHeader.pp
   h.short
 
-func pp*(d: CanonicalDesc; c: ForkedChainRef): string =
-  "(" & d.cursorHash.header(c).number.pp & "," & d.header.pp & ")"
-
 func pp*(d: CursorDesc; c: ForkedChainRef): string =
   let (a,b) = (d.forkJunction, d.hash.header(c).number)
   result = a.bnStr
   if a != b:
     result &= ".." & (if b == 0: d.hash.pp else: b.pp)
+
+func pp*(d: PivotArc; c: ForkedChainRef): string =
+  "(" & d.pvHeader.pp & "," & d.cursor.pp(c) & ")"
 
 func pp*(q: openArray[CursorDesc]; c: ForkedChainRef): string =
   "{" & q.sorted(c.cmp CursorDesc).mapIt(it.pp(c)).join(",") & "}"
