@@ -8,7 +8,7 @@
 # at your option. This file may not be copied, modified, or distributed
 # except according to those terms.
 
-{.push raises: [], gcsafe, noinline.}
+{.push raises: [], gcsafe, inline.}
 
 import stew/[arraybuf, arrayops, bitops2, endians2, staticfor]
 
