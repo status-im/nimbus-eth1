@@ -190,7 +190,8 @@ proc addContentOffer*(
   var id = ConnectionId.fromBytesBE(connectionId)
 
   # Generate a new id if already existing to avoid using a duplicate
-  if stream.contentOffers.contains(id):
+  # or if we happen to get an id of zero from the generator
+  if id == 0 or stream.contentOffers.contains(id):
     stream.rng[].generate(connectionId)
     id = ConnectionId.fromBytesBE(connectionId)
 
@@ -212,12 +213,14 @@ proc addContentRequest*(
   # TODO: Should we check if `NodeId` & `connectionId` combo already exists?
   # What happens if we get duplicates?
   var connectionId: Bytes2
+  stream.rng[].generate(connectionId)
 
   # uTP protocol uses BE for all values in the header, incl. connection id.
   var id = ConnectionId.fromBytesBE(connectionId)
 
   # Generate a new id if already existing to avoid using a duplicate
-  if stream.contentRequests.contains(id):
+  # or if we happen to get an id of zero from the generator
+  if id == 0 or stream.contentRequests.contains(id):
     stream.rng[].generate(connectionId)
     id = ConnectionId.fromBytesBE(connectionId)
 
