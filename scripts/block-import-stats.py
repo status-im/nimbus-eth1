@@ -77,6 +77,13 @@ contender = readStats(args.contender)
 start = max(min(baseline.index), min(contender.index))
 end = min(max(baseline.index), max(contender.index))
 
+# Check if there's any overlap in the time ranges
+if start > max(max(baseline.index), max(contender.index)) or end < min(min(baseline.index), min(contender.index)):
+    print(f"Error: No overlapping time ranges between baseline and contender datasets")
+    print(f"Baseline range: {min(baseline.index)} to {max(baseline.index)}")
+    print(f"Contender range: {min(contender.index)} to {max(contender.index)}")
+    exit(1)
+
 baseline = baseline.loc[baseline.index >= start and baseline.index <= end]
 contender = contender.loc[contender.index >= start and contender.index <= end]
 
