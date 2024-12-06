@@ -287,12 +287,12 @@ proc blocksStagedImport*(
       if nBn <= ctx.chain.baseNumber:
         trace info & ": ignoring block <= base", n, iv,
           B=ctx.chain.baseNumber.bnStr, L=ctx.chain.latestNumber.bnStr,
-          nthBn=nBn.bnStr, nthHash=qItem.data.getNthHash(n)
+          nthBn=nBn.bnStr, nthHash=qItem.data.getNthHash(n).short
         continue
       ctx.pool.chain.importBlock(qItem.data.blocks[n]).isOkOr:
         warn info & ": import block error", n, iv,
           B=ctx.chain.baseNumber.bnStr, L=ctx.chain.latestNumber.bnStr,
-          nthBn=nBn.bnStr, nthHash=qItem.data.getNthHash(n), `error`=error
+          nthBn=nBn.bnStr, nthHash=qItem.data.getNthHash(n).short, `error`=error
         # Restore what is left over below
         maxImport = ctx.chain.latestNumber()
         break importLoop
@@ -319,7 +319,7 @@ proc blocksStagedImport*(
         ctx.pool.chain.forkChoice(nthHash, finHash).isOkOr:
           warn info & ": fork choice error", n, iv,
             B=ctx.chain.baseNumber.bnStr, L=ctx.chain.latestNumber.bnStr,
-            F=ctx.layout.final.bnStr, nthBn=nBn.bnStr, nthHash,
+            F=ctx.layout.final.bnStr, nthBn=nBn.bnStr, nthHash=nthHash.short,
             finHash=(if finHash == nthHash: "nthHash" else: "F"), `error`=error
           # Restore what is left over below
           maxImport = ctx.chain.latestNumber()

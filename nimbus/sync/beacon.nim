@@ -68,8 +68,8 @@ proc init*(
 proc start*(desc: BeaconSyncRef): bool =
   desc.startSync()
 
-proc stop*(desc: BeaconSyncRef) =
-  desc.stopSync()
+proc stop*(desc: BeaconSyncRef) {.async.} =
+  await desc.stopSync()
 
 # ------------------------------------------------------------------------------
 # End
