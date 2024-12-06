@@ -497,6 +497,9 @@ func chainConfigForNetwork*(id: NetworkId): ChainConfig =
       cancunTime:          Opt.some(1_706_655_072.EthTime), # 2024-01-30 22:51:12
     )
   of HoleskyNet:
+    #https://github.com/eth-clients/holesky
+    const
+      HOLESKYNET_DEPOSIT_CONTRACT_ADDRESS = address"0x4242424242424242424242424242424242424242"
     ChainConfig(
       chainId:             HoleskyNet.ChainId,
       homesteadBlock:      Opt.some(0.BlockNumber),
@@ -514,6 +517,7 @@ func chainConfigForNetwork*(id: NetworkId): ChainConfig =
       terminalTotalDifficultyPassed: Opt.some(true),
       shanghaiTime:        Opt.some(1_696_000_704.EthTime),
       cancunTime:          Opt.some(1_707_305_664.EthTime), # 2024-02-07 11:34:24
+      depositContractAddress: Opt.some(HOLESKYNET_DEPOSIT_CONTRACT_ADDRESS),
     )
   else:
     ChainConfig()
