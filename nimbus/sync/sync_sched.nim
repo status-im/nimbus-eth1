@@ -174,14 +174,13 @@ proc terminate[S,W](dsc: RunnerSyncRef[S,W]) =
       for w in dsc.buddies.nextPairs:
         if w.data.isRunning:
           w.data.worker.ctrl.stopped = true
-          # Activate async job so it can finish
-          try:
-            waitFor sleepAsync termWaitPollingTime
-          except CancelledError:
-            trace "Shutdown: peer timeout was cancelled",
-              peer=w.data.worker.peer, nWorkers=dsc.buddies.len
         else:
           dsc.buddies.del w.key # this is OK to delete
+      # Activate async jobs so they can finish
+      try:
+        waitFor sleepAsync termWaitPollingTime
+      except CancelledError:
+        trace "Shutdown: peer timeout was cancelled", nWorkers=dsc.buddies.len
 
     while dsc.daemonRunning:
       # Activate async job so it can finish
