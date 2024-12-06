@@ -160,7 +160,7 @@ proc key(peer: Peer): ENode =
 # Private functions
 # ------------------------------------------------------------------------------
 
-proc terminate[S,W](dsc: RunnerSyncRef[S,W]) =
+proc terminate[S,W](dsc: RunnerSyncRef[S,W]) {.async.} =
   ## Request termination and wait for sub-tasks to finish
   mixin runRelease
 
@@ -185,7 +185,7 @@ proc terminate[S,W](dsc: RunnerSyncRef[S,W]) =
     while dsc.daemonRunning:
       # Activate async job so it can finish
       try:
-        waitFor sleepAsync termWaitPollingTime
+        await sleepAsync termWaitPollingTime
       except CancelledError:
         trace "Shutdown: daemon timeout was cancelled", nWorkers=dsc.buddies.len
 
@@ -481,9 +481,9 @@ proc startSync*[S,W](dsc: RunnerSyncRef[S,W]): bool =
       return true
 
 
-proc stopSync*[S,W](dsc: RunnerSyncRef[S,W]) =
+proc stopSync*[S,W](dsc: RunnerSyncRef[S,W]) {.async.} =
   ## Stop syncing and free peer handlers .
-  dsc.terminate()
+  await dsc.terminate()
 
 
 proc isRunning*[S,W](dsc: RunnerSyncRef[S,W]): bool =
