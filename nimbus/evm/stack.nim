@@ -132,6 +132,11 @@ func popInt*(stack: EvmStack): EvmResult[UInt256] =
 func popAddress*(stack: EvmStack): EvmResult[Address] =
   popAux(stack, Address)
 
+func pop*(stack: EvmStack): EvmResult[void] =
+  ? ensurePop(stack, 1)
+  stack.len -= 1
+  ok()
+
 proc init*(_: type EvmStack): EvmStack =
   let memory = c_malloc(evmStackSize * sizeof(EvmStackElement) + 31)
 

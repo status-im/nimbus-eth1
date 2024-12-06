@@ -61,6 +61,14 @@ proc runStackTests() =
         check stack.push(element).isOk
       check(stack.popInt.get == 3.u256)
 
+    test "pop requires stack item":
+      var stack = EvmStack.init()
+      defer: stack.dispose()
+      check:
+        stack.pop().isErr()
+        stack.push(1'u).isOk()
+        stack.pop().isOk()
+
     test "swap correct":
       privateAccess(EvmStack)
       var stack = EvmStack.init()
