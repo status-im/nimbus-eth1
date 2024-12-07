@@ -128,18 +128,30 @@ proc getKey(
   else:
     ?db.getKeyRc(rvid, {})
 
+template childVid(v: VertexRef): VertexID =
+  # If we have to recurse into a child, where would that recusion start?
+  case v.vType
+  of Leaf:
+    if v.lData.pType == AccountData and v.lData.stoID.isValid:
+      v.lData.stoID.vid
+    else:
+      default(VertexID)
+  of Branch:
+    v.startVid
+
 proc computeKeyImpl(
     db: AristoDbRef,
     rvid: RootedVertexID,
     batch: var WriteBatch,
-    vtxl: (VertexRef, int),
+    vtx: VertexRef,
+    level: int,
     skipLayers: static bool,
 ): Result[(HashKey, int), AristoError] =
   # The bloom filter available used only when creating the key cache from an
   # empty state
 
   # Top-most level of all the verticies this hash computation depends on
-  var (vtx, level) = vtxl
+  var level = level
 
   # TODO this is the same code as when serializing NodeRef, without the NodeRef
   var writer = initRlpWriter()
@@ -160,9 +172,12 @@ proc computeKeyImpl(
                     if keyvtxl[0][0].isValid:
                       (keyvtxl[0][0], keyvtxl[1])
                     else:
-                      let vtxl = (keyvtxl[0][1], keyvtxl[1])
                       ?db.computeKeyImpl(
-                        (stoID.vid, stoID.vid), batch, vtxl, skipLayers = skipLayers
+                        (stoID.vid, stoID.vid),
+                        batch,
+                        keyvtxl[0][1],
+                        keyvtxl[1],
+                        skipLayers = skipLayers,
                       )
                 level = maxLevel(level, sl)
                 skey
@@ -179,30 +194,67 @@ proc computeKeyImpl(
           # TODO avoid memory allocation when encoding storage data
           rlp.encode(vtx.lData.stoData)
     of Branch:
-      # For branches, we need to load the verticies before recursing into them
+      # For branches, we need to load the vertices before recursing into them
       # to exploit their on-disk order
       var keyvtxs: array[16, ((HashKey, VertexRef), int)]
       for n, subvid in vtx.pairs:
         keyvtxs[n] = ?db.getKey((rvid.root, subvid), skipLayers)
 
-      template writeBranch(w: var RlpWriter): HashKey =
-        w.encodeBranch(vtx):
-          if subvid.isValid:
-            batch.enter(n)
-            let (bkey, bl) =
-              if keyvtxs[n][0][0].isValid:
-                (keyvtxs[n][0][0], keyvtxs[n][1])
-              else:
+      # Make sure we have keys computed for each hash
+      block keysComputed:
+        while true:
+          # Compute missing keys in the order of the child vid that we have to
+          # recurse into, again exploiting on-disk order - this more than
+          # doubles computeKey speed on a fresh database!
+          var
+            minVid = default(VertexID)
+            minIdx = keyvtxs.len + 1 # index where the minvid can be found
+            n = 0'u8 # number of already-processed keys, for the progress bar
+
+          # The O(n^2) sort/search here is fine given the small size of the list
+          for nibble, keyvtx in keyvtxs.mpairs:
+            let subvid = vtx.bVid(uint8 nibble)
+            if (not subvid.isValid) or keyvtx[0][0].isValid:
+              n += 1 # no need to compute key
+              continue
+
+            let childVid = keyvtx[0][1].childVid
+            if not childVid.isValid:
+              # leaf vertex without storage ID - we can compute the key trivially
+              (keyvtx[0][0], keyvtx[1]) =
                 ?db.computeKeyImpl(
                   (rvid.root, subvid),
                   batch,
-                  (keyvtxs[n][0][1], keyvtxs[n][1]),
+                  keyvtx[0][1],
+                  keyvtx[1],
                   skipLayers = skipLayers,
                 )
-            batch.leave(n)
+              n += 1
+              continue
 
-            level = maxLevel(level, bl)
-            bkey
+            if minIdx == keyvtxs.len + 1 or childVid < minVid:
+              minIdx = nibble
+              minVid = childVid
+
+          if minIdx == keyvtxs.len + 1: # no uncomputed key found!
+            break keysComputed
+
+          batch.enter(n)
+          (keyvtxs[minIdx][0][0], keyvtxs[minIdx][1]) =
+            ?db.computeKeyImpl(
+              (rvid.root, vtx.bVid(uint8 minIdx)),
+              batch,
+              keyvtxs[minIdx][0][1],
+              keyvtxs[minIdx][1],
+              skipLayers = skipLayers,
+            )
+          batch.leave(n)
+
+      template writeBranch(w: var RlpWriter): HashKey =
+        w.encodeBranch(vtx):
+          if subvid.isValid:
+            level = maxLevel(level, keyvtxs[n][1])
+            keyvtxs[n][0][0]
           else:
             VOID_HASH_KEY
 
@@ -237,7 +289,7 @@ proc computeKeyImpl(
     return ok(keyvtx[0])
 
   var batch: WriteBatch
-  let res = computeKeyImpl(db, rvid, batch, (keyvtx[1], level), skipLayers = skipLayers)
+  let res = computeKeyImpl(db, rvid, batch, keyvtx[1], level, skipLayers = skipLayers)
   if res.isOk:
     ?batch.flush(db)
 
@@ -263,6 +315,7 @@ proc computeKey*(
 proc computeKeys*(db: AristoDbRef, root: VertexID): Result[void, AristoError] =
   ## Ensure that key cache is topped up with the latest state root
   discard db.computeKeyImpl((root, root), skipLayers = true)
+
   ok()
 
 # ------------------------------------------------------------------------------
