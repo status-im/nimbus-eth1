@@ -536,6 +536,12 @@ type
         defaultValue: false
         name: "debug-store-slot-hashes".}: bool
 
+      usePortal* {.
+        hidden
+        desc: "Use portal network instead of era files"
+        defaultValue: false
+        name: "debug-use-portal".}: bool
+
     of `import-rlp`:
       blocksFile* {.
         argument

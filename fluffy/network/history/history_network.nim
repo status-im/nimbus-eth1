@@ -142,7 +142,7 @@ proc getVerifiedBlockHeader*(
   for i in 0 ..< (1 + n.contentRequestRetries):
     let
       headerContent = (await n.portalProtocol.contentLookup(contentKey, contentId)).valueOr:
-        warn "Failed fetching block header with proof from the network"
+        debug "Failed fetching block header with proof from the network"
         return Opt.none(Header)
 
       header = validateCanonicalHeaderBytes(headerContent.content, id, n.accumulator).valueOr:
@@ -217,7 +217,7 @@ proc getBlock*(
   # also the original type into the network.
   let
     header = (await n.getVerifiedBlockHeader(id)).valueOr:
-      warn "Failed to get header when getting block", id
+      debug "Failed to get header when getting block", id
       return Opt.none(Block)
     hash =
       when id is Hash32:
@@ -225,7 +225,7 @@ proc getBlock*(
       else:
         header.rlpHash()
     body = (await n.getBlockBody(hash, header)).valueOr:
-      warn "Failed to get body when getting block", hash
+      debug "Failed to get body when getting block", hash
       return Opt.none(Block)
 
   Opt.some((header, body))
