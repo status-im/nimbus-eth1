@@ -81,13 +81,8 @@ proc runBackfillCollectBlockDataLoop(
   if web3Client of RpcHttpClient:
     warn "Using a WebSocket connection to the JSON-RPC API is recommended to improve performance"
 
-  let parentBlock = (
-    await web3Client.getBlockByNumber(blockId(startBlockNumber - 1.uint64), false)
-  ).valueOr:
-    raiseAssert("Failed to get parent block")
-
   var
-    parentStateRoot = parentBlock.stateRoot
+    parentStateRoot: Hash32
     currentBlockNumber = startBlockNumber
 
   while true:
@@ -96,6 +91,27 @@ proc runBackfillCollectBlockDataLoop(
 
     let blockData = db.getBlockData(currentBlockNumber).valueOr:
       # block data doesn't exist in db so we fetch it via RPC
+
+      # This should only be run for the starting block but we put this code here
+      # so that we can reconnect to the the web3 client on failure and also delay
+      # fetching data from the web3 client until needed
+      if parentStateRoot == default(Hash32):
+        doAssert(currentBlockNumber == startBlockNumber)
+
+        # if we don't yet have the parent state root get it from the parent block
+        let parentBlock = (
+          await web3Client.getBlockByNumber(
+            blockId(currentBlockNumber - 1.uint64), false
+          )
+        ).valueOr:
+          error "Failed to get parent block", error = error
+          await sleepAsync(3.seconds)
+          # We might need to reconnect if using a WebSocket client
+          await web3Client.tryReconnect(web3Url)
+          continue
+
+        parentStateRoot = parentBlock.stateRoot
+
       let
         blockId = blockId(currentBlockNumber)
         blockObject = (await web3Client.getBlockByNumber(blockId, false)).valueOr:
