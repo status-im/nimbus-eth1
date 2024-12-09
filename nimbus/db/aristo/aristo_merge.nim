@@ -41,7 +41,7 @@ proc layersPutLeaf(
 proc mergePayloadImpl(
     db: AristoDbRef, # Database, top layer
     root: VertexID, # MPT state root
-    path: openArray[byte], # Leaf item to add to the database
+    path: Hash32, # Leaf item to add to the database
     leaf: Opt[VertexRef],
     payload: LeafPayload, # Payload value
 ): Result[(VertexRef, VertexRef, VertexRef), AristoError] =
@@ -51,7 +51,7 @@ proc mergePayloadImpl(
   ## accordingly.
   ##
   var
-    path = NibblesBuf.fromBytes(path)
+    path = NibblesBuf.fromBytes(path.data)
     cur = root
     (vtx, _) = db.getVtxRc((root, cur)).valueOr:
       if error != GetVtxNotFound:
@@ -185,7 +185,7 @@ proc mergeAccountRecord*(
   let
     pyl =  LeafPayload(pType: AccountData, account: accRec)
     updated = db.mergePayloadImpl(
-        VertexID(1), accPath.data, db.cachedAccLeaf(accPath), pyl).valueOr:
+        VertexID(1), accPath, db.cachedAccLeaf(accPath), pyl).valueOr:
       if error == MergeNoAction:
         return ok false
       return err(error)
@@ -226,7 +226,7 @@ proc mergeStorageData*(
     # Call merge
     pyl = LeafPayload(pType: StoData, stoData: stoData)
     updated = db.mergePayloadImpl(
-        useID.vid, stoPath.data, db.cachedStoLeaf(mixPath), pyl).valueOr:
+        useID.vid, stoPath, db.cachedStoLeaf(mixPath), pyl).valueOr:
       if error == MergeNoAction:
         assert stoID.isValid         # debugging only
         return ok()
