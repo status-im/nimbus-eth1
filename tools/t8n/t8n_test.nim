@@ -681,7 +681,16 @@ const
       ),
       output: T8nOutput(alloc: true, result: true),
       expOut: "exp.json",
-    ),    
+    ),
+    TestSpec(
+      name: "Blake2b precompiles regression, holesky 2.406.802 # 11",
+      base: "testdata/00-528",
+      input: t8nInput(
+        "alloc.json", "txs.rlp", "env.json", "Cancun", "", "17000"
+      ),
+      output: T8nOutput(alloc: true, result: true),
+      expOut: "exp.json",
+    ),  
   ]
 
 proc main() =

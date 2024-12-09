@@ -379,6 +379,9 @@ func blake2bf(c: Computation): EvmResultVoid =
 
   c.output.setLen(64)
   if not blake2b_F(input, c.output):
+    # unlike other precompiles, blake2b upon
+    # error should return zero length output
+    c.output.setLen(0)
     return err(prcErr(PrcInvalidParam))
   ok()
 
