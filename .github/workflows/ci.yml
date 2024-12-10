@@ -37,9 +37,6 @@ jobs:
             cpu: amd64
             evmc: evmc
           - os: macos
-            cpu: amd64
-            evmc: evmc
-          - os: macos
             cpu: arm64
             evmc: evmc
           - os: windows
@@ -49,9 +46,6 @@ jobs:
             cpu: amd64
             evmc: nimvm
           - os: windows
-            cpu: amd64
-            evmc: nimvm
-          - os: macos
             cpu: amd64
             evmc: nimvm
           - os: macos
