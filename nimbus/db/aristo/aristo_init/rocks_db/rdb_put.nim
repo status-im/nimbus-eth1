@@ -51,6 +51,7 @@ proc rollback*(rdb: var RdbInst) =
   if not rdb.session.isClosed():
     rdb.rdKeyLru = typeof(rdb.rdKeyLru).init(rdb.rdKeySize)
     rdb.rdVtxLru = typeof(rdb.rdVtxLru).init(rdb.rdVtxSize)
+    rdb.rdBranchLru = typeof(rdb.rdBranchLru).init(rdb.rdBranchSize)
     rdb.disposeSession()
 
 proc commit*(rdb: var RdbInst): Result[void,(AristoError,string)] =
@@ -100,9 +101,25 @@ proc putVtx*(
     # Update existing cached items but don't add new ones since doing so is
     # likely to evict more useful items (when putting many items, we might even
     # evict those that were just added)
-    discard rdb.rdVtxLru.update(rvid.vid, vtx)
+
+    if vtx.vType == Branch and vtx.pfx.len == 0:
+      rdb.rdVtxLru.del(rvid.vid)
+      if rdb.rdBranchLru.len < rdb.rdBranchLru.capacity:
+        rdb.rdBranchLru.put(rvid.vid, (vtx.startVid, vtx.used))
+      else:
+        discard rdb.rdBranchLru.update(rvid.vid, (vtx.startVid, vtx.used))
+    else:
+      rdb.rdBranchLru.del(rvid.vid)
+      if rdb.rdVtxLru.len < rdb.rdVtxLru.capacity:
+        rdb.rdVtxLru.put(rvid.vid, vtx)
+      else:
+        discard rdb.rdVtxLru.update(rvid.vid, vtx)
+
     if key.isValid:
-      discard rdb.rdKeyLru.update(rvid.vid, key)
+      if rdb.rdKeyLru.len < rdb.rdKeyLru.capacity:
+        rdb.rdKeyLru.put(rvid.vid, key)
+      else:
+        discard rdb.rdKeyLru.update(rvid.vid, key)
     else:
       rdb.rdKeyLru.del rvid.vid
 
@@ -115,6 +132,7 @@ proc putVtx*(
       return err((rvid.vid,errSym,error))
 
     # Update cache, vertex will most probably never be visited anymore
+    rdb.rdBranchLru.del rvid.vid
     rdb.rdVtxLru.del rvid.vid
     rdb.rdKeyLru.del rvid.vid
 
