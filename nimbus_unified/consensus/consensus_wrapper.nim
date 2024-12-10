@@ -7,48 +7,23 @@
 
 #TODO: Clean these imports
 import
-  std/[os, atomics, random, terminal, times, exitprocs, sequtils],
+  std/atomics,
   metrics,
-  beacon_chain/[nimbus_beacon_node, nimbus_binary_common],
-  beacon_chain/spec/forks,
-  beacon_chain/[beacon_chain_db, trusted_node_sync],
-  beacon_chain/networking/network_metadata_downloads,
   chronos,
   chronicles,
-  stew/io2,
-  eth/p2p/discoveryv5/[enr, random2],
   ../configs/nimbus_configs,
-  beacon_chain/consensus_object_pools/vanity_logs/vanity_logs,
-  beacon_chain/statusbar,
-  beacon_chain/nimbus_binary_common,
-  beacon_chain/spec/[forks, digest, helpers],
-  beacon_chain/spec/datatypes/base,
-  beacon_chain/[beacon_chain_db, trusted_node_sync, beacon_node],
-  beacon_chain/spec/weak_subjectivity,
-  beacon_chain/rpc/[rest_beacon_api, rest_api, state_ttl_cache],
-  beacon_chain/consensus_object_pools/blob_quarantine,
-  beacon_chain/networking/[topic_params, network_metadata, network_metadata_downloads],
-  beacon_chain/spec/datatypes/[bellatrix],
-  beacon_chain/sync/[sync_protocol],
-  beacon_chain/validators/[keystore_management, beacon_validators],
-  beacon_chain/consensus_object_pools/[blockchain_dag],
-  beacon_chain/spec/
-    [beaconstate, state_transition, state_transition_epoch, validator, ssz_codec]
+  beacon_chain/[beacon_chain_db, beacon_node, nimbus_beacon_node, nimbus_binary_common],
+  beacon_chain/rpc/[rest_beacon_api, rest_api],
+  beacon_chain/networking/[network_metadata, network_metadata_downloads],
+  beacon_chain/validators/[keystore_management]
 
 export nimbus_configs
-
-when defined(posix):
-  import system/ansi_c
-
-from beacon_chain/spec/datatypes/deneb import SignedBeaconBlock
-from beacon_chain/beacon_node_light_client import
-  shouldSyncOptimistically, initLightClient, updateLightClientFromDag
-from libp2p/protocols/pubsub/gossipsub import TopicParams, validateParameters, init
 
 ## log
 logScope:
   topics = "Consensus layer"
 
+# handles option of eth2 beacon node
 proc handleStartingOption(config: var BeaconNodeConf) {.raises: [CatchableError].} =
   let rng = HmacDrbgContext.new()
 
