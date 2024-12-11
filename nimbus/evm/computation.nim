@@ -13,7 +13,7 @@
 import
   std/sequtils,
   ".."/[db/ledger, constants],
-  "."/[code_stream, memory, message, stack, state],
+  "."/[code_stream, memory, stack, state],
   "."/[types],
   ./interpreter/[gas_meter, gas_costs, op_codes],
   ./evm_errors,
@@ -45,17 +45,6 @@ when defined(evmc_enabled):
 
 const
   evmc_enabled* = defined(evmc_enabled)
-
-# ------------------------------------------------------------------------------
-# Helpers
-# ------------------------------------------------------------------------------
-
-proc generateContractAddress(c: Computation, salt: ContractSalt): Address =
-  if c.msg.kind == EVMC_CREATE:
-    let creationNonce = c.vmState.readOnlyStateDB().getNonce(c.msg.sender)
-    result = generateAddress(c.msg.sender, creationNonce)
-  else:
-    result = generateSafeAddress(c.msg.sender, salt, c.msg.data)
 
 # ------------------------------------------------------------------------------
 # Public functions
@@ -259,42 +248,17 @@ template resolveCode*(c: Computation, address: Address): CodeBytesRef =
   else:
     c.vmState.readOnlyStateDB.resolveCode(address)
 
-proc newComputation*(vmState: BaseVMState, sysCall: bool, message: Message,
-                     isPrecompile, keepStack: bool, salt: ContractSalt = ZERO_CONTRACTSALT): Computation =
+func newComputation*(vmState: BaseVMState,
+                     keepStack: bool,
+                     message: Message,
+                     code = CodeBytesRef(nil)): Computation =
   new result
   result.vmState = vmState
   result.msg = message
   result.gasMeter.init(message.gas)
-  result.sysCall = sysCall
   result.keepStack = keepStack
 
-  if not isPrecompile:
-    result.memory = EvmMemory.init()
-    result.stack = EvmStack.init()
-
-    if result.msg.isCreate():
-      result.msg.contractAddress = result.generateContractAddress(salt)
-      result.code = CodeStream.init(message.data)
-      message.data = @[]
-    else:
-      if vmState.fork >= FkPrague:
-        result.code = CodeStream.init(
-          vmState.readOnlyStateDB.resolveCode(message.codeAddress))
-      else:
-        result.code = CodeStream.init(
-          vmState.readOnlyStateDB.getCode(message.codeAddress))
-
-
-func newComputation*(vmState: BaseVMState, sysCall: bool,
-                     message: Message, code: CodeBytesRef, isPrecompile, keepStack: bool, ): Computation =
-  new result
-  result.vmState = vmState
-  result.msg = message
-  result.gasMeter.init(message.gas)
-  result.sysCall = sysCall
-  result.keepStack = keepStack
-
-  if not isPrecompile:
+  if not code.isNil:
     result.code = CodeStream.init(code)
     result.memory = EvmMemory.init()
     result.stack = EvmStack.init()

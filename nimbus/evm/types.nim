@@ -94,7 +94,6 @@ type
     else:
       parent*, child*:      Computation
     continuation*:          proc(): EvmResultVoid {.gcsafe, raises: [].}
-    sysCall*:               bool
     keepStack*:             bool
     finalStack*:            seq[UInt256]
 

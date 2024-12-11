@@ -264,6 +264,13 @@ else:
       c.dispose()
       c = c.parent
 
+proc postExecComputation*(c: Computation) =
+  if c.isSuccess:
+    if c.fork < FkLondon:
+      # EIP-3529: Reduction in refunds
+      c.refundSelfDestruct()
+  c.vmState.status = c.isSuccess
+  
 # ------------------------------------------------------------------------------
 # End
 # ------------------------------------------------------------------------------
