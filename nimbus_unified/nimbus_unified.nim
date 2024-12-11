@@ -52,7 +52,7 @@ proc consensusLayerHandler(parameters: TaskParameters) {.thread.} =
   info "\tExiting task:", task = parameters.name
 
 ## Waits for tasks to finish (joinThreads)
-proc joinTasks(tasks: var NimbusTasks) =
+proc joinTasks*(tasks: var NimbusTasks) =
   warn "Waiting all tasks to finish ... "
   for i in 0 .. cNimbusMaxTasks - 1:
     if not tasks.taskList[i].isNil:
