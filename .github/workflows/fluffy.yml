@@ -112,8 +112,6 @@ jobs:
         target:
           - os: linux
             cpu: amd64
-          # - os: linux
-          #   cpu: i386
           - os: macos
             cpu: amd64
           - os: windows
