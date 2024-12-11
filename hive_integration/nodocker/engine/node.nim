@@ -54,7 +54,7 @@ proc processBlock(
   if header.parentBeaconBlockRoot.isSome:
     ? vmState.processBeaconBlockRoot(header.parentBeaconBlockRoot.get)
 
-  ? processTransactions(vmState, header, blk.transactions)
+  ? processTransactions(vmState, header, blk.transactions, taskpool = com.taskpool)
 
   if com.isShanghaiOrLater(header.timestamp):
     for withdrawal in blk.withdrawals.get:

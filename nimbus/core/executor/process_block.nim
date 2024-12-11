@@ -8,6 +8,8 @@
 # at your option. This file may not be copied, modified, or distributed except
 # according to those terms.
 
+{.push raises: [], gcsafe.}
+
 import
   ../../common/common,
   ../../utils/utils,
@@ -21,11 +23,50 @@ import
   ./calculate_reward,
   ./executor_helpers,
   ./process_transaction,
-  eth/common/transaction_utils,
+  eth/common/[keys, transaction_utils],
   chronicles,
-  results
+  results,
+  taskpools
 
-{.push raises: [].}
+template withSender(txs: openArray[Transaction], body: untyped) =
+  # Execute transactions offloading the signature checking to the task pool if
+  # it's available
+  if taskpool == nil:
+    for txIndex {.inject.}, tx {.inject.} in txs:
+      let sender {.inject.} = tx.recoverSender().valueOr(default(Address))
+      body
+  else:
+    type Entry = (Signature, Hash32, Flowvar[Address])
+
+    proc recoverTask(e: ptr Entry): Address {.nimcall.} =
+      let pk = recover(e[][0], SkMessage(e[][1].data))
+      if pk.isOk():
+        pk[].to(Address)
+      else:
+        default(Address)
+
+    var entries = newSeq[Entry](txs.len)
+
+    # Prepare signature recovery tasks for each transaction - for simplicity,
+    # we use `default(Address)` to signal sig check failure
+    for i, e in entries.mpairs():
+      e[0] = txs[i].signature().valueOr(default(Signature))
+      e[1] = txs[i].rlpHashForSigning(txs[i].isEip155)
+      let a = addr e
+      # Spawning the task here allows it to start early, while we still haven't
+      # hashed subsequent txs
+      e[2] = taskpool.spawn recoverTask(a)
+
+    for txIndex {.inject.}, e in entries.mpairs():
+      template tx(): untyped =
+        txs[txIndex]
+
+      # Sync blocks until the sender is available from the task pool - as soon
+      # as we have it, we can process this transaction while the senders of the
+      # other transactions are being computed
+      let sender {.inject.} = sync(e[2])
+
+      body
 
 # Factored this out of procBlkPreamble so that it can be used directly for
 # stateless execution of specific transactions.
@@ -34,15 +75,17 @@ proc processTransactions*(
     header: Header,
     transactions: seq[Transaction],
     skipReceipts = false,
-    collectLogs = false
+    collectLogs = false,
+    taskpool: Taskpool = nil,
 ): Result[void, string] =
   vmState.receipts.setLen(if skipReceipts: 0 else: transactions.len)
   vmState.cumulativeGasUsed = 0
   vmState.allLogs = @[]
 
-  for txIndex, tx in transactions:
-    let sender = tx.recoverSender().valueOr:
+  withSender(transactions):
+    if sender == default(Address):
       return err("Could not get sender for tx with index " & $(txIndex))
+
     let rc = vmState.processTransaction(tx, sender, header)
     if rc.isErr:
       return err("Error processing tx with index " & $(txIndex) & ":" & rc.error)
@@ -60,7 +103,10 @@ proc processTransactions*(
   ok()
 
 proc procBlkPreamble(
-    vmState: BaseVMState, blk: Block, skipValidation, skipReceipts, skipUncles: bool
+    vmState: BaseVMState,
+    blk: Block,
+    skipValidation, skipReceipts, skipUncles: bool,
+    taskpool: Taskpool,
 ): Result[void, string] =
   template header(): Header =
     blk.header
@@ -97,7 +143,9 @@ proc procBlkPreamble(
       return err("Transactions missing from body")
 
     let collectLogs = header.requestsHash.isSome and not skipValidation
-    ?processTransactions(vmState, header, blk.transactions, skipReceipts, collectLogs)
+    ?processTransactions(
+      vmState, header, blk.transactions, skipReceipts, collectLogs, taskpool
+    )
   elif blk.transactions.len > 0:
     return err("Transactions in block with empty txRoot")
 
@@ -150,7 +198,8 @@ proc procBlkEpilogue(
     # large ranges of blocks, implicitly limiting its size using the gas limit
     db.persist(
       clearEmptyAccount = vmState.com.isSpuriousOrLater(header.number),
-      clearCache = true)
+      clearCache = true,
+    )
 
   var
     withdrawalReqs: seq[byte]
@@ -173,17 +222,15 @@ proc procBlkEpilogue(
         expected = header.stateRoot,
         actual = stateRoot,
         arrivedFrom = vmState.parent.stateRoot
-      return err("stateRoot mismatch, expect: " &
-        $header.stateRoot & ", got: " & $stateRoot)
+      return
+        err("stateRoot mismatch, expect: " & $header.stateRoot & ", got: " & $stateRoot)
 
     if not skipReceipts:
       let bloom = createBloom(vmState.receipts)
 
       if header.logsBloom != bloom:
         debug "wrong logsBloom in block",
-          blockNumber = header.number,
-          actual = bloom,
-          expected = header.logsBloom
+          blockNumber = header.number, actual = bloom, expected = header.logsBloom
         return err("bloom mismatch")
 
       let receiptsRoot = calcReceiptsRoot(vmState.receipts)
@@ -199,7 +246,8 @@ proc procBlkEpilogue(
 
     if header.requestsHash.isSome:
       let
-        depositReqs = ?parseDepositLogs(vmState.allLogs, vmState.com.depositContractAddress)
+        depositReqs =
+          ?parseDepositLogs(vmState.allLogs, vmState.com.depositContractAddress)
         requestsHash = calcRequestsHash(depositReqs, withdrawalReqs, consolidationReqs)
 
       if header.requestsHash.get != requestsHash:
@@ -223,9 +271,10 @@ proc processBlock*(
     skipValidation: bool = false,
     skipReceipts: bool = false,
     skipUncles: bool = false,
+    taskpool: Taskpool = nil,
 ): Result[void, string] =
   ## Generalised function to processes `blk` for any network.
-  ?vmState.procBlkPreamble(blk, skipValidation, skipReceipts, skipUncles)
+  ?vmState.procBlkPreamble(blk, skipValidation, skipReceipts, skipUncles, taskpool)
 
   # EIP-3675: no reward for miner in POA/POS
   if not vmState.com.proofOfStake(blk.header):

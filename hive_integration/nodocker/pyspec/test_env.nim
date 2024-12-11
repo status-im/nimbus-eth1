@@ -38,7 +38,7 @@ proc setupELClient*(conf: ChainConfig, node: JsonNode): TestEnv =
   let
     memDB = newCoreDbRef DefaultDbMemory
     genesisHeader = node.genesisHeader
-    com = CommonRef.new(memDB, conf)
+    com = CommonRef.new(memDB, Taskpool.new(), conf)
     stateDB = LedgerRef.init(memDB)
     chain = newForkedChain(com, genesisHeader)
 

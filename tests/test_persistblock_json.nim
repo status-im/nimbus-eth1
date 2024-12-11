@@ -19,7 +19,7 @@ proc testFixture(node: JsonNode, testStatusIMPL: var TestStatus) =
     blockNumber = UInt256.fromHex(node["blockNumber"].getStr())
     memoryDB    = newCoreDbRef DefaultDbMemory
     config      = chainConfigForNetwork(MainNet)
-    com         = CommonRef.new(memoryDB, config)
+    com         = CommonRef.new(memoryDB, nil, config)
     state       = node["state"]
 
   for k, v in state:
