@@ -31,15 +31,16 @@ import
   chronicles,
   eth/common,
   eth/common/eth_types,
-  stew/assign2,
   stint
 
 when not defined(evmc_enabled):
   import
     ../../state,
+    ../../message,
     ../../../db/ledger
 else:
   import
+    stew/assign2,
     stew/saturation_arith
 
 # ------------------------------------------------------------------------------
@@ -62,12 +63,12 @@ when evmc_enabled:
 
 else:
   proc execSubCreate(c: Computation; childMsg: Message;
-                    salt: ContractSalt = ZERO_CONTRACTSALT) {.raises: [].} =
+                     code: CodeBytesRef) {.raises: [].} =
     ## Create new VM -- helper for `Create`-like operations
 
     # need to provide explicit <c> and <child> for capturing in chainTo proc()
     var
-      child = newComputation(c.vmState, false, childMsg, false, false, salt)
+      child = newComputation(c.vmState, keepStack = false, childMsg, code)
 
     c.chainTo(child):
       if not child.shouldBurnGas:
@@ -154,14 +155,19 @@ proc createOp(cpt: VmCpt): EvmResultVoid =
     )
     c.execSubCreate(msg)
   else:
-    var childMsg = Message(
-      kind:   EVMC_CREATE,
-      depth:  cpt.msg.depth + 1,
-      gas:    createMsgGas,
-      sender: cpt.msg.contractAddress,
-      value:  endowment)
-    assign(childMsg.data, cpt.memory.read(memPos, memLen))
-    cpt.execSubCreate(childMsg)
+    var
+      childMsg = Message(
+        kind:   EVMC_CREATE,
+        depth:  cpt.msg.depth + 1,
+        gas:    createMsgGas,
+        sender: cpt.msg.contractAddress,
+        contractAddress: generateContractAddress(
+          cpt.vmState,
+          EVMC_CREATE,
+          cpt.msg.contractAddress),
+        value:  endowment)
+      code = CodeBytesRef.init(cpt.memory.read(memPos, memLen))
+    cpt.execSubCreate(childMsg, code)
   ok()
 
 # ---------------------
@@ -176,7 +182,7 @@ proc create2Op(cpt: VmCpt): EvmResultVoid =
     memPos    = cpt.stack.lsPeekSafeInt(^2)
     memLen    = cpt.stack.lsPeekSafeInt(^3)
     salt256   = cpt.stack.lsPeekInt(^4)
-    salt      = ContractSalt(bytes: salt256.toBytesBE)
+    salt      = Bytes32(salt256.toBytesBE)
 
   cpt.stack.lsShrink(3)
   cpt.stack.lsTop(0)
@@ -237,14 +243,21 @@ proc create2Op(cpt: VmCpt): EvmResultVoid =
     )
     c.execSubCreate(msg)
   else:
-    var childMsg = Message(
-      kind:   EVMC_CREATE2,
-      depth:  cpt.msg.depth + 1,
-      gas:    createMsgGas,
-      sender: cpt.msg.contractAddress,
-      value:  endowment)
-    assign(childMsg.data, cpt.memory.read(memPos, memLen))
-    cpt.execSubCreate(salt = salt, childMsg = childMsg)
+    var
+      code = CodeBytesRef.init(cpt.memory.read(memPos, memLen))
+      childMsg = Message(
+        kind:   EVMC_CREATE2,
+        depth:  cpt.msg.depth + 1,
+        gas:    createMsgGas,
+        sender: cpt.msg.contractAddress,
+        contractAddress: generateContractAddress(
+          cpt.vmState,
+          EVMC_CREATE2,
+          cpt.msg.contractAddress,
+          salt,
+          code),
+        value:  endowment)
+    cpt.execSubCreate(childMsg, code)
   ok()
 
 # ------------------------------------------------------------------------------

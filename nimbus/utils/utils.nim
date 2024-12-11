@@ -80,12 +80,9 @@ func hasBody*(h: Header): bool =
 func generateAddress*(address: Address, nonce: AccountNonce): Address =
   result.data[0..19] = keccak256(rlp.encodeList(address, nonce)).data.toOpenArray(12, 31)
 
-type ContractSalt* = object
-  bytes*: array[32, byte]
+const ZERO_CONTRACTSALT* = default(Bytes32)
 
-const ZERO_CONTRACTSALT* = default(ContractSalt)
-
-func generateSafeAddress*(address: Address, salt: ContractSalt,
+func generateSafeAddress*(address: Address, salt: Bytes32,
                           data: openArray[byte]): Address =
   const prefix = [0xff.byte]
   let
@@ -93,7 +90,7 @@ func generateSafeAddress*(address: Address, salt: ContractSalt,
     hashResult = withKeccak256:
       h.update(prefix)
       h.update(address.data)
-      h.update(salt.bytes)
+      h.update(salt.data)
       h.update(dataHash.data)
 
   hashResult.to(Address)

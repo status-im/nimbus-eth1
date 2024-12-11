@@ -24,9 +24,9 @@ func toEvmc*(h: Hash32): evmc_bytes32 {.inline.} =
   doAssert sizeof(h) == sizeof(evmc_bytes32)
   evmc_bytes32(bytes: h.data)
 
-func toEvmc*(h: ContractSalt): evmc_bytes32 {.inline.} =
+func toEvmc*(h: Bytes32): evmc_bytes32 {.inline.} =
   doAssert sizeof(h) == sizeof(evmc_bytes32)
-  cast[evmc_bytes32](h)
+  evmc_bytes32(bytes: h.data)
 
 func toEvmc*(n: UInt256): evmc_uint256be {.inline.} =
   when evmc_native:
@@ -35,9 +35,9 @@ func toEvmc*(n: UInt256): evmc_uint256be {.inline.} =
     cast[evmc_uint256be](n.toBytesBE)
 
 func fromEvmc*(T: type, n: evmc_bytes32): T {.inline.} =
-  when T is ContractSalt:
+  when T is Bytes32:
     doAssert sizeof(n) == sizeof(T)
-    cast[T](n)
+    T(n.bytes)
   elif T is Hash32:
     Hash32(n.bytes)
   elif T is UInt256:
@@ -63,6 +63,6 @@ when isMainModule:
   var h = EMPTY_SHA3
   var eh = toEvmc(h)
   assert(h == fromEvmc(Hash32, eh))
-  var s = cast[ContractSalt](EMPTY_ROOT_HASH)
+  var s = Bytes32(EMPTY_ROOT_HASH.data)
   var es = toEvmc(s)
-  assert(s == fromEvmc(ContractSalt, es))
+  assert(s == fromEvmc(Bytes32, es))

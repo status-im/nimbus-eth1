@@ -21,7 +21,6 @@ import
   ../../../core/eip7702,
   ../../computation,
   ../../memory,
-  ../../precompiles,
   ../../stack,
   ../../types,
   ../gas_costs,
@@ -39,6 +38,7 @@ import
 when not defined(evmc_enabled):
   import
     ../../state,
+    ../../message,
     ../../../db/ledger
 else:
   import
@@ -203,9 +203,9 @@ else:
     # need to provide explicit <c> and <child> for capturing in chainTo proc()
     # <memPos> and <memLen> are provided by value and need not be captured
     var
-      precompile = getPrecompile(c.fork, childMsg.codeAddress)
+      code = getCallCode(c.vmState, childMsg.codeAddress)
       child = newComputation(
-        c.vmState, false, childMsg, isPrecompile = precompile.isSome(), keepStack = false)
+        c.vmState, keepStack = false, childMsg, code)
 
     c.chainTo(child):
       if not child.shouldBurnGas:
