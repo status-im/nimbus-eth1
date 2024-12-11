@@ -36,6 +36,7 @@ when defined(metrics):
   type
     RdbVtxLruCounter = ref object of Counter
     RdbKeyLruCounter = ref object of Counter
+    RdbBranchLruCounter = ref object of Counter
 
   var
     rdbVtxLruStatsMetric {.used.} = RdbVtxLruCounter.newCollector(
@@ -45,6 +46,9 @@ when defined(metrics):
     )
     rdbKeyLruStatsMetric {.used.} = RdbKeyLruCounter.newCollector(
       "aristo_rdb_key_lru_total", "HashKey LRU lookup", labels = ["state", "hit"]
+    )
+    rdbBranchLruStatsMetric {.used.} = RdbBranchLruCounter.newCollector(
+      "aristo_rdb_branch_lru_total", "Branch LRU lookup", labels = ["state", "hit"]
     )
 
   method collect*(collector: RdbVtxLruCounter, output: MetricHandler) =
@@ -71,6 +75,19 @@ when defined(metrics):
         output(
           name = "aristo_rdb_key_lru_total",
           value = float64(rdbKeyLruStats[state].get(hit)),
+          labels = ["state", "hit"],
+          labelValues = [$state, $ord(hit)],
+          timestamp = timestamp,
+        )
+
+  method collect*(collector: RdbBranchLruCounter, output: MetricHandler) =
+    let timestamp = collector.now()
+
+    for state in RdbStateType:
+      for hit in [false, true]:
+        output(
+          name = "aristo_rdb_branch_lru_total",
+          value = float64(rdbBranchLruStats[state].get(hit)),
           labels = ["state", "hit"],
           labelValues = [$state, $ord(hit)],
           timestamp = timestamp,
@@ -156,15 +173,26 @@ proc getVtx*(
     rdb: var RdbInst, rvid: RootedVertexID, flags: set[GetVtxFlag]
 ): Result[VertexRef, (AristoError, string)] =
   # Try LRU cache first
-  var rc =
-    if GetVtxFlag.PeekCache in flags:
-      rdb.rdVtxLru.peek(rvid.vid)
-    else:
-      rdb.rdVtxLru.get(rvid.vid)
+  block:
+    let rc =
+      if GetVtxFlag.PeekCache in flags:
+        rdb.rdBranchLru.peek(rvid.vid)
+      else:
+        rdb.rdBranchLru.get(rvid.vid)
+    if rc.isOk():
+      rdbBranchLruStats[rvid.to(RdbStateType)].inc(true)
+      return ok(VertexRef(vType: Branch, startVid: rc[][0], used: rc[][1]))
 
-  if rc.isOk:
-    rdbVtxLruStats[rvid.to(RdbStateType)][rc.value().vType].inc(true)
-    return ok(move(rc.value))
+  block:
+    var rc =
+      if GetVtxFlag.PeekCache in flags:
+        rdb.rdVtxLru.peek(rvid.vid)
+      else:
+        rdb.rdVtxLru.get(rvid.vid)
+
+    if rc.isOk:
+      rdbVtxLruStats[rvid.to(RdbStateType)][rc.value().vType].inc(true)
+      return ok(move(rc.value))
 
   # Otherwise fetch from backend database
   # A threadvar is used to avoid allocating an environment for onData
@@ -186,11 +214,17 @@ proc getVtx*(
   if res.isErr():
     return err((res.error(), "Parsing failed")) # Parsing failed
 
-  rdbVtxLruStats[rvid.to(RdbStateType)][res.value().vType].inc(false)
+  if res.value.vType == Branch and res.value.pfx.len == 0:
+    rdbBranchLruStats[rvid.to(RdbStateType)].inc(false)
+  else:
+    rdbVtxLruStats[rvid.to(RdbStateType)][res.value().vType].inc(false)
 
   # Update cache and return - in peek mode, avoid evicting cache items
-  if GetVtxFlag.PeekCache notin flags or rdb.rdVtxLru.len < rdb.rdVtxLru.capacity:
-    rdb.rdVtxLru.put(rvid.vid, res.value())
+  if GetVtxFlag.PeekCache notin flags:
+    if res.value.vType == Branch and res.value.pfx.len == 0:
+      rdb.rdBranchLru.put(rvid.vid, (res.value().startVid, res.value.used))
+    else:
+      rdb.rdVtxLru.put(rvid.vid, res.value())
 
   ok res.value()
 

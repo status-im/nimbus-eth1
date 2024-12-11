@@ -60,6 +60,9 @@ type
     rdVtxLru*: LruCache[VertexID,VertexRef] ## Read cache
     rdVtxSize*: int
 
+    rdBranchLru*: LruCache[VertexID, (VertexID, uint16)]
+    rdBranchSize*: int
+
     basePath*: string                  ## Database directory
     trgWriteEvent*: RdbWriteEventCb    ## Database piggiback call back handler
 
@@ -84,6 +87,7 @@ var
   # happens from a separate thread.
   # TODO maybe turn this into more general framework for LRU reporting since
   #      we have lots of caches of this sort
+  rdbBranchLruStats*: array[RdbStateType, RdbLruCounter]
   rdbVtxLruStats*: array[RdbStateType, array[VertexType, RdbLruCounter]]
   rdbKeyLruStats*: array[RdbStateType, RdbLruCounter]
 
