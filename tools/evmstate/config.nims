@@ -8,4 +8,5 @@
 # at your option. This file may not be copied, modified, or distributed except
 # according to those terms.
 
-switch("define", "chronicles_runtime_filtering=on")
+# chronicles log output will intefere with evmstate ouput
+switch("define", "chronicles_enabled=off")
