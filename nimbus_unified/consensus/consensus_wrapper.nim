@@ -24,7 +24,7 @@ logScope:
   topics = "Consensus layer"
 
 # handles option of eth2 beacon node
-proc handleStartingOption(config: var BeaconNodeConf) {.raises: [CatchableError].} =
+proc handleStartingOption*(config: var BeaconNodeConf) {.raises: [CatchableError].} =
   let rng = HmacDrbgContext.new()
 
   # More options can be added, might be out of scope given that they exist in eth2
@@ -33,8 +33,9 @@ proc handleStartingOption(config: var BeaconNodeConf) {.raises: [CatchableError]
     doRunBeaconNode(config, rng)
   of BNStartUpCmd.trustedNodeSync:
     if config.blockId.isSome():
-      error "--blockId option has been removed - use --state-id instead!"
-      quit 1
+      raise newException(
+        ValueError, "--blockId option has been removed - use --state-id instead!"
+      )
 
     let
       metadata = loadEth2Network(config)
