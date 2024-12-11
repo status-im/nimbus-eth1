@@ -129,7 +129,7 @@ proc preExecComputation(vmState: BaseVMState, call: CallParams): int64 =
 
   gasRefund
 
-proc setupHost(call: CallParams, keepStack: bool): TransactionHost =
+proc setupHost(call: CallParams, keepStack: bool): TransactionHost =  
   let vmState = call.vmState
   vmState.txCtx = TxContext(
     origin         : call.origin.get(call.sender),
@@ -138,52 +138,47 @@ proc setupHost(call: CallParams, keepStack: bool): TransactionHost =
     blobBaseFee    : getBlobBaseFee(vmState.blockCtx.excessBlobGas),
   )
 
-  var intrinsicGas: GasInt = 0
-  if not call.noIntrinsic:
-    intrinsicGas = intrinsicGas(call, vmState.fork)
-
-  let host = TransactionHost(
-    vmState: vmState,
-    sysCall: call.sysCall,
-    msg: EvmcMessage(
-      kind:         if call.isCreate: EVMC_CREATE else: EVMC_CALL,
-      # Default: flags:       {},
-      # Default: depth:       0,
-      gas:          int64.saturate(call.gasLimit - intrinsicGas),
-      recipient:    call.to.toEvmc,
-      code_address: call.to.toEvmc,
-      sender:       call.sender.toEvmc,
-      value:        call.value.toEvmc,
-    )
-    # All other defaults in `TransactionHost` are fine.
-  )
-
   # reset global gasRefund counter each time
   # EVM called for a new transaction
   vmState.gasRefunded = 0
-  let gasRefund = if call.sysCall: 0
-                  else: preExecComputation(vmState, call)
-
-  var code: CodeBytesRef
-  if call.isCreate:
-    let contractAddress = generateContractAddress(call.vmState, EVMC_CREATE, call.sender)
-    host.msg.recipient = contractAddress.toEvmc
-    host.msg.input_size = 0
-    host.msg.input_data = nil
-    code = CodeBytesRef.init(call.input)
-  else:
-    code = getCallCode(host.vmState, host.msg.code_address.fromEvmc)
-    if call.input.len > 0:
-      host.msg.input_size = call.input.len.csize_t
-      # Must copy the data so the `host.msg.input_data` pointer
-      # remains valid after the end of `call` lifetime.
-      host.input = call.input
-      host.msg.input_data = host.input[0].addr
-
+  
   let
+    intrinsicGas = if call.noIntrinsic: 0.GasInt
+                   else: intrinsicGas(call, vmState.fork)
+    host = TransactionHost(
+      vmState: vmState,
+      sysCall: call.sysCall,
+      msg: EvmcMessage(
+        kind:         if call.isCreate: EVMC_CREATE else: EVMC_CALL,
+        # Default: flags:       {},
+        # Default: depth:       0,
+        gas:          int64.saturate(call.gasLimit - intrinsicGas),
+        recipient:    call.to.toEvmc,
+        code_address: call.to.toEvmc,
+        sender:       call.sender.toEvmc,
+        value:        call.value.toEvmc,
+      )
+      # All other defaults in `TransactionHost` are fine.
+    )
+    gasRefund = if call.sysCall: 0
+                else: preExecComputation(vmState, call)
+    code = if call.isCreate:
+             let contractAddress = generateContractAddress(call.vmState, EVMC_CREATE, call.sender)
+             host.msg.recipient = contractAddress.toEvmc
+             host.msg.input_size = 0
+             host.msg.input_data = nil
+             CodeBytesRef.init(call.input)
+           else:          
+             if call.input.len > 0:
+               host.msg.input_size = call.input.len.csize_t
+               # Must copy the data so the `host.msg.input_data` pointer
+               # remains valid after the end of `call` lifetime.
+               host.input = call.input
+               host.msg.input_data = host.input[0].addr
+             getCallCode(host.vmState, host.msg.code_address.fromEvmc)
     cMsg = hostToComputationMessage(host.msg)
-  host.computation = newComputation(
-    vmState, keepStack = keepStack, cMsg, code)
+    
+  host.computation = newComputation(vmState, keepStack, cMsg, code)
   host.code = code
 
   host.computation.addRefund(gasRefund)
