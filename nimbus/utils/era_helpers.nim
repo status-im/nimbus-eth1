@@ -119,11 +119,11 @@ proc getWithdrawals*(x: seq[capella.Withdrawal]): seq[blocks.Withdrawal] =
     )
   return withdrawals
 
-proc getEthBlock*(blck: ForkyTrustedBeaconBlock): Opt[EthBlock] =
+proc getEthBlock*(blck: ForkyTrustedBeaconBlock, res: var EthBlock): bool =
   ## Convert a beacon block to an eth1 block.
   const consensusFork = typeof(blck).kind
   when consensusFork >= ConsensusFork.Bellatrix:
-    let
+    var
       payload = blck.body.execution_payload
       txs = getTxs(payload.transactions.asSeq())
       ethWithdrawals =
@@ -152,33 +152,35 @@ proc getEthBlock*(blck: ForkyTrustedBeaconBlock): Opt[EthBlock] =
         else:
           Opt.none(Hash32)
 
-      header = Header(
-        parentHash: Hash32(payload.parent_hash.data),
-        ommersHash: EMPTY_UNCLE_HASH,
-        coinbase: EthAddress(payload.fee_recipient.data),
-        stateRoot: Root(payload.state_root.data),
-        transactionsRoot: calcTxRoot(txs),
-        receiptsRoot: Root(payload.receipts_root.data),
-        logsBloom: Bloom(payload.logs_bloom.data),
-        difficulty: 0.u256,
-        number: payload.block_number,
-        gasLimit: GasInt(payload.gas_limit),
-        gasUsed: GasInt(payload.gas_used),
-        timestamp: EthTime(payload.timestamp),
-        extraData: payload.extra_data.asSeq(),
-        mixHash: Bytes32(payload.prev_randao.data),
-        nonce: default(Bytes8),
-        baseFeePerGas: Opt.some(payload.base_fee_per_gas),
-        withdrawalsRoot: withdrawalRoot,
-        blobGasUsed: blobGasUsed,
-        excessBlobGas: excessBlobGas,
-        parentBeaconBlockRoot: parentBeaconBlockRoot,
-      )
-    Opt.some EthBlock(
-      header: header, transactions: txs, uncles: @[], withdrawals: ethWithdrawals
+    res.header = Header(
+      parentHash: Hash32(payload.parent_hash.data),
+      ommersHash: EMPTY_UNCLE_HASH,
+      coinbase: EthAddress(payload.fee_recipient.data),
+      stateRoot: Root(payload.state_root.data),
+      transactionsRoot: calcTxRoot(txs),
+      receiptsRoot: Root(payload.receipts_root.data),
+      logsBloom: Bloom(payload.logs_bloom.data),
+      difficulty: 0.u256,
+      number: payload.block_number,
+      gasLimit: GasInt(payload.gas_limit),
+      gasUsed: GasInt(payload.gas_used),
+      timestamp: EthTime(payload.timestamp),
+      extraData: payload.extra_data.asSeq(),
+      mixHash: Bytes32(payload.prev_randao.data),
+      nonce: default(Bytes8),
+      baseFeePerGas: Opt.some(payload.base_fee_per_gas),
+      withdrawalsRoot: withdrawalRoot,
+      blobGasUsed: blobGasUsed,
+      excessBlobGas: excessBlobGas,
+      parentBeaconBlockRoot: parentBeaconBlockRoot,
     )
+    res.transactions = move(txs)
+    res.uncles.reset()
+    res.withdrawals = move(ethWithdrawals)
+
+    true
   else:
-    Opt.none(EthBlock)
+    false
 
 proc getEthBlockFromEra*(
     db: EraDB,
@@ -186,15 +188,18 @@ proc getEthBlockFromEra*(
     historical_summaries: openArray[HistoricalSummary],
     slot: Slot,
     cfg: RuntimeConfig,
-): Opt[EthBlock] =
+    res: var EthBlock,
+): bool =
   let fork = cfg.consensusForkAtEpoch(slot.epoch)
   fork.withConsensusFork:
     type T = consensusFork.TrustedSignedBeaconBlock
-    var tmp = new T
+    var tmp = new Opt[T]
     # Pass in default Eth2Digest to avoid block root computation (it is not
     # needed in this case)
     tmp[] = db.getBlock(
       historical_roots, historical_summaries, slot, Opt.some(default(Eth2Digest)), T
-    ).valueOr:
-      return Opt.none(EthBlock)
-    getEthBlock(tmp[].message)
+    )
+    if tmp[].isNone():
+      return false
+
+    getEthBlock(tmp[][].message, res)

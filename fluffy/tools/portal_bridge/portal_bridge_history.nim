@@ -374,14 +374,15 @@ proc runBackfillLoopAuditMode(
     rng = newRng()
     db = Era1DB.new(era1Dir, "mainnet", loadAccumulator())
 
+  var blockTuple: BlockTuple
   while true:
     let
       # Grab a random blockNumber to audit and potentially gossip
       blockNumber = rng[].rand(network_metadata.mergeBlockNumber - 1).uint64
-      (header, body, receipts, _) = db.getBlockTuple(blockNumber).valueOr:
-        error "Failed to get block tuple", error, blockNumber
-        continue
-      blockHash = header.rlpHash()
+    db.getBlockTuple(blockNumber, blockTuple).isOkOr:
+      error "Failed to get block tuple", error, blockNumber
+      continue
+    let blockHash = blockTuple.header.rlpHash()
 
     var headerSuccess, bodySuccess, receiptsSuccess = false
 
@@ -441,7 +442,7 @@ proc runBackfillLoopAuditMode(
             error "Invalid hex for block body content", error = e.msg
             break bodyBlock
 
-      validateBlockBodyBytes(content, header).isOkOr:
+      validateBlockBodyBytes(content, blockTuple.header).isOkOr:
         error "Block body is invalid", error
         break bodyBlock
 
@@ -469,7 +470,7 @@ proc runBackfillLoopAuditMode(
             error "Invalid hex for block receipts content", error = e.msg
             break receiptsBlock
 
-      validateReceiptsBytes(content, header.receiptsRoot).isOkOr:
+      validateReceiptsBytes(content, blockTuple.header.receiptsRoot).isOkOr:
         error "Block receipts are invalid", error
         break receiptsBlock
 
@@ -481,7 +482,7 @@ proc runBackfillLoopAuditMode(
       let
         epochRecord = db.getAccumulator(blockNumber).valueOr:
           raiseAssert "Failed to get accumulator from EraDB: " & error
-        headerWithProof = buildHeaderWithProof(header, epochRecord).valueOr:
+        headerWithProof = buildHeaderWithProof(blockTuple.header, epochRecord).valueOr:
           raiseAssert "Failed to build header with proof: " & error
 
       # gossip block header by hash
@@ -489,9 +490,13 @@ proc runBackfillLoopAuditMode(
       # gossip block header by number
       await bridge.gossipBlockHeader(blockNumber, headerWithProof)
     if not bodySuccess:
-      await bridge.gossipBlockBody(blockHash, PortalBlockBodyLegacy.fromBlockBody(body))
+      await bridge.gossipBlockBody(
+        blockHash, PortalBlockBodyLegacy.fromBlockBody(blockTuple.body)
+      )
     if not receiptsSuccess:
-      await bridge.gossipReceipts(blockHash, PortalReceipts.fromReceipts(receipts))
+      await bridge.gossipReceipts(
+        blockHash, PortalReceipts.fromReceipts(blockTuple.receipts)
+      )
 
     await sleepAsync(2.seconds)
 

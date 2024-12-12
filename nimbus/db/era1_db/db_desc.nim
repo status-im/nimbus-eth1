@@ -14,10 +14,10 @@ import
   stew/io2,
   std/[os, parseutils, strutils, tables],
   results,
-  eth/common/eth_types,
+  eth/common/blocks,
   ../../../fluffy/eth_data/era1
 
-export results, eth_types
+export results, blocks
 
 # TODO this is a "rough copy" of the fluffy DB, minus the accumulator (it goes
 #      by era number alone instead of rooted name) - eventually the two should
@@ -80,15 +80,19 @@ proc init*(
 
   ok Era1DbRef(path: path, network: network, filenames: filenames)
 
-proc getEthBlock*(db: Era1DbRef, blockNumber: uint64): Result[EthBlock, string] =
+proc getEthBlock*(
+    db: Era1DbRef, blockNumber: uint64, res: var Block
+): Result[void, string] =
   let f = ?db.getEra1File(blockNumber.era)
 
-  f.getEthBlock(blockNumber)
+  f.getEthBlock(blockNumber, res)
 
-proc getBlockTuple*(db: Era1DbRef, blockNumber: uint64): Result[BlockTuple, string] =
+proc getBlockTuple*(
+    db: Era1DbRef, blockNumber: uint64, res: var BlockTuple
+): Result[void, string] =
   let f = ?db.getEra1File(blockNumber.era)
 
-  f.getBlockTuple(blockNumber)
+  f.getBlockTuple(blockNumber, res)
 
 proc dispose*(db: Era1DbRef) =
   for w in db.files:

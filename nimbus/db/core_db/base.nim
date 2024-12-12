@@ -157,8 +157,7 @@ proc finish*(db: CoreDbRef; eradicate = false) =
   db.ifTrackNewApi: debug logTxt, api, elapsed
 
 proc `$$`*(e: CoreDbError): string =
-  ## Pretty print error symbol, note that this directive may have side effects
-  ## as it calls a backend function.
+  ## Pretty print error symbol
   ##
   e.toStr()
 

@@ -96,7 +96,6 @@ proc setBlock*(c: ChainRef; blk: Block): Result[void, string] =
   let
     vmState = c.getVmState(header).valueOr:
       return err("no vmstate")
-    _ = vmState.parent.stateRoot # Check point
   ? vmState.processBlock(blk)
 
   ? c.db.persistHeader(

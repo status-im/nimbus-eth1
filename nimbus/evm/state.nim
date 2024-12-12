@@ -34,19 +34,25 @@ proc init(
       tracer:       TracerRef,
       flags:        set[VMFlag] = self.flags) =
   ## Initialisation helper
-  assign(self.parent, parent)
-  self.blockCtx = blockCtx
-  self.gasPool = blockCtx.gasLimit
+  # Take care to (re)set all fields since the VMState might be recycled
   self.com = com
-  self.tracer = tracer
   self.stateDB = ac
+  self.gasPool = blockCtx.gasLimit
+  assign(self.parent, parent)
+  assign(self.blockCtx, blockCtx)
+  const txCtx = default(TxContext)
+  assign(self.txCtx, txCtx)
   self.flags = flags
-  self.blobGasUsed = 0'u64
   self.fork = self.determineFork
+  self.tracer = tracer
+  self.receipts.setLen(0)
+  self.cumulativeGasUsed = 0
   self.gasCosts = self.fork.forkToSchedule
+  self.blobGasUsed = 0'u64
+  self.allLogs.setLen(0)
+  self.gasRefunded = 0
 
-func blockCtx(com: CommonRef, header: Header):
-                BlockContext =
+func blockCtx(header: Header): BlockContext =
   BlockContext(
     timestamp    : header.timestamp,
     gasLimit     : header.gasLimit,
@@ -104,24 +110,24 @@ proc reinit*(self:     BaseVMState;     ## Object descriptor
   ## queries about its `getStateRoot()`, i.e. `isTopLevelClean` evaluated `true`. If
   ## this function returns `false`, the function argument `self` is left
   ## untouched.
-  if self.stateDB.isTopLevelClean:
-    let
-      tracer = self.tracer
-      com    = self.com
-      db     = com.db
-      ac     = if linear or self.stateDB.getStateRoot() == parent.stateRoot: self.stateDB
-               else: LedgerRef.init(db, self.stateDB.storeSlotHash)
-      flags  = self.flags
-    self[].reset
-    self.init(
-      ac       = ac,
-      parent   = parent,
-      blockCtx = blockCtx,
-      com      = com,
-      tracer   = tracer,
-      flags    = flags)
-    return true
-  # else: false
+  if not self.stateDB.isTopLevelClean:
+    return false
+
+  let
+    tracer = self.tracer
+    com    = self.com
+    db     = com.db
+    ac     = if linear or self.stateDB.getStateRoot() == parent.stateRoot: self.stateDB
+              else: LedgerRef.init(db, self.stateDB.storeSlotHash)
+    flags  = self.flags
+  self.init(
+    ac       = ac,
+    parent   = parent,
+    blockCtx = blockCtx,
+    com      = com,
+    tracer   = tracer,
+    flags    = flags)
+  true
 
 proc reinit*(self:   BaseVMState; ## Object descriptor
              parent: Header; ## parent header, account sync pos.
@@ -136,22 +142,9 @@ proc reinit*(self:   BaseVMState; ## Object descriptor
   ## networks, the miner address is retrievable via `ecRecover()`.
   self.reinit(
     parent   = parent,
-    blockCtx = self.com.blockCtx(header),
+    blockCtx = blockCtx(header),
     linear = linear
     )
-
-proc reinit*(self:      BaseVMState; ## Object descriptor
-             header:    Header; ## header with tx environment data fields
-             ): bool =
-  ## This is a variant of the `reinit()` function above where the field
-  ## `header.parentHash`, is used to fetch the `parent` Header to be
-  ## used in the `update()` variant, above.
-  let parent = self.com.db.getBlockHeader(header.parentHash).valueOr:
-    return false
-  self.reinit(
-    parent    = parent,
-    header    = header,
-    linear    = false)
 
 proc init*(
       self:   BaseVMState;     ## Object descriptor
@@ -170,7 +163,7 @@ proc init*(
   self.init(
     ac       = LedgerRef.init(com.db, storeSlotHash),
     parent   = parent,
-    blockCtx = com.blockCtx(header),
+    blockCtx = blockCtx(header),
     com      = com,
     tracer   = tracer)
 

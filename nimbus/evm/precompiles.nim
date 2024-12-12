@@ -347,7 +347,7 @@ func bn256ecPairing(c: Computation, fork: EVMFork = FkByzantium): EvmResultVoid 
   c.output.setLen(32)
   if msglen == 0:
     # we can discard here because we supply buffer of proper size
-    discard BNU256.one().toBytes(c.output)
+    discard BNU256.one().toBytesBE(c.output)
   else:
     # Calculate number of pairing pairs
     let count = msglen div 192
@@ -365,7 +365,7 @@ func bn256ecPairing(c: Computation, fork: EVMFork = FkByzantium): EvmResultVoid 
 
     if acc == FQ12.one():
       # we can discard here because we supply buffer of proper size
-      discard BNU256.one().toBytes(c.output)
+      discard BNU256.one().toBytesBE(c.output)
 
   ok()
 
