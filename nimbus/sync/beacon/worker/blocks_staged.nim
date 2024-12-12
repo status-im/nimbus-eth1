@@ -187,6 +187,9 @@ proc blocksStagedCollect*(
       # response length from the network.
       nBlkBlocks = blk.blocks.len
 
+    # Update, so it can be followed nicely
+    ctx.updateMetrics()
+
     # Fetch and extend staging record
     if not await buddy.fetchAndCheck(ivReq, blk, info):
 
