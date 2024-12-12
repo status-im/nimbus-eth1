@@ -11,6 +11,7 @@
 {.push raises: [].}
 
 import
+  stew/assign2,
   results,
   ../../evm/state,
   ../../evm/types,
@@ -40,24 +41,29 @@ type
 
   PersistBlockFlags* = set[PersistBlockFlag]
 
-  PersistStats = tuple[blocks: int, txs: int, gas: GasInt]
+  Persister* = object
+    c: ChainRef
+    flags: PersistBlockFlags
+    dbTx: CoreDbTxRef
+    stats*: PersistStats
 
-const
-  NoPersistBodies* = {NoPersistTransactions, NoPersistUncles, NoPersistWithdrawals}
+    parent: Header
+    parentHash: Hash32
 
-  CleanUpEpoch = 30_000.BlockNumber
-    ## Regular checks for history clean up (applies to single state DB). This
-    ## is mainly a debugging/testing feature so that the database can be held
-    ## a bit smaller. It is not applicable to a full node.
+  PersistStats* = tuple[blocks: int, txs: int, gas: GasInt]
+
+const NoPersistBodies* = {NoPersistTransactions, NoPersistUncles, NoPersistWithdrawals}
 
 # ------------------------------------------------------------------------------
 # Private
 # ------------------------------------------------------------------------------
 
 proc getVmState(
-    c: ChainRef, header: Header, storeSlotHash = false
+    c: ChainRef, parent, header: Header, storeSlotHash = false
 ): Result[BaseVMState, string] =
   if not c.vmState.isNil:
+    if not c.vmState.reinit(parent = parent, header = header, linear = true):
+      return err("Could not reinit VMState")
     return ok(c.vmState)
 
   let vmState = BaseVMState()
@@ -65,136 +71,102 @@ proc getVmState(
     return err("Could not initialise VMState")
   ok(vmState)
 
-proc purgeOlderBlocksFromHistory(db: CoreDbRef, bn: BlockNumber) =
-  ## Remove non-reachable blocks from KVT database
-  if 0 < bn:
-    var blkNum = bn - 1
-    while 0 < blkNum:
-      if not db.forgetHistory blkNum:
-        break
-      blkNum = blkNum - 1
+proc dispose*(p: var Persister) =
+  if p.dbTx != nil:
+    p.dbTx.dispose()
+    p.dbTx = nil
 
-proc persistBlocksImpl(
-    c: ChainRef, blocks: openArray[Block], flags: PersistBlockFlags = {}
-): Result[PersistStats, string] =
-  let dbTx = c.db.ctx.newTransaction()
-  defer:
-    dbTx.dispose()
+proc init*(T: type Persister, c: ChainRef, flags: PersistBlockFlags): T =
+  T(c: c, flags: flags)
 
-  # Note that `0 < headers.len`, assured when called from `persistBlocks()`
-  let
-    vmState =
-      ?c.getVmState(blocks[0].header, storeSlotHash = NoPersistSlotHashes notin flags)
-    fromBlock = blocks[0].header.number
-    toBlock = blocks[blocks.high()].header.number
-  trace "Persisting blocks", fromBlock, toBlock
-
-  var
-    blks = 0
-    txs = 0
-    gas = GasInt(0)
-    parentHash: Hash32 # only needed after the first block
-  for blk in blocks:
-    template header(): Header =
-      blk.header
-
-    # Full validation means validating the state root at every block and
-    # performing the more expensive hash computations on the block itself, ie
-    # verifying that the transaction and receipts roots are valid - when not
-    # doing full validation, we skip these expensive checks relying instead
-    # on the source of the data to have performed them previously or because
-    # the cost of failure is low.
-    # TODO Figure out the right balance for header fields - in particular, if
-    #      we receive instruction from the CL while syncing that a block is
-    #      CL-valid, do we skip validation while "far from head"? probably yes.
-    #      This requires performing a header-chain validation from that CL-valid
-    #      block which the current code doesn't express.
-    #      Also, the potential avenues for corruption should be described with
-    #      more rigor, ie if the txroot doesn't match but everything else does,
-    #      can the state root of the last block still be correct? Dubious, but
-    #      what would be the consequences? We would roll back the full set of
-    #      blocks which is fairly low-cost.
-    let skipValidation =
-      NoFullValidation in flags and header.number != toBlock or NoValidation in flags
-
-
-    if blks > 0:
-      template parent(): Header =
-        blocks[blks - 1].header
-
-      let updated =
-        if header.number == parent.number + 1 and header.parentHash == parentHash:
-          vmState.reinit(parent = parent, header = header, linear = true)
-        else:
-          # TODO remove this code path and process only linear histories in this
-          #      function
-          vmState.reinit(header = header)
-
-      if not updated:
-        debug "Cannot update VmState", blockNumber = header.number
-        return err("Cannot update VmState to block " & $header.number)
-
-    # TODO even if we're skipping validation, we should perform basic sanity
-    #      checks on the block and header - that fields are sanely set for the
-    #      given hard fork and similar path-independent checks - these same
-    #      sanity checks should be performed early in the processing pipeline no
-    #      matter their provenance.
-    if not skipValidation and c.extraValidation and c.verifyFrom <= header.number:
-      # TODO: how to checkseal from here
-      ?c.com.validateHeaderAndKinship(blk, vmState.parent, checkSealOK = false)
-
-    # Generate receipts for storage or validation but skip them otherwise
-    ?vmState.processBlock(
-      blk,
-      skipValidation,
-      skipReceipts = skipValidation and NoPersistReceipts in flags,
-      skipUncles = NoPersistUncles in flags,
-      taskpool = c.com.taskpool,
-    )
-
-    let blockHash = header.blockHash()
-    if NoPersistHeader notin flags:
-      ?c.db.persistHeader(
-        blockHash, header,
-        c.com.proofOfStake(header), c.com.startOfHistory)
-
-    if NoPersistTransactions notin flags:
-      c.db.persistTransactions(header.number, header.txRoot, blk.transactions)
-
-    if NoPersistReceipts notin flags:
-      c.db.persistReceipts(header.receiptsRoot, vmState.receipts)
-
-    if NoPersistWithdrawals notin flags and blk.withdrawals.isSome:
-      c.db.persistWithdrawals(
-        header.withdrawalsRoot.expect("WithdrawalsRoot should be verified before"),
-        blk.withdrawals.get,
-      )
-
-    # update currentBlock *after* we persist it
-    # so the rpc return consistent result
-    # between eth_blockNumber and eth_syncing
-    c.com.syncCurrent = header.number
-
-    blks += 1
-    txs += blk.transactions.len
-    gas += blk.header.gasUsed
-    parentHash = blockHash
-
-  dbTx.commit()
+proc checkpoint*(p: var Persister): Result[void, string] =
+  if p.dbTx != nil:
+    p.dbTx.commit()
+    p.dbTx = nil
 
   # Save and record the block number before the last saved block state.
-  c.db.persistent(toBlock).isOkOr:
+  p.c.db.persistent(p.parent.number).isOkOr:
     return err("Failed to save state: " & $$error)
 
-  if c.com.pruneHistory:
-    # There is a feature for test systems to regularly clean up older blocks
-    # from the database, not appicable to a full node set up.
-    let n = fromBlock div CleanUpEpoch
-    if 0 < n and n < (toBlock div CleanUpEpoch):
-      # Starts at around `2 * CleanUpEpoch`
-      c.db.purgeOlderBlocksFromHistory(fromBlock - CleanUpEpoch)
+  ok()
 
-  ok((blks, txs, gas))
+proc persistBlock*(p: var Persister, blk: Block): Result[void, string] =
+  template header(): Header =
+    blk.header
+
+  let c = p.c
+
+  # Full validation means validating the state root at every block and
+  # performing the more expensive hash computations on the block itself, ie
+  # verifying that the transaction and receipts roots are valid - when not
+  # doing full validation, we skip these expensive checks relying instead
+  # on the source of the data to have performed them previously or because
+  # the cost of failure is low.
+  # TODO Figure out the right balance for header fields - in particular, if
+  #      we receive instruction from the CL while syncing that a block is
+  #      CL-valid, do we skip validation while "far from head"? probably yes.
+  #      This requires performing a header-chain validation from that CL-valid
+  #      block which the current code doesn't express.
+  #      Also, the potential avenues for corruption should be described with
+  #      more rigor, ie if the txroot doesn't match but everything else does,
+  #      can the state root of the last block still be correct? Dubious, but
+  #      what would be the consequences? We would roll back the full set of
+  #      blocks which is fairly low-cost.
+  let skipValidation = true
+    # NoFullValidation in p.flags and header.number != toBlock or NoValidation inp.flags
+
+  let vmState =
+    ?c.getVmState(p.parent, header, storeSlotHash = NoPersistSlotHashes notin p.flags)
+
+  # TODO even if we're skipping validation, we should perform basic sanity
+  #      checks on the block and header - that fields are sanely set for the
+  #      given hard fork and similar path-independent checks - these same
+  #      sanity checks should be performed early in the processing pipeline no
+  #      matter their provenance.
+  if not skipValidation and c.extraValidation and c.verifyFrom <= header.number:
+    # TODO: how to checkseal from here
+    ?c.com.validateHeaderAndKinship(blk, p.parent, checkSealOK = false)
+
+  # Generate receipts for storage or validation but skip them otherwise
+  ?vmState.processBlock(
+    blk,
+    skipValidation,
+    skipReceipts = skipValidation and NoPersistReceipts in p.flags,
+    skipUncles = NoPersistUncles in p.flags,
+    taskpool = c.com.taskpool,
+  )
+
+  let blockHash = header.blockHash()
+  if NoPersistHeader notin p.flags:
+    ?c.db.persistHeader(
+      blockHash, header, c.com.proofOfStake(header), c.com.startOfHistory
+    )
+
+  if NoPersistTransactions notin p.flags:
+    c.db.persistTransactions(header.number, header.txRoot, blk.transactions)
+
+  if NoPersistReceipts notin p.flags:
+    c.db.persistReceipts(header.receiptsRoot, vmState.receipts)
+
+  if NoPersistWithdrawals notin p.flags and blk.withdrawals.isSome:
+    c.db.persistWithdrawals(
+      header.withdrawalsRoot.expect("WithdrawalsRoot should be verified before"),
+      blk.withdrawals.get,
+    )
+
+  # update currentBlock *after* we persist it
+  # so the rpc return consistent result
+  # between eth_blockNumber and eth_syncing
+  c.com.syncCurrent = header.number
+
+  p.stats.blocks += 1
+  p.stats.txs += blk.transactions.len
+  p.stats.gas += blk.header.gasUsed
+
+  assign(p.parent, header)
+  p.parentHash = blockHash
+
+  ok()
 
 proc persistBlocks*(
     c: ChainRef, blocks: openArray[Block], flags: PersistBlockFlags = {}
@@ -204,7 +176,16 @@ proc persistBlocks*(
     debug "Nothing to do"
     return ok(default(PersistStats)) # TODO not nice to return nil
 
-  c.persistBlocksImpl(blocks, flags)
+  var p = Persister.init(c, flags)
+
+  for blk in blocks:
+    p.persistBlock(blk).isOkOr:
+      p.dispose()
+      return err(error)
+
+  let res = p.checkpoint()
+  p.dispose()
+  res and ok(p.stats)
 
 # ------------------------------------------------------------------------------
 # End
