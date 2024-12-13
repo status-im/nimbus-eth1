@@ -18,29 +18,23 @@ import
   ../nimbus/common/[common, context],
   ./test_helpers
 
-type
-  EthBlock = object
-    header: BlockHeader
-    transactions: seq[Transaction]
-    uncles: seq[BlockHeader]
-
 const
   caseFolder = "tests/graphql"
   dataFolder  = "tests/fixtures/eth_tests/BlockchainTests/ValidBlocks/bcUncleTest"
 
-proc toBlock(n: JsonNode, key: string): EthBlock =
+proc toBlock(n: JsonNode, key: string): Block =
   let rlpBlob = hexToSeqByte(n[key].str)
-  rlp.decode(rlpBlob, EthBlock)
+  rlp.decode(rlpBlob, Block)
 
-proc setupChain(): CommonRef =
+proc setupChain(): ForkedChainRef =
   let config = ChainConfig(
     chainId             : MainNet.ChainId,
-    byzantiumBlock      : some(0.BlockNumber),
-    constantinopleBlock : some(0.BlockNumber),
-    petersburgBlock     : some(0.BlockNumber),
-    istanbulBlock       : some(0.BlockNumber),
-    muirGlacierBlock    : some(0.BlockNumber),
-    berlinBlock         : some(10.BlockNumber)
+    byzantiumBlock      : Opt.some(0.BlockNumber),
+    constantinopleBlock : Opt.some(0.BlockNumber),
+    petersburgBlock     : Opt.some(0.BlockNumber),
+    istanbulBlock       : Opt.some(0.BlockNumber),
+    muirGlacierBlock    : Opt.some(0.BlockNumber),
+    berlinBlock         : Opt.some(10.BlockNumber)
   )
 
   var jn = json.parseFile(dataFolder & "/oneUncle.json")
@@ -58,48 +52,41 @@ proc setupChain(): CommonRef =
     mixHash   : gen.header.mixHash,
     coinBase  : gen.header.coinbase,
     timestamp : gen.header.timestamp,
-    baseFeePerGas: gen.header.fee
+    baseFeePerGas: gen.header.baseFeePerGas
   )
   if not parseGenesisAlloc($(jn["pre"]), genesis.alloc):
     quit(QuitFailure)
 
-  let customNetwork = NetworkParams(
-    config: config,
-    genesis: genesis
-  )
-
-  let com = CommonRef.new(
-    newCoreDbRef DefaultDbMemory, nil,
-    CustomNet,
-    customNetwork
-  )
-
-  let blocks = jn["blocks"]
-  var headers: seq[BlockHeader]
-  var bodies: seq[BlockBody]
-  for n in blocks:
-    let ethBlock = n.toBlock("rlp")
-    headers.add ethBlock.header
-    bodies.add BlockBody(
-      transactions: ethBlock.transactions,
-      uncles: ethBlock.uncles
+  let
+    customNetwork = NetworkParams(
+      config: config,
+      genesis: genesis
     )
+    com = CommonRef.new(
+      newCoreDbRef DefaultDbMemory,
+      taskpool = nil,
+      CustomNet,
+      customNetwork
+    )
+    chain = ForkedChainRef.init(com)
+    blocks = jn["blocks"]
 
-  let chain = newChain(com)
-  let res = chain.persistBlocks(headers, bodies)
-  assert res.isOk(), res.error()
+  for n in blocks:
+    let blk = n.toBlock("rlp")
+    chain.importBlock(blk).isOkOr:
+      doAssert(false, error)
 
-  com
+  chain
 
 proc graphqlMain*() =
   let
     conf    = makeTestConfig()
     ethCtx  = newEthContext()
     ethNode = setupEthNode(conf, ethCtx, eth)
-    com     = setupChain()
-    txPool  = TxPoolRef.new(com)
+    chain   = setupChain()
+    txPool  = TxPoolRef.new(chain)
 
-  let ctx = setupGraphqlContext(com, ethNode, txPool)
+  let ctx = setupGraphqlContext(chain.com, ethNode, txPool)
   when isMainModule:
     ctx.main(caseFolder, purgeSchema = false)
   else:

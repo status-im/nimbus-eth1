@@ -245,11 +245,11 @@ proc rpcMain*() =
     let
       env = setupEnv(signer, ks2, ctx, com)
       chain = ForkedChainRef.init(com)
-      txPool = TxPoolRef.new(com)
+      txPool = TxPoolRef.new(chain)
 
     # txPool must be informed of active head
     # so it can know the latest account state
-    doAssert txPool.smartHead(chain.latestHeader, chain)
+    doAssert txPool.smartHead(chain.latestHeader)
 
     let
       server = newRpcHttpServerWithParams("127.0.0.1:0").valueOr:

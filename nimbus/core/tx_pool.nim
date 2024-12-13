@@ -226,24 +226,17 @@
 ## A piece of code using this pool architecture could look like as follows:
 ## ::
 ##    # see also unit test examples, e.g. "Block packer tests"
-##    var db: CoreDbRef                      # to be initialised
+##    var chain: ForkedChainRef              # to be initialised
 ##    var txs: seq[Transaction]              # to be initialised
 ##
-##    proc mineThatBlock(blk: EthBlock)      # external function
 ##
-##    ..
-##
-##    var xq = TxPoolRef.new(db)             # initialise tx-pool
+##    var xq = TxPoolRef.new(chain)          # initialise tx-pool
 ##    ..
 ##
 ##    xq.add(txs)                            # add transactions ..
 ##    ..                                     # .. into the buckets
 ##
 ##    let newBlock = xq.assembleBlock        # fetch current mining block
-##
-##    ..
-##    mineThatBlock(newBlock) ...            # external mining & signing process
-##    ..
 ##
 ##    xp.smartHead(newBlock.header)          # update pool, new insertion point
 ##
@@ -252,7 +245,7 @@
 ## ---------------------
 ## In the example, transactions are processed into buckets via `add()`.
 ##
-## The `ethBlock()` directive assembles and retrieves a new block for mining
+## The `assembleBlock()` directive assembles and retrieves a new block for mining
 ## derived from the current pool state. It invokes the block packer which
 ## accumulates txs from the `pending` buscket into the `packed` bucket which
 ## then go into the block.
@@ -389,11 +382,11 @@ proc setHead(xp: TxPoolRef; val: Header)
 # Public constructor/destructor
 # ------------------------------------------------------------------------------
 
-proc new*(T: type TxPoolRef; com: CommonRef): T
+proc new*(T: type TxPoolRef; chain: ForkedChainRef): T
     {.gcsafe,raises: [].} =
   ## Constructor, returns a new tx-pool descriptor.
   new result
-  result.init(com)
+  result.init(chain)
 
 # ------------------------------------------------------------------------------
 # Public functions, task manager, pool actions serialiser
@@ -422,7 +415,7 @@ proc add*(xp: TxPoolRef; tx: PooledTransaction; info = "")
   ## Variant of `add()` for a single transaction.
   xp.add(@[tx], info)
 
-proc smartHead*(xp: TxPoolRef; pos: Header, chain: ForkedChainRef): bool
+proc smartHead*(xp: TxPoolRef; pos: Header): bool
     {.gcsafe,raises: [CatchableError].} =
   ## This function moves the internal head cache (i.e. tx insertion point,
   ## vmState) and ponts it to a now block on the chain.
@@ -434,7 +427,7 @@ proc smartHead*(xp: TxPoolRef; pos: Header, chain: ForkedChainRef): bool
   ## the internal head cache, the previously calculated actions will be
   ## applied.
   ##
-  let rcDiff = xp.headDiff(pos, chain)
+  let rcDiff = xp.headDiff(pos, xp.chain)
   if rcDiff.isOk:
     let changes = rcDiff.value
 
