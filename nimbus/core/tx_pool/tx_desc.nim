@@ -100,13 +100,13 @@ proc gasLimitsGet(com: CommonRef; parent: Header): GasInt =
     if not com.isLondonOrLater(parent.number):
       # Bump by 2x
       parentGasLimit = parent.gasLimit * EIP1559_ELASTICITY_MULTIPLIER
-    calcGasLimit1559(parentGasLimit, desiredLimit = DEFAULT_GAS_LIMIT)
+    calcGasLimit1559(parentGasLimit, desiredLimit = com.gasLimit)
   else:
     computeGasLimit(
       parent.gasUsed,
       parent.gasLimit,
-      gasFloor = DEFAULT_GAS_LIMIT,
-      gasCeil = DEFAULT_GAS_LIMIT)
+      gasFloor = com.gasLimit,
+      gasCeil = com.gasLimit)
 
 proc setupVMState(com: CommonRef; parent: Header): BaseVMState =
   # do hardfork transition before

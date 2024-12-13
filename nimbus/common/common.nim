@@ -95,7 +95,10 @@ type
       ## Must not not set for a full node, might go away some time
 
     extraData: string
-      ## Value of extraData field when building block
+      ## Value of extraData field when building a block
+
+    gasLimit: uint64
+      ## Desired gas limit when building a block
 
 # ------------------------------------------------------------------------------
 # Forward declarations
@@ -181,6 +184,7 @@ proc init(com         : CommonRef,
   com.pruneHistory= pruneHistory
   com.pos         = CasperRef.new
   com.extraData   = ShortClientId
+  com.gasLimit    = DEFAULT_GAS_LIMIT
 
   # com.forkIdCalculator and com.genesisHash are set
   # by setForkId
@@ -419,6 +423,9 @@ func syncState*(com: CommonRef): SyncState =
 func extraData*(com: CommonRef): string =
   com.extraData
 
+func gasLimit*(com: CommonRef): uint64 =
+  com.gasLimit
+
 # ------------------------------------------------------------------------------
 # Setters
 # ------------------------------------------------------------------------------
@@ -459,6 +466,9 @@ func `notifyBadBlock=`*(com: CommonRef; cb: NotifyBadBlockCB) =
 
 func `extraData=`*(com: CommonRef, val: string) =
   com.extraData = val
+
+func `gasLimit=`*(com: CommonRef, val: uint64) =
+  com.gasLimit = val
 
 # ------------------------------------------------------------------------------
 # End
