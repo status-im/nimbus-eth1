@@ -101,7 +101,7 @@ proc ledgerFromTag(api: ServerAPIRef, blockTag: BlockTag): Result[LedgerRef, str
   let header = ?api.headerFromTag(blockTag)
   if not api.chain.stateReady(header):
     api.chain.replaySegment(header.blockHash)
-  
+
   ok(LedgerRef.init(api.com.db))
 
 proc blockFromTag(api: ServerAPIRef, blockTag: BlockTag): Result[Block, string] =
@@ -389,7 +389,7 @@ proc setupServerAPI*(api: ServerAPIRef, server: RpcServer, ctx: EthContext) =
 
   server.rpc("eth_gasPrice") do() -> Web3Quantity:
     ## Returns an integer of the current gas price in wei.
-    w3Qty(calculateMedianGasPrice(api.com.db).uint64)
+    w3Qty(calculateMedianGasPrice(api.chain).uint64)
 
   server.rpc("eth_accounts") do() -> seq[eth_types.Address]:
     ## Returns a list of addresses owned by client.
@@ -474,7 +474,7 @@ proc setupServerAPI*(api: ServerAPIRef, server: RpcServer, ctx: EthContext) =
     let
       accDB = api.ledgerFromTag(blockId("latest")).valueOr:
         raise newException(ValueError, "Latest Block not found")
-      tx = unsignedTx(data, api.chain.db, accDB.getNonce(address) + 1, api.com.chainId)
+      tx = unsignedTx(data, api.chain, accDB.getNonce(address) + 1, api.com.chainId)
       eip155 = api.com.isEIP155(api.chain.latestNumber)
       signedTx = signTransaction(tx, acc.privateKey, eip155)
     return rlp.encode(signedTx)
@@ -495,7 +495,7 @@ proc setupServerAPI*(api: ServerAPIRef, server: RpcServer, ctx: EthContext) =
     let
       accDB = api.ledgerFromTag(blockId("latest")).valueOr:
         raise newException(ValueError, "Latest Block not found")
-      tx = unsignedTx(data, api.chain.db, accDB.getNonce(address) + 1, api.com.chainId)
+      tx = unsignedTx(data, api.chain, accDB.getNonce(address) + 1, api.com.chainId)
       eip155 = api.com.isEIP155(api.chain.latestNumber)
       signedTx = signTransaction(tx, acc.privateKey, eip155)
       networkPayload =
