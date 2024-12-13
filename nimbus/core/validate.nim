@@ -41,7 +41,6 @@ proc validateHeader(
     com: CommonRef;
     blk: Block;
     parentHeader: Header;
-    checkSealOK: bool;
       ): Result[void,string] =
   template header: Header = blk.header
   # TODO this code is used for validating uncles also, though these get passed
@@ -102,8 +101,7 @@ proc validateHeader(
   ok()
 
 proc validateUncles(com: CommonRef; header: Header;
-                    uncles: openArray[Header];
-                    checkSealOK: bool): Result[void,string]
+                    uncles: openArray[Header]): Result[void,string]
                       {.gcsafe, raises: [].} =
   let hasUncles = uncles.len > 0
   let shouldHaveUncles = header.ommersHash != EMPTY_UNCLE_HASH
@@ -162,7 +160,7 @@ proc validateUncles(com: CommonRef; header: Header;
 
     let uncleParent = ?chainDB.getBlockHeader(uncle.parentHash)
     ? com.validateHeader(
-      Block.init(uncle, BlockBody()), uncleParent, checkSealOK)
+      Block.init(uncle, BlockBody()), uncleParent)
 
   ok()
 
@@ -365,7 +363,6 @@ proc validateHeaderAndKinship*(
     com: CommonRef;
     blk: Block;
     parent: Header;
-    checkSealOK: bool;
       ): Result[void, string]
       {.gcsafe, raises: [].} =
   template header: Header = blk.header
@@ -375,13 +372,13 @@ proc validateHeaderAndKinship*(
       return err("Header.extraData larger than 32 bytes")
     return ok()
 
-  ? com.validateHeader(blk, parent, checkSealOK)
+  ? com.validateHeader(blk, parent)
 
   if blk.uncles.len > MAX_UNCLES:
     return err("Number of uncles exceed limit.")
 
   if not com.proofOfStake(header):
-    ? com.validateUncles(header, blk.uncles, checkSealOK)
+    ? com.validateUncles(header, blk.uncles)
 
   ok()
 
