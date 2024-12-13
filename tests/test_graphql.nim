@@ -32,7 +32,7 @@ proc toBlock(n: JsonNode, key: string): EthBlock =
   let rlpBlob = hexToSeqByte(n[key].str)
   rlp.decode(rlpBlob, EthBlock)
 
-proc setupChain(): CommonRef =
+proc setupChain(): ForkedChainRef =
   let config = ChainConfig(
     chainId             : MainNet.ChainId,
     byzantiumBlock      : some(0.BlockNumber),
@@ -63,41 +63,33 @@ proc setupChain(): CommonRef =
   if not parseGenesisAlloc($(jn["pre"]), genesis.alloc):
     quit(QuitFailure)
 
-  let customNetwork = NetworkParams(
-    config: config,
-    genesis: genesis
-  )
-
-  let com = CommonRef.new(
-    newCoreDbRef DefaultDbMemory,
-    CustomNet,
-    customNetwork
-  )
-
-  let blocks = jn["blocks"]
-  var headers: seq[BlockHeader]
-  var bodies: seq[BlockBody]
-  for n in blocks:
-    let ethBlock = n.toBlock("rlp")
-    headers.add ethBlock.header
-    bodies.add BlockBody(
-      transactions: ethBlock.transactions,
-      uncles: ethBlock.uncles
+  let 
+    customNetwork = NetworkParams(
+      config: config,
+      genesis: genesis
     )
-
-  let chain = newChain(com)
-  let res = chain.persistBlocks(headers, bodies)
-  assert res.isOk(), res.error()
-
-  com
+    com = CommonRef.new(
+      newCoreDbRef DefaultDbMemory,
+      CustomNet,
+      customNetwork
+    )
+    chain = ForkedChainRef.ini(com)
+    blocks = jn["blocks"]
+      
+  for n in blocks:
+    let blk = n.toBlock("rlp")
+    chain.importBlock(blk).isOkOr:
+      doAssert(false, error)
+  
+  chain
 
 proc graphqlMain*() =
   let
     conf    = makeTestConfig()
     ethCtx  = newEthContext()
     ethNode = setupEthNode(conf, ethCtx, eth)
-    com     = setupChain()
-    txPool  = TxPoolRef.new(com)
+    chain   = setupChain()
+    txPool  = TxPoolRef.new(chain)
 
   let ctx = setupGraphqlContext(com, ethNode, txPool)
   when isMainModule:

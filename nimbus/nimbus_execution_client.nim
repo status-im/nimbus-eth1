@@ -43,13 +43,13 @@ when defined(evmc_enabled):
 proc basicServices(nimbus: NimbusNode,
                    conf: NimbusConf,
                    com: CommonRef) =
-  nimbus.txPool = TxPoolRef.new(com)
-
+  nimbus.chainRef = ForkedChainRef.init(com)
+  
   # txPool must be informed of active head
   # so it can know the latest account state
   # e.g. sender nonce, etc
-  nimbus.chainRef = ForkedChainRef.init(com)
-  doAssert nimbus.txPool.smartHead(nimbus.chainRef.latestHeader,nimbus.chainRef)
+  nimbus.txPool = TxPoolRef.new(nimbus.chainRef)
+  doAssert nimbus.txPool.smartHead(nimbus.chainRef.latestHeader)
 
   nimbus.beaconEngine = BeaconEngineRef.new(nimbus.txPool, nimbus.chainRef)
 

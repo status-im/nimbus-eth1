@@ -82,10 +82,9 @@ proc newEngineEnv*(conf: var NimbusConf, chainFile: string, enableAuth: bool): E
   let
     node  = setupEthNode(conf, ctx)
     com   = makeCom(conf)
-    head  = com.db.getCanonicalHead().expect("canonical head exists")
-    chain = newForkedChain(com, head)
+    chain = ForkedChainRef.init(com)
 
-  let txPool = TxPoolRef.new(com)
+  let txPool = TxPoolRef.new(chain)
 
   node.addEthHandlerCapability(
     node.peerPool,
@@ -94,7 +93,7 @@ proc newEngineEnv*(conf: var NimbusConf, chainFile: string, enableAuth: bool): E
 
   # txPool must be informed of active head
   # so it can know the latest account state
-  doAssert txPool.smartHead(head, chain)
+  doAssert txPool.smartHead(chain.latestHeader)
 
   var key: JwtSharedKey
   key.fromHex(jwtSecret).isOkOr:

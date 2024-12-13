@@ -88,13 +88,12 @@ proc setupEnv(envFork: HardFork = MergeFork,
 
   let
     com   = setupCom(conf)
-    head  = com.db.getCanonicalHead().expect("canonical head exists")
     chain = ForkedChainRef.init(com)
-    txPool = TxPoolRef.new(com)
+    txPool = TxPoolRef.new(chain)
 
   # txPool must be informed of active head
   # so it can know the latest account state
-  doAssert txPool.smartHead(head, chain)
+  doAssert txPool.smartHead(chain.latestHeader)
 
   let
     server = newRpcHttpServerWithParams("127.0.0.1:0").valueOr:

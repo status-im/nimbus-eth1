@@ -20,6 +20,7 @@ import
   ../../evm/types,
   ../../db/ledger,
   ../../constants,
+  ../../core/chain/forked_chain,
   ../pow/header,
   ../eip4844,
   ../casper,
@@ -56,6 +57,7 @@ type
 
     lifeTime*: times.Duration   ## Maximum life time of a tx in the system
     priceBump*: uint            ## Min precentage price when superseding
+    chain*: ForkedChainRef
 
 const
   txItemLifeTime = ##\
@@ -137,12 +139,12 @@ proc update(xp: TxPoolRef; parent: Header) =
 # Public functions, constructor
 # ------------------------------------------------------------------------------
 
-proc init*(xp: TxPoolRef; com: CommonRef) =
+proc init*(xp: TxPoolRef; chain: ForkedChainRef) =
   ## Constructor, returns new tx-pool descriptor.
   xp.startDate = getTime().utc.toTime
 
-  let head = com.db.getCanonicalHead.expect("Canonicalhead exists")
-  xp.vmState = setupVMState(com, head)
+  let head = chain.latestHeader
+  xp.vmState = setupVMState(chain.com, head)
   xp.txDB = TxTabsRef.new
 
   xp.lifeTime = txItemLifeTime
@@ -150,6 +152,7 @@ proc init*(xp: TxPoolRef; com: CommonRef) =
 
   xp.param.reset
   xp.param.flags = txPoolFlags
+  xp.chain = chain
 
 # ------------------------------------------------------------------------------
 # Public functions

@@ -131,7 +131,7 @@ proc initEnv(envFork: HardFork): TestEnv =
     conf: conf,
     com: com,
     chain: chain,
-    xp: TxPoolRef.new(com),
+    xp: TxPoolRef.new(chain),
     vaultKey: privKey(vaultKeyHex),
     chainId: conf.networkParams.config.chainId,
     nonce: 0'u64,
@@ -262,7 +262,7 @@ proc runTxPoolBlobhashTest() =
         tx4 = env.signTxWithNonce(tx3, AccountNonce(env.nonce - 2))
         xp = env.xp
 
-      check xp.smartHead(blk.header, chain)
+      check xp.smartHead(blk.header)
       xp.add(PooledTransaction(tx: tx4))
 
       check inPoolAndOk(xp, rlpHash(tx4)) == false
@@ -318,7 +318,7 @@ proc runTxHeadDelta(noisy = true) =
           # Synchronise TxPool against new chain head, register txs differences.
           # In this particular case, these differences will simply flush the
           # packer bucket.
-          check xp.smartHead(blk.header, chain)
+          check xp.smartHead(blk.header)
 
           # Move TxPool chain head to new chain head and apply delta jobs
           check xp.nItems.staged == 0
@@ -362,7 +362,7 @@ proc runGetBlockBodyTest() =
       let blk = r.get.blk
       check env.chain.importBlock(blk).isOk
       parentHeader = blk.header
-      check env.xp.smartHead(parentHeader, env.chain)
+      check env.xp.smartHead(parentHeader)
       check blk.transactions.len == 2
 
     test "TxPool create second block":
@@ -387,7 +387,7 @@ proc runGetBlockBodyTest() =
       let blk = r.get.blk
       check env.chain.importBlock(blk).isOk
       currentHeader = blk.header
-      check env.xp.smartHead(currentHeader, env.chain)
+      check env.xp.smartHead(currentHeader)
       check blk.transactions.len == 3
       let currHash = currentHeader.blockHash
       check env.chain.forkChoice(currHash, currHash).isOk

@@ -46,11 +46,11 @@ proc manageAccounts(ctx: EthContext, conf: NimbusConf) =
 proc setupRpcServer(ctx: EthContext, com: CommonRef,
                     ethNode: EthereumNode, txPool: TxPoolRef,
                     conf: NimbusConf, chain: ForkedChainRef): RpcServer  =
-  let 
+  let
     rpcServer = newRpcHttpServer([initTAddress(conf.httpAddress, conf.httpPort)])
     serverApi = newServerAPI(chain, txPool)
 
-  
+
   setupCommonRpc(ethNode, conf, rpcServer)
   setupServerAPI(serverApi, rpcServer, ctx)
 
@@ -86,15 +86,14 @@ proc setupEnv*(): TestEnv =
 
   manageAccounts(ethCtx, conf)
 
-  let head = com.db.getCanonicalHead().expect("canonical head exists")
-  let chainRef = newForkedChain(com, head)
-  let txPool = TxPoolRef.new(com)
+  let chain = ForkedChainRef.init(com)
+  let txPool = TxPoolRef.new(chain)
 
   # txPool must be informed of active head
   # so it can know the latest account state
-  doAssert txPool.smartHead(head, chainRef)
+  doAssert txPool.smartHead(chain.latestHeader)
 
-  let rpcServer = setupRpcServer(ethCtx, com, ethNode, txPool, conf, chainRef)
+  let rpcServer = setupRpcServer(ethCtx, com, ethNode, txPool, conf, chain)
   let rpcClient = newRpcHttpClient()
   waitFor rpcClient.connect("127.0.0.1", Port(8545), false)
   let stopServer = stopRpcHttpServer

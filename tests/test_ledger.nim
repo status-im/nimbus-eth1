@@ -101,6 +101,7 @@ proc initEnv(): TestEnv =
       conf.networkId,
       conf.networkParams
     )
+    chain = newForkedChain(com, com.genesisHeader)
 
   TestEnv(
     com     : com,
@@ -108,8 +109,8 @@ proc initEnv(): TestEnv =
     vaultKey: privKey(hexPrivKey),
     nonce   : 0'u64,
     chainId : conf.networkParams.config.chainId,
-    xp      : TxPoolRef.new(com),
-    chain   : newForkedChain(com, com.genesisHeader),
+    xp      : TxPoolRef.new(chain),
+    chain   : chain,
   )
 
 func makeTx(
@@ -334,7 +335,7 @@ proc runLedgerTransactionTests(noisy = true) =
         )
         env.importBlock(Block.init(blk.header, body))
 
-        check env.xp.smartHead(blk.header, env.chain)
+        check env.xp.smartHead(blk.header)
         for tx in body.transactions:
           env.txs.add tx
 
