@@ -77,9 +77,6 @@ proc processBlock(
 
 proc getVmState(c: ChainRef, header: Header):
                  Result[BaseVMState, void] =
-  if c.vmState.isNil.not:
-    return ok(c.vmState)
-
   let vmState = BaseVMState()
   if not vmState.init(header, c.com, storeSlotHash = false):
     debug "Cannot initialise VmState",

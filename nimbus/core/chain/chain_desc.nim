@@ -11,9 +11,7 @@
 {.push raises: [].}
 
 import
-  ../../common/common,
-  ../../utils/utils,
-  ../../evm/types
+  ../../common/common
 
 export
   common
@@ -28,28 +26,18 @@ type
       ## Trigger extra validation, currently within `persistBlocks()`
       ## function only.
 
-    verifyFrom: BlockNumber ##\
-      ## First block to when `extraValidation` will be applied (only
-      ## effective if `extraValidation` is true.)
-
-    vmState: BaseVMState
-      ## If it's not nil, block validation will use this
-      ## If it's nil, a new vmState state will be created.
-
 # ------------------------------------------------------------------------------
 # Public constructors
 # ------------------------------------------------------------------------------
 
 func newChain*(com: CommonRef,
-               extraValidation: bool,
-               vmState = BaseVMState(nil)): ChainRef =
+               extraValidation: bool): ChainRef =
   ## Constructor for the `Chain` descriptor object.
   ## The argument `extraValidation` enables extra block
   ## chain validation if set `true`.
   ChainRef(
     com: com,
-    extraValidation: extraValidation,
-    vmState: vmState
+    extraValidation: extraValidation
   )
 
 proc newChain*(com: CommonRef): ChainRef =
@@ -65,9 +53,6 @@ proc newChain*(com: CommonRef): ChainRef =
 # ------------------------------------------------------------------------------
 # Public `Chain` getters
 # ------------------------------------------------------------------------------
-func vmState*(c: ChainRef): BaseVMState =
-  ## Getter
-  c.vmState
 
 func db*(c: ChainRef): CoreDbRef =
   ## Getter
@@ -81,10 +66,6 @@ func extraValidation*(c: ChainRef): bool =
   ## Getter
   c.extraValidation
 
-func verifyFrom*(c: ChainRef): BlockNumber =
-  ## Getter
-  c.verifyFrom
-
 # ------------------------------------------------------------------------------
 # Public `Chain` setters
 # ------------------------------------------------------------------------------
@@ -93,12 +74,6 @@ func `extraValidation=`*(c: ChainRef; extraValidation: bool) =
   ## Setter. If set `true`, the assignment value `extraValidation` enables
   ## extra block chain validation.
   c.extraValidation = extraValidation
-
-func `verifyFrom=`*(c: ChainRef; verifyFrom: BlockNumber) =
-  ## Setter. The  assignment value `verifyFrom` defines the first block where
-  ## validation should start if the `Clique` field `extraValidation` was set
-  ## `true`.
-  c.verifyFrom = verifyFrom
 
 # ------------------------------------------------------------------------------
 # End

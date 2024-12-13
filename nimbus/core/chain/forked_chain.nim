@@ -67,7 +67,7 @@ proc processBlock(c: ForkedChainRef,
   vmState.init(parent, header, c.com)
 
   if c.extraValidation:
-    ?c.com.validateHeaderAndKinship(blk, vmState.parent, checkSealOK = false)
+    ?c.com.validateHeaderAndKinship(blk, vmState.parent)
 
   ?vmState.processBlock(
     blk,

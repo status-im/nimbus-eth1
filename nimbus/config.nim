@@ -161,11 +161,6 @@ type
       abbr: "e"
       name: "import-key" }: InputFile
 
-    verifyFrom* {.
-      desc: "Enable extra verification when current block number greater than verify-from"
-      defaultValueDesc: ""
-      name: "verify-from" }: Option[uint64]
-
     evm* {.
       desc: "Load alternative EVM from EVMC-compatible shared library" & sharedLibText
       defaultValue: ""
