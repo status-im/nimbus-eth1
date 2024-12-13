@@ -36,14 +36,13 @@ proc processChainData(cd: ChainData, taskPool: Taskpool): TestStatus =
     # bad blocks
     discard importRlpBlocks(bytes, c, finalize = true)
 
-  let head = com.db.getCanonicalHead().expect("canonical head exists")
-  let blockHash = "0x" & head.blockHash.data.toHex
+  let blockHash = $c.latestHash
   if blockHash == cd.lastBlockHash:
     TestStatus.OK
   else:
     trace "block hash not equal",
       got=blockHash,
-      number=head.number,
+      number=c.latestHeader.number,
       expected=cd.lastBlockHash
     TestStatus.Failed
 

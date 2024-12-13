@@ -301,7 +301,7 @@ method getStatus*(ctx: EthWireRef): Result[EthState, string]
   let
     db = ctx.db
     com = ctx.chain.com
-    bestBlock = ?db.getCanonicalHead()
+    bestBlock = ctx.chain.latestHeader
     forkId = com.forkId(bestBlock.number, bestBlock.timestamp)
 
   return ok(EthState(

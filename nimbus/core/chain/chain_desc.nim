@@ -31,23 +31,13 @@ type
 # ------------------------------------------------------------------------------
 
 func newChain*(com: CommonRef,
-               extraValidation: bool): ChainRef =
+               extraValidation: bool = true): ChainRef =
   ## Constructor for the `Chain` descriptor object.
   ## The argument `extraValidation` enables extra block
   ## chain validation if set `true`.
   ChainRef(
     com: com,
     extraValidation: extraValidation
-  )
-
-proc newChain*(com: CommonRef): ChainRef =
-  ## Constructor for the `Chain` descriptor object. All sub-object descriptors
-  ## are initialised with defaults. So is extra block chain validation
-  let header = com.db.getCanonicalHead().expect("canonical head exists")
-  let extraValidation = com.proofOfStake(header)
-  return ChainRef(
-    com: com,
-    extraValidation: extraValidation,
   )
 
 # ------------------------------------------------------------------------------

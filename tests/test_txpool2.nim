@@ -277,7 +277,7 @@ proc runTxHeadDelta(noisy = true) =
         xp = env.xp
         com = env.com
         chain = env.chain
-        head = com.db.getCanonicalHead().expect("canonical head exists")
+        head = chain.latestHeader
         timestamp = head.timestamp
 
       const
@@ -327,7 +327,7 @@ proc runTxHeadDelta(noisy = true) =
           setErrorLevel() # in case we set trace level
 
       check com.syncCurrent == 10.BlockNumber
-      head = com.db.getBlockHeader(com.syncCurrent).expect("block header exists")
+      head = chain.headerByNumber(com.syncCurrent).expect("block header exists")
       let
         sdb = LedgerRef.init(com.db)
         expected = u256(txPerblock * numBlocks) * amount

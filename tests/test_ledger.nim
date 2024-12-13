@@ -339,7 +339,7 @@ proc runLedgerTransactionTests(noisy = true) =
         for tx in body.transactions:
           env.txs.add tx
 
-    let head = env.xdb.getCanonicalHead().expect("canonicalHead exists")
+    let head = env.chain.latestHeader
     test &"Collect unique recipient addresses from {env.txs.len} txs," &
         &" head=#{head.number}":
       # since we generate our own transactions instead of replaying

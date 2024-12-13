@@ -15,7 +15,8 @@ import
   results,
   ../transaction,
   ../common/common,
-  ../core/eip4844
+  ../core/eip4844,
+  ../core/chain/forked_chain
 
 from ./rpc_types import
   Quantity,
@@ -59,16 +60,16 @@ type
     blocks: uint64
 
   Oracle* = ref object
-    com: CommonRef
+    chain: ForkedChainRef
     maxHeaderHistory: uint64
     maxBlockHistory : uint64
     historyCache    : KeyedQueue[CacheKey, ProcessedFees]
 
 {.push gcsafe, raises: [].}
 
-func new*(_: type Oracle, com: CommonRef): Oracle =
+func new*(_: type Oracle, chain: ForkedChainRef): Oracle =
   Oracle(
-    com: com,
+    chain: chain,
     maxHeaderHistory: 1024,
     maxBlockHistory: 1024,
     historyCache: KeyedQueue[CacheKey, ProcessedFees].init(),
@@ -159,10 +160,7 @@ proc processBlock(oracle: Oracle, bc: BlockContent, percentiles: openArray[float
 proc resolveBlockRange(oracle: Oracle, blockId: BlockTag, numBlocks: uint64): Result[BlockRange, string] =
   # Get the chain's current head.
   let
-    headBlock = try:
-                  oracle.com.db.getCanonicalHead()
-                except CatchableError as exc:
-                  return err(exc.msg)
+    headBlock = oracle.chain.latestHeader
     head = headBlock.number
 
   var
