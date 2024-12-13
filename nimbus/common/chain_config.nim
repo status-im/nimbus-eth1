@@ -514,7 +514,6 @@ func chainConfigForNetwork*(id: NetworkId): ChainConfig =
       londonBlock:         Opt.some(0.BlockNumber),
       mergeForkBlock:      Opt.some(0.BlockNumber),
       terminalTotalDifficulty: Opt.some(0.u256),
-      terminalTotalDifficultyPassed: Opt.some(true),
       shanghaiTime:        Opt.some(1_696_000_704.EthTime),
       cancunTime:          Opt.some(1_707_305_664.EthTime), # 2024-02-07 11:34:24
       depositContractAddress: Opt.some(HOLESKYNET_DEPOSIT_CONTRACT_ADDRESS),

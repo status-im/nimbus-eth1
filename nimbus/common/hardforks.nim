@@ -48,7 +48,6 @@ type
   MergeForkTransitionThreshold* = object
     number*: Opt[BlockNumber]
     ttd*: Opt[DifficultyInt]
-    ttdPassed*: Opt[bool]
 
   ForkTransitionTable* = object
     blockNumberThresholds*: array[Frontier..GrayGlacier, Opt[BlockNumber]]
@@ -121,11 +120,9 @@ func isGTETransitionThreshold*(map: ForkTransitionTable, forkDeterminer: ForkDet
     map.blockNumberThresholds[fork].isSome and forkDeterminer.number >= map.blockNumberThresholds[fork].get
   elif fork == MergeFork:
     # MergeFork is a special case that can use either block number or ttd;
-    # ttdPassed > block number > ttd takes precedence.
+    # block number > ttd takes precedence.
     let t = map.mergeForkTransitionThreshold
-    if t.ttdPassed.isSome:
-      t.ttdPassed.get
-    elif t.number.isSome:
+    if t.number.isSome:
       forkDeterminer.number >= t.number.get
     elif t.ttd.isSome and forkDeterminer.td.isSome:
       forkDeterminer.td.get >= t.ttd.get
@@ -177,7 +174,6 @@ type
     osakaTime*          : Opt[EthTime]
 
     terminalTotalDifficulty*: Opt[UInt256]
-    terminalTotalDifficultyPassed*: Opt[bool]
     depositContractAddress*: Opt[Address]
 
   # These are used for checking that the values of the fields
@@ -241,7 +237,6 @@ func mergeForkTransitionThreshold*(conf: ChainConfig): MergeForkTransitionThresh
   MergeForkTransitionThreshold(
     number: conf.mergeForkBlock,
     ttd: conf.terminalTotalDifficulty,
-    ttdPassed: conf.terminalTotalDifficultyPassed
   )
 
 func toForkTransitionTable*(conf: ChainConfig): ForkTransitionTable =
@@ -287,7 +282,6 @@ func populateFromForkTransitionTable*(conf: ChainConfig, t: ForkTransitionTable)
 
   conf.mergeForkBlock          = t.mergeForkTransitionThreshold.number
   conf.terminalTotalDifficulty = t.mergeForkTransitionThreshold.ttd
-  conf.terminalTotalDifficultyPassed = t.mergeForkTransitionThreshold.ttdPassed
 
   conf.shanghaiTime        = t.timeThresholds[HardFork.Shanghai]
   conf.cancunTime          = t.timeThresholds[HardFork.Cancun]
