@@ -242,6 +242,9 @@ proc blocksStagedCollect*(
   trace info & ": staged blocks", peer, bottomBlock=iv.minPt.bnStr,
     nBlocks=blk.blocks.len, nStaged=ctx.blk.staged.len, ctrl=buddy.ctrl.state
 
+  # Update, so it can be followed nicely
+  ctx.updateMetrics()
+
   return true
 
 

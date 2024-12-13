@@ -60,7 +60,10 @@ template updateMetricsImpl(ctx: BeaconCtxRef) =
   metrics.set(beacon_coupler, ctx.layout.coupler.int64)
   metrics.set(beacon_dangling, ctx.layout.dangling.int64)
   metrics.set(beacon_head, ctx.layout.head.int64)
-  metrics.set(beacon_target, ctx.target.consHead.number.int64)
+
+  # Show last valid state.
+  if 0 < ctx.target.consHead.number:
+    metrics.set(beacon_target, ctx.target.consHead.number.int64)
 
   metrics.set(beacon_header_lists_staged, ctx.headersStagedQueueLen())
   metrics.set(beacon_headers_unprocessed,
