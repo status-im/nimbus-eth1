@@ -124,7 +124,7 @@ proc initEnv(envFork: HardFork): TestEnv =
 
   let
     com =
-      CommonRef.new(newCoreDbRef DefaultDbMemory, conf.networkId, conf.networkParams)
+      CommonRef.new(newCoreDbRef DefaultDbMemory, nil, conf.networkId, conf.networkParams)
     chain = newForkedChain(com, com.genesisHeader)
 
   result = TestEnv(

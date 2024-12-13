@@ -347,6 +347,7 @@ proc runTestOverflow() =
 
     let com = CommonRef.new(
       newCoreDbRef(DefaultDbMemory),
+      nil,
       config = chainConfigForNetwork(MainNet)
     )
 

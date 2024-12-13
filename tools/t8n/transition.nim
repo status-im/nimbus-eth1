@@ -349,11 +349,11 @@ proc exec(ctx: TransContext,
     excessBlobGas = ctx.env.currentExcessBlobGas
   elif ctx.env.parentExcessBlobGas.isSome and ctx.env.parentBlobGasUsed.isSome:
     excessBlobGas = Opt.some calcExcessBlobGas(vmState.parent)
-      
+
   if excessBlobGas.isSome:
     result.result.blobGasUsed = Opt.some vmState.blobGasUsed
     result.result.currentExcessBlobGas = excessBlobGas
-    
+
   if vmState.com.isPragueOrLater(ctx.env.currentTimestamp):
     var allLogs: seq[Log]
     for rec in result.result.receipts:
@@ -469,7 +469,7 @@ proc transitionAction*(ctx: var TransContext, conf: T8NConf) =
     config.depositContractAddress = ctx.env.depositContractAddress
     config.chainId = conf.stateChainId.ChainId
 
-    let com = CommonRef.new(newCoreDbRef DefaultDbMemory, config)
+    let com = CommonRef.new(newCoreDbRef DefaultDbMemory, Taskpool.new(), config)
 
     # Sanity check, to not `panic` in state_transition
     if com.isLondonOrLater(ctx.env.currentNumber):

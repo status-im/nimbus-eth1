@@ -161,11 +161,6 @@ type
       abbr: "e"
       name: "import-key" }: InputFile
 
-    verifyFrom* {.
-      desc: "Enable extra verification when current block number greater than verify-from"
-      defaultValueDesc: ""
-      name: "verify-from" }: Option[uint64]
-
     evm* {.
       desc: "Load alternative EVM from EVMC-compatible shared library" & sharedLibText
       defaultValue: ""
@@ -362,6 +357,12 @@ type
       defaultValue: ClientId
       defaultValueDesc: $ClientId
       name: "agent-string" .}: string
+
+    numThreads* {.
+      separator: "\pPERFORMANCE OPTIONS",
+      defaultValue: 0,
+      desc: "Number of worker threads (\"0\" = use as many threads as there are CPU cores available)"
+      name: "num-threads" .}: int
 
     beaconChunkSize* {.
       hidden

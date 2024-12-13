@@ -105,7 +105,7 @@ proc writeRootHashToStderr(stateRoot: Hash32) =
 
 proc runExecution(ctx: var StateContext, conf: StateConf, pre: JsonNode): StateResult =
   let
-    com     = CommonRef.new(newCoreDbRef DefaultDbMemory, ctx.chainConfig)
+    com     = CommonRef.new(newCoreDbRef DefaultDbMemory, nil, ctx.chainConfig)
     stream  = newFileStream(stderr)
     tracer  = if conf.jsonEnabled:
                 newJsonTracer(stream, ctx.tracerFlags, conf.pretty)

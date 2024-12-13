@@ -265,7 +265,7 @@ proc initVMEnv*(network: string): BaseVMState =
     cdb = DefaultDbMemory.newCoreDbRef()
     com = CommonRef.new(
       cdb,
-      conf,
+      nil, conf,
       conf.chainId.NetworkId)
     parent = Header(stateRoot: EMPTY_ROOT_HASH)
     parentHash = rlpHash(parent)

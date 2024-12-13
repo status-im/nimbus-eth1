@@ -54,7 +54,7 @@ proc processBlock(
   if header.parentBeaconBlockRoot.isSome:
     ? vmState.processBeaconBlockRoot(header.parentBeaconBlockRoot.get)
 
-  ? processTransactions(vmState, header, blk.transactions)
+  ? processTransactions(vmState, header, blk.transactions, taskpool = com.taskpool)
 
   if com.isShanghaiOrLater(header.timestamp):
     for withdrawal in blk.withdrawals.get:
@@ -77,9 +77,6 @@ proc processBlock(
 
 proc getVmState(c: ChainRef, header: Header):
                  Result[BaseVMState, void] =
-  if c.vmState.isNil.not:
-    return ok(c.vmState)
-
   let vmState = BaseVMState()
   if not vmState.init(header, c.com, storeSlotHash = false):
     debug "Cannot initialise VmState",

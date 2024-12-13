@@ -37,6 +37,7 @@ proc setupEnv(): TestEnv =
 proc newCom(env: TestEnv): CommonRef =
   CommonRef.new(
       newCoreDbRef DefaultDbMemory,
+      nil,
       env.conf.networkId,
       env.conf.networkParams
     )

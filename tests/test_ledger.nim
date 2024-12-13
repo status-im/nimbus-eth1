@@ -97,7 +97,7 @@ proc initEnv(): TestEnv =
 
   let
     com = CommonRef.new(
-      newCoreDbRef DefaultDbMemory,
+      newCoreDbRef DefaultDbMemory, nil,
       conf.networkId,
       conf.networkParams
     )

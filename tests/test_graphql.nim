@@ -18,29 +18,23 @@ import
   ../nimbus/common/[common, context],
   ./test_helpers
 
-type
-  EthBlock = object
-    header: BlockHeader
-    transactions: seq[Transaction]
-    uncles: seq[BlockHeader]
-
 const
   caseFolder = "tests/graphql"
   dataFolder  = "tests/fixtures/eth_tests/BlockchainTests/ValidBlocks/bcUncleTest"
 
-proc toBlock(n: JsonNode, key: string): EthBlock =
+proc toBlock(n: JsonNode, key: string): Block =
   let rlpBlob = hexToSeqByte(n[key].str)
-  rlp.decode(rlpBlob, EthBlock)
+  rlp.decode(rlpBlob, Block)
 
 proc setupChain(): ForkedChainRef =
   let config = ChainConfig(
     chainId             : MainNet.ChainId,
-    byzantiumBlock      : some(0.BlockNumber),
-    constantinopleBlock : some(0.BlockNumber),
-    petersburgBlock     : some(0.BlockNumber),
-    istanbulBlock       : some(0.BlockNumber),
-    muirGlacierBlock    : some(0.BlockNumber),
-    berlinBlock         : some(10.BlockNumber)
+    byzantiumBlock      : Opt.some(0.BlockNumber),
+    constantinopleBlock : Opt.some(0.BlockNumber),
+    petersburgBlock     : Opt.some(0.BlockNumber),
+    istanbulBlock       : Opt.some(0.BlockNumber),
+    muirGlacierBlock    : Opt.some(0.BlockNumber),
+    berlinBlock         : Opt.some(10.BlockNumber)
   )
 
   var jn = json.parseFile(dataFolder & "/oneUncle.json")
@@ -58,29 +52,30 @@ proc setupChain(): ForkedChainRef =
     mixHash   : gen.header.mixHash,
     coinBase  : gen.header.coinbase,
     timestamp : gen.header.timestamp,
-    baseFeePerGas: gen.header.fee
+    baseFeePerGas: gen.header.baseFeePerGas
   )
   if not parseGenesisAlloc($(jn["pre"]), genesis.alloc):
     quit(QuitFailure)
 
-  let 
+  let
     customNetwork = NetworkParams(
       config: config,
       genesis: genesis
     )
     com = CommonRef.new(
       newCoreDbRef DefaultDbMemory,
+      taskpool = nil,
       CustomNet,
       customNetwork
     )
-    chain = ForkedChainRef.ini(com)
+    chain = ForkedChainRef.init(com)
     blocks = jn["blocks"]
-      
+
   for n in blocks:
     let blk = n.toBlock("rlp")
     chain.importBlock(blk).isOkOr:
       doAssert(false, error)
-  
+
   chain
 
 proc graphqlMain*() =
@@ -91,7 +86,7 @@ proc graphqlMain*() =
     chain   = setupChain()
     txPool  = TxPoolRef.new(chain)
 
-  let ctx = setupGraphqlContext(com, ethNode, txPool)
+  let ctx = setupGraphqlContext(chain.com, ethNode, txPool)
   when isMainModule:
     ctx.main(caseFolder, purgeSchema = false)
   else:

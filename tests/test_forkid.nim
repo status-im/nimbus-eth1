@@ -72,7 +72,7 @@ template runTest(network: untyped, name: string) =
   test name:
     var
       params = networkParams(network)
-      com    = CommonRef.new(newCoreDbRef DefaultDbMemory, network, params)
+      com    = CommonRef.new(newCoreDbRef DefaultDbMemory, nil, network, params)
 
     for i, x in `network IDs`:
       let id = com.forkId(x.number, x.time)

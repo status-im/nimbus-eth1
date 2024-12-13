@@ -59,6 +59,7 @@ const
 proc makeCom*(conf: NimbusConf): CommonRef =
   CommonRef.new(
     newCoreDbRef DefaultDbMemory,
+    Taskpool.new(),
     conf.networkId,
     conf.networkParams
   )

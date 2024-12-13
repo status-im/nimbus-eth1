@@ -61,6 +61,7 @@ proc setupConfig(genesisFile: string): NimbusConf =
 proc setupCom(conf: NimbusConf): CommonRef =
   CommonRef.new(
     newCoreDbRef DefaultDbMemory,
+    nil,
     conf.networkId,
     conf.networkParams
   )

@@ -80,6 +80,7 @@ proc setupEnv*(): TestEnv =
     ethCtx  = newEthContext()
     ethNode = setupEthNode(conf, ethCtx, eth)
     com     = CommonRef.new(newCoreDbRef DefaultDbMemory,
+      Taskpool.new(),
       conf.networkId,
       conf.networkParams
     )

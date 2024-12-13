@@ -57,9 +57,6 @@ const
 proc getVmState(
     c: ChainRef, header: Header, storeSlotHash = false
 ): Result[BaseVMState, string] =
-  if not c.vmState.isNil:
-    return ok(c.vmState)
-
   let vmState = BaseVMState()
   if not vmState.init(header, c.com, storeSlotHash = storeSlotHash):
     return err("Could not initialise VMState")
@@ -139,9 +136,9 @@ proc persistBlocksImpl(
     #      given hard fork and similar path-independent checks - these same
     #      sanity checks should be performed early in the processing pipeline no
     #      matter their provenance.
-    if not skipValidation and c.extraValidation and c.verifyFrom <= header.number:
+    if not skipValidation and c.extraValidation:
       # TODO: how to checkseal from here
-      ?c.com.validateHeaderAndKinship(blk, vmState.parent, checkSealOK = false)
+      ?c.com.validateHeaderAndKinship(blk, vmState.parent)
 
     # Generate receipts for storage or validation but skip them otherwise
     ?vmState.processBlock(
@@ -149,6 +146,7 @@ proc persistBlocksImpl(
       skipValidation,
       skipReceipts = skipValidation and NoPersistReceipts in flags,
       skipUncles = NoPersistUncles in flags,
+      taskpool = c.com.taskpool,
     )
 
     let blockHash = header.blockHash()
