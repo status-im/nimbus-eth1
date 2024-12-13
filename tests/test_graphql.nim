@@ -86,7 +86,7 @@ proc graphqlMain*() =
     chain   = setupChain()
     txPool  = TxPoolRef.new(chain)
 
-  let ctx = setupGraphqlContext(chain.com, ethNode, txPool)
+  let ctx = setupGraphqlContext(chain, ethNode, txPool)
   when isMainModule:
     ctx.main(caseFolder, purgeSchema = false)
   else:
