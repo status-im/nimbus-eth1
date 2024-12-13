@@ -21,6 +21,7 @@ import
   ".."/[transaction, evm/state, config, constants],
   ../transaction/call_evm,
   ../core/[tx_pool, tx_pool/tx_item],
+  ../core/chain/forked_chain,
   ../common/common,
   web3/eth_api_types
 
@@ -75,6 +76,7 @@ type
     chainDB: CoreDbRef
     ethNode: EthereumNode
     txPool: TxPoolRef
+    chain: ForkedChainRef
 
 {.push gcsafe, raises: [].}
 {.pragma: apiRaises, raises: [].}
@@ -154,28 +156,28 @@ proc getStateDB(com: CommonRef, header: Header): LedgerRef  {.deprecated: "Ledge
 
 proc getBlockByNumber(ctx: GraphqlContextRef, number: Node): RespResult =
   try:
-    let header = ?ctx.chainDB.getBlockHeader(toBlockNumber(number))
+    let header = ?ctx.chain.headerByNumber(toBlockNumber(number))
     ok(headerNode(ctx, header))
   except ValueError as exc:
     err(exc.msg)
 
 proc getBlockByNumber(ctx: GraphqlContextRef, number: base.BlockNumber): RespResult =
-  let header = ?ctx.chainDB.getBlockHeader(number)
+  let header = ?ctx.chain.headerByNumber(number)
   ok(headerNode(ctx, header))
 
 proc getBlockByHash(ctx: GraphqlContextRef, hash: Node): RespResult =
   try:
-    let header = ?ctx.chainDB.getBlockHeader(toHash(hash))
+    let header = ?ctx.chain.headerByHash(toHash(hash))
     ok(headerNode(ctx, header))
   except ValueError as exc:
     err(exc.msg)
 
 proc getBlockByHash(ctx: GraphqlContextRef, hash: Hash32): RespResult =
-  let header = ?ctx.chainDB.getBlockHeader(hash)
+  let header = ?ctx.chain.headerByHash(hash)
   ok(headerNode(ctx, header))
 
 proc getLatestBlock(ctx: GraphqlContextRef): RespResult =
-  let header = ?ctx.chainDB.getCanonicalHead()
+  let header = ctx.chain.latestHeader
   ok(headerNode(ctx, header))
 
 proc getTxCount(ctx: GraphqlContextRef, txRoot: Hash32): RespResult =
@@ -1295,7 +1297,7 @@ proc queryLogs(ud: RootRef, params: Args, parent: Node): RespResult {.apiPragma.
 proc queryGasPrice(ud: RootRef, params: Args, parent: Node): RespResult {.apiPragma.} =
   let ctx = GraphqlContextRef(ud)
   try:
-    bigIntNode(calculateMedianGasPrice(ctx.chainDB))
+    bigIntNode(calculateMedianGasPrice(ctx.chain))
   except CatchableError as em:
     err("can't get gasPrice: " & em.msg)
 
@@ -1420,23 +1422,24 @@ proc initEthApi(ctx: GraphqlContextRef) =
     echo res.error
     quit(QuitFailure)
 
-proc setupGraphqlContext*(com: CommonRef,
+proc setupGraphqlContext*(chain: ForkedChainRef,
                           ethNode: EthereumNode,
                           txPool: TxPoolRef): GraphqlContextRef =
   let ctx = GraphqlContextRef(
-    chainDB: com.db,
-    com    : com,
+    chainDB: chain.com.db,
+    com    : chain.com,
     ethNode: ethNode,
-    txPool : txPool
+    txPool : txPool,
+    chain  : chain,
   )
   graphql.init(ctx)
   ctx.initEthApi()
   ctx
 
-proc setupGraphqlHttpHandler*(com: CommonRef,
+proc setupGraphqlHttpHandler*(chain: ForkedChainRef,
                               ethNode: EthereumNode,
                               txPool: TxPoolRef): GraphqlHttpHandlerRef =
-  let ctx = setupGraphqlContext(com, ethNode, txPool)
+  let ctx = setupGraphqlContext(chain, ethNode, txPool)
   GraphqlHttpHandlerRef.new(ctx)
 
 {.pop.}

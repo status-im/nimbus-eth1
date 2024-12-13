@@ -148,7 +148,7 @@ proc addHttpServices(handlers: var seq[RpcHandlerProc],
   # json-rpc have no reliable identification
 
   if conf.graphqlEnabled:
-    let ctx = setupGraphqlContext(com, nimbus.ethNode, nimbus.txPool)
+    let ctx = setupGraphqlContext(nimbus.chainRef, nimbus.ethNode, nimbus.txPool)
     let server = GraphqlHttpHandlerRef.new(ctx)
     handlers.addHandler(server)
     info "GraphQL API enabled", url = "http://" & $address
@@ -196,7 +196,7 @@ proc addServices(handlers: var seq[RpcHandlerProc],
   # The order is important: graphql, ws, rpc
 
   if conf.graphqlEnabled:
-    let ctx = setupGraphqlContext(com, nimbus.ethNode, nimbus.txPool)
+    let ctx = setupGraphqlContext(nimbus.chainRef, nimbus.ethNode, nimbus.txPool)
     let server = GraphqlHttpHandlerRef.new(ctx)
     handlers.addHandler(server)
     info "GraphQL API enabled", url = "http://" & $address

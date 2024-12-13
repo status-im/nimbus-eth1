@@ -13,13 +13,13 @@ import
   std/[sequtils, algorithm],
   ./rpc_types,
   ./params,
-  ../db/core_db,
   ../db/ledger,
   ../constants, stint,
   ../utils/utils,
   ../transaction,
   ../transaction/call_evm,
   ../core/eip4844,
+  ../core/chain/forked_chain,
   ../evm/types,
   ../evm/state,
   ../evm/precompiles,
@@ -29,13 +29,11 @@ import
   ../common/common,
   web3/eth_api_types
 
-proc calculateMedianGasPrice*(chain: CoreDbRef): GasInt {.raises: [RlpError].} =
+proc calculateMedianGasPrice*(chain: ForkedChainRef): GasInt =
   const minGasPrice = 30_000_000_000.GasInt
   var prices  = newSeqOfCap[GasInt](64)
-  let header = chain.getCanonicalHead().valueOr:
-    return minGasPrice
-  for encodedTx in chain.getBlockTransactionData(header.txRoot):
-    let tx = decodeTx(encodedTx)
+  let blk = chain.latestBlock
+  for tx in blk.transactions:
     prices.add(tx.gasPrice)
 
   if prices.len > 0:
@@ -57,9 +55,10 @@ proc calculateMedianGasPrice*(chain: CoreDbRef): GasInt {.raises: [RlpError].} =
   # re-enable the "query.gasPrice" test case (remove `skip = true`).
   result = max(result, minGasPrice)
 
-proc unsignedTx*(tx: TransactionArgs, chain: CoreDbRef, defaultNonce: AccountNonce, chainId: ChainId): Transaction
-    {.gcsafe, raises: [CatchableError].} =
-
+proc unsignedTx*(tx: TransactionArgs,
+                 chain: ForkedChainRef, 
+                 defaultNonce: AccountNonce, 
+                 chainId: ChainId): Transaction =
   var res: Transaction
 
   if tx.to.isSome:
