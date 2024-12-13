@@ -18,7 +18,6 @@ cliBuilder:
           ./test_rpc,
           ./test_generalstate_json,
           ./test_tracer_json,
-          #./test_persistblock_json,               -- fails
           ./test_filters,
           ./test_op_arith,
           ./test_op_bit,
