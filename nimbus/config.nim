@@ -179,10 +179,17 @@ type
       name: "trusted-setup-file" .}: Option[string]
 
     extraData* {.
-      desc: "Value of extraData field when assemble a block(max 32 bytes)"
+      separator: "\pPAYLOAD BUILDING OPTIONS:"
+      desc: "Value of extraData field when building an execution payload(max 32 bytes)"
       defaultValue: ShortClientId
       defaultValueDesc: $ShortClientId
       name: "extra-data" .}: string
+
+    gasLimit* {.
+      desc: "Desired gas limit when building an execution payload"
+      defaultValue: DEFAULT_GAS_LIMIT
+      defaultValueDesc: $DEFAULT_GAS_LIMIT
+      name: "gas-limit" .}: uint64
 
     network {.
       separator: "\pETHEREUM NETWORK OPTIONS:"

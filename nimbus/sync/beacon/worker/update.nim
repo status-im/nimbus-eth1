@@ -25,7 +25,7 @@ import
 # Private functions
 # ------------------------------------------------------------------------------
 
-func syncState(ctx: BeaconCtxRef; info: static[string]): SyncLayoutState =
+proc syncState(ctx: BeaconCtxRef; info: static[string]): SyncLayoutState =
   ## Calculate `SyncLayoutState` from the download context
 
   let
@@ -98,7 +98,7 @@ func syncState(ctx: BeaconCtxRef; info: static[string]): SyncLayoutState =
   #                        o---------------------o----------------o
   #                        | <-- unprocessed --> | <-- linked --> |
   #
-  trace info & ": inconsistent state",
+  debug info & ": inconsistent state",
     B=(if b == c: "C" else: b.bnStr),
     C=(if c == l: "L" else: c.bnStr),
     L=(if l == d: "D" else: l.bnStr),
@@ -121,7 +121,7 @@ proc startHibernating(ctx: BeaconCtxRef; info: static[string]) =
 
   ctx.hibernate = true
 
-  trace info & ": suspending syncer", L=ctx.chain.latestNumber.bnStr
+  debug info & ": suspending syncer", L=ctx.chain.latestNumber.bnStr
 
   # Update, so it can be followed nicely
   ctx.updateMetrics()
@@ -288,7 +288,7 @@ proc updateSyncState*(ctx: BeaconCtxRef; info: static[string]) =
     return
     # Notreached
 
-  trace info & ": sync state changed", prevState, thisState,
+  debug info & ": sync state changed", prevState, thisState,
     L=ctx.chain.latestNumber.bnStr,
     C=(if ctx.layout.coupler == ctx.layout.dangling: "D"
        else: ctx.layout.coupler.bnStr),
@@ -304,7 +304,7 @@ proc updateSyncState*(ctx: BeaconCtxRef; info: static[string]) =
      thisState == finishedHeaders and
      ctx.linkIntoFc(info):               # commit downloading headers
     ctx.setupProcessingBlocks info       # start downloading block bodies
-    trace info & ": sync state changed",
+    debug info & ": sync state changed",
       prevState=thisState, thisState=ctx.syncState(info)
     return
     # Notreached
@@ -338,7 +338,7 @@ proc updateFinalBlockHeader*(
     # Activate running (unless done yet)
     if ctx.hibernate:
       ctx.hibernate = false
-      trace info & ": activating syncer", B=b.bnStr,
+      debug info & ": activating syncer", B=b.bnStr,
         finalised=f.bnStr, head=ctx.target.consHead.bnStr
 
     # Update, so it can be followed nicely
