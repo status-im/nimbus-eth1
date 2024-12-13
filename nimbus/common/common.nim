@@ -392,9 +392,6 @@ func daoForkSupport*(com: CommonRef): bool =
 func ttd*(com: CommonRef): Opt[DifficultyInt] =
   com.config.terminalTotalDifficulty
 
-func ttdPassed*(com: CommonRef): bool =
-  com.config.terminalTotalDifficultyPassed.get(false)
-
 func pruneHistory*(com: CommonRef): bool =
   com.pruneHistory
 

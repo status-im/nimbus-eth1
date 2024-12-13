@@ -33,12 +33,10 @@ import
   ./engine/misc,
   ./engine/rpc
 
-proc getGenesis(cs: EngineSpec, param: NetworkParams) =  
+proc getGenesis(cs: EngineSpec, param: NetworkParams) =
   # Set the terminal total difficulty
   let realTTD = param.genesis.difficulty + cs.ttd.u256
   param.config.terminalTotalDifficulty = Opt.some(realTTD)
-  if param.genesis.difficulty <= realTTD:
-    param.config.terminalTotalDifficultyPassed = Opt.some(true)
 
   # Set the genesis timestamp if provided
   if cs.genesisTimestamp != 0:
@@ -58,7 +56,7 @@ proc executeEngineSpec*(ws: BaseSpec): bool =
     ws.getGenesisFn(ws, conf.networkParams)
   else:
     cs.getGenesis(conf.networkParams)
-    
+
   let env  = TestEnv.new(conf)
   env.engine.setRealTTD()
   env.setupCLMock()
