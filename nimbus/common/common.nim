@@ -15,7 +15,8 @@ import
   ../db/[core_db, ledger, storage_types],
   ../utils/[utils, ec_recover],
   ".."/[constants, errors, version],
-  "."/[chain_config, evmforks, genesis, hardforks]
+  "."/[chain_config, evmforks, genesis, hardforks],
+  taskpools
 
 export
   chain_config,
@@ -25,7 +26,8 @@ export
   evmforks,
   hardforks,
   genesis,
-  utils
+  utils,
+  taskpools
 
 type
   SyncProgress = object
@@ -100,6 +102,9 @@ type
     gasLimit: uint64
       ## Desired gas limit when building a block
 
+    taskpool*: Taskpool
+      ## Shared task pool for offloading computation to other threads
+
 # ------------------------------------------------------------------------------
 # Forward declarations
 # ------------------------------------------------------------------------------
@@ -168,6 +173,7 @@ proc initializeDb(com: CommonRef) =
 
 proc init(com         : CommonRef,
           db          : CoreDbRef,
+          taskpool    : Taskpool,
           networkId   : NetworkId,
           config      : ChainConfig,
           genesis     : Genesis,
@@ -184,6 +190,7 @@ proc init(com         : CommonRef,
   com.pruneHistory= pruneHistory
   com.pos         = CasperRef.new
   com.extraData   = ShortClientId
+  com.taskpool    = taskpool
   com.gasLimit    = DEFAULT_GAS_LIMIT
 
   # com.forkIdCalculator and com.genesisHash are set
@@ -227,6 +234,7 @@ proc isBlockAfterTtd(com: CommonRef, header: Header): bool =
 proc new*(
     _: type CommonRef;
     db: CoreDbRef;
+    taskpool: Taskpool;
     networkId: NetworkId = MainNet;
     params = networkParams(MainNet);
     pruneHistory = false;
@@ -237,6 +245,7 @@ proc new*(
   new(result)
   result.init(
     db,
+    taskpool,
     networkId,
     params.config,
     params.genesis,
@@ -245,6 +254,7 @@ proc new*(
 proc new*(
     _: type CommonRef;
     db: CoreDbRef;
+    taskpool: Taskpool;
     config: ChainConfig;
     networkId: NetworkId = MainNet;
     pruneHistory = false;
@@ -255,6 +265,7 @@ proc new*(
   new(result)
   result.init(
     db,
+    taskpool,
     networkId,
     config,
     nil,

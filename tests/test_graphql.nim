@@ -69,7 +69,7 @@ proc setupChain(): CommonRef =
   )
 
   let com = CommonRef.new(
-    newCoreDbRef DefaultDbMemory,
+    newCoreDbRef DefaultDbMemory, nil,
     CustomNet,
     customNetwork
   )

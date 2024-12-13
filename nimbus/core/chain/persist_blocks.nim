@@ -149,6 +149,7 @@ proc persistBlocksImpl(
       skipValidation,
       skipReceipts = skipValidation and NoPersistReceipts in flags,
       skipUncles = NoPersistUncles in flags,
+      taskpool = c.com.taskpool,
     )
 
     let blockHash = header.blockHash()

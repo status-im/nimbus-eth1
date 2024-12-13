@@ -77,7 +77,7 @@ proc dumpDebugData(ctx: TestCtx, vmState: BaseVMState, gasUsed: GasInt, success:
 
 proc testFixtureIndexes(ctx: var TestCtx, testStatusIMPL: var TestStatus) =
   let
-    com    = CommonRef.new(newCoreDbRef DefaultDbMemory, ctx.chainConfig)
+    com    = CommonRef.new(newCoreDbRef DefaultDbMemory, nil, ctx.chainConfig)
     parent = Header(stateRoot: emptyRoot)
     tracer = if ctx.trace:
                newLegacyTracer({})

@@ -71,7 +71,7 @@ proc testFixture(fixtures: JsonNode, testStatusIMPL: var TestStatus) =
     conf  = getChainConfig(parseFork(fixtures["fork"].getStr))
     data  = fixtures["data"]
     privateKey = PrivateKey.fromHex("7a28b5ba57c53603b0b07b56bba752f7784bf506fa95edc395f5cf6c7514fe9d")[]
-    com = CommonRef.new(newCoreDbRef DefaultDbMemory, config = conf)
+    com = CommonRef.new(newCoreDbRef DefaultDbMemory, nil, config = conf)
     vmState = BaseVMState.new(
       Header(number: 1'u64, stateRoot: emptyRlpHash),
       Header(),

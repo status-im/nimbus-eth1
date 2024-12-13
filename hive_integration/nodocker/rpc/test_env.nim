@@ -46,11 +46,11 @@ proc manageAccounts(ctx: EthContext, conf: NimbusConf) =
 proc setupRpcServer(ctx: EthContext, com: CommonRef,
                     ethNode: EthereumNode, txPool: TxPoolRef,
                     conf: NimbusConf, chain: ForkedChainRef): RpcServer  =
-  let 
+  let
     rpcServer = newRpcHttpServer([initTAddress(conf.httpAddress, conf.httpPort)])
     serverApi = newServerAPI(chain, txPool)
 
-  
+
   setupCommonRpc(ethNode, conf, rpcServer)
   setupServerAPI(serverApi, rpcServer, ctx)
 
@@ -80,6 +80,7 @@ proc setupEnv*(): TestEnv =
     ethCtx  = newEthContext()
     ethNode = setupEthNode(conf, ethCtx, eth)
     com     = CommonRef.new(newCoreDbRef DefaultDbMemory,
+      Taskpool.new(),
       conf.networkId,
       conf.networkParams
     )

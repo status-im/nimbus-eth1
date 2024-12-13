@@ -11,7 +11,7 @@ import
   ../nimbus/compile_info
 
 import
-  std/[os, strutils, net],
+  std/[os, osproc, strutils, net],
   chronicles,
   eth/net/nat,
   metrics,
@@ -217,8 +217,24 @@ proc run(nimbus: NimbusNode, conf: NimbusConf) =
   preventLoadingDataDirForTheWrongNetwork(coreDB, conf)
   setupMetrics(nimbus, conf)
 
+  let taskpool =
+    try:
+      if conf.numThreads < 0:
+        fatal "The number of threads --num-threads cannot be negative."
+        quit 1
+      elif conf.numThreads == 0:
+        Taskpool.new(numThreads = min(countProcessors(), 16))
+      else:
+        Taskpool.new(numThreads = conf.numThreads)
+    except CatchableError as e:
+      fatal "Cannot start taskpool", err = e.msg
+      quit 1
+
+  info "Threadpool started", numThreads = taskpool.numThreads
+
   let com = CommonRef.new(
     db = coreDB,
+    taskpool = taskpool,
     pruneHistory = (conf.chainDbMode == AriPrune),
     networkId = conf.networkId,
     params = conf.networkParams)

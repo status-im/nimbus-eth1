@@ -130,7 +130,7 @@ proc testFixtureImpl(node: JsonNode, testStatusIMPL: var TestStatus, memoryDB: C
   var
     blockNumberHex = node["blockNumber"].getStr()
     blockNumber = parseHexInt(blockNumberHex).uint64
-    com = CommonRef.new(memoryDB, chainConfigForNetwork(MainNet))
+    com = CommonRef.new(memoryDB, nil, chainConfigForNetwork(MainNet))
     state = node["state"]
     receipts = node["receipts"]
 

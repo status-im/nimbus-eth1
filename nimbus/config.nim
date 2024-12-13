@@ -363,6 +363,12 @@ type
       defaultValueDesc: $ClientId
       name: "agent-string" .}: string
 
+    numThreads* {.
+      separator: "\pPERFORMANCE OPTIONS",
+      defaultValue: 0,
+      desc: "Number of worker threads (\"0\" = use as many threads as there are CPU cores available)"
+      name: "num-threads" .}: int
+
     beaconChunkSize* {.
       hidden
       desc: "Number of blocks per database transaction for beacon sync"

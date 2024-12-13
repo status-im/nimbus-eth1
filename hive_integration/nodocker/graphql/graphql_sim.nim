@@ -79,7 +79,8 @@ proc main() =
     ethCtx  = newEthContext()
     ethNode = setupEthNode(conf, ethCtx, eth)
     com     = CommonRef.new(newCoreDbRef DefaultDbMemory,
-      conf.networkId,
+     Taskpool.new(),
+     conf.networkId,
       conf.networkParams
     )
 

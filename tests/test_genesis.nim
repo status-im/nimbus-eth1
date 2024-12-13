@@ -27,11 +27,11 @@ proc findFilePath(file: string): string =
         return path
 
 proc makeGenesis(networkId: NetworkId): Header =
-  let com = CommonRef.new(newCoreDbRef DefaultDbMemory, params = networkParams(networkId))
+  let com = CommonRef.new(newCoreDbRef DefaultDbMemory, taskpool = nil, params = networkParams(networkId))
   com.genesisHeader
 
 proc proofOfStake(params: NetworkParams): bool =
-  let com = CommonRef.new(newCoreDbRef DefaultDbMemory,
+  let com = CommonRef.new(newCoreDbRef DefaultDbMemory, taskpool = nil,
     networkId = params.config.chainId.NetworkId,
     params = params)
   let header = com.genesisHeader
@@ -66,7 +66,7 @@ proc customGenesisTest() =
     test "Devnet4.json (aka Kintsugi in all but chainId)":
       var cg: NetworkParams
       check loadNetworkParams("devnet4.json".findFilePath, cg)
-      let com = CommonRef.new(newCoreDbRef DefaultDbMemory, params = cg)
+      let com = CommonRef.new(newCoreDbRef DefaultDbMemory, taskpool = nil, params = cg)
       let stateRoot = hash32"3b84f313bfd49c03cc94729ade2e0de220688f813c0c895a99bd46ecc9f45e1e"
       let genesisHash = hash32"a28d8d73e087a01d09d8cb806f60863652f30b6b6dfa4e0157501ff07d422399"
       check com.genesisHeader.stateRoot == stateRoot
@@ -76,7 +76,7 @@ proc customGenesisTest() =
     test "Devnet5.json (aka Kiln in all but chainId and TTD)":
       var cg: NetworkParams
       check loadNetworkParams("devnet5.json".findFilePath, cg)
-      let com = CommonRef.new(newCoreDbRef DefaultDbMemory, params = cg)
+      let com = CommonRef.new(newCoreDbRef DefaultDbMemory, taskpool = nil, params = cg)
       let stateRoot = hash32"52e628c7f35996ba5a0402d02b34535993c89ff7fc4c430b2763ada8554bee62"
       let genesisHash = hash32"51c7fe41be669f69c45c33a56982cbde405313342d9e2b00d7c91a7b284dd4f8"
       check com.genesisHeader.stateRoot == stateRoot
@@ -86,7 +86,7 @@ proc customGenesisTest() =
     test "Mainnet shadow fork 1":
       var cg: NetworkParams
       check loadNetworkParams("mainshadow1.json".findFilePath, cg)
-      let com = CommonRef.new(newCoreDbRef DefaultDbMemory, params = cg)
+      let com = CommonRef.new(newCoreDbRef DefaultDbMemory, taskpool = nil, params = cg)
       let stateRoot = hash32"d7f8974fb5ac78d9ac099b9ad5018bedc2ce0a72dad1827a1709da30580f0544"
       let genesisHash = hash32"d4e56740f876aef8c010b86a40d5f56745a118d0906a34e69aec8c0db1cb8fa3"
       let ttd = "46_089_003_871_917_200_000_000".parse(UInt256)
@@ -99,7 +99,7 @@ proc customGenesisTest() =
       # parse using geth format should produce the same result with nimbus format
       var cg: NetworkParams
       check loadNetworkParams("geth_mainshadow1.json".findFilePath, cg)
-      let com = CommonRef.new(newCoreDbRef DefaultDbMemory, params = cg)
+      let com = CommonRef.new(newCoreDbRef DefaultDbMemory, taskpool = nil, params = cg)
       let stateRoot = hash32"d7f8974fb5ac78d9ac099b9ad5018bedc2ce0a72dad1827a1709da30580f0544"
       let genesisHash = hash32"d4e56740f876aef8c010b86a40d5f56745a118d0906a34e69aec8c0db1cb8fa3"
       let ttd = "46_089_003_871_917_200_000_000".parse(UInt256)
@@ -114,7 +114,7 @@ proc customGenesisTest() =
     test "Holesky":
       var cg: NetworkParams
       check loadNetworkParams("holesky.json".findFilePath, cg)
-      let com = CommonRef.new(newCoreDbRef DefaultDbMemory, params = cg)
+      let com = CommonRef.new(newCoreDbRef DefaultDbMemory, taskpool = nil, params = cg)
       let stateRoot = hash32"69D8C9D72F6FA4AD42D4702B433707212F90DB395EB54DC20BC85DE253788783"
       let genesisHash = hash32"b5f7f912443c940f21fd611f12828d75b534364ed9e95ca4e307729a4661bde4"
       check com.genesisHeader.stateRoot == stateRoot
@@ -125,7 +125,7 @@ proc customGenesisTest() =
       # parse using geth format should produce the same result with nimbus format
       var cg: NetworkParams
       check loadNetworkParams("geth_holesky.json".findFilePath, cg)
-      let com = CommonRef.new(newCoreDbRef DefaultDbMemory, params = cg)
+      let com = CommonRef.new(newCoreDbRef DefaultDbMemory, taskpool = nil, params = cg)
       let stateRoot = hash32"69D8C9D72F6FA4AD42D4702B433707212F90DB395EB54DC20BC85DE253788783"
       let genesisHash = hash32"b5f7f912443c940f21fd611f12828d75b534364ed9e95ca4e307729a4661bde4"
       check com.genesisHeader.stateRoot == stateRoot

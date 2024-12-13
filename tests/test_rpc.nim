@@ -222,7 +222,7 @@ proc rpcMain*() =
       ctx  = newEthContext()
       ethNode = setupEthNode(conf, ctx, eth)
       com = CommonRef.new(
-        newCoreDbRef DefaultDbMemory,
+        newCoreDbRef DefaultDbMemory, nil,
         conf.networkId,
         conf.networkParams
       )

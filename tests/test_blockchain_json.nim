@@ -69,7 +69,7 @@ proc executeCase(node: JsonNode): bool =
     memDB   = newCoreDbRef DefaultDbMemory
     stateDB = LedgerRef.init(memDB)
     config  = getChainConfig(env.network)
-    com     = CommonRef.new(memDB, config)
+    com     = CommonRef.new(memDB, nil, config)
 
   setupStateDB(env.pre, stateDB)
   stateDB.persist()

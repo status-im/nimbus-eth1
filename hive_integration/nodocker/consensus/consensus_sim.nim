@@ -23,6 +23,7 @@ proc processChainData(cd: ChainData): TestStatus =
   let
     networkId = NetworkId(cd.params.config.chainId)
     com = CommonRef.new(newCoreDbRef DefaultDbMemory,
+      Taskpool.new(),
       networkId,
       cd.params
     )
