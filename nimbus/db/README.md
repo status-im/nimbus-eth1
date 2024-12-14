@@ -27,7 +27,7 @@ is enclosed in brackets after the name of a component.
 
 * *(driver)*<br>
   The *driver* instances are sort of the lower layer workhorses. The implement
-  logic for solving a particular problem, providing a typically well defined
+  logic for solving a particular problem, providing a typically well-defined
   service, etc.
 
 * *(engine)*<br>
