@@ -159,7 +159,7 @@ implemented as separate table lookup IDs (called *vertexID*s later on.) The
 values of these lookup IDs are arbitrary as long as they are all different.
 
 In fact, the [Erigon](http://archive.is/6MJV7) project discusses a similar
-situation in **Separation of keys and the structure**, albeit aiming for a
+situation in **Separation of keys and the structure**, albeit aiming for an
 another scenario with the goal of using mostly flat data lookup structures.
 
 A graph for the example *(1)* would look like
