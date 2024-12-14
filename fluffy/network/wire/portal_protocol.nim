@@ -898,7 +898,7 @@ proc offer(
       acceptedKeysAmount.int64, labelValues = [$p.protocolId]
     )
     if acceptedKeysAmount == 0:
-      debug "No content accepted"
+      trace "No content accepted"
       # Don't open an uTP stream if no content was requested
       return ok(m.contentKeys)
 
@@ -971,7 +971,7 @@ proc offer(
 
     return ok(m.contentKeys)
   else:
-    debug "Offer failed due to accept request failure ",
+    trace "Offer failed due to accept request failure ",
       error = acceptMessageResponse.error
     return err("No or invalid accept response: " & acceptMessageResponse.error)
 

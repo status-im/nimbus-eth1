@@ -233,6 +233,7 @@ proc workerTask[E](
 
           didProgress = true
     else:
+      #maybe trace??
       debug "Failed to receive value on request", value, endpoint = E.name
   except ResponseError as exc:
     warn "Received invalid response", error = exc.msg, endpoint = E.name
