@@ -102,7 +102,7 @@ The [MetaMask configuration page](./docs/metamask_configuration.md) explains how
 ```bash
 # From the nimbus-eth1 repository
 git pull
-# To bring the git submodules up to date
+# To bring the git submodules up-to-date
 make update
 
 make nimbus_verified_proxy
