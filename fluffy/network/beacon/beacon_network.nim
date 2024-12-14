@@ -358,10 +358,9 @@ proc validateContent(
 
       let contentId = contentIdOpt.get()
       n.portalProtocol.storeContent(contentKey, contentId, contentItem)
-
-      debug "Received offered content validated successfully", srcNodeId, contentKey
+      trace "Received offered content validated successfully", srcNodeId, contentKey
     else:
-      debug "Received offered content failed validation",
+      trace "Received offered content failed validation",
         srcNodeId, contentKey, error = validation.error
       return false
 

@@ -363,7 +363,7 @@ when isMainModule:
                   return err("Invalid block header: " & e.msg)
 
               headerHash = to0xHex(rlpHash(blockHeader).data)
-            debug "Header decoded successfully",
+            trace "Header decoded successfully",
               hash = headerHash, blockNumber = blockHeader.number
           else:
             warn "Skipping record, not a block header", typ = toHex(header.typ)
