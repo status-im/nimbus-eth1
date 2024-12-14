@@ -17,7 +17,7 @@ commands:
 git clone https://github.com/status-im/nimbus-eth1.git
 cd nimbus-eth1
 
-# To bring the git submodules up to date
+# To bring the git submodules up-to-date
 make update
 
 # Build & run Portal wire protocol encoding test
