@@ -126,8 +126,10 @@ type
 
   BeaconBuddyData* = object
     ## Local descriptor data extension
-    nHdrRespErrors*: int             ## Number of errors/slow responses in a row
-    nBdyRespErrors*: int             ## Ditto for bodies
+    nHdrRespErrors*: uint8           ## Number of errors/slow responses in a row
+    nHdrProcErrors*: uint8           ## Number of post processing errors
+    nBdyRespErrors*: uint8           ## Ditto for bodies
+    nBdyProcErrors*: uint8
 
     # Debugging and logging.
     nMultiLoop*: int                 ## Number of runs

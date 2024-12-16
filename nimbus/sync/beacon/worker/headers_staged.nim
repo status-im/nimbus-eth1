@@ -132,6 +132,9 @@ proc headersStagedCollect*(
     # so that `async` can capture that properly.
     lhc = (ref LinkedHChain)(parentHash: topLink)
 
+    # Flag, not to reset error count
+    haveError = false
+
   while true:
     # Extract top range interval and fetch/stage it
     let
@@ -151,15 +154,17 @@ proc headersStagedCollect*(
       # Throw away opportunistic data (or first time header fetch.) Keep
       # other data for a partially assembled list.
       if isOpportunistic or nLhcHeaders == 0:
-        buddy.only.nHdrRespErrors.inc
+        buddy.only.nHdrProcErrors.inc
+        haveError = true
 
-        if (0 < buddy.only.nHdrRespErrors and buddy.ctrl.stopped) or
-           fetchHeadersReqThresholdCount < buddy.only.nHdrRespErrors:
+        if ((0 < buddy.only.nHdrRespErrors or
+             0 < buddy.only.nHdrProcErrors) and buddy.ctrl.stopped) or
+           fetchHeadersReqErrThresholdCount < buddy.only.nHdrRespErrors or
+           fetchHeadersProcessErrThresholdCount < buddy.only.nHdrProcErrors:
           # Make sure that this peer does not immediately reconnect
           buddy.ctrl.zombie = true
         trace info & ": current header list discarded", peer, iv, ivReq,
-          isOpportunistic,
-          ctrl=buddy.ctrl.state, nRespErrors=buddy.only.nHdrRespErrors
+          isOpportunistic, ctrl=buddy.ctrl.state, hdrErrors=buddy.hdrErrors
         ctx.headersUnprocCommit(iv.len, iv)
         # At this stage allow a task switch so that some other peer might try
         # to work on the currently returned interval.
@@ -195,9 +200,13 @@ proc headersStagedCollect*(
     raiseAssert info & ": duplicate key on staged queue iv=" & $iv
   qItem.data = lhc[]
 
-  trace info & ": staged a list of headers", peer,
-    topBlock=iv.maxPt.bnStr, nHeaders=lhc.revHdrs.len,
-    nStaged=ctx.hdr.staged.len, isOpportunistic, ctrl=buddy.ctrl.state
+  # Reset header process errors (not too many consecutive failures this time)
+  if not haveError:
+    buddy.only.nHdrProcErrors = 0
+
+  trace info & ": staged a list of headers", peer, topBlock=iv.maxPt.bnStr,
+    nHeaders=lhc.revHdrs.len, nStaged=ctx.hdr.staged.len, isOpportunistic,
+    ctrl=buddy.ctrl.state, hdrErrors=buddy.hdrErrors
 
   return true
 
