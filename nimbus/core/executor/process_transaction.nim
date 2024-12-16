@@ -28,7 +28,7 @@ import
 # Private functions
 # ------------------------------------------------------------------------------
 
-proc eip1559BaseFee(header: Header; fork: EVMFork): UInt256 =
+func eip1559BaseFee(header: Header; fork: EVMFork): UInt256 =
   ## Actually, `baseFee` should be 0 for pre-London headers already. But this
   ## function just plays safe. In particular, the `test_general_state_json.nim`
   ## module modifies this block header `baseFee` field unconditionally :(.
@@ -138,7 +138,7 @@ proc processBeaconBlockRoot*(vmState: BaseVMState, beaconRoot: Hash32):
     call = CallParams(
       vmState  : vmState,
       sender   : SYSTEM_ADDRESS,
-      gasLimit : 30_000_000.GasInt,
+      gasLimit : DEFAULT_GAS_LIMIT.GasInt,
       gasPrice : 0.GasInt,
       to       : BEACON_ROOTS_ADDRESS,
       input    : @(beaconRoot.data),
@@ -168,7 +168,7 @@ proc processParentBlockHash*(vmState: BaseVMState, prevHash: Hash32):
     call = CallParams(
       vmState  : vmState,
       sender   : SYSTEM_ADDRESS,
-      gasLimit : 30_000_000.GasInt,
+      gasLimit : DEFAULT_GAS_LIMIT.GasInt,
       gasPrice : 0.GasInt,
       to       : HISTORY_STORAGE_ADDRESS,
       input    : @(prevHash.data),
@@ -197,7 +197,7 @@ proc processDequeueWithdrawalRequests*(vmState: BaseVMState): seq[byte] =
     call = CallParams(
       vmState  : vmState,
       sender   : SYSTEM_ADDRESS,
-      gasLimit : 30_000_000.GasInt,
+      gasLimit : DEFAULT_GAS_LIMIT.GasInt,
       gasPrice : 0.GasInt,
       to       : WITHDRAWAL_QUEUE_ADDRESS,
 
@@ -221,7 +221,7 @@ proc processDequeueConsolidationRequests*(vmState: BaseVMState): seq[byte] =
     call = CallParams(
       vmState  : vmState,
       sender   : SYSTEM_ADDRESS,
-      gasLimit : 30_000_000.GasInt,
+      gasLimit : DEFAULT_GAS_LIMIT.GasInt,
       gasPrice : 0.GasInt,
       to       : CONSOLIDATION_QUEUE_ADDRESS,
 
