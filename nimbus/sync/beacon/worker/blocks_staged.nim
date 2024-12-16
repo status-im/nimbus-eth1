@@ -199,11 +199,12 @@ proc blocksStagedCollect*(
         buddy.only.nBdyRespErrors.inc
 
         if (1 < buddy.only.nBdyRespErrors and buddy.ctrl.stopped) or
-           fetchBodiesReqThresholdCount < buddy.only.nBdyRespErrors:
+           fetchBodiesReqErrThresholdCount < buddy.only.nBdyRespErrors:
           # Make sure that this peer does not immediately reconnect
           buddy.ctrl.zombie = true
         trace info & ": current block list discarded", peer, iv, ivReq,
-          ctrl=buddy.ctrl.state, nRespErrors=buddy.only.nBdyRespErrors
+          nStaged=ctx.blk.staged.len, ctrl=buddy.ctrl.state,
+          nRespErrors=buddy.only.nBdyRespErrors
         ctx.blocksUnprocCommit(iv.len, iv)
         # At this stage allow a task switch so that some other peer might try
         # to work on the currently returned interval.

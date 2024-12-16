@@ -25,7 +25,7 @@ import
 
 proc registerError(buddy: BeaconBuddyRef) =
   buddy.only.nHdrRespErrors.inc
-  if fetchHeadersReqThresholdCount < buddy.only.nHdrRespErrors:
+  if fetchHeadersReqErrThresholdCount < buddy.only.nHdrRespErrors:
     buddy.ctrl.zombie = true # abandon slow peer
 
 # ------------------------------------------------------------------------------
@@ -101,7 +101,7 @@ proc headersFetchReversed*(
 
   # Ban an overly slow peer for a while when seen in a row. Also there is a
   # mimimum share of the number of requested headers expected, typically 10%.
-  if fetchHeadersReqThresholdZombie < elapsed or
+  if fetchHeadersReqErrThresholdZombie < elapsed or
      h.len.uint64 * 100 < req.maxResults * fetchHeadersReqMinResponsePC:
     buddy.registerError()
   else:

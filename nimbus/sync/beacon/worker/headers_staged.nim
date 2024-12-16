@@ -154,7 +154,7 @@ proc headersStagedCollect*(
         buddy.only.nHdrRespErrors.inc
 
         if (0 < buddy.only.nHdrRespErrors and buddy.ctrl.stopped) or
-           fetchHeadersReqThresholdCount < buddy.only.nHdrRespErrors:
+           fetchHeadersReqErrThresholdCount < buddy.only.nHdrRespErrors:
           # Make sure that this peer does not immediately reconnect
           buddy.ctrl.zombie = true
         trace info & ": current header list discarded", peer, iv, ivReq,
