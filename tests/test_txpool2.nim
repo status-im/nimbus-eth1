@@ -113,7 +113,7 @@ proc initEnv(envFork: HardFork): TestEnv =
   conf.networkParams.genesis.alloc[recipient] = GenesisAccount(code: contractCode)
 
   if envFork >= MergeFork:
-    conf.networkParams.config.mergeForkBlock = Opt.some(0'u64)
+    conf.networkParams.config.mergeNetsplitBlock = Opt.some(0'u64)
     conf.networkParams.config.terminalTotalDifficulty = Opt.some(100.u256)
 
   if envFork >= Shanghai:

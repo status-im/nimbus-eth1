@@ -96,7 +96,7 @@ func config(shanghai, cancun: uint64): ChainConfig =
     berlinBlock:                   Opt.some(0'u64),
     londonBlock:                   Opt.some(0'u64),
     terminalTotalDifficulty:       Opt.some(0.u256),
-    mergeForkBlock:                Opt.some(0'u64),
+    mergeNetsplitBlock:            Opt.some(0'u64),
     shanghaiTime:                  Opt.some(shanghai.EthTime),
     cancunTime:                    Opt.some(cancun.EthTime),
   )

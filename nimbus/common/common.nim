@@ -336,8 +336,8 @@ proc proofOfStake*(com: CommonRef, header: Header): bool =
   if com.config.posBlock.isSome:
     # see comments of posBlock in common/hardforks.nim
     header.number >= com.config.posBlock.get
-  elif com.config.mergeForkBlock.isSome:
-    header.number >= com.config.mergeForkBlock.get
+  elif com.config.mergeNetsplitBlock.isSome:
+    header.number >= com.config.mergeNetsplitBlock.get
   else:
     # This costly check is only executed from test suite
     com.isBlockAfterTtd(header)

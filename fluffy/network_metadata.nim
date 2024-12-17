@@ -70,7 +70,7 @@ type
   # - `EthTime` uses std/times while chronos Moment is sufficient and more
   # sensible
   ChainConfig* = object
-    mergeForkBlock*: uint64
+    mergeNetsplitBlock*: uint64
     shanghaiTime*: Opt[Moment]
     cancunTime*: Opt[Moment]
 
@@ -81,7 +81,7 @@ const
   mergeBlockNumber* {.intdefine.}: uint64 = 15537394
 
   chainConfig* = ChainConfig(
-    mergeForkBlock: mergeBlockNumber,
+    mergeNetsplitBlock: mergeBlockNumber,
     shanghaiTime: Opt.some(Moment.init(1681338455'i64, Second)),
     cancunTime: Opt.none(Moment),
   )
@@ -93,7 +93,7 @@ func isTimestampForked(forkTime: Opt[Moment], timestamp: Moment): bool =
     forkTime.get() <= timestamp
 
 func isPoSBlock*(c: ChainConfig, blockNumber: uint64): bool =
-  c.mergeForkBlock <= blockNumber
+  c.mergeNetsplitBlock <= blockNumber
 
 func isShanghai*(c: ChainConfig, timestamp: Moment): bool =
   isTimestampForked(c.shanghaiTime, timestamp)
