@@ -10,15 +10,17 @@
 import
   std/[times],
   chronos,
+  taskpools,
   "."/[rpc_tests, test_env],
   ../sim_utils
 
 proc runRpcTest() =
   var stat: SimStat
+  let taskPool = Taskpool.new()
   let start = getTime()
   for x in testList:
     try:
-      let env = setupEnv()
+      let env = setupEnv(taskPool)
       let status = waitFor x.run(env)
       env.stopEnv()
       stat.inc(x.name, status)

@@ -34,11 +34,11 @@ proc genesisHeader(node: JsonNode): Header =
   let genesisRLP = hexToSeqByte(node["genesisRLP"].getStr)
   rlp.decode(genesisRLP, Block).header
 
-proc setupELClient*(conf: ChainConfig, node: JsonNode): TestEnv =
+proc setupELClient*(conf: ChainConfig, taskPool: Taskpool, node: JsonNode): TestEnv =
   let
     memDB = newCoreDbRef DefaultDbMemory
     genesisHeader = node.genesisHeader
-    com = CommonRef.new(memDB, Taskpool.new(), conf)
+    com = CommonRef.new(memDB, taskPool, conf)
     stateDB = LedgerRef.init(memDB)
     chain = newForkedChain(com, genesisHeader)
 
