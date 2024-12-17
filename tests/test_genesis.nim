@@ -109,7 +109,6 @@ proc customGenesisTest() =
       check com.proofOfStake(com.genesisHeader) == false
       check cg.config.mergeNetsplitBlock.isSome
       check cg.config.mergeNetsplitBlock.get == 14660963.BlockNumber
-      check cg.config.mergeNetsplitBlock == cg.config.mergeForkBlock
 
     test "Holesky":
       var cg: NetworkParams

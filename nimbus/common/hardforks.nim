@@ -163,11 +163,8 @@ type
     posBlock*
       {.dontSerialize.} : Opt[BlockNumber]
 
-    # mergeNetsplitBlock is an alias to mergeForkBlock
-    # and is used for geth compatibility layer
     mergeNetsplitBlock* : Opt[BlockNumber]
 
-    mergeForkBlock*     : Opt[BlockNumber]
     shanghaiTime*       : Opt[EthTime]
     cancunTime*         : Opt[EthTime]
     pragueTime*         : Opt[EthTime]
@@ -194,11 +191,7 @@ func countTimeFields(): int {.compileTime.} =
 func countBlockFields(): int {.compileTime.} =
   var z = ChainConfig()
   for name, _ in fieldPairs(z[]):
-    if name == "mergeNetsplitBlock":
-      # skip mergeForkBlock alias
-      # continue is not supported
-      discard
-    elif name.endsWith("Block"):
+    if name.endsWith("Block"):
       inc result
 
 const
@@ -217,11 +210,7 @@ func collectBlockFields(): array[blockFieldsCount, string] =
   var z = ChainConfig()
   var i = 0
   for name, _ in fieldPairs(z[]):
-    if name == "mergeNetsplitBlock":
-      # skip mergeForkBlock alias
-      # continue is not supported
-      discard
-    elif name.endsWith("Block"):
+    if name.endsWith("Block"):
       result[i] = name
       inc i
 
@@ -235,7 +224,7 @@ const
 
 func mergeForkTransitionThreshold*(conf: ChainConfig): MergeForkTransitionThreshold =
   MergeForkTransitionThreshold(
-    number: conf.mergeForkBlock,
+    number: conf.mergeNetsplitBlock,
     ttd: conf.terminalTotalDifficulty,
   )
 
@@ -280,7 +269,7 @@ func populateFromForkTransitionTable*(conf: ChainConfig, t: ForkTransitionTable)
   conf.arrowGlacierBlock   = t.blockNumberThresholds[HardFork.ArrowGlacier]
   conf.grayGlacierBlock    = t.blockNumberThresholds[HardFork.GrayGlacier]
 
-  conf.mergeForkBlock          = t.mergeForkTransitionThreshold.number
+  conf.mergeNetsplitBlock      = t.mergeForkTransitionThreshold.number
   conf.terminalTotalDifficulty = t.mergeForkTransitionThreshold.ttd
 
   conf.shanghaiTime        = t.timeThresholds[HardFork.Shanghai]
