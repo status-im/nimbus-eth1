@@ -468,7 +468,6 @@ proc assembleBlock*(
   ## tuning parameters. The following block header fields are left
   ## uninitialised:
   ##
-  ## * *extraData*: Blob
   ## * *mixHash*: Hash32
   ## * *nonce*:     BlockNonce
   ##

@@ -476,7 +476,12 @@ func `extraData=`*(com: CommonRef, val: string) =
   com.extraData = val
 
 func `gasLimit=`*(com: CommonRef, val: uint64) =
-  com.gasLimit = val
+  if val < GAS_LIMIT_MINIMUM:
+    com.gasLimit = GAS_LIMIT_MINIMUM
+  elif val > GAS_LIMIT_MAXIMUM:
+    com.gasLimit = GAS_LIMIT_MAXIMUM
+  else:
+    com.gasLimit = val
 
 # ------------------------------------------------------------------------------
 # End

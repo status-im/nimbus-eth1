@@ -44,7 +44,7 @@ proc basicServices(nimbus: NimbusNode,
                    conf: NimbusConf,
                    com: CommonRef) =
   nimbus.chainRef = ForkedChainRef.init(com)
-  
+
   # txPool must be informed of active head
   # so it can know the latest account state
   # e.g. sender nonce, etc
@@ -221,14 +221,14 @@ proc run(nimbus: NimbusNode, conf: NimbusConf) =
     try:
       if conf.numThreads < 0:
         fatal "The number of threads --num-threads cannot be negative."
-        quit 1
+        quit QuitFailure
       elif conf.numThreads == 0:
         Taskpool.new(numThreads = min(countProcessors(), 16))
       else:
         Taskpool.new(numThreads = conf.numThreads)
     except CatchableError as e:
       fatal "Cannot start taskpool", err = e.msg
-      quit 1
+      quit QuitFailure
 
   info "Threadpool started", numThreads = taskpool.numThreads
 
@@ -244,7 +244,15 @@ proc run(nimbus: NimbusNode, conf: NimbusConf) =
       extraData=conf.extraData,
       len=conf.extraData.len
 
+  if conf.gasLimit > GAS_LIMIT_MAXIMUM or
+     conf.gasLimit < GAS_LIMIT_MINIMUM:
+    warn "GasLimit not in expected range, truncate",
+      min=GAS_LIMIT_MINIMUM,
+      max=GAS_LIMIT_MAXIMUM,
+      get=conf.gasLimit
+
   com.extraData = conf.extraData
+  com.gasLimit = conf.gasLimit
 
   defer:
     com.db.finish()
