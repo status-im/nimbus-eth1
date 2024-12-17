@@ -62,7 +62,7 @@ proc stopRpcHttpServer(srv: RpcServer) =
   waitFor rpcServer.stop()
   waitFor rpcServer.closeWait()
 
-proc setupEnv*(): TestEnv =
+proc setupEnv*(taskPool: Taskpool): TestEnv =
   let conf = makeConfig(@[
     "--chaindb:archive",
     # "--nat:extip:0.0.0.0",
@@ -80,7 +80,7 @@ proc setupEnv*(): TestEnv =
     ethCtx  = newEthContext()
     ethNode = setupEthNode(conf, ethCtx, eth)
     com     = CommonRef.new(newCoreDbRef DefaultDbMemory,
-      Taskpool.new(),
+      taskPool,
       conf.networkId,
       conf.networkParams
     )

@@ -19,11 +19,11 @@ import
   ../sim_utils,
   ./extract_consensus_data
 
-proc processChainData(cd: ChainData): TestStatus =
+proc processChainData(cd: ChainData, taskPool: Taskpool): TestStatus =
   let
     networkId = NetworkId(cd.params.config.chainId)
     com = CommonRef.new(newCoreDbRef DefaultDbMemory,
-      Taskpool.new(),
+      taskPool,
       networkId,
       cd.params
     )
@@ -65,6 +65,7 @@ const unsupportedTests = [
 proc main() =
   const basePath = "tests/fixtures/eth_tests/BlockchainTests"
   var stat: SimStat
+  let taskPool = Taskpool.new()
   let start = getTime()
 
   let res = loadKzgTrustedSetup()
@@ -85,7 +86,7 @@ proc main() =
     let n = json.parseFile(fileName)
     for caseName, unit in n:
       let cd = extractChainData(unit)
-      let status = processChainData(cd)
+      let status = processChainData(cd, taskPool)
       stat.inc(caseName, status)
 
   let elpd = getTime() - start
