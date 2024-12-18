@@ -146,7 +146,7 @@ proc test_chainSync*(
   ## Store persistent blocks from dump into chain DB
   let
     sayBlocks = 900'u64
-    chain = com.newChain
+    chain = com.newChain()
     blockOnDb = com.db.getSavedStateBlockNumber()
     lastBlock = max(1, numBlocks).BlockNumber
 

@@ -79,11 +79,7 @@ proc importRlpBlocks*(importFile: string,
   importRlpBlocks(bytes, chain, finalize)
 
 proc importRlpBlocks*(conf: NimbusConf, com: CommonRef) =
-  let head = com.db.getCanonicalHead().valueOr:
-    error "cannot get canonical head from db", msg=error
-    quit(QuitFailure)
-
-  let chain = newForkedChain(com, head, baseDistance = 0)
+  let chain = ForkedChainRef.init(com, baseDistance = 0)
 
   # success or not, we quit after importing blocks
   for i, blocksFile in conf.blocksFile:

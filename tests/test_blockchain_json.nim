@@ -74,17 +74,15 @@ proc executeCase(node: JsonNode): bool =
   setupStateDB(env.pre, stateDB)
   stateDB.persist()
 
-  com.db.persistHeader(env.genesisHeader,
-                       com.proofOfStake(env.genesisHeader)).isOkOr:
+  com.db.persistHeaderAndSetHead(env.genesisHeader).isOkOr:
     debugEcho "Failed to put genesis header into database: ", error
     return false
 
-  let chead = com.db.getCanonicalHead().expect("canonicalHead exists")
-  if chead.blockHash != env.genesisHeader.blockHash:
+  var c = ForkedChainRef.init(com)  
+  if c.latestHash != env.genesisHeader.blockHash:
     debugEcho "Genesis block hash in database is different with expected genesis block hash"
     return false
-
-  var c = newForkedChain(com, env.genesisHeader)
+  
   var lastStateRoot = env.genesisHeader.stateRoot
   for blk in env.blocks:
     let res = c.importBlock(blk.blk)
@@ -102,9 +100,8 @@ proc executeCase(node: JsonNode): bool =
   c.forkChoice(env.lastBlockHash, env.lastBlockHash).isOkOr:
     debugEcho error
     return false
-
-  let head = com.db.getCanonicalHead().expect("canonicalHead exists")
-  let headHash = head.blockHash
+  
+  let headHash = c.latestHash
   if headHash != env.lastBlockHash:
     debugEcho "lastestBlockHash mismatch, get: ", headHash,
       " expect: ", env.lastBlockHash

@@ -54,11 +54,15 @@ const
     ## On `Geth`, responses to larger requests are all truncted to 1024 header
     ## entries (see `Geth` constant `maxHeadersServe`.)
 
-  fetchHeadersReqThresholdZombie* = chronos.seconds(2)
-  fetchHeadersReqThresholdCount* = 3
+  fetchHeadersReqErrThresholdZombie* = chronos.seconds(2)
+  fetchHeadersReqErrThresholdCount* = 3
     ## Response time allowance. If the response time for the set of headers
     ## exceeds this threshold for more than `fetchHeadersReqThresholdCount`
     ## times in a row, then this peer will be banned for a while.
+
+  fetchHeadersProcessErrThresholdCount* = 3
+    ## Similar to `fetchHeadersReqErrThresholdCount` but for the later part
+    ## when errors occur while block headers are queued and further processed.
 
   fetchHeadersReqMinResponsePC* = 10
     ## Some peers only returned one header at a time. If these peers sit on a
@@ -92,9 +96,12 @@ const
   nFetchBodiesRequest* = 128
     ## Similar to `nFetchHeadersRequest`
 
-  fetchBodiesReqThresholdZombie* = chronos.seconds(4)
-  fetchBodiesReqThresholdCount* = 5
+  fetchBodiesReqErrThresholdZombie* = chronos.seconds(4)
+  fetchBodiesReqErrThresholdCount* = 3
     ## Similar to `fetchHeadersReqThreshold*`
+
+  fetchBodiesProcessErrThresholdCount* = 3
+    ## Similar to `fetchHeadersProcessErrThresholdCount`.
 
   fetchBodiesReqMinResponsePC* = 10
     ## Similar to `fetchHeadersReqMinResponsePC`

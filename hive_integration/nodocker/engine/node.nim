@@ -98,8 +98,7 @@ proc setBlock*(c: ChainRef; blk: Block): Result[void, string] =
       return err("no vmstate")
   ? vmState.processBlock(blk)
 
-  ? c.db.persistHeader(
-      header, c.com.proofOfStake(header), c.com.startOfHistory)
+  ? c.db.persistHeaderAndSetHead(header, c.com.startOfHistory)
 
   c.db.persistTransactions(header.number, header.txRoot, blk.transactions)
   c.db.persistReceipts(header.receiptsRoot, vmState.receipts)

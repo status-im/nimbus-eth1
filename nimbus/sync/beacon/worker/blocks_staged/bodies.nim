@@ -22,9 +22,12 @@ import
 # Public functions
 # ------------------------------------------------------------------------------
 
+func bdyErrors*(buddy: BeaconBuddyRef): string =
+  $buddy.only.nBdyRespErrors & "/" & $buddy.only.nBdyProcErrors
+
 proc fetchRegisterError*(buddy: BeaconBuddyRef) =
   buddy.only.nBdyRespErrors.inc
-  if fetchBodiesReqThresholdCount < buddy.only.nBdyRespErrors:
+  if fetchBodiesReqErrThresholdCount < buddy.only.nBdyRespErrors:
     buddy.ctrl.zombie = true # abandon slow peer
 
 proc bodiesFetch*(
@@ -39,8 +42,7 @@ proc bodiesFetch*(
     start = Moment.now()
     nReq = blockHashes.len
 
-  trace trEthSendSendingGetBlockBodies, peer, nReq,
-    nRespErrors=buddy.only.nBdyRespErrors
+  trace trEthSendSendingGetBlockBodies, peer, nReq, bdyErrors=buddy.bdyErrors
 
   var resp: Option[blockBodiesObj]
   try:
@@ -48,7 +50,7 @@ proc bodiesFetch*(
   except CatchableError as e:
     buddy.fetchRegisterError()
     `info` info & " error", peer, nReq, elapsed=(Moment.now() - start).toStr,
-      error=($e.name), msg=e.msg, nRespErrors=buddy.only.nBdyRespErrors
+      error=($e.name), msg=e.msg, bdyErrors=buddy.bdyErrors
     return err()
 
   let elapsed = Moment.now() - start
@@ -57,8 +59,7 @@ proc bodiesFetch*(
   if resp.isNone or buddy.ctrl.stopped:
     buddy.fetchRegisterError()
     trace trEthRecvReceivedBlockBodies, peer, nReq, nResp=0,
-      elapsed=elapsed.toStr, ctrl=buddy.ctrl.state,
-      nRespErrors=buddy.only.nBdyRespErrors
+      elapsed=elapsed.toStr, ctrl=buddy.ctrl.state, bdyErrors=buddy.bdyErrors
     return err()
 
   let b: seq[BlockBody] = resp.get.blocks
@@ -71,15 +72,14 @@ proc bodiesFetch*(
 
   # Ban an overly slow peer for a while when seen in a row. Also there is a
   # mimimum share of the number of requested headers expected, typically 10%.
-  if fetchBodiesReqThresholdZombie < elapsed or
+  if fetchBodiesReqErrThresholdZombie < elapsed or
      b.len.uint64 * 100 < nReq.uint64 * fetchBodiesReqMinResponsePC:
     buddy.fetchRegisterError()
   else:
     buddy.only.nBdyRespErrors = 0 # reset error count
 
   trace trEthRecvReceivedBlockBodies, peer, nReq, nResp=b.len,
-    elapsed=elapsed.toStr, ctrl=buddy.ctrl.state,
-      nRespErrors=buddy.only.nBdyRespErrors
+    elapsed=elapsed.toStr, ctrl=buddy.ctrl.state, bdyErrors=buddy.bdyErrors
 
   return ok(b)
 

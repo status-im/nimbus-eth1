@@ -13,6 +13,7 @@ import
   eth/common/eth_types_rlp,
   json_rpc/rpcclient,
   web3/execution_types,
+  taskpools,
   ../sim_utils,
   ../../../tools/common/helpers as chp,
   ../../../tools/evmstate/helpers as ehp,
@@ -115,9 +116,9 @@ proc validatePostState(node: JsonNode, t: TestEnv): bool =
 
   return true
 
-proc runTest(node: JsonNode, network: string): TestStatus =
+proc runTest(node: JsonNode, taskPool: Taskpool, network: string): TestStatus =
   let conf = getChainConfig(network)
-  var env = setupELClient(conf, node)
+  var env = setupELClient(conf, taskPool, node)
 
   let blks = node["blocks"]
   var
@@ -198,6 +199,7 @@ proc collectTestVectors(): seq[string] =
 
 proc main() =
   var stat: SimStat
+  let taskPool = Taskpool.new()
   let start = getTime()
 
   let res = loadKzgTrustedSetup()
@@ -225,7 +227,7 @@ proc main() =
         continue
 
       try:
-        let status = runTest(fixture, network)
+        let status = runTest(fixture, taskPool, network)
         stat.inc(name, status)
       except CatchableError as ex:
         debugEcho ex.msg

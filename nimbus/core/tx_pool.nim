@@ -261,7 +261,7 @@
 ##
 ## In the most complex case, the newly mined block was added to some block
 ## chain branch which has become an uncle to the new canonical head retrieved
-## by `getCanonicalHead()`. In order to update the pool to the very state
+## by `latestHeader()`. In order to update the pool to the very state
 ## one would have arrived if worked on the retrieved canonical head branch
 ## in the first place, the directive `smartHead()` calculates the actions of
 ## what is needed to get just there from the locally cached head state of the
@@ -303,7 +303,7 @@
 ## --------------------
 ## head
 ##   Cached block chain insertion point, not necessarily the same header as
-##   retrieved by the `getCanonicalHead()`. This insertion point can be
+##   retrieved by the `latestHeader()`. This insertion point can be
 ##   adjusted with the `smartHead()` function.
 
 
@@ -468,7 +468,6 @@ proc assembleBlock*(
   ## tuning parameters. The following block header fields are left
   ## uninitialised:
   ##
-  ## * *extraData*: Blob
   ## * *mixHash*: Hash32
   ## * *nonce*:     BlockNonce
   ##

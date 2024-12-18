@@ -156,9 +156,7 @@ proc persistBlock*(p: var Persister, blk: Block): Result[void, string] =
 
   if NoPersistHeader notin p.flags:
     let blockHash = header.blockHash()
-    ?c.db.persistHeader(
-      blockHash, header, c.com.proofOfStake(header), c.com.startOfHistory
-    )
+    ?c.db.persistHeaderAndSetHead(blockHash, header, c.com.startOfHistory)
 
   if NoPersistTransactions notin p.flags:
     c.db.persistTransactions(header.number, header.txRoot, blk.transactions)

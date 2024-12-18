@@ -307,10 +307,6 @@ func toHardFork*(map: ForkTransitionTable, forkDeterminer: ForkDeterminationInfo
 proc validateChainConfig*(conf: ChainConfig): bool =
   result = true
 
-  if conf.mergeNetsplitBlock.isSome:
-    # geth compatibility
-    conf.mergeForkBlock = conf.mergeNetsplitBlock
-
   # FIXME: factor this to remove the duplication between the
   # block-based ones and the time-based ones.
 
@@ -491,7 +487,7 @@ func chainConfigForNetwork*(id: NetworkId): ChainConfig =
       muirGlacierBlock:    Opt.some(0.BlockNumber),
       berlinBlock:         Opt.some(0.BlockNumber),
       londonBlock:         Opt.some(0.BlockNumber),
-      mergeForkBlock:      Opt.some(1450409.BlockNumber),
+      mergeNetsplitBlock:  Opt.some(1450409.BlockNumber),
       terminalTotalDifficulty: Opt.some(sepoliaTTD),
       shanghaiTime:        Opt.some(1_677_557_088.EthTime),
       cancunTime:          Opt.some(1_706_655_072.EthTime), # 2024-01-30 22:51:12
@@ -512,7 +508,7 @@ func chainConfigForNetwork*(id: NetworkId): ChainConfig =
       istanbulBlock:       Opt.some(0.BlockNumber),
       berlinBlock:         Opt.some(0.BlockNumber),
       londonBlock:         Opt.some(0.BlockNumber),
-      mergeForkBlock:      Opt.some(0.BlockNumber),
+      mergeNetsplitBlock:  Opt.some(0.BlockNumber),
       terminalTotalDifficulty: Opt.some(0.u256),
       shanghaiTime:        Opt.some(1_696_000_704.EthTime),
       cancunTime:          Opt.some(1_707_305_664.EthTime), # 2024-02-07 11:34:24

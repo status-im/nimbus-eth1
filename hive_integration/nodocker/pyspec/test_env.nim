@@ -34,22 +34,27 @@ proc genesisHeader(node: JsonNode): Header =
   let genesisRLP = hexToSeqByte(node["genesisRLP"].getStr)
   rlp.decode(genesisRLP, Block).header
 
-proc setupELClient*(conf: ChainConfig, node: JsonNode): TestEnv =
+proc initializeDb(memDB: CoreDbRef, node: JsonNode): Hash32 =
   let
-    memDB = newCoreDbRef DefaultDbMemory
     genesisHeader = node.genesisHeader
-    com = CommonRef.new(memDB, Taskpool.new(), conf)
     stateDB = LedgerRef.init(memDB)
-    chain = newForkedChain(com, genesisHeader)
 
+  memDB.persistHeaderAndSetHead(genesisHeader).expect("persistHeader no error")
   setupStateDB(node["pre"], stateDB)
   stateDB.persist()
   doAssert stateDB.getStateRoot == genesisHeader.stateRoot
 
-  com.db.persistHeader(genesisHeader,
-    com.proofOfStake(genesisHeader)).expect("persistHeader no error")
-  let head = com.db.getCanonicalHead().expect("canonical head exists")
-  doAssert(head.blockHash == genesisHeader.blockHash)
+  genesisHeader.blockHash
+
+proc setupELClient*(conf: ChainConfig, taskPool: Taskpool, node: JsonNode): TestEnv =
+  let
+    memDB = newCoreDbRef DefaultDbMemory
+    genesisHash = initializeDb(memDB, node)
+    com = CommonRef.new(memDB, taskPool, conf)
+    chain = ForkedChainRef.init(com)
+
+  let headHash = chain.latestHash
+  doAssert(headHash == genesisHash)
 
   let
     txPool  = TxPoolRef.new(chain)

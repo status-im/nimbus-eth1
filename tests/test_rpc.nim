@@ -35,14 +35,10 @@ type
     txHash: Hash32
     blockHash: Hash32
 
-func zeroHash(): Hash32 =
-  Hash32.fromHex("0x0000000000000000000000000000000000000000000000000000000000000000")
-
-func emptyCodeHash(): Hash32 =
-  Hash32.fromHex("0xc5d2460186f7233c927e7db2dcc703c0e500b653ca82273b7bfad8045d85a470")
-
-func emptyStorageHash(): Hash32 =
-  Hash32.fromHex("0x56e81f171bcc55a6ff8345e692c0f86e5b48e01b996cadc001622fb5e363b421")
+const
+  zeroHash = hash32"0x0000000000000000000000000000000000000000000000000000000000000000"
+  emptyCodeHash = hash32"0xc5d2460186f7233c927e7db2dcc703c0e500b653ca82273b7bfad8045d85a470"
+  emptyStorageHash = hash32"0x56e81f171bcc55a6ff8345e692c0f86e5b48e01b996cadc001622fb5e363b421"
 
 proc verifyAccountProof(trustedStateRoot: Hash32, res: ProofResponse): MptProofVerificationResult =
   let
@@ -119,18 +115,18 @@ proc setupEnv(signer, ks2: Address, ctx: EthContext, com: CommonRef): TestEnv =
     signer, 1.u256 * 1_000_000_000.u256 * 1_000_000_000.u256)  # 1 ETH
 
   # Test data created for eth_getProof tests
-  let regularAcc = Address.fromHex("0x0000000000000000000000000000000000000001")
+  let regularAcc = address"0x0000000000000000000000000000000000000001"
   vmState.stateDB.addBalance(regularAcc, 2_000_000_000.u256)
   vmState.stateDB.setNonce(regularAcc, 1.uint64)
 
-  let contractAccWithStorage = Address.fromHex("0x0000000000000000000000000000000000000002")
+  let contractAccWithStorage = address"0x0000000000000000000000000000000000000002"
   vmState.stateDB.addBalance(contractAccWithStorage, 1_000_000_000.u256)
   vmState.stateDB.setNonce(contractAccWithStorage, 2.uint64)
   vmState.stateDB.setCode(contractAccWithStorage, code)
   vmState.stateDB.setStorage(contractAccWithStorage, u256(0), u256(1234))
   vmState.stateDB.setStorage(contractAccWithStorage, u256(1), u256(2345))
 
-  let contractAccNoStorage = Address.fromHex("0x0000000000000000000000000000000000000003")
+  let contractAccNoStorage = address"0x0000000000000000000000000000000000000003"
   vmState.stateDB.setCode(contractAccNoStorage, code)
 
 
@@ -181,26 +177,26 @@ proc setupEnv(signer, ks2: Address, ctx: EthContext, com: CommonRef): TestEnv =
   vmState.stateDB.persist()
 
   var header = Header(
-    parentHash  : parentHash,
-    stateRoot   : vmState.stateDB.getStateRoot,
-    transactionsRoot   : txRoot,
-    receiptsRoot : calcReceiptsRoot(vmState.receipts),
+    parentHash      : parentHash,
+    stateRoot       : vmState.stateDB.getStateRoot,
+    transactionsRoot: txRoot,
+    receiptsRoot    : calcReceiptsRoot(vmState.receipts),
     logsBloom       : createBloom(vmState.receipts),
-    difficulty  : difficulty,
-    number : blockNumber,
-    gasLimit    : vmState.cumulativeGasUsed + 1_000_000,
-    gasUsed     : vmState.cumulativeGasUsed,
-    timestamp   : timeStamp
+    difficulty      : difficulty,
+    number          : blockNumber,
+    gasLimit        : vmState.cumulativeGasUsed + 1_000_000,
+    gasUsed         : vmState.cumulativeGasUsed,
+    timestamp       : timeStamp
     )
 
-  com.db.persistHeader(header,
-    com.pos.isNil, com.startOfHistory).expect("persistHeader not error")
-
+  com.db.persistHeaderAndSetHead(header,
+    com.startOfHistory).expect("persistHeader not error")
+    
   let uncles = [header]
   header.ommersHash = com.db.persistUncles(uncles)
 
-  com.db.persistHeader(header,
-    com.pos.isNil, com.startOfHistory).expect("persistHeader not error")
+  com.db.persistHeaderAndSetHead(header,
+    com.startOfHistory).expect("persistHeader not error")
 
   com.db.persistFixtureBlock()
 
@@ -226,9 +222,9 @@ proc rpcMain*() =
         conf.networkId,
         conf.networkParams
       )
-      signer = Address.fromHex "0x0e69cde81b1aa07a45c32c6cd85d67229d36bb1b"
-      ks2 = Address.fromHex "0xa3b2222afa5c987da6ef773fde8d01b9f23d481f"
-      ks3 = Address.fromHex "0x597176e9a64aad0845d83afdaf698fbeff77703b"
+      signer = address"0x0e69cde81b1aa07a45c32c6cd85d67229d36bb1b"
+      ks2 = address"0xa3b2222afa5c987da6ef773fde8d01b9f23d481f"
+      ks3 = address"0x597176e9a64aad0845d83afdaf698fbeff77703b"
 
     let keyStore = "tests" / "keystore"
     let res = ctx.am.loadKeystores(keyStore)
@@ -319,19 +315,19 @@ proc rpcMain*() =
       check res == w3Qty(0x1'u64)
 
     test "eth_getBalance":
-      let a = await client.eth_getBalance(Address.fromHex("0xfff33a3bd36abdbd412707b8e310d6011454a7ae"), blockId(1'u64))
+      let a = await client.eth_getBalance(address"0xfff33a3bd36abdbd412707b8e310d6011454a7ae", blockId(1'u64))
       check a == UInt256.fromHex("0x1b1ae4d6e2ef5000000")
-      let b = await client.eth_getBalance(Address.fromHex("0xfff4bad596633479a2a29f9a8b3f78eefd07e6ee"), blockId(1'u64))
+      let b = await client.eth_getBalance(address"0xfff4bad596633479a2a29f9a8b3f78eefd07e6ee", blockId(1'u64))
       check b == UInt256.fromHex("0x56bc75e2d63100000")
-      let c = await client.eth_getBalance(Address.fromHex("0xfff7ac99c8e4feb60c9750054bdc14ce1857f181"), blockId(1'u64))
+      let c = await client.eth_getBalance(address"0xfff7ac99c8e4feb60c9750054bdc14ce1857f181", blockId(1'u64))
       check c == UInt256.fromHex("0x3635c9adc5dea00000")
 
     test "eth_getStorageAt":
-      let res = await client.eth_getStorageAt(Address.fromHex("0xfff33a3bd36abdbd412707b8e310d6011454a7ae"), 0.u256, blockId(1'u64))
+      let res = await client.eth_getStorageAt(address"0xfff33a3bd36abdbd412707b8e310d6011454a7ae", 0.u256, blockId(1'u64))
       check FixedBytes[32](zeroHash32.data) == res
 
     test "eth_getTransactionCount":
-      let res = await client.eth_getTransactionCount(Address.fromHex("0xfff7ac99c8e4feb60c9750054bdc14ce1857f181"), blockId(1'u64))
+      let res = await client.eth_getTransactionCount(address"0xfff7ac99c8e4feb60c9750054bdc14ce1857f181", blockId(1'u64))
       check res == w3Qty(0'u64)
 
     test "eth_getBlockTransactionCountByHash":
@@ -353,7 +349,7 @@ proc rpcMain*() =
       check res == w3Qty(0'u64)
 
     test "eth_getCode":
-      let res = await client.eth_getCode(Address.fromHex("0xfff7ac99c8e4feb60c9750054bdc14ce1857f181"), blockId(1'u64))
+      let res = await client.eth_getCode(address"0xfff7ac99c8e4feb60c9750054bdc14ce1857f181", blockId(1'u64))
       check res.len == 0
 
     test "eth_sign":
@@ -518,8 +514,8 @@ proc rpcMain*() =
       let testHeader = getBlockHeader4514995()
       let testHash = testHeader.blockHash
 
-      let topic = Bytes32.fromHex("0xddf252ad1be2c89b69c2b068fc378daa952ba7f163c4a11628f55a4df523b3ef")
-      let topic1 = Bytes32.fromHex("0x000000000000000000000000fdc183d01a793613736cd40a5a578f49add1772b")
+      let topic = bytes32"0xddf252ad1be2c89b69c2b068fc378daa952ba7f163c4a11628f55a4df523b3ef"
+      let topic1 = bytes32"0x000000000000000000000000fdc183d01a793613736cd40a5a578f49add1772b"
 
       let filterOptions = FilterOptions(
         blockHash: Opt.some(testHash),
@@ -540,11 +536,11 @@ proc rpcMain*() =
       let testHeader = getBlockHeader4514995()
       let testHash = testHeader.blockHash
 
-      let topic = Bytes32.fromHex("0xddf252ad1be2c89b69c2b068fc378daa952ba7f163c4a11628f55a4df523b3ef")
-      let topic1 = Bytes32.fromHex("0xa64da754fccf55aa65a1f0128a648633fade3884b236e879ee9f64c78df5d5d7")
+      let topic = bytes32"0xddf252ad1be2c89b69c2b068fc378daa952ba7f163c4a11628f55a4df523b3ef"
+      let topic1 = bytes32"0xa64da754fccf55aa65a1f0128a648633fade3884b236e879ee9f64c78df5d5d7"
 
-      let topic2 = Bytes32.fromHex("0x000000000000000000000000e16c02eac87920033ac72fc55ee1df3151c75786")
-      let topic3 = Bytes32.fromHex("0x000000000000000000000000b626a5facc4de1c813f5293ec3be31979f1d1c78")
+      let topic2 = bytes32"0x000000000000000000000000e16c02eac87920033ac72fc55ee1df3151c75786"
+      let topic3 = bytes32"0x000000000000000000000000b626a5facc4de1c813f5293ec3be31979f1d1c78"
 
 
 
@@ -567,7 +563,7 @@ proc rpcMain*() =
       block:
         # account doesn't exist
         let
-          address = Address.fromHex("0x0000000000000000000000000000000000000004")
+          address = address"0x0000000000000000000000000000000000000004"
           proofResponse = await client.eth_getProof(address, @[], blockId(1'u64))
           storageProof = proofResponse.storageProof
 
@@ -575,15 +571,15 @@ proc rpcMain*() =
           proofResponse.address == address
           verifyAccountProof(blockData.stateRoot, proofResponse).isMissing()
           proofResponse.balance == 0.u256
-          proofResponse.codeHash == zeroHash()
+          proofResponse.codeHash == zeroHash
           proofResponse.nonce == w3Qty(0.uint64)
-          proofResponse.storageHash == zeroHash()
+          proofResponse.storageHash == zeroHash
           storageProof.len() == 0
 
       block:
         # account exists but requested slots don't exist
         let
-          address = Address.fromHex("0x0000000000000000000000000000000000000001")
+          address = address"0x0000000000000000000000000000000000000001"
           slot1Key = 0.u256
           slot2Key = 1.u256
           proofResponse = await client.eth_getProof(address, @[slot1Key, slot2Key], blockId(1'u64))
@@ -593,9 +589,9 @@ proc rpcMain*() =
           proofResponse.address == address
           verifyAccountProof(blockData.stateRoot, proofResponse).isValid()
           proofResponse.balance == 2_000_000_000.u256
-          proofResponse.codeHash == emptyCodeHash()
+          proofResponse.codeHash == emptyCodeHash
           proofResponse.nonce == w3Qty(1.uint64)
-          proofResponse.storageHash == emptyStorageHash()
+          proofResponse.storageHash == emptyStorageHash
           storageProof.len() == 2
           storageProof[0].key == slot1Key
           storageProof[0].proof.len() == 0
@@ -607,7 +603,7 @@ proc rpcMain*() =
       block:
         # contract account with no storage slots
         let
-          address = Address.fromHex("0x0000000000000000000000000000000000000003")
+          address = address"0x0000000000000000000000000000000000000003"
           slot1Key = 0.u256 # Doesn't exist
           proofResponse = await client.eth_getProof(address, @[slot1Key], blockId(1'u64))
           storageProof = proofResponse.storageProof
@@ -616,9 +612,9 @@ proc rpcMain*() =
           proofResponse.address == address
           verifyAccountProof(blockData.stateRoot, proofResponse).isValid()
           proofResponse.balance == 0.u256
-          proofResponse.codeHash == Hash32.fromHex("0x09044b55d7aba83cb8ac3d2c9c8d8bcadbfc33f06f1be65e8cc1e4ddab5f3074")
+          proofResponse.codeHash == hash32"0x09044b55d7aba83cb8ac3d2c9c8d8bcadbfc33f06f1be65e8cc1e4ddab5f3074"
           proofResponse.nonce == w3Qty(0.uint64)
-          proofResponse.storageHash == emptyStorageHash()
+          proofResponse.storageHash == emptyStorageHash
           storageProof.len() == 1
           storageProof[0].key == slot1Key
           storageProof[0].proof.len() == 0
@@ -630,7 +626,7 @@ proc rpcMain*() =
       block:
         # contract account with storage slots
         let
-          address = Address.fromHex("0x0000000000000000000000000000000000000002")
+          address = address"0x0000000000000000000000000000000000000002"
           slot1Key = 0.u256
           slot2Key = 1.u256
           slot3Key = 2.u256 # Doesn't exist
@@ -641,9 +637,9 @@ proc rpcMain*() =
           proofResponse.address == address
           verifyAccountProof(blockData.stateRoot, proofResponse).isValid()
           proofResponse.balance == 1_000_000_000.u256
-          proofResponse.codeHash == Hash32.fromHex("0x09044b55d7aba83cb8ac3d2c9c8d8bcadbfc33f06f1be65e8cc1e4ddab5f3074")
+          proofResponse.codeHash == hash32"0x09044b55d7aba83cb8ac3d2c9c8d8bcadbfc33f06f1be65e8cc1e4ddab5f3074"
           proofResponse.nonce == w3Qty(2.uint64)
-          proofResponse.storageHash == Hash32.fromHex("0x2ed06ec37dad4cd8c8fc1a1172d633a8973987fa6995b14a7c0a50c0e8d1a9c3")
+          proofResponse.storageHash == hash32"0x2ed06ec37dad4cd8c8fc1a1172d633a8973987fa6995b14a7c0a50c0e8d1a9c3"
           storageProof.len() == 3
           storageProof[0].key == slot1Key
           storageProof[0].proof.len() > 0
@@ -661,7 +657,7 @@ proc rpcMain*() =
       block:
         # externally owned account
         let
-          address = Address.fromHex("0x0000000000000000000000000000000000000001")
+          address = address"0x0000000000000000000000000000000000000001"
           proofResponse = await client.eth_getProof(address, @[], blockId(1'u64))
           storageProof = proofResponse.storageProof
 
@@ -669,9 +665,9 @@ proc rpcMain*() =
           proofResponse.address == address
           verifyAccountProof(blockData.stateRoot, proofResponse).isValid()
           proofResponse.balance == 2_000_000_000.u256
-          proofResponse.codeHash == emptyCodeHash()
+          proofResponse.codeHash == emptyCodeHash
           proofResponse.nonce == w3Qty(1.uint64)
-          proofResponse.storageHash == emptyStorageHash()
+          proofResponse.storageHash == emptyStorageHash
           storageProof.len() == 0
 
     test "eth_getProof - Multiple blocks":
@@ -680,7 +676,7 @@ proc rpcMain*() =
       block:
         # block 1 - account has balance, code and storage
         let
-          address = Address.fromHex("0x0000000000000000000000000000000000000002")
+          address = address"0x0000000000000000000000000000000000000002"
           slot2Key = 1.u256
           proofResponse = await client.eth_getProof(address, @[slot2Key], blockId(1'u64))
           storageProof = proofResponse.storageProof
@@ -689,9 +685,9 @@ proc rpcMain*() =
           proofResponse.address == address
           verifyAccountProof(blockData.stateRoot, proofResponse).isValid()
           proofResponse.balance == 1_000_000_000.u256
-          proofResponse.codeHash == Hash32.fromHex("0x09044b55d7aba83cb8ac3d2c9c8d8bcadbfc33f06f1be65e8cc1e4ddab5f3074")
+          proofResponse.codeHash == hash32"0x09044b55d7aba83cb8ac3d2c9c8d8bcadbfc33f06f1be65e8cc1e4ddab5f3074"
           proofResponse.nonce == w3Qty(2.uint64)
-          proofResponse.storageHash == Hash32.fromHex("0x2ed06ec37dad4cd8c8fc1a1172d633a8973987fa6995b14a7c0a50c0e8d1a9c3")
+          proofResponse.storageHash == hash32"0x2ed06ec37dad4cd8c8fc1a1172d633a8973987fa6995b14a7c0a50c0e8d1a9c3"
           storageProof.len() == 1
           verifySlotProof(proofResponse.storageHash, storageProof[0]).isValid()
 

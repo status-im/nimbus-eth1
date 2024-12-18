@@ -144,8 +144,7 @@ proc initializeDb(com: CommonRef) =
       nonce = com.genesisHeader.nonce
     doAssert(com.genesisHeader.number == 0.BlockNumber,
       "can't commit genesis block with number > 0")
-    com.db.persistHeader(com.genesisHeader,
-      com.proofOfStake(com.genesisHeader),
+    com.db.persistHeaderAndSetHead(com.genesisHeader,
       startOfHistory=com.genesisHeader.parentHash).
       expect("can persist genesis header")
     doAssert(canonicalHeadHashKey().toOpenArray in kvt)
@@ -336,8 +335,8 @@ proc proofOfStake*(com: CommonRef, header: Header): bool =
   if com.config.posBlock.isSome:
     # see comments of posBlock in common/hardforks.nim
     header.number >= com.config.posBlock.get
-  elif com.config.mergeForkBlock.isSome:
-    header.number >= com.config.mergeForkBlock.get
+  elif com.config.mergeNetsplitBlock.isSome:
+    header.number >= com.config.mergeNetsplitBlock.get
   else:
     # This costly check is only executed from test suite
     com.isBlockAfterTtd(header)
@@ -476,7 +475,12 @@ func `extraData=`*(com: CommonRef, val: string) =
   com.extraData = val
 
 func `gasLimit=`*(com: CommonRef, val: uint64) =
-  com.gasLimit = val
+  if val < GAS_LIMIT_MINIMUM:
+    com.gasLimit = GAS_LIMIT_MINIMUM
+  elif val > GAS_LIMIT_MAXIMUM:
+    com.gasLimit = GAS_LIMIT_MAXIMUM
+  else:
+    com.gasLimit = val
 
 # ------------------------------------------------------------------------------
 # End
