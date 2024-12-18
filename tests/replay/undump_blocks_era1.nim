@@ -30,14 +30,14 @@ iterator undumpBlocksEra1*(
   #      a time and let the consumer do the chunking
   const blocksPerYield = 192
   var tmp = newSeqOfCap[EthBlock](blocksPerYield)
-
+  var blk: Block
   for i in 0 ..< stopAfter:
-    var bck = db.getEthBlock(least + i).valueOr:
+    db.getEthBlock(least + i, blk).isOkOr:
       if doAssertOk:
         doAssert i > 0, "expected at least one block"
       break
 
-    tmp.add move(bck)
+    tmp.add move(blk)
 
     # Genesis block requires a chunk of its own, for compatibility with current
     # test setup (a bit weird, that...)

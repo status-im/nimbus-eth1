@@ -5,12 +5,7 @@
 #  * MIT license ([LICENSE-MIT](LICENSE-MIT) or http://opensource.org/licenses/MIT)
 # at your option. This file may not be copied, modified, or distributed except according to those terms.
 
-import
-  chronicles,
-  eth/common,
-  stew/byteutils,
-  ./interpreter/op_codes,
-  ./code_bytes
+import chronicles, eth/common, stew/byteutils, ./interpreter/op_codes, ./code_bytes
 
 export code_bytes
 
@@ -31,24 +26,21 @@ func init*(T: type CodeStream, code: openArray[char]): T =
   T(code: CodeBytesRef.init(code))
 
 template read*(c: var CodeStream, size: int): openArray[byte] =
-  if c.pc + size - 1 < c.bytes.len:
-    let pos = c.pc
-    c.pc += size
-    c.code.bytes.toOpenArray(pos, pos + size - 1)
+  let
+    pos = c.pc
+    last = pos + size
+
+  if last <= c.bytes.len:
+    c.pc = last
+    c.code.bytes.toOpenArray(pos, last - 1)
   else:
     c.pc = c.bytes.len
-    c.code.bytes.toOpenArray(0, -1)
+    c.code.bytes.toOpenArray(pos, c.bytes.high)
 
-func readVmWord*(c: var CodeStream, n: static int): UInt256 =
+func readVmWord*(c: var CodeStream, n: static int): UInt256 {.inline, noinit.} =
   ## Reads `n` bytes from the code stream and pads
   ## the remaining bytes with zeros.
-  let result_bytes = cast[ptr array[32, byte]](addr result)
-
-  let last = min(c.pc + n, c.code.bytes.len)
-  let toWrite = last - c.pc
-  for i in 0 ..< toWrite:
-    result_bytes[i] = c.code.bytes[last - i - 1]
-  c.pc = last
+  UInt256.fromBytesBE(c.read(n))
 
 func len*(c: CodeStream): int =
   len(c.code)
@@ -100,13 +92,7 @@ proc decompile*(original: CodeStream): seq[(int, Op, string)] =
   while not c.atEnd:
     var op = c.next
     if op >= Push1 and op <= Push32:
-      result.add(
-        (
-          c.pc - 1,
-          op,
-          "0x" & c.read(op.int - 95).toHex,
-        )
-      )
+      result.add((c.pc - 1, op, "0x" & c.read(op.int - 95).toHex))
     elif op != Op.Stop:
       result.add((c.pc - 1, op, ""))
     else:
