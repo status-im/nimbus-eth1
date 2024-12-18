@@ -13,15 +13,13 @@
 import
   std/typetraits,
   eth/common,
-  "../.."/[constants, errors],
+  "../.."/[constants],
   ".."/[kvt, aristo],
-  ./backend/aristo_db,
   ./base/[api_tracking, base_config, base_desc, base_helpers]
 
 export
   CoreDbAccRef,
   CoreDbAccount,
-  CoreDbApiError,
   CoreDbCtxRef,
   CoreDbErrorCode,
   CoreDbError,
@@ -69,75 +67,6 @@ proc ctx*(db: CoreDbRef): CoreDbCtxRef =
   ## context.
   ##
   db.defCtx
-
-proc newCtxByKey*(ctx: CoreDbCtxRef; root: Hash32): CoreDbRc[CoreDbCtxRef] =
-  ## Create new context derived from a matching transaction of the currently
-  ## active context. If successful, the resulting context has the following
-  ## properties:
-  ##
-  ## * Transaction level is 1
-  ## * The state of the accounts column is equal to the argument `root`
-  ##
-  ## If successful, the resulting descriptor **must** be manually released
-  ## with `forget()` when it is not used, anymore.
-  ##
-  ## Note:
-  ##   The underlying `Aristo` backend uses lazy hashing so this function
-  ##   might fail simply because there is no computed state when nesting
-  ##   the next transaction. If the previous transaction needs to be found,
-  ##   then it must called like this:
-  ##   ::
-  ##     let db = ..                             # Instantiate CoreDb handle
-  ##     ...
-  ##     discard db.ctx.getAccounts.state()      # Compute state hash
-  ##     db.ctx.newTransaction()                 # Enter new transaction
-  ##
-  ##   However, remember that unused hash computations are contle relative
-  ##   to processing time.
-  ##
-  ctx.setTrackNewApi CtxNewCtxByKeyFn
-  result = ctx.newCtxByKey(root, $api)
-  ctx.ifTrackNewApi: debug logTxt, api, elapsed, root=($$root),  result
-
-proc swapCtx*(ctx: CoreDbCtxRef; db: CoreDbRef): CoreDbCtxRef =
-  ## Activate argument context `ctx` as default and return the previously
-  ## active context. This function goes typically together with `forget()`.
-  ## A valid scenario might look like
-  ## ::
-  ##   let db = ..                             # Instantiate CoreDb handle
-  ##   ...
-  ##   let ctx = newCtxByKey(..).expect "ctx"  # Create new context
-  ##   let saved = db.swapCtx ctx              # Swap context dandles
-  ##   defer: db.swapCtx(saved).forget()       # Restore
-  ##   ...
-  ##
-  doAssert not ctx.isNil
-  assert db.defCtx != ctx # debugging only
-  db.setTrackNewApi CtxSwapCtxFn
-
-  # Swap default context with argument `ctx`
-  result = db.defCtx
-  db.defCtx = ctx
-
-  # Set read-write access and install
-  CoreDbAccRef(ctx).call(reCentre, db.ctx.mpt).isOkOr:
-    raiseAssert $api & " failed: " & $error
-  CoreDbKvtRef(ctx).call(reCentre, db.ctx.kvt).isOkOr:
-    raiseAssert $api & " failed: " & $error
-  doAssert db.defCtx != result
-  db.ifTrackNewApi: debug logTxt, api, elapsed
-
-proc forget*(ctx: CoreDbCtxRef) =
-  ## Dispose `ctx` argument context and related columns created with this
-  ## context. This function throws an exception `ctx` is the default context.
-  ##
-  ctx.setTrackNewApi CtxForgetFn
-  doAssert ctx !=  ctx.parent.defCtx
-  CoreDbAccRef(ctx).call(forget, ctx.mpt).isOkOr:
-    raiseAssert $api & ": " & $error
-  CoreDbKvtRef(ctx).call(forget, ctx.kvt).isOkOr:
-    raiseAssert $api & ": " & $error
-  ctx.ifTrackNewApi: debug logTxt, api, elapsed
 
 # ------------------------------------------------------------------------------
 # Public base descriptor methods

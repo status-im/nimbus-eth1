@@ -12,7 +12,6 @@
 
 import
   std/[sequtils, sets, tables],
-  eth/common,
   results,
   ./kvt_desc
 

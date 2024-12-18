@@ -46,13 +46,6 @@ type
     txUid*: uint                      ## Unique ID among transactions
     level*: int                       ## Stack index for this transaction
 
-  DudesRef = ref object
-    ## List of peers accessing the same database. This list is layzily allocated
-    ## and might be kept with a single entry, i.e. so that `{centre} == peers`.
-    ##
-    centre: AristoDbRef               ## Link to peer with write permission
-    peers: HashSet[AristoDbRef]       ## List of all peers
-
   AristoDbRef* = ref object
     ## Three tier database object supporting distributed instances.
     top*: LayerRef                    ## Database working layer, mutable
@@ -62,7 +55,6 @@ type
 
     txRef*: AristoTxRef               ## Latest active transaction
     txUidGen*: uint                   ## Tx-relative unique number generator
-    dudes: DudesRef                   ## Related DB descriptors
 
     accLeaves*: LruCache[Hash32, VertexRef]
       ## Account path to payload cache - accounts are frequently accessed by
@@ -159,139 +151,6 @@ func isValid*(sqv: HashSet[RootedVertexID]): bool =
 func hash*(db: AristoDbRef): Hash =
   ## Table/KeyedQueue/HashSet mixin
   cast[pointer](db).hash
-
-# ------------------------------------------------------------------------------
-# Public functions, `dude` related
-# ------------------------------------------------------------------------------
-
-func isCentre*(db: AristoDbRef): bool =
-  ## This function returns `true` is the argument `db` is the centre (see
-  ## comments on `reCentre()` for details.)
-  ##
-  db.dudes.isNil or db.dudes.centre == db
-
-func getCentre*(db: AristoDbRef): AristoDbRef =
-  ## Get the centre descriptor among all other descriptors accessing the same
-  ## backend database (see comments on `reCentre()` for details.)
-  ##
-  if db.dudes.isNil: db else: db.dudes.centre
-
-proc reCentre*(db: AristoDbRef): Result[void,AristoError] =
-  ## Re-focus the `db` argument descriptor so that it becomes the centre.
-  ## Nothing is done if the `db` descriptor is the centre, already.
-  ##
-  ## With several descriptors accessing the same backend database there is a
-  ## single one that has write permission for the backend (regardless whether
-  ## there is a backend, at all.) The descriptor entity with write permission
-  ## is called *the centre*.
-  ##
-  ## After invoking `reCentre()`, the argument database `db` can only be
-  ## destructed by `finish()` which also destructs all other descriptors
-  ## accessing the same backend database. Descriptors where `isCentre()`
-  ## returns `false` must be single destructed with `forget()`.
-  ##
-  if not db.dudes.isNil:
-    db.dudes.centre = db
-  ok()
-
-proc fork*(
-    db: AristoDbRef;
-    noTopLayer = false;
-    noFilter = false;
-      ): Result[AristoDbRef,AristoError] =
-  ## This function creates a new empty descriptor accessing the same backend
-  ## (if any) database as the argument `db`. This new descriptor joins the
-  ## list of descriptors accessing the same backend database.
-  ##
-  ## After use, any unused non centre descriptor should be destructed via
-  ## `forget()`. Not doing so will not only hold memory ressources but might
-  ## also cost computing ressources for maintaining and updating backend
-  ## filters when writing to the backend database .
-  ##
-  ## If the argument `noFilter` is set `true` the function will fork directly
-  ## off the backend database and ignore any filter.
-  ##
-  ## If the argument `noTopLayer` is set `true` the function will provide an
-  ## uninitalised and inconsistent (!) descriptor object without top layer.
-  ## This setting avoids some database lookup for cases where the top layer
-  ## is redefined anyway.
-  ##
-  # Make sure that there is a dudes list
-  if db.dudes.isNil:
-    db.dudes = DudesRef(centre: db, peers: @[db].toHashSet)
-
-  let clone = AristoDbRef(
-    dudes:   db.dudes,
-    backend: db.backend,
-    accLeaves: db.accLeaves,
-    stoLeaves: db.stoLeaves,
-  )
-
-  if not noFilter:
-    clone.balancer = db.balancer # Ref is ok here (filters are immutable)
-
-  if not noTopLayer:
-    clone.top = LayerRef.init()
-    if not db.balancer.isNil:
-      clone.top.vTop = db.balancer.vTop
-    else:
-      let rc = clone.backend.getTuvFn()
-      if rc.isOk:
-        clone.top.vTop = rc.value
-      elif rc.error != GetTuvNotFound:
-        return err(rc.error)
-
-  # Add to peer list of clones
-  db.dudes.peers.incl clone
-
-  ok clone
-
-iterator forked*(db: AristoDbRef): tuple[db: AristoDbRef, isLast: bool] =
-  ## Interate over all non centre descriptors (see comments on `reCentre()`
-  ## for details.)
-  ##
-  ## The second `isLast` yielded loop entry is `true` if the yielded tuple
-  ## is the last entry in the list.
-  ##
-  if not db.dudes.isNil:
-    var nLeft = db.dudes.peers.len
-    for dude in db.dudes.peers.items:
-      if dude != db.dudes.centre:
-        nLeft.dec
-        yield (dude, nLeft == 1)
-
-func nForked*(db: AristoDbRef): int =
-  ## Returns the number of non centre descriptors (see comments on `reCentre()`
-  ## for details.) This function is a fast version of `db.forked.toSeq.len`.
-  if not db.dudes.isNil:
-    return db.dudes.peers.len - 1
-
-
-proc forget*(db: AristoDbRef): Result[void,AristoError] =
-  ## Destruct the non centre argument `db` descriptor (see comments on
-  ## `reCentre()` for details.)
-  ##
-  ## A non centre descriptor should always be destructed after use (see also
-  ## comments on `fork()`.)
-  ##
-  if db.isCentre:
-    err(DescNotAllowedOnCentre)
-  elif db notin db.dudes.peers:
-    err(DescStaleDescriptor)
-  else:
-    db.dudes.peers.excl db         # Unlink argument `db` from peers list
-    ok()
-
-proc forgetOthers*(db: AristoDbRef): Result[void,AristoError] =
-  ## For the centre argument `db` descriptor (see comments on `reCentre()`
-  ## for details), destruct all other descriptors accessing the same backend.
-  ##
-  if not db.dudes.isNil:
-    if db.dudes.centre != db:
-      return err(DescMustBeOnCentre)
-
-    db.dudes = DudesRef(nil)
-  ok()
 
 # ------------------------------------------------------------------------------
 # Public helpers

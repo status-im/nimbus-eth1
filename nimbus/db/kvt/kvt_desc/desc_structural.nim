@@ -16,6 +16,8 @@
 import
   std/tables
 
+export tables
+
 type
   LayerRef* = ref LayerObj
   LayerObj* = object

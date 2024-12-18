@@ -52,8 +52,7 @@ proc txStow*(
     # `db.balancer` is `nil`. Also, the `db.balancer` is read-only. In the
     # case that there are no forked peers one can ignore that restriction as
     # no balancer is shared.
-    db.balancer = deltaMerge(
-      db.top, modUpperOk = true, db.balancer, modLowerOk = db.nForked()==0)
+    db.balancer = deltaMerge(db.top, db.balancer)
 
     # New empty top layer
     db.top = LayerRef(vTop: db.balancer.vTop)

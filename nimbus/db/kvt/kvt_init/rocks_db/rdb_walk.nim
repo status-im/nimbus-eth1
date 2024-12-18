@@ -14,8 +14,6 @@
 {.push raises: [].}
 
 import
-  eth/common,
-  rocksdb,
   ./rdb_desc
 
 const

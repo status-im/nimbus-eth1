@@ -18,6 +18,8 @@ import
   ../../kvt_desc,
   rocksdb
 
+export rocksdb
+
 type
   RdbInst* = object
     store*: KvtCfStore               ## Rocks DB database handler

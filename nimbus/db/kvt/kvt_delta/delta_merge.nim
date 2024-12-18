@@ -9,7 +9,6 @@
 # except according to those terms.
 
 import
-  std/tables,
   ../kvt_desc
 
 # ------------------------------------------------------------------------------
@@ -26,9 +25,7 @@ proc layersMergeOnto(src: LayerRef; trg: var LayerObj) =
 
 proc deltaMerge*(
     upper: LayerRef;                   # Think of `top`, `nil` is ok
-    modUpperOk: bool;                  # May re-use/modify `upper`
     lower: LayerRef;                   # Think of `balancer`, `nil` is ok
-    modLowerOk: bool;                  # May re-use/modify `lower`
       ): LayerRef =
   ## Merge argument `upper` into the `lower` filter instance.
   ##
@@ -37,33 +34,17 @@ proc deltaMerge*(
   ##
   if lower.isNil:
     # Degenerate case: `upper` is void
-    result = upper
+    upper
 
   elif upper.isNil:
     # Degenerate case: `lower` is void
-    result = lower
+    lower
 
-  elif modLowerOk:
+  else:
     # Can modify `lower` which is the prefered action mode but applies only
     # in cases where the `lower` argument is not shared.
     layersMergeOnto(upper, lower[])
-    result = lower
-
-  elif not modUpperOk:
-    # Cannot modify any argument layers.
-    result = LayerRef(sTab: lower.sTab)
-    layersMergeOnto(upper, result[])
-
-  else:
-    # Otherwise avoid copying some tables by modifyinh `upper`. This is not
-    # completely free as the merge direction changes to merging the `lower`
-    # layer up into the higher prioritised `upper` layer (note that the `lower`
-    # argument filter is read-only.) Here again, the `upper` argument must not
-    # be a shared layer/filter.
-    for (key,val) in lower.sTab.pairs:
-      if not upper.sTab.hasKey(key):
-        upper.sTab[key] = val
-    result = upper
+    lower
 
 # ------------------------------------------------------------------------------
 # End

@@ -12,7 +12,6 @@
 
 import
   chronicles,
-  eth/common,
   rocksdb,
   results,
   ../../aristo,

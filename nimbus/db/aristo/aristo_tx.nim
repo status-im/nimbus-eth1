@@ -15,8 +15,8 @@
 
 import
   results,
-  ./aristo_tx/[tx_fork, tx_frame, tx_stow],
-  "."/[aristo_desc, aristo_get]
+  ./aristo_tx/[tx_frame, tx_stow],
+  ./aristo_desc
 
 # ------------------------------------------------------------------------------
 # Public functions, getters
@@ -46,124 +46,6 @@ func level*(db: AristoDbRef): int =
 func to*(tx: AristoTxRef; T: type[AristoDbRef]): T =
   ## Getter, retrieves the parent database descriptor from argument `tx`
   tx.db
-
-
-proc forkTx*(
-    db: AristoDbRef;
-    backLevel: int;                   # Backward location of transaction
-      ): Result[AristoDbRef,AristoError] =
-  ## Fork a new descriptor obtained from parts of the argument database
-  ## as described by arguments `db` and `backLevel`.
-  ##
-  ## If the argument `backLevel` is non-negative, the forked descriptor will
-  ## provide the database view where the first `backLevel` transaction layers
-  ## are stripped and the remaing layers are squashed into a single transaction.
-  ##
-  ## If `backLevel` is `-1`, a database descriptor with empty transaction
-  ## layers will be provided where the `balancer` between database and
-  ## transaction layers are kept in place.
-  ##
-  ## If `backLevel` is `-2`, a database descriptor with empty transaction
-  ## layers will be provided without a `balancer`.
-  ##
-  ## The returned database descriptor will always have transaction level one.
-  ## If there were no transactions that could be squashed, an empty
-  ## transaction is added.
-  ##
-  ## Use `aristo_desc.forget()` to clean up this descriptor.
-  ##
-  # Fork top layer (with or without pending transaction)?
-  if backLevel == 0:
-    return db.txForkTop()
-
-  # Fork bottom layer (=> 0 < db.stack.len)
-  if backLevel == db.stack.len:
-    return db.txForkBase()
-
-  # Inspect transaction stack
-  if 0 < backLevel:
-    var tx = db.txRef
-    if tx.isNil or db.stack.len < backLevel:
-      return err(TxLevelTooDeep)
-
-    # Fetch tx of level `backLevel` (seed to skip some items)
-    for _ in 0 ..< backLevel:
-      tx = tx.parent
-      if tx.isNil:
-        return err(TxStackGarbled)
-    return tx.txFork()
-
-  # Plain fork, include `balancer`
-  if backLevel == -1:
-    let xb = ? db.fork(noFilter=false)
-    discard xb.txFrameBegin()
-    return ok(xb)
-
-  # Plain fork, unfiltered backend
-  if backLevel == -2:
-    let xb = ? db.fork(noFilter=true)
-    discard xb.txFrameBegin()
-    return ok(xb)
-
-  err(TxLevelUseless)
-
-
-proc findTx*(
-    db: AristoDbRef;
-    rvid: RootedVertexID;             # Pivot vertex (typically `VertexID(1)`)
-    key: HashKey;                     # Hash key of pivot vertex
-      ): Result[int,AristoError] =
-  ## Find the transaction where the vertex with ID `vid` exists and has the
-  ## Merkle hash key `key`. If there is no transaction available, search in
-  ## the filter and then in the backend.
-  ##
-  ## If the above procedure succeeds, an integer indicating the transaction
-  ## level integer is returned:
-  ##
-  ## * `0` -- top level, current layer
-  ## * `1`, `2`, ... -- some transaction level further down the stack
-  ## * `-1` -- the filter between transaction stack and database backend
-  ## * `-2` -- the databse backend
-  ##
-  ## A successful return code might be used for the `forkTx()` call for
-  ## creating a forked descriptor that provides the pair `(vid,key)`.
-  ##
-  if not rvid.isValid or
-     not key.isValid:
-    return err(TxArgsUseless)
-
-  if db.txRef.isNil:
-    # Try `(vid,key)` on top layer
-    let topKey = db.top.kMap.getOrVoid rvid
-    if topKey == key:
-      return ok(0)
-
-  else:
-    # Find `(vid,key)` on transaction layers
-    for (n,tx,layer,error) in db.txRef.txFrameWalk:
-      if error != AristoError(0):
-        return err(error)
-      if layer.kMap.getOrVoid(rvid) == key:
-        return ok(n)
-
-    # Try bottom layer
-    let botKey = db.stack[0].kMap.getOrVoid rvid
-    if botKey == key:
-      return ok(db.stack.len)
-
-  # Try `(vid,key)` on balancer
-  if not db.balancer.isNil:
-    let roKey = db.balancer.kMap.getOrVoid rvid
-    if roKey == key:
-      return ok(-1)
-
-  # Try `(vid,key)` on unfiltered backend
-  block:
-    let beKey = db.getKeyUbe(rvid, {}).valueOr: (VOID_HASH_KEY, nil)
-    if beKey[0] == key:
-      return ok(-2)
-
-  err(TxNotFound)
 
 # ------------------------------------------------------------------------------
 # Public functions: Transaction frame

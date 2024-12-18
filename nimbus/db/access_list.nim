@@ -11,7 +11,7 @@
 import
   std/[tables, sets],
   stint,
-  eth/common,
+  eth/common/[addresses, transactions],
   ../utils/mergeutils
 
 type
@@ -67,9 +67,9 @@ proc add*(ac: var AccessList, address: Address, slot: UInt256) =
 proc clear*(ac: var AccessList) {.inline.} =
   ac.slots.clear()
 
-func getAccessList*(ac: AccessList): common.AccessList =
+func getAccessList*(ac: AccessList): transactions.AccessList =
   for address, slots in ac.slots:
-    result.add common.AccessPair(
+    result.add transactions.AccessPair(
       address    : address,
       storageKeys: slots.toStorageKeys,
     )

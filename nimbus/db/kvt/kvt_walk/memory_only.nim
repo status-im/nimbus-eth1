@@ -12,7 +12,6 @@
 ## ==================================================
 ##
 import
-  eth/common,
   ../kvt_init/[memory_db, memory_only],
   ".."/[kvt_desc, kvt_init],
   ./walk_private

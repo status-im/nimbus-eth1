@@ -129,11 +129,6 @@ proc closeFn(db: MemBackendRef): CloseFn =
     proc(ignore: bool) =
       discard
 
-proc canModFn(db: MemBackendRef): CanModFn =
-  result =
-    proc(): Result[void,KvtError] =
-      ok()
-
 proc setWrReqFn(db: MemBackendRef): SetWrReqFn =
   result =
     proc(kvt: RootRef): Result[void,KvtError] =
@@ -156,15 +151,8 @@ proc memoryBackend*: BackendRef =
   db.putEndFn = putEndFn db
 
   db.closeFn = closeFn db
-  db.canModFn = canModFn db
   db.setWrReqFn = setWrReqFn db
   db
-
-proc dup*(db: MemBackendRef): MemBackendRef =
-  ## Duplicate descriptor shell as needed for API debugging
-  new result
-  init_common.init(result[], db[])
-  result.mdb = db.mdb
 
 # ------------------------------------------------------------------------------
 # Public iterators (needs direct backend access)

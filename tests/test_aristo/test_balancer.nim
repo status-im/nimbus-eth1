@@ -64,9 +64,6 @@ proc dump(pfx: string; dx: varargs[AristoDbRef]): string =
 proc dump(dx: varargs[AristoDbRef]): string {.used.} =
   "".dump dx
 
-proc dump(w: DbTriplet): string {.used.} =
-  "db".dump(w[0], w[1], w[2])
-
 # ------------------------------------------------------------------------------
 # Private helpers
 # ------------------------------------------------------------------------------
@@ -99,7 +96,7 @@ iterator quadripartite(td: openArray[ProofTrieData]): LeafQuartet =
           yield [collect[0], collect[1], collect[2], lst]
         collect.setLen(0)
 
-proc dbTriplet(w: LeafQuartet; rdbPath: string): Result[DbTriplet,AristoError] =
+proc dbTriplet(w: LeafQuartet; rdbPath: string): Result[AristoDbRef,AristoError] =
   let db = block:
     if 0 < rdbPath.len:
       let (dbOpts, cfOpts) = DbOptions.init().toRocksDb()
@@ -123,28 +120,13 @@ proc dbTriplet(w: LeafQuartet; rdbPath: string): Result[DbTriplet,AristoError] =
     xCheckRc rc.error == 0:
       result = err(rc.error)
 
-  let dx = [db, db.forkTx(0).value, db.forkTx(0).value]
-  xCheck dx[0].nForked == 2
-
-  # Reduce unwanted tx layers
-  for n in 1 ..< dx.len:
-    xCheck dx[n].level == 1
-    xCheck dx[n].txTop.value.commit.isOk
-
-  # Clause (9) from `aristo/README.md` example
-  for n in 0 ..< dx.len:
-    let report = dx[n].mergeList w[n+1]
-    if report.error != 0:
-      db.finish(eradicate=true)
-      xCheck (n, report.error) == (n,0)
-
-  return ok(dx)
+  let dx = db
 
 # ----------------------
 
-proc cleanUp(dx: var DbTriplet) =
-  if not dx[0].isNil:
-    dx[0].finish(eradicate=true)
+proc cleanUp(dx: var AristoDbRef) =
+  if not dx.isNil:
+    dx.finish(eradicate=true)
     dx.reset
 
 # ----------------------
@@ -227,16 +209,14 @@ proc isDbEq(a, b: LayerRef; db: AristoDbRef; noisy = true): bool =
 # ----------------------
 
 proc checkBeOk(
-    dx: DbTriplet;
+    dx: AristoDbRef;
     forceCache = false;
     noisy = true;
       ): bool =
   ## ..
-  for n in 0 ..< dx.len:
-    let rc = dx[n].checkBE()
-    xCheckRc rc.error == (0,0):
-      noisy.say "***", "db checkBE failed",
-        " n=", n, "/", dx.len-1
+  let rc = dx.checkBE()
+  xCheckRc rc.error == (0,0):
+    noisy.say "***", "db checkBE failed"
   true
 
 # ------------------------------------------------------------------------------
@@ -267,7 +247,7 @@ proc testBalancer*(
           let rc = dbTriplet(w, rdbPath)
           xCheckRc rc.error == 0
           rc.value
-        (db1, db2, db3) = (dx[0], dx[1], dx[2])
+        db1 = dx
       defer:
         dx.cleanUp()
 
@@ -279,31 +259,15 @@ proc testBalancer*(
         let rc = db1.persist()
         xCheckRc rc.error == 0
       xCheck db1.balancer == LayerRef(nil)
-      xCheck db2.balancer == db3.balancer
-
-      block:
-        let rc = db2.stow() # non-persistent
-        xCheckRc rc.error == 0:
-          noisy.say "*** testDistributedAccess (3)", "n=", n, "db2".dump db2
-      xCheck db1.balancer == LayerRef(nil)
-      xCheck db2.balancer != db3.balancer
-
-      # Clause (11) from `aristo/README.md` example
-      discard db2.reCentre()
-      block:
-        let rc = db2.persist()
-        xCheckRc rc.error == 0
-      xCheck db2.balancer == LayerRef(nil)
 
       # Check/verify backends
       block:
         let ok = dx.checkBeOk(noisy=noisy)
         xCheck ok:
-          noisy.say "*** testDistributedAccess (4)", "n=", n, "db3".dump db3
+          noisy.say "*** testDistributedAccess (4)", "n=", n
 
       # Capture filters from clause (11)
       c11Filter1 = db1.balancer
-      c11Filter3 = db3.balancer
 
       # Clean up
       dx.cleanUp()
@@ -317,23 +281,9 @@ proc testBalancer*(
           let rc = dbTriplet(w, rdbPath)
           xCheckRc rc.error == 0
           rc.value
-        (db1, db2, db3) = (dy[0], dy[1], dy[2])
+        db1 = dy
       defer:
         dy.cleanUp()
-
-      # Build clause (12) from `aristo/README.md` example
-      discard db2.reCentre()
-      block:
-        let rc = db2.persist()
-        xCheckRc rc.error == 0
-      xCheck db2.balancer == LayerRef(nil)
-      xCheck db1.balancer == db3.balancer
-
-      # Clause (13) from `aristo/README.md` example
-      xCheck not db1.isCentre()
-      block:
-        let rc = db1.stow() # non-persistent
-        xCheckRc rc.error == 0
 
       # Clause (14) from `aristo/README.md` check
       let c11Fil1_eq_db1RoFilter = c11Filter1.isDbEq(db1.balancer, db1, noisy)
@@ -342,12 +292,6 @@ proc testBalancer*(
           "db1".dump(db1),
           ""
 
-      # Clause (15) from `aristo/README.md` check
-      let c11Fil3_eq_db3RoFilter = c11Filter3.isDbEq(db3.balancer, db3, noisy)
-      xCheck c11Fil3_eq_db3RoFilter:
-        noisy.say "*** testDistributedAccess (8)", "n=", n,
-          "db3".dump(db3),
-          ""
       # Check/verify backends
       block:
         let ok = dy.checkBeOk(noisy=noisy)

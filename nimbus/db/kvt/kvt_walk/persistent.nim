@@ -17,7 +17,6 @@
 ## `./kvt_walk/persistent`.)
 ##
 import
-  eth/common,
   ../kvt_init/[rocks_db, persistent],
   ../kvt_desc,
   "."/[memory_only, walk_private]

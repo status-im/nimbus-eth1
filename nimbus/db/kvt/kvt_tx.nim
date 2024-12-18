@@ -15,7 +15,7 @@
 
 import
   results,
-  ./kvt_tx/[tx_fork, tx_frame, tx_stow],
+  ./kvt_tx/[tx_frame, tx_stow],
   ./kvt_init/memory_only,
   ./kvt_desc
 
@@ -51,65 +51,6 @@ func to*(tx: KvtTxRef; T: type[KvtDbRef]): T =
 func toKvtDbRef*(tx: KvtTxRef): KvtDbRef =
   ## Same as `.to(KvtDbRef)`
   tx.db
-
-proc forkTx*(
-    db: KvtDbRef;
-    backLevel: int;                   # Backward location of transaction
-      ): Result[KvtDbRef,KvtError] =
-  ## Fork a new descriptor obtained from parts of the argument database
-  ## as described by arguments `db` and `backLevel`.
-  ##
-  ## If the argument `backLevel` is non-negative, the forked descriptor will
-  ## provide the database view where the first `backLevel` transaction layers
-  ## are stripped and the remaing layers are squashed into a single transaction.
-  ##
-  ## If `backLevel` is `-1`, a database descriptor with empty transaction
-  ## layers will be provided where the `roFilter` between database and
-  ## transaction layers are kept in place.
-  ##
-  ## If `backLevel` is `-2`, a database descriptor with empty transaction
-  ## layers will be provided without an `roFilter`.
-  ##
-  ## The returned database descriptor will always have transaction level one.
-  ## If there were no transactions that could be squashed, an empty
-  ## transaction is added.
-  ##
-  ## Use `kvt_desc.forget()` to clean up this descriptor.
-  ##
-  # Fork top layer (with or without pending transaction)?
-  if backLevel == 0:
-    return db.txForkTop()
-
-  # Fork bottom layer (=> 0 < db.stack.len)
-  if backLevel == db.stack.len:
-    return db.txForkBase()
-
-  # Inspect transaction stack
-  if 0 < backLevel:
-    var tx = db.txRef
-    if tx.isNil or db.stack.len < backLevel:
-      return err(TxLevelTooDeep)
-
-    # Fetch tx of level `backLevel` (seed to skip some items)
-    for _ in 0 ..< backLevel:
-      tx = tx.parent
-      if tx.isNil:
-        return err(TxStackGarbled)
-    return tx.txFork()
-
-  # Plain fork, include `roFilter`
-  if backLevel == -1:
-    let xb = ? db.fork(noFilter=false)
-    discard xb.txFrameBegin()
-    return ok(xb)
-
-  # Plain fork, unfiltered backend
-  if backLevel == -2:
-    let xb = ? db.fork(noFilter=true)
-    discard xb.txFrameBegin()
-    return ok(xb)
-
-  err(TxLevelUseless)
 
 # ------------------------------------------------------------------------------
 # Public functions: Transaction frame

@@ -15,10 +15,11 @@
 
 import
   std/tables,
-  eth/common,
   results,
   ./kvt_desc/desc_backend,
   "."/[kvt_desc, kvt_layers]
+
+export results
 
 # ------------------------------------------------------------------------------
 # Public functions, converters

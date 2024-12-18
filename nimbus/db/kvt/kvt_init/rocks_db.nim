@@ -28,7 +28,6 @@
 
 import
   chronicles,
-  eth/common,
   rocksdb,
   results,
   ../../aristo/aristo_init/persistent,
@@ -153,11 +152,6 @@ proc closeFn(db: RdbBackendRef): CloseFn =
     proc(eradicate: bool) =
       db.rdb.destroy(eradicate)
 
-proc canModFn(db: RdbBackendRef): CanModFn =
-  result =
-    proc(): Result[void,KvtError] =
-      ok()
-
 proc setWrReqFn(db: RdbBackendRef): SetWrReqFn =
   result =
     proc(kvt: RootRef): Result[void,KvtError] =
@@ -205,15 +199,6 @@ proc closeTriggeredFn(db: RdbBackendRef): CloseFn =
     proc(eradicate: bool) =
       # Nothing to do here as we do not own the backend
       discard
-
-proc canModTriggeredFn(db: RdbBackendRef): CanModFn =
-  ## Variant of `canModFn()` for piggyback write batch
-  result =
-    proc(): Result[void,KvtError] =
-      # Deny modifications/changes if there is a pending write request
-      if not db.rdb.delayedPersist.isNil:
-        return err(RdbBeDelayedLocked)
-      ok()
 
 proc setWrReqTriggeredFn(db: RdbBackendRef): SetWrReqFn =
   result =
@@ -291,7 +276,6 @@ proc rocksDbKvtBackend*(
   db.putEndFn = putEndFn db
 
   db.closeFn = closeFn db
-  db.canModFn = canModFn db
   db.setWrReqFn = setWrReqFn db
   ok db
 
@@ -321,15 +305,8 @@ proc rocksDbKvtTriggeredBackend*(
   db.putEndFn = putEndTriggeredFn db
 
   db.closeFn = closeTriggeredFn db
-  db.canModFn = canModTriggeredFn db
   db.setWrReqFn = setWrReqTriggeredFn db
   ok db
-
-
-proc dup*(db: RdbBackendRef): RdbBackendRef =
-  new result
-  init_common.init(result[], db[])
-  result.rdb = db.rdb
 
 # ------------------------------------------------------------------------------
 # Public iterators (needs direct backend access)

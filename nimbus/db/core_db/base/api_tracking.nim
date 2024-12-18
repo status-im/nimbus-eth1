@@ -33,7 +33,6 @@ type
     AccClearStorageFn   = "clearStorage"
     AccDeleteFn         = "acc/delete"
     AccFetchFn          = "acc/fetch"
-    AccForgetFn         = "acc/forget"
     AccHasPathFn        = "acc/hasPath"
     AccMergeFn          = "acc/merge"
     AccProofFn          = "acc/proof"
@@ -64,11 +63,8 @@ type
     CptPopFn            = "pop"
     CptStopCaptureFn    = "stopCapture"
 
-    CtxForgetFn         = "ctx/forget"
     CtxGetAccountsFn    = "getAccounts"
     CtxGetGenericFn     = "getGeneric"
-    CtxNewCtxByKeyFn    = "newCtxByKey"
-    CtxSwapCtxFn        = "swapCtx"
 
     KvtDelFn            = "del"
     KvtGetFn            = "get"

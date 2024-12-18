@@ -13,7 +13,7 @@
 import
   std/tables,
   eth/eip1559,
-  eth/common/[hashes, accounts, headers, addresses],
+  eth/common/[blocks, hashes, accounts, headers, addresses],
   ../db/[ledger, core_db],
   ../constants,
   ./chain_config

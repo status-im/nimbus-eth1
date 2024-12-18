@@ -115,28 +115,6 @@ type
         {.noRaise.}
       ## Fetch the Merkle hash of the storage root related to `accPath`.
 
-  AristoApiFindTxFn* =
-    proc(db: AristoDbRef;
-         rvid: RootedVertexID;
-         key: HashKey;
-        ): Result[int,AristoError]
-        {.noRaise.}
-      ## Find the transaction where the vertex with ID `vid` exists and has
-      ## the Merkle hash key `key`. If there is no transaction available,
-      ## search in the filter and then in the backend.
-      ##
-      ## If the above procedure succeeds, an integer indicating the transaction
-      ## level is returned:
-      ##
-      ## * `0` -- top level, current layer
-      ## * `1`,`2`,`..` -- some transaction level further down the stack
-      ## * `-1` -- the filter between transaction stack and database backend
-      ## * `-2` -- the databse backend
-      ##
-      ## A successful return code might be used for the `forkTx()` call for
-      ## creating a forked descriptor that provides the pair `(vid,key)`.
-      ##
-
   AristoApiFinishFn* =
     proc(db: AristoDbRef;
          eradicate = false;
@@ -160,32 +138,6 @@ type
       ##
       ## A non centre descriptor should always be destructed after use (see
       ## also# comments on `fork()`.)
-
-  AristoApiForkTxFn* =
-    proc(db: AristoDbRef;
-         backLevel: int;
-        ): Result[AristoDbRef,AristoError]
-        {.noRaise.}
-    ## Fork a new descriptor obtained from parts of the argument database
-    ## as described by arguments `db` and `backLevel`.
-    ##
-    ## If the argument `backLevel` is non-negative, the forked descriptor
-    ## will provide the database view where the first `backLevel` transaction
-    ## layers are stripped and the remaing layers are squashed into a single
-    ## transaction.
-    ##
-    ## If `backLevel` is `-1`, a database descriptor with empty transaction
-    ## layers will be provided where the `balancer` between database and
-    ## transaction layers are kept in place.
-    ##
-    ## If `backLevel` is `-2`, a database descriptor with empty transaction
-    ## layers will be provided without a `balancer`.
-    ##
-    ## The returned database descriptor will always have transaction level one.
-    ## If there were no transactions that could be squashed, an empty
-    ## transaction is added.
-    ##
-    ## Use `aristo_desc.forget()` to clean up this descriptor.
 
   AristoApiHashifyFn* =
     proc(db: AristoDbRef;
@@ -232,14 +184,6 @@ type
         {.noRaise.}
       ## Getter, non-negative nesting level (i.e. number of pending
       ## transactions)
-
-  AristoApiNForkedFn* =
-    proc(db: AristoDbRef;
-        ): int
-        {.noRaise.}
-      ## Returns the number of non centre descriptors (see comments on
-      ## `reCentre()` for details.) This function is a fast version of
-      ## `db.forked.toSeq.len`.
 
   AristoApiMergeAccountRecordFn* =
     proc(db: AristoDbRef;
@@ -358,23 +302,6 @@ type
       ##
       ## The argument `nxtSid` will be the ID for the next saved state record.
 
-  AristoApiReCentreFn* =
-    proc(db: AristoDbRef;
-        ): Result[void,AristoError]
-        {.noRaise.}
-      ## Re-focus the `db` argument descriptor so that it becomes the centre.
-      ## Nothing is done if the `db` descriptor is the centre, already.
-      ##
-      ## With several descriptors accessing the same backend database there is
-      ## a single one that has write permission for the backend (regardless
-      ## whether there is a backend, at all.) The descriptor entity with write
-      ## permission is called *the centre*.
-      ##
-      ## After invoking `reCentre()`, the argument database `db` can only be
-      ## destructed by `finish()` which also destructs all other descriptors
-      ## accessing the same backend database. Descriptors where `isCentre()`
-      ## returns `false` must be single destructed with `forget()`.
-
   AristoApiRollbackFn* =
     proc(tx: AristoTxRef;
         ): Result[void,AristoError]
@@ -425,17 +352,13 @@ type
     fetchStorageData*: AristoApiFetchStorageDataFn
     fetchStorageRoot*: AristoApiFetchStorageRootFn
 
-    findTx*: AristoApiFindTxFn
     finish*: AristoApiFinishFn
-    forget*: AristoApiForgetFn
-    forkTx*: AristoApiForkTxFn
     hasPathAccount*: AristoApiHasPathAccountFn
     hasPathStorage*: AristoApiHasPathStorageFn
     hasStorageData*: AristoApiHasStorageDataFn
 
     isTop*: AristoApiIsTopFn
     level*: AristoApiLevelFn
-    nForked*: AristoApiNForkedFn
 
     mergeAccountRecord*: AristoApiMergeAccountRecordFn
     mergeStorageData*: AristoApiMergeStorageDataFn
@@ -449,7 +372,6 @@ type
 
     pathAsBlob*: AristoApiPathAsBlobFn
     persist*: AristoApiPersistFn
-    reCentre*: AristoApiReCentreFn
     rollback*: AristoApiRollbackFn
     txBegin*: AristoApiTxBeginFn
     txLevel*: AristoApiTxLevelFn
@@ -472,10 +394,7 @@ type
     AristoApiProfFetchStorageDataFn     = "fetchStorageData"
     AristoApiProfFetchStorageRootFn     = "fetchStorageRoot"
 
-    AristoApiProfFindTxFn               = "findTx"
     AristoApiProfFinishFn               = "finish"
-    AristoApiProfForgetFn               = "forget"
-    AristoApiProfForkTxFn               = "forkTx"
 
     AristoApiProfHasPathAccountFn       = "hasPathAccount"
     AristoApiProfHasPathStorageFn       = "hasPathStorage"
@@ -483,7 +402,6 @@ type
 
     AristoApiProfIsTopFn                = "isTop"
     AristoApiProfLevelFn                = "level"
-    AristoApiProfNForkedFn              = "nForked"
 
     AristoApiProfMergeAccountRecordFn   = "mergeAccountRecord"
     AristoApiProfMergeStorageDataFn     = "mergeStorageData"
@@ -495,7 +413,6 @@ type
 
     AristoApiProfPathAsBlobFn           = "pathAsBlob"
     AristoApiProfPersistFn              = "persist"
-    AristoApiProfReCentreFn             = "reCentre"
     AristoApiProfRollbackFn             = "rollback"
     AristoApiProfTxBeginFn              = "txBegin"
     AristoApiProfTxLevelFn              = "txLevel"
@@ -534,10 +451,7 @@ when AutoValidateApiHooks:
     doAssert not api.fetchStorageData.isNil
     doAssert not api.fetchStorageRoot.isNil
 
-    doAssert not api.findTx.isNil
     doAssert not api.finish.isNil
-    doAssert not api.forget.isNil
-    doAssert not api.forkTx.isNil
 
     doAssert not api.hasPathAccount.isNil
     doAssert not api.hasPathStorage.isNil
@@ -545,7 +459,6 @@ when AutoValidateApiHooks:
 
     doAssert not api.isTop.isNil
     doAssert not api.level.isNil
-    doAssert not api.nForked.isNil
 
     doAssert not api.mergeAccountRecord.isNil
     doAssert not api.mergeStorageData.isNil
@@ -557,7 +470,6 @@ when AutoValidateApiHooks:
 
     doAssert not api.pathAsBlob.isNil
     doAssert not api.persist.isNil
-    doAssert not api.reCentre.isNil
     doAssert not api.rollback.isNil
     doAssert not api.txBegin.isNil
     doAssert not api.txLevel.isNil
@@ -601,10 +513,7 @@ func init*(api: var AristoApiObj) =
   api.fetchStorageData = fetchStorageData
   api.fetchStorageRoot = fetchStorageRoot
 
-  api.findTx = findTx
   api.finish = finish
-  api.forget = forget
-  api.forkTx = forkTx
 
   api.hasPathAccount = hasPathAccount
   api.hasPathStorage = hasPathStorage
@@ -612,7 +521,6 @@ func init*(api: var AristoApiObj) =
 
   api.isTop = isTop
   api.level = level
-  api.nForked = nForked
 
   api.mergeAccountRecord = mergeAccountRecord
   api.mergeStorageData = mergeStorageData
@@ -624,7 +532,6 @@ func init*(api: var AristoApiObj) =
 
   api.pathAsBlob = pathAsBlob
   api.persist = persist
-  api.reCentre = reCentre
   api.rollback = rollback
   api.txBegin = txBegin
   api.txLevel = txLevel
@@ -650,10 +557,7 @@ func dup*(api: AristoApiRef): AristoApiRef =
     fetchStorageData:     api.fetchStorageData,
     fetchStorageRoot:     api.fetchStorageRoot,
 
-    findTx:               api.findTx,
     finish:               api.finish,
-    forget:               api.forget,
-    forkTx:               api.forkTx,
 
     hasPathAccount:       api.hasPathAccount,
     hasPathStorage:       api.hasPathStorage,
@@ -661,7 +565,6 @@ func dup*(api: AristoApiRef): AristoApiRef =
 
     isTop:                api.isTop,
     level:                api.level,
-    nForked:              api.nForked,
 
     mergeAccountRecord:   api.mergeAccountRecord,
     mergeStorageData:     api.mergeStorageData,
@@ -673,7 +576,6 @@ func dup*(api: AristoApiRef): AristoApiRef =
 
     pathAsBlob:           api.pathAsBlob,
     persist:              api.persist,
-    reCentre:             api.reCentre,
     rollback:             api.rollback,
     txBegin:              api.txBegin,
     txLevel:              api.txLevel,
@@ -753,25 +655,10 @@ func init*(
       AristoApiProfFetchStorageRootFn.profileRunner:
         result = api.fetchStorageRoot(a, b)
 
-  profApi.findTx =
-    proc(a: AristoDbRef; b: RootedVertexID; c: HashKey): auto =
-      AristoApiProfFindTxFn.profileRunner:
-        result = api.findTx(a, b, c)
-
   profApi.finish =
     proc(a: AristoDbRef; b = false) =
       AristoApiProfFinishFn.profileRunner:
         api.finish(a, b)
-
-  profApi.forget =
-    proc(a: AristoDbRef): auto =
-      AristoApiProfForgetFn.profileRunner:
-        result = api.forget(a)
-
-  profApi.forkTx =
-    proc(a: AristoDbRef; b: int): auto =
-      AristoApiProfForkTxFn.profileRunner:
-        result = api.forkTx(a, b)
 
   profApi.hasPathAccount =
     proc(a: AristoDbRef; b: Hash32): auto =
@@ -797,11 +684,6 @@ func init*(
     proc(a: AristoDbRef): auto =
        AristoApiProfLevelFn.profileRunner:
          result = api.level(a)
-
-  profApi.nForked =
-    proc(a: AristoDbRef): auto =
-      AristoApiProfNForkedFn.profileRunner:
-         result = api.nForked(a)
 
   profApi.mergeAccountRecord =
     proc(a: AristoDbRef; b: Hash32; c: AristoAccount): auto =
@@ -842,11 +724,6 @@ func init*(
     proc(a: AristoDbRef; b = 0u64): auto =
        AristoApiProfPersistFn.profileRunner:
         result = api.persist(a, b)
-
-  profApi.reCentre =
-    proc(a: AristoDbRef): auto =
-      AristoApiProfReCentreFn.profileRunner:
-        result = api.reCentre(a)
 
   profApi.rollback =
     proc(a: AristoTxRef): auto =
