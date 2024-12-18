@@ -343,10 +343,10 @@ func bn256ecPairing(c: Computation, fork: EVMFork = FkByzantium): EvmResultVoid 
                else:
                  GasECPairingBaseIstanbul + numPoints * GasECPairingPerPointIstanbul
   ? c.gasMeter.consumeGas(gasFee, reason="ecPairing Precompile")
-
-  c.output.setLen(32)
+  
   if msglen == 0:
     # we can discard here because we supply buffer of proper size
+    c.output.setLen(32)
     discard BNU256.one().toBytesBE(c.output)
   else:
     # Calculate number of pairing pairs
@@ -357,12 +357,13 @@ func bn256ecPairing(c: Computation, fork: EVMFork = FkByzantium): EvmResultVoid 
     for i in 0..<count:
       let s = i * 192
       # Loading AffinePoint[G1], bytes from [0..63]
-      var p1 = ? G1.getPoint(c.msg.data.toOpenArray(s, s + 63))
+      let p1 = ?G1.getPoint(c.msg.data.toOpenArray(s, s + 63))       
       # Loading AffinePoint[G2], bytes from [64..191]
-      var p2 = ? G2.getPoint(c.msg.data.toOpenArray(s + 64, s + 191))
+      let p2 = ?G2.getPoint(c.msg.data.toOpenArray(s + 64, s + 191))
       # Accumulate pairing result
       acc = acc * pairing(p1, p2)
-
+    
+    c.output.setLen(32)
     if acc == FQ12.one():
       # we can discard here because we supply buffer of proper size
       discard BNU256.one().toBytesBE(c.output)
