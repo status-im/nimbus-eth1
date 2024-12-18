@@ -99,25 +99,9 @@ type
 
     # ------- update/move block chain head -------------------------------------
 
-    txInfoErrAncestorMissing = ##\
-      ## Cannot forward current head as it is detached from the block chain
-      "Lost header ancestor"
-
-    txInfoErrChainHeadMissing = ##\
-      ## Must not back move current head as it is detached from the block chain
-      "Lost header position"
-
     txInfoErrForwardHeadMissing = ##\
       ## Cannot move forward current head to non-existing target position
       "Non-existing forward header"
-
-    txInfoErrUnrootedCurChain = ##\
-      ## Some orphan block found in current branch of the block chain
-      "Orphan block in current branch"
-
-    txInfoErrUnrootedNewChain = ##\
-      ## Some orphan block found in new branch of the block chain
-      "Orphan block in new branch"
 
     txInfoChainHeadUpdate = ##\
       ## Tx becomes obsolete as it is in a mined block, already

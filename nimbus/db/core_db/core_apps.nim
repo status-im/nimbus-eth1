@@ -598,16 +598,15 @@ proc persistHeader*(
   db.addBlockNumberToHashLookup(header.number, blockHash)
   ok()
 
-proc persistHeader*(
+proc persistHeaderAndSetHead*(
     db: CoreDbRef;
     blockHash: Hash32;
     header: Header;
-    forceCanonical: bool;
     startOfHistory = GENESIS_PARENT_HASH;
       ): Result[void, string] =
   ?db.persistHeader(blockHash, header, startOfHistory)
 
-  if not forceCanonical and header.parentHash != startOfHistory:
+  if header.parentHash != startOfHistory:
     let
       canonicalHash = ?db.getCanonicalHeaderHash()
       canonScore = db.getScore(canonicalHash).valueOr:
@@ -621,15 +620,14 @@ proc persistHeader*(
 
   db.setHead(blockHash)
 
-proc persistHeader*(
+proc persistHeaderAndSetHead*(
     db: CoreDbRef;
     header: Header;
-    forceCanonical: bool;
     startOfHistory = GENESIS_PARENT_HASH;
       ): Result[void, string] =
   let
     blockHash = header.blockHash
-  db.persistHeader(blockHash, header, forceCanonical, startOfHistory)
+  db.persistHeaderAndSetHead(blockHash, header, startOfHistory)
 
 proc persistUncles*(db: CoreDbRef, uncles: openArray[Header]): Hash32 =
   ## Persists the list of uncles to the database.

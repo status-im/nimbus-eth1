@@ -144,8 +144,7 @@ proc initializeDb(com: CommonRef) =
       nonce = com.genesisHeader.nonce
     doAssert(com.genesisHeader.number == 0.BlockNumber,
       "can't commit genesis block with number > 0")
-    com.db.persistHeader(com.genesisHeader,
-      com.proofOfStake(com.genesisHeader),
+    com.db.persistHeaderAndSetHead(com.genesisHeader,
       startOfHistory=com.genesisHeader.parentHash).
       expect("can persist genesis header")
     doAssert(canonicalHeadHashKey().toOpenArray in kvt)

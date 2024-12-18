@@ -151,9 +151,8 @@ proc persistBlocksImpl(
 
     let blockHash = header.blockHash()
     if NoPersistHeader notin flags:
-      ?c.db.persistHeader(
-        blockHash, header,
-        c.com.proofOfStake(header), c.com.startOfHistory)
+      ?c.db.persistHeaderAndSetHead(
+        blockHash, header, c.com.startOfHistory)
 
     if NoPersistTransactions notin flags:
       c.db.persistTransactions(header.number, header.txRoot, blk.transactions)

@@ -224,7 +224,7 @@ proc getNonce*(xp: TxPoolRef; account: Address): AccountNonce =
 
 func head*(xp: TxPoolRef): Header =
   ## Getter, cached block chain insertion point. Typocally, this should be the
-  ## the same header as retrieved by the `getCanonicalHead()` (unless in the
+  ## the same header as retrieved by the `ForkedChainRef.latestHeader` (unless in the
   ## middle of a mining update.)
   xp.vmState.parent
 
