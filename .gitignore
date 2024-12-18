@@ -41,3 +41,6 @@ nimble.paths
 
 # nimbus-build-system files
 nimbus-build-system.paths
+
+# vscode generated files for path mapping into vendor
+.vscode

@@ -153,8 +153,9 @@ proc validateBlock(c: ForkedChainRef,
   if updateCursor:
     c.updateCursor(blk, move(res.value))
 
+  let blkHash = blk.header.blockHash
   for i, tx in blk.transactions:
-    c.txRecords[rlpHash(tx)] = (blk.header.blockHash, uint64(i))
+    c.txRecords[rlpHash(tx)] = (blkHash, uint64(i))
 
   ok()
 
