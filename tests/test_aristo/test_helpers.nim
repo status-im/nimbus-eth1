@@ -213,10 +213,7 @@ proc schedStow*(
     filterMeter = if db.balancer.isNil: 0
                   else: db.balancer.sTab.len + db.balancer.kMap.len
     persistent = MaxFilterBulk < max(layersMeter, filterMeter)
-  if persistent:
-    db.persist()
-  else:
-    db.stow()
+  db.persist()
 
 # ------------------
 

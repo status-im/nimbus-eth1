@@ -117,6 +117,9 @@ proc persistBlock*(p: var Persister, blk: Block): Result[void, string] =
 
   let c = p.c
 
+  if p.dbTx == nil:
+    p.dbTx = p.c.db.ctx.txFrameBegin()
+
   # Full validation means validating the state root at every block and
   # performing the more expensive hash computations on the block itself, ie
   # verifying that the transaction and receipts roots are valid - when not

@@ -178,7 +178,7 @@ type
       ## Getter, returns `true` if the argument `tx` referes to the current
       ## top level transaction.
 
-  AristoApiLevelFn* =
+  AristoApiTxFrameLevelFn* =
     proc(db: AristoDbRef;
         ): int
         {.noRaise.}
@@ -310,7 +310,7 @@ type
       ## operations performed for this transactio. The previous transaction
       ## is returned if there was any.
 
-  AristoApiTxBeginFn* =
+  AristoApiTxFrameBeginFn* =
     proc(db: AristoDbRef;
         ): Result[AristoTxRef,AristoError]
         {.noRaise.}
@@ -324,13 +324,7 @@ type
       ##     ... continue using db ...
       ##     tx.commit()
 
-  AristoApiTxLevelFn* =
-    proc(tx: AristoTxRef;
-        ): int
-        {.noRaise.}
-      ## Getter, positive nesting level of transaction argument `tx`
-
-  AristoApiTxTopFn* =
+  AristoApiTxFrameTopFn* =
     proc(db: AristoDbRef;
         ): Result[AristoTxRef,AristoError]
         {.noRaise.}
@@ -358,7 +352,7 @@ type
     hasStorageData*: AristoApiHasStorageDataFn
 
     isTop*: AristoApiIsTopFn
-    level*: AristoApiLevelFn
+    txFrameLevel*: AristoApiTxFrameLevelFn
 
     mergeAccountRecord*: AristoApiMergeAccountRecordFn
     mergeStorageData*: AristoApiMergeStorageDataFn
@@ -373,9 +367,8 @@ type
     pathAsBlob*: AristoApiPathAsBlobFn
     persist*: AristoApiPersistFn
     rollback*: AristoApiRollbackFn
-    txBegin*: AristoApiTxBeginFn
-    txLevel*: AristoApiTxLevelFn
-    txTop*: AristoApiTxTopFn
+    txFrameBegin*: AristoApiTxFrameBeginFn
+    txFrameTop*: AristoApiTxFrameTopFn
 
 
   AristoApiProfNames* = enum
@@ -414,9 +407,8 @@ type
     AristoApiProfPathAsBlobFn           = "pathAsBlob"
     AristoApiProfPersistFn              = "persist"
     AristoApiProfRollbackFn             = "rollback"
-    AristoApiProfTxBeginFn              = "txBegin"
-    AristoApiProfTxLevelFn              = "txLevel"
-    AristoApiProfTxTopFn                = "txTop"
+    AristoApiProfTxFrameBeginFn              = "txFrameBegin"
+    AristoApiProfTxFrameTopFn                = "txFrameTop"
 
     AristoApiProfBeGetVtxFn             = "be/getVtx"
     AristoApiProfBeGetKeyFn             = "be/getKey"
@@ -471,9 +463,8 @@ when AutoValidateApiHooks:
     doAssert not api.pathAsBlob.isNil
     doAssert not api.persist.isNil
     doAssert not api.rollback.isNil
-    doAssert not api.txBegin.isNil
-    doAssert not api.txLevel.isNil
-    doAssert not api.txTop.isNil
+    doAssert not api.txFrameBegin.isNil
+    doAssert not api.txFrameTop.isNil
 
   proc validate(prf: AristoApiProfRef) =
     prf.AristoApiRef.validate
@@ -520,7 +511,7 @@ func init*(api: var AristoApiObj) =
   api.hasStorageData = hasStorageData
 
   api.isTop = isTop
-  api.level = level
+  api.txFrameLevel = txFrameLevel
 
   api.mergeAccountRecord = mergeAccountRecord
   api.mergeStorageData = mergeStorageData
@@ -533,9 +524,8 @@ func init*(api: var AristoApiObj) =
   api.pathAsBlob = pathAsBlob
   api.persist = persist
   api.rollback = rollback
-  api.txBegin = txBegin
-  api.txLevel = txLevel
-  api.txTop = txTop
+  api.txFrameBegin = txFrameBegin
+  api.txFrameTop = txFrameTop
   when AutoValidateApiHooks:
     api.validate
 
@@ -564,7 +554,7 @@ func dup*(api: AristoApiRef): AristoApiRef =
     hasStorageData:       api.hasStorageData,
 
     isTop:                api.isTop,
-    level:                api.level,
+    txFrameLevel:              api.txFrameLevel,
 
     mergeAccountRecord:   api.mergeAccountRecord,
     mergeStorageData:     api.mergeStorageData,
@@ -577,9 +567,8 @@ func dup*(api: AristoApiRef): AristoApiRef =
     pathAsBlob:           api.pathAsBlob,
     persist:              api.persist,
     rollback:             api.rollback,
-    txBegin:              api.txBegin,
-    txLevel:              api.txLevel,
-    txTop:                api.txTop)
+    txFrameBegin:              api.txFrameBegin,
+    txFrameTop:                api.txFrameTop)
   when AutoValidateApiHooks:
     result.validate
 
@@ -730,20 +719,15 @@ func init*(
       AristoApiProfRollbackFn.profileRunner:
         result = api.rollback(a)
 
-  profApi.txBegin =
+  profApi.txFrameBegin =
     proc(a: AristoDbRef): auto =
-       AristoApiProfTxBeginFn.profileRunner:
-        result = api.txBegin(a)
+       AristoApiProfTxFrameBeginFn.profileRunner:
+        result = api.txFrameBegin(a)
 
-  profApi.txLevel =
-    proc(a: AristoTxRef): auto =
-       AristoApiProfTxLevelFn.profileRunner:
-        result = api.txLevel(a)
-
-  profApi.txTop =
+  profApi.txFrameTop =
     proc(a: AristoDbRef): auto =
-      AristoApiProfTxTopFn.profileRunner:
-        result = api.txTop(a)
+      AristoApiProfTxFrameTopFn.profileRunner:
+        result = api.txFrameTop(a)
 
   let beDup = be.dup()
   if beDup.isNil:

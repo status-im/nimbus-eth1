@@ -292,7 +292,7 @@ proc packerVmExec*(xp: TxPoolRef): Result[TxPacker, string]
   ## Rebuild `packed` bucket by selection items from the `staged` bucket
   ## after executing them in the VM.
   let db = xp.vmState.com.db
-  let dbTx = db.ctx.newTransaction()
+  let dbTx = db.ctx.txFrameBegin()
   defer: dbTx.dispose()
 
   var pst = xp.vmExecInit.valueOr:

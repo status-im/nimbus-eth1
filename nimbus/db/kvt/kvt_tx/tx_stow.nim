@@ -8,7 +8,7 @@
 # at your option. This file may not be copied, modified, or distributed
 # except according to those terms.
 
-## Kvt DB -- Transaction stow/save helper
+## Kvt DB -- Transaction save helper
 ## ======================================
 ##
 {.push raises: [].}
@@ -23,22 +23,20 @@ import
 # Public functions
 # ------------------------------------------------------------------------------
 
-proc txStowOk*(
+proc txPersistOk*(
     db: KvtDbRef;                     # Database
-    persistent: bool;                 # Stage only unless `true`
       ): Result[void,KvtError] =
-  ## Verify that `txStow()` can go ahead
+  ## Verify that `txPersist()` can go ahead
   if not db.txRef.isNil:
     return err(TxPendingTx)
   if 0 < db.stack.len:
     return err(TxStackGarbled)
-  if persistent and not db.deltaPersistentOk():
+  if not db.deltaPersistentOk():
     return err(TxBackendNotWritable)
   ok()
 
-proc txStow*(
+proc txPersist*(
     db: KvtDbRef;                     # Database
-    persistent: bool;                 # Stage only unless `true`
       ): Result[void,KvtError] =
   ## The function saves the data from the top layer cache into the
   ## backend database.
@@ -46,7 +44,7 @@ proc txStow*(
   ## If there is no backend the function returns immediately with an error.
   ## The same happens if there is a pending transaction.
   ##
-  ? db.txStowOk persistent
+  ? db.txPersistOk()
 
   if 0 < db.top.sTab.len:
     # Note that `deltaMerge()` will return the `db.top` argument if the
@@ -58,9 +56,8 @@ proc txStow*(
     # New empty top layer
     db.top = LayerRef()
 
-  if persistent:
-    # Move `balancer` data into persistent tables
-    ? db.deltaPersistent()
+  # Move `balancer` data into persistent tables
+  ? db.deltaPersistent()
 
   ok()
 

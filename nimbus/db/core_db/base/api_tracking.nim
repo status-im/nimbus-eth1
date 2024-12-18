@@ -52,7 +52,7 @@ type
     BaseFinishFn        = "finish"
     BaseLevelFn         = "level"
     BasePushCaptureFn   = "pushCapture"
-    BaseNewTxFn         = "newTransaction"
+    BaseNewTxFn         = "txFrameBegin"
     BasePersistentFn    = "persistent"
     BaseStateBlockNumberFn = "stateBlockNumber"
     BaseVerifyFn        = "verify"
@@ -77,7 +77,7 @@ type
 
     TxCommitFn          = "commit"
     TxDisposeFn         = "dispose"
-    TxLevelFn           = "level"
+    TxFrameLevelFn           = "level"
     TxRollbackFn        = "rollback"
     TxSaveDisposeFn     = "safeDispose"
 

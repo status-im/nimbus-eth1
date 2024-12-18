@@ -33,8 +33,8 @@ type
     # Transaction wrappers
     TxArgStaleTx
     TxBackendNotWritable
-    TxLevelTooDeep
-    TxLevelUseless
+    TxFrameLevelTooDeep
+    TxFrameLevelUseless
     TxNoPendingTx
     TxNotTopTx
     TxPendingTx

@@ -212,7 +212,7 @@ proc runTrial3Survive(env: TestEnv, ledger: LedgerRef; inx: int; noisy = false) 
   let eAddr = env.txs[inx].getRecipient
 
   block:
-    let dbTx = env.xdb.ctx.newTransaction()
+    let dbTx = env.xdb.ctx.txFrameBegin()
 
     block:
       let accTx = ledger.beginSavepoint
@@ -228,7 +228,7 @@ proc runTrial3Survive(env: TestEnv, ledger: LedgerRef; inx: int; noisy = false) 
     dbTx.rollback()
 
   block:
-    let dbTx = env.xdb.ctx.newTransaction()
+    let dbTx = env.xdb.ctx.txFrameBegin()
 
     block:
       let accTx = ledger.beginSavepoint
@@ -247,7 +247,7 @@ proc runTrial4(env: TestEnv, ledger: LedgerRef; inx: int; rollback: bool) =
   let eAddr = env.txs[inx].getRecipient
 
   block:
-    let dbTx = env.xdb.ctx.newTransaction()
+    let dbTx = env.xdb.ctx.txFrameBegin()
 
     block:
       let accTx = ledger.beginSavepoint
@@ -277,7 +277,7 @@ proc runTrial4(env: TestEnv, ledger: LedgerRef; inx: int; rollback: bool) =
     dbTx.commit()
 
   block:
-    let dbTx = env.xdb.ctx.newTransaction()
+    let dbTx = env.xdb.ctx.txFrameBegin()
 
     block:
       let accTx = ledger.beginSavepoint
@@ -350,14 +350,14 @@ proc runLedgerTransactionTests(noisy = true) =
 
     test &"Run {env.txi.len} two-step trials with rollback":
       for n in env.txi:
-        let dbTx = env.xdb.ctx.newTransaction()
+        let dbTx = env.xdb.ctx.txFrameBegin()
         defer: dbTx.dispose()
         let ledger = env.com.getLedger()
         env.runTrial2ok(ledger, n)
 
     test &"Run {env.txi.len} three-step trials with rollback":
       for n in env.txi:
-        let dbTx = env.xdb.ctx.newTransaction()
+        let dbTx = env.xdb.ctx.txFrameBegin()
         defer: dbTx.dispose()
         let ledger = env.com.getLedger()
         env.runTrial3(ledger, n, rollback = true)
@@ -365,21 +365,21 @@ proc runLedgerTransactionTests(noisy = true) =
     test &"Run {env.txi.len} three-step trials with extra db frame rollback" &
         " throwing Exceptions":
       for n in env.txi:
-        let dbTx = env.xdb.ctx.newTransaction()
+        let dbTx = env.xdb.ctx.txFrameBegin()
         defer: dbTx.dispose()
         let ledger = env.com.getLedger()
         env.runTrial3Survive(ledger, n, noisy)
 
     test &"Run {env.txi.len} tree-step trials without rollback":
       for n in env.txi:
-        let dbTx = env.xdb.ctx.newTransaction()
+        let dbTx = env.xdb.ctx.txFrameBegin()
         defer: dbTx.dispose()
         let ledger = env.com.getLedger()
         env.runTrial3(ledger, n, rollback = false)
 
     test &"Run {env.txi.len} four-step trials with rollback and db frames":
       for n in env.txi:
-        let dbTx = env.xdb.ctx.newTransaction()
+        let dbTx = env.xdb.ctx.txFrameBegin()
         defer: dbTx.dispose()
         let ledger = env.com.getLedger()
         env.runTrial4(ledger, n, rollback = true)

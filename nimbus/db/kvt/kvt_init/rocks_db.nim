@@ -185,11 +185,11 @@ proc putEndTriggeredFn(db: RdbBackendRef): PutEndFn =
         when extraTraceMessages:
           debug logTxt "putEndTriggeredFn: failed",
             error=hdl.error, info=hdl.info
-        # The error return code will signal a problem to the `txStow()`
+        # The error return code will signal a problem to the `txPersist()`
         # function which was called by `writeEvCb()` below.
         return err(hdl.error)
 
-      # Commit the session. This will be acknowledged by the `txStow()`
+      # Commit the session. This will be acknowledged by the `txPersist()`
       # function which was called by `writeEvCb()` below.
       ok()
 
@@ -229,22 +229,22 @@ proc writeEvCb(db: RdbBackendRef): RdbWriteEventCb =
         # Publish session argument
         db.rdb.session = ws
 
-        # Execute delayed session. Note the the `txStow()` function is located
+        # Execute delayed session. Note the the `txPersist()` function is located
         # in `tx_stow.nim`. This module `tx_stow.nim` is also imported by
         # `kvt_tx.nim` which contains `persist() `. So the logic goes:
         # ::
         #   kvt_tx.persist()     --> registers a delayed write request rather
-        #                            than excuting tx_stow.txStow()
+        #                            than excuting tx_stow.txPersist()
         #
         #   // the backend owner (i.e. Aristo) will start a write cycle and
         #   // invoke the envent handler rocks_db.writeEvCb()
-        #   rocks_db.writeEvCb() --> calls tx_stow.txStow()
+        #   rocks_db.writeEvCb() --> calls tx_stow.txPersist()
         #
-        #   tx_stow.txStow()     --> calls rocks_db.putBegTriggeredFn()
+        #   tx_stow.txPersist()     --> calls rocks_db.putBegTriggeredFn()
         #                            calls rocks_db.putKvpFn()
         #                            calls rocks_db.putEndTriggeredFn()
         #
-        let rc = db.rdb.delayedPersist.txStow(persistent=true)
+        let rc = db.rdb.delayedPersist.txPersist()
         if rc.isErr:
           error "writeEventCb(): persist() failed", error=rc.error
           return false

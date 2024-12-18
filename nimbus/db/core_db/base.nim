@@ -107,7 +107,7 @@ proc persistent*(
       if rc.isOk or rc.error == TxPersistDelayed:
         # The latter clause is OK: Piggybacking on `Aristo` backend
         discard
-      elif CoreDbKvtRef(db.ctx).call(level, db.ctx.kvt) != 0:
+      elif CoreDbKvtRef(db.ctx).call(txFrameLevel, db.ctx.kvt) != 0:
         result = err(rc.error.toError($api, TxPending))
         break body
       else:
@@ -651,37 +651,30 @@ proc recast*(
 # Public transaction related methods
 # ------------------------------------------------------------------------------
 
-proc level*(db: CoreDbRef): int =
+proc txFrameLevel*(db: CoreDbRef): int =
   ## Retrieve transaction level (zero if there is no pending transaction).
   ##
   db.setTrackNewApi BaseLevelFn
-  result = CoreDbAccRef(db.ctx).call(level, db.ctx.mpt)
+  result = CoreDbAccRef(db.ctx).call(txFrameLevel, db.ctx.mpt)
   db.ifTrackNewApi: debug logTxt, api, elapsed, result
 
-proc newTransaction*(ctx: CoreDbCtxRef): CoreDbTxRef =
+proc txFrameBegin*(ctx: CoreDbCtxRef): CoreDbTxRef =
   ## Constructor
   ##
   ctx.setTrackNewApi BaseNewTxFn
   let
-    kTx = CoreDbKvtRef(ctx).call(txBegin, ctx.kvt).valueOr:
+    kTx = CoreDbKvtRef(ctx).call(txFrameBegin, ctx.kvt).valueOr:
       raiseAssert $api & ": " & $error
-    aTx = CoreDbAccRef(ctx).call(txBegin, ctx.mpt).valueOr:
+    aTx = CoreDbAccRef(ctx).call(txFrameBegin, ctx.mpt).valueOr:
       raiseAssert $api & ": " & $error
   result = ctx.bless CoreDbTxRef(kTx: kTx, aTx: aTx)
   ctx.ifTrackNewApi:
     let newLevel = CoreDbAccRef(ctx).call(level, ctx.mpt)
     debug logTxt, api, elapsed, newLevel
 
-proc level*(tx: CoreDbTxRef): int =
-  ## Print positive transaction level for argument `tx`
-  ##
-  tx.setTrackNewApi TxLevelFn
-  result = CoreDbAccRef(tx.ctx).call(txLevel, tx.aTx)
-  tx.ifTrackNewApi: debug logTxt, api, elapsed, result
-
 proc commit*(tx: CoreDbTxRef) =
   tx.setTrackNewApi TxCommitFn:
-    let prvLevel {.used.} = CoreDbAccRef(tx.ctx).call(txLevel, tx.aTx)
+    let prvLevel {.used.} = CoreDbAccRef(tx.ctx).call(level, tx.aTx)
   CoreDbAccRef(tx.ctx).call(commit, tx.aTx).isOkOr:
     raiseAssert $api & ": " & $error
   CoreDbKvtRef(tx.ctx).call(commit, tx.kTx).isOkOr:
@@ -690,7 +683,7 @@ proc commit*(tx: CoreDbTxRef) =
 
 proc rollback*(tx: CoreDbTxRef) =
   tx.setTrackNewApi TxRollbackFn:
-    let prvLevel {.used.} = CoreDbAccRef(tx.ctx).call(txLevel, tx.aTx)
+    let prvLevel {.used.} = CoreDbAccRef(tx.ctx).call(level, tx.aTx)
   CoreDbAccRef(tx.ctx).call(rollback, tx.aTx).isOkOr:
     raiseAssert $api & ": " & $error
   CoreDbKvtRef(tx.ctx).call(rollback, tx.kTx).isOkOr:
@@ -699,7 +692,7 @@ proc rollback*(tx: CoreDbTxRef) =
 
 proc dispose*(tx: CoreDbTxRef) =
   tx.setTrackNewApi TxDisposeFn:
-    let prvLevel {.used.} = CoreDbAccRef(tx.ctx).call(txLevel, tx.aTx)
+    let prvLevel {.used.} = CoreDbAccRef(tx.ctx).call(level, tx.aTx)
   if CoreDbAccRef(tx.ctx).call(isTop, tx.aTx):
     CoreDbAccRef(tx.ctx).call(rollback, tx.aTx).isOkOr:
       raiseAssert $api & ": " & $error

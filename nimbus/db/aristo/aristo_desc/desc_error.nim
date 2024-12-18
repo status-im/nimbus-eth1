@@ -232,8 +232,8 @@ type
     TxArgStaleTx
     TxArgsUseless
     TxBackendNotWritable
-    TxLevelTooDeep
-    TxLevelUseless
+    TxFrameLevelTooDeep
+    TxFrameLevelUseless
     TxNoPendingTx
     TxNotFound
     TxNotTopTx

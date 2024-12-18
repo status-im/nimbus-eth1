@@ -42,7 +42,7 @@ proc processBlock(
   ## implementations (but can be savely removed, as well.)
   ## variant of `processBlock()` where the `header` argument is explicitely set.
   template header: Header = blk.header
-  var dbTx = vmState.com.db.ctx.newTransaction()
+  var dbTx = vmState.com.db.ctx.txFrameBegin()
   defer: dbTx.dispose()
 
   let com = vmState.com
@@ -89,7 +89,7 @@ proc getVmState(c: ChainRef, header: Header):
 # intended to accepts invalid block
 proc setBlock*(c: ChainRef; blk: Block): Result[void, string] =
   template header: Header = blk.header
-  let dbTx = c.db.ctx.newTransaction()
+  let dbTx = c.db.ctx.txFrameBegin()
   defer: dbTx.dispose()
 
   # Needed for figuring out whether KVT cleanup is due (see at the end)
