@@ -19,26 +19,8 @@ import
   ./kvt_init/memory_only,
   ./kvt_desc
 
-# ------------------------------------------------------------------------------
-# Public functions, getters
-# ------------------------------------------------------------------------------
+export tx_frame
 
-func txTop*(db: KvtDbRef): Result[KvtTxRef,KvtError] =
-  ## Getter, returns top level transaction if there is any.
-  db.txFrameTop()
-
-func isTop*(tx: KvtTxRef): bool =
-  ## Getter, returns `true` if the argument `tx` referes to the current top
-  ## level transaction.
-  tx.txFrameIsTop()
-
-func txLevel*(tx: KvtTxRef): int =
-  ## Getter, positive nesting level of transaction argument `tx`
-  tx.txFrameLevel()
-
-func level*(db: KvtDbRef): int =
-  ## Getter, non-negative nesting level (i.e. number of pending transactions)
-  db.txFrameLevel()
 
 # ------------------------------------------------------------------------------
 # Public functions
@@ -51,55 +33,6 @@ func to*(tx: KvtTxRef; T: type[KvtDbRef]): T =
 func toKvtDbRef*(tx: KvtTxRef): KvtDbRef =
   ## Same as `.to(KvtDbRef)`
   tx.db
-
-# ------------------------------------------------------------------------------
-# Public functions: Transaction frame
-# ------------------------------------------------------------------------------
-
-proc txBegin*(db: KvtDbRef): Result[KvtTxRef,KvtError] =
-  ## Starts a new transaction.
-  ##
-  ## Example:
-  ## ::
-  ##   proc doSomething(db: KvtDbRef) =
-  ##     let tx = db.txBegin
-  ##     defer: tx.rollback()
-  ##     ... continue using db ...
-  ##     tx.commit()
-  ##
-  db.txFrameBegin()
-
-proc rollback*(
-    tx: KvtTxRef;                     # Top transaction on database
-      ): Result[void,KvtError] =
-  ## Given a *top level* handle, this function discards all database operations
-  ## performed for this transactio. The previous transaction is returned if
-  ## there was any.
-  ##
-  tx.txFrameRollback()
-
-proc commit*(
-    tx: KvtTxRef;                     # Top transaction on database
-      ): Result[void,KvtError] =
-  ## Given a *top level* handle, this function accepts all database operations
-  ## performed through this handle and merges it to the previous layer. The
-  ## previous transaction is returned if there was any.
-  ##
-  tx.txFrameCommit()
-
-proc collapse*(
-    tx: KvtTxRef;                     # Top transaction on database
-    commit: bool;                     # Commit if `true`, otherwise roll back
-      ): Result[void,KvtError] =
-  ## Iterated application of `commit()` or `rollback()` performing the
-  ## something similar to
-  ## ::
-  ##   while true:
-  ##     discard tx.commit() # ditto for rollback()
-  ##     if db.topTx.isErr: break
-  ##     tx = db.topTx.value
-  ##
-  tx.txFrameCollapse commit
 
 # ------------------------------------------------------------------------------
 # Public functions: save database
@@ -121,24 +54,11 @@ proc persist*(
   ##
   # Register for saving if piggybacked on remote database
   if db.backend.kind == BackendRdbTriggered:
-    ? db.txStowOk(persistent=true)
+    ? db.txPersistOk()
     ? db.backend.setWrReqFn db
     return err(TxPersistDelayed)
 
-  db.txStow(persistent=true)
-
-proc stow*(
-    db: KvtDbRef;                     # Database
-      ): Result[void,KvtError] =
-  ## This function is similar to `persist()` stopping short of performing the
-  ## final step storing on the persistent database. It fails if there is a
-  ## pending transaction.
-  ##
-  ## The function merges all staged data from the top layer cache onto the
-  ## backend stage area and leaves it there. This function can be seen as
-  ## a sort of a bottom level transaction `commit()`.
-  ##
-  db.txStow(persistent=false)
+  db.txPersist()
 
 # ------------------------------------------------------------------------------
 # End

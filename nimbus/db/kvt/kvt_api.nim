@@ -52,14 +52,14 @@ type
   KvtApiHasKeyRcFn* = proc(db: KvtDbRef,
     key: openArray[byte]): Result[bool,KvtError] {.noRaise.}
   KvtApiIsTopFn* = proc(tx: KvtTxRef): bool {.noRaise.}
-  KvtApiLevelFn* = proc(db: KvtDbRef): int {.noRaise.}
+  KvtApiTxFrameLevelFn* = proc(db: KvtDbRef): int {.noRaise.}
   KvtApiPutFn* = proc(db: KvtDbRef,
     key, data: openArray[byte]): Result[void,KvtError] {.noRaise.}
   KvtApiRollbackFn* = proc(tx: KvtTxRef): Result[void,KvtError] {.noRaise.}
   KvtApiPersistFn* = proc(db: KvtDbRef): Result[void,KvtError] {.noRaise.}
   KvtApiToKvtDbRefFn* = proc(tx: KvtTxRef): KvtDbRef {.noRaise.}
-  KvtApiTxBeginFn* = proc(db: KvtDbRef): Result[KvtTxRef,KvtError] {.noRaise.}
-  KvtApiTxTopFn* =
+  KvtApiTxFrameBeginFn* = proc(db: KvtDbRef): Result[KvtTxRef,KvtError] {.noRaise.}
+  KvtApiTxFrameTopFn* =
     proc(db: KvtDbRef): Result[KvtTxRef,KvtError] {.noRaise.}
 
   KvtApiRef* = ref KvtApiObj
@@ -73,13 +73,13 @@ type
     len*: KvtApiLenFn
     hasKeyRc*: KvtApiHasKeyRcFn
     isTop*: KvtApiIsTopFn
-    level*: KvtApiLevelFn
+    txFrameLevel*: KvtApiTxFrameLevelFn
     put*: KvtApiPutFn
     rollback*: KvtApiRollbackFn
     persist*: KvtApiPersistFn
     toKvtDbRef*: KvtApiToKvtDbRefFn
-    txBegin*: KvtApiTxBeginFn
-    txTop*: KvtApiTxTopFn
+    txFrameBegin*: KvtApiTxFrameBeginFn
+    txFrameTop*: KvtApiTxFrameTopFn
 
 
   KvtApiProfNames* = enum
@@ -98,8 +98,8 @@ type
     KvtApiProfRollbackFn     = "rollback"
     KvtApiProfPersistFn      = "persist"
     KvtApiProfToKvtDbRefFn   = "toKvtDbRef"
-    KvtApiProfTxBeginFn      = "txBegin"
-    KvtApiProfTxTopFn        = "txTop"
+    KvtApiProfTxFrameBeginFn      = "txFrameBegin"
+    KvtApiProfTxFrameTopFn        = "txFrameTop"
 
     KvtApiProfBeGetKvpFn     = "be/getKvp"
     KvtApiProfBeLenKvpFn     = "be/lenKvp"
@@ -123,13 +123,13 @@ when AutoValidateApiHooks:
     doAssert not api.get.isNil
     doAssert not api.hasKeyRc.isNil
     doAssert not api.isTop.isNil
-    doAssert not api.level.isNil
+    doAssert not api.txFrameLevel.isNil
     doAssert not api.put.isNil
     doAssert not api.rollback.isNil
     doAssert not api.persist.isNil
     doAssert not api.toKvtDbRef.isNil
-    doAssert not api.txBegin.isNil
-    doAssert not api.txTop.isNil
+    doAssert not api.txFrameBegin.isNil
+    doAssert not api.txFrameTop.isNil
 
   proc validate(prf: KvtApiProfRef) =
     prf.KvtApiRef.validate
@@ -161,13 +161,13 @@ func init*(api: var KvtApiObj) =
   api.len = len
   api.hasKeyRc = hasKeyRc
   api.isTop = isTop
-  api.level = level
+  api.txFrameLevel = txFrameLevel
   api.put = put
   api.rollback = rollback
   api.persist = persist
   api.toKvtDbRef = toKvtDbRef
-  api.txBegin = txBegin
-  api.txTop = txTop
+  api.txFrameBegin = txFrameBegin
+  api.txFrameTop = txFrameTop
   when AutoValidateApiHooks:
     api.validate
 
@@ -184,16 +184,15 @@ func dup*(api: KvtApiRef): KvtApiRef =
     len:        api.len,
     hasKeyRc:   api.hasKeyRc,
     isTop:      api.isTop,
-    level:      api.level,
+    txFrameLevel:      api.txFrameLevel,
     put:        api.put,
     rollback:   api.rollback,
     persist:    api.persist,
     toKvtDbRef: api.toKvtDbRef,
-    txBegin:    api.txBegin,
-    txTop:      api.txTop)
+    txFrameBegin:    api.txFrameBegin,
+    txFrameTop:      api.txFrameTop)
   when AutoValidateApiHooks:
     result.validate
-
 # ------------------------------------------------------------------------------
 # Public profile API constuctor
 # ------------------------------------------------------------------------------
@@ -281,15 +280,15 @@ func init*(
        KvtApiProfToKvtDbRefFn.profileRunner:
          result = api.toKvtDbRef(a)
 
-  profApi.txBegin =
+  profApi.txFrameBegin =
     proc(a: KvtDbRef): auto =
-      KvtApiProfTxBeginFn.profileRunner:
-        result = api.txBegin(a)
+      KvtApiProfTxFrameBeginFn.profileRunner:
+        result = api.txFrameBegin(a)
 
-  profApi.txTop =
+  profApi.txFrameTop =
     proc(a: KvtDbRef): auto =
-      KvtApiProfTxTopFn.profileRunner:
-        result = api.txTop(a)
+      KvtApiProfTxFrameTopFn.profileRunner:
+        result = api.txFrameTop(a)
 
   let beDup = be.dup()
   if beDup.isNil:

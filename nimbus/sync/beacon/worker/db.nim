@@ -81,7 +81,7 @@ proc dbStoreSyncStateLayout*(ctx: BeaconCtxRef; info: static[string]) =
 
   # While executing blocks there are frequent save cycles. Otherwise, an
   # extra save request might help to pick up an interrupted sync session.
-  if ctx.db.level() == 0 and ctx.stash.len == 0:
+  if ctx.db.txFrameLevel() == 0 and ctx.stash.len == 0:
     let number = ctx.db.getSavedStateBlockNumber()
     ctx.db.persistent(number).isOkOr:
       raiseAssert info & " persistent() failed: " & $$error
@@ -165,9 +165,9 @@ proc dbHeadersStash*(
   ##    ..
   ##
   let
-    txLevel = ctx.db.level()
+    txFrameLevel = ctx.db.txFrameLevel()
     last = first + revBlobs.len.uint64 - 1
-  if 0 < txLevel:
+  if 0 < txFrameLevel:
     # Need to cache it because FCU has blocked writing through to disk.
     for n,data in revBlobs:
       ctx.stash[last - n.uint64] = data

@@ -109,7 +109,7 @@ proc randomisedLeafs(
 proc innerCleanUp(db: var AristoDbRef): bool {.discardable.}  =
   ## Defer action
   if not db.isNil:
-    let rx = db.txTop()
+    let rx = db.txFrameTop()
     if rx.isOk:
       let rc = rx.value.collapse(commit=false)
       xCheckRc rc.error == 0
@@ -140,7 +140,7 @@ proc saveToBackend(
     xCheckRc rc.error == 0
 
   block:
-    let rc = db.txTop()
+    let rc = db.txFrameTop()
     xCheckRc rc.error == 0
     tx = rc.value
 
@@ -157,7 +157,7 @@ proc saveToBackend(
     xCheckRc rc.error == 0
 
   block:
-    let rc = db.txTop()
+    let rc = db.txFrameTop()
     xCheckErr rc.value.level < 0 # force error
 
   block:
@@ -170,7 +170,7 @@ proc saveToBackend(
       noisy.say "***", "saveToBackend (8)", " debugID=", debugID
 
   # Update layers to original level
-  tx = db.txBegin().value.to(AristoDbRef).txBegin().value
+  tx = db.txFrameBegin().value.to(AristoDbRef).txFrameBegin().value
 
   true
 
@@ -268,8 +268,8 @@ proc testTxMergeAndDeleteOneByOne*(
   #       AristoDbRef.init(MemBackendRef)
 
   #   # Start transaction (double frame for testing)
-  #   xCheck db.txTop.isErr
-  #   var tx = db.txBegin().value.to(AristoDbRef).txBegin().value
+  #   xCheck db.txFrameTop.isErr
+  #   var tx = db.txFrameBegin().value.to(AristoDbRef).txFrameBegin().value
   #   xCheck tx.isTop()
   #   xCheck tx.level == 2
 
@@ -375,8 +375,8 @@ proc testTxMergeAndDeleteSubTree*(
   #       AristoDbRef.init(MemBackendRef)
 
   #   # Start transaction (double frame for testing)
-  #   xCheck db.txTop.isErr
-  #   var tx = db.txBegin().value.to(AristoDbRef).txBegin().value
+  #   xCheck db.txFrameTop.isErr
+  #   var tx = db.txFrameBegin().value.to(AristoDbRef).txFrameBegin().value
   #   xCheck tx.isTop()
   #   xCheck tx.level == 2
 

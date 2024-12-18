@@ -123,7 +123,7 @@ suite "Aristo compute":
       check:
         db.mergeAccountRecord(k, v) == Result[bool, AristoError].ok(true)
 
-    check db.txStow(1, true).isOk()
+    check db.txPersist(1).isOk()
 
     check db.computeKeys(root).isOk()
 

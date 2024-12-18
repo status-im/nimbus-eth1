@@ -55,7 +55,7 @@ proc saveToBackend(
     xCheckRc rc.error == 0
 
   block:
-    let rc = db.txTop()
+    let rc = db.txFrameTop()
     xCheckRc rc.error == 0
     tx = rc.value
 
@@ -72,7 +72,7 @@ proc saveToBackend(
     xCheckRc rc.error == 0
 
   block:
-    let rc = db.txTop()
+    let rc = db.txFrameTop()
     xCheckErr rc.value.level < 0 # force error
 
   block:
@@ -80,7 +80,7 @@ proc saveToBackend(
     xCheckRc rc.error == 0
 
   # Update layers to original level
-  tx = db.txBegin().value.to(AristoDbRef).txBegin().value
+  tx = db.txFrameBegin().value.to(AristoDbRef).txFrameBegin().value
 
   true
 
@@ -120,7 +120,7 @@ proc testMergeProofAndKvpList*(
   #     ps = PartStateRef.init(db)
 
   #     # Start transaction (double frame for testing)
-  #     tx = ps.db.txBegin().value.to(AristoDbRef).txBegin().value
+  #     tx = ps.db.txFrameBegin().value.to(AristoDbRef).txFrameBegin().value
   #     xCheck tx.isTop()
 
   #     # Update root
