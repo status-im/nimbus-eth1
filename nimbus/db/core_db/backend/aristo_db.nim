@@ -11,9 +11,7 @@
 {.push raises: [].}
 
 import
-  eth/common,
   ../../aristo as use_ari,
-  ../../aristo/aristo_desc/desc_identifiers,
   ../../aristo/[aristo_init/memory_only, aristo_walk],
   ../../kvt as use_kvt,
   ../../kvt/[kvt_init/memory_only, kvt_walk],
@@ -52,41 +50,6 @@ proc newAristoVoidCoreDbRef*(): CoreDbRef =
   AristoDbVoid.create(
     KvtDbRef.init(use_kvt.VoidBackendRef),
     AristoDbRef.init(use_ari.VoidBackendRef))
-
-proc newCtxByKey*(
-    ctx: CoreDbCtxRef;
-    key: Hash32;
-    info: static[string];
-      ): CoreDbRc[CoreDbCtxRef] =
-  const
-    rvid: RootedVertexID = (VertexID(1),VertexID(1))
-  let
-    db = ctx.parent
-
-    # Find `(vid,key)` on transaction stack
-    inx = block:
-      let rc = db.ariApi.call(findTx, ctx.mpt, rvid, key.to(HashKey))
-      if rc.isErr:
-        return err(rc.error.toError info)
-      rc.value
-
-    # Fork MPT descriptor that provides `(vid,key)`
-    newMpt = block:
-      let rc = db.ariApi.call(forkTx, ctx.mpt, inx)
-      if rc.isErr:
-        return err(rc.error.toError info)
-      rc.value
-
-    # Fork KVT descriptor parallel to `newMpt`
-    newKvt = block:
-      let rc = db.kvtApi.call(forkTx, ctx.kvt, inx)
-      if rc.isErr:
-        discard db.ariApi.call(forget, newMpt)
-        return err(rc.error.toError info)
-      rc.value
-
-  # Create new context
-  ok(db.bless CoreDbCtxRef(kvt: newKvt, mpt: newMpt))
 
 # ------------------------------------------------------------------------------
 # End

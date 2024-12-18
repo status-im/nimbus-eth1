@@ -11,7 +11,7 @@
 import
   tables,
   stint,
-  eth/common,
+  eth/common/addresses,
   ../utils/mergeutils
 
 type

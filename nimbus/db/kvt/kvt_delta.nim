@@ -16,8 +16,7 @@ import
   std/tables,
   results,
   ./kvt_desc,
-  ./kvt_desc/desc_backend,
-  ./kvt_delta/[delta_merge, delta_reverse]
+  ./kvt_desc/desc_backend
 
 # ------------------------------------------------------------------------------
 # Public functions
@@ -25,12 +24,11 @@ import
 
 proc deltaPersistentOk*(db: KvtDbRef): bool =
   ## Check whether the balancer filter can be merged into the backend
-  not db.backend.isNil and db.isCentre
+  not db.backend.isNil
 
 
 proc deltaPersistent*(
     db: KvtDbRef;                      # Database
-    reCentreOk = false;
       ): Result[void,KvtError] =
   ## Resolve (i.e. move) the backend filter into the physical backend database.
   ##
@@ -49,32 +47,6 @@ proc deltaPersistent*(
   # Blind or missing filter
   if db.balancer.isNil:
     return ok()
-
-  # Make sure that the argument `db` is at the centre so the backend is in
-  # read-write mode for this peer.
-  let parent = db.getCentre
-  if db != parent:
-    if not reCentreOk:
-      return err(FilBackendRoMode)
-    ? db.reCentre()
-  # Always re-centre to `parent` (in case `reCentreOk` was set)
-  defer: discard parent.reCentre()
-
-  # Update forked balancers here do that errors are detected early (if any.)
-  if 0 < db.nForked:
-    let rev = db.revFilter(db.balancer).valueOr:
-      return err(error[1])
-    if 0  < rev.sTab.len: # Can an empty `rev` happen at all?
-      var unsharedRevOk = true
-      for w in db.forked:
-        if not w.db.balancer.isValid:
-          unsharedRevOk = false
-        # The `rev` filter can be modified if one can make sure that it is
-        # not shared (i.e. only previously merged into the w.db.balancer.)
-        # Note that it is trivially true for a single fork.
-        let modLowerOk = w.isLast and unsharedRevOk
-        w.db.balancer = deltaMerge(
-          w.db.balancer, modUpperOk=false, rev, modLowerOk=modLowerOk)
 
   # Store structural single trie entries
   let writeBatch = ? be.putBegFn()

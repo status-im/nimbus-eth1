@@ -9,7 +9,6 @@
 # except according to those terms.
 
 import
-  std/tables,
   ".."/[aristo_desc, aristo_layers]
 
 # ------------------------------------------------------------------------------
@@ -18,9 +17,7 @@ import
 
 proc deltaMerge*(
     upper: LayerRef;                   # Think of `top`, `nil` is ok
-    modUpperOk: bool;                  # May re-use/modify `upper`
     lower: LayerRef;                   # Think of `balancer`, `nil` is ok
-    modLowerOk: bool;                  # May re-use/modify `lower`
       ): LayerRef =
   ## Merge argument `upper` into the `lower` filter instance.
   ##
@@ -29,51 +26,18 @@ proc deltaMerge*(
   ##
   if lower.isNil:
     # Degenerate case: `upper` is void
-    result = upper
+    upper
 
   elif upper.isNil:
     # Degenerate case: `lower` is void
-    result = lower
+    lower
 
-  elif modLowerOk:
+  else:
     # Can modify `lower` which is the prefered action mode but applies only
     # in cases where the `lower` argument is not shared.
     lower.vTop = upper.vTop
     layersMergeOnto(upper, lower[])
-    result = lower
-
-  elif not modUpperOk:
-    # Cannot modify any argument layers.
-    result = LayerRef(
-      sTab:      lower.sTab, # shallow copy (entries will not be modified)
-      kMap:      lower.kMap,
-      accLeaves: lower.accLeaves,
-      stoLeaves: lower.stoLeaves,
-      vTop:      upper.vTop)
-    layersMergeOnto(upper, result[])
-
-  else:
-    # Otherwise avoid copying some tables by modifying `upper`. This is not
-    # completely free as the merge direction changes to merging the `lower`
-    # layer up into the higher prioritised `upper` layer (note that the `lower`
-    # argument filter is read-only.) Here again, the `upper` argument must not
-    # be a shared layer/filter.
-    for (rvid,vtx) in lower.sTab.pairs:
-      if not upper.sTab.hasKey(rvid):
-        upper.sTab[rvid] = vtx
-
-    for (rvid,key) in lower.kMap.pairs:
-      if not upper.kMap.hasKey(rvid):
-        upper.kMap[rvid] = key
-
-    for (accPath,leafVtx) in lower.accLeaves.pairs:
-      if not upper.accLeaves.hasKey(accPath):
-        upper.accLeaves[accPath] = leafVtx
-
-    for (mixPath,leafVtx) in lower.stoLeaves.pairs:
-      if not upper.stoLeaves.hasKey(mixPath):
-        upper.stoLeaves[mixPath] = leafVtx
-    result = upper
+    lower
 
 # ------------------------------------------------------------------------------
 # End

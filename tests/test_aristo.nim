@@ -105,9 +105,6 @@ proc accountsRunner(
     test &"Delete accounts database sub-trees, {accLst.len} lists":
       check noisy.testTxMergeAndDeleteSubTree(accLst, dbDir)
 
-    test &"Distributed backend balancers {accLst.len} entries":
-      check noisy.testBalancer(accLst, dbDir)
-
 
 proc storagesRunner(
     noisy = true;
@@ -135,9 +132,6 @@ proc storagesRunner(
 
     test &"Delete storage database sub-trees, {stoLst.len} lists":
       check noisy.testTxMergeAndDeleteSubTree(stoLst, dbDir)
-
-    test &"Distributed backend balancers {stoLst.len} entries":
-      check noisy.testBalancer(stoLst, dbDir)
 
 # ------------------------------------------------------------------------------
 # Main function(s)

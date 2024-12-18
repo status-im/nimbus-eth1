@@ -229,8 +229,6 @@ proc getBlockContent(oracle: Oracle,
     return ok(bc)
   except RlpError as exc:
     return err(exc.msg)
-  except BlockNotFound as exc:
-    return err(exc.msg)
 
 type
   OracleResult = object

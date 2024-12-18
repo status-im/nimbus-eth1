@@ -57,10 +57,14 @@ proc init(
     root: common.Hash32;
       ): T =
   let ctx = block:
-    let rc = com.db.ctx.newCtxByKey(root)
-    if rc.isErr:
-      raiseAssert "newCptCtx: " & $$rc.error
-    rc.value
+    when false:
+      let rc = com.db.ctx.newCtxByKey(root)
+      if rc.isErr:
+        raiseAssert "newCptCtx: " & $$rc.error
+      rc.value
+    else:
+      {.warning: "TODO make a temporary context? newCtxByKey has been obsoleted".}
+      com.db.ctx
   T(db: com.db, root: root, cpt: com.db.pushCapture(), ctx: ctx)
 
 proc init(
@@ -75,14 +79,18 @@ proc activate(cc: CaptCtxRef): CaptCtxRef {.discardable.} =
   ## Install/activate new context `cc.ctx`, old one in `cc.restore`
   doAssert not cc.isNil
   doAssert cc.restore.isNil # otherwise activated, already
-  cc.restore = cc.ctx.swapCtx cc.db
+  if true:
+    raiseAssert "TODO activte context"
+  # cc.restore = cc.ctx.swapCtx cc.db
   cc
 
 proc release(cc: CaptCtxRef) =
-  if not cc.restore.isNil:             # switch to original context (if any)
-    let ctx = cc.restore.swapCtx(cc.db)
-    doAssert ctx == cc.ctx
-  cc.ctx.forget()                      # dispose
+  # if not cc.restore.isNil:             # switch to original context (if any)
+  #   let ctx = cc.restore.swapCtx(cc.db)
+  #   doAssert ctx == cc.ctx
+  if true:
+    raiseAssert "TODO release context"
+  # cc.ctx.forget()                      # dispose
   cc.cpt.pop()                         # discard top layer of actions tracer
 
 # -------------------
