@@ -67,7 +67,7 @@ iterator vkPairs*(ps: PartStateRef): (RootedVertexID, HashKey) =
 # ------------------------------------------------------------------------------
 
 proc partGenericTwig*(
-    db: AristoDbRef;
+    db: AristoTxRef;
     root: VertexID;
     path: NibblesBuf;
       ): Result[(seq[seq[byte]],bool), AristoError] =
@@ -88,7 +88,7 @@ proc partGenericTwig*(
     err(rc.error)
 
 proc partGenericTwig*(
-    db: AristoDbRef;
+    db: AristoTxRef;
     root: VertexID;
     path: openArray[byte];
       ): Result[(seq[seq[byte]],bool), AristoError] =
@@ -100,14 +100,14 @@ proc partGenericTwig*(
   db.partGenericTwig(root, NibblesBuf.fromBytes path)
 
 proc partAccountTwig*(
-    db: AristoDbRef;
+    db: AristoTxRef;
     accPath: Hash32;
       ): Result[(seq[seq[byte]],bool), AristoError] =
   ## Variant of `partGenericTwig()`.
   db.partGenericTwig(VertexID(1), NibblesBuf.fromBytes accPath.data)
 
 proc partStorageTwig*(
-    db: AristoDbRef;
+    db: AristoTxRef;
     accPath: Hash32;
     stoPath: Hash32;
       ): Result[(seq[seq[byte]],bool), AristoError] =

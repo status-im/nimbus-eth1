@@ -14,6 +14,8 @@ import
   eth/common/[addresses, transactions],
   ../utils/mergeutils
 
+export addresses
+
 type
   SlotSet = HashSet[UInt256]
 

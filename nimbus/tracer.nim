@@ -72,7 +72,7 @@ proc init(
     com: CommonRef;
     topHeader: Header;
       ): T =
-  let header = com.db.getBlockHeader(topHeader.parentHash).expect("top header parent exists")
+  let header = com.db.baseTxFrame().getBlockHeader(topHeader.parentHash).expect("top header parent exists")
   T.init(com, header.stateRoot)
 
 proc activate(cc: CaptCtxRef): CaptCtxRef {.discardable.} =
@@ -111,7 +111,7 @@ proc toJson(receipt: Receipt): JsonNode =
     result["status"] = %receipt.status
 
 proc dumpReceiptsImpl(
-    chainDB: CoreDbRef;
+    chainDB: CoreDbTxRef;
     header: Header;
       ): JsonNode =
   result = newJArray()
@@ -168,7 +168,7 @@ proc traceTransactionImpl(
   let
     tracerInst = newLegacyTracer(tracerFlags)
     cc = activate CaptCtxRef.init(com, header)
-    vmState = BaseVMState.new(header, com, storeSlotHash = true).valueOr: return newJNull()
+    vmState = BaseVMState.new(header, com, com.db.baseTxFrame(), storeSlotHash = true).valueOr: return newJNull()
     stateDb = vmState.stateDB
 
   defer: cc.release()
@@ -197,14 +197,12 @@ proc traceTransactionImpl(
       before.captureAccount(stateDb, miner, minerName)
       stateDb.persist()
       stateDiff["beforeRoot"] = %(stateDb.getStateRoot().toHex)
-      discard com.db.ctx.getAccounts.getStateRoot() # lazy hashing!
       stateCtx = CaptCtxRef.init(com, stateDb.getStateRoot())
 
     let rc = vmState.processTransaction(tx, sender, header)
     gasUsed = if rc.isOk: rc.value else: 0
 
     if idx.uint64 == txIndex:
-      discard com.db.ctx.getAccounts.getStateRoot() # lazy hashing!
       after.captureAccount(stateDb, sender, senderName)
       after.captureAccount(stateDb, recipient, recipientName)
       after.captureAccount(stateDb, miner, minerName)
@@ -216,7 +214,7 @@ proc traceTransactionImpl(
   # internal transactions:
   let
     cx = activate stateCtx
-    ldgBefore = LedgerRef.init(com.db, storeSlotHash = true)
+    ldgBefore = LedgerRef.init(com.db.baseTxFrame(), storeSlotHash = true)
   defer: cx.release()
 
   for idx, acc in tracedAccountsPairs(tracerInst):
@@ -249,7 +247,7 @@ proc dumpBlockStateImpl(
     # only need a stack dump when scanning for internal transaction address
     captureFlags = {DisableMemory, DisableStorage, EnableAccount}
     tracerInst = newLegacyTracer(captureFlags)
-    vmState = BaseVMState.new(header, com, tracerInst, storeSlotHash = true).valueOr:
+    vmState = BaseVMState.new(header, com, com.db.baseTxFrame(), tracerInst, storeSlotHash = true).valueOr:
       return newJNull()
     miner = vmState.coinbase()
 
@@ -258,7 +256,7 @@ proc dumpBlockStateImpl(
   var
     before = newJArray()
     after = newJArray()
-    stateBefore = LedgerRef.init(com.db, storeSlotHash = true)
+    stateBefore = LedgerRef.init(com.db.baseTxFrame(), storeSlotHash = true)
 
   for idx, tx in blk.transactions:
     let sender = tx.recoverSender().expect("valid signature")
@@ -313,7 +311,7 @@ proc traceBlockImpl(
     cc = activate CaptCtxRef.init(com, header)
     tracerInst = newLegacyTracer(tracerFlags)
     # Tracer needs a database where the reverse slot hash table has been set up
-    vmState = BaseVMState.new(header, com, tracerInst, storeSlotHash = true).valueOr:
+    vmState = BaseVMState.new(header, com, com.db.baseTxFrame(), tracerInst, storeSlotHash = true).valueOr:
       return newJNull()
 
   defer: cc.release()
@@ -369,7 +367,7 @@ proc dumpMemoryDB*(node: JsonNode, cpt: CoreDbCaptRef) =
     n[k.toHex(false)] = %v
   node["state"] = n
 
-proc dumpReceipts*(chainDB: CoreDbRef, header: Header): JsonNode =
+proc dumpReceipts*(chainDB: CoreDbTxRef, header: Header): JsonNode =
   chainDB.dumpReceiptsImpl header
 
 proc traceTransaction*(

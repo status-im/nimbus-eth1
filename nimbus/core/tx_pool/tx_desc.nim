@@ -130,7 +130,9 @@ proc setupVMState(com: CommonRef; parent: Header): BaseVMState =
   BaseVMState.new(
     parent   = parent,
     blockCtx = blockCtx,
-    com      = com)
+    com      = com,
+    txFrame = com.db.ctx.txFrameBegin(nil) # TODO correct state
+    )
 
 proc update(xp: TxPoolRef; parent: Header) =
   xp.vmState = setupVMState(xp.vmState.com, parent)

@@ -100,7 +100,7 @@ proc validateHeader(
 
   ok()
 
-proc validateUncles(com: CommonRef; header: Header;
+proc validateUncles(com: CommonRef; header: Header; txFrame: CoreDbTxRef,
                     uncles: openArray[Header]): Result[void,string]
                       {.gcsafe, raises: [].} =
   let hasUncles = uncles.len > 0
@@ -125,9 +125,8 @@ proc validateUncles(com: CommonRef; header: Header;
       uncleSet.incl uncleHash
 
   let
-    chainDB = com.db
-    recentAncestorHashes = ?chainDB.getAncestorsHashes(MAX_UNCLE_DEPTH + 1, header)
-    recentUncleHashes = ?chainDB.getUncleHashes(recentAncestorHashes)
+    recentAncestorHashes = ?txFrame.getAncestorsHashes(MAX_UNCLE_DEPTH + 1, header)
+    recentUncleHashes = ?txFrame.getUncleHashes(recentAncestorHashes)
     blockHash = header.blockHash
 
   for uncle in uncles:
@@ -154,11 +153,11 @@ proc validateUncles(com: CommonRef; header: Header;
       return err("uncle block number larger than current block number")
 
     # check uncle against own parent
-    let parent = ?chainDB.getBlockHeader(uncle.parentHash)
+    let parent = ?txFrame.getBlockHeader(uncle.parentHash)
     if uncle.timestamp <= parent.timestamp:
       return err("Uncle's parent must me older")
 
-    let uncleParent = ?chainDB.getBlockHeader(uncle.parentHash)
+    let uncleParent = ?txFrame.getBlockHeader(uncle.parentHash)
     ? com.validateHeader(
       Block.init(uncle, BlockBody()), uncleParent)
 
@@ -363,6 +362,7 @@ proc validateHeaderAndKinship*(
     com: CommonRef;
     blk: Block;
     parent: Header;
+    txFrame: CoreDbTxRef
       ): Result[void, string]
       {.gcsafe, raises: [].} =
   template header: Header = blk.header
@@ -378,7 +378,7 @@ proc validateHeaderAndKinship*(
     return err("Number of uncles exceed limit.")
 
   if not com.proofOfStake(header):
-    ? com.validateUncles(header, blk.uncles)
+    ? com.validateUncles(header, txFrame, blk.uncles)
 
   ok()
 

@@ -134,7 +134,7 @@ proc digestTo*(node: NodeRef; T: type HashKey): T =
   wr.finish().digestTo(HashKey)
 
 proc serialise*(
-    db: AristoDbRef;
+    db: AristoTxRef;
     root: VertexID;
     pyl: LeafPayload;
       ): Result[seq[byte],(VertexID,AristoError)] =

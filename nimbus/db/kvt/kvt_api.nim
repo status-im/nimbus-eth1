@@ -41,26 +41,23 @@ type
     ## Borrowed from `aristo_profile`
 
   KvtApiCommitFn* = proc(tx: KvtTxRef): Result[void,KvtError] {.noRaise.}
-  KvtApiDelFn* = proc(db: KvtDbRef,
+  KvtApiDelFn* = proc(db: KvtTxRef,
     key: openArray[byte]): Result[void,KvtError] {.noRaise.}
   KvtApiFinishFn* = proc(db: KvtDbRef, eradicate = false) {.noRaise.}
   KvtApiForgetFn* = proc(db: KvtDbRef): Result[void,KvtError] {.noRaise.}
-  KvtApiGetFn* = proc(db: KvtDbRef,
+  KvtApiGetFn* = proc(db: KvtTxRef,
     key: openArray[byte]): Result[seq[byte],KvtError] {.noRaise.}
-  KvtApiLenFn* = proc(db: KvtDbRef,
+  KvtApiLenFn* = proc(db: KvtTxRef,
     key: openArray[byte]): Result[int,KvtError] {.noRaise.}
-  KvtApiHasKeyRcFn* = proc(db: KvtDbRef,
+  KvtApiHasKeyRcFn* = proc(db: KvtTxRef,
     key: openArray[byte]): Result[bool,KvtError] {.noRaise.}
-  KvtApiIsTopFn* = proc(tx: KvtTxRef): bool {.noRaise.}
-  KvtApiTxFrameLevelFn* = proc(db: KvtDbRef): int {.noRaise.}
-  KvtApiPutFn* = proc(db: KvtDbRef,
+  KvtApiPutFn* = proc(db: KvtTxRef,
     key, data: openArray[byte]): Result[void,KvtError] {.noRaise.}
   KvtApiRollbackFn* = proc(tx: KvtTxRef): Result[void,KvtError] {.noRaise.}
   KvtApiPersistFn* = proc(db: KvtDbRef): Result[void,KvtError] {.noRaise.}
   KvtApiToKvtDbRefFn* = proc(tx: KvtTxRef): KvtDbRef {.noRaise.}
-  KvtApiTxFrameBeginFn* = proc(db: KvtDbRef): Result[KvtTxRef,KvtError] {.noRaise.}
-  KvtApiTxFrameTopFn* =
-    proc(db: KvtDbRef): Result[KvtTxRef,KvtError] {.noRaise.}
+  KvtApiTxFrameBeginFn* = proc(db: KvtDbRef, parent: KvtTxRef): Result[KvtTxRef,KvtError] {.noRaise.}
+  KvtApiBaseTxFrameFn* = proc(db: KvtDbRef): KvtTxRef {.noRaise.}
 
   KvtApiRef* = ref KvtApiObj
   KvtApiObj* = object of RootObj
@@ -72,14 +69,12 @@ type
     get*: KvtApiGetFn
     len*: KvtApiLenFn
     hasKeyRc*: KvtApiHasKeyRcFn
-    isTop*: KvtApiIsTopFn
-    txFrameLevel*: KvtApiTxFrameLevelFn
     put*: KvtApiPutFn
     rollback*: KvtApiRollbackFn
     persist*: KvtApiPersistFn
     toKvtDbRef*: KvtApiToKvtDbRefFn
     txFrameBegin*: KvtApiTxFrameBeginFn
-    txFrameTop*: KvtApiTxFrameTopFn
+    baseTxFrame*: KvtApiBaseTxFrameFn
 
 
   KvtApiProfNames* = enum
@@ -92,14 +87,12 @@ type
     KvtApiProfGetFn          = "get"
     KvtApiProfLenFn          = "len"
     KvtApiProfHasKeyRcFn     = "hasKeyRc"
-    KvtApiProfIsTopFn        = "isTop"
-    KvtApiProfLevelFn        = "level"
     KvtApiProfPutFn          = "put"
     KvtApiProfRollbackFn     = "rollback"
     KvtApiProfPersistFn      = "persist"
     KvtApiProfToKvtDbRefFn   = "toKvtDbRef"
     KvtApiProfTxFrameBeginFn      = "txFrameBegin"
-    KvtApiProfTxFrameTopFn        = "txFrameTop"
+    KvtApiProfBaseTxFrameFn      = "baseTxFrame"
 
     KvtApiProfBeGetKvpFn     = "be/getKvp"
     KvtApiProfBeLenKvpFn     = "be/lenKvp"
@@ -116,23 +109,12 @@ type
 # ------------------------------------------------------------------------------
 
 when AutoValidateApiHooks:
-  proc validate(api: KvtApiObj|KvtApiRef) =
-    doAssert not api.commit.isNil
-    doAssert not api.del.isNil
-    doAssert not api.finish.isNil
-    doAssert not api.get.isNil
-    doAssert not api.hasKeyRc.isNil
-    doAssert not api.isTop.isNil
-    doAssert not api.txFrameLevel.isNil
-    doAssert not api.put.isNil
-    doAssert not api.rollback.isNil
-    doAssert not api.persist.isNil
-    doAssert not api.toKvtDbRef.isNil
-    doAssert not api.txFrameBegin.isNil
-    doAssert not api.txFrameTop.isNil
+  proc validate(api: KvtApiObj) =
+    for _, field in api.fieldPairs:
+      doAssert not field.isNil
 
   proc validate(prf: KvtApiProfRef) =
-    prf.KvtApiRef.validate
+    prf.KvtApiRef[].validate
     doAssert not prf.data.isNil
 
 proc dup(be: BackendRef): BackendRef =
@@ -160,14 +142,13 @@ func init*(api: var KvtApiObj) =
   api.get = get
   api.len = len
   api.hasKeyRc = hasKeyRc
-  api.isTop = isTop
-  api.txFrameLevel = txFrameLevel
   api.put = put
   api.rollback = rollback
   api.persist = persist
   api.toKvtDbRef = toKvtDbRef
   api.txFrameBegin = txFrameBegin
-  api.txFrameTop = txFrameTop
+  api.baseTxFrame = baseTxFrame
+
   when AutoValidateApiHooks:
     api.validate
 
@@ -176,23 +157,10 @@ func init*(T: type KvtApiRef): T =
   result[].init()
 
 func dup*(api: KvtApiRef): KvtApiRef =
-  result = KvtApiRef(
-    commit:     api.commit,
-    del:        api.del,
-    finish:     api.finish,
-    get:        api.get,
-    len:        api.len,
-    hasKeyRc:   api.hasKeyRc,
-    isTop:      api.isTop,
-    txFrameLevel:      api.txFrameLevel,
-    put:        api.put,
-    rollback:   api.rollback,
-    persist:    api.persist,
-    toKvtDbRef: api.toKvtDbRef,
-    txFrameBegin:    api.txFrameBegin,
-    txFrameTop:      api.txFrameTop)
+  result = KvtApiRef()
+  result[] = api[]
   when AutoValidateApiHooks:
-    result.validate
+    result[].validate
 # ------------------------------------------------------------------------------
 # Public profile API constuctor
 # ------------------------------------------------------------------------------
@@ -250,16 +218,6 @@ func init*(
       KvtApiProfHasKeyRcFn.profileRunner:
         result = api.hasKeyRc(a, b)
 
-  profApi.isTop =
-    proc(a: KvtTxRef): auto =
-      KvtApiProfIsTopFn.profileRunner:
-        result = api.isTop(a)
-
-  profApi.level =
-    proc(a: KvtDbRef): auto =
-      KvtApiProfLevelFn.profileRunner:
-        result = api.level(a)
-
   profApi.put =
     proc(a: KvtDbRef; b, c: openArray[byte]): auto =
       KvtApiProfPutFn.profileRunner:
@@ -284,11 +242,6 @@ func init*(
     proc(a: KvtDbRef): auto =
       KvtApiProfTxFrameBeginFn.profileRunner:
         result = api.txFrameBegin(a)
-
-  profApi.txFrameTop =
-    proc(a: KvtDbRef): auto =
-      KvtApiProfTxFrameTopFn.profileRunner:
-        result = api.txFrameTop(a)
 
   let beDup = be.dup()
   if beDup.isNil:

@@ -14,7 +14,6 @@
 {.push raises: [].}
 
 import
-  eth/common,
   stew/endians2,
   rocksdb,
   ./rdb_desc,

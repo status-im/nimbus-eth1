@@ -16,7 +16,6 @@
 import
   std/os,
   std/concurrency/atomics,
-  eth/common,
   rocksdb,
   stew/endians2,
   ../../aristo_desc,

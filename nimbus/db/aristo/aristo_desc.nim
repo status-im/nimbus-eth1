@@ -23,7 +23,7 @@
 
 import
   std/[hashes, sets, tables],
-  eth/common,
+  eth/common/hashes,
   results,
   ./aristo_constants,
   ./aristo_desc/[desc_error, desc_identifiers, desc_nibbles, desc_structural],
@@ -36,24 +36,20 @@ from ./aristo_desc/desc_backend
 # Not auto-exporting backend
 export
   tables, aristo_constants, desc_error, desc_identifiers, desc_nibbles,
-  desc_structural, minilru, common
+  desc_structural, minilru, hashes
 
 type
   AristoTxRef* = ref object
     ## Transaction descriptor
     db*: AristoDbRef                  ## Database descriptor
     parent*: AristoTxRef              ## Previous transaction
-    txUid*: uint                      ## Unique ID among transactions
-    level*: int                       ## Stack index for this transaction
+    layer*: LayerRef
 
   AristoDbRef* = ref object
     ## Three tier database object supporting distributed instances.
-    top*: LayerRef                    ## Database working layer, mutable
-    stack*: seq[LayerRef]             ## Stashed immutable parent layers
-    balancer*: LayerRef               ## Balance out concurrent backend access
     backend*: BackendRef              ## Backend database (may well be `nil`)
 
-    txRef*: AristoTxRef               ## Latest active transaction
+    txRef*: AristoTxRef               ## Bottom-most in-memory frame
     txUidGen*: uint                   ## Tx-relative unique number generator
 
     accLeaves*: LruCache[Hash32, VertexRef]
@@ -128,7 +124,7 @@ func isValid*(layer: LayerRef): bool =
   layer != LayerRef(nil)
 
 func isValid*(root: Hash32): bool =
-  root != EMPTY_ROOT_HASH
+  root != emptyRoot
 
 func isValid*(key: HashKey): bool =
   assert key.len != 32 or key.to(Hash32).isValid
@@ -156,25 +152,29 @@ func hash*(db: AristoDbRef): Hash =
 # Public helpers
 # ------------------------------------------------------------------------------
 
-iterator rstack*(db: AristoDbRef): LayerRef =
+iterator rstack*(tx: AristoTxRef): LayerRef =
   # Stack in reverse order
-  for i in 0..<db.stack.len:
-    yield db.stack[db.stack.len - i - 1]
+  var tx = tx
 
-proc deltaAtLevel*(db: AristoDbRef, level: int): LayerRef =
-  if level == 0:
-    db.top
-  elif level > 0:
-    doAssert level <= db.stack.len
-    db.stack[^level]
-  elif level == -1:
-    doAssert db.balancer != nil
-    db.balancer
-  elif level == -2:
+  while tx != nil:
+    yield tx.layer
+    tx = tx.parent
+
+proc deltaAtLevel*(db: AristoTxRef, level: int): LayerRef =
+  if level == -2:
     nil
+  elif level == -1:
+    db.db.txRef.layer
   else:
-    raiseAssert "Unknown level " & $level
+    var
+      frame = db
+      level = level
 
+    while level > 0:
+      frame = frame.parent
+      level -= 1
+
+    frame.layer
 
 # ------------------------------------------------------------------------------
 # End

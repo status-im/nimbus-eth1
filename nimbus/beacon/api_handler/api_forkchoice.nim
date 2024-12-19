@@ -76,7 +76,7 @@ proc forkchoiceUpdated*(ben: BeaconEngineRef,
                              ForkchoiceUpdatedResponse =
   let
     com   = ben.com
-    db    = com.db
+    db    = com.db.baseTxFrame() # TODO forkedChain!
     chain = ben.chain
     blockHash = update.headBlockHash
 
@@ -125,6 +125,7 @@ proc forkchoiceUpdated*(ben: BeaconEngineRef,
     let blockNumber = header.number
     if header.difficulty > 0.u256 or blockNumber ==  0'u64:
       let
+        # TODO this chould be forkedchain!
         td  = db.getScore(blockHash)
         ptd = db.getScore(header.parentHash)
         ttd = com.ttd.get(high(UInt256))

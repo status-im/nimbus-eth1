@@ -159,7 +159,7 @@ proc setupMetrics(nimbus: NimbusNode, conf: NimbusConf) =
 
 proc preventLoadingDataDirForTheWrongNetwork(db: CoreDbRef; conf: NimbusConf) =
   let
-    kvt = db.ctx.getKvt()
+    kvt = db.baseTxFrame()
     calculatedId = calcHash(conf.networkId, conf.networkParams)
     dataDirIdBytes = kvt.get(dataDirIdKey().toOpenArray).valueOr:
       # an empty database

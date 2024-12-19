@@ -54,8 +54,8 @@ proc getBe*(
     key: openArray[byte];             # Key of database record
       ): Result[seq[byte],KvtError] =
   ## Get the vertex from the (filtered) backened if available.
-  if not db.balancer.isNil:
-    db.balancer.sTab.withValue(@key, w):
+  if not db.txRef.isNil:
+    db.txRef.layer.sTab.withValue(@key, w):
       if w[].len == 0:
         return err(GetNotFound)
       return ok(w[])
@@ -66,8 +66,8 @@ proc getBeLen*(
     key: openArray[byte];             # Key of database record
       ): Result[int,KvtError] =
   ## Get the vertex from the (filtered) backened if available.
-  if not db.balancer.isNil:
-    db.balancer.sTab.withValue(@key, w):
+  if not db.txRef.isNil:
+    db.txRef.layer.sTab.withValue(@key, w):
       if w[].len == 0:
         return err(GetNotFound)
       return ok(w[].len)
@@ -76,7 +76,7 @@ proc getBeLen*(
 # ------------
 
 proc put*(
-    db: KvtDbRef;                     # Database
+    db: KvtTxRef;                     # Database
     key: openArray[byte];             # Key of database record to store
     data: openArray[byte];            # Value of database record to store
       ): Result[void,KvtError] =
@@ -92,7 +92,7 @@ proc put*(
 
 
 proc del*(
-    db: KvtDbRef;                     # Database
+    db: KvtTxRef;                     # Database
     key: openArray[byte];             # Key of database record to delete
       ): Result[void,KvtError] =
   ## For the argument `key` delete the associated value (which will be marked
@@ -106,7 +106,7 @@ proc del*(
 # ------------
 
 proc get*(
-    db: KvtDbRef;                     # Database
+    db: KvtTxRef;                     # Database
     key: openArray[byte];             # Key of database record
       ): Result[seq[byte],KvtError] =
   ## For the argument `key` return the associated value preferably from the
@@ -116,12 +116,12 @@ proc get*(
     return err(KeyInvalid)
 
   var data = db.layersGet(key).valueOr:
-    return db.getBe key
+    return db.db.getBe key
 
   return ok(move(data))
 
 proc len*(
-    db: KvtDbRef;                     # Database
+    db: KvtTxRef;                     # Database
     key: openArray[byte];             # Key of database record
       ): Result[int,KvtError] =
   ## For the argument `key` return the length of the associated value,
@@ -131,11 +131,11 @@ proc len*(
     return err(KeyInvalid)
 
   let len = db.layersLen(key).valueOr:
-    return db.getBeLen key
+    return db.db.getBeLen key
   ok(len)
 
 proc hasKeyRc*(
-    db: KvtDbRef;                     # Database
+    db: KvtTxRef;                     # Database
     key: openArray[byte];             # Key of database record
       ): Result[bool,KvtError] =
   ## For the argument `key` return `true` if `get()` returned a value on
@@ -148,7 +148,7 @@ proc hasKeyRc*(
   if db.layersHasKey key:
     return ok(true)
 
-  let rc = db.getBe key
+  let rc = db.db.getBe key
   if rc.isOk:
     return ok(true)
   if rc.error == GetNotFound:
@@ -156,7 +156,7 @@ proc hasKeyRc*(
   err(rc.error)
 
 proc hasKey*(
-    db: KvtDbRef;                     # Database
+    db: KvtTxRef;                     # Database
     key: openArray[byte];             # Key of database record
       ): bool =
   ## Simplified version of `hasKeyRc` where `false` is returned instead of

@@ -173,7 +173,7 @@ proc procBlkPreamble(
     # TODO It's strange that we persist uncles before processing block but the
     #      rest after...
     if not skipUncles:
-      let h = vmState.com.db.persistUncles(blk.uncles)
+      let h = vmState.stateDB.txFrame.persistUncles(blk.uncles)
       if h != header.ommersHash:
         return err("ommersHash mismatch")
     elif not skipValidation and rlpHash(blk.uncles) != header.ommersHash:

@@ -27,7 +27,6 @@
 {.push raises: [].}
 
 import
-  eth/common,
   rocksdb,
   results,
   ../aristo_desc,

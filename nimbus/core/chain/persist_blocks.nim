@@ -46,7 +46,7 @@ type
     flags: PersistBlockFlags
 
     vmState: BaseVMState
-    dbTx: CoreDbTxRef
+    txFrame: CoreDbTxRef
     stats*: PersistStats
 
     parent: Header
@@ -64,30 +64,30 @@ proc getVmState(
 ): Result[BaseVMState, string] =
   if p.vmState == nil:
     let vmState = BaseVMState()
-    if not vmState.init(header, p.c.com, storeSlotHash = storeSlotHash):
+    if not vmState.init(header, p.c.com, p.txFrame, storeSlotHash = storeSlotHash):
       return err("Could not initialise VMState")
     p.vmState = vmState
   else:
     if header.number != p.parent.number + 1:
       return err("Only linear histories supported by Persister")
 
-    if not p.vmState.reinit(p.parent, header, linear = true):
+    if not p.vmState.reinit(p.parent, header):
       return err("Could not update VMState for new block")
 
   ok(p.vmState)
 
 proc dispose*(p: var Persister) =
-  if p.dbTx != nil:
-    p.dbTx.dispose()
-    p.dbTx = nil
+  if p.txFrame != nil:
+    p.txFrame.dispose()
+    p.txFrame = nil
 
 proc init*(T: type Persister, c: ChainRef, flags: PersistBlockFlags): T =
   T(c: c, flags: flags)
 
 proc checkpoint*(p: var Persister): Result[void, string] =
   if NoValidation notin p.flags:
-    let stateRoot = p.c.db.ctx.getAccounts().getStateRoot().valueOr:
-        return err($$error)
+    let stateRoot = p.txFrame.getStateRoot().valueOr:
+      return err($$error)
 
     if p.parent.stateRoot != stateRoot:
       # TODO replace logging with better error
@@ -101,9 +101,9 @@ proc checkpoint*(p: var Persister): Result[void, string] =
         "stateRoot mismatch, expect: " & $p.parent.stateRoot & ", got: " & $stateRoot
       )
 
-  if p.dbTx != nil:
-    p.dbTx.commit()
-    p.dbTx = nil
+  if p.txFrame != nil:
+    p.txFrame.commit()
+    p.txFrame = nil
 
   # Save and record the block number before the last saved block state.
   p.c.db.persistent(p.parent.number).isOkOr:
@@ -117,8 +117,8 @@ proc persistBlock*(p: var Persister, blk: Block): Result[void, string] =
 
   let c = p.c
 
-  if p.dbTx == nil:
-    p.dbTx = p.c.db.ctx.txFrameBegin()
+  if p.txFrame == nil:
+    p.txFrame = p.c.db.ctx.txFrameBegin(nil)
 
   # Full validation means validating the state root at every block and
   # performing the more expensive hash computations on the block itself, ie
@@ -146,7 +146,7 @@ proc persistBlock*(p: var Persister, blk: Block): Result[void, string] =
   #      sanity checks should be performed early in the processing pipeline no
   #      matter their provenance.
   if not skipValidation:
-    ?c.com.validateHeaderAndKinship(blk, vmState.parent)
+    ?c.com.validateHeaderAndKinship(blk, vmState.parent, p.txFrame)
 
   # Generate receipts for storage or validation but skip them otherwise
   ?vmState.processBlock(
@@ -159,16 +159,16 @@ proc persistBlock*(p: var Persister, blk: Block): Result[void, string] =
 
   if NoPersistHeader notin p.flags:
     let blockHash = header.blockHash()
-    ?c.db.persistHeaderAndSetHead(blockHash, header, c.com.startOfHistory)
+    ?p.txFrame.persistHeaderAndSetHead(blockHash, header, c.com.startOfHistory)
 
   if NoPersistTransactions notin p.flags:
-    c.db.persistTransactions(header.number, header.txRoot, blk.transactions)
+    p.txFrame.persistTransactions(header.number, header.txRoot, blk.transactions)
 
   if NoPersistReceipts notin p.flags:
-    c.db.persistReceipts(header.receiptsRoot, vmState.receipts)
+    p.txFrame.persistReceipts(header.receiptsRoot, vmState.receipts)
 
   if NoPersistWithdrawals notin p.flags and blk.withdrawals.isSome:
-    c.db.persistWithdrawals(
+    p.txFrame.persistWithdrawals(
       header.withdrawalsRoot.expect("WithdrawalsRoot should be verified before"),
       blk.withdrawals.get,
     )
