@@ -11,9 +11,8 @@
 {.push raises: [].}
 
 import
-  eth/common,
+  eth/common/hashes,
   results,
-  stew/arraybuf,
   "."/[aristo_desc, aristo_get]
 
 const

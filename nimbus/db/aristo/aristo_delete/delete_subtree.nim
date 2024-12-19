@@ -11,7 +11,7 @@
 {.push raises: [].}
 
 import
-  eth/common,
+  eth/common/hashes,
   ".."/[aristo_desc, aristo_get, aristo_layers]
 
 # ------------------------------------------------------------------------------

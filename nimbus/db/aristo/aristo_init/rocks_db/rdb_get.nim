@@ -14,7 +14,6 @@
 {.push raises: [].}
 
 import
-  eth/common,
   rocksdb,
   results,
   ../../[aristo_blobify, aristo_desc],

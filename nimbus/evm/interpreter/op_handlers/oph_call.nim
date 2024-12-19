@@ -30,8 +30,7 @@ import
   ./oph_defs,
   ./oph_helpers,
   chronicles,
-  eth/common,
-  eth/common/eth_types,
+  eth/common/addresses,
   stew/assign2,
   stint
 

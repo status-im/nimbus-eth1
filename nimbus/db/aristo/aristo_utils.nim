@@ -14,7 +14,6 @@
 {.push raises: [].}
 
 import
-  eth/common,
   results,
   "."/[aristo_desc, aristo_compute]
 

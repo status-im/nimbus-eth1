@@ -884,7 +884,7 @@ proc clearTransientStorage*(ac: LedgerRef) =
   doAssert(ac.savePoint.parentSavepoint.isNil)
   ac.savePoint.transientStorage.clear()
 
-func getAccessList*(ac: LedgerRef): common.AccessList =
+func getAccessList*(ac: LedgerRef): transactions.AccessList =
   # make sure all savepoint already committed
   doAssert(ac.savePoint.parentSavepoint.isNil)
   ac.savePoint.accessList.getAccessList()

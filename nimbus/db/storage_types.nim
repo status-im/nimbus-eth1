@@ -9,7 +9,9 @@
 # according to those terms.
 
 import
-  eth/common
+  eth/common/[base, hashes]
+
+export base, hashes
 
 type
   DBKeyKind* = enum
@@ -61,7 +63,7 @@ func canonicalHeadHashKey*(): DbKey {.inline.} =
 func dataDirIdKey*(): DbKey {.inline.} =
   result.data[0] = byte ord(dataDirId)
   result.dataEndPos = 1
-  
+
 func slotHashToSlotKey*(h: openArray[byte]): DbKey {.inline.} =
   doAssert(h.len == 32)
   result.data[0] = byte ord(slotHashToSlot)

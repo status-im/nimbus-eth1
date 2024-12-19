@@ -16,7 +16,8 @@
 
 import
   std/[algorithm, sequtils, sets, strutils, hashes],
-  eth/common,
+  eth/common/[base, hashes],
+  eth/rlp,
   stew/byteutils,
   chronicles,
   results,
@@ -24,7 +25,7 @@ import
   ./desc_nibbles
 
 export
-  desc_nibbles
+  desc_nibbles, base, hashes, rlp
 
 type
   VertexID* = distinct uint64
@@ -311,12 +312,12 @@ func to*(lid: HashKey; T: type Hash32): T =
   elif 0 < lid.len:
     lid.data.keccak256
   else:
-    EMPTY_ROOT_HASH
+    emptyRoot
 
 func to*(key: Hash32; T: type HashKey): T =
   ## This is an efficient version of `HashKey.fromBytes(key.data).value`, not
   ## to be confused with `digestTo(HashKey)`.
-  if key == EMPTY_ROOT_HASH:
+  if key == emptyRoot:
     T()
   else:
     T(len: 32, buf: key.data)

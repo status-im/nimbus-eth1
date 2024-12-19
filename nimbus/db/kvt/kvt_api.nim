@@ -116,23 +116,12 @@ type
 # ------------------------------------------------------------------------------
 
 when AutoValidateApiHooks:
-  proc validate(api: KvtApiObj|KvtApiRef) =
-    doAssert not api.commit.isNil
-    doAssert not api.del.isNil
-    doAssert not api.finish.isNil
-    doAssert not api.get.isNil
-    doAssert not api.hasKeyRc.isNil
-    doAssert not api.isTop.isNil
-    doAssert not api.txFrameLevel.isNil
-    doAssert not api.put.isNil
-    doAssert not api.rollback.isNil
-    doAssert not api.persist.isNil
-    doAssert not api.toKvtDbRef.isNil
-    doAssert not api.txFrameBegin.isNil
-    doAssert not api.txFrameTop.isNil
+  proc validate(api: KvtApiObj) =
+    for _, field in api.fieldPairs:
+      doAssert not field.isNil
 
   proc validate(prf: KvtApiProfRef) =
-    prf.KvtApiRef.validate
+    prf.KvtApiRef[].validate
     doAssert not prf.data.isNil
 
 proc dup(be: BackendRef): BackendRef =
@@ -176,23 +165,10 @@ func init*(T: type KvtApiRef): T =
   result[].init()
 
 func dup*(api: KvtApiRef): KvtApiRef =
-  result = KvtApiRef(
-    commit:     api.commit,
-    del:        api.del,
-    finish:     api.finish,
-    get:        api.get,
-    len:        api.len,
-    hasKeyRc:   api.hasKeyRc,
-    isTop:      api.isTop,
-    txFrameLevel:      api.txFrameLevel,
-    put:        api.put,
-    rollback:   api.rollback,
-    persist:    api.persist,
-    toKvtDbRef: api.toKvtDbRef,
-    txFrameBegin:    api.txFrameBegin,
-    txFrameTop:      api.txFrameTop)
+  result = KvtApiRef()
+  result[] = api[]
   when AutoValidateApiHooks:
-    result.validate
+    result[].validate
 # ------------------------------------------------------------------------------
 # Public profile API constuctor
 # ------------------------------------------------------------------------------

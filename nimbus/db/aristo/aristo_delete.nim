@@ -16,7 +16,7 @@
 
 import
   std/typetraits,
-  eth/common,
+  eth/common/hashes,
   results,
   ./aristo_delete/delete_subtree,
   "."/[aristo_desc, aristo_fetch, aristo_get, aristo_hike, aristo_layers]
