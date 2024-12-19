@@ -342,7 +342,7 @@ proc blocksStagedImport*(
   ctx.updateMetrics()
 
   debug info & ": import done", iv, nBlocks, B=ctx.chain.baseNumber.bnStr,
-    L=ctx.chain.latestNumber.bnStr, F=ctx.layout.final.bnStr
+    L=ctx.chain.latestNumber.bnStr
   return true
 
 # ------------------------------------------------------------------------------
