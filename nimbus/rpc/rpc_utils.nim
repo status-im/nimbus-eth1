@@ -56,8 +56,8 @@ proc calculateMedianGasPrice*(chain: ForkedChainRef): GasInt =
   result = max(result, minGasPrice)
 
 proc unsignedTx*(tx: TransactionArgs,
-                 chain: ForkedChainRef, 
-                 defaultNonce: AccountNonce, 
+                 chain: ForkedChainRef,
+                 defaultNonce: AccountNonce,
                  chainId: ChainId): Transaction =
   var res: Transaction
 
@@ -180,7 +180,7 @@ proc populateBlockObject*(blockHash: Hash32,
   result.requestsHash = header.requestsHash
 
 proc populateReceipt*(receipt: Receipt, gasUsed: GasInt, tx: Transaction,
-                      txIndex: uint64, header: Header): ReceiptObject =
+                      txIndex: uint64, header: Header, electra: bool): ReceiptObject =
   let sender = tx.recoverSender()
   var res = ReceiptObject()
   res.transactionHash = tx.rlpHash
@@ -236,7 +236,7 @@ proc populateReceipt*(receipt: Receipt, gasUsed: GasInt, tx: Transaction,
 
   if tx.txType == TxEip4844:
     res.blobGasUsed = Opt.some(Quantity(tx.versionedHashes.len.uint64 * GAS_PER_BLOB.uint64))
-    res.blobGasPrice = Opt.some(getBlobBaseFee(header.excessBlobGas.get(0'u64)))
+    res.blobGasPrice = Opt.some(getBlobBaseFee(header.excessBlobGas.get(0'u64), electra))
 
   return res
 
