@@ -248,7 +248,11 @@ proc procBlkEpilogue(
       let
         depositReqs =
           ?parseDepositLogs(vmState.allLogs, vmState.com.depositContractAddress)
-        requestsHash = calcRequestsHash(depositReqs, withdrawalReqs, consolidationReqs)
+        requestsHash = calcRequestsHash([
+          (DEPOSIT_REQUEST_TYPE, depositReqs),
+          (WITHDRAWAL_REQUEST_TYPE, withdrawalReqs),
+          (CONSOLIDATION_REQUEST_TYPE, consolidationReqs)
+        ])
 
       if header.requestsHash.get != requestsHash:
         debug "wrong requestsHash in block",

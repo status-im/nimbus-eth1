@@ -38,7 +38,7 @@ type
     payload*: ExecutionPayload
     expectedBlobVersionedHashes*: Opt[seq[Hash32]]
     parentBeaconBlockRoot*: Opt[Hash32]
-    executionRequests*: Opt[array[3, seq[byte]]]
+    executionRequests*: Opt[seq[seq[byte]]]
 
   TestSpec = object
     name: string

@@ -361,7 +361,11 @@ proc exec(ctx: TransContext,
     let
       depositReqs = parseDepositLogs(allLogs, vmState.com.depositContractAddress).valueOr:
         raise newError(ErrorEVM, error)
-      requestsHash = calcRequestsHash(depositReqs, withdrawalReqs, consolidationReqs)
+      requestsHash = calcRequestsHash([
+        (DEPOSIT_REQUEST_TYPE, depositReqs),
+        (WITHDRAWAL_REQUEST_TYPE, withdrawalReqs),
+        (CONSOLIDATION_REQUEST_TYPE, consolidationReqs)
+      ])
     result.result.requestsHash = Opt.some(requestsHash)
     result.result.requests = Opt.some([depositReqs, withdrawalReqs, consolidationReqs])
 
