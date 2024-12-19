@@ -94,7 +94,7 @@ proc getContent(
     let contentValue = V.decode(maybeLocalContent.get()).valueOr:
       raiseAssert("Unable to decode state local content value")
 
-    debug "Fetched state local content value"
+    trace "Fetched state local content value"
     return Opt.some(contentValue)
 
   for i in 0 ..< (1 + n.contentRequestRetries):
@@ -112,13 +112,13 @@ proc getContent(
       error "Validation of retrieved state content failed"
       continue
 
-    debug "Fetched valid state content from the network"
+    trace "Fetched valid state content from the network"
     n.portalProtocol.storeContent(
       contentKeyBytes, contentId, contentValueBytes, cacheContent = true
     )
 
     if maybeParentOffer.isSome() and lookupRes.nodesInterestedInContent.len() > 0:
-      debug "Sending content to interested nodes",
+      trace "Sending content to interested nodes",
         interestedNodesCount = lookupRes.nodesInterestedInContent.len()
 
       let offer = contentValue.toOffer(maybeParentOffer.get())
@@ -240,7 +240,7 @@ proc processContentLoop(n: StateNetwork) {.async: (raises: []).} =
 
         if offerRes.isOk():
           state_network_offers_success.inc(labelValues = [$n.portalProtocol.protocolId])
-          debug "Received offered content validated successfully",
+          trace "Received offered content validated successfully",
             srcNodeId, contentKeyBytes
         else:
           state_network_offers_failed.inc(labelValues = [$n.portalProtocol.protocolId])
