@@ -199,7 +199,7 @@ proc processDequeueWithdrawalRequests*(vmState: BaseVMState): seq[byte] =
       sender   : SYSTEM_ADDRESS,
       gasLimit : DEFAULT_GAS_LIMIT.GasInt,
       gasPrice : 0.GasInt,
-      to       : WITHDRAWAL_QUEUE_ADDRESS,
+      to       : WITHDRAWAL_REQUEST_PREDEPLOY_ADDRESS,
 
       # It's a systemCall, no need for other knicks knacks
       sysCall     : true,
@@ -223,7 +223,7 @@ proc processDequeueConsolidationRequests*(vmState: BaseVMState): seq[byte] =
       sender   : SYSTEM_ADDRESS,
       gasLimit : DEFAULT_GAS_LIMIT.GasInt,
       gasPrice : 0.GasInt,
-      to       : CONSOLIDATION_QUEUE_ADDRESS,
+      to       : CONSOLIDATION_REQUEST_PREDEPLOY_ADDRESS,
 
       # It's a systemCall, no need for other knicks knacks
       sysCall     : true,
