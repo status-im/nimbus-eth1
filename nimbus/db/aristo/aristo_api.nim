@@ -450,7 +450,7 @@ when AutoValidateApiHooks:
     doAssert not api.hasStorageData.isNil
 
     doAssert not api.isTop.isNil
-    doAssert not api.level.isNil
+    doAssert not api.txFrameLevel.isNil
 
     doAssert not api.mergeAccountRecord.isNil
     doAssert not api.mergeStorageData.isNil
