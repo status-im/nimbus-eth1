@@ -417,6 +417,11 @@ type
       desc: "Print RDB statistics at exit"
       name: "debug-rdb-print-stats".}: bool
 
+    rewriteDatadirId* {.
+      hidden
+      desc: "Rewrite selected network config hash to database"
+      name: "debug-rewrite-datadir-id".}: bool
+
     case cmd* {.
       command
       defaultValue: NimbusCmd.noCommand }: NimbusCmd
