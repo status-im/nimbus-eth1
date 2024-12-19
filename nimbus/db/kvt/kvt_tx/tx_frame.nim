@@ -14,56 +14,15 @@
 {.push raises: [].}
 
 import
-  std/tables,
   results,
-  ".."/[kvt_desc, kvt_layers]
+  ../[kvt_desc, kvt_layers]
 
-func isTop*(tx: KvtTxRef): bool
-
-# ------------------------------------------------------------------------------
-# Private helpers
-# ------------------------------------------------------------------------------
-
-func getDbDescFromTopTx(tx: KvtTxRef): Result[KvtDbRef,KvtError] =
-  if not tx.isTop():
-    return err(TxNotTopTx)
-  let db = tx.db
-  if tx.level != db.stack.len:
-    return err(TxStackUnderflow)
-  ok db
-
-proc getTxUid(db: KvtDbRef): uint =
-  if db.txUidGen == high(uint):
-    db.txUidGen = 0
-  db.txUidGen.inc
-  db.txUidGen
-
-# ------------------------------------------------------------------------------
-# Public functions, getters
-# ------------------------------------------------------------------------------
-
-func txFrameTop*(db: KvtDbRef): Result[KvtTxRef,KvtError] =
-  ## Getter, returns top level transaction if there is any.
-  if db.txRef.isNil:
-    err(TxNoPendingTx)
-  else:
-    ok(db.txRef)
-
-func isTop*(tx: KvtTxRef): bool =
-  ## Getter, returns `true` if the argument `tx` referes to the current top
-  ## level transaction.
-  tx.db.txRef == tx and tx.db.top.txUid == tx.txUid
-
-func txFrameLevel*(db: KvtDbRef): int =
-  ## Getter, non-negative nesting level (i.e. number of pending transactions)
-  if not db.txRef.isNil:
-    result = db.txRef.level
 
 # ------------------------------------------------------------------------------
 # Public functions
 # ------------------------------------------------------------------------------
 
-proc txFrameBegin*(db: KvtDbRef): Result[KvtTxRef,KvtError] =
+proc txFrameBegin*(db: KvtDbRef, parent: KvtTxRef): Result[KvtTxRef,KvtError] =
   ## Starts a new transaction.
   ##
   ## Example:
@@ -74,20 +33,16 @@ proc txFrameBegin*(db: KvtDbRef): Result[KvtTxRef,KvtError] =
   ##     ... continue using db ...
   ##     tx.commit()
   ##
-  if db.txFrameLevel != db.stack.len:
-    return err(TxStackGarbled)
 
-  db.stack.add db.top
-  db.top = LayerRef(
-    txUid: db.getTxUid)
-  db.txRef = KvtTxRef(
+  let parent = if parent == nil: db.txRef else: parent
+  ok KvtTxRef(
     db:     db,
-    txUid:  db.top.txUid,
-    parent: db.txRef,
-    level:  db.stack.len)
+    layer: LayerRef(),
+    parent: parent,
+  )
 
-  ok db.txRef
-
+proc baseTxFrame*(db: KvtDbRef): KvtTxRef =
+  db.txRef
 
 proc rollback*(
     tx: KvtTxRef;                     # Top transaction on database
@@ -96,15 +51,9 @@ proc rollback*(
   ## performed for this transactio. The previous transaction is returned if
   ## there was any.
   ##
-  let db = ? tx.getDbDescFromTopTx()
 
-  # Roll back to previous layer.
-  db.top = db.stack[^1]
-  db.stack.setLen(db.stack.len-1)
-
-  db.txRef = tx.parent
+  tx.layer = LayerRef()
   ok()
-
 
 proc commit*(
     tx: KvtTxRef;                     # Top transaction on database
@@ -113,23 +62,11 @@ proc commit*(
   ## performed through this handle and merges it to the previous layer. The
   ## previous transaction is returned if there was any.
   ##
-  let db = ? tx.getDbDescFromTopTx()
+  doAssert tx.parent != nil, "don't commit base tx"
 
-  # Replace the top two layers by its merged version
-  let merged = db.stack[^1]
-  for (key,val) in db.top.sTab.pairs:
-    merged.sTab[key] = val
-
-  # Install `merged` layer
-  db.top = merged
-  db.stack.setLen(db.stack.len-1)
-  db.txRef = tx.parent
-  if 0 < db.stack.len:
-    db.txRef.txUid = db.getTxUid
-    db.top.txUid = db.txRef.txUid
+  mergeAndReset(tx.parent.layer[], tx.layer[])
 
   ok()
-
 
 proc collapse*(
     tx: KvtTxRef;                     # Top transaction on database
@@ -143,17 +80,17 @@ proc collapse*(
   ##     if db.topTx.isErr: break
   ##     tx = db.topTx.value
   ##
-  let db = ? tx.getDbDescFromTopTx()
+  # let db = ? tx.getDbDescFromTopTx()
 
-  if commit:
-    db.top = db.layersCc
-  else:
-    db.top = db.stack[0]
-    db.top.txUid = 0
+  # if commit:
+  #   db.top = db.layersCc
+  # else:
+  #   db.top = db.stack[0]
+  #   # db.top.txUid = 0
 
-  # Clean up
-  db.stack.setLen(0)
-  db.txRef = KvtTxRef(nil)
+  # # Clean up
+  # db.stack.setLen(0)
+  # db.txRef = KvtTxRef(nil)
   ok()
 
 # ------------------------------------------------------------------------------

@@ -41,7 +41,7 @@ template shouldNotKeyError(info: string, body: untyped) =
   except KeyError as exc:
     raiseAssert info & ": name=" & $exc.name & " msg=" & exc.msg
 
-proc deleteLineage(c: ForkedChainRef; top: Hash32) =
+proc deleteLineage(c: ForkedChainRef; top: Hash32, commit: bool = false) =
   ## Starting at argument `top`, delete all entries from `c.blocks[]` along
   ## the ancestor chain.
   ##
@@ -50,6 +50,12 @@ proc deleteLineage(c: ForkedChainRef; top: Hash32) =
     c.blocks.withValue(parent, val):
       let w = parent
       parent = val.blk.header.parentHash
+      # TODO when committing, blocks that refer to the committed frame need to
+      #      update their parent field / get a new frame ..
+      if commit:
+        val[].txFrame.commit()
+      else:
+        val[].txFrame.dispose()
       c.blocks.del(w)
       continue
     break
@@ -60,15 +66,16 @@ proc deleteLineage(c: ForkedChainRef; top: Hash32) =
 
 proc processBlock(c: ForkedChainRef,
                   parent: Header,
+                  txFrame: CoreDbTxRef,
                   blk: Block): Result[seq[Receipt], string] =
   template header(): Header =
     blk.header
 
   let vmState = BaseVMState()
-  vmState.init(parent, header, c.com)
+  vmState.init(parent, header, c.com, txFrame)
 
   if c.extraValidation:
-    ?c.com.validateHeaderAndKinship(blk, vmState.parent)
+    ?c.com.validateHeaderAndKinship(blk, vmState.parent, txFrame)
 
   ?vmState.processBlock(
     blk,
@@ -80,7 +87,7 @@ proc processBlock(c: ForkedChainRef,
   # We still need to write header to database
   # because validateUncles still need it
   let blockHash = header.blockHash()
-  ?c.db.persistHeader(
+  ?txFrame.persistHeader(
      blockHash,
      header,
      c.com.startOfHistory)
@@ -120,6 +127,7 @@ func updateCursorHeads(c: ForkedChainRef,
 
 func updateCursor(c: ForkedChainRef,
                   blk: Block,
+                  txFrame: CoreDbTxRef,
                   receipts: sink seq[Receipt]) =
   template header(): Header =
     blk.header
@@ -134,73 +142,28 @@ func updateCursor(c: ForkedChainRef,
     # New block => update head
     c.blocks[c.cursorHash] = BlockDesc(
       blk: blk,
+      txFrame: txFrame,
       receipts: move(receipts))
     c.updateCursorHeads(c.cursorHash, header)
 
 proc validateBlock(c: ForkedChainRef,
           parent: Header,
-          blk: Block,
-          updateCursor: bool = true): Result[void, string] =
-  let dbTx = c.db.ctx.txFrameBegin()
-  defer:
-    dbTx.dispose()
+          parentFrame: CoreDbTxRef,
+          blk: Block): Result[void, string] =
+  let txFrame = parentFrame.ctx.txFrameBegin(parentFrame)
 
-  var res = c.processBlock(parent, blk)
+  var res = c.processBlock(parent, txFrame, blk)
   if res.isErr:
-    dbTx.rollback()
+    txFrame.rollback()
     return err(res.error)
 
-  dbTx.commit()
-  if updateCursor:
-    c.updateCursor(blk, move(res.value))
+  c.updateCursor(blk, txFrame, move(res.value))
 
   let blkHash = blk.header.blockHash
   for i, tx in blk.transactions:
     c.txRecords[rlpHash(tx)] = (blkHash, uint64(i))
 
   ok()
-
-proc replaySegment*(c: ForkedChainRef, target: Hash32) =
-  # Replay from base+1 to target block
-  var
-    prevHash = target
-    chain = newSeq[Block]()
-
-  shouldNotKeyError "replaySegment(target)":
-    while prevHash != c.baseHash:
-      chain.add c.blocks[prevHash].blk
-      prevHash = chain[^1].header.parentHash
-
-  c.stagingTx.rollback()
-  c.stagingTx = c.db.ctx.txFrameBegin()
-  c.cursorHeader = c.baseHeader
-  for i in countdown(chain.high, chain.low):
-    c.validateBlock(c.cursorHeader, chain[i],
-      updateCursor = false).expect("have been validated before")
-    c.cursorHeader = chain[i].header
-  c.cursorHash = target
-
-proc replaySegment(c: ForkedChainRef,
-                   target: Hash32,
-                   parent: Header,
-                   parentHash: Hash32) =
-  # Replay from parent+1 to target block
-  # with assumption last state is at parent
-  var
-    prevHash = target
-    chain = newSeq[Block]()
-
-  shouldNotKeyError "replaySegment(target,parent)":
-    while prevHash != parentHash:
-      chain.add c.blocks[prevHash].blk
-      prevHash = chain[^1].header.parentHash
-
-  c.cursorHeader = parent
-  for i in countdown(chain.high, chain.low):
-    c.validateBlock(c.cursorHeader, chain[i],
-      updateCursor = false).expect("have been validated before")
-    c.cursorHeader = chain[i].header
-  c.cursorHash = target
 
 proc writeBaggage(c: ForkedChainRef, target: Hash32) =
   # Write baggage from base+1 to target block
@@ -211,12 +174,14 @@ proc writeBaggage(c: ForkedChainRef, target: Hash32) =
     var prevHash = target
     var count = 0'u64
     while prevHash != c.baseHash:
-      let blk =  c.blocks[prevHash]
-      c.db.persistTransactions(header.number, header.txRoot, blk.blk.transactions)
-      c.db.persistReceipts(header.receiptsRoot, blk.receipts)
-      discard c.db.persistUncles(blk.blk.uncles)
+      let blk = c.blocks[prevHash]
+      # TODO this is a bit late to be writing the transactions etc into the frame
+      #      since there are probably frames built on top already ...
+      blk.txFrame.persistTransactions(header.number, header.txRoot, blk.blk.transactions)
+      blk.txFrame.persistReceipts(header.receiptsRoot, blk.receipts)
+      discard blk.txFrame.persistUncles(blk.blk.uncles)
       if blk.blk.withdrawals.isSome:
-        c.db.persistWithdrawals(
+        blk.txFrame.persistWithdrawals(
           header.withdrawalsRoot.expect("WithdrawalsRoot should be verified before"),
           blk.blk.withdrawals.get)
       for tx in blk.blk.transactions:
@@ -230,7 +195,7 @@ proc writeBaggage(c: ForkedChainRef, target: Hash32) =
       baseNumber = c.baseHeader.number,
       baseHash = c.baseHash.short
 
-func updateBase(c: ForkedChainRef, pvarc: PivotArc) =
+proc updateBase(c: ForkedChainRef, pvarc: PivotArc) =
   ## Remove obsolete chains, example:
   ##
   ##     A1 - A2 - A3          D5 - D6
@@ -264,7 +229,7 @@ func updateBase(c: ForkedChainRef, pvarc: PivotArc) =
   # Cleanup in-memory blocks starting from newBase backward
   # while blocks from newBase+1 to canonicalCursor not deleted
   # e.g. B4 onward
-  c.deleteLineage pvarc.pvHash
+  c.deleteLineage(pvarc.pvHash, true)
 
   # Implied deletion of chain heads (if any)
   c.cursorHeads.swap newCursorHeads
@@ -423,7 +388,7 @@ proc setHead(c: ForkedChainRef, pvarc: PivotArc) =
   # TODO: db.setHead should not read from db anymore
   # all canonical chain marking
   # should be done from here.
-  discard c.db.setHead(pvarc.pvHash)
+  # discard c.db.setHead(pvarc.pvHash)
 
   # update global syncHighest
   c.com.syncHighest = pvarc.pvNumber
@@ -431,20 +396,11 @@ proc setHead(c: ForkedChainRef, pvarc: PivotArc) =
 proc updateHeadIfNecessary(c: ForkedChainRef, pvarc: PivotArc) =
   # update head if the new head is different
   # from current head or current chain
-  if c.cursorHash != pvarc.cursor.hash:
-    if not c.stagingTx.isNil:
-      c.stagingTx.rollback()
-    c.stagingTx = c.db.ctx.txFrameBegin()
-    c.replaySegment(pvarc.pvHash)
 
   c.trimCursorArc(pvarc)
   if c.cursorHash != pvarc.pvHash:
     c.cursorHeader = pvarc.pvHeader
     c.cursorHash = pvarc.pvHash
-
-  if c.stagingTx.isNil:
-    # setHead below don't go straight to db
-    c.stagingTx = c.db.ctx.txFrameBegin()
 
   c.setHead(pvarc)
 
@@ -471,16 +427,17 @@ proc init*(
   ## `persistentBlocks()` used for `Era1` or `Era` import.
   ##
   let
-    base = com.db.getSavedStateBlockNumber
-    baseHash = com.db.getBlockHash(base).expect("baseHash exists")
-    baseHeader = com.db.getBlockHeader(baseHash).expect("base header exists")
+    baseTxFrame = com.db.baseTxFrame()
+    base = baseTxFrame.getSavedStateBlockNumber
+    baseHash = baseTxFrame.getBlockHash(base).expect("baseHash exists")
+    baseHeader = baseTxFrame.getBlockHeader(baseHash).expect("base header exists")
 
   # update global syncStart
   com.syncStart = baseHeader.number
 
   T(com:             com,
-    db:              com.db,
     baseHeader:      baseHeader,
+    baseTxFrame:       baseTxFrame,
     cursorHash:      baseHash,
     baseHash:        baseHash,
     cursorHeader:    baseHeader,
@@ -494,10 +451,12 @@ proc newForkedChain*(com: CommonRef,
   ## This constructor allows to set up the base state which might be needed
   ## for some particular test or other applications. Otherwise consider
   ## `init()`.
-  let baseHash = baseHeader.blockHash
+  let
+    baseHash = baseHeader.blockHash
+    baseTxFrame = com.db.baseTxFrame()
   let chain = ForkedChainRef(
     com: com,
-    db : com.db,
+    baseTxFrame : baseTxFrame,
     baseHeader  : baseHeader,
     cursorHash  : baseHash,
     baseHash    : baseHash,
@@ -512,21 +471,21 @@ proc newForkedChain*(com: CommonRef,
 proc importBlock*(c: ForkedChainRef, blk: Block): Result[void, string] =
   # Try to import block to canonical or side chain.
   # return error if the block is invalid
-  if c.stagingTx.isNil:
-    c.stagingTx = c.db.ctx.txFrameBegin()
-
   template header(): Header =
     blk.header
 
-  if header.parentHash == c.cursorHash:
-    return c.validateBlock(c.cursorHeader, blk)
-
   if header.parentHash == c.baseHash:
-    c.stagingTx.rollback()
-    c.stagingTx = c.db.ctx.txFrameBegin()
-    return c.validateBlock(c.baseHeader, blk)
+    return c.validateBlock(c.baseHeader, c.baseTxFrame, blk)
 
-  if header.parentHash notin c.blocks:
+  c.blocks.withValue(header.parentHash, bd) do:
+    # TODO: If engine API keep importing blocks
+    # but not finalized it, e.g. current chain length > StagedBlocksThreshold
+    # We need to persist some of the in-memory stuff
+    # to a "staging area" or disk-backed memory but it must not afect `base`.
+    # `base` is the point of no return, we only update it on finality.
+
+    ? c.validateBlock(bd.blk.header, bd.txFrame, blk)
+  do:
     # If it's parent is an invalid block
     # there is no hope the descendant is valid
     debug "Parent block not found",
@@ -534,14 +493,7 @@ proc importBlock*(c: ForkedChainRef, blk: Block): Result[void, string] =
       parentHash = header.parentHash.short
     return err("Block is not part of valid chain")
 
-  # TODO: If engine API keep importing blocks
-  # but not finalized it, e.g. current chain length > StagedBlocksThreshold
-  # We need to persist some of the in-memory stuff
-  # to a "staging area" or disk-backed memory but it must not afect `base`.
-  # `base` is the point of no return, we only update it on finality.
-
-  c.replaySegment(header.parentHash)
-  c.validateBlock(c.cursorHeader, blk)
+  ok()
 
 proc forkChoice*(c: ForkedChainRef,
                  headHash: Hash32,
@@ -573,25 +525,15 @@ proc forkChoice*(c: ForkedChainRef,
 
   # At this point cursorHeader.number > baseHeader.number
   if newBase.pvHash == c.cursorHash:
-    # Paranoid check, guaranteed by `newBase.hash == c.cursorHash`
-    doAssert(not c.stagingTx.isNil)
-
-    # CL decide to move backward and then forward?
-    if c.cursorHeader.number < pvarc.pvNumber:
-      c.replaySegment(pvarc.pvHash, c.cursorHeader, c.cursorHash)
-
     # Current segment is canonical chain
     c.writeBaggage(newBase.pvHash)
     c.setHead(pvarc)
-
-    c.stagingTx.commit()
-    c.stagingTx = nil
 
     # Move base to newBase
     c.updateBase(newBase)
 
     # Save and record the block number before the last saved block state.
-    c.db.persistent(newBase.pvNumber).isOkOr:
+    c.com.db.persistent(newBase.pvNumber).isOkOr:
       return err("Failed to save state: " & $$error)
 
     return ok()
@@ -602,27 +544,12 @@ proc forkChoice*(c: ForkedChainRef,
   doAssert(newBase.pvNumber <= finalizedHeader.number)
 
   # Write segment from base+1 to newBase into database
-  c.stagingTx.rollback()
-  c.stagingTx = c.db.ctx.txFrameBegin()
-
   if newBase.pvNumber > c.baseHeader.number:
-    c.replaySegment(newBase.pvHash)
     c.writeBaggage(newBase.pvHash)
-    c.stagingTx.commit()
-    c.stagingTx = nil
     # Update base forward to newBase
     c.updateBase(newBase)
-    c.db.persistent(newBase.pvNumber).isOkOr:
+    c.com.db.persistent(newBase.pvNumber).isOkOr:
       return err("Failed to save state: " & $$error)
-
-  if c.stagingTx.isNil:
-    # replaySegment or setHead below don't
-    # go straight to db
-    c.stagingTx = c.db.ctx.txFrameBegin()
-
-  # Move chain state forward to current head
-  if newBase.pvNumber < pvarc.pvNumber:
-    c.replaySegment(pvarc.pvHash)
 
   c.setHead(pvarc)
 
@@ -646,11 +573,19 @@ proc haveBlockLocally*(c: ForkedChainRef, blockHash: Hash32): bool =
     return true
   if c.baseHash == blockHash:
     return true
-  c.db.headerExists(blockHash)
+  c.baseTxFrame.headerExists(blockHash)
 
-func stateReady*(c: ForkedChainRef, header: Header): bool =
-  let blockHash = header.blockHash
-  blockHash == c.cursorHash
+func txFrame*(c: ForkedChainRef, blockHash: Hash32): CoreDbTxRef =
+  if blockHash == c.baseHash:
+    return c.baseTxFrame
+
+  c.blocks.withValue(blockHash, bd) do:
+    return bd[].txFrame
+
+  c.baseTxFrame
+
+func txFrame*(c: ForkedChainRef, header: Header): CoreDbTxRef =
+  c.txFrame(header.blockHash())
 
 func com*(c: ForkedChainRef): CommonRef =
   c.com
@@ -691,7 +626,7 @@ func memoryTransaction*(c: ForkedChainRef, txHash: Hash32): Opt[Transaction] =
 proc latestBlock*(c: ForkedChainRef): Block =
   c.blocks.withValue(c.cursorHash, val) do:
     return val.blk
-  c.db.getEthBlock(c.cursorHash).expect("cursorBlock exists")
+  c.baseTxFrame.getEthBlock(c.cursorHash).expect("cursorBlock exists")
 
 proc headerByNumber*(c: ForkedChainRef, number: BlockNumber): Result[Header, string] =
   if number > c.cursorHeader.number:
@@ -704,7 +639,7 @@ proc headerByNumber*(c: ForkedChainRef, number: BlockNumber): Result[Header, str
     return ok(c.baseHeader)
 
   if number < c.baseHeader.number:
-    return c.db.getBlockHeader(number)
+    return c.baseTxFrame.getBlockHeader(number)
 
   shouldNotKeyError "headerByNumber":
     var prevHash = c.cursorHeader.parentHash
@@ -722,7 +657,7 @@ proc headerByHash*(c: ForkedChainRef, blockHash: Hash32): Result[Header, string]
   do:
     if c.baseHash == blockHash:
       return ok(c.baseHeader)
-    return c.db.getBlockHeader(blockHash)
+    return c.baseTxFrame.getBlockHeader(blockHash)
 
 proc blockByHash*(c: ForkedChainRef, blockHash: Hash32): Result[Block, string] =
   # used by getPayloadBodiesByHash
@@ -731,14 +666,14 @@ proc blockByHash*(c: ForkedChainRef, blockHash: Hash32): Result[Block, string] =
   c.blocks.withValue(blockHash, val) do:
     return ok(val.blk)
   do:
-    return c.db.getEthBlock(blockHash)
+    return c.baseTxFrame.getEthBlock(blockHash)
 
 proc blockByNumber*(c: ForkedChainRef, number: BlockNumber): Result[Block, string] =
   if number > c.cursorHeader.number:
     return err("Requested block number not exists: " & $number)
 
   if number < c.baseHeader.number:
-    return c.db.getEthBlock(number)
+    return c.baseTxFrame.getEthBlock(number)
 
   shouldNotKeyError "blockByNumber":
     var prevHash = c.cursorHash
@@ -793,6 +728,6 @@ proc isCanonicalAncestor*(c: ForkedChainRef,
 
   # canonical chain in database should have a marker
   # and the marker is block number
-  let canonHash = c.db.getBlockHash(blockNumber).valueOr:
+  let canonHash = c.baseTxFrame.getBlockHash(blockNumber).valueOr:
     return false
   canonHash == blockHash

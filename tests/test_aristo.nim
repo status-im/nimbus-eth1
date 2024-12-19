@@ -24,7 +24,7 @@ import
   ./test_aristo/test_portal_proof,
   ./test_aristo/test_compute,
   ./test_aristo/[
-    test_balancer, test_helpers, test_samples_xx, test_tx,
+    test_helpers, test_samples_xx, test_tx,
     undump_accounts, undump_storages]
 
 const

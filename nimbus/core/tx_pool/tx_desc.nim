@@ -110,7 +110,7 @@ proc gasLimitsGet(com: CommonRef; parent: Header): GasInt =
       gasFloor = com.gasLimit,
       gasCeil = com.gasLimit)
 
-proc setupVMState(com: CommonRef; parent: Header): BaseVMState =
+proc setupVMState(com: CommonRef; parent: Header, parentFrame: CoreDbTxRef): BaseVMState =
   # do hardfork transition before
   # BaseVMState querying any hardfork/consensus from CommonRef
 
@@ -130,10 +130,12 @@ proc setupVMState(com: CommonRef; parent: Header): BaseVMState =
   BaseVMState.new(
     parent   = parent,
     blockCtx = blockCtx,
-    com      = com)
+    com      = com,
+    txFrame = com.db.ctx.txFrameBegin(parentFrame)
+    )
 
 proc update(xp: TxPoolRef; parent: Header) =
-  xp.vmState = setupVMState(xp.vmState.com, parent)
+  xp.vmState = setupVMState(xp.vmState.com, parent, xp.chain.txFrame(parent))
 
 # ------------------------------------------------------------------------------
 # Public functions, constructor
@@ -144,7 +146,7 @@ proc init*(xp: TxPoolRef; chain: ForkedChainRef) =
   xp.startDate = getTime().utc.toTime
 
   let head = chain.latestHeader
-  xp.vmState = setupVMState(chain.com, head)
+  xp.vmState = setupVMState(chain.com, head, chain.txFrame(head))
   xp.txDB = TxTabsRef.new
 
   xp.lifeTime = txItemLifeTime

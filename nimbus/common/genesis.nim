@@ -24,7 +24,7 @@ import
 
 proc toGenesisHeader*(
     g: Genesis;
-    db: CoreDbRef;
+    db: CoreDbTxRef;
     fork: HardFork;
       ): Header =
   ## Initialise block chain DB accounts derived from the `genesis.alloc` table
@@ -81,16 +81,16 @@ proc toGenesisHeader*(
 proc toGenesisHeader*(
     genesis: Genesis;
     fork: HardFork;
-    db = CoreDbRef(nil)): Header =
+    db = CoreDbTxRef(nil)): Header =
   ## Generate the genesis block header from the `genesis` and `config`
   ## argument value.
   let
-    db  = if db.isNil: AristoDbMemory.newCoreDbRef() else: db
+    db  = if db.isNil: AristoDbMemory.newCoreDbRef().ctx.txFrameBegin(nil) else: db
   toGenesisHeader(genesis, db, fork)
 
 proc toGenesisHeader*(
     params: NetworkParams;
-    db = CoreDbRef(nil)
+    db = CoreDbTxRef(nil)
       ): Header =
   ## Generate the genesis block header from the `genesis` and `config`
   ## argument value.

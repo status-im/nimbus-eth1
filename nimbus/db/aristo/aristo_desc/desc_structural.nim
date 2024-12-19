@@ -94,8 +94,8 @@ type
     key*: Hash32                     ## Some state hash (if any)
     serial*: uint64                  ## Generic identifier from application
 
-  LayerRef* = ref LayerObj
-  LayerObj* = object
+  LayerRef* = ref Layer
+  Layer* = object
     ## Delta layers are stacked implying a tables hierarchy. Table entries on
     ## a higher level take precedence over lower layer table entries. So an
     ## existing key-value table entry of a layer on top supersedes same key
@@ -124,8 +124,6 @@ type
 
     accLeaves*: Table[Hash32, VertexRef]   ## Account path -> VertexRef
     stoLeaves*: Table[Hash32, VertexRef]   ## Storage path -> VertexRef
-
-    txUid*: uint                           ## Transaction identifier if positive
 
   GetVtxFlag* = enum
     PeekCache

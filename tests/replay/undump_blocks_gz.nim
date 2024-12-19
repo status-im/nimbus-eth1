@@ -43,7 +43,7 @@ proc dumpBlocksEndNl*: string =
 proc dumpBlocksListNl*(header: Header; body: BlockBody): string =
   dumpBlocksList(header, body) & "\n"
 
-proc dumpBlocksBeginNl*(db: CoreDbRef;
+proc dumpBlocksBeginNl*(db: CoreDbTxRef;
                        headers: openArray[Header]): string =
   if headers[0].number == 1'u64:
     let
@@ -57,7 +57,7 @@ proc dumpBlocksBeginNl*(db: CoreDbRef;
   result &= dumpBlocksBegin(headers) & "\n"
 
 
-proc dumpBlocksNl*(db: CoreDbRef; headers: openArray[Header];
+proc dumpBlocksNl*(db: CoreDbTxRef; headers: openArray[Header];
                    bodies: openArray[BlockBody]): string =
   ## Add this below the line `transaction.commit()` in the function
   ## `p2p/chain/persist_blocks.persistBlocksImpl()`:

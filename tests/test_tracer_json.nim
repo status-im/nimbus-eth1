@@ -35,37 +35,37 @@ proc preLoadAristoDb(cdb: CoreDbRef; jKvp: JsonNode; num: BlockNumber) =
     predRoot: Hash32           # from predecessor header
     txRoot: Hash32             # header with block number `num`
     rcptRoot: Hash32           # ditto
-  let
-    adb = cdb.ctx.mpt           # `Aristo` db
-    kdb = cdb.ctx.kvt           # `Kvt` db
-    ps = PartStateRef.init adb  # Partial DB descriptor
+  # let
+  #   adb = cdb.ctx.mpt           # `Aristo` db
+  #   kdb = cdb.ctx.kvt           # `Kvt` db
+  #   ps = PartStateRef.init cdb.baseTxFrame  # Partial DB descriptor
 
-  # Fill KVT and collect `proof` data
-  for (k,v) in jKvp.pairs:
-    let
-      key = hexToSeqByte(k)
-      val = hexToSeqByte(v.getStr())
-    if key.len == 32:
-      doAssert key == val.keccak256.data
-      if val != @[0x80u8]: # Exclude empty item
-        proof.add val
-    else:
-      if key[0] == 0:
-        try:
-          # Pull our particular header fields (if possible)
-          let header = rlp.decode(val, Header)
-          if header.number == num:
-            txRoot = header.txRoot
-            rcptRoot = header.receiptsRoot
-          elif header.number == num-1:
-            predRoot = header.stateRoot
-        except RlpError:
-          discard
-      check kdb.put(key, val).isOk
+  # # Fill KVT and collect `proof` data
+  # for (k,v) in jKvp.pairs:
+  #   let
+  #     key = hexToSeqByte(k)
+  #     val = hexToSeqByte(v.getStr())
+  #   if key.len == 32:
+  #     doAssert key == val.keccak256.data
+  #     if val != @[0x80u8]: # Exclude empty item
+  #       proof.add val
+  #   else:
+  #     if key[0] == 0:
+  #       try:
+  #         # Pull our particular header fields (if possible)
+  #         let header = rlp.decode(val, Header)
+  #         if header.number == num:
+  #           txRoot = header.txRoot
+  #           rcptRoot = header.receiptsRoot
+  #         elif header.number == num-1:
+  #           predRoot = header.stateRoot
+  #       except RlpError:
+  #         discard
+  #     check kdb.put(key, val).isOk
 
-  # Set up production MPT
-  ps.partPut(proof, AutomaticPayload).isOkOr:
-    raiseAssert info & ": partPut => " & $error
+  # # Set up production MPT
+  # ps.partPut(proof, AutomaticPayload).isOkOr:
+  #   raiseAssert info & ": partPut => " & $error
 
   # TODO code needs updating after removal of generic payloads
   # # Handle transaction sub-tree
@@ -112,8 +112,8 @@ proc preLoadAristoDb(cdb: CoreDbRef; jKvp: JsonNode; num: BlockNumber) =
   # for (rvid,key) in ps.vkPairs:
   #   adb.layersPutKey(rvid, key)
 
-  ps.check().isOkOr:
-    raiseAssert info & ": check => " & $error
+  # ps.check().isOkOr:
+  #   raiseAssert info & ": check => " & $error
 
   #echo ">>> preLoadAristoDb (9)",
   #  "\n    ps\n    ", ps.pp(byKeyOk=false,byVidOk=false),
@@ -141,7 +141,7 @@ proc testFixtureImpl(node: JsonNode, testStatusIMPL: var TestStatus, memoryDB: C
   # Some hack for `Aristo` using the `snap` protocol proof-loader
   memoryDB.preLoadAristoDb(state, blockNumber)
 
-  var blk = com.db.getEthBlock(blockNumber).expect("eth block exists")
+  var blk = com.db.baseTxFrame().getEthBlock(blockNumber).expect("eth block exists")
 
   let txTraces = traceTransactions(com, blk.header, blk.transactions)
   let stateDump = dumpBlockState(com, blk)

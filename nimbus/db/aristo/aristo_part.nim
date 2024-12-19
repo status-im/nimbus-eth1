@@ -67,7 +67,7 @@ iterator vkPairs*(ps: PartStateRef): (RootedVertexID, HashKey) =
 # ------------------------------------------------------------------------------
 
 proc partTwig(
-    db: AristoDbRef;
+    db: AristoTxRef;
     root: VertexID;
     path: NibblesBuf;
       ): Result[(seq[seq[byte]],bool), AristoError] =
@@ -88,13 +88,13 @@ proc partTwig(
     err(rc.error)
 
 proc partAccountTwig*(
-    db: AristoDbRef;
+    db: AristoTxRef;
     accPath: Hash32;
       ): Result[(seq[seq[byte]],bool), AristoError] =
   db.partTwig(VertexID(1), NibblesBuf.fromBytes accPath.data)
 
 proc partStorageTwig*(
-    db: AristoDbRef;
+    db: AristoTxRef;
     accPath: Hash32;
     stoPath: Hash32;
       ): Result[(seq[seq[byte]],bool), AristoError] =
@@ -113,9 +113,7 @@ proc partUntwigPath*(
     root: Hash32;
     path: Hash32;
       ): Result[Opt[seq[byte]],AristoError] =
-  ## Verify the chain of rlp-encoded nodes and return the payload. If a
-  ## `Opt.none()` result is returned then the `path` argument does provably
-  ## not exist relative to `chain`.
+  ## Variant of `partUntwigGeneric()`.
   try:
     let
       nibbles = NibblesBuf.fromBytes path.data

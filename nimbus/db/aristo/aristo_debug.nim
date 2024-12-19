@@ -24,8 +24,8 @@ import
 # Private functions
 # ------------------------------------------------------------------------------
 
-func orDefault(db: AristoDbRef): AristoDbRef =
-  if db.isNil: AristoDbRef(top: LayerRef.init()) else: db
+func orDefault(db: AristoTxRef): AristoTxRef =
+  if db.isNil: AristoTxRef(layer: LayerRef.init()) else: db
 
 # --------------------------
 
@@ -80,17 +80,17 @@ func stripZeros(a: string; toExp = false): string =
 # ---------------------
 
 func ppKeyOk(
-    db: AristoDbRef;
+    db: AristoTxRef;
     key: HashKey;
     rvid: RootedVertexID;
       ): string =
   if key.isValid and rvid.isValid:
-    let rv = db.xMap.getOrVoid key
+    let rv = db.db.xMap.getOrVoid key
     if rv.isValid:
       if rvid != rv:
         result = "(!)"
       return
-    db.xMap[key] = rvid
+    db.db.xMap[key] = rvid
 
 func ppVid(vid: VertexID; pfx = true): string =
   if pfx:
@@ -130,7 +130,7 @@ func ppVidList(vLst: openArray[VertexID]): string =
     result &= vLst[^100 .. ^1].mapIt(it.ppVid).join(",")
   result &= "]"
 
-proc ppKey(key: HashKey; db: AristoDbRef; pfx = true): string =
+proc ppKey(key: HashKey; db: AristoTxRef; pfx = true): string =
   if pfx:
     result = "£"
   if key.to(Hash32) == default(Hash32):
@@ -139,7 +139,7 @@ proc ppKey(key: HashKey; db: AristoDbRef; pfx = true): string =
     result &= "ø"
   else:
     # Reverse lookup
-    let rvid = db.xMap.getOrVoid key
+    let rvid = db.db.xMap.getOrVoid key
     if rvid.isValid:
       result &= rvid.ppVid(pfx=false)
       let vtx = db.getVtx rvid
@@ -153,7 +153,7 @@ proc ppKey(key: HashKey; db: AristoDbRef; pfx = true): string =
       let tag = if key.len < 32: "[#" & $key.len & "]" else: ""
       result &= @(key.data).toHex.squeeze(hex=true,ignLen=true) & tag
 
-func ppLeafTie(lty: LeafTie, db: AristoDbRef): string =
+func ppLeafTie(lty: LeafTie, db: AristoTxRef): string =
   let pfx = lty.path.to(NibblesBuf)
   "@" & lty.root.ppVid(pfx=false) & ":" &
     ($pfx).squeeze(hex=true,ignLen=(pfx.len==64))
@@ -165,7 +165,7 @@ func ppPathPfx(pfx: NibblesBuf): string =
 func ppNibble(n: int8): string =
   if n < 0: "ø" elif n < 10: $n else: n.toHexLsb
 
-proc ppEthAccount(a: Account, db: AristoDbRef): string =
+proc ppEthAccount(a: Account, db: AristoTxRef): string =
   result = "("
   result &= ($a.nonce).stripZeros(toExp=true) & ","
   result &= ($a.balance).stripZeros(toExp=true) & ","
@@ -178,14 +178,14 @@ func ppAriAccount(a: AristoAccount): string =
   result &= ($a.balance).stripZeros(toExp=true) & ","
   result &= a.codeHash.ppCodeHash & ")"
 
-func ppPayload(p: LeafPayload, db: AristoDbRef): string =
+func ppPayload(p: LeafPayload, db: AristoTxRef): string =
   case p.pType:
   of AccountData:
     result = "(" & p.account.ppAriAccount() & "," & p.stoID.ppVid & ")"
   of StoData:
     result = ($p.stoData).squeeze
 
-func ppVtx(nd: VertexRef, db: AristoDbRef, rvid: RootedVertexID): string =
+func ppVtx(nd: VertexRef, db: AristoTxRef, rvid: RootedVertexID): string =
   if not nd.isValid:
     result = "ø"
   else:
@@ -210,7 +210,7 @@ func ppVtx(nd: VertexRef, db: AristoDbRef, rvid: RootedVertexID): string =
 
 proc ppNode(
     nd: NodeRef;
-    db: AristoDbRef;
+    db: AristoTxRef;
     rvid = default(RootedVertexID);
       ): string =
   if not nd.isValid:
@@ -253,7 +253,7 @@ proc ppNode(
 
 func ppXTab[T: VertexRef|NodeRef](
     tab: Table[RootedVertexID,T];
-    db: AristoDbRef;
+    db: AristoTxRef;
     indent = 4;
       ): string =
   proc ppT(v: T; r: RootedVertexID): string =
@@ -268,7 +268,7 @@ func ppXTab[T: VertexRef|NodeRef](
 
 
 proc ppXMap*(
-    db: AristoDbRef;
+    db: AristoTxRef;
     kMap: Table[RootedVertexID,HashKey];
     indent: int;
       ): string =
@@ -289,7 +289,7 @@ proc ppXMap*(
           if key == VOID_HASH_KEY:
             0
           else:
-            db.xMap[key] = w
+            db.db.xMap[key] = w
             let vtx = db.getVtx(w)
             if not vtx.isValid:
               1
@@ -360,7 +360,7 @@ proc ppXMap*(
 
 proc ppBalancer(
     fl: LayerRef;
-    db: AristoDbRef;
+    db: AristoTxRef;
     indent: int;
       ): string =
   ## Walk over filter tables
@@ -385,7 +385,7 @@ proc ppBalancer(
     result &= $(1+n) & "(" & vid.ppVid & "," & key.ppKey(db) & ")"
   result &= "}"
 
-proc ppBe[T](be: T; db: AristoDbRef; limit: int; indent: int): string =
+proc ppBe[T](be: T; db: AristoTxRef; limit: int; indent: int): string =
   ## Walk over backend tables
   let
     pfx = indent.toPfx
@@ -435,7 +435,7 @@ proc ppBe[T](be: T; db: AristoDbRef; limit: int; indent: int): string =
 
 proc ppLayer(
     layer: LayerRef;
-    db: AristoDbRef;
+    db: AristoTxRef;
     vTopOk: bool;
     sTabOk: bool;
     kMapOk: bool;
@@ -495,19 +495,19 @@ func pp*(w: Hash32; codeHashOk: bool): string =
 func pp*(n: NibblesBuf): string =
   n.ppPathPfx()
 
-proc pp*(w: HashKey; db = AristoDbRef(nil)): string =
+proc pp*(w: HashKey; db = AristoTxRef(nil)): string =
   w.ppKey(db.orDefault)
 
-proc pp*(w: Hash32; db = AristoDbRef(nil)): string =
+proc pp*(w: Hash32; db = AristoTxRef(nil)): string =
   w.to(HashKey).ppKey(db.orDefault)
 
-proc pp*(w: openArray[HashKey]; db = AristoDbRef(nil)): string =
+proc pp*(w: openArray[HashKey]; db = AristoTxRef(nil)): string =
   "[" & @w.mapIt(it.ppKey(db.orDefault)).join(",") & "]"
 
-func pp*(lty: LeafTie, db = AristoDbRef(nil)): string =
+func pp*(lty: LeafTie, db = AristoTxRef(nil)): string =
   lty.ppLeafTie(db.orDefault)
 
-proc pp*(a: Account, db = AristoDbRef(nil)): string =
+proc pp*(a: Account, db = AristoTxRef(nil)): string =
   a.ppEthAccount(db.orDefault)
 
 func pp*(vid: VertexID): string =
@@ -519,13 +519,13 @@ func pp*(rvid: RootedVertexID): string =
 func pp*(vLst: openArray[VertexID]): string =
   vLst.ppVidList
 
-func pp*(p: LeafPayload, db = AristoDbRef(nil)): string =
+func pp*(p: LeafPayload, db = AristoTxRef(nil)): string =
   p.ppPayload(db.orDefault)
 
-func pp*(nd: VertexRef, db = AristoDbRef(nil)): string =
+func pp*(nd: VertexRef, db = AristoTxRef(nil)): string =
   nd.ppVtx(db.orDefault, default(RootedVertexID))
 
-proc pp*(nd: NodeRef, db = AristoDbRef(nil)): string =
+proc pp*(nd: NodeRef, db = AristoTxRef(nil)): string =
   nd.ppNode(db.orDefault, default(RootedVertexID))
 
 func pp*(e: (VertexID,AristoError)): string =
@@ -542,26 +542,26 @@ func pp*[T](rc: Result[T,(VertexID,AristoError)]): string =
 
 func pp*(
     sTab: Table[RootedVertexID,VertexRef];
-    db = AristoDbRef(nil);
+    db = AristoTxRef(nil);
     indent = 4;
       ): string =
   sTab.ppXTab(db.orDefault)
 
-proc pp*(leg: Leg; root: VertexID; db = AristoDbRef(nil)): string =
+proc pp*(leg: Leg; root: VertexID; db = AristoTxRef(nil)): string =
   let db = db.orDefault()
   result = "(" & leg.wp.vid.ppVid & ","
   block:
     let key = db.layersGetKeyOrVoid (root, leg.wp.vid)
     if not key.isValid:
       result &= "ø"
-    elif (root, leg.wp.vid) != db.xMap.getOrVoid key:
+    elif (root, leg.wp.vid) != db.db.xMap.getOrVoid key:
       result &= key.ppKey(db)
   result &= ","
   if 0 <= leg.nibble:
     result &= $leg.nibble.ppNibble
   result &= "," & leg.wp.vtx.pp(db) & ")"
 
-proc pp*(hike: Hike; db = AristoDbRef(nil); indent = 4): string =
+proc pp*(hike: Hike; db = AristoTxRef(nil); indent = 4): string =
   let
     db = db.orDefault()
     pfx = indent.toPfx(1)
@@ -577,7 +577,7 @@ proc pp*(hike: Hike; db = AristoDbRef(nil); indent = 4): string =
 
 func pp*[T: NodeRef|VertexRef|HashKey](
     q: seq[(HashKey,T)];
-    db = AristoDbRef(nil);
+    db = AristoTxRef(nil);
     indent = 4;
       ): string =
   let db = db.orDefault
@@ -591,7 +591,7 @@ func pp*[T: NodeRef|VertexRef|HashKey](
 
 func pp*[T: NodeRef|VertexRef|HashKey](
     t: Table[HashKey,T];
-    db = AristoDbRef(nil);
+    db = AristoTxRef(nil);
     indent = 4;
       ): string =
   ## Sort hash keys by associated vertex ID were possible
@@ -611,7 +611,7 @@ func pp*[T: NodeRef|VertexRef|HashKey](
 
 proc pp*[T: HashKey](
     t: Table[T,RootedVertexID];
-    db = AristoDbRef(nil);
+    db = AristoTxRef(nil);
     indent = 4;
       ): string =
   ## Sort by second tab item vertex ID
@@ -638,14 +638,14 @@ proc pp*[T: HashKey](
 
 func pp*[T: HashKey](
     t: TableRef[HashKey,T];
-    db = AristoDbRef(nil);
+    db = AristoTxRef(nil);
     indent = 4;
       ): string =
   pp(t[],db,indent)
 
 proc pp*(
     kMap: Table[RootedVertexID,HashKey];
-    db: AristoDbRef;
+    db: AristoTxRef;
     indent = 4;
       ): string =
   db.ppXMap(kMap, indent)
@@ -653,18 +653,18 @@ proc pp*(
 # ---------------------
 
 func pp*(tx: AristoTxRef): string =
-  result = "(uid=" & $tx.txUid & ",level=" & $tx.level
+  result = "(" & repr(pointer(addr(tx[])))
   if not tx.parent.isNil:
-    result &= ", par=" & $tx.parent.txUid
+    result &= ", par=" & pp(tx.parent)
   result &= ")"
 
-func pp*(wp: VidVtxPair; db: AristoDbRef): string =
+func pp*(wp: VidVtxPair; db: AristoTxRef): string =
   "(" & wp.vid.pp & "," & wp.vtx.pp(db) & ")"
 
 
 proc pp*(
     layer: LayerRef;
-    db: AristoDbRef;
+    db: AristoTxRef;
     indent = 4;
     sTabOk = true,
     kMapOk = true,
@@ -675,11 +675,11 @@ proc pp*(
 
 proc pp*(
   be: BackendRef;
-  db: AristoDbRef;
+  db: AristoTxRef;
   limit = 100;
   indent = 4;
     ): string =
-  result = db.balancer.ppBalancer(db, indent+1) & indent.toPfx
+  result = db.layer.ppBalancer(db, indent+1) & indent.toPfx
   case be.kind:
   of BackendMemory:
     result &= be.MemBackendRef.ppBe(db, limit, indent+1)
@@ -689,7 +689,7 @@ proc pp*(
     result &= "<NoBackend>"
 
 proc pp*(
-    db: AristoDbRef;
+    db: AristoTxRef;
     indent = 4;
     backendOk = false;
     balancerOk = true;
@@ -699,29 +699,29 @@ proc pp*(
     sTabOk = true;
     limit = 100;
       ): string =
-  if topOk:
-    result = db.layersCc.ppLayer(
-      db, sTabOk=sTabOk, kMapOk=kMapOk, vTopOk=true, indent=indent)
-  let stackOnlyOk = stackOk and not (topOk or balancerOk or backendOk)
-  if not stackOnlyOk:
-    result &= indent.toPfx(1) & "level=" & $db.stack.len
-  if (stackOk and 0 < db.stack.len) or stackOnlyOk:
-    let layers = @[db.top] & db.stack.reversed
-    var lStr = ""
-    for n,w in layers:
-      let
-        m = layers.len - n - 1
-        l = db.layersCc m
-        a = w.kMap.values.toSeq.filterIt(not it.isValid).len
-        c = l.kMap.values.toSeq.filterIt(not it.isValid).len
-      result &= "(" & $(w.kMap.len - a) & "," & $a & ")"
-      lStr &= " " & $m & "=(" & $(l.kMap.len - c) & "," & $c & ")"
-    result &= " =>" & lStr
-  if backendOk:
-    result &= indent.toPfx & db.backend.pp(db, limit=limit, indent)
-  elif balancerOk:
-    result &= indent.toPfx & db.balancer.ppBalancer(db, indent+1)
-
+  # if topOk:
+  #   result = db.layersCc.ppLayer(
+  #     db, sTabOk=sTabOk, kMapOk=kMapOk, vTopOk=true, indent=indent)
+  # let stackOnlyOk = stackOk and not (topOk or balancerOk or backendOk)
+  # if not stackOnlyOk:
+  #   result &= indent.toPfx(1) & "level=" & $db.stack.len
+  # if (stackOk and 0 < db.stack.len) or stackOnlyOk:
+  #   let layers = @[db.top] & db.stack.reversed
+  #   var lStr = ""
+  #   for n,w in layers:
+  #     let
+  #       m = layers.len - n - 1
+  #       l = db.layersCc m
+  #       a = w.kMap.values.toSeq.filterIt(not it.isValid).len
+  #       c = l.kMap.values.toSeq.filterIt(not it.isValid).len
+  #     result &= "(" & $(w.kMap.len - a) & "," & $a & ")"
+  #     lStr &= " " & $m & "=(" & $(l.kMap.len - c) & "," & $c & ")"
+  #   result &= " =>" & lStr
+  # if backendOk:
+  #   result &= indent.toPfx & db.backend.pp(db, limit=limit, indent)
+  # elif balancerOk:
+  #   result &= indent.toPfx & db.balancer.ppBalancer(db, indent+1)
+  discard #TODO
 # ------------------------------------------------------------------------------
 # End
 # ------------------------------------------------------------------------------

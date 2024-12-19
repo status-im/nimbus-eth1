@@ -42,8 +42,6 @@ proc processBlock(
   ## implementations (but can be savely removed, as well.)
   ## variant of `processBlock()` where the `header` argument is explicitely set.
   template header: Header = blk.header
-  var dbTx = vmState.com.db.ctx.txFrameBegin()
-  defer: dbTx.dispose()
 
   let com = vmState.com
   if com.daoForkSupport and
@@ -64,7 +62,7 @@ proc processBlock(
     discard com.db.persistUncles(blk.uncles)
 
   # EIP-3675: no reward for miner in POA/POS
-  if com.proofOfStake(header):
+  if com.proofOfStake(header, vmState.stateDB.txFrame):
     vmState.calculateReward(header, blk.uncles)
 
   vmState.mutateStateDB:
@@ -75,10 +73,10 @@ proc processBlock(
 
   ok()
 
-proc getVmState(c: ChainRef, header: Header):
+proc getVmState(c: ChainRef, header: Header, txFrame: CoreDbTxRef):
                  Result[BaseVMState, void] =
   let vmState = BaseVMState()
-  if not vmState.init(header, c.com, storeSlotHash = false):
+  if not vmState.init(header, c.com, txFrame, storeSlotHash = false):
     debug "Cannot initialise VmState",
       number = header.number
     return err()
@@ -94,17 +92,17 @@ proc setBlock*(c: ChainRef; blk: Block): Result[void, string] =
 
   # Needed for figuring out whether KVT cleanup is due (see at the end)
   let
-    vmState = c.getVmState(header).valueOr:
+    vmState = c.getVmState(header, txFrame).valueOr:
       return err("no vmstate")
   ? vmState.processBlock(blk)
 
-  ? c.db.persistHeaderAndSetHead(header, c.com.startOfHistory)
+  ? txFrame.persistHeaderAndSetHead(header, c.com.startOfHistory)
 
-  c.db.persistTransactions(header.number, header.txRoot, blk.transactions)
-  c.db.persistReceipts(header.receiptsRoot, vmState.receipts)
+  txFrame.persistTransactions(header.number, header.txRoot, blk.transactions)
+  txFrame.persistReceipts(header.receiptsRoot, vmState.receipts)
 
   if blk.withdrawals.isSome:
-    c.db.persistWithdrawals(header.withdrawalsRoot.get, blk.withdrawals.get)
+    txFrame.persistWithdrawals(header.withdrawalsRoot.get, blk.withdrawals.get)
 
   # update currentBlock *after* we persist it
   # so the rpc return consistent result

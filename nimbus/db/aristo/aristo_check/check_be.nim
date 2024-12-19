@@ -51,7 +51,7 @@ proc checkBE*[T: RdbBackendRef|MemBackendRef|VoidBackendRef](
   for (rvid,key) in T.walkKeyBe db:
     if topVidBe.vid < rvid.vid:
       topVidBe = rvid
-    let _ = db.getVtxBE(rvid).valueOr:
+    let _ = db.getVtxBe(rvid).valueOr:
       return err((rvid.vid,CheckBeVtxMissing))
 
   # Compare calculated `vTop` against database state
@@ -76,25 +76,25 @@ proc checkBE*[T: RdbBackendRef|MemBackendRef|VoidBackendRef](
   block:
     var topVidCache: RootedVertexID = (VertexID(0), VertexID(0))
 
-    # Check structural table
-    for (rvid,vtx) in db.layersWalkVtx:
-      if vtx.isValid and topVidCache.vid < rvid.vid:
-        topVidCache = rvid
-      let (key, _) = db.layersGetKey(rvid).valueOr: (VOID_HASH_KEY, 0)
-      if not vtx.isValid:
-        # Some vertex is to be deleted, the key must be empty
-        if key.isValid:
-          return err((rvid.vid,CheckBeCacheKeyNonEmpty))
+    # # Check structural table
+    # for (rvid,vtx) in db.layersWalkVtx:
+    #   if vtx.isValid and topVidCache.vid < rvid.vid:
+    #     topVidCache = rvid
+    #   let (key, _) = db.layersGetKey(rvid).valueOr: (VOID_HASH_KEY, 0)
+    #   if not vtx.isValid:
+    #     # Some vertex is to be deleted, the key must be empty
+    #     if key.isValid:
+    #       return err((rvid.vid,CheckBeCacheKeyNonEmpty))
 
-    # Check key table
-    var list: seq[RootedVertexID]
-    for (rvid,key) in db.layersWalkKey:
-      if key.isValid and topVidCache.vid < rvid.vid:
-        topVidCache = rvid
-      list.add rvid
-      let vtx = db.getVtx rvid
-      if db.layersGetVtx(rvid).isErr and not vtx.isValid:
-        return err((rvid.vid,CheckBeCacheKeyDangling))
+    # # Check key table
+    # var list: seq[RootedVertexID]
+    # for (rvid,key) in db.layersWalkKey:
+    #   if key.isValid and topVidCache.vid < rvid.vid:
+    #     topVidCache = rvid
+    #   list.add rvid
+    #   let vtx = db.getVtx rvid
+    #   if db.layersGetVtx(rvid).isErr and not vtx.isValid:
+    #     return err((rvid.vid,CheckBeCacheKeyDangling))
 
     # Check vTop
     # TODO

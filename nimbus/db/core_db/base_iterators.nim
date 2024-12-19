@@ -34,9 +34,6 @@ when CoreDbEnableApiTracking:
   const
     logTxt = "API"
 
-template dbType(dsc: CoreDbKvtRef | CoreDbAccRef): CoreDbType =
-  dsc.distinctBase.parent.dbType
-
 # ---------------
 
 template call(api: KvtApiRef; fn: untyped; args: varargs[untyped]): untyped =
@@ -49,9 +46,6 @@ template call(kvt: CoreDbKvtRef; fn: untyped; args: varargs[untyped]): untyped =
   kvt.distinctBase.parent.kvtApi.call(fn, args)
 
 # ---------------
-
-template mpt(dsc: CoreDbAccRef): AristoDbRef =
-  dsc.distinctBase.mpt
 
 template call(api: AristoApiRef; fn: untyped; args: varargs[untyped]): untyped =
   when CoreDbEnableApiJumpTable:
@@ -70,14 +64,10 @@ template call(
 # Public iterators
 # ------------------------------------------------------------------------------
 
-iterator slotPairs*(acc: CoreDbAccRef; accPath: Hash32): (seq[byte], UInt256) =
+iterator slotPairs*(acc: CoreDbTxRef; accPath: Hash32): (seq[byte], UInt256) =
   acc.setTrackNewApi AccSlotPairsIt
-  case acc.dbType:
-  of AristoDbMemory, AristoDbRocks, AristoDbVoid:
-    for (path,data) in acc.mpt.rightPairsStorage accPath:
-      yield (acc.call(pathAsBlob, path), data)
-  of Ooops:
-    raiseAssert: "Unsupported database type: " & $acc.dbType
+  for (path,data) in acc.aTx.rightPairsStorage accPath:
+    yield (acc.ctx.parent.ariApi.call(pathAsBlob, path), data)
   acc.ifTrackNewApi:
     debug logTxt, api, elapsed
 

@@ -75,7 +75,8 @@ proc testFixture(fixtures: JsonNode, testStatusIMPL: var TestStatus) =
     vmState = BaseVMState.new(
       Header(number: 1'u64, stateRoot: emptyRlpHash),
       Header(),
-      com
+      com,
+      com.db.baseTxFrame()
     )
 
   case toLowerAscii(label)

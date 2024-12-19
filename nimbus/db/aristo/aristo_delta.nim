@@ -31,7 +31,7 @@ proc deltaPersistent*(
     db: AristoDbRef;                   # Database
     nxtFid = 0u64;                     # Next filter ID (if any)
       ): Result[void,AristoError] =
-  ## Resolve (i.e. move) the balancer into the physical backend database.
+  ## Resolve (i.e. move) txRef into the physical backend database.
   ##
   ## This needs write permission on the backend DB for the descriptor argument
   ## `db` (see the function `aristo_desc.isCentre()`.) If the argument flag
@@ -47,7 +47,7 @@ proc deltaPersistent*(
     return err(FilBackendMissing)
 
   # Blind or missing filter
-  if db.balancer.isNil:
+  if db.txRef.isNil:
     # Add a blind storage frame. This will do no harm if `Aristo` runs
     # standalone. Yet it is needed if a `Kvt` is tied to `Aristo` and has
     # triggered a save cyle already which is to be completed here.
@@ -60,30 +60,33 @@ proc deltaPersistent*(
     return ok()
 
   let lSst = SavedState(
-    key:  EMPTY_ROOT_HASH,                       # placeholder for more
+    key:  emptyRoot,                       # placeholder for more
     serial: nxtFid)
 
   # Store structural single trie entries
   let writeBatch = ? be.putBegFn()
-  for rvid, vtx in db.balancer.sTab:
-    db.balancer.kMap.withValue(rvid, key) do:
+  for rvid, vtx in db.txRef.layer.sTab:
+    db.txRef.layer.kMap.withValue(rvid, key) do:
       be.putVtxFn(writeBatch, rvid, vtx, key[])
     do:
       be.putVtxFn(writeBatch, rvid, vtx, default(HashKey))
 
-  be.putTuvFn(writeBatch, db.balancer.vTop)
+  be.putTuvFn(writeBatch, db.txRef.layer.vTop)
   be.putLstFn(writeBatch, lSst)
   ? be.putEndFn writeBatch                       # Finalise write batch
 
   # Copy back updated payloads
-  for accPath, vtx in db.balancer.accLeaves:
+  for accPath, vtx in db.txRef.layer.accLeaves:
     db.accLeaves.put(accPath, vtx)
 
-  for mixPath, vtx in db.balancer.stoLeaves:
+  for mixPath, vtx in db.txRef.layer.stoLeaves:
     db.stoLeaves.put(mixPath, vtx)
 
-  # Done with balancer, all saved to backend
-  db.balancer = LayerRef(nil)
+  # Done with txRef, all saved to backend
+  db.txRef.layer.sTab.clear()
+  db.txRef.layer.kMap.clear()
+  db.txRef.layer.accLeaves.clear()
+  db.txRef.layer.stoLeaves.clear()
 
   ok()
 

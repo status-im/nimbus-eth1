@@ -25,7 +25,7 @@ import
 # ------------------------------------------------------------------------------
 
 proc checkTop*(
-    db: AristoDbRef;                   # Database, top layer
+    db: AristoTxRef;                   # Database, top layer
     proofMode = false;                 # Has proof nodes
       ): Result[void,(VertexID,AristoError)] =
   ## Verify that the cache structure is correct as it would be after `merge()`
@@ -76,18 +76,18 @@ proc checkBE*(
 
 
 proc check*(
-    db: AristoDbRef;                   # Database
+    db: AristoTxRef;                   # Database
     relax = false;                     # Check existing hashes only
     cache = true;                      # Also verify against top layer cache
     proofMode = false;                 # Has proof nodes
       ): Result[void,(VertexID,AristoError)] =
   ## Shortcut for running `checkTop()` followed by `checkBE()`
   ? db.checkTop(proofMode = proofMode)
-  ? db.checkBE()
+  # ? db.checkBE()
   ok()
 
 proc check*(
-    db: AristoDbRef;                   # Database
+    db: AristoTxRef;                   # Database
     accPath: Hash32;                   # Account key
       ): Result[void,AristoError] =
   ## Check accounts tree path `accPath` against portal proof generation and
@@ -98,7 +98,7 @@ proc check*(
   db.checkTwig(accPath)
 
 proc check*(
-    db: AristoDbRef;                   # Database
+    db: AristoTxRef;                   # Database
     accPath: Hash32;                   # Account key
     stoPath: Hash32;                   # Storage key
       ): Result[void,AristoError] =

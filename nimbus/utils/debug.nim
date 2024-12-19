@@ -105,7 +105,7 @@ proc debug*(vms: BaseVMState): string =
 proc `$`(x: ChainId): string =
   $int(x)
 
-proc `$`(acl: AccessList): string =
+proc `$`(acl: transactions.AccessList): string =
   if acl.len == 0:
     return "zero length"
 

@@ -23,7 +23,7 @@ import
 # ------------------------------------------------------------------------------
 
 proc deltaPersistentOk*(db: KvtDbRef): bool =
-  ## Check whether the balancer filter can be merged into the backend
+  ## Check whether txRef can be merged into the backend
   not db.backend.isNil
 
 
@@ -45,17 +45,17 @@ proc deltaPersistent*(
     return err(FilBackendMissing)
 
   # Blind or missing filter
-  if db.balancer.isNil:
+  if db.txRef.isNil:
     return ok()
 
   # Store structural single trie entries
   let writeBatch = ? be.putBegFn()
-  for k,v in db.balancer.sTab:
+  for k,v in db.txRef.layer.sTab:
     be.putKvpFn(writeBatch, k, v)
   ? be.putEndFn writeBatch
 
-  # Done with balancer, all saved to backend
-  db.balancer = LayerRef(nil)
+  # Done with txRef, all saved to backend
+  db.txRef.layer.sTab.clear()
 
   ok()
 

@@ -152,7 +152,7 @@ proc getStateDB(com: CommonRef, header: Header): LedgerRef  {.deprecated: "Ledge
   ## Retrieves the account db from canonical head
   ## we don't use accounst_cache here because it's read only operations
   # TODO the ledger initialized here refers to the base, not the given header!
-  LedgerRef.init(com.db)
+  LedgerRef.init(com.db.ctx.txFrameBegin(nil)) # TODO use frame from forkedchain!
 
 proc getBlockByNumber(ctx: GraphqlContextRef, number: Node): RespResult =
   try:
@@ -181,7 +181,8 @@ proc getLatestBlock(ctx: GraphqlContextRef): RespResult =
   ok(headerNode(ctx, header))
 
 proc getTxCount(ctx: GraphqlContextRef, txRoot: Hash32): RespResult =
-  let txCount = ctx.chainDB.getTransactionCount(txRoot)
+  # TODO forkedchain!
+  let txCount = ctx.chainDB.baseTxFrame().getTransactionCount(txRoot)
   ok(resp(txCount))
 
 proc longNode(val: uint64 | int64): RespResult =
@@ -234,17 +235,17 @@ proc resp(data: openArray[byte]): RespResult =
   ok(resp("0x" & data.toHex))
 
 proc getTotalDifficulty(ctx: GraphqlContextRef, blockHash: Hash32): RespResult =
-  let score = getScore(ctx.chainDB, blockHash).valueOr:
+  let score = getScore(ctx.chainDB.baseTxFrame(), blockHash).valueOr:
     return err("can't get total difficulty")
 
   bigIntNode(score)
 
 proc getOmmerCount(ctx: GraphqlContextRef, ommersHash: Hash32): RespResult =
-  let ommers = ?ctx.chainDB.getUnclesCount(ommersHash)
+  let ommers = ?ctx.chainDB.baseTxFrame().getUnclesCount(ommersHash)
   ok(resp(ommers))
 
 proc getOmmers(ctx: GraphqlContextRef, ommersHash: Hash32): RespResult =
-  let uncles = ?ctx.chainDB.getUncles(ommersHash)
+  let uncles = ?ctx.chainDB.baseTxFrame().getUncles(ommersHash)
   when false:
     # EIP 1767 says no ommers == null
     # but hive test case want empty array []
@@ -256,7 +257,7 @@ proc getOmmers(ctx: GraphqlContextRef, ommersHash: Hash32): RespResult =
   ok(list)
 
 proc getOmmerAt(ctx: GraphqlContextRef, ommersHash: Hash32, index: int): RespResult =
-  let uncles = ?ctx.chainDB.getUncles(ommersHash)
+  let uncles = ?ctx.chainDB.baseTxFrame().getUncles(ommersHash)
   if uncles.len == 0:
     return ok(respNull())
   if index < 0 or index >= uncles.len:
@@ -264,20 +265,20 @@ proc getOmmerAt(ctx: GraphqlContextRef, ommersHash: Hash32, index: int): RespRes
   ok(headerNode(ctx, uncles[index]))
 
 proc getTxs(ctx: GraphqlContextRef, header: Header): RespResult =
-  let txCount = getTransactionCount(ctx.chainDB, header.txRoot)
+  let txCount = getTransactionCount(ctx.chainDB.baseTxFrame(), header.txRoot)
   if txCount == 0:
     return ok(respNull())
   var list = respList()
   var index = 0'u64
 
-  let txList = ?ctx.chainDB.getTransactions(header.txRoot)
+  let txList = ?ctx.chainDB.baseTxFrame().getTransactions(header.txRoot)
   for tx in txList:
     list.add txNode(ctx, tx, index, header.number, header.baseFeePerGas)
     inc index
 
   index = 0'u64
   var prevUsed = 0.GasInt
-  let receiptList = ?ctx.chainDB.getReceipts(header.receiptsRoot)
+  let receiptList = ?ctx.chainDB.baseTxFrame().getReceipts(header.receiptsRoot)
   for r in receiptList:
     let tx = TxNode(list.sons[index])
     tx.receipt = r
@@ -291,20 +292,20 @@ proc getWithdrawals(ctx: GraphqlContextRef, header: Header): RespResult =
   if header.withdrawalsRoot.isNone:
     return ok(respNull())
 
-  let wds = ?ctx.chainDB.getWithdrawals(header.withdrawalsRoot.get)
+  let wds = ?ctx.chainDB.baseTxFrame().getWithdrawals(header.withdrawalsRoot.get)
   var list = respList()
   for wd in wds:
     list.add wdNode(ctx, wd)
   ok(list)
 
 proc getTxAt(ctx: GraphqlContextRef, header: Header, index: uint64): RespResult =
-  let tx = ctx.chainDB.getTransactionByIndex(header.txRoot, index.uint16).valueOr:
+  let tx = ctx.chainDB.baseTxFrame().getTransactionByIndex(header.txRoot, index.uint16).valueOr:
     return ok(respNull())
 
   let txn = txNode(ctx, tx, index, header.number, header.baseFeePerGas)
   var i = 0'u64
   var prevUsed = 0.GasInt
-  let receiptList = ?ctx.chainDB.getReceipts(header.receiptsRoot)
+  let receiptList = ?ctx.chainDB.baseTxFrame().getReceipts(header.receiptsRoot)
   for r in receiptList:
     if i == index:
       let tx = TxNode(txn)
@@ -316,8 +317,8 @@ proc getTxAt(ctx: GraphqlContextRef, header: Header, index: uint64): RespResult 
 
 proc getTxByHash(ctx: GraphqlContextRef, hash: Hash32): RespResult =
   let
-    txKey = ?ctx.chainDB.getTransactionKey(hash)
-    header = ?ctx.chainDB.getBlockHeader(txKey.blockNumber)
+    txKey = ?ctx.chainDB.baseTxFrame().getTransactionKey(hash)
+    header = ?ctx.chainDB.baseTxFrame().getBlockHeader(txKey.blockNumber)
   getTxAt(ctx, header, txKey.index)
 
 proc accountNode(ctx: GraphqlContextRef, header: Header, address: Address): RespResult =

@@ -19,12 +19,11 @@ import
 export tables
 
 type
-  LayerRef* = ref LayerObj
-  LayerObj* = object
+  LayerRef* = ref Layer
+  Layer* = object
     ## Kvt database layer structures. Any layer holds the full
     ## change relative to the backend.
     sTab*: Table[seq[byte],seq[byte]] ## Structural data table
-    txUid*: uint                      ## Transaction identifier if positive
 
 # ------------------------------------------------------------------------------
 # Public helpers (misc)

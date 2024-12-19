@@ -125,10 +125,10 @@ func daoCheck(conf: ChainConfig) =
     conf.daoForkBlock = conf.homesteadBlock
 
 proc initializeDb(com: CommonRef) =
-  let kvt = com.db.ctx.getKvt()
-  proc contains(kvt: CoreDbKvtRef; key: openArray[byte]): bool =
-    kvt.hasKeyRc(key).expect "valid bool"
-  if canonicalHeadHashKey().toOpenArray notin kvt:
+  let txFrame = com.db.baseTxFrame()
+  proc contains(txFrame: CoreDbTxRef; key: openArray[byte]): bool =
+    txFrame.hasKeyRc(key).expect "valid bool"
+  if canonicalHeadHashKey().toOpenArray notin txFrame:
     info "Writing genesis to DB",
       blockHash = com.genesisHeader.rlpHash,
       stateRoot = com.genesisHeader.stateRoot,
@@ -138,23 +138,23 @@ proc initializeDb(com: CommonRef) =
       nonce = com.genesisHeader.nonce
     doAssert(com.genesisHeader.number == 0.BlockNumber,
       "can't commit genesis block with number > 0")
-    com.db.persistHeaderAndSetHead(com.genesisHeader,
+    txFrame.persistHeaderAndSetHead(com.genesisHeader,
       startOfHistory=com.genesisHeader.parentHash).
       expect("can persist genesis header")
-    doAssert(canonicalHeadHashKey().toOpenArray in kvt)
+    doAssert(canonicalHeadHashKey().toOpenArray in txFrame)
 
   # The database must at least contain the base and head pointers - the base
   # is implicitly considered finalized
   let
-    baseNum = com.db.getSavedStateBlockNumber()
-    base = com.db.getBlockHeader(baseNum).valueOr:
+    baseNum = txFrame.getSavedStateBlockNumber()
+    base = txFrame.getBlockHeader(baseNum).valueOr:
       fatal "Cannot load base block header",
         baseNum, err = error
       quit 1
-    finalized = com.db.finalizedHeader().valueOr:
+    finalized = txFrame.finalizedHeader().valueOr:
       debug "No finalized block stored in database, reverting to base"
       base
-    head = com.db.getCanonicalHead().valueOr:
+    head = txFrame.getCanonicalHead().valueOr:
       fatal "Cannot load canonical block header",
         err = error
       quit 1
@@ -196,10 +196,12 @@ proc init(com         : CommonRef,
         time: Opt.some(genesis.timestamp)
       )
       fork = toHardFork(com.forkTransitionTable, forkDeterminer)
+      txFrame = db.baseTxFrame()
 
     # Must not overwrite the global state on the single state DB
-    com.genesisHeader = db.getBlockHeader(0.BlockNumber).valueOr:
-      toGenesisHeader(genesis, fork, com.db)
+
+    com.genesisHeader = txFrame.getBlockHeader(0.BlockNumber).valueOr:
+      toGenesisHeader(genesis, fork, txFrame)
 
     com.setForkId(com.genesisHeader)
     com.pos.timestamp = genesis.timestamp
@@ -209,13 +211,13 @@ proc init(com         : CommonRef,
 
   com.initializeDb()
 
-proc isBlockAfterTtd(com: CommonRef, header: Header): bool =
+proc isBlockAfterTtd(com: CommonRef, header: Header, txFrame: CoreDbTxRef): bool =
   if com.config.terminalTotalDifficulty.isNone:
     return false
 
   let
     ttd = com.config.terminalTotalDifficulty.get()
-    ptd = com.db.getScore(header.parentHash).valueOr:
+    ptd = txFrame.getScore(header.parentHash).valueOr:
       return false
     td  = ptd + header.difficulty
   ptd >= ttd and td >= ttd
@@ -325,7 +327,7 @@ func isCancunOrLater*(com: CommonRef, t: EthTime): bool =
 func isPragueOrLater*(com: CommonRef, t: EthTime): bool =
   com.config.pragueTime.isSome and t >= com.config.pragueTime.get
 
-proc proofOfStake*(com: CommonRef, header: Header): bool =
+proc proofOfStake*(com: CommonRef, header: Header, txFrame: CoreDbTxRef): bool =
   if com.config.posBlock.isSome:
     # see comments of posBlock in common/hardforks.nim
     header.number >= com.config.posBlock.get
@@ -333,7 +335,7 @@ proc proofOfStake*(com: CommonRef, header: Header): bool =
     header.number >= com.config.mergeNetsplitBlock.get
   else:
     # This costly check is only executed from test suite
-    com.isBlockAfterTtd(header)
+    com.isBlockAfterTtd(header, txFrame)
 
 func depositContractAddress*(com: CommonRef): Address =
   com.config.depositContractAddress.get(default(Address))

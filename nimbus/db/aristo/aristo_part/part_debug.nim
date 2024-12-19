@@ -76,7 +76,7 @@ proc pp*[T: PrfNode|PrfExtension](
     t0: Table[RootedVertexID,(HashKey,T)]
     t1: Table[HashKey,T]
   for (key,val) in t.pairs:
-    ps.db.xMap.withValue(key,rv):
+    ps.db.db.xMap.withValue(key,rv):
       t0[rv[]] = (key,val)
     do:
       t1[key] = val

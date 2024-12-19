@@ -53,6 +53,9 @@ proc bless*(ctx: CoreDbCtxRef; dsc: CoreDbTxRef): auto =
 template kvt*(dsc: CoreDbKvtRef): KvtDbRef =
   CoreDbCtxRef(dsc).kvt
 
+template kvt*(tx: CoreDbTxRef): KvtDbRef =
+  tx.ctx.kvt
+
 template ctx*(kvt: CoreDbKvtRef): CoreDbCtxRef =
   CoreDbCtxRef(kvt)
 

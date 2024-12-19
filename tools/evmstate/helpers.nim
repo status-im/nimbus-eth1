@@ -10,9 +10,7 @@
 
 import
   std/[json, strutils],
-  eth/common/keys,
-  eth/common/headers,
-  eth/common/transactions,
+  eth/common/[base, keys, headers, transactions],
   stint,
   stew/byteutils,
   ../../nimbus/transaction,
@@ -58,7 +56,7 @@ proc fromJson(T: type PrivateKey, n: JsonNode): PrivateKey =
   removePrefix(secretKey, "0x")
   PrivateKey.fromHex(secretKey).tryGet()
 
-proc fromJson(T: type AccessList, n: JsonNode): AccessList =
+proc fromJson(T: type transactions.AccessList, n: JsonNode): transactions.AccessList =
   if n.kind == JNull:
     return
 

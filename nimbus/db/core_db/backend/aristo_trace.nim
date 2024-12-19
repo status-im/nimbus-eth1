@@ -349,7 +349,7 @@ proc kvtTraceRecorder(tr: TraceRecorderRef) =
 
   # Update production api
   tracerApi.get =
-    proc(kvt: KvtDbRef; key: openArray[byte]): Result[seq[byte],KvtError] =
+    proc(kvt: KvtTxRef; key: openArray[byte]): Result[seq[byte],KvtError] =
       const info = KvtApiProfGetFn
 
       when CoreDbNoisyCaptJournal:
@@ -368,7 +368,7 @@ proc kvtTraceRecorder(tr: TraceRecorderRef) =
       ok(data)
 
   tracerApi.del =
-    proc(kvt: KvtDbRef; key: openArray[byte]): Result[void,KvtError] =
+    proc(kvt: KvtTxRef; key: openArray[byte]): Result[void,KvtError] =
       const info = KvtApiProfDelFn
 
       when CoreDbNoisyCaptJournal:
@@ -402,7 +402,7 @@ proc kvtTraceRecorder(tr: TraceRecorderRef) =
       ok()
 
   tracerApi.put =
-    proc(kvt: KvtDbRef; key, data: openArray[byte]): Result[void,KvtError] =
+    proc(kvt: KvtTxRef; key, data: openArray[byte]): Result[void,KvtError] =
       const info = KvtApiProfPutFn
 
       when CoreDbNoisyCaptJournal:
@@ -445,7 +445,7 @@ proc ariTraceRecorder(tr: TraceRecorderRef) =
   tr.db.ariApi = tracerApi
 
   tracerApi.fetchAccountRecord =
-    proc(mpt: AristoDbRef;
+    proc(mpt: AristoTxRef;
          accPath: Hash32;
         ): Result[AristoAccount,AristoError] =
       const info = AristoApiProfFetchAccountRecordFn
@@ -467,7 +467,7 @@ proc ariTraceRecorder(tr: TraceRecorderRef) =
       ok accRec
 
   tracerApi.fetchStateRoot =
-    proc(mpt: AristoDbRef;
+    proc(mpt: AristoTxRef;
         ): Result[Hash32,AristoError] =
       const info = AristoApiProfFetchStateRootFn
 
@@ -488,7 +488,7 @@ proc ariTraceRecorder(tr: TraceRecorderRef) =
       ok state
 
   tracerApi.fetchStorageData =
-    proc(mpt: AristoDbRef;
+    proc(mpt: AristoTxRef;
          accPath: Hash32;
          stoPath: Hash32;
         ): Result[UInt256,AristoError] =
@@ -511,7 +511,7 @@ proc ariTraceRecorder(tr: TraceRecorderRef) =
       ok stoData
 
   tracerApi.fetchStorageRoot =
-    proc(mpt: AristoDbRef;
+    proc(mpt: AristoTxRef;
          accPath: Hash32;
         ): Result[Hash32,AristoError] =
       const info = AristoApiProfFetchStorageRootFn
@@ -533,7 +533,7 @@ proc ariTraceRecorder(tr: TraceRecorderRef) =
       ok state
 
   tracerApi.deleteAccountRecord =
-    proc(mpt: AristoDbRef;
+    proc(mpt: AristoTxRef;
          accPath: Hash32;
         ): Result[void,AristoError] =
       const info = AristoApiProfDeleteAccountRecordFn
@@ -569,7 +569,7 @@ proc ariTraceRecorder(tr: TraceRecorderRef) =
       ok()
 
   tracerApi.deleteStorageData =
-    proc(mpt: AristoDbRef;
+    proc(mpt: AristoTxRef;
          accPath: Hash32;
          stoPath: Hash32;
         ): Result[bool,AristoError] =
@@ -605,7 +605,7 @@ proc ariTraceRecorder(tr: TraceRecorderRef) =
       ok emptyTrie
 
   tracerApi.deleteStorageTree =
-    proc(mpt: AristoDbRef;
+    proc(mpt: AristoTxRef;
          accPath: Hash32;
         ): Result[void,AristoError] =
       const info = AristoApiProfDeleteStorageTreeFn
@@ -628,7 +628,7 @@ proc ariTraceRecorder(tr: TraceRecorderRef) =
       ok()
 
   tracerApi.mergeAccountRecord =
-    proc(mpt: AristoDbRef;
+    proc(mpt: AristoTxRef;
          accPath: Hash32;
          accRec: AristoAccount;
         ): Result[bool,AristoError] =
@@ -661,7 +661,7 @@ proc ariTraceRecorder(tr: TraceRecorderRef) =
       ok updated
 
   tracerApi.mergeStorageData =
-    proc(mpt: AristoDbRef;
+    proc(mpt: AristoTxRef;
          accPath: Hash32;
          stoPath: Hash32;
          stoData: UInt256;

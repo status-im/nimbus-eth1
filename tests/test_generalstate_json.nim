@@ -96,6 +96,7 @@ proc testFixtureIndexes(ctx: var TestCtx, testStatusIMPL: var TestStatus) =
       parent = parent,
       header = ctx.header,
       com    = com,
+      txFRame = com.db.baseTxFrame(),
       tracer = tracer,
       storeSlotHash = ctx.trace,
     )

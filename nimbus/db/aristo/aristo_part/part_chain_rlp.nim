@@ -30,7 +30,7 @@ const
 # ------------------------------------------------------------------------------
 
 proc chainRlpNodes*(
-    db: AristoDbRef;
+    db: AristoTxRef;
     rvid: RootedVertexID;
     path: NibblesBuf,
     chain: var seq[seq[byte]];

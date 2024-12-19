@@ -24,7 +24,7 @@ import
 proc toNode*(
     vtx: VertexRef;                    # Vertex to convert
     root: VertexID;                    # Sub-tree root the `vtx` belongs to
-    db: AristoDbRef;                   # Database
+    db: AristoTxRef;                   # Database
       ): Result[NodeRef,seq[VertexID]] =
   ## Convert argument the vertex `vtx` to a node type. Missing Merkle hash
   ## keys are searched for on the argument database `db`.

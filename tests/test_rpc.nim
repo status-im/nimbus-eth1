@@ -66,10 +66,10 @@ proc verifySlotProof(trustedStorageRoot: Hash32, slot: StorageProof): MptProofVe
     key,
     value)
 
-proc persistFixtureBlock(chainDB: CoreDbRef) =
+proc persistFixtureBlock(chainDB: CoreDbTxRef) =
   let header = getBlockHeader4514995()
   # Manually inserting header to avoid any parent checks
-  discard chainDB.ctx.getKvt.put(genericHashKey(header.blockHash).toOpenArray, rlp.encode(header))
+  discard chainDB.put(genericHashKey(header.blockHash).toOpenArray, rlp.encode(header))
   chainDB.addBlockNumberToHashLookup(header.number, header.blockHash)
   chainDB.persistTransactions(header.number, header.txRoot, getBlockBody4514995().transactions)
   chainDB.persistReceipts(header.receiptsRoot, getReceipts4514995())
@@ -94,7 +94,7 @@ proc setupEnv(signer, ks2: Address, ctx: EthContext, com: CommonRef): TestEnv =
   var
     acc = ctx.am.getAccount(signer).tryGet()
     blockNumber = 1'u64
-    parent = com.db.getCanonicalHead().expect("canonicalHead exists")
+    parent = com.db.baseTxFrame().getCanonicalHead().expect("canonicalHead exists")
     parentHash = parent.blockHash
 
   let code = evmByteCode:
@@ -108,7 +108,7 @@ proc setupEnv(signer, ks2: Address, ctx: EthContext, com: CommonRef): TestEnv =
   let
     vmHeader = Header(parentHash: parentHash, gasLimit: 5_000_000)
     vmState = BaseVMState()
-  vmState.init(parent, vmHeader, com)
+  vmState.init(parent, vmHeader, com, com.db.baseTxFrame())
 
   vmState.stateDB.setCode(ks2, code)
   vmState.stateDB.addBalance(
@@ -155,7 +155,7 @@ proc setupEnv(signer, ks2: Address, ctx: EthContext, com: CommonRef): TestEnv =
     txs = [signedTx1, signedTx2]
 
   let txRoot = calcTxRoot(txs)
-  com.db.persistTransactions(blockNumber, txRoot, txs)
+  com.db.baseTxFrame().persistTransactions(blockNumber, txRoot, txs)
 
   vmState.receipts = newSeq[Receipt](txs.len)
   vmState.cumulativeGasUsed = 0
@@ -172,7 +172,7 @@ proc setupEnv(signer, ks2: Address, ctx: EthContext, com: CommonRef): TestEnv =
     date        = dateTime(2017, mMar, 30)
     timeStamp   = date.toTime.toUnix.EthTime
     difficulty  = com.calcDifficulty(timeStamp, parent)
-
+    txFrame = com.db.baseTxFrame()
   # call persist() before we get the stateRoot
   vmState.stateDB.persist()
 
@@ -189,16 +189,16 @@ proc setupEnv(signer, ks2: Address, ctx: EthContext, com: CommonRef): TestEnv =
     timestamp       : timeStamp
     )
 
-  com.db.persistHeaderAndSetHead(header,
+  txFrame.persistHeaderAndSetHead(header,
     com.startOfHistory).expect("persistHeader not error")
-    
+
   let uncles = [header]
-  header.ommersHash = com.db.persistUncles(uncles)
+  header.ommersHash = txFrame.persistUncles(uncles)
 
-  com.db.persistHeaderAndSetHead(header,
+  txFrame.persistHeaderAndSetHead(header,
     com.startOfHistory).expect("persistHeader not error")
 
-  com.db.persistFixtureBlock()
+  txFrame.persistFixtureBlock()
 
   com.db.persistent(header.number).isOkOr:
     echo "Failed to save state: ", $error
@@ -222,6 +222,7 @@ proc rpcMain*() =
         conf.networkId,
         conf.networkParams
       )
+      txFrame = com.db.baseTxFrame()
       signer = address"0x0e69cde81b1aa07a45c32c6cd85d67229d36bb1b"
       ks2 = address"0xa3b2222afa5c987da6ef773fde8d01b9f23d481f"
       ks3 = address"0x597176e9a64aad0845d83afdaf698fbeff77703b"
@@ -331,7 +332,7 @@ proc rpcMain*() =
       check res == w3Qty(0'u64)
 
     test "eth_getBlockTransactionCountByHash":
-      let hash = com.db.getBlockHash(0'u64).expect("block hash exists")
+      let hash = txFrame.getBlockHash(0'u64).expect("block hash exists")
       let res = await client.eth_getBlockTransactionCountByHash(hash)
       check res == w3Qty(0'u64)
 
@@ -340,7 +341,7 @@ proc rpcMain*() =
       check res == w3Qty(0'u64)
 
     test "eth_getUncleCountByBlockHash":
-      let hash = com.db.getBlockHash(0'u64).expect("block hash exists")
+      let hash = txFrame.getBlockHash(0'u64).expect("block hash exists")
       let res = await client.eth_getUncleCountByBlockHash(hash)
       check res == w3Qty(0'u64)
 

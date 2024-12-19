@@ -50,9 +50,11 @@ proc init*(
       ): Result[KvtDbRef,KvtError] =
   ## Generic constructor for `RocksDb` backend
   ##
-  ok KvtDbRef(
-    top: LayerRef.init(),
+  let db = KvtDbRef(
+    txRef: KvtTxRef(layer: LayerRef.init()),
     backend: ? rocksDbKvtBackend(basePath, dbOpts, cfOpts).mapErr toErr0)
+  db.txRef.db = db
+  ok db
 
 proc init*(
     T: type KvtDbRef;
@@ -83,9 +85,12 @@ proc init*(
   ##   not be invoked directly (they will stop with an error most of the time,
   ##   anyway.)
   ##
-  ok KvtDbRef(
-    top: LayerRef.init(),
+
+  let db = KvtDbRef(
+    txRef: KvtTxRef(layer: LayerRef.init()),
     backend: ? rocksDbKvtTriggeredBackend(adb, oCfs).mapErr toErr0)
+  db.txRef.db = db
+  ok db
 
 # ------------------------------------------------------------------------------
 # End

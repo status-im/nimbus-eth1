@@ -9,42 +9,13 @@
 # except according to those terms.
 
 import
-  ../kvt_desc
+  ../kvt_desc,
+  ../../../utils/mergeutils
 
 # ------------------------------------------------------------------------------
 # Private functions
 # ------------------------------------------------------------------------------
 
-proc layersMergeOnto(src: LayerRef; trg: var LayerObj) =
-  for (key,val) in src.sTab.pairs:
-    trg.sTab[key] = val
-
-# ------------------------------------------------------------------------------
-# Public functions
-# ------------------------------------------------------------------------------
-
-proc deltaMerge*(
-    upper: LayerRef;                   # Think of `top`, `nil` is ok
-    lower: LayerRef;                   # Think of `balancer`, `nil` is ok
-      ): LayerRef =
-  ## Merge argument `upper` into the `lower` filter instance.
-  ##
-  ## Note that the namimg `upper` and `lower` indicate that the filters are
-  ## stacked and the database access is `upper -> lower -> backend`.
-  ##
-  if lower.isNil:
-    # Degenerate case: `upper` is void
-    upper
-
-  elif upper.isNil:
-    # Degenerate case: `lower` is void
-    lower
-
-  else:
-    # Can modify `lower` which is the prefered action mode but applies only
-    # in cases where the `lower` argument is not shared.
-    layersMergeOnto(upper, lower[])
-    lower
 
 # ------------------------------------------------------------------------------
 # End
