@@ -26,8 +26,12 @@ const
 # Private helpers
 # ------------------------------------------------------------------------------
 
+template kvtNotAvailable(info: static[string]): string =
+  info & ": kvt table not available (locked by FC module)"
+
+
 proc fetchSyncStateLayout(ctx: BeaconCtxRef): Opt[SyncStateLayout] =
-  let data = ctx.db.ctx.getKvt().get(LhcStateKey.toOpenArray).valueOr:
+  let data = ctx.pool.chain.fcKvtGet(LhcStateKey.toOpenArray).valueOr:
     return err()
   try:
     return ok(rlp.decode(data, SyncStateLayout))
@@ -42,29 +46,25 @@ proc deleteStaleHeadersAndState(
     info: static[string];
       ) =
   ## Delete stale headers and state
-  let
-    kvt = ctx.db.ctx.getKvt()
-    stateNum = ctx.db.getSavedStateBlockNumber() # for persisting
+  let c = ctx.pool.chain
+  if not c.fcKvtAvailable():
+    trace kvtNotAvailable(info)
+    return
 
   var bn = upTo
-  while 0 < bn and kvt.hasKey(beaconHeaderKey(bn).toOpenArray):
-    discard kvt.del(beaconHeaderKey(bn).toOpenArray)
+  while 0 < bn and c.fcKvtHasKey(beaconHeaderKey(bn).toOpenArray):
+    discard c.fcKvtDel(beaconHeaderKey(bn).toOpenArray)
     bn.dec
 
-    # Occasionallly persist the deleted headers. This will succeed if
-    # this function is called early enough after restart when there is
-    # no database transaction pending.
+    # Occasionallly persist the deleted headers (so that the internal DB cache
+    # does not grow extra large.) This will succeed if this function is called
+    # early enough after restart when there is no database transaction pending.
     if (upTo - bn) mod 8192 == 0:
-      ctx.db.persistent(stateNum).isOkOr:
-        debug info & ": cannot persist deleted sync headers", error=($$error)
-        # So be it, stop here.
-        return
+      discard c.fcKvtPersistent()
 
-  # Delete persistent state, there will be no use of it anymore
-  discard kvt.del(LhcStateKey.toOpenArray)
-  ctx.db.persistent(stateNum).isOkOr:
-    debug info & ": cannot persist deleted sync headers", error=($$error)
-    return
+  # Delete persistent state record, there will be no use of it anymore
+  discard c.fcKvtDel(LhcStateKey.toOpenArray)
+  discard c.fcKvtPersistent()
 
   if bn < upTo:
     debug info & ": deleted stale sync headers", iv=BnRange.new(bn+1,upTo)
@@ -75,17 +75,12 @@ proc deleteStaleHeadersAndState(
 
 proc dbStoreSyncStateLayout*(ctx: BeaconCtxRef; info: static[string]) =
   ## Save chain layout to persistent db
-  let data = rlp.encode(ctx.layout)
-  ctx.db.ctx.getKvt().put(LhcStateKey.toOpenArray, data).isOkOr:
-    raiseAssert info & " put() failed: " & $$error
-
-  # While executing blocks there are frequent save cycles. Otherwise, an
-  # extra save request might help to pick up an interrupted sync session.
-  if ctx.db.txFrameLevel() == 0 and ctx.stash.len == 0:
-    let number = ctx.db.getSavedStateBlockNumber()
-    ctx.db.persistent(number).isOkOr:
-      raiseAssert info & " persistent() failed: " & $$error
-
+  let c = ctx.pool.chain
+  if c.fcKvtAvailable():
+    discard c.fcKvtPut(LhcStateKey.toOpenArray, rlp.encode(ctx.layout))
+    discard c.fcKvtPersistent()
+  else:
+    trace kvtNotAvailable(info)
 
 proc dbLoadSyncStateLayout*(ctx: BeaconCtxRef; info: static[string]): bool =
   ## Restore chain layout from persistent db. It returns `true` if a previous
@@ -165,18 +160,16 @@ proc dbHeadersStash*(
   ##    ..
   ##
   let
-    txFrameLevel = ctx.db.txFrameLevel()
+    c = ctx.pool.chain
     last = first + revBlobs.len.uint64 - 1
-  if 0 < txFrameLevel:
+  if not c.fcKvtAvailable():
     # Need to cache it because FCU has blocked writing through to disk.
     for n,data in revBlobs:
       ctx.stash[last - n.uint64] = data
   else:
-    let kvt = ctx.db.ctx.getKvt()
     for n,data in revBlobs:
       let key = beaconHeaderKey(last - n.uint64)
-      kvt.put(key.toOpenArray, data).isOkOr:
-        raiseAssert info & ": put() failed: " & $$error
+      discard c.fcKvtPut(key.toOpenArray, data)
 
 proc dbHeaderPeek*(ctx: BeaconCtxRef; num: BlockNumber): Opt[Header] =
   ## Retrieve some stashed header.
@@ -189,7 +182,7 @@ proc dbHeaderPeek*(ctx: BeaconCtxRef; num: BlockNumber): Opt[Header] =
   # Use persistent storage next
   let
     key = beaconHeaderKey(num)
-    rc = ctx.db.ctx.getKvt().get(key.toOpenArray)
+    rc = ctx.pool.chain.fcKvtGet(key.toOpenArray)
   if rc.isOk:
     try:
       return ok(rlp.decode(rc.value, Header))
@@ -206,7 +199,7 @@ proc dbHeaderUnstash*(ctx: BeaconCtxRef; bn: BlockNumber) =
   ctx.stash.withValue(bn, _):
     ctx.stash.del bn
     return
-  discard ctx.db.ctx.getKvt().del(beaconHeaderKey(bn).toOpenArray)
+  discard ctx.pool.chain.fcKvtDel(beaconHeaderKey(bn).toOpenArray)
 
 # ------------------------------------------------------------------------------
 # End
