@@ -104,7 +104,11 @@ proc fetchAndCheck(
       blk.blocks[offset + n].uncles       = bodies[n].uncles
       blk.blocks[offset + n].withdrawals  = bodies[n].withdrawals
 
-  return offset < blk.blocks.len.uint64
+  if offset < blk.blocks.len.uint64:
+    return true
+
+  buddy.only.nBdyProcErrors.inc
+  return false
 
 # ------------------------------------------------------------------------------
 # Public functions
@@ -195,13 +199,11 @@ proc blocksStagedCollect*(
 
     # Fetch and extend staging record
     if not await buddy.fetchAndCheck(ivReq, blk, info):
+      haveError = true
 
       # Throw away first time block fetch data. Keep other data for a
       # partially assembled list.
       if nBlkBlocks == 0:
-        buddy.only.nBdyProcErrors.inc
-        haveError = true
-
         if ((0 < buddy.only.nBdyRespErrors or
              0 < buddy.only.nBdyProcErrors) and buddy.ctrl.stopped) or
            fetchBodiesReqErrThresholdCount < buddy.only.nBdyRespErrors or
@@ -288,7 +290,7 @@ proc blocksStagedImport*(
     nBlocks = qItem.data.blocks.len
     iv = BnRange.new(qItem.key, qItem.key + nBlocks.uint64 - 1)
 
-  trace info & ": import blocks ..", iv, nBlocks,
+  debug info & ": import blocks ..", iv, nBlocks,
     B=ctx.chain.baseNumber.bnStr, L=ctx.chain.latestNumber.bnStr
 
   var maxImport = iv.maxPt
@@ -317,6 +319,9 @@ proc blocksStagedImport*(
         maxImport = ctx.chain.latestNumber()
         break importLoop
 
+      # Update, so it can be followed nicely
+      ctx.updateMetrics()
+
       # Allow pseudo/async thread switch.
       try: await sleepAsync asyncThreadSwitchTimeSlot
       except CancelledError: discard
@@ -324,9 +329,6 @@ proc blocksStagedImport*(
         # Shutdown?
         maxImport = ctx.chain.latestNumber()
         break importLoop
-
-      # Update, so it can be followed nicely
-      ctx.updateMetrics()
 
       # Occasionally mark the chain finalized
       if (n + 1) mod finaliserChainLengthMax == 0 or (n + 1) == nBlocks:
@@ -363,7 +365,7 @@ proc blocksStagedImport*(
   # Update, so it can be followed nicely
   ctx.updateMetrics()
 
-  trace info & ": import done", iv, nBlocks, B=ctx.chain.baseNumber.bnStr,
+  debug info & ": import done", iv, nBlocks, B=ctx.chain.baseNumber.bnStr,
     L=ctx.chain.latestNumber.bnStr, F=ctx.layout.final.bnStr
   return true
 

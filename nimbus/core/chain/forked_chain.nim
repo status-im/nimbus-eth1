@@ -19,11 +19,12 @@ import
   ../../evm/state,
   ../validate,
   ../executor/process_block,
-  ./forked_chain/chain_desc
+  ./forked_chain/[chain_desc, chain_kvt]
 
 export
   BlockDesc,
   ForkedChainRef,
+  chain_kvt,
   common,
   core_db
 
