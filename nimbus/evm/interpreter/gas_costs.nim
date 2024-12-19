@@ -845,11 +845,11 @@ const
   GasQuadDivisor*        = 20
   GasQuadDivisorEIP2565* = 3
   # https://eips.ethereum.org/EIPS/eip-2537
-  Bls12381G1AddGas*          = GasInt 500
+  Bls12381G1AddGas*          = GasInt 375
   Bls12381G1MulGas*          = GasInt 12000
-  Bls12381G2AddGas*          = GasInt 800
-  Bls12381G2MulGas*          = GasInt 45000
-  Bls12381PairingBaseGas*    = GasInt 115000
-  Bls12381PairingPerPairGas* = GasInt 23000
+  Bls12381G2AddGas*          = GasInt 600
+  Bls12381G2MulGas*          = GasInt 22500
+  Bls12381PairingBaseGas*    = GasInt 37700
+  Bls12381PairingPerPairGas* = GasInt 32600
   Bls12381MapG1Gas*          = GasInt 5500
-  Bls12381MapG2Gas*          = GasInt 110000
+  Bls12381MapG2Gas*          = GasInt 23800
