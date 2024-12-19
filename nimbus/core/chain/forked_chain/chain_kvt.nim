@@ -26,47 +26,51 @@ import
 
 proc fcKvtAvailable*(c: ForkedChainRef): bool =
   ## Returns `true` if `kvt` data can be saved persistently.
-  c.db.txFrameLevel() == 0
+  false # TODO c.db.txFrameLevel() == 0
 
 proc fcKvtPersistent*(c: ForkedChainRef): bool =
   ## Save cached `kvt` data if possible. This function has the side effect
   ## that it saves all cached db data including `Aristo` data (although there
   ## should not be any.)
   ##
-  if c.fcKvtAvailable():
-    c.db.persistent(c.db.getSavedStateBlockNumber()).isOkOr:
-      raiseAssert "fcKvtPersistent: persistent() failed: " & $$error
-    return true
+  # if c.fcKvtAvailable():
+  #   c.db.persistent(c.db.getSavedStateBlockNumber()).isOkOr:
+  #     raiseAssert "fcKvtPersistent: persistent() failed: " & $$error
+  #   return true
+  discard # TODO
 
 proc fcKvtHasKey*(c: ForkedChainRef, key: openArray[byte]): bool =
   ## Check whether the argument `key` exists on the `kvt` table (i.e. `get()`
   ## would succeed.)
   ##
-  c.db.ctx.getKvt().hasKey(key)
+  # c.db.ctx.getKvt().hasKey(key)
+  discard # TODO
 
 proc fcKvtGet*(c: ForkedChainRef, key: openArray[byte]): Opt[seq[byte]] =
   ## Fetch data entry from `kvt` table.
   ##
-  var w = c.db.ctx.getKvt().get(key).valueOr:
-    return err()
-  ok(move w)
+  # var w = c.db.ctx.getKvt().get(key).valueOr:
+  #   return err()
+  # ok(move w)
+  discard # TODO
 
 proc fcKvtPut*(c: ForkedChainRef, key, data: openArray[byte]): bool =
   ## Cache data on the `kvt` table marked for saving persistently. If the `kvt`
   ## table is unavailable, this function does nothing and returns `false`.
   ##
-  if c.fcKvtAvailable():
-    c.db.ctx.getKvt().put(key, data).isOkOr:
-      raiseAssert "fcKvtPut: put() failed: " & $$error
-    return true
+  # if c.fcKvtAvailable():
+  #   c.db.ctx.getKvt().put(key, data).isOkOr:
+  #     raiseAssert "fcKvtPut: put() failed: " & $$error
+  #   return true
+  discard # TODO
 
 proc fcKvtDel*(c: ForkedChainRef, key: openArray[byte]): bool =
   ## Cache key for deletion on the  `kvt` table.  If the `kvt` table is
   ## unavailable, this function does nothing and returns `false`.
   ##
-  if c.fcKvtAvailable():
-    c.db.ctx.getKvt().del(key).isOkOr:
-      raiseAssert "fcKvtDel: del() failed: " & $$error
-    return true
-    
+  # if c.fcKvtAvailable():
+  #   c.db.ctx.getKvt().del(key).isOkOr:
+  #     raiseAssert "fcKvtDel: del() failed: " & $$error
+  #   return true
+  discard # TODO
 # End

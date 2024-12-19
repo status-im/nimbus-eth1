@@ -35,7 +35,7 @@ proc proofOfStake(params: NetworkParams): bool =
     networkId = params.config.chainId.NetworkId,
     params = params)
   let header = com.genesisHeader
-  com.proofOfStake(header)
+  com.proofOfStake(header, com.db.baseTxFrame())
 
 proc genesisTest() =
   suite "Genesis":
@@ -71,7 +71,7 @@ proc customGenesisTest() =
       let genesisHash = hash32"a28d8d73e087a01d09d8cb806f60863652f30b6b6dfa4e0157501ff07d422399"
       check com.genesisHeader.stateRoot == stateRoot
       check com.genesisHeader.blockHash == genesisHash
-      check com.proofOfStake(com.genesisHeader) == false
+      check com.proofOfStake(com.genesisHeader, com.db.baseTxFrame()) == false
 
     test "Devnet5.json (aka Kiln in all but chainId and TTD)":
       var cg: NetworkParams
@@ -81,7 +81,7 @@ proc customGenesisTest() =
       let genesisHash = hash32"51c7fe41be669f69c45c33a56982cbde405313342d9e2b00d7c91a7b284dd4f8"
       check com.genesisHeader.stateRoot == stateRoot
       check com.genesisHeader.blockHash == genesisHash
-      check com.proofOfStake(com.genesisHeader) == false
+      check com.proofOfStake(com.genesisHeader, com.db.baseTxFrame()) == false
 
     test "Mainnet shadow fork 1":
       var cg: NetworkParams
@@ -93,7 +93,7 @@ proc customGenesisTest() =
       check com.genesisHeader.stateRoot == stateRoot
       check com.genesisHeader.blockHash == genesisHash
       check com.ttd.get == ttd
-      check com.proofOfStake(com.genesisHeader) == false
+      check com.proofOfStake(com.genesisHeader, com.db.baseTxFrame()) == false
 
     test "Geth shadow fork 1":
       # parse using geth format should produce the same result with nimbus format
@@ -106,7 +106,7 @@ proc customGenesisTest() =
       check com.genesisHeader.stateRoot == stateRoot
       check com.genesisHeader.blockHash == genesisHash
       check com.ttd.get == ttd
-      check com.proofOfStake(com.genesisHeader) == false
+      check com.proofOfStake(com.genesisHeader, com.db.baseTxFrame()) == false
       check cg.config.mergeNetsplitBlock.isSome
       check cg.config.mergeNetsplitBlock.get == 14660963.BlockNumber
 

@@ -79,19 +79,20 @@ suite "Aristo compute":
     test "Add and delete entries " & $n:
       let
         db = AristoDbRef.init VoidBackendRef
+        txFrame = db.txRef
         root = VertexID(1)
 
       for (k, v, r) in sample:
         checkpoint("k = " & k.toHex & ", v = " & $v)
 
         check:
-          db.mergeAccountRecord(k, v) == Result[bool, AristoError].ok(true)
+          txFrame.mergeAccountRecord(k, v) == Result[bool, AristoError].ok(true)
 
         # Check state against expected value
-        let w = db.computeKey((root, root)).expect("no errors")
+        let w = txFrame.computeKey((root, root)).expect("no errors")
         check r == w.to(Hash32)
 
-        let rc = db.check
+        let rc = txFrame.check
         check rc == typeof(rc).ok()
 
       # Reverse run deleting entries
@@ -103,29 +104,30 @@ suite "Aristo compute":
         deletedKeys.incl k
 
         # Check state against expected value
-        let w = db.computeKey((root, root)).value.to(Hash32)
+        let w = txFrame.computeKey((root, root)).value.to(Hash32)
 
         check r == w
 
         check:
-          db.deleteAccountRecord(k).isOk
+          txFrame.deleteAccountRecord(k).isOk
 
-        let rc = db.check
+        let rc = txFrame.check
         check rc == typeof(rc).ok()
 
   test "Pre-computed key":
     # TODO use mainnet genesis in this test?
     let
       db = AristoDbRef.init MemBackendRef
+      txFrame = db.txRef
       root = VertexID(1)
 
     for (k, v, r) in samples[^1]:
       check:
-        db.mergeAccountRecord(k, v) == Result[bool, AristoError].ok(true)
+        txFrame.mergeAccountRecord(k, v) == Result[bool, AristoError].ok(true)
 
     check db.txPersist(1).isOk()
 
-    check db.computeKeys(root).isOk()
+    check txFrame.computeKeys(root).isOk()
 
-    let w = db.computeKey((root, root)).value.to(Hash32)
+    let w = txFrame.computeKey((root, root)).value.to(Hash32)
     check w == samples[^1][^1][2]

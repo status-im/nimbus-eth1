@@ -20,7 +20,7 @@ import
 # ------------------------------------------------------------------------------
 
 proc checkTwig*(
-    db: AristoDbRef;                   # Database
+    db: AristoTxRef;                   # Database
     root: VertexID;                    # Start node
     path: openArray[byte];             # Data path
       ): Result[void,AristoError] =
@@ -32,7 +32,7 @@ proc checkTwig*(
   ok()
 
 proc checkTwig*(
-    db: AristoDbRef;                   # Database
+    db: AristoTxRef;                   # Database
     accPath: Hash32;                  # Account key
     stoPath: Hash32;                  # Storage key
       ): Result[void,AristoError] =

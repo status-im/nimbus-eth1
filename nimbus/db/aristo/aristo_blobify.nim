@@ -13,6 +13,7 @@
 import
   results,
   stew/[arrayops, endians2],
+  eth/common/accounts,
   ./aristo_desc
 
 export aristo_desc, results

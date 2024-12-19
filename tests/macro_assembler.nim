@@ -279,7 +279,7 @@ proc initVMEnv*(network: string): BaseVMState =
       gasLimit: 100_000
     )
 
-  BaseVMState.new(parent, header, com)
+  BaseVMState.new(parent, header, com, com.db.baseTxFrame())
 
 proc verifyAsmResult(vmState: BaseVMState, boa: Assembler, asmResult: DebugCallResult): bool =
   let com = vmState.com
@@ -326,7 +326,7 @@ proc verifyAsmResult(vmState: BaseVMState, boa: Assembler, asmResult: DebugCallR
   stateDB.persist()
 
   let
-    al = com.db.ctx.getAccounts()
+    al = com.db.baseTxFrame()
     accPath = keccak256(codeAddress.data)
 
   for kv in boa.storage:

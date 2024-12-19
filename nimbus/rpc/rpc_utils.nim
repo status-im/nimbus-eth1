@@ -56,8 +56,8 @@ proc calculateMedianGasPrice*(chain: ForkedChainRef): GasInt =
   result = max(result, minGasPrice)
 
 proc unsignedTx*(tx: TransactionArgs,
-                 chain: ForkedChainRef, 
-                 defaultNonce: AccountNonce, 
+                 chain: ForkedChainRef,
+                 defaultNonce: AccountNonce,
                  chainId: ChainId): Transaction =
   var res: Transaction
 
@@ -256,7 +256,8 @@ proc createAccessList*(header: Header,
     args.gas = Opt.some(Quantity DEFAULT_RPC_GAS_CAP)
 
   let
-    vmState = BaseVMState.new(header, com).valueOr:
+    txFrame = com.db.ctx.txFrameBegin(nil) # TODO wrong txFrame
+    vmState = BaseVMState.new(header, com, txFrame).valueOr:
                 handleError("failed to create vmstate: " & $error.code)
     fork    = com.toEVMFork(forkDeterminationInfo(header.number, header.timestamp))
     sender  = args.sender
@@ -284,7 +285,8 @@ proc createAccessList*(header: Header,
     # Apply the transaction with the access list tracer
     let
       tracer  = AccessListTracer.new(accessList, sender, to, precompiles)
-      vmState = BaseVMState.new(header, com, tracer).valueOr:
+      txFrame = com.db.ctx.txFrameBegin(nil) # TODO fix txFrame
+      vmState = BaseVMState.new(header, com, txFrame, tracer).valueOr:
                   handleError("failed to create vmstate: " & $error.code)
       res     = rpcCallEvm(args, header, com, vmState).valueOr:
                   handleError("failed to call evm: " & $error.code)

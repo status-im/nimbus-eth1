@@ -28,7 +28,6 @@
 
 import
   std/[algorithm, options, sequtils, tables],
-  eth/common,
   results,
   ../aristo_constants,
   ../aristo_desc,
