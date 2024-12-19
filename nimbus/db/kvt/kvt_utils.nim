@@ -14,7 +14,6 @@
 {.push raises: [].}
 
 import
-  std/tables,
   results,
   ./kvt_desc/desc_backend,
   "."/[kvt_desc, kvt_layers]
@@ -25,7 +24,7 @@ export results
 # Public functions, converters
 # ------------------------------------------------------------------------------
 
-proc getUbe*(
+proc getBe*(
     db: KvtDbRef;                     # Database
     key: openArray[byte];             # Key of database record
       ): Result[seq[byte],KvtError] =
@@ -37,7 +36,7 @@ proc getUbe*(
     return be.getKvpFn key
   err(GetNotFound)
 
-proc getUbeLen*(
+proc getBeLen*(
     db: KvtDbRef;                     # Database
     key: openArray[byte];             # Key of database record
       ): Result[int,KvtError] =
@@ -49,29 +48,6 @@ proc getUbeLen*(
     return be.lenKvpFn key
   err(GetNotFound)
 
-proc getBe*(
-    db: KvtDbRef;                     # Database
-    key: openArray[byte];             # Key of database record
-      ): Result[seq[byte],KvtError] =
-  ## Get the vertex from the (filtered) backened if available.
-  if not db.txRef.isNil:
-    db.txRef.layer.sTab.withValue(@key, w):
-      if w[].len == 0:
-        return err(GetNotFound)
-      return ok(w[])
-  db.getUbe key
-
-proc getBeLen*(
-    db: KvtDbRef;                     # Database
-    key: openArray[byte];             # Key of database record
-      ): Result[int,KvtError] =
-  ## Get the vertex from the (filtered) backened if available.
-  if not db.txRef.isNil:
-    db.txRef.layer.sTab.withValue(@key, w):
-      if w[].len == 0:
-        return err(GetNotFound)
-      return ok(w[].len)
-  db.getUbeLen key
 
 # ------------
 

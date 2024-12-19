@@ -41,6 +41,7 @@ proc validateHeader(
     com: CommonRef;
     blk: Block;
     parentHeader: Header;
+    txFrame: CoreDbTxRef;
       ): Result[void,string] =
   template header: Header = blk.header
   # TODO this code is used for validating uncles also, though these get passed
@@ -76,7 +77,7 @@ proc validateHeader(
     if header.extraData != daoForkBlockExtraData:
       return err("header extra data should be marked DAO")
 
-  if com.proofOfStake(header):
+  if com.proofOfStake(header, txFrame):
     # EIP-4399 and EIP-3675
     # no need to check mixHash because EIP-4399 override this field
     # checking rule
@@ -159,7 +160,7 @@ proc validateUncles(com: CommonRef; header: Header; txFrame: CoreDbTxRef,
 
     let uncleParent = ?txFrame.getBlockHeader(uncle.parentHash)
     ? com.validateHeader(
-      Block.init(uncle, BlockBody()), uncleParent)
+      Block.init(uncle, BlockBody()), uncleParent, txFrame)
 
   ok()
 
@@ -372,12 +373,12 @@ proc validateHeaderAndKinship*(
       return err("Header.extraData larger than 32 bytes")
     return ok()
 
-  ? com.validateHeader(blk, parent)
+  ? com.validateHeader(blk, parent, txFrame)
 
   if blk.uncles.len > MAX_UNCLES:
     return err("Number of uncles exceed limit.")
 
-  if not com.proofOfStake(header):
+  if not com.proofOfStake(header, txFrame):
     ? com.validateUncles(header, txFrame, blk.uncles)
 
   ok()

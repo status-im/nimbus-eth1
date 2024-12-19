@@ -481,7 +481,7 @@ func dup*(api: AristoApiRef): AristoApiRef =
   result = AristoApiRef()
   result[] = api[]
   when AutoValidateApiHooks:
-    result.validate
+    result[].validate
 
 # ------------------------------------------------------------------------------
 # Public profile API constuctor

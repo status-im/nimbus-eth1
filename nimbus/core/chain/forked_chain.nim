@@ -474,6 +474,9 @@ proc importBlock*(c: ForkedChainRef, blk: Block): Result[void, string] =
   template header(): Header =
     blk.header
 
+  if header.parentHash == c.baseHash:
+    return c.validateBlock(c.baseHeader, c.baseTxFrame, blk)
+
   c.blocks.withValue(header.parentHash, bd) do:
     # TODO: If engine API keep importing blocks
     # but not finalized it, e.g. current chain length > StagedBlocksThreshold
@@ -490,6 +493,7 @@ proc importBlock*(c: ForkedChainRef, blk: Block): Result[void, string] =
       parentHash = header.parentHash.short
     return err("Block is not part of valid chain")
 
+  ok()
 
 proc forkChoice*(c: ForkedChainRef,
                  headHash: Hash32,
@@ -572,6 +576,9 @@ proc haveBlockLocally*(c: ForkedChainRef, blockHash: Hash32): bool =
   c.baseTxFrame.headerExists(blockHash)
 
 func txFrame*(c: ForkedChainRef, blockHash: Hash32): CoreDbTxRef =
+  if blockHash == c.baseHash:
+    return c.baseTxFrame
+
   c.blocks.withValue(blockHash, bd) do:
     return bd[].txFrame
 

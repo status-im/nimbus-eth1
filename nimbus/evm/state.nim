@@ -241,7 +241,7 @@ proc proofOfStake*(vmState: BaseVMState): bool =
     number: vmState.blockNumber,
     parentHash: vmState.blockCtx.parentHash,
     difficulty: vmState.blockCtx.difficulty,
-  ))
+  ), vmState.stateDB.txFrame)
 
 proc difficultyOrPrevRandao*(vmState: BaseVMState): UInt256 =
   if vmState.proofOfStake():

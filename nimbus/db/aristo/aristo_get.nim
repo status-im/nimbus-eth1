@@ -14,7 +14,6 @@
 {.push raises: [].}
 
 import
-  std/tables,
   results,
   "."/[aristo_desc, aristo_layers]
 
@@ -22,16 +21,16 @@ import
 # Public functions
 # ------------------------------------------------------------------------------
 
-proc getTuvUbe*(
+proc getTuvBe*(
     db: AristoDbRef;
       ): Result[VertexID,AristoError] =
-  ## Get the ID generator state from the unfiltered backened if available.
+  ## Get the ID generator state from the backened if available.
   let be = db.backend
   if not be.isNil:
     return be.getTuvFn()
   err(GetTuvNotFound)
 
-proc getLstUbe*(
+proc getLstBe*(
     db: AristoDbRef;
       ): Result[SavedState,AristoError] =
   ## Get the last saved state
@@ -40,66 +39,27 @@ proc getLstUbe*(
     return be.getLstFn()
   err(GetLstNotFound)
 
-proc getVtxUbe*(
+proc getVtxBe*(
     db: AristoDbRef;
     rvid: RootedVertexID;
     flags: set[GetVtxFlag] = {};
       ): Result[VertexRef,AristoError] =
-  ## Get the vertex from the unfiltered backened if available.
+  ## Get the vertex from the backened if available.
   let be = db.backend
   if not be.isNil:
     return be.getVtxFn(rvid, flags)
   err GetVtxNotFound
 
-proc getKeyUbe*(
+proc getKeyBe*(
     db: AristoDbRef;
     rvid: RootedVertexID;
     flags: set[GetVtxFlag];
       ): Result[(HashKey, VertexRef),AristoError] =
-  ## Get the Merkle hash/key from the unfiltered backend if available.
+  ## Get the Merkle hash/key from the backend if available.
   let be = db.backend
   if not be.isNil:
     return be.getKeyFn(rvid, flags)
   err GetKeyNotFound
-
-# ------------------
-
-proc getTuvBE*(
-    db: AristoDbRef;
-      ): Result[VertexID,AristoError] =
-  ## Get the ID generator state the `backened` layer if available.
-  if not db.txRef.isNil:
-    return ok(db.txRef.layer.vTop)
-  db.getTuvUbe()
-
-proc getVtxBE*(
-    db: AristoDbRef;
-    rvid: RootedVertexID;
-    flags: set[GetVtxFlag] = {};
-      ): Result[(VertexRef, int),AristoError] =
-  ## Get the vertex from the (filtered) backened if available.
-  if not db.txRef.isNil:
-    db.txRef.layer.sTab.withValue(rvid, w):
-      if w[].isValid:
-        return ok (w[], -1)
-      return err(GetVtxNotFound)
-  ok (? db.getVtxUbe(rvid, flags), -2)
-
-proc getKeyBE*(
-    db: AristoDbRef;
-    rvid: RootedVertexID;
-    flags: set[GetVtxFlag];
-      ): Result[((HashKey, VertexRef), int),AristoError] =
-  ## Get the merkle hash/key from the (filtered) backend if available.
-  if not db.txRef.isNil:
-    db.txRef.layer.kMap.withValue(rvid, w):
-      if w[].isValid:
-        return ok(((w[], nil), -1))
-      db.txRef.layer.sTab.withValue(rvid, s):
-        if s[].isValid:
-          return ok(((VOID_HASH_KEY, s[]), -1))
-        return err(GetKeyNotFound)
-  ok ((?db.getKeyUbe(rvid, flags)), -2)
 
 # ------------------
 
@@ -121,7 +81,7 @@ proc getVtxRc*(
     else:
       return err(GetVtxNotFound)
 
-  db.db.getVtxBE(rvid, flags)
+  ok (?db.db.getVtxBe(rvid, flags), -2)
 
 proc getVtx*(db: AristoTxRef; rvid: RootedVertexID, flags: set[GetVtxFlag] = {}): VertexRef =
   ## Cascaded attempt to fetch a vertex from the cache layers or the backend.
@@ -155,7 +115,7 @@ proc getKeyRc*(
       # The vertex is to be deleted. So is the value key.
       return err(GetKeyNotFound)
 
-  db.db.getKeyBE(rvid, flags)
+  ok (?db.db.getKeyBe(rvid, flags), -2)
 
 proc getKey*(db: AristoTxRef; rvid: RootedVertexID): HashKey =
   ## Cascaded attempt to fetch a vertex from the cache layers or the backend.

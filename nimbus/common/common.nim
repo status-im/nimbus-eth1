@@ -106,12 +106,6 @@ type
       ## Shared task pool for offloading computation to other threads
 
 # ------------------------------------------------------------------------------
-# Forward declarations
-# ------------------------------------------------------------------------------
-
-proc proofOfStake*(com: CommonRef, header: Header): bool {.gcsafe.}
-
-# ------------------------------------------------------------------------------
 # Private helper functions
 # ------------------------------------------------------------------------------
 
@@ -217,14 +211,13 @@ proc init(com         : CommonRef,
 
   com.initializeDb()
 
-proc isBlockAfterTtd(com: CommonRef, header: Header): bool =
+proc isBlockAfterTtd(com: CommonRef, header: Header, txFrame: CoreDbTxRef): bool =
   if com.config.terminalTotalDifficulty.isNone:
     return false
 
   let
     ttd = com.config.terminalTotalDifficulty.get()
-    # TODO use head frame?
-    ptd = com.db.baseTxFrame().getScore(header.parentHash).valueOr:
+    ptd = txFrame.getScore(header.parentHash).valueOr:
       return false
     td  = ptd + header.difficulty
   ptd >= ttd and td >= ttd
@@ -334,7 +327,7 @@ func isCancunOrLater*(com: CommonRef, t: EthTime): bool =
 func isPragueOrLater*(com: CommonRef, t: EthTime): bool =
   com.config.pragueTime.isSome and t >= com.config.pragueTime.get
 
-proc proofOfStake*(com: CommonRef, header: Header): bool =
+proc proofOfStake*(com: CommonRef, header: Header, txFrame: CoreDbTxRef): bool =
   if com.config.posBlock.isSome:
     # see comments of posBlock in common/hardforks.nim
     header.number >= com.config.posBlock.get
@@ -342,7 +335,7 @@ proc proofOfStake*(com: CommonRef, header: Header): bool =
     header.number >= com.config.mergeNetsplitBlock.get
   else:
     # This costly check is only executed from test suite
-    com.isBlockAfterTtd(header)
+    com.isBlockAfterTtd(header, txFrame)
 
 func depositContractAddress*(com: CommonRef): Address =
   com.config.depositContractAddress.get(default(Address))

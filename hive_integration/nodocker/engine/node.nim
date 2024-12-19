@@ -42,8 +42,6 @@ proc processBlock(
   ## implementations (but can be savely removed, as well.)
   ## variant of `processBlock()` where the `header` argument is explicitely set.
   template header: Header = blk.header
-  var dbTx = vmState.com.db.ctx.txFrameBegin()
-  defer: dbTx.dispose()
 
   let com = vmState.com
   if com.daoForkSupport and
@@ -64,7 +62,7 @@ proc processBlock(
     discard com.db.persistUncles(blk.uncles)
 
   # EIP-3675: no reward for miner in POA/POS
-  if com.proofOfStake(header):
+  if com.proofOfStake(header, vmState.stateDB.txFrame):
     vmState.calculateReward(header, blk.uncles)
 
   vmState.mutateStateDB:

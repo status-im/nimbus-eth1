@@ -152,12 +152,14 @@ func hash*(db: AristoDbRef): Hash =
 # Public helpers
 # ------------------------------------------------------------------------------
 
-iterator rstack*(tx: AristoTxRef): LayerRef =
+iterator rstack*(tx: AristoTxRef): (LayerRef, int) =
   # Stack in reverse order
   var tx = tx
 
+  var i = 0
   while tx != nil:
-    yield tx.layer
+    let level = if tx.parent == nil: -1 else: i
+    yield (tx.layer, level)
     tx = tx.parent
 
 proc deltaAtLevel*(db: AristoTxRef, level: int): LayerRef =

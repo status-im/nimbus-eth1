@@ -124,7 +124,7 @@ proc getKey(
     db: AristoTxRef, rvid: RootedVertexID, skipLayers: static bool
 ): Result[((HashKey, VertexRef), int), AristoError] =
   ok when skipLayers:
-    (?db.db.getKeyUbe(rvid, {GetVtxFlag.PeekCache}), -2)
+    (?db.db.getKeyBe(rvid, {GetVtxFlag.PeekCache}), -2)
   else:
     ?db.getKeyRc(rvid, {})
 
@@ -281,7 +281,7 @@ proc computeKeyImpl(
 ): Result[HashKey, AristoError] =
   let (keyvtx, level) =
     when skipLayers:
-      (?db.db.getKeyUbe(rvid, {GetVtxFlag.PeekCache}), -2)
+      (?db.db.getKeyBe(rvid, {GetVtxFlag.PeekCache}), -2)
     else:
       ?db.getKeyRc(rvid, {})
 

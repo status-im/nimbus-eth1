@@ -77,7 +77,6 @@ type
 
     TxCommitFn          = "commit"
     TxDisposeFn         = "dispose"
-    TxFrameLevelFn           = "level"
     TxRollbackFn        = "rollback"
     TxSaveDisposeFn     = "safeDispose"
 

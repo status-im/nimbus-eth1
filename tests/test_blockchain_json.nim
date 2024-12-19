@@ -58,8 +58,8 @@ proc parseEnv(node: JsonNode): TestEnv =
   result.network = node["network"].getStr
   result.pre = node["pre"]
 
-proc rootExists(db: CoreDbRef; root: Hash32): bool =
-  let state = db.baseTxFrame().getStateRoot().valueOr:
+proc rootExists(db: CoreDbTxRef; root: Hash32): bool =
+  let state = db.getStateRoot().valueOr:
     return false
   state == root
 
@@ -107,7 +107,7 @@ proc executeCase(node: JsonNode): bool =
       " expect: ", env.lastBlockHash
     return false
 
-  if not memDB.rootExists(lastStateRoot):
+  if not c.txFrame(headHash).rootExists(lastStateRoot):
     debugEcho "Last stateRoot not exists"
     return false
 

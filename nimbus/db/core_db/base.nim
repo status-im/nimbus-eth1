@@ -652,13 +652,6 @@ proc recast*(
 # Public transaction related methods
 # ------------------------------------------------------------------------------
 
-# proc txFrameLevel*(db: CoreDbRef): int =
-#   ## Retrieve transaction level (zero if there is no pending transaction).
-#   ##
-#   db.setTrackNewApi BaseLevelFn
-#   result = CoreDbAccRef(db.ctx).call(txFrameLevel, db.ctx.mpt)
-#   db.ifTrackNewApi: debug logTxt, api, elapsed, result
-
 proc txFrameBegin*(ctx: CoreDbCtxRef, parent: CoreDbTxRef): CoreDbTxRef =
   ## Constructor
   ##

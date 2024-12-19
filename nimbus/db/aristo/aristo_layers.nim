@@ -11,7 +11,7 @@
 {.push raises: [].}
 
 import
-  std/[enumerate, sets, tables],
+  std/[sets, tables],
   eth/common/hashes,
   results,
   ./aristo_desc,
@@ -34,9 +34,9 @@ func layersGetVtx*(db: AristoTxRef; rvid: RootedVertexID): Opt[(VertexRef, int)]
   ## Find a vertex on the cache layers. An `ok()` result might contain a
   ## `nil` vertex if it is stored on the cache  that way.
   ##
-  for i, w in enumerate(db.rstack):
+  for w, level in db.rstack:
     w.sTab.withValue(rvid, item):
-      return Opt.some((item[], i))
+      return Opt.some((item[], level))
 
   Opt.none((VertexRef, int))
 
@@ -45,11 +45,11 @@ func layersGetKey*(db: AristoTxRef; rvid: RootedVertexID): Opt[(HashKey, int)] =
   ## hash key if it is stored on the cache that way.
   ##
 
-  for i, w in enumerate(db.rstack):
+  for w, level in db.rstack:
     w.kMap.withValue(rvid, item):
-      return ok((item[], i))
+      return ok((item[], level))
     if rvid in w.sTab:
-      return Opt.some((VOID_HASH_KEY, i))
+      return Opt.some((VOID_HASH_KEY, level))
 
   Opt.none((HashKey, int))
 
@@ -58,14 +58,14 @@ func layersGetKeyOrVoid*(db: AristoTxRef; rvid: RootedVertexID): HashKey =
   (db.layersGetKey(rvid).valueOr (VOID_HASH_KEY, 0))[0]
 
 func layersGetAccLeaf*(db: AristoTxRef; accPath: Hash32): Opt[VertexRef] =
-  for w in db.rstack:
+  for w, _ in db.rstack:
     w.accLeaves.withValue(accPath, item):
       return Opt.some(item[])
 
   Opt.none(VertexRef)
 
 func layersGetStoLeaf*(db: AristoTxRef; mixPath: Hash32): Opt[VertexRef] =
-  for w in db.rstack:
+  for w, _ in db.rstack:
     w.stoLeaves.withValue(mixPath, item):
       return Opt.some(item[])
 
@@ -187,7 +187,7 @@ iterator layersWalkVtx*(
   ## the one with a zero vertex which are othewise skipped by the iterator.
   ## The `seen` argument must not be modified while the iterator is active.
   ##
-  for w in db.rstack:
+  for w, _ in db.rstack:
     for (rvid,vtx) in w.sTab.pairs:
       if rvid.vid notin seen:
         yield (rvid,vtx)
@@ -208,7 +208,7 @@ iterator layersWalkKey*(
   ## Walk over all `(VertexID,HashKey)` pairs on the cache layers. Note that
   ## entries are unsorted.
   var seen: HashSet[VertexID]
-  for w in db.rstack:
+  for w, _ in db.rstack:
     for (rvid,key) in w.kMap.pairs:
       if rvid.vid notin seen:
         yield (rvid,key)

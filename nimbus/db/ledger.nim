@@ -271,17 +271,16 @@ proc persistMode(acc: AccountRef): PersistMode =
       result = Remove
 
 proc persistCode(acc: AccountRef, ac: LedgerRef) =
-  discard
-  # if acc.code.len != 0 and not acc.code.persisted:
-  #   let rc = ac.kvt.put(
-  #     contractHashKey(acc.statement.codeHash).toOpenArray, acc.code.bytes())
-  #   if rc.isErr:
-  #     warn logTxt "persistCode()",
-  #      codeHash=acc.statement.codeHash, error=($$rc.error)
-  #   else:
-  #     # If the ledger changes rolled back entirely from the database, the ledger
-  #     # code cache must also be cleared!
-  #     acc.code.persisted = true
+  if acc.code.len != 0 and not acc.code.persisted:
+    let rc = ac.txFrame.put(
+      contractHashKey(acc.statement.codeHash).toOpenArray, acc.code.bytes())
+    if rc.isErr:
+      warn logTxt "persistCode()",
+       codeHash=acc.statement.codeHash, error=($$rc.error)
+    else:
+      # If the ledger changes rolled back entirely from the database, the ledger
+      # code cache must also be cleared!
+      acc.code.persisted = true
 
 proc persistStorage(acc: AccountRef, ac: LedgerRef) =
   const info = "persistStorage(): "
@@ -332,9 +331,9 @@ proc persistStorage(acc: AccountRef, ac: LedgerRef) =
       # over..
       let
         key = slotKey.data.slotHashToSlotKey
-      #   rc = ac.kvt.put(key.toOpenArray, blobify(slot).data)
-      # if rc.isErr:
-      #   warn logTxt "persistStorage()", slot, error=($$rc.error)
+        rc = ac.txFrame.put(key.toOpenArray, blobify(slot).data)
+      if rc.isErr:
+        warn logTxt "persistStorage()", slot, error=($$rc.error)
 
   acc.overlayStorage.clear()
 

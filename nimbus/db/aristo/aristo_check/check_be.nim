@@ -51,7 +51,7 @@ proc checkBE*[T: RdbBackendRef|MemBackendRef|VoidBackendRef](
   for (rvid,key) in T.walkKeyBe db:
     if topVidBe.vid < rvid.vid:
       topVidBe = rvid
-    let _ = db.getVtxBE(rvid).valueOr:
+    let _ = db.getVtxBe(rvid).valueOr:
       return err((rvid.vid,CheckBeVtxMissing))
 
   # Compare calculated `vTop` against database state
