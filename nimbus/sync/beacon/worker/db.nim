@@ -19,8 +19,8 @@ import
   ../worker_desc,
   ./headers_unproc
 
-const
-  LhcStateKey = 1.beaconStateKey
+let
+  LhcStateKey = 0.beaconHeaderKey
 
 # ------------------------------------------------------------------------------
 # Private helpers
