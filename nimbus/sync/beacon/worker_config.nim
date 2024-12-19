@@ -128,10 +128,6 @@ const
     ## entry block number is too high and so leaves a gap to the ledger state
     ## block number.)
 
-  finaliserChainLengthMax* = 32
-    ## When importing with `importBlock()`, finalise after at most this many
-    ## invocations of `importBlock()`.
-
   # ----------------------
 
 static:
