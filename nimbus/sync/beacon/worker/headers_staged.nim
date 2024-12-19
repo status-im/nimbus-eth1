@@ -251,7 +251,7 @@ proc headersStagedProcess*(ctx: BeaconCtxRef; info: static[string]): int =
 
     result += qItem.data.revHdrs.len # count headers
 
-  trace info & ": stashed consecutive headers",
+  debug info & ": stashed consecutive headers",
     nListsLeft=ctx.hdr.staged.len, nStashed=result
 
   if headersStagedQueueLengthLwm < ctx.hdr.staged.len:
