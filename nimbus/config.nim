@@ -420,7 +420,7 @@ type
     rewriteDatadirId* {.
       hidden
       desc: "Rewrite selected network config hash to database"
-      name: "rewrite-datadir-id".}: bool
+      name: "debug-rewrite-datadir-id".}: bool
 
     case cmd* {.
       command
