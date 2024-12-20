@@ -35,10 +35,6 @@
     "currentExcessBlobGas": "0x2b80000",
     "blobGasUsed": "0x0",
     "requestsHash": "0xe3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
-    "requests": [
-      "0x",
-      "0x",
-      "0x"
-    ]
+    "requests": []
   }
 }
