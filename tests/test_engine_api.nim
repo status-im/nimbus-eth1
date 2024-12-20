@@ -268,6 +268,9 @@ proc newPayloadV4InvalidRequests(env: TestEnv): Result[void, string] =
     if $engineApiInvalidParams notin res.error:
       return err("invalid error code: " & res.error & " expect: " & $engineApiInvalidParams)
 
+    if "request" notin res.error:
+      return err("expect \"request\" in error message: " & res.error)
+
   ok()
 
 const testList = [
