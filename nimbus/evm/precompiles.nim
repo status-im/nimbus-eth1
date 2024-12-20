@@ -28,29 +28,27 @@ import
 type
   PrecompileAddresses* = enum
     # Frontier to Spurious Dragron
-    paEcRecover  = 0x01,
-    paSha256     = 0x02,
-    paRipeMd160  = 0x03,
-    paIdentity   = 0x04,
+    paEcRecover       = 0x01
+    paSha256          = 0x02
+    paRipeMd160       = 0x03
+    paIdentity        = 0x04
     # Byzantium and Constantinople
-    paModExp     = 0x05,
-    paEcAdd      = 0x06,
-    paEcMul      = 0x07,
-    paPairing    = 0x08,
+    paModExp          = 0x05
+    paEcAdd           = 0x06
+    paEcMul           = 0x07
+    paPairing         = 0x08
     # Istanbul
-    paBlake2bf   = 0x09,
+    paBlake2bf        = 0x09
     # Cancun
-    paPointEvaluation = 0x0A,
+    paPointEvaluation = 0x0a
     # Prague (EIP-2537)
-    paBlsG1Add   = 0x0b,
-    paBlsG1Mul   = 0x0c,
-    paBlsG1MultiExp = 0x0d,
-    paBlsG2Add   = 0x0e,
-    paBlsG2Mul   = 0x0f,
-    paBlsG2MultiExp = 0x10,
-    paBlsPairing = 0x11,
-    paBlsMapG1 = 0x12,
-    paBlsMapG2 = 0x13
+    paBlsG1Add        = 0x0b
+    paBlsG1MultiExp   = 0x0c
+    paBlsG2Add        = 0x0d
+    paBlsG2MultiExp   = 0x0e
+    paBlsPairing      = 0x0f
+    paBlsMapG1        = 0x10
+    paBlsMapG2        = 0x11
 
   SigRes = object
     msgHash: array[32, byte]
@@ -409,30 +407,6 @@ func blsG1Add(c: Computation): EvmResultVoid =
     return err(prcErr(PrcInvalidPoint))
   ok()
 
-func blsG1Mul(c: Computation): EvmResultVoid =
-  template input: untyped =
-    c.msg.data
-
-  if input.len != 160:
-    return err(prcErr(PrcInvalidParam))
-
-  ? c.gasMeter.consumeGas(Bls12381G1MulGas, reason="blsG1Mul Precompile")
-
-  var a: BLS_G1
-  if not a.decodePoint(input.toOpenArray(0, 127)):
-    return err(prcErr(PrcInvalidPoint))
-
-  var scalar: BLS_SCALAR
-  if not scalar.fromBytes(input.toOpenArray(128, 159)):
-    return err(prcErr(PrcInvalidParam))
-
-  a.mul(scalar)
-
-  c.output.setLen(128)
-  if not encodePoint(a, c.output):
-    return err(prcErr(PrcInvalidPoint))
-  ok()
-
 const
   MSMG1DiscountTable = [
     1000.GasInt, 949, 848, 797, 764, 750, 738, 728, 719, 712, 705,
@@ -539,30 +513,6 @@ func blsG2Add(c: Computation): EvmResultVoid =
     return err(prcErr(PrcInvalidPoint))
 
   a.add b
-
-  c.output.setLen(256)
-  if not encodePoint(a, c.output):
-    return err(prcErr(PrcInvalidPoint))
-  ok()
-
-func blsG2Mul(c: Computation): EvmResultVoid =
-  template input: untyped =
-    c.msg.data
-
-  if input.len != 288:
-    return err(prcErr(PrcInvalidParam))
-
-  ? c.gasMeter.consumeGas(Bls12381G2MulGas, reason="blsG2Mul Precompile")
-
-  var a: BLS_G2
-  if not a.decodePoint(input.toOpenArray(0, 255)):
-    return err(prcErr(PrcInvalidPoint))
-
-  var scalar: BLS_SCALAR
-  if not scalar.fromBytes(input.toOpenArray(256, 287)):
-    return err(prcErr(PrcInvalidParam))
-
-  a.mul(scalar)
 
   c.output.setLen(256)
   if not encodePoint(a, c.output):
@@ -762,10 +712,8 @@ proc execPrecompile*(c: Computation, precompile: PrecompileAddresses) =
     of paBlake2bf: blake2bf(c)
     of paPointEvaluation: pointEvaluation(c)
     of paBlsG1Add: blsG1Add(c)
-    of paBlsG1Mul: blsG1Mul(c)
     of paBlsG1MultiExp: blsG1MultiExp(c)
     of paBlsG2Add: blsG2Add(c)
-    of paBlsG2Mul: blsG2Mul(c)
     of paBlsG2MultiExp: blsG2MultiExp(c)
     of paBlsPairing: blsPairing(c)
     of paBlsMapG1: blsMapG1(c)

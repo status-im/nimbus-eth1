@@ -18,7 +18,7 @@ import
   ../transaction/call_types,
   ../transaction,
   ../utils/utils,
-  "."/[dao, eip4844, eip7702, gaslimit, withdrawals],
+  "."/[dao, eip4844, eip7702, eip7691, gaslimit, withdrawals],
   ./pow/[difficulty, header],
   stew/objects,
   results
@@ -260,8 +260,9 @@ proc validateTxBasic*(
     if tx.versionedHashes.len == 0:
       return err("invalid tx: there must be at least one blob")
 
-    if tx.versionedHashes.len > MAX_BLOBS_PER_BLOCK:
-      return err(&"invalid tx: versioned hashes len exceeds MAX_BLOBS_PER_BLOCK={MAX_BLOBS_PER_BLOCK}. get={tx.versionedHashes.len}")
+    let maxBlobsPerBlob = getMaxBlobsPerBlock(fork >= FkPrague)
+    if tx.versionedHashes.len.uint64 > maxBlobsPerBlob:
+      return err(&"invalid tx: versioned hashes len exceeds MAX_BLOBS_PER_BLOCK={maxBlobsPerBlob}. get={tx.versionedHashes.len}")
 
     for i, bv in tx.versionedHashes:
       if bv.data[0] != VERSIONED_HASH_VERSION_KZG:
@@ -348,7 +349,7 @@ proc validateTransaction*(
 
   if tx.txType == TxEip4844:
     # ensure that the user was willing to at least pay the current data gasprice
-    let blobGasPrice = getBlobBaseFee(excessBlobGas)
+    let blobGasPrice = getBlobBaseFee(excessBlobGas, fork >= FkPrague)
     if tx.maxFeePerBlobGas < blobGasPrice:
       return err("invalid tx: maxFeePerBlobGas smaller than blobGasPrice. " &
         &"maxFeePerBlobGas={tx.maxFeePerBlobGas}, blobGasPrice={blobGasPrice}")
