@@ -59,7 +59,7 @@ proc processBlock(
       vmState.stateDB.addBalance(withdrawal.address, withdrawal.weiAmount)
 
   if header.ommersHash != EMPTY_UNCLE_HASH:
-    discard com.db.persistUncles(blk.uncles)
+    discard vmState.stateDB.txFrame.persistUncles(blk.uncles)
 
   # EIP-3675: no reward for miner in POA/POS
   if com.proofOfStake(header, vmState.stateDB.txFrame):
@@ -69,7 +69,7 @@ proc processBlock(
     let clearEmptyAccount = com.isSpuriousOrLater(header.number)
     db.persist(clearEmptyAccount)
 
-  dbTx.commit()
+  vmState.stateDB.txFrame.commit()
 
   ok()
 
@@ -87,8 +87,8 @@ proc getVmState(c: ChainRef, header: Header, txFrame: CoreDbTxRef):
 # intended to accepts invalid block
 proc setBlock*(c: ChainRef; blk: Block): Result[void, string] =
   template header: Header = blk.header
-  let dbTx = c.db.ctx.txFrameBegin()
-  defer: dbTx.dispose()
+  let txFrame = c.db.ctx.txFrameBegin(nil)
+  defer: txFrame.dispose()
 
   # Needed for figuring out whether KVT cleanup is due (see at the end)
   let
@@ -109,11 +109,8 @@ proc setBlock*(c: ChainRef; blk: Block): Result[void, string] =
   # between eth_blockNumber and eth_syncing
   c.com.syncCurrent = header.number
 
-  dbTx.commit()
+  txFrame.commit()
 
-  # The `c.db.persistent()` call is ignored by the legacy DB which
-  # automatically saves persistently when reaching the zero level transaction.
-  #
   # For the `Aristo` database, this code position is only reached if the
   # the parent state of the first block (as registered in `headers[0]`) was
   # the canonical state before updating. So this state will be saved with
