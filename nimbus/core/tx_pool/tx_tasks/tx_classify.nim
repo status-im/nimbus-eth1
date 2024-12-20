@@ -21,7 +21,9 @@ import
   chronicles,
   eth/common/[transactions, keys]
 
-import ../../../transaction
+import
+  ../../../transaction,
+  ../../../common/evmforks
 
 {.push raises: [].}
 
@@ -112,7 +114,7 @@ proc txFeesCovered(xp: TxPoolRef; item: TxItemRef): bool =
   if item.tx.txType == TxEip4844:
     let
       excessBlobGas = xp.excessBlobGas
-      blobGasPrice = getBlobBaseFee(excessBlobGas)
+      blobGasPrice = getBlobBaseFee(excessBlobGas, xp.nextFork >= FkPrague)
     if item.tx.maxFeePerBlobGas < blobGasPrice:
       debug "invalid tx: maxFeePerBlobGas smaller than blobGasPrice",
         maxFeePerBlobGas=item.tx.maxFeePerBlobGas,

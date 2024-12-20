@@ -15,6 +15,7 @@ import
   kzg4844/kzg,
   results,
   stint,
+  ./eip7691,
   ../constants,
   ../common/common
 
@@ -81,15 +82,16 @@ proc pointEvaluation*(input: openArray[byte]): Result[void, string] =
   ok()
 
 # calcExcessBlobGas implements calc_excess_data_gas from EIP-4844
-proc calcExcessBlobGas*(parent: Header): uint64 =
+proc calcExcessBlobGas*(parent: Header, electra: bool): uint64 =
   let
     excessBlobGas = parent.excessBlobGas.get(0'u64)
     blobGasUsed = parent.blobGasUsed.get(0'u64)
+    targetBlobGasPerBlock = getTargetBlobGasPerBlock(electra)
 
-  if excessBlobGas + blobGasUsed < TARGET_BLOB_GAS_PER_BLOCK:
+  if excessBlobGas + blobGasUsed < targetBlobGasPerBlock:
     0'u64
   else:
-    excessBlobGas + blobGasUsed - TARGET_BLOB_GAS_PER_BLOCK
+    excessBlobGas + blobGasUsed - targetBlobGasPerBlock
 
 # fakeExponential approximates factor * e ** (num / denom) using a taylor expansion
 # as described in the EIP-4844 spec.
@@ -113,17 +115,19 @@ proc getTotalBlobGas*(versionedHashesLen: int): uint64 =
   GAS_PER_BLOB * versionedHashesLen.uint64
 
 # getBlobBaseFee implements get_data_gas_price from EIP-4844
-func getBlobBaseFee*(excessBlobGas: uint64): UInt256 =
+func getBlobBaseFee*(excessBlobGas: uint64, electra: bool): UInt256 =
+  let blobBaseFeeUpdateFraction = getBlobBaseFeeUpdateFraction(electra).u256
   fakeExponential(
     MIN_BLOB_GASPRICE.u256,
     excessBlobGas.u256,
-    BLOB_GASPRICE_UPDATE_FRACTION.u256
+    blobBaseFeeUpdateFraction
   )
 
 proc calcDataFee*(versionedHashesLen: int,
-                  excessBlobGas: uint64): UInt256 =
+                  excessBlobGas: uint64,
+                  electra: bool): UInt256 =
   getTotalBlobGas(versionedHashesLen).u256 *
-    getBlobBaseFee(excessBlobGas)
+    getBlobBaseFee(excessBlobGas, electra)
 
 func blobGasUsed(txs: openArray[Transaction]): uint64 =
   for tx in txs:
@@ -150,13 +154,15 @@ func validateEip4844Header*(
     return err("expect EIP-4844 excessBlobGas in block header")
 
   let
+    electra = com.isPragueOrLater(header.timestamp)
     headerBlobGasUsed = header.blobGasUsed.get()
     blobGasUsed = blobGasUsed(txs)
     headerExcessBlobGas = header.excessBlobGas.get
-    excessBlobGas = calcExcessBlobGas(parentHeader)
+    excessBlobGas = calcExcessBlobGas(parentHeader, electra)
+    maxBlobGasPerBlock = getMaxBlobGasPerBlock(electra)
 
-  if blobGasUsed > MAX_BLOB_GAS_PER_BLOCK:
-    return err("blobGasUsed " & $blobGasUsed & " exceeds maximum allowance " & $MAX_BLOB_GAS_PER_BLOCK)
+  if blobGasUsed > maxBlobGasPerBlock:
+    return err("blobGasUsed " & $blobGasUsed & " exceeds maximum allowance " & $maxBlobGasPerBlock)
 
   if headerBlobGasUsed != blobGasUsed:
     return err("calculated blobGas not equal header.blobGasUsed")

@@ -28,6 +28,7 @@ import
   ../../evm/types,
   ../eip4844,
   ../eip6110,
+  ../eip7691,
   "."/[tx_desc, tx_item, tx_tabs, tx_tabs/tx_status, tx_info],
   tx_tasks/[tx_bucket]
 
@@ -81,7 +82,7 @@ proc classifyValidatePacked(vmState: BaseVMState; item: TxItemRef): bool =
     fork = vmState.fork
     gasLimit = vmState.blockCtx.gasLimit
     tx = item.tx.eip1559TxNormalization(baseFee.truncate(GasInt))
-    excessBlobGas = calcExcessBlobGas(vmState.parent)
+    excessBlobGas = calcExcessBlobGas(vmState.parent, vmState.fork >= FkPrague)
 
   roDB.validateTransaction(
     tx, item.sender, gasLimit, baseFee, excessBlobGas, fork).isOk
@@ -210,12 +211,15 @@ proc vmExecGrabItem(pst: var TxPacker; item: TxItemRef): GrabResult
     return ContinueWithNextAccount
 
   # EIP-4844
-  if pst.numBlobPerBlock + item.tx.versionedHashes.len > MAX_BLOBS_PER_BLOCK:
+  let maxBlobsPerBlob = getMaxBlobsPerBlock(vmState.fork >= FkPrague)
+  if (pst.numBlobPerBlock + item.tx.versionedHashes.len).uint64 > maxBlobsPerBlob:
     return ContinueWithNextAccount
   pst.numBlobPerBlock += item.tx.versionedHashes.len
 
-  let blobGasUsed = item.tx.getTotalBlobGas
-  if vmState.blobGasUsed + blobGasUsed > MAX_BLOB_GAS_PER_BLOCK:
+  let
+    blobGasUsed = item.tx.getTotalBlobGas
+    maxBlobGasPerBlock = getMaxBlobGasPerBlock(vmState.fork >= FkPrague)
+  if vmState.blobGasUsed + blobGasUsed > maxBlobGasPerBlock:
     return ContinueWithNextAccount
   vmState.blobGasUsed += blobGasUsed
 
