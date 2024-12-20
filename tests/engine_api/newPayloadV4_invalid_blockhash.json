@@ -34,9 +34,5 @@
       "0x0139c61fb5022f854e37742230a76e524166c0f1b2d67a152d4f5a488b5159c1"
     ],
     "parentBeaconBlockRoot": "0x25b66ce21990ffcbbb6248952c6ef7939dbddfb90f6659a2bb43ff369f47c23b",
-    "executionRequests": [
-      "0x",
-      "0x",
-      "0x"
-    ]
+    "executionRequests": []
 }
