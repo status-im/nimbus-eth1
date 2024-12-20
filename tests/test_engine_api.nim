@@ -239,6 +239,32 @@ proc genesisShouldCanonicalTest(env: TestEnv): Result[void, string] =
 
   ok()
 
+proc newPayloadV4InvalidRequests(env: TestEnv): Result[void, string] =
+  const
+    paramsFiles = [
+      "tests/engine_api/newPayloadV4_invalid_requests.json",
+      "tests/engine_api/newPayloadV4_empty_requests_data.json",
+      "tests/engine_api/newPayloadV4_invalid_requests_type.json",
+    ]
+
+  for paramsFile in paramsFiles:
+    let
+      client = env.client
+      params = JrpcConv.loadFile(paramsFile, NewPayloadV4Params)
+      res = client.newPayloadV4(
+        params.payload,
+        params.expectedBlobVersionedHashes,
+        params.parentBeaconBlockRoot,
+        params.executionRequests)
+
+    if res.isOk:
+      return err("res should error")
+
+    if $engineApiInvalidParams notin res.error:
+      return err("invalid error code: " & res.error & " expect: " & $engineApiInvalidParams)
+
+  ok()
+
 const testList = [
   TestSpec(
     name: "Basic cycle",
@@ -260,6 +286,11 @@ const testList = [
     fork: Cancun,
     testProc: genesisShouldCanonicalTest,
     genesisFile: mekongGenesisFile
+  ),
+  TestSpec(
+    name: "newPayloadV4 invalid execution requests",
+    fork: Prague,
+    testProc: newPayloadV4InvalidRequests
   ),
   ]
 
