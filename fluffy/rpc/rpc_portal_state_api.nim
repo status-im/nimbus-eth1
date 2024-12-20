@@ -74,7 +74,7 @@ proc installPortalStateApiHandlers*(rpcServer: RpcServer, p: PortalProtocol) =
         contentBytes = hexToSeqByte(contentItem[1])
         contentKV = ContentKV(contentKey: keyBytes, content: contentBytes)
 
-      discard validateOfferGetValue(Opt.none(Hash32), key, contentBytes).valueOr:
+      discard validateOfferGetRetrieval(key, contentBytes).valueOr:
         raise invalidValueErr()
       contentItemsToOffer.add(contentKV)
 
@@ -134,7 +134,7 @@ proc installPortalStateApiHandlers*(rpcServer: RpcServer, p: PortalProtocol) =
       (key, contentId) = validateGetContentKey(keyBytes).valueOr:
         raise invalidKeyErr()
       contentBytes = hexToSeqByte(content)
-      contentValue = validateOfferGetValue(Opt.none(Hash32), key, contentBytes).valueOr:
+      contentValue = validateOfferGetRetrieval(key, contentBytes).valueOr:
         raise invalidValueErr()
 
     p.storeContent(keyBytes, contentId, contentValue)
@@ -156,7 +156,7 @@ proc installPortalStateApiHandlers*(rpcServer: RpcServer, p: PortalProtocol) =
       (key, contentId) = validateGetContentKey(keyBytes).valueOr:
         raise invalidKeyErr()
       contentBytes = hexToSeqByte(content)
-      contentValue = validateOfferGetValue(Opt.none(Hash32), key, contentBytes).valueOr:
+      contentValue = validateOfferGetRetrieval(key, contentBytes).valueOr:
         raise invalidValueErr()
 
     p.storeContent(keyBytes, contentId, contentValue)

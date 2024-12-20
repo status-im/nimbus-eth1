@@ -13,8 +13,6 @@
 import
   std/strformat,
   results,
-  stew/arrayops,
-  stew/endians2,
   ../../common/common,
   ../../db/ledger,
   ../../transaction/call_evm,
@@ -24,13 +22,14 @@ import
   ../../evm/types,
   ../../constants,
   ../eip4844,
+  ../eip7691,
   ../validate
 
 # ------------------------------------------------------------------------------
 # Private functions
 # ------------------------------------------------------------------------------
 
-proc eip1559BaseFee(header: Header; fork: EVMFork): UInt256 =
+func eip1559BaseFee(header: Header; fork: EVMFork): UInt256 =
   ## Actually, `baseFee` should be 0 for pre-London headers already. But this
   ## function just plays safe. In particular, the `test_general_state_json.nim`
   ## module modifies this block header `baseFee` field unconditionally :(.
@@ -44,6 +43,7 @@ proc commitOrRollbackDependingOnGasUsed(
     tx: Transaction;
     gasBurned: GasInt;
     priorityFee: GasInt;
+    blobGasUsed: GasInt;
       ): Result[GasInt, string] =
   # Make sure that the tx does not exceed the maximum cumulative limit as
   # set in the block header. Again, the eip-1559 reference does not mention
@@ -61,6 +61,7 @@ proc commitOrRollbackDependingOnGasUsed(
     # Return remaining gas to the block gas counter so it is
     # available for the next transaction.
     vmState.gasPool += tx.gasLimit - gasBurned
+    vmState.blobGasUsed += blobGasUsed
     ok(gasBurned)
 
 proc processTransactionImpl(
@@ -87,11 +88,13 @@ proc processTransactionImpl(
 
   vmState.gasPool -= tx.gasLimit
 
-  let blobGasUsed = tx.getTotalBlobGas
-  if vmState.blobGasUsed + blobGasUsed > MAX_BLOB_GAS_PER_BLOCK:
+  # blobGasUsed will be added to vmState.blobGasUsed if the tx is ok.
+  let
+    blobGasUsed = tx.getTotalBlobGas
+    maxBlobGasPerBlock = getMaxBlobGasPerBlock(vmState.fork >= FkPrague)
+  if vmState.blobGasUsed + blobGasUsed > maxBlobGasPerBlock:
     return err("blobGasUsed " & $blobGasUsed &
-      " exceeds maximum allowance " & $MAX_BLOB_GAS_PER_BLOCK)
-  vmState.blobGasUsed += blobGasUsed
+      " exceeds maximum allowance " & $maxBlobGasPerBlock)
 
   # Actually, the eip-1559 reference does not mention an early exit.
   #
@@ -112,7 +115,7 @@ proc processTransactionImpl(
         gasBurned = tx.txCallEvm(sender, vmState, baseFee)
       vmState.captureTxEnd(tx.gasLimit - gasBurned)
 
-      commitOrRollbackDependingOnGasUsed(vmState, accTx, header, tx, gasBurned, priorityFee)
+      commitOrRollbackDependingOnGasUsed(vmState, accTx, header, tx, gasBurned, priorityFee, blobGasUsed)
     else:
       err(txRes.error)
 
@@ -138,7 +141,7 @@ proc processBeaconBlockRoot*(vmState: BaseVMState, beaconRoot: Hash32):
     call = CallParams(
       vmState  : vmState,
       sender   : SYSTEM_ADDRESS,
-      gasLimit : 30_000_000.GasInt,
+      gasLimit : DEFAULT_GAS_LIMIT.GasInt,
       gasPrice : 0.GasInt,
       to       : BEACON_ROOTS_ADDRESS,
       input    : @(beaconRoot.data),
@@ -168,7 +171,7 @@ proc processParentBlockHash*(vmState: BaseVMState, prevHash: Hash32):
     call = CallParams(
       vmState  : vmState,
       sender   : SYSTEM_ADDRESS,
-      gasLimit : 30_000_000.GasInt,
+      gasLimit : DEFAULT_GAS_LIMIT.GasInt,
       gasPrice : 0.GasInt,
       to       : HISTORY_STORAGE_ADDRESS,
       input    : @(prevHash.data),
@@ -197,9 +200,9 @@ proc processDequeueWithdrawalRequests*(vmState: BaseVMState): seq[byte] =
     call = CallParams(
       vmState  : vmState,
       sender   : SYSTEM_ADDRESS,
-      gasLimit : 30_000_000.GasInt,
+      gasLimit : DEFAULT_GAS_LIMIT.GasInt,
       gasPrice : 0.GasInt,
-      to       : WITHDRAWAL_REQUEST_ADDRESS,
+      to       : WITHDRAWAL_REQUEST_PREDEPLOY_ADDRESS,
 
       # It's a systemCall, no need for other knicks knacks
       sysCall     : true,
@@ -221,9 +224,9 @@ proc processDequeueConsolidationRequests*(vmState: BaseVMState): seq[byte] =
     call = CallParams(
       vmState  : vmState,
       sender   : SYSTEM_ADDRESS,
-      gasLimit : 30_000_000.GasInt,
+      gasLimit : DEFAULT_GAS_LIMIT.GasInt,
       gasPrice : 0.GasInt,
-      to       : CONSOLIDATION_REQUEST_ADDRESS,
+      to       : CONSOLIDATION_REQUEST_PREDEPLOY_ADDRESS,
 
       # It's a systemCall, no need for other knicks knacks
       sysCall     : true,

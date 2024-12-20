@@ -37,6 +37,7 @@ type
     Shanghai
     Cancun
     Prague
+    Osaka
 
 const lastPurelyBlockNumberBasedFork* = GrayGlacier
 # MergeFork is special because of TTD.
@@ -47,12 +48,11 @@ type
   MergeForkTransitionThreshold* = object
     number*: Opt[BlockNumber]
     ttd*: Opt[DifficultyInt]
-    ttdPassed*: Opt[bool]
 
   ForkTransitionTable* = object
     blockNumberThresholds*: array[Frontier..GrayGlacier, Opt[BlockNumber]]
     mergeForkTransitionThreshold*: MergeForkTransitionThreshold
-    timeThresholds*: array[Shanghai..Prague, Opt[EthTime]]
+    timeThresholds*: array[Shanghai..Osaka, Opt[EthTime]]
 
   # Starting with Shanghai, forking is based on timestamp
   # rather than block number.
@@ -120,11 +120,9 @@ func isGTETransitionThreshold*(map: ForkTransitionTable, forkDeterminer: ForkDet
     map.blockNumberThresholds[fork].isSome and forkDeterminer.number >= map.blockNumberThresholds[fork].get
   elif fork == MergeFork:
     # MergeFork is a special case that can use either block number or ttd;
-    # ttdPassed > block number > ttd takes precedence.
+    # block number > ttd takes precedence.
     let t = map.mergeForkTransitionThreshold
-    if t.ttdPassed.isSome:
-      t.ttdPassed.get
-    elif t.number.isSome:
+    if t.number.isSome:
       forkDeterminer.number >= t.number.get
     elif t.ttd.isSome and forkDeterminer.td.isSome:
       forkDeterminer.td.get >= t.ttd.get
@@ -165,17 +163,15 @@ type
     posBlock*
       {.dontSerialize.} : Opt[BlockNumber]
 
-    # mergeNetsplitBlock is an alias to mergeForkBlock
-    # and is used for geth compatibility layer
     mergeNetsplitBlock* : Opt[BlockNumber]
 
-    mergeForkBlock*     : Opt[BlockNumber]
     shanghaiTime*       : Opt[EthTime]
     cancunTime*         : Opt[EthTime]
     pragueTime*         : Opt[EthTime]
+    osakaTime*          : Opt[EthTime]
 
     terminalTotalDifficulty*: Opt[UInt256]
-    terminalTotalDifficultyPassed*: Opt[bool]
+    depositContractAddress*: Opt[Address]
 
   # These are used for checking that the values of the fields
   # are in a valid order.
@@ -195,11 +191,7 @@ func countTimeFields(): int {.compileTime.} =
 func countBlockFields(): int {.compileTime.} =
   var z = ChainConfig()
   for name, _ in fieldPairs(z[]):
-    if name == "mergeNetsplitBlock":
-      # skip mergeForkBlock alias
-      # continue is not supported
-      discard
-    elif name.endsWith("Block"):
+    if name.endsWith("Block"):
       inc result
 
 const
@@ -218,11 +210,7 @@ func collectBlockFields(): array[blockFieldsCount, string] =
   var z = ChainConfig()
   var i = 0
   for name, _ in fieldPairs(z[]):
-    if name == "mergeNetsplitBlock":
-      # skip mergeForkBlock alias
-      # continue is not supported
-      discard
-    elif name.endsWith("Block"):
+    if name.endsWith("Block"):
       result[i] = name
       inc i
 
@@ -236,9 +224,8 @@ const
 
 func mergeForkTransitionThreshold*(conf: ChainConfig): MergeForkTransitionThreshold =
   MergeForkTransitionThreshold(
-    number: conf.mergeForkBlock,
+    number: conf.mergeNetsplitBlock,
     ttd: conf.terminalTotalDifficulty,
-    ttdPassed: conf.terminalTotalDifficultyPassed
   )
 
 func toForkTransitionTable*(conf: ChainConfig): ForkTransitionTable =
@@ -264,6 +251,7 @@ func toForkTransitionTable*(conf: ChainConfig): ForkTransitionTable =
   result.timeThresholds[Shanghai] = conf.shanghaiTime
   result.timeThresholds[Cancun] = conf.cancunTime
   result.timeThresholds[Prague] = conf.pragueTime
+  result.timeThresholds[Osaka] = conf.osakaTime
 
 func populateFromForkTransitionTable*(conf: ChainConfig, t: ForkTransitionTable) =
   conf.homesteadBlock      = t.blockNumberThresholds[HardFork.Homestead]
@@ -281,13 +269,13 @@ func populateFromForkTransitionTable*(conf: ChainConfig, t: ForkTransitionTable)
   conf.arrowGlacierBlock   = t.blockNumberThresholds[HardFork.ArrowGlacier]
   conf.grayGlacierBlock    = t.blockNumberThresholds[HardFork.GrayGlacier]
 
-  conf.mergeForkBlock          = t.mergeForkTransitionThreshold.number
+  conf.mergeNetsplitBlock      = t.mergeForkTransitionThreshold.number
   conf.terminalTotalDifficulty = t.mergeForkTransitionThreshold.ttd
-  conf.terminalTotalDifficultyPassed = t.mergeForkTransitionThreshold.ttdPassed
 
   conf.shanghaiTime        = t.timeThresholds[HardFork.Shanghai]
   conf.cancunTime          = t.timeThresholds[HardFork.Cancun]
   conf.pragueTime          = t.timeThresholds[HardFork.Prague]
+  conf.osakaTime           = t.timeThresholds[HardFork.Osaka]
 
 # ------------------------------------------------------------------------------
 # Map HardFork to EVM/EVMC Fork
@@ -313,6 +301,7 @@ const
     FkShanghai,       # Shanghai
     FkCancun,         # Cancun
     FkPrague,         # Prague
+    FkOsaka,          # Osaka
   ]
 
 # ------------------------------------------------------------------------------

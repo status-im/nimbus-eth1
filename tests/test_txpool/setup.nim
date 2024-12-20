@@ -92,7 +92,7 @@ proc setupTxPool*(getStatus: proc(): TxItemStatus): (CommonRef, TxPoolRef, int) 
   txEnv.fillGenesis(conf.networkParams)
 
   let com = CommonRef.new(
-    newCoreDbRef DefaultDbMemory,
+    newCoreDbRef DefaultDbMemory, nil,
     conf.networkId,
     conf.networkParams
   )

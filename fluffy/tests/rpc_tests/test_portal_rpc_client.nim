@@ -19,7 +19,7 @@ import
   eth/p2p/discoveryv5/protocol as discv5_protocol,
   ../../network/wire/[portal_protocol, portal_stream, portal_protocol_config],
   ../../network/history/
-    [history_network, history_content, validation/historical_hashes_accumulator],
+    [history_network, history_content, history_type_conversions, history_validation],
   ../../database/content_db,
   ../../rpc/[portal_rpc_client, rpc_portal_history_api],
   ../test_helpers
@@ -57,7 +57,7 @@ proc stop(hn: HistoryNode) {.async.} =
   await hn.discoveryProtocol.closeWait()
 
 proc containsId(hn: HistoryNode, contentId: ContentId): bool =
-  return hn.historyNetwork.contentDB.get(contentId).isSome()
+  return hn.historyNetwork.contentDB.contains(contentId)
 
 proc store*(hn: HistoryNode, blockHash: Hash32, blockHeader: Header) =
   let
@@ -109,7 +109,7 @@ proc setupTest(rng: ref HmacDrbgContext): Future[TestCase] {.async.} =
     historyNode2.portalProtocol().addNode(historyNode1.localNode()) == Added
 
   let rpcHttpServer = RpcHttpServer.new()
-  rpcHttpServer.addHttpServer(ta, maxRequestBodySize = 4 * 1_048_576)
+  rpcHttpServer.addHttpServer(ta, maxRequestBodySize = 16 * 1024 * 1024)
   rpcHttpServer.installPortalHistoryApiHandlers(
     historyNode1.historyNetwork.portalProtocol
   )

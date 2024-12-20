@@ -1,5 +1,5 @@
 # Nimbus
-# Copyright (c) 2023 Status Research & Development GmbH
+# Copyright (c) 2023-2024 Status Research & Development GmbH
 # Licensed under either of
 #  * Apache License, version 2.0, ([LICENSE-APACHE](LICENSE-APACHE) or
 #    http://www.apache.org/licenses/LICENSE-2.0)
@@ -47,7 +47,7 @@ method execute*(step: SendModifiedLatestPayload, ctx: CancunTestContext): bool =
   doAssert(step.clientID < env.numEngines(), "invalid client index " & $step.clientID)
 
   let eng = env.engines(step.clientID)
-  let r = eng.client.newPayload(version, payload)
+  let r = eng.newPayload(version, payload)
   if expectedError != 0:
     r.expectErrorCode(expectedError)
   else:

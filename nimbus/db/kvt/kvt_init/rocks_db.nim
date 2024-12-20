@@ -28,7 +28,6 @@
 
 import
   chronicles,
-  eth/common,
   rocksdb,
   results,
   ../../aristo/aristo_init/persistent,
@@ -153,11 +152,6 @@ proc closeFn(db: RdbBackendRef): CloseFn =
     proc(eradicate: bool) =
       db.rdb.destroy(eradicate)
 
-proc canModFn(db: RdbBackendRef): CanModFn =
-  result =
-    proc(): Result[void,KvtError] =
-      ok()
-
 proc setWrReqFn(db: RdbBackendRef): SetWrReqFn =
   result =
     proc(kvt: RootRef): Result[void,KvtError] =
@@ -191,11 +185,11 @@ proc putEndTriggeredFn(db: RdbBackendRef): PutEndFn =
         when extraTraceMessages:
           debug logTxt "putEndTriggeredFn: failed",
             error=hdl.error, info=hdl.info
-        # The error return code will signal a problem to the `txStow()`
+        # The error return code will signal a problem to the `txPersist()`
         # function which was called by `writeEvCb()` below.
         return err(hdl.error)
 
-      # Commit the session. This will be acknowledged by the `txStow()`
+      # Commit the session. This will be acknowledged by the `txPersist()`
       # function which was called by `writeEvCb()` below.
       ok()
 
@@ -205,15 +199,6 @@ proc closeTriggeredFn(db: RdbBackendRef): CloseFn =
     proc(eradicate: bool) =
       # Nothing to do here as we do not own the backend
       discard
-
-proc canModTriggeredFn(db: RdbBackendRef): CanModFn =
-  ## Variant of `canModFn()` for piggyback write batch
-  result =
-    proc(): Result[void,KvtError] =
-      # Deny modifications/changes if there is a pending write request
-      if not db.rdb.delayedPersist.isNil:
-        return err(RdbBeDelayedLocked)
-      ok()
 
 proc setWrReqTriggeredFn(db: RdbBackendRef): SetWrReqFn =
   result =
@@ -244,22 +229,22 @@ proc writeEvCb(db: RdbBackendRef): RdbWriteEventCb =
         # Publish session argument
         db.rdb.session = ws
 
-        # Execute delayed session. Note the the `txStow()` function is located
+        # Execute delayed session. Note the the `txPersist()` function is located
         # in `tx_stow.nim`. This module `tx_stow.nim` is also imported by
         # `kvt_tx.nim` which contains `persist() `. So the logic goes:
         # ::
         #   kvt_tx.persist()     --> registers a delayed write request rather
-        #                            than excuting tx_stow.txStow()
+        #                            than excuting tx_stow.txPersist()
         #
         #   // the backend owner (i.e. Aristo) will start a write cycle and
         #   // invoke the envent handler rocks_db.writeEvCb()
-        #   rocks_db.writeEvCb() --> calls tx_stow.txStow()
+        #   rocks_db.writeEvCb() --> calls tx_stow.txPersist()
         #
-        #   tx_stow.txStow()     --> calls rocks_db.putBegTriggeredFn()
+        #   tx_stow.txPersist()     --> calls rocks_db.putBegTriggeredFn()
         #                            calls rocks_db.putKvpFn()
         #                            calls rocks_db.putEndTriggeredFn()
         #
-        let rc = db.rdb.delayedPersist.txStow(persistent=true)
+        let rc = db.rdb.delayedPersist.txPersist()
         if rc.isErr:
           error "writeEventCb(): persist() failed", error=rc.error
           return false
@@ -291,7 +276,6 @@ proc rocksDbKvtBackend*(
   db.putEndFn = putEndFn db
 
   db.closeFn = closeFn db
-  db.canModFn = canModFn db
   db.setWrReqFn = setWrReqFn db
   ok db
 
@@ -321,15 +305,8 @@ proc rocksDbKvtTriggeredBackend*(
   db.putEndFn = putEndTriggeredFn db
 
   db.closeFn = closeTriggeredFn db
-  db.canModFn = canModTriggeredFn db
   db.setWrReqFn = setWrReqTriggeredFn db
   ok db
-
-
-proc dup*(db: RdbBackendRef): RdbBackendRef =
-  new result
-  init_common.init(result[], db[])
-  result.rdb = db.rdb
 
 # ------------------------------------------------------------------------------
 # Public iterators (needs direct backend access)

@@ -20,6 +20,7 @@ import
   ../../evm/types,
   ../../db/ledger,
   ../../constants,
+  ../../core/chain/forked_chain,
   ../pow/header,
   ../eip4844,
   ../casper,
@@ -56,6 +57,7 @@ type
 
     lifeTime*: times.Duration   ## Maximum life time of a tx in the system
     priceBump*: uint            ## Min precentage price when superseding
+    chain*: ForkedChainRef
 
 const
   txItemLifeTime = ##\
@@ -100,13 +102,13 @@ proc gasLimitsGet(com: CommonRef; parent: Header): GasInt =
     if not com.isLondonOrLater(parent.number):
       # Bump by 2x
       parentGasLimit = parent.gasLimit * EIP1559_ELASTICITY_MULTIPLIER
-    calcGasLimit1559(parentGasLimit, desiredLimit = DEFAULT_GAS_LIMIT)
+    calcGasLimit1559(parentGasLimit, desiredLimit = com.gasLimit)
   else:
     computeGasLimit(
       parent.gasUsed,
       parent.gasLimit,
-      gasFloor = DEFAULT_GAS_LIMIT,
-      gasCeil = DEFAULT_GAS_LIMIT)
+      gasFloor = com.gasLimit,
+      gasCeil = com.gasLimit)
 
 proc setupVMState(com: CommonRef; parent: Header): BaseVMState =
   # do hardfork transition before
@@ -121,7 +123,8 @@ proc setupVMState(com: CommonRef; parent: Header): BaseVMState =
     prevRandao   : pos.prevRandao,
     difficulty   : UInt256.zero(),
     coinbase     : pos.feeRecipient,
-    excessBlobGas: calcExcessBlobGas(parent),
+    excessBlobGas: calcExcessBlobGas(parent, com.isPragueOrLater(pos.timestamp)),
+    parentHash   : parent.blockHash,
   )
 
   BaseVMState.new(
@@ -136,12 +139,12 @@ proc update(xp: TxPoolRef; parent: Header) =
 # Public functions, constructor
 # ------------------------------------------------------------------------------
 
-proc init*(xp: TxPoolRef; com: CommonRef)
-    {.gcsafe,raises: [CatchableError].} =
+proc init*(xp: TxPoolRef; chain: ForkedChainRef) =
   ## Constructor, returns new tx-pool descriptor.
   xp.startDate = getTime().utc.toTime
 
-  xp.vmState = setupVMState(com, com.db.getCanonicalHead)
+  let head = chain.latestHeader
+  xp.vmState = setupVMState(chain.com, head)
   xp.txDB = TxTabsRef.new
 
   xp.lifeTime = txItemLifeTime
@@ -149,6 +152,7 @@ proc init*(xp: TxPoolRef; com: CommonRef)
 
   xp.param.reset
   xp.param.flags = txPoolFlags
+  xp.chain = chain
 
 # ------------------------------------------------------------------------------
 # Public functions
@@ -220,7 +224,7 @@ proc getNonce*(xp: TxPoolRef; account: Address): AccountNonce =
 
 func head*(xp: TxPoolRef): Header =
   ## Getter, cached block chain insertion point. Typocally, this should be the
-  ## the same header as retrieved by the `getCanonicalHead()` (unless in the
+  ## the same header as retrieved by the `ForkedChainRef.latestHeader` (unless in the
   ## middle of a mining update.)
   xp.vmState.parent
 

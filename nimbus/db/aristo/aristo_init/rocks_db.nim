@@ -27,7 +27,6 @@
 {.push raises: [].}
 
 import
-  eth/common,
   rocksdb,
   results,
   ../aristo_desc,
@@ -90,15 +89,15 @@ proc getVtxFn(db: RdbBackendRef): GetVtxFn =
 
 proc getKeyFn(db: RdbBackendRef): GetKeyFn =
   result =
-    proc(rvid: RootedVertexID): Result[HashKey,AristoError] =
+    proc(rvid: RootedVertexID, flags: set[GetVtxFlag]): Result[(HashKey, VertexRef),AristoError] =
 
       # Fetch serialised data record
-      let key = db.rdb.getKey(rvid).valueOr:
+      let key = db.rdb.getKey(rvid, flags).valueOr:
         when extraTraceMessages:
           trace logTxt "getKeyFn: failed", rvid, error=error[0], info=error[1]
         return err(error[0])
 
-      if key.isValid:
+      if (key[0].isValid or key[1].isValid):
         return ok(key)
 
       err(GetKeyNotFound)
@@ -143,24 +142,12 @@ proc putBegFn(db: RdbBackendRef): PutBegFn =
 
 proc putVtxFn(db: RdbBackendRef): PutVtxFn =
   result =
-    proc(hdl: PutHdlRef; rvid: RootedVertexID; vtx: VertexRef) =
+    proc(hdl: PutHdlRef; rvid: RootedVertexID; vtx: VertexRef, key: HashKey) =
       let hdl = hdl.getSession db
       if hdl.error.isNil:
-        db.rdb.putVtx(rvid, vtx).isOkOr:
+        db.rdb.putVtx(rvid, vtx, key).isOkOr:
           hdl.error = TypedPutHdlErrRef(
             pfx:  VtxPfx,
-            vid:  error[0],
-            code: error[1],
-            info: error[2])
-
-proc putKeyFn(db: RdbBackendRef): PutKeyFn =
-  result =
-    proc(hdl: PutHdlRef; rvid: RootedVertexID, key: HashKey) =
-      let hdl = hdl.getSession db
-      if hdl.error.isNil:
-        db.rdb.putKey(rvid, key).isOkOr:
-          hdl.error = TypedPutHdlErrRef(
-            pfx:  KeyPfx,
             vid:  error[0],
             code: error[1],
             info: error[2])
@@ -185,12 +172,7 @@ proc putLstFn(db: RdbBackendRef): PutLstFn =
     proc(hdl: PutHdlRef; lst: SavedState) =
       let hdl = hdl.getSession db
       if hdl.error.isNil:
-        let data = lst.blobify.valueOr:
-          hdl.error = TypedPutHdlErrRef(
-            pfx:  AdmPfx,
-            aid:  AdmTabIdLst,
-            code: error)
-          return
+        let data = lst.blobify
         db.rdb.putAdm(AdmTabIdLst, data).isOkOr:
           hdl.error = TypedPutHdlErrRef(
             pfx:  AdmPfx,
@@ -273,7 +255,6 @@ proc rocksDbBackend*(
 
   db.putBegFn = putBegFn db
   db.putVtxFn = putVtxFn db
-  db.putKeyFn = putKeyFn db
   db.putTuvFn = putTuvFn db
   db.putLstFn = putLstFn db
   db.putEndFn = putEndFn db
@@ -309,9 +290,10 @@ proc dup*(db: RdbBackendRef): RdbBackendRef =
 
 iterator walkVtx*(
     be: RdbBackendRef;
+    kinds = {Branch, Leaf};
       ): tuple[evid: RootedVertexID, vtx: VertexRef] =
   ## Variant of `walk()` iteration over the vertex sub-table.
-  for (rvid, vtx) in be.rdb.walkVtx:
+  for (rvid, vtx) in be.rdb.walkVtx(kinds):
     yield (rvid, vtx)
 
 iterator walkKey*(
@@ -319,9 +301,7 @@ iterator walkKey*(
       ): tuple[rvid: RootedVertexID, key: HashKey] =
   ## Variant of `walk()` iteration over the Markle hash sub-table.
   for (rvid, data) in be.rdb.walkKey:
-    let lid = HashKey.fromBytes(data).valueOr:
-      continue
-    yield (rvid, lid)
+    yield (rvid, data)
 
 # ------------------------------------------------------------------------------
 # End

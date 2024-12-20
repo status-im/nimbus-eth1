@@ -12,13 +12,14 @@
 
 import
   std/[sequtils, sets, strformat],
+  pkg/blscurve, # Kludge: needed to compile `eip4844` -- sometimes :)
   ../db/ledger,
-  ".."/[transaction, common/common],
-  ".."/[errors],
+  ../common/common,
+  ../transaction/call_types,
+  ../transaction,
   ../utils/utils,
-  "."/[dao, eip4844, gaslimit, withdrawals],
+  "."/[dao, eip4844, eip7702, eip7691, gaslimit, withdrawals],
   ./pow/[difficulty, header],
-  nimcrypto/utils as cryptoutils,
   stew/objects,
   results
 
@@ -40,7 +41,6 @@ proc validateHeader(
     com: CommonRef;
     blk: Block;
     parentHeader: Header;
-    checkSealOK: bool;
       ): Result[void,string] =
   template header: Header = blk.header
   # TODO this code is used for validating uncles also, though these get passed
@@ -101,8 +101,7 @@ proc validateHeader(
   ok()
 
 proc validateUncles(com: CommonRef; header: Header;
-                    uncles: openArray[Header];
-                    checkSealOK: bool): Result[void,string]
+                    uncles: openArray[Header]): Result[void,string]
                       {.gcsafe, raises: [].} =
   let hasUncles = uncles.len > 0
   let shouldHaveUncles = header.ommersHash != EMPTY_UNCLE_HASH
@@ -125,18 +124,11 @@ proc validateUncles(com: CommonRef; header: Header;
     else:
       uncleSet.incl uncleHash
 
-  let chainDB = com.db
-  let recentAncestorHashes = try:
-    chainDB.getAncestorsHashes(MAX_UNCLE_DEPTH + 1, header)
-  except CatchableError as err:
-    return err("Block not present in database")
-
-  let recentUncleHashes = try:
-    chainDB.getUncleHashes(recentAncestorHashes)
-  except CatchableError as err:
-    return err("Ancenstors not present in database")
-
-  let blockHash = header.blockHash
+  let
+    chainDB = com.db
+    recentAncestorHashes = ?chainDB.getAncestorsHashes(MAX_UNCLE_DEPTH + 1, header)
+    recentUncleHashes = ?chainDB.getUncleHashes(recentAncestorHashes)
+    blockHash = header.blockHash
 
   for uncle in uncles:
     let uncleHash = uncle.blockHash
@@ -162,25 +154,48 @@ proc validateUncles(com: CommonRef; header: Header;
       return err("uncle block number larger than current block number")
 
     # check uncle against own parent
-    var parent: Header
-    if not chainDB.getBlockHeader(uncle.parentHash,parent):
-      return err("Uncle's parent has gone missing")
+    let parent = ?chainDB.getBlockHeader(uncle.parentHash)
     if uncle.timestamp <= parent.timestamp:
       return err("Uncle's parent must me older")
 
-    let uncleParent = try:
-      chainDB.getBlockHeader(uncle.parentHash)
-    except BlockNotFound:
-      return err("Uncle parent not found")
-
+    let uncleParent = ?chainDB.getBlockHeader(uncle.parentHash)
     ? com.validateHeader(
-      Block.init(uncle, BlockBody()), uncleParent, checkSealOK)
+      Block.init(uncle, BlockBody()), uncleParent)
 
   ok()
 
 # ------------------------------------------------------------------------------
 # Public function, extracted from executor
 # ------------------------------------------------------------------------------
+
+proc validateLegacySignatureForm(tx: Transaction, fork: EVMFork): bool =
+  var
+    vMin = 27'u64
+    vMax = 28'u64
+
+  if tx.V >= EIP155_CHAIN_ID_OFFSET:
+    let chainId = (tx.V - EIP155_CHAIN_ID_OFFSET) div 2
+    vMin = 35 + (2 * chainId)
+    vMax = vMin + 1
+
+  var isValid = tx.R >= UInt256.one
+  isValid = isValid and tx.S >= UInt256.one
+  isValid = isValid and tx.V >= vMin
+  isValid = isValid and tx.V <= vMax
+  isValid = isValid and tx.S < SECPK1_N
+  isValid = isValid and tx.R < SECPK1_N
+
+  if fork >= FkHomestead:
+    isValid = isValid and tx.S < SECPK1_N div 2
+
+  isValid
+
+proc validateEip2930SignatureForm(tx: Transaction): bool =
+  var isValid = tx.V == 0'u64 or tx.V == 1'u64
+  isValid = isValid and tx.S >= UInt256.one
+  isValid = isValid and tx.S < SECPK1_N
+  isValid = isValid and tx.R < SECPK1_N
+  isValid
 
 func gasCost*(tx: Transaction): UInt256 =
   if tx.txType >= TxEip4844:
@@ -205,6 +220,9 @@ proc validateTxBasic*(
     if tx.txType == TxEip4844 and fork < FkCancun:
       return err("invalid tx: Eip4844 Tx type detected before Cancun")
 
+    if tx.txType == TxEip7702 and fork < FkPrague:
+      return err("invalid tx: Eip7702 Tx type detected before Prague")
+
   if fork >= FkShanghai and tx.contractCreation and tx.payload.len > EIP3860_MAX_INITCODE_SIZE:
     return err("invalid tx: initcode size exceeds maximum")
 
@@ -228,30 +246,51 @@ proc validateTxBasic*(
         return err("invalid tx: access list storage keys len exceeds MAX_ACCESS_LIST_STORAGE_KEYS. " &
           &"index={i}, len={acl.storageKeys.len}")
 
-  if tx.txType >= TxEip4844:
+  if tx.txType == TxLegacy:
+    if not validateLegacySignatureForm(tx, fork):
+      return err("invalid tx: invalid legacy signature form")
+  else:
+    if not validateEip2930SignatureForm(tx):
+      return err("invalid tx: invalid post EIP-2930 signature form")
+
+  if tx.txType == TxEip4844:
     if tx.to.isNone:
       return err("invalid tx: destination must be not empty")
 
     if tx.versionedHashes.len == 0:
       return err("invalid tx: there must be at least one blob")
 
-    if tx.versionedHashes.len > MAX_BLOBS_PER_BLOCK:
-      return err(&"invalid tx: versioned hashes len exceeds MAX_BLOBS_PER_BLOCK={MAX_BLOBS_PER_BLOCK}. get={tx.versionedHashes.len}")
+    let maxBlobsPerBlob = getMaxBlobsPerBlock(fork >= FkPrague)
+    if tx.versionedHashes.len.uint64 > maxBlobsPerBlob:
+      return err(&"invalid tx: versioned hashes len exceeds MAX_BLOBS_PER_BLOCK={maxBlobsPerBlob}. get={tx.versionedHashes.len}")
 
     for i, bv in tx.versionedHashes:
       if bv.data[0] != VERSIONED_HASH_VERSION_KZG:
         return err("invalid tx: one of blobVersionedHash has invalid version. " &
           &"get={bv.data[0].int}, expect={VERSIONED_HASH_VERSION_KZG.int}")
 
+  if tx.txType == TxEip7702:
+    if tx.authorizationList.len == 0:
+      return err("invalid tx: authorization list must not empty")
+
+    const SECP256K1halfN = SECPK1_N div 2
+
+    for auth in tx.authorizationList:
+      if auth.v > 1'u64:
+        return err("invalid tx: auth.v must be 0 or 1")
+
+      if auth.s > SECP256K1halfN:
+        return err("invalid tx: auth.s must be <= SECP256K1N/2")
+
   ok()
 
 proc validateTransaction*(
     roDB:     ReadOnlyStateDB; ## Parent accounts environment for transaction
     tx:       Transaction;     ## tx to validate
-    sender:   Address;      ## tx.recoverSender
+    sender:   Address;         ## tx.recoverSender
     maxLimit: GasInt;          ## gasLimit from block header
     baseFee:  UInt256;         ## baseFee from block header
-    excessBlobGas: uint64;    ## excessBlobGas from parent block header
+    excessBlobGas: uint64;     ## excessBlobGas from parent block header
     fork:     EVMFork): Result[void, string] =
 
   ? validateTxBasic(tx, fork)
@@ -302,13 +341,15 @@ proc validateTransaction*(
   # Clients might choose to disable this rule for RPC calls like
   # `eth_call` and `eth_estimateGas`
   # EOA = Externally Owned Account
-  let codeHash = roDB.getCodeHash(sender)
-  if codeHash != EMPTY_CODE_HASH:
-    return err(&"invalid tx: sender is not an EOA. sender={sender.toHex}, codeHash={codeHash.data.toHex}")
+  let
+    code = roDB.getCode(sender)
+    delegated = code.parseDelegation()
+  if code.len > 0 and not delegated:
+    return err(&"invalid tx: sender is not an EOA. sender={sender.toHex}, codeLen={code.len}")
 
-  if tx.txType >= TxEip4844:
+  if tx.txType == TxEip4844:
     # ensure that the user was willing to at least pay the current data gasprice
-    let blobGasPrice = getBlobBaseFee(excessBlobGas)
+    let blobGasPrice = getBlobBaseFee(excessBlobGas, fork >= FkPrague)
     if tx.maxFeePerBlobGas < blobGasPrice:
       return err("invalid tx: maxFeePerBlobGas smaller than blobGasPrice. " &
         &"maxFeePerBlobGas={tx.maxFeePerBlobGas}, blobGasPrice={blobGasPrice}")
@@ -323,7 +364,6 @@ proc validateHeaderAndKinship*(
     com: CommonRef;
     blk: Block;
     parent: Header;
-    checkSealOK: bool;
       ): Result[void, string]
       {.gcsafe, raises: [].} =
   template header: Header = blk.header
@@ -333,13 +373,13 @@ proc validateHeaderAndKinship*(
       return err("Header.extraData larger than 32 bytes")
     return ok()
 
-  ? com.validateHeader(blk, parent, checkSealOK)
+  ? com.validateHeader(blk, parent)
 
   if blk.uncles.len > MAX_UNCLES:
     return err("Number of uncles exceed limit.")
 
   if not com.proofOfStake(header):
-    ? com.validateUncles(header, blk.uncles, checkSealOK)
+    ? com.validateUncles(header, blk.uncles)
 
   ok()
 

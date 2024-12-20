@@ -16,7 +16,6 @@ import
   results,
   ssz_serialization,
   beacon_chain/db_limits,
-  beacon_chain/spec/datatypes/[phase0, altair, bellatrix],
   beacon_chain/spec/forks,
   beacon_chain/spec/forks_light_client,
   ./beacon_content,
@@ -443,68 +442,72 @@ func keepBootstrapsFrom*(db: BeaconDb, minSlot: Slot) =
   let res = db.bootstraps.keepFromStmt.exec(minSlot.int64)
   res.expect("SQL query OK")
 
+proc getHandlerImpl(
+    db: BeaconDb, contentKey: ContentKeyByteList, contentId: ContentId
+): results.Opt[seq[byte]] =
+  let contentKey = contentKey.decode().valueOr:
+    # TODO: as this should not fail, maybe it is better to raiseAssert ?
+    return Opt.none(seq[byte])
+
+  case contentKey.contentType
+  of unused:
+    raiseAssert "Should not be used and fail at decoding"
+  of lightClientBootstrap:
+    db.getBootstrap(contentId)
+  of lightClientUpdate:
+    let
+      # TODO: add validation that startPeriod is not from the future,
+      # this requires db to be aware off the current beacon time
+      startPeriod = contentKey.lightClientUpdateKey.startPeriod
+      # get max 128 updates
+      numOfUpdates = min(
+        uint64(MAX_REQUEST_LIGHT_CLIENT_UPDATES), contentKey.lightClientUpdateKey.count
+      )
+      toPeriod = startPeriod + numOfUpdates # Not inclusive
+      updates = db.getLightClientUpdates(startPeriod, toPeriod)
+
+    if len(updates) == 0:
+      Opt.none(seq[byte])
+    else:
+      # Note that this might not return all of the requested updates.
+      # This might seem faulty/tricky as it is also used in handleOffer to
+      # check if an offer should be accepted.
+      # But it is actually fine as this will occur only when the node is
+      # synced and it would not be able to verify the older updates in the
+      # range anyhow.
+      Opt.some(SSZ.encode(updates))
+  of lightClientFinalityUpdate:
+    # TODO:
+    # Return only when the update is better than what is requested by
+    # contentKey. This is currently not possible as the contentKey does not
+    # include best update information.
+    if db.finalityUpdateCache.isSome():
+      let slot = contentKey.lightClientFinalityUpdateKey.finalizedSlot
+      let cache = db.finalityUpdateCache.get()
+      if cache.lastFinalityUpdateSlot >= slot:
+        Opt.some(cache.lastFinalityUpdate)
+      else:
+        Opt.none(seq[byte])
+    else:
+      Opt.none(seq[byte])
+  of lightClientOptimisticUpdate:
+    # TODO same as above applies here too.
+    if db.optimisticUpdateCache.isSome():
+      let slot = contentKey.lightClientOptimisticUpdateKey.optimisticSlot
+      let cache = db.optimisticUpdateCache.get()
+      if cache.lastOptimisticUpdateSlot >= slot:
+        Opt.some(cache.lastOptimisticUpdate)
+      else:
+        Opt.none(seq[byte])
+    else:
+      Opt.none(seq[byte])
+  of beacon_content.ContentType.historicalSummaries:
+    db.get(contentId)
+
 proc createGetHandler*(db: BeaconDb): DbGetHandler =
   return (
     proc(contentKey: ContentKeyByteList, contentId: ContentId): results.Opt[seq[byte]] =
-      let contentKey = contentKey.decode().valueOr:
-        # TODO: as this should not fail, maybe it is better to raiseAssert ?
-        return Opt.none(seq[byte])
-
-      case contentKey.contentType
-      of unused:
-        raiseAssert "Should not be used and fail at decoding"
-      of lightClientBootstrap:
-        db.getBootstrap(contentId)
-      of lightClientUpdate:
-        let
-          # TODO: add validation that startPeriod is not from the future,
-          # this requires db to be aware off the current beacon time
-          startPeriod = contentKey.lightClientUpdateKey.startPeriod
-          # get max 128 updates
-          numOfUpdates = min(
-            uint64(MAX_REQUEST_LIGHT_CLIENT_UPDATES),
-            contentKey.lightClientUpdateKey.count,
-          )
-          toPeriod = startPeriod + numOfUpdates # Not inclusive
-          updates = db.getLightClientUpdates(startPeriod, toPeriod)
-
-        if len(updates) == 0:
-          Opt.none(seq[byte])
-        else:
-          # Note that this might not return all of the requested updates.
-          # This might seem faulty/tricky as it is also used in handleOffer to
-          # check if an offer should be accepted.
-          # But it is actually fine as this will occur only when the node is
-          # synced and it would not be able to verify the older updates in the
-          # range anyhow.
-          Opt.some(SSZ.encode(updates))
-      of lightClientFinalityUpdate:
-        # TODO:
-        # Return only when the update is better than what is requested by
-        # contentKey. This is currently not possible as the contentKey does not
-        # include best update information.
-        if db.finalityUpdateCache.isSome():
-          let slot = contentKey.lightClientFinalityUpdateKey.finalizedSlot
-          let cache = db.finalityUpdateCache.get()
-          if cache.lastFinalityUpdateSlot >= slot:
-            Opt.some(cache.lastFinalityUpdate)
-          else:
-            Opt.none(seq[byte])
-        else:
-          Opt.none(seq[byte])
-      of lightClientOptimisticUpdate:
-        # TODO same as above applies here too.
-        if db.optimisticUpdateCache.isSome():
-          let slot = contentKey.lightClientOptimisticUpdateKey.optimisticSlot
-          let cache = db.optimisticUpdateCache.get()
-          if cache.lastOptimisticUpdateSlot >= slot:
-            Opt.some(cache.lastOptimisticUpdate)
-          else:
-            Opt.none(seq[byte])
-        else:
-          Opt.none(seq[byte])
-      of beacon_content.ContentType.historicalSummaries:
-        db.get(contentId)
+      db.getHandlerImpl(contentKey, contentId)
   )
 
 proc createStoreHandler*(db: BeaconDb): DbStoreHandler =
@@ -572,6 +575,12 @@ proc createStoreHandler*(db: BeaconDb): DbStoreHandler =
             db.put(contentId, content)
         else:
           db.put(contentId, content)
+  )
+
+proc createContainsHandler*(db: BeaconDb): DbContainsHandler =
+  return (
+    proc(contentKey: ContentKeyByteList, contentId: ContentId): bool =
+      db.getHandlerImpl(contentKey, contentId).isSome()
   )
 
 proc createRadiusHandler*(db: BeaconDb): DbRadiusHandler =

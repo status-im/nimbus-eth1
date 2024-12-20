@@ -19,17 +19,22 @@ import
   ../../../protocol/eth/eth_types,
   ../../worker_desc
 
-logScope:
-  topics = "beacon headers"
-
 # ------------------------------------------------------------------------------
 # Private functions
 # ------------------------------------------------------------------------------
 
 proc registerError(buddy: BeaconBuddyRef) =
   buddy.only.nHdrRespErrors.inc
-  if fetchHeadersReqThresholdCount < buddy.only.nHdrRespErrors:
+  if fetchHeadersReqErrThresholdCount < buddy.only.nHdrRespErrors:
     buddy.ctrl.zombie = true # abandon slow peer
+
+# ------------------------------------------------------------------------------
+# Public debugging & logging helpers
+# ------------------------------------------------------------------------------
+
+func hdrErrors*(buddy: BeaconBuddyRef): string =
+  $buddy.only.nHdrRespErrors & "/" & $buddy.only.nHdrProcErrors
+
 
 # ------------------------------------------------------------------------------
 # Public functions
@@ -41,7 +46,7 @@ proc headersFetchReversed*(
     topHash: Hash32;
     info: static[string];
       ): Future[Result[seq[Header],void]]
-      {.async.} =
+      {.async: (raises: []).} =
   ## Get a list of headers in reverse order.
   let
     peer = buddy.peer
@@ -66,7 +71,7 @@ proc headersFetchReversed*(
     start = Moment.now()
 
   trace trEthSendSendingGetBlockHeaders & " reverse", peer, ivReq,
-    nReq=req.maxResults, useHash, nRespErrors=buddy.only.nHdrRespErrors
+    nReq=req.maxResults, useHash, hdrErrors=buddy.hdrErrors
 
   # Fetch headers from peer
   var resp: Option[blockHeadersObj]
@@ -77,11 +82,11 @@ proc headersFetchReversed*(
     # reliably be used in a `withTimeout()` directive. It would rather crash
     # in `rplx` with a violated `req.timeoutAt <= Moment.now()` assertion.
     resp = await peer.getBlockHeaders(req)
-  except TransportError as e:
+  except CatchableError as e:
     buddy.registerError()
     `info` info & " error", peer, ivReq, nReq=req.maxResults, useHash,
       elapsed=(Moment.now() - start).toStr, error=($e.name), msg=e.msg,
-      nRespErrors=buddy.only.nHdrRespErrors
+      hdrErrors=buddy.hdrErrors
     return err()
 
   let elapsed = Moment.now() - start
@@ -91,7 +96,7 @@ proc headersFetchReversed*(
     buddy.registerError()
     trace trEthRecvReceivedBlockHeaders, peer, nReq=req.maxResults, useHash,
       nResp=0, elapsed=elapsed.toStr, ctrl=buddy.ctrl.state,
-      nRespErrors=buddy.only.nHdrRespErrors
+      hdrErrors=buddy.hdrErrors
     return err()
 
   let h: seq[Header] = resp.get.headers
@@ -99,12 +104,12 @@ proc headersFetchReversed*(
     buddy.registerError()
     trace trEthRecvReceivedBlockHeaders, peer, nReq=req.maxResults, useHash,
       nResp=h.len, elapsed=elapsed.toStr, ctrl=buddy.ctrl.state,
-      nRespErrors=buddy.only.nHdrRespErrors
+      hdrErrors=buddy.hdrErrors
     return err()
 
   # Ban an overly slow peer for a while when seen in a row. Also there is a
   # mimimum share of the number of requested headers expected, typically 10%.
-  if fetchHeadersReqThresholdZombie < elapsed or
+  if fetchHeadersReqErrThresholdZombie < elapsed or
      h.len.uint64 * 100 < req.maxResults * fetchHeadersReqMinResponsePC:
     buddy.registerError()
   else:
@@ -112,8 +117,7 @@ proc headersFetchReversed*(
 
   trace trEthRecvReceivedBlockHeaders, peer, nReq=req.maxResults, useHash,
     ivResp=BnRange.new(h[^1].number,h[0].number), nResp=h.len,
-    elapsed=elapsed.toStr, ctrl=buddy.ctrl.state,
-    nRespErrors=buddy.only.nHdrRespErrors
+    elapsed=elapsed.toStr, ctrl=buddy.ctrl.state, hdrErrors=buddy.hdrErrors
 
   return ok(h)
 

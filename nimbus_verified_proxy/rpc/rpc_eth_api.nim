@@ -9,21 +9,13 @@
 
 import
   std/strutils,
-  stint,
-  stew/byteutils,
   results,
   chronicles,
   json_rpc/[rpcproxy, rpcserver, rpcclient],
   eth/common/accounts,
   web3/[primitives, eth_api_types, eth_api],
-  beacon_chain/el/el_manager,
-  beacon_chain/networking/network_metadata,
-  beacon_chain/spec/forks,
-  ./rpc_utils,
   ../validate_proof,
   ../block_cache
-
-export forks
 
 logScope:
   topics = "verified_proxy"
@@ -66,44 +58,37 @@ template checkPreconditions(proxy: VerifiedRpcProxy) =
 template rpcClient(lcProxy: VerifiedRpcProxy): RpcClient =
   lcProxy.proxy.getClient()
 
-proc getPayloadByTag(
+proc getBlockByTag(
     proxy: VerifiedRpcProxy, quantityTag: BlockTag
-): results.Opt[ExecutionData] {.raises: [ValueError].} =
+): results.Opt[BlockObject] {.raises: [ValueError].} =
   checkPreconditions(proxy)
 
-  let tagResult = parseQuantityTag(quantityTag)
-
-  if tagResult.isErr:
-    raise newException(ValueError, tagResult.error)
-
-  let tag = tagResult.get()
+  let tag = parseQuantityTag(quantityTag).valueOr:
+    raise newException(ValueError, error)
 
   case tag.kind
   of LatestBlock:
     # this will always return some block, as we always checkPreconditions
-    return proxy.blockCache.latest
+    proxy.blockCache.latest
   of BlockNumber:
-    return proxy.blockCache.getByNumber(tag.blockNumber)
+    proxy.blockCache.getByNumber(tag.blockNumber)
 
-proc getPayloadByTagOrThrow(
+proc getBlockByTagOrThrow(
     proxy: VerifiedRpcProxy, quantityTag: BlockTag
-): ExecutionData {.raises: [ValueError].} =
-  let tagResult = getPayloadByTag(proxy, quantityTag)
-
-  if tagResult.isErr:
+): BlockObject {.raises: [ValueError].} =
+  getBlockByTag(proxy, quantityTag).valueOr:
     raise newException(ValueError, "No block stored for given tag " & $quantityTag)
-
-  return tagResult.get()
 
 proc installEthApiHandlers*(lcProxy: VerifiedRpcProxy) =
   lcProxy.proxy.rpc("eth_chainId") do() -> Quantity:
-    return lcProxy.chainId
+    lcProxy.chainId
 
   lcProxy.proxy.rpc("eth_blockNumber") do() -> Quantity:
     ## Returns the number of the most recent block.
-    checkPreconditions(lcProxy)
+    let latest = lcProxy.blockCache.latest.valueOr:
+      raise (ref ValueError)(msg: "Syncing")
 
-    return lcProxy.blockCache.latest.get.blockNumber
+    latest.number
 
   lcProxy.proxy.rpc("eth_getBalance") do(
     address: Address, quantityTag: BlockTag
@@ -113,88 +98,75 @@ proc installEthApiHandlers*(lcProxy: VerifiedRpcProxy) =
     # can mean different blocks and ultimatly piece received piece of state
     # must by validated against correct state root
     let
-      executionPayload = lcProxy.getPayloadByTagOrThrow(quantityTag)
-      blockNumber = executionPayload.blockNumber.uint64
+      blk = lcProxy.getBlockByTagOrThrow(quantityTag)
+      blockNumber = blk.number.uint64
 
     info "Forwarding eth_getBalance call", blockNumber
 
-    let proof = await lcProxy.rpcClient.eth_getProof(address, @[], blockId(blockNumber))
+    let
+      proof = await lcProxy.rpcClient.eth_getProof(address, @[], blockId(blockNumber))
+      account = getAccountFromProof(
+        blk.stateRoot, proof.address, proof.balance, proof.nonce, proof.codeHash,
+        proof.storageHash, proof.accountProof,
+      ).valueOr:
+        raise newException(ValueError, error)
 
-    let accountResult = getAccountFromProof(
-      executionPayload.stateRoot, proof.address, proof.balance, proof.nonce,
-      proof.codeHash, proof.storageHash, proof.accountProof,
-    )
-
-    if accountResult.isOk():
-      return accountResult.get.balance
-    else:
-      raise newException(ValueError, accountResult.error)
+    account.balance
 
   lcProxy.proxy.rpc("eth_getStorageAt") do(
     address: Address, slot: UInt256, quantityTag: BlockTag
   ) -> UInt256:
     let
-      executionPayload = lcProxy.getPayloadByTagOrThrow(quantityTag)
-      blockNumber = executionPayload.blockNumber.uint64
+      blk = lcProxy.getBlockByTagOrThrow(quantityTag)
+      blockNumber = blk.number.uint64
 
     info "Forwarding eth_getStorageAt", blockNumber
 
     let proof =
       await lcProxy.rpcClient.eth_getProof(address, @[slot], blockId(blockNumber))
 
-    let dataResult = getStorageData(executionPayload.stateRoot, slot, proof)
-
-    if dataResult.isOk():
-      let slotValue = dataResult.get()
-      return slotValue
-    else:
-      raise newException(ValueError, dataResult.error)
+    getStorageData(blk.stateRoot, slot, proof).valueOr:
+      raise newException(ValueError, error)
 
   lcProxy.proxy.rpc("eth_getTransactionCount") do(
     address: Address, quantityTag: BlockTag
   ) -> Quantity:
     let
-      executionPayload = lcProxy.getPayloadByTagOrThrow(quantityTag)
-      blockNumber = executionPayload.blockNumber.uint64
+      blk = lcProxy.getBlockByTagOrThrow(quantityTag)
+      blockNumber = blk.number.uint64
 
     info "Forwarding eth_getTransactionCount", blockNumber
 
-    let proof = await lcProxy.rpcClient.eth_getProof(address, @[], blockId(blockNumber))
+    let
+      proof = await lcProxy.rpcClient.eth_getProof(address, @[], blockId(blockNumber))
 
-    let accountResult = getAccountFromProof(
-      executionPayload.stateRoot, proof.address, proof.balance, proof.nonce,
-      proof.codeHash, proof.storageHash, proof.accountProof,
-    )
+      account = getAccountFromProof(
+        blk.stateRoot, proof.address, proof.balance, proof.nonce, proof.codeHash,
+        proof.storageHash, proof.accountProof,
+      ).valueOr:
+        raise newException(ValueError, error)
 
-    if accountResult.isOk():
-      return Quantity(accountResult.get.nonce)
-    else:
-      raise newException(ValueError, accountResult.error)
+    Quantity(account.nonce)
 
   lcProxy.proxy.rpc("eth_getCode") do(
     address: Address, quantityTag: BlockTag
   ) -> seq[byte]:
     let
-      executionPayload = lcProxy.getPayloadByTagOrThrow(quantityTag)
-      blockNumber = executionPayload.blockNumber.uint64
+      blk = lcProxy.getBlockByTagOrThrow(quantityTag)
+      blockNumber = blk.number.uint64
 
+    info "Forwarding eth_getCode", blockNumber
     let
       proof = await lcProxy.rpcClient.eth_getProof(address, @[], blockId(blockNumber))
-      accountResult = getAccountFromProof(
-        executionPayload.stateRoot, proof.address, proof.balance, proof.nonce,
-        proof.codeHash, proof.storageHash, proof.accountProof,
-      )
-
-    if accountResult.isErr():
-      raise newException(ValueError, accountResult.error)
-
-    let account = accountResult.get()
+      account = getAccountFromProof(
+        blk.stateRoot, proof.address, proof.balance, proof.nonce, proof.codeHash,
+        proof.storageHash, proof.accountProof,
+      ).valueOr:
+        raise newException(ValueError, error)
 
     if account.codeHash == EMPTY_CODE_HASH:
       # account does not have any code, return empty hex data
       return @[]
-
-    info "Forwarding eth_getCode", blockNumber
 
     let code = await lcProxy.rpcClient.eth_getCode(address, blockId(blockNumber))
 
@@ -218,22 +190,12 @@ proc installEthApiHandlers*(lcProxy: VerifiedRpcProxy) =
   lcProxy.proxy.rpc("eth_getBlockByNumber") do(
     quantityTag: BlockTag, fullTransactions: bool
   ) -> Opt[BlockObject]:
-    let executionPayload = lcProxy.getPayloadByTag(quantityTag)
-
-    if executionPayload.isErr:
-      return Opt.none(BlockObject)
-
-    return Opt.some(asBlockObject(executionPayload.get()))
+    lcProxy.getBlockByTag(quantityTag)
 
   lcProxy.proxy.rpc("eth_getBlockByHash") do(
     blockHash: Hash32, fullTransactions: bool
   ) -> Opt[BlockObject]:
-    let executionPayload = lcProxy.blockCache.getPayloadByHash(blockHash)
-
-    if executionPayload.isErr:
-      return Opt.none(BlockObject)
-
-    return Opt.some(asBlockObject(executionPayload.get()))
+    lcProxy.blockCache.getPayloadByHash(blockHash)
 
 proc new*(
     T: type VerifiedRpcProxy, proxy: RpcProxy, blockCache: BlockCache, chainId: Quantity
@@ -269,7 +231,7 @@ template awaitWithRetries*[T](
       var errorMsg = reqType & " failed " & $retries & " times"
       if f.failed:
         errorMsg &= ". Last error: " & f.error.msg
-      raise newException(DataProviderFailure, errorMsg)
+      raise newException(ValueError, errorMsg)
 
     await sleepAsync(chronos.milliseconds(retryDelayMs))
     retryDelayMs *= 2

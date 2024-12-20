@@ -65,6 +65,7 @@ type
     depth*:           int
     saveComputation*: seq[Computation]
     hostInterface*:   ptr evmc_host_interface
+    sysCall*:         bool
 
 # These versions of `toEvmc` and `fromEvmc` don't flip big/little-endian like
 # the older functions in `evmc_helpers`.  New code only flips with _explicit_

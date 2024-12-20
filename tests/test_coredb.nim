@@ -181,6 +181,7 @@ proc initRunnerDB(
 
   result = CommonRef.new(
     db = coreDB,
+    taskpool = nil,
     networkId = networkId,
     params = params,
     pruneHistory = pruneHistory)

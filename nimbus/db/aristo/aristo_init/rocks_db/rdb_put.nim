@@ -14,7 +14,6 @@
 {.push raises: [].}
 
 import
-  eth/common,
   rocksdb,
   results,
   ../../[aristo_blobify, aristo_desc],
@@ -51,6 +50,7 @@ proc rollback*(rdb: var RdbInst) =
   if not rdb.session.isClosed():
     rdb.rdKeyLru = typeof(rdb.rdKeyLru).init(rdb.rdKeySize)
     rdb.rdVtxLru = typeof(rdb.rdVtxLru).init(rdb.rdVtxSize)
+    rdb.rdBranchLru = typeof(rdb.rdBranchLru).init(rdb.rdBranchSize)
     rdb.disposeSession()
 
 proc commit*(rdb: var RdbInst): Result[void,(AristoError,string)] =
@@ -84,51 +84,13 @@ proc putAdm*(
       return err((xid,errSym,error))
   ok()
 
-proc putKey*(
-    rdb: var RdbInst;
-    rvid: RootedVertexID, key: HashKey;
-      ): Result[void,(VertexID,AristoError,string)] =
-  let dsc = rdb.session
-  # We only write keys whose value has to be hashed - the trivial ones can be
-  # loaded from the corresponding vertex directly!
-  # TODO move this logic to a higher layer
-  # TODO skip the delete for trivial keys - it's here to support databases that
-  #      were written at a time when trivial keys were also cached - it should
-  #      be cleaned up when revising the key cache in general.
-  if key.isValid and key.len == 32:
-    dsc.put(rvid.blobify().data(), key.data, rdb.keyCol.handle()).isOkOr:
-      # Caller must `rollback()` which will flush the `rdKeyLru` cache
-      const errSym = RdbBeDriverPutKeyError
-      when extraTraceMessages:
-        trace logTxt "putKey()", vid, error=errSym, info=error
-      return err((rvid.vid,errSym,error))
-
-    # Update existing cached items but don't add new ones since doing so is
-    # likely to evict more useful items (when putting many items, we might even
-    # evict those that were just added)
-    discard rdb.rdKeyLru.update(rvid.vid, key)
-
-  else:
-    dsc.delete(rvid.blobify().data(), rdb.keyCol.handle()).isOkOr:
-      # Caller must `rollback()` which will flush the `rdKeyLru` cache
-      const errSym = RdbBeDriverDelKeyError
-      when extraTraceMessages:
-        trace logTxt "putKey()", vid, error=errSym, info=error
-      return err((rvid.vid,errSym,error))
-
-    # Update cache, vertex will most probably never be visited anymore
-    rdb.rdKeyLru.del rvid.vid
-
-  ok()
-
-
 proc putVtx*(
     rdb: var RdbInst;
-    rvid: RootedVertexID; vtx: VertexRef
+    rvid: RootedVertexID; vtx: VertexRef, key: HashKey
       ): Result[void,(VertexID,AristoError,string)] =
   let dsc = rdb.session
   if vtx.isValid:
-    dsc.put(rvid.blobify().data(), vtx.blobify(), rdb.vtxCol.handle()).isOkOr:
+    dsc.put(rvid.blobify().data(), vtx.blobify(key), rdb.vtxCol.handle()).isOkOr:
       # Caller must `rollback()` which will flush the `rdVtxLru` cache
       const errSym = RdbBeDriverPutVtxError
       when extraTraceMessages:
@@ -138,7 +100,27 @@ proc putVtx*(
     # Update existing cached items but don't add new ones since doing so is
     # likely to evict more useful items (when putting many items, we might even
     # evict those that were just added)
-    discard rdb.rdVtxLru.update(rvid.vid, vtx)
+
+    if vtx.vType == Branch and vtx.pfx.len == 0:
+      rdb.rdVtxLru.del(rvid.vid)
+      if rdb.rdBranchLru.len < rdb.rdBranchLru.capacity:
+        rdb.rdBranchLru.put(rvid.vid, (vtx.startVid, vtx.used))
+      else:
+        discard rdb.rdBranchLru.update(rvid.vid, (vtx.startVid, vtx.used))
+    else:
+      rdb.rdBranchLru.del(rvid.vid)
+      if rdb.rdVtxLru.len < rdb.rdVtxLru.capacity:
+        rdb.rdVtxLru.put(rvid.vid, vtx)
+      else:
+        discard rdb.rdVtxLru.update(rvid.vid, vtx)
+
+    if key.isValid:
+      if rdb.rdKeyLru.len < rdb.rdKeyLru.capacity:
+        rdb.rdKeyLru.put(rvid.vid, key)
+      else:
+        discard rdb.rdKeyLru.update(rvid.vid, key)
+    else:
+      rdb.rdKeyLru.del rvid.vid
 
   else:
     dsc.delete(rvid.blobify().data(), rdb.vtxCol.handle()).isOkOr:
@@ -149,7 +131,9 @@ proc putVtx*(
       return err((rvid.vid,errSym,error))
 
     # Update cache, vertex will most probably never be visited anymore
+    rdb.rdBranchLru.del rvid.vid
     rdb.rdVtxLru.del rvid.vid
+    rdb.rdKeyLru.del rvid.vid
 
   ok()
 

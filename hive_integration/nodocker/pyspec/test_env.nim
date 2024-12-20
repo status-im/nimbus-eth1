@@ -13,7 +13,6 @@ import
   stew/[byteutils],
   json_rpc/[rpcserver, rpcclient],
   ../../../nimbus/[
-    config,
     constants,
     transaction,
     db/ledger,
@@ -35,31 +34,36 @@ proc genesisHeader(node: JsonNode): Header =
   let genesisRLP = hexToSeqByte(node["genesisRLP"].getStr)
   rlp.decode(genesisRLP, Block).header
 
-proc setupELClient*(conf: ChainConfig, node: JsonNode): TestEnv =
+proc initializeDb(memDB: CoreDbRef, node: JsonNode): Hash32 =
   let
-    memDB = newCoreDbRef DefaultDbMemory
     genesisHeader = node.genesisHeader
-    com = CommonRef.new(memDB, conf)
-    stateDB = LedgerRef.init(memDB, EMPTY_ROOT_HASH)
-    chain = newForkedChain(com, genesisHeader)
+    stateDB = LedgerRef.init(memDB)
 
+  memDB.persistHeaderAndSetHead(genesisHeader).expect("persistHeader no error")
   setupStateDB(node["pre"], stateDB)
   stateDB.persist()
-  doAssert stateDB.rootHash == genesisHeader.stateRoot
+  doAssert stateDB.getStateRoot == genesisHeader.stateRoot
 
-  doAssert com.db.persistHeader(genesisHeader,
-              com.proofOfStake(genesisHeader))
-  doAssert(com.db.getCanonicalHead().blockHash ==
-              genesisHeader.blockHash)
+  genesisHeader.blockHash
+
+proc setupELClient*(conf: ChainConfig, taskPool: Taskpool, node: JsonNode): TestEnv =
+  let
+    memDB = newCoreDbRef DefaultDbMemory
+    genesisHash = initializeDb(memDB, node)
+    com = CommonRef.new(memDB, taskPool, conf)
+    chain = ForkedChainRef.init(com)
+
+  let headHash = chain.latestHash
+  doAssert(headHash == genesisHash)
 
   let
-    txPool  = TxPoolRef.new(com)
+    txPool  = TxPoolRef.new(chain)
     beaconEngine = BeaconEngineRef.new(txPool, chain)
     serverApi = newServerAPI(chain, txPool)
     rpcServer = newRpcHttpServer(["127.0.0.1:0"])
     rpcClient = newRpcHttpClient()
 
-  setupServerAPI(serverApi, rpcServer)
+  setupServerAPI(serverApi, rpcServer, newEthContext())
   setupEngineAPI(beaconEngine, rpcServer)
 
   rpcServer.start()

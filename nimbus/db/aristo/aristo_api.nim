@@ -14,7 +14,7 @@
 
 import
   std/times,
-  eth/common,
+  eth/common/hashes,
   results,
   ./aristo_desc/desc_backend,
   ./aristo_init/memory_db,
@@ -57,27 +57,6 @@ type
       ## this leaf entry referres to a storage tree, this one will be deleted
       ## as well.
 
-  AristoApiDeleteGenericDataFn* =
-    proc(db: AristoDbRef;
-         root: VertexID;
-         path: openArray[byte];
-        ): Result[bool,AristoError]
-        {.noRaise.}
-      ## Delete the leaf data entry addressed by the argument `path`.  The MPT
-      ## sub-tree the leaf data entry is subsumed under is passed as argument
-      ## `root` which must be greater than `VertexID(1)` and smaller than
-      ## `LEAST_FREE_VID`.
-      ##
-      ## The return value is `true` if the argument `path` deleted was the last
-      ## one and the tree does not exist anymore.
-
-  AristoApiDeleteGenericTreeFn* =
-    proc(db: AristoDbRef;
-         root: VertexID;
-        ): Result[void,AristoError]
-        {.noRaise.}
-      ## Variant of `deleteGenericData()` for purging the whole MPT sub-tree.
-
   AristoApiDeleteStorageDataFn* =
     proc(db: AristoDbRef;
          accPath: Hash32;
@@ -114,71 +93,27 @@ type
         {.noRaise.}
       ## Fetch an account record from the database indexed by `accPath`.
 
-  AristoApiFetchAccountStateFn* =
+  AristoApiFetchStateRootFn* =
     proc(db: AristoDbRef;
-         updateOk: bool;
         ): Result[Hash32,AristoError]
         {.noRaise.}
-      ## Fetch the Merkle hash of the account root. Force update if the
-      ## argument `updateOK` is set `true`.
-
-  AristoApiFetchGenericDataFn* =
-    proc(db: AristoDbRef;
-         root: VertexID;
-         path: openArray[byte];
-        ): Result[seq[byte],AristoError]
-        {.noRaise.}
-      ## For a generic sub-tree starting at `root`, fetch the data record
-      ## indexed by `path`.
-
-  AristoApiFetchGenericStateFn* =
-    proc(db: AristoDbRef;
-         root: VertexID;
-         updateOk: bool;
-        ): Result[Hash32,AristoError]
-        {.noRaise.}
-      ## Fetch the Merkle hash of the argument `root`. Force update if the
-      ## argument `updateOK` is set `true`.
+      ## Fetch the Merkle hash of the account root.
 
   AristoApiFetchStorageDataFn* =
     proc(db: AristoDbRef;
          accPath: Hash32;
          stoPath: Hash32;
-        ): Result[Uint256,AristoError]
+        ): Result[UInt256,AristoError]
         {.noRaise.}
       ## For a storage tree related to account `accPath`, fetch the data
       ## record from the database indexed by `stoPath`.
 
-  AristoApiFetchStorageStateFn* =
+  AristoApiFetchStorageRootFn* =
     proc(db: AristoDbRef;
          accPath: Hash32;
-         updateOk: bool;
         ): Result[Hash32,AristoError]
         {.noRaise.}
-      ## Fetch the Merkle hash of the storage root related to `accPath`. Force
-      ## update if the argument `updateOK` is set `true`.
-
-  AristoApiFindTxFn* =
-    proc(db: AristoDbRef;
-         rvid: RootedVertexID;
-         key: HashKey;
-        ): Result[int,AristoError]
-        {.noRaise.}
-      ## Find the transaction where the vertex with ID `vid` exists and has
-      ## the Merkle hash key `key`. If there is no transaction available,
-      ## search in the filter and then in the backend.
-      ##
-      ## If the above procedure succeeds, an integer indicating the transaction
-      ## level is returned:
-      ##
-      ## * `0` -- top level, current layer
-      ## * `1`,`2`,`..` -- some transaction level further down the stack
-      ## * `-1` -- the filter between transaction stack and database backend
-      ## * `-2` -- the databse backend
-      ##
-      ## A successful return code might be used for the `forkTx()` call for
-      ## creating a forked descriptor that provides the pair `(vid,key)`.
-      ##
+      ## Fetch the Merkle hash of the storage root related to `accPath`.
 
   AristoApiFinishFn* =
     proc(db: AristoDbRef;
@@ -204,32 +139,6 @@ type
       ## A non centre descriptor should always be destructed after use (see
       ## also# comments on `fork()`.)
 
-  AristoApiForkTxFn* =
-    proc(db: AristoDbRef;
-         backLevel: int;
-        ): Result[AristoDbRef,AristoError]
-        {.noRaise.}
-    ## Fork a new descriptor obtained from parts of the argument database
-    ## as described by arguments `db` and `backLevel`.
-    ##
-    ## If the argument `backLevel` is non-negative, the forked descriptor
-    ## will provide the database view where the first `backLevel` transaction
-    ## layers are stripped and the remaing layers are squashed into a single
-    ## transaction.
-    ##
-    ## If `backLevel` is `-1`, a database descriptor with empty transaction
-    ## layers will be provided where the `balancer` between database and
-    ## transaction layers are kept in place.
-    ##
-    ## If `backLevel` is `-2`, a database descriptor with empty transaction
-    ## layers will be provided without a `balancer`.
-    ##
-    ## The returned database descriptor will always have transaction level one.
-    ## If there were no transactions that could be squashed, an empty
-    ## transaction is added.
-    ##
-    ## Use `aristo_desc.forget()` to clean up this descriptor.
-
   AristoApiHashifyFn* =
     proc(db: AristoDbRef;
         ): Result[void,(VertexID,AristoError)]
@@ -244,15 +153,6 @@ type
         {.noRaise.}
       ## For an account record indexed by `accPath` query whether this record
       ## exists on the database.
-
-  AristoApiHasPathGenericFn* =
-    proc(db: AristoDbRef;
-         root: VertexID;
-         path: openArray[byte];
-        ): Result[bool,AristoError]
-        {.noRaise.}
-      ## For a generic sub-tree starting at `root` and indexed by `path`,
-      ## mquery whether this record exists on the database.
 
   AristoApiHasPathStorageFn* =
     proc(db: AristoDbRef;
@@ -278,20 +178,12 @@ type
       ## Getter, returns `true` if the argument `tx` referes to the current
       ## top level transaction.
 
-  AristoApiLevelFn* =
+  AristoApiTxFrameLevelFn* =
     proc(db: AristoDbRef;
         ): int
         {.noRaise.}
       ## Getter, non-negative nesting level (i.e. number of pending
       ## transactions)
-
-  AristoApiNForkedFn* =
-    proc(db: AristoDbRef;
-        ): int
-        {.noRaise.}
-      ## Returns the number of non centre descriptors (see comments on
-      ## `reCentre()` for details.) This function is a fast version of
-      ## `db.forked.toSeq.len`.
 
   AristoApiMergeAccountRecordFn* =
     proc(db: AristoDbRef;
@@ -305,16 +197,6 @@ type
       ## On success, the function returns `true` if the `accPath` argument was
       ## not on the database already or the value differend from `accRec`, and
       ## `false` otherwise.
-
-  AristoApiMergeGenericDataFn* =
-    proc(db: AristoDbRef;
-         root: VertexID;
-         path: openArray[byte];
-         data: openArray[byte];
-        ): Result[bool,AristoError]
-        {.noRaise.}
-      ## Variant of `mergeXXX()` for generic sub-trees, i.e. for arguments
-      ## `root` greater than `VertexID(1)` and smaller than `LEAST_FREE_VID`.
 
   AristoApiMergeStorageDataFn* =
     proc(db: AristoDbRef;
@@ -339,17 +221,6 @@ type
       ##
       ## Errors will only be returned for invalid paths.
 
-  AristoApiPartGenericTwig* =
-    proc(db: AristoDbRef;
-         root: VertexID;
-         path: openArray[byte];
-        ): Result[(seq[seq[byte]],bool), AristoError]
-        {.noRaise.}
-      ## Variant of `partAccountTwig()`.
-      ##
-      ## Note: This function provides a functionality comparable to the
-      ## `getBranch()` function from `hexary.nim`
-
   AristoApiPartStorageTwig* =
     proc(db: AristoDbRef;
          accPath: Hash32;
@@ -358,32 +229,6 @@ type
         {.noRaise.}
       ## Variant of `partAccountTwig()`. Note that the function always returns
       ## an error unless the `accPath` is valid.
-
-  AristoApiPartUntwigGeneric* =
-    proc(chain: openArray[seq[byte]];
-         root: Hash32;
-         path: openArray[byte];
-        ): Result[Opt[seq[byte]],AristoError]
-        {.noRaise.}
-      ## Follow and verify the argument `chain` up unlil the last entry which
-      ## must be a leaf node. Extract the payload and pass it on as return
-      ## code. If a `Opt.none()` result is returned then the `path` argument
-      ## does provably not exist relative to `chain`.
-
-  AristoApiPartUntwigGenericOk* =
-    proc(chain: openArray[seq[byte]];
-         root: Hash32;
-         path: openArray[byte];
-         payload: Opt[seq[byte]];
-        ): Result[void,AristoError]
-        {.noRaise.}
-      ## Variant of `partUntwigGeneric()`. The function verifies the argument
-      ## `chain` of rlp-encoded nodes against the `path` and `payload`
-      ## arguments. If `payload` is passed `Opt.none()`, then the function is
-      ## subject to proving that the `path` does not exist relaive to `chain`.
-      ##
-      ## Note: This function provides a functionality comparable to the
-      ## `isValidBranch()` function from `hexary.nim`.
 
   AristoApiPartUntwigPath* =
     proc(chain: openArray[seq[byte]];
@@ -431,23 +276,6 @@ type
       ##
       ## The argument `nxtSid` will be the ID for the next saved state record.
 
-  AristoApiReCentreFn* =
-    proc(db: AristoDbRef;
-        ): Result[void,AristoError]
-        {.noRaise.}
-      ## Re-focus the `db` argument descriptor so that it becomes the centre.
-      ## Nothing is done if the `db` descriptor is the centre, already.
-      ##
-      ## With several descriptors accessing the same backend database there is
-      ## a single one that has write permission for the backend (regardless
-      ## whether there is a backend, at all.) The descriptor entity with write
-      ## permission is called *the centre*.
-      ##
-      ## After invoking `reCentre()`, the argument database `db` can only be
-      ## destructed by `finish()` which also destructs all other descriptors
-      ## accessing the same backend database. Descriptors where `isCentre()`
-      ## returns `false` must be single destructed with `forget()`.
-
   AristoApiRollbackFn* =
     proc(tx: AristoTxRef;
         ): Result[void,AristoError]
@@ -456,7 +284,7 @@ type
       ## operations performed for this transactio. The previous transaction
       ## is returned if there was any.
 
-  AristoApiTxBeginFn* =
+  AristoApiTxFrameBeginFn* =
     proc(db: AristoDbRef;
         ): Result[AristoTxRef,AristoError]
         {.noRaise.}
@@ -470,13 +298,7 @@ type
       ##     ... continue using db ...
       ##     tx.commit()
 
-  AristoApiTxLevelFn* =
-    proc(tx: AristoTxRef;
-        ): int
-        {.noRaise.}
-      ## Getter, positive nesting level of transaction argument `tx`
-
-  AristoApiTxTopFn* =
+  AristoApiTxFrameTopFn* =
     proc(db: AristoDbRef;
         ): Result[AristoTxRef,AristoError]
         {.noRaise.}
@@ -488,52 +310,37 @@ type
     commit*: AristoApiCommitFn
 
     deleteAccountRecord*: AristoApiDeleteAccountRecordFn
-    deleteGenericData*: AristoApiDeleteGenericDataFn
-    deleteGenericTree*: AristoApiDeleteGenericTreeFn
     deleteStorageData*: AristoApiDeleteStorageDataFn
     deleteStorageTree*: AristoApiDeleteStorageTreeFn
 
     fetchLastSavedState*: AristoApiFetchLastSavedStateFn
 
     fetchAccountRecord*: AristoApiFetchAccountRecordFn
-    fetchAccountState*: AristoApiFetchAccountStateFn
-    fetchGenericData*: AristoApiFetchGenericDataFn
-    fetchGenericState*: AristoApiFetchGenericStateFn
+    fetchStateRoot*: AristoApiFetchStateRootFn
     fetchStorageData*: AristoApiFetchStorageDataFn
-    fetchStorageState*: AristoApiFetchStorageStateFn
+    fetchStorageRoot*: AristoApiFetchStorageRootFn
 
-    findTx*: AristoApiFindTxFn
     finish*: AristoApiFinishFn
-    forget*: AristoApiForgetFn
-    forkTx*: AristoApiForkTxFn
     hasPathAccount*: AristoApiHasPathAccountFn
-    hasPathGeneric*: AristoApiHasPathGenericFn
     hasPathStorage*: AristoApiHasPathStorageFn
     hasStorageData*: AristoApiHasStorageDataFn
 
     isTop*: AristoApiIsTopFn
-    level*: AristoApiLevelFn
-    nForked*: AristoApiNForkedFn
+    txFrameLevel*: AristoApiTxFrameLevelFn
 
     mergeAccountRecord*: AristoApiMergeAccountRecordFn
-    mergeGenericData*: AristoApiMergeGenericDataFn
     mergeStorageData*: AristoApiMergeStorageDataFn
 
     partAccountTwig*: AristoApiPartAccountTwig
-    partGenericTwig*: AristoApiPartGenericTwig
     partStorageTwig*: AristoApiPartStorageTwig
-    partUntwigGeneric*: AristoApiPartUntwigGeneric
-    partUntwigGenericOk*: AristoApiPartUntwigGenericOk
     partUntwigPath*: AristoApiPartUntwigPath
     partUntwigPathOk*: AristoApiPartUntwigPathOk
 
     pathAsBlob*: AristoApiPathAsBlobFn
     persist*: AristoApiPersistFn
-    reCentre*: AristoApiReCentreFn
     rollback*: AristoApiRollbackFn
-    txBegin*: AristoApiTxBeginFn
-    txLevel*: AristoApiTxLevelFn
-    txTop*: AristoApiTxTopFn
+    txFrameBegin*: AristoApiTxFrameBeginFn
+    txFrameTop*: AristoApiTxFrameTopFn
 
 
   AristoApiProfNames* = enum
@@ -542,60 +349,44 @@ type
     AristoApiProfCommitFn               = "commit"
 
     AristoApiProfDeleteAccountRecordFn  = "deleteAccountRecord"
-    AristoApiProfDeleteGenericDataFn    = "deleteGnericData"
-    AristoApiProfDeleteGenericTreeFn    = "deleteGnericTree"
     AristoApiProfDeleteStorageDataFn    = "deleteStorageData"
     AristoApiProfDeleteStorageTreeFn    = "deleteStorageTree"
 
     AristoApiProfFetchLastSavedStateFn  = "fetchLastSavedState"
 
     AristoApiProfFetchAccountRecordFn   = "fetchAccountRecord"
-    AristoApiProfFetchAccountStateFn    = "fetchAccountState"
-    AristoApiProfFetchGenericDataFn     = "fetchGenericData"
-    AristoApiProfFetchGenericStateFn    = "fetchGenericState"
+    AristoApiProfFetchStateRootFn = "fetchStateRoot"
     AristoApiProfFetchStorageDataFn     = "fetchStorageData"
-    AristoApiProfFetchStorageStateFn    = "fetchStorageState"
+    AristoApiProfFetchStorageRootFn     = "fetchStorageRoot"
 
-    AristoApiProfFindTxFn               = "findTx"
     AristoApiProfFinishFn               = "finish"
-    AristoApiProfForgetFn               = "forget"
-    AristoApiProfForkTxFn               = "forkTx"
 
     AristoApiProfHasPathAccountFn       = "hasPathAccount"
-    AristoApiProfHasPathGenericFn       = "hasPathGeneric"
     AristoApiProfHasPathStorageFn       = "hasPathStorage"
     AristoApiProfHasStorageDataFn       = "hasStorageData"
 
     AristoApiProfIsTopFn                = "isTop"
     AristoApiProfLevelFn                = "level"
-    AristoApiProfNForkedFn              = "nForked"
 
     AristoApiProfMergeAccountRecordFn   = "mergeAccountRecord"
-    AristoApiProfMergeGenericDataFn     = "mergeGenericData"
     AristoApiProfMergeStorageDataFn     = "mergeStorageData"
 
     AristoApiProfPartAccountTwigFn      = "partAccountTwig"
-    AristoApiProfPartGenericTwigFn      = "partGenericTwig"
     AristoApiProfPartStorageTwigFn      = "partStorageTwig"
-    AristoApiProfPartUntwigGenericFn    = "partUntwigGeneric"
-    AristoApiProfPartUntwigGenericOkFn  = "partUntwigGenericOk"
     AristoApiProfPartUntwigPathFn       = "partUntwigPath"
     AristoApiProfPartUntwigPathOkFn     = "partUntwigPathOk"
 
     AristoApiProfPathAsBlobFn           = "pathAsBlob"
     AristoApiProfPersistFn              = "persist"
-    AristoApiProfReCentreFn             = "reCentre"
     AristoApiProfRollbackFn             = "rollback"
-    AristoApiProfTxBeginFn              = "txBegin"
-    AristoApiProfTxLevelFn              = "txLevel"
-    AristoApiProfTxTopFn                = "txTop"
+    AristoApiProfTxFrameBeginFn              = "txFrameBegin"
+    AristoApiProfTxFrameTopFn                = "txFrameTop"
 
     AristoApiProfBeGetVtxFn             = "be/getVtx"
     AristoApiProfBeGetKeyFn             = "be/getKey"
     AristoApiProfBeGetTuvFn             = "be/getTuv"
     AristoApiProfBeGetLstFn             = "be/getLst"
     AristoApiProfBePutVtxFn             = "be/putVtx"
-    AristoApiProfBePutKeyFn             = "be/putKey"
     AristoApiProfBePutTuvFn             = "be/putTuv"
     AristoApiProfBePutLstFn             = "be/putLst"
     AristoApiProfBePutEndFn             = "be/putEnd"
@@ -610,60 +401,12 @@ type
 # ------------------------------------------------------------------------------
 
 when AutoValidateApiHooks:
-  proc validate(api: AristoApiObj|AristoApiRef) =
-    doAssert not api.commit.isNil
-
-    doAssert not api.deleteAccountRecord.isNil
-    doAssert not api.deleteGenericData.isNil
-    doAssert not api.deleteGenericTree.isNil
-    doAssert not api.deleteStorageData.isNil
-    doAssert not api.deleteStorageTree.isNil
-
-    doAssert not api.fetchLastSavedState.isNil
-
-    doAssert not api.fetchAccountRecord.isNil
-    doAssert not api.fetchAccountState.isNil
-    doAssert not api.fetchGenericData.isNil
-    doAssert not api.fetchGenericState.isNil
-    doAssert not api.fetchStorageData.isNil
-    doAssert not api.fetchStorageState.isNil
-
-    doAssert not api.findTx.isNil
-    doAssert not api.finish.isNil
-    doAssert not api.forget.isNil
-    doAssert not api.forkTx.isNil
-
-    doAssert not api.hasPathAccount.isNil
-    doAssert not api.hasPathGeneric.isNil
-    doAssert not api.hasPathStorage.isNil
-    doAssert not api.hasStorageData.isNil
-
-    doAssert not api.isTop.isNil
-    doAssert not api.level.isNil
-    doAssert not api.nForked.isNil
-
-    doAssert not api.mergeAccountRecord.isNil
-    doAssert not api.mergeGenericData.isNil
-    doAssert not api.mergeStorageData.isNil
-
-    doAssert not api.partAccountTwig.isNil
-    doAssert not api.partGenericTwig.isNil
-    doAssert not api.partStorageTwig.isNil
-    doAssert not api.partUntwigGeneric.isNil
-    doAssert not api.partUntwigGenericOk.isNil
-    doAssert not api.partUntwigPath.isNil
-    doAssert not api.partUntwigPathOk.isNil
-
-    doAssert not api.pathAsBlob.isNil
-    doAssert not api.persist.isNil
-    doAssert not api.reCentre.isNil
-    doAssert not api.rollback.isNil
-    doAssert not api.txBegin.isNil
-    doAssert not api.txLevel.isNil
-    doAssert not api.txTop.isNil
+  proc validate(api: AristoApiObj) =
+    for _, field in api.fieldPairs():
+      doAssert not field.isNil
 
   proc validate(prf: AristoApiProfRef) =
-    prf.AristoApiRef.validate
+    prf.AristoApiRef[].validate
     doAssert not prf.data.isNil
 
 proc dup(be: BackendRef): BackendRef =
@@ -690,53 +433,38 @@ func init*(api: var AristoApiObj) =
   api.commit = commit
 
   api.deleteAccountRecord = deleteAccountRecord
-  api.deleteGenericData = deleteGenericData
-  api.deleteGenericTree = deleteGenericTree
   api.deleteStorageData = deleteStorageData
   api.deleteStorageTree = deleteStorageTree
 
   api.fetchLastSavedState = fetchLastSavedState
 
   api.fetchAccountRecord = fetchAccountRecord
-  api.fetchAccountState = fetchAccountState
-  api.fetchGenericData = fetchGenericData
-  api.fetchGenericState = fetchGenericState
+  api.fetchStateRoot = fetchStateRoot
   api.fetchStorageData = fetchStorageData
-  api.fetchStorageState = fetchStorageState
+  api.fetchStorageRoot = fetchStorageRoot
 
-  api.findTx = findTx
   api.finish = finish
-  api.forget = forget
-  api.forkTx = forkTx
 
   api.hasPathAccount = hasPathAccount
-  api.hasPathGeneric = hasPathGeneric
   api.hasPathStorage = hasPathStorage
   api.hasStorageData = hasStorageData
 
   api.isTop = isTop
-  api.level = level
-  api.nForked = nForked
+  api.txFrameLevel = txFrameLevel
 
   api.mergeAccountRecord = mergeAccountRecord
-  api.mergeGenericData = mergeGenericData
   api.mergeStorageData = mergeStorageData
 
   api.partAccountTwig = partAccountTwig
-  api.partGenericTwig = partGenericTwig
   api.partStorageTwig = partStorageTwig
-  api.partUntwigGeneric = partUntwigGeneric
-  api.partUntwigGenericOk = partUntwigGenericOk
   api.partUntwigPath = partUntwigPath
   api.partUntwigPathOk = partUntwigPathOk
 
   api.pathAsBlob = pathAsBlob
   api.persist = persist
-  api.reCentre = reCentre
   api.rollback = rollback
-  api.txBegin = txBegin
-  api.txLevel = txLevel
-  api.txTop = txTop
+  api.txFrameBegin = txFrameBegin
+  api.txFrameTop = txFrameTop
   when AutoValidateApiHooks:
     api.validate
 
@@ -745,58 +473,10 @@ func init*(T: type AristoApiRef): T =
   result[].init()
 
 func dup*(api: AristoApiRef): AristoApiRef =
-  result = AristoApiRef(
-    commit:               api.commit,
-
-    deleteAccountRecord:  api.deleteAccountRecord,
-    deleteGenericData:    api.deleteGenericData,
-    deleteGenericTree:    api.deleteGenericTree,
-    deleteStorageData:    api.deleteStorageData,
-    deleteStorageTree:    api.deleteStorageTree,
-
-    fetchLastSavedState:  api.fetchLastSavedState,
-    fetchAccountRecord:   api.fetchAccountRecord,
-    fetchAccountState:    api.fetchAccountState,
-    fetchGenericData:     api.fetchGenericData,
-    fetchGenericState:    api.fetchGenericState,
-    fetchStorageData:     api.fetchStorageData,
-    fetchStorageState:    api.fetchStorageState,
-
-    findTx:               api.findTx,
-    finish:               api.finish,
-    forget:               api.forget,
-    forkTx:               api.forkTx,
-
-    hasPathAccount:       api.hasPathAccount,
-    hasPathGeneric:       api.hasPathGeneric,
-    hasPathStorage:       api.hasPathStorage,
-    hasStorageData:       api.hasStorageData,
-
-    isTop:                api.isTop,
-    level:                api.level,
-    nForked:              api.nForked,
-
-    mergeAccountRecord:   api.mergeAccountRecord,
-    mergeGenericData:     api.mergeGenericData,
-    mergeStorageData:     api.mergeStorageData,
-
-    partAccountTwig:      api.partAccountTwig,
-    partGenericTwig:      api.partGenericTwig,
-    partStorageTwig:      api.partStorageTwig,
-    partUntwigGeneric:    api.partUntwigGeneric,
-    partUntwigGenericOk:  api.partUntwigGenericOk,
-    partUntwigPath:       api.partUntwigPath,
-    partUntwigPathOk:     api.partUntwigPathOk,
-
-    pathAsBlob:           api.pathAsBlob,
-    persist:              api.persist,
-    reCentre:             api.reCentre,
-    rollback:             api.rollback,
-    txBegin:              api.txBegin,
-    txLevel:              api.txLevel,
-    txTop:                api.txTop)
+  result = AristoApiRef()
+  result[] = api[]
   when AutoValidateApiHooks:
-    result.validate
+    result[].validate
 
 # ------------------------------------------------------------------------------
 # Public profile API constuctor
@@ -835,16 +515,6 @@ func init*(
       AristoApiProfDeleteAccountRecordFn.profileRunner:
         result = api.deleteAccountRecord(a, b)
 
-  profApi.deleteGenericData =
-    proc(a: AristoDbRef; b: VertexID; c: openArray[byte]): auto =
-      AristoApiProfDeleteGenericDataFn.profileRunner:
-        result = api.deleteGenericData(a, b, c)
-
-  profApi.deleteGenericTree =
-    proc(a: AristoDbRef; b: VertexID): auto =
-      AristoApiProfDeleteGenericTreeFn.profileRunner:
-        result = api.deleteGenericTree(a, b)
-
   profApi.deleteStorageData =
     proc(a: AristoDbRef; b: Hash32, c: Hash32): auto =
       AristoApiProfDeleteStorageDataFn.profileRunner:
@@ -865,60 +535,30 @@ func init*(
       AristoApiProfFetchAccountRecordFn.profileRunner:
         result = api.fetchAccountRecord(a, b)
 
-  profApi.fetchAccountState =
+  profApi.fetchStateRoot =
     proc(a: AristoDbRef; b: bool): auto =
-      AristoApiProfFetchAccountStateFn.profileRunner:
-        result = api.fetchAccountState(a, b)
-
-  profApi.fetchGenericData =
-    proc(a: AristoDbRef; b: VertexID; c: openArray[byte]): auto =
-      AristoApiProfFetchGenericDataFn.profileRunner:
-        result = api.fetchGenericData(a, b, c)
-
-  profApi.fetchGenericState =
-    proc(a: AristoDbRef; b: VertexID; c: bool): auto =
-      AristoApiProfFetchGenericStateFn.profileRunner:
-        result = api.fetchGenericState(a, b, c)
+      AristoApiProfFetchStateRootFn.profileRunner:
+        result = api.fetchStateRoot(a, b)
 
   profApi.fetchStorageData =
     proc(a: AristoDbRef; b, stoPath: Hash32): auto =
       AristoApiProfFetchStorageDataFn.profileRunner:
         result = api.fetchStorageData(a, b, stoPath)
 
-  profApi.fetchStorageState =
-    proc(a: AristoDbRef; b: Hash32; c: bool): auto =
-      AristoApiProfFetchStorageStateFn.profileRunner:
-        result = api.fetchStorageState(a, b, c)
-
-  profApi.findTx =
-    proc(a: AristoDbRef; b: RootedVertexID; c: HashKey): auto =
-      AristoApiProfFindTxFn.profileRunner:
-        result = api.findTx(a, b, c)
+  profApi.fetchStorageRoot =
+    proc(a: AristoDbRef; b: Hash32): auto =
+      AristoApiProfFetchStorageRootFn.profileRunner:
+        result = api.fetchStorageRoot(a, b)
 
   profApi.finish =
     proc(a: AristoDbRef; b = false) =
       AristoApiProfFinishFn.profileRunner:
         api.finish(a, b)
 
-  profApi.forget =
-    proc(a: AristoDbRef): auto =
-      AristoApiProfForgetFn.profileRunner:
-        result = api.forget(a)
-
-  profApi.forkTx =
-    proc(a: AristoDbRef; b: int): auto =
-      AristoApiProfForkTxFn.profileRunner:
-        result = api.forkTx(a, b)
-
   profApi.hasPathAccount =
     proc(a: AristoDbRef; b: Hash32): auto =
       AristoApiProfHasPathAccountFn.profileRunner:
         result = api.hasPathAccount(a, b)
-
-  profApi.hasPathGeneric =
-    proc(a: AristoDbRef; b: VertexID; c: openArray[byte]): auto =
-      AristoApiProfHasPathGenericFn.profileRunner:
-        result = api.hasPathGeneric(a, b, c)
 
   profApi.hasPathStorage =
     proc(a: AristoDbRef; b, c: Hash32): auto =
@@ -940,23 +580,13 @@ func init*(
        AristoApiProfLevelFn.profileRunner:
          result = api.level(a)
 
-  profApi.nForked =
-    proc(a: AristoDbRef): auto =
-      AristoApiProfNForkedFn.profileRunner:
-         result = api.nForked(a)
-
   profApi.mergeAccountRecord =
     proc(a: AristoDbRef; b: Hash32; c: AristoAccount): auto =
       AristoApiProfMergeAccountRecordFn.profileRunner:
         result = api.mergeAccountRecord(a, b, c)
 
-  profApi.mergeGenericData =
-    proc(a: AristoDbRef; b: VertexID, c, d: openArray[byte]): auto =
-      AristoApiProfMergeGenericDataFn.profileRunner:
-        result = api.mergeGenericData(a, b, c, d)
-
   profApi.mergeStorageData =
-    proc(a: AristoDbRef; b, c: Hash32, d: Uint256): auto =
+    proc(a: AristoDbRef; b, c: Hash32, d: UInt256): auto =
       AristoApiProfMergeStorageDataFn.profileRunner:
         result = api.mergeStorageData(a, b, c, d)
 
@@ -965,25 +595,10 @@ func init*(
       AristoApiProfPartAccountTwigFn.profileRunner:
         result = api.partAccountTwig(a, b)
 
-  profApi.partGenericTwig =
-    proc(a: AristoDbRef; b: VertexID; c: openArray[byte]): auto =
-      AristoApiProfPartGenericTwigFn.profileRunner:
-        result = api.partGenericTwig(a, b, c)
-
   profApi.partStorageTwig =
     proc(a: AristoDbRef; b: Hash32; c: Hash32): auto =
       AristoApiProfPartStorageTwigFn.profileRunner:
         result = api.partStorageTwig(a, b, c)
-
-  profApi.partUntwigGeneric =
-    proc(a: openArray[seq[byte]]; b: Hash32; c: openArray[byte]): auto =
-      AristoApiProfPartUntwigGenericFn.profileRunner:
-        result = api.partUntwigGeneric(a, b, c)
-
-  profApi.partUntwigGenericOk =
-    proc(a: openArray[seq[byte]]; b:Hash32; c:openArray[byte]; d:Opt[seq[byte]]): auto =
-      AristoApiProfPartUntwigGenericOkFn.profileRunner:
-        result = api.partUntwigGenericOk(a, b, c, d)
 
   profApi.partUntwigPath =
     proc(a: openArray[seq[byte]]; b, c: Hash32): auto =
@@ -1005,30 +620,20 @@ func init*(
        AristoApiProfPersistFn.profileRunner:
         result = api.persist(a, b)
 
-  profApi.reCentre =
-    proc(a: AristoDbRef): auto =
-      AristoApiProfReCentreFn.profileRunner:
-        result = api.reCentre(a)
-
   profApi.rollback =
     proc(a: AristoTxRef): auto =
       AristoApiProfRollbackFn.profileRunner:
         result = api.rollback(a)
 
-  profApi.txBegin =
+  profApi.txFrameBegin =
     proc(a: AristoDbRef): auto =
-       AristoApiProfTxBeginFn.profileRunner:
-        result = api.txBegin(a)
+       AristoApiProfTxFrameBeginFn.profileRunner:
+        result = api.txFrameBegin(a)
 
-  profApi.txLevel =
-    proc(a: AristoTxRef): auto =
-       AristoApiProfTxLevelFn.profileRunner:
-        result = api.txLevel(a)
-
-  profApi.txTop =
+  profApi.txFrameTop =
     proc(a: AristoDbRef): auto =
-      AristoApiProfTxTopFn.profileRunner:
-        result = api.txTop(a)
+      AristoApiProfTxFrameTopFn.profileRunner:
+        result = api.txFrameTop(a)
 
   let beDup = be.dup()
   if beDup.isNil:
@@ -1064,12 +669,6 @@ func init*(
         AristoApiProfBePutVtxFn.profileRunner:
           be.putVtxFn(a, b, c)
     data.list[AristoApiProfBePutVtxFn.ord].masked = true
-
-    beDup.putKeyFn =
-      proc(a: PutHdlRef; b: RootedVertexID, c: HashKey) =
-        AristoApiProfBePutKeyFn.profileRunner:
-          be.putKeyFn(a, b, c)
-    data.list[AristoApiProfBePutKeyFn.ord].masked = true
 
     beDup.putTuvFn =
       proc(a: PutHdlRef; b: VertexID) =

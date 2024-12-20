@@ -79,7 +79,6 @@ proc finish*(db: AristoDbRef; eradicate = false) =
   ##
   if not db.backend.isNil:
     db.backend.closeFn eradicate
-  discard db.getCentre.forgetOthers()
 
 # ------------------------------------------------------------------------------
 # End

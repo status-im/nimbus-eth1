@@ -14,7 +14,8 @@ import
   eth/rlp,
   ./test_helpers,
   eth/common/transaction_utils,
-  ../nimbus/[errors, transaction],
+  ../nimbus/transaction,
+  ../nimbus/core/validate,
   ../nimbus/utils/utils
 
 const
@@ -33,9 +34,7 @@ proc txHash(tx: Transaction): string =
   rlpHash(tx).toHex()
 
 proc testTxByFork(tx: Transaction, forkData: JsonNode, forkName: string, testStatusIMPL: var TestStatus) =
-  try:
-    tx.validate(nameToFork[forkName])
-  except ValidationError:
+  tx.validateTxBasic(nameToFork[forkName]).isOkOr:
     return
 
   if forkData.len > 0 and "sender" in forkData:

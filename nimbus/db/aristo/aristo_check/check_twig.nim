@@ -11,7 +11,7 @@
 {.push raises: [].}
 
 import
-  eth/common,
+  eth/common/hashes,
   results,
   ".."/[aristo_compute, aristo_desc, aristo_fetch, aristo_part]
 
@@ -21,13 +21,12 @@ import
 
 proc checkTwig*(
     db: AristoDbRef;                   # Database
-    root: VertexID;                    # Start node
-    path: openArray[byte];             # Data path
+    accPath: Hash32;             # Data path
       ): Result[void,AristoError] =
   let
-    proof = ? db.partGenericTwig(root, path)
-    key = ? db.computeKey (root,root)
-    pyl = ? proof[0].partUntwigGeneric(key.to(Hash32), path)
+    proof = ? db.partAccountTwig(accPath)
+    key = ? db.computeKey (VertexID(1),VertexID(1))
+  discard ? proof[0].partUntwigPath(key.to(Hash32), accPath)
 
   ok()
 
@@ -40,7 +39,7 @@ proc checkTwig*(
     proof = ? db.partStorageTwig(accPath, stoPath)
     vid = ? db.fetchStorageID accPath
     key = ? db.computeKey (VertexID(1),vid)
-    pyl = ? proof[0].partUntwigPath(key.to(Hash32), stoPath)
+  discard ? proof[0].partUntwigPath(key.to(Hash32), stoPath)
 
   ok()
 

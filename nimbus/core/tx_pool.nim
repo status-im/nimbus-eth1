@@ -226,24 +226,17 @@
 ## A piece of code using this pool architecture could look like as follows:
 ## ::
 ##    # see also unit test examples, e.g. "Block packer tests"
-##    var db: CoreDbRef                      # to be initialised
+##    var chain: ForkedChainRef              # to be initialised
 ##    var txs: seq[Transaction]              # to be initialised
 ##
-##    proc mineThatBlock(blk: EthBlock)      # external function
 ##
-##    ..
-##
-##    var xq = TxPoolRef.new(db)             # initialise tx-pool
+##    var xq = TxPoolRef.new(chain)          # initialise tx-pool
 ##    ..
 ##
 ##    xq.add(txs)                            # add transactions ..
 ##    ..                                     # .. into the buckets
 ##
 ##    let newBlock = xq.assembleBlock        # fetch current mining block
-##
-##    ..
-##    mineThatBlock(newBlock) ...            # external mining & signing process
-##    ..
 ##
 ##    xp.smartHead(newBlock.header)          # update pool, new insertion point
 ##
@@ -252,7 +245,7 @@
 ## ---------------------
 ## In the example, transactions are processed into buckets via `add()`.
 ##
-## The `ethBlock()` directive assembles and retrieves a new block for mining
+## The `assembleBlock()` directive assembles and retrieves a new block for mining
 ## derived from the current pool state. It invokes the block packer which
 ## accumulates txs from the `pending` buscket into the `packed` bucket which
 ## then go into the block.
@@ -268,7 +261,7 @@
 ##
 ## In the most complex case, the newly mined block was added to some block
 ## chain branch which has become an uncle to the new canonical head retrieved
-## by `getCanonicalHead()`. In order to update the pool to the very state
+## by `latestHeader()`. In order to update the pool to the very state
 ## one would have arrived if worked on the retrieved canonical head branch
 ## in the first place, the directive `smartHead()` calculates the actions of
 ## what is needed to get just there from the locally cached head state of the
@@ -310,7 +303,7 @@
 ## --------------------
 ## head
 ##   Cached block chain insertion point, not necessarily the same header as
-##   retrieved by the `getCanonicalHead()`. This insertion point can be
+##   retrieved by the `latestHeader()`. This insertion point can be
 ##   adjusted with the `smartHead()` function.
 
 
@@ -389,11 +382,11 @@ proc setHead(xp: TxPoolRef; val: Header)
 # Public constructor/destructor
 # ------------------------------------------------------------------------------
 
-proc new*(T: type TxPoolRef; com: CommonRef): T
-    {.gcsafe,raises: [CatchableError].} =
+proc new*(T: type TxPoolRef; chain: ForkedChainRef): T
+    {.gcsafe,raises: [].} =
   ## Constructor, returns a new tx-pool descriptor.
   new result
-  result.init(com)
+  result.init(chain)
 
 # ------------------------------------------------------------------------------
 # Public functions, task manager, pool actions serialiser
@@ -422,7 +415,7 @@ proc add*(xp: TxPoolRef; tx: PooledTransaction; info = "")
   ## Variant of `add()` for a single transaction.
   xp.add(@[tx], info)
 
-proc smartHead*(xp: TxPoolRef; pos: Header, chain: ForkedChainRef): bool
+proc smartHead*(xp: TxPoolRef; pos: Header): bool
     {.gcsafe,raises: [CatchableError].} =
   ## This function moves the internal head cache (i.e. tx insertion point,
   ## vmState) and ponts it to a now block on the chain.
@@ -434,7 +427,7 @@ proc smartHead*(xp: TxPoolRef; pos: Header, chain: ForkedChainRef): bool
   ## the internal head cache, the previously calculated actions will be
   ## applied.
   ##
-  let rcDiff = xp.headDiff(pos, chain)
+  let rcDiff = xp.headDiff(pos, xp.chain)
   if rcDiff.isOk:
     let changes = rcDiff.value
 
@@ -460,28 +453,28 @@ func com*(xp: TxPoolRef): CommonRef =
   ## Getter
   xp.vmState.com
 
-type EthBlockAndBlobsBundle* = object
+type AssembledBlock* = object
   blk*: EthBlock
   blobsBundle*: Opt[BlobsBundle]
   blockValue*: UInt256
+  executionRequests*: Opt[array[3, seq[byte]]]
 
 proc assembleBlock*(
     xp: TxPoolRef,
     someBaseFee: bool = false
-): Result[EthBlockAndBlobsBundle, string] {.gcsafe,raises: [CatchableError].} =
+): Result[AssembledBlock, string] {.gcsafe,raises: [CatchableError].} =
   ## Getter, retrieves a packed block ready for mining and signing depending
   ## on the internally cached block chain head, the txs in the pool and some
   ## tuning parameters. The following block header fields are left
   ## uninitialised:
   ##
-  ## * *extraData*: Blob
   ## * *mixHash*: Hash32
   ## * *nonce*:     BlockNonce
   ##
   ## Note that this getter runs *ad hoc* all the txs through the VM in
   ## order to build the block.
 
-  let pst = xp.packerVmExec().valueOr:       # updates vmState
+  var pst = xp.packerVmExec().valueOr:       # updates vmState
     return err(error)
 
   var blk = EthBlock(
@@ -500,6 +493,7 @@ proc assembleBlock*(
           blobsBundle.proofs.add p
         for blob in tx.networkPayload.blobs:
           blobsBundle.blobs.add blob
+  blk.header.transactionsRoot = calcTxRoot(blk.txs)
 
   let com = xp.vmState.com
   if com.isShanghaiOrLater(blk.header.timestamp):
@@ -519,10 +513,17 @@ proc assembleBlock*(
     # make sure baseFee always has something
     blk.header.baseFeePerGas = Opt.some(blk.header.baseFeePerGas.get(0.u256))
 
-  ok EthBlockAndBlobsBundle(
+  let executionRequestsOpt =
+    if com.isPragueOrLater(blk.header.timestamp):
+      Opt.some(pst.executionRequests)
+    else:
+      Opt.none(array[3, seq[byte]])
+
+  ok AssembledBlock(
     blk: blk,
     blobsBundle: blobsBundleOpt,
-    blockValue: pst.blockValue)
+    blockValue: pst.blockValue,
+    executionRequests: executionRequestsOpt)
 
 # core/tx_pool.go(474): func (pool SetGasPrice,*TxPool) Stats() (int, int) {
 # core/tx_pool.go(1728): func (t *txLookup) Count() int {

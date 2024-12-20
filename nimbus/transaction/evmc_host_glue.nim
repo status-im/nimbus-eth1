@@ -90,6 +90,9 @@ proc setTransientStorage(p: evmc_host_context, address: var evmc_address,
                 key, value: var evmc_bytes32) {.cdecl.} =
   toHost(p).setTransientStorage(address.fromEvmc, key.flip256.fromEvmc, value.flip256.fromEvmc)
 
+proc getDelegateAddress(p: evmc_hosT_context, address: var evmc_address): evmc_address {.cdecl.} =
+  toHost(p).getDelegateAddress(address.fromEvmc).toEvmc
+
 let hostInterface = evmc_host_interface(
   account_exists: accountExists,
   get_storage:    getStorage,
@@ -107,6 +110,7 @@ let hostInterface = evmc_host_interface(
   access_storage: accessStorage,
   get_transient_storage: getTransientStorage,
   set_transient_storage: setTransientStorage,
+  get_delegate_address: getDelegateAddress,
 )
 
 proc evmcExecComputation*(host: TransactionHost): EvmcResult =
@@ -125,9 +129,9 @@ proc evmcExecComputation*(host: TransactionHost): EvmcResult =
 
   result = vm.execute(vm, hostInterface.unsafeAddr, hostContext,
                         evmc_revision(host.vmState.fork.ord), host.msg,
-                        if host.code.len > 0: host.code.bytes[0].unsafeAddr
+                        if host.code != nil and host.code.len > 0: host.code.bytes[0].unsafeAddr
                         else: nil,
-                        host.code.len.csize_t)
+                        if host.code != nil: host.code.len.csize_t else: 0)
 
   host.showCallReturn(result)
 

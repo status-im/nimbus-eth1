@@ -108,7 +108,11 @@ proc cmdBench(conf: DbConf) =
 
   for key in keys:
     withTimer(timers[tDbGet]):
-      let _ = db.get(key)
+      var val = Opt.none(seq[byte])
+      proc onData(data: openArray[byte]) =
+        val = Opt.some(@data)
+
+      let _ = db.get(key, onData)
 
   for key in keys:
     withTimer(timers[tDbContains]):

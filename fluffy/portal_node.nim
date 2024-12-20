@@ -12,6 +12,7 @@ import
   chronos,
   eth/p2p/discoveryv5/protocol,
   beacon_chain/spec/forks,
+  stew/byteutils,
   ./network_metadata,
   ./eth_data/history_data_ssz_e2s,
   ./database/content_db,
@@ -36,6 +37,7 @@ type
     portalConfig*: PortalProtocolConfig
     dataDir*: string
     storageCapacity*: uint64
+    contentRequestRetries*: int
 
   PortalNode* = ref object
     state*: PortalNodeState
@@ -117,6 +119,8 @@ proc new*(
             beaconDb,
             streamManager,
             networkData.forks,
+            networkData.clock.getBeaconTimeFn(),
+            networkData.metadata.cfg,
             config.trustedBlockRoot,
             bootstrapRecords = bootstrapRecords,
             portalConfig = config.portalConfig,
@@ -136,6 +140,7 @@ proc new*(
             accumulator,
             bootstrapRecords = bootstrapRecords,
             portalConfig = config.portalConfig,
+            contentRequestRetries = config.contentRequestRetries,
           )
         )
       else:
@@ -153,6 +158,7 @@ proc new*(
             portalConfig = config.portalConfig,
             historyNetwork = historyNetwork,
             not config.disableStateRootValidation,
+            contentRequestRetries = config.contentRequestRetries,
           )
         )
       else:

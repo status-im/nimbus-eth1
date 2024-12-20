@@ -17,11 +17,9 @@ import
   pkg/stew/[interval_set, sorted_set],
   ../../../common,
   ../worker_desc,
+  ./update/metrics,
   ./headers_staged/[headers, linked_hchain],
-  ./headers_unproc
-
-logScope:
-  topics = "beacon headers"
+  "."/[headers_unproc, update]
 
 # ------------------------------------------------------------------------------
 # Private functions
@@ -32,7 +30,7 @@ proc fetchAndCheck(
     ivReq: BnRange;
     lhc: ref LinkedHChain; # update in place
     info: static[string];
-      ): Future[bool] {.async.} =
+      ): Future[bool] {.async: (raises: []).} =
   ## Collect single header chain from the peer and stash it on the `staged`
   ## queue. Returns the length of the stashed chain of headers.
   ##
@@ -45,7 +43,8 @@ proc fetchAndCheck(
 
   # While assembling a `LinkedHChainRef`, verify that the `revHeaders` list
   # was sound, i.e. contiguous, linked, etc.
-  if not revHeaders.extendLinkedHChain(buddy, ivReq.maxPt, lhc, info):
+  if not revHeaders.extendLinkedHChain(buddy, ivReq.maxPt, lhc):
+    buddy.only.nHdrProcErrors.inc
     return false
 
   return true
@@ -57,10 +56,12 @@ proc fetchAndCheck(
 proc headerStagedUpdateTarget*(
     buddy: BeaconBuddyRef;
     info: static[string];
-      ) {.async.} =
+      ) {.async: (raises: []).} =
   ## Fetch finalised beacon header if there is an update available
-  let ctx = buddy.ctx
-  if not ctx.layout.headLocked and
+  let
+    ctx = buddy.ctx
+    peer = buddy.peer
+  if ctx.layout.lastState == idleSyncState and
      ctx.target.final == 0 and
      ctx.target.finalHash != zeroHash32 and
      not ctx.target.locked:
@@ -70,21 +71,21 @@ proc headerStagedUpdateTarget*(
     let rc = await buddy.headersFetchReversed(iv, ctx.target.finalHash, info)
     ctx.target.locked = false
 
-    if rc.isOK:
+    if rc.isOk:
       let hash = rlp.encode(rc.value[0]).keccak256
       if hash != ctx.target.finalHash:
         # Oops
         buddy.ctrl.zombie = true
-        trace info & ": finalised header hash mismatch", peer=buddy.peer, hash,
+        trace info & ": finalised header hash mismatch", peer, hash,
           expected=ctx.target.finalHash
       else:
-        ctx.target.final = rc.value[0].number
+        ctx.updateFinalBlockHeader(rc.value[0], ctx.target.finalHash, info)
 
 
 proc headersStagedCollect*(
     buddy: BeaconBuddyRef;
     info: static[string];
-      ): Future[bool] {.async.} =
+      ): Future[bool] {.async: (raises: []).} =
   ## Collect a batch of chained headers totalling to at most `nHeaders`
   ## headers. Fetch the headers from the the peer and stash it blockwise on
   ## the `staged` queue. The function returns `true` it stashed a header
@@ -119,8 +120,9 @@ proc headersStagedCollect*(
     isOpportunistic = uTop + 1 < ctx.layout.dangling
 
     # Parent hash for `lhc` below
-    topLink = (if isOpportunistic: EMPTY_ROOT_HASH
-               else: ctx.layout.danglingParent)
+    topLink = if isOpportunistic: EMPTY_ROOT_HASH
+              else: ctx.dbHeaderParentHash(ctx.layout.dangling).expect "Hash32"
+
   var
     # This value is used for splitting the interval `iv` into
     # `[iv.minPt, somePt] + [somePt+1, ivTop] + already-collected` where the
@@ -130,6 +132,9 @@ proc headersStagedCollect*(
     # This record will accumulate the fetched headers. It must be on the heap
     # so that `async` can capture that properly.
     lhc = (ref LinkedHChain)(parentHash: topLink)
+
+    # Flag, not to reset error count
+    haveError = false
 
   while true:
     # Extract top range interval and fetch/stage it
@@ -146,19 +151,24 @@ proc headersStagedCollect*(
 
     # Fetch and extend chain record
     if not await buddy.fetchAndCheck(ivReq, lhc, info):
+      haveError = true
 
-      # Throw away opportunistic data (or first time header fetch.) Turn back
-      # unused data.
+      # Throw away opportunistic data (or first time header fetch.) Keep
+      # other data for a partially assembled list.
       if isOpportunistic or nLhcHeaders == 0:
-        if 0 < buddy.only.nHdrRespErrors and buddy.ctrl.stopped:
+        if ((0 < buddy.only.nHdrRespErrors or
+             0 < buddy.only.nHdrProcErrors) and buddy.ctrl.stopped) or
+           fetchHeadersReqErrThresholdCount < buddy.only.nHdrRespErrors or
+           fetchHeadersProcessErrThresholdCount < buddy.only.nHdrProcErrors:
           # Make sure that this peer does not immediately reconnect
           buddy.ctrl.zombie = true
-        trace info & ": completely failed", peer, iv, ivReq, isOpportunistic,
-          ctrl=buddy.ctrl.state, nRespErrors=buddy.only.nHdrRespErrors
+        trace info & ": current header list discarded", peer, iv, ivReq,
+          isOpportunistic, ctrl=buddy.ctrl.state, hdrErrors=buddy.hdrErrors
         ctx.headersUnprocCommit(iv.len, iv)
         # At this stage allow a task switch so that some other peer might try
         # to work on the currently returned interval.
-        await sleepAsync asyncThreadSwitchTimeSlot
+        try: await sleepAsync asyncThreadSwitchTimeSlot
+        except CancelledError: discard
         return false
 
       # So it is deterministic and there were some headers downloaded already.
@@ -189,9 +199,13 @@ proc headersStagedCollect*(
     raiseAssert info & ": duplicate key on staged queue iv=" & $iv
   qItem.data = lhc[]
 
-  trace info & ": staged headers", peer,
-    topBlock=iv.maxPt.bnStr, nHeaders=lhc.revHdrs.len,
-    nStaged=ctx.hdr.staged.len, isOpportunistic, ctrl=buddy.ctrl.state
+  # Reset header process errors (not too many consecutive failures this time)
+  if not haveError:
+    buddy.only.nHdrProcErrors = 0
+
+  trace info & ": staged a list of headers", peer, topBlock=iv.maxPt.bnStr,
+    nHeaders=lhc.revHdrs.len, nStaged=ctx.hdr.staged.len, isOpportunistic,
+    ctrl=buddy.ctrl.state, hdrErrors=buddy.hdrErrors
 
   return true
 
@@ -201,16 +215,15 @@ proc headersStagedProcess*(ctx: BeaconCtxRef; info: static[string]): int =
   ## chains layout and the persistent tables. The function returns the number
   ## of records processed and saved.
   while true:
-    # Fetch largest block
+    # Fetch list with largest block numbers
     let qItem = ctx.hdr.staged.le(high BlockNumber).valueOr:
-      trace info & ": no staged headers", error=error
       break # all done
 
     let
       dangling = ctx.layout.dangling
       iv = BnRange.new(qItem.key - qItem.data.revHdrs.len.uint64 + 1, qItem.key)
     if iv.maxPt+1 < dangling:
-      trace info & ": there is a gap", iv, D=dangling.bnStr, nSaved=result
+      trace info & ": there is a gap", iv, D=dangling.bnStr, nStashed=result
       break # there is a gap -- come back later
 
     # Overlap must not happen
@@ -221,29 +234,34 @@ proc headersStagedProcess*(ctx: BeaconCtxRef; info: static[string]): int =
     # anymore.
     discard ctx.hdr.staged.delete(iv.maxPt)
 
-    if qItem.data.hash != ctx.layout.danglingParent:
+    # Update, so it can be followed nicely
+    ctx.updateMetrics()
+
+    if qItem.data.hash != ctx.dbHeaderParentHash(dangling).expect "Hash32":
       # Discard wrong chain and merge back the range into the `unproc` list.
       ctx.headersUnprocCommit(0,iv)
-      trace info & ": discarding staged record",
-        iv, D=dangling.bnStr, lap=result
+      trace info & ": discarding staged header list", iv, D=dangling.bnStr,
+        nStashed=result, nDiscarded=qItem.data.revHdrs.len
       break
 
     # Store headers on database
-    ctx.dbStashHeaders(iv.minPt, qItem.data.revHdrs)
+    ctx.dbHeadersStash(iv.minPt, qItem.data.revHdrs, info)
     ctx.layout.dangling = iv.minPt
-    ctx.layout.danglingParent = qItem.data.parentHash
-    ctx.dbStoreSyncStateLayout()
+    ctx.dbStoreSyncStateLayout info
 
-    result.inc # count records
+    result += qItem.data.revHdrs.len # count headers
 
-  trace info & ": staged records saved",
-    nStaged=ctx.hdr.staged.len, nSaved=result
+  debug info & ": stashed consecutive headers",
+    nListsLeft=ctx.hdr.staged.len, nStashed=result
 
   if headersStagedQueueLengthLwm < ctx.hdr.staged.len:
     ctx.poolMode = true
 
+  # Update, so it can be followed nicely
+  ctx.updateMetrics()
 
-func headersStagedReorg*(ctx: BeaconCtxRef; info: static[string]) =
+
+proc headersStagedReorg*(ctx: BeaconCtxRef; info: static[string]) =
   ## Some pool mode intervention. The effect is that all concurrent peers
   ## finish up their current work and run this function here (which might
   ## do nothing.) This stopping should be enough in most cases to re-organise
@@ -277,26 +295,8 @@ func headersStagedReorg*(ctx: BeaconCtxRef; info: static[string]) =
       ctx.headersUnprocCommit(0, key - nHeaders + 1, key)
       discard ctx.hdr.staged.delete key
 
-
-func headersStagedTopKey*(ctx: BeaconCtxRef): BlockNumber =
-  ## Retrieve to staged block number
-  let qItem = ctx.hdr.staged.le(high BlockNumber).valueOr:
-    return BlockNumber(0)
-  qItem.key
-
-func headersStagedQueueLen*(ctx: BeaconCtxRef): int =
-  ## Number of staged records
-  ctx.hdr.staged.len
-
-func headersStagedQueueIsEmpty*(ctx: BeaconCtxRef): bool =
-  ## `true` iff no data are on the queue.
-  ctx.hdr.staged.len == 0
-
-# ----------------
-
-func headersStagedInit*(ctx: BeaconCtxRef) =
-  ## Constructor
-  ctx.hdr.staged = LinkedHChainQueue.init()
+    # Update, so it can be followed nicely
+    ctx.updateMetrics()
 
 # ------------------------------------------------------------------------------
 # End

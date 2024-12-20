@@ -255,6 +255,7 @@ proc run(config: PortalCliConf) =
       testContentIdHandler,
       createGetHandler(db),
       createStoreHandler(db, defaultRadiusConfig),
+      createContainsHandler(db),
       createRadiusHandler(db),
       stream,
       bootstrapRecords = bootstrapRecords,

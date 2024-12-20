@@ -9,7 +9,9 @@
 # according to those terms.
 
 import
-  eth/common
+  eth/common/[base, hashes]
+
+export base, hashes
 
 type
   DBKeyKind* = enum
@@ -21,11 +23,10 @@ type
     canonicalHeadHash = 4
     slotHashToSlot = 5
     contractHash = 6
-    transitionStatus = 7
+    dataDirId = 7
     safeHash = 8
     finalizedHash = 9
-    beaconState = 10
-    beaconHeader = 11
+    beaconHeader = 10
 
   DbKey* = object
     # The first byte stores the key type. The rest are key-specific values
@@ -59,6 +60,10 @@ func canonicalHeadHashKey*(): DbKey {.inline.} =
   result.data[0] = byte ord(canonicalHeadHash)
   result.dataEndPos = 1
 
+func dataDirIdKey*(): DbKey {.inline.} =
+  result.data[0] = byte ord(dataDirId)
+  result.dataEndPos = 1
+
 func slotHashToSlotKey*(h: openArray[byte]): DbKey {.inline.} =
   doAssert(h.len == 32)
   result.data[0] = byte ord(slotHashToSlot)
@@ -69,11 +74,6 @@ func contractHashKey*(h: Hash32): DbKey {.inline.} =
   result.data[0] = byte ord(contractHash)
   result.data[1 .. 32] = h.data
   result.dataEndPos = uint8 32
-
-func transitionStatusKey*(): DbKey =
-  # POW->POS Transition Status
-  result.data[0] = byte ord(transitionStatus)
-  result.dataEndPos = uint8 1
 
 func safeHashKey*(): DbKey {.inline.} =
   result.data[0] = byte ord(safeHash)
@@ -87,11 +87,6 @@ func hashIndexKey*(hash: Hash32, index: uint16): HashIndexKey =
   result[0..31] = hash.data
   result[32] = byte(index and 0xFF)
   result[33] = byte((index shl 8) and 0xFF)
-
-func beaconStateKey*(u: uint8): DbKey =
-  result.data[0] = byte ord(beaconState)
-  result.data[1] = u
-  result.dataEndPos = 1
 
 func beaconHeaderKey*(u: BlockNumber): DbKey =
   result.data[0] = byte ord(beaconHeader)

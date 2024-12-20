@@ -11,9 +11,8 @@
 {.push raises: [].}
 
 import
-  eth/common,
+  eth/common/hashes,
   results,
-  stew/arraybuf,
   "."/[aristo_desc, aristo_get]
 
 const
@@ -91,8 +90,8 @@ proc step*(
       return err(HikeBranchTailEmpty)
 
     let
-      nibble = path[vtx.pfx.len].int8
-      nextVid = vtx.bVid[nibble]
+      nibble = path[vtx.pfx.len]
+      nextVid = vtx.bVid(nibble)
 
     if not nextVid.isValid:
       return err(HikeBranchMissingEdge)

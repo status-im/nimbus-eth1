@@ -29,3 +29,4 @@ const
   FkShanghai*       = EVMC_SHANGHAI
   FkCancun*         = EVMC_CANCUN
   FkPrague*         = EVMC_PRAGUE
+  FkOsaka*          = EVMC_OSAKA

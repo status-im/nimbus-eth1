@@ -100,11 +100,10 @@ proc checkTopCommon*(
       of Branch:
         block check42Links:
           var seen = false
-          for n in 0 .. 15:
-            if vtx.bVid[n].isValid:
-              if seen:
-                break check42Links
-              seen = true
+          for _, _ in vtx.pairs():
+            if seen:
+              break check42Links
+            seen = true
           return err((rvid.vid,CheckAnyVtxBranchLinksMissing))
     else:
       nNilVtx.inc

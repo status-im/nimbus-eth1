@@ -19,10 +19,11 @@ import
   ../sim_utils,
   ./extract_consensus_data
 
-proc processChainData(cd: ChainData): TestStatus =
+proc processChainData(cd: ChainData, taskPool: Taskpool): TestStatus =
   let
     networkId = NetworkId(cd.params.config.chainId)
     com = CommonRef.new(newCoreDbRef DefaultDbMemory,
+      taskPool,
       networkId,
       cd.params
     )
@@ -35,14 +36,13 @@ proc processChainData(cd: ChainData): TestStatus =
     # bad blocks
     discard importRlpBlocks(bytes, c, finalize = true)
 
-  let head = com.db.getCanonicalHead()
-  let blockHash = "0x" & head.blockHash.data.toHex
+  let blockHash = $c.latestHash
   if blockHash == cd.lastBlockHash:
     TestStatus.OK
   else:
     trace "block hash not equal",
       got=blockHash,
-      number=head.number,
+      number=c.latestHeader.number,
       expected=cd.lastBlockHash
     TestStatus.Failed
 
@@ -64,6 +64,7 @@ const unsupportedTests = [
 proc main() =
   const basePath = "tests/fixtures/eth_tests/BlockchainTests"
   var stat: SimStat
+  let taskPool = Taskpool.new()
   let start = getTime()
 
   let res = loadKzgTrustedSetup()
@@ -84,7 +85,7 @@ proc main() =
     let n = json.parseFile(fileName)
     for caseName, unit in n:
       let cd = extractChainData(unit)
-      let status = processChainData(cd)
+      let status = processChainData(cd, taskPool)
       stat.inc(caseName, status)
 
   let elpd = getTime() - start

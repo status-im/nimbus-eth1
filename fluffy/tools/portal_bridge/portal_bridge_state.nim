@@ -81,13 +81,8 @@ proc runBackfillCollectBlockDataLoop(
   if web3Client of RpcHttpClient:
     warn "Using a WebSocket connection to the JSON-RPC API is recommended to improve performance"
 
-  let parentBlock = (
-    await web3Client.getBlockByNumber(blockId(startBlockNumber - 1.uint64), false)
-  ).valueOr:
-    raiseAssert("Failed to get parent block")
-
   var
-    parentStateRoot = parentBlock.stateRoot
+    parentStateRoot: Hash32
     currentBlockNumber = startBlockNumber
 
   while true:
@@ -96,6 +91,27 @@ proc runBackfillCollectBlockDataLoop(
 
     let blockData = db.getBlockData(currentBlockNumber).valueOr:
       # block data doesn't exist in db so we fetch it via RPC
+
+      # This should only be run for the starting block but we put this code here
+      # so that we can reconnect to the the web3 client on failure and also delay
+      # fetching data from the web3 client until needed
+      if parentStateRoot == default(Hash32):
+        doAssert(currentBlockNumber == startBlockNumber)
+
+        # if we don't yet have the parent state root get it from the parent block
+        let parentBlock = (
+          await web3Client.getBlockByNumber(
+            blockId(currentBlockNumber - 1.uint64), false
+          )
+        ).valueOr:
+          error "Failed to get parent block", error = error
+          await sleepAsync(3.seconds)
+          # We might need to reconnect if using a WebSocket client
+          await web3Client.tryReconnect(web3Url)
+          continue
+
+        parentStateRoot = parentBlock.stateRoot
+
       let
         blockId = blockId(currentBlockNumber)
         blockObject = (await web3Client.getBlockByNumber(blockId, false)).valueOr:
@@ -263,6 +279,7 @@ proc runBackfillGossipBlockOffersLoop(
     portalRpcUrl: JsonRpcUrl,
     portalNodeId: NodeId,
     verifyGossip: bool,
+    skipGossipForExisting: bool,
     workerId: int,
 ) {.async: (raises: [CancelledError]).} =
   info "Starting state backfill gossip block offers loop", workerId
@@ -304,18 +321,29 @@ proc runBackfillGossipBlockOffersLoop(
 
     var retryGossip = false
     for k, v in offersMap:
-      try:
-        let numPeers = await portalClient.portal_stateGossip(k.to0xHex(), v.to0xHex())
-        if numPeers > 0:
-          debug "Offer successfully gossipped to peers: ", numPeers, workerId
-        elif numPeers == 0:
-          warn "Offer gossipped to no peers", workerId
+      var gossipContent = true
+      if skipGossipForExisting:
+        try:
+          let contentInfo = await portalClient.portal_stateGetContent(k.to0xHex())
+          if contentInfo.content.len() > 0:
+            gossipContent = false
+        except CatchableError as e:
+          warn "Failed to find content with key: ",
+            contentKey = k.to0xHex(), error = e.msg, workerId
+
+      if gossipContent:
+        try:
+          let numPeers = await portalClient.portal_stateGossip(k.to0xHex(), v.to0xHex())
+          if numPeers > 0:
+            debug "Offer successfully gossipped to peers: ", numPeers, workerId
+          elif numPeers == 0:
+            warn "Offer gossipped to no peers", workerId
+            retryGossip = true
+            break
+        except CatchableError as e:
+          error "Failed to gossip offer to peers", error = e.msg, workerId
           retryGossip = true
           break
-      except CatchableError as e:
-        error "Failed to gossip offer to peers", error = e.msg, workerId
-        retryGossip = true
-        break
 
     if retryGossip:
       await sleepAsync(3.seconds)
@@ -336,7 +364,7 @@ proc runBackfillGossipBlockOffersLoop(
             break
         except CatchableError as e:
           warn "Failed to find content with key: ",
-            contentKey = k, error = e.msg, workerId
+            contentKey = k.to0xHex(), error = e.msg, workerId
           retryGossip = true
           break
 
@@ -348,6 +376,9 @@ proc runBackfillGossipBlockOffersLoop(
 
     if blockOffers.blockNumber mod 1000 == 0:
       info "Finished gossiping offers for block number: ",
+        workerId, blockNumber = blockOffers.blockNumber, offerCount = offersMap.len()
+    else:
+      debug "Finished gossiping offers for block number: ",
         workerId, blockNumber = blockOffers.blockNumber, offerCount = offersMap.len()
 
     blockOffers = await blockOffersQueue.popFirst()
@@ -422,7 +453,8 @@ proc runState*(config: PortalBridgeConf) =
 
   for workerId in 1 .. config.gossipWorkersCount.int:
     asyncSpawn runBackfillGossipBlockOffersLoop(
-      blockOffersQueue, config.portalRpcUrl, portalNodeId, config.verifyGossip, workerId
+      blockOffersQueue, config.portalRpcUrl, portalNodeId, config.verifyGossip,
+      config.skipGossipForExisting, workerId,
     )
 
   asyncSpawn runBackfillMetricsLoop(blockDataQueue, blockOffersQueue)

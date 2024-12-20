@@ -12,7 +12,6 @@ import
   stint,
   chronicles,
   chronos,
-  stew/byteutils,
   web3/eth_api_types,
   ./wd_history,
   ../test_env,
@@ -42,8 +41,8 @@ type
     nextIndex*: int
 
 const
-  WARM_COINBASE_ADDRESS = hexToByteArray[20]("0x0101010101010101010101010101010101010101")
-  PUSH0_ADDRESS         = hexToByteArray[20]("0x0202020202020202020202020202020202020202")
+  WARM_COINBASE_ADDRESS = address"0x0101010101010101010101010101010101010101"
+  PUSH0_ADDRESS         = address"0x0202020202020202020202020202020202020202"
   MAINNET_MAX_WITHDRAWAL_COUNT_PER_BLOCK* = 16
   TX_CONTRACT_ADDRESSES = [
     WARM_COINBASE_ADDRESS,
@@ -247,7 +246,7 @@ proc execute*(ws: WDBaseSpec, env: TestEnv): bool =
         # withdrawals before Shanghai
         var r = env.client.forkchoiceUpdatedV2(
           ForkchoiceStateV1(
-            headBlockHash: env.clMock.latestHeader,
+            headBlockHash: env.clMock.latestHeader.blockHash,
           ),
           Opt.some(PayloadAttributes(
             timestamp:             w3Qty(env.clMock.latestHeader.timestamp, ws.getBlockTimeIncrements()),
@@ -263,7 +262,7 @@ proc execute*(ws: WDBaseSpec, env: TestEnv): bool =
         # (clMock uses V1 by default)
         r = env.client.forkchoiceUpdatedV2(
           ForkchoiceStateV1(
-            headBlockHash: env.clMock.latestHeader,
+            headBlockHash: env.clMock.latestHeader.blockHash,
           ),
           Opt.some(PayloadAttributes(
             timestamp:             w3Qty(env.clMock.latestHeader.timestamp, ws.getBlockTimeIncrements()),
@@ -335,7 +334,7 @@ proc execute*(ws: WDBaseSpec, env: TestEnv): bool =
         # Shanghai
         let r = env.client.forkchoiceUpdatedV2(
           ForkchoiceStateV1(
-            headBlockHash: env.clMock.latestHeader,
+            headBlockHash: env.clMock.latestHeader.blockHash,
           ),
           Opt.some(PayloadAttributes(
             timestamp:             w3Qty(env.clMock.latestHeader.timestamp, ws.getBlockTimeIncrements()),

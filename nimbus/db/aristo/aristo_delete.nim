@@ -16,23 +16,23 @@
 
 import
   std/typetraits,
-  eth/common,
+  eth/common/hashes,
   results,
-  ./aristo_delete/[delete_helpers, delete_subtree],
+  ./aristo_delete/delete_subtree,
   "."/[aristo_desc, aristo_fetch, aristo_get, aristo_hike, aristo_layers]
 
 # ------------------------------------------------------------------------------
 # Private heplers
 # ------------------------------------------------------------------------------
 
-proc branchStillNeeded(vtx: VertexRef, removed: int): Result[int,void] =
+proc branchStillNeeded(vtx: VertexRef, removed: int8): Result[int8,void] =
   ## Returns the nibble if there is only one reference left.
-  var nibble = -1
-  for n in 0 .. 15:
+  var nibble = -1'i8
+  for n in 0'i8 .. 15'i8:
     if n == removed:
       continue
 
-    if vtx.bVid[n].isValid:
+    if vtx.bVid(uint8 n).isValid:
       if 0 <= nibble:
         return ok(-1)
       nibble = n
@@ -57,7 +57,7 @@ proc deleteImpl(
   if lf.vtx.vType != Leaf:
     return err(DelLeafExpexted)
 
-  db.disposeOfVtx((hike.root, lf.vid))
+  db.layersResVtx((hike.root, lf.vid))
 
   if hike.legs.len == 1:
     # This was the last node in the trie, meaning we don't have any branches or
@@ -75,8 +75,8 @@ proc deleteImpl(
 
   # Clear all Merkle hash keys up to the root key
   for n in 0 .. hike.legs.len - 2:
-    let vid = hike.legs[n].wp.vid
-    db.layersResKey((hike.root, vid))
+    let wp = hike.legs[n].wp
+    db.layersResKey((hike.root, wp.vid), wp.vtx)
 
   if 0 <= nbl:
     # Branch has only one entry - move that entry to where the branch was and
@@ -84,12 +84,12 @@ proc deleteImpl(
 
     # Get child vertex (there must be one after a `Branch` node)
     let
-      vid = br.vtx.bVid[nbl]
+      vid = br.vtx.bVid(uint8 nbl)
       nxt = db.getVtx (hike.root, vid)
     if not nxt.isValid:
       return err(DelVidStaleVtx)
 
-    db.disposeOfVtx((hike.root, vid))
+    db.layersResVtx((hike.root, vid))
 
     let vtx =
       case nxt.vType
@@ -103,7 +103,8 @@ proc deleteImpl(
         VertexRef(
           vType: Branch,
           pfx:  br.vtx.pfx & NibblesBuf.nibble(nbl.byte) & nxt.pfx,
-          bVid: nxt.bVid)
+          startVid: nxt.startVid,
+          used: nxt.used)
 
     # Put the new vertex at the id of the obsolete branch
     db.layersPutVtx((hike.root, br.vid), vtx)
@@ -115,7 +116,7 @@ proc deleteImpl(
   else:
     # Clear the removed leaf from the branch (that still contains other children)
     let brDup = br.vtx.dup
-    brDup.bVid[hike.legs[^2].nibble] = VertexID(0)
+    discard brDup.setUsed(uint8 hike.legs[^2].nibble, false)
     db.layersPutVtx((hike.root, br.vid), brDup)
 
     ok(nil)

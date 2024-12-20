@@ -11,9 +11,11 @@
 
 import
   chronicles,
-  eth/rlp, stew/io2,
+  eth/rlp,
+  stew/io2,
   ./chain,
-  ../config
+  ../config,
+  ../utils/utils
 
 proc importRlpBlocks*(blocksRlp: openArray[byte],
                       chain: ForkedChainRef,
@@ -23,10 +25,9 @@ proc importRlpBlocks*(blocksRlp: openArray[byte],
     # the encoded rlp can contains one or more blocks
     rlp = rlpFromBytes(blocksRlp)
     blk: Block
+    printBanner = false
+    firstSkip = Opt.none(uint64)
 
-  # even though the new imported blocks have block number
-  # smaller than head, we keep importing it.
-  # it maybe a side chain.
   while rlp.hasData:
     blk = try:
       rlp.read(Block)
@@ -34,7 +35,36 @@ proc importRlpBlocks*(blocksRlp: openArray[byte],
       # terminate if there was a decoding error
       return err($e.name & ": " & e.msg)
 
-    ? chain.importBlock(blk)
+    if blk.header.number <= chain.baseNumber:
+      if firstSkip.isNone:
+        firstSkip = Opt.some(blk.header.number)
+      continue
+
+    if firstSkip.isSome:
+      if firstSkip.get == blk.header.number - 1:
+        info "Block number smaller than base",
+          skip=firstSkip.get
+      else:
+        info "Block number smaller than base",
+          startSkip=firstSkip.get,
+          skipTo=blk.header.number-1
+      firstSkip.reset()
+
+    if not printBanner:
+      info "Start importing block",
+        hash=blk.header.blockHash.short,
+        number=blk.header.number
+      printBanner = true
+
+    let res = chain.importBlock(blk)
+    if res.isErr:
+      error "Error occured when importing block",
+        hash=blk.header.blockHash.short,
+        number=blk.header.number,
+        msg=res.error
+      if finalize:
+        ? chain.forkChoice(chain.latestHash, chain.latestHash)
+      return res
 
   if finalize:
     ? chain.forkChoice(chain.latestHash, chain.latestHash)
@@ -49,12 +79,7 @@ proc importRlpBlocks*(importFile: string,
   importRlpBlocks(bytes, chain, finalize)
 
 proc importRlpBlocks*(conf: NimbusConf, com: CommonRef) =
-  var head: Header
-  if not com.db.getCanonicalHead(head):
-    error "cannot get canonical head from db"
-    quit(QuitFailure)
-
-  let chain = newForkedChain(com, head, baseDistance = 0)
+  let chain = ForkedChainRef.init(com, baseDistance = 0)
 
   # success or not, we quit after importing blocks
   for i, blocksFile in conf.blocksFile:

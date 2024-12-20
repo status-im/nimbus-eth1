@@ -45,6 +45,7 @@ const
   defaultTableIpLimitDesc* = $defaultPortalProtocolConfig.tableIpLimits.tableIpLimit
   defaultBucketIpLimitDesc* = $defaultPortalProtocolConfig.tableIpLimits.bucketIpLimit
   defaultBitsPerHopDesc* = $defaultPortalProtocolConfig.bitsPerHop
+  defaultAlphaDesc* = $defaultPortalProtocolConfig.alpha
   defaultMaxGossipNodesDesc* = $defaultPortalProtocolConfig.maxGossipNodes
   defaultRpcApis* = @["eth", "portal"]
   defaultRpcApisDesc* = "eth,portal"
@@ -99,7 +100,8 @@ type
 
     portalSubnetworks* {.
       desc: "Select which networks (Portal sub-protocols) to enable",
-      defaultValue: {PortalSubnetwork.history, PortalSubnetwork.state},
+      defaultValue:
+        {PortalSubnetwork.history, PortalSubnetwork.state, PortalSubnetwork.beacon},
       name: "portal-subnetworks"
     .}: set[PortalSubnetwork]
 
@@ -253,12 +255,27 @@ type
       name: "bits-per-hop"
     .}: int
 
+    alpha* {.
+      hidden,
+      desc: "The Kademlia concurrency factor",
+      defaultValue: defaultPortalProtocolConfig.alpha,
+      defaultValueDesc: $defaultAlphaDesc,
+      name: "debug-alpha"
+    .}: int
+
     maxGossipNodes* {.
       hidden,
       desc: "The maximum number of nodes to send content to during gossip",
       defaultValue: defaultPortalProtocolConfig.maxGossipNodes,
       defaultValueDesc: $defaultMaxGossipNodesDesc,
-      name: "max-gossip-nodes"
+      name: "debug-max-gossip-nodes"
+    .}: int
+
+    maxConcurrentOffers* {.
+      hidden,
+      desc: "The maximum number of offers to send concurrently",
+      defaultValue: defaultPortalProtocolConfig.maxConcurrentOffers,
+      name: "debug-max-concurrent-offers"
     .}: int
 
     radiusConfig* {.
@@ -302,20 +319,27 @@ type
       name: "force-prune"
     .}: bool
 
+    contentRequestRetries* {.
+      hidden,
+      desc: "Max number of retries when requesting content over the network.",
+      defaultValue: 1,
+      name: "debug-content-request-retries"
+    .}: uint
+
     contentCacheSize* {.
       hidden,
       desc:
         "Size of the in memory local content cache. This is the max number " &
         "of content values that can be stored in the cache.",
       defaultValue: defaultPortalProtocolConfig.contentCacheSize,
-      name: "content-cache-size"
+      name: "debug-content-cache-size"
     .}: int
 
     disableContentCache* {.
       hidden,
       desc: "Disable the in memory local content cache",
       defaultValue: defaultPortalProtocolConfig.disableContentCache,
-      name: "disable-content-cache"
+      name: "debug-disable-content-cache"
     .}: bool
 
     disablePoke* {.

@@ -11,7 +11,7 @@
 import
   stew/saturation_arith,
   ./host_types, evmc/evmc,
-  ".."/[evm/types, evm/computation, evm/state_transactions]
+  ".."/[evm/types, evm/computation, evm/interpreter_dispatch]
 
 proc evmcReleaseResult(result: var evmc_result) {.cdecl.} =
   dealloc(result.output_data)
@@ -39,10 +39,9 @@ proc evmcExecute(vm: ptr evmc_vm, hostInterface: ptr evmc_host_interface,
   #  host.computation = c
 
   c.host.init(cast[ptr nimbus_host_interface](hostInterface), hostContext)
-  if c.sysCall:
-    execSysCall(c)
-  else:
-    execComputation(c)
+  c.execCallOrCreate()
+  if not host.sysCall:
+    c.postExecComputation()
 
   # When output size is zero, output data pointer may be null.
   var output_data: ptr byte

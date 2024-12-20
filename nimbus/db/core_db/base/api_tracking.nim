@@ -12,7 +12,7 @@
 
 import
   std/[sequtils, strutils, times, typetraits],
-  eth/common,
+  eth/common/[accounts, base, hashes],
   results,
   stew/byteutils,
   ../../aristo/aristo_profile,
@@ -23,7 +23,7 @@ type
     ## Needed for local `$` as it would be ambiguous for `Duration`
 
   CoreDbApiTrackRef* =
-    CoreDbRef | CoreDbKvtRef | CoreDbCtxRef | CoreDbMptRef | CoreDbAccRef |
+    CoreDbRef | CoreDbKvtRef | CoreDbCtxRef | CoreDbAccRef |
     CoreDbTxRef
 
   CoreDbFnInx* = enum
@@ -33,7 +33,6 @@ type
     AccClearStorageFn   = "clearStorage"
     AccDeleteFn         = "acc/delete"
     AccFetchFn          = "acc/fetch"
-    AccForgetFn         = "acc/forget"
     AccHasPathFn        = "acc/hasPath"
     AccMergeFn          = "acc/merge"
     AccProofFn          = "acc/proof"
@@ -45,30 +44,26 @@ type
     AccSlotHasPathFn    = "slotHasPath"
     AccSlotMergeFn      = "slotMerge"
     AccSlotProofFn      = "slotProof"
-    AccSlotStateFn      = "slotState"
-    AccSlotStateEmptyFn = "slotStateEmpty"
-    AccSlotStateEmptyOrVoidFn = "slotStateEmptyOrVoid"
+    AccSlotStorageRootFn = "slotStorageRoot"
+    AccSlotStorageEmptyFn = "slotStorageEmpty"
+    AccSlotStorageEmptyOrVoidFn = "slotStorageEmptyOrVoid"
     AccSlotPairsIt      = "slotPairs"
 
     BaseFinishFn        = "finish"
     BaseLevelFn         = "level"
     BasePushCaptureFn   = "pushCapture"
-    BaseNewTxFn         = "newTransaction"
+    BaseNewTxFn         = "txFrameBegin"
     BasePersistentFn    = "persistent"
     BaseStateBlockNumberFn = "stateBlockNumber"
     BaseVerifyFn        = "verify"
-    BaseVerifyOkFn      = "verifyOk"
 
     CptKvtLogFn         = "kvtLog"
     CptLevelFn          = "level"
     CptPopFn            = "pop"
     CptStopCaptureFn    = "stopCapture"
 
-    CtxForgetFn         = "ctx/forget"
     CtxGetAccountsFn    = "getAccounts"
     CtxGetGenericFn     = "getGeneric"
-    CtxNewCtxByKeyFn    = "newCtxByKey"
-    CtxSwapCtxFn        = "swapCtx"
 
     KvtDelFn            = "del"
     KvtGetFn            = "get"
@@ -79,20 +74,9 @@ type
     KvtPairsIt          = "pairs"
     KvtPutFn            = "put"
 
-    MptDeleteFn         = "mpt/delete"
-    MptFetchFn          = "mpt/fetch"
-    MptFetchOrEmptyFn   = "mpt/fetchOrEmpty"
-    MptForgetFn         = "mpt/forget"
-    MptHasPathFn        = "mpt/hasPath"
-    MptMergeFn          = "mpt/merge"
-    MptProofFn          = "mpt/proof"
-    MptPairsIt          = "mpt/pairs"
-    MptReplicateIt      = "mpt/replicate"
-    MptStateFn          = "mpt/state"
-
     TxCommitFn          = "commit"
     TxDisposeFn         = "dispose"
-    TxLevelFn           = "level"
+    TxFrameLevelFn           = "level"
     TxRollbackFn        = "rollback"
     TxSaveDisposeFn     = "safeDispose"
 
@@ -153,7 +137,6 @@ func toStr(rc: CoreDbRc[CoreDbRef]): string = rc.toStr "db"
 func toStr(rc: CoreDbRc[CoreDbKvtRef]): string = rc.toStr "kvt"
 func toStr(rc: CoreDbRc[CoreDbTxRef]): string = rc.toStr "tx"
 func toStr(rc: CoreDbRc[CoreDbCtxRef]): string = rc.toStr "ctx"
-func toStr(rc: CoreDbRc[CoreDbMptRef]): string = rc.toStr "mpt"
 func toStr(rc: CoreDbRc[CoreDbAccRef]): string = rc.toStr "acc"
 
 # ------------------------------------------------------------------------------

@@ -12,12 +12,12 @@ import
   std/[
     options,
     strutils,
-    times,
     os,
     uri,
     net
   ],
   pkg/[
+    chronos/transports/common,
     chronicles,
     confutils,
     confutils/defs,
@@ -30,35 +30,24 @@ import
 
 export net, defs
 
-const
-  # TODO: fix this agent-string format to match other
-  # eth clients format
-  NimbusIdent* = "$# v$# [$#: $#, $#, $#]" % [
-    NimbusName,
-    NimbusVersion,
-    hostOS,
-    hostCPU,
-    VmName,
-    GitRevision
-  ]
 
-let
+const
   # e.g.: Copyright (c) 2018-2021 Status Research & Development GmbH
   NimbusCopyright* = "Copyright (c) 2018-" &
-    $(now().utc.year) &
+    CompileDate.split('-')[0] &
     " Status Research & Development GmbH"
 
   # e.g.:
-  # Nimbus v0.1.0 [windows: amd64, rocksdb, evmc, dda8914f]
+  # nimbus/v0.1.0-abcdef/os-cpu/nim-a.b.c/emvc
   # Copyright (c) 2018-2021 Status Research & Development GmbH
   NimbusBuild* = "$#\p$#" % [
-    NimbusIdent,
+    ClientId,
     NimbusCopyright,
   ]
 
-  NimbusHeader* = "$#\p\p$#" % [
+  NimbusHeader* = "$#\p\pNim version $#" % [
     NimbusBuild,
-    version.NimVersion
+    NimVersion
   ]
 
 func defaultDataDir*(): string =
@@ -85,12 +74,15 @@ const
   defaultPort              = 30303
   defaultMetricsServerPort = 9093
   defaultHttpPort          = 8545
-  defaultEngineApiPort     = 8550
-  defaultListenAddress      = (static parseIpAddress("0.0.0.0"))
+  # https://github.com/ethereum/execution-apis/blob/v1.0.0-beta.4/src/engine/authentication.md#jwt-specifications
+  defaultEngineApiPort     = 8551
   defaultAdminListenAddress = (static parseIpAddress("127.0.0.1"))
-  defaultListenAddressDesc      = $defaultListenAddress & ", meaning all network interfaces"
   defaultAdminListenAddressDesc = $defaultAdminListenAddress & ", meaning local host only"
   logLevelDesc = getLogLevels()
+
+let
+  defaultListenAddress      = getAutoAddress(Port(0)).toIpAddress()
+  defaultListenAddressDesc  = $defaultListenAddress & ", meaning all network interfaces"
 
 # `when` around an option doesn't work with confutils; it fails to compile.
 # Workaround that by setting the `ignore` pragma on EVMC-specific options.
@@ -112,11 +104,7 @@ type
   NimbusCmd* {.pure.} = enum
     noCommand
     `import`
-
-  ProtocolFlag* {.pure.} = enum
-    ## Protocol flags
-    Eth                           ## enable eth subprotocol
-    #Snap                          ## enable snap sub-protocol
+    `import-rlp`
 
   RpcFlag* {.pure.} = enum
     ## RPC flags
@@ -173,11 +161,6 @@ type
       abbr: "e"
       name: "import-key" }: InputFile
 
-    verifyFrom* {.
-      desc: "Enable extra verification when current block number greater than verify-from"
-      defaultValueDesc: ""
-      name: "verify-from" }: Option[uint64]
-
     evm* {.
       desc: "Load alternative EVM from EVMC-compatible shared library" & sharedLibText
       defaultValue: ""
@@ -189,6 +172,19 @@ type
       defaultValue: none(string)
       defaultValueDesc: "Baked in trusted setup"
       name: "trusted-setup-file" .}: Option[string]
+
+    extraData* {.
+      separator: "\pPAYLOAD BUILDING OPTIONS:"
+      desc: "Value of extraData field when building an execution payload(max 32 bytes)"
+      defaultValue: ShortClientId
+      defaultValueDesc: $ShortClientId
+      name: "extra-data" .}: string
+
+    gasLimit* {.
+      desc: "Desired gas limit when building an execution payload"
+      defaultValue: DEFAULT_GAS_LIMIT
+      defaultValueDesc: $DEFAULT_GAS_LIMIT
+      name: "gas-limit" .}: uint64
 
     network {.
       separator: "\pETHEREUM NETWORK OPTIONS:"
@@ -358,17 +354,15 @@ type
 
     agentString* {.
       desc: "Node agent string which is used as identifier in network"
-      defaultValue: NimbusIdent
-      defaultValueDesc: $NimbusIdent
+      defaultValue: ClientId
+      defaultValueDesc: $ClientId
       name: "agent-string" .}: string
 
-    protocols {.
-      desc: "Enable specific set of server protocols (available: Eth, " &
-            " None.) This will not affect the sync mode"
-            # " Snap, None.) This will not affect the sync mode"
-      defaultValue: @[]
-      defaultValueDesc: $ProtocolFlag.Eth
-      name: "protocols" .}: seq[string]
+    numThreads* {.
+      separator: "\pPERFORMANCE OPTIONS",
+      defaultValue: 0,
+      desc: "Number of worker threads (\"0\" = use as many threads as there are CPU cores available)"
+      name: "num-threads" .}: int
 
     beaconChunkSize* {.
       hidden
@@ -400,17 +394,23 @@ type
       defaultValueDesc: $defaultBlockCacheSize
       name: "debug-rocksdb-block-cache-size".}: int
 
+    rdbVtxCacheSize {.
+      hidden
+      defaultValue: defaultRdbVtxCacheSize
+      defaultValueDesc: $defaultRdbVtxCacheSize
+      name: "debug-rdb-vtx-cache-size".}: int
+
     rdbKeyCacheSize {.
       hidden
       defaultValue: defaultRdbKeyCacheSize
       defaultValueDesc: $defaultRdbKeyCacheSize
       name: "debug-rdb-key-cache-size".}: int
 
-    rdbVtxCacheSize {.
+    rdbBranchCacheSize {.
       hidden
-      defaultValue: defaultRdbVtxCacheSize
-      defaultValueDesc: $defaultRdbVtxCacheSize
-      name: "debug-rdb-vtx-cache-size".}: int
+      defaultValue: defaultRdbBranchCacheSize
+      defaultValueDesc: $defaultRdbBranchCacheSize
+      name: "debug-rdb-branch-cache-size".}: int
 
     rdbPrintStats {.
       hidden
@@ -500,11 +500,6 @@ type
         name: "jwt-secret" .}: Option[InputFile]
 
     of `import`:
-      blocksFile* {.
-        argument
-        desc: "One or more RLP encoded block(s) files"
-        name: "blocks-file" }: seq[InputFile]
-
       maxBlocks* {.
         desc: "Maximum number of blocks to import"
         defaultValue: uint64.high()
@@ -554,6 +549,12 @@ type
         desc: "Store reverse slot hashes in database"
         defaultValue: false
         name: "debug-store-slot-hashes".}: bool
+
+    of `import-rlp`:
+      blocksFile* {.
+        argument
+        desc: "One or more RLP encoded block(s) files"
+        name: "blocks-file" }: seq[InputFile]
 
 func parseCmdArg(T: type NetworkId, p: string): T
     {.gcsafe, raises: [ValueError].} =
@@ -667,23 +668,6 @@ proc getNetworkId(conf: NimbusConf): Option[NetworkId] =
       error "Failed to parse network name or id", network
       quit QuitFailure
 
-proc getProtocolFlags*(conf: NimbusConf): set[ProtocolFlag] =
-  if conf.protocols.len == 0:
-    return {ProtocolFlag.Eth}
-
-  var noneOk = false
-  for item in repeatingList(conf.protocols):
-    case item.toLowerAscii()
-    of "eth": result.incl ProtocolFlag.Eth
-    # of "snap": result.incl ProtocolFlag.Snap
-    of "none": noneOk = true
-    else:
-      error "Unknown protocol", name=item
-      quit QuitFailure
-  if noneOk and 0 < result.len:
-    error "Setting none contradicts wire protocols", names = $result
-    quit QuitFailure
-
 proc getRpcFlags(api: openArray[string]): set[RpcFlag] =
   if api.len == 0:
     return {RpcFlag.Eth}
@@ -751,7 +735,7 @@ proc getBootNodes*(conf: NimbusConf): seq[ENode] =
 
   # Bootstrap nodes provided as ENRs
   for enr in conf.bootstrapEnrs:
-    let enode = Enode.fromEnr(enr).valueOr:
+    let enode = ENode.fromEnr(enr).valueOr:
       fatal "Invalid bootstrap ENR provided", error
       quit 1
 
@@ -766,7 +750,7 @@ proc getStaticPeers*(conf: NimbusConf): seq[ENode] =
 
   # Static peers provided as ENRs
   for enr in conf.staticPeersEnrs:
-    let enode = Enode.fromEnr(enr).valueOr:
+    let enode = ENode.fromEnr(enr).valueOr:
       fatal "Invalid static peer ENR provided", error
       quit 1
 
@@ -803,11 +787,13 @@ func dbOptions*(conf: NimbusConf, noKeyCache = false): DbOptions =
     rowCacheSize = conf.rocksdbRowCacheSize,
     blockCacheSize = conf.rocksdbBlockCacheSize,
     rdbKeyCacheSize =
-      if noKeyCache: 0 else: conf.rdbKeyCacheSize ,
-    rdbVtxCacheSize =
-      # The import command does not use the key cache - better give it to vtx
-      if noKeyCache: conf.rdbKeyCacheSize + conf.rdbVtxCacheSize
-      else: conf.rdbVtxCacheSize,
+      if noKeyCache: 0 else: conf.rdbKeyCacheSize,
+    rdbVtxCacheSize = conf.rdbVtxCacheSize,
+    rdbBranchCacheSize =
+      # The import command does not use the key cache - better give it to branch
+      if noKeyCache: conf.rdbKeyCacheSize + conf.rdbBranchCacheSize
+      else: conf.rdbBranchCacheSize,
+
     rdbPrintStats = conf.rdbPrintStats,
   )
 

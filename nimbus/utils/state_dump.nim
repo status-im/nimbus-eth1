@@ -87,7 +87,7 @@ proc dumpAccounts*(db: LedgerRef): Table[Address, DumpAccount] =
 
 proc dumpState*(db: LedgerRef): StateDump =
   StateDump(
-    root: db.rootHash,
+    root: db.getStateRoot(),
     accounts: dumpAccounts(db)
   )
 

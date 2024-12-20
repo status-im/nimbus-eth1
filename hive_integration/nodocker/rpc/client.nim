@@ -43,11 +43,6 @@ proc nonceAt*(client: RpcClient, address: Address): Future[AccountNonce] {.async
   let hex = await client.eth_getTransactionCount(address, blockId("latest"))
   result = hex.AccountNonce
 
-func toTopics(list: openArray[Hash32]): seq[eth_types.Topic] =
-  result = newSeqOfCap[eth_types.Topic](list.len)
-  for x in list:
-    result.add eth_types.Topic(x)
-
 func toLogs(list: openArray[LogObject]): seq[Log] =
   result = newSeqOfCap[Log](list.len)
   for x in list:

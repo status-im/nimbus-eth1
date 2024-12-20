@@ -11,20 +11,26 @@ import
   ../nimbus/compile_info
 
 import
-  std/[os, strutils, net],
+  std/[os, osproc, strutils, net],
   chronicles,
   eth/net/nat,
   metrics,
   metrics/chronicles_support,
   kzg4844/kzg,
+  stew/byteutils,
   ./rpc,
   ./version,
   ./constants,
   ./nimbus_desc,
   ./nimbus_import,
+  ./core/block_import,
   ./core/eip4844,
   ./db/core_db/persistent,
-  ./sync/handlers
+  ./db/storage_types,
+  ./sync/handlers,
+  ./common/chain_config_hash
+
+from beacon_chain/nimbus_binary_common import setupFileLimits
 
 when defined(evmc_enabled):
   import transaction/evmc_dynamic_loader
@@ -37,13 +43,13 @@ when defined(evmc_enabled):
 proc basicServices(nimbus: NimbusNode,
                    conf: NimbusConf,
                    com: CommonRef) =
-  nimbus.txPool = TxPoolRef.new(com)
+  nimbus.chainRef = ForkedChainRef.init(com)
 
   # txPool must be informed of active head
   # so it can know the latest account state
   # e.g. sender nonce, etc
-  nimbus.chainRef = ForkedChainRef.init(com)
-  doAssert nimbus.txPool.smartHead(nimbus.chainRef.latestHeader,nimbus.chainRef)
+  nimbus.txPool = TxPoolRef.new(nimbus.chainRef)
+  doAssert nimbus.txPool.smartHead(nimbus.chainRef.latestHeader)
 
   nimbus.beaconEngine = BeaconEngineRef.new(nimbus.txPool, nimbus.chainRef)
 
@@ -61,7 +67,7 @@ proc manageAccounts(nimbus: NimbusNode, conf: NimbusConf) =
       quit(QuitFailure)
 
 proc setupP2P(nimbus: NimbusNode, conf: NimbusConf,
-              com: CommonRef, protocols: set[ProtocolFlag]) =
+              com: CommonRef) =
   ## Creating P2P Server
   let kpres = nimbus.ctx.getNetKeys(conf.netKey, conf.dataDir.string)
   if kpres.isErr:
@@ -102,25 +108,11 @@ proc setupP2P(nimbus: NimbusNode, conf: NimbusConf,
     bindIp = conf.listenAddress,
     rng = nimbus.ctx.rng)
 
-  # Add protocol capabilities based on protocol flags
-  for w in protocols:
-    case w: # handle all possibilities
-    of ProtocolFlag.Eth:
-      nimbus.ethNode.addEthHandlerCapability(
-        nimbus.ethNode.peerPool,
-        nimbus.chainRef,
-        nimbus.txPool)
-    #of ProtocolFlag.Snap:
-    #  nimbus.ethNode.addSnapHandlerCapability(
-    #    nimbus.ethNode.peerPool,
-    #    nimbus.chainRef)
-  # Cannot do without minimal `eth` capability
-  if ProtocolFlag.Eth notin protocols:
-    nimbus.ethNode.addEthHandlerCapability(
-      nimbus.ethNode.peerPool,
-      nimbus.chainRef)
+  # Add protocol capabilities
+  nimbus.ethNode.addEthHandlerCapability(
+    nimbus.ethNode.peerPool, nimbus.chainRef, nimbus.txPool)
 
-  # Always start syncer -- will throttle itself unless needed
+  # Always initialise beacon syncer
   nimbus.beaconSyncRef = BeaconSyncRef.init(
     nimbus.ethNode, nimbus.chainRef, conf.maxPeers, conf.beaconChunkSize)
 
@@ -165,6 +157,24 @@ proc setupMetrics(nimbus: NimbusNode, conf: NimbusConf) =
     nimbus.metricsServer = res.get
     waitFor nimbus.metricsServer.start()
 
+proc preventLoadingDataDirForTheWrongNetwork(db: CoreDbRef; conf: NimbusConf) =
+  let
+    kvt = db.ctx.getKvt()
+    calculatedId = calcHash(conf.networkId, conf.networkParams)
+    dataDirIdBytes = kvt.get(dataDirIdKey().toOpenArray).valueOr:
+      # an empty database
+      info "Writing data dir ID", ID=calculatedId
+      kvt.put(dataDirIdKey().toOpenArray, calculatedId.data).isOkOr:
+        fatal "Cannot write data dir ID", ID=calculatedId
+        quit(QuitFailure)
+      return
+
+  if calculatedId.data != dataDirIdBytes:
+    fatal "Data dir already initialized with other network configuration",
+      get=dataDirIdBytes.toHex,
+      expected=calculatedId
+    quit(QuitFailure)
+
 proc run(nimbus: NimbusNode, conf: NimbusConf) =
   ## logging
   setLogLevel(conf.logLevel)
@@ -172,6 +182,8 @@ proc run(nimbus: NimbusNode, conf: NimbusConf) =
     let logFile = string conf.logFile.get()
     defaultChroniclesStream.output.outFile = nil # to avoid closing stdout
     discard defaultChroniclesStream.output.open(logFile, fmAppend)
+
+  setupFileLimits()
 
   info "Launching execution client",
       version = FullVersionStr,
@@ -202,13 +214,45 @@ proc run(nimbus: NimbusNode, conf: NimbusConf) =
         string conf.dataDir,
         conf.dbOptions(noKeyCache = conf.cmd == NimbusCmd.`import`))
 
+  preventLoadingDataDirForTheWrongNetwork(coreDB, conf)
   setupMetrics(nimbus, conf)
+
+  let taskpool =
+    try:
+      if conf.numThreads < 0:
+        fatal "The number of threads --num-threads cannot be negative."
+        quit QuitFailure
+      elif conf.numThreads == 0:
+        Taskpool.new(numThreads = min(countProcessors(), 16))
+      else:
+        Taskpool.new(numThreads = conf.numThreads)
+    except CatchableError as e:
+      fatal "Cannot start taskpool", err = e.msg
+      quit QuitFailure
+
+  info "Threadpool started", numThreads = taskpool.numThreads
 
   let com = CommonRef.new(
     db = coreDB,
+    taskpool = taskpool,
     pruneHistory = (conf.chainDbMode == AriPrune),
     networkId = conf.networkId,
     params = conf.networkParams)
+
+  if conf.extraData.len > 32:
+    warn "ExtraData exceeds 32 bytes limit, truncate",
+      extraData=conf.extraData,
+      len=conf.extraData.len
+
+  if conf.gasLimit > GAS_LIMIT_MAXIMUM or
+     conf.gasLimit < GAS_LIMIT_MINIMUM:
+    warn "GasLimit not in expected range, truncate",
+      min=GAS_LIMIT_MINIMUM,
+      max=GAS_LIMIT_MAXIMUM,
+      get=conf.gasLimit
+
+  com.extraData = conf.extraData
+  com.gasLimit = conf.gasLimit
 
   defer:
     com.db.finish()
@@ -216,16 +260,19 @@ proc run(nimbus: NimbusNode, conf: NimbusConf) =
   case conf.cmd
   of NimbusCmd.`import`:
     importBlocks(conf, com)
+  of NimbusCmd.`import-rlp`:
+    importRlpBlocks(conf, com)
   else:
-    let protocols = conf.getProtocolFlags()
-
     basicServices(nimbus, conf, com)
     manageAccounts(nimbus, conf)
-    setupP2P(nimbus, conf, com, protocols)
-    setupRpc(nimbus, conf, com, protocols)
+    setupP2P(nimbus, conf, com)
+    setupRpc(nimbus, conf, com)
 
-    if conf.maxPeers > 0:
-      nimbus.beaconSyncRef.start
+    if conf.maxPeers > 0 and conf.engineApiServerEnabled():
+      # Not starting syncer if there is definitely no way to run it. This
+      # avoids polling (i.e. waiting for instructions) and some logging.
+      if not nimbus.beaconSyncRef.start():
+        nimbus.beaconSyncRef = BeaconSyncRef(nil)
 
     if nimbus.state == NimbusState.Starting:
       # it might have been set to "Stopping" with Ctrl+C

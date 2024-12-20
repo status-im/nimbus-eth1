@@ -12,7 +12,6 @@ import
   chronos,
   eth/p2p/discoveryv5/protocol as discv5_protocol,
   beacon_chain/spec/forks,
-  beacon_chain/spec/datatypes/altair,
   beacon_chain/spec/helpers,
   ../../network/wire/[portal_protocol, portal_stream],
   ../../network/beacon/[beacon_init_loader, beacon_light_client],

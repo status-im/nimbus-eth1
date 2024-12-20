@@ -14,6 +14,8 @@ import
   ../db/ledger,
   ../common/[common, evmforks]
 
+export stack, memory
+
 # this import not guarded by `when defined(evmc_enabled)`
 # because we want to use evmc types such as evmc_call_kind
 # and evmc_flags
@@ -69,6 +71,7 @@ type
     gasCosts*         : GasCosts
     blobGasUsed*      : uint64
     allLogs*          : seq[Log] # EIP-6110
+    gasRefunded*      : int64    # Global gasRefunded counter
 
   Computation* = ref object
     # The execution computation
@@ -76,7 +79,6 @@ type
     msg*:                   Message
     memory*:                EvmMemory
     stack*:                 EvmStack
-    returnStack*:           seq[int]
     gasMeter*:              GasMeter
     code*:                  CodeStream
     output*:                seq[byte]
@@ -92,7 +94,8 @@ type
     else:
       parent*, child*:      Computation
     continuation*:          proc(): EvmResultVoid {.gcsafe, raises: [].}
-    sysCall*:               bool
+    keepStack*:             bool
+    finalStack*:            seq[UInt256]
 
   Error* = ref object
     evmcStatus*: evmc_status_code

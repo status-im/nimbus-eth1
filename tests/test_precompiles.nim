@@ -21,7 +21,7 @@ import
     transaction/call_evm
     ],
 
-  ./test_helpers, ./test_allowed_to_fail
+  ./test_helpers
 
 proc initAddress(i: byte): Address = result.data[19] = i
 
@@ -71,7 +71,7 @@ proc testFixture(fixtures: JsonNode, testStatusIMPL: var TestStatus) =
     conf  = getChainConfig(parseFork(fixtures["fork"].getStr))
     data  = fixtures["data"]
     privateKey = PrivateKey.fromHex("7a28b5ba57c53603b0b07b56bba752f7784bf506fa95edc395f5cf6c7514fe9d")[]
-    com = CommonRef.new(newCoreDbRef DefaultDbMemory, config = conf)
+    com = CommonRef.new(newCoreDbRef DefaultDbMemory, nil, config = conf)
     vmState = BaseVMState.new(
       Header(number: 1'u64, stateRoot: emptyRlpHash),
       Header(),
@@ -89,10 +89,8 @@ proc testFixture(fixtures: JsonNode, testStatusIMPL: var TestStatus) =
   of "ecpairing": data.doTest(vmState, paPairing)
   of "blake2f"  : data.doTest(vmState, paBlake2bf)
   of "blsg1add" : data.doTest(vmState, paBlsG1Add)
-  of "blsg1mul" : data.doTest(vmState, paBlsG1Mul)
   of "blsg1multiexp" : data.doTest(vmState, paBlsG1MultiExp)
   of "blsg2add" : data.doTest(vmState, paBlsG2Add)
-  of "blsg2mul" : data.doTest(vmState, paBlsG2Mul)
   of "blsg2multiexp": data.doTest(vmState, paBlsG2MultiExp)
   of "blspairing": data.doTest(vmState, paBlsPairing)
   of "blsmapg1": data.doTest(vmState, paBlsMapG1)
@@ -103,7 +101,7 @@ proc testFixture(fixtures: JsonNode, testStatusIMPL: var TestStatus) =
 
 proc precompilesMain*() =
   suite "Precompiles":
-    jsonTest("PrecompileTests", testFixture, skipPrecompilesTests)
+    jsonTest("PrecompileTests", testFixture)
 
 when isMainModule:
   precompilesMain()

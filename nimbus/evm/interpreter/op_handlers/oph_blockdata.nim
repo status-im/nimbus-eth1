@@ -15,7 +15,6 @@
 {.push raises: [].}
 
 import
-  eth/common,
   ../../computation,
   ../../stack,
   ../../evm_errors,
@@ -34,7 +33,7 @@ proc blockhashOp(cpt: VmCpt): EvmResultVoid =
   ## 0x40, Get the hash of one of the 256 most recent complete blocks.
   template block256(top, number, conv) =
     if number > high(BlockNumber).u256:
-      top = zero(UInt256)
+      conv(zero(UInt256), top)
     else:
       conv(cpt.getBlockHash(number.truncate(BlockNumber)), top)
 
@@ -82,7 +81,7 @@ proc blobHashOp(cpt: VmCpt): EvmResultVoid =
     if index < len:
       conv(cpt.getVersionedHash(index).data, top)
     else:
-      top = zero(UInt256)
+      conv(zero(UInt256), top)
 
   cpt.stack.unaryWithTop(blob256)
 

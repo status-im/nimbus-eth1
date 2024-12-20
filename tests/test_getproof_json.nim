@@ -12,10 +12,10 @@ import
   web3/eth_api,
   nimcrypto/[keccak, hash],
   eth/common/[keys, eth_types_rlp],
-  eth/[rlp, trie/trie_defs, trie/hexary_proof_verification],
+  eth/[rlp, trie/hexary_proof_verification],
   ../nimbus/db/[ledger, core_db],
   ../nimbus/common/chain_config,
-  ../nimbus/rpc/p2p
+  ../nimbus/rpc/server_api
 
 type
   Hash32 = eth_types.Hash32
@@ -69,7 +69,7 @@ proc setupStateDB(genAccounts: GenesisAlloc, stateDB: LedgerRef): Hash32 =
 
   stateDB.persist()
 
-  stateDB.rootHash
+  stateDB.getStateRoot()
 
 proc checkProofsForExistingLeafs(
     genAccounts: GenesisAlloc,
@@ -129,9 +129,9 @@ proc getProofJsonMain*() =
         let
           accounts = getGenesisAlloc("tests" / "customgenesis" / file)
           coreDb = newCoreDbRef(DefaultDbMemory)
-          accountsCache = LedgerRef.init(coreDb, emptyRlpHash)
+          accountsCache = LedgerRef.init(coreDb)
           stateRootHash = setupStateDB(accounts, accountsCache)
-          accountDb = LedgerRef.init(coreDb, stateRootHash)
+          accountDb = LedgerRef.init(coreDb)
 
         checkProofsForExistingLeafs(accounts, accountDb, stateRootHash)
 
@@ -141,9 +141,9 @@ proc getProofJsonMain*() =
         let
           accounts = getGenesisAlloc("tests" / "customgenesis" / file)
           coreDb = newCoreDbRef(DefaultDbMemory)
-          accountsCache = LedgerRef.init(coreDb, emptyRlpHash)
+          accountsCache = LedgerRef.init(coreDb)
           stateRootHash = setupStateDB(accounts, accountsCache)
-          accountDb = LedgerRef.init(coreDb, stateRootHash)
+          accountDb = LedgerRef.init(coreDb)
 
         checkProofsForMissingLeafs(accounts, accountDb, stateRootHash)
 

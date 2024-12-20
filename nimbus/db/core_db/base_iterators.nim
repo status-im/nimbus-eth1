@@ -12,23 +12,19 @@
 
 import
   std/typetraits,
-  eth/common,
-  ../../errors,
+  stint,
+  eth/common/hashes,
   ../aristo as use_ari,
-  ../aristo/[aristo_walk, aristo_serialise],
   ../kvt as use_kvt,
-  ../kvt/[kvt_init/memory_only, kvt_walk],
   ./base/[api_tracking, base_config, base_desc]
+
+export stint, hashes
 
 when CoreDbEnableApiJumpTable:
   discard
 else:
   import
-    ../aristo/[aristo_desc, aristo_path, aristo_tx],
-    ../kvt/[kvt_desc, kvt_tx]
-
-include
-  ./backend/aristo_replicate
+    ../aristo/[aristo_desc, aristo_path]
 
 when CoreDbEnableApiTracking:
   import
@@ -38,47 +34,43 @@ when CoreDbEnableApiTracking:
   const
     logTxt = "API"
 
-# Annotation helper(s)
-{.pragma: apiRaise, gcsafe, raises: [CoreDbApiError].}
+template dbType(dsc: CoreDbKvtRef | CoreDbAccRef): CoreDbType =
+  dsc.distinctBase.parent.dbType
+
+# ---------------
+
+template call(api: KvtApiRef; fn: untyped; args: varargs[untyped]): untyped =
+  when CoreDbEnableApiJumpTable:
+    api.fn(args)
+  else:
+    fn(args)
+
+template call(kvt: CoreDbKvtRef; fn: untyped; args: varargs[untyped]): untyped =
+  kvt.distinctBase.parent.kvtApi.call(fn, args)
+
+# ---------------
+
+template mpt(dsc: CoreDbAccRef): AristoDbRef =
+  dsc.distinctBase.mpt
+
+template call(api: AristoApiRef; fn: untyped; args: varargs[untyped]): untyped =
+  when CoreDbEnableApiJumpTable:
+    api.fn(args)
+  else:
+    fn(args)
+
+template call(
+    acc: CoreDbAccRef;
+    fn: untyped;
+    args: varargs[untyped];
+      ): untyped =
+  acc.distinctBase.parent.ariApi.call(fn, args)
 
 # ------------------------------------------------------------------------------
 # Public iterators
 # ------------------------------------------------------------------------------
 
-iterator pairs*(kvt: CoreDbKvtRef): (seq[byte], seq[byte]) {.apiRaise.} =
-  ## Iterator supported on memory DB (otherwise implementation dependent)
-  ##
-  kvt.setTrackNewApi KvtPairsIt
-  case kvt.dbType:
-  of AristoDbMemory:
-    let p = kvt.call(forkTx, kvt.kvt, 0).valueOrApiError "kvt/pairs()"
-    defer: discard kvt.call(forget, p)
-    for (k,v) in use_kvt.MemBackendRef.walkPairs p:
-      yield (k,v)
-  of AristoDbVoid:
-    let p = kvt.call(forkTx, kvt.kvt, 0).valueOrApiError "kvt/pairs()"
-    defer: discard kvt.call(forget, p)
-    for (k,v) in use_kvt.VoidBackendRef.walkPairs p:
-      yield (k,v)
-  of Ooops, AristoDbRocks:
-    raiseAssert: "Unsupported database type: " & $kvt.dbType
-  kvt.ifTrackNewApi: debug logTxt, api, elapsed
-
-iterator pairs*(mpt: CoreDbMptRef): (seq[byte], seq[byte]) =
-  ## Trie traversal, only supported for `CoreDbMptRef`
-  ##
-  mpt.setTrackNewApi MptPairsIt
-  case mpt.dbType:
-  of AristoDbMemory, AristoDbRocks, AristoDbVoid:
-    for (path,data) in mpt.mpt.rightPairsGeneric CoreDbVidGeneric:
-      yield (mpt.call(pathAsBlob, path), data)
-  of Ooops:
-    raiseAssert: "Unsupported database type: " & $mpt.dbType
-  mpt.ifTrackNewApi: debug logTxt, api, elapsed
-
 iterator slotPairs*(acc: CoreDbAccRef; accPath: Hash32): (seq[byte], UInt256) =
-  ## Trie traversal, only supported for `CoreDbMptRef`
-  ##
   acc.setTrackNewApi AccSlotPairsIt
   case acc.dbType:
   of AristoDbMemory, AristoDbRocks, AristoDbVoid:
@@ -88,21 +80,6 @@ iterator slotPairs*(acc: CoreDbAccRef; accPath: Hash32): (seq[byte], UInt256) =
     raiseAssert: "Unsupported database type: " & $acc.dbType
   acc.ifTrackNewApi:
     debug logTxt, api, elapsed
-
-iterator replicate*(mpt: CoreDbMptRef): (seq[byte], seq[byte]) {.apiRaise.} =
-  ## Low level trie dump, only supported for non persistent `CoreDbMptRef`
-  ##
-  mpt.setTrackNewApi MptReplicateIt
-  case mpt.dbType:
-  of AristoDbMemory:
-    for k,v in aristoReplicate[use_ari.MemBackendRef](mpt):
-      yield (k,v)
-  of AristoDbVoid:
-    for k,v in aristoReplicate[use_ari.VoidBackendRef](mpt):
-      yield (k,v)
-  of Ooops, AristoDbRocks:
-    raiseAssert: "Unsupported database type: " & $mpt.dbType
-  mpt.ifTrackNewApi: debug logTxt, api, elapsed
 
 # ------------------------------------------------------------------------------
 # End

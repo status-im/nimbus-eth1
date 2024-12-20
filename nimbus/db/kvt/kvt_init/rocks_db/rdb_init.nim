@@ -15,7 +15,6 @@
 
 import
   std/[sequtils, os],
-  rocksdb,
   results,
   ../../../opts,
   ../../kvt_desc,

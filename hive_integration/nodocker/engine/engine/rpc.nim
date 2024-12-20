@@ -75,13 +75,13 @@ method execute(cs: BlockStatus, env: TestEnv): bool =
   of LatestOnNewPayload:
     callbacks.onGetPayload = proc(): bool =
       let r = env.engine.client.namedHeader(Head)
-      r.expectHash(env.clMock.latestForkchoice.headblockHash)
+      r.expectHash(env.clMock.latestForkchoice.headBlockHash)
 
       let s = env.engine.client.blockNumber()
       s.expectNumber(env.clMock.latestHeadNumber.uint64)
 
       let p = env.engine.client.namedHeader(Head)
-      p.expectHash(env.clMock.latestForkchoice.headblockHash)
+      p.expectHash(env.clMock.latestForkchoice.headBlockHash)
 
       # Check that the receipt for the transaction we just sent is still not available
       let q = env.engine.client.txReceipt(shadow.txHash)
@@ -90,19 +90,19 @@ method execute(cs: BlockStatus, env: TestEnv): bool =
   of LatestOnHeadBlockHash:
     callbacks.onForkchoiceBroadcast = proc(): bool =
       let r = env.engine.client.namedHeader(Head)
-      r.expectHash(env.clMock.latestForkchoice.headblockHash)
+      r.expectHash(env.clMock.latestForkchoice.headBlockHash)
       let s = env.engine.client.txReceipt(shadow.txHash)
       s.expectTransactionHash(shadow.txHash)
       return true
   of SafeOnSafeBlockHash:
     callbacks.onSafeBlockChange = proc(): bool =
       let r = env.engine.client.namedHeader(Safe)
-      r.expectHash(env.clMock.latestForkchoice.safeblockHash)
+      r.expectHash(env.clMock.latestForkchoice.safeBlockHash)
       return true
   of FinalizedOnFinalizedBlockHash:
     callbacks.onFinalizedBlockChange = proc(): bool =
       let r = env.engine.client.namedHeader(Finalized)
-      r.expectHash(env.clMock.latestForkchoice.finalizedblockHash)
+      r.expectHash(env.clMock.latestForkchoice.finalizedBlockHash)
       return true
 
   # Perform the test

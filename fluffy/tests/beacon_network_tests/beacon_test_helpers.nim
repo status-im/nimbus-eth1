@@ -28,7 +28,14 @@ proc newLCNode*(
     db = BeaconDb.new(networkData, "", inMemory = true)
     streamManager = StreamManager.new(node)
     network = BeaconNetwork.new(
-      PortalNetwork.none, node, db, streamManager, networkData.forks, trustedBlockRoot
+      PortalNetwork.none,
+      node,
+      db,
+      streamManager,
+      networkData.forks,
+      networkData.clock.getBeaconTimeFn(),
+      networkData.metadata.cfg,
+      trustedBlockRoot,
     )
 
   return BeaconNode(discoveryProtocol: node, beaconNetwork: network)

@@ -42,17 +42,16 @@ proc checkBE*[T: RdbBackendRef|MemBackendRef|VoidBackendRef](
     of Branch:
       block check42Links:
         var seen = false
-        for n in 0 .. 15:
-          if vtx.bVid[n].isValid:
-            if seen:
-              break check42Links
-            seen = true
+        for _, _ in vtx.pairs():
+          if seen:
+            break check42Links
+          seen = true
         return err((rvid.vid,CheckBeVtxBranchLinksMissing))
 
   for (rvid,key) in T.walkKeyBe db:
     if topVidBe.vid < rvid.vid:
       topVidBe = rvid
-    let vtx = db.getVtxBE(rvid).valueOr:
+    let _ = db.getVtxBE(rvid).valueOr:
       return err((rvid.vid,CheckBeVtxMissing))
 
   # Compare calculated `vTop` against database state

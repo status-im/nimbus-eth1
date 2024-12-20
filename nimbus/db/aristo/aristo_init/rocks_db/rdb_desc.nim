@@ -16,7 +16,6 @@
 import
   std/os,
   std/concurrency/atomics,
-  eth/common,
   rocksdb,
   stew/endians2,
   ../../aristo_desc,
@@ -40,7 +39,6 @@ type
   RdbInst* = object
     admCol*: ColFamilyReadWrite        ## Admin column family handler
     vtxCol*: ColFamilyReadWrite        ## Vertex column family handler
-    keyCol*: ColFamilyReadWrite        ## Hash key column family handler
     session*: WriteBatchRef            ## For batched `put()`
 
     # Note that the key type `VertexID` for LRU caches requires that there is
@@ -61,6 +59,9 @@ type
     rdVtxLru*: LruCache[VertexID,VertexRef] ## Read cache
     rdVtxSize*: int
 
+    rdBranchLru*: LruCache[VertexID, (VertexID, uint16)]
+    rdBranchSize*: int
+
     basePath*: string                  ## Database directory
     trgWriteEvent*: RdbWriteEventCb    ## Database piggiback call back handler
 
@@ -68,7 +69,6 @@ type
     ## Column family symbols/handles and names used on the database
     AdmCF = "AriAdm"                   ## Admin column family name
     VtxCF = "AriVtx"                   ## Vertex column family name
-    KeyCF = "AriKey"                   ## Hash key column family name
 
   RdbLruCounter* = array[bool, Atomic[uint64]]
 
@@ -86,6 +86,7 @@ var
   # happens from a separate thread.
   # TODO maybe turn this into more general framework for LRU reporting since
   #      we have lots of caches of this sort
+  rdbBranchLruStats*: array[RdbStateType, RdbLruCounter]
   rdbVtxLruStats*: array[RdbStateType, array[VertexType, RdbLruCounter]]
   rdbKeyLruStats*: array[RdbStateType, RdbLruCounter]
 

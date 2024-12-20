@@ -1,0 +1,29 @@
+# Nimbus
+# Copyright (c) 2023-2024 Status Research & Development GmbH
+# Licensed and distributed under either of
+#   * MIT license (license terms in the root directory or at https://opensource.org/licenses/MIT).
+#   * Apache v2 license (license terms in the root directory or at https://www.apache.org/licenses/LICENSE-2.0).
+# at your option. This file may not be copied, modified, or distributed except according to those terms.
+
+FROM debian:stable-slim AS build
+
+ENV DEBIAN_FRONTEND=noninteractive TZ="Etc/UTC"
+ENV NPROC=8
+
+RUN apt update \
+  && apt install make bash build-essential curl git -y
+
+COPY ./ /nimbus-eth1
+
+WORKDIR /nimbus-eth1
+
+RUN make -j${NPROC} nimbus_execution_client && \
+  mv build/nimbus_execution_client /usr/local/bin/nimbus_execution_client
+
+# --------------------------------- #
+# Starting new image to reduce size #
+# --------------------------------- #
+FROM debian:stable-slim AS deploy
+COPY --from=build /usr/local/bin/nimbus_execution_client /usr/local/bin/nimbus_execution_client
+
+ENTRYPOINT ["/usr/local/bin/nimbus_execution_client"]

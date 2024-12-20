@@ -48,12 +48,8 @@ const
   logLevelDesc = getLogLevels()
 
 type
-  ChainDbMode* {.pure.} = enum
-    Aristo
-    AriPrune
-
   NRpcCmd* {.pure.} = enum
-    `external_sync`
+    `sync`
 
   NRpcConf* = object of RootObj
     ## Main NRpc configuration object
@@ -105,7 +101,7 @@ type
       command
       desc: "" }: NRpcCmd
 
-    of `external_sync`:
+    of `sync`:
 
       # https://github.com/ethereum/execution-apis/blob/v1.0.0-beta.4/src/engine/authentication.md#key-distribution
       jwtSecret* {.

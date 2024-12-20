@@ -57,10 +57,10 @@ type
 
   ExecutableData* = object
     basePayload* : ExecutionPayload
-    beaconRoot*  : Opt[Hash32]
-    executionRequests*: Opt[array[3, seq[byte]]]
     attr*        : PayloadAttributes
+    beaconRoot*  : Opt[Hash32]
     versionedHashes*: Opt[seq[Hash32]]
+    executionRequests*: Opt[array[3, seq[byte]]]
 
 const
   DefaultTimeout* = 60 # seconds
@@ -78,18 +78,21 @@ func toAddress*(x: UInt256): Address =
 const ZeroAddr* = default(Address)
 
 func toHash*(x: UInt256): Hash32 =
-  Hash32(x.toByteArrayBE)
+  Hash32(x.toBytesBE)
 
 func timestampToBeaconRoot*(timestamp: Quantity): Hash32 =
   # Generates a deterministic hash from the timestamp
   let h = sha2.sha256.digest(timestamp.uint64.toBytesBE)
   Hash32(h.data)
 
+proc randomBytes*(_: type Bytes32): Bytes32 =
+  doAssert randomBytes(result.data) == 32
+
 proc randomBytes*(_: type Hash32): Hash32 =
   doAssert randomBytes(result.data) == 32
 
 proc randomBytes*(_: type Address): Address =
-  doAssert randomBytes(result) == 20
+  doAssert randomBytes(result.data) == 20
 
 proc clone*[T](x: T): T =
   result = T()
@@ -321,3 +324,26 @@ proc `parentHash=`*(x: var ExecutableData, val: auto) =
 
 proc `blockHash=`*(x: var ExecutableData, val: auto) =
   x.basePayload.blockHash = val
+
+proc collectBlobHashes*(list: openArray[Web3Tx]): seq[Hash32] =
+  for w3tx in list:
+    let tx = ethTx(w3tx)
+    for h in tx.versionedHashes:
+      result.add h
+
+func toExecutableData*(res: GetPayloadResponse, attr: PayloadAttributes): ExecutableData =
+  ExecutableData(
+    basePayload: res.executionPayload,
+    attr: attr,
+    beaconRoot: attr.parentBeaconBlockRoot,
+    versionedHashes: Opt.some(collectBlobHashes(res.executionPayload.transactions)),
+    executionRequests: res.executionRequests,
+  )
+
+func toExecutableData*(payload: ExecutionPayload, attr: PayloadAttributes): ExecutableData =
+  ExecutableData(
+    basePayload: payload,
+    attr: attr,
+    beaconRoot: attr.parentBeaconBlockRoot,
+    versionedHashes: Opt.some(collectBlobHashes(payload.transactions)),
+  )

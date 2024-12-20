@@ -12,21 +12,18 @@
 
 import
   std/typetraits,
-  eth/common,
-  "../.."/[constants, errors],
-  ".."/[kvt, aristo],
-  ./backend/aristo_db,
+  eth/common/[accounts, base, hashes],
+  ../../constants,
+  ../[kvt, aristo],
   ./base/[api_tracking, base_config, base_desc, base_helpers]
 
 export
   CoreDbAccRef,
   CoreDbAccount,
-  CoreDbApiError,
   CoreDbCtxRef,
   CoreDbErrorCode,
   CoreDbError,
   CoreDbKvtRef,
-  CoreDbMptRef,
   CoreDbPersistentTypes,
   CoreDbRef,
   CoreDbTxRef,
@@ -71,75 +68,6 @@ proc ctx*(db: CoreDbRef): CoreDbCtxRef =
   ##
   db.defCtx
 
-proc newCtxByKey*(ctx: CoreDbCtxRef; root: Hash32): CoreDbRc[CoreDbCtxRef] =
-  ## Create new context derived from a matching transaction of the currently
-  ## active context. If successful, the resulting context has the following
-  ## properties:
-  ##
-  ## * Transaction level is 1
-  ## * The state of the accounts column is equal to the argument `root`
-  ##
-  ## If successful, the resulting descriptor **must** be manually released
-  ## with `forget()` when it is not used, anymore.
-  ##
-  ## Note:
-  ##   The underlying `Aristo` backend uses lazy hashing so this function
-  ##   might fail simply because there is no computed state when nesting
-  ##   the next transaction. If the previous transaction needs to be found,
-  ##   then it must called like this:
-  ##   ::
-  ##     let db = ..                             # Instantiate CoreDb handle
-  ##     ...
-  ##     discard db.ctx.getAccounts.state()      # Compute state hash
-  ##     db.ctx.newTransaction()                 # Enter new transaction
-  ##
-  ##   However, remember that unused hash computations are contle relative
-  ##   to processing time.
-  ##
-  ctx.setTrackNewApi CtxNewCtxByKeyFn
-  result = ctx.newCtxByKey(root, $api)
-  ctx.ifTrackNewApi: debug logTxt, api, elapsed, root=($$root),  result
-
-proc swapCtx*(ctx: CoreDbCtxRef; db: CoreDbRef): CoreDbCtxRef =
-  ## Activate argument context `ctx` as default and return the previously
-  ## active context. This function goes typically together with `forget()`.
-  ## A valid scenario might look like
-  ## ::
-  ##   let db = ..                             # Instantiate CoreDb handle
-  ##   ...
-  ##   let ctx = newCtxByKey(..).expect "ctx"  # Create new context
-  ##   let saved = db.swapCtx ctx              # Swap context dandles
-  ##   defer: db.swapCtx(saved).forget()       # Restore
-  ##   ...
-  ##
-  doAssert not ctx.isNil
-  assert db.defCtx != ctx # debugging only
-  db.setTrackNewApi CtxSwapCtxFn
-
-  # Swap default context with argument `ctx`
-  result = db.defCtx
-  db.defCtx = ctx
-
-  # Set read-write access and install
-  CoreDbAccRef(ctx).call(reCentre, db.ctx.mpt).isOkOr:
-    raiseAssert $api & " failed: " & $error
-  CoreDbKvtRef(ctx).call(reCentre, db.ctx.kvt).isOkOr:
-    raiseAssert $api & " failed: " & $error
-  doAssert db.defCtx != result
-  db.ifTrackNewApi: debug logTxt, api, elapsed
-
-proc forget*(ctx: CoreDbCtxRef) =
-  ## Dispose `ctx` argument context and related columns created with this
-  ## context. This function throws an exception `ctx` is the default context.
-  ##
-  ctx.setTrackNewApi CtxForgetFn
-  doAssert ctx !=  ctx.parent.defCtx
-  CoreDbAccRef(ctx).call(forget, ctx.mpt).isOkOr:
-    raiseAssert $api & ": " & $error
-  CoreDbKvtRef(ctx).call(forget, ctx.kvt).isOkOr:
-    raiseAssert $api & ": " & $error
-  ctx.ifTrackNewApi: debug logTxt, api, elapsed
-
 # ------------------------------------------------------------------------------
 # Public base descriptor methods
 # ------------------------------------------------------------------------------
@@ -158,8 +86,7 @@ proc finish*(db: CoreDbRef; eradicate = false) =
   db.ifTrackNewApi: debug logTxt, api, elapsed
 
 proc `$$`*(e: CoreDbError): string =
-  ## Pretty print error symbol, note that this directive may have side effects
-  ## as it calls a backend function.
+  ## Pretty print error symbol
   ##
   e.toStr()
 
@@ -180,7 +107,7 @@ proc persistent*(
       if rc.isOk or rc.error == TxPersistDelayed:
         # The latter clause is OK: Piggybacking on `Aristo` backend
         discard
-      elif CoreDbKvtRef(db.ctx).call(level, db.ctx.kvt) != 0:
+      elif CoreDbKvtRef(db.ctx).call(txFrameLevel, db.ctx.kvt) != 0:
         result = err(rc.error.toError($api, TxPending))
         break body
       else:
@@ -208,62 +135,7 @@ proc stateBlockNumber*(db: CoreDbRef): BlockNumber =
   db.ifTrackNewApi: debug logTxt, api, elapsed, result
 
 proc verify*(
-    db: CoreDbRef | CoreDbMptRef | CoreDbAccRef;
-    proof: openArray[seq[byte]];
-    root: Hash32;
-    path: openArray[byte];
-      ): CoreDbRc[Opt[seq[byte]]] =
-  ## This function os the counterpart of any of the `proof()` functions. Given
-  ## the argument chain of rlp-encoded nodes `proof`, this function verifies
-  ## that the chain represents a partial MPT starting with a root node state
-  ## `root` followig the path `key` leading to leaf node encapsulating a
-  ## payload which is passed back as return code.
-  ##
-  ## Note: The `mpt` argument is used for administative purposes (e.g. logging)
-  ##       only. The functionality is provided by the `Aristo` database
-  ##       function `aristo_part.partUntwigGeneric()` with the same prototype
-  ##       arguments except the `db`.
-  ##
-  template mpt: untyped =
-    when db is CoreDbRef:
-      CoreDbAccRef(db.defCtx)
-    else:
-      db
-  mpt.setTrackNewApi BaseVerifyFn
-  result = block:
-    let rc = mpt.call(partUntwigGeneric, proof, root, path)
-    if rc.isOk:
-      ok(rc.value)
-    else:
-      err(rc.error.toError($api, ProofVerify))
-  mpt.ifTrackNewApi: debug logTxt, api, elapsed, result
-
-proc verifyOk*(
-    db: CoreDbRef | CoreDbMptRef | CoreDbAccRef;
-    proof: openArray[seq[byte]];
-    root: Hash32;
-    path: openArray[byte];
-    payload: Opt[seq[byte]];
-      ): CoreDbRc[void] =
-  ## Variant of `verify()` which directly checks the argument `payload`
-  ## against what would be the return code in `verify()`.
-  ##
-  template mpt: untyped =
-    when db is CoreDbRef:
-      CoreDbAccRef(db.defCtx)
-    else:
-      db
-  mpt.setTrackNewApi BaseVerifyOkFn
-  result = block:
-    let rc = mpt.call(partUntwigGenericOk, proof, root, path, payload)
-    if rc.isOk:
-      ok()
-    else:
-      err(rc.error.toError($api, ProofVerify))
-  mpt.ifTrackNewApi: debug logTxt, api, elapsed, result
-
-proc verify*(
-    db: CoreDbRef | CoreDbMptRef | CoreDbAccRef;
+    db: CoreDbRef | CoreDbAccRef;
     proof: openArray[seq[byte]];
     root: Hash32;
     path: Hash32;
@@ -279,28 +151,6 @@ proc verify*(
     let rc = mpt.call(partUntwigPath, proof, root, path)
     if rc.isOk:
       ok(rc.value)
-    else:
-      err(rc.error.toError($api, ProofVerify))
-  mpt.ifTrackNewApi: debug logTxt, api, elapsed, result
-
-proc verifyOk*(
-    db: CoreDbRef | CoreDbMptRef | CoreDbAccRef;
-    proof: openArray[seq[byte]];
-    root: Hash32;
-    path: Hash32;
-    payload: Opt[seq[byte]];
-      ): CoreDbRc[void] =
-  ## Variant of `verifyOk()`.
-  template mpt: untyped =
-    when db is CoreDbRef:
-      CoreDbAccRef(db.defCtx)
-    else:
-      db
-  mpt.setTrackNewApi BaseVerifyOkFn
-  result = block:
-    let rc = mpt.call(partUntwigPathOk, proof, root, path, payload)
-    if rc.isOk:
-      ok()
     else:
       err(rc.error.toError($api, ProofVerify))
   mpt.ifTrackNewApi: debug logTxt, api, elapsed, result
@@ -409,130 +259,6 @@ proc hasKey*(kvt: CoreDbKvtRef; key: openArray[byte]): bool =
   kvt.setTrackNewApi KvtHasKeyFn
   result = kvt.call(hasKeyRc, kvt.kvt, key).valueOr: false
   kvt.ifTrackNewApi: debug logTxt, api, elapsed, key=key.toStr, result
-
-# ------------------------------------------------------------------------------
-# Public functions for generic columns
-# ------------------------------------------------------------------------------
-
-proc getGeneric*(
-    ctx: CoreDbCtxRef;
-    clearData = false;
-      ): CoreDbMptRef =
-  ## Get a generic MPT, viewed as column
-  ##
-  ctx.setTrackNewApi CtxGetGenericFn
-  result = CoreDbMptRef(ctx)
-  if clearData:
-    result.call(deleteGenericTree, ctx.mpt, CoreDbVidGeneric).isOkOr:
-      raiseAssert $api & ": " & $error
-  ctx.ifTrackNewApi: debug logTxt, api, clearData, elapsed
-
-# ----------- generic MPT ---------------
-
-proc proof*(
-    mpt: CoreDbMptRef;
-    key: openArray[byte];
-      ): CoreDbRc[(seq[seq[byte]],bool)] =
-  ## On the generic MPT, collect the nodes along the `key` interpreted as
-  ## path. Return these path nodes as a chain of rlp-encoded blobs followed
-  ## by a bool value which is `true` if the `key` path exists in the database,
-  ## and `false` otherwise. In the latter case, the chain of rlp-encoded blobs
-  ## are the nodes proving that the `key` path does not exist.
-  ##
-  mpt.setTrackNewApi MptProofFn
-  result = block:
-    let rc = mpt.call(partGenericTwig, mpt.mpt, CoreDbVidGeneric, key)
-    if rc.isOk:
-      ok(rc.value)
-    else:
-      err(rc.error.toError($api, ProofCreate))
-  mpt.ifTrackNewApi: debug logTxt, api, elapsed, result
-
-proc fetch*(mpt: CoreDbMptRef; key: openArray[byte]): CoreDbRc[seq[byte]] =
-  ## Fetch data from the argument `mpt`. The function always returns a
-  ## non-empty `seq[byte]` or an error code.
-  ##
-  mpt.setTrackNewApi MptFetchFn
-  result = block:
-    let rc = mpt.call(fetchGenericData, mpt.mpt, CoreDbVidGeneric, key)
-    if rc.isOk:
-      ok(rc.value)
-    elif rc.error == FetchPathNotFound:
-      err(rc.error.toError($api, MptNotFound))
-    else:
-      err(rc.error.toError $api)
-  mpt.ifTrackNewApi: debug logTxt, api, elapsed, key=key.toStr, result
-
-proc fetchOrEmpty*(mpt: CoreDbMptRef; key: openArray[byte]): CoreDbRc[seq[byte]] =
-  ## This function returns an empty `seq[byte]` if the argument `key` is not found
-  ## on the database.
-  ##
-  mpt.setTrackNewApi MptFetchOrEmptyFn
-  result = block:
-    let rc = mpt.call(fetchGenericData, mpt.mpt, CoreDbVidGeneric, key)
-    if rc.isOk:
-      ok(rc.value)
-    elif rc.error == FetchPathNotFound:
-      CoreDbRc[seq[byte]].ok(EmptyBlob)
-    else:
-      err(rc.error.toError $api)
-  mpt.ifTrackNewApi: debug logTxt, api, elapsed, key=key.toStr, result
-
-proc delete*(mpt: CoreDbMptRef; key: openArray[byte]): CoreDbRc[void] =
-  mpt.setTrackNewApi MptDeleteFn
-  result = block:
-    let rc = mpt.call(deleteGenericData, mpt.mpt,CoreDbVidGeneric, key)
-    if rc.isOk:
-      ok()
-    elif rc.error == DelPathNotFound:
-      err(rc.error.toError($api, MptNotFound))
-    else:
-      err(rc.error.toError $api)
-  mpt.ifTrackNewApi: debug logTxt, api, elapsed, key=key.toStr, result
-
-proc merge*(
-    mpt: CoreDbMptRef;
-    key: openArray[byte];
-    val: openArray[byte];
-      ): CoreDbRc[void] =
-  mpt.setTrackNewApi MptMergeFn
-  result = block:
-    let rc = mpt.call(mergeGenericData, mpt.mpt,CoreDbVidGeneric, key, val)
-    if rc.isOk:
-      ok()
-    else:
-      err(rc.error.toError $api)
-  mpt.ifTrackNewApi:
-    debug logTxt, api, elapsed, key=key.toStr, val=val.toLenStr, result
-
-proc hasPath*(mpt: CoreDbMptRef; key: openArray[byte]): CoreDbRc[bool] =
-  ## This function would be named `contains()` if it returned `bool` rather
-  ## than a `Result[]`.
-  ##
-  mpt.setTrackNewApi MptHasPathFn
-  result = block:
-    let rc = mpt.call(hasPathGeneric, mpt.mpt, CoreDbVidGeneric, key)
-    if rc.isOk:
-      ok(rc.value)
-    else:
-      err(rc.error.toError $api)
-  mpt.ifTrackNewApi: debug logTxt, api, elapsed, key=key.toStr, result
-
-proc state*(mpt: CoreDbMptRef; updateOk = false): CoreDbRc[Hash32] =
-  ## This function retrieves the Merkle state hash of the argument
-  ## database column (if acvailable.)
-  ##
-  ## If the argument `updateOk` is set `true`, the Merkle hashes of the
-  ## database will be updated first (if needed, at all).
-  ##
-  mpt.setTrackNewApi MptStateFn
-  result = block:
-    let rc = mpt.call(fetchGenericState, mpt.mpt, CoreDbVidGeneric, updateOk)
-    if rc.isOk:
-      ok(rc.value)
-    else:
-      err(rc.error.toError $api)
-  mpt.ifTrackNewApi: debug logTxt, api, elapsed, updateOK, result
 
 # ------------------------------------------------------------------------------
 # Public methods for accounts
@@ -655,21 +381,17 @@ proc hasPath*(
   acc.ifTrackNewApi:
     debug logTxt, api, elapsed, accPath=($$accPath), result
 
-proc state*(acc: CoreDbAccRef; updateOk = false): CoreDbRc[Hash32] =
+proc getStateRoot*(acc: CoreDbAccRef): CoreDbRc[Hash32] =
   ## This function retrieves the Merkle state hash of the accounts
   ## column (if available.)
-  ##
-  ## If the argument `updateOk` is set `true`, the Merkle hashes of the
-  ## database will be updated first (if needed, at all).
-  ##
   acc.setTrackNewApi AccStateFn
   result = block:
-    let rc = acc.call(fetchAccountState, acc.mpt, updateOk)
+    let rc = acc.call(fetchStateRoot, acc.mpt)
     if rc.isOk:
       ok(rc.value)
     else:
       err(rc.error.toError $api)
-  acc.ifTrackNewApi: debug logTxt, api, elapsed, updateOK, result
+  acc.ifTrackNewApi: debug logTxt, api, elapsed, result
 
 # ------------ storage ---------------
 
@@ -772,36 +494,32 @@ proc slotMerge*(
     debug logTxt, api, elapsed, accPath=($$accPath),
             stoPath=($$stoPath), stoData, result
 
-proc slotState*(
+proc slotStorageRoot*(
     acc: CoreDbAccRef;
     accPath: Hash32;
-    updateOk = false;
       ):  CoreDbRc[Hash32] =
   ## This function retrieves the Merkle state hash of the storage data
   ## column (if available) related to the account  indexed by the key
   ## `accPath`.`.
   ##
-  ## If the argument `updateOk` is set `true`, the Merkle hashes of the
-  ## database will be updated first (if needed, at all).
-  ##
-  acc.setTrackNewApi AccSlotStateFn
+  acc.setTrackNewApi AccSlotStorageRootFn
   result = block:
-    let rc = acc.call(fetchStorageState, acc.mpt, accPath, updateOk)
+    let rc = acc.call(fetchStorageRoot, acc.mpt, accPath)
     if rc.isOk:
       ok(rc.value)
     else:
       err(rc.error.toError $api)
   acc.ifTrackNewApi:
-    debug logTxt, api, elapsed, accPath=($$accPath), updateOk, result
+    debug logTxt, api, elapsed, accPath=($$accPath), result
 
-proc slotStateEmpty*(
+proc slotStorageEmpty*(
     acc: CoreDbAccRef;
     accPath: Hash32;
       ):  CoreDbRc[bool] =
   ## This function returns `true` if the storage data column is empty or
   ## missing.
   ##
-  acc.setTrackNewApi AccSlotStateEmptyFn
+  acc.setTrackNewApi AccSlotStorageEmptyFn
   result = block:
     let rc = acc.call(hasStorageData, acc.mpt, accPath)
     if rc.isOk:
@@ -811,12 +529,12 @@ proc slotStateEmpty*(
   acc.ifTrackNewApi:
     debug logTxt, api, elapsed, accPath=($$accPath), result
 
-proc slotStateEmptyOrVoid*(
+proc slotStorageEmptyOrVoid*(
     acc: CoreDbAccRef;
     accPath: Hash32;
       ): bool =
-  ## Convenience wrapper, returns `true` where `slotStateEmpty()` would fail.
-  acc.setTrackNewApi AccSlotStateEmptyOrVoidFn
+  ## Convenience wrapper, returns `true` where `slotStorageEmpty()` would fail.
+  acc.setTrackNewApi AccSlotStorageEmptyOrVoidFn
   result = block:
     let rc = acc.call(hasStorageData, acc.mpt, accPath)
     if rc.isOk:
@@ -832,14 +550,13 @@ proc recast*(
     acc: CoreDbAccRef;
     accPath: Hash32;
     accRec: CoreDbAccount;
-    updateOk = false;
       ): CoreDbRc[Account] =
   ## Complete the argument `accRec` to the portable Ethereum representation
   ## of an account statement. This conversion may fail if the storage colState
-  ## hash (see `slotState()` above) is currently unavailable.
+  ## hash (see `slotStorageRoot()` above) is currently unavailable.
   ##
   acc.setTrackNewApi AccRecastFn
-  let rc = acc.call(fetchStorageState, acc.mpt, accPath, updateOk)
+  let rc = acc.call(fetchStorageRoot, acc.mpt, accPath)
   result = block:
     if rc.isOk:
       ok Account(
@@ -850,44 +567,37 @@ proc recast*(
     else:
       err(rc.error.toError $api)
   acc.ifTrackNewApi:
-    let slotState = if rc.isOk: $$(rc.value) else: "n/a"
-    debug logTxt, api, elapsed, accPath=($$accPath), slotState, result
+    let storageRoot = if rc.isOk: $$(rc.value) else: "n/a"
+    debug logTxt, api, elapsed, accPath=($$accPath), storageRoot, result
 
 # ------------------------------------------------------------------------------
 # Public transaction related methods
 # ------------------------------------------------------------------------------
 
-proc level*(db: CoreDbRef): int =
+proc txFrameLevel*(db: CoreDbRef): int =
   ## Retrieve transaction level (zero if there is no pending transaction).
   ##
   db.setTrackNewApi BaseLevelFn
-  result = CoreDbAccRef(db.ctx).call(level, db.ctx.mpt)
+  result = CoreDbAccRef(db.ctx).call(txFrameLevel, db.ctx.mpt)
   db.ifTrackNewApi: debug logTxt, api, elapsed, result
 
-proc newTransaction*(ctx: CoreDbCtxRef): CoreDbTxRef =
+proc txFrameBegin*(ctx: CoreDbCtxRef): CoreDbTxRef =
   ## Constructor
   ##
   ctx.setTrackNewApi BaseNewTxFn
   let
-    kTx = CoreDbKvtRef(ctx).call(txBegin, ctx.kvt).valueOr:
+    kTx = CoreDbKvtRef(ctx).call(txFrameBegin, ctx.kvt).valueOr:
       raiseAssert $api & ": " & $error
-    aTx = CoreDbAccRef(ctx).call(txBegin, ctx.mpt).valueOr:
+    aTx = CoreDbAccRef(ctx).call(txFrameBegin, ctx.mpt).valueOr:
       raiseAssert $api & ": " & $error
   result = ctx.bless CoreDbTxRef(kTx: kTx, aTx: aTx)
   ctx.ifTrackNewApi:
     let newLevel = CoreDbAccRef(ctx).call(level, ctx.mpt)
     debug logTxt, api, elapsed, newLevel
 
-proc level*(tx: CoreDbTxRef): int =
-  ## Print positive transaction level for argument `tx`
-  ##
-  tx.setTrackNewApi TxLevelFn
-  result = CoreDbAccRef(tx.ctx).call(txLevel, tx.aTx)
-  tx.ifTrackNewApi: debug logTxt, api, elapsed, result
-
 proc commit*(tx: CoreDbTxRef) =
   tx.setTrackNewApi TxCommitFn:
-    let prvLevel {.used.} = CoreDbAccRef(tx.ctx).call(txLevel, tx.aTx)
+    let prvLevel {.used.} = CoreDbAccRef(tx.ctx).call(level, tx.aTx)
   CoreDbAccRef(tx.ctx).call(commit, tx.aTx).isOkOr:
     raiseAssert $api & ": " & $error
   CoreDbKvtRef(tx.ctx).call(commit, tx.kTx).isOkOr:
@@ -896,7 +606,7 @@ proc commit*(tx: CoreDbTxRef) =
 
 proc rollback*(tx: CoreDbTxRef) =
   tx.setTrackNewApi TxRollbackFn:
-    let prvLevel {.used.} = CoreDbAccRef(tx.ctx).call(txLevel, tx.aTx)
+    let prvLevel {.used.} = CoreDbAccRef(tx.ctx).call(level, tx.aTx)
   CoreDbAccRef(tx.ctx).call(rollback, tx.aTx).isOkOr:
     raiseAssert $api & ": " & $error
   CoreDbKvtRef(tx.ctx).call(rollback, tx.kTx).isOkOr:
@@ -905,7 +615,7 @@ proc rollback*(tx: CoreDbTxRef) =
 
 proc dispose*(tx: CoreDbTxRef) =
   tx.setTrackNewApi TxDisposeFn:
-    let prvLevel {.used.} = CoreDbAccRef(tx.ctx).call(txLevel, tx.aTx)
+    let prvLevel {.used.} = CoreDbAccRef(tx.ctx).call(level, tx.aTx)
   if CoreDbAccRef(tx.ctx).call(isTop, tx.aTx):
     CoreDbAccRef(tx.ctx).call(rollback, tx.aTx).isOkOr:
       raiseAssert $api & ": " & $error

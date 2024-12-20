@@ -46,6 +46,7 @@ const
     eth0, # Shanghai
     eth0, # Cancun
     eth0, # Prague
+    eth0, # Osaka
   ]
 
 proc calculateReward*(vmState: BaseVMState; account: Address;

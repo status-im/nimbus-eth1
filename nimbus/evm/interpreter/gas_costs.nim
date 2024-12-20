@@ -68,7 +68,7 @@ type
     kind*: Op
     isNewAccount*: bool
     gasLeft*: GasInt
-    gasCallEIP2929*: GasInt
+    gasCallEIPs*: GasInt
     contractGas*: UInt256
     currentMemSize*: GasNatural
     memOffset*: GasNatural
@@ -375,9 +375,9 @@ template gasCosts(fork: EVMFork, prefix, ResultGasCostsName: untyped) =
     # Both gasCost and childGasLimit are always on positive side
 
     var gasLeft = params.gasLeft
-    if gasLeft < params.gasCallEIP2929:
+    if gasLeft < params.gasCallEIPs:
       return err(opErr(OutOfGas))
-    gasLeft -= params.gasCallEIP2929
+    gasLeft -= params.gasCallEIPs
 
     var gasCost: GasInt = `prefix gasMemoryExpansion`(
                              params.currentMemSize,
@@ -422,11 +422,11 @@ template gasCosts(fork: EVMFork, prefix, ResultGasCostsName: untyped) =
         return err(gasErr(GasIntOverflow))
       childGasLimit = params.contractGas.truncate(GasInt)
 
-    if gasCost.u256 + childGasLimit.u256 + params.gasCallEIP2929.u256 > high(GasInt).u256:
+    if gasCost.u256 + childGasLimit.u256 + params.gasCallEIPs.u256 > high(GasInt).u256:
       return err(gasErr(GasIntOverflow))
 
     gasCost += childGasLimit
-    gasCost += params.gasCallEIP2929
+    gasCost += params.gasCallEIPs
 
     # Ccallgas - Gas sent to the child message
     if not value.isZero and params.kind in {Call, CallCode}:
@@ -789,6 +789,7 @@ const
     FkShanghai: ShanghaiGasFees,
     FkCancun: ShanghaiGasFees,
     FkPrague: ShanghaiGasFees,
+    FkOsaka: ShanghaiGasFees,
   ]
 
 gasCosts(FkFrontier, base, BaseGasCosts)
@@ -844,11 +845,11 @@ const
   GasQuadDivisor*        = 20
   GasQuadDivisorEIP2565* = 3
   # https://eips.ethereum.org/EIPS/eip-2537
-  Bls12381G1AddGas*          = GasInt 500
+  Bls12381G1AddGas*          = GasInt 375
   Bls12381G1MulGas*          = GasInt 12000
-  Bls12381G2AddGas*          = GasInt 800
-  Bls12381G2MulGas*          = GasInt 45000
-  Bls12381PairingBaseGas*    = GasInt 115000
-  Bls12381PairingPerPairGas* = GasInt 23000
+  Bls12381G2AddGas*          = GasInt 600
+  Bls12381G2MulGas*          = GasInt 22500
+  Bls12381PairingBaseGas*    = GasInt 37700
+  Bls12381PairingPerPairGas* = GasInt 32600
   Bls12381MapG1Gas*          = GasInt 5500
-  Bls12381MapG2Gas*          = GasInt 110000
+  Bls12381MapG2Gas*          = GasInt 23800

@@ -13,7 +13,6 @@
 
 import
   std/times,
-  eth/common,
   results,
   ../aristo/aristo_profile,
   ./kvt_desc/desc_backend,
@@ -46,26 +45,21 @@ type
     key: openArray[byte]): Result[void,KvtError] {.noRaise.}
   KvtApiFinishFn* = proc(db: KvtDbRef, eradicate = false) {.noRaise.}
   KvtApiForgetFn* = proc(db: KvtDbRef): Result[void,KvtError] {.noRaise.}
-  KvtApiForkTxFn* = proc(db: KvtDbRef,
-    backLevel: int): Result[KvtDbRef,KvtError] {.noRaise.}
   KvtApiGetFn* = proc(db: KvtDbRef,
     key: openArray[byte]): Result[seq[byte],KvtError] {.noRaise.}
   KvtApiLenFn* = proc(db: KvtDbRef,
     key: openArray[byte]): Result[int,KvtError] {.noRaise.}
   KvtApiHasKeyRcFn* = proc(db: KvtDbRef,
     key: openArray[byte]): Result[bool,KvtError] {.noRaise.}
-  KvtApiIsCentreFn* = proc(db: KvtDbRef): bool {.noRaise.}
   KvtApiIsTopFn* = proc(tx: KvtTxRef): bool {.noRaise.}
-  KvtApiLevelFn* = proc(db: KvtDbRef): int {.noRaise.}
-  KvtApiNForkedFn* = proc(db: KvtDbRef): int {.noRaise.}
+  KvtApiTxFrameLevelFn* = proc(db: KvtDbRef): int {.noRaise.}
   KvtApiPutFn* = proc(db: KvtDbRef,
     key, data: openArray[byte]): Result[void,KvtError] {.noRaise.}
-  KvtApiReCentreFn* = proc(db: KvtDbRef): Result[void,KvtError] {.noRaise.}
   KvtApiRollbackFn* = proc(tx: KvtTxRef): Result[void,KvtError] {.noRaise.}
   KvtApiPersistFn* = proc(db: KvtDbRef): Result[void,KvtError] {.noRaise.}
   KvtApiToKvtDbRefFn* = proc(tx: KvtTxRef): KvtDbRef {.noRaise.}
-  KvtApiTxBeginFn* = proc(db: KvtDbRef): Result[KvtTxRef,KvtError] {.noRaise.}
-  KvtApiTxTopFn* =
+  KvtApiTxFrameBeginFn* = proc(db: KvtDbRef): Result[KvtTxRef,KvtError] {.noRaise.}
+  KvtApiTxFrameTopFn* =
     proc(db: KvtDbRef): Result[KvtTxRef,KvtError] {.noRaise.}
 
   KvtApiRef* = ref KvtApiObj
@@ -75,22 +69,17 @@ type
     commit*: KvtApiCommitFn
     del*: KvtApiDelFn
     finish*: KvtApiFinishFn
-    forget*: KvtApiForgetFn
-    forkTx*: KvtApiForkTxFn
     get*: KvtApiGetFn
     len*: KvtApiLenFn
     hasKeyRc*: KvtApiHasKeyRcFn
-    isCentre*: KvtApiIsCentreFn
     isTop*: KvtApiIsTopFn
-    level*: KvtApiLevelFn
-    nForked*: KvtApiNForkedFn
+    txFrameLevel*: KvtApiTxFrameLevelFn
     put*: KvtApiPutFn
-    reCentre*: KvtApiReCentreFn
     rollback*: KvtApiRollbackFn
     persist*: KvtApiPersistFn
     toKvtDbRef*: KvtApiToKvtDbRefFn
-    txBegin*: KvtApiTxBeginFn
-    txTop*: KvtApiTxTopFn
+    txFrameBegin*: KvtApiTxFrameBeginFn
+    txFrameTop*: KvtApiTxFrameTopFn
 
 
   KvtApiProfNames* = enum
@@ -100,22 +89,17 @@ type
     KvtApiProfCommitFn       = "commit"
     KvtApiProfDelFn          = "del"
     KvtApiProfFinishFn       = "finish"
-    KvtApiProfForgetFn       = "forget"
-    KvtApiProfForkTxFn       = "forkTx"
     KvtApiProfGetFn          = "get"
     KvtApiProfLenFn          = "len"
     KvtApiProfHasKeyRcFn     = "hasKeyRc"
-    KvtApiProfIsCentreFn     = "isCentre"
     KvtApiProfIsTopFn        = "isTop"
     KvtApiProfLevelFn        = "level"
-    KvtApiProfNForkedFn      = "nForked"
     KvtApiProfPutFn          = "put"
-    KvtApiProfReCentreFn     = "reCentre"
     KvtApiProfRollbackFn     = "rollback"
     KvtApiProfPersistFn      = "persist"
     KvtApiProfToKvtDbRefFn   = "toKvtDbRef"
-    KvtApiProfTxBeginFn      = "txBegin"
-    KvtApiProfTxTopFn        = "txTop"
+    KvtApiProfTxFrameBeginFn      = "txFrameBegin"
+    KvtApiProfTxFrameTopFn        = "txFrameTop"
 
     KvtApiProfBeGetKvpFn     = "be/getKvp"
     KvtApiProfBeLenKvpFn     = "be/lenKvp"
@@ -132,28 +116,12 @@ type
 # ------------------------------------------------------------------------------
 
 when AutoValidateApiHooks:
-  proc validate(api: KvtApiObj|KvtApiRef) =
-    doAssert not api.commit.isNil
-    doAssert not api.del.isNil
-    doAssert not api.finish.isNil
-    doAssert not api.forget.isNil
-    doAssert not api.forkTx.isNil
-    doAssert not api.get.isNil
-    doAssert not api.hasKeyRc.isNil
-    doAssert not api.isCentre.isNil
-    doAssert not api.isTop.isNil
-    doAssert not api.level.isNil
-    doAssert not api.nForked.isNil
-    doAssert not api.put.isNil
-    doAssert not api.reCentre.isNil
-    doAssert not api.rollback.isNil
-    doAssert not api.persist.isNil
-    doAssert not api.toKvtDbRef.isNil
-    doAssert not api.txBegin.isNil
-    doAssert not api.txTop.isNil
+  proc validate(api: KvtApiObj) =
+    for _, field in api.fieldPairs:
+      doAssert not field.isNil
 
   proc validate(prf: KvtApiProfRef) =
-    prf.KvtApiRef.validate
+    prf.KvtApiRef[].validate
     doAssert not prf.data.isNil
 
 proc dup(be: BackendRef): BackendRef =
@@ -178,22 +146,17 @@ func init*(api: var KvtApiObj) =
   api.commit = commit
   api.del = del
   api.finish = finish
-  api.forget = forget
-  api.forkTx = forkTx
   api.get = get
   api.len = len
   api.hasKeyRc = hasKeyRc
-  api.isCentre = isCentre
   api.isTop = isTop
-  api.level = level
-  api.nForked = nForked
+  api.txFrameLevel = txFrameLevel
   api.put = put
-  api.reCentre = reCentre
   api.rollback = rollback
   api.persist = persist
   api.toKvtDbRef = toKvtDbRef
-  api.txBegin = txBegin
-  api.txTop = txTop
+  api.txFrameBegin = txFrameBegin
+  api.txFrameTop = txFrameTop
   when AutoValidateApiHooks:
     api.validate
 
@@ -202,29 +165,10 @@ func init*(T: type KvtApiRef): T =
   result[].init()
 
 func dup*(api: KvtApiRef): KvtApiRef =
-  result = KvtApiRef(
-    commit:     api.commit,
-    del:        api.del,
-    finish:     api.finish,
-    forget:     api.forget,
-    forkTx:     api.forkTx,
-    get:        api.get,
-    len:        api.len,
-    hasKeyRc:   api.hasKeyRc,
-    isCentre:   api.isCentre,
-    isTop:      api.isTop,
-    level:      api.level,
-    nForked:    api.nForked,
-    put:        api.put,
-    reCentre:   api.reCentre,
-    rollback:   api.rollback,
-    persist:    api.persist,
-    toKvtDbRef: api.toKvtDbRef,
-    txBegin:    api.txBegin,
-    txTop:      api.txTop)
+  result = KvtApiRef()
+  result[] = api[]
   when AutoValidateApiHooks:
-    result.validate
-
+    result[].validate
 # ------------------------------------------------------------------------------
 # Public profile API constuctor
 # ------------------------------------------------------------------------------
@@ -267,16 +211,6 @@ func init*(
       KvtApiProfFinishFn.profileRunner:
         api.finish(a, b)
 
-  profApi.forget =
-    proc(a: KvtDbRef): auto =
-      KvtApiProfForgetFn.profileRunner:
-        result = api.forget(a)
-
-  profApi.forkTx =
-    proc(a: KvtDbRef, b: int): auto =
-      KvtApiProfForkTxFn.profileRunner:
-        result = api.forkTx(a, b)
-
   profApi.get =
     proc(a: KvtDbRef, b: openArray[byte]): auto =
       KvtApiProfGetFn.profileRunner:
@@ -292,11 +226,6 @@ func init*(
       KvtApiProfHasKeyRcFn.profileRunner:
         result = api.hasKeyRc(a, b)
 
-  profApi.isCentre =
-    proc(a: KvtDbRef): auto =
-      KvtApiProfIsCentreFn.profileRunner:
-        result = api.isCentre(a)
-
   profApi.isTop =
     proc(a: KvtTxRef): auto =
       KvtApiProfIsTopFn.profileRunner:
@@ -307,20 +236,10 @@ func init*(
       KvtApiProfLevelFn.profileRunner:
         result = api.level(a)
 
-  profApi.nForked =
-    proc(a: KvtDbRef): auto =
-      KvtApiProfNForkedFn.profileRunner:
-        result = api.nForked(a)
-
   profApi.put =
     proc(a: KvtDbRef; b, c: openArray[byte]): auto =
       KvtApiProfPutFn.profileRunner:
         result = api.put(a, b, c)
-
-  profApi.reCentre =
-    proc(a: KvtDbRef): auto =
-      KvtApiProfReCentreFn.profileRunner:
-        result = api.reCentre(a)
 
   profApi.rollback =
     proc(a: KvtTxRef): auto =
@@ -337,15 +256,15 @@ func init*(
        KvtApiProfToKvtDbRefFn.profileRunner:
          result = api.toKvtDbRef(a)
 
-  profApi.txBegin =
+  profApi.txFrameBegin =
     proc(a: KvtDbRef): auto =
-      KvtApiProfTxBeginFn.profileRunner:
-        result = api.txBegin(a)
+      KvtApiProfTxFrameBeginFn.profileRunner:
+        result = api.txFrameBegin(a)
 
-  profApi.txTop =
+  profApi.txFrameTop =
     proc(a: KvtDbRef): auto =
-      KvtApiProfTxTopFn.profileRunner:
-        result = api.txTop(a)
+      KvtApiProfTxFrameTopFn.profileRunner:
+        result = api.txFrameTop(a)
 
   let beDup = be.dup()
   if beDup.isNil:

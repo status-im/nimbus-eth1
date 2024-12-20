@@ -42,7 +42,7 @@ proc processBlock(
   ## implementations (but can be savely removed, as well.)
   ## variant of `processBlock()` where the `header` argument is explicitely set.
   template header: Header = blk.header
-  var dbTx = vmState.com.db.ctx.newTransaction()
+  var dbTx = vmState.com.db.ctx.txFrameBegin()
   defer: dbTx.dispose()
 
   let com = vmState.com
@@ -54,7 +54,7 @@ proc processBlock(
   if header.parentBeaconBlockRoot.isSome:
     ? vmState.processBeaconBlockRoot(header.parentBeaconBlockRoot.get)
 
-  ? processTransactions(vmState, header, blk.transactions)
+  ? processTransactions(vmState, header, blk.transactions, taskpool = com.taskpool)
 
   if com.isShanghaiOrLater(header.timestamp):
     for withdrawal in blk.withdrawals.get:
@@ -77,9 +77,6 @@ proc processBlock(
 
 proc getVmState(c: ChainRef, header: Header):
                  Result[BaseVMState, void] =
-  if c.vmState.isNil.not:
-    return ok(c.vmState)
-
   let vmState = BaseVMState()
   if not vmState.init(header, c.com, storeSlotHash = false):
     debug "Cannot initialise VmState",
@@ -92,28 +89,22 @@ proc getVmState(c: ChainRef, header: Header):
 # intended to accepts invalid block
 proc setBlock*(c: ChainRef; blk: Block): Result[void, string] =
   template header: Header = blk.header
-  let dbTx = c.db.ctx.newTransaction()
+  let dbTx = c.db.ctx.txFrameBegin()
   defer: dbTx.dispose()
 
   # Needed for figuring out whether KVT cleanup is due (see at the end)
   let
     vmState = c.getVmState(header).valueOr:
       return err("no vmstate")
-    stateRootChpt = vmState.parent.stateRoot # Check point
   ? vmState.processBlock(blk)
 
-  if not c.db.persistHeader(
-      header, c.com.proofOfStake(header), c.com.startOfHistory):
-    return err("Could not persist header")
+  ? c.db.persistHeaderAndSetHead(header, c.com.startOfHistory)
 
-  try:
-    c.db.persistTransactions(header.number, header.txRoot, blk.transactions)
-    c.db.persistReceipts(header.receiptsRoot, vmState.receipts)
+  c.db.persistTransactions(header.number, header.txRoot, blk.transactions)
+  c.db.persistReceipts(header.receiptsRoot, vmState.receipts)
 
-    if blk.withdrawals.isSome:
-      c.db.persistWithdrawals(header.withdrawalsRoot.get, blk.withdrawals.get)
-  except CatchableError as exc:
-    return err(exc.msg)
+  if blk.withdrawals.isSome:
+    c.db.persistWithdrawals(header.withdrawalsRoot.get, blk.withdrawals.get)
 
   # update currentBlock *after* we persist it
   # so the rpc return consistent result

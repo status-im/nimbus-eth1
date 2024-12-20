@@ -13,7 +13,7 @@
 import
   eth/common,
   results,
-  ".."/[aristo_desc, aristo_get, aristo_utils, aristo_compute, aristo_serialise]
+  ".."/[aristo_desc, aristo_get, aristo_utils, aristo_serialise]
 
 const
   ChainRlpNodesNoEntry* = {
@@ -37,7 +37,6 @@ proc chainRlpNodes*(
       ): Result[void,AristoError] =
   ## Inspired by the `getBranchAux()` function from `hexary.nim`
   let
-    key = ? db.computeKey rvid
     (vtx,_) = ? db.getVtxRc rvid
     node = vtx.toNode(rvid.root, db).valueOr:
       return err(PartChnNodeConvError)
@@ -63,10 +62,10 @@ proc chainRlpNodes*(
       let
         nibble = path[nChewOff]
         rest = path.slice(nChewOff+1)
-      if not vtx.bVid[nibble].isValid:
+      if not vtx.bVid(nibble).isValid:
         return err(PartChnBranchVoidEdge)
       # Recursion!
-      db.chainRlpNodes((rvid.root,vtx.bVid[nibble]), rest, chain)
+      db.chainRlpNodes((rvid.root,vtx.bVid(nibble)), rest, chain)
 
 
 proc trackRlpNodes*(

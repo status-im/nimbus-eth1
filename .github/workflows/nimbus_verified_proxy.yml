@@ -53,7 +53,7 @@ jobs:
             builder: ubuntu-20.04
           - target:
               os: macos
-            builder: macos-12
+            builder: macos-13
           - target:
               os: windows
             builder: windows-latest

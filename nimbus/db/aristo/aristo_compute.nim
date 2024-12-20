@@ -13,9 +13,9 @@
 import
   std/strformat,
   chronicles,
-  eth/common,
+  eth/common/[accounts_rlp, base_rlp, hashes_rlp],
   results,
-  "."/[aristo_desc, aristo_get, aristo_serialise],
+  "."/[aristo_desc, aristo_get, aristo_walk/persistent],
   ./aristo_desc/desc_backend
 
 type WriteBatch = tuple[writer: PutHdlRef, count: int, depth: int, prefix: uint64]
@@ -25,17 +25,39 @@ type WriteBatch = tuple[writer: PutHdlRef, count: int, depth: int, prefix: uint6
 # larger it is..
 const batchSize = 1024 * 1024 div (sizeof(RootedVertexID) + sizeof(HashKey))
 
+proc flush(batch: var WriteBatch, db: AristoDbRef): Result[void, AristoError] =
+  if batch.writer != nil:
+    ?db.backend.putEndFn batch.writer
+    batch.writer = nil
+  ok()
+
+proc putVtx(
+    batch: var WriteBatch,
+    db: AristoDbRef,
+    rvid: RootedVertexID,
+    vtx: VertexRef,
+    key: HashKey,
+): Result[void, AristoError] =
+  if batch.writer == nil:
+    doAssert db.backend != nil, "source data is from the backend"
+    batch.writer = ?db.backend.putBegFn()
+
+  db.backend.putVtxFn(batch.writer, rvid, vtx, key)
+  batch.count += 1
+
+  ok()
+
 func progress(batch: WriteBatch): string =
   # Return an approximation on how much of the keyspace has been covered by
   # looking at the path prefix that we're currently processing
   &"{(float(batch.prefix) / float(uint64.high)) * 100:02.2f}%"
 
-func enter(batch: var WriteBatch, nibble: int) =
+func enter(batch: var WriteBatch, nibble: uint8) =
   batch.depth += 1
   if batch.depth <= 16:
     batch.prefix += uint64(nibble) shl ((16 - batch.depth) * 4)
 
-func leave(batch: var WriteBatch, nibble: int) =
+func leave(batch: var WriteBatch, nibble: uint8) =
   if batch.depth <= 16:
     batch.prefix -= uint64(nibble) shl ((16 - batch.depth) * 4)
   batch.depth -= 1
@@ -43,6 +65,7 @@ func leave(batch: var WriteBatch, nibble: int) =
 proc putKeyAtLevel(
     db: AristoDbRef,
     rvid: RootedVertexID,
+    vtx: VertexRef,
     key: HashKey,
     level: int,
     batch: var WriteBatch,
@@ -52,34 +75,21 @@ proc putKeyAtLevel(
   ## set (vertex data may have been committed to disk without computing the
   ## corresponding hash!)
 
-  # Only put computed keys in the database which keeps churn down by focusing on
-  # the ones that do not change - the ones that don't require hashing might as
-  # well be loaded from the vertex!
   if level == -2:
-    if key.len == 32:
-      let be = db.backend
-      if batch.writer == nil:
-        doAssert be != nil, "source data is from the backend"
-        # TODO long-running batch here?
-        batch.writer = ?be.putBegFn()
+    ?batch.putVtx(db, rvid, vtx, key)
 
-      be.putKeyFn(batch.writer, rvid, key)
-      batch.count += 1
+    if batch.count mod batchSize == 0:
+      ?batch.flush(db)
 
-      if batch.count mod batchSize == 0:
-        if batch.count mod (batchSize * 100) == 0:
-          info "Writing computeKey cache",
-            count = batch.count, accounts = batch.progress
-        else:
-          debug "Writing computeKey cache",
-            count = batch.count, accounts = batch.progress
-        ?be.putEndFn batch.writer
-        batch.writer = nil
-
-    ok()
+      if batch.count mod (batchSize * 100) == 0:
+        info "Writing computeKey cache", keys = batch.count, accounts = batch.progress
+      else:
+        debug "Writing computeKey cache", keys = batch.count, accounts = batch.progress
   else:
+    db.deltaAtLevel(level).sTab[rvid] = vtx
     db.deltaAtLevel(level).kMap[rvid] = key
-    ok()
+
+  ok()
 
 func maxLevel(cur, other: int): int =
   # Compare two levels and return the topmost in the stack, taking into account
@@ -91,112 +101,222 @@ func maxLevel(cur, other: int): int =
   else:
     min(cur, other) # Here the order is reversed and 0 is the top layer
 
+template encodeLeaf(w: var RlpWriter, pfx: NibblesBuf, leafData: untyped): HashKey =
+  w.startList(2)
+  w.append(pfx.toHexPrefix(isLeaf = true).data())
+  w.append(leafData)
+  w.finish().digestTo(HashKey)
+
+template encodeBranch(w: var RlpWriter, vtx: VertexRef, subKeyForN: untyped): HashKey =
+  w.startList(17)
+  for (n {.inject.}, subvid {.inject.}) in vtx.allPairs():
+    w.append(subKeyForN)
+  w.append EmptyBlob
+  w.finish().digestTo(HashKey)
+
+template encodeExt(w: var RlpWriter, pfx: NibblesBuf, branchKey: HashKey): HashKey =
+  w.startList(2)
+  w.append(pfx.toHexPrefix(isLeaf = false).data())
+  w.append(branchKey)
+  w.finish().digestTo(HashKey)
+
+proc getKey(
+    db: AristoDbRef, rvid: RootedVertexID, skipLayers: static bool
+): Result[((HashKey, VertexRef), int), AristoError] =
+  ok when skipLayers:
+    (?db.getKeyUbe(rvid, {GetVtxFlag.PeekCache}), -2)
+  else:
+    ?db.getKeyRc(rvid, {})
+
+template childVid(v: VertexRef): VertexID =
+  # If we have to recurse into a child, where would that recusion start?
+  case v.vType
+  of Leaf:
+    if v.lData.pType == AccountData and v.lData.stoID.isValid:
+      v.lData.stoID.vid
+    else:
+      default(VertexID)
+  of Branch:
+    v.startVid
+
 proc computeKeyImpl(
-    db: AristoDbRef, # Database, top layer
-    rvid: RootedVertexID, # Vertex to convert
+    db: AristoDbRef,
+    rvid: RootedVertexID,
     batch: var WriteBatch,
+    vtx: VertexRef,
+    level: int,
+    skipLayers: static bool,
 ): Result[(HashKey, int), AristoError] =
-  ## Compute the key for an arbitrary vertex ID. If successful, the length of
-  ## the resulting key might be smaller than 32. If it is used as a root vertex
-  ## state/hash, it must be converted to a `Hash32` (using (`.to(Hash32)`) as
-  ## in `db.computeKey(rvid).value.to(Hash32)` which always results in a
-  ## 32 byte value.
+  # The bloom filter available used only when creating the key cache from an
+  # empty state
 
-  db.getKeyRc(rvid).isErrOr:
-    # Value cached either in layers or database
-    return ok value
-
-  let (vtx, vl) = ?db.getVtxRc(rvid, {GetVtxFlag.PeekCache})
-
-  # Top-most level of all the verticies this hash compution depends on
-  var level = vl
+  # Top-most level of all the verticies this hash computation depends on
+  var level = level
 
   # TODO this is the same code as when serializing NodeRef, without the NodeRef
   var writer = initRlpWriter()
 
-  case vtx.vType
-  of Leaf:
-    writer.startList(2)
-    writer.append(vtx.pfx.toHexPrefix(isLeaf = true).data())
+  let key =
+    case vtx.vType
+    of Leaf:
+      writer.encodeLeaf(vtx.pfx):
+        case vtx.lData.pType
+        of AccountData:
+          let
+            stoID = vtx.lData.stoID
+            skey =
+              if stoID.isValid:
+                let
+                  keyvtxl = ?db.getKey((stoID.vid, stoID.vid), skipLayers)
+                  (skey, sl) =
+                    if keyvtxl[0][0].isValid:
+                      (keyvtxl[0][0], keyvtxl[1])
+                    else:
+                      ?db.computeKeyImpl(
+                        (stoID.vid, stoID.vid),
+                        batch,
+                        keyvtxl[0][1],
+                        keyvtxl[1],
+                        skipLayers = skipLayers,
+                      )
+                level = maxLevel(level, sl)
+                skey
+              else:
+                VOID_HASH_KEY
 
-    case vtx.lData.pType
-    of AccountData:
-      let
-        stoID = vtx.lData.stoID
-        skey =
-          if stoID.isValid:
-            let (skey, sl) = ?db.computeKeyImpl((stoID.vid, stoID.vid), batch)
-            level = maxLevel(level, sl)
-            skey
+          rlp.encode Account(
+            nonce: vtx.lData.account.nonce,
+            balance: vtx.lData.account.balance,
+            storageRoot: skey.to(Hash32),
+            codeHash: vtx.lData.account.codeHash,
+          )
+        of StoData:
+          # TODO avoid memory allocation when encoding storage data
+          rlp.encode(vtx.lData.stoData)
+    of Branch:
+      # For branches, we need to load the vertices before recursing into them
+      # to exploit their on-disk order
+      var keyvtxs: array[16, ((HashKey, VertexRef), int)]
+      for n, subvid in vtx.pairs:
+        keyvtxs[n] = ?db.getKey((rvid.root, subvid), skipLayers)
+
+      # Make sure we have keys computed for each hash
+      block keysComputed:
+        while true:
+          # Compute missing keys in the order of the child vid that we have to
+          # recurse into, again exploiting on-disk order - this more than
+          # doubles computeKey speed on a fresh database!
+          var
+            minVid = default(VertexID)
+            minIdx = keyvtxs.len + 1 # index where the minvid can be found
+            n = 0'u8 # number of already-processed keys, for the progress bar
+
+          # The O(n^2) sort/search here is fine given the small size of the list
+          for nibble, keyvtx in keyvtxs.mpairs:
+            let subvid = vtx.bVid(uint8 nibble)
+            if (not subvid.isValid) or keyvtx[0][0].isValid:
+              n += 1 # no need to compute key
+              continue
+
+            let childVid = keyvtx[0][1].childVid
+            if not childVid.isValid:
+              # leaf vertex without storage ID - we can compute the key trivially
+              (keyvtx[0][0], keyvtx[1]) =
+                ?db.computeKeyImpl(
+                  (rvid.root, subvid),
+                  batch,
+                  keyvtx[0][1],
+                  keyvtx[1],
+                  skipLayers = skipLayers,
+                )
+              n += 1
+              continue
+
+            if minIdx == keyvtxs.len + 1 or childVid < minVid:
+              minIdx = nibble
+              minVid = childVid
+
+          if minIdx == keyvtxs.len + 1: # no uncomputed key found!
+            break keysComputed
+
+          batch.enter(n)
+          (keyvtxs[minIdx][0][0], keyvtxs[minIdx][1]) =
+            ?db.computeKeyImpl(
+              (rvid.root, vtx.bVid(uint8 minIdx)),
+              batch,
+              keyvtxs[minIdx][0][1],
+              keyvtxs[minIdx][1],
+              skipLayers = skipLayers,
+            )
+          batch.leave(n)
+
+      template writeBranch(w: var RlpWriter): HashKey =
+        w.encodeBranch(vtx):
+          if subvid.isValid:
+            level = maxLevel(level, keyvtxs[n][1])
+            keyvtxs[n][0][0]
           else:
             VOID_HASH_KEY
 
-      writer.append(
-        encode Account(
-          nonce: vtx.lData.account.nonce,
-          balance: vtx.lData.account.balance,
-          storageRoot: skey.to(Hash32),
-          codeHash: vtx.lData.account.codeHash,
-        )
-      )
-    of RawData:
-      writer.append(vtx.lData.rawBlob)
-    of StoData:
-      # TODO avoid memory allocation when encoding storage data
-      writer.append(rlp.encode(vtx.lData.stoData))
-  of Branch:
-    template writeBranch(w: var RlpWriter) =
-      w.startList(17)
-      for n in 0 .. 15:
-        let vid = vtx.bVid[n]
-        if vid.isValid:
-          batch.enter(n)
-          let (bkey, bl) = ?db.computeKeyImpl((rvid.root, vid), batch)
-          batch.leave(n)
+      if vtx.pfx.len > 0: # Extension node
+        writer.encodeExt(vtx.pfx):
+          var bwriter = initRlpWriter()
+          bwriter.writeBranch()
+      else:
+        writer.writeBranch()
 
-          level = maxLevel(level, bl)
-          w.append(bkey)
-        else:
-          w.append(VOID_HASH_KEY)
-      w.append EmptyBlob
-
-    if vtx.pfx.len > 0: # Extension node
-      var bwriter = initRlpWriter()
-      writeBranch(bwriter)
-
-      writer.startList(2)
-      writer.append(vtx.pfx.toHexPrefix(isleaf = false).data())
-      writer.append(bwriter.finish().digestTo(HashKey))
-    else:
-      writeBranch(writer)
-
-  let h = writer.finish().digestTo(HashKey)
-
-  # Cache the hash int the same storage layer as the the top-most value that it
+  # Cache the hash into the same storage layer as the the top-most value that it
   # depends on (recursively) - this could be an ephemeral in-memory layer or the
   # underlying database backend - typically, values closer to the root are more
   # likely to live in an in-memory layer since any leaf change will lead to the
   # root key also changing while leaves that have never been hashed will see
   # their hash being saved directly to the backend.
-  ?db.putKeyAtLevel(rvid, h, level, batch)
 
-  ok (h, level)
+  if vtx.vType != Leaf:
+    ?db.putKeyAtLevel(rvid, vtx, key, level, batch)
+  ok (key, level)
+
+proc computeKeyImpl(
+    db: AristoDbRef, rvid: RootedVertexID, skipLayers: static bool
+): Result[HashKey, AristoError] =
+  let (keyvtx, level) =
+    when skipLayers:
+      (?db.getKeyUbe(rvid, {GetVtxFlag.PeekCache}), -2)
+    else:
+      ?db.getKeyRc(rvid, {})
+
+  if keyvtx[0].isValid:
+    return ok(keyvtx[0])
+
+  var batch: WriteBatch
+  let res = computeKeyImpl(db, rvid, batch, keyvtx[1], level, skipLayers = skipLayers)
+  if res.isOk:
+    ?batch.flush(db)
+
+    if batch.count > 0:
+      if batch.count >= batchSize * 100:
+        info "Wrote computeKey cache", keys = batch.count, accounts = "100.00%"
+      else:
+        debug "Wrote computeKey cache", keys = batch.count, accounts = "100.00%"
+
+  ok (?res)[0]
 
 proc computeKey*(
     db: AristoDbRef, # Database, top layer
     rvid: RootedVertexID, # Vertex to convert
 ): Result[HashKey, AristoError] =
-  var batch: WriteBatch
-  let res = computeKeyImpl(db, rvid, batch)
-  if res.isOk:
-    if batch.writer != nil:
-      if batch.count >= batchSize * 100:
-        info "Writing computeKey cache", count = batch.count, progress = "100.00%"
-      else:
-        debug "Writing computeKey cache", count = batch.count, progress = "100.00%"
-      ?db.backend.putEndFn batch.writer
-      batch.writer = nil
-  ok (?res)[0]
+  ## Compute the key for an arbitrary vertex ID. If successful, the length of
+  ## the resulting key might be smaller than 32. If it is used as a root vertex
+  ## state/hash, it must be converted to a `Hash32` (using (`.to(Hash32)`) as
+  ## in `db.computeKey(rvid).value.to(Hash32)` which always results in a
+  ## 32 byte value.
+  computeKeyImpl(db, rvid, skipLayers = false)
+
+proc computeKeys*(db: AristoDbRef, root: VertexID): Result[void, AristoError] =
+  ## Ensure that key cache is topped up with the latest state root
+  discard db.computeKeyImpl((root, root), skipLayers = true)
+
+  ok()
 
 # ------------------------------------------------------------------------------
 # End

@@ -306,7 +306,7 @@ proc opMemoryMain*() =
         var body = newStmtList()
         var stack = newStmtList()
 
-        for x in countDown(i, 0):
+        for x in countdown(i, 0):
           let val = newLit("0x" & toHex(x+10, 2))
           body.add quote do:
             `pushIdent` `val`

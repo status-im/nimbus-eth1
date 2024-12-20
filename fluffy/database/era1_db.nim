@@ -59,15 +59,19 @@ proc new*(
 ): Era1DB =
   Era1DB(path: path, network: network, accumulator: accumulator)
 
-proc getEthBlock*(db: Era1DB, blockNumber: uint64): Result[Block, string] =
+proc getEthBlock*(
+    db: Era1DB, blockNumber: uint64, res: var Block
+): Result[void, string] =
   let f = ?db.getEra1File(blockNumber.era)
 
-  f.getEthBlock(blockNumber)
+  f.getEthBlock(blockNumber, res)
 
-proc getBlockTuple*(db: Era1DB, blockNumber: uint64): Result[BlockTuple, string] =
+proc getBlockTuple*(
+    db: Era1DB, blockNumber: uint64, res: var BlockTuple
+): Result[void, string] =
   let f = ?db.getEra1File(blockNumber.era)
 
-  f.getBlockTuple(blockNumber)
+  f.getBlockTuple(blockNumber, res)
 
 proc getAccumulator*(
     db: Era1DB, blockNumber: uint64

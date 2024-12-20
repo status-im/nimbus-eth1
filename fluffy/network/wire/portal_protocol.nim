@@ -27,6 +27,8 @@ import
   "."/[portal_stream, portal_protocol_config],
   ./messages
 
+from std/times import epochTime # For system timestamp in traceContentLookup
+
 export messages, routing_table, protocol
 
 declareCounter portal_message_requests_incoming,
@@ -47,7 +49,7 @@ declareHistogram portal_lookup_node_requests,
   labels = ["protocol_id"],
   buckets = requestBuckets
 declareHistogram portal_lookup_content_requests,
-  "Portal wire protocol amount of requests per node lookup",
+  "Portal wire protocol amount of requests per content lookup",
   labels = ["protocol_id"],
   buckets = requestBuckets
 declareCounter portal_lookup_content_failures,
@@ -116,7 +118,6 @@ logScope:
   topics = "portal_wire"
 
 const
-  alpha = 3 ## Kademlia concurrency factor
   enrsResultLimit* = 32 ## Maximum amount of ENRs in the total Nodes messages
   ## that will be processed
   refreshInterval = 5.minutes ## Interval of launching a random query to
@@ -124,20 +125,6 @@ const
   revalidateMax = 4000 ## Revalidation of a peer is done between 0 and this
   ## value in milliseconds
   initialLookups = 1 ## Amount of lookups done when populating the routing table
-
-  # These are the concurrent offers per Portal wire protocol that is running.
-  # Using the `offerQueue` allows for limiting the amount of offers send and
-  # thus how many streams can be started.
-  # TODO:
-  # More thought needs to go into this as it is currently on a per network
-  # basis. Keep it simple like that? Or limit it better at the stream transport
-  # level? In the latter case, this might still need to be checked/blocked at
-  # the very start of sending the offer, because blocking/waiting too long
-  # between the received accept message and actually starting the stream and
-  # sending data could give issues due to timeouts on the other side.
-  # And then there are still limits to be applied also for FindContent and the
-  # incoming directions.
-  concurrentOffers = 50
 
 type
   ToContentIdHandler* =
@@ -151,13 +138,17 @@ type
     contentKey: ContentKeyByteList, contentId: ContentId, content: seq[byte]
   ) {.raises: [], gcsafe.}
 
+  DbContainsHandler* = proc(contentKey: ContentKeyByteList, contentId: ContentId): bool {.
+    raises: [], gcsafe
+  .}
+
   DbRadiusHandler* = proc(): UInt256 {.raises: [], gcsafe.}
 
   PortalProtocolId* = array[2, byte]
 
-  RadiusCache* = LRUCache[NodeId, UInt256]
+  RadiusCache* = LruCache[NodeId, UInt256]
 
-  ContentCache = LRUCache[ContentId, seq[byte]]
+  ContentCache = LruCache[ContentId, seq[byte]]
 
   ContentKV* = object
     contentKey*: ContentKeyByteList
@@ -183,6 +174,7 @@ type
     contentCache: ContentCache
     dbGet*: DbGetHandler
     dbPut*: DbStoreHandler
+    dbContains*: DbContainsHandler
     dataRadius*: DbRadiusHandler
     bootstrapRecords*: seq[Record]
     lastLookup: chronos.Moment
@@ -319,7 +311,7 @@ func inRange(
   let distance = p.distance(nodeId, contentId)
   distance <= nodeRadius
 
-proc inRange*(p: PortalProtocol, contentId: ContentId): bool =
+template inRange*(p: PortalProtocol, contentId: ContentId): bool =
   p.inRange(p.localNode.id, p.dataRadius(), contentId)
 
 func truncateEnrs(
@@ -415,8 +407,11 @@ proc handleFindContent(
     int64(logDistance), labelValues = [$p.protocolId]
   )
 
+  # Clear out the timed out connections and pending transfers
+  p.stream.pruneAllowedRequestConnections()
+
   # Check first if content is in range, as this is a cheaper operation
-  if p.inRange(contentId):
+  if p.inRange(contentId) and p.stream.canAddPendingTransfer(srcId, contentId):
     let contentResult = p.dbGet(fc.contentKey, contentId)
     if contentResult.isOk():
       let content = contentResult.get()
@@ -427,7 +422,8 @@ proc handleFindContent(
           )
         )
       else:
-        let connectionId = p.stream.addContentRequest(srcId, content)
+        p.stream.addPendingTransfer(srcId, contentId)
+        let connectionId = p.stream.addContentRequest(srcId, contentId, content)
 
         return encodeMessage(
           ContentMessage(
@@ -456,8 +452,13 @@ proc handleOffer(p: PortalProtocol, o: OfferMessage, srcId: NodeId): seq[byte] =
       )
     )
 
-  var contentKeysBitList = ContentKeysBitList.init(o.contentKeys.len)
-  var contentKeys = ContentKeysList.init(@[])
+  # Clear out the timed out connections and pending transfers
+  p.stream.pruneAllowedOfferConnections()
+
+  var
+    contentKeysBitList = ContentKeysBitList.init(o.contentKeys.len)
+    contentKeys = ContentKeysList.init(@[])
+    contentIds = newSeq[ContentId]()
   # TODO: Do we need some protection against a peer offering lots (64x) of
   # content that fits our Radius but is actually bogus?
   # Additional TODO, but more of a specification clarification: What if we don't
@@ -473,17 +474,19 @@ proc handleOffer(p: PortalProtocol, o: OfferMessage, srcId: NodeId): seq[byte] =
         int64(logDistance), labelValues = [$p.protocolId]
       )
 
-      if p.inRange(contentId):
-        if p.dbGet(contentKey, contentId).isErr:
-          contentKeysBitList.setBit(i)
-          discard contentKeys.add(contentKey)
+      if p.inRange(contentId) and p.stream.canAddPendingTransfer(srcId, contentId) and
+          not p.dbContains(contentKey, contentId):
+        p.stream.addPendingTransfer(srcId, contentId)
+        contentKeysBitList.setBit(i)
+        discard contentKeys.add(contentKey)
+        contentIds.add(contentId)
     else:
       # Return empty response when content key validation fails
       return @[]
 
   let connectionId =
     if contentKeysBitList.countOnes() != 0:
-      p.stream.addContentOffer(srcId, contentKeys)
+      p.stream.addContentOffer(srcId, contentKeys, contentIds)
     else:
       # When the node does not accept any of the content offered, reply with an
       # all zeroes bitlist and connectionId.
@@ -561,6 +564,7 @@ proc new*(
     toContentId: ToContentIdHandler,
     dbGet: DbGetHandler,
     dbPut: DbStoreHandler,
+    dbContains: DbContainsHandler,
     dbRadius: DbRadiusHandler,
     stream: PortalStream,
     bootstrapRecords: openArray[Record] = [],
@@ -580,11 +584,12 @@ proc new*(
       ContentCache.init(if config.disableContentCache: 0 else: config.contentCacheSize),
     dbGet: dbGet,
     dbPut: dbPut,
+    dbContains: dbContains,
     dataRadius: dbRadius,
     bootstrapRecords: @bootstrapRecords,
     stream: stream,
     radiusCache: RadiusCache.init(256),
-    offerQueue: newAsyncQueue[OfferRequest](concurrentOffers),
+    offerQueue: newAsyncQueue[OfferRequest](config.maxConcurrentOffers),
     pingTimings: Table[NodeId, chronos.Moment](),
     config: config,
   )
@@ -742,21 +747,18 @@ proc findContent*(
     let m = contentMessageResponse.get()
     case m.contentMessageType
     of connectionIdType:
-      let nodeAddress = NodeAddress.init(dst)
-      if nodeAddress.isNone():
-        # It should not happen as we are already after the succesfull
-        # talkreq/talkresp cycle
-        error "Trying to connect to node with unknown address", id = dst.id
-        return err("Trying to connect to node with unknown address")
+      let nodeAddress = NodeAddress.init(dst).valueOr:
+        # This should not happen as it comes a after succesfull talkreq/talkresp
+        return err("Trying to connect to node with unknown address: " & $dst.id)
 
-      # uTP protocol uses BE for all values in the header, incl. connection id
-      let socket = (
-        await p.stream.connectTo(
-          nodeAddress.unsafeGet(), uint16.fromBytesBE(m.connectionId)
+      let socket =
+        ?(
+          await p.stream.connectTo(
+            # uTP protocol uses BE for all values in the header, incl. connection id
+            nodeAddress,
+            uint16.fromBytesBE(m.connectionId),
+          )
         )
-      ).valueOr:
-        debug "uTP connection error for find content", error
-        return err("Error connecting uTP socket")
 
       try:
         # Read all bytes from the socket
@@ -811,7 +813,7 @@ proc findContent*(
       else:
         return err("Content message returned invalid ENRs")
   else:
-    warn "FindContent failed due to find content request failure ",
+    debug "FindContent failed due to find content request failure ",
       error = contentMessageResponse.error
 
     return err("No content response")
@@ -900,20 +902,12 @@ proc offer(
       # Don't open an uTP stream if no content was requested
       return ok(m.contentKeys)
 
-    let nodeAddress = NodeAddress.init(o.dst)
-    if nodeAddress.isNone():
-      # It should not happen as we are already after succesfull talkreq/talkresp
-      # cycle
-      error "Trying to connect to node with unknown address", id = o.dst.id
-      return err("Trying to connect to node with unknown address")
+    let nodeAddress = NodeAddress.init(o.dst).valueOr:
+      # This should not happen as it comes a after succesfull talkreq/talkresp
+      return err("Trying to connect to node with unknown address: " & $o.dst.id)
 
-    let socket = (
-      await p.stream.connectTo(
-        nodeAddress.unsafeGet(), uint16.fromBytesBE(m.connectionId)
-      )
-    ).valueOr:
-      debug "uTP connection error for offer content", error
-      return err("Error connecting uTP socket")
+    let socket =
+      ?(await p.stream.connectTo(nodeAddress, uint16.fromBytesBE(m.connectionId)))
 
     template lenu32(x: untyped): untyped =
       uint32(len(x))
@@ -923,7 +917,6 @@ proc offer(
       for i, b in m.contentKeys:
         if b:
           let content = o.contentList[i].content
-          # TODO: stop using faststreams for this
           var output = memoryOutput()
           try:
             output.write(toBytes(content.lenu32, Leb128).toOpenArray())
@@ -978,9 +971,9 @@ proc offer(
 
     return ok(m.contentKeys)
   else:
-    warn "Offer failed due to accept request failure ",
+    debug "Offer failed due to accept request failure ",
       error = acceptMessageResponse.error
-    return err("No accept response")
+    return err("No or invalid accept response: " & acceptMessageResponse.error)
 
 proc offer*(
     p: PortalProtocol, dst: Node, contentKeys: ContentKeysList
@@ -1042,14 +1035,15 @@ proc lookup*(
   for node in closestNodes:
     seen.incl(node.id)
 
-  var pendingQueries = newSeqOfCap[Future[seq[Node]].Raising([CancelledError])](alpha)
+  var pendingQueries =
+    newSeqOfCap[Future[seq[Node]].Raising([CancelledError])](p.config.alpha)
   var requestAmount = 0'i64
 
   while true:
     var i = 0
-    # Doing `alpha` amount of requests at once as long as closer non queried
+    # Doing `p.config.alpha` amount of requests at once as long as closer non queried
     # nodes are discovered.
-    while i < closestNodes.len and pendingQueries.len < alpha:
+    while i < closestNodes.len and pendingQueries.len < p.config.alpha:
       let n = closestNodes[i]
       if not asked.containsOrIncl(n.id):
         pendingQueries.add(p.lookupWorker(n, target))
@@ -1132,13 +1126,30 @@ proc contentLookup*(
     p: PortalProtocol, target: ContentKeyByteList, targetId: UInt256
 ): Future[Opt[ContentLookupResult]] {.async: (raises: [CancelledError]).} =
   ## Perform a lookup for the given target, return the closest n nodes to the
-  ## target. Maximum value for n is `BUCKET_SIZE`.
+  ## target.
   # `closestNodes` holds the k closest nodes to target found, sorted by distance
   # Unvalidated nodes are used for requests as a form of validation.
   var closestNodes = p.routingTable.neighbours(targetId, BUCKET_SIZE, seenOnly = false)
+
   # Shuffling the order of the nodes in order to not always hit the same node
   # first for the same request.
   p.baseProtocol.rng[].shuffle(closestNodes)
+
+  # Sort closestNodes so that nodes that are in range of the target content
+  # are queried first
+  proc nodesCmp(x, y: Node): int =
+    let
+      xRadius = p.radiusCache.get(x.id)
+      yRadius = p.radiusCache.get(y.id)
+
+    if xRadius.isSome() and p.inRange(x.id, xRadius.unsafeGet(), targetId):
+      -1
+    elif yRadius.isSome() and p.inRange(y.id, yRadius.unsafeGet(), targetId):
+      1
+    else:
+      0
+
+  closestNodes.sort(nodesCmp)
 
   var asked, seen = HashSet[NodeId]()
   asked.incl(p.localNode.id) # No need to ask our own node
@@ -1146,17 +1157,18 @@ proc contentLookup*(
   for node in closestNodes:
     seen.incl(node.id)
 
-  var pendingQueries =
-    newSeqOfCap[Future[PortalResult[FoundContent]].Raising([CancelledError])](alpha)
+  var pendingQueries = newSeqOfCap[
+    Future[PortalResult[FoundContent]].Raising([CancelledError])
+  ](p.config.alpha)
   var requestAmount = 0'i64
 
   var nodesWithoutContent: seq[Node] = newSeq[Node]()
 
   while true:
     var i = 0
-    # Doing `alpha` amount of requests at once as long as closer non queried
+    # Doing `p.config.alpha` amount of requests at once as long as closer non queried
     # nodes are discovered.
-    while i < closestNodes.len and pendingQueries.len < alpha:
+    while i < closestNodes.len and pendingQueries.len < p.config.alpha:
       let n = closestNodes[i]
       if not asked.containsOrIncl(n.id):
         pendingQueries.add(p.findContent(n, target))
@@ -1224,8 +1236,9 @@ proc contentLookup*(
           )
         )
     else:
-      # TODO: Should we do something with the node that failed responding our
-      # query?
+      # Note: Not doing any retries here as retries can/should be done on a
+      # higher layer. However, depending on the failure we could attempt a retry,
+      # e.g. on uTP specific errors.
       discard
 
   portal_lookup_content_failures.inc(labelValues = [$p.protocolId])
@@ -1238,14 +1251,30 @@ proc traceContentLookup*(
   ## target. Maximum value for n is `BUCKET_SIZE`.
   # `closestNodes` holds the k closest nodes to target found, sorted by distance
   # Unvalidated nodes are used for requests as a form of validation.
+  let startedAt = Moment.now()
+  # Need to use a system clock and not the mono clock for this.
+  let startedAtMs = int64(times.epochTime() * 1000)
+
   var closestNodes = p.routingTable.neighbours(targetId, BUCKET_SIZE, seenOnly = false)
   # Shuffling the order of the nodes in order to not always hit the same node
   # first for the same request.
   p.baseProtocol.rng[].shuffle(closestNodes)
 
-  let ts = now(chronos.Moment)
-  var responses = Table[string, TraceResponse]()
-  var metadata = Table[string, NodeMetadata]()
+  # Sort closestNodes so that nodes that are in range of the target content
+  # are queried first
+  proc nodesCmp(x, y: Node): int =
+    let
+      xRadius = p.radiusCache.get(x.id)
+      yRadius = p.radiusCache.get(y.id)
+
+    if xRadius.isSome() and p.inRange(x.id, xRadius.unsafeGet(), targetId):
+      -1
+    elif yRadius.isSome() and p.inRange(y.id, yRadius.unsafeGet(), targetId):
+      1
+    else:
+      0
+
+  closestNodes.sort(nodesCmp)
 
   var asked, seen = HashSet[NodeId]()
   asked.incl(p.localNode.id) # No need to ask our own node
@@ -1253,22 +1282,23 @@ proc traceContentLookup*(
   for node in closestNodes:
     seen.incl(node.id)
 
+  # Trace data
+  var responses = Table[string, TraceResponse]()
+  var metadata = Table[string, NodeMetadata]()
   # Local node should be part of the responses
   responses["0x" & $p.localNode.id] =
     TraceResponse(durationMs: 0, respondedWith: seen.toSeq())
-
   metadata["0x" & $p.localNode.id] = NodeMetadata(
     enr: p.localNode.record, distance: p.distance(p.localNode.id, targetId)
   )
+  # And metadata for all the nodes local node closestNodes
+  for node in closestNodes:
+    metadata["0x" & $node.id] =
+      NodeMetadata(enr: node.record, distance: p.distance(node.id, targetId))
 
-  # We should also have metadata for all the closes nodes
-  # in order to be able to show cancelled requests
-  for cn in closestNodes:
-    metadata["0x" & $cn.id] =
-      NodeMetadata(enr: cn.record, distance: p.distance(cn.id, targetId))
-
-  var pendingQueries =
-    newSeqOfCap[Future[PortalResult[FoundContent]].Raising([CancelledError])](alpha)
+  var pendingQueries = newSeqOfCap[
+    Future[PortalResult[FoundContent]].Raising([CancelledError])
+  ](p.config.alpha)
   var pendingNodes = newSeq[Node]()
   var requestAmount = 0'i64
 
@@ -1276,9 +1306,9 @@ proc traceContentLookup*(
 
   while true:
     var i = 0
-    # Doing `alpha` amount of requests at once as long as closer non queried
+    # Doing `p.config.alpha` amount of requests at once as long as closer non queried
     # nodes are discovered.
-    while i < closestNodes.len and pendingQueries.len < alpha:
+    while i < closestNodes.len and pendingQueries.len < p.config.alpha:
       let n = closestNodes[i]
       if not asked.containsOrIncl(n.id):
         pendingQueries.add(p.findContent(n, target))
@@ -1312,7 +1342,7 @@ proc traceContentLookup*(
 
       case content.kind
       of Nodes:
-        let duration = chronos.milliseconds(now(chronos.Moment) - ts)
+        let duration = chronos.milliseconds(Moment.now() - startedAt)
 
         let maybeRadius = p.radiusCache.get(content.src.id)
         if maybeRadius.isSome() and
@@ -1353,7 +1383,7 @@ proc traceContentLookup*(
         metadata["0x" & $content.src.id] =
           NodeMetadata(enr: content.src.record, distance: distance)
       of Content:
-        let duration = chronos.milliseconds(now(chronos.Moment) - ts)
+        let duration = chronos.milliseconds(Moment.now() - startedAt)
 
         # cancel any pending queries as the content has been found
         for f in pendingQueries:
@@ -1387,13 +1417,16 @@ proc traceContentLookup*(
             responses: responses,
             metadata: metadata,
             cancelled: pendingNodeIds,
-            startedAtMs: chronos.epochNanoSeconds(ts) div 1_000_000,
-              # nanoseconds to milliseconds
+            startedAtMs: startedAtMs,
           ),
         )
     else:
-      # TODO: Should we do something with the node that failed responding our
-      # query?
+      # Note: Not doing any retries here as retries can/should be done on a
+      # higher layer. However, depending on the failure we could attempt a retry,
+      # e.g. on uTP specific errors.
+      # TODO: Ideally we get an empty response added to the responses table
+      # and the metadata for the node that failed to respond. In the current
+      # implementation there is no access to the node information however.
       discard
 
   portal_lookup_content_failures.inc(labelValues = [$p.protocolId])
@@ -1407,8 +1440,7 @@ proc traceContentLookup*(
       responses: responses,
       metadata: metadata,
       cancelled: newSeq[NodeId](),
-      startedAtMs: chronos.epochNanoSeconds(ts) div 1_000_000,
-        # nanoseconds to milliseconds
+      startedAtMs: startedAtMs,
     ),
   )
 
@@ -1429,11 +1461,12 @@ proc query*(
   for node in queryBuffer:
     seen.incl(node.id)
 
-  var pendingQueries = newSeqOfCap[Future[seq[Node]].Raising([CancelledError])](alpha)
+  var pendingQueries =
+    newSeqOfCap[Future[seq[Node]].Raising([CancelledError])](p.config.alpha)
 
   while true:
     var i = 0
-    while i < min(queryBuffer.len, k) and pendingQueries.len < alpha:
+    while i < min(queryBuffer.len, k) and pendingQueries.len < p.config.alpha:
       let n = queryBuffer[i]
       if not asked.containsOrIncl(n.id):
         pendingQueries.add(p.lookupWorker(n, target))
@@ -1627,7 +1660,6 @@ proc getLocalContent*(
   # Check first if content is in range, as this is a cheaper operation
   # than the database lookup.
   if p.inRange(contentId):
-    doAssert(p.dbGet != nil)
     p.dbGet(contentKey, contentId)
   else:
     Opt.none(seq[byte])
@@ -1735,7 +1767,19 @@ proc start*(p: PortalProtocol) =
   p.refreshLoop = refreshLoop(p)
   p.revalidateLoop = revalidateLoop(p)
 
-  for i in 0 ..< concurrentOffers:
+  # These are the concurrent offers per Portal wire protocol that is running.
+  # Using the `offerQueue` allows for limiting the amount of offers send and
+  # thus how many streams can be started.
+  # TODO:
+  # More thought needs to go into this as it is currently on a per network
+  # basis. Keep it simple like that? Or limit it better at the stream transport
+  # level? In the latter case, this might still need to be checked/blocked at
+  # the very start of sending the offer, because blocking/waiting too long
+  # between the received accept message and actually starting the stream and
+  # sending data could give issues due to timeouts on the other side.
+  # And then there are still limits to be applied also for FindContent and the
+  # incoming directions.
+  for i in 0 ..< p.config.maxConcurrentOffers:
     p.offerWorkers.add(offerWorker(p))
 
 proc stop*(p: PortalProtocol) {.async: (raises: []).} =

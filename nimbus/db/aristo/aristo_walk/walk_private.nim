@@ -12,7 +12,7 @@
 import
   std/[algorithm, sequtils, sets, tables],
   results,
-  ".."/[aristo_desc, aristo_get, aristo_init, aristo_layers, aristo_utils]
+  ".."/[aristo_desc, aristo_init, aristo_layers]
 
 # ------------------------------------------------------------------------------
 # Public generic iterators
@@ -20,6 +20,7 @@ import
 
 iterator walkVtxBeImpl*[T](
     db: AristoDbRef;                   # Database with optional backend filter
+    kinds: set[VertexType];
       ): tuple[rvid: RootedVertexID, vtx: VertexRef] =
   ## Generic iterator
   when T is VoidBackendRef:
@@ -32,7 +33,7 @@ iterator walkVtxBeImpl*[T](
     if not db.balancer.isNil:
       filter.sTab = db.balancer.sTab # copy table
 
-    for (rvid,vtx) in db.backend.T.walkVtx:
+    for (rvid,vtx) in db.backend.T.walkVtx(kinds):
       if filter.sTab.hasKey rvid:
         let fVtx = filter.sTab.getOrVoid rvid
         if fVtx.isValid:
@@ -41,9 +42,11 @@ iterator walkVtxBeImpl*[T](
       else:
         yield (rvid,vtx)
 
-  for rvid in filter.sTab.keys.toSeq.sorted:
+  for rvid in filter.sTab.keys:
     let vtx = filter.sTab.getOrVoid rvid
     if vtx.isValid:
+      if vtx.vType notin kinds:
+        continue
       yield (rvid,vtx)
 
 
@@ -89,19 +92,6 @@ iterator walkPairsImpl*[T](
   for (rvid,vtx) in walkVtxBeImpl[T](db):
     if rvid.vid notin seen:
       yield (rvid,vtx)
-
-iterator replicateImpl*[T](
-   db: AristoDbRef;                   # Database with top layer & backend filter
-     ): tuple[rvid: RootedVertexID, key: HashKey, vtx: VertexRef, node: NodeRef] =
-  ## Variant of `walkPairsImpl()` for legacy applications.
-  for (rvid,vtx) in walkPairsImpl[T](db):
-    let node = block:
-      let rc = vtx.toNode(rvid.root, db)
-      if rc.isOk:
-        rc.value
-      else:
-        NodeRef(nil)
-    yield (rvid, db.getKey rvid, vtx, node)
 
 # ------------------------------------------------------------------------------
 # End

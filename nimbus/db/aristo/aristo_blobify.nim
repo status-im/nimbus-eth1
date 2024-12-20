@@ -68,10 +68,12 @@ proc deblobify*[T: uint64|VertexID](data: openArray[byte], _: type T): Result[T,
   if data.len < 1 or data.len > 8:
     return err(Deblob64LenUnsupported)
 
-  var tmp: array[8, byte]
-  discard tmp.toOpenArray(8 - data.len, 7).copyFrom(data)
+  var tmp = 0'u64
+  let start = 8 - data.len
+  for i in 0..<data.len:
+    tmp += uint64(data[i]) shl (8*(7-(i + start)))
 
-  ok T(uint64.fromBytesBE(tmp))
+  ok T(tmp)
 
 proc deblobify*(data: openArray[byte], _: type UInt256): Result[UInt256,AristoError] =
   if data.len < 1 or data.len > 32:
@@ -124,10 +126,6 @@ proc load256(data: openArray[byte]; start: var int, len: int): Result[UInt256,Ar
 
 proc blobifyTo*(pyl: LeafPayload, data: var seq[byte]) =
   case pyl.pType
-  of RawData:
-    data &= pyl.rawBlob
-    data &= [0x10.byte]
-
   of AccountData:
     # `lens` holds `len-1` since `mask` filters out the zero-length case (which
     # allows saving 1 bit per length)
@@ -161,86 +159,75 @@ proc blobifyTo*(pyl: LeafPayload, data: var seq[byte]) =
     data &= pyl.stoData.blobify().data
     data &= [0x20.byte]
 
-proc blobifyTo*(vtx: VertexRef; data: var seq[byte]): Result[void,AristoError] =
+proc blobifyTo*(vtx: VertexRef, key: HashKey, data: var seq[byte]) =
   ## This function serialises the vertex argument to a database record.
   ## Contrary to RLP based serialisation, these records aim to align on
   ## fixed byte boundaries.
   ## ::
   ##   Branch:
+  ##     <HashKey>      -- optional hash key
   ##     [VertexID, ..] -- list of up to 16 child vertices lookup keys
   ##     seq[byte]      -- hex encoded partial path (non-empty for extension nodes)
   ##     uint64         -- lengths of each child vertex, each taking 4 bits
-  ##     0x80 + xx      -- marker(2) + pathSegmentLen(6)
+  ##     0x80 + xx      -- marker(0/2) + pathSegmentLen(6)
   ##
   ##   Leaf:
   ##     seq[byte]      -- opaque leaf data payload (might be zero length)
   ##     seq[byte]      -- hex encoded partial path (at least one byte)
-  ##     0xc0 + yy      -- marker(2) + partialPathLen(6)
+  ##     0xc0 + yy      -- marker(3) + partialPathLen(6)
   ##
   ## For a branch record, the bytes of the `access` array indicate the position
   ## of the Patricia Trie vertex reference. So the `vertexID` with index `n` has
   ## ::
   ##   8 * n * ((access shr (n * 4)) and 15)
   ##
-  if not vtx.isValid:
-    return err(BlobifyNilVertex)
-  case vtx.vType:
-  of Branch:
-    var
-      lens = 0u64
-      pos = data.len
-    for n in 0..15:
-      if vtx.bVid[n].isValid:
-        let tmp = vtx.bVid[n].blobify()
-        lens += uint64(tmp.len) shl (n * 4)
-        data &= tmp.data()
-    if data.len == pos:
-      return err(BlobifyBranchMissingRefs)
+  doAssert vtx.isValid
 
-    let
-      pSegm =
-        if vtx.pfx.len > 0:
-          vtx.pfx.toHexPrefix(isleaf = false)
-        else:
-          default(HexPrefixBuf)
-      psLen = pSegm.len.byte
-    if 33 < psLen:
-      return err(BlobifyExtPathOverflow)
+  let
+    bits =
+      case vtx.vType
+      of Branch:
+        let bits =
+          if key.isValid and key.len == 32:
+            # Shorter keys can be loaded from the vertex directly
+            data.add key.data()
+            0b10'u8
+          else:
+            0b00'u8
 
-    data &= pSegm.data()
-    data &= lens.toBytesBE
-    data &= [0x80u8 or psLen]
+        data.add vtx.startVid.blobify().data()
+        data.add toBytesBE(vtx.used)
+        bits
+      of Leaf:
+        vtx.lData.blobifyTo(data)
+        0b01'u8
 
-  of Leaf:
-    let
-      pSegm = vtx.pfx.toHexPrefix(isleaf = true)
-      psLen = pSegm.len.byte
-    if psLen == 0 or 33 < psLen:
-      return err(BlobifyLeafPathOverflow)
-    vtx.lData.blobifyTo(data)
-    data &= pSegm.data()
-    data &= [0xC0u8 or psLen]
+    pSegm =
+      if vtx.pfx.len > 0:
+        vtx.pfx.toHexPrefix(isleaf = vtx.vType == Leaf)
+      else:
+        default(HexPrefixBuf)
+    psLen = pSegm.len.byte
 
-  ok()
+  data &= pSegm.data()
+  data &= [(bits shl 6) or psLen]
 
-proc blobify*(vtx: VertexRef): seq[byte] =
+proc blobify*(vtx: VertexRef, key: HashKey): seq[byte] =
   ## Variant of `blobify()`
   result = newSeqOfCap[byte](128)
-  if vtx.blobifyTo(result).isErr:
-    result.setLen(0) # blobify only fails on invalid verticies
+  vtx.blobifyTo(key, result)
 
-proc blobifyTo*(lSst: SavedState; data: var seq[byte]): Result[void,AristoError] =
+proc blobifyTo*(lSst: SavedState; data: var seq[byte]) =
   ## Serialise a last saved state record
   data.add lSst.key.data
   data.add lSst.serial.toBytesBE
   data.add @[0x7fu8]
-  ok()
 
-proc blobify*(lSst: SavedState): Result[seq[byte],AristoError] =
+proc blobify*(lSst: SavedState): seq[byte] =
   ## Variant of `blobify()`
   var data: seq[byte]
-  ? lSst.blobifyTo data
-  ok(move(data))
+  lSst.blobifyTo data
+  data
 
 # -------------
 proc deblobify(
@@ -248,45 +235,52 @@ proc deblobify(
     pyl: var LeafPayload;
       ): Result[void,AristoError] =
   if data.len == 0:
-    pyl = LeafPayload(pType: RawData)
-    return ok()
+    return err(DeblobVtxTooShort)
 
   let mask = data[^1]
-  if (mask and 0x10) > 0: # unstructured payload
-    pyl = LeafPayload(pType: RawData, rawBlob: data[0 .. ^2])
-    return ok()
-
   if (mask and 0x20) > 0: # Slot storage data
     pyl = LeafPayload(
       pType: StoData,
       stoData: ?deblobify(data.toOpenArray(0, data.len - 2), UInt256))
-    return ok()
+    ok()
+  elif (mask and 0xf0) == 0: # Only account fields set
+    pyl = LeafPayload(pType: AccountData)
+    var
+      start = 0
+      lens = uint16.fromBytesBE(data.toOpenArray(data.len - 3, data.len - 2))
 
-  pyl = LeafPayload(pType: AccountData)
-  var
-    start = 0
-    lens = uint16.fromBytesBE(data.toOpenArray(data.len - 3, data.len - 2))
+    if (mask and 0x01) > 0:
+      let len = lens and 0b111
+      pyl.account.nonce = ? load64(data, start, int(len + 1))
 
-  if (mask and 0x01) > 0:
-    let len = lens and 0b111
-    pyl.account.nonce = ? load64(data, start, int(len + 1))
+    if (mask and 0x02) > 0:
+      let len = (lens shr 3) and 0b11111
+      pyl.account.balance = ? load256(data, start, int(len + 1))
 
-  if (mask and 0x02) > 0:
-    let len = (lens shr 3) and 0b11111
-    pyl.account.balance = ? load256(data, start, int(len + 1))
+    if (mask and 0x04) > 0:
+      let len = (lens shr 8) and 0b111
+      pyl.stoID = (true, VertexID(? load64(data, start, int(len + 1))))
 
-  if (mask and 0x04) > 0:
-    let len = (lens shr 8) and 0b111
-    pyl.stoID = (true, VertexID(? load64(data, start, int(len + 1))))
+    if (mask and 0x08) > 0:
+      if data.len() < start + 32:
+        return err(DeblobCodeLenUnsupported)
+      discard pyl.account.codeHash.data.copyFrom(data.toOpenArray(start, start + 31))
+    else:
+      pyl.account.codeHash = EMPTY_CODE_HASH
 
-  if (mask and 0x08) > 0:
-    if data.len() < start + 32:
-      return err(DeblobCodeLenUnsupported)
-    discard pyl.account.codeHash.data.copyFrom(data.toOpenArray(start, start + 31))
+    ok()
   else:
-    pyl.account.codeHash = EMPTY_CODE_HASH
+    err(DeblobUnknown)
 
-  ok()
+proc deblobifyType*(record: openArray[byte]; T: type VertexRef):
+    Result[VertexType, AristoError] =
+  if record.len < 3:                                  # minimum `Leaf` record
+    return err(DeblobVtxTooShort)
+
+  ok if ((record[^1] shr 6) and 0b01'u8) > 0:
+    Leaf
+  else:
+    Branch
 
 proc deblobify*(
     record: openArray[byte];
@@ -294,59 +288,46 @@ proc deblobify*(
       ): Result[T,AristoError] =
   ## De-serialise a data record encoded with `blobify()`. The second
   ## argument `vtx` can be `nil`.
-  if record.len < 3:                                  # minimum `Leaf` record
+  if record.len < 3: # minimum `Leaf` record
     return err(DeblobVtxTooShort)
 
-  ok case record[^1] shr 6:
-  of 2: # `Branch` vertex
-    if record.len < 11:                               # at least two edges
-      return err(DeblobBranchTooShort)
+  let
+    bits = record[^1] shr 6
+    vType = if (bits and 0b01'u8) > 0: Leaf else: Branch
+    hasKey = (bits and 0b10'u8) > 0
+    psLen = int(record[^1] and 0b00111111)
+    start = if hasKey: 32 else: 0
+
+  if psLen > record.len - 2 or start > record.len - 2 - psLen:
+    return err(DeblobBranchTooShort)
+
+  let
+    psPos = record.len - psLen - 1
+    (_, pathSegment) =
+      NibblesBuf.fromHexPrefix record.toOpenArray(psPos, record.len - 2)
+
+  ok case vType
+  of Branch:
+    var pos = start
     let
-      aInx = record.len - 9
-      aIny = record.len - 2
-    var
-      offs = 0
-      lens = uint64.fromBytesBE record.toOpenArray(aInx, aIny)  # bitmap
-      vtxList: array[16,VertexID]
-      n = 0
-    while lens != 0:
-      let len = lens and 0b1111
-      if len > 0:
-        vtxList[n] = VertexID(? load64(record, offs, int(len)))
-      inc n
-      lens = lens shr 4
+      svLen = psPos - pos - 2
+      startVid = VertexID(?load64(record, pos, svLen))
+      used = uint16.fromBytesBE(record.toOpenArray(pos, pos + 1))
 
-    let (isLeaf, pathSegment) =
-      NibblesBuf.fromHexPrefix record.toOpenArray(offs, aInx - 1)
-    if isLeaf:
-      return err(DeblobBranchGotLeafPrefix)
+    pos += 2
 
-      # End `while`
-    VertexRef(
-      vType: Branch,
-      pfx:   pathSegment,
-      bVid:  vtxList)
+    VertexRef(vType: Branch, pfx: pathSegment, startVid: startVid, used: used)
+  of Leaf:
+    let vtx = VertexRef(vType: Leaf, pfx: pathSegment)
 
-  of 3: # `Leaf` vertex
-    let
-      sLen = record[^1].int and 0x3f                  # length of path segment
-      rLen = record.len - 1                           # payload + path segment
-      pLen = rLen - sLen                              # payload length
-    if rLen < sLen or pLen < 1:
-      return err(DeblobLeafSizeGarbled)
-    let (isLeaf, pathSegment) =
-      NibblesBuf.fromHexPrefix record.toOpenArray(pLen, rLen-1)
-    if not isLeaf:
-      return err(DeblobLeafGotExtPrefix)
-    let vtx = VertexRef(
-      vType: Leaf,
-      pfx:  pathSegment)
-
-    ? record.toOpenArray(0, pLen - 1).deblobify(vtx.lData)
+    ?record.toOpenArray(start, psPos - 1).deblobify(vtx.lData)
     vtx
 
+proc deblobify*(record: openArray[byte], T: type HashKey): Opt[HashKey] =
+  if record.len > 33 and (((record[^1] shr 6) and 0b10'u8) > 0):
+    HashKey.fromBytes(record.toOpenArray(0, 31))
   else:
-    return err(DeblobUnknown)
+    Opt.none(HashKey)
 
 proc deblobify*(
     data: openArray[byte];

@@ -11,8 +11,9 @@
 {.push raises: [].}
 
 import
+  std/sequtils,
   ".."/[db/ledger, constants],
-  "."/[code_stream, memory, message, stack, state],
+  "."/[code_stream, memory, stack, state],
   "."/[types],
   ./interpreter/[gas_meter, gas_costs, op_codes],
   ./evm_errors,
@@ -21,8 +22,7 @@ import
   ../utils/utils,
   ../common/common,
   eth/common/eth_types_rlp,
-  chronicles, chronos,
-  sets
+  chronicles, chronos
 
 export
   common
@@ -45,17 +45,6 @@ when defined(evmc_enabled):
 
 const
   evmc_enabled* = defined(evmc_enabled)
-
-# ------------------------------------------------------------------------------
-# Helpers
-# ------------------------------------------------------------------------------
-
-proc generateContractAddress(c: Computation, salt: ContractSalt): Address =
-  if c.msg.kind == EVMC_CREATE:
-    let creationNonce = c.vmState.readOnlyStateDB().getNonce(c.msg.sender)
-    result = generateAddress(c.msg.sender, creationNonce)
-  else:
-    result = generateSafeAddress(c.msg.sender, salt, c.msg.data)
 
 # ------------------------------------------------------------------------------
 # Public functions
@@ -224,36 +213,55 @@ template getTransientStorage*(c: Computation, slot: UInt256): UInt256 =
     c.vmState.readOnlyStateDB.
       getTransientStorage(c.msg.contractAddress, slot)
 
-proc newComputation*(vmState: BaseVMState, sysCall: bool, message: Message,
-                     salt: ContractSalt = ZERO_CONTRACTSALT): Computation =
-  new result
-  result.vmState = vmState
-  result.msg = message
-  result.memory = EvmMemory.init()
-  result.stack = EvmStack.init()
-  result.returnStack = @[]
-  result.gasMeter.init(message.gas)
-  result.sysCall = sysCall
-
-  if result.msg.isCreate():
-    result.msg.contractAddress = result.generateContractAddress(salt)
-    result.code = CodeStream.init(message.data)
-    message.data = @[]
+template resolveCodeSize*(c: Computation, address: Address): uint =
+  when evmc_enabled:
+    let delegateTo = c.host.getDelegateAddress(address)
+    if delegateTo == default(common.Address):
+      c.host.getCodeSize(address)
+    else:
+      c.host.getCodeSize(delegateTo)
   else:
-    result.code = CodeStream.init(
-      vmState.readOnlyStateDB.getCode(message.codeAddress))
+    uint(c.vmState.readOnlyStateDB.resolveCodeSize(address))
 
-func newComputation*(vmState: BaseVMState, sysCall: bool,
-                     message: Message, code: CodeBytesRef): Computation =
+template resolveCodeHash*(c: Computation, address: Address): Hash32=
+  when evmc_enabled:
+    let delegateTo = c.host.getDelegateAddress(address)
+    if delegateTo == default(common.Address):
+      c.host.getCodeHash(address)
+    else:
+      c.host.getCodeHash(delegateTo)
+  else:
+    let
+      db = c.vmState.readOnlyStateDB
+    if not db.accountExists(address) or db.isEmptyAccount(address):
+      default(Hash32)
+    else:
+      db.resolveCodeHash(address)
+
+template resolveCode*(c: Computation, address: Address): CodeBytesRef =
+  when evmc_enabled:
+    let delegateTo = c.host.getDelegateAddress(address)
+    if delegateTo == default(common.Address):
+      CodeBytesRef.init(c.host.copyCode(address))
+    else:
+      CodeBytesRef.init(c.host.copyCode(delegateTo))
+  else:
+    c.vmState.readOnlyStateDB.resolveCode(address)
+
+func newComputation*(vmState: BaseVMState,
+                     keepStack: bool,
+                     message: Message,
+                     code = CodeBytesRef(nil)): Computation =
   new result
   result.vmState = vmState
   result.msg = message
-  result.memory = EvmMemory.init()
-  result.stack = EvmStack.init()
-  result.returnStack = @[]
   result.gasMeter.init(message.gas)
-  result.code = CodeStream.init(code)
-  result.sysCall = sysCall
+  result.keepStack = keepStack
+
+  if not code.isNil:
+    result.code = CodeStream.init(code)
+    result.memory = EvmMemory.init()
+    result.stack = EvmStack.init()
 
 template gasCosts*(c: Computation): untyped =
   c.vmState.gasCosts
@@ -278,6 +286,12 @@ proc commit*(c: Computation) =
 
 proc dispose*(c: Computation) =
   c.vmState.stateDB.safeDispose(c.savePoint)
+  if c.stack != nil:
+    if c.keepStack:
+      c.finalStack = toSeq(c.stack.items())
+
+    c.stack.dispose()
+    c.stack = nil
   c.savePoint = nil
 
 proc rollback*(c: Computation) =
@@ -406,8 +420,14 @@ func getGasRefund*(c: Computation): GasInt =
   # EIP-2183 guarantee that sum of all child gasRefund
   # should never go below zero
   doAssert(c.msg.depth == 0 and c.gasMeter.gasRefunded >= 0)
+  var gasRefunded = c.vmState.gasRefunded
   if c.isSuccess:
-    result = GasInt c.gasMeter.gasRefunded
+    gasRefunded += c.gasMeter.gasRefunded
+
+  GasInt gasRefunded
+
+func addRefund*(c: Computation, amount: int64) =
+  c.vmState.gasRefunded += amount
 
 # Using `proc` as `selfDestructLen()` might be `proc` in logging mode
 proc refundSelfDestruct*(c: Computation) =
@@ -451,9 +471,9 @@ func traceError*(c: Computation) =
 func prepareTracer*(c: Computation) =
   c.vmState.capturePrepare(c, c.msg.depth)
 
-func opcodeGasCost*(
+template opcodeGasCost*(
     c: Computation, op: Op, gasCost: static GasInt, tracingEnabled: static bool,
-    reason: static string): EvmResultVoid {.inline.} =
+    reason: static string): EvmResultVoid =
   # Special case of the opcodeGasCost function used for fixed-gas opcodes - since
   # the parameters are known at compile time, we inline and specialize it
   when tracingEnabled:
@@ -465,16 +485,17 @@ func opcodeGasCost*(
       c.msg.depth + 1)
   c.gasMeter.consumeGas(gasCost, reason)
 
-func opcodeGasCost*(
+template opcodeGasCost*(
     c: Computation, op: Op, gasCost: GasInt, reason: static string): EvmResultVoid =
+  let cost = gasCost
   if c.vmState.tracingEnabled:
     c.vmState.captureGasCost(
       c,
       op,
-      gasCost,
+      cost,
       c.gasMeter.gasRemaining,
       c.msg.depth + 1)
-  c.gasMeter.consumeGas(gasCost, reason)
+  c.gasMeter.consumeGas(cost, reason)
 
 # ------------------------------------------------------------------------------
 # End

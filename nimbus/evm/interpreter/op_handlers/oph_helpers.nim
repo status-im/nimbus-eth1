@@ -15,16 +15,16 @@
 {.push raises: [].}
 
 import
+  ../../../core/eip7702,
   ../../evm_errors,
   ../../types,
   ../gas_costs,
-  eth/common,
-  eth/common/eth_types,
-  stint
+  eth/common/[addresses, base, hashes]
 
 when defined(evmc_enabled):
   import
     ../../evmc_api,
+    ../../code_bytes,
     evmc/evmc
 else:
   import
@@ -71,6 +71,29 @@ func checkInStaticContext*(c: Computation): EvmResultVoid =
     return err(opErr(StaticContext))
 
   ok()
+
+proc delegateResolutionCost*(c: Computation, address: Address): GasInt =
+  when defined(evmc_enabled):
+    if c.host.accessAccount(address) == EVMC_ACCESS_COLD:
+      ColdAccountAccessCost
+    else:
+      WarmStorageReadCost
+  else:
+    c.vmState.mutateStateDB:
+      if not db.inAccessList(address):
+        db.accessList(address)
+        return ColdAccountAccessCost
+      else:
+        return WarmStorageReadCost
+
+proc gasEip7702CodeCheck*(c: Computation; address: Address): GasInt =
+  let code = when defined(evmc_enabled):
+               CodeBytesRef.init(c.host.copyCode(address))
+             else:
+               c.vmState.readOnlyStateDB.getCode(address)
+  let delegateTo = parseDelegationAddress(code).valueOr:
+    return 0
+  c.delegateResolutionCost(delegateTo)
 
 # ------------------------------------------------------------------------------
 # End

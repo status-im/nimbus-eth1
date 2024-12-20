@@ -68,13 +68,10 @@ createJsonFlavor JGenesis,
   allowUnknownFields = true,
   skipNullFields = true
 
-template derefType(T: type): untyped =
-  typeof(T()[])
-
 NetworkParams.useDefaultReaderIn JGenesis
 GenesisAccount.useDefaultReaderIn JGenesis
-derefType(Genesis).useDefaultReaderIn JGenesis
-derefType(ChainConfig).useDefaultReaderIn JGenesis
+Genesis.useDefaultReaderIn JGenesis
+ChainConfig.useDefaultReaderIn JGenesis
 
 # ------------------------------------------------------------------------------
 # Private helper functions
@@ -310,10 +307,6 @@ func toHardFork*(map: ForkTransitionTable, forkDeterminer: ForkDeterminationInfo
 proc validateChainConfig*(conf: ChainConfig): bool =
   result = true
 
-  if conf.mergeNetsplitBlock.isSome:
-    # geth compatibility
-    conf.mergeForkBlock = conf.mergeNetsplitBlock
-
   # FIXME: factor this to remove the duplication between the
   # block-based ones and the time-based ones.
 
@@ -448,7 +441,9 @@ func chainConfigForNetwork*(id: NetworkId): ChainConfig =
 
   result = case id
   of MainNet:
-    const mainNetTTD = parse("58750000000000000000000",UInt256)
+    const
+      mainNetTTD = parse("58750000000000000000000",UInt256)
+      MAINNET_DEPOSIT_CONTRACT_ADDRESS = address"0x00000000219ab540356cbb839cbe05303d7705fa"
     ChainConfig(
       chainId:             MainNet.ChainId,
       # Genesis (Frontier):                                # 2015-07-30 15:26:13 UTC
@@ -473,6 +468,7 @@ func chainConfigForNetwork*(id: NetworkId): ChainConfig =
       terminalTotalDifficulty: Opt.some(mainNetTTD),
       shanghaiTime:        Opt.some(1_681_338_455.EthTime),  # 2023-04-12 10:27:35 UTC
       cancunTime:          Opt.some(1_710_338_135.EthTime),  # 2024-03-13 13:55:35 UTC
+      depositContractAddress: Opt.some(MAINNET_DEPOSIT_CONTRACT_ADDRESS),
     )
   of SepoliaNet:
     const sepoliaTTD = parse("17000000000000000",UInt256)
@@ -491,12 +487,15 @@ func chainConfigForNetwork*(id: NetworkId): ChainConfig =
       muirGlacierBlock:    Opt.some(0.BlockNumber),
       berlinBlock:         Opt.some(0.BlockNumber),
       londonBlock:         Opt.some(0.BlockNumber),
-      mergeForkBlock:      Opt.some(1450409.BlockNumber),
+      mergeNetsplitBlock:  Opt.some(1450409.BlockNumber),
       terminalTotalDifficulty: Opt.some(sepoliaTTD),
       shanghaiTime:        Opt.some(1_677_557_088.EthTime),
       cancunTime:          Opt.some(1_706_655_072.EthTime), # 2024-01-30 22:51:12
     )
   of HoleskyNet:
+    #https://github.com/eth-clients/holesky
+    const
+      HOLESKYNET_DEPOSIT_CONTRACT_ADDRESS = address"0x4242424242424242424242424242424242424242"
     ChainConfig(
       chainId:             HoleskyNet.ChainId,
       homesteadBlock:      Opt.some(0.BlockNumber),
@@ -509,11 +508,11 @@ func chainConfigForNetwork*(id: NetworkId): ChainConfig =
       istanbulBlock:       Opt.some(0.BlockNumber),
       berlinBlock:         Opt.some(0.BlockNumber),
       londonBlock:         Opt.some(0.BlockNumber),
-      mergeForkBlock:      Opt.some(0.BlockNumber),
+      mergeNetsplitBlock:  Opt.some(0.BlockNumber),
       terminalTotalDifficulty: Opt.some(0.u256),
-      terminalTotalDifficultyPassed: Opt.some(true),
       shanghaiTime:        Opt.some(1_696_000_704.EthTime),
       cancunTime:          Opt.some(1_707_305_664.EthTime), # 2024-02-07 11:34:24
+      depositContractAddress: Opt.some(HOLESKYNET_DEPOSIT_CONTRACT_ADDRESS),
     )
   else:
     ChainConfig()
@@ -543,7 +542,7 @@ func genesisBlockForNetwork*(id: NetworkId): Genesis
       difficulty: 0x01.u256,
       gasLimit: 0x17D7840,
       nonce: uint64(0x1234).to(Bytes8),
-      timestamp: EthTime(1_695_902_100),
+      timestamp: EthTime(0x65156994),
       alloc: decodePrealloc(holeskyAllocData)
     )
   else:

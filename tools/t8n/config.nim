@@ -1,5 +1,5 @@
 # Nimbus
-# Copyright (c) 2022-2023 Status Research & Development GmbH
+# Copyright (c) 2022-2024 Status Research & Development GmbH
 # Licensed under either of
 #  * Apache License, version 2.0, ([LICENSE-APACHE](LICENSE-APACHE) or
 #    http://www.apache.org/licenses/LICENSE-2.0)
@@ -171,8 +171,10 @@ proc convertToNimStyle(cmds: openArray[string]): seq[string] =
     inc i
 
 const
-  Copyright = "Copyright (c) 2022 Status Research & Development GmbH"
-  Version   = "Nimbus-t8n 0.2.2"
+  Copyright = "Copyright (c) 2022-" &
+    CompileDate.split('-')[0] &
+    " Status Research & Development GmbH"
+  Version   = "Nimbus-t8n 0.2.4"
 
 # force the compiler to instantiate T8NConf.load
 # rather than have to export parseCmdArg

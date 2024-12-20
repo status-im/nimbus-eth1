@@ -18,14 +18,14 @@ import
   results,
   ".."/[kvt_desc, kvt_layers]
 
-func txFrameIsTop*(tx: KvtTxRef): bool
+func isTop*(tx: KvtTxRef): bool
 
 # ------------------------------------------------------------------------------
 # Private helpers
 # ------------------------------------------------------------------------------
 
 func getDbDescFromTopTx(tx: KvtTxRef): Result[KvtDbRef,KvtError] =
-  if not tx.txFrameIsTop():
+  if not tx.isTop():
     return err(TxNotTopTx)
   let db = tx.db
   if tx.level != db.stack.len:
@@ -49,14 +49,10 @@ func txFrameTop*(db: KvtDbRef): Result[KvtTxRef,KvtError] =
   else:
     ok(db.txRef)
 
-func txFrameIsTop*(tx: KvtTxRef): bool =
+func isTop*(tx: KvtTxRef): bool =
   ## Getter, returns `true` if the argument `tx` referes to the current top
   ## level transaction.
   tx.db.txRef == tx and tx.db.top.txUid == tx.txUid
-
-func txFrameLevel*(tx: KvtTxRef): int =
-  ## Getter, positive nesting level of transaction argument `tx`
-  tx.level
 
 func txFrameLevel*(db: KvtDbRef): int =
   ## Getter, non-negative nesting level (i.e. number of pending transactions)
@@ -93,7 +89,7 @@ proc txFrameBegin*(db: KvtDbRef): Result[KvtTxRef,KvtError] =
   ok db.txRef
 
 
-proc txFrameRollback*(
+proc rollback*(
     tx: KvtTxRef;                     # Top transaction on database
       ): Result[void,KvtError] =
   ## Given a *top level* handle, this function discards all database operations
@@ -110,7 +106,7 @@ proc txFrameRollback*(
   ok()
 
 
-proc txFrameCommit*(
+proc commit*(
     tx: KvtTxRef;                     # Top transaction on database
       ): Result[void,KvtError] =
   ## Given a *top level* handle, this function accepts all database operations
@@ -135,7 +131,7 @@ proc txFrameCommit*(
   ok()
 
 
-proc txFrameCollapse*(
+proc collapse*(
     tx: KvtTxRef;                     # Top transaction on database
     commit: bool;                     # Commit if `true`, otherwise roll back
       ): Result[void,KvtError] =

@@ -34,10 +34,11 @@ export
 iterator walkVtxBe*[T: RdbBackendRef](
    _: type T;
    db: AristoDbRef;
+   kinds = {Branch, Leaf};
      ): tuple[rvid: RootedVertexID, vtx: VertexRef] =
   ## Iterate over filtered RocksDB backend vertices. This function depends on
   ## the particular backend type name which must match the backend descriptor.
-  for (rvid,vtx) in walkVtxBeImpl[T](db):
+  for (rvid,vtx) in walkVtxBeImpl[T](db, kinds):
     yield (rvid,vtx)
 
 iterator walkKeyBe*[T: RdbBackendRef](
@@ -58,14 +59,6 @@ iterator walkPairs*[T: RdbBackendRef](
   ## are unsorted.
   for (rvid,vtx) in walkPairsImpl[T](db):
     yield (rvid,vtx)
-
-iterator replicate*[T: RdbBackendRef](
-   _: type T;
-   db: AristoDbRef;
-    ): tuple[rvid: RootedVertexID, key: HashKey, vtx: VertexRef, node: NodeRef] =
-  ## Variant of `walkPairsImpl()` for legacy applications.
-  for (rvid,key,vtx,node) in replicateImpl[T](db):
-   yield (rvid,key,vtx,node)
 
 # ------------------------------------------------------------------------------
 # End

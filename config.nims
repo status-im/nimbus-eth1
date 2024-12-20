@@ -102,6 +102,11 @@ elif defined(macosx) and defined(arm64):
   # Apple's Clang can't handle "-march=native" on M1: https://github.com/status-im/nimbus-eth2/issues/2758
   switch("passC", "-mcpu=apple-a14")
   switch("passL", "-mcpu=apple-a14")
+elif defined(riscv64):
+  # riscv64 needs specification of ISA with extensions. 'gc' is widely supported 
+  # and seems to be the minimum extensions needed to build. 
+  switch("passC", "-march=rv64gc")
+  switch("passL", "-march=rv64gc")
 else:
   switch("passC", "-march=native")
   switch("passL", "-march=native")
@@ -169,10 +174,6 @@ if canEnableDebuggingSymbols:
 
 # `switch("warning[CaseTransition]", "off")` fails with "Error: invalid command line option: '--warning[CaseTransition]'"
 switch("warning", "CaseTransition:off")
-
-# The compiler doth protest too much, methinks, about all these cases where it can't
-# do its (N)RVO pass: https://github.com/nim-lang/RFCs/issues/230
-switch("warning", "ObservableStores:off")
 
 # nim-kzg shipping their own blst, nimbus-eth1 too.
 # disable nim-kzg's blst

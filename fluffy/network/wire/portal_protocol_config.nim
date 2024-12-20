@@ -38,11 +38,13 @@ type
   PortalProtocolConfig* = object
     tableIpLimits*: TableIpLimits
     bitsPerHop*: int
+    alpha*: int
     radiusConfig*: RadiusConfig
     disablePoke*: bool
     maxGossipNodes*: int
     contentCacheSize*: int
     disableContentCache*: bool
+    maxConcurrentOffers*: int
 
 const
   defaultRadiusConfig* = RadiusConfig(kind: Dynamic)
@@ -51,16 +53,20 @@ const
   defaultMaxGossipNodes* = 4
   defaultContentCacheSize* = 100
   defaultDisableContentCache* = false
+  defaultMaxConcurrentOffers* = 50
+  defaultAlpha* = 3
   revalidationTimeout* = chronos.seconds(30)
 
   defaultPortalProtocolConfig* = PortalProtocolConfig(
     tableIpLimits: DefaultTableIpLimits,
     bitsPerHop: DefaultBitsPerHop,
+    alpha: defaultAlpha,
     radiusConfig: defaultRadiusConfig,
     disablePoke: defaultDisablePoke,
     maxGossipNodes: defaultMaxGossipNodes,
     contentCacheSize: defaultContentCacheSize,
     disableContentCache: defaultDisableContentCache,
+    maxConcurrentOffers: defaultMaxConcurrentOffers,
   )
 
 proc init*(
@@ -68,21 +74,25 @@ proc init*(
     tableIpLimit: uint,
     bucketIpLimit: uint,
     bitsPerHop: int,
+    alpha: int,
     radiusConfig: RadiusConfig,
     disablePoke: bool,
     maxGossipNodes: int,
     contentCacheSize: int,
     disableContentCache: bool,
+    maxConcurrentOffers: int,
 ): T =
   PortalProtocolConfig(
     tableIpLimits:
       TableIpLimits(tableIpLimit: tableIpLimit, bucketIpLimit: bucketIpLimit),
     bitsPerHop: bitsPerHop,
+    alpha: alpha,
     radiusConfig: radiusConfig,
     disablePoke: disablePoke,
     maxGossipNodes: maxGossipNodes,
     contentCacheSize: contentCacheSize,
     disableContentCache: disableContentCache,
+    maxConcurrentOffers: maxConcurrentOffers,
   )
 
 func fromLogRadius*(T: type UInt256, logRadius: uint16): T =

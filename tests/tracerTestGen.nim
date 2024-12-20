@@ -56,7 +56,7 @@ proc main() {.used.} =
   var conf = makeConfig()
   let db = newCoreDbRef(
     DefaultDbPersistent, string conf.dataDir, DbOptions.init())
-  let com = CommonRef.new(db)
+  let com = CommonRef.new(db, nil)
 
   com.dumpTest(97)
   com.dumpTest(46147)

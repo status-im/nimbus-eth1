@@ -41,7 +41,7 @@ import
 
 # Precalculate the first data gas cost increase
 const
-  DATA_GAS_COST_INCREMENT_EXCEED_BLOBS = getMinExcessBlobsForBlobGasPrice(2).int
+  DATA_GAS_COST_INCREMENT_EXCEED_BLOBS = getMinExcessBlobsForBlobGasPrice(2, false).int
   TARGET_BLOBS_PER_BLOCK = int(TARGET_BLOB_GAS_PER_BLOCK div GAS_PER_BLOB)
 
 proc getGenesis(param: NetworkParams) =
@@ -1905,7 +1905,7 @@ proc makeCancunTest(): seq[EngineSpec] =
 
       result.add InvalidPayloadTestCase(
         mainFork             : ForkCancun,
-        txType               : Opt.some(TxEIP4844),
+        txType               : Opt.some(TxEip4844),
         invalidField         : invalidField,
         syncing              : syncing,
         invalidDetectedOnSync: invalidDetectedOnSync,
@@ -1915,26 +1915,26 @@ proc makeCancunTest(): seq[EngineSpec] =
   # Invalid Transaction ChainID Tests
   result.add InvalidTxChainIDTest(
     mainFork: ForkCancun,
-    txType  : Opt.some(TxEIP4844),
+    txType  : Opt.some(TxEip4844),
   )
 
   result.add PayloadBuildAfterInvalidPayloadTest(
     mainFork: ForkCancun,
-    txType  : Opt.some(TxEIP4844),
+    txType  : Opt.some(TxEip4844),
     invalidField: InvalidParentBeaconBlockRoot,
   )
 
   # Suggested Fee Recipient Tests (New Transaction Type)
   result.add SuggestedFeeRecipientTest(
     mainFork: ForkCancun,
-    txType  : Opt.some(TxEIP4844),
+    txType  : Opt.some(TxEip4844),
     transactionCount: 1, # Only one blob tx gets through due to blob gas limit
   )
 
   # Prev Randao Tests (New Transaction Type)
   result.add PrevRandaoTransactionTest(
     mainFork: ForkCancun,
-    txType  : Opt.some(TxEIP4844),
+    txType  : Opt.some(TxEip4844),
   )
 
 proc getGenesisProc(cs: BaseSpec, param: NetworkParams) =

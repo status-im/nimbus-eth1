@@ -15,8 +15,7 @@ import
   eth/common/headers_rlp,
   ../../network_metadata,
   ../../eth_data/[history_data_json_store, history_data_ssz_e2s],
-  ../../network/history/
-    [history_content, history_network, validation/historical_hashes_accumulator],
+  ../../network/history/[history_content, history_type_conversions, history_validation],
   ../../eth_data/yaml_utils,
   ./test_history_util
 
@@ -73,7 +72,7 @@ suite "History Content Values":
       check res.isOk()
       let header = res.get()
 
-      check accumulator.verifyHeader(header, blockHeaderWithProof.proof).isOk()
+      check accumulator.verifyBlockHeaderProof(header, blockHeaderWithProof.proof).isOk()
 
       # Encode content
       check:
@@ -108,7 +107,9 @@ suite "History Content Values":
         check res.isOk()
         let header = res.get()
 
-        check accumulator.verifyHeader(header, blockHeaderWithProof.proof).isOk()
+        check accumulator
+        .verifyBlockHeaderProof(header, blockHeaderWithProof.proof)
+        .isOk()
 
         # Encode content
         check:
@@ -172,7 +173,7 @@ suite "History Content Values":
       check contentKey.isOk()
 
       # Decode (SSZ + RLP decode step) and validate block body
-      let contentValue = decodeBlockBodyBytes(contentValueEncoded)
+      let contentValue = fromPortalBlockBodyBytes(contentValueEncoded)
       check contentValue.isOk()
 
       # Encode content and content key
