@@ -23,7 +23,7 @@
 
 import
   std/[hashes, sets, tables],
-  eth/common,
+  eth/common/hashes,
   results,
   ./aristo_constants,
   ./aristo_desc/[desc_error, desc_identifiers, desc_nibbles, desc_structural],
@@ -36,7 +36,7 @@ from ./aristo_desc/desc_backend
 # Not auto-exporting backend
 export
   tables, aristo_constants, desc_error, desc_identifiers, desc_nibbles,
-  desc_structural, minilru, common
+  desc_structural, minilru, hashes
 
 type
   AristoTxRef* = ref object

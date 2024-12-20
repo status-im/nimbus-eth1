@@ -12,9 +12,9 @@
 
 import
   std/typetraits,
-  eth/common,
-  "../.."/[constants],
-  ".."/[kvt, aristo],
+  eth/common/[accounts, base, hashes],
+  ../../constants,
+  ../[kvt, aristo],
   ./base/[api_tracking, base_config, base_desc, base_helpers]
 
 export
@@ -138,61 +138,6 @@ proc verify*(
     db: CoreDbRef | CoreDbAccRef;
     proof: openArray[seq[byte]];
     root: Hash32;
-    path: openArray[byte];
-      ): CoreDbRc[Opt[seq[byte]]] =
-  ## This function os the counterpart of any of the `proof()` functions. Given
-  ## the argument chain of rlp-encoded nodes `proof`, this function verifies
-  ## that the chain represents a partial MPT starting with a root node state
-  ## `root` followig the path `key` leading to leaf node encapsulating a
-  ## payload which is passed back as return code.
-  ##
-  ## Note: The `mpt` argument is used for administative purposes (e.g. logging)
-  ##       only. The functionality is provided by the `Aristo` database
-  ##       function `aristo_part.partUntwigGeneric()` with the same prototype
-  ##       arguments except the `db`.
-  ##
-  template mpt: untyped =
-    when db is CoreDbRef:
-      CoreDbAccRef(db.defCtx)
-    else:
-      db
-  mpt.setTrackNewApi BaseVerifyFn
-  result = block:
-    let rc = mpt.call(partUntwigGeneric, proof, root, path)
-    if rc.isOk:
-      ok(rc.value)
-    else:
-      err(rc.error.toError($api, ProofVerify))
-  mpt.ifTrackNewApi: debug logTxt, api, elapsed, result
-
-proc verifyOk*(
-    db: CoreDbRef | CoreDbAccRef;
-    proof: openArray[seq[byte]];
-    root: Hash32;
-    path: openArray[byte];
-    payload: Opt[seq[byte]];
-      ): CoreDbRc[void] =
-  ## Variant of `verify()` which directly checks the argument `payload`
-  ## against what would be the return code in `verify()`.
-  ##
-  template mpt: untyped =
-    when db is CoreDbRef:
-      CoreDbAccRef(db.defCtx)
-    else:
-      db
-  mpt.setTrackNewApi BaseVerifyOkFn
-  result = block:
-    let rc = mpt.call(partUntwigGenericOk, proof, root, path, payload)
-    if rc.isOk:
-      ok()
-    else:
-      err(rc.error.toError($api, ProofVerify))
-  mpt.ifTrackNewApi: debug logTxt, api, elapsed, result
-
-proc verify*(
-    db: CoreDbRef | CoreDbAccRef;
-    proof: openArray[seq[byte]];
-    root: Hash32;
     path: Hash32;
       ): CoreDbRc[Opt[seq[byte]]] =
   ## Variant of `verify()`.
@@ -206,28 +151,6 @@ proc verify*(
     let rc = mpt.call(partUntwigPath, proof, root, path)
     if rc.isOk:
       ok(rc.value)
-    else:
-      err(rc.error.toError($api, ProofVerify))
-  mpt.ifTrackNewApi: debug logTxt, api, elapsed, result
-
-proc verifyOk*(
-    db: CoreDbRef | CoreDbAccRef;
-    proof: openArray[seq[byte]];
-    root: Hash32;
-    path: Hash32;
-    payload: Opt[seq[byte]];
-      ): CoreDbRc[void] =
-  ## Variant of `verifyOk()`.
-  template mpt: untyped =
-    when db is CoreDbRef:
-      CoreDbAccRef(db.defCtx)
-    else:
-      db
-  mpt.setTrackNewApi BaseVerifyOkFn
-  result = block:
-    let rc = mpt.call(partUntwigPathOk, proof, root, path, payload)
-    if rc.isOk:
-      ok()
     else:
       err(rc.error.toError($api, ProofVerify))
   mpt.ifTrackNewApi: debug logTxt, api, elapsed, result

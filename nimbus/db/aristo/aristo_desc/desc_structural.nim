@@ -15,12 +15,12 @@
 {.push raises: [].}
 
 import
-  std/[hashes, tables],
+  std/[hashes as std_hashes, tables],
   stint,
-  eth/common,
+  eth/common/[accounts, base, hashes],
   ./desc_identifiers
 
-export stint
+export stint, tables, accounts, base, hashes
 
 type
   LeafTiePayload* = object

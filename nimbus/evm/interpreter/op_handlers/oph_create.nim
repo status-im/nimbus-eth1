@@ -28,10 +28,7 @@ import
   ../op_codes,
   ./oph_defs,
   ./oph_helpers,
-  chronicles,
-  eth/common,
-  eth/common/eth_types,
-  stint
+  chronicles
 
 when not defined(evmc_enabled):
   import

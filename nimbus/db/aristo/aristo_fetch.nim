@@ -15,7 +15,7 @@
 
 import
   std/typetraits,
-  eth/common,
+  eth/common/[base, hashes],
   results,
   "."/[aristo_compute, aristo_desc, aristo_get, aristo_layers, aristo_hike]
 

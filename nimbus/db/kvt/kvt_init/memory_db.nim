@@ -29,7 +29,6 @@
 import
   std/tables,
   chronicles,
-  eth/common,
   results,
   stew/byteutils,
   ../kvt_desc,
