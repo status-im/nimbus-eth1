@@ -97,7 +97,7 @@ proc gossipOffer*(
   let peers = await p.neighborhoodGossip(
     srcNodeId, ContentKeysList.init(@[keyBytes]), @[offerBytes]
   )
-  debug "Offered content gossipped successfully with peers", keyBytes, peers
+  trace "Offered content gossipped successfully with peers", keyBytes, peers
 
 # Currently only used for testing to gossip an entire account trie proof
 proc recursiveGossipOffer*(

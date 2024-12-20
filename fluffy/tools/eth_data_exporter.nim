@@ -315,7 +315,7 @@ when isMainModule:
         info "Requesting epoch headers", epoch
         var headers: seq[headers.Header]
         for j in 0 ..< EPOCH_SIZE.uint64:
-          debug "Requesting block", number = j
+          debug "Requesting block", number = j 
           let header = client.downloadHeader(epoch * EPOCH_SIZE + j)
           headers.add(header)
 

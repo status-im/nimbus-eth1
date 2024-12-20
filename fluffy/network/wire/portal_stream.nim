@@ -260,7 +260,7 @@ proc writeContentRequest(
 ) {.async: (raises: [CancelledError]).} =
   let dataWritten = await socket.write(request.content)
   if dataWritten.isErr():
-    debug "Error writing requested data", error = dataWritten.error
+    trace "Error writing requested data", error = dataWritten.error 
 
   await socket.closeWait()
 

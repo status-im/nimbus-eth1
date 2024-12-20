@@ -550,11 +550,11 @@ proc messageHandler(
     else:
       # This would mean a that Portal wire response message is being send over a
       # discv5 talkreq message.
-      debug "Invalid Portal wire message type over talkreq", kind = message.kind
+      debug "Invalid Portal wire message type over talkreq", kind = message.kind 
       @[]
   else:
     portal_message_decoding_failures.inc(labelValues = [$p.protocolId])
-    debug "Packet decoding error", error = decoded.error, srcId, srcUdpAddress
+    trace "Packet decoding error", error = decoded.error, srcId, srcUdpAddress
     @[]
 
 proc new*(
@@ -644,7 +644,7 @@ proc reqResponse[Request: SomeMessage, Response: SomeMessage](
 
     p.routingTable.setJustSeen(dst)
   else:
-    debug "Error receiving message response",
+    trace "Error receiving message response",# 
       error = messageResponse.error, srcId = dst.id, srcAddress = dst.address
     p.pingTimings.del(dst.id)
     p.routingTable.replaceNode(dst)
@@ -767,7 +767,7 @@ proc findContent*(
         # Further validation is required, using a length prefix here might be
         # beneficial for this.
         let readFut = socket.read()
-
+#ask kim
         readFut.cancelCallback = proc(udate: pointer) {.gcsafe.} =
           debug "Socket read cancelled", socketKey = socket.socketKey
           # In case this `findContent` gets cancelled while reading the data,
@@ -960,14 +960,14 @@ proc offer(
                 raiseAssert e.msg
 
             let dataWritten = (await socket.write(output.getOutput)).valueOr:
-              debug "Error writing requested data", error
+              debug "Error writing requested data", error 
               # No point in trying to continue writing data
               socket.close()
               return err("Error writing requested data")
 
             trace "Offered content item send", dataWritten = dataWritten
     await socket.closeWait()
-    debug "Content successfully offered"
+    debug "Content successfully offered" 
 
     return ok(m.contentKeys)
   else:
