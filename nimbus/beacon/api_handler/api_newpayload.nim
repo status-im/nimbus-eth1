@@ -84,13 +84,13 @@ template validatePayload(apiVersion, payloadVersion, payload) =
         "excessBlobGas is expected from execution payload")
 
 func validateExecutionRequest(requests: openArray[seq[byte]]): Result[void, string] {.raises:[].} =
-  var previousRequestType = -1.byte
+  var previousRequestType = -1
   for request in requests:
     if request.len == 0:
       return err("Execution request data must not be empty")
 
     let requestType = request[0]
-    if requestType <= previousRequestType:
+    if requestType.int <= previousRequestType:
       return err("Execution requests are not in strictly ascending order")
 
     if request.len == 1:
@@ -102,7 +102,7 @@ func validateExecutionRequest(requests: openArray[seq[byte]]): Result[void, stri
        CONSOLIDATION_REQUEST_TYPE]:
       return err("Invalid execution request type: " & $requestType)
 
-    previousRequestType = requestType
+    previousRequestType = requestType.int
 
   ok()
 

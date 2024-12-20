@@ -186,25 +186,29 @@ proc runNewPayloadV4Test(env: TestEnv): Result[void, string] =
 
 proc newPayloadV4ParamsTest(env: TestEnv): Result[void, string] =
   const
-    paramsFile = "tests/engine_api/newPayloadV4_invalid_blockhash.json"
+    paramsFiles = [
+      "tests/engine_api/newPayloadV4_invalid_blockhash.json",
+      "tests/engine_api/newPayloadV4_requests_order.json"
+    ]
 
-  let
-    client = env.client
-    params = JrpcConv.loadFile(paramsFile, NewPayloadV4Params)
-    res = ? client.newPayloadV4(
-      params.payload,
-      params.expectedBlobVersionedHashes,
-      params.parentBeaconBlockRoot,
-      params.executionRequests)
+  for paramsFile in paramsFiles:
+    let
+      client = env.client
+      params = JrpcConv.loadFile(paramsFile, NewPayloadV4Params)
+      res = ?client.newPayloadV4(
+        params.payload,
+        params.expectedBlobVersionedHashes,
+        params.parentBeaconBlockRoot,
+        params.executionRequests)
 
-  if res.status != PayloadExecutionStatus.syncing:
-    return err("res.status should equals to PayloadExecutionStatus.syncing")
+    if res.status != PayloadExecutionStatus.syncing:
+      return err("res.status should equals to PayloadExecutionStatus.syncing")
 
-  if res.latestValidHash.isSome:
-    return err("lastestValidHash should empty")
+    if res.latestValidHash.isSome:
+      return err("lastestValidHash should empty")
 
-  if res.validationError.isSome:
-    return err("validationError should empty")
+    if res.validationError.isSome:
+      return err("validationError should empty")
 
   ok()
 
@@ -245,6 +249,7 @@ proc newPayloadV4InvalidRequests(env: TestEnv): Result[void, string] =
       "tests/engine_api/newPayloadV4_invalid_requests.json",
       "tests/engine_api/newPayloadV4_empty_requests_data.json",
       "tests/engine_api/newPayloadV4_invalid_requests_type.json",
+      "tests/engine_api/newPayloadV4_invalid_requests_order.json",
     ]
 
   for paramsFile in paramsFiles:
