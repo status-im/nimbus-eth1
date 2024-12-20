@@ -52,7 +52,7 @@ proc newAristoRdbDbRef(
         return err(rc.error)
       rc.value
     db = (AristoDbRef(
-      txRef: AristoTxRef(layer: LayerRef(vTop: vTop)),
+      txRef: AristoTxRef(layer: LayerRef(vTop: vTop, cTop: vTop)),
       backend: be,
       accLeaves: LruCache[Hash32, VertexRef].init(ACC_LRU_SIZE),
       stoLeaves: LruCache[Hash32, VertexRef].init(ACC_LRU_SIZE),

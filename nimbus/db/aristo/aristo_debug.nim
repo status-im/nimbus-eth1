@@ -25,7 +25,7 @@ import
 # ------------------------------------------------------------------------------
 
 func orDefault(db: AristoTxRef): AristoTxRef =
-  if db.isNil: AristoTxRef(layer: LayerRef.init()) else: db
+  if db.isNil: AristoTxRef(layer: LayerRef()) else: db
 
 # --------------------------
 

@@ -83,6 +83,7 @@ proc deltaPersistent*(
     db.stoLeaves.put(mixPath, vtx)
 
   # Done with txRef, all saved to backend
+  db.txRef.layer.cTop = db.txRef.layer.vTop
   db.txRef.layer.sTab.clear()
   db.txRef.layer.kMap.clear()
   db.txRef.layer.accLeaves.clear()

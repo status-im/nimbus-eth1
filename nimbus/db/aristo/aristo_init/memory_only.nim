@@ -56,10 +56,10 @@ proc init*(
 
   let db =
     when B is VoidBackendRef:
-      AristoDbRef(txRef: AristoTxRef(layer: LayerRef.init()))
+      AristoDbRef(txRef: AristoTxRef(layer: LayerRef()))
 
     elif B is MemBackendRef:
-      AristoDbRef(txRef: AristoTxRef(layer: LayerRef.init()), backend: memoryBackend())
+      AristoDbRef(txRef: AristoTxRef(layer: LayerRef()), backend: memoryBackend())
   db.txRef.db = db
   db
 

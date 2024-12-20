@@ -125,6 +125,8 @@ type
     accLeaves*: Table[Hash32, VertexRef]   ## Account path -> VertexRef
     stoLeaves*: Table[Hash32, VertexRef]   ## Storage path -> VertexRef
 
+    cTop*: VertexID                        ## Last committed vertex ID
+
   GetVtxFlag* = enum
     PeekCache
       ## Peek into, but don't update cache - useful on work loads that are
@@ -147,10 +149,6 @@ func setUsed*(vtx: VertexRef, nibble: uint8, used: static bool): VertexID =
     else:
       vtx.used and (not (1'u16 shl nibble))
   vtx.bVid(nibble)
-
-func init*(T: type LayerRef): T =
-  ## Constructor, returns empty layer
-  T()
 
 func hash*(node: NodeRef): Hash =
   ## Table/KeyedQueue/HashSet mixin

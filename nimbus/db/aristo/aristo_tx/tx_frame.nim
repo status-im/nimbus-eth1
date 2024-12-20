@@ -40,8 +40,7 @@ proc txFrameBegin*(db: AristoDbRef, parent: AristoTxRef): Result[AristoTxRef,Ari
 
   let
     vTop = parent.layer.vTop
-    layer = LayerRef(
-      vTop:  vTop)
+    layer = LayerRef(vTop:  vTop, cTop: vTop)
 
   ok AristoTxRef(
     db:     db,
@@ -58,7 +57,10 @@ proc rollback*(
   ## performed for this transactio. The previous transaction is returned if
   ## there was any.
   # TODO Everyone using this txref should repoint their parent field
-  tx.layer = LayerRef()
+
+  let vTop = tx.layer[].cTop
+  tx.layer[] = Layer(vTop: vTop, cTop: vTop)
+
   ok()
 
 
@@ -69,8 +71,11 @@ proc commit*(
   ##
   # TODO Everyone using this txref should repoint their parent field
   doAssert tx.parent != nil, "should not commit the base tx"
-  mergeAndReset(tx.parent.layer[], tx.layer[])
 
+  # A rollback after commit should reset to the new vTop!
+  tx.layer[].cTop = tx.layer[].vTop
+
+  mergeAndReset(tx.parent.layer[], tx.layer[])
   ok()
 
 

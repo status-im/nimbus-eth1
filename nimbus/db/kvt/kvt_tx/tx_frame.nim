@@ -52,7 +52,7 @@ proc rollback*(
   ## there was any.
   ##
 
-  tx.layer = LayerRef()
+  tx.layer[] = Layer()
   ok()
 
 proc commit*(
