@@ -391,31 +391,31 @@ proc runLedgerBasicOperationsTests() =
 
       var
         memDB = newCoreDbRef DefaultDbMemory
-        stateDB {.used.} = LedgerRef.init(memDB)
+        ledger {.used.} = LedgerRef.init(memDB)
         address {.used.} = address"0x0f572e5295c57f15886f9b263e2f6d2d6c7b5ec6"
         code {.used.} = hexToSeqByte("0x0f572e5295c57f15886f9b263e2f6d2d6c7b5ec6")
         stateRoot {.used.} : Hash32
 
     test "accountExists and isDeadAccount":
-      check stateDB.accountExists(address) == false
-      check stateDB.isDeadAccount(address) == true
+      check ledger.accountExists(address) == false
+      check ledger.isDeadAccount(address) == true
 
-      stateDB.setBalance(address, 1000.u256)
+      ledger.setBalance(address, 1000.u256)
 
-      check stateDB.accountExists(address) == true
-      check stateDB.isDeadAccount(address) == false
+      check ledger.accountExists(address) == true
+      check ledger.isDeadAccount(address) == false
 
-      stateDB.setBalance(address, 0.u256)
-      stateDB.setNonce(address, 1)
-      check stateDB.isDeadAccount(address) == false
+      ledger.setBalance(address, 0.u256)
+      ledger.setNonce(address, 1)
+      check ledger.isDeadAccount(address) == false
 
-      stateDB.setCode(address, code)
-      stateDB.setNonce(address, 0)
-      check stateDB.isDeadAccount(address) == false
+      ledger.setCode(address, code)
+      ledger.setNonce(address, 0)
+      check ledger.isDeadAccount(address) == false
 
-      stateDB.setCode(address, newSeq[byte]())
-      check stateDB.isDeadAccount(address) == true
-      check stateDB.accountExists(address) == true
+      ledger.setCode(address, newSeq[byte]())
+      check ledger.isDeadAccount(address) == true
+      check ledger.accountExists(address) == true
 
     test "clone storage":
       # give access to private fields of AccountRef

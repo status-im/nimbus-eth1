@@ -173,7 +173,7 @@ proc partPut*(
     for n,key in chain:
       var
         rvid: RootedVertexID
-        (stopHere, vidFromStateDb) = (false,false) # not both `true`
+        (stopHere, vidFromLedger) = (false,false) # not both `true`
 
       # Parent might have been part of an earlier chain, already
       if n < chain.len - 1:
@@ -193,10 +193,10 @@ proc partPut*(
 
       # Get vertex ID and set a flag whether it was seen on state lookup
       if not rvid.isValid:
-        (rvid, vidFromStateDb) = ? ps.getRvid(root, key)
+        (rvid, vidFromLedger) = ? ps.getRvid(root, key)
 
       # Use from partial state database if possible
-      if vidFromStateDb and not ps.isCore(key):
+      if vidFromLedger and not ps.isCore(key):
         let vtx = ps.db.getVtx rvid
         if vtx.isValid:
           # Register core node.  Even though these nodes are only local to this

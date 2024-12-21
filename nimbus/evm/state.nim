@@ -36,7 +36,7 @@ proc init(
   ## Initialisation helper
   # Take care to (re)set all fields since the VMState might be recycled
   self.com = com
-  self.stateDB = ac
+  self.ledger = ac
   self.gasPool = blockCtx.gasLimit
   assign(self.parent, parent)
   assign(self.blockCtx, blockCtx)
@@ -110,15 +110,15 @@ proc reinit*(self:     BaseVMState;     ## Object descriptor
   ## queries about its `getStateRoot()`, i.e. `isTopLevelClean` evaluated `true`. If
   ## this function returns `false`, the function argument `self` is left
   ## untouched.
-  if not self.stateDB.isTopLevelClean:
+  if not self.ledger.isTopLevelClean:
     return false
 
   let
     tracer = self.tracer
     com    = self.com
     db     = com.db
-    ac     = if linear or self.stateDB.getStateRoot() == parent.stateRoot: self.stateDB
-              else: LedgerRef.init(db, self.stateDB.storeSlotHash)
+    ac     = if linear or self.ledger.getStateRoot() == parent.stateRoot: self.ledger
+              else: LedgerRef.init(db, self.ledger.storeSlotHash)
     flags  = self.flags
   self.init(
     ac       = ac,
@@ -257,16 +257,16 @@ method getAncestorHash*(
     return default(Hash32)
   blockHash
 
-proc readOnlyStateDB*(vmState: BaseVMState): ReadOnlyStateDB {.inline.} =
-  ReadOnlyStateDB(vmState.stateDB)
+proc readOnlyLedger*(vmState: BaseVMState): ReadOnlyLedger {.inline.} =
+  ReadOnlyLedger(vmState.ledger)
 
-template mutateStateDB*(vmState: BaseVMState, body: untyped) =
+template mutateLedger*(vmState: BaseVMState, body: untyped) =
   block:
-    var db {.inject.} = vmState.stateDB
+    var db {.inject.} = vmState.ledger
     body
 
 proc getAndClearLogEntries*(vmState: BaseVMState): seq[Log] =
-  vmState.stateDB.getAndClearLogEntries()
+  vmState.ledger.getAndClearLogEntries()
 
 proc status*(vmState: BaseVMState): bool =
   ExecutionOK in vmState.flags

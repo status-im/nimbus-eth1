@@ -42,7 +42,7 @@ proc gasEip2929AccountCheck*(c: Computation; address: Address): GasInt =
              else:
                WarmStorageReadCost
   else:
-    c.vmState.mutateStateDB:
+    c.vmState.mutateLedger:
       result = if not db.inAccessList(address):
                  db.accessList(address)
                  ColdAccountAccessCost
@@ -56,7 +56,7 @@ proc gasEip2929AccountCheck*(c: Computation; address: Address, slot: UInt256): G
              else:
                WarmStorageReadCost
   else:
-    c.vmState.mutateStateDB:
+    c.vmState.mutateLedger:
       result = if not db.inAccessList(address, slot):
                  db.accessList(address, slot)
                  ColdSloadCost
@@ -79,7 +79,7 @@ proc delegateResolutionCost*(c: Computation, address: Address): GasInt =
     else:
       WarmStorageReadCost
   else:
-    c.vmState.mutateStateDB:
+    c.vmState.mutateLedger:
       if not db.inAccessList(address):
         db.accessList(address)
         return ColdAccountAccessCost
@@ -90,7 +90,7 @@ proc gasEip7702CodeCheck*(c: Computation; address: Address): GasInt =
   let code = when defined(evmc_enabled):
                CodeBytesRef.init(c.host.copyCode(address))
              else:
-               c.vmState.readOnlyStateDB.getCode(address)
+               c.vmState.readOnlyLedger.getCode(address)
   let delegateTo = parseDelegationAddress(code).valueOr:
     return 0
   c.delegateResolutionCost(delegateTo)

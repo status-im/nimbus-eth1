@@ -228,7 +228,7 @@ proc exec(ctx: TransContext,
 
   if vmState.com.daoForkSupport and
      vmState.com.daoForkBlock.get == vmState.blockNumber:
-    vmState.mutateStateDB:
+    vmState.mutateLedger:
       db.applyDAOHardFork()
 
   vmState.receipts = newSeqOfCap[Receipt](ctx.txList.len)
@@ -303,16 +303,16 @@ proc exec(ctx: TransContext,
       var uncleReward = 8.u256 - uncle.delta.u256
       uncleReward = uncleReward * blockReward
       uncleReward = uncleReward div 8.u256
-      vmState.mutateStateDB:
+      vmState.mutateLedger:
         db.addBalance(uncle.address, uncleReward)
       mainReward += blockReward div 32.u256
 
-    vmState.mutateStateDB:
+    vmState.mutateLedger:
       db.addBalance(ctx.env.currentCoinbase, mainReward)
 
   if ctx.env.withdrawals.isSome:
     for withdrawal in ctx.env.withdrawals.get:
-      vmState.stateDB.addBalance(withdrawal.address, withdrawal.weiAmount)
+      vmState.ledger.addBalance(withdrawal.address, withdrawal.weiAmount)
 
   let miner = ctx.env.currentCoinbase
   coinbaseStateClearing(vmState, miner, stateReward.isSome())
@@ -326,10 +326,10 @@ proc exec(ctx: TransContext,
     withdrawalReqs = processDequeueWithdrawalRequests(vmState)
     consolidationReqs = processDequeueConsolidationRequests(vmState)
 
-  let stateDB = vmState.stateDB
-  stateDB.postState(result.alloc)
+  let ledger = vmState.ledger
+  ledger.postState(result.alloc)
   result.result = ExecutionResult(
-    stateRoot   : stateDB.getStateRoot(),
+    stateRoot   : ledger.getStateRoot(),
     txRoot      : includedTx.calcTxRoot,
     receiptsRoot: calcReceiptsRoot(vmState.receipts),
     logsHash    : calcLogsHash(vmState.receipts),
@@ -389,14 +389,14 @@ template wrapException(body: untyped) =
   else:
     body
 
-proc setupAlloc(stateDB: LedgerRef, alloc: GenesisAlloc) =
+proc setupAlloc(ledger: LedgerRef, alloc: GenesisAlloc) =
   for accAddr, acc in alloc:
-    stateDB.setNonce(accAddr, acc.nonce)
-    stateDB.setCode(accAddr, acc.code)
-    stateDB.setBalance(accAddr, acc.balance)
+    ledger.setNonce(accAddr, acc.nonce)
+    ledger.setCode(accAddr, acc.code)
+    ledger.setBalance(accAddr, acc.balance)
 
     for slot, value in acc.storage:
-      stateDB.setStorage(accAddr, slot, value)
+      ledger.setStorage(accAddr, slot, value)
 
 method getAncestorHash(vmState: TestVMState; blockNumber: BlockNumber): Hash32 =
   # we can't raise exception here, it'll mess with EVM exception handler.
@@ -552,7 +552,7 @@ proc transitionAction*(ctx: var TransContext, conf: T8NConf) =
       storeSlotHash = true
     )
 
-    vmState.mutateStateDB:
+    vmState.mutateLedger:
       db.setupAlloc(ctx.alloc)
       db.persist(clearEmptyAccount = false)
 

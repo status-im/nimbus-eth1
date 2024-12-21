@@ -48,7 +48,7 @@ proc processBlock(
   let com = vmState.com
   if com.daoForkSupport and
      com.daoForkBlock.get == header.number:
-    vmState.mutateStateDB:
+    vmState.mutateLedger:
       db.applyDAOHardFork()
 
   if header.parentBeaconBlockRoot.isSome:
@@ -58,7 +58,7 @@ proc processBlock(
 
   if com.isShanghaiOrLater(header.timestamp):
     for withdrawal in blk.withdrawals.get:
-      vmState.stateDB.addBalance(withdrawal.address, withdrawal.weiAmount)
+      vmState.ledger.addBalance(withdrawal.address, withdrawal.weiAmount)
 
   if header.ommersHash != EMPTY_UNCLE_HASH:
     discard com.db.persistUncles(blk.uncles)
@@ -67,7 +67,7 @@ proc processBlock(
   if com.proofOfStake(header):
     vmState.calculateReward(header, blk.uncles)
 
-  vmState.mutateStateDB:
+  vmState.mutateLedger:
     let clearEmptyAccount = com.isSpuriousOrLater(header.number)
     db.persist(clearEmptyAccount)
 

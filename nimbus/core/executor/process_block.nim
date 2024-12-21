@@ -113,7 +113,7 @@ proc procBlkPreamble(
 
   let com = vmState.com
   if com.daoForkSupport and com.daoForkBlock.get == header.number:
-    vmState.mutateStateDB:
+    vmState.mutateLedger:
       db.applyDAOHardFork()
 
   if not skipValidation: # Expensive!
@@ -156,7 +156,7 @@ proc procBlkPreamble(
       return err("Post-Shanghai block body must have withdrawals")
 
     for withdrawal in blk.withdrawals.get:
-      vmState.stateDB.addBalance(withdrawal.address, withdrawal.weiAmount)
+      vmState.ledger.addBalance(withdrawal.address, withdrawal.weiAmount)
   else:
     if header.withdrawalsRoot.isSome:
       return err("Pre-Shanghai block header must not have withdrawalsRoot")
@@ -190,7 +190,7 @@ proc procBlkEpilogue(
     blk.header
 
   # Reward beneficiary
-  vmState.mutateStateDB:
+  vmState.mutateLedger:
     if vmState.collectWitnessData:
       db.collectWitnessData()
 
@@ -212,7 +212,7 @@ proc procBlkEpilogue(
     consolidationReqs = processDequeueConsolidationRequests(vmState)
 
   if not skipValidation:
-    let stateRoot = vmState.stateDB.getStateRoot()
+    let stateRoot = vmState.ledger.getStateRoot()
     if header.stateRoot != stateRoot:
       # TODO replace logging with better error
       debug "wrong state root in block",

@@ -285,7 +285,7 @@ proc validateTxBasic*(
   ok()
 
 proc validateTransaction*(
-    roDB:     ReadOnlyStateDB; ## Parent accounts environment for transaction
+    roDB:     ReadOnlyLedger; ## Parent accounts environment for transaction
     tx:       Transaction;     ## tx to validate
     sender:   Address;         ## tx.recoverSender
     maxLimit: GasInt;          ## gasLimit from block header

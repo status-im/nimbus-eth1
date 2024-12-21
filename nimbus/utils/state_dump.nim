@@ -91,8 +91,8 @@ proc dumpState*(db: LedgerRef): StateDump =
     accounts: dumpAccounts(db)
   )
 
-proc dumpAccounts*(stateDB: LedgerRef, addresses: openArray[Address]): JsonNode =
+proc dumpAccounts*(ledger: LedgerRef, addresses: openArray[Address]): JsonNode =
   result = newJObject()
   for ac in addresses:
-    result[ac.toHex] = %dumpAccount(stateDB, ac)
+    result[ac.toHex] = %dumpAccount(ledger, ac)
 

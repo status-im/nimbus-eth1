@@ -53,7 +53,7 @@ proc initialAccessListEIP2929(call: CallParams) =
   if vmState.fork < FkBerlin:
     return
 
-  vmState.mutateStateDB:
+  vmState.mutateLedger:
     db.accessList(call.sender)
     # For contract creations the EVM will add the contract address to the
     # access list itself, after calculating the new contract address.
@@ -80,7 +80,7 @@ proc initialAccessListEIP2929(call: CallParams) =
 
 proc preExecComputation(vmState: BaseVMState, call: CallParams): int64 =
   var gasRefund = 0
-  let ledger = vmState.stateDB
+  let ledger = vmState.ledger
 
   if not call.isCreate:
     ledger.incNonce(call.sender)
@@ -225,7 +225,7 @@ proc prepareToRunComputation(host: TransactionHost, call: CallParams) =
       vmState = host.vmState
       fork = vmState.fork
 
-    vmState.mutateStateDB:
+    vmState.mutateLedger:
       db.subBalance(call.sender, call.gasLimit.u256 * call.gasPrice.u256)
 
       # EIP-4844
@@ -256,7 +256,7 @@ proc calculateAndPossiblyRefundGas(host: TransactionHost, call: CallParams): Gas
 
   # Refund for unused gas.
   if result > 0 and not call.noGasCharge:
-    host.vmState.mutateStateDB:
+    host.vmState.mutateLedger:
       db.addBalance(call.sender, result.u256 * call.gasPrice.u256)
 
 proc finishRunningComputation(

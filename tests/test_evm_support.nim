@@ -357,7 +357,7 @@ proc runTestOverflow() =
       com,
     )
 
-    s.stateDB.setCode(codeAddress, @data)
+    s.ledger.setCode(codeAddress, @data)
     let unsignedTx = Transaction(
       txType: TxLegacy,
       nonce: 0,

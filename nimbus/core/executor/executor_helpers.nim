@@ -53,7 +53,7 @@ proc makeReceipt*(vmState: BaseVMState; txType: TxType): Receipt =
     rec.status = vmState.status
   else:
     rec.isHash = true
-    rec.hash   = vmState.stateDB.getStateRoot()
+    rec.hash   = vmState.ledger.getStateRoot()
     # we set the status for the t8n output consistency
     rec.status = vmState.status
 

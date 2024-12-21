@@ -261,7 +261,7 @@ proc createAccessList*(header: Header,
     fork    = com.toEVMFork(forkDeterminationInfo(header.number, header.timestamp))
     sender  = args.sender
     # TODO: nonce should be retrieved from txPool
-    nonce   = vmState.stateDB.getNonce(sender)
+    nonce   = vmState.ledger.getNonce(sender)
     to      = if args.to.isSome: args.to.get
               else: generateAddress(sender, nonce)
     precompiles = activePrecompilesList(fork)

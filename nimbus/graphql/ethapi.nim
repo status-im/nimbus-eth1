@@ -148,7 +148,7 @@ proc wdNode(ctx: GraphqlContextRef, wd: Withdrawal): Node =
     wd: wd
   )
 
-proc getStateDB(com: CommonRef, header: Header): LedgerRef  {.deprecated: "LedgerRef does not support loading a particular state".} =
+proc getLedger(com: CommonRef, header: Header): LedgerRef  {.deprecated: "LedgerRef does not support loading a particular state".} =
   ## Retrieves the account db from canonical head
   ## we don't use accounst_cache here because it's read only operations
   # TODO the ledger initialized here refers to the base, not the given header!
@@ -322,7 +322,7 @@ proc getTxByHash(ctx: GraphqlContextRef, hash: Hash32): RespResult =
 
 proc accountNode(ctx: GraphqlContextRef, header: Header, address: Address): RespResult =
   try:
-    let db = getStateDB(ctx.com, header)
+    let db = getLedger(ctx.com, header)
     when false:
       # EIP 1767 unclear about non existent account
       # but hive test case demand something

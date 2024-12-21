@@ -110,24 +110,24 @@ proc setupEnv(signer, ks2: Address, ctx: EthContext, com: CommonRef): TestEnv =
     vmState = BaseVMState()
   vmState.init(parent, vmHeader, com)
 
-  vmState.stateDB.setCode(ks2, code)
-  vmState.stateDB.addBalance(
+  vmState.ledger.setCode(ks2, code)
+  vmState.ledger.addBalance(
     signer, 1.u256 * 1_000_000_000.u256 * 1_000_000_000.u256)  # 1 ETH
 
   # Test data created for eth_getProof tests
   let regularAcc = address"0x0000000000000000000000000000000000000001"
-  vmState.stateDB.addBalance(regularAcc, 2_000_000_000.u256)
-  vmState.stateDB.setNonce(regularAcc, 1.uint64)
+  vmState.ledger.addBalance(regularAcc, 2_000_000_000.u256)
+  vmState.ledger.setNonce(regularAcc, 1.uint64)
 
   let contractAccWithStorage = address"0x0000000000000000000000000000000000000002"
-  vmState.stateDB.addBalance(contractAccWithStorage, 1_000_000_000.u256)
-  vmState.stateDB.setNonce(contractAccWithStorage, 2.uint64)
-  vmState.stateDB.setCode(contractAccWithStorage, code)
-  vmState.stateDB.setStorage(contractAccWithStorage, u256(0), u256(1234))
-  vmState.stateDB.setStorage(contractAccWithStorage, u256(1), u256(2345))
+  vmState.ledger.addBalance(contractAccWithStorage, 1_000_000_000.u256)
+  vmState.ledger.setNonce(contractAccWithStorage, 2.uint64)
+  vmState.ledger.setCode(contractAccWithStorage, code)
+  vmState.ledger.setStorage(contractAccWithStorage, u256(0), u256(1234))
+  vmState.ledger.setStorage(contractAccWithStorage, u256(1), u256(2345))
 
   let contractAccNoStorage = address"0x0000000000000000000000000000000000000003"
-  vmState.stateDB.setCode(contractAccNoStorage, code)
+  vmState.ledger.setCode(contractAccNoStorage, code)
 
 
   let
@@ -174,11 +174,11 @@ proc setupEnv(signer, ks2: Address, ctx: EthContext, com: CommonRef): TestEnv =
     difficulty  = com.calcDifficulty(timeStamp, parent)
 
   # call persist() before we get the stateRoot
-  vmState.stateDB.persist()
+  vmState.ledger.persist()
 
   var header = Header(
     parentHash      : parentHash,
-    stateRoot       : vmState.stateDB.getStateRoot,
+    stateRoot       : vmState.ledger.getStateRoot,
     transactionsRoot: txRoot,
     receiptsRoot    : calcReceiptsRoot(vmState.receipts),
     logsBloom       : createBloom(vmState.receipts),
