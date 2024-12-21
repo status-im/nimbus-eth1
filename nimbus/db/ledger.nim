@@ -504,9 +504,10 @@ proc getCodeSize*(ac: LedgerRef, address: Address): int =
 
 proc resolveCodeHash*(ac: LedgerRef, address: Address): Hash32 =
   let (codeHash, code) = ac.getCode(address, true)
-  let delegateTo = parseDelegationAddress(code).valueOr:
-    return codeHash
-  ac.getCodeHash(delegateTo)
+  if code.isEip7702:
+    EIP7702_MAGIC_HASH
+  else:
+    codeHash
 
 proc resolveCode*(ac: LedgerRef, address: Address): CodeBytesRef =
   let code = ac.getCode(address)
@@ -516,9 +517,10 @@ proc resolveCode*(ac: LedgerRef, address: Address): CodeBytesRef =
 
 proc resolveCodeSize*(ac: LedgerRef, address: Address): int =
   let code = ac.getCode(address)
-  let delegateTo = parseDelegationAddress(code).valueOr:
-    return code.len
-  ac.getCodeSize(delegateTo)
+  if code.isEip7702:
+    EIP7702_MAGIC_BYTES.len
+  else:
+    code.len
 
 proc getDelegateAddress*(ac: LedgerRef, address: Address): Address =
   let code = ac.getCode(address)

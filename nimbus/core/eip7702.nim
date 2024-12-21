@@ -19,11 +19,14 @@ import
   eth/common/keys
 
 const
+  # the last 0x00 is the version
   DelegationPrefix = [0xef.byte, 0x01, 0x00]
 
 const
   PER_AUTH_BASE_COST* = 12500
   PER_EMPTY_ACCOUNT_COST* = 25000
+  EIP7702_MAGIC_BYTES* = [0xef.byte, 0x01]
+  EIP7702_MAGIC_HASH* = hash32"eadcdba66a79ab5dce91622d1d75c8cff5cff0b96944c3bf1072cd08ce018329"
 
 func authority*(auth: Authorization): Opt[Address] =
   let sigHash = rlpHashForSigning(auth)
@@ -62,3 +65,8 @@ func parseDelegationAddress*(code: CodeBytesRef): Opt[Address] =
     return Opt.none(Address)
 
   Opt.some(Address(slice[20](code, 3, 22)))
+
+func isEip7702*(code: CodeBytesRef): bool =
+  if code.len != 23:
+    return false
+  code.hasPrefix(DelegationPrefix)
