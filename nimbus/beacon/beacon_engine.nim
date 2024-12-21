@@ -26,7 +26,6 @@ type
   BeaconEngineRef* = ref object
     txPool: TxPoolRef
     queue : PayloadQueue
-    chain : ForkedChainRef
 
     # The forkchoice update and new payload method require us to return the
     # latest valid hash in an invalid chain. To support that return, we need
@@ -94,12 +93,10 @@ func setInvalidAncestor(ben: BeaconEngineRef,
 # ------------------------------------------------------------------------------
 
 func new*(_: type BeaconEngineRef,
-          txPool: TxPoolRef,
-          chain: ForkedChainRef): BeaconEngineRef =
+          txPool: TxPoolRef): BeaconEngineRef =
   let ben = BeaconEngineRef(
     txPool: txPool,
     queue : PayloadQueue(),
-    chain : chain,
   )
 
   txPool.com.notifyBadBlock = proc(invalid, origin: Header)
@@ -127,7 +124,7 @@ func com*(ben: BeaconEngineRef): CommonRef =
   ben.txPool.com
 
 func chain*(ben: BeaconEngineRef): ForkedChainRef =
-  ben.chain
+  ben.txPool.chain
 
 func get*(ben: BeaconEngineRef, hash: Hash32,
           header: var Header): bool =

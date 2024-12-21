@@ -13,7 +13,6 @@ import
   ../../nimbus/core/[chain, tx_pool], # must be early (compilation annoyance)
   ../../nimbus/common/common,
   ../../nimbus/[config, constants],
-  ../../nimbus/utils/ec_recover,
   ../../nimbus/core/tx_pool/[tx_chain, tx_item],
   ../../nimbus/transaction,
   eth/common/transaction_utils,

@@ -191,7 +191,7 @@ proc setupEnv(signer, ks2: Address, ctx: EthContext, com: CommonRef): TestEnv =
 
   com.db.persistHeaderAndSetHead(header,
     com.startOfHistory).expect("persistHeader not error")
-    
+
   let uncles = [header]
   header.ommersHash = com.db.persistUncles(uncles)
 
@@ -250,7 +250,7 @@ proc rpcMain*() =
     let
       server = newRpcHttpServerWithParams("127.0.0.1:0").valueOr:
         quit(QuitFailure)
-      serverApi = newServerAPI(chain, txPool)
+      serverApi = newServerAPI(txPool)
 
     setupServerAPI(serverApi, server, ctx)
     setupCommonRpc(ethNode, conf, server)

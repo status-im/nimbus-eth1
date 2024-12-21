@@ -48,7 +48,7 @@ proc setupRpcServer(ctx: EthContext, com: CommonRef,
                     conf: NimbusConf, chain: ForkedChainRef): RpcServer  =
   let
     rpcServer = newRpcHttpServer([initTAddress(conf.httpAddress, conf.httpPort)])
-    serverApi = newServerAPI(chain, txPool)
+    serverApi = newServerAPI(txPool)
 
 
   setupCommonRpc(ethNode, conf, rpcServer)

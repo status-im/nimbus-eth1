@@ -108,8 +108,8 @@ proc newEngineEnv*(conf: var NimbusConf, chainFile: string, enableAuth: bool): E
       echo "Failed to create rpc server: ", error
       quit(QuitFailure)
 
-    beaconEngine = BeaconEngineRef.new(txPool, chain)
-    serverApi = newServerAPI(chain, txPool)
+    beaconEngine = BeaconEngineRef.new(txPool)
+    serverApi = newServerAPI(txPool)
 
   setupServerAPI(serverApi, server, ctx)
   setupEngineAPI(beaconEngine, server)

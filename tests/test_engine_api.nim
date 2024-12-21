@@ -100,8 +100,8 @@ proc setupEnv(envFork: HardFork = MergeFork,
     server = newRpcHttpServerWithParams("127.0.0.1:0").valueOr:
       echo "Failed to create rpc server: ", error
       quit(QuitFailure)
-    beaconEngine = BeaconEngineRef.new(txPool, chain)
-    serverApi = newServerAPI(chain, txPool)
+    beaconEngine = BeaconEngineRef.new(txPool)
+    serverApi = newServerAPI(txPool)
 
   setupServerAPI(serverApi, server, newEthContext())
   setupEngineAPI(beaconEngine, server)
