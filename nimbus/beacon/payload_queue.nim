@@ -35,7 +35,7 @@ type
     payload*: ExecutionPayload
     blockValue*: UInt256
     blobsBundle*: Opt[BlobsBundleV1]
-    executionRequests*: Opt[array[3, seq[byte]]]
+    executionRequests*: Opt[seq[seq[byte]]]
     targetBlobsPerBlock*: Opt[Quantity]
 
   PayloadItem = object

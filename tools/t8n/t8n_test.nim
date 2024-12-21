@@ -112,6 +112,8 @@ proc cmp(jsc: var JsonComparator; a, b: JsonNode, path: string): bool =
     of JNull:
       result = true
     of JArray:
+      if a.len != b.len:
+        jsc.exit("ARRAY A.len($1) != B.len($2)" % [$a.len, $b.len])
       for i, x in a.elems:
         if not jsc.cmp(x, b.elems[i], path & "/" & $i):
           return false
@@ -690,7 +692,7 @@ const
       ),
       output: T8nOutput(alloc: true, result: true),
       expOut: "exp.json",
-    ),  
+    ),
   ]
 
 proc main() =

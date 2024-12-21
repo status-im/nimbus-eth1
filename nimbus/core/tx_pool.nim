@@ -457,7 +457,7 @@ type AssembledBlock* = object
   blk*: EthBlock
   blobsBundle*: Opt[BlobsBundle]
   blockValue*: UInt256
-  executionRequests*: Opt[array[3, seq[byte]]]
+  executionRequests*: Opt[seq[seq[byte]]]
 
 proc assembleBlock*(
     xp: TxPoolRef,
@@ -517,7 +517,7 @@ proc assembleBlock*(
     if com.isPragueOrLater(blk.header.timestamp):
       Opt.some(pst.executionRequests)
     else:
-      Opt.none(array[3, seq[byte]])
+      Opt.none(seq[seq[byte]])
 
   ok AssembledBlock(
     blk: blk,

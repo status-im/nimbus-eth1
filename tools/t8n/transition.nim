@@ -358,12 +358,23 @@ proc exec(ctx: TransContext,
     var allLogs: seq[Log]
     for rec in result.result.receipts:
       allLogs.add rec.logs
-    let
+    var
       depositReqs = parseDepositLogs(allLogs, vmState.com.depositContractAddress).valueOr:
         raise newError(ErrorEVM, error)
-      requestsHash = calcRequestsHash(depositReqs, withdrawalReqs, consolidationReqs)
+      executionRequests: seq[seq[byte]]
+
+    template append(dst, reqType, reqData) =
+      if reqData.len > 0:
+        reqData.insert(reqType)
+        dst.add(move(reqData))
+
+    executionRequests.append(DEPOSIT_REQUEST_TYPE, depositReqs)
+    executionRequests.append(WITHDRAWAL_REQUEST_TYPE, withdrawalReqs)
+    executionRequests.append(CONSOLIDATION_REQUEST_TYPE, consolidationReqs)
+
+    let requestsHash = calcRequestsHash(executionRequests)
     result.result.requestsHash = Opt.some(requestsHash)
-    result.result.requests = Opt.some([depositReqs, withdrawalReqs, consolidationReqs])
+    result.result.requests = Opt.some(executionRequests)
 
 template wrapException(body: untyped) =
   when wrapExceptionEnabled:
