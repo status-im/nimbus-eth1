@@ -69,7 +69,7 @@ proc persist(pst: var TxPacker)
   let vmState = pst.vmState
   if not pst.cleanState:
     let clearEmptyAccount = vmState.fork >= FkSpurious
-    vmState.stateDB.persist(clearEmptyAccount)
+    vmState.ledger.persist(clearEmptyAccount)
     pst.cleanState = true
 
 proc classifyValidatePacked(vmState: BaseVMState; item: TxItemRef): bool =
@@ -77,7 +77,7 @@ proc classifyValidatePacked(vmState: BaseVMState; item: TxItemRef): bool =
   ## is a wrapper around the `verifyTransaction()` call to be used in a similar
   ## fashion as in `asyncProcessTransactionImpl()`.
   let
-    roDB = vmState.readOnlyStateDB
+    roDB = vmState.ReadOnlyLedger
     baseFee = vmState.blockCtx.baseFeePerGas.get(0.u256)
     fork = vmState.fork
     gasLimit = vmState.blockCtx.gasLimit
@@ -142,7 +142,7 @@ proc runTxCommit(pst: var TxPacker; item: TxItemRef; gasBurned: GasInt)
   # are vetted for profitability before entering that bucket.
   assert 0 <= gasTip
   let reward = gasBurned.u256 * gasTip.u256
-  vmState.stateDB.addBalance(pst.feeRecipient, reward)
+  vmState.ledger.addBalance(pst.feeRecipient, reward)
   pst.blockValue += reward
 
   # Save accounts via persist() is not needed unless the fork is smaller
@@ -236,23 +236,23 @@ proc vmExecGrabItem(pst: var TxPacker; item: TxItemRef): GrabResult
     return ContinueWithNextAccount
 
   # EIP-1153
-  vmState.stateDB.clearTransientStorage()
+  vmState.ledger.clearTransientStorage()
 
   let
-    accTx = vmState.stateDB.beginSavepoint
+    accTx = vmState.ledger.beginSavepoint
     gasUsed = pst.runTx(item) # this is the crucial part, running the tx
 
   # Find out what to do next: accepting this tx or trying the next account
   if not vmState.classifyPacked(gasUsed):
-    vmState.stateDB.rollback(accTx)
+    vmState.ledger.rollback(accTx)
     if vmState.classifyPackedNext():
       return ContinueWithNextAccount
     return StopCollecting
 
   # Commit account state DB
-  vmState.stateDB.commit(accTx)
+  vmState.ledger.commit(accTx)
 
-  vmState.stateDB.persist(clearEmptyAccount = vmState.fork >= FkSpurious)
+  vmState.ledger.persist(clearEmptyAccount = vmState.fork >= FkSpurious)
 
   # Finish book-keeping and move item to `packed` bucket
   pst.runTxCommit(item, gasUsed)
@@ -262,12 +262,12 @@ proc vmExecGrabItem(pst: var TxPacker; item: TxItemRef): GrabResult
 proc vmExecCommit(pst: var TxPacker): Result[void, string] =
   let
     vmState = pst.vmState
-    stateDB = vmState.stateDB
+    ledger = vmState.ledger
 
   # EIP-4895
   if vmState.fork >= FkShanghai:
     for withdrawal in vmState.com.pos.withdrawals:
-      stateDB.addBalance(withdrawal.address, withdrawal.weiAmount)
+      ledger.addBalance(withdrawal.address, withdrawal.weiAmount)
 
   # EIP-6110, EIP-7002, EIP-7251
   if vmState.fork >= FkPrague:
@@ -275,8 +275,8 @@ proc vmExecCommit(pst: var TxPacker): Result[void, string] =
     pst.consolidationReqs = processDequeueConsolidationRequests(vmState)
     pst.depositReqs = ?parseDepositLogs(vmState.allLogs, vmState.com.depositContractAddress)
 
-  # Finish up, then vmState.stateDB.stateRoot may be accessed
-  stateDB.persist(clearEmptyAccount = vmState.fork >= FkSpurious)
+  # Finish up, then vmState.ledger.stateRoot may be accessed
+  ledger.persist(clearEmptyAccount = vmState.fork >= FkSpurious)
 
   # Update flexi-array, set proper length
   let nItems = pst.txDB.byStatus.eq(txItemPacked).nItems
@@ -284,7 +284,7 @@ proc vmExecCommit(pst: var TxPacker): Result[void, string] =
 
   pst.receiptsRoot = vmState.receipts.calcReceiptsRoot
   pst.logsBloom = vmState.receipts.createBloom
-  pst.stateRoot = vmState.stateDB.getStateRoot()
+  pst.stateRoot = vmState.ledger.getStateRoot()
   ok()
 
 # ------------------------------------------------------------------------------

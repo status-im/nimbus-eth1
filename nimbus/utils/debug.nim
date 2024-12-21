@@ -61,23 +61,23 @@ proc debug*(h: Header): string =
   result.add "blockHash      : " & $blockHash(h) & "\n"
 
 proc dumpAccounts*(vmState: BaseVMState): JsonNode =
-  %dumpAccounts(vmState.stateDB)
+  %dumpAccounts(vmState.ledger)
 
-proc debugAccounts*(stateDB: LedgerRef, addresses: openArray[string]): string =
+proc debugAccounts*(ledger: LedgerRef, addresses: openArray[string]): string =
   var accountList = newSeq[Address]()
   for address in addresses:
     accountList.add Address.fromHex(address)
 
-  (%dumpAccounts(stateDB, accountList)).pretty
+  (%dumpAccounts(ledger, accountList)).pretty
 
 proc debugAccounts*(vmState: BaseVMState): string =
   var accountList = newSeq[Address]()
-  for address in vmState.stateDB.addresses:
+  for address in vmState.ledger.addresses:
     accountList.add address
 
   let res = %{
-    "stateRoot": %($vmState.readOnlyStateDB.getStateRoot()),
-    "accounts": %dumpAccounts(vmState.stateDB, accountList),
+    "stateRoot": %($vmState.ReadOnlyLedger.getStateRoot()),
+    "accounts": %dumpAccounts(vmState.ledger, accountList),
   }
 
   res.pretty
@@ -94,7 +94,7 @@ proc debug*(vms: BaseVMState): string =
   result.add "excessBlobGas    : " & $vms.blockCtx.excessBlobGas & "\n"
   result.add "flags            : " & $vms.flags               & "\n"
   result.add "receipts.len     : " & $vms.receipts.len        & "\n"
-  result.add "stateDB.root     : " & $vms.stateDB.getStateRoot() & "\n"
+  result.add "ledger.root     : " & $vms.ledger.getStateRoot() & "\n"
   result.add "cumulativeGasUsed: " & $vms.cumulativeGasUsed   & "\n"
   result.add "tx.origin        : " & $vms.txCtx.origin        & "\n"
   result.add "tx.gasPrice      : " & $vms.txCtx.gasPrice      & "\n"

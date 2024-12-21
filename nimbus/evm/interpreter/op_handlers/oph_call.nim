@@ -68,7 +68,7 @@ proc gasCallEIP2929(c: Computation, address: Address): GasInt =
     if c.host.accessAccount(address) == EVMC_ACCESS_COLD:
       return ColdAccountAccessCost - WarmStorageReadCost
   else:
-    c.vmState.mutateStateDB:
+    c.vmState.mutateLedger:
       if not db.inAccessList(address):
         db.accessList(address)
 

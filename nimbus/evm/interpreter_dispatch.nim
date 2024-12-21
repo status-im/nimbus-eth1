@@ -68,7 +68,7 @@ macro selectVM(v: VmCpt, fork: EVMFork, tracingEnabled: bool): EvmResultVoid =
 proc beforeExecCall(c: Computation) =
   c.snapshot()
   if c.msg.kind == EVMC_CALL:
-    c.vmState.mutateStateDB:
+    c.vmState.mutateLedger:
       db.subBalance(c.msg.sender, c.msg.value)
       db.addBalance(c.msg.contractAddress, c.msg.value)
 
@@ -80,7 +80,7 @@ proc afterExecCall(c: Computation) =
   if c.isError or c.fork >= FkByzantium:
     if c.msg.contractAddress == RIPEMD_ADDR:
       # Special case to account for geth+parity bug
-      c.vmState.stateDB.ripemdSpecial()
+      c.vmState.ledger.ripemdSpecial()
 
   if c.isSuccess:
     c.commit()
@@ -88,7 +88,7 @@ proc afterExecCall(c: Computation) =
     c.rollback()
 
 proc beforeExecCreate(c: Computation): bool =
-  c.vmState.mutateStateDB:
+  c.vmState.mutateLedger:
     let nonce = db.getNonce(c.msg.sender)
     if nonce + 1 < nonce:
       let sender = c.msg.sender.toHex
@@ -106,13 +106,13 @@ proc beforeExecCreate(c: Computation): bool =
 
   c.snapshot()
 
-  if c.vmState.readOnlyStateDB().contractCollision(c.msg.contractAddress):
+  if c.vmState.ReadOnlyLedger().contractCollision(c.msg.contractAddress):
     let blurb = c.msg.contractAddress.toHex
     c.setError("Address collision when creating contract address=" & blurb, true)
     c.rollback()
     return true
 
-  c.vmState.mutateStateDB:
+  c.vmState.mutateLedger:
     db.subBalance(c.msg.sender, c.msg.value)
     db.addBalance(c.msg.contractAddress, c.msg.value)
     db.clearStorage(c.msg.contractAddress)

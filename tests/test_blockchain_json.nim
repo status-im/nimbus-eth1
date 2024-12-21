@@ -67,12 +67,12 @@ proc executeCase(node: JsonNode): bool =
   let
     env     = parseEnv(node)
     memDB   = newCoreDbRef DefaultDbMemory
-    stateDB = LedgerRef.init(memDB)
+    ledger = LedgerRef.init(memDB)
     config  = getChainConfig(env.network)
     com     = CommonRef.new(memDB, nil, config)
 
-  setupStateDB(env.pre, stateDB)
-  stateDB.persist()
+  setupLedger(env.pre, ledger)
+  ledger.persist()
 
   com.db.persistHeaderAndSetHead(env.genesisHeader).isOkOr:
     debugEcho "Failed to put genesis header into database: ", error

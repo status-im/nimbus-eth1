@@ -50,12 +50,12 @@ proc commitOrRollbackDependingOnGasUsed(
   # an early stop. It would rather detect differing values for the  block
   # header `gasUsed` and the `vmState.cumulativeGasUsed` at a later stage.
   if header.gasLimit < vmState.cumulativeGasUsed + gasBurned:
-    vmState.stateDB.rollback(accTx)
+    vmState.ledger.rollback(accTx)
     err(&"invalid tx: block header gasLimit reached. gasLimit={header.gasLimit}, gasUsed={vmState.cumulativeGasUsed}, addition={gasBurned}")
   else:
     # Accept transaction and collect mining fee.
-    vmState.stateDB.commit(accTx)
-    vmState.stateDB.addBalance(vmState.coinbase(), gasBurned.u256 * priorityFee.u256)
+    vmState.ledger.commit(accTx)
+    vmState.ledger.addBalance(vmState.coinbase(), gasBurned.u256 * priorityFee.u256)
     vmState.cumulativeGasUsed += gasBurned
 
     # Return remaining gas to the block gas counter so it is
@@ -75,7 +75,7 @@ proc processTransactionImpl(
 
   let
     fork = vmState.fork
-    roDB = vmState.readOnlyStateDB
+    roDB = vmState.ReadOnlyLedger
     baseFee256 = header.eip1559BaseFee(fork)
     baseFee = baseFee256.truncate(GasInt)
     priorityFee = min(tx.maxPriorityFeePerGasNorm(), tx.maxFeePerGasNorm() - baseFee)
@@ -106,12 +106,12 @@ proc processTransactionImpl(
     txRes = roDB.validateTransaction(tx, sender, header.gasLimit, baseFee256, excessBlobGas, fork)
     res = if txRes.isOk:
       # EIP-1153
-      vmState.stateDB.clearTransientStorage()
+      vmState.ledger.clearTransientStorage()
 
       # Execute the transaction.
       vmState.captureTxStart(tx.gasLimit)
       let
-        accTx = vmState.stateDB.beginSavepoint
+        accTx = vmState.ledger.beginSavepoint
         gasBurned = tx.txCallEvm(sender, vmState, baseFee)
       vmState.captureTxEnd(tx.gasLimit - gasBurned)
 
@@ -120,9 +120,9 @@ proc processTransactionImpl(
       err(txRes.error)
 
   if vmState.collectWitnessData:
-    vmState.stateDB.collectWitnessData()
+    vmState.ledger.collectWitnessData()
 
-  vmState.stateDB.persist(clearEmptyAccount = fork >= FkSpurious)
+  vmState.ledger.persist(clearEmptyAccount = fork >= FkSpurious)
 
   res
 
@@ -137,7 +137,7 @@ proc processBeaconBlockRoot*(vmState: BaseVMState, beaconRoot: Hash32):
   ## If EIP-4788 is enabled, we need to invoke the beaconroot storage
   ## contract with the new root.
   let
-    statedb = vmState.stateDB
+    ledger = vmState.ledger
     call = CallParams(
       vmState  : vmState,
       sender   : SYSTEM_ADDRESS,
@@ -159,7 +159,7 @@ proc processBeaconBlockRoot*(vmState: BaseVMState, beaconRoot: Hash32):
   if res.len > 0:
     return err("processBeaconBlockRoot: " & res)
 
-  statedb.persist(clearEmptyAccount = true)
+  ledger.persist(clearEmptyAccount = true)
   ok()
 
 proc processParentBlockHash*(vmState: BaseVMState, prevHash: Hash32):
@@ -167,7 +167,7 @@ proc processParentBlockHash*(vmState: BaseVMState, prevHash: Hash32):
   ## processParentBlockHash stores the parent block hash in the
   ## history storage contract as per EIP-2935.
   let
-    statedb = vmState.stateDB
+    ledger = vmState.ledger
     call = CallParams(
       vmState  : vmState,
       sender   : SYSTEM_ADDRESS,
@@ -189,14 +189,14 @@ proc processParentBlockHash*(vmState: BaseVMState, prevHash: Hash32):
   if res.len > 0:
     return err("processParentBlockHash: " & res)
 
-  statedb.persist(clearEmptyAccount = true)
+  ledger.persist(clearEmptyAccount = true)
   ok()
 
 proc processDequeueWithdrawalRequests*(vmState: BaseVMState): seq[byte] =
   ## processDequeueWithdrawalRequests applies the EIP-7002 system call
   ## to the withdrawal requests contract.
   let
-    statedb = vmState.stateDB
+    ledger = vmState.ledger
     call = CallParams(
       vmState  : vmState,
       sender   : SYSTEM_ADDRESS,
@@ -214,13 +214,13 @@ proc processDequeueWithdrawalRequests*(vmState: BaseVMState): seq[byte] =
 
   # runComputation a.k.a syscall/evm.call
   result = call.runComputation(seq[byte])
-  statedb.persist(clearEmptyAccount = true)
+  ledger.persist(clearEmptyAccount = true)
 
 proc processDequeueConsolidationRequests*(vmState: BaseVMState): seq[byte] =
   ## processDequeueConsolidationRequests applies the EIP-7251 system call
   ## to the consolidation requests contract.
   let
-    statedb = vmState.stateDB
+    ledger = vmState.ledger
     call = CallParams(
       vmState  : vmState,
       sender   : SYSTEM_ADDRESS,
@@ -238,7 +238,7 @@ proc processDequeueConsolidationRequests*(vmState: BaseVMState): seq[byte] =
 
   # runComputation a.k.a syscall/evm.call
   result = call.runComputation(seq[byte])
-  statedb.persist(clearEmptyAccount = true)
+  ledger.persist(clearEmptyAccount = true)
 
 proc processTransaction*(
     vmState: BaseVMState; ## Parent accounts environment for transaction

@@ -154,34 +154,34 @@ template accountExists*(c: Computation, address: Address): bool =
     c.host.accountExists(address)
   else:
     if c.fork >= FkSpurious:
-      not c.vmState.readOnlyStateDB.isDeadAccount(address)
+      not c.vmState.ReadOnlyLedger.isDeadAccount(address)
     else:
-      c.vmState.readOnlyStateDB.accountExists(address)
+      c.vmState.ReadOnlyLedger.accountExists(address)
 
 template getStorage*(c: Computation, slot: UInt256): UInt256 =
   when evmc_enabled:
     c.host.getStorage(c.msg.contractAddress, slot)
   else:
-    c.vmState.readOnlyStateDB.getStorage(c.msg.contractAddress, slot)
+    c.vmState.ReadOnlyLedger.getStorage(c.msg.contractAddress, slot)
 
 template getBalance*(c: Computation, address: Address): UInt256 =
   when evmc_enabled:
     c.host.getBalance(address)
   else:
-    c.vmState.readOnlyStateDB.getBalance(address)
+    c.vmState.ReadOnlyLedger.getBalance(address)
 
 template getCodeSize*(c: Computation, address: Address): uint =
   when evmc_enabled:
     c.host.getCodeSize(address)
   else:
-    uint(c.vmState.readOnlyStateDB.getCodeSize(address))
+    uint(c.vmState.ReadOnlyLedger.getCodeSize(address))
 
 template getCodeHash*(c: Computation, address: Address): Hash32 =
   when evmc_enabled:
     c.host.getCodeHash(address)
   else:
     let
-      db = c.vmState.readOnlyStateDB
+      db = c.vmState.ReadOnlyLedger
     if not db.accountExists(address) or db.isEmptyAccount(address):
       default(Hash32)
     else:
@@ -197,20 +197,20 @@ template getCode*(c: Computation, address: Address): CodeBytesRef =
   when evmc_enabled:
     CodeBytesRef.init(c.host.copyCode(address))
   else:
-    c.vmState.readOnlyStateDB.getCode(address)
+    c.vmState.ReadOnlyLedger.getCode(address)
 
 template setTransientStorage*(c: Computation, slot, val: UInt256) =
   when evmc_enabled:
     c.host.setTransientStorage(c.msg.contractAddress, slot, val)
   else:
-    c.vmState.stateDB.
+    c.vmState.ledger.
       setTransientStorage(c.msg.contractAddress, slot, val)
 
 template getTransientStorage*(c: Computation, slot: UInt256): UInt256 =
   when evmc_enabled:
     c.host.getTransientStorage(c.msg.contractAddress, slot)
   else:
-    c.vmState.readOnlyStateDB.
+    c.vmState.ReadOnlyLedger.
       getTransientStorage(c.msg.contractAddress, slot)
 
 template resolveCodeSize*(c: Computation, address: Address): uint =
@@ -221,7 +221,7 @@ template resolveCodeSize*(c: Computation, address: Address): uint =
     else:
       c.host.getCodeSize(delegateTo)
   else:
-    uint(c.vmState.readOnlyStateDB.resolveCodeSize(address))
+    uint(c.vmState.ReadOnlyLedger.resolveCodeSize(address))
 
 template resolveCodeHash*(c: Computation, address: Address): Hash32=
   when evmc_enabled:
@@ -232,7 +232,7 @@ template resolveCodeHash*(c: Computation, address: Address): Hash32=
       c.host.getCodeHash(delegateTo)
   else:
     let
-      db = c.vmState.readOnlyStateDB
+      db = c.vmState.ReadOnlyLedger
     if not db.accountExists(address) or db.isEmptyAccount(address):
       default(Hash32)
     else:
@@ -246,7 +246,7 @@ template resolveCode*(c: Computation, address: Address): CodeBytesRef =
     else:
       CodeBytesRef.init(c.host.copyCode(delegateTo))
   else:
-    c.vmState.readOnlyStateDB.resolveCode(address)
+    c.vmState.ReadOnlyLedger.resolveCode(address)
 
 func newComputation*(vmState: BaseVMState,
                      keepStack: bool,
@@ -279,13 +279,13 @@ func shouldBurnGas*(c: Computation): bool =
   c.isError and c.error.burnsGas
 
 proc snapshot*(c: Computation) =
-  c.savePoint = c.vmState.stateDB.beginSavepoint()
+  c.savePoint = c.vmState.ledger.beginSavepoint()
 
 proc commit*(c: Computation) =
-  c.vmState.stateDB.commit(c.savePoint)
+  c.vmState.ledger.commit(c.savePoint)
 
 proc dispose*(c: Computation) =
-  c.vmState.stateDB.safeDispose(c.savePoint)
+  c.vmState.ledger.safeDispose(c.savePoint)
   if c.stack != nil:
     if c.keepStack:
       c.finalStack = toSeq(c.stack.items())
@@ -295,7 +295,7 @@ proc dispose*(c: Computation) =
   c.savePoint = nil
 
 proc rollback*(c: Computation) =
-  c.vmState.stateDB.rollback(c.savePoint)
+  c.vmState.ledger.rollback(c.savePoint)
 
 func setError*(c: Computation, msg: sink string, burnsGas = false) =
   c.error = Error(evmcStatus: EVMC_FAILURE, info: move(msg), burnsGas: burnsGas)
@@ -361,7 +361,7 @@ proc writeContract*(c: Computation) =
     c.gasMeter.consumeGas(codeCost,
       reason = "Write new contract code").
         expect("enough gas since we checked against gasRemaining")
-    c.vmState.mutateStateDB:
+    c.vmState.mutateLedger:
       db.setCode(c.msg.contractAddress, c.output)
     withExtra trace, "Writing new contract code"
     return
@@ -387,7 +387,7 @@ template chainTo*(c: Computation,
     after
 
 proc execSelfDestruct*(c: Computation, beneficiary: Address) =
-  c.vmState.mutateStateDB:
+  c.vmState.mutateLedger:
     let localBalance = c.getBalance(c.msg.contractAddress)
 
     # Register the account to be deleted
@@ -412,7 +412,7 @@ proc execSelfDestruct*(c: Computation, beneficiary: Address) =
 
 # Using `proc` as `addLogEntry()` might be `proc` in logging mode
 proc addLogEntry*(c: Computation, log: Log) =
-  c.vmState.stateDB.addLogEntry(log)
+  c.vmState.ledger.addLogEntry(log)
 
 # some gasRefunded operations still relying
 # on negative number
@@ -432,7 +432,7 @@ func addRefund*(c: Computation, amount: int64) =
 # Using `proc` as `selfDestructLen()` might be `proc` in logging mode
 proc refundSelfDestruct*(c: Computation) =
   let cost = gasFees[c.fork][RefundSelfDestruct]
-  let num  = c.vmState.stateDB.selfDestructLen
+  let num  = c.vmState.ledger.selfDestructLen
   c.gasMeter.refundGas(cost * num)
 
 func tracingEnabled*(c: Computation): bool =

@@ -213,7 +213,7 @@ proc opEnvMain*() =
     assembler: # EXTCODECOPY OP
       title: "EXTCODECOPY_1"
       setup:
-        vmState.mutateStateDB:
+        vmState.mutateLedger:
           db.setCode(acc, code)
       code:
         Push1 "0x04" # size
@@ -231,7 +231,7 @@ proc opEnvMain*() =
     assembler: # EXTCODECOPY OP
       title: "EXTCODECOPY_2"
       setup:
-        vmState.mutateStateDB:
+        vmState.mutateLedger:
           db.setCode(acc, code)
       code:
         Push1 "0x3E"
@@ -251,7 +251,7 @@ proc opEnvMain*() =
     assembler: # EXTCODECOPY OP
       title: "EXTCODECOPY_3"
       setup:
-        vmState.mutateStateDB:
+        vmState.mutateLedger:
           db.setCode(acc, code)
       code:
         Push1 "0x5E"
@@ -272,7 +272,7 @@ proc opEnvMain*() =
     assembler: # EXTCODECOPY OP
       title: "EXTCODECOPY_4"
       setup:
-        vmState.mutateStateDB:
+        vmState.mutateLedger:
           db.setCode(acc, code)
       code:
         Push2 "0x1234"
@@ -327,7 +327,7 @@ proc opEnvMain*() =
     assembler: # EXTCODESIZE OP
       title: "EXTCODESIZE_1"
       setup:
-        vmState.mutateStateDB:
+        vmState.mutateLedger:
           db.setCode(acc, code)
       code:
         Push20 "0xfbe0afcd7658ba86be41922059dd879c192d4c73"
@@ -342,7 +342,7 @@ proc opEnvMain*() =
     assembler: # EIP2929 EXTCODESIZE OP
       title: "EIP2929 EXTCODESIZE_1"
       setup:
-        vmState.mutateStateDB:
+        vmState.mutateLedger:
           db.setCode(acc, code)
       code:
         Push20 "0xfbe0afcd7658ba86be41922059dd879c192d4c73"
@@ -355,7 +355,7 @@ proc opEnvMain*() =
     assembler: # EIP2929 EXTCODEHASH OP
       title: "EIP2929 EXTCODEHASH_1"
       setup:
-        vmState.mutateStateDB:
+        vmState.mutateLedger:
           db.setCode(acc, code)
       code:
         Push20 "0xfbe0afcd7658ba86be41922059dd879c192d4c73"
