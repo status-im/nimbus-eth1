@@ -23,7 +23,7 @@ from ./kvt_desc/desc_backend
 
 # Not auto-exporting backend
 export
-  tables, kvt_constants, desc_error, desc_structural
+  hashes, tables, kvt_constants, desc_error, desc_structural
 
 type
   KvtTxRef* = ref object

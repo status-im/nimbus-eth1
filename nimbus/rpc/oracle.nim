@@ -16,6 +16,7 @@ import
   ../transaction,
   ../common/common,
   ../core/eip4844,
+  ../core/eip7691,
   ../core/chain/forked_chain
 
 from ./rpc_types import
@@ -98,13 +99,16 @@ func calcBaseFee(com: CommonRef, bc: BlockContent): UInt256 =
 # the block field filled in, retrieves the block from the backend if not present yet and
 # fills in the rest of the fields.
 proc processBlock(oracle: Oracle, bc: BlockContent, percentiles: openArray[float64]): ProcessedFees =
+  let
+    electra = com.isPragueOrLater(bc.header.timestamp)
+    maxBlobGasPerBlock = getMaxBlobGasPerBlock(electra)
   result = ProcessedFees(
     baseFee: bc.header.baseFeePerGas.get(0.u256),
-    blobBaseFee: getBlobBaseFee(bc.header.excessBlobGas.get(0'u64)),
+    blobBaseFee: getBlobBaseFee(bc.header.excessBlobGas.get(0'u64), electra),
     nextBaseFee: calcBaseFee(oracle.com, bc),
-    nextBlobBaseFee: getBlobBaseFee(calcExcessBlobGas(bc.header)),
+    nextBlobBaseFee: getBlobBaseFee(calcExcessBlobGas(bc.header, electra), electra),
     gasUsedRatio: float64(bc.header.gasUsed) / float64(bc.header.gasLimit),
-    blobGasUsedRatio: float64(bc.header.blobGasUsed.get(0'u64)) / float64(MAX_BLOB_GAS_PER_BLOCK)
+    blobGasUsedRatio: float64(bc.header.blobGasUsed.get(0'u64)) / float64(maxBlobGasPerBlock)
   )
 
   if percentiles.len == 0:

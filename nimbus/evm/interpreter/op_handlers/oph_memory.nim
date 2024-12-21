@@ -25,9 +25,7 @@ import
   ../gas_costs,
   ../op_codes,
   ./oph_defs,
-  ./oph_helpers,
-  eth/common,
-  stint
+  ./oph_helpers
 
 when not defined(evmc_enabled):
   import

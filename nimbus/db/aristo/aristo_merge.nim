@@ -26,7 +26,7 @@
 
 import
   std/typetraits,
-  eth/common,
+  eth/common/hashes,
   results,
   "."/[aristo_desc, aristo_fetch, aristo_get, aristo_layers, aristo_vid]
 

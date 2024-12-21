@@ -1,6 +1,6 @@
 {
   "result": {
-    "stateRoot": "0xdbeeef4c53f45167aea35bccfa9329f4a9b59fa7b115dc2f6462eea7316c2600",
+    "stateRoot": "0x1b9f157c7ef478901a0fce1a7837a850ea8a0aad6686e6e7b176a425209910a6",
     "txRoot": "0xe67cc7032923c32bc107773c80dbe2afc754eeed4203ccee50605b9fe15a5bb5",
     "receiptsRoot": "0xead5884f735e5e8e703878f0c89b54919d06c2cee8e373d632e730d42b380e0c",
     "logsHash": "0x6fb31d3ef4580565e54b679a3bb580d1a4c345faab2cfc7868304e0e5da23f4c",
@@ -34,11 +34,7 @@
     "withdrawalsRoot": "0x56e81f171bcc55a6ff8345e692c0f86e5b48e01b996cadc001622fb5e363b421",
     "currentExcessBlobGas": "0x2b80000",
     "blobGasUsed": "0x0",
-    "requestsHash": "0x6036c41849da9c076ed79654d434017387a88fb833c2856b32e18218b3341c5f",
-    "requests": [
-      "0x",
-      "0x",
-      "0x"
-    ]
+    "requestsHash": "0xe3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "requests": []
   }
 }

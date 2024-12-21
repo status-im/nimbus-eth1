@@ -60,7 +60,7 @@ type
     attr*        : PayloadAttributes
     beaconRoot*  : Opt[Hash32]
     versionedHashes*: Opt[seq[Hash32]]
-    executionRequests*: Opt[array[3, seq[byte]]]
+    executionRequests*: Opt[seq[seq[byte]]]
 
 const
   DefaultTimeout* = 60 # seconds

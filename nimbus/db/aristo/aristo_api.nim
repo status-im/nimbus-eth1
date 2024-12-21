@@ -14,7 +14,7 @@
 
 import
   std/times,
-  eth/common,
+  eth/common/hashes,
   results,
   ./aristo_desc/desc_backend,
   ./aristo_init/memory_db,
@@ -230,32 +230,6 @@ type
       ## Variant of `partAccountTwig()`. Note that the function always returns
       ## an error unless the `accPath` is valid.
 
-  AristoApiPartUntwigGeneric* =
-    proc(chain: openArray[seq[byte]];
-         root: Hash32;
-         path: openArray[byte];
-        ): Result[Opt[seq[byte]],AristoError]
-        {.noRaise.}
-      ## Follow and verify the argument `chain` up unlil the last entry which
-      ## must be a leaf node. Extract the payload and pass it on as return
-      ## code. If a `Opt.none()` result is returned then the `path` argument
-      ## does provably not exist relative to `chain`.
-
-  AristoApiPartUntwigGenericOk* =
-    proc(chain: openArray[seq[byte]];
-         root: Hash32;
-         path: openArray[byte];
-         payload: Opt[seq[byte]];
-        ): Result[void,AristoError]
-        {.noRaise.}
-      ## Variant of `partUntwigGeneric()`. The function verifies the argument
-      ## `chain` of rlp-encoded nodes against the `path` and `payload`
-      ## arguments. If `payload` is passed `Opt.none()`, then the function is
-      ## subject to proving that the `path` does not exist relaive to `chain`.
-      ##
-      ## Note: This function provides a functionality comparable to the
-      ## `isValidBranch()` function from `hexary.nim`.
-
   AristoApiPartUntwigPath* =
     proc(chain: openArray[seq[byte]];
          root: Hash32;
@@ -359,8 +333,6 @@ type
 
     partAccountTwig*: AristoApiPartAccountTwig
     partStorageTwig*: AristoApiPartStorageTwig
-    partUntwigGeneric*: AristoApiPartUntwigGeneric
-    partUntwigGenericOk*: AristoApiPartUntwigGenericOk
     partUntwigPath*: AristoApiPartUntwigPath
     partUntwigPathOk*: AristoApiPartUntwigPathOk
 
@@ -429,45 +401,12 @@ type
 # ------------------------------------------------------------------------------
 
 when AutoValidateApiHooks:
-  proc validate(api: AristoApiObj|AristoApiRef) =
-    doAssert not api.commit.isNil
-
-    doAssert not api.deleteAccountRecord.isNil
-    doAssert not api.deleteStorageData.isNil
-    doAssert not api.deleteStorageTree.isNil
-
-    doAssert not api.fetchLastSavedState.isNil
-
-    doAssert not api.fetchAccountRecord.isNil
-    doAssert not api.fetchStateRoot.isNil
-    doAssert not api.fetchStorageData.isNil
-    doAssert not api.fetchStorageRoot.isNil
-
-    doAssert not api.finish.isNil
-
-    doAssert not api.hasPathAccount.isNil
-    doAssert not api.hasPathStorage.isNil
-    doAssert not api.hasStorageData.isNil
-
-    doAssert not api.isTop.isNil
-    doAssert not api.level.isNil
-
-    doAssert not api.mergeAccountRecord.isNil
-    doAssert not api.mergeStorageData.isNil
-
-    doAssert not api.partAccountTwig.isNil
-    doAssert not api.partStorageTwig.isNil
-    doAssert not api.partUntwigPath.isNil
-    doAssert not api.partUntwigPathOk.isNil
-
-    doAssert not api.pathAsBlob.isNil
-    doAssert not api.persist.isNil
-    doAssert not api.rollback.isNil
-    doAssert not api.txFrameBegin.isNil
-    doAssert not api.txFrameTop.isNil
+  proc validate(api: AristoApiObj) =
+    for _, field in api.fieldPairs():
+      doAssert not field.isNil
 
   proc validate(prf: AristoApiProfRef) =
-    prf.AristoApiRef.validate
+    prf.AristoApiRef[].validate
     doAssert not prf.data.isNil
 
 proc dup(be: BackendRef): BackendRef =
@@ -534,43 +473,10 @@ func init*(T: type AristoApiRef): T =
   result[].init()
 
 func dup*(api: AristoApiRef): AristoApiRef =
-  result = AristoApiRef(
-    commit:               api.commit,
-
-    deleteAccountRecord:  api.deleteAccountRecord,
-    deleteStorageData:    api.deleteStorageData,
-    deleteStorageTree:    api.deleteStorageTree,
-
-    fetchLastSavedState:  api.fetchLastSavedState,
-    fetchAccountRecord:   api.fetchAccountRecord,
-    fetchStateRoot: api.fetchStateRoot,
-    fetchStorageData:     api.fetchStorageData,
-    fetchStorageRoot:     api.fetchStorageRoot,
-
-    finish:               api.finish,
-
-    hasPathAccount:       api.hasPathAccount,
-    hasPathStorage:       api.hasPathStorage,
-    hasStorageData:       api.hasStorageData,
-
-    isTop:                api.isTop,
-    txFrameLevel:              api.txFrameLevel,
-
-    mergeAccountRecord:   api.mergeAccountRecord,
-    mergeStorageData:     api.mergeStorageData,
-
-    partAccountTwig:      api.partAccountTwig,
-    partStorageTwig:      api.partStorageTwig,
-    partUntwigPath:       api.partUntwigPath,
-    partUntwigPathOk:     api.partUntwigPathOk,
-
-    pathAsBlob:           api.pathAsBlob,
-    persist:              api.persist,
-    rollback:             api.rollback,
-    txFrameBegin:              api.txFrameBegin,
-    txFrameTop:                api.txFrameTop)
+  result = AristoApiRef()
+  result[] = api[]
   when AutoValidateApiHooks:
-    result.validate
+    result[].validate
 
 # ------------------------------------------------------------------------------
 # Public profile API constuctor

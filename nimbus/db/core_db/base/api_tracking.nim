@@ -12,7 +12,7 @@
 
 import
   std/[sequtils, strutils, times, typetraits],
-  eth/common,
+  eth/common/[accounts, base, hashes],
   results,
   stew/byteutils,
   ../../aristo/aristo_profile,
@@ -56,7 +56,6 @@ type
     BasePersistentFn    = "persistent"
     BaseStateBlockNumberFn = "stateBlockNumber"
     BaseVerifyFn        = "verify"
-    BaseVerifyOkFn      = "verifyOk"
 
     CptKvtLogFn         = "kvtLog"
     CptLevelFn          = "level"

@@ -60,7 +60,7 @@ proc setupEngineAPI*(engine: BeaconEngineRef, server: RpcServer) =
   server.rpc("engine_newPayloadV4") do(payload: ExecutionPayload,
                                        expectedBlobVersionedHashes: Opt[seq[Hash32]],
                                        parentBeaconBlockRoot: Opt[Hash32],
-                                       executionRequests: Opt[array[3, seq[byte]]]) -> PayloadStatusV1:
+                                       executionRequests: Opt[seq[seq[byte]]]) -> PayloadStatusV1:
     return engine.newPayload(Version.V4, payload,
       expectedBlobVersionedHashes, parentBeaconBlockRoot, executionRequests)
 

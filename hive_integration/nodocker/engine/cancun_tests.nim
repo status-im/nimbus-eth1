@@ -41,7 +41,7 @@ import
 
 # Precalculate the first data gas cost increase
 const
-  DATA_GAS_COST_INCREMENT_EXCEED_BLOBS = getMinExcessBlobsForBlobGasPrice(2).int
+  DATA_GAS_COST_INCREMENT_EXCEED_BLOBS = getMinExcessBlobsForBlobGasPrice(2, false).int
   TARGET_BLOBS_PER_BLOCK = int(TARGET_BLOB_GAS_PER_BLOCK div GAS_PER_BLOB)
 
 proc getGenesis(param: NetworkParams) =

@@ -129,19 +129,19 @@ proc preExecComputation(vmState: BaseVMState, call: CallParams): int64 =
 
   gasRefund
 
-proc setupHost(call: CallParams, keepStack: bool): TransactionHost =  
+proc setupHost(call: CallParams, keepStack: bool): TransactionHost =
   let vmState = call.vmState
   vmState.txCtx = TxContext(
     origin         : call.origin.get(call.sender),
     gasPrice       : call.gasPrice,
     versionedHashes: call.versionedHashes,
-    blobBaseFee    : getBlobBaseFee(vmState.blockCtx.excessBlobGas),
+    blobBaseFee    : getBlobBaseFee(vmState.blockCtx.excessBlobGas, vmState.fork >= FkPrague),
   )
 
   # reset global gasRefund counter each time
   # EVM called for a new transaction
   vmState.gasRefunded = 0
-  
+
   let
     intrinsicGas = if call.noIntrinsic: 0.GasInt
                    else: intrinsicGas(call, vmState.fork)
@@ -168,7 +168,7 @@ proc setupHost(call: CallParams, keepStack: bool): TransactionHost =
              host.msg.input_size = 0
              host.msg.input_data = nil
              CodeBytesRef.init(call.input)
-           else:          
+           else:
              if call.input.len > 0:
                host.msg.input_size = call.input.len.csize_t
                # Must copy the data so the `host.msg.input_data` pointer
@@ -177,7 +177,7 @@ proc setupHost(call: CallParams, keepStack: bool): TransactionHost =
                host.msg.input_data = host.input[0].addr
              getCallCode(host.vmState, host.msg.code_address.fromEvmc)
     cMsg = hostToComputationMessage(host.msg)
-    
+
   host.computation = newComputation(vmState, keepStack, cMsg, code)
   host.code = code
 
@@ -231,7 +231,7 @@ proc prepareToRunComputation(host: TransactionHost, call: CallParams) =
       # EIP-4844
       if fork >= FkCancun:
         let blobFee = calcDataFee(call.versionedHashes.len,
-          vmState.blockCtx.excessBlobGas)
+          vmState.blockCtx.excessBlobGas, fork >= FkPrague)
         db.subBalance(call.sender, blobFee)
 
 proc calculateAndPossiblyRefundGas(host: TransactionHost, call: CallParams): GasInt =

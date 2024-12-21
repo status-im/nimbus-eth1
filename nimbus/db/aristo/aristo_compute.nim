@@ -13,7 +13,7 @@
 import
   std/strformat,
   chronicles,
-  eth/common,
+  eth/common/[accounts_rlp, base_rlp, hashes_rlp],
   results,
   "."/[aristo_desc, aristo_get, aristo_walk/persistent],
   ./aristo_desc/desc_backend

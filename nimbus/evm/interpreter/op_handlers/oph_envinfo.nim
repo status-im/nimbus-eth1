@@ -24,9 +24,7 @@ import
   ../op_codes,
   ./oph_defs,
   ./oph_helpers,
-  eth/common,
-  stew/assign2,
-  stint
+  stew/assign2
 
 when not defined(evmc_enabled):
   import ../../state

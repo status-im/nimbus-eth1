@@ -14,7 +14,6 @@
 {.push raises: [].}
 
 import
-  std/tables,
   results,
   "."/[aristo_desc, aristo_layers]
 

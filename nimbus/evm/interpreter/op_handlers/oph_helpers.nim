@@ -19,9 +19,7 @@ import
   ../../evm_errors,
   ../../types,
   ../gas_costs,
-  eth/common,
-  eth/common/eth_types,
-  stint
+  eth/common/[addresses, base, hashes]
 
 when defined(evmc_enabled):
   import

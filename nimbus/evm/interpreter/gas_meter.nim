@@ -11,7 +11,7 @@
 {.push raises: [].}
 
 import
-  eth/common, # GasInt
+  eth/common/base,
   ../evm_errors,
   ../types
 

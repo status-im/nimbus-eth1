@@ -14,10 +14,9 @@
 
 import
   std/tables,
-  eth/common,
   results,
   ./aristo_desc/desc_backend,
-  "."/[aristo_desc]
+  ./aristo_desc
 
 # ------------------------------------------------------------------------------
 # Public functions, save to backend

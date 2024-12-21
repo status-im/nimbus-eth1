@@ -12,7 +12,7 @@
 
 import
   std/[enumerate, sequtils, sets, tables],
-  eth/common,
+  eth/common/hashes,
   results,
   ./aristo_desc
 
