@@ -180,14 +180,14 @@ proc runTxPoolPosTest() =
       check rr.isOk()
 
     test "validate TxPool prevRandao setter":
-      var sdb = LedgerRef.init(com.db)
+      var sdb = LedgerRef.init(com.db.baseTxFrame())
       let val = sdb.getStorage(recipient, slot)
       let randao = Bytes32(val.toBytesBE)
       check randao == prevRandao
 
     test "feeRecipient rewarded":
       check blk.header.coinbase == feeRecipient
-      var sdb = LedgerRef.init(com.db)
+      var sdb = LedgerRef.init(com.db.baseTxFrame())
       let bal = sdb.getBalance(feeRecipient)
       check not bal.isZero
 
@@ -245,14 +245,14 @@ proc runTxPoolBlobhashTest() =
       check rr.isOk()
 
     test "validate TxPool prevRandao setter":
-      var sdb = LedgerRef.init(com.db)
+      var sdb = LedgerRef.init(com.db.baseTxFrame())
       let val = sdb.getStorage(recipient, slot)
       let randao = Bytes32(val.toBytesBE)
       check randao == prevRandao
 
     test "feeRecipient rewarded":
       check blk.header.coinbase == feeRecipient
-      var sdb = LedgerRef.init(com.db)
+      var sdb = LedgerRef.init(com.db.baseTxFrame())
       let bal = sdb.getBalance(feeRecipient)
       check not bal.isZero
 
@@ -329,7 +329,7 @@ proc runTxHeadDelta(noisy = true) =
       check com.syncCurrent == 10.BlockNumber
       head = chain.headerByNumber(com.syncCurrent).expect("block header exists")
       let
-        sdb = LedgerRef.init(com.db)
+        sdb = LedgerRef.init(com.db.baseTxFrame())
         expected = u256(txPerblock * numBlocks) * amount
         balance = sdb.getBalance(recipient)
       check balance == expected

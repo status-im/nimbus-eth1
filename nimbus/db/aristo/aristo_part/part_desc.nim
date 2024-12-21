@@ -17,7 +17,7 @@ import
 
 type
   PartStateRef* = ref object of RootRef
-    db*: AristoDbRef
+    db*: AristoTxRef
     core*: Table[VertexID,HashSet[HashKey]] # Existing vertices
     pureExt*: Table[HashKey,PrfExtension]   # On-demand node (usually hidden)
     byKey*: Table[HashKey,RootedVertexID]   # All keys, instead of `kMap[]`
@@ -69,7 +69,7 @@ type
 # Public helpers
 # ------------------------------------------------------------------------------
 
-proc init*(T: type PartStateRef; db: AristoDbRef): T =
+proc init*(T: type PartStateRef; db: AristoTxRef): T =
   ## Constructor for a partial database.
   T(db: db)
 

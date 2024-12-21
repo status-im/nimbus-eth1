@@ -15,8 +15,7 @@
 
 import
   results,
-  ../aristo_delta/delta_merge,
-  ".."/[aristo_desc, aristo_delta, aristo_layers]
+  ../[aristo_desc, aristo_delta]
 
 # ------------------------------------------------------------------------------
 # Private functions
@@ -25,10 +24,6 @@ import
 proc txPersistOk*(
     db: AristoDbRef;                  # Database
       ): Result[void,AristoError] =
-  if not db.txRef.isNil:
-    return err(TxPendingTx)
-  if 0 < db.stack.len:
-    return err(TxStackGarbled)
   if not db.deltaPersistentOk():
     return err(TxBackendNotWritable)
   ok()
@@ -45,17 +40,7 @@ proc txPersist*(
   ##
   ? db.txPersistOk()
 
-  if not db.top.isEmpty():
-    # Note that `deltaMerge()` will return the `db.top` argument if the
-    # `db.balancer` is `nil`. Also, the `db.balancer` is read-only. In the
-    # case that there are no forked peers one can ignore that restriction as
-    # no balancer is shared.
-    db.balancer = deltaMerge(db.top, db.balancer)
-
-    # New empty top layer
-    db.top = LayerRef(vTop: db.balancer.vTop)
-
-  # Merge/move `balancer` into persistent tables (unless missing)
+  # Merge/move `txRef` into persistent tables (unless missing)
   ? db.deltaPersistent nxtSid
 
   ok()

@@ -147,7 +147,7 @@ proc test_chainSync*(
   let
     sayBlocks = 900'u64
     chain = com.newChain()
-    blockOnDb = com.db.getSavedStateBlockNumber()
+    blockOnDb = com.db.baseTxFrame().getSavedStateBlockNumber()
     lastBlock = max(1, numBlocks).BlockNumber
 
   noisy.initLogging com
@@ -203,7 +203,7 @@ proc test_chainSync*(
   for w in files.undumpBlocks(least = start):
     let (fromBlock, toBlock) = (w[0].header.number, w[^1].header.number)
     if fromBlock == 0'u64:
-      xCheck w[0].header == com.db.getBlockHeader(0'u64).expect("block header exists")
+      xCheck w[0].header == com.db.baseTxFrame().getBlockHeader(0'u64).expect("block header exists")
       continue
 
     # Process groups of blocks ...

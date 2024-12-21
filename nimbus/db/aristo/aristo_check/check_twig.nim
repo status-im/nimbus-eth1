@@ -20,7 +20,7 @@ import
 # ------------------------------------------------------------------------------
 
 proc checkTwig*(
-    db: AristoDbRef;                   # Database
+    db: AristoTxRef;                   # Database
     accPath: Hash32;             # Data path
       ): Result[void,AristoError] =
   let
@@ -31,7 +31,7 @@ proc checkTwig*(
   ok()
 
 proc checkTwig*(
-    db: AristoDbRef;                   # Database
+    db: AristoTxRef;                   # Database
     accPath: Hash32;                  # Account key
     stoPath: Hash32;                  # Storage key
       ): Result[void,AristoError] =

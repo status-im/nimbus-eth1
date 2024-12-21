@@ -62,7 +62,7 @@ func legsTo*(hike: Hike; numLegs: int; T: type NibblesBuf): T =
 # --------
 
 proc step*(
-    path: NibblesBuf, rvid: RootedVertexID, db: AristoDbRef
+    path: NibblesBuf, rvid: RootedVertexID, db: AristoTxRef
       ): Result[(VertexRef, NibblesBuf, VertexID), AristoError] =
   # Fetch next vertex
   let (vtx, _) = db.getVtxRc(rvid).valueOr:
@@ -102,7 +102,7 @@ proc step*(
 iterator stepUp*(
     path: NibblesBuf;                            # Partial path
     root: VertexID;                              # Start vertex
-    db: AristoDbRef;                             # Database
+    db: AristoTxRef;                             # Database
 ): Result[VertexRef, AristoError] =
   ## For the argument `path`, iterate over the logest possible path in the
   ## argument database `db`.
@@ -124,7 +124,7 @@ iterator stepUp*(
 proc hikeUp*(
     path: NibblesBuf;                            # Partial path
     root: VertexID;                              # Start vertex
-    db: AristoDbRef;                             # Database
+    db: AristoTxRef;                             # Database
     leaf: Opt[VertexRef];
     hike: var Hike;
       ): Result[void,(VertexID,AristoError)] =
@@ -171,7 +171,7 @@ proc hikeUp*(
 
 proc hikeUp*(
     lty: LeafTie;
-    db: AristoDbRef;
+    db: AristoTxRef;
     leaf: Opt[VertexRef];
     hike: var Hike
       ): Result[void,(VertexID,AristoError)] =
@@ -181,7 +181,7 @@ proc hikeUp*(
 proc hikeUp*(
     path: openArray[byte];
     root: VertexID;
-    db: AristoDbRef;
+    db: AristoTxRef;
     leaf: Opt[VertexRef];
     hike: var Hike
       ): Result[void,(VertexID,AristoError)] =
@@ -191,7 +191,7 @@ proc hikeUp*(
 proc hikeUp*(
     path: Hash32;
     root: VertexID;
-    db: AristoDbRef;
+    db: AristoTxRef;
     leaf: Opt[VertexRef];
     hike: var Hike
       ): Result[void,(VertexID,AristoError)] =

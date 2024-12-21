@@ -36,7 +36,7 @@ iterator walkVtxBe*[T: RdbBackendRef](
    db: AristoDbRef;
    kinds = {Branch, Leaf};
      ): tuple[rvid: RootedVertexID, vtx: VertexRef] =
-  ## Iterate over filtered RocksDB backend vertices. This function depends on
+  ## Iterate over RocksDB backend vertices. This function depends on
   ## the particular backend type name which must match the backend descriptor.
   for (rvid,vtx) in walkVtxBeImpl[T](db, kinds):
     yield (rvid,vtx)

@@ -61,7 +61,8 @@ proc successorHeader(db: CoreDbRef,
                      skip = 0'u): Opt[Header] =
   let offset = 1 + skip.BlockNumber
   if h.number <= (not 0.BlockNumber) - offset:
-    let header = db.getBlockHeader(h.number + offset).valueOr:
+    # TODO why is this using base db?
+    let header = db.baseTxFrame().getBlockHeader(h.number + offset).valueOr:
       return Opt.none(Header)
     return Opt.some(header)
   Opt.none(Header)
@@ -71,7 +72,8 @@ proc ancestorHeader(db: CoreDbRef,
                      skip = 0'u): Opt[Header] =
   let offset = 1 + skip.BlockNumber
   if h.number >= offset:
-    let header = db.getBlockHeader(h.number - offset).valueOr:
+    # TODO why is this using base db?
+    let header = db.baseTxFrame().getBlockHeader(h.number - offset).valueOr:
       return Opt.none(Header)
     return Opt.some(header)
   Opt.none(Header)
@@ -79,10 +81,10 @@ proc ancestorHeader(db: CoreDbRef,
 proc blockHeader(db: CoreDbRef,
                  b: BlockHashOrNumber): Opt[Header] =
   let header = if b.isHash:
-                 db.getBlockHeader(b.hash).valueOr:
+                 db.baseTxFrame().getBlockHeader(b.hash).valueOr:
                    return Opt.none(Header)
                else:
-                 db.getBlockHeader(b.number).valueOr:
+                 db.baseTxFrame().getBlockHeader(b.number).valueOr:
                    return Opt.none(Header)
   Opt.some(header)
 
@@ -305,7 +307,8 @@ method getStatus*(ctx: EthWireRef): Result[EthState, string]
     forkId = com.forkId(bestBlock.number, bestBlock.timestamp)
 
   return ok(EthState(
-    totalDifficulty: db.headTotalDifficulty,
+    # TODO forkedChain
+    totalDifficulty: db.baseTxFrame().headTotalDifficulty,
     genesisHash: com.genesisHash,
     bestBlockHash: bestBlock.blockHash,
     forkId: ChainForkId(
@@ -321,11 +324,12 @@ method getReceipts*(ctx: EthWireRef,
   let db = ctx.db
   var list: seq[seq[Receipt]]
   for blockHash in hashes:
-    let header = db.getBlockHeader(blockHash).valueOr:
+    # TODO forkedChain
+    let header = db.baseTxFrame().getBlockHeader(blockHash).valueOr:
       list.add @[]
       trace "handlers.getReceipts: blockHeader not found", blockHash
       continue
-    let receiptList = ?db.getReceipts(header.receiptsRoot)
+    let receiptList = ?db.baseTxFrame().getReceipts(header.receiptsRoot)
     list.add receiptList
 
   return ok(list)
@@ -356,7 +360,8 @@ method getBlockBodies*(ctx: EthWireRef,
   let db = ctx.db
   var list: seq[BlockBody]
   for blockHash in hashes:
-    let body = db.getBlockBody(blockHash).valueOr:
+    # TODO forkedChain
+    let body = db.baseTxFrame().getBlockBody(blockHash).valueOr:
       list.add BlockBody()
       trace "handlers.getBlockBodies: blockBody not found", blockHash
       continue

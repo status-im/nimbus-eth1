@@ -64,8 +64,7 @@ type
     codeTouched*: bool
 
   LedgerRef* = ref object
-    ledger: CoreDbAccRef # AccountLedger
-    kvt: CoreDbKvtRef
+    txFrame*: CoreDbTxRef
     savePoint: LedgerSpRef
     witnessCache: Table[Address, WitnessData]
     isDirty: bool
@@ -147,7 +146,7 @@ proc beginSavepoint*(ac: LedgerRef): LedgerSpRef {.gcsafe.}
 
 proc resetCoreDbAccount(ac: LedgerRef, acc: AccountRef) =
   const info = "resetCoreDbAccount(): "
-  ac.ledger.clearStorage(acc.toAccountKey).isOkOr:
+  ac.txFrame.clearStorage(acc.toAccountKey).isOkOr:
     raiseAssert info & $$error
   acc.statement.nonce = emptyEthAccount.nonce
   acc.statement.balance = emptyEthAccount.balance
@@ -175,7 +174,7 @@ proc getAccount(
   # not found in cache, look into state trie
   let
     accPath = address.toAccountKey
-    rc = ac.ledger.fetch accPath
+    rc = ac.txFrame.fetch accPath
   if rc.isOk:
     result = AccountRef(
       statement: rc.value,
@@ -233,7 +232,7 @@ proc originalStorageValue(
   let
     slotKey = ac.slots.get(slot).valueOr:
       slot.toBytesBE.keccak256
-    rc = ac.ledger.slotFetch(acc.toAccountKey, slotKey)
+    rc = ac.txFrame.slotFetch(acc.toAccountKey, slotKey)
   if rc.isOk:
     result = rc.value
 
@@ -273,7 +272,7 @@ proc persistMode(acc: AccountRef): PersistMode =
 
 proc persistCode(acc: AccountRef, ac: LedgerRef) =
   if acc.code.len != 0 and not acc.code.persisted:
-    let rc = ac.kvt.put(
+    let rc = ac.txFrame.put(
       contractHashKey(acc.statement.codeHash).toOpenArray, acc.code.bytes())
     if rc.isErr:
       warn logTxt "persistCode()",
@@ -297,7 +296,7 @@ proc persistStorage(acc: AccountRef, ac: LedgerRef) =
   # Make sure that there is an account entry on the database. This is needed by
   # `Aristo` for updating the account's storage area reference. As a side effect,
   # this action also updates the latest statement data.
-  ac.ledger.merge(acc.toAccountKey, acc.statement).isOkOr:
+  ac.txFrame.merge(acc.toAccountKey, acc.statement).isOkOr:
     raiseAssert info & $$error
 
   # Save `overlayStorage[]` on database
@@ -314,14 +313,14 @@ proc persistStorage(acc: AccountRef, ac: LedgerRef) =
       hash
 
     if value > 0:
-      ac.ledger.slotMerge(acc.toAccountKey, slotKey, value).isOkOr:
+      ac.txFrame.slotMerge(acc.toAccountKey, slotKey, value).isOkOr:
         raiseAssert info & $$error
 
       # move the overlayStorage to originalStorage, related to EIP2200, EIP1283
       acc.originalStorage[slot] = value
 
     else:
-      ac.ledger.slotDelete(acc.toAccountKey, slotKey).isOkOr:
+      ac.txFrame.slotDelete(acc.toAccountKey, slotKey).isOkOr:
         if error.error != StoNotFound:
           raiseAssert info & $$error
         discard
@@ -332,7 +331,7 @@ proc persistStorage(acc: AccountRef, ac: LedgerRef) =
       # over..
       let
         key = slotKey.data.slotHashToSlotKey
-        rc = ac.kvt.put(key.toOpenArray, blobify(slot).data)
+        rc = ac.txFrame.put(key.toOpenArray, blobify(slot).data)
       if rc.isErr:
         warn logTxt "persistStorage()", slot, error=($$rc.error)
 
@@ -358,17 +357,16 @@ proc makeDirty(ac: LedgerRef, address: Address, cloneStorage = true): AccountRef
 # ------------------------------------------------------------------------------
 
 # The LedgerRef is modeled after TrieDatabase for it's transaction style
-proc init*(x: typedesc[LedgerRef], db: CoreDbRef, storeSlotHash: bool): LedgerRef =
+proc init*(x: typedesc[LedgerRef], db: CoreDbTxRef, storeSlotHash: bool): LedgerRef =
   new result
-  result.ledger = db.ctx.getAccounts()
-  result.kvt = db.ctx.getKvt()
+  result.txFrame = db
   result.witnessCache = Table[Address, WitnessData]()
   result.storeSlotHash = storeSlotHash
   result.code = typeof(result.code).init(codeLruSize)
   result.slots = typeof(result.slots).init(slotsLruSize)
   discard result.beginSavepoint
 
-proc init*(x: typedesc[LedgerRef], db: CoreDbRef): LedgerRef =
+proc init*(x: typedesc[LedgerRef], db: CoreDbTxRef): LedgerRef =
   init(x, db, false)
 
 proc getStateRoot*(ac: LedgerRef): Hash32 =
@@ -376,7 +374,7 @@ proc getStateRoot*(ac: LedgerRef): Hash32 =
   doAssert(ac.savePoint.parentSavepoint.isNil)
   # make sure all cache already committed
   doAssert(ac.isDirty == false)
-  ac.ledger.getStateRoot().expect("working database")
+  ac.txFrame.getStateRoot().expect("working database")
 
 proc isTopLevelClean*(ac: LedgerRef): bool =
   ## Getter, returns `true` if all pending data have been commited.
@@ -464,7 +462,7 @@ proc getCode*(ac: LedgerRef,
     acc.code =
       if acc.statement.codeHash != EMPTY_CODE_HASH:
         ac.code.get(acc.statement.codeHash).valueOr:
-          var rc = ac.kvt.get(contractHashKey(acc.statement.codeHash).toOpenArray)
+          var rc = ac.txFrame.get(contractHashKey(acc.statement.codeHash).toOpenArray)
           if rc.isErr:
             warn logTxt "getCode()", codeHash=acc.statement.codeHash, error=($$rc.error)
             CodeBytesRef()
@@ -494,7 +492,7 @@ proc getCodeSize*(ac: LedgerRef, address: Address): int =
       # cached and easily accessible in the database layer - this is to prevent
       # EXTCODESIZE calls from messing up the code cache and thus causing
       # recomputation of the jump destination table
-      var rc = ac.kvt.len(contractHashKey(acc.statement.codeHash).toOpenArray)
+      var rc = ac.txFrame.len(contractHashKey(acc.statement.codeHash).toOpenArray)
 
       return rc.valueOr:
         warn logTxt "getCodeSize()", codeHash=acc.statement.codeHash, error=($$rc.error)
@@ -544,7 +542,7 @@ proc contractCollision*(ac: LedgerRef, address: Address): bool =
     return
   acc.statement.nonce != 0 or
     acc.statement.codeHash != EMPTY_CODE_HASH or
-      not ac.ledger.slotStorageEmptyOrVoid(acc.toAccountKey)
+      not ac.txFrame.slotStorageEmptyOrVoid(acc.toAccountKey)
 
 proc accountExists*(ac: LedgerRef, address: Address): bool =
   let acc = ac.getAccount(address, false)
@@ -630,11 +628,11 @@ proc clearStorage*(ac: LedgerRef, address: Address) =
   let acc = ac.getAccount(address)
   acc.flags.incl {Alive, NewlyCreated}
 
-  let empty = ac.ledger.slotStorageEmpty(acc.toAccountKey).valueOr: return
+  let empty = ac.txFrame.slotStorageEmpty(acc.toAccountKey).valueOr: return
   if not empty:
     # need to clear the storage from the database first
     let acc = ac.makeDirty(address, cloneStorage = false)
-    ac.ledger.clearStorage(acc.toAccountKey).isOkOr:
+    ac.txFrame.clearStorage(acc.toAccountKey).isOkOr:
       raiseAssert info & $$error
     # update caches
     if acc.originalStorage.isNil.not:
@@ -722,10 +720,10 @@ proc persist*(ac: LedgerRef,
       else:
         # This one is only necessary unless `persistStorage()` is run which needs
         # to `merge()` the latest statement as well.
-        ac.ledger.merge(acc.toAccountKey, acc.statement).isOkOr:
+        ac.txFrame.merge(acc.toAccountKey, acc.statement).isOkOr:
           raiseAssert info & $$error
     of Remove:
-      ac.ledger.delete(acc.toAccountKey).isOkOr:
+      ac.txFrame.delete(acc.toAccountKey).isOkOr:
         if error.error != AccNotFound:
           raiseAssert info & $$error
       ac.savePoint.cache.del eAddr
@@ -762,14 +760,14 @@ iterator accounts*(ac: LedgerRef): Account =
   # make sure all savepoint already committed
   doAssert(ac.savePoint.parentSavepoint.isNil)
   for _, acc in ac.savePoint.cache:
-    yield ac.ledger.recast(
+    yield ac.txFrame.recast(
       acc.toAccountKey, acc.statement).value
 
 iterator pairs*(ac: LedgerRef): (Address, Account) =
   # make sure all savepoint already committed
   doAssert(ac.savePoint.parentSavepoint.isNil)
   for address, acc in ac.savePoint.cache:
-    yield (address, ac.ledger.recast(
+    yield (address, ac.txFrame.recast(
       acc.toAccountKey, acc.statement).value)
 
 iterator storage*(
@@ -778,8 +776,8 @@ iterator storage*(
       ): (UInt256, UInt256) =
   # beware that if the account not persisted,
   # the storage root will not be updated
-  for (slotHash, value) in ac.ledger.slotPairs eAddr.toAccountKey:
-    let rc = ac.kvt.get(slotHashToSlotKey(slotHash).toOpenArray)
+  for (slotHash, value) in ac.txFrame.slotPairs eAddr.toAccountKey:
+    let rc = ac.txFrame.get(slotHashToSlotKey(slotHash).toOpenArray)
     if rc.isErr:
       warn logTxt "storage()", slotHash, error=($$rc.error)
       continue
@@ -801,7 +799,7 @@ proc getStorageRoot*(ac: LedgerRef, address: Address): Hash32 =
   # the storage root will not be updated
   let acc = ac.getAccount(address, false)
   if acc.isNil: EMPTY_ROOT_HASH
-  else: ac.ledger.slotStorageRoot(acc.toAccountKey).valueOr: EMPTY_ROOT_HASH
+  else: ac.txFrame.slotStorageRoot(acc.toAccountKey).valueOr: EMPTY_ROOT_HASH
 
 proc update(wd: var WitnessData, acc: AccountRef) =
   # once the code is touched make sure it doesn't get reset back to false in another update
@@ -895,13 +893,13 @@ proc getEthAccount*(ac: LedgerRef, address: Address): Account =
     return emptyEthAccount
 
   ## Convert to legacy object, will throw an assert if that fails
-  let rc = ac.ledger.recast(acc.toAccountKey, acc.statement)
+  let rc = ac.txFrame.recast(acc.toAccountKey, acc.statement)
   if rc.isErr:
     raiseAssert "getAccount(): cannot convert account: " & $$rc.error
   rc.value
 
 proc getAccountProof*(ac: LedgerRef, address: Address): seq[seq[byte]] =
-  let accProof = ac.ledger.proof(address.toAccountKey).valueOr:
+  let accProof = ac.txFrame.proof(address.toAccountKey).valueOr:
     raiseAssert "Failed to get account proof: " & $$error
 
   accProof[0]
@@ -911,7 +909,7 @@ proc getStorageProof*(ac: LedgerRef, address: Address, slots: openArray[UInt256]
 
   let
     addressHash = address.toAccountKey
-    accountExists = ac.ledger.hasPath(addressHash).valueOr:
+    accountExists = ac.txFrame.hasPath(addressHash).valueOr:
       raiseAssert "Call to hasPath failed: " & $$error
 
   for slot in slots:
@@ -922,7 +920,7 @@ proc getStorageProof*(ac: LedgerRef, address: Address, slots: openArray[UInt256]
     let
       slotKey = ac.slots.get(slot).valueOr:
         slot.toBytesBE.keccak256
-      slotProof = ac.ledger.slotProof(addressHash, slotKey).valueOr:
+      slotProof = ac.txFrame.slotProof(addressHash, slotKey).valueOr:
         if error.aErr == FetchPathNotFound:
           storageProof.add(@[])
           continue
