@@ -31,14 +31,18 @@ import
   ./filters
 
 type ServerAPIRef* = ref object
-  com: CommonRef
-  chain: ForkedChainRef
   txPool: TxPoolRef
 
 const defaultTag = blockId("latest")
 
-func newServerAPI*(c: ForkedChainRef, t: TxPoolRef): ServerAPIRef =
-  ServerAPIRef(com: c.com, chain: c, txPool: t)
+template com(api: ServerAPIRef): CommonRef =
+  api.txPool.com
+
+template chain(api: ServerAPIRef): ForkedChainRef =
+  api.txPool.chain
+
+func newServerAPI*(txPool: TxPoolRef): ServerAPIRef =
+  ServerAPIRef(txPool: txPool)
 
 proc getTotalDifficulty*(api: ServerAPIRef, blockHash: Hash32): UInt256 =
   let totalDifficulty = api.com.db.getScore(blockHash).valueOr:

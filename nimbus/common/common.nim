@@ -13,7 +13,7 @@ import
   chronicles,
   ../core/casper,
   ../db/[core_db, ledger, storage_types],
-  ../utils/[utils, ec_recover],
+  ../utils/[utils],
   ".."/[constants, errors, version],
   "."/[chain_config, evmforks, genesis, hardforks],
   taskpools

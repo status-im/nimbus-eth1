@@ -58,8 +58,8 @@ proc setupELClient*(conf: ChainConfig, taskPool: Taskpool, node: JsonNode): Test
 
   let
     txPool  = TxPoolRef.new(chain)
-    beaconEngine = BeaconEngineRef.new(txPool, chain)
-    serverApi = newServerAPI(chain, txPool)
+    beaconEngine = BeaconEngineRef.new(txPool)
+    serverApi = newServerAPI(txPool)
     rpcServer = newRpcHttpServer(["127.0.0.1:0"])
     rpcClient = newRpcHttpClient()
 
