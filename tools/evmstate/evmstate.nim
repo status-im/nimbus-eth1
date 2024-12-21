@@ -127,7 +127,7 @@ proc runExecution(ctx: var StateContext, conf: StateConf, pre: JsonNode): StateR
     db.persist(clearEmptyAccount = false) # settle accounts storage
 
   defer:
-    let stateRoot = vmState.ReadOnlyLedger.getStateRoot()
+    let stateRoot = vmState.readOnlyLedger.getStateRoot()
     ctx.verifyResult(vmState, stateRoot)
     result = StateResult(
       name : ctx.name,

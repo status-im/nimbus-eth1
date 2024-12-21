@@ -257,7 +257,7 @@ method getAncestorHash*(
     return default(Hash32)
   blockHash
 
-proc ReadOnlyLedger*(vmState: BaseVMState): ReadOnlyLedger {.inline.} =
+proc readOnlyLedger*(vmState: BaseVMState): ReadOnlyLedger {.inline.} =
   ReadOnlyLedger(vmState.ledger)
 
 template mutateLedger*(vmState: BaseVMState, body: untyped) =

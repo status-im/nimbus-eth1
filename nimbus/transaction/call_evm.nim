@@ -96,7 +96,7 @@ proc rpcEstimateGas*(args: TransactionArgs,
     if args.source.isNone:
       return err(evmErr(EvmInvalidParam))
 
-    let balance = vmState.ReadOnlyLedger.getBalance(args.source.get)
+    let balance = vmState.readOnlyLedger.getBalance(args.source.get)
     var available = balance
     if args.value.isSome:
       let value = args.value.get

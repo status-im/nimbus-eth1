@@ -76,7 +76,7 @@ proc debugAccounts*(vmState: BaseVMState): string =
     accountList.add address
 
   let res = %{
-    "stateRoot": %($vmState.ReadOnlyLedger.getStateRoot()),
+    "stateRoot": %($vmState.readOnlyLedger.getStateRoot()),
     "accounts": %dumpAccounts(vmState.ledger, accountList),
   }
 

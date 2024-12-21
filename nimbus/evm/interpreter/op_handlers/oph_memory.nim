@@ -68,7 +68,7 @@ else:
 
   proc sstoreNetGasMeteringImpl(c: Computation; slot, newValue: UInt256, coldAccess = 0.GasInt): EvmResultVoid =
     let
-      ledger = c.vmState.ReadOnlyLedger
+      ledger = c.vmState.readOnlyLedger
       currentValue = c.getStorage(slot)
 
       gasParam = GasParamsSs(

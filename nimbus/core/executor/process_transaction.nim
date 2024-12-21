@@ -75,7 +75,7 @@ proc processTransactionImpl(
 
   let
     fork = vmState.fork
-    roDB = vmState.ReadOnlyLedger
+    roDB = vmState.readOnlyLedger
     baseFee256 = header.eip1559BaseFee(fork)
     baseFee = baseFee256.truncate(GasInt)
     priorityFee = min(tx.maxPriorityFeePerGasNorm(), tx.maxFeePerGasNorm() - baseFee)

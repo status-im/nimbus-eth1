@@ -77,7 +77,7 @@ proc classifyValidatePacked(vmState: BaseVMState; item: TxItemRef): bool =
   ## is a wrapper around the `verifyTransaction()` call to be used in a similar
   ## fashion as in `asyncProcessTransactionImpl()`.
   let
-    roDB = vmState.ReadOnlyLedger
+    roDB = vmState.readOnlyLedger
     baseFee = vmState.blockCtx.baseFeePerGas.get(0.u256)
     fork = vmState.fork
     gasLimit = vmState.blockCtx.gasLimit

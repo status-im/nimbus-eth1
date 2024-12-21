@@ -154,34 +154,34 @@ template accountExists*(c: Computation, address: Address): bool =
     c.host.accountExists(address)
   else:
     if c.fork >= FkSpurious:
-      not c.vmState.ReadOnlyLedger.isDeadAccount(address)
+      not c.vmState.readOnlyLedger.isDeadAccount(address)
     else:
-      c.vmState.ReadOnlyLedger.accountExists(address)
+      c.vmState.readOnlyLedger.accountExists(address)
 
 template getStorage*(c: Computation, slot: UInt256): UInt256 =
   when evmc_enabled:
     c.host.getStorage(c.msg.contractAddress, slot)
   else:
-    c.vmState.ReadOnlyLedger.getStorage(c.msg.contractAddress, slot)
+    c.vmState.readOnlyLedger.getStorage(c.msg.contractAddress, slot)
 
 template getBalance*(c: Computation, address: Address): UInt256 =
   when evmc_enabled:
     c.host.getBalance(address)
   else:
-    c.vmState.ReadOnlyLedger.getBalance(address)
+    c.vmState.readOnlyLedger.getBalance(address)
 
 template getCodeSize*(c: Computation, address: Address): uint =
   when evmc_enabled:
     c.host.getCodeSize(address)
   else:
-    uint(c.vmState.ReadOnlyLedger.getCodeSize(address))
+    uint(c.vmState.readOnlyLedger.getCodeSize(address))
 
 template getCodeHash*(c: Computation, address: Address): Hash32 =
   when evmc_enabled:
     c.host.getCodeHash(address)
   else:
     let
-      db = c.vmState.ReadOnlyLedger
+      db = c.vmState.readOnlyLedger
     if not db.accountExists(address) or db.isEmptyAccount(address):
       default(Hash32)
     else:
@@ -197,7 +197,7 @@ template getCode*(c: Computation, address: Address): CodeBytesRef =
   when evmc_enabled:
     CodeBytesRef.init(c.host.copyCode(address))
   else:
-    c.vmState.ReadOnlyLedger.getCode(address)
+    c.vmState.readOnlyLedger.getCode(address)
 
 template setTransientStorage*(c: Computation, slot, val: UInt256) =
   when evmc_enabled:
@@ -210,7 +210,7 @@ template getTransientStorage*(c: Computation, slot: UInt256): UInt256 =
   when evmc_enabled:
     c.host.getTransientStorage(c.msg.contractAddress, slot)
   else:
-    c.vmState.ReadOnlyLedger.
+    c.vmState.readOnlyLedger.
       getTransientStorage(c.msg.contractAddress, slot)
 
 template resolveCodeSize*(c: Computation, address: Address): uint =
@@ -221,7 +221,7 @@ template resolveCodeSize*(c: Computation, address: Address): uint =
     else:
       c.host.getCodeSize(delegateTo)
   else:
-    uint(c.vmState.ReadOnlyLedger.resolveCodeSize(address))
+    uint(c.vmState.readOnlyLedger.resolveCodeSize(address))
 
 template resolveCodeHash*(c: Computation, address: Address): Hash32=
   when evmc_enabled:
@@ -232,7 +232,7 @@ template resolveCodeHash*(c: Computation, address: Address): Hash32=
       c.host.getCodeHash(delegateTo)
   else:
     let
-      db = c.vmState.ReadOnlyLedger
+      db = c.vmState.readOnlyLedger
     if not db.accountExists(address) or db.isEmptyAccount(address):
       default(Hash32)
     else:
@@ -246,7 +246,7 @@ template resolveCode*(c: Computation, address: Address): CodeBytesRef =
     else:
       CodeBytesRef.init(c.host.copyCode(delegateTo))
   else:
-    c.vmState.ReadOnlyLedger.resolveCode(address)
+    c.vmState.readOnlyLedger.resolveCode(address)
 
 func newComputation*(vmState: BaseVMState,
                      keepStack: bool,

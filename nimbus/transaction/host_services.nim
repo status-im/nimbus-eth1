@@ -114,21 +114,21 @@ when use_evmc_glue:
 
 proc accountExists(host: TransactionHost, address: HostAddress): bool {.show.} =
   if host.vmState.fork >= FkSpurious:
-    not host.vmState.ReadOnlyLedger.isDeadAccount(address)
+    not host.vmState.readOnlyLedger.isDeadAccount(address)
   else:
-    host.vmState.ReadOnlyLedger.accountExists(address)
+    host.vmState.readOnlyLedger.accountExists(address)
 
 # TODO: Why is `address` an argument in `getStorage`, `setStorage` and
 # `selfDestruct`, if an EVM is only allowed to do these things to its own
 # contract account and the host always knows which account?
 
 proc getStorage(host: TransactionHost, address: HostAddress, key: HostKey): HostValue {.show.} =
-  host.vmState.ReadOnlyLedger.getStorage(address, key)
+  host.vmState.readOnlyLedger.getStorage(address, key)
 
 proc setStorage(host: TransactionHost, address: HostAddress,
                 key: HostKey, newVal: HostValue): EvmcStorageStatus {.show.} =
   let
-    db = host.vmState.ReadOnlyLedger
+    db = host.vmState.readOnlyLedger
     currentVal = db.getStorage(address, key)
 
   if currentVal == newVal:
@@ -174,15 +174,15 @@ proc setStorage(host: TransactionHost, address: HostAddress,
     return EVMC_STORAGE_ASSIGNED
 
 proc getBalance(host: TransactionHost, address: HostAddress): HostBalance {.show.} =
-  host.vmState.ReadOnlyLedger.getBalance(address)
+  host.vmState.readOnlyLedger.getBalance(address)
 
 proc getCodeSize(host: TransactionHost, address: HostAddress): HostSize {.show.} =
   # TODO: Check this `HostSize`, it was copied as `uint` from other code.
   # Note: Old `evmc_host` uses `getCode(address).len` instead.
-  host.vmState.ReadOnlyLedger.getCodeSize(address).HostSize
+  host.vmState.readOnlyLedger.getCodeSize(address).HostSize
 
 proc getCodeHash(host: TransactionHost, address: HostAddress): HostHash {.show.} =
-  let db = host.vmState.ReadOnlyLedger
+  let db = host.vmState.readOnlyLedger
   # TODO: Copied from `Computation`, but check if that code is wrong with
   # `FkSpurious`, as it has different calls from `accountExists` above.
   if not db.accountExists(address) or db.isEmptyAccount(address):
@@ -205,7 +205,7 @@ proc copyCode(host: TransactionHost, address: HostAddress,
   #
   # Note, when there is no code, `getCode` result is empty `seq`.  It was `nil`
   # when the DB was first implemented, due to Nim language changes since then.
-  let code = host.vmState.ReadOnlyLedger.getCode(address)
+  let code = host.vmState.readOnlyLedger.getCode(address)
   var safe_len: int = code.len # It's safe to assume >= 0.
 
   if code_offset >= safe_len.HostSize:
@@ -295,7 +295,7 @@ proc accessStorage(host: TransactionHost, address: HostAddress,
 
 proc getTransientStorage(host: TransactionHost,
                          address: HostAddress, key: HostKey): HostValue {.show.} =
-  host.vmState.ReadOnlyLedger.getTransientStorage(address, key)
+  host.vmState.readOnlyLedger.getTransientStorage(address, key)
 
 proc setTransientStorage(host: TransactionHost, address: HostAddress,
                 key: HostKey, newVal: HostValue) {.show.} =
@@ -303,7 +303,7 @@ proc setTransientStorage(host: TransactionHost, address: HostAddress,
     db.setTransientStorage(address, key, newVal)
 
 proc getDelegateAddress(host: TransactionHost, address: HostAddress): HostAddress {.show.} =
-  let db = host.vmState.ReadOnlyLedger
+  let db = host.vmState.readOnlyLedger
   db.getDelegateAddress(address)
 
 when use_evmc_glue:

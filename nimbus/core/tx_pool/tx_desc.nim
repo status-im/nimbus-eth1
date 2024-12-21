@@ -208,17 +208,17 @@ func excessBlobGas*(xp: TxPoolRef): GasInt =
   xp.vmState.blockCtx.excessBlobGas
 
 proc getBalance*(xp: TxPoolRef; account: Address): UInt256 =
-  ## Wrapper around `vmState.ReadOnlyLedger.getBalance()` for a `vmState`
+  ## Wrapper around `vmState.readOnlyLedger.getBalance()` for a `vmState`
   ## descriptor positioned at the `dh.head`. This might differ from the
-  ## `dh.vmState.ReadOnlyLedger.getBalance()` which returnes the current
+  ## `dh.vmState.readOnlyLedger.getBalance()` which returnes the current
   ## balance relative to what has been accumulated by the current packing
   ## procedure.
   xp.vmState.ledger.getBalance(account)
 
 proc getNonce*(xp: TxPoolRef; account: Address): AccountNonce =
-  ## Wrapper around `vmState.ReadOnlyLedger.getNonce()` for a `vmState`
+  ## Wrapper around `vmState.readOnlyLedger.getNonce()` for a `vmState`
   ## descriptor positioned at the `dh.head`. This might differ from the
-  ## `dh.vmState.ReadOnlyLedger.getNonce()` which returnes the current balance
+  ## `dh.vmState.readOnlyLedger.getNonce()` which returnes the current balance
   ## relative to what has been accumulated by the current packing procedure.
   xp.vmState.ledger.getNonce(account)
 

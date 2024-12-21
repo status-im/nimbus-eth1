@@ -90,7 +90,7 @@ proc gasEip7702CodeCheck*(c: Computation; address: Address): GasInt =
   let code = when defined(evmc_enabled):
                CodeBytesRef.init(c.host.copyCode(address))
              else:
-               c.vmState.ReadOnlyLedger.getCode(address)
+               c.vmState.readOnlyLedger.getCode(address)
   let delegateTo = parseDelegationAddress(code).valueOr:
     return 0
   c.delegateResolutionCost(delegateTo)

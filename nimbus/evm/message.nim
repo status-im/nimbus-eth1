@@ -26,7 +26,7 @@ proc generateContractAddress*(vmState: BaseVMState,
                               salt = ZERO_CONTRACTSALT,
                               code = CodeBytesRef(nil)): Address =
   if kind == EVMC_CREATE:
-    let creationNonce = vmState.ReadOnlyLedger().getNonce(sender)
+    let creationNonce = vmState.readOnlyLedger().getNonce(sender)
     generateAddress(sender, creationNonce)
   else:
     generateSafeAddress(sender, salt, code.bytes)
@@ -37,6 +37,6 @@ proc getCallCode*(vmState: BaseVMState, codeAddress: Address): CodeBytesRef =
     return CodeBytesRef(nil)
 
   if vmState.fork >= FkPrague:
-    vmState.ReadOnlyLedger.resolveCode(codeAddress)
+    vmState.readOnlyLedger.resolveCode(codeAddress)
   else:
-    vmState.ReadOnlyLedger.getCode(codeAddress)
+    vmState.readOnlyLedger.getCode(codeAddress)
