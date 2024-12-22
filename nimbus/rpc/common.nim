@@ -45,7 +45,7 @@ proc setupCommonRpc*(node: EthereumNode, conf: NimbusConf, server: RpcServer) =
     let numPeers = node.numPeers
     result = numPeers < conf.maxPeers
 
-  server.rpc("net_peerCount") do() -> Web3Quantity:
+  server.rpc("net_peerCount") do() -> Quantity:
     let peerCount = uint node.numPeers
     result = w3Qty(peerCount)
 
