@@ -28,7 +28,7 @@ createRpcSigsFromNim(RpcClient):
   proc portal_stateGetContent(contentKey: string): ContentInfo
   proc portal_stateStore(contentKey: string, contentValue: string): bool
   proc portal_stateLocalContent(contentKey: string): string
-  proc portal_stateGossip(contentKey: string, contentValue: string): int
+  proc portal_statePutContent(contentKey: string, contentValue: string): int
 
   ## Portal History Network json-rpc calls
   proc portal_historyNodeInfo(): NodeInfo
@@ -49,7 +49,7 @@ createRpcSigsFromNim(RpcClient):
   proc portal_historyGetContent(contentKey: string): ContentInfo
   proc portal_historyStore(contentKey: string, contentValue: string): bool
   proc portal_historyLocalContent(contentKey: string): string
-  proc portal_historyGossip(contentKey: string, contentValue: string): int
+  proc portal_historyPutContent(contentKey: string, contentValue: string): int
 
   ## Portal Beacon Light Client Network json-rpc calls
   proc portal_beaconNodeInfo(): NodeInfo
@@ -67,5 +67,5 @@ createRpcSigsFromNim(RpcClient):
   proc portal_beaconGetContent(contentKey: string): ContentInfo
   proc portal_beaconStore(contentKey: string, contentValue: string): bool
   proc portal_beaconLocalContent(contentKey: string): string
-  proc portal_beaconGossip(contentKey: string, contentValue: string): int
+  proc portal_beaconPutContent(contentKey: string, contentValue: string): int
   proc portal_beaconRandomGossip(contentKey: string, contentValue: string): int

@@ -137,7 +137,7 @@ proc installPortalHistoryApiHandlers*(rpcServer: RpcServer, p: PortalProtocol) =
 
     return contentResult.to0xHex()
 
-  rpcServer.rpc("portal_historyGossip") do(
+  rpcServer.rpc("portal_historyPutContent") do(
     contentKey: string, contentValue: string
   ) -> int:
     let

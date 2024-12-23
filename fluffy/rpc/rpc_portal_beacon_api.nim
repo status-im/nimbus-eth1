@@ -129,7 +129,7 @@ proc installPortalBeaconApiHandlers*(rpcServer: RpcServer, p: PortalProtocol) =
 
     return contentResult.to0xHex()
 
-  rpcServer.rpc("portal_beaconGossip") do(
+  rpcServer.rpc("portal_beaconPutContent") do(
     contentKey: string, contentValue: string
   ) -> int:
     let
