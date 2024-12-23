@@ -85,17 +85,12 @@ proc main() =
     )
     chain   = ForkedChainRef.init(com)
     txPool  = TxPoolRef.new(chain)
-    
+
   discard importRlpBlock(blocksFile, com)
   let ctx = setupGraphqlContext(com, ethNode, txPool)
 
   var stat: SimStat
   let start = getTime()
-
-  # txPool must be informed of active head
-  # so it can know the latest account state
-  # e.g. "sendRawTransaction Nonce too low" case
-  doAssert txPool.smartHead(chain.latestHeader)
 
   for fileName in walkDirRec(
                  caseFolder, yieldFilter = {pcFile,pcLinkToFile}):

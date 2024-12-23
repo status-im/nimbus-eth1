@@ -155,10 +155,6 @@ proc generateExecutionBundle*(ben: BeaconEngineRef,
 
     pos.setWithdrawals(attrs)
 
-    if headBlock.blockHash != xp.head.blockHash:
-       # reorg
-       discard xp.smartHead(headBlock)
-
     if pos.timestamp <= headBlock.timestamp:
       return err "timestamp must be strictly later than parent"
 

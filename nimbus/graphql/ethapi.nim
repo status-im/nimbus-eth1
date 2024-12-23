@@ -1342,14 +1342,9 @@ proc sendRawTransaction(ud: RootRef, params: Args, parent: Node): RespResult {.a
     let tx     = decodePooledTx(data) # we want to know if it is a valid tx blob
     let txHash = rlpHash(tx)
 
-    ctx.txPool.add(tx)
-
-    let res = ctx.txPool.inPoolAndReason(txHash)
-    if res.isOk:
-      return resp(txHash)
-    else:
-      return err(res.error)
-
+    ctx.txPool.addTx(tx).isOkOr:
+      return err($error)
+    return resp(txHash)
   except CatchableError as em:
     return err("failed to process raw transaction: " & em.msg)
 

@@ -8,359 +8,88 @@
 # at your option. This file may not be copied, modified, or distributed except
 # according to those terms.
 
-## Transaction Pool Database For Buckets And Waste Basket
-## ======================================================
-##
-
 {.push raises: [].}
 
 import
-  std/[tables],
-  ./tx_info,
-  ./tx_item,
-  ./tx_tabs/[tx_sender, tx_rank, tx_status],
-  eth/common/[transactions, addresses],
-  stew/[keyed_queue, sorted_set],
-  results
-
-export
-  # bySender/byStatus index operations
-  sub, eq, ge, gt, le, len, lt, nItems
+  std/[tables, heapqueue],
+  eth/common/base,
+  eth/common/addresses,
+  eth/common/hashes,
+  stew/sorted_set,
+  ../../db/ledger,
+  ./tx_item
 
 type
-  TxTabsItemsCount* = tuple
-    pending, staged, packed: int ## sum => total
-    total: int                   ## excluding rejects
-    disposed: int                ## waste basket
+  SenderNonceList* = SortedSet[AccountNonce, TxItemRef]
 
-  TxTabsRef* = ref object ##\
-    ## Base descriptor
-    maxRejects: int ##\
-      ## Maximal number of items in waste basket
+  TxSenderNonceRef* = ref object
+    ## Sub-list ordered by `AccountNonce` values containing transaction
+    ## item lists.
+    list*: SenderNonceList
 
-    # ----- primary tables ------
+  TxSenderTab* = Table[Address, TxSenderNonceRef]
 
-    byRejects*: KeyedQueue[Hash32,TxItemRef] ##\
-      ## Rejects queue and waste basket, queued by disposal event
+  TxIdTab* = Table[Hash32, TxItemRef]
 
-    byItemID*: KeyedQueue[Hash32,TxItemRef] ##\
-      ## Primary table containing all tx items, queued by arrival event
+func init*(_ : type TxSenderNonceRef): TxSenderNonceRef =
+  TxSenderNonceRef(list: SenderNonceList.init())
 
-    # ----- index tables for byItemID ------
+template insertOrReplace*(sn: TxSenderNonceRef, item: TxItemRef) =
+  sn.list.findOrInsert(item.nonce).
+    expect("insert txitem ok").data = item
 
-    bySender*: TxSenderTab ##\
-      ## Index for byItemID: `sender` > `status` > `nonce` > item
+func last*(sn: TxSenderNonceRef): auto  =
+  sn.list.le(AccountNonce.high)
 
-    byStatus*: TxStatusTab ##\
-      ## Index for byItemID: `status` > `nonce` > item
+func len*(sn: TxSenderNonceRef): auto  =
+  sn.list.len
 
-    byRank*: TxRankTab ##\
-      ## Ranked address table, used for sender address traversal
+iterator byPriceAndNonce*(senderTab: TxSenderTab,
+                          ledger: LedgerRef,
+                          baseFee: GasInt): TxItemRef =
+  template removeFirstAndPushTo(sn, byPrice) =
+    let rc = sn.list.ge(AccountNonce.low).valueOr:
+      continue
+    discard sn.list.delete(rc.data.nonce)
+    byPrice.push(rc.data)
 
-const
-  txTabMaxRejects = ##\
-    ## Default size of rejects queue (aka waste basket.) Older waste items will
-    ## be automatically removed so that there are no more than this many items
-    ## in the rejects queue.
-    500
+  var byNonce: TxSenderTab
+  for address, sn in senderTab:
+    # Check if the account nonce matches the lowest known tx nonce
+    var
+      nonce = ledger.getNonce(address)
+      rc    = sn.list.eq(nonce)
+      sortedByNonce: TxSenderNonceRef
 
-# ------------------------------------------------------------------------------
-# Private helpers
-# ------------------------------------------------------------------------------
+    while rc.isOk:
+      let item = rc.get.data
+      item.calculatePrice(baseFee)
+      if item.nonce != nonce:
+        # a gap in nonce, stop collecting
+        break
 
-proc deleteImpl(xp: TxTabsRef; item: TxItemRef): bool
-    {.gcsafe,raises: [KeyError].} =
-  ## Delete transaction (and wrapping container) from the database. If
-  ## successful, the function returns the wrapping container that was just
-  ## removed.
-  if xp.byItemID.delete(item.itemID).isOk:
-    discard xp.bySender.delete(item)
-    discard xp.byStatus.delete(item)
+      if sortedByNonce.isNil:
+        sortedByNonce = TxSenderNonceRef.init()
+        byNonce[address] = sortedByNonce
 
-    # Update address rank
-    let rc = xp.bySender.rank(item.sender)
-    if rc.isOk:
-      discard xp.byRank.insert(rc.value.TxRank, item.sender) # update
-    else:
-      discard xp.byRank.delete(item.sender)
+      sortedByNonce.insertOrReplace(item)
+      nonce = item.nonce + 1
+      rc = sn.list.eq(nonce)
 
-    return true
+  # HeapQueue needs `<` to be overloaded for custom object
+  # and in this case, we want to pop highest price first
+  func `<`(a, b: TxItemRef): bool {.used.} = a.price > b.price
+  var byPrice = initHeapQueue[TxItemRef]()
+  for _, sn in byNonce:
+    sn.removeFirstAndPushTo(byPrice)
 
-proc insertImpl(xp: TxTabsRef; item: TxItemRef): Result[void,TxInfo]
-    {.gcsafe,raises: [CatchableError].} =
-  if not xp.bySender.insert(item):
-    return err(txInfoErrSenderNonceIndex)
+  while byPrice.len > 0:
+    # Retrieve the next best transaction by price
+    let best = byPrice.pop()
 
-  # Insert item
-  discard xp.byItemID.append(item.itemID,item)
-  discard xp.byStatus.insert(item)
+    # Push in its place the next transaction from the same account
+    let accTxs = byNonce.getOrDefault(best.sender)
+    if accTxs.isNil.not and accTxs.len > 0:
+      accTxs.removeFirstAndPushTo(byPrice)
 
-  # Update address rank
-  let rank = xp.bySender.rank(item.sender).value.TxRank
-  discard xp.byRank.insert(rank, item.sender)
-
-  return ok()
-
-# ------------------------------------------------------------------------------
-# Public functions, constructor
-# ------------------------------------------------------------------------------
-
-proc new*(T: type TxTabsRef): T {.gcsafe,raises: [].} =
-  ## Constructor, returns new tx-pool descriptor.
-  new result
-  result.maxRejects = txTabMaxRejects
-
-  # result.byItemID -- KeyedQueue, no need to init
-  # result.byRejects -- KeyedQueue, no need to init
-
-  # index tables
-  result.bySender.init
-  result.byStatus.init
-  result.byRank.init
-
-# ------------------------------------------------------------------------------
-# Public functions, add/remove entry
-# ------------------------------------------------------------------------------
-
-proc insert*(
-    xp: TxTabsRef;
-    tx: var PooledTransaction;
-    status = txItemPending;
-    info = ""): Result[void,TxInfo]
-    {.gcsafe,raises: [CatchableError].} =
-  ## Add new transaction argument `tx` to the database. If accepted and added
-  ## to the database, a `key` value is returned which can be used to retrieve
-  ## this transaction direcly via `tx[key].tx`. The following holds for the
-  ## returned `key` value (see `[]` below for details):
-  ## ::
-  ##   xp[key].id == key  # id: transaction key stored in the wrapping container
-  ##   tx.toKey == key    # holds as long as tx is not modified
-  ##
-  ## Adding the transaction will be rejected if the transaction key `tx.toKey`
-  ## exists in the database already.
-  ##
-  ## CAVEAT:
-  ##   The returned transaction key `key` for the transaction `tx` is
-  ##   recoverable as `tx.toKey` only while the trasaction remains unmodified.
-  ##
-  let itemID = tx.itemID
-  if xp.byItemID.hasKey(itemID):
-    return err(txInfoErrAlreadyKnown)
-  var item: TxItemRef
-  block:
-    let rc = TxItemRef.new(tx, itemID, status, info)
-    if rc.isErr:
-      return err(txInfoErrInvalidSender)
-    item = rc.value
-  block:
-    let rc = xp.insertImpl(item)
-    if rc.isErr:
-      return rc
-  ok()
-
-proc insert*(xp: TxTabsRef; item: TxItemRef): Result[void,TxInfo]
-    {.gcsafe,raises: [CatchableError].} =
-  ## Variant of `insert()` with fully qualified `item` argument.
-  if xp.byItemID.hasKey(item.itemID):
-    return err(txInfoErrAlreadyKnown)
-  return xp.insertImpl(item.dup)
-
-
-proc reassign*(xp: TxTabsRef; item: TxItemRef; status: TxItemStatus): bool
-    {.gcsafe,raises: [CatchableError].} =
-  ## Variant of `reassign()` for the `TxItemStatus` flag.
-  # make sure that the argument `item` is not some copy
-  let rc = xp.byItemID.eq(item.itemID)
-  if rc.isOk:
-    var realItem = rc.value
-    if realItem.status != status:
-      discard xp.bySender.delete(realItem) # delete original
-      discard xp.byStatus.delete(realItem)
-      realItem.status = status
-      discard xp.bySender.insert(realItem) # re-insert changed
-      discard xp.byStatus.insert(realItem)
-      return true
-
-
-proc flushRejects*(xp: TxTabsRef; maxItems = int.high): (int,int) =
-  ## Flush/delete at most `maxItems` oldest items from the waste basket and
-  ## return the numbers of deleted and remaining items (a waste basket item
-  ## is considered older if it was moved there earlier.)
-  if xp.byRejects.len <= maxItems:
-    result[0] = xp.byRejects.len
-    xp.byRejects.clear
-    return # result
-  while result[0] < maxItems:
-    if xp.byRejects.shift.isErr:
-      break
-    result[0].inc
-  result[1] = xp.byRejects.len
-
-
-proc dispose*(xp: TxTabsRef; item: TxItemRef; reason: TxInfo): bool
-    {.gcsafe,raises: [KeyError].} =
-  ## Move argument `item` to rejects queue (aka waste basket.)
-  if xp.deleteImpl(item):
-    if xp.maxRejects <= xp.byRejects.len:
-      discard xp.flushRejects(1 + xp.byRejects.len - xp.maxRejects)
-    item.reject = reason
-    xp.byRejects[item.itemID] = item
-    return true
-
-proc reject*(xp: TxTabsRef; tx: var PooledTransaction;
-             reason: TxInfo; status = txItemPending; info = "") =
-  ## Similar to dispose but for a tx without the item wrapper, the function
-  ## imports the tx into the waste basket (e.g. after it could not
-  ## be inserted.)
-  if xp.maxRejects <= xp.byRejects.len:
-    discard xp.flushRejects(1 + xp.byRejects.len - xp.maxRejects)
-  let item = TxItemRef.new(tx, reason, status, info)
-  xp.byRejects[item.itemID] = item
-
-proc reject*(xp: TxTabsRef; item: TxItemRef; reason: TxInfo) =
-  ## Variant of `reject()` with `item` rather than `tx` (assuming
-  ## `item` is not in the database.)
-  if xp.maxRejects <= xp.byRejects.len:
-    discard xp.flushRejects(1 + xp.byRejects.len - xp.maxRejects)
-  item.reject = reason
-  xp.byRejects[item.itemID] = item
-
-proc reject*(xp: TxTabsRef; tx: PooledTransaction;
-             reason: TxInfo; status = txItemPending; info = "") =
-  ## Variant of `reject()`
-  var ty = tx
-  xp.reject(ty, reason, status)
-
-# ------------------------------------------------------------------------------
-# Public getters
-# ------------------------------------------------------------------------------
-
-proc baseFee*(xp: TxTabsRef): GasInt =
-  ## Getter
-  xp.bySender.baseFee
-
-proc maxRejects*(xp: TxTabsRef): int =
-  ## Getter
-  xp.maxRejects
-
-# ------------------------------------------------------------------------------
-# Public functions, setters
-# ------------------------------------------------------------------------------
-
-proc `baseFee=`*(xp: TxTabsRef; val: GasInt)
-    {.gcsafe,raises: [KeyError].} =
-  ## Setter, update may cause database re-org
-  if xp.bySender.baseFee != val:
-    xp.bySender.baseFee = val
-    # Build new rank table
-    xp.byRank.clear
-    for (address,rank) in xp.bySender.accounts:
-      discard xp.byRank.insert(rank.TxRank, address)
-
-
-proc `maxRejects=`*(xp: TxTabsRef; val: int) =
-  ## Setter, applicable with next `reject()` invocation.
-  xp.maxRejects = val
-
-# ------------------------------------------------------------------------------
-# Public functions, miscellaneous
-# ------------------------------------------------------------------------------
-
-proc hasTx*(xp: TxTabsRef; tx: Transaction): bool =
-  ## Returns `true` if the argument pair `(key,local)` exists in the
-  ## database.
-  ##
-  ## If this function returns `true`, then it is save to use the `xp[key]`
-  ## paradigm for accessing a transaction container.
-  xp.byItemID.hasKey(tx.itemID)
-
-proc nItems*(xp: TxTabsRef): TxTabsItemsCount =
-  result.pending = xp.byStatus.eq(txItemPending).nItems
-  result.staged = xp.byStatus.eq(txItemStaged).nItems
-  result.packed = xp.byStatus.eq(txItemPacked).nItems
-  result.total =  xp.byItemID.len
-  result.disposed = xp.byRejects.len
-
-# ------------------------------------------------------------------------------
-# Public iterators, `TxRank` > `(Address,TxStatusNonceRef)`
-# ------------------------------------------------------------------------------
-
-iterator incAccount*(xp: TxTabsRef; bucket: TxItemStatus;
-                     fromRank = TxRank.low): (Address,TxStatusNonceRef)
-        {.gcsafe,raises: [KeyError].} =
-  ## Walk accounts with increasing ranks and return a nonce-ordered item list.
-  let rcBucket = xp.byStatus.eq(bucket)
-  if rcBucket.isOk:
-    let bucketList = xp.byStatus.eq(bucket).value.data
-
-    var rcRank = xp.byRank.ge(fromRank)
-    while rcRank.isOk:
-      let (rank, addrList) = (rcRank.value.key, rcRank.value.data)
-
-      # Use adresses for this rank which are also found in the bucket
-      for account in addrList.keys:
-        let rcAccount = bucketList.eq(account)
-        if rcAccount.isOk:
-          yield (account, rcAccount.value.data)
-
-      # Get next ranked address list (top down index walk)
-      rcRank = xp.byRank.gt(rank) # potenially modified database
-
-
-iterator decAccount*(xp: TxTabsRef; bucket: TxItemStatus;
-                     fromRank = TxRank.high): (Address,TxStatusNonceRef)
-        {.gcsafe,raises: [KeyError].} =
-  ## Walk accounts with decreasing ranks and return the nonce-ordered item list.
-  let rcBucket = xp.byStatus.eq(bucket)
-  if rcBucket.isOk:
-    let bucketList = xp.byStatus.eq(bucket).value.data
-
-    var rcRank = xp.byRank.le(fromRank)
-    while rcRank.isOk:
-      let (rank, addrList) = (rcRank.value.key, rcRank.value.data)
-
-      # Use adresses for this rank which are also found in the bucket
-      for account in addrList.keys:
-        let rcAccount = bucketList.eq(account)
-        if rcAccount.isOk:
-          yield (account, rcAccount.value.data)
-
-      # Get next ranked address list (top down index walk)
-      rcRank = xp.byRank.lt(rank) # potenially modified database
-
-iterator packingOrderAccounts*(xp: TxTabsRef; bucket: TxItemStatus):
-        (Address,TxStatusNonceRef)
-    {.gcsafe,raises: [KeyError].} =
-  ## Loop over accounts from a particular bucket ordered by
-  ## For the `txItemStaged` bucket, this iterator defines the packing order
-  ## for transactions (important when calculationg the *txRoot*.)
-  for (account,nonceList) in xp.decAccount(bucket):
-    yield (account,nonceList)
-
-# -----------------------------------------------------------------------------
-# Public second stage iterators: nonce-ordered item lists.
-# -----------------------------------------------------------------------------
-
-iterator incNonce*(nonceList: TxSenderNonceRef;
-                   nonceFrom = AccountNonce.low): TxItemRef =
-  ## Second stage iterator inside `incAccount()` or `decAccount()`. The
-  ## items visited are always sorted by least-nonce first.
-  var rc = nonceList.ge(nonceFrom)
-  while rc.isOk:
-    let (nonce, item) = (rc.value.key, rc.value.data)
-    yield item
-    rc = nonceList.gt(nonce) # potenially modified database
-
-
-iterator incNonce*(nonceList: TxStatusNonceRef;
-                   nonceFrom = AccountNonce.low): TxItemRef =
-  ## Variant of `incNonce()` for the `TxStatusNonceRef` list.
-  var rc = nonceList.ge(nonceFrom)
-  while rc.isOk:
-    let (nonce, item) = (rc.value.key, rc.value.data)
-    yield item
-    rc = nonceList.gt(nonce) # potenially modified database
-
-# ------------------------------------------------------------------------------
-# End
-# ------------------------------------------------------------------------------
+    yield best

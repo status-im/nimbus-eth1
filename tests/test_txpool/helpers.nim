@@ -9,9 +9,7 @@
 # according to those terms.
 
 import
-  std/[os, strformat, sequtils, strutils, times],
-  ../../nimbus/core/tx_pool/[tx_desc, tx_item, tx_tabs],
-  ../../nimbus/core/tx_pool/tx_tasks/[tx_recover],
+  std/[os, strformat, sequtils, strutils],
   ../replay/[pp, undump_blocks_gz],
   chronicles,
   eth/common/[transactions, keys],
@@ -22,39 +20,7 @@ import
 # to import `tx_pool/*` sup-modules
 export
   pp,
-  tx_desc.txDB,
-  tx_recover.recoverItem,
-  tx_tabs.TxTabsRef,
-  tx_tabs.decAccount,
-  tx_tabs.dispose,
-  tx_tabs.eq,
-  tx_tabs.flushRejects,
-  tx_tabs.ge,
-  tx_tabs.gt,
-  tx_tabs.incAccount,
-  tx_tabs.incNonce,
-  tx_tabs.le,
-  tx_tabs.len,
-  tx_tabs.lt,
-  tx_tabs.nItems,
-  tx_tabs.reassign,
-  tx_tabs.reject,
   undumpBlocksGz
-
-const
-  # pretty printing
-  localInfo* = block:
-    var rc: array[bool,string]
-    rc[true] = "L"
-    rc[false] = "R"
-    rc
-
-  statusInfo* = block:
-    var rc: array[TxItemStatus,string]
-    rc[txItemPending] = "*"
-    rc[txItemStaged] = "S"
-    rc[txItemPacked] = "P"
-    rc
 
 # ------------------------------------------------------------------------------
 # Helpers
@@ -98,9 +64,6 @@ proc toXX(v: uint64; r,s: UInt256): string =
 proc pp*(q: seq[(Address,int)]): string =
   "[" & q.mapIt(&"{it[0].pp}:{it[1]:03d}").join(",") & "]"
 
-proc pp*(w: TxItemStatus): string =
-  ($w).replace("txItem")
-
 proc pp*(tx: Transaction): string =
   ## Pretty print transaction (use for debugging)
   result = "(txType=" & $tx.txType
@@ -129,13 +92,6 @@ proc pp*(tx: Transaction): string =
   result &= ",VRS=" & tx.V.toXX(tx.R,tx.S)
   result &= ")"
 
-proc pp*(w: TxItemRef): string =
-  ## Pretty print item (use for debugging)
-  let s = w.tx.pp
-  result = "(timeStamp=" & ($w.timeStamp).replace(' ','_') &
-    ",hash=" & w.itemID.toXX &
-    ",status=" & w.status.pp &
-    "," & s[1 ..< s.len]
 
 proc pp*(txs: openArray[Transaction]; pfx = ""): string =
   let txt = block:
@@ -152,9 +108,6 @@ proc pp*(txs: openArray[Transaction]; pfx = ""): string =
 
 proc pp*(txs: openArray[Transaction]; pfxLen: int): string =
   txs.pp(" ".repeat(pfxLen))
-
-proc pp*(w: TxTabsItemsCount): string =
-  &"{w.pending}/{w.staged}/{w.packed}:{w.total}/{w.disposed}"
 
 # ------------------------------------------------------------------------------
 # Public functions, other

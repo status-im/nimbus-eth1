@@ -24,13 +24,10 @@ import
   ../nimbus/common/common,
   ../nimbus/utils/utils,
   ../nimbus/evm/types,
-  ./test_txpool/helpers,
   ./macro_assembler
 
 const
-  baseDir = [".", "tests"]
-  repoDir = [".", "customgenesis"]
-  genesisFile = "merge.json"
+  genesisFile = "tests/customgenesis/merge.json"
 
 type TestEnv = object
   nonce: uint64
@@ -107,7 +104,7 @@ func signTxWithNonce(t: TestEnv, tx: Transaction, nonce: AccountNonce): Transact
 
 proc initEnv(envFork: HardFork): TestEnv =
   var conf = makeConfig(
-    @["--custom-network:" & genesisFile.findFilePath(baseDir, repoDir).value]
+    @["--custom-network:" & genesisFile]
   )
 
   conf.networkParams.genesis.alloc[recipient] = GenesisAccount(code: contractCode)
@@ -126,9 +123,9 @@ proc initEnv(envFork: HardFork): TestEnv =
     conf.networkParams.config.pragueTime = Opt.some(0.EthTime)
 
   let
-    com =
-      CommonRef.new(newCoreDbRef DefaultDbMemory, nil, conf.networkId, conf.networkParams)
-    chain = newForkedChain(com, com.genesisHeader)
+    com   = CommonRef.new(newCoreDbRef DefaultDbMemory,
+              nil, conf.networkId, conf.networkParams)
+    chain = ForkedChainRef.init(com)
 
   TestEnv(
     conf: conf,
@@ -154,8 +151,8 @@ template runTxPoolPosTest() =
       com = env.com
       chain = env.chain
 
-    xp.add(PooledTransaction(tx: tx))
-    check xp.nItems.total == 1
+    check xp.addTx(tx).isOk
+    check xp.len == 1
 
     # generate block
     com.pos.prevRandao = prevRandao
@@ -196,9 +193,9 @@ template runTxPoolBlobhashTest() =
       com = env.com
       chain = env.chain
 
-    xp.add(tx1)
-    xp.add(tx2)
-    check xp.nItems.total == 2
+    check xp.addTx(tx1).isOk
+    check xp.addTx(tx2).isOk
+    check xp.len == 2
 
     # generate block
     com.pos.prevRandao = prevRandao
@@ -210,9 +207,8 @@ template runTxPoolBlobhashTest() =
       check false
       return
 
-    let
-      blk = bundle.blk
-    check blk.txs.len == 2
+    let blk = bundle.blk
+    check blk.transactions.len == 2
 
     let
       gasUsed1 = xp.vmState.receipts[0].cumulativeGasUsed
@@ -244,9 +240,10 @@ template runTxPoolBlobhashTest() =
       tx3 = env.makeTx(recipient, amount)
       tx4 = env.signTxWithNonce(tx3, AccountNonce(env.nonce - 2))
 
-    check xp.smartHead(blk.header)
-    xp.add(PooledTransaction(tx: tx4))
-    check inPoolAndOk(xp, rlpHash(tx4)) == false
+    xp.removeNewBlockTxs(blk)
+    let rc = xp.addTx(tx4)
+    check rc.isErr
+    check rc.error == txErrorNonceTooSmall
 
 template runTxHeadDelta() =
   ## see github.com/status-im/nimbus-eth1/issues/1031
@@ -266,7 +263,7 @@ template runTxHeadDelta() =
     for n in 0 ..< numBlocks:
       for tn in 0 ..< txPerblock:
         let tx = env.makeTx(recipient, amount)
-        xp.add(PooledTransaction(tx: tx))
+        check xp.addTx(tx).isOk
 
       timestamp = timestamp + 1
       com.pos.prevRandao = prevRandao
@@ -288,11 +285,10 @@ template runTxHeadDelta() =
       # Synchronise TxPool against new chain head, register txs differences.
       # In this particular case, these differences will simply flush the
       # packer bucket.
-      check xp.smartHead(blk.header)
+      xp.removeNewBlockTxs(blk)
 
       # Move TxPool chain head to new chain head and apply delta jobs
-      check xp.nItems.staged == 0
-      check xp.nItems.packed == 0
+      check xp.len == 0
 
     check com.syncCurrent == 10.BlockNumber
     head = chain.headerByNumber(com.syncCurrent).expect("block header exists")
@@ -314,8 +310,8 @@ template runGetBlockBodyTest() =
       tx1 = env.makeTx(recipient, 1.u256)
       tx2 = env.makeTx(recipient, 2.u256)
 
-    env.xp.add(PooledTransaction(tx: tx1))
-    env.xp.add(PooledTransaction(tx: tx2))
+    check env.xp.addTx(tx1).isOk
+    check env.xp.addTx(tx2).isOk
 
     env.com.pos.prevRandao = prevRandao
     env.com.pos.feeRecipient = feeRecipient
@@ -328,8 +324,7 @@ template runGetBlockBodyTest() =
 
     let blk = bundle.blk
     check env.chain.importBlock(blk).isOk
-    parentHeader = blk.header
-    check env.xp.smartHead(parentHeader)
+    env.xp.removeNewBlockTxs(blk)
     check blk.transactions.len == 2
 
     let
@@ -337,9 +332,9 @@ template runGetBlockBodyTest() =
       tx4 = env.makeTx(recipient, 4.u256)
       tx5 = env.makeTx(recipient, 5.u256)
 
-    env.xp.add(PooledTransaction(tx: tx3))
-    env.xp.add(PooledTransaction(tx: tx4))
-    env.xp.add(PooledTransaction(tx: tx5))
+    check env.xp.addTx(tx3).isOk
+    check env.xp.addTx(tx4).isOk
+    check env.xp.addTx(tx5).isOk
 
     env.com.pos.prevRandao = prevRandao
     env.com.pos.feeRecipient = feeRecipient
@@ -353,7 +348,7 @@ template runGetBlockBodyTest() =
     let blk2 = bundle2.blk
     check env.chain.importBlock(blk2).isOk
     currentHeader = blk2.header
-    check env.xp.smartHead(currentHeader)
+    env.xp.removeNewBlockTxs(blk2)
     check blk2.transactions.len == 3
     let currHash = currentHeader.blockHash
     check env.chain.forkChoice(currHash, currHash).isOk

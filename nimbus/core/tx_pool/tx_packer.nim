@@ -20,25 +20,28 @@ import
   ../../db/ledger,
   ../../common/common,
   ../../utils/utils,
-  ../../constants,
-  ".."/[executor, validate, casper],
+  ../../constants,  
   ../../transaction/call_evm,
   ../../transaction,
   ../../evm/state,
   ../../evm/types,
+  ../executor, 
+  ../validate, 
+  ../casper,
   ../eip4844,
   ../eip6110,
   ../eip7691,
-  "."/[tx_desc, tx_item, tx_tabs, tx_tabs/tx_status, tx_info],
-  tx_tasks/[tx_bucket]
+  ./tx_desc,
+  ./tx_item,
+  ./tx_tabs
 
 type
   TxPacker = object
     # Packer state
     vmState: BaseVMState
-    txDB: TxTabsRef
     cleanState: bool
     numBlobPerBlock: int
+    packedTxs: seq[TxItemRef]
 
     # Packer results
     blockValue: UInt256
@@ -49,15 +52,13 @@ type
     consolidationReqs: seq[byte]
     depositReqs: seq[byte]
 
-  GrabResult = enum
-    FetchNextItem
-    ContinueWithNextAccount
-    StopCollecting
-
 const
   receiptsExtensionSize = ##\
     ## Number of slots to extend the `receipts[]` at the same time.
     20
+
+  ContinueWithNextAccount = true
+  StopCollecting = false
 
 # ------------------------------------------------------------------------------
 # Private helpers
@@ -129,14 +130,13 @@ proc runTx(pst: var TxPacker; item: TxItemRef): GasInt =
   doAssert 0 <= gasUsed
   gasUsed
 
-proc runTxCommit(pst: var TxPacker; item: TxItemRef; gasBurned: GasInt)
-    {.gcsafe,raises: [CatchableError].} =
+proc runTxCommit(pst: var TxPacker; item: TxItemRef; gasBurned: GasInt) =
   ## Book keeping after executing argument `item` transaction in the VM. The
   ## function returns the next number of items `nItems+1`.
   let
     vmState = pst.vmState
-    inx = pst.txDB.byStatus.eq(txItemPacked).nItems
-    gasTip = item.tx.effectiveGasTip(pst.baseFee)
+    inx     = pst.packedTxs.len
+    gasTip  = item.tx.tip(pst.baseFee)
 
   # The gas tip cannot get negative as all items in the `staged` bucket
   # are vetted for profitability before entering that bucket.
@@ -164,24 +164,15 @@ proc runTxCommit(pst: var TxPacker; item: TxItemRef; gasBurned: GasInt)
   # gasUsed accounting
   vmState.cumulativeGasUsed += gasBurned
   vmState.receipts[inx] = vmState.makeReceipt(item.tx.txType)
-
-  # Add the item to the `packed` bucket. This implicitely increases the
-  # receipts index `inx` at the next visit of this function.
-  discard pst.txDB.reassign(item,txItemPacked)
+  pst.packedTxs.add item
 
 # ------------------------------------------------------------------------------
 # Private functions: packer packerVmExec() helpers
 # ------------------------------------------------------------------------------
 
-proc vmExecInit(xp: TxPoolRef): Result[TxPacker, string]
-    {.gcsafe,raises: [CatchableError].} =
-
-  # Flush `packed` bucket
-  xp.bucketFlushPacked
-
+proc vmExecInit(xp: TxPoolRef): Result[TxPacker, string] =
   let packer = TxPacker(
     vmState: xp.vmState,
-    txDB: xp.txDB,
     numBlobPerBlock: 0,
     blockValue: 0.u256,
     stateRoot: xp.vmState.parent.stateRoot,
@@ -200,15 +191,10 @@ proc vmExecInit(xp: TxPoolRef): Result[TxPacker, string]
 
   ok(packer)
 
-proc vmExecGrabItem(pst: var TxPacker; item: TxItemRef): GrabResult
-    {.gcsafe,raises: [CatchableError].}  =
+proc vmExecGrabItem(pst: var TxPacker; item: TxItemRef): bool =
   ## Greedily collect & compact items as long as the accumulated `gasLimit`
   ## values are below the maximum block size.
   let vmState = pst.vmState
-
-  if not item.tx.validateChainId(vmState.com.chainId):
-    discard pst.txDB.dispose(item, txInfoChainIdMismatch)
-    return ContinueWithNextAccount
 
   # EIP-4844
   let maxBlobsPerBlob = getMaxBlobsPerBlock(vmState.fork >= FkPrague)
@@ -257,7 +243,7 @@ proc vmExecGrabItem(pst: var TxPacker; item: TxItemRef): GrabResult
   # Finish book-keeping and move item to `packed` bucket
   pst.runTxCommit(item, gasUsed)
 
-  FetchNextItem
+  ContinueWithNextAccount
 
 proc vmExecCommit(pst: var TxPacker): Result[void, string] =
   let
@@ -279,8 +265,7 @@ proc vmExecCommit(pst: var TxPacker): Result[void, string] =
   ledger.persist(clearEmptyAccount = vmState.fork >= FkSpurious)
 
   # Update flexi-array, set proper length
-  let nItems = pst.txDB.byStatus.eq(txItemPacked).nItems
-  vmState.receipts.setLen(nItems)
+  vmState.receipts.setLen(pst.packedTxs.len)
 
   pst.receiptsRoot = vmState.receipts.calcReceiptsRoot
   pst.logsBloom = vmState.receipts.createBloom
@@ -291,8 +276,7 @@ proc vmExecCommit(pst: var TxPacker): Result[void, string] =
 # Public functions
 # ------------------------------------------------------------------------------
 
-proc packerVmExec*(xp: TxPoolRef): Result[TxPacker, string]
-      {.gcsafe,raises: [CatchableError].} =
+proc setupTxPacker*(xp: TxPoolRef): Result[TxPacker, string] =
   ## Rebuild `packed` bucket by selection items from the `staged` bucket
   ## after executing them in the VM.
   let db = xp.vmState.com.db
@@ -302,20 +286,13 @@ proc packerVmExec*(xp: TxPoolRef): Result[TxPacker, string]
   var pst = xp.vmExecInit.valueOr:
     return err(error)
 
-  block loop:
-    for (_,nonceList) in xp.txDB.packingOrderAccounts(txItemStaged):
-
-      block account:
-        for item in nonceList.incNonce:
-          let rc = pst.vmExecGrabItem(item)
-          if rc == StopCollecting:
-            break loop    # stop
-          if rc == ContinueWithNextAccount:
-            break account # continue with next account
+  for item in xp.byPriceAndNonce:
+    let rc = pst.vmExecGrabItem(item)
+    if rc == StopCollecting:
+      break
 
   ?pst.vmExecCommit()
   ok(pst)
-  # Block chain will roll back automatically
 
 func getExtraData(com: CommonRef): seq[byte] =
   if com.extraData.len > 32:
@@ -376,6 +353,10 @@ func executionRequests*(pst: var TxPacker): seq[seq[byte]] =
   result.append(DEPOSIT_REQUEST_TYPE, pst.depositReqs)
   result.append(WITHDRAWAL_REQUEST_TYPE, pst.withdrawalReqs)
   result.append(CONSOLIDATION_REQUEST_TYPE, pst.consolidationReqs)
+
+iterator packedTxs*(pst: TxPacker): TxItemRef =
+  for item in pst.packedTxs:
+    yield item
 
 # ------------------------------------------------------------------------------
 # End
