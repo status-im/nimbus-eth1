@@ -150,7 +150,7 @@ proc installPortalStateApiHandlers*(rpcServer: RpcServer, p: PortalProtocol) =
 
     contentResult.to0xHex()
 
-  rpcServer.rpc("portal_stateGossip") do(contentKey: string, content: string) -> int:
+  rpcServer.rpc("portal_statePutContent") do(contentKey: string, content: string) -> int:
     let
       keyBytes = ContentKeyByteList.init(hexToSeqByte(contentKey))
       (key, contentId) = validateGetContentKey(keyBytes).valueOr:

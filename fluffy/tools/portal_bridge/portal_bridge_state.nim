@@ -333,7 +333,8 @@ proc runBackfillGossipBlockOffersLoop(
 
       if gossipContent:
         try:
-          let numPeers = await portalClient.portal_stateGossip(k.to0xHex(), v.to0xHex())
+          let numPeers =
+            await portalClient.portal_statePutContent(k.to0xHex(), v.to0xHex())
           if numPeers > 0:
             debug "Offer successfully gossipped to peers: ", numPeers, workerId
           elif numPeers == 0:
