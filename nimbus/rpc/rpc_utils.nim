@@ -231,8 +231,8 @@ proc populateReceipt*(receipt: Receipt, gasUsed: GasInt, tx: Transaction,
     res.status = Opt.some(Quantity(receipt.status.uint64))
 
   let baseFeePerGas = header.baseFeePerGas.get(0.u256)
-  let normTx = eip1559TxNormalization(tx, baseFeePerGas.truncate(GasInt))
-  res.effectiveGasPrice = Quantity(normTx.gasPrice)
+  let gasPrice = effectiveGasPrice(tx, baseFeePerGas.truncate(GasInt))
+  res.effectiveGasPrice = Quantity(gasPrice)
 
   if tx.txType == TxEip4844:
     res.blobGasUsed = Opt.some(Quantity(tx.versionedHashes.len.uint64 * GAS_PER_BLOB.uint64))

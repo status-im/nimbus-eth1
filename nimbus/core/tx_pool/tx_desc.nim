@@ -262,9 +262,7 @@ proc addTx*(xp: TxPoolRef, ptx: PooledTransaction): Result[void, TxError] =
   validateTxBasic(
     ptx.tx,
     xp.nextFork,
-    # A new transaction of the next fork may be
-    # coming before the fork activated
-    validateFork = false).isOkOr:
+    validateFork = true).isOkOr:
     return err(txErrorBasicValidation)
 
   let

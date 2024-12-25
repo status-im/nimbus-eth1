@@ -28,19 +28,6 @@ func validateChainId*(tx: Transaction, chainId: ChainId): bool =
   else:
     chainId.uint64 == tx.chainId.uint64
 
-func eip1559TxNormalization*(tx: Transaction;
-                             baseFeePerGas: GasInt): Transaction =
-  ## This function adjusts a legacy transaction to EIP-1559 standard. This
-  ## is needed particularly when using the `validateTransaction()` utility
-  ## with legacy transactions.
-  result = tx
-  if tx.txType < TxEip1559:
-    result.maxPriorityFeePerGas = tx.gasPrice
-    result.maxFeePerGas = tx.gasPrice
-  else:
-    result.gasPrice = baseFeePerGas +
-      min(result.maxPriorityFeePerGas, result.maxFeePerGas - baseFeePerGas)
-
 func maxPriorityFeePerGasNorm*(tx: Transaction): GasInt =
   if tx.txType < TxEip1559:
     tx.gasPrice

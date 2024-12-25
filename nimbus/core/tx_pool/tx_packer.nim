@@ -72,11 +72,10 @@ proc classifyValidatePacked(vmState: BaseVMState; item: TxItemRef): bool =
     baseFee = vmState.blockCtx.baseFeePerGas.get(0.u256)
     fork = vmState.fork
     gasLimit = vmState.blockCtx.gasLimit
-    tx = item.tx.eip1559TxNormalization(baseFee.truncate(GasInt))
     excessBlobGas = calcExcessBlobGas(vmState.parent, vmState.fork >= FkPrague)
 
   roDB.validateTransaction(
-    tx, item.sender, gasLimit, baseFee, excessBlobGas, fork).isOk
+    item.tx, item.sender, gasLimit, baseFee, excessBlobGas, fork).isOk
 
 proc classifyPacked(vmState: BaseVMState; moreBurned: GasInt): bool =
   ## Classifier for *packing* (i.e. adding up `gasUsed` values after executing
