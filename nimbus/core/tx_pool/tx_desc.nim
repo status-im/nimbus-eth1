@@ -37,6 +37,7 @@ type
     chain    : ForkedChainRef
     senderTab: TxSenderTab
     idTab    : TxIdTab
+    rmHash   : Hash32
 
 const
   MAX_POOL_SIZE = 5000
@@ -60,10 +61,13 @@ func getGasLimit(com: CommonRef; parent: Header): GasInt =
   ## Post Merge rule
   calcGasLimit1559(parent.gasLimit, desiredLimit = com.gasLimit)
 
-proc setupVMState(com: CommonRef; parent: Header): BaseVMState =
+proc setupVMState(com: CommonRef; parent: Header, parentHash: Hash32): BaseVMState =
   let
     pos = com.pos
     electra = com.isPragueOrLater(pos.timestamp)
+
+  BaseVMState.new(
+    parent   = parent,
     blockCtx = BlockContext(
       timestamp    : pos.timestamp,
       gasLimit     : getGasLimit(com, parent),
@@ -72,12 +76,8 @@ proc setupVMState(com: CommonRef; parent: Header): BaseVMState =
       difficulty   : UInt256.zero(),
       coinbase     : pos.feeRecipient,
       excessBlobGas: calcExcessBlobGas(parent, electra),
-      parentHash   : parent.blockHash,
-    )
-
-  BaseVMState.new(
-    parent   = parent,
-    blockCtx = blockCtx,
+      parentHash   : parentHash,
+    ),
     com      = com)
 
 template append(tab: var TxSenderTab, sn: TxSenderNonceRef) =
@@ -110,7 +110,7 @@ proc insertToSenderTab(xp: TxPoolRef; item: TxItemRef): Result[void, TxError] =
     sn.insertOrReplace(item)
     xp.senderTab.append(sn)
     return ok()
-  
+
   let current = xp.getCurrentFromSenderTab(item).valueOr:
     if sn.len >= MAX_TXS_PER_ACCOUNT:
       return err(txErrorSenderMaxTxs)
@@ -128,21 +128,7 @@ proc insertToSenderTab(xp: TxPoolRef; item: TxItemRef): Result[void, TxError] =
   sn.insertOrReplace(item)
   ok()
 
-# ------------------------------------------------------------------------------
-# Public functions, constructor
-# ------------------------------------------------------------------------------
-
-proc init*(xp: TxPoolRef; chain: ForkedChainRef) =
-  ## Constructor, returns new tx-pool descriptor.
-  let head = chain.latestHeader
-  xp.vmState = setupVMState(chain.com, head)
-  xp.chain = chain
-
-# ------------------------------------------------------------------------------
-# Public functions, getters
-# ------------------------------------------------------------------------------
-
-func baseFee*(xp: TxPoolRef): GasInt =
+func baseFee(xp: TxPoolRef): GasInt =
   ## Getter, baseFee for the next bock header. This value is auto-generated
   ## when a new insertion point is set via `head=`.
   if xp.vmState.blockCtx.baseFeePerGas.isSome:
@@ -150,43 +136,17 @@ func baseFee*(xp: TxPoolRef): GasInt =
   else:
     0.GasInt
 
-func vmState*(xp: TxPoolRef): BaseVMState =
-  xp.vmState
-
-func nextFork*(xp: TxPoolRef): EVMFork =
-  xp.vmState.fork
-
-func gasLimit*(xp: TxPoolRef): GasInt =
+func gasLimit(xp: TxPoolRef): GasInt =
   xp.vmState.blockCtx.gasLimit
 
-func excessBlobGas*(xp: TxPoolRef): GasInt =
+func excessBlobGas(xp: TxPoolRef): GasInt =
   xp.vmState.blockCtx.excessBlobGas
 
-proc getBalance*(xp: TxPoolRef; account: Address): UInt256 =
+proc getBalance(xp: TxPoolRef; account: Address): UInt256 =
   xp.vmState.ledger.getBalance(account)
 
-proc getNonce*(xp: TxPoolRef; account: Address): AccountNonce =
+proc getNonce(xp: TxPoolRef; account: Address): AccountNonce =
   xp.vmState.ledger.getNonce(account)
-
-func parentHash*(xp: TxPoolRef): Hash32 =
-  xp.vmState.blockCtx.parentHash
-
-template chain*(xp: TxPoolRef): ForkedChainRef =
-  xp.chain
-
-template com*(xp: TxPoolRef): CommonRef =
-  xp.chain.com
-
-func len*(xp: TxPoolRef): int =
-  xp.idTab.len
-
-# ------------------------------------------------------------------------------
-# Public functions
-# ------------------------------------------------------------------------------
-
-proc updateVmState*(xp: TxPoolRef; parent: Header) =
-  ## Reset transaction environment, e.g. before packing a new block
-  xp.vmState = setupVMState(xp.vmState.com, parent)
 
 proc classifyValid(xp: TxPoolRef; tx: Transaction, sender: Address): bool =
   if tx.tip(xp.baseFee) <= 0.GasInt:
@@ -204,7 +164,8 @@ proc classifyValid(xp: TxPoolRef; tx: Transaction, sender: Address): bool =
   if tx.txType == TxEip4844:
     let
       excessBlobGas = xp.excessBlobGas
-      blobGasPrice = getBlobBaseFee(excessBlobGas, xp.nextFork >= FkPrague)
+      electra = xp.vmState.fork >= FkPrague
+      blobGasPrice = getBlobBaseFee(excessBlobGas, electra)
     if tx.maxFeePerBlobGas < blobGasPrice:
       return false
 
@@ -236,6 +197,55 @@ proc classifyValid(xp: TxPoolRef; tx: Transaction, sender: Address): bool =
       return false
 
   true
+
+# ------------------------------------------------------------------------------
+# Public functions, constructor
+# ------------------------------------------------------------------------------
+
+proc init*(xp: TxPoolRef; chain: ForkedChainRef) =
+  ## Constructor, returns new tx-pool descriptor.
+  xp.vmState = setupVMState(chain.com,
+    chain.latestHeader, chain.latestHash)
+  xp.chain = chain
+  xp.rmHash = chain.latestHash
+
+# ------------------------------------------------------------------------------
+# Public functions, getters
+# ------------------------------------------------------------------------------
+
+func vmState*(xp: TxPoolRef): BaseVMState =
+  xp.vmState
+
+func nextFork*(xp: TxPoolRef): EVMFork =
+  xp.vmState.fork
+
+template chain*(xp: TxPoolRef): ForkedChainRef =
+  xp.chain
+
+template com*(xp: TxPoolRef): CommonRef =
+  xp.chain.com
+
+func len*(xp: TxPoolRef): int =
+  xp.idTab.len
+
+# ------------------------------------------------------------------------------
+# Public functions, but private to TxPool, not exported to user
+# ------------------------------------------------------------------------------
+
+func rmHash*(xp: TxPoolRef): Hash32 =
+  xp.rmHash
+
+func `rmHash=`*(xp: TxPoolRef, val: Hash32) =
+  xp.rmHash = val
+
+proc updateVmState*(xp: TxPoolRef) =
+  ## Reset transaction environment, e.g. before packing a new block
+  xp.vmState = setupVMState(xp.chain.com,
+    xp.chain.latestHeader, xp.chain.latestHash)
+
+# ------------------------------------------------------------------------------
+# Public functions
+# ------------------------------------------------------------------------------
 
 proc addTx*(xp: TxPoolRef, ptx: PooledTransaction): Result[void, TxError] =
   if not ptx.tx.validateChainId(xp.chain.com.chainId):

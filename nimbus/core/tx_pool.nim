@@ -78,19 +78,27 @@ export
 # removeExpiredTxs(xp: TxPoolRef, lifeTime: Duration)
 
 proc removeNewBlockTxs*(xp: TxPoolRef, blk: Block, optHash = Opt.none(Hash32)) =
-  # Remove only the latest block transactions
-  if blk.header.parentHash == xp.parentHash:
-    for tx in blk.transactions:
-      let txHash = rlpHash(tx)
-      xp.removeTx(txHash)
-    return
-
   let fromHash = if optHash.isSome: optHash.get
                  else: blk.header.blockHash
 
+  # Up to date, no need for further actions
+  if fromHash == xp.rmHash:
+    return
+
+  # Remove only the latest block transactions
+  if blk.header.parentHash == xp.rmHash:
+    for tx in blk.transactions:
+      let txHash = rlpHash(tx)
+      xp.removeTx(txHash)
+
+    xp.rmHash = fromHash
+    return
+
   # Also remove transactions from older blocks
-  for txHash in xp.chain.txHashInRange(fromHash, xp.parentHash):
+  for txHash in xp.chain.txHashInRange(fromHash, xp.rmHash):
     xp.removeTx(txHash)
+
+  xp.rmHash = fromHash
 
 type AssembledBlock* = object
   blk*: EthBlock
@@ -102,9 +110,10 @@ proc assembleBlock*(
     xp: TxPoolRef,
     someBaseFee: bool = false
 ): Result[AssembledBlock, string] =
-  xp.updateVmState(xp.chain.latestHeader)
+  xp.updateVmState()
 
-  var pst = xp.setupTxPacker().valueOr:
+  # Run EVM with most profitable transactions
+  var pst = xp.packerVmExec().valueOr:
     return err(error)
 
   var blk = EthBlock(

@@ -303,8 +303,6 @@ template runGetBlockBodyTest() =
     var
       env = initEnv(Cancun)
       blockTime = EthTime.now()
-      parentHeader: Header
-      currentHeader: Header
 
     let
       tx1 = env.makeTx(recipient, 1.u256)
@@ -312,6 +310,7 @@ template runGetBlockBodyTest() =
 
     check env.xp.addTx(tx1).isOk
     check env.xp.addTx(tx2).isOk
+    check env.xp.len == 2
 
     env.com.pos.prevRandao = prevRandao
     env.com.pos.feeRecipient = feeRecipient
@@ -335,6 +334,7 @@ template runGetBlockBodyTest() =
     check env.xp.addTx(tx3).isOk
     check env.xp.addTx(tx4).isOk
     check env.xp.addTx(tx5).isOk
+    check env.xp.len == 3
 
     env.com.pos.prevRandao = prevRandao
     env.com.pos.feeRecipient = feeRecipient
@@ -346,11 +346,11 @@ template runGetBlockBodyTest() =
       return
 
     let blk2 = bundle2.blk
-    check env.chain.importBlock(blk2).isOk
-    currentHeader = blk2.header
-    env.xp.removeNewBlockTxs(blk2)
     check blk2.transactions.len == 3
-    let currHash = currentHeader.blockHash
+    check env.chain.importBlock(blk2).isOk
+    env.xp.removeNewBlockTxs(blk2)
+
+    let currHash = blk2.header.blockHash
     check env.chain.forkChoice(currHash, currHash).isOk
 
 proc txPool2Main*() =

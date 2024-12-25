@@ -20,13 +20,13 @@ import
   ../../db/ledger,
   ../../common/common,
   ../../utils/utils,
-  ../../constants,  
+  ../../constants,
   ../../transaction/call_evm,
   ../../transaction,
   ../../evm/state,
   ../../evm/types,
-  ../executor, 
-  ../validate, 
+  ../executor,
+  ../validate,
   ../casper,
   ../eip4844,
   ../eip6110,
@@ -36,18 +36,17 @@ import
   ./tx_tabs
 
 type
-  TxPacker = object
+  TxPacker = ref object
     # Packer state
     vmState: BaseVMState
-    cleanState: bool
     numBlobPerBlock: int
-    packedTxs: seq[TxItemRef]
 
     # Packer results
     blockValue: UInt256
     stateRoot: Hash32
     receiptsRoot: Hash32
     logsBloom: Bloom
+    packedTxs: seq[TxItemRef]
     withdrawalReqs: seq[byte]
     consolidationReqs: seq[byte]
     depositReqs: seq[byte]
@@ -63,15 +62,6 @@ const
 # ------------------------------------------------------------------------------
 # Private helpers
 # ------------------------------------------------------------------------------
-
-proc persist(pst: var TxPacker)
-    {.gcsafe,raises: [].} =
-  ## Smart wrapper
-  let vmState = pst.vmState
-  if not pst.cleanState:
-    let clearEmptyAccount = vmState.fork >= FkSpurious
-    vmState.ledger.persist(clearEmptyAccount)
-    pst.cleanState = true
 
 proc classifyValidatePacked(vmState: BaseVMState; item: TxItemRef): bool =
   ## Verify the argument `item` against the accounts database. This function
@@ -122,11 +112,7 @@ func feeRecipient(pst: TxPacker): Address =
 proc runTx(pst: var TxPacker; item: TxItemRef): GasInt =
   ## Execute item transaction and update `vmState` book keeping. Returns the
   ## `gasUsed` after executing the transaction.
-  let
-    baseFee = pst.baseFee
-
-  let gasUsed = item.tx.txCallEvm(item.sender, pst.vmState, baseFee)
-  pst.cleanState = false
+  let gasUsed = item.tx.txCallEvm(item.sender, pst.vmState, pst.baseFee)
   doAssert 0 <= gasUsed
   gasUsed
 
@@ -138,20 +124,9 @@ proc runTxCommit(pst: var TxPacker; item: TxItemRef; gasBurned: GasInt) =
     inx     = pst.packedTxs.len
     gasTip  = item.tx.tip(pst.baseFee)
 
-  # The gas tip cannot get negative as all items in the `staged` bucket
-  # are vetted for profitability before entering that bucket.
-  assert 0 <= gasTip
   let reward = gasBurned.u256 * gasTip.u256
   vmState.ledger.addBalance(pst.feeRecipient, reward)
   pst.blockValue += reward
-
-  # Save accounts via persist() is not needed unless the fork is smaller
-  # than `FkByzantium` in which case, the `getStateRoot()` function is called
-  # by `makeReceipt()`. As the `getStateRoot()` function asserts unconditionally
-  # that the account cache has been saved, the `persist()` call is
-  # obligatory here.
-  if vmState.fork < FkByzantium:
-    pst.persist()
 
   # Update receipts sequence
   if vmState.receipts.len <= inx:
@@ -194,17 +169,19 @@ proc vmExecInit(xp: TxPoolRef): Result[TxPacker, string] =
 proc vmExecGrabItem(pst: var TxPacker; item: TxItemRef): bool =
   ## Greedily collect & compact items as long as the accumulated `gasLimit`
   ## values are below the maximum block size.
-  let vmState = pst.vmState
+  let 
+    vmState = pst.vmState
+    electra = vmState.fork >= FkPrague
 
   # EIP-4844
-  let maxBlobsPerBlob = getMaxBlobsPerBlock(vmState.fork >= FkPrague)
-  if (pst.numBlobPerBlock + item.tx.versionedHashes.len).uint64 > maxBlobsPerBlob:
+  let maxBlobsPerBlock = getMaxBlobsPerBlock(electra)
+  if (pst.numBlobPerBlock + item.tx.versionedHashes.len).uint64 > maxBlobsPerBlock:
     return ContinueWithNextAccount
   pst.numBlobPerBlock += item.tx.versionedHashes.len
 
   let
     blobGasUsed = item.tx.getTotalBlobGas
-    maxBlobGasPerBlock = getMaxBlobGasPerBlock(vmState.fork >= FkPrague)
+    maxBlobGasPerBlock = getMaxBlobGasPerBlock(electra)
   if vmState.blobGasUsed + blobGasUsed > maxBlobGasPerBlock:
     return ContinueWithNextAccount
   vmState.blobGasUsed += blobGasUsed
@@ -224,9 +201,10 @@ proc vmExecGrabItem(pst: var TxPacker; item: TxItemRef): bool =
   # EIP-1153
   vmState.ledger.clearTransientStorage()
 
+  # Execute EVM for this transaction
   let
     accTx = vmState.ledger.beginSavepoint
-    gasUsed = pst.runTx(item) # this is the crucial part, running the tx
+    gasUsed = pst.runTx(item) 
 
   # Find out what to do next: accepting this tx or trying the next account
   if not vmState.classifyPacked(gasUsed):
@@ -235,12 +213,12 @@ proc vmExecGrabItem(pst: var TxPacker; item: TxItemRef): bool =
       return ContinueWithNextAccount
     return StopCollecting
 
-  # Commit account state DB
+  # Commit ledger changes
   vmState.ledger.commit(accTx)
 
   vmState.ledger.persist(clearEmptyAccount = vmState.fork >= FkSpurious)
 
-  # Finish book-keeping and move item to `packed` bucket
+  # Finish book-keeping
   pst.runTxCommit(item, gasUsed)
 
   ContinueWithNextAccount
@@ -276,9 +254,8 @@ proc vmExecCommit(pst: var TxPacker): Result[void, string] =
 # Public functions
 # ------------------------------------------------------------------------------
 
-proc setupTxPacker*(xp: TxPoolRef): Result[TxPacker, string] =
-  ## Rebuild `packed` bucket by selection items from the `staged` bucket
-  ## after executing them in the VM.
+proc packerVmExec*(xp: TxPoolRef): Result[TxPacker, string] =
+  ## Execute as much transactions as possible.
   let db = xp.vmState.com.db
   let dbTx = db.ctx.txFrameBegin()
   defer: dbTx.dispose()

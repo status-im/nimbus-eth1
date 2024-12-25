@@ -88,8 +88,8 @@ iterator byPriceAndNonce*(senderTab: TxSenderTab,
     let best = byPrice.pop()
 
     # Push in its place the next transaction from the same account
-    let accTxs = byNonce.getOrDefault(best.sender)
-    if accTxs.isNil.not and accTxs.len > 0:
-      accTxs.removeFirstAndPushTo(byPrice)
+    let sn = byNonce.getOrDefault(best.sender)
+    if sn.isNil.not and sn.len > 0:
+      sn.removeFirstAndPushTo(byPrice)
 
     yield best
