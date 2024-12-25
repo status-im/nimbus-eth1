@@ -110,11 +110,11 @@ proc insertToSenderTab(xp: TxPoolRef; item: TxItemRef): Result[void, TxError] =
     sn.insertOrReplace(item)
     xp.senderTab.append(sn)
     return ok()
-
-  if sn.len >= MAX_TXS_PER_ACCOUNT:
-    return err(txErrorSenderMaxTxs)
-
+  
   let current = xp.getCurrentFromSenderTab(item).valueOr:
+    if sn.len >= MAX_TXS_PER_ACCOUNT:
+      return err(txErrorSenderMaxTxs)
+
     # no equal sender/nonce,
     # insert into txpool
     sn.insertOrReplace(item)
@@ -167,6 +167,9 @@ proc getBalance*(xp: TxPoolRef; account: Address): UInt256 =
 
 proc getNonce*(xp: TxPoolRef; account: Address): AccountNonce =
   xp.vmState.ledger.getNonce(account)
+
+func parentHash*(xp: TxPoolRef): Hash32 =
+  xp.vmState.blockCtx.parentHash
 
 template chain*(xp: TxPoolRef): ForkedChainRef =
   xp.chain

@@ -18,7 +18,7 @@ import
   ./tx_pool/tx_packer,
   ./chain/forked_chain,
   ./casper
-  
+
 from eth/common/eth_types_rlp import rlpHash
 
 # ------------------------------------------------------------------------------
@@ -77,9 +77,19 @@ export
 # removeTx(xp: TxPoolRef, id: Hash32)
 # removeExpiredTxs(xp: TxPoolRef, lifeTime: Duration)
 
-proc removeNewBlockTxs*(xp: TxPoolRef, blk: Block) =
-  for tx in blk.transactions:
-    let txHash = rlpHash(tx)
+proc removeNewBlockTxs*(xp: TxPoolRef, blk: Block, optHash = Opt.none(Hash32)) =
+  # Remove only the latest block transactions
+  if blk.header.parentHash == xp.parentHash:
+    for tx in blk.transactions:
+      let txHash = rlpHash(tx)
+      xp.removeTx(txHash)
+    return
+
+  let fromHash = if optHash.isSome: optHash.get
+                 else: blk.header.blockHash
+
+  # Also remove transactions from older blocks
+  for txHash in xp.chain.txHashInRange(fromHash, xp.parentHash):
     xp.removeTx(txHash)
 
 type AssembledBlock* = object

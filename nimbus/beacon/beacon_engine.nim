@@ -126,6 +126,9 @@ func com*(ben: BeaconEngineRef): CommonRef =
 func chain*(ben: BeaconEngineRef): ForkedChainRef =
   ben.txPool.chain
 
+func txPool*(ben: BeaconEngineRef): TxPoolRef =
+  ben.txPool
+
 func get*(ben: BeaconEngineRef, hash: Hash32,
           header: var Header): bool =
   ben.queue.get(hash, header)
