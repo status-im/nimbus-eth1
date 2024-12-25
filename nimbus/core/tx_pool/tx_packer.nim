@@ -168,7 +168,7 @@ proc vmExecInit(xp: TxPoolRef): Result[TxPacker, string] =
 proc vmExecGrabItem(pst: var TxPacker; item: TxItemRef): bool =
   ## Greedily collect & compact items as long as the accumulated `gasLimit`
   ## values are below the maximum block size.
-  let 
+  let
     vmState = pst.vmState
     electra = vmState.fork >= FkPrague
 
@@ -176,14 +176,12 @@ proc vmExecGrabItem(pst: var TxPacker; item: TxItemRef): bool =
   let maxBlobsPerBlock = getMaxBlobsPerBlock(electra)
   if (pst.numBlobPerBlock + item.tx.versionedHashes.len).uint64 > maxBlobsPerBlock:
     return ContinueWithNextAccount
-  pst.numBlobPerBlock += item.tx.versionedHashes.len
 
   let
     blobGasUsed = item.tx.getTotalBlobGas
     maxBlobGasPerBlock = getMaxBlobGasPerBlock(electra)
   if vmState.blobGasUsed + blobGasUsed > maxBlobGasPerBlock:
     return ContinueWithNextAccount
-  vmState.blobGasUsed += blobGasUsed
 
   # Verify we have enough gas in gasPool
   if vmState.gasPool < item.tx.gasLimit:
@@ -191,7 +189,6 @@ proc vmExecGrabItem(pst: var TxPacker; item: TxItemRef): bool =
     # continue with next account
     # if we don't have enough gas
     return ContinueWithNextAccount
-  vmState.gasPool -= item.tx.gasLimit
 
   # Validate transaction relative to the current vmState
   if not vmState.classifyValidatePacked(item):
@@ -203,7 +200,7 @@ proc vmExecGrabItem(pst: var TxPacker; item: TxItemRef): bool =
   # Execute EVM for this transaction
   let
     accTx = vmState.ledger.beginSavepoint
-    gasUsed = pst.runTx(item) 
+    gasUsed = pst.runTx(item)
 
   # Find out what to do next: accepting this tx or trying the next account
   if not vmState.classifyPacked(gasUsed):
@@ -219,6 +216,10 @@ proc vmExecGrabItem(pst: var TxPacker; item: TxItemRef): bool =
 
   # Finish book-keeping
   pst.runTxCommit(item, gasUsed)
+
+  pst.numBlobPerBlock += item.tx.versionedHashes.len
+  vmState.blobGasUsed += blobGasUsed
+  vmState.gasPool -= item.tx.gasLimit
 
   ContinueWithNextAccount
 

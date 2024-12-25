@@ -353,5 +353,60 @@ proc txPoolMain*() =
       xp.removeNewBlockTxs(bundle.blk)
       check xp.len == 0
 
+    test "max transactions per account":
+      let acc = mx.getAccount(16)
+      let tc = BaseTx(
+        gasLimit: 75000
+      )
+
+      const MAX_TXS_GENERATED = 100
+      for i in 0..MAX_TXS_GENERATED-2:
+        let ptx = mx.makeTx(tc, acc, i.AccountNonce)
+        check xp.addTx(ptx).isOk
+        check xp.len == i + 1
+
+      var ptx = mx.makeTx(tc, acc, MAX_TXS_GENERATED-1)
+      check xp.addTx(ptx).isOk
+      check xp.len == MAX_TXS_GENERATED
+
+      var ptxMax = mx.makeTx(tc, acc, MAX_TXS_GENERATED)
+      let rc = xp.addTx(ptxMax)
+      check rc.isErr
+      check rc.error == txErrorSenderMaxTxs
+      check xp.len == MAX_TXS_GENERATED
+
+      # superseding not hit sender max txs
+      let oldPrice = ptx.tx.gasPrice
+      ptx.tx = mx.customizeTransaction(acc, ptx.tx,
+        CustomTx(gasPriceOrGasFeeCap: Opt.some(oldPrice*2)))
+      xp.addTx(ptx).isOkOr:
+        debugEcho error
+        check false
+        return
+
+      check xp.len == MAX_TXS_GENERATED
+
+      com.pos.prevRandao = prevRandao
+      com.pos.feeRecipient = feeRecipient
+
+      var numTxsPacked = 0
+      while numTxsPacked < MAX_TXS_GENERATED:
+        com.pos.timestamp = com.pos.timestamp + 1
+        let bundle = xp.assembleBlock().valueOr:
+          debugEcho error
+          check false
+          return
+
+        numTxsPacked += bundle.blk.transactions.len
+
+        chain.importBlock(bundle.blk).isOkOr:
+          check false
+          debugEcho error
+          return
+
+        xp.removeNewBlockTxs(bundle.blk)
+
+      check xp.len == 0
+
 when isMainModule:
   txPoolMain()
