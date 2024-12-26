@@ -351,5 +351,40 @@ proc txPoolMain*() =
       xp.checkAddTx(ptx2)
       xp.checkImportBlock(3, 0)
 
+    test "replacement gas too low":
+      let acc = mx.getAccount(19)
+      let
+        tc1 = BaseTx(
+          txType: Opt.some(TxLegacy),
+          gasLimit: 75000
+        )
+        tc2 = BaseTx(
+          txType: Opt.some(TxEip4844),
+          recipient: Opt.some(recipient),
+          gasLimit: 75000
+        )
+
+      var ptx0 = mx.makeTx(tc1, acc, 0)
+      var ptx1 = mx.makeTx(tc2, acc, 1)
+
+      xp.checkAddTx(ptx0)
+      xp.checkAddTx(ptx1)
+
+      var oldPrice = ptx0.tx.gasPrice
+      ptx0.tx = mx.customizeTransaction(acc, ptx0.tx,
+        CustomTx(gasPriceOrGasFeeCap: Opt.some(oldPrice+1)
+      ))
+      xp.checkAddTx(ptx0, txErrorReplacementGasTooLow)
+
+      let oldGas = ptx1.tx.maxFeePerBlobGas
+      let oldTip = ptx1.tx.maxPriorityFeePerGas
+      oldPrice = ptx1.tx.maxFeePerGas
+      ptx1.tx = mx.customizeTransaction(acc, ptx1.tx,
+        CustomTx(blobGas: Opt.some(oldGas+1),
+        gasTipCap: Opt.some(oldTip*2),
+        gasPriceOrGasFeeCap: Opt.some(oldPrice*2)
+      ))
+      xp.checkAddTx(ptx1, txErrorReplacementBlobGasTooLow)
+
 when isMainModule:
   txPoolMain()

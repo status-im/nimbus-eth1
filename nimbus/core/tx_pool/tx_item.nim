@@ -29,7 +29,6 @@ type
     txErrorItemNotFound
     txErrorAlreadyKnown
     txErrorNonceTooSmall
-    txErrorNonceGap
     txErrorBasicValidation
     txErrorInvalidBlob
     txErrorReplacementGasTooLow

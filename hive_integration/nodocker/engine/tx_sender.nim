@@ -69,6 +69,7 @@ type
     gasPriceOrGasFeeCap*: Opt[GasInt]
     gasTipCap*          : Opt[GasInt]
     gas*                : Opt[GasInt]
+    blobGas*            : Opt[UInt256]
     to*                 : Opt[common.Address]
     value*              : Opt[UInt256]
     data*               : Opt[seq[byte]]
@@ -443,6 +444,10 @@ proc customizeTransaction*(sender: TxSender,
     if modTx.to.isNone:
       var address: Address
       modTx.to = Opt.some(address)
+
+  if custTx.blobGas.isSome:
+    doAssert(baseTx.txType == TxEip4844)
+    modTx.maxFeePerBlobGas = custTx.blobGas.get
 
   if custTx.signature.isSome:
     let signature = custTx.signature.get
