@@ -12,182 +12,144 @@
 ## =========================================
 ##
 
-import
-  std/[hashes, times],
-  ../../utils/utils,
-  ../../transaction,
-  ./tx_info,
-  eth/common/transaction_utils,
-  results
-
-from eth/common/eth_types_rlp import rlpHash
-
 {.push raises: [].}
 
+import
+  std/[hashes, times],
+  results,
+  ../../utils/utils,
+  ../../transaction
+
+from ../eip4844 import getTotalBlobGas
+from eth/common/hashes import hash
+
 type
-  TxItemStatus* = enum ##\
-    ## Current status of a transaction as seen by the pool.
-    txItemPending = 0
-    txItemStaged
-    txItemPacked
+  TxError* = enum
+    txErrorInvalidSignature
+    txErrorItemNotFound
+    txErrorAlreadyKnown
+    txErrorNonceTooSmall
+    txErrorBasicValidation
+    txErrorInvalidBlob
+    txErrorReplacementGasTooLow
+    txErrorReplacementBlobGasTooLow
+    txErrorPoolIsFull
+    txErrorSenderMaxTxs
+    txErrorTxInvalid
+    txErrorChainIdMismatch
 
-  TxItemRef* = ref object of RootObj ##\
-    ## Data container with transaction and meta data. Entries are *read-only*\
-    ## by default, for some there is a setter available.
-    tx:        PooledTransaction     ## Transaction data
-    itemID:    Hash32               ## Transaction hash
-    timeStamp: Time                  ## Time when added
-    sender:    Address            ## Sender account address
-    info:      string                ## Whatever
-    status:    TxItemStatus          ## Transaction status (setter available)
-    reject:    TxInfo                ## Reason for moving to waste basket
+  TxItemRef* = ref object
+    ptx   : PooledTransaction  ## Transaction data
+    id    : Hash32             ## Transaction hash
+    time  : Time               ## Time when added
+    sender: Address            ## Sender account address
+    price : GasInt
 
-# ------------------------------------------------------------------------------
-# Private, helpers for debugging and pretty printing
-# ------------------------------------------------------------------------------
-
-proc utcTime: Time =
-  getTime().utc.toTime
+  TxGasPrice = object
+    maxFee: GasInt
+    tip: GasInt
 
 # ------------------------------------------------------------------------------
 # Public functions, Constructor
 # ------------------------------------------------------------------------------
 
-proc init*(item: TxItemRef; status: TxItemStatus; info: string) =
-  ## Update item descriptor.
-  item.info = info
-  item.status = status
-  item.timeStamp = utcTime()
-  item.reject = txInfoOk
+proc utcNow*(): Time =
+  getTime().utc.toTime
 
-proc new*(T: type TxItemRef; tx: PooledTransaction; itemID: Hash32;
-          status: TxItemStatus; info: string): Result[T,void] {.gcsafe,raises: [].} =
+proc new*(T: type TxItemRef;
+          ptx: PooledTransaction,
+          id: Hash32,
+          sender: Address): T =
   ## Create item descriptor.
-  let rc = tx.tx.recoverSender()
-  if rc.isErr:
-    return err()
-  ok(T(itemID:    itemID,
-       tx:        tx,
-       sender:    rc.value,
-       timeStamp: utcTime(),
-       info:      info,
-       status:    status))
-
-proc new*(T: type TxItemRef; tx: PooledTransaction;
-          reject: TxInfo; status: TxItemStatus; info: string): T {.gcsafe,raises: [].} =
-  ## Create incomplete item descriptor, so meta-data can be stored (e.g.
-  ## for holding in the waste basket to be investigated later.)
-  T(tx:        tx,
-    timeStamp: utcTime(),
-    info:      info,
-    status:    status)
-
-# ------------------------------------------------------------------------------
-#  Public functions, Table ID helper
-# ------------------------------------------------------------------------------
-
-proc hash*(item: TxItemRef): Hash =
-  ## Needed if `TxItemRef` is used as hash-`Table` index.
-  cast[pointer](item).hash
-
-# ------------------------------------------------------------------------------
-# Public functions, transaction getters
-# ------------------------------------------------------------------------------
-
-proc itemID*(tx: Transaction): Hash32 =
-  ## Getter, transaction ID
-  tx.rlpHash
-
-proc itemID*(tx: PooledTransaction): Hash32 =
-  ## Getter, transaction ID
-  tx.rlpHash
-
-# core/types/transaction.go(297): func (tx *Transaction) Cost() *big.Int {
-proc cost*(tx: Transaction): UInt256 =
-  ## Getter (go/ref compat): gas * gasPrice + value.
-  (tx.gasPrice * tx.gasLimit).u256 + tx.value
-
-func effectiveGasTip*(tx: Transaction; baseFee: GasInt): GasInt =
-  effectiveGasTip(tx, Opt.some(baseFee.u256))
-
-# ------------------------------------------------------------------------------
-# Public functions, item getters
-# ------------------------------------------------------------------------------
-
-proc dup*(item: TxItemRef): TxItemRef =
-  ## Getter, provide contents copy
-  TxItemRef(
-    tx: item.tx,
-    itemID: item.itemID,
-    timeStamp: item.timeStamp,
-    sender: item.sender,
-    info: item.info,
-    status: item.status,
-    reject: item.reject
+  T(
+    ptx   : ptx,
+    id    : id,
+    time  : utcNow(),
+    sender: sender,
   )
 
-proc info*(item: TxItemRef): string =
-  ## Getter
-  item.info
+# ------------------------------------------------------------------------------
+#  Public functions
+# -------------------------------------------------------------------------------
 
-proc itemID*(item: TxItemRef): Hash32 =
-  ## Getter
-  item.itemID
+func tip*(tx: Transaction; baseFee: GasInt): GasInt =
+  ## Tip calculator
+  effectiveGasTip(tx, Opt.some(baseFee.u256))
 
-proc reject*(item: TxItemRef): TxInfo =
-  ## Getter
-  item.reject
+func txGasPrice*(tx: Transaction): TxGasPrice =
+  case tx.txType
+  of TxLegacy, TxEip2930:
+    TxGasPrice(
+      maxFee: tx.gasPrice,
+      tip: tx.gasPrice,
+    )
+  else:
+    TxGasPrice(
+      maxFee: tx.maxFeePerGas,
+      tip: tx.maxPriorityFeePerGas,
+    )
 
-proc sender*(item: TxItemRef): Address =
+func hash*(item: TxItemRef): Hash =
+  ## Needed if `TxItemRef` is used as hash-`Table` index.
+  hash(item.id)
+
+template pooledTx*(item: TxItemRef): PooledTransaction =
+  ## Getter
+  item.ptx
+
+template tx*(item: TxItemRef): Transaction =
+  ## Getter
+  item.ptx.tx
+
+template id*(item: TxItemRef): Hash32 =
+  ## Getter
+  item.id
+
+template sender*(item: TxItemRef): Address =
   ## Getter
   item.sender
 
-proc status*(item: TxItemRef): TxItemStatus =
+template time*(item: TxItemRef): Time =
   ## Getter
-  item.status
+  item.time
 
-proc timeStamp*(item: TxItemRef): Time =
+template nonce*(item: TxItemRef): AccountNonce =
   ## Getter
-  item.timeStamp
+  item.tx.nonce
 
-proc pooledTx*(item: TxItemRef): PooledTransaction =
+template price*(item: TxItemRef): GasInt =
   ## Getter
-  item.tx
+  item.price
 
-proc tx*(item: TxItemRef): Transaction =
-  ## Getter
-  item.tx.tx
+func calculatePrice*(item: TxItemRef; baseFee: GasInt) =
+  ## Profit calculator
+  item.price = item.tx.gasLimit * item.tx.tip(baseFee) + item.tx.getTotalBlobGas
 
-func rejectInfo*(item: TxItemRef): string =
-  ## Getter
-  result = $item.reject
-  if item.info.len > 0:
-    result.add ": "
-    result.add item.info
+func validateTxGasBump*(current: TxItemRef, added: TxItemRef): Result[void, TxError] =
+  func txGasPrice(item: TxItemRef): TxGasPrice =
+    txGasPrice(item.tx)
 
-# ------------------------------------------------------------------------------
-# Public functions, setters
-# ------------------------------------------------------------------------------
+  const
+    MIN_GAS_PRICE_BUMP_PERCENT = 10
 
-proc `status=`*(item: TxItemRef; val: TxItemStatus) =
-  ## Setter
-  item.status = val
+  let
+    currentGasPrice = current.txGasPrice
+    newGasPrice = added.txGasPrice
+    minTipCap = currentGasPrice.tip +
+      (currentGasPrice.tip * MIN_GAS_PRICE_BUMP_PERCENT) div 100.GasInt
+    minFeeCap = currentGasPrice.maxFee +
+      (currentGasPrice.maxFee * MIN_GAS_PRICE_BUMP_PERCENT) div 100.GasInt
 
-proc `reject=`*(item: TxItemRef; val: TxInfo) =
-  ## Setter
-  item.reject = val
+  if newGasPrice.tip < minTipCap or newGasPrice.maxFee < minFeeCap:
+    return err(txErrorReplacementGasTooLow)
 
-proc `info=`*(item: TxItemRef; val: string) =
-  ## Setter
-  item.info = val
+  if added.tx.txType == TxEip4844 and current.tx.txType == TxEip4844:
+    let minblobGasFee = current.tx.maxFeePerBlobGas +
+      (current.tx.maxFeePerBlobGas * MIN_GAS_PRICE_BUMP_PERCENT.u256) div 100.u256
+    if added.tx.maxFeePerBlobGas < minblobGasFee:
+      return err(txErrorReplacementBlobGasTooLow)
 
-# ------------------------------------------------------------------------------
-# Public functions, pretty printing and debugging
-# ------------------------------------------------------------------------------
-
-proc `$`*(w: TxItemRef): string =
-  ## Visualise item ID (use for debugging)
-  "<" & w.itemID.short & ">"
+  ok()
 
 # ------------------------------------------------------------------------------
 # End

@@ -69,6 +69,7 @@ type
     gasPriceOrGasFeeCap*: Opt[GasInt]
     gasTipCap*          : Opt[GasInt]
     gas*                : Opt[GasInt]
+    blobGas*            : Opt[UInt256]
     to*                 : Opt[common.Address]
     value*              : Opt[UInt256]
     data*               : Opt[seq[byte]]
@@ -95,8 +96,8 @@ proc createAccount(idx: int): TestAccount =
     quit(QuitFailure)
   result.address = toAddress(result.key)
 
-proc createAccounts(sender: TxSender) =
-  for i in 0..<TestAccountCount:
+proc createAccounts(sender: TxSender, numAccounts: int) =
+  for i in 0..<numAccounts:
     sender.accounts.add createAccount(i.int)
 
 proc getNextAccount*(sender: TxSender): TestAccount =
@@ -113,14 +114,15 @@ proc getLastNonce(sender: TxSender, address: Address): uint64 =
   sender.nonceMap[address] - 1
 
 proc fillBalance(sender: TxSender, params: NetworkParams) =
+  const balance = UInt256.fromHex("0x123450000000000000000")
   for x in sender.accounts:
     params.genesis.alloc[x.address] = GenesisAccount(
-      balance: UInt256.fromHex("0x123450000000000000000"),
+      balance: balance,
     )
 
-proc new*(_: type TxSender, params: NetworkParams): TxSender =
+proc new*(_: type TxSender, params: NetworkParams, numAccounts = TestAccountCount): TxSender =
   result = TxSender(chainId: params.config.chainId)
-  result.createAccounts()
+  result.createAccounts(numAccounts)
   result.fillBalance(params)
 
 proc getTxType(tc: BaseTx, nonce: uint64): TxType =
@@ -442,6 +444,10 @@ proc customizeTransaction*(sender: TxSender,
     if modTx.to.isNone:
       var address: Address
       modTx.to = Opt.some(address)
+
+  if custTx.blobGas.isSome:
+    doAssert(baseTx.txType == TxEip4844)
+    modTx.maxFeePerBlobGas = custTx.blobGas.get
 
   if custTx.signature.isSome:
     let signature = custTx.signature.get

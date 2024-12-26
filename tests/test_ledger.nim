@@ -24,6 +24,8 @@ import
   ../nimbus/db/ledger {.all.}, # import all private symbols
   unittest2
 
+import results
+
 const
   genesisFile = "tests/customgenesis/cancun123.json"
   hexPrivKey  = "af1a9be9f1a54421cac82943820a0fe0f601bb5f4f6d0bccc81c613f0ce6ae22"
@@ -310,11 +312,10 @@ proc runLedgerTransactionTests(noisy = true) =
         for _ in 0..<NumTransactions:
           let recipient = initAddr(recipientSeed)
           let tx = env.makeTx(recipient, 1.u256)
-          env.xp.add(PooledTransaction(tx: tx))
-
+          check env.xp.addTx(tx).isOk            
           inc recipientSeed
 
-        check env.xp.nItems.total == NumTransactions
+        check env.xp.len == NumTransactions
         env.com.pos.prevRandao = prevRandao
         env.com.pos.feeRecipient = feeRecipient
         env.com.pos.timestamp = blockTime
@@ -328,15 +329,11 @@ proc runLedgerTransactionTests(noisy = true) =
           return
 
         let blk = r.get.blk
-        let body = BlockBody(
-          transactions: blk.txs,
-          uncles: blk.uncles,
-          withdrawals: Opt.some(newSeq[Withdrawal]())
-        )
-        env.importBlock(Block.init(blk.header, body))
+        env.importBlock(blk)
 
-        check env.xp.smartHead(blk.header)
-        for tx in body.transactions:
+        check blk.transactions.len == NumTransactions
+        env.xp.removeNewBlockTxs(blk)
+        for tx in blk.transactions:
           env.txs.add tx
 
     let head = env.chain.latestHeader
