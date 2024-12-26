@@ -45,6 +45,7 @@ func len*(sn: TxSenderNonceRef): auto  =
   sn.list.len
 
 iterator byPriceAndNonce*(senderTab: TxSenderTab,
+                          idTab: var TxIdTab,
                           ledger: LedgerRef,
                           baseFee: GasInt): TxItemRef =
   template removeFirstAndPushTo(sn, byPrice) =
@@ -54,25 +55,32 @@ iterator byPriceAndNonce*(senderTab: TxSenderTab,
     byPrice.push(rc.data)
 
   var byNonce: TxSenderTab
-  for address, sn in senderTab:
-    # Check if the account nonce matches the lowest known tx nonce
+  for address, sn in senderTab:    
     var
-      nonce = ledger.getNonce(address)
-      rc    = sn.list.eq(nonce)
+      nonce = ledger.getNonce(address)      
       sortedByNonce: TxSenderNonceRef
-
+    
+    # Remove item with nonce lower than current account.
+    # Happen when proposed block rejected.
+    var rc = sn.list.lt(nonce)
+    while rc.isOk:
+      let item = rc.get.data
+      idTab.del(item.id)
+      discard sn.list.delete(item.nonce)
+      rc = sn.list.lt(nonce)
+    
+    # Check if the account nonce matches the lowest known tx nonce
+    rc = sn.list.ge(nonce)
     while rc.isOk:
       let item = rc.get.data
       item.calculatePrice(baseFee)
-      if item.nonce != nonce:
-        # a gap in nonce, stop collecting
-        break
-
+      
       if sortedByNonce.isNil:
         sortedByNonce = TxSenderNonceRef.init()
         byNonce[address] = sortedByNonce
 
       sortedByNonce.insertOrReplace(item)
+      # If there is a gap, sn.list.eq will return isErr
       nonce = item.nonce + 1
       rc = sn.list.eq(nonce)
 

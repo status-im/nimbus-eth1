@@ -247,6 +247,29 @@ proc updateVmState*(xp: TxPoolRef) =
 # Public functions
 # ------------------------------------------------------------------------------
 
+proc getItem*(xp: TxPoolRef, id: Hash32): Result[TxItemRef, TxError] =
+  let item = xp.idTab.getOrDefault(id)
+  if item.isNil:
+    return err(txErrorItemNotFound)
+  ok(item)
+
+proc removeTx*(xp: TxPoolRef, id: Hash32) =
+  let item = xp.getItem(id).valueOr:
+    return
+  xp.removeFromSenderTab(item)
+  xp.idTab.del(id)
+
+proc removeExpiredTxs*(xp: TxPoolRef, lifeTime: Duration = TX_ITEM_LIFETIME) =
+  var expired = newSeqOfCap[Hash32](xp.idTab.len div 4)
+  let now = utcNow()
+
+  for txHash, item in xp.idTab:
+    if now - item.time > lifeTime:
+      expired.add txHash
+
+  for txHash in expired:
+    xp.removeTx(txHash)
+
 proc addTx*(xp: TxPoolRef, ptx: PooledTransaction): Result[void, TxError] =
   if not ptx.tx.validateChainId(xp.chain.com.chainId):
     return err(txErrorChainIdMismatch)
@@ -277,6 +300,9 @@ proc addTx*(xp: TxPoolRef, ptx: PooledTransaction): Result[void, TxError] =
     return err(txErrorTxInvalid)
 
   if xp.idTab.len >= MAX_POOL_SIZE:
+    xp.removeExpiredTxs()
+
+  if xp.idTab.len >= MAX_POOL_SIZE:
     return err(txErrorPoolIsFull)
 
   let item = TxItemRef.new(ptx, id, sender)
@@ -287,30 +313,8 @@ proc addTx*(xp: TxPoolRef, ptx: PooledTransaction): Result[void, TxError] =
 proc addTx*(xp: TxPoolRef, tx: Transaction): Result[void, TxError] =
   xp.addTx(PooledTransaction(tx: tx))
 
-proc getItem*(xp: TxPoolRef, id: Hash32): Result[TxItemRef, TxError] =
-  let item = xp.idTab.getOrDefault(id)
-  if item.isNil:
-    return err(txErrorItemNotFound)
-  ok(item)
-
-proc removeTx*(xp: TxPoolRef, id: Hash32) =
-  let item = xp.getItem(id).valueOr:
-    return
-  xp.removeFromSenderTab(item)
-  xp.idTab.del(id)
-
-proc removeExpiredTxs*(xp: TxPoolRef, lifeTime: Duration = TX_ITEM_LIFETIME) =
-  var expired = newSeqOfCap[Hash32](xp.idTab.len div 4)
-  let now = utcNow()
-
-  for txHash, item in xp.idTab:
-    if now - item.time > lifeTime:
-      expired.add txHash
-
-  for txHash in expired:
-    xp.removeTx(txHash)
 
 iterator byPriceAndNonce*(xp: TxPoolRef): TxItemRef =
-  for item in byPriceAndNonce(xp.senderTab,
+  for item in byPriceAndNonce(xp.senderTab, xp.idTab,
       xp.vmState.ledger, xp.baseFee):
     yield item
