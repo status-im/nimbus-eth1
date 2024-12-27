@@ -83,12 +83,35 @@ template validatePayload(apiVersion, payloadVersion, payload) =
       raise invalidParams("newPayload" & $apiVersion &
         "excessBlobGas is expected from execution payload")
 
+func validateExecutionRequest(requests: openArray[seq[byte]]): Result[void, string] {.raises:[].} =
+  var previousRequestType = -1
+  for request in requests:
+    if request.len == 0:
+      return err("Execution request data must not be empty")
+
+    let requestType = request[0]
+    if requestType.int <= previousRequestType:
+      return err("Execution requests are not in strictly ascending order")
+
+    if request.len == 1:
+      return err("Empty data for request type " & $requestType)
+
+    if requestType notin [
+       DEPOSIT_REQUEST_TYPE,
+       WITHDRAWAL_REQUEST_TYPE,
+       CONSOLIDATION_REQUEST_TYPE]:
+      return err("Invalid execution request type: " & $requestType)
+
+    previousRequestType = requestType.int
+
+  ok()
+
 proc newPayload*(ben: BeaconEngineRef,
                  apiVersion: Version,
                  payload: ExecutionPayload,
                  versionedHashes = Opt.none(seq[Hash32]),
                  beaconRoot = Opt.none(Hash32),
-                 executionRequests = Opt.none(array[3, seq[byte]])): PayloadStatusV1 =
+                 executionRequests = Opt.none(seq[seq[byte]])): PayloadStatusV1 =
 
   trace "Engine API request received",
     meth = "newPayload",
@@ -103,6 +126,10 @@ proc newPayload*(ben: BeaconEngineRef,
     if executionRequests.isNone:
       raise invalidParams("newPayload" & $apiVersion &
         ": executionRequests is expected from execution payload")
+
+    validateExecutionRequest(executionRequests.get).isOkOr:
+      raise invalidParams("newPayload" & $apiVersion &
+        ": " & error)
 
   let
     com = ben.com

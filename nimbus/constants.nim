@@ -34,19 +34,13 @@ const
 
   BLOCK_REWARD* =                           5.u256 * 2.u256 # denoms.ether
 
-  UNCLE_DEPTH_PENALTY_FACTOR* =             8.u256
-
   MAX_UNCLE_DEPTH* =                        6
   MAX_UNCLES* =                             2
 
-  GENESIS_BLOCK_NUMBER* =                   0.BlockNumber
   GENESIS_DIFFICULTY* =                     131_072.u256
   GENESIS_GAS_LIMIT* =                      3_141_592
   GENESIS_PARENT_HASH* =                    ZERO_HASH32
-  GENESIS_COINBASE* =                       ZERO_ADDRESS
-  GENESIS_NONCE* =                          "\x00\x00\x00\x00\x00\x00\x00B"
-  GENESIS_MIX_HASH* =                       ZERO_HASH32
-  GENESIS_EXTRA_DATA* =                     ""
+
   GAS_LIMIT_MINIMUM* =                      5000
   GAS_LIMIT_MAXIMUM* =                      int64.high.GasInt # Maximum the gas limit (2^63-1).
   DEFAULT_GAS_LIMIT* =                      36_000_000

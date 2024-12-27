@@ -131,7 +131,7 @@ proc persistBlock*(p: var Persister, blk: Block): Result[void, string] =
   let
     skipValidation = NoValidation in p.flags
     vmState = ?p.getVmState(header, storeSlotHash = NoPersistSlotHashes notin p.flags)
-    txFrame = vmState.stateDB.txFrame
+    txFrame = vmState.ledger.txFrame
 
   # TODO even if we're skipping validation, we should perform basic sanity
   #      checks on the block and header - that fields are sanely set for the

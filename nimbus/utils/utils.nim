@@ -19,6 +19,11 @@ import
 
 export eth_types_rlp
 
+const
+  DEPOSIT_REQUEST_TYPE*       = 0x00.byte
+  WITHDRAWAL_REQUEST_TYPE*    = 0x01.byte
+  CONSOLIDATION_REQUEST_TYPE* = 0x02.byte
+
 template calcTxRoot*(transactions: openArray[Transaction]): Root =
   orderedTrieRoot(transactions)
 
@@ -28,7 +33,7 @@ template calcWithdrawalsRoot*(withdrawals: openArray[Withdrawal]): Root =
 template calcReceiptsRoot*(receipts: openArray[Receipt]): Root =
   orderedTrieRoot(receipts)
 
-func calcRequestsHash*(requests: varargs[seq[byte]]): Hash32 =
+func calcRequestsHash*(requests: varargs[tuple[reqType: byte, data: seq[byte]]]): Hash32 =
   func calcHash(reqType: byte, data: openArray[byte]): Hash32 =
     var ctx: sha256
     ctx.init()
@@ -39,16 +44,26 @@ func calcRequestsHash*(requests: varargs[seq[byte]]): Hash32 =
 
   var ctx: sha256
   ctx.init()
-  for i, data in requests:
-    ctx.update(calcHash(i.byte, data).data)
+  for req in requests:
+    if req.data.len > 0:
+      ctx.update(calcHash(req.reqType, req.data).data)
   ctx.finish(result.data)
   ctx.clear()
 
-func calcRequestsHash*(reqs: Opt[array[3, seq[byte]]]): Opt[Hash32] =
+func calcRequestsHash*(requests: openArray[seq[byte]]): Hash32 =
+  var ctx: sha256
+  ctx.init()
+  for req in requests:
+    if req.len > 0:
+      ctx.update(sha256.digest(req).data)
+  ctx.finish(result.data)
+  ctx.clear()
+
+func calcRequestsHash*(reqs: Opt[seq[seq[byte]]]): Opt[Hash32] =
   if reqs.isNone:
     Opt.none(Hash32)
   else:
-    Opt.some(calcRequestsHash(reqs.get()[0], reqs.get()[1], reqs.get()[2]))
+    Opt.some(calcRequestsHash(reqs.get))
 
 func sumHash*(hashes: varargs[Hash32]): Hash32 =
   var ctx: sha256

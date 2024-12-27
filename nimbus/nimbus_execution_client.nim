@@ -51,7 +51,7 @@ proc basicServices(nimbus: NimbusNode,
   nimbus.txPool = TxPoolRef.new(nimbus.chainRef)
   doAssert nimbus.txPool.smartHead(nimbus.chainRef.latestHeader)
 
-  nimbus.beaconEngine = BeaconEngineRef.new(nimbus.txPool, nimbus.chainRef)
+  nimbus.beaconEngine = BeaconEngineRef.new(nimbus.txPool)
 
 proc manageAccounts(nimbus: NimbusNode, conf: NimbusConf) =
   if string(conf.keyStore).len > 0:

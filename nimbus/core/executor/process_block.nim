@@ -113,7 +113,7 @@ proc procBlkPreamble(
 
   let com = vmState.com
   if com.daoForkSupport and com.daoForkBlock.get == header.number:
-    vmState.mutateStateDB:
+    vmState.mutateLedger:
       db.applyDAOHardFork()
 
   if not skipValidation: # Expensive!
@@ -156,7 +156,7 @@ proc procBlkPreamble(
       return err("Post-Shanghai block body must have withdrawals")
 
     for withdrawal in blk.withdrawals.get:
-      vmState.stateDB.addBalance(withdrawal.address, withdrawal.weiAmount)
+      vmState.ledger.addBalance(withdrawal.address, withdrawal.weiAmount)
   else:
     if header.withdrawalsRoot.isSome:
       return err("Pre-Shanghai block header must not have withdrawalsRoot")
@@ -173,7 +173,7 @@ proc procBlkPreamble(
     # TODO It's strange that we persist uncles before processing block but the
     #      rest after...
     if not skipUncles:
-      let h = vmState.stateDB.txFrame.persistUncles(blk.uncles)
+      let h = vmState.ledger.txFrame.persistUncles(blk.uncles)
       if h != header.ommersHash:
         return err("ommersHash mismatch")
     elif not skipValidation and rlpHash(blk.uncles) != header.ommersHash:
@@ -190,7 +190,7 @@ proc procBlkEpilogue(
     blk.header
 
   # Reward beneficiary
-  vmState.mutateStateDB:
+  vmState.mutateLedger:
     if vmState.collectWitnessData:
       db.collectWitnessData()
 
@@ -212,7 +212,7 @@ proc procBlkEpilogue(
     consolidationReqs = processDequeueConsolidationRequests(vmState)
 
   if not skipValidation:
-    let stateRoot = vmState.stateDB.getStateRoot()
+    let stateRoot = vmState.ledger.getStateRoot()
     if header.stateRoot != stateRoot:
       # TODO replace logging with better error
       debug "wrong state root in block",
@@ -248,7 +248,11 @@ proc procBlkEpilogue(
       let
         depositReqs =
           ?parseDepositLogs(vmState.allLogs, vmState.com.depositContractAddress)
-        requestsHash = calcRequestsHash(depositReqs, withdrawalReqs, consolidationReqs)
+        requestsHash = calcRequestsHash([
+          (DEPOSIT_REQUEST_TYPE, depositReqs),
+          (WITHDRAWAL_REQUEST_TYPE, withdrawalReqs),
+          (CONSOLIDATION_REQUEST_TYPE, consolidationReqs)
+        ])
 
       if header.requestsHash.get != requestsHash:
         debug "wrong requestsHash in block",
@@ -277,7 +281,7 @@ proc processBlock*(
   ?vmState.procBlkPreamble(blk, skipValidation, skipReceipts, skipUncles, taskpool)
 
   # EIP-3675: no reward for miner in POA/POS
-  if not vmState.com.proofOfStake(blk.header, vmState.stateDB.txFrame):
+  if not vmState.com.proofOfStake(blk.header, vmState.ledger.txFrame):
     vmState.calculateReward(blk.header, blk.uncles)
 
   ?vmState.procBlkEpilogue(blk, skipValidation, skipReceipts)

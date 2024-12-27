@@ -205,6 +205,7 @@ type
   ContentLookupResult* = object
     content*: seq[byte]
     utpTransfer*: bool
+    receivedFrom*: Node
     # List of nodes which do not have requested content, and for which
     # content is in their range
     nodesInterestedInContent*: seq[Node]
@@ -238,11 +239,13 @@ func init*(
     T: type ContentLookupResult,
     content: seq[byte],
     utpTransfer: bool,
+    receivedFrom: Node,
     nodesInterestedInContent: seq[Node],
 ): T =
   ContentLookupResult(
     content: content,
     utpTransfer: utpTransfer,
+    receivedFrom: receivedFrom,
     nodesInterestedInContent: nodesInterestedInContent,
   )
 
@@ -890,7 +893,8 @@ proc offer(
     if m.contentKeys.len() != contentKeysLen:
       # TODO:
       # When there is such system, the peer should get scored negatively here.
-      error "Accepted content key bitlist has invalid size"
+      error "Accepted content key bitlist has invalid size",
+        bitListLen = m.contentKeys.len(), contentKeysLen
       return err("Accepted content key bitlist has invalid size")
 
     let acceptedKeysAmount = m.contentKeys.countOnes()
@@ -1232,7 +1236,7 @@ proc contentLookup*(
         )
         return Opt.some(
           ContentLookupResult.init(
-            content.content, content.utpTransfer, nodesWithoutContent
+            content.content, content.utpTransfer, content.src, nodesWithoutContent
           )
         )
     else:

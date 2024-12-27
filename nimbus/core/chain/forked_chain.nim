@@ -617,11 +617,11 @@ func isInMemory*(c: ForkedChainRef, blockHash: Hash32): bool =
 func memoryBlock*(c: ForkedChainRef, blockHash: Hash32): BlockDesc =
   c.blocks.getOrDefault(blockHash)
 
-func memoryTransaction*(c: ForkedChainRef, txHash: Hash32): Opt[Transaction] =
+func memoryTransaction*(c: ForkedChainRef, txHash: Hash32): Opt[(Transaction, BlockNumber)] =
   let (blockHash, index) = c.txRecords.getOrDefault(txHash, (Hash32.default, 0'u64))
   c.blocks.withValue(blockHash, val) do:
-    return Opt.some(val.blk.transactions[index])
-  return Opt.none(Transaction)
+    return Opt.some( (val.blk.transactions[index], val.blk.header.number) )
+  return Opt.none((Transaction, BlockNumber))
 
 proc latestBlock*(c: ForkedChainRef): Block =
   c.blocks.withValue(c.cursorHash, val) do:
@@ -672,7 +672,7 @@ proc blockByNumber*(c: ForkedChainRef, number: BlockNumber): Result[Block, strin
   if number > c.cursorHeader.number:
     return err("Requested block number not exists: " & $number)
 
-  if number < c.baseHeader.number:
+  if number <= c.baseHeader.number:
     return c.baseTxFrame.getEthBlock(number)
 
   shouldNotKeyError "blockByNumber":

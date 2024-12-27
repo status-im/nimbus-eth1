@@ -36,7 +36,7 @@ proc init(
   ## Initialisation helper
   # Take care to (re)set all fields since the VMState might be recycled
   self.com = com
-  self.stateDB = ac
+  self.ledger = ac
   self.gasPool = blockCtx.gasLimit
   assign(self.parent, parent)
   assign(self.blockCtx, blockCtx)
@@ -110,13 +110,13 @@ proc reinit*(self:     BaseVMState;     ## Object descriptor
   ## queries about its `getStateRoot()`, i.e. `isTopLevelClean` evaluated `true`. If
   ## this function returns `false`, the function argument `self` is left
   ## untouched.
-  if not self.stateDB.isTopLevelClean:
+  if not self.ledger.isTopLevelClean:
     return false
 
   let
     tracer = self.tracer
     com    = self.com
-    ac     = self.stateDB
+    ac     = self.ledger
     flags  = self.flags
   self.init(
     ac       = ac,
@@ -241,7 +241,7 @@ proc proofOfStake*(vmState: BaseVMState): bool =
     number: vmState.blockNumber,
     parentHash: vmState.blockCtx.parentHash,
     difficulty: vmState.blockCtx.difficulty,
-  ), vmState.stateDB.txFrame)
+  ), vmState.ledger.txFrame)
 
 proc difficultyOrPrevRandao*(vmState: BaseVMState): UInt256 =
   if vmState.proofOfStake():
@@ -255,21 +255,21 @@ func baseFeePerGas*(vmState: BaseVMState): UInt256 =
 
 method getAncestorHash*(
     vmState: BaseVMState, blockNumber: BlockNumber): Hash32 {.gcsafe, base.} =
-  let db = vmState.stateDB.txFrame
+  let db = vmState.ledger.txFrame
   let blockHash = db.getBlockHash(blockNumber).valueOr:
     return default(Hash32)
   blockHash
 
-proc readOnlyStateDB*(vmState: BaseVMState): ReadOnlyStateDB {.inline.} =
-  ReadOnlyStateDB(vmState.stateDB)
+proc readOnlyLedger*(vmState: BaseVMState): ReadOnlyLedger {.inline.} =
+  ReadOnlyLedger(vmState.ledger)
 
-template mutateStateDB*(vmState: BaseVMState, body: untyped) =
+template mutateLedger*(vmState: BaseVMState, body: untyped) =
   block:
-    var db {.inject.} = vmState.stateDB
+    var db {.inject.} = vmState.ledger
     body
 
 proc getAndClearLogEntries*(vmState: BaseVMState): seq[Log] =
-  vmState.stateDB.getAndClearLogEntries()
+  vmState.ledger.getAndClearLogEntries()
 
 proc status*(vmState: BaseVMState): bool =
   ExecutionOK in vmState.flags

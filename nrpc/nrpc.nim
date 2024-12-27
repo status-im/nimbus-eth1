@@ -256,7 +256,7 @@ proc syncToEngineApi(conf: NRpcConf) {.async.} =
             engine_api.VersionedHash(kzg_commitment_to_versioned_hash(it)),
           )
           # Execution Requests for Electra
-          let execution_requests = [
+          let execution_requests = @[
             SSZ.encode(forkyBlck.message.body.execution_requests.deposits),
             SSZ.encode(forkyBlck.message.body.execution_requests.withdrawals),
             SSZ.encode(forkyBlck.message.body.execution_requests.consolidations),

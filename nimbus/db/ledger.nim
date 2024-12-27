@@ -89,7 +89,7 @@ type
       ## over and over again to the database to avoid the WAL and compation
       ## write amplification that ensues
 
-  ReadOnlyStateDB* = distinct LedgerRef
+  ReadOnlyLedger* = distinct LedgerRef
 
   TransactionState = enum
     Pending
@@ -934,29 +934,29 @@ proc getStorageProof*(ac: LedgerRef, address: Address, slots: openArray[UInt256]
 # Public virtual read-only methods
 # ------------------------------------------------------------------------------
 
-proc getStateRoot*(db: ReadOnlyStateDB): Hash32 {.borrow.}
-proc getCodeHash*(db: ReadOnlyStateDB, address: Address): Hash32 = getCodeHash(distinctBase db, address)
-proc getStorageRoot*(db: ReadOnlyStateDB, address: Address): Hash32 = getStorageRoot(distinctBase db, address)
-proc getBalance*(db: ReadOnlyStateDB, address: Address): UInt256 = getBalance(distinctBase db, address)
-proc getStorage*(db: ReadOnlyStateDB, address: Address, slot: UInt256): UInt256 = getStorage(distinctBase db, address, slot)
-proc getNonce*(db: ReadOnlyStateDB, address: Address): AccountNonce = getNonce(distinctBase db, address)
-proc getCode*(db: ReadOnlyStateDB, address: Address): CodeBytesRef = getCode(distinctBase db, address)
-proc getCodeSize*(db: ReadOnlyStateDB, address: Address): int = getCodeSize(distinctBase db, address)
-proc contractCollision*(db: ReadOnlyStateDB, address: Address): bool = contractCollision(distinctBase db, address)
-proc accountExists*(db: ReadOnlyStateDB, address: Address): bool = accountExists(distinctBase db, address)
-proc isDeadAccount*(db: ReadOnlyStateDB, address: Address): bool = isDeadAccount(distinctBase db, address)
-proc isEmptyAccount*(db: ReadOnlyStateDB, address: Address): bool = isEmptyAccount(distinctBase db, address)
-proc getCommittedStorage*(db: ReadOnlyStateDB, address: Address, slot: UInt256): UInt256 = getCommittedStorage(distinctBase db, address, slot)
-proc inAccessList*(db: ReadOnlyStateDB, address: Address): bool = inAccessList(distinctBase db, address)
-proc inAccessList*(db: ReadOnlyStateDB, address: Address, slot: UInt256): bool = inAccessList(distinctBase db, address)
-proc getTransientStorage*(db: ReadOnlyStateDB,
+proc getStateRoot*(db: ReadOnlyLedger): Hash32 {.borrow.}
+proc getCodeHash*(db: ReadOnlyLedger, address: Address): Hash32 = getCodeHash(distinctBase db, address)
+proc getStorageRoot*(db: ReadOnlyLedger, address: Address): Hash32 = getStorageRoot(distinctBase db, address)
+proc getBalance*(db: ReadOnlyLedger, address: Address): UInt256 = getBalance(distinctBase db, address)
+proc getStorage*(db: ReadOnlyLedger, address: Address, slot: UInt256): UInt256 = getStorage(distinctBase db, address, slot)
+proc getNonce*(db: ReadOnlyLedger, address: Address): AccountNonce = getNonce(distinctBase db, address)
+proc getCode*(db: ReadOnlyLedger, address: Address): CodeBytesRef = getCode(distinctBase db, address)
+proc getCodeSize*(db: ReadOnlyLedger, address: Address): int = getCodeSize(distinctBase db, address)
+proc contractCollision*(db: ReadOnlyLedger, address: Address): bool = contractCollision(distinctBase db, address)
+proc accountExists*(db: ReadOnlyLedger, address: Address): bool = accountExists(distinctBase db, address)
+proc isDeadAccount*(db: ReadOnlyLedger, address: Address): bool = isDeadAccount(distinctBase db, address)
+proc isEmptyAccount*(db: ReadOnlyLedger, address: Address): bool = isEmptyAccount(distinctBase db, address)
+proc getCommittedStorage*(db: ReadOnlyLedger, address: Address, slot: UInt256): UInt256 = getCommittedStorage(distinctBase db, address, slot)
+proc inAccessList*(db: ReadOnlyLedger, address: Address): bool = inAccessList(distinctBase db, address)
+proc inAccessList*(db: ReadOnlyLedger, address: Address, slot: UInt256): bool = inAccessList(distinctBase db, address)
+proc getTransientStorage*(db: ReadOnlyLedger,
                           address: Address, slot: UInt256): UInt256 = getTransientStorage(distinctBase db, address, slot)
-proc getAccountProof*(db: ReadOnlyStateDB, address: Address): seq[seq[byte]] = getAccountProof(distinctBase db, address)
-proc getStorageProof*(db: ReadOnlyStateDB, address: Address, slots: openArray[UInt256]): seq[seq[seq[byte]]] = getStorageProof(distinctBase db, address, slots)
-proc resolveCodeHash*(db: ReadOnlyStateDB, address: Address): Hash32 = resolveCodeHash(distinctBase db, address)
-proc resolveCode*(db: ReadOnlyStateDB, address: Address): CodeBytesRef = resolveCode(distinctBase db, address)
-proc resolveCodeSize*(db: ReadOnlyStateDB, address: Address): int = resolveCodeSize(distinctBase db, address)
-proc getDelegateAddress*(db: ReadOnlyStateDB, address: Address): Address = getDelegateAddress(distinctBase db, address)
+proc getAccountProof*(db: ReadOnlyLedger, address: Address): seq[seq[byte]] = getAccountProof(distinctBase db, address)
+proc getStorageProof*(db: ReadOnlyLedger, address: Address, slots: openArray[UInt256]): seq[seq[seq[byte]]] = getStorageProof(distinctBase db, address, slots)
+proc resolveCodeHash*(db: ReadOnlyLedger, address: Address): Hash32 = resolveCodeHash(distinctBase db, address)
+proc resolveCode*(db: ReadOnlyLedger, address: Address): CodeBytesRef = resolveCode(distinctBase db, address)
+proc resolveCodeSize*(db: ReadOnlyLedger, address: Address): int = resolveCodeSize(distinctBase db, address)
+proc getDelegateAddress*(db: ReadOnlyLedger, address: Address): Address = getDelegateAddress(distinctBase db, address)
 
 # ------------------------------------------------------------------------------
 # End

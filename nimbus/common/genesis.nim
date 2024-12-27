@@ -16,6 +16,7 @@ import
   eth/common/[blocks, hashes, accounts, headers, addresses],
   ../db/[ledger, core_db],
   ../constants,
+  ../utils/utils,
   ./chain_config
 
 # ------------------------------------------------------------------------------
@@ -77,6 +78,10 @@ proc toGenesisHeader*(
     result.blobGasUsed           = Opt.some g.blobGasUsed.get(0'u64)
     result.excessBlobGas         = Opt.some g.excessBlobGas.get(0'u64)
     result.parentBeaconBlockRoot = Opt.some g.parentBeaconBlockRoot.get(default(Hash32))
+
+  if fork >= Prague:
+    const EmptyRequestsHash = calcRequestsHash()
+    result.requestsHash = Opt.some(EmptyRequestsHash)
 
 proc toGenesisHeader*(
     genesis: Genesis;

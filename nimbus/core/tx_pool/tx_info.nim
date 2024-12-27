@@ -107,32 +107,4 @@ type
       ## Tx becomes obsolete as it is in a mined block, already
       "Tx obsoleted"
 
-    # ---------- debugging error codes as used in verifier functions -----------
-
-    # failed verifier codes
-
-    txInfoVfyItemIdList            ## Corrupted ID queue/fifo structure
-    txInfoVfyRejectsList           ## Corrupted waste basket structure
-    txInfoVfyNonceChain            ## Non-consecutive nonces
-
-    txInfoVfySenderRbTree          ## Corrupted sender list structure
-    txInfoVfySenderLeafEmpty       ## Empty sender list leaf record
-    txInfoVfySenderTotal           ## Wrong number of leaves
-    txInfoVfySenderProfits         ## Profits calculation error
-
-    txInfoVfyStatusTotal           ## Wrong number of leaves
-    txInfoVfyStatusGasLimits       ## Wrong gas accu values
-    txInfoVfyStatusSenderList      ## Corrupted status-sender sub-list
-    txInfoVfyStatusNonceList       ## Corrupted status-nonce sub-list
-
-    txInfoVfyStatusSenderTotal     ## Sender vs status table mismatch
-    txInfoVfyStatusSenderGasLimits ## Wrong gas accu values
-
-    txInfoVfyRankAddrMismatch      ## Different ranks in address set
-    txInfoVfyReverseZombies        ## Zombie addresses in reverse lookup
-    txInfoVfyRankReverseLookup     ## Sender missing in reverse lookup
-    txInfoVfyRankReverseMismatch   ## Ranks differ with revers lookup
-    txInfoVfyRankDuplicateAddr     ## Same address with different ranks
-    txInfoVfyRankTotal             ## Wrong number of leaves (i.e. adresses)
-
 # End

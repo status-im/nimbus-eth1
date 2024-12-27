@@ -107,7 +107,7 @@ func getHexadecimalInt*(j: JsonNode): int64 =
   data = fromHex(StUint[64], j.getStr)
   result = cast[int64](data)
 
-proc verifyStateDB*(wantedState: JsonNode, stateDB: ReadOnlyStateDB) =
+proc verifyLedger*(wantedState: JsonNode, ledger: ReadOnlyLedger) =
   for ac, accountData in wantedState:
     let account = EthAddress.fromHex(ac)
     for slot, value in accountData{"storage"}:
@@ -115,7 +115,7 @@ proc verifyStateDB*(wantedState: JsonNode, stateDB: ReadOnlyStateDB) =
         slotId = UInt256.fromHex slot
         wantedValue = UInt256.fromHex value.getStr
 
-      let actualValue = stateDB.getStorage(account, slotId)
+      let actualValue = ledger.getStorage(account, slotId)
       #if not found:
       #  raise newException(ValidationError, "account not found:  " & ac)
       if actualValue != wantedValue:
@@ -126,9 +126,9 @@ proc verifyStateDB*(wantedState: JsonNode, stateDB: ReadOnlyStateDB) =
       wantedBalance = UInt256.fromHex accountData{"balance"}.getStr
       wantedNonce = accountData{"nonce"}.getHexadecimalInt.AccountNonce
 
-      actualCode = stateDB.getCode(account).bytes()
-      actualBalance = stateDB.getBalance(account)
-      actualNonce = stateDB.getNonce(account)
+      actualCode = ledger.getCode(account).bytes()
+      actualBalance = ledger.getBalance(account)
+      actualNonce = ledger.getNonce(account)
 
     if wantedCode != actualCode:
       raise newException(ValidationError, &"{ac} codeDiff {wantedCode.toHex} != {actualCode.toHex}")

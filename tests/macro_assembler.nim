@@ -322,8 +322,8 @@ proc verifyAsmResult(vmState: BaseVMState, boa: Assembler, asmResult: DebugCallR
       error "different memory value", idx=i, expected=mem, actual=actual
       return false
 
-  var stateDB = vmState.stateDB
-  stateDB.persist()
+  var ledger = vmState.ledger
+  ledger.persist()
 
   let
     al = com.db.baseTxFrame()
@@ -392,7 +392,7 @@ proc createSignedTx(payload: seq[byte], chainId: ChainId): Transaction =
 proc runVM*(vmState: BaseVMState, boa: Assembler): bool =
   let
     com  = vmState.com
-  vmState.mutateStateDB:
+  vmState.mutateLedger:
     db.setCode(codeAddress, boa.code)
     db.setBalance(codeAddress, 1_000_000.u256)
   let tx = createSignedTx(boa.data, com.chainId)

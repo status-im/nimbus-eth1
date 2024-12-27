@@ -37,12 +37,12 @@ proc genesisHeader(node: JsonNode): Header =
 proc initializeDb(memDB: CoreDbRef, node: JsonNode): Hash32 =
   let
     genesisHeader = node.genesisHeader
-    stateDB = LedgerRef.init(memDB)
+    ledger = LedgerRef.init(memDB.baseTxFrame())
 
-  memDB.persistHeaderAndSetHead(genesisHeader).expect("persistHeader no error")
-  setupStateDB(node["pre"], stateDB)
-  stateDB.persist()
-  doAssert stateDB.getStateRoot == genesisHeader.stateRoot
+  ledger.txFrame.persistHeaderAndSetHead(genesisHeader).expect("persistHeader no error")
+  setupLedger(node["pre"], ledger)
+  ledger.persist()
+  doAssert ledger.getStateRoot == genesisHeader.stateRoot
 
   genesisHeader.blockHash
 
@@ -58,8 +58,8 @@ proc setupELClient*(conf: ChainConfig, taskPool: Taskpool, node: JsonNode): Test
 
   let
     txPool  = TxPoolRef.new(chain)
-    beaconEngine = BeaconEngineRef.new(txPool, chain)
-    serverApi = newServerAPI(chain, txPool)
+    beaconEngine = BeaconEngineRef.new(txPool)
+    serverApi = newServerAPI(txPool)
     rpcServer = newRpcHttpServer(["127.0.0.1:0"])
     rpcClient = newRpcHttpClient()
 

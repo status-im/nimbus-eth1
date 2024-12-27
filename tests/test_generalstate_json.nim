@@ -104,8 +104,8 @@ proc testFixtureIndexes(ctx: var TestCtx, testStatusIMPL: var TestStatus) =
   var gasUsed: GasInt
   let sender = ctx.tx.recoverSender().expect("valid signature")
 
-  vmState.mutateStateDB:
-    setupStateDB(ctx.pre, db)
+  vmState.mutateLedger:
+    setupLedger(ctx.pre, db)
 
     # this is an important step when using `db/ledger`
     # it will affect the account storage's location
@@ -121,7 +121,7 @@ proc testFixtureIndexes(ctx: var TestCtx, testStatusIMPL: var TestStatus) =
   coinbaseStateClearing(vmState, miner)
 
   block post:
-    let obtainedHash = vmState.readOnlyStateDB.getStateRoot()
+    let obtainedHash = vmState.readOnlyLedger.getStateRoot()
     check obtainedHash == ctx.expectedHash
     let logEntries = vmState.getAndClearLogEntries()
     let actualLogsHash = rlpHash(logEntries)

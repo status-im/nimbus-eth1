@@ -114,27 +114,27 @@ when use_evmc_glue:
 
 proc accountExists(host: TransactionHost, address: HostAddress): bool {.show.} =
   if host.vmState.fork >= FkSpurious:
-    not host.vmState.readOnlyStateDB.isDeadAccount(address)
+    not host.vmState.readOnlyLedger.isDeadAccount(address)
   else:
-    host.vmState.readOnlyStateDB.accountExists(address)
+    host.vmState.readOnlyLedger.accountExists(address)
 
 # TODO: Why is `address` an argument in `getStorage`, `setStorage` and
 # `selfDestruct`, if an EVM is only allowed to do these things to its own
 # contract account and the host always knows which account?
 
 proc getStorage(host: TransactionHost, address: HostAddress, key: HostKey): HostValue {.show.} =
-  host.vmState.readOnlyStateDB.getStorage(address, key)
+  host.vmState.readOnlyLedger.getStorage(address, key)
 
 proc setStorage(host: TransactionHost, address: HostAddress,
                 key: HostKey, newVal: HostValue): EvmcStorageStatus {.show.} =
   let
-    db = host.vmState.readOnlyStateDB
+    db = host.vmState.readOnlyLedger
     currentVal = db.getStorage(address, key)
 
   if currentVal == newVal:
     return EVMC_STORAGE_ASSIGNED
 
-  host.vmState.mutateStateDB:
+  host.vmState.mutateLedger:
     db.setStorage(address, key, newVal)
 
   # https://eips.ethereum.org/EIPS/eip-1283
@@ -174,15 +174,15 @@ proc setStorage(host: TransactionHost, address: HostAddress,
     return EVMC_STORAGE_ASSIGNED
 
 proc getBalance(host: TransactionHost, address: HostAddress): HostBalance {.show.} =
-  host.vmState.readOnlyStateDB.getBalance(address)
+  host.vmState.readOnlyLedger.getBalance(address)
 
 proc getCodeSize(host: TransactionHost, address: HostAddress): HostSize {.show.} =
   # TODO: Check this `HostSize`, it was copied as `uint` from other code.
   # Note: Old `evmc_host` uses `getCode(address).len` instead.
-  host.vmState.readOnlyStateDB.getCodeSize(address).HostSize
+  host.vmState.readOnlyLedger.getCodeSize(address).HostSize
 
 proc getCodeHash(host: TransactionHost, address: HostAddress): HostHash {.show.} =
-  let db = host.vmState.readOnlyStateDB
+  let db = host.vmState.readOnlyLedger
   # TODO: Copied from `Computation`, but check if that code is wrong with
   # `FkSpurious`, as it has different calls from `accountExists` above.
   if not db.accountExists(address) or db.isEmptyAccount(address):
@@ -205,7 +205,7 @@ proc copyCode(host: TransactionHost, address: HostAddress,
   #
   # Note, when there is no code, `getCode` result is empty `seq`.  It was `nil`
   # when the DB was first implemented, due to Nim language changes since then.
-  let code = host.vmState.readOnlyStateDB.getCode(address)
+  let code = host.vmState.readOnlyLedger.getCode(address)
   var safe_len: int = code.len # It's safe to assume >= 0.
 
   if code_offset >= safe_len.HostSize:
@@ -221,7 +221,7 @@ proc copyCode(host: TransactionHost, address: HostAddress,
   return safe_len.HostSize
 
 proc selfDestruct(host: TransactionHost, address, beneficiary: HostAddress) {.show.} =
-  host.vmState.mutateStateDB:
+  host.vmState.mutateLedger:
     let localBalance = db.getBalance(address)
 
     if host.vmState.fork >= FkCancun:
@@ -274,10 +274,10 @@ proc emitLog(host: TransactionHost, address: HostAddress,
     copyMem(log.data[0].addr, data, data_size.int)
 
   log.address = address
-  host.vmState.stateDB.addLogEntry(log)
+  host.vmState.ledger.addLogEntry(log)
 
 proc accessAccount(host: TransactionHost, address: HostAddress): EvmcAccessStatus {.show.} =
-  host.vmState.mutateStateDB:
+  host.vmState.mutateLedger:
     if not db.inAccessList(address):
       db.accessList(address)
       return EVMC_ACCESS_COLD
@@ -286,7 +286,7 @@ proc accessAccount(host: TransactionHost, address: HostAddress): EvmcAccessStatu
 
 proc accessStorage(host: TransactionHost, address: HostAddress,
                    key: HostKey): EvmcAccessStatus {.show.} =
-  host.vmState.mutateStateDB:
+  host.vmState.mutateLedger:
     if not db.inAccessList(address, key):
       db.accessList(address, key)
       return EVMC_ACCESS_COLD
@@ -295,15 +295,15 @@ proc accessStorage(host: TransactionHost, address: HostAddress,
 
 proc getTransientStorage(host: TransactionHost,
                          address: HostAddress, key: HostKey): HostValue {.show.} =
-  host.vmState.readOnlyStateDB.getTransientStorage(address, key)
+  host.vmState.readOnlyLedger.getTransientStorage(address, key)
 
 proc setTransientStorage(host: TransactionHost, address: HostAddress,
                 key: HostKey, newVal: HostValue) {.show.} =
-  host.vmState.mutateStateDB:
+  host.vmState.mutateLedger:
     db.setTransientStorage(address, key, newVal)
 
 proc getDelegateAddress(host: TransactionHost, address: HostAddress): HostAddress {.show.} =
-  let db = host.vmState.readOnlyStateDB
+  let db = host.vmState.readOnlyLedger
   db.getDelegateAddress(address)
 
 when use_evmc_glue:

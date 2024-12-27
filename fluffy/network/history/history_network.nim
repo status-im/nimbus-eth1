@@ -142,11 +142,12 @@ proc getVerifiedBlockHeader*(
   for i in 0 ..< (1 + n.contentRequestRetries):
     let
       headerContent = (await n.portalProtocol.contentLookup(contentKey, contentId)).valueOr:
-        warn "Failed fetching block header with proof from the network"
+        debug "Failed fetching block header with proof from the network"
         return Opt.none(Header)
 
       header = validateCanonicalHeaderBytes(headerContent.content, id, n.accumulator).valueOr:
-        warn "Validation of block header failed", error = error
+        warn "Validation of block header failed",
+          error = error, node = headerContent.receivedFrom.record.toURI()
         continue
 
     debug "Fetched valid block header from the network"
@@ -186,11 +187,12 @@ proc getBlockBody*(
   for i in 0 ..< (1 + n.contentRequestRetries):
     let
       bodyContent = (await n.portalProtocol.contentLookup(contentKey, contentId)).valueOr:
-        warn "Failed fetching block body from the network"
+        debug "Failed fetching block body from the network"
         return Opt.none(BlockBody)
 
       body = validateBlockBodyBytes(bodyContent.content, header).valueOr:
-        warn "Validation of block body failed", error
+        warn "Validation of block body failed",
+          error, node = bodyContent.receivedFrom.record.toURI()
         continue
 
     debug "Fetched block body from the network"
@@ -217,7 +219,7 @@ proc getBlock*(
   # also the original type into the network.
   let
     header = (await n.getVerifiedBlockHeader(id)).valueOr:
-      warn "Failed to get header when getting block", id
+      debug "Failed to get header when getting block", id
       return Opt.none(Block)
     hash =
       when id is Hash32:
@@ -225,7 +227,7 @@ proc getBlock*(
       else:
         header.rlpHash()
     body = (await n.getBlockBody(hash, header)).valueOr:
-      warn "Failed to get body when getting block", hash
+      debug "Failed to get body when getting block", hash
       return Opt.none(Block)
 
   Opt.some((header, body))
@@ -261,10 +263,11 @@ proc getReceipts*(
   for i in 0 ..< (1 + n.contentRequestRetries):
     let
       receiptsContent = (await n.portalProtocol.contentLookup(contentKey, contentId)).valueOr:
-        warn "Failed fetching receipts from the network"
+        debug "Failed fetching receipts from the network"
         return Opt.none(seq[Receipt])
       receipts = validateReceiptsBytes(receiptsContent.content, header.receiptsRoot).valueOr:
-        warn "Validation of receipts failed", error
+        warn "Validation of receipts failed",
+          error, node = receiptsContent.receivedFrom.record.toURI()
         continue
 
     debug "Fetched receipts from the network"

@@ -135,9 +135,9 @@ method captureOpEnd*(ctx: LegacyTracer, c: Computation,
     if TracerFlags.DisableStorage notin ctx.flags:
       var storage = newJObject()
       if c.msg.depth < ctx.storageKeys.len:
-        var stateDB = c.vmState.stateDB
+        var ledger = c.vmState.ledger
         for key in ctx.storage(c.msg.depth):
-          let value = stateDB.getStorage(c.msg.contractAddress, key)
+          let value = ledger.getStorage(c.msg.contractAddress, key)
           storage[key.dumpHex] = %(value.dumpHex)
         j["storage"] = storage
 

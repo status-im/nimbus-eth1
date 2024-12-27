@@ -14,7 +14,6 @@
 
 import
   std/[hashes, times],
-  ../../utils/ec_recover,
   ../../utils/utils,
   ../../transaction,
   ./tx_info,

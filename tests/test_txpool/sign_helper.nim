@@ -10,7 +10,6 @@
 
 import
   ../../nimbus/[constants, transaction],
-  ../../nimbus/utils/ec_recover,
   ../../nimbus/core/tx_pool/tx_item,
   eth/[common, common/transaction, keys],
   results,

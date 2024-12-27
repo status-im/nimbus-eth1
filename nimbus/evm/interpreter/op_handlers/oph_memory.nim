@@ -61,19 +61,19 @@ else:
     ? c.opcodeGasCost(Sstore, res.gasCost, "SSTORE")
     c.gasMeter.refundGas(res.gasRefund)
 
-    c.vmState.mutateStateDB:
+    c.vmState.mutateLedger:
       db.setStorage(c.msg.contractAddress, slot, newValue)
     ok()
 
 
   proc sstoreNetGasMeteringImpl(c: Computation; slot, newValue: UInt256, coldAccess = 0.GasInt): EvmResultVoid =
     let
-      stateDB = c.vmState.readOnlyStateDB
+      ledger = c.vmState.readOnlyLedger
       currentValue = c.getStorage(slot)
 
       gasParam = GasParamsSs(
         currentValue: currentValue,
-        originalValue: stateDB.getCommittedStorage(c.msg.contractAddress, slot))
+        originalValue: ledger.getCommittedStorage(c.msg.contractAddress, slot))
 
       res = c.gasCosts[Sstore].ss_handler(newValue, gasParam)
 
@@ -81,7 +81,7 @@ else:
 
     c.gasMeter.refundGas(res.gasRefund)
 
-    c.vmState.mutateStateDB:
+    c.vmState.mutateLedger:
       db.setStorage(c.msg.contractAddress, slot, newValue)
     ok()
 
@@ -249,7 +249,7 @@ proc sstoreEIP2929Op(cpt: VmCpt): EvmResultVoid =
     if cpt.host.accessStorage(cpt.msg.contractAddress, slot) == EVMC_ACCESS_COLD:
       coldAccessGas = ColdSloadCost
   else:
-    cpt.vmState.mutateStateDB:
+    cpt.vmState.mutateLedger:
       if not db.inAccessList(cpt.msg.contractAddress, slot):
         db.accessList(cpt.msg.contractAddress, slot)
         coldAccessGas = ColdSloadCost
