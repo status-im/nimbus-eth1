@@ -126,6 +126,9 @@ func com*(ben: BeaconEngineRef): CommonRef =
 func chain*(ben: BeaconEngineRef): ForkedChainRef =
   ben.txPool.chain
 
+func txPool*(ben: BeaconEngineRef): TxPoolRef =
+  ben.txPool
+
 func get*(ben: BeaconEngineRef, hash: Hash32,
           header: var Header): bool =
   ben.queue.get(hash, header)
@@ -154,10 +157,6 @@ proc generateExecutionBundle*(ben: BeaconEngineRef,
       pos.parentBeaconBlockRoot = attrs.parentBeaconBlockRoot.get
 
     pos.setWithdrawals(attrs)
-
-    if headBlock.blockHash != xp.head.blockHash:
-       # reorg
-       discard xp.smartHead(headBlock)
 
     if pos.timestamp <= headBlock.timestamp:
       return err "timestamp must be strictly later than parent"

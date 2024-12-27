@@ -228,7 +228,7 @@ proc validateTxBasic*(
 
   # The total must be the larger of the two
   if tx.maxFeePerGasNorm < tx.maxPriorityFeePerGasNorm:
-    return err(&"invalid tx: maxFee is smaller than maPriorityFee. maxFee={tx.maxFeePerGas}, maxPriorityFee={tx.maxPriorityFeePerGasNorm}")
+    return err(&"invalid tx: maxFee is smaller than maxPriorityFee. maxFee={tx.maxFeePerGas}, maxPriorityFee={tx.maxPriorityFeePerGasNorm}")
 
   if tx.gasLimit < tx.intrinsicGas(fork):
     return err(&"invalid tx: not enough gas to perform calculation. avail={tx.gasLimit}, require={tx.intrinsicGas(fork)}")

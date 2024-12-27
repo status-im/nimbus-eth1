@@ -21,23 +21,24 @@ import
   ../../common/common,
   ../../utils/utils,
   ../../constants,
-  ".."/[executor, validate, casper],
   ../../transaction/call_evm,
   ../../transaction,
   ../../evm/state,
   ../../evm/types,
+  ../executor,
+  ../validate,
+  ../casper,
   ../eip4844,
   ../eip6110,
   ../eip7691,
-  "."/[tx_desc, tx_item, tx_tabs, tx_tabs/tx_status, tx_info],
-  tx_tasks/[tx_bucket]
+  ./tx_desc,
+  ./tx_item,
+  ./tx_tabs
 
 type
-  TxPacker = object
+  TxPacker = ref object
     # Packer state
     vmState: BaseVMState
-    txDB: TxTabsRef
-    cleanState: bool
     numBlobPerBlock: int
 
     # Packer results
@@ -45,32 +46,22 @@ type
     stateRoot: Hash32
     receiptsRoot: Hash32
     logsBloom: Bloom
+    packedTxs: seq[TxItemRef]
     withdrawalReqs: seq[byte]
     consolidationReqs: seq[byte]
     depositReqs: seq[byte]
-
-  GrabResult = enum
-    FetchNextItem
-    ContinueWithNextAccount
-    StopCollecting
 
 const
   receiptsExtensionSize = ##\
     ## Number of slots to extend the `receipts[]` at the same time.
     20
 
+  ContinueWithNextAccount = true
+  StopCollecting = false
+
 # ------------------------------------------------------------------------------
 # Private helpers
 # ------------------------------------------------------------------------------
-
-proc persist(pst: var TxPacker)
-    {.gcsafe,raises: [].} =
-  ## Smart wrapper
-  let vmState = pst.vmState
-  if not pst.cleanState:
-    let clearEmptyAccount = vmState.fork >= FkSpurious
-    vmState.ledger.persist(clearEmptyAccount)
-    pst.cleanState = true
 
 proc classifyValidatePacked(vmState: BaseVMState; item: TxItemRef): bool =
   ## Verify the argument `item` against the accounts database. This function
@@ -81,11 +72,10 @@ proc classifyValidatePacked(vmState: BaseVMState; item: TxItemRef): bool =
     baseFee = vmState.blockCtx.baseFeePerGas.get(0.u256)
     fork = vmState.fork
     gasLimit = vmState.blockCtx.gasLimit
-    tx = item.tx.eip1559TxNormalization(baseFee.truncate(GasInt))
     excessBlobGas = calcExcessBlobGas(vmState.parent, vmState.fork >= FkPrague)
 
   roDB.validateTransaction(
-    tx, item.sender, gasLimit, baseFee, excessBlobGas, fork).isOk
+    item.tx, item.sender, gasLimit, baseFee, excessBlobGas, fork).isOk
 
 proc classifyPacked(vmState: BaseVMState; moreBurned: GasInt): bool =
   ## Classifier for *packing* (i.e. adding up `gasUsed` values after executing
@@ -121,37 +111,21 @@ func feeRecipient(pst: TxPacker): Address =
 proc runTx(pst: var TxPacker; item: TxItemRef): GasInt =
   ## Execute item transaction and update `vmState` book keeping. Returns the
   ## `gasUsed` after executing the transaction.
-  let
-    baseFee = pst.baseFee
-
-  let gasUsed = item.tx.txCallEvm(item.sender, pst.vmState, baseFee)
-  pst.cleanState = false
+  let gasUsed = item.tx.txCallEvm(item.sender, pst.vmState, pst.baseFee)
   doAssert 0 <= gasUsed
   gasUsed
 
-proc runTxCommit(pst: var TxPacker; item: TxItemRef; gasBurned: GasInt)
-    {.gcsafe,raises: [CatchableError].} =
+proc runTxCommit(pst: var TxPacker; item: TxItemRef; gasBurned: GasInt) =
   ## Book keeping after executing argument `item` transaction in the VM. The
   ## function returns the next number of items `nItems+1`.
   let
     vmState = pst.vmState
-    inx = pst.txDB.byStatus.eq(txItemPacked).nItems
-    gasTip = item.tx.effectiveGasTip(pst.baseFee)
+    inx     = pst.packedTxs.len
+    gasTip  = item.tx.tip(pst.baseFee)
 
-  # The gas tip cannot get negative as all items in the `staged` bucket
-  # are vetted for profitability before entering that bucket.
-  assert 0 <= gasTip
   let reward = gasBurned.u256 * gasTip.u256
   vmState.ledger.addBalance(pst.feeRecipient, reward)
   pst.blockValue += reward
-
-  # Save accounts via persist() is not needed unless the fork is smaller
-  # than `FkByzantium` in which case, the `getStateRoot()` function is called
-  # by `makeReceipt()`. As the `getStateRoot()` function asserts unconditionally
-  # that the account cache has been saved, the `persist()` call is
-  # obligatory here.
-  if vmState.fork < FkByzantium:
-    pst.persist()
 
   # Update receipts sequence
   if vmState.receipts.len <= inx:
@@ -164,24 +138,15 @@ proc runTxCommit(pst: var TxPacker; item: TxItemRef; gasBurned: GasInt)
   # gasUsed accounting
   vmState.cumulativeGasUsed += gasBurned
   vmState.receipts[inx] = vmState.makeReceipt(item.tx.txType)
-
-  # Add the item to the `packed` bucket. This implicitely increases the
-  # receipts index `inx` at the next visit of this function.
-  discard pst.txDB.reassign(item,txItemPacked)
+  pst.packedTxs.add item
 
 # ------------------------------------------------------------------------------
 # Private functions: packer packerVmExec() helpers
 # ------------------------------------------------------------------------------
 
-proc vmExecInit(xp: TxPoolRef): Result[TxPacker, string]
-    {.gcsafe,raises: [CatchableError].} =
-
-  # Flush `packed` bucket
-  xp.bucketFlushPacked
-
+proc vmExecInit(xp: TxPoolRef): Result[TxPacker, string] =
   let packer = TxPacker(
     vmState: xp.vmState,
-    txDB: xp.txDB,
     numBlobPerBlock: 0,
     blockValue: 0.u256,
     stateRoot: xp.vmState.parent.stateRoot,
@@ -200,28 +165,23 @@ proc vmExecInit(xp: TxPoolRef): Result[TxPacker, string]
 
   ok(packer)
 
-proc vmExecGrabItem(pst: var TxPacker; item: TxItemRef): GrabResult
-    {.gcsafe,raises: [CatchableError].}  =
+proc vmExecGrabItem(pst: var TxPacker; item: TxItemRef): bool =
   ## Greedily collect & compact items as long as the accumulated `gasLimit`
   ## values are below the maximum block size.
-  let vmState = pst.vmState
-
-  if not item.tx.validateChainId(vmState.com.chainId):
-    discard pst.txDB.dispose(item, txInfoChainIdMismatch)
-    return ContinueWithNextAccount
+  let
+    vmState = pst.vmState
+    electra = vmState.fork >= FkPrague
 
   # EIP-4844
-  let maxBlobsPerBlob = getMaxBlobsPerBlock(vmState.fork >= FkPrague)
-  if (pst.numBlobPerBlock + item.tx.versionedHashes.len).uint64 > maxBlobsPerBlob:
+  let maxBlobsPerBlock = getMaxBlobsPerBlock(electra)
+  if (pst.numBlobPerBlock + item.tx.versionedHashes.len).uint64 > maxBlobsPerBlock:
     return ContinueWithNextAccount
-  pst.numBlobPerBlock += item.tx.versionedHashes.len
 
   let
     blobGasUsed = item.tx.getTotalBlobGas
-    maxBlobGasPerBlock = getMaxBlobGasPerBlock(vmState.fork >= FkPrague)
+    maxBlobGasPerBlock = getMaxBlobGasPerBlock(electra)
   if vmState.blobGasUsed + blobGasUsed > maxBlobGasPerBlock:
     return ContinueWithNextAccount
-  vmState.blobGasUsed += blobGasUsed
 
   # Verify we have enough gas in gasPool
   if vmState.gasPool < item.tx.gasLimit:
@@ -229,7 +189,6 @@ proc vmExecGrabItem(pst: var TxPacker; item: TxItemRef): GrabResult
     # continue with next account
     # if we don't have enough gas
     return ContinueWithNextAccount
-  vmState.gasPool -= item.tx.gasLimit
 
   # Validate transaction relative to the current vmState
   if not vmState.classifyValidatePacked(item):
@@ -238,9 +197,10 @@ proc vmExecGrabItem(pst: var TxPacker; item: TxItemRef): GrabResult
   # EIP-1153
   vmState.ledger.clearTransientStorage()
 
+  # Execute EVM for this transaction
   let
     accTx = vmState.ledger.beginSavepoint
-    gasUsed = pst.runTx(item) # this is the crucial part, running the tx
+    gasUsed = pst.runTx(item)
 
   # Find out what to do next: accepting this tx or trying the next account
   if not vmState.classifyPacked(gasUsed):
@@ -249,15 +209,19 @@ proc vmExecGrabItem(pst: var TxPacker; item: TxItemRef): GrabResult
       return ContinueWithNextAccount
     return StopCollecting
 
-  # Commit account state DB
+  # Commit ledger changes
   vmState.ledger.commit(accTx)
 
   vmState.ledger.persist(clearEmptyAccount = vmState.fork >= FkSpurious)
 
-  # Finish book-keeping and move item to `packed` bucket
+  # Finish book-keeping
   pst.runTxCommit(item, gasUsed)
 
-  FetchNextItem
+  pst.numBlobPerBlock += item.tx.versionedHashes.len
+  vmState.blobGasUsed += blobGasUsed
+  vmState.gasPool -= item.tx.gasLimit
+
+  ContinueWithNextAccount
 
 proc vmExecCommit(pst: var TxPacker): Result[void, string] =
   let
@@ -279,8 +243,7 @@ proc vmExecCommit(pst: var TxPacker): Result[void, string] =
   ledger.persist(clearEmptyAccount = vmState.fork >= FkSpurious)
 
   # Update flexi-array, set proper length
-  let nItems = pst.txDB.byStatus.eq(txItemPacked).nItems
-  vmState.receipts.setLen(nItems)
+  vmState.receipts.setLen(pst.packedTxs.len)
 
   pst.receiptsRoot = vmState.receipts.calcReceiptsRoot
   pst.logsBloom = vmState.receipts.createBloom
@@ -291,10 +254,8 @@ proc vmExecCommit(pst: var TxPacker): Result[void, string] =
 # Public functions
 # ------------------------------------------------------------------------------
 
-proc packerVmExec*(xp: TxPoolRef): Result[TxPacker, string]
-      {.gcsafe,raises: [CatchableError].} =
-  ## Rebuild `packed` bucket by selection items from the `staged` bucket
-  ## after executing them in the VM.
+proc packerVmExec*(xp: TxPoolRef): Result[TxPacker, string] =
+  ## Execute as much transactions as possible.
   let db = xp.vmState.com.db
   let dbTx = db.ctx.txFrameBegin(nil) # TODO use the correct parent frame here!
   defer: dbTx.dispose()
@@ -302,20 +263,13 @@ proc packerVmExec*(xp: TxPoolRef): Result[TxPacker, string]
   var pst = xp.vmExecInit.valueOr:
     return err(error)
 
-  block loop:
-    for (_,nonceList) in xp.txDB.packingOrderAccounts(txItemStaged):
-
-      block account:
-        for item in nonceList.incNonce:
-          let rc = pst.vmExecGrabItem(item)
-          if rc == StopCollecting:
-            break loop    # stop
-          if rc == ContinueWithNextAccount:
-            break account # continue with next account
+  for item in xp.byPriceAndNonce:
+    let rc = pst.vmExecGrabItem(item)
+    if rc == StopCollecting:
+      break
 
   ?pst.vmExecCommit()
   ok(pst)
-  # Block chain will roll back automatically
 
 func getExtraData(com: CommonRef): seq[byte] =
   if com.extraData.len > 32:
@@ -376,6 +330,10 @@ func executionRequests*(pst: var TxPacker): seq[seq[byte]] =
   result.append(DEPOSIT_REQUEST_TYPE, pst.depositReqs)
   result.append(WITHDRAWAL_REQUEST_TYPE, pst.withdrawalReqs)
   result.append(CONSOLIDATION_REQUEST_TYPE, pst.consolidationReqs)
+
+iterator packedTxs*(pst: TxPacker): TxItemRef =
+  for item in pst.packedTxs:
+    yield item
 
 # ------------------------------------------------------------------------------
 # End

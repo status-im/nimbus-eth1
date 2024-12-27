@@ -49,8 +49,6 @@ proc basicServices(nimbus: NimbusNode,
   # so it can know the latest account state
   # e.g. sender nonce, etc
   nimbus.txPool = TxPoolRef.new(nimbus.chainRef)
-  doAssert nimbus.txPool.smartHead(nimbus.chainRef.latestHeader)
-
   nimbus.beaconEngine = BeaconEngineRef.new(nimbus.txPool)
 
 proc manageAccounts(nimbus: NimbusNode, conf: NimbusConf) =

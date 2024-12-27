@@ -310,10 +310,8 @@ proc setupServerAPI*(api: ServerAPIRef, server: RpcServer, ctx: EthContext) =
       pooledTx = decodePooledTx(txBytes)
       txHash = rlpHash(pooledTx)
 
-    api.txPool.add(pooledTx)
-    let res = api.txPool.inPoolAndReason(txHash)
-    if res.isErr:
-      raise newException(ValueError, res.error)
+    api.txPool.addTx(pooledTx).isOkOr:
+      raise newException(ValueError, $error)
     txHash
 
   server.rpc("eth_call") do(args: TransactionArgs, blockTag: BlockTag) -> seq[byte]:
@@ -527,7 +525,8 @@ proc setupServerAPI*(api: ServerAPIRef, server: RpcServer, ctx: EthContext) =
           nil
       pooledTx = PooledTransaction(tx: signedTx, networkPayload: networkPayload)
 
-    api.txPool.add(pooledTx)
+    api.txPool.addTx(pooledTx).isOkOr:
+      raise newException(ValueError, $error)
     rlpHash(signedTx)
 
   server.rpc("eth_getTransactionByHash") do(data: Hash32) -> TransactionObject:

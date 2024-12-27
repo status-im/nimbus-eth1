@@ -10,12 +10,13 @@
 import
   std/[typetraits],
   results,
-  ../beacon_engine,
   eth/common/[headers, hashes, times],
   web3/execution_types,
-  ./api_utils,
   chronicles,
-  ../web3_eth_conv
+  ../../core/tx_pool,
+  ../beacon_engine,
+  ../web3_eth_conv,
+  ./api_utils
 
 {.push gcsafe, raises:[CatchableError].}
 
@@ -201,6 +202,7 @@ proc forkchoiceUpdated*(ben: BeaconEngineRef,
       gasUsed = bundle.payload.gasUsed,
       blobGasUsed = bundle.payload.blobGasUsed.get(Quantity(0)),
       id = id.toHex,
+      txPoolLen = ben.txPool.len,
       attrs = attrs
 
     return validFCU(Opt.some(id), blockHash)

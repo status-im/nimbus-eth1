@@ -731,3 +731,18 @@ proc isCanonicalAncestor*(c: ForkedChainRef,
   let canonHash = c.baseTxFrame.getBlockHash(blockNumber).valueOr:
     return false
   canonHash == blockHash
+
+iterator txHashInRange*(c: ForkedChainRef, fromHash: Hash32, toHash: Hash32): Hash32 =
+  ## exclude base from iteration, new block produced by txpool
+  ## should not reach base
+  var prevHash = fromHash
+  while prevHash != c.baseHash:
+    c.blocks.withValue(prevHash, item) do:
+      if toHash == prevHash:
+        break
+      for tx in item.blk.transactions:
+        let txHash = rlpHash(tx)
+        yield txHash
+      prevHash = item.blk.header.parentHash
+    do:
+      break

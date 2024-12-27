@@ -92,10 +92,6 @@ proc newEngineEnv*(conf: var NimbusConf, chainFile: string, enableAuth: bool): E
     chain,
     txPool)
 
-  # txPool must be informed of active head
-  # so it can know the latest account state
-  doAssert txPool.smartHead(chain.latestHeader)
-
   var key: JwtSharedKey
   key.fromHex(jwtSecret).isOkOr:
     echo "JWT SECRET ERROR: ", error
@@ -178,14 +174,12 @@ proc peer*(env: EngineEnv): Peer =
 proc getTxsInPool*(env: EngineEnv, txHashes: openArray[common.Hash32]): seq[Transaction] =
   result = newSeqOfCap[Transaction](txHashes.len)
   for txHash in txHashes:
-    let res = env.txPool.getItem(txHash)
-    if res.isErr: continue
-    let item = res.get
-    if item.reject == txInfoOk:
-      result.add item.tx
+    let item = env.txPool.getItem(txHash).valueOr:
+      continue
+    result.add item.tx
 
 proc numTxsInPool*(env: EngineEnv): int =
-  env.txPool.numTxs
+  env.txPool.len
 
 func version*(env: EngineEnv, time: EthTime): Version =
   if env.com.isPragueOrLater(time):

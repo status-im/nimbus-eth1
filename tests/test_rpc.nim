@@ -187,10 +187,6 @@ proc setupEnv(envFork: HardFork = MergeFork): TestEnv =
     chain = ForkedChainRef.init(com)
     txPool = TxPoolRef.new(chain)
 
-  # txPool must be informed of active head
-  # so it can know the latest account state
-  doAssert txPool.smartHead(chain.latestHeader)
-
   let
     server = newRpcHttpServerWithParams("127.0.0.1:0").valueOr:
       echo "Failed to create rpc server: ", error
@@ -236,13 +232,9 @@ proc generateBlock(env: var TestEnv) =
     tx2 = env.makeTx(acc.privateKey, zeroAddress, 2.u256, 30_000_000_100'u64)
     chain = env.chain
 
-  # txPool must be informed of active head
-  # so it can know the latest account state
-  doAssert xp.smartHead(chain.latestHeader)
-
-  xp.add(PooledTransaction(tx: tx1))
-  xp.add(PooledTransaction(tx: tx2))
-  doAssert(xp.nItems.total == 2)
+  doAssert xp.addTx(tx1).isOk
+  doAssert xp.addTx(tx2).isOk
+  doAssert(xp.len == 2)
 
   # generate block
   com.pos.prevRandao = prevRandao
@@ -261,7 +253,7 @@ proc generateBlock(env: var TestEnv) =
     debugEcho error
     quit(QuitFailure)
 
-  doAssert xp.smartHead(chain.latestHeader)
+  xp.removeNewBlockTxs(blk)
 
   txFrame.persistFixtureBlock()
 
@@ -390,23 +382,41 @@ proc rpcMain*() =
       let recoveredAddr = pubkey.toCanonicalAddress()
       check recoveredAddr == signer # verified
 
-    test "eth_signTransaction, eth_sendTransaction, eth_sendRawTransaction":
+    test "eth_signTransaction, eth_sendTransaction":
       let unsignedTx = TransactionArgs(
         `from`: Opt.some(signer),
         to: Opt.some(contractAddress),
         gas: Opt.some(w3Qty(100000'u)),
         gasPrice: Opt.none(Quantity),
         value: Opt.some(100.u256),
-        nonce: Opt.none(Quantity)
+        nonce: Opt.some(2.Quantity)
         )
 
       let signedTxBytes = await client.eth_signTransaction(unsignedTx)
       let signedTx = rlp.decode(signedTxBytes, Transaction)
       check signer == signedTx.recoverSender().expect("valid signature") # verified
 
-      let hashAhex = await client.eth_sendTransaction(unsignedTx)
-      let hashBhex = await client.eth_sendRawTransaction(signedTxBytes)
-      check hashAhex == hashBhex
+      let txHash = await client.eth_sendTransaction(unsignedTx)
+      const expHash = hash32"0x929d48788096f26cfff70296b16c9974e6b1bf693c0121742e8527bb92b6d074"
+      check txHash == expHash
+
+    test "eth_sendRawTransaction":
+      let unsignedTx = TransactionArgs(
+        `from`: Opt.some(signer),
+        to: Opt.some(contractAddress),
+        gas: Opt.some(w3Qty(100001'u)),
+        gasPrice: Opt.none(Quantity),
+        value: Opt.some(100.u256),
+        nonce: Opt.some(3.Quantity)
+        )
+
+      let signedTxBytes = await client.eth_signTransaction(unsignedTx)
+      let signedTx = rlp.decode(signedTxBytes, Transaction)
+      check signer == signedTx.recoverSender().expect("valid signature") # verified
+
+      let txHash = await client.eth_sendRawTransaction(signedTxBytes)
+      const expHash = hash32"0xeea79669dd904921d203fb720c7228f5c7854e5a768248f494f36fa68c83c191"
+      check txHash == expHash
 
     test "eth_call":
       let ec = TransactionArgs(

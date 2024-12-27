@@ -90,10 +90,6 @@ proc setupEnv*(taskPool: Taskpool): TestEnv =
   let chain = ForkedChainRef.init(com)
   let txPool = TxPoolRef.new(chain)
 
-  # txPool must be informed of active head
-  # so it can know the latest account state
-  doAssert txPool.smartHead(chain.latestHeader)
-
   let rpcServer = setupRpcServer(ethCtx, com, ethNode, txPool, conf, chain)
   let rpcClient = newRpcHttpClient()
   waitFor rpcClient.connect("127.0.0.1", Port(8545), false)

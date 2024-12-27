@@ -9,13 +9,14 @@
 
 import
   results,
-  ../web3_eth_conv,
+  chronicles,
   eth/common/hashes,
-  ../beacon_engine,
   web3/[execution_types, primitives],
+  ../../core/tx_pool,
+  ../web3_eth_conv,
+  ../beacon_engine,
   ../payload_conv,
-  ./api_utils,
-  chronicles
+  ./api_utils
 
 {.push gcsafe, raises:[CatchableError].}
 
@@ -227,6 +228,8 @@ proc newPayload*(ben: BeaconEngineRef,
     ben.setInvalidAncestor(header, blockHash)
     let blockHash = latestValidHash(com.db, parent, ttd)
     return invalidStatus(blockHash, vres.error())
+
+  ben.txPool.removeNewBlockTxs(blk, Opt.some(blockHash))
 
   info "New payload received and validated",
     number = header.number,
