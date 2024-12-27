@@ -534,7 +534,7 @@ proc createStoreHandler*(db: BeaconDb): DbStoreHandler =
           return
 
         # Lot of assumptions here:
-        # - that updates are continious i.e there is no period gaps
+        # - that updates are continuous i.e there is no period gaps
         # - that updates start from startPeriod of content key
         var period = contentKey.lightClientUpdateKey.startPeriod
         for update in updates.asSeq():
