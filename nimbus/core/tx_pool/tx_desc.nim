@@ -293,6 +293,19 @@ proc addTx*(xp: TxPoolRef, ptx: PooledTransaction): Result[void, TxError] =
       return err(txErrorInvalidSignature)
     nonce = xp.getNonce(sender)
 
+  # The downside of this arrangement is the ledger is not
+  # always up to date. The comparison below
+  # does not always filter out transactions with lower nonce.
+  # But it will not affect the correctness of the subsequent
+  # algorithm. In `byPriceAndNonce`, once again transactions
+  # with lower nonce are filtered out, for different reason.
+  # But the end result is same, transactions packed in a block only
+  # have consecutive nonces >= than current account's nonce.
+  #
+  # Calling something like:
+  # if xp.chain.latestHash != xp.parentHash:
+  #   xp.updateVmState()
+  # maybe can solve the accuracy but it is quite expensive.
   if ptx.tx.nonce < nonce:
     return err(txErrorNonceTooSmall)
 
@@ -312,7 +325,6 @@ proc addTx*(xp: TxPoolRef, ptx: PooledTransaction): Result[void, TxError] =
 
 proc addTx*(xp: TxPoolRef, tx: Transaction): Result[void, TxError] =
   xp.addTx(PooledTransaction(tx: tx))
-
 
 iterator byPriceAndNonce*(xp: TxPoolRef): TxItemRef =
   for item in byPriceAndNonce(xp.senderTab, xp.idTab,

@@ -38,9 +38,6 @@ template insertOrReplace*(sn: TxSenderNonceRef, item: TxItemRef) =
   sn.list.findOrInsert(item.nonce).
     expect("insert txitem ok").data = item
 
-func last*(sn: TxSenderNonceRef): auto  =
-  sn.list.le(AccountNonce.high)
-
 func len*(sn: TxSenderNonceRef): auto  =
   sn.list.len
 
@@ -48,56 +45,77 @@ iterator byPriceAndNonce*(senderTab: TxSenderTab,
                           idTab: var TxIdTab,
                           ledger: LedgerRef,
                           baseFee: GasInt): TxItemRef =
-  template removeFirstAndPushTo(sn, byPrice) =
-    let rc = sn.list.ge(AccountNonce.low).valueOr:
-      continue
-    discard sn.list.delete(rc.data.nonce)
-    byPrice.push(rc.data)
 
-  var byNonce: TxSenderTab
-  for address, sn in senderTab:    
-    var
-      nonce = ledger.getNonce(address)      
-      sortedByNonce: TxSenderNonceRef
-    
-    # Remove item with nonce lower than current account.
+  ## This algorithm and comment is taken from ethereumjs but modified.
+  ##
+  ## Returns eligible txs to be packed sorted by price in such a way that the
+  ## nonce orderings within a single account are maintained.
+  ##
+  ## Note, this is not as trivial as it seems from the first look as there are three
+  ## different criteria that need to be taken into account (price, nonce, account
+  ## match), which cannot be done with any plain sorting method, as certain items
+  ## cannot be compared without context.
+  ##
+  ## This method first sorts the list of transactions into individual
+  ## sender accounts and sorts them by nonce.
+  ##    -- This is done by senderTab internal algorithm.
+  ##
+  ## After the account nonce ordering is satisfied, the results are merged back
+  ## together by price, always comparing only the head transaction from each account.
+  ## This is done via a heap to keep it fast.
+  ##
+  ## @param baseFee Provide a baseFee to exclude txs with a lower gasPrice
+  ##
+
+  template getHeadAndPushTo(sn, byPrice, nonce) =
+    let rc = sn.list.ge(nonce)
+    if rc.isOk:
+      let item = rc.get.data
+      item.calculatePrice(baseFee)
+      byPrice.push(item)
+
+  # HeapQueue needs `<` to be overloaded for custom object
+  # and in this case, we want to pop highest price first.
+  # That's why we use '>' instead of '<' in the implementation.
+  func `<`(a, b: TxItemRef): bool {.used.} = a.price > b.price
+  var byPrice = initHeapQueue[TxItemRef]()
+
+  # Fill byPrice with `head item` from each account.
+  # The `head item` is the lowest allowed nonce.
+  for address, sn in senderTab:
+    let nonce = ledger.getNonce(address)
+
+    # Remove item with nonce lower than current account's nonce.
     # Happen when proposed block rejected.
+    # removeNewBlockTxs will also remove this kind of txs,
+    # but in a less explicit way. And probably less thoroughly.
+    # EMV will reject the transaction too, but we filter it here
+    # for efficiency.
     var rc = sn.list.lt(nonce)
     while rc.isOk:
       let item = rc.get.data
       idTab.del(item.id)
       discard sn.list.delete(item.nonce)
       rc = sn.list.lt(nonce)
-    
-    # Check if the account nonce matches the lowest known tx nonce
-    rc = sn.list.ge(nonce)
-    while rc.isOk:
-      let item = rc.get.data
-      item.calculatePrice(baseFee)
-      
-      if sortedByNonce.isNil:
-        sortedByNonce = TxSenderNonceRef.init()
-        byNonce[address] = sortedByNonce
 
-      sortedByNonce.insertOrReplace(item)
-      # If there is a gap, sn.list.eq will return isErr
-      nonce = item.nonce + 1
-      rc = sn.list.eq(nonce)
-
-  # HeapQueue needs `<` to be overloaded for custom object
-  # and in this case, we want to pop highest price first
-  func `<`(a, b: TxItemRef): bool {.used.} = a.price > b.price
-  var byPrice = initHeapQueue[TxItemRef]()
-  for _, sn in byNonce:
-    sn.removeFirstAndPushTo(byPrice)
+    # Check if the account nonce matches the lowest known tx nonce.
+    sn.getHeadAndPushTo(byPrice, nonce)
 
   while byPrice.len > 0:
-    # Retrieve the next best transaction by price
+    # Retrieve the next best transaction by price.
     let best = byPrice.pop()
 
-    # Push in its place the next transaction from the same account
-    let sn = byNonce.getOrDefault(best.sender)
-    if sn.isNil.not and sn.len > 0:
-      sn.removeFirstAndPushTo(byPrice)
+    # Push in its place the next transaction from the same account.
+    let sn = senderTab.getOrDefault(best.sender)
+    if sn.isNil.not:
+      # This algorithm will automatically reject
+      # transaction with nonce gap(best.nonce + 1)
+      # EVM will reject this kind transaction too, but
+      # why do expensive EVM call when we can do it cheaply here.
+      # We don't remove transactions with gap like we do with transactions
+      # of lower nonce? because they might be  packed by future blocks
+      # when the gap is filled. Worst case is they will expired and get purged by
+      # `removeExpiredTxs`
+      sn.getHeadAndPushTo(byPrice, best.nonce + 1)
 
     yield best
