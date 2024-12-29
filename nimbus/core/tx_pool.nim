@@ -8,6 +8,32 @@
 # at your option. This file may not be copied, modified, or distributed except
 # according to those terms.
 
+## Pool coding
+## ===========
+## A piece of code using this pool architecture could look like as follows:
+## ::
+##    # see also unit test examples, e.g. "Block packer tests"
+##    var chain: ForkedChainRef              # to be initialised
+##
+##
+##    var xp = TxPoolRef.new(chain)          # initialise tx-pool
+##    ..
+##
+##    xq.addTx(txs)                          # add transactions ..
+##    ..                                     # .. into the buckets
+##
+##    let bundle = xp.assembleBlock          # fetch current block
+##
+##    xp.removeNewBlockTxs(bundle.blk)       # remove used transactions
+##
+## Why not remove used transactions in `assembleBlock`?
+## ::
+##    There is probability the block we proposed is rejected by
+##    by network or other client produce an accepted block.
+##    The block param passed through `removeNewBlockTxs` can be
+##    a block newer than the the one last produced by `assembleBlock`.
+
+
 {.push raises: [].}
 
 import
