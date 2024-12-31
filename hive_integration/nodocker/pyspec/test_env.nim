@@ -37,9 +37,9 @@ proc genesisHeader(node: JsonNode): Header =
 proc initializeDb(memDB: CoreDbRef, node: JsonNode): Hash32 =
   let
     genesisHeader = node.genesisHeader
-    ledger = LedgerRef.init(memDB)
+    ledger = LedgerRef.init(memDB.baseTxFrame())
 
-  memDB.persistHeaderAndSetHead(genesisHeader).expect("persistHeader no error")
+  ledger.txFrame.persistHeaderAndSetHead(genesisHeader).expect("persistHeader no error")
   setupLedger(node["pre"], ledger)
   ledger.persist()
   doAssert ledger.getStateRoot == genesisHeader.stateRoot

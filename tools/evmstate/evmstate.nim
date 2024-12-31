@@ -117,6 +117,7 @@ proc runExecution(ctx: var StateContext, conf: StateConf, pre: JsonNode): StateR
     parent = ctx.parent,
     header = ctx.header,
     com    = com,
+    txFrame = com.db.baseTxFrame(),
     tracer = tracer)
 
   var gasUsed: GasInt

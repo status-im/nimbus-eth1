@@ -177,7 +177,8 @@ proc latestValidHash*(db: CoreDbRef,
                       ttd: DifficultyInt): Hash32 =
   if parent.isGenesis:
     return default(Hash32)
-  let ptd = db.getScore(parent.parentHash).valueOr(0.u256)
+  # TODO shouldn't this be in forkedchainref?
+  let ptd = db.baseTxFrame().getScore(parent.parentHash).valueOr(0.u256)
   if ptd >= ttd:
     parent.blockHash
   else:

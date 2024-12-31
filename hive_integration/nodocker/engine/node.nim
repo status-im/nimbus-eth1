@@ -42,8 +42,6 @@ proc processBlock(
   ## implementations (but can be savely removed, as well.)
   ## variant of `processBlock()` where the `header` argument is explicitely set.
   template header: Header = blk.header
-  var dbTx = vmState.com.db.ctx.txFrameBegin()
-  defer: dbTx.dispose()
 
   let com = vmState.com
   if com.daoForkSupport and
@@ -61,24 +59,24 @@ proc processBlock(
       vmState.ledger.addBalance(withdrawal.address, withdrawal.weiAmount)
 
   if header.ommersHash != EMPTY_UNCLE_HASH:
-    discard com.db.persistUncles(blk.uncles)
+    discard vmState.ledger.txFrame.persistUncles(blk.uncles)
 
   # EIP-3675: no reward for miner in POA/POS
-  if com.proofOfStake(header):
+  if com.proofOfStake(header, vmState.ledger.txFrame):
     vmState.calculateReward(header, blk.uncles)
 
   vmState.mutateLedger:
     let clearEmptyAccount = com.isSpuriousOrLater(header.number)
     db.persist(clearEmptyAccount)
 
-  dbTx.commit()
+  vmState.ledger.txFrame.commit()
 
   ok()
 
-proc getVmState(c: ChainRef, header: Header):
+proc getVmState(c: ChainRef, header: Header, txFrame: CoreDbTxRef):
                  Result[BaseVMState, void] =
   let vmState = BaseVMState()
-  if not vmState.init(header, c.com, storeSlotHash = false):
+  if not vmState.init(header, c.com, txFrame, storeSlotHash = false):
     debug "Cannot initialise VmState",
       number = header.number
     return err()
@@ -89,33 +87,30 @@ proc getVmState(c: ChainRef, header: Header):
 # intended to accepts invalid block
 proc setBlock*(c: ChainRef; blk: Block): Result[void, string] =
   template header: Header = blk.header
-  let dbTx = c.db.ctx.txFrameBegin()
-  defer: dbTx.dispose()
+  let txFrame = c.db.ctx.txFrameBegin(nil)
+  defer: txFrame.dispose()
 
   # Needed for figuring out whether KVT cleanup is due (see at the end)
   let
-    vmState = c.getVmState(header).valueOr:
+    vmState = c.getVmState(header, txFrame).valueOr:
       return err("no vmstate")
   ? vmState.processBlock(blk)
 
-  ? c.db.persistHeaderAndSetHead(header, c.com.startOfHistory)
+  ? txFrame.persistHeaderAndSetHead(header, c.com.startOfHistory)
 
-  c.db.persistTransactions(header.number, header.txRoot, blk.transactions)
-  c.db.persistReceipts(header.receiptsRoot, vmState.receipts)
+  txFrame.persistTransactions(header.number, header.txRoot, blk.transactions)
+  txFrame.persistReceipts(header.receiptsRoot, vmState.receipts)
 
   if blk.withdrawals.isSome:
-    c.db.persistWithdrawals(header.withdrawalsRoot.get, blk.withdrawals.get)
+    txFrame.persistWithdrawals(header.withdrawalsRoot.get, blk.withdrawals.get)
 
   # update currentBlock *after* we persist it
   # so the rpc return consistent result
   # between eth_blockNumber and eth_syncing
   c.com.syncCurrent = header.number
 
-  dbTx.commit()
+  txFrame.commit()
 
-  # The `c.db.persistent()` call is ignored by the legacy DB which
-  # automatically saves persistently when reaching the zero level transaction.
-  #
   # For the `Aristo` database, this code position is only reached if the
   # the parent state of the first block (as registered in `headers[0]`) was
   # the canonical state before updating. So this state will be saved with

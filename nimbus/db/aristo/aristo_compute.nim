@@ -63,7 +63,7 @@ func leave(batch: var WriteBatch, nibble: uint8) =
   batch.depth -= 1
 
 proc putKeyAtLevel(
-    db: AristoDbRef,
+    db: AristoTxRef,
     rvid: RootedVertexID,
     vtx: VertexRef,
     key: HashKey,
@@ -76,10 +76,10 @@ proc putKeyAtLevel(
   ## corresponding hash!)
 
   if level == -2:
-    ?batch.putVtx(db, rvid, vtx, key)
+    ?batch.putVtx(db.db, rvid, vtx, key)
 
     if batch.count mod batchSize == 0:
-      ?batch.flush(db)
+      ?batch.flush(db.db)
 
       if batch.count mod (batchSize * 100) == 0:
         info "Writing computeKey cache", keys = batch.count, accounts = batch.progress
@@ -121,10 +121,10 @@ template encodeExt(w: var RlpWriter, pfx: NibblesBuf, branchKey: HashKey): HashK
   w.finish().digestTo(HashKey)
 
 proc getKey(
-    db: AristoDbRef, rvid: RootedVertexID, skipLayers: static bool
+    db: AristoTxRef, rvid: RootedVertexID, skipLayers: static bool
 ): Result[((HashKey, VertexRef), int), AristoError] =
   ok when skipLayers:
-    (?db.getKeyUbe(rvid, {GetVtxFlag.PeekCache}), -2)
+    (?db.db.getKeyBe(rvid, {GetVtxFlag.PeekCache}), -2)
   else:
     ?db.getKeyRc(rvid, {})
 
@@ -140,7 +140,7 @@ template childVid(v: VertexRef): VertexID =
     v.startVid
 
 proc computeKeyImpl(
-    db: AristoDbRef,
+    db: AristoTxRef,
     rvid: RootedVertexID,
     batch: var WriteBatch,
     vtx: VertexRef,
@@ -277,11 +277,11 @@ proc computeKeyImpl(
   ok (key, level)
 
 proc computeKeyImpl(
-    db: AristoDbRef, rvid: RootedVertexID, skipLayers: static bool
+    db: AristoTxRef, rvid: RootedVertexID, skipLayers: static bool
 ): Result[HashKey, AristoError] =
   let (keyvtx, level) =
     when skipLayers:
-      (?db.getKeyUbe(rvid, {GetVtxFlag.PeekCache}), -2)
+      (?db.db.getKeyBe(rvid, {GetVtxFlag.PeekCache}), -2)
     else:
       ?db.getKeyRc(rvid, {})
 
@@ -291,7 +291,7 @@ proc computeKeyImpl(
   var batch: WriteBatch
   let res = computeKeyImpl(db, rvid, batch, keyvtx[1], level, skipLayers = skipLayers)
   if res.isOk:
-    ?batch.flush(db)
+    ?batch.flush(db.db)
 
     if batch.count > 0:
       if batch.count >= batchSize * 100:
@@ -302,7 +302,7 @@ proc computeKeyImpl(
   ok (?res)[0]
 
 proc computeKey*(
-    db: AristoDbRef, # Database, top layer
+    db: AristoTxRef, # Database, top layer
     rvid: RootedVertexID, # Vertex to convert
 ): Result[HashKey, AristoError] =
   ## Compute the key for an arbitrary vertex ID. If successful, the length of
@@ -312,7 +312,7 @@ proc computeKey*(
   ## 32 byte value.
   computeKeyImpl(db, rvid, skipLayers = false)
 
-proc computeKeys*(db: AristoDbRef, root: VertexID): Result[void, AristoError] =
+proc computeKeys*(db: AristoTxRef, root: VertexID): Result[void, AristoError] =
   ## Ensure that key cache is topped up with the latest state root
   discard db.computeKeyImpl((root, root), skipLayers = true)
 

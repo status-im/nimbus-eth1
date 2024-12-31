@@ -68,6 +68,18 @@ proc ctx*(db: CoreDbRef): CoreDbCtxRef =
   ##
   db.defCtx
 
+proc baseTxFrame*(db: CoreDbRef): CoreDbTxRef =
+  ## The base tx frame is a staging are for reading and writing "almost"
+  ## directly from/to the database without using any pending frames - when a
+  ## transaction created using `beginTxFrame` is committed, it ultimately ends
+  ## up in the base txframe before being persisted to the database with a
+  ## persist call.
+
+  CoreDbTxRef(
+    ctx: db.ctx,
+    aTx: db.ctx.parent.ariApi.call(baseTxFrame, db.ctx.mpt),
+    kTx: db.ctx.parent.kvtApi.call(baseTxFrame, db.ctx.kvt))
+
 # ------------------------------------------------------------------------------
 # Public base descriptor methods
 # ------------------------------------------------------------------------------
@@ -102,17 +114,14 @@ proc persistent*(
   ##
   db.setTrackNewApi BasePersistentFn
   block body:
-    block:
-      let rc = CoreDbKvtRef(db.ctx).call(persist, db.ctx.kvt)
-      if rc.isOk or rc.error == TxPersistDelayed:
-        # The latter clause is OK: Piggybacking on `Aristo` backend
-        discard
-      elif CoreDbKvtRef(db.ctx).call(txFrameLevel, db.ctx.kvt) != 0:
-        result = err(rc.error.toError($api, TxPending))
-        break body
-      else:
-        result = err(rc.error.toError $api)
-        break body
+    let rc = CoreDbKvtRef(db.ctx).call(persist, db.ctx.kvt)
+    if rc.isOk or rc.error == TxPersistDelayed:
+      # The latter clause is OK: Piggybacking on `Aristo` backend
+      discard
+    else:
+      result = err(rc.error.toError $api)
+      break body
+
     # Having reached here `Aristo` must not fail as both `Kvt` and `Aristo`
     # are kept in sync. So if there is a legit fail condition it mist be
     # caught in the previous clause.
@@ -121,13 +130,13 @@ proc persistent*(
     result = ok()
   db.ifTrackNewApi: debug logTxt, api, elapsed, blockNumber, result
 
-proc stateBlockNumber*(db: CoreDbRef): BlockNumber =
-  ## Rhis function returns the block number stored with the latest `persist()`
+proc stateBlockNumber*(db: CoreDbTxRef): BlockNumber =
+  ## This function returns the block number stored with the latest `persist()`
   ## directive.
   ##
   db.setTrackNewApi BaseStateBlockNumberFn
   result = block:
-    let rc = CoreDbAccRef(db.ctx).call(fetchLastSavedState, db.ctx.mpt)
+    let rc = db.ctx.parent.ariApi.call(fetchLastSavedState, db.aTx)
     if rc.isOk:
       rc.value.serial.BlockNumber
     else:
@@ -169,11 +178,11 @@ proc getKvt*(ctx: CoreDbCtxRef): CoreDbKvtRef =
 
 # ----------- KVT ---------------
 
-proc get*(kvt: CoreDbKvtRef; key: openArray[byte]): CoreDbRc[seq[byte]] =
+proc get*(kvt: CoreDbTxRef; key: openArray[byte]): CoreDbRc[seq[byte]] =
   ## This function always returns a non-empty `seq[byte]` or an error code.
   kvt.setTrackNewApi KvtGetFn
   result = block:
-    let rc = kvt.call(get, kvt.kvt, key)
+    let rc = kvt.ctx.parent.kvtApi.call(get, kvt.kTx, key)
     if rc.isOk:
       ok(rc.value)
     elif rc.error == GetNotFound:
@@ -182,13 +191,13 @@ proc get*(kvt: CoreDbKvtRef; key: openArray[byte]): CoreDbRc[seq[byte]] =
       err(rc.error.toError $api)
   kvt.ifTrackNewApi: debug logTxt, api, elapsed, key=key.toStr, result
 
-proc getOrEmpty*(kvt: CoreDbKvtRef; key: openArray[byte]): CoreDbRc[seq[byte]] =
+proc getOrEmpty*(kvt: CoreDbTxRef; key: openArray[byte]): CoreDbRc[seq[byte]] =
   ## Variant of `get()` returning an empty `seq[byte]` if the key is not found
   ## on the database.
   ##
   kvt.setTrackNewApi KvtGetOrEmptyFn
   result = block:
-    let rc = kvt.call(get, kvt.kvt, key)
+    let rc = kvt.ctx.parent.kvtApi.call(get, kvt.kTx, key)
     if rc.isOk:
       ok(rc.value)
     elif rc.error == GetNotFound:
@@ -197,11 +206,11 @@ proc getOrEmpty*(kvt: CoreDbKvtRef; key: openArray[byte]): CoreDbRc[seq[byte]] =
       err(rc.error.toError $api)
   kvt.ifTrackNewApi: debug logTxt, api, elapsed, key=key.toStr, result
 
-proc len*(kvt: CoreDbKvtRef; key: openArray[byte]): CoreDbRc[int] =
+proc len*(kvt: CoreDbTxRef; key: openArray[byte]): CoreDbRc[int] =
   ## This function returns the size of the value associated with `key`.
   kvt.setTrackNewApi KvtLenFn
   result = block:
-    let rc = kvt.call(len, kvt.kvt, key)
+    let rc = kvt.ctx.parent.kvtApi.call(len, kvt.kTx, key)
     if rc.isOk:
       ok(rc.value)
     elif rc.error == GetNotFound:
@@ -210,10 +219,10 @@ proc len*(kvt: CoreDbKvtRef; key: openArray[byte]): CoreDbRc[int] =
       err(rc.error.toError $api)
   kvt.ifTrackNewApi: debug logTxt, api, elapsed, key=key.toStr, result
 
-proc del*(kvt: CoreDbKvtRef; key: openArray[byte]): CoreDbRc[void] =
+proc del*(kvt: CoreDbTxRef; key: openArray[byte]): CoreDbRc[void] =
   kvt.setTrackNewApi KvtDelFn
   result = block:
-    let rc = kvt.call(del, kvt.kvt, key)
+    let rc = kvt.ctx.parent.kvtApi.call(del, kvt.kTx, key)
     if rc.isOk:
       ok()
     else:
@@ -221,13 +230,13 @@ proc del*(kvt: CoreDbKvtRef; key: openArray[byte]): CoreDbRc[void] =
   kvt.ifTrackNewApi: debug logTxt, api, elapsed, key=key.toStr, result
 
 proc put*(
-    kvt: CoreDbKvtRef;
+    kvt: CoreDbTxRef;
     key: openArray[byte];
     val: openArray[byte];
       ): CoreDbRc[void] =
   kvt.setTrackNewApi KvtPutFn
   result = block:
-    let rc = kvt.call(put, kvt.kvt, key, val)
+    let rc = kvt.ctx.parent.kvtApi.call(put, kvt.kTx, key, val)
     if rc.isOk:
       ok()
     else:
@@ -235,21 +244,21 @@ proc put*(
   kvt.ifTrackNewApi:
     debug logTxt, api, elapsed, key=key.toStr, val=val.toLenStr, result
 
-proc hasKeyRc*(kvt: CoreDbKvtRef; key: openArray[byte]): CoreDbRc[bool] =
+proc hasKeyRc*(kvt: CoreDbTxRef; key: openArray[byte]): CoreDbRc[bool] =
   ## For the argument `key` return `true` if `get()` returned a value on
   ## that argument, `false` if it returned `GetNotFound`, and an error
   ## otherwise.
   ##
   kvt.setTrackNewApi KvtHasKeyRcFn
   result = block:
-    let rc = kvt.call(hasKeyRc, kvt.kvt, key)
+    let rc = kvt.ctx.parent.kvtApi.call(hasKeyRc, kvt.kTx, key)
     if rc.isOk:
       ok(rc.value)
     else:
       err(rc.error.toError $api)
   kvt.ifTrackNewApi: debug logTxt, api, elapsed, key=key.toStr, result
 
-proc hasKey*(kvt: CoreDbKvtRef; key: openArray[byte]): bool =
+proc hasKey*(kvt: CoreDbTxRef; key: openArray[byte]): bool =
   ## Simplified version of `hasKeyRc` where `false` is returned instead of
   ## an error.
   ##
@@ -257,7 +266,7 @@ proc hasKey*(kvt: CoreDbKvtRef; key: openArray[byte]): bool =
   ## `Tables`.
   ##
   kvt.setTrackNewApi KvtHasKeyFn
-  result = kvt.call(hasKeyRc, kvt.kvt, key).valueOr: false
+  result = kvt.ctx.parent.kvtApi.call(hasKeyRc, kvt.kTx, key).valueOr: false
   kvt.ifTrackNewApi: debug logTxt, api, elapsed, key=key.toStr, result
 
 # ------------------------------------------------------------------------------
@@ -274,7 +283,7 @@ proc getAccounts*(ctx: CoreDbCtxRef): CoreDbAccRef =
 # ----------- accounts ---------------
 
 proc proof*(
-    acc: CoreDbAccRef;
+    acc: CoreDbTxRef;
     accPath: Hash32;
       ): CoreDbRc[(seq[seq[byte]],bool)] =
   ## On the accounts MPT, collect the nodes along the `accPath` interpreted as
@@ -285,7 +294,7 @@ proc proof*(
   ##
   acc.setTrackNewApi AccProofFn
   result = block:
-    let rc = acc.call(partAccountTwig, acc.mpt, accPath)
+    let rc = acc.ctx.parent.ariApi.call(partAccountTwig, acc.aTx, accPath)
     if rc.isOk:
       ok(rc.value)
     else:
@@ -293,7 +302,7 @@ proc proof*(
   acc.ifTrackNewApi: debug logTxt, api, elapsed, result
 
 proc fetch*(
-    acc: CoreDbAccRef;
+    acc: CoreDbTxRef;
     accPath: Hash32;
       ): CoreDbRc[CoreDbAccount] =
   ## Fetch the account data record for the particular account indexed by
@@ -301,7 +310,7 @@ proc fetch*(
   ##
   acc.setTrackNewApi AccFetchFn
   result = block:
-    let rc = acc.call(fetchAccountRecord, acc.mpt, accPath)
+    let rc = acc.ctx.parent.ariApi.call(fetchAccountRecord, acc.aTx, accPath)
     if rc.isOk:
       ok(rc.value)
     elif rc.error == FetchPathNotFound:
@@ -311,7 +320,7 @@ proc fetch*(
   acc.ifTrackNewApi: debug logTxt, api, elapsed, accPath=($$accPath), result
 
 proc delete*(
-    acc: CoreDbAccRef;
+    acc: CoreDbTxRef;
     accPath: Hash32;
       ): CoreDbRc[void] =
   ## Delete the particular account indexed by the key `accPath`. This
@@ -319,7 +328,7 @@ proc delete*(
   ##
   acc.setTrackNewApi AccDeleteFn
   result = block:
-    let rc = acc.call(deleteAccountRecord, acc.mpt, accPath)
+    let rc = acc.ctx.parent.ariApi.call(deleteAccountRecord, acc.aTx, accPath)
     if rc.isOk:
       ok()
     elif rc.error == DelPathNotFound:
@@ -331,7 +340,7 @@ proc delete*(
     debug logTxt, api, elapsed, accPath=($$accPath), result
 
 proc clearStorage*(
-    acc: CoreDbAccRef;
+    acc: CoreDbTxRef;
     accPath: Hash32;
       ): CoreDbRc[void] =
   ## Delete all data slots from the storage area associated with the
@@ -339,7 +348,7 @@ proc clearStorage*(
   ##
   acc.setTrackNewApi AccClearStorageFn
   result = block:
-    let rc = acc.call(deleteStorageTree, acc.mpt, accPath)
+    let rc = acc.ctx.parent.ariApi.call(deleteStorageTree, acc.aTx, accPath)
     if rc.isOk or rc.error in {DelStoRootMissing,DelStoAccMissing}:
       ok()
     else:
@@ -348,7 +357,7 @@ proc clearStorage*(
     debug logTxt, api, elapsed, accPath=($$accPath), result
 
 proc merge*(
-    acc: CoreDbAccRef;
+    acc: CoreDbTxRef;
     accPath: Hash32;
     accRec: CoreDbAccount;
       ): CoreDbRc[void] =
@@ -357,7 +366,7 @@ proc merge*(
   ##
   acc.setTrackNewApi AccMergeFn
   result = block:
-    let rc = acc.call(mergeAccountRecord, acc.mpt, accPath, accRec)
+    let rc = acc.ctx.parent.ariApi.call(mergeAccountRecord, acc.aTx, accPath, accRec)
     if rc.isOk:
       ok()
     else:
@@ -366,14 +375,14 @@ proc merge*(
     debug logTxt, api, elapsed, accPath=($$accPath), result
 
 proc hasPath*(
-    acc: CoreDbAccRef;
+    acc: CoreDbTxRef;
     accPath: Hash32;
       ): CoreDbRc[bool] =
   ## Would be named `contains` if it returned `bool` rather than `Result[]`.
   ##
   acc.setTrackNewApi AccHasPathFn
   result = block:
-    let rc = acc.call(hasPathAccount, acc.mpt, accPath)
+    let rc = acc.ctx.parent.ariApi.call(hasPathAccount, acc.aTx, accPath)
     if rc.isOk:
       ok(rc.value)
     else:
@@ -381,12 +390,12 @@ proc hasPath*(
   acc.ifTrackNewApi:
     debug logTxt, api, elapsed, accPath=($$accPath), result
 
-proc getStateRoot*(acc: CoreDbAccRef): CoreDbRc[Hash32] =
+proc getStateRoot*(acc: CoreDbTxRef): CoreDbRc[Hash32] =
   ## This function retrieves the Merkle state hash of the accounts
   ## column (if available.)
   acc.setTrackNewApi AccStateFn
   result = block:
-    let rc = acc.call(fetchStateRoot, acc.mpt)
+    let rc = acc.ctx.parent.ariApi.call(fetchStateRoot, acc.aTx)
     if rc.isOk:
       ok(rc.value)
     else:
@@ -396,7 +405,7 @@ proc getStateRoot*(acc: CoreDbAccRef): CoreDbRc[Hash32] =
 # ------------ storage ---------------
 
 proc slotProof*(
-    acc: CoreDbAccRef;
+    acc: CoreDbTxRef;
     accPath: Hash32;
     stoPath: Hash32;
       ): CoreDbRc[(seq[seq[byte]],bool)] =
@@ -412,7 +421,7 @@ proc slotProof*(
   ##
   acc.setTrackNewApi AccSlotProofFn
   result = block:
-    let rc = acc.call(partStorageTwig, acc.mpt, accPath, stoPath)
+    let rc = acc.ctx.parent.ariApi.call(partStorageTwig, acc.aTx, accPath, stoPath)
     if rc.isOk:
       ok(rc.value)
     else:
@@ -420,14 +429,14 @@ proc slotProof*(
   acc.ifTrackNewApi: debug logTxt, api, elapsed, result
 
 proc slotFetch*(
-    acc: CoreDbAccRef;
+    acc: CoreDbTxRef;
     accPath: Hash32;
     stoPath: Hash32;
       ):  CoreDbRc[UInt256] =
   ## Like `fetch()` but with cascaded index `(accPath,slot)`.
   acc.setTrackNewApi AccSlotFetchFn
   result = block:
-    let rc = acc.call(fetchStorageData, acc.mpt, accPath, stoPath)
+    let rc = acc.ctx.parent.ariApi.call(fetchStorageData, acc.aTx, accPath, stoPath)
     if rc.isOk:
       ok(rc.value)
     elif rc.error == FetchPathNotFound:
@@ -439,14 +448,14 @@ proc slotFetch*(
             stoPath=($$stoPath), result
 
 proc slotDelete*(
-    acc: CoreDbAccRef;
+    acc: CoreDbTxRef;
     accPath: Hash32;
     stoPath: Hash32;
       ):  CoreDbRc[void] =
   ## Like `delete()` but with cascaded index `(accPath,slot)`.
   acc.setTrackNewApi AccSlotDeleteFn
   result = block:
-    let rc = acc.call(deleteStorageData, acc.mpt, accPath, stoPath)
+    let rc = acc.ctx.parent.ariApi.call(deleteStorageData, acc.aTx, accPath, stoPath)
     if rc.isOk or rc.error == DelStoRootMissing:
       # The second `if` clause is insane but legit: A storage column was
       # announced for an account but no data have been added, yet.
@@ -460,14 +469,14 @@ proc slotDelete*(
             stoPath=($$stoPath), result
 
 proc slotHasPath*(
-    acc: CoreDbAccRef;
+    acc: CoreDbTxRef;
     accPath: Hash32;
     stoPath: Hash32;
       ):  CoreDbRc[bool] =
   ## Like `hasPath()` but with cascaded index `(accPath,slot)`.
   acc.setTrackNewApi AccSlotHasPathFn
   result = block:
-    let rc = acc.call(hasPathStorage, acc.mpt, accPath, stoPath)
+    let rc = acc.ctx.parent.ariApi.call(hasPathStorage, acc.aTx, accPath, stoPath)
     if rc.isOk:
       ok(rc.value)
     else:
@@ -477,7 +486,7 @@ proc slotHasPath*(
             stoPath=($$stoPath), result
 
 proc slotMerge*(
-    acc: CoreDbAccRef;
+    acc: CoreDbTxRef;
     accPath: Hash32;
     stoPath: Hash32;
     stoData: UInt256;
@@ -485,7 +494,7 @@ proc slotMerge*(
   ## Like `merge()` but with cascaded index `(accPath,slot)`.
   acc.setTrackNewApi AccSlotMergeFn
   result = block:
-    let rc = acc.call(mergeStorageData, acc.mpt, accPath, stoPath, stoData)
+    let rc = acc.ctx.parent.ariApi.call(mergeStorageData, acc.aTx, accPath, stoPath, stoData)
     if rc.isOk:
       ok()
     else:
@@ -495,7 +504,7 @@ proc slotMerge*(
             stoPath=($$stoPath), stoData, result
 
 proc slotStorageRoot*(
-    acc: CoreDbAccRef;
+    acc: CoreDbTxRef;
     accPath: Hash32;
       ):  CoreDbRc[Hash32] =
   ## This function retrieves the Merkle state hash of the storage data
@@ -504,7 +513,7 @@ proc slotStorageRoot*(
   ##
   acc.setTrackNewApi AccSlotStorageRootFn
   result = block:
-    let rc = acc.call(fetchStorageRoot, acc.mpt, accPath)
+    let rc = acc.ctx.parent.ariApi.call(fetchStorageRoot, acc.aTx, accPath)
     if rc.isOk:
       ok(rc.value)
     else:
@@ -513,7 +522,7 @@ proc slotStorageRoot*(
     debug logTxt, api, elapsed, accPath=($$accPath), result
 
 proc slotStorageEmpty*(
-    acc: CoreDbAccRef;
+    acc: CoreDbTxRef;
     accPath: Hash32;
       ):  CoreDbRc[bool] =
   ## This function returns `true` if the storage data column is empty or
@@ -521,7 +530,7 @@ proc slotStorageEmpty*(
   ##
   acc.setTrackNewApi AccSlotStorageEmptyFn
   result = block:
-    let rc = acc.call(hasStorageData, acc.mpt, accPath)
+    let rc = acc.ctx.parent.ariApi.call(hasStorageData, acc.aTx, accPath)
     if rc.isOk:
       ok(not rc.value)
     else:
@@ -530,13 +539,13 @@ proc slotStorageEmpty*(
     debug logTxt, api, elapsed, accPath=($$accPath), result
 
 proc slotStorageEmptyOrVoid*(
-    acc: CoreDbAccRef;
+    acc: CoreDbTxRef;
     accPath: Hash32;
       ): bool =
   ## Convenience wrapper, returns `true` where `slotStorageEmpty()` would fail.
   acc.setTrackNewApi AccSlotStorageEmptyOrVoidFn
   result = block:
-    let rc = acc.call(hasStorageData, acc.mpt, accPath)
+    let rc = acc.ctx.parent.ariApi.call(hasStorageData, acc.aTx, accPath)
     if rc.isOk:
       not rc.value
     else:
@@ -547,7 +556,7 @@ proc slotStorageEmptyOrVoid*(
 # ------------- other ----------------
 
 proc recast*(
-    acc: CoreDbAccRef;
+    acc: CoreDbTxRef;
     accPath: Hash32;
     accRec: CoreDbAccount;
       ): CoreDbRc[Account] =
@@ -556,7 +565,7 @@ proc recast*(
   ## hash (see `slotStorageRoot()` above) is currently unavailable.
   ##
   acc.setTrackNewApi AccRecastFn
-  let rc = acc.call(fetchStorageRoot, acc.mpt, accPath)
+  let rc = acc.ctx.parent.ariApi.call(fetchStorageRoot, acc.aTx, accPath)
   result = block:
     if rc.isOk:
       ok Account(
@@ -574,21 +583,14 @@ proc recast*(
 # Public transaction related methods
 # ------------------------------------------------------------------------------
 
-proc txFrameLevel*(db: CoreDbRef): int =
-  ## Retrieve transaction level (zero if there is no pending transaction).
-  ##
-  db.setTrackNewApi BaseLevelFn
-  result = CoreDbAccRef(db.ctx).call(txFrameLevel, db.ctx.mpt)
-  db.ifTrackNewApi: debug logTxt, api, elapsed, result
-
-proc txFrameBegin*(ctx: CoreDbCtxRef): CoreDbTxRef =
+proc txFrameBegin*(ctx: CoreDbCtxRef, parent: CoreDbTxRef): CoreDbTxRef =
   ## Constructor
   ##
   ctx.setTrackNewApi BaseNewTxFn
   let
-    kTx = CoreDbKvtRef(ctx).call(txFrameBegin, ctx.kvt).valueOr:
+    kTx = CoreDbKvtRef(ctx).call(txFrameBegin, ctx.kvt, if parent != nil: parent.kTx else: nil).valueOr:
       raiseAssert $api & ": " & $error
-    aTx = CoreDbAccRef(ctx).call(txFrameBegin, ctx.mpt).valueOr:
+    aTx = CoreDbAccRef(ctx).call(txFrameBegin, ctx.mpt, if parent != nil: parent.aTx else: nil).valueOr:
       raiseAssert $api & ": " & $error
   result = ctx.bless CoreDbTxRef(kTx: kTx, aTx: aTx)
   ctx.ifTrackNewApi:
@@ -616,12 +618,12 @@ proc rollback*(tx: CoreDbTxRef) =
 proc dispose*(tx: CoreDbTxRef) =
   tx.setTrackNewApi TxDisposeFn:
     let prvLevel {.used.} = CoreDbAccRef(tx.ctx).call(level, tx.aTx)
-  if CoreDbAccRef(tx.ctx).call(isTop, tx.aTx):
-    CoreDbAccRef(tx.ctx).call(rollback, tx.aTx).isOkOr:
-      raiseAssert $api & ": " & $error
-  if CoreDbKvtRef(tx.ctx).call(isTop, tx.kTx):
-    CoreDbKvtRef(tx.ctx).call(rollback, tx.kTx).isOkOr:
-      raiseAssert $api & ": " & $error
+  # if CoreDbAccRef(tx.ctx).call(isTop, tx.aTx):
+  CoreDbAccRef(tx.ctx).call(rollback, tx.aTx).isOkOr:
+    raiseAssert $api & ": " & $error
+  # if CoreDbKvtRef(tx.ctx).call(isTop, tx.kTx):
+  CoreDbKvtRef(tx.ctx).call(rollback, tx.kTx).isOkOr:
+    raiseAssert $api & ": " & $error
   tx.ifTrackNewApi: debug logTxt, api, elapsed, prvLevel
 
 # ------------------------------------------------------------------------------

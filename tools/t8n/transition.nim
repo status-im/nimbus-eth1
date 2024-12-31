@@ -549,6 +549,7 @@ proc transitionAction*(ctx: var TransContext, conf: T8NConf) =
       parent      = parent,
       header      = header,
       com         = com,
+      txFrame     = com.db.baseTxFrame(),
       storeSlotHash = true
     )
 

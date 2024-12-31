@@ -22,6 +22,7 @@ type
 
   BlockDesc* = object
     blk*: Block
+    txFrame*: CoreDbTxRef
     receipts*: seq[Receipt]
 
   PivotArc* = object
@@ -30,13 +31,15 @@ type
     cursor*: CursorDesc             ## Cursor arc containing `pv` item
 
   ForkedChainRef* = ref object
-    stagingTx*: CoreDbTxRef
-    db*: CoreDbRef
     com*: CommonRef
     blocks*: Table[Hash32, BlockDesc]
     txRecords: Table[Hash32, (Hash32, uint64)]
     baseHash*: Hash32
     baseHeader*: Header
+    baseTxFrame*: CoreDbTxRef
+      # Frame that skips all in-memory state that ForkecChain holds - used to
+      # lookup items straight from the database
+
     cursorHash*: Hash32
     cursorHeader*: Header
     cursorHeads*: seq[CursorDesc]

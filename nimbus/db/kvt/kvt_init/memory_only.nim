@@ -52,11 +52,13 @@ proc init*(
       ): T =
   ## Memory backend constructor.
   ##
-  when B is VoidBackendRef:
-    KvtDbRef(top: LayerRef.init())
+  let db = when B is VoidBackendRef:
+    KvtDbRef(txRef: KvtTxRef(layer: LayerRef.init()))
 
   elif B is MemBackendRef:
-    KvtDbRef(top: LayerRef.init(), backend: memoryBackend())
+    KvtDbRef(txRef: KvtTxRef(layer: LayerRef.init()), backend: memoryBackend())
+  db.txRef.db = db
+  db
 
 proc init*(
     T: type KvtDbRef;                         # Target type

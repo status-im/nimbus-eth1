@@ -174,7 +174,7 @@ template runTxPoolPosTest() =
       return
 
     let
-      sdb = LedgerRef.init(com.db)
+      sdb = LedgerRef.init(com.db.baseTxFrame())
       val = sdb.getStorage(recipient, slot)
       randao = Bytes32(val.toBytesBE)
       bal = sdb.getBalance(feeRecipient)
@@ -227,7 +227,7 @@ template runTxPoolBlobhashTest() =
       return
 
     let
-      sdb = LedgerRef.init(com.db)
+      sdb = LedgerRef.init(com.db.baseTxFrame())
       val = sdb.getStorage(recipient, slot)
       randao = Bytes32(val.toBytesBE)
       bal = sdb.getBalance(feeRecipient)
@@ -293,7 +293,7 @@ template runTxHeadDelta() =
     check com.syncCurrent == 10.BlockNumber
     head = chain.headerByNumber(com.syncCurrent).expect("block header exists")
     let
-      sdb = LedgerRef.init(com.db)
+      sdb = LedgerRef.init(com.db.baseTxFrame())
       expected = u256(txPerblock * numBlocks) * amount
       balance = sdb.getBalance(recipient)
     check balance == expected

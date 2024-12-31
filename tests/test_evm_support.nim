@@ -355,6 +355,7 @@ proc runTestOverflow() =
       header,
       header,
       com,
+      com.db.baseTxFrame()
     )
 
     s.ledger.setCode(codeAddress, @data)

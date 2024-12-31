@@ -61,7 +61,9 @@ func getGasLimit(com: CommonRef; parent: Header): GasInt =
   ## Post Merge rule
   calcGasLimit1559(parent.gasLimit, desiredLimit = com.gasLimit)
 
-proc setupVMState(com: CommonRef; parent: Header, parentHash: Hash32): BaseVMState =
+proc setupVMState(
+    com: CommonRef; parent: Header, parentHash: Hash32,
+    parentFrame: CoreDbTxRef): BaseVMState =
   let
     pos = com.pos
     electra = com.isPragueOrLater(pos.timestamp)
@@ -78,6 +80,7 @@ proc setupVMState(com: CommonRef; parent: Header, parentHash: Hash32): BaseVMSta
       excessBlobGas: calcExcessBlobGas(parent, electra),
       parentHash   : parentHash,
     ),
+    txFrame = com.db.ctx.txFrameBegin(parentFrame),
     com      = com)
 
 template append(tab: var TxSenderTab, sn: TxSenderNonceRef) =
@@ -205,7 +208,7 @@ proc classifyValid(xp: TxPoolRef; tx: Transaction, sender: Address): bool =
 proc init*(xp: TxPoolRef; chain: ForkedChainRef) =
   ## Constructor, returns new tx-pool descriptor.
   xp.vmState = setupVMState(chain.com,
-    chain.latestHeader, chain.latestHash)
+    chain.latestHeader, chain.latestHash, chain.txFrame(chain.latestHash))
   xp.chain = chain
   xp.rmHash = chain.latestHash
 
@@ -241,7 +244,7 @@ func `rmHash=`*(xp: TxPoolRef, val: Hash32) =
 proc updateVmState*(xp: TxPoolRef) =
   ## Reset transaction environment, e.g. before packing a new block
   xp.vmState = setupVMState(xp.chain.com,
-    xp.chain.latestHeader, xp.chain.latestHash)
+    xp.chain.latestHeader, xp.chain.latestHash, xp.chain.txFrame(xp.chain.latestHash()))
 
 # ------------------------------------------------------------------------------
 # Public functions

@@ -257,7 +257,7 @@ proc vmExecCommit(pst: var TxPacker): Result[void, string] =
 proc packerVmExec*(xp: TxPoolRef): Result[TxPacker, string] =
   ## Execute as much transactions as possible.
   let db = xp.vmState.com.db
-  let dbTx = db.ctx.txFrameBegin()
+  let dbTx = db.ctx.txFrameBegin(nil) # TODO use the correct parent frame here!
   defer: dbTx.dispose()
 
   var pst = xp.vmExecInit.valueOr:
