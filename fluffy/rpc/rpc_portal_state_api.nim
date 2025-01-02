@@ -1,5 +1,5 @@
 # fluffy
-# Copyright (c) 2021-2024 Status Research & Development GmbH
+# Copyright (c) 2021-2025 Status Research & Development GmbH
 # Licensed and distributed under either of
 #   * MIT license (license terms in the root directory or at https://opensource.org/licenses/MIT).
 #   * Apache v2 license (license terms in the root directory or at https://www.apache.org/licenses/LICENSE-2.0).
@@ -150,7 +150,9 @@ proc installPortalStateApiHandlers*(rpcServer: RpcServer, p: PortalProtocol) =
 
     contentResult.to0xHex()
 
-  rpcServer.rpc("portal_statePutContent") do(contentKey: string, content: string) -> int:
+  rpcServer.rpc("portal_statePutContent") do(
+    contentKey: string, content: string
+  ) -> PutContentResult:
     let
       keyBytes = ContentKeyByteList.init(hexToSeqByte(contentKey))
       (key, contentId) = validateGetContentKey(keyBytes).valueOr:
@@ -159,8 +161,9 @@ proc installPortalStateApiHandlers*(rpcServer: RpcServer, p: PortalProtocol) =
       contentValue = validateOfferGetRetrieval(key, contentBytes).valueOr:
         raise invalidValueErr()
 
-    p.storeContent(keyBytes, contentId, contentValue)
+      storedLocally = p.storeContent(keyBytes, contentId, contentValue)
+      peerCount = await p.neighborhoodGossip(
+        Opt.none(NodeId), ContentKeysList(@[keyBytes]), @[contentBytes]
+      )
 
-    await p.neighborhoodGossip(
-      Opt.none(NodeId), ContentKeysList(@[keyBytes]), @[contentBytes]
-    )
+    PutContentResult(storedLocally: storedLocally, peerCount: peerCount)

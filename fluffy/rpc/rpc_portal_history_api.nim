@@ -1,5 +1,5 @@
 # fluffy
-# Copyright (c) 2021-2024 Status Research & Development GmbH
+# Copyright (c) 2021-2025 Status Research & Development GmbH
 # Licensed and distributed under either of
 #   * MIT license (license terms in the root directory or at https://opensource.org/licenses/MIT).
 #   * Apache v2 license (license terms in the root directory or at https://www.apache.org/licenses/LICENSE-2.0).
@@ -139,12 +139,16 @@ proc installPortalHistoryApiHandlers*(rpcServer: RpcServer, p: PortalProtocol) =
 
   rpcServer.rpc("portal_historyPutContent") do(
     contentKey: string, contentValue: string
-  ) -> int:
+  ) -> PutContentResult:
     let
-      key = hexToSeqByte(contentKey)
+      key = ContentKeyByteList.init(hexToSeqByte(contentKey))
+      contentId = p.toContentId(key).valueOr:
+        raise invalidKeyErr()
       content = hexToSeqByte(contentValue)
-      contentKeys = ContentKeysList(@[ContentKeyByteList.init(key)])
-      numberOfPeers =
-        await p.neighborhoodGossip(Opt.none(NodeId), contentKeys, @[content])
+      contentKeys = ContentKeysList(@[key])
 
-    return numberOfPeers
+      # TODO: validate content
+      storedLocally = p.storeContent(key, contentId, content)
+      peerCount = await p.neighborhoodGossip(Opt.none(NodeId), contentKeys, @[content])
+
+    PutContentResult(storedLocally: storedLocally, peerCount: peerCount)
