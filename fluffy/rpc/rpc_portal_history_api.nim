@@ -139,12 +139,16 @@ proc installPortalHistoryApiHandlers*(rpcServer: RpcServer, p: PortalProtocol) =
 
   rpcServer.rpc("portal_historyPutContent") do(
     contentKey: string, contentValue: string
-  ) -> int:
+  ) -> PutContentResult:
     let
-      key = hexToSeqByte(contentKey)
+      key = ContentKeyByteList.init(hexToSeqByte(contentKey))
+      contentId = p.toContentId(key).valueOr:
+        raise invalidKeyErr()
       content = hexToSeqByte(contentValue)
-      contentKeys = ContentKeysList(@[ContentKeyByteList.init(key)])
-      numberOfPeers =
-        await p.neighborhoodGossip(Opt.none(NodeId), contentKeys, @[content])
+      contentKeys = ContentKeysList(@[key])
 
-    return numberOfPeers
+      # TODO: validate content
+      storedLocally = p.storeContent(key, contentId, content)
+      peerCount = await p.neighborhoodGossip(Opt.none(NodeId), contentKeys, @[content])
+
+    PutContentResult(storedLocally: storedLocally, peerCount: peerCount)

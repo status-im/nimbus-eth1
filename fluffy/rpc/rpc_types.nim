@@ -62,10 +62,15 @@ type
 
   ContentItem* = array[2, string]
 
+  PutContentResult* = object
+    peerCount*: int
+    storedLocally*: bool
+
 NodeInfo.useDefaultSerializationIn JrpcConv
 RoutingTableInfo.useDefaultSerializationIn JrpcConv
 (string, string).useDefaultSerializationIn JrpcConv
 ContentInfo.useDefaultSerializationIn JrpcConv
+PutContentResult.useDefaultSerializationIn JrpcConv
 
 func getNodeInfo*(r: RoutingTable): NodeInfo =
   NodeInfo(enr: r.localNode.record, nodeId: r.localNode.id)
