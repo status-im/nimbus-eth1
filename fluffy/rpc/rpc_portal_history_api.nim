@@ -47,108 +47,111 @@ proc installPortalHistoryApiHandlers*(rpcServer: RpcServer, p: PortalProtocol) =
         let res = ContentInfo(
           content: foundContent.content.to0xHex(), utpTransfer: foundContent.utpTransfer
         )
-        return JrpcConv.encode(res).JsonString
+        JrpcConv.encode(res).JsonString
       of Nodes:
         let enrs = foundContent.nodes.map(
           proc(n: Node): Record =
             n.record
         )
         let jsonEnrs = JrpcConv.encode(enrs)
-        return ("{\"enrs\":" & jsonEnrs & "}").JsonString
+        ("{\"enrs\":" & jsonEnrs & "}").JsonString
 
   rpcServer.rpc("portal_historyOffer") do(
     enr: Record, contentItems: seq[ContentItem]
   ) -> string:
     let node = toNodeWithAddress(enr)
 
-    var contentItemsToOffer: seq[ContentKV]
+    var contentOffers: seq[ContentKV]
     for contentItem in contentItems:
       let
-        contentKey = hexToSeqByte(contentItem[0])
-        contentValue = hexToSeqByte(contentItem[1])
-        contentKV = ContentKV(
-          contentKey: ContentKeyByteList.init(contentKey), content: contentValue
-        )
-      contentItemsToOffer.add(contentKV)
+        keyBytes = ContentKeyByteList.init(hexToSeqByte(contentItem[0]))
+        offerValueBytes = hexToSeqByte(contentItem[1])
 
-    let offerResult = (await p.offer(node, contentItemsToOffer)).valueOr:
+      contentOffers.add(ContentKV(contentKey: keyBytes, content: offerValueBytes))
+
+    let offerResult = (await p.offer(node, contentOffers)).valueOr:
       raise newException(ValueError, $error)
 
     SSZ.encode(offerResult).to0xHex()
 
   rpcServer.rpc("portal_historyGetContent") do(contentKey: string) -> ContentInfo:
     let
-      key = ContentKeyByteList.init(hexToSeqByte(contentKey))
-      contentId = p.toContentId(key).valueOr:
+      keyBytes = ContentKeyByteList.init(hexToSeqByte(contentKey))
+      contentId = p.toContentId(keyBytes).valueOr:
         raise invalidKeyErr()
-      maybeContent = p.getLocalContent(key, contentId)
+      maybeValueBytes = p.getLocalContent(keyBytes, contentId)
 
-    if maybeContent.isSome():
-      return ContentInfo(content: maybeContent.get().to0xHex(), utpTransfer: false)
+    if maybeValueBytes.isSome():
+      return ContentInfo(content: maybeValueBytes.get().to0xHex(), utpTransfer: false)
 
-    let contentResult = (await p.contentLookup(key, contentId)).valueOr:
+    let contentLookupResult = (await p.contentLookup(keyBytes, contentId)).valueOr:
       raise contentNotFoundErr()
 
-    return ContentInfo(
-      content: contentResult.content.to0xHex(), utpTransfer: contentResult.utpTransfer
+    ContentInfo(
+      content: contentLookupResult.content.to0xHex(),
+      utpTransfer: contentLookupResult.utpTransfer,
     )
 
   rpcServer.rpc("portal_historyTraceGetContent") do(
     contentKey: string
   ) -> TraceContentLookupResult:
     let
-      key = ContentKeyByteList.init(hexToSeqByte(contentKey))
-      contentId = p.toContentId(key).valueOr:
+      keyBytes = ContentKeyByteList.init(hexToSeqByte(contentKey))
+      contentId = p.toContentId(keyBytes).valueOr:
         raise invalidKeyErr()
-      maybeContent = p.getLocalContent(key, contentId)
+      maybeValueBytes = p.getLocalContent(keyBytes, contentId)
 
-    if maybeContent.isSome():
-      return TraceContentLookupResult(content: maybeContent, utpTransfer: false)
-
-    let res = await p.traceContentLookup(key, contentId)
+    if maybeValueBytes.isSome():
+      return TraceContentLookupResult(content: maybeValueBytes, utpTransfer: false)
 
     # TODO: Might want to restructure the lookup result here. Potentially doing
     # the json conversion in this module.
-    if res.content.isSome():
-      return res
-    else:
-      let data = Opt.some(JrpcConv.encode(res.trace).JsonString)
-      raise contentNotFoundErrWithTrace(data)
+    let
+      res = await p.traceContentLookup(keyBytes, contentId)
+      _ = res.content.valueOr:
+        let data = Opt.some(JrpcConv.encode(res.trace).JsonString)
+        raise contentNotFoundErrWithTrace(data)
+
+    res
 
   rpcServer.rpc("portal_historyStore") do(
     contentKey: string, contentValue: string
   ) -> bool:
     let
-      key = ContentKeyByteList.init(hexToSeqByte(contentKey))
-      contentValueBytes = hexToSeqByte(contentValue)
-      contentId = p.toContentId(key).valueOr:
+      keyBytes = ContentKeyByteList.init(hexToSeqByte(contentKey))
+      offerValueBytes = hexToSeqByte(contentValue)
+      contentId = p.toContentId(keyBytes).valueOr:
         raise invalidKeyErr()
 
-    p.storeContent(key, contentId, contentValueBytes)
+    # TODO: Do we need to convert the received offer to a value without proofs before storing?
+
+    p.storeContent(keyBytes, contentId, offerValueBytes)
 
   rpcServer.rpc("portal_historyLocalContent") do(contentKey: string) -> string:
     let
-      key = ContentKeyByteList.init(hexToSeqByte(contentKey))
-      contentId = p.toContentId(key).valueOr:
+      keyBytes = ContentKeyByteList.init(hexToSeqByte(contentKey))
+      contentId = p.toContentId(keyBytes).valueOr:
         raise invalidKeyErr()
 
-      contentResult = p.dbGet(key, contentId).valueOr:
+      valueBytes = p.dbGet(keyBytes, contentId).valueOr:
         raise contentNotFoundErr()
 
-    return contentResult.to0xHex()
+    valueBytes.to0xHex()
 
   rpcServer.rpc("portal_historyPutContent") do(
     contentKey: string, contentValue: string
   ) -> PutContentResult:
     let
-      key = ContentKeyByteList.init(hexToSeqByte(contentKey))
-      contentId = p.toContentId(key).valueOr:
+      keyBytes = ContentKeyByteList.init(hexToSeqByte(contentKey))
+      contentId = p.toContentId(keyBytes).valueOr:
         raise invalidKeyErr()
-      content = hexToSeqByte(contentValue)
-      contentKeys = ContentKeysList(@[key])
+      offerValueBytes = hexToSeqByte(contentValue)
 
-      # TODO: validate content
-      storedLocally = p.storeContent(key, contentId, content)
-      peerCount = await p.neighborhoodGossip(Opt.none(NodeId), contentKeys, @[content])
+      # TODO: Do we need to convert the received offer to a value without proofs before storing?
+      # TODO: validate and store content locally
+      # storedLocally = p.storeContent(keyBytes, contentId, valueBytes)
+      peerCount = await p.neighborhoodGossip(
+        Opt.none(NodeId), ContentKeysList(@[keyBytes]), @[offerValueBytes]
+      )
 
-    PutContentResult(storedLocally: storedLocally, peerCount: peerCount)
+    PutContentResult(storedLocally: false, peerCount: peerCount)
