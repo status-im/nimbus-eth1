@@ -20,6 +20,9 @@ import
 
 {.push gcsafe, raises:[CatchableError].}
 
+logScope:
+  topics = "beacon engine"
+
 template validateVersion(attr, com, apiVersion) =
   let
     version   = attr.version

@@ -20,6 +20,9 @@ import
 
 {.push gcsafe, raises:[CatchableError].}
 
+logScope:
+  topics = "beacon engine"
+
 func validateVersionedHashed(payload: ExecutionPayload,
                               expected: openArray[Hash32]): bool  =
   var versionedHashes: seq[VersionedHash]

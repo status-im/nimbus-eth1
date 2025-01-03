@@ -21,6 +21,9 @@ import
   ../executor/process_block,
   ./forked_chain/[chain_desc, chain_kvt]
 
+logScope:
+  topics = "forked chain"
+
 export
   BlockDesc,
   ForkedChainRef,
@@ -227,13 +230,13 @@ proc writeBaggage(c: ForkedChainRef, target: Hash32) =
     if count > 1:
       notice "Finalized blocks persisted",
         numberOfBlocks = count,
-        last = target.short,
+        target = target.short,
         baseNumber = c.baseHeader.number,
         baseHash = c.baseHash.short
     else:
       debug "Finalized blocks persisted",
         numberOfBlocks = count,
-        last = target.short,
+        taget = target.short,
         baseNumber = c.baseHeader.number,
         baseHash = c.baseHash.short
 
