@@ -1,5 +1,5 @@
 # Nimbus
-# Copyright (c) 2023-2024 Status Research & Development GmbH
+# Copyright (c) 2023-2025 Status Research & Development GmbH
 # Licensed and distributed under either of
 #   * MIT license (license terms in the root directory or at
 #     https://opensource.org/licenses/MIT).
@@ -290,7 +290,7 @@ proc blocksStagedImport*(
     nBlocks = qItem.data.blocks.len
     iv = BnRange.new(qItem.key, qItem.key + nBlocks.uint64 - 1)
 
-  debug info & ": import blocks ..", iv, nBlocks,
+  info info & ": import blocks ..", iv, nBlocks,
     B=ctx.chain.baseNumber.bnStr, L=ctx.chain.latestNumber.bnStr
 
   var maxImport = iv.maxPt
@@ -365,7 +365,7 @@ proc blocksStagedImport*(
   # Update, so it can be followed nicely
   ctx.updateMetrics()
 
-  debug info & ": import done", iv, nBlocks, B=ctx.chain.baseNumber.bnStr,
+  info info & ": import done", iv, nBlocks, B=ctx.chain.baseNumber.bnStr,
     L=ctx.chain.latestNumber.bnStr, F=ctx.layout.final.bnStr
   return true
 

@@ -1,5 +1,5 @@
 # Nimbus
-# Copyright (c) 2023-2024 Status Research & Development GmbH
+# Copyright (c) 2023-2025 Status Research & Development GmbH
 # Licensed and distributed under either of
 #   * MIT license (license terms in the root directory or at
 #     https://opensource.org/licenses/MIT).
@@ -121,7 +121,7 @@ proc startHibernating(ctx: BeaconCtxRef; info: static[string]) =
 
   ctx.hibernate = true
 
-  debug info & ": suspending syncer", L=ctx.chain.latestNumber.bnStr
+  info info & ": suspending syncer", L=ctx.chain.latestNumber.bnStr
 
   # Update, so it can be followed nicely
   ctx.updateMetrics()
@@ -288,7 +288,7 @@ proc updateSyncState*(ctx: BeaconCtxRef; info: static[string]) =
     return
     # Notreached
 
-  debug info & ": sync state changed", prevState, thisState,
+  info info & ": sync state changed", prevState, thisState,
     L=ctx.chain.latestNumber.bnStr,
     C=(if ctx.layout.coupler == ctx.layout.dangling: "D"
        else: ctx.layout.coupler.bnStr),
@@ -304,7 +304,7 @@ proc updateSyncState*(ctx: BeaconCtxRef; info: static[string]) =
      thisState == finishedHeaders and
      ctx.linkIntoFc(info):               # commit downloading headers
     ctx.setupProcessingBlocks info       # start downloading block bodies
-    debug info & ": sync state changed",
+    info info & ": sync state changed",
       prevState=thisState, thisState=ctx.syncState(info)
     return
     # Notreached
@@ -338,7 +338,7 @@ proc updateFinalBlockHeader*(
     # Activate running (unless done yet)
     if ctx.hibernate:
       ctx.hibernate = false
-      debug info & ": activating syncer", B=b.bnStr,
+      info info & ": activating syncer", B=b.bnStr,
         finalised=f.bnStr, head=ctx.target.consHead.bnStr
 
     # Update, so it can be followed nicely
