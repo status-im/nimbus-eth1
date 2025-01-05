@@ -1,5 +1,5 @@
 # Nimbus
-# Copyright (c) 2024 Status Research & Development GmbH
+# Copyright (c) 2024-2025 Status Research & Development GmbH
 # Licensed under either of
 #  * Apache License, version 2.0, ([LICENSE-APACHE](LICENSE-APACHE) or
 #    http://www.apache.org/licenses/LICENSE-2.0)
@@ -801,6 +801,7 @@ proc isCanonicalAncestor*(c: ForkedChainRef,
   canonHash == blockHash
 
 iterator txHashInRange*(c: ForkedChainRef, fromHash: Hash32, toHash: Hash32): Hash32 =
+  ## toHash should be ancestor of fromHash
   ## exclude base from iteration, new block produced by txpool
   ## should not reach base
   var prevHash = fromHash
