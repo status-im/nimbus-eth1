@@ -154,11 +154,11 @@ proc getNonce(xp: TxPoolRef; account: Address): AccountNonce =
 
 proc classifyValid(xp: TxPoolRef; tx: Transaction, sender: Address): bool =
   if tx.tip(xp.baseFee) <= 0.GasInt:
-    warn "Invalid Transaction: No tip"
+    debug "Invalid Transaction: No tip"
     return false
 
   if tx.gasLimit > xp.gasLimit:
-    warn "Invalid Transaction: Gas limit too high", 
+    debug "Invalid Transaction: Gas limit too high", 
       txGasLimit = tx.gasLimit, 
       gasLimit = xp.gasLimit
     return false
@@ -167,7 +167,7 @@ proc classifyValid(xp: TxPoolRef; tx: Transaction, sender: Address): bool =
   # And to at least pay the current data gasprice
   if tx.txType >= TxEip1559:
     if tx.maxFeePerGas < xp.baseFee:
-      warn "Invalid Transaction: maxFeePerGas lower than baseFee", 
+      debug "Invalid Transaction: maxFeePerGas lower than baseFee", 
         maxFeePerGas = tx.maxFeePerGas, 
         baseFee = xp.baseFee
       return false
@@ -178,7 +178,7 @@ proc classifyValid(xp: TxPoolRef; tx: Transaction, sender: Address): bool =
       electra = xp.vmState.fork >= FkPrague
       blobGasPrice = getBlobBaseFee(excessBlobGas, electra)
     if tx.maxFeePerBlobGas < blobGasPrice:
-      warn "Invalid Transaction: maxFeePerBlobGas lower than blobGasPrice", 
+      debug "Invalid Transaction: maxFeePerBlobGas lower than blobGasPrice", 
         maxFeePerBlobGas = tx.maxFeePerBlobGas, 
         blobGasPrice = blobGasPrice
       return false
@@ -188,13 +188,13 @@ proc classifyValid(xp: TxPoolRef; tx: Transaction, sender: Address): bool =
     balance = xp.getBalance(sender)
     gasCost = tx.gasCost
   if balance < gasCost:
-    warn "Invalid Transaction: Insufficient balance for gas cost", 
+    debug "Invalid Transaction: Insufficient balance for gas cost", 
       balance = balance, 
       gasCost = gasCost
     return false
   let balanceOffGasCost = balance - gasCost
   if balanceOffGasCost < tx.value:
-    warn "Invalid Transaction: Insufficient balance for tx value", 
+    debug "Invalid Transaction: Insufficient balance for tx value", 
       balanceOffGasCost = balanceOffGasCost, 
       txValue = tx.value
     return false
@@ -203,22 +203,22 @@ proc classifyValid(xp: TxPoolRef; tx: Transaction, sender: Address): bool =
   # high enough. These checks are optional.
   if tx.txType < TxEip1559:
     if tx.gasPrice < 0:
-      warn "Invalid Transaction: Legacy transaction with invalid gas price", 
+      debug "Invalid Transaction: Legacy transaction with invalid gas price", 
         gasPrice = tx.gasPrice
       return false
 
     # Fall back transaction selector scheme
     if tx.tip(xp.baseFee) < 1.GasInt:
-      warn "Invalid Transaction: Legacy transaction with tip lower than 1"
+      debug "Invalid Transaction: Legacy transaction with tip lower than 1"
       return false
 
   if tx.txType >= TxEip1559:
     if tx.tip(xp.baseFee) < 1.GasInt:
-      warn "Invalid Transaction: EIP-1559 transaction with tip lower than 1"
+      debug "Invalid Transaction: EIP-1559 transaction with tip lower than 1"
       return false
 
     if tx.maxFeePerGas < 1.GasInt:
-      warn "Invalid Transaction: EIP-1559 transaction with maxFeePerGas lower than 1"
+      debug "Invalid Transaction: EIP-1559 transaction with maxFeePerGas lower than 1"
       return false
   
   debug "Valid Transaction",
@@ -312,7 +312,7 @@ proc addTx*(xp: TxPoolRef, ptx: PooledTransaction): Result[void, TxError] =
 
   if ptx.tx.txType == TxEip4844:
     ptx.validateBlobTransactionWrapper().isOkOr:
-      warn "Invalid Transaction: Blob transaction wrapper validation failed", 
+      debug "Invalid Transaction: Blob transaction wrapper validation failed", 
         tx = ptx.tx,
         error = error
       return err(txErrorInvalidBlob)
@@ -325,7 +325,7 @@ proc addTx*(xp: TxPoolRef, ptx: PooledTransaction): Result[void, TxError] =
     ptx.tx,
     xp.nextFork,
     validateFork = true).isOkOr:
-    warn "Invalid Transaction: Basic validation failed", 
+    debug "Invalid Transaction: Basic validation failed", 
       txHash = id,
       error = error
     return err(txErrorBasicValidation)
@@ -349,7 +349,7 @@ proc addTx*(xp: TxPoolRef, ptx: PooledTransaction): Result[void, TxError] =
   #   xp.updateVmState()
   # maybe can solve the accuracy but it is quite expensive.
   if ptx.tx.nonce < nonce:
-    warn "Transaction Rejected: Nonce too small", 
+    debug "Transaction Rejected: Nonce too small", 
       txNonce = ptx.tx.nonce, 
       nonce = nonce,
       sender = sender
@@ -362,14 +362,14 @@ proc addTx*(xp: TxPoolRef, ptx: PooledTransaction): Result[void, TxError] =
     xp.removeExpiredTxs()
 
   if xp.idTab.len >= MAX_POOL_SIZE:
-    warn "Transaction Rejected: TxPool is full"
+    debug "Transaction Rejected: TxPool is full"
     return err(txErrorPoolIsFull)
 
   let item = TxItemRef.new(ptx, id, sender)
   ?xp.insertToSenderTab(item)
   xp.idTab[item.id] = item
 
-  info "Transaction added to txpool", 
+  debug "Transaction added to txpool", 
     txHash = id,
     sender = sender,
     recipient = ptx.tx.getRecipient(sender),
