@@ -9,6 +9,7 @@ FROM debian:stable-slim AS build
 
 ENV DEBIAN_FRONTEND=noninteractive TZ="Etc/UTC"
 ENV NPROC=8
+ENV NIMFLAGS_COMMON="-d:disableMarchNative --gcc.options.debug:'-g1' --clang.options.debug:'-gline-tables-only'"
 
 RUN apt update \
   && apt install make bash build-essential curl git -y
@@ -17,7 +18,14 @@ COPY ./ /nimbus-eth1
 
 WORKDIR /nimbus-eth1
 
-RUN make -j${NPROC} nimbus_execution_client && \
+RUN mv vendor vendor.orig
+
+RUN  --mount=type=cache,target=/nimbus-eth1/build --mount=type=cache,target=/nimbus-eth1/vendor \
+  mv vendor.orig vendor && \
+  make -j${NPROC} NIMFLAGS="${NIMFLAGS_COMMON} --parallelBuild:${NPROC}" V=1 update
+
+RUN  --mount=type=cache,target=/nimbus-eth1/build --mount=type=cache,target=/nimbus-eth1/vendor \
+  make -j${NPROC} NIMFLAGS="${NIMFLAGS_COMMON} --parallelBuild:${NPROC}" nimbus_execution_client && \
   mv build/nimbus_execution_client /usr/local/bin/nimbus_execution_client
 
 # --------------------------------- #
