@@ -811,6 +811,7 @@ proc isCanonicalAncestor*(c: ForkedChainRef,
   canonHash == blockHash
 
 iterator txHashInRange*(c: ForkedChainRef, fromHash: Hash32, toHash: Hash32): Hash32 =
+  ## toHash should be ancestor of fromHash
   ## exclude base from iteration, new block produced by txpool
   ## should not reach base
   var prevHash = fromHash
