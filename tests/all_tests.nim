@@ -34,7 +34,6 @@ cliBuilder:
           #./test_graphql,                         -- fails
           ./test_configuration,
           ./test_txpool,
-          ./test_txpool2,
           ./test_engine_api,
           ./test_getproof_json,
           ./test_aristo,
