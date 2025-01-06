@@ -121,7 +121,7 @@ proc startHibernating(ctx: BeaconCtxRef; info: static[string]) =
 
   ctx.hibernate = true
 
-  info info & ": suspending syncer", L=ctx.chain.latestNumber.bnStr
+  info "Suspending syncer", head=ctx.chain.latestNumber.bnStr
 
   # Update, so it can be followed nicely
   ctx.updateMetrics()
@@ -288,13 +288,13 @@ proc updateSyncState*(ctx: BeaconCtxRef; info: static[string]) =
     return
     # Notreached
 
-  info info & ": sync state changed", prevState, thisState,
-    L=ctx.chain.latestNumber.bnStr,
-    C=(if ctx.layout.coupler == ctx.layout.dangling: "D"
+  info "Sync state changed", prevState, thisState,
+    head=ctx.chain.latestNumber.bnStr,
+    oldBase=(if ctx.layout.coupler == ctx.layout.dangling: "downloaded"
        else: ctx.layout.coupler.bnStr),
-    D=(if ctx.layout.dangling == ctx.layout.head: "H"
+    downloaded=(if ctx.layout.dangling == ctx.layout.head: "target"
        else: ctx.layout.dangling.bnStr),
-    H=ctx.layout.head.bnStr
+    target=ctx.layout.head.bnStr
 
   # So there is a states transition. The only relevant transition here
   # is `collectingHeaders -> finishedHeaders` which will be continued
@@ -304,7 +304,7 @@ proc updateSyncState*(ctx: BeaconCtxRef; info: static[string]) =
      thisState == finishedHeaders and
      ctx.linkIntoFc(info):               # commit downloading headers
     ctx.setupProcessingBlocks info       # start downloading block bodies
-    info info & ": sync state changed",
+    info "Sync state changed",
       prevState=thisState, thisState=ctx.syncState(info)
     return
     # Notreached
@@ -338,8 +338,8 @@ proc updateFinalBlockHeader*(
     # Activate running (unless done yet)
     if ctx.hibernate:
       ctx.hibernate = false
-      info info & ": activating syncer", B=b.bnStr,
-        finalised=f.bnStr, head=ctx.target.consHead.bnStr
+      info "Activating syncer", base=b.bnStr, head=ctx.chain.latestNumber.bnStr,
+        finalised=f.bnStr, target=ctx.target.consHead.bnStr
 
     # Update, so it can be followed nicely
     ctx.updateMetrics()

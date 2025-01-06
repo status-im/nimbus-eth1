@@ -254,7 +254,7 @@ proc blocksStagedCollect*(
   if not haveError:
     buddy.only.nBdyProcErrors = 0
 
-  info info & ": staged blocks", peer, bottomBlock=iv.minPt.bnStr,
+  info "Downloaded blocks", peer, bottomBlock=iv.minPt.bnStr,
     nBlocks=blk.blocks.len, nStaged=ctx.blk.staged.len, ctrl=buddy.ctrl.state,
     bdyErrors=buddy.bdyErrors
 
@@ -290,8 +290,8 @@ proc blocksStagedImport*(
     nBlocks = qItem.data.blocks.len
     iv = BnRange.new(qItem.key, qItem.key + nBlocks.uint64 - 1)
 
-  info info & ": import blocks ..", iv, nBlocks,
-    B=ctx.chain.baseNumber.bnStr, L=ctx.chain.latestNumber.bnStr
+  info "Importing blocks", iv, nBlocks,
+    base=ctx.chain.baseNumber.bnStr, head=ctx.chain.latestNumber.bnStr
 
   var maxImport = iv.maxPt
   block importLoop:
@@ -365,8 +365,8 @@ proc blocksStagedImport*(
   # Update, so it can be followed nicely
   ctx.updateMetrics()
 
-  info info & ": import done", iv, nBlocks, B=ctx.chain.baseNumber.bnStr,
-    L=ctx.chain.latestNumber.bnStr, F=ctx.layout.final.bnStr
+  info "Import done", iv, nBlocks, base=ctx.chain.baseNumber.bnStr,
+    head=ctx.chain.latestNumber.bnStr, target=ctx.layout.final.bnStr
   return true
 
 # ------------------------------------------------------------------------------
