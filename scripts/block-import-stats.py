@@ -2,7 +2,6 @@ import pandas as pd
 import numpy as np
 import matplotlib.pyplot as plt
 import os
-import csv
 import argparse
 
 plt.rcParams["figure.figsize"] = [40, 30]
@@ -52,40 +51,56 @@ def formatBins(df: pd.DataFrame, bins: int):
         return df
 
 
-def write_csv_output(df_stats, df, csv_path):
-    """Write statistics to a CSV file"""
+def write_markdown_output(file,df_stats, df, baseline_name, contender_name):
+    """Write statistics in markdown table format to a file"""
     total_blocks = df.block_number.max() - df.block_number.min()
     time_xt = df.time_x.sum()
     time_yt = df.time_y.sum()
     timet = time_yt - time_xt
 
-    with open(csv_path, 'w', newline='') as csvfile:
-        csv_writer = csv.writer(csvfile)
+    file.write(f"\n## {os.path.basename(baseline_name)} vs {os.path.basename(contender_name)}\n\n")
 
-        csv_writer.writerow(['block_range', 'bps_x', 'bps_y', 'tps_x', 'tps_y',
-                             'time_x', 'time_y', 'bpsd', 'tpsd', 'timed'])
+    file.write("| Block Range | BPS Baseline | BPS Contender | TPS Baseline | TPS Contender | Time Baseline | Time Contender | BPS Diff | TPS Diff | Time Diff |\n")
+    file.write("|------------|--------------|---------------|--------------|---------------|---------------|----------------|----------|----------|-----------|\n")
 
-        for idx, row in df_stats.iterrows():
-            csv_writer.writerow([
-                str(idx),  # block range
-                f"{row['bps_x']:.2f}",
-                f"{row['bps_y']:.2f}",
-                f"{row['tps_x']:.2f}",
-                f"{row['tps_y']:.2f}",
-                prettySecs(row['time_x']),
-                prettySecs(row['time_y']),
-                f"{row['bpsd']:.2%}",
-                f"{row['tpsd']:.2%}",
-                f"{row['timed']:.2%}"
-            ])
+    for idx, row in df_stats.iterrows():
+        file.write(f"| {str(idx)} | {row['bps_x']:.2f} | {row['bps_y']:.2f} | {row['tps_x']:.2f} | {row['tps_y']:.2f} | {prettySecs(row['time_x'])} | {prettySecs(row['time_y'])} | {row['bpsd']:.2%} | {row['tpsd']:.2%} | {row['timed']:.2%} |\n")
 
-        csv_writer.writerow([])
+    file.write("\n## Summary\n\n")
 
-        csv_writer.writerow(['Total Blocks', total_blocks])
-        csv_writer.writerow(['Baseline Time', prettySecs(time_xt)])
-        csv_writer.writerow(['Contender Time', prettySecs(time_yt)])
-        csv_writer.writerow(['Time Difference', prettySecs(timet)])
-        csv_writer.writerow(['Time Difference %', f"{(timet/time_xt):.2%}"])
+    file.write("| Metric | Value |\n")
+    file.write("|--------|-------|\n")
+
+    file.write(f"| Total Blocks | {total_blocks} |\n")
+    file.write(f"| Baseline Time | {prettySecs(time_xt)} |\n")
+    file.write(f"| Contender Time | {prettySecs(time_yt)} |\n")
+    file.write(f"| Time Difference | {prettySecs(timet)} |\n")
+    file.write(f"| Time Difference % | {(timet/time_xt):.2%} |\n")
+
+    file.write("\n## Legend\n\n")
+    file.write("- BPS Diff: Blocks per second difference (+)\n")
+    file.write("- TPS Diff: Transactions per second difference\n")
+    file.write("- Time Diff: Time to process difference (-)\n")
+    file.write("\n(+) = more is better, (-) = less is better\n")
+
+
+def write_standard_output(df_stats, df, baseline_name, contender_name):
+    print(f"{os.path.basename(baseline_name)} vs {os.path.basename(contender_name)}")
+    print(df_stats.to_string(
+        formatters=dict.fromkeys(["bpsd", "tpsd", "timed"], "{:,.2%}".format)
+                   | dict.fromkeys(["bps_x", "bps_y", "tps_x", "tps_y"], "{:,.2f}".format)
+                   | dict.fromkeys(["time_x", "time_y"], prettySecs),
+    ))
+
+    total_blocks = df.block_number.max() - df.block_number.min()
+    time_xt = df.time_x.sum()
+    time_yt = df.time_y.sum()
+    timet = time_yt - time_xt
+
+    print(f"\nblocks: {total_blocks}, baseline: {prettySecs(time_xt)}, contender: {prettySecs(time_yt)}")
+    print(f"Time (total): {prettySecs(timet)}, {(timet/time_xt):.2%}")
+    print("\nbpsd = blocks per sec diff (+), tpsd = txs per sec diff, timed = time to process diff (-)")
+    print("+ = more is better, - = less is better")
 
 
 def main():
@@ -93,7 +108,7 @@ def main():
     parser.add_argument("baseline")
     parser.add_argument("contender")
     parser.add_argument("--plot", action="store_true")
-    parser.add_argument("--csv-output", type=str, help="Path to output CSV file")
+    parser.add_argument("--markdown-output", type=str, help="Output path for markdown format file")
     parser.add_argument(
         "--bins",
         default=10,
@@ -122,8 +137,8 @@ def main():
         print(f"Contender range: {min(contender.index)} to {max(contender.index)}")
         exit(1)
 
-    baseline = baseline.loc[baseline.index >= start and baseline.index <= end]
-    contender = contender.loc[contender.index >= start and contender.index <= end]
+    baseline = baseline.loc[start:end]
+    contender = contender.loc[start:end]
 
     # Join the two frames then interpolate - this helps dealing with runs that
     # haven't been using the same chunking and/or max-blocks
@@ -173,26 +188,11 @@ def main():
         | dict.fromkeys(["bpsd", "tpsd", "timed"], "mean")
     )
 
-    if args.csv_output:
-        write_csv_output(stats_df, df, args.csv_output)
-
-    print(f"{os.path.basename(args.baseline)} vs {os.path.basename(args.contender)}")
-    print(stats_df.to_string(
-        formatters=dict.fromkeys(["bpsd", "tpsd", "timed"], "{:,.2%}".format)
-                   | dict.fromkeys(["bps_x", "bps_y", "tps_x", "tps_y"], "{:,.2f}".format)
-                   | dict.fromkeys(["time_x", "time_y"], prettySecs),
-    ))
-
-    total_blocks = df.block_number.max() - df.block_number.min()
-    time_xt = df.time_x.sum()
-    time_yt = df.time_y.sum()
-    timet = time_yt - time_xt
-
-    print(f"\nblocks: {total_blocks}, baseline: {prettySecs(time_xt)}, contender: {prettySecs(time_yt)}")
-    print(f"Time (total): {prettySecs(timet)}, {(timet/time_xt):.2%}")
-    print("\nbpsd = blocks per sec diff (+), tpsd = txs per sec diff, timed = time to process diff (-)")
-    print("+ = more is better, - = less is better")
-
+    if args.markdown_output:
+        with open(args.markdown_output, 'w') as f:
+            write_markdown_output(f, stats_df, df, args.baseline, args.contender)
+    else:
+        write_standard_output(stats_df, df, args.baseline, args.contender)
 
 if __name__ == "__main__":
     main()
