@@ -235,7 +235,6 @@ proc writeBaggage(c: ForkedChainRef, target: Hash32) =
     if count > 1:
       notice "Finalized blocks persisted",
         numberOfBlocks = count,
-        target = target.short,
         baseNumber = c.baseHeader.number,
         baseHash = c.baseHash.short
     else:
