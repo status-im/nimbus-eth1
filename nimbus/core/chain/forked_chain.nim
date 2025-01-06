@@ -227,6 +227,11 @@ proc writeBaggage(c: ForkedChainRef, target: Hash32) =
       prevHash = header.parentHash
       count.inc
 
+    # Log only if more than one block persisted
+    # This is to avoid log spamming, during normal operation
+    # of the client following the chain
+    # When multiple blocks are persisted together, it's mainly
+    # during `beacon sync` or `nrpc sync`
     if count > 1:
       notice "Finalized blocks persisted",
         numberOfBlocks = count,
