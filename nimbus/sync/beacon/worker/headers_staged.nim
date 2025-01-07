@@ -203,9 +203,9 @@ proc headersStagedCollect*(
   if not haveError:
     buddy.only.nHdrProcErrors = 0
 
-  info "Downloaded a list of headers", peer, topBlock=iv.maxPt.bnStr,
+  info "Downloaded a list of headers", topBlock=iv.maxPt.bnStr,
     nHeaders=lhc.revHdrs.len, nStaged=ctx.hdr.staged.len, isOpportunistic,
-    ctrl=buddy.ctrl.state, hdrErrors=buddy.hdrErrors
+    hdrErrors=buddy.hdrErrors
 
   return true
 

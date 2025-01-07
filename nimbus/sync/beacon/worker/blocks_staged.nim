@@ -254,8 +254,8 @@ proc blocksStagedCollect*(
   if not haveError:
     buddy.only.nBdyProcErrors = 0
 
-  info "Downloaded blocks", peer, bottomBlock=iv.minPt.bnStr,
-    nBlocks=blk.blocks.len, nStaged=ctx.blk.staged.len, ctrl=buddy.ctrl.state,
+  info "Downloaded blocks", bottomBlock=iv.minPt.bnStr,
+    nBlocks=blk.blocks.len, nStaged=ctx.blk.staged.len,
     bdyErrors=buddy.bdyErrors
 
   # Update, so it can be followed nicely
