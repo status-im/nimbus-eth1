@@ -1,5 +1,5 @@
 # fluffy
-# Copyright (c) 2021-2024 Status Research & Development GmbH
+# Copyright (c) 2021-2025 Status Research & Development GmbH
 # Licensed and distributed under either of
 #   * MIT license (license terms in the root directory or at https://opensource.org/licenses/MIT).
 #   * Apache v2 license (license terms in the root directory or at https://www.apache.org/licenses/LICENSE-2.0).
@@ -39,21 +39,21 @@ proc installPortalStateApiHandlers*(rpcServer: RpcServer, p: PortalProtocol) =
       keyBytes = ContentKeyByteList.init(hexToSeqByte(contentKey))
       (key, _) = validateGetContentKey(keyBytes).valueOr:
         raise invalidKeyErr()
-      foundContent = (await p.findContent(node, keyBytes)).valueOr:
+      foundContentResult = (await p.findContent(node, keyBytes)).valueOr:
         raise newException(ValueError, $error)
 
-    case foundContent.kind
+    case foundContentResult.kind
     of Content:
-      let contentValue = foundContent.content
-      validateRetrieval(key, contentValue).isOkOr:
+      let valueBytes = foundContentResult.content
+      validateRetrieval(key, valueBytes).isOkOr:
         raise invalidValueErr()
 
       let res = ContentInfo(
-        content: contentValue.to0xHex(), utpTransfer: foundContent.utpTransfer
+        content: valueBytes.to0xHex(), utpTransfer: foundContentResult.utpTransfer
       )
       JrpcConv.encode(res).JsonString
     of Nodes:
-      let enrs = foundContent.nodes.map(
+      let enrs = foundContentResult.nodes.map(
         proc(n: Node): Record =
           n.record
       )
@@ -65,20 +65,19 @@ proc installPortalStateApiHandlers*(rpcServer: RpcServer, p: PortalProtocol) =
   ) -> string:
     let node = toNodeWithAddress(enr)
 
-    var contentItemsToOffer: seq[ContentKV]
+    var contentOffers: seq[ContentKV]
     for contentItem in contentItems:
       let
         keyBytes = ContentKeyByteList.init(hexToSeqByte(contentItem[0]))
         (key, _) = validateGetContentKey(keyBytes).valueOr:
           raise invalidKeyErr()
-        contentBytes = hexToSeqByte(contentItem[1])
-        contentKV = ContentKV(contentKey: keyBytes, content: contentBytes)
+        offerValueBytes = hexToSeqByte(contentItem[1])
 
-      discard validateOfferGetRetrieval(key, contentBytes).valueOr:
+      discard validateOfferGetRetrieval(key, offerValueBytes).valueOr:
         raise invalidValueErr()
-      contentItemsToOffer.add(contentKV)
+      contentOffers.add(ContentKV(contentKey: keyBytes, content: offerValueBytes))
 
-    let offerResult = (await p.offer(node, contentItemsToOffer)).valueOr:
+    let offerResult = (await p.offer(node, contentOffers)).valueOr:
       raise newException(ValueError, $error)
 
     SSZ.encode(offerResult).to0xHex()
@@ -88,20 +87,22 @@ proc installPortalStateApiHandlers*(rpcServer: RpcServer, p: PortalProtocol) =
       keyBytes = ContentKeyByteList.init(hexToSeqByte(contentKey))
       (key, contentId) = validateGetContentKey(keyBytes).valueOr:
         raise invalidKeyErr()
-      maybeContent = p.getLocalContent(keyBytes, contentId)
-    if maybeContent.isSome():
-      return ContentInfo(content: maybeContent.get().to0xHex(), utpTransfer: false)
+      maybeValueBytes = p.getLocalContent(keyBytes, contentId)
+    if maybeValueBytes.isSome():
+      return ContentInfo(content: maybeValueBytes.get().to0xHex(), utpTransfer: false)
 
     let
-      foundContent = (await p.contentLookup(keyBytes, contentId)).valueOr:
+      contentLookupResult = (await p.contentLookup(keyBytes, contentId)).valueOr:
         raise contentNotFoundErr()
-      contentValue = foundContent.content
+      valueBytes = contentLookupResult.content
 
-    validateRetrieval(key, contentValue).isOkOr:
+    validateRetrieval(key, valueBytes).isOkOr:
       raise invalidValueErr()
-    p.storeContent(keyBytes, contentId, contentValue, cacheContent = true)
+    p.storeContent(keyBytes, contentId, valueBytes, cacheContent = true)
 
-    ContentInfo(content: contentValue.to0xHex(), utpTransfer: foundContent.utpTransfer)
+    ContentInfo(
+      content: valueBytes.to0xHex(), utpTransfer: contentLookupResult.utpTransfer
+    )
 
   rpcServer.rpc("portal_stateTraceGetContent") do(
     contentKey: string
@@ -110,34 +111,36 @@ proc installPortalStateApiHandlers*(rpcServer: RpcServer, p: PortalProtocol) =
       keyBytes = ContentKeyByteList.init(hexToSeqByte(contentKey))
       (key, contentId) = validateGetContentKey(keyBytes).valueOr:
         raise invalidKeyErr()
-      maybeContent = p.getLocalContent(keyBytes, contentId)
-    if maybeContent.isSome():
-      return TraceContentLookupResult(content: maybeContent, utpTransfer: false)
+      maybeValueBytes = p.getLocalContent(keyBytes, contentId)
+    if maybeValueBytes.isSome():
+      return TraceContentLookupResult(content: maybeValueBytes, utpTransfer: false)
 
     # TODO: Might want to restructure the lookup result here. Potentially doing
     # the json conversion in this module.
     let
       res = await p.traceContentLookup(keyBytes, contentId)
-      contentValue = res.content.valueOr:
+      valueBytes = res.content.valueOr:
         let data = Opt.some(JrpcConv.encode(res.trace).JsonString)
         raise contentNotFoundErrWithTrace(data)
 
-    validateRetrieval(key, contentValue).isOkOr:
+    validateRetrieval(key, valueBytes).isOkOr:
       raise invalidValueErr()
-    p.storeContent(keyBytes, contentId, contentValue, cacheContent = true)
+    p.storeContent(keyBytes, contentId, valueBytes, cacheContent = true)
 
     res
 
-  rpcServer.rpc("portal_stateStore") do(contentKey: string, content: string) -> bool:
+  rpcServer.rpc("portal_stateStore") do(
+    contentKey: string, contentValue: string
+  ) -> bool:
     let
       keyBytes = ContentKeyByteList.init(hexToSeqByte(contentKey))
       (key, contentId) = validateGetContentKey(keyBytes).valueOr:
         raise invalidKeyErr()
-      contentBytes = hexToSeqByte(content)
-      contentValue = validateOfferGetRetrieval(key, contentBytes).valueOr:
+      offerValueBytes = hexToSeqByte(contentValue)
+      valueBytes = validateOfferGetRetrieval(key, offerValueBytes).valueOr:
         raise invalidValueErr()
 
-    p.storeContent(keyBytes, contentId, contentValue)
+    p.storeContent(keyBytes, contentId, valueBytes)
 
   rpcServer.rpc("portal_stateLocalContent") do(contentKey: string) -> string:
     let
@@ -145,22 +148,25 @@ proc installPortalStateApiHandlers*(rpcServer: RpcServer, p: PortalProtocol) =
       (_, contentId) = validateGetContentKey(keyBytes).valueOr:
         raise invalidKeyErr()
 
-      contentResult = p.getLocalContent(keyBytes, contentId).valueOr:
+      valueBytes = p.getLocalContent(keyBytes, contentId).valueOr:
         raise contentNotFoundErr()
 
-    contentResult.to0xHex()
+    valueBytes.to0xHex()
 
-  rpcServer.rpc("portal_statePutContent") do(contentKey: string, content: string) -> int:
+  rpcServer.rpc("portal_statePutContent") do(
+    contentKey: string, contentValue: string
+  ) -> PutContentResult:
     let
       keyBytes = ContentKeyByteList.init(hexToSeqByte(contentKey))
       (key, contentId) = validateGetContentKey(keyBytes).valueOr:
         raise invalidKeyErr()
-      contentBytes = hexToSeqByte(content)
-      contentValue = validateOfferGetRetrieval(key, contentBytes).valueOr:
+      offerValueBytes = hexToSeqByte(contentValue)
+      valueBytes = validateOfferGetRetrieval(key, offerValueBytes).valueOr:
         raise invalidValueErr()
 
-    p.storeContent(keyBytes, contentId, contentValue)
+      storedLocally = p.storeContent(keyBytes, contentId, valueBytes)
+      peerCount = await p.neighborhoodGossip(
+        Opt.none(NodeId), ContentKeysList(@[keyBytes]), @[offerValueBytes]
+      )
 
-    await p.neighborhoodGossip(
-      Opt.none(NodeId), ContentKeysList(@[keyBytes]), @[contentBytes]
-    )
+    PutContentResult(storedLocally: storedLocally, peerCount: peerCount)

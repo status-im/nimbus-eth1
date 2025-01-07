@@ -1,5 +1,5 @@
 # Fluffy
-# Copyright (c) 2024 Status Research & Development GmbH
+# Copyright (c) 2024-2025 Status Research & Development GmbH
 # Licensed and distributed under either of
 #   * MIT license (license terms in the root directory or at https://opensource.org/licenses/MIT).
 #   * Apache v2 license (license terms in the root directory or at https://www.apache.org/licenses/LICENSE-2.0).
@@ -333,8 +333,10 @@ proc runBackfillGossipBlockOffersLoop(
 
       if gossipContent:
         try:
-          let numPeers =
-            await portalClient.portal_statePutContent(k.to0xHex(), v.to0xHex())
+          let
+            putContentResult =
+              await portalClient.portal_statePutContent(k.to0xHex(), v.to0xHex())
+            numPeers = putContentResult.peerCount
           if numPeers > 0:
             debug "Offer successfully gossipped to peers: ", numPeers, workerId
           elif numPeers == 0:
