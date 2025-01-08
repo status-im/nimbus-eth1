@@ -1,5 +1,5 @@
 # Fluffy
-# Copyright (c) 2023-2024 Status Research & Development GmbH
+# Copyright (c) 2023-2025 Status Research & Development GmbH
 # Licensed and distributed under either of
 #   * MIT license (license terms in the root directory or at https://opensource.org/licenses/MIT).
 #   * Apache v2 license (license terms in the root directory or at https://www.apache.org/licenses/LICENSE-2.0).
@@ -149,8 +149,18 @@ type
         name: "gossip-concurrency"
       .}: int
     of PortalBridgeCmd.state:
-      web3UrlState* {.desc: "Execution layer JSON-RPC API URL", name: "web3-url".}:
+      web3RpcUrl* {.desc: "Execution layer JSON-RPC API URL", name: "web3-url".}:
         JsonRpcUrl
+
+      portalRpcEndpoints* {.
+        desc:
+          "The number of portal clients to use for gossipping content into the network. " &
+          "Portal clients must be started and running before running the state bridge. " &
+          "The bridge assumes the portal clients are running on the same host using contiguous " &
+          "port numbers in the range starting from the port of the portal-rpc-url",
+        defaultValue: 1,
+        name: "portal-endpoints"
+      .}: uint
 
       stateDir* {.
         desc: "The directory where the state data is stored",
@@ -198,7 +208,7 @@ type
         name: "skip-gossip-for-existing"
       .}: bool
 
-      gossipWorkersCount* {.
+      gossipWorkers* {.
         desc:
           "The number of workers to use for gossiping the state into the portal network",
         defaultValue: 2,

@@ -8,7 +8,7 @@
 {.push raises: [].}
 
 import
-  std/[sequtils, algorithm],
+  std/[sequtils, algorithm, uri, strutils],
   chronicles,
   chronos,
   stint,
@@ -27,20 +27,25 @@ import
 logScope:
   topics = "portal_bridge"
 
-type BlockData = object
-  blockNumber: uint64
-  blockHash: Hash32
-  miner: EthAddress
-  uncles: seq[tuple[miner: EthAddress, blockNumber: uint64]]
-  parentStateRoot: Hash32
-  stateRoot: Hash32
-  stateDiffs: seq[TransactionDiff]
+type
+  BlockData = object
+    blockNumber: uint64
+    blockHash: Hash32
+    miner: EthAddress
+    uncles: seq[tuple[miner: EthAddress, blockNumber: uint64]]
+    parentStateRoot: Hash32
+    stateRoot: Hash32
+    stateDiffs: seq[TransactionDiff]
 
-type BlockOffersRef = ref object
-  blockNumber: uint64
-  accountTrieOffers: seq[AccountTrieOfferWithKey]
-  contractTrieOffers: seq[ContractTrieOfferWithKey]
-  contractCodeOffers: seq[ContractCodeOfferWithKey]
+  BlockOffersRef = ref object
+    blockNumber: uint64
+    accountTrieOffers: seq[AccountTrieOfferWithKey]
+    contractTrieOffers: seq[ContractTrieOfferWithKey]
+    contractCodeOffers: seq[ContractCodeOfferWithKey]
+
+  PortalEndpoint = object
+    rpcUrl: JsonRpcUrl
+    nodeId: NodeId
 
 proc getBlockData(db: DatabaseRef, blockNumber: uint64): Opt[BlockData] =
   let blockDataBytes = db.get(rlp.encode(blockNumber))
@@ -279,15 +284,17 @@ proc recursiveCollectOffer(
 
 proc runBackfillGossipBlockOffersLoop(
     blockOffersQueue: AsyncQueue[BlockOffersRef],
-    portalRpcUrl: JsonRpcUrl,
-    portalNodeId: NodeId,
+    portalEndpoint: PortalEndpoint,
     verifyGossip: bool,
     skipGossipForExisting: bool,
     workerId: int,
 ) {.async: (raises: [CancelledError]).} =
   info "Starting state backfill gossip block offers loop", workerId
 
-  let portalClient = newRpcClientConnect(portalRpcUrl)
+  # Create one client per worker in order to improve performance.
+  # WebSocket connections don't perform well when shared by many
+  # concurrent workers.
+  let portalClient = newRpcClientConnect(portalEndpoint.rpcUrl)
   var blockOffers = await blockOffersQueue.popFirst()
 
   while true:
@@ -308,8 +315,8 @@ proc runBackfillGossipBlockOffersLoop(
       let
         xId = ContentKeyByteList.init(x[0]).toContentId()
         yId = ContentKeyByteList.init(y[0]).toContentId()
-        xDistance = portalNodeId xor xId
-        yDistance = portalNodeId xor yId
+        xDistance = portalEndpoint.nodeId xor xId
+        yDistance = portalEndpoint.nodeId xor yId
 
       if xDistance == yDistance:
         0
@@ -388,7 +395,7 @@ proc runBackfillGossipBlockOffersLoop(
         workerId
 
       # We might need to reconnect if using a WebSocket client
-      await portalClient.tryReconnect(portalRpcUrl)
+      await portalClient.tryReconnect(portalEndpoint.rpcUrl)
       continue
 
     if blockOffers.blockNumber mod 1000 == 0:
@@ -423,16 +430,32 @@ proc runBackfillMetricsLoop(
       info "Block offers queue metrics: ", blockOffersQueueLen = blockOffersQueue.len()
 
 proc runState*(config: PortalBridgeConf) =
-  let
-    portalClient = newRpcClientConnect(config.portalRpcUrl)
-    portalNodeId =
+  var
+    uri = parseUri(config.portalRpcUrl.value)
+    portalEndpoints = newSeq[PortalEndpoint]()
+
+  for i in 0 ..< config.portalRpcEndpoints.int:
+    let
+      rpcUrl =
+        try:
+          JsonRpcUrl.parseCmdArg($uri)
+        except ValueError as e:
+          raiseAssert("Failed to parse JsonRpcUrl")
+      client = newRpcClientConnect(rpcUrl)
+      nodeId =
+        try:
+          (waitFor client.portal_stateNodeInfo()).nodeId
+        except CatchableError as e:
+          fatal "Failed to connect to portal client", error = $e.msg
+          quit QuitFailure
+    info "Connected to portal client with nodeId", nodeId
+    portalEndpoints.add(PortalEndpoint(rpcUrl: rpcUrl, nodeId: nodeId))
+    asyncSpawn client.close() # this connection was only used to collect the nodeId
+    uri.port =
       try:
-        (waitFor portalClient.portal_stateNodeInfo()).nodeId
-      except CatchableError as e:
-        fatal "Failed to connect to portal client", error = $e.msg
-        quit QuitFailure
-  info "Connected to portal client with nodeId", nodeId = portalNodeId
-  asyncSpawn portalClient.close() # this connection was only used to collect the nodeId
+        $(parseInt(uri.port) + 1)
+      except ValueError as e:
+        raiseAssert("Failed to parse int")
 
   let db = DatabaseRef.init(config.stateDir.string).get()
   defer:
@@ -461,16 +484,19 @@ proc runState*(config: PortalBridgeConf) =
     blockOffersQueue = newAsyncQueue[BlockOffersRef](bufferSize)
 
   asyncSpawn runBackfillCollectBlockDataLoop(
-    db, blockDataQueue, config.web3UrlState, config.startBlockNumber
+    db, blockDataQueue, config.web3RpcUrl, config.startBlockNumber
   )
   asyncSpawn runBackfillBuildBlockOffersLoop(
     db, blockDataQueue, blockOffersQueue, config.verifyStateProofs, config.enableGossip,
     config.gossipGenesis,
   )
 
-  for workerId in 1 .. config.gossipWorkersCount.int:
+  for i in 0 ..< config.gossipWorkers.int:
+    let
+      portalEndpoint = portalEndpoints[i mod config.portalRpcEndpoints.int]
+      workerId = i + 1
     asyncSpawn runBackfillGossipBlockOffersLoop(
-      blockOffersQueue, config.portalRpcUrl, portalNodeId, config.verifyGossip,
+      blockOffersQueue, portalEndpoint, config.verifyGossip,
       config.skipGossipForExisting, workerId,
     )
 
