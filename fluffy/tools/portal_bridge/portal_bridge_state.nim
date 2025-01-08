@@ -24,6 +24,9 @@ import
   ./state_bridge/[database, state_diff, world_state_helper, offers_builder],
   ./[portal_bridge_conf, portal_bridge_common]
 
+logScope:
+  topics = "portal_bridge"
+
 type BlockData = object
   blockNumber: uint64
   blockHash: Hash32
@@ -321,6 +324,7 @@ proc runBackfillGossipBlockOffersLoop(
 
     var retryGossip = false
     for k, v in offersMap:
+      # Check if we need to gossip the content
       var gossipContent = true
       if skipGossipForExisting:
         try:
@@ -328,9 +332,10 @@ proc runBackfillGossipBlockOffersLoop(
           if contentInfo.content.len() > 0:
             gossipContent = false
         except CatchableError as e:
-          warn "Failed to find content with key: ",
+          debug "Unable to find existing content. Will attempt to gossip content: ",
             contentKey = k.to0xHex(), error = e.msg, workerId
 
+      # Gossip the content into the network
       if gossipContent:
         try:
           let
@@ -348,16 +353,14 @@ proc runBackfillGossipBlockOffersLoop(
           retryGossip = true
           break
 
-    if retryGossip:
-      await sleepAsync(3.seconds)
-      warn "Retrying state gossip for block number: ",
-        blockNumber = blockOffers.blockNumber, workerId
-      # We might need to reconnect if using a WebSocket client
-      await portalClient.tryReconnect(portalRpcUrl)
-      continue
+    # Check if the content can be found in the network
+    var foundContentKeys = newSeq[seq[byte]]()
+    if verifyGossip and not retryGossip:
+      # wait for the peers to be updated
+      let waitTimeMs = 200 + (offersMap.len() * 20)
+      await sleepAsync(waitTimeMs.milliseconds)
+        # wait time is proportional to the number of offers
 
-    if verifyGossip:
-      await sleepAsync(100.milliseconds) # wait for the peers to be updated
       for k, _ in offersMap:
         try:
           let contentInfo = await portalClient.portal_stateGetContent(k.to0xHex())
@@ -365,23 +368,34 @@ proc runBackfillGossipBlockOffersLoop(
             error "Found empty contentValue", workerId
             retryGossip = true
             break
+          foundContentKeys.add(k)
         except CatchableError as e:
-          warn "Failed to find content with key: ",
+          warn "Unable to find content with key. Will retry gossipping content:",
             contentKey = k.to0xHex(), error = e.msg, workerId
           retryGossip = true
           break
 
-      if retryGossip:
-        await sleepAsync(3.seconds)
-        warn "Retrying state gossip for block number: ",
-          blockNumber = blockOffers.blockNumber
-        continue
+    # Retry if any failures occurred or if the content wasn't found in the network
+    if retryGossip:
+      await sleepAsync(3.seconds)
+
+      # Don't retry gossip for content that was found in the network
+      for key in foundContentKeys:
+        offersMap.del(key)
+      warn "Retrying state gossip for block: ",
+        blockNumber = blockOffers.blockNumber,
+        remainingOffers = offersMap.len(),
+        workerId
+
+      # We might need to reconnect if using a WebSocket client
+      await portalClient.tryReconnect(portalRpcUrl)
+      continue
 
     if blockOffers.blockNumber mod 1000 == 0:
-      info "Finished gossiping offers for block number: ",
+      info "Finished gossiping offers for block: ",
         workerId, blockNumber = blockOffers.blockNumber, offerCount = offersMap.len()
     else:
-      debug "Finished gossiping offers for block number: ",
+      debug "Finished gossiping offers for block: ",
         workerId, blockNumber = blockOffers.blockNumber, offerCount = offersMap.len()
 
     blockOffers = await blockOffersQueue.popFirst()
