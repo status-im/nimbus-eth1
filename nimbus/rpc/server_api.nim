@@ -314,7 +314,7 @@ proc setupServerAPI*(api: ServerAPIRef, server: RpcServer, ctx: EthContext) =
     api.txPool.addTx(pooledTx).isOkOr:
       raise newException(ValueError, $error)
 
-    info "Submitted Transaction",
+    info "Submitted transaction",
       endpoint = "eth_sendRawTransaction",
       txHash = txHash,
       sender = sender,
@@ -539,7 +539,7 @@ proc setupServerAPI*(api: ServerAPIRef, server: RpcServer, ctx: EthContext) =
       raise newException(ValueError, $error)
 
     let txHash = rlpHash(signedTx)
-    info "Submitted Transaction",
+    info "Submitted transaction",
       endpoint = "eth_sendTransaction",
       txHash = txHash,
       sender = address,
