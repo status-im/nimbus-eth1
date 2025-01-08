@@ -362,7 +362,7 @@ proc addTx*(xp: TxPoolRef, ptx: PooledTransaction): Result[void, TxError] =
     xp.removeExpiredTxs()
 
   if xp.idTab.len >= MAX_POOL_SIZE:
-    debug "Transaction rejected: TxPool is full"
+    debug "Transaction rejected: txpool is full"
     return err(txErrorPoolIsFull)
 
   let item = TxItemRef.new(ptx, id, sender)
