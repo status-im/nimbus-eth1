@@ -34,7 +34,7 @@ if [ ${PIPESTATUS[0]} != 4 ]; then
 fi
 
 OPTS="h:n:d"
-LONGOPTS="help,nodes:,data-dir:,run-tests,log-level:,base-port:,base-rpc-port:,trusted-block-root:,portal-bridge,base-metrics-port:,reuse-existing-data-dir,timeout:,kill-old-processes,skip-build,portal-subnetworks:,disable-state-root-validation,radius:"
+LONGOPTS="help,nodes:,data-dir:,run-tests,log-level:,base-port:,base-rpc-port:,ws,trusted-block-root:,portal-bridge,base-metrics-port:,reuse-existing-data-dir,timeout:,kill-old-processes,skip-build,portal-subnetworks:,disable-state-root-validation,radius:"
 
 # default values
 
@@ -48,6 +48,7 @@ LOG_LEVEL="INFO"
 BASE_PORT="9000"
 BASE_METRICS_PORT="8008"
 BASE_RPC_PORT="10000"
+WS_ENABLED="0"
 REUSE_EXISTING_DATA_DIR="0"
 TIMEOUT_DURATION="0"
 KILL_OLD_PROCESSES="0"
@@ -72,6 +73,7 @@ E.g.: $(basename "$0") --nodes ${NUM_NODES} --data-dir "${DATA_DIR}" # defaults
   --base-port                       bootstrap node's discv5 port (default: ${BASE_PORT})
   --base-rpc-port                   bootstrap node's RPC port (default: ${BASE_RPC_PORT})
   --base-metrics-port               bootstrap node's metrics server port (default: ${BASE_METRICS_PORT})
+  --ws                              use WebSocket instead of HTTP for the RPC endpoints (default: false)
   --portal-bridge                   run a portal bridge attached to the bootstrap node
   --trusted-block-root              recent trusted finalized block root to initialize the consensus light client from
   --run-tests                       when enabled run tests else use "htop" to see the fluffy processes without doing any tests
@@ -135,6 +137,10 @@ while true; do
     --base-metrics-port)
       BASE_METRICS_PORT="$2"
       shift 2
+      ;;
+    --ws)
+      WS_ENABLED="1"
+      shift
       ;;
     --reuse-existing-data-dir)
       REUSE_EXISTING_DATA_DIR="1"
@@ -324,6 +330,11 @@ for NUM_NODE in $(seq 0 $(( NUM_NODES - 1 ))); do
     done
   fi
 
+  RPC=rpc
+  if [[ "${WS_ENABLED}" == "1" ]]; then
+    RPC="ws"
+  fi
+
   # Running with bits-per-hop of 1 to make the lookups more likely requiring
   # to request to nodes over the network instead of having most of them in the
   # own routing table.
@@ -335,16 +346,17 @@ for NUM_NODE in $(seq 0 $(( NUM_NODES - 1 ))); do
     --data-dir="${NODE_DATA_DIR}" \
     --network="none" \
     ${BOOTSTRAP_ARG} \
-    --rpc \
-    --rpc-address="127.0.0.1" \
-    --rpc-port="$(( BASE_RPC_PORT + NUM_NODE ))" \
-    --rpc-api=eth,debug,portal,portal_debug,discovery \
+    --${RPC} \
+    --${RPC}-address="127.0.0.1" \
+    --${RPC}-port="$(( BASE_RPC_PORT + NUM_NODE ))" \
+    --${RPC}-api=eth,debug,portal,portal_debug,discovery \
     --metrics \
     --metrics-address="127.0.0.1" \
     --metrics-port="$(( BASE_METRICS_PORT + NUM_NODE ))" \
     --table-ip-limit=1024 \
     --bucket-ip-limit=24 \
-    --bits-per-hop=1 \
+    --bits-per-hop=5 \
+    --debug-max-gossip-nodes=4 \
     --portal-subnetworks="${PORTAL_SUBNETWORKS}" \
     --disable-state-root-validation="${DISABLE_STATE_ROOT_VALIDATION}" \
     ${TRUSTED_BLOCK_ROOT_ARG} \
