@@ -1,5 +1,5 @@
 # Nimbus
-# Copyright (c) 2023-2024 Status Research & Development GmbH
+# Copyright (c) 2023-2025 Status Research & Development GmbH
 # Licensed and distributed under either of
 #   * MIT license (license terms in the root directory or at
 #     https://opensource.org/licenses/MIT).
@@ -254,8 +254,8 @@ proc blocksStagedCollect*(
   if not haveError:
     buddy.only.nBdyProcErrors = 0
 
-  trace info & ": staged blocks", peer, bottomBlock=iv.minPt.bnStr,
-    nBlocks=blk.blocks.len, nStaged=ctx.blk.staged.len, ctrl=buddy.ctrl.state,
+  info "Downloaded blocks", bottomBlock=iv.minPt.bnStr,
+    nBlocks=blk.blocks.len, nStaged=ctx.blk.staged.len,
     bdyErrors=buddy.bdyErrors
 
   # Update, so it can be followed nicely
@@ -290,8 +290,9 @@ proc blocksStagedImport*(
     nBlocks = qItem.data.blocks.len
     iv = BnRange.new(qItem.key, qItem.key + nBlocks.uint64 - 1)
 
-  debug info & ": import blocks ..", iv, nBlocks,
-    B=ctx.chain.baseNumber.bnStr, L=ctx.chain.latestNumber.bnStr
+  info "Importing blocks", iv, nBlocks,
+    base=ctx.chain.baseNumber.bnStr, head=ctx.chain.latestNumber.bnStr,
+    target=ctx.layout.final.bnStr
 
   var maxImport = iv.maxPt
   block importLoop:
@@ -365,8 +366,8 @@ proc blocksStagedImport*(
   # Update, so it can be followed nicely
   ctx.updateMetrics()
 
-  debug info & ": import done", iv, nBlocks, B=ctx.chain.baseNumber.bnStr,
-    L=ctx.chain.latestNumber.bnStr, F=ctx.layout.final.bnStr
+  info "Import done", iv, nBlocks, base=ctx.chain.baseNumber.bnStr,
+    head=ctx.chain.latestNumber.bnStr, target=ctx.layout.final.bnStr
   return true
 
 # ------------------------------------------------------------------------------

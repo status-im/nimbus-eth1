@@ -1,5 +1,5 @@
 # Nimbus
-# Copyright (c) 2023-2024 Status Research & Development GmbH
+# Copyright (c) 2023-2025 Status Research & Development GmbH
 # Licensed and distributed under either of
 #   * MIT license (license terms in the root directory or at
 #     https://opensource.org/licenses/MIT).
@@ -76,7 +76,7 @@ proc headerStagedUpdateTarget*(
       if hash != ctx.target.finalHash:
         # Oops
         buddy.ctrl.zombie = true
-        trace info & ": finalised header hash mismatch", peer, hash,
+        debug info & ": finalised header hash mismatch", peer, hash,
           expected=ctx.target.finalHash
       else:
         ctx.updateFinalBlockHeader(rc.value[0], ctx.target.finalHash, info)
@@ -162,7 +162,7 @@ proc headersStagedCollect*(
            fetchHeadersProcessErrThresholdCount < buddy.only.nHdrProcErrors:
           # Make sure that this peer does not immediately reconnect
           buddy.ctrl.zombie = true
-        trace info & ": current header list discarded", peer, iv, ivReq,
+        debug info & ": current header list discarded", peer, iv, ivReq,
           isOpportunistic, ctrl=buddy.ctrl.state, hdrErrors=buddy.hdrErrors
         ctx.headersUnprocCommit(iv.len, iv)
         # At this stage allow a task switch so that some other peer might try
@@ -173,7 +173,7 @@ proc headersStagedCollect*(
 
       # So it is deterministic and there were some headers downloaded already.
       # Turn back unused data and proceed with staging.
-      trace info & ": partially failed", peer, iv, ivReq,
+      debug info & ": partially failed", peer, iv, ivReq,
         unused=BnRange.new(iv.minPt,ivTop), isOpportunistic
       # There is some left over to store back
       ctx.headersUnprocCommit(iv.len, iv.minPt, ivTop)
@@ -203,9 +203,9 @@ proc headersStagedCollect*(
   if not haveError:
     buddy.only.nHdrProcErrors = 0
 
-  trace info & ": staged a list of headers", peer, topBlock=iv.maxPt.bnStr,
+  info "Downloaded a list of headers", topBlock=iv.maxPt.bnStr,
     nHeaders=lhc.revHdrs.len, nStaged=ctx.hdr.staged.len, isOpportunistic,
-    ctrl=buddy.ctrl.state, hdrErrors=buddy.hdrErrors
+    hdrErrors=buddy.hdrErrors
 
   return true
 
@@ -223,7 +223,7 @@ proc headersStagedProcess*(ctx: BeaconCtxRef; info: static[string]): int =
       dangling = ctx.layout.dangling
       iv = BnRange.new(qItem.key - qItem.data.revHdrs.len.uint64 + 1, qItem.key)
     if iv.maxPt+1 < dangling:
-      trace info & ": there is a gap", iv, D=dangling.bnStr, nStashed=result
+      debug info & ": there is a gap", iv, D=dangling.bnStr, nStashed=result
       break # there is a gap -- come back later
 
     # Overlap must not happen
@@ -240,7 +240,7 @@ proc headersStagedProcess*(ctx: BeaconCtxRef; info: static[string]): int =
     if qItem.data.hash != ctx.dbHeaderParentHash(dangling).expect "Hash32":
       # Discard wrong chain and merge back the range into the `unproc` list.
       ctx.headersUnprocCommit(0,iv)
-      trace info & ": discarding staged header list", iv, D=dangling.bnStr,
+      debug info & ": discarding staged header list", iv, D=dangling.bnStr,
         nStashed=result, nDiscarded=qItem.data.revHdrs.len
       break
 
