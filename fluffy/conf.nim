@@ -191,7 +191,7 @@ type
     .}: bool
 
     rpcAddress* {.
-      desc: "Listening address of the RPC server",
+      desc: "Listening address of the HTTP JSON-RPC server",
       defaultValue: defaultAdminListenAddress,
       defaultValueDesc: $defaultAdminListenAddressDesc,
       name: "rpc-address"
@@ -203,7 +203,7 @@ type
 
     rpcApi* {.
       desc:
-        "Enable specific set of RPC APIs (available: eth, debug, portal, portal_debug, discovery)",
+        "Enable specific set of JSON-RPC APIs over HTTP (available: eth, debug, portal, portal_debug, discovery)",
       defaultValue: defaultRpcApis,
       defaultValueDesc: $defaultRpcApisDesc,
       name: "rpc-api"
@@ -213,11 +213,26 @@ type
       desc: "Enable the WebSocket JSON-RPC server", defaultValue: false, name: "ws"
     .}: bool
 
+    wsAddress* {.
+      desc: "Listening address of the WebSocket JSON-RPC server",
+      defaultValue: defaultAdminListenAddress,
+      defaultValueDesc: $defaultAdminListenAddressDesc,
+      name: "ws-address"
+    .}: IpAddress
+
     wsPort* {.
       desc: "Port for the WebSocket JSON-RPC server",
       defaultValue: 8546,
       name: "ws-port"
     .}: Port
+
+    wsApi* {.
+      desc:
+        "Enable specific set of JSON-RPC APIs over WebSocket (available: eth, debug, portal, portal_debug, discovery)",
+      defaultValue: defaultRpcApis,
+      defaultValueDesc: $defaultRpcApisDesc,
+      name: "ws-api"
+    .}: seq[string]
 
     wsCompression* {.
       desc: "Enable compression for the WebSocket JSON-RPC server",

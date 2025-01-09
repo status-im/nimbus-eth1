@@ -245,13 +245,11 @@ proc run(
 
   ## Start the JSON-RPC APIs
 
-  let rpcFlags = getRpcFlags(config.rpcApi)
-
   proc setupRpcServer(
-      rpcServer: RpcHttpServer | RpcWebSocketServer
+      rpcServer: RpcHttpServer | RpcWebSocketServer, flags: set[RpcFlag]
   ) {.raises: [CatchableError].} =
-    for rpcFlag in rpcFlags:
-      case rpcFlag
+    for flag in flags:
+      case flag
       of RpcFlag.eth:
         rpcServer.installEthApiHandlers(
           node.historyNetwork, node.beaconLightClient, node.stateNetwork
@@ -291,29 +289,33 @@ proc run(
 
     rpcServer.start()
 
-  let rpcHttpServer =
-    if config.rpcEnabled:
-      let
-        ta = initTAddress(config.rpcAddress, config.rpcPort)
-        rpcHttpServer = RpcHttpServer.new()
-      # 16mb to comfortably fit 2-3mb blocks + blobs + json overhead
-      rpcHttpServer.addHttpServer(ta, maxRequestBodySize = 16 * 1024 * 1024)
-      setupRpcServer(rpcHttpServer)
+  let
+    rpcFlags = getRpcFlags(config.rpcApi)
+    wsFlags = getRpcFlags(config.wsApi)
 
-      Opt.some(rpcHttpServer)
-    else:
-      Opt.none(RpcHttpServer)
+    rpcHttpServer =
+      if config.rpcEnabled:
+        let
+          ta = initTAddress(config.rpcAddress, config.rpcPort)
+          rpcHttpServer = RpcHttpServer.new()
+        # 16mb to comfortably fit 2-3mb blocks + blobs + json overhead
+        rpcHttpServer.addHttpServer(ta, maxRequestBodySize = 16 * 1024 * 1024)
+        rpcHttpServer.setupRpcServer(rpcFlags)
 
-  let rpcWsServer =
-    if config.wsEnabled:
-      let
-        ta = initTAddress(config.rpcAddress, config.wsPort)
-        rpcWsServer = newRpcWebSocketServer(ta, compression = config.wsCompression)
-      setupRpcServer(rpcWsServer)
+        Opt.some(rpcHttpServer)
+      else:
+        Opt.none(RpcHttpServer)
 
-      Opt.some(rpcWsServer)
-    else:
-      Opt.none(RpcWebSocketServer)
+    rpcWsServer =
+      if config.wsEnabled:
+        let
+          ta = initTAddress(config.wsAddress, config.wsPort)
+          rpcWsServer = newRpcWebSocketServer(ta, compression = config.wsCompression)
+        rpcWsServer.setupRpcServer(wsFlags)
+
+        Opt.some(rpcWsServer)
+      else:
+        Opt.none(RpcWebSocketServer)
 
   return (node, metricsServer, rpcHttpServer, rpcWsServer)
 
