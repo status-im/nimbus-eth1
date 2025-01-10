@@ -1,4 +1,4 @@
-# Copyright (c) 2018-2024 Status Research & Development GmbH
+# Copyright (c) 2018-2025 Status Research & Development GmbH
 # Licensed under either of
 #  * Apache License, version 2.0, ([LICENSE-APACHE](LICENSE-APACHE))
 #  * MIT license ([LICENSE-MIT](LICENSE-MIT))
@@ -28,7 +28,9 @@ import
   common/chain_config,
   db/opts
 
-export net, defs
+from beacon_chain/nimbus_binary_common import setupLogging, StdoutLogKind
+
+export net, defs, StdoutLogKind
 
 
 const
@@ -217,13 +219,16 @@ type
     logLevel* {.
       separator: "\pLOGGING AND DEBUGGING OPTIONS:"
       desc: "Sets the log level for process and topics (" & logLevelDesc & ")"
-      defaultValue: LogLevel.INFO
-      defaultValueDesc: $LogLevel.INFO
-      name: "log-level" }: LogLevel
+      defaultValue: "INFO"
+      defaultValueDesc: "Info topic level logging"
+      name: "log-level" }: string
 
-    logFile* {.
-      desc: "Specifies a path for the written Json log file"
-      name: "log-file" }: Option[OutFile]
+    logStdout* {.
+      hidden
+      desc: "Specifies what kind of logs should be written to stdout (auto, colors, nocolors, json)"
+      defaultValueDesc: "auto"
+      defaultValue: StdoutLogKind.Auto
+      name: "log-format" .}: StdoutLogKind
 
     logMetricsEnabled* {.
       desc: "Enable metrics logging"
@@ -816,6 +821,8 @@ proc makeConfig*(cmdLine = commandLineParams()): NimbusConf
     {.pop.}
   except CatchableError as e:
     raise e
+
+  setupLogging(result.logLevel, result.logStdout, none(OutFile))
 
   var networkId = result.getNetworkId()
 

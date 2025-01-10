@@ -1,5 +1,5 @@
 # Nimbus
-# Copyright (c) 2018-2024 Status Research & Development GmbH
+# Copyright (c) 2018-2025 Status Research & Development GmbH
 # Licensed under either of
 #  * Apache License, version 2.0, ([LICENSE-APACHE](LICENSE-APACHE))
 #  * MIT license ([LICENSE-MIT](LICENSE-MIT))
@@ -174,14 +174,6 @@ proc preventLoadingDataDirForTheWrongNetwork(db: CoreDbRef; conf: NimbusConf) =
     quit(QuitFailure)
 
 proc run(nimbus: NimbusNode, conf: NimbusConf) =
-  ## logging
-  setLogLevel(conf.logLevel)
-  if conf.logFile.isSome:
-    let logFile = string conf.logFile.get()
-    defaultChroniclesStream.output.outFile = nil # to avoid closing stdout
-    discard defaultChroniclesStream.output.open(logFile, fmAppend)
-
-  setupFileLimits()
 
   info "Launching execution client",
       version = FullVersionStr,
@@ -290,19 +282,18 @@ proc run(nimbus: NimbusNode, conf: NimbusConf) =
 when isMainModule:
   var nimbus = NimbusNode(state: NimbusState.Starting, ctx: newEthContext())
 
+  ## Processing command line arguments
+  let conf = makeConfig()
+
+  setupFileLimits()
+
   ## Ctrl+C handling
   proc controlCHandler() {.noconv.} =
     when defined(windows):
       # workaround for https://github.com/nim-lang/Nim/issues/4057
       setupForeignThreadGc()
     nimbus.state = NimbusState.Stopping
-    echo "\nCtrl+C pressed. Waiting for a graceful shutdown."
+    notice "\nCtrl+C pressed. Waiting for a graceful shutdown."
   setControlCHook(controlCHandler)
-
-  ## Show logs on stdout until we get the user's logging choice
-  discard defaultChroniclesStream.output.open(stdout)
-
-  ## Processing command line arguments
-  let conf = makeConfig()
 
   nimbus.run(conf)
