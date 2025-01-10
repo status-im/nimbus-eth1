@@ -355,7 +355,7 @@ for NUM_NODE in $(seq 0 $(( NUM_NODES - 1 ))); do
     --metrics-port="$(( BASE_METRICS_PORT + NUM_NODE ))" \
     --table-ip-limit=1024 \
     --bucket-ip-limit=24 \
-    --bits-per-hop=5 \
+    --bits-per-hop=1 \
     --debug-max-gossip-nodes=4 \
     --portal-subnetworks="${PORTAL_SUBNETWORKS}" \
     --disable-state-root-validation="${DISABLE_STATE_ROOT_VALIDATION}" \
