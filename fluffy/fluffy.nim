@@ -261,9 +261,7 @@ proc run(
           rpcServer.installPortalCommonApiHandlers(
             node.historyNetwork.value.portalProtocol, PortalSubnetwork.history
           )
-          rpcServer.installPortalHistoryApiHandlers(
-            node.historyNetwork.value.portalProtocol
-          )
+          rpcServer.installPortalHistoryApiHandlers(node.historyNetwork.value)
         if node.beaconNetwork.isSome():
           rpcServer.installPortalCommonApiHandlers(
             node.beaconNetwork.value.portalProtocol, PortalSubnetwork.beacon

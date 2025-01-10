@@ -1,5 +1,5 @@
 # Fluffy
-# Copyright (c) 2021-2024 Status Research & Development GmbH
+# Copyright (c) 2021-2025 Status Research & Development GmbH
 # Licensed and distributed under either of
 #   * MIT license (license terms in the root directory or at https://opensource.org/licenses/MIT).
 #   * Apache v2 license (license terms in the root directory or at https://www.apache.org/licenses/LICENSE-2.0).
@@ -34,12 +34,15 @@ func validateHeaderBytes*(
     bytes: openArray[byte], id: uint64 | Hash32
 ): Result[Header, string] =
   # Note:
-  # No additional quick-checks are addedhere such as timestamp vs the optional
-  # (later forks) added fields. E.g. Shanghai field, Cancun fields,
+  # No additional quick-checks are added here such as timestamp vs the optional
+  # (per hardfork) added fields. E.g. Shanghai field, Cancun fields,
   # zero ommersHash, etc.
   # This is because the block hash comparison + canonical verification will
-  # catch these. For comparison by number this is will also be caught by the
+  # catch these. For comparison by number this is will be caught by the
   # canonical verification.
+  # The hash or number verification does still need to be done because else
+  # it would only be verified that a header is canonical and not that the
+  # returned header is the one that was requested.
   let header = ?decodeRlp(bytes, Header)
 
   ?header.validateHeader(id)

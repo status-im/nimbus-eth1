@@ -13,6 +13,7 @@ import
   json_serialization/std/tables,
   stew/byteutils,
   ../network/wire/portal_protocol,
+  ../network/history/history_network,
   ./rpc_types
 
 {.warning[UnusedImport]: off.}
@@ -29,7 +30,10 @@ TraceObject.useDefaultSerializationIn JrpcConv
 NodeMetadata.useDefaultSerializationIn JrpcConv
 TraceResponse.useDefaultSerializationIn JrpcConv
 
-proc installPortalHistoryApiHandlers*(rpcServer: RpcServer, p: PortalProtocol) =
+proc installPortalHistoryApiHandlers*(rpcServer: RpcServer, n: HistoryNetwork) =
+  template p(): PortalProtocol =
+    n.portalProtocol
+
   rpcServer.rpc("portal_historyFindContent") do(
     enr: Record, contentKey: string
   ) -> JsonString:
@@ -79,13 +83,23 @@ proc installPortalHistoryApiHandlers*(rpcServer: RpcServer, p: PortalProtocol) =
       keyBytes = ContentKeyByteList.init(hexToSeqByte(contentKey))
       contentId = p.toContentId(keyBytes).valueOr:
         raise invalidKeyErr()
-      maybeValueBytes = p.getLocalContent(keyBytes, contentId)
 
-    if maybeValueBytes.isSome():
-      return ContentInfo(content: maybeValueBytes.get().to0xHex(), utpTransfer: false)
+    p.getLocalContent(keyBytes, contentId).isErrOr:
+      return ContentInfo(content: value.to0xHex(), utpTransfer: false)
 
-    let contentLookupResult = (await p.contentLookup(keyBytes, contentId)).valueOr:
-      raise contentNotFoundErr()
+    let
+      contentLookupResult = (await p.contentLookup(keyBytes, contentId)).valueOr:
+        raise contentNotFoundErr()
+      valueBytes = contentLookupResult.content
+
+    # Note:
+    # Validate the content before returning & storing it. This is currently
+    # quite ambiguously described in the specifications. Doing it anyhow as it
+    # is rather a high level call.
+    # TODO: Should lookup retries be done in case validation fails?
+    (await n.validateContent(valueBytes, keyBytes)).isOkOr:
+      raise invalidValueErr()
+    p.storeContent(keyBytes, contentId, valueBytes, cacheContent = true)
 
     ContentInfo(
       content: contentLookupResult.content.to0xHex(),
@@ -99,18 +113,23 @@ proc installPortalHistoryApiHandlers*(rpcServer: RpcServer, p: PortalProtocol) =
       keyBytes = ContentKeyByteList.init(hexToSeqByte(contentKey))
       contentId = p.toContentId(keyBytes).valueOr:
         raise invalidKeyErr()
-      maybeValueBytes = p.getLocalContent(keyBytes, contentId)
 
-    if maybeValueBytes.isSome():
-      return TraceContentLookupResult(content: maybeValueBytes, utpTransfer: false)
+    p.getLocalContent(keyBytes, contentId).isErrOr:
+      # TODO: Fill in the trace field here.
+      return TraceContentLookupResult(content: Opt.some(value), utpTransfer: false)
 
     # TODO: Might want to restructure the lookup result here. Potentially doing
     # the json conversion in this module.
     let
       res = await p.traceContentLookup(keyBytes, contentId)
-      _ = res.content.valueOr:
+      valueBytes = res.content.valueOr:
         let data = Opt.some(JrpcConv.encode(res.trace).JsonString)
         raise contentNotFoundErrWithTrace(data)
+
+    # Note: Same remark as for `portal_historyGetContent`
+    (await n.validateContent(valueBytes, keyBytes)).isOkOr:
+      raise invalidValueErr()
+    p.storeContent(keyBytes, contentId, valueBytes, cacheContent = true)
 
     res
 
@@ -123,8 +142,6 @@ proc installPortalHistoryApiHandlers*(rpcServer: RpcServer, p: PortalProtocol) =
       contentId = p.toContentId(keyBytes).valueOr:
         raise invalidKeyErr()
 
-    # TODO: Do we need to convert the received offer to a value without proofs before storing?
-
     p.storeContent(keyBytes, contentId, offerValueBytes)
 
   rpcServer.rpc("portal_historyLocalContent") do(contentKey: string) -> string:
@@ -133,7 +150,7 @@ proc installPortalHistoryApiHandlers*(rpcServer: RpcServer, p: PortalProtocol) =
       contentId = p.toContentId(keyBytes).valueOr:
         raise invalidKeyErr()
 
-      valueBytes = p.dbGet(keyBytes, contentId).valueOr:
+      valueBytes = p.getLocalContent(keyBytes, contentId).valueOr:
         raise contentNotFoundErr()
 
     valueBytes.to0xHex()
@@ -147,9 +164,11 @@ proc installPortalHistoryApiHandlers*(rpcServer: RpcServer, p: PortalProtocol) =
         raise invalidKeyErr()
       offerValueBytes = hexToSeqByte(contentValue)
 
-      # TODO: Do we need to convert the received offer to a value without proofs before storing?
       # TODO: validate and store content locally
-      # storedLocally = p.storeContent(keyBytes, contentId, valueBytes)
+      # Note: Not validating content as this would have a high impact on bridge
+      # gossip performance. Specification is quite ambiguous on what kind of
+      # validation should be done here anyhow.
+      # As no validation is done here, the content is not stored locally.
       peerCount = await p.neighborhoodGossip(
         Opt.none(NodeId), ContentKeysList(@[keyBytes]), @[offerValueBytes]
       )
