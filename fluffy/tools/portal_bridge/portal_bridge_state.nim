@@ -189,10 +189,10 @@ proc runBackfillCollectBlockDataLoop(
         )
         bridge.db.putBlockData(currentBlockNumber, blockData)
 
-        parentStateRoot = blockObject.stateRoot
         blockData
 
       await bridge.blockDataQueue.addLast(blockData)
+      parentStateRoot = blockData.stateRoot
       inc currentBlockNumber
   except CancelledError:
     trace "collectBlockDataLoop canceled"
