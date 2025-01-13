@@ -209,7 +209,12 @@ proc syncToEngineApi(conf: NRpcConf) {.async.} =
       # Make the forkchoiceUpdated call based, after loading attributes based on the consensus fork
       let fcuResponse = await rpcClient.forkchoiceUpdated(state, payloadAttributes)
       debug "forkchoiceUpdated", state = state, response = fcuResponse
-      info "forkchoiceUpdated Request sent", response = fcuResponse.payloadStatus.status
+      if fcuResponse.payloadStatus.status != PayloadExecutionStatus.valid:
+        error "Forkchoice not validated", status = fcuResponse.payloadStatus.status
+        quit(QuitFailure)
+      else:
+        info "forkchoiceUpdated Request sent",
+          response = fcuResponse.payloadStatus.status
 
   while running and currentBlockNumber < headBlck.header.number:
     var isAvailable = false
@@ -250,19 +255,24 @@ proc syncToEngineApi(conf: NRpcConf) {.async.} =
             versionedHashes = versioned_hashes
         elif consensusFork == ConsensusFork.Electra or
             consensusFork == ConsensusFork.Fulu:
-          # Calculate the versioned hashes from the kzg commitments
-          let versioned_hashes = mapIt(
-            forkyBlck.message.body.blob_kzg_commitments,
-            engine_api.VersionedHash(kzg_commitment_to_versioned_hash(it)),
-          )
-          # Execution Requests for Electra
-          let execution_requests =
-            @[
-              SSZ.encode(forkyBlck.message.body.execution_requests.deposits),
-              SSZ.encode(forkyBlck.message.body.execution_requests.withdrawals),
-              SSZ.encode(forkyBlck.message.body.execution_requests.consolidations),
-            ]
-          # TODO: Update to `newPayload()` once nim-web3 is updated
+          let
+            # Calculate the versioned hashes from the kzg commitments
+            versioned_hashes = mapIt(
+              forkyBlck.message.body.blob_kzg_commitments,
+              engine_api.VersionedHash(kzg_commitment_to_versioned_hash(it)),
+            )
+            # Execution Requests for Electra
+            execution_requests = block:
+              var requests: seq[seq[byte]]
+              for request_type, request_data in [
+                SSZ.encode(forkyBlck.message.body.execution_requests.deposits),
+                SSZ.encode(forkyBlck.message.body.execution_requests.withdrawals),
+                SSZ.encode(forkyBlck.message.body.execution_requests.consolidations),
+              ]:
+                if request_data.len > 0:
+                  requests.add @[request_type.byte] & request_data
+              requests
+
           payloadResponse = await rpcClient.engine_newPayloadV4(
             payload,
             versioned_hashes,
