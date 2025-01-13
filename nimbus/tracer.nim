@@ -168,7 +168,10 @@ proc traceTransactionImpl(
   let
     tracerInst = newLegacyTracer(tracerFlags)
     cc = activate CaptCtxRef.init(com, header)
-    vmState = BaseVMState.new(header, com, com.db.baseTxFrame(), storeSlotHash = true).valueOr: return newJNull()
+    txFrame = com.db.baseTxFrame()
+    parent = txFrame.getBlockHeader(header.parentHash).valueOr:
+      return newJNull()
+    vmState = BaseVMState.new(parent, header, com, txFrame, storeSlotHash = true)
     ledger = vmState.ledger
 
   defer: cc.release()
@@ -247,8 +250,10 @@ proc dumpBlockStateImpl(
     # only need a stack dump when scanning for internal transaction address
     captureFlags = {DisableMemory, DisableStorage, EnableAccount}
     tracerInst = newLegacyTracer(captureFlags)
-    vmState = BaseVMState.new(header, com, com.db.baseTxFrame(), tracerInst, storeSlotHash = true).valueOr:
+    txFrame = com.db.baseTxFrame()
+    parent = txFrame.getBlockHeader(header.parentHash).valueOr:
       return newJNull()
+    vmState = BaseVMState.new(parent, header, com, txFrame, tracerInst, storeSlotHash = true)
     miner = vmState.coinbase()
 
   defer: cc.release()
@@ -311,8 +316,10 @@ proc traceBlockImpl(
     cc = activate CaptCtxRef.init(com, header)
     tracerInst = newLegacyTracer(tracerFlags)
     # Tracer needs a database where the reverse slot hash table has been set up
-    vmState = BaseVMState.new(header, com, com.db.baseTxFrame(), tracerInst, storeSlotHash = true).valueOr:
+    txFrame = com.db.baseTxFrame()
+    parent = txFrame.getBlockHeader(header.parentHash).valueOr:
       return newJNull()
+    vmState = BaseVMState.new(parent, header, com, txFrame, tracerInst, storeSlotHash = true)
 
   defer: cc.release()
 
