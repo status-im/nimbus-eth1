@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 
-# Copyright (c) 2020-2024 Status Research & Development GmbH. Licensed under
+# Copyright (c) 2020-2025 Status Research & Development GmbH. Licensed under
 # either of:
 # - Apache License, version 2.0
 # - MIT license
@@ -301,7 +301,7 @@ for BINARY in ${BINARIES}; do
       | grep -v "failed to insert symbol" \
       | grep -v "could not find object file symbol for symbol" \
       | grep -v "while processing" \
-      | grep -v "warning: line table paramters mismatch. Cannot emit." \
+      | grep -v "warning: line table parameters mismatch. Cannot emit." \
       || true
     cp -a "./build/${BINARY}.dSYM" "${DIST_PATH}/build/"
   fi

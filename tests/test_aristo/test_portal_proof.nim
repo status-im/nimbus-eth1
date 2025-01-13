@@ -1,5 +1,5 @@
 # Nimbus
-# Copyright (c) 2023-2024 Status Research & Development GmbH
+# Copyright (c) 2023-2025 Status Research & Development GmbH
 # Licensed under either of
 #  * Apache License, version 2.0, ([LICENSE-APACHE](LICENSE-APACHE) or
 #    http://www.apache.org/licenses/LICENSE-2.0)
@@ -18,8 +18,7 @@ import
   unittest2,
   ../test_helpers,
   ../../nimbus/db/aristo,
-  ../../nimbus/db/aristo/[aristo_desc, aristo_get, aristo_hike, aristo_layers,
-                          aristo_part],
+  ../../nimbus/db/aristo/[aristo_desc, aristo_get, aristo_hike, aristo_part],
   ../../nimbus/db/aristo/aristo_part/part_debug
 
 type
@@ -69,7 +68,7 @@ proc preLoadAristoDb(jKvp: JsonNode): PartStateRef =
   ps
 
 
-proc collectAddresses(node: JsonNode, collect: var HashSet[Address]) =
+func collectAddresses(node: JsonNode, collect: var HashSet[Address]) =
   case node.kind:
     of JObject:
       for k,v in node.pairs:

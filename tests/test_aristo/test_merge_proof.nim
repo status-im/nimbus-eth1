@@ -1,5 +1,5 @@
 # Nimbus
-# Copyright (c) 2023-2024 Status Research & Development GmbH
+# Copyright (c) 2023-2025 Status Research & Development GmbH
 # Licensed under either of
 #  * Apache License, version 2.0, ([LICENSE-APACHE](LICENSE-APACHE) or
 #    http://www.apache.org/licenses/LICENSE-2.0)
@@ -13,13 +13,11 @@ import
   results,
   unittest2,
   ../../nimbus/db/opts,
-  ../../nimbus/db/core_db/backend/aristo_rocksdb,
   ../../nimbus/db/aristo/[
     aristo_check,
     aristo_desc,
     aristo_init/persistent,
     aristo_part,
-    aristo_part/part_debug,
     aristo_tx],
   ../replay/xcheck,
   ./test_helpers

@@ -21,6 +21,9 @@ import
   ../executor/process_block,
   ./forked_chain/[chain_desc, chain_kvt]
 
+logScope:
+  topics = "forked chain"
+
 export
   BlockDesc,
   ForkedChainRef,
@@ -189,11 +192,22 @@ proc writeBaggage(c: ForkedChainRef, target: Hash32) =
       prevHash = header.parentHash
       count.inc
 
-    notice "Finalized blocks persisted",
-      numberOfBlocks = count,
-      last = target.short,
-      baseNumber = c.baseHeader.number,
-      baseHash = c.baseHash.short
+    # Log only if more than one block persisted
+    # This is to avoid log spamming, during normal operation
+    # of the client following the chain
+    # When multiple blocks are persisted together, it's mainly
+    # during `beacon sync` or `nrpc sync`
+    if count > 1:
+      notice "Finalized blocks persisted",
+        numberOfBlocks = count,
+        baseNumber = c.baseHeader.number,
+        baseHash = c.baseHash.short
+    else:
+      debug "Finalized blocks persisted",
+        numberOfBlocks = count,
+        taget = target.short,
+        baseNumber = c.baseHeader.number,
+        baseHash = c.baseHash.short
 
 proc updateBase(c: ForkedChainRef, pvarc: PivotArc) =
   ## Remove obsolete chains, example:

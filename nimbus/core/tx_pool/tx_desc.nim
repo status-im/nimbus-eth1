@@ -1,5 +1,5 @@
 # Nimbus
-# Copyright (c) 2018-2024 Status Research & Development GmbH
+# Copyright (c) 2018-2025 Status Research & Development GmbH
 # Licensed under either of
 #  * Apache License, version 2.0, ([LICENSE-APACHE](LICENSE-APACHE) or
 #    http://www.apache.org/licenses/LICENSE-2.0)
@@ -11,6 +11,7 @@
 {.push raises: [].}
 
 import
+  chronicles,
   std/times,
   eth/eip1559,
   eth/common/transaction_utils,
@@ -30,6 +31,9 @@ import
   ./tx_item
 
 from eth/common/eth_types_rlp import rlpHash
+
+logScope:
+  topics = "txpool"
 
 type
   TxPoolRef* = ref object
@@ -153,15 +157,22 @@ proc getNonce(xp: TxPoolRef; account: Address): AccountNonce =
 
 proc classifyValid(xp: TxPoolRef; tx: Transaction, sender: Address): bool =
   if tx.tip(xp.baseFee) <= 0.GasInt:
+    debug "Invalid transaction: No tip"
     return false
 
   if tx.gasLimit > xp.gasLimit:
+    debug "Invalid transaction: Gas limit too high", 
+      txGasLimit = tx.gasLimit, 
+      gasLimit = xp.gasLimit
     return false
 
   # Ensure that the user was willing to at least pay the base fee
   # And to at least pay the current data gasprice
   if tx.txType >= TxEip1559:
     if tx.maxFeePerGas < xp.baseFee:
+      debug "Invalid transaction: maxFeePerGas lower than baseFee", 
+        maxFeePerGas = tx.maxFeePerGas, 
+        baseFee = xp.baseFee
       return false
 
   if tx.txType == TxEip4844:
@@ -170,6 +181,9 @@ proc classifyValid(xp: TxPoolRef; tx: Transaction, sender: Address): bool =
       electra = xp.vmState.fork >= FkPrague
       blobGasPrice = getBlobBaseFee(excessBlobGas, electra)
     if tx.maxFeePerBlobGas < blobGasPrice:
+      debug "Invalid transaction: maxFeePerBlobGas lower than blobGasPrice", 
+        maxFeePerBlobGas = tx.maxFeePerBlobGas, 
+        blobGasPrice = blobGasPrice
       return false
 
   # Check whether the worst case expense is covered by the price budget,
@@ -177,28 +191,45 @@ proc classifyValid(xp: TxPoolRef; tx: Transaction, sender: Address): bool =
     balance = xp.getBalance(sender)
     gasCost = tx.gasCost
   if balance < gasCost:
+    debug "Invalid transaction: Insufficient balance for gas cost", 
+      balance = balance, 
+      gasCost = gasCost
     return false
   let balanceOffGasCost = balance - gasCost
   if balanceOffGasCost < tx.value:
+    debug "Invalid transaction: Insufficient balance for tx value", 
+      balanceOffGasCost = balanceOffGasCost, 
+      txValue = tx.value
     return false
 
   # For legacy transactions check whether minimum gas price and tip are
   # high enough. These checks are optional.
   if tx.txType < TxEip1559:
     if tx.gasPrice < 0:
+      debug "Invalid transaction: Legacy transaction with invalid gas price", 
+        gasPrice = tx.gasPrice
       return false
 
     # Fall back transaction selector scheme
     if tx.tip(xp.baseFee) < 1.GasInt:
+      debug "Invalid transaction: Legacy transaction with tip lower than 1"
       return false
 
   if tx.txType >= TxEip1559:
     if tx.tip(xp.baseFee) < 1.GasInt:
+      debug "Invalid transaction: EIP-1559 transaction with tip lower than 1"
       return false
 
     if tx.maxFeePerGas < 1.GasInt:
+      debug "Invalid transaction: EIP-1559 transaction with maxFeePerGas lower than 1"
       return false
-
+  
+  debug "Valid transaction",
+    txType = tx.txType, 
+    sender = sender,
+    gasLimit = tx.gasLimit, 
+    gasPrice = tx.gasPrice, 
+    value = tx.value
   true
 
 # ------------------------------------------------------------------------------
@@ -275,20 +306,31 @@ proc removeExpiredTxs*(xp: TxPoolRef, lifeTime: Duration = TX_ITEM_LIFETIME) =
 
 proc addTx*(xp: TxPoolRef, ptx: PooledTransaction): Result[void, TxError] =
   if not ptx.tx.validateChainId(xp.chain.com.chainId):
+    debug "Transaction chain id mismatch", 
+      txChainId = ptx.tx.chainId, 
+      chainId = xp.chain.com.chainId
     return err(txErrorChainIdMismatch)
+  
+  let id = ptx.rlpHash
 
   if ptx.tx.txType == TxEip4844:
     ptx.validateBlobTransactionWrapper().isOkOr:
+      debug "Invalid transaction: Blob transaction wrapper validation failed", 
+        tx = ptx.tx,
+        error = error
       return err(txErrorInvalidBlob)
 
-  let id = ptx.rlpHash
   if xp.alreadyKnown(id):
+    debug "Transaction already known", txHash = id
     return err(txErrorAlreadyKnown)
 
   validateTxBasic(
     ptx.tx,
     xp.nextFork,
     validateFork = true).isOkOr:
+    debug "Invalid transaction: Basic validation failed", 
+      txHash = id,
+      error = error
     return err(txErrorBasicValidation)
 
   let
@@ -310,6 +352,10 @@ proc addTx*(xp: TxPoolRef, ptx: PooledTransaction): Result[void, TxError] =
   #   xp.updateVmState()
   # maybe can solve the accuracy but it is quite expensive.
   if ptx.tx.nonce < nonce:
+    debug "Transaction rejected: Nonce too small", 
+      txNonce = ptx.tx.nonce, 
+      nonce = nonce,
+      sender = sender
     return err(txErrorNonceTooSmall)
 
   if not xp.classifyValid(ptx.tx, sender):
@@ -319,11 +365,21 @@ proc addTx*(xp: TxPoolRef, ptx: PooledTransaction): Result[void, TxError] =
     xp.removeExpiredTxs()
 
   if xp.idTab.len >= MAX_POOL_SIZE:
+    debug "Transaction rejected: txpool is full"
     return err(txErrorPoolIsFull)
 
   let item = TxItemRef.new(ptx, id, sender)
   ?xp.insertToSenderTab(item)
   xp.idTab[item.id] = item
+
+  debug "Transaction added to txpool", 
+    txHash = id,
+    sender = sender,
+    recipient = ptx.tx.getRecipient(sender),
+    nonce = ptx.tx.nonce,
+    gasPrice = ptx.tx.gasPrice,
+    value = ptx.tx.value
+
   ok()
 
 proc addTx*(xp: TxPoolRef, tx: Transaction): Result[void, TxError] =

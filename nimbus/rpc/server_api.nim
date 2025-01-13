@@ -1,5 +1,5 @@
 # Nimbus
-# Copyright (c) 2024 Status Research & Development GmbH
+# Copyright (c) 2024-2025 Status Research & Development GmbH
 # Licensed under either of
 #  * Apache License, version 2.0, ([LICENSE-APACHE](LICENSE-APACHE))
 #  * MIT license ([LICENSE-MIT](LICENSE-MIT))
@@ -14,7 +14,7 @@ import
   std/[sequtils, strutils],
   stint,
   web3/[conversions, eth_api_types],
-  eth/common/base,
+  eth/common/[base, transaction_utils],
   stew/byteutils,
   ../common/common,
   json_rpc/rpcserver,
@@ -29,6 +29,9 @@ import
   ./rpc_types,
   ./rpc_utils,
   ./filters
+
+logScope:
+  topics = "rpc"
 
 type ServerAPIRef* = ref object
   txPool: TxPoolRef
@@ -309,9 +312,19 @@ proc setupServerAPI*(api: ServerAPIRef, server: RpcServer, ctx: EthContext) =
     let
       pooledTx = decodePooledTx(txBytes)
       txHash = rlpHash(pooledTx)
+      sender = pooledTx.tx.recoverSender().get()
 
     api.txPool.addTx(pooledTx).isOkOr:
       raise newException(ValueError, $error)
+
+    info "Submitted transaction",
+      endpoint = "eth_sendRawTransaction",
+      txHash = txHash,
+      sender = sender,
+      recipient = pooledTx.tx.getRecipient(sender),
+      nonce = pooledTx.tx.nonce,
+      value = pooledTx.tx.value
+
     txHash
 
   server.rpc("eth_call") do(args: TransactionArgs, blockTag: BlockTag) -> seq[byte]:
@@ -527,7 +540,17 @@ proc setupServerAPI*(api: ServerAPIRef, server: RpcServer, ctx: EthContext) =
 
     api.txPool.addTx(pooledTx).isOkOr:
       raise newException(ValueError, $error)
-    rlpHash(signedTx)
+
+    let txHash = rlpHash(signedTx)
+    info "Submitted transaction",
+      endpoint = "eth_sendTransaction",
+      txHash = txHash,
+      sender = address,
+      recipient = data.`to`.get(),
+      nonce = pooledTx.tx.nonce,
+      value = pooledTx.tx.value
+
+    txHash
 
   server.rpc("eth_getTransactionByHash") do(data: Hash32) -> TransactionObject:
     ## Returns the information about a transaction requested by transaction hash.
