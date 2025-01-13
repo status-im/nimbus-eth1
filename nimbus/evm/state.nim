@@ -187,47 +187,6 @@ proc new*(
     tracer = tracer,
     storeSlotHash = storeSlotHash)
 
-proc new*(
-      T:      type BaseVMState;
-      header: Header;     ## header with tx environment data fields
-      com:    CommonRef;       ## block chain config
-      txFrame: CoreDbTxRef;
-      tracer: TracerRef = nil,
-      storeSlotHash = false): EvmResult[T] =
-  ## This is a variant of the `new()` constructor above where the field
-  ## `header.parentHash`, is used to fetch the `parent` Header to be
-  ## used in the `new()` variant, above.
-  let parent = txFrame.getBlockHeader(header.parentHash).valueOr:
-    return err(evmErr(EvmHeaderNotFound))
-
-  ok(BaseVMState.new(
-      parent = parent,
-      header = header,
-      com    = com,
-      txFrame = txFrame,
-      tracer = tracer,
-      storeSlotHash = storeSlotHash))
-
-proc init*(
-      vmState: BaseVMState;
-      header:  Header;     ## header with tx environment data fields
-      com:     CommonRef;       ## block chain config
-      txFrame: CoreDbTxRef;
-      tracer:  TracerRef = nil,
-      storeSlotHash = false): bool =
-  ## Variant of `new()` which does not throw an exception on a dangling
-  ## `Header` parent hash reference.
-  let parent = txFrame.getBlockHeader(header.parentHash).valueOr:
-    return false
-  vmState.init(
-    parent = parent,
-    header = header,
-    com    = com,
-    txFrame = txFrame,
-    tracer = tracer,
-    storeSlotHash = storeSlotHash)
-  return true
-
 func coinbase*(vmState: BaseVMState): Address =
   vmState.blockCtx.coinbase
 

@@ -27,51 +27,50 @@ export
 
 proc rpcCallEvm*(args: TransactionArgs,
                  header: Header,
-                 com: CommonRef): EvmResult[CallResult] =
+                 headerHash: Hash32,
+                 com: CommonRef,
+                 parentFrame: CoreDbTxRef): EvmResult[CallResult] =
   const globalGasCap = 0 # TODO: globalGasCap should configurable by user
   let topHeader = Header(
-    parentHash: header.blockHash,
+    parentHash: headerHash,
     timestamp:  EthTime.now(),
     gasLimit:   0.GasInt,              ## ???
     baseFeePerGas: Opt.none UInt256, ## ???
   )
 
-  var dbTx = com.db.ctx.txFrameBegin(nil) # TODO use matching header frame
-  defer: dbTx.dispose() # always dispose state changes
+  let txFrame = parentFrame.ctx.txFrameBegin(parentFrame)
+  defer: txFrame.dispose() # always dispose state changes
 
-  let vmState = ? BaseVMState.new(topHeader, com, dbTx)
+  let vmState = BaseVMState.new(header, topHeader, com, txFrame)
   let params  = ? toCallParams(vmState, args, globalGasCap, header.baseFeePerGas)
-
 
   ok(runComputation(params, CallResult))
 
 proc rpcCallEvm*(args: TransactionArgs,
                  header: Header,
-                 com: CommonRef,
                  vmState: BaseVMState): EvmResult[CallResult] =
   const globalGasCap = 0 # TODO: globalGasCap should configurable by user
   let params  = ? toCallParams(vmState, args, globalGasCap, header.baseFeePerGas)
-
-  var dbTx = com.db.ctx.txFrameBegin(nil) # TODO provide db tx
-  defer: dbTx.dispose() # always dispose state changes
-
   ok(runComputation(params, CallResult))
 
 proc rpcEstimateGas*(args: TransactionArgs,
                      header: Header,
-                     com: CommonRef, gasCap: GasInt): EvmResult[GasInt] =
+                     headerHash: Hash32,
+                     com: CommonRef,
+                     parentFrame: CoreDbTxRef,
+                     gasCap: GasInt): EvmResult[GasInt] =
   # Binary search the gas requirement, as it may be higher than the amount used
   let topHeader = Header(
-    parentHash: header.blockHash,
+    parentHash: headerHash,
     timestamp:  EthTime.now(),
     gasLimit:   0.GasInt,              ## ???
     baseFeePerGas: Opt.none UInt256,   ## ???
   )
 
-  var dbTx = com.db.ctx.txFrameBegin(nil) # TODO header state
-  defer: dbTx.dispose() # always dispose state changes
+  let txFrame = parentFrame.ctx.txFrameBegin(parentFrame)
+  defer: txFrame.dispose() # always dispose state changes
 
-  let vmState = ? BaseVMState.new(topHeader, com, dbTx)
+  let vmState = BaseVMState.new(header, topHeader, com, txFrame)
   let fork    = vmState.fork
   let txGas   = GasInt gasFees[fork][GasTransaction] # txGas always 21000, use constants?
   var params  = ? toCallParams(vmState, args, gasCap, header.baseFeePerGas)

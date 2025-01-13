@@ -336,7 +336,9 @@ proc setupServerAPI*(api: ServerAPIRef, server: RpcServer, ctx: EthContext) =
     let
       header = api.headerFromTag(blockTag).valueOr:
         raise newException(ValueError, "Block not found")
-      res = rpcCallEvm(args, header, api.com).valueOr:
+      headerHash = header.blockHash
+      txFrame = api.chain.txFrame(headerHash)
+      res = rpcCallEvm(args, header, headerHash, api.com, txFrame).valueOr:
         raise newException(ValueError, "rpcCallEvm error: " & $error.code)
     res.output
 
@@ -401,8 +403,10 @@ proc setupServerAPI*(api: ServerAPIRef, server: RpcServer, ctx: EthContext) =
     let
       header = api.headerFromTag(blockId("latest")).valueOr:
         raise newException(ValueError, "Block not found")
+      headerHash = header.blockHash
+      txFrame = api.chain.txFrame(headerHash)
       #TODO: change 0 to configureable gas cap
-      gasUsed = rpcEstimateGas(args, header, api.chain.com, DEFAULT_RPC_GAS_CAP).valueOr:
+      gasUsed = rpcEstimateGas(args, header, headerHash, api.com, txFrame, DEFAULT_RPC_GAS_CAP).valueOr:
         raise newException(ValueError, "rpcEstimateGas error: " & $error.code)
     Quantity(gasUsed)
 
@@ -682,7 +686,7 @@ proc setupServerAPI*(api: ServerAPIRef, server: RpcServer, ctx: EthContext) =
     try:
       let header = api.headerFromTag(quantityTag).valueOr:
         raise newException(ValueError, "Block not found")
-      return createAccessList(header, api.com, args)
+      return createAccessList(header, api.com, api.chain, args)
     except CatchableError as exc:
       return AccessListResult(error: Opt.some("createAccessList error: " & exc.msg))
 

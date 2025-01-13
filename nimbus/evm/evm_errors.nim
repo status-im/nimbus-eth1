@@ -33,7 +33,6 @@ type
     InvalidJumpDest
     OutOfBounds
     InvalidInitCode
-    EvmHeaderNotFound
     EvmInvalidParam
 
   EvmErrorObj* = object

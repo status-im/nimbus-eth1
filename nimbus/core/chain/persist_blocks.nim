@@ -62,11 +62,11 @@ proc getVmState(
     p: var Persister, header: Header, storeSlotHash = false
 ): Result[BaseVMState, string] =
   if p.vmState == nil:
-    let vmState = BaseVMState()
-    if not vmState.init(
-      header, p.c.com, p.c.db.baseTxFrame(), storeSlotHash = storeSlotHash
-    ):
-      return err("Could not initialise VMState")
+    let
+      vmState = BaseVMState()
+      txFrame = p.c.db.baseTxFrame()
+      parent  = ?txFrame.getBlockHeader(header.parentHash)
+    vmState.init(parent, header, p.c.com, txFrame, storeSlotHash = storeSlotHash)
     p.vmState = vmState
   else:
     if header.number != p.parent.number + 1:
