@@ -450,7 +450,7 @@ proc txPoolMain*() =
       xp.checkImportBlock(bundle, 0)
 
       let
-        sdb = LedgerRef.init(com.db)
+        sdb = LedgerRef.init(chain.latestTxFrame)
         val = sdb.getStorage(recipient, slot)
         randao = Bytes32(val.toBytesBE)
         fee = sdb.getBalance(feeRecipient)
@@ -488,7 +488,7 @@ proc txPoolMain*() =
       xp.checkImportBlock(bundle, 0)
 
       let
-        sdb = LedgerRef.init(com.db)
+        sdb = LedgerRef.init(chain.latestTxFrame)
         val = sdb.getStorage(recipient, slot)
         randao = Bytes32(val.toBytesBE)
         bal = sdb.getBalance(feeRecipient)
@@ -521,7 +521,7 @@ proc txPoolMain*() =
       check com.syncCurrent == lastNumber + numBlocks
       let
         head = chain.headerByNumber(com.syncCurrent).expect("block header exists")
-        sdb = LedgerRef.init(com.db)
+        sdb = LedgerRef.init(chain.latestTxFrame)
         expected = u256(txPerblock * numBlocks) * amount
         balance = sdb.getBalance(recipient214)
       check balance == expected

@@ -451,7 +451,7 @@ proc init*(
 
   T(com:             com,
     baseHeader:      baseHeader,
-    baseTxFrame:       baseTxFrame,
+    baseTxFrame:     baseTxFrame,
     cursorHash:      baseHash,
     baseHash:        baseHash,
     cursorHeader:    baseHeader,
@@ -600,6 +600,9 @@ func txFrame*(c: ForkedChainRef, blockHash: Hash32): CoreDbTxRef =
 
 func txFrame*(c: ForkedChainRef, header: Header): CoreDbTxRef =
   c.txFrame(header.blockHash())
+
+func latestTxFrame*(c: ForkedChainRef): CoreDbTxRef =
+  c.txFrame(c.cursorHash)
 
 func com*(c: ForkedChainRef): CommonRef =
   c.com
