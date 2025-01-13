@@ -281,8 +281,8 @@ proc syncToEngineApi(conf: NRpcConf) {.async.} =
         info "newPayload Request sent",
           blockNumber = int(payload.blockNumber), response = payloadResponse.status
 
-        if payloadResponse.status != PayloadExecutionStatus.accepted:
-          error "Payload not accepted",
+        if payloadResponse.status != PayloadExecutionStatus.valid:
+          error "Payload not validated",
             blockNumber = int(payload.blockNumber), status = payloadResponse.status
           quit(QuitFailure)
 
