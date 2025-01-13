@@ -1,5 +1,5 @@
 # Nimbus
-# Copyright (c) 2024 Status Research & Development GmbH
+# Copyright (c) 2024-2025 Status Research & Development GmbH
 # Licensed under either of
 #  * Apache License, version 2.0, ([LICENSE-APACHE](LICENSE-APACHE))
 #  * MIT license ([LICENSE-MIT](LICENSE-MIT))
@@ -199,11 +199,11 @@ proc syncToEngineApi(conf: NRpcConf) {.async.} =
           elif consensusFork == ConsensusFork.Capella:
             Opt.none(PayloadAttributesV2)
           elif consensusFork == ConsensusFork.Deneb or
-            consensusFork == ConsensusFork.Electra or
-            consensusFork == ConsensusFork.Fulu:
+            consensusFork == ConsensusFork.Electra or consensusFork == ConsensusFork.Fulu:
             Opt.none(PayloadAttributesV3)
           else:
-            static: doAssert(false, "Unsupported consensus fork")
+            static:
+              doAssert(false, "Unsupported consensus fork")
             Opt.none(PayloadAttributesV3)
 
       # Make the forkchoiceUpdated call based, after loading attributes based on the consensus fork
@@ -249,18 +249,19 @@ proc syncToEngineApi(conf: NRpcConf) {.async.} =
             payload = payload,
             versionedHashes = versioned_hashes
         elif consensusFork == ConsensusFork.Electra or
-          consensusFork == ConsensusFork.Fulu:
+            consensusFork == ConsensusFork.Fulu:
           # Calculate the versioned hashes from the kzg commitments
           let versioned_hashes = mapIt(
             forkyBlck.message.body.blob_kzg_commitments,
             engine_api.VersionedHash(kzg_commitment_to_versioned_hash(it)),
           )
           # Execution Requests for Electra
-          let execution_requests = @[
-            SSZ.encode(forkyBlck.message.body.execution_requests.deposits),
-            SSZ.encode(forkyBlck.message.body.execution_requests.withdrawals),
-            SSZ.encode(forkyBlck.message.body.execution_requests.consolidations),
-          ]
+          let execution_requests =
+            @[
+              SSZ.encode(forkyBlck.message.body.execution_requests.deposits),
+              SSZ.encode(forkyBlck.message.body.execution_requests.withdrawals),
+              SSZ.encode(forkyBlck.message.body.execution_requests.consolidations),
+            ]
           # TODO: Update to `newPayload()` once nim-web3 is updated
           payloadResponse = await rpcClient.engine_newPayloadV4(
             payload,
@@ -274,15 +275,15 @@ proc syncToEngineApi(conf: NRpcConf) {.async.} =
             versionedHashes = versioned_hashes,
             executionRequests = execution_requests
         else:
-          static: doAssert(false, "Unsupported consensus fork")
+          static:
+            doAssert(false, "Unsupported consensus fork")
 
         info "newPayload Request sent",
           blockNumber = int(payload.blockNumber), response = payloadResponse.status
 
         if payloadResponse.status != PayloadExecutionStatus.accepted:
-          error "Payload not accepted", 
-            blockNumber = int(payload.blockNumber), 
-            status = payloadResponse.status
+          error "Payload not accepted",
+            blockNumber = int(payload.blockNumber), status = payloadResponse.status
           quit(QuitFailure)
 
         # Load the head hash from the execution payload, for forkchoice
@@ -315,14 +316,13 @@ proc syncToEngineApi(conf: NRpcConf) {.async.} =
 
     # Check for reorg
     # No need to check for reorg if the EL head is behind the finalized block
-    if currentBlockNumber > finalizedBlck.header.number and oldHeadBlockNumber > headBlck.header.number:
-      warn "Head moved backwards : Possible reorg detected", 
-        oldHead = oldHeadBlockNumber,
-        newHead = headBlck.header.number
-      
-      let (headClBlck, isAvailable) = client.getCLBlockFromBeaconChain(
-        BlockIdent.init(BlockIdentType.Head), clConfig
-      )
+    if currentBlockNumber > finalizedBlck.header.number and
+        oldHeadBlockNumber > headBlck.header.number:
+      warn "Head moved backwards : Possible reorg detected",
+        oldHead = oldHeadBlockNumber, newHead = headBlck.header.number
+
+      let (headClBlck, isAvailable) =
+        client.getCLBlockFromBeaconChain(BlockIdent.init(BlockIdentType.Head), clConfig)
 
       # move back the importedSlot to the finalized block
       if isAvailable:
@@ -330,7 +330,7 @@ proc syncToEngineApi(conf: NRpcConf) {.async.} =
           when consensusFork >= ConsensusFork.Bellatrix:
             importedSlot = forkyBlck.message.slot.uint64 + 1
             currentBlockNumber = forkyBlck.message.body.execution_payload.block_number
-          
+
           # Load this head to the `headBlck`
           if not getEthBlock(forkyBlck.message, headBlck):
             error "Failed to get EL block from CL head"
@@ -344,7 +344,6 @@ proc syncToEngineApi(conf: NRpcConf) {.async.} =
       else:
         error "Failed to get CL head"
         quit(QuitFailure)
-
 
   # fcU call for the last remaining payloads
   sendFCU(curBlck)
