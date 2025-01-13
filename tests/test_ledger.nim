@@ -1,5 +1,5 @@
 # Nimbus
-# Copyright (c) 2018-2024 Status Research & Development GmbH
+# Copyright (c) 2018-2025 Status Research & Development GmbH
 # Licensed under either of
 #  * Apache License, version 2.0, ([LICENSE-APACHE](LICENSE-APACHE) or
 #    http://www.apache.org/licenses/LICENSE-2.0)
@@ -293,7 +293,7 @@ proc runLedgerTransactionTests(noisy = true) =
         for _ in 0..<NumTransactions:
           let recipient = initAddr(recipientSeed)
           let tx = env.makeTx(recipient, 1.u256)
-          check env.xp.addTx(tx).isOk            
+          check env.xp.addTx(tx).isOk
           inc recipientSeed
 
         check env.xp.len == NumTransactions
