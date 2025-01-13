@@ -22,6 +22,7 @@ import
   beacon_chain/el/el_manager,
   beacon_chain/el/engine_api_conversions,
   beacon_chain/spec/[forks, state_transition_block],
+  beacon_chain/spec/datatypes/bellatrix,
   beacon_chain/spec/eth2_apis/[rest_types, rest_beacon_calls],
   beacon_chain/networking/network_metadata,
   eth/async_utils
@@ -45,7 +46,6 @@ template getCLBlockFromBeaconChain(
   var blck: ForkedSignedBeaconBlock
   if clBlock.isSome():
     let blck = clBlock.get()[]
-
     (blck, true)
   else:
     (blck, false)
@@ -279,6 +279,12 @@ proc syncToEngineApi(conf: NRpcConf) {.async.} =
         info "newPayload Request sent",
           blockNumber = int(payload.blockNumber), response = payloadResponse.status
 
+        if payloadResponse.status != PayloadExecutionStatus.accepted:
+          error "Payload not accepted", 
+            blockNumber = int(payload.blockNumber), 
+            status = payloadResponse.status
+          quit(QuitFailure)
+
         # Load the head hash from the execution payload, for forkchoice
         headHash = forkyBlck.message.body.execution_payload.block_hash
 
@@ -303,8 +309,42 @@ proc syncToEngineApi(conf: NRpcConf) {.async.} =
     # Update the current block number from EL rest api
     # Shows that the fcu call has succeeded
     currentBlockNumber = elBlockNumber()
+    let oldHeadBlockNumber = headBlck.header.number
     (headBlck, _) =
       client.getELBlockFromBeaconChain(BlockIdent.init(BlockIdentType.Head), clConfig)
+
+    # Check for reorg
+    # No need to check for reorg if the EL head is behind the finalized block
+    if currentBlockNumber > finalizedBlck.header.number and oldHeadBlockNumber > headBlck.header.number:
+      warn "Head moved backwards : Possible reorg detected", 
+        oldHead = oldHeadBlockNumber,
+        newHead = headBlck.header.number
+      
+      let (headClBlck, isAvailable) = client.getCLBlockFromBeaconChain(
+        BlockIdent.init(BlockIdentType.Head), clConfig
+      )
+
+      # move back the importedSlot to the finalized block
+      if isAvailable:
+        withBlck(headClBlck.asTrusted()):
+          when consensusFork >= ConsensusFork.Bellatrix:
+            importedSlot = forkyBlck.message.slot.uint64 + 1
+            currentBlockNumber = forkyBlck.message.body.execution_payload.block_number
+          
+          # Load this head to the `headBlck`
+          if not getEthBlock(forkyBlck.message, headBlck):
+            error "Failed to get EL block from CL head"
+            quit(QuitFailure)
+
+        (finalizedBlck, _) = client.getELBlockFromBeaconChain(
+          BlockIdent.init(BlockIdentType.Finalized), clConfig
+        )
+        finalizedHash = finalizedBlck.header.blockHash.asEth2Digest
+        sendFCU(headClBlck)
+      else:
+        error "Failed to get CL head"
+        quit(QuitFailure)
+
 
   # fcU call for the last remaining payloads
   sendFCU(curBlck)
