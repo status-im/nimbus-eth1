@@ -92,10 +92,6 @@ proc dbLoadSyncStateLayout*(ctx: BeaconCtxRef; info: static[string]): bool =
   # If there was a manual import after a previous sync, then saved state
   # might be outdated.
   if rc.isOk and
-     # The base number is the least record of the FCU chains/tree. So the
-     # finalised entry must not be smaller.
-     ctx.chain.baseNumber() <= rc.value.final and
-
      # If the latest FCU number is not larger than the head, there is nothing
      # to do (might also happen after a manual import.)
      latest < rc.value.head and

@@ -291,8 +291,7 @@ proc blocksStagedImport*(
     iv = BnRange.new(qItem.key, qItem.key + nBlocks.uint64 - 1)
 
   info "Importing blocks", iv, nBlocks,
-    base=ctx.chain.baseNumber.bnStr, head=ctx.chain.latestNumber.bnStr,
-    target=ctx.layout.final.bnStr
+    base=ctx.chain.baseNumber.bnStr, head=ctx.chain.latestNumber.bnStr
 
   var maxImport = iv.maxPt
   block importLoop:
@@ -343,7 +342,7 @@ proc blocksStagedImport*(
   ctx.updateMetrics()
 
   info "Import done", iv, nBlocks, base=ctx.chain.baseNumber.bnStr,
-    head=ctx.chain.latestNumber.bnStr, target=ctx.layout.final.bnStr
+    head=ctx.chain.latestNumber.bnStr
   return true
 
 # ------------------------------------------------------------------------------

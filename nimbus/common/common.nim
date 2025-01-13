@@ -43,7 +43,7 @@ type
   SyncReqNewHeadCB* = proc(header: Header) {.gcsafe, raises: [].}
     ## Update head for syncing
 
-  ReqBeaconSyncTargetCB* = proc(header: Header; finHash: Hash32) {.gcsafe, raises: [].}
+  ReqBeaconSyncTargetCB* = proc(header: Header) {.gcsafe, raises: [].}
     ## Ditto (for beacon sync)
 
   NotifyBadBlockCB* = proc(invalid, origin: Header) {.gcsafe, raises: [].}
@@ -344,10 +344,10 @@ proc syncReqNewHead*(com: CommonRef; header: Header)
   if not com.syncReqNewHead.isNil:
     com.syncReqNewHead(header)
 
-proc reqBeaconSyncTargetCB*(com: CommonRef; header: Header; finHash: Hash32) =
+proc reqBeaconSyncTargetCB*(com: CommonRef; header: Header) =
   ## Used by RPC updater
   if not com.reqBeaconSyncTargetCB.isNil:
-    com.reqBeaconSyncTargetCB(header, finHash)
+    com.reqBeaconSyncTargetCB(header)
 
 proc notifyBadBlock*(com: CommonRef; invalid, origin: Header)
     {.gcsafe, raises: [].} =

@@ -156,8 +156,6 @@ proc setupCollectingHeaders(ctx: BeaconCtxRef; info: static[string]) =
     ctx.sst.layout = SyncStateLayout(
       coupler:   c,
       dangling:  h,
-      final:     ctx.target.final,
-      finalHash: ctx.target.finalHash,
       head:      h,
       lastState: collectingHeaders)           # state transition
 
@@ -282,17 +280,16 @@ proc updateSyncState*(ctx: BeaconCtxRef; info: static[string]) =
     # Check whether the system has been idle and a new header download
     # session can be set up
     if prevState == idleSyncState and
-       ctx.target.changed and            # and there is a new target from CL
-       ctx.target.final != 0:            # .. ditto
+       ctx.target.changed:               # and there is a new target from CL
       ctx.setupCollectingHeaders info    # set up new header sync
     return
     # Notreached
 
   info "Sync state changed", prevState, thisState,
     head=ctx.chain.latestNumber.bnStr,
-    oldBase=(if ctx.layout.coupler == ctx.layout.dangling: "downloaded"
+    coupler=(if ctx.layout.coupler == ctx.layout.dangling: "dangling"
        else: ctx.layout.coupler.bnStr),
-    downloaded=(if ctx.layout.dangling == ctx.layout.head: "target"
+    dangling=(if ctx.layout.dangling == ctx.layout.head: "target"
        else: ctx.layout.dangling.bnStr),
     target=ctx.layout.head.bnStr
 
@@ -313,33 +310,14 @@ proc updateSyncState*(ctx: BeaconCtxRef; info: static[string]) =
   ctx.startHibernating info
 
 
-proc updateFinalBlockHeader*(
-    ctx: BeaconCtxRef;
-    finHdr: Header;
-    finHash: Hash32;
-    info: static[string];
-      ) =
-  ## Update the finalised header cache. If the finalised header is acceptable,
-  ## the syncer will be activated from hibernation if necessary.
-  ##
-  let
-    b = ctx.chain.baseNumber()
-    f = finHdr.number
-  if f < b:
-    trace info & ": finalised block # too low",
-      B=b.bnStr, finalised=f.bnStr, delta=(b - f)
+proc updateFromHibernating*(ctx: BeaconCtxRef; info: static[string]) =
+  ## Activate syncer if hibernating.
+  if ctx.hibernate:
+    ctx.hibernate = false            # activates syncer
+    debug info & ": activating syncer", T=ctx.target.consHead.bnStr
 
-    ctx.target.reset
-
-  else:
-    ctx.target.final = f
-    ctx.target.finalHash = finHash
-
-    # Activate running (unless done yet)
-    if ctx.hibernate:
-      ctx.hibernate = false
-      info "Activating syncer", base=b.bnStr, head=ctx.chain.latestNumber.bnStr,
-        finalised=f.bnStr, target=ctx.target.consHead.bnStr
+    # Re-calculate sync state
+    ctx.updateSyncState info
 
     # Update, so it can be followed nicely
     ctx.updateMetrics()

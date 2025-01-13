@@ -72,11 +72,8 @@ type
 
   SyncStateTarget* = object
     ## Beacon state to be implicitely updated by RPC method
-    locked*: bool                    ## Don't update while fetching header
     changed*: bool                   ## Tell that something has changed
     consHead*: Header                ## Consensus head
-    final*: BlockNumber              ## Finalised block number
-    finalHash*: Hash32               ## Finalised hash
 
   SyncStateLayout* = object
     ## Layout of a linked header chains defined by the triple `(C,D,H)` as
@@ -95,13 +92,8 @@ type
     ##
     coupler*: BlockNumber            ## Bottom end `C` of full chain `(C,H]`
     dangling*: BlockNumber           ## Left end `D` of linked chain `[D,H]`
-    head*: BlockNumber               ## `H`, block num of some finalised block
+    head*: BlockNumber               ## `H`, block number of some target block
     lastState*: SyncLayoutState      ## Last known layout state
-
-    # Legacy entries, will be removed some time. This is currently needed
-    # for importing blocks into `FC` the support of which will be deprecated.
-    final*: BlockNumber              ## Finalised block number `F`
-    finalHash*: Hash32               ## Hash of `F`
 
   SyncState* = object
     ## Sync state for header and block chains

@@ -38,7 +38,7 @@ when enableTicker:
         head:            ctx.layout.head,
         headOk:          ctx.layout.lastState != idleSyncState,
         target:          ctx.target.consHead.number,
-        targetOk:        ctx.target.final != 0,
+        targetOk:        ctx.target.changed,
 
         nHdrStaged:      ctx.headersStagedQueueLen(),
         hdrStagedTop:    ctx.headersStagedQueueTopKey(),
@@ -62,31 +62,13 @@ proc updateBeaconHeaderCB(
       ): ReqBeaconSyncTargetCB =
   ## Update beacon header. This function is intended as a call back function
   ## for the RPC module.
-  return proc(h: Header; f: Hash32) {.gcsafe, raises: [].} =
-
-    # Check whether there is an update running (otherwise take next upate)
-    if not ctx.target.locked and                 # ignore if currently updating
-       ctx.target.final == 0 and                 # ignore if complete already
-       f != zeroHash32 and                       # finalised hash is set
+  return proc(h: Header) {.gcsafe, raises: [].} =
+    if ctx.chain.baseNumber() < h.number and     # sanity check
        ctx.layout.head < h.number and            # update is advancing
        ctx.target.consHead.number < h.number:    # .. ditto
-
       ctx.target.consHead = h
-      ctx.target.finalHash = f
-      ctx.target.changed = true
-
-      # Check whether `FC` knows about the finalised block already.
-      #
-      # On a full node, all blocks before the current state are stored on the
-      # database which is also accessed by `FC`. So one can already decude here
-      # whether `FC` id capable of handling that finalised block (the number of
-      # must be at least the `base` from `FC`.)
-      #
-      # Otherwise the block header will need to be fetched from a peer when
-      # available and checked there (see `headerStagedUpdateTarget()`.)
-      #
-      let finHdr = ctx.chain.headerByHash(f).valueOr: return
-      ctx.updateFinalBlockHeader(finHdr, f, info)
+      ctx.target.changed = true                  # enable this dataset
+      ctx.updateFromHibernating info             # wake up if sleeping
 
 # ------------------------------------------------------------------------------
 # Public functions
