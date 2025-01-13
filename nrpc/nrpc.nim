@@ -148,7 +148,7 @@ proc syncToEngineApi(conf: NRpcConf) {.async.} =
       uint64(await rpcClient.eth_blockNumber())
     except CatchableError as exc:
       error "Error getting block number", error = exc.msg
-      0'u64
+      quit(QuitFailure)
 
   # Load the EL state detials and create the beaconAPI client
   var
