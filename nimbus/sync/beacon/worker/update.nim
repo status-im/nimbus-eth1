@@ -286,12 +286,7 @@ proc updateSyncState*(ctx: BeaconCtxRef; info: static[string]) =
     # Notreached
 
   info "Sync state changed", prevState, thisState,
-    head=ctx.chain.latestNumber.bnStr,
-    coupler=(if ctx.layout.coupler == ctx.layout.dangling: "dangling"
-       else: ctx.layout.coupler.bnStr),
-    dangling=(if ctx.layout.dangling == ctx.layout.head: "target"
-       else: ctx.layout.dangling.bnStr),
-    target=ctx.layout.head.bnStr
+    head=ctx.chain.latestNumber.bnStr, target=ctx.layout.head.bnStr
 
   # So there is a states transition. The only relevant transition here
   # is `collectingHeaders -> finishedHeaders` which will be continued
