@@ -246,12 +246,6 @@ rm vendor/Nim/bin/nim
 make -j8 build-nim
 ```
 
-- some programs in the _tests_ subdirectory do a replay of blockchain
-  database dumps when compiled and run locally. The dumps are found in
-  [this](https://github.com/status-im/nimbus-eth1-blobs) module which
-  need to be cloned as _nimbus-eth1-blobs_ parellel to the _nimbus-eth1_
-  file system root.
-
 #### Git submodule workflow
 
 Working on a dependency:

@@ -1,5 +1,5 @@
 # Nimbus
-# Copyright (c) 2023-2024 Status Research & Development GmbH
+# Copyright (c) 2023-2025 Status Research & Development GmbH
 # Licensed under either of
 #  * Apache License, version 2.0, ([LICENSE-APACHE](LICENSE-APACHE) or
 #    http://www.apache.org/licenses/LICENSE-2.0)
@@ -339,10 +339,6 @@ when isMainModule:
 
   when true and false:
     false.coreDbMain()
-
-  # This one uses the readily available dump: `bulkTest0` and some huge replay
-  # dumps `bulkTest2`, `bulkTest3`, .. from the `nimbus-eth1-blobs` package.
-  # For specs see `tests/test_coredb/bulk_test_xx.nim`.
 
   sampleList = cmdLineConfig().samples
   if sampleList.len == 0:
