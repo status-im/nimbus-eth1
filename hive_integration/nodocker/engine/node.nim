@@ -74,13 +74,11 @@ proc processBlock(
   ok()
 
 proc getVmState(c: ChainRef, header: Header, txFrame: CoreDbTxRef):
-                 Result[BaseVMState, void] =
-  let vmState = BaseVMState()
-  if not vmState.init(header, c.com, txFrame, storeSlotHash = false):
-    debug "Cannot initialise VmState",
-      number = header.number
-    return err()
-
+                 Result[BaseVMState, string] =
+  let
+    parent  = ?txFrame.getBlockHeader(header.parentHash)
+    vmState = BaseVMState()
+  vmState.init(parent, header, c.com, txFrame, storeSlotHash = false)
   return ok(vmState)
 
 # A stripped down version of persistBlocks without validation
@@ -92,8 +90,7 @@ proc setBlock*(c: ChainRef; blk: Block): Result[void, string] =
 
   # Needed for figuring out whether KVT cleanup is due (see at the end)
   let
-    vmState = c.getVmState(header, txFrame).valueOr:
-      return err("no vmstate")
+    vmState = ? c.getVmState(header, txFrame)
   ? vmState.processBlock(blk)
 
   ? txFrame.persistHeaderAndSetHead(header, c.com.startOfHistory)
