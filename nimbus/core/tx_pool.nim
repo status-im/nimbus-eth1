@@ -1,5 +1,5 @@
 # Nimbus
-# Copyright (c) 2018-2024 Status Research & Development GmbH
+# Copyright (c) 2018-2025 Status Research & Development GmbH
 # Licensed under either of
 #  * Apache License, version 2.0, ([LICENSE-APACHE](LICENSE-APACHE) or
 #    http://www.apache.org/licenses/LICENSE-2.0)
@@ -42,8 +42,7 @@ import
   ./tx_pool/tx_item,
   ./tx_pool/tx_desc,
   ./tx_pool/tx_packer,
-  ./chain/forked_chain,
-  ./casper
+  ./chain/forked_chain
 
 from eth/common/eth_types_rlp import rlpHash
 
@@ -143,7 +142,7 @@ proc assembleBlock*(
     return err(error)
 
   var blk = EthBlock(
-    header: pst.assembleHeader
+    header: pst.assembleHeader(xp)
   )
   var blobsBundle: BlobsBundle
   for item in pst.packedTxs:
@@ -160,7 +159,7 @@ proc assembleBlock*(
 
   let com = xp.vmState.com
   if com.isShanghaiOrLater(blk.header.timestamp):
-    blk.withdrawals = Opt.some(com.pos.withdrawals)
+    blk.withdrawals = Opt.some(xp.withdrawals)
 
   if not com.isCancunOrLater(blk.header.timestamp) and blobsBundle.commitments.len > 0:
     return err("PooledTransaction contains blobs prior to Cancun")
@@ -187,3 +186,37 @@ proc assembleBlock*(
     blobsBundle: blobsBundleOpt,
     blockValue: pst.blockValue,
     executionRequests: executionRequestsOpt)
+
+# ------------------------------------------------------------------------------
+# PoS payload attributes getters
+# ------------------------------------------------------------------------------
+
+export
+  feeRecipient,
+  timestamp,
+  prevRandao,
+  withdrawals,
+  parentBeaconBlockRoot
+
+# feeRecipient(xp: TxPoolRef): Address
+# timestamp(xp: TxPoolRef): EthTime
+# prevRandao(xp: TxPoolRef): Bytes32
+# withdrawals(xp: TxPoolRef): seq[Withdrawal]
+# parentBeaconBlockRoot(xp: TxPoolRef): Hash32
+
+# ------------------------------------------------------------------------------
+# PoS payload attributes setters
+# ------------------------------------------------------------------------------
+
+export
+  `feeRecipient=`,
+  `timestamp=`,
+  `prevRandao=`,
+  `withdrawals=`,
+  `parentBeaconBlockRoot=`
+
+# `feeRecipient=`(xp: TxPoolRef, val: Address)
+# `timestamp=`(xp: TxPoolRef, val: EthTime)
+# `prevRandao=`(xp: TxPoolRef, val: Bytes32)
+# `withdrawals=`(xp: TxPoolRef, val: sink seq[Withdrawal])
+# `parentBeaconBlockRoot=`(xp: TxPoolRef, val: Hash32)

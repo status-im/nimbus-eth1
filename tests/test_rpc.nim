@@ -1,5 +1,5 @@
 # Nimbus
-# Copyright (c) 2018-2024 Status Research & Development GmbH
+# Copyright (c) 2018-2025 Status Research & Development GmbH
 # Licensed under either of
 #  * Apache License, version 2.0, ([LICENSE-APACHE](LICENSE-APACHE) or http://www.apache.org/licenses/LICENSE-2.0)
 #  * MIT license ([LICENSE-MIT](LICENSE-MIT) or http://opensource.org/licenses/MIT)
@@ -18,7 +18,7 @@ import
   ../nimbus/[constants, transaction, config, version],
   ../nimbus/db/[ledger, storage_types],
   ../nimbus/sync/protocol,
-  ../nimbus/core/[tx_pool, chain, pow/difficulty, casper],
+  ../nimbus/core/[tx_pool, chain, pow/difficulty],
   ../nimbus/utils/utils,
   ../nimbus/[common, rpc],
   ../nimbus/rpc/rpc_types,
@@ -236,9 +236,9 @@ proc generateBlock(env: var TestEnv) =
   doAssert(xp.len == 2)
 
   # generate block
-  com.pos.prevRandao = prevRandao
-  com.pos.feeRecipient = feeRecipient
-  com.pos.timestamp = EthTime.now()
+  xp.prevRandao = prevRandao
+  xp.feeRecipient = feeRecipient
+  xp.timestamp = EthTime.now()
 
   let bundle = xp.assembleBlock().valueOr:
     debugEcho error

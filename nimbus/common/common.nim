@@ -1,5 +1,5 @@
 # Nimbus
-# Copyright (c) 2022-2024 Status Research & Development GmbH
+# Copyright (c) 2022-2025 Status Research & Development GmbH
 # Licensed under either of
 #  * Apache License, version 2.0, ([LICENSE-APACHE](LICENSE-APACHE))
 #  * MIT license ([LICENSE-MIT](LICENSE-MIT))
@@ -11,7 +11,6 @@
 
 import
   chronicles,
-  ../core/casper,
   ../db/[core_db, ledger, storage_types],
   ../utils/[utils],
   ".."/[constants, errors, version],
@@ -89,9 +88,6 @@ type
       ## This setting is needed for resuming blockwise syncying after
       ## installing a snapshot pivot. The default value for this field is
       ## `GENESIS_PARENT_HASH` to start at the very beginning.
-
-    pos: CasperRef
-      ## Proof Of Stake descriptor
 
     pruneHistory: bool
       ## Must not not set for a full node, might go away some time
@@ -181,7 +177,6 @@ proc init(com         : CommonRef,
   com.syncProgress= SyncProgress()
   com.syncState   = Waiting
   com.pruneHistory= pruneHistory
-  com.pos         = CasperRef.new
   com.extraData   = ShortClientId
   com.taskpool    = taskpool
   com.gasLimit    = DEFAULT_GAS_LIMIT
@@ -202,7 +197,6 @@ proc init(com         : CommonRef,
       toGenesisHeader(genesis, fork, com.db)
 
     com.setForkId(com.genesisHeader)
-    com.pos.timestamp = genesis.timestamp
 
   # By default, history begins at genesis.
   com.startOfHistory = GENESIS_PARENT_HASH
@@ -276,7 +270,6 @@ func clone*(com: CommonRef, db: CoreDbRef): CommonRef =
     genesisHeader: com.genesisHeader,
     syncProgress : com.syncProgress,
     networkId    : com.networkId,
-    pos          : com.pos,
     pruneHistory : com.pruneHistory)
 
 func clone*(com: CommonRef): CommonRef =
@@ -362,10 +355,6 @@ proc notifyBadBlock*(com: CommonRef; invalid, origin: Header)
 func startOfHistory*(com: CommonRef): Hash32 =
   ## Getter
   com.startOfHistory
-
-func pos*(com: CommonRef): CasperRef =
-  ## Getter
-  com.pos
 
 func db*(com: CommonRef): CoreDbRef =
   com.db
