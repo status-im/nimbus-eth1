@@ -608,7 +608,7 @@ func com*(c: ForkedChainRef): CommonRef =
   c.com
 
 func db*(c: ForkedChainRef): CoreDbRef =
-  c.db
+  c.com.db
 
 func latestHeader*(c: ForkedChainRef): Header =
   c.cursorHeader
