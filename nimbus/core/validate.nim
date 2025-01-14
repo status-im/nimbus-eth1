@@ -273,15 +273,6 @@ proc validateTxBasic*(
     if tx.authorizationList.len == 0:
       return err("invalid tx: authorization list must not empty")
 
-    const SECP256K1halfN = SECPK1_N div 2
-
-    for auth in tx.authorizationList:
-      if auth.v > 1'u64:
-        return err("invalid tx: auth.v must be 0 or 1")
-
-      if auth.s > SECP256K1halfN:
-        return err("invalid tx: auth.s must be <= SECP256K1N/2")
-
   ok()
 
 proc validateTransaction*(

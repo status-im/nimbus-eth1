@@ -12,6 +12,7 @@
 
 import
   ../evm/code_bytes,
+  ../constants,
   results,
   stew/assign2,
   eth/common/eth_types,
@@ -26,6 +27,16 @@ const
   PER_EMPTY_ACCOUNT_COST* = 25000
 
 func authority*(auth: Authorization): Opt[Address] =
+  const SECP256K1halfN = SECPK1_N div 2
+
+  if auth.v > 1'u64:
+    # auth.v must be 0 or 1
+    return Opt.none(Address)
+
+  if auth.s > SECP256K1halfN:
+    # auth.s must be <= SECP256K1N/2
+    return Opt.none(Address)
+
   let sigHash = rlpHashForSigning(auth)
 
   var bytes: array[65, byte]

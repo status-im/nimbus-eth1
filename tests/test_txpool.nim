@@ -572,5 +572,47 @@ proc txPoolMain*() =
         inc count
       check count == hs.len
 
+    test "EIP-7702 transaction before Prague":
+      let
+        acc = mx.getAccount(24)
+        auth = mx.makeAuth(acc, 0)
+        tc = BaseTx(
+          txType: Opt.some(TxEip7702),
+          gasLimit: 75000,
+          recipient: Opt.some(recipient214),
+          amount: amount,
+          authorizationList: @[auth],
+        )
+        tx = mx.makeTx(tc, 0)
+
+      xp.checkAddTx(tx, txErrorBasicValidation)
+
+    test "EIP-7702 transaction invalid auth signature":
+      let
+        env = initEnv(Prague)
+        xp = env.xp
+        mx = env.sender
+        acc = mx.getAccount(25)
+        auth = mx.makeAuth(acc, 0)
+        tc = BaseTx(
+          txType: Opt.some(TxEip7702),
+          gasLimit: 75000,
+          recipient: Opt.some(recipient214),
+          amount: amount,
+          authorizationList: @[auth],
+        )
+        ptx = mx.makeTx(tc, 0)
+
+      # invalid auth
+      var invauth = auth
+      invauth.v = 3.uint64
+      let
+        ctx = CustomTx(auth: Opt.some(invauth))
+        tx  = mx.customizeTransaction(acc, ptx.tx, ctx)
+
+      xp.checkAddTx(tx)
+      # invalid auth, but the tx itself still valid
+      xp.checkImportBlock(1, 0)
+
 when isMainModule:
   txPoolMain()
