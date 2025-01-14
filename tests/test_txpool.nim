@@ -369,6 +369,8 @@ proc txPoolMain*() =
       xp.checkAddTx(ptx2)
 
       xp2.checkImportBlock(2, 0)
+
+      xp.timestamp = xp2.timestamp + 1
       xp.checkImportBlock(1, 0)
 
     test "mixed type of transactions":
