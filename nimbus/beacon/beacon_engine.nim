@@ -1,5 +1,5 @@
 # Nimbus
-# Copyright (c) 2023-2024 Status Research & Development GmbH
+# Copyright (c) 2023-2025 Status Research & Development GmbH
 # Licensed under either of
 #  * Apache License, version 2.0, ([LICENSE-APACHE](LICENSE-APACHE))
 #  * MIT license ([LICENSE-MIT](LICENSE-MIT))
@@ -16,7 +16,7 @@ import
   ./payload_conv,
   ./payload_queue,
   ./api_handler/api_utils,
-  ../core/[tx_pool, casper, chain]
+  ../core/[tx_pool, chain]
 
 export
   chain,
@@ -68,12 +68,12 @@ const
 # Private helpers
 # ------------------------------------------------------------------------------
 
-func setWithdrawals(ctx: CasperRef, attrs: PayloadAttributes) =
+func setWithdrawals(xp: TxPoolRef, attrs: PayloadAttributes) =
   case attrs.version
   of Version.V2, Version.V3:
-    ctx.withdrawals = ethWithdrawals attrs.withdrawals.get
+    xp.withdrawals = ethWithdrawals attrs.withdrawals.get
   else:
-    ctx.withdrawals = @[]
+    xp.withdrawals = @[]
 
 template wrapException(body: untyped): auto =
   try:
@@ -146,19 +146,18 @@ proc generateExecutionBundle*(ben: BeaconEngineRef,
   wrapException:
     let
       xp  = ben.txPool
-      pos = xp.com.pos
       headBlock = ben.chain.latestHeader
 
-    pos.prevRandao   = attrs.prevRandao
-    pos.timestamp    = ethTime attrs.timestamp
-    pos.feeRecipient = attrs.suggestedFeeRecipient
+    xp.prevRandao   = attrs.prevRandao
+    xp.timestamp    = ethTime attrs.timestamp
+    xp.feeRecipient = attrs.suggestedFeeRecipient
 
     if attrs.parentBeaconBlockRoot.isSome:
-      pos.parentBeaconBlockRoot = attrs.parentBeaconBlockRoot.get
+      xp.parentBeaconBlockRoot = attrs.parentBeaconBlockRoot.get
 
-    pos.setWithdrawals(attrs)
+    xp.setWithdrawals(attrs)
 
-    if pos.timestamp <= headBlock.timestamp:
+    if xp.timestamp <= headBlock.timestamp:
       return err "timestamp must be strictly later than parent"
 
     # someBaseFee = true: make sure bundle.blk.header

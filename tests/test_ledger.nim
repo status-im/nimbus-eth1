@@ -1,5 +1,5 @@
 # Nimbus
-# Copyright (c) 2018-2024 Status Research & Development GmbH
+# Copyright (c) 2018-2025 Status Research & Development GmbH
 # Licensed under either of
 #  * Apache License, version 2.0, ([LICENSE-APACHE](LICENSE-APACHE) or
 #    http://www.apache.org/licenses/LICENSE-2.0)
@@ -18,7 +18,6 @@ import
   ../nimbus/common/common,
   ../nimbus/core/chain,
   ../nimbus/core/tx_pool,
-  ../nimbus/core/casper,
   ../nimbus/transaction,
   ../nimbus/constants,
   ../nimbus/db/ledger {.all.}, # import all private symbols
@@ -312,13 +311,13 @@ proc runLedgerTransactionTests(noisy = true) =
         for _ in 0..<NumTransactions:
           let recipient = initAddr(recipientSeed)
           let tx = env.makeTx(recipient, 1.u256)
-          check env.xp.addTx(tx).isOk            
+          check env.xp.addTx(tx).isOk
           inc recipientSeed
 
         check env.xp.len == NumTransactions
-        env.com.pos.prevRandao = prevRandao
-        env.com.pos.feeRecipient = feeRecipient
-        env.com.pos.timestamp = blockTime
+        env.xp.prevRandao = prevRandao
+        env.xp.feeRecipient = feeRecipient
+        env.xp.timestamp = blockTime
 
         blockTime = EthTime(blockTime.uint64 + 1'u64)
 

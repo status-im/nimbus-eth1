@@ -21,7 +21,6 @@ import
   ../nimbus/[config, transaction, constants],
   ../nimbus/core/tx_pool,
   ../nimbus/core/tx_pool/tx_desc,
-  ../nimbus/core/casper,
   ../nimbus/common/common,
   ../nimbus/utils/utils,
   ./macro_assembler
@@ -111,7 +110,7 @@ template checkAddTxSupersede(xp, tx) =
   check xp.len == prevCount
 
 template checkAssembleBlock(xp, expCount): auto =
-  xp.com.pos.timestamp = xp.com.pos.timestamp + 1
+  xp.timestamp = xp.timestamp + 1
   let rc = xp.assembleBlock()
   check rc.isOk == true
   if rc.isErr:
@@ -186,9 +185,9 @@ proc txPoolMain*() =
       chain = env.chain
       com = env.com
 
-    com.pos.prevRandao = prevRandao
-    com.pos.feeRecipient = feeRecipient
-    com.pos.timestamp = EthTime.now()
+    xp.prevRandao = prevRandao
+    xp.feeRecipient = feeRecipient
+    xp.timestamp = EthTime.now()
 
     test "Bad blob tx":
       let acc = mx.getAccount(7)
@@ -334,7 +333,7 @@ proc txPoolMain*() =
 
       var numTxsPacked = 0
       while numTxsPacked < MAX_TXS_GENERATED:
-        com.pos.timestamp = com.pos.timestamp + 1
+        xp.timestamp = xp.timestamp + 1
         let bundle = xp.assembleBlock().valueOr:
           debugEcho error
           check false
