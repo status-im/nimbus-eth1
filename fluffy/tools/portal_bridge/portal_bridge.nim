@@ -1,5 +1,5 @@
 # Fluffy
-# Copyright (c) 2023-2024 Status Research & Development GmbH
+# Copyright (c) 2023-2025 Status Research & Development GmbH
 # Licensed and distributed under either of
 #   * MIT license (license terms in the root directory or at https://opensource.org/licenses/MIT).
 #   * Apache v2 license (license terms in the root directory or at https://www.apache.org/licenses/LICENSE-2.0).
@@ -47,12 +47,17 @@
 
 import
   chronos,
+  chronicles,
   confutils,
   confutils/std/net,
   ../../logging,
   ./[
     portal_bridge_conf, portal_bridge_beacon, portal_bridge_history, portal_bridge_state
   ]
+
+type PortalBridgeStatus = enum
+  Running
+  Stopping
 
 when isMainModule:
   {.pop.}
@@ -61,10 +66,37 @@ when isMainModule:
 
   setupLogging(config.logLevel, config.logStdout, none(OutFile))
 
+  var bridgeStatus = PortalBridgeStatus.Running
+
+  # Ctrl+C handling
+  proc controlCHandler() {.noconv.} =
+    when defined(windows):
+      # workaround for https://github.com/nim-lang/Nim/issues/4057
+      try:
+        setupForeignThreadGc()
+      except Exception as e:
+        raiseAssert e.msg # shouldn't happen
+
+    notice "Shutting down after having received SIGINT"
+    bridgeStatus = PortalBridgeStatus.Stopping
+
+  try:
+    setControlCHook(controlCHandler)
+  except Exception as e: # TODO Exception
+    warn "Cannot set ctrl-c handler", msg = e.msg
+
   case config.cmd
   of PortalBridgeCmd.beacon:
     runBeacon(config)
   of PortalBridgeCmd.history:
     runHistory(config)
   of PortalBridgeCmd.state:
-    runState(config)
+    let bridge = waitFor runState(config)
+
+    while bridgeStatus == PortalBridgeStatus.Running:
+      try:
+        poll()
+      except CatchableError as e:
+        warn "Exception in poll()", exc = e.name, err = e.msg
+
+    waitFor bridge.stop()
