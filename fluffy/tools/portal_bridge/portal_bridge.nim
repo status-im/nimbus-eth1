@@ -59,6 +59,13 @@ type PortalBridgeStatus = enum
   Running
   Stopping
 
+template pollWhileRunning(status: PortalBridgeStatus) =
+  while status == PortalBridgeStatus.Running:
+    try:
+      poll()
+    except CatchableError as e:
+      warn "Exception in poll()", exc = e.name, err = e.msg
+
 when isMainModule:
   {.pop.}
   let config = PortalBridgeConf.load()
@@ -88,15 +95,16 @@ when isMainModule:
   case config.cmd
   of PortalBridgeCmd.beacon:
     runBeacon(config)
+
+    pollWhileRunning(bridgeStatus)
+    # TODO: Implement stop/cleanup for beacon bridge
   of PortalBridgeCmd.history:
     runHistory(config)
+
+    pollWhileRunning(bridgeStatus)
+    # TODO: Implement stop/cleanup for history bridge
   of PortalBridgeCmd.state:
     let bridge = waitFor runState(config)
 
-    while bridgeStatus == PortalBridgeStatus.Running:
-      try:
-        poll()
-      except CatchableError as e:
-        warn "Exception in poll()", exc = e.name, err = e.msg
-
+    pollWhileRunning(bridgeStatus)
     waitFor bridge.stop()
