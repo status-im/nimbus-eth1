@@ -1,5 +1,5 @@
 # Nimbus
-# Copyright (c) 2018-2024 Status Research & Development GmbH
+# Copyright (c) 2018-2025 Status Research & Development GmbH
 # Licensed under either of
 #  * Apache License, version 2.0, ([LICENSE-APACHE](LICENSE-APACHE) or
 #    http://www.apache.org/licenses/LICENSE-2.0)
@@ -272,15 +272,6 @@ proc validateTxBasic*(
   if tx.txType == TxEip7702:
     if tx.authorizationList.len == 0:
       return err("invalid tx: authorization list must not empty")
-
-    const SECP256K1halfN = SECPK1_N div 2
-
-    for auth in tx.authorizationList:
-      if auth.v > 1'u64:
-        return err("invalid tx: auth.v must be 0 or 1")
-
-      if auth.s > SECP256K1halfN:
-        return err("invalid tx: auth.s must be <= SECP256K1N/2")
 
   ok()
 
