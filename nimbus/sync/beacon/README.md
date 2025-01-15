@@ -307,19 +307,19 @@ The following metrics are defined in *worker/update/metrics.nim* which will
 be available if *nimbus* is compiled with the additional make flags
 *NIMFLAGS="-d:metrics \-\-threads:on"*:
 
-| *Variable*         | *Logic type* | *Short description* |
-|:-------------------|:------------:|:--------------------|
-|                    |              |                     |
-| beacon_base        | block height | **B**, *increasing* |
-| beacon_latest      | block height | **L**, *increasing* |
-| beacon_coupler     | block height | **C**, *increasing* |
-| beacon_dangling    | block height | **D**               |
-| beacon_head        | block height | **H**, *increasing* |
-| beacon_target      | block height | **T**, *increasing* |
-|                            |      |                     |
-| beacon_header_lists_staged | size | # of staged header list records      |
-| beacon_headers_unprocessed | size | # of accumulated header block numbers|
-| beacon_block_lists_staged  | size | # of staged block list records       |
-| beacon_blocks_unprocessed  | size | # of accumulated body block numbers  |
-|                            |      |                                      |
-| beacon_buddies             | size | # of peers working concurrently      |
+| *Variable*                   | *Logic type* | *Short description* |
+|:-----------------------------|:------------:|:--------------------|
+|                              |              |                     |
+| nec_base                     | block height | **B**, *increasing* |
+| nec_execution_head           | block height | **L**, *increasing* |
+| nec_sync_coupler             | block height | **C**, *increasing* |
+| nec_sync_dangling            | block height | **D**               |
+| nec_sync_head                | block height | **H**, *increasing* |
+| nec_consensus_head           | block height | **T**, *increasing* |
+|                              |              |                     |
+| nec_sync_header_lists_staged | size | # of staged header list records      |
+| nec_sync_headers_unprocessed | size | # of accumulated header block numbers|
+| nec_sync_block_lists_staged  | size | # of staged block list records       |
+| nec_sync_blocks_unprocessed  | size | # of accumulated body block numbers  |
+|                              |      |                                      |
+| nec_sync_peers               | size | # of peers working concurrently      |
