@@ -1,5 +1,5 @@
 # Nimbus
-# Copyright (c) 2022-2024 Status Research & Development GmbH
+# Copyright (c) 2022-2025 Status Research & Development GmbH
 # Licensed under either of
 #  * Apache License, version 2.0, ([LICENSE-APACHE](LICENSE-APACHE))
 #  * MIT license ([LICENSE-MIT](LICENSE-MIT))
@@ -133,7 +133,18 @@ func isGTETransitionThreshold*(map: ForkTransitionTable, forkDeterminer: ForkDet
   else:
     raise newException(Defect, "Why is this hard fork not in one of the above categories?")
 
+const
+  BlobScheduleTable*: array[Cancun..HardFork.high, string] = [
+    "cancun",
+    "prague",
+    "osaka"
+  ]
+
 type
+  BlobSchedule* = object
+    target*: uint64
+    max*   : uint64
+
   # if you add more fork block
   # please update forkBlockField constant too
   ChainConfig* = ref object
@@ -172,6 +183,7 @@ type
 
     terminalTotalDifficulty*: Opt[UInt256]
     depositContractAddress*: Opt[Address]
+    blobSchedule*       : array[Cancun..HardFork.high, Opt[BlobSchedule]]
 
   # These are used for checking that the values of the fields
   # are in a valid order.

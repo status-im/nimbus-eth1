@@ -1,5 +1,5 @@
 # Nimbus
-# Copyright (c) 2024 Status Research & Development GmbH
+# Copyright (c) 2024-2025 Status Research & Development GmbH
 # Licensed under either of
 #  * Apache License, version 2.0, ([LICENSE-APACHE](LICENSE-APACHE) or
 #    http://www.apache.org/licenses/LICENSE-2.0)
@@ -11,7 +11,10 @@
 {.push raises: [].}
 
 import
-  ../constants
+  ../constants,
+  ../common/hardforks,
+  ../common/evmforks,
+  ../common/common
 
 func getMaxBlobGasPerBlock*(electra: bool): uint64 =
   if electra: MAX_BLOB_GAS_PER_BLOCK_ELECTRA.uint64
@@ -25,6 +28,13 @@ func getBlobBaseFeeUpdateFraction*(electra: bool): uint64 =
   if electra: BLOB_BASE_FEE_UPDATE_FRACTION_ELECTRA.uint64
   else: BLOB_BASE_FEE_UPDATE_FRACTION.uint64
 
-func getMaxBlobsPerBlock*(electra: bool): uint64 =
-  if electra: MAX_BLOBS_PER_BLOCK_ELECTRA.uint64
-  else: MAX_BLOBS_PER_BLOCK.uint64
+const
+  EVMForkToFork: array[FkCancun..EVMFork.high, HardFork] = [
+    Cancun,
+    Prague,
+    Osaka
+  ]
+
+func getMaxBlobsPerBlock*(com: CommonRef, fork: EVMFork): uint64 =
+  doAssert(fork >= FkCancun)
+  com.maxBlobsPerBlock(EVMForkToFork[fork])

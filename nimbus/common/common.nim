@@ -416,6 +416,14 @@ func extraData*(com: CommonRef): string =
 func gasLimit*(com: CommonRef): uint64 =
   com.gasLimit
 
+func maxBlobsPerBlock*(com: CommonRef, fork: HardFork): uint64 =
+  doAssert(fork >= Cancun)
+  com.config.blobSchedule[fork].expect("blobSchedule initialized").max
+
+func targetBlobsPerBlock*(com: CommonRef, fork: HardFork): uint64 =
+  doAssert(fork >= Cancun)
+  com.config.blobSchedule[fork].expect("blobSchedule initialized").target
+
 # ------------------------------------------------------------------------------
 # Setters
 # ------------------------------------------------------------------------------

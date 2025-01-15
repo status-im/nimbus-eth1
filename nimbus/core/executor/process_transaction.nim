@@ -1,5 +1,5 @@
 # Nimbus
-# Copyright (c) 2018-2024 Status Research & Development GmbH
+# Copyright (c) 2018-2025 Status Research & Development GmbH
 # Licensed under either of
 #  * Apache License, version 2.0, ([LICENSE-APACHE](LICENSE-APACHE) or
 #    http://www.apache.org/licenses/LICENSE-2.0)
@@ -103,7 +103,8 @@ proc processTransactionImpl(
   # of the `processTransaction()` function. So there is no `return err()`
   # statement, here.
   let
-    txRes = roDB.validateTransaction(tx, sender, header.gasLimit, baseFee256, excessBlobGas, fork)
+    com = vmState.com
+    txRes = roDB.validateTransaction(tx, sender, header.gasLimit, baseFee256, excessBlobGas, com, fork)
     res = if txRes.isOk:
       # EIP-1153
       vmState.ledger.clearTransientStorage()
