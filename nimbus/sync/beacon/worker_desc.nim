@@ -142,7 +142,7 @@ type
     syncState*: SyncState            ## Save/resume state descriptor
     hdrSync*: HeaderImportSync       ## Syncing by linked header chains
     blkSync*: BlocksImportSync       ## For importing/executing blocks
-    nextUpdate*: Moment              ## For updating metrics
+    nextMetricsUpdate*: Moment       ## For updating metrics
 
     # Blocks import/execution settings for importing with
     # `nBodiesBatch` blocks in each round (minimum value is
