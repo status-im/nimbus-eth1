@@ -1,5 +1,5 @@
 # Nimbus
-# Copyright (c) 2021-2024 Status Research & Development GmbH
+# Copyright (c) 2021-2025 Status Research & Development GmbH
 # Licensed under either of
 #  * Apache License, version 2.0, ([LICENSE-APACHE](LICENSE-APACHE))
 #  * MIT license ([LICENSE-MIT](LICENSE-MIT))
@@ -72,6 +72,7 @@ NetworkParams.useDefaultReaderIn JGenesis
 GenesisAccount.useDefaultReaderIn JGenesis
 Genesis.useDefaultReaderIn JGenesis
 ChainConfig.useDefaultReaderIn JGenesis
+BlobSchedule.useDefaultReaderIn JGenesis
 
 # ------------------------------------------------------------------------------
 # Private helper functions
@@ -274,6 +275,43 @@ proc readValue(reader: var JsonReader[JGenesis], value: var GenesisAlloc)
     for key in reader.readObjectFields:
       value[Address.fromHex(key)] = reader.readValue(GenesisAccount)
 
+const
+  BlobScheduleTable: array[Cancun..HardFork.high, string] = [
+    "cancun",
+    "prague",
+    "osaka"
+  ]
+
+func ofStmt(fork: HardFork, keyName: string, reader: NimNode, value: NimNode): NimNode =
+  let branchStmt = quote do:
+    `value`[`fork`] = reader.readValue(Opt[BlobSchedule])
+
+  nnkOfBranch.newTree(
+    newLit(keyName),
+    branchStmt
+  )
+
+macro blobScheduleParser(reader, key, value: typed): untyped =
+  # Automated blob schedule parser generator
+  var caseStmt = nnkCaseStmt.newTree(
+    quote do: `key`
+  )
+
+  for fork in Cancun..HardFork.high:
+    let keyName = BlobScheduleTable[fork]
+    caseStmt.add ofStmt(fork, keyName, reader, value)
+
+  caseStmt.add nnkElse.newTree(
+    quote do: discard
+  )
+  result = caseStmt
+
+proc readValue(reader: var JsonReader[JGenesis], value: var array[Cancun..HardFork.high, Opt[BlobSchedule]])
+    {.gcsafe, raises: [SerializationError, IOError].} =
+  wrapError:
+    for key in reader.readObjectFields:
+      blobScheduleParser(reader, key, value)
+
 macro fillArrayOfBlockNumberBasedForkOptionals(conf, tmp: typed): untyped =
   result = newStmtList()
   for i, x in forkBlockField:
@@ -304,7 +342,7 @@ func toHardFork*(map: ForkTransitionTable, forkDeterminer: ForkDeterminationInfo
   # should always have a match
   doAssert(false, "unreachable code")
 
-proc validateChainConfig*(conf: ChainConfig): bool =
+proc validateChainConfig(conf: ChainConfig): bool =
   result = true
 
   # FIXME: factor this to remove the duplication between the
@@ -353,6 +391,15 @@ proc validateChainConfig*(conf: ChainConfig): bool =
     if cur.time.isSome:
       lastTimeBasedFork = cur
 
+proc configureBlobSchedule(conf: ChainConfig) =
+  var prevFork = Cancun
+  if conf.blobSchedule[Cancun].isNone:
+    conf.blobSchedule[Cancun] = Opt.some(BlobSchedule())
+  for fork in Prague..HardFork.high:
+    if conf.blobSchedule[fork].isNone:
+      conf.blobSchedule[fork] = conf.blobSchedule[prevFork]
+    prevFork = fork
+
 proc parseGenesis*(data: string): Genesis
      {.gcsafe.} =
   try:
@@ -393,6 +440,7 @@ proc validateNetworkParams(params: var NetworkParams, input: string, inputIsFile
     warn "Loaded custom network contains no 'config' data"
     params.config = ChainConfig()
 
+  configureBlobSchedule(params.config)
   validateChainConfig(params.config)
 
 proc loadNetworkParams*(fileName: string, params: var NetworkParams):
@@ -435,6 +483,13 @@ proc parseGenesisAlloc*(data: string, ga: var GenesisAlloc): bool
 
   return true
 
+func defaultBlobSchedule*(): array[Cancun..HardFork.high, Opt[BlobSchedule]] =
+  [
+    Cancun: Opt.some(BlobSchedule(target: 3'u64, max: 6'u64)),
+    Prague: Opt.some(BlobSchedule(target: 6'u64, max: 9'u64)),
+    Osaka : Opt.some(BlobSchedule(target: 6'u64, max: 9'u64)),
+  ]
+
 func chainConfigForNetwork*(id: NetworkId): ChainConfig =
   # For some public networks, NetworkId and ChainId value are identical
   # but that is not always the case
@@ -446,8 +501,8 @@ func chainConfigForNetwork*(id: NetworkId): ChainConfig =
       MAINNET_DEPOSIT_CONTRACT_ADDRESS = address"0x00000000219ab540356cbb839cbe05303d7705fa"
     ChainConfig(
       chainId:             MainNet.ChainId,
-      # Genesis (Frontier):                                # 2015-07-30 15:26:13 UTC
-      # Frontier Thawing:  200_000.BlockNumber,          # 2015-09-07 21:33:09 UTC
+      # Genesis (Frontier):                                  # 2015-07-30 15:26:13 UTC
+      # Frontier Thawing:  200_000.BlockNumber,              # 2015-09-07 21:33:09 UTC
       homesteadBlock:      Opt.some(1_150_000.BlockNumber),  # 2016-03-14 18:49:53 UTC
       daoForkBlock:        Opt.some(1_920_000.BlockNumber),  # 2016-07-20 13:20:40 UTC
       daoForkSupport:      true,
@@ -469,6 +524,7 @@ func chainConfigForNetwork*(id: NetworkId): ChainConfig =
       shanghaiTime:        Opt.some(1_681_338_455.EthTime),  # 2023-04-12 10:27:35 UTC
       cancunTime:          Opt.some(1_710_338_135.EthTime),  # 2024-03-13 13:55:35 UTC
       depositContractAddress: Opt.some(MAINNET_DEPOSIT_CONTRACT_ADDRESS),
+      blobSchedule:        defaultBlobSchedule(),
     )
   of SepoliaNet:
     const sepoliaTTD = parse("17000000000000000",UInt256)
@@ -491,6 +547,7 @@ func chainConfigForNetwork*(id: NetworkId): ChainConfig =
       terminalTotalDifficulty: Opt.some(sepoliaTTD),
       shanghaiTime:        Opt.some(1_677_557_088.EthTime),
       cancunTime:          Opt.some(1_706_655_072.EthTime), # 2024-01-30 22:51:12
+      blobSchedule:        defaultBlobSchedule(),
     )
   of HoleskyNet:
     #https://github.com/eth-clients/holesky
@@ -513,6 +570,7 @@ func chainConfigForNetwork*(id: NetworkId): ChainConfig =
       shanghaiTime:        Opt.some(1_696_000_704.EthTime),
       cancunTime:          Opt.some(1_707_305_664.EthTime), # 2024-02-07 11:34:24
       depositContractAddress: Opt.some(HOLESKYNET_DEPOSIT_CONTRACT_ADDRESS),
+      blobSchedule:        defaultBlobSchedule(),
     )
   else:
     ChainConfig()

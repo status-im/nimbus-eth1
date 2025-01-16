@@ -332,6 +332,7 @@ proc addTx*(xp: TxPoolRef, ptx: PooledTransaction): Result[void, TxError] =
     return err(txErrorAlreadyKnown)
 
   validateTxBasic(
+    xp.com,
     ptx.tx,
     xp.nextFork,
     validateFork = true).isOkOr:

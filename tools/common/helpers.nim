@@ -1,5 +1,5 @@
 # Nimbus
-# Copyright (c) 2022-2024 Status Research & Development GmbH
+# Copyright (c) 2022-2025 Status Research & Development GmbH
 # Licensed under either of
 #  * Apache License, version 2.0, ([LICENSE-APACHE](LICENSE-APACHE) or
 #    http://www.apache.org/licenses/LICENSE-2.0)
@@ -65,6 +65,7 @@ func getChainConfig*(network: string, c: ChainConfig) =
   c.daoForkSupport = false
   c.chainId = 1.ChainId
   c.terminalTotalDifficulty = Opt.none(UInt256)
+  c.blobSchedule = defaultBlobSchedule()
 
   case network
   of $TestFork.Frontier:

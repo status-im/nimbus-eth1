@@ -1,0 +1,27 @@
+{
+  "config": {
+    "chainId": 7,
+    "homesteadBlock": 0,
+    "eip150Block": 0,
+    "eip150Hash": "0x5de1ee4135274003348e80b788e5afa4b18b18d320a5622218d5c493fedf5689",
+    "eip155Block": 0,
+    "eip158Block": 0,
+    "byzantiumBlock": 0,
+    "constantinopleBlock": 0,
+    "petersburgBlock": 0,
+    "istanbulBlock": 0,
+    "muirGlacierBlock": 0,
+    "berlinBlock": 0,
+    "londonBlock": 0,
+    "blobSchedule": {
+      "cancun": {
+        "target": 3,
+        "max": 6
+      },
+      "osaka": {
+        "target": 6,
+        "max": 9
+      }
+    }
+  }
+}
