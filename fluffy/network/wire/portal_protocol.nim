@@ -1,5 +1,5 @@
 # Fluffy
-# Copyright (c) 2021-2024 Status Research & Development GmbH
+# Copyright (c) 2021-2025 Status Research & Development GmbH
 # Licensed and distributed under either of
 #   * MIT license (license terms in the root directory or at https://opensource.org/licenses/MIT).
 #   * Apache v2 license (license terms in the root directory or at https://www.apache.org/licenses/LICENSE-2.0).
@@ -166,9 +166,12 @@ type
     of Database:
       contentKeys: ContentKeysList
 
+  BanTimeout = chronos.Moment
+
   PortalProtocol* = ref object of TalkProtocol
     protocolId*: PortalProtocolId
     routingTable*: RoutingTable
+    bannedPeers: Table[NodeId, BanTimeout]
     baseProtocol*: protocol.Protocol
     toContentId*: ToContentIdHandler
     contentCache: ContentCache
@@ -333,6 +336,30 @@ func truncateEnrs(
       break
 
   enrs
+
+proc banPeer(p: PortalProtocol, nodeId: NodeId, period: chronos.Duration) =
+  let banTimeout = now(chronos.Moment) + period
+
+  if p.bannedPeers.contains(nodeId):
+    let existingTimeout = p.bannedPeers.getOrDefault(nodeId)
+    if existingTimeout < banTimeout:
+      p.bannedPeers[nodeId] = banTimeout
+  else:
+    p.bannedPeers[nodeId] = banTimeout
+
+proc isBanned(p: PortalProtocol, nodeId: NodeId): bool =
+  if not p.bannedPeers.contains(nodeId):
+    return false
+
+  let
+    currentTime = now(chronos.Moment)
+    banTimeout = p.bannedPeers.getOrDefault(nodeId)
+  if currentTime < banTimeout:
+    return true
+
+  # Peer is in bannedPeers table but the time period has expired
+  p.bannedPeers.del(nodeId)
+  false
 
 proc handlePing(p: PortalProtocol, ping: PingMessage, srcId: NodeId): seq[byte] =
   # TODO: This should become custom per Portal Network
