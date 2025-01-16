@@ -21,7 +21,6 @@ import
   ../nimbus/[config, transaction, constants],
   ../nimbus/core/tx_pool,
   ../nimbus/core/tx_pool/tx_desc,
-  ../nimbus/core/casper,
   ../nimbus/common/common,
   ../nimbus/utils/utils,
   ./macro_assembler
@@ -111,7 +110,7 @@ template checkAddTxSupersede(xp, tx) =
   check xp.len == prevCount
 
 template checkAssembleBlock(xp, expCount): auto =
-  xp.com.pos.timestamp = xp.com.pos.timestamp + 1
+  xp.timestamp = xp.timestamp + 1
   let rc = xp.assembleBlock()
   check rc.isOk == true
   if rc.isErr:
@@ -186,9 +185,9 @@ proc txPoolMain*() =
       chain = env.chain
       com = env.com
 
-    com.pos.prevRandao = prevRandao
-    com.pos.feeRecipient = feeRecipient
-    com.pos.timestamp = EthTime.now()
+    xp.prevRandao = prevRandao
+    xp.feeRecipient = feeRecipient
+    xp.timestamp = EthTime.now()
 
     test "Bad blob tx":
       let acc = mx.getAccount(7)
@@ -334,7 +333,7 @@ proc txPoolMain*() =
 
       var numTxsPacked = 0
       while numTxsPacked < MAX_TXS_GENERATED:
-        com.pos.timestamp = com.pos.timestamp + 1
+        xp.timestamp = xp.timestamp + 1
         let bundle = xp.assembleBlock().valueOr:
           debugEcho error
           check false
@@ -370,6 +369,8 @@ proc txPoolMain*() =
       xp.checkAddTx(ptx2)
 
       xp2.checkImportBlock(2, 0)
+
+      xp.timestamp = xp2.timestamp + 1
       xp.checkImportBlock(1, 0)
 
     test "mixed type of transactions":
@@ -570,6 +571,48 @@ proc txPoolMain*() =
         check txh in hs
         inc count
       check count == hs.len
+
+    test "EIP-7702 transaction before Prague":
+      let
+        acc = mx.getAccount(24)
+        auth = mx.makeAuth(acc, 0)
+        tc = BaseTx(
+          txType: Opt.some(TxEip7702),
+          gasLimit: 75000,
+          recipient: Opt.some(recipient214),
+          amount: amount,
+          authorizationList: @[auth],
+        )
+        tx = mx.makeTx(tc, 0)
+
+      xp.checkAddTx(tx, txErrorBasicValidation)
+
+    test "EIP-7702 transaction invalid auth signature":
+      let
+        env = initEnv(Prague)
+        xp = env.xp
+        mx = env.sender
+        acc = mx.getAccount(25)
+        auth = mx.makeAuth(acc, 0)
+        tc = BaseTx(
+          txType: Opt.some(TxEip7702),
+          gasLimit: 75000,
+          recipient: Opt.some(recipient214),
+          amount: amount,
+          authorizationList: @[auth],
+        )
+        ptx = mx.makeTx(tc, 0)
+
+      # invalid auth
+      var invauth = auth
+      invauth.v = 3.uint64
+      let
+        ctx = CustomTx(auth: Opt.some(invauth))
+        tx  = mx.customizeTransaction(acc, ptx.tx, ctx)
+
+      xp.checkAddTx(tx)
+      # invalid auth, but the tx itself still valid
+      xp.checkImportBlock(1, 0)
 
 when isMainModule:
   txPoolMain()

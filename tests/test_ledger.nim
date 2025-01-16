@@ -18,7 +18,6 @@ import
   ../nimbus/common/common,
   ../nimbus/core/chain,
   ../nimbus/core/tx_pool,
-  ../nimbus/core/casper,
   ../nimbus/transaction,
   ../nimbus/constants,
   ../nimbus/db/ledger {.all.}, # import all private symbols
@@ -297,9 +296,9 @@ proc runLedgerTransactionTests(noisy = true) =
           inc recipientSeed
 
         check env.xp.len == NumTransactions
-        env.com.pos.prevRandao = prevRandao
-        env.com.pos.feeRecipient = feeRecipient
-        env.com.pos.timestamp = blockTime
+        env.xp.prevRandao = prevRandao
+        env.xp.feeRecipient = feeRecipient
+        env.xp.timestamp = blockTime
 
         blockTime = EthTime(blockTime.uint64 + 1'u64)
 

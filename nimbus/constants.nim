@@ -1,5 +1,5 @@
 # Nimbus
-# Copyright (c) 2018-2024 Status Research & Development GmbH
+# Copyright (c) 2018-2025 Status Research & Development GmbH
 # Licensed under either of
 #  * Apache License, version 2.0, ([LICENSE-APACHE](LICENSE-APACHE) or
 #    http://www.apache.org/licenses/LICENSE-2.0)
@@ -106,7 +106,7 @@ const
       result.data[19] = x.byte
     initAddress(3)
 
-  HISTORY_STORAGE_ADDRESS* = address"0x0aae40965e6800cd9b1f4b05ff21581047e3f91e"
+  HISTORY_STORAGE_ADDRESS* = address"0x0F792be4B0c0cb4DAE440Ef133E90C0eCD48CCCC"
   WITHDRAWAL_REQUEST_PREDEPLOY_ADDRESS* = address"0x0c15F14308530b7CDB8460094BbB9cC28b9AaaAA"
   CONSOLIDATION_REQUEST_PREDEPLOY_ADDRESS* = address"0x00431F263cE400f4455c2dCf564e53007Ca4bbBb"
 # End

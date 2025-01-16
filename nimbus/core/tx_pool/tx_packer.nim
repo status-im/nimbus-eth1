@@ -27,7 +27,6 @@ import
   ../../evm/types,
   ../executor,
   ../validate,
-  ../casper,
   ../eip4844,
   ../eip6110,
   ../eip7691,
@@ -101,9 +100,6 @@ func baseFee(pst: TxPacker): GasInt =
   else:
     0.GasInt
 
-func feeRecipient(pst: TxPacker): Address =
-  pst.vmState.com.pos.feeRecipient
-
 # ------------------------------------------------------------------------------
 # Private functions
 # ------------------------------------------------------------------------------
@@ -115,7 +111,7 @@ proc runTx(pst: var TxPacker; item: TxItemRef): GasInt =
   doAssert 0 <= gasUsed
   gasUsed
 
-proc runTxCommit(pst: var TxPacker; item: TxItemRef; gasBurned: GasInt) =
+proc runTxCommit(pst: var TxPacker; item: TxItemRef; gasBurned: GasInt, xp: TxPoolRef) =
   ## Book keeping after executing argument `item` transaction in the VM. The
   ## function returns the next number of items `nItems+1`.
   let
@@ -124,7 +120,7 @@ proc runTxCommit(pst: var TxPacker; item: TxItemRef; gasBurned: GasInt) =
     gasTip  = item.tx.tip(pst.baseFee)
 
   let reward = gasBurned.u256 * gasTip.u256
-  vmState.ledger.addBalance(pst.feeRecipient, reward)
+  vmState.ledger.addBalance(xp.feeRecipient, reward)
   pst.blockValue += reward
 
   # Update receipts sequence
@@ -154,7 +150,7 @@ proc vmExecInit(xp: TxPoolRef): Result[TxPacker, string] =
 
   # EIP-4788
   if xp.nextFork >= FkCancun:
-    let beaconRoot = xp.vmState.com.pos.parentBeaconBlockRoot
+    let beaconRoot = xp.parentBeaconBlockRoot
     xp.vmState.processBeaconBlockRoot(beaconRoot).isOkOr:
       return err(error)
 
@@ -165,7 +161,7 @@ proc vmExecInit(xp: TxPoolRef): Result[TxPacker, string] =
 
   ok(packer)
 
-proc vmExecGrabItem(pst: var TxPacker; item: TxItemRef): bool =
+proc vmExecGrabItem(pst: var TxPacker; item: TxItemRef, xp: TxPoolRef): bool =
   ## Greedily collect & compact items as long as the accumulated `gasLimit`
   ## values are below the maximum block size.
   let
@@ -215,7 +211,7 @@ proc vmExecGrabItem(pst: var TxPacker; item: TxItemRef): bool =
   vmState.ledger.persist(clearEmptyAccount = vmState.fork >= FkSpurious)
 
   # Finish book-keeping
-  pst.runTxCommit(item, gasUsed)
+  pst.runTxCommit(item, gasUsed, xp)
 
   pst.numBlobPerBlock += item.tx.versionedHashes.len
   vmState.blobGasUsed += blobGasUsed
@@ -223,14 +219,14 @@ proc vmExecGrabItem(pst: var TxPacker; item: TxItemRef): bool =
 
   ContinueWithNextAccount
 
-proc vmExecCommit(pst: var TxPacker): Result[void, string] =
+proc vmExecCommit(pst: var TxPacker, xp: TxPoolRef): Result[void, string] =
   let
     vmState = pst.vmState
     ledger = vmState.ledger
 
   # EIP-4895
   if vmState.fork >= FkShanghai:
-    for withdrawal in vmState.com.pos.withdrawals:
+    for withdrawal in xp.withdrawals:
       ledger.addBalance(withdrawal.address, withdrawal.weiAmount)
 
   # EIP-6110, EIP-7002, EIP-7251
@@ -264,11 +260,11 @@ proc packerVmExec*(xp: TxPoolRef): Result[TxPacker, string] =
     return err(error)
 
   for item in xp.byPriceAndNonce:
-    let rc = pst.vmExecGrabItem(item)
+    let rc = pst.vmExecGrabItem(item, xp)
     if rc == StopCollecting:
       break
 
-  ?pst.vmExecCommit()
+  ?pst.vmExecCommit(xp)
   ok(pst)
 
 func getExtraData(com: CommonRef): seq[byte] =
@@ -277,17 +273,16 @@ func getExtraData(com: CommonRef): seq[byte] =
   else:
     com.extraData.toBytes
 
-proc assembleHeader*(pst: TxPacker): Header =
+proc assembleHeader*(pst: TxPacker, xp: TxPoolRef): Header =
   ## Generate a new header, a child of the cached `head`
   let
     vmState = pst.vmState
     com = vmState.com
-    pos = com.pos
 
   result = Header(
     parentHash:    vmState.blockCtx.parentHash,
     ommersHash:    EMPTY_UNCLE_HASH,
-    coinbase:      pos.feeRecipient,
+    coinbase:      xp.feeRecipient,
     stateRoot:     pst.stateRoot,
     receiptsRoot:  pst.receiptsRoot,
     logsBloom:     pst.logsBloom,
@@ -295,22 +290,22 @@ proc assembleHeader*(pst: TxPacker): Header =
     number:        vmState.blockNumber,
     gasLimit:      vmState.blockCtx.gasLimit,
     gasUsed:       vmState.cumulativeGasUsed,
-    timestamp:     pos.timestamp,
+    timestamp:     xp.timestamp,
     extraData:     getExtraData(com),
-    mixHash:       pos.prevRandao,
+    mixHash:       xp.prevRandao,
     nonce:         default(Bytes8),
     baseFeePerGas: vmState.blockCtx.baseFeePerGas,
     )
 
-  if com.isShanghaiOrLater(pos.timestamp):
-    result.withdrawalsRoot = Opt.some(calcWithdrawalsRoot(pos.withdrawals))
+  if com.isShanghaiOrLater(xp.timestamp):
+    result.withdrawalsRoot = Opt.some(calcWithdrawalsRoot(xp.withdrawals))
 
-  if com.isCancunOrLater(pos.timestamp):
-    result.parentBeaconBlockRoot = Opt.some(pos.parentBeaconBlockRoot)
+  if com.isCancunOrLater(xp.timestamp):
+    result.parentBeaconBlockRoot = Opt.some(xp.parentBeaconBlockRoot)
     result.blobGasUsed = Opt.some vmState.blobGasUsed
     result.excessBlobGas = Opt.some vmState.blockCtx.excessBlobGas
 
-  if com.isPragueOrLater(pos.timestamp):
+  if com.isPragueOrLater(xp.timestamp):
     let requestsHash = calcRequestsHash([
       (DEPOSIT_REQUEST_TYPE, pst.depositReqs),
       (WITHDRAWAL_REQUEST_TYPE, pst.withdrawalReqs),

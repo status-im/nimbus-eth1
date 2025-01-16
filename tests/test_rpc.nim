@@ -18,7 +18,7 @@ import
   ../nimbus/[constants, transaction, config, version],
   ../nimbus/db/[ledger, storage_types],
   ../nimbus/sync/protocol,
-  ../nimbus/core/[tx_pool, chain, pow/difficulty, casper],
+  ../nimbus/core/[tx_pool, chain, pow/difficulty],
   ../nimbus/utils/utils,
   ../nimbus/[common, rpc],
   ../nimbus/rpc/rpc_types,
@@ -237,9 +237,9 @@ proc generateBlock(env: var TestEnv) =
   doAssert(xp.len == 2)
 
   # generate block
-  com.pos.prevRandao = prevRandao
-  com.pos.feeRecipient = feeRecipient
-  com.pos.timestamp = EthTime.now()
+  xp.prevRandao = prevRandao
+  xp.feeRecipient = feeRecipient
+  xp.timestamp = EthTime.now()
 
   let bundle = xp.assembleBlock().valueOr:
     debugEcho error

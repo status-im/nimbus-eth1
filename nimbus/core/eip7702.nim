@@ -1,5 +1,5 @@
 # Nimbus
-# Copyright (c) 2024 Status Research & Development GmbH
+# Copyright (c) 2024-2025 Status Research & Development GmbH
 # Licensed under either of
 #  * Apache License, version 2.0, ([LICENSE-APACHE](LICENSE-APACHE) or
 #    http://www.apache.org/licenses/LICENSE-2.0)
@@ -12,6 +12,7 @@
 
 import
   ../evm/code_bytes,
+  ../constants,
   results,
   stew/assign2,
   eth/common/eth_types,
@@ -19,13 +20,26 @@ import
   eth/common/keys
 
 const
+  # the last 0x00 is the version
   DelegationPrefix = [0xef.byte, 0x01, 0x00]
 
 const
   PER_AUTH_BASE_COST* = 12500
   PER_EMPTY_ACCOUNT_COST* = 25000
+  EIP7702_MAGIC_BYTES* = [0xef.byte, 0x01]
+  EIP7702_MAGIC_HASH* = hash32"eadcdba66a79ab5dce91622d1d75c8cff5cff0b96944c3bf1072cd08ce018329"
 
 func authority*(auth: Authorization): Opt[Address] =
+  const SECP256K1halfN = SECPK1_N div 2
+
+  if auth.v > 1'u64:
+    # auth.v must be 0 or 1
+    return Opt.none(Address)
+
+  if auth.s > SECP256K1halfN:
+    # auth.s must be <= SECP256K1N/2
+    return Opt.none(Address)
+
   let sigHash = rlpHashForSigning(auth)
 
   var bytes: array[65, byte]
@@ -62,3 +76,8 @@ func parseDelegationAddress*(code: CodeBytesRef): Opt[Address] =
     return Opt.none(Address)
 
   Opt.some(Address(slice[20](code, 3, 22)))
+
+func isEip7702*(code: CodeBytesRef): bool =
+  if code.len != 23:
+    return false
+  code.hasPrefix(DelegationPrefix)
