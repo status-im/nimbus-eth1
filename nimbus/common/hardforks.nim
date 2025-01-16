@@ -133,13 +133,6 @@ func isGTETransitionThreshold*(map: ForkTransitionTable, forkDeterminer: ForkDet
   else:
     raise newException(Defect, "Why is this hard fork not in one of the above categories?")
 
-const
-  BlobScheduleTable*: array[Cancun..HardFork.high, string] = [
-    "cancun",
-    "prague",
-    "osaka"
-  ]
-
 type
   BlobSchedule* = object
     target*: uint64

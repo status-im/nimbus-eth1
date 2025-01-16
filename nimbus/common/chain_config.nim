@@ -275,6 +275,13 @@ proc readValue(reader: var JsonReader[JGenesis], value: var GenesisAlloc)
     for key in reader.readObjectFields:
       value[Address.fromHex(key)] = reader.readValue(GenesisAccount)
 
+const
+  BlobScheduleTable: array[Cancun..HardFork.high, string] = [
+    "cancun",
+    "prague",
+    "osaka"
+  ]
+
 func ofStmt(fork: HardFork, keyName: string, reader: NimNode, value: NimNode): NimNode =
   let branchStmt = quote do:
     `value`[`fork`] = reader.readValue(Opt[BlobSchedule])
@@ -476,7 +483,7 @@ proc parseGenesisAlloc*(data: string, ga: var GenesisAlloc): bool
 
   return true
 
-func defaultBlobSchedule(): array[Cancun..HardFork.high, Opt[BlobSchedule]] =
+func defaultBlobSchedule*(): array[Cancun..HardFork.high, Opt[BlobSchedule]] =
   [
     Cancun: Opt.some(BlobSchedule(target: 3'u64, max: 6'u64)),
     Prague: Opt.some(BlobSchedule(target: 6'u64, max: 9'u64)),
