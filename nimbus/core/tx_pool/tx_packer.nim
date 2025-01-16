@@ -71,10 +71,10 @@ proc classifyValidatePacked(vmState: BaseVMState; item: TxItemRef): bool =
     baseFee = vmState.blockCtx.baseFeePerGas.get(0.u256)
     fork = vmState.fork
     gasLimit = vmState.blockCtx.gasLimit
-    excessBlobGas = calcExcessBlobGas(vmState.parent, vmState.fork >= FkPrague)
+    excessBlobGas = calcExcessBlobGas(vmState.parent, fork >= FkPrague)
 
   roDB.validateTransaction(
-    item.tx, item.sender, gasLimit, baseFee, excessBlobGas, fork).isOk
+    item.tx, item.sender, gasLimit, baseFee, excessBlobGas, vmState.com, fork).isOk
 
 proc classifyPacked(vmState: BaseVMState; moreBurned: GasInt): bool =
   ## Classifier for *packing* (i.e. adding up `gasUsed` values after executing
@@ -169,9 +169,10 @@ proc vmExecGrabItem(pst: var TxPacker; item: TxItemRef, xp: TxPoolRef): bool =
     electra = vmState.fork >= FkPrague
 
   # EIP-4844
-  let maxBlobsPerBlock = getMaxBlobsPerBlock(electra)
-  if (pst.numBlobPerBlock + item.tx.versionedHashes.len).uint64 > maxBlobsPerBlock:
-    return ContinueWithNextAccount
+  if item.tx.txType == TxEip4844:
+    let maxBlobsPerBlock = getMaxBlobsPerBlock(vmState.com, vmState.fork)
+    if (pst.numBlobPerBlock + item.tx.versionedHashes.len).uint64 > maxBlobsPerBlock:
+      return ContinueWithNextAccount
 
   let
     blobGasUsed = item.tx.getTotalBlobGas

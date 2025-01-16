@@ -56,17 +56,21 @@ proc initEnv(envFork: HardFork): TestEnv =
 
   doAssert envFork >= MergeFork
 
+  let cc = conf.networkParams.config
   if envFork >= MergeFork:
-    conf.networkParams.config.mergeNetsplitBlock = Opt.some(0'u64)
+    cc.mergeNetsplitBlock = Opt.some(0'u64)
 
   if envFork >= Shanghai:
-    conf.networkParams.config.shanghaiTime = Opt.some(0.EthTime)
+    cc.shanghaiTime = Opt.some(0.EthTime)
 
   if envFork >= Cancun:
-    conf.networkParams.config.cancunTime = Opt.some(0.EthTime)
+    cc.cancunTime = Opt.some(0.EthTime)
 
   if envFork >= Prague:
-    conf.networkParams.config.pragueTime = Opt.some(0.EthTime)
+    cc.pragueTime = Opt.some(0.EthTime)
+
+  if envFork >= Osaka:
+    cc.osakaTime = Opt.some(0.EthTime)
 
   conf.networkParams.genesis.alloc[recipient] = GenesisAccount(code: contractCode)
 
@@ -613,6 +617,42 @@ proc txPoolMain*() =
       xp.checkAddTx(tx)
       # invalid auth, but the tx itself still valid
       xp.checkImportBlock(1, 0)
+
+    test "Blobschedule":
+      let
+        cc = env.conf.networkParams.config
+        acc = mx.getAccount(26)
+        tc = BlobTx(
+          txType: Opt.some(TxEip4844),
+          gasLimit: 75000,
+          recipient: Opt.some(acc.address),
+          blobID: 0.BlobID,
+          blobCount: 1
+        )
+        tx1 = mx.makeTx(tc, acc, 0)
+        tx2 = mx.makeTx(tc, acc, 1)
+        tx3 = mx.makeTx(tc, acc, 2)
+        tx4 = mx.makeTx(tc, acc, 3)
+
+      xp.checkAddTx(tx1)
+      xp.checkAddTx(tx2)
+      xp.checkAddTx(tx3)
+      xp.checkAddTx(tx4)
+
+      # override current blobSchedule
+      let bs = cc.blobSchedule[Cancun]
+      cc.blobSchedule[Cancun] = Opt.some(
+        BlobSchedule(target: 2, max: 3)
+      )
+
+      # allow 3 blobs
+      xp.checkImportBlock(3, 1)
+
+      # consume the rest of blobs
+      xp.checkImportBlock(1, 0)
+
+      # restore blobSchedule
+      cc.blobSchedule[Cancun] = bs
 
 when isMainModule:
   txPoolMain()

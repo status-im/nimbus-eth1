@@ -206,6 +206,7 @@ func gasCost*(tx: Transaction): UInt256 =
     tx.gasLimit.u256 * tx.gasPrice.u256
 
 proc validateTxBasic*(
+    com:      CommonRef,
     tx:       Transaction;     ## tx to validate
     fork:     EVMFork,
     validateFork: bool = true): Result[void, string] =
@@ -260,9 +261,9 @@ proc validateTxBasic*(
     if tx.versionedHashes.len == 0:
       return err("invalid tx: there must be at least one blob")
 
-    let maxBlobsPerBlob = getMaxBlobsPerBlock(fork >= FkPrague)
-    if tx.versionedHashes.len.uint64 > maxBlobsPerBlob:
-      return err(&"invalid tx: versioned hashes len exceeds MAX_BLOBS_PER_BLOCK={maxBlobsPerBlob}. get={tx.versionedHashes.len}")
+    let maxBlobsPerBlock = getMaxBlobsPerBlock(com, fork)
+    if tx.versionedHashes.len.uint64 > maxBlobsPerBlock:
+      return err(&"invalid tx: versioned hashes len exceeds MAX_BLOBS_PER_BLOCK={maxBlobsPerBlock}. get={tx.versionedHashes.len}")
 
     for i, bv in tx.versionedHashes:
       if bv.data[0] != VERSIONED_HASH_VERSION_KZG:
@@ -282,9 +283,10 @@ proc validateTransaction*(
     maxLimit: GasInt;          ## gasLimit from block header
     baseFee:  UInt256;         ## baseFee from block header
     excessBlobGas: uint64;     ## excessBlobGas from parent block header
+    com:      CommonRef,
     fork:     EVMFork): Result[void, string] =
 
-  ? validateTxBasic(tx, fork)
+  ? validateTxBasic(com, tx, fork)
 
   let
     balance = roDB.getBalance(sender)

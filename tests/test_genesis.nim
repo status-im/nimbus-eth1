@@ -151,10 +151,33 @@ proc customGenesisTest() =
         (CONSOLIDATION_REQUEST_TYPE, default(seq[byte]))
       ]) == EmptyRequestsHash
 
+    test "BlobSchedule":
+      template validateBlobSchedule(cg, fork, tgt, mx) =
+        check cg.config.blobSchedule[fork].isSome
+        if cg.config.blobSchedule[fork].isSome:
+          let bs = cg.config.blobSchedule[fork].get
+          check bs.target == tgt
+          check bs.max == mx
+
+      var cg: NetworkParams
+      check loadNetworkParams("blobschedule_cancun_prague.json".findFilePath, cg)
+      validateBlobSchedule(cg, Cancun, 3, 6)
+      validateBlobSchedule(cg, Prague, 6, 9)
+      validateBlobSchedule(cg, Osaka, 6, 9)
+
+      check loadNetworkParams("blobschedule_cancun_osaka.json".findFilePath, cg)
+      validateBlobSchedule(cg, Cancun, 3, 6)
+      validateBlobSchedule(cg, Prague, 3, 6)
+      validateBlobSchedule(cg, Osaka, 6, 9)
+
+      check loadNetworkParams("blobschedule_prague.json".findFilePath, cg)
+      validateBlobSchedule(cg, Cancun, 0, 0)
+      validateBlobSchedule(cg, Prague, 6, 9)
+      validateBlobSchedule(cg, Osaka, 6, 9)
+
 proc genesisMain*() =
   genesisTest()
   customGenesisTest()
 
 when isMainModule:
-  genesisTest()
-  customGenesisTest()
+  genesisMain()
