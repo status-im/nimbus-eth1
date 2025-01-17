@@ -1,5 +1,5 @@
 # Nimbus
-# Copyright (c) 2024 Status Research & Development GmbH
+# Copyright (c) 2024-2025 Status Research & Development GmbH
 # Licensed under either of
 #  * Apache License, version 2.0, ([LICENSE-APACHE](LICENSE-APACHE) or
 #    http://www.apache.org/licenses/LICENSE-2.0)
@@ -18,7 +18,8 @@ import
   pkg/stew/interval_set,
   ../../nimbus/common,
   ../../nimbus/sync/beacon/worker/helpers,
-  ../../nimbus/core/chain/forked_chain/chain_desc
+  ../../nimbus/core/chain/forked_chain/chain_desc,
+  ../../nimbus/core/chain/forked_chain/chain_branch
 
 logScope: topics = "forked-chain"
 
@@ -27,8 +28,8 @@ logScope: topics = "forked-chain"
 # ------------------------------------------------------------------------------
 
 func header(h: Hash32; c: ForkedChainRef): Header =
-  c.blocks.withValue(h, val):
-    return val.blk.header
+  c.hashToBlock.withValue(h, loc):
+    return loc[].header
 
 func cmp(c: ForkedChainRef; _: type CursorDesc): auto =
   return func(x,y: CursorDesc): int =

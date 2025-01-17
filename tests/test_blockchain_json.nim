@@ -148,6 +148,6 @@ when isMainModule:
       if testStatusIMPL == FAILED:
         quit(QuitFailure)
 
-    executeFile("tests/fixtures/eth_tests/BlockchainTests/GeneralStateTests/stTransactionTest/ValueOverflowParis.json")
+    executeFile("tests/fixtures/eth_tests/BlockchainTests/ValidBlocks/bcWalletTest/walletReorganizeOwners.json")
   else:
     blockchainJsonMain()
