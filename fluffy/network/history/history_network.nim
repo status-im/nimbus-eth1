@@ -1,5 +1,5 @@
 # Fluffy
-# Copyright (c) 2021-2024 Status Research & Development GmbH
+# Copyright (c) 2021-2025 Status Research & Development GmbH
 # Licensed and distributed under either of
 #   * MIT license (license terms in the root directory or at https://opensource.org/licenses/MIT).
 #   * Apache v2 license (license terms in the root directory or at https://www.apache.org/licenses/LICENSE-2.0).
@@ -17,7 +17,7 @@ import
   ../../common/common_types,
   ../../database/content_db,
   ../../network_metadata,
-  ../wire/[portal_protocol, portal_stream, portal_protocol_config],
+  ../wire/[portal_protocol, portal_stream, portal_protocol_config, ping_extensions],
   "."/[history_content, history_validation, history_type_conversions],
   ../beacon/beacon_chain_historical_roots,
   ./content/content_deprecated
@@ -29,6 +29,8 @@ logScope:
   topics = "portal_hist"
 
 export blocks_rlp
+
+const pingExtensionCapabilities = {CapabilitiesType, HistoryRadiusType}
 
 type
   HistoryNetwork* = ref object
@@ -350,6 +352,7 @@ proc new*(
       stream,
       bootstrapRecords,
       config = portalConfig,
+      pingExtensionCapabilities = pingExtensionCapabilities,
     )
 
   HistoryNetwork(

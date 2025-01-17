@@ -1,5 +1,5 @@
-# Fluffy
-# Copyright (c) 2021-2024 Status Research & Development GmbH
+# Nimbus
+# Copyright (c) 2021-2025 Status Research & Development GmbH
 # Licensed and distributed under either of
 #   * MIT license (license terms in the root directory or at https://opensource.org/licenses/MIT).
 #   * Apache v2 license (license terms in the root directory or at https://www.apache.org/licenses/LICENSE-2.0).
@@ -21,15 +21,13 @@ import
 suite "Portal Wire Protocol Message Encodings":
   test "Ping Request":
     let
-      dataRadius = UInt256.high() - 1 # Full radius - 1
       enrSeq = 1'u64
-      # Can be any custom payload, testing with just dataRadius here.
-      customPayload = ByteList[2048](SSZ.encode(CustomPayload(dataRadius: dataRadius)))
+      # Can be any custom payload, testing with meaningless string of bytes.
+      customPayload = ByteList[2048].init(@[byte 0x01, 0x02, 0x03, 0x04])
       p = PingMessage(enrSeq: enrSeq, customPayload: customPayload)
 
     let encoded = encodeMessage(p)
-    check encoded.toHex ==
-      "0001000000000000000c000000feffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff"
+    check encoded.toHex == "0001000000000000000c00000001020304"
     let decoded = decodeMessage(encoded)
     check decoded.isOk()
 
@@ -41,15 +39,13 @@ suite "Portal Wire Protocol Message Encodings":
 
   test "Pong Response":
     let
-      dataRadius = UInt256.high() div 2.stuint(256) # Radius of half the UInt256
       enrSeq = 1'u64
-      # Can be any custom payload, testing with just dataRadius here.
-      customPayload = ByteList[2048](SSZ.encode(CustomPayload(dataRadius: dataRadius)))
+      # Can be any custom payload, testing with meaningless string of bytes.
+      customPayload = ByteList[2048].init(@[byte 0x01, 0x02, 0x03, 0x04])
       p = PongMessage(enrSeq: enrSeq, customPayload: customPayload)
 
     let encoded = encodeMessage(p)
-    check encoded.toHex ==
-      "0101000000000000000c000000ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff7f"
+    check encoded.toHex == "0101000000000000000c00000001020304"
     let decoded = decodeMessage(encoded)
     check decoded.isOk()
 
