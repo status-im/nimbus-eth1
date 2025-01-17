@@ -126,6 +126,10 @@ const
   ## value in milliseconds
   initialLookups = 1 ## Amount of lookups done when populating the routing table
 
+  # Ban durations for the banned peers table
+  PeerBanDurationContentLookupFailedValidation = 30.minutes
+  PeerBanDurationOfferFailedValidation = 60.minutes
+
 type
   ToContentIdHandler* =
     proc(contentKey: ContentKeyByteList): results.Opt[ContentId] {.raises: [], gcsafe.}
@@ -360,6 +364,12 @@ proc isBanned(p: PortalProtocol, nodeId: NodeId): bool =
   # Peer is in bannedPeers table but the time period has expired
   p.bannedPeers.del(nodeId)
   false
+
+template contentLookupFailedValidation*(p: PortalProtocol, nodeId: NodeId) =
+  p.banPeer(nodeId, PeerBanDurationContentLookupFailedValidation)
+
+template offerFailedValidation*(p: PortalProtocol, nodeId: NodeId) =
+  p.banPeer(nodeId, PeerBanDurationOfferFailedValidation)
 
 proc handlePing(p: PortalProtocol, ping: PingMessage, srcId: NodeId): seq[byte] =
   # TODO: This should become custom per Portal Network

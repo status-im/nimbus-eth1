@@ -46,6 +46,7 @@ proc installPortalStateApiHandlers*(rpcServer: RpcServer, p: PortalProtocol) =
     of Content:
       let valueBytes = foundContentResult.content
       validateRetrieval(key, valueBytes).isOkOr:
+        p.contentLookupFailedValidation(node.id)
         raise invalidValueErr()
 
       let res = ContentInfo(
@@ -97,6 +98,7 @@ proc installPortalStateApiHandlers*(rpcServer: RpcServer, p: PortalProtocol) =
       valueBytes = contentLookupResult.content
 
     validateRetrieval(key, valueBytes).isOkOr:
+      p.contentLookupFailedValidation(contentLookupResult.receivedFrom.id)
       raise invalidValueErr()
     p.storeContent(keyBytes, contentId, valueBytes, cacheContent = true)
 
@@ -124,6 +126,8 @@ proc installPortalStateApiHandlers*(rpcServer: RpcServer, p: PortalProtocol) =
         raise contentNotFoundErrWithTrace(data)
 
     validateRetrieval(key, valueBytes).isOkOr:
+      if res.trace.receivedFrom.isSome():
+        p.contentLookupFailedValidation(res.trace.receivedFrom.get())
       raise invalidValueErr()
     p.storeContent(keyBytes, contentId, valueBytes, cacheContent = true)
 
