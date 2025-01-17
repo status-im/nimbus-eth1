@@ -87,9 +87,9 @@ proc installPortalStateApiHandlers*(rpcServer: RpcServer, p: PortalProtocol) =
       keyBytes = ContentKeyByteList.init(hexToSeqByte(contentKey))
       (key, contentId) = validateGetContentKey(keyBytes).valueOr:
         raise invalidKeyErr()
-      maybeValueBytes = p.getLocalContent(keyBytes, contentId)
-    if maybeValueBytes.isSome():
-      return ContentInfo(content: maybeValueBytes.get().to0xHex(), utpTransfer: false)
+
+    p.getLocalContent(keyBytes, contentId).isErrOr:
+      return ContentInfo(content: value.to0xHex(), utpTransfer: false)
 
     let
       contentLookupResult = (await p.contentLookup(keyBytes, contentId)).valueOr:
@@ -111,9 +111,17 @@ proc installPortalStateApiHandlers*(rpcServer: RpcServer, p: PortalProtocol) =
       keyBytes = ContentKeyByteList.init(hexToSeqByte(contentKey))
       (key, contentId) = validateGetContentKey(keyBytes).valueOr:
         raise invalidKeyErr()
-      maybeValueBytes = p.getLocalContent(keyBytes, contentId)
-    if maybeValueBytes.isSome():
-      return TraceContentLookupResult(content: maybeValueBytes, utpTransfer: false)
+
+    p.getLocalContent(keyBytes, contentId).isErrOr:
+      return TraceContentLookupResult(
+        content: Opt.some(value),
+        utpTransfer: false,
+        trace: TraceObject(
+          origin: p.localNode.id,
+          targetId: contentId,
+          receivedFrom: Opt.some(p.localNode.id),
+        ),
+      )
 
     # TODO: Might want to restructure the lookup result here. Potentially doing
     # the json conversion in this module.

@@ -1,4 +1,4 @@
-# Copyright (c) 2018-2024 Status Research & Development GmbH
+# Copyright (c) 2018-2025 Status Research & Development GmbH
 # Licensed under either of
 #  * Apache License, version 2.0, ([LICENSE-APACHE](LICENSE-APACHE))
 #  * MIT license ([LICENSE-MIT](LICENSE-MIT))
@@ -416,6 +416,11 @@ type
       hidden
       desc: "Print RDB statistics at exit"
       name: "debug-rdb-print-stats".}: bool
+
+    rewriteDatadirId* {.
+      hidden
+      desc: "Rewrite selected network config hash to database"
+      name: "debug-rewrite-datadir-id".}: bool
 
     case cmd* {.
       command

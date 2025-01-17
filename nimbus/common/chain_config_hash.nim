@@ -1,5 +1,5 @@
 # Nimbus
-# Copyright (c) 2024 Status Research & Development GmbH
+# Copyright (c) 2024-2025 Status Research & Development GmbH
 # Licensed under either of
 #  * Apache License, version 2.0, ([LICENSE-APACHE](LICENSE-APACHE))
 #  * MIT license ([LICENSE-MIT](LICENSE-MIT))
@@ -25,8 +25,8 @@ import
 # complicated steps before the genesis hash is ready. See `CommonRef.init`.
 # If the genesis happen to exists in database belonging to other network,
 # it will replace the one in CommonRef cache.
-# That is the reason why using genesis header or genesis hash + ChainId is 
-# not a good solution to prevent loading existing data directory for 
+# That is the reason why using genesis header or genesis hash + ChainId is
+# not a good solution to prevent loading existing data directory for
 # the wrong network.
 # But the ChainConfig + raw Genesis hash will make the job done before
 # CommonRef creation.
@@ -66,6 +66,11 @@ func update[T: ref](ctx: var sha256, val: T) =
   for f in fields(val[]):
     ctx.update(f)
 
+func update(ctx: var sha256, list: openArray[Opt[BlobSchedule]]) =
+  mixin update
+  for val in list:
+    ctx.update(val)
+
 # ------------------------------------------------------------------------------
 # Public functions
 # ------------------------------------------------------------------------------
@@ -74,7 +79,7 @@ func calcHash*(networkId: NetworkId, conf: ChainConfig, genesis: Genesis): Hash3
   var ctx: sha256
   ctx.init()
   ctx.update(networkId)
-  ctx.update(conf)
+  ctx.update(conf.chainId)
   if genesis.isNil.not:
     ctx.update(genesis)
   ctx.finish(result.data)
