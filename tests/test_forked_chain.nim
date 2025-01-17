@@ -15,8 +15,8 @@ import
   ../nimbus/config,
   ../nimbus/utils/utils,
   ../nimbus/core/chain/forked_chain,
-  ../nimbus/db/ledger,
-  ./test_forked_chain/chain_debug
+  ../nimbus/db/ledger#,
+  #./test_forked_chain/chain_debug
 
 const
   genesisFile = "tests/customgenesis/cancun123.json"

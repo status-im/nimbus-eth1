@@ -12,45 +12,27 @@
 
 import
   std/tables,
+  ./chain_branch,
   ../../../common,
   ../../../db/core_db
 
 type
-  CursorDesc* = object
-    forkJunction*: BlockNumber      ## Bottom or left end of cursor arc
-    hash*: Hash32                   ## Top or right end of cursor arc
-
-  BlockDesc* = object
-    blk*: Block
-    txFrame*: CoreDbTxRef
-    receipts*: seq[Receipt]
-
-  PivotArc* = object
-    pvHash*: Hash32                 ## Pivot item on cursor arc (e.g. new base)
-    pvHeader*: Header               ## Ditto
-    cursor*: CursorDesc             ## Cursor arc containing `pv` item
-
   ForkedChainRef* = ref object
     com*: CommonRef
-    blocks*: Table[Hash32, BlockDesc]
-    txRecords: Table[Hash32, (Hash32, uint64)]
-    baseHash*: Hash32
-    baseHeader*: Header
-    baseTxFrame*: CoreDbTxRef
-      # Frame that skips all in-memory state that ForkecChain holds - used to
+    hashToBlock* : Table[Hash32, BlockPos]
+    branches*    : seq[BranchRef]
+    baseBranch*  : BranchRef
+    activeBranch*: BranchRef
+
+    txRecords    : Table[Hash32, (Hash32, uint64)]
+    baseTxFrame* : CoreDbTxRef
+      # Frame that skips all in-memory state that ForkedChain holds - used to
       # lookup items straight from the database
 
-    cursorHash*: Hash32
-    cursorHeader*: Header
-    cursorHeads*: seq[CursorDesc]
     extraValidation*: bool
     baseDistance*: uint64
 
 # ----------------
-
-func pvNumber*(pva: PivotArc): BlockNumber =
-  ## Getter
-  pva.pvHeader.number
 
 func txRecords*(c: ForkedChainRef): var Table[Hash32, (Hash32, uint64)] =
   ## Avoid clash with `forked_chain.txRecords()`
