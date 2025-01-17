@@ -687,9 +687,7 @@ proc offerImpl*(
 
   return await reqResponse[OfferMessage, AcceptMessage](p, dst, offer)
 
-proc recordsFromBytes*(
-    rawRecords: List[ByteList[2048], 32]
-): PortalResult[seq[Record]] =
+proc recordsFromBytes(rawRecords: List[ByteList[2048], 32]): PortalResult[seq[Record]] =
   var records: seq[Record]
   for r in rawRecords.asSeq():
     let record = enr.Record.fromBytes(r.asSeq()).valueOr:
@@ -1509,19 +1507,6 @@ proc queryRandom*(
   ## Perform a query for a random target, return all nodes discovered.
   p.query(NodeId.random(p.baseProtocol.rng[]))
 
-proc getNClosestNodesWithRadius*(
-    p: PortalProtocol, targetId: NodeId, n: int, seenOnly: bool = false
-): seq[(Node, UInt256)] =
-  let closestLocalNodes =
-    p.routingTable.neighbours(targetId, k = n, seenOnly = seenOnly)
-
-  var nodesWithRadiuses: seq[(Node, UInt256)]
-  for node in closestLocalNodes:
-    let radius = p.radiusCache.get(node.id)
-    if radius.isSome():
-      nodesWithRadiuses.add((node, radius.unsafeGet()))
-  return nodesWithRadiuses
-
 proc neighborhoodGossip*(
     p: PortalProtocol,
     srcNodeId: Opt[NodeId],
@@ -1831,41 +1816,3 @@ proc resolve*(
         return Opt.some(n)
 
   return node
-
-proc resolveWithRadius*(
-    p: PortalProtocol, id: NodeId
-): Future[Opt[(Node, UInt256)]] {.async: (raises: [CancelledError]).} =
-  ## Resolve a `Node` based on provided `NodeId`, also try to establish what
-  ## is known radius of found node.
-  ##
-  ## This will first look in the own routing table. If the node is known, it
-  ## will try to contact if for newer information. If node is not known or it
-  ## does not reply, a lookup is done to see if it can find a (newer) record of
-  ## the node on the network.
-  ##
-  ## If node is found, radius will be first checked in radius cache, it radius
-  ## is not known node will be pinged to establish what is its current radius
-  ##
-
-  let n = await p.resolve(id)
-  if n.isNone():
-    return Opt.none((Node, UInt256))
-
-  let node = n.unsafeGet()
-
-  let r = p.radiusCache.get(id)
-  if r.isSome():
-    return Opt.some((node, r.unsafeGet()))
-
-  let pongResult = await p.ping(node)
-  if pongResult.isOk():
-    let maybeRadius = p.radiusCache.get(id)
-    # After successful ping radius should already be in cache, but for the
-    # unlikely case that it is not, check it just to be sure.
-    # TODO: refactor ping to return node radius.
-    if maybeRadius.isNone():
-      return Opt.none((Node, UInt256))
-    else:
-      return Opt.some((node, maybeRadius.unsafeGet()))
-  else:
-    return Opt.none((Node, UInt256))
