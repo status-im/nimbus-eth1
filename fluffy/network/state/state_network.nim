@@ -1,5 +1,5 @@
 # Fluffy
-# Copyright (c) 2021-2024 Status Research & Development GmbH
+# Copyright (c) 2021-2025 Status Research & Development GmbH
 # Licensed and distributed under either of
 #   * MIT license (license terms in the root directory or at https://opensource.org/licenses/MIT).
 #   * Apache v2 license (license terms in the root directory or at https://www.apache.org/licenses/LICENSE-2.0).
@@ -16,7 +16,7 @@ import
   eth/p2p/discoveryv5/[protocol, enr],
   ../../database/content_db,
   ../history/history_network,
-  ../wire/[portal_protocol, portal_stream, portal_protocol_config],
+  ../wire/[portal_protocol, portal_stream, portal_protocol_config, ping_extensions],
   ./state_content,
   ./state_validation,
   ./state_gossip
@@ -30,6 +30,8 @@ declareCounter state_network_offers_success,
   "Portal state network offers successfully validated", labels = ["protocol_id"]
 declareCounter state_network_offers_failed,
   "Portal state network offers which failed validation", labels = ["protocol_id"]
+
+const pingExtensionCapabilities = {CapabilitiesType, BasicRadiusType}
 
 type StateNetwork* = ref object
   portalProtocol*: PortalProtocol
@@ -69,6 +71,7 @@ proc new*(
       s,
       bootstrapRecords,
       config = portalConfig,
+      pingExtensionCapabilities = pingExtensionCapabilities,
     )
 
   StateNetwork(
