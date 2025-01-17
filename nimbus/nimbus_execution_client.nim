@@ -173,35 +173,33 @@ proc preventLoadingDataDirForTheWrongNetwork(db: CoreDbRef; conf: NimbusConf) =
       expected=calculatedId
     quit(QuitFailure)
 
-proc run(nimbus: NimbusNode, conf: NimbusConf) =
-  ## logging
-  setLogLevel(conf.logLevel)
-  if conf.logFile.isSome:
-    let logFile = string conf.logFile.get()
-    defaultChroniclesStream.output.outFile = nil # to avoid closing stdout
-    discard defaultChroniclesStream.output.open(logFile, fmAppend)
+proc run*(nimbus: NimbusNode, conf: NimbusConf) =
+  # ## logging
+  # setLogLevel(conf.logLevel)
+  # if conf.logFile.isSome:
+  #   let logFile = string conf.logFile.get()
+  #   defaultChroniclesStream.output.outFile = nil # to avoid closing stdout
+  #   discard defaultChroniclesStream.output.open(logFile, fmAppend)
 
-  setupFileLimits()
+  # setupFileLimits()
 
-  info "Launching execution client",
-      version = FullVersionStr,
-      conf
+  # info "Launching execution client", version = FullVersionStr, conf
 
   when defined(evmc_enabled):
     evmcSetLibraryPath(conf.evm)
 
   # Trusted setup is needed for processing Cancun+ blocks
-  if conf.trustedSetupFile.isSome:
-    let fileName = conf.trustedSetupFile.get()
-    let res = loadTrustedSetup(fileName, 0)
-    if res.isErr:
-      fatal "Cannot load Kzg trusted setup from file", msg=res.error
-      quit(QuitFailure)
-  else:
-    let res = loadKzgTrustedSetup()
-    if res.isErr:
-      fatal "Cannot load baked in Kzg trusted setup", msg=res.error
-      quit(QuitFailure)
+  # if conf.trustedSetupFile.isSome:
+  #   let fileName = conf.trustedSetupFile.get()
+  #   let res = loadTrustedSetup(fileName, 0)
+  #   if res.isErr:
+  #     fatal "Cannot load Kzg trusted setup from file", msg=res.error
+  #     quit(QuitFailure)
+  # else:
+  #   let res = loadKzgTrustedSetup()
+  #   if res.isErr:
+  #     fatal "Cannot load baked in Kzg trusted setup", msg=res.error
+  #     quit(QuitFailure)
 
   createDir(string conf.dataDir)
   let coreDB =

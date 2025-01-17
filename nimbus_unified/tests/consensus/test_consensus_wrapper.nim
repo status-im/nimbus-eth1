@@ -56,7 +56,7 @@ suite "Nimbus Consensus Wrapper Tests":
 
   # Test: consensusWrapper handles CatchableError gracefully
   test "consensusWrapper handles CatchableError and sets shutdown flag":
-    var params: TaskParameters = TaskParameters(
+    var params: ServiceParameters = ServiceParameters(
       name: "ErrorTest",
       beaconNodeConfigs: BeaconNodeConf(cmd: BNStartUpCmd(cast[BNStartUpCmd](999))),
         # Invalid command enum), # Invalid command

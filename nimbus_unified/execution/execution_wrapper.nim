@@ -5,22 +5,41 @@
 #   * Apache v2 license (license terms in the root directory or at https://www.apache.org/licenses/LICENSE-2.0).
 # at your option. This file may not be copied, modified, or distributed except according to those terms.
 
-import chronicles, std/[os, atomics], ../configs/nimbus_configs
+import
+  chronicles,
+  std/[atomics],
+  ../configs/nimbus_configs,
+  ../../nimbus/nimbus_desc,
+  ../../nimbus/nimbus_execution_client
+
 export nimbus_configs
 
 ## log
 logScope:
   topics = "Execution layer"
 
-const cTempExecutionTimeoutMs = 5000
-proc executionWrapper*(parameters: TaskParameters) =
-  info "Execution wrapper:", worker = parameters.name
+proc checkForExecutionShutdown(nimbus: NimbusNode) {.async.} =
+  while isShutDownRequired.load() == false:
+    await sleepAsync(cNimbusServiceTimeoutMs)
 
-  while true:
-    sleep(cTempExecutionTimeoutMs)
-    info "looping execution"
-    if isShutDownRequired.load() == true:
-      break
+  if isShutDownRequired.load() == true:
+    nimbus.state = NimbusState.Stopping
+
+proc executionWrapper*(params: ServiceParameters) {.raises: [CatchableError].} =
+  info "execution wrapper:", worker = params.name
+
+  var config = params.layerConfig
+
+  doAssert config.kind == Execution
+
+  try:
+    {.gcsafe.}:
+      var nimbus = NimbusNode(state: NimbusState.Starting, ctx: newEthContext())
+      discard nimbus.checkForExecutionShutdown()
+      nimbus.run(config.executionConfig)
+  except CatchableError as e:
+    fatal "error", message = e.msg
+    isShutDownRequired.store(true)
 
   isShutDownRequired.store(true)
-  warn "\tExiting execution:", worker = parameters.name
+  warn "\tExiting execution layer"

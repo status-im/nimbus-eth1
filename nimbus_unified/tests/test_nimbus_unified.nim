@@ -30,82 +30,82 @@ template removeFile(filename: string) =
   except IOError:
     discard # Ignore if the file does not exist
 
-proc handlerMock(parameters: TaskParameters) {.thread.} =
+proc handlerMock(parameters: ServiceParameters) {.thread.} =
   echo "handler mock"
 
 # ----------------------------------------------------------------------------
 # Unit Tests
 # ----------------------------------------------------------------------------
 
-suite "Nimbus Task Management Tests":
-  # Test: Creating a new task successfully
-  test "addNewTask successfully adds a task":
-    var tasks: NimbusTasks = NimbusTasks.new()
-    var params: TaskParameters = TaskParameters(name: "TestTask")
+suite "Nimbus Service Management Tests":
+  # Test: Creating a new service successfully
+  test "addNewService successfully adds a service":
+    var services: NimbusServicesList = NimbusServicesList.new()
+    var params: ServiceParameters = ServiceParameters(name: "TestService")
 
-    tasks.addNewTask(cNimbusTaskTimeoutMs, handlerMock, params)
+    services.addNewService(cNimbusServiceTimeoutMs, handlerMock, params)
 
-    check not tasks.taskList[0].isNil
-    check tasks.taskList[0].name == "TestTask"
+    check not services.serviceList[0].isNil
+    check services.serviceList[0].name == "TestService"
 
-  # Test: Adding more tasks than the maximum allowed
-  test "addNewTask fails when NimbusTasks is full":
-    var tasks: NimbusTasks = NimbusTasks.new()
+  # Test: Adding more services than the maximum allowed
+  test "addNewService fails when NimbusServicesList is full":
+    var services: NimbusServicesList = NimbusServicesList.new()
 
-    for i in 0 ..< cNimbusMaxTasks:
-      var params: TaskParameters = TaskParameters(name: "Task" & $i)
-      tasks.addNewTask(cNimbusTaskTimeoutMs, handlerMock, params)
+    for i in 0 ..< cNimbusMaxServices:
+      var params: ServiceParameters = ServiceParameters(name: "Service" & $i)
+      services.addNewService(cNimbusServiceTimeoutMs, handlerMock, params)
 
-    # Attempt to add one more task than allowed
-    var extraParams: TaskParameters = TaskParameters(name: "ExtraTask")
+    # Attempt to add one more service than allowed
+    var extraParams: ServiceParameters = ServiceParameters(name: "ExtraService")
     check:
       try:
-        tasks.addNewTask(cNimbusTaskTimeoutMs, handlerMock, extraParams)
+        services.addNewService(cNimbusServiceTimeoutMs, handlerMock, extraParams)
         false # If no exception, test fails
-      except NimbusTasksError:
+      except NimbusServicesListError:
         true # Exception was correctly raised
 
-  # Test: Tasks finish properly and joinTasks correctly joins all threads
-  test "joinTasks waits for all tasks to finish":
-    var tasks: NimbusTasks = NimbusTasks.new()
+  # Test: Services finish properly and joinServices correctly joins all threads
+  test "joinServices waits for all services to finish":
+    var services: NimbusServicesList = NimbusServicesList.new()
 
-    for i in 0 ..< cNimbusMaxTasks:
-      var params: TaskParameters = TaskParameters(name: "Task" & $i)
-      tasks.addNewTask(cNimbusTaskTimeoutMs, handlerMock, params)
+    for i in 0 ..< cNimbusMaxServices:
+      var params: ServiceParameters = ServiceParameters(name: "Service" & $i)
+      services.addNewService(cNimbusServiceTimeoutMs, handlerMock, params)
 
-    tasks.joinTasks()
+    services.joinServices()
 
-    # Check that all task slots are still non-nil but threads have finished
-    for i in 0 ..< cNimbusMaxTasks:
-      check not tasks.taskList[i].isNil
+    # Check that all service slots are still non-nil but threads have finished
+    for i in 0 ..< cNimbusMaxServices:
+      check not services.serviceList[i].isNil
 
-  # Test: startTasks initializes both the execution and consensus layer tasks
-  test "startTasks initializes execution and consensus tasks":
-    var tasks: NimbusTasks = NimbusTasks.new()
+  # Test: startServices initializes both the execution and consensus layer services
+  test "startServices initializes execution and consensus services":
+    var services: NimbusServicesList = NimbusServicesList.new()
     let nimbusConfigs = NimbusConfig()
     var beaconNodeConfig: BeaconNodeConf = BeaconNodeConf()
 
-    tasks.startTasks(nimbusConfigs, beaconNodeConfig)
+    services.startServices(nimbusConfigs, beaconNodeConfig)
 
-    # Check that at least two tasks were created
-    check not tasks.taskList[0].isNil
-    check not tasks.taskList[1].isNil
+    # Check that at least two services were created
+    check not services.serviceList[0].isNil
+    check not services.serviceList[1].isNil
 
-  # Test: Monitor detects shutdown and calls joinTasks
-  test "monitor stops on shutdown signal and calls joinTasks":
-    var tasks: NimbusTasks = NimbusTasks.new()
+  # Test: Monitor detects shutdown and calls joinServices
+  test "monitor stops on shutdown signal and calls joinServices":
+    var services: NimbusServicesList = NimbusServicesList.new()
     let config: NimbusConfig = NimbusConfig()
 
     # Simulate a shutdown signal
     isShutDownRequired.store(true)
-    tasks.monitor(config)
+    services.monitor(config)
 
     # Check that the monitor loop exits correctly (this is difficult to test directly, but we can infer it)
     check isShutDownRequired.load() == true
 
   # Test: Control-C handler properly initiates shutdown
   test "controlCHandler triggers shutdown sequence":
-    var tasks: NimbusTasks = NimbusTasks.new()
+    var services: NimbusServicesList = NimbusServicesList.new()
     let config: NimbusConfig = NimbusConfig()
 
     proc localControlCHandler() {.noconv.} =

@@ -5,36 +5,53 @@
 #   * Apache v2 license (license terms in the root directory or at https://www.apache.org/licenses/LICENSE-2.0).
 # at your option. This file may not be copied, modified, or distributed except according to those terms.
 
-import std/[os, atomics, tables], beacon_chain/nimbus_binary_common
+import
+  std/[os, atomics],
+  #eth2
+  beacon_chain/nimbus_binary_common,
+  #eth1
+  ../../nimbus/nimbus_desc
 
 ## Exceptions
-type NimbusTasksError* = object of CatchableError
+type NimbusServicesListError* = object of CatchableError
 
-## Configuration
-## TODO: implement a json (or other format like yaml) config reader for config reading (file config scenarios)
-##  1) implement a command line reader to read arguments
-##  2) good option to adhere to other projects conventions and use the in place support to read and load
-type NimbusConfig* = object
-  configTable: Table[string, string]
+## Constants
+## TODO: evaluate the proposed timeouts
+const cNimbusMaxServices* = 5
+const cNimbusServiceTimeoutMs* = 5000
+
+## log
+logScope:
+  topics = "Service manager"
 
 ## Nimbus workers arguments (thread arguments)
-type TaskParameters* = object
-  name*: string
-  configs*: string
-  beaconNodeConfigs*: BeaconNodeConf
+type
+  ConfigKind* = enum
+    Execution
+    Consensus
 
-## Task shutdown flag
-##
-## The behaviour required: this thread needs to atomically change the flag value when
-##  a shutdown is required or when detects a stopped thread.
-##
-## Given the behaviour wanted, atomic operations are sufficient without barriers or fences. Compilers
-##  may reorder instructions, but given that the order is not important, this does not affect
-##  the semantic wanted: If instructions are reordered, the worker will fail to read on the current iteration
-##  but will read it correctly on the next iteration ( this thread is the only on which changes the flag behaviour,
-##  and will always change it to true)
-##
-## With this we avoid the overhead of locks
+  LayerConfig* = object
+    case kind*: ConfigKind
+    of Consensus:
+      consensusConfig*: BeaconNodeConf
+    of Execution:
+      executionConfig*: NimbusConf
+
+  ServiceParameters* = object
+    name*: string
+    layerConfig*: LayerConfig
+
+## Service and associated service information
+type NimbusService* = ref object #experimentar tipos com ref
+  name*: string
+  timeoutMs*: uint32
+  threadHandler*: Thread[ServiceParameters]
+
+## Service manager
+type NimbusServicesList* = ref object
+  serviceList*: array[cNimbusMaxServices, Option[NimbusService]]
+
+## Service shutdown
 var isShutDownRequired*: Atomic[bool]
 isShutDownRequired.store(false)
 

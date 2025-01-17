@@ -11,55 +11,52 @@ import
   stew/io2,
   consensus/consensus_wrapper,
   execution/execution_wrapper,
+  version,
+  #eth2
   beacon_chain/[nimbus_binary_common, conf, conf_common],
-  beacon_chain/validators/keystore_management,
-  version
+  beacon_chain/validators/keystore_management
 
-## Constants
-## TODO: evaluate the proposed timeouts with team
-const cNimbusMaxTasks* = 5
-const cNimbusTaskTimeoutMs* = 5000
-
-## Task and associated task information
-type NimbusTask* = ref object
-  name*: string
-  timeoutMs*: uint32
-  threadHandler*: Thread[TaskParameters]
-
-## Task manager
-type NimbusTasks* = ref object
-  taskList*: array[cNimbusMaxTasks, NimbusTask]
-
-## log
-logScope:
-  topics = "Task manager"
+#eth1
+from ../nimbus/config import makeConfig
 
 # ------------------------------------------------------------------------------
 # Private and helper functions
 # ------------------------------------------------------------------------------
 
 ## Execution Layer handler
-proc executionLayerHandler(parameters: TaskParameters) {.thread.} =
-  info "Started task:", task = parameters.name
-  executionWrapper(parameters)
-  info "\tExiting task;", task = parameters.name
+proc executionLayerHandler*(parameters: ServiceParameters) {.thread.} =
+  info "Started service:", service = parameters.name
+  {.gcsafe.}:
+    executionWrapper(parameters)
+  info "\tExiting service", service = parameters.name
 
 ## Consensus Layer handler
-proc consensusLayerHandler(parameters: TaskParameters) {.thread.} =
-  info "Started task:", task = parameters.name
+proc consensusLayerHandler*(parameters: ServiceParameters) {.thread.} =
+  info "Started service:", service = parameters.name
+
+  ## TODO
+  # implement mechanism to check nimbus.state changes
+  info "Waiting for execution layer bring up ..."
+  sleep(15000)
   {.gcsafe.}:
     consensusWrapper(parameters)
-  info "\tExiting task:", task = parameters.name
+  info "\tExiting service", service = parameters.name
 
-## Waits for tasks to finish (joinThreads)
-proc joinTasks*(tasks: var NimbusTasks) =
-  warn "Waiting all tasks to finish ... "
-  for i in 0 .. cNimbusMaxTasks - 1:
-    if not tasks.taskList[i].isNil:
-      joinThread(tasks.taskList[i].threadHandler)
+## Waits for services to finish (joinThreads)
+proc joinServices*(services: NimbusServicesList) =
+  warn "Waiting all services to finish ... "
 
-  notice "All tasks finished correctly"
+  for i in 0 .. cNimbusMaxServices - 1:
+    if services.serviceList[i].isSome:
+      let thread = services.serviceList[i].get()
+      if thread.threadHandler.running():
+        joinThread(thread.threadHandler)
+        services.serviceList[i] = none(NimbusService)
+        info "Exited service ", service = thread.name
 
+  notice "Exited all services"
+
+# lock file
 var gPidFile: string
 proc createPidFile(filename: string) {.raises: [IOError].} =
   writeFile filename, $os.getCurrentProcessId()
@@ -69,101 +66,100 @@ proc createPidFile(filename: string) {.raises: [IOError].} =
       discard io2.removeFile(filename)
   )
 
-# ----
-
-# ------------------------------------------------------------------------------
-# Public functions
-# ------------------------------------------------------------------------------
-
-## adds a new task to nimbus Tasks.
-## Note that thread handler passed by argument needs to have the signature: proc foobar(NimbusParameters)
-proc addNewTask*(
-    tasks: var NimbusTasks,
+## adds a new service to nimbus services list.
+proc addNewService(
+    services: var NimbusServicesList,
+    serviceHandler: proc(config: ServiceParameters) {.thread.},
+    parameters: var ServiceParameters,
     timeout: uint32,
-    taskHandler: proc(config: TaskParameters) {.thread.},
-    parameters: var TaskParameters,
 ) =
-  #search next available worker
+  #search next available free worker
   var currentIndex = -1
-  for i in 0 .. cNimbusMaxTasks - 1:
-    if tasks.taskList[i].isNil:
-      tasks.taskList[i] = NimbusTask.new
-      tasks.taskList[i].name = parameters.name
-      tasks.taskList[i].timeoutMs = timeout
+  for i in 0 .. cNimbusMaxServices - 1:
+    if services.serviceList[i].isNone:
+      services.serviceList[i] =
+        some(NimbusService(name: parameters.name, timeoutMs: timeout))
       currentIndex = i
       parameters.name = parameters.name
       break
 
   if currentIndex < 0:
-    raise newException(NimbusTasksError, "No free slots on Nimbus Tasks")
+    raise newException(NimbusServicesListError, "No free slots on nimbus services list")
   try:
-    createThread(tasks.taskList[currentIndex].threadHandler, taskHandler, parameters)
+    createThread(
+      services.serviceList[currentIndex].get().threadHandler, serviceHandler, parameters
+    )
   except CatchableError as e:
-    # TODO: joinThreads
-    fatal "error creating task (thread)", msg = e.msg
+    isShutDownRequired.store(true)
+    fatal "error creating service (thread)", msg = e.msg
 
-  info "Created task:", task = tasks.taskList[currentIndex].name
+  info "Created service:", service = services.serviceList[currentIndex].get().name
 
-## Task monitoring
-proc monitor*(tasksList: var NimbusTasks, config: NimbusConfig) =
-  info "started task monitoring"
+# ------------------------------------------------------------------------------
+# Public functions
+# ------------------------------------------------------------------------------
 
-  while true:
-    info "checking tasks ... "
-    if isShutDownRequired.load() == true:
-      break
-    sleep(cNimbusTaskTimeoutMs)
+## Service monitoring
+proc monitor*(servicesList: NimbusServicesList) =
+  info "started service monitoring"
 
-  tasksList.joinTasks()
+  while isShutDownRequired.load() == false:
+    sleep(cNimbusServiceTimeoutMs)
 
-## create running workers
-proc startTasks*(
-    tasksList: var NimbusTasks, configs: NimbusConfig, beaconConfigs: var BeaconNodeConf
+  if isShutDownRequired.load() == true:
+    servicesList.joinServices()
+
+  notice "Shutting down now"
+
+## create workers
+proc configureService*(
+    servicesList: var NimbusServicesList,
+    config: var LayerConfig,
+    execName: string,
+    fun: proc(config: ServiceParameters) {.thread.},
+    timeout: uint32 = cNimbusServiceTimeoutMs,
 ) {.raises: [CatchableError].} =
-  let
-
-    # TODO: extract configs for each task from NimbusConfig
-    # or extract them somewhere else and passs them here.
-    # check nimbus_configs annotations.
-    execName = "Execution Layer"
-    consName = "Consensus Layer"
-  var
-    paramsExecution: TaskParameters = TaskParameters(
-      name: execName,
-      configs: "task configs extracted from NimbusConfig go here",
-      beaconNodeConfigs: beaconConfigs,
-    )
-    paramsConsensus: TaskParameters = TaskParameters(
-      name: execName,
-      configs: "task configs extracted from NimbusConfig go here",
-      beaconNodeConfigs: beaconConfigs,
-    )
-
-  tasksList.addNewTask(cNimbusTaskTimeoutMs, executionLayerHandler, paramsExecution)
-  tasksList.addNewTask(cNimbusTaskTimeoutMs, consensusLayerHandler, paramsConsensus)
+  var params: ServiceParameters = ServiceParameters(name: execName, layerConfig: config)
+  servicesList.addNewService(fun, params, timeout)
 
 # ------
-
 when isMainModule:
   notice "Starting Nimbus"
 
-  let nimbusConfigs = NimbusConfig()
-  var tasksList: NimbusTasks = NimbusTasks.new
+  ## TODO
+  # create a procedure to extract and filter the command
+  # line options for each layer
+  # here we are adding the "engine-api" option for eth1
+  var args: seq[string] = @["--engine-api"]
 
-  var beaconNodeConfig = makeBannerAndConfig(
+  var execConfig = makeConfig(@["--engine-api"])
+  var beaconConfig = makeBannerAndConfig(
     clientName, versionAsStr, nimBanner, "", [], BeaconNodeConf
   ).valueOr:
     stderr.write error
     quit QuitFailure
 
-  if not (checkAndCreateDataDir(string(beaconNodeConfig.dataDir))):
+  # trustedNodeSync (same  as before)
+  if beaconConfig.cmd == BNStartUpCmd.trustedNodeSync:
+    let
+      nodeSync = LayerConfig(kind: Consensus, consensusConfig: beaconConfig)
+      params: ServiceParameters =
+        ServiceParameters(name: "trustedNodeSync", layerConfig: nodeSync)
+
+    info " Starting trusted node synchronization"
+    consensusWrapper(params)
+    quit (0)
+
+  if not (checkAndCreateDataDir(string(beaconConfig.dataDir))):
     quit QuitFailure
 
   setupFileLimits()
 
   # setupLogging(config.logLevel, config.logStdout, config.logFile)
 
-  createPidFile(beaconNodeConfig.dataDir.string / "unified.pid")
+  createPidFile(beaconConfig.dataDir.string / "unified.pid")
+
+  var servicesList: NimbusServicesList = NimbusServicesList.new
 
   ## Graceful shutdown by handling of Ctrl+C signal
   proc controlCHandler() {.noconv.} =
@@ -171,20 +167,21 @@ when isMainModule:
       # workaround for https://github.com/nim-lang/Nim/issues/4057
       try:
         setupForeignThreadGc()
-      except NimbusTasksError as exc:
+      except NimbusServicesListError as exc:
         raiseAssert exc.msg # shouldn't happen
 
-    notice "\nCtrl+C pressed. Shutting down working tasks"
-
+    notice "\nCtrl+C pressed. Shutting down working services"
     isShutDownRequired.store(true)
-    tasksList.joinTasks()
-    notice "Shutting down now"
-    quit(0)
 
   setControlCHook(controlCHandler)
 
-  #create and start tasks
-  tasksList.startTasks(nimbusConfigs, beaconNodeConfig)
+  #create and start services
+  var
+    execution = LayerConfig(kind: Execution, executionConfig: execConfig)
+    consensus = LayerConfig(kind: Consensus, consensusConfig: beaconConfig)
+
+  servicesList.configureService(execution, "Execution Layer", executionLayerHandler)
+  servicesList.configureService(consensus, "Consensus Layer", consensusLayerHandler)
 
   #start monitoring
-  tasksList.monitor(nimbusConfigs)
+  servicesList.monitor()
