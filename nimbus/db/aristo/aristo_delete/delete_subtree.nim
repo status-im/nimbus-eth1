@@ -1,5 +1,5 @@
 # nimbus-eth1
-# Copyright (c) 2023-2024 Status Research & Development GmbH
+# Copyright (c) 2023-2025 Status Research & Development GmbH
 # Licensed under either of
 #  * Apache License, version 2.0, ([LICENSE-APACHE](LICENSE-APACHE) or
 #    http://www.apache.org/licenses/LICENSE-2.0)
@@ -19,7 +19,7 @@ import
 # ------------------------------------------------------------------------------
 
 proc delSubTreeNow(
-    db: AristoDbRef;
+    db: AristoTxRef;
     rvid: RootedVertexID;
       ): Result[void,AristoError] =
   ## Delete sub-tree now
@@ -38,7 +38,7 @@ proc delSubTreeNow(
 
 
 proc delStoTreeNow(
-  db: AristoDbRef;                   # Database, top layer
+  db: AristoTxRef;                   # Database, top layer
   rvid: RootedVertexID;              # Root vertex
   accPath: Hash32;                   # Accounts cache designator
   stoPath: NibblesBuf;               # Current storage path
@@ -70,14 +70,14 @@ proc delStoTreeNow(
 # ------------------------------------------------------------------------------
 
 proc delSubTreeImpl*(
-    db: AristoDbRef;
+    db: AristoTxRef;
     root: VertexID;
       ): Result[void,AristoError] =
   db.delSubTreeNow (root,root)
 
 
 proc delStoTreeImpl*(
-    db: AristoDbRef;                   # Database, top layer
+    db: AristoTxRef;                   # Database, top layer
     rvid: RootedVertexID;              # Root vertex
     accPath: Hash32;
       ): Result[void,AristoError] =

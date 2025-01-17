@@ -1,5 +1,5 @@
 # nimbus-eth1
-# Copyright (c) 2023-2024 Status Research & Development GmbH
+# Copyright (c) 2023-2025 Status Research & Development GmbH
 # Licensed under either of
 #  * Apache License, version 2.0, ([LICENSE-APACHE](LICENSE-APACHE) or
 #    http://www.apache.org/licenses/LICENSE-2.0)
@@ -32,14 +32,14 @@ import
 
 
 proc layersPutLeaf(
-    db: AristoDbRef, rvid: RootedVertexID, path: NibblesBuf, payload: LeafPayload
+    db: AristoTxRef, rvid: RootedVertexID, path: NibblesBuf, payload: LeafPayload
 ): VertexRef =
   let vtx = VertexRef(vType: Leaf, pfx: path, lData: payload)
   db.layersPutVtx(rvid, vtx)
   vtx
 
 proc mergePayloadImpl(
-    db: AristoDbRef, # Database, top layer
+    db: AristoTxRef, # Database, top layer
     root: VertexID, # MPT state root
     path: Hash32, # Leaf item to add to the database
     leaf: Opt[VertexRef],
@@ -171,7 +171,7 @@ proc mergePayloadImpl(
 # ------------------------------------------------------------------------------
 
 proc mergeAccountRecord*(
-    db: AristoDbRef;                   # Database, top layer
+    db: AristoTxRef;                   # Database, top layer
     accPath: Hash32;          # Even nibbled byte path
     accRec: AristoAccount;             # Account data
       ): Result[bool,AristoError] =
@@ -201,7 +201,7 @@ proc mergeAccountRecord*(
   ok true
 
 proc mergeStorageData*(
-    db: AristoDbRef;                   # Database, top layer
+    db: AristoTxRef;                   # Database, top layer
     accPath: Hash32;                   # Needed for accounts payload
     stoPath: Hash32;                   # Storage data path (aka key)
     stoData: UInt256;                  # Storage data payload value

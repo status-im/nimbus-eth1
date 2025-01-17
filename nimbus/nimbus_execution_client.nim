@@ -163,7 +163,7 @@ proc preventLoadingDataDirForTheWrongNetwork(db: CoreDbRef; conf: NimbusConf) =
       quit(QuitFailure)
       
   let
-    kvt = db.ctx.getKvt()
+    kvt = db.baseTxFrame()
     calculatedId = calcHash(conf.networkId, conf.networkParams)
     dataDirIdBytes = kvt.get(dataDirIdKey().toOpenArray).valueOr:
       # an empty database

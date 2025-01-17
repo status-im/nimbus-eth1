@@ -1,6 +1,6 @@
 # Nimbus - Types, data structures and shared utilities used in network sync
 #
-# Copyright (c) 2023-2024 Status Research & Development GmbH
+# Copyright (c) 2023-2025 Status Research & Development GmbH
 # Licensed under either of
 #  * Apache License, version 2.0, ([LICENSE-APACHE](LICENSE-APACHE) or
 #    http://www.apache.org/licenses/LICENSE-2.0)
@@ -36,7 +36,7 @@ iterator walkVtxBe*[T: RdbBackendRef](
    db: AristoDbRef;
    kinds = {Branch, Leaf};
      ): tuple[rvid: RootedVertexID, vtx: VertexRef] =
-  ## Iterate over filtered RocksDB backend vertices. This function depends on
+  ## Iterate over RocksDB backend vertices. This function depends on
   ## the particular backend type name which must match the backend descriptor.
   for (rvid,vtx) in walkVtxBeImpl[T](db, kinds):
     yield (rvid,vtx)

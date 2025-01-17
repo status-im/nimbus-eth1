@@ -1,5 +1,5 @@
 # nimbus-eth1
-# Copyright (c) 2023-2024 Status Research & Development GmbH
+# Copyright (c) 2023-2025 Status Research & Development GmbH
 # Licensed under either of
 #  * Apache License, version 2.0, ([LICENSE-APACHE](LICENSE-APACHE) or
 #    http://www.apache.org/licenses/LICENSE-2.0)
@@ -46,7 +46,7 @@ proc branchStillNeeded(vtx: VertexRef, removed: int8): Result[int8,void] =
 # ------------------------------------------------------------------------------
 
 proc deleteImpl(
-    db: AristoDbRef;                   # Database, top layer
+    db: AristoTxRef;                   # Database, top layer
     hike: Hike;                        # Fully expanded path
       ): Result[VertexRef,AristoError] =
   ## Removes the last node in the hike and returns the updated leaf in case
@@ -126,7 +126,7 @@ proc deleteImpl(
 # ------------------------------------------------------------------------------
 
 proc deleteAccountRecord*(
-    db: AristoDbRef;
+    db: AristoTxRef;
     accPath: Hash32;
       ): Result[void,AristoError] =
   ## Delete the account leaf entry addressed by the argument `path`. If this
@@ -156,7 +156,7 @@ proc deleteAccountRecord*(
   ok()
 
 proc deleteGenericData*(
-    db: AristoDbRef;
+    db: AristoTxRef;
     root: VertexID;
     path: openArray[byte];
       ): Result[bool,AristoError] =
@@ -187,7 +187,7 @@ proc deleteGenericData*(
   ok(not db.getVtx((root, root)).isValid)
 
 proc deleteGenericTree*(
-    db: AristoDbRef;                   # Database, top layer
+    db: AristoTxRef;                   # Database, top layer
     root: VertexID;                    # Root vertex
       ): Result[void,AristoError] =
   ## Variant of `deleteGenericData()` for purging the whole MPT sub-tree.
@@ -203,7 +203,7 @@ proc deleteGenericTree*(
   db.delSubTreeImpl root
 
 proc deleteStorageData*(
-    db: AristoDbRef;
+    db: AristoTxRef;
     accPath: Hash32;          # Implies storage data tree
     stoPath: Hash32;
       ): Result[bool,AristoError] =
@@ -266,7 +266,7 @@ proc deleteStorageData*(
   ok(true)
 
 proc deleteStorageTree*(
-    db: AristoDbRef;                   # Database, top layer
+    db: AristoTxRef;                   # Database, top layer
     accPath: Hash32;                   # Implies storage data tree
       ): Result[void,AristoError] =
   ## Variant of `deleteStorageData()` for purging the whole storage tree

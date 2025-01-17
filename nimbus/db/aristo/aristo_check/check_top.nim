@@ -1,5 +1,5 @@
 # nimbus-eth1
-# Copyright (c) 2023-2024 Status Research & Development GmbH
+# Copyright (c) 2023-2025 Status Research & Development GmbH
 # Licensed under either of
 #  * Apache License, version 2.0, ([LICENSE-APACHE](LICENSE-APACHE) or
 #    http://www.apache.org/licenses/LICENSE-2.0)
@@ -21,7 +21,7 @@ import
 # ------------------------------------------------------------------------------
 
 proc checkTopStrict*(
-    db: AristoDbRef;                   # Database, top layer
+    db: AristoTxRef;                   # Database, top layer
       ): Result[void,(VertexID,AristoError)] =
   # No need to specify zero keys if implied by a leaf path with valid target
   # vertex ID (i.e. not deleted).
@@ -55,7 +55,7 @@ proc checkTopStrict*(
 
 
 proc checkTopProofMode*(
-    db: AristoDbRef;                               # Database, top layer
+    db: AristoTxRef;                               # Database, top layer
       ): Result[void,(VertexID,AristoError)] =
   for (rvid,key) in db.layersWalkKey:
     if key.isValid:                              # Otherwise to be deleted
@@ -69,13 +69,13 @@ proc checkTopProofMode*(
 
 
 proc checkTopCommon*(
-    db: AristoDbRef;                   # Database, top layer
+    db: AristoTxRef;                   # Database, top layer
       ): Result[void,(VertexID,AristoError)] =
   # Some `kMap[]` entries may ne void indicating backend deletion
   let
     kMapCount = db.layersWalkKey.toSeq.mapIt(it[1]).filterIt(it.isValid).len
     kMapNilCount = db.layersWalkKey.toSeq.len - kMapCount
-    vTop = db.vTop
+    vTop = db.layer.vTop
   var
     topVid = VertexID(0)
     stoRoots: HashSet[VertexID]

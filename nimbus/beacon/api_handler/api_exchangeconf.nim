@@ -1,5 +1,5 @@
 # Nimbus
-# Copyright (c) 2023-2024 Status Research & Development GmbH
+# Copyright (c) 2023-2025 Status Research & Development GmbH
 # Licensed under either of
 #  * Apache License, version 2.0, ([LICENSE-APACHE](LICENSE-APACHE))
 #  * MIT license ([LICENSE-MIT](LICENSE-MIT))
@@ -43,7 +43,7 @@ proc exchangeConf*(ben: BeaconEngineRef,
     terminalBlockHash   = conf.terminalBlockHash
 
   if terminalBlockHash != default(Hash32):
-    let headerHash = db.getBlockHash(terminalBlockNumber).valueOr:
+    let headerHash = db.baseTxFrame().getBlockHash(terminalBlockNumber).valueOr:
       raise newException(ValueError, "cannot get terminal block hash, number $1, msg: $2" %
         [$terminalBlockNumber, error])
 
@@ -51,7 +51,7 @@ proc exchangeConf*(ben: BeaconEngineRef,
       raise newException(ValueError, "invalid terminal block hash, got $1 want $2" %
         [$terminalBlockHash, $headerHash])
 
-    let header = db.getBlockHeader(headerHash).valueOr:
+    let header = db.baseTxFrame().getBlockHeader(headerHash).valueOr:
       raise newException(ValueError, "cannot get terminal block header, hash $1, msg: $2" %
         [$terminalBlockHash, error])
 

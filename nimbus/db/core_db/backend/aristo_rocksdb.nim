@@ -1,5 +1,5 @@
 # Nimbus
-# Copyright (c) 2023-2024 Status Research & Development GmbH
+# Copyright (c) 2023-2025 Status Research & Development GmbH
 # Licensed under either of
 #  * Apache License, version 2.0, ([LICENSE-APACHE](LICENSE-APACHE) or
 #    http://www.apache.org/licenses/LICENSE-2.0)
@@ -167,7 +167,7 @@ proc newAristoRocksDbCoreDbRef*(path: string, opts: DbOptions): CoreDbRef =
 
   if opts.rdbKeyCacheSize > 0:
     # Make sure key cache isn't empty
-    adb.computeKeys(VertexID(1)).isOkOr:
+    adb.txRef.computeKeys(VertexID(1)).isOkOr:
       fatal "Cannot compute root keys", msg=error
       quit(QuitFailure)
 

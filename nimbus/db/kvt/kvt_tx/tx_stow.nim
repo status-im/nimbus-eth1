@@ -1,5 +1,5 @@
 # nimbus-eth1
-# Copyright (c) 2023-2024 Status Research & Development GmbH
+# Copyright (c) 2023-2025 Status Research & Development GmbH
 # Licensed under either of
 #  * Apache License, version 2.0, ([LICENSE-APACHE](LICENSE-APACHE) or
 #    http://www.apache.org/licenses/LICENSE-2.0)
@@ -14,9 +14,7 @@
 {.push raises: [].}
 
 import
-  std/tables,
   results,
-  ../kvt_delta/delta_merge,
   ".."/[kvt_desc, kvt_delta]
 
 # ------------------------------------------------------------------------------
@@ -27,10 +25,6 @@ proc txPersistOk*(
     db: KvtDbRef;                     # Database
       ): Result[void,KvtError] =
   ## Verify that `txPersist()` can go ahead
-  if not db.txRef.isNil:
-    return err(TxPendingTx)
-  if 0 < db.stack.len:
-    return err(TxStackGarbled)
   if not db.deltaPersistentOk():
     return err(TxBackendNotWritable)
   ok()
@@ -46,17 +40,7 @@ proc txPersist*(
   ##
   ? db.txPersistOk()
 
-  if 0 < db.top.sTab.len:
-    # Note that `deltaMerge()` will return the `db.top` argument if the
-    # `db.balancer` is `nil`. Also, the `db.balancer` is read-only. In the
-    # case that there are no forked peers one can ignore that restriction as
-    # no balancer is shared.
-    db.balancer = deltaMerge(db.top, db.balancer)
-
-    # New empty top layer
-    db.top = LayerRef()
-
-  # Move `balancer` data into persistent tables
+  # Move `txRef` data into persistent tables
   ? db.deltaPersistent()
 
   ok()

@@ -1,5 +1,5 @@
 # nimbus-eth1
-# Copyright (c) 2023-2024 Status Research & Development GmbH
+# Copyright (c) 2023-2025 Status Research & Development GmbH
 # Licensed under either of
 #  * Apache License, version 2.0, ([LICENSE-APACHE](LICENSE-APACHE) or
 #    http://www.apache.org/licenses/LICENSE-2.0)
@@ -134,7 +134,7 @@ proc digestTo*(node: NodeRef; T: type HashKey): T =
   wr.finish().digestTo(HashKey)
 
 proc serialise*(
-    db: AristoDbRef;
+    db: AristoTxRef;
     root: VertexID;
     pyl: LeafPayload;
       ): Result[seq[byte],(VertexID,AristoError)] =

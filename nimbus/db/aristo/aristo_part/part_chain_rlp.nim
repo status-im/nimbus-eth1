@@ -1,5 +1,5 @@
 # nimbus-eth1
-# Copyright (c) 2024 Status Research & Development GmbH
+# Copyright (c) 2024-2025 Status Research & Development GmbH
 # Licensed under either of
 #  * Apache License, version 2.0, ([LICENSE-APACHE](LICENSE-APACHE) or
 #    http://www.apache.org/licenses/LICENSE-2.0)
@@ -30,7 +30,7 @@ const
 # ------------------------------------------------------------------------------
 
 proc chainRlpNodes*(
-    db: AristoDbRef;
+    db: AristoTxRef;
     rvid: RootedVertexID;
     path: NibblesBuf,
     chain: var seq[seq[byte]];

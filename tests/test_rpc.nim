@@ -93,10 +93,10 @@ proc verifySlotProof(trustedStorageRoot: Hash32, slot: StorageProof): MptProofVe
     key,
     value)
 
-proc persistFixtureBlock(chainDB: CoreDbRef) =
+proc persistFixtureBlock(chainDB: CoreDbTxRef) =
   let header = getBlockHeader4514995()
   # Manually inserting header to avoid any parent checks
-  discard chainDB.ctx.getKvt.put(genericHashKey(header.blockHash).toOpenArray, rlp.encode(header))
+  discard chainDB.put(genericHashKey(header.blockHash).toOpenArray, rlp.encode(header))
   chainDB.addBlockNumberToHashLookup(header.number, header.blockHash)
   chainDB.persistTransactions(header.number, header.txRoot, getBlockBody4514995().transactions)
   chainDB.persistReceipts(header.receiptsRoot, getReceipts4514995())
@@ -226,6 +226,7 @@ proc generateBlock(env: var TestEnv) =
     com = env.com
     xp  = env.txPool
     ctx = env.ctx
+    txFrame = com.db.baseTxFrame()
     acc = ctx.am.getAccount(signer).tryGet()
     tx1 = env.makeTx(acc.privateKey, zeroAddress, 1.u256, 30_000_000_000'u64)
     tx2 = env.makeTx(acc.privateKey, zeroAddress, 2.u256, 30_000_000_100'u64)
@@ -254,7 +255,7 @@ proc generateBlock(env: var TestEnv) =
 
   xp.removeNewBlockTxs(blk)
 
-  com.db.persistFixtureBlock()
+  txFrame.persistFixtureBlock()
 
   env.txHash = tx1.rlpHash
   env.blockHash = blk.header.blockHash

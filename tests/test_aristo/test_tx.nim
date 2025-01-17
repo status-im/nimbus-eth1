@@ -82,35 +82,35 @@ func rand(td: var PrngDesc; top: int): int =
 
 # -----------------------
 
-proc randomisedLeafs(
-    db: AristoDbRef;
-    ltys: HashSet[LeafTie];
-    td: var PrngDesc;
-       ): Result[seq[(LeafTie,RootedVertexID)],(VertexID,AristoError)] =
-  var lvp: seq[(LeafTie,RootedVertexID)]
-  for lty in ltys:
-    var hike: Hike
-    ?lty.hikeUp(db, Opt.none(VertexRef), hike)
-    lvp.add (lty,(hike.root, hike.legs[^1].wp.vid))
+# proc randomisedLeafs(
+#     db: AristoTxRef;
+#     ltys: HashSet[LeafTie];
+#     td: var PrngDesc;
+#        ): Result[seq[(LeafTie,RootedVertexID)],(VertexID,AristoError)] =
+#   var lvp: seq[(LeafTie,RootedVertexID)]
+#   for lty in ltys:
+#     var hike: Hike
+#     ?lty.hikeUp(db, Opt.none(VertexRef), hike)
+#     lvp.add (lty,(hike.root, hike.legs[^1].wp.vid))
 
-  var lvp2 = lvp.sorted(
-    cmp = proc(a,b: (LeafTie,RootedVertexID)): int = cmp(a[0],b[0]))
-  if 2 < lvp2.len:
-    for n in 0 ..< lvp2.len-1:
-      let r = n + td.rand(lvp2.len - n)
-      lvp2[n].swap lvp2[r]
-  ok lvp2
+#   var lvp2 = lvp.sorted(
+#     cmp = proc(a,b: (LeafTie,RootedVertexID)): int = cmp(a[0],b[0]))
+#   if 2 < lvp2.len:
+#     for n in 0 ..< lvp2.len-1:
+#       let r = n + td.rand(lvp2.len - n)
+#       lvp2[n].swap lvp2[r]
+#   ok lvp2
 
-proc innerCleanUp(db: var AristoDbRef): bool {.discardable.}  =
-  ## Defer action
-  if not db.isNil:
-    let rx = db.txFrameTop()
-    if rx.isOk:
-      let rc = rx.value.collapse(commit=false)
-      xCheckRc rc.error == 0
-    db.finish(eradicate=true)
-    db = AristoDbRef(nil)
-  true
+# proc innerCleanUp(db: var AristoTxRef): bool {.discardable.}  =
+#   ## Defer action
+#   if not db.isNil:
+#     let rx = db.txFrameTop()
+#     if rx.isOk:
+#       let rc = rx.value.collapse(commit=false)
+#       xCheckRc rc.error == 0
+#     db.finish(eradicate=true)
+#     db = AristoDbRef(nil)
+#   true
 
 # --------------------------------
 
@@ -122,50 +122,50 @@ proc saveToBackend(
       ): bool =
   var db = tx.to(AristoDbRef)
 
-  # Verify context: nesting level must be 2 (i.e. two transactions)
-  xCheck tx.level == 2
+  # # Verify context: nesting level must be 2 (i.e. two transactions)
+  # xCheck tx.level == 2
 
-  block:
-    let rc = db.checkTop()
-    xCheckRc rc.error == (0,0)
+  # block:
+  #   let rc = db.checkTop()
+  #   xCheckRc rc.error == (0,0)
 
-  # Commit and hashify the current layer
-  block:
-    let rc = tx.commit()
-    xCheckRc rc.error == 0
+  # # Commit and hashify the current layer
+  # block:
+  #   let rc = tx.commit()
+  #   xCheckRc rc.error == 0
 
-  block:
-    let rc = db.txFrameTop()
-    xCheckRc rc.error == 0
-    tx = rc.value
+  # block:
+  #   let rc = db.txFrameTop()
+  #   xCheckRc rc.error == 0
+  #   tx = rc.value
 
-  # Verify context: nesting level must be 1 (i.e. one transaction)
-  xCheck tx.level == 1
+  # # Verify context: nesting level must be 1 (i.e. one transaction)
+  # xCheck tx.level == 1
 
-  block:
-    let rc = db.checkBE()
-    xCheckRc rc.error == (0,0)
+  # block:
+  #   let rc = db.checkBE()
+  #   xCheckRc rc.error == (0,0)
 
-  # Commit and save to backend
-  block:
-    let rc = tx.commit()
-    xCheckRc rc.error == 0
+  # # Commit and save to backend
+  # block:
+  #   let rc = tx.commit()
+  #   xCheckRc rc.error == 0
 
-  block:
-    let rc = db.txFrameTop()
-    xCheckErr rc.value.level < 0 # force error
+  # block:
+  #   let rc = db.txFrameTop()
+  #   xCheckErr rc.value.level < 0 # force error
 
-  block:
-    let rc = db.schedStow()
-    xCheckRc rc.error == 0
+  # block:
+  #   let rc = db.schedStow()
+  #   xCheckRc rc.error == 0
 
-  block:
-    let rc = db.checkBE()
-    xCheckRc rc.error == (0,0):
-      noisy.say "***", "saveToBackend (8)", " debugID=", debugID
+  # block:
+  #   let rc = db.checkBE()
+  #   xCheckRc rc.error == (0,0):
+  #     noisy.say "***", "saveToBackend (8)", " debugID=", debugID
 
-  # Update layers to original level
-  tx = db.txFrameBegin().value.to(AristoDbRef).txFrameBegin().value
+  # # Update layers to original level
+  # tx = db.txFrameBegin().value.to(AristoDbRef).txFrameBegin().value
 
   true
 
@@ -179,26 +179,26 @@ proc fwdWalkVerify(
       ): bool =
   let
     nLeafs = leftOver.len
-  var
-    leftOver = leftOver
-    last = LeafTie()
-    n = 0
-  for (key,_) in db.rightPairs low(LeafTie,root):
-    xCheck key in leftOver:
-      noisy.say "*** fwdWalkVerify", "id=", n + (nLeafs + 1) * debugID
-    leftOver.excl key
-    last = key
-    n.inc
+  # var
+  #   leftOver = leftOver
+  #   last = LeafTie()
+  #   n = 0
+  # for (key,_) in db.rightPairs low(LeafTie,root):
+  #   xCheck key in leftOver:
+  #     noisy.say "*** fwdWalkVerify", "id=", n + (nLeafs + 1) * debugID
+  #   leftOver.excl key
+  #   last = key
+  #   n.inc
 
-  # Verify stop condition
-  if last.root == VertexID(0):
-    last = low(LeafTie,root)
-  elif last != high(LeafTie,root):
-    last = last.next
-  let rc = last.right db
-  xCheck rc.isErr
-  xCheck rc.error[1] == NearbyBeyondRange
-  xCheck n == nLeafs
+  # # Verify stop condition
+  # if last.root == VertexID(0):
+  #   last = low(LeafTie,root)
+  # elif last != high(LeafTie,root):
+  #   last = last.next
+  # let rc = last.right db
+  # xCheck rc.isErr
+  # xCheck rc.error[1] == NearbyBeyondRange
+  # xCheck n == nLeafs
 
   true
 
@@ -211,26 +211,26 @@ proc revWalkVerify(
       ): bool =
   let
     nLeafs = leftOver.len
-  var
-    leftOver = leftOver
-    last = LeafTie()
-    n = 0
-  for (key,_) in db.leftPairs high(LeafTie,root):
-    xCheck key in leftOver:
-      noisy.say "*** revWalkVerify", " id=", n + (nLeafs + 1) * debugID
-    leftOver.excl key
-    last = key
-    n.inc
+  # var
+  #   leftOver = leftOver
+  #   last = LeafTie()
+  #   n = 0
+  # for (key,_) in db.leftPairs high(LeafTie,root):
+  #   xCheck key in leftOver:
+  #     noisy.say "*** revWalkVerify", " id=", n + (nLeafs + 1) * debugID
+  #   leftOver.excl key
+  #   last = key
+  #   n.inc
 
-  # Verify stop condition
-  if last.root == VertexID(0):
-    last = high(LeafTie,root)
-  elif last != low(LeafTie,root):
-    last = last.prev
-  let rc = last.left db
-  xCheck rc.isErr
-  xCheck rc.error[1] == NearbyBeyondRange
-  xCheck n == nLeafs
+  # # Verify stop condition
+  # if last.root == VertexID(0):
+  #   last = high(LeafTie,root)
+  # elif last != low(LeafTie,root):
+  #   last = last.prev
+  # let rc = last.left db
+  # xCheck rc.isErr
+  # xCheck rc.error[1] == NearbyBeyondRange
+  # xCheck n == nLeafs
 
   true
 

@@ -1,5 +1,5 @@
 # Nimbus
-# Copyright (c) 2023-2024 Status Research & Development GmbH
+# Copyright (c) 2023-2025 Status Research & Development GmbH
 # Licensed under either of
 #  * Apache License, version 2.0, ([LICENSE-APACHE](LICENSE-APACHE) or
 #    http://www.apache.org/licenses/LICENSE-2.0)
@@ -12,9 +12,9 @@
 
 import
   ../../aristo as use_ari,
-  ../../aristo/[aristo_init/memory_only, aristo_walk],
+  ../../aristo/[aristo_init/memory_only, aristo_walk/memory_only],
   ../../kvt as use_kvt,
-  ../../kvt/[kvt_init/memory_only, kvt_walk],
+  ../../kvt/[kvt_init/memory_only, kvt_walk/memory_only],
   ../base/[base_config, base_desc, base_helpers]
 
 # ------------------------------------------------------------------------------

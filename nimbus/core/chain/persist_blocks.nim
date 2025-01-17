@@ -1,5 +1,5 @@
 # Nimbus
-# Copyright (c) 2018-2024 Status Research & Development GmbH
+# Copyright (c) 2018-2025 Status Research & Development GmbH
 # Licensed under either of
 #  * Apache License, version 2.0, ([LICENSE-APACHE](LICENSE-APACHE) or
 #    http://www.apache.org/licenses/LICENSE-2.0)
@@ -46,7 +46,6 @@ type
     flags: PersistBlockFlags
 
     vmState: BaseVMState
-    dbTx: CoreDbTxRef
     stats*: PersistStats
 
     parent: Header
@@ -63,30 +62,30 @@ proc getVmState(
     p: var Persister, header: Header, storeSlotHash = false
 ): Result[BaseVMState, string] =
   if p.vmState == nil:
-    let vmState = BaseVMState()
-    if not vmState.init(header, p.c.com, storeSlotHash = storeSlotHash):
-      return err("Could not initialise VMState")
+    let
+      vmState = BaseVMState()
+      txFrame = p.c.db.baseTxFrame()
+      parent  = ?txFrame.getBlockHeader(header.parentHash)
+    vmState.init(parent, header, p.c.com, txFrame, storeSlotHash = storeSlotHash)
     p.vmState = vmState
   else:
     if header.number != p.parent.number + 1:
       return err("Only linear histories supported by Persister")
 
-    if not p.vmState.reinit(p.parent, header, linear = true):
+    if not p.vmState.reinit(p.parent, header):
       return err("Could not update VMState for new block")
 
   ok(p.vmState)
 
 proc dispose*(p: var Persister) =
-  if p.dbTx != nil:
-    p.dbTx.dispose()
-    p.dbTx = nil
+  p.c.db.baseTxFrame().rollback()
 
 proc init*(T: type Persister, c: ChainRef, flags: PersistBlockFlags): T =
   T(c: c, flags: flags)
 
 proc checkpoint*(p: var Persister): Result[void, string] =
   if NoValidation notin p.flags:
-    let stateRoot = p.c.db.ctx.getAccounts().getStateRoot().valueOr:
+    let stateRoot = p.c.db.baseTxFrame().getStateRoot().valueOr:
         return err($$error)
 
     if p.parent.stateRoot != stateRoot:
@@ -101,10 +100,6 @@ proc checkpoint*(p: var Persister): Result[void, string] =
         "stateRoot mismatch, expect: " & $p.parent.stateRoot & ", got: " & $stateRoot
       )
 
-  if p.dbTx != nil:
-    p.dbTx.commit()
-    p.dbTx = nil
-
   # Save and record the block number before the last saved block state.
   p.c.db.persistent(p.parent.number).isOkOr:
     return err("Failed to save state: " & $$error)
@@ -116,9 +111,6 @@ proc persistBlock*(p: var Persister, blk: Block): Result[void, string] =
     blk.header
 
   let c = p.c
-
-  if p.dbTx == nil:
-    p.dbTx = p.c.db.ctx.txFrameBegin()
 
   # Full validation means validating the state root at every block and
   # performing the more expensive hash computations on the block itself, ie
@@ -139,6 +131,7 @@ proc persistBlock*(p: var Persister, blk: Block): Result[void, string] =
   let
     skipValidation = NoValidation in p.flags
     vmState = ?p.getVmState(header, storeSlotHash = NoPersistSlotHashes notin p.flags)
+    txFrame = vmState.ledger.txFrame
 
   # TODO even if we're skipping validation, we should perform basic sanity
   #      checks on the block and header - that fields are sanely set for the
@@ -146,7 +139,7 @@ proc persistBlock*(p: var Persister, blk: Block): Result[void, string] =
   #      sanity checks should be performed early in the processing pipeline no
   #      matter their provenance.
   if not skipValidation:
-    ?c.com.validateHeaderAndKinship(blk, vmState.parent)
+    ?c.com.validateHeaderAndKinship(blk, vmState.parent, txFrame)
 
   # Generate receipts for storage or validation but skip them otherwise
   ?vmState.processBlock(
@@ -159,16 +152,16 @@ proc persistBlock*(p: var Persister, blk: Block): Result[void, string] =
 
   if NoPersistHeader notin p.flags:
     let blockHash = header.blockHash()
-    ?c.db.persistHeaderAndSetHead(blockHash, header, c.com.startOfHistory)
+    ?txFrame.persistHeaderAndSetHead(blockHash, header, c.com.startOfHistory)
 
   if NoPersistTransactions notin p.flags:
-    c.db.persistTransactions(header.number, header.txRoot, blk.transactions)
+    txFrame.persistTransactions(header.number, header.txRoot, blk.transactions)
 
   if NoPersistReceipts notin p.flags:
-    c.db.persistReceipts(header.receiptsRoot, vmState.receipts)
+    txFrame.persistReceipts(header.receiptsRoot, vmState.receipts)
 
   if NoPersistWithdrawals notin p.flags and blk.withdrawals.isSome:
-    c.db.persistWithdrawals(
+    txFrame.persistWithdrawals(
       header.withdrawalsRoot.expect("WithdrawalsRoot should be verified before"),
       blk.withdrawals.get,
     )

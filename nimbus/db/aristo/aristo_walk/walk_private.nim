@@ -1,6 +1,6 @@
 # Nimbus - Types, data structures and shared utilities used in network sync
 #
-# Copyright (c) 2023-2024 Status Research & Development GmbH
+# Copyright (c) 2023-2025 Status Research & Development GmbH
 # Licensed under either of
 #  * Apache License, version 2.0, ([LICENSE-APACHE](LICENSE-APACHE) or
 #    http://www.apache.org/licenses/LICENSE-2.0)
@@ -24,14 +24,14 @@ iterator walkVtxBeImpl*[T](
       ): tuple[rvid: RootedVertexID, vtx: VertexRef] =
   ## Generic iterator
   when T is VoidBackendRef:
-    let filter = if db.balancer.isNil: LayerRef() else: db.balancer
+    let filter = if db.txRef.isNil: LayerRef() else: db.txRef.layer
 
   else:
     mixin walkVtx
 
     let filter = LayerRef()
-    if not db.balancer.isNil:
-      filter.sTab = db.balancer.sTab # copy table
+    if not db.txRef.isNil:
+      filter.sTab = db.txRef.layer.sTab # copy table
 
     for (rvid,vtx) in db.backend.T.walkVtx(kinds):
       if filter.sTab.hasKey rvid:
@@ -55,14 +55,14 @@ iterator walkKeyBeImpl*[T](
       ): tuple[rvid: RootedVertexID, key: HashKey] =
   ## Generic iterator
   when T is VoidBackendRef:
-    let filter = if db.balancer.isNil: LayerRef() else: db.balancer
+    let filter = if db.txRef.isNil: LayerRef() else: db.txRef.layer
 
   else:
     mixin walkKey
 
     let filter = LayerRef()
-    if not db.balancer.isNil:
-      filter.kMap = db.balancer.kMap # copy table
+    if not db.txRef.isNil:
+      filter.kMap = db.txRef.layer.kMap # copy table
 
     for (rvid,key) in db.backend.T.walkKey:
       if filter.kMap.hasKey rvid:

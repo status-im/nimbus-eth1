@@ -51,7 +51,7 @@ proc createPartDb(ps: PartStateRef; data: seq[seq[byte]]; info: static[string]) 
 
 proc preLoadAristoDb(jKvp: JsonNode): PartStateRef =
   const info = "preLoadAristoDb"
-  let ps = PartStateRef.init AristoDbRef.init()
+  let ps = PartStateRef.init AristoDbRef.init().txRef
 
   # Collect rlp-encodede node blobs
   var proof: seq[seq[byte]]
@@ -198,7 +198,7 @@ proc testCreatePortalProof(node: JsonNode, testStatusIMPL: var TestStatus) {.dep
         let chain = proof.chain
 
         # Create another partial database from tree
-        let pq = PartStateRef.init AristoDbRef.init()
+        let pq = PartStateRef.init AristoDbRef.init().txRef
         pq.createPartDb(chain, info)
 
         # Create the same proof again which must result into the same as before
@@ -227,7 +227,7 @@ proc testCreatePortalProof(node: JsonNode, testStatusIMPL: var TestStatus) {.dep
           chain = @[ext] & tail
 
         # Create a third partial database from modified proof
-        let pq = PartStateRef.init AristoDbRef.init()
+        let pq = PartStateRef.init AristoDbRef.init().txRef
         pq.createPartDb(chain, info)
 
         # Re-create proof again

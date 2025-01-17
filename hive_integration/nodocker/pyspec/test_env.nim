@@ -1,5 +1,5 @@
 # Nimbus
-# Copyright (c) 2023-2024 Status Research & Development GmbH
+# Copyright (c) 2023-2025 Status Research & Development GmbH
 # Licensed under either of
 #  * Apache License, version 2.0, ([LICENSE-APACHE](LICENSE-APACHE) or
 #    http://www.apache.org/licenses/LICENSE-2.0)
@@ -37,9 +37,9 @@ proc genesisHeader(node: JsonNode): Header =
 proc initializeDb(memDB: CoreDbRef, node: JsonNode): Hash32 =
   let
     genesisHeader = node.genesisHeader
-    ledger = LedgerRef.init(memDB)
+    ledger = LedgerRef.init(memDB.baseTxFrame())
 
-  memDB.persistHeaderAndSetHead(genesisHeader).expect("persistHeader no error")
+  ledger.txFrame.persistHeaderAndSetHead(genesisHeader).expect("persistHeader no error")
   setupLedger(node["pre"], ledger)
   ledger.persist()
   doAssert ledger.getStateRoot == genesisHeader.stateRoot

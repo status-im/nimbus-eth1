@@ -137,7 +137,7 @@ proc newPayload*(ben: BeaconEngineRef,
 
   let
     com = ben.com
-    db  = com.db
+    db  = com.db.baseTxFrame() # TODO this should be forkedchain!
     timestamp = ethTime payload.timestamp
     version = payload.version
     requestsHash = calcRequestsHash(executionRequests)
@@ -216,7 +216,7 @@ proc newPayload*(ben: BeaconEngineRef,
     warn "State not available, ignoring new payload",
       hash   = blockHash,
       number = header.number
-    let blockHash = latestValidHash(db, parent, ttd)
+    let blockHash = latestValidHash(com.db, parent, ttd)
     return acceptedStatus(blockHash)
 
   trace "Inserting block without sethead",
@@ -229,7 +229,7 @@ proc newPayload*(ben: BeaconEngineRef,
       parent = header.parentHash.short,
       error = vres.error()
     ben.setInvalidAncestor(header, blockHash)
-    let blockHash = latestValidHash(db, parent, ttd)
+    let blockHash = latestValidHash(com.db, parent, ttd)
     return invalidStatus(blockHash, vres.error())
 
   ben.txPool.removeNewBlockTxs(blk, Opt.some(blockHash))

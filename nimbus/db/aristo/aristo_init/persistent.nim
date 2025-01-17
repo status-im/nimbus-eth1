@@ -1,5 +1,5 @@
 # nimbus-eth1
-# Copyright (c) 2023-2024 Status Research & Development GmbH
+# Copyright (c) 2023-2025 Status Research & Development GmbH
 # Licensed under either of
 #  * Apache License, version 2.0, ([LICENSE-APACHE](LICENSE-APACHE) or
 #    http://www.apache.org/licenses/LICENSE-2.0)
@@ -51,12 +51,16 @@ proc newAristoRdbDbRef(
         be.closeFn(eradicate = false)
         return err(rc.error)
       rc.value
-  ok((AristoDbRef(
-      top: LayerRef(vTop: vTop),
+    db = (AristoDbRef(
+      txRef: AristoTxRef(layer: LayerRef(vTop: vTop, cTop: vTop)),
       backend: be,
       accLeaves: LruCache[Hash32, VertexRef].init(ACC_LRU_SIZE),
       stoLeaves: LruCache[Hash32, VertexRef].init(ACC_LRU_SIZE),
-    ), oCfs))
+    ), oCfs)
+
+  db[0].txRef.db = db[0] # TODO evaluate if this cyclic ref is worth the convenience
+
+  ok(db)
 
 # ------------------------------------------------------------------------------
 # Public database constuctors, destructor

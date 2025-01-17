@@ -1,5 +1,5 @@
 # Nimbus
-# Copyright (c) 2024 Status Research & Development GmbH
+# Copyright (c) 2024-2025 Status Research & Development GmbH
 # Licensed under either of
 #  * Apache License, version 2.0, ([LICENSE-APACHE](LICENSE-APACHE))
 #  * MIT license ([LICENSE-MIT](LICENSE-MIT))
@@ -97,7 +97,7 @@ proc importBlocks*(conf: NimbusConf, com: CommonRef) =
   setControlCHook(controlCHandler)
 
   let
-    start = com.db.getSavedStateBlockNumber() + 1
+    start = com.db.baseTxFrame().getSavedStateBlockNumber() + 1
     chain = com.newChain()
     (cfg, genesis_validators_root, lastEra1Block, firstSlotAfterMerge) =
       getMetadata(conf.networkId)

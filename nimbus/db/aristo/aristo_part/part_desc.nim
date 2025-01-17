@@ -1,5 +1,5 @@
 # nimbus-eth1
-# Copyright (c) 2024 Status Research & Development GmbH
+# Copyright (c) 2024-2025 Status Research & Development GmbH
 # Licensed under either of
 #  * Apache License, version 2.0, ([LICENSE-APACHE](LICENSE-APACHE) or
 #    http://www.apache.org/licenses/LICENSE-2.0)
@@ -17,7 +17,7 @@ import
 
 type
   PartStateRef* = ref object of RootRef
-    db*: AristoDbRef
+    db*: AristoTxRef
     core*: Table[VertexID,HashSet[HashKey]] # Existing vertices
     pureExt*: Table[HashKey,PrfExtension]   # On-demand node (usually hidden)
     byKey*: Table[HashKey,RootedVertexID]   # All keys, instead of `kMap[]`
@@ -69,7 +69,7 @@ type
 # Public helpers
 # ------------------------------------------------------------------------------
 
-proc init*(T: type PartStateRef; db: AristoDbRef): T =
+proc init*(T: type PartStateRef; db: AristoTxRef): T =
   ## Constructor for a partial database.
   T(db: db)
 

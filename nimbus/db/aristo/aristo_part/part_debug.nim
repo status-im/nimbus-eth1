@@ -1,5 +1,5 @@
 # nimbus-eth1
-# Copyright (c) 2024 Status Research & Development GmbH
+# Copyright (c) 2024-2025 Status Research & Development GmbH
 # Licensed under either of
 #  * Apache License, version 2.0, ([LICENSE-APACHE](LICENSE-APACHE) or
 #    http://www.apache.org/licenses/LICENSE-2.0)
@@ -76,7 +76,7 @@ proc pp*[T: PrfNode|PrfExtension](
     t0: Table[RootedVertexID,(HashKey,T)]
     t1: Table[HashKey,T]
   for (key,val) in t.pairs:
-    ps.db.xMap.withValue(key,rv):
+    ps.db.db.xMap.withValue(key,rv):
       t0[rv[]] = (key,val)
     do:
       t1[key] = val
