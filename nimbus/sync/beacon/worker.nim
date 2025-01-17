@@ -1,5 +1,5 @@
 # Nimbus
-# Copyright (c) 2023-2024 Status Research & Development GmbH
+# Copyright (c) 2023-2025 Status Research & Development GmbH
 # Licensed and distributed under either of
 #   * MIT license (license terms in the root directory or at
 #     https://opensource.org/licenses/MIT).
@@ -169,10 +169,6 @@ proc runPeer*(
   if 0 < buddy.only.nMultiLoop:                 # statistics/debugging
     buddy.only.multiRunIdle = Moment.now() - buddy.only.stoppedMultiRun
   buddy.only.nMultiLoop.inc                     # statistics/debugging
-
-  # Update consensus header target when needed. It comes with a finalised
-  # header hash where we need to complete the block number.
-  await buddy.headerStagedUpdateTarget info
 
   if not await buddy.napUnlessSomethingToFetch():
     #

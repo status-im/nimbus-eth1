@@ -1,5 +1,5 @@
 # Nimbus
-# Copyright (c) 2021-2024 Status Research & Development GmbH
+# Copyright (c) 2021-2025 Status Research & Development GmbH
 # Licensed and distributed under either of
 #   * MIT license (license terms in the root directory or at
 #     https://opensource.org/licenses/MIT).
@@ -127,10 +127,6 @@ const
     ## staged blocks queue. (The `+1` is exceptional, appears when the least
     ## entry block number is too high and so leaves a gap to the ledger state
     ## block number.)
-
-  finaliserChainLengthMax* = 32
-    ## When importing with `importBlock()`, finalise after at most this many
-    ## invocations of `importBlock()`.
 
   # ----------------------
 

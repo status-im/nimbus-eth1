@@ -219,7 +219,7 @@ Running the sync process for *MainNet*
 --------------------------------------
 
 For syncing, a beacon node is needed that regularly informs via *RPC* of a
-recently finalised block header.
+recent target block header.
 
 The beacon node program used here is the *nimbus_beacon_node* binary from the
 *nimbus-eth2* project (any other, e.g.the *light client*  will do.)
@@ -230,7 +230,7 @@ The beacon node program used here is the *nimbus_beacon_node* binary from the
          --jwt-secret=/tmp/jwtsecret
 
 where *http://127.0.0.1:8551* is the URL of the sync process that receives the
-finalised block header (here on the same physical machine) and `/tmp/jwtsecret`
+target block headers (here on the same physical machine) and `/tmp/jwtsecret`
 is the shared secret file needed for mutual communication authentication.
 
 It will take a while for *nimbus_beacon_node* to catch up (see the
