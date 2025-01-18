@@ -149,7 +149,6 @@ proc getVerifiedBlockHeader*(
         warn "Validation of block header failed",
           error = error, node = headerContent.receivedFrom.record.toURI()
         continue
-
     debug "Fetched valid block header from the network"
     # Content is valid, it can be stored and propagated to interested peers
     n.portalProtocol.storeContent(
@@ -194,7 +193,6 @@ proc getBlockBody*(
         warn "Validation of block body failed",
           error, node = bodyContent.receivedFrom.record.toURI()
         continue
-
     debug "Fetched block body from the network"
     # Content is valid, it can be stored and propagated to interested peers
     n.portalProtocol.storeContent(
@@ -213,7 +211,6 @@ proc getBlock*(
     n: HistoryNetwork, id: Hash32 | uint64
 ): Future[Opt[Block]] {.async: (raises: [CancelledError]).} =
   debug "Trying to retrieve block", id
-
   # Note: Using `getVerifiedBlockHeader` instead of getBlockHeader even though
   # proofs are not necessiarly needed, in order to avoid having to inject
   # also the original type into the network.
