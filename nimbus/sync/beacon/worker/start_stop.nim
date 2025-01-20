@@ -17,6 +17,7 @@ import
   ../worker_desc,
   ./blocks_staged/staged_queue,
   ./headers_staged/staged_queue,
+  ./update/metrics,
   "."/[blocks_unproc, db, headers_unproc, update]
 
 when enableTicker:
@@ -155,11 +156,14 @@ proc startBuddy*(buddy: BeaconBuddyRef): bool =
     ctx = buddy.ctx
     peer = buddy.peer
   if peer.supports(protocol.eth) and peer.state(protocol.eth).initialized:
-    ctx.pool.nBuddies.inc # for metrics
+    ctx.pool.nBuddies.inc
+    ctx.updateMetrics()
     return true
 
 proc stopBuddy*(buddy: BeaconBuddyRef) =
-  buddy.ctx.pool.nBuddies.dec # for metrics
+  let ctx = buddy.ctx
+  ctx.pool.nBuddies.dec
+  ctx.updateMetrics(force=(ctx.pool.nBuddies == 0))
 
 # ------------------------------------------------------------------------------
 # End
