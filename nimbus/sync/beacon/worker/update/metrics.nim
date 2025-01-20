@@ -79,7 +79,7 @@ template updateMetricsImpl(ctx: BeaconCtxRef) =
 
 proc updateMetrics*(ctx: BeaconCtxRef; force = false) =
   let now = Moment.now()
-    if ctx.pool.nextMetricsUpdate < now or force:
+  if ctx.pool.nextMetricsUpdate < now or force:
     ctx.updateMetricsImpl()
     ctx.pool.nextMetricsUpdate = now + metricsUpdateInterval
 
