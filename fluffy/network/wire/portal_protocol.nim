@@ -336,48 +336,51 @@ func truncateEnrs(
   enrs
 
 proc handlePingExtension(
-    p: PortalProtocol, encodedCustomPayload: ByteList[2048], srcId: NodeId
-): ByteList[2048] =
-  let customPayload = decodeSsz(
-    encodedCustomPayload.asSeq(), CustomPayloadExtensionsFormat
-  ).valueOr:
-    # invalid custom payload format, send back FailedToDecodePayload
-    return encodeErrorPayload(ErrorCode.FailedToDecodePayload)
-
-  if customPayload.`type` notin p.pingExtensionCapabilities:
+    p: PortalProtocol,
+    payloadType: uint16,
+    encodedPayload: ByteList[1100],
+    srcId: NodeId,
+): (uint16, ByteList[1100]) =
+  if payloadType notin p.pingExtensionCapabilities:
     return encodeErrorPayload(ErrorCode.ExtensionNotSupported)
 
-  case customPayload.`type`
+  case payloadType
   of CapabilitiesType:
-    let payload = decodeSsz(customPayload.payload.asSeq(), CapabilitiesPayload).valueOr:
+    let payload = decodeSsz(encodedPayload.asSeq(), CapabilitiesPayload).valueOr:
       return encodeErrorPayload(ErrorCode.FailedToDecodePayload)
 
     p.radiusCache.put(srcId, payload.data_radius)
 
-    encodeCustomPayload(
-      CapabilitiesPayload(
-        client_info: ByteList[MAX_CLIENT_INFO_BYTE_LENGTH].init(@[]),
-        data_radius: p.dataRadius(),
-        capabilities: List[uint16, MAX_CAPABILITIES_LENGTH].init(
-          p.pingExtensionCapabilities.toSeq()
-        ),
-      )
+    (
+      payloadType,
+      encodePayload(
+        CapabilitiesPayload(
+          client_info: ByteList[MAX_CLIENT_INFO_BYTE_LENGTH].init(@[]),
+          data_radius: p.dataRadius(),
+          capabilities: List[uint16, MAX_CAPABILITIES_LENGTH].init(
+            p.pingExtensionCapabilities.toSeq()
+          ),
+        )
+      ),
     )
   of BasicRadiusType:
-    let payload = decodeSsz(customPayload.payload.asSeq(), BasicRadiusPayload).valueOr:
+    let payload = decodeSsz(encodedPayload.asSeq(), BasicRadiusPayload).valueOr:
       return encodeErrorPayload(ErrorCode.FailedToDecodePayload)
 
     p.radiusCache.put(srcId, payload.data_radius)
 
-    encodeCustomPayload(HistoryRadiusPayload(data_radius: p.dataRadius()))
+    (payloadType, encodePayload(HistoryRadiusPayload(data_radius: p.dataRadius())))
   of HistoryRadiusType:
-    let payload = decodeSsz(customPayload.payload.asSeq(), HistoryRadiusPayload).valueOr:
+    let payload = decodeSsz(encodedPayload.asSeq(), HistoryRadiusPayload).valueOr:
       return encodeErrorPayload(ErrorCode.FailedToDecodePayload)
 
     p.radiusCache.put(srcId, payload.data_radius)
 
-    encodeCustomPayload(
-      HistoryRadiusPayload(data_radius: p.dataRadius(), ephemeral_header_count: 0)
+    (
+      payloadType,
+      encodePayload(
+        HistoryRadiusPayload(data_radius: p.dataRadius(), ephemeral_header_count: 0)
+      ),
     )
   else:
     encodeErrorPayload(ErrorCode.ExtensionNotSupported)
@@ -385,10 +388,12 @@ proc handlePingExtension(
 proc handlePing(p: PortalProtocol, ping: PingMessage, srcId: NodeId): seq[byte] =
   # TODO: Need to think about the effect of malicious actor sending lots of
   # pings from different nodes to clear the LRU.
+  let (payloadType, payload) =
+    handlePingExtension(p, ping.payload_type, ping.payload, srcId)
+
   encodeMessage(
     PongMessage(
-      enrSeq: p.localNode.record.seqNum,
-      customPayload: handlePingExtension(p, ping.customPayload, srcId),
+      enrSeq: p.localNode.record.seqNum, payload_type: payloadType, payload: payload
     )
   )
 
@@ -697,7 +702,7 @@ proc reqResponse[Request: SomeMessage, Response: SomeMessage](
 proc pingImpl*(
     p: PortalProtocol, dst: Node
 ): Future[PortalResult[PongMessage]] {.async: (raises: [CancelledError]).} =
-  let pingCustomPayload = encodeCustomPayload(
+  let pingPayload = encodePayload(
     CapabilitiesPayload(
       client_info: ByteList[MAX_CLIENT_INFO_BYTE_LENGTH].init(@[]),
       data_radius: p.dataRadius(),
@@ -706,8 +711,11 @@ proc pingImpl*(
     )
   )
 
-  let ping =
-    PingMessage(enrSeq: p.localNode.record.seqNum, customPayload: pingCustomPayload)
+  let ping = PingMessage(
+    enrSeq: p.localNode.record.seqNum,
+    payload_type: CapabilitiesType,
+    payload: pingPayload,
+  )
 
   return await reqResponse[PingMessage, PongMessage](p, dst, ping)
 
@@ -758,15 +766,12 @@ proc ping*(
 
     let pong = pongResponse.get()
 
-    let customPayload = decodeSsz(
-      pong.customPayload.asSeq(), CustomPayloadExtensionsFormat
-    ).valueOr:
-      return err("Pong message contains invalid custom payload")
+    # Note: currently only decoding as capabilities payload as this is the only
+    # one that we support sending.
+    if pong.payload_type != CapabilitiesType:
+      return err("Pong message contains invalid or error payload")
 
-    if customPayload.`type` != CapabilitiesType:
-      return err("Pong message contains invalid custom payload")
-
-    let payload = decodeSsz(customPayload.payload.asSeq(), CapabilitiesPayload).valueOr:
+    let payload = decodeSsz(pong.payload.asSeq(), CapabilitiesPayload).valueOr:
       return err("Pong message contains invalid CapabilitiesPayload")
 
     p.radiusCache.put(dst.id, payload.data_radius)

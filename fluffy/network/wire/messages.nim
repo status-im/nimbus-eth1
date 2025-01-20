@@ -46,11 +46,13 @@ type
 
   PingMessage* = object
     enrSeq*: uint64
-    customPayload*: ByteList[2048]
+    payload_type*: uint16
+    payload*: ByteList[1100]
 
   PongMessage* = object
     enrSeq*: uint64
-    customPayload*: ByteList[2048]
+    payload_type*: uint16
+    payload*: ByteList[1100]
 
   FindNodesMessage* = object
     distances*: List[uint16, 256]

@@ -9,10 +9,6 @@
 
 import ssz_serialization
 
-type CustomPayloadExtensionsFormat* = object
-  `type`*: uint16
-  payload*: ByteList[1100]
-
 const
   # Extension types
   CapabilitiesType* = 0'u16
@@ -43,47 +39,25 @@ type
     error_code*: uint16
     message*: ByteList[MAX_ERROR_BYTE_LENGTH]
 
+  CustomPayload* =
+    CapabilitiesPayload | BasicRadiusPayload | HistoryRadiusPayload | ErrorPayload
+
   ErrorCode* = enum
     ExtensionNotSupported = 0
     RequestedDataNotFound = 1
     FailedToDecodePayload = 2
     SystemError = 3
 
-func encodeCustomPayload*(payload: CapabilitiesPayload): ByteList[2048] =
-  let
-    encodedPayload = SSZ.encode(payload)
-    customPayload = CustomPayloadExtensionsFormat(
-      `type`: CapabilitiesType, payload: ByteList[1100](encodedPayload)
-    )
-  ByteList[2048](SSZ.encode(customPayload))
+func encodePayload*(payload: CustomPayload): ByteList[1100] =
+  ByteList[1100].init(SSZ.encode(payload))
 
-func encodeCustomPayload*(payload: BasicRadiusPayload): ByteList[2048] =
-  let
-    encodedPayload = SSZ.encode(payload)
-    customPayload = CustomPayloadExtensionsFormat(
-      `type`: BasicRadiusType, payload: ByteList[1100](encodedPayload)
-    )
-  return ByteList[2048](SSZ.encode(customPayload))
-
-func encodeCustomPayload*(payload: HistoryRadiusPayload): ByteList[2048] =
-  let
-    encodedPayload = SSZ.encode(payload)
-    customPayload = CustomPayloadExtensionsFormat(
-      `type`: HistoryRadiusType, payload: ByteList[1100](encodedPayload)
-    )
-  return ByteList[2048](SSZ.encode(customPayload))
-
-func encodeCustomPayload*(payload: ErrorPayload): ByteList[2048] =
-  let
-    encodedPayload = SSZ.encode(payload)
-    customPayload = CustomPayloadExtensionsFormat(
-      `type`: ErrorType, payload: ByteList[1100](encodedPayload)
-    )
-  return ByteList[2048](SSZ.encode(customPayload))
-
-func encodeErrorPayload*(code: ErrorCode): ByteList[2048] =
-  encodeCustomPayload(
-    ErrorPayload(
-      error_code: uint16(ord(code)), message: ByteList[MAX_ERROR_BYTE_LENGTH].init(@[])
-    )
+func encodeErrorPayload*(code: ErrorCode): (uint16, ByteList[1100]) =
+  (
+    ErrorType,
+    encodePayload(
+      ErrorPayload(
+        error_code: uint16(ord(code)),
+        message: ByteList[MAX_ERROR_BYTE_LENGTH].init(@[]),
+      )
+    ),
   )

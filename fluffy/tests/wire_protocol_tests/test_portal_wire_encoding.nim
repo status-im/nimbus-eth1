@@ -23,11 +23,11 @@ suite "Portal Wire Protocol Message Encodings":
     let
       enrSeq = 1'u64
       # Can be any custom payload, testing with meaningless string of bytes.
-      customPayload = ByteList[2048].init(@[byte 0x01, 0x02, 0x03, 0x04])
-      p = PingMessage(enrSeq: enrSeq, customPayload: customPayload)
+      customPayload = ByteList[1100].init(@[byte 0x01, 0x02, 0x03, 0x04])
+      p = PingMessage(enrSeq: enrSeq, payload_type: 42'u16, payload: customPayload)
 
     let encoded = encodeMessage(p)
-    check encoded.toHex == "0001000000000000000c00000001020304"
+    check encoded.toHex == "0001000000000000002a000e00000001020304"
     let decoded = decodeMessage(encoded)
     check decoded.isOk()
 
@@ -35,17 +35,18 @@ suite "Portal Wire Protocol Message Encodings":
     check:
       message.kind == ping
       message.ping.enrSeq == enrSeq
-      message.ping.customPayload == customPayload
+      message.ping.payload_type == 42'u16
+      message.ping.payload == customPayload
 
   test "Pong Response":
     let
       enrSeq = 1'u64
       # Can be any custom payload, testing with meaningless string of bytes.
-      customPayload = ByteList[2048].init(@[byte 0x01, 0x02, 0x03, 0x04])
-      p = PongMessage(enrSeq: enrSeq, customPayload: customPayload)
+      customPayload = ByteList[1100].init(@[byte 0x01, 0x02, 0x03, 0x04])
+      p = PongMessage(enrSeq: enrSeq, payload_type: 42'u16, payload: customPayload)
 
     let encoded = encodeMessage(p)
-    check encoded.toHex == "0101000000000000000c00000001020304"
+    check encoded.toHex == "0101000000000000002a000e00000001020304"
     let decoded = decodeMessage(encoded)
     check decoded.isOk()
 
@@ -53,7 +54,8 @@ suite "Portal Wire Protocol Message Encodings":
     check:
       message.kind == pong
       message.pong.enrSeq == enrSeq
-      message.pong.customPayload == customPayload
+      message.pong.payload_type == 42'u16
+      message.pong.payload == customPayload
 
   test "FindNodes Request":
     let

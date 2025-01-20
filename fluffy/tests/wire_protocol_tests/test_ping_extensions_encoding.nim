@@ -27,12 +27,14 @@ suite "Portal Wire Ping Extension Encodings - Type 0x00":
         data_radius: data_radius,
         capabilities: List[uint16, MAX_CAPABILITIES_LENGTH].init(capabilities),
       )
-      customPayload = encodeCustomPayload(payload)
-      ping = PingMessage(enrSeq: enr_seq, customPayload: customPayload)
+      customPayload = encodePayload(payload)
+      ping = PingMessage(
+        enrSeq: enr_seq, payload_type: CapabilitiesType, payload: customPayload
+      )
 
     let encoded = encodeMessage(ping)
     check encoded.to0xHex ==
-      "0x0001000000000000000c00000000000600000028000000feffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff550000007472696e2f76302e312e312d62363166646335632f6c696e75782d7838365f36342f7275737463312e38312e3000000100ffff"
+      "0x00010000000000000000000e00000028000000feffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff550000007472696e2f76302e312e312d62363166646335632f6c696e75782d7838365f36342f7275737463312e38312e3000000100ffff"
 
     let decoded = decodeMessage(encoded)
     check decoded.isOk()
@@ -40,16 +42,10 @@ suite "Portal Wire Ping Extension Encodings - Type 0x00":
     check:
       message.kind == MessageKind.ping
       message.ping.enrSeq == enr_seq
-      message.ping.customPayload == customPayload
+      message.ping.payload_type == CapabilitiesType
+      message.ping.payload == customPayload
 
-    let decodedCustomPayload =
-      decodeSsz(message.ping.customPayload.asSeq(), CustomPayloadExtensionsFormat)
-    check:
-      decodedCustomPayload.isOk()
-      decodedCustomPayload.value().type == CapabilitiesType
-
-    let decodedPayload =
-      decodeSsz(decodedCustomPayload.value.payload.asSeq(), CapabilitiesPayload)
+    let decodedPayload = decodeSsz(message.ping.payload.asSeq(), CapabilitiesPayload)
     check:
       decodedPayload.isOk()
       decodedPayload.value().client_info.asSeq() == client_info.toBytes()
@@ -68,12 +64,14 @@ suite "Portal Wire Ping Extension Encodings - Type 0x00":
         data_radius: data_radius,
         capabilities: List[uint16, MAX_CAPABILITIES_LENGTH].init(capabilities),
       )
-      customPayload = encodeCustomPayload(payload)
-      ping = PingMessage(enrSeq: enr_seq, customPayload: customPayload)
+      customPayload = encodePayload(payload)
+      ping = PingMessage(
+        enrSeq: enr_seq, payload_type: CapabilitiesType, payload: customPayload
+      )
 
     let encoded = encodeMessage(ping)
     check encoded.to0xHex ==
-      "0x0001000000000000000c00000000000600000028000000feffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff2800000000000100ffff"
+      "0x00010000000000000000000e00000028000000feffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff2800000000000100ffff"
     let decoded = decodeMessage(encoded)
     check decoded.isOk()
 
@@ -89,12 +87,14 @@ suite "Portal Wire Ping Extension Encodings - Type 0x00":
         data_radius: data_radius,
         capabilities: List[uint16, MAX_CAPABILITIES_LENGTH].init(capabilities),
       )
-      customPayload = encodeCustomPayload(payload)
-      pong = PongMessage(enrSeq: enr_seq, customPayload: customPayload)
+      customPayload = encodePayload(payload)
+      pong = PongMessage(
+        enrSeq: enr_seq, payload_type: CapabilitiesType, payload: customPayload
+      )
 
     let encoded = encodeMessage(pong)
     check encoded.to0xHex ==
-      "0x0101000000000000000c00000000000600000028000000feffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff550000007472696e2f76302e312e312d62363166646335632f6c696e75782d7838365f36342f7275737463312e38312e3000000100ffff"
+      "0x01010000000000000000000e00000028000000feffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff550000007472696e2f76302e312e312d62363166646335632f6c696e75782d7838365f36342f7275737463312e38312e3000000100ffff"
 
   test "SSZ encoded Pong response - with empty client info":
     let
@@ -108,12 +108,14 @@ suite "Portal Wire Ping Extension Encodings - Type 0x00":
         data_radius: data_radius,
         capabilities: List[uint16, MAX_CAPABILITIES_LENGTH].init(capabilities),
       )
-      customPayload = encodeCustomPayload(payload)
-      pong = PongMessage(enrSeq: enr_seq, customPayload: customPayload)
+      customPayload = encodePayload(payload)
+      pong = PongMessage(
+        enrSeq: enr_seq, payload_type: CapabilitiesType, payload: customPayload
+      )
 
     let encoded = encodeMessage(pong)
     check encoded.to0xHex ==
-      "0x0101000000000000000c00000000000600000028000000feffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff2800000000000100ffff"
+      "0x01010000000000000000000e00000028000000feffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff2800000000000100ffff"
 
 suite "Portal Wire Ping Extension Encodings - Type 0x01":
   test "SSZ encoded Ping request":
@@ -122,12 +124,14 @@ suite "Portal Wire Ping Extension Encodings - Type 0x01":
       data_radius = UInt256.high() - 1 # Full radius - 1
 
       payload = BasicRadiusPayload(data_radius: data_radius)
-      customPayload = encodeCustomPayload(payload)
-      ping = PingMessage(enrSeq: enr_seq, customPayload: customPayload)
+      customPayload = encodePayload(payload)
+      ping = PingMessage(
+        enrSeq: enr_seq, payload_type: BasicRadiusType, payload: customPayload
+      )
 
     let encoded = encodeMessage(ping)
     check encoded.to0xHex ==
-      "0x0001000000000000000c000000010006000000feffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff"
+      "0x00010000000000000001000e000000feffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff"
 
   test "SSZ encoded Pong response":
     let
@@ -135,12 +139,14 @@ suite "Portal Wire Ping Extension Encodings - Type 0x01":
       data_radius = UInt256.high() - 1 # Full radius - 1
 
       payload = BasicRadiusPayload(data_radius: data_radius)
-      customPayload = encodeCustomPayload(payload)
-      pong = PongMessage(enrSeq: enr_seq, customPayload: customPayload)
+      customPayload = encodePayload(payload)
+      pong = PongMessage(
+        enrSeq: enr_seq, payload_type: BasicRadiusType, payload: customPayload
+      )
 
     let encoded = encodeMessage(pong)
     check encoded.to0xHex ==
-      "0x0101000000000000000c000000010006000000feffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff"
+      "0x01010000000000000001000e000000feffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff"
 
 suite "Portal Wire Ping Extension Encodings - Type 0x02":
   test "SSZ encoded Ping request":
@@ -152,12 +158,14 @@ suite "Portal Wire Ping Extension Encodings - Type 0x02":
       payload = HistoryRadiusPayload(
         data_radius: data_radius, ephemeral_header_count: ephemeral_header_count
       )
-      customPayload = encodeCustomPayload(payload)
-      ping = PingMessage(enrSeq: enr_seq, customPayload: customPayload)
+      customPayload = encodePayload(payload)
+      ping = PingMessage(
+        enrSeq: enr_seq, payload_type: HistoryRadiusType, payload: customPayload
+      )
 
     let encoded = encodeMessage(ping)
     check encoded.to0xHex ==
-      "0x0001000000000000000c000000020006000000feffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff9210"
+      "0x00010000000000000002000e000000feffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff9210"
 
   test "SSZ encoded Pong response":
     let
@@ -168,12 +176,14 @@ suite "Portal Wire Ping Extension Encodings - Type 0x02":
       payload = HistoryRadiusPayload(
         data_radius: data_radius, ephemeral_header_count: ephemeral_header_count
       )
-      customPayload = encodeCustomPayload(payload)
-      pong = PongMessage(enrSeq: enr_seq, customPayload: customPayload)
+      customPayload = encodePayload(payload)
+      pong = PongMessage(
+        enrSeq: enr_seq, payload_type: HistoryRadiusType, payload: customPayload
+      )
 
     let encoded = encodeMessage(pong)
     check encoded.to0xHex ==
-      "0x0101000000000000000c000000020006000000feffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff9210"
+      "0x01010000000000000002000e000000feffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff9210"
 
 suite "Portal Wire Ping Extension Encodings - Type 0x03":
   test "SSZ encoded Pong response":
@@ -186,9 +196,10 @@ suite "Portal Wire Ping Extension Encodings - Type 0x03":
         error_code: error_code,
         message: ByteList[MAX_ERROR_BYTE_LENGTH].init(message.toBytes()),
       )
-      customPayload = encodeCustomPayload(payload)
-      pong = PongMessage(enrSeq: enr_seq, customPayload: customPayload)
+      customPayload = encodePayload(payload)
+      pong =
+        PongMessage(enrSeq: enr_seq, payload_type: ErrorType, payload: customPayload)
 
     let encoded = encodeMessage(pong)
     check encoded.to0xHex ==
-      "0x0101000000000000000c000000ffff0600000002000600000068656c6c6f20776f726c64"
+      "0x010100000000000000ffff0e00000002000600000068656c6c6f20776f726c64"
