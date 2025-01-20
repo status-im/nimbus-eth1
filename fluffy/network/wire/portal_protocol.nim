@@ -127,8 +127,8 @@ const
   initialLookups = 1 ## Amount of lookups done when populating the routing table
 
   # Ban durations for the banned peers table
-  PeerBanDurationContentLookupFailedValidation = 30.minutes
-  PeerBanDurationOfferFailedValidation = 60.minutes
+  PeerBanDurationContentLookupFailedValidation* = 60.minutes
+  PeerBanDurationOfferFailedValidation* = 60.minutes
 
 type
   ToContentIdHandler* =
@@ -170,12 +170,12 @@ type
     of Database:
       contentKeys: ContentKeysList
 
-  BanTimeout = chronos.Moment
+  PeerBanTimeout = chronos.Moment
 
   PortalProtocol* = ref object of TalkProtocol
     protocolId*: PortalProtocolId
     routingTable*: RoutingTable
-    bannedPeers: Table[NodeId, BanTimeout]
+    bannedPeers: Table[NodeId, PeerBanTimeout]
     baseProtocol*: protocol.Protocol
     toContentId*: ToContentIdHandler
     contentCache: ContentCache
@@ -291,7 +291,7 @@ func getProtocolId*(
     of PortalSubnetwork.transactionGossip:
       [portalPrefix, 0x4F]
 
-proc banPeer(p: PortalProtocol, nodeId: NodeId, period: chronos.Duration) =
+proc banPeer*(p: PortalProtocol, nodeId: NodeId, period: chronos.Duration) =
   let banTimeout = now(chronos.Moment) + period
 
   if p.bannedPeers.contains(nodeId):
@@ -314,12 +314,6 @@ proc isBanned(p: PortalProtocol, nodeId: NodeId): bool =
   # Peer is in bannedPeers table but the time period has expired
   p.bannedPeers.del(nodeId)
   false
-
-template contentLookupFailedValidation*(p: PortalProtocol, nodeId: NodeId) =
-  p.banPeer(nodeId, PeerBanDurationContentLookupFailedValidation)
-
-template offerFailedValidation*(p: PortalProtocol, nodeId: NodeId) =
-  p.banPeer(nodeId, PeerBanDurationOfferFailedValidation)
 
 func `$`(id: PortalProtocolId): string =
   id.toHex()

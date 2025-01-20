@@ -46,7 +46,7 @@ proc installPortalStateApiHandlers*(rpcServer: RpcServer, p: PortalProtocol) =
     of Content:
       let valueBytes = foundContentResult.content
       validateRetrieval(key, valueBytes).isOkOr:
-        p.contentLookupFailedValidation(node.id)
+        p.banPeer(node.id, PeerBanDurationContentLookupFailedValidation)
         raise invalidValueErr()
 
       let res = ContentInfo(
@@ -98,7 +98,10 @@ proc installPortalStateApiHandlers*(rpcServer: RpcServer, p: PortalProtocol) =
       valueBytes = contentLookupResult.content
 
     validateRetrieval(key, valueBytes).isOkOr:
-      p.contentLookupFailedValidation(contentLookupResult.receivedFrom.id)
+      p.banPeer(
+        contentLookupResult.receivedFrom.id,
+        PeerBanDurationContentLookupFailedValidation,
+      )
       raise invalidValueErr()
     p.storeContent(keyBytes, contentId, valueBytes, cacheContent = true)
 
@@ -135,7 +138,9 @@ proc installPortalStateApiHandlers*(rpcServer: RpcServer, p: PortalProtocol) =
 
     validateRetrieval(key, valueBytes).isOkOr:
       if res.trace.receivedFrom.isSome():
-        p.contentLookupFailedValidation(res.trace.receivedFrom.get())
+        p.banPeer(
+          res.trace.receivedFrom.get(), PeerBanDurationContentLookupFailedValidation
+        )
       raise invalidValueErr()
     p.storeContent(keyBytes, contentId, valueBytes, cacheContent = true)
 
