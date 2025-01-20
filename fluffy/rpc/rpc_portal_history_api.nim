@@ -79,14 +79,14 @@ proc installPortalHistoryApiHandlers*(rpcServer: RpcServer, p: PortalProtocol) =
       keyBytes = ContentKeyByteList.init(hexToSeqByte(contentKey))
       contentId = p.toContentId(keyBytes).valueOr:
         raise invalidKeyErr()
-      maybeValueBytes = p.getLocalContent(keyBytes, contentId)
 
-    if maybeValueBytes.isSome():
-      return ContentInfo(content: maybeValueBytes.get().to0xHex(), utpTransfer: false)
+    p.getLocalContent(keyBytes, contentId).isErrOr:
+      return ContentInfo(content: value.to0xHex(), utpTransfer: false)
 
     let contentLookupResult = (await p.contentLookup(keyBytes, contentId)).valueOr:
       raise contentNotFoundErr()
 
+    # TODO: Add default on validation by optional validation parameter.
     ContentInfo(
       content: contentLookupResult.content.to0xHex(),
       utpTransfer: contentLookupResult.utpTransfer,
@@ -99,10 +99,17 @@ proc installPortalHistoryApiHandlers*(rpcServer: RpcServer, p: PortalProtocol) =
       keyBytes = ContentKeyByteList.init(hexToSeqByte(contentKey))
       contentId = p.toContentId(keyBytes).valueOr:
         raise invalidKeyErr()
-      maybeValueBytes = p.getLocalContent(keyBytes, contentId)
 
-    if maybeValueBytes.isSome():
-      return TraceContentLookupResult(content: maybeValueBytes, utpTransfer: false)
+    p.getLocalContent(keyBytes, contentId).isErrOr:
+      return TraceContentLookupResult(
+        content: Opt.some(value),
+        utpTransfer: false,
+        trace: TraceObject(
+          origin: p.localNode.id,
+          targetId: contentId,
+          receivedFrom: Opt.some(p.localNode.id),
+        ),
+      )
 
     # TODO: Might want to restructure the lookup result here. Potentially doing
     # the json conversion in this module.
@@ -123,8 +130,6 @@ proc installPortalHistoryApiHandlers*(rpcServer: RpcServer, p: PortalProtocol) =
       contentId = p.toContentId(keyBytes).valueOr:
         raise invalidKeyErr()
 
-    # TODO: Do we need to convert the received offer to a value without proofs before storing?
-
     p.storeContent(keyBytes, contentId, offerValueBytes)
 
   rpcServer.rpc("portal_historyLocalContent") do(contentKey: string) -> string:
@@ -133,7 +138,7 @@ proc installPortalHistoryApiHandlers*(rpcServer: RpcServer, p: PortalProtocol) =
       contentId = p.toContentId(keyBytes).valueOr:
         raise invalidKeyErr()
 
-      valueBytes = p.dbGet(keyBytes, contentId).valueOr:
+      valueBytes = p.getLocalContent(keyBytes, contentId).valueOr:
         raise contentNotFoundErr()
 
     valueBytes.to0xHex()
@@ -143,13 +148,15 @@ proc installPortalHistoryApiHandlers*(rpcServer: RpcServer, p: PortalProtocol) =
   ) -> PutContentResult:
     let
       keyBytes = ContentKeyByteList.init(hexToSeqByte(contentKey))
-      contentId = p.toContentId(keyBytes).valueOr:
+      _ = p.toContentId(keyBytes).valueOr:
         raise invalidKeyErr()
       offerValueBytes = hexToSeqByte(contentValue)
 
-      # TODO: Do we need to convert the received offer to a value without proofs before storing?
-      # TODO: validate and store content locally
-      # storedLocally = p.storeContent(keyBytes, contentId, valueBytes)
+      # Note: Not validating content as this would have a high impact on bridge
+      # gossip performance. Specification is quite ambiguous on what kind of
+      # validation should be done here anyhow.
+      # As no validation is done here, the content is not stored locally.
+      # TODO: Add default on validation by optional validation parameter.
       peerCount = await p.neighborhoodGossip(
         Opt.none(NodeId), ContentKeysList(@[keyBytes]), @[offerValueBytes]
       )

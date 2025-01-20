@@ -79,7 +79,7 @@ func calcHash*(networkId: NetworkId, conf: ChainConfig, genesis: Genesis): Hash3
   var ctx: sha256
   ctx.init()
   ctx.update(networkId)
-  ctx.update(conf)
+  ctx.update(conf.chainId)
   if genesis.isNil.not:
     ctx.update(genesis)
   ctx.finish(result.data)
