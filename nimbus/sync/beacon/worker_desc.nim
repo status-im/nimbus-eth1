@@ -143,6 +143,7 @@ type
     hdrSync*: HeaderImportSync       ## Syncing by linked header chains
     blkSync*: BlocksImportSync       ## For importing/executing blocks
     nextMetricsUpdate*: Moment       ## For updating metrics
+    nextAsyncNanoSleep*: Moment      ## Use nano-sleeps for task switch
 
     # Blocks import/execution settings for importing with
     # `nBodiesBatch` blocks in each round (minimum value is
