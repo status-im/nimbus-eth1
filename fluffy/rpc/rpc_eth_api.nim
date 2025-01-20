@@ -1,5 +1,5 @@
 # Fluffy
-# Copyright (c) 2021-2024 Status Research & Development GmbH
+# Copyright (c) 2021-2025 Status Research & Development GmbH
 # Licensed and distributed under either of
 #   * MIT license (license terms in the root directory or at https://opensource.org/licenses/MIT).
 #   * Apache v2 license (license terms in the root directory or at https://www.apache.org/licenses/LICENSE-2.0).
@@ -139,6 +139,15 @@ proc installEthApiHandlers*(
     # 1
     return Quantity(uint64(1))
 
+  rpcServer.rpc("eth_blockNumber") do() -> Quantity:
+    let blc = beaconLightClient.getOrRaise()
+
+    withForkyStore(blc.store[]):
+      when lcDataFork > LightClientDataFork.Altair:
+        return Quantity(forkyStore.optimistic_header.execution.block_number)
+      else:
+        raise newException(ValueError, "Not available before Capella - not synced?")
+
   rpcServer.rpc("eth_getBlockByHash") do(
     blockHash: Hash32, fullTransactions: bool
   ) -> Opt[BlockObject]:
@@ -165,14 +174,6 @@ proc installEthApiHandlers*(
       let tag = quantityTag.alias.toLowerAscii
       case tag
       of "latest":
-        # TODO:
-        # I assume this would refer to the content in the latest optimistic update
-        # in case the majority treshold is not met. And if it is met it is the
-        # same as the safe version?
-        raise newException(ValueError, "Latest tag not yet implemented")
-      of "earliest":
-        raise newException(ValueError, "Earliest tag not yet implemented")
-      of "safe":
         let blc = beaconLightClient.getOrRaise()
 
         withForkyStore(blc.store[]):
@@ -185,6 +186,15 @@ proc installEthApiHandlers*(
             return Opt.some(BlockObject.init(header, body, fullTransactions))
           else:
             raise newException(ValueError, "Not available before Capella - not synced?")
+      of "earliest":
+        raise newException(ValueError, "Earliest tag not yet implemented")
+      of "safe":
+        # Safe block currently means most recent justified block, see:
+        # - https://github.com/ethereum/consensus-specs/blob/4afe39822c9ad9747e0f5635cca117c18441ec1b/fork_choice/safe-block.md
+        # - https://github.com/status-im/nimbus-eth2/blob/4e440277cf8a3fed72f32eb2f01fc5e910ad6768/beacon_chain/consensus_object_pools/attestation_pool.nim#L1162
+        # This is provided by engineForkChoiceUpdateV1/V2/V3 from CL to EL.
+        # Unclear how to get the block hash from current Portal network.
+        raise newException(ValueError, "safe tag cannot be implemented")
       of "finalized":
         let blc = beaconLightClient.getOrRaise()
 
