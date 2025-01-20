@@ -156,12 +156,12 @@ proc setupMetrics(nimbus: NimbusNode, conf: NimbusConf) =
     waitFor nimbus.metricsServer.start()
 
 proc preventLoadingDataDirForTheWrongNetwork(db: CoreDbRef; conf: NimbusConf) =
-  proc writeDataDirId(kvt: CoreDbKvtRef, calculatedId: Hash32) =
+  proc writeDataDirId(kvt: CoreDbTxRef, calculatedId: Hash32) =
     info "Writing data dir ID", ID=calculatedId
     kvt.put(dataDirIdKey().toOpenArray, calculatedId.data).isOkOr:
       fatal "Cannot write data dir ID", ID=calculatedId
       quit(QuitFailure)
-      
+
   let
     kvt = db.baseTxFrame()
     calculatedId = calcHash(conf.networkId, conf.networkParams)
@@ -173,7 +173,7 @@ proc preventLoadingDataDirForTheWrongNetwork(db: CoreDbRef; conf: NimbusConf) =
   if conf.rewriteDatadirId:
     writeDataDirId(kvt, calculatedId)
     return
-  
+
   if calculatedId.data != dataDirIdBytes:
     fatal "Data dir already initialized with other network configuration",
       get=dataDirIdBytes.toHex,
