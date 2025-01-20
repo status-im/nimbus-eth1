@@ -227,7 +227,7 @@ type
 
   TraceObject* = object
     origin*: NodeId
-    targetId: UInt256
+    targetId*: UInt256
     receivedFrom*: Opt[NodeId]
     responses*: Table[string, TraceResponse]
     metadata*: Table[string, NodeMetadata]
