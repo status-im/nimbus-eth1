@@ -166,7 +166,7 @@ proc headersStagedCollect*(
           isOpportunistic, ctrl=buddy.ctrl.state, hdrErrors=buddy.hdrErrors
         ctx.headersUnprocCommit(iv.len, iv)
         # At this stage allow a task switch so that some other peer might try
-        # to work on the currently returned interval.
+        # to continue work on the currently returned interval.
         try: await sleepAsync asyncThreadSwitchTimeSlot
         except CancelledError: discard
         return false

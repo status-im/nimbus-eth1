@@ -46,6 +46,7 @@ proc napUnlessSomethingToFetch(
       buddy.ctrl.zombie = true
     return true
   else:
+    # Returning `false` => no need to check for shutdown
     return false
 
 # ------------------------------------------------------------------------------
