@@ -15,7 +15,7 @@ import
   pkg/eth/[common, p2p],
   pkg/stew/[interval_set, sorted_set],
   ../../common,
-  ./worker/update/metrics,
+  ./worker/update/[metrics, ticker],
   ./worker/[blocks_staged, headers_staged, headers_unproc, start_stop, update],
   ./worker_desc
 
@@ -60,15 +60,11 @@ proc setup*(ctx: BeaconCtxRef; info: static[string]): bool =
 
   # Load initial state from database if there is any
   ctx.setupDatabase info
-
-  # Debugging stuff, might be an empty template
-  ctx.setupTicker()
   true
 
 proc release*(ctx: BeaconCtxRef; info: static[string]) =
   ## Global clean up
   ctx.destroyRpcMagic()
-  ctx.destroyTicker()
 
 
 proc start*(buddy: BeaconBuddyRef; info: static[string]): bool =
@@ -101,6 +97,7 @@ proc runTicker*(ctx: BeaconCtxRef; info: static[string]) =
   ## Global background job that is started every few seconds. It is to be
   ## intended for updating metrics, debug logging etc.
   ctx.updateMetrics()
+  ctx.updateTicker()
 
 proc runDaemon*(
     ctx: BeaconCtxRef;
