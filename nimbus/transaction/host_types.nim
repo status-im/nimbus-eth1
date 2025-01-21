@@ -1,6 +1,6 @@
 # Nimbus - Types and helpers used at the boundary of transactions/RPC and EVMC/EVM
 #
-# Copyright (c) 2019-2024 Status Research & Development GmbH
+# Copyright (c) 2019-2025 Status Research & Development GmbH
 # Licensed under either of
 #  * Apache License, version 2.0, ([LICENSE-APACHE](LICENSE-APACHE) or http://www.apache.org/licenses/LICENSE-2.0)
 #  * MIT license ([LICENSE-MIT](LICENSE-MIT) or http://opensource.org/licenses/MIT)
@@ -66,6 +66,7 @@ type
     saveComputation*: seq[Computation]
     hostInterface*:   ptr evmc_host_interface
     sysCall*:         bool
+    floorDataGas*:    GasInt
 
 # These versions of `toEvmc` and `fromEvmc` don't flip big/little-endian like
 # the older functions in `evmc_helpers`.  New code only flips with _explicit_
