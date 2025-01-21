@@ -1,5 +1,5 @@
 # Nimbus
-# Copyright (c) 2023-2024 Status Research & Development GmbH
+# Copyright (c) 2023-2025 Status Research & Development GmbH
 # Licensed and distributed under either of
 #   * MIT license (license terms in the root directory or at
 #     https://opensource.org/licenses/MIT).
@@ -96,15 +96,17 @@ proc stop*(buddy: BeaconBuddyRef; info: static[string]) =
 # Public functions
 # ------------------------------------------------------------------------------
 
+proc runTicker*(ctx: BeaconCtxRef; info: static[string]) =
+  ## Global background job that is started every few seconds. It is to be
+  ## intended for updating metrics, debug logging etc.
+  discard
+
 proc runDaemon*(
     ctx: BeaconCtxRef;
     info: static[string];
       ) {.async: (raises: []).} =
   ## Global background job that will be re-started as long as the variable
-  ## `ctx.daemon` is set `true`. If that job was stopped due to re-setting
-  ## `ctx.daemon` to `false`, it will be restarted next after it was reset
-  ## as `true` not before there is some activity on the `runPool()`,
-  ## `runSingle()`, or `runMulti()` functions.
+  ## `ctx.daemon` is set `true`.
   ##
   ## On a fresh start, the flag `ctx.daemon` will not be set `true` before the
   ## first usable request from the CL (via RPC) stumbles in.
