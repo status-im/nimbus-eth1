@@ -17,7 +17,6 @@ import
   ../../../core/chain,
   ../worker_desc,
   ./blocks_staged/bodies,
-  ./update/metrics,
   "."/[blocks_unproc, db, helpers, update]
 
 # ------------------------------------------------------------------------------
@@ -194,9 +193,6 @@ proc blocksStagedCollect*(
       # response length from the network.
       nBlkBlocks = blk.blocks.len
 
-    # Update, so it can be followed nicely
-    ctx.updateMetrics()
-
     # Fetch and extend staging record
     if not await buddy.fetchAndCheck(ivReq, blk, info):
       haveError = true
@@ -258,9 +254,6 @@ proc blocksStagedCollect*(
     nBlocks=blk.blocks.len, nStaged=ctx.blk.staged.len,
     bdyErrors=buddy.bdyErrors
 
-  # Update, so it can be followed nicely
-  ctx.updateMetrics()
-
   return true
 
 
@@ -320,9 +313,6 @@ proc blocksStagedImport*(
         maxImport = ctx.chain.latestNumber()
         break importLoop
 
-      # Update, so it can be followed nicely
-      ctx.updateMetrics()
-
       # Allow pseudo/async thread switch.
       (await ctx.updateAsyncTasks()).isOkOr:
         maxImport = ctx.chain.latestNumber()
@@ -357,9 +347,6 @@ proc blocksStagedImport*(
   # Remove stashed headers for imported blocks
   for bn in iv.minPt .. maxImport:
     ctx.dbHeaderUnstash bn
-
-  # Update, so it can be followed nicely
-  ctx.updateMetrics()
 
   info "Import done", iv, nBlocks, base=ctx.chain.baseNumber.bnStr,
     head=ctx.chain.latestNumber.bnStr, target=ctx.layout.final.bnStr

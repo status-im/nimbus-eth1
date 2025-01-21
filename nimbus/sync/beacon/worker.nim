@@ -15,6 +15,7 @@ import
   pkg/eth/[common, p2p],
   pkg/stew/[interval_set, sorted_set],
   ../../common,
+  ./worker/update/metrics,
   ./worker/[blocks_staged, headers_staged, headers_unproc, start_stop, update],
   ./worker_desc
 
@@ -99,7 +100,7 @@ proc stop*(buddy: BeaconBuddyRef; info: static[string]) =
 proc runTicker*(ctx: BeaconCtxRef; info: static[string]) =
   ## Global background job that is started every few seconds. It is to be
   ## intended for updating metrics, debug logging etc.
-  discard
+  ctx.updateMetrics()
 
 proc runDaemon*(
     ctx: BeaconCtxRef;

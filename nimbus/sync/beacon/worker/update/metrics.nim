@@ -1,5 +1,5 @@
 # Nimbus
-# Copyright (c) 2023-2024 Status Research & Development GmbH
+# Copyright (c) 2023-2025 Status Research & Development GmbH
 # Licensed and distributed under either of
 #   * MIT license (license terms in the root directory or at
 #     https://opensource.org/licenses/MIT).
@@ -77,9 +77,9 @@ template updateMetricsImpl(ctx: BeaconCtxRef) =
 
 # ---------------
 
-proc updateMetrics*(ctx: BeaconCtxRef; force = false) =
+proc updateMetrics*(ctx: BeaconCtxRef) =
   let now = Moment.now()
-  if ctx.pool.nextMetricsUpdate < now or force:
+  if ctx.pool.nextMetricsUpdate < now:
     ctx.updateMetricsImpl()
     ctx.pool.nextMetricsUpdate = now + metricsUpdateInterval
 

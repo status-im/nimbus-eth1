@@ -16,7 +16,6 @@ import
   pkg/stew/[byteutils, sorted_set],
   ../../../core/chain,
   ../worker_desc,
-  ./update/metrics,
   ./blocks_staged/staged_queue,
   ./headers_staged/staged_queue,
   "."/[blocks_unproc, db, headers_unproc, helpers]
@@ -123,9 +122,6 @@ proc startHibernating(ctx: BeaconCtxRef; info: static[string]) =
 
   info "Suspending syncer", head=ctx.chain.latestNumber.bnStr
 
-  # Update, so it can be followed nicely
-  ctx.updateMetrics()
-
 
 proc setupCollectingHeaders(ctx: BeaconCtxRef; info: static[string]) =
   ## Set up sync target (see clause *(9)* in `README.md`) by modifying
@@ -170,9 +166,6 @@ proc setupCollectingHeaders(ctx: BeaconCtxRef; info: static[string]) =
 
     # Update range
     ctx.headersUnprocSet(c+1, h-1)
-
-    # Update, so it can be followed nicely
-    ctx.updateMetrics()
 
     # Mark target used, reset for re-fill
     ctx.target.changed = false
@@ -238,9 +231,6 @@ proc linkIntoFc(ctx: BeaconCtxRef; info: static[string]): bool =
 
       # Save layout state
       ctx.dbStoreSyncStateLayout info
-
-      # Update, so it can be followed nicely
-      ctx.updateMetrics()
       return true
 
   trace info & ": cannot link into FC", B=b.bnStr, L=l.bnStr,
@@ -340,9 +330,6 @@ proc updateFinalBlockHeader*(
       ctx.hibernate = false
       info "Activating syncer", base=b.bnStr, head=ctx.chain.latestNumber.bnStr,
         finalised=f.bnStr, target=ctx.target.consHead.bnStr
-
-    # Update, so it can be followed nicely
-    ctx.updateMetrics()
 
 
 proc updateAsyncTasks*(

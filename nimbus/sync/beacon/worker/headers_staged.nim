@@ -17,7 +17,6 @@ import
   pkg/stew/[interval_set, sorted_set],
   ../../../common,
   ../worker_desc,
-  ./update/metrics,
   ./headers_staged/[headers, linked_hchain],
   "."/[headers_unproc, update]
 
@@ -234,9 +233,6 @@ proc headersStagedProcess*(ctx: BeaconCtxRef; info: static[string]): int =
     # anymore.
     discard ctx.hdr.staged.delete(iv.maxPt)
 
-    # Update, so it can be followed nicely
-    ctx.updateMetrics()
-
     if qItem.data.hash != ctx.dbHeaderParentHash(dangling).expect "Hash32":
       # Discard wrong chain and merge back the range into the `unproc` list.
       ctx.headersUnprocCommit(0,iv)
@@ -256,9 +252,6 @@ proc headersStagedProcess*(ctx: BeaconCtxRef; info: static[string]): int =
 
   if headersStagedQueueLengthLwm < ctx.hdr.staged.len:
     ctx.poolMode = true
-
-  # Update, so it can be followed nicely
-  ctx.updateMetrics()
 
 
 proc headersStagedReorg*(ctx: BeaconCtxRef; info: static[string]) =
@@ -294,9 +287,6 @@ proc headersStagedReorg*(ctx: BeaconCtxRef; info: static[string]) =
         nHeaders = qItem.data.revHdrs.len.uint64
       ctx.headersUnprocCommit(0, key - nHeaders + 1, key)
       discard ctx.hdr.staged.delete key
-
-    # Update, so it can be followed nicely
-    ctx.updateMetrics()
 
 # ------------------------------------------------------------------------------
 # End
