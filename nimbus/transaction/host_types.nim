@@ -66,6 +66,7 @@ type
     saveComputation*: seq[Computation]
     hostInterface*:   ptr evmc_host_interface
     sysCall*:         bool
+    floorDataGas*:    GasInt
 
 # These versions of `toEvmc` and `fromEvmc` don't flip big/little-endian like
 # the older functions in `evmc_helpers`.  New code only flips with _explicit_

@@ -231,8 +231,12 @@ proc validateTxBasic*(
   if tx.maxFeePerGasNorm < tx.maxPriorityFeePerGasNorm:
     return err(&"invalid tx: maxFee is smaller than maxPriorityFee. maxFee={tx.maxFeePerGas}, maxPriorityFee={tx.maxPriorityFeePerGasNorm}")
 
-  if tx.gasLimit < tx.intrinsicGas(fork):
-    return err(&"invalid tx: not enough gas to perform calculation. avail={tx.gasLimit}, require={tx.intrinsicGas(fork)}")
+  let
+    (intrinsicGas, floorDataGas) = tx.intrinsicGas(fork)
+    minGasLimit = max(intrinsicGas, floorDataGas)
+
+  if tx.gasLimit < minGasLimit:
+    return err(&"invalid tx: not enough gas to perform calculation. avail={tx.gasLimit}, require={minGasLimit}")
 
   if fork >= FkCancun:
     if tx.payload.len > MAX_CALLDATA_SIZE:

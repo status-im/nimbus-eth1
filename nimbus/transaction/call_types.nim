@@ -61,31 +61,44 @@ template input(tx: Transaction): auto =
 func isError*(cr: CallResult): bool =
   cr.error.len > 0
 
-func intrinsicGas*(call: CallParams | Transaction, fork: EVMFork): GasInt =
+const
+  TOTAL_COST_FLOOR_PER_TOKEN = 10
+
+func intrinsicGas*(call: CallParams | Transaction, fork: EVMFork): (GasInt, GasInt) =
   # Compute the baseline gas cost for this transaction.  This is the amount
   # of gas needed to send this transaction (but that is not actually used
   # for computation).
-  var gas = gasFees[fork][GasTransaction]
+  var
+    intrinsicGas = gasFees[fork][GasTransaction]
+    floorDataGas = intrinsicGas
+    tokens = 0
 
   # EIP-2 (Homestead) extra intrinsic gas for contract creations.
   if call.isCreate:
-    gas += gasFees[fork][GasTXCreate]
+    intrinsicGas += gasFees[fork][GasTXCreate]
     if fork >= FkShanghai:
-      gas += (gasFees[fork][GasInitcodeWord] * call.input.len.wordCount)
+      intrinsicGas += (gasFees[fork][GasInitcodeWord] * call.input.len.wordCount)
 
   # Input data cost, reduced in EIP-2028 (Istanbul).
   let gasZero    = gasFees[fork][GasTXDataZero]
   let gasNonZero = gasFees[fork][GasTXDataNonZero]
   for b in call.input:
-    gas += (if b == 0: gasZero else: gasNonZero)
+    if b == 0:
+      intrinsicGas += gasZero
+      tokens += 1
+    else:
+      intrinsicGas += gasNonZero
+      tokens += 4
+
 
   # EIP-2930 (Berlin) intrinsic gas for transaction access list.
   if fork >= FkBerlin:
     for account in call.accessList:
-      gas += ACCESS_LIST_ADDRESS_COST
-      gas += GasInt(account.storageKeys.len) * ACCESS_LIST_STORAGE_KEY_COST
+      intrinsicGas += ACCESS_LIST_ADDRESS_COST
+      intrinsicGas += GasInt(account.storageKeys.len) * ACCESS_LIST_STORAGE_KEY_COST
 
   if fork >= FkPrague:
-    gas += call.authorizationList.len * PER_EMPTY_ACCOUNT_COST
+    intrinsicGas += call.authorizationList.len * PER_EMPTY_ACCOUNT_COST
+    floorDataGas += tokens * TOTAL_COST_FLOOR_PER_TOKEN
 
-  return gas.GasInt
+  return (intrinsicGas.GasInt, floorDataGas.GasInt)
