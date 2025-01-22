@@ -209,7 +209,8 @@ proc syncToEngineApi(conf: NRpcConf) {.async.} =
       # Make the forkchoiceUpdated call based, after loading attributes based on the consensus fork
       let fcuResponse = await rpcClient.forkchoiceUpdated(state, payloadAttributes)
       debug "forkchoiceUpdated", state = state, response = fcuResponse
-      if fcuResponse.payloadStatus.status != PayloadExecutionStatus.valid:
+      if fcuResponse.payloadStatus.status == PayloadExecutionStatus.invalid or
+          fcuResponse.payloadStatus.status == PayloadExecutionStatus.invalid_block_hash:
         error "Forkchoice not validated", status = fcuResponse.payloadStatus.status
         quit(QuitFailure)
       else:
@@ -291,7 +292,8 @@ proc syncToEngineApi(conf: NRpcConf) {.async.} =
         info "newPayload Request sent",
           blockNumber = int(payload.blockNumber), response = payloadResponse.status
 
-        if payloadResponse.status != PayloadExecutionStatus.valid:
+        if payloadResponse.status == PayloadExecutionStatus.invalid or
+            payloadResponse.status == PayloadExecutionStatus.invalid_block_hash:
           error "Payload not validated",
             blockNumber = int(payload.blockNumber), status = payloadResponse.status
           quit(QuitFailure)
