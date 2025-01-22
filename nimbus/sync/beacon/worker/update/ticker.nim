@@ -1,6 +1,6 @@
 # Nimbus - Fetch account and storage states from peers efficiently
 #
-# Copyright (c) 2021-2024 Status Research & Development GmbH
+# Copyright (c) 2021-2025 Status Research & Development GmbH
 # Licensed under either of
 #  * Apache License, version 2.0, ([LICENSE-APACHE](LICENSE-APACHE) or
 #    http://www.apache.org/licenses/LICENSE-2.0)
@@ -15,62 +15,90 @@ import
   std/strutils,
   pkg/[chronos, chronicles, eth/common, stint],
   ../../../../utils/prettify,
-  ../helpers
+  ../../../../core/chain,
+  ../../worker_desc,
+  ../blocks_staged/staged_queue,
+  ../headers_staged/staged_queue,
+  ".."/[blocks_unproc, headers_unproc, helpers]
 
 logScope:
   topics = "beacon ticker"
 
 type
-  TickerStatsUpdater* = proc: TickerStats {.gcsafe, raises: [].}
-    ## Full sync state update function
-
-  TickerStats* = object
+  TickerStats = object
     ## Full sync state (see `TickerFullStatsUpdater`)
-    base*: BlockNumber
-    latest*: BlockNumber
-    coupler*: BlockNumber
-    dangling*: BlockNumber
-    head*: BlockNumber
-    headOk*: bool
-    target*: BlockNumber
-    targetOk*: bool
+    base: BlockNumber
+    latest: BlockNumber
+    coupler: BlockNumber
+    dangling: BlockNumber
+    head: BlockNumber
+    headOk: bool
+    target: BlockNumber
+    targetOk: bool
 
-    hdrUnprocTop*: BlockNumber
-    nHdrUnprocessed*: uint64
-    nHdrUnprocFragm*: int
-    nHdrStaged*: int
-    hdrStagedTop*: BlockNumber
+    hdrUnprocTop: BlockNumber
+    nHdrUnprocessed: uint64
+    nHdrUnprocFragm: int
+    nHdrStaged: int
+    hdrStagedTop: BlockNumber
 
-    blkUnprocBottom*: BlockNumber
-    nBlkUnprocessed*: uint64
-    nBlkUnprocFragm*: int
-    nBlkStaged*: int
-    blkStagedBottom*: BlockNumber
+    blkUnprocBottom: BlockNumber
+    nBlkUnprocessed: uint64
+    nBlkUnprocFragm: int
+    nBlkStaged: int
+    blkStagedBottom: BlockNumber
 
-    reorg*: int
-    nBuddies*: int
+    reorg: int
+    nBuddies: int
 
-  TickerRef* = ref object
+  TickerRef* = ref object of RootRef
     ## Ticker descriptor object
     started: Moment
     visited: Moment
-    prettyPrint: proc(t: TickerRef) {.gcsafe, raises: [].}
-    statsCb: TickerStatsUpdater
     lastStats: TickerStats
 
 const
-  tickerStartDelay = chronos.milliseconds(100)
-  tickerLogInterval = chronos.seconds(1)
+  tickerLogInterval = chronos.seconds(2)
   tickerLogSuppressMax = chronos.seconds(100)
 
 # ------------------------------------------------------------------------------
 # Private functions: printing ticker messages
 # ------------------------------------------------------------------------------
 
-proc tickerLogger(t: TickerRef) {.gcsafe.} =
+proc updater(ctx: BeaconCtxRef): TickerStats =
+  ## Legacy stuff, will be probably be superseded by `metrics`
+  TickerStats(
+    base:            ctx.chain.baseNumber(),
+    latest:          ctx.chain.latestNumber(),
+    coupler:         ctx.layout.coupler,
+    dangling:        ctx.layout.dangling,
+    head:            ctx.layout.head,
+    headOk:          ctx.layout.lastState != idleSyncState,
+    target:          ctx.target.consHead.number,
+    targetOk:        ctx.target.final != 0,
+
+    nHdrStaged:      ctx.headersStagedQueueLen(),
+    hdrStagedTop:    ctx.headersStagedQueueTopKey(),
+    hdrUnprocTop:    ctx.headersUnprocTop(),
+    nHdrUnprocessed: ctx.headersUnprocTotal() + ctx.headersUnprocBorrowed(),
+    nHdrUnprocFragm: ctx.headersUnprocChunks(),
+
+    nBlkStaged:      ctx.blocksStagedQueueLen(),
+    blkStagedBottom: ctx.blocksStagedQueueBottomKey(),
+    blkUnprocBottom: ctx.blocksUnprocBottom(),
+    nBlkUnprocessed: ctx.blocksUnprocTotal() + ctx.blocksUnprocBorrowed(),
+    nBlkUnprocFragm: ctx.blocksUnprocChunks(),
+
+    reorg:           ctx.pool.nReorg,
+    nBuddies:        ctx.pool.nBuddies)
+
+proc tickerLogger(t: TickerRef; ctx: BeaconCtxRef) =
   let
-    data = t.statsCb()
+    data = ctx.updater()
     now = Moment.now()
+
+  if now <= t.visited + tickerLogInterval:
+    return
 
   if data != t.lastStats or
      tickerLogSuppressMax < (now - t.visited):
@@ -115,40 +143,16 @@ proc tickerLogger(t: TickerRef) {.gcsafe.} =
     debug "Sync state", up, peers, B, L, C, D, H, T, hS, hU, bS, bU, rrg, mem
 
 # ------------------------------------------------------------------------------
-# Private functions: ticking log messages
+# Public function
 # ------------------------------------------------------------------------------
 
-proc setLogTicker(t: TickerRef; at: Moment) {.gcsafe.}
-
-proc runLogTicker(t: TickerRef) {.gcsafe.} =
-  if not t.statsCb.isNil:
-    t.prettyPrint(t)
-    t.setLogTicker(Moment.fromNow(tickerLogInterval))
-
-proc setLogTicker(t: TickerRef; at: Moment) =
-  if t.statsCb.isNil:
-    debug "Ticker stopped"
-  else:
-    # Store the `runLogTicker()` in a closure to avoid some garbage collection
-    # memory corruption issues that might occur otherwise.
-    discard setTimer(at, proc(ign: pointer) = runLogTicker(t))
-
-# ------------------------------------------------------------------------------
-# Public constructor and start/stop functions
-# ------------------------------------------------------------------------------
-
-proc init*(T: type TickerRef; cb: TickerStatsUpdater): T =
-  ## Constructor
-  result = TickerRef(
-    prettyPrint: tickerLogger,
-    statsCb:     cb,
-    started:     Moment.now())
-  result.setLogTicker Moment.fromNow(tickerStartDelay)
-
-proc destroy*(t: TickerRef) =
-  ## Stop ticker unconditionally
-  if not t.isNil:
-    t.statsCb = TickerStatsUpdater(nil)
+when enableTicker:
+  proc updateTicker*(ctx: BeaconCtxRef) =
+    if ctx.pool.ticker.isNil:
+      ctx.pool.ticker = TickerRef(started: Moment.now())
+    ctx.pool.ticker.TickerRef.tickerLogger(ctx)
+else:
+  template updateTicker*(ctx: BeaconCtxRef) = discard
 
 # ------------------------------------------------------------------------------
 # End
