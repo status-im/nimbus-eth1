@@ -18,7 +18,7 @@ import
   ../worker_desc,
   ./blocks_staged/bodies,
   ./update/metrics,
-  "."/[blocks_unproc, db, helpers]
+  "."/[blocks_unproc, db, helpers, update]
 
 # ------------------------------------------------------------------------------
 # Private debugging & logging helpers
@@ -324,10 +324,7 @@ proc blocksStagedImport*(
       ctx.updateMetrics()
 
       # Allow pseudo/async thread switch.
-      try: await sleepAsync asyncThreadSwitchTimeSlot
-      except CancelledError: discard
-      if not ctx.daemon:
-        # Shutdown?
+      (await ctx.updateAsyncTasks()).isOkOr:
         maxImport = ctx.chain.latestNumber()
         break importLoop
 
@@ -349,9 +346,7 @@ proc blocksStagedImport*(
           break importLoop
 
         # Allow pseudo/async thread switch.
-        try: await sleepAsync asyncThreadSwitchTimeSlot
-        except CancelledError: discard
-        if not ctx.daemon:
+        (await ctx.updateAsyncTasks()).isOkOr:
           maxImport = ctx.chain.latestNumber()
           break importLoop
 

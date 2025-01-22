@@ -1,5 +1,5 @@
 # Nimbus
-# Copyright (c) 2021-2024 Status Research & Development GmbH
+# Copyright (c) 2021-2025 Status Research & Development GmbH
 # Licensed and distributed under either of
 #   * MIT license (license terms in the root directory or at
 #     https://opensource.org/licenses/MIT).
@@ -142,7 +142,8 @@ type
     syncState*: SyncState            ## Save/resume state descriptor
     hdrSync*: HeaderImportSync       ## Syncing by linked header chains
     blkSync*: BlocksImportSync       ## For importing/executing blocks
-    nextUpdate*: Moment              ## For updating metrics
+    nextMetricsUpdate*: Moment       ## For updating metrics
+    nextAsyncNanoSleep*: Moment      ## Use nano-sleeps for task switch
 
     # Blocks import/execution settings for importing with
     # `nBodiesBatch` blocks in each round (minimum value is
