@@ -108,6 +108,7 @@ VERIF_PROXY_OUT_PATH ?= build/libverifproxy/
 	nimbus \
 	nimbus_execution_client \
 	nimbus_portal_client \
+	nimbus_unified \
 	fluffy \
 	nimbus_verified_proxy \
 	libverifproxy \
@@ -378,12 +379,23 @@ txparse: | build deps
 
 # usual cleaning
 clean: | clean-common
-	rm -rf build/{nimbus,nimbus_execution_client,nimbus_portal_client,fluffy,portal_bridge,libverifproxy,nimbus_verified_proxy,$(TOOLS_CSV),$(PORTAL_TOOLS_CSV),all_tests,test_kvstore_rocksdb,test_rpc,all_portal_tests,all_history_network_custom_chain_tests,test_portal_testnet,utp_test_app,utp_test,*.dSYM}
+	rm -rf build/{nimbus_unified,nimbus,nimbus_execution_client,nimbus_portal_client,fluffy,portal_bridge,libverifproxy,nimbus_verified_proxy,$(TOOLS_CSV),$(PORTAL_TOOLS_CSV),all_tests,test_kvstore_rocksdb,test_rpc,all_portal_tests,all_history_network_custom_chain_tests,test_portal_testnet,utp_test_app,utp_test,nimbus_unified_test,*.dSYM}
 	rm -rf tools/t8n/{t8n,t8n_test}
 	rm -rf tools/evmstate/{evmstate,evmstate_test}
 ifneq ($(USE_LIBBACKTRACE), 0)
 	+ $(MAKE) -C vendor/nim-libbacktrace clean $(HANDLE_OUTPUT)
 endif
+
+# Nimbus unified related targets
+
+# builds the unified client
+nimbus_unified: | build deps
+	echo -e $(BUILD_MSG) "build/$@" && \
+		$(ENV_SCRIPT) nim c $(NIM_PARAMS) -d:release --parallelBuild:1 -d:libp2p_pki_schemes=secp256k1 -u:metrics -o:build/$@ "nimbus_unified/$@.nim"
+
+all_tests_unified: | build deps
+	echo -e $(BUILD_MSG) "build/$@" && \
+	$(ENV_SCRIPT) nim c -r $(NIM_PARAMS) --threads:on -d:chronicles_log_level=ERROR -o:build/$@ "nimbus_unified/tests/$@.nim"
 
 # Note about building Nimbus as a library:
 #
