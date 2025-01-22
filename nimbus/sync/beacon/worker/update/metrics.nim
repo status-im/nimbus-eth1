@@ -1,5 +1,5 @@
 # Nimbus
-# Copyright (c) 2023-2024 Status Research & Development GmbH
+# Copyright (c) 2023-2025 Status Research & Development GmbH
 # Licensed and distributed under either of
 #   * MIT license (license terms in the root directory or at
 #     https://opensource.org/licenses/MIT).
@@ -23,7 +23,7 @@ declareGauge beacon_base, "" &
 
 declareGauge beacon_latest, "" &
   "Block number of latest imported blocks"
-  
+
 declareGauge beacon_coupler, "" &
   "Max block number for header chain starting at genesis"
 
