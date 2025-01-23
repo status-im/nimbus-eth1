@@ -1,5 +1,5 @@
 # Nimbus
-# Copyright (c) 2024 Status Research & Development GmbH
+# Copyright (c) 2024-2025 Status Research & Development GmbH
 # Licensed under either of
 #  * Apache License, version 2.0, ([LICENSE-APACHE](LICENSE-APACHE))
 #  * MIT license ([LICENSE-MIT](LICENSE-MIT))
@@ -22,6 +22,7 @@ import
   beacon_chain/el/el_manager,
   beacon_chain/el/engine_api_conversions,
   beacon_chain/spec/[forks, state_transition_block],
+  beacon_chain/spec/datatypes/bellatrix,
   beacon_chain/spec/eth2_apis/[rest_types, rest_beacon_calls],
   beacon_chain/networking/network_metadata,
   eth/async_utils
@@ -45,7 +46,6 @@ template getCLBlockFromBeaconChain(
   var blck: ForkedSignedBeaconBlock
   if clBlock.isSome():
     let blck = clBlock.get()[]
-
     (blck, true)
   else:
     (blck, false)
@@ -148,7 +148,7 @@ proc syncToEngineApi(conf: NRpcConf) {.async.} =
       uint64(await rpcClient.eth_blockNumber())
     except CatchableError as exc:
       error "Error getting block number", error = exc.msg
-      0'u64
+      quit(QuitFailure)
 
   # Load the EL state detials and create the beaconAPI client
   var
@@ -199,17 +199,23 @@ proc syncToEngineApi(conf: NRpcConf) {.async.} =
           elif consensusFork == ConsensusFork.Capella:
             Opt.none(PayloadAttributesV2)
           elif consensusFork == ConsensusFork.Deneb or
-            consensusFork == ConsensusFork.Electra or
-            consensusFork == ConsensusFork.Fulu:
+            consensusFork == ConsensusFork.Electra or consensusFork == ConsensusFork.Fulu:
             Opt.none(PayloadAttributesV3)
           else:
-            static: doAssert(false, "Unsupported consensus fork")
+            static:
+              doAssert(false, "Unsupported consensus fork")
             Opt.none(PayloadAttributesV3)
 
       # Make the forkchoiceUpdated call based, after loading attributes based on the consensus fork
       let fcuResponse = await rpcClient.forkchoiceUpdated(state, payloadAttributes)
       debug "forkchoiceUpdated", state = state, response = fcuResponse
-      info "forkchoiceUpdated Request sent", response = fcuResponse.payloadStatus.status
+      if fcuResponse.payloadStatus.status == PayloadExecutionStatus.invalid or
+          fcuResponse.payloadStatus.status == PayloadExecutionStatus.invalid_block_hash:
+        error "Forkchoice not validated", status = fcuResponse.payloadStatus.status
+        quit(QuitFailure)
+      else:
+        info "forkchoiceUpdated Request sent",
+          response = fcuResponse.payloadStatus.status
 
   while running and currentBlockNumber < headBlck.header.number:
     var isAvailable = false
@@ -249,19 +255,25 @@ proc syncToEngineApi(conf: NRpcConf) {.async.} =
             payload = payload,
             versionedHashes = versioned_hashes
         elif consensusFork == ConsensusFork.Electra or
-          consensusFork == ConsensusFork.Fulu:
-          # Calculate the versioned hashes from the kzg commitments
-          let versioned_hashes = mapIt(
-            forkyBlck.message.body.blob_kzg_commitments,
-            engine_api.VersionedHash(kzg_commitment_to_versioned_hash(it)),
-          )
-          # Execution Requests for Electra
-          let execution_requests = @[
-            SSZ.encode(forkyBlck.message.body.execution_requests.deposits),
-            SSZ.encode(forkyBlck.message.body.execution_requests.withdrawals),
-            SSZ.encode(forkyBlck.message.body.execution_requests.consolidations),
-          ]
-          # TODO: Update to `newPayload()` once nim-web3 is updated
+            consensusFork == ConsensusFork.Fulu:
+          let
+            # Calculate the versioned hashes from the kzg commitments
+            versioned_hashes = mapIt(
+              forkyBlck.message.body.blob_kzg_commitments,
+              engine_api.VersionedHash(kzg_commitment_to_versioned_hash(it)),
+            )
+            # Execution Requests for Electra
+            execution_requests = block:
+              var requests: seq[seq[byte]]
+              for request_type, request_data in [
+                SSZ.encode(forkyBlck.message.body.execution_requests.deposits),
+                SSZ.encode(forkyBlck.message.body.execution_requests.withdrawals),
+                SSZ.encode(forkyBlck.message.body.execution_requests.consolidations),
+              ]:
+                if request_data.len > 0:
+                  requests.add @[request_type.byte] & request_data
+              requests
+
           payloadResponse = await rpcClient.engine_newPayloadV4(
             payload,
             versioned_hashes,
@@ -274,10 +286,17 @@ proc syncToEngineApi(conf: NRpcConf) {.async.} =
             versionedHashes = versioned_hashes,
             executionRequests = execution_requests
         else:
-          static: doAssert(false, "Unsupported consensus fork")
+          static:
+            doAssert(false, "Unsupported consensus fork")
 
         info "newPayload Request sent",
           blockNumber = int(payload.blockNumber), response = payloadResponse.status
+
+        if payloadResponse.status == PayloadExecutionStatus.invalid or
+            payloadResponse.status == PayloadExecutionStatus.invalid_block_hash:
+          error "Payload not validated",
+            blockNumber = int(payload.blockNumber), status = payloadResponse.status
+          quit(QuitFailure)
 
         # Load the head hash from the execution payload, for forkchoice
         headHash = forkyBlck.message.body.execution_payload.block_hash
@@ -303,8 +322,40 @@ proc syncToEngineApi(conf: NRpcConf) {.async.} =
     # Update the current block number from EL rest api
     # Shows that the fcu call has succeeded
     currentBlockNumber = elBlockNumber()
+    let oldHeadBlockNumber = headBlck.header.number
     (headBlck, _) =
       client.getELBlockFromBeaconChain(BlockIdent.init(BlockIdentType.Head), clConfig)
+
+    # Check for reorg
+    # No need to check for reorg if the EL head is behind the finalized block
+    if currentBlockNumber > finalizedBlck.header.number and
+        oldHeadBlockNumber > headBlck.header.number:
+      warn "Head moved backwards : Possible reorg detected",
+        oldHead = oldHeadBlockNumber, newHead = headBlck.header.number
+
+      let (headClBlck, isAvailable) =
+        client.getCLBlockFromBeaconChain(BlockIdent.init(BlockIdentType.Head), clConfig)
+
+      # move back the importedSlot to the finalized block
+      if isAvailable:
+        withBlck(headClBlck.asTrusted()):
+          when consensusFork >= ConsensusFork.Bellatrix:
+            importedSlot = forkyBlck.message.slot.uint64 + 1
+            currentBlockNumber = forkyBlck.message.body.execution_payload.block_number
+
+          # Load this head to the `headBlck`
+          if not getEthBlock(forkyBlck.message, headBlck):
+            error "Failed to get EL block from CL head"
+            quit(QuitFailure)
+
+        (finalizedBlck, _) = client.getELBlockFromBeaconChain(
+          BlockIdent.init(BlockIdentType.Finalized), clConfig
+        )
+        finalizedHash = finalizedBlck.header.blockHash.asEth2Digest
+        sendFCU(headClBlck)
+      else:
+        error "Failed to get CL head"
+        quit(QuitFailure)
 
   # fcU call for the last remaining payloads
   sendFCU(curBlck)
