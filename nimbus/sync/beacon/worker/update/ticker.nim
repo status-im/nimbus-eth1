@@ -48,6 +48,7 @@ type
     nBlkStaged: int
     blkStagedBottom: BlockNumber
 
+    state: SyncLayoutState
     reorg: int
     nBuddies: int
 
@@ -89,6 +90,7 @@ proc updater(ctx: BeaconCtxRef): TickerStats =
     nBlkUnprocessed: ctx.blocksUnprocTotal() + ctx.blocksUnprocBorrowed(),
     nBlkUnprocFragm: ctx.blocksUnprocChunks(),
 
+    state:           ctx.layout.lastState,
     reorg:           ctx.pool.nReorg,
     nBuddies:        ctx.pool.nBuddies)
 
@@ -130,8 +132,13 @@ proc tickerLogger(t: TickerRef; ctx: BeaconCtxRef) =
            else: data.blkUnprocBottom.bnStr & "(" &
                  data.nBlkUnprocessed.toSI & "," & $data.nBlkUnprocFragm & ")"
 
+      st = case data.state
+           of idleSyncState: "0"
+           of collectingHeaders: "h"
+           of finishedHeaders: "f"
+           of processingBlocks: "b"
       rrg = data.reorg
-      peers = data.nBuddies
+      nP = data.nBuddies
 
       # With `int64`, there are more than 29*10^10 years range for seconds
       up = (now - t.started).seconds.uint64.toSI
@@ -140,7 +147,7 @@ proc tickerLogger(t: TickerRef; ctx: BeaconCtxRef) =
     t.lastStats = data
     t.visited = now
 
-    debug "Sync state", up, peers, B, L, C, D, H, T, hS, hU, bS, bU, rrg, mem
+    debug "Sync state", up, nP, st, B, L, C, D, H, T, hS, hU, bS, bU, rrg, mem
 
 # ------------------------------------------------------------------------------
 # Public function
