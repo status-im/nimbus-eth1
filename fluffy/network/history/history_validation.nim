@@ -50,20 +50,23 @@ func validateHeaderBytes*(
   ok(header)
 
 func verifyBlockHeaderProof*(
-    a: FinishedHistoricalHashesAccumulator, header: Header, proof: BlockHeaderProof
+    a: FinishedHistoricalHashesAccumulator,
+    header: Header,
+    proof: ByteList[MAX_HEADER_PROOF_LENGTH],
 ): Result[void, string] =
-  case proof.proofType
-  of BlockHeaderProofType.historicalHashesAccumulatorProof:
-    a.verifyAccumulatorProof(header, proof.historicalHashesAccumulatorProof)
-  of BlockHeaderProofType.none:
-    if header.isPreMerge():
-      err("Pre merge header requires HistoricalHashesAccumulatorProof")
-    else:
-      # TODO:
-      # Add verification post merge based on historical_roots & historical_summaries
-      # Lets for now no longer accept other headers without a proof and the most
-      # recent ones are now a different type.
-      err("Post merge header proofs not yet activated")
+  let timestamp = Moment.init(header.timestamp.int64, Second)
+
+  if isShanghai(chainConfig, timestamp):
+    # TODO: Add verification post merge based on historical_summaries
+    err("Shanghai block verification not implemented")
+  elif isPoSBlock(chainConfig, header.number):
+    # TODO: Add verification post merge based on historical_roots
+    err("PoS block verification not implemented")
+  else:
+    let accumulatorProof = decodeSsz(proof.asSeq(), HistoricalHashesAccumulatorProof).valueOr:
+      return err("Failed decoding accumulator proof: " & error)
+
+    a.verifyAccumulatorProof(header, accumulatorProof)
 
 func validateCanonicalHeaderBytes*(
     bytes: openArray[byte], id: uint64 | Hash32, a: FinishedHistoricalHashesAccumulator

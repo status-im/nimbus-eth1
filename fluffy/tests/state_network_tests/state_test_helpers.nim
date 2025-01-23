@@ -154,7 +154,8 @@ proc mockStateRootLookup*(
     blockHeader = Header(stateRoot: stateRoot)
     headerRlp = rlp.encode(blockHeader)
     blockHeaderWithProof = BlockHeaderWithProof(
-      header: ByteList[2048].init(headerRlp), proof: BlockHeaderProof.init()
+      header: ByteList[MAX_HEADER_LENGTH].init(headerRlp),
+      proof: ByteList[MAX_HEADER_PROOF_LENGTH].init(@[]),
     )
     contentKeyBytes = blockHeaderContentKey(blockNumOrHash).encode()
     contentId = history_content.toContentId(contentKeyBytes)
