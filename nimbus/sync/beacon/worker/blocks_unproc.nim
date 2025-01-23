@@ -112,12 +112,16 @@ proc blocksUnprocClear*(ctx: BeaconCtxRef) =
   ctx.blk.unprocessed.clear()
   ctx.blk.borrowed = 0u
 
-proc blocksUnprocSet*(ctx: BeaconCtxRef; minPt, maxPt: BlockNumber) =
-  ## Set up new unprocessed range
-  ctx.blocksUnprocClear()
+proc blocksUnprocAmend*(ctx: BeaconCtxRef; minPt, maxPt: BlockNumber) =
+  ## Add some unprocessed range
   # Argument `maxPt` would be internally adjusted to `max(minPt,maxPt)`
   if minPt <= maxPt:
     discard ctx.blk.unprocessed.merge(minPt, maxPt)
+
+proc blocksUnprocSet*(ctx: BeaconCtxRef; minPt, maxPt: BlockNumber) =
+  ## Set up new unprocessed range
+  ctx.blocksUnprocClear()
+  ctx.blocksUnprocAmend(minPt, maxPt)
 
 # ------------------------------------------------------------------------------
 # End
