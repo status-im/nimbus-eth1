@@ -26,25 +26,15 @@ const
   MAX_WITHDRAWALS_COUNT = MAX_WITHDRAWALS_PER_PAYLOAD
 
   MAX_EPHEMERAL_HEADER_PAYLOAD = 256
+  MAX_HEADER_PROOF_LENGTH* = 1024
 
 type
   ## BlockHeader types
   HistoricalHashesAccumulatorProof* = array[15, Digest]
 
-  BlockHeaderProofType* = enum
-    none = 0x00 # An SSZ Union None
-    historicalHashesAccumulatorProof = 0x01
-
-  BlockHeaderProof* = object
-    case proofType*: BlockHeaderProofType
-    of none:
-      discard
-    of historicalHashesAccumulatorProof:
-      historicalHashesAccumulatorProof*: HistoricalHashesAccumulatorProof
-
   BlockHeaderWithProof* = object
     header*: ByteList[MAX_HEADER_LENGTH] # RLP data
-    proof*: BlockHeaderProof
+    proof*: ByteList[MAX_HEADER_PROOF_LENGTH]
 
   ## Ephemeral BlockHeader list
   EphemeralBlockHeaderList* =
@@ -73,11 +63,3 @@ type
   ## Receipts types
   ReceiptByteList* = ByteList[MAX_RECEIPT_LENGTH] # RLP data
   PortalReceipts* = List[ReceiptByteList, MAX_TRANSACTION_COUNT]
-
-func init*(T: type BlockHeaderProof, proof: HistoricalHashesAccumulatorProof): T =
-  BlockHeaderProof(
-    proofType: historicalHashesAccumulatorProof, historicalHashesAccumulatorProof: proof
-  )
-
-func init*(T: type BlockHeaderProof): T =
-  BlockHeaderProof(proofType: none)
