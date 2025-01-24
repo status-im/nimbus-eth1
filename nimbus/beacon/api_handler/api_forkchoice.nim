@@ -68,10 +68,10 @@ template validateHeaderTimestamp(header, com, apiVersion) =
   #   if apiVersion != Version.V2:
   #     raise invalidAttr("forkChoiceUpdated" & $apiVersion &
   #         " doesn't support head block with Shanghai timestamp")
-  else:
-    if apiVersion != Version.V1:
-      raise invalidAttr("forkChoiceUpdated" & $apiVersion &
-          " doesn't support head block with timestamp earlier than Shanghai")
+  # else:
+  #   if apiVersion != Version.V1:
+  #     raise invalidAttr("forkChoiceUpdated" & $apiVersion &
+  #         " doesn't support head block with timestamp earlier than Shanghai")
 
 proc forkchoiceUpdated*(ben: BeaconEngineRef,
                         apiVersion: Version,
