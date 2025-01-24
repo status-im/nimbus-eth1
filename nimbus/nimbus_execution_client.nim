@@ -161,7 +161,7 @@ proc preventLoadingDataDirForTheWrongNetwork(db: CoreDbRef; conf: NimbusConf) =
     kvt.put(dataDirIdKey().toOpenArray, calculatedId.data).isOkOr:
       fatal "Cannot write data dir ID", ID=calculatedId
       quit(QuitFailure)
-      
+
   let
     kvt = db.ctx.getKvt()
     calculatedId = calcHash(conf.networkId, conf.networkParams)
@@ -173,7 +173,7 @@ proc preventLoadingDataDirForTheWrongNetwork(db: CoreDbRef; conf: NimbusConf) =
   if conf.rewriteDatadirId:
     writeDataDirId(kvt, calculatedId)
     return
-  
+
   if calculatedId.data != dataDirIdBytes:
     fatal "Data dir already initialized with other network configuration",
       get=dataDirIdBytes.toHex,

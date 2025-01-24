@@ -1,5 +1,5 @@
 # Nimbus
-# Copyright (c) 2024 Status Research & Development GmbH
+# Copyright (c) 2024-2025 Status Research & Development GmbH
 # Licensed under either of
 #  * Apache License, version 2.0, ([LICENSE-APACHE](LICENSE-APACHE))
 #  * MIT license ([LICENSE-MIT](LICENSE-MIT))
@@ -277,7 +277,7 @@ proc importBlocks*(conf: NimbusConf, com: CommonRef) =
         else:
           raiseAssert "Other networks are unsupported or do not have an era1"
       db = Era1DbRef.init(conf.era1Dir.string, era1Name).valueOr:
-        fatal "Could not open era1 database", era1Dir = conf.era1Dir, era1Name, error
+        fatal "Could not open era1 database", era1Dir=conf.era1Dir, era1Name=era1Name, error=error
         quit(QuitFailure)
 
     notice "Importing era1 archive",

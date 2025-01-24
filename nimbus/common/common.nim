@@ -11,6 +11,7 @@
 
 import
   chronicles,
+  logging,
   ../db/[core_db, ledger, storage_types],
   ../utils/[utils],
   ".."/[constants, errors, version],
@@ -26,7 +27,8 @@ export
   hardforks,
   genesis,
   utils,
-  taskpools
+  taskpools,
+  logging
 
 type
   SyncProgress = object
