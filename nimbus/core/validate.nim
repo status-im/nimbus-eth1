@@ -267,7 +267,7 @@ proc validateTxBasic*(
 
     let maxBlobsPerBlock = getMaxBlobsPerBlock(com, fork)
     if tx.versionedHashes.len.uint64 > maxBlobsPerBlock:
-      return err(&"invalid tx: versioned hashes len exceeds MAX_BLOBS_PER_BLOCK={maxBlobsPerBlock}. get={tx.versionedHashes.len}")
+      return err(&"invalid tx: versioned hashes len exceeds MAX_BLOBS_PER_BLOCK={maxBlobsPerBlock}, get={tx.versionedHashes.len}, fork={fork}")
 
     for i, bv in tx.versionedHashes:
       if bv.data[0] != VERSIONED_HASH_VERSION_KZG:
