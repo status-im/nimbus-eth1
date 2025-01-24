@@ -171,7 +171,7 @@ proc customGenesisTest() =
       validateBlobSchedule(cg, Osaka, 6, 9)
 
       check loadNetworkParams("blobschedule_prague.json".findFilePath, cg)
-      validateBlobSchedule(cg, Cancun, 0, 0)
+      validateBlobSchedule(cg, Cancun, 3, 6) # default fallback case
       validateBlobSchedule(cg, Prague, 6, 9)
       validateBlobSchedule(cg, Osaka, 6, 9)
 

@@ -394,7 +394,7 @@ proc validateChainConfig(conf: ChainConfig): bool =
 proc configureBlobSchedule(conf: ChainConfig) =
   var prevFork = Cancun
   if conf.blobSchedule[Cancun].isNone:
-    conf.blobSchedule[Cancun] = Opt.some(BlobSchedule())
+    conf.blobSchedule[Cancun] = Opt.some(BlobSchedule(target: 3'u64, max: 6'u64))
   for fork in Prague..HardFork.high:
     if conf.blobSchedule[fork].isNone:
       conf.blobSchedule[fork] = conf.blobSchedule[prevFork]
