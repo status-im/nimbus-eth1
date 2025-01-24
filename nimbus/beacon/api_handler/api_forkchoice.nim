@@ -64,10 +64,10 @@ template validateHeaderTimestamp(header, com, apiVersion) =
           " doesn't support head block with timestamp >= Cancun")
   # See fCUV2 specification No.2 bullet 1
   # https://github.com/ethereum/execution-apis/blob/v1.0.0-beta.4/src/engine/shanghai.md#specification-1
-  elif com.isShanghaiOrLater(header.timestamp):
-    if apiVersion != Version.V2 or apiVersion != Version.V3:
-      raise invalidAttr("forkChoiceUpdated" & $apiVersion &
-          " doesn't support head block with Shanghai timestamp")
+  # elif com.isShanghaiOrLater(header.timestamp):
+  #   if apiVersion != Version.V2:
+  #     raise invalidAttr("forkChoiceUpdated" & $apiVersion &
+  #         " doesn't support head block with Shanghai timestamp")
   else:
     if apiVersion != Version.V1:
       raise invalidAttr("forkChoiceUpdated" & $apiVersion &
