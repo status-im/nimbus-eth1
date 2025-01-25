@@ -831,8 +831,8 @@ proc getContentKeys(o: OfferRequest): ContentKeysList =
 
 func getMaxOfferedContentKeys*(protocolIdLen: uint32, maxKeySize: uint32): int =
   ## Calculates how many ContentKeys will fit in one offer message which
-  ## will be small enouch to fit into discv5 limit.
-  ## This is neccesarry as contentKeysLimit (64) is sometimes to big, and even
+  ## will be small enough to fit into discv5 limit.
+  ## This is necessary as contentKeysLimit (64) is sometimes too big, and even
   ## half of this can be too much to fit into discv5 limits.
 
   let maxTalkReqPayload = maxDiscv5PacketSize - getTalkReqOverhead(int(protocolIdLen))

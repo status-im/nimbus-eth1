@@ -22,9 +22,6 @@ import
 export
   helpers, sync_desc, worker_config
 
-when enableTicker:
-  import ./worker/start_stop/ticker
-
 type
   BnRangeSet* = IntervalSetRef[BlockNumber,uint64]
     ## Disjunct sets of block number intervals
@@ -159,7 +156,7 @@ type
 
     # Debugging stuff
     when enableTicker:
-      ticker*: TickerRef             ## Logger ticker
+      ticker*: RootRef               ## Logger ticker
 
   BeaconBuddyRef* = BuddyRef[BeaconCtxData,BeaconBuddyData]
     ## Extended worker peer descriptor

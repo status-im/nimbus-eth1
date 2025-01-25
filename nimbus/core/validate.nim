@@ -19,7 +19,7 @@ import
   ../transaction,
   ../utils/utils,
   "."/[dao, eip4844, eip7702, eip7691, gaslimit, withdrawals],
-  ./pow/[difficulty, header],
+  ./pow/difficulty,
   stew/objects,
   results
 
@@ -168,7 +168,7 @@ proc validateUncles(com: CommonRef; header: Header; txFrame: CoreDbTxRef,
 # Public function, extracted from executor
 # ------------------------------------------------------------------------------
 
-proc validateLegacySignatureForm(tx: Transaction, fork: EVMFork): bool =
+func validateLegacySignatureForm(tx: Transaction, fork: EVMFork): bool =
   var
     vMin = 27'u64
     vMax = 28'u64
@@ -190,7 +190,7 @@ proc validateLegacySignatureForm(tx: Transaction, fork: EVMFork): bool =
 
   isValid
 
-proc validateEip2930SignatureForm(tx: Transaction): bool =
+func validateEip2930SignatureForm(tx: Transaction): bool =
   var isValid = tx.V == 0'u64 or tx.V == 1'u64
   isValid = isValid and tx.S >= UInt256.one
   isValid = isValid and tx.S < SECPK1_N
@@ -205,7 +205,7 @@ func gasCost*(tx: Transaction): UInt256 =
   else:
     tx.gasLimit.u256 * tx.gasPrice.u256
 
-proc validateTxBasic*(
+func validateTxBasic*(
     com:      CommonRef,
     tx:       Transaction;     ## tx to validate
     fork:     EVMFork,
@@ -267,7 +267,7 @@ proc validateTxBasic*(
 
     let maxBlobsPerBlock = getMaxBlobsPerBlock(com, fork)
     if tx.versionedHashes.len.uint64 > maxBlobsPerBlock:
-      return err(&"invalid tx: versioned hashes len exceeds MAX_BLOBS_PER_BLOCK={maxBlobsPerBlock}. get={tx.versionedHashes.len}")
+      return err(&"invalid tx: versioned hashes len exceeds MAX_BLOBS_PER_BLOCK={maxBlobsPerBlock}, get={tx.versionedHashes.len}")
 
     for i, bv in tx.versionedHashes:
       if bv.data[0] != VERSIONED_HASH_VERSION_KZG:

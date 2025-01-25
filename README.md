@@ -81,9 +81,6 @@ nim --version
 ./env.sh nim --version
 ```
 
-Our Wiki provides additional helpful information for [debugging individual test cases][1]
-and for [pairing Nimbus with a locally running copy of Geth][2].
-
 #### Windows
 
 _(Experimental support!)_
@@ -124,8 +121,8 @@ make test # run the test suite
 
 *Experimental* The code can be compiled on a Raspberry PI:
 
-* Raspberry PI 3b+
-* 64gb SD Card (less might work too, but the default recommended 4-8GB will probably be too small)
+* Raspberry Pi 4+
+* 64GB SD Card (less might work too, but the default recommended 4-8GB will probably be too small)
 * [Rasbian Buster Lite](https://www.raspberrypi.org/downloads/raspbian/) - Lite version is enough to get going and will save some disk space!
 
 Assuming you're working with a freshly written image:
@@ -375,6 +372,3 @@ or
 * Apache License, Version 2.0, ([LICENSE-APACHEv2](LICENSE-APACHEv2) or https://www.apache.org/licenses/LICENSE-2.0)
 
 at your option. These files may not be copied, modified, or distributed except according to those terms.
-
-[1]: https://github.com/status-im/nimbus/wiki/Understanding-and-debugging-Nimbus-EVM-JSON-tests
-[2]: https://github.com/status-im/nimbus/wiki/Debugging-state-reconstruction

@@ -1,5 +1,5 @@
 # fluffy
-# Copyright (c) 2021-2024 Status Research & Development GmbH
+# Copyright (c) 2021-2025 Status Research & Development GmbH
 # Licensed and distributed under either of
 #   * MIT license (license terms in the root directory or at https://opensource.org/licenses/MIT).
 #   * Apache v2 license (license terms in the root directory or at https://www.apache.org/licenses/LICENSE-2.0).
@@ -20,10 +20,12 @@ const
   MAX_TRANSACTION_LENGTH = 2 ^ 24 # ~= 16 million
   MAX_TRANSACTION_COUNT = 2 ^ 14 # ~= 16k
   MAX_RECEIPT_LENGTH = 2 ^ 27 # ~= 134 million
-  MAX_HEADER_LENGTH = 2 ^ 11 # = 2048
+  MAX_HEADER_LENGTH* = 2 ^ 11 # = 2048
   MAX_ENCODED_UNCLES_LENGTH = MAX_HEADER_LENGTH * 2 ^ 4 # = 2 ^ 17 ~= 131k
   MAX_WITHDRAWAL_LENGTH = 64
   MAX_WITHDRAWALS_COUNT = MAX_WITHDRAWALS_PER_PAYLOAD
+
+  MAX_EPHEMERAL_HEADER_PAYLOAD = 256
 
 type
   ## BlockHeader types
@@ -43,6 +45,10 @@ type
   BlockHeaderWithProof* = object
     header*: ByteList[MAX_HEADER_LENGTH] # RLP data
     proof*: BlockHeaderProof
+
+  ## Ephemeral BlockHeader list
+  EphemeralBlockHeaderList* =
+    List[ByteList[MAX_HEADER_LENGTH], MAX_EPHEMERAL_HEADER_PAYLOAD]
 
   ## BlockBody types
   TransactionByteList* = ByteList[MAX_TRANSACTION_LENGTH] # RLP data
