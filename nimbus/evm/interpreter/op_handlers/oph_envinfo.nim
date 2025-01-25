@@ -1,5 +1,5 @@
 # Nimbus
-# Copyright (c) 2018-2024 Status Research & Development GmbH
+# Copyright (c) 2018-2025 Status Research & Development GmbH
 # Licensed under either of
 #  * Apache License, version 2.0, ([LICENSE-APACHE](LICENSE-APACHE) or
 #    http://www.apache.org/licenses/LICENSE-2.0)
@@ -152,15 +152,6 @@ proc extCodeSizeEIP2929Op(cpt: VmCpt): EvmResultVoid =
 
   cpt.stack.unaryAddress(ecsEIP2929)
 
-proc extCodeSizeEIP7702Op(cpt: VmCpt): EvmResultVoid =
-  ## 0x3b, Get size of an account's code (EIP-7702)
-  template ecsEIP7702(address): auto =
-    let gasCost = cpt.gasEip2929AccountCheck(address)
-    ? cpt.opcodeGasCost(ExtCodeSize, gasCost, reason = "ExtCodeSize EIP7702")
-    cpt.resolveCodeSize(address)
-
-  cpt.stack.unaryAddress(ecsEIP7702)
-
 # -----------
 
 proc extCodeCopyOp(cpt: VmCpt): EvmResultVoid =
@@ -197,25 +188,6 @@ proc extCodeCopyEIP2929Op(cpt: VmCpt): EvmResultVoid =
   ? cpt.opcodeGasCost(ExtCodeCopy, gasCost, reason = "ExtCodeCopy EIP2929")
 
   let code = cpt.getCode(address)
-  cpt.memory.writePadded(code.bytes(), memPos, codePos, len)
-  ok()
-
-proc extCodeCopyEIP7702Op(cpt: VmCpt): EvmResultVoid =
-  ## 0x3c, Copy an account's code to memory (EIP-7702).
-  ? cpt.stack.lsCheck(4)
-  let
-    address = cpt.stack.lsPeekAddress(^1)
-    memPos  = cpt.stack.lsPeekMemRef(^2)
-    codePos = cpt.stack.lsPeekMemRef(^3)
-    len     = cpt.stack.lsPeekMemRef(^4)
-    gasCost = cpt.gasCosts[ExtCodeCopy].m_handler(cpt.memory.len, memPos, len) +
-                cpt.gasEip2929AccountCheck(address) +
-                cpt.gasEip7702CodeCheck(address)
-
-  cpt.stack.lsShrink(4)
-  ? cpt.opcodeGasCost(ExtCodeCopy, gasCost, reason = "ExtCodeCopy EIP7702")
-
-  let code = cpt.resolveCode(address)
   cpt.memory.writePadded(code.bytes(), memPos, codePos, len)
   ok()
 
@@ -260,14 +232,6 @@ proc extCodeHashEIP2929Op(cpt: VmCpt): EvmResultVoid =
     ? cpt.opcodeGasCost(ExtCodeHash, gasCost, reason = "ExtCodeHash EIP2929")
     cpt.getCodeHash(address)
   cpt.stack.unaryAddress(echEIP2929)
-
-proc extCodeHashEIP7702Op(cpt: VmCpt): EvmResultVoid =
-  ## 0x3f, Returns the keccak256 hash of a contract’s code (EIP-7702)
-  template echEIP7702(address): auto =
-    let gasCost = cpt.gasEip2929AccountCheck(address)
-    ? cpt.opcodeGasCost(ExtCodeHash, gasCost, reason = "ExtCodeHash EIP7702")
-    cpt.resolveCodeHash(address)
-  cpt.stack.unaryAddress(echEIP7702)
 
 # ------------------------------------------------------------------------------
 # Public, op exec table entries
@@ -369,17 +333,10 @@ const
 
 
     (opCode: ExtCodeSize,    ## 0x3b, Account code size for Berlin through Cancun
-     forks: VmOpBerlinAndLater - VmOpPragueAndLater,
+     forks: VmOpBerlinAndLater,
      name: "extCodeSizeEIP2929",
      info: "EIP2929: Get size of an account's code",
      exec: extCodeSizeEIP2929Op),
-
-
-    (opCode: ExtCodeSize,    ## 0x3b, Account code size for Prague and later
-     forks: VmOpPragueAndLater,
-     name: "extCodeSizeEIP7702",
-     info: "EIP7702: Get size of an account's code",
-     exec: extCodeSizeEIP7702Op),
 
 
     (opCode: ExtCodeCopy,    ## 0x3c, Account code copy to memory.
@@ -390,17 +347,10 @@ const
 
 
     (opCode: ExtCodeCopy,    ## 0x3c, Account Code-copy for Berlin through Cancun
-     forks: VmOpBerlinAndLater - VmOpPragueAndLater,
+     forks: VmOpBerlinAndLater,
      name: "extCodeCopyEIP2929",
      info: "EIP2929: Copy an account's code to memory",
      exec: extCodeCopyEIP2929Op),
-
-
-    (opCode: ExtCodeCopy,    ## 0x3c, Account code copy for Prague and later
-     forks: VmOpPragueAndLater,
-     name: "extCodeCopyEIP7702",
-     info: "EIP7702: Copy an account's code to memory",
-     exec: extCodeCopyEIP7702Op),
 
 
     (opCode: ReturnDataSize, ## 0x3d, Previous call output data size
@@ -426,17 +376,10 @@ const
 
 
     (opCode: ExtCodeHash,    ## 0x3f, Contract hash for Berlin through Cancun
-     forks: VmOpBerlinAndLater - VmOpPragueAndLater,
+     forks: VmOpBerlinAndLater,
      name: "extCodeHashEIP2929",
      info: "EIP2929: Returns the keccak256 hash of a contract’s code",
-     exec: extCodeHashEIP2929Op),
-
-
-    (opCode: ExtCodeHash,    ## 0x3f, Contract hash for Prague and later
-     forks: VmOpPragueAndLater,
-     name: "extCodeHashEIP7702",
-     info: "EIP7702: Returns the keccak256 hash of a contract’s code",
-     exec: extCodeHashEIP7702Op)]
+     exec: extCodeHashEIP2929Op)]
 
 # ------------------------------------------------------------------------------
 # End
