@@ -28,7 +28,8 @@ import
   ./db/core_db/persistent,
   ./db/storage_types,
   ./sync/handlers,
-  ./common/chain_config_hash
+  ./common/chain_config_hash,
+  ./portal/portal
 
 from beacon_chain/nimbus_binary_common import setupFileLimits
 
@@ -44,6 +45,8 @@ proc basicServices(nimbus: NimbusNode,
                    conf: NimbusConf,
                    com: CommonRef) =
   nimbus.chainRef = ForkedChainRef.init(com)
+  if conf.isPortalEnabled:
+    nimbus.chainRef.portal = PortalClientRef.init(conf)
 
   # txPool must be informed of active head
   # so it can know the latest account state
