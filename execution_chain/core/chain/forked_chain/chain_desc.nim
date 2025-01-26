@@ -14,7 +14,8 @@ import
   std/[deques, tables],
   ./chain_branch,
   ../../../common,
-  ../../../db/core_db
+  ../../../db/core_db,
+  ../../../portal/portal
 
 export deques, tables
 
@@ -32,6 +33,7 @@ type
       # lookup items straight from the database
 
     baseDistance*: uint64
+    portal*: PortalClientRef
 
     lastSnapshots*: array[10, CoreDbTxRef]
     lastSnapshotPos*: int
