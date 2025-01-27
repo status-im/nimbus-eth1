@@ -4,7 +4,7 @@ This is a short manual to help you quickly setup and run
 Hive.  For more detailed information please read the
 [hive documentation](https://github.com/ethereum/hive/blob/master/docs/overview.md).
 
-## Prerequisities
+## Prerequisites
 
 - A Linux machine. Trust me, it does not work on Windows or MacOS.
 - Or Linux inside a VM (e.g. VirtualBox) on Windows or MacOS.
