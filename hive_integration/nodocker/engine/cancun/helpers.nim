@@ -1,5 +1,5 @@
 # Nimbus
-# Copyright (c) 2023-2024 Status Research & Development GmbH
+# Copyright (c) 2023-2025 Status Research & Development GmbH
 # Licensed under either of
 #  * Apache License, version 2.0, ([LICENSE-APACHE](LICENSE-APACHE) or
 #    http://www.apache.org/licenses/LICENSE-2.0)
@@ -39,19 +39,27 @@ const
   DATAHASH_START_ADDRESS* = toAddress(0x20000.u256)
   DATAHASH_ADDRESS_COUNT* = 1000
 
-func getMinExcessBlobGasForBlobGasPrice(data_gas_price: uint64, electra: bool): uint64 =
+func getCancunBlobBaseFee*(excessBlobGas: uint64): UInt256 =
+  const blobBaseFeeUpdateFraction = 3338477.u256
+  fakeExponential(
+    MIN_BLOB_GASPRICE.u256,
+    excessBlobGas.u256,
+    blobBaseFeeUpdateFraction
+  )
+
+func getMinExcessBlobGasForBlobGasPrice(data_gas_price: uint64): uint64 =
   var
     current_excess_data_gas = 0'u64
     current_data_gas_price  = 1'u64
 
   while current_data_gas_price < data_gas_price:
     current_excess_data_gas += GAS_PER_BLOB.uint64
-    current_data_gas_price = getBlobBaseFee(current_excess_data_gas, electra).truncate(uint64)
+    current_data_gas_price = getCancunBlobBaseFee(current_excess_data_gas).truncate(uint64)
 
   return current_excess_data_gas
 
-func getMinExcessBlobsForBlobGasPrice*(data_gas_price: uint64, electra: bool): uint64 =
-  return getMinExcessBlobGasForBlobGasPrice(data_gas_price, electra) div GAS_PER_BLOB.uint64
+func getMinExcessBlobsForBlobGasPrice*(data_gas_price: uint64): uint64 =
+  return getMinExcessBlobGasForBlobGasPrice(data_gas_price) div GAS_PER_BLOB.uint64
 
 proc addBlobTransaction*(pool: TestBlobTxPool, tx: PooledTransaction) =
   let txHash = rlpHash(tx)

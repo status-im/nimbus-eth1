@@ -394,7 +394,7 @@ proc validateChainConfig(conf: ChainConfig): bool =
 proc configureBlobSchedule(conf: ChainConfig) =
   var prevFork = Cancun
   if conf.blobSchedule[Cancun].isNone:
-    conf.blobSchedule[Cancun] = Opt.some(BlobSchedule(target: 3'u64, max: 6'u64))
+    conf.blobSchedule[Cancun] = Opt.some(BlobSchedule(target: 3'u64, max: 6'u64, baseFeeUpdateFraction: 3_338_477'u64))
   for fork in Prague..HardFork.high:
     if conf.blobSchedule[fork].isNone:
       conf.blobSchedule[fork] = conf.blobSchedule[prevFork]
@@ -485,9 +485,9 @@ proc parseGenesisAlloc*(data: string, ga: var GenesisAlloc): bool
 
 func defaultBlobSchedule*(): array[Cancun..HardFork.high, Opt[BlobSchedule]] =
   [
-    Cancun: Opt.some(BlobSchedule(target: 3'u64, max: 6'u64)),
-    Prague: Opt.some(BlobSchedule(target: 6'u64, max: 9'u64)),
-    Osaka : Opt.some(BlobSchedule(target: 6'u64, max: 9'u64)),
+    Cancun: Opt.some(BlobSchedule(target: 3'u64, max: 6'u64, baseFeeUpdateFraction: 3_338_477'u64)),
+    Prague: Opt.some(BlobSchedule(target: 6'u64, max: 9'u64, baseFeeUpdateFraction: 5_007_716'u64)),
+    Osaka : Opt.some(BlobSchedule(target: 6'u64, max: 9'u64, baseFeeUpdateFraction: 5_007_716'u64)),
   ]
 
 func chainConfigForNetwork*(id: NetworkId): ChainConfig =

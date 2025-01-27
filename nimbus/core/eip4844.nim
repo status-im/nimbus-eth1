@@ -1,5 +1,5 @@
 # Nimbus
-# Copyright (c) 2023-2024 Status Research & Development GmbH
+# Copyright (c) 2023-2025 Status Research & Development GmbH
 # Licensed under either of
 #  * Apache License, version 2.0, ([LICENSE-APACHE](LICENSE-APACHE) or
 #    http://www.apache.org/licenses/LICENSE-2.0)
@@ -115,19 +115,22 @@ proc getTotalBlobGas*(versionedHashesLen: int): uint64 =
   GAS_PER_BLOB * versionedHashesLen.uint64
 
 # getBlobBaseFee implements get_data_gas_price from EIP-4844
-func getBlobBaseFee*(excessBlobGas: uint64, electra: bool): UInt256 =
-  let blobBaseFeeUpdateFraction = getBlobBaseFeeUpdateFraction(electra).u256
-  fakeExponential(
-    MIN_BLOB_GASPRICE.u256,
-    excessBlobGas.u256,
-    blobBaseFeeUpdateFraction
-  )
+func getBlobBaseFee*(excessBlobGas: uint64, com: CommonRef, fork: EVMFork): UInt256 =
+  if fork >= FkCancun:
+    let blobBaseFeeUpdateFraction = com.getBlobBaseFeeUpdateFraction(fork).u256
+    fakeExponential(
+      MIN_BLOB_GASPRICE.u256,
+      excessBlobGas.u256,
+      blobBaseFeeUpdateFraction
+    )
+  else:
+    0.u256
 
 proc calcDataFee*(versionedHashesLen: int,
                   excessBlobGas: uint64,
-                  electra: bool): UInt256 =
+                  com: CommonRef, fork: EVMFork): UInt256 =
   getTotalBlobGas(versionedHashesLen).u256 *
-    getBlobBaseFee(excessBlobGas, electra)
+    getBlobBaseFee(excessBlobGas, com, fork)
 
 func blobGasUsed(txs: openArray[Transaction]): uint64 =
   for tx in txs:

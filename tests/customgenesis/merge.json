@@ -11,16 +11,18 @@
     "petersburgBlock": 0,
     "istanbulBlock": 0,
     "muirGlacierBlock": 0,
-    "berlinBlock": 0,    
+    "berlinBlock": 0,
     "londonBlock": 0,
     "blobSchedule": {
       "cancun": {
         "target": 3,
-        "max": 6
+        "max": 6,
+        "baseFeeUpdateFraction": 3338477
       },
       "prague": {
         "target": 6,
-        "max": 9
+        "max": 9,
+        "baseFeeUpdateFraction": 5007716
       }
     }
   },
