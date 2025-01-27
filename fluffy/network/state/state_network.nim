@@ -109,8 +109,8 @@ proc getContent(
       continue
 
     validateRetrieval(key, contentValue).isOkOr:
-      n.portalProtocol.banPeer(
-        lookupRes.receivedFrom.id, PeerBanDurationContentLookupFailedValidation
+      n.portalProtocol.banNode(
+        lookupRes.receivedFrom.id, NodeBanDurationContentLookupFailedValidation
       )
       error "Validation of retrieved state content failed"
       continue
@@ -247,8 +247,8 @@ proc processContentLoop(n: StateNetwork) {.async: (raises: []).} =
             srcNodeId, contentKeyBytes
         else:
           if srcNodeId.isSome():
-            n.portalProtocol.banPeer(
-              srcNodeId.get(), PeerBanDurationOfferFailedValidation
+            n.portalProtocol.banNode(
+              srcNodeId.get(), NodeBanDurationOfferFailedValidation
             )
           state_network_offers_failed.inc(labelValues = [$n.portalProtocol.protocolId])
           error "Received offered content failed validation",

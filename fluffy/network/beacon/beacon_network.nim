@@ -361,6 +361,8 @@ proc validateContent(
 
       debug "Received offered content validated successfully", srcNodeId, contentKey
     else:
+      if srcNodeId.isSome():
+        n.portalProtocol.banNode(srcNodeId.get(), NodeBanDurationOfferFailedValidation)
       debug "Received offered content failed validation",
         srcNodeId, contentKey, error = validation.error
       return false

@@ -126,9 +126,11 @@ const
   ## value in milliseconds
   initialLookups = 1 ## Amount of lookups done when populating the routing table
 
-  # Ban durations for the banned peers table
-  PeerBanDurationContentLookupFailedValidation* = 60.minutes
-  PeerBanDurationOfferFailedValidation* = 60.minutes
+  ## Ban durations for banned nodes in the routing table
+  NodeBanDurationInvalidResponse = 15.minutes
+  NodeBanDurationNoResponse = 5.minutes
+  NodeBanDurationContentLookupFailedValidation* = 60.minutes
+  NodeBanDurationOfferFailedValidation* = 60.minutes
 
 type
   ToContentIdHandler* =
@@ -170,12 +172,9 @@ type
     of Database:
       contentKeys: ContentKeysList
 
-  PeerBanTimeout = chronos.Moment
-
   PortalProtocol* = ref object of TalkProtocol
     protocolId*: PortalProtocolId
     routingTable*: RoutingTable
-    bannedPeers: Table[NodeId, PeerBanTimeout]
     baseProtocol*: protocol.Protocol
     toContentId*: ToContentIdHandler
     contentCache: ContentCache
@@ -291,29 +290,11 @@ func getProtocolId*(
     of PortalSubnetwork.transactionGossip:
       [portalPrefix, 0x4F]
 
-proc banPeer*(p: PortalProtocol, nodeId: NodeId, period: chronos.Duration) =
-  let banTimeout = now(chronos.Moment) + period
+template banNode*(p: PortalProtocol, nodeId: NodeId, period: chronos.Duration) =
+  p.routingTable.banNode(nodeId, period)
 
-  if p.bannedPeers.contains(nodeId):
-    let existingTimeout = p.bannedPeers.getOrDefault(nodeId)
-    if existingTimeout < banTimeout:
-      p.bannedPeers[nodeId] = banTimeout
-  else:
-    p.bannedPeers[nodeId] = banTimeout
-
-proc isBanned(p: PortalProtocol, nodeId: NodeId): bool =
-  if not p.bannedPeers.contains(nodeId):
-    return false
-
-  let
-    currentTime = now(chronos.Moment)
-    banTimeout = p.bannedPeers.getOrDefault(nodeId)
-  if currentTime < banTimeout:
-    return true
-
-  # Peer is in bannedPeers table but the time period has expired
-  p.bannedPeers.del(nodeId)
-  false
+template isBanned*(p: PortalProtocol, nodeId: NodeId): bool =
+  p.routingTable.isBanned(nodeId)
 
 func `$`(id: PortalProtocolId): string =
   id.toHex()
@@ -330,11 +311,10 @@ func getNode*(p: PortalProtocol, id: NodeId): Opt[Node] =
 func localNode*(p: PortalProtocol): Node =
   p.baseProtocol.localNode
 
-proc neighbours*(
+template neighbours*(
     p: PortalProtocol, id: NodeId, k: int = BUCKET_SIZE, seenOnly = false
 ): seq[Node] =
-  # TODO: Maybe banned peers should be in the routing table and filtered out at that level
-  p.routingTable.neighbours(id, k, seenOnly).filterIt(not p.isBanned(it.id))
+  p.routingTable.neighbours(id, k, seenOnly)
 
 func distance(p: PortalProtocol, a, b: NodeId): UInt256 =
   p.routingTable.distance(a, b)
@@ -742,6 +722,9 @@ proc recordsFromBytes(rawRecords: List[ByteList[2048], 32]): PortalResult[seq[Re
 proc ping*(
     p: PortalProtocol, dst: Node
 ): Future[PortalResult[PongMessage]] {.async: (raises: [CancelledError]).} =
+  if p.isBanned(dst.id):
+    return err("destination node is banned")
+
   let pongResponse = await p.pingImpl(dst)
 
   if pongResponse.isOk():
@@ -764,12 +747,16 @@ proc ping*(
 proc findNodes*(
     p: PortalProtocol, dst: Node, distances: seq[uint16]
 ): Future[PortalResult[seq[Node]]] {.async: (raises: [CancelledError]).} =
+  if p.isBanned(dst.id):
+    return err("destination node is banned")
+
   let nodesMessage = await p.findNodesImpl(dst, List[uint16, 256](distances))
   if nodesMessage.isOk():
     let records = recordsFromBytes(nodesMessage.get().enrs)
     if records.isOk():
       # TODO: distance function is wrong here for state, fix + tests
-      return ok(verifyNodesRecords(records.get(), dst, enrsResultLimit, distances))
+      let res = verifyNodesRecords(records.get(), dst, enrsResultLimit, distances)
+      return ok(res.filterIt(not p.isBanned(it.id)))
     else:
       return err(records.error)
   else:
@@ -781,6 +768,9 @@ proc findContent*(
   logScope:
     node = dst
     contentKey
+
+  if p.isBanned(dst.id):
+    return err("destination node is banned")
 
   let contentMessageResponse = await p.findContentImpl(dst, contentKey)
 
@@ -915,6 +905,9 @@ proc offer(
   portal_content_keys_offered.observe(
     contentKeys.len().int64, labelValues = [$p.protocolId]
   )
+
+  if p.isBanned(o.dst.id):
+    return err("destination node is banned")
 
   let acceptMessageResponse = await p.offerImpl(o.dst, contentKeys)
 
@@ -1114,7 +1107,7 @@ proc lookup*(
     let nodes = await query
     # TODO: Remove node on timed-out query?
     for n in nodes:
-      if not seen.containsOrIncl(n.id) and not p.isBanned(n.id):
+      if not seen.containsOrIncl(n.id):
         # If it wasn't seen before, insert node while remaining sorted
         closestNodes.insert(
           n,
@@ -1252,7 +1245,7 @@ proc contentLookup*(
           nodesWithoutContent.add(content.src)
 
         for n in content.nodes:
-          if not seen.containsOrIncl(n.id) and not p.isBanned(n.id):
+          if not seen.containsOrIncl(n.id):
             discard p.addNode(n)
             # If it wasn't seen before, insert node while remaining sorted
             closestNodes.insert(
@@ -1789,6 +1782,9 @@ proc refreshLoop(p: PortalProtocol) {.async: (raises: []).} =
         trace "Discovered nodes in random target query", nodes = randomQuery.len
         debug "Total nodes in routing table", total = p.routingTable.len()
 
+      # Remove the expired bans from routing table to limit memory usage
+      p.routingTable.cleanupExpiredBans()
+
       await sleepAsync(refreshInterval)
   except CancelledError:
     trace "refreshLoop canceled"
@@ -1840,6 +1836,12 @@ proc resolve*(
   ## the node on the network.
   if id == p.localNode.id:
     return Opt.some(p.localNode)
+
+  # No point in trying to resolve a banned node because it won't exist in the
+  # routing table and it will be filtered out of any respones in the lookup call
+  if p.isBanned(id):
+    debug "Not resolving banned node", nodeId = id
+    return Opt.none(Node)
 
   let node = p.getNode(id)
   if node.isSome():
