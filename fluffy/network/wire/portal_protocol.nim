@@ -24,7 +24,7 @@ import
   minilru,
   eth/rlp,
   eth/p2p/discoveryv5/[protocol, node, enr, routing_table, random2, nodes_verification],
-  "."/[portal_stream, portal_protocol_config],
+  "."/[portal_stream, portal_protocol_config, ping_extensions],
   ./messages
 
 from std/times import epochTime # For system timestamp in traceContentLookup
@@ -186,6 +186,7 @@ type
     offerWorkers: seq[Future[void]]
     pingTimings: Table[NodeId, chronos.Moment]
     config*: PortalProtocolConfig
+    pingExtensionCapabilities*: set[uint16]
 
   PortalResult*[T] = Result[T, string]
 
@@ -334,25 +335,67 @@ func truncateEnrs(
 
   enrs
 
+proc handlePingExtension(
+    p: PortalProtocol,
+    payloadType: uint16,
+    encodedPayload: ByteList[1100],
+    srcId: NodeId,
+): (uint16, ByteList[1100]) =
+  if payloadType notin p.pingExtensionCapabilities:
+    return encodeErrorPayload(ErrorCode.ExtensionNotSupported)
+
+  case payloadType
+  of CapabilitiesType:
+    let payload = decodeSsz(encodedPayload.asSeq(), CapabilitiesPayload).valueOr:
+      return encodeErrorPayload(ErrorCode.FailedToDecodePayload)
+
+    p.radiusCache.put(srcId, payload.data_radius)
+
+    (
+      payloadType,
+      encodePayload(
+        CapabilitiesPayload(
+          client_info: ByteList[MAX_CLIENT_INFO_BYTE_LENGTH].init(@[]),
+          data_radius: p.dataRadius(),
+          capabilities: List[uint16, MAX_CAPABILITIES_LENGTH].init(
+            p.pingExtensionCapabilities.toSeq()
+          ),
+        )
+      ),
+    )
+  of BasicRadiusType:
+    let payload = decodeSsz(encodedPayload.asSeq(), BasicRadiusPayload).valueOr:
+      return encodeErrorPayload(ErrorCode.FailedToDecodePayload)
+
+    p.radiusCache.put(srcId, payload.data_radius)
+
+    (payloadType, encodePayload(HistoryRadiusPayload(data_radius: p.dataRadius())))
+  of HistoryRadiusType:
+    let payload = decodeSsz(encodedPayload.asSeq(), HistoryRadiusPayload).valueOr:
+      return encodeErrorPayload(ErrorCode.FailedToDecodePayload)
+
+    p.radiusCache.put(srcId, payload.data_radius)
+
+    (
+      payloadType,
+      encodePayload(
+        HistoryRadiusPayload(data_radius: p.dataRadius(), ephemeral_header_count: 0)
+      ),
+    )
+  else:
+    encodeErrorPayload(ErrorCode.ExtensionNotSupported)
+
 proc handlePing(p: PortalProtocol, ping: PingMessage, srcId: NodeId): seq[byte] =
-  # TODO: This should become custom per Portal Network
   # TODO: Need to think about the effect of malicious actor sending lots of
   # pings from different nodes to clear the LRU.
-  let customPayloadDecoded =
-    try:
-      SSZ.decode(ping.customPayload.asSeq(), CustomPayload)
-    except SerializationError:
-      # invalid custom payload, send empty back
-      return @[]
-  p.radiusCache.put(srcId, customPayloadDecoded.dataRadius)
+  let (payloadType, payload) =
+    handlePingExtension(p, ping.payload_type, ping.payload, srcId)
 
-  let customPayload = CustomPayload(dataRadius: p.dataRadius())
-  let p = PongMessage(
-    enrSeq: p.localNode.record.seqNum,
-    customPayload: ByteList[2048](SSZ.encode(customPayload)),
+  encodeMessage(
+    PongMessage(
+      enrSeq: p.localNode.record.seqNum, payload_type: payloadType, payload: payload
+    )
   )
-
-  encodeMessage(p)
 
 proc handleFindNodes(p: PortalProtocol, fn: FindNodesMessage): seq[byte] =
   if fn.distances.len == 0:
@@ -573,6 +616,7 @@ proc new*(
     bootstrapRecords: openArray[Record] = [],
     distanceCalculator: DistanceCalculator = XorDistanceCalculator,
     config: PortalProtocolConfig = defaultPortalProtocolConfig,
+    pingExtensionCapabilities: set[uint16] = {CapabilitiesType},
 ): T =
   let proto = PortalProtocol(
     protocolHandler: messageHandler,
@@ -595,6 +639,7 @@ proc new*(
     offerQueue: newAsyncQueue[OfferRequest](config.maxConcurrentOffers),
     pingTimings: Table[NodeId, chronos.Moment](),
     config: config,
+    pingExtensionCapabilities: pingExtensionCapabilities,
   )
 
   proto.baseProtocol.registerTalkProtocol(@(proto.protocolId), proto).expect(
@@ -657,10 +702,19 @@ proc reqResponse[Request: SomeMessage, Response: SomeMessage](
 proc pingImpl*(
     p: PortalProtocol, dst: Node
 ): Future[PortalResult[PongMessage]] {.async: (raises: [CancelledError]).} =
-  let customPayload = CustomPayload(dataRadius: p.dataRadius())
+  let pingPayload = encodePayload(
+    CapabilitiesPayload(
+      client_info: ByteList[MAX_CLIENT_INFO_BYTE_LENGTH].init(@[]),
+      data_radius: p.dataRadius(),
+      capabilities:
+        List[uint16, MAX_CAPABILITIES_LENGTH].init(p.pingExtensionCapabilities.toSeq()),
+    )
+  )
+
   let ping = PingMessage(
     enrSeq: p.localNode.record.seqNum,
-    customPayload: ByteList[2048](SSZ.encode(customPayload)),
+    payload_type: CapabilitiesType,
+    payload: pingPayload,
   )
 
   return await reqResponse[PingMessage, PongMessage](p, dst, ping)
@@ -701,7 +755,9 @@ proc recordsFromBytes(rawRecords: List[ByteList[2048], 32]): PortalResult[seq[Re
 
 proc ping*(
     p: PortalProtocol, dst: Node
-): Future[PortalResult[PongMessage]] {.async: (raises: [CancelledError]).} =
+): Future[PortalResult[(uint64, CapabilitiesPayload)]] {.
+    async: (raises: [CancelledError])
+.} =
   let pongResponse = await p.pingImpl(dst)
 
   if pongResponse.isOk():
@@ -709,17 +765,20 @@ proc ping*(
     p.pingTimings[dst.id] = now(chronos.Moment)
 
     let pong = pongResponse.get()
-    # TODO: This should become custom per Portal Network
-    let customPayloadDecoded =
-      try:
-        SSZ.decode(pong.customPayload.asSeq(), CustomPayload)
-      except SerializationError:
-        # invalid custom payload
-        return err("Pong message contains invalid custom payload")
 
-    p.radiusCache.put(dst.id, customPayloadDecoded.dataRadius)
+    # Note: currently only decoding as capabilities payload as this is the only
+    # one that we support sending.
+    if pong.payload_type != CapabilitiesType:
+      return err("Pong message contains invalid or error payload")
 
-  return pongResponse
+    let payload = decodeSsz(pong.payload.asSeq(), CapabilitiesPayload).valueOr:
+      return err("Pong message contains invalid CapabilitiesPayload")
+
+    p.radiusCache.put(dst.id, payload.data_radius)
+
+    ok((pong.enrSeq, payload))
+  else:
+    err(pongResponse.error)
 
 proc findNodes*(
     p: PortalProtocol, dst: Node, distances: seq[uint16]
@@ -1691,8 +1750,8 @@ proc revalidateNode*(p: PortalProtocol, n: Node) {.async: (raises: [CancelledErr
   let pong = await p.ping(n)
 
   if pong.isOk():
-    let res = pong.get()
-    if res.enrSeq > n.record.seqNum:
+    let (enrSeq, _) = pong.get()
+    if enrSeq > n.record.seqNum:
       # Request new ENR
       let nodesMessage = await p.findNodes(n, @[0'u16])
       if nodesMessage.isOk():
