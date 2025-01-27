@@ -135,7 +135,7 @@ proc setupHost(call: CallParams, keepStack: bool): TransactionHost =
     origin         : call.origin.get(call.sender),
     gasPrice       : call.gasPrice,
     versionedHashes: call.versionedHashes,
-    blobBaseFee    : getBlobBaseFee(vmState.blockCtx.excessBlobGas, vmState.fork >= FkPrague),
+    blobBaseFee    : getBlobBaseFee(vmState.blockCtx.excessBlobGas, vmState.com, vmState.fork),
   )
 
   # reset global gasRefund counter each time
@@ -232,7 +232,7 @@ proc prepareToRunComputation(host: TransactionHost, call: CallParams) =
       # EIP-4844
       if fork >= FkCancun:
         let blobFee = calcDataFee(call.versionedHashes.len,
-          vmState.blockCtx.excessBlobGas, fork >= FkPrague)
+          vmState.blockCtx.excessBlobGas, vmState.com, fork)
         db.subBalance(call.sender, blobFee)
 
 proc calculateAndPossiblyRefundGas(host: TransactionHost, call: CallParams): GasInt =

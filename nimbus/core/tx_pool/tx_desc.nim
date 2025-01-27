@@ -184,8 +184,7 @@ proc classifyValid(xp: TxPoolRef; tx: Transaction, sender: Address): bool =
   if tx.txType == TxEip4844:
     let
       excessBlobGas = xp.excessBlobGas
-      electra = xp.vmState.fork >= FkPrague
-      blobGasPrice = getBlobBaseFee(excessBlobGas, electra)
+      blobGasPrice = getBlobBaseFee(excessBlobGas, xp.vmState.com, xp.vmState.fork)
     if tx.maxFeePerBlobGas < blobGasPrice:
       debug "Invalid transaction: maxFeePerBlobGas lower than blobGasPrice",
         maxFeePerBlobGas = tx.maxFeePerBlobGas,

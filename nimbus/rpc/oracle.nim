@@ -1,5 +1,5 @@
 # Nimbus
-# Copyright (c) 2024 Status Research & Development GmbH
+# Copyright (c) 2024-2025 Status Research & Development GmbH
 # Licensed under either of
 #  * Apache License, version 2.0, ([LICENSE-APACHE](LICENSE-APACHE))
 #  * MIT license ([LICENSE-MIT](LICENSE-MIT))
@@ -100,13 +100,13 @@ func calcBaseFee(com: CommonRef, bc: BlockContent): UInt256 =
 # fills in the rest of the fields.
 proc processBlock(oracle: Oracle, bc: BlockContent, percentiles: openArray[float64]): ProcessedFees =
   let
-    electra = com.isPragueOrLater(bc.header.timestamp)
+    fork = com.toEVMFork(bc.header)
     maxBlobGasPerBlock = getMaxBlobGasPerBlock(electra)
   result = ProcessedFees(
     baseFee: bc.header.baseFeePerGas.get(0.u256),
-    blobBaseFee: getBlobBaseFee(bc.header.excessBlobGas.get(0'u64), electra),
+    blobBaseFee: getBlobBaseFee(bc.header.excessBlobGas.get(0'u64), com, fork),
     nextBaseFee: calcBaseFee(oracle.com, bc),
-    nextBlobBaseFee: getBlobBaseFee(calcExcessBlobGas(bc.header, electra), electra),
+    nextBlobBaseFee: getBlobBaseFee(calcExcessBlobGas(bc.header, com, fork), com, fork),
     gasUsedRatio: float64(bc.header.gasUsed) / float64(bc.header.gasLimit),
     blobGasUsedRatio: float64(bc.header.blobGasUsed.get(0'u64)) / float64(maxBlobGasPerBlock)
   )
