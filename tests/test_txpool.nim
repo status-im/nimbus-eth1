@@ -642,7 +642,7 @@ proc txPoolMain*() =
       # override current blobSchedule
       let bs = cc.blobSchedule[Cancun]
       cc.blobSchedule[Cancun] = Opt.some(
-        BlobSchedule(target: 2, max: 3)
+        BlobSchedule(target: 2, max: 3, baseFeeUpdateFraction: 3338477)
       )
 
       # allow 3 blobs

@@ -398,6 +398,10 @@ proc configureBlobSchedule(conf: ChainConfig) =
   for fork in Prague..HardFork.high:
     if conf.blobSchedule[fork].isNone:
       conf.blobSchedule[fork] = conf.blobSchedule[prevFork]
+    if conf.blobSchedule[fork].baseFeeUpdateFraction == 0:
+      # Set fallback to Cancun's baseFeeUpdateFraction and prevent division by zero
+      warn "baseFeeUpdateFraction not set, fallback to Cancun's", fork=fork
+      conf.blobSchedule[fork].baseFeeUpdateFraction = 3_338_477'u64
     prevFork = fork
 
 proc parseGenesis*(data: string): Genesis
@@ -487,7 +491,7 @@ func defaultBlobSchedule*(): array[Cancun..HardFork.high, Opt[BlobSchedule]] =
   [
     Cancun: Opt.some(BlobSchedule(target: 3'u64, max: 6'u64, baseFeeUpdateFraction: 3_338_477'u64)),
     Prague: Opt.some(BlobSchedule(target: 6'u64, max: 9'u64, baseFeeUpdateFraction: 5_007_716'u64)),
-    Osaka : Opt.some(BlobSchedule(target: 6'u64, max: 9'u64, baseFeeUpdateFraction: 5_007_716'u64)),
+    Osaka : Opt.some(BlobSchedule(target: 9'u64, max: 12'u64, baseFeeUpdateFraction: 5_007_716'u64)),
   ]
 
 func chainConfigForNetwork*(id: NetworkId): ChainConfig =
