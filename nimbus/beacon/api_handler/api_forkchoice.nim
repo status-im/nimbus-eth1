@@ -50,6 +50,10 @@ template validateVersion(attr, com, apiVersion) =
       if version > Version.V2:
         raise invalidAttr("if timestamp is Shanghai or later," &
           " payloadAttributes must be PayloadAttributesV2")
+      # ForkchoiceUpdatedV2 after Cancun with beacon root field must return INVALID_PAYLOAD_ATTRIBUTES
+      if attr.parentBeaconBlockRoot.isSome:
+        raise invalidAttr("forkChoiceUpdatedV2 with beacon root field" &
+          " must return INVALID_PAYLOAD_ATTRIBUTES")
     else:
       if version != Version.V1:
         raise invalidParams("if timestamp is earlier than Shanghai," &
