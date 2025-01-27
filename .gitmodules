@@ -171,7 +171,7 @@
 [submodule "vendor/nimbus-eth2"]
 	path = vendor/nimbus-eth2
 	url = https://github.com/status-im/nimbus-eth2.git
-	branch = unstable
+	branch = dev/pedro/unified_changes
 [submodule "vendor/nim-taskpools"]
 	path = vendor/nim-taskpools
 	url = https://github.com/status-im/nim-taskpools.git
@@ -240,4 +240,24 @@
 [submodule "vendor/nim-minilru"]
 	path = vendor/nim-minilru
 	url = https://github.com/status-im/nim-minilru.git
+	branch = master
+[submodule "vendor/mainnet"]
+	path = vendor/mainnet
+	url = https://github.com/eth-clients/mainnet.git
+	ignore = untracked
+	branch = master
+[submodule "vendor/holesky"]
+	path = vendor/holesky
+	url = https://github.com/eth-clients/holesky.git
+	ignore = untracked
+	branch = master
+[submodule "vendor/sepolia"]
+	path = vendor/sepolia
+	url = https://github.com/eth-clients/sepolia.git
+	ignore = untracked
+	branch = master
+[submodule "vendor/gnosis-chain-configs"]
+	path = vendor/gnosis-chain-configs
+	url = https://github.com/gnosischain/configs.git
+	ignore = untracked
 	branch = master
