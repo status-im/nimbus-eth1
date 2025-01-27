@@ -45,8 +45,7 @@ template validateVersion(attr, com, apiVersion) =
           " doesn't support PayloadAttributes" & $version)
       # ForkchoiceUpdatedV2 after Cancun with beacon root field must return INVALID_PAYLOAD_ATTRIBUTES
       if apiVersion == Version.V2 and attr.parentBeaconBlockRoot.isSome:
-        raise invalidAttr("forkChoiceUpdatedV2 with beacon root field" &
-          " must return INVALID_PAYLOAD_ATTRIBUTES")
+        raise invalidAttr("forkChoiceUpdatedV2 with beacon root field is invalid after Cancun")
     elif com.isShanghaiOrLater(timestamp):
       if version < Version.V2:
         raise invalidParams("forkChoiceUpdated" & $apiVersion &
