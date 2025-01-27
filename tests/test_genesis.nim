@@ -176,6 +176,11 @@ proc customGenesisTest() =
       validateBlobSchedule(cg, Prague, 6, 9, 5007716)
       validateBlobSchedule(cg, Osaka, 6, 9, 5007716)
 
+      check loadNetworkParams("blobschedule_nobasefee.json".findFilePath, cg)
+      validateBlobSchedule(cg, Cancun, 3, 6, 3338477)
+      validateBlobSchedule(cg, Prague, 6, 9, 3338477)
+      validateBlobSchedule(cg, Osaka, 6, 9, 3338477)
+
 proc genesisMain*() =
   genesisTest()
   customGenesisTest()
