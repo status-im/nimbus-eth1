@@ -1,5 +1,5 @@
 # Fluffy
-# Copyright (c) 2021-2024 Status Research & Development GmbH
+# Copyright (c) 2021-2025 Status Research & Development GmbH
 # Licensed and distributed under either of
 #   * MIT license (license terms in the root directory or at https://opensource.org/licenses/MIT).
 #   * Apache v2 license (license terms in the root directory or at https://www.apache.org/licenses/LICENSE-2.0).
@@ -16,7 +16,8 @@ import
   eth/p2p/discoveryv5/routing_table,
   nimcrypto/[hash, sha2],
   eth/p2p/discoveryv5/protocol as discv5_protocol,
-  ../../network/wire/[portal_protocol, portal_stream, portal_protocol_config],
+  ../../network/wire/
+    [portal_protocol, portal_stream, portal_protocol_config, ping_extensions],
   ../../database/content_db,
   ../test_helpers
 
@@ -77,13 +78,20 @@ procSuite "Portal Wire Protocol Tests":
 
     let pong = await proto1.ping(proto2.localNode)
 
-    let customPayload =
-      ByteList[2048](SSZ.encode(CustomPayload(dataRadius: UInt256.high())))
+    let customPayload = CapabilitiesPayload(
+      client_info: ByteList[MAX_CLIENT_INFO_BYTE_LENGTH].init(@[]),
+      data_radius: UInt256.high(),
+      capabilities: List[uint16, MAX_CAPABILITIES_LENGTH].init(
+        proto1.pingExtensionCapabilities.toSeq()
+      ),
+    )
 
+    check pong.isOk()
+
+    let (enrSeq, payload) = pong.value()
     check:
-      pong.isOk()
-      pong.get().enrSeq == 1'u64
-      pong.get().customPayload == customPayload
+      enrSeq == 1'u64
+      payload == customPayload
 
     await proto1.stopPortalProtocol()
     await proto2.stopPortalProtocol()

@@ -1,5 +1,5 @@
 # Nimbus
-# Copyright (c) 2018-2024 Status Research & Development GmbH
+# Copyright (c) 2018-2025 Status Research & Development GmbH
 # Licensed under either of
 #  * Apache License, version 2.0, ([LICENSE-APACHE](LICENSE-APACHE) or
 #    http://www.apache.org/licenses/LICENSE-2.0)
@@ -212,41 +212,6 @@ template getTransientStorage*(c: Computation, slot: UInt256): UInt256 =
   else:
     c.vmState.readOnlyLedger.
       getTransientStorage(c.msg.contractAddress, slot)
-
-template resolveCodeSize*(c: Computation, address: Address): uint =
-  when evmc_enabled:
-    let delegateTo = c.host.getDelegateAddress(address)
-    if delegateTo == default(common.Address):
-      c.host.getCodeSize(address)
-    else:
-      c.host.getCodeSize(delegateTo)
-  else:
-    uint(c.vmState.readOnlyLedger.resolveCodeSize(address))
-
-template resolveCodeHash*(c: Computation, address: Address): Hash32=
-  when evmc_enabled:
-    let delegateTo = c.host.getDelegateAddress(address)
-    if delegateTo == default(common.Address):
-      c.host.getCodeHash(address)
-    else:
-      c.host.getCodeHash(delegateTo)
-  else:
-    let
-      db = c.vmState.readOnlyLedger
-    if not db.accountExists(address) or db.isEmptyAccount(address):
-      default(Hash32)
-    else:
-      db.resolveCodeHash(address)
-
-template resolveCode*(c: Computation, address: Address): CodeBytesRef =
-  when evmc_enabled:
-    let delegateTo = c.host.getDelegateAddress(address)
-    if delegateTo == default(common.Address):
-      CodeBytesRef.init(c.host.copyCode(address))
-    else:
-      CodeBytesRef.init(c.host.copyCode(delegateTo))
-  else:
-    c.vmState.readOnlyLedger.resolveCode(address)
 
 func newComputation*(vmState: BaseVMState,
                      keepStack: bool,

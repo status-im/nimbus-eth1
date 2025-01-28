@@ -43,6 +43,9 @@ template validateVersion(attr, com, apiVersion) =
       if version > Version.V3:
         raise invalidAttr("forkChoiceUpdated" & $apiVersion &
           " doesn't support PayloadAttributes" & $version)
+      # ForkchoiceUpdatedV2 after Cancun with beacon root field must return INVALID_PAYLOAD_ATTRIBUTES
+      if apiVersion == Version.V2 and attr.parentBeaconBlockRoot.isSome:
+        raise invalidAttr("forkChoiceUpdatedV2 with beacon root field is invalid after Cancun")
     elif com.isShanghaiOrLater(timestamp):
       if version < Version.V2:
         raise invalidParams("forkChoiceUpdated" & $apiVersion &
@@ -58,20 +61,13 @@ template validateVersion(attr, com, apiVersion) =
 template validateHeaderTimestamp(header, com, apiVersion) =
   # See fCUV3 specification No.2 bullet iii
   # https://github.com/ethereum/execution-apis/blob/v1.0.0-beta.4/src/engine/cancun.md#specification-1
-  if com.isCancunOrLater(header.timestamp):
-    if apiVersion != Version.V3:
-      raise invalidAttr("forkChoiceUpdated" & $apiVersion &
-          " doesn't support head block with timestamp >= Cancun")
+  #  No additional restrictions on the timestamp of the head block
   # See fCUV2 specification No.2 bullet 1
   # https://github.com/ethereum/execution-apis/blob/v1.0.0-beta.4/src/engine/shanghai.md#specification-1
-  elif com.isShanghaiOrLater(header.timestamp):
-    if apiVersion != Version.V2:
+  if com.isShanghaiOrLater(header.timestamp):
+    if apiVersion < Version.V2:
       raise invalidAttr("forkChoiceUpdated" & $apiVersion &
           " doesn't support head block with Shanghai timestamp")
-  else:
-    if apiVersion != Version.V1:
-      raise invalidAttr("forkChoiceUpdated" & $apiVersion &
-          " doesn't support head block with timestamp earlier than Shanghai")
 
 proc forkchoiceUpdated*(ben: BeaconEngineRef,
                         apiVersion: Version,

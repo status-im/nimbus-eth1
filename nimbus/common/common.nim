@@ -290,6 +290,9 @@ func toEVMFork*(com: CommonRef, forkDeterminer: ForkDeterminationInfo): EVMFork 
   let fork = com.toHardFork(forkDeterminer)
   ToEVMFork[fork]
 
+func toEVMFork*(com: CommonRef, header: Header): EVMFork =
+  com.toEVMFork(forkDeterminationInfo(header))
+
 func isSpuriousOrLater*(com: CommonRef, number: BlockNumber): bool =
   com.toHardFork(number.forkDeterminationInfo) >= Spurious
 
@@ -425,6 +428,10 @@ func maxBlobsPerBlock*(com: CommonRef, fork: HardFork): uint64 =
 func targetBlobsPerBlock*(com: CommonRef, fork: HardFork): uint64 =
   doAssert(fork >= Cancun)
   com.config.blobSchedule[fork].expect("blobSchedule initialized").target
+
+func baseFeeUpdateFraction*(com: CommonRef, fork: HardFork): uint64 =
+  doAssert(fork >= Cancun)
+  com.config.blobSchedule[fork].expect("blobSchedule initialized").baseFeeUpdateFraction
 
 # ------------------------------------------------------------------------------
 # Setters

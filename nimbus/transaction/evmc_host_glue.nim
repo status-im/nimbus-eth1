@@ -1,6 +1,6 @@
 # Nimbus - Binary compatibility on the host side of the EVMC API interface
 #
-# Copyright (c) 2019-2024 Status Research & Development GmbH
+# Copyright (c) 2019-2025 Status Research & Development GmbH
 # Licensed under either of
 #  * Apache License, version 2.0, ([LICENSE-APACHE](LICENSE-APACHE) or http://www.apache.org/licenses/LICENSE-2.0)
 #  * MIT license ([LICENSE-MIT](LICENSE-MIT) or http://opensource.org/licenses/MIT)
@@ -90,9 +90,6 @@ proc setTransientStorage(p: evmc_host_context, address: var evmc_address,
                 key, value: var evmc_bytes32) {.cdecl.} =
   toHost(p).setTransientStorage(address.fromEvmc, key.flip256.fromEvmc, value.flip256.fromEvmc)
 
-proc getDelegateAddress(p: evmc_hosT_context, address: var evmc_address): evmc_address {.cdecl.} =
-  toHost(p).getDelegateAddress(address.fromEvmc).toEvmc
-
 let hostInterface = evmc_host_interface(
   account_exists: accountExists,
   get_storage:    getStorage,
@@ -110,7 +107,6 @@ let hostInterface = evmc_host_interface(
   access_storage: accessStorage,
   get_transient_storage: getTransientStorage,
   set_transient_storage: setTransientStorage,
-  get_delegate_address: getDelegateAddress,
 )
 
 proc evmcExecComputation*(host: TransactionHost): EvmcResult =

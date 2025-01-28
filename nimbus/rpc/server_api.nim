@@ -373,7 +373,7 @@ proc setupServerAPI*(api: ServerAPIRef, server: RpcServer, ctx: EthContext) =
         let gasUsed = receipt.cumulativeGasUsed - prevGasUsed
         prevGasUsed = receipt.cumulativeGasUsed
         if idx == txDetails.index:
-          return populateReceipt(receipt, gasUsed, tx, txDetails.index, header, api.com.isPragueOrLater(header.timestamp))
+          return populateReceipt(receipt, gasUsed, tx, txDetails.index, header, api.com)
         idx.inc
     else:
       # Receipt in memory
@@ -387,8 +387,7 @@ proc setupServerAPI*(api: ServerAPIRef, server: RpcServer, ctx: EthContext) =
         if txid == idx:
           return populateReceipt(
             receipt, gasUsed, blkdesc.blk.transactions[txid], txid, blkdesc.blk.header,
-            api.com.isPragueOrLater(blkdesc.blk.header.timestamp)
-          )
+            api.com)
 
         idx.inc
 
@@ -673,7 +672,7 @@ proc setupServerAPI*(api: ServerAPIRef, server: RpcServer, ctx: EthContext) =
       for receipt in receipts:
         let gasUsed = receipt.cumulativeGasUsed - prevGasUsed
         prevGasUsed = receipt.cumulativeGasUsed
-        recs.add populateReceipt(receipt, gasUsed, txs[index], index, header, api.com.isPragueOrLater(header.timestamp))
+        recs.add populateReceipt(receipt, gasUsed, txs[index], index, header, api.com)
         inc index
       return Opt.some(recs)
     except CatchableError:
@@ -699,7 +698,7 @@ proc setupServerAPI*(api: ServerAPIRef, server: RpcServer, ctx: EthContext) =
     if header.excessBlobGas.isNone:
       raise newException(ValueError, "excessBlobGas missing from latest header")
     let blobBaseFee =
-      getBlobBaseFee(header.excessBlobGas.get, api.com.isPragueOrLater(header.timestamp)) * header.blobGasUsed.get.u256
+      getBlobBaseFee(header.excessBlobGas.get, api.com, api.com.toEVMFork(header)) * header.blobGasUsed.get.u256
     if blobBaseFee > high(uint64).u256:
       raise newException(ValueError, "blobBaseFee is bigger than uint64.max")
     return w3Qty blobBaseFee.truncate(uint64)
