@@ -108,6 +108,12 @@ proc writeBaggage(c: ForkedChainRef,
 proc validateBlock(c: ForkedChainRef,
           parent: BlockPos,
           blk: Block): Result[void, string] =
+  let blkHash = blk.header.blockHash
+
+  if c.hashToBlock.hasKey(blkHash):
+    # Block exists, just return
+    return ok()
+
   let
     parentFrame = parent.txFrame
     txFrame = parentFrame.txFrameBegin
@@ -117,7 +123,6 @@ proc validateBlock(c: ForkedChainRef,
     txFrame.rollback()
     return err(res.error)
 
-  let blkHash = blk.header.blockHash
   c.writeBaggage(blk, txFrame, res.value)
   c.updateBranch(parent, blk, blkHash, txFrame, move(res.value))
 
@@ -290,6 +295,7 @@ proc updateHead(c: ForkedChainRef, head: BlockPos) =
     c.removeBlockFromChain(head.branch.blocks[i])
 
   head.branch.blocks.setLen(head.index+1)
+  c.activeBranch.headTxFrame.setHead(head.branch.headHash).expect("OK")
 
 proc updateFinalized(c: ForkedChainRef, finalized: BlockPos) =
   # Pruning
@@ -476,8 +482,13 @@ proc forkChoice*(c: ForkedChainRef,
     # and there is no request to new finality.
     return ok()
 
-  # Find the unique branch where `headHash` is a member of.
-  let head = ?c.findHeadPos(headHash)
+  let
+    # Find the unique branch where `headHash` is a member of.
+    head = ?c.findHeadPos(headHash)
+    # Finalized block must be parent or on the new canonical chain which is
+    # represented by `head`.
+    finalized = ?c.findFinalizedPos(finalizedHash, head)
+
   # Head maybe moved backward or moved to other branch.
   c.updateHead(head)
 
@@ -485,9 +496,6 @@ proc forkChoice*(c: ForkedChainRef,
     # skip updateBase and updateFinalized if finalizedHash is zero.
     return ok()
 
-  # Finalized block must be parent or on the new canonical chain which is
-  # represented by `head`.
-  let finalized = ?c.findFinalizedPos(finalizedHash, head)
   c.updateFinalized(finalized)
 
   let newBase = c.calculateNewBase(finalized, head)
