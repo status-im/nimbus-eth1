@@ -1602,8 +1602,12 @@ proc neighborhoodGossip*(
   # table, but at the same time avoid unnecessary node lookups.
   # It might still cause issues in data getting propagated in a wider id range.
 
-  let closestLocalNodes =
+  var closestLocalNodes =
     p.routingTable.neighbours(NodeId(contentId), k = 16, seenOnly = true)
+
+  # Shuffling the order of the nodes in order to not always hit the same node
+  # first for the same request.
+  p.baseProtocol.rng[].shuffle(closestLocalNodes)
 
   var gossipNodes: seq[Node]
   for node in closestLocalNodes:
