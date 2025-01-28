@@ -243,8 +243,6 @@ proc removeBlockFromChain(c: ForkedChainRef, bd: BlockDesc, commit = false) =
   c.hashToBlock.del(bd.hash)
   for tx in bd.blk.transactions:
     c.txRecords.del(rlpHash(tx))
-  # TODO when committing, blocks that refer to the committed frame need to
-  #      update their parent field / get a new frame ..
   if commit:
     if bd.txFrame != c.baseTxFrame:
       bd.txFrame.commit()
@@ -341,13 +339,13 @@ proc updateBase(c: ForkedChainRef, newBase: BlockPos) =
   # e.g. B3 backward. Switch to parent branch if needed.
   var
     branch = newBase.branch
-    number = newBase.number
+    number = newBase.number - 1
     count  = 0
 
   while not branch.isNil:
     let
       tailNumber = branch.tailNumber
-      nextIndex  = int(number - tailNumber + 1)
+      nextIndex  = int(number - tailNumber)
 
     var numDeleted = 0
     while number >= tailNumber:
@@ -377,6 +375,10 @@ proc updateBase(c: ForkedChainRef, newBase: BlockPos) =
           branch: branch,
           index : i
         )
+
+      # Update base txFrame
+      blocks[0].txFrame.reparent(branch.blocks[nextIndex-1].txFrame)
+      c.baseTxFrame = blocks[0].txFrame
       branch.blocks = move(blocks)
 
     branch = branch.parent
@@ -441,32 +443,6 @@ proc init*(
     baseTxFrame:     baseTxFrame,
     extraValidation: extraValidation,
     baseDistance:    baseDistance)
-
-proc newForkedChain*(com: CommonRef,
-                     baseHeader: Header,
-                     baseDistance: uint64 = BaseDistance,
-                     extraValidation: bool = true): ForkedChainRef =
-  ## This constructor allows to set up the base state which might be needed
-  ## for some particular test or other applications. Otherwise consider
-  ## `init()`.
-  let
-    baseHash = baseHeader.blockHash
-    baseTxFrame = com.db.baseTxFrame()
-    baseBranch = branch(baseHeader, baseHash, baseTxFrame)
-
-  let chain = ForkedChainRef(
-    com: com,
-    baseBranch:      baseBranch,
-    activeBranch:    baseBranch,
-    branches:        @[baseBranch],
-    hashToBlock:     {baseHash: baseBranch.lastBlockPos}.toTable,
-    baseTxFrame :    baseTxFrame,
-    extraValidation: extraValidation,
-    baseDistance:    baseDistance)
-
-  # update global syncStart
-  com.syncStart = baseHeader.number
-  chain
 
 proc importBlock*(c: ForkedChainRef, blk: Block): Result[void, string] =
   ## Try to import block to canonical or side chain.

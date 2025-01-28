@@ -626,6 +626,10 @@ proc dispose*(tx: CoreDbTxRef) =
     raiseAssert $api & ": " & $error
   tx.ifTrackNewApi: debug logTxt, api, elapsed, prvLevel
 
+func reparent*(tx: CoreDbTxRef, parent: CoreDbTxRef) =
+  tx.aTx.parent = parent.aTx.parent
+  tx.kTx.parent = parent.kTx.parent
+
 # ------------------------------------------------------------------------------
 # Public tracer methods
 # ------------------------------------------------------------------------------

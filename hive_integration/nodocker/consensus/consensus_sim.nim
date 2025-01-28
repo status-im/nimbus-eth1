@@ -27,7 +27,7 @@ proc processChainData(cd: ChainData, taskPool: Taskpool): TestStatus =
       cd.params
     )
 
-  let c = newForkedChain(com, com.genesisHeader)
+  let c = ForkedChainRef.new(com)
 
   for bytes in cd.blocksRlp:
     # ignore return value here

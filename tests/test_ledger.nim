@@ -102,7 +102,7 @@ proc initEnv(): TestEnv =
       conf.networkId,
       conf.networkParams
     )
-    chain = newForkedChain(com, com.genesisHeader)
+    chain = ForkedChainRef.new(com)
 
   TestEnv(
     com     : com,

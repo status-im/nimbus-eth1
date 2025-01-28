@@ -15,10 +15,10 @@ import
 
 type
   BlockDesc* = object
-    blk*: Block
-    txFrame*: CoreDbTxRef
+    blk*     : Block
+    txFrame* : CoreDbTxRef
     receipts*: seq[Receipt]
-    hash*: Hash32
+    hash*    : Hash32
 
   BlockPos* = object
     branch*: BranchRef
