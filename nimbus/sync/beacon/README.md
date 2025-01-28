@@ -320,7 +320,7 @@ be available if *nimbus* is compiled with the additional make flags
 | nec_sync_coupler             | block height | **C**, *0 when idle* |
 | nec_sync_dangling            | block height | **D**, *0 when idle* |
 | nec_sync_head                | block height | **H**, *0 when idle* |
-| nec_consensus_head           | block height | **T**, *increasing*  |
+| nec_sync_consensus_head      | block height | **T**, *increasing*  |
 |                              |              |                      |
 | nec_sync_header_lists_staged | size | # of staged header list records      |
 | nec_sync_headers_unprocessed | size | # of accumulated header block numbers|

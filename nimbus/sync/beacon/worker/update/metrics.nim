@@ -33,7 +33,7 @@ declareGauge nec_sync_dangling, "" &
 declareGauge nec_sync_head, "" &
   "Ending/max block number of higher up headers chain"
 
-declareGauge nec_consensus_head, "" &
+declareGauge nec_sync_consensus_head, "" &
   "Block number of sync target (would be consensus header)"
 
 
@@ -63,7 +63,7 @@ template updateMetricsImpl(ctx: BeaconCtxRef) =
 
   # Show last valid state.
   if 0 < ctx.target.consHead.number:
-    metrics.set(nec_consensus_head, ctx.target.consHead.number.int64)
+    metrics.set(nec_sync_consensus_head, ctx.target.consHead.number.int64)
 
   metrics.set(nec_sync_header_lists_staged, ctx.headersStagedQueueLen())
   metrics.set(nec_sync_headers_unprocessed,
