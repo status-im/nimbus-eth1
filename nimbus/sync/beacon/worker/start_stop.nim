@@ -23,13 +23,18 @@ import
 # Private functions
 # ------------------------------------------------------------------------------
 
-proc querySyncStatusCB(
+proc queryProgressCB(
     ctx: BeaconCtxRef;
     info: static[string];
-      ): BeaconSyncerIsActiveCB =
+      ): BeaconSyncerProgressCB =
   ## Syncer status query function/closure.
-  return proc(): bool =
-    not ctx.hibernate()
+  return proc(): tuple[start, current, target: BlockNumber] =
+    if not ctx.hibernate():
+      return (ctx.layout.coupler,
+              max(ctx.layout.coupler,
+                  min(ctx.chain.latestNumber(), ctx.layout.head)),
+              ctx.layout.head)
+    # (0,0,0)
 
 proc updateBeaconHeaderCB(
     ctx: BeaconCtxRef;
@@ -102,13 +107,13 @@ proc setupServices*(ctx: BeaconCtxRef; info: static[string]) =
   ## Helper for `setup()`: Enable external call-back based services
   # Activate target request. Will be called from RPC handler.
   ctx.pool.chain.com.reqBeaconSyncerTarget = ctx.updateBeaconHeaderCB info
-  # Provide status info: running or hibernating
-  ctx.pool.chain.com.beaconSyncerIsActive = ctx.querySyncStatusCB info
+  # Provide progress info
+  ctx.pool.chain.com.beaconSyncerProgress = ctx.queryProgressCB info
 
 proc destroyServices*(ctx: BeaconCtxRef) =
   ## Helper for `release()`
   ctx.pool.chain.com.reqBeaconSyncerTarget = ReqBeaconSyncerTargetCB(nil)
-  ctx.pool.chain.com.beaconSyncerIsActive = BeaconSyncerIsActiveCB(nil)
+  ctx.pool.chain.com.beaconSyncerProgress = BeaconSyncerProgressCB(nil)
 
 # ---------
 
