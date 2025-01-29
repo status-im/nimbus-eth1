@@ -1,5 +1,5 @@
 # Nimbus
-# Copyright (c) 2023-2024 Status Research & Development GmbH
+# Copyright (c) 2023-2025 Status Research & Development GmbH
 # Licensed and distributed under either of
 #   * MIT license (license terms in the root directory or at
 #     https://opensource.org/licenses/MIT).
@@ -17,45 +17,11 @@ import
   ../worker_desc,
   ./blocks_staged/staged_queue,
   ./headers_staged/staged_queue,
-  ./update/metrics,
   "."/[blocks_unproc, db, headers_unproc, update]
-
-when enableTicker:
-  import ./start_stop/ticker
 
 # ------------------------------------------------------------------------------
 # Private functions
 # ------------------------------------------------------------------------------
-
-when enableTicker:
-  proc tickerUpdater(ctx: BeaconCtxRef): TickerStatsUpdater =
-    ## Legacy stuff, will be probably be superseded by `metrics`
-    return proc: auto =
-      TickerStats(
-        base:            ctx.chain.baseNumber(),
-        latest:          ctx.chain.latestNumber(),
-        coupler:         ctx.layout.coupler,
-        dangling:        ctx.layout.dangling,
-        head:            ctx.layout.head,
-        headOk:          ctx.layout.lastState != idleSyncState,
-        target:          ctx.target.consHead.number,
-        targetOk:        ctx.target.final != 0,
-
-        nHdrStaged:      ctx.headersStagedQueueLen(),
-        hdrStagedTop:    ctx.headersStagedQueueTopKey(),
-        hdrUnprocTop:    ctx.headersUnprocTop(),
-        nHdrUnprocessed: ctx.headersUnprocTotal() + ctx.headersUnprocBorrowed(),
-        nHdrUnprocFragm: ctx.headersUnprocChunks(),
-
-        nBlkStaged:      ctx.blocksStagedQueueLen(),
-        blkStagedBottom: ctx.blocksStagedQueueBottomKey(),
-        blkUnprocBottom: ctx.blocksUnprocBottom(),
-        nBlkUnprocessed: ctx.blocksUnprocTotal() + ctx.blocksUnprocBorrowed(),
-        nBlkUnprocFragm: ctx.blocksUnprocChunks(),
-
-        reorg:           ctx.pool.nReorg,
-        nBuddies:        ctx.pool.nBuddies)
-
 
 proc updateBeaconHeaderCB(
     ctx: BeaconCtxRef;
@@ -92,22 +58,6 @@ proc updateBeaconHeaderCB(
 # ------------------------------------------------------------------------------
 # Public functions
 # ------------------------------------------------------------------------------
-
-when enableTicker:
-  proc setupTicker*(ctx: BeaconCtxRef) =
-    ## Helper for `setup()`: Start ticker
-    ctx.pool.ticker = TickerRef.init(ctx.tickerUpdater)
-
-  proc destroyTicker*(ctx: BeaconCtxRef) =
-    ## Helper for `release()`
-    ctx.pool.ticker.destroy()
-    ctx.pool.ticker = TickerRef(nil)
-
-else:
-  template setupTicker*(ctx: BeaconCtxRef) = discard
-  template destroyTicker*(ctx: BeaconCtxRef) = discard
-
-# ---------
 
 proc setupDatabase*(ctx: BeaconCtxRef; info: static[string]) =
   ## Initalise database related stuff
@@ -157,13 +107,11 @@ proc startBuddy*(buddy: BeaconBuddyRef): bool =
     peer = buddy.peer
   if peer.supports(protocol.eth) and peer.state(protocol.eth).initialized:
     ctx.pool.nBuddies.inc
-    ctx.updateMetrics()
     return true
 
 proc stopBuddy*(buddy: BeaconBuddyRef) =
   let ctx = buddy.ctx
   ctx.pool.nBuddies.dec
-  ctx.updateMetrics(force=(ctx.pool.nBuddies == 0))
 
 # ------------------------------------------------------------------------------
 # End

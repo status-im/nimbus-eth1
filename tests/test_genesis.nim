@@ -152,28 +152,34 @@ proc customGenesisTest() =
       ]) == EmptyRequestsHash
 
     test "BlobSchedule":
-      template validateBlobSchedule(cg, fork, tgt, mx) =
+      template validateBlobSchedule(cg, fork, tgt, mx, fee) =
         check cg.config.blobSchedule[fork].isSome
         if cg.config.blobSchedule[fork].isSome:
           let bs = cg.config.blobSchedule[fork].get
           check bs.target == tgt
           check bs.max == mx
+          check bs.baseFeeUpdateFraction == fee
 
       var cg: NetworkParams
       check loadNetworkParams("blobschedule_cancun_prague.json".findFilePath, cg)
-      validateBlobSchedule(cg, Cancun, 3, 6)
-      validateBlobSchedule(cg, Prague, 6, 9)
-      validateBlobSchedule(cg, Osaka, 6, 9)
+      validateBlobSchedule(cg, Cancun, 3, 6, 3338477)
+      validateBlobSchedule(cg, Prague, 6, 9, 5007716)
+      validateBlobSchedule(cg, Osaka, 6, 9, 5007716)
 
       check loadNetworkParams("blobschedule_cancun_osaka.json".findFilePath, cg)
-      validateBlobSchedule(cg, Cancun, 3, 6)
-      validateBlobSchedule(cg, Prague, 3, 6)
-      validateBlobSchedule(cg, Osaka, 6, 9)
+      validateBlobSchedule(cg, Cancun, 3, 6, 3338477)
+      validateBlobSchedule(cg, Prague, 3, 6, 3338477)
+      validateBlobSchedule(cg, Osaka, 6, 9, 5007716)
 
       check loadNetworkParams("blobschedule_prague.json".findFilePath, cg)
-      validateBlobSchedule(cg, Cancun, 0, 0)
-      validateBlobSchedule(cg, Prague, 6, 9)
-      validateBlobSchedule(cg, Osaka, 6, 9)
+      validateBlobSchedule(cg, Cancun, 3, 6, 3338477) # default fallback case
+      validateBlobSchedule(cg, Prague, 6, 9, 5007716)
+      validateBlobSchedule(cg, Osaka, 6, 9, 5007716)
+
+      check loadNetworkParams("blobschedule_nobasefee.json".findFilePath, cg)
+      validateBlobSchedule(cg, Cancun, 3, 6, 3338477)
+      validateBlobSchedule(cg, Prague, 6, 9, 3338477)
+      validateBlobSchedule(cg, Osaka, 6, 9, 3338477)
 
 proc genesisMain*() =
   genesisTest()

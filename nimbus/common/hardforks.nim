@@ -137,6 +137,7 @@ type
   BlobSchedule* = object
     target*: uint64
     max*   : uint64
+    baseFeeUpdateFraction*: uint64
 
   # if you add more fork block
   # please update forkBlockField constant too

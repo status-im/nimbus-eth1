@@ -1,6 +1,6 @@
 # Nimbus - Common entry point to the EVM from all different callers
 #
-# Copyright (c) 2018-2024 Status Research & Development GmbH
+# Copyright (c) 2018-2025 Status Research & Development GmbH
 # Licensed under either of
 #  * Apache License, version 2.0, ([LICENSE-APACHE](LICENSE-APACHE) or http://www.apache.org/licenses/LICENSE-2.0)
 #  * MIT license ([LICENSE-MIT](LICENSE-MIT) or http://opensource.org/licenses/MIT)
@@ -135,7 +135,7 @@ proc setupHost(call: CallParams, keepStack: bool): TransactionHost =
     origin         : call.origin.get(call.sender),
     gasPrice       : call.gasPrice,
     versionedHashes: call.versionedHashes,
-    blobBaseFee    : getBlobBaseFee(vmState.blockCtx.excessBlobGas, vmState.fork >= FkPrague),
+    blobBaseFee    : getBlobBaseFee(vmState.blockCtx.excessBlobGas, vmState.com, vmState.fork),
   )
 
   # reset global gasRefund counter each time
@@ -143,8 +143,8 @@ proc setupHost(call: CallParams, keepStack: bool): TransactionHost =
   vmState.gasRefunded = 0
 
   let
-    intrinsicGas = if call.noIntrinsic: 0.GasInt
-                   else: intrinsicGas(call, vmState.fork)
+    (intrinsicGas, floorDataGas) = if call.noIntrinsic: (0.GasInt, 0.GasInt)
+                                   else: intrinsicGas(call, vmState.fork)
     host = TransactionHost(
       vmState: vmState,
       sysCall: call.sysCall,
@@ -157,7 +157,8 @@ proc setupHost(call: CallParams, keepStack: bool): TransactionHost =
         code_address: call.to.toEvmc,
         sender:       call.sender.toEvmc,
         value:        call.value.toEvmc,
-      )
+      ),
+      floorDataGas: floorDataGas,
       # All other defaults in `TransactionHost` are fine.
     )
     gasRefund = if call.sysCall: 0
@@ -231,33 +232,45 @@ proc prepareToRunComputation(host: TransactionHost, call: CallParams) =
       # EIP-4844
       if fork >= FkCancun:
         let blobFee = calcDataFee(call.versionedHashes.len,
-          vmState.blockCtx.excessBlobGas, fork >= FkPrague)
+          vmState.blockCtx.excessBlobGas, vmState.com, fork)
         db.subBalance(call.sender, blobFee)
 
 proc calculateAndPossiblyRefundGas(host: TransactionHost, call: CallParams): GasInt =
-  let c = host.computation
+  let
+    c = host.computation
+    fork = host.vmState.fork
 
   # EIP-3529: Reduction in refunds
-  let MaxRefundQuotient = if host.vmState.fork >= FkLondon:
+  let MaxRefundQuotient = if fork >= FkLondon:
                             5.GasInt
                           else:
                             2.GasInt
 
+  var gasRemaining = 0.GasInt
+
   # Calculated gas used, taking into account refund rules.
   if call.noRefund:
-    result = c.gasMeter.gasRemaining
+    gasRemaining = c.gasMeter.gasRemaining
   else:
     if c.shouldBurnGas:
       c.gasMeter.gasRemaining = 0
     let maxRefund = (call.gasLimit - c.gasMeter.gasRemaining) div MaxRefundQuotient
     let refund = min(c.getGasRefund(), maxRefund)
     c.gasMeter.returnGas(refund)
-    result = c.gasMeter.gasRemaining
+    gasRemaining = c.gasMeter.gasRemaining
+
+  let gasUsed = call.gasLimit - gasRemaining
+  if fork >= FkPrague:
+    if host.floorDataGas > gasUsed:
+      gasRemaining = call.gasLimit - host.floorDataGas
+      c.gasMeter.gasRemaining = gasRemaining
 
   # Refund for unused gas.
-  if result > 0 and not call.noGasCharge:
+  if gasRemaining > 0 and not call.noGasCharge:
     host.vmState.mutateLedger:
-      db.addBalance(call.sender, result.u256 * call.gasPrice.u256)
+      db.addBalance(call.sender, gasRemaining.u256 * call.gasPrice.u256)
+
+  gasRemaining
 
 proc finishRunningComputation(
     host: TransactionHost, call: CallParams, T: type): T =
@@ -265,8 +278,8 @@ proc finishRunningComputation(
 
   let gasRemaining = calculateAndPossiblyRefundGas(host, call)
   # evm gas used without intrinsic gas
-  let gasUsed = host.msg.gas.GasInt - gasRemaining
-  host.vmState.captureEnd(c, c.output, gasUsed, c.errorOpt)
+  let evmGasUsed = host.msg.gas.GasInt - gasRemaining
+  host.vmState.captureEnd(c, c.output, evmGasUsed, c.errorOpt)
 
   when T is CallResult|DebugCallResult:
     # Collecting the result can be unnecessarily expensive when (re)-processing

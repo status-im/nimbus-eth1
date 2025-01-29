@@ -14,13 +14,15 @@ import
   eth/p2p/discoveryv5/[protocol, enr],
   beacon_chain/spec/forks,
   beacon_chain/gossip_processing/light_client_processor,
-  ../wire/[portal_protocol, portal_stream, portal_protocol_config],
+  ../wire/[portal_protocol, portal_stream, portal_protocol_config, ping_extensions],
   "."/[beacon_content, beacon_db, beacon_validation, beacon_chain_historical_summaries]
 
 export beacon_content, beacon_db
 
 logScope:
   topics = "portal_beacon"
+
+const pingExtensionCapabilities = {CapabilitiesType, BasicRadiusType}
 
 type BeaconNetwork* = ref object
   portalProtocol*: PortalProtocol
@@ -213,6 +215,7 @@ proc new*(
       stream,
       bootstrapRecords,
       config = portalConfig,
+      pingExtensionCapabilities = pingExtensionCapabilities,
     )
 
   let beaconBlockRoot =

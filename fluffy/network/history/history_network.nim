@@ -17,7 +17,7 @@ import
   ../../common/common_types,
   ../../database/content_db,
   ../../network_metadata,
-  ../wire/[portal_protocol, portal_stream, portal_protocol_config],
+  ../wire/[portal_protocol, portal_stream, portal_protocol_config, ping_extensions],
   "."/[history_content, history_validation, history_type_conversions],
   ../beacon/beacon_chain_historical_roots,
   ./content/content_deprecated
@@ -29,6 +29,8 @@ logScope:
   topics = "portal_hist"
 
 export blocks_rlp
+
+const pingExtensionCapabilities = {CapabilitiesType, HistoryRadiusType}
 
 type
   HistoryNetwork* = ref object
@@ -331,6 +333,8 @@ proc validateContent(
       return err("Failed validating block header: " & error)
 
     ok()
+  of ephemeralBlockHeader:
+    err("Ephemeral block headers are not yet supported")
 
 proc new*(
     T: type HistoryNetwork,
@@ -360,6 +364,7 @@ proc new*(
       stream,
       bootstrapRecords,
       config = portalConfig,
+      pingExtensionCapabilities = pingExtensionCapabilities,
     )
 
   HistoryNetwork(

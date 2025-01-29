@@ -1,6 +1,6 @@
 # Nimbus - Services available to EVM code that is run for a transaction
 #
-# Copyright (c) 2019-2024 Status Research & Development GmbH
+# Copyright (c) 2019-2025 Status Research & Development GmbH
 # Licensed under either of
 #  * Apache License, version 2.0, ([LICENSE-APACHE](LICENSE-APACHE) or http://www.apache.org/licenses/LICENSE-2.0)
 #  * MIT license ([LICENSE-MIT](LICENSE-MIT) or http://opensource.org/licenses/MIT)
@@ -302,10 +302,6 @@ proc setTransientStorage(host: TransactionHost, address: HostAddress,
   host.vmState.mutateLedger:
     db.setTransientStorage(address, key, newVal)
 
-proc getDelegateAddress(host: TransactionHost, address: HostAddress): HostAddress {.show.} =
-  let db = host.vmState.readOnlyLedger
-  db.getDelegateAddress(address)
-
 when use_evmc_glue:
   {.pop: inline.}
   const included_from_host_services {.used.} = true
@@ -313,4 +309,4 @@ when use_evmc_glue:
 else:
   export
     accountExists, getStorage, storage, getBalance, getCodeSize, getCodeHash,
-    copyCode, selfDestruct, getTxContext, call, getBlockHash, emitLog, getDelegateAddress
+    copyCode, selfDestruct, getTxContext, call, getBlockHash, emitLog

@@ -47,9 +47,7 @@ func asEthBlock(blockObject: BlockObject): EthBlock =
     header: header, transactions: transactions, withdrawals: blockObject.withdrawals
   )
 
-func asPortalBlock(
-    ethBlock: EthBlock
-): (BlockHeaderWithProof, PortalBlockBodyShanghai) =
+func asPortalBlockBody(ethBlock: EthBlock): PortalBlockBodyShanghai =
   var transactions: Transactions
   for tx in ethBlock.txs:
     discard transactions.add(TransactionByteList(rlp.encode(tx)))
@@ -59,16 +57,9 @@ func asPortalBlock(
   for w in ethBlock.withdrawals.get():
     discard withdrawals.add(WithdrawalByteList(rlp.encode(w)))
 
-  let
-    headerWithProof = BlockHeaderWithProof(
-      header: ByteList[2048](rlp.encode(ethBlock.header)),
-      proof: BlockHeaderProof.init(),
-    )
-    portalBody = PortalBlockBodyShanghai(
-      transactions: transactions, uncles: Uncles(@[byte 0xc0]), withdrawals: withdrawals
-    )
-
-  (headerWithProof, portalBody)
+  PortalBlockBodyShanghai(
+    transactions: transactions, uncles: Uncles(@[byte 0xc0]), withdrawals: withdrawals
+  )
 
 func asTxType(quantity: Opt[Quantity]): Result[TxType, string] =
   let value = quantity.get(0.Quantity).uint8
@@ -171,6 +162,15 @@ proc gossipReceipts(
 
   await bridge.gossipQueue.addLast((contentKey.encode.asSeq(), SSZ.encode(receipts)))
 
+proc gossipEphemeralBlockHeader(
+    bridge: PortalHistoryBridge, hash: Hash32, header: ByteList[MAX_HEADER_LENGTH]
+): Future[void] {.async: (raises: [CancelledError]).} =
+  let contentKey = ephemeralBlockHeaderContentKey(hash, 0'u8)
+
+  await bridge.gossipQueue.addLast(
+    (contentKey.encode.asSeq(), SSZ.encode(EphemeralBlockHeaderList.init(@[header])))
+  )
+
 proc runLatestLoop(
     bridge: PortalHistoryBridge, validate = false
 ) {.async: (raises: [CancelledError]).} =
@@ -202,7 +202,8 @@ proc runLatestLoop(
 
       let
         ethBlock = blockObject.asEthBlock()
-        (headerWithProof, body) = ethBlock.asPortalBlock()
+        header = ByteList[MAX_HEADER_LENGTH].init(rlp.encode(ethBlock.header))
+        body = ethBlock.asPortalBlockBody()
 
         receipts = receiptObjects.asReceipts().valueOr:
           # Note: this failure should not occur. It would mean invalid encoded
@@ -216,7 +217,7 @@ proc runLatestLoop(
 
       let hash = blockObject.hash
       if validate:
-        if validateHeaderBytes(headerWithProof.header.asSeq(), hash).isErr():
+        if validateHeaderBytes(header.asSeq(), hash).isErr():
           error "Block header is invalid"
           continue
         if validateBlockBody(body, ethBlock.header).isErr():
@@ -226,10 +227,8 @@ proc runLatestLoop(
           error "Receipts root is invalid"
           continue
 
-      # gossip block header by hash
-      await bridge.gossipBlockHeader(hash, headerWithProof)
-      # gossip block header by number
-      await bridge.gossipBlockHeader(blockNumber, headerWithProof)
+      # gossip ephemeral block header
+      await bridge.gossipEphemeralBlockHeader(hash, header)
 
       # For bodies & receipts to get verified, the header needs to be available
       # on the network. Wait a little to get the headers propagated through

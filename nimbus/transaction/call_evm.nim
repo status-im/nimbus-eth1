@@ -1,6 +1,6 @@
 # Nimbus - Various ways of calling the EVM
 #
-# Copyright (c) 2018-2024 Status Research & Development GmbH
+# Copyright (c) 2018-2025 Status Research & Development GmbH
 # Licensed under either of
 #  * Apache License, version 2.0, ([LICENSE-APACHE](LICENSE-APACHE) or http://www.apache.org/licenses/LICENSE-2.0)
 #  * MIT license ([LICENSE-MIT](LICENSE-MIT) or http://opensource.org/licenses/MIT)
@@ -118,11 +118,13 @@ proc rpcEstimateGas*(args: TransactionArgs,
     hi = gasCap
 
   cap = hi
-  let intrinsicGas = intrinsicGas(params, fork)
+  let
+    (intrinsicGas, floorDataGas) = intrinsicGas(params, fork)
+    minGasLimit = max(intrinsicGas, floorDataGas)
 
   # Create a helper to check if a gas allowance results in an executable transaction
   proc executable(gasLimit: GasInt): EvmResult[bool] =
-    if intrinsicGas > gasLimit:
+    if minGasLimit > gasLimit:
       # Special case, raise gas limit
       return ok(true)
 

@@ -1,5 +1,5 @@
 # Nimbus
-# Copyright (c) 2022-2024 Status Research & Development GmbH
+# Copyright (c) 2022-2025 Status Research & Development GmbH
 # Licensed and distributed under either of
 #   * MIT license (license terms in the root directory or at https://opensource.org/licenses/MIT).
 #   * Apache v2 license (license terms in the root directory or at https://www.apache.org/licenses/LICENSE-2.0).
@@ -300,16 +300,13 @@ proc readContentOffer(
   # Read number of content values according to amount of ContentKeys accepted.
   # This will either end with a FIN, or because the read action times out or
   # because the number of expected values was read (if this happens and no FIN
-  # was received yet, a FIN will be send from this side).
+  # is received eventually, the socket will just get destroyed).
   # None of this means that the contentValues are valid, further validation is
-  # required.
-  # Socket will be closed when this call ends.
+  # required. This call deals with cleaning up the socket.
 
-  # TODO: Currently reading from the socket one value at a time, and validating
-  # values at later time. Uncertain what is best approach here (mostly from a
-  # security PoV), e.g. other options such as reading all content from socket at
-  # once, then processing the individual content values. Or reading and
-  # validating one per time.
+  # Content items are read from the socket and added to a queue for later
+  # validation. Validating the content item immediatly would likely result in
+  # timeouts of the rest of the content transmitted.
   let amount = offer.contentKeys.len()
 
   var contentValues: seq[seq[byte]]
@@ -327,11 +324,15 @@ proc readContentOffer(
           contentKeys = offer.contentKeys, error = contentValue.error
         break
     else:
-      # Read timed out, stop further reading, but still process data received
-      # so far.
+      # Read timed out, stop further reading and discard the data received so
+      # far as it will be incomplete.
       debug "Reading data from socket timed out, content offer failed",
         contentKeys = offer.contentKeys
-      break
+      # Still closing the socket (= sending FIN) but not waiting here for its
+      # ACK however, so no `closeWait`. Underneath the socket will still wait
+      # for the FIN-ACK (or timeout) before it destroys the socket.
+      socket.close()
+      return
 
   if socket.atEof():
     # Destroy socket and not closing as we already received FIN. Closing would

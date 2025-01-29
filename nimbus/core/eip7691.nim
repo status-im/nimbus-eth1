@@ -24,10 +24,6 @@ func getTargetBlobGasPerBlock*(electra: bool): uint64 =
   if electra: TARGET_BLOB_GAS_PER_BLOCK_ELECTRA.uint64
   else: TARGET_BLOB_GAS_PER_BLOCK.uint64
 
-func getBlobBaseFeeUpdateFraction*(electra: bool): uint64 =
-  if electra: BLOB_BASE_FEE_UPDATE_FRACTION_ELECTRA.uint64
-  else: BLOB_BASE_FEE_UPDATE_FRACTION.uint64
-
 const
   EVMForkToFork: array[FkCancun..EVMFork.high, HardFork] = [
     Cancun,
@@ -38,3 +34,7 @@ const
 func getMaxBlobsPerBlock*(com: CommonRef, fork: EVMFork): uint64 =
   doAssert(fork >= FkCancun)
   com.maxBlobsPerBlock(EVMForkToFork[fork])
+
+func getBlobBaseFeeUpdateFraction*(com: CommonRef, fork: EVMFork): uint64 =
+  doAssert(fork >= FkCancun)
+  com.baseFeeUpdateFraction(EVMForkToFork[fork])

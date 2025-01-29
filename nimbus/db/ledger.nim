@@ -1,5 +1,5 @@
 # Nimbus
-# Copyright (c) 2023-2024 Status Research & Development GmbH
+# Copyright (c) 2023-2025 Status Research & Development GmbH
 # Licensed under either of
 #  * Apache License, version 2.0, ([LICENSE-APACHE](LICENSE-APACHE) or
 #    http://www.apache.org/licenses/LICENSE-2.0)
@@ -502,31 +502,11 @@ proc getCodeSize*(ac: LedgerRef, address: Address): int =
 
   acc.code.len()
 
-proc resolveCodeHash*(ac: LedgerRef, address: Address): Hash32 =
-  let (codeHash, code) = ac.getCode(address, true)
-  if code.isEip7702:
-    EIP7702_MAGIC_HASH
-  else:
-    codeHash
-
 proc resolveCode*(ac: LedgerRef, address: Address): CodeBytesRef =
   let code = ac.getCode(address)
   let delegateTo = parseDelegationAddress(code).valueOr:
     return code
   ac.getCode(delegateTo)
-
-proc resolveCodeSize*(ac: LedgerRef, address: Address): int =
-  let code = ac.getCode(address)
-  if code.isEip7702:
-    EIP7702_MAGIC_BYTES.len
-  else:
-    code.len
-
-proc getDelegateAddress*(ac: LedgerRef, address: Address): Address =
-  let code = ac.getCode(address)
-  let delegateTo = parseDelegationAddress(code).valueOr:
-    return
-  delegateTo
 
 proc getCommittedStorage*(ac: LedgerRef, address: Address, slot: UInt256): UInt256 =
   let acc = ac.getAccount(address, false)
@@ -957,10 +937,7 @@ proc getTransientStorage*(db: ReadOnlyLedger,
                           address: Address, slot: UInt256): UInt256 = getTransientStorage(distinctBase db, address, slot)
 proc getAccountProof*(db: ReadOnlyLedger, address: Address): seq[seq[byte]] = getAccountProof(distinctBase db, address)
 proc getStorageProof*(db: ReadOnlyLedger, address: Address, slots: openArray[UInt256]): seq[seq[seq[byte]]] = getStorageProof(distinctBase db, address, slots)
-proc resolveCodeHash*(db: ReadOnlyLedger, address: Address): Hash32 = resolveCodeHash(distinctBase db, address)
 proc resolveCode*(db: ReadOnlyLedger, address: Address): CodeBytesRef = resolveCode(distinctBase db, address)
-proc resolveCodeSize*(db: ReadOnlyLedger, address: Address): int = resolveCodeSize(distinctBase db, address)
-proc getDelegateAddress*(db: ReadOnlyLedger, address: Address): Address = getDelegateAddress(distinctBase db, address)
 
 # ------------------------------------------------------------------------------
 # End
