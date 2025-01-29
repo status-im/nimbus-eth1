@@ -1589,21 +1589,27 @@ proc neighborhoodGossip*(
 
   # For selecting the closest nodes to whom to gossip the content a mixed
   # approach is taken:
-  # 1. Select the closest neighbours in the routing table
-  # 2. Check if the radius is known for these these nodes and whether they are
+  # 1. Select the closest neighbours in the routing table.
+  # 2. Shuffle the selected nodes to randomize the gossip process so that we
+  # don't always offer to the same closest nodes.
+  # 3. Check if the radius is known for these these nodes and whether they are
   # in range of the content to be offered.
-  # 3. If more than n (= maxGossipNodes) nodes are in range, offer these nodes
+  # 4. If more than n (= maxGossipNodes) nodes are in range, offer these nodes
   # the content (maxed out at n).
-  # 4. If less than n nodes are in range, do a node lookup, and offer the nodes
-  # returned from the lookup the content (max nodes set at 8)
+  # 5. If less than n nodes are in range, do a node lookup, and offer the nodes
+  # returned from the lookup the content (max nodes set at 8).
   #
   # This should give a bigger rate of success and avoid the data being stopped
   # in its propagation than when looking only for nodes in the own routing
   # table, but at the same time avoid unnecessary node lookups.
   # It might still cause issues in data getting propagated in a wider id range.
 
-  let closestLocalNodes =
+  var closestLocalNodes =
     p.routingTable.neighbours(NodeId(contentId), k = 16, seenOnly = true)
+
+  # Shuffling the order of the nodes in order to not always hit the same node
+  # first for the same request.
+  p.baseProtocol.rng[].shuffle(closestLocalNodes)
 
   var gossipNodes: seq[Node]
   for node in closestLocalNodes:
