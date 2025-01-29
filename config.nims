@@ -103,8 +103,8 @@ elif defined(macosx) and defined(arm64):
   switch("passC", "-mcpu=apple-a14")
   switch("passL", "-mcpu=apple-a14")
 elif defined(riscv64):
-  # riscv64 needs specification of ISA with extensions. 'gc' is widely supported 
-  # and seems to be the minimum extensions needed to build. 
+  # riscv64 needs specification of ISA with extensions. 'gc' is widely supported
+  # and seems to be the minimum extensions needed to build.
   switch("passC", "-march=rv64gc")
   switch("passL", "-march=rv64gc")
 else:
@@ -180,17 +180,12 @@ switch("define", "kzgExternalBlst")
 # We lock down rocksdb to a particular version
 # TODO self-build rocksdb dll on windows
 when not defined(use_system_rocksdb) and not defined(windows):
-  switch("define", "rocksdb_static_linking")
 
   # use the C++ linker profile because it's a C++ library
   when defined(macosx):
     switch("clang.linkerexe", "clang++")
   else:
     switch("gcc.linkerexe", "g++")
-
-  switch("dynlibOverride", "rocksdb")
-  switch("dynlibOverride", "lz4")
-  switch("dynlibOverride", "zstd")
 
 # This applies per-file compiler flags to C files
 # which do not support {.localPassC: "...".}
