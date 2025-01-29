@@ -13,7 +13,7 @@
 {.push raises: [].}
 
 import
-  std/[algorithm, sequtils, sets, strutils, tables],
+  std/[sequtils, tables],
   pkg/chronicles,
   pkg/stew/interval_set,
   ../../nimbus/common,

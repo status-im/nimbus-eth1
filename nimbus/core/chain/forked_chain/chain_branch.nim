@@ -136,6 +136,3 @@ func appendBlock*(loc: BlockPos,
 iterator transactions*(loc: BlockPos): Transaction =
   for tx in loc.branch.blocks[loc.index].blk.transactions:
     yield tx
-
-proc txFrameBegin*(frame: CoreDbTxRef): CoreDbTxRef =
-  frame.ctx.txFrameBegin(frame)

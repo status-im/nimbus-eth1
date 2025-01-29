@@ -104,7 +104,8 @@ proc collapse*(
 
 iterator walk*(tx: AristoTxRef): (int,AristoTxRef,LayerRef,AristoError) =
   ## Walk down the transaction stack chain.
-  let db = tx.db
+  discard
+  #let db = tx.db
   # var tx = tx
 
   # block body:

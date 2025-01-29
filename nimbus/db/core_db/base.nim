@@ -630,6 +630,9 @@ func reparent*(tx: CoreDbTxRef, parent: CoreDbTxRef) =
   tx.aTx.parent = parent.aTx
   tx.kTx.parent = parent.kTx
 
+proc txFrameBegin*(tx: CoreDbTxRef): CoreDbTxRef =
+  tx.ctx.txFrameBegin(tx)
+
 # ------------------------------------------------------------------------------
 # Public tracer methods
 # ------------------------------------------------------------------------------

@@ -50,7 +50,7 @@ type
     backend*: BackendRef              ## Backend database (may well be `nil`)
 
     txRef*: AristoTxRef               ## Bottom-most in-memory frame
-    txUidGen*: uint                   ## Tx-relative unique number generator
+    # txUidGen*: uint                   ## Tx-relative unique number generator
 
     accLeaves*: LruCache[Hash32, VertexRef]
       ## Account path to payload cache - accounts are frequently accessed by

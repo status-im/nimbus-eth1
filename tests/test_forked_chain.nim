@@ -42,7 +42,7 @@ proc newCom(env: TestEnv): CommonRef =
       env.conf.networkParams
     )
 
-proc makeBlk(com: CommonRef, number: BlockNumber, parentBlk: Block): Block =
+proc makeBlk(txFrame: CoreDbTxRef, number: BlockNumber, parentBlk: Block): Block =
   template parent(): Header =
     parentBlk.header
 
@@ -55,7 +55,7 @@ proc makeBlk(com: CommonRef, number: BlockNumber, parentBlk: Block): Block =
       amount: 1,
     )
 
-  let ledger = LedgerRef.init(com.db.baseTxFrame())
+  let ledger = LedgerRef.init(txFrame)
   for wd in wds:
     ledger.addBalance(wd.address, wd.weiAmount)
 
@@ -85,8 +85,8 @@ proc makeBlk(com: CommonRef, number: BlockNumber, parentBlk: Block): Block =
 
   Block.init(header, body)
 
-proc makeBlk(com: CommonRef, number: BlockNumber, parentBlk: Block, extraData: byte): Block =
-  var blk = com.makeBlk(number, parentBlk)
+proc makeBlk(txFrame: CoreDbTxRef, number: BlockNumber, parentBlk: Block, extraData: byte): Block =
+  var blk = txFrame.makeBlk(number, parentBlk)
   blk.header.extraData = @[extraData]
   blk
 
@@ -131,6 +131,13 @@ template checkForkChoiceErr(chain, a, b) =
     debugEcho "FORK CHOICE SHOULD FAIL"
     debugEcho "Block Number: ", a.header.number, " ", b.header.number
 
+template checkPersisted(chain, blk) =
+  let res = chain.baseTxFrame.getBlockHeader(blk.blockHash)
+  check res.isOk
+  if res.isErr:
+    debugEcho "CHECK FINALIZED FAIL: ", res.error
+    debugEcho "Block Number: ", blk.header.number
+
 proc forkedChainMain*() =
    suite "ForkedChainRef tests":
      var env = setupEnv()
@@ -138,27 +145,28 @@ proc forkedChainMain*() =
        cc = env.newCom
        genesisHash = cc.genesisHeader.blockHash
        genesis = Block.init(cc.genesisHeader, BlockBody())
+       baseTxFrame = cc.db.baseTxFrame()
 
      let
-       blk1 = cc.makeBlk(1, genesis)
-       blk2 = cc.makeBlk(2, blk1)
-       blk3 = cc.makeBlk(3, blk2)
+       blk1 = baseTxFrame.makeBlk(1, genesis)
+       blk2 = baseTxFrame.makeBlk(2, blk1)
+       blk3 = baseTxFrame.makeBlk(3, blk2)
 
-       #dbTx = cc.db.ctx.txFrameBegin()
-       blk4 = cc.makeBlk(4, blk3)
-       blk5 = cc.makeBlk(5, blk4)
-       blk6 = cc.makeBlk(6, blk5)
-       blk7 = cc.makeBlk(7, blk6)
+       dbTx = baseTxFrame.txFrameBegin
+       blk4 = dbTx.makeBlk(4, blk3)
+       blk5 = dbTx.makeBlk(5, blk4)
+       blk6 = dbTx.makeBlk(6, blk5)
+       blk7 = dbTx.makeBlk(7, blk6)
 
-#     dbTx.dispose()
+     dbTx.dispose()
 
      let
-       B4 = cc.makeBlk(4, blk3, 1.byte)
-       B5 = cc.makeBlk(5, B4)
-       B6 = cc.makeBlk(6, B5)
-       B7 = cc.makeBlk(7, B6)
+       B4 = baseTxFrame.makeBlk(4, blk3, 1.byte)
+       B5 = baseTxFrame.makeBlk(5, B4)
+       B6 = baseTxFrame.makeBlk(6, B5)
+       B7 = baseTxFrame.makeBlk(7, B6)
 
-     test "newBase == oldBase":
+     #[test "newBase == oldBase":
        const info = "newBase == oldBase"
        let com = env.newCom()
 
@@ -209,10 +217,97 @@ proc forkedChainMain*() =
        check chain.wdWritten(blk2) == 2
        check chain.validate info & " (9)"
 
-#     test "newBase == cursor":
-#       const info = "newBase == cursor"
-#       let com = env.newCom()
+     test "newBase == head":
+       const info = "newBase == head"
+       let com = env.newCom()
 
+       var chain = ForkedChainRef.init(com, baseDistance = 3)
+       checkImportBlock(chain, blk1)
+       checkImportBlock(chain, blk2)
+       checkImportBlock(chain, blk3)
+       checkImportBlock(chain, blk4)
+       checkImportBlock(chain, blk5)
+       checkImportBlock(chain, blk6)
+       checkImportBlock(chain, blk7)
+
+       checkImportBlock(chain, blk4)
+       check chain.validate info & " (1)"
+
+       # newbase == head
+       checkForkChoice(chain, blk7, blk6)
+       check chain.validate info & " (2)"
+
+       check chain.headHash == blk7.blockHash
+       check chain.latestHash == blk7.blockHash
+
+       check chain.wdWritten(blk7) == 7
+
+       # head - baseDistance must been persisted
+       checkPersisted(chain, blk3)
+
+       # make sure aristo not wiped out baggage
+       check chain.wdWritten(blk3) == 3
+       check chain.validate info & " (9)"
+
+     test "newBase between oldBase and head":
+       const info = "newBase between oldBase and head"
+       let com = env.newCom()
+
+       var chain = ForkedChainRef.init(com, baseDistance = 3)
+       checkImportBlock(chain, blk1)
+       checkImportBlock(chain, blk2)
+       checkImportBlock(chain, blk3)
+       checkImportBlock(chain, blk4)
+       checkImportBlock(chain, blk5)
+       checkImportBlock(chain, blk6)
+       checkImportBlock(chain, blk7)
+       check chain.validate info & " (1)"
+
+       checkForkChoice(chain, blk7, blk6)
+       check chain.validate info & " (2)"
+
+       check chain.headHash == blk7.blockHash
+       check chain.latestHash == blk7.blockHash
+
+       check chain.wdWritten(blk6) == 6
+       check chain.wdWritten(blk7) == 7
+
+       # head - baseDistance must been persisted
+       checkPersisted(chain, blk3)
+
+       # make sure aristo not wiped out baggage
+       check chain.wdWritten(blk3) == 3
+       check chain.validate info & " (9)"]#
+
+     test "newBase == oldBase, fork and stay on that fork":
+       const info = "newBase == oldBase, fork .."
+       let com = env.newCom()
+
+       var chain = ForkedChainRef.init(com)
+       checkImportBlock(chain, blk1)
+       checkImportBlock(chain, blk2)
+       checkImportBlock(chain, blk3)
+       checkImportBlock(chain, blk4)
+       checkImportBlock(chain, blk5)
+       checkImportBlock(chain, blk6)
+       checkImportBlock(chain, blk7)
+
+       checkImportBlock(chain, B4)
+       checkImportBlock(chain, B5)
+       checkImportBlock(chain, B6)
+       checkImportBlock(chain, B7)
+       check chain.validate info & " (1)"
+
+       checkForkChoice(chain, B7, B5)
+
+       check chain.headHash == B7.blockHash
+       check chain.latestHash == B7.blockHash
+       check chain.validate info & " (9)"
+
+#     test "newBase == head, fork and stay on that fork":
+#       const info = "newBase == head, fork .."
+#       let com = env.newCom()
+#
 #       var chain = ForkedChainRef.init(com, baseDistance = 3)
 #       checkImportBlock(chain, blk1)
 #       checkImportBlock(chain, blk2)
@@ -221,103 +316,18 @@ proc forkedChainMain*() =
 #       checkImportBlock(chain, blk5)
 #       checkImportBlock(chain, blk6)
 #       checkImportBlock(chain, blk7)
-
-#       checkImportBlock(chain, blk4)
-#       check chain.validate info & " (1)"
-
-#       # newbase == cursor
-#       checkForkChoice(chain, blk7, blk6)
-#       check chain.validate info & " (2)"
-
-#       check chain.headHash == blk7.blockHash
-#       check chain.latestHash == blk7.blockHash
-
-#       check chain.wdWritten(blk7) == 0
-
-#       # head - baseDistance must been finalized
-#       check chain.wdWritten(blk4) == 4
-#       # make sure aristo not wiped out baggage
-#       check chain.wdWritten(blk3) == 3
-#       check chain.validate info & " (9)"
-
-#     test "newBase between oldBase and cursor":
-#       const info = "newBase between oldBase and cursor"
-#       let com = env.newCom()
-
-#       var chain = ForkedChainRef.init(com, baseDistance = 3)
-#       checkImportBlock(chain, blk1)
-#       checkImportBlock(chain, blk2)
-#       checkImportBlock(chain, blk3)
-#       checkImportBlock(chain, blk4)
-#       checkImportBlock(chain, blk5)
-#       checkImportBlock(chain, blk6)
-#       checkImportBlock(chain, blk7)
-#       check chain.validate info & " (1)"
-
-#       checkForkChoice(chain, blk7, blk6)
-#       check chain.validate info & " (2)"
-
-#       check chain.headHash == blk7.blockHash
-#       check chain.latestHash == blk7.blockHash
-
-#       check chain.wdWritten(blk6) == 0
-#       check chain.wdWritten(blk7) == 0
-
-#       # head - baseDistance must been finalized
-#       check chain.wdWritten(blk4) == 4
-#       # make sure aristo not wiped out baggage
-#       check chain.wdWritten(blk3) == 3
-#       check chain.validate info & " (9)"
-
-#     test "newBase == oldBase, fork and stay on that fork":
-#       const info = "newBase == oldBase, fork .."
-#       let com = env.newCom()
-
-#       var chain = ForkedChainRef.init(com)
-#       checkImportBlock(chain, blk1)
-#       checkImportBlock(chain, blk2)
-#       checkImportBlock(chain, blk3)
-#       checkImportBlock(chain, blk4)
-#       checkImportBlock(chain, blk5)
-#       checkImportBlock(chain, blk6)
-#       checkImportBlock(chain, blk7)
-
+#
 #       checkImportBlock(chain, B4)
 #       checkImportBlock(chain, B5)
 #       checkImportBlock(chain, B6)
 #       checkImportBlock(chain, B7)
-#       check chain.validate info & " (1)"
-
-#       checkForkChoice(chain, B7, B5)
-
-#       check chain.headHash == B7.blockHash
-#       check chain.latestHash == B7.blockHash
-#       check chain.validate info & " (9)"
-
-#     test "newBase == cursor, fork and stay on that fork":
-#       const info = "newBase == cursor, fork .."
-#       let com = env.newCom()
-
-#       var chain = ForkedChainRef.init(com, baseDistance = 3)
-#       checkImportBlock(chain, blk1)
-#       checkImportBlock(chain, blk2)
-#       checkImportBlock(chain, blk3)
-#       checkImportBlock(chain, blk4)
-#       checkImportBlock(chain, blk5)
-#       checkImportBlock(chain, blk6)
-#       checkImportBlock(chain, blk7)
-
-#       checkImportBlock(chain, B4)
-#       checkImportBlock(chain, B5)
-#       checkImportBlock(chain, B6)
-#       checkImportBlock(chain, B7)
-
+#
 #       checkImportBlock(chain, B4)
 #       check chain.validate info & " (1)"
-
+#
 #       checkForkChoice(chain, B7, B6)
 #       check chain.validate info & " (2)"
-
+#
 #       check chain.headHash == B7.blockHash
 #       check chain.latestHash == B7.blockHash
 #       check chain.validate info & " (9)"

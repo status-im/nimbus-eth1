@@ -11,11 +11,11 @@
 {.push raises: [].}
 
 import
-  std/typetraits,
+  #std/typetraits,
   stint,
   eth/common/hashes,
   ../aristo as use_ari,
-  ../kvt as use_kvt,
+  #../kvt as use_kvt,
   ./base/[api_tracking, base_config, base_desc]
 
 export stint, hashes
@@ -36,14 +36,14 @@ when CoreDbEnableApiTracking:
 
 # ---------------
 
-template call(api: KvtApiRef; fn: untyped; args: varargs[untyped]): untyped =
-  when CoreDbEnableApiJumpTable:
-    api.fn(args)
-  else:
-    fn(args)
+#template call(api: KvtApiRef; fn: untyped; args: varargs[untyped]): untyped =
+#  when CoreDbEnableApiJumpTable:
+#    api.fn(args)
+#  else:
+#    fn(args)
 
-template call(kvt: CoreDbKvtRef; fn: untyped; args: varargs[untyped]): untyped =
-  kvt.distinctBase.parent.kvtApi.call(fn, args)
+#template call(kvt: CoreDbKvtRef; fn: untyped; args: varargs[untyped]): untyped =
+#  kvt.distinctBase.parent.kvtApi.call(fn, args)
 
 # ---------------
 
@@ -53,12 +53,12 @@ template call(api: AristoApiRef; fn: untyped; args: varargs[untyped]): untyped =
   else:
     fn(args)
 
-template call(
-    acc: CoreDbAccRef;
-    fn: untyped;
-    args: varargs[untyped];
-      ): untyped =
-  acc.distinctBase.parent.ariApi.call(fn, args)
+#template call(
+#    acc: CoreDbAccRef;
+#    fn: untyped;
+#    args: varargs[untyped];
+#      ): untyped =
+#  acc.distinctBase.parent.ariApi.call(fn, args)
 
 # ------------------------------------------------------------------------------
 # Public iterators
