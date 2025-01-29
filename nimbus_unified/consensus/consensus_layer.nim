@@ -9,7 +9,6 @@ import std/[atomics, os], chronicles, ../configs/nimbus_configs
 
 export nimbus_configs
 
-## log
 logScope:
   topics = "Consensus layer"
 
