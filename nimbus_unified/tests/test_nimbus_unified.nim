@@ -30,7 +30,8 @@ template removeFile(filename: string) =
   except IOError:
     discard # Ignore if the file does not exist
 
-proc handlerMock(parameters: ServiceParameters) {.thread.} = return
+proc handlerMock(parameters: ServiceParameters) {.thread.} =
+  return
 
 # ----------------------------------------------------------------------------
 # Unit Tests

@@ -77,14 +77,13 @@ proc addService(
 
 ## Block execution and waits for services to finish
 proc exitServices*(nimbus: Nimbus) =
-
   for i in 0 .. cNimbusMaxServices - 1:
     if nimbus.serviceList[i].isSome:
       let thread = nimbus.serviceList[i].get()
       if thread.serviceHandler.running():
         joinThread(thread.serviceHandler)
-        nimbus.serviceList[i] = none(NimbusService)
         info "Exited service ", service = thread.name
+      nimbus.serviceList[i] = none(NimbusService)
 
   notice "Exited all services"
 
