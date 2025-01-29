@@ -166,7 +166,7 @@ proc forkedChainMain*() =
        B6 = baseTxFrame.makeBlk(6, B5)
        B7 = baseTxFrame.makeBlk(7, B6)
 
-     #[test "newBase == oldBase":
+     test "newBase == oldBase":
        const info = "newBase == oldBase"
        let com = env.newCom()
 
@@ -210,6 +210,7 @@ proc forkedChainMain*() =
        checkForkChoice(chain, blk2, blk2)
        check chain.headHash == blk2.blockHash
        check chain.latestHash == blk2.blockHash
+       check chain.baseNumber == 0'u64
        check chain.validate info & " (8)"
 
        # baggage written
@@ -217,8 +218,8 @@ proc forkedChainMain*() =
        check chain.wdWritten(blk2) == 2
        check chain.validate info & " (9)"
 
-     test "newBase == head":
-       const info = "newBase == head"
+     test "newBase on activeBranch":
+       const info = "newBase on activeBranch"
        let com = env.newCom()
 
        var chain = ForkedChainRef.init(com, baseDistance = 3)
@@ -239,6 +240,7 @@ proc forkedChainMain*() =
 
        check chain.headHash == blk7.blockHash
        check chain.latestHash == blk7.blockHash
+       check chain.baseBranch == chain.activeBranch
 
        check chain.wdWritten(blk7) == 7
 
@@ -268,6 +270,7 @@ proc forkedChainMain*() =
 
        check chain.headHash == blk7.blockHash
        check chain.latestHash == blk7.blockHash
+       check chain.baseBranch == chain.activeBranch
 
        check chain.wdWritten(blk6) == 6
        check chain.wdWritten(blk7) == 7
@@ -277,7 +280,7 @@ proc forkedChainMain*() =
 
        # make sure aristo not wiped out baggage
        check chain.wdWritten(blk3) == 3
-       check chain.validate info & " (9)"]#
+       check chain.validate info & " (9)"
 
      test "newBase == oldBase, fork and stay on that fork":
        const info = "newBase == oldBase, fork .."
@@ -302,266 +305,254 @@ proc forkedChainMain*() =
 
        check chain.headHash == B7.blockHash
        check chain.latestHash == B7.blockHash
+       check chain.baseNumber == 0'u64
+       check chain.branches.len == 2
+
        check chain.validate info & " (9)"
 
-#     test "newBase == head, fork and stay on that fork":
-#       const info = "newBase == head, fork .."
-#       let com = env.newCom()
-#
-#       var chain = ForkedChainRef.init(com, baseDistance = 3)
-#       checkImportBlock(chain, blk1)
-#       checkImportBlock(chain, blk2)
-#       checkImportBlock(chain, blk3)
-#       checkImportBlock(chain, blk4)
-#       checkImportBlock(chain, blk5)
-#       checkImportBlock(chain, blk6)
-#       checkImportBlock(chain, blk7)
-#
-#       checkImportBlock(chain, B4)
-#       checkImportBlock(chain, B5)
-#       checkImportBlock(chain, B6)
-#       checkImportBlock(chain, B7)
-#
-#       checkImportBlock(chain, B4)
-#       check chain.validate info & " (1)"
-#
-#       checkForkChoice(chain, B7, B6)
-#       check chain.validate info & " (2)"
-#
-#       check chain.headHash == B7.blockHash
-#       check chain.latestHash == B7.blockHash
-#       check chain.validate info & " (9)"
+     test "newBase move forward, fork and stay on that fork":
+       const info = "newBase move forward, fork .."
+       let com = env.newCom()
 
-#     test "newBase on shorter canonical arc, discard arc with oldBase":
-#       const info = "newBase on shorter canonical .."
-#       let com = env.newCom()
+       var chain = ForkedChainRef.init(com, baseDistance = 3)
+       checkImportBlock(chain, blk1)
+       checkImportBlock(chain, blk2)
+       checkImportBlock(chain, blk3)
+       checkImportBlock(chain, blk4)
+       checkImportBlock(chain, blk5)
+       checkImportBlock(chain, blk6)
+       checkImportBlock(chain, blk7)
 
-#       var chain = ForkedChainRef.init(com, baseDistance = 3)
-#       checkImportBlock(chain, blk1)
-#       checkImportBlock(chain, blk2)
-#       checkImportBlock(chain, blk3)
-#       checkImportBlock(chain, blk4)
-#       checkImportBlock(chain, blk5)
-#       checkImportBlock(chain, blk6)
-#       checkImportBlock(chain, blk7)
+       checkImportBlock(chain, B4)
+       checkImportBlock(chain, B5)
+       checkImportBlock(chain, B6)
+       checkImportBlock(chain, B7)
 
-#       checkImportBlock(chain, B4)
-#       checkImportBlock(chain, B5)
-#       checkImportBlock(chain, B6)
-#       checkImportBlock(chain, B7)
-#       check chain.validate info & " (1)"
+       checkImportBlock(chain, B4)
+       check chain.validate info & " (1)"
 
-#       checkForkChoice(chain, B7, B5)
-#       check chain.validate info & " (2)"
+       checkForkChoice(chain, B6, B4)
+       check chain.validate info & " (2)"
 
-#       check chain.headHash == B7.blockHash
-#       check chain.latestHash == B7.blockHash
-#       check chain.baseNumber >= B4.header.number
-#       check chain.cursorHeads.len == 1
-#       check chain.validate info & " (9)"
+       check chain.headHash == B6.blockHash
+       check chain.latestHash == B6.blockHash
+       check chain.baseNumber == 3'u64
+       check chain.branches.len == 2
+       check chain.validate info & " (9)"
 
-#     test "newBase on curbed non-canonical arc":
-#       const info = "newBase on curbed non-canonical .."
-#       let com = env.newCom()
+     test "newBase on shorter canonical arc, remove oldBase branches":
+       const info = "newBase on shorter canonical, remove oldBase branches"
+       let com = env.newCom()
 
-#       var chain = ForkedChainRef.init(com, baseDistance = 5)
-#       checkImportBlock(chain, blk1)
-#       checkImportBlock(chain, blk2)
-#       checkImportBlock(chain, blk3)
-#       checkImportBlock(chain, blk4)
-#       checkImportBlock(chain, blk5)
-#       checkImportBlock(chain, blk6)
-#       checkImportBlock(chain, blk7)
+       var chain = ForkedChainRef.init(com, baseDistance = 3)
+       checkImportBlock(chain, blk1)
+       checkImportBlock(chain, blk2)
+       checkImportBlock(chain, blk3)
+       checkImportBlock(chain, blk4)
+       checkImportBlock(chain, blk5)
+       checkImportBlock(chain, blk6)
+       checkImportBlock(chain, blk7)
 
-#       checkImportBlock(chain, B4)
-#       checkImportBlock(chain, B5)
-#       checkImportBlock(chain, B6)
-#       checkImportBlock(chain, B7)
-#       check chain.validate info & " (1)"
+       checkImportBlock(chain, B4)
+       checkImportBlock(chain, B5)
+       checkImportBlock(chain, B6)
+       checkImportBlock(chain, B7)
+       check chain.validate info & " (1)"
 
-#       checkForkChoice(chain, B7, B5)
-#       check chain.validate info & " (2)"
+       checkForkChoice(chain, B7, B6)
+       check chain.validate info & " (2)"
 
-#       check chain.headHash == B7.blockHash
-#       check chain.latestHash == B7.blockHash
-#       check chain.baseNumber > 0
-#       check chain.baseNumber < B4.header.number
-#       check chain.cursorHeads.len == 2
-#       check chain.validate info & " (9)"
+       check chain.headHash == B7.blockHash
+       check chain.latestHash == B7.blockHash
+       check chain.baseNumber == 4'u64
+       check chain.branches.len == 1
+       check chain.validate info & " (9)"
 
-#     test "newBase == oldBase, fork and return to old chain":
-#       const info = "newBase == oldBase, fork .."
-#       let com = env.newCom()
+     test "newBase on curbed non-canonical arc":
+       const info = "newBase on curbed non-canonical .."
+       let com = env.newCom()
 
-#       var chain = ForkedChainRef.init(com)
-#       checkImportBlock(chain, blk1)
-#       checkImportBlock(chain, blk2)
-#       checkImportBlock(chain, blk3)
-#       checkImportBlock(chain, blk4)
-#       checkImportBlock(chain, blk5)
-#       checkImportBlock(chain, blk6)
-#       checkImportBlock(chain, blk7)
+       var chain = ForkedChainRef.init(com, baseDistance = 5)
+       checkImportBlock(chain, blk1)
+       checkImportBlock(chain, blk2)
+       checkImportBlock(chain, blk3)
+       checkImportBlock(chain, blk4)
+       checkImportBlock(chain, blk5)
+       checkImportBlock(chain, blk6)
+       checkImportBlock(chain, blk7)
 
-#       checkImportBlock(chain, B4)
-#       checkImportBlock(chain, B5)
-#       checkImportBlock(chain, B6)
-#       checkImportBlock(chain, B7)
-#       check chain.validate info & " (1)"
+       checkImportBlock(chain, B4)
+       checkImportBlock(chain, B5)
+       checkImportBlock(chain, B6)
+       checkImportBlock(chain, B7)
+       check chain.validate info & " (1)"
 
-#       checkForkChoice(chain, blk7, blk5)
-#       check chain.validate info & " (2)"
+       checkForkChoice(chain, B7, B5)
+       check chain.validate info & " (2)"
 
-#       check chain.headHash == blk7.blockHash
-#       check chain.latestHash == blk7.blockHash
-#       check chain.validate info & " (9)"
+       check chain.headHash == B7.blockHash
+       check chain.latestHash == B7.blockHash
+       check chain.baseNumber > 0
+       check chain.baseNumber < B4.header.number
+       check chain.branches.len == 2
+       check chain.validate info & " (9)"
 
-#     test "newBase == cursor, fork and return to old chain":
-#       const info = "newBase == cursor, fork .."
-#       let com = env.newCom()
+     test "newBase == oldBase, fork and return to old chain":
+       const info = "newBase == oldBase, fork .."
+       let com = env.newCom()
 
-#       var chain = ForkedChainRef.init(com, baseDistance = 3)
-#       checkImportBlock(chain, blk1)
-#       checkImportBlock(chain, blk2)
-#       checkImportBlock(chain, blk3)
-#       checkImportBlock(chain, blk4)
-#       checkImportBlock(chain, blk5)
-#       checkImportBlock(chain, blk6)
-#       checkImportBlock(chain, blk7)
+       var chain = ForkedChainRef.init(com)
+       checkImportBlock(chain, blk1)
+       checkImportBlock(chain, blk2)
+       checkImportBlock(chain, blk3)
+       checkImportBlock(chain, blk4)
+       checkImportBlock(chain, blk5)
+       checkImportBlock(chain, blk6)
+       checkImportBlock(chain, blk7)
 
-#       checkImportBlock(chain, B4)
-#       checkImportBlock(chain, B5)
-#       checkImportBlock(chain, B6)
-#       checkImportBlock(chain, B7)
+       checkImportBlock(chain, B4)
+       checkImportBlock(chain, B5)
+       checkImportBlock(chain, B6)
+       checkImportBlock(chain, B7)
+       check chain.validate info & " (1)"
 
-#       checkImportBlock(chain, blk4)
-#       check chain.validate info & " (1)"
+       checkForkChoice(chain, blk7, blk5)
+       check chain.validate info & " (2)"
 
-#       checkForkChoice(chain, blk7, blk5)
-#       check chain.validate info & " (2)"
+       check chain.headHash == blk7.blockHash
+       check chain.latestHash == blk7.blockHash
+       check chain.baseNumber == 0'u64
+       check chain.validate info & " (9)"
 
-#       check chain.headHash == blk7.blockHash
-#       check chain.latestHash == blk7.blockHash
-#       check chain.validate info & " (9)"
+     test "newBase on activeBranch, fork and return to old chain":
+       const info = "newBase on activeBranch, fork .."
+       let com = env.newCom()
 
-#     test "newBase on shorter canonical arc, discard arc with oldBase" &
-#          " (ign dup block)":
-#       const info = "newBase on shorter canonical .."
-#       let com = env.newCom()
+       var chain = ForkedChainRef.init(com, baseDistance = 3)
+       checkImportBlock(chain, blk1)
+       checkImportBlock(chain, blk2)
+       checkImportBlock(chain, blk3)
+       checkImportBlock(chain, blk4)
+       checkImportBlock(chain, blk5)
+       checkImportBlock(chain, blk6)
+       checkImportBlock(chain, blk7)
 
-#       var chain = ForkedChainRef.init(com, baseDistance = 3)
-#       checkImportBlock(chain, blk1)
-#       checkImportBlock(chain, blk2)
-#       checkImportBlock(chain, blk3)
-#       checkImportBlock(chain, blk4)
-#       checkImportBlock(chain, blk5)
-#       checkImportBlock(chain, blk6)
-#       checkImportBlock(chain, blk7)
+       checkImportBlock(chain, B4)
+       checkImportBlock(chain, B5)
+       checkImportBlock(chain, B6)
+       checkImportBlock(chain, B7)
 
-#       checkImportBlock(chain, B4)
-#       checkImportBlock(chain, B5)
-#       checkImportBlock(chain, B6)
-#       checkImportBlock(chain, B7)
+       checkImportBlock(chain, blk4)
+       check chain.validate info & " (1)"
 
-#       checkImportBlock(chain, blk4)
-#       check chain.validate info & " (1)"
+       checkForkChoice(chain, blk7, blk5)
+       check chain.validate info & " (2)"
 
-#       checkForkChoice(chain, B7, B5)
-#       check chain.validate info & " (2)"
+       check chain.headHash == blk7.blockHash
+       check chain.latestHash == blk7.blockHash
+       check chain.baseBranch == chain.activeBranch
+       check chain.validate info & " (9)"
 
-#       check chain.headHash == B7.blockHash
-#       check chain.latestHash == B7.blockHash
-#       check chain.baseNumber >= B4.header.number
-#       check chain.cursorHeads.len == 1
-#       check chain.validate info & " (9)"
+     test "newBase on shorter canonical arc, discard arc with oldBase" &
+          " (ign dup block)":
+       const info = "newBase on shorter canonical .."
+       let com = env.newCom()
 
-#     test "newBase on longer canonical arc, discard arc with oldBase":
-#       const info = "newBase on longer canonical .."
-#       let com = env.newCom()
+       var chain = ForkedChainRef.init(com, baseDistance = 3)
+       checkImportBlock(chain, blk1)
+       checkImportBlock(chain, blk2)
+       checkImportBlock(chain, blk3)
+       checkImportBlock(chain, blk4)
+       checkImportBlock(chain, blk5)
+       checkImportBlock(chain, blk6)
+       checkImportBlock(chain, blk7)
 
-#       var chain = ForkedChainRef.init(com, baseDistance = 3)
-#       checkImportBlock(chain, blk1)
-#       checkImportBlock(chain, blk2)
-#       checkImportBlock(chain, blk3)
-#       checkImportBlock(chain, blk4)
-#       checkImportBlock(chain, blk5)
-#       checkImportBlock(chain, blk6)
-#       checkImportBlock(chain, blk7)
+       checkImportBlock(chain, B4)
+       checkImportBlock(chain, B5)
+       checkImportBlock(chain, B6)
+       checkImportBlock(chain, B7)
 
-#       checkImportBlock(chain, B4)
-#       checkImportBlock(chain, B5)
-#       checkImportBlock(chain, B6)
-#       checkImportBlock(chain, B7)
-#       check chain.validate info & " (1)"
+       checkImportBlock(chain, blk4)
+       check chain.validate info & " (1)"
 
-#       checkForkChoice(chain, blk7, blk5)
-#       check chain.validate info & " (2)"
+       checkForkChoice(chain, B7, B5)
+       check chain.validate info & " (2)"
 
-#       check chain.headHash == blk7.blockHash
-#       check chain.latestHash == blk7.blockHash
-#       check chain.baseNumber > 0
-#       check chain.baseNumber < blk5.header.number
-#       check chain.cursorHeads.len == 1
-#       check chain.validate info & " (9)"
+       check chain.headHash == B7.blockHash
+       check chain.latestHash == B7.blockHash
+       check chain.baseNumber == 4'u64
+       check chain.branches.len == 1
+       check chain.validate info & " (9)"
 
-#     test "headerByNumber":
-#       const info = "headerByNumber"
-#       let com = env.newCom()
+     test "newBase on longer canonical arc, discard new branch":
+       const info = "newBase on longer canonical .."
+       let com = env.newCom()
 
-#       var chain = ForkedChainRef.init(com, baseDistance = 3)
-#       checkImportBlock(chain, blk1)
-#       checkImportBlock(chain, blk2)
-#       checkImportBlock(chain, blk3)
-#       checkImportBlock(chain, blk4)
-#       checkImportBlock(chain, blk5)
-#       checkImportBlock(chain, blk6)
-#       checkImportBlock(chain, blk7)
+       var chain = ForkedChainRef.init(com, baseDistance = 3)
+       checkImportBlock(chain, blk1)
+       checkImportBlock(chain, blk2)
+       checkImportBlock(chain, blk3)
+       checkImportBlock(chain, blk4)
+       checkImportBlock(chain, blk5)
+       checkImportBlock(chain, blk6)
+       checkImportBlock(chain, blk7)
 
-#       checkImportBlock(chain, B4)
-#       checkImportBlock(chain, B5)
-#       checkImportBlock(chain, B6)
-#       checkImportBlock(chain, B7)
-#       check chain.validate info & " (1)"
+       checkImportBlock(chain, B4)
+       checkImportBlock(chain, B5)
+       checkImportBlock(chain, B6)
+       checkImportBlock(chain, B7)
+       check chain.validate info & " (1)"
 
-#       checkForkChoice(chain, blk7, blk5)
-#       check chain.validate info & " (2)"
+       checkForkChoice(chain, blk7, blk5)
+       check chain.validate info & " (2)"
 
-#       # cursor
-#       check chain.headerByNumber(8).isErr
-#       check chain.headerByNumber(7).expect("OK").number == 7
-#       check chain.headerByNumber(7).expect("OK").blockHash == blk7.blockHash
+       check chain.headHash == blk7.blockHash
+       check chain.latestHash == blk7.blockHash
+       check chain.baseNumber > 0
+       check chain.baseNumber < blk5.header.number
+       check chain.branches.len == 1
+       check chain.validate info & " (9)"
 
-#       # from db
-#       check chain.headerByNumber(3).expect("OK").number == 3
-#       check chain.headerByNumber(3).expect("OK").blockHash == blk3.blockHash
+     test "headerByNumber":
+       const info = "headerByNumber"
+       let com = env.newCom()
 
-#       # base
-#       check chain.headerByNumber(4).expect("OK").number == 4
-#       check chain.headerByNumber(4).expect("OK").blockHash == blk4.blockHash
+       var chain = ForkedChainRef.init(com, baseDistance = 3)
+       checkImportBlock(chain, blk1)
+       checkImportBlock(chain, blk2)
+       checkImportBlock(chain, blk3)
+       checkImportBlock(chain, blk4)
+       checkImportBlock(chain, blk5)
+       checkImportBlock(chain, blk6)
+       checkImportBlock(chain, blk7)
 
-#       # from cache
-#       check chain.headerByNumber(5).expect("OK").number == 5
-#       check chain.headerByNumber(5).expect("OK").blockHash == blk5.blockHash
-#       check chain.validate info & " (9)"
+       checkImportBlock(chain, B4)
+       checkImportBlock(chain, B5)
+       checkImportBlock(chain, B6)
+       checkImportBlock(chain, B7)
+       check chain.validate info & " (1)"
 
-#     test "Import after Replay Segment":
-#       const info = "Import after Replay Segment"
-#       let com = env.newCom()
-#       var chain = ForkedChainRef.init(com, baseDistance = 3)
+       checkForkChoice(chain, blk7, blk5)
+       check chain.validate info & " (2)"
 
-#       checkImportBlock(chain, blk1)
-#       checkImportBlock(chain, blk2)
-#       checkImportBlock(chain, blk3)
-#       checkImportBlock(chain, blk4)
-#       checkImportBlock(chain, blk5)
-#       check chain.validate info & " (1)"
+       # cursor
+       check chain.headerByNumber(8).isErr
+       check chain.headerByNumber(7).expect("OK").number == 7
+       check chain.headerByNumber(7).expect("OK").blockHash == blk7.blockHash
 
-#       chain.replaySegment(blk2.header)
-#       chain.replaySegment(blk5.header)
-#       check chain.validate info & " (2)"
+       # from db
+       check chain.headerByNumber(3).expect("OK").number == 3
+       check chain.headerByNumber(3).expect("OK").blockHash == blk3.blockHash
 
-#       checkImportBlock(chain, blk6)
-#       checkImportBlock(chain, blk7)
-#       check chain.validate info & " (9)"
+       # base
+       check chain.headerByNumber(4).expect("OK").number == 4
+       check chain.headerByNumber(4).expect("OK").blockHash == blk4.blockHash
+
+       # from cache
+       check chain.headerByNumber(5).expect("OK").number == 5
+       check chain.headerByNumber(5).expect("OK").blockHash == blk5.blockHash
+       check chain.validate info & " (9)"
+
 
 when isMainModule:
   forkedChainMain()

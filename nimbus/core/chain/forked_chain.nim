@@ -203,7 +203,7 @@ func calculateNewBase(
   let target = min(finalized.number,
     max(head.number, c.baseDistance) - c.baseDistance)
 
-  # Can only increase base block number.
+  # Do not update base.
   if target <= c.baseBranch.tailNumber:
     return BlockPos(branch: c.baseBranch)
 
@@ -310,6 +310,13 @@ proc updateFinalized(c: ForkedChainRef, finalized: BlockPos) =
   # 'B', 'D', and A5 onward will stay
   # 'C' will be removed
 
+  func sameLineage(brc: BranchRef, line: BranchRef): bool =
+    var branch = line
+    while not branch.isNil:
+      if branch == brc:
+        return true
+      branch = branch.parent
+
   let finalizedNumber = finalized.number
   var i = 0
   while i < c.branches.len:
@@ -317,7 +324,7 @@ proc updateFinalized(c: ForkedChainRef, finalized: BlockPos) =
 
     # Any branches with tail block number less or equal
     # than finalized should be removed.
-    if branch != finalized.branch and branch.tailNumber <= finalizedNumber:
+    if not branch.sameLineage(finalized.branch) and branch.tailNumber <= finalizedNumber:
       for i in countdown(branch.blocks.len-1, 0):
         c.removeBlockFromChain(branch.blocks[i])
       c.branches.del(i)
@@ -343,48 +350,56 @@ proc updateBase(c: ForkedChainRef, newBase: BlockPos) =
 
   # Cleanup in-memory blocks starting from newBase backward
   # e.g. B3 backward. Switch to parent branch if needed.
-  var
-    branch = newBase.branch
-    number = newBase.number - 1
-    count  = 0
 
-  while not branch.isNil:
-    let
-      tailNumber = branch.tailNumber
-      nextIndex  = int(number - tailNumber)
-
-    var numDeleted = 0
+  template commitBlocks(number, branch) =
+    let tailNumber = branch.tailNumber
     while number >= tailNumber:
       c.removeBlockFromChain(branch.blocks[number - tailNumber], commit = true)
       inc count
-      inc numDeleted
 
       if number == 0:
         # Don't go below genesis
         break
       dec number
 
-    if numDeleted == branch.len:
-      # If all blocks in a branch is removed, remove the branch too
-      for i, brc in c.branches:
-        if brc == branch:
-          c.branches.del(i)
-          break
-    else:
-      # Only remove blocks with number lower than newBase.number
-      var blocks = newSeqOfCap[BlockDesc](branch.len-nextIndex)
-      for i in nextIndex..<branch.len:
-        blocks.add branch.blocks[i]
-      # Update hashToBlock index
-      for i in 0..<blocks.len:
-        c.hashToBlock[blocks[i].hash] = BlockPos(
-          branch: branch,
-          index : i
-        )
+  var
+    branch = newBase.branch
+    number = newBase.number - 1
+    count  = 0
 
-      branch.blocks = move(blocks)
+  let nextIndex  = int(newBase.number - branch.tailNumber)
+  commitBlocks(number, branch)
+
+  # Update base if it indeed changed
+  if nextIndex > 0:
+    # Only remove blocks with number lower than newBase.number
+    var blocks = newSeqOfCap[BlockDesc](branch.len-nextIndex)
+    for i in nextIndex..<branch.len:
+      blocks.add branch.blocks[i]
+
+    # Update hashToBlock index
+    for i in 0..<blocks.len:
+      c.hashToBlock[blocks[i].hash] = BlockPos(
+        branch: branch,
+        index : i
+      )
+    branch.blocks = move(blocks)
+
+  # Older branches will gone
+  branch = branch.parent
+  while not branch.isNil:
+    commitBlocks(number, branch)
+
+    for i, brc in c.branches:
+      if brc == branch:
+        c.branches.del(i)
+        break
 
     branch = branch.parent
+
+  # Update base branch
+  c.baseBranch = newBase.branch
+  c.baseBranch.parent = nil
 
   # Log only if more than one block persisted
   # This is to avoid log spamming, during normal operation
@@ -402,10 +417,6 @@ proc updateBase(c: ForkedChainRef, newBase: BlockPos) =
       target = newBase.hash.short,
       baseNumber = c.baseBranch.tailNumber,
       baseHash = c.baseBranch.tailHash.short
-
-  # Update base branch
-  c.baseBranch = newBase.branch
-  c.baseBranch.parent = nil
 
   # Update base txFrame
   if c.baseBranch.blocks[0].txFrame != c.baseTxFrame:
