@@ -18,15 +18,6 @@ import
   ../../utils/mergeutils
 
 # ------------------------------------------------------------------------------
-# Private functions
-# ------------------------------------------------------------------------------
-
-# func dup(sTab: Table[RootedVertexID,VertexRef]): Table[RootedVertexID,VertexRef] =
-#   ## Explicit dup for `VertexRef` values
-#   for (k,v) in sTab.pairs:
-#     result[k] = v.dup
-
-# ------------------------------------------------------------------------------
 # Public functions: getter variants
 # ------------------------------------------------------------------------------
 
