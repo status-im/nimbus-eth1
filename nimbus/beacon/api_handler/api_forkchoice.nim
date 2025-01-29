@@ -76,7 +76,7 @@ proc forkchoiceUpdated*(ben: BeaconEngineRef,
                              ForkchoiceUpdatedResponse =
   let
     com   = ben.com
-    db    = com.db.baseTxFrame() # TODO forkedChain!
+    txFrame = ben.chain.latestTxFrame()
     chain = ben.chain
     blockHash = update.headBlockHash
 
@@ -125,9 +125,8 @@ proc forkchoiceUpdated*(ben: BeaconEngineRef,
     let blockNumber = header.number
     if header.difficulty > 0.u256 or blockNumber ==  0'u64:
       let
-        # TODO this chould be forkedchain!
-        td  = db.getScore(blockHash)
-        ptd = db.getScore(header.parentHash)
+        td  = txFrame.getScore(blockHash)
+        ptd = txFrame.getScore(header.parentHash)
         ttd = com.ttd.get(high(UInt256))
 
       if td.isNone or (blockNumber > 0'u64 and ptd.isNone):
@@ -161,13 +160,14 @@ proc forkchoiceUpdated*(ben: BeaconEngineRef,
 
   # If the beacon client also advertised a finalized block, mark the local
   # chain final and completely in PoS mode.
+  let baseTxFrame = ben.chain.baseTxFrame
   let finalizedBlockHash = update.finalizedBlockHash
   if finalizedBlockHash != default(Hash32):
     if not ben.chain.isCanonical(finalizedBlockHash):
       warn "Final block not in canonical chain",
         hash=finalizedBlockHash.short
       raise invalidForkChoiceState("finalized block not canonical")
-    db.finalizedHeaderHash(finalizedBlockHash)
+    baseTxFrame.finalizedHeaderHash(finalizedBlockHash)
 
   let safeBlockHash = update.safeBlockHash
   if safeBlockHash != default(Hash32):
@@ -175,7 +175,7 @@ proc forkchoiceUpdated*(ben: BeaconEngineRef,
       warn "Safe block not in canonical chain",
         hash=safeBlockHash.short
       raise invalidForkChoiceState("safe head not canonical")
-    db.safeHeaderHash(safeBlockHash)
+    baseTxFrame.safeHeaderHash(safeBlockHash)
 
   chain.forkChoice(blockHash, finalizedBlockHash).isOkOr:
     return invalidFCU(error, chain, header)
