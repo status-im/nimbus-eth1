@@ -47,7 +47,7 @@ type
   ReqBeaconSyncerTargetCB* = proc(header: Header; finHash: Hash32) {.gcsafe, raises: [].}
     ## Ditto (for beacon sync)
 
-  BeaconSyncerIsActiveCB* = proc(): bool {.gcsafe, raises: [].}
+  BeaconSyncerProgressCB* = proc(): tuple[start, current, target: BlockNumber] {.gcsafe, raises: [].}
     ## Query syncer status
 
   NotifyBadBlockCB* = proc(invalid, origin: Header) {.gcsafe, raises: [].}
@@ -85,7 +85,7 @@ type
       ## Call back function for a sync processor that returns the canonical
       ## header.
 
-    beaconSyncerIsActiveCB: BeaconSyncerIsActiveCB
+    beaconSyncerProgressCB: BeaconSyncerProgressCB
       ## Call back function querying the status of the sync processor. The
       ## function returns `true` if the syncer is running, downloading or
       ## importing headers and blocks.
@@ -355,11 +355,11 @@ proc reqBeaconSyncerTarget*(com: CommonRef; header: Header; finHash: Hash32) =
   if not com.reqBeaconSyncerTargetCB.isNil:
     com.reqBeaconSyncerTargetCB(header, finHash)
 
-proc beaconSyncerIsActive*(com: CommonRef): bool =
+proc beaconSyncerProgress*(com: CommonRef): tuple[start, current, target: BlockNumber] =
   ## Query syncer status
-  if not com.beaconSyncerIsActiveCB.isNil:
-    return com.beaconSyncerIsActiveCB()
-  # false
+  if not com.beaconSyncerProgressCB.isNil:
+    return com.beaconSyncerProgressCB()
+  # (0,0,0)
 
 proc notifyBadBlock*(com: CommonRef; invalid, origin: Header)
     {.gcsafe, raises: [].} =
@@ -481,9 +481,9 @@ func `reqBeaconSyncerTarget=`*(com: CommonRef; cb: ReqBeaconSyncerTargetCB) =
   ## Activate or reset a call back handler for syncing.
   com.reqBeaconSyncerTargetCB = cb
 
-func `beaconSyncerIsActive=`*(com: CommonRef; cb: BeaconSyncerIsActiveCB) =
+func `beaconSyncerProgress=`*(com: CommonRef; cb: BeaconSyncerProgressCB) =
   ## Activate or reset a call back handler for querying syncer.
-  com.beaconSyncerIsActiveCB = cb
+  com.beaconSyncerProgressCB = cb
 
 func `notifyBadBlock=`*(com: CommonRef; cb: NotifyBadBlockCB) =
   ## Activate or reset a call back handler for bad block notification.
