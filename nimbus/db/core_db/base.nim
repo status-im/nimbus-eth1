@@ -627,8 +627,8 @@ proc dispose*(tx: CoreDbTxRef) =
   tx.ifTrackNewApi: debug logTxt, api, elapsed, prvLevel
 
 func reparent*(tx: CoreDbTxRef, parent: CoreDbTxRef) =
-  tx.aTx.parent = parent.aTx.parent
-  tx.kTx.parent = parent.kTx.parent
+  tx.aTx.parent = parent.aTx
+  tx.kTx.parent = parent.kTx
 
 # ------------------------------------------------------------------------------
 # Public tracer methods

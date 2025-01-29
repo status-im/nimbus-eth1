@@ -382,9 +382,6 @@ proc updateBase(c: ForkedChainRef, newBase: BlockPos) =
           index : i
         )
 
-      # Update base txFrame
-      blocks[0].txFrame.reparent(branch.blocks[nextIndex-1].txFrame)
-      c.baseTxFrame = blocks[0].txFrame
       branch.blocks = move(blocks)
 
     branch = branch.parent
@@ -406,8 +403,16 @@ proc updateBase(c: ForkedChainRef, newBase: BlockPos) =
       baseNumber = c.baseBranch.tailNumber,
       baseHash = c.baseBranch.tailHash.short
 
+  # Update base branch
   c.baseBranch = newBase.branch
   c.baseBranch.parent = nil
+
+  # Update base txFrame
+  if c.baseBranch.blocks[0].txFrame != c.baseTxFrame:
+    c.baseBranch.blocks[0].txFrame.commit()
+    c.baseBranch.blocks[0].txFrame = c.baseTxFrame
+    if c.baseBranch.len > 1:
+      c.baseBranch.blocks[1].txFrame.reparent(c.baseTxFrame)
 
 # ------------------------------------------------------------------------------
 # Public functions
