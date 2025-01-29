@@ -42,8 +42,11 @@ type
   SyncReqNewHeadCB* = proc(header: Header) {.gcsafe, raises: [].}
     ## Update head for syncing
 
-  ReqBeaconSyncTargetCB* = proc(header: Header; finHash: Hash32) {.gcsafe, raises: [].}
+  ReqBeaconSyncerTargetCB* = proc(header: Header; finHash: Hash32) {.gcsafe, raises: [].}
     ## Ditto (for beacon sync)
+
+  BeaconSyncerIsActiveCB* = proc(): bool {.gcsafe, raises: [].}
+    ## Query syncer status
 
   NotifyBadBlockCB* = proc(invalid, origin: Header) {.gcsafe, raises: [].}
     ## Notify engine-API of encountered bad block
@@ -76,9 +79,14 @@ type
       ## Call back function for the sync processor. This function stages
       ## the arguent header to a private aerea for subsequent processing.
 
-    reqBeaconSyncTargetCB: ReqBeaconSyncTargetCB
+    reqBeaconSyncerTargetCB: ReqBeaconSyncerTargetCB
       ## Call back function for a sync processor that returns the canonical
       ## header.
+
+    beaconSyncerIsActiveCB: BeaconSyncerIsActiveCB
+      ## Call back function querying the status of the sync processor. The
+      ## function returns `true` if the syncer is running, downloading or
+      ## importing headers and blocks.
 
     notifyBadBlock: NotifyBadBlockCB
       ## Allow synchronizer to inform engine-API of bad encountered during sync
@@ -340,10 +348,16 @@ proc syncReqNewHead*(com: CommonRef; header: Header)
   if not com.syncReqNewHead.isNil:
     com.syncReqNewHead(header)
 
-proc reqBeaconSyncTargetCB*(com: CommonRef; header: Header; finHash: Hash32) =
+proc reqBeaconSyncerTarget*(com: CommonRef; header: Header; finHash: Hash32) =
   ## Used by RPC updater
-  if not com.reqBeaconSyncTargetCB.isNil:
-    com.reqBeaconSyncTargetCB(header, finHash)
+  if not com.reqBeaconSyncerTargetCB.isNil:
+    com.reqBeaconSyncerTargetCB(header, finHash)
+
+proc beaconSyncerIsActive*(com: CommonRef): bool =
+  ## Query syncer status
+  if not com.beaconSyncerIsActiveCB.isNil:
+    return com.beaconSyncerIsActiveCB()
+  # false
 
 proc notifyBadBlock*(com: CommonRef; invalid, origin: Header)
     {.gcsafe, raises: [].} =
@@ -461,9 +475,13 @@ func `syncReqNewHead=`*(com: CommonRef; cb: SyncReqNewHeadCB) =
   ## Activate or reset a call back handler for syncing.
   com.syncReqNewHead = cb
 
-func `reqBeaconSyncTarget=`*(com: CommonRef; cb: ReqBeaconSyncTargetCB) =
+func `reqBeaconSyncerTarget=`*(com: CommonRef; cb: ReqBeaconSyncerTargetCB) =
   ## Activate or reset a call back handler for syncing.
-  com.reqBeaconSyncTargetCB = cb
+  com.reqBeaconSyncerTargetCB = cb
+
+func `beaconSyncerIsActive=`*(com: CommonRef; cb: BeaconSyncerIsActiveCB) =
+  ## Activate or reset a call back handler for querying syncer.
+  com.beaconSyncerIsActiveCB = cb
 
 func `notifyBadBlock=`*(com: CommonRef; cb: NotifyBadBlockCB) =
   ## Activate or reset a call back handler for bad block notification.

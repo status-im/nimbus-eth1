@@ -23,10 +23,18 @@ import
 # Private functions
 # ------------------------------------------------------------------------------
 
+proc querySyncStatusCB(
+    ctx: BeaconCtxRef;
+    info: static[string];
+      ): BeaconSyncerIsActiveCB =
+  ## Syncer status query function/closure.
+  return proc(): bool =
+    not ctx.hibernate()
+
 proc updateBeaconHeaderCB(
     ctx: BeaconCtxRef;
     info: static[string];
-      ): ReqBeaconSyncTargetCB =
+      ): ReqBeaconSyncerTargetCB =
   ## Update beacon header. This function is intended as a call back function
   ## for the RPC module.
   return proc(h: Header; f: Hash32) {.gcsafe, raises: [].} =
@@ -90,13 +98,17 @@ proc setupDatabase*(ctx: BeaconCtxRef; info: static[string]) =
     ctx.pool.blocksStagedQuLenMax = blocksStagedQueueLenMaxDefault
 
 
-proc setupRpcMagic*(ctx: BeaconCtxRef; info: static[string]) =
-  ## Helper for `setup()`: Enable external pivot update via RPC
-  ctx.pool.chain.com.reqBeaconSyncTarget = ctx.updateBeaconHeaderCB info
+proc setupServices*(ctx: BeaconCtxRef; info: static[string]) =
+  ## Helper for `setup()`: Enable external call-back based services
+  # Activate target request. Will be called from RPC handler.
+  ctx.pool.chain.com.reqBeaconSyncerTarget = ctx.updateBeaconHeaderCB info
+  # Provide status info: running or hibernating
+  ctx.pool.chain.com.beaconSyncerIsActive = ctx.querySyncStatusCB info
 
-proc destroyRpcMagic*(ctx: BeaconCtxRef) =
+proc destroyServices*(ctx: BeaconCtxRef) =
   ## Helper for `release()`
-  ctx.pool.chain.com.reqBeaconSyncTarget = ReqBeaconSyncTargetCB(nil)
+  ctx.pool.chain.com.reqBeaconSyncerTarget = ReqBeaconSyncerTargetCB(nil)
+  ctx.pool.chain.com.beaconSyncerIsActive = BeaconSyncerIsActiveCB(nil)
 
 # ---------
 
