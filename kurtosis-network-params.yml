@@ -21,6 +21,7 @@ additional_services:
   - assertoor
   - beacon_metrics_gazer
   - blob_spammer
+snooper_enabled: true
 mev_type: null
 assertoor_params:
   image: "ethpandaops/assertoor"
