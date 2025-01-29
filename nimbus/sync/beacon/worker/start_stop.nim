@@ -23,6 +23,14 @@ import
 # Private functions
 # ------------------------------------------------------------------------------
 
+proc querySyncStatusCB(
+    ctx: BeaconCtxRef;
+    info: static[string];
+      ): BeaconSyncerIsActiveCB =
+  ## Syncer status query function/closure.
+  return proc(): bool =
+    not ctx.hibernate()
+
 proc updateBeaconHeaderCB(
     ctx: BeaconCtxRef;
     info: static[string];
@@ -94,10 +102,13 @@ proc setupServices*(ctx: BeaconCtxRef; info: static[string]) =
   ## Helper for `setup()`: Enable external call-back based services
   # Activate target request. Will be called from RPC handler.
   ctx.pool.chain.com.reqBeaconSyncerTarget = ctx.updateBeaconHeaderCB info
+  # Provide status info: running or hibernating
+  ctx.pool.chain.com.beaconSyncerIsActive = ctx.querySyncStatusCB info
 
 proc destroyServices*(ctx: BeaconCtxRef) =
   ## Helper for `release()`
   ctx.pool.chain.com.reqBeaconSyncerTarget = ReqBeaconSyncerTargetCB(nil)
+  ctx.pool.chain.com.beaconSyncerIsActive = BeaconSyncerIsActiveCB(nil)
 
 # ---------
 
