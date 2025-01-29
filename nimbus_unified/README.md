@@ -9,7 +9,7 @@
 
 
 # description
-
+tbd
 For in-depth configuration and functionality of Nimbus execution and consensus layer refer to:
 - [Nimbus-eth1 - Execution layer client](https://github.com/status-im/nimbus-eth1) Documentation
 - [Nimbus-eth2 - Consensus layer client](https://github.com/status-im/nimbus-eth2) Documentation
