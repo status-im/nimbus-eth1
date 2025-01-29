@@ -133,7 +133,7 @@ proc acceptedStatus*(): PayloadStatusV1 =
   PayloadStatusV1(
     status: PayloadExecutionStatus.accepted,
     latestValidHash: Opt.none(Hash32),
-    validationError: Opt.some(null)
+    validationError: Opt.some("null")
   )
 
 proc validStatus*(validHash: common.Hash32): PayloadStatusV1 =
