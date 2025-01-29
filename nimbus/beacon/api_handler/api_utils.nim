@@ -103,7 +103,7 @@ proc validFCU*(id: Opt[Bytes8],
     payloadStatus: PayloadStatusV1(
       status: PayloadExecutionStatus.valid,
       latestValidHash: toValidHash(validHash),
-      validationError: Opt.none(string)
+      validationError: Opt.some("null")
     ),
     payloadId: id
   )
@@ -119,28 +119,28 @@ proc invalidStatus*(validHash = default(common.Hash32)): PayloadStatusV1 =
   PayloadStatusV1(
     status: PayloadExecutionStatus.invalid,
     latestValidHash: toValidHash(validHash),
-    validationError: Opt.none(string)
+    validationError: Opt.some("null")
   )
 
 proc acceptedStatus*(validHash: common.Hash32): PayloadStatusV1 =
   PayloadStatusV1(
     status: PayloadExecutionStatus.accepted,
     latestValidHash: toValidHash(validHash),
-    validationError: Opt.none(string)
+    validationError: Opt.some("null")
   )
 
 proc acceptedStatus*(): PayloadStatusV1 =
   PayloadStatusV1(
     status: PayloadExecutionStatus.accepted,
     latestValidHash: Opt.none(Hash32),
-    validationError: Opt.none(string)
+    validationError: Opt.some(null)
   )
 
 proc validStatus*(validHash: common.Hash32): PayloadStatusV1 =
   PayloadStatusV1(
     status: PayloadExecutionStatus.valid,
     latestValidHash: toValidHash(validHash),
-    validationError: Opt.none(string)
+    validationError: Opt.some("null")
   )
 
 proc invalidParams*(msg: string): ref InvalidRequest =
