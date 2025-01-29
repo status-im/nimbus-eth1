@@ -157,6 +157,7 @@ proc runPool*(
   ## Note that this function does not run in `async` mode.
   ##
   buddy.ctx.headersStagedReorg info
+  buddy.ctx.blocksStagedReorg info
   true # stop
 
 

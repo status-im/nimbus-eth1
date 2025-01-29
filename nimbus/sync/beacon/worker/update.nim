@@ -264,19 +264,38 @@ proc setupProcessingBlocks(ctx: BeaconCtxRef; info: static[string]) =
 
 proc updateSyncState*(ctx: BeaconCtxRef; info: static[string]) =
   ## Update internal state when needed
-  let
-    prevState = ctx.layout.lastState     # previous state
-    thisState = ctx.syncState info       # currently observed state
+  let prevState = ctx.layout.lastState   # previous state
+  var thisState = ctx.syncState info     # currently observed state
 
   if thisState == prevState:
     # Check whether the system has been idle and a new header download
     # session can be set up
-    if prevState == idleSyncState and
-       ctx.target.changed and            # and there is a new target from CL
-       ctx.target.final != 0:            # .. ditto
-      ctx.setupCollectingHeaders info    # set up new header sync
-    return
-    # Notreached
+    case prevState:
+    of idleSyncState:
+      if ctx.target.changed and          # and there is a new target from CL
+         ctx.target.final != 0:          # .. ditto
+        ctx.setupCollectingHeaders info  # set up new header sync
+      return
+    of processingBlocks:
+      if not ctx.blocksStagedQueueIsEmpty() or
+         0 < ctx.blocksUnprocChunks() or
+         0 < ctx.blocksUnprocBorrowed:
+        return
+      # Set to idle
+      debug info & ": blocks processing cancelled",
+        B=(if ctx.chain.baseNumber() == ctx.layout.coupler: "C"
+           else: ctx.chain.baseNumber().bnStr),
+        C=(if ctx.layout.coupler == ctx.chain.latestNumber(): "L"
+           else: ctx.layout.coupler.bnStr),
+        L=(if ctx.chain.latestNumber() == ctx.layout.dangling: "D"
+           else: ctx.chain.latestNumber().bnStr),
+        D=(if ctx.layout.dangling == ctx.layout.head: "H"
+           else: ctx.layout.dangling.bnStr),
+        H=ctx.layout.head.bnStr
+      thisState = idleSyncState
+      # proceed
+    else:
+      return
 
   info "Sync state changed", prevState, thisState,
     head=ctx.chain.latestNumber.bnStr,

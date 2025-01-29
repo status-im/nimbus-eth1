@@ -1,5 +1,5 @@
 # Nimbus
-# Copyright (c) 2023-2024 Status Research & Development GmbH
+# Copyright (c) 2023-2025 Status Research & Development GmbH
 # Licensed and distributed under either of
 #   * MIT license (license terms in the root directory or at
 #     https://opensource.org/licenses/MIT).
@@ -112,12 +112,16 @@ proc blocksUnprocClear*(ctx: BeaconCtxRef) =
   ctx.blk.unprocessed.clear()
   ctx.blk.borrowed = 0u
 
-proc blocksUnprocSet*(ctx: BeaconCtxRef; minPt, maxPt: BlockNumber) =
-  ## Set up new unprocessed range
-  ctx.blocksUnprocClear()
+proc blocksUnprocAmend*(ctx: BeaconCtxRef; minPt, maxPt: BlockNumber) =
+  ## Add some unprocessed range
   # Argument `maxPt` would be internally adjusted to `max(minPt,maxPt)`
   if minPt <= maxPt:
     discard ctx.blk.unprocessed.merge(minPt, maxPt)
+
+proc blocksUnprocSet*(ctx: BeaconCtxRef; minPt, maxPt: BlockNumber) =
+  ## Set up new unprocessed range
+  ctx.blocksUnprocClear()
+  ctx.blocksUnprocAmend(minPt, maxPt)
 
 # ------------------------------------------------------------------------------
 # End
