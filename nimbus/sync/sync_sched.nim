@@ -430,7 +430,7 @@ proc onPeerConnected[S,W](dsc: RunnerSyncRef[S,W]; peer: Peer) =
       # This could happen if there are idle entries in the table, i.e.
       # somehow hanging runners.
       if dsc.ctx.noisyLog: trace "Peer table full! Dequeuing least used entry",
-        oldest, nPeers, nWorkers=dsc.buddies.len, maxWorkers
+        oldestPeer=oldest.peer, oldestOnly=oldest.only, nPeers=nPeers, nWorkers=dsc.buddies.len, maxWorkers
       # Setting to `zombie` will trigger the worker to terminate (if any.)
       oldest.ctrl.zombie = true
 
