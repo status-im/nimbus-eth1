@@ -172,13 +172,13 @@ proc tooLargeRequest*(msg: string): ref InvalidRequest =
     msg: msg
   )
 
-proc latestValidHash*(db: CoreDbRef,
+proc latestValidHash*(txFrame: CoreDbTxRef,
                       parent: Header,
                       ttd: DifficultyInt): Hash32 =
   if parent.isGenesis:
     return default(Hash32)
   # TODO shouldn't this be in forkedchainref?
-  let ptd = db.baseTxFrame().getScore(parent.parentHash).valueOr(0.u256)
+  let ptd = txFrame.getScore(parent.parentHash).valueOr(0.u256)
   if ptd >= ttd:
     parent.blockHash
   else:
@@ -193,6 +193,6 @@ proc invalidFCU*(validationError: string,
     return invalidFCU(validationError)
 
   let blockHash =
-    latestValidHash(chain.db, parent, chain.com.ttd.get(high(UInt256)))
+    latestValidHash(chain.latestTxFrame, parent, chain.com.ttd.get(high(UInt256)))
 
   invalidFCU(validationError, blockHash)

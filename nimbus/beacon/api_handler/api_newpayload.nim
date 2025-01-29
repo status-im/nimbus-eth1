@@ -137,7 +137,7 @@ proc newPayload*(ben: BeaconEngineRef,
 
   let
     com = ben.com
-    db  = com.db.baseTxFrame() # TODO this should be forkedchain!
+    txFrame = ben.chain.latestTxFrame()
     timestamp = ethTime payload.timestamp
     version = payload.version
     requestsHash = calcRequestsHash(executionRequests)
@@ -185,9 +185,9 @@ proc newPayload*(ben: BeaconEngineRef,
   let ttd = com.ttd.get(high(UInt256))
 
   if version == Version.V1:
-    let ptd  = db.getScore(header.parentHash).valueOr:
+    let ptd  = txFrame.getScore(header.parentHash).valueOr:
       0.u256
-    let gptd  = db.getScore(parent.parentHash)
+    let gptd  = txFrame.getScore(parent.parentHash)
     if ptd < ttd:
       warn "Ignoring pre-merge payload",
         number = header.number, hash = blockHash.short, ptd, ttd
@@ -216,7 +216,7 @@ proc newPayload*(ben: BeaconEngineRef,
     warn "State not available, ignoring new payload",
       hash   = blockHash,
       number = header.number
-    let blockHash = latestValidHash(com.db, parent, ttd)
+    let blockHash = latestValidHash(txFrame, parent, ttd)
     return acceptedStatus(blockHash)
 
   trace "Inserting block without sethead",
@@ -229,7 +229,7 @@ proc newPayload*(ben: BeaconEngineRef,
       parent = header.parentHash.short,
       error = vres.error()
     ben.setInvalidAncestor(header, blockHash)
-    let blockHash = latestValidHash(com.db, parent, ttd)
+    let blockHash = latestValidHash(txFrame, parent, ttd)
     return invalidStatus(blockHash, vres.error())
 
   ben.txPool.removeNewBlockTxs(blk, Opt.some(blockHash))
