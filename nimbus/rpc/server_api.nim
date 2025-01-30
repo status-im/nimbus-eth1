@@ -241,9 +241,8 @@ proc setupServerAPI*(api: ServerAPIRef, server: RpcServer, ctx: EthContext) =
           number = header.number, hash = header.blockHash.short,
           txs = txs.len, receipts = receipts.len
         return Opt.none(seq[FilterLog])
-      let logs = deriveLogs(header, txs, receipts)
-      let filteredLogs = filterLogs(logs, opts.address, opts.topics)
-      return Opt.some(filteredLogs)
+      let logs = deriveLogs(header, txs, receipts, opts)
+      return Opt.some(logs)
     else:
       return Opt.some(newSeq[FilterLog](0))
 
