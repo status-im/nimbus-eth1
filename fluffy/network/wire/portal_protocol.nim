@@ -127,7 +127,8 @@ const
   initialLookups = 1 ## Amount of lookups done when populating the routing table
 
   ## Ban durations for banned nodes in the routing table
-  NodeBanDurationMessageResponseError = 15.minutes
+  NodeBanDurationWrongSubprotocol = 12.hours
+  NodeBanDurationInvalidResponse = 30.minutes
   NodeBanDurationContentLookupFailedValidation* = 60.minutes
   NodeBanDurationOfferFailedValidation* = 60.minutes
 
@@ -681,7 +682,7 @@ proc reqResponse[Request: SomeMessage, Response: SomeMessage](
     labelValues = [$p.protocolId, $messageKind(Request)]
   )
 
-  let talkresp =
+  let talkResp =
     await talkReq(p.baseProtocol, dst, @(p.protocolId), encodeMessage(request))
 
   # Note: Failure of `decodeMessage` might also simply mean that the peer is
@@ -689,18 +690,27 @@ proc reqResponse[Request: SomeMessage, Response: SomeMessage](
   # an empty response needs to be send in that case.
   # See: https://github.com/ethereum/devp2p/blob/master/discv5/discv5-wire.md#talkreq-request-0x05
 
-  let messageResponse = talkresp
+  let messageResponse = talkResp
     .mapErr(
       proc(x: cstring): string =
         $x
     )
     .flatMap(
       proc(x: seq[byte]): Result[Message, string] =
+        # ban nodes that are on the wrong subprotocol
+        if x.len() == 0:
+          p.banNode(dst.id, NodeBanDurationWrongSubprotocol)
+
         decodeMessage(x)
     )
     .flatMap(
       proc(m: Message): Result[Response, string] =
-        getInnerMessage[Response](m)
+        let r = getInnerMessage[Response](m)
+
+        # ban nodes that that send ban response messages
+        if r.isErr():
+          p.banNode(dst.id, NodeBanDurationInvalidResponse)
+        return r
     )
 
   if messageResponse.isOk():
@@ -715,11 +725,7 @@ proc reqResponse[Request: SomeMessage, Response: SomeMessage](
     debug "Error receiving message response",
       error = messageResponse.error, srcId = dst.id, srcAddress = dst.address
     p.pingTimings.del(dst.id)
-
-    if p.config.disableBanNodes:
-      p.routingTable.replaceNode(dst)
-    else:
-      p.routingTable.banNode(dst.id, NodeBanDurationMessageResponseError)
+    p.routingTable.replaceNode(dst)
 
   return messageResponse
 
