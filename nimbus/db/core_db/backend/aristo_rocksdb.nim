@@ -1,5 +1,5 @@
 # Nimbus
-# Copyright (c) 2023-2024 Status Research & Development GmbH
+# Copyright (c) 2023-2025 Status Research & Development GmbH
 # Licensed under either of
 #  * Apache License, version 2.0, ([LICENSE-APACHE](LICENSE-APACHE) or
 #    http://www.apache.org/licenses/LICENSE-2.0)
@@ -118,6 +118,10 @@ proc toRocksDb*(
   # Reduce number of files when the database grows
   cfOpts.targetFileSizeBase = cfOpts.writeBufferSize
   cfOpts.targetFileSizeMultiplier = 6
+
+  # We certainly don't want to re-compact historical data over and over
+  cfOpts.ttl = 0
+  cfOpts.periodicCompactionSeconds = 0
 
   let dbOpts = defaultDbOptions(autoClose = true)
   dbOpts.maxOpenFiles = opts.maxOpenFiles
