@@ -127,7 +127,6 @@ const
   initialLookups = 1 ## Amount of lookups done when populating the routing table
 
   ## Ban durations for banned nodes in the routing table
-  NodeBanDurationWrongSubprotocol = 12.hours
   NodeBanDurationInvalidResponse = 30.minutes
   NodeBanDurationContentLookupFailedValidation* = 60.minutes
   NodeBanDurationOfferFailedValidation* = 60.minutes
@@ -575,8 +574,8 @@ proc messageHandler(
   if p.isBanned(srcId):
     # The sender of the message is in the temporary node ban list
     # so we don't process the message
-    debug "Ignoring message from banned node", srcId, srcUdpAddress
-    return @[]
+    debug "Dropping message from banned node", srcId, srcUdpAddress
+    return @[] # Reply with an empty response message
 
   let decoded = decodeMessage(request)
   if decoded.isOk():
@@ -697,17 +696,16 @@ proc reqResponse[Request: SomeMessage, Response: SomeMessage](
     )
     .flatMap(
       proc(x: seq[byte]): Result[Message, string] =
-        # ban nodes that are on the wrong subprotocol
-        if x.len() == 0:
-          p.banNode(dst.id, NodeBanDurationWrongSubprotocol)
-
-        decodeMessage(x)
+        let r = decodeMessage(x)
+        # Ban nodes that that send messages that fail to decode (includes empty messages)
+        if r.isErr():
+          p.banNode(dst.id, NodeBanDurationInvalidResponse)
+        return r
     )
     .flatMap(
       proc(m: Message): Result[Response, string] =
         let r = getInnerMessage[Response](m)
-
-        # ban nodes that that send ban response messages
+        # Ban nodes that that send wrong type of response message
         if r.isErr():
           p.banNode(dst.id, NodeBanDurationInvalidResponse)
         return r

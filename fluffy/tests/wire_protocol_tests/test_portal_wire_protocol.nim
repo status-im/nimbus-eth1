@@ -502,3 +502,124 @@ procSuite "Portal Wire Protocol Tests":
 
     await proto1.stopPortalProtocol()
     await proto2.stopPortalProtocol()
+
+  asyncTest "Banned nodes are removed and cannot be added":
+    let (proto1, proto2) = defaultTestSetup(rng)
+
+    # add the node
+    check:
+      proto1.addNode(proto2.localNode) == Added
+      proto1.getNode(proto2.localNode.id).isSome()
+
+    # banning the node should remove it from the routing table
+    proto1.banNode(proto2.localNode.id, 1.minutes)
+    check proto1.getNode(proto2.localNode.id).isNone()
+
+    # cannot add a banned node
+    check:
+      proto1.addNode(proto2.localNode) == Banned
+      proto1.getNode(proto2.localNode.id).isNone()
+
+    await proto1.stopPortalProtocol()
+    await proto2.stopPortalProtocol()
+
+  asyncTest "Banned nodes are filtered out in FindNodes/Nodes":
+    let
+      proto1 = initPortalProtocol(rng, PrivateKey.random(rng[]), localAddress(20302))
+      proto2 = initPortalProtocol(rng, PrivateKey.random(rng[]), localAddress(20303))
+      proto3 = initPortalProtocol(rng, PrivateKey.random(rng[]), localAddress(20304))
+      distance = logDistance(proto2.localNode.id, proto3.localNode.id)
+
+    check proto2.addNode(proto3.localNode) == Added
+    check (await proto2.ping(proto3.localNode)).isOk()
+    check (await proto3.ping(proto2.localNode)).isOk()
+
+    # before banning the node it is returned in the response
+    block:
+      let res = await proto1.findNodes(proto2.localNode, @[distance])
+      check:
+        res.isOk()
+        res.get().len() == 1
+
+    proto1.banNode(proto3.localNode.id, 1.minutes)
+
+    # after banning the node, it is not returned in the response
+    block:
+      let res = await proto1.findNodes(proto2.localNode, @[distance])
+      check:
+        res.isOk()
+        res.get().len() == 0
+
+    await proto1.stopPortalProtocol()
+    await proto2.stopPortalProtocol()
+    await proto3.stopPortalProtocol()
+
+  asyncTest "Banned nodes are filtered out in FindContent/Content - send enrs":
+    let
+      proto1 = initPortalProtocol(rng, PrivateKey.random(rng[]), localAddress(20302))
+      proto2 = initPortalProtocol(rng, PrivateKey.random(rng[]), localAddress(20303))
+      proto3 = initPortalProtocol(rng, PrivateKey.random(rng[]), localAddress(20304))
+
+    check proto2.addNode(proto3.localNode) == Added
+    check (await proto2.ping(proto3.localNode)).isOk()
+    check (await proto3.ping(proto2.localNode)).isOk()
+
+    let contentKey = ContentKeyByteList.init(@[1'u8])
+
+    block:
+      let res = await proto1.findContent(proto2.localNode, contentKey)
+      check:
+        res.isOk()
+        res.get().nodes.len() == 1
+
+    proto1.banNode(proto3.localNode.id, 1.minutes)
+
+    block:
+      let res = await proto1.findContent(proto2.localNode, contentKey)
+      check:
+        res.isOk()
+        res.get().nodes.len() == 0
+
+    await proto1.stopPortalProtocol()
+    await proto2.stopPortalProtocol()
+    await proto3.stopPortalProtocol()
+
+  asyncTest "Drop messages from banned nodes":
+    let
+      proto1 = initPortalProtocol(rng, PrivateKey.random(rng[]), localAddress(20302))
+      proto2 = initPortalProtocol(rng, PrivateKey.random(rng[]), localAddress(20303))
+      proto3 = initPortalProtocol(rng, PrivateKey.random(rng[]), localAddress(20304))
+      proto4 = initPortalProtocol(rng, PrivateKey.random(rng[]), localAddress(20305))
+      contentKey = ContentKeyByteList.init(@[1'u8])
+
+    proto2.banNode(proto1.localNode.id, 1.minutes)
+    proto3.banNode(proto1.localNode.id, 1.minutes)
+    proto4.banNode(proto1.localNode.id, 1.minutes)
+
+    check:
+      (await proto1.ping(proto2.localNode)).error() == "No message data, peer might not support this talk protocol"
+      (await proto1.findNodes(proto3.localNode, @[0.uint16])).error() == "No message data, peer might not support this talk protocol"
+      (await proto1.findContent(proto4.localNode, contentKey)).error() == "No content response"
+
+    await proto1.stopPortalProtocol()
+    await proto2.stopPortalProtocol()
+
+  asyncTest "Cannot send message to banned nodes":
+    let
+      (proto1, proto2) = defaultTestSetup(rng)
+      contentKey = ContentKeyByteList.init(@[1'u8])
+
+    check:
+      (await proto1.ping(proto2.localNode)).isOk()
+      (await proto1.findNodes(proto2.localNode, @[0.uint16])).isOk()
+      (await proto1.findContent(proto2.localNode, contentKey)).isOk()
+
+    proto1.banNode(proto2.localNode.id, 1.minutes)
+
+    check:
+      (await proto1.ping(proto2.localNode)).error() == "destination node is banned"
+      (await proto1.findNodes(proto2.localNode, @[0.uint16])).error() == "destination node is banned"
+      (await proto1.findContent(proto2.localNode, contentKey)).error() == "destination node is banned"
+
+    await proto1.stopPortalProtocol()
+    await proto2.stopPortalProtocol()
