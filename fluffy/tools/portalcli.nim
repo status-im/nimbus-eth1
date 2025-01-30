@@ -238,6 +238,7 @@ proc run(config: PortalCliConf) =
     bindPort = udpPort,
     enrAutoUpdate = config.enrAutoUpdate,
     rng = rng,
+    banNodes = true,
   )
 
   d.open()

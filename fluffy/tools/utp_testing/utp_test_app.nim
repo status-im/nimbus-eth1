@@ -151,6 +151,7 @@ when isMainModule:
     bindPort = conf.udpPort,
     enrAutoUpdate = true,
     rng = rng,
+    banNodes = true,
   )
 
   d.open()
