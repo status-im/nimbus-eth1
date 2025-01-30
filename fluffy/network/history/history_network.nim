@@ -19,8 +19,7 @@ import
   ../../network_metadata,
   ../wire/[portal_protocol, portal_stream, portal_protocol_config, ping_extensions],
   "."/[history_content, history_validation, history_type_conversions],
-  ../beacon/beacon_chain_historical_roots,
-  ./content/content_deprecated
+  ../beacon/beacon_chain_historical_roots
 
 from eth/common/eth_types_rlp import rlpHash
 from eth/common/accounts import EMPTY_ROOT_HASH
@@ -439,7 +438,6 @@ proc start*(n: HistoryNetwork) =
 
   n.processContentLoop = processContentLoop(n)
   n.statusLogLoop = statusLogLoop(n)
-  pruneDeprecatedAccumulatorRecords(n.accumulator, n.contentDB)
 
 proc stop*(n: HistoryNetwork) {.async: (raises: []).} =
   info "Stopping Portal execution history network"

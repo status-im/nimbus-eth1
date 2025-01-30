@@ -161,7 +161,7 @@ proc preventLoadingDataDirForTheWrongNetwork(db: CoreDbRef; conf: NimbusConf) =
     kvt.put(dataDirIdKey().toOpenArray, calculatedId.data).isOkOr:
       fatal "Cannot write data dir ID", ID=calculatedId
       quit(QuitFailure)
-      
+
   let
     kvt = db.ctx.getKvt()
     calculatedId = calcHash(conf.networkId, conf.networkParams)
@@ -173,7 +173,7 @@ proc preventLoadingDataDirForTheWrongNetwork(db: CoreDbRef; conf: NimbusConf) =
   if conf.rewriteDatadirId:
     writeDataDirId(kvt, calculatedId)
     return
-  
+
   if calculatedId.data != dataDirIdBytes:
     fatal "Data dir already initialized with other network configuration",
       get=dataDirIdBytes.toHex,
@@ -181,14 +181,6 @@ proc preventLoadingDataDirForTheWrongNetwork(db: CoreDbRef; conf: NimbusConf) =
     quit(QuitFailure)
 
 proc run(nimbus: NimbusNode, conf: NimbusConf) =
-  ## logging
-  setLogLevel(conf.logLevel)
-  if conf.logFile.isSome:
-    let logFile = string conf.logFile.get()
-    defaultChroniclesStream.output.outFile = nil # to avoid closing stdout
-    discard defaultChroniclesStream.output.open(logFile, fmAppend)
-
-  setupFileLimits()
 
   info "Launching execution client",
       version = FullVersionStr,
@@ -297,19 +289,18 @@ proc run(nimbus: NimbusNode, conf: NimbusConf) =
 when isMainModule:
   var nimbus = NimbusNode(state: NimbusState.Starting, ctx: newEthContext())
 
+  ## Processing command line arguments
+  let conf = makeConfig()
+
+  setupFileLimits()
+
   ## Ctrl+C handling
   proc controlCHandler() {.noconv.} =
     when defined(windows):
       # workaround for https://github.com/nim-lang/Nim/issues/4057
       setupForeignThreadGc()
     nimbus.state = NimbusState.Stopping
-    echo "\nCtrl+C pressed. Waiting for a graceful shutdown."
+    notice "\nCtrl+C pressed. Waiting for a graceful shutdown."
   setControlCHook(controlCHandler)
-
-  ## Show logs on stdout until we get the user's logging choice
-  discard defaultChroniclesStream.output.open(stdout)
-
-  ## Processing command line arguments
-  let conf = makeConfig()
 
   nimbus.run(conf)
