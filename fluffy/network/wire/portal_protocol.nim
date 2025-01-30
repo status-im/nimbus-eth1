@@ -127,8 +127,7 @@ const
   initialLookups = 1 ## Amount of lookups done when populating the routing table
 
   ## Ban durations for banned nodes in the routing table
-  NodeBanDurationInvalidResponse = 15.minutes
-  NodeBanDurationNoResponse = 5.minutes
+  NodeBanDurationMessageResponseError = 15.minutes
   NodeBanDurationContentLookupFailedValidation* = 60.minutes
   NodeBanDurationOfferFailedValidation* = 60.minutes
 
@@ -715,7 +714,7 @@ proc reqResponse[Request: SomeMessage, Response: SomeMessage](
     debug "Error receiving message response",
       error = messageResponse.error, srcId = dst.id, srcAddress = dst.address
     p.pingTimings.del(dst.id)
-    p.routingTable.replaceNode(dst)
+    p.banNode(dst.id, NodeBanDurationMessageResponseError)
 
   return messageResponse
 
@@ -898,8 +897,7 @@ proc findContent*(
       let records = recordsFromBytes(m.enrs)
       if records.isOk():
         let verifiedNodes = verifyNodesRecords(records.get(), dst, enrsResultLimit)
-
-        return ok(FoundContent(src: dst, kind: Nodes, nodes: verifiedNodes))
+        return ok(FoundContent(src: dst, kind: Nodes, nodes: verifiedNodes.filterIt(not p.isBanned(it.id))))
       else:
         return err("Content message returned invalid ENRs")
   else:
@@ -1296,8 +1294,7 @@ proc contentLookup*(
       of Nodes:
         let maybeRadius = p.radiusCache.get(content.src.id)
         if maybeRadius.isSome() and
-            p.inRange(content.src.id, maybeRadius.unsafeGet(), targetId) and
-            not p.isBanned(content.src.id):
+            p.inRange(content.src.id, maybeRadius.unsafeGet(), targetId):
           # Only return nodes which may be interested in content.
           # No need to check for duplicates in nodesWithoutContent
           # as requests are never made two times to the same node.
@@ -1441,8 +1438,7 @@ proc traceContentLookup*(
 
         let maybeRadius = p.radiusCache.get(content.src.id)
         if maybeRadius.isSome() and
-            p.inRange(content.src.id, maybeRadius.unsafeGet(), targetId) and
-            not p.isBanned(content.src.id):
+            p.inRange(content.src.id, maybeRadius.unsafeGet(), targetId):
           # Only return nodes which may be interested in content.
           # No need to check for duplicates in nodesWithoutContent
           # as requests are never made two times to the same node.
@@ -1456,7 +1452,7 @@ proc traceContentLookup*(
           metadata["0x" & $n.id] = NodeMetadata(enr: n.record, distance: dist)
           respondedWith.add(n.id)
 
-          if not seen.containsOrIncl(n.id) and not p.isBanned(n.id):
+          if not seen.containsOrIncl(n.id):
             discard p.addNode(n)
             # If it wasn't seen before, insert node while remaining sorted
             closestNodes.insert(
