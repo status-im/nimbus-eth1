@@ -161,7 +161,7 @@ procSuite "History Content Network":
     await historyNode1.stop()
     await historyNode2.stop()
 
-  asyncTest "Offer - Maximum Content Keys in 1 Message":
+  asyncTest "Offer - Maximum plus one Content Keys in 1 Message":
     # Need to provide enough headers to have the accumulator "finished".
     const lastBlockNumber = int(mergeBlockNumber - 1)
 
@@ -204,36 +204,75 @@ procSuite "History Content Network":
 
     # Offering 1 content item too much which should result in a discv5 packet
     # that is too large and thus not get any response.
-    block:
-      let offerResult =
-        await historyNode1.portalProtocol.offer(historyNode2.localNode(), contentKVs)
+    let offerResult =
+      await historyNode1.portalProtocol.offer(historyNode2.localNode(), contentKVs)
 
-      # Fail due timeout, as remote side must drop the too large discv5 packet
-      check offerResult.isErr()
+    # Fail due timeout, as remote side must drop the too large discv5 packet
+    check offerResult.isErr()
 
-      for contentKV in contentKVs:
-        let id = toContentId(contentKV.contentKey)
-        check historyNode2.containsId(id) == false
+    for contentKV in contentKVs:
+      let id = toContentId(contentKV.contentKey)
+      check historyNode2.containsId(id) == false
+
+    await historyNode1.stop()
+    await historyNode2.stop()
+
+  asyncTest "Offer - Maximum Content Keys in 1 Message":
+    # Need to provide enough headers to have the accumulator "finished".
+    const lastBlockNumber = int(mergeBlockNumber - 1)
+
+    let headers = createEmptyHeaders(0, lastBlockNumber)
+    let accumulatorRes = buildAccumulatorData(headers)
+    check accumulatorRes.isOk()
+
+    let
+      (masterAccumulator, epochRecords) = accumulatorRes.get()
+      historyNode1 = newHistoryNode(rng, 20302, masterAccumulator)
+      historyNode2 = newHistoryNode(rng, 20303, masterAccumulator)
+
+    check:
+      historyNode1.portalProtocol().addNode(historyNode2.localNode()) == Added
+      historyNode2.portalProtocol().addNode(historyNode1.localNode()) == Added
+
+      (await historyNode1.portalProtocol().ping(historyNode2.localNode())).isOk()
+      (await historyNode2.portalProtocol().ping(historyNode1.localNode())).isOk()
+
+    # Need to run start to get the processContentLoop running
+    historyNode1.start()
+    historyNode2.start()
+
+    let maxOfferedHistoryContent =
+      getMaxOfferedContentKeys(uint32(len(PortalProtocolId)), maxContentKeySize)
+
+    let headersWithProof =
+      buildHeadersWithProof(headers[0 ..< maxOfferedHistoryContent], epochRecords)
+    check headersWithProof.isOk()
+
+    # This is equal to maxOfferedHistoryContent
+    let contentKVs = headersToContentKV(headersWithProof.get())
+
+    # node 1 will offer the content so it needs to have it in its database
+    for contentKV in contentKVs:
+      let id = toContentId(contentKV.contentKey)
+      historyNode1.portalProtocol.storeContent(
+        contentKV.contentKey, id, contentKV.content
+      )
 
     # One content key less should make offer be succesful and should result
     # in the content being transferred and stored on the other node.
-    block:
-      let offerResult = await historyNode1.portalProtocol.offer(
-        historyNode2.localNode(), contentKVs[0 ..< maxOfferedHistoryContent]
-      )
+    let offerResult = await historyNode1.portalProtocol.offer(
+      historyNode2.localNode(), contentKVs[0 ..< maxOfferedHistoryContent]
+    )
 
-      check offerResult.isOk()
+    check offerResult.isOk()
 
-      # Make sure the content got processed out of content queue
-      while not historyNode2.historyNetwork.contentQueue.empty():
-        await sleepAsync(1.milliseconds)
+    # Make sure the content got processed out of content queue
+    while not historyNode2.historyNetwork.contentQueue.empty():
+      await sleepAsync(1.milliseconds)
 
-      for i, contentKV in contentKVs:
-        let id = toContentId(contentKV.contentKey)
-        if i < len(contentKVs) - 1:
-          await historyNode2.checkContainsIdWithRetry(id)
-        else:
-          check historyNode2.containsId(id) == false
+    for i, contentKV in contentKVs:
+      let id = toContentId(contentKV.contentKey)
+      await historyNode2.checkContainsIdWithRetry(id)
 
     await historyNode1.stop()
     await historyNode2.stop()
