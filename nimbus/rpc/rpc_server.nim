@@ -1,5 +1,5 @@
 # Nimbus
-# Copyright (c) 2023-2024 Status Research & Development GmbH
+# Copyright (c) 2023-2025 Status Research & Development GmbH
 # Licensed under either of
 #  * Apache License, version 2.0, ([LICENSE-APACHE](LICENSE-APACHE))
 #  * MIT license ([LICENSE-MIT](LICENSE-MIT))
@@ -64,7 +64,10 @@ func defaultRpcHttpServerParams(): RpcHttpServerParams =
     serverUri: Uri(),
     serverIdent: "",
     maxConnections: -1,
-    bufferSize: 4096,
+    # Assuming blocks take up to 16mb, it takes up to 64 reads to fetch the
+    # block from the OS buffer (which fills up quickly when the block is arriving
+    # from a local socket)
+    bufferSize: 256 * 1024,
     backlogSize: 100,
     httpHeadersTimeout: 10.seconds,
     maxHeadersSize: 64 * 1024,
