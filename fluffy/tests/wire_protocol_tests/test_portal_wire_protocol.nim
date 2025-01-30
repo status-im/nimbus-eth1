@@ -597,9 +597,12 @@ procSuite "Portal Wire Protocol Tests":
     proto4.banNode(proto1.localNode.id, 1.minutes)
 
     check:
-      (await proto1.ping(proto2.localNode)).error() == "No message data, peer might not support this talk protocol"
-      (await proto1.findNodes(proto3.localNode, @[0.uint16])).error() == "No message data, peer might not support this talk protocol"
-      (await proto1.findContent(proto4.localNode, contentKey)).error() == "No content response"
+      (await proto1.ping(proto2.localNode)).error() ==
+        "No message data, peer might not support this talk protocol"
+      (await proto1.findNodes(proto3.localNode, @[0.uint16])).error() ==
+        "No message data, peer might not support this talk protocol"
+      (await proto1.findContent(proto4.localNode, contentKey)).error() ==
+        "No content response"
 
     await proto1.stopPortalProtocol()
     await proto2.stopPortalProtocol()
@@ -618,8 +621,10 @@ procSuite "Portal Wire Protocol Tests":
 
     check:
       (await proto1.ping(proto2.localNode)).error() == "destination node is banned"
-      (await proto1.findNodes(proto2.localNode, @[0.uint16])).error() == "destination node is banned"
-      (await proto1.findContent(proto2.localNode, contentKey)).error() == "destination node is banned"
+      (await proto1.findNodes(proto2.localNode, @[0.uint16])).error() ==
+        "destination node is banned"
+      (await proto1.findContent(proto2.localNode, contentKey)).error() ==
+        "destination node is banned"
 
     await proto1.stopPortalProtocol()
     await proto2.stopPortalProtocol()
