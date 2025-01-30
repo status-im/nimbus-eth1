@@ -290,11 +290,12 @@ func getProtocolId*(
     of PortalSubnetwork.transactionGossip:
       [portalPrefix, 0x4F]
 
-template banNode*(p: PortalProtocol, nodeId: NodeId, period: chronos.Duration) =
-  p.routingTable.banNode(nodeId, period)
+proc banNode*(p: PortalProtocol, nodeId: NodeId, period: chronos.Duration) =
+  if not p.config.disableBanNodes:
+    p.routingTable.banNode(nodeId, period)
 
-template isBanned*(p: PortalProtocol, nodeId: NodeId): bool =
-  p.routingTable.isBanned(nodeId)
+proc isBanned*(p: PortalProtocol, nodeId: NodeId): bool =
+  p.config.disableBanNodes == false and p.routingTable.isBanned(nodeId)
 
 func `$`(id: PortalProtocolId): string =
   id.toHex()
@@ -714,7 +715,11 @@ proc reqResponse[Request: SomeMessage, Response: SomeMessage](
     debug "Error receiving message response",
       error = messageResponse.error, srcId = dst.id, srcAddress = dst.address
     p.pingTimings.del(dst.id)
-    p.banNode(dst.id, NodeBanDurationMessageResponseError)
+
+    if p.config.disableBanNodes:
+      p.routingTable.replaceNode(dst)
+    else:
+      p.routingTable.banNode(dst.id, NodeBanDurationMessageResponseError)
 
   return messageResponse
 
@@ -897,7 +902,11 @@ proc findContent*(
       let records = recordsFromBytes(m.enrs)
       if records.isOk():
         let verifiedNodes = verifyNodesRecords(records.get(), dst, enrsResultLimit)
-        return ok(FoundContent(src: dst, kind: Nodes, nodes: verifiedNodes.filterIt(not p.isBanned(it.id))))
+        return ok(
+          FoundContent(
+            src: dst, kind: Nodes, nodes: verifiedNodes.filterIt(not p.isBanned(it.id))
+          )
+        )
       else:
         return err("Content message returned invalid ENRs")
   else:

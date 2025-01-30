@@ -1,5 +1,5 @@
 # Fluffy
-# Copyright (c) 2021-2024 Status Research & Development GmbH
+# Copyright (c) 2021-2025 Status Research & Development GmbH
 # Licensed and distributed under either of
 #   * MIT license (license terms in the root directory or at https://opensource.org/licenses/MIT).
 #   * Apache v2 license (license terms in the root directory or at https://www.apache.org/licenses/LICENSE-2.0).
@@ -45,6 +45,7 @@ type
     contentCacheSize*: int
     disableContentCache*: bool
     maxConcurrentOffers*: int
+    disableBanNodes*: bool
 
 const
   defaultRadiusConfig* = RadiusConfig(kind: Dynamic)
@@ -56,6 +57,7 @@ const
   defaultMaxConcurrentOffers* = 50
   defaultAlpha* = 3
   revalidationTimeout* = chronos.seconds(30)
+  defaultDisableBanNodes* = false
 
   defaultPortalProtocolConfig* = PortalProtocolConfig(
     tableIpLimits: DefaultTableIpLimits,
@@ -67,6 +69,7 @@ const
     contentCacheSize: defaultContentCacheSize,
     disableContentCache: defaultDisableContentCache,
     maxConcurrentOffers: defaultMaxConcurrentOffers,
+    disableBanNodes: defaultDisableBanNodes,
   )
 
 proc init*(
@@ -81,6 +84,7 @@ proc init*(
     contentCacheSize: int,
     disableContentCache: bool,
     maxConcurrentOffers: int,
+    disableBanNodes: bool,
 ): T =
   PortalProtocolConfig(
     tableIpLimits:
@@ -93,6 +97,7 @@ proc init*(
     contentCacheSize: contentCacheSize,
     disableContentCache: disableContentCache,
     maxConcurrentOffers: maxConcurrentOffers,
+    disableBanNodes: disableBanNodes,
   )
 
 func fromLogRadius*(T: type UInt256, logRadius: uint16): T =
