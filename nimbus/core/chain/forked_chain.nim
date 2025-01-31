@@ -118,6 +118,26 @@ proc validateBlock(c: ForkedChainRef,
     parentFrame = parent.txFrame
     txFrame = parentFrame.txFrameBegin
 
+  # TODO shortLog-equivalent for eth types
+  debug "Validating block",
+    blkHash, blk = (
+      parentHash: blk.header.parentHash,
+      coinbase: blk.header.coinbase,
+      stateRoot: blk.header.stateRoot,
+      transactionsRoot: blk.header.transactionsRoot,
+      receiptsRoot: blk.header.receiptsRoot,
+      number: blk.header.number,
+      gasLimit: blk.header.gasLimit,
+      gasUsed: blk.header.gasUsed,
+      nonce: blk.header.nonce,
+      baseFeePerGas: blk.header.baseFeePerGas,
+      withdrawalsRoot: blk.header.withdrawalsRoot,
+      blobGasUsed: blk.header.blobGasUsed,
+      excessBlobGas: blk.header.excessBlobGas,
+      parentBeaconBlockRoot: blk.header.parentBeaconBlockRoot,
+      requestsHash: blk.header.requestsHash,
+    )
+
   var res = c.processBlock(parent.header, txFrame, blk)
   if res.isErr:
     txFrame.rollback()
@@ -531,8 +551,11 @@ proc forkChoice*(c: ForkedChainRef,
   c.updateBase(newBase)
 
   # Save and record the block number before the last saved block state.
-  c.com.db.persistent(newBaseNumber).isOkOr:
-    return err("Failed to save state: " & $$error)
+  if newBaseNumber > 0:
+    # TODO -1 works around a bug where the base block header is not persisted yet
+    #      find out why this is the case..?
+    c.com.db.persistent(newBaseNumber - 1).isOkOr:
+      return err("Failed to save state: " & $$error)
 
   ok()
 
