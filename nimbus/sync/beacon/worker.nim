@@ -56,7 +56,7 @@ proc napUnlessSomethingToFetch(
 
 proc setup*(ctx: BeaconCtxRef; info: static[string]): bool =
   ## Global set up
-  ctx.setupRpcMagic info
+  ctx.setupServices info
 
   # Load initial state from database if there is any
   ctx.setupDatabase info
@@ -64,7 +64,7 @@ proc setup*(ctx: BeaconCtxRef; info: static[string]): bool =
 
 proc release*(ctx: BeaconCtxRef; info: static[string]) =
   ## Global clean up
-  ctx.destroyRpcMagic()
+  ctx.destroyServices()
 
 
 proc start*(buddy: BeaconBuddyRef; info: static[string]): bool =
@@ -157,6 +157,7 @@ proc runPool*(
   ## Note that this function does not run in `async` mode.
   ##
   buddy.ctx.headersStagedReorg info
+  buddy.ctx.blocksStagedReorg info
   true # stop
 
 

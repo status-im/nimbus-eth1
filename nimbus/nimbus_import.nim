@@ -277,7 +277,7 @@ proc importBlocks*(conf: NimbusConf, com: CommonRef) =
         else:
           raiseAssert "Other networks are unsupported or do not have an era1"
       db = Era1DbRef.init(conf.era1Dir.string, era1Name).valueOr:
-        fatal "Could not open era1 database", era1Dir = conf.era1Dir, era1Name, error
+        fatal "Could not open era1 database", era1Dir=conf.era1Dir, era1Name=era1Name, error=error
         quit(QuitFailure)
 
     notice "Importing era1 archive",

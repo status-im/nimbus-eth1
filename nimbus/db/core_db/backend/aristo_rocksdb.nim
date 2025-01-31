@@ -119,6 +119,10 @@ proc toRocksDb*(
   cfOpts.targetFileSizeBase = cfOpts.writeBufferSize
   cfOpts.targetFileSizeMultiplier = 6
 
+  # We certainly don't want to re-compact historical data over and over
+  cfOpts.ttl = 0
+  cfOpts.periodicCompactionSeconds = 0
+
   let dbOpts = defaultDbOptions(autoClose = true)
   dbOpts.maxOpenFiles = opts.maxOpenFiles
 

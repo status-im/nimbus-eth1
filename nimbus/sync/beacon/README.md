@@ -80,7 +80,7 @@ where
 
 * *C* -- coupler, parent of the left endpoint of the chain of headers or blocks
          to be fetched and imported. The block number of *C* is somewhere
-		 between the ones of *B* and *C* inclusive.
+         between the ones of *B* and *C* inclusive.
 
 * *L* -- **latest**, current value of this entity (with the same name) of the
          **FC** module (i.e. the current value when looked up.) *L* need not
@@ -92,8 +92,12 @@ where
          state eventually reaching *Y* (for notation *D<<H* see clause *(6)*
          below.)
 
-* *H* -- head, sync target header which typically was the value of a *sync to
-         new head* request (via RPC)
+* *H* -- head, sync scrum target header which locks the value of *T* (see
+         below) while processing.
+
+* *T* -- cached value of the last *consensus head* request (interpreted as
+         *sync to new head* instruction) sent from the **CL** via RPC (this
+         symbol is used in code comments of the implementation.)
 
 The internal sync state (as opposed to the general state also including the
 state of **FC**) is defined by the triple *(C,D,H)*. Other parameters like *L*
@@ -239,11 +243,13 @@ It will take a while for *nimbus_beacon_node* to catch up (see the
 ### Starting `nimbus` for syncing
 
 As the syncing process is quite slow, it makes sense to pre-load the database
-from an *Era1* archive (if available) before starting the real sync process.
-The command for importing an *Era1* reproitory would be something like
+from an *Era1* and *Era* archives (if available) before starting the real sync
+process. The command for importing an *Era1* and *Era* reprositories would be
+something like
 
        ./build/nimbus_execution_client import \
           --era1-dir:/path/to/main-era1/repo \
+          --era-dir:/path/to/main-era/repo \
           ...
 
 which will take its time for the full *MainNet* Era1 repository (but way faster
@@ -254,7 +260,6 @@ started on the same machine where the beacon node runs with the command
 
 
        ./build/nimbus_execution_client \
-          --network=mainnet \
           --engine-api=true \
           --engine-api-port=8551 \
           --engine-api-ws=true \
@@ -266,10 +271,10 @@ the corresponding options from the *nimbus-eth2* beacon source example.
 
 ### Syncing on a low memory machine
 
-On a system with memory with *8GiB* the following additional options proved
+On a system with memory around *8GiB* the following additional options proved
 useful for *nimbus* to reduce the memory footprint.
 
-For the *Era1* pre-load (if any) the following extra options apply to
+For the *Era1*/*Era* pre-load (if any) the following extra options apply to
 "*nimbus import*":
 
        --chunk-size=1024
@@ -307,16 +312,16 @@ The following metrics are defined in *worker/update/metrics.nim* which will
 be available if *nimbus* is compiled with the additional make flags
 *NIMFLAGS="-d:metrics \-\-threads:on"*:
 
-| *Variable*                   | *Logic type* | *Short description* |
-|:-----------------------------|:------------:|:--------------------|
-|                              |              |                     |
-| nec_base                     | block height | **B**, *increasing* |
-| nec_execution_head           | block height | **L**, *increasing* |
-| nec_sync_coupler             | block height | **C**, *increasing* |
-| nec_sync_dangling            | block height | **D**               |
-| nec_sync_head                | block height | **H**, *increasing* |
-| nec_consensus_head           | block height | **T**, *increasing* |
-|                              |              |                     |
+| *Variable*                   | *Logic type* | *Short description*  |
+|:-----------------------------|:------------:|:---------------------|
+|                              |              |                      |
+| nec_base                     | block height | **B**, *increasing*  |
+| nec_execution_head           | block height | **L**, *increasing*  |
+| nec_sync_coupler             | block height | **C**, *0 when idle* |
+| nec_sync_dangling            | block height | **D**, *0 when idle* |
+| nec_sync_head                | block height | **H**, *0 when idle* |
+| nec_sync_consensus_head      | block height | **T**, *increasing*  |
+|                              |              |                      |
 | nec_sync_header_lists_staged | size | # of staged header list records      |
 | nec_sync_headers_unprocessed | size | # of accumulated header block numbers|
 | nec_sync_block_lists_staged  | size | # of staged block list records       |
