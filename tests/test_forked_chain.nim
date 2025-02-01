@@ -162,9 +162,17 @@ proc forkedChainMain*() =
 
      let
        B4 = baseTxFrame.makeBlk(4, blk3, 1.byte)
-       B5 = baseTxFrame.makeBlk(5, B4)
-       B6 = baseTxFrame.makeBlk(6, B5)
-       B7 = baseTxFrame.makeBlk(7, B6)
+       dbTx2 = baseTxFrame.txFrameBegin
+       B5 = dbTx2.makeBlk(5, B4)
+       B6 = dbTx2.makeBlk(6, B5)
+       B7 = dbTx2.makeBlk(7, B6)
+
+     dbTx2.dispose()
+
+     let
+       C5 = baseTxFrame.makeBlk(5, blk4, 1.byte)
+       C6 = baseTxFrame.makeBlk(6, C5)
+       C7 = baseTxFrame.makeBlk(7, C6)
 
      test "newBase == oldBase":
        const info = "newBase == oldBase"
@@ -553,6 +561,42 @@ proc forkedChainMain*() =
        check chain.headerByNumber(5).expect("OK").blockHash == blk5.blockHash
        check chain.validate info & " (9)"
 
+     test "3 branches, alternating imports":
+       const info = "3 branches, alternating imports"
+       let com = env.newCom()
+
+       var chain = ForkedChainRef.init(com, baseDistance = 3)
+       checkImportBlock(chain, blk1)
+       checkImportBlock(chain, blk2)
+       checkImportBlock(chain, blk3)
+
+       checkImportBlock(chain, B4)
+       checkImportBlock(chain, blk4)
+
+       checkImportBlock(chain, B5)
+       checkImportBlock(chain, blk5)
+       checkImportBlock(chain, C5)
+
+       checkImportBlock(chain, B6)
+       checkImportBlock(chain, blk6)
+       checkImportBlock(chain, C6)
+
+       checkImportBlock(chain, B7)
+       checkImportBlock(chain, blk7)
+       checkImportBlock(chain, C7)
+       check chain.validate info & " (1)"
+
+       check chain.latestHash == C7.blockHash
+       check chain.latestNumber == 7'u64
+       check chain.branches.len == 3
+
+       checkForkChoice(chain, B7, blk3)
+       check chain.validate info & " (2)"
+       check chain.branches.len == 3
+
+       checkForkChoice(chain, B7, B6)
+       check chain.validate info & " (2)"
+       check chain.branches.len == 1
 
 when isMainModule:
   forkedChainMain()
