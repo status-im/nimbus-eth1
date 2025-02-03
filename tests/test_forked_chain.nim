@@ -42,6 +42,14 @@ proc newCom(env: TestEnv): CommonRef =
       env.conf.networkParams
     )
 
+proc newCom(env: TestEnv, db: CoreDbRef): CommonRef =
+  CommonRef.new(
+      db,
+      nil,
+      env.conf.networkId,
+      env.conf.networkParams
+    )
+
 proc makeBlk(txFrame: CoreDbTxRef, number: BlockNumber, parentBlk: Block): Block =
   template parent(): Header =
     parentBlk.header
@@ -597,6 +605,20 @@ proc forkedChainMain*() =
        checkForkChoice(chain, B7, B6)
        check chain.validate info & " (2)"
        check chain.branches.len == 1
+
+     test "importing blocks with new CommonRef and FC instance twice":
+       const info = "importing blocks with new CommonRef and FC instance twice"
+       let com = env.newCom()
+
+       let chain = ForkedChainRef.init(com, baseDistance = 0)
+       checkImportBlock(chain, blk1)
+       checkForkChoice(chain, blk1, blk1)
+
+       let cc = env.newCom(com.db)
+       let fc = ForkedChainRef.init(cc, baseDistance = 0)
+       check fc.headHash == blk1.blockHash
+       checkImportBlock(fc, blk2)
+       checkForkChoice(fc, blk2, blk2)
 
 when isMainModule:
   forkedChainMain()

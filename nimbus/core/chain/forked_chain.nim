@@ -315,7 +315,8 @@ proc updateHead(c: ForkedChainRef, head: BlockPos) =
     c.removeBlockFromChain(head.branch.blocks[i])
 
   head.branch.blocks.setLen(head.index+1)
-  c.activeBranch.headTxFrame.setHead(head.branch.headHash).expect("OK")
+  c.baseTxFrame.setHead(head.branch.headHeader,
+    head.branch.headHash).expect("OK")
 
 proc updateFinalized(c: ForkedChainRef, finalized: BlockPos) =
   # Pruning
@@ -554,7 +555,7 @@ proc forkChoice*(c: ForkedChainRef,
   if newBaseNumber > 0:
     # TODO -1 works around a bug where the base block header is not persisted yet
     #      find out why this is the case..?
-    c.com.db.persistent(newBaseNumber - 1).isOkOr:
+    c.com.db.persistent(newBaseNumber).isOkOr:
       return err("Failed to save state: " & $$error)
 
   ok()

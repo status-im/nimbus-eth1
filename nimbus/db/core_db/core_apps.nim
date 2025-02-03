@@ -503,12 +503,10 @@ proc setHead*(
 proc setHead*(
     db: CoreDbTxRef;
     header: Header;
-    writeHeader = false;
+    headerHash: Hash32;
       ): Result[void, string] =
-  var headerHash = rlpHash(header)
-  if writeHeader:
-    db.put(genericHashKey(headerHash).toOpenArray, rlp.encode(header)).isOkOr:
-      return err($$error)
+  db.put(genericHashKey(headerHash).toOpenArray, rlp.encode(header)).isOkOr:
+    return err($$error)
   let canonicalHeadHash = canonicalHeadHashKey()
   db.put(canonicalHeadHash.toOpenArray, rlp.encode(headerHash)).isOkOr:
     return err($$error)
