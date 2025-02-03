@@ -383,12 +383,20 @@ proc updateBase(c: ForkedChainRef, newBase: BlockPos) =
         break
       dec number
 
+  func commitBase(c: ForkedChainRef, bd: BlockDesc) =
+    if bd.txFrame != c.baseTxFrame:
+      bd.txFrame.commit()
+
   var
     branch = newBase.branch
     number = newBase.number - 1
     count  = 0
 
   let nextIndex  = int(newBase.number - branch.tailNumber)
+
+  # Commit base block but don't remove from FC
+  c.commitBase(branch.blocks[nextIndex])
+
   commitBlocks(number, branch)
 
   # Update base if it indeed changed
@@ -441,7 +449,6 @@ proc updateBase(c: ForkedChainRef, newBase: BlockPos) =
 
   # Update base txFrame
   if c.baseBranch.blocks[0].txFrame != c.baseTxFrame:
-    c.baseBranch.blocks[0].txFrame.commit()
     c.baseBranch.blocks[0].txFrame = c.baseTxFrame
     if c.baseBranch.len > 1:
       c.baseBranch.blocks[1].txFrame.reparent(c.baseTxFrame)

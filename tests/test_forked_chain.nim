@@ -606,19 +606,40 @@ proc forkedChainMain*() =
        check chain.validate info & " (2)"
        check chain.branches.len == 1
 
-     test "importing blocks with new CommonRef and FC instance twice":
-       const info = "importing blocks with new CommonRef and FC instance twice"
+     test "importing blocks with new CommonRef and FC instance, 3 blocks":
+       const info = "importing blocks with new CommonRef and FC instance, 3 blocks"
+       let com = env.newCom()
+
+       let chain = ForkedChainRef.init(com, baseDistance = 0)
+       checkImportBlock(chain, blk1)
+       checkImportBlock(chain, blk2)
+       checkImportBlock(chain, blk3)
+       checkForkChoice(chain, blk3, blk3)
+       check chain.validate info & " (1)"
+
+       let cc = env.newCom(com.db)
+       let fc = ForkedChainRef.init(cc, baseDistance = 0)
+       check fc.headHash == blk3.blockHash
+       checkImportBlock(fc, blk4)
+       checkForkChoice(fc, blk4, blk4)
+       check chain.validate info & " (2)"
+
+     test "importing blocks with new CommonRef and FC instance, 1 block":
+       const info = "importing blocks with new CommonRef and FC instance, 1 block"
        let com = env.newCom()
 
        let chain = ForkedChainRef.init(com, baseDistance = 0)
        checkImportBlock(chain, blk1)
        checkForkChoice(chain, blk1, blk1)
+       check chain.validate info & " (1)"
 
        let cc = env.newCom(com.db)
        let fc = ForkedChainRef.init(cc, baseDistance = 0)
        check fc.headHash == blk1.blockHash
        checkImportBlock(fc, blk2)
        checkForkChoice(fc, blk2, blk2)
+       check chain.validate info & " (2)"
+
 
 when isMainModule:
   forkedChainMain()
