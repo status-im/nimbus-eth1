@@ -383,7 +383,7 @@ proc updateBase(c: ForkedChainRef, newBase: BlockPos) =
         break
       dec number
 
-  func commitBase(c: ForkedChainRef, bd: BlockDesc) =
+  proc commitBase(c: ForkedChainRef, bd: BlockDesc) =
     if bd.txFrame != c.baseTxFrame:
       bd.txFrame.commit()
 
