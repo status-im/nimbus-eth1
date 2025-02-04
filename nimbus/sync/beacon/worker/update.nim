@@ -142,8 +142,7 @@ proc setupCollectingHeaders(ctx: BeaconCtxRef; info: static[string]) =
     h = ctx.target.consHead.number
 
   if c+1 < h:                                 # header chain interval is `(C,H]`
-    doAssert ctx.headersUnprocTotal() == 0
-    doAssert ctx.headersUnprocBorrowed() == 0
+    doAssert ctx.headersUnprocIsEmpty()
     doAssert ctx.headersStagedQueueIsEmpty()
     doAssert ctx.blocksUnprocIsEmpty()
     doAssert ctx.blocksStagedQueueIsEmpty()
@@ -238,8 +237,7 @@ proc linkIntoFc(ctx: BeaconCtxRef; info: static[string]): bool =
 
 
 proc setupProcessingBlocks(ctx: BeaconCtxRef; info: static[string]) =
-  doAssert ctx.headersUnprocTotal() == 0
-  doAssert ctx.headersUnprocBorrowed() == 0
+  doAssert ctx.headersUnprocIsEmpty()
   doAssert ctx.headersStagedQueueIsEmpty()
   doAssert ctx.blocksUnprocIsEmpty()
   doAssert ctx.blocksStagedQueueIsEmpty()

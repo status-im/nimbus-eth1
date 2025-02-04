@@ -24,7 +24,7 @@ import
 # ------------------------------------------------------------------------------
 
 proc headersToFetchOk(buddy: BeaconBuddyRef): bool =
-  0 < buddy.ctx.headersUnprocTotal() and
+  0 < buddy.ctx.headersUnprocAvail() and
     buddy.ctrl.running and
     not buddy.ctx.poolMode
 

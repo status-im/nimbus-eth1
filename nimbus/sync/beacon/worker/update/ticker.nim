@@ -80,9 +80,9 @@ proc updater(ctx: BeaconCtxRef): TickerStats =
 
     nHdrStaged:      ctx.headersStagedQueueLen(),
     hdrStagedTop:    ctx.headersStagedQueueTopKey(),
-    hdrUnprocTop:    ctx.headersUnprocTop(),
-    nHdrUnprocessed: ctx.headersUnprocTotal() + ctx.headersUnprocBorrowed(),
-    nHdrUnprocFragm: ctx.headersUnprocChunks(),
+    hdrUnprocTop:    ctx.headersUnprocTotalTop(),
+    nHdrUnprocessed: ctx.headersUnprocTotal(),
+    nHdrUnprocFragm: ctx.hdr.unprocessed.chunks(),
 
     nBlkStaged:      ctx.blocksStagedQueueLen(),
     blkStagedBottom: ctx.blocksStagedQueueBottomKey(),
