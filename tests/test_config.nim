@@ -1,5 +1,5 @@
 # Nimbus
-# Copyright (c) 2019-2024 Status Research & Development GmbH
+# Copyright (c) 2019-2025 Status Research & Development GmbH
 # Licensed under either of
 #  * Apache License, version 2.0, ([LICENSE-APACHE](LICENSE-APACHE) or
 #    http://www.apache.org/licenses/LICENSE-2.0)
@@ -28,7 +28,7 @@ type
     index*: Opt[int]
     trace*: bool
     legacy*: bool
-    pruning*: bool
+    subFixture*: Opt[int]
     json*: bool
 
 var testConfig {.threadvar.}: Configuration
@@ -36,7 +36,6 @@ var testConfig {.threadvar.}: Configuration
 proc initConfiguration(): Configuration =
   result = new Configuration
   result.trace = true
-  result.pruning = true
 
 proc getConfiguration*(): Configuration {.gcsafe.} =
   if isNil(testConfig):
@@ -59,7 +58,7 @@ proc processArguments*(msg: var string): ConfigStatus =
       of "index": config.index = Opt.some(parseInt(value))
       of "trace": config.trace = parseBool(value)
       of "legacy": config.legacy = parseBool(value)
-      of "pruning": config.pruning = parseBool(value)
+      of "sub": config.subFixture = Opt.some(parseInt(value))
       of "json": config.json = parseBool(value)
       else:
         msg = "Unknown option " & key
