@@ -73,7 +73,9 @@ func fromBytes(ret: var BLS_FP, raw: openArray[byte]): bool =
   if raw.len < L:
     return false
   let pa = cast[ptr array[L, byte]](raw[0].unsafeAddr)
+  debugEcho "Original Data: ", pa[]
   blst_fp_from_bendian(toCV(ret), pa[])
+  debugEcho "Montogomery domain: ", ret
   true
 
 func toBytes(fp: BLS_FP, output: var openArray[byte]): bool =
