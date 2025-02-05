@@ -16,20 +16,6 @@ import
 # ----------------------------------------------------------------------------
 # Helper Functions
 # ----------------------------------------------------------------------------
-
-template fileExists(filename: string): bool =
-  try:
-    discard readFile(filename)
-    true
-  except IOError:
-    false
-
-template removeFile(filename: string) =
-  try:
-    discard io2.removeFile(filename)
-  except IOError:
-    discard # Ignore if the file does not exist
-
 proc handlerMock(parameters: ServiceParameters) {.thread.} =
   return
 
@@ -75,8 +61,7 @@ suite "Nimbus Service Management Tests":
     nimbus.exitServices()
 
     # Check that all service slots are empty (thread was stopped, joined and its spot cleared)
-    for i in 0 ..< cNimbusMaxServices - 1:
-      check nimbus.serviceList[i].isNone
+    for s in nimbus.serviceList: check s.isNone
 
   # Test: startServices initializes both the execution and consensus layer services
   test "startServices initializes execution and consensus services":
@@ -102,8 +87,7 @@ suite "Nimbus Service Management Tests":
     # Check that the monitor loop exits correctly
     # services running should be 0
     check isShutDownRequired.load() == true
-    for i in 0 .. cNimbusMaxServices - 1:
-      check nimbus.serviceList[i].isNone
+    for s in nimbus.serviceList: check s.isNone
 
   # Test: Control-C handler properly initiates shutdown
   test "controlCHandler triggers shutdown sequence":
@@ -123,5 +107,4 @@ suite "Nimbus Service Management Tests":
     check isShutDownRequired.load() == true
 
     #services running should be 0
-    for i in 0 .. cNimbusMaxServices - 1:
-      check nimbus.serviceList[i].isNone
+    for s in nimbus.serviceList: check s.isNone
