@@ -495,13 +495,12 @@ type
         name: "engine-api-ws" .}: bool
 
       allowedOrigins* {.
-        desc: "Comma separated list of domains from which to accept cross origin requests"
+        desc: "Comma-separated list of domains from which to accept cross origin requests"
         defaultValue: @[]
         defaultValueDesc: "*"
         name: "allowed-origins" .}: seq[string]
 
-      # github.com/ethereum/execution-apis/
-      #   /blob/v1.0.0-alpha.8/src/engine/authentication.md#key-distribution
+      # https://github.com/ethereum/execution-apis/blob/v1.0.0-beta.4/src/engine/authentication.md#key-distribution
       jwtSecret* {.
         desc: "Path to a file containing a 32 byte hex-encoded shared secret" &
           " needed for websocket authentication. By default, the secret key" &
