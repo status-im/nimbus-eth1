@@ -58,18 +58,20 @@ proc fetchAndCheck(
   for n in 1u ..< ivReq.len:
     let header = ctx.dbHeaderPeek(ivReq.minPt + n).valueOr:
       # There is nothing one can do here
-      info "Block header missing, requesting reorg", ivReq, n,
+      info "Block header missing (reorg triggered)", ivReq, n,
         nth=(ivReq.minPt + n).bnStr
       # So require reorg
+      blk.blocks.setLen(offset)
       ctx.poolMode = true
       return false
     blockHash[n - 1] = header.parentHash
     blk.blocks[offset + n].header = header
   blk.blocks[offset].header = ctx.dbHeaderPeek(ivReq.minPt).valueOr:
     # There is nothing one can do here
-    info "Block header missing, requesting reorg", ivReq, n=0,
+    info "Block header missing (reorg triggered)", ivReq, n=0,
       nth=ivReq.minPt.bnStr
     # So require reorg
+    blk.blocks.setLen(offset)
     ctx.poolMode = true
     return false
   blockHash[ivReq.len - 1] =
@@ -100,9 +102,8 @@ proc fetchAndCheck(
         # Oops, cut off the rest
         blk.blocks.setLen(offset + n)
         buddy.fetchRegisterError()
-        trace info & ": fetch bodies cut off junk", peer=buddy.peer, ivReq,
-          n, nTxs=bodies[n].transactions.len, nBodies,
-          nRespErrors=buddy.only.nBdyRespErrors
+        trace info & ": cut off fetched junk", peer=buddy.peer, ivReq, n,
+          nTxs=bodies[n].transactions.len, nBodies, bdyErrors=buddy.bdyErrors
         break loop
 
       blk.blocks[offset + n].transactions = bodies[n].transactions
