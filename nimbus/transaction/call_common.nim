@@ -91,41 +91,39 @@ proc preExecComputation(vmState: BaseVMState, call: CallParams): int64 =
     if not(auth.chainId == 0.ChainId or auth.chainId == vmState.com.chainId):
       continue
 
-    # 2. authority = ecrecover(keccak(MAGIC || rlp([chain_id, address, nonce])), y_parity, r, s]
+    # 2. Verify the nonce is less than 2**64 - 1.
+    if auth.nonce+1 < auth.nonce:
+      continue
+
+    # 3. authority = ecrecover(keccak(MAGIC || rlp([chain_id, address, nonce])), y_parity, r, s]
     let authority = authority(auth).valueOr:
       continue
 
-    # 3. Add authority to accessed_addresses (as defined in EIP-2929.)
+    # 4. Add authority to accessed_addresses (as defined in EIP-2929.)
     ledger.accessList(authority)
 
-    # 4. Verify the code of authority is either empty or already delegated.
+    # 5. Verify the code of authority is either empty or already delegated.
     let code = ledger.getCode(authority)
     if code.len > 0:
       if not parseDelegation(code):
         continue
 
-    # 5. Verify the nonce of authority is equal to nonce.
+    # 6. Verify the nonce of authority is equal to nonce.
     if ledger.getNonce(authority) != auth.nonce:
       continue
 
-    # 6. Add PER_EMPTY_ACCOUNT_COST - PER_AUTH_BASE_COST gas to the global refund counter if authority exists in the trie.
+    # 7. Add PER_EMPTY_ACCOUNT_COST - PER_AUTH_BASE_COST gas to the global refund counter if authority exists in the trie.
     if ledger.accountExists(authority):
       gasRefund += PER_EMPTY_ACCOUNT_COST - PER_AUTH_BASE_COST
 
-    # 7. Set the code of authority to be 0xef0100 || address. This is a delegation designation.
-    if auth.address == default(eth_types.Address):
+    # 8. Set the code of authority to be 0xef0100 || address. This is a delegation designation.
+    if auth.address == zeroAddress:
       ledger.setCode(authority, @[])
     else:
       ledger.setCode(authority, @(addressToDelegation(auth.address)))
 
-    # 8. Increase the nonce of authority by one.
+    # 9. Increase the nonce of authority by one.
     ledger.setNonce(authority, auth.nonce + 1)
-
-    # Usually the transaction destination and delegation target are added to
-    # the access list in initialAccessListEIP2929, however if the delegation is in
-    # the same transaction we need add here as to reduce calling slow ecrecover.
-    if call.to == authority:
-      ledger.accessList(auth.address)
 
   gasRefund
 

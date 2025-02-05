@@ -37,6 +37,7 @@ type
     debugMode: bool
     trace: bool
     index: int
+    subFixture: int
     fork: string
 
 var
@@ -73,7 +74,8 @@ proc dumpDebugData(ctx: TestCtx, vmState: BaseVMState, gasUsed: GasInt, success:
   }
   let status = if success: "_success" else: "_failed"
   let fileName = normalizeFileName(ctx.name)
-  writeFile(fileName & "_" & ctx.fork & "_" & $ctx.index & status & ".json", debugData.pretty())
+  writeFile(fileName & "_" & $ctx.subFixture & "_" &
+    ctx.fork & "_" & $ctx.index & status & ".json", debugData.pretty())
 
 proc testFixtureIndexes(ctx: var TestCtx, testStatusIMPL: var TestStatus) =
   let
@@ -130,15 +132,8 @@ proc testFixtureIndexes(ctx: var TestCtx, testStatusIMPL: var TestStatus) =
       let success = ctx.expectedLogs == actualLogsHash and obtainedHash == ctx.expectedHash
       ctx.dumpDebugData(vmState, gasUsed, success)
 
-proc testFixture(fixtures: JsonNode, testStatusIMPL: var TestStatus,
+proc testSubFixture(ctx: var TestCtx, fixture: JsonNode, testStatusIMPL: var TestStatus,
                  trace = false, debugMode = false) =
-  var ctx: TestCtx
-  var fixture: JsonNode
-  for label, child in fixtures:
-    fixture = child
-    ctx.name = label
-    break
-
   ctx.pre    = fixture["pre"]
   ctx.parent = parseParentHeader(fixture["env"])
   ctx.header = parseHeader(fixture["env"])
@@ -194,12 +189,28 @@ proc testFixture(fixtures: JsonNode, testStatusIMPL: var TestStatus,
         runSubTest(subTest)
         inc ctx.index
 
+proc testFixture(fixtures: JsonNode, testStatusIMPL: var TestStatus,
+                 trace = false, debugMode = false) =
+  let
+    conf = getConfiguration()
+
+  var
+    ctx: TestCtx
+    subFixture = 0
+
+  for label, child in fixtures:
+    ctx.name = label
+    ctx.subFixture = subFixture
+    inc subFixture
+    if conf.subFixture.isSome and conf.subFixture.get != ctx.subFixture:
+      continue
+    testSubFixture(ctx, child, testStatusIMPL, trace, debugMode)
+
 proc generalStateJsonMain*(debugMode = false) =
   const
     legacyFolder = "eth_tests/LegacyTests/Constantinople/GeneralStateTests"
     newFolder = "eth_tests/GeneralStateTests"
-    #newFolder = "eth_tests/EIPTests/StateTests"
-
+    
   let config = getConfiguration()
   if config.testSubject == "" or not debugMode:
     # run all test fixtures
