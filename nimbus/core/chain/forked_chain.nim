@@ -443,7 +443,7 @@ proc updateBase(c: ForkedChainRef, newBase: BlockPos) =
   else:
     debug "Finalized blocks persisted",
       numberOfBlocks = count,
-      target = newBase.hash.short,
+      #target = newBase.hash.short,
       baseNumber = c.baseBranch.tailNumber,
       baseHash = c.baseBranch.tailHash.short
 
