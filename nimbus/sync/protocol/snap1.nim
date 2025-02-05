@@ -9,15 +9,15 @@
 
 {.push raises: [].}
 
-import eth/common
+from eth/common import Account, Hash32
 
 type
   SnapAccount = object
     accHash: Hash32
-    accBody {.rlpCustomSerialization.}: Account
+    accBody: Account
 
   SnapProof* = distinct seq[byte]
-    ## Rlp coded node data, to be handled different from a generic `Blob`
+    ## RLP-coded node data, to be handled differently from a generic `Blob`
 
   SnapProofNodes = object
     ## Wrapper around `seq[SnapProof]` for controlling serialisation.
@@ -27,14 +27,6 @@ type
     slotHash*: Hash32
     slotData*: seq[byte]
 
-# ------------------------------------------------------------------------------
-# Public `SnapProof` type helpers
-# ------------------------------------------------------------------------------
-
-proc to*(data: seq[byte]; T: type SnapProof): T = data.T
-proc to*(node: SnapProof; T: type seq[byte]): T = node.T
-
-type
   SnapAccountRange* = object
     accounts: seq[SnapAccount]
     proof: SnapProofNodes
@@ -48,3 +40,6 @@ type
 
   SnapTrieNodes* = object
     nodes: seq[seq[byte]]
+
+func to*(data: seq[byte]; T: type SnapProof): T = data.T
+func to*(node: SnapProof; T: type seq[byte]): T = node.T
