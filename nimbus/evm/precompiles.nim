@@ -481,6 +481,9 @@ func blsG1MultiExp(c: Computation): EvmResultVoid =
     if not p.decodePoint(input.toOpenArray(off, off+127)):
       return err(prcErr(PrcInvalidPoint))
 
+    if not p.subgroupCheck:
+      return err(prcErr(PrcInvalidPoint))
+
     # Decode scalar value
     if not s.fromBytes(input.toOpenArray(off+128, off+159)):
       return err(prcErr(PrcInvalidParam))
@@ -544,6 +547,9 @@ func blsG2MultiExp(c: Computation): EvmResultVoid =
 
     # Decode G1 point
     if not p.decodePoint(input.toOpenArray(off, off+255)):
+      return err(prcErr(PrcInvalidPoint))
+
+    if not p.subgroupCheck:
       return err(prcErr(PrcInvalidPoint))
 
     # Decode scalar value
