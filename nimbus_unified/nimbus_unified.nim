@@ -36,16 +36,6 @@ proc consensusLayerHandler(parameters: ServiceParameters) {.thread.} =
   consensusLayer(parameters)
   info "\tExit service", service = parameters.name
 
-# lock file
-var gPidFile: string
-proc createPidFile(filename: string) {.raises: [IOError].} =
-  writeFile filename, $os.getCurrentProcessId()
-  gPidFile = filename
-  addExitProc (
-    proc() =
-      discard io2.removeFile(filename)
-  )
-
 ## adds a new service to nimbus services list.
 ## returns position on services list
 proc addService(
