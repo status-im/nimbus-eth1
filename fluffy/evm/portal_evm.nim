@@ -5,17 +5,31 @@
 #   * Apache v2 license (license terms in the root directory or at https://www.apache.org/licenses/LICENSE-2.0).
 # at your option. This file may not be copied, modified, or distributed except according to those terms.
 
-
 import
   std/tables,
+  stew/byteutils,
+  stew/ptrops, stint,
+  results,
   evmc/evmc,
   eth/common/[hashes, accounts, addresses]
 
-export evmc
+# export evmc
 
 {.pragma: evmc_abi, cdecl, gcsafe, raises: [].}
 
+# Evmc Conversions
 
+const
+  evmc_native* {.booldefine.} = false
+
+func toEvmc(a: Address): evmc_address {.inline.} =
+  evmc_address(bytes: a.data)
+
+func toEvmc(n: UInt256): evmc_uint256be {.inline.} =
+  when evmc_native:
+    cast[evmc_uint256be](n)
+  else:
+    cast[evmc_uint256be](n.toBytesBE)
 
 # Host Context
 
@@ -145,41 +159,57 @@ func name*(evm: PortalEvmRef): string =
 func version*(evm: PortalEvmRef): string =
   $evm.vmPtr.version
 
-  # Executes the given code using the input from the message.
-  #
-  # This function MAY be invoked multiple times for a single VM instance.
-  #
-  # @param vm         The VM instance. This argument MUST NOT be NULL.
-  # @param host       The Host interface. This argument MUST NOT be NULL unless
-  #                   the @p vm has the ::EVMC_CAPABILITY_PRECOMPILES capability.
-  # @param context    The opaque pointer to the Host execution context.
-  #                   This argument MAY be NULL. The VM MUST pass the same
-  #                   pointer to the methods of the @p host interface.
-  #                   The VM MUST NOT dereference the pointer.
-  # @param rev        The requested EVM specification revision.
-  # @param msg        The call parameters. See ::evmc_message. This argument MUST NOT be NULL.
-  # @param code       The reference to the code to be executed. This argument MAY be NULL.
-  # @param code_size  The length of the code. If @p code is NULL this argument MUST be 0.
-  # @return           The execution result.
-  # evmc_execute_fn* = proc(vm: ptr evmc_vm, host: ptr evmc_host_interface,
-  #                         context: evmc_host_context, rev: evmc_revision,
-  #                         msg: var evmc_message, code: ptr byte, code_size: csize_t):
-  #                           evmc_result {.evmc_abi.}
-proc execute(evm: PortalEvmRef,
-  msg: var evmc_message,
-  code: openArray[byte]) =
+# TODO: do we need to use evm.vmPtr.get_capabilities and/or evm.vmPtr.set_option?
 
+proc execute*(evm: PortalEvmRef,
+  recipient: Address,
+  sender: Address,
+  inputData: openArray[byte],
+  value: UInt256,
+  codeAddress: Address,
+  code: openArray[byte]): Result[seq[byte], string] =
   doAssert(code.len() > 0)
 
-  discard evm.vmPtr.execute(evm.vmPtr,
+  var msg = evmc_message(
+    kind: EVMC_CALL, # Only support call for now. Do we need to support EVMC_DELEGATECALL or EVMC_CALLCODE?
+    #flags: {EVMC_STATIC}, # Should we use static call?
+    depth: 0, # use zero depth as only call is supported. Double check this
+    gas: 99999999999999999.int64, # set a large value for now. Should this be passed in?
+    recipient: recipient.toEvmc(),
+    sender: sender.toEvmc(),
+    input_data: if inputData.len() > 0: inputData[0].addr else: nil,
+    input_size: inputData.len().csize_t,
+    value: value.toEvmc(),
+    #create2_salt: # only required when creating contracts
+    code_address: codeAddress.toEvmc(),
+    code: code[0].addr,
+    code_size: code.len().csize_t)
+
+  var evmc_result = evm.vmPtr.execute(evm.vmPtr,
     hostInteface.addr,
     evm.context.toEvmc(),
     evmc_revision.EVMC_OSAKA, # TODO: which evm revisions should we support. Just the latest?
-    msg, # TODO: message
+    msg,
     code[0].addr,
     code.len().csize_t
     )
-  # TODO: return type
+
+  let res =
+    if evmc_result.status_code == EVMC_SUCCESS:
+      let output =
+        if evmc_result.output_size.int == 0:
+          @[]
+        else:
+          @(makeOpenArray(evmc_result.output_data, evmc_result.output_size.int))
+      ok(output)
+    else:
+      err($evmc_result.status_code)
+
+  # Release the evmc_result
+  if not evmc_result.release.isNil():
+    evmc_result.release(evmc_result)
+
+  return res
 
 func isClosed*(evm: PortalEvmRef): bool =
   evm.vmPtr.isNil()
@@ -190,18 +220,6 @@ proc close(evm: PortalEvmRef) =
     evm.vmPtr = nil
 
 when isMainModule:
-  # let context = HostContext.init()
-  # let cHost: evmc_host_context = context.toEvmc()
-
-  # let host = evmc_host_interface(account_exists: accountExists)
-
-  # var adr: evmc_address
-  # let res = host.account_exists(cHost, adr)
-  # echo "res: ", res
-
-
-  # echo "vm.execute: ", evm.execute.isNil()
-
   # Create new instance of the evm
   let evm = PortalEvmRef.init()
 
@@ -216,9 +234,15 @@ when isMainModule:
 
 
   # Execute some code
+  let byteCode = hexToSeqByte("0x6080604052348015600e575f80fd5b506101438061001c5f395ff3fe608060405234801561000f575f80fd5b5060043610610034575f3560e01c80632e64cec1146100385780636057361d14610056575b5f80fd5b610040610072565b60405161004d919061009b565b60405180910390f35b610070600480360381019061006b91906100e2565b61007a565b005b5f8054905090565b805f8190555050565b5f819050919050565b61009581610083565b82525050565b5f6020820190506100ae5f83018461008c565b92915050565b5f80fd5b6100c181610083565b81146100cb575f80fd5b50565b5f813590506100dc816100b8565b92915050565b5f602082840312156100f7576100f66100b4565b5b5f610104848285016100ce565b9150509291505056fea26469706673582212209a0dd35336aff1eb3eeb11db76aa60a1427a12c1b92f945ea8c8d1dfa337cf2264736f6c634300081a0033")
 
-
-
+  echo evm.execute(
+    default(Address),
+    default(Address),
+    hexToSeqByte("0x"),
+    1.u256,
+    default(Address),
+    byteCode)
 
   # Check if the evm is cleaned up
   echo "Before calling close... PortalEvmRef.isClosed() = ", evm.isClosed()
