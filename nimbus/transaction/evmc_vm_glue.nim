@@ -82,24 +82,24 @@ proc evmcSetOption(vm: ptr evmc_vm, name, value: cstring): evmc_set_option_resul
   return EVMC_SET_OPTION_INVALID_NAME
 
 proc evmcDestroy(vm: ptr evmc_vm) {.cdecl.} =
-  GC_unref(cast[ref evmc_vm](vm))
+  dealloc(vm)
 
-proc evmc_create_nimbus_evm(): ptr evmc_vm {.cdecl, exportc.} =
+proc evmc_create_nimbusevm*(): ptr evmc_vm {.cdecl, exportc, dynlib.} =
   ## Entry point to the Nimbus EVM, using an EVMC compatible interface.
   ## This is an exported C function.  EVMC specifies the function must
   ## have this name format when exported from a shared library.
-  let vm = (ref evmc_vm)(
-    abi_version:      EVMC_ABI_VERSION,
-    name:             evmcName,
-    version:          evmcVersion,
-    destroy:          evmcDestroy,
-    execute:          evmcExecute,
-    get_capabilities: evmcGetCapabilities,
-    set_option:       evmcSetOption
-  )
-  # Keep an extra reference on this, until `evmcDestroy` is called.
-  GC_ref(vm)
-  return cast[ptr evmc_vm](vm)
+
+  let vm = cast[ptr evmc_vm](alloc(sizeof(evmc_vm)))
+
+  vm[].abi_version = EVMC_ABI_VERSION
+  vm[].name = evmcName
+  vm[].version = evmcVersion
+  vm[].destroy = evmcDestroy
+  vm[].execute = evmcExecute
+  vm[].get_capabilities = evmcGetCapabilities
+  vm[].set_option = evmcSetOption
+
+  return vm
 
 # This code assumes fields, methods and types of ABI version 12, and must be
 # checked for compatibility if the `import evmc/evmc` major version is updated.

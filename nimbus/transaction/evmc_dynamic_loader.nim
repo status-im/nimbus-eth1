@@ -14,9 +14,9 @@ import
   evmc/evmc, ../config
 
 # The built-in Nimbus EVM, via imported C function.
-proc evmc_create_nimbus_evm(): ptr evmc_vm {.cdecl, importc, raises: [], gcsafe.}
+proc evmc_create_nimbusevm(): ptr evmc_vm {.cdecl, importc, raises: [], gcsafe.}
 
-# Import this module to link in the definition of `evmc_create_nimbus_evm`.
+# Import this module to link in the definition of `evmc_create_nimbusevm`.
 # Nim thinks the module is unused because the function is only called via
 # `.exportc` -> `.importc`.
 {.warning[UnusedImport]: off.}:
@@ -36,7 +36,7 @@ proc evmcLoadVMGetCreateFn(): (evmc_create_vm_name_fn, string) =
 
   # Use built-in EVM if no other is specified.
   if path.len == 0:
-    return (evmc_create_nimbus_evm, "built-in")
+    return (evmc_create_nimbusevm, "built-in")
 
   # The steps below match the EVMC Loader documentation, copied here:
   #
