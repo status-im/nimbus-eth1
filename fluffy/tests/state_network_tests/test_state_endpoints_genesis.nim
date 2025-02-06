@@ -1,5 +1,5 @@
 # Nimbus
-# Copyright (c) 2023-2024 Status Research & Development GmbH
+# Copyright (c) 2023-2025 Status Research & Development GmbH
 # Licensed and distributed under either of
 #   * MIT license (license terms in the root directory or at https://opensource.org/licenses/MIT).
 #   * Apache v2 license (license terms in the root directory or at https://www.apache.org/licenses/LICENSE-2.0).
@@ -12,7 +12,7 @@ import
   results,
   eth/trie,
   eth/common/[addresses, hashes],
-  ../../../nimbus/common/chain_config,
+  ../../../execution_chain/common/chain_config,
   ../../network/wire/[portal_protocol, portal_stream],
   ../../network/state/
     [state_content, state_network, state_gossip, state_endpoints, state_utils],

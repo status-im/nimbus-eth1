@@ -14,7 +14,7 @@ import
   std/[algorithm, sets],
   stew/byteutils,
   unittest2,
-  ../../nimbus/db/aristo/[
+  ../../execution_chain/db/aristo/[
     aristo_check,
     aristo_compute,
     aristo_delete,

@@ -1,5 +1,5 @@
 # Nimbus
-# Copyright (c) 2018-2024 Status Research & Development GmbH
+# Copyright (c) 2018-2025 Status Research & Development GmbH
 # Licensed under either of
 #  * Apache License, version 2.0, ([LICENSE-APACHE](LICENSE-APACHE) or http://www.apache.org/licenses/LICENSE-2.0)
 #  * MIT license ([LICENSE-MIT](LICENSE-MIT) or http://opensource.org/licenses/MIT)
@@ -52,8 +52,8 @@ proc setSign*(v: var UInt256, sign: bool) {.inline.} =
 
 func cleanMemRef*(x: UInt256): int {.inline.} =
   ## Sanitize memory addresses, catch negative or impossibly big offsets
-  # See https://github.com/status-im/nimbus/pull/97 for more info
-  # For rationale on shr, see https://github.com/status-im/nimbus/pull/101
+  # See https://github.com/status-im/execution_chain/pull/97 for more info
+  # For rationale on shr, see https://github.com/status-im/execution_chain/pull/101
   const upperBound = (high(int32) shr 2).u256
   if x > upperBound:
     return high(int32) shr 2

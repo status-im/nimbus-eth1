@@ -16,9 +16,9 @@ import
   chronicles,
   ./engine_client,
   ./cancun/blobs,
-  ../../../nimbus/transaction,
-  ../../../nimbus/common,
-  ../../../nimbus/utils/utils
+  ../../../execution_chain/transaction,
+  ../../../execution_chain/common,
+  ../../../execution_chain/utils/utils
 
 from std/sequtils import mapIt
 

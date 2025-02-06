@@ -1,5 +1,5 @@
 # Nimbus
-# Copyright (c) 2023-2024 Status Research & Development GmbH
+# Copyright (c) 2023-2025 Status Research & Development GmbH
 # Licensed under either of
 #  * Apache License, version 2.0, ([LICENSE-APACHE](LICENSE-APACHE) or
 #    http://www.apache.org/licenses/LICENSE-2.0)
@@ -12,8 +12,8 @@
 
 import
   std/sequtils,
-  ../../nimbus/db/core_db/backend/aristo_rocksdb,
-  ../../nimbus/db/[core_db, opts]
+  ../../execution_chain/db/core_db/backend/aristo_rocksdb,
+  ../../execution_chain/db/[core_db, opts]
 
 type
   CdbTypeEx* = enum

@@ -14,8 +14,8 @@ import
   eth/common,
   results,
   unittest2,
-  ../../nimbus/core/chain,
-  ../../nimbus/db/ledger,
+  ../../execution_chain/core/chain,
+  ../../execution_chain/db/ledger,
   ../replay/[pp, undump_blocks, undump_blocks_era1, xcheck],
   ./test_helpers
 
@@ -25,8 +25,8 @@ when CoreDbEnableProfiling:
 
 when CoreDbEnableProfiling:
   import
-    ../../nimbus/db/aristo/[aristo_api, aristo_profile],
-    ../../nimbus/db/kvt/kvt_api
+    ../../execution_chain/db/aristo/[aristo_api, aristo_profile],
+    ../../execution_chain/db/kvt/kvt_api
   var
     aristoProfData: AristoDbProfListRef
     kvtProfData: KvtDbProfListRef

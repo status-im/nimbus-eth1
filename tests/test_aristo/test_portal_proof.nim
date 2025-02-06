@@ -17,9 +17,9 @@ import
   results,
   unittest2,
   ../test_helpers,
-  ../../nimbus/db/aristo,
-  ../../nimbus/db/aristo/[aristo_desc, aristo_get, aristo_hike, aristo_part],
-  ../../nimbus/db/aristo/aristo_part/part_debug
+  ../../execution_chain/db/aristo,
+  ../../execution_chain/db/aristo/[aristo_desc, aristo_get, aristo_hike, aristo_part],
+  ../../execution_chain/db/aristo/aristo_part/part_debug
 
 type
   ProofData = ref object

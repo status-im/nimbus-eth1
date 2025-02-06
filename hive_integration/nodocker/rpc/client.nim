@@ -1,5 +1,5 @@
 # Nimbus
-# Copyright (c) 2021-2024 Status Research & Development GmbH
+# Copyright (c) 2021-2025 Status Research & Development GmbH
 # Licensed under either of
 #  * Apache License, version 2.0, ([LICENSE-APACHE](LICENSE-APACHE))
 #  * MIT license ([LICENSE-MIT](LICENSE-MIT))
@@ -12,9 +12,9 @@ import
   eth/rlp,
   chronos, stint,
   json_rpc/[rpcclient],
-  ../../../nimbus/transaction,
-  ../../../nimbus/utils/utils,
-  ../../../nimbus/beacon/web3_eth_conv,
+  ../../../execution_chain/transaction,
+  ../../../execution_chain/utils/utils,
+  ../../../execution_chain/beacon/web3_eth_conv,
   web3/eth_api
 
 export eth_api

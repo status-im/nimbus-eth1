@@ -8,14 +8,14 @@
 import
   std/[strutils, tables, json, os, sets],
   ./test_helpers, ./test_allowed_to_fail,
-  ../nimbus/core/executor, test_config,
-  ../nimbus/transaction,
-  ../nimbus/[evm/state, evm/types],
-  ../nimbus/db/ledger,
-  ../nimbus/common/common,
-  ../nimbus/utils/[utils, debug],
-  ../nimbus/evm/tracer/legacy_tracer,
-  ../nimbus/core/eip4844,
+  ../execution_chain/core/executor, test_config,
+  ../execution_chain/transaction,
+  ../execution_chain/[evm/state, evm/types],
+  ../execution_chain/db/ledger,
+  ../execution_chain/common/common,
+  ../execution_chain/utils/[utils, debug],
+  ../execution_chain/evm/tracer/legacy_tracer,
+  ../execution_chain/core/eip4844,
   ../tools/common/helpers as chp,
   ../tools/evmstate/helpers,
   ../tools/common/state_clearing,
@@ -210,7 +210,7 @@ proc generalStateJsonMain*(debugMode = false) =
   const
     legacyFolder = "eth_tests/LegacyTests/Constantinople/GeneralStateTests"
     newFolder = "eth_tests/GeneralStateTests"
-    
+
   let config = getConfiguration()
   if config.testSubject == "" or not debugMode:
     # run all test fixtures

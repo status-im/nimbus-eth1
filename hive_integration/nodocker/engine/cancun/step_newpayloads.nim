@@ -18,8 +18,8 @@ import
   ../engine_client,
   ../test_env,
   ../types,
-  ../../../../nimbus/core/eip4844,
-  ../../../../nimbus/common/common
+  ../../../../execution_chain/core/eip4844,
+  ../../../../execution_chain/common/common
 
 type
   NewPayloads* = ref object of TestStep

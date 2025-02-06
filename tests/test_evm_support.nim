@@ -9,19 +9,19 @@ import
   std/[importutils, sequtils],
   unittest2,
   eth/common/[keys, transaction_utils],
-  ../nimbus/common,
-  ../nimbus/transaction,
-  ../nimbus/evm/types,
-  ../nimbus/evm/state,
-  ../nimbus/evm/evm_errors,
-  ../nimbus/evm/stack,
-  ../nimbus/evm/memory,
-  ../nimbus/evm/code_stream,
-  ../nimbus/evm/internals,
-  ../nimbus/constants,
-  ../nimbus/core/pow/header,
-  ../nimbus/db/ledger,
-  ../nimbus/transaction/call_evm
+  ../execution_chain/common,
+  ../execution_chain/transaction,
+  ../execution_chain/evm/types,
+  ../execution_chain/evm/state,
+  ../execution_chain/evm/evm_errors,
+  ../execution_chain/evm/stack,
+  ../execution_chain/evm/memory,
+  ../execution_chain/evm/code_stream,
+  ../execution_chain/evm/internals,
+  ../execution_chain/constants,
+  ../execution_chain/core/pow/header,
+  ../execution_chain/db/ledger,
+  ../execution_chain/transaction/call_evm
 
 template testPush(value: untyped, expected: untyped): untyped =
   privateAccess(EvmStack)

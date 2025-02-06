@@ -11,10 +11,10 @@ import
   std/[os, json, strutils, times],
   results,
   chronicles,
-  ../../../nimbus/core/chain,
-  ../../../nimbus/core/block_import,
-  ../../../nimbus/common,
-  ../../../nimbus/core/eip4844,
+  ../../../execution_chain/core/chain,
+  ../../../execution_chain/core/block_import,
+  ../../../execution_chain/common,
+  ../../../execution_chain/core/eip4844,
   ../sim_utils,
   ./extract_consensus_data
 

@@ -16,10 +16,10 @@ import
   std/[sequtils, tables],
   pkg/chronicles,
   pkg/stew/interval_set,
-  ../../nimbus/common,
-  ../../nimbus/sync/beacon/worker/helpers,
-  ../../nimbus/core/chain/forked_chain/chain_desc,
-  ../../nimbus/core/chain/forked_chain/chain_branch
+  ../../execution_chain/common,
+  ../../execution_chain/sync/beacon/worker/helpers,
+  ../../execution_chain/core/chain/forked_chain/chain_desc,
+  ../../execution_chain/core/chain/forked_chain/chain_branch
 
 logScope: topics = "forked-chain"
 

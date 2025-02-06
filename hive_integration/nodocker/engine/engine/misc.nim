@@ -1,5 +1,5 @@
 # Nimbus
-# Copyright (c) 2023-2024 Status Research & Development GmbH
+# Copyright (c) 2023-2025 Status Research & Development GmbH
 # Licensed under either of
 #  * Apache License, version 2.0, ([LICENSE-APACHE](LICENSE-APACHE) or
 #    http://www.apache.org/licenses/LICENSE-2.0)
@@ -10,7 +10,7 @@
 
 import
   ./engine_spec,
-  ../../../../nimbus/common/hardforks
+  ../../../../execution_chain/common/hardforks
 
 # Runs a sanity test on a post Merge fork where a previous fork's (London) number is not zero
 type

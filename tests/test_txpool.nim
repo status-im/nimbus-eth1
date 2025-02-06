@@ -15,14 +15,14 @@ import
   unittest2,
   ../hive_integration/nodocker/engine/tx_sender,
   ../hive_integration/nodocker/engine/cancun/blobs,
-  ../nimbus/db/ledger,
-  ../nimbus/core/chain,
-  ../nimbus/core/eip4844,
-  ../nimbus/[config, transaction, constants],
-  ../nimbus/core/tx_pool,
-  ../nimbus/core/tx_pool/tx_desc,
-  ../nimbus/common/common,
-  ../nimbus/utils/utils,
+  ../execution_chain/db/ledger,
+  ../execution_chain/core/chain,
+  ../execution_chain/core/eip4844,
+  ../execution_chain/[config, transaction, constants],
+  ../execution_chain/core/tx_pool,
+  ../execution_chain/core/tx_pool/tx_desc,
+  ../execution_chain/common/common,
+  ../execution_chain/utils/utils,
   ./macro_assembler
 
 const

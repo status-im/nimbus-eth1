@@ -1,5 +1,5 @@
 # Nimbus
-# Copyright (c) 2020-2024 Status Research & Development GmbH
+# Copyright (c) 2020-2025 Status Research & Development GmbH
 # Licensed under either of
 #  * Apache License, version 2.0, ([LICENSE-APACHE](LICENSE-APACHE) or
 #    http://www.apache.org/licenses/LICENSE-2.0)
@@ -11,7 +11,7 @@
 import
   random, unittest2, stew/byteutils,
   eth/trie/nibbles,
-  ../nimbus/stateless/multi_keys
+  ../execution_chain/stateless/multi_keys
 
 proc initMultiKeys(keys: openArray[string], storageMode: bool = false): MultiKeysRef =
   result.new

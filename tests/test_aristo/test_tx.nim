@@ -16,8 +16,8 @@ import
   results,
   unittest2,
   stew/endians2,
-  ../../nimbus/db/opts,
-  ../../nimbus/db/aristo/[
+  ../../execution_chain/db/opts,
+  ../../execution_chain/db/aristo/[
     aristo_check,
     aristo_desc,
     aristo_hike,

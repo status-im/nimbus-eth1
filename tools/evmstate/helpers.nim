@@ -13,9 +13,9 @@ import
   eth/common/[base, keys, headers, transactions],
   stint,
   stew/byteutils,
-  ../../nimbus/transaction,
-  ../../nimbus/db/ledger,
-  ../../nimbus/common/chain_config
+  ../../execution_chain/transaction,
+  ../../execution_chain/db/ledger,
+  ../../execution_chain/common/chain_config
 
 template fromJson(T: type Address, n: JsonNode): Address =
   Address.fromHex(n.getStr)

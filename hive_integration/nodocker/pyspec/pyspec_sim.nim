@@ -1,5 +1,5 @@
 # Nimbus
-# Copyright (c) 2023-2024 Status Research & Development GmbH
+# Copyright (c) 2023-2025 Status Research & Development GmbH
 # Licensed under either of
 #  * Apache License, version 2.0, ([LICENSE-APACHE](LICENSE-APACHE))
 #  * MIT license ([LICENSE-MIT](LICENSE-MIT))
@@ -17,9 +17,9 @@ import
   ../sim_utils,
   ../../../tools/common/helpers as chp,
   ../../../tools/evmstate/helpers as ehp,
-  ../../../nimbus/beacon/web3_eth_conv,
-  ../../../nimbus/beacon/payload_conv,
-  ../../../nimbus/core/eip4844,
+  ../../../execution_chain/beacon/web3_eth_conv,
+  ../../../execution_chain/beacon/payload_conv,
+  ../../../execution_chain/core/eip4844,
   ../engine/engine_client,
   ../engine/types,
   ./test_env

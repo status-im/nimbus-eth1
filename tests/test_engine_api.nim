@@ -1,5 +1,5 @@
 # Nimbus
-# Copyright (c) 2024 Status Research & Development GmbH
+# Copyright (c) 2024-2025 Status Research & Development GmbH
 # Licensed under either of
 #  * Apache License, version 2.0, ([LICENSE-APACHE](LICENSE-APACHE) or
 #    http://www.apache.org/licenses/LICENSE-2.0)
@@ -19,12 +19,12 @@ import
   unittest2
 
 import
-  ../nimbus/rpc,
-  ../nimbus/config,
-  ../nimbus/core/chain,
-  ../nimbus/core/tx_pool,
-  ../nimbus/beacon/beacon_engine,
-  ../nimbus/beacon/web3_eth_conv,
+  ../execution_chain/rpc,
+  ../execution_chain/config,
+  ../execution_chain/core/chain,
+  ../execution_chain/core/tx_pool,
+  ../execution_chain/beacon/beacon_engine,
+  ../execution_chain/beacon/web3_eth_conv,
   ../hive_integration/nodocker/engine/engine_client
 
 type

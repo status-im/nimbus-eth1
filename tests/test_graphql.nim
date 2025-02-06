@@ -1,5 +1,5 @@
 # nim-graphql
-# Copyright (c) 2021-2024 Status Research & Development GmbH
+# Copyright (c) 2021-2025 Status Research & Development GmbH
 # Licensed under either of
 #  * Apache License, version 2.0, ([LICENSE-APACHE](LICENSE-APACHE))
 #  * MIT license ([LICENSE-MIT](LICENSE-MIT))
@@ -11,11 +11,11 @@ import
   std/[json],
   stew/byteutils,
   eth/[p2p, rlp],
-  graphql, ../nimbus/graphql/ethapi, graphql/test_common,
-  ../nimbus/sync/protocol,
-  ../nimbus/config,
-  ../nimbus/core/[chain, tx_pool],
-  ../nimbus/common/[common, context],
+  graphql, ../execution_chain/graphql/ethapi, graphql/test_common,
+  ../execution_chain/sync/protocol,
+  ../execution_chain/config,
+  ../execution_chain/core/[chain, tx_pool],
+  ../execution_chain/common/[common, context],
   ./test_helpers
 
 const

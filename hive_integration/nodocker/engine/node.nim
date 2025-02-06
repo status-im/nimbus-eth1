@@ -9,7 +9,7 @@
 # according to those terms.
 
 import
-  ../../../nimbus/[
+  ../../../execution_chain/[
     utils/utils,
     common/common,
     constants,

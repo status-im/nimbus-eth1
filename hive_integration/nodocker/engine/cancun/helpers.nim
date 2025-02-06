@@ -18,11 +18,11 @@ import
   kzg4844/kzg,
   ../types,
   ../engine_client,
-  ../../../../nimbus/constants,
-  ../../../../nimbus/core/eip4844,
-  ../../../../nimbus/rpc/rpc_types,
+  ../../../../execution_chain/constants,
+  ../../../../execution_chain/core/eip4844,
+  ../../../../execution_chain/rpc/rpc_types,
   web3/execution_types,
-  ../../../../nimbus/beacon/web3_eth_conv,
+  ../../../../execution_chain/beacon/web3_eth_conv,
   ./blobs
 
 type

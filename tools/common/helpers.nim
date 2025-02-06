@@ -9,7 +9,7 @@
 # according to those terms.
 
 import
-  ../../nimbus/common/common,
+  ../../execution_chain/common/common,
   ./types
 
 export

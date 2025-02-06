@@ -15,16 +15,16 @@ import
   stint, results,
   "."/[config, types, helpers],
   ../common/state_clearing,
-  ../../nimbus/[evm/types, evm/state, transaction],
-  ../../nimbus/common/common,
-  ../../nimbus/db/ledger,
-  ../../nimbus/utils/utils,
-  ../../nimbus/core/pow/difficulty,
-  ../../nimbus/core/dao,
-  ../../nimbus/core/executor/[process_transaction, executor_helpers],
-  ../../nimbus/core/eip4844,
-  ../../nimbus/core/eip6110,
-  ../../nimbus/evm/tracer/json_tracer
+  ../../execution_chain/[evm/types, evm/state, transaction],
+  ../../execution_chain/common/common,
+  ../../execution_chain/db/ledger,
+  ../../execution_chain/utils/utils,
+  ../../execution_chain/core/pow/difficulty,
+  ../../execution_chain/core/dao,
+  ../../execution_chain/core/executor/[process_transaction, executor_helpers],
+  ../../execution_chain/core/eip4844,
+  ../../execution_chain/core/eip6110,
+  ../../execution_chain/evm/tracer/json_tracer
 
 const
   wrapExceptionEnabled* {.booldefine.} = true

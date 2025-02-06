@@ -15,12 +15,12 @@ import
   unittest2,
   results,
   ./test_helpers,
-  ../nimbus/db/aristo,
-  ../nimbus/db/aristo/[aristo_desc, aristo_part],
-  ../nimbus/db/aristo/aristo_part/part_debug,
-  ../nimbus/db/kvt/kvt_utils,
-  ../nimbus/[tracer, evm/types],
-  ../nimbus/common/common
+  ../execution_chain/db/aristo,
+  ../execution_chain/db/aristo/[aristo_desc, aristo_part],
+  ../execution_chain/db/aristo/aristo_part/part_debug,
+  ../execution_chain/db/kvt/kvt_utils,
+  ../execution_chain/[tracer, evm/types],
+  ../execution_chain/common/common
 
 proc setErrorLevel {.used.} =
   when defined(chronicles_runtime_filtering) and loggingEnabled:
