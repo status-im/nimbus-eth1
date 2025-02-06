@@ -264,7 +264,7 @@ func calculateNewBase(
 
   doAssert(false, "Unreachable code, finalized block outside canonical chain")
 
-proc removeBlockFromChain(c: ForkedChainRef, bd: BlockDesc, commit = false) =
+proc removeBlockFromCache(c: ForkedChainRef, bd: BlockDesc, commit = false) =
   c.hashToBlock.del(bd.hash)
   for tx in bd.blk.transactions:
     c.txRecords.del(rlpHash(tx))
@@ -302,7 +302,7 @@ proc updateHead(c: ForkedChainRef, head: BlockPos) =
     # Any branches with block number greater than head+1 should be removed.
     if branch.tailNumber > headNumber + 1:
       for i in countdown(branch.blocks.len-1, 0):
-        c.removeBlockFromChain(branch.blocks[i])
+        c.removeBlockFromCache(branch.blocks[i])
       c.branches.del(i)
       # no need to increment i when we delete from c.branches.
       continue
@@ -312,7 +312,7 @@ proc updateHead(c: ForkedChainRef, head: BlockPos) =
   # Maybe the current active chain is longer than canonical chain,
   # trim the branch.
   for i in countdown(head.branch.len-1, head.index+1):
-    c.removeBlockFromChain(head.branch.blocks[i])
+    c.removeBlockFromCache(head.branch.blocks[i])
 
   head.branch.blocks.setLen(head.index+1)
   c.baseTxFrame.setHead(head.branch.headHeader,
@@ -347,7 +347,7 @@ proc updateFinalized(c: ForkedChainRef, finalized: BlockPos) =
     # than finalized should be removed.
     if not branch.sameLineage(finalized.branch) and branch.tailNumber <= finalizedNumber:
       for i in countdown(branch.blocks.len-1, 0):
-        c.removeBlockFromChain(branch.blocks[i])
+        c.removeBlockFromCache(branch.blocks[i])
       c.branches.del(i)
       # no need to increment i when we delete from c.branches.
       continue
@@ -375,7 +375,7 @@ proc updateBase(c: ForkedChainRef, newBase: BlockPos) =
   template commitBlocks(number, branch) =
     let tailNumber = branch.tailNumber
     while number >= tailNumber:
-      c.removeBlockFromChain(branch.blocks[number - tailNumber], commit = true)
+      c.removeBlockFromCache(branch.blocks[number - tailNumber], commit = true)
       inc count
 
       if number == 0:
@@ -386,6 +386,11 @@ proc updateBase(c: ForkedChainRef, newBase: BlockPos) =
   proc commitBase(c: ForkedChainRef, bd: BlockDesc) =
     if bd.txFrame != c.baseTxFrame:
       bd.txFrame.commit()
+
+  let
+    # Cache to prevent crash after we shift
+    # the blocks
+    newBaseHash = newBase.hash
 
   var
     branch = newBase.branch
@@ -443,7 +448,7 @@ proc updateBase(c: ForkedChainRef, newBase: BlockPos) =
   else:
     debug "Finalized blocks persisted",
       numberOfBlocks = count,
-      target = newBase.hash.short,
+      target = newBaseHash.short,
       baseNumber = c.baseBranch.tailNumber,
       baseHash = c.baseBranch.tailHash.short
 
@@ -560,8 +565,6 @@ proc forkChoice*(c: ForkedChainRef,
 
   # Save and record the block number before the last saved block state.
   if newBaseNumber > 0:
-    # TODO -1 works around a bug where the base block header is not persisted yet
-    #      find out why this is the case..?
     c.com.db.persistent(newBaseNumber).isOkOr:
       return err("Failed to save state: " & $$error)
 
