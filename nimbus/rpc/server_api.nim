@@ -211,15 +211,16 @@ proc setupServerAPI*(api: ServerAPIRef, server: RpcServer, ctx: EthContext) =
 
   server.rpc("eth_syncing") do() -> SyncingStatus:
     ## Returns SyncObject or false when not syncing.
-    if api.com.syncState != Waiting:
+    let (start, current, target) = api.com.beaconSyncerProgress()
+    if start == 0 and current == 0 and target == 0:
+      return SyncingStatus(syncing: false)
+    else:
       let sync = SyncObject(
-        startingBlock: Quantity(api.com.syncStart),
-        currentBlock: Quantity(api.com.syncCurrent),
-        highestBlock: Quantity(api.com.syncHighest),
+        startingBlock: Quantity(start),
+        currentBlock: Quantity(current),
+        highestBlock: Quantity(target),
       )
       return SyncingStatus(syncing: true, syncObject: sync)
-    else:
-      return SyncingStatus(syncing: false)
 
   proc getLogsForBlock(
       chain: ForkedChainRef, header: Header, opts: FilterOptions
