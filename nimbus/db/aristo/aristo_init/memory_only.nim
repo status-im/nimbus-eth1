@@ -1,5 +1,5 @@
 # nimbus-eth1
-# Copyright (c) 2023-2024 Status Research & Development GmbH
+# Copyright (c) 2023-2025 Status Research & Development GmbH
 # Licensed under either of
 #  * Apache License, version 2.0, ([LICENSE-APACHE](LICENSE-APACHE) or
 #    http://www.apache.org/licenses/LICENSE-2.0)
@@ -53,11 +53,15 @@ proc init*(
       ): T =
   ## Memory backend constructor.
   ##
-  when B is VoidBackendRef:
-    AristoDbRef(top: LayerRef.init())
 
-  elif B is MemBackendRef:
-    AristoDbRef(top: LayerRef.init(), backend: memoryBackend())
+  let db =
+    when B is VoidBackendRef:
+      AristoDbRef(txRef: AristoTxRef(layer: LayerRef()))
+
+    elif B is MemBackendRef:
+      AristoDbRef(txRef: AristoTxRef(layer: LayerRef()), backend: memoryBackend())
+  db.txRef.db = db
+  db
 
 proc init*(
     T: type AristoDbRef;                      # Target type

@@ -1,5 +1,5 @@
 # Nimbus
-# Copyright (c) 2023-2024 Status Research & Development GmbH
+# Copyright (c) 2023-2025 Status Research & Development GmbH
 # Licensed under either of
 #  * Apache License, version 2.0, ([LICENSE-APACHE](LICENSE-APACHE) or
 #    http://www.apache.org/licenses/LICENSE-2.0)
@@ -36,27 +36,27 @@ type
 # ------------------------------------------------------------------------------
 
 proc getBlockHeader*(
-    db: CoreDbRef;
+    db: CoreDbTxRef;
     n: BlockNumber;
       ): Result[Header, string]
 
 proc getBlockHeader*(
-    db: CoreDbRef,
+    db: CoreDbTxRef,
     blockHash: Hash32;
       ): Result[Header, string]
 
 proc getBlockHash*(
-    db: CoreDbRef;
+    db: CoreDbTxRef;
     n: BlockNumber;
       ): Result[Hash32, string]
 
 proc addBlockNumberToHashLookup*(
-    db: CoreDbRef;
+    db: CoreDbTxRef;
     blockNumber: BlockNumber;
     blockHash: Hash32;
       )
 
-proc getCanonicalHeaderHash*(db: CoreDbRef): Result[Hash32, string]
+proc getCanonicalHeaderHash*(db: CoreDbTxRef): Result[Hash32, string]
 
 # ------------------------------------------------------------------------------
 # Private helpers
@@ -73,17 +73,16 @@ template wrapRlpException(info: static[string]; code: untyped) =
 # ------------------------------------------------------------------------------
 
 iterator getBlockTransactionData*(
-    db: CoreDbRef;
+    db: CoreDbTxRef;
     txRoot: Hash32;
       ): seq[byte] =
   block body:
     if txRoot == EMPTY_ROOT_HASH:
       break body
 
-    let kvt = db.ctx.getKvt()
     for idx in 0'u16..<uint16.high:
       let key = hashIndexKey(txRoot, idx)
-      let txData = kvt.getOrEmpty(key).valueOr:
+      let txData = db.getOrEmpty(key).valueOr:
         warn "getBlockTransactionData", txRoot, key, error=($$error)
         break body
       if txData.len == 0:
@@ -91,7 +90,7 @@ iterator getBlockTransactionData*(
       yield txData
 
 iterator getBlockTransactions*(
-    db: CoreDbRef;
+    db: CoreDbTxRef;
     header: Header;
       ): Transaction =
   for encodedTx in db.getBlockTransactionData(header.txRoot):
@@ -102,7 +101,7 @@ iterator getBlockTransactions*(
         data = toHex(encodedTx), err=e.msg, errName=e.name
 
 iterator getBlockTransactionHashes*(
-    db: CoreDbRef;
+    db: CoreDbTxRef;
     blockHeader: Header;
       ): Hash32 =
   ## Returns an iterable of the transaction hashes from th block specified
@@ -111,17 +110,16 @@ iterator getBlockTransactionHashes*(
     yield keccak256(encodedTx)
 
 iterator getWithdrawals*(
-    db: CoreDbRef;
+    db: CoreDbTxRef;
     withdrawalsRoot: Hash32;
       ): Withdrawal {.raises: [RlpError].} =
   block body:
     if withdrawalsRoot == EMPTY_ROOT_HASH:
       break body
 
-    let kvt = db.ctx.getKvt()
     for idx in 0'u16..<uint16.high:
       let key = hashIndexKey(withdrawalsRoot, idx)
-      let data = kvt.getOrEmpty(key).valueOr:
+      let data = db.getOrEmpty(key).valueOr:
         warn "getWithdrawals", withdrawalsRoot, key, error=($$error)
         break body
       if data.len == 0:
@@ -129,7 +127,7 @@ iterator getWithdrawals*(
       yield rlp.decode(data, Withdrawal)
 
 iterator getReceipts*(
-    db: CoreDbRef;
+    db: CoreDbTxRef;
     receiptsRoot: Hash32;
       ): Receipt
       {.gcsafe, raises: [RlpError].} =
@@ -137,10 +135,9 @@ iterator getReceipts*(
     if receiptsRoot == EMPTY_ROOT_HASH:
       break body
 
-    let kvt = db.ctx.getKvt()
     for idx in 0'u16..<uint16.high:
       let key = hashIndexKey(receiptsRoot, idx)
-      let data = kvt.getOrEmpty(key).valueOr:
+      let data = db.getOrEmpty(key).valueOr:
         warn "getReceipts", receiptsRoot, key, error=($$error)
         break body
       if data.len == 0:
@@ -152,7 +149,7 @@ iterator getReceipts*(
 # ------------------------------------------------------------------------------
 
 proc getSavedStateBlockNumber*(
-    db: CoreDbRef;
+    db: CoreDbTxRef;
       ): BlockNumber =
   ## Returns the block number registered when the database was last time
   ## updated, or `BlockNumber(0)` if there was no update found.
@@ -160,11 +157,11 @@ proc getSavedStateBlockNumber*(
   db.stateBlockNumber()
 
 proc getBlockHeader*(
-    db: CoreDbRef;
+    db: CoreDbTxRef;
     blockHash: Hash32;
       ): Result[Header, string] =
   const info = "getBlockHeader()"
-  let data = db.ctx.getKvt().get(genericHashKey(blockHash).toOpenArray).valueOr:
+  let data = db.get(genericHashKey(blockHash).toOpenArray).valueOr:
     if error.error != KvtNotFound:
       warn info, blockHash, error=($$error)
     return err("No block with hash " & $blockHash)
@@ -173,7 +170,7 @@ proc getBlockHeader*(
     return ok(rlp.decode(data, Header))
 
 proc getBlockHeader*(
-    db: CoreDbRef;
+    db: CoreDbTxRef;
     n: BlockNumber;
       ): Result[Header, string] =
   ## Returns the block header with the given number in the canonical chain.
@@ -181,11 +178,11 @@ proc getBlockHeader*(
   db.getBlockHeader(blockHash)
 
 proc getHash(
-    db: CoreDbRef;
+    db: CoreDbTxRef;
     key: DbKey;
       ): Result[Hash32, string] =
   const info = "getHash()"
-  let data = db.ctx.getKvt().get(key.toOpenArray).valueOr:
+  let data = db.get(key.toOpenArray).valueOr:
     if error.error != KvtNotFound:
       warn info, key, error=($$error)
     return err($$error)
@@ -193,29 +190,28 @@ proc getHash(
   wrapRlpException info:
     return ok(rlp.decode(data, Hash32))
 
-proc getCanonicalHeaderHash*(db: CoreDbRef): Result[Hash32, string] =
+proc getCanonicalHeaderHash*(db: CoreDbTxRef): Result[Hash32, string] =
   db.getHash(canonicalHeadHashKey())
 
 proc getCanonicalHead*(
-    db: CoreDbRef;
+    db: CoreDbTxRef;
       ): Result[Header, string] =
   let headHash = ?db.getCanonicalHeaderHash()
   db.getBlockHeader(headHash)
 
 proc getBlockHash*(
-    db: CoreDbRef;
+    db: CoreDbTxRef;
     n: BlockNumber;
       ): Result[Hash32, string] =
   ## Return the block hash for the given block number.
   db.getHash(blockNumberToHashKey(n))
 
 proc getScore*(
-    db: CoreDbRef;
+    db: CoreDbTxRef;
     blockHash: Hash32;
       ): Opt[UInt256] =
   const info = "getScore()"
-  let data = db.ctx.getKvt()
-               .get(blockHashToScoreKey(blockHash).toOpenArray).valueOr:
+  let data = db.get(blockHashToScoreKey(blockHash).toOpenArray).valueOr:
     if error.error != KvtNotFound:
       warn info, blockHash, error=($$error)
     return Opt.none(UInt256)
@@ -225,15 +221,15 @@ proc getScore*(
     warn info, data = data.toHex(), error=exc.msg
     Opt.none(UInt256)
 
-proc setScore*(db: CoreDbRef; blockHash: Hash32, score: UInt256) =
+proc setScore*(db: CoreDbTxRef; blockHash: Hash32, score: UInt256) =
   ## for testing purpose
   let scoreKey = blockHashToScoreKey blockHash
-  db.ctx.getKvt.put(scoreKey.toOpenArray, rlp.encode(score)).isOkOr:
+  db.put(scoreKey.toOpenArray, rlp.encode(score)).isOkOr:
     warn "setScore()", scoreKey, error=($$error)
     return
 
 proc headTotalDifficulty*(
-    db: CoreDbRef;
+    db: CoreDbTxRef;
       ): UInt256 =
   let blockHash = db.getCanonicalHeaderHash().valueOr:
     return 0.u256
@@ -241,7 +237,7 @@ proc headTotalDifficulty*(
   db.getScore(blockHash).valueOr(0.u256)
 
 proc getAncestorsHashes*(
-    db: CoreDbRef;
+    db: CoreDbTxRef;
     limit: BlockNumber;
     header: Header;
       ): Result[seq[Hash32], string] =
@@ -256,13 +252,13 @@ proc getAncestorsHashes*(
   ok(res)
 
 proc addBlockNumberToHashLookup*(
-    db: CoreDbRef; blockNumber: BlockNumber, blockHash: Hash32) =
+    db: CoreDbTxRef; blockNumber: BlockNumber, blockHash: Hash32) =
   let blockNumberKey = blockNumberToHashKey(blockNumber)
-  db.ctx.getKvt.put(blockNumberKey.toOpenArray, rlp.encode(blockHash)).isOkOr:
+  db.put(blockNumberKey.toOpenArray, rlp.encode(blockHash)).isOkOr:
     warn "addBlockNumberToHashLookup", blockNumberKey, error=($$error)
 
 proc persistTransactions*(
-    db: CoreDbRef;
+    db: CoreDbTxRef;
     blockNumber: BlockNumber;
     txRoot: Hash32;
     transactions: openArray[Transaction];
@@ -273,7 +269,6 @@ proc persistTransactions*(
   if transactions.len == 0:
     return
 
-  let kvt = db.ctx.getKvt()
   for idx, tx in transactions:
     let
       encodedTx = rlp.encode(tx)
@@ -281,15 +276,15 @@ proc persistTransactions*(
       blockKey = transactionHashToBlockKey(txHash)
       txKey = TransactionKey(blockNumber: blockNumber, index: idx.uint)
       key = hashIndexKey(txRoot, idx.uint16)
-    kvt.put(key, encodedTx).isOkOr:
+    db.put(key, encodedTx).isOkOr:
       warn info, idx, error=($$error)
       return
-    kvt.put(blockKey.toOpenArray, rlp.encode(txKey)).isOkOr:
+    db.put(blockKey.toOpenArray, rlp.encode(txKey)).isOkOr:
       trace info, blockKey, error=($$error)
       return
 
 proc forgetHistory*(
-    db: CoreDbRef;
+    db: CoreDbTxRef;
     blockNum: BlockNumber;
       ): bool =
   ## Remove all data related to the block number argument `num`. This function
@@ -297,24 +292,22 @@ proc forgetHistory*(
   let blockHash = db.getBlockHash(blockNum).valueOr:
     return false
 
-  let kvt = db.ctx.getKvt()
   # delete blockNum->blockHash
-  discard kvt.del(blockNumberToHashKey(blockNum).toOpenArray)
+  discard db.del(blockNumberToHashKey(blockNum).toOpenArray)
   # delete blockHash->header, stateRoot->blockNum
-  discard kvt.del(genericHashKey(blockHash).toOpenArray)
+  discard db.del(genericHashKey(blockHash).toOpenArray)
   true
 
 proc getTransactionByIndex*(
-    db: CoreDbRef;
+    db: CoreDbTxRef;
     txRoot: Hash32;
     txIndex: uint16;
       ): Result[Transaction, string] =
   const
     info = "getTransaction()"
 
-  let kvt = db.ctx.getKvt()
   let key = hashIndexKey(txRoot, txIndex)
-  let txData = kvt.getOrEmpty(key).valueOr:
+  let txData = db.getOrEmpty(key).valueOr:
     return err($$error)
   if txData.len == 0:
     return err("tx data is empty for root=" & $txRoot & " and index=" & $txIndex)
@@ -323,17 +316,16 @@ proc getTransactionByIndex*(
     return ok(rlp.decode(txData, Transaction))
 
 proc getTransactionCount*(
-    db: CoreDbRef;
+    db: CoreDbTxRef;
     txRoot: Hash32;
       ): int =
   const
     info = "getTransactionCount()"
 
-  let kvt = db.ctx.getKvt()
   var txCount = 0'u16
   while true:
     let key = hashIndexKey(txRoot, txCount)
-    let yes = kvt.hasKeyRc(key).valueOr:
+    let yes = db.hasKeyRc(key).valueOr:
       warn info, txRoot, key, error=($$error)
       return 0
     if yes:
@@ -344,7 +336,7 @@ proc getTransactionCount*(
   doAssert(false, "unreachable")
 
 proc getUnclesCount*(
-    db: CoreDbRef;
+    db: CoreDbTxRef;
     ommersHash: Hash32;
       ): Result[int, string] =
   const info = "getUnclesCount()"
@@ -354,14 +346,14 @@ proc getUnclesCount*(
   wrapRlpException info:
     let encodedUncles = block:
       let key = genericHashKey(ommersHash)
-      db.ctx.getKvt().get(key.toOpenArray).valueOr:
+      db.get(key.toOpenArray).valueOr:
         if error.error != KvtNotFound:
           warn info, ommersHash, error=($$error)
         return ok(0)
     return ok(rlpFromBytes(encodedUncles).listLen)
 
 proc getUncles*(
-    db: CoreDbRef;
+    db: CoreDbTxRef;
     ommersHash: Hash32;
       ): Result[seq[Header], string] =
   const info = "getUncles()"
@@ -371,29 +363,28 @@ proc getUncles*(
   wrapRlpException info:
     let  encodedUncles = block:
       let key = genericHashKey(ommersHash)
-      db.ctx.getKvt().get(key.toOpenArray).valueOr:
+      db.get(key.toOpenArray).valueOr:
         if error.error != KvtNotFound:
           warn info, ommersHash, error=($$error)
         return ok(default(seq[Header]))
     return ok(rlp.decode(encodedUncles, seq[Header]))
 
 proc persistWithdrawals*(
-    db: CoreDbRef;
+    db: CoreDbTxRef;
     withdrawalsRoot: Hash32;
     withdrawals: openArray[Withdrawal];
       ) =
   const info = "persistWithdrawals()"
   if withdrawals.len == 0:
     return
-  let kvt = db.ctx.getKvt()
   for idx, wd in withdrawals:
     let key = hashIndexKey(withdrawalsRoot, idx.uint16)
-    kvt.put(key, rlp.encode(wd)).isOkOr:
+    db.put(key, rlp.encode(wd)).isOkOr:
       warn info, idx, error=($$error)
       return
 
 proc getWithdrawals*(
-    db: CoreDbRef;
+    db: CoreDbTxRef;
     withdrawalsRoot: Hash32
       ): Result[seq[Withdrawal], string] =
   wrapRlpException "getWithdrawals":
@@ -403,7 +394,7 @@ proc getWithdrawals*(
     return ok(res)
 
 proc getTransactions*(
-    db: CoreDbRef;
+    db: CoreDbTxRef;
     txRoot: Hash32
       ): Result[seq[Transaction], string] =
   wrapRlpException "getTransactions":
@@ -413,7 +404,7 @@ proc getTransactions*(
     return ok(res)
 
 proc getBlockBody*(
-    db: CoreDbRef;
+    db: CoreDbTxRef;
     header: Header;
       ): Result[BlockBody, string] =
   wrapRlpException "getBlockBody":
@@ -427,14 +418,14 @@ proc getBlockBody*(
     return ok(body)
 
 proc getBlockBody*(
-    db: CoreDbRef;
+    db: CoreDbTxRef;
     blockHash: Hash32;
       ): Result[BlockBody, string] =
   let header = ?db.getBlockHeader(blockHash)
   db.getBlockBody(header)
 
 proc getEthBlock*(
-    db: CoreDbRef;
+    db: CoreDbTxRef;
     hash: Hash32;
       ): Result[EthBlock, string] =
   var
@@ -443,7 +434,7 @@ proc getEthBlock*(
   ok(EthBlock.init(move(header), move(blockBody)))
 
 proc getEthBlock*(
-    db: CoreDbRef;
+    db: CoreDbTxRef;
     blockNumber: BlockNumber;
       ): Result[EthBlock, string] =
   var
@@ -454,7 +445,7 @@ proc getEthBlock*(
 
 
 proc getUncleHashes*(
-    db: CoreDbRef;
+    db: CoreDbTxRef;
     blockHashes: openArray[Hash32];
       ): Result[seq[Hash32], string] =
   var res: seq[Hash32]
@@ -464,7 +455,7 @@ proc getUncleHashes*(
   ok(res)
 
 proc getUncleHashes*(
-    db: CoreDbRef;
+    db: CoreDbTxRef;
     header: Header;
       ): Result[seq[Hash32], string] =
   if header.ommersHash != EMPTY_UNCLE_HASH:
@@ -473,59 +464,56 @@ proc getUncleHashes*(
   wrapRlpException "getUncleHashes":
     let
       key = genericHashKey(header.ommersHash)
-      encodedUncles = db.ctx.getKvt().get(key.toOpenArray).valueOr:
+      encodedUncles = db.get(key.toOpenArray).valueOr:
         if error.error != KvtNotFound:
           warn "getUncleHashes()", ommersHash=header.ommersHash, error=($$error)
         return ok(default(seq[Hash32]))
     return ok(rlp.decode(encodedUncles, seq[Header]).mapIt(it.rlpHash))
 
 proc getTransactionKey*(
-    db: CoreDbRef;
+    db: CoreDbTxRef;
     transactionHash: Hash32;
       ): Result[TransactionKey, string] =
   wrapRlpException "getTransactionKey":
     let
       txKey = transactionHashToBlockKey(transactionHash)
-      tx = db.ctx.getKvt().get(txKey.toOpenArray).valueOr:
+      tx = db.get(txKey.toOpenArray).valueOr:
         if error.error != KvtNotFound:
           warn "getTransactionKey()", transactionHash, error=($$error)
         return ok(default(TransactionKey))
     return ok(rlp.decode(tx, TransactionKey))
 
-proc headerExists*(db: CoreDbRef; blockHash: Hash32): bool =
+proc headerExists*(db: CoreDbTxRef; blockHash: Hash32): bool =
   ## Returns True if the header with the given block hash is in our DB.
-  db.ctx.getKvt().hasKeyRc(genericHashKey(blockHash).toOpenArray).valueOr:
+  db.hasKeyRc(genericHashKey(blockHash).toOpenArray).valueOr:
     if error.error != KvtNotFound:
       warn "headerExists()", blockHash, error=($$error)
     return false
   # => true/false
 
 proc setHead*(
-    db: CoreDbRef;
+    db: CoreDbTxRef;
     blockHash: Hash32;
       ): Result[void, string] =
   let canonicalHeadHash = canonicalHeadHashKey()
-  db.ctx.getKvt.put(canonicalHeadHash.toOpenArray, rlp.encode(blockHash)).isOkOr:
+  db.put(canonicalHeadHash.toOpenArray, rlp.encode(blockHash)).isOkOr:
     return err($$error)
   ok()
 
 proc setHead*(
-    db: CoreDbRef;
+    db: CoreDbTxRef;
     header: Header;
-    writeHeader = false;
+    headerHash: Hash32;
       ): Result[void, string] =
-  var headerHash = rlpHash(header)
-  let kvt = db.ctx.getKvt()
-  if writeHeader:
-    kvt.put(genericHashKey(headerHash).toOpenArray, rlp.encode(header)).isOkOr:
-      return err($$error)
+  db.put(genericHashKey(headerHash).toOpenArray, rlp.encode(header)).isOkOr:
+    return err($$error)
   let canonicalHeadHash = canonicalHeadHashKey()
-  kvt.put(canonicalHeadHash.toOpenArray, rlp.encode(headerHash)).isOkOr:
+  db.put(canonicalHeadHash.toOpenArray, rlp.encode(headerHash)).isOkOr:
     return err($$error)
   ok()
 
 proc persistReceipts*(
-    db: CoreDbRef;
+    db: CoreDbTxRef;
     receiptsRoot: Hash32;
     receipts: openArray[Receipt];
       ) =
@@ -533,14 +521,13 @@ proc persistReceipts*(
   if receipts.len == 0:
     return
 
-  let kvt = db.ctx.getKvt()
   for idx, rec in receipts:
     let key = hashIndexKey(receiptsRoot, idx.uint16)
-    kvt.put(key, rlp.encode(rec)).isOkOr:
+    db.put(key, rlp.encode(rec)).isOkOr:
       warn info, idx, error=($$error)
 
 proc getReceipts*(
-    db: CoreDbRef;
+    db: CoreDbTxRef;
     receiptsRoot: Hash32;
       ): Result[seq[Receipt], string] =
   wrapRlpException "getReceipts":
@@ -550,21 +537,20 @@ proc getReceipts*(
     return ok(receipts)
 
 proc persistScore*(
-    db: CoreDbRef;
+    db: CoreDbTxRef;
     blockHash: Hash32;
     score: UInt256
       ): Result[void, string] =
   const
     info = "persistScore"
   let
-    kvt = db.ctx.getKvt()
     scoreKey = blockHashToScoreKey(blockHash)
-  kvt.put(scoreKey.toOpenArray, rlp.encode(score)).isOkOr:
+  db.put(scoreKey.toOpenArray, rlp.encode(score)).isOkOr:
     return err(info & ": " & $$error)
   ok()
 
 proc persistHeader*(
-    db: CoreDbRef;
+    db: CoreDbTxRef;
     blockHash: Hash32;
     header: Header;
     startOfHistory = GENESIS_PARENT_HASH;
@@ -572,13 +558,12 @@ proc persistHeader*(
   const
     info = "persistHeader"
   let
-    kvt = db.ctx.getKvt()
     isStartOfHistory = header.parentHash == startOfHistory
 
   if not isStartOfHistory and not db.headerExists(header.parentHash):
     return err(info & ": parent header missing number " & $header.number)
 
-  kvt.put(genericHashKey(blockHash).toOpenArray, rlp.encode(header)).isOkOr:
+  db.put(genericHashKey(blockHash).toOpenArray, rlp.encode(header)).isOkOr:
     return err(info & ": " & $$error)
 
   let
@@ -599,7 +584,7 @@ proc persistHeader*(
   ok()
 
 proc persistHeaderAndSetHead*(
-    db: CoreDbRef;
+    db: CoreDbTxRef;
     blockHash: Hash32;
     header: Header;
     startOfHistory = GENESIS_PARENT_HASH;
@@ -621,7 +606,7 @@ proc persistHeaderAndSetHead*(
   db.setHead(blockHash)
 
 proc persistHeaderAndSetHead*(
-    db: CoreDbRef;
+    db: CoreDbTxRef;
     header: Header;
     startOfHistory = GENESIS_PARENT_HASH;
       ): Result[void, string] =
@@ -629,43 +614,43 @@ proc persistHeaderAndSetHead*(
     blockHash = header.blockHash
   db.persistHeaderAndSetHead(blockHash, header, startOfHistory)
 
-proc persistUncles*(db: CoreDbRef, uncles: openArray[Header]): Hash32 =
+proc persistUncles*(db: CoreDbTxRef, uncles: openArray[Header]): Hash32 =
   ## Persists the list of uncles to the database.
   ## Returns the uncles hash.
   let enc = rlp.encode(uncles)
   result = keccak256(enc)
-  db.ctx.getKvt.put(genericHashKey(result).toOpenArray, enc).isOkOr:
+  db.put(genericHashKey(result).toOpenArray, enc).isOkOr:
     warn "persistUncles()", unclesHash=result, error=($$error)
     return EMPTY_ROOT_HASH
 
 
-proc safeHeaderHash*(db: CoreDbRef): Hash32 =
+proc safeHeaderHash*(db: CoreDbTxRef): Hash32 =
   db.getHash(safeHashKey()).valueOr(default(Hash32))
 
-proc safeHeaderHash*(db: CoreDbRef, headerHash: Hash32) =
+proc safeHeaderHash*(db: CoreDbTxRef, headerHash: Hash32) =
   let safeHashKey = safeHashKey()
-  db.ctx.getKvt.put(safeHashKey.toOpenArray, rlp.encode(headerHash)).isOkOr:
+  db.put(safeHashKey.toOpenArray, rlp.encode(headerHash)).isOkOr:
     warn "safeHeaderHash()", safeHashKey, error=($$error)
     return
 
 proc finalizedHeaderHash*(
-    db: CoreDbRef;
+    db: CoreDbTxRef;
       ): Hash32 =
   db.getHash(finalizedHashKey()).valueOr(default(Hash32))
 
-proc finalizedHeaderHash*(db: CoreDbRef, headerHash: Hash32) =
+proc finalizedHeaderHash*(db: CoreDbTxRef, headerHash: Hash32) =
   let finalizedHashKey = finalizedHashKey()
-  db.ctx.getKvt.put(finalizedHashKey.toOpenArray, rlp.encode(headerHash)).isOkOr:
+  db.put(finalizedHashKey.toOpenArray, rlp.encode(headerHash)).isOkOr:
     warn "finalizedHeaderHash()", finalizedHashKey, error=($$error)
     return
 
 proc safeHeader*(
-    db: CoreDbRef;
+    db: CoreDbTxRef;
       ): Result[Header, string] =
   db.getBlockHeader(db.safeHeaderHash)
 
 proc finalizedHeader*(
-    db: CoreDbRef;
+    db: CoreDbTxRef;
       ): Result[Header, string] =
   db.getBlockHeader(db.finalizedHeaderHash)
 

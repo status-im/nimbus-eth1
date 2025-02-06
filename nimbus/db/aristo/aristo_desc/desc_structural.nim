@@ -1,5 +1,5 @@
 # nimbus-eth1
-# Copyright (c) 2023-2024 Status Research & Development GmbH
+# Copyright (c) 2023-2025 Status Research & Development GmbH
 # Licensed under either of
 #  * Apache License, version 2.0, ([LICENSE-APACHE](LICENSE-APACHE) or
 #    http://www.apache.org/licenses/LICENSE-2.0)
@@ -94,8 +94,8 @@ type
     key*: Hash32                     ## Some state hash (if any)
     serial*: uint64                  ## Generic identifier from application
 
-  LayerRef* = ref LayerObj
-  LayerObj* = object
+  LayerRef* = ref Layer
+  Layer* = object
     ## Delta layers are stacked implying a tables hierarchy. Table entries on
     ## a higher level take precedence over lower layer table entries. So an
     ## existing key-value table entry of a layer on top supersedes same key
@@ -125,7 +125,7 @@ type
     accLeaves*: Table[Hash32, VertexRef]   ## Account path -> VertexRef
     stoLeaves*: Table[Hash32, VertexRef]   ## Storage path -> VertexRef
 
-    txUid*: uint                           ## Transaction identifier if positive
+    cTop*: VertexID                        ## Last committed vertex ID
 
   GetVtxFlag* = enum
     PeekCache
@@ -149,10 +149,6 @@ func setUsed*(vtx: VertexRef, nibble: uint8, used: static bool): VertexID =
     else:
       vtx.used and (not (1'u16 shl nibble))
   vtx.bVid(nibble)
-
-func init*(T: type LayerRef): T =
-  ## Constructor, returns empty layer
-  T()
 
 func hash*(node: NodeRef): Hash =
   ## Table/KeyedQueue/HashSet mixin

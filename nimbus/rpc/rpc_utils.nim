@@ -242,6 +242,7 @@ proc populateReceipt*(receipt: Receipt, gasUsed: GasInt, tx: Transaction,
 
 proc createAccessList*(header: Header,
                        com: CommonRef,
+                       chain: ForkedChainRef,
                        args: TransactionArgs): AccessListResult =
 
   template handleError(msg: string) =
@@ -256,8 +257,10 @@ proc createAccessList*(header: Header,
     args.gas = Opt.some(Quantity DEFAULT_RPC_GAS_CAP)
 
   let
-    vmState = BaseVMState.new(header, com).valueOr:
-                handleError("failed to create vmstate: " & $error.code)
+    txFrame = chain.txFrame(header.blockHash)
+    parent  = txFrame.getBlockHeader(header.parentHash).valueOr:
+      handleError(error)
+    vmState = BaseVMState.new(parent, header, com, txFrame)
     fork    = com.toEVMFork(forkDeterminationInfo(header.number, header.timestamp))
     sender  = args.sender
     # TODO: nonce should be retrieved from txPool
@@ -283,12 +286,15 @@ proc createAccessList*(header: Header,
 
     # Apply the transaction with the access list tracer
     let
+      txFrame = txFrame.ctx.txFrameBegin(txFrame)
       tracer  = AccessListTracer.new(accessList, sender, to, precompiles)
-      vmState = BaseVMState.new(header, com, tracer).valueOr:
-                  handleError("failed to create vmstate: " & $error.code)
-      res     = rpcCallEvm(args, header, com, vmState).valueOr:
+      vmState = BaseVMState.new(parent, header, com, txFrame, tracer)
+      res     = rpcCallEvm(args, header, vmState).valueOr:
+                  txFrame.dispose()
                   handleError("failed to call evm: " & $error.code)
 
+    txFrame.dispose()
+    
     if res.isError:
       handleError("failed to apply transaction: " & res.error)
 

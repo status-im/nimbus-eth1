@@ -1,5 +1,5 @@
 # Nimbus
-# Copyright (c) 2024 Status Research & Development GmbH
+# Copyright (c) 2024-2025 Status Research & Development GmbH
 # Licensed under either of
 #  * Apache License, version 2.0, ([LICENSE-APACHE](LICENSE-APACHE) or
 #    http://www.apache.org/licenses/LICENSE-2.0)
@@ -24,49 +24,40 @@ import
   ../../../db/core_db,
   ./chain_desc
 
-proc fcKvtAvailable*(c: ForkedChainRef): bool =
-  ## Returns `true` if `kvt` data can be saved persistently.
-  c.db.txFrameLevel() == 0
-
-proc fcKvtPersistent*(c: ForkedChainRef): bool =
+proc fcKvtPersistent*(c: ForkedChainRef) =
   ## Save cached `kvt` data if possible. This function has the side effect
   ## that it saves all cached db data including `Aristo` data (although there
   ## should not be any.)
   ##
-  if c.fcKvtAvailable():
-    c.db.persistent(c.db.getSavedStateBlockNumber()).isOkOr:
-      raiseAssert "fcKvtPersistent: persistent() failed: " & $$error
-    return true
+  let db = c.com.db
+  db.persistent(c.baseTxFrame.getSavedStateBlockNumber()).isOkOr:
+    raiseAssert "fcKvtPersistent: persistent() failed: " & $$error
 
 proc fcKvtHasKey*(c: ForkedChainRef, key: openArray[byte]): bool =
   ## Check whether the argument `key` exists on the `kvt` table (i.e. `get()`
   ## would succeed.)
   ##
-  c.db.ctx.getKvt().hasKey(key)
+  c.baseTxFrame.hasKey(key)
 
 proc fcKvtGet*(c: ForkedChainRef, key: openArray[byte]): Opt[seq[byte]] =
   ## Fetch data entry from `kvt` table.
   ##
-  var w = c.db.ctx.getKvt().get(key).valueOr:
+  var w = c.baseTxFrame.get(key).valueOr:
     return err()
   ok(move w)
 
-proc fcKvtPut*(c: ForkedChainRef, key, data: openArray[byte]): bool =
+proc fcKvtPut*(c: ForkedChainRef, key, data: openArray[byte]) =
   ## Cache data on the `kvt` table marked for saving persistently. If the `kvt`
   ## table is unavailable, this function does nothing and returns `false`.
   ##
-  if c.fcKvtAvailable():
-    c.db.ctx.getKvt().put(key, data).isOkOr:
-      raiseAssert "fcKvtPut: put() failed: " & $$error
-    return true
+  c.baseTxFrame.put(key, data).isOkOr:
+    raiseAssert "fcKvtPut: put() failed: " & $$error
 
-proc fcKvtDel*(c: ForkedChainRef, key: openArray[byte]): bool =
+proc fcKvtDel*(c: ForkedChainRef, key: openArray[byte]) =
   ## Cache key for deletion on the  `kvt` table.  If the `kvt` table is
   ## unavailable, this function does nothing and returns `false`.
   ##
-  if c.fcKvtAvailable():
-    c.db.ctx.getKvt().del(key).isOkOr:
-      raiseAssert "fcKvtDel: del() failed: " & $$error
-    return true
-    
+  c.baseTxFrame.del(key).isOkOr:
+    raiseAssert "fcKvtDel: del() failed: " & $$error
+
 # End

@@ -23,7 +23,7 @@ declareGauge nec_base, "" &
 
 declareGauge nec_execution_head, "" &
   "Block number of latest imported blocks"
-  
+
 declareGauge nec_sync_coupler, "" &
   "Max block number for header chain starting at genesis"
 

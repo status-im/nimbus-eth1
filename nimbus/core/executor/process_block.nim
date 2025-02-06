@@ -1,5 +1,5 @@
 # Nimbus
-# Copyright (c) 2018-2024 Status Research & Development GmbH
+# Copyright (c) 2018-2025 Status Research & Development GmbH
 # Licensed under either of
 #  * Apache License, version 2.0, ([LICENSE-APACHE](LICENSE-APACHE) or
 #    http://www.apache.org/licenses/LICENSE-2.0)
@@ -173,7 +173,7 @@ proc procBlkPreamble(
     # TODO It's strange that we persist uncles before processing block but the
     #      rest after...
     if not skipUncles:
-      let h = vmState.com.db.persistUncles(blk.uncles)
+      let h = vmState.ledger.txFrame.persistUncles(blk.uncles)
       if h != header.ommersHash:
         return err("ommersHash mismatch")
     elif not skipValidation and rlpHash(blk.uncles) != header.ommersHash:
@@ -281,7 +281,7 @@ proc processBlock*(
   ?vmState.procBlkPreamble(blk, skipValidation, skipReceipts, skipUncles, taskpool)
 
   # EIP-3675: no reward for miner in POA/POS
-  if not vmState.com.proofOfStake(blk.header):
+  if not vmState.com.proofOfStake(blk.header, vmState.ledger.txFrame):
     vmState.calculateReward(blk.header, blk.uncles)
 
   ?vmState.procBlkEpilogue(blk, skipValidation, skipReceipts)

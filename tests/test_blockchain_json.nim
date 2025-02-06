@@ -1,5 +1,5 @@
 # Nimbus
-# Copyright (c) 2018-2024 Status Research & Development GmbH
+# Copyright (c) 2018-2025 Status Research & Development GmbH
 # Licensed under either of
 #  * Apache License, version 2.0, ([LICENSE-APACHE](LICENSE-APACHE) or
 #    http://www.apache.org/licenses/LICENSE-2.0)
@@ -58,8 +58,8 @@ proc parseEnv(node: JsonNode): TestEnv =
   result.network = node["network"].getStr
   result.pre = node["pre"]
 
-proc rootExists(db: CoreDbRef; root: Hash32): bool =
-  let state = db.ctx.getAccounts().getStateRoot().valueOr:
+proc rootExists(db: CoreDbTxRef; root: Hash32): bool =
+  let state = db.getStateRoot().valueOr:
     return false
   state == root
 
@@ -67,22 +67,22 @@ proc executeCase(node: JsonNode): bool =
   let
     env     = parseEnv(node)
     memDB   = newCoreDbRef DefaultDbMemory
-    ledger = LedgerRef.init(memDB)
+    ledger = LedgerRef.init(memDB.baseTxFrame())
     config  = getChainConfig(env.network)
     com     = CommonRef.new(memDB, nil, config)
 
   setupLedger(env.pre, ledger)
   ledger.persist()
 
-  com.db.persistHeaderAndSetHead(env.genesisHeader).isOkOr:
+  ledger.txFrame.persistHeaderAndSetHead(env.genesisHeader).isOkOr:
     debugEcho "Failed to put genesis header into database: ", error
     return false
 
-  var c = ForkedChainRef.init(com)  
+  var c = ForkedChainRef.init(com)
   if c.latestHash != env.genesisHeader.blockHash:
     debugEcho "Genesis block hash in database is different with expected genesis block hash"
     return false
-  
+
   var lastStateRoot = env.genesisHeader.stateRoot
   for blk in env.blocks:
     let res = c.importBlock(blk.blk)
@@ -100,14 +100,14 @@ proc executeCase(node: JsonNode): bool =
   c.forkChoice(env.lastBlockHash, env.lastBlockHash).isOkOr:
     debugEcho error
     return false
-  
+
   let headHash = c.latestHash
   if headHash != env.lastBlockHash:
     debugEcho "lastestBlockHash mismatch, get: ", headHash,
       " expect: ", env.lastBlockHash
     return false
 
-  if not memDB.rootExists(lastStateRoot):
+  if not c.txFrame(headHash).rootExists(lastStateRoot):
     debugEcho "Last stateRoot not exists"
     return false
 
@@ -148,6 +148,6 @@ when isMainModule:
       if testStatusIMPL == FAILED:
         quit(QuitFailure)
 
-    executeFile("tests/fixtures/eth_tests/BlockchainTests/GeneralStateTests/stTransactionTest/ValueOverflowParis.json")
+    executeFile("tests/fixtures/eth_tests/BlockchainTests/ValidBlocks/bcWalletTest/walletReorganizeOwners.json")
   else:
     blockchainJsonMain()

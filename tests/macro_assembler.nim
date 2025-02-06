@@ -1,5 +1,5 @@
 # Nimbus
-# Copyright (c) 2019-2024 Status Research & Development GmbH
+# Copyright (c) 2019-2025 Status Research & Development GmbH
 # Licensed under either of
 #  * Apache License, version 2.0, ([LICENSE-APACHE](LICENSE-APACHE) or
 #    http://www.apache.org/licenses/LICENSE-2.0)
@@ -279,7 +279,7 @@ proc initVMEnv*(network: string): BaseVMState =
       gasLimit: 100_000
     )
 
-  BaseVMState.new(parent, header, com)
+  BaseVMState.new(parent, header, com, com.db.baseTxFrame())
 
 proc verifyAsmResult(vmState: BaseVMState, boa: Assembler, asmResult: DebugCallResult): bool =
   let com = vmState.com
@@ -326,7 +326,7 @@ proc verifyAsmResult(vmState: BaseVMState, boa: Assembler, asmResult: DebugCallR
   ledger.persist()
 
   let
-    al = com.db.ctx.getAccounts()
+    al = com.db.baseTxFrame()
     accPath = keccak256(codeAddress.data)
 
   for kv in boa.storage:

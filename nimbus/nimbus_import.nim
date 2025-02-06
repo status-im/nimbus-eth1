@@ -97,7 +97,7 @@ proc importBlocks*(conf: NimbusConf, com: CommonRef) =
   setControlCHook(controlCHandler)
 
   let
-    start = com.db.getSavedStateBlockNumber() + 1
+    start = com.db.baseTxFrame().getSavedStateBlockNumber() + 1
     chain = com.newChain()
     (cfg, genesis_validators_root, lastEra1Block, firstSlotAfterMerge) =
       getMetadata(conf.networkId)

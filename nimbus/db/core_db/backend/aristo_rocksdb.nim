@@ -171,7 +171,7 @@ proc newAristoRocksDbCoreDbRef*(path: string, opts: DbOptions): CoreDbRef =
 
   if opts.rdbKeyCacheSize > 0:
     # Make sure key cache isn't empty
-    adb.computeKeys(VertexID(1)).isOkOr:
+    adb.txRef.computeKeys(VertexID(1)).isOkOr:
       fatal "Cannot compute root keys", msg=error
       quit(QuitFailure)
 

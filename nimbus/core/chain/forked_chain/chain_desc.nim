@@ -1,5 +1,5 @@
 # Nimbus
-# Copyright (c) 2024 Status Research & Development GmbH
+# Copyright (c) 2024-2025 Status Research & Development GmbH
 # Licensed under either of
 #  * Apache License, version 2.0, ([LICENSE-APACHE](LICENSE-APACHE) or
 #    http://www.apache.org/licenses/LICENSE-2.0)
@@ -12,42 +12,27 @@
 
 import
   std/tables,
+  ./chain_branch,
   ../../../common,
   ../../../db/core_db
 
 type
-  CursorDesc* = object
-    forkJunction*: BlockNumber      ## Bottom or left end of cursor arc
-    hash*: Hash32                   ## Top or right end of cursor arc
-
-  BlockDesc* = object
-    blk*: Block
-    receipts*: seq[Receipt]
-
-  PivotArc* = object
-    pvHash*: Hash32                 ## Pivot item on cursor arc (e.g. new base)
-    pvHeader*: Header               ## Ditto
-    cursor*: CursorDesc             ## Cursor arc containing `pv` item
-
   ForkedChainRef* = ref object
-    stagingTx*: CoreDbTxRef
-    db*: CoreDbRef
     com*: CommonRef
-    blocks*: Table[Hash32, BlockDesc]
-    txRecords: Table[Hash32, (Hash32, uint64)]
-    baseHash*: Hash32
-    baseHeader*: Header
-    cursorHash*: Hash32
-    cursorHeader*: Header
-    cursorHeads*: seq[CursorDesc]
+    hashToBlock* : Table[Hash32, BlockPos]
+    branches*    : seq[BranchRef]
+    baseBranch*  : BranchRef
+    activeBranch*: BranchRef
+
+    txRecords    : Table[Hash32, (Hash32, uint64)]
+    baseTxFrame* : CoreDbTxRef
+      # Frame that skips all in-memory state that ForkedChain holds - used to
+      # lookup items straight from the database
+
     extraValidation*: bool
     baseDistance*: uint64
 
 # ----------------
-
-func pvNumber*(pva: PivotArc): BlockNumber =
-  ## Getter
-  pva.pvHeader.number
 
 func txRecords*(c: ForkedChainRef): var Table[Hash32, (Hash32, uint64)] =
   ## Avoid clash with `forked_chain.txRecords()`

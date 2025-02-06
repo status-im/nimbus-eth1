@@ -1,5 +1,5 @@
 # Nimbus
-# Copyright (c) 2018-2024 Status Research & Development GmbH
+# Copyright (c) 2018-2025 Status Research & Development GmbH
 # Licensed under either of
 #  * Apache License, version 2.0, ([LICENSE-APACHE](LICENSE-APACHE) or
 #    http://www.apache.org/licenses/LICENSE-2.0)
@@ -79,6 +79,7 @@ proc new*(
       parent:   Header;     ## parent header, account sync position
       blockCtx: BlockContext;
       com:      CommonRef;       ## block chain config
+      txFrame:  CoreDbTxRef;
       tracer:   TracerRef = nil,
       storeSlotHash = false): T =
   ## Create a new `BaseVMState` descriptor from a parent block header. This
@@ -90,7 +91,7 @@ proc new*(
   ## with the `parent` block header.
   new result
   result.init(
-    ac       = LedgerRef.init(com.db, storeSlotHash),
+    ac       = LedgerRef.init(txFrame, storeSlotHash),
     parent   = parent,
     blockCtx = blockCtx,
     com      = com,
@@ -99,7 +100,6 @@ proc new*(
 proc reinit*(self:     BaseVMState;     ## Object descriptor
              parent:   Header;     ## parent header, account sync pos.
              blockCtx: BlockContext;
-             linear: bool
              ): bool =
   ## Re-initialise state descriptor. The `LedgerRef` database is
   ## re-initilaise only if its `getStateRoot()` doe not point to `parent.stateRoot`,
@@ -116,9 +116,7 @@ proc reinit*(self:     BaseVMState;     ## Object descriptor
   let
     tracer = self.tracer
     com    = self.com
-    db     = com.db
-    ac     = if linear or self.ledger.getStateRoot() == parent.stateRoot: self.ledger
-              else: LedgerRef.init(db, self.ledger.storeSlotHash)
+    ac     = self.ledger
     flags  = self.flags
   self.init(
     ac       = ac,
@@ -132,7 +130,6 @@ proc reinit*(self:     BaseVMState;     ## Object descriptor
 proc reinit*(self:   BaseVMState; ## Object descriptor
              parent: Header; ## parent header, account sync pos.
              header: Header; ## header with tx environment data fields
-             linear: bool
              ): bool =
   ## Variant of `reinit()`. The `parent` argument is used to sync the accounts
   ## cache and the `header` is used as a container to pass the `timestamp`,
@@ -143,7 +140,6 @@ proc reinit*(self:   BaseVMState; ## Object descriptor
   self.reinit(
     parent   = parent,
     blockCtx = blockCtx(header),
-    linear = linear
     )
 
 proc init*(
@@ -151,6 +147,7 @@ proc init*(
       parent: Header;     ## parent header, account sync position
       header: Header;     ## header with tx environment data fields
       com:    CommonRef;       ## block chain config
+      txFrame: CoreDbTxRef;
       tracer: TracerRef = nil,
       storeSlotHash = false) =
   ## Variant of `new()` constructor above for in-place initalisation. The
@@ -161,7 +158,7 @@ proc init*(
   ## It requires the `header` argument properly initalised so that for PoA
   ## networks, the miner address is retrievable via `ecRecover()`.
   self.init(
-    ac       = LedgerRef.init(com.db, storeSlotHash),
+    ac       = LedgerRef.init(txFrame, storeSlotHash),
     parent   = parent,
     blockCtx = blockCtx(header),
     com      = com,
@@ -172,6 +169,7 @@ proc new*(
       parent: Header;     ## parent header, account sync position
       header: Header;     ## header with tx environment data fields
       com:    CommonRef;       ## block chain config
+      txFrame: CoreDbTxRef;
       tracer: TracerRef = nil,
       storeSlotHash = false): T =
   ## This is a variant of the `new()` constructor above where the `parent`
@@ -185,45 +183,9 @@ proc new*(
     parent = parent,
     header = header,
     com    = com,
+    txFrame = txFrame,
     tracer = tracer,
     storeSlotHash = storeSlotHash)
-
-proc new*(
-      T:      type BaseVMState;
-      header: Header;     ## header with tx environment data fields
-      com:    CommonRef;       ## block chain config
-      tracer: TracerRef = nil,
-      storeSlotHash = false): EvmResult[T] =
-  ## This is a variant of the `new()` constructor above where the field
-  ## `header.parentHash`, is used to fetch the `parent` Header to be
-  ## used in the `new()` variant, above.
-  let parent = com.db.getBlockHeader(header.parentHash).valueOr:
-    return err(evmErr(EvmHeaderNotFound))
-
-  ok(BaseVMState.new(
-      parent = parent,
-      header = header,
-      com    = com,
-      tracer = tracer,
-      storeSlotHash = storeSlotHash))
-
-proc init*(
-      vmState: BaseVMState;
-      header:  Header;     ## header with tx environment data fields
-      com:     CommonRef;       ## block chain config
-      tracer:  TracerRef = nil,
-      storeSlotHash = false): bool =
-  ## Variant of `new()` which does not throw an exception on a dangling
-  ## `Header` parent hash reference.
-  let parent = com.db.getBlockHeader(header.parentHash).valueOr:
-    return false
-  vmState.init(
-    parent = parent,
-    header = header,
-    com    = com,
-    tracer = tracer,
-    storeSlotHash = storeSlotHash)
-  return true
 
 func coinbase*(vmState: BaseVMState): Address =
   vmState.blockCtx.coinbase
@@ -238,7 +200,7 @@ proc proofOfStake*(vmState: BaseVMState): bool =
     number: vmState.blockNumber,
     parentHash: vmState.blockCtx.parentHash,
     difficulty: vmState.blockCtx.difficulty,
-  ))
+  ), vmState.ledger.txFrame)
 
 proc difficultyOrPrevRandao*(vmState: BaseVMState): UInt256 =
   if vmState.proofOfStake():
@@ -252,7 +214,7 @@ func baseFeePerGas*(vmState: BaseVMState): UInt256 =
 
 method getAncestorHash*(
     vmState: BaseVMState, blockNumber: BlockNumber): Hash32 {.gcsafe, base.} =
-  let db = vmState.com.db
+  let db = vmState.ledger.txFrame
   let blockHash = db.getBlockHash(blockNumber).valueOr:
     return default(Hash32)
   blockHash

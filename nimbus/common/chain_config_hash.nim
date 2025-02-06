@@ -66,11 +66,6 @@ func update[T: ref](ctx: var sha256, val: T) =
   for f in fields(val[]):
     ctx.update(f)
 
-func update(ctx: var sha256, list: openArray[Opt[BlobSchedule]]) =
-  mixin update
-  for val in list:
-    ctx.update(val)
-
 # ------------------------------------------------------------------------------
 # Public functions
 # ------------------------------------------------------------------------------

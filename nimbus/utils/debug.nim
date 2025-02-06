@@ -1,5 +1,5 @@
 # Nimbus
-# Copyright (c) 2022-2024 Status Research & Development GmbH
+# Copyright (c) 2022-2025 Status Research & Development GmbH
 # Licensed under either of
 #  * Apache License, version 2.0, ([LICENSE-APACHE](LICENSE-APACHE) or
 #    http://www.apache.org/licenses/LICENSE-2.0)
@@ -105,7 +105,7 @@ proc debug*(vms: BaseVMState): string =
 proc `$`(x: ChainId): string =
   $int(x)
 
-proc `$`(acl: AccessList): string =
+proc `$`(acl: transactions.AccessList): string =
   if acl.len == 0:
     return "zero length"
 

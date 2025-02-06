@@ -1,5 +1,5 @@
 # nimbus-eth1
-# Copyright (c) 2023-2024 Status Research & Development GmbH
+# Copyright (c) 2023-2025 Status Research & Development GmbH
 # Licensed under either of
 #  * Apache License, version 2.0, ([LICENSE-APACHE](LICENSE-APACHE) or
 #    http://www.apache.org/licenses/LICENSE-2.0)
@@ -24,7 +24,7 @@ import
 proc toNode*(
     vtx: VertexRef;                    # Vertex to convert
     root: VertexID;                    # Sub-tree root the `vtx` belongs to
-    db: AristoDbRef;                   # Database
+    db: AristoTxRef;                   # Database
       ): Result[NodeRef,seq[VertexID]] =
   ## Convert argument the vertex `vtx` to a node type. Missing Merkle hash
   ## keys are searched for on the argument database `db`.

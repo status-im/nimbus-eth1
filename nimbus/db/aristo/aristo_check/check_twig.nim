@@ -1,5 +1,5 @@
 # nimbus-eth1
-# Copyright (c) 2023-2024 Status Research & Development GmbH
+# Copyright (c) 2023-2025 Status Research & Development GmbH
 # Licensed under either of
 #  * Apache License, version 2.0, ([LICENSE-APACHE](LICENSE-APACHE) or
 #    http://www.apache.org/licenses/LICENSE-2.0)
@@ -20,7 +20,7 @@ import
 # ------------------------------------------------------------------------------
 
 proc checkTwig*(
-    db: AristoDbRef;                   # Database
+    db: AristoTxRef;                   # Database
     accPath: Hash32;             # Data path
       ): Result[void,AristoError] =
   let
@@ -31,7 +31,7 @@ proc checkTwig*(
   ok()
 
 proc checkTwig*(
-    db: AristoDbRef;                   # Database
+    db: AristoTxRef;                   # Database
     accPath: Hash32;                  # Account key
     stoPath: Hash32;                  # Storage key
       ): Result[void,AristoError] =

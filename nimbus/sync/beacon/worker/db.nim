@@ -1,5 +1,5 @@
 # Nimbus
-# Copyright (c) 2023-2024 Status Research & Development GmbH
+# Copyright (c) 2023-2025 Status Research & Development GmbH
 # Licensed and distributed under either of
 #   * MIT license (license terms in the root directory or at
 #     https://opensource.org/licenses/MIT).
@@ -26,10 +26,6 @@ let
 # Private helpers
 # ------------------------------------------------------------------------------
 
-template kvtNotAvailable(info: static[string]): string =
-  info & ": kvt table not available (locked by FC module)"
-
-
 proc fetchSyncStateLayout(ctx: BeaconCtxRef): Opt[SyncStateLayout] =
   let data = ctx.pool.chain.fcKvtGet(LhcStateKey.toOpenArray).valueOr:
     return err()
@@ -47,24 +43,21 @@ proc deleteStaleHeadersAndState(
       ) =
   ## Delete stale headers and state
   let c = ctx.pool.chain
-  if not c.fcKvtAvailable():
-    trace kvtNotAvailable(info)
-    return
 
   var bn = upTo
   while 0 < bn and c.fcKvtHasKey(beaconHeaderKey(bn).toOpenArray):
-    discard c.fcKvtDel(beaconHeaderKey(bn).toOpenArray)
+    c.fcKvtDel(beaconHeaderKey(bn).toOpenArray)
     bn.dec
 
     # Occasionallly persist the deleted headers (so that the internal DB cache
     # does not grow extra large.) This will succeed if this function is called
     # early enough after restart when there is no database transaction pending.
     if (upTo - bn) mod 8192 == 0:
-      discard c.fcKvtPersistent()
+      c.fcKvtPersistent()
 
   # Delete persistent state record, there will be no use of it anymore
-  discard c.fcKvtDel(LhcStateKey.toOpenArray)
-  discard c.fcKvtPersistent()
+  c.fcKvtDel(LhcStateKey.toOpenArray)
+  c.fcKvtPersistent()
 
   if bn < upTo:
     debug info & ": deleted stale sync headers", iv=BnRange.new(bn+1,upTo)
@@ -76,11 +69,8 @@ proc deleteStaleHeadersAndState(
 proc dbStoreSyncStateLayout*(ctx: BeaconCtxRef; info: static[string]) =
   ## Save chain layout to persistent db
   let c = ctx.pool.chain
-  if c.fcKvtAvailable():
-    discard c.fcKvtPut(LhcStateKey.toOpenArray, rlp.encode(ctx.layout))
-    discard c.fcKvtPersistent()
-  else:
-    trace kvtNotAvailable(info)
+  c.fcKvtPut(LhcStateKey.toOpenArray, rlp.encode(ctx.layout))
+  c.fcKvtPersistent()
 
 proc dbLoadSyncStateLayout*(ctx: BeaconCtxRef; info: static[string]): bool =
   ## Restore chain layout from persistent db. It returns `true` if a previous
@@ -162,14 +152,9 @@ proc dbHeadersStash*(
   let
     c = ctx.pool.chain
     last = first + revBlobs.len.uint64 - 1
-  if not c.fcKvtAvailable():
-    # Need to cache it because FCU has blocked writing through to disk.
-    for n,data in revBlobs:
-      ctx.stash[last - n.uint64] = data
-  else:
-    for n,data in revBlobs:
-      let key = beaconHeaderKey(last - n.uint64)
-      discard c.fcKvtPut(key.toOpenArray, data)
+  for n,data in revBlobs:
+    let key = beaconHeaderKey(last - n.uint64)
+    c.fcKvtPut(key.toOpenArray, data)
 
 proc dbHeaderPeek*(ctx: BeaconCtxRef; num: BlockNumber): Opt[Header] =
   ## Retrieve some stashed header.
@@ -199,7 +184,7 @@ proc dbHeaderUnstash*(ctx: BeaconCtxRef; bn: BlockNumber) =
   ctx.stash.withValue(bn, _):
     ctx.stash.del bn
     return
-  discard ctx.pool.chain.fcKvtDel(beaconHeaderKey(bn).toOpenArray)
+  ctx.pool.chain.fcKvtDel(beaconHeaderKey(bn).toOpenArray)
 
 # ------------------------------------------------------------------------------
 # End

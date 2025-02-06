@@ -1,5 +1,5 @@
 # nimbus-eth1
-# Copyright (c) 2023-2024 Status Research & Development GmbH
+# Copyright (c) 2023-2025 Status Research & Development GmbH
 # Licensed under either of
 #  * Apache License, version 2.0, ([LICENSE-APACHE](LICENSE-APACHE) or
 #    http://www.apache.org/licenses/LICENSE-2.0)
@@ -19,12 +19,11 @@ import
 export tables
 
 type
-  LayerRef* = ref LayerObj
-  LayerObj* = object
+  LayerRef* = ref Layer
+  Layer* = object
     ## Kvt database layer structures. Any layer holds the full
     ## change relative to the backend.
     sTab*: Table[seq[byte],seq[byte]] ## Structural data table
-    txUid*: uint                      ## Transaction identifier if positive
 
 # ------------------------------------------------------------------------------
 # Public helpers (misc)

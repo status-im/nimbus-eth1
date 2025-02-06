@@ -102,7 +102,7 @@ proc initEnv(): TestEnv =
       conf.networkId,
       conf.networkParams
     )
-    chain = newForkedChain(com, com.genesisHeader)
+    chain = ForkedChainRef.init(com)
 
   TestEnv(
     com     : com,
@@ -146,8 +146,8 @@ proc importBlock(env: TestEnv; blk: Block) =
     raiseAssert "persistBlocks() failed at block #" &
       $blk.header.number & " msg: " & error
 
-proc getLedger(com: CommonRef): LedgerRef =
-  LedgerRef.init(com.db)
+proc getLedger(txFrame: CoreDbTxRef): LedgerRef =
+  LedgerRef.init(txFrame)
 
 func getRecipient(tx: Transaction): Address =
   tx.to.expect("transaction have no recipient")
@@ -213,8 +213,6 @@ proc runTrial3Survive(env: TestEnv, ledger: LedgerRef; inx: int; noisy = false) 
   let eAddr = env.txs[inx].getRecipient
 
   block:
-    let dbTx = env.xdb.ctx.txFrameBegin()
-
     block:
       let accTx = ledger.beginSavepoint
       ledger.modBalance(eAddr)
@@ -226,11 +224,7 @@ proc runTrial3Survive(env: TestEnv, ledger: LedgerRef; inx: int; noisy = false) 
       ledger.modBalance(eAddr)
       ledger.rollback(accTx)
 
-    dbTx.rollback()
-
   block:
-    let dbTx = env.xdb.ctx.txFrameBegin()
-
     block:
       let accTx = ledger.beginSavepoint
       ledger.modBalance(eAddr)
@@ -240,16 +234,11 @@ proc runTrial3Survive(env: TestEnv, ledger: LedgerRef; inx: int; noisy = false) 
 
       ledger.persist()
 
-    dbTx.commit()
-
-
 proc runTrial4(env: TestEnv, ledger: LedgerRef; inx: int; rollback: bool) =
   ## Like `runTrial3()` but with four blocks and extra db transaction frames.
   let eAddr = env.txs[inx].getRecipient
 
   block:
-    let dbTx = env.xdb.ctx.txFrameBegin()
-
     block:
       let accTx = ledger.beginSavepoint
       ledger.modBalance(eAddr)
@@ -273,20 +262,12 @@ proc runTrial4(env: TestEnv, ledger: LedgerRef; inx: int; rollback: bool) =
       ledger.commit(accTx)
       ledger.persist()
 
-    # There must be no dbTx.rollback() here unless `ledger` is
-    # discarded and/or re-initialised.
-    dbTx.commit()
-
   block:
-    let dbTx = env.xdb.ctx.txFrameBegin()
-
     block:
       let accTx = ledger.beginSavepoint
       ledger.modBalance(eAddr)
       ledger.commit(accTx)
       ledger.persist()
-
-    dbTx.commit()
 
 # ------------------------------------------------------------------------------
 # Test Runner
@@ -346,38 +327,38 @@ proc runLedgerTransactionTests(noisy = true) =
 
     test &"Run {env.txi.len} two-step trials with rollback":
       for n in env.txi:
-        let dbTx = env.xdb.ctx.txFrameBegin()
+        let dbTx = env.xdb.ctx.txFrameBegin(nil)
         defer: dbTx.dispose()
-        let ledger = env.com.getLedger()
+        let ledger = dbTx.getLedger()
         env.runTrial2ok(ledger, n)
 
     test &"Run {env.txi.len} three-step trials with rollback":
       for n in env.txi:
-        let dbTx = env.xdb.ctx.txFrameBegin()
+        let dbTx = env.xdb.ctx.txFrameBegin(nil)
         defer: dbTx.dispose()
-        let ledger = env.com.getLedger()
+        let ledger = dbTx.getLedger()
         env.runTrial3(ledger, n, rollback = true)
 
     test &"Run {env.txi.len} three-step trials with extra db frame rollback" &
         " throwing Exceptions":
       for n in env.txi:
-        let dbTx = env.xdb.ctx.txFrameBegin()
+        let dbTx = env.xdb.ctx.txFrameBegin(nil)
         defer: dbTx.dispose()
-        let ledger = env.com.getLedger()
+        let ledger = dbTx.getLedger()
         env.runTrial3Survive(ledger, n, noisy)
 
     test &"Run {env.txi.len} tree-step trials without rollback":
       for n in env.txi:
-        let dbTx = env.xdb.ctx.txFrameBegin()
+        let dbTx = env.xdb.ctx.txFrameBegin(nil)
         defer: dbTx.dispose()
-        let ledger = env.com.getLedger()
+        let ledger = dbTx.getLedger()
         env.runTrial3(ledger, n, rollback = false)
 
     test &"Run {env.txi.len} four-step trials with rollback and db frames":
       for n in env.txi:
-        let dbTx = env.xdb.ctx.txFrameBegin()
+        let dbTx = env.xdb.ctx.txFrameBegin(nil)
         defer: dbTx.dispose()
-        let ledger = env.com.getLedger()
+        let ledger = dbTx.getLedger()
         env.runTrial4(ledger, n, rollback = true)
 
 proc runLedgerBasicOperationsTests() =
@@ -387,7 +368,7 @@ proc runLedgerBasicOperationsTests() =
 
       var
         memDB = newCoreDbRef DefaultDbMemory
-        ledger {.used.} = LedgerRef.init(memDB)
+        ledger {.used.} = LedgerRef.init(memDB.baseTxFrame())
         address {.used.} = address"0x0f572e5295c57f15886f9b263e2f6d2d6c7b5ec6"
         code {.used.} = hexToSeqByte("0x0f572e5295c57f15886f9b263e2f6d2d6c7b5ec6")
         stateRoot {.used.} : Hash32
@@ -444,7 +425,7 @@ proc runLedgerBasicOperationsTests() =
       check y.originalStorage.len == 3
 
     test "Ledger various operations":
-      var ac = LedgerRef.init(memDB)
+      var ac = LedgerRef.init(memDB.baseTxFrame())
       var addr1 = initAddr(1)
 
       check ac.isDeadAccount(addr1) == true
@@ -476,7 +457,7 @@ proc runLedgerBasicOperationsTests() =
       ac.persist()
       stateRoot = ac.getStateRoot()
 
-      var db = LedgerRef.init(memDB)
+      var db = LedgerRef.init(memDB.baseTxFrame())
       db.setBalance(addr1, 1100.u256)
       db.setNonce(addr1, 2)
       db.setCode(addr1, code)
@@ -484,7 +465,7 @@ proc runLedgerBasicOperationsTests() =
       check stateRoot == db.getStateRoot()
 
       # Ledger readonly operations using previous hash
-      var ac2 = LedgerRef.init(memDB)
+      var ac2 = LedgerRef.init(memDB.baseTxFrame())
       var addr2 = initAddr(2)
 
       check ac2.getCodeHash(addr2) == emptyAcc.codeHash
@@ -504,14 +485,14 @@ proc runLedgerBasicOperationsTests() =
       check ac2.getStateRoot() == stateRoot
 
     test "Ledger code retrieval after persist called":
-      var ac = LedgerRef.init(memDB)
+      var ac = LedgerRef.init(memDB.baseTxFrame())
       var addr2 = initAddr(2)
       ac.setCode(addr2, code)
       ac.persist()
       check ac.getCode(addr2) == code
       let
         key = contractHashKey(keccak256(code))
-        val = memDB.ctx.getKvt().get(key.toOpenArray).valueOr: EmptyBlob
+        val = memDB.baseTxFrame().get(key.toOpenArray).valueOr: EmptyBlob
       check val == code
 
     test "accessList operations":
@@ -537,7 +518,7 @@ proc runLedgerBasicOperationsTests() =
       proc accessList(ac: LedgerRef, address, slot: int) {.inline.} =
         ac.accessList(address.initAddr, slot.u256)
 
-      var ac = LedgerRef.init(memDB)
+      var ac = LedgerRef.init(memDB.baseTxFrame())
 
       ac.accessList(0xaa)
       ac.accessList(0xbb, 0x01)
@@ -579,7 +560,7 @@ proc runLedgerBasicOperationsTests() =
       check ac.verifySlots(0xdd, 0x04)
 
     test "transient storage operations":
-      var ac = LedgerRef.init(memDB)
+      var ac = LedgerRef.init(memDB.baseTxFrame())
 
       proc tStore(ac: LedgerRef, address, slot, val: int) =
         ac.setTransientStorage(address.initAddr, slot.u256, val.u256)
@@ -646,7 +627,7 @@ proc runLedgerBasicOperationsTests() =
 
     test "ledger contractCollision":
       # use previous hash
-      var ac = LedgerRef.init(memDB)
+      var ac = LedgerRef.init(memDB.baseTxFrame())
       let addr2 = initAddr(2)
       check ac.contractCollision(addr2) == false
 
@@ -667,7 +648,7 @@ proc runLedgerBasicOperationsTests() =
       check ac.contractCollision(addr4) == true
 
     test "Ledger storage iterator":
-      var ac = LedgerRef.init(memDB, storeSlotHash = true)
+      var ac = LedgerRef.init(memDB.baseTxFrame(), storeSlotHash = true)
       let addr2 = initAddr(2)
       ac.setStorage(addr2, 1.u256, 2.u256)
       ac.setStorage(addr2, 2.u256, 3.u256)

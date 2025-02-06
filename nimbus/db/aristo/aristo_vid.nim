@@ -1,5 +1,5 @@
 # nimbus-eth1
-# Copyright (c) 2023-2024 Status Research & Development GmbH
+# Copyright (c) 2023-2025 Status Research & Development GmbH
 # Licensed under either of
 #  * Apache License, version 2.0, ([LICENSE-APACHE](LICENSE-APACHE) or
 #    http://www.apache.org/licenses/LICENSE-2.0)
@@ -20,14 +20,14 @@ import
 # Public functions
 # ------------------------------------------------------------------------------
 
-proc vidFetch*(db: AristoDbRef, n = 1): VertexID =
+proc vidFetch*(db: AristoTxRef, n = 1): VertexID =
   ## Fetch next vertex ID.
   ##
-  if db.top.vTop  == 0:
-    db.top.vTop = VertexID(LEAST_FREE_VID)
-  var ret = db.top.vTop
+  if db.layer.vTop  == 0:
+    db.layer.vTop = VertexID(LEAST_FREE_VID)
+  var ret = db.layer.vTop
   ret.inc
-  db.top.vTop.inc(n)
+  db.layer.vTop.inc(n)
   ret
 
 # ------------------------------------------------------------------------------

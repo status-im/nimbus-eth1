@@ -1,5 +1,5 @@
 # nimbus-eth1
-# Copyright (c) 2024 Status Research & Development GmbH
+# Copyright (c) 2024-2025 Status Research & Development GmbH
 # Licensed under either of
 #  * Apache License, version 2.0, ([LICENSE-APACHE](LICENSE-APACHE) or
 #    http://www.apache.org/licenses/LICENSE-2.0)
@@ -49,7 +49,7 @@ type
       ## was any.
 
   AristoApiDeleteAccountRecordFn* =
-    proc(db: AristoDbRef;
+    proc(db: AristoTxRef;
          accPath: Hash32;
         ): Result[void,AristoError]
         {.noRaise.}
@@ -58,7 +58,7 @@ type
       ## as well.
 
   AristoApiDeleteStorageDataFn* =
-    proc(db: AristoDbRef;
+    proc(db: AristoTxRef;
          accPath: Hash32;
          stoPath: Hash32;
         ): Result[bool,AristoError]
@@ -71,7 +71,7 @@ type
       ## case only the function will return `true`.
 
   AristoApiDeleteStorageTreeFn* =
-    proc(db: AristoDbRef;
+    proc(db: AristoTxRef;
          accPath: Hash32;
         ): Result[void,AristoError]
         {.noRaise.}
@@ -79,7 +79,7 @@ type
       ## associated to the account argument `accPath`.
 
   AristoApiFetchLastSavedStateFn* =
-    proc(db: AristoDbRef
+    proc(db: AristoTxRef
         ): Result[SavedState,AristoError]
         {.noRaise.}
       ## The function returns the state of the last saved state. This is a
@@ -87,20 +87,20 @@ type
       ## (may be interpreted as block number.)
 
   AristoApiFetchAccountRecordFn* =
-    proc(db: AristoDbRef;
+    proc(db: AristoTxRef;
          accPath: Hash32;
         ): Result[AristoAccount,AristoError]
         {.noRaise.}
       ## Fetch an account record from the database indexed by `accPath`.
 
   AristoApiFetchStateRootFn* =
-    proc(db: AristoDbRef;
+    proc(db: AristoTxRef;
         ): Result[Hash32,AristoError]
         {.noRaise.}
       ## Fetch the Merkle hash of the account root.
 
   AristoApiFetchStorageDataFn* =
-    proc(db: AristoDbRef;
+    proc(db: AristoTxRef;
          accPath: Hash32;
          stoPath: Hash32;
         ): Result[UInt256,AristoError]
@@ -109,7 +109,7 @@ type
       ## record from the database indexed by `stoPath`.
 
   AristoApiFetchStorageRootFn* =
-    proc(db: AristoDbRef;
+    proc(db: AristoTxRef;
          accPath: Hash32;
         ): Result[Hash32,AristoError]
         {.noRaise.}
@@ -130,7 +130,7 @@ type
       ## This distructor may be used on already *destructed* descriptors.
 
   AristoApiForgetFn* =
-    proc(db: AristoDbRef;
+    proc(db: AristoTxRef;
         ): Result[void,AristoError]
         {.noRaise.}
       ## Destruct the non centre argument `db` descriptor (see comments on
@@ -140,14 +140,14 @@ type
       ## also# comments on `fork()`.)
 
   AristoApiHashifyFn* =
-    proc(db: AristoDbRef;
+    proc(db: AristoTxRef;
         ): Result[void,(VertexID,AristoError)]
         {.noRaise.}
       ## Add keys to the  `Patricia Trie` so that it becomes a `Merkle
       ## Patricia Tree`.
 
   AristoApiHasPathAccountFn* =
-    proc(db: AristoDbRef;
+    proc(db: AristoTxRef;
          accPath: Hash32;
         ): Result[bool,AristoError]
         {.noRaise.}
@@ -155,7 +155,7 @@ type
       ## exists on the database.
 
   AristoApiHasPathStorageFn* =
-    proc(db: AristoDbRef;
+    proc(db: AristoTxRef;
          accPath: Hash32;
          stoPath: Hash32;
         ): Result[bool,AristoError]
@@ -164,29 +164,15 @@ type
       ## data record indexed by `stoPath` exists on the database.
 
   AristoApiHasStorageDataFn* =
-    proc(db: AristoDbRef;
+    proc(db: AristoTxRef;
          accPath: Hash32;
         ): Result[bool,AristoError]
         {.noRaise.}
       ## For a storage tree related to account `accPath`, query whether there
       ## is a non-empty data storage area at all.
 
-  AristoApiIsTopFn* =
-    proc(tx: AristoTxRef;
-        ): bool
-        {.noRaise.}
-      ## Getter, returns `true` if the argument `tx` referes to the current
-      ## top level transaction.
-
-  AristoApiTxFrameLevelFn* =
-    proc(db: AristoDbRef;
-        ): int
-        {.noRaise.}
-      ## Getter, non-negative nesting level (i.e. number of pending
-      ## transactions)
-
   AristoApiMergeAccountRecordFn* =
-    proc(db: AristoDbRef;
+    proc(db: AristoTxRef;
          accPath: Hash32;
          accRec: AristoAccount;
         ): Result[bool,AristoError]
@@ -199,7 +185,7 @@ type
       ## `false` otherwise.
 
   AristoApiMergeStorageDataFn* =
-    proc(db: AristoDbRef;
+    proc(db: AristoTxRef;
          accPath: Hash32;
          stoPath: Hash32;
          stoData: UInt256;
@@ -210,7 +196,7 @@ type
       ## and `stoPath`  is the slot path of the corresponding storage area.
 
   AristoApiPartAccountTwig* =
-    proc(db: AristoDbRef;
+    proc(db: AristoTxRef;
          accPath: Hash32;
         ): Result[(seq[seq[byte]],bool), AristoError]
         {.noRaise.}
@@ -222,7 +208,7 @@ type
       ## Errors will only be returned for invalid paths.
 
   AristoApiPartStorageTwig* =
-    proc(db: AristoDbRef;
+    proc(db: AristoTxRef;
          accPath: Hash32;
          stoPath: Hash32;
         ): Result[(seq[seq[byte]],bool), AristoError]
@@ -285,24 +271,23 @@ type
       ## is returned if there was any.
 
   AristoApiTxFrameBeginFn* =
-    proc(db: AristoDbRef;
+    proc(db: AristoDbRef; parent: AristoTxRef
         ): Result[AristoTxRef,AristoError]
         {.noRaise.}
       ## Starts a new transaction.
       ##
       ## Example:
       ## ::
-      ##   proc doSomething(db: AristoDbRef) =
+      ##   proc doSomething(db: AristoTxRef) =
       ##     let tx = db.begin
       ##     defer: tx.rollback()
       ##     ... continue using db ...
       ##     tx.commit()
 
-  AristoApiTxFrameTopFn* =
+  AristoApiBaseTxFrameFn* =
     proc(db: AristoDbRef;
-        ): Result[AristoTxRef,AristoError]
+        ): AristoTxRef
         {.noRaise.}
-      ## Getter, returns top level transaction if there is any.
 
   AristoApiRef* = ref AristoApiObj
   AristoApiObj* = object of RootObj
@@ -325,9 +310,6 @@ type
     hasPathStorage*: AristoApiHasPathStorageFn
     hasStorageData*: AristoApiHasStorageDataFn
 
-    isTop*: AristoApiIsTopFn
-    txFrameLevel*: AristoApiTxFrameLevelFn
-
     mergeAccountRecord*: AristoApiMergeAccountRecordFn
     mergeStorageData*: AristoApiMergeStorageDataFn
 
@@ -340,7 +322,7 @@ type
     persist*: AristoApiPersistFn
     rollback*: AristoApiRollbackFn
     txFrameBegin*: AristoApiTxFrameBeginFn
-    txFrameTop*: AristoApiTxFrameTopFn
+    baseTxFrame*: AristoApiBaseTxFrameFn
 
 
   AristoApiProfNames* = enum
@@ -365,9 +347,6 @@ type
     AristoApiProfHasPathStorageFn       = "hasPathStorage"
     AristoApiProfHasStorageDataFn       = "hasStorageData"
 
-    AristoApiProfIsTopFn                = "isTop"
-    AristoApiProfLevelFn                = "level"
-
     AristoApiProfMergeAccountRecordFn   = "mergeAccountRecord"
     AristoApiProfMergeStorageDataFn     = "mergeStorageData"
 
@@ -380,7 +359,7 @@ type
     AristoApiProfPersistFn              = "persist"
     AristoApiProfRollbackFn             = "rollback"
     AristoApiProfTxFrameBeginFn              = "txFrameBegin"
-    AristoApiProfTxFrameTopFn                = "txFrameTop"
+    AristoApiProfBaseTxFrameFn              = "baseTxFrame"
 
     AristoApiProfBeGetVtxFn             = "be/getVtx"
     AristoApiProfBeGetKeyFn             = "be/getKey"
@@ -449,9 +428,6 @@ func init*(api: var AristoApiObj) =
   api.hasPathStorage = hasPathStorage
   api.hasStorageData = hasStorageData
 
-  api.isTop = isTop
-  api.txFrameLevel = txFrameLevel
-
   api.mergeAccountRecord = mergeAccountRecord
   api.mergeStorageData = mergeStorageData
 
@@ -464,7 +440,8 @@ func init*(api: var AristoApiObj) =
   api.persist = persist
   api.rollback = rollback
   api.txFrameBegin = txFrameBegin
-  api.txFrameTop = txFrameTop
+  api.baseTxFrame = baseTxFrame
+
   when AutoValidateApiHooks:
     api.validate
 
@@ -490,7 +467,7 @@ func init*(
   ## This constructor creates a profiling API descriptor to be derived from
   ## an initialised `api` argument descriptor. For profiling the DB backend,
   ## the field `.be` of the result descriptor must be assigned to the
-  ## `.backend` field of the `AristoDbRef` descriptor.
+  ## `.backend` field of the `AristoTxRef` descriptor.
   ##
   ## The argument desctiptors `api` and `be` will not be modified and can be
   ## used to restore the previous set up.
@@ -511,92 +488,82 @@ func init*(
         result = api.commit(a)
 
   profApi.deleteAccountRecord =
-    proc(a: AristoDbRef; b: Hash32): auto =
+    proc(a: AristoTxRef; b: Hash32): auto =
       AristoApiProfDeleteAccountRecordFn.profileRunner:
         result = api.deleteAccountRecord(a, b)
 
   profApi.deleteStorageData =
-    proc(a: AristoDbRef; b: Hash32, c: Hash32): auto =
+    proc(a: AristoTxRef; b: Hash32, c: Hash32): auto =
       AristoApiProfDeleteStorageDataFn.profileRunner:
         result = api.deleteStorageData(a, b, c)
 
   profApi.deleteStorageTree =
-    proc(a: AristoDbRef; b: Hash32): auto =
+    proc(a: AristoTxRef; b: Hash32): auto =
       AristoApiProfDeleteStorageTreeFn.profileRunner:
         result = api.deleteStorageTree(a, b)
 
   profApi.fetchLastSavedState =
-    proc(a: AristoDbRef): auto =
+    proc(a: AristoTxRef): auto =
       AristoApiProfFetchLastSavedStateFn.profileRunner:
         result = api.fetchLastSavedState(a)
 
   profApi.fetchAccountRecord =
-    proc(a: AristoDbRef; b: Hash32): auto =
+    proc(a: AristoTxRef; b: Hash32): auto =
       AristoApiProfFetchAccountRecordFn.profileRunner:
         result = api.fetchAccountRecord(a, b)
 
   profApi.fetchStateRoot =
-    proc(a: AristoDbRef; b: bool): auto =
+    proc(a: AristoTxRef; b: bool): auto =
       AristoApiProfFetchStateRootFn.profileRunner:
         result = api.fetchStateRoot(a, b)
 
   profApi.fetchStorageData =
-    proc(a: AristoDbRef; b, stoPath: Hash32): auto =
+    proc(a: AristoTxRef; b, stoPath: Hash32): auto =
       AristoApiProfFetchStorageDataFn.profileRunner:
         result = api.fetchStorageData(a, b, stoPath)
 
   profApi.fetchStorageRoot =
-    proc(a: AristoDbRef; b: Hash32): auto =
+    proc(a: AristoTxRef; b: Hash32): auto =
       AristoApiProfFetchStorageRootFn.profileRunner:
         result = api.fetchStorageRoot(a, b)
 
   profApi.finish =
-    proc(a: AristoDbRef; b = false) =
+    proc(a: AristoTxRef; b = false) =
       AristoApiProfFinishFn.profileRunner:
         api.finish(a, b)
 
   profApi.hasPathAccount =
-    proc(a: AristoDbRef; b: Hash32): auto =
+    proc(a: AristoTxRef; b: Hash32): auto =
       AristoApiProfHasPathAccountFn.profileRunner:
         result = api.hasPathAccount(a, b)
 
   profApi.hasPathStorage =
-    proc(a: AristoDbRef; b, c: Hash32): auto =
+    proc(a: AristoTxRef; b, c: Hash32): auto =
       AristoApiProfHasPathStorageFn.profileRunner:
         result = api.hasPathStorage(a, b, c)
 
   profApi.hasStorageData =
-    proc(a: AristoDbRef; b: Hash32): auto =
+    proc(a: AristoTxRef; b: Hash32): auto =
       AristoApiProfHasStorageDataFn.profileRunner:
         result = api.hasStorageData(a, b)
 
-  profApi.isTop =
-    proc(a: AristoTxRef): auto =
-      AristoApiProfIsTopFn.profileRunner:
-        result = api.isTop(a)
-
-  profApi.level =
-    proc(a: AristoDbRef): auto =
-       AristoApiProfLevelFn.profileRunner:
-         result = api.level(a)
-
   profApi.mergeAccountRecord =
-    proc(a: AristoDbRef; b: Hash32; c: AristoAccount): auto =
+    proc(a: AristoTxRef; b: Hash32; c: AristoAccount): auto =
       AristoApiProfMergeAccountRecordFn.profileRunner:
         result = api.mergeAccountRecord(a, b, c)
 
   profApi.mergeStorageData =
-    proc(a: AristoDbRef; b, c: Hash32, d: UInt256): auto =
+    proc(a: AristoTxRef; b, c: Hash32, d: UInt256): auto =
       AristoApiProfMergeStorageDataFn.profileRunner:
         result = api.mergeStorageData(a, b, c, d)
 
   profApi.partAccountTwig =
-    proc(a: AristoDbRef; b: Hash32): auto =
+    proc(a: AristoTxRef; b: Hash32): auto =
       AristoApiProfPartAccountTwigFn.profileRunner:
         result = api.partAccountTwig(a, b)
 
   profApi.partStorageTwig =
-    proc(a: AristoDbRef; b: Hash32; c: Hash32): auto =
+    proc(a: AristoTxRef; b: Hash32; c: Hash32): auto =
       AristoApiProfPartStorageTwigFn.profileRunner:
         result = api.partStorageTwig(a, b, c)
 
@@ -616,7 +583,7 @@ func init*(
         result = api.pathAsBlob(a)
 
   profApi.persist =
-    proc(a: AristoDbRef; b = 0u64): auto =
+    proc(a: AristoTxRef; b = 0u64): auto =
        AristoApiProfPersistFn.profileRunner:
         result = api.persist(a, b)
 
@@ -626,14 +593,14 @@ func init*(
         result = api.rollback(a)
 
   profApi.txFrameBegin =
-    proc(a: AristoDbRef): auto =
+    proc(a: AristoTxRef): auto =
        AristoApiProfTxFrameBeginFn.profileRunner:
         result = api.txFrameBegin(a)
 
-  profApi.txFrameTop =
-    proc(a: AristoDbRef): auto =
-      AristoApiProfTxFrameTopFn.profileRunner:
-        result = api.txFrameTop(a)
+  profApi.baseTxFrame =
+    proc(a: AristoTxRef): auto =
+       AristoApiProfBaseTxFrameFn.profileRunner:
+        result = api.baseTxFrame(a)
 
   let beDup = be.dup()
   if beDup.isNil:

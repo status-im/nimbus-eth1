@@ -1,5 +1,5 @@
 # Nimbus
-# Copyright (c) 2023-2024 Status Research & Development GmbH
+# Copyright (c) 2023-2025 Status Research & Development GmbH
 # Licensed under either of
 #  * Apache License, version 2.0, ([LICENSE-APACHE](LICENSE-APACHE) or
 #    http://www.apache.org/licenses/LICENSE-2.0)
@@ -49,7 +49,7 @@ func to(a: NodeKey; T: type PathID): T =
 proc pp*(
     w: ProofTrieData;
     rootID: VertexID;
-    db: AristoDbRef;
+    db: AristoTxRef;
     indent = 4;
       ): string =
   let
@@ -65,13 +65,13 @@ proc pp*(
   result &= "])"
 
 proc pp*(w: ProofTrieData; indent = 4): string =
-  var db = AristoDbRef()
+  var db = AristoTxRef()
   w.pp(VertexID(1), db, indent)
 
 proc pp*(
     w: openArray[ProofTrieData];
     rootID: VertexID;
-    db: AristoDbRef;
+    db: AristoTxRef;
     indent = 4): string =
   let pfx = indent.toPfx
   "[" & w.mapIt(it.pp(rootID, db, indent + 1)).join("," & pfx & " ") & "]"
@@ -80,7 +80,7 @@ proc pp*(w: openArray[ProofTrieData]; indent = 4): string =
   let pfx = indent.toPfx
   "[" & w.mapIt(it.pp(indent + 1)).join("," & pfx & " ") & "]"
 
-proc pp*(ltp: LeafTiePayload; db: AristoDbRef): string =
+proc pp*(ltp: LeafTiePayload; db: AristoTxRef): string =
   "(" & ltp.leafTie.pp(db) & "," & ltp.payload.pp(db) & ")"
 
 # ----------
@@ -208,11 +208,6 @@ proc schedStow*(
     db: AristoDbRef;                  # Database
       ): Result[void,AristoError] =
   ## Context based scheduled persistent/non-persistent storage.
-  let
-    layersMeter = db.nLayersVtx() + db.nLayersKey()
-    filterMeter = if db.balancer.isNil: 0
-                  else: db.balancer.sTab.len + db.balancer.kMap.len
-    persistent = MaxFilterBulk < max(layersMeter, filterMeter)
   db.persist()
 
 # ------------------
