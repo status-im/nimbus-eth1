@@ -188,19 +188,22 @@ proc execute*(evm: PortalEvmRef,
   var evmc_result = evm.vmPtr.execute(evm.vmPtr,
     hostInteface.addr,
     evm.context.toEvmc(),
-    evmc_revision.EVMC_OSAKA, # TODO: which evm revisions should we support. Just the latest?
+    evmc_revision.EVMC_OSAKA, # TODO: We may need to support multiple revisions so that we can execute from any block in the history
     msg,
     code[0].addr,
     code.len().csize_t
     )
 
+  let output =
+    if evmc_result.output_size.int == 0:
+      @[]
+    else:
+      @(makeOpenArray(evmc_result.output_data, evmc_result.output_size.int))
+  echo output
+
   let res =
     if evmc_result.status_code == EVMC_SUCCESS:
-      let output =
-        if evmc_result.output_size.int == 0:
-          @[]
-        else:
-          @(makeOpenArray(evmc_result.output_data, evmc_result.output_size.int))
+
       ok(output)
     else:
       err($evmc_result.status_code)
@@ -232,14 +235,27 @@ when isMainModule:
   # Get the evm version
   echo "PortalEvmRef.version() = ", evm.version()
 
+# 608060405234801561001057600080fd5b50600360015560c18061002460003960
+# 00f3fe6080604052348015600f57600080fd5b5060043610603c5760003560e01c8
+# 06360fe47b114604157806395cacbe014605d578063c82fdf36146075575b600080
+# fd5b605b60048036036020811015605557600080fd5b5035607b565b005b606360
+# 80565b60408051918252519081900360200190f35b60636086565b600055565b60
+# 015481565b6000548156fea265627a7a723058204e00129b67b55015b0de73c316
+# 7fb19ae30a4bb9b293318b7fb6c40bced080b864736f6c634300050a0032
 
   # Execute some code
-  let byteCode = hexToSeqByte("0x6080604052348015600e575f80fd5b506101438061001c5f395ff3fe608060405234801561000f575f80fd5b5060043610610034575f3560e01c80632e64cec1146100385780636057361d14610056575b5f80fd5b610040610072565b60405161004d919061009b565b60405180910390f35b610070600480360381019061006b91906100e2565b61007a565b005b5f8054905090565b805f8190555050565b5f819050919050565b61009581610083565b82525050565b5f6020820190506100ae5f83018461008c565b92915050565b5f80fd5b6100c181610083565b81146100cb575f80fd5b50565b5f813590506100dc816100b8565b92915050565b5f602082840312156100f7576100f66100b4565b5b5f610104848285016100ce565b9150509291505056fea26469706673582212209a0dd35336aff1eb3eeb11db76aa60a1427a12c1b92f945ea8c8d1dfa337cf2264736f6c634300081a0033")
+  let byteCode = hexToSeqByte(
+    "0x6080604052348015600f57600080fd5b5060043610603c5760003560e01c8" &
+    "06360fe47b114604157806395cacbe014605d578063c82fdf36146075575b600080" &
+    "fd5b605b60048036036020811015605557600080fd5b5035607b565b005b606360" &
+    "80565b60408051918252519081900360200190f35b60636086565b600055565b60" &
+    "015481565b6000548156fea265627a7a723058204e00129b67b55015b0de73c316" &
+    "7fb19ae30a4bb9b293318b7fb6c40bced080b864736f6c634300050a0032")
 
   echo evm.execute(
     default(Address),
     default(Address),
-    hexToSeqByte("0x"),
+    hexToSeqByte("0x2e64cec1"),
     1.u256,
     default(Address),
     byteCode)
