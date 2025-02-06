@@ -1,5 +1,5 @@
 # Nimbus
-# Copyright (c) 2021-2024 Status Research & Development GmbH
+# Copyright (c) 2021-2025 Status Research & Development GmbH
 # Licensed under either of
 #  * Apache License, version 2.0, ([LICENSE-APACHE](LICENSE-APACHE) or
 #    http://www.apache.org/licenses/LICENSE-2.0)
@@ -238,7 +238,7 @@ jobs:
         # Updating nph version should be accompanied with running the new
         # version on the fluffy directory.
         run: |
-          VERSION="v0.6.0"
+          VERSION="v0.6.1"
           ARCHIVE="nph-linux_x64.tar.gz"
           curl -L "https://github.com/arnetheduck/nph/releases/download/${VERSION}/${ARCHIVE}" -o ${ARCHIVE}
           tar -xzf ${ARCHIVE}

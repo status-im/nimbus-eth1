@@ -17,14 +17,14 @@ import
   results,
   ".."/[aristo_desc, aristo_layers]
 
-func txFrameIsTop*(tx: AristoTxRef): bool
+func isTop*(tx: AristoTxRef): bool
 
 # ------------------------------------------------------------------------------
 # Private helpers
 # ------------------------------------------------------------------------------
 
 func getDbDescFromTopTx(tx: AristoTxRef): Result[AristoDbRef,AristoError] =
-  if not tx.txFrameIsTop():
+  if not tx.isTop():
     return err(TxNotTopTx)
   let db = tx.db
   if tx.level != db.stack.len:
@@ -48,14 +48,10 @@ func txFrameTop*(db: AristoDbRef): Result[AristoTxRef,AristoError] =
   else:
     ok(db.txRef)
 
-func txFrameIsTop*(tx: AristoTxRef): bool =
+func isTop*(tx: AristoTxRef): bool =
   ## Getter, returns `true` if the argument `tx` referes to the current top
   ## level transaction.
   tx.db.txRef == tx and tx.db.top.txUid == tx.txUid
-
-func txFrameLevel*(tx: AristoTxRef): int =
-  ## Getter, positive nesting level of transaction argument `tx`
-  tx.level
 
 func txFrameLevel*(db: AristoDbRef): int =
   ## Getter, non-negative nesting level (i.e. number of pending transactions)
@@ -95,7 +91,7 @@ proc txFrameBegin*(db: AristoDbRef): Result[AristoTxRef,AristoError] =
   ok db.txRef
 
 
-proc txFrameRollback*(
+proc rollback*(
     tx: AristoTxRef;                  # Top transaction on database
       ): Result[void,AristoError] =
   ## Given a *top level* handle, this function discards all database operations
@@ -112,7 +108,7 @@ proc txFrameRollback*(
   ok()
 
 
-proc txFrameCommit*(
+proc commit*(
     tx: AristoTxRef;                  # Top transaction on database
       ): Result[void,AristoError] =
   ## Given a *top level* handle, this function accepts all database operations
@@ -139,7 +135,7 @@ proc txFrameCommit*(
   ok()
 
 
-proc txFrameCollapse*(
+proc collapse*(
     tx: AristoTxRef;                  # Top transaction on database
     commit: bool;                     # Commit if `true`, otherwise roll back
       ): Result[void,AristoError] =
@@ -148,8 +144,8 @@ proc txFrameCollapse*(
   ## ::
   ##   while true:
   ##     discard tx.commit() # ditto for rollback()
-  ##     if db.txTop.isErr: break
-  ##     tx = db.txTop.value
+  ##     if db.txFrameTop.isErr: break
+  ##     tx = db.txFrameTop.value
   ##
   let db = ? tx.getDbDescFromTopTx()
 
@@ -162,7 +158,7 @@ proc txFrameCollapse*(
 # Public iterators
 # ------------------------------------------------------------------------------
 
-iterator txFrameWalk*(tx: AristoTxRef): (int,AristoTxRef,LayerRef,AristoError) =
+iterator walk*(tx: AristoTxRef): (int,AristoTxRef,LayerRef,AristoError) =
   ## Walk down the transaction stack chain.
   let db = tx.db
   var tx = tx

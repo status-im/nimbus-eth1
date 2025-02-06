@@ -9,9 +9,7 @@
 # according to those terms.
 
 import
-  eth/common,
-  eth/common/hashes,
-  stint,
+  eth/common/[base, hashes],
   kzg4844/kzg,
   kzg4844/kzg_abi,
   stew/endians2,
@@ -19,6 +17,7 @@ import
   results,
   ../../../../nimbus/core/eip4844
 
+export base, hashes
 type
   BlobID* = uint64
   BlobIDs* = seq[BlobID]

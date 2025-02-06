@@ -1,6 +1,6 @@
 # Nimbus - Ethereum Wire Protocol
 #
-# Copyright (c) 2018-2024 Status Research & Development GmbH
+# Copyright (c) 2018-2025 Status Research & Development GmbH
 # Licensed under either of
 #  * Apache License, version 2.0, ([LICENSE-APACHE](LICENSE-APACHE) or
 #    http://www.apache.org/licenses/LICENSE-2.0)
@@ -21,7 +21,8 @@ import
   stew/byteutils,
   ./trace_config,
   ./eth/eth_types,
-  ../../utils/utils
+  ../../utils/utils,
+  ../../common/logging
 
 export
   eth_types

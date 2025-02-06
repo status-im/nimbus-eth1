@@ -24,9 +24,7 @@ import
   ../gas_costs,
   ../op_codes,
   ./oph_defs,
-  ./oph_helpers,
-  eth/common,
-  stint
+  ./oph_helpers
 
 when not defined(evmc_enabled):
   import
@@ -133,7 +131,7 @@ proc selfDestructEIP2929Op(cpt: VmCpt): EvmResultVoid =
     if cpt.host.accessAccount(beneficiary) == EVMC_ACCESS_COLD:
       gasCost = gasCost + ColdAccountAccessCost
   else:
-    cpt.vmState.mutateStateDB:
+    cpt.vmState.mutateLedger:
       if not db.inAccessList(beneficiary):
         db.accessList(beneficiary)
         gasCost = gasCost + ColdAccountAccessCost

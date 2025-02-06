@@ -180,9 +180,10 @@ func offsetsLen(startNumber: uint64): int =
 proc toCompressedRlpBytes(item: auto): seq[byte] =
   snappy.encodeFramed(rlp.encode(item))
 
-proc fromCompressedRlpBytes(bytes: openArray[byte], T: type): Result[T, string] =
+proc fromCompressedRlpBytes[T](bytes: openArray[byte], v: var T): Result[void, string] =
   try:
-    ok(rlp.decode(decodeFramed(bytes, checkIntegrity = false), T))
+    v = rlp.decode(decodeFramed(bytes, checkIntegrity = false), T)
+    ok()
   except RlpError as e:
     err("Invalid compressed RLP data for " & $T & ": " & e.msg)
 
@@ -300,32 +301,32 @@ proc skipRecord*(f: Era1File): Result[void, string] =
 
   f[].handle.get().skipRecord()
 
-proc getBlockHeader(f: Era1File): Result[headers.Header, string] =
+proc getBlockHeader(f: Era1File, res: var headers.Header): Result[void, string] =
   var bytes: seq[byte]
 
   let header = ?f[].handle.get().readRecord(bytes)
   if header.typ != CompressedHeader:
     return err("Invalid era file: didn't find block header at index position")
 
-  fromCompressedRlpBytes(bytes, headers.Header)
+  fromCompressedRlpBytes(bytes, res)
 
-proc getBlockBody(f: Era1File): Result[BlockBody, string] =
+proc getBlockBody(f: Era1File, res: var BlockBody): Result[void, string] =
   var bytes: seq[byte]
 
   let header = ?f[].handle.get().readRecord(bytes)
   if header.typ != CompressedBody:
     return err("Invalid era file: didn't find block body at index position")
 
-  fromCompressedRlpBytes(bytes, BlockBody)
+  fromCompressedRlpBytes(bytes, res)
 
-proc getReceipts(f: Era1File): Result[seq[Receipt], string] =
+proc getReceipts(f: Era1File, res: var seq[Receipt]): Result[void, string] =
   var bytes: seq[byte]
 
   let header = ?f[].handle.get().readRecord(bytes)
   if header.typ != CompressedReceipts:
     return err("Invalid era file: didn't find receipts at index position")
 
-  fromCompressedRlpBytes(bytes, seq[Receipt])
+  fromCompressedRlpBytes(bytes, res)
 
 proc getTotalDifficulty(f: Era1File): Result[UInt256, string] =
   var bytes: seq[byte]
@@ -339,18 +340,25 @@ proc getTotalDifficulty(f: Era1File): Result[UInt256, string] =
 
   ok(UInt256.fromBytesLE(bytes))
 
-proc getNextEthBlock*(f: Era1File): Result[Block, string] =
+proc getNextEthBlock*(f: Era1File, res: var Block): Result[void, string] =
   doAssert not isNil(f) and f[].handle.isSome
 
-  var
-    header = ?getBlockHeader(f)
-    body = ?getBlockBody(f)
+  var body: BlockBody
+  ?getBlockHeader(f, res.header)
+  ?getBlockBody(f, body)
+
   ?skipRecord(f) # receipts
   ?skipRecord(f) # totalDifficulty
 
-  ok(Block.init(move(header), move(body)))
+  res.transactions = move(body.transactions)
+  res.uncles = move(body.uncles)
+  res.withdrawals = move(body.withdrawals)
 
-proc getEthBlock*(f: Era1File, blockNumber: uint64): Result[Block, string] =
+  ok()
+
+proc getEthBlock*(
+    f: Era1File, blockNumber: uint64, res: var Block
+): Result[void, string] =
   doAssert not isNil(f) and f[].handle.isSome
   doAssert(
     blockNumber >= f[].blockIdx.startNumber and blockNumber <= f[].blockIdx.endNumber,
@@ -361,33 +369,21 @@ proc getEthBlock*(f: Era1File, blockNumber: uint64): Result[Block, string] =
 
   ?f[].handle.get().setFilePos(pos, SeekPosition.SeekBegin).mapErr(ioErrorMsg)
 
-  getNextEthBlock(f)
+  getNextEthBlock(f, res)
 
-proc getNextBlockTuple*(f: Era1File): Result[BlockTuple, string] =
+proc getNextBlockTuple*(f: Era1File, res: var BlockTuple): Result[void, string] =
   doAssert not isNil(f) and f[].handle.isSome
 
-  let
-    blockHeader = ?getBlockHeader(f)
-    blockBody = ?getBlockBody(f)
-    receipts = ?getReceipts(f)
-    totalDifficulty = ?getTotalDifficulty(f)
+  ?getBlockHeader(f, res.header)
+  ?getBlockBody(f, res.body)
+  ?getReceipts(f, res.receipts)
+  res.td = ?getTotalDifficulty(f)
 
-  ok((blockHeader, blockBody, receipts, totalDifficulty))
+  ok()
 
-proc getBlockTuple*(f: Era1File, blockNumber: uint64): Result[BlockTuple, string] =
-  doAssert not isNil(f) and f[].handle.isSome
-  doAssert(
-    blockNumber >= f[].blockIdx.startNumber and blockNumber <= f[].blockIdx.endNumber,
-    "Wrong era1 file for selected block number",
-  )
-
-  let pos = f[].blockIdx.offsets[blockNumber - f[].blockIdx.startNumber]
-
-  ?f[].handle.get().setFilePos(pos, SeekPosition.SeekBegin).mapErr(ioErrorMsg)
-
-  getNextBlockTuple(f)
-
-proc getBlockHeader*(f: Era1File, blockNumber: uint64): Result[headers.Header, string] =
+proc getBlockTuple*(
+    f: Era1File, blockNumber: uint64, res: var BlockTuple
+): Result[void, string] =
   doAssert not isNil(f) and f[].handle.isSome
   doAssert(
     blockNumber >= f[].blockIdx.startNumber and blockNumber <= f[].blockIdx.endNumber,
@@ -398,7 +394,22 @@ proc getBlockHeader*(f: Era1File, blockNumber: uint64): Result[headers.Header, s
 
   ?f[].handle.get().setFilePos(pos, SeekPosition.SeekBegin).mapErr(ioErrorMsg)
 
-  getBlockHeader(f)
+  getNextBlockTuple(f, res)
+
+proc getBlockHeader*(
+    f: Era1File, blockNumber: uint64, res: var headers.Header
+): Result[void, string] =
+  doAssert not isNil(f) and f[].handle.isSome
+  doAssert(
+    blockNumber >= f[].blockIdx.startNumber and blockNumber <= f[].blockIdx.endNumber,
+    "Wrong era1 file for selected block number",
+  )
+
+  let pos = f[].blockIdx.offsets[blockNumber - f[].blockIdx.startNumber]
+
+  ?f[].handle.get().setFilePos(pos, SeekPosition.SeekBegin).mapErr(ioErrorMsg)
+
+  getBlockHeader(f, res)
 
 proc getTotalDifficulty*(f: Era1File, blockNumber: uint64): Result[UInt256, string] =
   doAssert not isNil(f) and f[].handle.isSome
@@ -445,13 +456,13 @@ proc buildAccumulator*(f: Era1File): Result[EpochRecordCached, string] =
     endNumber = f.blockIdx.endNumber()
 
   var headerRecords: seq[HeaderRecord]
+  var header: headers.Header
   for blockNumber in startNumber .. endNumber:
-    let
-      blockHeader = ?f.getBlockHeader(blockNumber)
-      totalDifficulty = ?f.getTotalDifficulty(blockNumber)
+    ?f.getBlockHeader(blockNumber, header)
+    let totalDifficulty = ?f.getTotalDifficulty(blockNumber)
 
     headerRecords.add(
-      HeaderRecord(blockHash: blockHeader.rlpHash(), totalDifficulty: totalDifficulty)
+      HeaderRecord(blockHash: header.rlpHash(), totalDifficulty: totalDifficulty)
     )
 
   ok(EpochRecordCached.init(headerRecords))
@@ -462,25 +473,26 @@ proc verify*(f: Era1File): Result[Digest, string] =
     endNumber = f.blockIdx.endNumber()
 
   var headerRecords: seq[HeaderRecord]
+  var blockTuple: BlockTuple
   for blockNumber in startNumber .. endNumber:
+    ?f.getBlockTuple(blockNumber, blockTuple)
     let
-      (blockHeader, blockBody, receipts, totalDifficulty) =
-        ?f.getBlockTuple(blockNumber)
+      txRoot = calcTxRoot(blockTuple.body.transactions)
+      ommershHash = rlpHash(blockTuple.body.uncles)
 
-      txRoot = calcTxRoot(blockBody.transactions)
-      ommershHash = rlpHash(blockBody.uncles)
-
-    if blockHeader.txRoot != txRoot:
+    if blockTuple.header.txRoot != txRoot:
       return err("Invalid transactions root")
 
-    if blockHeader.ommersHash != ommershHash:
+    if blockTuple.header.ommersHash != ommershHash:
       return err("Invalid ommers hash")
 
-    if blockHeader.receiptsRoot != calcReceiptsRoot(receipts):
+    if blockTuple.header.receiptsRoot != calcReceiptsRoot(blockTuple.receipts):
       return err("Invalid receipts root")
 
     headerRecords.add(
-      HeaderRecord(blockHash: blockHeader.rlpHash(), totalDifficulty: totalDifficulty)
+      HeaderRecord(
+        blockHash: blockTuple.header.rlpHash(), totalDifficulty: blockTuple.td
+      )
     )
 
   let expectedRoot = ?f.getAccumulatorRoot()
@@ -496,9 +508,9 @@ iterator era1BlockHeaders*(f: Era1File): headers.Header =
     startNumber = f.blockIdx.startNumber
     endNumber = f.blockIdx.endNumber()
 
+  var header: headers.Header
   for blockNumber in startNumber .. endNumber:
-    let header = f.getBlockHeader(blockNumber).valueOr:
-      raiseAssert("Failed to read block header: " & error)
+    f.getBlockHeader(blockNumber, header).expect("Header can be read")
     yield header
 
 iterator era1BlockTuples*(f: Era1File): BlockTuple =
@@ -506,7 +518,7 @@ iterator era1BlockTuples*(f: Era1File): BlockTuple =
     startNumber = f.blockIdx.startNumber
     endNumber = f.blockIdx.endNumber()
 
+  var blockTuple: BlockTuple
   for blockNumber in startNumber .. endNumber:
-    let blockTuple = f.getBlockTuple(blockNumber).valueOr:
-      raiseAssert("Failed to read block tuple: " & error)
+    f.getBlockTuple(blockNumber, blockTuple).expect("Block tuple can be read")
     yield blockTuple

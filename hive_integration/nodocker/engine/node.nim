@@ -42,23 +42,23 @@ proc processBlock(
   ## implementations (but can be savely removed, as well.)
   ## variant of `processBlock()` where the `header` argument is explicitely set.
   template header: Header = blk.header
-  var dbTx = vmState.com.db.ctx.newTransaction()
+  var dbTx = vmState.com.db.ctx.txFrameBegin()
   defer: dbTx.dispose()
 
   let com = vmState.com
   if com.daoForkSupport and
      com.daoForkBlock.get == header.number:
-    vmState.mutateStateDB:
+    vmState.mutateLedger:
       db.applyDAOHardFork()
 
   if header.parentBeaconBlockRoot.isSome:
     ? vmState.processBeaconBlockRoot(header.parentBeaconBlockRoot.get)
 
-  ? processTransactions(vmState, header, blk.transactions)
+  ? processTransactions(vmState, header, blk.transactions, taskpool = com.taskpool)
 
   if com.isShanghaiOrLater(header.timestamp):
     for withdrawal in blk.withdrawals.get:
-      vmState.stateDB.addBalance(withdrawal.address, withdrawal.weiAmount)
+      vmState.ledger.addBalance(withdrawal.address, withdrawal.weiAmount)
 
   if header.ommersHash != EMPTY_UNCLE_HASH:
     discard com.db.persistUncles(blk.uncles)
@@ -67,7 +67,7 @@ proc processBlock(
   if com.proofOfStake(header):
     vmState.calculateReward(header, blk.uncles)
 
-  vmState.mutateStateDB:
+  vmState.mutateLedger:
     let clearEmptyAccount = com.isSpuriousOrLater(header.number)
     db.persist(clearEmptyAccount)
 
@@ -77,9 +77,6 @@ proc processBlock(
 
 proc getVmState(c: ChainRef, header: Header):
                  Result[BaseVMState, void] =
-  if c.vmState.isNil.not:
-    return ok(c.vmState)
-
   let vmState = BaseVMState()
   if not vmState.init(header, c.com, storeSlotHash = false):
     debug "Cannot initialise VmState",
@@ -92,18 +89,16 @@ proc getVmState(c: ChainRef, header: Header):
 # intended to accepts invalid block
 proc setBlock*(c: ChainRef; blk: Block): Result[void, string] =
   template header: Header = blk.header
-  let dbTx = c.db.ctx.newTransaction()
+  let dbTx = c.db.ctx.txFrameBegin()
   defer: dbTx.dispose()
 
   # Needed for figuring out whether KVT cleanup is due (see at the end)
   let
     vmState = c.getVmState(header).valueOr:
       return err("no vmstate")
-    _ = vmState.parent.stateRoot # Check point
   ? vmState.processBlock(blk)
 
-  ? c.db.persistHeader(
-      header, c.com.proofOfStake(header), c.com.startOfHistory)
+  ? c.db.persistHeaderAndSetHead(header, c.com.startOfHistory)
 
   c.db.persistTransactions(header.number, header.txRoot, blk.transactions)
   c.db.persistReceipts(header.receiptsRoot, vmState.receipts)

@@ -1,6 +1,6 @@
 # Nimbus - Common entry point to the EVM from all different callers
 #
-# Copyright (c) 2018-2024 Status Research & Development GmbH
+# Copyright (c) 2018-2025 Status Research & Development GmbH
 # Licensed under either of
 #  * Apache License, version 2.0, ([LICENSE-APACHE](LICENSE-APACHE) or http://www.apache.org/licenses/LICENSE-2.0)
 #  * MIT license ([LICENSE-MIT](LICENSE-MIT) or http://opensource.org/licenses/MIT)
@@ -14,7 +14,7 @@ import
   results,
   stew/saturation_arith,
   ../evm/[types, state],
-  ../evm/[precompiles, internals],
+  ../evm/[message, precompiles, internals, interpreter_dispatch],
   ../db/ledger,
   ../common/evmforks,
   ../core/eip4844,
@@ -28,9 +28,6 @@ when defined(evmc_enabled):
   import
     ../utils/utils,
     ./host_services
-else:
-  import
-    ../evm/state_transactions
 
 export
   call_types
@@ -56,7 +53,7 @@ proc initialAccessListEIP2929(call: CallParams) =
   if vmState.fork < FkBerlin:
     return
 
-  vmState.mutateStateDB:
+  vmState.mutateLedger:
     db.accessList(call.sender)
     # For contract creations the EVM will add the contract address to the
     # access list itself, after calculating the new contract address.
@@ -83,7 +80,7 @@ proc initialAccessListEIP2929(call: CallParams) =
 
 proc preExecComputation(vmState: BaseVMState, call: CallParams): int64 =
   var gasRefund = 0
-  let ledger = vmState.stateDB
+  let ledger = vmState.ledger
 
   if not call.isCreate:
     ledger.incNonce(call.sender)
@@ -94,41 +91,39 @@ proc preExecComputation(vmState: BaseVMState, call: CallParams): int64 =
     if not(auth.chainId == 0.ChainId or auth.chainId == vmState.com.chainId):
       continue
 
-    # 2. authority = ecrecover(keccak(MAGIC || rlp([chain_id, address, nonce])), y_parity, r, s]
+    # 2. Verify the nonce is less than 2**64 - 1.
+    if auth.nonce+1 < auth.nonce:
+      continue
+
+    # 3. authority = ecrecover(keccak(MAGIC || rlp([chain_id, address, nonce])), y_parity, r, s]
     let authority = authority(auth).valueOr:
       continue
 
-    # 3. Add authority to accessed_addresses (as defined in EIP-2929.)
+    # 4. Add authority to accessed_addresses (as defined in EIP-2929.)
     ledger.accessList(authority)
 
-    # 4. Verify the code of authority is either empty or already delegated.
+    # 5. Verify the code of authority is either empty or already delegated.
     let code = ledger.getCode(authority)
     if code.len > 0:
       if not parseDelegation(code):
         continue
 
-    # 5. Verify the nonce of authority is equal to nonce.
+    # 6. Verify the nonce of authority is equal to nonce.
     if ledger.getNonce(authority) != auth.nonce:
       continue
 
-    # 6. Add PER_EMPTY_ACCOUNT_COST - PER_AUTH_BASE_COST gas to the global refund counter if authority exists in the trie.
+    # 7. Add PER_EMPTY_ACCOUNT_COST - PER_AUTH_BASE_COST gas to the global refund counter if authority exists in the trie.
     if ledger.accountExists(authority):
       gasRefund += PER_EMPTY_ACCOUNT_COST - PER_AUTH_BASE_COST
 
-    # 7. Set the code of authority to be 0xef0100 || address. This is a delegation designation.
-    if auth.address == default(eth_types.Address):
+    # 8. Set the code of authority to be 0xef0100 || address. This is a delegation designation.
+    if auth.address == zeroAddress:
       ledger.setCode(authority, @[])
     else:
       ledger.setCode(authority, @(addressToDelegation(auth.address)))
 
-    # 8. Increase the nonce of authority by one.
+    # 9. Increase the nonce of authority by one.
     ledger.setNonce(authority, auth.nonce + 1)
-
-    # Usually the transaction destination and delegation target are added to
-    # the access list in initialAccessListEIP2929, however if the delegation is in
-    # the same transaction we need add here as to reduce calling slow ecrecover.
-    if call.to == authority:
-      ledger.accessList(auth.address)
 
   gasRefund
 
@@ -138,82 +133,54 @@ proc setupHost(call: CallParams, keepStack: bool): TransactionHost =
     origin         : call.origin.get(call.sender),
     gasPrice       : call.gasPrice,
     versionedHashes: call.versionedHashes,
-    blobBaseFee    : getBlobBaseFee(vmState.blockCtx.excessBlobGas),
+    blobBaseFee    : getBlobBaseFee(vmState.blockCtx.excessBlobGas, vmState.com, vmState.fork),
   )
 
-  var intrinsicGas: GasInt = 0
-  if not call.noIntrinsic:
-    intrinsicGas = intrinsicGas(call, vmState.fork)
+  # reset global gasRefund counter each time
+  # EVM called for a new transaction
+  vmState.gasRefunded = 0
 
-  let host = TransactionHost(
-    vmState:       vmState,
-    msg: EvmcMessage(
-      kind:         if call.isCreate: EVMC_CREATE else: EVMC_CALL,
-      # Default: flags:       {},
-      # Default: depth:       0,
-      gas:          int64.saturate(call.gasLimit - intrinsicGas),
-      recipient:    call.to.toEvmc,
-      code_address: call.to.toEvmc,
-      sender:       call.sender.toEvmc,
-      value:        call.value.toEvmc,
+  let
+    (intrinsicGas, floorDataGas) = if call.noIntrinsic: (0.GasInt, 0.GasInt)
+                                   else: intrinsicGas(call, vmState.fork)
+    host = TransactionHost(
+      vmState: vmState,
+      sysCall: call.sysCall,
+      msg: EvmcMessage(
+        kind:         if call.isCreate: EVMC_CREATE else: EVMC_CALL,
+        # Default: flags:       {},
+        # Default: depth:       0,
+        gas:          int64.saturate(call.gasLimit - intrinsicGas),
+        recipient:    call.to.toEvmc,
+        code_address: call.to.toEvmc,
+        sender:       call.sender.toEvmc,
+        value:        call.value.toEvmc,
+      ),
+      floorDataGas: floorDataGas,
+      # All other defaults in `TransactionHost` are fine.
     )
-    # All other defaults in `TransactionHost` are fine.
-  )
+    gasRefund = if call.sysCall: 0
+                else: preExecComputation(vmState, call)
+    code = if call.isCreate:
+             let contractAddress = generateContractAddress(call.vmState, EVMC_CREATE, call.sender)
+             host.msg.recipient = contractAddress.toEvmc
+             host.msg.input_size = 0
+             host.msg.input_data = nil
+             CodeBytesRef.init(call.input)
+           else:
+             if call.input.len > 0:
+               host.msg.input_size = call.input.len.csize_t
+               # Must copy the data so the `host.msg.input_data` pointer
+               # remains valid after the end of `call` lifetime.
+               host.input = call.input
+               host.msg.input_data = host.input[0].addr
+             getCallCode(host.vmState, host.msg.code_address.fromEvmc)
+    cMsg = hostToComputationMessage(host.msg)
 
-  let gasRefund = if call.sysCall: 0
-                  else: preExecComputation(vmState, call)
-  let isPrecompile =
-    not call.isCreate and vmState.fork.getPrecompile(host.msg.code_address.fromEvmc).isSome()
+  host.computation = newComputation(vmState, keepStack, cMsg, code)
+  host.code = code
 
-  # Generate new contract address, prepare code, and update message `recipient`
-  # with the contract address.  This differs from the previous Nimbus EVM API.
-  # Guarded under `evmc_enabled` for now so it doesn't break vm2.
-  when defined(evmc_enabled):
-    var code: CodeBytesRef
-    if call.isCreate:
-      let sender = call.sender
-      let contractAddress =
-        generateAddress(sender, call.vmState.readOnlyStateDB.getNonce(sender))
-      host.msg.recipient = contractAddress.toEvmc
-      host.msg.input_size = 0
-      host.msg.input_data = nil
-      code = CodeBytesRef.init(call.input)
-    else:
-      # TODO: Share the underlying data, but only after checking this does not
-      # cause problems with the database.
-      if isPrecompile:
-        code = nil
-      elif host.vmState.fork >= FkPrague:
-        code = host.vmState.readOnlyStateDB.resolveCode(host.msg.code_address.fromEvmc)
-      else:
-        code = host.vmState.readOnlyStateDB.getCode(host.msg.code_address.fromEvmc)
-      if call.input.len > 0:
-        host.msg.input_size = call.input.len.csize_t
-        # Must copy the data so the `host.msg.input_data` pointer
-        # remains valid after the end of `call` lifetime.
-        host.input = call.input
-        host.msg.input_data = host.input[0].addr
-
-    let
-      cMsg = hostToComputationMessage(host.msg)
-    host.computation = newComputation(
-      vmState, call.sysCall, cMsg, code, isPrecompile = isPrecompile, keepStack = keepStack)
-    host.code = code
-
-  else:
-    if call.input.len > 0:
-      host.msg.input_size = call.input.len.csize_t
-      # Must copy the data so the `host.msg.input_data` pointer
-      # remains valid after the end of `call` lifetime.
-      host.input = call.input
-      host.msg.input_data = host.input[0].addr
-
-    let
-      cMsg = hostToComputationMessage(host.msg)
-    host.computation = newComputation(
-      vmState, call.sysCall, cMsg, isPrecompile = isPrecompile, keepStack = keepStack)
-
-  host.computation.gasMeter.refundGas(gasRefund)
+  host.computation.addRefund(gasRefund)
   vmState.captureStart(host.computation, call.sender, call.to,
                        call.isCreate, call.input,
                        call.gasLimit, call.value)
@@ -257,37 +224,51 @@ proc prepareToRunComputation(host: TransactionHost, call: CallParams) =
       vmState = host.vmState
       fork = vmState.fork
 
-    vmState.mutateStateDB:
+    vmState.mutateLedger:
       db.subBalance(call.sender, call.gasLimit.u256 * call.gasPrice.u256)
 
       # EIP-4844
       if fork >= FkCancun:
         let blobFee = calcDataFee(call.versionedHashes.len,
-          vmState.blockCtx.excessBlobGas)
+          vmState.blockCtx.excessBlobGas, vmState.com, fork)
         db.subBalance(call.sender, blobFee)
 
 proc calculateAndPossiblyRefundGas(host: TransactionHost, call: CallParams): GasInt =
-  let c = host.computation
+  let
+    c = host.computation
+    fork = host.vmState.fork
 
   # EIP-3529: Reduction in refunds
-  let MaxRefundQuotient = if host.vmState.fork >= FkLondon:
+  let MaxRefundQuotient = if fork >= FkLondon:
                             5.GasInt
                           else:
                             2.GasInt
 
+  var gasRemaining = 0.GasInt
+
   # Calculated gas used, taking into account refund rules.
   if call.noRefund:
-    result = c.gasMeter.gasRemaining
-  elif not c.shouldBurnGas:
+    gasRemaining = c.gasMeter.gasRemaining
+  else:
+    if c.shouldBurnGas:
+      c.gasMeter.gasRemaining = 0
     let maxRefund = (call.gasLimit - c.gasMeter.gasRemaining) div MaxRefundQuotient
     let refund = min(c.getGasRefund(), maxRefund)
     c.gasMeter.returnGas(refund)
-    result = c.gasMeter.gasRemaining
+    gasRemaining = c.gasMeter.gasRemaining
+
+  let gasUsed = call.gasLimit - gasRemaining
+  if fork >= FkPrague:
+    if host.floorDataGas > gasUsed:
+      gasRemaining = call.gasLimit - host.floorDataGas
+      c.gasMeter.gasRemaining = gasRemaining
 
   # Refund for unused gas.
-  if result > 0 and not call.noGasCharge:
-    host.vmState.mutateStateDB:
-      db.addBalance(call.sender, result.u256 * call.gasPrice.u256)
+  if gasRemaining > 0 and not call.noGasCharge:
+    host.vmState.mutateLedger:
+      db.addBalance(call.sender, gasRemaining.u256 * call.gasPrice.u256)
+
+  gasRemaining
 
 proc finishRunningComputation(
     host: TransactionHost, call: CallParams, T: type): T =
@@ -295,8 +276,8 @@ proc finishRunningComputation(
 
   let gasRemaining = calculateAndPossiblyRefundGas(host, call)
   # evm gas used without intrinsic gas
-  let gasUsed = host.msg.gas.GasInt - gasRemaining
-  host.vmState.captureEnd(c, c.output, gasUsed, c.errorOpt)
+  let evmGasUsed = host.msg.gas.GasInt - gasRemaining
+  host.vmState.captureEnd(c, c.output, evmGasUsed, c.errorOpt)
 
   when T is CallResult|DebugCallResult:
     # Collecting the result can be unnecessarily expensive when (re)-processing
@@ -328,9 +309,8 @@ proc runComputation*(call: CallParams, T: type): T =
   when defined(evmc_enabled):
     doExecEvmc(host, call)
   else:
-    if host.computation.sysCall:
-      execSysCall(host.computation)
-    else:
-      execComputation(host.computation)
+    host.computation.execCallOrCreate()
+    if not call.sysCall:
+      host.computation.postExecComputation()
 
   finishRunningComputation(host, call, T)

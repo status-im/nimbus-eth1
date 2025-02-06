@@ -26,7 +26,7 @@ proc coinbaseStateClearing*(vmState: BaseVMState,
   # as well as conditionally cleaning up the coinbase account when left
   # empty in VMs after the state clearing rules came into effect.
 
-  vmState.mutateStateDB:
+  vmState.mutateLedger:
     if touched:
       db.addBalance(miner, 0.u256)
 

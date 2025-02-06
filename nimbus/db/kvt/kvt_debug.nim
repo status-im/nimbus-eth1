@@ -12,7 +12,6 @@
 
 import
   std/[algorithm, sequtils, strutils, tables],
-  eth/common,
   results,
   stew/byteutils,
   ./kvt_desc/desc_backend,

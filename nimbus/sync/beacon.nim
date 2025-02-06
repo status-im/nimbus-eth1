@@ -1,5 +1,5 @@
 # Nimbus
-# Copyright (c) 2023-2024 Status Research & Development GmbH
+# Copyright (c) 2023-2025 Status Research & Development GmbH
 # Licensed under either of
 #  * Apache License, version 2.0, ([LICENSE-APACHE](LICENSE-APACHE) or
 #    http://www.apache.org/licenses/LICENSE-2.0)
@@ -36,6 +36,9 @@ proc runRelease(ctx: BeaconCtxRef) =
 proc runDaemon(ctx: BeaconCtxRef) {.async: (raises: []).} =
   await worker.runDaemon(ctx, "RunDaemon")
 
+proc runTicker(ctx: BeaconCtxRef) =
+  worker.runTicker(ctx, "RunTicker")
+
 proc runStart(buddy: BeaconBuddyRef): bool =
   worker.start(buddy, "RunStart")
 
@@ -68,8 +71,8 @@ proc init*(
 proc start*(desc: BeaconSyncRef): bool =
   desc.startSync()
 
-proc stop*(desc: BeaconSyncRef) =
-  desc.stopSync()
+proc stop*(desc: BeaconSyncRef) {.async.} =
+  await desc.stopSync()
 
 # ------------------------------------------------------------------------------
 # End

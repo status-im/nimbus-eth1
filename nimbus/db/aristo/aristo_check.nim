@@ -14,9 +14,7 @@
 {.push raises: [].}
 
 import
-  std/[algorithm, sequtils, tables],
-  eth/common,
-  stew/interval_set,
+  eth/common/hashes,
   results,
   ./aristo_walk/persistent,
   "."/[aristo_desc, aristo_get, aristo_init],
@@ -90,18 +88,6 @@ proc check*(
 
 proc check*(
     db: AristoDbRef;                   # Database
-    root: VertexID;                    # Start node
-    path: openArray[byte];             # Data path
-      ): Result[void,AristoError] =
-  ## Check generic path `path` against portal proof generation and
-  ## verification.
-  ##
-  ## Note that this check might have side effects in that it might compile
-  ## the hash keys on the `root` sub-tree.
-  db.checkTwig(root, path)
-
-proc check*(
-    db: AristoDbRef;                   # Database
     accPath: Hash32;                   # Account key
       ): Result[void,AristoError] =
   ## Check accounts tree path `accPath` against portal proof generation and
@@ -109,7 +95,7 @@ proc check*(
   ##
   ## Note that this check might have side effects in that it might compile
   ## the hash keys on the accounts sub-tree.
-  db.checkTwig(VertexID(1), accPath.data)
+  db.checkTwig(accPath)
 
 proc check*(
     db: AristoDbRef;                   # Database

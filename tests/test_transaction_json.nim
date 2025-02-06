@@ -1,5 +1,5 @@
 # Nimbus
-# Copyright (c) 2019-2024 Status Research & Development GmbH
+# Copyright (c) 2019-2025 Status Research & Development GmbH
 # Licensed under either of
 #  * Apache License, version 2.0, ([LICENSE-APACHE](LICENSE-APACHE) or
 #    http://www.apache.org/licenses/LICENSE-2.0)
@@ -14,6 +14,9 @@ import
   eth/rlp,
   ./test_helpers,
   eth/common/transaction_utils,
+  ../tools/common/helpers as chp,
+  ../nimbus/db/core_db,
+  ../nimbus/common/common,
   ../nimbus/transaction,
   ../nimbus/core/validate,
   ../nimbus/utils/utils
@@ -34,7 +37,12 @@ proc txHash(tx: Transaction): string =
   rlpHash(tx).toHex()
 
 proc testTxByFork(tx: Transaction, forkData: JsonNode, forkName: string, testStatusIMPL: var TestStatus) =
-  tx.validateTxBasic(nameToFork[forkName]).isOkOr:
+  let
+    config = getChainConfig(forkName)
+    memDB  = newCoreDbRef DefaultDbMemory
+    com    = CommonRef.new(memDB, nil, config)
+
+  validateTxBasic(com, tx, nameToFork[forkName]).isOkOr:
     return
 
   if forkData.len > 0 and "sender" in forkData:

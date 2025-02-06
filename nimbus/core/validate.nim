@@ -1,5 +1,5 @@
 # Nimbus
-# Copyright (c) 2018-2024 Status Research & Development GmbH
+# Copyright (c) 2018-2025 Status Research & Development GmbH
 # Licensed under either of
 #  * Apache License, version 2.0, ([LICENSE-APACHE](LICENSE-APACHE) or
 #    http://www.apache.org/licenses/LICENSE-2.0)
@@ -12,13 +12,14 @@
 
 import
   std/[sequtils, sets, strformat],
+  pkg/blscurve, # Kludge: needed to compile `eip4844` -- sometimes :)
   ../db/ledger,
   ../common/common,
   ../transaction/call_types,
   ../transaction,
   ../utils/utils,
-  "."/[dao, eip4844, eip7702, gaslimit, withdrawals],
-  ./pow/[difficulty, header],
+  "."/[dao, eip4844, eip7702, eip7691, gaslimit, withdrawals],
+  ./pow/difficulty,
   stew/objects,
   results
 
@@ -40,7 +41,6 @@ proc validateHeader(
     com: CommonRef;
     blk: Block;
     parentHeader: Header;
-    checkSealOK: bool;
       ): Result[void,string] =
   template header: Header = blk.header
   # TODO this code is used for validating uncles also, though these get passed
@@ -101,8 +101,7 @@ proc validateHeader(
   ok()
 
 proc validateUncles(com: CommonRef; header: Header;
-                    uncles: openArray[Header];
-                    checkSealOK: bool): Result[void,string]
+                    uncles: openArray[Header]): Result[void,string]
                       {.gcsafe, raises: [].} =
   let hasUncles = uncles.len > 0
   let shouldHaveUncles = header.ommersHash != EMPTY_UNCLE_HASH
@@ -161,7 +160,7 @@ proc validateUncles(com: CommonRef; header: Header;
 
     let uncleParent = ?chainDB.getBlockHeader(uncle.parentHash)
     ? com.validateHeader(
-      Block.init(uncle, BlockBody()), uncleParent, checkSealOK)
+      Block.init(uncle, BlockBody()), uncleParent)
 
   ok()
 
@@ -169,7 +168,7 @@ proc validateUncles(com: CommonRef; header: Header;
 # Public function, extracted from executor
 # ------------------------------------------------------------------------------
 
-proc validateLegacySignatureForm(tx: Transaction, fork: EVMFork): bool =
+func validateLegacySignatureForm(tx: Transaction, fork: EVMFork): bool =
   var
     vMin = 27'u64
     vMax = 28'u64
@@ -191,7 +190,7 @@ proc validateLegacySignatureForm(tx: Transaction, fork: EVMFork): bool =
 
   isValid
 
-proc validateEip2930SignatureForm(tx: Transaction): bool =
+func validateEip2930SignatureForm(tx: Transaction): bool =
   var isValid = tx.V == 0'u64 or tx.V == 1'u64
   isValid = isValid and tx.S >= UInt256.one
   isValid = isValid and tx.S < SECPK1_N
@@ -206,7 +205,8 @@ func gasCost*(tx: Transaction): UInt256 =
   else:
     tx.gasLimit.u256 * tx.gasPrice.u256
 
-proc validateTxBasic*(
+func validateTxBasic*(
+    com:      CommonRef,
     tx:       Transaction;     ## tx to validate
     fork:     EVMFork,
     validateFork: bool = true): Result[void, string] =
@@ -229,10 +229,14 @@ proc validateTxBasic*(
 
   # The total must be the larger of the two
   if tx.maxFeePerGasNorm < tx.maxPriorityFeePerGasNorm:
-    return err(&"invalid tx: maxFee is smaller than maPriorityFee. maxFee={tx.maxFeePerGas}, maxPriorityFee={tx.maxPriorityFeePerGasNorm}")
+    return err(&"invalid tx: maxFee is smaller than maxPriorityFee. maxFee={tx.maxFeePerGas}, maxPriorityFee={tx.maxPriorityFeePerGasNorm}")
 
-  if tx.gasLimit < tx.intrinsicGas(fork):
-    return err(&"invalid tx: not enough gas to perform calculation. avail={tx.gasLimit}, require={tx.intrinsicGas(fork)}")
+  let
+    (intrinsicGas, floorDataGas) = tx.intrinsicGas(fork)
+    minGasLimit = max(intrinsicGas, floorDataGas)
+
+  if tx.gasLimit < minGasLimit:
+    return err(&"invalid tx: not enough gas to perform calculation. avail={tx.gasLimit}, require={minGasLimit}")
 
   if fork >= FkCancun:
     if tx.payload.len > MAX_CALLDATA_SIZE:
@@ -261,8 +265,9 @@ proc validateTxBasic*(
     if tx.versionedHashes.len == 0:
       return err("invalid tx: there must be at least one blob")
 
-    if tx.versionedHashes.len > MAX_BLOBS_PER_BLOCK:
-      return err(&"invalid tx: versioned hashes len exceeds MAX_BLOBS_PER_BLOCK={MAX_BLOBS_PER_BLOCK}. get={tx.versionedHashes.len}")
+    let maxBlobsPerBlock = getMaxBlobsPerBlock(com, fork)
+    if tx.versionedHashes.len.uint64 > maxBlobsPerBlock:
+      return err(&"invalid tx: versioned hashes len exceeds MAX_BLOBS_PER_BLOCK={maxBlobsPerBlock}, get={tx.versionedHashes.len}")
 
     for i, bv in tx.versionedHashes:
       if bv.data[0] != VERSIONED_HASH_VERSION_KZG:
@@ -273,27 +278,19 @@ proc validateTxBasic*(
     if tx.authorizationList.len == 0:
       return err("invalid tx: authorization list must not empty")
 
-    const SECP256K1halfN = SECPK1_N div 2
-
-    for auth in tx.authorizationList:
-      if auth.v > 1'u64:
-        return err("invalid tx: auth.v must be 0 or 1")
-
-      if auth.s > SECP256K1halfN:
-        return err("invalid tx: auth.s must be <= SECP256K1N/2")
-
   ok()
 
 proc validateTransaction*(
-    roDB:     ReadOnlyStateDB; ## Parent accounts environment for transaction
+    roDB:     ReadOnlyLedger; ## Parent accounts environment for transaction
     tx:       Transaction;     ## tx to validate
     sender:   Address;         ## tx.recoverSender
     maxLimit: GasInt;          ## gasLimit from block header
     baseFee:  UInt256;         ## baseFee from block header
     excessBlobGas: uint64;     ## excessBlobGas from parent block header
+    com:      CommonRef,
     fork:     EVMFork): Result[void, string] =
 
-  ? validateTxBasic(tx, fork)
+  ? validateTxBasic(com, tx, fork)
 
   let
     balance = roDB.getBalance(sender)
@@ -349,7 +346,7 @@ proc validateTransaction*(
 
   if tx.txType == TxEip4844:
     # ensure that the user was willing to at least pay the current data gasprice
-    let blobGasPrice = getBlobBaseFee(excessBlobGas)
+    let blobGasPrice = getBlobBaseFee(excessBlobGas, com, fork)
     if tx.maxFeePerBlobGas < blobGasPrice:
       return err("invalid tx: maxFeePerBlobGas smaller than blobGasPrice. " &
         &"maxFeePerBlobGas={tx.maxFeePerBlobGas}, blobGasPrice={blobGasPrice}")
@@ -364,7 +361,6 @@ proc validateHeaderAndKinship*(
     com: CommonRef;
     blk: Block;
     parent: Header;
-    checkSealOK: bool;
       ): Result[void, string]
       {.gcsafe, raises: [].} =
   template header: Header = blk.header
@@ -374,13 +370,13 @@ proc validateHeaderAndKinship*(
       return err("Header.extraData larger than 32 bytes")
     return ok()
 
-  ? com.validateHeader(blk, parent, checkSealOK)
+  ? com.validateHeader(blk, parent)
 
   if blk.uncles.len > MAX_UNCLES:
     return err("Number of uncles exceed limit.")
 
   if not com.proofOfStake(header):
-    ? com.validateUncles(header, blk.uncles, checkSealOK)
+    ? com.validateUncles(header, blk.uncles)
 
   ok()
 

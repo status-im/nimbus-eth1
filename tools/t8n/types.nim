@@ -118,7 +118,7 @@ type
     blobGasUsed*: Opt[uint64]
     currentExcessBlobGas*: Opt[uint64]
     requestsHash*: Opt[Hash32]
-    requests*: Opt[array[3, seq[byte]]]
+    requests*: Opt[seq[seq[byte]]]
 
 const
   ErrorEVM*              = 2.T8NExitCode

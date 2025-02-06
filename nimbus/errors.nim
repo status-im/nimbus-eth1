@@ -6,17 +6,5 @@
 # at your option. This file may not be copied, modified, or distributed except according to those terms.
 
 type
-  EVMError* = object of CatchableError
-    ## Base error class for all evm errors.
-
-  BlockNotFound* = object of EVMError
-    ## The block with the given number/hash does not exist.
-
-  CanonicalHeadNotFound* = object of EVMError
-    ## The chain has no canonical head.
-
-  ValidationError* = object of EVMError
+  ValidationError* = object of CatchableError
     ## Error to signal something does not pass a validation check.
-
-  CoreDbApiError* = object of CatchableError
-    ## Errors related to `CoreDB` API

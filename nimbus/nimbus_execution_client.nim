@@ -1,5 +1,5 @@
 # Nimbus
-# Copyright (c) 2018-2024 Status Research & Development GmbH
+# Copyright (c) 2018-2025 Status Research & Development GmbH
 # Licensed under either of
 #  * Apache License, version 2.0, ([LICENSE-APACHE](LICENSE-APACHE))
 #  * MIT license ([LICENSE-MIT](LICENSE-MIT))
@@ -11,7 +11,7 @@ import
   ../nimbus/compile_info
 
 import
-  std/[os, strutils, net],
+  std/[os, osproc, strutils, net],
   chronicles,
   eth/net/nat,
   metrics,
@@ -23,6 +23,7 @@ import
   ./constants,
   ./nimbus_desc,
   ./nimbus_import,
+  ./core/block_import,
   ./core/eip4844,
   ./db/core_db/persistent,
   ./db/storage_types,
@@ -42,15 +43,13 @@ when defined(evmc_enabled):
 proc basicServices(nimbus: NimbusNode,
                    conf: NimbusConf,
                    com: CommonRef) =
-  nimbus.txPool = TxPoolRef.new(com)
+  nimbus.chainRef = ForkedChainRef.init(com)
 
   # txPool must be informed of active head
   # so it can know the latest account state
   # e.g. sender nonce, etc
-  nimbus.chainRef = ForkedChainRef.init(com)
-  doAssert nimbus.txPool.smartHead(nimbus.chainRef.latestHeader,nimbus.chainRef)
-
-  nimbus.beaconEngine = BeaconEngineRef.new(nimbus.txPool, nimbus.chainRef)
+  nimbus.txPool = TxPoolRef.new(nimbus.chainRef)
+  nimbus.beaconEngine = BeaconEngineRef.new(nimbus.txPool)
 
 proc manageAccounts(nimbus: NimbusNode, conf: NimbusConf) =
   if string(conf.keyStore).len > 0:
@@ -157,16 +156,23 @@ proc setupMetrics(nimbus: NimbusNode, conf: NimbusConf) =
     waitFor nimbus.metricsServer.start()
 
 proc preventLoadingDataDirForTheWrongNetwork(db: CoreDbRef; conf: NimbusConf) =
+  proc writeDataDirId(kvt: CoreDbKvtRef, calculatedId: Hash32) =
+    info "Writing data dir ID", ID=calculatedId
+    kvt.put(dataDirIdKey().toOpenArray, calculatedId.data).isOkOr:
+      fatal "Cannot write data dir ID", ID=calculatedId
+      quit(QuitFailure)
+
   let
     kvt = db.ctx.getKvt()
     calculatedId = calcHash(conf.networkId, conf.networkParams)
     dataDirIdBytes = kvt.get(dataDirIdKey().toOpenArray).valueOr:
       # an empty database
-      info "Writing data dir ID", ID=calculatedId
-      kvt.put(dataDirIdKey().toOpenArray, calculatedId.data).isOkOr:
-        fatal "Cannot write data dir ID", ID=calculatedId
-        quit(QuitFailure)
+      writeDataDirId(kvt, calculatedId)
       return
+
+  if conf.rewriteDatadirId:
+    writeDataDirId(kvt, calculatedId)
+    return
 
   if calculatedId.data != dataDirIdBytes:
     fatal "Data dir already initialized with other network configuration",
@@ -175,14 +181,6 @@ proc preventLoadingDataDirForTheWrongNetwork(db: CoreDbRef; conf: NimbusConf) =
     quit(QuitFailure)
 
 proc run(nimbus: NimbusNode, conf: NimbusConf) =
-  ## logging
-  setLogLevel(conf.logLevel)
-  if conf.logFile.isSome:
-    let logFile = string conf.logFile.get()
-    defaultChroniclesStream.output.outFile = nil # to avoid closing stdout
-    discard defaultChroniclesStream.output.open(logFile, fmAppend)
-
-  setupFileLimits()
 
   info "Launching execution client",
       version = FullVersionStr,
@@ -216,8 +214,24 @@ proc run(nimbus: NimbusNode, conf: NimbusConf) =
   preventLoadingDataDirForTheWrongNetwork(coreDB, conf)
   setupMetrics(nimbus, conf)
 
+  let taskpool =
+    try:
+      if conf.numThreads < 0:
+        fatal "The number of threads --num-threads cannot be negative."
+        quit QuitFailure
+      elif conf.numThreads == 0:
+        Taskpool.new(numThreads = min(countProcessors(), 16))
+      else:
+        Taskpool.new(numThreads = conf.numThreads)
+    except CatchableError as e:
+      fatal "Cannot start taskpool", err = e.msg
+      quit QuitFailure
+
+  info "Threadpool started", numThreads = taskpool.numThreads
+
   let com = CommonRef.new(
     db = coreDB,
+    taskpool = taskpool,
     pruneHistory = (conf.chainDbMode == AriPrune),
     networkId = conf.networkId,
     params = conf.networkParams)
@@ -227,7 +241,15 @@ proc run(nimbus: NimbusNode, conf: NimbusConf) =
       extraData=conf.extraData,
       len=conf.extraData.len
 
+  if conf.gasLimit > GAS_LIMIT_MAXIMUM or
+     conf.gasLimit < GAS_LIMIT_MINIMUM:
+    warn "GasLimit not in expected range, truncate",
+      min=GAS_LIMIT_MINIMUM,
+      max=GAS_LIMIT_MAXIMUM,
+      get=conf.gasLimit
+
   com.extraData = conf.extraData
+  com.gasLimit = conf.gasLimit
 
   defer:
     com.db.finish()
@@ -235,6 +257,8 @@ proc run(nimbus: NimbusNode, conf: NimbusConf) =
   case conf.cmd
   of NimbusCmd.`import`:
     importBlocks(conf, com)
+  of NimbusCmd.`import-rlp`:
+    importRlpBlocks(conf, com)
   else:
     basicServices(nimbus, conf, com)
     manageAccounts(nimbus, conf)
@@ -265,19 +289,18 @@ proc run(nimbus: NimbusNode, conf: NimbusConf) =
 when isMainModule:
   var nimbus = NimbusNode(state: NimbusState.Starting, ctx: newEthContext())
 
+  ## Processing command line arguments
+  let conf = makeConfig()
+
+  setupFileLimits()
+
   ## Ctrl+C handling
   proc controlCHandler() {.noconv.} =
     when defined(windows):
       # workaround for https://github.com/nim-lang/Nim/issues/4057
       setupForeignThreadGc()
     nimbus.state = NimbusState.Stopping
-    echo "\nCtrl+C pressed. Waiting for a graceful shutdown."
+    notice "\nCtrl+C pressed. Waiting for a graceful shutdown."
   setControlCHook(controlCHandler)
-
-  ## Show logs on stdout until we get the user's logging choice
-  discard defaultChroniclesStream.output.open(stdout)
-
-  ## Processing command line arguments
-  let conf = makeConfig()
 
   nimbus.run(conf)

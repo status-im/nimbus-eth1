@@ -1,5 +1,5 @@
 # Nimbus
-# Copyright (c) 2022-2024 Status Research & Development GmbH
+# Copyright (c) 2022-2025 Status Research & Development GmbH
 # Licensed and distributed under either of
 #   * MIT license (license terms in the root directory or at https://opensource.org/licenses/MIT).
 #   * Apache v2 license (license terms in the root directory or at https://www.apache.org/licenses/LICENSE-2.0).
@@ -8,7 +8,7 @@
 {.push raises: [].}
 
 import
-  std/[sequtils, sets],
+  std/sets,
   chronos,
   stew/[byteutils, leb128, endians2],
   chronicles,
@@ -38,15 +38,15 @@ const
   maxPendingTransfersPerPeer = 128
 
 type
+  ConnectionId* = uint16
+
   ContentRequest = object
-    connectionId: uint16
     nodeId: NodeId
     contentId: ContentId
     content: seq[byte]
     timeout: Moment
 
   ContentOffer = object
-    connectionId: uint16
     nodeId: NodeId
     contentIds: seq[ContentId]
     contentKeys: ContentKeysList
@@ -67,8 +67,8 @@ type
     # values of the discovery v5 talkresp message.
     # TODO: Should the content key also be stored to be able to validate the
     # received data?
-    contentRequests: seq[ContentRequest]
-    contentOffers: seq[ContentOffer]
+    contentRequests: TableRef[ConnectionId, ContentRequest]
+    contentOffers: TableRef[ConnectionId, ContentOffer]
     connectionTimeout: Duration
     contentReadTimeout*: Duration
     rng: ref HmacDrbgContext
@@ -146,21 +146,34 @@ template removePendingTransfer*(
 ) =
   removePendingTransfer(stream.pendingTransfers, nodeId, contentId)
 
-proc pruneAllowedConnections(stream: PortalStream) =
-  # Prune requests and offers that didn't receive a connection request
+proc pruneAllowedRequestConnections*(stream: PortalStream) =
+  # Prune requests that didn't receive a connection request
   # before `connectionTimeout`.
   let now = Moment.now()
 
-  for i, request in stream.contentRequests:
+  var connectionIdsToPrune = newSeq[ConnectionId]()
+  for connectionId, request in stream.contentRequests:
     if request.timeout <= now:
       stream.removePendingTransfer(request.nodeId, request.contentId)
-      stream.contentRequests.del(i)
+      connectionIdsToPrune.add(connectionId)
 
-  for i, offer in stream.contentOffers:
+  for connectionId in connectionIdsToPrune:
+    stream.contentRequests.del(connectionId)
+
+proc pruneAllowedOfferConnections*(stream: PortalStream) =
+  # Prune offers that didn't receive a connection request
+  # before `connectionTimeout`.
+  let now = Moment.now()
+
+  var connectionIdsToPrune = newSeq[ConnectionId]()
+  for connectionId, offer in stream.contentOffers:
     if offer.timeout <= now:
       for contentId in offer.contentIds:
         stream.removePendingTransfer(offer.nodeId, contentId)
-      stream.contentOffers.del(i)
+      connectionIdsToPrune.add(connectionId)
+
+  for connectionId in connectionIdsToPrune:
+    stream.contentOffers.del(connectionId)
 
 proc addContentOffer*(
     stream: PortalStream,
@@ -168,74 +181,77 @@ proc addContentOffer*(
     contentKeys: ContentKeysList,
     contentIds: seq[ContentId],
 ): Bytes2 =
-  stream.pruneAllowedConnections()
-
   # TODO: Should we check if `NodeId` & `connectionId` combo already exists?
   # What happens if we get duplicates?
   var connectionId: Bytes2
   stream.rng[].generate(connectionId)
 
   # uTP protocol uses BE for all values in the header, incl. connection id.
-  let id = uint16.fromBytesBE(connectionId)
+  var id = ConnectionId.fromBytesBE(connectionId)
+
+  # Generate a new id if already existing to avoid using a duplicate
+  if stream.contentOffers.contains(id):
+    stream.rng[].generate(connectionId)
+    id = ConnectionId.fromBytesBE(connectionId)
 
   debug "Register new incoming offer", contentKeys
 
   let contentOffer = ContentOffer(
-    connectionId: id,
     nodeId: nodeId,
     contentIds: contentIds,
     contentKeys: contentKeys,
     timeout: Moment.now() + stream.connectionTimeout,
   )
-  stream.contentOffers.add(contentOffer)
+  stream.contentOffers[id] = contentOffer
 
   return connectionId
 
 proc addContentRequest*(
     stream: PortalStream, nodeId: NodeId, contentId: ContentId, content: seq[byte]
 ): Bytes2 =
-  stream.pruneAllowedConnections()
-
   # TODO: Should we check if `NodeId` & `connectionId` combo already exists?
   # What happens if we get duplicates?
   var connectionId: Bytes2
   stream.rng[].generate(connectionId)
 
   # uTP protocol uses BE for all values in the header, incl. connection id.
-  let id = uint16.fromBytesBE(connectionId)
+  var id = ConnectionId.fromBytesBE(connectionId)
+
+  # Generate a new id if already existing to avoid using a duplicate
+  if stream.contentRequests.contains(id):
+    stream.rng[].generate(connectionId)
+    id = ConnectionId.fromBytesBE(connectionId)
+
   let contentRequest = ContentRequest(
-    connectionId: id,
     nodeId: nodeId,
     contentId: contentId,
     content: content,
     timeout: Moment.now() + stream.connectionTimeout,
   )
-  stream.contentRequests.add(contentRequest)
+  stream.contentRequests[id] = contentRequest
 
   return connectionId
 
 proc connectTo*(
-    stream: PortalStream, nodeAddress: NodeAddress, connectionId: uint16
+    stream: PortalStream, nodeAddress: NodeAddress, connectionId: ConnectionId
 ): Future[Result[UtpSocket[NodeAddress], string]] {.async: (raises: [CancelledError]).} =
   let connectRes = await stream.transport.connectTo(nodeAddress, connectionId)
   if connectRes.isErr():
     case connectRes.error
     of SocketAlreadyExists:
-      # This means that there is already a socket to this nodeAddress with given
-      # connection id. This means that a peer sent us a connection id which is
-      # already in use. The connection is failed and an error returned.
-      let msg =
-        "Socket to " & $nodeAddress & "with connection id: " & $connectionId &
-        " already exists"
-      return err(msg)
+      # There is already a socket to this nodeAddress with given connection id.
+      # This means that a peer sent a connection id which is already in use.
+      err(
+        "Socket to " & $nodeAddress & " with connection id " & $connectionId &
+          " already exists"
+      )
     of ConnectionTimedOut:
-      # A time-out here means that a uTP SYN packet was re-sent 3 times and
-      # failed to be acked. This should be enough of indication that the
-      # remote host is not reachable and no new connections are attempted.
-      let msg = "uTP timeout while trying to connect to " & $nodeAddress
-      return err(msg)
+      # A time-out here means that a uTP SYN packet was sent 3 times and failed
+      # to be acked. This should be enough of indication that the remote host is
+      # not reachable and no new connections are attempted.
+      err("uTP connection timeout when connecting to node: " & $nodeAddress)
   else:
-    return ok(connectRes.get())
+    ok(connectRes.value())
 
 proc writeContentRequest(
     socket: UtpSocket[NodeAddress], stream: PortalStream, request: ContentRequest
@@ -284,16 +300,13 @@ proc readContentOffer(
   # Read number of content values according to amount of ContentKeys accepted.
   # This will either end with a FIN, or because the read action times out or
   # because the number of expected values was read (if this happens and no FIN
-  # was received yet, a FIN will be send from this side).
+  # is received eventually, the socket will just get destroyed).
   # None of this means that the contentValues are valid, further validation is
-  # required.
-  # Socket will be closed when this call ends.
+  # required. This call deals with cleaning up the socket.
 
-  # TODO: Currently reading from the socket one value at a time, and validating
-  # values at later time. Uncertain what is best approach here (mostly from a
-  # security PoV), e.g. other options such as reading all content from socket at
-  # once, then processing the individual content values. Or reading and
-  # validating one per time.
+  # Content items are read from the socket and added to a queue for later
+  # validation. Validating the content item immediatly would likely result in
+  # timeouts of the rest of the content transmitted.
   let amount = offer.contentKeys.len()
 
   var contentValues: seq[seq[byte]]
@@ -311,11 +324,15 @@ proc readContentOffer(
           contentKeys = offer.contentKeys, error = contentValue.error
         break
     else:
-      # Read timed out, stop further reading, but still process data received
-      # so far.
+      # Read timed out, stop further reading and discard the data received so
+      # far as it will be incomplete.
       debug "Reading data from socket timed out, content offer failed",
         contentKeys = offer.contentKeys
-      break
+      # Still closing the socket (= sending FIN) but not waiting here for its
+      # ACK however, so no `closeWait`. Underneath the socket will still wait
+      # for the FIN-ACK (or timeout) before it destroys the socket.
+      socket.close()
+      return
 
   if socket.atEof():
     # Destroy socket and not closing as we already received FIN. Closing would
@@ -361,6 +378,8 @@ proc new(
 ): T =
   let stream = PortalStream(
     transport: transport,
+    contentRequests: newTable[ConnectionId, ContentRequest](),
+    contentOffers: newTable[ConnectionId, ContentOffer](),
     connectionTimeout: connectionTimeout,
     contentReadTimeout: contentReadTimeout,
     pendingTransfers: newTable[NodeId, HashSet[ContentId]](),
@@ -371,17 +390,17 @@ proc new(
   stream
 
 proc allowedConnection(
-    stream: PortalStream, address: NodeAddress, connectionId: uint16
+    stream: PortalStream, address: NodeAddress, connectionId: ConnectionId
 ): bool =
-  return
-    stream.contentRequests.any(
-      proc(x: ContentRequest): bool =
-        x.connectionId == connectionId and x.nodeId == address.nodeId
-    ) or
-    stream.contentOffers.any(
-      proc(x: ContentOffer): bool =
-        x.connectionId == connectionId and x.nodeId == address.nodeId
-    )
+  if stream.contentRequests.contains(connectionId) and
+      stream.contentRequests.getOrDefault(connectionId).nodeId == address.nodeId:
+    return true
+
+  if stream.contentOffers.contains(connectionId) and
+      stream.contentOffers.getOrDefault(connectionId).nodeId == address.nodeId:
+    return true
+
+  return false
 
 proc handleIncomingConnection(
     server: UtpRouter[NodeAddress], socket: UtpSocket[NodeAddress]
@@ -392,23 +411,24 @@ proc handleIncomingConnection(
     # Note: Connection id of uTP SYN is different from other packets, it is
     # actually the peers `send_conn_id`, opposed to `receive_conn_id` for all
     # other packets.
-    for i, request in stream.contentRequests:
-      if request.connectionId == socket.connectionId and
-          request.nodeId == socket.remoteAddress.nodeId:
+
+    if stream.contentRequests.contains(socket.connectionId):
+      let request = stream.contentRequests.getOrDefault(socket.connectionId)
+      if request.nodeId == socket.remoteAddress.nodeId:
         let fut = socket.writeContentRequest(stream, request)
 
         stream.removePendingTransfer(request.nodeId, request.contentId)
-        stream.contentRequests.del(i)
+        stream.contentRequests.del(socket.connectionId)
         return noCancel(fut)
 
-    for i, offer in stream.contentOffers:
-      if offer.connectionId == socket.connectionId and
-          offer.nodeId == socket.remoteAddress.nodeId:
+    if stream.contentOffers.contains(socket.connectionId):
+      let offer = stream.contentOffers.getOrDefault(socket.connectionId)
+      if offer.nodeId == socket.remoteAddress.nodeId:
         let fut = socket.readContentOffer(stream, offer)
 
         for contentId in offer.contentIds:
           stream.removePendingTransfer(offer.nodeId, contentId)
-        stream.contentOffers.del(i)
+        stream.contentOffers.del(socket.connectionId)
         return noCancel(fut)
 
   # TODO: Is there a scenario where this can happen,
@@ -418,7 +438,7 @@ proc handleIncomingConnection(
   return fut
 
 proc allowIncomingConnection(
-    r: UtpRouter[NodeAddress], remoteAddress: NodeAddress, connectionId: uint16
+    r: UtpRouter[NodeAddress], remoteAddress: NodeAddress, connectionId: ConnectionId
 ): bool =
   let manager = getUserData[NodeAddress, StreamManager](r)
   for stream in manager.streams:

@@ -13,7 +13,7 @@ import
   stew/ptrops,
   stew/saturation_arith,
   stint,
-  ../evm/[types, precompiles],
+  ../evm/[types, code_bytes, message],
   ../evm/interpreter_dispatch,
   ../utils/utils,
   "."/[host_types, host_trace]
@@ -26,17 +26,22 @@ proc evmcResultRelease(res: var EvmcResult) {.cdecl, gcsafe.} =
 proc beforeExecCreateEvmcNested(host: TransactionHost,
                                 m: EvmcMessage): Computation =
   # TODO: use evmc_message to avoid copy
-  let childMsg = Message(
-    kind: CallKind(m.kind.ord),
-    depth: m.depth,
-    gas: GasInt m.gas,
-    sender: m.sender.fromEvmc,
-    value: m.value.fromEvmc,
-    data: @(makeOpenArray(m.input_data, m.input_size.int))
-  )
-  return newComputation(host.vmState, false, childMsg, isPrecompile = false,
-                        keepStack = false,
-                        cast[ContractSalt](m.create2_salt))
+  let
+    code = CodeBytesRef.init(makeOpenArray(m.input_data, m.input_size.int))
+    childMsg = Message(
+      kind: m.kind,
+      depth: m.depth,
+      gas: GasInt m.gas,
+      sender: m.sender.fromEvmc,
+      value: m.value.fromEvmc,
+      contractAddress: generateContractAddress(
+        host.vmState,
+        m.kind,
+        m.sender.fromEvmc,
+        Bytes32(m.create2_salt.bytes),
+        code)
+    )
+  newComputation(host.vmState, keepStack = false, childMsg, code)
 
 proc afterExecCreateEvmcNested(host: TransactionHost, child: Computation,
                                res: var EvmcResult) {.inline.} =
@@ -59,7 +64,7 @@ proc afterExecCreateEvmcNested(host: TransactionHost, child: Computation,
 proc beforeExecCallEvmcNested(host: TransactionHost,
                               m: EvmcMessage): Computation {.inline.} =
   let childMsg = Message(
-    kind: CallKind(m.kind.ord),
+    kind: m.kind,
     depth: m.depth,
     gas: GasInt m.gas,
     sender: m.sender.fromEvmc,
@@ -72,8 +77,8 @@ proc beforeExecCallEvmcNested(host: TransactionHost,
     data: @(makeOpenArray(m.input_data, m.input_size.int)),
     flags: m.flags,
   )
-  let isPrecompile = getPrecompile(host.vmState.fork, childMsg.codeAddress).isSome()
-  newComputation(host.vmState, false, childMsg, isPrecompile = isPrecompile, keepStack = false)
+  let code = getCallCode(host.vmState, childMsg.codeAddress)
+  newComputation(host.vmState, keepStack = false, childMsg, code)
 
 proc afterExecCallEvmcNested(host: TransactionHost, child: Computation,
                              res: var EvmcResult) {.inline.} =

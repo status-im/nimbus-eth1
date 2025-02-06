@@ -1,6 +1,6 @@
 # Nimbus - Various ways of calling the EVM
 #
-# Copyright (c) 2018-2024 Status Research & Development GmbH
+# Copyright (c) 2018-2025 Status Research & Development GmbH
 # Licensed under either of
 #  * Apache License, version 2.0, ([LICENSE-APACHE](LICENSE-APACHE) or http://www.apache.org/licenses/LICENSE-2.0)
 #  * MIT license ([LICENSE-MIT](LICENSE-MIT) or http://opensource.org/licenses/MIT)
@@ -38,7 +38,7 @@ proc rpcCallEvm*(args: TransactionArgs,
   let vmState = ? BaseVMState.new(topHeader, com)
   let params  = ? toCallParams(vmState, args, globalGasCap, header.baseFeePerGas)
 
-  var dbTx = com.db.ctx.newTransaction()
+  var dbTx = com.db.ctx.txFrameBegin()
   defer: dbTx.dispose() # always dispose state changes
 
   ok(runComputation(params, CallResult))
@@ -50,7 +50,7 @@ proc rpcCallEvm*(args: TransactionArgs,
   const globalGasCap = 0 # TODO: globalGasCap should configurable by user
   let params  = ? toCallParams(vmState, args, globalGasCap, header.baseFeePerGas)
 
-  var dbTx = com.db.ctx.newTransaction()
+  var dbTx = com.db.ctx.txFrameBegin()
   defer: dbTx.dispose() # always dispose state changes
 
   ok(runComputation(params, CallResult))
@@ -75,7 +75,7 @@ proc rpcEstimateGas*(args: TransactionArgs,
     hi : GasInt = GasInt args.gas.get(0.Quantity)
     cap: GasInt
 
-  var dbTx = com.db.ctx.newTransaction()
+  var dbTx = com.db.ctx.txFrameBegin()
   defer: dbTx.dispose() # always dispose state changes
 
   # Determine the highest gas limit can be used during the estimation.
@@ -96,7 +96,7 @@ proc rpcEstimateGas*(args: TransactionArgs,
     if args.source.isNone:
       return err(evmErr(EvmInvalidParam))
 
-    let balance = vmState.readOnlyStateDB.getBalance(args.source.get)
+    let balance = vmState.readOnlyLedger.getBalance(args.source.get)
     var available = balance
     if args.value.isSome:
       let value = args.value.get
@@ -118,11 +118,13 @@ proc rpcEstimateGas*(args: TransactionArgs,
     hi = gasCap
 
   cap = hi
-  let intrinsicGas = intrinsicGas(params, fork)
+  let
+    (intrinsicGas, floorDataGas) = intrinsicGas(params, fork)
+    minGasLimit = max(intrinsicGas, floorDataGas)
 
   # Create a helper to check if a gas allowance results in an executable transaction
   proc executable(gasLimit: GasInt): EvmResult[bool] =
-    if intrinsicGas > gasLimit:
+    if minGasLimit > gasLimit:
       # Special case, raise gas limit
       return ok(true)
 

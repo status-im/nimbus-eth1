@@ -1,5 +1,5 @@
 # Nimbus
-# Copyright (c) 2022-2024 Status Research & Development GmbH
+# Copyright (c) 2022-2025 Status Research & Development GmbH
 # Licensed under either of
 #  * Apache License, version 2.0, ([LICENSE-APACHE](LICENSE-APACHE))
 #  * MIT license ([LICENSE-MIT](LICENSE-MIT))
@@ -11,11 +11,12 @@
 
 import
   chronicles,
-  ../core/casper,
+  logging,
   ../db/[core_db, ledger, storage_types],
-  ../utils/[utils, ec_recover],
+  ../utils/[utils],
   ".."/[constants, errors, version],
-  "."/[chain_config, evmforks, genesis, hardforks]
+  "."/[chain_config, evmforks, genesis, hardforks],
+  taskpools
 
 export
   chain_config,
@@ -25,7 +26,9 @@ export
   evmforks,
   hardforks,
   genesis,
-  utils
+  utils,
+  taskpools,
+  logging
 
 type
   SyncProgress = object
@@ -41,8 +44,11 @@ type
   SyncReqNewHeadCB* = proc(header: Header) {.gcsafe, raises: [].}
     ## Update head for syncing
 
-  ReqBeaconSyncTargetCB* = proc(header: Header; finHash: Hash32) {.gcsafe, raises: [].}
+  ReqBeaconSyncerTargetCB* = proc(header: Header; finHash: Hash32) {.gcsafe, raises: [].}
     ## Ditto (for beacon sync)
+
+  BeaconSyncerProgressCB* = proc(): tuple[start, current, target: BlockNumber] {.gcsafe, raises: [].}
+    ## Query syncer status
 
   NotifyBadBlockCB* = proc(invalid, origin: Header) {.gcsafe, raises: [].}
     ## Notify engine-API of encountered bad block
@@ -75,9 +81,14 @@ type
       ## Call back function for the sync processor. This function stages
       ## the arguent header to a private aerea for subsequent processing.
 
-    reqBeaconSyncTargetCB: ReqBeaconSyncTargetCB
+    reqBeaconSyncerTargetCB: ReqBeaconSyncerTargetCB
       ## Call back function for a sync processor that returns the canonical
       ## header.
+
+    beaconSyncerProgressCB: BeaconSyncerProgressCB
+      ## Call back function querying the status of the sync processor. The
+      ## function returns `true` if the syncer is running, downloading or
+      ## importing headers and blocks.
 
     notifyBadBlock: NotifyBadBlockCB
       ## Allow synchronizer to inform engine-API of bad encountered during sync
@@ -88,20 +99,17 @@ type
       ## installing a snapshot pivot. The default value for this field is
       ## `GENESIS_PARENT_HASH` to start at the very beginning.
 
-    pos: CasperRef
-      ## Proof Of Stake descriptor
-
     pruneHistory: bool
       ## Must not not set for a full node, might go away some time
 
     extraData: string
-      ## Value of extraData field when building block
+      ## Value of extraData field when building a block
 
-# ------------------------------------------------------------------------------
-# Forward declarations
-# ------------------------------------------------------------------------------
+    gasLimit: uint64
+      ## Desired gas limit when building a block
 
-proc proofOfStake*(com: CommonRef, header: Header): bool {.gcsafe.}
+    taskpool*: Taskpool
+      ## Shared task pool for offloading computation to other threads
 
 # ------------------------------------------------------------------------------
 # Private helper functions
@@ -136,8 +144,7 @@ proc initializeDb(com: CommonRef) =
       nonce = com.genesisHeader.nonce
     doAssert(com.genesisHeader.number == 0.BlockNumber,
       "can't commit genesis block with number > 0")
-    com.db.persistHeader(com.genesisHeader,
-      com.proofOfStake(com.genesisHeader),
+    com.db.persistHeaderAndSetHead(com.genesisHeader,
       startOfHistory=com.genesisHeader.parentHash).
       expect("can persist genesis header")
     doAssert(canonicalHeadHashKey().toOpenArray in kvt)
@@ -165,6 +172,7 @@ proc initializeDb(com: CommonRef) =
 
 proc init(com         : CommonRef,
           db          : CoreDbRef,
+          taskpool    : Taskpool,
           networkId   : NetworkId,
           config      : ChainConfig,
           genesis     : Genesis,
@@ -179,8 +187,9 @@ proc init(com         : CommonRef,
   com.syncProgress= SyncProgress()
   com.syncState   = Waiting
   com.pruneHistory= pruneHistory
-  com.pos         = CasperRef.new
   com.extraData   = ShortClientId
+  com.taskpool    = taskpool
+  com.gasLimit    = DEFAULT_GAS_LIMIT
 
   # com.forkIdCalculator and com.genesisHash are set
   # by setForkId
@@ -198,7 +207,6 @@ proc init(com         : CommonRef,
       toGenesisHeader(genesis, fork, com.db)
 
     com.setForkId(com.genesisHeader)
-    com.pos.timestamp = genesis.timestamp
 
   # By default, history begins at genesis.
   com.startOfHistory = GENESIS_PARENT_HASH
@@ -223,6 +231,7 @@ proc isBlockAfterTtd(com: CommonRef, header: Header): bool =
 proc new*(
     _: type CommonRef;
     db: CoreDbRef;
+    taskpool: Taskpool;
     networkId: NetworkId = MainNet;
     params = networkParams(MainNet);
     pruneHistory = false;
@@ -233,6 +242,7 @@ proc new*(
   new(result)
   result.init(
     db,
+    taskpool,
     networkId,
     params.config,
     params.genesis,
@@ -241,6 +251,7 @@ proc new*(
 proc new*(
     _: type CommonRef;
     db: CoreDbRef;
+    taskpool: Taskpool;
     config: ChainConfig;
     networkId: NetworkId = MainNet;
     pruneHistory = false;
@@ -251,6 +262,7 @@ proc new*(
   new(result)
   result.init(
     db,
+    taskpool,
     networkId,
     config,
     nil,
@@ -268,7 +280,6 @@ func clone*(com: CommonRef, db: CoreDbRef): CommonRef =
     genesisHeader: com.genesisHeader,
     syncProgress : com.syncProgress,
     networkId    : com.networkId,
-    pos          : com.pos,
     pruneHistory : com.pruneHistory)
 
 func clone*(com: CommonRef): CommonRef =
@@ -286,6 +297,9 @@ func toEVMFork*(com: CommonRef, forkDeterminer: ForkDeterminationInfo): EVMFork 
   ## similar to toFork, but produce EVMFork
   let fork = com.toHardFork(forkDeterminer)
   ToEVMFork[fork]
+
+func toEVMFork*(com: CommonRef, header: Header): EVMFork =
+  com.toEVMFork(forkDeterminationInfo(header))
 
 func isSpuriousOrLater*(com: CommonRef, number: BlockNumber): bool =
   com.toHardFork(number.forkDeterminationInfo) >= Spurious
@@ -321,8 +335,8 @@ proc proofOfStake*(com: CommonRef, header: Header): bool =
   if com.config.posBlock.isSome:
     # see comments of posBlock in common/hardforks.nim
     header.number >= com.config.posBlock.get
-  elif com.config.mergeForkBlock.isSome:
-    header.number >= com.config.mergeForkBlock.get
+  elif com.config.mergeNetsplitBlock.isSome:
+    header.number >= com.config.mergeNetsplitBlock.get
   else:
     # This costly check is only executed from test suite
     com.isBlockAfterTtd(header)
@@ -336,10 +350,16 @@ proc syncReqNewHead*(com: CommonRef; header: Header)
   if not com.syncReqNewHead.isNil:
     com.syncReqNewHead(header)
 
-proc reqBeaconSyncTargetCB*(com: CommonRef; header: Header; finHash: Hash32) =
+proc reqBeaconSyncerTarget*(com: CommonRef; header: Header; finHash: Hash32) =
   ## Used by RPC updater
-  if not com.reqBeaconSyncTargetCB.isNil:
-    com.reqBeaconSyncTargetCB(header, finHash)
+  if not com.reqBeaconSyncerTargetCB.isNil:
+    com.reqBeaconSyncerTargetCB(header, finHash)
+
+proc beaconSyncerProgress*(com: CommonRef): tuple[start, current, target: BlockNumber] =
+  ## Query syncer status
+  if not com.beaconSyncerProgressCB.isNil:
+    return com.beaconSyncerProgressCB()
+  # (0,0,0)
 
 proc notifyBadBlock*(com: CommonRef; invalid, origin: Header)
     {.gcsafe, raises: [].} =
@@ -354,10 +374,6 @@ proc notifyBadBlock*(com: CommonRef; invalid, origin: Header)
 func startOfHistory*(com: CommonRef): Hash32 =
   ## Getter
   com.startOfHistory
-
-func pos*(com: CommonRef): CasperRef =
-  ## Getter
-  com.pos
 
 func db*(com: CommonRef): CoreDbRef =
   com.db
@@ -376,9 +392,6 @@ func daoForkSupport*(com: CommonRef): bool =
 
 func ttd*(com: CommonRef): Opt[DifficultyInt] =
   com.config.terminalTotalDifficulty
-
-func ttdPassed*(com: CommonRef): bool =
-  com.config.terminalTotalDifficultyPassed.get(false)
 
 func pruneHistory*(com: CommonRef): bool =
   com.pruneHistory
@@ -419,6 +432,21 @@ func syncState*(com: CommonRef): SyncState =
 func extraData*(com: CommonRef): string =
   com.extraData
 
+func gasLimit*(com: CommonRef): uint64 =
+  com.gasLimit
+
+func maxBlobsPerBlock*(com: CommonRef, fork: HardFork): uint64 =
+  doAssert(fork >= Cancun)
+  com.config.blobSchedule[fork].expect("blobSchedule initialized").max
+
+func targetBlobsPerBlock*(com: CommonRef, fork: HardFork): uint64 =
+  doAssert(fork >= Cancun)
+  com.config.blobSchedule[fork].expect("blobSchedule initialized").target
+
+func baseFeeUpdateFraction*(com: CommonRef, fork: HardFork): uint64 =
+  doAssert(fork >= Cancun)
+  com.config.blobSchedule[fork].expect("blobSchedule initialized").baseFeeUpdateFraction
+
 # ------------------------------------------------------------------------------
 # Setters
 # ------------------------------------------------------------------------------
@@ -449,9 +477,13 @@ func `syncReqNewHead=`*(com: CommonRef; cb: SyncReqNewHeadCB) =
   ## Activate or reset a call back handler for syncing.
   com.syncReqNewHead = cb
 
-func `reqBeaconSyncTarget=`*(com: CommonRef; cb: ReqBeaconSyncTargetCB) =
+func `reqBeaconSyncerTarget=`*(com: CommonRef; cb: ReqBeaconSyncerTargetCB) =
   ## Activate or reset a call back handler for syncing.
-  com.reqBeaconSyncTargetCB = cb
+  com.reqBeaconSyncerTargetCB = cb
+
+func `beaconSyncerProgress=`*(com: CommonRef; cb: BeaconSyncerProgressCB) =
+  ## Activate or reset a call back handler for querying syncer.
+  com.beaconSyncerProgressCB = cb
 
 func `notifyBadBlock=`*(com: CommonRef; cb: NotifyBadBlockCB) =
   ## Activate or reset a call back handler for bad block notification.
@@ -459,6 +491,14 @@ func `notifyBadBlock=`*(com: CommonRef; cb: NotifyBadBlockCB) =
 
 func `extraData=`*(com: CommonRef, val: string) =
   com.extraData = val
+
+func `gasLimit=`*(com: CommonRef, val: uint64) =
+  if val < GAS_LIMIT_MINIMUM:
+    com.gasLimit = GAS_LIMIT_MINIMUM
+  elif val > GAS_LIMIT_MAXIMUM:
+    com.gasLimit = GAS_LIMIT_MAXIMUM
+  else:
+    com.gasLimit = val
 
 # ------------------------------------------------------------------------------
 # End

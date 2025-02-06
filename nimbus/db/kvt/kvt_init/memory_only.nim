@@ -63,7 +63,7 @@ proc init*(
       ): T =
   ## Shortcut for `KvtDbRef.init(VoidBackendRef)`
   KvtDbRef.init VoidBackendRef
- 
+
 
 proc finish*(db: KvtDbRef; eradicate = false) =
   ## Backend destructor. The argument `eradicate` indicates that a full
@@ -73,7 +73,6 @@ proc finish*(db: KvtDbRef; eradicate = false) =
   ##
   if not db.backend.isNil:
     db.backend.closeFn eradicate
-  discard db.getCentre.forgetOthers()
 
 # ------------------------------------------------------------------------------
 # End

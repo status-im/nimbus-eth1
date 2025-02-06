@@ -33,10 +33,12 @@ const
     ## re-reads from file.
     ##
     ## A bit of space on top of the filter is left for data block caching
-  defaultRdbVtxCacheSize* = 768 * 1024 * 1024
+  defaultRdbVtxCacheSize* = 512 * 1024 * 1024
     ## Cache of branches and leaves in the state MPTs (world and account)
   defaultRdbKeyCacheSize* = 256 * 1024 * 1024
     ## Hashes of the above
+  defaultRdbBranchCacheSize* = 1024 * 1024 * 1024
+    ## Cache of branches and leaves in the state MPTs (world and account)
 
 
 type DbOptions* = object # Options that are transported to the database layer
@@ -46,6 +48,7 @@ type DbOptions* = object # Options that are transported to the database layer
   blockCacheSize*: int
   rdbVtxCacheSize*: int
   rdbKeyCacheSize*: int
+  rdbBranchCacheSize*: int
   rdbPrintStats*: bool
 
 func init*(
@@ -56,6 +59,7 @@ func init*(
     blockCacheSize = defaultBlockCacheSize,
     rdbVtxCacheSize = defaultRdbVtxCacheSize,
     rdbKeyCacheSize = defaultRdbKeyCacheSize,
+    rdbBranchCacheSize = defaultRdbBranchCacheSize,
     rdbPrintStats = false,
 ): T =
   T(
@@ -65,5 +69,6 @@ func init*(
     blockCacheSize: blockCacheSize,
     rdbVtxCacheSize: rdbVtxCacheSize,
     rdbKeyCacheSize: rdbKeyCacheSize,
+    rdbBranchCacheSize: rdbBranchCacheSize,
     rdbPrintStats: rdbPrintStats,
   )

@@ -1,5 +1,5 @@
 # Nimbus
-# Copyright (c) 2021-2024 Status Research & Development GmbH
+# Copyright (c) 2021-2025 Status Research & Development GmbH
 # Licensed and distributed under either of
 #   * MIT license (license terms in the root directory or at
 #     https://opensource.org/licenses/MIT).
@@ -21,9 +21,6 @@ import
 
 export
   helpers, sync_desc, worker_config
-
-when enableTicker:
-  import ./worker/start_stop/ticker
 
 type
   BnRangeSet* = IntervalSetRef[BlockNumber,uint64]
@@ -126,8 +123,10 @@ type
 
   BeaconBuddyData* = object
     ## Local descriptor data extension
-    nHdrRespErrors*: int             ## Number of errors/slow responses in a row
-    nBdyRespErrors*: int             ## Ditto for bodies
+    nHdrRespErrors*: uint8           ## Number of errors/slow responses in a row
+    nHdrProcErrors*: uint8           ## Number of post processing errors
+    nBdyRespErrors*: uint8           ## Ditto for bodies
+    nBdyProcErrors*: uint8
 
     # Debugging and logging.
     nMultiLoop*: int                 ## Number of runs
@@ -140,7 +139,8 @@ type
     syncState*: SyncState            ## Save/resume state descriptor
     hdrSync*: HeaderImportSync       ## Syncing by linked header chains
     blkSync*: BlocksImportSync       ## For importing/executing blocks
-    nextUpdate*: Moment              ## For updating metrics
+    nextMetricsUpdate*: Moment       ## For updating metrics
+    nextAsyncNanoSleep*: Moment      ## Use nano-sleeps for task switch
 
     # Blocks import/execution settings for importing with
     # `nBodiesBatch` blocks in each round (minimum value is
@@ -156,7 +156,7 @@ type
 
     # Debugging stuff
     when enableTicker:
-      ticker*: TickerRef             ## Logger ticker
+      ticker*: RootRef               ## Logger ticker
 
   BeaconBuddyRef* = BuddyRef[BeaconCtxData,BeaconBuddyData]
     ## Extended worker peer descriptor

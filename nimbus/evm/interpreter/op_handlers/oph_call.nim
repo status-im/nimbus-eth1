@@ -21,7 +21,6 @@ import
   ../../../core/eip7702,
   ../../computation,
   ../../memory,
-  ../../precompiles,
   ../../stack,
   ../../types,
   ../gas_costs,
@@ -29,15 +28,16 @@ import
   ../op_codes,
   ../utils/utils_numeric,
   ./oph_defs,
+  ./oph_helpers,
   chronicles,
-  eth/common,
-  eth/common/eth_types,
+  eth/common/addresses,
   stew/assign2,
   stint
 
 when not defined(evmc_enabled):
   import
     ../../state,
+    ../../message,
     ../../../db/ledger
 else:
   import
@@ -68,27 +68,13 @@ proc gasCallEIP2929(c: Computation, address: Address): GasInt =
     if c.host.accessAccount(address) == EVMC_ACCESS_COLD:
       return ColdAccountAccessCost - WarmStorageReadCost
   else:
-    c.vmState.mutateStateDB:
+    c.vmState.mutateLedger:
       if not db.inAccessList(address):
         db.accessList(address)
 
         # The WarmStorageReadCostEIP2929 (100) is already deducted in
         # the form of a constant `gasCall`
         return ColdAccountAccessCost - WarmStorageReadCost
-
-proc delegateResolutionCost(c: Computation, address: Address): GasInt =
-  when evmc_enabled:
-    if c.host.accessAccount(address) == EVMC_ACCESS_COLD:
-      ColdAccountAccessCost
-    else:
-      WarmStorageReadCost
-  else:
-    c.vmState.mutateStateDB:
-      if not db.inAccessList(address):
-        db.accessList(address)
-        return ColdAccountAccessCost
-      else:
-        return WarmStorageReadCost
 
 proc updateStackAndParams(q: var LocalParams; c: Computation) =
   c.stack.lsTop(0)
@@ -216,9 +202,9 @@ else:
     # need to provide explicit <c> and <child> for capturing in chainTo proc()
     # <memPos> and <memLen> are provided by value and need not be captured
     var
-      precompile = getPrecompile(c.fork, childMsg.codeAddress)
+      code = getCallCode(c.vmState, childMsg.codeAddress)
       child = newComputation(
-        c.vmState, false, childMsg, isPrecompile = precompile.isSome(), keepStack = false)
+        c.vmState, keepStack = false, childMsg, code)
 
     c.chainTo(child):
       if not child.shouldBurnGas:

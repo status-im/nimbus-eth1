@@ -31,7 +31,7 @@ method getForkConfig*(cs: NonZeroPreMergeFork): ChainConfig =
 
   # Merge fork & pre-merge happen at block 1
   forkConfig.londonBlock = Opt.some(1'u64)
-  forkConfig.mergeForkBlock = Opt.some(1'u64)
+  forkConfig.mergeNetsplitBlock = Opt.some(1'u64)
 
   # Post-merge fork happens at block 2
   let mainFork = BaseSpec(cs).getMainFork()

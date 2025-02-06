@@ -1,5 +1,5 @@
 # Fluffy
-# Copyright (c) 2021-2024 Status Research & Development GmbH
+# Copyright (c) 2021-2025 Status Research & Development GmbH
 # Licensed and distributed under either of
 #   * MIT license (license terms in the root directory or at https://opensource.org/licenses/MIT).
 #   * Apache v2 license (license terms in the root directory or at https://www.apache.org/licenses/LICENSE-2.0).
@@ -17,10 +17,9 @@ import
   ../../common/common_types,
   ../../database/content_db,
   ../../network_metadata,
-  ../wire/[portal_protocol, portal_stream, portal_protocol_config],
+  ../wire/[portal_protocol, portal_stream, portal_protocol_config, ping_extensions],
   "."/[history_content, history_validation, history_type_conversions],
-  ../beacon/beacon_chain_historical_roots,
-  ./content/content_deprecated
+  ../beacon/beacon_chain_historical_roots
 
 from eth/common/eth_types_rlp import rlpHash
 from eth/common/accounts import EMPTY_ROOT_HASH
@@ -29,6 +28,8 @@ logScope:
   topics = "portal_hist"
 
 export blocks_rlp
+
+const pingExtensionCapabilities = {CapabilitiesType, HistoryRadiusType}
 
 type
   HistoryNetwork* = ref object
@@ -142,11 +143,12 @@ proc getVerifiedBlockHeader*(
   for i in 0 ..< (1 + n.contentRequestRetries):
     let
       headerContent = (await n.portalProtocol.contentLookup(contentKey, contentId)).valueOr:
-        warn "Failed fetching block header with proof from the network"
+        debug "Failed fetching block header with proof from the network"
         return Opt.none(Header)
 
       header = validateCanonicalHeaderBytes(headerContent.content, id, n.accumulator).valueOr:
-        warn "Validation of block header failed", error = error
+        warn "Validation of block header failed",
+          error = error, node = headerContent.receivedFrom.record.toURI()
         continue
 
     debug "Fetched valid block header from the network"
@@ -186,11 +188,12 @@ proc getBlockBody*(
   for i in 0 ..< (1 + n.contentRequestRetries):
     let
       bodyContent = (await n.portalProtocol.contentLookup(contentKey, contentId)).valueOr:
-        warn "Failed fetching block body from the network"
+        debug "Failed fetching block body from the network"
         return Opt.none(BlockBody)
 
       body = validateBlockBodyBytes(bodyContent.content, header).valueOr:
-        warn "Validation of block body failed", error
+        warn "Validation of block body failed",
+          error, node = bodyContent.receivedFrom.record.toURI()
         continue
 
     debug "Fetched block body from the network"
@@ -217,7 +220,7 @@ proc getBlock*(
   # also the original type into the network.
   let
     header = (await n.getVerifiedBlockHeader(id)).valueOr:
-      warn "Failed to get header when getting block", id
+      debug "Failed to get header when getting block", id
       return Opt.none(Block)
     hash =
       when id is Hash32:
@@ -225,7 +228,7 @@ proc getBlock*(
       else:
         header.rlpHash()
     body = (await n.getBlockBody(hash, header)).valueOr:
-      warn "Failed to get body when getting block", hash
+      debug "Failed to get body when getting block", hash
       return Opt.none(Block)
 
   Opt.some((header, body))
@@ -261,10 +264,11 @@ proc getReceipts*(
   for i in 0 ..< (1 + n.contentRequestRetries):
     let
       receiptsContent = (await n.portalProtocol.contentLookup(contentKey, contentId)).valueOr:
-        warn "Failed fetching receipts from the network"
+        debug "Failed fetching receipts from the network"
         return Opt.none(seq[Receipt])
       receipts = validateReceiptsBytes(receiptsContent.content, header.receiptsRoot).valueOr:
-        warn "Validation of receipts failed", error
+        warn "Validation of receipts failed",
+          error, node = receiptsContent.receivedFrom.record.toURI()
         continue
 
     debug "Fetched receipts from the network"
@@ -318,6 +322,8 @@ proc validateContent(
       return err("Failed validating block header: " & error)
 
     ok()
+  of ephemeralBlockHeader:
+    err("Ephemeral block headers are not yet supported")
 
 proc new*(
     T: type HistoryNetwork,
@@ -347,6 +353,7 @@ proc new*(
       stream,
       bootstrapRecords,
       config = portalConfig,
+      pingExtensionCapabilities = pingExtensionCapabilities,
     )
 
   HistoryNetwork(
@@ -418,7 +425,6 @@ proc start*(n: HistoryNetwork) =
 
   n.processContentLoop = processContentLoop(n)
   n.statusLogLoop = statusLogLoop(n)
-  pruneDeprecatedAccumulatorRecords(n.accumulator, n.contentDB)
 
 proc stop*(n: HistoryNetwork) {.async: (raises: []).} =
   info "Stopping Portal execution history network"

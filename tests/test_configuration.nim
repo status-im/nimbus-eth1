@@ -46,12 +46,12 @@ proc configurationMain*() =
       let ff = makeConfig(@["--chaindb:ariPrune"])
       check ff.chainDbMode == ChainDbMode.AriPrune
 
-    test "import":
+    test "import-rlp":
       let aa = makeTestConfig()
       check aa.cmd == NimbusCmd.noCommand
 
-      let bb = makeConfig(@["import", genesisFile])
-      check bb.cmd == NimbusCmd.`import`
+      let bb = makeConfig(@["import-rlp", genesisFile])
+      check bb.cmd == NimbusCmd.`import-rlp`
       check bb.blocksFile[0].string == genesisFile
 
     test "custom-network loading config file with no genesis data":

@@ -27,7 +27,6 @@ logScope:
 
 proc runVM(
     c: VmCpt,
-    shouldPrepareTracer: bool,
     fork: static EVMFork,
     tracingEnabled: static bool,
 ): EvmResultVoid =
@@ -35,17 +34,8 @@ proc runVM(
   ## this function is instantiated so that selection of fork-specific
   ## versions of functions happens only once
 
-  # It's important not to re-prepare the tracer after
-  # an async operation, only after a call/create.
-  #
-  # That is, tracingEnabled is checked in many places, and
-  # indicates something like, "Do we want tracing to be
-  # enabled?", whereas shouldPrepareTracer is more like,
-  # "Are we at a spot right now where we want to re-initialize
-  # the tracer?"
   when tracingEnabled:
-    if shouldPrepareTracer:
-      c.prepareTracer()
+    c.prepareTracer()
 
   while true:
     {.computedGoto.}
@@ -55,7 +45,7 @@ proc runVM(
 
   ok()
 
-macro selectVM(v: VmCpt, shouldPrepareTracer: bool, fork: EVMFork, tracingEnabled: bool): EvmResultVoid =
+macro selectVM(v: VmCpt, fork: EVMFork, tracingEnabled: bool): EvmResultVoid =
   # Generate opcode dispatcher that calls selectVM with a literal for each fork:
   #
   # case fork
@@ -69,8 +59,8 @@ macro selectVM(v: VmCpt, shouldPrepareTracer: bool, fork: EVMFork, tracingEnable
         `fork`
       call = quote:
         case `tracingEnabled`
-        of false: runVM(`v`, `shouldPrepareTracer`, `forkVal`, `false`)
-        of true: runVM(`v`, `shouldPrepareTracer`, `forkVal`, `true`)
+        of false: runVM(`v`, `fork`, false)
+        of true: runVM(`v`, `fork`, true)
 
     caseStmt.add nnkOfBranch.newTree(forkVal, call)
   caseStmt
@@ -78,7 +68,7 @@ macro selectVM(v: VmCpt, shouldPrepareTracer: bool, fork: EVMFork, tracingEnable
 proc beforeExecCall(c: Computation) =
   c.snapshot()
   if c.msg.kind == EVMC_CALL:
-    c.vmState.mutateStateDB:
+    c.vmState.mutateLedger:
       db.subBalance(c.msg.sender, c.msg.value)
       db.addBalance(c.msg.contractAddress, c.msg.value)
 
@@ -90,7 +80,7 @@ proc afterExecCall(c: Computation) =
   if c.isError or c.fork >= FkByzantium:
     if c.msg.contractAddress == RIPEMD_ADDR:
       # Special case to account for geth+parity bug
-      c.vmState.stateDB.ripemdSpecial()
+      c.vmState.ledger.ripemdSpecial()
 
   if c.isSuccess:
     c.commit()
@@ -98,7 +88,7 @@ proc afterExecCall(c: Computation) =
     c.rollback()
 
 proc beforeExecCreate(c: Computation): bool =
-  c.vmState.mutateStateDB:
+  c.vmState.mutateLedger:
     let nonce = db.getNonce(c.msg.sender)
     if nonce + 1 < nonce:
       let sender = c.msg.sender.toHex
@@ -116,13 +106,13 @@ proc beforeExecCreate(c: Computation): bool =
 
   c.snapshot()
 
-  if c.vmState.readOnlyStateDB().contractCollision(c.msg.contractAddress):
+  if c.vmState.readOnlyLedger().contractCollision(c.msg.contractAddress):
     let blurb = c.msg.contractAddress.toHex
     c.setError("Address collision when creating contract address=" & blurb, true)
     c.rollback()
     return true
 
-  c.vmState.mutateStateDB:
+  c.vmState.mutateLedger:
     db.subBalance(c.msg.sender, c.msg.value)
     db.addBalance(c.msg.contractAddress, c.msg.value)
     db.clearStorage(c.msg.contractAddress)
@@ -193,43 +183,38 @@ template handleEvmError(x: EvmErrorObj) =
     depth = $(c.msg.depth + 1) # plus one to match tracer depth, and avoid confusion
   c.setError("Opcode Dispatch Error: " & msg & ", depth=" & depth, true)
 
-proc executeOpcodes*(c: Computation, shouldPrepareTracer: bool = true) =
+proc executeOpcodes*(c: Computation) =
   let fork = c.fork
 
   block blockOne:
-    if c.continuation.isNil:
+    let cont = c.continuation
+    if cont.isNil:
       let precompile = c.fork.getPrecompile(c.msg.codeAddress)
       if precompile.isSome:
         c.execPrecompile(precompile[])
         break blockOne
-
-    let cont = c.continuation
-    if not cont.isNil:
+    else:
       c.continuation = nil
       cont().isOkOr:
         handleEvmError(error)
         break blockOne
 
-    let nextCont = c.continuation
-    if not nextCont.isNil:
-      # Return up to the caller, which will run the child
-      # and then call this proc again.
-      break blockOne
+      let nextCont = c.continuation
+      if not nextCont.isNil:
+        # Return up to the caller, which will run the child
+        # and then call this proc again.
+        break blockOne
 
-    # FIXME-Adam: I hate how convoluted this is. See also the comment in
-    # op_dispatcher.nim. The idea here is that we need to call
-    # traceOpCodeEnded at the end of the opcode (and only if there
-    # hasn't been an exception thrown); otherwise we run into problems
-    # if an exception (e.g. out of gas) is thrown during a continuation.
-    # So this code says, "If we've just run a continuation, but there's
-    # no *subsequent* continuation, then the opcode is done."
-    if c.tracingEnabled and not (cont.isNil) and nextCont.isNil:
-      c.traceOpCodeEnded(c.instr, c.opIndex)
+      # traceOpCodeEnded is normally called directly after opcode execution
+      # but in the case that a continuation is created, it must run after that
+      # continuation has finished
+      if c.tracingEnabled:
+        c.traceOpCodeEnded(c.instr, c.opIndex)
 
     if c.instr == Return or c.instr == Revert or c.instr == SelfDestruct:
       break blockOne
 
-    c.selectVM(shouldPrepareTracer, fork, c.tracingEnabled).isOkOr:
+    c.selectVM(fork, c.tracingEnabled).isOkOr:
       handleEvmError(error)
       break blockOne # this break is not needed but make the flow clear
 
@@ -256,29 +241,36 @@ when vm_use_recursion:
 
 else:
   proc execCallOrCreate*(cParam: Computation) =
-    var (c, before, shouldPrepareTracer) = (cParam, true, true)
+    var (c, before) = (cParam, true)
 
     # No actual recursion, but simulate recursion including before/after/dispose.
     while true:
       while true:
         if before and c.beforeExec():
           break
-        c.executeOpcodes(shouldPrepareTracer)
+        c.executeOpcodes()
         if c.continuation.isNil:
           c.afterExec()
           break
-        (before, shouldPrepareTracer, c.child, c, c.parent) =
-          (true, true, nil.Computation, c.child, c)
+        (before, c.child, c, c.parent) =
+          (true, nil.Computation, c.child, c)
       if c.parent.isNil:
         break
       c.dispose()
-      (before, shouldPrepareTracer, c.parent, c) =
-        (false, true, nil.Computation, c.parent)
+      (before, c.parent, c) =
+        (false, nil.Computation, c.parent)
 
     while not c.isNil:
       c.dispose()
       c = c.parent
 
+proc postExecComputation*(c: Computation) =
+  if c.isSuccess:
+    if c.fork < FkLondon:
+      # EIP-3529: Reduction in refunds
+      c.refundSelfDestruct()
+  c.vmState.status = c.isSuccess
+  
 # ------------------------------------------------------------------------------
 # End
 # ------------------------------------------------------------------------------

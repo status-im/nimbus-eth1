@@ -1,5 +1,5 @@
 # Nimbus
-# Copyright (c) 2023-2024 Status Research & Development GmbH
+# Copyright (c) 2023-2025 Status Research & Development GmbH
 # Licensed and distributed under either of
 #   * MIT license (license terms in the root directory or at
 #     https://opensource.org/licenses/MIT).
@@ -19,47 +19,27 @@ import
   ./headers_staged/staged_queue,
   "."/[blocks_unproc, db, headers_unproc, update]
 
-when enableTicker:
-  import ./start_stop/ticker
-
 # ------------------------------------------------------------------------------
 # Private functions
 # ------------------------------------------------------------------------------
 
-when enableTicker:
-  proc tickerUpdater(ctx: BeaconCtxRef): TickerStatsUpdater =
-    ## Legacy stuff, will be probably be superseded by `metrics`
-    return proc: auto =
-      TickerStats(
-        base:            ctx.chain.baseNumber(),
-        latest:          ctx.chain.latestNumber(),
-        coupler:         ctx.layout.coupler,
-        dangling:        ctx.layout.dangling,
-        head:            ctx.layout.head,
-        headOk:          ctx.layout.lastState != idleSyncState,
-        target:          ctx.target.consHead.number,
-        targetOk:        ctx.target.final != 0,
-
-        nHdrStaged:      ctx.headersStagedQueueLen(),
-        hdrStagedTop:    ctx.headersStagedQueueTopKey(),
-        hdrUnprocTop:    ctx.headersUnprocTop(),
-        nHdrUnprocessed: ctx.headersUnprocTotal() + ctx.headersUnprocBorrowed(),
-        nHdrUnprocFragm: ctx.headersUnprocChunks(),
-
-        nBlkStaged:      ctx.blocksStagedQueueLen(),
-        blkStagedBottom: ctx.blocksStagedQueueBottomKey(),
-        blkUnprocBottom: ctx.blocksUnprocBottom(),
-        nBlkUnprocessed: ctx.blocksUnprocTotal() + ctx.blocksUnprocBorrowed(),
-        nBlkUnprocFragm: ctx.blocksUnprocChunks(),
-
-        reorg:           ctx.pool.nReorg,
-        nBuddies:        ctx.pool.nBuddies)
-
+proc queryProgressCB(
+    ctx: BeaconCtxRef;
+    info: static[string];
+      ): BeaconSyncerProgressCB =
+  ## Syncer status query function/closure.
+  return proc(): tuple[start, current, target: BlockNumber] =
+    if not ctx.hibernate():
+      return (ctx.layout.coupler,
+              max(ctx.layout.coupler,
+                  min(ctx.chain.latestNumber(), ctx.layout.head)),
+              ctx.layout.head)
+    # (0,0,0)
 
 proc updateBeaconHeaderCB(
     ctx: BeaconCtxRef;
     info: static[string];
-      ): ReqBeaconSyncTargetCB =
+      ): ReqBeaconSyncerTargetCB =
   ## Update beacon header. This function is intended as a call back function
   ## for the RPC module.
   return proc(h: Header; f: Hash32) {.gcsafe, raises: [].} =
@@ -92,22 +72,6 @@ proc updateBeaconHeaderCB(
 # Public functions
 # ------------------------------------------------------------------------------
 
-when enableTicker:
-  proc setupTicker*(ctx: BeaconCtxRef) =
-    ## Helper for `setup()`: Start ticker
-    ctx.pool.ticker = TickerRef.init(ctx.tickerUpdater)
-
-  proc destroyTicker*(ctx: BeaconCtxRef) =
-    ## Helper for `release()`
-    ctx.pool.ticker.destroy()
-    ctx.pool.ticker = TickerRef(nil)
-
-else:
-  template setupTicker*(ctx: BeaconCtxRef) = discard
-  template destroyTicker*(ctx: BeaconCtxRef) = discard
-
-# ---------
-
 proc setupDatabase*(ctx: BeaconCtxRef; info: static[string]) =
   ## Initalise database related stuff
 
@@ -139,13 +103,17 @@ proc setupDatabase*(ctx: BeaconCtxRef; info: static[string]) =
     ctx.pool.blocksStagedQuLenMax = blocksStagedQueueLenMaxDefault
 
 
-proc setupRpcMagic*(ctx: BeaconCtxRef; info: static[string]) =
-  ## Helper for `setup()`: Enable external pivot update via RPC
-  ctx.pool.chain.com.reqBeaconSyncTarget = ctx.updateBeaconHeaderCB info
+proc setupServices*(ctx: BeaconCtxRef; info: static[string]) =
+  ## Helper for `setup()`: Enable external call-back based services
+  # Activate target request. Will be called from RPC handler.
+  ctx.pool.chain.com.reqBeaconSyncerTarget = ctx.updateBeaconHeaderCB info
+  # Provide progress info
+  ctx.pool.chain.com.beaconSyncerProgress = ctx.queryProgressCB info
 
-proc destroyRpcMagic*(ctx: BeaconCtxRef) =
+proc destroyServices*(ctx: BeaconCtxRef) =
   ## Helper for `release()`
-  ctx.pool.chain.com.reqBeaconSyncTarget = ReqBeaconSyncTargetCB(nil)
+  ctx.pool.chain.com.reqBeaconSyncerTarget = ReqBeaconSyncerTargetCB(nil)
+  ctx.pool.chain.com.beaconSyncerProgress = BeaconSyncerProgressCB(nil)
 
 # ---------
 
@@ -155,11 +123,12 @@ proc startBuddy*(buddy: BeaconBuddyRef): bool =
     ctx = buddy.ctx
     peer = buddy.peer
   if peer.supports(protocol.eth) and peer.state(protocol.eth).initialized:
-    ctx.pool.nBuddies.inc # for metrics
+    ctx.pool.nBuddies.inc
     return true
 
 proc stopBuddy*(buddy: BeaconBuddyRef) =
-  buddy.ctx.pool.nBuddies.dec # for metrics
+  let ctx = buddy.ctx
+  ctx.pool.nBuddies.dec
 
 # ------------------------------------------------------------------------------
 # End

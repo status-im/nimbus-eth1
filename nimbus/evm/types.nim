@@ -58,7 +58,7 @@ type
 
   BaseVMState* = ref object of RootObj
     com*              : CommonRef
-    stateDB*          : LedgerRef
+    ledger*           : LedgerRef
     gasPool*          : GasInt
     parent*           : Header
     blockCtx*         : BlockContext
@@ -71,6 +71,7 @@ type
     gasCosts*         : GasCosts
     blobGasUsed*      : uint64
     allLogs*          : seq[Log] # EIP-6110
+    gasRefunded*      : int64    # Global gasRefunded counter
 
   Computation* = ref object
     # The execution computation
@@ -93,7 +94,6 @@ type
     else:
       parent*, child*:      Computation
     continuation*:          proc(): EvmResultVoid {.gcsafe, raises: [].}
-    sysCall*:               bool
     keepStack*:             bool
     finalStack*:            seq[UInt256]
 

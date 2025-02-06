@@ -1,5 +1,5 @@
 # Nimbus
-# Copyright (c) 2018-2024 Status Research & Development GmbH
+# Copyright (c) 2018-2025 Status Research & Development GmbH
 # Licensed under either of
 #  * Apache License, version 2.0, ([LICENSE-APACHE](LICENSE-APACHE) or http://www.apache.org/licenses/LICENSE-2.0)
 #  * MIT license ([LICENSE-MIT](LICENSE-MIT) or http://opensource.org/licenses/MIT)
@@ -18,7 +18,6 @@ cliBuilder:
           ./test_rpc,
           ./test_generalstate_json,
           ./test_tracer_json,
-          #./test_persistblock_json,               -- fails
           ./test_filters,
           ./test_op_arith,
           ./test_op_bit,
@@ -34,8 +33,7 @@ cliBuilder:
           ./test_multi_keys,
           #./test_graphql,                         -- fails
           ./test_configuration,
-          #./test_txpool,                          -- fails
-          ./test_txpool2,
+          ./test_txpool,
           ./test_engine_api,
           ./test_getproof_json,
           ./test_aristo,

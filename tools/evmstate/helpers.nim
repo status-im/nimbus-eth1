@@ -177,15 +177,15 @@ proc parseTx*(txData, index: JsonNode): Transaction =
     valIndex  = index["value"].getInt
   parseTx(txData, dataIndex, gasIndex, valIndex)
 
-proc setupStateDB*(wantedState: JsonNode, stateDB: LedgerRef) =
+proc setupLedger*(wantedState: JsonNode, ledger: LedgerRef) =
   for ac, accountData in wantedState:
     let account = Address.fromHex(ac)
     for slot, value in accountData{"storage"}:
-      stateDB.setStorage(account, fromHex(UInt256, slot), fromHex(UInt256, value.getStr))
+      ledger.setStorage(account, fromHex(UInt256, slot), fromHex(UInt256, value.getStr))
 
-    stateDB.setNonce(account, fromJson(AccountNonce, accountData["nonce"]))
-    stateDB.setCode(account, fromJson(seq[byte], accountData["code"]))
-    stateDB.setBalance(account, fromJson(UInt256, accountData["balance"]))
+    ledger.setNonce(account, fromJson(AccountNonce, accountData["nonce"]))
+    ledger.setCode(account, fromJson(seq[byte], accountData["code"]))
+    ledger.setBalance(account, fromJson(UInt256, accountData["balance"]))
 
 iterator postState*(node: JsonNode): (Address, GenesisAccount) =
   for ac, accountData in node:

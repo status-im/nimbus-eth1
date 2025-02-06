@@ -15,7 +15,6 @@
 {.push raises: [].}
 
 import
-  eth/common,
   ../../computation,
   ../../stack,
   ../../evm_errors,

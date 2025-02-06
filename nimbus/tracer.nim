@@ -57,10 +57,14 @@ proc init(
     root: common.Hash32;
       ): T =
   let ctx = block:
-    let rc = com.db.ctx.newCtxByKey(root)
-    if rc.isErr:
-      raiseAssert "newCptCtx: " & $$rc.error
-    rc.value
+    when false:
+      let rc = com.db.ctx.newCtxByKey(root)
+      if rc.isErr:
+        raiseAssert "newCptCtx: " & $$rc.error
+      rc.value
+    else:
+      {.warning: "TODO make a temporary context? newCtxByKey has been obsoleted".}
+      com.db.ctx
   T(db: com.db, root: root, cpt: com.db.pushCapture(), ctx: ctx)
 
 proc init(
@@ -75,14 +79,18 @@ proc activate(cc: CaptCtxRef): CaptCtxRef {.discardable.} =
   ## Install/activate new context `cc.ctx`, old one in `cc.restore`
   doAssert not cc.isNil
   doAssert cc.restore.isNil # otherwise activated, already
-  cc.restore = cc.ctx.swapCtx cc.db
+  if true:
+    raiseAssert "TODO activte context"
+  # cc.restore = cc.ctx.swapCtx cc.db
   cc
 
 proc release(cc: CaptCtxRef) =
-  if not cc.restore.isNil:             # switch to original context (if any)
-    let ctx = cc.restore.swapCtx(cc.db)
-    doAssert ctx == cc.ctx
-  cc.ctx.forget()                      # dispose
+  # if not cc.restore.isNil:             # switch to original context (if any)
+  #   let ctx = cc.restore.swapCtx(cc.db)
+  #   doAssert ctx == cc.ctx
+  if true:
+    raiseAssert "TODO release context"
+  # cc.ctx.forget()                      # dispose
   cc.cpt.pop()                         # discard top layer of actions tracer
 
 # -------------------
@@ -161,7 +169,7 @@ proc traceTransactionImpl(
     tracerInst = newLegacyTracer(tracerFlags)
     cc = activate CaptCtxRef.init(com, header)
     vmState = BaseVMState.new(header, com, storeSlotHash = true).valueOr: return newJNull()
-    stateDb = vmState.stateDB
+    ledger = vmState.ledger
 
   defer: cc.release()
 
@@ -184,25 +192,25 @@ proc traceTransactionImpl(
 
     if idx.uint64 == txIndex:
       vmState.tracer = tracerInst # only enable tracer on target tx
-      before.captureAccount(stateDb, sender, senderName)
-      before.captureAccount(stateDb, recipient, recipientName)
-      before.captureAccount(stateDb, miner, minerName)
-      stateDb.persist()
-      stateDiff["beforeRoot"] = %(stateDb.getStateRoot().toHex)
+      before.captureAccount(ledger, sender, senderName)
+      before.captureAccount(ledger, recipient, recipientName)
+      before.captureAccount(ledger, miner, minerName)
+      ledger.persist()
+      stateDiff["beforeRoot"] = %(ledger.getStateRoot().toHex)
       discard com.db.ctx.getAccounts.getStateRoot() # lazy hashing!
-      stateCtx = CaptCtxRef.init(com, stateDb.getStateRoot())
+      stateCtx = CaptCtxRef.init(com, ledger.getStateRoot())
 
     let rc = vmState.processTransaction(tx, sender, header)
     gasUsed = if rc.isOk: rc.value else: 0
 
     if idx.uint64 == txIndex:
       discard com.db.ctx.getAccounts.getStateRoot() # lazy hashing!
-      after.captureAccount(stateDb, sender, senderName)
-      after.captureAccount(stateDb, recipient, recipientName)
-      after.captureAccount(stateDb, miner, minerName)
+      after.captureAccount(ledger, sender, senderName)
+      after.captureAccount(ledger, recipient, recipientName)
+      after.captureAccount(ledger, miner, minerName)
       tracerInst.removeTracedAccounts(sender, recipient, miner)
-      stateDb.persist()
-      stateDiff["afterRoot"] = %(stateDb.getStateRoot().toHex)
+      ledger.persist()
+      stateDiff["afterRoot"] = %(ledger.getStateRoot().toHex)
       break
 
   # internal transactions:
@@ -215,7 +223,7 @@ proc traceTransactionImpl(
     before.captureAccount(ldgBefore, acc, internalTxName & $idx)
 
   for idx, acc in tracedAccountsPairs(tracerInst):
-    after.captureAccount(stateDb, acc, internalTxName & $idx)
+    after.captureAccount(ledger, acc, internalTxName & $idx)
 
   result = tracerInst.getTracingResult()
   result["gas"] = %gasUsed
@@ -265,7 +273,7 @@ proc dumpBlockStateImpl(
 
   discard vmState.processBlock(blk)
 
-  var stateAfter = vmState.stateDB
+  var stateAfter = vmState.ledger
 
   for idx, tx in blk.transactions:
     let sender = tx.recoverSender().expect("valid signature")

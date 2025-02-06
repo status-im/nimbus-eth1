@@ -19,9 +19,7 @@ import
   ../../evm_errors,
   ../../types,
   ../gas_costs,
-  eth/common,
-  eth/common/eth_types,
-  stint
+  eth/common/[addresses, base]
 
 when defined(evmc_enabled):
   import
@@ -44,7 +42,7 @@ proc gasEip2929AccountCheck*(c: Computation; address: Address): GasInt =
              else:
                WarmStorageReadCost
   else:
-    c.vmState.mutateStateDB:
+    c.vmState.mutateLedger:
       result = if not db.inAccessList(address):
                  db.accessList(address)
                  ColdAccountAccessCost
@@ -58,7 +56,7 @@ proc gasEip2929AccountCheck*(c: Computation; address: Address, slot: UInt256): G
              else:
                WarmStorageReadCost
   else:
-    c.vmState.mutateStateDB:
+    c.vmState.mutateLedger:
       result = if not db.inAccessList(address, slot):
                  db.accessList(address, slot)
                  ColdSloadCost
@@ -74,14 +72,28 @@ func checkInStaticContext*(c: Computation): EvmResultVoid =
 
   ok()
 
+proc delegateResolutionCost*(c: Computation, address: Address): GasInt =
+  when defined(evmc_enabled):
+    if c.host.accessAccount(address) == EVMC_ACCESS_COLD:
+      ColdAccountAccessCost
+    else:
+      WarmStorageReadCost
+  else:
+    c.vmState.mutateLedger:
+      if not db.inAccessList(address):
+        db.accessList(address)
+        return ColdAccountAccessCost
+      else:
+        return WarmStorageReadCost
+
 proc gasEip7702CodeCheck*(c: Computation; address: Address): GasInt =
   let code = when defined(evmc_enabled):
                CodeBytesRef.init(c.host.copyCode(address))
              else:
-               c.vmState.readOnlyStateDB.getCode(address)
+               c.vmState.readOnlyLedger.getCode(address)
   let delegateTo = parseDelegationAddress(code).valueOr:
     return 0
-  c.gasEip2929AccountCheck(delegateTo)
+  c.delegateResolutionCost(delegateTo)
 
 # ------------------------------------------------------------------------------
 # End

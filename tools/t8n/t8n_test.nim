@@ -112,6 +112,8 @@ proc cmp(jsc: var JsonComparator; a, b: JsonNode, path: string): bool =
     of JNull:
       result = true
     of JArray:
+      if a.len != b.len:
+        jsc.exit("ARRAY A.len($1) != B.len($2)" % [$a.len, $b.len])
       for i, x in a.elems:
         if not jsc.cmp(x, b.elems[i], path & "/" & $i):
           return false
@@ -660,6 +662,33 @@ const
       base: "testdata/33",
       input: t8nInput(
         "alloc.json", "txs.json", "env.json", "Prague", "",
+      ),
+      output: T8nOutput(alloc: true, result: true),
+      expOut: "exp.json",
+    ),
+    TestSpec(
+      name: "Mekong test, EIP-7702 gasRefunded",
+      base: "testdata/00-526",
+      input: t8nInput(
+        "alloc.json", "txs.rlp", "env.json", "Prague", "", "7078815900"
+      ),
+      output: T8nOutput(alloc: true, result: true),
+      expOut: "exp.json",
+    ),
+    TestSpec(
+      name: "Mekong test, EIP-7702 gasRefunded when computation fails",
+      base: "testdata/00-527",
+      input: t8nInput(
+        "alloc.json", "txs.rlp", "env.json", "Prague", "", "7078815900"
+      ),
+      output: T8nOutput(alloc: true, result: true),
+      expOut: "exp.json",
+    ),
+    TestSpec(
+      name: "Blake2b precompiles regression, holesky 2.406.802 # 11",
+      base: "testdata/00-528",
+      input: t8nInput(
+        "alloc.json", "txs.rlp", "env.json", "Cancun", "", "17000"
       ),
       output: T8nOutput(alloc: true, result: true),
       expOut: "exp.json",

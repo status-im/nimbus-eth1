@@ -1,5 +1,5 @@
 # Nimbus
-# Copyright (c) 2023-2024 Status Research & Development GmbH
+# Copyright (c) 2023-2025 Status Research & Development GmbH
 # Licensed and distributed under either of
 #   * MIT license (license terms in the root directory or at
 #     https://opensource.org/licenses/MIT).
@@ -15,6 +15,7 @@ import
   pkg/eth/[common, p2p],
   pkg/stew/[interval_set, sorted_set],
   ../../common,
+  ./worker/update/[metrics, ticker],
   ./worker/[blocks_staged, headers_staged, headers_unproc, start_stop, update],
   ./worker_desc
 
@@ -46,6 +47,7 @@ proc napUnlessSomethingToFetch(
       buddy.ctrl.zombie = true
     return true
   else:
+    # Returning `false` => no need to check for shutdown
     return false
 
 # ------------------------------------------------------------------------------
@@ -54,19 +56,15 @@ proc napUnlessSomethingToFetch(
 
 proc setup*(ctx: BeaconCtxRef; info: static[string]): bool =
   ## Global set up
-  ctx.setupRpcMagic info
+  ctx.setupServices info
 
   # Load initial state from database if there is any
   ctx.setupDatabase info
-
-  # Debugging stuff, might be an empty template
-  ctx.setupTicker()
   true
 
 proc release*(ctx: BeaconCtxRef; info: static[string]) =
   ## Global clean up
-  ctx.destroyRpcMagic()
-  ctx.destroyTicker()
+  ctx.destroyServices()
 
 
 proc start*(buddy: BeaconBuddyRef; info: static[string]): bool =
@@ -87,7 +85,7 @@ proc start*(buddy: BeaconBuddyRef; info: static[string]): bool =
 proc stop*(buddy: BeaconBuddyRef; info: static[string]) =
   ## Clean up this peer
   if not buddy.ctx.hibernate: debug info & ": release peer", peer=buddy.peer,
-    ctrl=buddy.ctrl.state, nInvocations=buddy.only.nMultiLoop,
+    ctrl=buddy.ctrl.state, nLaps=buddy.only.nMultiLoop,
     lastIdleGap=buddy.only.multiRunIdle.toStr
   buddy.stopBuddy()
 
@@ -95,15 +93,18 @@ proc stop*(buddy: BeaconBuddyRef; info: static[string]) =
 # Public functions
 # ------------------------------------------------------------------------------
 
+proc runTicker*(ctx: BeaconCtxRef; info: static[string]) =
+  ## Global background job that is started every few seconds. It is to be
+  ## intended for updating metrics, debug logging etc.
+  ctx.updateMetrics()
+  ctx.updateTicker()
+
 proc runDaemon*(
     ctx: BeaconCtxRef;
     info: static[string];
       ) {.async: (raises: []).} =
   ## Global background job that will be re-started as long as the variable
-  ## `ctx.daemon` is set `true`. If that job was stopped due to re-setting
-  ## `ctx.daemon` to `false`, it will be restarted next after it was reset
-  ## as `true` not before there is some activity on the `runPool()`,
-  ## `runSingle()`, or `runMulti()` functions.
+  ## `ctx.daemon` is set `true`.
   ##
   ## On a fresh start, the flag `ctx.daemon` will not be set `true` before the
   ## first usable request from the CL (via RPC) stumbles in.
@@ -156,6 +157,7 @@ proc runPool*(
   ## Note that this function does not run in `async` mode.
   ##
   buddy.ctx.headersStagedReorg info
+  buddy.ctx.blocksStagedReorg info
   true # stop
 
 

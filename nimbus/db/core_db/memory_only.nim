@@ -11,7 +11,6 @@
 {.push raises: [].}
 
 import
-  eth/common,
   ../aristo,
   ./backend/aristo_db,
   ./base/base_config,
@@ -25,7 +24,6 @@ export
   base,
   base_config,
   base_iterators,
-  common,
   core_apps
 
 # ------------------------------------------------------------------------------

@@ -15,7 +15,7 @@
 
 import
   std/typetraits,
-  eth/common,
+  eth/common/[base, hashes],
   results,
   "."/[aristo_compute, aristo_desc, aristo_get, aristo_layers, aristo_hike]
 
@@ -26,12 +26,9 @@ import
 proc retrieveLeaf(
     db: AristoDbRef;
     root: VertexID;
-    path: openArray[byte];
+    path: Hash32;
       ): Result[VertexRef,AristoError] =
-  if path.len == 0:
-    return err(FetchPathInvalid)
-
-  for step in stepUp(NibblesBuf.fromBytes(path), root, db):
+  for step in stepUp(NibblesBuf.fromBytes(path.data), root, db):
     let vtx = step.valueOr:
       if error in HikeAcceptableStopsNotFound:
         return err(FetchPathNotFound)
@@ -68,7 +65,7 @@ proc retrieveAccountLeaf(
   # Updated payloads are stored in the layers so if we didn't find them there,
   # it must have been in the database
   let
-    leafVtx = db.retrieveLeaf(VertexID(1), accPath.data).valueOr:
+    leafVtx = db.retrieveLeaf(VertexID(1), accPath).valueOr:
       if error == FetchPathNotFound:
         db.accLeaves.put(accPath, nil)
       return err(error)
@@ -83,7 +80,7 @@ proc retrieveMerkleHash(
       ): Result[Hash32,AristoError] =
   let key =
     db.computeKey((root, root)).valueOr:
-      if error == GetVtxNotFound:
+      if error in [GetVtxNotFound, GetKeyNotFound]:
         return ok(EMPTY_ROOT_HASH)
       return err(error)
 
@@ -168,7 +165,7 @@ proc retrieveStoragePayload(
 
   # Updated payloads are stored in the layers so if we didn't find them there,
   # it must have been in the database
-  let leafVtx = db.retrieveLeaf(? db.fetchStorageIdImpl(accPath), stoPath.data).valueOr:
+  let leafVtx = db.retrieveLeaf(? db.fetchStorageIdImpl(accPath), stoPath).valueOr:
     if error == FetchPathNotFound:
       db.stoLeaves.put(mixPath, nil)
     return err(error)

@@ -1,5 +1,5 @@
 # Nimbus
-# Copyright (c) 2024 Status Research & Development GmbH
+# Copyright (c) 2024-2025 Status Research & Development GmbH
 # Licensed under either of
 #  * Apache License, version 2.0, ([LICENSE-APACHE](LICENSE-APACHE))
 #  * MIT license ([LICENSE-MIT](LICENSE-MIT))
@@ -15,7 +15,9 @@ import
   results,
   ../transaction,
   ../common/common,
-  ../core/eip4844
+  ../core/eip4844,
+  ../core/eip7691,
+  ../core/chain/forked_chain
 
 from ./rpc_types import
   Quantity,
@@ -59,16 +61,16 @@ type
     blocks: uint64
 
   Oracle* = ref object
-    com: CommonRef
+    chain: ForkedChainRef
     maxHeaderHistory: uint64
     maxBlockHistory : uint64
     historyCache    : KeyedQueue[CacheKey, ProcessedFees]
 
 {.push gcsafe, raises: [].}
 
-func new*(_: type Oracle, com: CommonRef): Oracle =
+func new*(_: type Oracle, chain: ForkedChainRef): Oracle =
   Oracle(
-    com: com,
+    chain: chain,
     maxHeaderHistory: 1024,
     maxBlockHistory: 1024,
     historyCache: KeyedQueue[CacheKey, ProcessedFees].init(),
@@ -97,13 +99,16 @@ func calcBaseFee(com: CommonRef, bc: BlockContent): UInt256 =
 # the block field filled in, retrieves the block from the backend if not present yet and
 # fills in the rest of the fields.
 proc processBlock(oracle: Oracle, bc: BlockContent, percentiles: openArray[float64]): ProcessedFees =
+  let
+    fork = com.toEVMFork(bc.header)
+    maxBlobGasPerBlock = getMaxBlobGasPerBlock(electra)
   result = ProcessedFees(
     baseFee: bc.header.baseFeePerGas.get(0.u256),
-    blobBaseFee: getBlobBaseFee(bc.header.excessBlobGas.get(0'u64)),
+    blobBaseFee: getBlobBaseFee(bc.header.excessBlobGas.get(0'u64), com, fork),
     nextBaseFee: calcBaseFee(oracle.com, bc),
-    nextBlobBaseFee: getBlobBaseFee(calcExcessBlobGas(bc.header)),
+    nextBlobBaseFee: getBlobBaseFee(calcExcessBlobGas(bc.header, com, fork), com, fork),
     gasUsedRatio: float64(bc.header.gasUsed) / float64(bc.header.gasLimit),
-    blobGasUsedRatio: float64(bc.header.blobGasUsed.get(0'u64)) / float64(MAX_BLOB_GAS_PER_BLOCK)
+    blobGasUsedRatio: float64(bc.header.blobGasUsed.get(0'u64)) / float64(maxBlobGasPerBlock)
   )
 
   if percentiles.len == 0:
@@ -159,10 +164,7 @@ proc processBlock(oracle: Oracle, bc: BlockContent, percentiles: openArray[float
 proc resolveBlockRange(oracle: Oracle, blockId: BlockTag, numBlocks: uint64): Result[BlockRange, string] =
   # Get the chain's current head.
   let
-    headBlock = try:
-                  oracle.com.db.getCanonicalHead()
-                except CatchableError as exc:
-                  return err(exc.msg)
+    headBlock = oracle.chain.latestHeader
     head = headBlock.number
 
   var
@@ -230,8 +232,6 @@ proc getBlockContent(oracle: Oracle,
 
     return ok(bc)
   except RlpError as exc:
-    return err(exc.msg)
-  except BlockNotFound as exc:
     return err(exc.msg)
 
 type

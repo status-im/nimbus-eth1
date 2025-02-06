@@ -105,7 +105,7 @@ proc writeRootHashToStderr(stateRoot: Hash32) =
 
 proc runExecution(ctx: var StateContext, conf: StateConf, pre: JsonNode): StateResult =
   let
-    com     = CommonRef.new(newCoreDbRef DefaultDbMemory, ctx.chainConfig)
+    com     = CommonRef.new(newCoreDbRef DefaultDbMemory, nil, ctx.chainConfig)
     stream  = newFileStream(stderr)
     tracer  = if conf.jsonEnabled:
                 newJsonTracer(stream, ctx.tracerFlags, conf.pretty)
@@ -122,12 +122,12 @@ proc runExecution(ctx: var StateContext, conf: StateConf, pre: JsonNode): StateR
   var gasUsed: GasInt
   let sender = ctx.tx.recoverSender().expect("valid signature")
 
-  vmState.mutateStateDB:
-    setupStateDB(pre, db)
+  vmState.mutateLedger:
+    setupLedger(pre, db)
     db.persist(clearEmptyAccount = false) # settle accounts storage
 
   defer:
-    let stateRoot = vmState.readOnlyStateDB.getStateRoot()
+    let stateRoot = vmState.readOnlyLedger.getStateRoot()
     ctx.verifyResult(vmState, stateRoot)
     result = StateResult(
       name : ctx.name,
@@ -137,7 +137,7 @@ proc runExecution(ctx: var StateContext, conf: StateConf, pre: JsonNode): StateR
       error: ctx.error
     )
     if conf.dumpEnabled:
-      result.state = dumpState(vmState.stateDB)
+      result.state = dumpState(vmState.ledger)
     if conf.jsonEnabled:
       writeRootHashToStderr(stateRoot)
 

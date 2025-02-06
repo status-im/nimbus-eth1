@@ -12,7 +12,7 @@
 
 import
   std/[sequtils, strutils, times, typetraits],
-  eth/common,
+  eth/common/[accounts, base, hashes],
   results,
   stew/byteutils,
   ../../aristo/aristo_profile,
@@ -33,7 +33,6 @@ type
     AccClearStorageFn   = "clearStorage"
     AccDeleteFn         = "acc/delete"
     AccFetchFn          = "acc/fetch"
-    AccForgetFn         = "acc/forget"
     AccHasPathFn        = "acc/hasPath"
     AccMergeFn          = "acc/merge"
     AccProofFn          = "acc/proof"
@@ -53,22 +52,18 @@ type
     BaseFinishFn        = "finish"
     BaseLevelFn         = "level"
     BasePushCaptureFn   = "pushCapture"
-    BaseNewTxFn         = "newTransaction"
+    BaseNewTxFn         = "txFrameBegin"
     BasePersistentFn    = "persistent"
     BaseStateBlockNumberFn = "stateBlockNumber"
     BaseVerifyFn        = "verify"
-    BaseVerifyOkFn      = "verifyOk"
 
     CptKvtLogFn         = "kvtLog"
     CptLevelFn          = "level"
     CptPopFn            = "pop"
     CptStopCaptureFn    = "stopCapture"
 
-    CtxForgetFn         = "ctx/forget"
     CtxGetAccountsFn    = "getAccounts"
     CtxGetGenericFn     = "getGeneric"
-    CtxNewCtxByKeyFn    = "newCtxByKey"
-    CtxSwapCtxFn        = "swapCtx"
 
     KvtDelFn            = "del"
     KvtGetFn            = "get"
@@ -81,7 +76,7 @@ type
 
     TxCommitFn          = "commit"
     TxDisposeFn         = "dispose"
-    TxLevelFn           = "level"
+    TxFrameLevelFn           = "level"
     TxRollbackFn        = "rollback"
     TxSaveDisposeFn     = "safeDispose"
 

@@ -15,6 +15,7 @@
 {.push raises: [].}
 
 import
+  std/sequtils,
   stew/assign2,
   ../../../constants,
   ../../evm_errors,
@@ -26,10 +27,7 @@ import
   ../op_codes,
   ./oph_defs,
   ./oph_gen_handlers,
-  ./oph_helpers,
-  eth/common,
-  sequtils,
-  stint
+  ./oph_helpers
 
 # ------------------------------------------------------------------------------
 # Private, names & settings

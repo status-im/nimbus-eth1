@@ -1,5 +1,5 @@
 # Fluffy
-# Copyright (c) 2022-2024 Status Research & Development GmbH
+# Copyright (c) 2022-2025 Status Research & Development GmbH
 # Licensed and distributed under either of
 #   * MIT license (license terms in the root directory or at https://opensource.org/licenses/MIT).
 #   * Apache v2 license (license terms in the root directory or at https://www.apache.org/licenses/LICENSE-2.0).
@@ -579,7 +579,7 @@ when isMainModule:
 
         let epochRecordRes = readEpochRecordCached(epochRecordFile)
         if epochRecordRes.isErr():
-          error "Could not read epoch record file", error = res.error
+          error "Could not read epoch record file", error = epochRecordRes.error
           quit 1
 
         let epochRecord = epochRecordRes.get()

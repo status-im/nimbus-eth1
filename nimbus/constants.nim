@@ -1,5 +1,5 @@
 # Nimbus
-# Copyright (c) 2018-2024 Status Research & Development GmbH
+# Copyright (c) 2018-2025 Status Research & Development GmbH
 # Licensed under either of
 #  * Apache License, version 2.0, ([LICENSE-APACHE](LICENSE-APACHE) or
 #    http://www.apache.org/licenses/LICENSE-2.0)
@@ -34,22 +34,16 @@ const
 
   BLOCK_REWARD* =                           5.u256 * 2.u256 # denoms.ether
 
-  UNCLE_DEPTH_PENALTY_FACTOR* =             8.u256
-
   MAX_UNCLE_DEPTH* =                        6
   MAX_UNCLES* =                             2
 
-  GENESIS_BLOCK_NUMBER* =                   0.BlockNumber
   GENESIS_DIFFICULTY* =                     131_072.u256
   GENESIS_GAS_LIMIT* =                      3_141_592
   GENESIS_PARENT_HASH* =                    ZERO_HASH32
-  GENESIS_COINBASE* =                       ZERO_ADDRESS
-  GENESIS_NONCE* =                          "\x00\x00\x00\x00\x00\x00\x00B"
-  GENESIS_MIX_HASH* =                       ZERO_HASH32
-  GENESIS_EXTRA_DATA* =                     ""
+
   GAS_LIMIT_MINIMUM* =                      5000
   GAS_LIMIT_MAXIMUM* =                      int64.high.GasInt # Maximum the gas limit (2^63-1).
-  DEFAULT_GAS_LIMIT* =                      8_000_000
+  DEFAULT_GAS_LIMIT* =                      36_000_000
 
   EMPTY_SHA3* =                             hash32"c5d2460186f7233c927e7db2dcc703c0e500b653ca82273b7bfad8045d85a470"
 
@@ -92,9 +86,12 @@ const
   GAS_PER_BLOB* = (1 shl 17).uint64 # 2^17
   TARGET_BLOB_GAS_PER_BLOCK* = 393216
   MIN_BLOB_GASPRICE* = 1'u64
-  BLOB_GASPRICE_UPDATE_FRACTION* = 3338477'u64
   MAX_BLOB_GAS_PER_BLOCK* = 786432
   MAX_BLOBS_PER_BLOCK* = int(MAX_BLOB_GAS_PER_BLOCK div GAS_PER_BLOB)
+
+  MAX_BLOB_GAS_PER_BLOCK_ELECTRA* = 1179648
+  TARGET_BLOB_GAS_PER_BLOCK_ELECTRA* = 786432
+  MAX_BLOBS_PER_BLOCK_ELECTRA* = int(MAX_BLOB_GAS_PER_BLOCK_ELECTRA div GAS_PER_BLOB)
 
   # EIP-4788 addresses
   # BEACON_ROOTS_ADDRESS is the address where historical beacon roots are stored as per EIP-4788
@@ -107,7 +104,7 @@ const
       result.data[19] = x.byte
     initAddress(3)
 
-  HISTORY_STORAGE_ADDRESS* = address"0x0aae40965e6800cd9b1f4b05ff21581047e3f91e"
-  WITHDRAWAL_QUEUE_ADDRESS* = address"0x09Fc772D0857550724b07B850a4323f39112aAaA"
-  CONSOLIDATION_QUEUE_ADDRESS* = address"0x01aBEa29659e5e97C95107F20bb753cD3e09bBBb"
+  HISTORY_STORAGE_ADDRESS* = address"0x0000F90827F1C53a10cb7A02335B175320002935"
+  WITHDRAWAL_REQUEST_PREDEPLOY_ADDRESS* = address"0x00000961Ef480Eb55e80D19ad83579A64c007002"
+  CONSOLIDATION_REQUEST_PREDEPLOY_ADDRESS* = address"0x0000BBdDc7CE488642fb579F8B00f3a590007251"
 # End

@@ -1,5 +1,5 @@
 # Nimbus
-# Copyright (c) 2024 Status Research & Development GmbH
+# Copyright (c) 2024-2025 Status Research & Development GmbH
 # Licensed under either of
 #  * Apache License, version 2.0, ([LICENSE-APACHE](LICENSE-APACHE) or
 #    http://www.apache.org/licenses/LICENSE-2.0)
@@ -18,54 +18,48 @@ import
   ../../evm/types,
   ../../evm/state,
   ../validate,
-  ../executor/process_block
+  ../executor/process_block,
+  ./forked_chain/[chain_desc, chain_kvt]
+
+logScope:
+  topics = "forked chain"
 
 export
+  BlockDesc,
+  ForkedChainRef,
+  chain_kvt,
   common,
   core_db
-
-type
-  CursorDesc = object
-    forkJunction: BlockNumber
-    hash: Hash32
-
-  BlockDesc* = object
-    blk*: Block
-    receipts*: seq[Receipt]
-
-  BaseDesc = object
-    hash: Hash32
-    header: Header
-
-  CanonicalDesc = object
-    cursorHash: Hash32
-    header: Header
-
-  ForkedChainRef* = ref object
-    stagingTx: CoreDbTxRef
-    db: CoreDbRef
-    com: CommonRef
-    blocks: Table[Hash32, BlockDesc]
-    txRecords: Table[Hash32, (Hash32, uint64)]
-    baseHash: Hash32
-    baseHeader: Header
-    cursorHash: Hash32
-    cursorHeader: Header
-    cursorHeads: seq[CursorDesc]
-    extraValidation: bool
-    baseDistance: uint64
 
 const
   BaseDistance = 128
 
 # ------------------------------------------------------------------------------
-# Private
+# Private helpers
 # ------------------------------------------------------------------------------
-template shouldNotKeyError(body: untyped) =
+
+template shouldNotKeyError(info: string, body: untyped) =
   try:
     body
   except KeyError as exc:
-    raiseAssert exc.msg
+    raiseAssert info & ": name=" & $exc.name & " msg=" & exc.msg
+
+proc deleteLineage(c: ForkedChainRef; top: Hash32) =
+  ## Starting at argument `top`, delete all entries from `c.blocks[]` along
+  ## the ancestor chain.
+  ##
+  var parent = top
+  while true:
+    c.blocks.withValue(parent, val):
+      let w = parent
+      parent = val.blk.header.parentHash
+      c.blocks.del(w)
+      continue
+    break
+
+# ------------------------------------------------------------------------------
+# Private functions
+# ------------------------------------------------------------------------------
 
 proc processBlock(c: ForkedChainRef,
                   parent: Header,
@@ -77,7 +71,7 @@ proc processBlock(c: ForkedChainRef,
   vmState.init(parent, header, c.com)
 
   if c.extraValidation:
-    ?c.com.validateHeaderAndKinship(blk, vmState.parent, checkSealOK = false)
+    ?c.com.validateHeaderAndKinship(blk, vmState.parent)
 
   ?vmState.processBlock(
     blk,
@@ -135,17 +129,22 @@ func updateCursor(c: ForkedChainRef,
 
   c.cursorHeader = header
   c.cursorHash = header.blockHash
-  c.blocks[c.cursorHash] = BlockDesc(
-    blk: blk,
-    receipts: move(receipts)
-  )
-  c.updateCursorHeads(c.cursorHash, header)
+
+  c.blocks.withValue(c.cursorHash, val):
+    # Block exists alrady, so update only
+    val.receipts = receipts
+  do:
+    # New block => update head
+    c.blocks[c.cursorHash] = BlockDesc(
+      blk: blk,
+      receipts: move(receipts))
+    c.updateCursorHeads(c.cursorHash, header)
 
 proc validateBlock(c: ForkedChainRef,
           parent: Header,
           blk: Block,
           updateCursor: bool = true): Result[void, string] =
-  let dbTx = c.db.ctx.newTransaction()
+  let dbTx = c.db.ctx.txFrameBegin()
   defer:
     dbTx.dispose()
 
@@ -158,8 +157,9 @@ proc validateBlock(c: ForkedChainRef,
   if updateCursor:
     c.updateCursor(blk, move(res.value))
 
+  let blkHash = blk.header.blockHash
   for i, tx in blk.transactions:
-    c.txRecords[rlpHash(tx)] = (blk.header.blockHash, uint64(i))
+    c.txRecords[rlpHash(tx)] = (blkHash, uint64(i))
 
   ok()
 
@@ -169,13 +169,13 @@ proc replaySegment*(c: ForkedChainRef, target: Hash32) =
     prevHash = target
     chain = newSeq[Block]()
 
-  shouldNotKeyError:
+  shouldNotKeyError "replaySegment(target)":
     while prevHash != c.baseHash:
       chain.add c.blocks[prevHash].blk
       prevHash = chain[^1].header.parentHash
 
   c.stagingTx.rollback()
-  c.stagingTx = c.db.ctx.newTransaction()
+  c.stagingTx = c.db.ctx.txFrameBegin()
   c.cursorHeader = c.baseHeader
   for i in countdown(chain.high, chain.low):
     c.validateBlock(c.cursorHeader, chain[i],
@@ -193,7 +193,7 @@ proc replaySegment(c: ForkedChainRef,
     prevHash = target
     chain = newSeq[Block]()
 
-  shouldNotKeyError:
+  shouldNotKeyError "replaySegment(target,parent)":
     while prevHash != parentHash:
       chain.add c.blocks[prevHash].blk
       prevHash = chain[^1].header.parentHash
@@ -210,7 +210,7 @@ proc writeBaggage(c: ForkedChainRef, target: Hash32) =
   template header(): Header =
     blk.blk.header
 
-  shouldNotKeyError:
+  shouldNotKeyError "writeBaggage":
     var prevHash = target
     var count = 0'u64
     while prevHash != c.baseHash:
@@ -227,129 +227,196 @@ proc writeBaggage(c: ForkedChainRef, target: Hash32) =
       prevHash = header.parentHash
       count.inc
 
-    notice "Finalized blocks persisted",
-      numberOfBlocks = count,
-      last = target.short,
-      baseNumber = c.baseHeader.number,
-      baseHash = c.baseHash.short
+    # Log only if more than one block persisted
+    # This is to avoid log spamming, during normal operation
+    # of the client following the chain
+    # When multiple blocks are persisted together, it's mainly
+    # during `beacon sync` or `nrpc sync`
+    if count > 1:
+      notice "Finalized blocks persisted",
+        numberOfBlocks = count,
+        baseNumber = c.baseHeader.number,
+        baseHash = c.baseHash.short
+    else:
+      debug "Finalized blocks persisted",
+        numberOfBlocks = count,
+        taget = target.short,
+        baseNumber = c.baseHeader.number,
+        baseHash = c.baseHash.short
 
-func updateBase(c: ForkedChainRef,
-                newBaseHash: Hash32,
-                newBaseHeader: Header,
-                canonicalCursorHash: Hash32) =
-  var cursorHeadsLen = c.cursorHeads.len
-  # Remove obsolete chains, example:
-  #     -- A1 - A2 - A3      -- D5 - D6
-  #    /                    /
-  # base - B1 - B2 - [B3] - B4
-  #             \
-  #              --- C3 - C4
-  # If base move to B3, both A and C will be removed
-  # but not D
+func updateBase(c: ForkedChainRef, pvarc: PivotArc) =
+  ## Remove obsolete chains, example:
+  ##
+  ##     A1 - A2 - A3          D5 - D6
+  ##    /                     /
+  ## base - B1 - B2 - [B3] - B4 - B5
+  ##         \          \
+  ##          C2 - C3    E4 - E5
+  ##
+  ## where `B1..B5` is the `pvarc.cursor` arc and `[B5]` is the `pvarc.pv`.
+  #
+  ## The `base` will be moved to position `[B3]`. Both chains `A` and `C`
+  ## will be removed but not so for `D` and `E`, and `pivot` arc `B` will
+  ## be curtailed below `B4`.
+  ##
+  var newCursorHeads: seq[CursorDesc]       # Will become new `c.cursorHeads`
+  for ch in c.cursorHeads:
+    if pvarc.pvNumber < ch.forkJunction:
+      # On the example, this would be any of chain `D` or `E`.
+      newCursorHeads.add ch
 
-  for i in 0..<cursorHeadsLen:
-    if c.cursorHeads[i].forkJunction <= newBaseHeader.number and
-       c.cursorHeads[i].hash != canonicalCursorHash:
-      var prevHash = c.cursorHeads[i].hash
-      while prevHash != c.baseHash:
-        c.blocks.withValue(prevHash, val) do:
-          let rmHash = prevHash
-          prevHash = val.blk.header.parentHash
-          c.blocks.del(rmHash)
-        do:
-          # Older chain segment have been deleted
-          # by previous head
-          break
-      c.cursorHeads.del(i)
-      # If we use `c.cursorHeads.len` in the for loop,
-      # the sequence length will not updated
-      dec cursorHeadsLen
+    elif ch.hash == pvarc.cursor.hash:
+      # On the example, this would be chain `B`.
+      newCursorHeads.add CursorDesc(
+        hash:         ch.hash,
+        forkJunction: pvarc.pvNumber + 1)
+
+    else:
+      # On the example, this would be either chain `A` or `B`.
+      c.deleteLineage ch.hash
 
   # Cleanup in-memory blocks starting from newBase backward
   # while blocks from newBase+1 to canonicalCursor not deleted
   # e.g. B4 onward
-  var prevHash = newBaseHash
-  while prevHash != c.baseHash:
-    c.blocks.withValue(prevHash, val) do:
-      let rmHash = prevHash
-      prevHash = val.blk.header.parentHash
-      c.blocks.del(rmHash)
-    do:
-      # Older chain segment have been deleted
-      # by previous head
-      break
+  c.deleteLineage pvarc.pvHash
 
-  c.baseHeader = newBaseHeader
-  c.baseHash = newBaseHash
+  # Implied deletion of chain heads (if any)
+  c.cursorHeads.swap newCursorHeads
 
-func findCanonicalHead(c: ForkedChainRef,
-                       hash: Hash32): Result[CanonicalDesc, string] =
+  c.baseHeader = pvarc.pvHeader
+  c.baseHash = pvarc.pvHash
+
+func findCursorArc(c: ForkedChainRef, hash: Hash32): Result[PivotArc, string] =
+  ## Find the `cursor` arc that contains the block relative to the
+  ## argument `hash`.
+  ##
   if hash == c.baseHash:
     # The cursorHash here should not be used for next step
     # because it not point to any active chain
-    return ok(CanonicalDesc(cursorHash: c.baseHash, header: c.baseHeader))
+    return ok PivotArc(
+      pvHash:         c.baseHash,
+      pvHeader:       c.baseHeader,
+      cursor: CursorDesc(
+        forkJunction: c.baseHeader.number,
+        hash:         c.baseHash))
 
-  shouldNotKeyError:
-   # Find hash belong to which chain
-   for cursor in c.cursorHeads:
-     var prevHash = cursor.hash
-     while prevHash != c.baseHash:
-       let header = c.blocks[prevHash].blk.header
-       if prevHash == hash:
-         return ok(CanonicalDesc(cursorHash: cursor.hash, header: header))
-       prevHash = header.parentHash
+  for ch in c.cursorHeads:
+    var top = ch.hash
+    while true:
+      c.blocks.withValue(top, val):
+        if ch.forkJunction <= val.blk.header.number:
+          if top == hash:
+            return ok PivotArc(
+              pvHash:   hash,
+              pvHeader: val.blk.header,
+              cursor:   ch)
+          if ch.forkJunction < val.blk.header.number:
+            top = val.blk.header.parentHash
+            continue
+      break
 
   err("Block hash is not part of any active chain")
 
-func canonicalChain(c: ForkedChainRef,
-                    hash: Hash32,
-                    headHash: Hash32): Result[Header, string] =
-  if hash == c.baseHash:
+func findHeader(
+    c: ForkedChainRef;
+    itHash: Hash32;
+    headHash: Hash32;
+      ): Result[Header, string] =
+  ## Find header for argument `itHash` on argument `headHash` ancestor chain.
+  ##
+  if itHash == c.baseHash:
     return ok(c.baseHeader)
 
-  shouldNotKeyError:
-    var prevHash = headHash
-    while prevHash != c.baseHash:
-      var header = c.blocks[prevHash].blk.header
-      if prevHash == hash:
-        return ok(header)
-      prevHash = header.parentHash
+  # Find `pvHash` on the ancestor lineage of `headHash`
+  var prevHash = headHash
+  while true:
+    c.blocks.withValue(prevHash, val):
+      if prevHash == itHash:
+        return ok(val.blk.header)
+      prevHash = val.blk.header.parentHash
+      continue
+    break
 
-  err("Block hash not in canonical chain")
+  err("Block not in argument head ancestor lineage")
 
-func calculateNewBase(c: ForkedChainRef,
-               finalizedHeader: Header,
-               headHash: Hash32,
-               headHeader: Header): BaseDesc =
+func calculateNewBase(
+    c: ForkedChainRef;
+    finalized: BlockNumber;
+    pvarc: PivotArc;
+      ): PivotArc =
+  ## It is required that the `finalized` argument is on the `pvarc` arc, i.e.
+  ## it ranges beween `pvarc.cursor.forkJunction` and
+  ## `c.blocks[pvarc.cursor.head].number`.
+  ##
+  ## The function returns a cursor arc containing a new base position. It is
+  ## calculated as follows.
+  ##
+  ## Starting at the argument `pvarc.pvHead` searching backwards, the new base
+  ## is the position of the block with number `finalized`.
+  ##
+  ## Before searching backwards, the `finalized` argument might be adjusted
+  ## and made smaller so that a minimum distance to the head on the cursor arc
+  ## applies.
+  ##
   # It's important to have base at least `baseDistance` behind head
   # so we can answer state queries about history that deep.
+  let target = min(finalized,
+    max(pvarc.pvNumber, c.baseDistance) - c.baseDistance)
 
-  let targetNumber = min(finalizedHeader.number,
-    max(headHeader.number, c.baseDistance) - c.baseDistance)
+  # Can only increase base block number.
+  if target <= c.baseHeader.number:
+    return PivotArc(
+      pvHash:         c.baseHash,
+      pvHeader:       c.baseHeader,
+      cursor: CursorDesc(
+        forkJunction: c.baseHeader.number,
+        hash:         c.baseHash))
 
-  # The distance is less than `baseDistance`, don't move the base
-  if targetNumber <= c.baseHeader.number + c.baseDistance:
-    return BaseDesc(hash: c.baseHash, header: c.baseHeader)
+  var prevHash = pvarc.pvHash
+  while true:
+    c.blocks.withValue(prevHash, val):
+      if target == val.blk.header.number:
+        if pvarc.cursor.forkJunction <= target:
+          # OK, new base stays on the argument pivot arc.
+          # ::
+          #                 B1 - B2 - B3 - B4
+          #                /      ^    ^    ^
+          #   base - A1 - A2 - A3 |    |    |
+          #                       |    pv   CCH
+          #                       |
+          #                       target
+          #
+          return PivotArc(
+            pvHash:   prevHash,
+            pvHeader: val.blk.header,
+            cursor:   pvarc.cursor)
+        else:
+          # The new base (aka target) falls out of the argument pivot branch,
+          # ending up somewhere on a parent branch.
+          # ::
+          #                 B1 - B2 - B3 - B4
+          #                /           ^    ^
+          #   base - A1 - A2 - A3      |    |
+          #           ^                pv   CCH
+          #           |
+          #           target
+          #
+          return c.findCursorArc(prevHash).expect "valid cursor arc"
+      prevHash = val.blk.header.parentHash
+      continue
+    break
 
-  shouldNotKeyError:
-    var prevHash = headHash
-    while prevHash != c.baseHash:
-      var header = c.blocks[prevHash].blk.header
-      if header.number == targetNumber:
-        return BaseDesc(hash: prevHash, header: move(header))
-      prevHash = header.parentHash
+  doAssert(false, "Unreachable code, finalized block outside cursor arc")
 
-  doAssert(false, "Unreachable code")
-
-func trimCanonicalChain(c: ForkedChainRef,
-                        head: CanonicalDesc,
-                        headHash: Hash32) =
+func trimCursorArc(c: ForkedChainRef, pvarc: PivotArc) =
+  ## Curb argument `pvarc.cursor` head so that it ends up at `pvarc.pv`.
+  ##
   # Maybe the current active chain is longer than canonical chain
-  shouldNotKeyError:
-    var prevHash = head.cursorHash
+  shouldNotKeyError "trimCanonicalChain":
+    var prevHash = pvarc.cursor.hash
     while prevHash != c.baseHash:
       let header = c.blocks[prevHash].blk.header
-      if header.number > head.header.number:
+      if header.number > pvarc.pvNumber:
         c.blocks.del(prevHash)
       else:
         break
@@ -360,43 +427,40 @@ func trimCanonicalChain(c: ForkedChainRef,
 
   # Update cursorHeads if indeed we trim
   for i in 0..<c.cursorHeads.len:
-    if c.cursorHeads[i].hash == head.cursorHash:
-      c.cursorHeads[i].hash = headHash
+    if c.cursorHeads[i].hash == pvarc.cursor.hash:
+      c.cursorHeads[i].hash = pvarc.pvHash
       return
 
   doAssert(false, "Unreachable code")
 
-proc setHead(c: ForkedChainRef,
-             headHash: Hash32,
-             number: BlockNumber) =
+proc setHead(c: ForkedChainRef, pvarc: PivotArc) =
   # TODO: db.setHead should not read from db anymore
   # all canonical chain marking
   # should be done from here.
-  discard c.db.setHead(headHash)
+  discard c.db.setHead(pvarc.pvHash)
 
   # update global syncHighest
-  c.com.syncHighest = number
+  c.com.syncHighest = pvarc.pvNumber
 
-proc updateHeadIfNecessary(c: ForkedChainRef,
-                           head: CanonicalDesc, headHash: Hash32) =
+proc updateHeadIfNecessary(c: ForkedChainRef, pvarc: PivotArc) =
   # update head if the new head is different
   # from current head or current chain
-  if c.cursorHash != head.cursorHash:
+  if c.cursorHash != pvarc.cursor.hash:
     if not c.stagingTx.isNil:
       c.stagingTx.rollback()
-    c.stagingTx = c.db.ctx.newTransaction()
-    c.replaySegment(headHash)
+    c.stagingTx = c.db.ctx.txFrameBegin()
+    c.replaySegment(pvarc.pvHash)
 
-  c.trimCanonicalChain(head, headHash)
-  if c.cursorHash != headHash:
-    c.cursorHeader = head.header
-    c.cursorHash = headHash
+  c.trimCursorArc(pvarc)
+  if c.cursorHash != pvarc.pvHash:
+    c.cursorHeader = pvarc.pvHeader
+    c.cursorHash = pvarc.pvHash
 
   if c.stagingTx.isNil:
     # setHead below don't go straight to db
-    c.stagingTx = c.db.ctx.newTransaction()
+    c.stagingTx = c.db.ctx.txFrameBegin()
 
-  c.setHead(headHash, head.header.number)
+  c.setHead(pvarc)
 
 # ------------------------------------------------------------------------------
 # Public functions
@@ -435,8 +499,7 @@ proc init*(
     baseHash:        baseHash,
     cursorHeader:    baseHeader,
     extraValidation: extraValidation,
-    baseDistance:    baseDistance,
-    txRecords:       initTable[Hash32, (Hash32, uint64)]())
+    baseDistance:    baseDistance)
 
 proc newForkedChain*(com: CommonRef,
                      baseHeader: Header,
@@ -454,9 +517,7 @@ proc newForkedChain*(com: CommonRef,
     baseHash    : baseHash,
     cursorHeader: baseHeader,
     extraValidation: extraValidation,
-    baseDistance: baseDistance,
-    txRecords: initTable[Hash32, (Hash32, uint64)]()
-  )
+    baseDistance: baseDistance)
 
   # update global syncStart
   com.syncStart = baseHeader.number
@@ -466,7 +527,7 @@ proc importBlock*(c: ForkedChainRef, blk: Block): Result[void, string] =
   # Try to import block to canonical or side chain.
   # return error if the block is invalid
   if c.stagingTx.isNil:
-    c.stagingTx = c.db.ctx.newTransaction()
+    c.stagingTx = c.db.ctx.txFrameBegin()
 
   template header(): Header =
     blk.header
@@ -476,7 +537,7 @@ proc importBlock*(c: ForkedChainRef, blk: Block): Result[void, string] =
 
   if header.parentHash == c.baseHash:
     c.stagingTx.rollback()
-    c.stagingTx = c.db.ctx.newTransaction()
+    c.stagingTx = c.db.ctx.txFrameBegin()
     return c.validateBlock(c.baseHeader, blk)
 
   if header.parentHash notin c.blocks:
@@ -499,92 +560,91 @@ proc importBlock*(c: ForkedChainRef, blk: Block): Result[void, string] =
 proc forkChoice*(c: ForkedChainRef,
                  headHash: Hash32,
                  finalizedHash: Hash32): Result[void, string] =
-
   if headHash == c.cursorHash and finalizedHash == static(default(Hash32)):
     # Do nothing if the new head already our current head
     # and there is no request to new finality
     return ok()
 
-  # If there are multiple heads, find which chain headHash belongs to
-  let head = ?c.findCanonicalHead(headHash)
+  # Find the unique cursor arc where `headHash` is a member of.
+  let pvarc = ?c.findCursorArc(headHash)
 
   if finalizedHash == static(default(Hash32)):
     # skip newBase calculation and skip chain finalization
     # if finalizedHash is zero
-    c.updateHeadIfNecessary(head, headHash)
+    c.updateHeadIfNecessary(pvarc)
     return ok()
 
-  # Finalized block must be part of canonical chain
-  let finalizedHeader = ?c.canonicalChain(finalizedHash, headHash)
+  # Finalized block must be parent or on the new canonical chain which is
+  # represented by `pvarc`.
+  let finalizedHeader = ?c.findHeader(finalizedHash, pvarc.pvHash)
 
-  let newBase = c.calculateNewBase(
-    finalizedHeader, headHash, head.header)
+  let newBase = c.calculateNewBase(finalizedHeader.number, pvarc)
 
-  if newBase.hash == c.baseHash:
+  if newBase.pvHash == c.baseHash:
     # The base is not updated but the cursor maybe need update
-    c.updateHeadIfNecessary(head, headHash)
+    c.updateHeadIfNecessary(pvarc)
     return ok()
 
   # At this point cursorHeader.number > baseHeader.number
-  if newBase.hash == c.cursorHash:
+  if newBase.pvHash == c.cursorHash:
     # Paranoid check, guaranteed by `newBase.hash == c.cursorHash`
     doAssert(not c.stagingTx.isNil)
 
     # CL decide to move backward and then forward?
-    if c.cursorHeader.number < head.header.number:
-      c.replaySegment(headHash, c.cursorHeader, c.cursorHash)
+    if c.cursorHeader.number < pvarc.pvNumber:
+      c.replaySegment(pvarc.pvHash, c.cursorHeader, c.cursorHash)
 
     # Current segment is canonical chain
-    c.writeBaggage(newBase.hash)
-    c.setHead(headHash, head.header.number)
+    c.writeBaggage(newBase.pvHash)
+    c.setHead(pvarc)
 
     c.stagingTx.commit()
     c.stagingTx = nil
 
     # Move base to newBase
-    c.updateBase(newBase.hash, c.cursorHeader, head.cursorHash)
+    c.updateBase(newBase)
 
     # Save and record the block number before the last saved block state.
-    c.db.persistent(newBase.header.number).isOkOr:
+    c.db.persistent(newBase.pvNumber).isOkOr:
       return err("Failed to save state: " & $$error)
 
     return ok()
 
   # At this point finalizedHeader.number is <= headHeader.number
   # and possibly switched to other chain beside the one with cursor
-  doAssert(finalizedHeader.number <= head.header.number)
-  doAssert(newBase.header.number <= finalizedHeader.number)
+  doAssert(finalizedHeader.number <= pvarc.pvNumber)
+  doAssert(newBase.pvNumber <= finalizedHeader.number)
 
   # Write segment from base+1 to newBase into database
   c.stagingTx.rollback()
-  c.stagingTx = c.db.ctx.newTransaction()
+  c.stagingTx = c.db.ctx.txFrameBegin()
 
-  if newBase.header.number > c.baseHeader.number:
-    c.replaySegment(newBase.hash)
-    c.writeBaggage(newBase.hash)
+  if newBase.pvNumber > c.baseHeader.number:
+    c.replaySegment(newBase.pvHash)
+    c.writeBaggage(newBase.pvHash)
     c.stagingTx.commit()
     c.stagingTx = nil
     # Update base forward to newBase
-    c.updateBase(newBase.hash, newBase.header, head.cursorHash)
-    c.db.persistent(newBase.header.number).isOkOr:
+    c.updateBase(newBase)
+    c.db.persistent(newBase.pvNumber).isOkOr:
       return err("Failed to save state: " & $$error)
 
   if c.stagingTx.isNil:
     # replaySegment or setHead below don't
     # go straight to db
-    c.stagingTx = c.db.ctx.newTransaction()
+    c.stagingTx = c.db.ctx.txFrameBegin()
 
   # Move chain state forward to current head
-  if newBase.header.number < head.header.number:
-    c.replaySegment(headHash)
+  if newBase.pvNumber < pvarc.pvNumber:
+    c.replaySegment(pvarc.pvHash)
 
-  c.setHead(headHash, head.header.number)
+  c.setHead(pvarc)
 
   # Move cursor to current head
-  c.trimCanonicalChain(head, headHash)
-  if c.cursorHash != headHash:
-    c.cursorHeader = head.header
-    c.cursorHash = headHash
+  c.trimCursorArc(pvarc)
+  if c.cursorHash != pvarc.pvHash:
+    c.cursorHeader = pvarc.pvHeader
+    c.cursorHash = pvarc.pvHash
 
   ok()
 
@@ -636,24 +696,16 @@ func isInMemory*(c: ForkedChainRef, blockHash: Hash32): bool =
 func memoryBlock*(c: ForkedChainRef, blockHash: Hash32): BlockDesc =
   c.blocks.getOrDefault(blockHash)
 
-func memoryTransaction*(c: ForkedChainRef, txHash: Hash32): Opt[Transaction] =
+func memoryTransaction*(c: ForkedChainRef, txHash: Hash32): Opt[(Transaction, BlockNumber)] =
   let (blockHash, index) = c.txRecords.getOrDefault(txHash, (Hash32.default, 0'u64))
   c.blocks.withValue(blockHash, val) do:
-    return Opt.some(val.blk.transactions[index])
-  return Opt.none(Transaction)
+    return Opt.some( (val.blk.transactions[index], val.blk.header.number) )
+  return Opt.none((Transaction, BlockNumber))
 
 proc latestBlock*(c: ForkedChainRef): Block =
   c.blocks.withValue(c.cursorHash, val) do:
     return val.blk
-  do:
-    result = c.db.getEthBlock(c.cursorHash).expect("cursorBlock exists")
-    if c.cursorHash != c.baseHash:
-      # This can happen if the block pointed to by cursorHash is not loaded yet
-      c.blocks[c.cursorHash] = BlockDesc(
-        blk: result,
-        receipts: c.db.getReceipts(result.header.receiptsRoot).
-          expect("receipts exists"),
-      )
+  c.db.getEthBlock(c.cursorHash).expect("cursorBlock exists")
 
 proc headerByNumber*(c: ForkedChainRef, number: BlockNumber): Result[Header, string] =
   if number > c.cursorHeader.number:
@@ -668,7 +720,7 @@ proc headerByNumber*(c: ForkedChainRef, number: BlockNumber): Result[Header, str
   if number < c.baseHeader.number:
     return c.db.getBlockHeader(number)
 
-  shouldNotKeyError:
+  shouldNotKeyError "headerByNumber":
     var prevHash = c.cursorHeader.parentHash
     while prevHash != c.baseHash:
       let header = c.blocks[prevHash].blk.header
@@ -702,7 +754,10 @@ proc blockByNumber*(c: ForkedChainRef, number: BlockNumber): Result[Block, strin
   if number < c.baseHeader.number:
     return c.db.getEthBlock(number)
 
-  shouldNotKeyError:
+  if number == c.baseHeader.number:
+    return c.db.getEthBlock(c.baseHash)
+
+  shouldNotKeyError "blockByNumber":
     var prevHash = c.cursorHash
     while prevHash != c.baseHash:
       c.blocks.withValue(prevHash, item):
@@ -713,7 +768,7 @@ proc blockByNumber*(c: ForkedChainRef, number: BlockNumber): Result[Block, strin
 
 func blockFromBaseTo*(c: ForkedChainRef, number: BlockNumber): seq[Block] =
   # return block in reverse order
-  shouldNotKeyError:
+  shouldNotKeyError "blockFromBaseTo":
     var prevHash = c.cursorHash
     while prevHash != c.baseHash:
       c.blocks.withValue(prevHash, item):
@@ -725,7 +780,7 @@ func isCanonical*(c: ForkedChainRef, blockHash: Hash32): bool =
   if blockHash == c.baseHash:
     return true
 
-  shouldNotKeyError:
+  shouldNotKeyError "isCanonical":
     var prevHash = c.cursorHash
     while prevHash != c.baseHash:
       c.blocks.withValue(prevHash, item):
@@ -745,7 +800,7 @@ proc isCanonicalAncestor*(c: ForkedChainRef,
   if c.baseHeader.number < c.cursorHeader.number:
     # The current canonical chain in memory is headed by
     # cursorHeader
-    shouldNotKeyError:
+    shouldNotKeyError "isCanonicalAncestor":
       var prevHash = c.cursorHeader.parentHash
       while prevHash != c.baseHash:
         var header = c.blocks[prevHash].blk.header
@@ -758,3 +813,19 @@ proc isCanonicalAncestor*(c: ForkedChainRef,
   let canonHash = c.db.getBlockHash(blockNumber).valueOr:
     return false
   canonHash == blockHash
+
+iterator txHashInRange*(c: ForkedChainRef, fromHash: Hash32, toHash: Hash32): Hash32 =
+  ## toHash should be ancestor of fromHash
+  ## exclude base from iteration, new block produced by txpool
+  ## should not reach base
+  var prevHash = fromHash
+  while prevHash != c.baseHash:
+    c.blocks.withValue(prevHash, item) do:
+      if toHash == prevHash:
+        break
+      for tx in item.blk.transactions:
+        let txHash = rlpHash(tx)
+        yield txHash
+      prevHash = item.blk.header.parentHash
+    do:
+      break

@@ -1,5 +1,5 @@
 # Nimbus
-# Copyright (c) 2023-2024 Status Research & Development GmbH
+# Copyright (c) 2023-2025 Status Research & Development GmbH
 # Licensed and distributed under either of
 #   * MIT license (license terms in the root directory or at
 #     https://opensource.org/licenses/MIT).
@@ -16,7 +16,6 @@ import
   pkg/stew/[byteutils, sorted_set],
   ../../../core/chain,
   ../worker_desc,
-  ./update/metrics,
   ./blocks_staged/staged_queue,
   ./headers_staged/staged_queue,
   "."/[blocks_unproc, db, headers_unproc, helpers]
@@ -25,7 +24,7 @@ import
 # Private functions
 # ------------------------------------------------------------------------------
 
-func syncState(ctx: BeaconCtxRef; info: static[string]): SyncLayoutState =
+proc syncState(ctx: BeaconCtxRef; info: static[string]): SyncLayoutState =
   ## Calculate `SyncLayoutState` from the download context
 
   let
@@ -98,7 +97,7 @@ func syncState(ctx: BeaconCtxRef; info: static[string]): SyncLayoutState =
   #                        o---------------------o----------------o
   #                        | <-- unprocessed --> | <-- linked --> |
   #
-  trace info & ": inconsistent state",
+  debug info & ": inconsistent state",
     B=(if b == c: "C" else: b.bnStr),
     C=(if c == l: "L" else: c.bnStr),
     L=(if l == d: "D" else: l.bnStr),
@@ -121,10 +120,7 @@ proc startHibernating(ctx: BeaconCtxRef; info: static[string]) =
 
   ctx.hibernate = true
 
-  trace info & ": suspending syncer", L=ctx.chain.latestNumber.bnStr
-
-  # Update, so it can be followed nicely
-  ctx.updateMetrics()
+  info "Suspending syncer", head=ctx.chain.latestNumber.bnStr
 
 
 proc setupCollectingHeaders(ctx: BeaconCtxRef; info: static[string]) =
@@ -170,9 +166,6 @@ proc setupCollectingHeaders(ctx: BeaconCtxRef; info: static[string]) =
 
     # Update range
     ctx.headersUnprocSet(c+1, h-1)
-
-    # Update, so it can be followed nicely
-    ctx.updateMetrics()
 
     # Mark target used, reset for re-fill
     ctx.target.changed = false
@@ -238,9 +231,6 @@ proc linkIntoFc(ctx: BeaconCtxRef; info: static[string]): bool =
 
       # Save layout state
       ctx.dbStoreSyncStateLayout info
-
-      # Update, so it can be followed nicely
-      ctx.updateMetrics()
       return true
 
   trace info & ": cannot link into FC", B=b.bnStr, L=l.bnStr,
@@ -274,27 +264,46 @@ proc setupProcessingBlocks(ctx: BeaconCtxRef; info: static[string]) =
 
 proc updateSyncState*(ctx: BeaconCtxRef; info: static[string]) =
   ## Update internal state when needed
-  let
-    prevState = ctx.layout.lastState     # previous state
-    thisState = ctx.syncState info       # currently observed state
+  let prevState = ctx.layout.lastState   # previous state
+  var thisState = ctx.syncState info     # currently observed state
 
   if thisState == prevState:
     # Check whether the system has been idle and a new header download
     # session can be set up
-    if prevState == idleSyncState and
-       ctx.target.changed and            # and there is a new target from CL
-       ctx.target.final != 0:            # .. ditto
-      ctx.setupCollectingHeaders info    # set up new header sync
-    return
-    # Notreached
+    case prevState:
+    of idleSyncState:
+      if ctx.target.changed and          # and there is a new target from CL
+         ctx.target.final != 0:          # .. ditto
+        ctx.setupCollectingHeaders info  # set up new header sync
+      return
+    of processingBlocks:
+      if not ctx.blocksStagedQueueIsEmpty() or
+         0 < ctx.blocksUnprocChunks() or
+         0 < ctx.blocksUnprocBorrowed:
+        return
+      # Set to idle
+      debug info & ": blocks processing cancelled",
+        B=(if ctx.chain.baseNumber() == ctx.layout.coupler: "C"
+           else: ctx.chain.baseNumber().bnStr),
+        C=(if ctx.layout.coupler == ctx.chain.latestNumber(): "L"
+           else: ctx.layout.coupler.bnStr),
+        L=(if ctx.chain.latestNumber() == ctx.layout.dangling: "D"
+           else: ctx.chain.latestNumber().bnStr),
+        D=(if ctx.layout.dangling == ctx.layout.head: "H"
+           else: ctx.layout.dangling.bnStr),
+        H=ctx.layout.head.bnStr
+      thisState = idleSyncState
+      # proceed
+    else:
+      return
 
-  trace info & ": sync state changed", prevState, thisState,
-    L=ctx.chain.latestNumber.bnStr,
-    C=(if ctx.layout.coupler == ctx.layout.dangling: "D"
+  info "Sync state changed", prevState, thisState,
+    head=ctx.chain.latestNumber.bnStr,
+    oldBase=(if ctx.layout.coupler == ctx.layout.dangling: "downloaded"
        else: ctx.layout.coupler.bnStr),
-    D=(if ctx.layout.dangling == ctx.layout.head: "H"
+    downloaded=(if ctx.layout.dangling == ctx.layout.head: "target"
        else: ctx.layout.dangling.bnStr),
-    H=ctx.layout.head.bnStr
+    target=ctx.layout.head.bnStr
 
   # So there is a states transition. The only relevant transition here
   # is `collectingHeaders -> finishedHeaders` which will be continued
@@ -304,7 +313,7 @@ proc updateSyncState*(ctx: BeaconCtxRef; info: static[string]) =
      thisState == finishedHeaders and
      ctx.linkIntoFc(info):               # commit downloading headers
     ctx.setupProcessingBlocks info       # start downloading block bodies
-    trace info & ": sync state changed",
+    info "Sync state changed",
       prevState=thisState, thisState=ctx.syncState(info)
     return
     # Notreached
@@ -338,11 +347,28 @@ proc updateFinalBlockHeader*(
     # Activate running (unless done yet)
     if ctx.hibernate:
       ctx.hibernate = false
-      trace info & ": activating syncer", B=b.bnStr,
-        finalised=f.bnStr, head=ctx.target.consHead.bnStr
+      info "Activating syncer", base=b.bnStr, head=ctx.chain.latestNumber.bnStr,
+        finalised=f.bnStr, target=ctx.target.consHead.bnStr
 
-    # Update, so it can be followed nicely
-    ctx.updateMetrics()
+
+proc updateAsyncTasks*(
+    ctx: BeaconCtxRef;
+      ): Future[Opt[void]] {.async: (raises: []).} =
+  ## Allow task switch by issuing a short sleep request. The `due` argument
+  ## allows to maintain a minimum time gap when invoking this function.
+  let start = Moment.now()
+  if ctx.pool.nextAsyncNanoSleep < start:
+
+    try: await sleepAsync asyncThreadSwitchTimeSlot
+    except CancelledError: discard
+
+    if ctx.daemon:
+      ctx.pool.nextAsyncNanoSleep = Moment.now() + asyncThreadSwitchGap
+      return ok()
+    # Shutdown?
+    return err()
+
+  return ok()
 
 # ------------------------------------------------------------------------------
 # End

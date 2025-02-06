@@ -1,5 +1,5 @@
 # Nimbus
-# Copyright (c) 2023-2024 Status Research & Development GmbH
+# Copyright (c) 2023-2025 Status Research & Development GmbH
 # Licensed under either of
 #  * Apache License, version 2.0, ([LICENSE-APACHE](LICENSE-APACHE))
 #  * MIT license ([LICENSE-MIT](LICENSE-MIT))
@@ -9,15 +9,19 @@
 
 import
   results,
-  ../web3_eth_conv,
+  chronicles,
   eth/common/hashes,
-  ../beacon_engine,
   web3/[execution_types, primitives],
+  ../../core/tx_pool,
+  ../web3_eth_conv,
+  ../beacon_engine,
   ../payload_conv,
-  ./api_utils,
-  chronicles
+  ./api_utils
 
 {.push gcsafe, raises:[CatchableError].}
+
+logScope:
+  topics = "beacon engine"
 
 func validateVersionedHashed(payload: ExecutionPayload,
                               expected: openArray[Hash32]): bool  =
@@ -83,12 +87,35 @@ template validatePayload(apiVersion, payloadVersion, payload) =
       raise invalidParams("newPayload" & $apiVersion &
         "excessBlobGas is expected from execution payload")
 
+func validateExecutionRequest(requests: openArray[seq[byte]]): Result[void, string] {.raises:[].} =
+  var previousRequestType = -1
+  for request in requests:
+    if request.len == 0:
+      return err("Execution request data must not be empty")
+
+    let requestType = request[0]
+    if requestType.int <= previousRequestType:
+      return err("Execution requests are not in strictly ascending order")
+
+    if request.len == 1:
+      return err("Empty data for request type " & $requestType)
+
+    if requestType notin [
+       DEPOSIT_REQUEST_TYPE,
+       WITHDRAWAL_REQUEST_TYPE,
+       CONSOLIDATION_REQUEST_TYPE]:
+      return err("Invalid execution request type: " & $requestType)
+
+    previousRequestType = requestType.int
+
+  ok()
+
 proc newPayload*(ben: BeaconEngineRef,
                  apiVersion: Version,
                  payload: ExecutionPayload,
                  versionedHashes = Opt.none(seq[Hash32]),
                  beaconRoot = Opt.none(Hash32),
-                 executionRequests = Opt.none(array[3, seq[byte]])): PayloadStatusV1 =
+                 executionRequests = Opt.none(seq[seq[byte]])): PayloadStatusV1 =
 
   trace "Engine API request received",
     meth = "newPayload",
@@ -103,6 +130,10 @@ proc newPayload*(ben: BeaconEngineRef,
     if executionRequests.isNone:
       raise invalidParams("newPayload" & $apiVersion &
         ": executionRequests is expected from execution payload")
+
+    validateExecutionRequest(executionRequests.get).isOkOr:
+      raise invalidParams("newPayload" & $apiVersion &
+        ": " & error)
 
   let
     com = ben.com
@@ -195,11 +226,13 @@ proc newPayload*(ben: BeaconEngineRef,
     warn "Error importing block",
       number = header.number,
       hash = blockHash.short,
-      parent = header.parentHash.short, 
+      parent = header.parentHash.short,
       error = vres.error()
     ben.setInvalidAncestor(header, blockHash)
     let blockHash = latestValidHash(db, parent, ttd)
     return invalidStatus(blockHash, vres.error())
+
+  ben.txPool.removeNewBlockTxs(blk, Opt.some(blockHash))
 
   info "New payload received and validated",
     number = header.number,

@@ -1,5 +1,5 @@
 # Nimbus
-# Copyright (c) 2023-2024 Status Research & Development GmbH
+# Copyright (c) 2023-2025 Status Research & Development GmbH
 # Licensed and distributed under either of
 #   * MIT license (license terms in the root directory or at
 #     https://opensource.org/licenses/MIT).
@@ -17,7 +17,6 @@ import
   pkg/stew/[interval_set, sorted_set],
   ../../../common,
   ../worker_desc,
-  ./update/metrics,
   ./headers_staged/[headers, linked_hchain],
   "."/[headers_unproc, update]
 
@@ -44,6 +43,7 @@ proc fetchAndCheck(
   # While assembling a `LinkedHChainRef`, verify that the `revHeaders` list
   # was sound, i.e. contiguous, linked, etc.
   if not revHeaders.extendLinkedHChain(buddy, ivReq.maxPt, lhc):
+    buddy.only.nHdrProcErrors.inc
     return false
 
   return true
@@ -75,7 +75,7 @@ proc headerStagedUpdateTarget*(
       if hash != ctx.target.finalHash:
         # Oops
         buddy.ctrl.zombie = true
-        trace info & ": finalised header hash mismatch", peer, hash,
+        debug info & ": finalised header hash mismatch", peer, hash,
           expected=ctx.target.finalHash
       else:
         ctx.updateFinalBlockHeader(rc.value[0], ctx.target.finalHash, info)
@@ -132,6 +132,9 @@ proc headersStagedCollect*(
     # so that `async` can capture that properly.
     lhc = (ref LinkedHChain)(parentHash: topLink)
 
+    # Flag, not to reset error count
+    haveError = false
+
   while true:
     # Extract top range interval and fetch/stage it
     let
@@ -147,29 +150,29 @@ proc headersStagedCollect*(
 
     # Fetch and extend chain record
     if not await buddy.fetchAndCheck(ivReq, lhc, info):
+      haveError = true
 
       # Throw away opportunistic data (or first time header fetch.) Keep
       # other data for a partially assembled list.
       if isOpportunistic or nLhcHeaders == 0:
-        buddy.only.nHdrRespErrors.inc
-
-        if (0 < buddy.only.nHdrRespErrors and buddy.ctrl.stopped) or
-           fetchHeadersReqThresholdCount < buddy.only.nHdrRespErrors:
+        if ((0 < buddy.only.nHdrRespErrors or
+             0 < buddy.only.nHdrProcErrors) and buddy.ctrl.stopped) or
+           fetchHeadersReqErrThresholdCount < buddy.only.nHdrRespErrors or
+           fetchHeadersProcessErrThresholdCount < buddy.only.nHdrProcErrors:
           # Make sure that this peer does not immediately reconnect
           buddy.ctrl.zombie = true
-        trace info & ": current header list discarded", peer, iv, ivReq,
-          isOpportunistic,
-          ctrl=buddy.ctrl.state, nRespErrors=buddy.only.nHdrRespErrors
+        debug info & ": current header list discarded", peer, iv, ivReq,
+          isOpportunistic, ctrl=buddy.ctrl.state, hdrErrors=buddy.hdrErrors
         ctx.headersUnprocCommit(iv.len, iv)
         # At this stage allow a task switch so that some other peer might try
-        # to work on the currently returned interval.
+        # to continue work on the currently returned interval.
         try: await sleepAsync asyncThreadSwitchTimeSlot
         except CancelledError: discard
         return false
 
       # So it is deterministic and there were some headers downloaded already.
       # Turn back unused data and proceed with staging.
-      trace info & ": partially failed", peer, iv, ivReq,
+      debug info & ": partially failed", peer, iv, ivReq,
         unused=BnRange.new(iv.minPt,ivTop), isOpportunistic
       # There is some left over to store back
       ctx.headersUnprocCommit(iv.len, iv.minPt, ivTop)
@@ -195,9 +198,13 @@ proc headersStagedCollect*(
     raiseAssert info & ": duplicate key on staged queue iv=" & $iv
   qItem.data = lhc[]
 
-  trace info & ": staged a list of headers", peer,
-    topBlock=iv.maxPt.bnStr, nHeaders=lhc.revHdrs.len,
-    nStaged=ctx.hdr.staged.len, isOpportunistic, ctrl=buddy.ctrl.state
+  # Reset header process errors (not too many consecutive failures this time)
+  if not haveError:
+    buddy.only.nHdrProcErrors = 0
+
+  info "Downloaded a list of headers", topBlock=iv.maxPt.bnStr,
+    nHeaders=lhc.revHdrs.len, nStaged=ctx.hdr.staged.len, isOpportunistic,
+    hdrErrors=buddy.hdrErrors
 
   return true
 
@@ -215,7 +222,7 @@ proc headersStagedProcess*(ctx: BeaconCtxRef; info: static[string]): int =
       dangling = ctx.layout.dangling
       iv = BnRange.new(qItem.key - qItem.data.revHdrs.len.uint64 + 1, qItem.key)
     if iv.maxPt+1 < dangling:
-      trace info & ": there is a gap", iv, D=dangling.bnStr, nStashed=result
+      debug info & ": there is a gap", iv, D=dangling.bnStr, nStashed=result
       break # there is a gap -- come back later
 
     # Overlap must not happen
@@ -226,13 +233,10 @@ proc headersStagedProcess*(ctx: BeaconCtxRef; info: static[string]): int =
     # anymore.
     discard ctx.hdr.staged.delete(iv.maxPt)
 
-    # Update, so it can be followed nicely
-    ctx.updateMetrics()
-
     if qItem.data.hash != ctx.dbHeaderParentHash(dangling).expect "Hash32":
       # Discard wrong chain and merge back the range into the `unproc` list.
       ctx.headersUnprocCommit(0,iv)
-      trace info & ": discarding staged header list", iv, D=dangling.bnStr,
+      debug info & ": discarding staged header list", iv, D=dangling.bnStr,
         nStashed=result, nDiscarded=qItem.data.revHdrs.len
       break
 
@@ -243,14 +247,11 @@ proc headersStagedProcess*(ctx: BeaconCtxRef; info: static[string]): int =
 
     result += qItem.data.revHdrs.len # count headers
 
-  trace info & ": stashed consecutive headers",
+  debug info & ": stashed consecutive headers",
     nListsLeft=ctx.hdr.staged.len, nStashed=result
 
   if headersStagedQueueLengthLwm < ctx.hdr.staged.len:
     ctx.poolMode = true
-
-  # Update, so it can be followed nicely
-  ctx.updateMetrics()
 
 
 proc headersStagedReorg*(ctx: BeaconCtxRef; info: static[string]) =
@@ -286,9 +287,6 @@ proc headersStagedReorg*(ctx: BeaconCtxRef; info: static[string]) =
         nHeaders = qItem.data.revHdrs.len.uint64
       ctx.headersUnprocCommit(0, key - nHeaders + 1, key)
       discard ctx.hdr.staged.delete key
-
-    # Update, so it can be followed nicely
-    ctx.updateMetrics()
 
 # ------------------------------------------------------------------------------
 # End

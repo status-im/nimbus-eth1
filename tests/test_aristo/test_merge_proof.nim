@@ -1,5 +1,5 @@
 # Nimbus
-# Copyright (c) 2023-2024 Status Research & Development GmbH
+# Copyright (c) 2023-2025 Status Research & Development GmbH
 # Licensed under either of
 #  * Apache License, version 2.0, ([LICENSE-APACHE](LICENSE-APACHE) or
 #    http://www.apache.org/licenses/LICENSE-2.0)
@@ -13,13 +13,11 @@ import
   results,
   unittest2,
   ../../nimbus/db/opts,
-  ../../nimbus/db/core_db/backend/aristo_rocksdb,
   ../../nimbus/db/aristo/[
     aristo_check,
     aristo_desc,
     aristo_init/persistent,
     aristo_part,
-    aristo_part/part_debug,
     aristo_tx],
   ../replay/xcheck,
   ./test_helpers
@@ -55,7 +53,7 @@ proc saveToBackend(
     xCheckRc rc.error == 0
 
   block:
-    let rc = db.txTop()
+    let rc = db.txFrameTop()
     xCheckRc rc.error == 0
     tx = rc.value
 
@@ -72,7 +70,7 @@ proc saveToBackend(
     xCheckRc rc.error == 0
 
   block:
-    let rc = db.txTop()
+    let rc = db.txFrameTop()
     xCheckErr rc.value.level < 0 # force error
 
   block:
@@ -80,7 +78,7 @@ proc saveToBackend(
     xCheckRc rc.error == 0
 
   # Update layers to original level
-  tx = db.txBegin().value.to(AristoDbRef).txBegin().value
+  tx = db.txFrameBegin().value.to(AristoDbRef).txFrameBegin().value
 
   true
 
@@ -120,7 +118,7 @@ proc testMergeProofAndKvpList*(
   #     ps = PartStateRef.init(db)
 
   #     # Start transaction (double frame for testing)
-  #     tx = ps.db.txBegin().value.to(AristoDbRef).txBegin().value
+  #     tx = ps.db.txFrameBegin().value.to(AristoDbRef).txFrameBegin().value
   #     xCheck tx.isTop()
 
   #     # Update root

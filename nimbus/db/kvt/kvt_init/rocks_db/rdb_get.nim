@@ -14,8 +14,6 @@
 {.push raises: [].}
 
 import
-  eth/common,
-  rocksdb,
   results,
   "../.."/[kvt_constants, kvt_desc],
   ./rdb_desc

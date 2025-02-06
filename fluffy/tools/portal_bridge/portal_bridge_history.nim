@@ -1,5 +1,5 @@
 # Fluffy
-# Copyright (c) 2024 Status Research & Development GmbH
+# Copyright (c) 2024-2025 Status Research & Development GmbH
 # Licensed and distributed under either of
 #   * MIT license (license terms in the root directory or at https://opensource.org/licenses/MIT).
 #   * Apache v2 license (license terms in the root directory or at https://www.apache.org/licenses/LICENSE-2.0).
@@ -47,9 +47,7 @@ func asEthBlock(blockObject: BlockObject): EthBlock =
     header: header, transactions: transactions, withdrawals: blockObject.withdrawals
   )
 
-func asPortalBlock(
-    ethBlock: EthBlock
-): (BlockHeaderWithProof, PortalBlockBodyShanghai) =
+func asPortalBlockBody(ethBlock: EthBlock): PortalBlockBodyShanghai =
   var transactions: Transactions
   for tx in ethBlock.txs:
     discard transactions.add(TransactionByteList(rlp.encode(tx)))
@@ -59,16 +57,9 @@ func asPortalBlock(
   for w in ethBlock.withdrawals.get():
     discard withdrawals.add(WithdrawalByteList(rlp.encode(w)))
 
-  let
-    headerWithProof = BlockHeaderWithProof(
-      header: ByteList[2048](rlp.encode(ethBlock.header)),
-      proof: BlockHeaderProof.init(),
-    )
-    portalBody = PortalBlockBodyShanghai(
-      transactions: transactions, uncles: Uncles(@[byte 0xc0]), withdrawals: withdrawals
-    )
-
-  (headerWithProof, portalBody)
+  PortalBlockBodyShanghai(
+    transactions: transactions, uncles: Uncles(@[byte 0xc0]), withdrawals: withdrawals
+  )
 
 func asTxType(quantity: Opt[Quantity]): Result[TxType, string] =
   let value = quantity.get(0.Quantity).uint8
@@ -171,6 +162,15 @@ proc gossipReceipts(
 
   await bridge.gossipQueue.addLast((contentKey.encode.asSeq(), SSZ.encode(receipts)))
 
+proc gossipEphemeralBlockHeader(
+    bridge: PortalHistoryBridge, hash: Hash32, header: ByteList[MAX_HEADER_LENGTH]
+): Future[void] {.async: (raises: [CancelledError]).} =
+  let contentKey = ephemeralBlockHeaderContentKey(hash, 0'u8)
+
+  await bridge.gossipQueue.addLast(
+    (contentKey.encode.asSeq(), SSZ.encode(EphemeralBlockHeaderList.init(@[header])))
+  )
+
 proc runLatestLoop(
     bridge: PortalHistoryBridge, validate = false
 ) {.async: (raises: [CancelledError]).} =
@@ -202,7 +202,8 @@ proc runLatestLoop(
 
       let
         ethBlock = blockObject.asEthBlock()
-        (headerWithProof, body) = ethBlock.asPortalBlock()
+        header = ByteList[MAX_HEADER_LENGTH].init(rlp.encode(ethBlock.header))
+        body = ethBlock.asPortalBlockBody()
 
         receipts = receiptObjects.asReceipts().valueOr:
           # Note: this failure should not occur. It would mean invalid encoded
@@ -216,7 +217,7 @@ proc runLatestLoop(
 
       let hash = blockObject.hash
       if validate:
-        if validateHeaderBytes(headerWithProof.header.asSeq(), hash).isErr():
+        if validateHeaderBytes(header.asSeq(), hash).isErr():
           error "Block header is invalid"
           continue
         if validateBlockBody(body, ethBlock.header).isErr():
@@ -226,10 +227,8 @@ proc runLatestLoop(
           error "Receipts root is invalid"
           continue
 
-      # gossip block header by hash
-      await bridge.gossipBlockHeader(hash, headerWithProof)
-      # gossip block header by number
-      await bridge.gossipBlockHeader(blockNumber, headerWithProof)
+      # gossip ephemeral block header
+      await bridge.gossipEphemeralBlockHeader(hash, header)
 
       # For bodies & receipts to get verified, the header needs to be available
       # on the network. Wait a little to get the headers propagated through
@@ -374,14 +373,15 @@ proc runBackfillLoopAuditMode(
     rng = newRng()
     db = Era1DB.new(era1Dir, "mainnet", loadAccumulator())
 
+  var blockTuple: BlockTuple
   while true:
     let
       # Grab a random blockNumber to audit and potentially gossip
       blockNumber = rng[].rand(network_metadata.mergeBlockNumber - 1).uint64
-      (header, body, receipts, _) = db.getBlockTuple(blockNumber).valueOr:
-        error "Failed to get block tuple", error, blockNumber
-        continue
-      blockHash = header.rlpHash()
+    db.getBlockTuple(blockNumber, blockTuple).isOkOr:
+      error "Failed to get block tuple", error, blockNumber
+      continue
+    let blockHash = blockTuple.header.rlpHash()
 
     var headerSuccess, bodySuccess, receiptsSuccess = false
 
@@ -441,7 +441,7 @@ proc runBackfillLoopAuditMode(
             error "Invalid hex for block body content", error = e.msg
             break bodyBlock
 
-      validateBlockBodyBytes(content, header).isOkOr:
+      validateBlockBodyBytes(content, blockTuple.header).isOkOr:
         error "Block body is invalid", error
         break bodyBlock
 
@@ -469,7 +469,7 @@ proc runBackfillLoopAuditMode(
             error "Invalid hex for block receipts content", error = e.msg
             break receiptsBlock
 
-      validateReceiptsBytes(content, header.receiptsRoot).isOkOr:
+      validateReceiptsBytes(content, blockTuple.header.receiptsRoot).isOkOr:
         error "Block receipts are invalid", error
         break receiptsBlock
 
@@ -481,7 +481,7 @@ proc runBackfillLoopAuditMode(
       let
         epochRecord = db.getAccumulator(blockNumber).valueOr:
           raiseAssert "Failed to get accumulator from EraDB: " & error
-        headerWithProof = buildHeaderWithProof(header, epochRecord).valueOr:
+        headerWithProof = buildHeaderWithProof(blockTuple.header, epochRecord).valueOr:
           raiseAssert "Failed to build header with proof: " & error
 
       # gossip block header by hash
@@ -489,9 +489,13 @@ proc runBackfillLoopAuditMode(
       # gossip block header by number
       await bridge.gossipBlockHeader(blockNumber, headerWithProof)
     if not bodySuccess:
-      await bridge.gossipBlockBody(blockHash, PortalBlockBodyLegacy.fromBlockBody(body))
+      await bridge.gossipBlockBody(
+        blockHash, PortalBlockBodyLegacy.fromBlockBody(blockTuple.body)
+      )
     if not receiptsSuccess:
-      await bridge.gossipReceipts(blockHash, PortalReceipts.fromReceipts(receipts))
+      await bridge.gossipReceipts(
+        blockHash, PortalReceipts.fromReceipts(blockTuple.receipts)
+      )
 
     await sleepAsync(2.seconds)
 
@@ -511,7 +515,7 @@ proc runHistory*(config: PortalBridgeConf) =
           contentValueHex = contentValue.toHex()
 
         try:
-          let peers = await bridge.portalClient.portal_historyGossip(
+          let peers = await bridge.portalClient.portal_historyPutContent(
             contentKeyHex, contentValueHex
           )
           debug "Content gossiped", peers, contentKey = contentKeyHex
@@ -519,7 +523,7 @@ proc runHistory*(config: PortalBridgeConf) =
           trace "Cancelled gossipWorker"
           raise e
         except CatchableError as e:
-          error "JSON-RPC portal_historyGossip failed",
+          error "JSON-RPC portal_historyPutContent failed",
             error = $e.msg, contentKey = contentKeyHex
     except CancelledError:
       trace "gossipWorker canceled"
@@ -538,6 +542,3 @@ proc runHistory*(config: PortalBridgeConf) =
       asyncSpawn bridge.runBackfillLoop(
         config.era1Dir.string, config.startEra, config.endEra
       )
-
-  while true:
-    poll()

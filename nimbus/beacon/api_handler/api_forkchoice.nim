@@ -1,5 +1,5 @@
 # Nimbus
-# Copyright (c) 2023-2024 Status Research & Development GmbH
+# Copyright (c) 2023-2025 Status Research & Development GmbH
 # Licensed under either of
 #  * Apache License, version 2.0, ([LICENSE-APACHE](LICENSE-APACHE))
 #  * MIT license ([LICENSE-MIT](LICENSE-MIT))
@@ -10,14 +10,18 @@
 import
   std/[typetraits],
   results,
-  ../beacon_engine,
   eth/common/[headers, hashes, times],
   web3/execution_types,
-  ./api_utils,
   chronicles,
-  ../web3_eth_conv
+  ../../core/tx_pool,
+  ../beacon_engine,
+  ../web3_eth_conv,
+  ./api_utils
 
 {.push gcsafe, raises:[CatchableError].}
+
+logScope:
+  topics = "beacon engine"
 
 template validateVersion(attr, com, apiVersion) =
   let
@@ -39,6 +43,9 @@ template validateVersion(attr, com, apiVersion) =
       if version > Version.V3:
         raise invalidAttr("forkChoiceUpdated" & $apiVersion &
           " doesn't support PayloadAttributes" & $version)
+      # ForkchoiceUpdatedV2 after Cancun with beacon root field must return INVALID_PAYLOAD_ATTRIBUTES
+      if apiVersion == Version.V2 and attr.parentBeaconBlockRoot.isSome:
+        raise invalidAttr("forkChoiceUpdatedV2 with beacon root field is invalid after Cancun")
     elif com.isShanghaiOrLater(timestamp):
       if version < Version.V2:
         raise invalidParams("forkChoiceUpdated" & $apiVersion &
@@ -54,20 +61,13 @@ template validateVersion(attr, com, apiVersion) =
 template validateHeaderTimestamp(header, com, apiVersion) =
   # See fCUV3 specification No.2 bullet iii
   # https://github.com/ethereum/execution-apis/blob/v1.0.0-beta.4/src/engine/cancun.md#specification-1
-  if com.isCancunOrLater(header.timestamp):
-    if apiVersion != Version.V3:
-      raise invalidAttr("forkChoiceUpdated" & $apiVersion &
-          " doesn't support head block with timestamp >= Cancun")
+  #  No additional restrictions on the timestamp of the head block
   # See fCUV2 specification No.2 bullet 1
   # https://github.com/ethereum/execution-apis/blob/v1.0.0-beta.4/src/engine/shanghai.md#specification-1
-  elif com.isShanghaiOrLater(header.timestamp):
-    if apiVersion != Version.V2:
+  if com.isShanghaiOrLater(header.timestamp):
+    if apiVersion < Version.V2:
       raise invalidAttr("forkChoiceUpdated" & $apiVersion &
           " doesn't support head block with Shanghai timestamp")
-  else:
-    if apiVersion != Version.V1:
-      raise invalidAttr("forkChoiceUpdated" & $apiVersion &
-          " doesn't support head block with timestamp earlier than Shanghai")
 
 proc forkchoiceUpdated*(ben: BeaconEngineRef,
                         apiVersion: Version,
@@ -110,7 +110,9 @@ proc forkchoiceUpdated*(ben: BeaconEngineRef,
 
     # Update sync header (if any)
     com.syncReqNewHead(header)
-    com.reqBeaconSyncTargetCB(header, update.finalizedBlockHash)
+
+    # Ask the syncer to install missing blcks via RLPX
+    com.reqBeaconSyncerTarget(header, update.finalizedBlockHash)
 
     return simpleFCU(PayloadExecutionStatus.syncing)
 
@@ -200,6 +202,7 @@ proc forkchoiceUpdated*(ben: BeaconEngineRef,
       gasUsed = bundle.payload.gasUsed,
       blobGasUsed = bundle.payload.blobGasUsed.get(Quantity(0)),
       id = id.toHex,
+      txPoolLen = ben.txPool.len,
       attrs = attrs
 
     return validFCU(Opt.some(id), blockHash)

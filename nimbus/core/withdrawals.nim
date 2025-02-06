@@ -22,11 +22,8 @@ proc validateWithdrawals*(
     elif withdrawals.isNone:
       return err("Post-Shanghai block body must have withdrawals")
     else:
-      try:
-        if withdrawals.get.calcWithdrawalsRoot != header.withdrawalsRoot.get:
-          return err("Mismatched withdrawalsRoot blockNumber =" & $header.number)
-      except RlpError as ex:
-        return err(ex.msg)
+      if withdrawals.get.calcWithdrawalsRoot != header.withdrawalsRoot.get:
+        return err("Mismatched withdrawalsRoot blockNumber =" & $header.number)
   else:
     if header.withdrawalsRoot.isSome:
       return err("Pre-Shanghai block header must not have withdrawalsRoot")

@@ -20,14 +20,15 @@ import
 # Public functions
 # ------------------------------------------------------------------------------
 
-proc vidFetch*(db: AristoDbRef): VertexID =
+proc vidFetch*(db: AristoDbRef, n = 1): VertexID =
   ## Fetch next vertex ID.
   ##
   if db.top.vTop  == 0:
     db.top.vTop = VertexID(LEAST_FREE_VID)
-  else:
-    db.top.vTop.inc
-  db.top.vTop
+  var ret = db.top.vTop
+  ret.inc
+  db.top.vTop.inc(n)
+  ret
 
 # ------------------------------------------------------------------------------
 # End

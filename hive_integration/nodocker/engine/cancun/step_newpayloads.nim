@@ -1,5 +1,5 @@
 # Nimbus
-# Copyright (c) 2023-2024 Status Research & Development GmbH
+# Copyright (c) 2023-2025 Status Research & Development GmbH
 # Licensed under either of
 #  * Apache License, version 2.0, ([LICENSE-APACHE](LICENSE-APACHE) or
 #    http://www.apache.org/licenses/LICENSE-2.0)
@@ -73,7 +73,7 @@ proc verifyPayload(step: NewPayloads,
       excessBlobGas: Opt.some(parentExcessBlobGas),
       blobGasUsed: Opt.some(parentBlobGasUsed)
     )
-    expectedExcessBlobGas = calcExcessBlobGas(parent)
+    expectedExcessBlobGas = calcExcessBlobGas(parent, com.isPragueOrLater(payload.timestamp.EthTime))
 
   if com.isCancunOrLater(payload.timestamp.EthTime):
     if payload.excessBlobGas.isNone:
@@ -96,7 +96,7 @@ proc verifyPayload(step: NewPayloads,
 
     var
       totalBlobCount = 0
-      expectedBlobGasPrice = getBlobBaseFee(expectedExcessBlobGas)
+      expectedBlobGasPrice = getCancunBlobBaseFee(expectedExcessBlobGas)
 
     for tx in blobTxsInPayload:
       let blobCount = tx.versionedHashes.len

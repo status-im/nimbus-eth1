@@ -32,8 +32,9 @@ proc newRpcClientConnect*(url: JsonRpcUrl): RpcClient =
     try:
       waitFor client.connect(url.value)
     except CatchableError as e:
-      fatal "Failed to connect to JSON-RPC server", error = $e.msg, url = url.value
-      quit QuitFailure
+      warn "Failed to connect to JSON-RPC server", error = $e.msg, url = url.value
+      # The Websocket client supports reconnecting so we don't need to quit here
+      #quit QuitFailure
     client
 
 proc tryReconnect*(client: RpcClient, url: JsonRpcUrl) {.async: (raises: []).} =

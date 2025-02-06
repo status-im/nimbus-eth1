@@ -1,4 +1,4 @@
-# Copyright (c) 2018-2024 Status Research & Development GmbH
+# Copyright (c) 2018-2025 Status Research & Development GmbH
 # Licensed under either of
 #  * Apache License, version 2.0, ([LICENSE-APACHE](LICENSE-APACHE))
 #  * MIT license ([LICENSE-MIT](LICENSE-MIT))
@@ -28,7 +28,9 @@ import
   common/chain_config,
   db/opts
 
-export net, defs
+from beacon_chain/nimbus_binary_common import setupLogging, StdoutLogKind
+
+export net, defs, StdoutLogKind
 
 
 const
@@ -104,6 +106,7 @@ type
   NimbusCmd* {.pure.} = enum
     noCommand
     `import`
+    `import-rlp`
 
   RpcFlag* {.pure.} = enum
     ## RPC flags
@@ -160,11 +163,6 @@ type
       abbr: "e"
       name: "import-key" }: InputFile
 
-    verifyFrom* {.
-      desc: "Enable extra verification when current block number greater than verify-from"
-      defaultValueDesc: ""
-      name: "verify-from" }: Option[uint64]
-
     evm* {.
       desc: "Load alternative EVM from EVMC-compatible shared library" & sharedLibText
       defaultValue: ""
@@ -178,10 +176,17 @@ type
       name: "trusted-setup-file" .}: Option[string]
 
     extraData* {.
-      desc: "Value of extraData field when assemble a block(max 32 bytes)"
+      separator: "\pPAYLOAD BUILDING OPTIONS:"
+      desc: "Value of extraData field when building an execution payload(max 32 bytes)"
       defaultValue: ShortClientId
       defaultValueDesc: $ShortClientId
       name: "extra-data" .}: string
+
+    gasLimit* {.
+      desc: "Desired gas limit when building an execution payload"
+      defaultValue: DEFAULT_GAS_LIMIT
+      defaultValueDesc: $DEFAULT_GAS_LIMIT
+      name: "gas-limit" .}: uint64
 
     network {.
       separator: "\pETHEREUM NETWORK OPTIONS:"
@@ -214,13 +219,16 @@ type
     logLevel* {.
       separator: "\pLOGGING AND DEBUGGING OPTIONS:"
       desc: "Sets the log level for process and topics (" & logLevelDesc & ")"
-      defaultValue: LogLevel.INFO
-      defaultValueDesc: $LogLevel.INFO
-      name: "log-level" }: LogLevel
+      defaultValue: "INFO"
+      defaultValueDesc: "Info topic level logging"
+      name: "log-level" }: string
 
-    logFile* {.
-      desc: "Specifies a path for the written Json log file"
-      name: "log-file" }: Option[OutFile]
+    logStdout* {.
+      hidden
+      desc: "Specifies what kind of logs should be written to stdout (auto, colors, nocolors, json)"
+      defaultValueDesc: "auto"
+      defaultValue: StdoutLogKind.Auto
+      name: "log-format" .}: StdoutLogKind
 
     logMetricsEnabled* {.
       desc: "Enable metrics logging"
@@ -355,6 +363,12 @@ type
       defaultValueDesc: $ClientId
       name: "agent-string" .}: string
 
+    numThreads* {.
+      separator: "\pPERFORMANCE OPTIONS",
+      defaultValue: 0,
+      desc: "Number of worker threads (\"0\" = use as many threads as there are CPU cores available)"
+      name: "num-threads" .}: int
+
     beaconChunkSize* {.
       hidden
       desc: "Number of blocks per database transaction for beacon sync"
@@ -385,22 +399,33 @@ type
       defaultValueDesc: $defaultBlockCacheSize
       name: "debug-rocksdb-block-cache-size".}: int
 
-    rdbKeyCacheSize {.
-      hidden
-      defaultValue: defaultRdbKeyCacheSize
-      defaultValueDesc: $defaultRdbKeyCacheSize
-      name: "debug-rdb-key-cache-size".}: int
-
     rdbVtxCacheSize {.
       hidden
       defaultValue: defaultRdbVtxCacheSize
       defaultValueDesc: $defaultRdbVtxCacheSize
       name: "debug-rdb-vtx-cache-size".}: int
 
+    rdbKeyCacheSize {.
+      hidden
+      defaultValue: defaultRdbKeyCacheSize
+      defaultValueDesc: $defaultRdbKeyCacheSize
+      name: "debug-rdb-key-cache-size".}: int
+
+    rdbBranchCacheSize {.
+      hidden
+      defaultValue: defaultRdbBranchCacheSize
+      defaultValueDesc: $defaultRdbBranchCacheSize
+      name: "debug-rdb-branch-cache-size".}: int
+
     rdbPrintStats {.
       hidden
       desc: "Print RDB statistics at exit"
       name: "debug-rdb-print-stats".}: bool
+
+    rewriteDatadirId* {.
+      hidden
+      desc: "Rewrite selected network config hash to database"
+      name: "debug-rewrite-datadir-id".}: bool
 
     case cmd* {.
       command
@@ -485,11 +510,6 @@ type
         name: "jwt-secret" .}: Option[InputFile]
 
     of `import`:
-      blocksFile* {.
-        argument
-        desc: "One or more RLP encoded block(s) files"
-        name: "blocks-file" }: seq[InputFile]
-
       maxBlocks* {.
         desc: "Maximum number of blocks to import"
         defaultValue: uint64.high()
@@ -539,6 +559,12 @@ type
         desc: "Store reverse slot hashes in database"
         defaultValue: false
         name: "debug-store-slot-hashes".}: bool
+
+    of `import-rlp`:
+      blocksFile* {.
+        argument
+        desc: "One or more RLP encoded block(s) files"
+        name: "blocks-file" }: seq[InputFile]
 
 func parseCmdArg(T: type NetworkId, p: string): T
     {.gcsafe, raises: [ValueError].} =
@@ -771,11 +797,13 @@ func dbOptions*(conf: NimbusConf, noKeyCache = false): DbOptions =
     rowCacheSize = conf.rocksdbRowCacheSize,
     blockCacheSize = conf.rocksdbBlockCacheSize,
     rdbKeyCacheSize =
-      if noKeyCache: 0 else: conf.rdbKeyCacheSize ,
-    rdbVtxCacheSize =
-      # The import command does not use the key cache - better give it to vtx
-      if noKeyCache: conf.rdbKeyCacheSize + conf.rdbVtxCacheSize
-      else: conf.rdbVtxCacheSize,
+      if noKeyCache: 0 else: conf.rdbKeyCacheSize,
+    rdbVtxCacheSize = conf.rdbVtxCacheSize,
+    rdbBranchCacheSize =
+      # The import command does not use the key cache - better give it to branch
+      if noKeyCache: conf.rdbKeyCacheSize + conf.rdbBranchCacheSize
+      else: conf.rdbBranchCacheSize,
+
     rdbPrintStats = conf.rdbPrintStats,
   )
 
@@ -798,6 +826,8 @@ proc makeConfig*(cmdLine = commandLineParams()): NimbusConf
     {.pop.}
   except CatchableError as e:
     raise e
+
+  setupLogging(result.logLevel, result.logStdout, none(OutFile))
 
   var networkId = result.getNetworkId()
 

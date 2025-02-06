@@ -1,5 +1,5 @@
 # Nimbus
-# Copyright (c) 2018-2024 Status Research & Development GmbH
+# Copyright (c) 2018-2025 Status Research & Development GmbH
 # Licensed under either of
 #  * Apache License, version 2.0, ([LICENSE-APACHE](LICENSE-APACHE))
 #  * MIT license ([LICENSE-MIT](LICENSE-MIT))
@@ -13,13 +13,13 @@ import
   std/[sequtils, algorithm],
   ./rpc_types,
   ./params,
-  ../db/core_db,
   ../db/ledger,
   ../constants, stint,
   ../utils/utils,
   ../transaction,
   ../transaction/call_evm,
   ../core/eip4844,
+  ../core/chain/forked_chain,
   ../evm/types,
   ../evm/state,
   ../evm/precompiles,
@@ -29,13 +29,11 @@ import
   ../common/common,
   web3/eth_api_types
 
-proc calculateMedianGasPrice*(chain: CoreDbRef): GasInt {.raises: [RlpError].} =
+proc calculateMedianGasPrice*(chain: ForkedChainRef): GasInt =
   const minGasPrice = 30_000_000_000.GasInt
   var prices  = newSeqOfCap[GasInt](64)
-  let header = chain.getCanonicalHead().valueOr:
-    return minGasPrice
-  for encodedTx in chain.getBlockTransactionData(header.txRoot):
-    let tx = decodeTx(encodedTx)
+  let blk = chain.latestBlock
+  for tx in blk.transactions:
     prices.add(tx.gasPrice)
 
   if prices.len > 0:
@@ -57,9 +55,10 @@ proc calculateMedianGasPrice*(chain: CoreDbRef): GasInt {.raises: [RlpError].} =
   # re-enable the "query.gasPrice" test case (remove `skip = true`).
   result = max(result, minGasPrice)
 
-proc unsignedTx*(tx: TransactionArgs, chain: CoreDbRef, defaultNonce: AccountNonce, chainId: ChainId): Transaction
-    {.gcsafe, raises: [CatchableError].} =
-
+proc unsignedTx*(tx: TransactionArgs,
+                 chain: ForkedChainRef,
+                 defaultNonce: AccountNonce,
+                 chainId: ChainId): Transaction =
   var res: Transaction
 
   if tx.to.isSome:
@@ -181,7 +180,7 @@ proc populateBlockObject*(blockHash: Hash32,
   result.requestsHash = header.requestsHash
 
 proc populateReceipt*(receipt: Receipt, gasUsed: GasInt, tx: Transaction,
-                      txIndex: uint64, header: Header): ReceiptObject =
+                      txIndex: uint64, header: Header, com: CommonRef): ReceiptObject =
   let sender = tx.recoverSender()
   var res = ReceiptObject()
   res.transactionHash = tx.rlpHash
@@ -232,12 +231,12 @@ proc populateReceipt*(receipt: Receipt, gasUsed: GasInt, tx: Transaction,
     res.status = Opt.some(Quantity(receipt.status.uint64))
 
   let baseFeePerGas = header.baseFeePerGas.get(0.u256)
-  let normTx = eip1559TxNormalization(tx, baseFeePerGas.truncate(GasInt))
-  res.effectiveGasPrice = Quantity(normTx.gasPrice)
+  let gasPrice = effectiveGasPrice(tx, baseFeePerGas.truncate(GasInt))
+  res.effectiveGasPrice = Quantity(gasPrice)
 
   if tx.txType == TxEip4844:
     res.blobGasUsed = Opt.some(Quantity(tx.versionedHashes.len.uint64 * GAS_PER_BLOB.uint64))
-    res.blobGasPrice = Opt.some(getBlobBaseFee(header.excessBlobGas.get(0'u64)))
+    res.blobGasPrice = Opt.some(getBlobBaseFee(header.excessBlobGas.get(0'u64), com, com.toEVMFork(header)))
 
   return res
 
@@ -262,7 +261,7 @@ proc createAccessList*(header: Header,
     fork    = com.toEVMFork(forkDeterminationInfo(header.number, header.timestamp))
     sender  = args.sender
     # TODO: nonce should be retrieved from txPool
-    nonce   = vmState.stateDB.getNonce(sender)
+    nonce   = vmState.ledger.getNonce(sender)
     to      = if args.to.isSome: args.to.get
               else: generateAddress(sender, nonce)
     precompiles = activePrecompilesList(fork)

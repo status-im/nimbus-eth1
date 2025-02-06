@@ -69,7 +69,7 @@ type
     latestPayloadAttributes*: PayloadAttributes
     latestExecutedPayload*  : ExecutableData
     latestForkchoice*       : ForkchoiceStateV1
-    latestExecutionRequests*: Opt[array[3, seq[byte]]]
+    latestExecutionRequests*: Opt[seq[seq[byte]]]
 
     # Merge related
     firstPoSBlockNumber*      : Opt[uint64]

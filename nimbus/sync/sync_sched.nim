@@ -1,5 +1,5 @@
 # Nimbus
-# Copyright (c) 2021-2024 Status Research & Development GmbH
+# Copyright (c) 2021-2025 Status Research & Development GmbH
 # Licensed under either of
 #  * Apache License, version 2.0, ([LICENSE-APACHE](LICENSE-APACHE) or
 #    http://www.apache.org/licenses/LICENSE-2.0)
@@ -25,10 +25,11 @@
 ##
 ## *runDaemon(ctx: CtxRef[S]) {.async: (raises: []).}*
 ##   Global background job that will be re-started as long as the variable
-##   `ctx.daemon` is set `true`. If that job was stopped due to re-setting
-##   `ctx.daemon` to `false`, it will be restarted next after it was reset
-##   as `true` not before there is some activity on the `runPool()`, or
-##   `runPeer()` functions.
+##   `ctx.daemon` is set `true`.
+##
+## *runTicker(ctx: CtxRef[S])*
+##   Global background job that is started every few seconds. It is to be
+##   intended for updating metrics, debug logging etc.
 ##
 ##
 ## *runStart(buddy: BuddyRef[S,W]): bool*
@@ -106,6 +107,7 @@ type
     buddiesMax: int             ## Max number of buddies
     buddies: ActiveBuddies[S,W] ## LRU cache with worker descriptors
     daemonRunning: bool         ## Running background job (in async mode)
+    tickerRunning: bool         ## Running background ticker
     monitorLock: bool           ## Monitor mode is activated (non-async mode)
     activeMulti: int            ## Number of async workers active/running
     runCtrl: RunCtrl            ## Start/stop control
@@ -139,6 +141,9 @@ const
   termWaitPollingTime = 10.milliseconds
     ## Wait for instance to have terminated for shutdown
 
+  tickerWaitInterval = 5.seconds
+    ## Ticker loop interval
+
 # ------------------------------------------------------------------------------
 # Private helpers
 # ------------------------------------------------------------------------------
@@ -160,7 +165,7 @@ proc key(peer: Peer): ENode =
 # Private functions
 # ------------------------------------------------------------------------------
 
-proc terminate[S,W](dsc: RunnerSyncRef[S,W]) =
+proc terminate[S,W](dsc: RunnerSyncRef[S,W]) {.async.} =
   ## Request termination and wait for sub-tasks to finish
   mixin runRelease
 
@@ -174,19 +179,18 @@ proc terminate[S,W](dsc: RunnerSyncRef[S,W]) =
       for w in dsc.buddies.nextPairs:
         if w.data.isRunning:
           w.data.worker.ctrl.stopped = true
-          # Activate async job so it can finish
-          try:
-            waitFor sleepAsync termWaitPollingTime
-          except CancelledError:
-            trace "Shutdown: peer timeout was cancelled",
-              peer=w.data.worker.peer, nWorkers=dsc.buddies.len
         else:
           dsc.buddies.del w.key # this is OK to delete
+      # Activate async jobs so they can finish
+      try:
+        waitFor sleepAsync termWaitPollingTime
+      except CancelledError:
+        trace "Shutdown: peer timeout was cancelled", nWorkers=dsc.buddies.len
 
     while dsc.daemonRunning:
       # Activate async job so it can finish
       try:
-        waitFor sleepAsync termWaitPollingTime
+        await sleepAsync termWaitPollingTime
       except CancelledError:
         trace "Shutdown: daemon timeout was cancelled", nWorkers=dsc.buddies.len
 
@@ -231,11 +235,33 @@ proc daemonLoop[S,W](dsc: RunnerSyncRef[S,W]) {.async: (raises: []).} =
         # Stop on error (must not end up in busy-loop). If the activation flag
         # `dsc.ctx.daemon` remains `true`, the deamon will be re-started from
         # the worker loop in due time.
-        trace "Deamon loop timeout was cancelled", nWorkers=dsc.buddies.len
+        trace "Deamon loop sleep was cancelled", nWorkers=dsc.buddies.len
         break
       # End while
 
   dsc.daemonRunning = false
+
+proc tickerLoop[S,W](dsc: RunnerSyncRef[S,W]) {.async: (raises: []).} =
+  mixin runTicker
+
+  if dsc.runCtrl == running:
+    dsc.tickerRunning = true
+
+    while true:
+      # Dispatch daemon sevice if needed
+      if not dsc.daemonRunning and dsc.ctx.daemon:
+        asyncSpawn dsc.daemonLoop()
+
+      # Run ticker job
+      dsc.ctx.runTicker()
+
+      try:
+        await sleepAsync tickerWaitInterval
+      except CancelledError:
+        trace "Ticker loop sleep was cancelled"
+        break
+
+  dsc.tickerRunning = false
 
 
 proc workerLoop[S,W](buddy: RunnerBuddyRef[S,W]) {.async: (raises: []).} =
@@ -319,9 +345,9 @@ proc workerLoop[S,W](buddy: RunnerBuddyRef[S,W]) {.async: (raises: []).} =
         worker.ctrl.stopped = true
         break taskExecLoop
 
-      # Dispatch daemon sevice if needed
-      if not dsc.daemonRunning and dsc.ctx.daemon:
-        asyncSpawn dsc.daemonLoop()
+      # Restart ticker sevice if needed
+      if not dsc.tickerRunning:
+        asyncSpawn dsc.tickerLoop()
 
       # Check for worker termination
       if worker.ctrl.stopped:
@@ -336,7 +362,7 @@ proc workerLoop[S,W](buddy: RunnerBuddyRef[S,W]) {.async: (raises: []).} =
       try:
         await sleepAsync suspend
       except CancelledError:
-        trace "Peer loop timeout was cancelled", peer, nWorkers=dsc.buddies.len
+        trace "Peer loop sleep was cancelled", peer, nWorkers=dsc.buddies.len
         break # stop on error (must not end up in busy-loop)
       # End while
 
@@ -404,7 +430,7 @@ proc onPeerConnected[S,W](dsc: RunnerSyncRef[S,W]; peer: Peer) =
       # This could happen if there are idle entries in the table, i.e.
       # somehow hanging runners.
       if dsc.ctx.noisyLog: trace "Peer table full! Dequeuing least used entry",
-        oldest, nPeers, nWorkers=dsc.buddies.len, maxWorkers
+        oldestPeer=oldest.peer, oldestOnly=oldest.only, nPeers=nPeers, nWorkers=dsc.buddies.len, maxWorkers
       # Setting to `zombie` will trigger the worker to terminate (if any.)
       oldest.ctrl.zombie = true
 
@@ -477,14 +503,13 @@ proc startSync*[S,W](dsc: RunnerSyncRef[S,W]): bool =
 
       po.setProtocol eth
       dsc.pool.addObserver(dsc, po)
-      if dsc.ctx.daemon:
-        asyncSpawn dsc.daemonLoop()
+      asyncSpawn dsc.tickerLoop()
       return true
 
 
-proc stopSync*[S,W](dsc: RunnerSyncRef[S,W]) =
+proc stopSync*[S,W](dsc: RunnerSyncRef[S,W]) {.async.} =
   ## Stop syncing and free peer handlers .
-  dsc.terminate()
+  await dsc.terminate()
 
 
 proc isRunning*[S,W](dsc: RunnerSyncRef[S,W]): bool =

@@ -1,5 +1,5 @@
 # Nimbus
-# Copyright (c) 2023-2024 Status Research & Development GmbH
+# Copyright (c) 2023-2025 Status Research & Development GmbH
 # Licensed under either of
 #  * Apache License, version 2.0, ([LICENSE-APACHE](LICENSE-APACHE) or
 #    http://www.apache.org/licenses/LICENSE-2.0)
@@ -11,23 +11,18 @@
 ## Aristo (aka Patricia) DB records transaction based merge test
 
 import
-  std/[algorithm, bitops, sequtils, sets, tables],
+  std/[algorithm, bitops, sets, tables],
   eth/common,
   results,
   unittest2,
   stew/endians2,
   ../../nimbus/db/opts,
-  ../../nimbus/db/core_db/backend/aristo_rocksdb,
   ../../nimbus/db/aristo/[
     aristo_check,
-    aristo_debug,
-    aristo_delete,
     aristo_desc,
-    aristo_get,
     aristo_hike,
     aristo_init/persistent,
     aristo_nearby,
-    aristo_part,
     aristo_part/part_debug,
     aristo_tx],
   ../replay/xcheck,
@@ -48,13 +43,13 @@ const
 # Private helpers
 # ------------------------------------------------------------------------------
 
-proc posixPrngRand(state: var uint32): byte =
+func posixPrngRand(state: var uint32): byte =
   ## POSIX.1-2001 example of a rand() implementation, see manual page rand(3).
   state = state * 1103515245 + 12345;
   let val = (state shr 16) and 32767    # mod 2^31
   (val shr 8).byte                      # Extract second byte
 
-proc rand[W: SomeInteger|VertexID](ap: var PrngDesc; T: type W): T =
+func rand[W: SomeInteger|VertexID](ap: var PrngDesc; T: type W): T =
   var a: array[sizeof T,byte]
   for n in 0 ..< sizeof T:
     a[n] = ap.prng.posixPrngRand().byte
@@ -73,10 +68,10 @@ proc rand[W: SomeInteger|VertexID](ap: var PrngDesc; T: type W): T =
     # That way the result is independent of endianness
     (addr result).copyMem(unsafeAddr w, sizeof w)
 
-proc init(T: type PrngDesc; seed: int): PrngDesc =
+func init(T: type PrngDesc; seed: int): PrngDesc =
   result.prng = (seed and 0x7fffffff).uint32
 
-proc rand(td: var PrngDesc; top: int): int =
+func rand(td: var PrngDesc; top: int): int =
   if 0 < top:
     let mask = (1 shl (8 * sizeof(int) - top.countLeadingZeroBits)) - 1
     for _ in 0 ..< 100:
@@ -109,7 +104,7 @@ proc randomisedLeafs(
 proc innerCleanUp(db: var AristoDbRef): bool {.discardable.}  =
   ## Defer action
   if not db.isNil:
-    let rx = db.txTop()
+    let rx = db.txFrameTop()
     if rx.isOk:
       let rc = rx.value.collapse(commit=false)
       xCheckRc rc.error == 0
@@ -140,7 +135,7 @@ proc saveToBackend(
     xCheckRc rc.error == 0
 
   block:
-    let rc = db.txTop()
+    let rc = db.txFrameTop()
     xCheckRc rc.error == 0
     tx = rc.value
 
@@ -157,7 +152,7 @@ proc saveToBackend(
     xCheckRc rc.error == 0
 
   block:
-    let rc = db.txTop()
+    let rc = db.txFrameTop()
     xCheckErr rc.value.level < 0 # force error
 
   block:
@@ -170,7 +165,7 @@ proc saveToBackend(
       noisy.say "***", "saveToBackend (8)", " debugID=", debugID
 
   # Update layers to original level
-  tx = db.txBegin().value.to(AristoDbRef).txBegin().value
+  tx = db.txFrameBegin().value.to(AristoDbRef).txFrameBegin().value
 
   true
 
@@ -268,8 +263,8 @@ proc testTxMergeAndDeleteOneByOne*(
   #       AristoDbRef.init(MemBackendRef)
 
   #   # Start transaction (double frame for testing)
-  #   xCheck db.txTop.isErr
-  #   var tx = db.txBegin().value.to(AristoDbRef).txBegin().value
+  #   xCheck db.txFrameTop.isErr
+  #   var tx = db.txFrameBegin().value.to(AristoDbRef).txFrameBegin().value
   #   xCheck tx.isTop()
   #   xCheck tx.level == 2
 
@@ -375,8 +370,8 @@ proc testTxMergeAndDeleteSubTree*(
   #       AristoDbRef.init(MemBackendRef)
 
   #   # Start transaction (double frame for testing)
-  #   xCheck db.txTop.isErr
-  #   var tx = db.txBegin().value.to(AristoDbRef).txBegin().value
+  #   xCheck db.txFrameTop.isErr
+  #   var tx = db.txFrameBegin().value.to(AristoDbRef).txFrameBegin().value
   #   xCheck tx.isTop()
   #   xCheck tx.level == 2
 

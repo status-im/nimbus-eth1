@@ -25,9 +25,7 @@ import
   ../gas_costs,
   ../op_codes,
   ./oph_defs,
-  ./oph_helpers,
-  eth/common,
-  stint
+  ./oph_helpers
 
 when not defined(evmc_enabled):
   import
@@ -63,19 +61,19 @@ else:
     ? c.opcodeGasCost(Sstore, res.gasCost, "SSTORE")
     c.gasMeter.refundGas(res.gasRefund)
 
-    c.vmState.mutateStateDB:
+    c.vmState.mutateLedger:
       db.setStorage(c.msg.contractAddress, slot, newValue)
     ok()
 
 
   proc sstoreNetGasMeteringImpl(c: Computation; slot, newValue: UInt256, coldAccess = 0.GasInt): EvmResultVoid =
     let
-      stateDB = c.vmState.readOnlyStateDB
+      ledger = c.vmState.readOnlyLedger
       currentValue = c.getStorage(slot)
 
       gasParam = GasParamsSs(
         currentValue: currentValue,
-        originalValue: stateDB.getCommittedStorage(c.msg.contractAddress, slot))
+        originalValue: ledger.getCommittedStorage(c.msg.contractAddress, slot))
 
       res = c.gasCosts[Sstore].ss_handler(newValue, gasParam)
 
@@ -83,7 +81,7 @@ else:
 
     c.gasMeter.refundGas(res.gasRefund)
 
-    c.vmState.mutateStateDB:
+    c.vmState.mutateLedger:
       db.setStorage(c.msg.contractAddress, slot, newValue)
     ok()
 
@@ -122,9 +120,7 @@ func jumpImpl(c: Computation; jumpTarget: UInt256): EvmResultVoid =
 
 proc popOp(cpt: VmCpt): EvmResultVoid =
   ## 0x50, Remove item from stack.
-  cpt.stack.popInt.isOkOr:
-    return err(error)
-  ok()
+  cpt.stack.pop()
 
 proc mloadOp(cpt: VmCpt): EvmResultVoid =
   ## 0x51, Load word from memory
@@ -170,7 +166,7 @@ proc mstore8Op(cpt: VmCpt): EvmResultVoid =
     reason = "MSTORE8: GasVeryLow + memory expansion")
 
   cpt.memory.extend(memPos, 1)
-  cpt.memory.write(memPos, value.toByteArrayBE[31])
+  cpt.memory.write(memPos, value.toBytesBE[31])
 
 
 # -------
@@ -253,7 +249,7 @@ proc sstoreEIP2929Op(cpt: VmCpt): EvmResultVoid =
     if cpt.host.accessStorage(cpt.msg.contractAddress, slot) == EVMC_ACCESS_COLD:
       coldAccessGas = ColdSloadCost
   else:
-    cpt.vmState.mutateStateDB:
+    cpt.vmState.mutateLedger:
       if not db.inAccessList(cpt.msg.contractAddress, slot):
         db.accessList(cpt.msg.contractAddress, slot)
         coldAccessGas = ColdSloadCost

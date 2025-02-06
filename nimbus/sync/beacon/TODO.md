@@ -8,19 +8,7 @@
 
 See issue [#2816](https://github.com/status-im/nimbus-eth1/issues/2816)
 
-### 2. Some assert
-
-        Error: unhandled exception: key not found: 0x441a0f..027bc96a [AssertionDefect]
-
-which happened on several `holesky` tests immediately after loging somehing like
-
-        NTC 2024-10-31 21:37:34.728 Finalized blocks persisted   file=forked_chain.nim:231 numberOfBlocks=129 last=044d22843cbe baseNumber=2646764 baseHash=21ec11c1deac
-
-or from another machine with literally the same exception text (but the stack-trace differs)
-
-        NTC 2024-10-31 21:58:07.616 Finalized blocks persisted   file=forked_chain.nim:231 numberOfBlocks=129 last=9cbcc52953a8 baseNumber=2646857 baseHash=9db5c2ac537b
-
-### 3. Mem overflow possible on small breasted systems
+### 2. Mem overflow possible on small breasted systems
 
 Running the exe client, a 1.5G response message was opbserved (on my 8G test system this kills the program as it has already 80% mem load. It happens while syncing holesky at around block #184160 and is reproducible on the 8G system but not yet on the an 80G system.)
 

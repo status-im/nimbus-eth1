@@ -1,5 +1,5 @@
 # Nimbus
-# Copyright (c) 2023-2024 Status Research & Development GmbH
+# Copyright (c) 2023-2025 Status Research & Development GmbH
 # Licensed and distributed under either of
 #   * MIT license (license terms in the root directory or at
 #     https://opensource.org/licenses/MIT).
@@ -17,15 +17,14 @@ import
   ../../../core/chain,
   ../worker_desc,
   ./blocks_staged/bodies,
-  ./update/metrics,
-  "."/[blocks_unproc, db, helpers]
+  "."/[blocks_unproc, db, helpers, update]
 
 # ------------------------------------------------------------------------------
 # Private debugging & logging helpers
 # ------------------------------------------------------------------------------
 
 formatIt(Hash32):
-  it.data.short
+  it.short
 
 # ------------------------------------------------------------------------------
 # Private functions
@@ -59,14 +58,20 @@ proc fetchAndCheck(
   for n in 1u ..< ivReq.len:
     let header = ctx.dbHeaderPeek(ivReq.minPt + n).valueOr:
       # There is nothing one can do here
-      raiseAssert info & " stashed header missing: n=" & $n &
-        " ivReq=" & $ivReq & " nth=" & (ivReq.minPt + n).bnStr
+      info "Block header missing, requesting reorg", ivReq, n,
+        nth=(ivReq.minPt + n).bnStr
+      # So require reorg
+      ctx.poolMode = true
+      return false
     blockHash[n - 1] = header.parentHash
     blk.blocks[offset + n].header = header
   blk.blocks[offset].header = ctx.dbHeaderPeek(ivReq.minPt).valueOr:
     # There is nothing one can do here
-    raiseAssert info & " stashed header missing: n=0" &
-      " ivReq=" & $ivReq & " nth=" & ivReq.minPt.bnStr
+    info "Block header missing, requesting reorg", ivReq, n=0,
+      nth=ivReq.minPt.bnStr
+    # So require reorg
+    ctx.poolMode = true
+    return false
   blockHash[ivReq.len - 1] =
     rlp.encode(blk.blocks[offset + ivReq.len - 1].header).keccak256
 
@@ -104,7 +109,11 @@ proc fetchAndCheck(
       blk.blocks[offset + n].uncles       = bodies[n].uncles
       blk.blocks[offset + n].withdrawals  = bodies[n].withdrawals
 
-  return offset < blk.blocks.len.uint64
+  if offset < blk.blocks.len.uint64:
+    return true
+
+  buddy.only.nBdyProcErrors.inc
+  return false
 
 # ------------------------------------------------------------------------------
 # Public functions
@@ -173,6 +182,9 @@ proc blocksStagedCollect*(
     # so that `async` can capture that properly.
     blk = (ref BlocksForImport)()
 
+    # Flag, not to reset error count
+    haveError = false
+
   # nFetchBodiesRequest
   while true:
     # Extract bottom range interval and fetch/stage it
@@ -189,18 +201,27 @@ proc blocksStagedCollect*(
 
     # Fetch and extend staging record
     if not await buddy.fetchAndCheck(ivReq, blk, info):
+      if ctx.poolMode:
+        # Reorg requested?
+        ctx.blocksUnprocCommit(iv.len, iv)
+        return false
+
+      haveError = true
 
       # Throw away first time block fetch data. Keep other data for a
       # partially assembled list.
       if nBlkBlocks == 0:
-        buddy.only.nBdyRespErrors.inc
-
-        if (1 < buddy.only.nBdyRespErrors and buddy.ctrl.stopped) or
-           fetchBodiesReqThresholdCount < buddy.only.nBdyRespErrors:
+        if ((0 < buddy.only.nBdyRespErrors or
+             0 < buddy.only.nBdyProcErrors) and buddy.ctrl.stopped) or
+           fetchBodiesReqErrThresholdCount < buddy.only.nBdyRespErrors or
+           fetchBodiesProcessErrThresholdCount < buddy.only.nBdyProcErrors:
           # Make sure that this peer does not immediately reconnect
           buddy.ctrl.zombie = true
+
         trace info & ": current block list discarded", peer, iv, ivReq,
-          ctrl=buddy.ctrl.state, nRespErrors=buddy.only.nBdyRespErrors
+          nStaged=ctx.blk.staged.len, ctrl=buddy.ctrl.state,
+          bdyErrors=buddy.bdyErrors
+
         ctx.blocksUnprocCommit(iv.len, iv)
         # At this stage allow a task switch so that some other peer might try
         # to work on the currently returned interval.
@@ -236,8 +257,13 @@ proc blocksStagedCollect*(
     raiseAssert info & ": duplicate key on staged queue iv=" & $iv
   qItem.data = blk[]
 
-  trace info & ": staged blocks", peer, bottomBlock=iv.minPt.bnStr,
-    nBlocks=blk.blocks.len, nStaged=ctx.blk.staged.len, ctrl=buddy.ctrl.state
+  # Reset block process errors (not too many consecutive failures this time)
+  if not haveError:
+    buddy.only.nBdyProcErrors = 0
+
+  info "Downloaded blocks", bottomBlock=iv.minPt.bnStr,
+    nBlocks=blk.blocks.len, nStaged=ctx.blk.staged.len,
+    bdyErrors=buddy.bdyErrors
 
   return true
 
@@ -256,6 +282,11 @@ proc blocksStagedImport*(
   block:
     let imported = ctx.chain.latestNumber()
     if imported + 1 < qItem.key:
+      # If there is a gap, the `FC` module data area might have been re-set (or
+      # some problem occured due to concurrent collection.) In any case, the
+      # missing block numbers are added to the range of blocks that need to be
+      # fetched.
+      ctx.blocksUnprocAmend(imported + 1, qItem.key - 1)
       trace info & ": there is a gap L vs. staged",
         B=ctx.chain.baseNumber.bnStr, L=imported.bnStr, staged=qItem.key.bnStr,
         C=ctx.layout.coupler.bnStr
@@ -268,8 +299,9 @@ proc blocksStagedImport*(
     nBlocks = qItem.data.blocks.len
     iv = BnRange.new(qItem.key, qItem.key + nBlocks.uint64 - 1)
 
-  trace info & ": import blocks ..", iv, nBlocks,
-    B=ctx.chain.baseNumber.bnStr, L=ctx.chain.latestNumber.bnStr
+  info "Importing blocks", iv, nBlocks,
+    base=ctx.chain.baseNumber.bnStr, head=ctx.chain.latestNumber.bnStr,
+    target=ctx.layout.final.bnStr
 
   var maxImport = iv.maxPt
   block importLoop:
@@ -287,26 +319,20 @@ proc blocksStagedImport*(
       if nBn <= ctx.chain.baseNumber:
         trace info & ": ignoring block <= base", n, iv,
           B=ctx.chain.baseNumber.bnStr, L=ctx.chain.latestNumber.bnStr,
-          nthBn=nBn.bnStr, nthHash=qItem.data.getNthHash(n)
+          nthBn=nBn.bnStr, nthHash=qItem.data.getNthHash(n).short
         continue
       ctx.pool.chain.importBlock(qItem.data.blocks[n]).isOkOr:
         warn info & ": import block error", n, iv,
           B=ctx.chain.baseNumber.bnStr, L=ctx.chain.latestNumber.bnStr,
-          nthBn=nBn.bnStr, nthHash=qItem.data.getNthHash(n), `error`=error
+          nthBn=nBn.bnStr, nthHash=qItem.data.getNthHash(n).short, `error`=error
         # Restore what is left over below
         maxImport = ctx.chain.latestNumber()
         break importLoop
 
       # Allow pseudo/async thread switch.
-      try: await sleepAsync asyncThreadSwitchTimeSlot
-      except CancelledError: discard
-      if not ctx.daemon:
-        # Shutdown?
+      (await ctx.updateAsyncTasks()).isOkOr:
         maxImport = ctx.chain.latestNumber()
         break importLoop
-
-      # Update, so it can be followed nicely
-      ctx.updateMetrics()
 
       # Occasionally mark the chain finalized
       if (n + 1) mod finaliserChainLengthMax == 0 or (n + 1) == nBlocks:
@@ -319,16 +345,14 @@ proc blocksStagedImport*(
         ctx.pool.chain.forkChoice(nthHash, finHash).isOkOr:
           warn info & ": fork choice error", n, iv,
             B=ctx.chain.baseNumber.bnStr, L=ctx.chain.latestNumber.bnStr,
-            F=ctx.layout.final.bnStr, nthBn=nBn.bnStr, nthHash,
+            F=ctx.layout.final.bnStr, nthBn=nBn.bnStr, nthHash=nthHash.short,
             finHash=(if finHash == nthHash: "nthHash" else: "F"), `error`=error
           # Restore what is left over below
           maxImport = ctx.chain.latestNumber()
           break importLoop
 
         # Allow pseudo/async thread switch.
-        try: await sleepAsync asyncThreadSwitchTimeSlot
-        except CancelledError: discard
-        if not ctx.daemon:
+        (await ctx.updateAsyncTasks()).isOkOr:
           maxImport = ctx.chain.latestNumber()
           break importLoop
 
@@ -340,12 +364,37 @@ proc blocksStagedImport*(
   for bn in iv.minPt .. maxImport:
     ctx.dbHeaderUnstash bn
 
-  # Update, so it can be followed nicely
-  ctx.updateMetrics()
-
-  trace info & ": import done", iv, nBlocks, B=ctx.chain.baseNumber.bnStr,
-    L=ctx.chain.latestNumber.bnStr, F=ctx.layout.final.bnStr
+  info "Import done", iv, nBlocks, base=ctx.chain.baseNumber.bnStr,
+    head=ctx.chain.latestNumber.bnStr, target=ctx.layout.final.bnStr
   return true
+
+
+proc blocksStagedReorg*(ctx: BeaconCtxRef; info: static[string]) =
+  ## Some pool mode intervention.
+  ##
+  ## One scenario is that some blocks do not have a matching header available.
+  ## The main reson might be that the queue of block lists had a gap so that
+  ## some blocks could not be imported. This in turn can happen when the `FC`
+  ## module was reset (e.g. by `CL` via RPC.)
+  ##
+  ## A reset by `CL` via RPC would mostly happen if the syncer is near the
+  ## top of the block chain anyway. So the savest way to re-org is to flush
+  ## the block queues as there won't be mant data cached, then.
+  ##
+  if ctx.blk.staged.len == 0 and
+     ctx.blocksUnprocChunks() == 0:
+    # nothing to do
+    return
+
+  # Update counter
+  ctx.pool.nReorg.inc
+
+  # Reset block queues
+  trace info & ": Flushing Block queues", nUnproc=ctx.blocksUnprocTotal(),
+    nStaged=ctx.blk.staged.len
+
+  ctx.blocksUnprocClear()
+  ctx.blk.staged.clear()
 
 # ------------------------------------------------------------------------------
 # End

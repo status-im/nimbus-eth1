@@ -34,27 +34,32 @@ proc genesisHeader(node: JsonNode): Header =
   let genesisRLP = hexToSeqByte(node["genesisRLP"].getStr)
   rlp.decode(genesisRLP, Block).header
 
-proc setupELClient*(conf: ChainConfig, node: JsonNode): TestEnv =
+proc initializeDb(memDB: CoreDbRef, node: JsonNode): Hash32 =
+  let
+    genesisHeader = node.genesisHeader
+    ledger = LedgerRef.init(memDB)
+
+  memDB.persistHeaderAndSetHead(genesisHeader).expect("persistHeader no error")
+  setupLedger(node["pre"], ledger)
+  ledger.persist()
+  doAssert ledger.getStateRoot == genesisHeader.stateRoot
+
+  genesisHeader.blockHash
+
+proc setupELClient*(conf: ChainConfig, taskPool: Taskpool, node: JsonNode): TestEnv =
   let
     memDB = newCoreDbRef DefaultDbMemory
-    genesisHeader = node.genesisHeader
-    com = CommonRef.new(memDB, conf)
-    stateDB = LedgerRef.init(memDB)
-    chain = newForkedChain(com, genesisHeader)
+    genesisHash = initializeDb(memDB, node)
+    com = CommonRef.new(memDB, taskPool, conf)
+    chain = ForkedChainRef.init(com)
 
-  setupStateDB(node["pre"], stateDB)
-  stateDB.persist()
-  doAssert stateDB.getStateRoot == genesisHeader.stateRoot
-
-  com.db.persistHeader(genesisHeader,
-    com.proofOfStake(genesisHeader)).expect("persistHeader no error")
-  let head = com.db.getCanonicalHead().expect("canonical head exists")
-  doAssert(head.blockHash == genesisHeader.blockHash)
+  let headHash = chain.latestHash
+  doAssert(headHash == genesisHash)
 
   let
-    txPool  = TxPoolRef.new(com)
-    beaconEngine = BeaconEngineRef.new(txPool, chain)
-    serverApi = newServerAPI(chain, txPool)
+    txPool  = TxPoolRef.new(chain)
+    beaconEngine = BeaconEngineRef.new(txPool)
+    serverApi = newServerAPI(txPool)
     rpcServer = newRpcHttpServer(["127.0.0.1:0"])
     rpcClient = newRpcHttpClient()
 

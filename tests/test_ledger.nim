@@ -1,5 +1,5 @@
 # Nimbus
-# Copyright (c) 2018-2024 Status Research & Development GmbH
+# Copyright (c) 2018-2025 Status Research & Development GmbH
 # Licensed under either of
 #  * Apache License, version 2.0, ([LICENSE-APACHE](LICENSE-APACHE) or
 #    http://www.apache.org/licenses/LICENSE-2.0)
@@ -18,11 +18,12 @@ import
   ../nimbus/common/common,
   ../nimbus/core/chain,
   ../nimbus/core/tx_pool,
-  ../nimbus/core/casper,
   ../nimbus/transaction,
   ../nimbus/constants,
   ../nimbus/db/ledger {.all.}, # import all private symbols
   unittest2
+
+import results
 
 const
   genesisFile = "tests/customgenesis/cancun123.json"
@@ -97,10 +98,11 @@ proc initEnv(): TestEnv =
 
   let
     com = CommonRef.new(
-      newCoreDbRef DefaultDbMemory,
+      newCoreDbRef DefaultDbMemory, nil,
       conf.networkId,
       conf.networkParams
     )
+    chain = newForkedChain(com, com.genesisHeader)
 
   TestEnv(
     com     : com,
@@ -108,8 +110,8 @@ proc initEnv(): TestEnv =
     vaultKey: privKey(hexPrivKey),
     nonce   : 0'u64,
     chainId : conf.networkParams.config.chainId,
-    xp      : TxPoolRef.new(com),
-    chain   : newForkedChain(com, com.genesisHeader),
+    xp      : TxPoolRef.new(chain),
+    chain   : chain,
   )
 
 func makeTx(
@@ -211,7 +213,7 @@ proc runTrial3Survive(env: TestEnv, ledger: LedgerRef; inx: int; noisy = false) 
   let eAddr = env.txs[inx].getRecipient
 
   block:
-    let dbTx = env.xdb.ctx.newTransaction()
+    let dbTx = env.xdb.ctx.txFrameBegin()
 
     block:
       let accTx = ledger.beginSavepoint
@@ -227,7 +229,7 @@ proc runTrial3Survive(env: TestEnv, ledger: LedgerRef; inx: int; noisy = false) 
     dbTx.rollback()
 
   block:
-    let dbTx = env.xdb.ctx.newTransaction()
+    let dbTx = env.xdb.ctx.txFrameBegin()
 
     block:
       let accTx = ledger.beginSavepoint
@@ -246,7 +248,7 @@ proc runTrial4(env: TestEnv, ledger: LedgerRef; inx: int; rollback: bool) =
   let eAddr = env.txs[inx].getRecipient
 
   block:
-    let dbTx = env.xdb.ctx.newTransaction()
+    let dbTx = env.xdb.ctx.txFrameBegin()
 
     block:
       let accTx = ledger.beginSavepoint
@@ -276,7 +278,7 @@ proc runTrial4(env: TestEnv, ledger: LedgerRef; inx: int; rollback: bool) =
     dbTx.commit()
 
   block:
-    let dbTx = env.xdb.ctx.newTransaction()
+    let dbTx = env.xdb.ctx.txFrameBegin()
 
     block:
       let accTx = ledger.beginSavepoint
@@ -309,14 +311,13 @@ proc runLedgerTransactionTests(noisy = true) =
         for _ in 0..<NumTransactions:
           let recipient = initAddr(recipientSeed)
           let tx = env.makeTx(recipient, 1.u256)
-          env.xp.add(PooledTransaction(tx: tx))
-
+          check env.xp.addTx(tx).isOk
           inc recipientSeed
 
-        check env.xp.nItems.total == NumTransactions
-        env.com.pos.prevRandao = prevRandao
-        env.com.pos.feeRecipient = feeRecipient
-        env.com.pos.timestamp = blockTime
+        check env.xp.len == NumTransactions
+        env.xp.prevRandao = prevRandao
+        env.xp.feeRecipient = feeRecipient
+        env.xp.timestamp = blockTime
 
         blockTime = EthTime(blockTime.uint64 + 1'u64)
 
@@ -327,18 +328,14 @@ proc runLedgerTransactionTests(noisy = true) =
           return
 
         let blk = r.get.blk
-        let body = BlockBody(
-          transactions: blk.txs,
-          uncles: blk.uncles,
-          withdrawals: Opt.some(newSeq[Withdrawal]())
-        )
-        env.importBlock(Block.init(blk.header, body))
+        env.importBlock(blk)
 
-        check env.xp.smartHead(blk.header, env.chain)
-        for tx in body.transactions:
+        check blk.transactions.len == NumTransactions
+        env.xp.removeNewBlockTxs(blk)
+        for tx in blk.transactions:
           env.txs.add tx
 
-    let head = env.xdb.getCanonicalHead().expect("canonicalHead exists")
+    let head = env.chain.latestHeader
     test &"Collect unique recipient addresses from {env.txs.len} txs," &
         &" head=#{head.number}":
       # since we generate our own transactions instead of replaying
@@ -349,14 +346,14 @@ proc runLedgerTransactionTests(noisy = true) =
 
     test &"Run {env.txi.len} two-step trials with rollback":
       for n in env.txi:
-        let dbTx = env.xdb.ctx.newTransaction()
+        let dbTx = env.xdb.ctx.txFrameBegin()
         defer: dbTx.dispose()
         let ledger = env.com.getLedger()
         env.runTrial2ok(ledger, n)
 
     test &"Run {env.txi.len} three-step trials with rollback":
       for n in env.txi:
-        let dbTx = env.xdb.ctx.newTransaction()
+        let dbTx = env.xdb.ctx.txFrameBegin()
         defer: dbTx.dispose()
         let ledger = env.com.getLedger()
         env.runTrial3(ledger, n, rollback = true)
@@ -364,21 +361,21 @@ proc runLedgerTransactionTests(noisy = true) =
     test &"Run {env.txi.len} three-step trials with extra db frame rollback" &
         " throwing Exceptions":
       for n in env.txi:
-        let dbTx = env.xdb.ctx.newTransaction()
+        let dbTx = env.xdb.ctx.txFrameBegin()
         defer: dbTx.dispose()
         let ledger = env.com.getLedger()
         env.runTrial3Survive(ledger, n, noisy)
 
     test &"Run {env.txi.len} tree-step trials without rollback":
       for n in env.txi:
-        let dbTx = env.xdb.ctx.newTransaction()
+        let dbTx = env.xdb.ctx.txFrameBegin()
         defer: dbTx.dispose()
         let ledger = env.com.getLedger()
         env.runTrial3(ledger, n, rollback = false)
 
     test &"Run {env.txi.len} four-step trials with rollback and db frames":
       for n in env.txi:
-        let dbTx = env.xdb.ctx.newTransaction()
+        let dbTx = env.xdb.ctx.txFrameBegin()
         defer: dbTx.dispose()
         let ledger = env.com.getLedger()
         env.runTrial4(ledger, n, rollback = true)
@@ -390,31 +387,31 @@ proc runLedgerBasicOperationsTests() =
 
       var
         memDB = newCoreDbRef DefaultDbMemory
-        stateDB {.used.} = LedgerRef.init(memDB)
+        ledger {.used.} = LedgerRef.init(memDB)
         address {.used.} = address"0x0f572e5295c57f15886f9b263e2f6d2d6c7b5ec6"
         code {.used.} = hexToSeqByte("0x0f572e5295c57f15886f9b263e2f6d2d6c7b5ec6")
         stateRoot {.used.} : Hash32
 
     test "accountExists and isDeadAccount":
-      check stateDB.accountExists(address) == false
-      check stateDB.isDeadAccount(address) == true
+      check ledger.accountExists(address) == false
+      check ledger.isDeadAccount(address) == true
 
-      stateDB.setBalance(address, 1000.u256)
+      ledger.setBalance(address, 1000.u256)
 
-      check stateDB.accountExists(address) == true
-      check stateDB.isDeadAccount(address) == false
+      check ledger.accountExists(address) == true
+      check ledger.isDeadAccount(address) == false
 
-      stateDB.setBalance(address, 0.u256)
-      stateDB.setNonce(address, 1)
-      check stateDB.isDeadAccount(address) == false
+      ledger.setBalance(address, 0.u256)
+      ledger.setNonce(address, 1)
+      check ledger.isDeadAccount(address) == false
 
-      stateDB.setCode(address, code)
-      stateDB.setNonce(address, 0)
-      check stateDB.isDeadAccount(address) == false
+      ledger.setCode(address, code)
+      ledger.setNonce(address, 0)
+      check ledger.isDeadAccount(address) == false
 
-      stateDB.setCode(address, newSeq[byte]())
-      check stateDB.isDeadAccount(address) == true
-      check stateDB.accountExists(address) == true
+      ledger.setCode(address, newSeq[byte]())
+      check ledger.isDeadAccount(address) == true
+      check ledger.accountExists(address) == true
 
     test "clone storage":
       # give access to private fields of AccountRef

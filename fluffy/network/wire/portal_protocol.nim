@@ -1,5 +1,5 @@
 # Fluffy
-# Copyright (c) 2021-2024 Status Research & Development GmbH
+# Copyright (c) 2021-2025 Status Research & Development GmbH
 # Licensed and distributed under either of
 #   * MIT license (license terms in the root directory or at https://opensource.org/licenses/MIT).
 #   * Apache v2 license (license terms in the root directory or at https://www.apache.org/licenses/LICENSE-2.0).
@@ -24,7 +24,7 @@ import
   minilru,
   eth/rlp,
   eth/p2p/discoveryv5/[protocol, node, enr, routing_table, random2, nodes_verification],
-  "."/[portal_stream, portal_protocol_config],
+  "."/[portal_stream, portal_protocol_config, ping_extensions],
   ./messages
 
 from std/times import epochTime # For system timestamp in traceContentLookup
@@ -186,6 +186,7 @@ type
     offerWorkers: seq[Future[void]]
     pingTimings: Table[NodeId, chronos.Moment]
     config*: PortalProtocolConfig
+    pingExtensionCapabilities*: set[uint16]
 
   PortalResult*[T] = Result[T, string]
 
@@ -205,6 +206,7 @@ type
   ContentLookupResult* = object
     content*: seq[byte]
     utpTransfer*: bool
+    receivedFrom*: Node
     # List of nodes which do not have requested content, and for which
     # content is in their range
     nodesInterestedInContent*: seq[Node]
@@ -219,7 +221,7 @@ type
 
   TraceObject* = object
     origin*: NodeId
-    targetId: UInt256
+    targetId*: UInt256
     receivedFrom*: Opt[NodeId]
     responses*: Table[string, TraceResponse]
     metadata*: Table[string, NodeMetadata]
@@ -238,11 +240,13 @@ func init*(
     T: type ContentLookupResult,
     content: seq[byte],
     utpTransfer: bool,
+    receivedFrom: Node,
     nodesInterestedInContent: seq[Node],
 ): T =
   ContentLookupResult(
     content: content,
     utpTransfer: utpTransfer,
+    receivedFrom: receivedFrom,
     nodesInterestedInContent: nodesInterestedInContent,
   )
 
@@ -331,25 +335,67 @@ func truncateEnrs(
 
   enrs
 
+proc handlePingExtension(
+    p: PortalProtocol,
+    payloadType: uint16,
+    encodedPayload: ByteList[1100],
+    srcId: NodeId,
+): (uint16, ByteList[1100]) =
+  if payloadType notin p.pingExtensionCapabilities:
+    return encodeErrorPayload(ErrorCode.ExtensionNotSupported)
+
+  case payloadType
+  of CapabilitiesType:
+    let payload = decodeSsz(encodedPayload.asSeq(), CapabilitiesPayload).valueOr:
+      return encodeErrorPayload(ErrorCode.FailedToDecodePayload)
+
+    p.radiusCache.put(srcId, payload.data_radius)
+
+    (
+      payloadType,
+      encodePayload(
+        CapabilitiesPayload(
+          client_info: ByteList[MAX_CLIENT_INFO_BYTE_LENGTH].init(@[]),
+          data_radius: p.dataRadius(),
+          capabilities: List[uint16, MAX_CAPABILITIES_LENGTH].init(
+            p.pingExtensionCapabilities.toSeq()
+          ),
+        )
+      ),
+    )
+  of BasicRadiusType:
+    let payload = decodeSsz(encodedPayload.asSeq(), BasicRadiusPayload).valueOr:
+      return encodeErrorPayload(ErrorCode.FailedToDecodePayload)
+
+    p.radiusCache.put(srcId, payload.data_radius)
+
+    (payloadType, encodePayload(HistoryRadiusPayload(data_radius: p.dataRadius())))
+  of HistoryRadiusType:
+    let payload = decodeSsz(encodedPayload.asSeq(), HistoryRadiusPayload).valueOr:
+      return encodeErrorPayload(ErrorCode.FailedToDecodePayload)
+
+    p.radiusCache.put(srcId, payload.data_radius)
+
+    (
+      payloadType,
+      encodePayload(
+        HistoryRadiusPayload(data_radius: p.dataRadius(), ephemeral_header_count: 0)
+      ),
+    )
+  else:
+    encodeErrorPayload(ErrorCode.ExtensionNotSupported)
+
 proc handlePing(p: PortalProtocol, ping: PingMessage, srcId: NodeId): seq[byte] =
-  # TODO: This should become custom per Portal Network
   # TODO: Need to think about the effect of malicious actor sending lots of
   # pings from different nodes to clear the LRU.
-  let customPayloadDecoded =
-    try:
-      SSZ.decode(ping.customPayload.asSeq(), CustomPayload)
-    except SerializationError:
-      # invalid custom payload, send empty back
-      return @[]
-  p.radiusCache.put(srcId, customPayloadDecoded.dataRadius)
+  let (payloadType, payload) =
+    handlePingExtension(p, ping.payload_type, ping.payload, srcId)
 
-  let customPayload = CustomPayload(dataRadius: p.dataRadius())
-  let p = PongMessage(
-    enrSeq: p.localNode.record.seqNum,
-    customPayload: ByteList[2048](SSZ.encode(customPayload)),
+  encodeMessage(
+    PongMessage(
+      enrSeq: p.localNode.record.seqNum, payload_type: payloadType, payload: payload
+    )
   )
-
-  encodeMessage(p)
 
 proc handleFindNodes(p: PortalProtocol, fn: FindNodesMessage): seq[byte] =
   if fn.distances.len == 0:
@@ -407,6 +453,9 @@ proc handleFindContent(
     int64(logDistance), labelValues = [$p.protocolId]
   )
 
+  # Clear out the timed out connections and pending transfers
+  p.stream.pruneAllowedRequestConnections()
+
   # Check first if content is in range, as this is a cheaper operation
   if p.inRange(contentId) and p.stream.canAddPendingTransfer(srcId, contentId):
     let contentResult = p.dbGet(fc.contentKey, contentId)
@@ -448,6 +497,9 @@ proc handleOffer(p: PortalProtocol, o: OfferMessage, srcId: NodeId): seq[byte] =
         contentKeys: ContentKeysBitList.init(o.contentKeys.len),
       )
     )
+
+  # Clear out the timed out connections and pending transfers
+  p.stream.pruneAllowedOfferConnections()
 
   var
     contentKeysBitList = ContentKeysBitList.init(o.contentKeys.len)
@@ -564,6 +616,7 @@ proc new*(
     bootstrapRecords: openArray[Record] = [],
     distanceCalculator: DistanceCalculator = XorDistanceCalculator,
     config: PortalProtocolConfig = defaultPortalProtocolConfig,
+    pingExtensionCapabilities: set[uint16] = {CapabilitiesType},
 ): T =
   let proto = PortalProtocol(
     protocolHandler: messageHandler,
@@ -586,6 +639,7 @@ proc new*(
     offerQueue: newAsyncQueue[OfferRequest](config.maxConcurrentOffers),
     pingTimings: Table[NodeId, chronos.Moment](),
     config: config,
+    pingExtensionCapabilities: pingExtensionCapabilities,
   )
 
   proto.baseProtocol.registerTalkProtocol(@(proto.protocolId), proto).expect(
@@ -648,10 +702,19 @@ proc reqResponse[Request: SomeMessage, Response: SomeMessage](
 proc pingImpl*(
     p: PortalProtocol, dst: Node
 ): Future[PortalResult[PongMessage]] {.async: (raises: [CancelledError]).} =
-  let customPayload = CustomPayload(dataRadius: p.dataRadius())
+  let pingPayload = encodePayload(
+    CapabilitiesPayload(
+      client_info: ByteList[MAX_CLIENT_INFO_BYTE_LENGTH].init(@[]),
+      data_radius: p.dataRadius(),
+      capabilities:
+        List[uint16, MAX_CAPABILITIES_LENGTH].init(p.pingExtensionCapabilities.toSeq()),
+    )
+  )
+
   let ping = PingMessage(
     enrSeq: p.localNode.record.seqNum,
-    customPayload: ByteList[2048](SSZ.encode(customPayload)),
+    payload_type: CapabilitiesType,
+    payload: pingPayload,
   )
 
   return await reqResponse[PingMessage, PongMessage](p, dst, ping)
@@ -678,9 +741,7 @@ proc offerImpl*(
 
   return await reqResponse[OfferMessage, AcceptMessage](p, dst, offer)
 
-proc recordsFromBytes*(
-    rawRecords: List[ByteList[2048], 32]
-): PortalResult[seq[Record]] =
+proc recordsFromBytes(rawRecords: List[ByteList[2048], 32]): PortalResult[seq[Record]] =
   var records: seq[Record]
   for r in rawRecords.asSeq():
     let record = enr.Record.fromBytes(r.asSeq()).valueOr:
@@ -694,7 +755,9 @@ proc recordsFromBytes*(
 
 proc ping*(
     p: PortalProtocol, dst: Node
-): Future[PortalResult[PongMessage]] {.async: (raises: [CancelledError]).} =
+): Future[PortalResult[(uint64, CapabilitiesPayload)]] {.
+    async: (raises: [CancelledError])
+.} =
   let pongResponse = await p.pingImpl(dst)
 
   if pongResponse.isOk():
@@ -702,17 +765,20 @@ proc ping*(
     p.pingTimings[dst.id] = now(chronos.Moment)
 
     let pong = pongResponse.get()
-    # TODO: This should become custom per Portal Network
-    let customPayloadDecoded =
-      try:
-        SSZ.decode(pong.customPayload.asSeq(), CustomPayload)
-      except SerializationError:
-        # invalid custom payload
-        return err("Pong message contains invalid custom payload")
 
-    p.radiusCache.put(dst.id, customPayloadDecoded.dataRadius)
+    # Note: currently only decoding as capabilities payload as this is the only
+    # one that we support sending.
+    if pong.payload_type != CapabilitiesType:
+      return err("Pong message contains invalid or error payload")
 
-  return pongResponse
+    let payload = decodeSsz(pong.payload.asSeq(), CapabilitiesPayload).valueOr:
+      return err("Pong message contains invalid CapabilitiesPayload")
+
+    p.radiusCache.put(dst.id, payload.data_radius)
+
+    ok((pong.enrSeq, payload))
+  else:
+    err(pongResponse.error)
 
 proc findNodes*(
     p: PortalProtocol, dst: Node, distances: seq[uint16]
@@ -741,21 +807,18 @@ proc findContent*(
     let m = contentMessageResponse.get()
     case m.contentMessageType
     of connectionIdType:
-      let nodeAddress = NodeAddress.init(dst)
-      if nodeAddress.isNone():
-        # It should not happen as we are already after the succesfull
-        # talkreq/talkresp cycle
-        error "Trying to connect to node with unknown address", id = dst.id
-        return err("Trying to connect to node with unknown address")
+      let nodeAddress = NodeAddress.init(dst).valueOr:
+        # This should not happen as it comes a after succesfull talkreq/talkresp
+        return err("Trying to connect to node with unknown address: " & $dst.id)
 
-      # uTP protocol uses BE for all values in the header, incl. connection id
-      let socket = (
-        await p.stream.connectTo(
-          nodeAddress.unsafeGet(), uint16.fromBytesBE(m.connectionId)
+      let socket =
+        ?(
+          await p.stream.connectTo(
+            # uTP protocol uses BE for all values in the header, incl. connection id
+            nodeAddress,
+            uint16.fromBytesBE(m.connectionId),
+          )
         )
-      ).valueOr:
-        debug "uTP connection error for find content", error
-        return err("Error connecting uTP socket")
 
       try:
         # Read all bytes from the socket
@@ -810,7 +873,7 @@ proc findContent*(
       else:
         return err("Content message returned invalid ENRs")
   else:
-    warn "FindContent failed due to find content request failure ",
+    debug "FindContent failed due to find content request failure ",
       error = contentMessageResponse.error
 
     return err("No content response")
@@ -827,8 +890,8 @@ proc getContentKeys(o: OfferRequest): ContentKeysList =
 
 func getMaxOfferedContentKeys*(protocolIdLen: uint32, maxKeySize: uint32): int =
   ## Calculates how many ContentKeys will fit in one offer message which
-  ## will be small enouch to fit into discv5 limit.
-  ## This is neccesarry as contentKeysLimit (64) is sometimes to big, and even
+  ## will be small enough to fit into discv5 limit.
+  ## This is necessary as contentKeysLimit (64) is sometimes too big, and even
   ## half of this can be too much to fit into discv5 limits.
 
   let maxTalkReqPayload = maxDiscv5PacketSize - getTalkReqOverhead(int(protocolIdLen))
@@ -887,7 +950,8 @@ proc offer(
     if m.contentKeys.len() != contentKeysLen:
       # TODO:
       # When there is such system, the peer should get scored negatively here.
-      error "Accepted content key bitlist has invalid size"
+      error "Accepted content key bitlist has invalid size",
+        bitListLen = m.contentKeys.len(), contentKeysLen
       return err("Accepted content key bitlist has invalid size")
 
     let acceptedKeysAmount = m.contentKeys.countOnes()
@@ -899,20 +963,12 @@ proc offer(
       # Don't open an uTP stream if no content was requested
       return ok(m.contentKeys)
 
-    let nodeAddress = NodeAddress.init(o.dst)
-    if nodeAddress.isNone():
-      # It should not happen as we are already after succesfull talkreq/talkresp
-      # cycle
-      error "Trying to connect to node with unknown address", id = o.dst.id
-      return err("Trying to connect to node with unknown address")
+    let nodeAddress = NodeAddress.init(o.dst).valueOr:
+      # This should not happen as it comes a after succesfull talkreq/talkresp
+      return err("Trying to connect to node with unknown address: " & $o.dst.id)
 
-    let socket = (
-      await p.stream.connectTo(
-        nodeAddress.unsafeGet(), uint16.fromBytesBE(m.connectionId)
-      )
-    ).valueOr:
-      debug "uTP connection error for offer content", error
-      return err("Error connecting uTP socket")
+    let socket =
+      ?(await p.stream.connectTo(nodeAddress, uint16.fromBytesBE(m.connectionId)))
 
     template lenu32(x: untyped): untyped =
       uint32(len(x))
@@ -922,7 +978,6 @@ proc offer(
       for i, b in m.contentKeys:
         if b:
           let content = o.contentList[i].content
-          # TODO: stop using faststreams for this
           var output = memoryOutput()
           try:
             output.write(toBytes(content.lenu32, Leb128).toOpenArray())
@@ -1238,12 +1293,13 @@ proc contentLookup*(
         )
         return Opt.some(
           ContentLookupResult.init(
-            content.content, content.utpTransfer, nodesWithoutContent
+            content.content, content.utpTransfer, content.src, nodesWithoutContent
           )
         )
     else:
-      # TODO: Should we do something with the node that failed responding our
-      # query?
+      # Note: Not doing any retries here as retries can/should be done on a
+      # higher layer. However, depending on the failure we could attempt a retry,
+      # e.g. on uTP specific errors.
       discard
 
   portal_lookup_content_failures.inc(labelValues = [$p.protocolId])
@@ -1265,8 +1321,21 @@ proc traceContentLookup*(
   # first for the same request.
   p.baseProtocol.rng[].shuffle(closestNodes)
 
-  var responses = Table[string, TraceResponse]()
-  var metadata = Table[string, NodeMetadata]()
+  # Sort closestNodes so that nodes that are in range of the target content
+  # are queried first
+  proc nodesCmp(x, y: Node): int =
+    let
+      xRadius = p.radiusCache.get(x.id)
+      yRadius = p.radiusCache.get(y.id)
+
+    if xRadius.isSome() and p.inRange(x.id, xRadius.unsafeGet(), targetId):
+      -1
+    elif yRadius.isSome() and p.inRange(y.id, yRadius.unsafeGet(), targetId):
+      1
+    else:
+      0
+
+  closestNodes.sort(nodesCmp)
 
   var asked, seen = HashSet[NodeId]()
   asked.incl(p.localNode.id) # No need to ask our own node
@@ -1274,19 +1343,19 @@ proc traceContentLookup*(
   for node in closestNodes:
     seen.incl(node.id)
 
+  # Trace data
+  var responses = Table[string, TraceResponse]()
+  var metadata = Table[string, NodeMetadata]()
   # Local node should be part of the responses
   responses["0x" & $p.localNode.id] =
     TraceResponse(durationMs: 0, respondedWith: seen.toSeq())
-
   metadata["0x" & $p.localNode.id] = NodeMetadata(
     enr: p.localNode.record, distance: p.distance(p.localNode.id, targetId)
   )
-
-  # We should also have metadata for all the closes nodes
-  # in order to be able to show cancelled requests
-  for cn in closestNodes:
-    metadata["0x" & $cn.id] =
-      NodeMetadata(enr: cn.record, distance: p.distance(cn.id, targetId))
+  # And metadata for all the nodes local node closestNodes
+  for node in closestNodes:
+    metadata["0x" & $node.id] =
+      NodeMetadata(enr: node.record, distance: p.distance(node.id, targetId))
 
   var pendingQueries = newSeqOfCap[
     Future[PortalResult[FoundContent]].Raising([CancelledError])
@@ -1413,8 +1482,12 @@ proc traceContentLookup*(
           ),
         )
     else:
-      # TODO: Should we do something with the node that failed responding our
-      # query?
+      # Note: Not doing any retries here as retries can/should be done on a
+      # higher layer. However, depending on the failure we could attempt a retry,
+      # e.g. on uTP specific errors.
+      # TODO: Ideally we get an empty response added to the responses table
+      # and the metadata for the node that failed to respond. In the current
+      # implementation there is no access to the node information however.
       discard
 
   portal_lookup_content_failures.inc(labelValues = [$p.protocolId])
@@ -1493,19 +1566,6 @@ proc queryRandom*(
   ## Perform a query for a random target, return all nodes discovered.
   p.query(NodeId.random(p.baseProtocol.rng[]))
 
-proc getNClosestNodesWithRadius*(
-    p: PortalProtocol, targetId: NodeId, n: int, seenOnly: bool = false
-): seq[(Node, UInt256)] =
-  let closestLocalNodes =
-    p.routingTable.neighbours(targetId, k = n, seenOnly = seenOnly)
-
-  var nodesWithRadiuses: seq[(Node, UInt256)]
-  for node in closestLocalNodes:
-    let radius = p.radiusCache.get(node.id)
-    if radius.isSome():
-      nodesWithRadiuses.add((node, radius.unsafeGet()))
-  return nodesWithRadiuses
-
 proc neighborhoodGossip*(
     p: PortalProtocol,
     srcNodeId: Opt[NodeId],
@@ -1529,21 +1589,27 @@ proc neighborhoodGossip*(
 
   # For selecting the closest nodes to whom to gossip the content a mixed
   # approach is taken:
-  # 1. Select the closest neighbours in the routing table
-  # 2. Check if the radius is known for these these nodes and whether they are
+  # 1. Select the closest neighbours in the routing table.
+  # 2. Shuffle the selected nodes to randomize the gossip process so that we
+  # don't always offer to the same closest nodes.
+  # 3. Check if the radius is known for these these nodes and whether they are
   # in range of the content to be offered.
-  # 3. If more than n (= maxGossipNodes) nodes are in range, offer these nodes
+  # 4. If more than n (= maxGossipNodes) nodes are in range, offer these nodes
   # the content (maxed out at n).
-  # 4. If less than n nodes are in range, do a node lookup, and offer the nodes
-  # returned from the lookup the content (max nodes set at 8)
+  # 5. If less than n nodes are in range, do a node lookup, and offer the nodes
+  # returned from the lookup the content (max nodes set at 8).
   #
   # This should give a bigger rate of success and avoid the data being stopped
   # in its propagation than when looking only for nodes in the own routing
   # table, but at the same time avoid unnecessary node lookups.
   # It might still cause issues in data getting propagated in a wider id range.
 
-  let closestLocalNodes =
+  var closestLocalNodes =
     p.routingTable.neighbours(NodeId(contentId), k = 16, seenOnly = true)
+
+  # Shuffling the order of the nodes in order to not always hit the same node
+  # first for the same request.
+  p.baseProtocol.rng[].shuffle(closestLocalNodes)
 
   var gossipNodes: seq[Node]
   for node in closestLocalNodes:
@@ -1690,8 +1756,8 @@ proc revalidateNode*(p: PortalProtocol, n: Node) {.async: (raises: [CancelledErr
   let pong = await p.ping(n)
 
   if pong.isOk():
-    let res = pong.get()
-    if res.enrSeq > n.record.seqNum:
+    let (enrSeq, _) = pong.get()
+    if enrSeq > n.record.seqNum:
       # Request new ENR
       let nodesMessage = await p.findNodes(n, @[0'u16])
       if nodesMessage.isOk():
@@ -1815,41 +1881,3 @@ proc resolve*(
         return Opt.some(n)
 
   return node
-
-proc resolveWithRadius*(
-    p: PortalProtocol, id: NodeId
-): Future[Opt[(Node, UInt256)]] {.async: (raises: [CancelledError]).} =
-  ## Resolve a `Node` based on provided `NodeId`, also try to establish what
-  ## is known radius of found node.
-  ##
-  ## This will first look in the own routing table. If the node is known, it
-  ## will try to contact if for newer information. If node is not known or it
-  ## does not reply, a lookup is done to see if it can find a (newer) record of
-  ## the node on the network.
-  ##
-  ## If node is found, radius will be first checked in radius cache, it radius
-  ## is not known node will be pinged to establish what is its current radius
-  ##
-
-  let n = await p.resolve(id)
-  if n.isNone():
-    return Opt.none((Node, UInt256))
-
-  let node = n.unsafeGet()
-
-  let r = p.radiusCache.get(id)
-  if r.isSome():
-    return Opt.some((node, r.unsafeGet()))
-
-  let pongResult = await p.ping(node)
-  if pongResult.isOk():
-    let maybeRadius = p.radiusCache.get(id)
-    # After successful ping radius should already be in cache, but for the
-    # unlikely case that it is not, check it just to be sure.
-    # TODO: refactor ping to return node radius.
-    if maybeRadius.isNone():
-      return Opt.none((Node, UInt256))
-    else:
-      return Opt.some((node, maybeRadius.unsafeGet()))
-  else:
-    return Opt.none((Node, UInt256))

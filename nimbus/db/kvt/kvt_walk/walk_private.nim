@@ -9,8 +9,7 @@
 # distributed except according to those terms.
 
 import
-  std/[sets, tables],
-  eth/common,
+  std/sets,
   ".."/[kvt_desc, kvt_init, kvt_layers]
 
 # ------------------------------------------------------------------------------

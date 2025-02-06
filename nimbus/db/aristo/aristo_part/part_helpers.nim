@@ -256,19 +256,19 @@ proc getRvid*(
     ps: PartStateRef;
     root: VertexID;
     key: HashKey;
-      ): Result[tuple[rvid: RootedVertexID, fromStateDb: bool],AristoError] =
+      ): Result[tuple[rvid: RootedVertexID, fromLedger: bool],AristoError] =
   ## Find key in `ps[]` or create a new key. the value `onStateDb` is
   ## return `false` if a new entry was created.
   ##
-  var (rvid, fromStateDb) = (ps[key], true)
+  var (rvid, fromLedger) = (ps[key], true)
   if not rvid.isValid:
     # Create new one
-    (rvid, fromStateDb) = ((root, ps.db.vidFetch()), false)
+    (rvid, fromLedger) = ((root, ps.db.vidFetch()), false)
     ps[key] = rvid
   elif root != rvid.root:
     # Oops
     return err(PartRootVidsDontMatch)
-  ok((rvid, fromStateDb))
+  ok((rvid, fromLedger))
 
 
 proc updateAccountsTree*(

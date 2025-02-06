@@ -8,6 +8,8 @@
 # at your option. This file may not be copied, modified, or distributed except
 # according to those terms.
 
+{.push raises: [].}
+
 import
   std/[json, sets, streams, strutils],
   eth/common/eth_types,
@@ -103,9 +105,9 @@ proc captureOpImpl(ctx: JsonTracer, c: Computation, pc: int,
   if TracerFlags.DisableStorage notin ctx.flags:
     var storage = newJObject()
     if c.msg.depth < ctx.storageKeys.len:
-      var stateDB = c.vmState.stateDB
+      var ledger = c.vmState.ledger
       for key in ctx.storage(c.msg.depth):
-        let value = stateDB.getStorage(c.msg.contractAddress, key)
+        let value = ledger.getStorage(c.msg.contractAddress, key)
         storage[key.encodeHex] = %(value.encodeHex)
     res["storage"] = storage
 
@@ -164,17 +166,11 @@ method captureOpStart*(ctx: JsonTracer, c: Computation,
       ctx.stack.add(%(v.encodeHex))
 
   if TracerFlags.DisableStorage notin ctx.flags and op == Sstore:
-    try:
-      if c.stack.len > 1:
-        ctx.rememberStorageKey(c.msg.depth,
-          c.stack[^1, UInt256].expect("stack constains more than 2 elements"))
-    except ValueError as ex:
-      error "JsonTracer captureOpStart", msg=ex.msg
+    if c.stack.len > 1:
+      ctx.rememberStorageKey(c.msg.depth,
+        c.stack[^1, UInt256].expect("stack constains more than 2 elements"))
 
-  try:
-    ctx.captureOpImpl(c, pc, op, 0, 0, [], depth, Opt.none(string))
-  except RlpError as ex:
-    error "JsonTracer captureOpStart", msg=ex.msg
+  ctx.captureOpImpl(c, pc, op, 0, 0, [], depth, Opt.none(string))
 
   # make sure captureOpEnd get the right opIndex
   result = ctx.index
@@ -229,13 +225,10 @@ method captureFault*(ctx: JsonTracer, comp: Computation,
     ctx.node = nil
     return
 
-  try:
-    ctx.captureOpImpl(comp, pc, op, gas, refund, rData, depth, error)
-    doAssert(ctx.node.isNil.not)
-    ctx.writeJson(ctx.node)
-    ctx.node = nil
-  except RlpError as ex:
-    error "JsonTracer captureOpFault", msg=ex.msg
+  ctx.captureOpImpl(comp, pc, op, gas, refund, rData, depth, error)
+  doAssert(ctx.node.isNil.not)
+  ctx.writeJson(ctx.node)
+  ctx.node = nil
 
-proc close*(ctx: JsonTracer) =
+proc close*(ctx: JsonTracer) {.raises: [IOError, OSError].} =
   ctx.stream.close()

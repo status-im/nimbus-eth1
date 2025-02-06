@@ -12,7 +12,7 @@
 
 import
   std/sequtils,
-  eth/common,
+  eth/common/hashes,
   results,
   ./aristo_desc
 

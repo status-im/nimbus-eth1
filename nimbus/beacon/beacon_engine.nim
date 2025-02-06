@@ -1,5 +1,5 @@
 # Nimbus
-# Copyright (c) 2023-2024 Status Research & Development GmbH
+# Copyright (c) 2023-2025 Status Research & Development GmbH
 # Licensed under either of
 #  * Apache License, version 2.0, ([LICENSE-APACHE](LICENSE-APACHE))
 #  * MIT license ([LICENSE-MIT](LICENSE-MIT))
@@ -16,7 +16,7 @@ import
   ./payload_conv,
   ./payload_queue,
   ./api_handler/api_utils,
-  ../core/[tx_pool, casper, chain]
+  ../core/[tx_pool, chain]
 
 export
   chain,
@@ -26,7 +26,6 @@ type
   BeaconEngineRef* = ref object
     txPool: TxPoolRef
     queue : PayloadQueue
-    chain : ForkedChainRef
 
     # The forkchoice update and new payload method require us to return the
     # latest valid hash in an invalid chain. To support that return, we need
@@ -69,12 +68,12 @@ const
 # Private helpers
 # ------------------------------------------------------------------------------
 
-func setWithdrawals(ctx: CasperRef, attrs: PayloadAttributes) =
+func setWithdrawals(xp: TxPoolRef, attrs: PayloadAttributes) =
   case attrs.version
   of Version.V2, Version.V3:
-    ctx.withdrawals = ethWithdrawals attrs.withdrawals.get
+    xp.withdrawals = ethWithdrawals attrs.withdrawals.get
   else:
-    ctx.withdrawals = @[]
+    xp.withdrawals = @[]
 
 template wrapException(body: untyped): auto =
   try:
@@ -94,12 +93,10 @@ func setInvalidAncestor(ben: BeaconEngineRef,
 # ------------------------------------------------------------------------------
 
 func new*(_: type BeaconEngineRef,
-          txPool: TxPoolRef,
-          chain: ForkedChainRef): BeaconEngineRef =
+          txPool: TxPoolRef): BeaconEngineRef =
   let ben = BeaconEngineRef(
     txPool: txPool,
     queue : PayloadQueue(),
-    chain : chain,
   )
 
   txPool.com.notifyBadBlock = proc(invalid, origin: Header)
@@ -127,7 +124,10 @@ func com*(ben: BeaconEngineRef): CommonRef =
   ben.txPool.com
 
 func chain*(ben: BeaconEngineRef): ForkedChainRef =
-  ben.chain
+  ben.txPool.chain
+
+func txPool*(ben: BeaconEngineRef): TxPoolRef =
+  ben.txPool
 
 func get*(ben: BeaconEngineRef, hash: Hash32,
           header: var Header): bool =
@@ -146,23 +146,18 @@ proc generateExecutionBundle*(ben: BeaconEngineRef,
   wrapException:
     let
       xp  = ben.txPool
-      pos = xp.com.pos
       headBlock = ben.chain.latestHeader
 
-    pos.prevRandao   = attrs.prevRandao
-    pos.timestamp    = ethTime attrs.timestamp
-    pos.feeRecipient = attrs.suggestedFeeRecipient
+    xp.prevRandao   = attrs.prevRandao
+    xp.timestamp    = ethTime attrs.timestamp
+    xp.feeRecipient = attrs.suggestedFeeRecipient
 
     if attrs.parentBeaconBlockRoot.isSome:
-      pos.parentBeaconBlockRoot = attrs.parentBeaconBlockRoot.get
+      xp.parentBeaconBlockRoot = attrs.parentBeaconBlockRoot.get
 
-    pos.setWithdrawals(attrs)
+    xp.setWithdrawals(attrs)
 
-    if headBlock.blockHash != xp.head.blockHash:
-       # reorg
-       discard xp.smartHead(headBlock, ben.chain)
-
-    if pos.timestamp <= headBlock.timestamp:
+    if xp.timestamp <= headBlock.timestamp:
       return err "timestamp must be strictly later than parent"
 
     # someBaseFee = true: make sure bundle.blk.header

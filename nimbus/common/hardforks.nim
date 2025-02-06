@@ -1,5 +1,5 @@
 # Nimbus
-# Copyright (c) 2022-2024 Status Research & Development GmbH
+# Copyright (c) 2022-2025 Status Research & Development GmbH
 # Licensed under either of
 #  * Apache License, version 2.0, ([LICENSE-APACHE](LICENSE-APACHE))
 #  * MIT license ([LICENSE-MIT](LICENSE-MIT))
@@ -48,7 +48,6 @@ type
   MergeForkTransitionThreshold* = object
     number*: Opt[BlockNumber]
     ttd*: Opt[DifficultyInt]
-    ttdPassed*: Opt[bool]
 
   ForkTransitionTable* = object
     blockNumberThresholds*: array[Frontier..GrayGlacier, Opt[BlockNumber]]
@@ -121,11 +120,9 @@ func isGTETransitionThreshold*(map: ForkTransitionTable, forkDeterminer: ForkDet
     map.blockNumberThresholds[fork].isSome and forkDeterminer.number >= map.blockNumberThresholds[fork].get
   elif fork == MergeFork:
     # MergeFork is a special case that can use either block number or ttd;
-    # ttdPassed > block number > ttd takes precedence.
+    # block number > ttd takes precedence.
     let t = map.mergeForkTransitionThreshold
-    if t.ttdPassed.isSome:
-      t.ttdPassed.get
-    elif t.number.isSome:
+    if t.number.isSome:
       forkDeterminer.number >= t.number.get
     elif t.ttd.isSome and forkDeterminer.td.isSome:
       forkDeterminer.td.get >= t.ttd.get
@@ -137,6 +134,11 @@ func isGTETransitionThreshold*(map: ForkTransitionTable, forkDeterminer: ForkDet
     raise newException(Defect, "Why is this hard fork not in one of the above categories?")
 
 type
+  BlobSchedule* = object
+    target*: uint64
+    max*   : uint64
+    baseFeeUpdateFraction*: uint64
+
   # if you add more fork block
   # please update forkBlockField constant too
   ChainConfig* = ref object
@@ -166,19 +168,16 @@ type
     posBlock*
       {.dontSerialize.} : Opt[BlockNumber]
 
-    # mergeNetsplitBlock is an alias to mergeForkBlock
-    # and is used for geth compatibility layer
     mergeNetsplitBlock* : Opt[BlockNumber]
 
-    mergeForkBlock*     : Opt[BlockNumber]
     shanghaiTime*       : Opt[EthTime]
     cancunTime*         : Opt[EthTime]
     pragueTime*         : Opt[EthTime]
     osakaTime*          : Opt[EthTime]
 
     terminalTotalDifficulty*: Opt[UInt256]
-    terminalTotalDifficultyPassed*: Opt[bool]
     depositContractAddress*: Opt[Address]
+    blobSchedule*       : array[Cancun..HardFork.high, Opt[BlobSchedule]]
 
   # These are used for checking that the values of the fields
   # are in a valid order.
@@ -198,11 +197,7 @@ func countTimeFields(): int {.compileTime.} =
 func countBlockFields(): int {.compileTime.} =
   var z = ChainConfig()
   for name, _ in fieldPairs(z[]):
-    if name == "mergeNetsplitBlock":
-      # skip mergeForkBlock alias
-      # continue is not supported
-      discard
-    elif name.endsWith("Block"):
+    if name.endsWith("Block"):
       inc result
 
 const
@@ -221,11 +216,7 @@ func collectBlockFields(): array[blockFieldsCount, string] =
   var z = ChainConfig()
   var i = 0
   for name, _ in fieldPairs(z[]):
-    if name == "mergeNetsplitBlock":
-      # skip mergeForkBlock alias
-      # continue is not supported
-      discard
-    elif name.endsWith("Block"):
+    if name.endsWith("Block"):
       result[i] = name
       inc i
 
@@ -239,9 +230,8 @@ const
 
 func mergeForkTransitionThreshold*(conf: ChainConfig): MergeForkTransitionThreshold =
   MergeForkTransitionThreshold(
-    number: conf.mergeForkBlock,
+    number: conf.mergeNetsplitBlock,
     ttd: conf.terminalTotalDifficulty,
-    ttdPassed: conf.terminalTotalDifficultyPassed
   )
 
 func toForkTransitionTable*(conf: ChainConfig): ForkTransitionTable =
@@ -285,9 +275,8 @@ func populateFromForkTransitionTable*(conf: ChainConfig, t: ForkTransitionTable)
   conf.arrowGlacierBlock   = t.blockNumberThresholds[HardFork.ArrowGlacier]
   conf.grayGlacierBlock    = t.blockNumberThresholds[HardFork.GrayGlacier]
 
-  conf.mergeForkBlock          = t.mergeForkTransitionThreshold.number
+  conf.mergeNetsplitBlock      = t.mergeForkTransitionThreshold.number
   conf.terminalTotalDifficulty = t.mergeForkTransitionThreshold.ttd
-  conf.terminalTotalDifficultyPassed = t.mergeForkTransitionThreshold.ttdPassed
 
   conf.shanghaiTime        = t.timeThresholds[HardFork.Shanghai]
   conf.cancunTime          = t.timeThresholds[HardFork.Cancun]

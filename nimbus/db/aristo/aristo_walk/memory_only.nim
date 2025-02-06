@@ -19,7 +19,8 @@ import
 
 export
   memory_db,
-  memory_only
+  memory_only,
+  aristo_desc
 
 # ------------------------------------------------------------------------------
 # Public iterators (all in one)

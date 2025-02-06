@@ -40,6 +40,8 @@ template wrapTry(body: untyped) =
     return err(e.msg)
   except JsonRpcError as ex:
     return err(ex.msg)
+  except JsonReaderError as ex:
+    return err(ex.formatMsg("rpc"))
   except CatchableError as ex:
     return err(ex.msg)
 
@@ -163,7 +165,7 @@ proc newPayloadV4*(client: RpcClient,
       payload: ExecutionPayloadV3,
       versionedHashes: seq[VersionedHash],
       parentBeaconBlockRoot: Hash32,
-      executionRequests: array[3, seq[byte]]):
+      executionRequests: seq[seq[byte]]):
         Result[PayloadStatusV1, string] =
   wrapTrySimpleRes:
     client.engine_newPayloadV4(payload, versionedHashes,
@@ -194,7 +196,7 @@ proc newPayloadV4*(client: RpcClient,
       payload: ExecutionPayload,
       versionedHashes: Opt[seq[VersionedHash]],
       parentBeaconBlockRoot: Opt[Hash32],
-      executionRequests: Opt[array[3, seq[byte]]]):
+      executionRequests: Opt[seq[seq[byte]]]):
         Result[PayloadStatusV1, string] =
   wrapTrySimpleRes:
     client.engine_newPayloadV4(payload, versionedHashes,
@@ -241,11 +243,6 @@ proc maybeChainId(n: Opt[Quantity]): Opt[ChainId] =
   if n.isNone:
     return Opt.none(ChainId)
   Opt.some(n.get.ChainId)
-
-proc maybeInt(n: Opt[Quantity]): Opt[int] =
-  if n.isNone:
-    return Opt.none(int)
-  Opt.some(n.get.int)
 
 proc toBlockHeader*(bc: BlockObject): Header =
   Header(
@@ -309,7 +306,7 @@ proc toTransactions*(txs: openArray[TxOrHash]): seq[Transaction] =
 type
   RPCReceipt* = object
     txHash*: Hash32
-    txIndex*: int
+    txIndex*: uint64
     blockHash*: Hash32
     blockNumber*: uint64
     sender*: Address
@@ -339,7 +336,7 @@ type
     payload*: seq[byte]
     nonce*: AccountNonce
     to*: Opt[Address]
-    txIndex*: Opt[int]
+    txIndex*: Opt[uint64]
     value*: UInt256
     v*: uint64
     r*: UInt256
@@ -353,7 +350,7 @@ type
 proc toRPCReceipt(rec: ReceiptObject): RPCReceipt =
   RPCReceipt(
     txHash: rec.transactionHash,
-    txIndex: rec.transactionIndex.int,
+    txIndex: rec.transactionIndex.uint64,
     blockHash: rec.blockHash,
     blockNumber: rec.blockNumber.uint64,
     sender: rec.`from`,
@@ -385,7 +382,7 @@ proc toRPCTx(tx: eth_api.TransactionObject): RPCTx =
     payload: tx.input,
     nonce: tx.nonce.AccountNonce,
     to: tx.to,
-    txIndex: maybeInt(tx.transactionIndex),
+    txIndex: maybeU64(tx.transactionIndex),
     value: tx.value,
     v: tx.v.uint64,
     r: tx.r,
@@ -455,6 +452,18 @@ proc latestBlock*(client: RpcClient): Result[Block, string] =
     )
     return ok(output)
 
+proc blockByNumber*(client: RpcClient, number: uint64): Result[Block, string] =
+  wrapTry:
+    let res = waitFor client.eth_getBlockByNumber(blockId(number), true)
+    if res.isNil:
+      return err("failed to get block " & $number)
+    let output = Block(
+      header: toBlockHeader(res),
+      transactions: toTransactions(res.transactions),
+      withdrawals: res.withdrawals,
+    )
+    return ok(output)
+
 proc namedHeader*(client: RpcClient, name: string): Result[Header, string] =
   wrapTry:
     let res = waitFor client.eth_getBlockByNumber(name, false)
@@ -495,6 +504,13 @@ proc txReceipt*(client: RpcClient, txHash: Hash32): Result[RPCReceipt, string] =
       return err("failed to get receipt: " & txHash.data.toHex)
     return ok(res.toRPCReceipt)
 
+proc getReceipt*(client: RpcClient, txHash: Hash32): Result[ReceiptObject, string] =
+  wrapTry:
+    let res = waitFor client.eth_getTransactionReceipt(txHash)
+    if res.isNil:
+      return err("failed to get receipt: " & txHash.data.toHex)
+    return ok(res)
+    
 proc txByHash*(client: RpcClient, txHash: Hash32): Result[RPCTx, string] =
   wrapTry:
     let res = waitFor client.eth_getTransactionByHash(txHash)

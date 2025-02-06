@@ -25,7 +25,7 @@ type
       ## `Aristo DB` data record.
 
   GetKeyFn* =
-    proc(rvid: RootedVertexID): Result[HashKey,AristoError] {.gcsafe, raises: [].}
+    proc(rvid: RootedVertexID, flags: set[GetVtxFlag]): Result[(HashKey, VertexRef),AristoError] {.gcsafe, raises: [].}
       ## Generic backend database retrieval function for a single
       ## `Aristo DB` hash lookup value.
 

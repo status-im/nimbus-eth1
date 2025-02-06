@@ -1,5 +1,5 @@
 # Nimbus
-# Copyright (c) 2020-2024 Status Research & Development GmbH
+# Copyright (c) 2020-2025 Status Research & Development GmbH
 # Licensed under either of
 #  * Apache License, version 2.0, ([LICENSE-APACHE](LICENSE-APACHE) or
 #    http://www.apache.org/licenses/LICENSE-2.0)
@@ -60,6 +60,13 @@ template toCC(x: auto): auto =
   elif x is BLS_G2P:
     toCC(x, cblst_p2_affine)
 
+func isOverModulus(data: openArray[byte]): bool =
+  const
+    fieldModulus = StUint[512].fromHex "0x1a0111ea397fe69a4b1ba7b6434bacd764774b84f38512bf6730d2a0f6b0f6241eabfffeb153ffffb9feffffffffaaab"
+  var z: StUint[512]
+  z.initFromBytesBE(data)
+  z >= fieldModulus
+
 func fromBytes*(ret: var BLS_SCALAR, raw: openArray[byte]): bool =
   const L = 32
   if raw.len < L:
@@ -73,6 +80,8 @@ func fromBytes(ret: var BLS_FP, raw: openArray[byte]): bool =
   if raw.len < L:
     return false
   let pa = cast[ptr array[L, byte]](raw[0].unsafeAddr)
+  if isOverModulus(pa[]):
+    return false
   blst_fp_from_bendian(toCV(ret), pa[])
   true
 
@@ -149,6 +158,12 @@ func pack(g: var BLS_G1P, x, y: BLS_FP): bool =
 func pack(g: var BLS_G2P, x0, x1, y0, y1: BLS_FP): bool =
   g = blst_p2_affine(x: blst_fp2(fp: [x0, x1]), y: blst_fp2(fp: [y0, y1]))
   blst_p2_affine_on_curve(toCV(g)).int == 1
+
+func subgroupCheck*(P: BLS_G1): bool {.inline.} =
+  blst_p1_in_g1(toCC(P)).int == 1
+
+func subgroupCheck*(P: BLS_G2): bool {.inline.} =
+  blst_p2_in_g2(toCC(P)).int == 1
 
 func subgroupCheck*(P: BLS_G1P): bool {.inline.} =
   blst_p1_affine_in_g1(toCC(P)).int == 1

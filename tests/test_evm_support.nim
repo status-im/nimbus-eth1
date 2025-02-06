@@ -61,6 +61,14 @@ proc runStackTests() =
         check stack.push(element).isOk
       check(stack.popInt.get == 3.u256)
 
+    test "pop requires stack item":
+      var stack = EvmStack.init()
+      defer: stack.dispose()
+      check:
+        stack.pop().isErr()
+        stack.push(1'u).isOk()
+        stack.pop().isOk()
+
     test "swap correct":
       privateAccess(EvmStack)
       var stack = EvmStack.init()
@@ -339,6 +347,7 @@ proc runTestOverflow() =
 
     let com = CommonRef.new(
       newCoreDbRef(DefaultDbMemory),
+      nil,
       config = chainConfigForNetwork(MainNet)
     )
 
@@ -348,7 +357,7 @@ proc runTestOverflow() =
       com,
     )
 
-    s.stateDB.setCode(codeAddress, @data)
+    s.ledger.setCode(codeAddress, @data)
     let unsignedTx = Transaction(
       txType: TxLegacy,
       nonce: 0,

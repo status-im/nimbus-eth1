@@ -1,5 +1,5 @@
 # Nimbus
-# Copyright (c) 2021-2024 Status Research & Development GmbH
+# Copyright (c) 2021-2025 Status Research & Development GmbH
 # Licensed and distributed under either of
 #   * MIT license (license terms in the root directory or at https://opensource.org/licenses/MIT).
 #   * Apache v2 license (license terms in the root directory or at https://www.apache.org/licenses/LICENSE-2.0).
@@ -139,6 +139,40 @@ suite "History Content Keys":
     check:
       contentKeyDecoded.contentType == contentKey.contentType
       contentKeyDecoded.blockNumberKey == contentKey.blockNumberKey
+
+      toContentId(contentKey) == parse(contentId, StUint[256], 10)
+      # In stint this does BE hex string
+      toContentId(contentKey).toHex() == contentIdHexBE
+
+  test "Ehpemeral BlockHeaders":
+    # Input
+    const
+      blockHash = Hash32.fromHex(
+        "0xd1c390624d3bd4e409a61a858e5dcc5517729a9170d014a6c96530d64dd8621d"
+      )
+      ancestorCount = 242'u8
+
+    # Output
+    const
+      contentKeyHex =
+        "04d1c390624d3bd4e409a61a858e5dcc5517729a9170d014a6c96530d64dd8621df2"
+      contentId =
+        "107754593760180144978479156856849717135578675732374967927631096183784899947859"
+      # or
+      contentIdHexBE =
+        "ee3af053669ddd2130227b62f899547d6b6cc94f2492e9bbc731025a5ff92d53"
+
+    let contentKey = ephemeralBlockHeaderContentKey(blockHash, ancestorCount)
+
+    let encoded = encode(contentKey)
+    check encoded.asSeq.toHex == contentKeyHex
+    let decoded = decode(encoded)
+    check decoded.isSome()
+
+    let contentKeyDecoded = decoded.get()
+    check:
+      contentKeyDecoded.contentType == contentKey.contentType
+      contentKeyDecoded.ephemeralBlockHeaderKey == contentKey.ephemeralBlockHeaderKey
 
       toContentId(contentKey) == parse(contentId, StUint[256], 10)
       # In stint this does BE hex string

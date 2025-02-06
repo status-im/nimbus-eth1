@@ -12,7 +12,7 @@
 
 import
   std/[enumerate, sequtils, sets, tables],
-  eth/common,
+  eth/common/hashes,
   results,
   ./aristo_desc
 
@@ -68,11 +68,6 @@ func layersGetVtx*(db: AristoDbRef; rvid: RootedVertexID): Opt[(VertexRef, int)]
       return Opt.some((item[], i + 1))
 
   Opt.none((VertexRef, int))
-
-func layersGetVtxOrVoid*(db: AristoDbRef; rvid: RootedVertexID): VertexRef =
-  ## Simplified version of `layersGetVtx()`
-  db.layersGetVtx(rvid).valueOr((VertexRef(nil), 0))[0]
-
 
 func layersGetKey*(db: AristoDbRef; rvid: RootedVertexID): Opt[(HashKey, int)] =
   ## Find a hash key on the cache layers. An `ok()` result might contain a void

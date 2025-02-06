@@ -59,6 +59,7 @@ const
 proc makeCom*(conf: NimbusConf): CommonRef =
   CommonRef.new(
     newCoreDbRef DefaultDbMemory,
+    Taskpool.new(),
     conf.networkId,
     conf.networkParams
   )
@@ -82,19 +83,14 @@ proc newEngineEnv*(conf: var NimbusConf, chainFile: string, enableAuth: bool): E
   let
     node  = setupEthNode(conf, ctx)
     com   = makeCom(conf)
-    head  = com.db.getCanonicalHead().expect("canonical head exists")
-    chain = newForkedChain(com, head)
+    chain = ForkedChainRef.init(com)
 
-  let txPool = TxPoolRef.new(com)
+  let txPool = TxPoolRef.new(chain)
 
   node.addEthHandlerCapability(
     node.peerPool,
     chain,
     txPool)
-
-  # txPool must be informed of active head
-  # so it can know the latest account state
-  doAssert txPool.smartHead(head, chain)
 
   var key: JwtSharedKey
   key.fromHex(jwtSecret).isOkOr:
@@ -108,8 +104,8 @@ proc newEngineEnv*(conf: var NimbusConf, chainFile: string, enableAuth: bool): E
       echo "Failed to create rpc server: ", error
       quit(QuitFailure)
 
-    beaconEngine = BeaconEngineRef.new(txPool, chain)
-    serverApi = newServerAPI(chain, txPool)
+    beaconEngine = BeaconEngineRef.new(txPool)
+    serverApi = newServerAPI(txPool)
 
   setupServerAPI(serverApi, server, ctx)
   setupEngineAPI(beaconEngine, server)
@@ -178,14 +174,12 @@ proc peer*(env: EngineEnv): Peer =
 proc getTxsInPool*(env: EngineEnv, txHashes: openArray[common.Hash32]): seq[Transaction] =
   result = newSeqOfCap[Transaction](txHashes.len)
   for txHash in txHashes:
-    let res = env.txPool.getItem(txHash)
-    if res.isErr: continue
-    let item = res.get
-    if item.reject == txInfoOk:
-      result.add item.tx
+    let item = env.txPool.getItem(txHash).valueOr:
+      continue
+    result.add item.tx
 
 proc numTxsInPool*(env: EngineEnv): int =
-  env.txPool.numTxs
+  env.txPool.len
 
 func version*(env: EngineEnv, time: EthTime): Version =
   if env.com.isPragueOrLater(time):

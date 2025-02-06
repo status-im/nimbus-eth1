@@ -15,7 +15,7 @@
 
 import
   std/[sets, sequtils],
-  eth/common,
+  eth/common/hashes,
   results,
   "."/[aristo_desc, aristo_fetch, aristo_get, aristo_merge, aristo_layers,
        aristo_utils],
@@ -66,7 +66,7 @@ iterator vkPairs*(ps: PartStateRef): (RootedVertexID, HashKey) =
 # Public functions
 # ------------------------------------------------------------------------------
 
-proc partGenericTwig*(
+proc partTwig(
     db: AristoDbRef;
     root: VertexID;
     path: NibblesBuf;
@@ -87,51 +87,38 @@ proc partGenericTwig*(
   else:
     err(rc.error)
 
-proc partGenericTwig*(
-    db: AristoDbRef;
-    root: VertexID;
-    path: openArray[byte];
-      ): Result[(seq[seq[byte]],bool), AristoError] =
-  ## Variant of `partGenericTwig()`.
-  ##
-  ## Note: This function provides a functionality comparable to the
-  ## `getBranch()` function from `hexary.nim`
-  ##
-  db.partGenericTwig(root, NibblesBuf.fromBytes path)
-
 proc partAccountTwig*(
     db: AristoDbRef;
     accPath: Hash32;
       ): Result[(seq[seq[byte]],bool), AristoError] =
-  ## Variant of `partGenericTwig()`.
-  db.partGenericTwig(VertexID(1), NibblesBuf.fromBytes accPath.data)
+  db.partTwig(VertexID(1), NibblesBuf.fromBytes accPath.data)
 
 proc partStorageTwig*(
     db: AristoDbRef;
     accPath: Hash32;
     stoPath: Hash32;
       ): Result[(seq[seq[byte]],bool), AristoError] =
-  ## Variant of `partGenericTwig()`. Note that the function returns an error unless
+  ## Note that the function returns an error unless
   ## the argument `accPath` is valid.
   let vid = db.fetchStorageID(accPath).valueOr:
     if error == FetchPathStoRootMissing:
       return ok((@[],false))
     return err(error)
-  db.partGenericTwig(vid, NibblesBuf.fromBytes stoPath.data)
+  db.partTwig(vid, NibblesBuf.fromBytes stoPath.data)
 
 # ----------
 
-proc partUntwigGeneric*(
+proc partUntwigPath*(
     chain: openArray[seq[byte]];
     root: Hash32;
-    path: openArray[byte];
+    path: Hash32;
       ): Result[Opt[seq[byte]],AristoError] =
   ## Verify the chain of rlp-encoded nodes and return the payload. If a
   ## `Opt.none()` result is returned then the `path` argument does provably
   ## not exist relative to `chain`.
   try:
     let
-      nibbles = NibblesBuf.fromBytes path
+      nibbles = NibblesBuf.fromBytes path.data
       rc = chain.trackRlpNodes(root.to(HashKey), nibbles, start=true)
     if rc.isOk:
       return ok(Opt.some rc.value)
@@ -141,32 +128,6 @@ proc partUntwigGeneric*(
   except RlpError:
     return err(PartTrkRlpError)
 
-proc partUntwigPath*(
-    chain: openArray[seq[byte]];
-    root: Hash32;
-    path: Hash32;
-      ): Result[Opt[seq[byte]],AristoError] =
-  ## Variant of `partUntwigGeneric()`.
-  chain.partUntwigGeneric(root, path.data)
-
-
-proc partUntwigGenericOk*(
-    chain: openArray[seq[byte]];
-    root: Hash32;
-    path: openArray[byte];
-    payload: Opt[seq[byte]];
-      ): Result[void,AristoError] =
-  ## Verify the argument `chain` of rlp-encoded nodes against the `path`
-  ## and `payload` arguments.
-  ##
-  ## Note: This function provides a functionality comparable to the
-  ## `isValidBranch()` function from `hexary.nim`.
-  ##
-  if payload == ? chain.partUntwigGeneric(root, path):
-    ok()
-  else:
-    err(PartTrkPayloadMismatch)
-
 proc partUntwigPathOk*(
     chain: openArray[seq[byte]];
     root: Hash32;
@@ -174,7 +135,10 @@ proc partUntwigPathOk*(
     payload: Opt[seq[byte]];
       ): Result[void,AristoError] =
   ## Variant of `partUntwigGenericOk()`.
-  chain.partUntwigGenericOk(root, path.data, payload)
+  if payload == ? chain.partUntwigPath(root, path):
+    ok()
+  else:
+    err(PartTrkPayloadMismatch)
 
 # ----------------
 
@@ -209,7 +173,7 @@ proc partPut*(
     for n,key in chain:
       var
         rvid: RootedVertexID
-        (stopHere, vidFromStateDb) = (false,false) # not both `true`
+        (stopHere, vidFromLedger) = (false,false) # not both `true`
 
       # Parent might have been part of an earlier chain, already
       if n < chain.len - 1:
@@ -229,10 +193,10 @@ proc partPut*(
 
       # Get vertex ID and set a flag whether it was seen on state lookup
       if not rvid.isValid:
-        (rvid, vidFromStateDb) = ? ps.getRvid(root, key)
+        (rvid, vidFromLedger) = ? ps.getRvid(root, key)
 
       # Use from partial state database if possible
-      if vidFromStateDb and not ps.isCore(key):
+      if vidFromLedger and not ps.isCore(key):
         let vtx = ps.db.getVtx rvid
         if vtx.isValid:
           # Register core node.  Even though these nodes are only local to this
@@ -242,7 +206,8 @@ proc partPut*(
           of Leaf:
             node.vtx.lData = vtx.lData
           of Branch:
-            node.vtx.bVid = vtx.bVid
+            node.vtx.startVid = vtx.startVid
+            node.vtx.used = vtx.used
           ps.addCore(root, key)                # register core node
           ps.pureExt.del key                   # core node can't be an extension
           continue
@@ -266,7 +231,7 @@ proc partPut*(
         for n in 0 .. 15:
           let bKey = node.key[n]
           if bKey.isValid:
-            node.vtx.bVid[n] = (? ps.getRvid(root, bKey))[0].vid
+            doAssert false, "TODO node.vtx.bVid[n] = (? ps.getRvid(root, bKey))[0].vid"
       ps.addCore(root, key)                    # register core node
       ps.pureExt.del key                       # core node can't be an extension
 
@@ -444,7 +409,7 @@ proc partWithExtEnd*(ps: PartStateRef): Result[void,AristoError] =
       return err(PartExtVtxHasVanished)
     if vtx.vType != Branch or
        vtx.pfx != ext.xPfx or
-       vtx.bVid != array[16,VertexID].default:
+       vtx.used != uint16.default:
       restore()
       return err(PartExtVtxWasModified)
     rollback.add (rvid,ext)

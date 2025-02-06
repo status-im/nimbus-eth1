@@ -145,9 +145,9 @@ const
 # ApplyDAOHardFork modifies the state database according to the DAO hard-fork
 # rules, transferring all balances of a set of DAO accounts to a single refund
 # contract.
-proc applyDAOHardFork*(statedb: LedgerRef) =
+proc applyDAOHardFork*(ledger: LedgerRef) =
   const zero = 0.u256
   # Move every DAO account and extra-balance account funds into the refund contract
   for address in DAODrainList:
-    statedb.addBalance(DAORefundContract, statedb.getBalance(address))
-    statedb.setBalance(address, zero)
+    ledger.addBalance(DAORefundContract, ledger.getBalance(address))
+    ledger.setBalance(address, zero)

@@ -1,12 +1,12 @@
 # Nimbus
-# Copyright (c) 2022-2024 Status Research & Development GmbH
+# Copyright (c) 2022-2025 Status Research & Development GmbH
 # Licensed and distributed under either of
 #   * MIT license (license terms in the root directory or at https://opensource.org/licenses/MIT).
 #   * Apache v2 license (license terms in the root directory or at https://www.apache.org/licenses/LICENSE-2.0).
 # at your option. This file may not be copied, modified, or distributed except according to those terms.
 
 import
-  std/options,
+  std/sequtils,
   eth/common/eth_types_rlp,
   web3/eth_api_types,
   eth/bloom as bFilter,
@@ -17,7 +17,56 @@ export rpc_types
 
 {.push raises: [].}
 
-proc deriveLogs*(header: Header, transactions: seq[Transaction], receipts: seq[Receipt]): seq[FilterLog] =
+proc matchTopics(
+    topics: openArray[receipts.Topic], filter: openArray[TopicOrList]
+): bool =
+  for i, sub in filter:
+    if sub.kind == slkNull:
+      # null subtopic i.e it matches all possible move to nex
+      continue
+
+    var match = false
+    if sub.kind == slkSingle:
+      match = topics[i] == sub.single
+    else:
+      # treat empty as wildcard, although caller should rather use none kind of
+      # option to indicate that. If nim would have NonEmptySeq type that would be
+      # use case for it.
+      match = sub.list.len == 0
+      for topic in sub.list:
+        if topics[i] == topic:
+          match = true
+          break
+
+    if not match:
+      return false
+
+  return true
+
+proc match*(
+    log: Log | FilterLog, addresses: AddressOrList, topics: openArray[TopicOrList]
+): bool =
+  if addresses.kind == slkSingle and (addresses.single != log.address):
+    return false
+
+  if addresses.kind == slkList and addresses.list.len > 0 and
+      (not addresses.list.contains(log.address)):
+    return false
+
+  if len(topics) > len(log.topics):
+    return false
+
+  if not matchTopics(log.topics, topics):
+    return false
+
+  true
+
+proc deriveLogs*(
+    header: Header,
+    transactions: openArray[Transaction],
+    receipts: openArray[Receipt],
+    filterOptions: FilterOptions,
+): seq[FilterLog] =
   ## Derive log fields, does not deal with pending log, only the logs with
   ## full data set
   doAssert(len(transactions) == len(receipts))
@@ -26,26 +75,30 @@ proc deriveLogs*(header: Header, transactions: seq[Transaction], receipts: seq[R
   var logIndex = 0'u64
 
   for i, receipt in receipts:
-    for log in receipt.logs:
-      let filterLog = FilterLog(
-         # TODO investigate how to handle this field
-        # - in nimbus info about log removel would need to be kept at synchronization
-        # level, to keep track about potential re-orgs
-        # - in fluffy there is no concept of re-org
-        removed: false,
-        logIndex: Opt.some(Quantity(logIndex)),
-        transactionIndex: Opt.some(Quantity(i)),
-        transactionHash: Opt.some(transactions[i].rlpHash),
-        blockHash: Opt.some(header.blockHash),
-        blockNumber: Opt.some(Quantity(header.number)),
-        address: log.address,
-        data: log.data,
-        #  TODO topics should probably be kept as Hash32 in receipts
-        topics: log.topics
-      )
+    let logs = receipt.logs.filterIt(it.match(filterOptions.address, filterOptions.topics))
+    if logs.len > 0:
+      # TODO avoid recomputing entirely - we should have this cached somewhere
+      let txHash = transactions[i].rlpHash
+      for log in logs:
+        let filterLog = FilterLog(
+          # TODO investigate how to handle this field
+          # - in nimbus info about log removel would need to be kept at synchronization
+          # level, to keep track about potential re-orgs
+          # - in fluffy there is no concept of re-org
+          removed: false,
+          logIndex: Opt.some(Quantity(logIndex)),
+          transactionIndex: Opt.some(Quantity(i)),
+          transactionHash: Opt.some(txHash),
+          blockHash: Opt.some(header.blockHash),
+          blockNumber: Opt.some(Quantity(header.number)),
+          address: log.address,
+          data: log.data,
+          #  TODO topics should probably be kept as Hash32 in receipts
+          topics: log.topics,
+        )
 
-      inc logIndex
-      resLogs.add(filterLog)
+        inc logIndex
+        resLogs.add(filterLog)
 
   return resLogs
 
@@ -58,10 +111,8 @@ func participateInFilter(x: AddressOrList): bool =
   true
 
 proc bloomFilter*(
-    bloom: Bloom,
-    addresses: AddressOrList,
-    topics: seq[TopicOrList]): bool =
-
+    bloom: Bloom, addresses: AddressOrList, topics: seq[TopicOrList]
+): bool =
   let bloomFilter = bFilter.BloomFilter(value: bloom.to(StUint[2048]))
 
   if addresses.participateInFilter():
@@ -101,58 +152,11 @@ proc bloomFilter*(
   return true
 
 proc headerBloomFilter*(
-    header: Header,
-    addresses: AddressOrList,
-    topics: seq[TopicOrList]): bool =
+    header: Header, addresses: AddressOrList, topics: seq[TopicOrList]
+): bool =
   return bloomFilter(header.logsBloom, addresses, topics)
 
-proc matchTopics(log: FilterLog, topics: seq[TopicOrList]): bool =
-  for i, sub in topics:
-
-    if sub.kind == slkNull:
-      # null subtopic i.e it matches all possible move to nex
-      continue
-
-    var match = false
-    if sub.kind == slkSingle:
-      match = log.topics[i] == sub.single
-    else:
-      # treat empty as wildcard, although caller should rather use none kind of
-      # option to indicate that. If nim would have NonEmptySeq type that would be
-      # use case for it.
-      match = sub.list.len == 0
-      for topic in sub.list:
-        if log.topics[i] == topic:
-          match = true
-          break
-
-    if not match:
-      return false
-
-  return true
-
 proc filterLogs*(
-    logs: openArray[FilterLog],
-    addresses: AddressOrList,
-    topics: seq[TopicOrList]): seq[FilterLog] =
-
-  var filteredLogs: seq[FilterLog] = newSeq[FilterLog]()
-
-  for log in logs:
-    if addresses.kind == slkSingle and (addresses.single != log.address):
-      continue
-
-    if addresses.kind == slkList and
-       addresses.list.len > 0 and
-       (not addresses.list.contains(log.address)):
-      continue
-
-    if len(topics) > len(log.topics):
-      continue
-
-    if not matchTopics(log, topics):
-      continue
-
-    filteredLogs.add(log)
-
-  return filteredLogs
+    logs: openArray[FilterLog], addresses: AddressOrList, topics: seq[TopicOrList]
+): seq[FilterLog] =
+  logs.filterIt(it.match(addresses, topics))

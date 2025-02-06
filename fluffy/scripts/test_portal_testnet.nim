@@ -264,7 +264,9 @@ procSuite "Portal testnet tests":
     # require them for validation.
     for (contentKey, contentValue) in blockHeadersWithProof:
       discard (
-        await clients[0].portal_historyGossip(contentKey.toHex(), contentValue.toHex())
+        await clients[0].portal_historyPutContent(
+          contentKey.toHex(), contentValue.toHex()
+        )
       )
 
     # TODO: Fix iteration order: Because the blockData gets parsed into a
@@ -291,7 +293,7 @@ procSuite "Portal testnet tests":
             contentKey = history_content.encode(value[0]).asSeq().toHex()
             contentValue = value[1].toHex()
 
-          discard (await clients[0].portal_historyGossip(contentKey, contentValue))
+          discard (await clients[0].portal_historyPutContent(contentKey, contentValue))
 
     await clients[0].close()
 
