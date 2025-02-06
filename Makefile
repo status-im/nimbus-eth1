@@ -1,4 +1,4 @@
-# Copyright (c) 2018-2024 Status Research & Development GmbH. Licensed under
+# Copyright (c) 2018-2025 Status Research & Development GmbH. Licensed under
 # either of:
 # - Apache License, version 2.0
 # - MIT license
@@ -83,11 +83,11 @@ FLUFFY_TOOLS_DIRS := \
 FLUFFY_TOOLS_CSV := $(subst $(SPACE),$(COMMA),$(FLUFFY_TOOLS))
 
 # Namespaced variables to avoid conflicts with other makefiles
-OS = $(shell $(CC) -dumpmachine)
-ifneq (, $(findstring darwin, $(OS)))
+OS_PLATFORM = $(shell $(CC) -dumpmachine)
+ifneq (, $(findstring darwin, $(OS_PLATFORM)))
   SHAREDLIBEXT = dylib
 else
-ifneq (, $(findstring mingw, $(OS))$(findstring cygwin, $(OS))$(findstring msys, $(OS)))
+ifneq (, $(findstring mingw, $(OS_PLATFORM))$(findstring cygwin, $(OS_PLATFORM))$(findstring msys, $(OS_PLATFORM)))
   SHAREDLIBEXT = dll
 else
   SHAREDLIBEXT = so
