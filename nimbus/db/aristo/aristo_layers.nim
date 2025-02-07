@@ -25,9 +25,8 @@ func layersGetVtx*(db: AristoTxRef; rvid: RootedVertexID): Opt[(VertexRef, int)]
   ## Find a vertex on the cache layers. An `ok()` result might contain a
   ## `nil` vertex if it is stored on the cache  that way.
   ##
-  for w, level in db.rstack:
-    w.sTab.withValue(rvid, item):
-      return Opt.some((item[], level))
+  db.layer.sTab.withValue(rvid, item):
+    return Opt.some((item[], 0))
 
   Opt.none((VertexRef, int))
 
@@ -36,11 +35,10 @@ func layersGetKey*(db: AristoTxRef; rvid: RootedVertexID): Opt[(HashKey, int)] =
   ## hash key if it is stored on the cache that way.
   ##
 
-  for w, level in db.rstack:
-    w.kMap.withValue(rvid, item):
-      return ok((item[], level))
-    if rvid in w.sTab:
-      return Opt.some((VOID_HASH_KEY, level))
+  db.layer.kMap.withValue(rvid, item):
+    return ok((item[], 0))
+  if rvid in db.layer.sTab:
+    return Opt.some((VOID_HASH_KEY, 0))
 
   Opt.none((HashKey, int))
 
@@ -49,16 +47,14 @@ func layersGetKeyOrVoid*(db: AristoTxRef; rvid: RootedVertexID): HashKey =
   (db.layersGetKey(rvid).valueOr (VOID_HASH_KEY, 0))[0]
 
 func layersGetAccLeaf*(db: AristoTxRef; accPath: Hash32): Opt[VertexRef] =
-  for w, _ in db.rstack:
-    w.accLeaves.withValue(accPath, item):
-      return Opt.some(item[])
+  db.layer.accLeaves.withValue(accPath, item):
+    return Opt.some(item[])
 
   Opt.none(VertexRef)
 
 func layersGetStoLeaf*(db: AristoTxRef; mixPath: Hash32): Opt[VertexRef] =
-  for w, _ in db.rstack:
-    w.stoLeaves.withValue(mixPath, item):
-      return Opt.some(item[])
+  db.layer.stoLeaves.withValue(mixPath, item):
+    return Opt.some(item[])
 
   Opt.none(VertexRef)
 
@@ -125,15 +121,19 @@ proc mergeAndReset*(trg, src: var Layer) =
   ## Merges the argument `src` into the argument `trg` and clears `src`.
   trg.vTop = src.vTop
 
-  if trg.kMap.len > 0:
-    # Invalidate cached keys in the lower layer
-    for vid in src.sTab.keys:
-      trg.kMap.del vid
+  trg.sTab = src.sTab
+  trg.kMap = src.kMap
+  trg.accLeaves = src.accLeaves
+  trg.stoLeaves = src.stoLeaves
+  # if trg.kMap.len > 0:
+  #   # Invalidate cached keys in the lower layer
+  #   for vid in src.sTab.keys:
+  #     trg.kMap.del vid
 
-  mergeAndReset(trg.sTab, src.sTab)
-  mergeAndReset(trg.kMap, src.kMap)
-  mergeAndReset(trg.accLeaves, src.accLeaves)
-  mergeAndReset(trg.stoLeaves, src.stoLeaves)
+  # mergeAndReset(trg.sTab, src.sTab)
+  # mergeAndReset(trg.kMap, src.kMap)
+  # mergeAndReset(trg.accLeaves, src.accLeaves)
+  # mergeAndReset(trg.stoLeaves, src.stoLeaves)
 
 # func layersCc*(db: AristoDbRef; level = high(int)): LayerRef =
 #   ## Provide a collapsed copy of layers up to a particular transaction level.
@@ -178,11 +178,10 @@ iterator layersWalkVtx*(
   ## the one with a zero vertex which are othewise skipped by the iterator.
   ## The `seen` argument must not be modified while the iterator is active.
   ##
-  for w, _ in db.rstack:
-    for (rvid,vtx) in w.sTab.pairs:
-      if rvid.vid notin seen:
-        yield (rvid,vtx)
-        seen.incl rvid.vid
+  for (rvid,vtx) in db.layer.sTab.pairs:
+    if rvid.vid notin seen:
+      yield (rvid,vtx)
+      seen.incl rvid.vid
 
 iterator layersWalkVtx*(
     db: AristoTxRef;
@@ -199,11 +198,10 @@ iterator layersWalkKey*(
   ## Walk over all `(VertexID,HashKey)` pairs on the cache layers. Note that
   ## entries are unsorted.
   var seen: HashSet[VertexID]
-  for w, _ in db.rstack:
-    for (rvid,key) in w.kMap.pairs:
-      if rvid.vid notin seen:
-        yield (rvid,key)
-        seen.incl rvid.vid
+  for (rvid,key) in db.layer.kMap.pairs:
+    if rvid.vid notin seen:
+      yield (rvid,key)
+      seen.incl rvid.vid
 
 # ------------------------------------------------------------------------------
 # End

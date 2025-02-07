@@ -40,7 +40,7 @@ proc txFrameBegin*(db: AristoDbRef, parent: AristoTxRef): Result[AristoTxRef,Ari
 
   let
     vTop = parent.layer.vTop
-    layer = LayerRef(vTop:  vTop, cTop: vTop)
+    layer = LayerRef(vTop:  vTop, cTop: vTop, sTab: parent.layer.sTab, kMap: parent.layer.kMap, accLeaves: parent.layer.accLeaves, stoLeaves: parent.layer.stoLeaves)
 
   ok AristoTxRef(
     db:     db,
@@ -57,9 +57,9 @@ proc rollback*(
   ## performed for this transactio. The previous transaction is returned if
   ## there was any.
   # TODO Everyone using this txref should repoint their parent field
-
+  let parent = tx.parent
   let vTop = tx.layer[].cTop
-  tx.layer[] = Layer(vTop: vTop, cTop: vTop)
+  tx.layer[] = Layer(vTop:  vTop, cTop: vTop, sTab: parent.layer.sTab, kMap: parent.layer.kMap, accLeaves: parent.layer.accLeaves, stoLeaves: parent.layer.stoLeaves)
 
   ok()
 
