@@ -20,6 +20,9 @@ git submodule update --init
 
 cmake -S . -B build -DEVMONE_TESTING=ON
 
+# Use to build static library instead of shared library.
+#cmake -S . -B build -DEVMONE_TESTING=ON # -DBUILD_SHARED_LIBS=NO
+
 # For windows (not yet supported)
 #cmake -S . -B build -DEVMONE_TESTING=ON -G "Visual Studio 16 2019" -A x64
 
