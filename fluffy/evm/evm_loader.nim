@@ -12,14 +12,16 @@ export evmc
 # This is currently built using a manual build script which copies the library into the build directory
 const libevmone* = "build/libevmone.so"
 
-proc evmc_create_evmone(): ptr evmc_vm {.cdecl, importc: "evmc_create_evmone", raises: [], gcsafe, dynlib: libevmone.}
+proc evmc_create_evmone(): ptr evmc_vm {.
+  cdecl, importc: "evmc_create_evmone", raises: [], gcsafe, dynlib: libevmone
+.}
 
 # Using evmone evm (for now)
 
-const EVMC_ABI_VERSION = 12
+const SUPPORTED_EVMC_ABI_VERSION = 12
 
 proc loadEvmcVM*(): ptr evmc_vm =
   let vmPtr = evmc_create_evmone() # TODO: update this to use nimbus evm
-  doAssert(vmPtr.abi_version.int == EVMC_ABI_VERSION)
+  doAssert(vmPtr.abi_version.int == SUPPORTED_EVMC_ABI_VERSION)
 
   return vmPtr

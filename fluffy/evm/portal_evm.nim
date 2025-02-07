@@ -8,7 +8,8 @@
 import
   std/tables,
   stew/byteutils,
-  stew/ptrops, stint,
+  stew/ptrops,
+  stint,
   results,
   evmc/evmc,
   eth/common/[hashes, accounts, addresses],
@@ -16,26 +17,6 @@ import
   ./[evm_loader, portal_evm_context]
 
 export portal_evm_context
-
-type PortalEvmRef* = ref object
-  vmPtr: ptr evmc_vm
-  context: PortalEvmContext
-
-func init*(T: type PortalEvmRef): T =
-  PortalEvmRef(
-    vmPtr: loadEvmcVM(),
-    context: PortalEvmContext.init())
-
-func abiVersion(evm: PortalEvmRef): int =
-  evm.vmPtr.abi_version.int
-
-func name*(evm: PortalEvmRef): string =
-  $evm.vmPtr.name
-
-func version*(evm: PortalEvmRef): string =
-  $evm.vmPtr.version
-
-# TODO: do we need to use evm.vmPtr.get_capabilities and/or evm.vmPtr.set_option?
 
 type
   PortalEvmMessageKind* = enum
@@ -59,36 +40,87 @@ type
     codeAddress*: Opt[Address]
     code*: Opt[seq[byte]]
 
+  PortalEvmRef* = ref object
+    vmPtr: ptr evmc_vm
+    context: PortalEvmContext
+
 func toEvmc(msgKind: PortalEvmMessageKind): evmc_call_kind =
   evmc_call_kind(msgKind.int)
 
 func toEvmc(msg: PortalEvmMessage): evmc_message =
   evmc_message(
     kind: msg.kind.toEvmc(),
-    flags: if msg.staticCall: {EVMC_STATIC} else: {},
+    flags:
+      if msg.staticCall:
+        {EVMC_STATIC}
+      else:
+        {},
     depth: msg.depth,
     gas: msg.gas,
     recipient: msg.recipient.toEvmc(),
     sender: msg.sender.toEvmc(),
-    input_data: if msg.inputData.isSome(): msg.inputData.get()[0].addr else: nil,
-    input_size: if msg.inputData.isSome(): csize_t(msg.inputData.get().len()) else: 0,
+    input_data:
+      if msg.inputData.isSome():
+        msg.inputData.get()[0].addr
+      else:
+        nil,
+    input_size:
+      if msg.inputData.isSome():
+        csize_t(msg.inputData.get().len())
+      else:
+        0,
     value: msg.value.toEvmc(),
     create2_salt: msg.create2Salt.toEvmc(),
-    code_address: if msg.codeAddress.isSome(): msg.codeAddress.get().toEvmc() else: default(evmc_address),
-    code: if msg.code.isSome(): msg.code.get()[0].addr else: nil,
-    code_size: if msg.code.isSome(): csize_t(msg.code.get().len()) else: 0,
+    code_address:
+      if msg.codeAddress.isSome():
+        msg.codeAddress.get().toEvmc()
+      else:
+        default(evmc_address),
+    code:
+      if msg.code.isSome():
+        msg.code.get()[0].addr
+      else:
+        nil,
+    code_size:
+      if msg.code.isSome():
+        csize_t(msg.code.get().len())
+      else:
+        0,
   )
 
-proc execute*(evm: PortalEvmRef, message: PortalEvmMessage, code: Opt[seq[byte]]): Result[seq[byte], string] =
+func init*(T: type PortalEvmRef): T =
+  PortalEvmRef(vmPtr: loadEvmcVM(), context: PortalEvmContext.init())
+
+func abiVersion(evm: PortalEvmRef): int =
+  evm.vmPtr.abi_version.int
+
+func name*(evm: PortalEvmRef): string =
+  $evm.vmPtr.name
+
+func version*(evm: PortalEvmRef): string =
+  $evm.vmPtr.version
+
+# TODO: do we need to use evm.vmPtr.get_capabilities and/or evm.vmPtr.set_option?
+
+proc execute*(
+    evm: PortalEvmRef, message: PortalEvmMessage, code: Opt[seq[byte]]
+): Result[seq[byte], string] =
   var
     msg = message.toEvmc()
-    evmc_result = evm.vmPtr.execute(evm.vmPtr,
+    evmc_result = evm.vmPtr.execute(
+      evm.vmPtr,
       hostInteface.addr,
       evm.context.toEvmc(),
       EVMC_LATEST_STABLE_REVISION,
       msg,
-      if code.isSome(): code.get()[0].addr else: nil,
-      if code.isSome(): csize_t(code.get().len()) else: 0,
+      if code.isSome():
+        code.get()[0].addr
+      else:
+        nil,
+      if code.isSome():
+        csize_t(code.get().len())
+      else:
+        0,
     )
 
   let output =
@@ -118,8 +150,6 @@ proc close(evm: PortalEvmRef) =
     evm.vmPtr.destroy(evm.vmPtr)
     evm.vmPtr = nil
 
-
-
 when isMainModule:
   # Create new instance of the evm
   let evm = PortalEvmRef.init()
@@ -144,9 +174,9 @@ when isMainModule:
       sender: address"0xfffffffffffffffffffffffffffffffffffffffe",
       inputData: Opt.some(@[0x1.byte, 0x2, 0x3]),
       value: 10.u256(),
-      #create2Salt: Bytes32
-      #codeAddress: Opt[Address]
-      #code: Opt[seq[byte]]
+        #create2Salt: Bytes32
+        #codeAddress: Opt[Address]
+        #code: Opt[seq[byte]]
     )
     code = Opt.some(hexToSeqByte("0x4360005543600052596000f3"))
 
