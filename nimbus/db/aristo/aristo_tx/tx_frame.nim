@@ -59,7 +59,13 @@ proc rollback*(
   # TODO Everyone using this txref should repoint their parent field
   let parent = tx.parent
   let vTop = tx.layer[].cTop
-  tx.layer[] = Layer(vTop:  vTop, cTop: vTop, sTab: parent.layer.sTab, kMap: parent.layer.kMap, accLeaves: parent.layer.accLeaves, stoLeaves: parent.layer.stoLeaves)
+  tx.layer[] = Layer(vTop:  vTop, cTop: vTop)
+
+  if parent != nil:
+    tx.layer.sTab = parent.layer.sTab
+    tx.layer.kMap= parent.layer.kMap
+    tx.layer.accLeaves = parent.layer.accLeaves
+    tx.layer.stoLeaves= parent.layer.stoLeaves
 
   ok()
 
