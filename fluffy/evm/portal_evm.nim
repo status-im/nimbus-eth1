@@ -46,61 +46,78 @@ func toEvmc(context: PortalEvmHostContext): evmc_host_context =
 # Host Interface
 
 proc accountExists(context: evmc_host_context, address: var evmc_address): c99bool {.evmc_abi.} =
+  echo "accountExists called"
   #let accounts = cast[ptr HostContext](context)[].accounts
   raiseAssert("Not implemented")
 
 proc getStorage(context: evmc_host_context, address: var evmc_address, key: var evmc_bytes32): evmc_bytes32 {.evmc_abi.} =
+  echo "getStorage called"
   raiseAssert("Not implemented")
 
 proc setStorage(context: evmc_host_context, address: var evmc_address,
                               key, value: var evmc_bytes32): evmc_storage_status {.evmc_abi.} =
+  echo "setStorage called"
   raiseAssert("Not implemented")
 
 proc getBalance(context: evmc_host_context, address: var evmc_address): evmc_uint256be {.evmc_abi.} =
+  echo "getBalance called"
   raiseAssert("Not implemented")
 
 proc getCodeSize(context: evmc_host_context, address: var evmc_address): csize_t {.evmc_abi.} =
+  echo "getCodeSize called"
   raiseAssert("Not implemented")
 
 proc getCodeHash(context: evmc_host_context, address: var evmc_address): evmc_bytes32 {.evmc_abi.} =
+  echo "getCodeHash called"
   raiseAssert("Not implemented")
 
 proc copyCode(context: evmc_host_context, address: var evmc_address,
                             code_offset: csize_t, buffer_data: ptr byte,
                             buffer_size: csize_t): csize_t {.evmc_abi.} =
+  echo "copyCode called"
   raiseAssert("Not implemented")
 
 proc selfDestruct(context: evmc_host_context, address, beneficiary: var evmc_address) {.evmc_abi.} =
+  echo "selfDestruct called"
   raiseAssert("Not implemented")
 
 proc call(context: evmc_host_context, msg: var evmc_message): evmc_result {.evmc_abi.} =
+  echo "call called"
   raiseAssert("Not implemented")
 
 proc getTxContext(context: evmc_host_context): evmc_tx_context {.evmc_abi.} =
+  echo "getTxContext called"
   raiseAssert("Not implemented")
 
 proc getBlockHash(context: evmc_host_context, number: int64): evmc_bytes32 {.evmc_abi.} =
+  echo "getBlockHash called"
   raiseAssert("Not implemented")
 
 proc emitLog(context: evmc_host_context, address: var evmc_address,
                            data: ptr byte, data_size: csize_t,
                            topics: ptr evmc_bytes32, topics_count: csize_t) {.evmc_abi.} =
+  echo "emitLog called"
   raiseAssert("Not implemented")
 
 proc accessAccount(context: evmc_host_context, address: var evmc_address): evmc_access_status {.evmc_abi.} =
+  echo "accessAccount called"
   raiseAssert("Not implemented")
 
 proc accessStorage(context: evmc_host_context, address: var evmc_address,
                                  key: var evmc_bytes32): evmc_access_status {.evmc_abi.} =
+  echo "accessStorage called"
   raiseAssert("Not implemented")
 
 proc getTransientStorage(context: evmc_host_context, address: var evmc_address, key: var evmc_bytes32): evmc_bytes32 {.evmc_abi.} =
+  echo "getTransientStorage called"
   raiseAssert("Not implemented")
 
 proc setTransientStorage(context: evmc_host_context, address: var evmc_address, key, value: var evmc_bytes32) {.evmc_abi.} =
+  echo "setTransientStorage called"
   raiseAssert("Not implemented")
 
 proc getDelegateAddress(context: evmc_host_context, address: var evmc_address): evmc_address {.evmc_abi.} =
+  echo "getDelegateAddress called"
   raiseAssert("Not implemented")
 
 const hostInteface = evmc_host_interface(
@@ -126,13 +143,13 @@ const hostInteface = evmc_host_interface(
 
 # Using evmone evm
 
-const libevmone* = "libevmone.so"
+const libevmone* = "libevmone.so.0.13.0"
 
 proc evmc_create_evmone*(): ptr evmc_vm {.cdecl, importc: "evmc_create_evmone", raises: [], gcsafe, dynlib: libevmone.}
 
 # Portal EVM
 
-const EVMC_ABI_VERSION = 10 # TODO: update to support the latest abi version 12
+const EVMC_ABI_VERSION = 12
 
 type PortalEvmRef* = ref object
   vmPtr: ptr evmc_vm
@@ -171,24 +188,25 @@ proc execute*(evm: PortalEvmRef,
   doAssert(code.len() > 0)
 
   var msg = evmc_message(
-    kind: EVMC_CALL, # Only support call for now. Do we need to support EVMC_DELEGATECALL or EVMC_CALLCODE?
-    #flags: {EVMC_STATIC}, # Should we use static call?
-    depth: 0, # use zero depth as only call is supported. Double check this
+    # kind: EVMC_CREATE, # Only support call for now. Do we need to support EVMC_DELEGATECALL or EVMC_CALLCODE?
+    # #flags: {EVMC_STATIC}, # Should we use static call?
+    # depth: 0, # use zero depth as only call is supported. Double check this
     gas: 99999999999999999.int64, # set a large value for now. Should this be passed in?
-    recipient: recipient.toEvmc(),
-    sender: sender.toEvmc(),
-    input_data: if inputData.len() > 0: inputData[0].addr else: nil,
-    input_size: inputData.len().csize_t,
-    value: value.toEvmc(),
-    #create2_salt: # only required when creating contracts
-    code_address: codeAddress.toEvmc(),
-    code: code[0].addr,
-    code_size: code.len().csize_t)
+    # recipient: recipient.toEvmc(),
+    # sender: sender.toEvmc(),
+    # input_data: if inputData.len() > 0: inputData[0].addr else: nil,
+    # input_size: inputData.len().csize_t,
+    # value: value.toEvmc(),
+    # #create2_salt: # only required when creating contracts
+    # code_address: codeAddress.toEvmc() ,
+    # code: code[0].addr,
+    # code_size: code.len().csize_t
+    )
 
   var evmc_result = evm.vmPtr.execute(evm.vmPtr,
     hostInteface.addr,
     evm.context.toEvmc(),
-    evmc_revision.EVMC_OSAKA, # TODO: We may need to support multiple revisions so that we can execute from any block in the history
+    EVMC_LATEST_STABLE_REVISION, # TODO: We may need to support multiple revisions so that we can execute from any block in the history
     msg,
     code[0].addr,
     code.len().csize_t
@@ -203,7 +221,6 @@ proc execute*(evm: PortalEvmRef,
 
   let res =
     if evmc_result.status_code == EVMC_SUCCESS:
-
       ok(output)
     else:
       err($evmc_result.status_code)
@@ -235,27 +252,13 @@ when isMainModule:
   # Get the evm version
   echo "PortalEvmRef.version() = ", evm.version()
 
-# 608060405234801561001057600080fd5b50600360015560c18061002460003960
-# 00f3fe6080604052348015600f57600080fd5b5060043610603c5760003560e01c8
-# 06360fe47b114604157806395cacbe014605d578063c82fdf36146075575b600080
-# fd5b605b60048036036020811015605557600080fd5b5035607b565b005b606360
-# 80565b60408051918252519081900360200190f35b60636086565b600055565b60
-# 015481565b6000548156fea265627a7a723058204e00129b67b55015b0de73c316
-# 7fb19ae30a4bb9b293318b7fb6c40bced080b864736f6c634300050a0032
-
   # Execute some code
-  let byteCode = hexToSeqByte(
-    "0x6080604052348015600f57600080fd5b5060043610603c5760003560e01c8" &
-    "06360fe47b114604157806395cacbe014605d578063c82fdf36146075575b600080" &
-    "fd5b605b60048036036020811015605557600080fd5b5035607b565b005b606360" &
-    "80565b60408051918252519081900360200190f35b60636086565b600055565b60" &
-    "015481565b6000548156fea265627a7a723058204e00129b67b55015b0de73c316" &
-    "7fb19ae30a4bb9b293318b7fb6c40bced080b864736f6c634300050a0032")
+  let byteCode = hexToSeqByte("0x4360005543600052596000f3")
 
   echo evm.execute(
     default(Address),
     default(Address),
-    hexToSeqByte("0x2e64cec1"),
+    hexToSeqByte("0x"),
     1.u256,
     default(Address),
     byteCode)
