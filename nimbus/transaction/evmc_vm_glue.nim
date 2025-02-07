@@ -91,13 +91,13 @@ proc evmc_create_nimbusevm*(): ptr evmc_vm {.cdecl, exportc, dynlib.} =
 
   let vm = cast[ptr evmc_vm](alloc(sizeof(evmc_vm)))
 
-  vm[].abi_version = EVMC_ABI_VERSION
-  vm[].name = evmcName
-  vm[].version = evmcVersion
-  vm[].destroy = evmcDestroy
-  vm[].execute = evmcExecute
-  vm[].get_capabilities = evmcGetCapabilities
-  vm[].set_option = evmcSetOption
+  vm.abi_version = EVMC_ABI_VERSION
+  vm.name = evmcName
+  vm.version = evmcVersion
+  vm.destroy = evmcDestroy
+  vm.execute = evmcExecute
+  vm.get_capabilities = evmcGetCapabilities
+  vm.set_option = evmcSetOption
 
   return vm
 
