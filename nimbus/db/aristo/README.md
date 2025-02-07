@@ -433,7 +433,7 @@ database, the above architecture mutates to
 
 When looked at descriptor API there are no changes when accessing data via
 *db1*, *db2*, or *db3*. In a different, more algebraic notation, the above
-tansformation is written as
+transformation is written as
 
         | tx1, ø |                                                   (8)
         | tx2, ø | PBE
