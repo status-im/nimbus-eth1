@@ -17,25 +17,17 @@ import
 
 export portal_evm_context
 
-
 type PortalEvmRef* = ref object
   vmPtr: ptr evmc_vm
   context: PortalEvmContext
 
-func isAbiCompatible*(evm: PortalEvmRef): bool
-
 func init*(T: type PortalEvmRef): T =
-  let evm = PortalEvmRef(
+  PortalEvmRef(
     vmPtr: loadEvmcVM(),
-    context: PortalEvmContext.init()) # TODO: update this to use nimbus evm
-  doAssert(evm.isAbiCompatible)
-  evm
+    context: PortalEvmContext.init())
 
 func abiVersion(evm: PortalEvmRef): int =
   evm.vmPtr.abi_version.int
-
-func isAbiCompatible*(evm: PortalEvmRef): bool =
-  evm.abiVersion() == EVMC_ABI_VERSION
 
 func name*(evm: PortalEvmRef): string =
   $evm.vmPtr.name
@@ -45,38 +37,58 @@ func version*(evm: PortalEvmRef): string =
 
 # TODO: do we need to use evm.vmPtr.get_capabilities and/or evm.vmPtr.set_option?
 
-proc execute*(evm: PortalEvmRef,
-  recipient: Address,
-  sender: Address,
-  inputData: openArray[byte],
-  value: UInt256,
-  codeAddress: Address,
-  code: openArray[byte]): Result[seq[byte], string] =
-  doAssert(code.len() > 0)
+type
+  PortalEvmMessageKind* = enum
+    CALL = 0
+    DELEGATECALL = 1
+    CALLCODE = 2
+    CREATE = 3
+    CREATE2 = 4
+    EOFCREATE = 5
 
-  var msg = evmc_message(
-    # kind: EVMC_CREATE, # Only support call for now. Do we need to support EVMC_DELEGATECALL or EVMC_CALLCODE?
-    # #flags: {EVMC_STATIC}, # Should we use static call?
-    # depth: 0, # use zero depth as only call is supported. Double check this
-    gas: 99999999999999999.int64, # set a large value for now. Should this be passed in?
-    # recipient: recipient.toEvmc(),
-    # sender: sender.toEvmc(),
-    # input_data: if inputData.len() > 0: inputData[0].addr else: nil,
-    # input_size: inputData.len().csize_t,
-    # value: value.toEvmc(),
-    # #create2_salt: # only required when creating contracts
-    # code_address: codeAddress.toEvmc() ,
-    # code: code[0].addr,
-    # code_size: code.len().csize_t
-    )
+  PortalEvmMessage* = object
+    kind*: PortalEvmMessageKind
+    staticCall*: bool
+    depth*: int32
+    gas*: int64
+    recipient*: Address
+    sender*: Address
+    inputData*: Opt[seq[byte]]
+    value*: UInt256
+    create2Salt*: Bytes32
+    codeAddress*: Opt[Address]
+    code*: Opt[seq[byte]]
 
-  var evmc_result = evm.vmPtr.execute(evm.vmPtr,
-    hostInteface.addr,
-    evm.context.toEvmc(),
-    EVMC_LATEST_STABLE_REVISION, # TODO: We may need to support multiple revisions so that we can execute from any block in the history
-    msg,
-    code[0].addr,
-    code.len().csize_t
+func toEvmc(msgKind: PortalEvmMessageKind): evmc_call_kind =
+  evmc_call_kind(msgKind.int)
+
+func toEvmc(msg: PortalEvmMessage): evmc_message =
+  evmc_message(
+    kind: msg.kind.toEvmc(),
+    flags: if msg.staticCall: {EVMC_STATIC} else: {},
+    depth: msg.depth,
+    gas: msg.gas,
+    recipient: msg.recipient.toEvmc(),
+    sender: msg.sender.toEvmc(),
+    input_data: if msg.inputData.isSome(): msg.inputData.get()[0].addr else: nil,
+    input_size: if msg.inputData.isSome(): csize_t(msg.inputData.get().len()) else: 0,
+    value: msg.value.toEvmc(),
+    create2_salt: msg.create2Salt.toEvmc(),
+    code_address: if msg.codeAddress.isSome(): msg.codeAddress.get().toEvmc() else: default(evmc_address),
+    code: if msg.code.isSome(): msg.code.get()[0].addr else: nil,
+    code_size: if msg.code.isSome(): csize_t(msg.code.get().len()) else: 0,
+  )
+
+proc execute*(evm: PortalEvmRef, message: PortalEvmMessage, code: Opt[seq[byte]]): Result[seq[byte], string] =
+  var
+    msg = message.toEvmc()
+    evmc_result = evm.vmPtr.execute(evm.vmPtr,
+      hostInteface.addr,
+      evm.context.toEvmc(),
+      EVMC_LATEST_STABLE_REVISION,
+      msg,
+      if code.isSome(): code.get()[0].addr else: nil,
+      if code.isSome(): csize_t(code.get().len()) else: 0,
     )
 
   let output =
@@ -122,15 +134,23 @@ when isMainModule:
   echo "PortalEvmRef.version() = ", evm.version()
 
   # Execute some code
-  let byteCode = hexToSeqByte("0x4360005543600052596000f3")
+  let
+    message = PortalEvmMessage(
+      kind: PortalEvmMessageKind.CALL,
+      staticCall: false,
+      depth: 0,
+      gas: 200000,
+      recipient: address"0xfffffffffffffffffffffffffffffffffffffffe",
+      sender: address"0xfffffffffffffffffffffffffffffffffffffffe",
+      inputData: Opt.some(@[0x1.byte, 0x2, 0x3]),
+      value: 10.u256(),
+      #create2Salt: Bytes32
+      #codeAddress: Opt[Address]
+      #code: Opt[seq[byte]]
+    )
+    code = Opt.some(hexToSeqByte("0x4360005543600052596000f3"))
 
-  echo evm.execute(
-    default(Address),
-    default(Address),
-    hexToSeqByte("0x"),
-    1.u256,
-    default(Address),
-    byteCode)
+  echo evm.execute(message, code)
 
   # Check if the evm is cleaned up
   echo "Before calling close... PortalEvmRef.isClosed() = ", evm.isClosed()

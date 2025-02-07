@@ -16,7 +16,10 @@ proc evmc_create_evmone(): ptr evmc_vm {.cdecl, importc: "evmc_create_evmone", r
 
 # Using evmone evm (for now)
 
-const EVMC_ABI_VERSION* = 12
+const EVMC_ABI_VERSION = 12
 
 proc loadEvmcVM*(): ptr evmc_vm =
-  evmc_create_evmone()
+  let vmPtr = evmc_create_evmone() # TODO: update this to use nimbus evm
+  doAssert(vmPtr.abi_version.int == EVMC_ABI_VERSION)
+
+  return vmPtr
