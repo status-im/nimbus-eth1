@@ -7,7 +7,13 @@
 
 {.push raises: [].}
 
-import stew/ptrops, stint, sqlite3_abi, eth/db/kvstore_sqlite3
+import
+  stew/ptrops,
+  stint,
+  sqlite3_abi,
+  eth/db/kvstore_sqlite3,
+  ../common/common_types,
+  ../network/history/content/content_values_deprecated
 
 func xorDistance(a: openArray[byte], b: openArray[byte]): seq[byte] =
   doAssert(a.len == b.len)
@@ -63,6 +69,33 @@ func isInRadius*(
       UInt256.fromBytesBE(makeOpenArray(sqlite3_value_blob(ptrs[][2]), byte, blob3Len))
 
   if isInRadius(contentId, localId, radius):
+    ctx.sqlite3_result_int(cint 1)
+  else:
+    ctx.sqlite3_result_int(cint 0)
+
+func isWithoutProofImpl(content: openArray[byte]): bool =
+  let headerWithProof = decodeSsz(content, BlockHeaderWithProofDeprecated).valueOr:
+    # Leave all other content as it is
+    return false
+
+  if headerWithProof.proof.proofType ==
+      BlockHeaderProofType.historicalHashesAccumulatorProof:
+    false
+  elif headerWithProof.proof.proofType == BlockHeaderProofType.none:
+    true
+  else:
+    false
+
+func isWithoutProof*(
+    ctx: SqliteContext, n: cint, v: SqliteValue
+) {.cdecl, gcsafe, raises: [].} =
+  doAssert(n == 1)
+
+  let
+    ptrs = makeUncheckedArray(v)
+    blob1Len = sqlite3_value_bytes(ptrs[][0])
+
+  if isWithoutProofImpl(makeOpenArray(sqlite3_value_blob(ptrs[][0]), byte, blob1Len)):
     ctx.sqlite3_result_int(cint 1)
   else:
     ctx.sqlite3_result_int(cint 0)

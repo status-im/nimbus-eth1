@@ -14,7 +14,7 @@ import
   results,
   eth/db/kvstore,
   eth/db/kvstore_sqlite3,
-  ../network/history/[history_content],
+  ../network/history/history_content,
   ../network/history/content/content_values_deprecated,
   ../network/wire/[portal_protocol, portal_protocol_config],
   ./content_db_custom_sql_functions
@@ -67,6 +67,7 @@ type
     deleteOutOfRadiusStmt: SqliteStmt[(array[32, byte], array[32, byte]), void]
     largestDistanceStmt: SqliteStmt[array[32, byte], array[32, byte]]
     selectAllStmt: SqliteStmt[NoParams, ContentPair]
+    deleteBatchStmt: SqliteStmt[NoParams, void]
 
   PutResultType* = enum
     ContentStored
@@ -218,6 +219,10 @@ proc new*(
     "Custom function isInRadius creation OK"
   )
 
+  db.createCustomFunction("isWithoutProof", 1, isWithoutProof).expect(
+    "Custom function isWithoutProof creation OK"
+  )
+
   let sizeStmt = db.prepareStmt(
     "SELECT page_count * page_size as size FROM pragma_page_count(), pragma_page_size();",
     NoParams, int64,
@@ -257,6 +262,11 @@ proc new*(
   let selectAllStmt =
     db.prepareStmt("SELECT key, value FROM kvstore", NoParams, ContentPair)[]
 
+  let deleteBatchStmt = db.prepareStmt(
+    "DELETE FROM kvstore WHERE key IN (SELECT key FROM kvstore WHERE isWithoutProof(value) == 1)",
+    NoParams, void,
+  )[]
+
   let contentDb = ContentDB(
     kv: kvStore,
     backend: db,
@@ -272,6 +282,7 @@ proc new*(
     deleteOutOfRadiusStmt: deleteOutOfRadiusStmt,
     largestDistanceStmt: largestDistanceStmt,
     selectAllStmt: selectAllStmt,
+    deleteBatchStmt: deleteBatchStmt,
   )
 
   contentDb.setInitialRadius(radiusConfig)
@@ -493,6 +504,11 @@ proc iterateAllAndMigrateHeaderType*(db: ContentDB) =
       contentDeleted.inc()
 
   notice "ContentDB migration done: ", contentAltered, contentDeleted
+
+proc deleteAllHeadersWithoutProof*(db: ContentDB) =
+  notice "ContentDB migration: deleting all headers without proof"
+  db.deleteBatchStmt.exec().expectDb()
+  notice "ContentDB migration done"
 
 proc createGetHandler*(db: ContentDB): DbGetHandler =
   return (
