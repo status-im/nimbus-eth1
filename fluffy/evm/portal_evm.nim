@@ -9,6 +9,7 @@ import
   std/tables,
   stew/byteutils,
   stew/ptrops,
+  chronicles,
   stint,
   results,
   evmc/evmc,
@@ -16,7 +17,10 @@ import
   ../../nimbus/evm/evmc_helpers,
   ./[evm_loader, portal_evm_context]
 
-export portal_evm_context
+export portal_evm_context, results
+
+logScope:
+  topics = "portal_evm"
 
 type
   PortalEvmMessageKind* = enum
@@ -36,13 +40,13 @@ type
     sender*: Address
     inputData*: Opt[seq[byte]]
     value*: UInt256
-    create2Salt*: Bytes32
+    create2Salt*: base.Bytes32
     codeAddress*: Opt[Address]
     code*: Opt[seq[byte]]
 
   PortalEvmRef* = ref object
     vmPtr: ptr evmc_vm
-    context: PortalEvmContext
+    context: PortalEvmContextRef
 
 func toEvmc(msgKind: PortalEvmMessageKind): evmc_call_kind =
   evmc_call_kind(msgKind.int)
@@ -88,8 +92,11 @@ func toEvmc(msg: PortalEvmMessage): evmc_message =
         0,
   )
 
-func init*(T: type PortalEvmRef): T =
-  PortalEvmRef(vmPtr: loadEvmcVM(), context: PortalEvmContext.init())
+func init*(T: type PortalEvmRef, context: PortalEvmContextRef): T =
+  PortalEvmRef(vmPtr: loadEvmcVM(), context: context)
+
+proc initContext*(evm: PortalEvmRef, context: PortalEvmContextRef) =
+  evm.context = context
 
 func abiVersion(evm: PortalEvmRef): int =
   evm.vmPtr.abi_version.int
@@ -152,7 +159,7 @@ proc close(evm: PortalEvmRef) =
 
 when isMainModule:
   # Create new instance of the evm
-  let evm = PortalEvmRef.init()
+  let evm = PortalEvmRef.init(PortalEvmContextRef.init(Header()))
 
   # Get the abi version
   echo "PortalEvmRef.abiVersion() = ", evm.abiVersion()
