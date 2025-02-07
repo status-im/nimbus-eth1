@@ -14,7 +14,8 @@ import
   results,
   eth/db/kvstore,
   eth/db/kvstore_sqlite3,
-  ../network/state/state_content,
+  ../network/history/[history_content],
+  ../network/history/content/content_values_deprecated,
   ../network/wire/[portal_protocol, portal_protocol_config],
   ./content_db_custom_sql_functions
 
@@ -48,6 +49,8 @@ type
   RowInfo =
     tuple[contentId: array[32, byte], payloadLength: int64, distance: array[32, byte]]
 
+  ContentPair = tuple[contentKey: array[32, byte], contentItem: seq[byte]]
+
   ContentDB* = ref object
     backend: SqStoreRef
     kv: KvStoreRef
@@ -63,6 +66,7 @@ type
     getAllOrderedByDistanceStmt: SqliteStmt[array[32, byte], RowInfo]
     deleteOutOfRadiusStmt: SqliteStmt[(array[32, byte], array[32, byte]), void]
     largestDistanceStmt: SqliteStmt[array[32, byte], array[32, byte]]
+    selectAllStmt: SqliteStmt[NoParams, ContentPair]
 
   PutResultType* = enum
     ContentStored
@@ -250,6 +254,9 @@ proc new*(
     "SELECT max(xorDistance(?, key)) FROM kvstore", array[32, byte], array[32, byte]
   )[]
 
+  let selectAllStmt =
+    db.prepareStmt("SELECT key, value FROM kvstore", NoParams, ContentPair)[]
+
   let contentDb = ContentDB(
     kv: kvStore,
     backend: db,
@@ -264,6 +271,7 @@ proc new*(
     getAllOrderedByDistanceStmt: getAllOrderedByDistanceStmt,
     deleteOutOfRadiusStmt: deleteOutOfRadiusStmt,
     largestDistanceStmt: largestDistanceStmt,
+    selectAllStmt: selectAllStmt,
   )
 
   contentDb.setInitialRadius(radiusConfig)
@@ -283,6 +291,7 @@ proc close*(db: ContentDB) =
   db.getAllOrderedByDistanceStmt.disposeSafe()
   db.deleteOutOfRadiusStmt.disposeSafe()
   db.largestDistanceStmt.disposeSafe()
+  db.selectAllStmt.disposeSafe()
   discard db.kv.close()
 
 ## Private ContentDB calls
@@ -453,6 +462,37 @@ proc adjustRadius(
   # dataRadius, so the radius will constantly decrease through the node its
   # lifetime.
   db.dataRadius = newRadius
+
+proc iterateAllAndMigrateHeaderType*(db: ContentDB) =
+  var
+    contentPair: ContentPair
+    contentAltered = 0
+    contentDeleted = 0
+
+  notice "ContentDB migration: iterating over all content"
+  for e in db.selectAllStmt.exec(contentPair):
+    let headerWithProof = decodeSsz(
+      contentPair.contentItem, BlockHeaderWithProofDeprecated
+    ).valueOr:
+      # Leave all other content as it is
+      continue
+
+    if headerWithProof.proof.proofType ==
+        BlockHeaderProofType.historicalHashesAccumulatorProof:
+      # Proof, migrate the content
+      let accumulatorProof = headerWithProof.proof.historicalHashesAccumulatorProof
+      let adjustedContent = BlockHeaderWithProof(
+        header: headerWithProof.header,
+        proof: ByteList[MAX_HEADER_PROOF_LENGTH].init(SSZ.encode(accumulatorProof)),
+      )
+      db.put(contentPair.contentKey, SSZ.encode(adjustedContent))
+      contentAltered.inc()
+    elif headerWithProof.proof.proofType == BlockHeaderProofType.none:
+      # No proof, delete the content
+      db.del(contentPair.contentKey)
+      contentDeleted.inc()
+
+  notice "ContentDB migration done: ", contentAltered, contentDeleted
 
 proc createGetHandler*(db: ContentDB): DbGetHandler =
   return (
