@@ -241,3 +241,8 @@
 	path = vendor/nim-minilru
 	url = https://github.com/status-im/nim-minilru.git
 	branch = master
+[submodule "vendor/evmone"]
+	path = vendor/evmone
+	url = https://github.com/ethereum/evmone.git
+  ignore = dirty
+	branch = master

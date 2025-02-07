@@ -143,7 +143,8 @@ const hostInteface = evmc_host_interface(
 
 # Using evmone evm
 
-const libevmone* = "libevmone.so.0.13.0"
+# This is currently built using a manual build script which copies the library into the build directory
+const libevmone* = "build/libevmone.so"
 
 proc evmc_create_evmone*(): ptr evmc_vm {.cdecl, importc: "evmc_create_evmone", raises: [], gcsafe, dynlib: libevmone.}
 
