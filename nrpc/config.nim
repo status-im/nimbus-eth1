@@ -22,7 +22,7 @@ import
     confutils/std/net
   ],
   eth/[common, net/nat, p2p/enode, p2p/discoveryv5/enr],
-  "../nimbus"/[constants, compile_info],
+  ../execution_chain/[constants, compile_info],
   ../execution_chain/common/chain_config,
   ../execution_chain/db/opts
 
