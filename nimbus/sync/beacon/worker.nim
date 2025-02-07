@@ -24,7 +24,7 @@ import
 # ------------------------------------------------------------------------------
 
 proc headersToFetchOk(buddy: BeaconBuddyRef): bool =
-  0 < buddy.ctx.headersUnprocTotal() and
+  0 < buddy.ctx.headersUnprocAvail() and
     buddy.ctrl.running and
     not buddy.ctx.poolMode
 
@@ -127,8 +127,8 @@ proc runDaemon*(
 
       # Import from staged queue.
       while await ctx.blocksStagedImport(info):
-        if not ctx.daemon:
-          # Implied by external sync shutdown?
+        if not ctx.daemon or   # Implied by external sync shutdown?
+           ctx.poolMode:       # Oops, re-org needed?
           return
 
   # At the end of the cycle, leave time to trigger refill headers/blocks

@@ -110,13 +110,13 @@ type
   HeaderImportSync* = object
     ## Header sync staging area
     unprocessed*: BnRangeSet         ## Block or header ranges to fetch
-    borrowed*: uint64                ## Total of temp. fetched ranges
+    borrowed*: BnRangeSet            ## Fetched/locked ranges
     staged*: LinkedHChainQueue       ## Blocks fetched but not stored yet
 
   BlocksImportSync* = object
     ## Block sync staging area
     unprocessed*: BnRangeSet         ## Blocks download requested
-    borrowed*: uint64                ## Total of temp. fetched ranges
+    borrowed*: BnRangeSet            ## Fetched/locked fetched ranges
     staged*: StagedBlocksQueue       ## Blocks ready for import
 
   # -------------------

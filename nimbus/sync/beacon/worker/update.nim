@@ -142,11 +142,9 @@ proc setupCollectingHeaders(ctx: BeaconCtxRef; info: static[string]) =
     h = ctx.target.consHead.number
 
   if c+1 < h:                                 # header chain interval is `(C,H]`
-    doAssert ctx.headersUnprocTotal() == 0
-    doAssert ctx.headersUnprocBorrowed() == 0
+    doAssert ctx.headersUnprocIsEmpty()
     doAssert ctx.headersStagedQueueIsEmpty()
-    doAssert ctx.blocksUnprocTotal() == 0
-    doAssert ctx.blocksUnprocBorrowed() == 0
+    doAssert ctx.blocksUnprocIsEmpty()
     doAssert ctx.blocksStagedQueueIsEmpty()
 
     ctx.sst.layout = SyncStateLayout(
@@ -239,11 +237,9 @@ proc linkIntoFc(ctx: BeaconCtxRef; info: static[string]): bool =
 
 
 proc setupProcessingBlocks(ctx: BeaconCtxRef; info: static[string]) =
-  doAssert ctx.headersUnprocTotal() == 0
-  doAssert ctx.headersUnprocBorrowed() == 0
+  doAssert ctx.headersUnprocIsEmpty()
   doAssert ctx.headersStagedQueueIsEmpty()
-  doAssert ctx.blocksUnprocTotal() == 0
-  doAssert ctx.blocksUnprocBorrowed() == 0
+  doAssert ctx.blocksUnprocIsEmpty()
   doAssert ctx.blocksStagedQueueIsEmpty()
 
   let
@@ -251,7 +247,7 @@ proc setupProcessingBlocks(ctx: BeaconCtxRef; info: static[string]) =
     h = ctx.layout.head
 
   # Update blocks `(C,H]`
-  ctx.blocksUnprocCommit(0, c+1, h)
+  ctx.blocksUnprocSet(c+1, h)
 
   # State transition
   ctx.layout.lastState = processingBlocks
@@ -278,8 +274,7 @@ proc updateSyncState*(ctx: BeaconCtxRef; info: static[string]) =
       return
     of processingBlocks:
       if not ctx.blocksStagedQueueIsEmpty() or
-         0 < ctx.blocksUnprocChunks() or
-         0 < ctx.blocksUnprocBorrowed:
+         not ctx.blocksUnprocIsEmpty():
         return
       # Set to idle
       debug info & ": blocks processing cancelled",

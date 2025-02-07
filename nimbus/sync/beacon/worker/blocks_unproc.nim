@@ -49,79 +49,108 @@ proc blocksUnprocFetch*(
         BnRange.new(jv.minPt, jv.minPt + maxLen - 1)
 
   discard q.reduce(iv)
-  ctx.blk.borrowed += iv.len
+  doAssert ctx.blk.borrowed.merge(iv) == iv.len
   ok(iv)
 
 
-proc blocksUnprocCommit*(ctx: BeaconCtxRef; borrowed: uint) =
-  ## Commit back all processed range
-  ctx.blk.borrowed -= borrowed
+proc blocksUnprocCommit*(ctx: BeaconCtxRef; iv: BnRange) =
+  ## Commit back all processed range, i.e. remove it from the borrowed set.
+  doAssert ctx.blk.borrowed.reduce(iv) == iv.len
 
-proc blocksUnprocCommit*(ctx: BeaconCtxRef; borrowed: uint; retuor: BnRange) =
-  ## Merge back unprocessed range `retour`
-  ctx.blocksUnprocCommit borrowed
-  doAssert ctx.blk.unprocessed.merge(retuor) == retuor.len
+proc blocksUnprocCommit*(ctx: BeaconCtxRef; iv, unproc: BnRange) =
+  ## Variant of `blocksUnprocCommit()` which merges back some unprocessed
+  ## range `unproc`.
+  doAssert ctx.blk.borrowed.reduce(iv) == iv.len
+  doAssert ctx.blk.unprocessed.merge(unproc) == unproc.len
 
 proc blocksUnprocCommit*(
     ctx: BeaconCtxRef;
-    borrowed: uint;
-    rMinPt: BlockNumber;
-    rMaxPt: BlockNumber) =
-  ## Variant of `blocksUnprocCommit()`
-  ctx.blocksUnprocCommit borrowed
-  doAssert ctx.blk.unprocessed.merge(rMinPt, rMaxPt) == rMaxPt - rMinPt + 1
+    iv: BnRange;
+    uMinPt: BlockNumber;
+    uMaxPt: BlockNumber;
+      ) =
+  ## Variant of `blocksUnprocCommit()`which merges back some unprocessed
+  ## range `[uMinPt,uMaxPt]`.
+  doAssert ctx.blk.borrowed.reduce(iv) == iv.len
+  if uMinPt <= uMaxPt:
+    # Otherwise `maxPt` would be internally adjusted to `max(minPt,maxPt)`
+    doAssert ctx.blk.unprocessed.merge(uMinPt, uMaxPt) == uMaxPt - uMinPt + 1
 
 
-proc blocksUnprocCovered*(ctx: BeaconCtxRef; minPt,maxPt: BlockNumber): uint64 =
-  ## Check whether range is fully contained
+proc blocksUnprocAppend*(ctx: BeaconCtxRef; minPt, maxPt: uint64) =
+  ## Add some unprocessed range while leaving the borrowed queue untouched.
+  ## The argument range will be curbed by existing `borrowed` entries (so
+  ## it might become a set of ranges.)
   # Argument `maxPt` would be internally adjusted to `max(minPt,maxPt)`
   if minPt <= maxPt:
-    return ctx.blk.unprocessed.covered(minPt, maxPt)
+    if 0 < ctx.blk.borrowed.covered(minPt, maxPt):
+      # Must Reduce by currenty borrowed block numbers
+      for pt in minPt .. maxPt:
+        # So this is piecmeal adding to unprocessed numbers
+        if ctx.blk.borrowed.covered(pt,pt) == 0:
+          discard ctx.blk.unprocessed.merge(pt, pt)
+    else:
+      discard ctx.blk.unprocessed.merge(minPt, maxPt)
 
-proc blocksUnprocCovered*(ctx: BeaconCtxRef; pt: BlockNumber): bool =
-  ## Check whether point is contained
-  ctx.blk.unprocessed.covered(pt, pt) == 1
 
+proc blocksUnprocAvail*(ctx: BeaconCtxRef): uint64 =
+  ## Returns the number of blocks that can be fetched
+  ctx.blk.unprocessed.total()
 
-proc blocksUnprocBottom*(ctx: BeaconCtxRef): BlockNumber =
+proc blocksUnprocAvailBottom*(ctx: BeaconCtxRef): uint64 =
+  ## Returns the least number from the `unprocessed` ranges set. It
+  ## will default to `high(uint64)` if the range set is empty.
   let iv = ctx.blk.unprocessed.ge().valueOr:
-    return high(BlockNumber)
+    return high(uint64)
   iv.minPt
 
 
 proc blocksUnprocTotal*(ctx: BeaconCtxRef): uint64 =
-  ctx.blk.unprocessed.total()
+  ## Returns the sum of `borrowed` and `unprocessed` ranges.
+  ctx.blk.unprocessed.total() + ctx.blk.borrowed.total()
 
-proc blocksUnprocBorrowed*(ctx: BeaconCtxRef): uint64 =
-  ctx.blk.borrowed
+proc blocksUnprocTotalBottom*(ctx: BeaconCtxRef): uint64 =
+  ## Returns the number item from `borrowed` and `unprocessed` ranges. It
+  ## will return `high(uint64)` if both range sets are empty.
+  let
+    uMin = block:
+      let rc = ctx.blk.unprocessed.ge(0)
+      if rc.isOk:
+        rc.value.minPt
+      else:
+        high(BlockNumber)
+    bMin = block:
+      let rc = ctx.blk.borrowed.ge(0)
+      if rc.isOk:
+        rc.value.minPt
+      else:
+        high(BlockNumber)
+  min(uMin, bMin)
 
-proc blocksUnprocChunks*(ctx: BeaconCtxRef): int =
-  ctx.blk.unprocessed.chunks()
 
 proc blocksUnprocIsEmpty*(ctx: BeaconCtxRef): bool =
-  ctx.blk.unprocessed.chunks() == 0
+  ## True iff there are neither `borrowed` or `unprocessed` entries.
+  ctx.blk.unprocessed.chunks() == 0 and
+  ctx.blk.borrowed.chunks() == 0
 
 # ------------------
 
 proc blocksUnprocInit*(ctx: BeaconCtxRef) =
   ## Constructor
   ctx.blk.unprocessed = BnRangeSet.init()
+  ctx.blk.borrowed = BnRangeSet.init()
 
 proc blocksUnprocClear*(ctx: BeaconCtxRef) =
   ## Clear
   ctx.blk.unprocessed.clear()
-  ctx.blk.borrowed = 0u
+  ctx.blk.borrowed.clear()
 
-proc blocksUnprocAmend*(ctx: BeaconCtxRef; minPt, maxPt: BlockNumber) =
-  ## Add some unprocessed range
-  # Argument `maxPt` would be internally adjusted to `max(minPt,maxPt)`
-  if minPt <= maxPt:
-    discard ctx.blk.unprocessed.merge(minPt, maxPt)
-
-proc blocksUnprocSet*(ctx: BeaconCtxRef; minPt, maxPt: BlockNumber) =
+proc blocksUnprocSet*(ctx: BeaconCtxRef; minPt, maxPt: uint64) =
   ## Set up new unprocessed range
   ctx.blocksUnprocClear()
-  ctx.blocksUnprocAmend(minPt, maxPt)
+  if minPt <= maxPt:
+    # Otherwise `maxPt` would be internally adjusted to `max(minPt,maxPt)`
+    discard ctx.blk.unprocessed.merge(minPt, maxPt)
 
 # ------------------------------------------------------------------------------
 # End

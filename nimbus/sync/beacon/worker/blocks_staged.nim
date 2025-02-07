@@ -58,18 +58,20 @@ proc fetchAndCheck(
   for n in 1u ..< ivReq.len:
     let header = ctx.dbHeaderPeek(ivReq.minPt + n).valueOr:
       # There is nothing one can do here
-      info "Block header missing, requesting reorg", ivReq, n,
+      info "Block header missing (reorg triggered)", ivReq, n,
         nth=(ivReq.minPt + n).bnStr
       # So require reorg
+      blk.blocks.setLen(offset)
       ctx.poolMode = true
       return false
     blockHash[n - 1] = header.parentHash
     blk.blocks[offset + n].header = header
   blk.blocks[offset].header = ctx.dbHeaderPeek(ivReq.minPt).valueOr:
     # There is nothing one can do here
-    info "Block header missing, requesting reorg", ivReq, n=0,
+    info "Block header missing (reorg triggered)", ivReq, n=0,
       nth=ivReq.minPt.bnStr
     # So require reorg
+    blk.blocks.setLen(offset)
     ctx.poolMode = true
     return false
   blockHash[ivReq.len - 1] =
@@ -100,14 +102,16 @@ proc fetchAndCheck(
         # Oops, cut off the rest
         blk.blocks.setLen(offset + n)
         buddy.fetchRegisterError()
-        trace info & ": fetch bodies cut off junk", peer=buddy.peer, ivReq,
-          n, nTxs=bodies[n].transactions.len, nBodies,
-          nRespErrors=buddy.only.nBdyRespErrors
+        trace info & ": cut off fetched junk", peer=buddy.peer, ivReq, n,
+          nTxs=bodies[n].transactions.len, nBodies, bdyErrors=buddy.bdyErrors
         break loop
 
       blk.blocks[offset + n].transactions = bodies[n].transactions
       blk.blocks[offset + n].uncles       = bodies[n].uncles
       blk.blocks[offset + n].withdrawals  = bodies[n].withdrawals
+
+      # Remove stashed header
+      ctx.dbHeaderUnstash blk.blocks[offset + n].header.number
 
   if offset < blk.blocks.len.uint64:
     return true
@@ -122,16 +126,30 @@ proc fetchAndCheck(
 func blocksStagedCanImportOk*(ctx: BeaconCtxRef): bool =
   ## Check whether the queue is at its maximum size so import can start with
   ## a full queue.
-  if ctx.pool.blocksStagedQuLenMax <= ctx.blk.staged.len:
-    return true
+  ##
+  if ctx.poolMode:
+    # Re-org is scheduled
+    return false
 
   if 0 < ctx.blk.staged.len:
-    # Import if what is on the queue is all we have got.
-    if ctx.blocksUnprocIsEmpty() and ctx.blocksUnprocBorrowed() == 0:
+    # Import if what is on the queue is all we have got. Note that the function
+    # `blocksUnprocIsEmpty()` returns `true` only if all blocks possible have
+    # been fetched (i.e. the `borrowed` list is also empty.)
+    if ctx.blocksUnprocIsEmpty():
       return true
-    # Import if there is currently no peer active
-    if ctx.pool.nBuddies == 0:
-      return true
+
+    # Make sure that the lowest block is available, already. Or the other way
+    # round: no unprocessed block number range precedes the least staged block.
+    if ctx.blk.staged.ge(0).value.key < ctx.blocksUnprocTotalBottom():
+      # Also suggest importing blocks if there is currently no peer active.
+      # The `unprocessed` ranges will contain some higher number block ranges,
+      # but these can be fetched later.
+      if ctx.pool.nBuddies == 0:
+        return true
+
+      # Start importing if the queue is long enough.
+      if ctx.pool.blocksStagedQuLenMax <= ctx.blk.staged.len:
+        return true
 
   false
 
@@ -139,16 +157,15 @@ func blocksStagedCanImportOk*(ctx: BeaconCtxRef): bool =
 func blocksStagedFetchOk*(ctx: BeaconCtxRef): bool =
   ## Check whether body records can be fetched and stored on the `staged` queue.
   ##
-  let uBottom = ctx.blocksUnprocBottom()
-  if uBottom < high(BlockNumber):
+  if 0 < ctx.blocksUnprocAvail():
     # Not to start fetching while the queue is busy (i.e. larger than Lwm)
     # so that import might still be running strong.
     if ctx.blk.staged.len < ctx.pool.blocksStagedQuLenMax:
       return true
 
     # Make sure that there is no gap at the bottom which needs to be
-    # addressed regardless of the length of the queue.
-    if uBottom < ctx.blk.staged.ge(0).value.key:
+    # fetched regardless of the length of the queue.
+    if ctx.blocksUnprocAvailBottom() < ctx.blk.staged.ge(0).value.key:
       return true
 
   false
@@ -160,7 +177,7 @@ proc blocksStagedCollect*(
       ): Future[bool] {.async: (raises: []).} =
   ## Collect bodies and stage them.
   ##
-  if buddy.ctx.blocksUnprocIsEmpty():
+  if buddy.ctx.blocksUnprocAvail() == 0:
     # Nothing to do
     return false
 
@@ -203,7 +220,7 @@ proc blocksStagedCollect*(
     if not await buddy.fetchAndCheck(ivReq, blk, info):
       if ctx.poolMode:
         # Reorg requested?
-        ctx.blocksUnprocCommit(iv.len, iv)
+        ctx.blocksUnprocCommit(iv, iv)
         return false
 
       haveError = true
@@ -222,7 +239,7 @@ proc blocksStagedCollect*(
           nStaged=ctx.blk.staged.len, ctrl=buddy.ctrl.state,
           bdyErrors=buddy.bdyErrors
 
-        ctx.blocksUnprocCommit(iv.len, iv)
+        ctx.blocksUnprocCommit(iv, iv)
         # At this stage allow a task switch so that some other peer might try
         # to work on the currently returned interval.
         try: await sleepAsync asyncThreadSwitchTimeSlot
@@ -234,14 +251,14 @@ proc blocksStagedCollect*(
       trace info & ": list partially failed", peer, iv, ivReq,
         unused=BnRange.new(ivBottom,iv.maxPt)
       # There is some left over to store back
-      ctx.blocksUnprocCommit(iv.len, ivBottom, iv.maxPt)
+      ctx.blocksUnprocCommit(iv, ivBottom, iv.maxPt)
       break
 
     # Update remaining interval
     let ivRespLen = blk.blocks.len - nBlkBlocks
     if iv.maxPt < ivBottom + ivRespLen.uint64:
       # All collected
-      ctx.blocksUnprocCommit(iv.len)
+      ctx.blocksUnprocCommit(iv)
       break
 
     ivBottom += ivRespLen.uint64 # will mostly result into `ivReq.maxPt+1`
@@ -249,7 +266,7 @@ proc blocksStagedCollect*(
     if buddy.ctrl.stopped:
       # There is some left over to store back. And `ivBottom <= iv.maxPt`
       # because of the check against `ivRespLen` above.
-      ctx.blocksUnprocCommit(iv.len, ivBottom, iv.maxPt)
+      ctx.blocksUnprocCommit(iv, ivBottom, iv.maxPt)
       break
 
   # Store `blk` chain on the `staged` queue
@@ -276,21 +293,16 @@ proc blocksStagedImport*(
   ## Import/execute blocks record from staged queue
   ##
   let qItem = ctx.blk.staged.ge(0).valueOr:
+    # Empty queue
     return false
 
-  # Fetch least record, accept only if it matches the global ledger state
-  block:
-    let imported = ctx.chain.latestNumber()
-    if imported + 1 < qItem.key:
-      # If there is a gap, the `FC` module data area might have been re-set (or
-      # some problem occured due to concurrent collection.) In any case, the
-      # missing block numbers are added to the range of blocks that need to be
-      # fetched.
-      ctx.blocksUnprocAmend(imported + 1, qItem.key - 1)
-      trace info & ": there is a gap L vs. staged",
-        B=ctx.chain.baseNumber.bnStr, L=imported.bnStr, staged=qItem.key.bnStr,
-        C=ctx.layout.coupler.bnStr
-      return false
+  # Make sure that the lowest block is available, already. Or the other way
+  # round: no unprocessed block number range precedes the least staged block.
+  let uBottom = ctx.blocksUnprocTotalBottom()
+  if uBottom < qItem.key:
+    trace info & ": block queue not ready yet", nBuddies=ctx.pool.nBuddies,
+      unprocBottom=uBottom.bnStr, least=qItem.key.bnStr
+    return false
 
   # Remove from queue
   discard ctx.blk.staged.delete qItem.key
@@ -306,32 +318,27 @@ proc blocksStagedImport*(
   var maxImport = iv.maxPt
   block importLoop:
     for n in 0 ..< nBlocks:
-      # It is known that `key <= imported + 1`. This means that some blocks
-      # potentally overlap with what is already known by `FC` (e.g. due to
-      # concurrently running `importBlock()` by a `newPayload` RPC requests.)
-      #
-      # It is not left to `FC` to ignore this record. Passing a block before
-      # the `base` (which also might have changed) is responded by `FC` with
-      # an error. This would cause throwing away all `nBlocks` rather than
-      # ignoring the first some.
-      #
       let nBn = qItem.data.blocks[n].header.number
       if nBn <= ctx.chain.baseNumber:
-        trace info & ": ignoring block <= base", n, iv,
+        trace info & ": ignoring block less eq. base", n, iv,
           B=ctx.chain.baseNumber.bnStr, L=ctx.chain.latestNumber.bnStr,
           nthBn=nBn.bnStr, nthHash=qItem.data.getNthHash(n).short
         continue
       ctx.pool.chain.importBlock(qItem.data.blocks[n]).isOkOr:
-        warn info & ": import block error", n, iv,
+        # The way out here is simply to re-compile the block queue. At any
+        # point, the `FC` module data area might have been moved to a new
+        # canonocal branch.
+        #
+        ctx.poolMode = true
+        warn info & ": import block error (reorg triggered)", n, iv,
           B=ctx.chain.baseNumber.bnStr, L=ctx.chain.latestNumber.bnStr,
-          nthBn=nBn.bnStr, nthHash=qItem.data.getNthHash(n).short, `error`=error
-        # Restore what is left over below
-        maxImport = ctx.chain.latestNumber()
+          nthBn=nBn.bnStr, nthHash=qItem.data.getNthHash(n).short,
+          `error`=error
         break importLoop
 
       # Allow pseudo/async thread switch.
       (await ctx.updateAsyncTasks()).isOkOr:
-        maxImport = ctx.chain.latestNumber()
+        maxImport = nBn # shutdown?
         break importLoop
 
       # Occasionally mark the chain finalized
@@ -343,29 +350,26 @@ proc blocksStagedImport*(
 
         doAssert nBn == ctx.chain.latestNumber()
         ctx.pool.chain.forkChoice(nthHash, finHash).isOkOr:
-          warn info & ": fork choice error", n, iv,
+          warn info & ": fork choice error (reorg triggered)", n, iv,
             B=ctx.chain.baseNumber.bnStr, L=ctx.chain.latestNumber.bnStr,
             F=ctx.layout.final.bnStr, nthBn=nBn.bnStr, nthHash=nthHash.short,
             finHash=(if finHash == nthHash: "nthHash" else: "F"), `error`=error
           # Restore what is left over below
-          maxImport = ctx.chain.latestNumber()
+          ctx.poolMode = true
           break importLoop
 
         # Allow pseudo/async thread switch.
         (await ctx.updateAsyncTasks()).isOkOr:
-          maxImport = ctx.chain.latestNumber()
+          maxImport = nBn # shutdown?
           break importLoop
 
   # Import probably incomplete, so a partial roll back may be needed
   if maxImport < iv.maxPt:
-    ctx.blocksUnprocCommit(0, maxImport+1, qItem.data.blocks[^1].header.number)
-
-  # Remove stashed headers for imported blocks
-  for bn in iv.minPt .. maxImport:
-    ctx.dbHeaderUnstash bn
+    ctx.blocksUnprocAppend(maxImport+1, iv.maxPt)
 
   info "Import done", iv, nBlocks, base=ctx.chain.baseNumber.bnStr,
     head=ctx.chain.latestNumber.bnStr, target=ctx.layout.final.bnStr
+
   return true
 
 
@@ -382,7 +386,7 @@ proc blocksStagedReorg*(ctx: BeaconCtxRef; info: static[string]) =
   ## the block queues as there won't be mant data cached, then.
   ##
   if ctx.blk.staged.len == 0 and
-     ctx.blocksUnprocChunks() == 0:
+     ctx.blocksUnprocIsEmpty():
     # nothing to do
     return
 

@@ -66,12 +66,10 @@ template updateMetricsImpl(ctx: BeaconCtxRef) =
     metrics.set(nec_sync_consensus_head, ctx.target.consHead.number.int64)
 
   metrics.set(nec_sync_header_lists_staged, ctx.headersStagedQueueLen())
-  metrics.set(nec_sync_headers_unprocessed,
-              (ctx.headersUnprocTotal() + ctx.headersUnprocBorrowed()).int64)
+  metrics.set(nec_sync_headers_unprocessed, ctx.headersUnprocTotal().int64)
 
   metrics.set(nec_sync_block_lists_staged, ctx.blocksStagedQueueLen())
-  metrics.set(nec_sync_blocks_unprocessed,
-              (ctx.blocksUnprocTotal() + ctx.blocksUnprocBorrowed()).int64)
+  metrics.set(nec_sync_blocks_unprocessed, ctx.blocksUnprocTotal().int64)
 
   metrics.set(nec_sync_peers, ctx.pool.nBuddies)
 

@@ -13,7 +13,7 @@
 
 import
   std/strutils,
-  pkg/[chronos, chronicles, eth/common, stint],
+  pkg/[chronos, chronicles, eth/common, stew/interval_set, stint],
   ../../../../utils/prettify,
   ../../../../core/chain,
   ../../worker_desc,
@@ -80,15 +80,15 @@ proc updater(ctx: BeaconCtxRef): TickerStats =
 
     nHdrStaged:      ctx.headersStagedQueueLen(),
     hdrStagedTop:    ctx.headersStagedQueueTopKey(),
-    hdrUnprocTop:    ctx.headersUnprocTop(),
-    nHdrUnprocessed: ctx.headersUnprocTotal() + ctx.headersUnprocBorrowed(),
-    nHdrUnprocFragm: ctx.headersUnprocChunks(),
+    hdrUnprocTop:    ctx.headersUnprocTotalTop(),
+    nHdrUnprocessed: ctx.headersUnprocTotal(),
+    nHdrUnprocFragm: ctx.hdr.unprocessed.chunks(),
 
     nBlkStaged:      ctx.blocksStagedQueueLen(),
     blkStagedBottom: ctx.blocksStagedQueueBottomKey(),
-    blkUnprocBottom: ctx.blocksUnprocBottom(),
-    nBlkUnprocessed: ctx.blocksUnprocTotal() + ctx.blocksUnprocBorrowed(),
-    nBlkUnprocFragm: ctx.blocksUnprocChunks(),
+    blkUnprocBottom: ctx.blocksUnprocTotalBottom(),
+    nBlkUnprocessed: ctx.blocksUnprocTotal(),
+    nBlkUnprocFragm: ctx.blk.unprocessed.chunks(),
 
     state:           ctx.layout.lastState,
     reorg:           ctx.pool.nReorg,

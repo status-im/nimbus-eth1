@@ -100,7 +100,7 @@ proc headersStagedCollect*(
   let
     ctx = buddy.ctx
     peer = buddy.peer
-    uTop = ctx.headersUnprocTop()
+    uTop = ctx.headersUnprocAvailTop()
 
   if uTop == 0:
     # Nothing to do
@@ -163,7 +163,7 @@ proc headersStagedCollect*(
           buddy.ctrl.zombie = true
         debug info & ": current header list discarded", peer, iv, ivReq,
           isOpportunistic, ctrl=buddy.ctrl.state, hdrErrors=buddy.hdrErrors
-        ctx.headersUnprocCommit(iv.len, iv)
+        ctx.headersUnprocCommit(iv, iv)
         # At this stage allow a task switch so that some other peer might try
         # to continue work on the currently returned interval.
         try: await sleepAsync asyncThreadSwitchTimeSlot
@@ -175,14 +175,14 @@ proc headersStagedCollect*(
       debug info & ": partially failed", peer, iv, ivReq,
         unused=BnRange.new(iv.minPt,ivTop), isOpportunistic
       # There is some left over to store back
-      ctx.headersUnprocCommit(iv.len, iv.minPt, ivTop)
+      ctx.headersUnprocCommit(iv, iv.minPt, ivTop)
       break
 
     # Update remaining interval
     let ivRespLen = lhc.revHdrs.len - nLhcHeaders
     if ivTop < iv.minPt + ivRespLen.uint64:
       # All collected
-      ctx.headersUnprocCommit(iv.len)
+      ctx.headersUnprocCommit(iv)
       break
 
     ivTop -= ivRespLen.uint64 # will mostly result into `ivReq.minPt-1`
@@ -190,7 +190,7 @@ proc headersStagedCollect*(
     if buddy.ctrl.stopped:
       # There is some left over to store back. And `iv.minPt <= ivTop` because
       # of the check against `ivRespLen` above.
-      ctx.headersUnprocCommit(iv.len, iv.minPt, ivTop)
+      ctx.headersUnprocCommit(iv, iv.minPt, ivTop)
       break
 
   # Store `lhc` chain on the `staged` queue
@@ -235,7 +235,7 @@ proc headersStagedProcess*(ctx: BeaconCtxRef; info: static[string]): int =
 
     if qItem.data.hash != ctx.dbHeaderParentHash(dangling).expect "Hash32":
       # Discard wrong chain and merge back the range into the `unproc` list.
-      ctx.headersUnprocCommit(0,iv)
+      ctx.headersUnprocAppend(iv)
       debug info & ": discarding staged header list", iv, D=dangling.bnStr,
         nStashed=result, nDiscarded=qItem.data.revHdrs.len
       break
@@ -247,11 +247,11 @@ proc headersStagedProcess*(ctx: BeaconCtxRef; info: static[string]): int =
 
     result += qItem.data.revHdrs.len # count headers
 
-  debug info & ": stashed consecutive headers",
-    nListsLeft=ctx.hdr.staged.len, nStashed=result
-
   if headersStagedQueueLengthLwm < ctx.hdr.staged.len:
     ctx.poolMode = true
+
+  debug info & ": stashed consecutive headers",
+    nListsLeft=ctx.hdr.staged.len, nStashed=result, poolMode=ctx.poolMode
 
 
 proc headersStagedReorg*(ctx: BeaconCtxRef; info: static[string]) =
@@ -265,6 +265,8 @@ proc headersStagedReorg*(ctx: BeaconCtxRef; info: static[string]) =
   ## (downloading deterministically by hashes) and many fast opportunistic
   ## actors filling the staged queue.
   ##
+  doAssert ctx.headersBorrowedIsEmpty()
+
   if ctx.hdr.staged.len == 0:
     # nothing to do
     return
@@ -285,7 +287,7 @@ proc headersStagedReorg*(ctx: BeaconCtxRef; info: static[string]) =
         qItem = ctx.hdr.staged.ge(BlockNumber 0).expect "valid record"
         key = qItem.key
         nHeaders = qItem.data.revHdrs.len.uint64
-      ctx.headersUnprocCommit(0, key - nHeaders + 1, key)
+      ctx.headersUnprocAppend(key - nHeaders + 1, key)
       discard ctx.hdr.staged.delete key
 
 # ------------------------------------------------------------------------------
