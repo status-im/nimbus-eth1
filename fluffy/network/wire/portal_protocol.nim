@@ -696,11 +696,7 @@ proc reqResponse[Request: SomeMessage, Response: SomeMessage](
     )
     .flatMap(
       proc(x: seq[byte]): Result[Message, string] =
-        let r = decodeMessage(x)
-        # Ban nodes that that send messages that fail to decode (includes empty messages)
-        if r.isErr():
-          p.banNode(dst.id, NodeBanDurationInvalidResponse)
-        return r
+        decodeMessage(x)
     )
     .flatMap(
       proc(m: Message): Result[Response, string] =
