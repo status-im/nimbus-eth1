@@ -18,7 +18,8 @@ import
   std/[hashes as std_hashes, tables],
   stint,
   eth/common/[accounts, base, hashes],
-  ./desc_identifiers
+  ./desc_identifiers,
+  minilru
 
 export stint, tables, accounts, base, hashes
 
@@ -121,6 +122,9 @@ type
     sTab*: Table[RootedVertexID,VertexRef] ## Structural vertex table
     kMap*: Table[RootedVertexID,HashKey]   ## Merkle hash key mapping
     vTop*: VertexID                        ## Last used vertex ID
+
+    pTab*: LruCache[RootedVertexID,(VertexRef, int)]
+    pMap*: LruCache[RootedVertexID,(HashKey, int)]
 
     accLeaves*: Table[Hash32, VertexRef]   ## Account path -> VertexRef
     stoLeaves*: Table[Hash32, VertexRef]   ## Storage path -> VertexRef

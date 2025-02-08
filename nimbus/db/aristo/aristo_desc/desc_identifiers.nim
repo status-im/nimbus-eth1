@@ -133,6 +133,9 @@ func `$`*(vid: VertexID): string =
 func `$`*(rvid: RootedVertexID): string =
   $rvid.root & "/" & $rvid.vid
 
+func hash*(rvid: RootedVertexID): Hash {.inline.} =
+  hash(rvid.vid.uint64) # No need to waste cycles on mixing in root!
+
 func `==`*(a: VertexID; b: static[uint]): bool = (a == VertexID(b))
 
 # Scalar model extension as in `IntervalSetRef[VertexID,uint64]`

@@ -27,7 +27,14 @@ func layersGetVtx*(db: AristoTxRef; rvid: RootedVertexID): Opt[(VertexRef, int)]
   ##
   for w, level in db.rstack:
     w.sTab.withValue(rvid, item):
+      if level > 0:
+        db.layer.pTab.put(rvid, (item[], level))
       return Opt.some((item[], level))
+
+    if level == 0:
+      let p = w.pTab.get(rvid)
+      if p.isSome():
+        return p
 
   Opt.none((VertexRef, int))
 
@@ -38,9 +45,19 @@ func layersGetKey*(db: AristoTxRef; rvid: RootedVertexID): Opt[(HashKey, int)] =
 
   for w, level in db.rstack:
     w.kMap.withValue(rvid, item):
+      if level > 0:
+        w.pMap.put(rvid, (item[], level))
       return ok((item[], level))
+
     if rvid in w.sTab:
+      if level > 0:
+        db.layer.pMap.put(rvid, (VOID_HASH_KEY, level))
       return Opt.some((VOID_HASH_KEY, level))
+
+    if level == 0:
+      let p = w.pMap.get(rvid)
+      if p.isSome():
+        return p
 
   Opt.none((HashKey, int))
 
@@ -134,6 +151,12 @@ proc mergeAndReset*(trg, src: var Layer) =
   mergeAndReset(trg.kMap, src.kMap)
   mergeAndReset(trg.accLeaves, src.accLeaves)
   mergeAndReset(trg.stoLeaves, src.stoLeaves)
+
+  swap(trg.pTab, src.pTab)
+  swap(trg.pMap, src.pMap)
+
+  src.pTab = LruCache[RootedVertexID,(VertexRef, int)].init(ACC_LRU_SIZE)
+  src.pMap = LruCache[RootedVertexID,(HashKey, int)].init(ACC_LRU_SIZE)
 
 # func layersCc*(db: AristoDbRef; level = high(int)): LayerRef =
 #   ## Provide a collapsed copy of layers up to a particular transaction level.
