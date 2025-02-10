@@ -68,6 +68,7 @@ type
     largestDistanceStmt: SqliteStmt[array[32, byte], array[32, byte]]
     selectAllStmt: SqliteStmt[NoParams, ContentPair]
     deleteBatchStmt: SqliteStmt[NoParams, void]
+    updateBatchStmt: SqliteStmt[NoParams, void]
 
   PutResultType* = enum
     ContentStored
@@ -223,6 +224,14 @@ proc new*(
     "Custom function isWithoutProof creation OK"
   )
 
+  db.createCustomFunction("isWithInvalidEncoding", 1, isWithInvalidEncoding).expect(
+    "Custom function isWithInvalidEncoding creation OK"
+  )
+
+  db.createCustomFunction("adjustContent", 1, adjustContent).expect(
+    "Custom function adjustContent creation OK"
+  )
+
   let sizeStmt = db.prepareStmt(
     "SELECT page_count * page_size as size FROM pragma_page_count(), pragma_page_size();",
     NoParams, int64,
@@ -267,6 +276,11 @@ proc new*(
     NoParams, void,
   )[]
 
+  let updateBatchStmt = db.prepareStmt(
+    "UPDATE kvstore SET value = adjustContent(value) WHERE key IN (SELECT key FROM kvstore WHERE isWithInvalidEncoding(value) == 1)",
+    NoParams, void,
+  )[]
+
   let contentDb = ContentDB(
     kv: kvStore,
     backend: db,
@@ -283,6 +297,7 @@ proc new*(
     largestDistanceStmt: largestDistanceStmt,
     selectAllStmt: selectAllStmt,
     deleteBatchStmt: deleteBatchStmt,
+    updateBatchStmt: updateBatchStmt,
   )
 
   contentDb.setInitialRadius(radiusConfig)
@@ -508,6 +523,11 @@ proc iterateAllAndMigrateHeaderType*(db: ContentDB) =
 proc deleteAllHeadersWithoutProof*(db: ContentDB) =
   notice "ContentDB migration: deleting all headers without proof"
   db.deleteBatchStmt.exec().expectDb()
+  notice "ContentDB migration done"
+
+proc updateAllHeadersWithInvalidEncoding*(db: ContentDB) =
+  notice "ContentDB migration: updating all headers with invalid encoding"
+  db.updateBatchStmt.exec().expectDb()
   notice "ContentDB migration done"
 
 proc createGetHandler*(db: ContentDB): DbGetHandler =

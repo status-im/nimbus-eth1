@@ -13,6 +13,7 @@ import
   sqlite3_abi,
   eth/db/kvstore_sqlite3,
   ../common/common_types,
+  ../network/history/history_content,
   ../network/history/content/content_values_deprecated
 
 func xorDistance(a: openArray[byte], b: openArray[byte]): seq[byte] =
@@ -99,3 +100,53 @@ func isWithoutProof*(
     ctx.sqlite3_result_int(cint 1)
   else:
     ctx.sqlite3_result_int(cint 0)
+
+func isWithInvalidEncodingImpl(content: openArray[byte]): bool =
+  let headerWithProof = decodeSsz(content, BlockHeaderWithProofDeprecated).valueOr:
+    # Leave all other content as it is
+    return false
+
+  if headerWithProof.proof.proofType ==
+      BlockHeaderProofType.historicalHashesAccumulatorProof: true else: false
+
+func isWithInvalidEncoding*(
+    ctx: SqliteContext, n: cint, v: SqliteValue
+) {.cdecl, gcsafe, raises: [].} =
+  doAssert(n == 1)
+
+  let
+    ptrs = makeUncheckedArray(v)
+    blobLen = sqlite3_value_bytes(ptrs[][0])
+
+  if isWithInvalidEncodingImpl(
+    makeOpenArray(sqlite3_value_blob(ptrs[][0]), byte, blobLen)
+  ):
+    ctx.sqlite3_result_int(cint 1)
+  else:
+    ctx.sqlite3_result_int(cint 0)
+
+func adjustContentImpl(a: openArray[byte]): seq[byte] =
+  let headerWithProof = decodeSsz(a, BlockHeaderWithProofDeprecated).valueOr:
+    raiseAssert("Should not occur as decoding check is already done")
+
+  let accumulatorProof = headerWithProof.proof.historicalHashesAccumulatorProof
+  let adjustedContent = BlockHeaderWithProof(
+    header: headerWithProof.header,
+    proof: ByteList[MAX_HEADER_PROOF_LENGTH].init(SSZ.encode(accumulatorProof)),
+  )
+
+  SSZ.encode(adjustedContent)
+
+func adjustContent*(
+    ctx: SqliteContext, n: cint, v: SqliteValue
+) {.cdecl, gcsafe, raises: [].} =
+  doAssert(n == 1)
+
+  let
+    ptrs = makeUncheckedArray(v)
+    blobLen = sqlite3_value_bytes(ptrs[][0])
+
+    bytes =
+      adjustContentImpl(makeOpenArray(sqlite3_value_blob(ptrs[][0]), byte, blobLen))
+
+  sqlite3_result_blob(ctx, baseAddr bytes, cint bytes.len, SQLITE_TRANSIENT)
