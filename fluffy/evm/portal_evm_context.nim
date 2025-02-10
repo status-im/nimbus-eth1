@@ -9,8 +9,8 @@ import
   std/[tables, sets],
   chronos,
   chronicles,
-  # stew/byteutils,
-  # stew/ptrops,
+  stew/byteutils,
+  stew/ptrops,
   stint,
   results,
   evmc/evmc,
@@ -117,7 +117,64 @@ proc getStorage*(
   context.fetchStorageIfRequired(address, slotKey)
   context.storage.getOrDefault(address).getOrDefault(slotKey)
 
+proc setStorage*(context: PortalEvmContextRef, address: Address, slotKey, slotValue: UInt256) =
+  context.storage.withValue(address, value):
+    value[][slotKey] = slotValue
+  do:
+    context.storage[address] = {slotKey: slotValue}.toTable
+
+proc getBalance*(context: PortalEvmContextRef, address: Address): UInt256 =
+  context.fetchAccountIfRequired(address)
+  context.accounts.getOrDefault(address).balance
+
+proc getCode*(context: PortalEvmContextRef, address: Address): seq[byte] =
+  context.fetchCodeIfRequired(address)
+  context.code.getOrDefault(address)
+
+proc getCodeSize*(context: PortalEvmContextRef, address: Address): int =
+  context.getCode(address).len()
+
+proc getCodeHash*(context: PortalEvmContextRef, address: Address): Hash32 =
+  context.getCode(address).keccak256()
+
+proc copyCode*(context: PortalEvmContextRef, address: Address, codeOffset: int, buffer: var openArray[byte]): int =
+  let code = context.getCode(address)
+  var
+    i = 0
+  while (i + codeOffset) < code.len() and i < buffer.len():
+    buffer[i] = code[i + codeOffset]
+    inc i
+  i
+
+proc accessAccount*(context: PortalEvmContextRef, address: Address): bool =
+  let warm = context.fetchedAccounts.contains(address)
+  context.fetchAccountIfRequired(address)
+  warm
+
+proc accessStorage*(context: PortalEvmContextRef, address: Address, slotKey: UInt256): bool =
+  let warm = context.fetchedStorage.getOrDefault(address).contains(slotKey)
+  context.fetchStorageIfRequired(address, slotKey)
+  warm
+
+# proc getTransientStorage(
+#     context: evmc_host_context, address: var evmc_address, key: var evmc_bytes32
+# ): evmc_bytes32 {.evmc_abi.} =
+#   echo "getTransientStorage called"
+#   raiseAssert("Not implemented")
+
+# proc setTransientStorage(
+#     context: evmc_host_context, address: var evmc_address, key, value: var evmc_bytes32
+# ) {.evmc_abi.} =
+#   echo "setTransientStorage called"
+#   raiseAssert("Not implemented")
+
+
+
+
+
+###############################################################################
 # The below functions implement the EVMC host interface
+###############################################################################
 
 proc accountExists(
     context: evmc_host_context, address: var evmc_address
@@ -131,31 +188,30 @@ proc getStorage(
   echo "getStorage called"
   context.fromEvmc().getStorage(address.fromEvmc(), UInt256.fromEvmc(key)).toEvmc()
 
-# TODO: below
-
 proc setStorage(
     context: evmc_host_context, address: var evmc_address, key, value: var evmc_bytes32
 ): evmc_storage_status {.evmc_abi.} =
   echo "setStorage called"
-  raiseAssert("Not implemented")
+  context.fromEvmc().setStorage(address.fromEvmc(), UInt256.fromEvmc(key), UInt256.fromEvmc(value))
+  EVMC_STORAGE_ASSIGNED # TODO: return correct status
 
 proc getBalance(
     context: evmc_host_context, address: var evmc_address
 ): evmc_uint256be {.evmc_abi.} =
   echo "getBalance called"
-  raiseAssert("Not implemented")
+  context.fromEvmc().getBalance(address.fromEvmc()).toEvmc()
 
 proc getCodeSize(
     context: evmc_host_context, address: var evmc_address
 ): csize_t {.evmc_abi.} =
   echo "getCodeSize called"
-  raiseAssert("Not implemented")
+  context.fromEvmc().getCodeSize(address.fromEvmc()).csize_t
 
 proc getCodeHash(
     context: evmc_host_context, address: var evmc_address
 ): evmc_bytes32 {.evmc_abi.} =
   echo "getCodeHash called"
-  raiseAssert("Not implemented")
+  context.fromEvmc().getCodeHash(address.fromEvmc()).toEvmc()
 
 proc copyCode(
     context: evmc_host_context,
@@ -165,7 +221,7 @@ proc copyCode(
     buffer_size: csize_t,
 ): csize_t {.evmc_abi.} =
   echo "copyCode called"
-  raiseAssert("Not implemented")
+  context.fromEvmc().copyCode(address.fromEvmc(), code_offset.int, makeOpenArray(buffer_data, buffer_size.int)).csize_t
 
 proc selfDestruct(
     context: evmc_host_context, address, beneficiary: var evmc_address
@@ -203,13 +259,13 @@ proc accessAccount(
     context: evmc_host_context, address: var evmc_address
 ): evmc_access_status {.evmc_abi.} =
   echo "accessAccount called"
-  raiseAssert("Not implemented")
+  context.fromEvmc().accessAccount(address.fromEvmc()).evmc_access_status
 
 proc accessStorage(
     context: evmc_host_context, address: var evmc_address, key: var evmc_bytes32
 ): evmc_access_status {.evmc_abi.} =
   echo "accessStorage called"
-  raiseAssert("Not implemented")
+  context.fromEvmc().accessStorage(address.fromEvmc(), UInt256.fromEvmc(key)).evmc_access_status
 
 proc getTransientStorage(
     context: evmc_host_context, address: var evmc_address, key: var evmc_bytes32
