@@ -1,5 +1,5 @@
 # Fluffy
-# Copyright (c) 2021-2024 Status Research & Development GmbH
+# Copyright (c) 2021-2025 Status Research & Development GmbH
 # Licensed and distributed under either of
 #   * MIT license (license terms in the root directory or at https://opensource.org/licenses/MIT).
 #   * Apache v2 license (license terms in the root directory or at https://www.apache.org/licenses/LICENSE-2.0).
@@ -154,7 +154,8 @@ proc mockStateRootLookup*(
     blockHeader = Header(stateRoot: stateRoot)
     headerRlp = rlp.encode(blockHeader)
     blockHeaderWithProof = BlockHeaderWithProof(
-      header: ByteList[2048].init(headerRlp), proof: BlockHeaderProof.init()
+      header: ByteList[MAX_HEADER_LENGTH].init(headerRlp),
+      proof: ByteList[MAX_HEADER_PROOF_LENGTH].init(@[]),
     )
     contentKeyBytes = blockHeaderContentKey(blockNumOrHash).encode()
     contentId = history_content.toContentId(contentKeyBytes)
