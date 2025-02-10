@@ -194,6 +194,8 @@ proc new*(
 
 proc statusLogLoop(n: PortalNode) {.async: (raises: []).} =
   try:
+    n.contentDB.deleteAllHeadersWithoutProof()
+    n.contentDB.updateAllHeadersWithInvalidEncoding()
     while true:
       # This is the data radius percentage compared to full storage. This will
       # drop a lot when using the logbase2 scale, namely `/ 2` per 1 logaritmic

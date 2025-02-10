@@ -14,7 +14,8 @@ import
   results,
   eth/db/kvstore,
   eth/db/kvstore_sqlite3,
-  ../network/state/state_content,
+  ../network/history/history_content,
+  ../network/history/content/content_values_deprecated,
   ../network/wire/[portal_protocol, portal_protocol_config],
   ./content_db_custom_sql_functions
 
@@ -48,6 +49,8 @@ type
   RowInfo =
     tuple[contentId: array[32, byte], payloadLength: int64, distance: array[32, byte]]
 
+  ContentPair = tuple[contentKey: array[32, byte], contentItem: seq[byte]]
+
   ContentDB* = ref object
     backend: SqStoreRef
     kv: KvStoreRef
@@ -63,6 +66,9 @@ type
     getAllOrderedByDistanceStmt: SqliteStmt[array[32, byte], RowInfo]
     deleteOutOfRadiusStmt: SqliteStmt[(array[32, byte], array[32, byte]), void]
     largestDistanceStmt: SqliteStmt[array[32, byte], array[32, byte]]
+    selectAllStmt: SqliteStmt[NoParams, ContentPair]
+    deleteBatchStmt: SqliteStmt[NoParams, void]
+    updateBatchStmt: SqliteStmt[NoParams, void]
 
   PutResultType* = enum
     ContentStored
@@ -214,6 +220,18 @@ proc new*(
     "Custom function isInRadius creation OK"
   )
 
+  db.createCustomFunction("isWithoutProof", 1, isWithoutProof).expect(
+    "Custom function isWithoutProof creation OK"
+  )
+
+  db.createCustomFunction("isWithInvalidEncoding", 1, isWithInvalidEncoding).expect(
+    "Custom function isWithInvalidEncoding creation OK"
+  )
+
+  db.createCustomFunction("adjustContent", 1, adjustContent).expect(
+    "Custom function adjustContent creation OK"
+  )
+
   let sizeStmt = db.prepareStmt(
     "SELECT page_count * page_size as size FROM pragma_page_count(), pragma_page_size();",
     NoParams, int64,
@@ -250,6 +268,19 @@ proc new*(
     "SELECT max(xorDistance(?, key)) FROM kvstore", array[32, byte], array[32, byte]
   )[]
 
+  let selectAllStmt =
+    db.prepareStmt("SELECT key, value FROM kvstore", NoParams, ContentPair)[]
+
+  let deleteBatchStmt = db.prepareStmt(
+    "DELETE FROM kvstore WHERE key IN (SELECT key FROM kvstore WHERE isWithoutProof(value) == 1)",
+    NoParams, void,
+  )[]
+
+  let updateBatchStmt = db.prepareStmt(
+    "UPDATE kvstore SET value = adjustContent(value) WHERE key IN (SELECT key FROM kvstore WHERE isWithInvalidEncoding(value) == 1)",
+    NoParams, void,
+  )[]
+
   let contentDb = ContentDB(
     kv: kvStore,
     backend: db,
@@ -264,6 +295,9 @@ proc new*(
     getAllOrderedByDistanceStmt: getAllOrderedByDistanceStmt,
     deleteOutOfRadiusStmt: deleteOutOfRadiusStmt,
     largestDistanceStmt: largestDistanceStmt,
+    selectAllStmt: selectAllStmt,
+    deleteBatchStmt: deleteBatchStmt,
+    updateBatchStmt: updateBatchStmt,
   )
 
   contentDb.setInitialRadius(radiusConfig)
@@ -283,6 +317,7 @@ proc close*(db: ContentDB) =
   db.getAllOrderedByDistanceStmt.disposeSafe()
   db.deleteOutOfRadiusStmt.disposeSafe()
   db.largestDistanceStmt.disposeSafe()
+  db.selectAllStmt.disposeSafe()
   discard db.kv.close()
 
 ## Private ContentDB calls
@@ -453,6 +488,47 @@ proc adjustRadius(
   # dataRadius, so the radius will constantly decrease through the node its
   # lifetime.
   db.dataRadius = newRadius
+
+proc iterateAllAndMigrateHeaderType*(db: ContentDB) =
+  var
+    contentPair: ContentPair
+    contentAltered = 0
+    contentDeleted = 0
+
+  notice "ContentDB migration: iterating over all content"
+  for e in db.selectAllStmt.exec(contentPair):
+    let headerWithProof = decodeSsz(
+      contentPair.contentItem, BlockHeaderWithProofDeprecated
+    ).valueOr:
+      # Leave all other content as it is
+      continue
+
+    if headerWithProof.proof.proofType ==
+        BlockHeaderProofType.historicalHashesAccumulatorProof:
+      # Proof, migrate the content
+      let accumulatorProof = headerWithProof.proof.historicalHashesAccumulatorProof
+      let adjustedContent = BlockHeaderWithProof(
+        header: headerWithProof.header,
+        proof: ByteList[MAX_HEADER_PROOF_LENGTH].init(SSZ.encode(accumulatorProof)),
+      )
+      db.put(contentPair.contentKey, SSZ.encode(adjustedContent))
+      contentAltered.inc()
+    elif headerWithProof.proof.proofType == BlockHeaderProofType.none:
+      # No proof, delete the content
+      db.del(contentPair.contentKey)
+      contentDeleted.inc()
+
+  notice "ContentDB migration done: ", contentAltered, contentDeleted
+
+proc deleteAllHeadersWithoutProof*(db: ContentDB) =
+  notice "ContentDB migration: deleting all headers without proof"
+  db.deleteBatchStmt.exec().expectDb()
+  notice "ContentDB migration done"
+
+proc updateAllHeadersWithInvalidEncoding*(db: ContentDB) =
+  notice "ContentDB migration: updating all headers with invalid encoding"
+  db.updateBatchStmt.exec().expectDb()
+  notice "ContentDB migration done"
 
 proc createGetHandler*(db: ContentDB): DbGetHandler =
   return (
