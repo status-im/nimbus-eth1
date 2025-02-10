@@ -1,4 +1,4 @@
-# Copyright (c) 2018-2024 Status Research & Development GmbH. Licensed under
+# Copyright (c) 2018-2025 Status Research & Development GmbH. Licensed under
 # either of:
 # - Apache License, version 2.0
 # - MIT license
@@ -83,14 +83,14 @@ FLUFFY_TOOLS_DIRS := \
 FLUFFY_TOOLS_CSV := $(subst $(SPACE),$(COMMA),$(FLUFFY_TOOLS))
 
 # Namespaced variables to avoid conflicts with other makefiles
-VERIF_PROXY_OS = $(shell $(CC) -dumpmachine)
-ifneq (, $(findstring darwin, $(VERIF_PROXY_OS)))
-  VERIF_PROXY_SHAREDLIBEXT = dylib
+OS_PLATFORM = $(shell $(CC) -dumpmachine)
+ifneq (, $(findstring darwin, $(OS_PLATFORM)))
+  SHAREDLIBEXT = dylib
 else
-ifneq (, $(findstring mingw, $(VERIF_PROXY_OS))$(findstring cygwin, $(VERIF_PROXY_OS))$(findstring msys, $(VERIF_PROXY_OS)))
-  VERIF_PROXY_SHAREDLIBEXT = dll
+ifneq (, $(findstring mingw, $(OS_PLATFORM))$(findstring cygwin, $(OS_PLATFORM))$(findstring msys, $(OS_PLATFORM)))
+  SHAREDLIBEXT = dll
 else
-  VERIF_PROXY_SHAREDLIBEXT = so
+  SHAREDLIBEXT = so
 endif
 endif
 
@@ -333,7 +333,7 @@ nimbus-verified-proxy-test: | build deps rocksdb
 libverifproxy: | build deps rocksdb
 	+ echo -e $(BUILD_MSG) "build/$@" && \
 		$(ENV_SCRIPT) nim --version && \
-		$(ENV_SCRIPT) nim c --app:lib -d:"libp2p_pki_schemes=secp256k1" --noMain:on --threads:on --nimcache:nimcache/libverifproxy -o:$(VERIF_PROXY_OUT_PATH)/$@.$(VERIF_PROXY_SHAREDLIBEXT) $(NIM_PARAMS) nimbus_verified_proxy/libverifproxy/verifproxy.nim
+		$(ENV_SCRIPT) nim c --app:lib -d:"libp2p_pki_schemes=secp256k1" --noMain:on --threads:on --nimcache:nimcache/libverifproxy -o:$(VERIF_PROXY_OUT_PATH)/$@.$(SHAREDLIBEXT) $(NIM_PARAMS) nimbus_verified_proxy/libverifproxy/verifproxy.nim
 	cp nimbus_verified_proxy/libverifproxy/verifproxy.h $(VERIF_PROXY_OUT_PATH)/
 	echo -e $(BUILD_END_MSG) "build/$@"
 
@@ -356,6 +356,10 @@ evmstate_test: | build deps evmstate
 # builds txparse tool
 txparse: | build deps
 	$(ENV_SCRIPT) nim c $(NIM_PARAMS) "tools/txparse/$@.nim"
+
+# builds the nimbus evmc shared library
+libnimbusevm: | build deps
+	$(ENV_SCRIPT) nim c $(NIM_PARAMS) -d:evmc_enabled --app:lib --noMain -o:build/libnimbusevm/$@.$(SHAREDLIBEXT) nimbus/transaction/evmc_vm_glue.nim
 
 # usual cleaning
 clean: | clean-common
