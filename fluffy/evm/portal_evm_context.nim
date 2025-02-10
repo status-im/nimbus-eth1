@@ -38,9 +38,7 @@ type PortalEvmContextRef* = ref object
   fetchedStorage: Table[Address, HashSet[UInt256]]
 
 func init*(
-    T: type PortalEvmContextRef,
-    header: Header,
-    stateNetwork = Opt.none(StateNetwork),
+    T: type PortalEvmContextRef, header: Header, stateNetwork = Opt.none(StateNetwork)
 ): PortalEvmContextRef =
   PortalEvmContextRef(header: header, stateNetwork: stateNetwork)
 
@@ -82,7 +80,9 @@ proc fetchCodeIfRequired(context: PortalEvmContextRef, address: Address) =
   except CancelledError:
     trace "stateNetwork.getCodeByStateRoot canceled"
 
-proc fetchStorageIfRequired(context: PortalEvmContextRef, address: Address, slotKey: UInt256) =
+proc fetchStorageIfRequired(
+    context: PortalEvmContextRef, address: Address, slotKey: UInt256
+) =
   let sn = context.stateNetwork.valueOr:
     return # state lookups over portal network are disabled
 
@@ -90,7 +90,9 @@ proc fetchStorageIfRequired(context: PortalEvmContextRef, address: Address, slot
     return # already fetched storage
 
   try:
-    let slotValue = waitFor(sn.getStorageAtByStateRoot(context.header.stateRoot, address, slotKey)).valueOr:
+    let slotValue = waitFor(
+      sn.getStorageAtByStateRoot(context.header.stateRoot, address, slotKey)
+    ).valueOr:
       raiseAssert("storage lookup failed") # how should we handle this?
 
     context.storage.withValue(address, value):
