@@ -640,9 +640,10 @@ func memoryTxHashesForBlock*(c: ForkedChainRef, blockHash: Hash32): seq[Hash32] 
     if blkHash == blockHash:
       cachedTxHashes.add((txHash, txIdx))
 
-  cachedTxHashes.sorted(proc(a, b: (Hash32, uint64)): int =
+  cachedTxHashes.sort(proc(a, b: (Hash32, uint64)): int =
       cmp(a[1], b[1])
-    ).mapIt(it[0])
+    )
+  cachedTxHashes.mapIt(it[0])
 
 proc latestBlock*(c: ForkedChainRef): Block =
   if c.activeBranch.headNumber == c.baseBranch.tailNumber:
