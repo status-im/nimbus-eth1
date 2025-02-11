@@ -12,7 +12,7 @@
 
 import
   chronicles,
-  std/tables,
+  std/[tables, algorithm],
   ../../common,
   ../../db/core_db,
   ../../evm/types,
@@ -20,6 +20,8 @@ import
   ../validate,
   ../executor/process_block,
   ./forked_chain/[chain_desc, chain_kvt]
+
+from std/sequtils import mapIt
 
 logScope:
   topics = "forked chain"
@@ -701,6 +703,17 @@ func memoryTransaction*(c: ForkedChainRef, txHash: Hash32): Opt[(Transaction, Bl
   c.blocks.withValue(blockHash, val) do:
     return Opt.some( (val.blk.transactions[index], val.blk.header.number) )
   return Opt.none((Transaction, BlockNumber))
+
+func memoryTxHashesForBlock*(c: ForkedChainRef, blockHash: Hash32): seq[Hash32] =
+  var cachedTxHashes = newSeq[(Hash32, uint64)]()
+  for txHash, (blkHash, txIdx) in c.txRecords.pairs:
+    if blkHash == blockHash:
+      cachedTxHashes.add((txHash, txIdx))
+
+  cachedTxHashes.sort(proc(a, b: (Hash32, uint64)): int =
+      cmp(a[1], b[1])
+    )
+  cachedTxHashes.mapIt(it[0])
 
 proc latestBlock*(c: ForkedChainRef): Block =
   c.blocks.withValue(c.cursorHash, val) do:
