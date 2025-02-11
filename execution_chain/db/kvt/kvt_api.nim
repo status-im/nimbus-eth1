@@ -17,7 +17,7 @@ import
   ../aristo/aristo_profile,
   ./kvt_desc/desc_backend,
   ./kvt_init/memory_db,
-  "."/[kvt_desc, kvt_init, kvt_tx, kvt_utils]
+  "."/[kvt_desc, kvt_init, kvt_persist, kvt_tx_frame, kvt_utils]
 
 const
   AutoValidateApiHooks = defined(release).not
@@ -54,7 +54,7 @@ type
   KvtApiPutFn* = proc(db: KvtTxRef,
     key, data: openArray[byte]): Result[void,KvtError] {.noRaise.}
   KvtApiRollbackFn* = proc(tx: KvtTxRef): Result[void,KvtError] {.noRaise.}
-  KvtApiPersistFn* = proc(db: KvtDbRef): Result[void,KvtError] {.noRaise.}
+  KvtApiPersistFn* = proc(db: KvtDbRef, batch: PutHdlRef) {.noRaise.}
   KvtApiToKvtDbRefFn* = proc(tx: KvtTxRef): KvtDbRef {.noRaise.}
   KvtApiTxFrameBeginFn* = proc(db: KvtDbRef, parent: KvtTxRef): Result[KvtTxRef,KvtError] {.noRaise.}
   KvtApiBaseTxFrameFn* = proc(db: KvtDbRef): KvtTxRef {.noRaise.}
@@ -72,7 +72,6 @@ type
     put*: KvtApiPutFn
     rollback*: KvtApiRollbackFn
     persist*: KvtApiPersistFn
-    toKvtDbRef*: KvtApiToKvtDbRefFn
     txFrameBegin*: KvtApiTxFrameBeginFn
     baseTxFrame*: KvtApiBaseTxFrameFn
 
@@ -90,7 +89,6 @@ type
     KvtApiProfPutFn          = "put"
     KvtApiProfRollbackFn     = "rollback"
     KvtApiProfPersistFn      = "persist"
-    KvtApiProfToKvtDbRefFn   = "toKvtDbRef"
     KvtApiProfTxFrameBeginFn      = "txFrameBegin"
     KvtApiProfBaseTxFrameFn      = "baseTxFrame"
 
@@ -145,7 +143,6 @@ func init*(api: var KvtApiObj) =
   api.put = put
   api.rollback = rollback
   api.persist = persist
-  api.toKvtDbRef = toKvtDbRef
   api.txFrameBegin = txFrameBegin
   api.baseTxFrame = baseTxFrame
 
@@ -232,11 +229,6 @@ func init*(
     proc(a: KvtDbRef): auto =
       KvtApiProfPersistFn.profileRunner:
         result = api.persist(a)
-
-  profApi.toKvtDbRef =
-     proc(a: KvtTxRef): auto =
-       KvtApiProfToKvtDbRefFn.profileRunner:
-         result = api.toKvtDbRef(a)
 
   profApi.txFrameBegin =
     proc(a: KvtDbRef): auto =

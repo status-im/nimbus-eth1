@@ -53,11 +53,11 @@ proc deleteStaleHeadersAndState(
     # does not grow extra large.) This will succeed if this function is called
     # early enough after restart when there is no database transaction pending.
     if (upTo - bn) mod 8192 == 0:
-      c.fcKvtPersistent()
+      c.fcKvtPersist()
 
   # Delete persistent state record, there will be no use of it anymore
   c.fcKvtDel(LhcStateKey.toOpenArray)
-  c.fcKvtPersistent()
+  c.fcKvtPersist()
 
   if bn < upTo:
     debug info & ": deleted stale sync headers", iv=BnRange.new(bn+1,upTo)
@@ -70,7 +70,7 @@ proc dbStoreSyncStateLayout*(ctx: BeaconCtxRef; info: static[string]) =
   ## Save chain layout to persistent db
   let c = ctx.pool.chain
   c.fcKvtPut(LhcStateKey.toOpenArray, rlp.encode(ctx.layout))
-  c.fcKvtPersistent()
+  c.fcKvtPersist()
 
 proc dbLoadSyncStateLayout*(ctx: BeaconCtxRef; info: static[string]): bool =
   ## Restore chain layout from persistent db. It returns `true` if a previous

@@ -567,7 +567,7 @@ proc forkChoice*(c: ForkedChainRef,
 
   # Save and record the block number before the last saved block state.
   if newBaseNumber > 0:
-    c.com.db.persistent(newBaseNumber).isOkOr:
+    c.com.db.persist(newBaseNumber).isOkOr:
       return err("Failed to save state: " & $$error)
 
   ok()

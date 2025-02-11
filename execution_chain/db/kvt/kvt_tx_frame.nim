@@ -15,7 +15,7 @@
 
 import
   results,
-  ../[kvt_desc, kvt_layers]
+  ./[kvt_desc, kvt_layers]
 
 
 # ------------------------------------------------------------------------------
@@ -68,30 +68,35 @@ proc commit*(
 
   ok()
 
-proc collapse*(
-    tx: KvtTxRef;                     # Top transaction on database
-    commit: bool;                     # Commit if `true`, otherwise roll back
-      ): Result[void,KvtError] =
-  ## Iterated application of `commit()` or `rollback()` performing the
-  ## something similar to
-  ## ::
-  ##   while true:
-  ##     discard tx.commit() # ditto for rollback()
-  ##     if db.topTx.isErr: break
-  ##     tx = db.topTx.value
+proc txFramePersist*(
+    db: KvtDbRef;                     # Database
+    batch: PutHdlRef;
+      ) =
+  ## Persistently store data onto backend database. If the system is running
+  ## without a database backend, the function returns immediately with an
+  ## error.
   ##
-  # let db = ? tx.getDbDescFromTopTx()
+  ## The function merges all staged data from the top layer cache onto the
+  ## backend stage area. After that, the top layer cache is cleared.
+  ##
+  ## Finally, the staged data are merged into the physical backend database
+  ## and the staged data area is cleared. Wile performing this last step,
+  ## the recovery journal is updated (if available.)
+  ##
+  let be = db.backend
+  doAssert not be.isNil, "Persisting to backend requires ... a backend!"
 
-  # if commit:
-  #   db.top = db.layersCc
-  # else:
-  #   db.top = db.stack[0]
-  #   # db.top.txUid = 0
+  # Store structural single trie entries
+  for k,v in db.txRef.layer.sTab:
+    be.putKvpFn(batch, k, v)
 
-  # # Clean up
-  # db.stack.setLen(0)
-  # db.txRef = KvtTxRef(nil)
-  ok()
+  # TODO above, we only prepare the changes to the database but don't actually
+  #      write them to disk - the code below that updates the frame should
+  #      really run after things have been written (to maintain sync betweeen
+  #      in-memory and on-disk state)
+
+  # Done with txRef, all saved to backend
+  db.txRef.layer.sTab.clear()
 
 # ------------------------------------------------------------------------------
 # End

@@ -13,8 +13,7 @@ import
   eth/common,
   stew/endians2,
   ../../execution_chain/db/aristo/[
-    aristo_debug, aristo_desc, aristo_hike, aristo_layers,
-    aristo_tx],
+    aristo_debug, aristo_desc, aristo_hike, aristo_layers],
   ../replay/pp,
   "."/[undump_accounts, undump_desc, undump_storages, test_samples_xx]
 
@@ -203,12 +202,6 @@ func mapRootVid*(
 # ------------------------------------------------------------------------------
 # Public functions
 # ------------------------------------------------------------------------------
-
-proc schedStow*(
-    db: AristoDbRef;                  # Database
-      ): Result[void,AristoError] =
-  ## Context based scheduled persistent/non-persistent storage.
-  db.persist()
 
 # ------------------
 

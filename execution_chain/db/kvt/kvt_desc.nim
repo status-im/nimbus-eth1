@@ -19,11 +19,11 @@ import
   ./kvt_desc/[desc_error, desc_structural]
 
 from ./kvt_desc/desc_backend
-  import BackendRef
+  import BackendRef, PutHdlRef
 
 # Not auto-exporting backend
 export
-  hashes, tables, kvt_constants, desc_error, desc_structural
+  hashes, tables, kvt_constants, desc_error, desc_structural, PutHdlRef
 
 type
   KvtTxRef* = ref object

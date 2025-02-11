@@ -1,5 +1,5 @@
 # nimbus-eth1
-# Copyright (c) 2023-2024 Status Research & Development GmbH
+# Copyright (c) 2023-2025 Status Research & Development GmbH
 # Licensed under either of
 #  * Apache License, version 2.0, ([LICENSE-APACHE](LICENSE-APACHE) or
 #    http://www.apache.org/licenses/LICENSE-2.0)
@@ -159,7 +159,7 @@ proc putEndFn(db: MemBackendRef): PutEndFn =
       if not hdl.error.isNil:
         when extraTraceMessages:
           case hdl.error.pfx:
-          of VtxPfx, KeyPfx: trace logTxt "putEndFn: vtx/key failed",
+          of VtxPfx: trace logTxt "putEndFn: vtx/key failed",
             pfx=hdl.error.pfx, vid=hdl.error.vid, error=hdl.error.code
           of AdmPfx: trace logTxt "putEndFn: admin failed",
             pfx=AdmPfx, aid=hdl.error.aid.uint64, error=hdl.error.code

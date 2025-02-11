@@ -1,5 +1,5 @@
 # nimbus-eth1
-# Copyright (c) 2023-2024 Status Research & Development GmbH
+# Copyright (c) 2023-2025 Status Research & Development GmbH
 # Licensed under either of
 #  * Apache License, version 2.0, ([LICENSE-APACHE](LICENSE-APACHE) or
 #    http://www.apache.org/licenses/LICENSE-2.0)
@@ -22,14 +22,12 @@ type
     BackendVoid = 0                  ## For providing backend-less constructor
     BackendMemory
     BackendRocksDB
-    BackendRdbHosting                ## Allowed piggybacking write session
 
   StorageType* = enum
     ## Storage types, key prefix
     Oops = 0
     AdmPfx = 1                       ## Admin data, e.g. ID generator
     VtxPfx = 2                       ## Vertex data
-    KeyPfx = 3                       ## Key/hash data
 
   AdminTabID* = distinct uint64
     ## Access keys for admin table records. When exposed (e.g. when itereating
@@ -48,7 +46,7 @@ type
 
   TypedPutHdlErrRef* = ref object of RootRef
     case pfx*: StorageType           ## Error sub-table
-    of VtxPfx, KeyPfx:
+    of VtxPfx:
       vid*: VertexID                 ## Vertex ID where the error occured
     of AdmPfx:
       aid*: AdminTabID

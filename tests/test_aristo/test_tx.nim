@@ -24,7 +24,7 @@ import
     aristo_init/persistent,
     aristo_nearby,
     aristo_part/part_debug,
-    aristo_tx],
+  ],
   ../replay/xcheck,
   ./test_helpers
 
@@ -120,7 +120,7 @@ proc saveToBackend(
     noisy: bool;
     debugID: int;
       ): bool =
-  var db = tx.to(AristoDbRef)
+  # var db = tx.to(AristoDbRef)
 
   # # Verify context: nesting level must be 2 (i.e. two transactions)
   # xCheck tx.level == 2
