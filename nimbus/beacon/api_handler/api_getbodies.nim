@@ -1,5 +1,5 @@
 # Nimbus
-# Copyright (c) 2023-2024 Status Research & Development GmbH
+# Copyright (c) 2023-2025 Status Research & Development GmbH
 # Licensed under either of
 #  * Apache License, version 2.0, ([LICENSE-APACHE](LICENSE-APACHE))
 #  * MIT license ([LICENSE-MIT](LICENSE-MIT))
@@ -71,7 +71,7 @@ proc getPayloadBodiesByRange*(ben: BeaconEngineRef,
     last = ben.chain.latestNumber
 
   # get bodies from database
-  for bn in start..ben.chain.baseNumber:
+  for bn in start..min(last, ben.chain.baseNumber):
     let blk = ben.chain.blockByNumber(bn).valueOr:
       result.add Opt.none(ExecutionPayloadBodyV1)
       continue
@@ -80,4 +80,5 @@ proc getPayloadBodiesByRange*(ben: BeaconEngineRef,
   if last > ben.chain.baseNumber:
     let blocks = ben.chain.blockFromBaseTo(last)
     for i in countdown(blocks.len-1, 0):
-      result.add Opt.some(toPayloadBody(blocks[i]))
+      if blocks[i].header.number >= start:
+        result.add Opt.some(toPayloadBody(blocks[i]))
