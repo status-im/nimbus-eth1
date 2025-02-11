@@ -12,7 +12,7 @@ import
   std/[json],
   stew/[byteutils],
   json_rpc/[rpcserver, rpcclient],
-  ../../../nimbus/[
+  ../../../execution_chain/[
     constants,
     transaction,
     db/ledger,

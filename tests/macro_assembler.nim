@@ -17,19 +17,19 @@ import
   stew/shims/macros
 
 import
-  ../nimbus/db/ledger,
-  ../nimbus/evm/types,
-  ../nimbus/evm/interpreter/op_codes,
-  ../nimbus/evm/internals,
-  ../nimbus/transaction/[call_common, call_evm],
-  ../nimbus/evm/state,
-  ../nimbus/core/pow/difficulty
+  ../execution_chain/db/ledger,
+  ../execution_chain/evm/types,
+  ../execution_chain/evm/interpreter/op_codes,
+  ../execution_chain/evm/internals,
+  ../execution_chain/transaction/[call_common, call_evm],
+  ../execution_chain/evm/state,
+  ../execution_chain/core/pow/difficulty
 
-from ../nimbus/db/aristo
+from ../execution_chain/db/aristo
   import EmptyBlob
 
 # Ditto, for GasPrice.
-import ../nimbus/transaction except GasPrice
+import ../execution_chain/transaction except GasPrice
 import ../tools/common/helpers except LogLevel
 
 export byteutils

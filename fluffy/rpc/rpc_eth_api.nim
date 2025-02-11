@@ -19,8 +19,8 @@ import
   ../network/beacon/beacon_light_client,
   ../version
 
-from ../../nimbus/errors import ValidationError
-from ../../nimbus/rpc/filters import headerBloomFilter, deriveLogs
+from ../../execution_chain/errors import ValidationError
+from ../../execution_chain/rpc/filters import headerBloomFilter, deriveLogs
 
 from eth/common/eth_types_rlp import rlpHash
 

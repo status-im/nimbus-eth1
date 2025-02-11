@@ -11,9 +11,9 @@
 import
   std/[os],
   unittest2,
-  ../nimbus/config,
-  ../nimbus/utils/utils,
-  ../nimbus/common/common
+  ../execution_chain/config,
+  ../execution_chain/utils/utils,
+  ../execution_chain/common/common
 
 const
   baseDir = [".", "tests", ".."/"tests", $DirSep]  # path containg repo

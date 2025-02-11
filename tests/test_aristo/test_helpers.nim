@@ -12,7 +12,7 @@ import
   std/[os, sequtils],
   eth/common,
   stew/endians2,
-  ../../nimbus/db/aristo/[
+  ../../execution_chain/db/aristo/[
     aristo_debug, aristo_desc, aristo_hike, aristo_layers,
     aristo_tx],
   ../replay/pp,

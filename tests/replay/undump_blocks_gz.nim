@@ -12,7 +12,7 @@ import
   std/[os, sequtils, strformat, strutils],
   eth/[common, rlp],
   nimcrypto/utils,
-  ../../nimbus/db/core_db,
+  ../../execution_chain/db/core_db,
   "."/[gunzip, undump_helpers]
 
 # ------------------------------------------------------------------------------

@@ -13,14 +13,14 @@ import
   eth/common/[keys, transaction_utils],
   stew/byteutils,
   stew/endians2,
-  ../nimbus/config,
-  ../nimbus/db/storage_types,
-  ../nimbus/common/common,
-  ../nimbus/core/chain,
-  ../nimbus/core/tx_pool,
-  ../nimbus/transaction,
-  ../nimbus/constants,
-  ../nimbus/db/ledger {.all.}, # import all private symbols
+  ../execution_chain/config,
+  ../execution_chain/db/storage_types,
+  ../execution_chain/common/common,
+  ../execution_chain/core/chain,
+  ../execution_chain/core/tx_pool,
+  ../execution_chain/transaction,
+  ../execution_chain/constants,
+  ../execution_chain/db/ledger {.all.}, # import all private symbols
   unittest2
 
 import results

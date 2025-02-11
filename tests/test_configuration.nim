@@ -1,5 +1,5 @@
 # Nimbus
-# Copyright (c) 2019-2024 Status Research & Development GmbH
+# Copyright (c) 2019-2025 Status Research & Development GmbH
 # Licensed under either of
 #  * Apache License, version 2.0, ([LICENSE-APACHE](LICENSE-APACHE) or
 #    http://www.apache.org/licenses/LICENSE-2.0)
@@ -13,8 +13,8 @@ import
   pkg/[unittest2],
   eth/common/[base, keys],
   stew/byteutils,
-  ../nimbus/config,
-  ../nimbus/common/[chain_config, context, manager],
+  ../execution_chain/config,
+  ../execution_chain/common/[chain_config, context, manager],
   ./test_helpers
 
 proc configurationMain*() =

@@ -1,5 +1,5 @@
 # Nimbus
-# Copyright (c) 2023-2024 Status Research & Development GmbH
+# Copyright (c) 2023-2025 Status Research & Development GmbH
 # Licensed under either of
 #  * Apache License, version 2.0, ([LICENSE-APACHE](LICENSE-APACHE) or
 #    http://www.apache.org/licenses/LICENSE-2.0)
@@ -15,8 +15,8 @@ import
   eth/common/eth_types_rlp,
   ./engine_spec,
   ../cancun/customizer,
-  ../../../../nimbus/utils/utils,
-  ../../../../nimbus/beacon/payload_conv
+  ../../../../execution_chain/utils/utils,
+  ../../../../execution_chain/beacon/payload_conv
 
 # Attempt to re-org to a chain which at some point contains an unknown payload which is also invalid.
 # Then reveal the invalid payload and expect that the client rejects it and rejects forkchoice updated calls to this chain.

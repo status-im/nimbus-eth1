@@ -11,11 +11,11 @@
 import
   pkg/chronicles,
   pkg/unittest2,
-  ../nimbus/common,
-  ../nimbus/config,
-  ../nimbus/utils/utils,
-  ../nimbus/core/chain/forked_chain,
-  ../nimbus/db/ledger,
+  ../execution_chain/common,
+  ../execution_chain/config,
+  ../execution_chain/utils/utils,
+  ../execution_chain/core/chain/forked_chain,
+  ../execution_chain/db/ledger,
   ./test_forked_chain/chain_debug
 
 const

@@ -14,12 +14,12 @@ import
   stew/byteutils,
   ./test_helpers,
   ./test_allowed_to_fail,
-  ../nimbus/db/ledger,
-  ../nimbus/core/chain/forked_chain,
+  ../execution_chain/db/ledger,
+  ../execution_chain/core/chain/forked_chain,
   ../tools/common/helpers as chp,
   ../tools/evmstate/helpers,
-  ../nimbus/common/common,
-  ../nimbus/core/eip4844
+  ../execution_chain/common/common,
+  ../execution_chain/core/eip4844
 
 const
   debugMode = false

@@ -22,7 +22,7 @@
 
 # Ignore generated C and doc files
 nimcache
-/nimbus/docs
+/execution_chain/docs
 
 /debug*.json
 /block*.json

@@ -1,5 +1,5 @@
 # Nimbus
-# Copyright (c) 2024 Status Research & Development GmbH
+# Copyright (c) 2024-2025 Status Research & Development GmbH
 # Licensed under either of
 #  * Apache License, version 2.0, ([LICENSE-APACHE](LICENSE-APACHE) or
 #    http://www.apache.org/licenses/LICENSE-2.0)
@@ -10,7 +10,7 @@
 
 {.used.}
 
-import unittest2, std/sequtils, ../../nimbus/db/aristo/aristo_blobify
+import unittest2, std/sequtils, ../../execution_chain/db/aristo/aristo_blobify
 
 suite "Aristo blobify":
   test "VertexRef roundtrip":

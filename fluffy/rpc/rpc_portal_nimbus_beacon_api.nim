@@ -1,5 +1,5 @@
 # nimbus
-# Copyright (c) 2024 Status Research & Development GmbH
+# Copyright (c) 2024-2025 Status Research & Development GmbH
 # Licensed and distributed under either of
 #   * MIT license (license terms in the root directory or at https://opensource.org/licenses/MIT).
 #   * Apache v2 license (license terms in the root directory or at https://www.apache.org/licenses/LICENSE-2.0).
@@ -11,7 +11,7 @@ import json_rpc/rpcserver, ../network/beacon/beacon_network
 
 export rpcserver
 
-# Nimbus/fluffy specific RPC methods for the Portal beacon network.
+# execution_chain/fluffy specific RPC methods for the Portal beacon network.
 proc installPortalNimbusBeaconApiHandlers*(rpcServer: RpcServer, n: BeaconNetwork) =
   rpcServer.rpc("portal_nimbus_beaconSetTrustedBlockRoot") do(blockRoot: string) -> bool:
     let root = Digest.fromHex(blockRoot)

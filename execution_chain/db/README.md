@@ -84,7 +84,7 @@ locations where to start looking at.
 
 * *Aristo DB (driver)*<a name="add"></a>
   + Sources:<br>
-    ./nimbus/db/core_db/backend/aristo_*<br>
+    ./execution_chain/db/core_db/backend/aristo_*<br>
 
   + Synopsis:<br>
     Combines both, the *Kvt* and the *Aristo* driver sub-modules providing an
@@ -92,14 +92,14 @@ locations where to start looking at.
 
 * *Aristo MPT (driver)*<a name="amd"></a>
   + Sources:<br>
-    ./nimbus/db/aristo*
+    ./execution_chain/db/aristo*
 
   + Synopsis:<br>
     Revamped implementation of a hexary *Merkle Patricia Tree*.
 
 * *Common (concentrator)*<a name="cc"></a>
     * Sources:<br>
-      ./nimbus/common*<br>
+      ./execution_chain/common*<br>
 
     * Synopsis:<br>
       Collected information for running block chain execution layer
@@ -107,7 +107,7 @@ locations where to start looking at.
 
 * *Core DB (API)*<a name="cda"></a>
   * Sources:<br>
-    ./nimbus/db/core_db*
+    ./execution_chain/db/core_db*
 
   * Synopsis:<br>
     Database abstraction layer. Unless for legacy applications, there should
@@ -115,8 +115,8 @@ locations where to start looking at.
 
 * *EVM (application)*<a name="ea"></a>
   + Sources:<br>
-    ./nimbus/core/executor/*
-    ./nimbus/evm/*
+    ./execution_chain/core/executor/*
+    ./execution_chain/evm/*
 
   + Synopsis:<br>
     An implementation of the *Ethereum Virtual Machine*.
@@ -140,7 +140,7 @@ locations where to start looking at.
 
 * *Kvt (driver)*<a name="kd"></a>
   + Sources:<br>
-    ./nimbus/db/kvt*
+    ./execution_chain/db/kvt*
 
   + Synopsis:<br>
     Key value table interface for the [Aristo DB (driver)](#add) module.
@@ -149,7 +149,7 @@ locations where to start looking at.
 
 * *Ledger (API)*<a name="la"></a>
   + Sources:<br>
-    ./nimbus/db/ledger*
+    ./execution_chain/db/ledger*
 
   + Synopsis:<br>
     Abstraction layer for either the [legacy cache (driver)](#lgcd) accounts
@@ -159,9 +159,9 @@ locations where to start looking at.
 
 * *ledger cache (driver)*<a name="ldcd"></a>
   + Sources:<br>
-    ./nimbus/db/ledger/accounts_ledger.nim<br>
-    ./nimbus/db/ledger/backend/accounts_ledger*<br>
-    ./nimbus/db/ledger/distinct_ledgers.nim
+    ./execution_chain/db/ledger/accounts_ledger.nim<br>
+    ./execution_chain/db/ledger/backend/accounts_ledger*<br>
+    ./execution_chain/db/ledger/distinct_ledgers.nim
 
   + Synopsis:<br>
     Management of accounts and storage data. This is a re-write of the
@@ -170,7 +170,7 @@ locations where to start looking at.
 
 * *legacy DB (concentrator)*<a name="ldc"></a>
   + Sources:<br>
-    ./nimbus/db/core_db/backend/legacy_*
+    ./execution_chain/db/core_db/backend/legacy_*
 
   + Synopsis:<br>
     Legacy database abstraction. It mostly forwards requests directly to the
@@ -186,8 +186,8 @@ locations where to start looking at.
 
 * *State DB (concentrator)*<a name="sdc"></a>
   + Sources:<br>
-    ./nimbus/evm/state.nim<br>
-    ./nimbus/evm/types.nim
+    ./execution_chain/evm/state.nim<br>
+    ./execution_chain/evm/types.nim
 
   + Synopsis:<br>
     Integrated collection of modules and methods relevant for the EVM.

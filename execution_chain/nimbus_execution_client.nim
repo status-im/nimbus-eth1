@@ -8,7 +8,7 @@
 # those terms.
 
 import
-  ../nimbus/compile_info
+  ../execution_chain/compile_info
 
 import
   std/[os, osproc, strutils, net],

@@ -190,7 +190,7 @@ ifneq ($(ENABLE_EVMC), 0)
   T8N_PARAMS := -d:chronicles_enabled=off
 endif
 
-# eth protocol settings, rules from "nimbus/sync/protocol/eth/variables.mk"
+# eth protocol settings, rules from "execution_chain/sync/protocol/eth/variables.mk"
 NIM_PARAMS := $(NIM_PARAMS) $(NIM_ETH_PARAMS)
 
 #- deletes and recreates "nimbus.nims" which on Windows is a copy instead of a proper symlink
@@ -211,7 +211,7 @@ $(TOOLS): | build deps rocksdb
 
 nimbus_execution_client: | build deps rocksdb
 	echo -e $(BUILD_MSG) "build/nimbus_execution_client" && \
-		$(ENV_SCRIPT) nim c $(NIM_PARAMS) -d:chronicles_log_level=TRACE -o:build/nimbus_execution_client "nimbus/nimbus_execution_client.nim"
+		$(ENV_SCRIPT) nim c $(NIM_PARAMS) -d:chronicles_log_level=TRACE -o:build/nimbus_execution_client "execution_chain/nimbus_execution_client.nim"
 
 nimbus: nimbus_execution_client
 	echo "The nimbus target is deprecated and will soon change meaning, use 'nimbus_execution_client' instead"

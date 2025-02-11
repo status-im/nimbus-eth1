@@ -1,5 +1,5 @@
 # Nimbus
-# Copyright (c) 2022-2024 Status Research & Development GmbH
+# Copyright (c) 2022-2025 Status Research & Development GmbH
 # Licensed under either of
 #  * Apache License, version 2.0, ([LICENSE-APACHE](LICENSE-APACHE) or
 #    http://www.apache.org/licenses/LICENSE-2.0)
@@ -13,14 +13,14 @@
 
 import
   std/[base64, json, options, os, strutils, times],
-  ../nimbus/config,
-  ../nimbus/rpc/jwt_auth,
-  ../nimbus/rpc {.all.},
+  ../execution_chain/config,
+  ../execution_chain/rpc/jwt_auth,
+  ../execution_chain/rpc {.all.},
   ./replay/pp,
   chronicles,
   chronos/apps/http/httpclient as chronoshttpclient,
   chronos/apps/http/httptable,
-  eth/common/keys, 
+  eth/common/keys,
   eth/p2p,
   nimcrypto/[hmac, sha2, utils],
   results,

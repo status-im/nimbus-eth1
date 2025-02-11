@@ -40,7 +40,7 @@ const
     " Status Research & Development GmbH"
 
   # e.g.:
-  # nimbus/v0.1.0-abcdef/os-cpu/nim-a.b.c/emvc
+  # nimbus_execution_client/v0.1.0-abcdef/os-cpu/nim-a.b.c/emvc
   # Copyright (c) 2018-2021 Status Research & Development GmbH
   NimbusBuild* = "$#\p$#" % [
     ClientId,

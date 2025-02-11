@@ -11,8 +11,8 @@ import
   std/[options, typetraits],
   unittest2,
   eth/[common/eth_types],
-  ../nimbus/rpc/filters,
-  ../nimbus/beacon/web3_eth_conv,
+  ../execution_chain/rpc/filters,
+  ../execution_chain/beacon/web3_eth_conv,
   ./test_block_fixture
 
 type Address = primitives.Address

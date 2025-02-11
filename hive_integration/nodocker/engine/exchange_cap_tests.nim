@@ -1,5 +1,5 @@
 # Nimbus
-# Copyright (c) 2023-2024 Status Research & Development GmbH
+# Copyright (c) 2023-2025 Status Research & Development GmbH
 # Licensed under either of
 #  * Apache License, version 2.0, ([LICENSE-APACHE](LICENSE-APACHE) or
 #    http://www.apache.org/licenses/LICENSE-2.0)
@@ -14,7 +14,7 @@ import
   ./test_env,
   ./types,
   chronicles,
-  ../../../nimbus/common/hardforks
+  ../../../execution_chain/common/hardforks
 
 import ../../../tools/common/helpers except LogLevel
 
