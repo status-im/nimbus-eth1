@@ -117,7 +117,9 @@ proc getStorage*(
   context.fetchStorageIfRequired(address, slotKey)
   context.storage.getOrDefault(address).getOrDefault(slotKey)
 
-proc setStorage*(context: PortalEvmContextRef, address: Address, slotKey, slotValue: UInt256) =
+proc setStorage*(
+    context: PortalEvmContextRef, address: Address, slotKey, slotValue: UInt256
+) =
   context.storage.withValue(address, value):
     value[][slotKey] = slotValue
   do:
@@ -137,10 +139,14 @@ proc getCodeSize*(context: PortalEvmContextRef, address: Address): int =
 proc getCodeHash*(context: PortalEvmContextRef, address: Address): Hash32 =
   context.getCode(address).keccak256()
 
-proc copyCode*(context: PortalEvmContextRef, address: Address, codeOffset: int, buffer: var openArray[byte]): int =
+proc copyCode*(
+    context: PortalEvmContextRef,
+    address: Address,
+    codeOffset: int,
+    buffer: var openArray[byte],
+): int =
   let code = context.getCode(address)
-  var
-    i = 0
+  var i = 0
   while (i + codeOffset) < code.len() and i < buffer.len():
     buffer[i] = code[i + codeOffset]
     inc i
@@ -151,26 +157,25 @@ proc accessAccount*(context: PortalEvmContextRef, address: Address): bool =
   context.fetchAccountIfRequired(address)
   warm
 
-proc accessStorage*(context: PortalEvmContextRef, address: Address, slotKey: UInt256): bool =
+proc accessStorage*(
+    context: PortalEvmContextRef, address: Address, slotKey: UInt256
+): bool =
   let warm = context.fetchedStorage.getOrDefault(address).contains(slotKey)
   context.fetchStorageIfRequired(address, slotKey)
   warm
 
-# proc getTransientStorage(
-#     context: evmc_host_context, address: var evmc_address, key: var evmc_bytes32
-# ): evmc_bytes32 {.evmc_abi.} =
-#   echo "getTransientStorage called"
-#   raiseAssert("Not implemented")
+proc getTransientStorage*(
+    context: PortalEvmContextRef, address: Address, slotKey: UInt256
+): UInt256 =
+  context.transientStorage.getOrDefault(address).getOrDefault(slotKey)
 
-# proc setTransientStorage(
-#     context: evmc_host_context, address: var evmc_address, key, value: var evmc_bytes32
-# ) {.evmc_abi.} =
-#   echo "setTransientStorage called"
-#   raiseAssert("Not implemented")
-
-
-
-
+proc setTransientStorage*(
+    context: PortalEvmContextRef, address: Address, slotKey, slotValue: UInt256
+) =
+  context.transientStorage.withValue(address, value):
+    value[][slotKey] = slotValue
+  do:
+    context.transientStorage[address] = {slotKey: slotValue}.toTable
 
 ###############################################################################
 # The below functions implement the EVMC host interface
@@ -186,13 +191,20 @@ proc getStorage(
     context: evmc_host_context, address: var evmc_address, key: var evmc_bytes32
 ): evmc_bytes32 {.evmc_abi.} =
   echo "getStorage called"
-  context.fromEvmc().getStorage(address.fromEvmc(), UInt256.fromEvmc(key)).toEvmc()
+  echo "address: ", address
+  echo "key: ", key
+  let r =
+    context.fromEvmc().getStorage(address.fromEvmc(), UInt256.fromEvmc(key)).toEvmc()
+  echo "r: ", r
+  r
 
 proc setStorage(
     context: evmc_host_context, address: var evmc_address, key, value: var evmc_bytes32
 ): evmc_storage_status {.evmc_abi.} =
   echo "setStorage called"
-  context.fromEvmc().setStorage(address.fromEvmc(), UInt256.fromEvmc(key), UInt256.fromEvmc(value))
+  context.fromEvmc().setStorage(
+    address.fromEvmc(), UInt256.fromEvmc(key), UInt256.fromEvmc(value)
+  )
   EVMC_STORAGE_ASSIGNED # TODO: return correct status
 
 proc getBalance(
@@ -221,7 +233,11 @@ proc copyCode(
     buffer_size: csize_t,
 ): csize_t {.evmc_abi.} =
   echo "copyCode called"
-  context.fromEvmc().copyCode(address.fromEvmc(), code_offset.int, makeOpenArray(buffer_data, buffer_size.int)).csize_t
+  context
+  .fromEvmc()
+  .copyCode(
+    address.fromEvmc(), code_offset.int, makeOpenArray(buffer_data, buffer_size.int)
+  ).csize_t
 
 proc selfDestruct(
     context: evmc_host_context, address, beneficiary: var evmc_address
@@ -259,25 +275,32 @@ proc accessAccount(
     context: evmc_host_context, address: var evmc_address
 ): evmc_access_status {.evmc_abi.} =
   echo "accessAccount called"
-  context.fromEvmc().accessAccount(address.fromEvmc()).evmc_access_status
+  let warm = context.fromEvmc().accessAccount(address.fromEvmc())
+  if warm: EVMC_ACCESS_WARM else: EVMC_ACCESS_COLD
 
 proc accessStorage(
     context: evmc_host_context, address: var evmc_address, key: var evmc_bytes32
 ): evmc_access_status {.evmc_abi.} =
   echo "accessStorage called"
-  context.fromEvmc().accessStorage(address.fromEvmc(), UInt256.fromEvmc(key)).evmc_access_status
+  let warm = context.fromEvmc().accessStorage(address.fromEvmc(), UInt256.fromEvmc(key))
+  if warm: EVMC_ACCESS_WARM else: EVMC_ACCESS_COLD
 
 proc getTransientStorage(
     context: evmc_host_context, address: var evmc_address, key: var evmc_bytes32
 ): evmc_bytes32 {.evmc_abi.} =
   echo "getTransientStorage called"
-  raiseAssert("Not implemented")
+  context
+  .fromEvmc()
+  .getTransientStorage(address.fromEvmc(), UInt256.fromEvmc(key))
+  .toEvmc()
 
 proc setTransientStorage(
     context: evmc_host_context, address: var evmc_address, key, value: var evmc_bytes32
 ) {.evmc_abi.} =
   echo "setTransientStorage called"
-  raiseAssert("Not implemented")
+  context.fromEvmc().setTransientStorage(
+    address.fromEvmc(), UInt256.fromEvmc(key), UInt256.fromEvmc(value)
+  )
 
 proc getDelegateAddress(
     context: evmc_host_context, address: var evmc_address
