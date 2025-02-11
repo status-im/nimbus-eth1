@@ -9,13 +9,13 @@ import
   std/[tables, sets],
   chronos,
   chronicles,
-  stew/byteutils,
-  stew/ptrops,
+  # stew/byteutils,
+  # stew/ptrops,
   stint,
   results,
   evmc/evmc,
   eth/common/[hashes, accounts, addresses, headers],
-  ../../nimbus/evm/evmc_helpers,
+  # ../../nimbus/evm/evmc_helpers,
   ../network/state/state_endpoints
 
 export evmc, addresses, stint, headers, state_network
@@ -176,154 +176,3 @@ proc setTransientStorage*(
     value[][slotKey] = slotValue
   do:
     context.transientStorage[address] = {slotKey: slotValue}.toTable
-
-###############################################################################
-# The below functions implement the EVMC host interface
-###############################################################################
-
-proc accountExists(
-    context: evmc_host_context, address: var evmc_address
-): c99bool {.evmc_abi.} =
-  echo "accountExists called"
-  context.fromEvmc().accountExists(address.fromEvmc()).c99bool
-
-proc getStorage(
-    context: evmc_host_context, address: var evmc_address, key: var evmc_bytes32
-): evmc_bytes32 {.evmc_abi.} =
-  echo "getStorage called"
-  echo "address: ", address
-  echo "key: ", key
-  let r =
-    context.fromEvmc().getStorage(address.fromEvmc(), UInt256.fromEvmc(key)).toEvmc()
-  echo "r: ", r
-  r
-
-proc setStorage(
-    context: evmc_host_context, address: var evmc_address, key, value: var evmc_bytes32
-): evmc_storage_status {.evmc_abi.} =
-  echo "setStorage called"
-  context.fromEvmc().setStorage(
-    address.fromEvmc(), UInt256.fromEvmc(key), UInt256.fromEvmc(value)
-  )
-  EVMC_STORAGE_ASSIGNED # TODO: return correct status
-
-proc getBalance(
-    context: evmc_host_context, address: var evmc_address
-): evmc_uint256be {.evmc_abi.} =
-  echo "getBalance called"
-  context.fromEvmc().getBalance(address.fromEvmc()).toEvmc()
-
-proc getCodeSize(
-    context: evmc_host_context, address: var evmc_address
-): csize_t {.evmc_abi.} =
-  echo "getCodeSize called"
-  context.fromEvmc().getCodeSize(address.fromEvmc()).csize_t
-
-proc getCodeHash(
-    context: evmc_host_context, address: var evmc_address
-): evmc_bytes32 {.evmc_abi.} =
-  echo "getCodeHash called"
-  context.fromEvmc().getCodeHash(address.fromEvmc()).toEvmc()
-
-proc copyCode(
-    context: evmc_host_context,
-    address: var evmc_address,
-    code_offset: csize_t,
-    buffer_data: ptr byte,
-    buffer_size: csize_t,
-): csize_t {.evmc_abi.} =
-  echo "copyCode called"
-  context
-  .fromEvmc()
-  .copyCode(
-    address.fromEvmc(), code_offset.int, makeOpenArray(buffer_data, buffer_size.int)
-  ).csize_t
-
-proc selfDestruct(
-    context: evmc_host_context, address, beneficiary: var evmc_address
-) {.evmc_abi.} =
-  echo "selfDestruct called"
-  raiseAssert("Not implemented")
-
-proc call(context: evmc_host_context, msg: var evmc_message): evmc_result {.evmc_abi.} =
-  echo "call called"
-  raiseAssert("Not implemented")
-
-proc getTxContext(context: evmc_host_context): evmc_tx_context {.evmc_abi.} =
-  echo "getTxContext called"
-  evmc_tx_context()
-  # raiseAssert("Not implemented")
-
-proc getBlockHash(
-    context: evmc_host_context, number: int64
-): evmc_bytes32 {.evmc_abi.} =
-  echo "getBlockHash called"
-  raiseAssert("Not implemented")
-
-proc emitLog(
-    context: evmc_host_context,
-    address: var evmc_address,
-    data: ptr byte,
-    data_size: csize_t,
-    topics: ptr evmc_bytes32,
-    topics_count: csize_t,
-) {.evmc_abi.} =
-  echo "emitLog called"
-  raiseAssert("Not implemented")
-
-proc accessAccount(
-    context: evmc_host_context, address: var evmc_address
-): evmc_access_status {.evmc_abi.} =
-  echo "accessAccount called"
-  let warm = context.fromEvmc().accessAccount(address.fromEvmc())
-  if warm: EVMC_ACCESS_WARM else: EVMC_ACCESS_COLD
-
-proc accessStorage(
-    context: evmc_host_context, address: var evmc_address, key: var evmc_bytes32
-): evmc_access_status {.evmc_abi.} =
-  echo "accessStorage called"
-  let warm = context.fromEvmc().accessStorage(address.fromEvmc(), UInt256.fromEvmc(key))
-  if warm: EVMC_ACCESS_WARM else: EVMC_ACCESS_COLD
-
-proc getTransientStorage(
-    context: evmc_host_context, address: var evmc_address, key: var evmc_bytes32
-): evmc_bytes32 {.evmc_abi.} =
-  echo "getTransientStorage called"
-  context
-  .fromEvmc()
-  .getTransientStorage(address.fromEvmc(), UInt256.fromEvmc(key))
-  .toEvmc()
-
-proc setTransientStorage(
-    context: evmc_host_context, address: var evmc_address, key, value: var evmc_bytes32
-) {.evmc_abi.} =
-  echo "setTransientStorage called"
-  context.fromEvmc().setTransientStorage(
-    address.fromEvmc(), UInt256.fromEvmc(key), UInt256.fromEvmc(value)
-  )
-
-proc getDelegateAddress(
-    context: evmc_host_context, address: var evmc_address
-): evmc_address {.evmc_abi.} =
-  echo "getDelegateAddress called"
-  raiseAssert("Not implemented")
-
-const hostInteface* = evmc_host_interface(
-  account_exists: accountExists,
-  get_storage: getStorage,
-  set_storage: setStorage,
-  get_balance: getBalance,
-  get_code_size: getCodeSize,
-  get_code_hash: getCodeHash,
-  copy_code: copyCode,
-  selfdestruct: selfDestruct,
-  call: call,
-  get_tx_context: getTxContext,
-  get_block_hash: getBlockHash,
-  emit_log: emitLog,
-  access_account: accessAccount,
-  access_storage: accessStorage,
-  get_transient_storage: getTransientStorage,
-  set_transient_storage: setTransientStorage,
-  get_delegate_address: getDelegateAddress,
-)
