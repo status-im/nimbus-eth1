@@ -66,11 +66,17 @@ proc deriveLogs*(
     transactions: openArray[Transaction],
     receipts: openArray[Receipt],
     filterOptions: FilterOptions,
+    txHashes: Opt[seq[Hash32]] = Opt.none(seq[Hash32])
 ): seq[FilterLog] =
   ## Derive log fields, does not deal with pending log, only the logs with
   ## full data set
   doAssert(len(transactions) == len(receipts))
 
+  # Verify that txHashes is consistent with transactions
+  if txHashes.isSome:
+    doAssert(txHashes.get.len == len(transactions))
+
+  let blkHash = header.blockHash
   var resLogs: seq[FilterLog] = @[]
   var logIndex = 0'u64
 
@@ -78,7 +84,12 @@ proc deriveLogs*(
     let logs = receipt.logs.filterIt(it.match(filterOptions.address, filterOptions.topics))
     if logs.len > 0:
       # TODO avoid recomputing entirely - we should have this cached somewhere
-      let txHash = transactions[i].rlpHash
+      let txHash = 
+        if txHashes.isSome:
+            txHashes.get[i] # cached txHashes 
+        else:
+          transactions[i].rlpHash
+
       for log in logs:
         let filterLog = FilterLog(
           # TODO investigate how to handle this field
@@ -89,7 +100,7 @@ proc deriveLogs*(
           logIndex: Opt.some(Quantity(logIndex)),
           transactionIndex: Opt.some(Quantity(i)),
           transactionHash: Opt.some(txHash),
-          blockHash: Opt.some(header.blockHash),
+          blockHash: Opt.some(blkHash),
           blockNumber: Opt.some(Quantity(header.number)),
           address: log.address,
           data: log.data,
