@@ -14,10 +14,12 @@ import
   results,
   evmc/evmc,
   eth/common/[hashes, accounts, addresses],
-  ../../nimbus/evm/evmc_helpers,
+  ../../execution_chain/evm/evmc_helpers,
   ./[evm_loader, portal_evm_context]
 
 export portal_evm_context, results
+
+{.push raises: [].}
 
 logScope:
   topics = "portal_evm"
@@ -55,8 +57,7 @@ type
 func hostInterface(): evmc_host_interface
 
 func init*(T: type PortalEvmHost, evm: PortalEvmRef): T =
-  PortalEvmHost(evm: evm,
-    hostInterface: hostInterface())
+  PortalEvmHost(evm: evm, hostInterface: hostInterface())
 
 template toEvmc(host: PortalEvmHost): evmc_host_context =
   evmc_host_context(host.addr)
@@ -66,6 +67,18 @@ template fromEvmc(host: evmc_host_context): PortalEvmHost =
 
 template context(host: PortalEvmHost): PortalEvmContextRef =
   host.evm.context
+
+template addrIfPresent(value: Opt[seq[byte]]): auto =
+  if value.isSome():
+    value.get()[0].addr
+  else:
+    nil
+
+template lenIfPresent(value: Opt[seq[byte]]): auto =
+  if value.isSome():
+    csize_t(value.get().len())
+  else:
+    0
 
 func toEvmc(msgKind: PortalEvmMessageKind): evmc_call_kind =
   evmc_call_kind(msgKind.int)
@@ -82,16 +95,8 @@ func toEvmc(msg: PortalEvmMessage): evmc_message =
     gas: msg.gas,
     recipient: msg.recipient.toEvmc(),
     sender: msg.sender.toEvmc(),
-    input_data:
-      if msg.inputData.isSome():
-        msg.inputData.get()[0].addr
-      else:
-        nil,
-    input_size:
-      if msg.inputData.isSome():
-        csize_t(msg.inputData.get().len())
-      else:
-        0,
+    input_data: msg.inputData.addrIfPresent(),
+    input_size: msg.inputData.lenIfPresent(),
     value: msg.value.toEvmc(),
     create2_salt: msg.create2Salt.toEvmc(),
     code_address:
@@ -99,16 +104,8 @@ func toEvmc(msg: PortalEvmMessage): evmc_message =
         msg.codeAddress.get().toEvmc()
       else:
         default(evmc_address),
-    code:
-      if msg.code.isSome():
-        msg.code.get()[0].addr
-      else:
-        nil,
-    code_size:
-      if msg.code.isSome():
-        csize_t(msg.code.get().len())
-      else:
-        0,
+    code: msg.code.addrIfPresent(),
+    code_size: msg.code.lenIfPresent(),
   )
 
 func init*(T: type PortalEvmRef, context: PortalEvmContextRef): T =
@@ -129,8 +126,6 @@ func name*(evm: PortalEvmRef): string =
 func version*(evm: PortalEvmRef): string =
   $evm.vmPtr.version
 
-# TODO: do we need to use evm.vmPtr.get_capabilities and/or evm.vmPtr.set_option?
-
 proc execute*(
     evm: PortalEvmRef, message: PortalEvmMessage, code: Opt[seq[byte]]
 ): Result[seq[byte], string] =
@@ -144,27 +139,17 @@ proc execute*(
       host.toEvmc(),
       EVMC_LATEST_STABLE_REVISION,
       msg,
-      if code.isSome():
-        code.get()[0].addr
-      else:
-        nil,
-      if code.isSome():
-        csize_t(code.get().len())
-      else:
-        0,
+      code.addrIfPresent(),
+      code.lenIfPresent(),
     )
 
-  let output =
-    if evmc_result.output_size.int == 0:
-      @[]
-    else:
-      @(makeOpenArray(evmc_result.output_data, evmc_result.output_size.int))
-
-  let res =
-    if evmc_result.status_code == EVMC_SUCCESS:
-      ok(output)
-    else:
-      err($evmc_result.status_code)
+  let
+    output = @(makeOpenArray(evmc_result.output_data, evmc_result.output_size.int))
+    res =
+      if evmc_result.status_code == EVMC_SUCCESS:
+        ok(output)
+      else:
+        err($evmc_result.status_code)
 
   # Release the evmc_result
   if not evmc_result.release.isNil():
@@ -196,16 +181,57 @@ proc getStorage(
     host: evmc_host_context, address: var evmc_address, key: var evmc_bytes32
 ): evmc_bytes32 {.evmc_abi.} =
   echo "getStorage called"
-  host.fromEvmc().context().getStorage(address.fromEvmc(), UInt256.fromEvmc(key)).toEvmc()
+  host
+  .fromEvmc()
+  .context()
+  .getCurrentStorage(address.fromEvmc(), UInt256.fromEvmc(key))
+  .toEvmc()
 
 proc setStorage(
     host: evmc_host_context, address: var evmc_address, key, value: var evmc_bytes32
 ): evmc_storage_status {.evmc_abi.} =
   echo "setStorage called"
-  host.fromEvmc().context().setStorage(
-    address.fromEvmc(), UInt256.fromEvmc(key), UInt256.fromEvmc(value)
-  )
-  EVMC_STORAGE_ASSIGNED # TODO: return correct status
+
+  # Logic copied from Erigon Silkworm EVM.
+  # See here: https://github.com/erigontech/silkworm/blob/7ea57b6fc2f4a990363ace3aa91941878da60631/silkworm/core/execution/evm.cpp#L350
+
+  let
+    context = host.fromEvmc().context()
+    adr = address.fromEvmc()
+    k = UInt256.fromEvmc(key)
+    v = UInt256.fromEvmc(value)
+
+  let currentValue = context.getCurrentStorage(adr, k)
+
+  if currentValue == v:
+    return EVMC_STORAGE_ASSIGNED
+
+  context.setStorage(adr, k, v)
+
+  let originalValue = context.getOriginalStorage(adr, k)
+
+  if originalValue == currentValue:
+    if originalValue.isZero():
+      return EVMC_STORAGE_ADDED
+    if v.isZero():
+      return EVMC_STORAGE_DELETED
+    return EVMC_STORAGE_MODIFIED
+
+  if not originalValue.isZero():
+    if currentValue.isZero():
+      if originalValue == v:
+        return EVMC_STORAGE_DELETED_RESTORED
+      return EVMC_STORAGE_DELETED_ADDED
+    if v.isZero():
+      return EVMC_STORAGE_MODIFIED_DELETED
+    if originalValue == v:
+      return EVMC_STORAGE_MODIFIED_RESTORED
+    return EVMC_STORAGE_ASSIGNED
+
+  if originalValue == v:
+    return EVMC_STORAGE_ADDED_DELETED
+
+  return EVMC_STORAGE_ASSIGNED
 
 proc getBalance(
     host: evmc_host_context, address: var evmc_address
@@ -233,8 +259,10 @@ proc copyCode(
     buffer_size: csize_t,
 ): csize_t {.evmc_abi.} =
   echo "copyCode called"
+
   host
-  .fromEvmc().context()
+  .fromEvmc()
+  .context()
   .copyCode(
     address.fromEvmc(), code_offset.int, makeOpenArray(buffer_data, buffer_size.int)
   ).csize_t
@@ -250,22 +278,22 @@ proc call(host: evmc_host_context, msg: var evmc_message): evmc_result {.evmc_ab
 
   let h = host.fromEvmc()
   h.evm.vmPtr.execute(
-      h.evm.vmPtr,
-      h.hostInterface.addr,
-      h.context().toEvmc(),
-      EVMC_LATEST_STABLE_REVISION, # TODO this should be set based on the current block number
-      msg,
-      nil,
-      0)
+    h.evm.vmPtr,
+    h.hostInterface.addr,
+    h.context().toEvmc(),
+    EVMC_LATEST_STABLE_REVISION,
+      # TODO this should be set based on the current block number
+    msg,
+    nil,
+    0,
+  )
 
 proc getTxContext(host: evmc_host_context): evmc_tx_context {.evmc_abi.} =
   echo "getTxContext called"
   evmc_tx_context()
   # raiseAssert("Not implemented")
 
-proc getBlockHash(
-    host: evmc_host_context, number: int64
-): evmc_bytes32 {.evmc_abi.} =
+proc getBlockHash(host: evmc_host_context, number: int64): evmc_bytes32 {.evmc_abi.} =
   echo "getBlockHash called"
   raiseAssert("Not implemented")
 
@@ -278,7 +306,7 @@ proc emitLog(
     topics_count: csize_t,
 ) {.evmc_abi.} =
   echo "emitLog called"
-  raiseAssert("Not implemented")
+  discard # Not required
 
 proc accessAccount(
     host: evmc_host_context, address: var evmc_address
@@ -291,15 +319,18 @@ proc accessStorage(
     host: evmc_host_context, address: var evmc_address, key: var evmc_bytes32
 ): evmc_access_status {.evmc_abi.} =
   echo "accessStorage called"
-  let warm = host.fromEvmc().context().accessStorage(address.fromEvmc(), UInt256.fromEvmc(key))
+  let warm =
+    host.fromEvmc().context().accessStorage(address.fromEvmc(), UInt256.fromEvmc(key))
   if warm: EVMC_ACCESS_WARM else: EVMC_ACCESS_COLD
 
 proc getTransientStorage(
     host: evmc_host_context, address: var evmc_address, key: var evmc_bytes32
 ): evmc_bytes32 {.evmc_abi.} =
   echo "getTransientStorage called"
+
   host
-  .fromEvmc().context()
+  .fromEvmc()
+  .context()
   .getTransientStorage(address.fromEvmc(), UInt256.fromEvmc(key))
   .toEvmc()
 
@@ -310,12 +341,6 @@ proc setTransientStorage(
   host.fromEvmc().context().setTransientStorage(
     address.fromEvmc(), UInt256.fromEvmc(key), UInt256.fromEvmc(value)
   )
-
-proc getDelegateAddress(
-    host: evmc_host_context, address: var evmc_address
-): evmc_address {.evmc_abi.} =
-  echo "getDelegateAddress called"
-  raiseAssert("Not implemented")
 
 func hostInterface(): evmc_host_interface =
   evmc_host_interface(
@@ -335,7 +360,6 @@ func hostInterface(): evmc_host_interface =
     access_storage: accessStorage,
     get_transient_storage: getTransientStorage,
     set_transient_storage: setTransientStorage,
-    get_delegate_address: getDelegateAddress,
   )
 
 when isMainModule:

@@ -15,10 +15,12 @@ import
   results,
   evmc/evmc,
   eth/common/[hashes, accounts, addresses, headers],
-  # ../../nimbus/evm/evmc_helpers,
+  # ../../execution_chain/evm/evmc_helpers,
   ../network/state/state_endpoints
 
 export evmc, addresses, stint, headers, state_network
+
+{.push raises: [].}
 
 {.pragma: evmc_abi, cdecl, gcsafe, raises: [].}
 
@@ -30,7 +32,8 @@ type PortalEvmContextRef* = ref object
   header: Header
   accounts: Table[Address, Account]
   code: Table[Address, seq[byte]]
-  storage: Table[Address, Table[UInt256, UInt256]]
+  storage: Table[Address, Table[UInt256, (UInt256, UInt256)]]
+    # maps address -> slot key -> (original slot value, updated slot value)
   transientStorage: Table[Address, Table[UInt256, UInt256]]
   stateNetwork: Opt[StateNetwork] # when none network lookups are disabled
   fetchedAccounts: HashSet[Address]
@@ -96,9 +99,9 @@ proc fetchStorageIfRequired(
       raiseAssert("storage lookup failed") # how should we handle this?
 
     context.storage.withValue(address, value):
-      value[][slotKey] = slotValue
+      value[][slotKey] = (slotValue, slotValue)
     do:
-      context.storage[address] = {slotKey: slotValue}.toTable
+      context.storage[address] = {slotKey: (slotValue, slotValue)}.toTable
 
     context.fetchedStorage.withValue(address, value):
       value[].incl(slotKey)
@@ -111,19 +114,25 @@ proc accountExists*(context: PortalEvmContextRef, address: Address): bool =
   context.fetchAccountIfRequired(address)
   context.accounts.contains(address)
 
-proc getStorage*(
+proc getOriginalStorage*(
     context: PortalEvmContextRef, address: Address, slotKey: UInt256
 ): UInt256 =
   context.fetchStorageIfRequired(address, slotKey)
-  context.storage.getOrDefault(address).getOrDefault(slotKey)
+  context.storage.getOrDefault(address).getOrDefault(slotKey)[0]
+
+proc getCurrentStorage*(
+    context: PortalEvmContextRef, address: Address, slotKey: UInt256
+): UInt256 =
+  context.fetchStorageIfRequired(address, slotKey)
+  context.storage.getOrDefault(address).getOrDefault(slotKey)[1]
 
 proc setStorage*(
     context: PortalEvmContextRef, address: Address, slotKey, slotValue: UInt256
 ) =
   context.storage.withValue(address, value):
-    value[][slotKey] = slotValue
+    value[][slotKey] = (value[].getOrDefault(slotKey)[0], slotValue)
   do:
-    context.storage[address] = {slotKey: slotValue}.toTable
+    context.storage[address] = {slotKey: (0.u256, slotValue)}.toTable
 
 proc getBalance*(context: PortalEvmContextRef, address: Address): UInt256 =
   context.fetchAccountIfRequired(address)
