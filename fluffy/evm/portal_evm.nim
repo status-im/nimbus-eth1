@@ -174,32 +174,37 @@ proc close(evm: PortalEvmRef) =
 proc accountExists(
     host: evmc_host_context, address: var evmc_address
 ): c99bool {.evmc_abi.} =
-  echo "accountExists called"
-  host.fromEvmc().state().accountExists(address.fromEvmc()).c99bool
+  let
+    state = host.fromEvmc().state()
+    adr = address.fromEvmc()
+  trace "evmc_host_interface.account_exists called", address = adr.to0xHex()
+
+  state.accountExists(adr).c99bool
 
 proc getStorage(
     host: evmc_host_context, address: var evmc_address, key: var evmc_bytes32
 ): evmc_bytes32 {.evmc_abi.} =
-  echo "getStorage called"
-  host
-  .fromEvmc()
-  .state()
-  .getCurrentStorage(address.fromEvmc(), UInt256.fromEvmc(key))
-  .toEvmc()
+  let
+    state = host.fromEvmc().state()
+    adr = address.fromEvmc()
+    k = UInt256.fromEvmc(key)
+  trace "evmc_host_interface.get_storage called", address = adr.to0xHex(), key = k
+
+  state.getCurrentStorage(adr, k).toEvmc()
 
 proc setStorage(
     host: evmc_host_context, address: var evmc_address, key, value: var evmc_bytes32
 ): evmc_storage_status {.evmc_abi.} =
-  echo "setStorage called"
-
-  # Logic copied from Erigon Silkworm EVM.
-  # See here: https://github.com/erigontech/silkworm/blob/7ea57b6fc2f4a990363ace3aa91941878da60631/silkworm/core/execution/evm.cpp#L350
-
   let
     state = host.fromEvmc().state()
     adr = address.fromEvmc()
     k = UInt256.fromEvmc(key)
     v = UInt256.fromEvmc(value)
+  trace "evmc_host_interface.set_storage called",
+    address = adr.to0xHex(), key = k, value = v
+
+  # Logic copied from Erigon Silkworm EVM.
+  # See here: https://github.com/erigontech/silkworm/blob/7ea57b6fc2f4a990363ace3aa91941878da60631/silkworm/core/execution/evm.cpp#L350
 
   let currentValue = state.getCurrentStorage(adr, k)
 
@@ -236,20 +241,32 @@ proc setStorage(
 proc getBalance(
     host: evmc_host_context, address: var evmc_address
 ): evmc_uint256be {.evmc_abi.} =
-  echo "getBalance called"
-  host.fromEvmc().state().getBalance(address.fromEvmc()).toEvmc()
+  let
+    state = host.fromEvmc().state()
+    adr = address.fromEvmc()
+  trace "evmc_host_interface.get_balance called", address = adr.to0xHex()
+
+  state.getBalance(adr).toEvmc()
 
 proc getCodeSize(
     host: evmc_host_context, address: var evmc_address
 ): csize_t {.evmc_abi.} =
-  echo "getCodeSize called"
-  host.fromEvmc().state().getCodeSize(address.fromEvmc()).csize_t
+  let
+    state = host.fromEvmc().state()
+    adr = address.fromEvmc()
+  trace "evmc_host_interface.get_code_size called", address = adr.to0xHex()
+
+  state.getCodeSize(adr).csize_t
 
 proc getCodeHash(
     host: evmc_host_context, address: var evmc_address
 ): evmc_bytes32 {.evmc_abi.} =
-  echo "getCodeHash called"
-  host.fromEvmc().state().getCodeHash(address.fromEvmc()).toEvmc()
+  let
+    state = host.fromEvmc().state()
+    adr = address.fromEvmc()
+  trace "evmc_host_interface.get_code_hash called", address = adr.to0xHex()
+
+  state.getCodeHash(adr).toEvmc()
 
 proc copyCode(
     host: evmc_host_context,
@@ -258,23 +275,27 @@ proc copyCode(
     buffer_data: ptr byte,
     buffer_size: csize_t,
 ): csize_t {.evmc_abi.} =
-  echo "copyCode called"
+  let
+    state = host.fromEvmc().state()
+    adr = address.fromEvmc()
+  trace "evmc_host_interface.copy_code called",
+    address = adr.to0xHex(), code_offset, buffer_size
 
-  host
-  .fromEvmc()
-  .state()
-  .copyCode(
-    address.fromEvmc(), code_offset.int, makeOpenArray(buffer_data, buffer_size.int)
-  ).csize_t
+  state.copyCode(adr, code_offset.int, makeOpenArray(buffer_data, buffer_size.int)).csize_t
 
 proc selfDestruct(
     host: evmc_host_context, address, beneficiary: var evmc_address
 ) {.evmc_abi.} =
-  echo "selfDestruct called"
+  let
+    state = host.fromEvmc().state()
+    adr = address.fromEvmc()
+    benef = beneficiary.fromEvmc()
+  trace "evmc_host_interface.copy_code called",
+    address = adr.to0xHex(), beneficiary = benef.to0xHex()
   raiseAssert("Not implemented")
 
 proc call(host: evmc_host_context, msg: var evmc_message): evmc_result {.evmc_abi.} =
-  echo "call called"
+  trace "evmc_host_interface.call called", evmc_message # can this be printed?
 
   let h = host.fromEvmc()
   h.evm.vmPtr.execute(
@@ -289,12 +310,12 @@ proc call(host: evmc_host_context, msg: var evmc_message): evmc_result {.evmc_ab
   )
 
 proc getTxContext(host: evmc_host_context): evmc_tx_context {.evmc_abi.} =
-  echo "getTxContext called"
+  trace "evmc_host_interface.get_tx_context called"
   evmc_tx_context()
   # raiseAssert("Not implemented")
 
 proc getBlockHash(host: evmc_host_context, number: int64): evmc_bytes32 {.evmc_abi.} =
-  echo "getBlockHash called"
+  trace "evmc_host_interface.get_block_hash called", number
   raiseAssert("Not implemented")
 
 proc emitLog(
@@ -305,42 +326,55 @@ proc emitLog(
     topics: ptr evmc_bytes32,
     topics_count: csize_t,
 ) {.evmc_abi.} =
-  echo "emitLog called"
-  discard # Not required
+  trace "evmc_host_interface.emit_log called", address = address.fromEvmc()
+  discard # Implementation not required for Fluffy
 
 proc accessAccount(
     host: evmc_host_context, address: var evmc_address
 ): evmc_access_status {.evmc_abi.} =
-  echo "accessAccount called"
-  let warm = host.fromEvmc().state().accessAccount(address.fromEvmc())
+  let
+    state = host.fromEvmc().state()
+    adr = address.fromEvmc()
+  trace "evmc_host_interface.access_account called", address = adr
+
+  let warm = state.accessAccount(adr)
   if warm: EVMC_ACCESS_WARM else: EVMC_ACCESS_COLD
 
 proc accessStorage(
     host: evmc_host_context, address: var evmc_address, key: var evmc_bytes32
 ): evmc_access_status {.evmc_abi.} =
-  echo "accessStorage called"
-  let warm =
-    host.fromEvmc().state().accessStorage(address.fromEvmc(), UInt256.fromEvmc(key))
+  let
+    state = host.fromEvmc().state()
+    adr = address.fromEvmc()
+    k = UInt256.fromEvmc(key)
+  trace "evmc_host_interface.access_account called", address = adr, key = k
+
+  let warm = state.accessStorage(adr, k)
   if warm: EVMC_ACCESS_WARM else: EVMC_ACCESS_COLD
 
 proc getTransientStorage(
     host: evmc_host_context, address: var evmc_address, key: var evmc_bytes32
 ): evmc_bytes32 {.evmc_abi.} =
-  echo "getTransientStorage called"
+  let
+    state = host.fromEvmc().state()
+    adr = address.fromEvmc()
+    k = UInt256.fromEvmc(key)
+  trace "evmc_host_interface.get_transient_storage called", address = adr, key = k
 
-  host
-  .fromEvmc()
-  .state()
-  .getTransientStorage(address.fromEvmc(), UInt256.fromEvmc(key))
-  .toEvmc()
+  state.getTransientStorage(adr, k).toEvmc()
 
 proc setTransientStorage(
     host: evmc_host_context, address: var evmc_address, key, value: var evmc_bytes32
 ) {.evmc_abi.} =
-  echo "setTransientStorage called"
-  host.fromEvmc().state().setTransientStorage(
-    address.fromEvmc(), UInt256.fromEvmc(key), UInt256.fromEvmc(value)
-  )
+  let
+    state = host.fromEvmc().state()
+    adr = address.fromEvmc()
+    k = UInt256.fromEvmc(key)
+    v = UInt256.fromEvmc(value)
+  trace "evmc_host_interface.get_transient_storage called",
+    address = adr, key = k, value = v
+
+  state.setTransientStorage(adr, k, v)
 
 func hostInterface(): evmc_host_interface =
   evmc_host_interface(

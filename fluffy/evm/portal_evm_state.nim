@@ -9,20 +9,15 @@ import
   std/[tables, sets],
   chronos,
   chronicles,
-  # stew/byteutils,
-  # stew/ptrops,
   stint,
   results,
   evmc/evmc,
   eth/common/[hashes, accounts, addresses, headers],
-  # ../../execution_chain/evm/evmc_helpers,
   ../network/state/state_endpoints
 
 export evmc, addresses, stint, headers, state_network
 
 {.push raises: [].}
-
-{.pragma: evmc_abi, cdecl, gcsafe, raises: [].}
 
 logScope:
   topics = "portal_evm"
