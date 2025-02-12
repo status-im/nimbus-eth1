@@ -1,0 +1,184 @@
+# Fluffy
+# Copyright (c) 2025 Status Research & Development GmbH
+# Licensed and distributed under either of
+#   * MIT license (license terms in the root directory or at https://opensource.org/licenses/MIT).
+#   * Apache v2 license (license terms in the root directory or at https://www.apache.org/licenses/LICENSE-2.0).
+# at your option. This file may not be copied, modified, or distributed except according to those terms.
+
+import
+  std/[tables, sets],
+  chronos,
+  chronicles,
+  # stew/byteutils,
+  # stew/ptrops,
+  stint,
+  results,
+  evmc/evmc,
+  eth/common/[hashes, accounts, addresses, headers],
+  # ../../execution_chain/evm/evmc_helpers,
+  ../network/state/state_endpoints
+
+export evmc, addresses, stint, headers, state_network
+
+{.push raises: [].}
+
+{.pragma: evmc_abi, cdecl, gcsafe, raises: [].}
+
+logScope:
+  topics = "portal_evm"
+
+type PortalEvmStateRef* = ref object
+  header: Header
+  accounts: Table[Address, Account]
+  code: Table[Address, seq[byte]]
+  storage: Table[Address, Table[UInt256, (UInt256, UInt256)]]
+    # maps address -> slot key -> (original slot value, updated slot value)
+  transientStorage: Table[Address, Table[UInt256, UInt256]]
+  stateNetwork: Opt[StateNetwork] # when none network lookups are disabled
+  fetchedAccounts: HashSet[Address]
+  fetchedCode: HashSet[Address]
+  fetchedStorage: Table[Address, HashSet[UInt256]]
+
+func init*(
+    T: type PortalEvmStateRef, header: Header, stateNetwork = Opt.none(StateNetwork)
+): PortalEvmStateRef =
+  PortalEvmStateRef(header: header, stateNetwork: stateNetwork)
+
+template toEvmc*(state: PortalEvmStateRef): evmc_host_context =
+  evmc_host_context(state.addr)
+
+template fromEvmc(state: evmc_host_context): PortalEvmStateRef =
+  cast[ptr PortalEvmStateRef](context)[]
+
+proc fetchAccountIfRequired(state: PortalEvmStateRef, address: Address) =
+  let sn = state.stateNetwork.valueOr:
+    return # state lookups over portal network are disabled
+
+  if address in state.fetchedAccounts:
+    return # already fetched account
+
+  try:
+    let account = waitFor(sn.getAccount(state.header.stateRoot, address)).valueOr:
+      raiseAssert("account lookup failed") # how should we handle this?
+    state.accounts[address] = account
+    state.fetchedAccounts.incl(address)
+  except CancelledError:
+    trace "stateNetwork.getAccount canceled"
+
+proc fetchCodeIfRequired(state: PortalEvmStateRef, address: Address) =
+  let sn = state.stateNetwork.valueOr:
+    return # state lookups over portal network are disabled
+
+  if address in state.fetchedCode:
+    return # already fetched code
+
+  try:
+    let code = waitFor(sn.getCodeByStateRoot(state.header.stateRoot, address)).valueOr:
+      raiseAssert("code lookup failed") # how should we handle this?
+    state.code[address] = code.asSeq()
+    state.fetchedCode.incl(address)
+  except CancelledError:
+    trace "stateNetwork.getCodeByStateRoot canceled"
+
+proc fetchStorageIfRequired(
+    state: PortalEvmStateRef, address: Address, slotKey: UInt256
+) =
+  let sn = state.stateNetwork.valueOr:
+    return # state lookups over portal network are disabled
+
+  if slotKey in state.fetchedStorage.getOrDefault(address):
+    return # already fetched storage
+
+  try:
+    let slotValue = waitFor(
+      sn.getStorageAtByStateRoot(state.header.stateRoot, address, slotKey)
+    ).valueOr:
+      raiseAssert("storage lookup failed") # how should we handle this?
+
+    state.storage.withValue(address, value):
+      value[][slotKey] = (slotValue, slotValue)
+    do:
+      state.storage[address] = {slotKey: (slotValue, slotValue)}.toTable
+
+    state.fetchedStorage.withValue(address, value):
+      value[].incl(slotKey)
+    do:
+      state.fetchedStorage[address] = toHashSet([slotKey])
+  except CancelledError:
+    trace "stateNetwork.getStorageAtByStateRoot canceled"
+
+proc accountExists*(state: PortalEvmStateRef, address: Address): bool =
+  state.fetchAccountIfRequired(address)
+  state.accounts.contains(address)
+
+proc getOriginalStorage*(
+    state: PortalEvmStateRef, address: Address, slotKey: UInt256
+): UInt256 =
+  state.fetchStorageIfRequired(address, slotKey)
+  state.storage.getOrDefault(address).getOrDefault(slotKey)[0]
+
+proc getCurrentStorage*(
+    state: PortalEvmStateRef, address: Address, slotKey: UInt256
+): UInt256 =
+  state.fetchStorageIfRequired(address, slotKey)
+  state.storage.getOrDefault(address).getOrDefault(slotKey)[1]
+
+proc setStorage*(
+    state: PortalEvmStateRef, address: Address, slotKey, slotValue: UInt256
+) =
+  state.storage.withValue(address, value):
+    value[][slotKey] = (value[].getOrDefault(slotKey)[0], slotValue)
+  do:
+    state.storage[address] = {slotKey: (0.u256, slotValue)}.toTable
+
+proc getBalance*(state: PortalEvmStateRef, address: Address): UInt256 =
+  state.fetchAccountIfRequired(address)
+  state.accounts.getOrDefault(address).balance
+
+proc getCode*(state: PortalEvmStateRef, address: Address): seq[byte] =
+  state.fetchCodeIfRequired(address)
+  state.code.getOrDefault(address)
+
+proc getCodeSize*(state: PortalEvmStateRef, address: Address): int =
+  state.getCode(address).len()
+
+proc getCodeHash*(state: PortalEvmStateRef, address: Address): Hash32 =
+  state.getCode(address).keccak256()
+
+proc copyCode*(
+    state: PortalEvmStateRef,
+    address: Address,
+    codeOffset: int,
+    buffer: var openArray[byte],
+): int =
+  let code = state.getCode(address)
+  var i = 0
+  while (i + codeOffset) < code.len() and i < buffer.len():
+    buffer[i] = code[i + codeOffset]
+    inc i
+  i
+
+proc accessAccount*(state: PortalEvmStateRef, address: Address): bool =
+  let warm = state.fetchedAccounts.contains(address)
+  state.fetchAccountIfRequired(address)
+  warm
+
+proc accessStorage*(
+    state: PortalEvmStateRef, address: Address, slotKey: UInt256
+): bool =
+  let warm = state.fetchedStorage.getOrDefault(address).contains(slotKey)
+  state.fetchStorageIfRequired(address, slotKey)
+  warm
+
+proc getTransientStorage*(
+    state: PortalEvmStateRef, address: Address, slotKey: UInt256
+): UInt256 =
+  state.transientStorage.getOrDefault(address).getOrDefault(slotKey)
+
+proc setTransientStorage*(
+    state: PortalEvmStateRef, address: Address, slotKey, slotValue: UInt256
+) =
+  state.transientStorage.withValue(address, value):
+    value[][slotKey] = slotValue
+  do:
+    state.transientStorage[address] = {slotKey: slotValue}.toTable
