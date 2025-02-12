@@ -16,7 +16,7 @@ import
   eth/common,
   results,
   unittest2,
-  ../nimbus/db/aristo/aristo_desc,
+  ../execution_chain/db/aristo/aristo_desc,
   ./replay/pp,
   ./test_aristo/test_blobify,
   ./test_aristo/test_merge_proof,

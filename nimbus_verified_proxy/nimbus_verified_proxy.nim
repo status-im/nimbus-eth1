@@ -1,5 +1,5 @@
 # nimbus_verified_proxy
-# Copyright (c) 2022-2024 Status Research & Development GmbH
+# Copyright (c) 2022-2025 Status Research & Development GmbH
 # Licensed and distributed under either of
 #   * MIT license (license terms in the root directory or at https://opensource.org/licenses/MIT).
 #   * Apache v2 license (license terms in the root directory or at https://www.apache.org/licenses/LICENSE-2.0).
@@ -21,8 +21,8 @@ import
   beacon_chain/spec/beaconstate,
   beacon_chain/spec/datatypes/[phase0, altair, bellatrix],
   beacon_chain/[light_client, nimbus_binary_common, version],
-  ../nimbus/rpc/[cors, rpc_utils],
-  ../nimbus/beacon/payload_conv,
+  ../execution_chain/rpc/[cors, rpc_utils],
+  ../execution_chain/beacon/payload_conv,
   ./rpc/rpc_eth_api,
   ./nimbus_verified_proxy_conf,
   ./block_cache

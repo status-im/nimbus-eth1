@@ -1,5 +1,5 @@
 # Nimbus
-# Copyright (c) 2023-2024 Status Research & Development GmbH
+# Copyright (c) 2023-2025 Status Research & Development GmbH
 # Licensed under either of
 #  * Apache License, version 2.0, ([LICENSE-APACHE](LICENSE-APACHE) or
 #    http://www.apache.org/licenses/LICENSE-2.0)
@@ -12,8 +12,8 @@ import
   std/[algorithm, os, sequtils],
   eth/common,
   results,
-  ../../nimbus/utils/prettify,
-  ../../nimbus/db/aristo/aristo_profile,
+  ../../execution_chain/utils/prettify,
+  ../../execution_chain/db/aristo/aristo_profile,
   ../replay/pp
 
 # ------------------------------------------------------------------------------

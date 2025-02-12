@@ -1,5 +1,5 @@
 # Nimbus
-# Copyright (c) 2022-2024 Status Research & Development GmbH
+# Copyright (c) 2022-2025 Status Research & Development GmbH
 # Licensed under either of
 #  * Apache License, version 2.0, ([LICENSE-APACHE](LICENSE-APACHE) or
 #    http://www.apache.org/licenses/LICENSE-2.0)
@@ -15,7 +15,7 @@ import
   std/[tables, typetraits],
   eth/common,
   stew/byteutils,
-  ../../nimbus/common/chain_config,
+  ../../execution_chain/common/chain_config,
   ./pp_light
 
 export

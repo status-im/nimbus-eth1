@@ -1,5 +1,5 @@
 # Nimbus
-# Copyright (c) 2023-2024 Status Research & Development GmbH
+# Copyright (c) 2023-2025 Status Research & Development GmbH
 # Licensed under either of
 #  * Apache License, version 2.0, ([LICENSE-APACHE](LICENSE-APACHE) or
 #    http://www.apache.org/licenses/LICENSE-2.0)
@@ -14,11 +14,11 @@ import
   ./blobs,
   ../types,
   ../tx_sender,
-  ../../../../nimbus/constants,
-  ../../../../nimbus/utils/utils,
-  ../../../../nimbus/common as nimbus_common,
-  ../../../../nimbus/beacon/web3_eth_conv,
-  ../../../../nimbus/beacon/payload_conv,
+  ../../../../execution_chain/constants,
+  ../../../../execution_chain/utils/utils,
+  ../../../../execution_chain/common as nimbus_common,
+  ../../../../execution_chain/beacon/web3_eth_conv,
+  ../../../../execution_chain/beacon/payload_conv,
   web3/execution_types
 
 type

@@ -1,5 +1,5 @@
 # Nimbus
-# Copyright (c) 2021-2024 Status Research & Development GmbH
+# Copyright (c) 2021-2025 Status Research & Development GmbH
 # Licensed under either of
 #  * Apache License, version 2.0, ([LICENSE-APACHE](LICENSE-APACHE))
 #  * MIT license ([LICENSE-MIT](LICENSE-MIT))
@@ -10,12 +10,12 @@
 import
   std/[os, json, times],
   eth/p2p,
-  ../../../nimbus/sync/protocol,
-  ../../../nimbus/config,
-  ../../../nimbus/graphql/ethapi,
+  ../../../execution_chain/sync/protocol,
+  ../../../execution_chain/config,
+  ../../../execution_chain/graphql/ethapi,
   ../../../tests/test_helpers,
-  ../../../nimbus/core/[tx_pool, block_import],
-  ../../../nimbus/common,
+  ../../../execution_chain/core/[tx_pool, block_import],
+  ../../../execution_chain/common,
   graphql, ../sim_utils
 
 const

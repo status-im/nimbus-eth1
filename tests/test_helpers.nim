@@ -9,9 +9,9 @@ import
   std/[os, macros, json, strformat, strutils, tables],
   stew/byteutils, net, eth/[common/keys, p2p], unittest2,
   testutils/markdown_reports,
-  ../nimbus/[constants, config, transaction, errors],
-  ../nimbus/db/ledger,
-  ../nimbus/common/[context, common]
+  ../execution_chain/[constants, config, transaction, errors],
+  ../execution_chain/db/ledger,
+  ../execution_chain/common/[context, common]
 
 func revTable(list: array[EVMFork, string]): Table[string, EVMFork] =
   for k, v in list:

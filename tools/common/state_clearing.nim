@@ -1,5 +1,5 @@
 # Nimbus
-# Copyright (c) 2023-2024 Status Research & Development GmbH
+# Copyright (c) 2023-2025 Status Research & Development GmbH
 # Licensed under either of
 #  * Apache License, version 2.0, ([LICENSE-APACHE](LICENSE-APACHE) or
 #    http://www.apache.org/licenses/LICENSE-2.0)
@@ -9,9 +9,9 @@
 # according to those terms.
 
 import
-  ../../nimbus/common/common,
-  ../../nimbus/[evm/state, evm/types],
-  ../../nimbus/db/ledger
+  ../../execution_chain/common/common,
+  ../../execution_chain/[evm/state, evm/types],
+  ../../execution_chain/db/ledger
 
 proc coinbaseStateClearing*(vmState: BaseVMState,
                             miner: Address,

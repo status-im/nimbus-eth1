@@ -1,5 +1,5 @@
 # Nimbus
-# Copyright (c) 2023-2024 Status Research & Development GmbH
+# Copyright (c) 2023-2025 Status Research & Development GmbH
 # Licensed under either of
 #  * Apache License, version 2.0, ([LICENSE-APACHE](LICENSE-APACHE) or
 #    http://www.apache.org/licenses/LICENSE-2.0)
@@ -16,7 +16,7 @@ import
   eth/rlp,
   eth/common/eth_types_rlp, chronos,
   json_rpc/[rpcclient, errors, jsonmarshal],
-  ../../../nimbus/beacon/web3_eth_conv,
+  ../../../execution_chain/beacon/web3_eth_conv,
   ./types
 
 import
@@ -510,7 +510,7 @@ proc getReceipt*(client: RpcClient, txHash: Hash32): Result[ReceiptObject, strin
     if res.isNil:
       return err("failed to get receipt: " & txHash.data.toHex)
     return ok(res)
-    
+
 proc txByHash*(client: RpcClient, txHash: Hash32): Result[RPCTx, string] =
   wrapTry:
     let res = waitFor client.eth_getTransactionByHash(txHash)

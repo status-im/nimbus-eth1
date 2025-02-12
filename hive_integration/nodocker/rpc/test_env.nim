@@ -1,5 +1,5 @@
 # Nimbus
-# Copyright (c) 2021-2024 Status Research & Development GmbH
+# Copyright (c) 2021-2025 Status Research & Development GmbH
 # Licensed under either of
 #  * Apache License, version 2.0, ([LICENSE-APACHE](LICENSE-APACHE))
 #  * MIT license ([LICENSE-MIT](LICENSE-MIT))
@@ -12,13 +12,13 @@ import
   eth/p2p as ethp2p,
   results,
   chronos, json_rpc/[rpcserver, rpcclient],
-  ../../../nimbus/sync/protocol,
-  ../../../nimbus/common,
-  ../../../nimbus/config,
-  ../../../nimbus/rpc,
-  ../../../nimbus/rpc/server_api,
-  ../../../nimbus/utils/utils,
-  ../../../nimbus/core/[chain, tx_pool],
+  ../../../execution_chain/sync/protocol,
+  ../../../execution_chain/common,
+  ../../../execution_chain/config,
+  ../../../execution_chain/rpc,
+  ../../../execution_chain/rpc/server_api,
+  ../../../execution_chain/utils/utils,
+  ../../../execution_chain/core/[chain, tx_pool],
   ../../../tests/test_helpers,
   ./vault
 

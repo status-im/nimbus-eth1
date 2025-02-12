@@ -1,5 +1,5 @@
 # Nimbus
-# Copyright (c) 2024 Status Research & Development GmbH
+# Copyright (c) 2024-2025 Status Research & Development GmbH
 # Licensed and distributed under either of
 #   * MIT license (license terms in the root directory or at https://opensource.org/licenses/MIT).
 #   * Apache v2 license (license terms in the root directory or at https://www.apache.org/licenses/LICENSE-2.0).
@@ -13,9 +13,9 @@ import
   nimcrypto/[keccak, hash],
   eth/common/[keys, eth_types_rlp],
   eth/[rlp, trie/hexary_proof_verification],
-  ../nimbus/db/[ledger, core_db],
-  ../nimbus/common/chain_config,
-  ../nimbus/rpc/server_api
+  ../execution_chain/db/[ledger, core_db],
+  ../execution_chain/common/chain_config,
+  ../execution_chain/rpc/server_api
 
 type
   Hash32 = eth_types.Hash32
@@ -129,9 +129,9 @@ proc getProofJsonMain*() =
         let
           accounts = getGenesisAlloc("tests" / "customgenesis" / file)
           coreDb = newCoreDbRef(DefaultDbMemory)
-          ledger = LedgerRef.init(coreDb)
+          ledger = LedgerRef.init(coreDb.baseTxFrame())
           stateRootHash = setupLedger(accounts, ledger)
-          accountDb = LedgerRef.init(coreDb)
+          accountDb = LedgerRef.init(coreDb.baseTxFrame())
 
         checkProofsForExistingLeafs(accounts, accountDb, stateRootHash)
 
@@ -141,9 +141,9 @@ proc getProofJsonMain*() =
         let
           accounts = getGenesisAlloc("tests" / "customgenesis" / file)
           coreDb = newCoreDbRef(DefaultDbMemory)
-          ledger = LedgerRef.init(coreDb)
+          ledger = LedgerRef.init(coreDb.baseTxFrame())
           stateRootHash = setupLedger(accounts, ledger)
-          accountDb = LedgerRef.init(coreDb)
+          accountDb = LedgerRef.init(coreDb.baseTxFrame())
 
         checkProofsForMissingLeafs(accounts, accountDb, stateRootHash)
 

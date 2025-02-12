@@ -1,5 +1,5 @@
 # Nimbus
-# Copyright (c) 2019-2024 Status Research & Development GmbH
+# Copyright (c) 2019-2025 Status Research & Development GmbH
 # Licensed under either of
 #  * Apache License, version 2.0, ([LICENSE-APACHE](LICENSE-APACHE) or
 #    http://www.apache.org/licenses/LICENSE-2.0)
@@ -10,9 +10,9 @@
 
 import
   macro_assembler, unittest2,
-  stew/byteutils, ../nimbus/common/common,
-  ../nimbus/[evm/state, constants],
-  ../nimbus/db/ledger
+  stew/byteutils, ../execution_chain/common/common,
+  ../execution_chain/[evm/state, constants],
+  ../execution_chain/db/ledger
 
 proc opEnvMain*() =
   suite "Environmental Information Opcodes":

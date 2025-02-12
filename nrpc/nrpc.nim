@@ -10,10 +10,10 @@
 import
   std/sequtils,
   chronicles,
-  ../nimbus/constants,
-  ../nimbus/core/chain,
+  ../execution_chain/constants,
+  ../execution_chain/core/chain,
   ./config,
-  ../nimbus/utils/era_helpers,
+  ../execution_chain/utils/era_helpers,
   kzg4844/kzg,
   web3,
   web3/[engine_api, primitives, conversions],

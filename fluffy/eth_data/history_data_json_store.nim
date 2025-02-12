@@ -1,5 +1,5 @@
 # Nimbus - Portal Network
-# Copyright (c) 2022-2024 Status Research & Development GmbH
+# Copyright (c) 2022-2025 Status Research & Development GmbH
 # Licensed and distributed under either of
 #   * MIT license (license terms in the root directory or at https://opensource.org/licenses/MIT).
 #   * Apache v2 license (license terms in the root directory or at https://www.apache.org/licenses/LICENSE-2.0).
@@ -14,7 +14,7 @@ import
   stew/[byteutils, io2],
   chronicles,
   eth/common/[hashes, blocks, receipts, headers_rlp],
-  ../../nimbus/common/[chain_config, genesis],
+  ../../execution_chain/common/[chain_config, genesis],
   ../network/history/[history_content, validation/historical_hashes_accumulator]
 
 from eth/common/eth_types_rlp import rlpHash

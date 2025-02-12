@@ -1,5 +1,5 @@
 # Nimbus
-# Copyright (c) 2022-2024 Status Research & Development GmbH
+# Copyright (c) 2022-2025 Status Research & Development GmbH
 # Licensed under either of
 #  * Apache License, version 2.0, ([LICENSE-APACHE](LICENSE-APACHE) or
 #    http://www.apache.org/licenses/LICENSE-2.0)
@@ -178,7 +178,7 @@ const
 
 # force the compiler to instantiate T8NConf.load
 # rather than have to export parseCmdArg
-# because it will use wrong parseCmdArg from nimbus/config.nim
+# because it will use wrong parseCmdArg from execution_chain/config.nim
 # when evmc_enabled
 proc initT8NConf(cmdLine: openArray[string]): T8NConf =
   {.push warning[ProveInit]: off.}
