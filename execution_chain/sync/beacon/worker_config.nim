@@ -14,7 +14,7 @@ import
   pkg/chronos
 
 const
-  enableTicker* = false
+  enableTicker* = false or true
     ## Log regular status updates similar to metrics. Great for debugging.
 
   runsThisManyPeersOnly* = 8
@@ -31,7 +31,7 @@ const
     ##   This setting has priority over the `maxPeers` setting of the
     ##   `BeaconSyncRef.init()` initaliser.
 
-  minPeersImportWhileFetching* = 3
+  minPeersImportWhileFetching* = 99
     ## With concurrently running blocks import/execution and fetching blocks
     ## over the network, there is a significant chance to loose peers rather
     ## than downloading in a quasi-parallel task.
@@ -137,7 +137,7 @@ const
     ## With an average less than 90KiB/block (on `mainnet` at block ~#22m),
     ## one arrives at a total of at most 35MiB per block batch.
 
-  blocksStagedHwmDefault* = 4 * nFetchBodiesBatch
+  blocksStagedHwmDefault* = 8 * nFetchBodiesBatch
     ## This is an initialiser value for `blocksStagedHwm`.
     ##
     ## If the staged block queue exceeds this many number of block objects for
