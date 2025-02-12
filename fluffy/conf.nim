@@ -372,6 +372,15 @@ type
       name: "disable-state-root-validation"
     .}: bool
 
+    disableBanNodes* {.
+      hidden,
+      desc:
+        "Disable node banning functionality for both discv5 and portal sub-protocols",
+      defaultValue: defaultDisableBanNodes,
+      defaultValueDesc: $defaultDisableBanNodes,
+      name: "debug-disable-ban-nodes"
+    .}: bool
+
     case cmd* {.command, defaultValue: noCommand.}: PortalCmd
     of noCommand:
       discard
