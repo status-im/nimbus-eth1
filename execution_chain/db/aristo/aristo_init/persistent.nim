@@ -30,37 +30,8 @@ export
   AristoDbRef,
   RdbBackendRef,
   RdbWriteEventCb,
-  memory_only
-
-# ------------------------------------------------------------------------------
-# Private helpers
-# ------------------------------------------------------------------------------
-
-proc newAristoRdbDbRef(
-    basePath: string;
-    opts: DbOptions;
-    dbOpts: DbOptionsRef;
-    cfOpts: ColFamilyOptionsRef;
-    guestCFs: openArray[ColFamilyDescriptor];
-      ): Result[(AristoDbRef, seq[ColFamilyReadWrite]), AristoError]=
-  let
-    (be, oCfs) = ? rocksDbBackend(basePath, opts, dbOpts, cfOpts, guestCFs)
-    vTop = block:
-      let rc = be.getTuvFn()
-      if rc.isErr:
-        be.closeFn(eradicate = false)
-        return err(rc.error)
-      rc.value
-    db = (AristoDbRef(
-      txRef: AristoTxRef(layer: LayerRef(vTop: vTop, cTop: vTop)),
-      backend: be,
-      accLeaves: LruCache[Hash32, VertexRef].init(ACC_LRU_SIZE),
-      stoLeaves: LruCache[Hash32, VertexRef].init(ACC_LRU_SIZE),
-    ), oCfs)
-
-  db[0].txRef.db = db[0] # TODO evaluate if this cyclic ref is worth the convenience
-
-  ok(db)
+  memory_only,
+  aristo_desc
 
 # ------------------------------------------------------------------------------
 # Public database constuctors, destructor
@@ -69,44 +40,27 @@ proc newAristoRdbDbRef(
 proc init*(
     T: type AristoDbRef;
     B: type RdbBackendRef;
-    basePath: string;
     opts: DbOptions;
-    dbOpts: DbOptionsRef;
-    cfOpts: ColFamilyOptionsRef;
-    guestCFs: openArray[ColFamilyDescriptor];
-      ): Result[(T, seq[ColFamilyReadWrite]), AristoError] =
-  ## Generic constructor, `basePath` argument is ignored for memory backend
-  ## databases (which also unconditionally succeed initialising.)
-  ##
-  basePath.newAristoRdbDbRef opts, dbOpts, cfOpts, guestCFs
+    baseDb: RocksDbInstanceRef;
+      ): Result[T, AristoError] =
+  let
+    be = rocksDbBackend(opts, baseDb)
+    vTop = block:
+      let rc = be.getTuvFn()
+      if rc.isErr:
+        be.closeFn(eradicate = false)
+        return err(rc.error)
+      rc.value
+    db = AristoDbRef(
+      txRef: AristoTxRef(layer: LayerRef(vTop: vTop, cTop: vTop)),
+      backend: be,
+      accLeaves: LruCache[Hash32, VertexRef].init(ACC_LRU_SIZE),
+      stoLeaves: LruCache[Hash32, VertexRef].init(ACC_LRU_SIZE),
+    )
 
-proc activateWrTrigger*(
-    db: AristoDbRef;
-    hdl: RdbWriteEventCb;
-      ): Result[void,AristoError] =
-  ## This function allows to link an application to the `Aristo` storage event
-  ## for the `RocksDb` backend via call back argument function `hdl`.
-  ##
-  ## The argument handler `hdl` of type
-  ## ::
-  ##    proc(session: WriteBatchRef): bool
-  ##
-  ## will be invoked when a write batch for the `Aristo` database is opened in
-  ## order to save current changes to the backend. The `session` argument passed
-  ## to the handler in conjunction with a list of `ColFamilyReadWrite` items
-  ## (as returned from `reinit()`) might be used to store additional items
-  ## to the database with the same write batch.
-  ##
-  ## If the handler returns `true` upon return from running, the write batch
-  ## will proceed saving. Otherwise it is aborted and no data are saved at all.
-  ##
-  case db.backend.kind:
-  of BackendRocksDB:
-    db.backend.rocksDbSetEventTrigger hdl
-  of BackendRdbHosting:
-    err(RdbBeWrTriggerActiveAlready)
-  else:
-    err(RdbBeTypeUnsupported)
+  db.txRef.db = db # TODO evaluate if this cyclic ref is worth the convenience
+
+  ok(db)
 
 # ------------------------------------------------------------------------------
 # End

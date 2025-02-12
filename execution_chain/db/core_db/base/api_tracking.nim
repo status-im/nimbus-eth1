@@ -53,7 +53,7 @@ type
     BaseLevelFn         = "level"
     BasePushCaptureFn   = "pushCapture"
     BaseNewTxFn         = "txFrameBegin"
-    BasePersistentFn    = "persistent"
+    BasePersistFn       = "persist"
     BaseStateBlockNumberFn = "stateBlockNumber"
     BaseVerifyFn        = "verify"
 

@@ -15,7 +15,7 @@
 
 import
   results,
-  ".."/[aristo_desc, aristo_layers]
+  ./[aristo_desc, aristo_layers]
 
 # ------------------------------------------------------------------------------
 # Public functions
@@ -54,15 +54,13 @@ proc rollback*(
     tx: AristoTxRef;                  # Top transaction on database
       ): Result[void,AristoError] =
   ## Given a *top level* handle, this function discards all database operations
-  ## performed for this transactio. The previous transaction is returned if
-  ## there was any.
+  ## performed for this transaction.
   # TODO Everyone using this txref should repoint their parent field
 
   let vTop = tx.layer[].cTop
   tx.layer[] = Layer(vTop: vTop, cTop: vTop)
 
   ok()
-
 
 proc commit*(
     tx: AristoTxRef;                  # Top transaction on database
@@ -76,61 +74,63 @@ proc commit*(
   tx.layer[].cTop = tx.layer[].vTop
 
   mergeAndReset(tx.parent.layer[], tx.layer[])
+
   ok()
 
-
-proc collapse*(
-    tx: AristoTxRef;                  # Top transaction on database
-    commit: bool;                     # Commit if `true`, otherwise roll back
-      ): Result[void,AristoError] =
-  ## Iterated application of `commit()` or `rollback()` performing the
-  ## something similar to
-  ## ::
-  ##   while true:
-  ##     discard tx.commit() # ditto for rollback()
-  ##     if db.txFrameTop.isErr: break
-  ##     tx = db.txFrameTop.value
+proc txFramePersist*(
+    db: AristoDbRef;                  # Database
+    batch: PutHdlRef;
+    nxtSid = 0u64;                    # Next state ID (aka block number)
+      ) =
+  ## Persistently store data onto backend database. If the system is running
+  ## without a database backend, the function returns immediately with an
+  ## error.
   ##
-  # let db = ? tx.getDbDescFromTopTx()
+  ## The function merges all data staged in `txFrame` and merges it onto the
+  ## backend database. `txFrame` becomes the new `baseTxFrame`.
+  ##
+  ## Any parent frames of `txFrame` become invalid after this operation.
+  ##
+  ## If the argument `nxtSid` is passed non-zero, it will be the ID for the
+  ## next recovery journal record. If non-zero, this ID must be greater than
+  ## all previous IDs (e.g. block number when stowing after block execution.)
+  ##
+  let be = db.backend
+  doAssert not be.isNil, "Persisting to backend requires ... a backend!"
 
-  # db.top.txUid = 0
-  # db.stack.setLen(0)
-  # db.txRef = AristoTxRef(nil)
-  ok()
+  let lSst = SavedState(
+    key:  emptyRoot,                       # placeholder for more
+    serial: nxtSid)
 
-# ------------------------------------------------------------------------------
-# Public iterators
-# ------------------------------------------------------------------------------
+  # Store structural single trie entries
+  for rvid, vtx in db.txRef.layer.sTab:
+    db.txRef.layer.kMap.withValue(rvid, key) do:
+      be.putVtxFn(batch, rvid, vtx, key[])
+    do:
+      be.putVtxFn(batch, rvid, vtx, default(HashKey))
 
-iterator walk*(tx: AristoTxRef): (int,AristoTxRef,LayerRef,AristoError) =
-  ## Walk down the transaction stack chain.
-  discard
-  #let db = tx.db
-  # var tx = tx
+  be.putTuvFn(batch, db.txRef.layer.vTop)
+  be.putLstFn(batch, lSst)
 
-  # block body:
-  #   # Start at top layer if tx refers to that
-  #   if tx.level == db.stack.len:
-  #     if tx.txUid != db.top.txUid:
-  #       yield (-1,tx,db.top,TxStackGarbled)
-  #       break body
+  # TODO above, we only prepare the changes to the database but don't actually
+  #      write them to disk - the code below that updates the frame should
+  #      really run after things have been written (to maintain sync betweeen
+  #      in-memory and on-disk state)
 
-  #     # Yield the top level
-  #     yield (0,tx,db.top,AristoError(0))
+  # Copy back updated payloads
+  for accPath, vtx in db.txRef.layer.accLeaves:
+    db.accLeaves.put(accPath, vtx)
 
-  #   # Walk down the transaction stack
-  #   for level in (tx.level-1).countdown(1):
-  #     tx = tx.parent
-  #     if tx.isNil or tx.level != level:
-  #       yield (-1,tx,LayerRef(nil),TxStackGarbled)
-  #       break body
+  for mixPath, vtx in db.txRef.layer.stoLeaves:
+    db.stoLeaves.put(mixPath, vtx)
 
-  #     var layer = db.stack[level]
-  #     if tx.txUid != layer.txUid:
-  #       yield (-1,tx,layer,TxStackGarbled)
-  #       break body
+  # Done with txRef, all saved to backend
+  db.txRef.layer.cTop = db.txRef.layer.vTop
+  db.txRef.layer.sTab.clear()
+  db.txRef.layer.kMap.clear()
+  db.txRef.layer.accLeaves.clear()
+  db.txRef.layer.stoLeaves.clear()
 
-  #     yield (db.stack.len-level,tx,layer,AristoError(0))
 
 # ------------------------------------------------------------------------------
 # End

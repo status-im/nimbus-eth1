@@ -21,7 +21,7 @@ import
   ../execution_chain/core/chain,
   ./replay/pp,
   ./test_coredb/[
-    coredb_test_xx, test_chainsync, test_coredb_helpers, test_helpers]
+    coredb_test_xx, test_chainsync, test_helpers]
 
 const
   # If `true`, this compile time option set up `unittest2` for manual parsing
@@ -152,17 +152,16 @@ proc setErrorLevel {.used.} =
 proc initRunnerDB(
     path: string;
     specs: CaptureSpecs;
-    dbType: CdbTypeEx;
+    dbType: CoreDbType;
     pruneHistory: bool;
      ): CommonRef =
   let coreDB =
     # Resolve for static `dbType`
     case dbType:
-    of CdbAristoMemory: AristoDbMemory.newCoreDbRef()
-    of CdbAristoRocks: AristoDbRocks.newCoreDbRef(path, DbOptions.init())
-    of CdbAristoDualRocks: newCdbAriAristoDualRocks(path, DbOptions.init())
-    of CdbAristoVoid: AristoDbVoid.newCoreDbRef()
-    of CdbOoops: raiseAssert "Ooops"
+    of AristoDbMemory: AristoDbMemory.newCoreDbRef()
+    of AristoDbRocks: AristoDbRocks.newCoreDbRef(path, DbOptions.init())
+    of AristoDbVoid: AristoDbVoid.newCoreDbRef()
+    else: raiseAssert $dbType
 
   when false: # or true:
     setDebugLevel()
@@ -198,7 +197,7 @@ proc initRunnerDB(
 proc chainSyncRunner(
     noisy = true;
     capture = memorySampleDefault;
-    dbType =  CdbTypeEx(0);
+    dbType =  CoreDbType(0);
     pruneHistory = false;
     profilingOk = false;
     finalDiskCleanUpOk = true;
@@ -220,14 +219,14 @@ proc chainSyncRunner(
 
     dbType = block:
       # Decreasing priority: dbType, capture.dbType, dbTypeDefault
-      var effDbType = dbTypeDefault.to(CdbTypeEx)
-      if dbType != CdbTypeEx(0):
+      var effDbType = dbTypeDefault
+      if dbType != CoreDbType(0):
         effDbType = dbType
       elif capture.dbType != CoreDbType(0):
-        effDbType = capture.dbType.to(CdbTypeEx)
+        effDbType = capture.dbType
       effDbType
 
-    persistent = dbType in CdbTypeExPersistent
+    persistent = dbType in CoreDbPersistentTypes
 
   defer:
     if persistent: baseDir.flushDbDir
@@ -255,7 +254,7 @@ proc chainSyncRunner(
 proc persistentSyncPreLoadAndResumeRunner(
     noisy = true;
     capture = persistentSampleDefault;
-    dbType = CdbTypeEx(0);
+    dbType = CoreDbType(0);
     profilingOk = false;
     pruneHistory = false;
     finalDiskCleanUpOk = true;
@@ -271,14 +270,14 @@ proc persistentSyncPreLoadAndResumeRunner(
 
     dbType = block:
       # Decreasing priority: dbType, capture.dbType, dbTypeDefault
-      var effDbType = dbTypeDefault.to(CdbTypeEx)
-      if dbType != CdbTypeEx(0):
+      var effDbType = dbTypeDefault
+      if dbType != CoreDbType(0):
         effDbType = dbType
       elif capture.dbType != CoreDbType(0):
-        effDbType = capture.dbType.to(CdbTypeEx)
+        effDbType = capture.dbType
       effDbType
 
-  doAssert dbType in CdbTypeExPersistent
+  doAssert dbType in CoreDbPersistentTypes
   defer: baseDir.flushDbDir
 
   let

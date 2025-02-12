@@ -1,5 +1,5 @@
 # nimbus-eth1
-# Copyright (c) 2023-2024 Status Research & Development GmbH
+# Copyright (c) 2023-2025 Status Research & Development GmbH
 # Licensed under either of
 #  * Apache License, version 2.0, ([LICENSE-APACHE](LICENSE-APACHE) or
 #    http://www.apache.org/licenses/LICENSE-2.0)
@@ -13,13 +13,7 @@
 
 {.push raises: [].}
 
-import
-  std/[exitprocs, sets, sequtils, strformat, os],
-  rocksdb,
-  results,
-  ../../aristo_desc,
-  ./rdb_desc,
-  ../../../opts
+import std/[exitprocs, strformat], results, ../../aristo_desc, ./rdb_desc, ../../../opts
 
 # ------------------------------------------------------------------------------
 # Private constructor
@@ -84,18 +78,13 @@ proc dumpCacheStats(keySize, vtxSize, branchSize: int) =
     let hitRate = float64(hits * 100) / (float64(hits + misses))
     echo &"     all {misses:>10} {hits:>10} {misses+hits:>10} {hitRate:>5.2f}%"
 
-proc initImpl(
-    rdb: var RdbInst,
-    basePath: string,
-    opts: DbOptions,
-    dbOpts: DbOptionsRef,
-    cfOpts: ColFamilyOptionsRef,
-    guestCFs: openArray[ColFamilyDescriptor] = [],
-): Result[seq[ColFamilyReadWrite], (AristoError, string)] =
-  ## Database backend constructor
-  const initFailed = "RocksDB/init() failed"
+# ------------------------------------------------------------------------------
+# Public constructor
+# ------------------------------------------------------------------------------
 
-  rdb.basePath = basePath
+proc init*(rdb: var RdbInst, opts: DbOptions, baseDb: RocksDbInstanceRef) =
+  ## Database backend constructor
+  rdb.baseDb = baseDb
 
   # bytes -> entries based on overhead estimates
   rdb.rdKeySize =
@@ -124,81 +113,15 @@ proc initImpl(
         dumpCacheStats(ks, vs, bs)
     )
 
-  let dataDir = rdb.dataDir
-  try:
-    dataDir.createDir
-  except OSError, IOError:
-    return err((RdbBeCantCreateDataDir, ""))
-
-  # Column familiy names to allocate when opening the database. This list
-  # might be extended below.
-  var useCFs = AristoCFs.mapIt($it).toHashSet
-
-  # The `guestCFs` list must not overwrite `AristoCFs` options
-  let guestCFs = guestCFs.filterIt(it.name notin useCFs)
-
-  # If the database exists already, check for missing column families and
-  # allocate them for opening. Otherwise rocksdb might reject the peristent
-  # database.
-  if (dataDir / "CURRENT").fileExists:
-    let hdCFs = dataDir.listColumnFamilies.valueOr:
-      raiseAssert initFailed & " cannot read existing CFs: " & error
-    # Update list of column families for opener.
-    useCFs = useCFs + hdCFs.toHashSet
-
-  # The `guestCFs` list might come with a different set of options. So it is
-  # temporarily removed from `useCFs` and will be re-added with appropriate
-  # options.
-  let guestCFq = @guestCFs
-  useCFs = useCFs - guestCFs.mapIt(it.name).toHashSet
-
-  # Finalise list of column families
-  let cfs = useCFs.toSeq.mapIt(it.initColFamilyDescriptor cfOpts) & guestCFq
-
-  # Open database for the extended family :)
-  let baseDb = openRocksDb(dataDir, dbOpts, columnFamilies = cfs).valueOr:
-    raiseAssert initFailed & " cannot create base descriptor: " & error
-
   # Initialise column handlers (this stores implicitely `baseDb`)
-  rdb.admCol = baseDb.getColFamily($AdmCF).valueOr:
-    raiseAssert initFailed & " cannot initialise AdmCF descriptor: " & error
-  rdb.vtxCol = baseDb.getColFamily($VtxCF).valueOr:
-    raiseAssert initFailed & " cannot initialise VtxCF descriptor: " & error
-
-  ok(guestCFs.mapIt(baseDb.getColFamily(it.name).expect("loaded cf")))
-
-# ------------------------------------------------------------------------------
-# Public constructor
-# ------------------------------------------------------------------------------
-
-proc init*(
-    rdb: var RdbInst,
-    basePath: string,
-    opts: DbOptions,
-    dbOpts: DbOptionsRef,
-    cfOpts: ColFamilyOptionsRef,
-    guestCFs: openArray[ColFamilyDescriptor],
-): Result[seq[ColFamilyReadWrite], (AristoError, string)] =
-  ## Temporarily define a guest CF list here.
-  rdb.initImpl(basePath, opts, dbOpts, cfOpts, guestCFs)
+  rdb.admCol = baseDb.db.getColFamily($AdmCF).valueOr:
+    raiseAssert "Cannot initialise AdmCF descriptor: " & error
+  rdb.vtxCol = baseDb.db.getColFamily($VtxCF).valueOr:
+    raiseAssert "Cannot initialise VtxCF descriptor: " & error
 
 proc destroy*(rdb: var RdbInst, eradicate: bool) =
   ## Destructor
-  rdb.baseDb.close()
-
-  if eradicate:
-    try:
-      rdb.dataDir.removeDir
-
-      # Remove the base folder if it is empty
-      block done:
-        for w in rdb.baseDir.walkDirRec:
-          # Ignore backup files
-          if 0 < w.len and w[^1] != '~':
-            break done
-        rdb.baseDir.removeDir
-    except CatchableError:
-      discard
+  rdb.baseDb.close(eradicate)
 
 # ------------------------------------------------------------------------------
 # End

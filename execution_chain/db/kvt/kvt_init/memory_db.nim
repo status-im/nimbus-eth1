@@ -1,5 +1,5 @@
 # nimbus-eth1
-# Copyright (c) 2023-2024 Status Research & Development GmbH
+# Copyright (c) 2023-2025 Status Research & Development GmbH
 # Licensed under either of
 #  * Apache License, version 2.0, ([LICENSE-APACHE](LICENSE-APACHE) or
 #    http://www.apache.org/licenses/LICENSE-2.0)
@@ -128,11 +128,6 @@ proc closeFn(db: MemBackendRef): CloseFn =
     proc(ignore: bool) =
       discard
 
-proc setWrReqFn(db: MemBackendRef): SetWrReqFn =
-  result =
-    proc(kvt: RootRef): Result[void,KvtError] =
-      err(RdbBeHostNotApplicable)
-
 # ------------------------------------------------------------------------------
 # Public functions
 # ------------------------------------------------------------------------------
@@ -150,7 +145,6 @@ proc memoryBackend*: BackendRef =
   db.putEndFn = putEndFn db
 
   db.closeFn = closeFn db
-  db.setWrReqFn = setWrReqFn db
   db
 
 # ------------------------------------------------------------------------------

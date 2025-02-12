@@ -112,7 +112,7 @@ proc setBlock*(c: ChainRef; blk: Block): Result[void, string] =
   # the parent state of the first block (as registered in `headers[0]`) was
   # the canonical state before updating. So this state will be saved with
   # `persistent()` together with the respective block number.
-  c.db.persistent(header.number - 1).isOkOr:
+  c.db.persist(header.number - 1).isOkOr:
     return err($error)
 
   ok()

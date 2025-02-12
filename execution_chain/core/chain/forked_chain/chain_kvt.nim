@@ -24,14 +24,14 @@ import
   ../../../db/core_db,
   ./chain_desc
 
-proc fcKvtPersistent*(c: ForkedChainRef) =
+proc fcKvtPersist*(c: ForkedChainRef) =
   ## Save cached `kvt` data if possible. This function has the side effect
   ## that it saves all cached db data including `Aristo` data (although there
   ## should not be any.)
   ##
   let db = c.com.db
-  db.persistent(c.baseTxFrame.getSavedStateBlockNumber()).isOkOr:
-    raiseAssert "fcKvtPersistent: persistent() failed: " & $$error
+  db.persist(c.baseTxFrame.getSavedStateBlockNumber()).isOkOr:
+    raiseAssert "fcKvtPersist: persistent() failed: " & $$error
 
 proc fcKvtHasKey*(c: ForkedChainRef, key: openArray[byte]): bool =
   ## Check whether the argument `key` exists on the `kvt` table (i.e. `get()`

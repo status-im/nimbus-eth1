@@ -101,7 +101,7 @@ proc checkpoint*(p: var Persister): Result[void, string] =
       )
 
   # Save and record the block number before the last saved block state.
-  p.c.db.persistent(p.parent.number).isOkOr:
+  p.c.db.persist(p.parent.number).isOkOr:
     return err("Failed to save state: " & $$error)
 
   ok()

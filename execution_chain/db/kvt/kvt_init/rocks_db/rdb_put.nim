@@ -1,5 +1,5 @@
 # nimbus-eth1
-# Copyright (c) 2023-2024 Status Research & Development GmbH
+# Copyright (c) 2023-2025 Status Research & Development GmbH
 # Licensed under either of
 #  * Apache License, version 2.0, ([LICENSE-APACHE](LICENSE-APACHE) or
 #    http://www.apache.org/licenses/LICENSE-2.0)
@@ -34,10 +34,6 @@ when extraTraceMessages:
 # Private helpers
 # ------------------------------------------------------------------------------
 
-proc disposeSession(rdb: var RdbInst) =
-  rdb.session.close()
-  rdb.session = WriteBatchRef(nil)
-
 when extraTraceMessages:
   proc `$`(a: seq[byte]): string =
     a.toHex
@@ -46,18 +42,17 @@ when extraTraceMessages:
 # Public functions
 # ------------------------------------------------------------------------------
 
-proc begin*(rdb: var RdbInst) =
-  if rdb.session.isNil:
-    rdb.session = rdb.baseDb.openWriteBatch()
+proc begin*(rdb: var RdbInst): SharedWriteBatchRef =
+  rdb.baseDb.openWriteBatch()
 
-proc rollback*(rdb: var RdbInst) =
-  if not rdb.session.isClosed():
-    rdb.disposeSession()
+proc rollback*(rdb: var RdbInst, session: SharedWriteBatchRef) =
+  if not session.isClosed():
+    session.close()
 
-proc commit*(rdb: var RdbInst): Result[void,(KvtError,string)] =
-  if not rdb.session.isClosed():
-    defer: rdb.disposeSession()
-    rdb.baseDb.write(rdb.session).isOkOr:
+proc commit*(rdb: var RdbInst, session: SharedWriteBatchRef): Result[void,(KvtError,string)] =
+  if not session.isClosed():
+    defer: session.close()
+    rdb.baseDb.commit(session).isOkOr:
       const errSym = RdbBeDriverWriteError
       when extraTraceMessages:
         trace logTxt "commit", error=errSym, info=error
@@ -66,16 +61,17 @@ proc commit*(rdb: var RdbInst): Result[void,(KvtError,string)] =
 
 proc put*(
     rdb: RdbInst;
+    session: SharedWriteBatchRef,
     key, val: openArray[byte];
       ): Result[void,(KvtError,string)] =
   if val.len == 0:
-    rdb.session.delete(key, rdb.store[KvtGeneric].handle()).isOkOr:
+    session.batch.delete(key, rdb.store[KvtGeneric].handle()).isOkOr:
       const errSym = RdbBeDriverDelError
       when extraTraceMessages:
         trace logTxt "del", key, error=errSym, info=error
       return err((errSym,error))
   else:
-    rdb.session.put(key, val, rdb.store[KvtGeneric].handle()).isOkOr:
+    session.batch.put(key, val, rdb.store[KvtGeneric].handle()).isOkOr:
       const errSym = RdbBeDriverPutError
       when extraTraceMessages:
         trace logTxt "put", key, error=errSym, info=error

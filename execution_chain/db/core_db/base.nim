@@ -53,8 +53,8 @@ else:
   import
     ../aristo/[
       aristo_delete, aristo_desc, aristo_fetch, aristo_merge, aristo_part,
-      aristo_tx],
-    ../kvt/[kvt_desc, kvt_utils, kvt_tx]
+      aristo_persist, aristo_tx_frame],
+    ../kvt/[kvt_desc, kvt_utils, kvt_persist, kvt_tx_frame]
 
 # ------------------------------------------------------------------------------
 # Public context constructors and administration
@@ -102,7 +102,7 @@ proc `$$`*(e: CoreDbError): string =
   ##
   e.toStr()
 
-proc persistent*(
+proc persist*(
     db: CoreDbRef;
     blockNumber: BlockNumber;
       ): CoreDbRc[void] =
@@ -112,22 +112,39 @@ proc persistent*(
   ## It also stores the argument block number `blockNumber` as a state record
   ## which can be retrieved via `stateBlockNumber()`.
   ##
-  db.setTrackNewApi BasePersistentFn
-  block body:
-    let rc = CoreDbKvtRef(db.ctx).call(persist, db.ctx.kvt)
-    if rc.isOk or rc.error == TxPersistDelayed:
-      # The latter clause is OK: Piggybacking on `Aristo` backend
-      discard
-    else:
-      result = err(rc.error.toError $api)
-      break body
+  db.setTrackNewApi BasePersistFn
 
-    # Having reached here `Aristo` must not fail as both `Kvt` and `Aristo`
-    # are kept in sync. So if there is a legit fail condition it mist be
-    # caught in the previous clause.
-    CoreDbAccRef(db.ctx).call(persist, db.ctx.mpt, blockNumber).isOkOr:
+  # TODO these backend functions coud maybe be hidden behind an abstraction
+  #      layer - or... the abstraction layer could be removed from everywhere
+  #      else since it's not really needed
+  let
+    kvtBatch = db.defCtx.kvt.backend.putBegFn()
+    mptBatch = db.defCtx.mpt.backend.putBegFn()
+
+  if kvtBatch.isOk() and mptBatch.isOk():
+    # TODO the `persist` api stages changes but does not actually persist - a
+    #      separate "actually-write" api is needed so the changes from both
+    #      kvt and ari can be staged and then written together - for this to
+    #      happen, we need to expose the shared nature of the write batch
+    #      to here and perform a single atomic write.
+    #      Because there is nothing in place to handle partial failures (ie
+    #      kvt changes written to memory but not to disk because of an aristo
+    #      error), we have to panic instead.
+
+    CoreDbKvtRef(db.ctx).call(persist, db.ctx.kvt, kvtBatch[])
+    CoreDbAccRef(db.ctx).call(persist, db.ctx.mpt, mptBatch[], blockNumber)
+
+    db.defCtx.kvt.backend.putEndFn(kvtBatch[]).isOkOr:
       raiseAssert $api & ": " & $error
+
+    db.defCtx.mpt.backend.putEndFn(mptBatch[]).isOkOr:
+      raiseAssert $api & ": " & $error
+
     result = ok()
+  else:
+    discard kvtBatch.expect($api & ": should always be able to create batch")
+    discard mptBatch.expect($api & ": should always be able to create batch")
+
   db.ifTrackNewApi: debug logTxt, api, elapsed, blockNumber, result
 
 proc stateBlockNumber*(db: CoreDbTxRef): BlockNumber =

@@ -21,7 +21,7 @@ import
     aristo_merge,
     aristo_desc,
     aristo_init,
-    aristo_tx/tx_stow,
+    aristo_tx_frame,
   ]
 
 func x(s: string): seq[byte] =
@@ -125,7 +125,9 @@ suite "Aristo compute":
       check:
         txFrame.mergeAccountRecord(k, v) == Result[bool, AristoError].ok(true)
 
-    check db.txPersist(1).isOk()
+    let batch = db.backend.putBegFn()[]
+    db.txFramePersist(batch, 1)
+    check db.backend.putEndFn(batch).isOk()
 
     check txFrame.computeKeys(root).isOk()
 

@@ -683,7 +683,7 @@ proc pp*(
   case be.kind:
   of BackendMemory:
     result &= be.MemBackendRef.ppBe(db, limit, indent+1)
-  of BackendRocksDB, BackendRdbHosting:
+  of BackendRocksDB:
     result &= be.RdbBackendRef.ppBe(db, limit, indent+1)
   of BackendVoid:
     result &= "<NoBackend>"

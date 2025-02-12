@@ -28,14 +28,8 @@ import
 
 export
   RdbBackendRef,
-  memory_only
-
-# ------------------------------------------------------------------------------
-# Private helpers
-# ------------------------------------------------------------------------------
-
-func toErr0(err: (KvtError,string)): KvtError =
-  err[0]
+  memory_only,
+  kvt_desc
 
 # ------------------------------------------------------------------------------
 # Public database constuctors, destructor
@@ -44,51 +38,13 @@ func toErr0(err: (KvtError,string)): KvtError =
 proc init*(
     T: type KvtDbRef;
     B: type RdbBackendRef;
-    basePath: string;
-    dbOpts: DbOptionsRef;
-    cfOpts: ColFamilyOptionsRef;
+    baseDb: RocksDbInstanceRef;
       ): Result[KvtDbRef,KvtError] =
   ## Generic constructor for `RocksDb` backend
   ##
   let db = KvtDbRef(
     txRef: KvtTxRef(layer: LayerRef.init()),
-    backend: ? rocksDbKvtBackend(basePath, dbOpts, cfOpts).mapErr toErr0)
-  db.txRef.db = db
-  ok db
-
-proc init*(
-    T: type KvtDbRef;
-    B: type RdbBackendRef;
-    adb: AristoDbRef;
-    oCfs: openArray[ColFamilyReadWrite];
-      ): Result[KvtDbRef,KvtError] =
-  ## Constructor for `RocksDb` backend which piggybacks on the `Aristo`
-  ## backend. The following changes will occur after successful instantiation:
-  ##
-  ## * When invoked, the function `kvt_tx.persistent()` will always return an
-  ##   error. If everything is all right (e.g. saving is possible), the error
-  ##   returned will be `TxPersistDelayed`. This indicates that the save
-  ##   request was queued, waiting for being picked up by an event handler.
-  ##
-  ## * There should be an invocation of `aristo_tx.persistent()` immediately
-  ##   follwing the `kvt_tx.persistent()` call (some `KVT` functions might
-  ##   return `RdbBeDelayedLocked` or similar errors while the save request
-  ##   is pending.) Once successful, the`aristo_tx.persistent()` function will
-  ##   also have commited the pending save request mentioned above.
-  ##
-  ## * The function `kvt_init/memory_only.finish()` does nothing.
-  ##
-  ## * The function `aristo_init/memory_only.finish()` will close both
-  ##   sessions, the one for `KVT` and the other for `Aristo`.
-  ##
-  ## * The functiond `kvt_delta.deltaUpdate()` and `tx_stow.tcStow()` should
-  ##   not be invoked directly (they will stop with an error most of the time,
-  ##   anyway.)
-  ##
-
-  let db = KvtDbRef(
-    txRef: KvtTxRef(layer: LayerRef.init()),
-    backend: ? rocksDbKvtTriggeredBackend(adb, oCfs).mapErr toErr0)
+    backend: rocksDbKvtBackend(baseDb))
   db.txRef.db = db
   ok db
 
