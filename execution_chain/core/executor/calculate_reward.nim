@@ -31,7 +31,7 @@ const
   eth2 = 2.eth
   eth0 = 0.u256
 
-  BlockRewards: array[FkFrontier..FkOsaka, UInt256] = [
+  BlockRewards: array[FkFrontier..FkLatest, UInt256] = [
     eth5, # Frontier
     eth5, # Homestead
     eth5, # Tangerine

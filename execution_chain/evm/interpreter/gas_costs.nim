@@ -774,7 +774,7 @@ const
   LondonGasFees = BerlinGasFees.londonGasFees
   ShanghaiGasFees = LondonGasFees.shanghaiGasFees
 
-  gasFees*: array[FkFrontier..FkOsaka, GasFeeSchedule] = [
+  gasFees*: array[FkFrontier..FkLatest, GasFeeSchedule] = [
     FkFrontier: BaseGasFees,
     FkHomestead: HomesteadGasFees,
     FkTangerine: TangerineGasFees,

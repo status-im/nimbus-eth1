@@ -30,3 +30,4 @@ const
   FkCancun*         = EVMC_CANCUN
   FkPrague*         = EVMC_PRAGUE
   FkOsaka*          = EVMC_OSAKA
+  FkLatest*         = EVMFork(EVMFork.high.int - 1)
