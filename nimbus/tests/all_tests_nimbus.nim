@@ -1,4 +1,4 @@
-# nimbus_unified
+# Nimbus
 # Copyright (c) 2025 Status Research & Development GmbH
 # Licensed and distributed under either of
 #   * MIT license (license terms in the root directory or at https://opensource.org/licenses/MIT).
@@ -8,6 +8,6 @@
 {.warning[UnusedImport]: off.}
 
 import
-  ./test_nimbus_unified,
+  ./test_nimbus,
   ./consensus/test_consensus_layer,
   ./execution/test_execution_layer
