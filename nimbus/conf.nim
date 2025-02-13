@@ -1,4 +1,4 @@
-# nimbus_unified
+# Nimbus
 # Copyright (c) 2025 Status Research & Development GmbH
 # Licensed and distributed under either of
 #   * MIT license (license terms in the root directory or at https://opensource.org/licenses/MIT).
@@ -12,7 +12,7 @@ import
   #eth2-configs
   beacon_chain/nimbus_binary_common,
   #eth1-configs
-  ../../nimbus/nimbus_desc
+  ../../execution_chain/nimbus_desc
 
 export BeaconNodeConf, NimbusConf
 
@@ -37,22 +37,20 @@ type
   LayerConfig* = object
     case kind*: ConfigKind
     of Consensus:
-      consensusConfig*: BeaconNodeConf
+      consensusConfig*: seq[string]
     of Execution:
-      executionConfig*: NimbusConf
-
-  ServiceParameters* = object
-    name*: string
-    layerConfig*: LayerConfig
+      executionConfig*: seq[string]
 
   NimbusService* = ref object
     name*: string
-    timeoutMs*: uint32
-    serviceHandler*: Thread[ServiceParameters]
+    layerConfig*: LayerConfig
+    serviceHandler*: Thread[ptr Channel[pointer]]
+    serviceChannel: ptr Channel[pointer]
 
   Nimbus* = ref object
-    serviceList*: array[cNimbusMaxServices, Option[NimbusService]]
+    serviceList*: seq[NimbusService]
 
+#replace with cond var
 ## Service shutdown
 var isShutDownRequired*: Atomic[bool]
 isShutDownRequired.store(false)
@@ -61,10 +59,10 @@ isShutDownRequired.store(false)
 proc defaultDataDir*(): string =
   let dataDir =
     when defined(windows):
-      "AppData" / "Roaming" / "Nimbus_unified"
+      "AppData" / "Roaming" / "Nimbus"
     elif defined(macosx):
-      "Library" / "Application Support" / "Nimbus_unified"
+      "Library" / "Application Support" / "Nimbus"
     else:
-      ".cache" / "nimbus_unified"
+      ".cache" / "Nimbus"
 
   getHomeDir() / dataDir

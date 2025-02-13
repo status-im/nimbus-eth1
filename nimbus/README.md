@@ -1,4 +1,4 @@
-# Nimbus Unified
+# Nimbus
 
 <!-- [![Github Actions CI](tbd) -->
 [![License: Apache](https://img.shields.io/badge/License-Apache%202.0-blue.svg)](https://opensource.org/licenses/Apache-2.0)
@@ -26,9 +26,9 @@ tbd
 tbd
     - mac os, windows, and linux
 
-    ]$ make nimbus_unified
+    ]$ make nimbus
 ## colaborate
-We welcome contributions to Nimbus Unified! Please adhere to the following guidelines:
+We welcome contributions to Nimbus! Please adhere to the following guidelines:
 
 - Use the [Status Nim style guide](https://status-im.github.io/nim-style-guide/) to maintain code consistency.
 - Format your code using the [Nim Pretty Printer (nph)](https://github.com/nim-lang/nimpretty) to ensure consistency across the codebase. Run it as part of your pull request process.
