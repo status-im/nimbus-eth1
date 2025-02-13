@@ -25,7 +25,7 @@ func getTargetBlobGasPerBlock*(electra: bool): uint64 =
   else: TARGET_BLOB_GAS_PER_BLOCK.uint64
 
 const
-  EVMForkToFork: array[FkCancun..EVMFork.high, HardFork] = [
+  EVMForkToFork: array[FkCancun..FkOsaka, HardFork] = [
     Cancun,
     Prague,
     Osaka
