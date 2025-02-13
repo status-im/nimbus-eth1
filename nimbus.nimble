@@ -135,3 +135,10 @@ task build_fuzzers, "Build fuzzer test cases":
   for file in walkDirRec("tests/networking/fuzzing/"):
     if file.endsWith("nim"):
       exec "nim c -c -d:release " & file
+## nimbus tasks
+
+task nimbus, "Build Nimbus":
+  buildBinary "nimbus", "nimbus/", "-d:chronicles_log_level=TRACE"
+
+task nimbus_test, "Run Nimbus tests":
+  test "nimbus/tests/","all_tests", "-d:chronicles_log_level=ERROR"
