@@ -13,13 +13,13 @@ import
   ../execution_chain/db/ledger,
   ../execution_chain/common/[context, common]
 
-func revTable(list: array[EVMFork, string]): Table[string, EVMFork] =
+func revTable(list: array[FkFrontier..FkOsaka, string]): Table[string, EVMFork] =
   for k, v in list:
     result[v] = k
 
 const
   # from https://ethereum-tests.readthedocs.io/en/latest/test_types/state_tests.html
-  ForkToName: array[EVMFork, string] = [
+  ForkToName: array[FkFrontier..FkOsaka, string] = [
     "Frontier",             # FkFrontier
     "Homestead",            # FkHomestead
     "EIP150",               # FkTangerine
