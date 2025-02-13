@@ -1,4 +1,4 @@
-# nimbus_unified
+# Nimbus
 # Copyright (c) 2025 Status Research & Development GmbH
 # Licensed and distributed under either of
 #   * MIT license (license terms in the root directory or at https://opensource.org/licenses/MIT).
@@ -6,9 +6,8 @@
 # at your option. This file may not be copied, modified, or distributed except according to those terms.
 
 import
-  std/[atomics, os, exitprocs],
+  std/[atomics, os],
   chronicles,
-  stew/io2,
   options,
   consensus/consensus_layer,
   execution/execution_layer,
@@ -16,7 +15,7 @@ import
   #eth2-configs
   beacon_chain/nimbus_binary_common,
   #eth1-configs
-  ../nimbus/nimbus_desc
+  ../execution_chain/nimbus_desc
 
 # ------------------------------------------------------------------------------
 # Private
@@ -65,7 +64,7 @@ proc addService(
 # Public
 # ------------------------------------------------------------------------------
 
-## Block execution and waits for services to finish
+## Gracefully exits all services
 proc exitServices*(nimbus: Nimbus) =
   for i in 0 .. cNimbusMaxServices - 1:
     if nimbus.serviceList[i].isSome:

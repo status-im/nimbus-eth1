@@ -127,10 +127,10 @@ task nimbus_verified_proxy, "Build Nimbus verified proxy":
 task nimbus_verified_proxy_test, "Run Nimbus verified proxy tests":
   test "nimbus_verified_proxy/tests", "test_proof_validation", "-d:chronicles_log_level=ERROR -d:nimbus_db_backend=sqlite"
 
-## nimbus unified tasks
+## nimbus tasks
 
-task nimbus_unified, "Build Nimbus":
-  buildBinary "nimbus_unified", "nimbus_unified/", "-d:chronicles_log_level=TRACE"
+task nimbus, "Build Nimbus":
+  buildBinary "nimbus", "nimbus/", "-d:chronicles_log_level=TRACE"
 
-task nimbus_unified_test, "Run Nimbus tests":
-  test "nimbus_unified/tests/","all_tests_unified", "-d:chronicles_log_level=ERROR"
+task nimbus_test, "Run Nimbus tests":
+  test "nimbus/tests/","all_tests", "-d:chronicles_log_level=ERROR"
