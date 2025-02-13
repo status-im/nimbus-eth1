@@ -28,6 +28,8 @@ type PortalEvmStateRef* = ref object
   code: Table[Address, seq[byte]]
   storage: Table[Address, Table[UInt256, (UInt256, UInt256)]]
     # maps address -> slot key -> (original slot value, updated slot value)
+  created: HashSet[Address]
+  selfDestructs: HashSet[Address]
   transientStorage: Table[Address, Table[UInt256, UInt256]]
   stateNetwork: Opt[StateNetwork] # when none network lookups are disabled
   fetchedAccounts: HashSet[Address]
@@ -130,6 +132,17 @@ proc getBalance*(state: PortalEvmStateRef, address: Address): UInt256 =
   state.fetchAccountIfRequired(address)
   state.accounts.getOrDefault(address).balance
 
+proc setBalance*(state: PortalEvmStateRef, address: Address, value: UInt256) =
+  state.fetchAccountIfRequired(address)
+  # state.accounts[address] = value
+
+  state.accounts.withValue(address, acc):
+    acc[].balance = value
+  do:
+    var account = EMPTY_ACCOUNT
+    account.balance = value
+    state.accounts[address] = account
+
 proc getCode*(state: PortalEvmStateRef, address: Address): seq[byte] =
   state.fetchCodeIfRequired(address)
   state.code.getOrDefault(address)
@@ -177,3 +190,15 @@ proc setTransientStorage*(
     value[][slotKey] = slotValue
   do:
     state.transientStorage[address] = {slotKey: slotValue}.toTable
+
+proc isCreated*(state: PortalEvmStateRef, address: Address): bool =
+  state.created.contains(address)
+
+proc addCreated*(state: PortalEvmStateRef, address: Address) =
+  state.created.incl(address)
+
+proc isSelfDestructed*(state: PortalEvmStateRef, address: Address): bool =
+  state.selfDestructs.contains(address)
+
+proc selfDestruct*(state: PortalEvmStateRef, address: Address) =
+  state.selfDestructs.incl(address)

@@ -68,6 +68,9 @@ template fromEvmc(host: evmc_host_context): PortalEvmHost =
 template state(host: PortalEvmHost): PortalEvmStateRef =
   host.evm.state
 
+template revision(host: PortalEvmHost): evmc_revision =
+  host.evm.revision
+
 template addrIfPresent(value: Opt[seq[byte]]): auto =
   if value.isSome():
     value.get()[0].addr
@@ -117,6 +120,9 @@ proc `state=`*(evm: PortalEvmRef, state: PortalEvmStateRef) =
 func state*(evm: PortalEvmRef): PortalEvmStateRef =
   evm.state
 
+func revision(evm: PortalEvmRef): evmc_revision =
+  EVMC_LATEST_STABLE_REVISION
+
 func abiVersion*(evm: PortalEvmRef): int =
   evm.vmPtr.abi_version.int
 
@@ -137,7 +143,7 @@ proc execute*(
       evm.vmPtr,
       host.hostInterface.addr,
       host.toEvmc(),
-      EVMC_LATEST_STABLE_REVISION,
+      evm.revision(),
       msg,
       code.addrIfPresent(),
       code.lenIfPresent(),
@@ -156,6 +162,14 @@ proc execute*(
     evmc_result.release(evmc_result)
 
   return res
+
+# Eth_Call parameters:
+# from: DATA, 20 Bytes - (optional) The address the transaction is sent from.
+# to: DATA, 20 Bytes - The address the transaction is directed to.
+# gas: QUANTITY - (optional) Integer of the gas provided for the transaction execution. eth_call consumes zero gas, but this parameter may be needed by some executions.
+# gasPrice: QUANTITY - (optional) Integer of the gasPrice used for each paid gas
+# value: QUANTITY - (optional) Integer of the value sent with this transaction
+# input: DATA - (optional) Hash of the method signature and encoded parameters. For details see Ethereum Contract ABI in the Solidity documentation(opens in a new tab).
 
 func isClosed*(evm: PortalEvmRef): bool =
   evm.vmPtr.isNil()
@@ -287,12 +301,26 @@ proc selfDestruct(
     host: evmc_host_context, address, beneficiary: var evmc_address
 ) {.evmc_abi.} =
   let
-    state = host.fromEvmc().state()
+    h = host.fromEvmc()
+    state = h.state()
     adr = address.fromEvmc()
     benef = beneficiary.fromEvmc()
   trace "evmc_host_interface.copy_code called",
     address = adr.to0xHex(), beneficiary = benef.to0xHex()
-  raiseAssert("Not implemented")
+
+  let balance = state.getBalance(adr)
+  state.setBalance(benef, state.getBalance(benef) + balance)
+
+  var recorded = false
+  if h.revision() >= EVMC_CANCUN and not state.isCreated(adr):
+    state.setBalance(adr, state.getBalance(adr) - balance)
+  else:
+    state.setBalance(adr, 0.u256)
+    state.selfDestruct(adr)
+    recorded = true
+
+  discard recorded # TODO: return this once the nim-evmc api is updated
+
 
 proc call(host: evmc_host_context, msg: var evmc_message): evmc_result {.evmc_abi.} =
   trace "evmc_host_interface.call called", evmc_message # can this be printed?
