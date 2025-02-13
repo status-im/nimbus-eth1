@@ -13,7 +13,10 @@ import
   results,
   evmc/evmc,
   eth/common/[hashes, accounts, addresses, headers],
-  ../network/state/state_endpoints
+  ../network/history/history_network,
+  ../network/state/[state_endpoints, state_network]
+
+from eth/common/eth_types_rlp import rlpHash
 
 export evmc, addresses, stint, headers, state_network
 
@@ -31,10 +34,12 @@ type PortalEvmStateRef* = ref object
   created: HashSet[Address]
   selfDestructs: HashSet[Address]
   transientStorage: Table[Address, Table[UInt256, UInt256]]
-  stateNetwork: Opt[StateNetwork] # when none network lookups are disabled
+  stateNetwork: Opt[StateNetwork] # when none state network lookups are disabled
   fetchedAccounts: HashSet[Address]
   fetchedCode: HashSet[Address]
   fetchedStorage: Table[Address, HashSet[UInt256]]
+  historyNetwork: Opt[HistoryNetwork] # when none history network lookups are disabled
+  blockHashes: Table[uint64, Hash32]
 
 func init*(
     T: type PortalEvmStateRef, header: Header, stateNetwork = Opt.none(StateNetwork)
@@ -61,6 +66,7 @@ proc fetchAccountIfRequired(state: PortalEvmStateRef, address: Address) =
     state.fetchedAccounts.incl(address)
   except CancelledError:
     trace "stateNetwork.getAccount canceled"
+    raiseAssert("account lookup failed") # how should we handle this?
 
 proc fetchCodeIfRequired(state: PortalEvmStateRef, address: Address) =
   let sn = state.stateNetwork.valueOr:
@@ -76,6 +82,7 @@ proc fetchCodeIfRequired(state: PortalEvmStateRef, address: Address) =
     state.fetchedCode.incl(address)
   except CancelledError:
     trace "stateNetwork.getCodeByStateRoot canceled"
+    raiseAssert("code lookup failed") # how should we handle this?
 
 proc fetchStorageIfRequired(
     state: PortalEvmStateRef, address: Address, slotKey: UInt256
@@ -103,6 +110,26 @@ proc fetchStorageIfRequired(
       state.fetchedStorage[address] = toHashSet([slotKey])
   except CancelledError:
     trace "stateNetwork.getStorageAtByStateRoot canceled"
+    raiseAssert("storage lookup failed") # how should we handle this?
+
+proc fetchBlockHashIfRequired(state: PortalEvmStateRef, number: uint64) =
+  if state.blockHashes.contains(number):
+    return # already fetched block hash
+
+  if state.header.number == number:
+    state.blockHashes[number] = state.header.rlpHash()
+    return
+
+  let hn = state.historyNetwork.valueOr:
+    return # history lookups over portal network are disabled
+
+  try:
+    let header = waitFor(hn.getVerifiedBlockHeader(number)).valueOr:
+      raiseAssert("block header lookup failed") # how should we handle this?
+    state.blockHashes[number] = header.rlpHash()
+  except CancelledError:
+    trace "historyNetwork.getVerifiedBlockHeader canceled"
+    raiseAssert("block header lookup failed") # how should we handle this?
 
 proc accountExists*(state: PortalEvmStateRef, address: Address): bool =
   state.fetchAccountIfRequired(address)
@@ -202,3 +229,10 @@ proc isSelfDestructed*(state: PortalEvmStateRef, address: Address): bool =
 
 proc selfDestruct*(state: PortalEvmStateRef, address: Address) =
   state.selfDestructs.incl(address)
+
+proc getBlockHash*(state: PortalEvmStateRef, number: uint64): Opt[Hash32] =
+  state.fetchBlockHashIfRequired(number)
+  if state.blockHashes.contains(number):
+    Opt.some(state.blockHashes.getOrDefault(number))
+  else:
+    Opt.none(Hash32)

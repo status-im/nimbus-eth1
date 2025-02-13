@@ -340,11 +340,43 @@ proc call(host: evmc_host_context, msg: var evmc_message): evmc_result {.evmc_ab
 proc getTxContext(host: evmc_host_context): evmc_tx_context {.evmc_abi.} =
   trace "evmc_host_interface.get_tx_context called"
   evmc_tx_context()
-  # raiseAssert("Not implemented")
+    # const BlockHeader& header{evm_.block_.header};
+    # evmc_tx_context context{};
+    # const intx::uint256 base_fee_per_gas{header.base_fee_per_gas.value_or(0)};
+    # const intx::uint256 effective_gas_price{evm_.txn_->effective_gas_price(base_fee_per_gas)};
+    # intx::be::store(context.tx_gas_price.bytes, effective_gas_price);
+    # context.tx_origin = *evm_.txn_->sender();
+    # context.block_coinbase = evm_.beneficiary;
+    # SILKWORM_ASSERT(header.number <= INT64_MAX);  // EIP-1985
+    # context.block_number = static_cast<int64_t>(header.number);
+    # context.block_timestamp = static_cast<int64_t>(header.timestamp);
+    # SILKWORM_ASSERT(header.gas_limit <= INT64_MAX);  // EIP-1985
+    # context.block_gas_limit = static_cast<int64_t>(header.gas_limit);
+    # if (header.difficulty == 0) {
+    #     // EIP-4399: Supplant DIFFICULTY opcode with RANDOM
+    #     // We use 0 header difficulty as the telltale of PoS blocks
+    #     std::memcpy(context.block_prev_randao.bytes, header.prev_randao.bytes, kHashLength);
+    # } else {
+    #     intx::be::store(context.block_prev_randao.bytes, header.difficulty);
+    # }
+    # intx::be::store(context.chain_id.bytes, intx::uint256{evm_.config().chain_id});
+    # intx::be::store(context.block_base_fee.bytes, base_fee_per_gas);
+    # const intx::uint256 blob_gas_price{header.blob_gas_price().value_or(0)};
+    # intx::be::store(context.blob_base_fee.bytes, blob_gas_price);
+    # context.blob_hashes = evm_.txn_->blob_versioned_hashes.data();
+    # context.blob_hashes_count = evm_.txn_->blob_versioned_hashes.size();
+    # return context;
 
 proc getBlockHash(host: evmc_host_context, number: int64): evmc_bytes32 {.evmc_abi.} =
+  doAssert(number >= 0)
+
+  let state = host.fromEvmc().state()
   trace "evmc_host_interface.get_block_hash called", number
-  raiseAssert("Not implemented")
+
+  let blockHash = state.getBlockHash(number.uint64).valueOr:
+    return default(evmc_bytes32)
+
+  blockHash.toEvmc()
 
 proc emitLog(
     host: evmc_host_context,
