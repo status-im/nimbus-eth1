@@ -90,18 +90,6 @@ proc getProof*(
       storageProof: storage,
     )
 
-proc portalFromTag(api: ServerAPIRef, blockTag: BlockTag): Result[BlockObject, string] =
-  if blockTag.kind == bidAlias:
-    let tag = blockTag.alias.toLowerAscii
-    case tag
-    of "latest":
-      return err("Unsupported block tag " & tag)
-    else:
-      return err("Unsupported block tag " & tag)
-  else:
-    let blockNum = base.BlockNumber blockTag.number
-    return api.chain.portal.getBlock(blockNum)
-
 proc headerFromTag(api: ServerAPIRef, blockTag: BlockTag): Result[Header, string] =
   if blockTag.kind == bidAlias:
     let tag = blockTag.alias.toLowerAscii
@@ -214,17 +202,13 @@ proc setupServerAPI*(api: ServerAPIRef, server: RpcServer, ctx: EthContext) =
     ## blockTag: integer of a block number, or the string "earliest", "latest" or "pending", as in the default block parameter.
     ## fullTransactions: If true it returns the full transaction objects, if false only the hashes of the transactions.
     ## Returns BlockObject or nil when no block was found.
-    # let blk = api.blockFromTag(blockTag).valueOr:
-    #   return nil
-
-    # let blockHash = blk.header.blockHash
-    # return populateBlockObject(
-    #   blockHash, blk, api.getTotalDifficulty(blockHash), fullTransactions
-    # )
-
-    let blk = api.portalFromTag(blockTag).valueOr:
+    let blk = api.blockFromTag(blockTag).valueOr:
       return nil
-    return blk
+
+    let blockHash = blk.header.blockHash
+    return populateBlockObject(
+      blockHash, blk, api.getTotalDifficulty(blockHash), fullTransactions
+    )
 
   server.rpc("eth_syncing") do() -> SyncingStatus:
     ## Returns SyncObject or false when not syncing.

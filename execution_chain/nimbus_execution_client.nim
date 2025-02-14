@@ -45,7 +45,7 @@ proc basicServices(nimbus: NimbusNode,
                    conf: NimbusConf,
                    com: CommonRef) =
   nimbus.chainRef = ForkedChainRef.init(com)
-  if conf.isPortalEnabled:
+  if conf.portalEnabled:
     nimbus.chainRef.portal = PortalClientRef.init(conf)
 
   # txPool must be informed of active head
