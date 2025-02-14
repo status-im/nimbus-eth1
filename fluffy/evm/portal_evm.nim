@@ -299,7 +299,7 @@ proc copyCode(
 
 proc selfDestruct(
     host: evmc_host_context, address, beneficiary: var evmc_address
-) {.evmc_abi.} =
+): c99bool {.evmc_abi.} =
   let
     h = host.fromEvmc()
     state = h.state()
@@ -319,7 +319,7 @@ proc selfDestruct(
     state.selfDestruct(adr)
     recorded = true
 
-  discard recorded # TODO: return this once the nim-evmc api is updated
+  recorded
 
 
 proc call(host: evmc_host_context, msg: var evmc_message): evmc_result {.evmc_abi.} =
