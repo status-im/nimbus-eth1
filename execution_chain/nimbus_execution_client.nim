@@ -41,9 +41,9 @@ proc basicServices(nimbus: NimbusNode,
                    conf: NimbusConf,
                    com: CommonRef) =
   nimbus.fc = ForkedChainRef.init(com)
-  if conf.isPortalEnabled:
-    nimbus.chainRef.portal = PortalClientRef.init(conf)
-    
+  if conf.portalEnabled:
+    nimbus.fc.portal = PortalClientRef.init(conf)
+
   # txPool must be informed of active head
   # so it can know the latest account state
   # e.g. sender nonce, etc
