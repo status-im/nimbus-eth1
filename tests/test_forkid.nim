@@ -9,6 +9,7 @@
 # according to those terms.
 
 import
+  std/strutils,
   unittest2,
   ../execution_chain/common/common,
   ../execution_chain/utils/utils
@@ -55,8 +56,10 @@ const
     (number: 1450410'u64, time: 1677557087'u64, id: (crc: 0x4a85c09c'u32, next: 1677557088'u64)), # Last MergeNetsplit block
     (number: 1450410'u64, time: 1677557088'u64, id: (crc: 0xce82fa52'u32, next: 1706655072'u64)), # First Shanghai block
     (number: 1450410'u64, time: 1706655071'u64, id: (crc: 0xce82fa52'u32, next: 1706655072'u64)), # Last Shanghai block
-    (number: 1450410'u64, time: 1706655072'u64, id: (crc: 0xa6260961'u32, next: 0'u64)),          # First Cancun block
-    (number: 1450410'u64, time: 2706655072'u64, id: (crc: 0xa6260961'u32, next: 0'u64)),          # Future Cancun block
+    (number: 1450410'u64, time: 1706655072'u64, id: (crc: 0xa6260961'u32, next: 1741159776'u64)), # First Cancun block
+    (number: 1450410'u64, time: 1741159775'u64, id: (crc: 0xa6260961'u32, next: 1741159776'u64)), # Last Cancun block
+    (number: 1450410'u64, time: 1741159776'u64, id: (crc: 0x1cd80755'u32, next: 0'u64)), # First Prague block
+    (number: 1450410'u64, time: 2741159776'u64, id: (crc: 0x1cd80755'u32, next: 0'u64)), # Future Prague block
   ]
 
   HoleskyNetIDs = [
@@ -64,8 +67,10 @@ const
     (number: 123'u64, time: 0'u64, id: (crc: 0xc61a6098'u32, next: 1696000704'u64)), # First MergeNetsplit block
     (number: 123'u64, time: 1696000704'u64, id: (crc: 0xfd4f016b'u32, next: 1707305664'u64)), # First Shanghai block
     (number: 123'u64, time: 1707305663'u64, id: (crc: 0xfd4f016b'u32, next: 1707305664'u64)), # Last Shanghai block
-    (number: 123'u64, time: 1707305664'u64, id: (crc: 0x9b192ad0'u32, next: 0'u64)), # First Cancun block
-    (number: 123'u64, time: 2707305664'u64, id: (crc: 0x9b192ad0'u32, next: 0'u64)), # Future Cancun block
+    (number: 123'u64, time: 1707305664'u64, id: (crc: 0x9b192ad0'u32, next: 1740434112'u64)), # First Cancun block
+    (number: 123'u64, time: 1740434111'u64, id: (crc: 0x9b192ad0'u32, next: 1740434112'u64)), # Last Cancun block
+    (number: 123'u64, time: 1740434112'u64, id: (crc: 0xdfbd9bed'u32, next: 0'u64)), # First Prague block
+    (number: 123'u64, time: 2740434112'u64, id: (crc: 0xdfbd9bed'u32, next: 0'u64)), # Future Prague block
   ]
 
 template runTest(network: untyped, name: string) =
@@ -76,7 +81,7 @@ template runTest(network: untyped, name: string) =
 
     for i, x in `network IDs`:
       let id = com.forkId(x.number, x.time)
-      check id.crc == x.id.crc
+      check toHex(id.crc) == toHex(x.id.crc)
       check id.nextFork == x.id.next
 
 func config(shanghai, cancun: uint64): ChainConfig =
