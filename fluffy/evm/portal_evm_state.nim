@@ -138,6 +138,20 @@ proc accountExists*(state: PortalEvmStateRef, address: Address): bool =
   state.fetchAccountIfRequired(address)
   state.accounts.contains(address)
 
+proc getBalance*(state: PortalEvmStateRef, address: Address): UInt256 =
+  state.fetchAccountIfRequired(address)
+  state.accounts.getOrDefault(address).balance
+
+proc setBalance*(state: PortalEvmStateRef, address: Address, value: UInt256) =
+  state.fetchAccountIfRequired(address)
+
+  state.accounts.withValue(address, acc):
+    acc[].balance = value
+  do:
+    var account = EMPTY_ACCOUNT
+    account.balance = value
+    state.accounts[address] = account
+
 proc getOriginalStorage*(
     state: PortalEvmStateRef, address: Address, slotKey: UInt256
 ): UInt256 =
@@ -158,24 +172,12 @@ proc setStorage*(
   do:
     state.storage[address] = {slotKey: (0.u256, slotValue)}.toTable
 
-proc getBalance*(state: PortalEvmStateRef, address: Address): UInt256 =
-  state.fetchAccountIfRequired(address)
-  state.accounts.getOrDefault(address).balance
-
-proc setBalance*(state: PortalEvmStateRef, address: Address, value: UInt256) =
-  state.fetchAccountIfRequired(address)
-  # state.accounts[address] = value
-
-  state.accounts.withValue(address, acc):
-    acc[].balance = value
-  do:
-    var account = EMPTY_ACCOUNT
-    account.balance = value
-    state.accounts[address] = account
-
 proc getCode*(state: PortalEvmStateRef, address: Address): seq[byte] =
   state.fetchCodeIfRequired(address)
   state.code.getOrDefault(address)
+
+proc setCode*(state: PortalEvmStateRef, address: Address, code: seq[byte]) =
+  state.code[address] = code
 
 proc getCodeSize*(state: PortalEvmStateRef, address: Address): int =
   state.getCode(address).len()
