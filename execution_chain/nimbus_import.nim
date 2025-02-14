@@ -358,7 +358,10 @@ proc importBlocks*(conf: NimbusConf, com: CommonRef) =
         persistBlock()
         checkpoint()
 
-  checkpoint(true)
+  # If there were no blocks written, we will not have loaded the block number
+  # and therefore should not call checkpoint().
+  if 0 < persister.stats.blocks:
+    checkpoint(true)
 
   notice "Import complete",
     blockNumber,
