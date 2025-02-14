@@ -19,7 +19,8 @@ import
   ./network/wire/[portal_stream, portal_protocol_config],
   ./network/beacon/[beacon_init_loader, beacon_light_client],
   ./network/history/[history_network, history_content],
-  ./network/state/[state_network, state_content]
+  ./network/state/[state_network, state_content],
+  ./evm/portal_evm
 
 export
   beacon_light_client, history_network, state_network, portal_protocol_config, forks
@@ -49,6 +50,7 @@ type
     stateNetwork*: Opt[StateNetwork]
     beaconLightClient*: Opt[LightClient]
     statusLogLoop: Future[void]
+    portalEvm*: Opt[PortalEvmRef]
 
 # Beacon light client application callbacks triggered when new finalized header
 # or optimistic header is available.
@@ -190,6 +192,7 @@ proc new*(
     historyNetwork: historyNetwork,
     stateNetwork: stateNetwork,
     beaconLightClient: beaconLightClient,
+    portalEvm: Opt.some(PortalEvmRef.init())
   )
 
 proc statusLogLoop(n: PortalNode) {.async: (raises: []).} =
@@ -244,6 +247,9 @@ proc stop*(n: PortalNode) {.async: (raises: []).} =
     futures.add(n.beaconLightClient.value.stop())
   if not n.statusLogLoop.isNil():
     futures.add(n.statusLogLoop.cancelAndWait())
+
+  if n.portalEvm.isSome():
+    n.portalEvm.value.close()
 
   await noCancel(allFutures(futures))
 

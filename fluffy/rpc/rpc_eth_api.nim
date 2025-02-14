@@ -17,6 +17,7 @@ import
   ../network/history/[history_network, history_content],
   ../network/state/[state_network, state_content, state_endpoints],
   ../network/beacon/beacon_light_client,
+  ../evm/portal_evm,
   ../version
 
 from ../../execution_chain/errors import ValidationError
@@ -125,11 +126,17 @@ template getOrRaise(stateNetwork: Opt[StateNetwork]): StateNetwork =
     raise newException(ValueError, "state sub-network not enabled")
   sn
 
+template getOrRaise(portalEvm: Opt[PortalEvmRef]): PortalEvmRef =
+  let sn = portalEvm.valueOr:
+    raise newException(ValueError, "portal evm not enabled")
+  sn
+
 proc installEthApiHandlers*(
     rpcServer: RpcServer,
     historyNetwork: Opt[HistoryNetwork],
     beaconLightClient: Opt[LightClient],
     stateNetwork: Opt[StateNetwork],
+    portalEvm: Opt[PortalEvmRef]
 ) =
   rpcServer.rpc("web3_clientVersion") do() -> string:
     return clientVersion
@@ -418,3 +425,44 @@ proc installEthApiHandlers*(
       storageHash: proofs.account.storageRoot,
       storageProof: storageProof,
     )
+
+  # TransactionArgs* = object
+  #   `from`*: Opt[Address]    # (optional) The address the transaction is sent from.
+  #   to*: Opt[Address]        # The address the transaction is directed to.
+  #   gas*: Opt[Quantity]      # (optional) Integer of the gas provided for the transaction execution. eth_call consumes zero gas, but this parameter may be needed by some executions.
+  #   gasPrice*: Opt[Quantity] # (optional) Integer of the gasPrice used for each paid gas.
+  #   maxFeePerGas*: Opt[Quantity]         # (optional) MaxFeePerGas is the maximum fee per gas offered, in wei.
+  #   maxPriorityFeePerGas*: Opt[Quantity] # (optional) MaxPriorityFeePerGas is the maximum miner tip per gas offered, in wei.
+  #   value*: Opt[UInt256]     # (optional) Integer of the value sent with this transaction.
+  #   nonce*: Opt[Quantity]    # (optional) integer of a nonce. This allows to overwrite your own pending transactions that use the same nonce
+  rpcServer.rpc("eth_call") do(txObj: TransactionArgs, quantityTag: RtBlockIdentifier) -> seq[byte]:
+    # TODO: add documentation
+
+    if txObj.to.isNone():
+      raise newException(ValueError, "to address is required")
+
+    if quantityTag.kind == bidAlias:
+      # TODO: Implement
+      raise newException(ValueError, "tag not yet implemented")
+
+    let
+      hn = historyNetwork.getOrRaise()
+      header = (await hn.getVerifiedBlockHeader(quantityTag.number.uint64)).valueOr:
+        raise newException(ValueError, "Could not find header with requested block number")
+      evm = portalEvm.getOrRaise()
+      state = PortalEvmStateRef.init(Opt.some(header.stateRoot), stateNetwork, historyNetwork)
+
+    evm.setExecutionContext(state, header)
+
+    evm.call(txObj.`from`,
+        txObj.to.get(),
+        txObj.gas.map(func (q: Quantity): auto = uint64(q)),
+        txObj.gasPrice.map(func (q: Quantity): auto = uint64(q)),
+        txObj.value,
+        txObj.input).get()
+    # fromAddr = Opt.none(Address),
+    # toAddr: Address,
+    # gas = Opt.none(int64),
+    # gasPrice = Opt.none(int64),
+    # value = Opt.none(UInt256),
+    # input = Opt.none(seq[byte])): Result[seq[byte], string] =

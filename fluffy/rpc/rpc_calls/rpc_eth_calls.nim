@@ -47,3 +47,4 @@ createRpcSigsFromNim(RpcClient):
   proc eth_getProof(
     address: Address, slots: seq[UInt256], blockId: BlockIdentifier
   ): ProofResponse
+  proc eth_call(args: TransactionArgs, blockId: BlockIdentifier): seq[byte]

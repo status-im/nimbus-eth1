@@ -26,8 +26,8 @@ logScope:
   topics = "portal_evm"
 
 type
-  # TODO: maybe don't need this extra types
-  PortalEvmMessageKind* = enum
+  # TODO: maybe don't need these extra types
+  PortalEvmMessageKind = enum
     CALL = 0
     DELEGATECALL = 1
     CALLCODE = 2
@@ -35,7 +35,7 @@ type
     CREATE2 = 4
     EOFCREATE = 5
 
-  PortalEvmMessage* = object
+  PortalEvmMessage = object
     kind*: PortalEvmMessageKind
     staticCall*: bool
     depth*: int32
@@ -63,7 +63,7 @@ type
 
 func hostInterface(): evmc_host_interface
 
-func init*(T: type PortalEvmHost, evm: PortalEvmRef): T =
+func init(T: type PortalEvmHost, evm: PortalEvmRef): T =
   PortalEvmHost(evm: evm, hostInterface: hostInterface())
 
 template toEvmc(host: PortalEvmHost): evmc_host_context =
@@ -139,7 +139,7 @@ func name*(evm: PortalEvmRef): string =
 func version*(evm: PortalEvmRef): string =
   $evm.vmPtr.version
 
-proc execute*(
+proc execute(
     evm: PortalEvmRef, message: PortalEvmMessage, code: Opt[seq[byte]]
 ): Result[seq[byte], string] =
   let host = PortalEvmHost.init(evm)
@@ -173,8 +173,8 @@ proc execute*(
 proc call*(evm: PortalEvmRef,
     fromAddr = Opt.none(Address),
     toAddr: Address,
-    gas = Opt.none(int64),
-    gasPrice = Opt.none(int64),
+    gas = Opt.none(uint64),
+    gasPrice = Opt.none(uint64),
     value = Opt.none(UInt256),
     input = Opt.none(seq[byte])): Result[seq[byte], string] =
 
@@ -186,7 +186,7 @@ proc call*(evm: PortalEvmRef,
       # depth: 0,
       sender: if fromAddr.isSome(): fromAddr.get() else: default(Address),
       recipient: toAddr,
-      gas: if gas.isSome(): gas.get() else: 550_000_000,
+      gas: if gas.isSome(): gas.get().int64 else: 550_000_000,
       inputData: input,
       value: if value.isSome(): value.get() else: 0.u256(),
       #create2Salt: Bytes32
@@ -196,11 +196,11 @@ proc call*(evm: PortalEvmRef,
 
   return evm.execute(message, Opt.some(code))
 
-func isClosed*(evm: PortalEvmRef): bool =
+template isClosed*(evm: PortalEvmRef): bool =
   evm.vmPtr.isNil()
 
 proc close*(evm: PortalEvmRef) =
-  if not evm.vmPtr.isNil():
+  if not evm.isClosed():
     evm.vmPtr.destroy(evm.vmPtr)
     evm.vmPtr = nil
 
@@ -354,7 +354,7 @@ proc selfDestruct(
   recorded
 
 proc call(host: evmc_host_context, msg: var evmc_message): evmc_result {.evmc_abi.} =
-  trace "evmc_host_interface.call called", evmc_message
+  trace "evmc_host_interface.call called"
 
   let h = host.fromEvmc()
   h.evm.vmPtr.execute(

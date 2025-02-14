@@ -43,15 +43,14 @@ type PortalEvmStateRef* = ref object
 
 func init*(
     T: type PortalEvmStateRef,
-    sn = Opt.none(StateNetwork),
     stateRoot = Opt.none(Hash32),
+    sn = Opt.none(StateNetwork),
     hn = Opt.none(HistoryNetwork),
 ): PortalEvmStateRef =
   if sn.isSome():
     # stateRoot is required if state network lookups are enabled
     doAssert(stateRoot.isSome())
-
-  PortalEvmStateRef(stateNetwork: sn, stateRoot: stateRoot, historyNetwork: hn)
+  PortalEvmStateRef(stateRoot: stateRoot, stateNetwork: sn, historyNetwork: hn)
 
 template toEvmc*(state: PortalEvmStateRef): evmc_host_context =
   evmc_host_context(state.addr)
