@@ -447,9 +447,10 @@ proc installEthApiHandlers*(
 
     let
       hn = historyNetwork.getOrRaise()
+      sn = stateNetwork.getOrRaise()
+      evm = portalEvm.getOrRaise()
       header = (await hn.getVerifiedBlockHeader(quantityTag.number.uint64)).valueOr:
         raise newException(ValueError, "Could not find header with requested block number")
-      evm = portalEvm.getOrRaise()
       state = PortalEvmStateRef.init(Opt.some(header.stateRoot), stateNetwork, historyNetwork)
 
     evm.setExecutionContext(state, header)
@@ -460,9 +461,3 @@ proc installEthApiHandlers*(
         txObj.gasPrice.map(func (q: Quantity): auto = uint64(q)),
         txObj.value,
         txObj.input).get()
-    # fromAddr = Opt.none(Address),
-    # toAddr: Address,
-    # gas = Opt.none(int64),
-    # gasPrice = Opt.none(int64),
-    # value = Opt.none(UInt256),
-    # input = Opt.none(seq[byte])): Result[seq[byte], string] =
