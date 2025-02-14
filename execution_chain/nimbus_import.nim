@@ -358,7 +358,15 @@ proc importBlocks*(conf: NimbusConf, com: CommonRef) =
         persistBlock()
         checkpoint()
 
-  checkpoint(true)
+  # There is some fringe case where the `persister` is not in sync to the DB
+  # state. Checkpointing here would then produce a mismatch of the
+  # `getSavedStateBlockNumber()` value and the state which typically fails
+  # with a state root mismatch when the next program uses the DB.
+  #
+  # This all happens only if there were no `era` or `era1` files that could be
+  # imported.
+  if 0 < persister.stats.blocks:
+    checkpoint(true)
 
   notice "Import complete",
     blockNumber,
