@@ -1,5 +1,5 @@
 # Nimbus
-# Copyright (c) 2018-2024 Status Research & Development GmbH
+# Copyright (c) 2018-2025 Status Research & Development GmbH
 # Licensed under either of
 #  * Apache License, version 2.0, ([LICENSE-APACHE](LICENSE-APACHE) or http://www.apache.org/licenses/LICENSE-2.0)
 #  * MIT license ([LICENSE-MIT](LICENSE-MIT) or http://opensource.org/licenses/MIT)
@@ -774,7 +774,7 @@ const
   LondonGasFees = BerlinGasFees.londonGasFees
   ShanghaiGasFees = LondonGasFees.shanghaiGasFees
 
-  gasFees*: array[EVMFork, GasFeeSchedule] = [
+  gasFees*: array[FkFrontier..FkLatest, GasFeeSchedule] = [
     FkFrontier: BaseGasFees,
     FkHomestead: HomesteadGasFees,
     FkTangerine: TangerineGasFees,

@@ -25,10 +25,10 @@ func getTargetBlobGasPerBlock*(electra: bool): uint64 =
   else: TARGET_BLOB_GAS_PER_BLOCK.uint64
 
 const
-  EVMForkToFork: array[FkCancun..EVMFork.high, HardFork] = [
+  EVMForkToFork: array[FkCancun..FkLatest, HardFork] = [
     Cancun,
     Prague,
-    Osaka
+    Osaka,
   ]
 
 func getMaxBlobsPerBlock*(com: CommonRef, fork: EVMFork): uint64 =
