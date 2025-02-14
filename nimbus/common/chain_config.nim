@@ -535,7 +535,10 @@ func chainConfigForNetwork*(id: NetworkId): ChainConfig =
       blobSchedule:        defaultBlobSchedule(),
     )
   of SepoliaNet:
-    const sepoliaTTD = parse("17000000000000000",UInt256)
+    # https://github.com/eth-clients/sepolia/blob/f5e3652be045250fd2de1631683b110317592bd3/metadata/genesis.json
+    const
+      sepoliaTTD = parse("17000000000000000",UInt256)
+      SEPOLIANET_DEPOSIT_CONTRACT_ADDRESS = address"0x7f02C3E3c98b133055B8B348B2Ac625669Ed295D"
     ChainConfig(
       chainId:             SepoliaNet.ChainId,
       homesteadBlock:      Opt.some(0.BlockNumber),
@@ -555,6 +558,7 @@ func chainConfigForNetwork*(id: NetworkId): ChainConfig =
       terminalTotalDifficulty: Opt.some(sepoliaTTD),
       shanghaiTime:        Opt.some(1_677_557_088.EthTime),
       cancunTime:          Opt.some(1_706_655_072.EthTime), # 2024-01-30 22:51:12
+      depositContractAddress: Opt.some(SEPOLIANET_DEPOSIT_CONTRACT_ADDRESS),
       blobSchedule:        defaultBlobSchedule(),
     )
   of HoleskyNet:
