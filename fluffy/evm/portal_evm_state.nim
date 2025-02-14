@@ -26,7 +26,6 @@ logScope:
   topics = "portal_evm"
 
 type PortalEvmStateRef* = ref object
-  header: Header
   accounts: Table[Address, Account]
   code: Table[Address, seq[byte]]
   storage: Table[Address, Table[UInt256, (UInt256, UInt256)]]
@@ -35,6 +34,7 @@ type PortalEvmStateRef* = ref object
   selfDestructs: HashSet[Address]
   transientStorage: Table[Address, Table[UInt256, UInt256]]
   stateNetwork: Opt[StateNetwork] # when none state network lookups are disabled
+  stateRoot: Opt[Hash32]
   fetchedAccounts: HashSet[Address]
   fetchedCode: HashSet[Address]
   fetchedStorage: Table[Address, HashSet[UInt256]]
@@ -42,9 +42,16 @@ type PortalEvmStateRef* = ref object
   blockHashes: Table[uint64, Hash32]
 
 func init*(
-    T: type PortalEvmStateRef, header: Header, stateNetwork = Opt.none(StateNetwork)
+    T: type PortalEvmStateRef,
+    sn = Opt.none(StateNetwork),
+    stateRoot = Opt.none(Hash32),
+    hn = Opt.none(HistoryNetwork),
 ): PortalEvmStateRef =
-  PortalEvmStateRef(header: header, stateNetwork: stateNetwork)
+  if sn.isSome():
+    # stateRoot is required if state network lookups are enabled
+    doAssert(stateRoot.isSome())
+
+  PortalEvmStateRef(stateNetwork: sn, stateRoot: stateRoot, historyNetwork: hn)
 
 template toEvmc*(state: PortalEvmStateRef): evmc_host_context =
   evmc_host_context(state.addr)
@@ -60,7 +67,7 @@ proc fetchAccountIfRequired(state: PortalEvmStateRef, address: Address) =
     return # already fetched account
 
   try:
-    let account = waitFor(sn.getAccount(state.header.stateRoot, address)).valueOr:
+    let account = waitFor(sn.getAccount(state.stateRoot.get(), address)).valueOr:
       raiseAssert("account lookup failed") # how should we handle this?
     state.accounts[address] = account
     state.fetchedAccounts.incl(address)
@@ -76,7 +83,7 @@ proc fetchCodeIfRequired(state: PortalEvmStateRef, address: Address) =
     return # already fetched code
 
   try:
-    let code = waitFor(sn.getCodeByStateRoot(state.header.stateRoot, address)).valueOr:
+    let code = waitFor(sn.getCodeByStateRoot(state.stateRoot.get(), address)).valueOr:
       raiseAssert("code lookup failed") # how should we handle this?
     state.code[address] = code.asSeq()
     state.fetchedCode.incl(address)
@@ -95,7 +102,7 @@ proc fetchStorageIfRequired(
 
   try:
     let slotValue = waitFor(
-      sn.getStorageAtByStateRoot(state.header.stateRoot, address, slotKey)
+      sn.getStorageAtByStateRoot(state.stateRoot.get(), address, slotKey)
     ).valueOr:
       raiseAssert("storage lookup failed") # how should we handle this?
 
@@ -113,15 +120,11 @@ proc fetchStorageIfRequired(
     raiseAssert("storage lookup failed") # how should we handle this?
 
 proc fetchBlockHashIfRequired(state: PortalEvmStateRef, number: uint64) =
-  if state.blockHashes.contains(number):
-    return # already fetched block hash
-
-  if state.header.number == number:
-    state.blockHashes[number] = state.header.rlpHash()
-    return
-
   let hn = state.historyNetwork.valueOr:
     return # history lookups over portal network are disabled
+
+  if state.blockHashes.contains(number):
+    return # already fetched block hash
 
   try:
     let header = waitFor(hn.getVerifiedBlockHeader(number)).valueOr:

@@ -13,7 +13,9 @@ import
   stint,
   results,
   evmc/evmc,
-  eth/common/[hashes, accounts, addresses],
+  eth/common/[hashes, accounts, addresses, transactions],
+  ../../execution_chain/common/chain_config,
+  ../../execution_chain/transaction,
   ../../execution_chain/evm/evmc_helpers,
   ./[evm_loader, portal_evm_state]
 
@@ -25,6 +27,7 @@ logScope:
   topics = "portal_evm"
 
 type
+  # TODO: maybe don't need this extra types
   PortalEvmMessageKind* = enum
     CALL = 0
     DELEGATECALL = 1
@@ -48,7 +51,12 @@ type
 
   PortalEvmRef* = ref object
     vmPtr: ptr evmc_vm
+    revision: evmc_revision
+    config: ChainConfig
     state: PortalEvmStateRef
+    header: Header
+    transaction: Transaction
+    sender: Address
 
   PortalEvmHost = object
     evm: PortalEvmRef
@@ -64,12 +72,6 @@ template toEvmc(host: PortalEvmHost): evmc_host_context =
 
 template fromEvmc(host: evmc_host_context): PortalEvmHost =
   cast[ptr PortalEvmHost](host)[]
-
-template state(host: PortalEvmHost): PortalEvmStateRef =
-  host.evm.state
-
-template revision(host: PortalEvmHost): evmc_revision =
-  host.evm.revision
 
 template addrIfPresent(value: Opt[seq[byte]]): auto =
   if value.isSome():
@@ -112,16 +114,22 @@ func toEvmc(msg: PortalEvmMessage): evmc_message =
   )
 
 func init*(T: type PortalEvmRef): T =
-  PortalEvmRef(vmPtr: loadEvmcVM())
+  PortalEvmRef(
+    vmPtr: loadEvmcVM(),
+    revision: EVMC_LATEST_STABLE_REVISION,
+    config: chainConfigForNetwork(MainNet),
+  )
 
-proc `state=`*(evm: PortalEvmRef, state: PortalEvmStateRef) =
+func getRevision(evm: PortalEvmRef): evmc_revision =
+  let
+    forkTable = evm.config.toForkTransitionTable()
+    fork = forkTable.toHardFork(forkDeterminationInfo(evm.header))
+  ToEVMFork[fork]
+
+proc setExecutionContext*(evm: PortalEvmRef, state: PortalEvmStateRef, header: Header) =
   evm.state = state
-
-func state*(evm: PortalEvmRef): PortalEvmStateRef =
-  evm.state
-
-func revision(evm: PortalEvmRef): evmc_revision =
-  EVMC_LATEST_STABLE_REVISION
+  evm.header = header
+  evm.revision = evm.getRevision()
 
 func abiVersion*(evm: PortalEvmRef): int =
   evm.vmPtr.abi_version.int
@@ -143,7 +151,7 @@ proc execute*(
       evm.vmPtr,
       host.hostInterface.addr,
       host.toEvmc(),
-      evm.revision(),
+      evm.revision,
       msg,
       code.addrIfPresent(),
       code.lenIfPresent(),
@@ -163,6 +171,36 @@ proc execute*(
 
   return res
 
+# proc execute*(
+#     evm: PortalEvmRef, txn: Transaction, sender: Address): Result[seq[byte], string] =
+
+#   evm.transaction = txn
+
+#   let contractCreation = not txn.to.has_value()};
+#     const evmc::address destination{contract_creation ? evmc::address{} : *txn.to};
+
+#   let
+#     message = PortalEvmMessage(
+#       kind: PortalEvmMessageKind.CALL,
+#       # staticCall: false,
+#       # depth: 0,
+#       gas: 20000000,
+#       recipient: address"0xc2edad668740f1aa35e4d8f227fb8e17dca888cd",
+#       sender: address"0xfffffffffffffffffffffffffffffffffffffffe",
+#       #inputData: Opt.some(@[0x1.byte, 0x2, 0x3]),
+#       inputData: Opt.some(hexToSeqByte("0x2e64cec1")),
+#         #value: 10.u256(),
+#         #create2Salt: Bytes32
+#         #codeAddress: Opt[Address]
+#         #code: Opt[seq[byte]]
+#     )
+#     #code = Opt.some(hexToSeqByte("0x4360005543600052596000f3"))
+#     code = Opt.some(
+#       hexToSeqByte(
+#         "608060405234801561000f575f80fd5b5060043610610034575f3560e01c80632e64cec1146100385780636057361d14610056575b5f80fd5b610040610072565b60405161004d919061009b565b60405180910390f35b610070600480360381019061006b91906100e2565b61007a565b005b5f8054905090565b805f8190555050565b5f819050919050565b61009581610083565b82525050565b5f6020820190506100ae5f83018461008c565b92915050565b5f80fd5b6100c181610083565b81146100cb575f80fd5b50565b5f813590506100dc816100b8565b92915050565b5f602082840312156100f7576100f66100b4565b5b5f610104848285016100ce565b9150509291505056fea26469706673582212209a0dd35336aff1eb3eeb11db76aa60a1427a12c1b92f945ea8c8d1dfa337cf2264736f6c634300081a0033"
+#       )
+#     )
+
 # Eth_Call parameters:
 # from: DATA, 20 Bytes - (optional) The address the transaction is sent from.
 # to: DATA, 20 Bytes - The address the transaction is directed to.
@@ -170,6 +208,7 @@ proc execute*(
 # gasPrice: QUANTITY - (optional) Integer of the gasPrice used for each paid gas
 # value: QUANTITY - (optional) Integer of the value sent with this transaction
 # input: DATA - (optional) Hash of the method signature and encoded parameters. For details see Ethereum Contract ABI in the Solidity documentation(opens in a new tab).
+#proc call*(evm: PortalEvmRef, fromAddr: Opt[Address], toAddr: Address,): bool =
 
 func isClosed*(evm: PortalEvmRef): bool =
   evm.vmPtr.isNil()
@@ -189,7 +228,8 @@ proc accountExists(
     host: evmc_host_context, address: var evmc_address
 ): c99bool {.evmc_abi.} =
   let
-    state = host.fromEvmc().state()
+    h = host.fromEvmc()
+    state = h.evm.state
     adr = address.fromEvmc()
   trace "evmc_host_interface.account_exists called", address = adr.to0xHex()
 
@@ -199,7 +239,8 @@ proc getStorage(
     host: evmc_host_context, address: var evmc_address, key: var evmc_bytes32
 ): evmc_bytes32 {.evmc_abi.} =
   let
-    state = host.fromEvmc().state()
+    h = host.fromEvmc()
+    state = h.evm.state
     adr = address.fromEvmc()
     k = UInt256.fromEvmc(key)
   trace "evmc_host_interface.get_storage called", address = adr.to0xHex(), key = k
@@ -210,7 +251,8 @@ proc setStorage(
     host: evmc_host_context, address: var evmc_address, key, value: var evmc_bytes32
 ): evmc_storage_status {.evmc_abi.} =
   let
-    state = host.fromEvmc().state()
+    h = host.fromEvmc()
+    state = h.evm.state
     adr = address.fromEvmc()
     k = UInt256.fromEvmc(key)
     v = UInt256.fromEvmc(value)
@@ -256,7 +298,8 @@ proc getBalance(
     host: evmc_host_context, address: var evmc_address
 ): evmc_uint256be {.evmc_abi.} =
   let
-    state = host.fromEvmc().state()
+    h = host.fromEvmc()
+    state = h.evm.state
     adr = address.fromEvmc()
   trace "evmc_host_interface.get_balance called", address = adr.to0xHex()
 
@@ -266,7 +309,8 @@ proc getCodeSize(
     host: evmc_host_context, address: var evmc_address
 ): csize_t {.evmc_abi.} =
   let
-    state = host.fromEvmc().state()
+    h = host.fromEvmc()
+    state = h.evm.state
     adr = address.fromEvmc()
   trace "evmc_host_interface.get_code_size called", address = adr.to0xHex()
 
@@ -276,7 +320,8 @@ proc getCodeHash(
     host: evmc_host_context, address: var evmc_address
 ): evmc_bytes32 {.evmc_abi.} =
   let
-    state = host.fromEvmc().state()
+    h = host.fromEvmc()
+    state = h.evm.state
     adr = address.fromEvmc()
   trace "evmc_host_interface.get_code_hash called", address = adr.to0xHex()
 
@@ -290,7 +335,8 @@ proc copyCode(
     buffer_size: csize_t,
 ): csize_t {.evmc_abi.} =
   let
-    state = host.fromEvmc().state()
+    h = host.fromEvmc()
+    state = h.evm.state
     adr = address.fromEvmc()
   trace "evmc_host_interface.copy_code called",
     address = adr.to0xHex(), code_offset, buffer_size
@@ -302,7 +348,7 @@ proc selfDestruct(
 ): c99bool {.evmc_abi.} =
   let
     h = host.fromEvmc()
-    state = h.state()
+    state = h.evm.state
     adr = address.fromEvmc()
     benef = beneficiary.fromEvmc()
   trace "evmc_host_interface.copy_code called",
@@ -312,7 +358,7 @@ proc selfDestruct(
   state.setBalance(benef, state.getBalance(benef) + balance)
 
   var recorded = false
-  if h.revision() >= EVMC_CANCUN and not state.isCreated(adr):
+  if h.evm.revision >= EVMC_CANCUN and not state.isCreated(adr):
     state.setBalance(adr, state.getBalance(adr) - balance)
   else:
     state.setBalance(adr, 0.u256)
@@ -321,60 +367,48 @@ proc selfDestruct(
 
   recorded
 
-
 proc call(host: evmc_host_context, msg: var evmc_message): evmc_result {.evmc_abi.} =
-  trace "evmc_host_interface.call called", evmc_message # can this be printed?
+  trace "evmc_host_interface.call called", evmc_message
 
   let h = host.fromEvmc()
   h.evm.vmPtr.execute(
-    h.evm.vmPtr,
-    h.hostInterface.addr,
-    h.state().toEvmc(),
-    EVMC_LATEST_STABLE_REVISION,
-      # TODO this should be set based on the current block number
-    msg,
-    nil,
-    0,
+    h.evm.vmPtr, h.hostInterface.addr, h.evm.state.toEvmc(), h.evm.revision, msg, nil, 0
   )
 
 proc getTxContext(host: evmc_host_context): evmc_tx_context {.evmc_abi.} =
   trace "evmc_host_interface.get_tx_context called"
-  evmc_tx_context()
-    # const BlockHeader& header{evm_.block_.header};
-    # evmc_tx_context context{};
-    # const intx::uint256 base_fee_per_gas{header.base_fee_per_gas.value_or(0)};
-    # const intx::uint256 effective_gas_price{evm_.txn_->effective_gas_price(base_fee_per_gas)};
-    # intx::be::store(context.tx_gas_price.bytes, effective_gas_price);
-    # context.tx_origin = *evm_.txn_->sender();
-    # context.block_coinbase = evm_.beneficiary;
-    # SILKWORM_ASSERT(header.number <= INT64_MAX);  // EIP-1985
-    # context.block_number = static_cast<int64_t>(header.number);
-    # context.block_timestamp = static_cast<int64_t>(header.timestamp);
-    # SILKWORM_ASSERT(header.gas_limit <= INT64_MAX);  // EIP-1985
-    # context.block_gas_limit = static_cast<int64_t>(header.gas_limit);
-    # if (header.difficulty == 0) {
-    #     // EIP-4399: Supplant DIFFICULTY opcode with RANDOM
-    #     // We use 0 header difficulty as the telltale of PoS blocks
-    #     std::memcpy(context.block_prev_randao.bytes, header.prev_randao.bytes, kHashLength);
-    # } else {
-    #     intx::be::store(context.block_prev_randao.bytes, header.difficulty);
-    # }
-    # intx::be::store(context.chain_id.bytes, intx::uint256{evm_.config().chain_id});
-    # intx::be::store(context.block_base_fee.bytes, base_fee_per_gas);
-    # const intx::uint256 blob_gas_price{header.blob_gas_price().value_or(0)};
-    # intx::be::store(context.blob_base_fee.bytes, blob_gas_price);
-    # context.blob_hashes = evm_.txn_->blob_versioned_hashes.data();
-    # context.blob_hashes_count = evm_.txn_->blob_versioned_hashes.size();
-    # return context;
+
+  let
+    h = host.fromEvmc()
+    header = h.evm.header
+    txn = h.evm.transaction
+    sender = h.evm.sender
+    baseFeePerGas = header.baseFeePerGas.valueOr:
+      0.u256()
+    effectiveGasPrice = txn.effectiveGasPrice(baseFeePerGas.truncate(GasInt))
+
+  var context = evmc_tx_context()
+  context.tx_gas_price = u256(effectiveGasPrice).toEvmc()
+  context.tx_origin = sender.toEvmc()
+  context.block_number = header.number.int64
+  context.block_timestamp = header.timestamp.int64
+  context.block_gas_limit = header.gasLimit.int64
+  if header.difficulty.isZero():
+    context.block_prev_randao = header.prevRandao().toEvmc()
+  else:
+    context.block_prev_randao = header.difficulty.toEvmc()
+  context.chain_id = u256(h.evm.config.chainId.uint64).toEvmc()
+  context.block_base_fee = baseFeePerGas.toEvmc()
 
 proc getBlockHash(host: evmc_host_context, number: int64): evmc_bytes32 {.evmc_abi.} =
+  trace "evmc_host_interface.get_block_hash called", number
   doAssert(number >= 0)
 
-  let state = host.fromEvmc().state()
-  trace "evmc_host_interface.get_block_hash called", number
-
-  let blockHash = state.getBlockHash(number.uint64).valueOr:
-    return default(evmc_bytes32)
+  let
+    h = host.fromEvmc()
+    state = h.evm.state
+    blockHash = state.getBlockHash(number.uint64).valueOr:
+      return default(evmc_bytes32)
 
   blockHash.toEvmc()
 
@@ -393,7 +427,8 @@ proc accessAccount(
     host: evmc_host_context, address: var evmc_address
 ): evmc_access_status {.evmc_abi.} =
   let
-    state = host.fromEvmc().state()
+    h = host.fromEvmc()
+    state = h.evm.state
     adr = address.fromEvmc()
   trace "evmc_host_interface.access_account called", address = adr
 
@@ -404,7 +439,8 @@ proc accessStorage(
     host: evmc_host_context, address: var evmc_address, key: var evmc_bytes32
 ): evmc_access_status {.evmc_abi.} =
   let
-    state = host.fromEvmc().state()
+    h = host.fromEvmc()
+    state = h.evm.state
     adr = address.fromEvmc()
     k = UInt256.fromEvmc(key)
   trace "evmc_host_interface.access_account called", address = adr, key = k
@@ -416,7 +452,8 @@ proc getTransientStorage(
     host: evmc_host_context, address: var evmc_address, key: var evmc_bytes32
 ): evmc_bytes32 {.evmc_abi.} =
   let
-    state = host.fromEvmc().state()
+    h = host.fromEvmc()
+    state = h.evm.state
     adr = address.fromEvmc()
     k = UInt256.fromEvmc(key)
   trace "evmc_host_interface.get_transient_storage called", address = adr, key = k
@@ -427,7 +464,8 @@ proc setTransientStorage(
     host: evmc_host_context, address: var evmc_address, key, value: var evmc_bytes32
 ) {.evmc_abi.} =
   let
-    state = host.fromEvmc().state()
+    h = host.fromEvmc()
+    state = h.evm.state
     adr = address.fromEvmc()
     k = UInt256.fromEvmc(key)
     v = UInt256.fromEvmc(value)
@@ -459,9 +497,9 @@ func hostInterface(): evmc_host_interface =
 when isMainModule:
   # Create new instance of the evm
   let evm = PortalEvmRef.init()
-
+  evm.revision = EVMC_LATEST_STABLE_REVISION
   # Set the state to be used during the execution
-  evm.state = PortalEvmStateRef.init(Header())
+  evm.state = PortalEvmStateRef.init()
 
   # Get the abi version
   echo "PortalEvmRef.abiVersion() = ", evm.abiVersion()
