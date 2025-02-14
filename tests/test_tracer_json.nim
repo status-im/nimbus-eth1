@@ -169,9 +169,6 @@ proc testFixtureImpl(node: JsonNode, testStatusIMPL: var TestStatus, memoryDB: C
 proc testFixtureAristo(node: JsonNode, testStatusIMPL: var TestStatus) =
   node.testFixtureImpl(testStatusIMPL, newCoreDbRef AristoDbMemory)
 
-proc tracerJsonMain*() =
-  suite "tracer json tests for Aristo DB":
-    jsonTest("TracerTests", testFixtureAristo)
+suite "tracer json tests for Aristo DB":
+  jsonTest("TracerTests", testFixtureAristo)
 
-when isMainModule:
-  tracerJsonMain()

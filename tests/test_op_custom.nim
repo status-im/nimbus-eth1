@@ -320,5 +320,4 @@ proc opCustomMain*() =
       stack: "0x0000000000000000000000000000000000000000000000000000000000000001"
       success: false
 
-when isMainModule:
-  opCustomMain()
+opCustomMain()

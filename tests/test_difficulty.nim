@@ -119,9 +119,5 @@ template runTest() =
       let fixtures = parseJson(readFile(filename))
       testFixture(fixtures, testStatusIMPL)
 
-proc difficultyMain*() =
-  suite "DifficultyTest":
-    runTest()
-
-when isMainModule:
-  difficultyMain()
+suite "DifficultyTest":
+  runTest()

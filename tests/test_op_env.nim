@@ -466,5 +466,4 @@ proc opEnvMain*() =
       gasused: 2
       fork: Cancun
 
-when isMainModule:
-  opEnvMain()
+opEnvMain()

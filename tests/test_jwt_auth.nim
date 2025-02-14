@@ -446,13 +446,10 @@ proc jwtAuthMain*(noisy = defined(debug)) =
   noisy.runJwtAuth
 
 when isMainModule:
-  const
-    noisy = defined(debug)
-
   setErrorLevel()
 
-  noisy.runKeyLoader
-  noisy.runJwtAuth
+runKeyLoader()
+runJwtAuth()
 
 # ------------------------------------------------------------------------------
 # End

@@ -115,5 +115,4 @@ proc multiKeysMain*() =
         mg.group.first == 2
         mg.group.last == 3
 
-when isMainModule:
-  multiKeysMain()
+multiKeysMain()

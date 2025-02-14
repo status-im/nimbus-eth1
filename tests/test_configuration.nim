@@ -298,5 +298,4 @@ proc configurationMain*() =
       check res.isErr
       check res.error.find("expect json object of keystore data:") == 0
 
-when isMainModule:
-  configurationMain()
+configurationMain()
