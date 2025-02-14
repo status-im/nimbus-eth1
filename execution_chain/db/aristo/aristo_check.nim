@@ -69,7 +69,7 @@ proc checkBE*(
   case db.backend.kind:
   of BackendMemory:
     return MemBackendRef.checkBE db
-  of BackendRocksDB, BackendRdbHosting:
+  of BackendRocksDB:
     return RdbBackendRef.checkBE db
   of BackendVoid:
     return VoidBackendRef.checkBE db

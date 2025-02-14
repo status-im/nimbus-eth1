@@ -30,13 +30,7 @@ type
     RdbBeHostError
     RdbBeHostNotApplicable
 
-    # Transaction wrappers
-    TxBackendNotWritable
-    TxPersistDelayed
-    TxStackGarbled
-
     # Filter management
-    FilBackendMissing
     FilBackendRoMode
     FilSiblingsCommitUnfinshed
 

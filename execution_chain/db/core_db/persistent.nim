@@ -1,5 +1,5 @@
 # Nimbus
-# Copyright (c) 2023-2024 Status Research & Development GmbH
+# Copyright (c) 2023-2025 Status Research & Development GmbH
 # Licensed under either of
 #  * Apache License, version 2.0, ([LICENSE-APACHE](LICENSE-APACHE) or
 #    http://www.apache.org/licenses/LICENSE-2.0)
@@ -41,7 +41,7 @@ proc newCoreDbRef*(
   ## `RocksDb` backend for both, `Aristo` and `KVT`.
   ##
   when dbType == AristoDbRocks:
-    newAristoRocksDbCoreDbRef path, opts
+    newRocksDbCoreDbRef path, opts
 
   else:
     {.error: "Unsupported dbType for persistent newCoreDbRef()".}

@@ -1,5 +1,5 @@
 # nimbus-eth1
-# Copyright (c) 2023-2024 Status Research & Development GmbH
+# Copyright (c) 2023-2025 Status Research & Development GmbH
 # Licensed under either of
 #  * Apache License, version 2.0, ([LICENSE-APACHE](LICENSE-APACHE) or
 #    http://www.apache.org/licenses/LICENSE-2.0)
@@ -31,45 +31,35 @@ when extraTraceMessages:
     topics = "aristo-rocksdb"
 
 # ------------------------------------------------------------------------------
-# Private helpers
-# ------------------------------------------------------------------------------
-
-proc disposeSession(rdb: var RdbInst) =
-  rdb.session.close()
-  rdb.session = WriteBatchRef(nil)
-
-# ------------------------------------------------------------------------------
 # Public functions
 # ------------------------------------------------------------------------------
 
-proc begin*(rdb: var RdbInst) =
-  if rdb.session.isNil:
-    rdb.session = rdb.baseDb.openWriteBatch()
+proc begin*(rdb: var RdbInst): SharedWriteBatchRef =
+  rdb.baseDb.openWriteBatch()
 
-proc rollback*(rdb: var RdbInst) =
-  if not rdb.session.isClosed():
+proc rollback*(rdb: var RdbInst, session: SharedWriteBatchRef) =
+  if not session.isClosed():
     rdb.rdKeyLru = typeof(rdb.rdKeyLru).init(rdb.rdKeySize)
     rdb.rdVtxLru = typeof(rdb.rdVtxLru).init(rdb.rdVtxSize)
     rdb.rdBranchLru = typeof(rdb.rdBranchLru).init(rdb.rdBranchSize)
-    rdb.disposeSession()
+    session.close()
 
-proc commit*(rdb: var RdbInst): Result[void,(AristoError,string)] =
-  if not rdb.session.isClosed():
-    defer: rdb.disposeSession()
-    rdb.baseDb.write(rdb.session).isOkOr:
+proc commit*(rdb: var RdbInst, session: SharedWriteBatchRef): Result[void,(AristoError,string)] =
+  if not session.isClosed():
+    defer: session.close()
+    rdb.baseDb.commit(session).isOkOr:
       const errSym = RdbBeDriverWriteError
       when extraTraceMessages:
         trace logTxt "commit", error=errSym, info=error
       return err((errSym,error))
   ok()
 
-
 proc putAdm*(
-    rdb: var RdbInst;
+    rdb: var RdbInst; session: SharedWriteBatchRef,
     xid: AdminTabID;
     data: openArray[byte];
       ): Result[void,(AdminTabID,AristoError,string)] =
-  let dsc = rdb.session
+  let dsc = session.batch
   if data.len == 0:
     dsc.delete(xid.toOpenArray, rdb.admCol.handle()).isOkOr:
       const errSym = RdbBeDriverDelAdmError
@@ -85,10 +75,10 @@ proc putAdm*(
   ok()
 
 proc putVtx*(
-    rdb: var RdbInst;
+    rdb: var RdbInst; session: SharedWriteBatchRef,
     rvid: RootedVertexID; vtx: VertexRef, key: HashKey
       ): Result[void,(VertexID,AristoError,string)] =
-  let dsc = rdb.session
+  let dsc = session.batch
   if vtx.isValid:
     dsc.put(rvid.blobify().data(), vtx.blobify(key), rdb.vtxCol.handle()).isOkOr:
       # Caller must `rollback()` which will flush the `rdVtxLru` cache

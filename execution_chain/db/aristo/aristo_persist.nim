@@ -8,42 +8,26 @@
 # at your option. This file may not be copied, modified, or distributed
 # except according to those terms.
 
-## Kvt DB -- Transaction interface
-## ===============================
+## Aristo DB -- Transaction interface
+## ==================================
 ##
 {.push raises: [].}
 
 import
-  results,
-  ./kvt_tx/[tx_frame, tx_stow],
-  ./kvt_init/memory_only,
-  ./kvt_desc
-
-export tx_frame
-
+  ./[aristo_desc, aristo_tx_frame]
 
 # ------------------------------------------------------------------------------
-# Public functions
-# ------------------------------------------------------------------------------
-
-func to*(tx: KvtTxRef; T: type[KvtDbRef]): T =
-  ## Getter, retrieves the parent database descriptor from argument `tx`
-  tx.db
-
-func toKvtDbRef*(tx: KvtTxRef): KvtDbRef =
-  ## Same as `.to(KvtDbRef)`
-  tx.db
-
-# ------------------------------------------------------------------------------
-# Public functions: save database
+# Public functions: save to database
 # ------------------------------------------------------------------------------
 
 proc persist*(
-    db: KvtDbRef;                     # Database
-      ): Result[void,KvtError] =
+    db: AristoDbRef;                  # Database
+    batch: PutHdlRef;
+    nxtSid = 0u64;                    # Next state ID (aka block number)
+      ) =
   ## Persistently store data onto backend database. If the system is running
   ## without a database backend, the function returns immediately with an
-  ## error. The same happens if there is a pending transaction.
+  ## error.
   ##
   ## The function merges all staged data from the top layer cache onto the
   ## backend stage area. After that, the top layer cache is cleared.
@@ -52,13 +36,11 @@ proc persist*(
   ## and the staged data area is cleared. Wile performing this last step,
   ## the recovery journal is updated (if available.)
   ##
-  # Register for saving if piggybacked on remote database
-  if db.backend.kind == BackendRdbTriggered:
-    ? db.txPersistOk()
-    ? db.backend.setWrReqFn db
-    return err(TxPersistDelayed)
-
-  db.txPersist()
+  ## If the argument `nxtSid` is passed non-zero, it will be the ID for the
+  ## next recovery journal record. If non-zero, this ID must be greater than
+  ## all previous IDs (e.g. block number when stowing after block execution.)
+  ##
+  db.txFramePersist(batch, nxtSid)
 
 # ------------------------------------------------------------------------------
 # End

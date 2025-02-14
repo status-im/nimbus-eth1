@@ -17,6 +17,8 @@ import
   ../../kvt/[kvt_init/memory_only, kvt_walk/memory_only],
   ../base/[base_config, base_desc, base_helpers]
 
+export base_desc
+
 # ------------------------------------------------------------------------------
 # Public constructors
 # ------------------------------------------------------------------------------
@@ -41,12 +43,12 @@ proc create*(dbType: CoreDbType; kvt: KvtDbRef; mpt: AristoDbRef): CoreDbRef =
       mpt.backend = profApi.be
   bless db
 
-proc newAristoMemoryCoreDbRef*(): CoreDbRef =
-  result = AristoDbMemory.create(
+proc newMemoryCoreDbRef*(): CoreDbRef =
+  AristoDbMemory.create(
     KvtDbRef.init(use_kvt.MemBackendRef),
     AristoDbRef.init(use_ari.MemBackendRef))
 
-proc newAristoVoidCoreDbRef*(): CoreDbRef =
+proc newVoidCoreDbRef*(): CoreDbRef =
   AristoDbVoid.create(
     KvtDbRef.init(use_kvt.VoidBackendRef),
     AristoDbRef.init(use_ari.VoidBackendRef))

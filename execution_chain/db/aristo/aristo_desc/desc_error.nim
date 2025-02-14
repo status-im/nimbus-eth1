@@ -86,7 +86,6 @@ type
 
 
     # Functions from  `aristo_delta.nim`
-    FilBackendMissing
     FilBackendRoMode
     FilSiblingsCommitUnfinshed
 
@@ -226,9 +225,5 @@ type
     RdbGuestInstanceAborted
     RdbHashKeyExpected
 
-
-    # Transaction wrappers
-    TxBackendNotWritable
-    TxStackGarbled
 
 # End

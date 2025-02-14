@@ -1,5 +1,5 @@
 # nimbus-eth1
-# Copyright (c) 2023-2024 Status Research & Development GmbH
+# Copyright (c) 2023-2025 Status Research & Development GmbH
 # Licensed under either of
 #  * Apache License, version 2.0, ([LICENSE-APACHE](LICENSE-APACHE) or
 #    http://www.apache.org/licenses/LICENSE-2.0)
@@ -36,6 +36,8 @@ import
   ./rocks_db/[rdb_desc, rdb_get, rdb_init, rdb_put, rdb_walk],
   ../../opts
 
+export rdb_desc
+
 const
   extraTraceMessages = false
     ## Enabled additional logging noise
@@ -45,6 +47,7 @@ type
     rdb: RdbInst              ## Allows low level access to database
 
   RdbPutHdlRef = ref object of TypedPutHdlRef
+    session*: SharedWriteBatchRef
 
 when extraTraceMessages:
   import chronicles
@@ -56,8 +59,8 @@ when extraTraceMessages:
 # Private helpers
 # ------------------------------------------------------------------------------
 
-proc newSession(db: RdbBackendRef): RdbPutHdlRef =
-  new result
+proc newSession(db: RdbBackendRef, session: SharedWriteBatchRef): RdbPutHdlRef =
+  result = RdbPutHdlRef(session: session)
   result.TypedPutHdlRef.beginSession db
 
 proc getSession(hdl: PutHdlRef; db: RdbBackendRef): RdbPutHdlRef =
@@ -137,15 +140,14 @@ proc getLstFn(db: RdbBackendRef): GetLstFn =
 proc putBegFn(db: RdbBackendRef): PutBegFn =
   result =
     proc(): Result[PutHdlRef,AristoError] =
-      db.rdb.begin()
-      ok db.newSession()
+      ok db.newSession(db.rdb.begin())
 
 proc putVtxFn(db: RdbBackendRef): PutVtxFn =
   result =
     proc(hdl: PutHdlRef; rvid: RootedVertexID; vtx: VertexRef, key: HashKey) =
       let hdl = hdl.getSession db
       if hdl.error.isNil:
-        db.rdb.putVtx(rvid, vtx, key).isOkOr:
+        db.rdb.putVtx(hdl.session, rvid, vtx, key).isOkOr:
           hdl.error = TypedPutHdlErrRef(
             pfx:  VtxPfx,
             vid:  error[0],
@@ -158,7 +160,7 @@ proc putTuvFn(db: RdbBackendRef): PutTuvFn =
       let hdl = hdl.getSession db
       if hdl.error.isNil:
         if vs.isValid:
-          db.rdb.putAdm(AdmTabIdTuv, vs.blobify.data()).isOkOr:
+          db.rdb.putAdm(hdl.session, AdmTabIdTuv, vs.blobify.data()).isOkOr:
             hdl.error = TypedPutHdlErrRef(
               pfx:  AdmPfx,
               aid:  AdmTabIdTuv,
@@ -173,7 +175,7 @@ proc putLstFn(db: RdbBackendRef): PutLstFn =
       let hdl = hdl.getSession db
       if hdl.error.isNil:
         let data = lst.blobify
-        db.rdb.putAdm(AdmTabIdLst, data).isOkOr:
+        db.rdb.putAdm(hdl.session, AdmTabIdLst, data).isOkOr:
           hdl.error = TypedPutHdlErrRef(
             pfx:  AdmPfx,
             aid:  AdmTabIdLst,
@@ -187,17 +189,17 @@ proc putEndFn(db: RdbBackendRef): PutEndFn =
       if not hdl.error.isNil:
         when extraTraceMessages:
           case hdl.error.pfx:
-          of VtxPfx, KeyPfx: trace logTxt "putEndFn: vtx/key failed",
+          of VtxPfx: trace logTxt "putEndFn: vtx/key failed",
             pfx=hdl.error.pfx, vid=hdl.error.vid, error=hdl.error.code
           of AdmPfx: trace logTxt "putEndFn: admin failed",
             pfx=AdmPfx, aid=hdl.error.aid.uint64, error=hdl.error.code
           of Oops: trace logTxt "putEndFn: oops",
             pfx=hdl.error.pfx, error=hdl.error.code
-        db.rdb.rollback()
+        db.rdb.rollback(hdl.session)
         return err(hdl.error.code)
 
       # Commit session
-      db.rdb.commit().isOkOr:
+      db.rdb.commit(hdl.session).isOkOr:
         when extraTraceMessages:
           trace logTxt "putEndFn: failed", error=($error[0]), info=error[1]
         return err(error[0])
@@ -209,44 +211,17 @@ proc closeFn(db: RdbBackendRef): CloseFn =
       db.rdb.destroy(eradicate)
 
 # ------------------------------------------------------------------------------
-# Private functions: hosting interface changes
-# ------------------------------------------------------------------------------
-
-proc putBegHostingFn(db: RdbBackendRef): PutBegFn =
-  result =
-    proc(): Result[PutHdlRef,AristoError] =
-      db.rdb.begin()
-      if db.rdb.trgWriteEvent(db.rdb.session):
-        ok db.newSession()
-      else:
-        when extraTraceMessages:
-          trace logTxt "putBegFn: guest trigger aborted session"
-        db.rdb.rollback()
-        err(RdbGuestInstanceAborted)
-
-# ------------------------------------------------------------------------------
 # Public functions
 # ------------------------------------------------------------------------------
 
 proc rocksDbBackend*(
-    path: string;
     opts: DbOptions;
-    dbOpts: DbOptionsRef;
-    cfOpts: ColFamilyOptionsRef;
-    guestCFs: openArray[ColFamilyDescriptor];
-      ): Result[(BackendRef, seq[ColFamilyReadWrite]),AristoError] =
-  let db = RdbBackendRef(
-    beKind: BackendRocksDB)
+    baseDb: RocksDbInstanceRef;
+      ): BackendRef =
+  let db = RdbBackendRef(beKind: BackendRocksDB)
 
   # Initialise RocksDB
-  let oCfs = block:
-    let rc = db.rdb.init(path, opts, dbOpts, cfOpts, guestCFs)
-    if rc.isErr:
-      when extraTraceMessages:
-        trace logTxt "constructor failed",
-           error=rc.error[0], info=rc.error[1]
-      return err(rc.error[0])
-    rc.value()
+  db.rdb.init(opts, baseDb)
 
   db.getVtxFn = getVtxFn db
   db.getKeyFn = getKeyFn db
@@ -260,23 +235,8 @@ proc rocksDbBackend*(
   db.putEndFn = putEndFn db
 
   db.closeFn = closeFn db
-  ok((db, oCfs))
 
-
-proc rocksDbSetEventTrigger*(
-    be: BackendRef;
-    hdl: RdbWriteEventCb;
-     ): Result[void,AristoError] =
-  ## Store event trigger. This also changes the backend type.
-  if hdl.isNil:
-    err(RdbBeWrTriggerNilFn)
-  else:
-    let db = RdbBackendRef(be)
-    db.rdb.trgWriteEvent = hdl
-    db.beKind = BackendRdbHosting
-    db.putBegFn = putBegHostingFn db
-    ok()
-
+  db
 
 proc dup*(db: RdbBackendRef): RdbBackendRef =
   ## Duplicate descriptor shell as needed for API debugging

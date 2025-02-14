@@ -1,5 +1,5 @@
 # nimbus-eth1
-# Copyright (c) 2023-2024 Status Research & Development GmbH
+# Copyright (c) 2023-2025 Status Research & Development GmbH
 # Licensed under either of
 #  * Apache License, version 2.0, ([LICENSE-APACHE](LICENSE-APACHE) or
 #    http://www.apache.org/licenses/LICENSE-2.0)
@@ -14,19 +14,15 @@
 {.push raises: [].}
 
 import
-  std/os,
-  ../../kvt_desc,
-  rocksdb
+  ../../../core_db/backend/rocksdb_desc
 
-export rocksdb
+export rocksdb_desc
 
 type
   RdbInst* = object
-    store*: KvtCfStore               ## Rocks DB database handler
-    session*: WriteBatchRef          ## For batched `put()`
+    baseDb*: RocksDbInstanceRef
 
-    basePath*: string                ## Database directory
-    delayedPersist*: KvtDbRef        ## Enable next piggyback write session
+    store*: KvtCfStore               ## Rocks DB database handler
 
   KvtCFs* = enum
     ## Column family symbols/handles and names used on the database
@@ -34,28 +30,6 @@ type
 
   KvtCfStore* = array[KvtCFs, ColFamilyReadWrite]
     ## List of column family handlers
-
-const
-  BaseFolder* = "nimbus"             ## Same as for Legacy DB
-  DataFolder* = "kvt"                ## Legacy DB has "data"
-
-# ------------------------------------------------------------------------------
-# Public functions
-# ------------------------------------------------------------------------------
-
-template logTxt*(info: static[string]): static[string] =
-   "RocksDB/" & info
-
-
-func baseDir*(rdb: RdbInst): string =
-  rdb.basePath / BaseFolder
-
-func dataDir*(rdb: RdbInst): string =
-  rdb.baseDir / DataFolder
-
-
-template baseDb*(rdb: RdbInst): RocksDbReadWriteRef =
-  rdb.store[KvtGeneric].db
 
 # ------------------------------------------------------------------------------
 # End

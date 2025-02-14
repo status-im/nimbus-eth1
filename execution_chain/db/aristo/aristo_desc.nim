@@ -31,12 +31,12 @@ import
 
 
 from ./aristo_desc/desc_backend
-  import BackendRef
+  import BackendRef, PutHdlRef
 
 # Not auto-exporting backend
 export
   tables, aristo_constants, desc_error, desc_identifiers, desc_nibbles,
-  desc_structural, minilru, hashes
+  desc_structural, minilru, hashes, PutHdlRef
 
 type
   AristoTxRef* = ref object

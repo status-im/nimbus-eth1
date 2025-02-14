@@ -19,7 +19,7 @@ import
   ./aristo_desc/desc_backend,
   ./aristo_init/memory_db,
   "."/[aristo_delete, aristo_desc, aristo_fetch, aristo_init, aristo_merge,
-       aristo_part, aristo_path, aristo_profile, aristo_tx]
+       aristo_part, aristo_path, aristo_persist, aristo_profile, aristo_tx_frame]
 
 export
   AristoDbProfListRef
@@ -246,10 +246,11 @@ type
       ## `seq[byte]`, i.e. `PathID` type paths with an even number of nibbles.
 
   AristoApiPersistFn* =
-    proc(db: AristoDbRef;
+    proc(
+      db: AristoDbRef;
+      batch: PutHdlRef;
          nxtSid = 0u64;
-        ): Result[void,AristoError]
-        {.noRaise.}
+        ) {.noRaise.}
       ## Persistently store data onto backend database. If the system is
       ## running without a database backend, the function returns immediately
       ## with an error. The same happens if there is a pending transaction.
@@ -393,7 +394,7 @@ proc dup(be: BackendRef): BackendRef =
   of BackendMemory:
     return MemBackendRef(be).dup
 
-  of BackendRocksDB, BackendRdbHosting:
+  of BackendRocksDB:
     when AristoPersistentBackendOk:
       return RdbBackendRef(be).dup
 
