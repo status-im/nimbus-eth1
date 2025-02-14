@@ -53,7 +53,6 @@ proc init*(T: type PortalClientRef, conf: NimbusConf): T =
     return nil
 
   T(
-    active: true,
     rpc: rpc,
     limit: 0
   )
