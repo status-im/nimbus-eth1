@@ -9,7 +9,7 @@
 # at your option. This file may not be copied, modified, or distributed
 # except according to those terms.
 
-## This module implements Ethereum Wire Protocol version 67, `eth/67`.
+## This module implements Ethereum Wire Protocol version 68, `eth/68`.
 ## Specification:
 ##   `eth/68 <https://github.com/ethereum/devp2p/blob/master/caps/eth.md>`_
 
