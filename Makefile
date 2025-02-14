@@ -359,7 +359,7 @@ txparse: | build deps
 
 # builds the nimbus evmc shared library
 libnimbusevm: | build deps
-	$(ENV_SCRIPT) nim c $(NIM_PARAMS) -d:evmc_enabled --app:lib --noMain -o:build/libnimbusevm/$@.$(SHAREDLIBEXT) nimbus/transaction/evmc_vm_glue.nim
+	$(ENV_SCRIPT) nim c $(NIM_PARAMS) -d:evmc_enabled --app:lib --noMain -o:build/libnimbusevm/$@.$(SHAREDLIBEXT) execution_chain/transaction/evmc_vm_glue.nim
 
 # usual cleaning
 clean: | clean-common

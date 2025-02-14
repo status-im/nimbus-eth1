@@ -1,5 +1,5 @@
 # Nimbus
-# Copyright (c) 2018-2024 Status Research & Development GmbH
+# Copyright (c) 2018-2025 Status Research & Development GmbH
 # Licensed under either of
 #  * Apache License, version 2.0, ([LICENSE-APACHE](LICENSE-APACHE) or
 #    http://www.apache.org/licenses/LICENSE-2.0)
@@ -31,7 +31,7 @@ const
   eth2 = 2.eth
   eth0 = 0.u256
 
-  BlockRewards: array[EVMFork, UInt256] = [
+  BlockRewards: array[FkFrontier..FkLatest, UInt256] = [
     eth5, # Frontier
     eth5, # Homestead
     eth5, # Tangerine

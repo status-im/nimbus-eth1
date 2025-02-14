@@ -1,5 +1,5 @@
 # Nimbus
-# Copyright (c) 2023-2024 Status Research & Development GmbH
+# Copyright (c) 2023-2025 Status Research & Development GmbH
 # Licensed under either of
 #  * Apache License, version 2.0, ([LICENSE-APACHE](LICENSE-APACHE))
 #  * MIT license ([LICENSE-MIT](LICENSE-MIT))
@@ -11,7 +11,6 @@ import
   ./api_handler/api_utils,
   ./api_handler/api_getpayload,
   ./api_handler/api_getbodies,
-  ./api_handler/api_exchangeconf,
   ./api_handler/api_newpayload,
   ./api_handler/api_forkchoice
 
@@ -26,6 +25,5 @@ export
   getPayloadV4,
   getPayloadBodiesByHash,
   getPayloadBodiesByRange,
-  exchangeConf,
   newPayload,
   forkchoiceUpdated
