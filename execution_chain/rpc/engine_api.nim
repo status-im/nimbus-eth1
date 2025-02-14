@@ -35,6 +35,7 @@ const supportedMethods: HashSet[string] =
     "engine_getPayloadBodiesByHashV1",
     "engine_getPayloadBodiesByRangeV1",
     "engine_getClientVersionV1",
+    "engine_getBlobsV1",
   ])
 
 # I'm trying to keep the handlers below very thin, and move the
@@ -104,3 +105,7 @@ proc setupEngineAPI*(engine: BeaconEngineRef, server: RpcServer) =
       version: NimbusVersion,
       commit: FixedBytes[4](GitRevisionBytes),
     )]
+
+  server.rpc("engine_getBlobsV1") do(versionedHashes: seq[Hash32]) ->
+                                         seq[Opt[BlobAndProofV1]]:
+    return engine.getBlobs(versionedHashes)
