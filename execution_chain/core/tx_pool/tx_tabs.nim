@@ -1,5 +1,5 @@
 # Nimbus
-# Copyright (c) 2018-2024 Status Research & Development GmbH
+# Copyright (c) 2018-2025 Status Research & Development GmbH
 # Licensed under either of
 #  * Apache License, version 2.0, ([LICENSE-APACHE](LICENSE-APACHE) or
 #    http://www.apache.org/licenses/LICENSE-2.0)
@@ -31,6 +31,12 @@ type
 
   TxIdTab* = Table[Hash32, TxItemRef]
 
+  BlobLookup* = object
+    item*: TxItemRef
+    blobIndex*: int
+
+  BlobLookupTab* = Table[Hash32, BlobLookup]
+
 func init*(_ : type TxSenderNonceRef): TxSenderNonceRef =
   TxSenderNonceRef(list: SenderNonceList.init())
 
@@ -41,8 +47,17 @@ template insertOrReplace*(sn: TxSenderNonceRef, item: TxItemRef) =
 func len*(sn: TxSenderNonceRef): auto  =
   sn.list.len
 
+func addLookup*(blobTab: var BlobLookupTab, item: TxItemRef) =
+  for i, v in item.tx.versionedHashes:
+    blobTab[v] = BlobLookup(item: item, blobIndex: i)
+
+func removeLookup*(blobTab: var BlobLookupTab, item: TxItemRef) =
+  for v in item.tx.versionedHashes:
+    blobTab.del(v)
+
 iterator byPriceAndNonce*(senderTab: TxSenderTab,
                           idTab: var TxIdTab,
+                          blobTab: var BlobLookupTab,
                           ledger: LedgerRef,
                           baseFee: GasInt): TxItemRef =
 
@@ -95,6 +110,7 @@ iterator byPriceAndNonce*(senderTab: TxSenderTab,
     while rc.isOk:
       let item = rc.get.data
       idTab.del(item.id)
+      blobTab.removeLookup(item)
       discard sn.list.delete(item.nonce)
       rc = sn.list.lt(nonce)
 
