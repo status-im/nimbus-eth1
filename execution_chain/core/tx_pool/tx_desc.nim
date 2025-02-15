@@ -406,7 +406,7 @@ iterator byPriceAndNonce*(xp: TxPoolRef): TxItemRef =
       xp.blobTab, xp.vmState.ledger, xp.baseFee):
     yield item
 
-func getBlobAndProof*(xp: TxPoolRef, v: Hash32): Opt[BlobAndProofV1] =
+func getBlobAndProofV1*(xp: TxPoolRef, v: VersionedHash): Opt[BlobAndProofV1] =
   xp.blobTab.withValue(v, val):
     let np = val.item.pooledTx.networkPayload
     return Opt.some(BlobAndProofV1(

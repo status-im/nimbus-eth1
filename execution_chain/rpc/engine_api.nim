@@ -106,6 +106,6 @@ proc setupEngineAPI*(engine: BeaconEngineRef, server: RpcServer) =
       commit: FixedBytes[4](GitRevisionBytes),
     )]
 
-  server.rpc("engine_getBlobsV1") do(versionedHashes: seq[Hash32]) ->
+  server.rpc("engine_getBlobsV1") do(versionedHashes: seq[VersionedHash]) ->
                                          seq[Opt[BlobAndProofV1]]:
-    return engine.getBlobs(versionedHashes)
+    return engine.getBlobsV1(versionedHashes)

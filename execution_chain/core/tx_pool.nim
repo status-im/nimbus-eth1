@@ -95,14 +95,14 @@ export
   getItem,
   removeTx,
   removeExpiredTxs,
-  getBlobAndProof
+  getBlobAndProofV1
 
 # addTx(xp: TxPoolRef, ptx: PooledTransaction): Result[void, TxError]
 # addTx(xp: TxPoolRef, tx: Transaction): Result[void, TxError]
 # getItem(xp: TxPoolRef, id: Hash32): Result[TxItemRef, TxError]
 # removeTx(xp: TxPoolRef, id: Hash32)
 # removeExpiredTxs(xp: TxPoolRef, lifeTime: Duration)
-# getBlobAndProof(xp: TxPoolRef, v: Hash32): Opt[BlobAndProofV1]
+# getBlobAndProof(xp: TxPoolRef, v: VersionedHash): Opt[BlobAndProofV1]
 
 proc removeNewBlockTxs*(xp: TxPoolRef, blk: Block, optHash = Opt.none(Hash32)) =
   let fromHash = if optHash.isSome: optHash.get
