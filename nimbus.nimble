@@ -70,10 +70,10 @@ proc test(path: string, name: string, params = "", lang = "c") =
   exec runPrefix & "build/" & name
 
 task test, "Run tests":
-  test "tests", "all_tests", "-d:chronicles_log_level=ERROR -d:unittest2DisableParamFiltering"
+  test "tests", "all_tests", "-d:chronicles_log_level=ERROR"
 
 task test_rocksdb, "Run rocksdb tests":
-  test "tests/db", "test_kvstore_rocksdb", "-d:chronicles_log_level=ERROR -d:unittest2DisableParamFiltering"
+  test "tests/db", "test_kvstore_rocksdb", "-d:chronicles_log_level=ERROR"
 
 task test_import, "Run block import test":
   let tmp = getTempDir() / "nimbus-eth1-block-import"

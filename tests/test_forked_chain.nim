@@ -641,5 +641,4 @@ proc forkedChainMain*() =
        check chain.validate info & " (2)"
 
 
-when isMainModule:
-  forkedChainMain()
+forkedChainMain()

@@ -159,6 +159,8 @@ when isMainModule:
       for n,sam in snapTestStorageList:
         noisy.accountsRunner(sam, persistent=persistent)
         noisy.storagesRunner(sam, persistent=persistent)
+else:
+  aristoMain()
 
 # ------------------------------------------------------------------------------
 # End

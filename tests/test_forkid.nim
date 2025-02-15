@@ -132,13 +132,9 @@ template runGenesisTimeIdTests() =
     check get.crc == x.want.crc
     check get.nextFork == x.want.next
 
-proc forkIdMain*() =
-  suite "Fork ID tests":
-    runTest(MainNet, "MainNet")
-    runTest(SepoliaNet, "SepoliaNet")
-    runTest(HoleskyNet, "HoleskyNet")
-    test "Genesis Time Fork ID":
-      runGenesisTimeIdTests()
-
-when isMainModule:
-  forkIdMain()
+suite "Fork ID tests":
+  runTest(MainNet, "MainNet")
+  runTest(SepoliaNet, "SepoliaNet")
+  runTest(HoleskyNet, "HoleskyNet")
+  test "Genesis Time Fork ID":
+    runGenesisTimeIdTests()

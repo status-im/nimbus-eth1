@@ -100,9 +100,6 @@ proc testFixture(fixtures: JsonNode, testStatusIMPL: var TestStatus) =
     echo "Unknown test vector '" & $label & "'"
     testStatusIMPL = SKIPPED
 
-proc precompilesMain*() =
-  suite "Precompiles":
-    jsonTest("PrecompileTests", testFixture)
+suite "Precompiles":
+  jsonTest("PrecompileTests", testFixture)
 
-when isMainModule:
-  precompilesMain()

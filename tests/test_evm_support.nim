@@ -380,7 +380,7 @@ proc runTestOverflow() =
       # After gasCall values always on positive, this test become OOG
       check res.error == "Opcode Dispatch Error: OutOfGas, depth=1"
 
-proc evmSupportMain*() =
+proc evmSupportMain() =
   runStackTests()
   runMemoryTests()
   runCodeStreamTests()
@@ -388,5 +388,4 @@ proc evmSupportMain*() =
   runMiscTests()
   runTestOverflow()
 
-when isMainModule:
-  evmSupportMain()
+evmSupportMain()

@@ -358,6 +358,8 @@ when isMainModule:
         )
 
     noisy.say "***", "total: ", state[0].pp, " sections: ", state[1]
+else:
+  coreDbMain()
 
 # ------------------------------------------------------------------------------
 # End
