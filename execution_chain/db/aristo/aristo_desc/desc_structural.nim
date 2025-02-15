@@ -125,8 +125,6 @@ type
     accLeaves*: Table[Hash32, VertexRef]   ## Account path -> VertexRef
     stoLeaves*: Table[Hash32, VertexRef]   ## Storage path -> VertexRef
 
-    cTop*: VertexID                        ## Last committed vertex ID
-
   GetVtxFlag* = enum
     PeekCache
       ## Peek into, but don't update cache - useful on work loads that are

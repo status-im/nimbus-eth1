@@ -43,7 +43,7 @@ const
 proc processBlock(c: ForkedChainRef,
                   parent: Header,
                   txFrame: CoreDbTxRef,
-                  blk: Block): Result[seq[Receipt], string] =
+                  blk: Block, blkHash: Hash32): Result[seq[Receipt], string] =
   template header(): Header =
     blk.header
 
@@ -62,11 +62,7 @@ proc processBlock(c: ForkedChainRef,
 
   # We still need to write header to database
   # because validateUncles still need it
-  let blockHash = header.blockHash()
-  ?txFrame.persistHeader(
-     blockHash,
-     header,
-     c.com.startOfHistory)
+  ?txFrame.persistHeader(blkHash, header, c.com.startOfHistory)
 
   # update currentBlock *after* we persist it
   # so the rpc return consistent result
@@ -93,7 +89,7 @@ func updateBranch(c: ForkedChainRef,
   c.activeBranch = newBranch
 
 proc writeBaggage(c: ForkedChainRef,
-        blk: Block,
+        blk: Block, blkHash: Hash32,
         txFrame: CoreDbTxRef,
         receipts: openArray[Receipt]) =
   template header(): Header =
@@ -140,13 +136,16 @@ proc validateBlock(c: ForkedChainRef,
       requestsHash: blk.header.requestsHash,
     )
 
-  var res = c.processBlock(parent.header, txFrame, blk)
-  if res.isErr:
-    txFrame.rollback()
-    return err(res.error)
+  var receipts = c.processBlock(parent.header, txFrame, blk, blkHash).valueOr:
+    txFrame.dispose()
+    return err(error)
 
-  c.writeBaggage(blk, txFrame, res.value)
-  c.updateBranch(parent, blk, blkHash, txFrame, move(res.value))
+  c.writeBaggage(blk, blkHash, txFrame, receipts)
+
+  # Block fully written to txFrame, mark it as such
+  txFrame.checkpoint(blk.header.number)
+
+  c.updateBranch(parent, blk, blkHash, txFrame, move(receipts))
 
   for i, tx in blk.transactions:
     c.txRecords[rlpHash(tx)] = (blkHash, uint64(i))
@@ -266,15 +265,11 @@ func calculateNewBase(
 
   doAssert(false, "Unreachable code, finalized block outside canonical chain")
 
-proc removeBlockFromCache(c: ForkedChainRef, bd: BlockDesc, commit = false) =
+proc removeBlockFromCache(c: ForkedChainRef, bd: BlockDesc) =
   c.hashToBlock.del(bd.hash)
   for tx in bd.blk.transactions:
     c.txRecords.del(rlpHash(tx))
-  if commit:
-    if bd.txFrame != c.baseTxFrame:
-      bd.txFrame.commit()
-  else:
-    bd.txFrame.dispose()
+  bd.txFrame.dispose()
 
 proc updateHead(c: ForkedChainRef, head: BlockPos) =
   ## Update head if the new head is different from current head.
@@ -374,20 +369,16 @@ proc updateBase(c: ForkedChainRef, newBase: BlockPos) =
   # Cleanup in-memory blocks starting from newBase backward
   # e.g. B3 backward. Switch to parent branch if needed.
 
-  template commitBlocks(number, branch) =
+  template disposeBlocks(number, branch) =
     let tailNumber = branch.tailNumber
     while number >= tailNumber:
-      c.removeBlockFromCache(branch.blocks[number - tailNumber], commit = true)
+      c.removeBlockFromCache(branch.blocks[number - tailNumber])
       inc count
 
       if number == 0:
         # Don't go below genesis
         break
       dec number
-
-  proc commitBase(c: ForkedChainRef, bd: BlockDesc) =
-    if bd.txFrame != c.baseTxFrame:
-      bd.txFrame.commit()
 
   let
     # Cache to prevent crash after we shift
@@ -401,10 +392,11 @@ proc updateBase(c: ForkedChainRef, newBase: BlockPos) =
 
   let nextIndex  = int(newBase.number - branch.tailNumber)
 
-  # Commit base block but don't remove from FC
-  c.commitBase(branch.blocks[nextIndex])
+  # Persist the new base block - this replaces the base tx in coredb!
+  c.com.db.persist(newBase.txFrame)
+  c.baseTxFrame = newBase.txFrame
 
-  commitBlocks(number, branch)
+  disposeBlocks(number, branch)
 
   # Update base if it indeed changed
   if nextIndex > 0:
@@ -424,7 +416,7 @@ proc updateBase(c: ForkedChainRef, newBase: BlockPos) =
   # Older branches will gone
   branch = branch.parent
   while not branch.isNil:
-    commitBlocks(number, branch)
+    disposeBlocks(number, branch)
 
     for i, brc in c.branches:
       if brc == branch:
@@ -453,12 +445,6 @@ proc updateBase(c: ForkedChainRef, newBase: BlockPos) =
       target = newBaseHash.short,
       baseNumber = c.baseBranch.tailNumber,
       baseHash = c.baseBranch.tailHash.short
-
-  # Update base txFrame
-  if c.baseBranch.blocks[0].txFrame != c.baseTxFrame:
-    c.baseBranch.blocks[0].txFrame = c.baseTxFrame
-    if c.baseBranch.len > 1:
-      c.baseBranch.blocks[1].txFrame.reparent(c.baseTxFrame)
 
 # ------------------------------------------------------------------------------
 # Public functions
@@ -564,11 +550,6 @@ proc forkChoice*(c: ForkedChainRef,
   doAssert(finalized.number <= head.number)
   doAssert(newBaseNumber <= finalized.number)
   c.updateBase(newBase)
-
-  # Save and record the block number before the last saved block state.
-  if newBaseNumber > 0:
-    c.com.db.persist(newBaseNumber).isOkOr:
-      return err("Failed to save state: " & $$error)
 
   ok()
 

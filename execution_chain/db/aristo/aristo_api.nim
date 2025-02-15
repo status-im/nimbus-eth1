@@ -39,14 +39,11 @@ when AristoPersistentBackendOk:
 {.pragma: noRaise, gcsafe, raises: [].}
 
 type
-  AristoApiCommitFn* =
+  AristoApiCheckpointFn* =
     proc(tx: AristoTxRef;
-        ): Result[void,AristoError]
-        {.noRaise.}
-      ## Given a *top level* handle, this function accepts all database
-      ## operations performed through this handle and merges it to the
-      ## previous layer. The previous transaction is returned if there
-      ## was any.
+        blockNumber: uint64
+        ) {.noRaise.}
+      ## Update the txFrame to the given checkpoint "identifier", or block number
 
   AristoApiDeleteAccountRecordFn* =
     proc(db: AristoTxRef;
@@ -78,9 +75,9 @@ type
       ## Variant of `deleteStorageData()` for purging the whole storage tree
       ## associated to the account argument `accPath`.
 
-  AristoApiFetchLastSavedStateFn* =
+  AristoApiFetchLastCheckpointFn* =
     proc(db: AristoTxRef
-        ): Result[SavedState,AristoError]
+        ): Result[uint64,AristoError]
         {.noRaise.}
       ## The function returns the state of the last saved state. This is a
       ## Merkle hash tag for vertex with ID 1 and a bespoke `uint64` identifier
@@ -249,41 +246,25 @@ type
     proc(
       db: AristoDbRef;
       batch: PutHdlRef;
-         nxtSid = 0u64;
+      txFrame: AristoTxRef;
         ) {.noRaise.}
-      ## Persistently store data onto backend database. If the system is
-      ## running without a database backend, the function returns immediately
-      ## with an error. The same happens if there is a pending transaction.
-      ##
-      ## The function merges all staged data from the top layer cache onto the
-      ## backend stage area. After that, the top layer cache is cleared.
-      ##
-      ## Finally, the staged data are merged into the physical backend
-      ## database and the staged data area is cleared.
-      ##
-      ## The argument `nxtSid` will be the ID for the next saved state record.
+      ## Persistently store the cumulative set of changes that `txFrame`
+      ## represents to the database. `txFrame` becomes the new base after this
+      ## operation.
 
-  AristoApiRollbackFn* =
+  AristoApiDisposeFn* =
     proc(tx: AristoTxRef;
-        ): Result[void,AristoError]
-        {.noRaise.}
-      ## Given a *top level* handle, this function discards all database
-      ## operations performed for this transactio. The previous transaction
-      ## is returned if there was any.
+        ) {.noRaise.}
+      ## Release a frame releasing its associated resources. This operation
+      ## makes all frames built on top of it invalid - they still need to be
+      ## released however.
 
   AristoApiTxFrameBeginFn* =
     proc(db: AristoDbRef; parent: AristoTxRef
-        ): Result[AristoTxRef,AristoError]
+        ): AristoTxRef
         {.noRaise.}
-      ## Starts a new transaction.
-      ##
-      ## Example:
-      ## ::
-      ##   proc doSomething(db: AristoTxRef) =
-      ##     let tx = db.begin
-      ##     defer: tx.rollback()
-      ##     ... continue using db ...
-      ##     tx.commit()
+      ## Create a new layered transaction frame - the frame can later be
+      ## released or frozen and persisted.
 
   AristoApiBaseTxFrameFn* =
     proc(db: AristoDbRef;
@@ -293,13 +274,13 @@ type
   AristoApiRef* = ref AristoApiObj
   AristoApiObj* = object of RootObj
     ## Useful set of `Aristo` fuctions that can be filtered, stacked etc.
-    commit*: AristoApiCommitFn
+    checkpoint*: AristoApiCheckpointFn
 
     deleteAccountRecord*: AristoApiDeleteAccountRecordFn
     deleteStorageData*: AristoApiDeleteStorageDataFn
     deleteStorageTree*: AristoApiDeleteStorageTreeFn
 
-    fetchLastSavedState*: AristoApiFetchLastSavedStateFn
+    fetchLastCheckpoint*: AristoApiFetchLastCheckpointFn
 
     fetchAccountRecord*: AristoApiFetchAccountRecordFn
     fetchStateRoot*: AristoApiFetchStateRootFn
@@ -321,7 +302,7 @@ type
 
     pathAsBlob*: AristoApiPathAsBlobFn
     persist*: AristoApiPersistFn
-    rollback*: AristoApiRollbackFn
+    dispose*: AristoApiDisposeFn
     txFrameBegin*: AristoApiTxFrameBeginFn
     baseTxFrame*: AristoApiBaseTxFrameFn
 
@@ -329,13 +310,13 @@ type
   AristoApiProfNames* = enum
     ## Index/name mapping for profile slots
     AristoApiProfTotal                  = "total"
-    AristoApiProfCommitFn               = "commit"
+    AristoApiProfCheckpointFn           = "checkpoint"
 
     AristoApiProfDeleteAccountRecordFn  = "deleteAccountRecord"
     AristoApiProfDeleteStorageDataFn    = "deleteStorageData"
     AristoApiProfDeleteStorageTreeFn    = "deleteStorageTree"
 
-    AristoApiProfFetchLastSavedStateFn  = "fetchLastSavedState"
+    AristoApiProfFetchLastCheckpointFn  = "fetchLastCheckpoint"
 
     AristoApiProfFetchAccountRecordFn   = "fetchAccountRecord"
     AristoApiProfFetchStateRootFn = "fetchStateRoot"
@@ -358,9 +339,9 @@ type
 
     AristoApiProfPathAsBlobFn           = "pathAsBlob"
     AristoApiProfPersistFn              = "persist"
-    AristoApiProfRollbackFn             = "rollback"
-    AristoApiProfTxFrameBeginFn              = "txFrameBegin"
-    AristoApiProfBaseTxFrameFn              = "baseTxFrame"
+    AristoApiProfDisposeFn              = "dispose"
+    AristoApiProfTxFrameBeginFn         = "txFrameBegin"
+    AristoApiProfBaseTxFrameFn          = "baseTxFrame"
 
     AristoApiProfBeGetVtxFn             = "be/getVtx"
     AristoApiProfBeGetKeyFn             = "be/getKey"
@@ -410,13 +391,13 @@ func init*(api: var AristoApiObj) =
   ##
   when AutoValidateApiHooks:
     api.reset
-  api.commit = commit
+  api.checkpoint = checkpoint
 
   api.deleteAccountRecord = deleteAccountRecord
   api.deleteStorageData = deleteStorageData
   api.deleteStorageTree = deleteStorageTree
 
-  api.fetchLastSavedState = fetchLastSavedState
+  api.fetchLastCheckpoint = fetchLastCheckpoint
 
   api.fetchAccountRecord = fetchAccountRecord
   api.fetchStateRoot = fetchStateRoot
@@ -439,7 +420,7 @@ func init*(api: var AristoApiObj) =
 
   api.pathAsBlob = pathAsBlob
   api.persist = persist
-  api.rollback = rollback
+  api.dispose = dispose
   api.txFrameBegin = txFrameBegin
   api.baseTxFrame = baseTxFrame
 
@@ -483,10 +464,10 @@ func init*(
     code
     data.update(n.ord, getTime() - start)
 
-  profApi.commit =
+  profApi.checkpoint =
     proc(a: AristoTxRef): auto =
-      AristoApiProfCommitFn.profileRunner:
-        result = api.commit(a)
+      AristoApiProfCheckpointFn.profileRunner:
+        api.checkpoint(a)
 
   profApi.deleteAccountRecord =
     proc(a: AristoTxRef; b: Hash32): auto =
@@ -503,10 +484,10 @@ func init*(
       AristoApiProfDeleteStorageTreeFn.profileRunner:
         result = api.deleteStorageTree(a, b)
 
-  profApi.fetchLastSavedState =
+  profApi.fetchLastCheckpoint =
     proc(a: AristoTxRef): auto =
-      AristoApiProfFetchLastSavedStateFn.profileRunner:
-        result = api.fetchLastSavedState(a)
+      AristoApiProfFetchLastCheckpointFn.profileRunner:
+        result = api.fetchLastCheckpoint(a)
 
   profApi.fetchAccountRecord =
     proc(a: AristoTxRef; b: Hash32): auto =
@@ -588,10 +569,10 @@ func init*(
        AristoApiProfPersistFn.profileRunner:
         result = api.persist(a, b)
 
-  profApi.rollback =
-    proc(a: AristoTxRef): auto =
-      AristoApiProfRollbackFn.profileRunner:
-        result = api.rollback(a)
+  profApi.dispose =
+    proc(a: AristoTxRef) =
+      AristoApiProfDisposeFn.profileRunner:
+        api.dispose(a)
 
   profApi.txFrameBegin =
     proc(a: AristoTxRef): auto =

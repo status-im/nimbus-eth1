@@ -21,26 +21,11 @@ import
 # ------------------------------------------------------------------------------
 
 proc persist*(
-    db: AristoDbRef;                  # Database
+    db: AristoDbRef;
     batch: PutHdlRef;
-    nxtSid = 0u64;                    # Next state ID (aka block number)
+    txFrame: AristoTxRef;
       ) =
-  ## Persistently store data onto backend database. If the system is running
-  ## without a database backend, the function returns immediately with an
-  ## error.
-  ##
-  ## The function merges all staged data from the top layer cache onto the
-  ## backend stage area. After that, the top layer cache is cleared.
-  ##
-  ## Finally, the staged data are merged into the physical backend database
-  ## and the staged data area is cleared. Wile performing this last step,
-  ## the recovery journal is updated (if available.)
-  ##
-  ## If the argument `nxtSid` is passed non-zero, it will be the ID for the
-  ## next recovery journal record. If non-zero, this ID must be greater than
-  ## all previous IDs (e.g. block number when stowing after block execution.)
-  ##
-  db.txFramePersist(batch, nxtSid)
+  db.txFramePersist(batch, txFrame)
 
 # ------------------------------------------------------------------------------
 # End

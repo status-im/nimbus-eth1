@@ -21,8 +21,8 @@
 {.push raises: [].}
 
 import
-  ./aristo_init/memory_only
+  ./aristo_init/[init_common, memory_only]
 export
-  memory_only
+  init_common, memory_only
 
 # End

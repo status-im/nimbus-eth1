@@ -64,8 +64,10 @@ proc getVmState(
   if p.vmState == nil:
     let
       vmState = BaseVMState()
-      txFrame = p.c.db.baseTxFrame()
-      parent  = ?txFrame.getBlockHeader(header.parentHash)
+      txFrame = p.c.db.baseTxFrame.txFrameBegin()
+      parent = ?txFrame.getBlockHeader(header.parentHash)
+
+    doAssert txFrame.getSavedStateBlockNumber() == parent.number
     vmState.init(parent, header, p.c.com, txFrame, storeSlotHash = storeSlotHash)
     p.vmState = vmState
   else:
@@ -78,14 +80,15 @@ proc getVmState(
   ok(p.vmState)
 
 proc dispose*(p: var Persister) =
-  p.c.db.baseTxFrame().rollback()
+  p.vmState.ledger.txFrame.dispose()
+  p.vmState = nil
 
 proc init*(T: type Persister, c: ChainRef, flags: PersistBlockFlags): T =
   T(c: c, flags: flags)
 
 proc checkpoint*(p: var Persister): Result[void, string] =
   if NoValidation notin p.flags:
-    let stateRoot = p.c.db.baseTxFrame().getStateRoot().valueOr:
+    let stateRoot = p.vmState.ledger.txFrame.getStateRoot().valueOr:
         return err($$error)
 
     if p.parent.stateRoot != stateRoot:
@@ -100,9 +103,10 @@ proc checkpoint*(p: var Persister): Result[void, string] =
         "stateRoot mismatch, expect: " & $p.parent.stateRoot & ", got: " & $stateRoot
       )
 
-  # Save and record the block number before the last saved block state.
-  p.c.db.persist(p.parent.number).isOkOr:
-    return err("Failed to save state: " & $$error)
+  # Move in-memory state to disk
+  p.c.db.persist(p.vmState.ledger.txFrame)
+  # Get a new frame since the DB assumes ownership
+  p.vmState.ledger.txFrame = p.c.db.baseTxFrame().txFrameBegin()
 
   ok()
 
@@ -169,6 +173,8 @@ proc persistBlock*(p: var Persister, blk: Block): Result[void, string] =
   p.stats.blocks += 1
   p.stats.txs += blk.transactions.len
   p.stats.gas += blk.header.gasUsed
+
+  txFrame.checkpoint(header.number)
 
   assign(p.parent, header)
 

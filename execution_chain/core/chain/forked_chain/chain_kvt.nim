@@ -30,8 +30,7 @@ proc fcKvtPersist*(c: ForkedChainRef) =
   ## should not be any.)
   ##
   let db = c.com.db
-  db.persist(c.baseTxFrame.getSavedStateBlockNumber()).isOkOr:
-    raiseAssert "fcKvtPersist: persistent() failed: " & $$error
+  db.persist(c.baseTxFrame)
 
 proc fcKvtHasKey*(c: ForkedChainRef, key: openArray[byte]): bool =
   ## Check whether the argument `key` exists on the `kvt` table (i.e. `get()`

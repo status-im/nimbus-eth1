@@ -21,6 +21,7 @@ import
     aristo_merge,
     aristo_desc,
     aristo_init,
+    aristo_persist,
     aristo_tx_frame,
   ]
 
@@ -124,9 +125,10 @@ suite "Aristo compute":
     for (k, v, r) in samples[^1]:
       check:
         txFrame.mergeAccountRecord(k, v) == Result[bool, AristoError].ok(true)
+    txFrame.checkpoint(1)
 
     let batch = db.backend.putBegFn()[]
-    db.txFramePersist(batch, 1)
+    db.persist(batch, txFrame)
     check db.backend.putEndFn(batch).isOk()
 
     check txFrame.computeKeys(root).isOk()

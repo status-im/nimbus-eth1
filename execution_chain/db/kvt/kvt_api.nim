@@ -40,7 +40,6 @@ type
   KvtDbProfData* = AristoDbProfData
     ## Borrowed from `aristo_profile`
 
-  KvtApiCommitFn* = proc(tx: KvtTxRef): Result[void,KvtError] {.noRaise.}
   KvtApiDelFn* = proc(db: KvtTxRef,
     key: openArray[byte]): Result[void,KvtError] {.noRaise.}
   KvtApiFinishFn* = proc(db: KvtDbRef, eradicate = false) {.noRaise.}
@@ -53,24 +52,23 @@ type
     key: openArray[byte]): Result[bool,KvtError] {.noRaise.}
   KvtApiPutFn* = proc(db: KvtTxRef,
     key, data: openArray[byte]): Result[void,KvtError] {.noRaise.}
-  KvtApiRollbackFn* = proc(tx: KvtTxRef): Result[void,KvtError] {.noRaise.}
-  KvtApiPersistFn* = proc(db: KvtDbRef, batch: PutHdlRef) {.noRaise.}
+  KvtApiDisposeFn* = proc(tx: KvtTxRef) {.noRaise.}
+  KvtApiPersistFn* = proc(db: KvtDbRef, batch: PutHdlRef, txFrame: KvtTxRef) {.noRaise.}
   KvtApiToKvtDbRefFn* = proc(tx: KvtTxRef): KvtDbRef {.noRaise.}
-  KvtApiTxFrameBeginFn* = proc(db: KvtDbRef, parent: KvtTxRef): Result[KvtTxRef,KvtError] {.noRaise.}
+  KvtApiTxFrameBeginFn* = proc(db: KvtDbRef, parent: KvtTxRef): KvtTxRef {.noRaise.}
   KvtApiBaseTxFrameFn* = proc(db: KvtDbRef): KvtTxRef {.noRaise.}
 
   KvtApiRef* = ref KvtApiObj
   KvtApiObj* = object of RootObj
     ## Useful set of `Kvt` fuctions that can be filtered, stacked etc. Note
     ## that this API is modelled after a subset of the `Aristo` API.
-    commit*: KvtApiCommitFn
     del*: KvtApiDelFn
     finish*: KvtApiFinishFn
     get*: KvtApiGetFn
     len*: KvtApiLenFn
     hasKeyRc*: KvtApiHasKeyRcFn
     put*: KvtApiPutFn
-    rollback*: KvtApiRollbackFn
+    dispose*: KvtApiDisposeFn
     persist*: KvtApiPersistFn
     txFrameBegin*: KvtApiTxFrameBeginFn
     baseTxFrame*: KvtApiBaseTxFrameFn
@@ -80,14 +78,13 @@ type
     ## index/name mapping for profile slots
     KvtApiProfTotal          = "total"
 
-    KvtApiProfCommitFn       = "commit"
     KvtApiProfDelFn          = "del"
     KvtApiProfFinishFn       = "finish"
     KvtApiProfGetFn          = "get"
     KvtApiProfLenFn          = "len"
     KvtApiProfHasKeyRcFn     = "hasKeyRc"
     KvtApiProfPutFn          = "put"
-    KvtApiProfRollbackFn     = "rollback"
+    KvtApiProfDisposeFn     = "dispose"
     KvtApiProfPersistFn      = "persist"
     KvtApiProfTxFrameBeginFn      = "txFrameBegin"
     KvtApiProfBaseTxFrameFn      = "baseTxFrame"
@@ -134,14 +131,13 @@ proc dup(be: BackendRef): BackendRef =
 func init*(api: var KvtApiObj) =
   when AutoValidateApiHooks:
     api.reset
-  api.commit = commit
   api.del = del
   api.finish = finish
   api.get = get
   api.len = len
   api.hasKeyRc = hasKeyRc
   api.put = put
-  api.rollback = rollback
+  api.dispose = dispose
   api.persist = persist
   api.txFrameBegin = txFrameBegin
   api.baseTxFrame = baseTxFrame
@@ -185,11 +181,6 @@ func init*(
     code
     data.update(n.ord, getTime() - start)
 
-  profApi.commit =
-    proc(a: KvtTxRef): auto =
-      KvtApiProfCommitFn.profileRunner:
-        result = api.commit(a)
-
   profApi.del =
     proc(a: KvtDbRef; b: openArray[byte]): auto =
       KvtApiProfDelFn.profileRunner:
@@ -220,10 +211,10 @@ func init*(
       KvtApiProfPutFn.profileRunner:
         result = api.put(a, b, c)
 
-  profApi.rollback =
+  profApi.dispose =
     proc(a: KvtTxRef): auto =
-      KvtApiProfRollbackFn.profileRunner:
-        result = api.rollback(a)
+      KvtApiProfDisposeFn.profileRunner:
+        result = api.dispose(a)
 
   profApi.persist =
     proc(a: KvtDbRef): auto =
@@ -231,9 +222,9 @@ func init*(
         result = api.persist(a)
 
   profApi.txFrameBegin =
-    proc(a: KvtDbRef): auto =
+    proc(a: KvtDbRef) =
       KvtApiProfTxFrameBeginFn.profileRunner:
-        result = api.txFrameBegin(a)
+        api.txFrameBegin(a)
 
   let beDup = be.dup()
   if beDup.isNil:

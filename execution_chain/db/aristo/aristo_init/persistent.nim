@@ -24,13 +24,13 @@ import
   ../../opts,
   ../aristo_desc,
   ./rocks_db/rdb_desc,
-  "."/[rocks_db, memory_only]
+  "."/[init_common, rocks_db]
 
 export
   AristoDbRef,
   RdbBackendRef,
   RdbWriteEventCb,
-  memory_only,
+  init_common,
   aristo_desc
 
 # ------------------------------------------------------------------------------
@@ -45,22 +45,10 @@ proc init*(
       ): Result[T, AristoError] =
   let
     be = rocksDbBackend(opts, baseDb)
-    vTop = block:
-      let rc = be.getTuvFn()
-      if rc.isErr:
-        be.closeFn(eradicate = false)
-        return err(rc.error)
-      rc.value
-    db = AristoDbRef(
-      txRef: AristoTxRef(layer: LayerRef(vTop: vTop, cTop: vTop)),
-      backend: be,
-      accLeaves: LruCache[Hash32, VertexRef].init(ACC_LRU_SIZE),
-      stoLeaves: LruCache[Hash32, VertexRef].init(ACC_LRU_SIZE),
-    )
-
-  db.txRef.db = db # TODO evaluate if this cyclic ref is worth the convenience
-
-  ok(db)
+    db = AristoDbRef.init(be).valueOr:
+      be.closeFn(eradicate = false)
+      return err(error)
+  ok db
 
 # ------------------------------------------------------------------------------
 # End

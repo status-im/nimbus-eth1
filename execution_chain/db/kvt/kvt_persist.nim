@@ -21,21 +21,11 @@ import
 # ------------------------------------------------------------------------------
 
 proc persist*(
-    db: KvtDbRef;                     # Database
+    db: KvtDbRef;
     batch: PutHdlRef;
+    txFrame: KvtTxRef
       ) =
-  ## Persistently store data onto backend database. If the system is running
-  ## without a database backend, the function returns immediately with an
-  ## error.
-  ##
-  ## The function merges all staged data from the top layer cache onto the
-  ## backend stage area. After that, the top layer cache is cleared.
-  ##
-  ## Finally, the staged data are merged into the physical backend database
-  ## and the staged data area is cleared. Wile performing this last step,
-  ## the recovery journal is updated (if available.)
-  ##
-  db.txFramePersist(batch)
+  db.txFramePersist(batch, txFrame)
 
 # ------------------------------------------------------------------------------
 # End
