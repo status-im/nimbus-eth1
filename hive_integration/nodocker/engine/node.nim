@@ -83,7 +83,7 @@ proc getVmState(c: ChainRef, header: Header, txFrame: CoreDbTxRef):
 # intended to accepts invalid block
 proc setBlock*(c: ChainRef; blk: Block): Result[void, string] =
   template header: Header = blk.header
-  let txFrame = c.db.ctx.txFrameBegin(c.db.ctx.baseTxFrame())
+  let txFrame = c.db.ctx.txFrameBegin(c.db.baseTxFrame())
 
   # Needed for figuring out whether KVT cleanup is due (see at the end)
   let
