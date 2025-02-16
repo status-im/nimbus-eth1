@@ -20,7 +20,6 @@ type
     Ooops
     AristoDbMemory            ## Memory backend emulator
     AristoDbRocks             ## RocksDB backend
-    AristoDbVoid              ## No backend
 
 const
   CoreDbPersistentTypes* = {AristoDbRocks}

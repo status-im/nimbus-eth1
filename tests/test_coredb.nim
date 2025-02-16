@@ -160,7 +160,6 @@ proc initRunnerDB(
     case dbType:
     of AristoDbMemory: AristoDbMemory.newCoreDbRef()
     of AristoDbRocks: AristoDbRocks.newCoreDbRef(path, DbOptions.init())
-    of AristoDbVoid: AristoDbVoid.newCoreDbRef()
     else: raiseAssert $dbType
 
   when false: # or true:

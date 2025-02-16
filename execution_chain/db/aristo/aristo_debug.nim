@@ -679,7 +679,7 @@ proc pp*(
   limit = 100;
   indent = 4;
     ): string =
-  result = db.layer.ppBalancer(db, indent+1) & indent.toPfx
+  result = db.ppBalancer(db, indent+1) & indent.toPfx
   case be.kind:
   of BackendMemory:
     result &= be.MemBackendRef.ppBe(db, limit, indent+1)

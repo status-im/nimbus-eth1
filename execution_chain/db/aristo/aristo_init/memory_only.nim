@@ -49,6 +49,8 @@ proc init*(
   db.txRef.db = db
   db
 
+proc init*(T: type AristoDbRef): T =
+  AristoDbRef.init(MemBackendRef)
 
 proc finish*(db: AristoDbRef; eradicate = false) =
   ## Backend destructor. The argument `eradicate` indicates that a full
