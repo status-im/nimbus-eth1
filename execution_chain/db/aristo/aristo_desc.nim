@@ -41,9 +41,40 @@ export
 type
   AristoTxRef* = ref object
     ## Transaction descriptor
+    ##
+    ## Delta layers are stacked implying a tables hierarchy. Table entries on
+    ## a higher level take precedence over lower layer table entries. So an
+    ## existing key-value table entry of a layer on top supersedes same key
+    ## entries on all lower layers. A missing entry on a higher layer indicates
+    ## that the key-value pair might be fond on some lower layer.
+    ##
+    ## A zero value (`nil`, empty hash etc.) is considered am missing key-value
+    ## pair. Tables on the `LayerDelta` may have stray zero key-value pairs for
+    ## missing entries due to repeated transactions while adding and deleting
+    ## entries. There is no need to purge redundant zero entries.
+    ##
+    ## As for `kMap[]` entries, there might be a zero value entriy relating
+    ## (i.e. indexed by the same vertex ID) to an `sMap[]` non-zero value entry
+    ## (of the same layer or a lower layer whatever comes first.) This entry
+    ## is kept as a reminder that the hash value of the `kMap[]` entry needs
+    ## to be re-compiled.
+    ##
+    ## The reasoning behind the above scenario is that every vertex held on the
+    ## `sTab[]` tables must correspond to a hash entry held on the `kMap[]`
+    ## tables. So a corresponding zero value or missing entry produces an
+    ## inconsistent state that must be resolved.
+
     db*: AristoDbRef                  ## Database descriptor
     parent*: AristoTxRef              ## Previous transaction
-    layer*: LayerRef
+
+    sTab*: Table[RootedVertexID,VertexRef] ## Structural vertex table
+    kMap*: Table[RootedVertexID,HashKey]   ## Merkle hash key mapping
+    vTop*: VertexID                        ## Last used vertex ID
+
+    accLeaves*: Table[Hash32, VertexRef]   ## Account path -> VertexRef
+    stoLeaves*: Table[Hash32, VertexRef]   ## Storage path -> VertexRef
+
+    cTop*: VertexID                        ## Last committed vertex ID
 
   AristoDbRef* = ref object
     ## Three tier database object supporting distributed instances.
@@ -119,8 +150,8 @@ func isValid*(nd: NodeRef): bool =
 func isValid*(pid: PathID): bool =
   pid != VOID_PATH_ID
 
-func isValid*(layer: LayerRef): bool =
-  layer != LayerRef(nil)
+func isValid*(tx: AristoTxRef): bool =
+  tx != AristoTxRef(nil)
 
 func isValid*(root: Hash32): bool =
   root != emptyRoot
@@ -151,21 +182,21 @@ func hash*(db: AristoDbRef): Hash =
 # Public helpers
 # ------------------------------------------------------------------------------
 
-iterator rstack*(tx: AristoTxRef): (LayerRef, int) =
+iterator rstack*(tx: AristoTxRef): (AristoTxRef, int) =
   # Stack in reverse order
   var tx = tx
 
   var i = 0
   while tx != nil:
     let level = if tx.parent == nil: -1 else: i
-    yield (tx.layer, level)
+    yield (tx, level)
     tx = tx.parent
 
-proc deltaAtLevel*(db: AristoTxRef, level: int): LayerRef =
+proc deltaAtLevel*(db: AristoTxRef, level: int): AristoTxRef =
   if level == -2:
     nil
   elif level == -1:
-    db.db.txRef.layer
+    db.db.txRef
   else:
     var
       frame = db
@@ -175,7 +206,7 @@ proc deltaAtLevel*(db: AristoTxRef, level: int): LayerRef =
       frame = frame.parent
       level -= 1
 
-    frame.layer
+    frame
 
 # ------------------------------------------------------------------------------
 # End

@@ -16,21 +16,21 @@
 import
   std/[hashes, tables],
   ./kvt_constants,
-  ./kvt_desc/[desc_error, desc_structural]
+  ./kvt_desc/[desc_error]
 
 from ./kvt_desc/desc_backend
   import BackendRef, PutHdlRef
 
 # Not auto-exporting backend
 export
-  hashes, tables, kvt_constants, desc_error, desc_structural, PutHdlRef
+  hashes, tables, kvt_constants, desc_error, PutHdlRef
 
 type
   KvtTxRef* = ref object
     ## Transaction descriptor
     db*: KvtDbRef                     ## Database descriptor
     parent*: KvtTxRef                 ## Previous transaction
-    layer*: LayerRef
+    sTab*: Table[seq[byte],seq[byte]] ## Structural data table
 
   KvtDbRef* = ref object of RootRef
     ## Three tier database object supporting distributed instances.
@@ -58,8 +58,8 @@ func getOrVoid*(tab: Table[seq[byte],seq[byte]]; w: seq[byte]): seq[byte] =
 func isValid*(key: seq[byte]): bool =
   key != EmptyBlob
 
-func isValid*(layer: LayerRef): bool =
-  layer != LayerRef(nil)
+func isValid*(tx: KvtTxRef): bool =
+  tx != KvtTxRef(nil)
 
 # ------------------------------------------------------------------------------
 # Public functions, miscellaneous
@@ -68,11 +68,11 @@ func isValid*(layer: LayerRef): bool =
 # Don't put in a hash!
 func hash*(db: KvtDbRef): Hash {.error.}
 
-iterator rstack*(tx: KvtTxRef): LayerRef =
+iterator rstack*(tx: KvtTxRef): KvtTxRef =
   var tx = tx
   # Stack in reverse order
   while tx != nil:
-    yield tx.layer
+    yield tx
     tx = tx.parent
 
 # ------------------------------------------------------------------------------

@@ -18,12 +18,6 @@ import
   ../aristo_desc/desc_backend,
   "."/[init_common, memory_db]
 
-type
-  VoidBackendRef* = ref object of TypedBackendRef
-    ## Dummy descriptor type, used as `nil` reference
-
-  MemOnlyBackend* = VoidBackendRef|MemBackendRef
-
 export
   BackendType,
   GuestDbRef,
@@ -37,11 +31,8 @@ proc kind*(
     be: BackendRef;
       ): BackendType =
   ## Retrieves the backend type symbol for a `be` backend database argument
-  ## where `BackendVoid` is returned for the`nil` backend.
-  if be.isNil:
-    BackendVoid
-  else:
-    be.TypedBackendRef.beKind
+  doAssert(not be.isNil)
+  be.TypedBackendRef.beKind
 
 # ------------------------------------------------------------------------------
 # Public database constuctors, destructor
@@ -49,25 +40,14 @@ proc kind*(
 
 proc init*(
     T: type AristoDbRef;                      # Target type
-    B: type MemOnlyBackend;                   # Backend type
+    B: type MemBackendRef;                   # Backend type
       ): T =
   ## Memory backend constructor.
   ##
 
-  let db =
-    when B is VoidBackendRef:
-      AristoDbRef(txRef: AristoTxRef(layer: LayerRef()))
-
-    elif B is MemBackendRef:
-      AristoDbRef(txRef: AristoTxRef(layer: LayerRef()), backend: memoryBackend())
+  let db = AristoDbRef(txRef: AristoTxRef(), backend: memoryBackend())
   db.txRef.db = db
   db
-
-proc init*(
-    T: type AristoDbRef;                      # Target type
-      ): T =
-  ## Shortcut for `AristoDbRef.init(VoidBackendRef)`
-  AristoDbRef.init VoidBackendRef
 
 
 proc finish*(db: AristoDbRef; eradicate = false) =

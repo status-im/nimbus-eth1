@@ -17,13 +17,13 @@ import
   stew/interval_set,
   ../../aristo,
   ../aristo_walk/persistent,
-  ".."/[aristo_desc, aristo_get, aristo_layers]
+  ".."/[aristo_desc, aristo_get]
 
 # ------------------------------------------------------------------------------
 # Public functions
 # ------------------------------------------------------------------------------
 
-proc checkBE*[T: RdbBackendRef|MemBackendRef|VoidBackendRef](
+proc checkBE*[T: RdbBackendRef|MemBackendRef](
     _: type T;
     db: AristoDbRef;                   # Database, top layer
       ): Result[void,(VertexID,AristoError)] =

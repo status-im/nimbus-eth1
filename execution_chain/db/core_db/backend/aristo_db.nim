@@ -48,11 +48,6 @@ proc newMemoryCoreDbRef*(): CoreDbRef =
     KvtDbRef.init(use_kvt.MemBackendRef),
     AristoDbRef.init(use_ari.MemBackendRef))
 
-proc newVoidCoreDbRef*(): CoreDbRef =
-  AristoDbVoid.create(
-    KvtDbRef.init(use_kvt.VoidBackendRef),
-    AristoDbRef.init(use_ari.VoidBackendRef))
-
 # ------------------------------------------------------------------------------
 # End
 # ------------------------------------------------------------------------------

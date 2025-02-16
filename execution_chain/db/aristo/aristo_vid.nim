@@ -23,11 +23,11 @@ import
 proc vidFetch*(db: AristoTxRef, n = 1): VertexID =
   ## Fetch next vertex ID.
   ##
-  if db.layer.vTop  == 0:
-    db.layer.vTop = VertexID(LEAST_FREE_VID)
-  var ret = db.layer.vTop
+  if db.vTop  == 0:
+    db.vTop = VertexID(LEAST_FREE_VID)
+  var ret = db.vTop
   ret.inc
-  db.layer.vTop.inc(n)
+  db.vTop.inc(n)
   ret
 
 # ------------------------------------------------------------------------------

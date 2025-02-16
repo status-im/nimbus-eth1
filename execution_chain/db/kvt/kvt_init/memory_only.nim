@@ -18,12 +18,6 @@ import
   ../kvt_desc/desc_backend,
   "."/[init_common, memory_db]
 
-type
-  VoidBackendRef* = ref object of TypedBackendRef
-    ## Dummy descriptor type, used as `nil` reference
-
-  MemOnlyBackend* = VoidBackendRef|MemBackendRef
-
 export
   BackendType,
   MemBackendRef
@@ -37,10 +31,8 @@ func kind*(
       ): BackendType =
   ## Retrieves the backend type symbol for a `be` backend database argument
   ## where `BackendVoid` is returned for the`nil` backend.
-  if be.isNil:
-    BackendVoid
-  else:
-    be.TypedBackendRef.beKind
+  doAssert(not be.isNil)
+  be.TypedBackendRef.beKind
 
 # ------------------------------------------------------------------------------
 # Public database constuctors, destructor
@@ -48,24 +40,13 @@ func kind*(
 
 proc init*(
     T: type KvtDbRef;                         # Target type
-    B: type MemOnlyBackend;                   # Backend type
+    B: type MemBackendRef;                   # Backend type
       ): T =
   ## Memory backend constructor.
   ##
-  let db = when B is VoidBackendRef:
-    KvtDbRef(txRef: KvtTxRef(layer: LayerRef.init()))
-
-  elif B is MemBackendRef:
-    KvtDbRef(txRef: KvtTxRef(layer: LayerRef.init()), backend: memoryBackend())
+  let db = KvtDbRef(txRef: KvtTxRef(), backend: memoryBackend())
   db.txRef.db = db
   db
-
-proc init*(
-    T: type KvtDbRef;                         # Target type
-      ): T =
-  ## Shortcut for `KvtDbRef.init(VoidBackendRef)`
-  KvtDbRef.init VoidBackendRef
-
 
 proc finish*(db: KvtDbRef; eradicate = false) =
   ## Backend destructor. The argument `eradicate` indicates that a full

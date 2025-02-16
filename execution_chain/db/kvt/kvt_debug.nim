@@ -1,5 +1,5 @@
 # nimbus-eth1
-# Copyright (c) 2023-2024 Status Research & Development GmbH
+# Copyright (c) 2023-2025 Status Research & Development GmbH
 # Licensed under either of
 #  * Apache License, version 2.0, ([LICENSE-APACHE](LICENSE-APACHE) or
 #    http://www.apache.org/licenses/LICENSE-2.0)
@@ -131,7 +131,7 @@ proc ppBe[T](be: T; db: KvtDbRef; indent: int): string =
     spc = if 0 < n: pfx2 else: " "
   "<" & $be.kind & ">" & pfx1 & "tab" & spc & "{" & data & "}"
 
-proc ppLayer(layer: LayerRef; db: KvtDbRef; indent = 4): string =
+proc ppLayer(layer: AristoTxRef; db: KvtDbRef; indent = 4): string =
   let
     tLen = layer.sTab.len
     info = "tab(" & $tLen & ")"
@@ -151,10 +151,8 @@ proc pp*(
   case be.kind:
   of BackendMemory:
     result &= be.MemBackendRef.ppBe(db, indent)
-  of BackendRocksDB,BackendRdbTriggered:
+  of BackendRocksDB:
     result &= be.RdbBackendRef.ppBe(db, indent)
-  of BackendVoid:
-    result &= "<NoBackend>"
 
 proc pp*(
     db: KvtDbRef;

@@ -20,14 +20,12 @@ import
     aristo_delete,
     aristo_merge,
     aristo_desc,
-    aristo_init,
+    aristo_init/memory_only,
     aristo_tx_frame,
   ]
 
 func x(s: string): seq[byte] =
   s.hexToSeqByte
-func k(s: string): HashKey =
-  HashKey.fromBytes(s.x).value
 
 let samples = [
   # Somew on-the-fly provided stuff
@@ -78,7 +76,7 @@ suite "Aristo compute":
   for n, sample in samples:
     test "Add and delete entries " & $n:
       let
-        db = AristoDbRef.init VoidBackendRef
+        db = AristoDbRef.init MemBackendRef
         txFrame = db.txRef
         root = VertexID(1)
 

@@ -17,7 +17,8 @@ import
   ../aristo/aristo_profile,
   ./kvt_desc/desc_backend,
   ./kvt_init/memory_db,
-  "."/[kvt_desc, kvt_init, kvt_persist, kvt_tx_frame, kvt_utils]
+  ./kvt_init/memory_only,
+  "."/[kvt_desc, kvt_persist, kvt_tx_frame, kvt_utils]
 
 const
   AutoValidateApiHooks = defined(release).not
@@ -120,12 +121,9 @@ proc dup(be: BackendRef): BackendRef =
   of BackendMemory:
     return MemBackendRef(be).dup
 
-  of BackendRocksDB, BackendRdbTriggered:
+  of BackendRocksDB:
     when KvtPersistentBackendOk:
       return RdbBackendRef(be).dup
-
-  of BackendVoid:
-    discard
 
 # ------------------------------------------------------------------------------
 # Public API constuctors

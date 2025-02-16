@@ -39,13 +39,13 @@ proc txFrameBegin*(db: AristoDbRef, parent: AristoTxRef): Result[AristoTxRef,Ari
     parent
 
   let
-    vTop = parent.layer.vTop
-    layer = LayerRef(vTop:  vTop, cTop: vTop)
+    vTop = parent.vTop
 
   ok AristoTxRef(
     db:     db,
     parent: parent,
-    layer: layer)
+    vTop:   vTop,
+    cTop:   vTop)
 
 proc baseTxFrame*(db: AristoDbRef): AristoTxRef=
   db.txRef
@@ -57,8 +57,8 @@ proc rollback*(
   ## performed for this transaction.
   # TODO Everyone using this txref should repoint their parent field
 
-  let vTop = tx.layer[].cTop
-  tx.layer[] = Layer(vTop: vTop, cTop: vTop)
+  tx.vTop = tx.cTop # Yes, it is cTop
+  tx.cTop = tx.cTop
 
   ok()
 
@@ -71,9 +71,9 @@ proc commit*(
   doAssert tx.parent != nil, "should not commit the base tx"
 
   # A rollback after commit should reset to the new vTop!
-  tx.layer[].cTop = tx.layer[].vTop
+  tx.cTop = tx.vTop
 
-  mergeAndReset(tx.parent.layer[], tx.layer[])
+  mergeAndReset(tx.parent, tx)
 
   ok()
 
@@ -103,13 +103,13 @@ proc txFramePersist*(
     serial: nxtSid)
 
   # Store structural single trie entries
-  for rvid, vtx in db.txRef.layer.sTab:
-    db.txRef.layer.kMap.withValue(rvid, key) do:
+  for rvid, vtx in db.txRef.sTab:
+    db.txRef.kMap.withValue(rvid, key) do:
       be.putVtxFn(batch, rvid, vtx, key[])
     do:
       be.putVtxFn(batch, rvid, vtx, default(HashKey))
 
-  be.putTuvFn(batch, db.txRef.layer.vTop)
+  be.putTuvFn(batch, db.txRef.vTop)
   be.putLstFn(batch, lSst)
 
   # TODO above, we only prepare the changes to the database but don't actually
@@ -118,18 +118,18 @@ proc txFramePersist*(
   #      in-memory and on-disk state)
 
   # Copy back updated payloads
-  for accPath, vtx in db.txRef.layer.accLeaves:
+  for accPath, vtx in db.txRef.accLeaves:
     db.accLeaves.put(accPath, vtx)
 
-  for mixPath, vtx in db.txRef.layer.stoLeaves:
+  for mixPath, vtx in db.txRef.stoLeaves:
     db.stoLeaves.put(mixPath, vtx)
 
   # Done with txRef, all saved to backend
-  db.txRef.layer.cTop = db.txRef.layer.vTop
-  db.txRef.layer.sTab.clear()
-  db.txRef.layer.kMap.clear()
-  db.txRef.layer.accLeaves.clear()
-  db.txRef.layer.stoLeaves.clear()
+  db.txRef.cTop = db.txRef.vTop
+  db.txRef.sTab.clear()
+  db.txRef.kMap.clear()
+  db.txRef.accLeaves.clear()
+  db.txRef.stoLeaves.clear()
 
 
 # ------------------------------------------------------------------------------

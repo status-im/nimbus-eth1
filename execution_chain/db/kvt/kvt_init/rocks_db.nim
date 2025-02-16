@@ -15,7 +15,6 @@
 ## backend access
 ## ::
 ##   import
-##     kvt/kvt_init,
 ##     kvt/kvt_init/kvt_rocksdb
 ##
 ##   let rc = KvtDb.init(BackendRocksDB, "/var/tmp")

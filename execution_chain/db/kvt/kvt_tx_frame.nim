@@ -37,7 +37,6 @@ proc txFrameBegin*(db: KvtDbRef, parent: KvtTxRef): Result[KvtTxRef,KvtError] =
   let parent = if parent == nil: db.txRef else: parent
   ok KvtTxRef(
     db:     db,
-    layer: LayerRef(),
     parent: parent,
   )
 
@@ -52,7 +51,7 @@ proc rollback*(
   ## there was any.
   ##
 
-  tx.layer[] = Layer()
+  tx.sTab.clear()
   ok()
 
 proc commit*(
@@ -64,7 +63,7 @@ proc commit*(
   ##
   doAssert tx.parent != nil, "don't commit base tx"
 
-  mergeAndReset(tx.parent.layer[], tx.layer[])
+  mergeAndReset(tx.parent, tx)
 
   ok()
 
@@ -87,7 +86,7 @@ proc txFramePersist*(
   doAssert not be.isNil, "Persisting to backend requires ... a backend!"
 
   # Store structural single trie entries
-  for k,v in db.txRef.layer.sTab:
+  for k,v in db.txRef.sTab:
     be.putKvpFn(batch, k, v)
 
   # TODO above, we only prepare the changes to the database but don't actually
@@ -96,7 +95,7 @@ proc txFramePersist*(
   #      in-memory and on-disk state)
 
   # Done with txRef, all saved to backend
-  db.txRef.layer.sTab.clear()
+  db.txRef.sTab.clear()
 
 # ------------------------------------------------------------------------------
 # End

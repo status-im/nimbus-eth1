@@ -1,5 +1,5 @@
 # Nimbus-eth1
-# Copyright (c) 2023-2024 Status Research & Development GmbH
+# Copyright (c) 2023-2025 Status Research & Development GmbH
 # Licensed under either of
 #  * Apache License, version 2.0, ([LICENSE-APACHE](LICENSE-APACHE) or
 #    http://www.apache.org/licenses/LICENSE-2.0)
@@ -13,7 +13,7 @@
 ##
 import
   ../kvt_init/[memory_db, memory_only],
-  ".."/[kvt_desc, kvt_init],
+  ".."/kvt_desc,
   ./walk_private
 
 export
@@ -24,7 +24,7 @@ export
 # Public iterators (all in one)
 # ------------------------------------------------------------------------------
 
-iterator walkPairs*[T: MemBackendRef|VoidBackendRef](
+iterator walkPairs*[T: MemBackendRef](
    _: type T;
    db: KvtDbRef;
      ): tuple[key: seq[byte], data: seq[byte]] =
