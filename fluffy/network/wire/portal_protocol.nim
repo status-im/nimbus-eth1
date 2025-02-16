@@ -876,7 +876,7 @@ proc findContent*(
     debug "FindContent failed due to find content request failure ",
       error = contentMessageResponse.error
 
-    return err("No content response")
+    return err(contentMessageResponse.error)
 
 proc getContentKeys(o: OfferRequest): ContentKeysList =
   case o.kind
@@ -1297,6 +1297,7 @@ proc contentLookup*(
           )
         )
     else:
+      debug "Content query failed", error = contentResult.error
       # Note: Not doing any retries here as retries can/should be done on a
       # higher layer. However, depending on the failure we could attempt a retry,
       # e.g. on uTP specific errors.
