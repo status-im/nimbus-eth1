@@ -69,8 +69,6 @@ proc processBlock(
     let clearEmptyAccount = com.isSpuriousOrLater(header.number)
     db.persist(clearEmptyAccount)
 
-  vmState.ledger.txFrame.commit()
-
   ok()
 
 proc getVmState(c: ChainRef, header: Header, txFrame: CoreDbTxRef):
@@ -85,8 +83,7 @@ proc getVmState(c: ChainRef, header: Header, txFrame: CoreDbTxRef):
 # intended to accepts invalid block
 proc setBlock*(c: ChainRef; blk: Block): Result[void, string] =
   template header: Header = blk.header
-  let txFrame = c.db.ctx.txFrameBegin(nil)
-  defer: txFrame.dispose()
+  let txFrame = c.db.ctx.baseTxFrame().txFrameBegin()
 
   # Needed for figuring out whether KVT cleanup is due (see at the end)
   let
@@ -106,14 +103,13 @@ proc setBlock*(c: ChainRef; blk: Block): Result[void, string] =
   # between eth_blockNumber and eth_syncing
   c.com.syncCurrent = header.number
 
-  txFrame.commit()
+  txFrame.checkpoint(header.number)
 
   # For the `Aristo` database, this code position is only reached if the
   # the parent state of the first block (as registered in `headers[0]`) was
   # the canonical state before updating. So this state will be saved with
   # `persistent()` together with the respective block number.
-  c.db.persist(header.number - 1).isOkOr:
-    return err($error)
+  c.db.persist(txFrame)
 
   ok()
 
