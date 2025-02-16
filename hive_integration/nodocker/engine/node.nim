@@ -98,11 +98,6 @@ proc setBlock*(c: ChainRef; blk: Block): Result[void, string] =
   if blk.withdrawals.isSome:
     txFrame.persistWithdrawals(header.withdrawalsRoot.get, blk.withdrawals.get)
 
-  # update currentBlock *after* we persist it
-  # so the rpc return consistent result
-  # between eth_blockNumber and eth_syncing
-  c.com.syncCurrent = header.number
-
   txFrame.checkpoint(header.number)
 
   # For the `Aristo` database, this code position is only reached if the
@@ -110,6 +105,11 @@ proc setBlock*(c: ChainRef; blk: Block): Result[void, string] =
   # the canonical state before updating. So this state will be saved with
   # `persistent()` together with the respective block number.
   c.db.persist(txFrame)
+
+  # update currentBlock *after* we persist it
+  # so the rpc return consistent result
+  # between eth_blockNumber and eth_syncing
+  c.com.syncCurrent = header.number
 
   ok()
 
