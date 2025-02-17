@@ -54,7 +54,7 @@ jobs:
         include:
           - target:
               os: linux
-            builder: ubuntu-latest
+            builder: ubuntu-22.04
           - target:
               os: macos
             builder: macos-13
