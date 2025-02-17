@@ -185,9 +185,6 @@ proc initRunnerDB(
     pruneHistory = pruneHistory)
 
   setErrorLevel()
-  when CoreDbEnableApiTracking:
-    coreDB.trackCoreDbApi = false
-    coreDB.trackLedgerApi = false
 
 # ------------------------------------------------------------------------------
 # Test Runners: accounts and accounts storages
@@ -240,11 +237,6 @@ proc chainSyncRunner(
         if profilingOk: noisy.test_chainSyncProfilingPrint numBlocks
         if persistent and finalDiskCleanUpOk: dbDir.flushDbDir
 
-      when CoreDbEnableApiTracking:
-        if noisy:
-          com.db.trackCoreDbApi = true
-          com.db.trackLedgerApi = true
-
       check noisy.test_chainSync(filePaths, com, numBlocks,
         lastOneExtra=lastOneExtraOk, enaLogging=enaLoggingOk,
         oldLogAlign=oldLogAlign)
@@ -293,11 +285,6 @@ proc persistentSyncPreLoadAndResumeRunner(
         com.db.finish(eradicate = finalDiskCleanUpOk)
         if profilingOk: noisy.test_chainSyncProfilingPrint firstPart
 
-      when CoreDbEnableApiTracking:
-        if noisy:
-          com.db.trackCoreDbApi = true
-          com.db.trackLedgerApi = true
-
       check noisy.test_chainSync(filePaths, com, firstPart,
         lastOneExtra=lastOneExtraOk, enaLogging=enaLoggingOk,
         oldLogAlign=oldLogAlign)
@@ -309,11 +296,6 @@ proc persistentSyncPreLoadAndResumeRunner(
         com.db.finish(eradicate = finalDiskCleanUpOk)
         if profilingOk: noisy.test_chainSyncProfilingPrint secndPart
         if finalDiskCleanUpOk: dbDir.flushDbDir
-
-      when CoreDbEnableApiTracking:
-        if noisy:
-          com.db.trackCoreDbApi = true
-          com.db.trackLedgerApi = true
 
       check noisy.test_chainSync(filePaths, com, secndPart,
         lastOneExtra=lastOneExtraOk, enaLogging=enaLoggingOk,

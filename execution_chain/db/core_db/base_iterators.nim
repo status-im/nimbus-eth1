@@ -14,42 +14,20 @@ import
   stint,
   eth/common/hashes,
   ../aristo as use_ari,
-  ./base/[api_tracking, base_config, base_desc]
+  ./base/base_desc
 
 export stint, hashes
 
-when CoreDbEnableApiJumpTable:
-  discard
-else:
-  import
-    ../aristo/[aristo_desc, aristo_path]
-
-when CoreDbEnableApiTracking:
-  import
-    chronicles
-  logScope:
-    topics = "core_db"
-  const
-    logTxt = "API"
-
-# ---------------
-
-template call(api: AristoApiRef; fn: untyped; args: varargs[untyped]): untyped =
-  when CoreDbEnableApiJumpTable:
-    api.fn(args)
-  else:
-    fn(args)
+import
+  ../aristo/[aristo_desc, aristo_path]
 
 # ------------------------------------------------------------------------------
 # Public iterators
 # ------------------------------------------------------------------------------
 
 iterator slotPairs*(acc: CoreDbTxRef; accPath: Hash32): (seq[byte], UInt256) =
-  acc.setTrackNewApi AccSlotPairsIt
   for (path,data) in acc.aTx.rightPairsStorage accPath:
-    yield (acc.ctx.parent.ariApi.call(pathAsBlob, path), data)
-  acc.ifTrackNewApi:
-    debug logTxt, api, elapsed
+    yield (pathAsBlob(path), data)
 
 # ------------------------------------------------------------------------------
 # End

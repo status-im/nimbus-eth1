@@ -13,7 +13,6 @@
 import
   ../aristo,
   ./backend/aristo_db,
-  ./base/base_config,
   "."/[base_iterators, core_apps]
 
 import
@@ -22,7 +21,6 @@ import
 export
   EmptyBlob,
   base,
-  base_config,
   base_iterators,
   core_apps
 

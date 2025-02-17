@@ -15,46 +15,23 @@ import
   eth/common/[accounts, base, hashes],
   ../../constants,
   ../[kvt, aristo],
-  ./base/[api_tracking, base_config, base_desc, base_helpers]
+  ./base/[base_desc, base_helpers]
 
 export
-  CoreDbAccRef,
   CoreDbAccount,
   CoreDbCtxRef,
   CoreDbErrorCode,
   CoreDbError,
-  CoreDbKvtRef,
   CoreDbPersistentTypes,
   CoreDbRef,
   CoreDbTxRef,
   CoreDbType
 
-when CoreDbEnableApiTracking:
-  import
-    chronicles
-  logScope:
-    topics = "core_db"
-  const
-    logTxt = "API"
-
-when CoreDbEnableProfiling:
-  export
-    CoreDbFnInx,
-    CoreDbProfListRef
-
-when CoreDbEnableCaptJournal:
-  import
-    ./backend/aristo_trace
-  type
-    CoreDbCaptRef* = distinct TraceLogInstRef
-  func `$`(p: CoreDbCaptRef): string =
-    if p.distinctBase.isNil: "<nil>" else: "<capt>"
-else:
-  import
-    ../aristo/[
-      aristo_delete, aristo_desc, aristo_fetch, aristo_merge, aristo_part,
-      aristo_persist, aristo_tx_frame],
-    ../kvt/[kvt_desc, kvt_utils, kvt_persist, kvt_tx_frame]
+import
+  ../aristo/[
+    aristo_delete, aristo_desc, aristo_fetch, aristo_merge, aristo_part,
+    aristo_persist, aristo_tx_frame],
+  ../kvt/[kvt_desc, kvt_utils, kvt_persist, kvt_tx_frame]
 
 # ------------------------------------------------------------------------------
 # Public context constructors and administration
@@ -77,8 +54,8 @@ proc baseTxFrame*(db: CoreDbRef): CoreDbTxRef =
 
   CoreDbTxRef(
     ctx: db.ctx,
-    aTx: db.ctx.parent.ariApi.call(baseTxFrame, db.ctx.mpt),
-    kTx: db.ctx.parent.kvtApi.call(baseTxFrame, db.ctx.kvt))
+    aTx: db.ctx.mpt.baseTxFrame(),
+    kTx: db.ctx.kvt.baseTxFrame())
 
 # ------------------------------------------------------------------------------
 # Public base descriptor methods
@@ -92,15 +69,17 @@ proc finish*(db: CoreDbRef; eradicate = false) =
   ## depends on the backend database. Currently, only the `AristoDbRocks` type
   ## backend removes the database on `true`.
   ##
-  db.setTrackNewApi BaseFinishFn
-  CoreDbKvtRef(db.ctx).call(finish, db.ctx.kvt, eradicate)
-  CoreDbAccRef(db.ctx).call(finish, db.ctx.mpt, eradicate)
-  db.ifTrackNewApi: debug logTxt, api, elapsed
+  db.ctx.kvt.finish(eradicate)
+  db.ctx.mpt.finish(eradicate)
 
 proc `$$`*(e: CoreDbError): string =
   ## Pretty print error symbol
   ##
-  e.toStr()
+  result = $e.error & "("
+  result &= (if e.isAristo: "Aristo" else: "Kvt")
+  result &= ", ctx=" & $e.ctx & ", error="
+  result &= (if e.isAristo: $e.aErr else: $e.kErr)
+  result &= ")"
 
 proc persist*(
     db: CoreDbRef;
@@ -109,8 +88,6 @@ proc persist*(
   ## This function persists changes up to and including the given frame to the
   ## database.
   ##
-  db.setTrackNewApi BasePersistFn
-
   # TODO these backend functions coud maybe be hidden behind an abstraction
   #      layer - or... the abstraction layer could be removed from everywhere
   #      else since it's not really needed
@@ -128,148 +105,103 @@ proc persist*(
     #      kvt changes written to memory but not to disk because of an aristo
     #      error), we have to panic instead.
 
-    CoreDbKvtRef(db.ctx).call(persist, db.ctx.kvt, kvtBatch[], txFrame.kTx)
-    CoreDbAccRef(db.ctx).call(persist, db.ctx.mpt, mptBatch[], txFrame.aTx)
+    db.ctx.kvt.persist(kvtBatch[], txFrame.kTx)
+    db.ctx.mpt.persist(mptBatch[], txFrame.aTx)
 
     db.defCtx.kvt.backend.putEndFn(kvtBatch[]).isOkOr:
-      raiseAssert $api & ": " & $error
+      raiseAssert "" & ": " & $error
 
     db.defCtx.mpt.backend.putEndFn(mptBatch[]).isOkOr:
-      raiseAssert $api & ": " & $error
+      raiseAssert "" & ": " & $error
 
   else:
-    discard kvtBatch.expect($api & ": should always be able to create batch")
-    discard mptBatch.expect($api & ": should always be able to create batch")
-
-  db.ifTrackNewApi: debug logTxt, api, elapsed, blockNumber, result
+    discard kvtBatch.expect("" & ": should always be able to create batch")
+    discard mptBatch.expect("" & ": should always be able to create batch")
 
 proc stateBlockNumber*(db: CoreDbTxRef): BlockNumber =
   ## This function returns the block number stored with the latest `persist()`
   ## directive.
   ##
-  db.setTrackNewApi BaseStateBlockNumberFn
-  result = block:
-    let rc = db.ctx.parent.ariApi.call(fetchLastCheckpoint, db.aTx)
-    if rc.isOk:
-      rc.value.BlockNumber
-    else:
-      0u64
-  db.ifTrackNewApi: debug logTxt, api, elapsed, result
+  let rc = db.aTx.fetchLastCheckpoint().valueOr:
+    return 0u64
+
+  rc.BlockNumber
 
 proc verify*(
-    db: CoreDbRef | CoreDbAccRef;
+    db: CoreDbRef;
     proof: openArray[seq[byte]];
     root: Hash32;
     path: Hash32;
       ): CoreDbRc[Opt[seq[byte]]] =
   ## Variant of `verify()`.
-  template mpt: untyped =
-    when db is CoreDbRef:
-      CoreDbAccRef(db.defCtx)
-    else:
-      db
-  mpt.setTrackNewApi BaseVerifyFn
-  result = block:
-    let rc = mpt.call(partUntwigPath, proof, root, path)
-    if rc.isOk:
-      ok(rc.value)
-    else:
-      err(rc.error.toError($api, ProofVerify))
-  mpt.ifTrackNewApi: debug logTxt, api, elapsed, result
+  let rc = partUntwigPath(proof, root, path).valueOr:
+    return err(error.toError("", ProofVerify))
+
+  ok(rc)
 
 # ------------------------------------------------------------------------------
 # Public key-value table methods
 # ------------------------------------------------------------------------------
 
-proc getKvt*(ctx: CoreDbCtxRef): CoreDbKvtRef =
-  ## This function retrieves the common base object shared with other KVT
-  ## descriptors. Any changes are immediately visible to subscribers.
-  ## On destruction (when the constructed object gets out of scope), changes
-  ## are not saved to the backend database but are still cached and available.
-  ##
-  CoreDbKvtRef(ctx)
-
 # ----------- KVT ---------------
 
 proc get*(kvt: CoreDbTxRef; key: openArray[byte]): CoreDbRc[seq[byte]] =
   ## This function always returns a non-empty `seq[byte]` or an error code.
-  kvt.setTrackNewApi KvtGetFn
-  result = block:
-    let rc = kvt.ctx.parent.kvtApi.call(get, kvt.kTx, key)
-    if rc.isOk:
-      ok(rc.value)
-    elif rc.error == GetNotFound:
-      err(rc.error.toError($api, KvtNotFound))
-    else:
-      err(rc.error.toError $api)
-  kvt.ifTrackNewApi: debug logTxt, api, elapsed, key=key.toStr, result
+  let rc = kvt.kTx.get(key)
+  if rc.isOk:
+    ok(rc.value)
+  elif rc.error == GetNotFound:
+    err(rc.error.toError("", KvtNotFound))
+  else:
+    err(rc.error.toError(""))
 
 proc getOrEmpty*(kvt: CoreDbTxRef; key: openArray[byte]): CoreDbRc[seq[byte]] =
   ## Variant of `get()` returning an empty `seq[byte]` if the key is not found
   ## on the database.
   ##
-  kvt.setTrackNewApi KvtGetOrEmptyFn
-  result = block:
-    let rc = kvt.ctx.parent.kvtApi.call(get, kvt.kTx, key)
-    if rc.isOk:
-      ok(rc.value)
-    elif rc.error == GetNotFound:
-      CoreDbRc[seq[byte]].ok(EmptyBlob)
-    else:
-      err(rc.error.toError $api)
-  kvt.ifTrackNewApi: debug logTxt, api, elapsed, key=key.toStr, result
+  let rc = kvt.kTx.get(key)
+  if rc.isOk:
+    ok(rc.value)
+  elif rc.error == GetNotFound:
+    CoreDbRc[seq[byte]].ok(EmptyBlob)
+  else:
+    err(rc.error.toError(""))
 
 proc len*(kvt: CoreDbTxRef; key: openArray[byte]): CoreDbRc[int] =
   ## This function returns the size of the value associated with `key`.
-  kvt.setTrackNewApi KvtLenFn
-  result = block:
-    let rc = kvt.ctx.parent.kvtApi.call(len, kvt.kTx, key)
-    if rc.isOk:
-      ok(rc.value)
-    elif rc.error == GetNotFound:
-      err(rc.error.toError($api, KvtNotFound))
-    else:
-      err(rc.error.toError $api)
-  kvt.ifTrackNewApi: debug logTxt, api, elapsed, key=key.toStr, result
+  let rc = kvt.kTx.len(key)
+  if rc.isOk:
+    ok(rc.value)
+  elif rc.error == GetNotFound:
+    err(rc.error.toError("", KvtNotFound))
+  else:
+    err(rc.error.toError(""))
 
 proc del*(kvt: CoreDbTxRef; key: openArray[byte]): CoreDbRc[void] =
-  kvt.setTrackNewApi KvtDelFn
-  result = block:
-    let rc = kvt.ctx.parent.kvtApi.call(del, kvt.kTx, key)
-    if rc.isOk:
-      ok()
-    else:
-      err(rc.error.toError $api)
-  kvt.ifTrackNewApi: debug logTxt, api, elapsed, key=key.toStr, result
+  kvt.kTx.del(key).isOkOr:
+    return err(error.toError(""))
+
+  ok()
 
 proc put*(
     kvt: CoreDbTxRef;
     key: openArray[byte];
     val: openArray[byte];
       ): CoreDbRc[void] =
-  kvt.setTrackNewApi KvtPutFn
-  result = block:
-    let rc = kvt.ctx.parent.kvtApi.call(put, kvt.kTx, key, val)
-    if rc.isOk:
-      ok()
-    else:
-      err(rc.error.toError $api)
-  kvt.ifTrackNewApi:
-    debug logTxt, api, elapsed, key=key.toStr, val=val.toLenStr, result
+  kvt.kTx.put(key, val).isOkOr:
+    return err(error.toError(""))
+
+  ok()
 
 proc hasKeyRc*(kvt: CoreDbTxRef; key: openArray[byte]): CoreDbRc[bool] =
   ## For the argument `key` return `true` if `get()` returned a value on
   ## that argument, `false` if it returned `GetNotFound`, and an error
   ## otherwise.
   ##
-  kvt.setTrackNewApi KvtHasKeyRcFn
-  result = block:
-    let rc = kvt.ctx.parent.kvtApi.call(hasKeyRc, kvt.kTx, key)
-    if rc.isOk:
-      ok(rc.value)
-    else:
-      err(rc.error.toError $api)
-  kvt.ifTrackNewApi: debug logTxt, api, elapsed, key=key.toStr, result
+  let rc = kvt.kTx.hasKeyRc(key).valueOr:
+    return err(error.toError(""))
+
+  ok(rc)
 
 proc hasKey*(kvt: CoreDbTxRef; key: openArray[byte]): bool =
   ## Simplified version of `hasKeyRc` where `false` is returned instead of
@@ -278,20 +210,11 @@ proc hasKey*(kvt: CoreDbTxRef; key: openArray[byte]): bool =
   ## This function prototype is in line with the `hasKey` function for
   ## `Tables`.
   ##
-  kvt.setTrackNewApi KvtHasKeyFn
-  result = kvt.ctx.parent.kvtApi.call(hasKeyRc, kvt.kTx, key).valueOr: false
-  kvt.ifTrackNewApi: debug logTxt, api, elapsed, key=key.toStr, result
+  result = kvt.kTx.hasKeyRc(key).valueOr: false
 
 # ------------------------------------------------------------------------------
 # Public methods for accounts
 # ------------------------------------------------------------------------------
-
-proc getAccounts*(ctx: CoreDbCtxRef): CoreDbAccRef =
-  ## Accounts column constructor, will defect on failure.
-  ##
-  ctx.setTrackNewApi CtxGetAccountsFn
-  result =  CoreDbAccRef(ctx)
-  ctx.ifTrackNewApi: debug logTxt, api, elapsed
 
 # ----------- accounts ---------------
 
@@ -305,14 +228,10 @@ proc proof*(
   ## and `false` otherwise. In the latter case, the chain of rlp-encoded blobs
   ## are the nodes proving that the `key` path does not exist.
   ##
-  acc.setTrackNewApi AccProofFn
-  result = block:
-    let rc = acc.ctx.parent.ariApi.call(partAccountTwig, acc.aTx, accPath)
-    if rc.isOk:
-      ok(rc.value)
-    else:
-      err(rc.error.toError($api, ProofCreate))
-  acc.ifTrackNewApi: debug logTxt, api, elapsed, result
+  let rc = acc.aTx.partAccountTwig(accPath).valueOr:
+    return err(error.toError("", ProofCreate))
+
+  ok(rc)
 
 proc fetch*(
     acc: CoreDbTxRef;
@@ -321,16 +240,13 @@ proc fetch*(
   ## Fetch the account data record for the particular account indexed by
   ## the key `accPath`.
   ##
-  acc.setTrackNewApi AccFetchFn
-  result = block:
-    let rc = acc.ctx.parent.ariApi.call(fetchAccountRecord, acc.aTx, accPath)
-    if rc.isOk:
-      ok(rc.value)
-    elif rc.error == FetchPathNotFound:
-      err(rc.error.toError($api, AccNotFound))
-    else:
-      err(rc.error.toError $api)
-  acc.ifTrackNewApi: debug logTxt, api, elapsed, accPath=($$accPath), result
+  let rc = acc.aTx.fetchAccountRecord(accPath)
+  if rc.isOk:
+    ok(rc.value)
+  elif rc.error == FetchPathNotFound:
+    err(rc.error.toError("", AccNotFound))
+  else:
+    err(rc.error.toError(""))
 
 proc delete*(
     acc: CoreDbTxRef;
@@ -339,18 +255,14 @@ proc delete*(
   ## Delete the particular account indexed by the key `accPath`. This
   ## will also destroy an associated storage area.
   ##
-  acc.setTrackNewApi AccDeleteFn
-  result = block:
-    let rc = acc.ctx.parent.ariApi.call(deleteAccountRecord, acc.aTx, accPath)
-    if rc.isOk:
-      ok()
-    elif rc.error == DelPathNotFound:
-      # TODO: Would it be conseqient to just return `ok()` here?
-      err(rc.error.toError($api, AccNotFound))
-    else:
-      err(rc.error.toError $api)
-  acc.ifTrackNewApi:
-    debug logTxt, api, elapsed, accPath=($$accPath), result
+  let rc = acc.aTx.deleteAccountRecord(accPath)
+  if rc.isOk:
+    ok()
+  elif rc.error == DelPathNotFound:
+    # TODO: Would it be conseqient to just return `ok()` here?
+    err(rc.error.toError("", AccNotFound))
+  else:
+    err(rc.error.toError(""))
 
 proc clearStorage*(
     acc: CoreDbTxRef;
@@ -359,15 +271,11 @@ proc clearStorage*(
   ## Delete all data slots from the storage area associated with the
   ## particular account indexed by the key `accPath`.
   ##
-  acc.setTrackNewApi AccClearStorageFn
-  result = block:
-    let rc = acc.ctx.parent.ariApi.call(deleteStorageTree, acc.aTx, accPath)
-    if rc.isOk or rc.error in {DelStoRootMissing,DelStoAccMissing}:
-      ok()
-    else:
-      err(rc.error.toError $api)
-  acc.ifTrackNewApi:
-    debug logTxt, api, elapsed, accPath=($$accPath), result
+  let rc = acc.aTx.deleteStorageTree(accPath)
+  if rc.isOk or rc.error in {DelStoRootMissing,DelStoAccMissing}:
+    ok()
+  else:
+    err(rc.error.toError(""))
 
 proc merge*(
     acc: CoreDbTxRef;
@@ -377,15 +285,10 @@ proc merge*(
   ## Add or update the argument account data record `account`. Note that the
   ## `account` argument uniquely idendifies the particular account address.
   ##
-  acc.setTrackNewApi AccMergeFn
-  result = block:
-    let rc = acc.ctx.parent.ariApi.call(mergeAccountRecord, acc.aTx, accPath, accRec)
-    if rc.isOk:
-      ok()
-    else:
-      err(rc.error.toError $api)
-  acc.ifTrackNewApi:
-    debug logTxt, api, elapsed, accPath=($$accPath), result
+  acc.aTx.mergeAccountRecord(accPath, accRec).isOkOr:
+    return err(error.toError(""))
+
+  ok()
 
 proc hasPath*(
     acc: CoreDbTxRef;
@@ -393,27 +296,18 @@ proc hasPath*(
       ): CoreDbRc[bool] =
   ## Would be named `contains` if it returned `bool` rather than `Result[]`.
   ##
-  acc.setTrackNewApi AccHasPathFn
-  result = block:
-    let rc = acc.ctx.parent.ariApi.call(hasPathAccount, acc.aTx, accPath)
-    if rc.isOk:
-      ok(rc.value)
-    else:
-      err(rc.error.toError $api)
-  acc.ifTrackNewApi:
-    debug logTxt, api, elapsed, accPath=($$accPath), result
+  let rc = acc.aTx.hasPathAccount(accPath).valueOr:
+    return err(error.toError(""))
+
+  ok(rc)
 
 proc getStateRoot*(acc: CoreDbTxRef): CoreDbRc[Hash32] =
   ## This function retrieves the Merkle state hash of the accounts
   ## column (if available.)
-  acc.setTrackNewApi AccStateFn
-  result = block:
-    let rc = acc.ctx.parent.ariApi.call(fetchStateRoot, acc.aTx)
-    if rc.isOk:
-      ok(rc.value)
-    else:
-      err(rc.error.toError $api)
-  acc.ifTrackNewApi: debug logTxt, api, elapsed, result
+  let rc = acc.aTx.fetchStateRoot().valueOr:
+    return err(error.toError(""))
+
+  ok(rc)
 
 # ------------ storage ---------------
 
@@ -432,14 +326,10 @@ proc slotProof*(
   ## Note that the function always returns an error unless the `accPath` is
   ## valid.
   ##
-  acc.setTrackNewApi AccSlotProofFn
-  result = block:
-    let rc = acc.ctx.parent.ariApi.call(partStorageTwig, acc.aTx, accPath, stoPath)
-    if rc.isOk:
-      ok(rc.value)
-    else:
-      err(rc.error.toError($api, ProofCreate))
-  acc.ifTrackNewApi: debug logTxt, api, elapsed, result
+  let rc = acc.aTx.partStorageTwig(accPath, stoPath).valueOr:
+    return err(error.toError("", ProofCreate))
+
+  ok(rc)
 
 proc slotFetch*(
     acc: CoreDbTxRef;
@@ -447,18 +337,13 @@ proc slotFetch*(
     stoPath: Hash32;
       ):  CoreDbRc[UInt256] =
   ## Like `fetch()` but with cascaded index `(accPath,slot)`.
-  acc.setTrackNewApi AccSlotFetchFn
-  result = block:
-    let rc = acc.ctx.parent.ariApi.call(fetchStorageData, acc.aTx, accPath, stoPath)
-    if rc.isOk:
-      ok(rc.value)
-    elif rc.error == FetchPathNotFound:
-      err(rc.error.toError($api, StoNotFound))
-    else:
-      err(rc.error.toError $api)
-  acc.ifTrackNewApi:
-    debug logTxt, api, elapsed, accPath=($$accPath),
-            stoPath=($$stoPath), result
+  let rc = acc.aTx.fetchStorageData(accPath, stoPath)
+  if rc.isOk:
+    ok(rc.value)
+  elif rc.error == FetchPathNotFound:
+    err(rc.error.toError("", StoNotFound))
+  else:
+    err(rc.error.toError(""))
 
 proc slotDelete*(
     acc: CoreDbTxRef;
@@ -466,105 +351,73 @@ proc slotDelete*(
     stoPath: Hash32;
       ):  CoreDbRc[void] =
   ## Like `delete()` but with cascaded index `(accPath,slot)`.
-  acc.setTrackNewApi AccSlotDeleteFn
-  result = block:
-    let rc = acc.ctx.parent.ariApi.call(deleteStorageData, acc.aTx, accPath, stoPath)
-    if rc.isOk or rc.error == DelStoRootMissing:
-      # The second `if` clause is insane but legit: A storage column was
-      # announced for an account but no data have been added, yet.
-      ok()
-    elif rc.error == DelPathNotFound:
-      err(rc.error.toError($api, StoNotFound))
-    else:
-      err(rc.error.toError $api)
-  acc.ifTrackNewApi:
-    debug logTxt, api, elapsed, accPath=($$accPath),
-            stoPath=($$stoPath), result
+  let rc = acc.aTx.deleteStorageData(accPath, stoPath)
+  if rc.isOk or rc.error == DelStoRootMissing:
+    # The second `if` clause is insane but legit: A storage column was
+    # announced for an account but no data have been added, yet.
+    ok()
+  elif rc.error == DelPathNotFound:
+    err(rc.error.toError("", StoNotFound))
+  else:
+    err(rc.error.toError(""))
 
 proc slotHasPath*(
     acc: CoreDbTxRef;
     accPath: Hash32;
     stoPath: Hash32;
-      ):  CoreDbRc[bool] =
+      ): CoreDbRc[bool] =
   ## Like `hasPath()` but with cascaded index `(accPath,slot)`.
-  acc.setTrackNewApi AccSlotHasPathFn
-  result = block:
-    let rc = acc.ctx.parent.ariApi.call(hasPathStorage, acc.aTx, accPath, stoPath)
-    if rc.isOk:
-      ok(rc.value)
-    else:
-      err(rc.error.toError $api)
-  acc.ifTrackNewApi:
-    debug logTxt, api, elapsed, accPath=($$accPath),
-            stoPath=($$stoPath), result
+  let rc = acc.aTx.hasPathStorage(accPath, stoPath).valueOr:
+    return err(error.toError(""))
+
+  ok(rc)
 
 proc slotMerge*(
     acc: CoreDbTxRef;
     accPath: Hash32;
     stoPath: Hash32;
     stoData: UInt256;
-      ):  CoreDbRc[void] =
+      ): CoreDbRc[void] =
   ## Like `merge()` but with cascaded index `(accPath,slot)`.
-  acc.setTrackNewApi AccSlotMergeFn
-  result = block:
-    let rc = acc.ctx.parent.ariApi.call(mergeStorageData, acc.aTx, accPath, stoPath, stoData)
-    if rc.isOk:
-      ok()
-    else:
-      err(rc.error.toError $api)
-  acc.ifTrackNewApi:
-    debug logTxt, api, elapsed, accPath=($$accPath),
-            stoPath=($$stoPath), stoData, result
+  acc.aTx.mergeStorageData(accPath, stoPath, stoData).isOkOr:
+    return err(error.toError(""))
+
+  ok()
 
 proc slotStorageRoot*(
     acc: CoreDbTxRef;
     accPath: Hash32;
-      ):  CoreDbRc[Hash32] =
+      ): CoreDbRc[Hash32] =
   ## This function retrieves the Merkle state hash of the storage data
   ## column (if available) related to the account  indexed by the key
   ## `accPath`.`.
   ##
-  acc.setTrackNewApi AccSlotStorageRootFn
-  result = block:
-    let rc = acc.ctx.parent.ariApi.call(fetchStorageRoot, acc.aTx, accPath)
-    if rc.isOk:
-      ok(rc.value)
-    else:
-      err(rc.error.toError $api)
-  acc.ifTrackNewApi:
-    debug logTxt, api, elapsed, accPath=($$accPath), result
+  let rc = acc.aTx.fetchStorageRoot(accPath).valueOr:
+    return err(error.toError(""))
+
+  ok(rc)
 
 proc slotStorageEmpty*(
     acc: CoreDbTxRef;
     accPath: Hash32;
-      ):  CoreDbRc[bool] =
+      ): CoreDbRc[bool] =
   ## This function returns `true` if the storage data column is empty or
   ## missing.
   ##
-  acc.setTrackNewApi AccSlotStorageEmptyFn
-  result = block:
-    let rc = acc.ctx.parent.ariApi.call(hasStorageData, acc.aTx, accPath)
-    if rc.isOk:
-      ok(not rc.value)
-    else:
-      err(rc.error.toError $api)
-  acc.ifTrackNewApi:
-    debug logTxt, api, elapsed, accPath=($$accPath), result
+  let rc = acc.aTx.hasStorageData(accPath).valueOr:
+    return err(error.toError(""))
+
+  ok(not rc)
 
 proc slotStorageEmptyOrVoid*(
     acc: CoreDbTxRef;
     accPath: Hash32;
       ): bool =
   ## Convenience wrapper, returns `true` where `slotStorageEmpty()` would fail.
-  acc.setTrackNewApi AccSlotStorageEmptyOrVoidFn
-  result = block:
-    let rc = acc.ctx.parent.ariApi.call(hasStorageData, acc.aTx, accPath)
-    if rc.isOk:
-      not rc.value
-    else:
-      true
-  acc.ifTrackNewApi:
-    debug logTxt, api, elapsed, accPath=($$accPath), result
+  let rc = acc.aTx.hasStorageData(accPath).valueOr:
+    return true
+
+  not rc
 
 # ------------- other ----------------
 
@@ -577,20 +430,14 @@ proc recast*(
   ## of an account statement. This conversion may fail if the storage colState
   ## hash (see `slotStorageRoot()` above) is currently unavailable.
   ##
-  acc.setTrackNewApi AccRecastFn
-  let rc = acc.ctx.parent.ariApi.call(fetchStorageRoot, acc.aTx, accPath)
-  result = block:
-    if rc.isOk:
-      ok Account(
-        nonce:       accRec.nonce,
-        balance:     accRec.balance,
-        codeHash:    accRec.codeHash,
-        storageRoot: rc.value)
-    else:
-      err(rc.error.toError $api)
-  acc.ifTrackNewApi:
-    let storageRoot = if rc.isOk: $$(rc.value) else: "n/a"
-    debug logTxt, api, elapsed, accPath=($$accPath), storageRoot, result
+  let rc = acc.aTx.fetchStorageRoot(accPath).valueOr:
+    return err(error.toError(""))
+
+  ok Account(
+    nonce:       accRec.nonce,
+    balance:     accRec.balance,
+    codeHash:    accRec.codeHash,
+    storageRoot: rc)
 
 # ------------------------------------------------------------------------------
 # Public transaction related methods
@@ -599,85 +446,22 @@ proc recast*(
 proc txFrameBegin*(ctx: CoreDbCtxRef, parent: CoreDbTxRef): CoreDbTxRef =
   ## Constructor
   ##
-  ctx.setTrackNewApi BaseNewTxFn
   let
-    kTx = CoreDbKvtRef(ctx).call(txFrameBegin, ctx.kvt, if parent != nil: parent.kTx else: nil)
-    aTx = CoreDbAccRef(ctx).call(txFrameBegin, ctx.mpt, if parent != nil: parent.aTx else: nil)
+    kTx = ctx.kvt.txFrameBegin(if parent != nil: parent.kTx else: nil)
+    aTx = ctx.mpt.txFrameBegin(if parent != nil: parent.aTx else: nil)
 
-  result = ctx.bless CoreDbTxRef(kTx: kTx, aTx: aTx)
-  ctx.ifTrackNewApi:
-    let newLevel = CoreDbAccRef(ctx).call(level, ctx.mpt)
-    debug logTxt, api, elapsed, newLevel
+  ctx.bless CoreDbTxRef(kTx: kTx, aTx: aTx)
 
 proc checkpoint*(tx: CoreDbTxRef, blockNumber: BlockNumber) =
-  tx.setTrackNewApi TxCommitFn:
-    let prvLevel {.used.} = CoreDbAccRef(tx.ctx).call(level, tx.aTx)
-  CoreDbAccRef(tx.ctx).call(checkpoint, tx.aTx, blockNumber)
-  tx.ifTrackNewApi: debug logTxt, api, elapsed, prvLevel
+  tx.aTx.checkpoint(blockNumber)
 
 proc dispose*(tx: CoreDbTxRef) =
-  tx.setTrackNewApi TxRollbackFn:
-    let prvLevel {.used.} = CoreDbAccRef(tx.ctx).call(level, tx.aTx)
-  CoreDbAccRef(tx.ctx).call(dispose, tx.aTx)
-  CoreDbKvtRef(tx.ctx).call(dispose, tx.kTx)
+  tx.aTx.dispose()
+  tx.kTx.dispose()
   tx[].reset()
-  tx.ifTrackNewApi: debug logTxt, api, elapsed, prvLevel
 
 proc txFrameBegin*(tx: CoreDbTxRef): CoreDbTxRef =
   tx.ctx.txFrameBegin(tx)
-
-# ------------------------------------------------------------------------------
-# Public tracer methods
-# ------------------------------------------------------------------------------
-
-when CoreDbEnableCaptJournal:
-  proc pushCapture*(db: CoreDbRef): CoreDbCaptRef =
-    ## ..
-    ##
-    db.setTrackNewApi BasePushCaptureFn
-    if db.tracerHook.isNil:
-      db.tracerHook = TraceRecorderRef.init(db)
-    else:
-      TraceRecorderRef(db.tracerHook).push()
-    result = TraceRecorderRef(db.tracerHook).topInst().CoreDbCaptRef
-    db.ifTrackNewApi: debug logTxt, api, elapsed, result
-
-  proc level*(cpt: CoreDbCaptRef): int =
-    ## Getter, returns the positive number of stacked instances.
-    ##
-    let log = cpt.distinctBase
-    log.db.setTrackNewApi CptLevelFn
-    result = log.level()
-    log.db.ifTrackNewApi: debug logTxt, api, elapsed, result
-
-  proc kvtLog*(cpt: CoreDbCaptRef): seq[(seq[byte],seq[byte])] =
-    ## Getter, returns the `Kvt` logger list for the argument instance.
-    ##
-    let log = cpt.distinctBase
-    log.db.setTrackNewApi CptKvtLogFn
-    result = log.kvtLogBlobs()
-    log.db.ifTrackNewApi: debug logTxt, api, elapsed
-
-  proc pop*(cpt: CoreDbCaptRef) =
-    ## Explicitely stop recording the current tracer instance and reset to
-    ## previous level.
-    ##
-    let db = cpt.distinctBase.db
-    db.setTrackNewApi CptPopFn
-    if not cpt.distinctBase.pop():
-      TraceRecorderRef(db.tracerHook).restore()
-      db.tracerHook = TraceRecorderRef(nil)
-    db.ifTrackNewApi: debug logTxt, api, elapsed, cpt
-
-  proc stopCapture*(db: CoreDbRef) =
-    ## Discard capture instances. This function is equivalent to `pop()`-ing
-    ## all instances.
-    ##
-    db.setTrackNewApi CptStopCaptureFn
-    if not db.tracerHook.isNil:
-      TraceRecorderRef(db.tracerHook).restore()
-      db.tracerHook = TraceRecorderRef(nil)
-    db.ifTrackNewApi: debug logTxt, api, elapsed
 
 # ------------------------------------------------------------------------------
 # End
