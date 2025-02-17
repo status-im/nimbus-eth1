@@ -68,6 +68,17 @@ func isValid*(tx: KvtTxRef): bool =
 # Don't put in a hash!
 func hash*(db: KvtDbRef): Hash {.error.}
 
+iterator stack*(tx: KvtTxRef): KvtTxRef =
+  # Stack going from base to tx
+  var frames: seq[KvtTxRef]
+  var tx = tx
+  while tx != nil:
+    frames.add tx
+    tx = tx.parent
+
+  while frames.len > 0:
+    yield frames.pop()
+
 iterator rstack*(tx: KvtTxRef): KvtTxRef =
   var tx = tx
   # Stack in reverse order

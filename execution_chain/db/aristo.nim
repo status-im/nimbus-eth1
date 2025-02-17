@@ -19,7 +19,8 @@ export
   aristo_api, aristo_constants
 
 import
-  aristo/aristo_init/memory_only
+  aristo/aristo_init/memory_only,
+  aristo/aristo_init/init_common
 export
   MemBackendRef,
   finish,

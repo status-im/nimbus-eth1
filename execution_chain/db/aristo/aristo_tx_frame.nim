@@ -21,95 +21,74 @@ import
 # Public functions
 # ------------------------------------------------------------------------------
 
-proc txFrameBegin*(db: AristoDbRef, parent: AristoTxRef): Result[AristoTxRef,AristoError] =
-  ## Starts a new transaction.
-  ##
-  ## Example:
-  ## ::
-  ##   proc doSomething(db: AristoDbRef) =
-  ##     let tx = db.begin
-  ##     defer: tx.rollback()
-  ##     ... continue using db ...
-  ##     tx.commit()
-  ##
-
+proc txFrameBegin*(db: AristoDbRef, parent: AristoTxRef): AristoTxRef =
   let parent = if parent == nil:
     db.txRef
   else:
     parent
 
-  let
-    vTop = parent.vTop
-
-  ok AristoTxRef(
+  AristoTxRef(
     db:     db,
     parent: parent,
-    vTop:   vTop,
-    cTop:   vTop)
+    vTop:   parent.vTop)
 
 proc baseTxFrame*(db: AristoDbRef): AristoTxRef=
   db.txRef
 
-proc rollback*(
-    tx: AristoTxRef;                  # Top transaction on database
-      ): Result[void,AristoError] =
-  ## Given a *top level* handle, this function discards all database operations
-  ## performed for this transaction.
-  # TODO Everyone using this txref should repoint their parent field
+proc dispose*(
+    tx: AristoTxRef;
+      ) =
+  tx[].reset()
 
-  tx.vTop = tx.cTop # Yes, it is cTop
-  tx.cTop = tx.cTop
-
-  ok()
-
-proc commit*(
-    tx: AristoTxRef;                  # Top transaction on database
-      ): Result[void,AristoError] =
-  ## This function pushes all changes done in this frame to its parent
-  ##
-  # TODO Everyone using this txref should repoint their parent field
-  doAssert tx.parent != nil, "should not commit the base tx"
-
-  # A rollback after commit should reset to the new vTop!
-  tx.cTop = tx.vTop
-
-  mergeAndReset(tx.parent, tx)
-
-  ok()
+proc checkpoint*(
+    tx: AristoTxRef;
+    blockNumber: uint64;
+      ) =
+  tx.blockNumber = Opt.some(blockNumber)
 
 proc txFramePersist*(
     db: AristoDbRef;                  # Database
     batch: PutHdlRef;
-    nxtSid = 0u64;                    # Next state ID (aka block number)
+    txFrame: AristoTxRef;
       ) =
-  ## Persistently store data onto backend database. If the system is running
-  ## without a database backend, the function returns immediately with an
-  ## error.
-  ##
-  ## The function merges all data staged in `txFrame` and merges it onto the
-  ## backend database. `txFrame` becomes the new `baseTxFrame`.
-  ##
-  ## Any parent frames of `txFrame` become invalid after this operation.
-  ##
-  ## If the argument `nxtSid` is passed non-zero, it will be the ID for the
-  ## next recovery journal record. If non-zero, this ID must be greater than
-  ## all previous IDs (e.g. block number when stowing after block execution.)
-  ##
+
+  if txFrame == db.txRef and txFrame.sTab.len == 0:
+    # No changes in frame - no `checkpoint` requirement - nothing to do here
+    return
+
   let be = db.backend
   doAssert not be.isNil, "Persisting to backend requires ... a backend!"
 
   let lSst = SavedState(
     key:  emptyRoot,                       # placeholder for more
-    serial: nxtSid)
+    serial: txFrame.blockNumber.expect("`checkpoint` before persisting frame"))
+
+  # Squash all changes up to the base
+  if txFrame != db.txRef:
+    # Consolidate the changes from the old to the new base going from the
+    # bottom of the stack to avoid having to cascade each change through
+    # the full stack
+    assert txFrame.parent != nil
+    for frame in txFrame.stack():
+      if frame == db.txRef:
+        continue
+      mergeAndReset(db.txRef, frame)
+      db.txRef.blockNumber = frame.blockNumber
+
+      frame.dispose() # This will also dispose `txFrame` itself!
+
+    # Put the now-merged contents in txFrame and make it the new base
+    swap(db.txRef[], txFrame[])
+    db.txRef = txFrame
 
   # Store structural single trie entries
   for rvid, vtx in db.txRef.sTab:
-    db.txRef.kMap.withValue(rvid, key) do:
+    txFrame.kMap.withValue(rvid, key) do:
       be.putVtxFn(batch, rvid, vtx, key[])
     do:
       be.putVtxFn(batch, rvid, vtx, default(HashKey))
 
-  be.putTuvFn(batch, db.txRef.vTop)
+  be.putTuvFn(batch, txFrame.vTop)
   be.putLstFn(batch, lSst)
 
   # TODO above, we only prepare the changes to the database but don't actually
@@ -118,19 +97,16 @@ proc txFramePersist*(
   #      in-memory and on-disk state)
 
   # Copy back updated payloads
-  for accPath, vtx in db.txRef.accLeaves:
+  for accPath, vtx in txFrame.accLeaves:
     db.accLeaves.put(accPath, vtx)
 
-  for mixPath, vtx in db.txRef.stoLeaves:
+  for mixPath, vtx in txFrame.stoLeaves:
     db.stoLeaves.put(mixPath, vtx)
 
-  # Done with txRef, all saved to backend
-  db.txRef.cTop = db.txRef.vTop
-  db.txRef.sTab.clear()
-  db.txRef.kMap.clear()
-  db.txRef.accLeaves.clear()
-  db.txRef.stoLeaves.clear()
-
+  txFrame.sTab.clear()
+  txFrame.kMap.clear()
+  txFrame.accLeaves.clear()
+  txFrame.stoLeaves.clear()
 
 # ------------------------------------------------------------------------------
 # End

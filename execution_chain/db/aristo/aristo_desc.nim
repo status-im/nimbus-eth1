@@ -63,9 +63,8 @@ type
     ## `sTab[]` tables must correspond to a hash entry held on the `kMap[]`
     ## tables. So a corresponding zero value or missing entry produces an
     ## inconsistent state that must be resolved.
-
-    db*: AristoDbRef                  ## Database descriptor
-    parent*: AristoTxRef              ## Previous transaction
+    db*: AristoDbRef                       ## Database descriptor
+    parent*: AristoTxRef                   ## Previous transaction
 
     sTab*: Table[RootedVertexID,VertexRef] ## Structural vertex table
     kMap*: Table[RootedVertexID,HashKey]   ## Merkle hash key mapping
@@ -75,6 +74,7 @@ type
     stoLeaves*: Table[Hash32, VertexRef]   ## Storage path -> VertexRef
 
     cTop*: VertexID                        ## Last committed vertex ID
+    blockNumber*: Opt[uint64]              ## Block number set when freezing the frame
 
   AristoDbRef* = ref object
     ## Three tier database object supporting distributed instances.
@@ -182,8 +182,19 @@ func hash*(db: AristoDbRef): Hash =
 # Public helpers
 # ------------------------------------------------------------------------------
 
+iterator stack*(tx: AristoTxRef): AristoTxRef =
+  # Stack going from base to tx
+  var frames: seq[AristoTxRef]
+  var tx = tx
+  while tx != nil:
+    frames.add tx
+    tx = tx.parent
+
+  while frames.len > 0:
+    yield frames.pop()
+
 iterator rstack*(tx: AristoTxRef): (AristoTxRef, int) =
-  # Stack in reverse order
+  # Stack in reverse order, ie going from tx to base
   var tx = tx
 
   var i = 0

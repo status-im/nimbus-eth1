@@ -104,13 +104,10 @@ proc `$$`*(e: CoreDbError): string =
 
 proc persist*(
     db: CoreDbRef;
-    blockNumber: BlockNumber;
-      ): CoreDbRc[void] =
-  ## This function stored cached data from the default context (see `ctx()`
-  ## below) to the persistent database.
-  ##
-  ## It also stores the argument block number `blockNumber` as a state record
-  ## which can be retrieved via `stateBlockNumber()`.
+    txFrame: CoreDbTxRef;
+      ) =
+  ## This function persists changes up to and including the given frame to the
+  ## database.
   ##
   db.setTrackNewApi BasePersistFn
 
@@ -131,8 +128,8 @@ proc persist*(
     #      kvt changes written to memory but not to disk because of an aristo
     #      error), we have to panic instead.
 
-    CoreDbKvtRef(db.ctx).call(persist, db.ctx.kvt, kvtBatch[])
-    CoreDbAccRef(db.ctx).call(persist, db.ctx.mpt, mptBatch[], blockNumber)
+    CoreDbKvtRef(db.ctx).call(persist, db.ctx.kvt, kvtBatch[], txFrame.kTx)
+    CoreDbAccRef(db.ctx).call(persist, db.ctx.mpt, mptBatch[], txFrame.aTx)
 
     db.defCtx.kvt.backend.putEndFn(kvtBatch[]).isOkOr:
       raiseAssert $api & ": " & $error
@@ -140,7 +137,6 @@ proc persist*(
     db.defCtx.mpt.backend.putEndFn(mptBatch[]).isOkOr:
       raiseAssert $api & ": " & $error
 
-    result = ok()
   else:
     discard kvtBatch.expect($api & ": should always be able to create batch")
     discard mptBatch.expect($api & ": should always be able to create batch")
@@ -153,9 +149,9 @@ proc stateBlockNumber*(db: CoreDbTxRef): BlockNumber =
   ##
   db.setTrackNewApi BaseStateBlockNumberFn
   result = block:
-    let rc = db.ctx.parent.ariApi.call(fetchLastSavedState, db.aTx)
+    let rc = db.ctx.parent.ariApi.call(fetchLastCheckpoint, db.aTx)
     if rc.isOk:
-      rc.value.serial.BlockNumber
+      rc.value.BlockNumber
     else:
       0u64
   db.ifTrackNewApi: debug logTxt, api, elapsed, result
@@ -605,47 +601,27 @@ proc txFrameBegin*(ctx: CoreDbCtxRef, parent: CoreDbTxRef): CoreDbTxRef =
   ##
   ctx.setTrackNewApi BaseNewTxFn
   let
-    kTx = CoreDbKvtRef(ctx).call(txFrameBegin, ctx.kvt, if parent != nil: parent.kTx else: nil).valueOr:
-      raiseAssert $api & ": " & $error
-    aTx = CoreDbAccRef(ctx).call(txFrameBegin, ctx.mpt, if parent != nil: parent.aTx else: nil).valueOr:
-      raiseAssert $api & ": " & $error
+    kTx = CoreDbKvtRef(ctx).call(txFrameBegin, ctx.kvt, if parent != nil: parent.kTx else: nil)
+    aTx = CoreDbAccRef(ctx).call(txFrameBegin, ctx.mpt, if parent != nil: parent.aTx else: nil)
+
   result = ctx.bless CoreDbTxRef(kTx: kTx, aTx: aTx)
   ctx.ifTrackNewApi:
     let newLevel = CoreDbAccRef(ctx).call(level, ctx.mpt)
     debug logTxt, api, elapsed, newLevel
 
-proc commit*(tx: CoreDbTxRef) =
+proc checkpoint*(tx: CoreDbTxRef, blockNumber: BlockNumber) =
   tx.setTrackNewApi TxCommitFn:
     let prvLevel {.used.} = CoreDbAccRef(tx.ctx).call(level, tx.aTx)
-  CoreDbAccRef(tx.ctx).call(commit, tx.aTx).isOkOr:
-    raiseAssert $api & ": " & $error
-  CoreDbKvtRef(tx.ctx).call(commit, tx.kTx).isOkOr:
-    raiseAssert $api & ": " & $error
-  tx.ifTrackNewApi: debug logTxt, api, elapsed, prvLevel
-
-proc rollback*(tx: CoreDbTxRef) =
-  tx.setTrackNewApi TxRollbackFn:
-    let prvLevel {.used.} = CoreDbAccRef(tx.ctx).call(level, tx.aTx)
-  CoreDbAccRef(tx.ctx).call(rollback, tx.aTx).isOkOr:
-    raiseAssert $api & ": " & $error
-  CoreDbKvtRef(tx.ctx).call(rollback, tx.kTx).isOkOr:
-    raiseAssert $api & ": " & $error
+  CoreDbAccRef(tx.ctx).call(checkpoint, tx.aTx, blockNumber)
   tx.ifTrackNewApi: debug logTxt, api, elapsed, prvLevel
 
 proc dispose*(tx: CoreDbTxRef) =
-  tx.setTrackNewApi TxDisposeFn:
+  tx.setTrackNewApi TxRollbackFn:
     let prvLevel {.used.} = CoreDbAccRef(tx.ctx).call(level, tx.aTx)
-  # if CoreDbAccRef(tx.ctx).call(isTop, tx.aTx):
-  CoreDbAccRef(tx.ctx).call(rollback, tx.aTx).isOkOr:
-    raiseAssert $api & ": " & $error
-  # if CoreDbKvtRef(tx.ctx).call(isTop, tx.kTx):
-  CoreDbKvtRef(tx.ctx).call(rollback, tx.kTx).isOkOr:
-    raiseAssert $api & ": " & $error
+  CoreDbAccRef(tx.ctx).call(dispose, tx.aTx)
+  CoreDbKvtRef(tx.ctx).call(dispose, tx.kTx)
+  tx[].reset()
   tx.ifTrackNewApi: debug logTxt, api, elapsed, prvLevel
-
-func reparent*(tx: CoreDbTxRef, parent: CoreDbTxRef) =
-  tx.aTx.parent = parent.aTx
-  tx.kTx.parent = parent.kTx
 
 proc txFrameBegin*(tx: CoreDbTxRef): CoreDbTxRef =
   tx.ctx.txFrameBegin(tx)

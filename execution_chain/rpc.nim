@@ -1,5 +1,5 @@
 # Nimbus
-# Copyright (c) 2022-2024 Status Research & Development GmbH
+# Copyright (c) 2022-2025 Status Research & Development GmbH
 # Licensed under either of
 #  * Apache License, version 2.0, ([LICENSE-APACHE](LICENSE-APACHE))
 #  * MIT license ([LICENSE-MIT](LICENSE-MIT))
@@ -11,7 +11,6 @@ import
   chronicles,
   websock/websock,
   json_rpc/rpcserver,
-  graphql/httpserver,
   ./rpc/common,
   #./rpc/debug,
   ./rpc/engine_api,
@@ -19,8 +18,7 @@ import
   ./rpc/cors,
   ./rpc/rpc_server,
   ./rpc/server_api,
-  ./nimbus_desc,
-  ./graphql/ethapi
+  ./nimbus_desc
 
 export
   common,
@@ -121,22 +119,6 @@ func addHandler(handlers: var seq[RpcHandlerProc],
 
   handlers.add handlerProc
 
-func addHandler(handlers: var seq[RpcHandlerProc],
-                server: GraphqlHttpHandlerRef) =
-
-  proc handlerProc(request: HttpRequestRef):
-        Future[RpcHandlerResult] {.async: (raises: []).} =
-    try:
-      let res = await server.serveHTTP(request)
-      if res.isNil:
-        return RpcHandlerResult(status: RpcHandlerStatus.Skip)
-      else:
-        return RpcHandlerResult(status: RpcHandlerStatus.Response, response: res)
-    except CatchableError:
-      return RpcHandlerResult(status: RpcHandlerStatus.Error)
-
-  handlers.add handlerProc
-
 proc addHttpServices(handlers: var seq[RpcHandlerProc],
                      nimbus: NimbusNode, conf: NimbusConf,
                      com: CommonRef, serverApi: ServerAPIRef,
@@ -146,12 +128,6 @@ proc addHttpServices(handlers: var seq[RpcHandlerProc],
   # graphql depends on /graphl path
   # ws depends on Sec-WebSocket-Version header
   # json-rpc have no reliable identification
-
-  if conf.graphqlEnabled:
-    let ctx = setupGraphqlContext(nimbus.chainRef, nimbus.ethNode, nimbus.txPool)
-    let server = GraphqlHttpHandlerRef.new(ctx)
-    handlers.addHandler(server)
-    info "GraphQL API enabled", url = "http://" & $address
 
   if conf.wsEnabled:
     let server = newRpcWebsocketHandler()
@@ -193,13 +169,7 @@ proc addServices(handlers: var seq[RpcHandlerProc],
                  com: CommonRef, serverApi: ServerAPIRef,
                  address: TransportAddress) =
 
-  # The order is important: graphql, ws, rpc
-
-  if conf.graphqlEnabled:
-    let ctx = setupGraphqlContext(nimbus.chainRef, nimbus.ethNode, nimbus.txPool)
-    let server = GraphqlHttpHandlerRef.new(ctx)
-    handlers.addHandler(server)
-    info "GraphQL API enabled", url = "http://" & $address
+  # The order is important: ws, rpc
 
   if conf.wsEnabled or conf.engineApiWsEnabled:
     let server = newRpcWebsocketHandler()
