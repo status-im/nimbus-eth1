@@ -1,6 +1,6 @@
 # Nimbus - Types, data structures and shared utilities used in network sync
 #
-# Copyright (c) 2023-2024 Status Research & Development GmbH
+# Copyright (c) 2023-2025 Status Research & Development GmbH
 # Licensed under either of
 #  * Apache License, version 2.0, ([LICENSE-APACHE](LICENSE-APACHE) or
 #    http://www.apache.org/licenses/LICENSE-2.0)
@@ -14,7 +14,7 @@
 ##
 import
   ../aristo_init/[memory_db, memory_only],
-  ".."/[aristo_desc, aristo_init],
+  ".."/[aristo_desc],
   ./walk_private
 
 export
@@ -26,7 +26,7 @@ export
 # Public iterators (all in one)
 # ------------------------------------------------------------------------------
 
-iterator walkVtxBe*[T: MemBackendRef|VoidBackendRef](
+iterator walkVtxBe*[T: MemBackendRef](
    _: type T;
    db: AristoDbRef;
    kinds = {Branch, Leaf};
@@ -37,7 +37,7 @@ iterator walkVtxBe*[T: MemBackendRef|VoidBackendRef](
   for (rvid,vtx) in walkVtxBeImpl[T](db, kinds):
     yield (rvid,vtx)
 
-iterator walkKeyBe*[T: MemBackendRef|VoidBackendRef](
+iterator walkKeyBe*[T: MemBackendRef](
    _: type T;
    db: AristoDbRef;
      ): tuple[rvid: RootedVertexID, key: HashKey] =
@@ -47,7 +47,7 @@ iterator walkKeyBe*[T: MemBackendRef|VoidBackendRef](
 
 # -----------
 
-iterator walkPairs*[T: MemBackendRef|VoidBackendRef](
+iterator walkPairs*[T: MemBackendRef](
    _: type T;
    db: AristoDbRef;
      ): tuple[rvid: RootedVertexID, vtx: VertexRef] =

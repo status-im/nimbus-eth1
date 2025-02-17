@@ -17,7 +17,7 @@ import
   eth/common/hashes,
   results,
   ./aristo_walk/persistent,
-  "."/[aristo_desc, aristo_get, aristo_init],
+  "."/[aristo_desc, aristo_get, aristo_init/memory_only],
   ./aristo_check/[check_be, check_top, check_twig]
 
 # ------------------------------------------------------------------------------
@@ -71,9 +71,6 @@ proc checkBE*(
     return MemBackendRef.checkBE db
   of BackendRocksDB:
     return RdbBackendRef.checkBE db
-  of BackendVoid:
-    return VoidBackendRef.checkBE db
-
 
 proc check*(
     db: AristoTxRef;                   # Database

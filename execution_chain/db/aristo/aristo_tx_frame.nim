@@ -27,14 +27,10 @@ proc txFrameBegin*(db: AristoDbRef, parent: AristoTxRef): AristoTxRef =
   else:
     parent
 
-  let
-    vTop = parent.layer.vTop
-    layer = LayerRef(vTop: vTop)
-
   AristoTxRef(
     db:     db,
     parent: parent,
-    layer: layer)
+    vTop:   parent.vTop)
 
 proc baseTxFrame*(db: AristoDbRef): AristoTxRef=
   db.txRef
@@ -56,7 +52,7 @@ proc txFramePersist*(
     txFrame: AristoTxRef;
       ) =
 
-  if txFrame == db.txRef and txFrame.layer.sTab.len == 0:
+  if txFrame == db.txRef and txFrame.sTab.len == 0:
     # No changes in frame - no `checkpoint` requirement - nothing to do here
     return
 
@@ -76,7 +72,7 @@ proc txFramePersist*(
     for frame in txFrame.stack():
       if frame == db.txRef:
         continue
-      mergeAndReset(db.txRef.layer[], frame.layer[])
+      mergeAndReset(db.txRef, frame)
       db.txRef.blockNumber = frame.blockNumber
 
       frame.dispose() # This will also dispose `txFrame` itself!
@@ -86,13 +82,13 @@ proc txFramePersist*(
     db.txRef = txFrame
 
   # Store structural single trie entries
-  for rvid, vtx in txFrame.layer.sTab:
-    txFrame.layer.kMap.withValue(rvid, key) do:
+  for rvid, vtx in db.txRef.sTab:
+    txFrame.kMap.withValue(rvid, key) do:
       be.putVtxFn(batch, rvid, vtx, key[])
     do:
       be.putVtxFn(batch, rvid, vtx, default(HashKey))
 
-  be.putTuvFn(batch, txFrame.layer.vTop)
+  be.putTuvFn(batch, txFrame.vTop)
   be.putLstFn(batch, lSst)
 
   # TODO above, we only prepare the changes to the database but don't actually
@@ -101,16 +97,16 @@ proc txFramePersist*(
   #      in-memory and on-disk state)
 
   # Copy back updated payloads
-  for accPath, vtx in txFrame.layer.accLeaves:
+  for accPath, vtx in txFrame.accLeaves:
     db.accLeaves.put(accPath, vtx)
 
-  for mixPath, vtx in txFrame.layer.stoLeaves:
+  for mixPath, vtx in txFrame.stoLeaves:
     db.stoLeaves.put(mixPath, vtx)
 
-  txFrame.layer.sTab.clear()
-  txFrame.layer.kMap.clear()
-  txFrame.layer.accLeaves.clear()
-  txFrame.layer.stoLeaves.clear()
+  txFrame.sTab.clear()
+  txFrame.kMap.clear()
+  txFrame.accLeaves.clear()
+  txFrame.stoLeaves.clear()
 
 # ------------------------------------------------------------------------------
 # End

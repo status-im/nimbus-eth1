@@ -19,7 +19,6 @@ const
 
 type
   BackendType* = enum
-    BackendVoid = 0                  ## For providing backend-less constructor
     BackendMemory
     BackendRocksDB
 
@@ -100,7 +99,7 @@ proc init*(
   let
     vTop = if backend == nil: VertexID(0) else: ?backend.getTuvFn()
     db = AristoDbRef(
-      txRef: AristoTxRef(layer: LayerRef(vTop: vTop)),
+      txRef: AristoTxRef(vTop: vTop),
       backend: backend,
       accLeaves: LruCache[Hash32, VertexRef].init(ACC_LRU_SIZE),
       stoLeaves: LruCache[Hash32, VertexRef].init(ACC_LRU_SIZE),

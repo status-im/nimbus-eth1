@@ -43,7 +43,7 @@ proc init*(
   ## Generic constructor for `RocksDb` backend
   ##
   let db = KvtDbRef(
-    txRef: KvtTxRef(layer: LayerRef.init()),
+    txRef: KvtTxRef(),
     backend: rocksDbKvtBackend(baseDb))
   db.txRef.db = db
   ok db

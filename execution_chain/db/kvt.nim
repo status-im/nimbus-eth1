@@ -1,5 +1,5 @@
 # nimbus-eth1
-# Copyright (c) 2023-2024 Status Research & Development GmbH
+# Copyright (c) 2023-2025 Status Research & Development GmbH
 # Licensed under either of
 #  * Apache License, version 2.0, ([LICENSE-APACHE](LICENSE-APACHE) or
 #    http://www.apache.org/licenses/LICENSE-2.0)
@@ -19,10 +19,9 @@ export
   kvt_api, kvt_constants
 
 import
-  kvt/kvt_init
+  kvt/kvt_init/memory_only
 export
   MemBackendRef,
-  VoidBackendRef,
   finish,
   init
 

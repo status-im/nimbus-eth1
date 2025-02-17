@@ -36,7 +36,6 @@ proc txFrameBegin*(db: KvtDbRef, parent: KvtTxRef): KvtTxRef =
   let parent = if parent == nil: db.txRef else: parent
   KvtTxRef(
     db:     db,
-    layer: LayerRef(),
     parent: parent,
   )
 
@@ -46,7 +45,6 @@ proc baseTxFrame*(db: KvtDbRef): KvtTxRef =
 proc dispose*(
     tx: KvtTxRef;
       ) =
-
   tx[].reset()
 
 proc txFramePersist*(
@@ -65,7 +63,7 @@ proc txFramePersist*(
     for frame in txFrame.stack():
       if frame == db.txRef:
         continue
-      mergeAndReset(db.txRef.layer[], frame.layer[])
+      mergeAndReset(db.txRef, frame)
       frame.dispose()
 
     # Put the now-merged contents in txFrame and make it the new base
@@ -73,14 +71,15 @@ proc txFramePersist*(
     db.txRef = txFrame
 
   # Store structural single trie entries
-  for k,v in txFrame.layer.sTab:
+  for k,v in txFrame.sTab:
     be.putKvpFn(batch, k, v)
   # TODO above, we only prepare the changes to the database but don't actually
   #      write them to disk - the code below that updates the frame should
   #      really run after things have been written (to maintain sync betweeen
   #      in-memory and on-disk state)
 
-  txFrame.layer.sTab.clear()
+  # Done with txRef, all saved to backend
+  txFrame.sTab.clear()
 
 # ------------------------------------------------------------------------------
 # End

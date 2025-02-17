@@ -25,7 +25,7 @@ import
 # ------------------------------------------------------------------------------
 
 func orDefault(db: AristoTxRef): AristoTxRef =
-  if db.isNil: AristoTxRef(layer: LayerRef()) else: db
+  if db.isNil: AristoTxRef() else: db
 
 # --------------------------
 
@@ -359,7 +359,7 @@ proc ppXMap*(
 
 
 proc ppBalancer(
-    fl: LayerRef;
+    fl: AristoTxRef;
     db: AristoTxRef;
     indent: int;
       ): string =
@@ -434,7 +434,7 @@ proc ppBe[T](be: T; db: AristoTxRef; limit: int; indent: int): string =
     result &= "[]"
 
 proc ppLayer(
-    layer: LayerRef;
+    layer: AristoTxRef;
     db: AristoTxRef;
     vTopOk: bool;
     sTabOk: bool;
@@ -663,7 +663,7 @@ func pp*(wp: VidVtxPair; db: AristoTxRef): string =
 
 
 proc pp*(
-    layer: LayerRef;
+    layer: AristoTxRef;
     db: AristoTxRef;
     indent = 4;
     sTabOk = true,
@@ -679,14 +679,12 @@ proc pp*(
   limit = 100;
   indent = 4;
     ): string =
-  result = db.layer.ppBalancer(db, indent+1) & indent.toPfx
+  result = db.ppBalancer(db, indent+1) & indent.toPfx
   case be.kind:
   of BackendMemory:
     result &= be.MemBackendRef.ppBe(db, limit, indent+1)
   of BackendRocksDB:
     result &= be.RdbBackendRef.ppBe(db, limit, indent+1)
-  of BackendVoid:
-    result &= "<NoBackend>"
 
 proc pp*(
     db: AristoTxRef;

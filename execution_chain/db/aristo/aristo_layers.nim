@@ -72,8 +72,8 @@ func layersPutVtx*(
     vtx: VertexRef;
       ) =
   ## Store a (potentally empty) vertex on the top layer
-  db.layer.sTab[rvid] = vtx
-  db.layer.kMap.del(rvid)
+  db.sTab[rvid] = vtx
+  db.kMap.del(rvid)
 
 func layersResVtx*(
     db: AristoTxRef;
@@ -90,8 +90,8 @@ func layersPutKey*(
     key: HashKey;
       ) =
   ## Store a (potentally void) hash key on the top layer
-  db.layer.sTab[rvid] = vtx
-  db.layer.kMap[rvid] = key
+  db.sTab[rvid] = vtx
+  db.kMap[rvid] = key
 
 func layersResKey*(db: AristoTxRef; rvid: RootedVertexID, vtx: VertexRef) =
   ## Shortcut for `db.layersPutKey(vid, VOID_HASH_KEY)`. It is sort of the
@@ -104,16 +104,16 @@ func layersResKeys*(db: AristoTxRef; hike: Hike) =
     db.layersResKey((hike.root, hike.legs[^i].wp.vid), hike.legs[^i].wp.vtx)
 
 func layersPutAccLeaf*(db: AristoTxRef; accPath: Hash32; leafVtx: VertexRef) =
-  db.layer.accLeaves[accPath] = leafVtx
+  db.accLeaves[accPath] = leafVtx
 
 func layersPutStoLeaf*(db: AristoTxRef; mixPath: Hash32; leafVtx: VertexRef) =
-  db.layer.stoLeaves[mixPath] = leafVtx
+  db.stoLeaves[mixPath] = leafVtx
 
 # ------------------------------------------------------------------------------
 # Public functions
 # ------------------------------------------------------------------------------
 
-func isEmpty*(ly: LayerRef): bool =
+func isEmpty*(ly: AristoTxRef): bool =
   ## Returns `true` if the layer does not contain any changes, i.e. all the
   ## tables are empty.
   ly.sTab.len == 0 and
@@ -121,7 +121,7 @@ func isEmpty*(ly: LayerRef): bool =
   ly.accLeaves.len == 0 and
   ly.stoLeaves.len == 0
 
-proc mergeAndReset*(trg, src: var Layer) =
+proc mergeAndReset*(trg, src: AristoTxRef) =
   ## Merges the argument `src` into the argument `trg` and clears `src`.
   trg.vTop = src.vTop
 

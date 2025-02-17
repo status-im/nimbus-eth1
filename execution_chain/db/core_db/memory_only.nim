@@ -41,9 +41,6 @@ proc newCoreDbRef*(
   when dbType == AristoDbMemory:
     newMemoryCoreDbRef()
 
-  elif dbType == AristoDbVoid:
-    newVoidCoreDbRef()
-
   else:
     {.error: "Unsupported constructor " & $dbType & ".newCoreDbRef()".}
 

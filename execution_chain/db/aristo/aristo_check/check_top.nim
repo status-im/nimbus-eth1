@@ -75,7 +75,7 @@ proc checkTopCommon*(
   let
     kMapCount = db.layersWalkKey.toSeq.mapIt(it[1]).filterIt(it.isValid).len
     kMapNilCount = db.layersWalkKey.toSeq.len - kMapCount
-    vTop = db.layer.vTop
+    vTop = db.vTop
   var
     topVid = VertexID(0)
     stoRoots: HashSet[VertexID]

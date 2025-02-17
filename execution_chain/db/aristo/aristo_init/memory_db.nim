@@ -15,7 +15,6 @@
 ## backend access
 ## ::
 ##   import
-##     aristo/aristo_init,
 ##     aristo/aristo_init/aristo_memory
 ##
 ##   let rc = newAristoDbRef(BackendMemory)

@@ -15,7 +15,6 @@
 ## backend access
 ## ::
 ##   import
-##     kvt/kvt_init,
 ##     kvt/kvt_init/kvt_memory
 ##
 ##   let rc = newKvtDbRef(BackendMemory)

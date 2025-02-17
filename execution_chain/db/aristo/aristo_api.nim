@@ -18,7 +18,9 @@ import
   results,
   ./aristo_desc/desc_backend,
   ./aristo_init/memory_db,
-  "."/[aristo_delete, aristo_desc, aristo_fetch, aristo_init, aristo_merge,
+  ./aristo_init/memory_only,
+  ./aristo_init/init_common,
+  "."/[aristo_delete, aristo_desc, aristo_fetch, aristo_merge,
        aristo_part, aristo_path, aristo_persist, aristo_profile, aristo_tx_frame]
 
 export
@@ -378,9 +380,6 @@ proc dup(be: BackendRef): BackendRef =
   of BackendRocksDB:
     when AristoPersistentBackendOk:
       return RdbBackendRef(be).dup
-
-  of BackendVoid:
-    discard
 
 # ------------------------------------------------------------------------------
 # Public API constuctors
