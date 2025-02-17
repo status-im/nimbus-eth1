@@ -1,5 +1,5 @@
 # Nimbus
-# Copyright (c) 2024 Status Research & Development GmbH
+# Copyright (c) 2025 Status Research & Development GmbH
 # Licensed under either of
 #  * Apache License, version 2.0, ([LICENSE-APACHE](LICENSE-APACHE) or
 #    http://www.apache.org/licenses/LICENSE-2.0)
@@ -21,7 +21,7 @@ ADD . /root/nimbus-eth1
 
 RUN cd /root/nimbus-eth1 \
  && make -j$(nproc) update-from-ci \
- && make -j$(nproc) V=1 LOG_LEVEL=TRACE nimbus
+ && make -j$(nproc) V=1 LOG_LEVEL=TRACE nimbus_execution_client
 
 # --------------------------------- #
 # Starting new image to reduce size #
