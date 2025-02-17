@@ -18,6 +18,7 @@ on:
       - '**/*.yml'
       - 'hive_integration/**'
       - 'portal/**'
+      - 'nimbus/**'
       - '.github/workflows/portal*.yml'
       - 'nimbus_verified_proxy/**'
       - '.github/workflows/nimbus_verified_proxy.yml'
