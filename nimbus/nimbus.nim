@@ -6,105 +6,125 @@
 # at your option. This file may not be copied, modified, or distributed except according to those terms.
 
 import
-  std/[atomics, os],
+  std/[concurrency/atomics, os],
   chronicles,
-  options,
   consensus/consensus_layer,
   execution/execution_layer,
-  configs/nimbus_configs,
-  #eth2-configs
-  beacon_chain/nimbus_binary_common,
-  #eth1-configs
-  ../execution_chain/nimbus_desc
+  conf
 
 # ------------------------------------------------------------------------------
 # Private
 # ------------------------------------------------------------------------------
 
-## Execution Layer handler
-proc executionLayerHandler(parameters: ServiceParameters) {.thread.} =
-  info "Started service:", service = parameters.name
-  executionLayer(parameters)
-  info "\tExited service", service = parameters.name
+## create and configure service
+proc startService(nimbus: var Nimbus, service: var NimbusService) =
+  #channel creation (shared memory)
+  service.serviceChannel =
+    cast[ptr Channel[pointer]](allocShared0(sizeof(Channel[pointer])))
 
-## Consensus Layer handler
-proc consensusLayerHandler(parameters: ServiceParameters) {.thread.} =
-  info "Started service:", service = parameters.name
+  service.serviceChannel[].open()
 
-  info "Waiting for execution layer bring up ..."
-  consensusLayer(parameters)
-  info "\tExit service", service = parameters.name
+  #thread read ack
+  isConfigRead.store(false)
 
-## adds a new service to nimbus services list.
-## returns position on services list
-proc addService(
-    nimbus: var Nimbus,
-    serviceHandler: proc(config: ServiceParameters) {.thread.},
-    parameters: var ServiceParameters,
-    timeout: uint32,
-): int =
-  #search next available free worker
-  var currentIndex = -1
-  for i in 0 .. cNimbusMaxServices - 1:
-    if nimbus.serviceList[i].isNone:
-      nimbus.serviceList[i] =
-        some(NimbusService(name: parameters.name, timeoutMs: timeout))
-      currentIndex = i
-      parameters.name = parameters.name
-      break
+  #start thread
+  createThread(service.serviceHandler, service.serviceFunc, service.serviceChannel)
 
-  if currentIndex < 0:
-    raise newException(NimbusServiceError, "No available slots on nimbus services list")
+  let optionsList = block:
+    case service.layerConfig.kind
+    of Consensus: service.layerConfig.consensusOptions
+    of Execution: service.layerConfig.executionOptions
 
-  info "Created service:", service = nimbus.serviceList[currentIndex].get().name
+  #configs list total size
+  var totalSize: uint = 0
+  totalSize += uint(sizeof(uint))
+  for word in optionsList:
+    totalSize += uint(sizeof(uint)) # element type size
+    totalSize += uint(word.len) # element length
 
-  currentIndex
+  # Allocate shared memory
+  # schema: (array size Uint) | [ (element size Uint) (element data)]
+  var byteArray = cast[ptr byte](allocShared(totalSize))
+  if byteArray.isNil:
+    fatal "Memory allocation failed"
+    quit QuitFailure
+
+  # Writing to shared memory
+  var writeOffset = cast[uint](byteArray)
+
+  #write total size of array
+  copyMem(cast[pointer](writeOffset), addr totalSize, sizeof(uint))
+  writeOffset += uint(sizeof(uint))
+
+  for word in optionsList:
+    #elem size
+    let strLen = uint(word.len)
+    copyMem(cast[pointer](writeOffset), addr strLen, sizeof(uint))
+    writeOffset += uint(sizeof(uint))
+
+    #element data
+    copyMem(cast[pointer](writeOffset), unsafeAddr word[0], word.len)
+    writeOffset += uint(word.len)
+
+  service.serviceChannel[].send(byteArray)
+
+  #wait for service read ack
+  while not isConfigRead.load():
+    sleep(cThreadTimeAck)
+  isConfigRead.store(true)
+
+  #close channel
+  service.serviceChannel[].close()
+
+  #dealloc shared data
+  deallocShared(byteArray)
+  deallocShared(service.serviceChannel)
+
+## Gracefully exits all services
+proc monitorServices(nimbus: Nimbus) =
+  for service in nimbus.serviceList:
+    if service.serviceHandler.running():
+      joinThread(service.serviceHandler)
+      info "Exited service ", service = service.name
+
+  notice "Exited all services"
 
 # ------------------------------------------------------------------------------
 # Public
 # ------------------------------------------------------------------------------
 
-## Gracefully exits all services
-proc exitServices*(nimbus: Nimbus) =
-  for i in 0 .. cNimbusMaxServices - 1:
-    if nimbus.serviceList[i].isSome:
-      let thread = nimbus.serviceList[i].get()
-      if thread.serviceHandler.running():
-        joinThread(thread.serviceHandler)
-        info "Exited service ", service = thread.name
-      nimbus.serviceList[i] = none(NimbusService)
+## start nimbus client
+proc run*(nimbus: var Nimbus) =
+  # todo
+  # parse cmd, read options and create configs
+  var
+    execOpt = newSeq[string]()
+    consOpt = newSeq[string]()
+    executionService: NimbusService = NimbusService(
+      name: "Execution Layer",
+      serviceFunc: executionLayerHandler,
+      layerConfig: LayerConfig(kind: Execution, executionOptions: execOpt),
+    )
 
-  notice "Exited all services"
+    consensusService: NimbusService = NimbusService(
+      name: "Consensus Layer",
+      serviceFunc: consensusLayerHandler,
+      layerConfig: LayerConfig(kind: Consensus, consensusOptions: consOpt),
+    )
 
-## Service monitoring
-proc monitor*(nimbus: Nimbus) =
-  info "started service monitoring"
-
-  while isShutDownRequired.load() == false:
-    sleep(cNimbusServiceTimeoutMs)
-
-  if isShutDownRequired.load() == true:
-    nimbus.exitServices()
-
-  notice "Shutting down now"
-
-## create and configure service
-proc startService*(
-    nimbus: var Nimbus,
-    config: var LayerConfig,
-    service: string,
-    fun: proc(config: ServiceParameters) {.thread.},
-    timeout: uint32 = cNimbusServiceTimeoutMs,
-) {.raises: [CatchableError].} =
-  var params: ServiceParameters = ServiceParameters(name: service, layerConfig: config)
-  let serviceId = nimbus.addService(fun, params, timeout)
+  nimbus.serviceList.add(executionService)
+  nimbus.serviceList.add(consensusService)
 
   try:
-    createThread(nimbus.serviceList[serviceId].get().serviceHandler, fun, params)
-  except CatchableError as e:
-    fatal "error creating service (thread)", msg = e.msg
+    for service in nimbus.serviceList.mitems():
+      info "Starting service ", service = service.name
+      nimbus.startService(service)
+  except Exception as e:
+    fatal "error", msg = e.msg
+    quit QuitFailure
 
-  info "Starting service ", service = service
+  ## wait for shutdown
+  nimbus.monitorServices()
 
 # ------
 when isMainModule:
@@ -123,22 +143,12 @@ when isMainModule:
       except NimbusServiceError as exc:
         raiseAssert exc.msg # shouldn't happen
 
-    notice "\tCtrl+C pressed. Shutting down services"
-    isShutDownRequired.store(true)
-    nimbus.exitServices()
+    notice "\tCtrl+C pressed. Shutting down services ..."
+    quit 0
 
   setControlCHook(controlCHandler)
+  nimbus.run()
 
-  var
-    execution = LayerConfig(kind: Execution, executionConfig: NimbusConf())
-    consensus = LayerConfig(kind: Consensus, consensusConfig: BeaconNodeConf())
-
-  try:
-    nimbus.startService(execution, "Execution Layer", executionLayerHandler)
-    nimbus.startService(consensus, "Consensus Layer", consensusLayerHandler)
-  except Exception:
-    isShutDownRequired.store(true)
-    nimbus.exitServices()
-    quit QuitFailure
-
-  nimbus.monitor()
+# -----
+when defined(testing):
+  export monitorServices, startService

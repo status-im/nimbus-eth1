@@ -5,27 +5,34 @@
 #   * Apache v2 license (license terms in the root directory or at https://www.apache.org/licenses/LICENSE-2.0).
 # at your option. This file may not be copied, modified, or distributed except according to those terms.
 
-import std/[atomics, os], chronicles, ../configs/nimbus_configs
+{.push raises: [].}
 
-export nimbus_configs
+import std/[atomics, os], chronicles, ../conf, ../common/utils
 
 logScope:
   topics = "Execution layer"
 
-proc executionLayer*(params: ServiceParameters) {.raises: [CatchableError].} =
-  var config = params.layerConfig
+## Execution Layer handler
+proc executionLayerHandler*(channel: ptr Channel[pointer]) =
+  var p: pointer
+  try:
+    p = channel[].recv()
+  except Exception as e:
+    fatal "service unable to receive configuration", err = e.msg
+    quit(QuitFailure)
 
-  doAssert config.kind == Execution
+  let configs = parseChannelData(p).valueOr:
+    fatal "unable to parse service data", message = error
+    quit(QuitFailure)
+
+  #signal main thread that data is read
+  isConfigRead.store(true)
 
   try:
-    while isShutDownRequired.load() == false:
+    while true:
       info "execution ..."
       sleep(cNimbusServiceTimeoutMs)
-
-    isShutDownRequired.store(true)
   except CatchableError as e:
     fatal "error", message = e.msg
-    isShutDownRequired.store(true)
 
-  isShutDownRequired.store(true)
   warn "\tExiting execution layer"
