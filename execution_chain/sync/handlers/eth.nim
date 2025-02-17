@@ -324,7 +324,7 @@ method getReceipts*(ctx: EthWireRef,
   let db = ctx.db
   var list: seq[seq[Receipt]]
   for blockHash in hashes:
-    # TODO forkedChain
+    # TODO : Receipts in a common interface in forkedchain
     let header = db.baseTxFrame().getBlockHeader(blockHash).valueOr:
       list.add @[]
       trace "handlers.getReceipts: blockHeader not found", blockHash
@@ -357,11 +357,9 @@ method getBlockBodies*(ctx: EthWireRef,
                        hashes: openArray[Hash32]):
                         Result[seq[BlockBody], string]
     {.gcsafe.} =
-  let db = ctx.db
   var list: seq[BlockBody]
   for blockHash in hashes:
-    # TODO forkedChain
-    let body = db.baseTxFrame().getBlockBody(blockHash).valueOr:
+    let body = ctx.chain.blockBodyByHash(blockHash).valueOr:
       list.add BlockBody()
       trace "handlers.getBlockBodies: blockBody not found", blockHash
       continue
@@ -373,18 +371,18 @@ method getBlockHeaders*(ctx: EthWireRef,
                         req: EthBlocksRequest):
                           Result[seq[Header], string]
     {.gcsafe.} =
-  let db = ctx.db
+  let chain = ctx.chain
   var list = newSeqOfCap[Header](req.maxResults)
-  var foundBlock = db.blockHeader(req.startBlock).valueOr:
+  var foundBlock = chain.blockHeader(req.startBlock).valueOr:
     return ok(list)
   list.add foundBlock
 
   while uint64(list.len) < req.maxResults:
     if not req.reverse:
-      foundBlock = db.successorHeader(foundBlock, req.skip).valueOr:
+      foundBlock = chain.headerByNumber(foundBlock.number + 1 + req.skip).valueOr:
         break
     else:
-      foundBlock = db.ancestorHeader(foundBlock, req.skip).valueOr:
+      foundBlock = chain.headerByNumber(foundBlock.number - 1 - req.skip).valueOr:
         break
     list.add foundBlock
   return ok(list)
