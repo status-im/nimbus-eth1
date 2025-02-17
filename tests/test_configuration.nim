@@ -180,7 +180,6 @@ proc configurationMain*() =
         conf.rpcEnabled == false
         conf.wsEnabled == false
         conf.engineApiWsEnabled == false
-        conf.graphqlEnabled == false
         conf.engineApiServerEnabled
         conf.httpServerEnabled == false
         conf.shareServerWithEngineApi
@@ -192,7 +191,6 @@ proc configurationMain*() =
         conf.wsEnabled
         conf.engineApiEnabled == false
         conf.rpcEnabled == false
-        conf.graphqlEnabled == false
         conf.engineApiServerEnabled
         conf.httpServerEnabled
         conf.shareServerWithEngineApi
@@ -204,7 +202,6 @@ proc configurationMain*() =
         conf.rpcEnabled
         conf.engineApiWsEnabled == false
         conf.wsEnabled == false
-        conf.graphqlEnabled == false
         conf.httpServerEnabled
         conf.engineApiServerEnabled
         conf.shareServerWithEngineApi == false
@@ -216,20 +213,18 @@ proc configurationMain*() =
         conf.wsEnabled
         conf.engineApiEnabled == false
         conf.rpcEnabled == false
-        conf.graphqlEnabled == false
         conf.httpServerEnabled
         conf.engineApiServerEnabled
         conf.shareServerWithEngineApi == false
 
-    test "graphql enabled. ws, rpc, and engine api not enabled":
-      let conf = makeConfig(@["--graphql"])
+    test "ws, rpc, and engine api not enabled":
+      let conf = makeConfig(@[])
       check:
         conf.engineApiWsEnabled == false
         conf.wsEnabled == false
         conf.engineApiEnabled == false
         conf.rpcEnabled == false
-        conf.graphqlEnabled == true
-        conf.httpServerEnabled == true
+        conf.httpServerEnabled == false
         conf.engineApiServerEnabled == false
         conf.shareServerWithEngineApi == false
 
