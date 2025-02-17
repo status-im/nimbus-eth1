@@ -148,6 +148,7 @@ proc run(
       enrAutoUpdate = config.enrAutoUpdate,
       config = discoveryConfig,
       rng = rng,
+      banNodes = not config.disableBanNodes,
     )
 
   d.open()
@@ -184,6 +185,7 @@ proc run(
       config.tableIpLimit, config.bucketIpLimit, config.bitsPerHop, config.alpha,
       config.radiusConfig, config.disablePoke, config.maxGossipNodes,
       config.contentCacheSize, config.disableContentCache, config.maxConcurrentOffers,
+      config.disableBanNodes,
     )
 
     portalNodeConfig = PortalNodeConfig(
