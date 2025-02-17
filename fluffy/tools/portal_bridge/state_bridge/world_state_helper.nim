@@ -1,5 +1,5 @@
 # Fluffy
-# Copyright (c) 2024 Status Research & Development GmbH
+# Copyright (c) 2024-2025 Status Research & Development GmbH
 # Licensed and distributed under either of
 #   * MIT license (license terms in the root directory or at https://opensource.org/licenses/MIT).
 #   * Apache v2 license (license terms in the root directory or at https://www.apache.org/licenses/LICENSE-2.0).
@@ -12,10 +12,10 @@ import
   stint,
   results,
   eth/common/addresses,
-  ../../../../nimbus/common/chain_config,
+  ../../../../execution_chain/common/chain_config,
   ./[state_diff, world_state]
 
-from ../../../../nimbus/core/dao import DAORefundContract, DAODrainList
+from ../../../../execution_chain/core/dao import DAORefundContract, DAODrainList
 
 export chain_config, state_diff, world_state
 

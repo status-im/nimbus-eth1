@@ -24,8 +24,8 @@ import
   ./cancun/customizer,
   ./engine_tests,
   ./engine/engine_spec,
-  ../../../nimbus/constants,
-  ../../../nimbus/common/chain_config
+  ../../../execution_chain/constants,
+  ../../../execution_chain/common/chain_config
 
 import
   ./cancun/step_newpayloads,

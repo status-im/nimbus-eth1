@@ -15,11 +15,11 @@ import
   ./test_helpers,
   eth/common/transaction_utils,
   ../tools/common/helpers as chp,
-  ../nimbus/db/core_db,
-  ../nimbus/common/common,
-  ../nimbus/transaction,
-  ../nimbus/core/validate,
-  ../nimbus/utils/utils
+  ../execution_chain/db/core_db,
+  ../execution_chain/common/common,
+  ../execution_chain/transaction,
+  ../execution_chain/core/validate,
+  ../execution_chain/utils/utils
 
 const
   FIXTURE_FORK_SKIPS = ["_info", "rlp", "Constantinople"]
@@ -30,8 +30,7 @@ proc transactionJsonMain*() =
   suite "Transactions tests":
     jsonTest("eth_tests" / "TransactionTests", "TransactionTests", testFixture)
 
-when isMainModule:
-  transactionJsonMain()
+transactionJsonMain()
 
 proc txHash(tx: Transaction): string =
   rlpHash(tx).toHex()

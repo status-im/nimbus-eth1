@@ -1,5 +1,5 @@
 # Nimbus
-# Copyright (c) 2019-2024 Status Research & Development GmbH
+# Copyright (c) 2019-2025 Status Research & Development GmbH
 # Licensed under either of
 #  * Apache License, version 2.0, ([LICENSE-APACHE](LICENSE-APACHE) or
 #    http://www.apache.org/licenses/LICENSE-2.0)
@@ -11,10 +11,10 @@
 import
   std/[json, strutils],
   results,
-  ../nimbus/common/common, # must be early (compilation annoyance)
-  ../nimbus/db/opts,
-  ../nimbus/db/core_db/persistent,
-  ../nimbus/[config, tracer, evm/types]
+  ../execution_chain/common/common, # must be early (compilation annoyance)
+  ../execution_chain/db/opts,
+  ../execution_chain/db/core_db/persistent,
+  ../execution_chain/[config, tracer, evm/types]
 
 proc dumpTest(com: CommonRef, blockNumber: BlockNumber) =
   var

@@ -1,5 +1,5 @@
 # Nimbus
-# Copyright (c) 2019-2024 Status Research & Development GmbH
+# Copyright (c) 2019-2025 Status Research & Development GmbH
 # Licensed under either of
 #  * Apache License, version 2.0, ([LICENSE-APACHE](LICENSE-APACHE) or
 #    http://www.apache.org/licenses/LICENSE-2.0)
@@ -13,8 +13,8 @@ import
   pkg/[unittest2],
   eth/common/[base, keys],
   stew/byteutils,
-  ../nimbus/config,
-  ../nimbus/common/[chain_config, context, manager],
+  ../execution_chain/config,
+  ../execution_chain/common/[chain_config, context, manager],
   ./test_helpers
 
 proc configurationMain*() =
@@ -180,7 +180,6 @@ proc configurationMain*() =
         conf.rpcEnabled == false
         conf.wsEnabled == false
         conf.engineApiWsEnabled == false
-        conf.graphqlEnabled == false
         conf.engineApiServerEnabled
         conf.httpServerEnabled == false
         conf.shareServerWithEngineApi
@@ -192,7 +191,6 @@ proc configurationMain*() =
         conf.wsEnabled
         conf.engineApiEnabled == false
         conf.rpcEnabled == false
-        conf.graphqlEnabled == false
         conf.engineApiServerEnabled
         conf.httpServerEnabled
         conf.shareServerWithEngineApi
@@ -204,7 +202,6 @@ proc configurationMain*() =
         conf.rpcEnabled
         conf.engineApiWsEnabled == false
         conf.wsEnabled == false
-        conf.graphqlEnabled == false
         conf.httpServerEnabled
         conf.engineApiServerEnabled
         conf.shareServerWithEngineApi == false
@@ -216,20 +213,18 @@ proc configurationMain*() =
         conf.wsEnabled
         conf.engineApiEnabled == false
         conf.rpcEnabled == false
-        conf.graphqlEnabled == false
         conf.httpServerEnabled
         conf.engineApiServerEnabled
         conf.shareServerWithEngineApi == false
 
-    test "graphql enabled. ws, rpc, and engine api not enabled":
-      let conf = makeConfig(@["--graphql"])
+    test "ws, rpc, and engine api not enabled":
+      let conf = makeConfig(@[])
       check:
         conf.engineApiWsEnabled == false
         conf.wsEnabled == false
         conf.engineApiEnabled == false
         conf.rpcEnabled == false
-        conf.graphqlEnabled == true
-        conf.httpServerEnabled == true
+        conf.httpServerEnabled == false
         conf.engineApiServerEnabled == false
         conf.shareServerWithEngineApi == false
 
@@ -298,5 +293,4 @@ proc configurationMain*() =
       check res.isErr
       check res.error.find("expect json object of keystore data:") == 0
 
-when isMainModule:
-  configurationMain()
+configurationMain()

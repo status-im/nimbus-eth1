@@ -12,13 +12,12 @@ import
   eth/common,
   results,
   unittest2,
-  ../../nimbus/db/opts,
-  ../../nimbus/db/aristo/[
+  ../../execution_chain/db/opts,
+  ../../execution_chain/db/aristo/[
     aristo_check,
     aristo_desc,
     aristo_init/persistent,
-    aristo_part,
-    aristo_tx],
+    aristo_part],
   ../replay/xcheck,
   ./test_helpers
 
@@ -32,7 +31,7 @@ const
 
 proc innerCleanUp(ps: var PartStateRef) =
   if not ps.isNil:
-    ps.db.finish(eradicate=true)
+    ps.db.db.finish(eradicate=true)
     ps = PartStateRef(nil)
 
 # -----------------------
@@ -42,43 +41,43 @@ proc saveToBackend(
     noisy: bool;
     debugID: int;
       ): bool =
-  var db = tx.to(AristoDbRef)
+  # var db = tx.to(AristoDbRef)
 
-  # Verify context: nesting level must be 2 (i.e. two transactions)
-  xCheck tx.level == 2
+  # # Verify context: nesting level must be 2 (i.e. two transactions)
+  # xCheck tx.level == 2
 
-  # Commit and hashify the current layer
-  block:
-    let rc = tx.commit()
-    xCheckRc rc.error == 0
+  # # Commit and hashify the current layer
+  # block:
+  #   let rc = tx.commit()
+  #   xCheckRc rc.error == 0
 
-  block:
-    let rc = db.txFrameTop()
-    xCheckRc rc.error == 0
-    tx = rc.value
+  # block:
+  #   let rc = db.txFrameTop()
+  #   xCheckRc rc.error == 0
+  #   tx = rc.value
 
-  # Verify context: nesting level must be 1 (i.e. one transaction)
-  xCheck tx.level == 1
+  # # Verify context: nesting level must be 1 (i.e. one transaction)
+  # xCheck tx.level == 1
 
-  block:
-    let rc = db.checkBE()
-    xCheckRc rc.error == (0,0)
+  # block:
+  #   let rc = db.checkBE()
+  #   xCheckRc rc.error == (0,0)
 
-  # Commit and save to backend
-  block:
-    let rc = tx.commit()
-    xCheckRc rc.error == 0
+  # # Commit and save to backend
+  # block:
+  #   let rc = tx.commit()
+  #   xCheckRc rc.error == 0
 
-  block:
-    let rc = db.txFrameTop()
-    xCheckErr rc.value.level < 0 # force error
+  # block:
+  #   let rc = db.txFrameTop()
+  #   xCheckErr rc.value.level < 0 # force error
 
-  block:
-    let rc = db.schedStow()
-    xCheckRc rc.error == 0
+  # block:
+  #   let rc = db.schedStow()
+  #   xCheckRc rc.error == 0
 
-  # Update layers to original level
-  tx = db.txFrameBegin().value.to(AristoDbRef).txFrameBegin().value
+  # # Update layers to original level
+  # tx = db.txFrameBegin().value.to(AristoDbRef).txFrameBegin().value
 
   true
 

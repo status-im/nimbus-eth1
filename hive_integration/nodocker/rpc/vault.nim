@@ -1,5 +1,5 @@
 # Nimbus
-# Copyright (c) 2021-2024 Status Research & Development GmbH
+# Copyright (c) 2021-2025 Status Research & Development GmbH
 # Licensed under either of
 #  * Apache License, version 2.0, ([LICENSE-APACHE](LICENSE-APACHE))
 #  * MIT license ([LICENSE-MIT](LICENSE-MIT))
@@ -13,8 +13,8 @@ import
   stew/byteutils,
   chronos, stint,
   json_rpc/[rpcclient],
-  ../../../nimbus/utils/utils,
-  ../../../nimbus/transaction,
+  ../../../execution_chain/utils/utils,
+  ../../../execution_chain/transaction,
   ./client
 
 when false:

@@ -9,17 +9,17 @@ import
   std/[os, macros, json, strformat, strutils, tables],
   stew/byteutils, net, eth/[common/keys, p2p], unittest2,
   testutils/markdown_reports,
-  ../nimbus/[constants, config, transaction, errors],
-  ../nimbus/db/ledger,
-  ../nimbus/common/[context, common]
+  ../execution_chain/[constants, config, transaction, errors],
+  ../execution_chain/db/ledger,
+  ../execution_chain/common/[context, common]
 
-func revTable(list: array[EVMFork, string]): Table[string, EVMFork] =
+func revTable(list: array[FkFrontier..FkLatest, string]): Table[string, EVMFork] =
   for k, v in list:
     result[v] = k
 
 const
   # from https://ethereum-tests.readthedocs.io/en/latest/test_types/state_tests.html
-  ForkToName: array[EVMFork, string] = [
+  ForkToName: array[FkFrontier..FkLatest, string] = [
     "Frontier",             # FkFrontier
     "Homestead",            # FkHomestead
     "EIP150",               # FkTangerine

@@ -15,14 +15,14 @@ import
   unittest2,
   ../hive_integration/nodocker/engine/tx_sender,
   ../hive_integration/nodocker/engine/cancun/blobs,
-  ../nimbus/db/ledger,
-  ../nimbus/core/chain,
-  ../nimbus/core/eip4844,
-  ../nimbus/[config, transaction, constants],
-  ../nimbus/core/tx_pool,
-  ../nimbus/core/tx_pool/tx_desc,
-  ../nimbus/common/common,
-  ../nimbus/utils/utils,
+  ../execution_chain/db/ledger,
+  ../execution_chain/core/chain,
+  ../execution_chain/core/eip4844,
+  ../execution_chain/[config, transaction, constants],
+  ../execution_chain/core/tx_pool,
+  ../execution_chain/core/tx_pool/tx_desc,
+  ../execution_chain/common/common,
+  ../execution_chain/utils/utils,
   ./macro_assembler
 
 const
@@ -455,7 +455,7 @@ proc txPoolMain*() =
       xp.checkImportBlock(bundle, 0)
 
       let
-        sdb = LedgerRef.init(com.db)
+        sdb = LedgerRef.init(chain.latestTxFrame)
         val = sdb.getStorage(recipient, slot)
         randao = Bytes32(val.toBytesBE)
         fee = sdb.getBalance(feeRecipient)
@@ -493,7 +493,7 @@ proc txPoolMain*() =
       xp.checkImportBlock(bundle, 0)
 
       let
-        sdb = LedgerRef.init(com.db)
+        sdb = LedgerRef.init(chain.latestTxFrame)
         val = sdb.getStorage(recipient, slot)
         randao = Bytes32(val.toBytesBE)
         bal = sdb.getBalance(feeRecipient)
@@ -526,7 +526,7 @@ proc txPoolMain*() =
       check com.syncCurrent == lastNumber + numBlocks
       let
         head = chain.headerByNumber(com.syncCurrent).expect("block header exists")
-        sdb = LedgerRef.init(com.db)
+        sdb = LedgerRef.init(chain.latestTxFrame)
         expected = u256(txPerblock * numBlocks) * amount
         balance = sdb.getBalance(recipient214)
       check balance == expected
@@ -654,5 +654,4 @@ proc txPoolMain*() =
       # restore blobSchedule
       cc.blobSchedule[Cancun] = bs
 
-when isMainModule:
-  txPoolMain()
+txPoolMain()

@@ -1,5 +1,5 @@
 # nimbus
-# Copyright (c) 2018-2024 Status Research & Development GmbH
+# Copyright (c) 2018-2025 Status Research & Development GmbH
 # Licensed and distributed under either of
 #   * MIT license (license terms in the root directory or at https://opensource.org/licenses/MIT).
 #   * Apache v2 license (license terms in the root directory or at https://www.apache.org/licenses/LICENSE-2.0).
@@ -37,7 +37,7 @@ binDir = "build"
 
 when declared(namedBin):
   namedBin = {
-    "nimbus/nimbus_execution_client": "nimbus_execution_client",
+    "execution_chain/nimbus_execution_client": "nimbus_execution_client",
     "fluffy/fluffy": "fluffy",
     "nimbus_verified_proxy/nimbus_verified_proxy": "nimbus_verified_proxy",
   }.toTable()
@@ -70,10 +70,7 @@ proc test(path: string, name: string, params = "", lang = "c") =
   exec runPrefix & "build/" & name
 
 task test, "Run tests":
-  test "tests", "all_tests", "-d:chronicles_log_level=ERROR -d:unittest2DisableParamFiltering"
-
-task test_rocksdb, "Run rocksdb tests":
-  test "tests/db", "test_kvstore_rocksdb", "-d:chronicles_log_level=ERROR -d:unittest2DisableParamFiltering"
+  test "tests", "all_tests", "-d:chronicles_log_level=ERROR"
 
 task test_import, "Run block import test":
   let tmp = getTempDir() / "nimbus-eth1-block-import"

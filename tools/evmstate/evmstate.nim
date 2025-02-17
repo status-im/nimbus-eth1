@@ -1,5 +1,5 @@
 # Nimbus
-# Copyright (c) 2022-2024 Status Research & Development GmbH
+# Copyright (c) 2022-2025 Status Research & Development GmbH
 # Licensed under either of
 #  * Apache License, version 2.0, ([LICENSE-APACHE](LICENSE-APACHE) or
 #    http://www.apache.org/licenses/LICENSE-2.0)
@@ -16,14 +16,14 @@ import
   stew/byteutils,
   results,
   stint,
-  ../../nimbus/[evm/types, evm/state],
-  ../../nimbus/db/ledger,
-  ../../nimbus/transaction,
-  ../../nimbus/core/executor,
-  ../../nimbus/common/common,
-  ../../nimbus/evm/tracer/json_tracer,
-  ../../nimbus/core/eip4844,
-  ../../nimbus/utils/state_dump,
+  ../../execution_chain/[evm/types, evm/state],
+  ../../execution_chain/db/ledger,
+  ../../execution_chain/transaction,
+  ../../execution_chain/core/executor,
+  ../../execution_chain/common/common,
+  ../../execution_chain/evm/tracer/json_tracer,
+  ../../execution_chain/core/eip4844,
+  ../../execution_chain/utils/state_dump,
   ../common/helpers as chp,
   "."/[config, helpers],
   ../common/state_clearing
@@ -117,6 +117,7 @@ proc runExecution(ctx: var StateContext, conf: StateConf, pre: JsonNode): StateR
     parent = ctx.parent,
     header = ctx.header,
     com    = com,
+    txFrame = com.db.baseTxFrame(),
     tracer = tracer)
 
   var gasUsed: GasInt

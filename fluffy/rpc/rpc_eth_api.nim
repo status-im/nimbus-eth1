@@ -19,8 +19,8 @@ import
   ../network/beacon/beacon_light_client,
   ../version
 
-from ../../nimbus/errors import ValidationError
-from ../../nimbus/rpc/filters import headerBloomFilter, deriveLogs, filterLogs
+from ../../execution_chain/errors import ValidationError
+from ../../execution_chain/rpc/filters import headerBloomFilter, deriveLogs
 
 from eth/common/eth_types_rlp import rlpHash
 
@@ -269,10 +269,7 @@ proc installEthApiHandlers*(
         receipts = (await hn.getReceipts(hash, header)).valueOr:
           raise newException(ValueError, "Could not find receipts for requested hash")
 
-        logs = deriveLogs(header, body.transactions, receipts)
-        filteredLogs = filterLogs(logs, filterOptions.address, filterOptions.topics)
-
-      return filteredLogs
+      return deriveLogs(header, body.transactions, receipts, filterOptions)
     else:
       # bloomfilter returned false, there are no logs matching the criteria
       return @[]

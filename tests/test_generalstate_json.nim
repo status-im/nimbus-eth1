@@ -1,5 +1,5 @@
 # Nimbus
-# Copyright (c) 2018-2024 Status Research & Development GmbH
+# Copyright (c) 2018-2025 Status Research & Development GmbH
 # Licensed under either of
 #  * Apache License, version 2.0, ([LICENSE-APACHE](LICENSE-APACHE) or http://www.apache.org/licenses/LICENSE-2.0)
 #  * MIT license ([LICENSE-MIT](LICENSE-MIT) or http://opensource.org/licenses/MIT)
@@ -8,14 +8,14 @@
 import
   std/[strutils, tables, json, os, sets],
   ./test_helpers, ./test_allowed_to_fail,
-  ../nimbus/core/executor, test_config,
-  ../nimbus/transaction,
-  ../nimbus/[evm/state, evm/types],
-  ../nimbus/db/ledger,
-  ../nimbus/common/common,
-  ../nimbus/utils/[utils, debug],
-  ../nimbus/evm/tracer/legacy_tracer,
-  ../nimbus/core/eip4844,
+  ../execution_chain/core/executor, test_config,
+  ../execution_chain/transaction,
+  ../execution_chain/[evm/state, evm/types],
+  ../execution_chain/db/ledger,
+  ../execution_chain/common/common,
+  ../execution_chain/utils/[utils, debug],
+  ../execution_chain/evm/tracer/legacy_tracer,
+  ../execution_chain/core/eip4844,
   ../tools/common/helpers as chp,
   ../tools/evmstate/helpers,
   ../tools/common/state_clearing,
@@ -37,6 +37,7 @@ type
     debugMode: bool
     trace: bool
     index: int
+    subFixture: int
     fork: string
 
 var
@@ -73,7 +74,8 @@ proc dumpDebugData(ctx: TestCtx, vmState: BaseVMState, gasUsed: GasInt, success:
   }
   let status = if success: "_success" else: "_failed"
   let fileName = normalizeFileName(ctx.name)
-  writeFile(fileName & "_" & ctx.fork & "_" & $ctx.index & status & ".json", debugData.pretty())
+  writeFile(fileName & "_" & $ctx.subFixture & "_" &
+    ctx.fork & "_" & $ctx.index & status & ".json", debugData.pretty())
 
 proc testFixtureIndexes(ctx: var TestCtx, testStatusIMPL: var TestStatus) =
   let
@@ -96,6 +98,7 @@ proc testFixtureIndexes(ctx: var TestCtx, testStatusIMPL: var TestStatus) =
       parent = parent,
       header = ctx.header,
       com    = com,
+      txFrame = com.db.baseTxFrame(),
       tracer = tracer,
       storeSlotHash = ctx.trace,
     )
@@ -129,15 +132,8 @@ proc testFixtureIndexes(ctx: var TestCtx, testStatusIMPL: var TestStatus) =
       let success = ctx.expectedLogs == actualLogsHash and obtainedHash == ctx.expectedHash
       ctx.dumpDebugData(vmState, gasUsed, success)
 
-proc testFixture(fixtures: JsonNode, testStatusIMPL: var TestStatus,
+proc testSubFixture(ctx: var TestCtx, fixture: JsonNode, testStatusIMPL: var TestStatus,
                  trace = false, debugMode = false) =
-  var ctx: TestCtx
-  var fixture: JsonNode
-  for label, child in fixtures:
-    fixture = child
-    ctx.name = label
-    break
-
   ctx.pre    = fixture["pre"]
   ctx.parent = parseParentHeader(fixture["env"])
   ctx.header = parseHeader(fixture["env"])
@@ -193,11 +189,27 @@ proc testFixture(fixtures: JsonNode, testStatusIMPL: var TestStatus,
         runSubTest(subTest)
         inc ctx.index
 
+proc testFixture(fixtures: JsonNode, testStatusIMPL: var TestStatus,
+                 trace = false, debugMode = false) =
+  let
+    conf = getConfiguration()
+
+  var
+    ctx: TestCtx
+    subFixture = 0
+
+  for label, child in fixtures:
+    ctx.name = label
+    ctx.subFixture = subFixture
+    inc subFixture
+    if conf.subFixture.isSome and conf.subFixture.get != ctx.subFixture:
+      continue
+    testSubFixture(ctx, child, testStatusIMPL, trace, debugMode)
+
 proc generalStateJsonMain*(debugMode = false) =
   const
     legacyFolder = "eth_tests/LegacyTests/Constantinople/GeneralStateTests"
     newFolder = "eth_tests/GeneralStateTests"
-    #newFolder = "eth_tests/EIPTests/StateTests"
 
   let config = getConfiguration()
   if config.testSubject == "" or not debugMode:
@@ -224,8 +236,6 @@ when isMainModule:
   import std/times
   var message: string
 
-  let start = getTime()
-
   ## Processing command line arguments
   if processArguments(message) != Success:
     echo message
@@ -236,5 +246,5 @@ when isMainModule:
       quit(QuitSuccess)
 
   generalStateJsonMain(true)
-  let elpd = getTime() - start
-  echo "TIME: ", elpd
+else:
+  generalStateJsonMain(false)

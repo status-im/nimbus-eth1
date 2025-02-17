@@ -17,7 +17,7 @@ import
   web3/[eth_api, eth_api_types],
   results,
   eth/common/[addresses_rlp, hashes_rlp],
-  ../../../nimbus/common/chain_config,
+  ../../../execution_chain/common/chain_config,
   ../../rpc/rpc_calls/rpc_trace_calls,
   ../../rpc/portal_rpc_client,
   ../../network/state/[state_content, state_gossip],

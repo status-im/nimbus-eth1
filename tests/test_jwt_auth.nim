@@ -1,5 +1,5 @@
 # Nimbus
-# Copyright (c) 2022-2024 Status Research & Development GmbH
+# Copyright (c) 2022-2025 Status Research & Development GmbH
 # Licensed under either of
 #  * Apache License, version 2.0, ([LICENSE-APACHE](LICENSE-APACHE) or
 #    http://www.apache.org/licenses/LICENSE-2.0)
@@ -8,19 +8,19 @@
 # at your option. This file may not be copied, modified, or distributed except
 # according to those terms.
 
-## Test Jwt Authorisation Functionality
+## Test JWT Authorisation Functionality
 ## ====================================
 
 import
   std/[base64, json, options, os, strutils, times],
-  ../nimbus/config,
-  ../nimbus/rpc/jwt_auth,
-  ../nimbus/rpc {.all.},
+  ../execution_chain/config,
+  ../execution_chain/rpc/jwt_auth,
+  ../execution_chain/rpc {.all.},
   ./replay/pp,
   chronicles,
   chronos/apps/http/httpclient as chronoshttpclient,
   chronos/apps/http/httptable,
-  eth/common/keys, 
+  eth/common/keys,
   eth/p2p,
   nimcrypto/[hmac, sha2, utils],
   results,
@@ -84,12 +84,12 @@ proc setErrorLevel =
 # Private Functions
 # ------------------------------------------------------------------------------
 
-proc fakeGenSecret(fake: JwtSharedKey): JwtGenSecret =
+func fakeGenSecret(fake: JwtSharedKey): JwtGenSecret =
   ## Key random generator, fake version
   result = proc: JwtSharedKey =
     fake
 
-proc base64urlEncode(x: auto): string =
+func base64urlEncode(x: auto): string =
   ## from nimbus-eth2, engine_authentication.nim
   base64.encode(x, safe = true).replace("=", "")
 
@@ -97,24 +97,24 @@ func getIatToken(time: uint64): JsonNode =
   ## from nimbus-eth2, engine_authentication.nim
   %* {"iat": time}
 
-proc getSignedToken(key: openArray[byte], payload: string): string =
+func getSignedToken(key: openArray[byte], payload: string): string =
   ## from nimbus-eth2, engine_authentication.nim
   # Using hard coded string for """{"typ": "JWT", "alg": "HS256"}"""
   let sData = "eyJ0eXAiOiJKV1QiLCJhbGciOiJIUzI1NiJ9." & base64urlEncode(payload)
   sData & "." & sha256.hmac(key, sData).data.base64urlEncode
 
-proc getSignedToken2(key: openArray[byte], payload: string): string =
+func getSignedToken2(key: openArray[byte], payload: string): string =
   ## Variant of `getSignedToken()`: different algorithm encoding
   let
     jNode = %* {"alg": "HS256", "typ": "JWT" }
     sData = base64urlEncode($jNode) & "." & base64urlEncode(payload)
   sData & "." & sha256.hmac(key, sData).data.base64urlEncode
 
-proc getHttpAuthReqHeader(secret: JwtSharedKey; time: uint64): HttpTable =
+func getHttpAuthReqHeader(secret: JwtSharedKey; time: uint64): HttpTable =
   let bearer = secret.UnGuardedKey.getSignedToken($getIatToken(time))
   result.add("aUtHoRiZaTiOn", "Bearer " & bearer)
 
-proc getHttpAuthReqHeader2(secret: JwtSharedKey; time: uint64): HttpTable =
+func getHttpAuthReqHeader2(secret: JwtSharedKey; time: uint64): HttpTable =
   let bearer = secret.UnGuardedKey.getSignedToken2($getIatToken(time))
   result.add("aUtHoRiZaTiOn", "Bearer " & bearer)
 
@@ -151,26 +151,12 @@ func localAddress(server: GraphqlHttpServerRef): TransportAddress =
 # Http combo helpers
 # ------------------------------------------------------------------------------
 
-proc newGraphqlHandler(): GraphqlHttpHandlerRef =
-  const schema = """type Query {name: String}"""
-
-  let ctx = GraphqlRef.new()
-  let r = ctx.parseSchema(schema)
-  if r.isErr:
-    debugEcho r.error
-    # continue with empty schema
-
-  GraphqlHttpHandlerRef.new(ctx)
-
-proc installRPC(server: RpcServer) =
+func installRPC(server: RpcServer) =
   server.rpc("rpc_echo") do(input: int) -> string:
     result = "hello: " & $input
 
 proc setupComboServer(hooks: sink seq[RpcAuthHook]): HttpResult[NimbusHttpServerRef] =
   var handlers: seq[RpcHandlerProc]
-
-  let qlServer = newGraphqlHandler()
-  handlers.addHandler(qlServer)
 
   let wsServer = newRpcWebsocketHandler()
   wsServer.installRPC()
@@ -383,24 +369,6 @@ proc runJwtAuth(noisy = true; keyFile = jwtKeyFile) =
 
     server.start()
 
-    test "Graphql query no auth":
-      let client = setupClient(server.localAddress)
-      let res = waitFor client.sendRequest(query)
-      check res.isOk
-      let resp = res.get()
-      check resp.status == 403
-      check resp.reason == "Forbidden"
-      check resp.response == "Missing authorization token"
-
-    test "Graphql query with auth":
-      let client = setupClient(server.localAddress)
-      let res = waitFor client.sendRequest(query, req.toList)
-      check res.isOk
-      let resp = res.get()
-      check resp.status == 200
-      check resp.reason == "OK"
-      check resp.response == """{"data":{"__type":{"kind":"SCALAR"}}}"""
-
     test "rpc query no auth":
       let client = newRpcHttpClient()
       waitFor client.connect("http://" & $server.localAddress)
@@ -446,13 +414,10 @@ proc jwtAuthMain*(noisy = defined(debug)) =
   noisy.runJwtAuth
 
 when isMainModule:
-  const
-    noisy = defined(debug)
-
   setErrorLevel()
 
-  noisy.runKeyLoader
-  noisy.runJwtAuth
+runKeyLoader()
+runJwtAuth()
 
 # ------------------------------------------------------------------------------
 # End

@@ -1,4 +1,4 @@
-# Copyright (c) 2018-2024 Status Research & Development GmbH
+# Copyright (c) 2018-2025 Status Research & Development GmbH
 # Licensed under either of
 #  * Apache License, version 2.0, ([LICENSE-APACHE](LICENSE-APACHE))
 #  * MIT license ([LICENSE-MIT](LICENSE-MIT))
@@ -22,9 +22,9 @@ import
     confutils/std/net
   ],
   eth/[common, net/nat, p2p/enode, p2p/discoveryv5/enr],
-  "../nimbus"/[constants, compile_info],
-  ../nimbus/common/chain_config,
-  ../nimbus/db/opts
+  ../execution_chain/[constants, compile_info],
+  ../execution_chain/common/chain_config,
+  ../execution_chain/db/opts
 
 export net, defs
 
@@ -53,7 +53,7 @@ type
 
   NRpcConf* = object of RootObj
     ## Main NRpc configuration object
-    
+
     beaconApi* {.
       desc: "Beacon API url"
       defaultValue: ""

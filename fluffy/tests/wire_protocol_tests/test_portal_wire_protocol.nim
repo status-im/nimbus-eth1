@@ -602,7 +602,7 @@ procSuite "Portal Wire Protocol Tests":
       (await proto1.findNodes(proto3.localNode, @[0.uint16])).error() ==
         "No message data, peer might not support this talk protocol"
       (await proto1.findContent(proto4.localNode, contentKey)).error() ==
-        "No content response"
+        "No message data, peer might not support this talk protocol"
 
     await proto1.stopPortalProtocol()
     await proto2.stopPortalProtocol()

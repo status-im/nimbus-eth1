@@ -1,5 +1,5 @@
 # Nimbus
-# Copyright (c) 2018-2024 Status Research & Development GmbH
+# Copyright (c) 2018-2025 Status Research & Development GmbH
 # Licensed under either of
 #  * Apache License, version 2.0, ([LICENSE-APACHE](LICENSE-APACHE) or http://www.apache.org/licenses/LICENSE-2.0)
 #  * MIT license ([LICENSE-MIT](LICENSE-MIT) or http://opensource.org/licenses/MIT)
@@ -9,19 +9,19 @@ import
   std/[importutils, sequtils],
   unittest2,
   eth/common/[keys, transaction_utils],
-  ../nimbus/common,
-  ../nimbus/transaction,
-  ../nimbus/evm/types,
-  ../nimbus/evm/state,
-  ../nimbus/evm/evm_errors,
-  ../nimbus/evm/stack,
-  ../nimbus/evm/memory,
-  ../nimbus/evm/code_stream,
-  ../nimbus/evm/internals,
-  ../nimbus/constants,
-  ../nimbus/core/pow/header,
-  ../nimbus/db/ledger,
-  ../nimbus/transaction/call_evm
+  ../execution_chain/common,
+  ../execution_chain/transaction,
+  ../execution_chain/evm/types,
+  ../execution_chain/evm/state,
+  ../execution_chain/evm/evm_errors,
+  ../execution_chain/evm/stack,
+  ../execution_chain/evm/memory,
+  ../execution_chain/evm/code_stream,
+  ../execution_chain/evm/internals,
+  ../execution_chain/constants,
+  ../execution_chain/core/pow/header,
+  ../execution_chain/db/ledger,
+  ../execution_chain/transaction/call_evm
 
 template testPush(value: untyped, expected: untyped): untyped =
   privateAccess(EvmStack)
@@ -355,6 +355,7 @@ proc runTestOverflow() =
       header,
       header,
       com,
+      com.db.baseTxFrame()
     )
 
     s.ledger.setCode(codeAddress, @data)
@@ -379,7 +380,7 @@ proc runTestOverflow() =
       # After gasCall values always on positive, this test become OOG
       check res.error == "Opcode Dispatch Error: OutOfGas, depth=1"
 
-proc evmSupportMain*() =
+proc evmSupportMain() =
   runStackTests()
   runMemoryTests()
   runCodeStreamTests()
@@ -387,5 +388,4 @@ proc evmSupportMain*() =
   runMiscTests()
   runTestOverflow()
 
-when isMainModule:
-  evmSupportMain()
+evmSupportMain()

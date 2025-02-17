@@ -1,5 +1,5 @@
 # Nimbus
-# Copyright (c) 2023-2024 Status Research & Development GmbH
+# Copyright (c) 2023-2025 Status Research & Development GmbH
 # Licensed under either of
 #  * Apache License, version 2.0, ([LICENSE-APACHE](LICENSE-APACHE) or
 #    http://www.apache.org/licenses/LICENSE-2.0)
@@ -14,8 +14,8 @@ import
   eth/common,
   results,
   unittest2,
-  ../../nimbus/core/chain,
-  ../../nimbus/db/ledger,
+  ../../execution_chain/core/chain,
+  ../../execution_chain/db/ledger,
   ../replay/[pp, undump_blocks, undump_blocks_era1, xcheck],
   ./test_helpers
 
@@ -25,8 +25,8 @@ when CoreDbEnableProfiling:
 
 when CoreDbEnableProfiling:
   import
-    ../../nimbus/db/aristo/[aristo_api, aristo_profile],
-    ../../nimbus/db/kvt/kvt_api
+    ../../execution_chain/db/aristo/[aristo_api, aristo_profile],
+    ../../execution_chain/db/kvt/kvt_api
   var
     aristoProfData: AristoDbProfListRef
     kvtProfData: KvtDbProfListRef
@@ -147,7 +147,7 @@ proc test_chainSync*(
   let
     sayBlocks = 900'u64
     chain = com.newChain()
-    blockOnDb = com.db.getSavedStateBlockNumber()
+    blockOnDb = com.db.baseTxFrame().getSavedStateBlockNumber()
     lastBlock = max(1, numBlocks).BlockNumber
 
   noisy.initLogging com
@@ -203,7 +203,7 @@ proc test_chainSync*(
   for w in files.undumpBlocks(least = start):
     let (fromBlock, toBlock) = (w[0].header.number, w[^1].header.number)
     if fromBlock == 0'u64:
-      xCheck w[0].header == com.db.getBlockHeader(0'u64).expect("block header exists")
+      xCheck w[0].header == com.db.baseTxFrame().getBlockHeader(0'u64).expect("block header exists")
       continue
 
     # Process groups of blocks ...

@@ -1,4 +1,4 @@
-# Copyright (c) 2022-2024 Status Research & Development GmbH
+# Copyright (c) 2022-2025 Status Research & Development GmbH
 # Licensed under either of
 #  * Apache License, version 2.0, ([LICENSE-APACHE](LICENSE-APACHE))
 #  * MIT license ([LICENSE-MIT](LICENSE-MIT))
@@ -11,13 +11,13 @@ import
   std/[options, typetraits],
   unittest2,
   eth/[common/eth_types],
-  ../nimbus/rpc/filters,
-  ../nimbus/beacon/web3_eth_conv,
+  ../execution_chain/rpc/filters,
+  ../execution_chain/beacon/web3_eth_conv,
   ./test_block_fixture
 
 type Address = primitives.Address
 
-let allLogs = deriveLogs(blockHeader4514995, blockBody4514995.transactions, receipts4514995)
+let allLogs = deriveLogs(blockHeader4514995, blockBody4514995.transactions, receipts4514995, FilterOptions())
 
 proc filtersMain*() =
   # All magic numbers and addresses in following tests are confirmed with geth eth_getLogs,
@@ -203,5 +203,4 @@ proc filtersMain*() =
           check:
             filteredLog.address == log.address
 
-when isMainModule:
-  filtersMain()
+filtersMain()

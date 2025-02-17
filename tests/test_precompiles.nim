@@ -1,5 +1,5 @@
 # Nimbus
-# Copyright (c) 2018-2024 Status Research & Development GmbH
+# Copyright (c) 2018-2025 Status Research & Development GmbH
 # Licensed under either of
 #  * Apache License, version 2.0, ([LICENSE-APACHE](LICENSE-APACHE) or http://www.apache.org/licenses/LICENSE-2.0)
 #  * MIT license ([LICENSE-MIT](LICENSE-MIT) or http://opensource.org/licenses/MIT)
@@ -10,9 +10,9 @@ import
   unittest2, stew/byteutils,
   eth/[trie],
   eth/common/[keys, transaction_utils],
-  ../nimbus/common/common,
+  ../execution_chain/common/common,
   ../tools/common/helpers as chp,
-  ../nimbus/[evm/computation,
+  ../execution_chain/[evm/computation,
     evm/state,
     evm/types,
     constants,
@@ -75,7 +75,8 @@ proc testFixture(fixtures: JsonNode, testStatusIMPL: var TestStatus) =
     vmState = BaseVMState.new(
       Header(number: 1'u64, stateRoot: emptyRlpHash),
       Header(),
-      com
+      com,
+      com.db.baseTxFrame()
     )
 
   case toLowerAscii(label)
@@ -99,9 +100,6 @@ proc testFixture(fixtures: JsonNode, testStatusIMPL: var TestStatus) =
     echo "Unknown test vector '" & $label & "'"
     testStatusIMPL = SKIPPED
 
-proc precompilesMain*() =
-  suite "Precompiles":
-    jsonTest("PrecompileTests", testFixture)
+suite "Precompiles":
+  jsonTest("PrecompileTests", testFixture)
 
-when isMainModule:
-  precompilesMain()

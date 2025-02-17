@@ -1,5 +1,5 @@
 # Nimbus
-# Copyright (c) 2023-2024 Status Research & Development GmbH
+# Copyright (c) 2023-2025 Status Research & Development GmbH
 # Licensed under either of
 #  * Apache License, version 2.0, ([LICENSE-APACHE](LICENSE-APACHE) or
 #    http://www.apache.org/licenses/LICENSE-2.0)
@@ -16,8 +16,8 @@ import
   ./helpers,
   ../types,
   ../test_env,
-  ../../../../nimbus/utils/utils,
-  ../../../../nimbus/sync/protocol
+  ../../../../execution_chain/utils/utils,
+  ../../../../execution_chain/sync/protocol
 
 # A step that requests a Transaction hash via P2P and expects the correct full blob tx
 type
