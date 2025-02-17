@@ -57,7 +57,7 @@ const
   defaultMaxConcurrentOffers* = 50
   defaultAlpha* = 3
   revalidationTimeout* = chronos.seconds(30)
-  defaultDisableBanNodes* = false
+  defaultDisableBanNodes* = true
 
   defaultPortalProtocolConfig* = PortalProtocolConfig(
     tableIpLimits: DefaultTableIpLimits,
