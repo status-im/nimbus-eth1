@@ -5,28 +5,31 @@
 #   * Apache v2 license (license terms in the root directory or at https://www.apache.org/licenses/LICENSE-2.0).
 # at your option. This file may not be copied, modified, or distributed except according to those terms.
 
+{.push raises: [].}
+
 import
   std/[os, atomics],
   chronicles,
-  options,
-  #eth2-configs
-  beacon_chain/nimbus_binary_common,
-  #eth1-configs
-  ../../execution_chain/nimbus_desc
+  #eth2
+  beacon_chain/nimbus_binary_common
 
-export BeaconNodeConf, NimbusConf
+export setupFileLimits
+
+## log
+logScope:
+  topics = "Service manager"
 
 ## Exceptions
 type NimbusServiceError* = object of CatchableError
 
 ## Constants
-## TODO: evaluate the proposed timeouts
-const cNimbusMaxServices* = 2
-const cNimbusServiceTimeoutMs* = 3000
+const
+  cNimbusServiceTimeoutMs* = 3000
+  cThreadTimeAck* = 10
 
-## log
-logScope:
-  topics = "Service manager"
+# configuration read by threads
+var isConfigRead*: Atomic[bool]
+isConfigRead.store(false)
 
 ## Nimbus service arguments
 type
@@ -37,25 +40,21 @@ type
   LayerConfig* = object
     case kind*: ConfigKind
     of Consensus:
-      consensusConfig*: seq[string]
+      consensusOptions*: seq[string]
     of Execution:
-      executionConfig*: seq[string]
+      executionOptions*: seq[string]
 
   NimbusService* = ref object
     name*: string
     layerConfig*: LayerConfig
     serviceHandler*: Thread[ptr Channel[pointer]]
-    serviceChannel: ptr Channel[pointer]
+    serviceChannel*: ptr Channel[pointer] = nil
+    serviceFunc*: proc(ch: ptr Channel[pointer]) {.thread.}
 
   Nimbus* = ref object
     serviceList*: seq[NimbusService]
 
-#replace with cond var
-## Service shutdown
-var isShutDownRequired*: Atomic[bool]
-isShutDownRequired.store(false)
-
-# filesystem specs
+## filesystem specs
 proc defaultDataDir*(): string =
   let dataDir =
     when defined(windows):

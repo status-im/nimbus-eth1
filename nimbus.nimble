@@ -40,6 +40,7 @@ when declared(namedBin):
     "execution_chain/nimbus_execution_client": "nimbus_execution_client",
     "fluffy/fluffy": "fluffy",
     "nimbus_verified_proxy/nimbus_verified_proxy": "nimbus_verified_proxy",
+    "nimbus/nimbus_client": "nimbus_client",
   }.toTable()
 
 import std/[os, strutils]
@@ -137,7 +138,8 @@ task build_fuzzers, "Build fuzzer test cases":
   for file in walkDirRec("tests/networking/fuzzing/"):
     if file.endsWith("nim"):
       exec "nim c -c -d:release " & file
-## nimbus tasks
+
+## Nimbus tasks
 
 task nimbus, "Build Nimbus":
   buildBinary "nimbus", "nimbus/", "-d:chronicles_log_level=TRACE"
