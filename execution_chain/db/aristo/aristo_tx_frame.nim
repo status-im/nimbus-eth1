@@ -73,7 +73,6 @@ proc txFramePersist*(
       if frame == db.txRef:
         continue
       mergeAndReset(db.txRef, frame)
-      db.txRef.blockNumber = frame.blockNumber
 
       frame.dispose() # This will also dispose `txFrame` itself!
 
@@ -82,7 +81,7 @@ proc txFramePersist*(
     db.txRef = txFrame
 
   # Store structural single trie entries
-  for rvid, vtx in db.txRef.sTab:
+  for rvid, vtx in txFrame.sTab:
     txFrame.kMap.withValue(rvid, key) do:
       be.putVtxFn(batch, rvid, vtx, key[])
     do:
@@ -107,6 +106,7 @@ proc txFramePersist*(
   txFrame.kMap.clear()
   txFrame.accLeaves.clear()
   txFrame.stoLeaves.clear()
+  txFrame.blockNumber.reset()
 
 # ------------------------------------------------------------------------------
 # End
