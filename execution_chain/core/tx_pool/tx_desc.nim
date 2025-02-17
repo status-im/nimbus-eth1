@@ -12,10 +12,11 @@
 
 import
   chronicles,
-  std/times,
+  std/[times, tables],
   eth/eip1559,
   eth/common/transaction_utils,
   stew/sorted_set,
+  web3/engine_api_types,
   ../../common/common,
   ../../evm/state,
   ../../evm/types,
@@ -49,6 +50,7 @@ type
     idTab    : TxIdTab
     rmHash   : Hash32
     pos      : PosPayloadAttr
+    blobTab  : BlobLookupTab
 
 const
   MAX_POOL_SIZE = 5000
@@ -140,6 +142,7 @@ proc insertToSenderTab(xp: TxPoolRef; item: TxItemRef): Result[void, TxError] =
   # Replace current item,
   # insertion to idTab will be handled by addTx.
   xp.idTab.del(current.id)
+  xp.blobTab.removeLookup(item)
   sn.insertOrReplace(item)
   ok()
 
@@ -302,6 +305,7 @@ proc removeTx*(xp: TxPoolRef, id: Hash32) =
     return
   xp.removeFromSenderTab(item)
   xp.idTab.del(id)
+  xp.blobTab.removeLookup(item)
 
 proc removeExpiredTxs*(xp: TxPoolRef, lifeTime: Duration = TX_ITEM_LIFETIME) =
   var expired = newSeqOfCap[Hash32](xp.idTab.len div 4)
@@ -382,6 +386,7 @@ proc addTx*(xp: TxPoolRef, ptx: PooledTransaction): Result[void, TxError] =
   let item = TxItemRef.new(ptx, id, sender)
   ?xp.insertToSenderTab(item)
   xp.idTab[item.id] = item
+  xp.blobTab.addLookup(item)
 
   debug "Transaction added to txpool",
     txHash = id,
@@ -398,8 +403,17 @@ proc addTx*(xp: TxPoolRef, tx: Transaction): Result[void, TxError] =
 
 iterator byPriceAndNonce*(xp: TxPoolRef): TxItemRef =
   for item in byPriceAndNonce(xp.senderTab, xp.idTab,
-      xp.vmState.ledger, xp.baseFee):
+      xp.blobTab, xp.vmState.ledger, xp.baseFee):
     yield item
+
+func getBlobAndProofV1*(xp: TxPoolRef, v: VersionedHash): Opt[BlobAndProofV1] =
+  xp.blobTab.withValue(v, val):
+    let np = val.item.pooledTx.networkPayload
+    return Opt.some(BlobAndProofV1(
+      blob: engine_api_types.Blob(np.blobs[val.blobIndex]),
+      proof: np.proofs[val.blobIndex]))
+
+  Opt.none(BlobAndProofV1)
 
 # ------------------------------------------------------------------------------
 # PoS payload attributes getters

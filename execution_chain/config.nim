@@ -434,13 +434,13 @@ type
     of noCommand:
       httpPort* {.
         separator: "\pLOCAL SERVICES OPTIONS:"
-        desc: "Listening port of the HTTP server(rpc, ws, graphql)"
+        desc: "Listening port of the HTTP server(rpc, ws)"
         defaultValue: defaultHttpPort
         defaultValueDesc: $defaultHttpPort
         name: "http-port" }: Port
 
       httpAddress* {.
-        desc: "Listening IP address of the HTTP server(rpc, ws, graphql)"
+        desc: "Listening IP address of the HTTP server(rpc, ws)"
         defaultValue: defaultAdminListenAddress
         defaultValueDesc: $defaultAdminListenAddressDesc
         name: "http-address" }: IpAddress
@@ -466,11 +466,6 @@ type
         defaultValue: @[]
         defaultValueDesc: $RpcFlag.Eth
         name: "ws-api" }: seq[string]
-
-      graphqlEnabled* {.
-        desc: "Enable the GraphQL HTTP server"
-        defaultValue: false
-        name: "graphql" }: bool
 
       engineApiEnabled* {.
         desc: "Enable the Engine API"
@@ -779,9 +774,7 @@ func shareServerWithEngineApi*(conf: NimbusConf): bool =
     conf.engineApiPort == conf.httpPort
 
 func httpServerEnabled*(conf: NimbusConf): bool =
-  conf.graphqlEnabled or
-    conf.wsEnabled or
-    conf.rpcEnabled
+  conf.wsEnabled or conf.rpcEnabled
 
 func era1Dir*(conf: NimbusConf): OutDir =
   conf.era1DirOpt.get(OutDir(conf.dataDir.string & "/era1"))

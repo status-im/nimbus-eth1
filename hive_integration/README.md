@@ -70,7 +70,6 @@ or
 - `ethereum/sync`
 - `ethereum/consensus`
 - `ethereum/rpc`
-- `ethereum/graphql`
 - `ethereum/engine`
 - `smoke/network`
 - `smoke/genesis`
@@ -79,7 +78,6 @@ or
 The number of passes and fails output at the time of writing (2022-11-18) is:
 
     ethereum/consensus:  48682 pass,     0 fail, 48682 total London
-    ethereum/graphql:       39 pass,     7 fail,    46 total
     devp2p/discv4:          14 pass,     0 fail,    14 total
     devp2p/eth:             16 pass,     0 fail,    16 total
     devp2p/snap              0 pass,     5 fail,     5 total
@@ -108,12 +106,6 @@ in a markdown file with the same name with the simulator.
   Note that this program expects the _./tests_ directory accessible. So if
   you compile from the _hive_integration/nodocker_ directory on a Posix
   system, the _./tests_ directory would be a symlink to _../../tests_.
-
-- ethereum/graphql
-  ```nim
-  nim c -r -d:release hive_integration/nodocker/graphql/graphql_sim
-  ```
-  Similar to above, the directory _./hive_integration_ is expected.
 
 - ethereum/engine
   ```nim

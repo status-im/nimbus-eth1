@@ -22,7 +22,6 @@ import
     test_generalstate_json,
     test_genesis,
     test_getproof_json,
-    #test_graphql,                         -- fails
     test_jwt_auth,
     test_ledger,
     test_multi_keys,
