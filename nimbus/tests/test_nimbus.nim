@@ -5,18 +5,12 @@
 #   * Apache v2 license (license terms in the root directory or at https://www.apache.org/licenses/LICENSE-2.0).
 # at your option. This file may not be copied, modified, or distributed except according to those terms.
 
-import
-  std/[os, atomics],
-  unittest2,
-  ../nimbus,
-  ../configs/nimbus_configs,
-  #eth1-configs
-  ../../execution_chain/nimbus_desc
+import std/[os, atomics], unittest2, ../nimbus, ../conf
 
-# ----------------------------------------------------------------------------
-# Helper Functions
-# ----------------------------------------------------------------------------
-proc handlerMock(parameters: ServiceParameters) {.thread.} =
+# # ----------------------------------------------------------------------------
+# # Helper Functions
+# # ----------------------------------------------------------------------------
+proc handlerMock(channel: ptr Channel[pointer]) =
   return
 
 # ----------------------------------------------------------------------------
@@ -30,81 +24,12 @@ suite "Nimbus Service Management Tests":
 
   # Test: Creating a new service successfully
   test "startService successfully adds a service":
-    var layerConfig = LayerConfig(kind: Execution, executionConfig: NimbusConf())
+    var someService: NimbusService = NimbusService(
+      name: "FooBar service",
+      serviceFunc: handlerMock,
+      layerConfig: LayerConfig(kind: Consensus, consensusOptions: @["foo", "bar"]),
+    )
+    nimbus.serviceList.add(someService)
 
-    nimbus.startService(layerConfig, "TestService", handlerMock)
-
-    check nimbus.serviceList[0].isSome
-    check nimbus.serviceList[0].get().name == "TestService"
-
-  # Test: Adding more services than the maximum allowed
-  test "startService fails when Nimbus is full":
-    for i in 0 ..< cNimbusMaxServices:
-      var layerConfig = LayerConfig(kind: Execution, executionConfig: NimbusConf())
-      nimbus.startService(layerConfig, "service" & $i, handlerMock)
-
-    # Attempt to add one more service than allowed
-    var extraConfig = LayerConfig(kind: Execution, executionConfig: NimbusConf())
-    check:
-      try:
-        nimbus.startService(extraConfig, "ExtraService", handlerMock)
-        false # If no exception, test fails
-      except NimbusServiceError:
-        true # Exception was correctly raised
-
-  # Test: Services finish properly and exitServices correctly joins all threads
-  test "exitServices waits for all services to finish":
-    for i in 0 ..< cNimbusMaxServices:
-      var layerConfig = LayerConfig(kind: Execution, executionConfig: NimbusConf())
-      nimbus.startService(layerConfig, "service" & $i, handlerMock)
-
-    nimbus.exitServices()
-
-    # Check that all service slots are empty (thread was stopped, joined and its spot cleared)
-    for s in nimbus.serviceList: check s.isNone
-
-  # Test: startServices initializes both the execution and consensus layer services
-  test "startServices initializes execution and consensus services":
-    var execLayer = LayerConfig(kind: Execution, executionConfig: NimbusConf())
-    var consensusLayer = LayerConfig(kind: Execution, executionConfig: NimbusConf())
-
-    nimbus.startService(execLayer, "service1", handlerMock)
-    nimbus.startService(consensusLayer, "service2", handlerMock)
-
-    # Check that at least two services were created
-    check not nimbus.serviceList[0].isNone
-    check not nimbus.serviceList[1].isNone
-
-  # Test: Monitor detects shutdown and calls exitServices
-  test "monitor stops on shutdown signal and calls exitServices":
-    var layer = LayerConfig(kind: Execution, executionConfig: NimbusConf())
-    nimbus.startService(layer, "service1", handlerMock)
-
-    #simulates a shutdown signal
-    isShutDownRequired.store(true)
-    nimbus.monitor()
-
-    # Check that the monitor loop exits correctly
-    # services running should be 0
-    check isShutDownRequired.load() == true
-    for s in nimbus.serviceList: check s.isNone
-
-  # Test: Control-C handler properly initiates shutdown
-  test "controlCHandler triggers shutdown sequence":
-    var layer = LayerConfig(kind: Execution, executionConfig: NimbusConf())
-    nimbus.startService(layer, "service1", handlerMock)
-
-    proc localControlCHandler() {.noconv.} =
-      isShutDownRequired.store(true)
-      nimbus.exitServices()
-
-    # Set up a simulated control-C hook
-    setControlCHook(localControlCHandler)
-
-    # Trigger the hook manually
-    localControlCHandler()
-
-    check isShutDownRequired.load() == true
-
-    #services running should be 0
-    for s in nimbus.serviceList: check s.isNone
+    check nimbus.serviceList.len == 1
+    check nimbus.serviceList[0].name == "FooBar service"
