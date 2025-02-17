@@ -14,7 +14,6 @@
 {.push raises: [].}
 
 import
-  results,
   ./[kvt_desc, kvt_layers]
 
 
@@ -22,7 +21,7 @@ import
 # Public functions
 # ------------------------------------------------------------------------------
 
-proc txFrameBegin*(db: KvtDbRef, parent: KvtTxRef): Result[KvtTxRef,KvtError] =
+proc txFrameBegin*(db: KvtDbRef, parent: KvtTxRef): KvtTxRef =
   ## Starts a new transaction.
   ##
   ## Example:
@@ -35,7 +34,7 @@ proc txFrameBegin*(db: KvtDbRef, parent: KvtTxRef): Result[KvtTxRef,KvtError] =
   ##
 
   let parent = if parent == nil: db.txRef else: parent
-  ok KvtTxRef(
+  KvtTxRef(
     db:     db,
     layer: LayerRef(),
     parent: parent,
@@ -44,59 +43,44 @@ proc txFrameBegin*(db: KvtDbRef, parent: KvtTxRef): Result[KvtTxRef,KvtError] =
 proc baseTxFrame*(db: KvtDbRef): KvtTxRef =
   db.txRef
 
-proc rollback*(
-    tx: KvtTxRef;                     # Top transaction on database
-      ): Result[void,KvtError] =
-  ## Given a *top level* handle, this function discards all database operations
-  ## performed for this transactio. The previous transaction is returned if
-  ## there was any.
-  ##
+proc dispose*(
+    tx: KvtTxRef;
+      ) =
 
-  tx.layer[] = Layer()
-  ok()
-
-proc commit*(
-    tx: KvtTxRef;                     # Top transaction on database
-      ): Result[void,KvtError] =
-  ## Given a *top level* handle, this function accepts all database operations
-  ## performed through this handle and merges it to the previous layer. The
-  ## previous transaction is returned if there was any.
-  ##
-  doAssert tx.parent != nil, "don't commit base tx"
-
-  mergeAndReset(tx.parent.layer[], tx.layer[])
-
-  ok()
+  tx[].reset()
 
 proc txFramePersist*(
-    db: KvtDbRef;                     # Database
+    db: KvtDbRef;
     batch: PutHdlRef;
+    txFrame: KvtTxRef;
       ) =
-  ## Persistently store data onto backend database. If the system is running
-  ## without a database backend, the function returns immediately with an
-  ## error.
-  ##
-  ## The function merges all staged data from the top layer cache onto the
-  ## backend stage area. After that, the top layer cache is cleared.
-  ##
-  ## Finally, the staged data are merged into the physical backend database
-  ## and the staged data area is cleared. Wile performing this last step,
-  ## the recovery journal is updated (if available.)
-  ##
   let be = db.backend
   doAssert not be.isNil, "Persisting to backend requires ... a backend!"
 
-  # Store structural single trie entries
-  for k,v in db.txRef.layer.sTab:
-    be.putKvpFn(batch, k, v)
+  if txFrame != db.txRef:
+    # Consolidate the changes from the old to the new base going from the
+    # bottom of the stack to avoid having to cascade each change through
+    # the full stack
+    assert txFrame.parent != nil
+    for frame in txFrame.stack():
+      if frame == db.txRef:
+        continue
+      mergeAndReset(db.txRef.layer[], frame.layer[])
+      frame.dispose()
 
+    # Put the now-merged contents in txFrame and make it the new base
+    swap(db.txRef[], txFrame[])
+    db.txRef = txFrame
+
+  # Store structural single trie entries
+  for k,v in txFrame.layer.sTab:
+    be.putKvpFn(batch, k, v)
   # TODO above, we only prepare the changes to the database but don't actually
   #      write them to disk - the code below that updates the frame should
   #      really run after things have been written (to maintain sync betweeen
   #      in-memory and on-disk state)
 
-  # Done with txRef, all saved to backend
-  db.txRef.layer.sTab.clear()
+  txFrame.layer.sTab.clear()
 
 # ------------------------------------------------------------------------------
 # End

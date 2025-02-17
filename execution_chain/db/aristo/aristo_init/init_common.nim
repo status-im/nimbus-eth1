@@ -93,6 +93,37 @@ proc init*(trg: var TypedBackendObj; src: TypedBackendObj) =
     trg.txGen = src.txGen
     trg.txId = src.txId
 
+proc init*(
+    T: type AristoDbRef;
+    backend: BackendRef
+      ): Result[T, AristoError] =
+  let
+    vTop = if backend == nil: VertexID(0) else: ?backend.getTuvFn()
+    db = AristoDbRef(
+      txRef: AristoTxRef(layer: LayerRef(vTop: vTop)),
+      backend: backend,
+      accLeaves: LruCache[Hash32, VertexRef].init(ACC_LRU_SIZE),
+      stoLeaves: LruCache[Hash32, VertexRef].init(ACC_LRU_SIZE),
+    )
+
+  db.txRef.db = db # TODO evaluate if this cyclic ref is worth the convenience
+
+  ok(db)
+
+proc finish*(db: AristoDbRef; eradicate = false) =
+  ## Backend destructor. The argument `eradicate` indicates that a full
+  ## database deletion is requested. If set `false` the outcome might differ
+  ## depending on the type of backend (e.g. the `BackendMemory` backend will
+  ## always eradicate on close.)
+  ##
+  ## In case of distributed descriptors accessing the same backend, all
+  ## distributed descriptors will be destroyed.
+  ##
+  ## This distructor may be used on already *destructed* descriptors.
+  ##
+  if not db.backend.isNil:
+    db.backend.closeFn eradicate
+
 # ------------------------------------------------------------------------------
 # End
 # ------------------------------------------------------------------------------

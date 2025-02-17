@@ -18,13 +18,9 @@ import
   unittest2,
   ../execution_chain/db/aristo/aristo_desc,
   ./replay/pp,
-  ./test_aristo/test_blobify,
-  ./test_aristo/test_merge_proof,
-  ./test_aristo/test_nibbles,
-  ./test_aristo/test_portal_proof,
-  ./test_aristo/test_compute,
   ./test_aristo/[
-    test_helpers, test_samples_xx, test_tx,
+    test_blobify, test_compute, test_helpers, test_merge_proof, test_nibbles,
+    test_portal_proof, test_samples_xx, test_tx, test_tx_frame,
     undump_accounts, undump_storages]
 
 const

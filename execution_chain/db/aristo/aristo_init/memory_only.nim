@@ -54,35 +54,19 @@ proc init*(
   ## Memory backend constructor.
   ##
 
-  let db =
-    when B is VoidBackendRef:
-      AristoDbRef(txRef: AristoTxRef(layer: LayerRef()))
+  when B is VoidBackendRef:
+    AristoDbRef.init(nil)[]
 
-    elif B is MemBackendRef:
-      AristoDbRef(txRef: AristoTxRef(layer: LayerRef()), backend: memoryBackend())
-  db.txRef.db = db
-  db
+  elif B is MemBackendRef:
+    AristoDbRef.init(memoryBackend())[]
+  else:
+    raiseAssert "Unknown backend"
 
 proc init*(
     T: type AristoDbRef;                      # Target type
       ): T =
   ## Shortcut for `AristoDbRef.init(VoidBackendRef)`
   AristoDbRef.init VoidBackendRef
-
-
-proc finish*(db: AristoDbRef; eradicate = false) =
-  ## Backend destructor. The argument `eradicate` indicates that a full
-  ## database deletion is requested. If set `false` the outcome might differ
-  ## depending on the type of backend (e.g. the `BackendMemory` backend will
-  ## always eradicate on close.)
-  ##
-  ## In case of distributed descriptors accessing the same backend, all
-  ## distributed descriptors will be destroyed.
-  ##
-  ## This distructor may be used on already *destructed* descriptors.
-  ##
-  if not db.backend.isNil:
-    db.backend.closeFn eradicate
 
 # ------------------------------------------------------------------------------
 # End

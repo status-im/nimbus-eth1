@@ -27,7 +27,7 @@
 {.push raises: [].}
 
 import
-  std/[algorithm, options, sequtils, tables],
+  std/[algorithm, sequtils, tables],
   results,
   ../aristo_constants,
   ../aristo_desc,
@@ -40,11 +40,11 @@ const
      ## Enabled additional logging noise
 
 type
-  MemDbRef = ref object
+  MemDbRef* = ref object
     ## Database
-    sTab: Table[RootedVertexID,seq[byte]] ## Structural vertex table making up a trie
-    tUvi: Option[VertexID]                ## Top used vertex ID
-    lSst: Opt[SavedState]                 ## Last saved state
+    sTab*: Table[RootedVertexID,seq[byte]] ## Structural vertex table making up a trie
+    tUvi*: Opt[VertexID]                   ## Top used vertex ID
+    lSst*: Opt[SavedState]                 ## Last saved state
 
   MemBackendRef* = ref object of TypedBackendRef
     ## Inheriting table so access can be extended for debugging purposes
@@ -52,7 +52,7 @@ type
 
   MemPutHdlRef = ref object of TypedPutHdlRef
     sTab: Table[RootedVertexID,seq[byte]]
-    tUvi: Option[VertexID]
+    tUvi: Opt[VertexID]
     lSst: Opt[SavedState]
 
 when extraTraceMessages:
@@ -109,16 +109,12 @@ proc getKeyFn(db: MemBackendRef): GetKeyFn =
 proc getTuvFn(db: MemBackendRef): GetTuvFn =
   result =
     proc(): Result[VertexID,AristoError]=
-      if db.mdb.tUvi.isSome:
-        return ok db.mdb.tUvi.unsafeGet
-      err(GetTuvNotFound)
+      db.mdb.tUvi or ok(VertexID(0))
 
 proc getLstFn(db: MemBackendRef): GetLstFn =
   result =
     proc(): Result[SavedState,AristoError]=
-      if db.mdb.lSst.isSome:
-        return ok db.mdb.lSst.unsafeGet
-      err(GetLstNotFound)
+      db.mdb.lSst or err(GetLstNotFound)
 
 # -------------
 
@@ -143,7 +139,7 @@ proc putTuvFn(db: MemBackendRef): PutTuvFn =
     proc(hdl: PutHdlRef; vs: VertexID)  =
       let hdl = hdl.getSession db
       if hdl.error.isNil:
-        hdl.tUvi = some(vs)
+        hdl.tUvi = Opt.some(vs)
 
 proc putLstFn(db: MemBackendRef): PutLstFn =
   result =
@@ -175,7 +171,7 @@ proc putEndFn(db: MemBackendRef): PutEndFn =
 
       let tuv = hdl.tUvi.get(otherwise = VertexID(0))
       if tuv.isValid:
-        db.mdb.tUvi = some(tuv)
+        db.mdb.tUvi = Opt.some(tuv)
 
       if hdl.lSst.isSome:
         db.mdb.lSst = hdl.lSst
@@ -193,10 +189,10 @@ proc closeFn(db: MemBackendRef): CloseFn =
 # Public functions
 # ------------------------------------------------------------------------------
 
-proc memoryBackend*(): BackendRef =
+proc memoryBackend*(mdb = MemDbRef()): BackendRef =
   let db = MemBackendRef(
     beKind: BackendMemory,
-    mdb:    MemDbRef())
+    mdb:    mdb)
 
   db.getVtxFn = getVtxFn db
   db.getKeyFn = getKeyFn db

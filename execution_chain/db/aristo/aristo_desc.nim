@@ -44,6 +44,7 @@ type
     db*: AristoDbRef                  ## Database descriptor
     parent*: AristoTxRef              ## Previous transaction
     layer*: LayerRef
+    blockNumber*: Opt[uint64] ## Block number set when freezing the frame
 
   AristoDbRef* = ref object
     ## Three tier database object supporting distributed instances.
@@ -151,8 +152,19 @@ func hash*(db: AristoDbRef): Hash =
 # Public helpers
 # ------------------------------------------------------------------------------
 
+iterator stack*(tx: AristoTxRef): AristoTxRef =
+  # Stack going from base to tx
+  var frames: seq[AristoTxRef]
+  var tx = tx
+  while tx != nil:
+    frames.add tx
+    tx = tx.parent
+
+  while frames.len > 0:
+    yield frames.pop()
+
 iterator rstack*(tx: AristoTxRef): (LayerRef, int) =
-  # Stack in reverse order
+  # Stack in reverse order, ie going from tx to base
   var tx = tx
 
   var i = 0
