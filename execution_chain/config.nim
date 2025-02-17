@@ -554,11 +554,24 @@ type
         defaultValue: false
         name: "debug-store-slot-hashes".}: bool
 
+      usePortal* {.
+        hidden
+        desc: "Use portal network instead of era files"
+        defaultValue: false
+        name: "debug-use-portal".}: bool
+
+      portalWorkers* {.
+        hidden
+        desc: "Amount of Portal workers to use for downloading blocks"
+        defaultValue: 512
+        name: "debug-portal-workers".}: int
+
     of `import-rlp`:
       blocksFile* {.
         argument
         desc: "One or more RLP encoded block(s) files"
         name: "blocks-file" }: seq[InputFile]
+
 
 func parseCmdArg(T: type NetworkId, p: string): T
     {.gcsafe, raises: [ValueError].} =
