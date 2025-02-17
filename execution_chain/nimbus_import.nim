@@ -13,7 +13,8 @@ import
   chronicles,
   metrics,
   chronos/timer,
-  std/[strformat, strutils],
+  chronos,
+  std/[strformat, strutils, os],
   stew/io2,
   beacon_chain/era_db,
   beacon_chain/networking/network_metadata,
@@ -21,7 +22,16 @@ import
   ./common/common,
   ./core/chain,
   ./db/era1_db,
-  ./utils/era_helpers
+  ./utils/era_helpers,
+  eth/common/keys, # rng
+  eth/net/nat, # setupAddress
+  eth/p2p/discoveryv5/protocol as discv5_protocol,
+  eth/p2p/discoveryv5/routing_table,
+  eth/p2p/discoveryv5/enr,
+  ../fluffy/portal_node,
+  ../fluffy/common/common_utils, # getPersistentNetKey, getPersistentEnr
+  ../fluffy/network_metadata,
+  ../fluffy/version
 
 declareGauge nec_import_block_number, "Latest imported block number"
 
@@ -95,7 +105,192 @@ template boolFlag(flags, b): PersistBlockFlags =
   else:
     {}
 
-proc importBlocks*(conf: NimbusConf, com: CommonRef) =
+proc run(config: NimbusConf): PortalNode {.
+    raises: [CatchableError]
+.} =
+  let rng = newRng()
+
+  ## Network configuration
+  let
+    bindIp = config.listenAddress
+    udpPort = Port(config.udpPort)
+    # TODO: allow for no TCP port mapping!
+    (extIp, _, extUdpPort) =
+      try:
+        setupAddress(config.nat, config.listenAddress, udpPort, udpPort, "portal")
+      except CatchableError as exc:
+        raiseAssert exc.msg
+        # raise exc # TODO: Ideally we don't have the Exception here
+      except Exception as exc:
+        raiseAssert exc.msg
+    (netkey, newNetKey) =
+      # if config.netKey.isSome():
+      #   (config.netKey.get(), true)
+      # else:
+        getPersistentNetKey(rng[], config.dataDir / "netkey")
+
+    enrFilePath = config.dataDir / "nimbus_portal_node.enr"
+    previousEnr =
+      if not newNetKey:
+        getPersistentEnr(enrFilePath)
+      else:
+        Opt.none(enr.Record)
+
+  var bootstrapRecords: seq[Record]
+  # loadBootstrapFile(string config.bootstrapNodesFile, bootstrapRecords)
+  # bootstrapRecords.add(config.bootstrapNodes)
+
+  # case config.network
+  # of PortalNetwork.none:
+  #   discard # don't connect to any network bootstrap nodes
+  # of PortalNetwork.mainnet:
+  #   for enrURI in mainnetBootstrapNodes:
+  #     let res = enr.Record.fromURI(enrURI)
+  #     if res.isOk():
+  #       bootstrapRecords.add(res.value)
+  # of PortalNetwork.angelfood:
+  #   for enrURI in angelfoodBootstrapNodes:
+  #     let res = enr.Record.fromURI(enrURI)
+  #     if res.isOk():
+  #       bootstrapRecords.add(res.value)
+
+  # Only mainnet
+  for enrURI in mainnetBootstrapNodes:
+    let res = enr.Record.fromURI(enrURI)
+    if res.isOk():
+      bootstrapRecords.add(res.value)
+
+  ## Discovery v5 protocol setup
+  let
+    discoveryConfig =
+      DiscoveryConfig.init(DefaultTableIpLimit, DefaultBucketIpLimit, DefaultBitsPerHop)
+    d = newProtocol(
+      netkey,
+      extIp,
+      Opt.none(Port),
+      extUdpPort,
+      # Note: The addition of default clientInfo to the ENR is a temporary
+      # measure to easily identify & debug the clients used in the testnet.
+      # Might make this into a, default off, cli option.
+      localEnrFields = {"c": enrClientInfoShort},
+      bootstrapRecords = bootstrapRecords,
+      previousRecord = previousEnr,
+      bindIp = bindIp,
+      bindPort = udpPort,
+      enrAutoUpdate = true,
+      config = discoveryConfig,
+      rng = rng,
+    )
+
+  d.open()
+
+  ## Portal node setup
+  let
+    portalProtocolConfig = PortalProtocolConfig.init(
+      DefaultTableIpLimit, DefaultBucketIpLimit, DefaultBitsPerHop, defaultAlpha, RadiusConfig(kind: Static, logRadius: 249),
+      defaultDisablePoke, defaultMaxGossipNodes, defaultContentCacheSize,
+      defaultDisableContentCache, defaultMaxConcurrentOffers, defaultDisableBanNodes,
+    )
+
+    portalNodeConfig = PortalNodeConfig(
+      accumulatorFile: Opt.none(string),
+      disableStateRootValidation: true,
+      trustedBlockRoot: Opt.none(Digest),
+      portalConfig: portalProtocolConfig,
+      dataDir: string config.dataDir,
+      storageCapacity: 0,
+      contentRequestRetries: 1
+    )
+
+    node = PortalNode.new(
+      PortalNetwork.mainnet,
+      portalNodeConfig,
+      d,
+      {PortalSubnetwork.history},
+      bootstrapRecords = bootstrapRecords,
+      rng = rng,
+    )
+
+  let enrFile = config.dataDir / "nimbus_portal_node.enr"
+  if io2.writeFile(enrFile, d.localNode.record.toURI()).isErr:
+    fatal "Failed to write the enr file", file = enrFile
+    quit 1
+
+  ## Start the Portal node.
+  node.start()
+
+  node
+
+proc getBlockLoop(node: PortalNode, blockQueue: AsyncQueue[EthBlock], startBlock: uint64, portalWorkers: int): Future[void] {.async.} =
+  const bufferSize = 8192
+
+  let historyNetwork = node.historyNetwork.value()
+  let blockNumberQueue = newAsyncQueue[(uint64, uint64)](2048)
+
+  var blockNumber = startBlock
+  var blocks: seq[EthBlock] = newSeq[EthBlock](bufferSize)
+  var count = 0
+  var failureCount = 0
+
+  # Note: Could make these stuint bitmasks
+  var downloadFinished: array[bufferSize, bool]
+  var downloadStarted: array[bufferSize, bool]
+
+  proc blockWorker(node: PortalNode): Future[void] {.async.} =
+    while true:
+      let (blockNumber, i) = await blockNumberQueue.popFirst()
+      var currentBlockFailures = 0
+      while true:
+        let (header, body) = (await historyNetwork.getBlock(blockNumber + i)).valueOr:
+          currentBlockFailures.inc()
+          if currentBlockFailures > 10:
+            fatal "Block download failed too many times", blockNumber = blockNumber + i, currentBlockFailures
+            quit(QuitFailure)
+
+          debug "Failed to get block", blockNumber = blockNumber + i, currentBlockFailures
+          failureCount.inc()
+          continue
+
+        blocks[i] = init(EthBlock, header, body)
+        downloadFinished[i] = true
+        count.inc()
+
+        break
+
+  var workers: seq[Future[void]] = @[]
+  for i in 0 ..< portalWorkers:
+    workers.add node.blockWorker()
+
+  info "Start downloading blocks", startBlock = blockNumber
+  var i = 0'u64
+  var nextDownloadedIndex = 0
+  let t0 = Moment.now()
+
+  while true:
+    while downloadFinished[nextDownloadedIndex]:
+      debug "Adding block to the processing queue", blockNumber = nextDownloadedIndex.uint64 + blockNumber
+      await blockQueue.addLast(blocks[nextDownloadedIndex])
+      downloadFinished[nextDownloadedIndex] = false
+      downloadStarted[nextDownloadedIndex] = false
+      nextDownloadedIndex = (nextDownloadedIndex + 1) mod bufferSize
+
+    # TODO: can use the read pointer nextDownloadedIndex instead and get rid of downloadStarted
+    if not downloadStarted[i]:
+      debug "Adding block to the download queue", blockNumber = blockNumber + i
+      await blockNumberQueue.addLast((blockNumber, i))
+      downloadStarted[i] = true
+      # TODO clean this up by directly using blocknumber with modulo calc
+      if i == bufferSize.uint64 - 1:
+        blockNumber += bufferSize.uint64
+        let t1 = Moment.now()
+        let diff = (t1 - t0).nanoseconds().float / 1000000000
+        let avgBps = count.float / diff
+        info "Total blocks downloaded", count = count, failureCount = failureCount, failureRate = failureCount.float / count.float, avgBps = avgBps
+      i = (i + 1'u64) mod bufferSize.uint64
+    else:
+      await sleepAsync(1.nanoseconds)
+
+proc importBlocks*(conf: NimbusConf, com: CommonRef, node: PortalNode, blockQueue: AsyncQueue[EthBlock]) {.async.} =
   proc controlCHandler() {.noconv.} =
     when defined(windows):
       # workaround for https://github.com/nim-lang/Nim/issues/4057
@@ -126,7 +321,7 @@ proc importBlocks*(conf: NimbusConf, com: CommonRef) =
       boolFlag(NoPersistBodies, not conf.storeBodies) +
       boolFlag({PersistBlockFlag.NoPersistReceipts}, not conf.storeReceipts) +
       boolFlag({PersistBlockFlag.NoPersistSlotHashes}, not conf.storeSlotHashes)
-    blk: Block
+    blk: blocks.Block
     persister = Persister.init(com, flags)
     cstats: PersistStats # stats at start of chunk
 
@@ -299,11 +494,16 @@ proc importBlocks*(conf: NimbusConf, com: CommonRef) =
 
     while running and persister.stats.blocks.uint64 < conf.maxBlocks and
         blockNumber <= lastEra1Block:
-      if not loadEraBlock(blockNumber):
-        notice "No more `era1` blocks to import", blockNumber, slot
-        break
-      persistBlock()
-      checkpoint()
+      if not conf.usePortal:
+        if not loadEraBlock(blockNumber):
+          notice "No more `era1` blocks to import", blockNumber, slot
+          break
+        persistBlock()
+        checkpoint()
+      else:
+        blk = await blockQueue.popFirst()
+        persistBlock()
+        checkpoint()
 
   block era1Import:
     if blockNumber > lastEra1Block:
@@ -375,3 +575,22 @@ proc importBlocks*(conf: NimbusConf, com: CommonRef) =
     blocks = persister.stats.blocks,
     txs = persister.stats.txs,
     mgas = f(persister.stats.gas.float / 1000000)
+
+proc importBlocksPortal*(conf: NimbusConf, com: CommonRef) {.
+    raises: [CatchableError]
+.} =
+  let
+    portalNode = run(conf)
+    blockQueue = newAsyncQueue[EthBlock]()
+    start = com.db.baseTxFrame().getSavedStateBlockNumber() + 1
+
+  if conf.usePortal:
+    asyncSpawn portalNode.getBlockLoop(blockQueue, start, conf.portalWorkers)
+
+  asyncSpawn importBlocks(conf, com, portalNode, blockQueue)
+
+  while running:
+    try:
+      poll()
+    except CatchableError as e:
+      warn "Exception in poll()", exc = e.name, err = e.msg

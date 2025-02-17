@@ -201,7 +201,7 @@ proc getBlockBody*(
         n.portalProtocol.banNode(
           bodyContent.receivedFrom.id, NodeBanDurationContentLookupFailedValidation
         )
-        warn "Validation of block body failed",
+        debug "Validation of block body failed",
           error, node = bodyContent.receivedFrom.record.toURI()
         continue
 
