@@ -45,17 +45,21 @@ proc initPortalProtocol(
     q = newAsyncQueue[(Opt[NodeId], ContentKeysList, seq[seq[byte]])](50)
     stream = manager.registerNewStream(q, connectionTimeout = 2.seconds)
 
-    proto = PortalProtocol.new(
-      d,
-      protocolId,
-      toContentId,
-      createGetHandler(db),
-      createStoreHandler(db, defaultRadiusConfig),
-      createContainsHandler(db),
-      createRadiusHandler(db),
-      stream,
-      bootstrapRecords = bootstrapRecords,
-    )
+  var config = defaultPortalProtocolConfig
+  config.disableBanNodes = false
+
+  let proto = PortalProtocol.new(
+    d,
+    protocolId,
+    toContentId,
+    createGetHandler(db),
+    createStoreHandler(db, defaultRadiusConfig),
+    createContainsHandler(db),
+    createRadiusHandler(db),
+    stream,
+    bootstrapRecords = bootstrapRecords,
+    config = config,
+  )
 
   return proto
 
