@@ -53,15 +53,3 @@ type
 
   Nimbus* = ref object
     serviceList*: seq[NimbusService]
-
-## filesystem specs
-proc defaultDataDir*(): string =
-  let dataDir =
-    when defined(windows):
-      "AppData" / "Roaming" / "Nimbus"
-    elif defined(macosx):
-      "Library" / "Application Support" / "Nimbus"
-    else:
-      ".cache" / "Nimbus"
-
-  getHomeDir() / dataDir
