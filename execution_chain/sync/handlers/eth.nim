@@ -56,38 +56,6 @@ proc notEnabled(name: string) {.used.} =
 proc notImplemented(name: string) {.used.} =
   debug "Wire handler method not implemented", meth = name
 
-proc successorHeader(db: CoreDbRef,
-                     h: Header,
-                     skip = 0'u): Opt[Header] =
-  let offset = 1 + skip.BlockNumber
-  if h.number <= (not 0.BlockNumber) - offset:
-    # TODO why is this using base db?
-    let header = db.baseTxFrame().getBlockHeader(h.number + offset).valueOr:
-      return Opt.none(Header)
-    return Opt.some(header)
-  Opt.none(Header)
-
-proc ancestorHeader(db: CoreDbRef,
-                     h: Header,
-                     skip = 0'u): Opt[Header] =
-  let offset = 1 + skip.BlockNumber
-  if h.number >= offset:
-    # TODO why is this using base db?
-    let header = db.baseTxFrame().getBlockHeader(h.number - offset).valueOr:
-      return Opt.none(Header)
-    return Opt.some(header)
-  Opt.none(Header)
-
-proc blockHeader(db: CoreDbRef,
-                 b: BlockHashOrNumber): Opt[Header] =
-  let header = if b.isHash:
-                 db.baseTxFrame().getBlockHeader(b.hash).valueOr:
-                   return Opt.none(Header)
-               else:
-                 db.baseTxFrame().getBlockHeader(b.number).valueOr:
-                   return Opt.none(Header)
-  Opt.some(header)
-
 # ------------------------------------------------------------------------------
 # Private functions: peers related functions
 # ------------------------------------------------------------------------------
