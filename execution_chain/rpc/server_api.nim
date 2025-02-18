@@ -26,6 +26,7 @@ import
   ../transaction/call_evm,
   ../evm/evm_errors,
   ../core/eip4844,
+  ../portal/portal,
   ./rpc_types,
   ./rpc_utils,
   ./filters
