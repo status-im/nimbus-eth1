@@ -49,16 +49,6 @@ type
     ## Block request item sorted by least block number (i.e. from `blocks[0]`.)
     blocks*: seq[EthBlock]           ## List of blocks for import
 
-  KvtCache* = Table[BlockNumber,seq[byte]]
-    ## This cache type is intended for holding block headers that cannot be
-    ## reliably saved persistently. This is the situation after blocks are
-    ## imported as the FCU handlers always maintain a positive transaction
-    ## level and in some instances the current transaction is flushed and
-    ## re-opened.
-    ##
-    ## The number of block headers to hold in memory after block import has
-    ## started is the distance to the new `canonical execution head`.
-
   # -------------------
 
   SyncLayoutState* = enum
@@ -146,7 +136,6 @@ type
     # `nBodiesBatch` blocks in each round (minimum value is
     # `nFetchBodiesRequest`.)
     chain*: ForkedChainRef           ## Core database, FCU support
-    stash*: KvtCache                 ## Temporary header and state table
     blockImportOk*: bool             ## Don't fetch data while block importing
     nBodiesBatch*: int               ## Default `nFetchBodiesBatchDefault`
     blocksStagedQuLenMax*: int       ## Default `blocksStagedQueueLenMaxDefault`
@@ -191,10 +180,6 @@ func target*(ctx: BeaconCtxRef): var SyncStateTarget =
 func chain*(ctx: BeaconCtxRef): ForkedChainRef =
   ## Getter
   ctx.pool.chain
-
-func stash*(ctx: BeaconCtxRef): var KvtCache =
-  ## Getter
-  ctx.pool.stash
 
 func db*(ctx: BeaconCtxRef): CoreDbRef =
   ## Getter
