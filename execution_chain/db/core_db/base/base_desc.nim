@@ -12,8 +12,7 @@
 
 import
   results,
-  "../.."/[aristo, aristo/aristo_profile, kvt],
-  ./base_config
+  "../.."/[aristo, kvt]
 
 type
   CoreDbType* = enum
@@ -26,12 +25,6 @@ const
     ## List of persistent DB types (currently only a single one)
 
 type
-  CoreDbProfListRef* = AristoDbProfListRef
-    ## Borrowed from `aristo_profile`, only used in profiling mode
-
-  CoreDbProfData* = AristoDbProfData
-    ## Borrowed from `aristo_profile`, only used in profiling mode
-
   CoreDbRc*[T] = Result[T,CoreDbError]
 
   CoreDbAccount* = AristoAccount
@@ -64,30 +57,11 @@ type
     dbType*: CoreDbType           ## Type of database backend
     defCtx*: CoreDbCtxRef         ## Default context
 
-    # Optional api interface (can be re-directed/intercepted)
-    ariApi*: AristoApiRef         ## `Aristo` api
-    kvtApi*: KvtApiRef            ## `KVT` api
-
-    # Optional profiling and debugging stuff
-    when CoreDbEnableApiTracking:
-      trackLedgerApi*: bool       ## Debugging, suggestion for ledger
-      trackCoreDbApi*: bool       ## Debugging, support
-    when CoreDbEnableApiJumpTable:
-      profTab*: CoreDbProfListRef ## Profiling data (if any)
-      ledgerHook*: RootRef        ## Debugging/profiling, to be used by ledger
-      tracerHook*: RootRef        ## Debugging/tracing
-
   CoreDbCtxRef* = ref object
     ## Shared context for `CoreDbAccRef`, `CoreDbKvtRef`
     parent*: CoreDbRef
     mpt*: AristoDbRef           ## `Aristo` database
     kvt*: KvtDbRef              ## `KVT` key-value table
-
-  CoreDbKvtRef* = distinct CoreDbCtxRef
-    ## Statically initialised Key-Value pair table
-
-  CoreDbAccRef* = distinct CoreDbCtxRef
-    ## Similar to `CoreDbKvtRef`, only dealing with `Aristo` accounts
 
   CoreDbTxRef* = ref object
     ## Transaction descriptor

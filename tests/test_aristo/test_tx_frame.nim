@@ -19,13 +19,12 @@ import
     aristo_delete,
     aristo_desc,
     aristo_fetch,
-    aristo_hike,
-    aristo_init,
+    aristo_tx_frame,
+    aristo_init/init_common,
     aristo_init/memory_db,
     aristo_layers,
     aristo_merge,
-    aristo_persist,
-    aristo_tx_frame,
+    aristo_persist
   ]
 
 proc makeAccount(i: uint64): (Hash32, AristoAccount) =
