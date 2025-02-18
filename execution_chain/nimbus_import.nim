@@ -98,7 +98,6 @@ proc importBlocks*(conf: NimbusConf, com: CommonRef) =
 
   let
     start = com.db.baseTxFrame().getSavedStateBlockNumber() + 1
-    chain = com.newChain()
     (cfg, genesis_validators_root, lastEra1Block, firstSlotAfterMerge) =
       getMetadata(conf.networkId)
     time0 = Moment.now()
@@ -120,7 +119,7 @@ proc importBlocks*(conf: NimbusConf, com: CommonRef) =
       boolFlag({PersistBlockFlag.NoPersistReceipts}, not conf.storeReceipts) +
       boolFlag({PersistBlockFlag.NoPersistSlotHashes}, not conf.storeSlotHashes)
     blk: Block
-    persister = Persister.init(chain, flags)
+    persister = Persister.init(com, flags)
     cstats: PersistStats # stats at start of chunk
 
   defer:

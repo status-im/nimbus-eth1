@@ -1,5 +1,5 @@
 # Nimbus
-# Copyright (c) 2018-2024 Status Research & Development GmbH
+# Copyright (c) 2018-2025 Status Research & Development GmbH
 # Licensed under either of
 #  * Apache License, version 2.0, ([LICENSE-APACHE](LICENSE-APACHE) or
 #    http://www.apache.org/licenses/LICENSE-2.0)
@@ -30,26 +30,6 @@ proc addEthHandlerCapability*(
   node.addCapability(
     protocol.eth,
     EthWireRef.new(chain, txPool, peerPool))
-
-# ------------------------------------------------------------------------------
-# Public functions: convenience mappings for `snap`
-# ------------------------------------------------------------------------------
-
-when false: # needs to be updated
-  import
-    ./snap as handlers_snap
-
-  proc addSnapHandlerCapability*(
-      node: EthereumNode;
-      peerPool: PeerPool;
-      chain = ChainRef(nil);
-        ) =
-    ## Install `snap` handlers,Passing `chein` as `nil` installs the handler
-    ## in minimal/outbound mode.
-    if chain.isNil:
-      node.addCapability protocol.snap
-    else:
-      node.addCapability(protocol.snap, SnapWireRef.init(chain, peerPool))
 
 # ------------------------------------------------------------------------------
 # End

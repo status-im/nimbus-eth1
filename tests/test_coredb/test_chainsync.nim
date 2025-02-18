@@ -114,7 +114,6 @@ proc test_chainSync*(
   ## Store persistent blocks from dump into chain DB
   let
     sayBlocks = 900'u64
-    chain = com.newChain()
     blockOnDb = com.db.baseTxFrame().getSavedStateBlockNumber()
     lastBlock = max(1, numBlocks).BlockNumber
 
@@ -181,12 +180,12 @@ proc test_chainSync*(
           noisy.startLogging(w[0].header.number)
 
       noisy.stopLoggingAfter():
-        let runPersistBlocksRc = chain.persistBlocks(w)
+        let runPersistBlocksRc = com.persistBlocks(w)
         xCheck runPersistBlocksRc.isOk():
           if noisy:
             noisy.whisper "***", "Re-run with logging enabled...\n"
             setTraceLevel()
-            discard chain.persistBlocks(w)
+            discard com.persistBlocks(w)
       blocks += w.len
       continue
 
@@ -211,7 +210,7 @@ proc test_chainSync*(
         sayPerf
         noisy.whisper "***",
            &"processing {dotsOrSpace}[#{fromBlock:>8},#{(lastBlock-1):>8}]"
-      let runPersistBlocks1Rc = chain.persistBlocks(blocks1)
+      let runPersistBlocks1Rc = com.persistBlocks(blocks1)
       xCheck runPersistBlocks1Rc.isOk()
       dotsOrSpace = "   "
 
@@ -227,7 +226,7 @@ proc test_chainSync*(
         noisy.whisper "***",
           &"processing {dotsOrSpace}[#{lastBlock:>8},#{lastBlock:>8}]"
       noisy.stopLoggingAfter():
-        let runPersistBlocks0Rc = chain.persistBlocks(blocks0)
+        let runPersistBlocks0Rc = com.persistBlocks(blocks0)
         xCheck runPersistBlocks0Rc.isOk()
     else:
       if oldLogAlign:
@@ -238,7 +237,7 @@ proc test_chainSync*(
         noisy.whisper "***",
           &"processing {dotsOrSpace}[#{lastBlock:>8},#{toBlock:>8}]"
       noisy.stopLoggingAfter():
-        let runPersistBlocks9Rc = chain.persistBlocks(blocks9)
+        let runPersistBlocks9Rc = com.persistBlocks(blocks9)
         xCheck runPersistBlocks9Rc.isOk()
     break
   if not oldLogAlign:
