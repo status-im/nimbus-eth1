@@ -673,18 +673,18 @@ proc pp*(
   layer.ppLayer(
     db.orDefault(), vTopOk=vTopOk, sTabOk=sTabOk, kMapOk=kMapOk, indent=indent)
 
-proc pp*(
-  be: BackendRef;
-  db: AristoTxRef;
-  limit = 100;
-  indent = 4;
-    ): string =
-  result = db.ppBalancer(db, indent+1) & indent.toPfx
-  case be.kind:
-  of BackendMemory:
-    result &= be.MemBackendRef.ppBe(db, limit, indent+1)
-  of BackendRocksDB:
-    result &= be.RdbBackendRef.ppBe(db, limit, indent+1)
+#proc pp*(
+#  be: BackendRef;
+#  db: AristoTxRef;
+#  limit = 100;
+#  indent = 4;
+#    ): string =
+#  result = db.ppBalancer(db, indent+1) & indent.toPfx
+#  case be.kind:
+#  of BackendMemory:
+#    result &= be.MemBackendRef.ppBe(db, limit, indent+1)
+#  of BackendRocksDB:
+#    result &= be.RdbBackendRef.ppBe(db, limit, indent+1)
 
 proc pp*(
     db: AristoTxRef;

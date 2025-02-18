@@ -27,11 +27,9 @@ import
   results,
   ./aristo_constants,
   ./aristo_desc/[desc_error, desc_identifiers, desc_nibbles, desc_structural],
+  ./aristo_desc/desc_backend,
   minilru
 
-
-from ./aristo_desc/desc_backend
-  import BackendRef, PutHdlRef
 
 # Not auto-exporting backend
 export
@@ -76,8 +74,19 @@ type
     blockNumber*: Opt[uint64]              ## Block number set when checkpointing the frame
 
   AristoDbRef* = ref object
-    ## Three tier database object supporting distributed instances.
-    backend*: BackendRef              ## Backend database (may well be `nil`)
+    ## Backend interface.
+    getVtxFn*: GetVtxFn              ## Read vertex record
+    getKeyFn*: GetKeyFn              ## Read Merkle hash/key
+    getTuvFn*: GetTuvFn              ## Read top used vertex ID
+    getLstFn*: GetLstFn              ## Read saved state
+
+    putBegFn*: PutBegFn              ## Start bulk store session
+    putVtxFn*: PutVtxFn              ## Bulk store vertex records
+    putTuvFn*: PutTuvFn              ## Store top used vertex ID
+    putLstFn*: PutLstFn              ## Store saved state
+    putEndFn*: PutEndFn              ## Commit bulk store session
+
+    closeFn*: CloseFn                ## Generic destructor
 
     txRef*: AristoTxRef               ## Bottom-most in-memory frame
 

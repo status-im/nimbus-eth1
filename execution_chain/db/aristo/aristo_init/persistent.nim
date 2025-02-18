@@ -39,15 +39,13 @@ export
 
 proc init*(
     T: type AristoDbRef;
-    B: type RdbBackendRef;
     opts: DbOptions;
     baseDb: RocksDbInstanceRef;
       ): Result[T, AristoError] =
-  let
-    be = rocksDbBackend(opts, baseDb)
-    db = AristoDbRef.init(be).valueOr:
-      be.closeFn(eradicate = false)
-      return err(error)
+  let db = rocksDbBackend(opts, baseDb)
+  db.initInstance().isOkOr:
+    db.closeFn(eradicate = false)
+    return err(error)
   ok db
 
 # ------------------------------------------------------------------------------

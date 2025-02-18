@@ -32,12 +32,8 @@ type
     ## Access keys for admin table records. When exposed (e.g. when itereating
     ## over the tables), this data type is to be used.
 
-  GuestDbRef* = ref object of RootRef
-    ## Object returned from `GuestDbFn` (if any)
-    beKind*: BackendType             ## Backend type identifier
-
   TypedBackendRef* = ref TypedBackendObj
-  TypedBackendObj* = object of BackendObj
+  TypedBackendObj* = object of RootObj
     beKind*: BackendType             ## Backend type identifier
     when verifyIxId:
       txGen: uint                    ## Transaction ID generator (for debugging)
@@ -85,29 +81,12 @@ proc finishSession*(hdl: TypedPutHdlRef; db: TypedBackendRef) =
     doAssert db.txId == hdl.txId
     db.txId = 0
 
-proc init*(trg: var TypedBackendObj; src: TypedBackendObj) =
-  desc_backend.init(trg, src)
-  trg.beKind = src.beKind
-  when verifyIxId:
-    trg.txGen = src.txGen
-    trg.txId = src.txId
-
-proc init*(
-    T: type AristoDbRef;
-    backend: BackendRef
-      ): Result[T, AristoError] =
-  let
-    vTop = if backend == nil: VertexID(0) else: ?backend.getTuvFn()
-    db = AristoDbRef(
-      txRef: AristoTxRef(vTop: vTop),
-      backend: backend,
-      accLeaves: LruCache[Hash32, VertexRef].init(ACC_LRU_SIZE),
-      stoLeaves: LruCache[Hash32, VertexRef].init(ACC_LRU_SIZE),
-    )
-
-  db.txRef.db = db # TODO evaluate if this cyclic ref is worth the convenience
-
-  ok(db)
+proc initInstance*(db: AristoDbRef): Result[void, AristoError] =
+  let vTop = ?db.getTuvFn()
+  db.txRef = AristoTxRef(db: db, vTop: vTop)
+  db.accLeaves = LruCache[Hash32, VertexRef].init(ACC_LRU_SIZE)
+  db.stoLeaves = LruCache[Hash32, VertexRef].init(ACC_LRU_SIZE)
+  ok()
 
 proc finish*(db: AristoDbRef; eradicate = false) =
   ## Backend destructor. The argument `eradicate` indicates that a full
@@ -120,8 +99,7 @@ proc finish*(db: AristoDbRef; eradicate = false) =
   ##
   ## This distructor may be used on already *destructed* descriptors.
   ##
-  if not db.backend.isNil:
-    db.backend.closeFn eradicate
+  db.closeFn eradicate
 
 # ------------------------------------------------------------------------------
 # End

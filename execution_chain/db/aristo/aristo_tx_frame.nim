@@ -35,18 +35,13 @@ proc txFrameBegin*(db: AristoDbRef, parent: AristoTxRef): AristoTxRef =
 proc baseTxFrame*(db: AristoDbRef): AristoTxRef=
   db.txRef
 
-proc dispose*(
-    tx: AristoTxRef;
-      ) =
+proc dispose*(tx: AristoTxRef) =
   tx[].reset()
 
-proc checkpoint*(
-    tx: AristoTxRef;
-    blockNumber: uint64;
-      ) =
+proc checkpoint*(tx: AristoTxRef; blockNumber: uint64) =
   tx.blockNumber = Opt.some(blockNumber)
 
-proc txFramePersist*(
+proc persist*(
     db: AristoDbRef;                  # Database
     batch: PutHdlRef;
     txFrame: AristoTxRef;
@@ -55,9 +50,6 @@ proc txFramePersist*(
   if txFrame == db.txRef and txFrame.sTab.len == 0:
     # No changes in frame - no `checkpoint` requirement - nothing to do here
     return
-
-  let be = db.backend
-  doAssert not be.isNil, "Persisting to backend requires ... a backend!"
 
   let lSst = SavedState(
     key:  emptyRoot,                       # placeholder for more
@@ -83,12 +75,12 @@ proc txFramePersist*(
   # Store structural single trie entries
   for rvid, vtx in txFrame.sTab:
     txFrame.kMap.withValue(rvid, key) do:
-      be.putVtxFn(batch, rvid, vtx, key[])
+      db.putVtxFn(batch, rvid, vtx, key[])
     do:
-      be.putVtxFn(batch, rvid, vtx, default(HashKey))
+      db.putVtxFn(batch, rvid, vtx, default(HashKey))
 
-  be.putTuvFn(batch, txFrame.vTop)
-  be.putLstFn(batch, lSst)
+  db.putTuvFn(batch, txFrame.vTop)
+  db.putLstFn(batch, lSst)
 
   # TODO above, we only prepare the changes to the database but don't actually
   #      write them to disk - the code below that updates the frame should

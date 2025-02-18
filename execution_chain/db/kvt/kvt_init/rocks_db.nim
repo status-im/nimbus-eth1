@@ -30,7 +30,6 @@ import
   rocksdb,
   results,
   ../kvt_desc,
-  ../kvt_desc/desc_backend,
   ./init_common,
   ./rocks_db/[rdb_desc, rdb_get, rdb_init, rdb_put, rdb_walk]
 
@@ -150,20 +149,22 @@ proc closeFn(db: RdbBackendRef): CloseFn =
 # Public functions
 # ------------------------------------------------------------------------------
 
-proc rocksDbKvtBackend*(baseDb: RocksDbInstanceRef): BackendRef =
-  let db = RdbBackendRef(beKind: BackendRocksDB)
+proc rocksDbKvtBackend*(baseDb: RocksDbInstanceRef): KvtDbRef =
+  let
+    be = RdbBackendRef(beKind: BackendRocksDB)
+    db = KvtDbRef()
 
   # Initialise RocksDB
-  db.rdb.init(baseDb)
+  be.rdb.init(baseDb)
 
-  db.getKvpFn = getKvpFn db
-  db.lenKvpFn = lenKvpFn db
+  db.getKvpFn = getKvpFn be
+  db.lenKvpFn = lenKvpFn be
 
-  db.putBegFn = putBegFn db
-  db.putKvpFn = putKvpFn db
-  db.putEndFn = putEndFn db
+  db.putBegFn = putBegFn be
+  db.putKvpFn = putKvpFn be
+  db.putEndFn = putEndFn be
 
-  db.closeFn = closeFn db
+  db.closeFn = closeFn be
 
   db
 

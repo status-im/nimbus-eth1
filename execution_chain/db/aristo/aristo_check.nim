@@ -17,8 +17,8 @@ import
   eth/common/hashes,
   results,
   ./aristo_walk/persistent,
-  "."/[aristo_desc, aristo_get, aristo_init/memory_only],
-  ./aristo_check/[check_be, check_top, check_twig]
+  ./aristo_desc,
+  ./aristo_check/[check_top, check_twig]
 
 # ------------------------------------------------------------------------------
 # Public functions
@@ -45,32 +45,6 @@ proc checkTop*(
     ? db.checkTopStrict()
 
   db.checkTopCommon()
-
-
-proc checkBE*(
-    db: AristoDbRef;                   # Database, top layer
-      ): Result[void,(VertexID,AristoError)] =
-  ## Verify database backend structure. If the argument `relax` is set `false`,
-  ## all necessary Merkle hashes are compiled and verified. If the argument
-  ## `cache` is set `true`, the cache is also checked so that a safe operation
-  ## (like `resolveBackendFilter()`) will leave the backend consistent.
-  ##
-  ## The following is verified:
-  ##
-  ## * Each vertex ID on the structural table can be represented as a Merkle
-  ##   patricia Tree node. If `relax` is set `false`, the Merkle hashes are
-  ##   all recompiled and must match.
-  ##
-  ## * The set of free vertex IDa as potentally suppliedby the ID generator
-  ##   state is disjunct to the set of already used vertex IDs on the database.
-  ##   Moreover, the union of both sets is equivalent to the set of positive
-  ##   `uint64` numbers.
-  ##
-  case db.backend.kind:
-  of BackendMemory:
-    return MemBackendRef.checkBE db
-  of BackendRocksDB:
-    return RdbBackendRef.checkBE db
 
 proc check*(
     db: AristoTxRef;                   # Database

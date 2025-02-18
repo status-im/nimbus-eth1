@@ -39,15 +39,10 @@ const
      ## Enabled additional logging noise
 
 type
-  MemDbRef* = ref object
-    ## Database
+  MemBackendRef* = ref object of TypedBackendRef
     sTab*: Table[RootedVertexID,seq[byte]] ## Structural vertex table making up a trie
     tUvi*: Opt[VertexID]                   ## Top used vertex ID
     lSst*: Opt[SavedState]                 ## Last saved state
-
-  MemBackendRef* = ref object of TypedBackendRef
-    ## Inheriting table so access can be extended for debugging purposes
-    mdb: MemDbRef                         ## Database
 
   MemPutHdlRef = ref object of TypedPutHdlRef
     sTab: Table[RootedVertexID,seq[byte]]
@@ -84,7 +79,7 @@ proc getVtxFn(db: MemBackendRef): GetVtxFn =
   result =
     proc(rvid: RootedVertexID, flags: set[GetVtxFlag]): Result[VertexRef,AristoError] =
       # Fetch serialised data record
-      let data = db.mdb.sTab.getOrDefault(rvid, EmptyBlob)
+      let data = db.sTab.getOrDefault(rvid, EmptyBlob)
       if 0 < data.len:
         let rc = data.deblobify(VertexRef)
         when extraTraceMessages:
@@ -96,7 +91,7 @@ proc getVtxFn(db: MemBackendRef): GetVtxFn =
 proc getKeyFn(db: MemBackendRef): GetKeyFn =
   result =
     proc(rvid: RootedVertexID, flags: set[GetVtxFlag]): Result[(HashKey, VertexRef),AristoError] =
-      let data = db.mdb.sTab.getOrDefault(rvid, EmptyBlob)
+      let data = db.sTab.getOrDefault(rvid, EmptyBlob)
       if 0 < data.len:
         let key = data.deblobify(HashKey).valueOr:
           let vtx = data.deblobify(VertexRef).valueOr:
@@ -108,12 +103,12 @@ proc getKeyFn(db: MemBackendRef): GetKeyFn =
 proc getTuvFn(db: MemBackendRef): GetTuvFn =
   result =
     proc(): Result[VertexID,AristoError]=
-      db.mdb.tUvi or ok(VertexID(0))
+      db.tUvi or ok(VertexID(0))
 
 proc getLstFn(db: MemBackendRef): GetLstFn =
   result =
     proc(): Result[SavedState,AristoError]=
-      db.mdb.lSst or err(GetLstNotFound)
+      db.lSst or err(GetLstNotFound)
 
 # -------------
 
@@ -164,16 +159,16 @@ proc putEndFn(db: MemBackendRef): PutEndFn =
 
       for (vid,data) in hdl.sTab.pairs:
         if 0 < data.len:
-          db.mdb.sTab[vid] = data
+          db.sTab[vid] = data
         else:
-          db.mdb.sTab.del vid
+          db.sTab.del vid
 
       let tuv = hdl.tUvi.get(otherwise = VertexID(0))
       if tuv.isValid:
-        db.mdb.tUvi = Opt.some(tuv)
+        db.tUvi = Opt.some(tuv)
 
       if hdl.lSst.isSome:
-        db.mdb.lSst = hdl.lSst
+        db.lSst = hdl.lSst
 
       ok()
 
@@ -188,30 +183,24 @@ proc closeFn(db: MemBackendRef): CloseFn =
 # Public functions
 # ------------------------------------------------------------------------------
 
-proc memoryBackend*(mdb = MemDbRef()): BackendRef =
-  let db = MemBackendRef(
-    beKind: BackendMemory,
-    mdb:    mdb)
+proc memoryBackend*(): AristoDbRef =
+  let 
+    be = MemBackendRef(beKind: BackendMemory)
+    db = AristoDbRef()
 
-  db.getVtxFn = getVtxFn db
-  db.getKeyFn = getKeyFn db
-  db.getTuvFn = getTuvFn db
-  db.getLstFn = getLstFn db
+  db.getVtxFn = getVtxFn be
+  db.getKeyFn = getKeyFn be
+  db.getTuvFn = getTuvFn be
+  db.getLstFn = getLstFn be
 
-  db.putBegFn = putBegFn db
-  db.putVtxFn = putVtxFn db
-  db.putTuvFn = putTuvFn db
-  db.putLstFn = putLstFn db
-  db.putEndFn = putEndFn db
+  db.putBegFn = putBegFn be
+  db.putVtxFn = putVtxFn be
+  db.putTuvFn = putTuvFn be
+  db.putLstFn = putLstFn be
+  db.putEndFn = putEndFn be
 
-  db.closeFn = closeFn db
+  db.closeFn = closeFn be
   db
-
-proc dup*(db: MemBackendRef): MemBackendRef =
-  ## Duplicate descriptor shell as needed for API debugging
-  new result
-  init_common.init(result[], db[])
-  result.mdb = db.mdb
 
 # ------------------------------------------------------------------------------
 # Public iterators (needs direct backend access)
@@ -222,8 +211,8 @@ iterator walkVtx*(
     kinds = {Branch, Leaf};
       ): tuple[rvid: RootedVertexID, vtx: VertexRef] =
   ##  Iteration over the vertex sub-table.
-  for n,rvid in be.mdb.sTab.keys.toSeq.mapIt(it).sorted:
-    let data = be.mdb.sTab.getOrDefault(rvid, EmptyBlob)
+  for n,rvid in be.sTab.keys.toSeq.mapIt(it).sorted:
+    let data = be.sTab.getOrDefault(rvid, EmptyBlob)
     if 0 < data.len:
       let rc = data.deblobify VertexRef
       if rc.isErr:
@@ -237,8 +226,8 @@ iterator walkKey*(
     be: MemBackendRef;
       ): tuple[rvid: RootedVertexID, key: HashKey] =
   ## Iteration over the Markle hash sub-table.
-  for n,rvid in be.mdb.sTab.keys.toSeq.mapIt(it).sorted:
-    let data = be.mdb.sTab.getOrDefault(rvid, EmptyBlob)
+  for n,rvid in be.sTab.keys.toSeq.mapIt(it).sorted:
+    let data = be.sTab.getOrDefault(rvid, EmptyBlob)
     if 0 < data.len:
       let rc = data.deblobify HashKey
       if rc.isNone:

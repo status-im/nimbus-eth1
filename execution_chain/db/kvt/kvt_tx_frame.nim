@@ -16,23 +16,12 @@
 import
   ./[kvt_desc, kvt_layers]
 
-
 # ------------------------------------------------------------------------------
 # Public functions
 # ------------------------------------------------------------------------------
 
 proc txFrameBegin*(db: KvtDbRef, parent: KvtTxRef): KvtTxRef =
   ## Starts a new transaction.
-  ##
-  ## Example:
-  ## ::
-  ##   proc doSomething(db: KvtDbRef) =
-  ##     let tx = db.begin
-  ##     defer: tx.rollback()
-  ##     ... continue using db ...
-  ##     tx.commit()
-  ##
-
   let parent = if parent == nil: db.txRef else: parent
   KvtTxRef(
     db:     db,
@@ -42,19 +31,14 @@ proc txFrameBegin*(db: KvtDbRef, parent: KvtTxRef): KvtTxRef =
 proc baseTxFrame*(db: KvtDbRef): KvtTxRef =
   db.txRef
 
-proc dispose*(
-    tx: KvtTxRef;
-      ) =
+proc dispose*(tx: KvtTxRef) =
   tx[].reset()
 
-proc txFramePersist*(
+proc persist*(
     db: KvtDbRef;
     batch: PutHdlRef;
     txFrame: KvtTxRef;
       ) =
-  let be = db.backend
-  doAssert not be.isNil, "Persisting to backend requires ... a backend!"
-
   if txFrame != db.txRef:
     # Consolidate the changes from the old to the new base going from the
     # bottom of the stack to avoid having to cascade each change through
@@ -72,7 +56,7 @@ proc txFramePersist*(
 
   # Store structural single trie entries
   for k,v in txFrame.sTab:
-    be.putKvpFn(batch, k, v)
+    db.putKvpFn(batch, k, v)
   # TODO above, we only prepare the changes to the database but don't actually
   #      write them to disk - the code below that updates the frame should
   #      really run after things have been written (to maintain sync betweeen

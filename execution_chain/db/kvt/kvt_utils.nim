@@ -15,7 +15,6 @@
 
 import
   results,
-  ./kvt_desc/desc_backend,
   "."/[kvt_desc, kvt_layers]
 
 export results
@@ -31,10 +30,7 @@ proc getBe*(
   ## For the argument `key` return the associated value from the backend
   ## database if available.
   ##
-  let be = db.backend
-  if not be.isNil:
-    return be.getKvpFn key
-  err(GetNotFound)
+  db.getKvpFn key
 
 proc getBeLen*(
     db: KvtDbRef;                     # Database
@@ -43,10 +39,7 @@ proc getBeLen*(
   ## For the argument `key` return the associated value from the backend
   ## database if available.
   ##
-  let be = db.backend
-  if not be.isNil:
-    return be.lenKvpFn key
-  err(GetNotFound)
+  db.lenKvpFn key
 
 
 # ------------

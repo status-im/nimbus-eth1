@@ -19,15 +19,10 @@
 {.push raises: [].}
 
 import
-  rocksdb,
-  results,
-  ../../aristo,
-  ../../opts,
   ../kvt_desc,
   "."/[rocks_db, memory_only]
 
 export
-  RdbBackendRef,
   memory_only,
   kvt_desc
 
@@ -37,16 +32,13 @@ export
 
 proc init*(
     T: type KvtDbRef;
-    B: type RdbBackendRef;
     baseDb: RocksDbInstanceRef;
-      ): Result[KvtDbRef,KvtError] =
+      ): T =
   ## Generic constructor for `RocksDb` backend
   ##
-  let db = KvtDbRef(
-    txRef: KvtTxRef(),
-    backend: rocksDbKvtBackend(baseDb))
-  db.txRef.db = db
-  ok db
+  let db = rocksDbKvtBackend(baseDb)
+  db.txRef = KvtTxRef(db: db)
+  db
 
 # ------------------------------------------------------------------------------
 # End

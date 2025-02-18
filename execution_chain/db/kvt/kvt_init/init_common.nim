@@ -11,8 +11,7 @@
 {.push raises: [].}
 
 import
-  ../kvt_desc,
-  ../kvt_desc/desc_backend
+  ../kvt_desc
 
 const
   verifyIxId = true # and false
@@ -24,7 +23,7 @@ type
     BackendRocksDB                   ## Same as Aristo
 
   TypedBackendRef* = ref TypedBackendObj
-  TypedBackendObj* = object of BackendObj
+  TypedBackendObj* = object of RootObj
     beKind*: BackendType             ## Backend type identifier
     when verifyIxId:
       txGen: uint                    ## Transaction ID generator (for debugging)
@@ -57,13 +56,6 @@ proc finishSession*(hdl: TypedPutHdlRef; db: TypedBackendRef) =
   when verifyIxId:
     doAssert db.txId == hdl.txId
     db.txId = 0
-
-proc init*(trg: var TypedBackendObj; src: TypedBackendObj) =
-  desc_backend.init(trg, src)
-  trg.beKind = src.beKind
-  when verifyIxId:
-    trg.txGen = src.txGen
-    trg.txId = src.txId
 
 # ------------------------------------------------------------------------------
 # End

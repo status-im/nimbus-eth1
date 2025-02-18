@@ -82,38 +82,6 @@ type
       ## passed `false` the outcome might differ depending on the type of
       ## backend (e.g. in-memory backends will always eradicate on close.)
 
-  # -------------
-
-  BackendRef* = ref BackendObj
-  BackendObj* = object of RootObj
-    ## Backend interface.
-    getVtxFn*: GetVtxFn              ## Read vertex record
-    getKeyFn*: GetKeyFn              ## Read Merkle hash/key
-    getTuvFn*: GetTuvFn              ## Read top used vertex ID
-    getLstFn*: GetLstFn              ## Read saved state
-
-    putBegFn*: PutBegFn              ## Start bulk store session
-    putVtxFn*: PutVtxFn              ## Bulk store vertex records
-    putTuvFn*: PutTuvFn              ## Store top used vertex ID
-    putLstFn*: PutLstFn              ## Store saved state
-    putEndFn*: PutEndFn              ## Commit bulk store session
-
-    closeFn*: CloseFn                ## Generic destructor
-
-proc init*(trg: var BackendObj; src: BackendObj) =
-  trg.getVtxFn = src.getVtxFn
-  trg.getKeyFn = src.getKeyFn
-  trg.getTuvFn = src.getTuvFn
-  trg.getLstFn = src.getLstFn
-
-  trg.putBegFn = src.putBegFn
-  trg.putVtxFn = src.putVtxFn
-  trg.putTuvFn = src.putTuvFn
-  trg.putLstFn = src.putLstFn
-  trg.putEndFn = src.putEndFn
-
-  trg.closeFn = src.closeFn
-
 # ------------------------------------------------------------------------------
 # End
 # ------------------------------------------------------------------------------
