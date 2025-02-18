@@ -38,7 +38,7 @@ proc rpcCallEvm*(args: TransactionArgs,
     baseFeePerGas: Opt.none UInt256, ## ???
   )
 
-  let txFrame = parentFrame.ctx.txFrameBegin(parentFrame)
+  let txFrame = parentFrame.txFrameBegin()
   defer: txFrame.dispose() # always dispose state changes
 
   let vmState = BaseVMState.new(header, topHeader, com, txFrame)
@@ -67,7 +67,7 @@ proc rpcEstimateGas*(args: TransactionArgs,
     baseFeePerGas: Opt.none UInt256,   ## ???
   )
 
-  let txFrame = parentFrame.ctx.txFrameBegin(parentFrame)
+  let txFrame = parentFrame.txFrameBegin()
   defer: txFrame.dispose() # always dispose state changes
 
   let vmState = BaseVMState.new(header, topHeader, com, txFrame)

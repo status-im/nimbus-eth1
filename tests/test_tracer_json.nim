@@ -10,13 +10,12 @@
 
 import
   std/[json, os, tables, strutils],
-  stew/byteutils,
   chronicles,
   unittest2,
   results,
   ./test_helpers,
   ../execution_chain/db/aristo,
-  ../execution_chain/db/aristo/[aristo_desc, aristo_part],
+  ../execution_chain/db/aristo/[aristo_desc],
   ../execution_chain/db/aristo/aristo_part/part_debug,
   ../execution_chain/db/kvt/kvt_utils,
   ../execution_chain/[tracer, evm/types],

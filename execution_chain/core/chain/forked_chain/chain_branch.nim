@@ -103,6 +103,9 @@ func header*(loc: BlockPos): Header =
 func blk*(loc: BlockPos): Block =
   loc.branch.blocks[loc.index].blk
 
+func receipts*(loc: BlockPos): seq[Receipt] =
+  loc.branch.blocks[loc.index].receipts
+
 func number*(loc: BlockPos): BlockNumber =
   loc.branch.blocks[loc.index].blk.header.number
 

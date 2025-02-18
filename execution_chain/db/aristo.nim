@@ -14,9 +14,9 @@
 {.push raises: [].}
 
 import
-  aristo/[aristo_api, aristo_constants]
+  aristo/aristo_constants
 export
-  aristo_api, aristo_constants
+  aristo_constants
 
 import
   aristo/aristo_init/memory_only,

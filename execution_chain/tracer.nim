@@ -26,16 +26,10 @@ import
   ./transaction,
   ./utils/utils
 
-when not CoreDbEnableCaptJournal:
-  {.error: "Compiler flag missing for tracer, try -d:dbjapi_enabled".}
-
 type
   CaptCtxRef = ref object
     db: CoreDbRef               # not `nil`
     root: common.Hash32
-    ctx: CoreDbCtxRef           # not `nil`
-    cpt: CoreDbCaptRef          # not `nil`
-    restore: CoreDbCtxRef       # `nil` unless `ctx` activated
 
 const
   senderName = "sender"
@@ -44,7 +38,6 @@ const
   uncleName = "uncle"
   internalTxName = "internalTx"
 
-proc dumpMemoryDB*(node: JsonNode, cpt: CoreDbCaptRef) {.gcsafe.}
 proc toJson*(receipts: seq[Receipt]): JsonNode {.gcsafe.}
 
 # ------------------------------------------------------------------------------
@@ -56,16 +49,7 @@ proc init(
     com: CommonRef;
     root: common.Hash32;
       ): T =
-  let ctx = block:
-    when false:
-      let rc = com.db.ctx.newCtxByKey(root)
-      if rc.isErr:
-        raiseAssert "newCptCtx: " & $$rc.error
-      rc.value
-    else:
-      {.warning: "TODO make a temporary context? newCtxByKey has been obsoleted".}
-      com.db.ctx
-  T(db: com.db, root: root, cpt: com.db.pushCapture(), ctx: ctx)
+  T(db: com.db, root: root)
 
 proc init(
     T: type CaptCtxRef;
@@ -74,24 +58,6 @@ proc init(
       ): T =
   let header = com.db.baseTxFrame().getBlockHeader(topHeader.parentHash).expect("top header parent exists")
   T.init(com, header.stateRoot)
-
-proc activate(cc: CaptCtxRef): CaptCtxRef {.discardable.} =
-  ## Install/activate new context `cc.ctx`, old one in `cc.restore`
-  doAssert not cc.isNil
-  doAssert cc.restore.isNil # otherwise activated, already
-  if true:
-    raiseAssert "TODO activte context"
-  # cc.restore = cc.ctx.swapCtx cc.db
-  cc
-
-proc release(cc: CaptCtxRef) =
-  # if not cc.restore.isNil:             # switch to original context (if any)
-  #   let ctx = cc.restore.swapCtx(cc.db)
-  #   doAssert ctx == cc.ctx
-  if true:
-    raiseAssert "TODO release context"
-  # cc.ctx.forget()                      # dispose
-  cc.cpt.pop()                         # discard top layer of actions tracer
 
 # -------------------
 
@@ -167,14 +133,12 @@ proc traceTransactionImpl(
 
   let
     tracerInst = newLegacyTracer(tracerFlags)
-    cc = activate CaptCtxRef.init(com, header)
+    cc = CaptCtxRef.init(com, header)
     txFrame = com.db.baseTxFrame()
     parent = txFrame.getBlockHeader(header.parentHash).valueOr:
       return newJNull()
     vmState = BaseVMState.new(parent, header, com, txFrame, storeSlotHash = true)
     ledger = vmState.ledger
-
-  defer: cc.release()
 
   doAssert(transactions.calcTxRoot == header.txRoot)
   doAssert(transactions.len != 0)
@@ -216,9 +180,8 @@ proc traceTransactionImpl(
 
   # internal transactions:
   let
-    cx = activate stateCtx
+    cx = stateCtx
     ldgBefore = LedgerRef.init(com.db.baseTxFrame(), storeSlotHash = true)
-  defer: cx.release()
 
   for idx, acc in tracedAccountsPairs(tracerInst):
     before.captureAccount(ldgBefore, acc, internalTxName & $idx)
@@ -232,20 +195,14 @@ proc traceTransactionImpl(
   if TracerFlags.DisableStateDiff notin tracerFlags:
     result["stateDiff"] = stateDiff
 
-  # now we dump captured state db
-  if TracerFlags.DisableState notin tracerFlags:
-    result.dumpMemoryDB(cx.cpt)
-
-
 proc dumpBlockStateImpl(
     com: CommonRef;
     blk: EthBlock;
-    dumpState = false;
       ): JsonNode =
   template header: Header = blk.header
 
   let
-    cc = activate CaptCtxRef.init(com, header)
+    cc = CaptCtxRef.init(com, header)
 
     # only need a stack dump when scanning for internal transaction address
     captureFlags = {DisableMemory, DisableStorage, EnableAccount}
@@ -255,8 +212,6 @@ proc dumpBlockStateImpl(
       return newJNull()
     vmState = BaseVMState.new(parent, header, com, txFrame, tracerInst, storeSlotHash = true)
     miner = vmState.coinbase()
-
-  defer: cc.release()
 
   var
     before = newJArray()
@@ -301,10 +256,6 @@ proc dumpBlockStateImpl(
 
   result = %{"before": before, "after": after}
 
-  if dumpState:
-    result.dumpMemoryDB(cc.cpt)
-
-
 proc traceBlockImpl(
     com: CommonRef;
     blk: EthBlock;
@@ -313,15 +264,13 @@ proc traceBlockImpl(
   template header: Header = blk.header
 
   let
-    cc = activate CaptCtxRef.init(com, header)
+    cc = CaptCtxRef.init(com, header)
     tracerInst = newLegacyTracer(tracerFlags)
     # Tracer needs a database where the reverse slot hash table has been set up
     txFrame = com.db.baseTxFrame()
     parent = txFrame.getBlockHeader(header.parentHash).valueOr:
       return newJNull()
     vmState = BaseVMState.new(parent, header, com, txFrame, tracerInst, storeSlotHash = true)
-
-  defer: cc.release()
 
   if header.txRoot == EMPTY_ROOT_HASH: return newJNull()
   doAssert(blk.transactions.calcTxRoot == header.txRoot)
@@ -338,9 +287,6 @@ proc traceBlockImpl(
 
   result = tracerInst.getTracingResult()
   result["gas"] = %gasUsed
-
-  if TracerFlags.DisableState notin tracerFlags:
-    result.dumpMemoryDB(cc.cpt)
 
 proc traceTransactionsImpl(
     com: CommonRef;
@@ -368,12 +314,6 @@ proc toJson*(receipts: seq[Receipt]): JsonNode =
   for receipt in receipts:
     result.add receipt.toJson
 
-proc dumpMemoryDB*(node: JsonNode, cpt: CoreDbCaptRef) =
-  var n = newJObject()
-  for (k,v) in cpt.kvtLog:
-    n[k.toHex(false)] = %v
-  node["state"] = n
-
 proc dumpReceipts*(chainDB: CoreDbTxRef, header: Header): JsonNode =
   chainDB.dumpReceiptsImpl header
 
@@ -389,9 +329,8 @@ proc traceTransaction*(
 proc dumpBlockState*(
     com: CommonRef;
     blk: EthBlock;
-    dumpState = false;
       ): JsonNode =
-  com.dumpBlockStateImpl(blk, dumpState)
+  com.dumpBlockStateImpl(blk)
 
 proc traceTransactions*(
     com: CommonRef;

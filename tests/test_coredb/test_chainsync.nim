@@ -19,19 +19,6 @@ import
   ../replay/[pp, undump_blocks, undump_blocks_era1, xcheck],
   ./test_helpers
 
-when CoreDbEnableProfiling:
-  import
-    std/sequtils
-
-when CoreDbEnableProfiling:
-  import
-    ../../execution_chain/db/aristo/[aristo_api, aristo_profile],
-    ../../execution_chain/db/kvt/kvt_api
-  var
-    aristoProfData: AristoDbProfListRef
-    kvtProfData: KvtDbProfListRef
-    cdbProfData: CoreDbProfListRef
-
 const
   EnableExtraLoggingControl = true
 var
@@ -63,16 +50,10 @@ template initLogging(noisy: bool, com: CommonRef) =
       debug "start undumping into persistent blocks"
     logStartTime = Time()
     setErrorLevel()
-    when CoreDbEnableApiTracking:
-      logSavedEnv = (com.db.trackCoreDbApi, com.db.trackLedgerApi)
-      com.db.trackCoreDbApi = true
-      com.db.trackLedgerApi = true
 
 proc finishLogging(com: CommonRef) =
   when EnableExtraLoggingControl:
     setErrorLevel()
-    when CoreDbEnableApiTracking:
-      (com.db.trackCoreDbApi, com.db.trackLedgerApi) = logSavedEnv
 
 
 template startLogging(noisy: bool; num: BlockNumber) =
@@ -118,19 +99,6 @@ proc test_chainSyncProfilingPrint*(
       else: ""
     discard info
     var blurb: seq[string]
-    when CoreDbEnableProfiling:
-      blurb.add cdbProfData.profilingPrinter(
-        names = CoreDbFnInx.toSeq.mapIt($it),
-        header = "CoreDb profiling results" & info,
-        indent)
-      blurb.add aristoProfData.profilingPrinter(
-        names = AristoApiProfNames.toSeq.mapIt($it),
-        header = "Aristo backend profiling results" & info,
-        indent)
-      blurb.add kvtProfData.profilingPrinter(
-        names = KvtApiProfNames.toSeq.mapIt($it),
-        header = "Kvt backend profiling results" & info,
-        indent)
     for s in blurb:
       if 0 < s.len: true.say "***", s, "\n"
 
@@ -172,14 +140,6 @@ proc test_chainSync*(
     else:
       noisy.say "***", "stop: sample exhausted"
       return true
-
-  # Profile variables will be non-nil if profiling is available. The profiling
-  # API data need to be captured so it will be available after the services
-  # have terminated.
-  when CoreDbEnableProfiling:
-    aristoProfData = com.db.ariApi.AristoApiProfRef.data
-    kvtProfData = com.db.kvtApi.KvtApiProfRef.data
-    cdbProfData = com.db.profTab
 
   # This will enable printing the `era1` covered block ranges (if any)
   undump_blocks_era1.noisy = noisy
@@ -226,9 +186,6 @@ proc test_chainSync*(
           if noisy:
             noisy.whisper "***", "Re-run with logging enabled...\n"
             setTraceLevel()
-            when CoreDbEnableApiTracking:
-              com.db.trackCoreDbApi = false
-              com.db.trackLedgerApi = false
             discard chain.persistBlocks(w)
       blocks += w.len
       continue

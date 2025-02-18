@@ -14,9 +14,9 @@
 {.push raises: [].}
 
 import
-  kvt/[kvt_api, kvt_constants]
+  kvt/kvt_constants
 export
-  kvt_api, kvt_constants
+  kvt_constants
 
 import
   kvt/kvt_init/memory_only
@@ -28,7 +28,6 @@ export
 import
   kvt/kvt_desc
 export
-  KvtDbAction,
   KvtDbRef,
   KvtError,
   KvtTxRef,

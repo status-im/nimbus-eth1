@@ -45,8 +45,6 @@ type
     xMap*: Table[seq[byte],uint64]    ## For pretty printing
     pAmx*: Table[uint64,seq[byte]]    ## For pretty printing
 
-  KvtDbAction* = proc(db: KvtDbRef) {.gcsafe, raises: [].}
-    ## Generic call back function/closure.
 
 # ------------------------------------------------------------------------------
 # Public helpers

@@ -90,7 +90,7 @@ proc toGenesisHeader*(
   ## Generate the genesis block header from the `genesis` and `config`
   ## argument value.
   let
-    db  = if db.isNil: AristoDbMemory.newCoreDbRef().ctx.txFrameBegin(nil) else: db
+    db  = if db.isNil: AristoDbMemory.newCoreDbRef().txFrameBegin() else: db
   toGenesisHeader(genesis, db, fork)
 
 proc toGenesisHeader*(
