@@ -73,8 +73,7 @@ type
     accLeaves*: Table[Hash32, VertexRef]   ## Account path -> VertexRef
     stoLeaves*: Table[Hash32, VertexRef]   ## Storage path -> VertexRef
 
-    cTop*: VertexID                        ## Last committed vertex ID
-    blockNumber*: Opt[uint64]              ## Block number set when freezing the frame
+    blockNumber*: Opt[uint64]              ## Block number set when checkpointing the frame
 
   AristoDbRef* = ref object
     ## Three tier database object supporting distributed instances.
@@ -202,6 +201,7 @@ iterator rstack*(tx: AristoTxRef): (AristoTxRef, int) =
     let level = if tx.parent == nil: -1 else: i
     yield (tx, level)
     tx = tx.parent
+    i += 1
 
 proc deltaAtLevel*(db: AristoTxRef, level: int): AristoTxRef =
   if level == -2:

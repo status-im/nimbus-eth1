@@ -126,6 +126,11 @@ const
   ## value in milliseconds
   initialLookups = 1 ## Amount of lookups done when populating the routing table
 
+  ## Ban durations for banned nodes in the routing table
+  NodeBanDurationInvalidResponse = 30.minutes
+  NodeBanDurationContentLookupFailedValidation* = 60.minutes
+  NodeBanDurationOfferFailedValidation* = 60.minutes
+
 type
   ToContentIdHandler* =
     proc(contentKey: ContentKeyByteList): results.Opt[ContentId] {.raises: [], gcsafe.}
@@ -285,6 +290,13 @@ func getProtocolId*(
     of PortalSubnetwork.transactionGossip:
       [portalPrefix, 0x4F]
 
+proc banNode*(p: PortalProtocol, nodeId: NodeId, period: chronos.Duration) =
+  if not p.config.disableBanNodes:
+    p.routingTable.banNode(nodeId, period)
+
+proc isBanned*(p: PortalProtocol, nodeId: NodeId): bool =
+  p.config.disableBanNodes == false and p.routingTable.isBanned(nodeId)
+
 func `$`(id: PortalProtocolId): string =
   id.toHex()
 
@@ -300,8 +312,10 @@ func getNode*(p: PortalProtocol, id: NodeId): Opt[Node] =
 func localNode*(p: PortalProtocol): Node =
   p.baseProtocol.localNode
 
-func neighbours*(p: PortalProtocol, id: NodeId, seenOnly = false): seq[Node] =
-  p.routingTable.neighbours(id = id, seenOnly = seenOnly)
+template neighbours*(
+    p: PortalProtocol, id: NodeId, k: int = BUCKET_SIZE, seenOnly = false
+): seq[Node] =
+  p.routingTable.neighbours(id, k, seenOnly)
 
 func distance(p: PortalProtocol, a, b: NodeId): UInt256 =
   p.routingTable.distance(a, b)
@@ -480,7 +494,7 @@ proc handleFindContent(
   # Node does not have the content, or content is not even in radius,
   # send closest neighbours to the requested content id.
   let
-    closestNodes = p.routingTable.neighbours(NodeId(contentId), seenOnly = true)
+    closestNodes = p.neighbours(NodeId(contentId), seenOnly = true)
     enrs = truncateEnrs(closestNodes, maxPayloadSize, enrOverhead)
   portal_content_enrs_packed.observe(enrs.len().int64, labelValues = [$p.protocolId])
 
@@ -556,6 +570,12 @@ proc messageHandler(
     protocolId = p.protocolId
 
   let p = PortalProtocol(protocol)
+
+  if p.isBanned(srcId):
+    # The sender of the message is in the temporary node ban list
+    # so we don't process the message
+    debug "Dropping message from banned node", srcId, srcUdpAddress
+    return @[] # Reply with an empty response message
 
   let decoded = decodeMessage(request)
   if decoded.isOk():
@@ -661,7 +681,7 @@ proc reqResponse[Request: SomeMessage, Response: SomeMessage](
     labelValues = [$p.protocolId, $messageKind(Request)]
   )
 
-  let talkresp =
+  let talkResp =
     await talkReq(p.baseProtocol, dst, @(p.protocolId), encodeMessage(request))
 
   # Note: Failure of `decodeMessage` might also simply mean that the peer is
@@ -669,7 +689,7 @@ proc reqResponse[Request: SomeMessage, Response: SomeMessage](
   # an empty response needs to be send in that case.
   # See: https://github.com/ethereum/devp2p/blob/master/discv5/discv5-wire.md#talkreq-request-0x05
 
-  let messageResponse = talkresp
+  let messageResponse = talkResp
     .mapErr(
       proc(x: cstring): string =
         $x
@@ -680,7 +700,11 @@ proc reqResponse[Request: SomeMessage, Response: SomeMessage](
     )
     .flatMap(
       proc(m: Message): Result[Response, string] =
-        getInnerMessage[Response](m)
+        let r = getInnerMessage[Response](m)
+        # Ban nodes that that send wrong type of response message
+        if r.isErr():
+          p.banNode(dst.id, NodeBanDurationInvalidResponse)
+        return r
     )
 
   if messageResponse.isOk():
@@ -758,6 +782,9 @@ proc ping*(
 ): Future[PortalResult[(uint64, CapabilitiesPayload)]] {.
     async: (raises: [CancelledError])
 .} =
+  if p.isBanned(dst.id):
+    return err("destination node is banned")
+
   let pong = ?(await p.pingImpl(dst))
 
   # Update last time we pinged this node
@@ -778,11 +805,18 @@ proc ping*(
 proc findNodes*(
     p: PortalProtocol, dst: Node, distances: seq[uint16]
 ): Future[PortalResult[seq[Node]]] {.async: (raises: [CancelledError]).} =
+  if p.isBanned(dst.id):
+    return err("destination node is banned")
+
   let response = ?(await p.findNodesImpl(dst, List[uint16, 256](distances)))
 
   let records = ?recordsFromBytes(response.enrs)
   # TODO: distance function is wrong here for state, fix + tests
-  ok(verifyNodesRecords(records, dst, enrsResultLimit, distances))
+  ok(
+    verifyNodesRecords(records, dst, enrsResultLimit, distances).filterIt(
+      not p.isBanned(it.id)
+    )
+  )
 
 proc findContent*(
     p: PortalProtocol, dst: Node, contentKey: ContentKeyByteList
@@ -790,6 +824,9 @@ proc findContent*(
   logScope:
     node = dst
     contentKey
+
+  if p.isBanned(dst.id):
+    return err("destination node is banned")
 
   let response = ?(await p.findContentImpl(dst, contentKey))
 
@@ -855,7 +892,11 @@ proc findContent*(
     let records = ?recordsFromBytes(response.enrs)
     let verifiedNodes = verifyNodesRecords(records, dst, enrsResultLimit)
 
-    ok(FoundContent(src: dst, kind: Nodes, nodes: verifiedNodes))
+    ok(
+      FoundContent(
+        src: dst, kind: Nodes, nodes: verifiedNodes.filterIt(not p.isBanned(it.id))
+      )
+    )
 
 proc getContentKeys(o: OfferRequest): ContentKeysList =
   case o.kind
@@ -914,6 +955,9 @@ proc offer(
   portal_content_keys_offered.observe(
     contentKeys.len().int64, labelValues = [$p.protocolId]
   )
+
+  if p.isBanned(o.dst.id):
+    return err("destination node is banned")
 
   let response = ?(await p.offerImpl(o.dst, contentKeys))
 
@@ -1061,7 +1105,7 @@ proc lookup*(
   ## target. Maximum value for n is `BUCKET_SIZE`.
   # `closestNodes` holds the k closest nodes to target found, sorted by distance
   # Unvalidated nodes are used for requests as a form of validation.
-  var closestNodes = p.routingTable.neighbours(target, BUCKET_SIZE, seenOnly = false)
+  var closestNodes = p.neighbours(target, BUCKET_SIZE, seenOnly = false)
 
   var asked, seen = HashSet[NodeId]()
   asked.incl(p.localNode.id) # No need to ask our own node
@@ -1163,7 +1207,7 @@ proc contentLookup*(
   ## target.
   # `closestNodes` holds the k closest nodes to target found, sorted by distance
   # Unvalidated nodes are used for requests as a form of validation.
-  var closestNodes = p.routingTable.neighbours(targetId, BUCKET_SIZE, seenOnly = false)
+  var closestNodes = p.neighbours(targetId, BUCKET_SIZE, seenOnly = false)
 
   # Shuffling the order of the nodes in order to not always hit the same node
   # first for the same request.
@@ -1290,7 +1334,7 @@ proc traceContentLookup*(
   # Need to use a system clock and not the mono clock for this.
   let startedAtMs = int64(times.epochTime() * 1000)
 
-  var closestNodes = p.routingTable.neighbours(targetId, BUCKET_SIZE, seenOnly = false)
+  var closestNodes = p.neighbours(targetId, BUCKET_SIZE, seenOnly = false)
   # Shuffling the order of the nodes in order to not always hit the same node
   # first for the same request.
   p.baseProtocol.rng[].shuffle(closestNodes)
@@ -1488,7 +1532,7 @@ proc query*(
   ## This will take k nodes from the routing table closest to target and
   ## query them for nodes closest to target. If there are less than k nodes in
   ## the routing table, nodes returned by the first queries will be used.
-  var queryBuffer = p.routingTable.neighbours(target, k, seenOnly = false)
+  var queryBuffer = p.neighbours(target, k, seenOnly = false)
 
   var asked, seen = HashSet[NodeId]()
   asked.incl(p.localNode.id) # No need to ask our own node
@@ -1579,7 +1623,7 @@ proc neighborhoodGossip*(
   # It might still cause issues in data getting propagated in a wider id range.
 
   var closestLocalNodes =
-    p.routingTable.neighbours(NodeId(contentId), k = 16, seenOnly = true)
+    p.routingTable.neighbours(NodeId(contentId), BUCKET_SIZE, seenOnly = true)
 
   # Shuffling the order of the nodes in order to not always hit the same node
   # first for the same request.
@@ -1787,6 +1831,9 @@ proc refreshLoop(p: PortalProtocol) {.async: (raises: []).} =
         trace "Discovered nodes in random target query", nodes = randomQuery.len
         debug "Total nodes in routing table", total = p.routingTable.len()
 
+      # Remove the expired bans from routing table to limit memory usage
+      p.routingTable.cleanupExpiredBans()
+
       await sleepAsync(refreshInterval)
   except CancelledError:
     trace "refreshLoop canceled"
@@ -1838,6 +1885,12 @@ proc resolve*(
   ## the node on the network.
   if id == p.localNode.id:
     return Opt.some(p.localNode)
+
+  # No point in trying to resolve a banned node because it won't exist in the
+  # routing table and it will be filtered out of any respones in the lookup call
+  if p.isBanned(id):
+    debug "Not resolving banned node", nodeId = id
+    return Opt.none(Node)
 
   let node = p.getNode(id)
   if node.isSome():

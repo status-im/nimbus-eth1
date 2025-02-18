@@ -221,13 +221,6 @@ proc getScore*(
     warn info, data = data.toHex(), error=exc.msg
     Opt.none(UInt256)
 
-proc setScore*(db: CoreDbTxRef; blockHash: Hash32, score: UInt256) =
-  ## for testing purpose
-  let scoreKey = blockHashToScoreKey blockHash
-  db.put(scoreKey.toOpenArray, rlp.encode(score)).isOkOr:
-    warn "setScore()", scoreKey, error=($$error)
-    return
-
 proc headTotalDifficulty*(
     db: CoreDbTxRef;
       ): UInt256 =
