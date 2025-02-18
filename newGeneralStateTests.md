@@ -2533,8 +2533,8 @@ OK: 13/13 Fail: 0/13 Skip: 0/13
 + callValue.json                                                  OK
 + callcodeTo0.json                                                OK
 + callcodeToNameRegistrator0.json                                 OK
-+ callcodeToNameRegistratorAddresTooBigLeft.json                  OK
-+ callcodeToNameRegistratorAddresTooBigRight.json                 OK
++ callcodeToNameRegistratorAddressTooBigLeft.json                  OK
++ callcodeToNameRegistratorAddressTooBigRight.json                 OK
 + callcodeToNameRegistratorZeroMemExpanion.json                   OK
 + callcodeToReturn1.json                                          OK
 + callerAccountBalance.json                                       OK
@@ -2558,8 +2558,8 @@ OK: 13/13 Fail: 0/13 Skip: 0/13
 + return2.json                                                    OK
 + suicideAddress.json                                             OK
 + suicideCaller.json                                              OK
-+ suicideCallerAddresTooBigLeft.json                              OK
-+ suicideCallerAddresTooBigRight.json                             OK
++ suicideCallerAddressTooBigLeft.json                              OK
++ suicideCallerAddressTooBigRight.json                             OK
 + suicideNotExistingAccount.json                                  OK
 + suicideOrigin.json                                              OK
 + suicideSendEtherPostDeath.json                                  OK
@@ -2612,7 +2612,7 @@ OK: 24/26 Fail: 0/26 Skip: 2/26
 + InternalCallHittingGasLimit2.json                               OK
 + InternalCallHittingGasLimitSuccess.json                         OK
 + InternlCallStoreClearsOOG.json                                  OK
-+ InternlCallStoreClearsSucces.json                               OK
++ InternlCallStoreClearsSuccess.json                              OK
 + NoSrcAccount.json                                               OK
 + NoSrcAccount1559.json                                           OK
 + NoSrcAccountCreate.json                                         OK
