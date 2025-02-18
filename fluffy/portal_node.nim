@@ -50,7 +50,7 @@ type
     stateNetwork*: Opt[StateNetwork]
     beaconLightClient*: Opt[LightClient]
     statusLogLoop: Future[void]
-    portalEvm*: Opt[PortalEvmRef]
+    portalEvm*: Opt[PortalEvm]
 
 # Beacon light client application callbacks triggered when new finalized header
 # or optimistic header is available.
@@ -192,7 +192,7 @@ proc new*(
     historyNetwork: historyNetwork,
     stateNetwork: stateNetwork,
     beaconLightClient: beaconLightClient,
-    portalEvm: Opt.some(PortalEvmRef.init())
+    portalEvm: Opt.some(PortalEvm.init()),
   )
 
 proc statusLogLoop(n: PortalNode) {.async: (raises: []).} =

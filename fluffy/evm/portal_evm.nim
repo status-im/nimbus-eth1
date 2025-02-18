@@ -48,22 +48,22 @@ type
     codeAddress*: Opt[Address]
     code*: Opt[seq[byte]]
 
-  PortalEvmRef* = ref object
+  PortalEvm* = ref object
     vmPtr: ptr evmc_vm
     revision: evmc_revision
     config: ChainConfig
-    state: PortalEvmStateRef
+    state: PortalEvmState
     header: Header
     transaction: Transaction
     sender: Address
 
   PortalEvmHost = object
-    evm: PortalEvmRef
+    evm: PortalEvm
     hostInterface: evmc_host_interface
 
 func hostInterface(): evmc_host_interface
 
-func init(T: type PortalEvmHost, evm: PortalEvmRef): T =
+func init(T: type PortalEvmHost, evm: PortalEvm): T =
   PortalEvmHost(evm: evm, hostInterface: hostInterface())
 
 template toEvmc(host: PortalEvmHost): evmc_host_context =
@@ -112,35 +112,35 @@ func toEvmc(msg: PortalEvmMessage): evmc_message =
     code_size: msg.code.lenIfPresent(),
   )
 
-func init*(T: type PortalEvmRef): T =
-  PortalEvmRef(
+func init*(T: type PortalEvm): T =
+  PortalEvm(
     vmPtr: loadEvmcVM(),
     revision: EVMC_LATEST_STABLE_REVISION,
     config: chainConfigForNetwork(MainNet),
   )
 
-func getRevision(evm: PortalEvmRef): evmc_revision =
+func getRevision(evm: PortalEvm): evmc_revision =
   let
     forkTable = evm.config.toForkTransitionTable()
     fork = forkTable.toHardFork(forkDeterminationInfo(evm.header))
   ToEVMFork[fork]
 
-proc setExecutionContext*(evm: PortalEvmRef, state: PortalEvmStateRef, header: Header) =
+proc setExecutionContext*(evm: PortalEvm, state: PortalEvmState, header: Header) =
   evm.state = state
   evm.header = header
   evm.revision = evm.getRevision()
 
-func abiVersion*(evm: PortalEvmRef): int =
+func abiVersion*(evm: PortalEvm): int =
   evm.vmPtr.abi_version.int
 
-func name*(evm: PortalEvmRef): string =
+func name*(evm: PortalEvm): string =
   $evm.vmPtr.name
 
-func version*(evm: PortalEvmRef): string =
+func version*(evm: PortalEvm): string =
   $evm.vmPtr.version
 
 proc execute(
-    evm: PortalEvmRef, message: PortalEvmMessage, code: Opt[seq[byte]]
+    evm: PortalEvm, message: PortalEvmMessage, code: Opt[seq[byte]]
 ): Result[seq[byte], string] =
   let host = PortalEvmHost.init(evm)
 
@@ -170,36 +170,49 @@ proc execute(
 
   return res
 
-proc call*(evm: PortalEvmRef,
+proc call*(
+    evm: PortalEvm,
     fromAddr = Opt.none(Address),
     toAddr: Address,
     gas = Opt.none(uint64),
     gasPrice = Opt.none(uint64),
     value = Opt.none(UInt256),
-    input = Opt.none(seq[byte])): Result[seq[byte], string] =
-
+    input = Opt.none(seq[byte]),
+): Result[seq[byte], string] =
   let
     code = evm.state.getCode(toAddr)
     message = PortalEvmMessage(
       kind: PortalEvmMessageKind.CALL,
       # staticCall: true,
       # depth: 0,
-      sender: if fromAddr.isSome(): fromAddr.get() else: default(Address),
+      sender:
+        if fromAddr.isSome():
+          fromAddr.get()
+        else:
+          default(Address),
       recipient: toAddr,
-      gas: if gas.isSome(): gas.get().int64 else: 550_000_000,
+      gas:
+        if gas.isSome():
+          gas.get().int64
+        else:
+          550_000_000,
       inputData: input,
-      value: if value.isSome(): value.get() else: 0.u256(),
-      #create2Salt: Bytes32
-      #codeAddress: toAddr.toEvmc(),
-      #code: Opt[seq[byte]]
+      value:
+        if value.isSome():
+          value.get()
+        else:
+          0.u256(),
+        #create2Salt: Bytes32
+        #codeAddress: toAddr.toEvmc(),
+        #code: Opt[seq[byte]]
     )
 
   return evm.execute(message, Opt.some(code))
 
-template isClosed*(evm: PortalEvmRef): bool =
+template isClosed*(evm: PortalEvm): bool =
   evm.vmPtr.isNil()
 
-proc close*(evm: PortalEvmRef) =
+proc close*(evm: PortalEvm) =
   if not evm.isClosed():
     evm.vmPtr.destroy(evm.vmPtr)
     evm.vmPtr = nil

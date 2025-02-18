@@ -126,7 +126,7 @@ template getOrRaise(stateNetwork: Opt[StateNetwork]): StateNetwork =
     raise newException(ValueError, "state sub-network not enabled")
   sn
 
-template getOrRaise(portalEvm: Opt[PortalEvmRef]): PortalEvmRef =
+template getOrRaise(portalEvm: Opt[PortalEvm]): PortalEvm =
   let sn = portalEvm.valueOr:
     raise newException(ValueError, "portal evm not enabled")
   sn
@@ -136,7 +136,7 @@ proc installEthApiHandlers*(
     historyNetwork: Opt[HistoryNetwork],
     beaconLightClient: Opt[LightClient],
     stateNetwork: Opt[StateNetwork],
-    portalEvm: Opt[PortalEvmRef]
+    portalEvm: Opt[PortalEvm],
 ) =
   rpcServer.rpc("web3_clientVersion") do() -> string:
     return clientVersion
@@ -435,7 +435,9 @@ proc installEthApiHandlers*(
   #   maxPriorityFeePerGas*: Opt[Quantity] # (optional) MaxPriorityFeePerGas is the maximum miner tip per gas offered, in wei.
   #   value*: Opt[UInt256]     # (optional) Integer of the value sent with this transaction.
   #   nonce*: Opt[Quantity]    # (optional) integer of a nonce. This allows to overwrite your own pending transactions that use the same nonce
-  rpcServer.rpc("eth_call") do(txObj: TransactionArgs, quantityTag: RtBlockIdentifier) -> seq[byte]:
+  rpcServer.rpc("eth_call") do(
+    txObj: TransactionArgs, quantityTag: RtBlockIdentifier
+  ) -> seq[byte]:
     # TODO: add documentation
 
     if txObj.to.isNone():
@@ -450,14 +452,26 @@ proc installEthApiHandlers*(
       sn = stateNetwork.getOrRaise()
       evm = portalEvm.getOrRaise()
       header = (await hn.getVerifiedBlockHeader(quantityTag.number.uint64)).valueOr:
-        raise newException(ValueError, "Could not find header with requested block number")
-      state = PortalEvmStateRef.init(Opt.some(header.stateRoot), stateNetwork, historyNetwork)
+        raise
+          newException(ValueError, "Could not find header with requested block number")
+      state =
+        PortalEvmState.init(Opt.some(header.stateRoot), stateNetwork, historyNetwork)
 
     evm.setExecutionContext(state, header)
 
-    evm.call(txObj.`from`,
-        txObj.to.get(),
-        txObj.gas.map(func (q: Quantity): auto = uint64(q)),
-        txObj.gasPrice.map(func (q: Quantity): auto = uint64(q)),
-        txObj.value,
-        txObj.input).get()
+    evm
+    .call(
+      txObj.`from`,
+      txObj.to.get(),
+      txObj.gas.map(
+        func (q: Quantity): auto =
+          uint64(q)
+      ),
+      txObj.gasPrice.map(
+        func (q: Quantity): auto =
+          uint64(q)
+      ),
+      txObj.value,
+      txObj.input,
+    )
+    .get()
