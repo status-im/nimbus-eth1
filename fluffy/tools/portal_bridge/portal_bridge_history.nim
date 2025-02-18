@@ -162,15 +162,6 @@ proc gossipReceipts(
 
   await bridge.gossipQueue.addLast((contentKey.encode.asSeq(), SSZ.encode(receipts)))
 
-proc gossipEphemeralBlockHeader(
-    bridge: PortalHistoryBridge, hash: Hash32, header: ByteList[MAX_HEADER_LENGTH]
-): Future[void] {.async: (raises: [CancelledError]).} =
-  let contentKey = ephemeralBlockHeaderContentKey(hash, 0'u8)
-
-  await bridge.gossipQueue.addLast(
-    (contentKey.encode.asSeq(), SSZ.encode(EphemeralBlockHeaderList.init(@[header])))
-  )
-
 proc runLatestLoop(
     bridge: PortalHistoryBridge, validate = false
 ) {.async: (raises: [CancelledError]).} =
@@ -227,13 +218,9 @@ proc runLatestLoop(
           error "Receipts root is invalid"
           continue
 
-      # gossip ephemeral block header
-      await bridge.gossipEphemeralBlockHeader(hash, header)
-
-      # For bodies & receipts to get verified, the header needs to be available
-      # on the network. Wait a little to get the headers propagated through
-      # the network.
-      await sleepAsync(2.seconds)
+      # According to specs ephemeral block header should not be gossiped:
+      # https://github.com/ethereum/portal-network-specs/blob/fd74e19e9ac6332e2be0bd02e8a75fab754c118d/history/history-network.md#ephemeral-block-headers
+      # Clients will not accept these via offers.
 
       # gossip block body
       await bridge.gossipBlockBody(hash, body)
