@@ -690,6 +690,15 @@ proc blockHeader*(c: ForkedChainRef, blk: BlockHashOrNumber): Result[Header, str
     return c.headerByHash(blk.hash)
   c.headerByNumber(blk.number)
 
+proc receiptsByBlockHash*(c: ForkedChainRef, blockHash: Hash32): Result[seq[Receipt], string] =
+  c.hashToBlock.withValue(blockHash, loc):
+    return ok(loc[].receipts)
+  
+  let header = c.headerByHash(blockHash).valueOr:
+    return err("Block hash not found")
+
+  c.baseTxFrame.getReceipts(header.receiptsRoot)
+
 func blockFromBaseTo*(c: ForkedChainRef, number: BlockNumber): seq[Block] =
   # return block in reverse order
   var branch = c.activeBranch

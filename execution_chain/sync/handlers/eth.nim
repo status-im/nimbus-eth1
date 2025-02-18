@@ -289,15 +289,9 @@ method getReceipts*(ctx: EthWireRef,
                     hashes: openArray[Hash32]):
                       Result[seq[seq[Receipt]], string]
     {.gcsafe.} =
-  let db = ctx.db
   var list: seq[seq[Receipt]]
   for blockHash in hashes:
-    # TODO : Receipts in a common interface in forkedchain
-    let header = db.baseTxFrame().getBlockHeader(blockHash).valueOr:
-      list.add @[]
-      trace "handlers.getReceipts: blockHeader not found", blockHash
-      continue
-    let receiptList = ?db.baseTxFrame().getReceipts(header.receiptsRoot)
+    let receiptList = ?ctx.chain.receiptsByBlockHash(blockHash)
     list.add receiptList
 
   return ok(list)
