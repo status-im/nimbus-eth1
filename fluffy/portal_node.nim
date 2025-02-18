@@ -39,6 +39,7 @@ type
     dataDir*: string
     storageCapacity*: uint64
     contentRequestRetries*: int
+    evmPath*: string
 
   PortalNode* = ref object
     state*: PortalNodeState
@@ -192,7 +193,7 @@ proc new*(
     historyNetwork: historyNetwork,
     stateNetwork: stateNetwork,
     beaconLightClient: beaconLightClient,
-    portalEvm: Opt.some(PortalEvm.init()),
+    portalEvm: if config.evmPath.len() == 0: Opt.none(PortalEvm) else: Opt.some(PortalEvm.init(config.evmPath)),
   )
 
 proc statusLogLoop(n: PortalNode) {.async: (raises: []).} =

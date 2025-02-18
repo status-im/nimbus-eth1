@@ -112,9 +112,9 @@ func toEvmc(msg: PortalEvmMessage): evmc_message =
     code_size: msg.code.lenIfPresent(),
   )
 
-func init*(T: type PortalEvm): T =
+proc init*(T: type PortalEvm, evmPath: string): T =
   PortalEvm(
-    vmPtr: loadEvmcVM(),
+    vmPtr: loadEvmcVM(evmPath),
     revision: EVMC_LATEST_STABLE_REVISION,
     config: chainConfigForNetwork(MainNet),
   )

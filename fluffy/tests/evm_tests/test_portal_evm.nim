@@ -9,6 +9,14 @@
 
 import unittest2, stew/byteutils, ../../evm/portal_evm
 
+# These tests need to be run manually until we support loading and running
+# the Nimbus EVM as the default EVMC EVM.
+
+# For now we just assume that the evmone library is in the build directory.
+# The library needs to be manually built once using the following script:
+# nimbus-eth1/scripts/build_evmone.sh
+const evmPath = "build/libevmone.so"
+
 suite "Portal EVM Tests":
   let
     recipient = address"0xc2edad668740f1aa35e4d8f227fb8e17dca888cd"
@@ -18,7 +26,7 @@ suite "Portal EVM Tests":
 
   test "Basic call":
     let
-      evm = PortalEvm.init()
+      evm = PortalEvm.init(evmPath)
       state = PortalEvmState.init()
 
     state.setCode(recipient, code)

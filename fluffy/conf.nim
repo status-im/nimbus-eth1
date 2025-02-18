@@ -381,6 +381,13 @@ type
       name: "debug-disable-ban-nodes"
     .}: bool
 
+    evmPath* {.
+      hidden,
+      desc: "Load alternative EVM from EVMC-compatible shared library",
+      defaultValue: "",
+      name: "debug-evm-path"
+    .}: string
+
     case cmd* {.command, defaultValue: noCommand.}: PortalCmd
     of noCommand:
       discard

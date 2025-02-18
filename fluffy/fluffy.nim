@@ -199,6 +199,7 @@ proc run(
       dataDir: string config.dataDir,
       storageCapacity: config.storageCapacityMB * 1_000_000,
       contentRequestRetries: config.contentRequestRetries.int,
+      evmPath: config.evmPath,
     )
 
     node = PortalNode.new(
