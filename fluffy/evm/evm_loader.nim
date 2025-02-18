@@ -5,10 +5,7 @@
 #   * Apache v2 license (license terms in the root directory or at https://www.apache.org/licenses/LICENSE-2.0).
 # at your option. This file may not be copied, modified, or distributed except according to those terms.
 
-import
-  std/[dynlib, strutils, os],
-  evmc/evmc,
-  chronicles
+import std/[dynlib, strutils, os], evmc/evmc, chronicles
 
 export evmc
 
@@ -55,8 +52,8 @@ proc getEvmcCreateFn(path: string): evmc_create_vm_name_fn =
     sym = symAddr(lib, fallback)
     if sym.isNil:
       warn "EVMC create function not found in library", path
-      warn "Tried this library symbol", symbol=symbolName
-      warn "Tried this library symbol", symbol=fallback
+      warn "Tried this library symbol", symbol = symbolName
+      warn "Tried this library symbol", symbol = fallback
       return nil
 
   return cast[evmc_create_vm_name_fn](sym)

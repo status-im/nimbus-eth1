@@ -262,10 +262,10 @@ proc processContentLoop(n: StateNetwork) {.async: (raises: []).} =
 proc statusLogLoop(n: StateNetwork) {.async: (raises: []).} =
   try:
     while true:
+      await sleepAsync(60.seconds)
+
       info "State network status",
         routingTableNodes = n.portalProtocol.routingTable.len()
-
-      await sleepAsync(60.seconds)
   except CancelledError:
     trace "statusLogLoop canceled"
 

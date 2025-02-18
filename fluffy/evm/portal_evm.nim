@@ -113,6 +113,7 @@ func toEvmc(msg: PortalEvmMessage): evmc_message =
   )
 
 proc init*(T: type PortalEvm, evmPath: string): T =
+  info "Loading Portal EVM", evmPath
   PortalEvm(
     vmPtr: loadEvmcVM(evmPath),
     revision: EVMC_LATEST_STABLE_REVISION,

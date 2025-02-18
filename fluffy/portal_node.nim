@@ -26,7 +26,7 @@ export
   beacon_light_client, history_network, state_network, portal_protocol_config, forks
 
 type
-  PortalNodeState* = enum
+  PortalNodeStatus* = enum
     Starting
     Running
     Stopping
@@ -42,7 +42,7 @@ type
     evmPath*: string
 
   PortalNode* = ref object
-    state*: PortalNodeState
+    status*: PortalNodeStatus
     discovery: protocol.Protocol
     contentDB: ContentDB
     streamManager: StreamManager
@@ -193,7 +193,11 @@ proc new*(
     historyNetwork: historyNetwork,
     stateNetwork: stateNetwork,
     beaconLightClient: beaconLightClient,
-    portalEvm: if config.evmPath.len() == 0: Opt.none(PortalEvm) else: Opt.some(PortalEvm.init(config.evmPath)),
+    portalEvm:
+      if config.evmPath.len() == 0:
+        Opt.none(PortalEvm)
+      else:
+        Opt.some(PortalEvm.init(config.evmPath)),
   )
 
 proc statusLogLoop(n: PortalNode) {.async: (raises: []).} =
@@ -231,7 +235,7 @@ proc start*(n: PortalNode) =
 
   n.statusLogLoop = statusLogLoop(n)
 
-  n.state = PortalNodeState.Running
+  n.status = PortalNodeStatus.Running
 
 proc stop*(n: PortalNode) {.async: (raises: []).} =
   debug "Stopping Portal node"
