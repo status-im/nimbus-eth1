@@ -124,6 +124,7 @@ func isEmpty*(ly: AristoTxRef): bool =
 proc mergeAndReset*(trg, src: AristoTxRef) =
   ## Merges the argument `src` into the argument `trg` and clears `src`.
   trg.vTop = src.vTop
+  trg.blockNumber = src.blockNumber
 
   if trg.kMap.len > 0:
     # Invalidate cached keys in the lower layer

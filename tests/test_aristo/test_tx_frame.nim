@@ -19,11 +19,13 @@ import
     aristo_delete,
     aristo_desc,
     aristo_fetch,
-    aristo_tx_frame,
+    aristo_hike,
     aristo_init,
     aristo_init/memory_db,
+    aristo_layers,
     aristo_merge,
     aristo_persist,
+    aristo_tx_frame,
   ]
 
 proc makeAccount(i: uint64): (Hash32, AristoAccount) =
@@ -34,6 +36,7 @@ proc makeAccount(i: uint64): (Hash32, AristoAccount) =
 const
   acc1 = makeAccount(1)
   acc2 = makeAccount(2)
+  acc3 = makeAccount(3)
 
 suite "Aristo TxFrame":
   setup:
@@ -47,12 +50,14 @@ suite "Aristo TxFrame":
       tx1 = db.txFrameBegin(tx0)
       tx2 = db.txFrameBegin(tx1)
       tx2b = db.txFrameBegin(tx1)
+      tx2c = db.txFrameBegin(tx1)
 
     check:
       tx0.mergeAccountRecord(acc1[0], acc1[1]).isOk()
       tx1.mergeAccountRecord(acc2[0], acc2[1]).isOk()
       tx2.deleteAccountRecord(acc2[0]).isOk()
       tx2b.deleteAccountRecord(acc1[0]).isOk()
+      tx2c.mergeAccountRecord(acc2[0], acc3[1]).isOk()
 
     check:
       tx0.fetchAccountRecord(acc1[0]).isOk()
@@ -67,6 +72,15 @@ suite "Aristo TxFrame":
 
       tx0.fetchStateRoot() != tx1.fetchStateRoot()
       tx0.fetchStateRoot() == tx2.fetchStateRoot()
+
+    var acc1Hike: Hike
+    check:
+      tx2c.fetchAccountHike(acc1[0], acc1Hike).isOk()
+
+      # The vid for acc1 gets created in tx1 because it has to move to a new
+      # mpt node from the root - tx2c updates only data, so the level at which
+      # we find the vtx should be one below tx2c!
+      tx2c.layersGetVtx((VertexID(1), acc1Hike.legs[^1].wp.vid)).value()[1] == 1
 
     tx2.checkpoint(1)
     let batch = db.backend.putBegFn().expect("working batch")
