@@ -25,21 +25,28 @@ export evmc, addresses, stint, headers, state_network
 logScope:
   topics = "portal_evm"
 
-type PortalEvmState* = ref object
-  accounts: Table[Address, Account]
-  code: Table[Address, seq[byte]]
-  storage: Table[Address, Table[UInt256, (UInt256, UInt256)]]
-    # maps address -> slot key -> (original slot value, updated slot value)
-  created: HashSet[Address]
-  selfDestructs: HashSet[Address]
-  transientStorage: Table[Address, Table[UInt256, UInt256]]
-  stateNetwork: Opt[StateNetwork] # when none state network lookups are disabled
-  stateRoot: Opt[Hash32]
-  fetchedAccounts: HashSet[Address]
-  fetchedCode: HashSet[Address]
-  fetchedStorage: Table[Address, HashSet[UInt256]]
-  historyNetwork: Opt[HistoryNetwork] # when none history network lookups are disabled
-  blockHashes: Table[uint64, Hash32]
+type
+  PortalEvmState* = ref object
+    accounts: Table[Address, Account]
+    code: Table[Address, seq[byte]]
+    storage: Table[Address, Table[UInt256, (UInt256, UInt256)]]
+      # maps address -> slot key -> (original slot value, updated slot value)
+    created: HashSet[Address]
+    selfDestructs: HashSet[Address]
+    transientStorage: Table[Address, Table[UInt256, UInt256]]
+    stateNetwork: Opt[StateNetwork] # when none state network lookups are disabled
+    stateRoot: Opt[Hash32]
+    fetchedAccounts: HashSet[Address]
+    fetchedCode: HashSet[Address]
+    fetchedStorage: Table[Address, HashSet[UInt256]]
+    historyNetwork: Opt[HistoryNetwork] # when none history network lookups are disabled
+    blockHashes: Table[uint64, Hash32]
+
+  # We need to inherit from a Defect here because we need a way to return errors
+  # from the EVMC host interface. The host interface functions don't have error 
+  # status codes in the return types for most functions. We can't use a CatchableError 
+  # exception either because the host interface doesn't list any exception types.
+  PortalEvmStateException* = object of Defect
 
 func init*(
     T: type PortalEvmState,
@@ -67,12 +74,12 @@ proc fetchAccountIfRequired(state: PortalEvmState, address: Address) =
 
   try:
     let account = waitFor(sn.getAccount(state.stateRoot.get(), address)).valueOr:
-      raiseAssert("account lookup failed") # how should we handle this?
+      raise newException(PortalEvmStateException, "account lookup failed")
     state.accounts[address] = account
     state.fetchedAccounts.incl(address)
   except CancelledError:
     trace "stateNetwork.getAccount canceled"
-    raiseAssert("account lookup failed") # how should we handle this?
+    raise newException(PortalEvmStateException, "account lookup failed")
 
 proc fetchCodeIfRequired(state: PortalEvmState, address: Address) =
   let sn = state.stateNetwork.valueOr:
@@ -83,12 +90,12 @@ proc fetchCodeIfRequired(state: PortalEvmState, address: Address) =
 
   try:
     let code = waitFor(sn.getCodeByStateRoot(state.stateRoot.get(), address)).valueOr:
-      raiseAssert("code lookup failed") # how should we handle this?
+      raise newException(PortalEvmStateException, "code lookup failed")
     state.code[address] = code.asSeq()
     state.fetchedCode.incl(address)
   except CancelledError:
     trace "stateNetwork.getCodeByStateRoot canceled"
-    raiseAssert("code lookup failed") # how should we handle this?
+    raise newException(PortalEvmStateException, "code lookup failed")
 
 proc fetchStorageIfRequired(state: PortalEvmState, address: Address, slotKey: UInt256) =
   let sn = state.stateNetwork.valueOr:
@@ -101,7 +108,7 @@ proc fetchStorageIfRequired(state: PortalEvmState, address: Address, slotKey: UI
     let slotValue = waitFor(
       sn.getStorageAtByStateRoot(state.stateRoot.get(), address, slotKey)
     ).valueOr:
-      raiseAssert("storage lookup failed") # how should we handle this?
+      raise newException(PortalEvmStateException, "storage lookup failed")
 
     state.storage.withValue(address, value):
       value[][slotKey] = (slotValue, slotValue)
@@ -114,7 +121,7 @@ proc fetchStorageIfRequired(state: PortalEvmState, address: Address, slotKey: UI
       state.fetchedStorage[address] = toHashSet([slotKey])
   except CancelledError:
     trace "stateNetwork.getStorageAtByStateRoot canceled"
-    raiseAssert("storage lookup failed") # how should we handle this?
+    raise newException(PortalEvmStateException, "storage lookup failed")
 
 proc fetchBlockHashIfRequired(state: PortalEvmState, number: uint64) =
   let hn = state.historyNetwork.valueOr:
@@ -125,11 +132,11 @@ proc fetchBlockHashIfRequired(state: PortalEvmState, number: uint64) =
 
   try:
     let header = waitFor(hn.getVerifiedBlockHeader(number)).valueOr:
-      raiseAssert("block header lookup failed") # how should we handle this?
+      raise newException(PortalEvmStateException, "block header lookup failed")
     state.blockHashes[number] = header.rlpHash()
   except CancelledError:
     trace "historyNetwork.getVerifiedBlockHeader canceled"
-    raiseAssert("block header lookup failed") # how should we handle this?
+    raise newException(PortalEvmStateException, "block header lookup failed")
 
 proc accountExists*(state: PortalEvmState, address: Address): bool =
   state.fetchAccountIfRequired(address)

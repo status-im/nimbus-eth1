@@ -459,8 +459,7 @@ proc installEthApiHandlers*(
 
     evm.setExecutionContext(state, header)
 
-    evm
-    .call(
+    evm.call(
       txObj.`from`,
       txObj.to.get(),
       txObj.gas.map(
@@ -473,5 +472,5 @@ proc installEthApiHandlers*(
       ),
       txObj.value,
       txObj.input,
-    )
-    .get()
+    ).valueOr:
+      raise newException(ValueError, "Unable to call contract")

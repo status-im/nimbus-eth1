@@ -179,35 +179,38 @@ proc call*(
     value = Opt.none(UInt256),
     input = Opt.none(seq[byte]),
 ): Result[seq[byte], string] =
-  let
-    code = evm.state.getCode(toAddr)
-    message = PortalEvmMessage(
-      kind: PortalEvmMessageKind.CALL,
-      # staticCall: true,
-      # depth: 0,
-      sender:
-        if fromAddr.isSome():
-          fromAddr.get()
-        else:
-          default(Address),
-      recipient: toAddr,
-      gas:
-        if gas.isSome():
-          gas.get().int64
-        else:
-          550_000_000,
-      inputData: input,
-      value:
-        if value.isSome():
-          value.get()
-        else:
-          0.u256(),
-        #create2Salt: Bytes32
-        #codeAddress: toAddr.toEvmc(),
-        #code: Opt[seq[byte]]
-    )
+  try:
+    let
+      code = evm.state.getCode(toAddr)
+      message = PortalEvmMessage(
+        kind: PortalEvmMessageKind.CALL,
+        # staticCall: true,
+        # depth: 0,
+        sender:
+          if fromAddr.isSome():
+            fromAddr.get()
+          else:
+            default(Address),
+        recipient: toAddr,
+        gas:
+          if gas.isSome():
+            gas.get().int64
+          else:
+            550_000_000,
+        inputData: input,
+        value:
+          if value.isSome():
+            value.get()
+          else:
+            0.u256(),
+          #create2Salt: Bytes32
+          #codeAddress: toAddr.toEvmc(),
+          #code: Opt[seq[byte]]
+      )
 
-  return evm.execute(message, Opt.some(code))
+    evm.execute(message, Opt.some(code))
+  except PortalEvmStateException as e:
+    err(e.msg)
 
 template isClosed*(evm: PortalEvm): bool =
   evm.vmPtr.isNil()
