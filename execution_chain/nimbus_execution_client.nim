@@ -161,6 +161,7 @@ proc preventLoadingDataDirForTheWrongNetwork(db: CoreDbRef; conf: NimbusConf) =
     kvt.put(dataDirIdKey().toOpenArray, calculatedId.data).isOkOr:
       fatal "Cannot write data dir ID", ID=calculatedId
       quit(QuitFailure)
+    db.persist(kvt)
 
   let
     kvt = db.baseTxFrame()
