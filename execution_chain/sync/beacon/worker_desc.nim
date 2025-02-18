@@ -136,9 +136,12 @@ type
     # `nBodiesBatch` blocks in each round (minimum value is
     # `nFetchBodiesRequest`.)
     chain*: ForkedChainRef           ## Core database, FCU support
+
+    # Blocks import/execution settings
     blockImportOk*: bool             ## Don't fetch data while block importing
     nBodiesBatch*: int               ## Default `nFetchBodiesBatchDefault`
-    blocksStagedQuLenMax*: int       ## Default `blocksStagedQueueLenMaxDefault`
+    blocksStagedHwm*: int            ## Set a `staged` queue limit
+    stagedLenHwm*: int               ## Figured out as # staged records
 
     # Info & debugging stuff, no functional contribution
     nReorg*: int                     ## Number of reorg invocations (info only)

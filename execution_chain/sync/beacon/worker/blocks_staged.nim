@@ -147,8 +147,8 @@ func blocksStagedCanImportOk*(ctx: BeaconCtxRef): bool =
       if ctx.pool.nBuddies == 0:
         return true
 
-      # Start importing if the queue is long enough.
-      if ctx.pool.blocksStagedQuLenMax <= ctx.blk.staged.len:
+      # Start importing if the queue is filled up enough
+      if ctx.pool.stagedLenHwm <= ctx.blk.staged.len:
         return true
 
   false
@@ -158,9 +158,8 @@ func blocksStagedFetchOk*(ctx: BeaconCtxRef): bool =
   ## Check whether body records can be fetched and stored on the `staged` queue.
   ##
   if 0 < ctx.blocksUnprocAvail():
-    # Not to start fetching while the queue is busy (i.e. larger than Lwm)
-    # so that import might still be running strong.
-    if ctx.blk.staged.len < ctx.pool.blocksStagedQuLenMax:
+    # Fetch if there is space on the queue.
+    if ctx.blk.staged.len < ctx.pool.stagedLenHwm:
       return true
 
     # Make sure that there is no gap at the bottom which needs to be
@@ -186,8 +185,7 @@ proc blocksStagedCollect*(
     peer = buddy.peer
 
     # Fetch the full range of headers to be completed to blocks
-    iv = ctx.blocksUnprocFetch(
-      ctx.pool.nBodiesBatch.uint64).expect "valid interval"
+    iv = ctx.blocksUnprocFetch(nFetchBodiesBatch.uint64).expect "valid interval"
 
   var
     # This value is used for splitting the interval `iv` into
