@@ -21,7 +21,7 @@ import
     aristo_fetch,
     aristo_tx_frame,
     aristo_init/init_common,
-    aristo_init/memory_db,
+    aristo_init/memory_only,
     aristo_layers,
     aristo_merge,
     aristo_persist
@@ -40,8 +40,7 @@ const
 suite "Aristo TxFrame":
   setup:
     let
-      mdb = MemDbRef()
-      db = AristoDbRef.init(memoryBackend(mdb)).expect("working memory backend")
+      db = AristoDbRef.init()
 
   test "Frames should independently keep data":
     let
@@ -82,17 +81,17 @@ suite "Aristo TxFrame":
       tx2c.layersGetVtx((VertexID(1), acc1Hike.legs[^1].wp.vid)).value()[1] == 1
 
     tx2.checkpoint(1)
-    let batch = db.backend.putBegFn().expect("working batch")
+    let batch = db.putBegFn().expect("working batch")
     db.persist(batch, tx2)
     check:
-      db.backend.putEndFn(batch).isOk()
+      db.putEndFn(batch).isOk()
 
     db.finish()
 
     block:
-      let
-        db2 = AristoDbRef.init(memoryBackend(mdb)).expect("working backend")
-        tx = db2.baseTxFrame()
+      # using the same backend but new txRef and cache
+      db.initInstance().expect("working backend")
+      let tx = db.baseTxFrame()
       check:
         tx.fetchAccountRecord(acc1[0]).isOk()
         tx.fetchAccountRecord(acc2[0]).isErr() # Doesn't exist in tx2

@@ -15,40 +15,19 @@
 
 import
   ../aristo_desc,
-  ../aristo_desc/desc_backend,
-  "."/[init_common, memory_db]
-
-export
-  BackendType,
-  GuestDbRef,
-  MemBackendRef
-
-# ------------------------------------------------------------------------------
-# Public helpers
-# ------------------------------------------------------------------------------
-
-proc kind*(
-    be: BackendRef;
-      ): BackendType =
-  ## Retrieves the backend type symbol for a `be` backend database argument
-  doAssert(not be.isNil)
-  be.TypedBackendRef.beKind
+  ./init_common,
+  ./memory_db
 
 # ------------------------------------------------------------------------------
 # Public database constuctors, destructor
 # ------------------------------------------------------------------------------
 
-proc init*(
-    T: type AristoDbRef;                     # Target type
-    B: type MemBackendRef;                   # Backend type
-      ): T =
+proc init*(T: type AristoDbRef): T =
   ## Memory backend constructor.
   ##
-  AristoDbRef.init(memoryBackend())[]
+  let db = memoryBackend()
+  db.initInstance()[]
 
-proc init*(T: type AristoDbRef): T =
-  AristoDbRef.init(MemBackendRef)
-
-# ------------------------------------------------------------------------------
+# --+----------------------------------------------------------------------------
 # End
 # ------------------------------------------------------------------------------

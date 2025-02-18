@@ -77,7 +77,7 @@ suite "Aristo compute":
   for n, sample in samples:
     test "Add and delete entries " & $n:
       let
-        db = AristoDbRef.init MemBackendRef
+        db = AristoDbRef.init()
         txFrame = db.txRef
         root = VertexID(1)
 
@@ -116,7 +116,7 @@ suite "Aristo compute":
   test "Pre-computed key":
     # TODO use mainnet genesis in this test?
     let
-      db = AristoDbRef.init MemBackendRef
+      db = AristoDbRef.init()
       txFrame = db.txRef
       root = VertexID(1)
 
@@ -125,9 +125,9 @@ suite "Aristo compute":
         txFrame.mergeAccountRecord(k, v) == Result[bool, AristoError].ok(true)
     txFrame.checkpoint(1)
 
-    let batch = db.backend.putBegFn()[]
+    let batch = db.putBegFn()[]
     db.persist(batch, txFrame)
-    check db.backend.putEndFn(batch).isOk()
+    check db.putEndFn(batch).isOk()
 
     check txFrame.computeKeys(root).isOk()
 

@@ -30,7 +30,7 @@ import
   ../aristo/[
     aristo_delete, aristo_desc, aristo_fetch, aristo_merge, aristo_part,
     aristo_persist, aristo_tx_frame],
-  ../kvt/[kvt_desc, kvt_utils, kvt_persist, kvt_tx_frame]
+  ../kvt/[kvt_desc, kvt_utils, kvt_tx_frame]
 
 # ------------------------------------------------------------------------------
 # Public context constructors and administration
@@ -78,12 +78,9 @@ proc persist*(
   ## This function persists changes up to and including the given frame to the
   ## database.
   ##
-  # TODO these backend functions coud maybe be hidden behind an abstraction
-  #      layer - or... the abstraction layer could be removed from everywhere
-  #      else since it's not really needed
   let
-    kvtBatch = db.kvt.backend.putBegFn()
-    mptBatch = db.mpt.backend.putBegFn()
+    kvtBatch = db.kvt.putBegFn()
+    mptBatch = db.mpt.putBegFn()
 
   if kvtBatch.isOk() and mptBatch.isOk():
     # TODO the `persist` api stages changes but does not actually persist - a
@@ -98,10 +95,10 @@ proc persist*(
     db.kvt.persist(kvtBatch[], txFrame.kTx)
     db.mpt.persist(mptBatch[], txFrame.aTx)
 
-    db.kvt.backend.putEndFn(kvtBatch[]).isOkOr:
+    db.kvt.putEndFn(kvtBatch[]).isOkOr:
       raiseAssert "" & ": " & $error
 
-    db.mpt.backend.putEndFn(mptBatch[]).isOkOr:
+    db.mpt.putEndFn(mptBatch[]).isOkOr:
       raiseAssert "" & ": " & $error
 
   else:

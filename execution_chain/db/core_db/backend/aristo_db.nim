@@ -29,8 +29,8 @@ proc create*(dbType: CoreDbType; kvt: KvtDbRef; mpt: AristoDbRef): CoreDbRef =
 
 proc newMemoryCoreDbRef*(): CoreDbRef =
   AristoDbMemory.create(
-    KvtDbRef.init(use_kvt.MemBackendRef),
-    AristoDbRef.init(use_ari.MemBackendRef))
+    KvtDbRef.init(),
+    AristoDbRef.init())
 
 # ------------------------------------------------------------------------------
 # End

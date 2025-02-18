@@ -27,7 +27,7 @@ const batchSize = 1024 * 1024 div (sizeof(RootedVertexID) + sizeof(HashKey))
 
 proc flush(batch: var WriteBatch, db: AristoDbRef): Result[void, AristoError] =
   if batch.writer != nil:
-    ?db.backend.putEndFn batch.writer
+    ?db.putEndFn batch.writer
     batch.writer = nil
   ok()
 
@@ -39,10 +39,9 @@ proc putVtx(
     key: HashKey,
 ): Result[void, AristoError] =
   if batch.writer == nil:
-    doAssert db.backend != nil, "source data is from the backend"
-    batch.writer = ?db.backend.putBegFn()
+    batch.writer = ?db.putBegFn()
 
-  db.backend.putVtxFn(batch.writer, rvid, vtx, key)
+  db.putVtxFn(batch.writer, rvid, vtx, key)
   batch.count += 1
 
   ok()

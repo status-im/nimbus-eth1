@@ -56,9 +56,6 @@ proc txFramePersist*(
     # No changes in frame - no `checkpoint` requirement - nothing to do here
     return
 
-  let be = db.backend
-  doAssert not be.isNil, "Persisting to backend requires ... a backend!"
-
   let lSst = SavedState(
     key:  emptyRoot,                       # placeholder for more
     serial: txFrame.blockNumber.expect("`checkpoint` before persisting frame"))
@@ -83,12 +80,12 @@ proc txFramePersist*(
   # Store structural single trie entries
   for rvid, vtx in txFrame.sTab:
     txFrame.kMap.withValue(rvid, key) do:
-      be.putVtxFn(batch, rvid, vtx, key[])
+      db.putVtxFn(batch, rvid, vtx, key[])
     do:
-      be.putVtxFn(batch, rvid, vtx, default(HashKey))
+      db.putVtxFn(batch, rvid, vtx, default(HashKey))
 
-  be.putTuvFn(batch, txFrame.vTop)
-  be.putLstFn(batch, lSst)
+  db.putTuvFn(batch, txFrame.vTop)
+  db.putLstFn(batch, lSst)
 
   # TODO above, we only prepare the changes to the database but don't actually
   #      write them to disk - the code below that updates the frame should
