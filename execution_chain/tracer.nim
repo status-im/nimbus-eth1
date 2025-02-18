@@ -30,8 +30,6 @@ type
   CaptCtxRef = ref object
     db: CoreDbRef               # not `nil`
     root: common.Hash32
-    ctx: CoreDbCtxRef           # not `nil`
-    restore: CoreDbCtxRef       # `nil` unless `ctx` activated
 
 const
   senderName = "sender"
@@ -51,16 +49,7 @@ proc init(
     com: CommonRef;
     root: common.Hash32;
       ): T =
-  let ctx = block:
-    when false:
-      let rc = com.db.ctx.newCtxByKey(root)
-      if rc.isErr:
-        raiseAssert "newCptCtx: " & $$rc.error
-      rc.value
-    else:
-      {.warning: "TODO make a temporary context? newCtxByKey has been obsoleted".}
-      com.db.ctx
-  T(db: com.db, root: root, ctx: ctx)
+  T(db: com.db, root: root)
 
 proc init(
     T: type CaptCtxRef;
@@ -69,22 +58,6 @@ proc init(
       ): T =
   let header = com.db.baseTxFrame().getBlockHeader(topHeader.parentHash).expect("top header parent exists")
   T.init(com, header.stateRoot)
-
-proc activate(cc: CaptCtxRef): CaptCtxRef {.discardable.} =
-  ## Install/activate new context `cc.ctx`, old one in `cc.restore`
-  doAssert not cc.isNil
-  doAssert cc.restore.isNil # otherwise activated, already
-  if true:
-    raiseAssert "TODO activte context"
-  # cc.restore = cc.ctx.swapCtx cc.db
-  cc
-
-proc release(cc: CaptCtxRef) =
-  # if not cc.restore.isNil:             # switch to original context (if any)
-  #   let ctx = cc.restore.swapCtx(cc.db)
-  #   doAssert ctx == cc.ctx
-  if true:
-    raiseAssert "TODO release context"
 
 # -------------------
 
@@ -160,14 +133,12 @@ proc traceTransactionImpl(
 
   let
     tracerInst = newLegacyTracer(tracerFlags)
-    cc = activate CaptCtxRef.init(com, header)
+    cc = CaptCtxRef.init(com, header)
     txFrame = com.db.baseTxFrame()
     parent = txFrame.getBlockHeader(header.parentHash).valueOr:
       return newJNull()
     vmState = BaseVMState.new(parent, header, com, txFrame, storeSlotHash = true)
     ledger = vmState.ledger
-
-  defer: cc.release()
 
   doAssert(transactions.calcTxRoot == header.txRoot)
   doAssert(transactions.len != 0)
@@ -209,9 +180,8 @@ proc traceTransactionImpl(
 
   # internal transactions:
   let
-    cx = activate stateCtx
+    cx = stateCtx
     ldgBefore = LedgerRef.init(com.db.baseTxFrame(), storeSlotHash = true)
-  defer: cx.release()
 
   for idx, acc in tracedAccountsPairs(tracerInst):
     before.captureAccount(ldgBefore, acc, internalTxName & $idx)
@@ -232,7 +202,7 @@ proc dumpBlockStateImpl(
   template header: Header = blk.header
 
   let
-    cc = activate CaptCtxRef.init(com, header)
+    cc = CaptCtxRef.init(com, header)
 
     # only need a stack dump when scanning for internal transaction address
     captureFlags = {DisableMemory, DisableStorage, EnableAccount}
@@ -242,8 +212,6 @@ proc dumpBlockStateImpl(
       return newJNull()
     vmState = BaseVMState.new(parent, header, com, txFrame, tracerInst, storeSlotHash = true)
     miner = vmState.coinbase()
-
-  defer: cc.release()
 
   var
     before = newJArray()
@@ -296,15 +264,13 @@ proc traceBlockImpl(
   template header: Header = blk.header
 
   let
-    cc = activate CaptCtxRef.init(com, header)
+    cc = CaptCtxRef.init(com, header)
     tracerInst = newLegacyTracer(tracerFlags)
     # Tracer needs a database where the reverse slot hash table has been set up
     txFrame = com.db.baseTxFrame()
     parent = txFrame.getBlockHeader(header.parentHash).valueOr:
       return newJNull()
     vmState = BaseVMState.new(parent, header, com, txFrame, tracerInst, storeSlotHash = true)
-
-  defer: cc.release()
 
   if header.txRoot == EMPTY_ROOT_HASH: return newJNull()
   doAssert(blk.transactions.calcTxRoot == header.txRoot)

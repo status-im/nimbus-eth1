@@ -286,7 +286,7 @@ proc createAccessList*(header: Header,
 
     # Apply the transaction with the access list tracer
     let
-      txFrame = txFrame.ctx.txFrameBegin(txFrame)
+      txFrame = txFrame.txFrameBegin()
       tracer  = AccessListTracer.new(accessList, sender, to, precompiles)
       vmState = BaseVMState.new(parent, header, com, txFrame, tracer)
       res     = rpcCallEvm(args, header, vmState).valueOr:
@@ -294,7 +294,7 @@ proc createAccessList*(header: Header,
                   handleError("failed to call evm: " & $error.code)
 
     txFrame.dispose()
-    
+
     if res.isError:
       handleError("failed to apply transaction: " & res.error)
 

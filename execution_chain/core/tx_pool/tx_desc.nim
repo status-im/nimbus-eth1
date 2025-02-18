@@ -94,8 +94,8 @@ proc setupVMState(com: CommonRef;
       excessBlobGas: calcExcessBlobGas(parent, electra),
       parentHash   : parentHash,
     ),
-    txFrame = com.db.ctx.txFrameBegin(parentFrame),
-    com      = com)
+    txFrame = parentFrame.txFrameBegin(),
+    com     = com)
 
 template append(tab: var TxSenderTab, sn: TxSenderNonceRef) =
   tab[item.sender] = sn

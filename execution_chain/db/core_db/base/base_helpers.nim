@@ -14,28 +14,6 @@ import
   "../.."/[aristo, kvt],
   ./base_desc
 
-# ------------------------------------------------------------------------------
-# Public constructor helper
-# ------------------------------------------------------------------------------
-
-proc bless*(db: CoreDbRef): CoreDbRef =
-  ## Verify descriptor
-  db
-
-proc bless*(db: CoreDbRef; ctx: CoreDbCtxRef): CoreDbCtxRef =
-  ctx.parent = db
-  ctx
-
-proc bless*(ctx: CoreDbCtxRef; dsc: CoreDbTxRef): auto =
-  dsc.ctx = ctx
-  dsc
-
-# ------------------------------------------------------------------------------
-# Public KVT helpers
-# ------------------------------------------------------------------------------
-template kvt*(tx: CoreDbTxRef): KvtDbRef =
-  tx.ctx.kvt
-
 # ---------------
 
 func toError*(e: KvtError; s: string; error = Unspecified): CoreDbError =
@@ -44,13 +22,6 @@ func toError*(e: KvtError; s: string; error = Unspecified): CoreDbError =
     ctx:      s,
     isAristo: false,
     kErr:     e)
-
-# ------------------------------------------------------------------------------
-# Public Aristo helpers
-# ------------------------------------------------------------------------------
-
-template mpt*(tx: CoreDbTxRef): AristoDbRef =
-  tx.ctx.mpt
 
 # ---------------
 

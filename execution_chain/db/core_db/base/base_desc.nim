@@ -54,18 +54,12 @@ type
   # --------------------------------------------------
   CoreDbRef* = ref object
     ## Database descriptor
-    dbType*: CoreDbType           ## Type of database backend
-    defCtx*: CoreDbCtxRef         ## Default context
-
-  CoreDbCtxRef* = ref object
-    ## Shared context for `CoreDbAccRef`, `CoreDbKvtRef`
-    parent*: CoreDbRef
+    dbType*: CoreDbType         ## Type of database backend
     mpt*: AristoDbRef           ## `Aristo` database
     kvt*: KvtDbRef              ## `KVT` key-value table
 
   CoreDbTxRef* = ref object
     ## Transaction descriptor
-    ctx*: CoreDbCtxRef          ## Context (also contains `Aristo` descriptor)
     aTx*: AristoTxRef           ## `Aristo` transaction (if any)
     kTx*: KvtTxRef              ## `KVT` transaction (if any)
 
