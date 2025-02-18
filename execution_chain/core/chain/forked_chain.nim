@@ -660,6 +660,16 @@ proc blockByHash*(c: ForkedChainRef, blockHash: Hash32): Result[Block, string] =
     return ok(loc[].blk)
   c.baseTxFrame.getEthBlock(blockHash)
 
+proc blockBodyByHash*(c: ForkedChainRef, blockHash: Hash32): Result[BlockBody, string] =
+  c.hashToBlock.withValue(blockHash, loc):
+    let blk = loc[].blk
+    return ok(BlockBody(
+      transactions: blk.transactions,
+      uncles: blk.uncles,
+      withdrawals: blk.withdrawals,
+    ))
+  c.baseTxFrame.getBlockBody(blockHash)
+
 proc blockByNumber*(c: ForkedChainRef, number: BlockNumber): Result[Block, string] =
   if number > c.activeBranch.headNumber:
     return err("Requested block number not exists: " & $number)
@@ -674,6 +684,20 @@ proc blockByNumber*(c: ForkedChainRef, number: BlockNumber): Result[Block, strin
     branch = branch.parent
 
   err("Block not found, number = " & $number)
+
+proc blockHeader*(c: ForkedChainRef, blk: BlockHashOrNumber): Result[Header, string] =
+  if blk.isHash:
+    return c.headerByHash(blk.hash)
+  c.headerByNumber(blk.number)
+
+proc receiptsByBlockHash*(c: ForkedChainRef, blockHash: Hash32): Result[seq[Receipt], string] =
+  c.hashToBlock.withValue(blockHash, loc):
+    return ok(loc[].receipts)
+  
+  let header = c.baseTxFrame.getBlockHeader(blockHash).valueOr:
+    return err("Block header not found")
+
+  c.baseTxFrame.getReceipts(header.receiptsRoot)
 
 func blockFromBaseTo*(c: ForkedChainRef, number: BlockNumber): seq[Block] =
   # return block in reverse order
