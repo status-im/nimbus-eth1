@@ -160,15 +160,11 @@ proc forkchoiceUpdated*(ben: BeaconEngineRef,
       blockNumber=header.number
     return validFCU(Opt.none(Bytes8), headHash)
 
-  chain.forkChoice(headHash, update.finalizedBlockHash).isOkOr:
-    return invalidFCU(error, chain, header)
-
   # If the beacon client also advertised a finalized block, mark the local
   # chain final and completely in PoS mode.
   let baseTxFrame = ben.chain.baseTxFrame
   let finalizedBlockHash = update.finalizedBlockHash
   if finalizedBlockHash != zeroHash32:
-    # ForkedChain should have detect this violation in `chain.forkChoice` above
     if not ben.chain.equalOrAncestorOf(finalizedBlockHash, headHash):
       warn "Final block not in canonical tree",
         hash=finalizedBlockHash.short
@@ -182,6 +178,9 @@ proc forkchoiceUpdated*(ben: BeaconEngineRef,
         hash=safeBlockHash.short
       raise invalidForkChoiceState("safe block not in canonical tree")
     baseTxFrame.safeHeaderHash(safeBlockHash)
+
+  chain.forkChoice(headHash, update.finalizedBlockHash).isOkOr:
+    return invalidFCU(error, chain, header)
 
   # If payload generation was requested, create a new block to be potentially
   # sealed by the beacon client. The payload will be requested later, and we
