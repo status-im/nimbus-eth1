@@ -15,7 +15,7 @@ import
   ../../aristo/[aristo_init/memory_only, aristo_walk/memory_only],
   ../../kvt as use_kvt,
   ../../kvt/[kvt_init/memory_only, kvt_walk/memory_only],
-  ../base/[base_desc, base_helpers]
+  ../base/base_desc
 
 export base_desc
 
@@ -25,10 +25,7 @@ export base_desc
 
 proc create*(dbType: CoreDbType; kvt: KvtDbRef; mpt: AristoDbRef): CoreDbRef =
   ## Constructor helper
-  var db = CoreDbRef(dbType: dbType)
-  db.defCtx = db.bless CoreDbCtxRef(mpt: mpt, kvt: kvt)
-
-  bless db
+  CoreDbRef(dbType: dbType, mpt: mpt, kvt: kvt)
 
 proc newMemoryCoreDbRef*(): CoreDbRef =
   AristoDbMemory.create(

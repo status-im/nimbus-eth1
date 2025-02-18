@@ -19,7 +19,6 @@ import
 
 export
   CoreDbAccount,
-  CoreDbCtxRef,
   CoreDbErrorCode,
   CoreDbError,
   CoreDbPersistentTypes,
@@ -37,14 +36,6 @@ import
 # Public context constructors and administration
 # ------------------------------------------------------------------------------
 
-proc ctx*(db: CoreDbRef): CoreDbCtxRef =
-  ## Get the defauly context. This is a base descriptor which provides the
-  ## KVT, MPT, the accounts descriptors as well as the transaction descriptor.
-  ## They are kept all in sync, i.e. `persistent()` will store exactly this
-  ## context.
-  ##
-  db.defCtx
-
 proc baseTxFrame*(db: CoreDbRef): CoreDbTxRef =
   ## The base tx frame is a staging are for reading and writing "almost"
   ## directly from/to the database without using any pending frames - when a
@@ -53,9 +44,8 @@ proc baseTxFrame*(db: CoreDbRef): CoreDbTxRef =
   ## persist call.
 
   CoreDbTxRef(
-    ctx: db.ctx,
-    aTx: db.ctx.mpt.baseTxFrame(),
-    kTx: db.ctx.kvt.baseTxFrame())
+    aTx: db.mpt.baseTxFrame(),
+    kTx: db.kvt.baseTxFrame())
 
 # ------------------------------------------------------------------------------
 # Public base descriptor methods
@@ -69,8 +59,8 @@ proc finish*(db: CoreDbRef; eradicate = false) =
   ## depends on the backend database. Currently, only the `AristoDbRocks` type
   ## backend removes the database on `true`.
   ##
-  db.ctx.kvt.finish(eradicate)
-  db.ctx.mpt.finish(eradicate)
+  db.kvt.finish(eradicate)
+  db.mpt.finish(eradicate)
 
 proc `$$`*(e: CoreDbError): string =
   ## Pretty print error symbol
@@ -92,8 +82,8 @@ proc persist*(
   #      layer - or... the abstraction layer could be removed from everywhere
   #      else since it's not really needed
   let
-    kvtBatch = db.defCtx.kvt.backend.putBegFn()
-    mptBatch = db.defCtx.mpt.backend.putBegFn()
+    kvtBatch = db.kvt.backend.putBegFn()
+    mptBatch = db.mpt.backend.putBegFn()
 
   if kvtBatch.isOk() and mptBatch.isOk():
     # TODO the `persist` api stages changes but does not actually persist - a
@@ -105,13 +95,13 @@ proc persist*(
     #      kvt changes written to memory but not to disk because of an aristo
     #      error), we have to panic instead.
 
-    db.ctx.kvt.persist(kvtBatch[], txFrame.kTx)
-    db.ctx.mpt.persist(mptBatch[], txFrame.aTx)
+    db.kvt.persist(kvtBatch[], txFrame.kTx)
+    db.mpt.persist(mptBatch[], txFrame.aTx)
 
-    db.defCtx.kvt.backend.putEndFn(kvtBatch[]).isOkOr:
+    db.kvt.backend.putEndFn(kvtBatch[]).isOkOr:
       raiseAssert "" & ": " & $error
 
-    db.defCtx.mpt.backend.putEndFn(mptBatch[]).isOkOr:
+    db.mpt.backend.putEndFn(mptBatch[]).isOkOr:
       raiseAssert "" & ": " & $error
 
   else:
@@ -443,14 +433,23 @@ proc recast*(
 # Public transaction related methods
 # ------------------------------------------------------------------------------
 
-proc txFrameBegin*(ctx: CoreDbCtxRef, parent: CoreDbTxRef): CoreDbTxRef =
+proc txFrameBegin*(db: CoreDbRef): CoreDbTxRef =
   ## Constructor
   ##
   let
-    kTx = ctx.kvt.txFrameBegin(if parent != nil: parent.kTx else: nil)
-    aTx = ctx.mpt.txFrameBegin(if parent != nil: parent.aTx else: nil)
+    kTx = db.kvt.txFrameBegin(nil)
+    aTx = db.mpt.txFrameBegin(nil)
 
-  ctx.bless CoreDbTxRef(kTx: kTx, aTx: aTx)
+  CoreDbTxRef(kTx: kTx, aTx: aTx)
+
+proc txFrameBegin*(parent: CoreDbTxRef): CoreDbTxRef =
+  ## Constructor
+  ##
+  let
+    kTx = parent.kTx.db.txFrameBegin(parent.kTx)
+    aTx = parent.aTx.db.txFrameBegin(parent.aTx)
+
+  CoreDbTxRef(kTx: kTx, aTx: aTx)
 
 proc checkpoint*(tx: CoreDbTxRef, blockNumber: BlockNumber) =
   tx.aTx.checkpoint(blockNumber)
@@ -459,9 +458,6 @@ proc dispose*(tx: CoreDbTxRef) =
   tx.aTx.dispose()
   tx.kTx.dispose()
   tx[].reset()
-
-proc txFrameBegin*(tx: CoreDbTxRef): CoreDbTxRef =
-  tx.ctx.txFrameBegin(tx)
 
 # ------------------------------------------------------------------------------
 # End
