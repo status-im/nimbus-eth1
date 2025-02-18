@@ -110,7 +110,7 @@ type
       latest* {.
         desc:
           "Follow the head of the chain and gossip latest block header, body and receipts into the network",
-        defaultValue: true,
+        defaultValue: false,
         name: "latest"
       .}: bool
 
