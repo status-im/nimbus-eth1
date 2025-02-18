@@ -35,18 +35,13 @@ proc txFrameBegin*(db: AristoDbRef, parent: AristoTxRef): AristoTxRef =
 proc baseTxFrame*(db: AristoDbRef): AristoTxRef=
   db.txRef
 
-proc dispose*(
-    tx: AristoTxRef;
-      ) =
+proc dispose*(tx: AristoTxRef) =
   tx[].reset()
 
-proc checkpoint*(
-    tx: AristoTxRef;
-    blockNumber: uint64;
-      ) =
+proc checkpoint*(tx: AristoTxRef; blockNumber: uint64) =
   tx.blockNumber = Opt.some(blockNumber)
 
-proc txFramePersist*(
+proc persist*(
     db: AristoDbRef;                  # Database
     batch: PutHdlRef;
     txFrame: AristoTxRef;

@@ -23,8 +23,7 @@ import
     aristo_init/init_common,
     aristo_init/memory_only,
     aristo_layers,
-    aristo_merge,
-    aristo_persist
+    aristo_merge
   ]
 
 proc makeAccount(i: uint64): (Hash32, AristoAccount) =

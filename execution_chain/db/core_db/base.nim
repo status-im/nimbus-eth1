@@ -29,7 +29,7 @@ export
 import
   ../aristo/[
     aristo_delete, aristo_desc, aristo_fetch, aristo_merge, aristo_part,
-    aristo_persist, aristo_tx_frame],
+    aristo_tx_frame],
   ../kvt/[kvt_desc, kvt_utils, kvt_tx_frame]
 
 # ------------------------------------------------------------------------------

@@ -21,7 +21,6 @@ import
     aristo_merge,
     aristo_desc,
     aristo_init/memory_only,
-    aristo_persist,
     aristo_tx_frame,
   ]
 
