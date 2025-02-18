@@ -298,20 +298,16 @@ const testList = [
   ),
   ]
 
-proc engineApiMain*() =
-  suite "Engine API":
-    for z in testList:
-      test z.name:
-        let genesisFile = if z.genesisFile.len > 0:
-                            z.genesisFile
-                          else:
-                            defaultGenesisFile
-        let env = setupEnv(z.fork, genesisFile)
-        let res = z.testProc(env)
-        if res.isErr:
-          debugEcho "FAILED TO EXECUTE ", z.name, ": ", res.error
-        check res.isOk
-        env.close()
-
-when isMainModule:
-  engineApiMain()
+suite "Engine API":
+  for z in testList:
+    test z.name:
+      let genesisFile = if z.genesisFile.len > 0:
+                          z.genesisFile
+                        else:
+                          defaultGenesisFile
+      let env = setupEnv(z.fork, genesisFile)
+      let res = z.testProc(env)
+      if res.isErr:
+        debugEcho "FAILED TO EXECUTE ", z.name, ": ", res.error
+      check res.isOk
+      env.close()

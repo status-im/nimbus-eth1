@@ -17,8 +17,7 @@ import
     aristo_check,
     aristo_desc,
     aristo_init/persistent,
-    aristo_part,
-    aristo_tx],
+    aristo_part],
   ../replay/xcheck,
   ./test_helpers
 

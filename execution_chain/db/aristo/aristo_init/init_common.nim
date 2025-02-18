@@ -1,5 +1,5 @@
 # nimbus-eth1
-# Copyright (c) 2023-2024 Status Research & Development GmbH
+# Copyright (c) 2023-2025 Status Research & Development GmbH
 # Licensed under either of
 #  * Apache License, version 2.0, ([LICENSE-APACHE](LICENSE-APACHE) or
 #    http://www.apache.org/licenses/LICENSE-2.0)
@@ -19,17 +19,14 @@ const
 
 type
   BackendType* = enum
-    BackendVoid = 0                  ## For providing backend-less constructor
     BackendMemory
     BackendRocksDB
-    BackendRdbHosting                ## Allowed piggybacking write session
 
   StorageType* = enum
     ## Storage types, key prefix
     Oops = 0
     AdmPfx = 1                       ## Admin data, e.g. ID generator
     VtxPfx = 2                       ## Vertex data
-    KeyPfx = 3                       ## Key/hash data
 
   AdminTabID* = distinct uint64
     ## Access keys for admin table records. When exposed (e.g. when itereating
@@ -48,7 +45,7 @@ type
 
   TypedPutHdlErrRef* = ref object of RootRef
     case pfx*: StorageType           ## Error sub-table
-    of VtxPfx, KeyPfx:
+    of VtxPfx:
       vid*: VertexID                 ## Vertex ID where the error occured
     of AdmPfx:
       aid*: AdminTabID
@@ -94,6 +91,37 @@ proc init*(trg: var TypedBackendObj; src: TypedBackendObj) =
   when verifyIxId:
     trg.txGen = src.txGen
     trg.txId = src.txId
+
+proc init*(
+    T: type AristoDbRef;
+    backend: BackendRef
+      ): Result[T, AristoError] =
+  let
+    vTop = if backend == nil: VertexID(0) else: ?backend.getTuvFn()
+    db = AristoDbRef(
+      txRef: AristoTxRef(vTop: vTop),
+      backend: backend,
+      accLeaves: LruCache[Hash32, VertexRef].init(ACC_LRU_SIZE),
+      stoLeaves: LruCache[Hash32, VertexRef].init(ACC_LRU_SIZE),
+    )
+
+  db.txRef.db = db # TODO evaluate if this cyclic ref is worth the convenience
+
+  ok(db)
+
+proc finish*(db: AristoDbRef; eradicate = false) =
+  ## Backend destructor. The argument `eradicate` indicates that a full
+  ## database deletion is requested. If set `false` the outcome might differ
+  ## depending on the type of backend (e.g. the `BackendMemory` backend will
+  ## always eradicate on close.)
+  ##
+  ## In case of distributed descriptors accessing the same backend, all
+  ## distributed descriptors will be destroyed.
+  ##
+  ## This distructor may be used on already *destructed* descriptors.
+  ##
+  if not db.backend.isNil:
+    db.backend.closeFn eradicate
 
 # ------------------------------------------------------------------------------
 # End

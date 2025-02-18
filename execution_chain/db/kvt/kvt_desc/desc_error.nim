@@ -11,38 +11,15 @@
 type
   KvtError* = enum
     NothingSerious = 0
-    GenericError
 
     GetNotFound
     KeyInvalid
     DataInvalid
 
     # RocksDB backend
-    RdbBeCantCreateDataDir
-    RdbBeDelayedAlreadyRegistered
-    RdbBeDelayedLocked
-    RdbBeDelayedNotReady
     RdbBeDriverDelError
     RdbBeDriverGetError
-    RdbBeDriverInitError
     RdbBeDriverPutError
     RdbBeDriverWriteError
-    RdbBeHostError
-    RdbBeHostNotApplicable
-
-    # Transaction wrappers
-    TxBackendNotWritable
-    TxPersistDelayed
-    TxStackGarbled
-
-    # Filter management
-    FilBackendMissing
-    FilBackendRoMode
-    FilSiblingsCommitUnfinshed
-
-    # Functions from `kvt_desc`
-    MustBeOnCentre
-    NotAllowedOnCentre
-    StaleDescriptor
 
 # End

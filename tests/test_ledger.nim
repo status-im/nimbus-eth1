@@ -721,11 +721,7 @@ proc ledgerMain*(noisy = defined(debug)) =
   noisy.runLedgerTransactionTests
   runLedgerBasicOperationsTests()
 
-when isMainModule:
-  var noisy = defined(debug)
-
-  setErrorLevel()
-  noisy.ledgerMain
+ledgerMain()
 
 # ------------------------------------------------------------------------------
 # End

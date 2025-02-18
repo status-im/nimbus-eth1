@@ -1,5 +1,13 @@
 #!/bin/bash
 
+# Copyright (c) 2021-2025 Status Research & Development GmbH
+# Licensed under either of
+#  * Apache License, version 2.0, ([LICENSE-APACHE](LICENSE-APACHE))
+#  * MIT license ([LICENSE-MIT](LICENSE-MIT))
+# at your option.
+# This file may not be copied, modified, or distributed except according to
+# those terms.
+
 # Startup script to initialize and boot a nimbus instance.
 #
 # This script assumes the following files:
@@ -103,13 +111,9 @@ fi
 set -e
 
 # Configure RPC.
-if [ "$HIVE_GRAPHQL_ENABLED" != "" ]; then
-  FLAGS="$FLAGS --graphql --graphql-address:0.0.0.0 --graphql-port:8545"
-else
-  FLAGS="$FLAGS --rpc --rpc-api:eth,debug --rpc-address:0.0.0.0 --rpc-port:8545"
-  FLAGS="$FLAGS --ws --ws-api:eth,debug --ws-address:0.0.0.0 --ws-port:8546"
-  FLAGS="$FLAGS --engine-api:true --engine-api-address:0.0.0.0 --engine-api-port:8551"
-fi
+FLAGS="$FLAGS --rpc --rpc-api:eth,debug --rpc-address:0.0.0.0 --rpc-port:8545"
+FLAGS="$FLAGS --ws --ws-api:eth,debug --ws-address:0.0.0.0 --ws-port:8546"
+FLAGS="$FLAGS --engine-api:true --engine-api-address:0.0.0.0 --engine-api-port:8551"
 
 echo "Running nimbus execution client with flags $FLAGS"
 $nimbus_execution_client $FLAGS

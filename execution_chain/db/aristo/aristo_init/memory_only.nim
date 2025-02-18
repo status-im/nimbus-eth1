@@ -18,12 +18,6 @@ import
   ../aristo_desc/desc_backend,
   "."/[init_common, memory_db]
 
-type
-  VoidBackendRef* = ref object of TypedBackendRef
-    ## Dummy descriptor type, used as `nil` reference
-
-  MemOnlyBackend* = VoidBackendRef|MemBackendRef
-
 export
   BackendType,
   GuestDbRef,
@@ -37,52 +31,23 @@ proc kind*(
     be: BackendRef;
       ): BackendType =
   ## Retrieves the backend type symbol for a `be` backend database argument
-  ## where `BackendVoid` is returned for the`nil` backend.
-  if be.isNil:
-    BackendVoid
-  else:
-    be.TypedBackendRef.beKind
+  doAssert(not be.isNil)
+  be.TypedBackendRef.beKind
 
 # ------------------------------------------------------------------------------
 # Public database constuctors, destructor
 # ------------------------------------------------------------------------------
 
 proc init*(
-    T: type AristoDbRef;                      # Target type
-    B: type MemOnlyBackend;                   # Backend type
+    T: type AristoDbRef;                     # Target type
+    B: type MemBackendRef;                   # Backend type
       ): T =
   ## Memory backend constructor.
   ##
+  AristoDbRef.init(memoryBackend())[]
 
-  let db =
-    when B is VoidBackendRef:
-      AristoDbRef(txRef: AristoTxRef(layer: LayerRef()))
-
-    elif B is MemBackendRef:
-      AristoDbRef(txRef: AristoTxRef(layer: LayerRef()), backend: memoryBackend())
-  db.txRef.db = db
-  db
-
-proc init*(
-    T: type AristoDbRef;                      # Target type
-      ): T =
-  ## Shortcut for `AristoDbRef.init(VoidBackendRef)`
-  AristoDbRef.init VoidBackendRef
-
-
-proc finish*(db: AristoDbRef; eradicate = false) =
-  ## Backend destructor. The argument `eradicate` indicates that a full
-  ## database deletion is requested. If set `false` the outcome might differ
-  ## depending on the type of backend (e.g. the `BackendMemory` backend will
-  ## always eradicate on close.)
-  ##
-  ## In case of distributed descriptors accessing the same backend, all
-  ## distributed descriptors will be destroyed.
-  ##
-  ## This distructor may be used on already *destructed* descriptors.
-  ##
-  if not db.backend.isNil:
-    db.backend.closeFn eradicate
+proc init*(T: type AristoDbRef): T =
+  AristoDbRef.init(MemBackendRef)
 
 # ------------------------------------------------------------------------------
 # End

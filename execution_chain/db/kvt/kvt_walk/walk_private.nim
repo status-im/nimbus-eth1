@@ -1,5 +1,5 @@
 # Nimbus-eth1
-# Copyright (c) 2023-2024 Status Research & Development GmbH
+# Copyright (c) 2023-2025 Status Research & Development GmbH
 # Licensed under either of
 #  * Apache License, version 2.0, ([LICENSE-APACHE](LICENSE-APACHE) or
 #    http://www.apache.org/licenses/LICENSE-2.0)
@@ -10,7 +10,7 @@
 
 import
   std/sets,
-  ".."/[kvt_desc, kvt_init, kvt_layers]
+  ".."/[kvt_desc, kvt_layers]
 
 # ------------------------------------------------------------------------------
 # Public generic iterators
@@ -26,12 +26,11 @@ iterator walkPairsImpl*[T](
     if data.isValid:
       yield (key,data)
 
-  when T isnot VoidBackendRef:
-    mixin walk
+  mixin walk
 
-    for (key,data) in db.backend.T.walk:
-      if key notin seen and data.isValid:
-        yield (key,data)
+  for (key,data) in db.backend.T.walk:
+    if key notin seen and data.isValid:
+      yield (key,data)
 
 # ------------------------------------------------------------------------------
 # End

@@ -1,5 +1,5 @@
 # nimbus-eth1
-# Copyright (c) 2023-2024 Status Research & Development GmbH
+# Copyright (c) 2023-2025 Status Research & Development GmbH
 # Licensed under either of
 #  * Apache License, version 2.0, ([LICENSE-APACHE](LICENSE-APACHE) or
 #    http://www.apache.org/licenses/LICENSE-2.0)
@@ -130,15 +130,21 @@ func `$`*(vid: VertexID): string =
   "$" & (if vid == VertexID(0): "ø"
          else: vid.uint64.toHex.strip(trailing=false,chars={'0'}).toLowerAscii)
 
-func `$`*(rvid: RootedVertexID): string =
-  $rvid.root & "/" & $rvid.vid
-
 func `==`*(a: VertexID; b: static[uint]): bool = (a == VertexID(b))
 
 # Scalar model extension as in `IntervalSetRef[VertexID,uint64]`
 func `+`*(a: VertexID; b: uint64): VertexID = (a.uint64+b).VertexID
 func `-`*(a: VertexID; b: uint64): VertexID = (a.uint64-b).VertexID
 func `-`*(a, b: VertexID): uint64 = (a.uint64 - b.uint64)
+
+func `==`*(a, b: RootedVertexID): bool {.inline.} =
+  a.vid == b.vid
+
+func hash*(rvid: RootedVertexID): Hash {.inline.} =
+  hash(rvid.vid)
+
+func `$`*(rvid: RootedVertexID): string =
+  $rvid.root & "/" & $rvid.vid
 
 # ------------------------------------------------------------------------------
 # Public helpers: `PathID` ordered scalar data model

@@ -11,23 +11,15 @@
 {.push raises: [].}
 
 import
+  std/[os, sequtils],
   chronicles,
   rocksdb,
   results,
-  ../../aristo,
-  ../../aristo/aristo_init/rocks_db as use_ari,
-  ../../aristo/[aristo_desc, aristo_compute, aristo_walk/persistent],
-  ../../kvt,
-  ../../kvt/kvt_persistent as use_kvt,
-  ../../kvt/kvt_init/rocks_db/rdb_init,
-  ../base,
-  ./aristo_db,
+  ../../aristo/aristo_init/[rocks_db as use_ari, persistent],
+  ../../kvt/kvt_init/[rocks_db as use_kvt, persistent],
+  ./[aristo_db, rocksdb_desc],
+  ../../aristo/aristo_compute,
   ../../opts
-
-const
-  # Expectation messages
-  aristoFail = "Aristo/RocksDB init() failed"
-  kvtFail = "Kvt/RocksDB init() failed"
 
 proc toRocksDb*(
     opts: DbOptions
@@ -140,14 +132,11 @@ proc toRocksDb*(
   # https://github.com/facebook/rocksdb/blob/af50823069818fc127438e39fef91d2486d6e76c/include/rocksdb/options.h#L719
   # Flushing the oldest
   let writeBufferSize =
-    if opts.writeBufferSize > 0:
-      opts.writeBufferSize
-    else:
-      cfOpts.writeBufferSize
+    if opts.writeBufferSize > 0: opts.writeBufferSize else: cfOpts.writeBufferSize
 
   # The larger the value, the fewer files will be created but the longer the
   # startup time (because this much data must be replayed)
-  dbOpts.maxTotalWalSize = 3 * writeBufferSize + 1024*1024
+  dbOpts.maxTotalWalSize = 3 * writeBufferSize + 1024 * 1024
 
   dbOpts.keepLogFileNum = 16 # No point keeping 1000 log files around...
 
@@ -157,35 +146,30 @@ proc toRocksDb*(
 # Public constructor
 # ------------------------------------------------------------------------------
 
-proc newAristoRocksDbCoreDbRef*(path: string, opts: DbOptions): CoreDbRef =
-  ## This funcion piggybacks the `KVT` on the `Aristo` backend.
+proc newRocksDbCoreDbRef*(basePath: string, opts: DbOptions): CoreDbRef =
+  # Single rocksdb database with separate column families for mpt/kvt
 
+  # The same column family options are used for all column families meaning that
+  # the options are a compromise between the various write and access patterns
+  # of what's stored in there - there's room for improvement here!
   let
-    # Sharing opts means we also share caches between column families!
     (dbOpts, cfOpts) = opts.toRocksDb()
-    guestCFs = RdbInst.guestCFs(cfOpts)
-    (adb, oCfs) = AristoDbRef.init(use_ari.RdbBackendRef, path, opts, dbOpts, cfOpts, guestCFs).valueOr:
-      raiseAssert aristoFail & ": " & $error
-    kdb = KvtDbRef.init(use_kvt.RdbBackendRef, adb, oCfs).valueOr:
-      raiseAssert kvtFail & ": " & $error
+    cfDescs = (AristoCFs.items().toSeq().mapIt($it) & KvtCFs.items().toSeq().mapIt($it))
+    baseDb = RocksDbInstanceRef.open(basePath, dbOpts, cfOpts, cfDescs).expect(
+        "Open database from " & basePath
+      )
+
+    adb = AristoDbRef.init(use_ari.RdbBackendRef, opts, baseDb).valueOr:
+      raiseAssert "Could not initialize aristo: " & $error
+    kdb = KvtDbRef.init(use_kvt.RdbBackendRef, baseDb).valueOr:
+      raiseAssert "Could not initialize kvt: " & $error
 
   if opts.rdbKeyCacheSize > 0:
     # Make sure key cache isn't empty
     adb.txRef.computeKeys(VertexID(1)).isOkOr:
-      fatal "Cannot compute root keys", msg=error
+      fatal "Cannot compute root keys", msg = error
       quit(QuitFailure)
 
-  AristoDbRocks.create(kdb, adb)
-
-proc newAristoDualRocksDbCoreDbRef*(path: string, opts: DbOptions): CoreDbRef =
-  ## This is only for debugging. The KVT is run on a completely separate
-  ## database backend.
-  let
-    (dbOpts, cfOpts) = opts.toRocksDb()
-    (adb, _) = AristoDbRef.init(use_ari.RdbBackendRef, path, opts, dbOpts, cfOpts, []).valueOr:
-      raiseAssert aristoFail & ": " & $error
-    kdb = KvtDbRef.init(use_kvt.RdbBackendRef, path, dbOpts, cfOpts).valueOr:
-      raiseAssert kvtFail & ": " & $error
   AristoDbRocks.create(kdb, adb)
 
 # ------------------------------------------------------------------------------

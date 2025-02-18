@@ -56,20 +56,20 @@ func layersGet*(db: KvtTxRef; key: openArray[byte]|seq[byte]): Opt[seq[byte]] =
 
 func layersPut*(db: KvtTxRef; key: openArray[byte]; data: openArray[byte]) =
   ## Store a (potentally empty) value on the top layer
-  db.layer.sTab[@key] = @data
+  db.sTab[@key] = @data
 
 # ------------------------------------------------------------------------------
 # Public functions
 # ------------------------------------------------------------------------------
 
-proc mergeAndReset*(trg, src: var Layer) =
+proc mergeAndReset*(trg, src: KvtTxRef) =
   mergeAndReset(trg.sTab, src.sTab)
 
 # ------------------------------------------------------------------------------
 # Public functions
 # ------------------------------------------------------------------------------
 
-func layersCc*(db: KvtDbRef; level = high(int)): LayerRef =
+func layersCc*(db: KvtDbRef; level = high(int)): KvtTxRef =
   ## Provide a collapsed copy of layers up to a particular transaction level.
   ## If the `level` argument is too large, the maximum transaction level is
   ## returned. For the result layer, the `txUid` value set to `0`.

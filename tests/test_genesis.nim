@@ -181,9 +181,8 @@ proc customGenesisTest() =
       validateBlobSchedule(cg, Prague, 6, 9, 3338477)
       validateBlobSchedule(cg, Osaka, 6, 9, 3338477)
 
-proc genesisMain*() =
+proc genesisMain() =
   genesisTest()
   customGenesisTest()
 
-when isMainModule:
-  genesisMain()
+genesisMain()

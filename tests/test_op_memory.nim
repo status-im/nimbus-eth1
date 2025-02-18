@@ -1,5 +1,5 @@
 # Nimbus
-# Copyright (c) 2019-2024 Status Research & Development GmbH
+# Copyright (c) 2019-2025 Status Research & Development GmbH
 # Licensed under either of
 #  * Apache License, version 2.0, ([LICENSE-APACHE](LICENSE-APACHE) or
 #    http://www.apache.org/licenses/LICENSE-2.0)
@@ -962,5 +962,4 @@ proc opMemoryMain*() =
         "0x695b00"       # 5: PUSH10 First byte is jumpDestOp but operand is too short
       success: false
 
-when isMainModule:
-  opMemoryMain()
+opMemoryMain()

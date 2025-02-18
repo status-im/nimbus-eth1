@@ -26,15 +26,11 @@ import
   ./transaction,
   ./utils/utils
 
-when not CoreDbEnableCaptJournal:
-  {.error: "Compiler flag missing for tracer, try -d:dbjapi_enabled".}
-
 type
   CaptCtxRef = ref object
     db: CoreDbRef               # not `nil`
     root: common.Hash32
     ctx: CoreDbCtxRef           # not `nil`
-    cpt: CoreDbCaptRef          # not `nil`
     restore: CoreDbCtxRef       # `nil` unless `ctx` activated
 
 const
@@ -44,7 +40,6 @@ const
   uncleName = "uncle"
   internalTxName = "internalTx"
 
-proc dumpMemoryDB*(node: JsonNode, cpt: CoreDbCaptRef) {.gcsafe.}
 proc toJson*(receipts: seq[Receipt]): JsonNode {.gcsafe.}
 
 # ------------------------------------------------------------------------------
@@ -65,7 +60,7 @@ proc init(
     else:
       {.warning: "TODO make a temporary context? newCtxByKey has been obsoleted".}
       com.db.ctx
-  T(db: com.db, root: root, cpt: com.db.pushCapture(), ctx: ctx)
+  T(db: com.db, root: root, ctx: ctx)
 
 proc init(
     T: type CaptCtxRef;
@@ -90,8 +85,6 @@ proc release(cc: CaptCtxRef) =
   #   doAssert ctx == cc.ctx
   if true:
     raiseAssert "TODO release context"
-  # cc.ctx.forget()                      # dispose
-  cc.cpt.pop()                         # discard top layer of actions tracer
 
 # -------------------
 
@@ -232,15 +225,9 @@ proc traceTransactionImpl(
   if TracerFlags.DisableStateDiff notin tracerFlags:
     result["stateDiff"] = stateDiff
 
-  # now we dump captured state db
-  if TracerFlags.DisableState notin tracerFlags:
-    result.dumpMemoryDB(cx.cpt)
-
-
 proc dumpBlockStateImpl(
     com: CommonRef;
     blk: EthBlock;
-    dumpState = false;
       ): JsonNode =
   template header: Header = blk.header
 
@@ -301,10 +288,6 @@ proc dumpBlockStateImpl(
 
   result = %{"before": before, "after": after}
 
-  if dumpState:
-    result.dumpMemoryDB(cc.cpt)
-
-
 proc traceBlockImpl(
     com: CommonRef;
     blk: EthBlock;
@@ -339,9 +322,6 @@ proc traceBlockImpl(
   result = tracerInst.getTracingResult()
   result["gas"] = %gasUsed
 
-  if TracerFlags.DisableState notin tracerFlags:
-    result.dumpMemoryDB(cc.cpt)
-
 proc traceTransactionsImpl(
     com: CommonRef;
     header: Header;
@@ -368,12 +348,6 @@ proc toJson*(receipts: seq[Receipt]): JsonNode =
   for receipt in receipts:
     result.add receipt.toJson
 
-proc dumpMemoryDB*(node: JsonNode, cpt: CoreDbCaptRef) =
-  var n = newJObject()
-  for (k,v) in cpt.kvtLog:
-    n[k.toHex(false)] = %v
-  node["state"] = n
-
 proc dumpReceipts*(chainDB: CoreDbTxRef, header: Header): JsonNode =
   chainDB.dumpReceiptsImpl header
 
@@ -389,9 +363,8 @@ proc traceTransaction*(
 proc dumpBlockState*(
     com: CommonRef;
     blk: EthBlock;
-    dumpState = false;
       ): JsonNode =
-  com.dumpBlockStateImpl(blk, dumpState)
+  com.dumpBlockStateImpl(blk)
 
 proc traceTransactions*(
     com: CommonRef;

@@ -12,7 +12,8 @@ import
   ./api_handler/api_getpayload,
   ./api_handler/api_getbodies,
   ./api_handler/api_newpayload,
-  ./api_handler/api_forkchoice
+  ./api_handler/api_forkchoice,
+  ./api_handler/api_getblobs
 
 # ------------------------------------------------------------------------------
 # Public functions
@@ -26,4 +27,5 @@ export
   getPayloadBodiesByHash,
   getPayloadBodiesByRange,
   newPayload,
-  forkchoiceUpdated
+  forkchoiceUpdated,
+  getBlobsV1

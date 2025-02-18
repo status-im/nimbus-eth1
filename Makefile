@@ -241,7 +241,6 @@ endif
 
 # builds and runs the nimbus test suite
 test: | build deps rocksdb
-	$(ENV_SCRIPT) nim test_rocksdb $(NIM_PARAMS) nimbus.nims
 	$(ENV_SCRIPT) nim test $(NIM_PARAMS) nimbus.nims
 
 test_import: nimbus_execution_client

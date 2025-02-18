@@ -90,7 +90,7 @@
   branch = master
 [submodule "vendor/nim-unittest2"]
   path = vendor/nim-unittest2
-  url = https://github.com/stefantalpalaru/nim-unittest2.git
+  url = https://github.com/status-im/nim-unittest2.git
   ignore = dirty
   branch = master
 [submodule "vendor/nim-metrics"]

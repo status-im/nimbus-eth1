@@ -12,7 +12,7 @@
 import
   std/[algorithm, sequtils, sets, tables],
   results,
-  ".."/[aristo_desc, aristo_init, aristo_layers]
+  ".."/[aristo_desc, aristo_layers]
 
 # ------------------------------------------------------------------------------
 # Public generic iterators
@@ -23,24 +23,20 @@ iterator walkVtxBeImpl*[T](
     kinds: set[VertexType];
       ): tuple[rvid: RootedVertexID, vtx: VertexRef] =
   ## Generic iterator
-  when T is VoidBackendRef:
-    let filter = if db.txRef.isNil: LayerRef() else: db.txRef.layer
+  mixin walkVtx
 
-  else:
-    mixin walkVtx
+  let filter = AristoTxRef()
+  if not db.txRef.isNil:
+    filter.sTab = db.txRef.sTab # copy table
 
-    let filter = LayerRef()
-    if not db.txRef.isNil:
-      filter.sTab = db.txRef.layer.sTab # copy table
-
-    for (rvid,vtx) in db.backend.T.walkVtx(kinds):
-      if filter.sTab.hasKey rvid:
-        let fVtx = filter.sTab.getOrVoid rvid
-        if fVtx.isValid:
-          yield (rvid,fVtx)
-        filter.sTab.del rvid
-      else:
-        yield (rvid,vtx)
+  for (rvid,vtx) in db.backend.T.walkVtx(kinds):
+    if filter.sTab.hasKey rvid:
+      let fVtx = filter.sTab.getOrVoid rvid
+      if fVtx.isValid:
+        yield (rvid,fVtx)
+      filter.sTab.del rvid
+    else:
+      yield (rvid,vtx)
 
   for rvid in filter.sTab.keys:
     let vtx = filter.sTab.getOrVoid rvid
@@ -54,24 +50,20 @@ iterator walkKeyBeImpl*[T](
     db: AristoDbRef;                   # Database with optional backend filter
       ): tuple[rvid: RootedVertexID, key: HashKey] =
   ## Generic iterator
-  when T is VoidBackendRef:
-    let filter = if db.txRef.isNil: LayerRef() else: db.txRef.layer
+  mixin walkKey
 
-  else:
-    mixin walkKey
+  let filter = AristoTxRef()
+  if not db.txRef.isNil:
+    filter.kMap = db.txRef.kMap # copy table
 
-    let filter = LayerRef()
-    if not db.txRef.isNil:
-      filter.kMap = db.txRef.layer.kMap # copy table
-
-    for (rvid,key) in db.backend.T.walkKey:
-      if filter.kMap.hasKey rvid:
-        let fKey = filter.kMap.getOrVoid rvid
-        if fKey.isValid:
-          yield (rvid,fKey)
-        filter.kMap.del rvid
-      else:
-        yield (rvid,key)
+  for (rvid,key) in db.backend.T.walkKey:
+    if filter.kMap.hasKey rvid:
+      let fKey = filter.kMap.getOrVoid rvid
+      if fKey.isValid:
+        yield (rvid,fKey)
+      filter.kMap.del rvid
+    else:
+      yield (rvid,key)
 
   for rvid in filter.kMap.keys.toSeq.sorted:
     let key = filter.kMap.getOrVoid rvid

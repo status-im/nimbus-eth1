@@ -1,5 +1,5 @@
 # Nimbus
-# Copyright (c) 2023-2024 Status Research & Development GmbH
+# Copyright (c) 2023-2025 Status Research & Development GmbH
 # Licensed under either of
 #  * Apache License, version 2.0, ([LICENSE-APACHE](LICENSE-APACHE) or
 #    http://www.apache.org/licenses/LICENSE-2.0)
@@ -13,7 +13,6 @@
 import
   ../aristo,
   ./backend/aristo_db,
-  ./base/base_config,
   "."/[base_iterators, core_apps]
 
 import
@@ -22,7 +21,6 @@ import
 export
   EmptyBlob,
   base,
-  base_config,
   base_iterators,
   core_apps
 
@@ -39,10 +37,7 @@ proc newCoreDbRef*(
   ## `CoreDbRef.init()` because of compiler coughing.
   ##
   when dbType == AristoDbMemory:
-    newAristoMemoryCoreDbRef()
-
-  elif dbType == AristoDbVoid:
-    newAristoVoidCoreDbRef()
+    newMemoryCoreDbRef()
 
   else:
     {.error: "Unsupported constructor " & $dbType & ".newCoreDbRef()".}

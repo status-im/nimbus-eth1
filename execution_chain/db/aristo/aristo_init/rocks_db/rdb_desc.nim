@@ -1,5 +1,5 @@
 # nimbus-eth1
-# Copyright (c) 2023-2024 Status Research & Development GmbH
+# Copyright (c) 2023-2025 Status Research & Development GmbH
 # Licensed under either of
 #  * Apache License, version 2.0, ([LICENSE-APACHE](LICENSE-APACHE) or
 #    http://www.apache.org/licenses/LICENSE-2.0)
@@ -16,13 +16,13 @@
 import
   std/os,
   std/concurrency/atomics,
-  rocksdb,
   stew/endians2,
+  ../../../core_db/backend/rocksdb_desc,
   ../../aristo_desc,
   ../init_common,
   minilru
 
-export minilru
+export minilru, rocksdb_desc
 
 type
   RdbWriteEventCb* =
@@ -37,9 +37,9 @@ type
       ## write session and return a session error.
 
   RdbInst* = object
+    baseDb*: RocksDbInstanceRef
     admCol*: ColFamilyReadWrite        ## Admin column family handler
     vtxCol*: ColFamilyReadWrite        ## Vertex column family handler
-    session*: WriteBatchRef            ## For batched `put()`
 
     # Note that the key type `VertexID` for LRU caches requires that there is
     # strictly no vertex ID re-use.
@@ -62,9 +62,6 @@ type
     rdBranchLru*: LruCache[VertexID, (VertexID, uint16)]
     rdBranchSize*: int
 
-    basePath*: string                  ## Database directory
-    trgWriteEvent*: RdbWriteEventCb    ## Database piggiback call back handler
-
   AristoCFs* = enum
     ## Column family symbols/handles and names used on the database
     AdmCF = "AriAdm"                   ## Admin column family name
@@ -75,10 +72,6 @@ type
   RdbStateType* = enum
     Account
     World
-
-const
-  BaseFolder* = "nimbus"               ## Same as for Legacy DB
-  DataFolder* = "aristo"               ## Legacy DB has "data"
 
 var
   # Hit/miss counters for LRU cache - global so as to integrate easily with
@@ -93,20 +86,6 @@ var
 # ------------------------------------------------------------------------------
 # Public functions
 # ------------------------------------------------------------------------------
-
-template logTxt*(info: static[string]): static[string] =
-  "RocksDB/" & info
-
-template baseDb*(rdb: RdbInst): RocksDbReadWriteRef =
-  rdb.admCol.db
-
-
-func baseDir*(rdb: RdbInst): string =
-  rdb.basePath / BaseFolder
-
-func dataDir*(rdb: RdbInst): string =
-  rdb.baseDir / DataFolder
-
 
 template toOpenArray*(xid: AdminTabID): openArray[byte] =
   xid.uint64.toBytesBE.toOpenArray(0,7)

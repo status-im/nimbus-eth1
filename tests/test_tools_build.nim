@@ -1,5 +1,5 @@
 # nimbus
-# Copyright (c) 2018-2024 Status Research & Development GmbH
+# Copyright (c) 2018-2025 Status Research & Development GmbH
 # Licensed and distributed under either of
 #   * MIT license: [LICENSE-MIT](LICENSE-MIT) or http://opensource.org/licenses/MIT
 #   * Apache License, Version 2.0, ([LICENSE-APACHE](LICENSE-APACHE) or http://www.apache.org/licenses/LICENSE-2.0)
@@ -16,7 +16,6 @@ import
   #./persistBlockTestGen,    # -- ditto
   ../hive_integration/nodocker/rpc/rpc_sim,
   ../hive_integration/nodocker/consensus/consensus_sim,
-  #../hive_integration/nodocker/graphql/graphql_sim,       # -- does not compile
   ../hive_integration/nodocker/engine/engine_sim,
   ../hive_integration/nodocker/pyspec/pyspec_sim,
   ../tools/t8n/t8n,

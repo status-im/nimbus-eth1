@@ -12,17 +12,6 @@ type
   AristoError* = enum
     NothingSerious = 0
 
-    # Miscelaneous/unclassified handy helpers
-    GenericError
-
-
-    # Data record transcoders, `blobify()` from `blobify.nim`
-    BlobifyBranchMissingRefs
-    BlobifyExtMissingRefs
-    BlobifyExtPathOverflow
-    BlobifyLeafPathOverflow
-    BlobifyNilVertex
-
 
     # Cache checker `checkCache()`
     CheckAnyVidDeadStorageRoot
@@ -78,18 +67,6 @@ type
     DelStoRootMissing
     DelStoRootNotAccepted
     DelVidStaleVtx
-
-    # Functions from `aristo_desc.nim`
-    DescMustBeOnCentre
-    DescNotAllowedOnCentre
-    DescStaleDescriptor
-
-
-    # Functions from  `aristo_delta.nim`
-    FilBackendMissing
-    FilBackendRoMode
-    FilSiblingsCommitUnfinshed
-
 
     # Fetch functions from `aristo_fetch.nim`
     FetchAccInaccessible
@@ -206,7 +183,6 @@ type
     PartVtxSlotWasNotModified
 
     # RocksDB backend
-    RdbBeCantCreateDataDir
     RdbBeCantCreateTmpDir
     RdbBeDriverDelAdmError
     RdbBeDriverDelKeyError
@@ -226,9 +202,5 @@ type
     RdbGuestInstanceAborted
     RdbHashKeyExpected
 
-
-    # Transaction wrappers
-    TxBackendNotWritable
-    TxStackGarbled
 
 # End

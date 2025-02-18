@@ -719,5 +719,4 @@ proc rpcMain*() =
 
     env.close()
 
-when isMainModule:
-  rpcMain()
+rpcMain()

@@ -14,36 +14,18 @@
 {.push raises: [].}
 
 import
-  results,
-  ".."/[kvt_desc, kvt_delta]
+  ./[kvt_desc, kvt_tx_frame]
 
 # ------------------------------------------------------------------------------
 # Public functions
 # ------------------------------------------------------------------------------
 
-proc txPersistOk*(
-    db: KvtDbRef;                     # Database
-      ): Result[void,KvtError] =
-  ## Verify that `txPersist()` can go ahead
-  if not db.deltaPersistentOk():
-    return err(TxBackendNotWritable)
-  ok()
-
-proc txPersist*(
-    db: KvtDbRef;                     # Database
-      ): Result[void,KvtError] =
-  ## The function saves the data from the top layer cache into the
-  ## backend database.
-  ##
-  ## If there is no backend the function returns immediately with an error.
-  ## The same happens if there is a pending transaction.
-  ##
-  ? db.txPersistOk()
-
-  # Move `txRef` data into persistent tables
-  ? db.deltaPersistent()
-
-  ok()
+proc persist*(
+    db: KvtDbRef;
+    batch: PutHdlRef;
+    txFrame: KvtTxRef
+      ) =
+  db.txFramePersist(batch, txFrame)
 
 # ------------------------------------------------------------------------------
 # End

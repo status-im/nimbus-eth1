@@ -203,5 +203,4 @@ proc filtersMain*() =
           check:
             filteredLog.address == log.address
 
-when isMainModule:
-  filtersMain()
+filtersMain()

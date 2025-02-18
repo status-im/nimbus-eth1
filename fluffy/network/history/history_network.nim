@@ -147,6 +147,9 @@ proc getVerifiedBlockHeader*(
         return Opt.none(Header)
 
       header = validateCanonicalHeaderBytes(headerContent.content, id, n.accumulator).valueOr:
+        n.portalProtocol.banNode(
+          headerContent.receivedFrom.id, NodeBanDurationContentLookupFailedValidation
+        )
         warn "Validation of block header failed",
           error = error, node = headerContent.receivedFrom.record.toURI()
         continue
@@ -192,6 +195,9 @@ proc getBlockBody*(
         return Opt.none(BlockBody)
 
       body = validateBlockBodyBytes(bodyContent.content, header).valueOr:
+        n.portalProtocol.banNode(
+          bodyContent.receivedFrom.id, NodeBanDurationContentLookupFailedValidation
+        )
         warn "Validation of block body failed",
           error, node = bodyContent.receivedFrom.record.toURI()
         continue
@@ -266,7 +272,11 @@ proc getReceipts*(
       receiptsContent = (await n.portalProtocol.contentLookup(contentKey, contentId)).valueOr:
         debug "Failed fetching receipts from the network"
         return Opt.none(seq[Receipt])
+
       receipts = validateReceiptsBytes(receiptsContent.content, header.receiptsRoot).valueOr:
+        n.portalProtocol.banNode(
+          receiptsContent.receivedFrom.id, NodeBanDurationContentLookupFailedValidation
+        )
         warn "Validation of receipts failed",
           error, node = receiptsContent.receivedFrom.record.toURI()
         continue
@@ -384,6 +394,9 @@ proc validateContent(
 
       debug "Received offered content validated successfully", srcNodeId, contentKey
     else:
+      if srcNodeId.isSome():
+        n.portalProtocol.banNode(srcNodeId.get(), NodeBanDurationOfferFailedValidation)
+
       debug "Received offered content failed validation",
         srcNodeId, contentKey, error = res.error
       return false

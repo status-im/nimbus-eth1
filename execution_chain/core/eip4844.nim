@@ -224,4 +224,11 @@ proc loadKzgTrustedSetup*(): Result[void, string] =
     trustedSetupDir = vendorDir & "/nim-kzg4844/kzg4844/csources/src"
     trustedSetup = staticRead trustedSetupDir & "/trusted_setup.txt"
 
-  loadTrustedSetupFromString(trustedSetup, 0)
+  # If the baked-in trusted setup was loaded successfully, it's harmless to
+  # try again (which happpens in tests)
+  var loaded {.global.}: bool
+  if not loaded:
+    ?loadTrustedSetupFromString(trustedSetup, 0)
+    loaded = true
+  ok()
+

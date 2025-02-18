@@ -236,8 +236,6 @@ when isMainModule:
   import std/times
   var message: string
 
-  let start = getTime()
-
   ## Processing command line arguments
   if processArguments(message) != Success:
     echo message
@@ -248,5 +246,5 @@ when isMainModule:
       quit(QuitSuccess)
 
   generalStateJsonMain(true)
-  let elpd = getTime() - start
-  echo "TIME: ", elpd
+else:
+  generalStateJsonMain(false)

@@ -190,14 +190,17 @@ proc hasStoragePayload(
 # Public functions
 # ------------------------------------------------------------------------------
 
-proc fetchLastSavedState*(
+proc fetchLastCheckpoint*(
     db: AristoTxRef;
-      ): Result[SavedState,AristoError] =
+      ): Result[BlockNumber,AristoError] =
   ## Wrapper around `getLstBe()`. The function returns the state of the last
   ## saved state. This is a Merkle hash tag for vertex with ID 1 and a bespoke
   ## `uint64` identifier (may be interpreted as block number.)
-  # TODO store in frame!!
-  db.db.getLstBe()
+  if db.blockNumber.isSome():
+    return ok db.blockNumber.get()
+
+  let state = ?db.db.getLstBe()
+  ok state.serial
 
 proc fetchAccountRecord*(
     db: AristoTxRef;

@@ -30,8 +30,7 @@ proc transactionJsonMain*() =
   suite "Transactions tests":
     jsonTest("eth_tests" / "TransactionTests", "TransactionTests", testFixture)
 
-when isMainModule:
-  transactionJsonMain()
+transactionJsonMain()
 
 proc txHash(tx: Transaction): string =
   rlpHash(tx).toHex()

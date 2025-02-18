@@ -1,5 +1,5 @@
 # nimbus-eth1
-# Copyright (c) 2023-2024 Status Research & Development GmbH
+# Copyright (c) 2023-2025 Status Research & Development GmbH
 # Licensed under either of
 #  * Apache License, version 2.0, ([LICENSE-APACHE](LICENSE-APACHE) or
 #    http://www.apache.org/licenses/LICENSE-2.0)
@@ -14,15 +14,15 @@
 {.push raises: [].}
 
 import
-  aristo/[aristo_api, aristo_constants]
+  aristo/aristo_constants
 export
-  aristo_api, aristo_constants
+  aristo_constants
 
 import
-  aristo/aristo_init
+  aristo/aristo_init/memory_only,
+  aristo/aristo_init/init_common
 export
   MemBackendRef,
-  VoidBackendRef,
   finish,
   init
 

@@ -654,5 +654,4 @@ proc txPoolMain*() =
       # restore blobSchedule
       cc.blobSchedule[Cancun] = bs
 
-when isMainModule:
-  txPoolMain()
+txPoolMain()

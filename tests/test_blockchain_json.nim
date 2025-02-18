@@ -135,19 +135,18 @@ proc blockchainJsonMain*() =
     suite "new block chain json tests":
       jsonTest(newFolder, "newBlockchainTests", executeFile, skipNewBCTests)
 
-when isMainModule:
-  when debugMode:
-    proc executeFile(name: string) =
-      loadKzgTrustedSetup().isOkOr:
-        echo "FATAL: ", error
-        quit(QuitFailure)
+when debugMode:
+  proc executeFile(name: string) =
+    loadKzgTrustedSetup().isOkOr:
+      echo "FATAL: ", error
+      quit(QuitFailure)
 
-      var testStatusIMPL: TestStatus
-      let node = json.parseFile(name)
-      executeFile(node, testStatusIMPL)
-      if testStatusIMPL == FAILED:
-        quit(QuitFailure)
+    var testStatusIMPL: TestStatus
+    let node = json.parseFile(name)
+    executeFile(node, testStatusIMPL)
+    if testStatusIMPL == FAILED:
+      quit(QuitFailure)
 
-    executeFile("tests/fixtures/eth_tests/BlockchainTests/ValidBlocks/bcWalletTest/walletReorganizeOwners.json")
-  else:
-    blockchainJsonMain()
+  executeFile("tests/fixtures/eth_tests/BlockchainTests/ValidBlocks/bcWalletTest/walletReorganizeOwners.json")
+else:
+  blockchainJsonMain()
