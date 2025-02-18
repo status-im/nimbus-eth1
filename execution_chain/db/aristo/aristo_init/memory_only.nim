@@ -27,6 +27,7 @@ proc init*(T: type AristoDbRef): T =
   ##
   let db = memoryBackend()
   db.initInstance()[]
+  db
 
 # --+----------------------------------------------------------------------------
 # End
