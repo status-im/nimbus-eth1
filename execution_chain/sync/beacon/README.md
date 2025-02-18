@@ -283,7 +283,7 @@ For the *Era1*/*Era* pre-load (if any) the following extra options apply to
 
 To start syncing, the following additional options apply to *nimbus*:
 
-       --debug-beacon-chunk-size=384
+       --debug-beacon-blocks-queue-hwm=1000
        --debug-rocksdb-max-open-files=384
        --debug-rocksdb-write-buffer-size=50331648
        --debug-rocksdb-block-cache-size=1073741824

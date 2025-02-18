@@ -132,14 +132,10 @@ type
     nextMetricsUpdate*: Moment       ## For updating metrics
     nextAsyncNanoSleep*: Moment      ## Use nano-sleeps for task switch
 
-    # Blocks import/execution settings for importing with
-    # `nBodiesBatch` blocks in each round (minimum value is
-    # `nFetchBodiesRequest`.)
     chain*: ForkedChainRef           ## Core database, FCU support
 
     # Blocks import/execution settings
     blockImportOk*: bool             ## Don't fetch data while block importing
-    nBodiesBatch*: int               ## Default `nFetchBodiesBatchDefault`
     blocksStagedHwm*: int            ## Set a `staged` queue limit
     stagedLenHwm*: int               ## Figured out as # staged records
 
