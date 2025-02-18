@@ -694,8 +694,8 @@ proc receiptsByBlockHash*(c: ForkedChainRef, blockHash: Hash32): Result[seq[Rece
   c.hashToBlock.withValue(blockHash, loc):
     return ok(loc[].receipts)
   
-  let header = c.headerByHash(blockHash).valueOr:
-    return err("Block hash not found")
+  let header = c.baseTxFrame.getBlockHeader(blockHash).valueOr:
+    return err("Block header not found")
 
   c.baseTxFrame.getReceipts(header.receiptsRoot)
 
