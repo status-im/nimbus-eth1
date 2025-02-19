@@ -25,30 +25,21 @@ proc getTuvBe*(
     db: AristoDbRef;
       ): Result[VertexID,AristoError] =
   ## Get the ID generator state from the backened if available.
-  let be = db.backend
-  if not be.isNil:
-    return be.getTuvFn()
-  err(GetTuvNotFound)
-
+  db.getTuvFn()
+  
 proc getLstBe*(
     db: AristoDbRef;
       ): Result[SavedState,AristoError] =
   ## Get the last saved state
-  let be = db.backend
-  if not be.isNil:
-    return be.getLstFn()
-  err(GetLstNotFound)
-
+  db.getLstFn()
+  
 proc getVtxBe*(
     db: AristoDbRef;
     rvid: RootedVertexID;
     flags: set[GetVtxFlag] = {};
       ): Result[VertexRef,AristoError] =
   ## Get the vertex from the backened if available.
-  let be = db.backend
-  if not be.isNil:
-    return be.getVtxFn(rvid, flags)
-  err GetVtxNotFound
+  db.getVtxFn(rvid, flags)
 
 proc getKeyBe*(
     db: AristoDbRef;
@@ -56,10 +47,7 @@ proc getKeyBe*(
     flags: set[GetVtxFlag];
       ): Result[(HashKey, VertexRef),AristoError] =
   ## Get the Merkle hash/key from the backend if available.
-  let be = db.backend
-  if not be.isNil:
-    return be.getKeyFn(rvid, flags)
-  err GetKeyNotFound
+  db.getKeyFn(rvid, flags)
 
 # ------------------
 

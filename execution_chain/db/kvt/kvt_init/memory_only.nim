@@ -15,7 +15,6 @@
 
 import
   ../kvt_desc,
-  ../kvt_desc/desc_backend,
   "."/[init_common, memory_db]
 
 export
@@ -23,29 +22,14 @@ export
   MemBackendRef
 
 # ------------------------------------------------------------------------------
-# Public helpers
-# -----------------------------------------------------------------------------
-
-func kind*(
-    be: BackendRef;
-      ): BackendType =
-  ## Retrieves the backend type symbol for a `be` backend database argument
-  ## where `BackendVoid` is returned for the`nil` backend.
-  doAssert(not be.isNil)
-  be.TypedBackendRef.beKind
-
-# ------------------------------------------------------------------------------
 # Public database constuctors, destructor
 # ------------------------------------------------------------------------------
 
-proc init*(
-    T: type KvtDbRef;                         # Target type
-    B: type MemBackendRef;                   # Backend type
-      ): T =
+proc init*(T: type KvtDbRef): T =
   ## Memory backend constructor.
   ##
-  let db = KvtDbRef(txRef: KvtTxRef(), backend: memoryBackend())
-  db.txRef.db = db
+  let db = memoryBackend()
+  db.txRef = KvtTxRef(db: db)
   db
 
 proc finish*(db: KvtDbRef; eradicate = false) =
@@ -54,8 +38,7 @@ proc finish*(db: KvtDbRef; eradicate = false) =
   ## depending on the type of backend (e.g. the `BackendMemory` backend will
   ## always eradicate on close.)
   ##
-  if not db.backend.isNil:
-    db.backend.closeFn eradicate
+  db.closeFn eradicate
 
 # ------------------------------------------------------------------------------
 # End

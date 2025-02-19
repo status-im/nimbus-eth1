@@ -159,10 +159,9 @@ proc newRocksDbCoreDbRef*(basePath: string, opts: DbOptions): CoreDbRef =
         "Open database from " & basePath
       )
 
-    adb = AristoDbRef.init(use_ari.RdbBackendRef, opts, baseDb).valueOr:
+    adb = AristoDbRef.init(opts, baseDb).valueOr:
       raiseAssert "Could not initialize aristo: " & $error
-    kdb = KvtDbRef.init(use_kvt.RdbBackendRef, baseDb).valueOr:
-      raiseAssert "Could not initialize kvt: " & $error
+    kdb = KvtDbRef.init(baseDb)
 
   if opts.rdbKeyCacheSize > 0:
     # Make sure key cache isn't empty

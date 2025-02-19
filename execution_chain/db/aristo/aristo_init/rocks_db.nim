@@ -216,32 +216,28 @@ proc closeFn(db: RdbBackendRef): CloseFn =
 proc rocksDbBackend*(
     opts: DbOptions;
     baseDb: RocksDbInstanceRef;
-      ): BackendRef =
-  let db = RdbBackendRef(beKind: BackendRocksDB)
+      ): AristoDbRef =
+  let
+    be = RdbBackendRef(beKind: BackendRocksDB)
+    db = AristoDbRef()
 
   # Initialise RocksDB
-  db.rdb.init(opts, baseDb)
+  be.rdb.init(opts, baseDb)
 
-  db.getVtxFn = getVtxFn db
-  db.getKeyFn = getKeyFn db
-  db.getTuvFn = getTuvFn db
-  db.getLstFn = getLstFn db
+  db.getVtxFn = getVtxFn be
+  db.getKeyFn = getKeyFn be
+  db.getTuvFn = getTuvFn be
+  db.getLstFn = getLstFn be
 
-  db.putBegFn = putBegFn db
-  db.putVtxFn = putVtxFn db
-  db.putTuvFn = putTuvFn db
-  db.putLstFn = putLstFn db
-  db.putEndFn = putEndFn db
+  db.putBegFn = putBegFn be
+  db.putVtxFn = putVtxFn be
+  db.putTuvFn = putTuvFn be
+  db.putLstFn = putLstFn be
+  db.putEndFn = putEndFn be
 
-  db.closeFn = closeFn db
+  db.closeFn = closeFn be
 
   db
-
-proc dup*(db: RdbBackendRef): RdbBackendRef =
-  ## Duplicate descriptor shell as needed for API debugging
-  new result
-  init_common.init(result[], db[])
-  result.rdb = db.rdb
 
 # ------------------------------------------------------------------------------
 # Public iterators (needs direct backend access)

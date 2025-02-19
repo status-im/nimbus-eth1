@@ -30,18 +30,12 @@ import
   chronicles,
   results,
   stew/byteutils,
-  ../kvt_desc,
-  ../kvt_desc/desc_backend,
-  ./init_common
+  ./init_common,
+  ../kvt_desc
 
 type
-  MemDbRef = ref object
-    ## Database
-    tab: Table[seq[byte],seq[byte]]  ## Structural key-value table
-
   MemBackendRef* = ref object of TypedBackendRef
-    ## Inheriting table so access can be extended for debugging purposes
-    mdb: MemDbRef                    ## Database
+    tab: Table[seq[byte],seq[byte]]  ## Structural key-value table
 
   MemPutHdlRef = ref object of TypedPutHdlRef
     tab: Table[seq[byte],seq[byte]]
@@ -75,7 +69,7 @@ proc getKvpFn(db: MemBackendRef): GetKvpFn =
     proc(key: openArray[byte]): Result[seq[byte],KvtError] =
       if key.len == 0:
         return err(KeyInvalid)
-      var data = db.mdb.tab.getOrVoid @key
+      var data = db.tab.getOrVoid @key
       if data.isValid:
         return ok(move(data))
       err(GetNotFound)
@@ -85,7 +79,7 @@ proc lenKvpFn(db: MemBackendRef): LenKvpFn =
     proc(key: openArray[byte]): Result[int,KvtError] =
       if key.len == 0:
         return err(KeyInvalid)
-      var data = db.mdb.tab.getOrVoid @key
+      var data = db.tab.getOrVoid @key
       if data.isValid:
         return ok(data.len)
       err(GetNotFound)
@@ -115,8 +109,8 @@ proc putEndFn(db: MemBackendRef): PutEndFn =
         debug logTxt "putEndFn: key/value failed", error=hdl.error
         return err(hdl.error)
 
-      for (k,v) in hdl.tab.pairs:
-        db.mdb.tab[k] = v
+      for k, v in hdl.tab:
+        db.tab[k] = v
 
       ok()
 
@@ -131,19 +125,19 @@ proc closeFn(db: MemBackendRef): CloseFn =
 # Public functions
 # ------------------------------------------------------------------------------
 
-proc memoryBackend*: BackendRef =
-  let db = MemBackendRef(
-    beKind: BackendMemory,
-    mdb:    MemDbRef())
+proc memoryBackend*: KvtDbRef =
+  let
+    be = MemBackendRef(beKind: BackendMemory)
+    db = KvtDbRef()
 
-  db.getKvpFn = getKvpFn db
-  db.lenKvpFn = lenKvpFn db
+  db.getKvpFn = getKvpFn be
+  db.lenKvpFn = lenKvpFn be
 
-  db.putBegFn = putBegFn db
-  db.putKvpFn = putKvpFn db
-  db.putEndFn = putEndFn db
+  db.putBegFn = putBegFn be
+  db.putKvpFn = putKvpFn be
+  db.putEndFn = putEndFn be
 
-  db.closeFn = closeFn db
+  db.closeFn = closeFn be
   db
 
 # ------------------------------------------------------------------------------
@@ -154,7 +148,7 @@ iterator walk*(
     be: MemBackendRef;
       ): tuple[key: seq[byte], data: seq[byte]] =
   ## Walk over all key-value pairs of the database.
-  for (key,data) in be.mdb.tab.pairs:
+  for key, data in be.tab:
     if data.isValid:
       yield (key, data)
     else:

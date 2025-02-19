@@ -15,17 +15,51 @@
 
 import
   std/[hashes, tables],
+  results,
   ./kvt_constants,
-  ./kvt_desc/[desc_error]
-
-from ./kvt_desc/desc_backend
-  import BackendRef, PutHdlRef
+  ./kvt_desc/desc_error
 
 # Not auto-exporting backend
 export
-  hashes, tables, kvt_constants, desc_error, PutHdlRef
+  hashes, tables, kvt_constants, desc_error
 
 type
+  GetKvpFn* =
+    proc(key: openArray[byte]): Result[seq[byte],KvtError] {.gcsafe, raises: [].}
+      ## Generic backend database retrieval function
+  LenKvpFn* =
+    proc(key: openArray[byte]): Result[int,KvtError] {.gcsafe, raises: [].}
+      ## Generic backend database retrieval function
+
+  # -------------
+
+  PutHdlRef* = ref object of RootRef
+    ## Persistent database transaction frame handle. This handle is used to
+    ## wrap any of `PutVtxFn`, `PutKeyFn`, and `PutIdgFn` into and atomic
+    ## transaction frame. These transaction frames must not be interleaved
+    ## by any library function using the backend.
+
+  PutBegFn* =
+    proc(): Result[PutHdlRef,KvtError] {.gcsafe, raises: [].}
+      ## Generic transaction initialisation function
+
+  PutKvpFn* =
+    proc(hdl: PutHdlRef; k, v: openArray[byte]) {.gcsafe, raises: [].}
+      ## Generic backend database bulk storage function.
+
+  PutEndFn* =
+    proc(hdl: PutHdlRef): Result[void,KvtError] {.gcsafe, raises: [].}
+      ## Generic transaction termination function
+
+  # -------------
+
+  CloseFn* =
+    proc(eradicate: bool) {.gcsafe, raises: [].}
+      ## Generic destructor for the `Kvt DB` backend. The argument `eradicate`
+      ## indicates that a full database deletion is requested. If passed
+      ## `false` the outcome might differ depending on the type of backend
+      ## (e.g. in-memory backends would eradicate on close.)
+
   KvtTxRef* = ref object
     ## Transaction descriptor
     db*: KvtDbRef                     ## Database descriptor
@@ -33,18 +67,19 @@ type
     sTab*: Table[seq[byte],seq[byte]] ## Structural data table
 
   KvtDbRef* = ref object of RootRef
-    ## Three tier database object supporting distributed instances.
-    backend*: BackendRef              ## Backend database (may well be `nil`)
+    ## Backend interface.
+    getKvpFn*: GetKvpFn              ## Read key-value pair
+    lenKvpFn*: LenKvpFn              ## Read key-value pair length
+
+    putBegFn*: PutBegFn              ## Start bulk store session
+    putKvpFn*: PutKvpFn              ## Bulk store key-value pairs
+    putEndFn*: PutEndFn              ## Commit bulk store session
+
+    closeFn*: CloseFn                ## Generic destructor
 
     txRef*: KvtTxRef
       ## Tx holding data scheduled to be written to disk during the next
       ## `persist` call
-
-    # Debugging data below, might go away in future
-    xIdGen*: uint64
-    xMap*: Table[seq[byte],uint64]    ## For pretty printing
-    pAmx*: Table[uint64,seq[byte]]    ## For pretty printing
-
 
 # ------------------------------------------------------------------------------
 # Public helpers

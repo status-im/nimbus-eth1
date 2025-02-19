@@ -22,7 +22,6 @@ import
   aristo/aristo_init/memory_only,
   aristo/aristo_init/init_common
 export
-  MemBackendRef,
   finish,
   init
 
