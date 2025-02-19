@@ -23,8 +23,7 @@ proc getPayload*(ben: BeaconEngineRef,
   trace "Engine API request received",
     meth = "GetPayload", id
 
-  var bundle: ExecutionBundle
-  if not ben.get(id, bundle):
+  let bundle = ben.getPayloadBundle(id).valueOr:
     raise unknownPayload("Unknown bundle")
 
   let version = bundle.payload.version
@@ -45,8 +44,7 @@ proc getPayloadV3*(ben: BeaconEngineRef, id: Bytes8): GetPayloadV3Response =
   trace "Engine API request received",
     meth = "GetPayload", id
 
-  var bundle: ExecutionBundle
-  if not ben.get(id, bundle):
+  let bundle = ben.getPayloadBundle(id).valueOr:
     raise unknownPayload("Unknown bundle")
 
   let version = bundle.payload.version
@@ -62,7 +60,7 @@ proc getPayloadV3*(ben: BeaconEngineRef, id: Bytes8): GetPayloadV3Response =
   GetPayloadV3Response(
     executionPayload: bundle.payload.V3,
     blockValue: bundle.blockValue,
-    blobsBundle: bundle.blobsBundle.get,
+    blobsBundle: bundle.blobsBundle.value,
     shouldOverrideBuilder: false
   )
 
@@ -70,8 +68,7 @@ proc getPayloadV4*(ben: BeaconEngineRef, id: Bytes8): GetPayloadV4Response =
   trace "Engine API request received",
     meth = "GetPayload", id
 
-  var bundle: ExecutionBundle
-  if not ben.get(id, bundle):
+  let bundle = ben.getPayloadBundle(id).valueOr:
     raise unknownPayload("Unknown bundle")
 
   let version = bundle.payload.version
@@ -89,7 +86,7 @@ proc getPayloadV4*(ben: BeaconEngineRef, id: Bytes8): GetPayloadV4Response =
   GetPayloadV4Response(
     executionPayload: bundle.payload.V3,
     blockValue: bundle.blockValue,
-    blobsBundle: bundle.blobsBundle.get,
+    blobsBundle: bundle.blobsBundle.value,
     shouldOverrideBuilder: false,
     executionRequests: bundle.executionRequests.get,
   )

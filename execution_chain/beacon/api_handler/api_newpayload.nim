@@ -134,11 +134,11 @@ proc newPayload*(ben: BeaconEngineRef,
       raise invalidParams("newPayload" & $apiVersion &
         ": executionRequests is expected from execution payload")
 
-    validateExecutionRequest(executionRequests.get, apiVersion)
+    validateExecutionRequest(executionRequests.value, apiVersion)
 
   let
     com = ben.com
-    txFrame = ben.chain.latestTxFrame()
+    chain = ben.chain
     timestamp = ethTime payload.timestamp
     version = payload.version
 
@@ -147,7 +147,7 @@ proc newPayload*(ben: BeaconEngineRef,
 
   let
     requestsHash = calcRequestsHash(executionRequests)
-    blk = 
+    blk =
       try:
         ethBlock(payload, beaconRoot, requestsHash)
       except RlpError as e:
@@ -161,7 +161,7 @@ proc newPayload*(ben: BeaconEngineRef,
     if versionedHashes.isNone:
       raise invalidParams("newPayload" & $apiVersion &
         " expect blobVersionedHashes but got none")
-    if not validateVersionedHashed(payload, versionedHashes.get):
+    if not validateVersionedHashed(payload, versionedHashes.value):
       return invalidStatus(header.parentHash, "invalid blob versionedHashes")
 
   let blockHash = payload.blockHash
@@ -170,7 +170,7 @@ proc newPayload*(ben: BeaconEngineRef,
 
   # If we already have the block locally, ignore the entire execution and just
   # return a fake success.
-  if ben.chain.haveBlockAndState(blockHash):
+  if chain.haveBlockAndState(blockHash):
     notice "Ignoring already known beacon payload",
       number = header.number, hash = blockHash.short
     return validStatus(blockHash)
@@ -178,7 +178,7 @@ proc newPayload*(ben: BeaconEngineRef,
   # If this block was rejected previously, keep rejecting it
   let res = ben.checkInvalidAncestor(blockHash, blockHash)
   if res.isSome:
-    return res.get
+    return res.value
 
   # If the parent is missing, we - in theory - could trigger a sync, but that
   # would also entail a reorg. That is problematic if multiple sibling blocks
@@ -186,14 +186,15 @@ proc newPayload*(ben: BeaconEngineRef,
   # our live chain. As such, payload execution will not permit reorgs and thus
   # will not trigger a sync cycle. That is fine though, if we get a fork choice
   # update after legit payload executions.
-  let parent = ben.chain.headerByHash(header.parentHash).valueOr:
-    return ben.delayPayloadImport(header)
+  let parent = chain.headerByHash(header.parentHash).valueOr:
+    return ben.delayPayloadImport(blockHash, blk)
 
   # We have an existing parent, do some sanity checks to avoid the beacon client
   # triggering too early
   let ttd = com.ttd.get(high(UInt256))
 
   if version == Version.V1:
+    let txFrame = chain.latestTxFrame()
     let ptd  = txFrame.getScore(header.parentHash).valueOr:
       0.u256
     let gptd  = txFrame.getScore(parent.parentHash)
@@ -212,17 +213,19 @@ proc newPayload*(ben: BeaconEngineRef,
       parent = parent.timestamp, header = header.timestamp
     return invalidStatus(parent.blockHash, "Invalid timestamp")
 
-  if not ben.chain.haveBlockAndState(header.parentHash):
-    ben.put(blockHash, header)
+  if not chain.haveBlockAndState(header.parentHash):
+    chain.quarantine.addOrphan(blockHash, blk)
     warn "State not available, ignoring new payload",
       hash   = blockHash,
       number = header.number
-    let blockHash = latestValidHash(txFrame, parent, ttd)
+    let
+      txFrame = chain.latestTxFrame()
+      blockHash = latestValidHash(txFrame, parent, ttd)
     return acceptedStatus(blockHash)
 
   trace "Importing block without sethead",
     hash = blockHash, number = header.number
-  let vres = ben.chain.importBlock(blk)
+  let vres = chain.importBlock(blk)
   if vres.isErr:
     warn "Error importing block",
       number = header.number,
@@ -230,7 +233,9 @@ proc newPayload*(ben: BeaconEngineRef,
       parent = header.parentHash.short,
       error = vres.error()
     ben.setInvalidAncestor(header, blockHash)
-    let blockHash = latestValidHash(txFrame, parent, ttd)
+    let
+      txFrame = chain.latestTxFrame()
+      blockHash = latestValidHash(txFrame, parent, ttd)
     return invalidStatus(blockHash, vres.error())
 
   ben.txPool.removeNewBlockTxs(blk, Opt.some(blockHash))
