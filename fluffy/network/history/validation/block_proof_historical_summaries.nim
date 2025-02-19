@@ -1,5 +1,5 @@
 # Fluffy
-# Copyright (c) 2023-2024 Status Research & Development GmbH
+# Copyright (c) 2023-2025 Status Research & Development GmbH
 # Licensed and distributed under either of
 #   * MIT license (license terms in the root directory or at https://opensource.org/licenses/MIT).
 #   * Apache v2 license (license terms in the root directory or at https://www.apache.org/licenses/LICENSE-2.0).
@@ -28,21 +28,62 @@ import
   ssz_serialization,
   ssz_serialization/[proofs, merkleization],
   beacon_chain/spec/eth2_ssz_serialization,
+  beacon_chain/spec/ssz_codec,
   beacon_chain/spec/presets,
   beacon_chain/spec/datatypes/capella,
+  beacon_chain/spec/forks,
   ./block_proof_common
 
-export block_proof_common
+export block_proof_common, presets, ssz_codec, capella
 
 type
   BeaconBlockProofHistoricalRoots* = array[13, Digest]
+
+  # TODO: this needs to become Limit 12 to support deneb
+  ExecutionBlockProofList* = List[Digest, Limit 11]
 
   BlockProofHistoricalSummaries* = object
     # Total size (11 + 1 + 13) * 32 bytes + 4 bytes = 804 bytes
     beaconBlockProof*: BeaconBlockProofHistoricalRoots
     beaconBlockRoot*: Digest
-    executionBlockProof*: ExecutionBlockProof
+    executionBlockProof*: ExecutionBlockProofList
     slot*: Slot
+
+  HistoricalSummaries* = HashList[HistoricalSummary, Limit HISTORICAL_ROOTS_LIMIT]
+
+# Builds proof to be able to verify that the EL block hash is part of the
+# CL BeaconBlock for given root.
+func buildProof*(
+    beaconBlock: SomeForkyBeaconBlock
+): Result[ExecutionBlockProofList, string] =
+  let
+    # BeaconBlock level:
+    # - 8 as there are 5 fields
+    # - 4 as index (pos) of field is 4
+    gIndexTopLevel = (1 * 1 * 8 + 4)
+    # BeaconBlockBody level:
+    # - 16 as there are 10 fields
+    # - 9 as index (pos) of field is 9
+    gIndexMidLevel = (gIndexTopLevel * 1 * 16 + 9)
+    # ExecutionPayload level:
+    # - 16 as there are 14 fields
+    # - 12 as pos of field is 12
+    gIndex = GeneralizedIndex(gIndexMidLevel * 1 * 16 + 12)
+
+  var proof: seq[Digest] = newSeq[Digest](11)
+  ?beaconBlock.build_proof(gIndex, proof)
+
+  ok(ExecutionBlockProofList(proof))
+
+func verifyProof*(
+    blockHash: Digest, proof: ExecutionBlockProofList, blockRoot: Digest
+): bool =
+  let
+    gIndexTopLevel = (1 * 1 * 8 + 4)
+    gIndexMidLevel = (gIndexTopLevel * 1 * 16 + 9)
+    gIndex = GeneralizedIndex(gIndexMidLevel * 1 * 16 + 12)
+
+  verify_merkle_multiproof(@[blockHash], proof.asSeq(), @[gIndex], blockRoot)
 
 template `[]`(x: openArray[Eth2Digest], chunk: Limit): Eth2Digest =
   # Nim 2.0 requires arrays to be indexed by the same type they're declared with.
