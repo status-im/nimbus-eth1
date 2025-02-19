@@ -1,5 +1,5 @@
 # Fluffy
-# Copyright (c) 2023-2024 Status Research & Development GmbH
+# Copyright (c) 2023-2025 Status Research & Development GmbH
 # Licensed and distributed under either of
 #   * MIT license (license terms in the root directory or at https://opensource.org/licenses/MIT).
 #   * Apache v2 license (license terms in the root directory or at https://www.apache.org/licenses/LICENSE-2.0).
@@ -28,11 +28,12 @@ import
   ssz_serialization,
   ssz_serialization/[proofs, merkleization],
   beacon_chain/spec/eth2_ssz_serialization,
-  beacon_chain/spec/presets,
+  beacon_chain/spec/ssz_codec,
   beacon_chain/spec/datatypes/capella,
+  beacon_chain/spec/forks,
   ./block_proof_common
 
-export block_proof_common
+export block_proof_common, ssz_codec
 
 type
   BeaconBlockProofHistoricalRoots* = array[13, Digest]
@@ -43,6 +44,8 @@ type
     beaconBlockRoot*: Digest
     executionBlockProof*: ExecutionBlockProof
     slot*: Slot
+
+  HistoricalSummaries* = HashList[HistoricalSummary, Limit HISTORICAL_ROOTS_LIMIT]
 
 template `[]`(x: openArray[Eth2Digest], chunk: Limit): Eth2Digest =
   # Nim 2.0 requires arrays to be indexed by the same type they're declared with.
@@ -104,7 +107,7 @@ func verifyProof*(
   verify_merkle_multiproof(@[blockHeaderRoot], proof, @[gIndex], historicalRoot)
 
 func verifyProof*(
-    historical_summaries: HashList[HistoricalSummary, Limit HISTORICAL_ROOTS_LIMIT],
+    historical_summaries: HistoricalSummaries,
     proof: BlockProofHistoricalSummaries,
     blockHash: Digest,
     cfg: RuntimeConfig,
