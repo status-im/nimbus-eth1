@@ -1,5 +1,5 @@
 # Fluffy
-# Copyright (c) 2023-2024 Status Research & Development GmbH
+# Copyright (c) 2023-2025 Status Research & Development GmbH
 # Licensed and distributed under either of
 #   * MIT license (license terms in the root directory or at https://opensource.org/licenses/MIT).
 #   * Apache v2 license (license terms in the root directory or at https://www.apache.org/licenses/LICENSE-2.0).
@@ -287,7 +287,7 @@ proc exportBeaconBlockProofBellatrix(
       error "Failed to load Bellatrix block", slot
       quit QuitFailure
 
-    blockProof = buildProof(batch, beaconBlock.message).valueOr:
+    blockProof = block_proof_historical_roots.buildProof(batch, beaconBlock.message).valueOr:
       error "Failed to build proof for Bellatrix block", slot, error
       quit QuitFailure
 

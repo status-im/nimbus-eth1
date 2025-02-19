@@ -121,7 +121,12 @@ proc newStateNode*(
     )
     sm = StreamManager.new(node)
     hn = HistoryNetwork.new(
-      PortalNetwork.none, node, db, sm, FinishedHistoricalHashesAccumulator()
+      PortalNetwork.none,
+      node,
+      db,
+      sm,
+      RuntimeConfig(),
+      FinishedHistoricalHashesAccumulator(),
     )
     sn =
       StateNetwork.new(PortalNetwork.none, node, db, sm, historyNetwork = Opt.some(hn))

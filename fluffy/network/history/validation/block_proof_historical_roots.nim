@@ -1,5 +1,5 @@
 # Fluffy
-# Copyright (c) 2022-2024 Status Research & Development GmbH
+# Copyright (c) 2022-2025 Status Research & Development GmbH
 # Licensed and distributed under either of
 #   * MIT license (license terms in the root directory or at https://opensource.org/licenses/MIT).
 #   * Apache v2 license (license terms in the root directory or at https://www.apache.org/licenses/LICENSE-2.0).
@@ -78,13 +78,17 @@ import
   ssz_serialization,
   ssz_serialization/[proofs, merkleization],
   beacon_chain/spec/eth2_ssz_serialization,
+  beacon_chain/spec/ssz_codec,
   beacon_chain/spec/datatypes/bellatrix,
+  beacon_chain/spec/forks,
   ./block_proof_common
 
-export block_proof_common
+export block_proof_common, ssz_codec
 
 type
   BeaconBlockProofHistoricalRoots* = array[14, Digest]
+
+  ExecutionBlockProof* = array[11, Digest]
 
   BlockProofHistoricalRoots* = object
     # Total size (11 + 1 + 14) * 32 bytes + 4 bytes = 836 bytes
@@ -93,11 +97,47 @@ type
     executionBlockProof*: ExecutionBlockProof
     slot*: Slot
 
+  HistoricalRoots* = HashList[Digest, Limit HISTORICAL_ROOTS_LIMIT]
+
 func getHistoricalRootsIndex*(slot: Slot): uint64 =
   slot div SLOTS_PER_HISTORICAL_ROOT
 
 func getHistoricalRootsIndex*(blockHeader: BeaconBlockHeader): uint64 =
   getHistoricalRootsIndex(blockHeader.slot)
+
+# Builds proof to be able to verify that the EL block hash is part of the
+# CL BeaconBlock for given root.
+func buildProof*(
+    beaconBlock: bellatrix.TrustedBeaconBlock | bellatrix.BeaconBlock
+): Result[ExecutionBlockProof, string] =
+  let
+    # BeaconBlock level:
+    # - 8 as there are 5 fields
+    # - 4 as index (pos) of field is 4
+    gIndexTopLevel = (1 * 1 * 8 + 4)
+    # BeaconBlockBody level:
+    # - 16 as there are 10 fields
+    # - 9 as index (pos) of field is 9
+    gIndexMidLevel = (gIndexTopLevel * 1 * 16 + 9)
+    # ExecutionPayload level:
+    # - 16 as there are 14 fields
+    # - 12 as pos of field is 12
+    gIndex = GeneralizedIndex(gIndexMidLevel * 1 * 16 + 12)
+
+  var proof: ExecutionBlockProof
+  ?beaconBlock.build_proof(gIndex, proof)
+
+  ok(proof)
+
+func verifyProof*(
+    blockHash: Digest, proof: ExecutionBlockProof, blockRoot: Digest
+): bool =
+  let
+    gIndexTopLevel = (1 * 1 * 8 + 4)
+    gIndexMidLevel = (gIndexTopLevel * 1 * 16 + 9)
+    gIndex = GeneralizedIndex(gIndexMidLevel * 1 * 16 + 12)
+
+  verify_merkle_multiproof(@[blockHash], proof, @[gIndex], blockRoot)
 
 template `[]`(x: openArray[Eth2Digest], chunk: Limit): Eth2Digest =
   # Nim 2.0 requires arrays to be indexed by the same type they're declared with.
@@ -125,7 +165,7 @@ func buildProof*(
     beaconBlock: bellatrix.TrustedBeaconBlock | bellatrix.BeaconBlock,
 ): Result[BlockProofHistoricalRoots, string] =
   let
-    blockRootIndex = getBlockRootsIndex(beaconBlock)
+    blockRootIndex = block_proof_common.getBlockRootsIndex(beaconBlock)
     executionBlockProof = ?beaconBlock.buildProof()
     beaconBlockProof = ?batch.buildProof(blockRootIndex)
 

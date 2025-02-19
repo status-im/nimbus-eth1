@@ -1,5 +1,5 @@
 # Nimbus
-# Copyright (c) 2023-2024 Status Research & Development GmbH
+# Copyright (c) 2023-2025 Status Research & Development GmbH
 # Licensed and distributed under either of
 #   * MIT license (license terms in the root directory or at https://opensource.org/licenses/MIT).
 #   * Apache v2 license (license terms in the root directory or at https://www.apache.org/licenses/LICENSE-2.0).
@@ -14,6 +14,7 @@ import
   stew/byteutils,
   eth/common/headers_rlp,
   ../../network_metadata,
+  ../../network/beacon/beacon_init_loader,
   ../../eth_data/[history_data_json_store, history_data_ssz_e2s],
   ../../network/history/[history_content, history_type_conversions, history_validation],
   ../../eth_data/yaml_utils,
@@ -38,7 +39,9 @@ suite "History Content Values":
         raiseAssert "Invalid epoch accumulator file: " & accumulatorFile
       blockHeadersWithProof = buildHeadersWithProof(blockHeaders, epochRecord).valueOr:
         raiseAssert "Could not build headers with proof"
-      accumulator = loadAccumulator()
+      accumulators = HistoryAccumulators(historicalHashes: loadAccumulator())
+      networkData = loadNetworkData("mainnet")
+      cfg = networkData.metadata.cfg
 
     let res = readJsonType(headersWithProofFile, JsonPortalContentTable)
     check res.isOk()
@@ -72,7 +75,9 @@ suite "History Content Values":
       check res.isOk()
       let header = res.get()
 
-      check accumulator.verifyBlockHeaderProof(header, blockHeaderWithProof.proof).isOk()
+      check accumulators
+      .verifyBlockHeaderProof(header, blockHeaderWithProof.proof, cfg)
+      .isOk()
 
       # Encode content
       check:
@@ -80,15 +85,25 @@ suite "History Content Values":
         encode(contentKey.get()).asSeq() == contentKeyEncoded
 
   test "HeaderWithProof Encoding/Decoding and Verification":
-    const testsPath =
-      "./vendor/portal-spec-tests/tests/mainnet/history/headers_with_proof/"
+    const
+      testsPath = "./vendor/portal-spec-tests/tests/mainnet/history/headers_with_proof/"
+      historicalSummaries_path =
+        "./vendor/portal-spec-tests/tests/mainnet/history/headers_with_proof/block_proofs_capella/historical_summaries_at_slot_8953856.ssz"
+
+    let historicalSummaries = readHistoricalSummaries(historicalSummaries_path).valueOr:
+      raiseAssert "Cannot read historical summaries: " & error
+    let cfg = loadNetworkData("mainnet").metadata.cfg
 
     for kind, path in walkDir(testsPath):
       if kind == pcFile and path.splitFile.ext == ".yaml":
         let
           content = YamlPortalContent.loadFromYaml(path).valueOr:
             raiseAssert "Invalid data file: " & error
-          accumulator = loadAccumulator()
+          accumulators = HistoryAccumulators(
+            historicalHashes: loadAccumulator(),
+            historicalRoots: loadHistoricalRoots(),
+            historicalSummaries: historicalSummaries,
+          )
           contentKeyEncoded = content.content_key.hexToSeqByte()
           contentValueEncoded = content.content_value.hexToSeqByte()
 
@@ -107,8 +122,8 @@ suite "History Content Values":
         check res.isOk()
         let header = res.get()
 
-        check accumulator
-        .verifyBlockHeaderProof(header, blockHeaderWithProof.proof)
+        check accumulators
+        .verifyBlockHeaderProof(header, blockHeaderWithProof.proof, cfg)
         .isOk()
 
         # Encode content
