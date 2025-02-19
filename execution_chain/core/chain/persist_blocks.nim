@@ -13,11 +13,9 @@
 import
   stew/assign2,
   results,
-  ../../evm/state,
-  ../../evm/types,
-  ../executor,
-  ../validate,
-  ./chain_desc,
+  ../../evm/[state, types],
+  ../../common,
+  ../[executor, validate],
   chronicles,
   stint
 
@@ -42,7 +40,7 @@ type
   PersistBlockFlags* = set[PersistBlockFlag]
 
   Persister* = object
-    c: ChainRef
+    com: CommonRef
     flags: PersistBlockFlags
 
     vmState: BaseVMState
@@ -64,11 +62,11 @@ proc getVmState(
   if p.vmState == nil:
     let
       vmState = BaseVMState()
-      txFrame = p.c.db.baseTxFrame.txFrameBegin()
+      txFrame = p.com.db.baseTxFrame.txFrameBegin()
       parent = ?txFrame.getBlockHeader(header.parentHash)
 
     doAssert txFrame.getSavedStateBlockNumber() == parent.number
-    vmState.init(parent, header, p.c.com, txFrame, storeSlotHash = storeSlotHash)
+    vmState.init(parent, header, p.com, txFrame, storeSlotHash = storeSlotHash)
     p.vmState = vmState
   else:
     if header.number != p.parent.number + 1:
@@ -83,13 +81,13 @@ proc dispose*(p: var Persister) =
   p.vmState.ledger.txFrame.dispose()
   p.vmState = nil
 
-proc init*(T: type Persister, c: ChainRef, flags: PersistBlockFlags): T =
-  T(c: c, flags: flags)
+proc init*(T: type Persister, com: CommonRef, flags: PersistBlockFlags): T =
+  T(com: com, flags: flags)
 
 proc checkpoint*(p: var Persister): Result[void, string] =
   if NoValidation notin p.flags:
     let stateRoot = p.vmState.ledger.txFrame.getStateRoot().valueOr:
-        return err($$error)
+      return err($$error)
 
     if p.parent.stateRoot != stateRoot:
       # TODO replace logging with better error
@@ -104,9 +102,9 @@ proc checkpoint*(p: var Persister): Result[void, string] =
       )
 
   # Move in-memory state to disk
-  p.c.db.persist(p.vmState.ledger.txFrame)
+  p.com.db.persist(p.vmState.ledger.txFrame)
   # Get a new frame since the DB assumes ownership
-  p.vmState.ledger.txFrame = p.c.db.baseTxFrame().txFrameBegin()
+  p.vmState.ledger.txFrame = p.com.db.baseTxFrame().txFrameBegin()
 
   ok()
 
@@ -114,7 +112,7 @@ proc persistBlock*(p: var Persister, blk: Block): Result[void, string] =
   template header(): Header =
     blk.header
 
-  let c = p.c
+  let com = p.com
 
   # Full validation means validating the state root at every block and
   # performing the more expensive hash computations on the block itself, ie
@@ -143,7 +141,7 @@ proc persistBlock*(p: var Persister, blk: Block): Result[void, string] =
   #      sanity checks should be performed early in the processing pipeline no
   #      matter their provenance.
   if not skipValidation:
-    ?c.com.validateHeaderAndKinship(blk, vmState.parent, txFrame)
+    ?com.validateHeaderAndKinship(blk, vmState.parent, txFrame)
 
   # Generate receipts for storage or validation but skip them otherwise
   ?vmState.processBlock(
@@ -151,12 +149,12 @@ proc persistBlock*(p: var Persister, blk: Block): Result[void, string] =
     skipValidation,
     skipReceipts = skipValidation and NoPersistReceipts in p.flags,
     skipUncles = NoPersistUncles in p.flags,
-    taskpool = c.com.taskpool,
+    taskpool = com.taskpool,
   )
 
   if NoPersistHeader notin p.flags:
     let blockHash = header.blockHash()
-    ?txFrame.persistHeaderAndSetHead(blockHash, header, c.com.startOfHistory)
+    ?txFrame.persistHeaderAndSetHead(blockHash, header, com.startOfHistory)
 
   if NoPersistTransactions notin p.flags:
     txFrame.persistTransactions(header.number, header.txRoot, blk.transactions)
@@ -181,14 +179,14 @@ proc persistBlock*(p: var Persister, blk: Block): Result[void, string] =
   ok()
 
 proc persistBlocks*(
-    c: ChainRef, blocks: openArray[Block], flags: PersistBlockFlags = {}
+    com: CommonRef, blocks: openArray[Block], flags: PersistBlockFlags = {}
 ): Result[PersistStats, string] =
   # Run the VM here
   if blocks.len == 0:
     debug "Nothing to do"
     return ok(default(PersistStats)) # TODO not nice to return nil
 
-  var p = Persister.init(c, flags)
+  var p = Persister.init(com, flags)
 
   for blk in blocks:
     p.persistBlock(blk).isOkOr:
@@ -198,7 +196,7 @@ proc persistBlocks*(
   # update currentBlock *after* we persist it
   # so the rpc return consistent result
   # between eth_blockNumber and eth_syncing
-  c.com.syncCurrent = p.parent.number
+  com.syncCurrent = p.parent.number
 
   let res = p.checkpoint()
   p.dispose()
