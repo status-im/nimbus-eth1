@@ -14,7 +14,8 @@ import
   std/tables,
   ./chain_branch,
   ../../../common,
-  ../../../db/core_db
+  ../../../db/core_db,
+  ../../../portal/portal
 
 type
   ForkedChainRef* = ref object
@@ -31,6 +32,7 @@ type
 
     extraValidation*: bool
     baseDistance*: uint64
+    portal*: PortalClientRef
 
 # ----------------
 
