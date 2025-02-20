@@ -455,11 +455,6 @@ type
         defaultValue: ""
         name: "portal-url" }: string
 
-      graphqlEnabled* {.
-        desc: "Enable the GraphQL HTTP server"
-        defaultValue: false
-        name: "graphql" }: bool
-
       engineApiEnabled* {.
         desc: "Enable the Engine API"
         defaultValue: false
