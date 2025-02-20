@@ -96,6 +96,7 @@ proc persist*(db: AristoDbRef, batch: PutHdlRef, txFrame: AristoTxRef) =
     serial: txFrame.blockNumber.expect("`checkpoint` before persisting frame"),
   )
 
+  let oldLevel = db.txRef.level
   if txFrame != db.txRef:
     # Consolidate the changes from the old to the new base going from the
     # bottom of the stack to avoid having to cascade each change through
@@ -116,6 +117,11 @@ proc persist*(db: AristoDbRef, batch: PutHdlRef, txFrame: AristoTxRef) =
         # the bottom.
         if bottom.snapshot.len == 0:
           bottom.snapshotLevel.reset()
+        else:
+          # Incoming snapshots already have sTab baked in - make sure we don't
+          # overwrite merged data from more recent layers with this old version
+          bottom.sTab.reset()
+          bottom.kMap.reset()
         continue
 
       doAssert not bottom.isNil, "should have found db.txRef at least"
@@ -133,10 +139,19 @@ proc persist*(db: AristoDbRef, batch: PutHdlRef, txFrame: AristoTxRef) =
         frame.dispose()
 
       txFrame.parent = nil
+  else:
+    if txFrame.snapshotLevel.isSome():
+      # Clear out redundant copy so we don't write it twice, below
+      txFrame.sTab.reset()
+      txFrame.kMap.reset()
 
   # Store structural single trie entries
+  assert txFrame.snapshot.len == 0 or txFrame.sTab.len == 0,
+    "Either snapshot or sTab should have been cleared as part of merging"
+
   for rvid, item in txFrame.snapshot:
-    db.putVtxFn(batch, rvid, item[0], item[1])
+    if item[2] >= oldLevel:
+      db.putVtxFn(batch, rvid, item[0], item[1])
 
   for rvid, vtx in txFrame.sTab:
     txFrame.kMap.withValue(rvid, key):
