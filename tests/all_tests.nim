@@ -10,7 +10,6 @@
 import
   ./[
     test_aristo,
-    test_blockchain_json,
     test_configuration,
     test_coredb,
     test_difficulty,
@@ -19,7 +18,6 @@ import
     test_filters,
     test_forked_chain,
     test_forkid,
-    test_generalstate_json,
     test_genesis,
     test_getproof_json,
     test_jwt_auth,
@@ -36,4 +34,8 @@ import
     test_tracer_json,
     test_transaction_json,
     test_txpool,
+
+    # These two suites are much slower than all the rest, so run them last
+    test_blockchain_json,
+    test_generalstate_json,
   ]
