@@ -321,9 +321,7 @@ proc persistStorage(acc: AccountRef, ac: LedgerRef) =
 
     else:
       ac.txFrame.slotDelete(acc.toAccountKey, slotKey).isOkOr:
-        if error.error != StoNotFound:
-          raiseAssert info & $$error
-        discard
+        raiseAssert info & $$error
       acc.originalStorage.del(slot)
 
     if ac.storeSlotHash and not cached:

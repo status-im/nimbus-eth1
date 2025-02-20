@@ -61,10 +61,7 @@ type
     DelBranchWithoutRefs
     DelDanglingStoTrie
     DelLeafExpexted
-    DelPathNotFound
     DelRootVidMissing
-    DelStoAccMissing
-    DelStoRootMissing
     DelStoRootNotAccepted
     DelVidStaleVtx
 
