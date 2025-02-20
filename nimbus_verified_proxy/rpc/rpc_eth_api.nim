@@ -13,7 +13,12 @@ import
   chronicles,
   json_rpc/[rpcserver, rpcclient, rpcproxy],
   eth/common/accounts,
-  web3/eth_api,
+  web3/[primitives, eth_api_types, eth_api],
+  ../../nimbus/beacon/web3_eth_conv,
+  ../../nimbus/common/common,
+  ../../nimbus/db/ledger,
+  ../../nimbus/transaction/call_evm,
+  ../../nimbus/[evm/types, evm/state],
   ../validate_proof,
   ../block_cache
 
@@ -73,11 +78,131 @@ proc getBlockByTag(
   of BlockNumber:
     proxy.blockCache.getByNumber(tag.blockNumber)
 
+proc getBlockByHash(
+    proxy: VerifiedRpcProxy, blockHash: Hash32
+): results.Opt[BlockObject] {.raises: [ValueError].} =
+  checkPreconditions(proxy)
+  proxy.blockCache.getPayloadByHash(blockHash)
+
 proc getBlockByTagOrThrow(
     proxy: VerifiedRpcProxy, quantityTag: BlockTag
 ): BlockObject {.raises: [ValueError].} =
   getBlockByTag(proxy, quantityTag).valueOr:
     raise newException(ValueError, "No block stored for given tag " & $quantityTag)
+
+proc getBlockByHashOrThrow(
+    proxy: VerifiedRpcProxy, blockHash: Hash32
+): BlockObject {.raises: [ValueError].} =
+  getBlockByHash(proxy, blockHash).valueOr:
+    raise newException(ValueError, "No block stored for given hash " & $blockHash)
+
+proc getBlockHeaderByTagOrThrow(
+    proxy: VerifiedRpcProxy, quantityTag: BlockTag
+): Header {.raises: [ValueError].} =
+  let blk = getBlockByTag(proxy, quantityTag).valueOr:
+    raise newException(ValueError, "No block stored for given tag " & $quantityTag)
+
+  return Header(
+    parentHash: blk.parentHash,
+    ommersHash: blk.sha3Uncles,
+    coinbase: blk.miner,
+    stateRoot: blk.stateRoot,
+    transactionsRoot: blk.transactionsRoot,
+    receiptsRoot: blk.receiptsRoot,
+    logsBloom: blk.logsBloom,
+    difficulty: blk.difficulty,
+    number: distinctBase(blk.number),
+    gasLimit: distinctBase(blk.gasLimit),
+    gasUsed: distinctBase(blk.gasUsed),
+    timestamp: blk.timestamp.ethTime,
+    extraData: distinctBase(blk.extraData),
+    mixHash: Bytes32(distinctBase(blk.mixHash)),
+    nonce: blk.nonce.get,
+    baseFeePerGas: blk.baseFeePerGas,
+    withdrawalsRoot: blk.withdrawalsRoot,
+    blobGasUsed: blk.blobGasUsed.u64,
+    excessBlobGas: blk.excessBlobGas.u64,
+    parentBeaconBlockRoot: blk.parentBeaconBlockRoot,
+    requestsHash: blk.requestsHash
+  )
+
+proc getBlockHeaderByHashOrThrow(
+    proxy: VerifiedRpcProxy, blockHash: Hash32
+): Header {.raises: [ValueError].} =
+  let blk = getBlockByHash(proxy, blockHash).valueOr:
+    raise newException(ValueError, "No block stored for given hash " & $blockHash)
+
+  return Header(
+    parentHash: blk.parentHash,
+    ommersHash: blk.sha3Uncles,
+    coinbase: blk.miner,
+    stateRoot: blk.stateRoot,
+    transactionsRoot: blk.transactionsRoot,
+    receiptsRoot: blk.receiptsRoot,
+    logsBloom: blk.logsBloom,
+    difficulty: blk.difficulty,
+    number: distinctBase(blk.number),
+    gasLimit: distinctBase(blk.gasLimit),
+    gasUsed: distinctBase(blk.gasUsed),
+    timestamp: blk.timestamp.ethTime,
+    extraData: distinctBase(blk.extraData),
+    mixHash: Bytes32(distinctBase(blk.mixHash)),
+    nonce: blk.nonce.get,
+    baseFeePerGas: blk.baseFeePerGas,
+    withdrawalsRoot: blk.withdrawalsRoot,
+    blobGasUsed: blk.blobGasUsed.u64,
+    excessBlobGas: blk.excessBlobGas.u64,
+    parentBeaconBlockRoot: blk.parentBeaconBlockRoot,
+    requestsHash: blk.requestsHash
+  )
+
+proc getAccount(lcProxy: VerifiedRpcProxy, address: Address, quantityTag: BlockTag): Future[Account] {.async: (raises: [ValueError, CatchableError]).} =
+  let
+    blk = lcProxy.getBlockByTagOrThrow(quantityTag)
+    blockNumber = blk.number.uint64
+
+  let
+    proof = await lcProxy.rpcClient.eth_getProof(address, @[], blockId(blockNumber))
+    account = getAccountFromProof(
+      blk.stateRoot, proof.address, proof.balance, proof.nonce, proof.codeHash,
+      proof.storageHash, proof.accountProof,
+    ).valueOr:
+      raise newException(ValueError, error)
+
+  return account
+
+proc getCode(lcProxy: VerifiedRpcProxy, address: Address, quantityTag: BlockTag): Future[seq[byte]] {.async: (raises: [ValueError, CatchableError]).} = 
+  let
+    blk = lcProxy.getBlockByTagOrThrow(quantityTag)
+    blockNumber = blk.number.uint64
+    account = await lcProxy.getAccount(address, quantityTag)
+ 
+  info "Forwarding eth_getCode", blockNumber
+
+  if account.codeHash == EMPTY_CODE_HASH:
+    # account does not have any code, return empty hex data
+    return @[]
+
+  let code = await lcProxy.rpcClient.eth_getCode(address, blockId(blockNumber))
+
+  if isValidCode(account, code):
+    return code
+  else:
+    raise newException(ValueError, "received code doesn't match the account code hash")
+
+proc getStorageAt(lcProxy: VerifiedRpcProxy, address: Address, slot: UInt256, quantityTag: BlockTag): Future[UInt256] {.async: (raises: [ValueError, CatchableError]).} = 
+  let
+    blk = lcProxy.getBlockByTagOrThrow(quantityTag)
+    blockNumber = blk.number.uint64
+
+  info "Forwarding eth_getStorageAt", blockNumber
+
+  let 
+    proof = await lcProxy.rpcClient.eth_getProof(address, @[slot], blockId(blockNumber))
+    slotValue = getStorageData(blk.stateRoot, slot, proof).valueOr:
+      raise newException(ValueError, error)
+
+  slotValue
 
 proc installEthApiHandlers*(lcProxy: VerifiedRpcProxy) =
   lcProxy.proxy.rpc("eth_chainId") do() -> UInt256:
@@ -93,95 +218,79 @@ proc installEthApiHandlers*(lcProxy: VerifiedRpcProxy) =
   lcProxy.proxy.rpc("eth_getBalance") do(
     address: Address, quantityTag: BlockTag
   ) -> UInt256:
-    # When requesting state for `latest` block number, we need to translate
-    # `latest` to actual block number as `latest` on proxy and on data provider
-    # can mean different blocks and ultimatly piece received piece of state
-    # must by validated against correct state root
-    let
-      blk = lcProxy.getBlockByTagOrThrow(quantityTag)
-      blockNumber = blk.number.uint64
-
-    info "Forwarding eth_getBalance call", blockNumber
-
-    let
-      proof = await lcProxy.rpcClient.eth_getProof(address, @[], blockId(blockNumber))
-      account = getAccountFromProof(
-        blk.stateRoot, proof.address, proof.balance, proof.nonce, proof.codeHash,
-        proof.storageHash, proof.accountProof,
-      ).valueOr:
-        raise newException(ValueError, error)
-
+    let account = await lcProxy.getAccount(address, quantityTag)
     account.balance
 
   lcProxy.proxy.rpc("eth_getStorageAt") do(
     address: Address, slot: UInt256, quantityTag: BlockTag
   ) -> UInt256:
-    let
-      blk = lcProxy.getBlockByTagOrThrow(quantityTag)
-      blockNumber = blk.number.uint64
-
-    info "Forwarding eth_getStorageAt", blockNumber
-
-    let proof =
-      await lcProxy.rpcClient.eth_getProof(address, @[slot], blockId(blockNumber))
-
-    getStorageData(blk.stateRoot, slot, proof).valueOr:
-      raise newException(ValueError, error)
+    await lcProxy.getStorageAt(address, slot, quantityTag)
 
   lcProxy.proxy.rpc("eth_getTransactionCount") do(
     address: Address, quantityTag: BlockTag
-  ) -> uint64:
-    let
-      blk = lcProxy.getBlockByTagOrThrow(quantityTag)
-      blockNumber = blk.number.uint64
-
-    info "Forwarding eth_getTransactionCount", blockNumber
-
-    let
-      proof = await lcProxy.rpcClient.eth_getProof(address, @[], blockId(blockNumber))
-
-      account = getAccountFromProof(
-        blk.stateRoot, proof.address, proof.balance, proof.nonce, proof.codeHash,
-        proof.storageHash, proof.accountProof,
-      ).valueOr:
-        raise newException(ValueError, error)
-
-    account.nonce
+  ) -> Quantity:
+    let account = await lcProxy.getAccount(address, quantityTag)
+    Quantity(account.nonce)
 
   lcProxy.proxy.rpc("eth_getCode") do(
     address: Address, quantityTag: BlockTag
   ) -> seq[byte]:
-    let
-      blk = lcProxy.getBlockByTagOrThrow(quantityTag)
-      blockNumber = blk.number.uint64
+    await lcProxy.getCode(address, quantityTag)
 
-    info "Forwarding eth_getCode", blockNumber
-    let
-      proof = await lcProxy.rpcClient.eth_getProof(address, @[], blockId(blockNumber))
-      account = getAccountFromProof(
-        blk.stateRoot, proof.address, proof.balance, proof.nonce, proof.codeHash,
-        proof.storageHash, proof.accountProof,
-      ).valueOr:
-        raise newException(ValueError, error)
+  lcProxy.proxy.rpc("eth_call") do(
+    args: TransactionArgs, quantityTag: BlockTag
+  ) -> seq[byte]:
 
-    if account.codeHash == EMPTY_CODE_HASH:
-      # account does not have any code, return empty hex data
-      return @[]
+    # eth_call
+    # 1. get the code with proof
+    let to = if args.to.isSome(): args.to.get()
+             else: raise newException(ValueError, "contract address missing in transaction args")
 
-    let code = await lcProxy.rpcClient.eth_getCode(address, blockId(blockNumber))
+    # 2. get all storage locations that are accessed
+    let 
+      code = await lcProxy.getCode(to, quantityTag)
+      header = lcProxy.getBlockHeaderByTagOrThrow(quantityTag)
+      blkNumber = header.number.uint64
+      parent = lcProxy.getBlockHeaderByHashOrThrow(header.parentHash)
+      accessListResult = await lcProxy.rpcClient.eth_createAccessList(args, blockId(blkNumber)) 
 
-    if isValidCode(account, code):
-      return code
-    else:
-      raise newException(
-        ValueError, "Received code which does not match the account code hash"
-      )
+    let accessList = if not accessListResult.error.isSome(): accessListResult.accessList
+                     else: raise newException(ValueError, "couldn't get an access list for eth call")
+
+    # 3. pull the storage values that are access along with their accounts and initialize db
+    let 
+      com = CommonRef.new(newCoreDbRef DefaultDbMemory, nil)
+      fork = com.toEVMFork(header)
+      vmState = BaseVMState()
+
+    vmState.init(parent, header, com, com.db.baseTxFrame())
+    vmState.mutateLedger:
+      for accessPair in accessList:
+        let 
+          accountAddr = accessPair.address
+          acc = await lcProxy.getAccount(accountAddr, quantityTag)
+          accCode = await lcProxy.getCode(accountAddr, quantityTag)
+
+        db.setNonce(accountAddr, acc.nonce)
+        db.setBalance(accountAddr, acc.balance)
+        db.setCode(accountAddr, accCode)
+
+        for slot in accessPair.storageKeys:
+          let slotInt = UInt256.fromHex(toHex(slot))
+          let slotValue = await lcProxy.getStorageAt(accountAddr, slotInt, quantityTag) 
+          db.setStorage(accountAddr, slotInt, slotValue)
+      db.persist(clearEmptyAccount = false) # settle accounts storage
+
+    # 4. run the evm with the initialized storage
+    let evmResult = rpcCallEvm(args, header, vmState).valueOr:
+      raise newException(ValueError, "rpcCallEvm error: " & $error.code)
+
+    evmResult.output
 
   # TODO:
   # Following methods are forwarded directly to the web3 provider and therefore
   # are not validated in any way.
   lcProxy.proxy.registerProxyMethod("net_version")
-  lcProxy.proxy.registerProxyMethod("eth_call")
   lcProxy.proxy.registerProxyMethod("eth_sendRawTransaction")
   lcProxy.proxy.registerProxyMethod("eth_getTransactionReceipt")
 
