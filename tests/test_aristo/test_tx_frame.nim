@@ -23,7 +23,7 @@ import
     aristo_init/init_common,
     aristo_init/memory_only,
     aristo_layers,
-    aristo_merge
+    aristo_merge,
   ]
 
 proc makeAccount(i: uint64): (Hash32, AristoAccount) =
@@ -38,8 +38,7 @@ const
 
 suite "Aristo TxFrame":
   setup:
-    let
-      db = AristoDbRef.init()
+    let db = AristoDbRef.init()
 
   test "Frames should independently keep data":
     let
@@ -77,9 +76,24 @@ suite "Aristo TxFrame":
       # The vid for acc1 gets created in tx1 because it has to move to a new
       # mpt node from the root - tx2c updates only data, so the level at which
       # we find the vtx should be one below tx2c!
-      tx2c.layersGetVtx((VertexID(1), acc1Hike.legs[^1].wp.vid)).value()[1] == 1
+      (
+        tx2c.level -
+        tx2c.layersGetVtx((VertexID(1), acc1Hike.legs[^1].wp.vid)).value()[1]
+      ) == 1
 
-    tx2.checkpoint(1)
+    tx0.checkpoint(1)
+    tx1.checkpoint(2)
+    tx2.checkpoint(3)
+    tx2b.checkpoint(3)
+    tx2c.checkpoint(3)
+
+    check:
+      # Even after checkpointing, we should maintain the same relative levels
+      (
+        tx2c.level -
+        tx2c.layersGetVtx((VertexID(1), acc1Hike.legs[^1].wp.vid)).value()[1]
+      ) == 1
+
     let batch = db.putBegFn().expect("working batch")
     db.persist(batch, tx2)
     check:

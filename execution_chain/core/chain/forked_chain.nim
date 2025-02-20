@@ -143,7 +143,11 @@ proc validateBlock(c: ForkedChainRef,
   c.writeBaggage(blk, blkHash, txFrame, receipts)
 
   # Block fully written to txFrame, mark it as such
+  # Checkpoint creates a snapshot of ancestor changes in txFrame - it is an
+  # expensive operation, specially when creating a new branch (ie when blk
+  # is being applied to a block that is currently not a head)
   txFrame.checkpoint(blk.header.number)
+
 
   c.updateBranch(parent, blk, blkHash, txFrame, move(receipts))
 
