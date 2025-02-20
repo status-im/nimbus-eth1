@@ -111,29 +111,24 @@ const
   fetchBodiesReqMinResponsePC* = 10
     ## Similar to `fetchHeadersReqMinResponsePC`
 
-  nFetchBodiesBatchDefault* = 6 * nFetchBodiesRequest
+  nFetchBodiesBatch* = 3 * nFetchBodiesRequest
     ## Similar to `nFetchHeadersBatch`
     ##
-    ## This value can be overridden with a smaller value which must be at
-    ## least `nFetchBodiesRequest`.
+    ## With an average less than 90KiB/block (on `mainnet` at block ~#22m),
+    ## one arrives at a total of at most 35MiB per block batch.
 
-  blocksStagedQueueLenMaxDefault* = 16
-    ## Maximum number of staged header + bodies blocks records to be filled. If
-    ## this size is reached, the process stops with staging with the exception
-    ## of the lowest blockes (in case there is a gap.)
+  blocksStagedHwmDefault* = 4 * nFetchBodiesBatch
+    ## This is an initialiser value for `blocksStagedHwm`.
     ##
-    ## This value might be adjusted with a larger value if
-    ## `nFetchBodiesBatchDefault` is overridden with a smaller value.
-    ##
-    ## Some cursory measurements on `MainNet` suggest an average maximum block
-    ## size ~25KiB (i.e. header + body) at block height ~4.5MiB. There will be
-    ## as many as `nFetchBodiesBatch` blocks on a single staged blocks record.
-    ## And there will be at most `blocksStagedQueueLengthMax+1` records on the
-    ## staged blocks queue. (The `+1` is exceptional, appears when the least
-    ## entry block number is too high and so leaves a gap to the ledger state
-    ## block number.)
+    ## If the staged block queue exceeds this many number of block objects for
+    ## import, no further block objets are added (but the current sub-list is
+    ## completed.)
 
-  finaliserChainLengthMax* = 32
+  blocksStagedLwm* = nFetchBodiesBatch
+    ## Minimal accepted initialisation value for `blocksStagedHwm`. The latter
+    ## will be initalised with `blocksStagedHwmDefault` if smaller than the LWM.
+
+  finaliserChainLengthMax* = 32 # -- to be obsoleted soon
     ## When importing with `importBlock()`, finalise after at most this many
     ## invocations of `importBlock()`.
 
@@ -148,7 +143,8 @@ static:
   doAssert headersStagedQueueLengthLwm < headersStagedQueueLengthHwm
 
   doAssert 0 < nFetchBodiesRequest
-  doAssert nFetchBodiesRequest <= nFetchBodiesBatchDefault
-  doAssert 0 < blocksStagedQueueLenMaxDefault
+  doAssert nFetchBodiesRequest <= nFetchBodiesBatch
+  doAssert 0 < blocksStagedLwm
+  doAssert blocksStagedLwm <= blocksStagedHwmDefault
 
 # End

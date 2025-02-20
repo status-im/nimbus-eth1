@@ -11,7 +11,7 @@
 {.push raises:[].}
 
 import
-  pkg/[chronos, metrics],
+  pkg/[chronos, eth/p2p/peer_pool, metrics],
   ../../../../core/chain,
   ../../worker_desc,
   ../blocks_staged/staged_queue,
@@ -53,6 +53,9 @@ declareGauge nec_sync_blocks_unprocessed, "" &
 declareGauge nec_sync_peers, "" &
   "Number of currently active worker instances"
 
+declareGauge nec_sync_non_peers_connected, "" &
+  "Number of currently connected peers less active worker instances"
+
 
 template updateMetricsImpl(ctx: BeaconCtxRef) =
   metrics.set(nec_base, ctx.chain.baseNumber().int64)
@@ -72,6 +75,9 @@ template updateMetricsImpl(ctx: BeaconCtxRef) =
   metrics.set(nec_sync_blocks_unprocessed, ctx.blocksUnprocTotal().int64)
 
   metrics.set(nec_sync_peers, ctx.pool.nBuddies)
+  metrics.set(nec_sync_non_peers_connected,
+              # nBuddies might not be commited/updated yet
+              max(0,ctx.node.peerPool.len - ctx.pool.nBuddies))
 
 # ---------------
 

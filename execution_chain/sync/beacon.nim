@@ -60,11 +60,11 @@ proc init*(
     ethNode: EthereumNode;
     chain: ForkedChainRef;
     maxPeers: int;
-    chunkSize = 0;
+    blockQueueHwm = 0;
       ): T =
   var desc = T()
   desc.initSync(ethNode, maxPeers)
-  desc.ctx.pool.nBodiesBatch = chunkSize
+  desc.ctx.pool.blocksStagedHwm = blockQueueHwm
   desc.ctx.pool.chain = chain
   desc
 

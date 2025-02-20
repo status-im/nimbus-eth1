@@ -27,7 +27,7 @@ ancestor of a right one.
         0------C1                                                            (1)
 
         0--------L1                                                          (2)
-                 \_______H1
+                \_______H1
 
         0------------------C2                                                (3)
 
@@ -283,7 +283,7 @@ For the *Era1*/*Era* pre-load (if any) the following extra options apply to
 
 To start syncing, the following additional options apply to *nimbus*:
 
-       --debug-beacon-chunk-size=384
+       --debug-beacon-blocks-queue-hwm=1000
        --debug-rocksdb-max-open-files=384
        --debug-rocksdb-write-buffer-size=50331648
        --debug-rocksdb-block-cache-size=1073741824
@@ -328,3 +328,28 @@ be available if *nimbus* is compiled with the additional make flags
 | nec_sync_blocks_unprocessed  | size | # of accumulated body block numbers  |
 |                              |      |                                      |
 | nec_sync_peers               | size | # of peers working concurrently      |
+| nec_sync_non_peers_connected | size | # of other connected peers           |
+
+### Graphana example
+
+There is an [example configuration](#Grafana-example.json) for the syncer on
+**mainnet** for the Grafana metrics display server. For this example, Grafana
+is configured on top of prometheus which in turn is configured roughly as
+
+      /etc/prometheus/prometheus.yml:
+        [..]
+        scrape_configs:
+          [..]
+          # Use "ip addr add 172.16.210.1/24 dev lo" if there is no
+          # such interface address "172.16.210.1" on the local network
+          - job_name: mainnet
+            static_configs:
+            - targets: ['172.16.210.1:9099']
+
+The nimbus_ececution client is supposed to run with the additional
+command line arguments (note that port *9099* is default)
+
+      --metrics-address=172.16.210.1 --metrics-port=9099
+
+A general [Metric visualisation](https://github.com/status-im/nimbus-eth1?tab=readme-ov-file#metric-visualisation) setup is described as part of the
+introductory [README.md](../../../README.md) of the *nimbus-eth1* package.
