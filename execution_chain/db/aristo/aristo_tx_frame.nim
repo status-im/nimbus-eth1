@@ -78,12 +78,13 @@ proc baseTxFrame*(db: AristoDbRef): AristoTxRef =
 proc dispose*(tx: AristoTxRef) =
   tx[].reset()
 
-proc checkpoint*(tx: AristoTxRef, blockNumber: uint64) =
+proc checkpoint*(tx: AristoTxRef, blockNumber: uint64, skipSnapshot: bool) =
   tx.blockNumber = Opt.some(blockNumber)
 
-  # Snapshots are expensive, therefore we only do it at checkpoints (which
-  # presumably have gone through enough validation)
-  tx.buildSnapshot(tx.db.txRef.level)
+  if not skipSnapshot:
+    # Snapshots are expensive, therefore we only do it at checkpoints (which
+    # presumably have gone through enough validation)
+    tx.buildSnapshot(tx.db.txRef.level)
 
 proc persist*(db: AristoDbRef, batch: PutHdlRef, txFrame: AristoTxRef) =
   if txFrame == db.txRef and txFrame.isEmpty():
@@ -108,6 +109,13 @@ proc persist*(db: AristoDbRef, batch: PutHdlRef, txFrame: AristoTxRef) =
         # db.txRef always is a snapshot, therefore we're guaranteed to end up
         # here
         bottom = frame
+
+        # If there is no snapshot, consolidate changes into sTab/kMap instead
+        # which caters to the scenario where changes from multiple blocks
+        # have already been written to sTab and the changes can moved into
+        # the bottom.
+        if bottom.snapshot.len == 0:
+          bottom.snapshotLevel.reset()
         continue
 
       doAssert not bottom.isNil, "should have found db.txRef at least"

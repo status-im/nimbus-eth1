@@ -81,11 +81,11 @@ suite "Aristo TxFrame":
         tx2c.layersGetVtx((VertexID(1), acc1Hike.legs[^1].wp.vid)).value()[1]
       ) == 1
 
-    tx0.checkpoint(1)
-    tx1.checkpoint(2)
-    tx2.checkpoint(3)
-    tx2b.checkpoint(3)
-    tx2c.checkpoint(3)
+    tx0.checkpoint(1, skipSnapshot = false)
+    tx1.checkpoint(2, skipSnapshot = false)
+    tx2.checkpoint(3, skipSnapshot = false)
+    tx2b.checkpoint(3, skipSnapshot = false)
+    tx2c.checkpoint(3, skipSnapshot = false)
 
     check:
       # Even after checkpointing, we should maintain the same relative levels
