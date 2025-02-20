@@ -38,6 +38,7 @@ type
 
   CtxRef*[S] = ref object
     ## Shared state among all syncing peer workers (aka buddies.)
+    node*: EthereumNode         ## Own network identity
     noisyLog*: bool             ## Hold back `trace` and `debug` msgs if `false`
     poolMode*: bool             ## Activate `runPool()` workers if set `true`
     daemon*: bool               ## Enable global background job

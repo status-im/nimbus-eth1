@@ -328,3 +328,4 @@ be available if *nimbus* is compiled with the additional make flags
 | nec_sync_blocks_unprocessed  | size | # of accumulated body block numbers  |
 |                              |      |                                      |
 | nec_sync_peers               | size | # of peers working concurrently      |
+| nec_sync_non_peers_connected | size | # of other connected peers           |
