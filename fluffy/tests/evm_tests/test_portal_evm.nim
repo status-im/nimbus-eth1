@@ -7,7 +7,7 @@
 
 {.used.}
 
-import unittest2, stew/byteutils, ../../evm/portal_evm
+import unittest2, stew/byteutils, chronicles, ../../evm/portal_evm
 
 # These tests need to be run manually until we support loading and running
 # the Nimbus EVM as the default EVMC EVM.
