@@ -27,9 +27,9 @@ const
     ## seconds (rather than ms.) This will be further looked at to be confirmed
     ## or rejected as insignificant.
     ##
-    ## FIXME: This setting has priority over the `maxPeers` setting of the
-    ##        `BeaconSyncRef.init()` initaliser. This might be harmonised at
-    ##        a later stage.
+    ## Note:
+    ##   This setting has priority over the `maxPeers` setting of the
+    ##   `BeaconSyncRef.init()` initaliser.
 
   # ----------------------
 
