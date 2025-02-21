@@ -134,25 +134,8 @@
           "sort": "none"
         }
       },
-      "pluginVersion": "11.5.1",
+      "pluginVersion": "11.5.2",
       "targets": [
-        {
-          "datasource": {
-            "type": "prometheus",
-            "uid": "bdvimuocv3fggc"
-          },
-          "disableTextWrap": false,
-          "editorMode": "builder",
-          "expr": "nec_execution_head{instance=\"172.16.210.1:9099\", job=\"mainnet\"}",
-          "fullMetaSearch": false,
-          "hide": false,
-          "includeNullMetadata": true,
-          "instant": false,
-          "legendFormat": "nec_execution_head",
-          "range": true,
-          "refId": "A",
-          "useBackend": false
-        },
         {
           "datasource": {
             "type": "prometheus",
@@ -168,6 +151,23 @@
           "legendFormat": "nec_base",
           "range": true,
           "refId": "B",
+          "useBackend": false
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "bdvimuocv3fggc"
+          },
+          "disableTextWrap": false,
+          "editorMode": "builder",
+          "expr": "nec_execution_head{instance=\"172.16.210.1:9099\", job=\"mainnet\"}",
+          "fullMetaSearch": false,
+          "hide": false,
+          "includeNullMetadata": true,
+          "instant": false,
+          "legendFormat": "nec_execution_head",
+          "range": true,
+          "refId": "A",
           "useBackend": false
         }
       ],
@@ -194,7 +194,7 @@
             "barAlignment": 0,
             "barWidthFactor": 0.6,
             "drawStyle": "line",
-            "fillOpacity": 25,
+            "fillOpacity": 50,
             "gradientMode": "opacity",
             "hideFrom": {
               "legend": false,
@@ -244,7 +244,7 @@
               {
                 "id": "color",
                 "value": {
-                  "fixedColor": "dark-blue",
+                  "fixedColor": "super-light-blue",
                   "mode": "fixed"
                 }
               }
@@ -287,8 +287,26 @@
           "sort": "none"
         }
       },
-      "pluginVersion": "11.5.1",
+      "pluginVersion": "11.5.2",
       "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "bdvimuocv3fggc"
+          },
+          "disableTextWrap": false,
+          "editorMode": "builder",
+          "exemplar": false,
+          "expr": "nec_sync_peers{instance=\"172.16.210.1:9099\", job=\"mainnet\"}",
+          "fullMetaSearch": false,
+          "hide": false,
+          "includeNullMetadata": true,
+          "instant": false,
+          "legendFormat": "nec_sync_peers",
+          "range": true,
+          "refId": "B",
+          "useBackend": false
+        },
         {
           "datasource": {
             "type": "prometheus",
@@ -306,24 +324,6 @@
           "legendFormat": "nec_sync_block_lists_staged",
           "range": true,
           "refId": "A",
-          "useBackend": false
-        },
-        {
-          "datasource": {
-            "type": "prometheus",
-            "uid": "bdvimuocv3fggc"
-          },
-          "disableTextWrap": false,
-          "editorMode": "builder",
-          "exemplar": false,
-          "expr": "nec_sync_peers{instance=\"172.16.210.1:9099\", job=\"mainnet\"}",
-          "fullMetaSearch": false,
-          "hide": false,
-          "includeNullMetadata": true,
-          "instant": false,
-          "legendFormat": "nec_sync_peers",
-          "range": true,
-          "refId": "B",
           "useBackend": false
         }
       ],
@@ -350,8 +350,8 @@
             "barAlignment": 0,
             "barWidthFactor": 0.6,
             "drawStyle": "line",
-            "fillOpacity": 27,
-            "gradientMode": "none",
+            "fillOpacity": 50,
+            "gradientMode": "opacity",
             "hideFrom": {
               "legend": false,
               "tooltip": false,
@@ -443,7 +443,7 @@
           "sort": "none"
         }
       },
-      "pluginVersion": "11.5.1",
+      "pluginVersion": "11.5.2",
       "targets": [
         {
           "datasource": {
@@ -625,7 +625,7 @@
           "sort": "none"
         }
       },
-      "pluginVersion": "11.5.1",
+      "pluginVersion": "11.5.2",
       "targets": [
         {
           "datasource": {
@@ -761,7 +761,7 @@
           "sort": "none"
         }
       },
-      "pluginVersion": "11.5.1",
+      "pluginVersion": "11.5.2",
       "targets": [
         {
           "datasource": {
@@ -913,7 +913,7 @@
           "sort": "none"
         }
       },
-      "pluginVersion": "11.5.1",
+      "pluginVersion": "11.5.2",
       "targets": [
         {
           "datasource": {
@@ -946,13 +946,13 @@
     "list": []
   },
   "time": {
-    "from": "now-1h",
+    "from": "2025-02-25T11:03:15.000Z",
     "to": "now"
   },
   "timepicker": {},
   "timezone": "browser",
   "title": "Mainnet Sync",
   "uid": "beavm2j26dvr4b",
-  "version": 45,
+  "version": 49,
   "weekStart": ""
 }
