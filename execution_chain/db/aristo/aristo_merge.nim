@@ -254,6 +254,65 @@ proc mergeStorageData*(
 
   ok()
 
+proc mergeStorageData*(
+    db: AristoTxRef;                   # Database, top layer
+    accPath: Hash32;                   # Needed for accounts payload
+    updates: openArray[(Hash32, UInt256)]; # Storage data path (aka key)
+      ): Result[void,AristoError] =
+  ## Store the `stoData` data argument on the storage area addressed by
+  ## `(accPath,stoPath)` where `accPath` is the account key (into the MPT)
+  ## and `stoPath`  is the slot path of the corresponding storage area.
+  ##
+  if updates.len == 0:
+    return ok()
+
+  var accHike: Hike
+  db.fetchAccountHike(accPath,accHike).isOkOr:
+    return err(MergeStoAccMissing)
+
+  # Mark account path Merkle keys for update
+  db.layersResKeys(accHike)
+
+  let
+    stoID = accHike.legs[^1].wp.vtx.lData.stoID
+
+    # Provide new storage ID when needed
+    useID =
+      if stoID.isValid: stoID                     # Use as is
+      elif stoID.vid.isValid: (true, stoID.vid)   # Re-use previous vid
+      else: (true, db.vidFetch())                 # Create new vid
+
+  if not stoID.isValid:
+    # Make sure that there is an account that refers to that storage trie
+    let leaf = accHike.legs[^1].wp.vtx.dup # Dup on modify
+    leaf.lData.stoID = useID
+    db.layersPutAccLeaf(accPath, leaf)
+    db.layersPutVtx((VertexID(1), accHike.legs[^1].wp.vid), leaf)
+
+  for (stoPath, stoData) in updates:
+    let
+      mixPath = mixUp(accPath, stoPath)
+      # Call merge
+      pyl = LeafPayload(pType: StoData, stoData: stoData)
+      updated = db.mergePayloadImpl(
+          useID.vid, stoPath, db.cachedStoLeaf(mixPath), pyl).valueOr:
+        if error == MergeNoAction:
+          assert stoID.isValid         # debugging only
+          continue
+
+        return err(error)
+
+    # Update leaf cache both of the merged value and potentially the displaced
+    # leaf resulting from splitting a leaf into a branch with two leaves
+    db.layersPutStoLeaf(mixPath, updated[0])
+
+    if updated[1].isValid:
+      let otherPath = Hash32(getBytes(
+        NibblesBuf.fromBytes(stoPath.data).replaceSuffix(updated[1].pfx)))
+      db.layersPutStoLeaf(mixUp(accPath, otherPath), updated[2])
+
+  ok()
+
 # ------------------------------------------------------------------------------
 # End
 # ------------------------------------------------------------------------------

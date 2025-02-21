@@ -11,7 +11,7 @@
 {.push raises: [].}
 
 import
-  std/[tables, hashes, sets, typetraits],
+  std/[algorithm, tables, hashes, sets, typetraits],
   chronicles,
   eth/common/eth_types,
   results,
@@ -141,6 +141,11 @@ template toAccountKey(acc: AccountRef): Hash32 =
 template toAccountKey(eAddr: Address): Hash32 =
   eAddr.data.keccak256
 
+proc `<`(a, b: Hash32): bool =
+  for i in 0..<a.data.len:
+    if a.data[i] >= b.data[i]:
+      return false
+  true
 
 proc beginSavepoint*(ac: LedgerRef): LedgerSpRef {.gcsafe.}
 
@@ -300,6 +305,11 @@ proc persistStorage(acc: AccountRef, ac: LedgerRef) =
     raiseAssert info & $$error
 
   # Save `overlayStorage[]` on database
+
+  var
+    merges = newSeqOfCap[(Hash32, UInt256)](acc.overlayStorage.len)
+    deletes = newSeqOfCap[Hash32](acc.overlayStorage.len)
+
   for slot, value in acc.overlayStorage:
     acc.originalStorage[].withValue(slot, v):
       if v[] == value:
@@ -312,16 +322,14 @@ proc persistStorage(acc: AccountRef, ac: LedgerRef) =
       ac.slots.put(slot, hash)
       hash
 
-    if value > 0:
-      ac.txFrame.slotMerge(acc.toAccountKey, slotKey, value).isOkOr:
-        raiseAssert info & $$error
+    if not isZero(value):
+      merges.add (slotKey, value)
 
       # move the overlayStorage to originalStorage, related to EIP2200, EIP1283
       acc.originalStorage[slot] = value
 
     else:
-      ac.txFrame.slotDelete(acc.toAccountKey, slotKey).isOkOr:
-        raiseAssert info & $$error
+      deletes.add (slotKey)
       acc.originalStorage.del(slot)
 
     if ac.storeSlotHash and not cached:
@@ -332,6 +340,16 @@ proc persistStorage(acc: AccountRef, ac: LedgerRef) =
         rc = ac.txFrame.put(key.toOpenArray, blobify(slot).data)
       if rc.isErr:
         warn logTxt "persistStorage()", slot, error=($$rc.error)
+
+  # Sort merges / delets to perform them in mpt database order as much as possible
+  merges.sort()
+  deletes.sort()
+
+  ac.txFrame.slotDelete(acc.toAccountKey, deletes).isOkOr:
+    raiseAssert info & $$error
+
+  ac.txFrame.slotMerge(acc.toAccountKey, merges).isOkOr:
+    raiseAssert info & $$error
 
   acc.overlayStorage.clear()
 
@@ -690,30 +708,48 @@ proc persist*(ac: LedgerRef,
   for address in ac.savePoint.selfDestruct:
     ac.deleteAccount(address)
 
+  var updates = newSeqOfCap[(EthAddress, AccountRef)](ac.savePoint.dirty.len)
+  var removes = newSeqOfCap[(EthAddress, AccountRef)](ac.savePoint.dirty.len)
+
   for (eAddr,acc) in ac.savePoint.dirty.pairs(): # This is a hotspot in block processing
     case acc.persistMode()
-    of Update:
-      if CodeChanged in acc.flags:
-        acc.persistCode(ac)
-      if StorageChanged in acc.flags:
-        acc.persistStorage(ac)
-      else:
-        # This one is only necessary unless `persistStorage()` is run which needs
-        # to `merge()` the latest statement as well.
-        ac.txFrame.merge(acc.toAccountKey, acc.statement).isOkOr:
-          raiseAssert info & $$error
-    of Remove:
-      ac.txFrame.delete(acc.toAccountKey).isOkOr:
-        if error.error != AccNotFound:
-          raiseAssert info & $$error
-      ac.savePoint.cache.del eAddr
+    of Update: updates.add (eAddr, acc)
+    of Remove: removes.add (eAddr, acc)
     of DoNothing:
       # dead man tell no tales
       # remove touched dead account from cache
       if Alive notin acc.flags:
         ac.savePoint.cache.del eAddr
 
+      acc.flags = acc.flags - resetFlags
+
+  proc byKey(a, b: (EthAddress, AccountRef)): int =
+    cmp(a[1].toAccountKey, b[1].toAccountKey)
+
+  updates.sort(byKey)
+  removes.sort(byKey)
+
+  for (eAddr,acc) in removes: # This is a hotspot in block processing
+    ac.txFrame.delete(acc.toAccountKey).isOkOr:
+      if error.error != AccNotFound:
+        raiseAssert info & $$error
+    ac.savePoint.cache.del eAddr
+
     acc.flags = acc.flags - resetFlags
+
+  for (eAddr,acc) in updates: # This is a hotspot in block processing
+    if CodeChanged in acc.flags:
+      acc.persistCode(ac)
+    if StorageChanged in acc.flags:
+      acc.persistStorage(ac)
+    else:
+      # This one is only necessary unless `persistStorage()` is run which needs
+      # to `merge()` the latest statement as well.
+      ac.txFrame.merge(acc.toAccountKey, acc.statement).isOkOr:
+        raiseAssert info & $$error
+
+    acc.flags = acc.flags - resetFlags
+
   ac.savePoint.dirty.clear()
 
   if clearCache:

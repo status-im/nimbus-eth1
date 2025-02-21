@@ -338,6 +338,17 @@ proc slotDelete*(
 
   ok()
 
+proc slotDelete*(
+    acc: CoreDbTxRef;
+    accPath: Hash32;
+    stoPaths: openArray[Hash32];
+      ):  CoreDbRc[void] =
+  ## Like `delete()` but with cascaded index `(accPath,slot)`.
+  acc.aTx.deleteStorageData(accPath, stoPaths).isOkOr:
+    return err(error.toError(""))
+
+  ok()
+
 proc slotHasPath*(
     acc: CoreDbTxRef;
     accPath: Hash32;
@@ -357,6 +368,17 @@ proc slotMerge*(
       ): CoreDbRc[void] =
   ## Like `merge()` but with cascaded index `(accPath,slot)`.
   acc.aTx.mergeStorageData(accPath, stoPath, stoData).isOkOr:
+    return err(error.toError(""))
+
+  ok()
+
+proc slotMerge*(
+    acc: CoreDbTxRef;
+    accPath: Hash32;
+    updates: openArray[(Hash32, UInt256)];
+      ): CoreDbRc[void] =
+  ## Like `merge()` but with cascaded index `(accPath,slot)`.
+  acc.aTx.mergeStorageData(accPath, updates).isOkOr:
     return err(error.toError(""))
 
   ok()

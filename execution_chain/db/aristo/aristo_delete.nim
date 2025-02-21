@@ -265,6 +265,76 @@ proc deleteStorageData*(
   db.layersPutVtx((accHike.root, wpAcc.vid), leaf)
   ok()
 
+proc deleteStorageData*(
+    db: AristoTxRef;
+    accPath: Hash32;          # Implies storage data tree
+    stoPaths: openArray[Hash32];
+      ): Result[void,AristoError] =
+  ## For a given account argument `accPath`, this function deletes the
+  ## argument `stoPath` from the associated storage tree (if any, at all.) If
+  ## the if the argument `stoPath` deleted was the last one on the storage tree,
+  ## account leaf referred to by `accPath` will be updated so that it will
+  ## not refer to a storage tree anymore.
+  ##
+
+  if stoPaths.len == 0:
+    return ok()
+
+  var accHike: Hike
+  var updated = false
+  for stoPath in stoPaths:
+    let
+      mixPath = mixUp(accPath, stoPath)
+      stoLeaf = db.cachedStoLeaf(mixPath)
+
+    if stoLeaf == Opt.some(nil):
+      continue
+
+    if accHike.legs.len == 0:
+      db.fetchAccountHike(accPath, accHike).isOkOr:
+        if error == FetchAccInaccessible:
+          return ok() # Trying to delete something that doesn't exist is ok
+        return err(error)
+
+      if not accHike.legs[^1].wp.vtx.lData.stoID.isValid:
+        return ok() # Trying to delete something that doesn't exist is ok
+
+    let
+      wpAcc = accHike.legs[^1].wp
+      stoID = wpAcc.vtx.lData.stoID
+
+    let stoNibbles = NibblesBuf.fromBytes(stoPath.data)
+    var stoHike: Hike
+    stoNibbles.hikeUp(stoID.vid, db, stoLeaf, stoHike).isOkOr:
+      if error[1] in HikeAcceptableStopsNotFound:
+        continue
+      return err(error[1])
+
+    # Mark account path Merkle keys for update
+    if not updated:
+      db.layersResKeys accHike
+      updated = true
+
+    let otherLeaf = ?db.deleteImpl(stoHike)
+    db.layersPutStoLeaf(mixPath, nil)
+
+    if otherLeaf.isValid:
+      let leafMixPath = mixUp(
+        accPath,
+        Hash32(getBytes(stoNibbles.replaceSuffix(otherLeaf.pfx))))
+      db.layersPutStoLeaf(leafMixPath, otherLeaf)
+
+    # If there was only one item (that got deleted), update the account as well
+    if stoHike.legs.len == 1:
+      # De-register the deleted storage tree from the account record
+      let leaf = wpAcc.vtx.dup           # Dup on modify
+      leaf.lData.stoID.isValid = false
+      db.layersPutAccLeaf(accPath, leaf)
+      db.layersPutVtx((accHike.root, wpAcc.vid), leaf)
+      break
+
+  ok()
+
 proc deleteStorageTree*(
     db: AristoTxRef;                   # Database, top layer
     accPath: Hash32;                   # Implies storage data tree
