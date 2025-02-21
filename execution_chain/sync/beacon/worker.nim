@@ -117,7 +117,7 @@ proc runDaemon*(
     return
 
   # Execute staged block records.
-  if ctx.blocksStagedCanImportOk():
+  if ctx.blocksStagedCanImportOk info:
 
     block:
       # Set advisory flag telling that a slow/long running process will take

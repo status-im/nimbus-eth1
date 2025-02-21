@@ -123,9 +123,8 @@ proc fetchAndCheck(
 # Public functions
 # ------------------------------------------------------------------------------
 
-func blocksStagedCanImportOk*(ctx: BeaconCtxRef): bool =
-  ## Check whether the queue is at its maximum size so import can start with
-  ## a full queue.
+func blocksStagedCanImportOk*(ctx: BeaconCtxRef; info: static[string];): bool =
+  ## Check whether the queue is ready so that block import can run
   ##
   if ctx.poolMode:
     # Re-org is scheduled
@@ -136,19 +135,33 @@ func blocksStagedCanImportOk*(ctx: BeaconCtxRef): bool =
     # `blocksUnprocIsEmpty()` returns `true` only if all blocks possible have
     # been fetched (i.e. the `borrowed` list is also empty.)
     if ctx.blocksUnprocIsEmpty():
+      trace info & ": import ok", unprocIsEmpty=true
       return true
 
     # Make sure that the lowest block is available, already. Or the other way
     # round: no unprocessed block number range precedes the least staged block.
     if ctx.blk.staged.ge(0).value.key < ctx.blocksUnprocTotalBottom():
-      # Also suggest importing blocks if there is currently no peer active.
-      # The `unprocessed` ranges will contain some higher number block ranges,
-      # but these can be fetched later.
-      if ctx.pool.nBuddies == 0:
+      # Start importing blocks if there is currently no peer active.
+      if ctx.pool.nBuddies == 0 or
+
+         # When importing starts while peers are actively downloading, the
+         # system tends to loose download peers, most probably due to high
+         # system activity. By this behaviour, there will be extra waiting
+         # delays for finding and connecting to new download peers.
+         #
+         # So importing and fetching goes full concurrently not unless there
+         # are at least some min number of download peers available.
+         minPeersImportWhileFetching <= ctx.pool.nBuddies:
+
+        trace info & ": import ok", nBuddies=ctx.pool.nBuddies
         return true
 
-      # Start importing if the queue is filled up enough
+      # With a too few peers available, importing will not start not until the
+      # queue is filled up enough. This increases the ramp up time (observed
+      # less than a minute with default config) but leaves more time for
+      # fishing for new peers while importing.
       if ctx.pool.stagedLenHwm <= ctx.blk.staged.len:
+        trace info & ": import ok", nStaged=ctx.blk.staged.len
         return true
 
   false
