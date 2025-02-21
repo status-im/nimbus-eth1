@@ -436,7 +436,7 @@ proc installEthApiHandlers*(
   #   value*: Opt[UInt256]     # (optional) Integer of the value sent with this transaction.
   #   nonce*: Opt[Quantity]    # (optional) integer of a nonce. This allows to overwrite your own pending transactions that use the same nonce
   rpcServer.rpc("eth_call") do(
-    txObj: TransactionArgs, quantityTag: RtBlockIdentifier
+    txObj: TransactionArgs, quantityTag: RtBlockIdentifier, inMemory: bool
   ) -> seq[byte]:
     # TODO: add documentation
 
@@ -454,23 +454,68 @@ proc installEthApiHandlers*(
       header = (await hn.getVerifiedBlockHeader(quantityTag.number.uint64)).valueOr:
         raise
           newException(ValueError, "Could not find header with requested block number")
-      state =
-        PortalEvmState.init(Opt.some(header.stateRoot), stateNetwork, historyNetwork)
+    let state = PortalEvmState.init(Opt.some(header.stateRoot), stateNetwork, historyNetwork)
 
     evm.setExecutionContext(state, header)
 
-    evm.call(
-      txObj.`from`,
-      txObj.to.get(),
-      txObj.gas.map(
-        func (q: Quantity): auto =
-          uint64(q)
-      ),
-      txObj.gasPrice.map(
-        func (q: Quantity): auto =
-          uint64(q)
-      ),
-      txObj.value,
-      txObj.input,
-    ).valueOr:
-      raise newException(ValueError, "Unable to call contract")
+    if inMemory:
+      let c = state.getCode(txObj.to.get())
+      echo "code fetched: ", c
+      state.stateNetwork = Opt.none(StateNetwork) # use in memory evm for execution
+
+      var res: Result[seq[byte], string]
+
+      var prevStorageKeysLen = -1
+      while state.touchedStorageKeys.len() > prevStorageKeysLen:
+
+        prevStorageKeysLen = state.touchedStorageKeys.len()
+
+        res = evm.call(
+          txObj.`from`,
+          txObj.to.get(),
+          txObj.gas.map(
+            func (q: Quantity): auto =
+              uint64(q)
+          ),
+          txObj.gasPrice.map(
+            func (q: Quantity): auto =
+              uint64(q)
+          ),
+          txObj.value,
+          txObj.input,
+        )
+
+
+        var futures: Table[UInt256, Future[Opt[UInt256]]]
+        let address = txObj.to.get()
+        for slotKey in state.touchedStorageKeys:
+          echo "slot key touched: ", slotKey
+          let fut = stateNetwork.get().getStorageAtByStateRoot(header.stateRoot, address, slotKey)
+          futures[slotKey] = fut
+
+        for slotKey in state.touchedStorageKeys:
+          let slotValue = await (futures.getOrDefault(slotKey))
+          echo "slot value fetched: ", slotValue
+          state.setStorage(address, slotKey, slotValue.get())
+          # let s = state.getCurrentStorage(address, slotKey)
+          # echo "getCurrentStorage: ", s
+        # state.stateNetwork = Opt.none(StateNetwork) # use in memory evm for execution
+      res.valueOr:
+        raise newException(ValueError, "Unable to call contract")
+
+    else:
+      evm.call(
+        txObj.`from`,
+        txObj.to.get(),
+        txObj.gas.map(
+          func (q: Quantity): auto =
+            uint64(q)
+        ),
+        txObj.gasPrice.map(
+          func (q: Quantity): auto =
+            uint64(q)
+        ),
+        txObj.value,
+        txObj.input,
+      ).valueOr:
+        raise newException(ValueError, "Unable to call contract")

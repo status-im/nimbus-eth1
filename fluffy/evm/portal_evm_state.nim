@@ -27,24 +27,25 @@ logScope:
 
 type
   PortalEvmState* = ref object
-    accounts: Table[Address, Account]
+    accounts*: Table[Address, Account]
     code: Table[Address, seq[byte]]
-    storage: Table[Address, Table[UInt256, (UInt256, UInt256)]]
+    storage*: Table[Address, Table[UInt256, (UInt256, UInt256)]]
       # maps address -> slot key -> (original slot value, updated slot value)
     created: HashSet[Address]
     selfDestructs: HashSet[Address]
     transientStorage: Table[Address, Table[UInt256, UInt256]]
-    stateNetwork: Opt[StateNetwork] # when none state network lookups are disabled
+    stateNetwork*: Opt[StateNetwork] # when none state network lookups are disabled
     stateRoot: Opt[Hash32]
     fetchedAccounts: HashSet[Address]
     fetchedCode: HashSet[Address]
     fetchedStorage: Table[Address, HashSet[UInt256]]
     historyNetwork: Opt[HistoryNetwork] # when none history network lookups are disabled
     blockHashes: Table[uint64, Hash32]
+    touchedStorageKeys*: HashSet[UInt256]
 
   # We need to inherit from a Defect here because we need a way to return errors
-  # from the EVMC host interface. The host interface functions don't have error 
-  # status codes in the return types for most functions. We can't use a CatchableError 
+  # from the EVMC host interface. The host interface functions don't have error
+  # status codes in the return types for most functions. We can't use a CatchableError
   # exception either because the host interface doesn't list any exception types.
   PortalEvmStateException* = object of Defect
 
@@ -97,31 +98,37 @@ proc fetchCodeIfRequired(state: PortalEvmState, address: Address) =
     trace "stateNetwork.getCodeByStateRoot canceled"
     raise newException(PortalEvmStateException, "code lookup failed")
 
-proc fetchStorageIfRequired(state: PortalEvmState, address: Address, slotKey: UInt256) =
-  let sn = state.stateNetwork.valueOr:
-    return # state lookups over portal network are disabled
+# proc fetchStorageIfRequired(state: PortalEvmState, address: Address, slotKey: UInt256) =
+#   if state.fetchedStorage.getOrDefault(address).contains(slotKey):
+#     return # already fetched storage
 
-  if slotKey in state.fetchedStorage.getOrDefault(address):
-    return # already fetched storage
+#   let sn = state.stateNetwork.valueOr:
+#     let slotValue = 0.u256()
+#     state.storage.withValue(address, value):
+#       value[][slotKey] = (slotValue, slotValue)
+#     do:
+#       state.storage[address] = {slotKey: (slotValue, slotValue)}.toTable
 
-  try:
-    let slotValue = waitFor(
-      sn.getStorageAtByStateRoot(state.stateRoot.get(), address, slotKey)
-    ).valueOr:
-      raise newException(PortalEvmStateException, "storage lookup failed")
+#     return # state lookups over portal network are disabled
 
-    state.storage.withValue(address, value):
-      value[][slotKey] = (slotValue, slotValue)
-    do:
-      state.storage[address] = {slotKey: (slotValue, slotValue)}.toTable
+#   try:
+#     let slotValue = waitFor(
+#       sn.getStorageAtByStateRoot(state.stateRoot.get(), address, slotKey)
+#     ).valueOr:
+#       raise newException(PortalEvmStateException, "storage lookup failed")
 
-    state.fetchedStorage.withValue(address, value):
-      value[].incl(slotKey)
-    do:
-      state.fetchedStorage[address] = toHashSet([slotKey])
-  except CancelledError:
-    trace "stateNetwork.getStorageAtByStateRoot canceled"
-    raise newException(PortalEvmStateException, "storage lookup failed")
+#     state.storage.withValue(address, value):
+#       value[][slotKey] = (slotValue, slotValue)
+#     do:
+#       state.storage[address] = {slotKey: (slotValue, slotValue)}.toTable
+
+#     state.fetchedStorage.withValue(address, value):
+#       value[].incl(slotKey)
+#     do:
+#       state.fetchedStorage[address] = toHashSet([slotKey])
+#   except CancelledError:
+#     trace "stateNetwork.getStorageAtByStateRoot canceled"
+#     raise newException(PortalEvmStateException, "storage lookup failed")
 
 proc fetchBlockHashIfRequired(state: PortalEvmState, number: uint64) =
   let hn = state.historyNetwork.valueOr:
@@ -159,20 +166,29 @@ proc setBalance*(state: PortalEvmState, address: Address, value: UInt256) =
 proc getOriginalStorage*(
     state: PortalEvmState, address: Address, slotKey: UInt256
 ): UInt256 =
-  state.fetchStorageIfRequired(address, slotKey)
+  #state.fetchStorageIfRequired(address, slotKey)
   state.storage.getOrDefault(address).getOrDefault(slotKey)[0]
 
 proc getCurrentStorage*(
     state: PortalEvmState, address: Address, slotKey: UInt256
 ): UInt256 =
-  state.fetchStorageIfRequired(address, slotKey)
-  state.storage.getOrDefault(address).getOrDefault(slotKey)[1]
+  state.touchedStorageKeys.incl(slotKey)
+  #state.fetchStorageIfRequired(address, slotKey)
+  let slotsMap = state.storage.getOrDefault(address)
+  # echo slotsMap
+
+  let slot = slotsMap.getOrDefault(slotKey)[1]
+  # echo "returning slot value: ", slot
+  return slot
 
 proc setStorage*(state: PortalEvmState, address: Address, slotKey, slotValue: UInt256) =
-  state.storage.withValue(address, value):
-    value[][slotKey] = (value[].getOrDefault(slotKey)[0], slotValue)
-  do:
-    state.storage[address] = {slotKey: (0.u256, slotValue)}.toTable
+  var slotsMap = state.storage.getOrDefault(address)
+  slotsMap[slotKey] = (slotValue, slotValue)
+  state.storage[address] = slotsMap
+  # state.storage.withValue(address, value):
+  #   value[][slotKey] = (value[].getOrDefault(slotKey)[0], slotValue)
+  # do:
+  #   state.storage[address] = {slotKey: (0.u256, slotValue)}.toTable
 
 proc getCode*(state: PortalEvmState, address: Address): seq[byte] =
   state.fetchCodeIfRequired(address)
@@ -207,7 +223,7 @@ proc accessAccount*(state: PortalEvmState, address: Address): bool =
 
 proc accessStorage*(state: PortalEvmState, address: Address, slotKey: UInt256): bool =
   let warm = state.fetchedStorage.getOrDefault(address).contains(slotKey)
-  state.fetchStorageIfRequired(address, slotKey)
+  # state.fetchStorageIfRequired(address, slotKey)
   warm
 
 proc getTransientStorage*(

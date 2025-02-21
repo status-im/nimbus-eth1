@@ -164,6 +164,7 @@ proc execute(
         ok(output)
       else:
         err($evmc_result.status_code)
+  echo res
 
   # Release the evmc_result
   if not evmc_result.release.isNil():
