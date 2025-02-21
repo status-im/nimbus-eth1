@@ -37,7 +37,9 @@ proc napUnlessSomethingToFetch(
     buddy: BeaconBuddyRef;
       ): Future[bool] {.async: (raises: []).} =
   ## When idle, save cpu cycles waiting for something to do.
-  if buddy.ctx.pool.blockImportOk or             # currently importing blocks
+  if (buddy.ctx.pool.blockImportOk and           # currently importing blocks
+      buddy.ctx.pool.nBuddies < minPeersImportWhileFetching) or
+                                                 # too few download peers
      buddy.ctx.hibernate or                      # not activated yet?
      not (buddy.headersToFetchOk() or            # something on TODO list
           buddy.bodiesToFetchOk()):

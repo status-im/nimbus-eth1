@@ -31,6 +31,26 @@ const
     ##   This setting has priority over the `maxPeers` setting of the
     ##   `BeaconSyncRef.init()` initaliser.
 
+  minPeersImportWhileFetching* = 3
+    ## With concurrently running blocks import/execution and fetching blocks
+    ## over the network, there is a significant chance to loose peers rather
+    ## than downloading in a quasi-parallel task.
+    ##
+    ## So, with a few peers available only, fetching is suspended while
+    ## importing so there is a high chance that some peers are still available
+    ## when the import cycle is done.
+    ##
+    ## With a similar argument, importing/executing will fill up the blocks
+    ## queue to the HWM first if there are only a few peers available. With
+    ## an observed extra ramp up time of less than a minute (w/default config)
+    ## is a fraction of observed peer re-connection time, often more than 5min.
+    ##
+    ## Note:
+    ##   Setting this constant to `0` or `1` will disable all import/fetching
+    ##   syncronisation in a way that importing starts with the first queue
+    ##   entry (see `nFetchBodiesBatch`) while fetching continues as a
+    ##   quasi-parallel task. Use `99` to configure full serialisation.
+
   # ----------------------
 
   metricsUpdateInterval* = chronos.seconds(10)
