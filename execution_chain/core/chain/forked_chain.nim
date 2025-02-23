@@ -678,6 +678,16 @@ proc txDetailsByTxHash*(c: ForkedChainRef, txHash: Hash32): Result[(Hash32, uint
     blockHash = header.blockHash
   return ok((blockHash, txDetails.index))
   
+proc blockBodyByHash*(c: ForkedChainRef, blockHash: Hash32): Result[BlockBody, string] =
+  c.hashToBlock.withValue(blockHash, loc):
+    let blk = loc[].blk
+    return ok(BlockBody(
+      transactions: blk.transactions,
+      uncles: blk.uncles,
+      withdrawals: blk.withdrawals,
+    ))
+  c.baseTxFrame.getBlockBody(blockHash)
+
 proc blockByHash*(c: ForkedChainRef, blockHash: Hash32): Result[Block, string] =
   # used by getPayloadBodiesByHash
   # https://github.com/ethereum/execution-apis/blob/v1.0.0-beta.4/src/engine/shanghai.md#specification-3
@@ -689,16 +699,6 @@ proc blockByHash*(c: ForkedChainRef, blockHash: Hash32): Result[Block, string] =
     if c.isPortalActive:
       return c.portal.getBlockByHash(blockHash)
   blk
-
-proc blockBodyByHash*(c: ForkedChainRef, blockHash: Hash32): Result[BlockBody, string] =
-  c.hashToBlock.withValue(blockHash, loc):
-    let blk = loc[].blk
-    return ok(BlockBody(
-      transactions: blk.transactions,
-      uncles: blk.uncles,
-      withdrawals: blk.withdrawals,
-    ))
-  c.baseTxFrame.getBlockBody(blockHash)
 
 proc blockByNumber*(c: ForkedChainRef, number: BlockNumber): Result[Block, string] =
   if number > c.activeBranch.headNumber:
