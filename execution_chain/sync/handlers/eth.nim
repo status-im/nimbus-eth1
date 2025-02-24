@@ -290,7 +290,9 @@ method getReceipts*(ctx: EthWireRef,
                       Result[seq[seq[Receipt]], string]
     {.gcsafe.} =
   var list: seq[seq[Receipt]]
-  for blockHash in hashes:
+  for i, blockHash in hashes:
+    if i > maxReceiptsFetch:
+      break
     let receiptList = ?ctx.chain.receiptsByBlockHash(blockHash)
     list.add receiptList
 
@@ -320,7 +322,9 @@ method getBlockBodies*(ctx: EthWireRef,
                         Result[seq[BlockBody], string]
     {.gcsafe.} =
   var list: seq[BlockBody]
-  for blockHash in hashes:
+  for i, blockHash in hashes:
+    if i > maxBodiesFetch:
+      break
     let body = ctx.chain.blockBodyByHash(blockHash).valueOr:
       list.add BlockBody()
       trace "handlers.getBlockBodies: blockBody not found", blockHash
@@ -333,18 +337,19 @@ method getBlockHeaders*(ctx: EthWireRef,
                         req: EthBlocksRequest):
                           Result[seq[Header], string]
     {.gcsafe.} =
-  let chain = ctx.chain
-  var list = newSeqOfCap[Header](req.maxResults)
-  var foundBlock = chain.blockHeader(req.startBlock).valueOr:
-    return ok(list)
+  var 
+    list = newSeqOfCap[Header](req.maxResults)
+    foundBlock = ctx.chain.blockHeader(req.startBlock).valueOr:
+      return ok(list)
+  let headerLimit = min(req.maxResults, maxHeadersFetch)
   list.add foundBlock
 
-  while uint64(list.len) < req.maxResults:
+  while uint64(list.len) < headerLimit:
     if not req.reverse:
-      foundBlock = chain.headerByNumber(foundBlock.number + 1 + req.skip).valueOr:
+      foundBlock = ctx.chain.headerByNumber(foundBlock.number + 1 + req.skip).valueOr:
         break
     else:
-      foundBlock = chain.headerByNumber(foundBlock.number - 1 - req.skip).valueOr:
+      foundBlock = ctx.chain.headerByNumber(foundBlock.number - 1 - req.skip).valueOr:
         break
     list.add foundBlock
   return ok(list)

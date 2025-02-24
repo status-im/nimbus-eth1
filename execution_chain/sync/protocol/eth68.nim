@@ -183,12 +183,6 @@ p2pProtocol eth68(version = ethVersion,
         trace trEthRecvReceived & "GetBlockHeaders (0x03)", peer,
           count=request.maxResults
 
-      if request.maxResults > uint64(maxHeadersFetch):
-        debug "GetBlockHeaders (0x03) requested too many headers",
-          peer, requested=request.maxResults, max=maxHeadersFetch
-        await peer.disconnect(BreachOfProtocol)
-        return
-
       let ctx = peer.networkState()
       let headers = ctx.getBlockHeaders(request)
       handleHandlerError(headers)
