@@ -117,7 +117,7 @@ const
     ## With an average less than 90KiB/block (on `mainnet` at block ~#22m),
     ## one arrives at a total of at most 35MiB per block batch.
 
-  blocksStagedHwmDefault* = 4 * nFetchBodiesBatch
+  blocksStagedHwmDefault* = 8 * nFetchBodiesBatch
     ## This is an initialiser value for `blocksStagedHwm`.
     ##
     ## If the staged block queue exceeds this many number of block objects for
