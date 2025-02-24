@@ -49,7 +49,7 @@ const
   maxStateFetch* = 384
   maxBodiesFetch* = 128
   maxReceiptsFetch* = 256
-  maxHeadersFetch* = 192
+  maxHeadersFetch* = 512
 
 proc notImplemented(name: string) =
   debug "Method not implemented", meth = name
