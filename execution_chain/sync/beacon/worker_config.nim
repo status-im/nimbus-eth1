@@ -80,7 +80,7 @@ const
     ## Length of the request/stage batch. Several headers are consecutively
     ## fetched and stashed together as a single record on the staged queue.
 
-  headersStagedQueueLengthLwm* = 32
+  headersStagedQueueLengthLwm* = 16
     ## Limit the number of records in the staged headers queue.
     ##
     ## Queue entries start accumulating if one peer stalls while fetching the
@@ -91,7 +91,7 @@ const
     ## the above problem. Currently the **magic** is to let (pseudo) threads
     ## terminate and then restart all over again.
 
-  headersStagedQueueLengthHwm* = 48
+  headersStagedQueueLengthHwm* = 24
     ## If this size is exceeded, the staged queue is flushed and resized to
     ## `headersStagedQueueLengthLwm-1` entries. Then contents is re-fetched
     ## from scratch.
