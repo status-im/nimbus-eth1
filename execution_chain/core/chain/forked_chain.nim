@@ -647,6 +647,7 @@ proc latestBlock*(c: ForkedChainRef): Block =
     return c.baseTxFrame.getEthBlock(c.activeBranch.headHash).expect("cursorBlock exists")
   c.activeBranch.blocks[^1].blk
 
+# TODO: Doesn't serve portal data
 proc headerByNumber*(c: ForkedChainRef, number: BlockNumber): Result[Header, string] =
   if number > c.activeBranch.headNumber:
     return err("Requested block number not exists: " & $number)
@@ -678,6 +679,7 @@ proc txDetailsByTxHash*(c: ForkedChainRef, txHash: Hash32): Result[(Hash32, uint
     blockHash = header.blockHash
   return ok((blockHash, txDetails.index))
   
+# TODO: Doesn't fetch data from portal
 proc blockBodyByHash*(c: ForkedChainRef, blockHash: Hash32): Result[BlockBody, string] =
   c.hashToBlock.withValue(blockHash, loc):
     let blk = loc[].blk
@@ -688,6 +690,7 @@ proc blockBodyByHash*(c: ForkedChainRef, blockHash: Hash32): Result[BlockBody, s
     ))
   c.baseTxFrame.getBlockBody(blockHash)
 
+# Serves portal data if block not found in db
 proc blockByHash*(c: ForkedChainRef, blockHash: Hash32): Result[Block, string] =
   # used by getPayloadBodiesByHash
   # https://github.com/ethereum/execution-apis/blob/v1.0.0-beta.4/src/engine/shanghai.md#specification-3
@@ -700,6 +703,7 @@ proc blockByHash*(c: ForkedChainRef, blockHash: Hash32): Result[Block, string] =
       return c.portal.getBlockByHash(blockHash)
   blk
 
+# Serves portal data if block not found in db
 proc blockByNumber*(c: ForkedChainRef, number: BlockNumber): Result[Block, string] =
   if number > c.activeBranch.headNumber:
     return err("Requested block number not exists: " & $number)
