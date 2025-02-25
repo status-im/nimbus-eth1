@@ -15,6 +15,7 @@ import
   results,
   json_rpc/rpcclient,
   ../config,
+  ../common,
   eth/common/[base, eth_types, keys]
 
 logScope:
@@ -28,7 +29,7 @@ type
 type
   PortalClientRef* = ref object
     rpc: PortalRpc
-    limit*: uint64 # blockNumber limit till portal is activated, EIP specific
+    limit*: base.BlockNumber # blockNumber limit till portal is activated, EIP specific
 
 
 proc init*(T: type PortalRpc, url: string): T =
@@ -47,14 +48,18 @@ proc getPortalRpc(conf: NimbusConf): Opt[PortalRpc] =
   else:
     Opt.none(PortalRpc)
 
-proc init*(T: type PortalClientRef, conf: NimbusConf): T =
+proc init*(T: type PortalClientRef, conf: NimbusConf, com: CommonRef): T =
+  # Portal is only available for mainnet
+  if not (conf.portalEnabled and com.networkId == MainNet):
+    return nil
+
   let rpc = conf.getPortalRpc().valueOr:
     error "Portal RPC url is not available"
     return nil
 
   T(
     rpc: rpc,
-    limit: 0
+    limit: com.posBlock.get()
   )
 
 proc rpcProvider*(pc: PortalClientRef): RpcClient =
