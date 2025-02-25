@@ -19,7 +19,6 @@ import
     evm/types,
     core/dao,
     core/validate,
-    core/chain/chain_desc,
     core/executor/calculate_reward,
     core/executor/process_transaction,
     core/executor/process_block
@@ -71,26 +70,26 @@ proc processBlock(
 
   ok()
 
-proc getVmState(c: ChainRef, header: Header, txFrame: CoreDbTxRef):
+proc getVmState(com: CommonRef, header: Header, txFrame: CoreDbTxRef):
                  Result[BaseVMState, string] =
   let
     parent  = ?txFrame.getBlockHeader(header.parentHash)
     vmState = BaseVMState()
-  vmState.init(parent, header, c.com, txFrame, storeSlotHash = false)
+  vmState.init(parent, header, com, txFrame, storeSlotHash = false)
   return ok(vmState)
 
 # A stripped down version of persistBlocks without validation
 # intended to accepts invalid block
-proc setBlock*(c: ChainRef; blk: Block): Result[void, string] =
+proc setBlock*(com: CommonRef; blk: Block): Result[void, string] =
   template header: Header = blk.header
-  let txFrame = c.db.baseTxFrame().txFrameBegin()
+  let txFrame = com.db.baseTxFrame().txFrameBegin()
 
   # Needed for figuring out whether KVT cleanup is due (see at the end)
   let
-    vmState = ? c.getVmState(header, txFrame)
+    vmState = ? com.getVmState(header, txFrame)
   ? vmState.processBlock(blk)
 
-  ? txFrame.persistHeaderAndSetHead(header, c.com.startOfHistory)
+  ? txFrame.persistHeaderAndSetHead(header, com.startOfHistory)
 
   txFrame.persistTransactions(header.number, header.txRoot, blk.transactions)
   txFrame.persistReceipts(header.receiptsRoot, vmState.receipts)
@@ -104,12 +103,12 @@ proc setBlock*(c: ChainRef; blk: Block): Result[void, string] =
   # the parent state of the first block (as registered in `headers[0]`) was
   # the canonical state before updating. So this state will be saved with
   # `persistent()` together with the respective block number.
-  c.db.persist(txFrame)
+  com.db.persist(txFrame)
 
   # update currentBlock *after* we persist it
   # so the rpc return consistent result
   # between eth_blockNumber and eth_syncing
-  c.com.syncCurrent = header.number
+  com.syncCurrent = header.number
 
   ok()
 
