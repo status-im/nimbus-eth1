@@ -14,11 +14,11 @@ import
   json_rpc/[rpcserver, rpcclient, rpcproxy],
   eth/common/accounts,
   web3/[primitives, eth_api_types, eth_api],
-  ../../nimbus/beacon/web3_eth_conv,
-  ../../nimbus/common/common,
-  ../../nimbus/db/ledger,
-  ../../nimbus/transaction/call_evm,
-  ../../nimbus/[evm/types, evm/state],
+  ../../execution_chain/beacon/web3_eth_conv,
+  ../../execution_chain/common/common,
+  ../../execution_chain/db/ledger,
+  ../../execution_chain/transaction/call_evm,
+  ../../execution_chain/[evm/types, evm/state],
   ../validate_proof,
   ../block_cache
 
