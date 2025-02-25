@@ -486,7 +486,8 @@ proc init*(
     hashToBlock:     {baseHash: baseBranch.lastBlockPos}.toTable,
     baseTxFrame:     baseTxFrame,
     extraValidation: extraValidation,
-    baseDistance:    baseDistance)
+    baseDistance:    baseDistance,
+    quarantine:      Quarantine.init())
 
 proc importBlock*(c: ForkedChainRef, blk: Block): Result[void, string] =
   ## Try to import block to canonical or side chain.

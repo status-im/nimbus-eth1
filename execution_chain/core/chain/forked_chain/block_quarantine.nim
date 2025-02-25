@@ -11,10 +11,11 @@
 import
   std/tables,
   results,
+  minilru,
   eth/common/blocks
 
 const
-  MaxOrphans = 128
+  MaxOrphans = 32
 
 type
   Quarantine* = object
@@ -24,28 +25,21 @@ type
     ## This only stores blocks that cannot be linked to the
     ## ForkedChain due to missing ancestor(s).
 
-    orphans: OrderedTable[Hash32, Block]
+    orphans: LruCache[Hash32, Block]
       ## Blocks that we don't have a parent for - when we resolve the
       ## parent, we can proceed to resolving the block as well - we
       ## index this by parentHash.
 
-func addOrphan*(quarantine: var Quarantine, blk: Block) =
-  if quarantine.orphans.len >= MaxOrphans:
-    # Evict based on FIFO
-    var oldest_orphan_key: Hash32
-    for k in quarantine.orphans.keys:
-      oldest_orphan_key = k
-      break
-    quarantine.orphans.del oldest_orphan_key
+func init*(T: type Quarantine): T =
+  T(
+    orphans: LruCache[Hash32, Block].init(MaxOrphans)
+  )
 
-  quarantine.orphans[blk.header.parentHash] = blk
+func addOrphan*(quarantine: var Quarantine, blk: Block) =
+  quarantine.orphans.put(blk.header.parentHash, blk)
 
 func popOrphan*(quarantine: var Quarantine, parentHash: Hash32): Opt[Block] =
-  var blk: Block
-  if quarantine.orphans.pop(parentHash, blk):
-    Opt.some(blk)
-  else:
-    Opt.none(Block)
+  quarantine.orphans.pop(parentHash)
 
 func hasOrphans*(quarantine: Quarantine): bool =
   quarantine.orphans.len > 0
