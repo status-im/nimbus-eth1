@@ -254,7 +254,7 @@ proc run(
       case flag
       of RpcFlag.eth:
         rpcServer.installEthApiHandlers(
-          node.historyNetwork, node.beaconLightClient, node.stateNetwork
+          node.historyNetwork, node.beaconLightClient, node.stateNetwork, node.portalEvm
         )
       of RpcFlag.debug:
         rpcServer.installDebugApiHandlers(node.stateNetwork)
@@ -344,14 +344,14 @@ when isMainModule:
         raiseAssert exc.msg # shouldn't happen
 
     notice "Shutting down after having received SIGINT"
-    node.state = PortalNodeState.Stopping
+    node.status = PortalNodeStatus.Stopping
 
   try:
     setControlCHook(controlCHandler)
   except Exception as exc: # TODO Exception
     warn "Cannot set ctrl-c handler", msg = exc.msg
 
-  while node.state == PortalNodeState.Running:
+  while node.status == PortalNodeStatus.Running:
     try:
       poll()
     except CatchableError as e:

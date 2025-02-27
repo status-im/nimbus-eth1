@@ -19,13 +19,14 @@ import
   ./network/wire/[portal_stream, portal_protocol_config],
   ./network/beacon/[beacon_init_loader, beacon_light_client],
   ./network/history/[history_network, history_content],
-  ./network/state/[state_network, state_content]
+  ./network/state/[state_network, state_content],
+  ./evm/portal_evm
 
 export
   beacon_light_client, history_network, state_network, portal_protocol_config, forks
 
 type
-  PortalNodeState* = enum
+  PortalNodeStatus* = enum
     Starting
     Running
     Stopping
@@ -40,7 +41,7 @@ type
     contentRequestRetries*: int
 
   PortalNode* = ref object
-    state*: PortalNodeState
+    status*: PortalNodeStatus
     discovery: protocol.Protocol
     contentDB: ContentDB
     streamManager: StreamManager
@@ -48,6 +49,7 @@ type
     historyNetwork*: Opt[HistoryNetwork]
     stateNetwork*: Opt[StateNetwork]
     beaconLightClient*: Opt[LightClient]
+    portalEvm*: Opt[PortalEvm]
     statusLogLoop: Future[void]
 
 # Beacon light client application callbacks triggered when new finalized header
@@ -190,6 +192,11 @@ proc new*(
     historyNetwork: historyNetwork,
     stateNetwork: stateNetwork,
     beaconLightClient: beaconLightClient,
+    portalEvm:
+      if historyNetwork.isSome() and stateNetwork.isSome():
+        Opt.some(PortalEvm.init(historyNetwork.get(), stateNetwork.get()))
+      else:
+        Opt.none(PortalEvm),
   )
 
 proc statusLogLoop(n: PortalNode) {.async: (raises: []).} =
@@ -227,7 +234,7 @@ proc start*(n: PortalNode) =
 
   n.statusLogLoop = statusLogLoop(n)
 
-  n.state = PortalNodeState.Running
+  n.status = PortalNodeStatus.Running
 
 proc stop*(n: PortalNode) {.async: (raises: []).} =
   debug "Stopping Portal node"

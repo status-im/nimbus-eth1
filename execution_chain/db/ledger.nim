@@ -790,7 +790,6 @@ proc update(wd: var WitnessData, acc: AccountRef) =
 
   if not acc.originalStorage.isNil:
     for k, v in acc.originalStorage:
-      if v.isZero: continue
       wd.storageKeys.incl k
 
   for k, v in acc.overlayStorage:
