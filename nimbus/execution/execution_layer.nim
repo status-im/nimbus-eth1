@@ -7,7 +7,7 @@
 
 {.push raises: [].}
 
-import std/[atomics, os], chronicles, ../conf, ../common/utils
+import std/[atomics, os], chronicles, ../conf, ../common/utils, results
 
 logScope:
   topics = "Execution layer"

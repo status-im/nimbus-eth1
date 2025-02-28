@@ -7,11 +7,9 @@
 
 {.push raises: [].}
 
-import
-  unittest2,
-  std/[concurrency/atomics, os],
-  ../../../nimbus/common/utils,
-  ../../../nimbus/conf,
-  ../../../nimbus/consensus/consensus_layer
+import unittest2
 
-#tbd
+suite "Nimbus consensus layer":
+  #tbd, given that layer is in development
+  test "tbd":
+    check true

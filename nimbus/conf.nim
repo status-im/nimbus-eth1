@@ -8,7 +8,7 @@
 {.push raises: [].}
 
 import
-  std/[os, atomics],
+  std/[atomics, tables],
   chronicles,
   #eth2
   beacon_chain/nimbus_binary_common
@@ -33,6 +33,8 @@ isConfigRead.store(false)
 
 ## Nimbus service arguments
 type
+  NimbusConfigTable* = Table[string, string]
+
   ConfigKind* = enum
     Execution
     Consensus
@@ -40,15 +42,14 @@ type
   LayerConfig* = object
     case kind*: ConfigKind
     of Consensus:
-      consensusOptions*: seq[string]
+      consensusOptions*: NimbusConfigTable
     of Execution:
-      executionOptions*: seq[string]
+      executionOptions*: NimbusConfigTable
 
   NimbusService* = ref object
     name*: string
     layerConfig*: LayerConfig
     serviceHandler*: Thread[ptr Channel[pointer]]
-    serviceChannel*: ptr Channel[pointer] = nil
     serviceFunc*: proc(ch: ptr Channel[pointer]) {.thread.}
 
   Nimbus* = ref object

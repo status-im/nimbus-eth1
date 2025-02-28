@@ -8,10 +8,9 @@
 {.push raises: [].}
 
 import
-  unittest2,
-  std/[concurrency/atomics, os],
-  ../../../nimbus/common/utils,
-  ../../../nimbus/conf,
-  ../../../nimbus/execution/execution_layer
+  unittest2
 
-#tbd
+suite "Nimbus execution layer":
+  #tbd, given that layer is in development
+  test "tbd":
+    check true

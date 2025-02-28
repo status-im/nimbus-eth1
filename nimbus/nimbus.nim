@@ -10,6 +10,7 @@ import
   chronicles,
   consensus/consensus_layer,
   execution/execution_layer,
+  common/utils,
   conf
 
 # ------------------------------------------------------------------------------
@@ -19,31 +20,31 @@ import
 ## create and configure service
 proc startService(nimbus: var Nimbus, service: var NimbusService) =
   #channel creation (shared memory)
-  service.serviceChannel =
+  var serviceChannel =
     cast[ptr Channel[pointer]](allocShared0(sizeof(Channel[pointer])))
 
-  service.serviceChannel[].open()
+  serviceChannel[].open()
 
   #thread read ack
   isConfigRead.store(false)
 
   #start thread
-  createThread(service.serviceHandler, service.serviceFunc, service.serviceChannel)
+  createThread(service.serviceHandler, service.serviceFunc, serviceChannel)
 
-  let optionsList = block:
+  let optionsTable = block:
     case service.layerConfig.kind
     of Consensus: service.layerConfig.consensusOptions
     of Execution: service.layerConfig.executionOptions
 
-  #configs list total size
+  #configs table total size
   var totalSize: uint = 0
   totalSize += uint(sizeof(uint))
-  for word in optionsList:
-    totalSize += uint(sizeof(uint)) # element type size
-    totalSize += uint(word.len) # element length
+  for opt, arg in optionsTable:
+    totalSize += uint(sizeof(uint)) + uint(opt.len) # option
+    totalSize += uint(sizeof(uint)) + uint(arg.len) # arg
 
   # Allocate shared memory
-  # schema: (array size Uint) | [ (element size Uint) (element data)]
+  # schema: (table size:Uint) | [ (option size:Uint) (option data:byte) (arg size: Uint) (arg data:byte)]
   var byteArray = cast[ptr byte](allocShared(totalSize))
   if byteArray.isNil:
     fatal "Memory allocation failed"
@@ -56,17 +57,11 @@ proc startService(nimbus: var Nimbus, service: var NimbusService) =
   copyMem(cast[pointer](writeOffset), addr totalSize, sizeof(uint))
   writeOffset += uint(sizeof(uint))
 
-  for word in optionsList:
-    #elem size
-    let strLen = uint(word.len)
-    copyMem(cast[pointer](writeOffset), addr strLen, sizeof(uint))
-    writeOffset += uint(sizeof(uint))
+  for opt, arg in optionsTable:
+    serializeTableElem(writeOffset, opt)
+    serializeTableElem(writeOffset, arg)
 
-    #element data
-    copyMem(cast[pointer](writeOffset), unsafeAddr word[0], word.len)
-    writeOffset += uint(word.len)
-
-  service.serviceChannel[].send(byteArray)
+  serviceChannel[].send(byteArray)
 
   #wait for service read ack
   while not isConfigRead.load():
@@ -74,11 +69,11 @@ proc startService(nimbus: var Nimbus, service: var NimbusService) =
   isConfigRead.store(true)
 
   #close channel
-  service.serviceChannel[].close()
+  serviceChannel[].close()
 
   #dealloc shared data
   deallocShared(byteArray)
-  deallocShared(service.serviceChannel)
+  deallocShared(serviceChannel)
 
 ## Gracefully exits all services
 proc monitorServices(nimbus: Nimbus) =
@@ -95,11 +90,10 @@ proc monitorServices(nimbus: Nimbus) =
 
 ## start nimbus client
 proc run*(nimbus: var Nimbus) =
-  # todo
-  # parse cmd, read options and create configs
+  # to be filled with command line options after parsed according to service
   var
-    execOpt = newSeq[string]()
-    consOpt = newSeq[string]()
+    consOpt, execOpt = NimbusConfigTable()
+
     executionService: NimbusService = NimbusService(
       name: "Execution Layer",
       serviceFunc: executionLayerHandler,
