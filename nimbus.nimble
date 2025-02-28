@@ -143,4 +143,4 @@ task nimbus, "Build Nimbus":
   buildBinary "nimbus", "nimbus/", "-d:chronicles_log_level=TRACE"
 
 task nimbus_test, "Run Nimbus tests":
-  test "nimbus/tests/","all_tests", "-d:chronicles_log_level=ERROR"
+  test "nimbus/tests/", "all_tests_nimbus", "-d:chronicles_log_level=ERROR -d:testing"

@@ -392,7 +392,7 @@ nimbus: | build deps
 
 all_tests_nimbus: | build deps
 	echo -e $(BUILD_MSG) "build/$@" && \
-	$(ENV_SCRIPT) nim c -r $(NIM_PARAMS) --threads:on -d:chronicles_log_level=ERROR -o:build/$@ "nimbus/tests/$@.nim"
+	$(ENV_SCRIPT) nim c -r $(NIM_PARAMS) -d:testing --threads:on -d:chronicles_log_level=ERROR -o:build/$@ "nimbus/tests/$@.nim"
 
 # Note about building Nimbus as a library:
 #

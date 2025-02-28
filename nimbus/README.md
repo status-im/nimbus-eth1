@@ -27,11 +27,9 @@ tbd
     - mac os, windows, and linux
 
     ]$ make nimbus
-## colaborate
-We welcome contributions to Nimbus! Please adhere to the following guidelines:
-
-- Use the [Status Nim style guide](https://status-im.github.io/nim-style-guide/) to maintain code consistency.
-- Format your code using the [Nim Pretty Printer (nph)](https://github.com/nim-lang/nimpretty) to ensure consistency across the codebase. Run it as part of your pull request process.
+## collaborate
+- Use [Status Nim style guide](https://status-im.github.io/nim-style-guide/) to maintain code consistency.
+- Format your code using the [Nim Pretty Printer (nph)](https://github.com/arnetheduck/nph) to ensure consistency across the codebase. Run it as part of your pull request process.
 ## License
 
 Licensed and distributed under either of

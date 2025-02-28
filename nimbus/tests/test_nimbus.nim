@@ -5,31 +5,101 @@
 #   * Apache v2 license (license terms in the root directory or at https://www.apache.org/licenses/LICENSE-2.0).
 # at your option. This file may not be copied, modified, or distributed except according to those terms.
 
-import std/[os, atomics], unittest2, ../nimbus, ../conf
+import unittest2, std/atomics, ../[nimbus, conf], ../common/utils, tables, results
 
 # # ----------------------------------------------------------------------------
-# # Helper Functions
+# # Helpers
 # # ----------------------------------------------------------------------------
+
+# checks result computed in thread procedures
+var checkResult: ptr bool = createShared(bool)
+
+# simple mock
 proc handlerMock(channel: ptr Channel[pointer]) =
   return
 
+#handles data for a given service
+proc handlerService_1(channel: ptr Channel[pointer]) =
+  const expectedConfigTable = {"0": "zero", "1": "one", "2": "two"}.toTable
+
+  let p = channel[].recv()
+
+  let configs = parseChannelData(p).valueOr:
+    quit(QuitFailure)
+
+  isConfigRead.store(true)
+  checkResult[] = configs == expectedConfigTable
+
+#handles data for a given service
+proc handlerService_2(channel: ptr Channel[pointer]) =
+  const expectedConfigTable = {"4": "four", "5": "five", "6": "six"}.toTable
+  let p = channel[].recv()
+
+  let configs = parseChannelData(p).valueOr:
+    quit(QuitFailure)
+
+  isConfigRead.store(true)
+  checkResult[] = configs == expectedConfigTable
+
 # ----------------------------------------------------------------------------
-# Unit Tests
+# # Unit Tests
 # ----------------------------------------------------------------------------
 
-suite "Nimbus Service Management Tests":
+suite "Nimbus Service Management":
   var nimbus: Nimbus
   setup:
     nimbus = Nimbus.new
+
+  const configTable_1 = {"0": "zero", "1": "one", "2": "two"}.toTable
+  const configTable_2 = {"4": "four", "5": "five", "6": "six"}.toTable
 
   # Test: Creating a new service successfully
   test "startService successfully adds a service":
     var someService: NimbusService = NimbusService(
       name: "FooBar service",
       serviceFunc: handlerMock,
-      layerConfig: LayerConfig(kind: Consensus, consensusOptions: @["foo", "bar"]),
+      layerConfig: LayerConfig(kind: Consensus, consensusOptions: configTable_1),
     )
     nimbus.serviceList.add(someService)
 
     check nimbus.serviceList.len == 1
     check nimbus.serviceList[0].name == "FooBar service"
+
+  test "nimbus sends correct data for a service":
+    var someService: NimbusService = NimbusService(
+      name: "FooBar service",
+      serviceFunc: handlerService_1,
+      layerConfig: LayerConfig(kind: Consensus, consensusOptions: configTable_1),
+    )
+
+    nimbus.serviceList.add(someService)
+
+    nimbus.startService(someService)
+
+    check nimbus.serviceList.len == 1
+    check nimbus.serviceList[0].name == "FooBar service"
+    check checkResult[] == true
+
+  test "nimbus sends correct data for multiple services":
+    var someService: NimbusService = NimbusService(
+      name: "FooBar service",
+      serviceFunc: handlerService_1,
+      layerConfig: LayerConfig(kind: Consensus, consensusOptions: configTable_1),
+    )
+    var anotherService: NimbusService = NimbusService(
+      name: "Xpto service",
+      serviceFunc: handlerService_2,
+      layerConfig: LayerConfig(kind: Execution, executionOptions: configTable_2),
+    )
+    nimbus.serviceList.add(someService)
+    nimbus.serviceList.add(anotherService)
+
+    nimbus.startService(someService)
+    check checkResult[] == true
+
+    nimbus.startService(anotherService)
+    check checkResult[] == true
+
+    check nimbus.serviceList.len == 2
+    check nimbus.serviceList[0].name == "FooBar service"
+    check nimbus.serviceList[1].name == "Xpto service"
