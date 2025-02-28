@@ -15,7 +15,7 @@ import
   chronicles,
   eth/common/[accounts_rlp, base_rlp, hashes_rlp],
   results,
-  "."/[aristo_desc, aristo_get, aristo_walk/persistent],
+  "."/[aristo_desc, aristo_get, aristo_tx_frame, aristo_walk/persistent],
   ./aristo_desc/desc_backend
 
 type WriteBatch = tuple[writer: PutHdlRef, count: int, depth: int, prefix: uint64]
@@ -74,7 +74,7 @@ proc putKeyAtLevel(
   ## set (vertex data may have been committed to disk without computing the
   ## corresponding hash!)
 
-  if level == -2:
+  if level < db.db.baseTxFrame().level:
     ?batch.putVtx(db.db, rvid, vtx, key)
 
     if batch.count mod batchSize == 0:
@@ -89,16 +89,6 @@ proc putKeyAtLevel(
     db.deltaAtLevel(level).kMap[rvid] = key
 
   ok()
-
-func maxLevel(cur, other: int): int =
-  # Compare two levels and return the topmost in the stack, taking into account
-  # the odd reversal of order around the zero point
-  if cur < 0:
-    max(cur, other) # >= 0 is always more topmost than <0
-  elif other < 0:
-    cur
-  else:
-    min(cur, other) # Here the order is reversed and 0 is the top layer
 
 template encodeLeaf(w: var RlpWriter, pfx: NibblesBuf, leafData: untyped): HashKey =
   w.startList(2)
@@ -123,7 +113,7 @@ proc getKey(
     db: AristoTxRef, rvid: RootedVertexID, skipLayers: static bool
 ): Result[((HashKey, VertexRef), int), AristoError] =
   ok when skipLayers:
-    (?db.db.getKeyBe(rvid, {GetVtxFlag.PeekCache}), -2)
+    (?db.db.getKeyBe(rvid, {GetVtxFlag.PeekCache}), dbLevel)
   else:
     ?db.getKeyRc(rvid, {})
 
@@ -178,7 +168,7 @@ proc computeKeyImpl(
                         keyvtxl[1],
                         skipLayers = skipLayers,
                       )
-                level = maxLevel(level, sl)
+                level = max(level, sl)
                 skey
               else:
                 VOID_HASH_KEY
@@ -252,7 +242,7 @@ proc computeKeyImpl(
       template writeBranch(w: var RlpWriter): HashKey =
         w.encodeBranch(vtx):
           if subvid.isValid:
-            level = maxLevel(level, keyvtxs[n][1])
+            level = max(level, keyvtxs[n][1])
             keyvtxs[n][0][0]
           else:
             VOID_HASH_KEY
@@ -280,7 +270,7 @@ proc computeKeyImpl(
 ): Result[HashKey, AristoError] =
   let (keyvtx, level) =
     when skipLayers:
-      (?db.db.getKeyBe(rvid, {GetVtxFlag.PeekCache}), -2)
+      (?db.db.getKeyBe(rvid, {GetVtxFlag.PeekCache}), dbLevel)
     else:
       ?db.getKeyRc(rvid, {})
 

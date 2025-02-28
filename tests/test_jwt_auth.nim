@@ -138,7 +138,7 @@ createRpcSigsFromNim(RpcClient):
 # Test Runners
 # ------------------------------------------------------------------------------
 
-proc runKeyLoader(noisy = true;
+proc runKeyLoader(noisy = defined(debug);
                   keyFile = jwtKeyFile; strippedFile = jwtKeyStripped) =
   let
     filePath = keyFile.findFilePath.value
@@ -229,7 +229,7 @@ proc runKeyLoader(noisy = true;
       # Compare key against contents of shared key file
       check hexKey.cmpIgnoreCase(hexLine) == 0
 
-proc runJwtAuth(noisy = true; keyFile = jwtKeyFile) =
+proc runJwtAuth(noisy = defined(debug); keyFile = jwtKeyFile) =
   let
     filePath = keyFile.findFilePath.value
     dataDir = filePath.splitPath.head
@@ -296,10 +296,6 @@ proc runJwtAuth(noisy = true; keyFile = jwtKeyFile) =
 # ------------------------------------------------------------------------------
 # Main function(s)
 # ------------------------------------------------------------------------------
-
-proc jwtAuthMain*(noisy = defined(debug)) =
-  noisy.runKeyLoader
-  noisy.runJwtAuth
 
 when isMainModule:
   setErrorLevel()
