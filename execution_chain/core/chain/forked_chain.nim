@@ -697,7 +697,7 @@ proc blockHeader*(c: ForkedChainRef, blk: BlockHashOrNumber): Result[Header, str
 proc receiptsByBlockHash*(c: ForkedChainRef, blockHash: Hash32): Result[seq[Receipt], string] =
   c.hashToBlock.withValue(blockHash, loc):
     return ok(loc[].receipts)
-  
+
   let header = c.baseTxFrame.getBlockHeader(blockHash).valueOr:
     return err("Block header not found")
 
@@ -711,13 +711,19 @@ func blockFromBaseTo*(c: ForkedChainRef, number: BlockNumber): seq[Block] =
       result.add(branch.blocks[i].blk)
     branch = branch.parent
 
-func isCanonical*(c: ForkedChainRef, blockHash: Hash32): bool =
-  c.hashToBlock.withValue(blockHash, loc):
-    var branch = c.activeBranch
-    while not branch.isNil:
-      if loc.branch == branch:
-        return true
-      branch = branch.parent
+func equalOrAncestorOf*(c: ForkedChainRef, blockHash: Hash32, ancestorHash: Hash32): bool =
+  if blockHash == ancestorHash:
+    return true
+
+  c.hashToBlock.withValue(ancestorHash, ancestorLoc):
+    c.hashToBlock.withValue(blockHash, loc):
+      var branch = ancestorLoc.branch
+      while not branch.isNil:
+        if loc.branch == branch:
+          return true
+        branch = branch.parent
+
+  false
 
 proc isCanonicalAncestor*(c: ForkedChainRef,
                     blockNumber: BlockNumber,

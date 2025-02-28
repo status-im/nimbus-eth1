@@ -87,20 +87,16 @@ proc setupDatabase*(ctx: BeaconCtxRef; info: static[string]) =
   # for a new target so there is reduced service (aka `hibernate`.).
   ctx.hibernate = not ctx.dbLoadSyncStateLayout info
 
-  # Set blocks batch import value for block import
-  if ctx.pool.nBodiesBatch < nFetchBodiesRequest:
-    if ctx.pool.nBodiesBatch == 0:
-      ctx.pool.nBodiesBatch = nFetchBodiesBatchDefault
-    else:
-      ctx.pool.nBodiesBatch = nFetchBodiesRequest
-
-  # Set length of `staged` queue
-  if ctx.pool.nBodiesBatch < nFetchBodiesBatchDefault:
-    const nBlocks = blocksStagedQueueLenMaxDefault * nFetchBodiesBatchDefault
-    ctx.pool.blocksStagedQuLenMax =
-      (nBlocks + ctx.pool.nBodiesBatch - 1) div ctx.pool.nBodiesBatch
-  else:
-    ctx.pool.blocksStagedQuLenMax = blocksStagedQueueLenMaxDefault
+  # Set blocks batch import queue size
+  if ctx.pool.blocksStagedHwm < blocksStagedLwm:
+    ctx.pool.blocksStagedHwm = blocksStagedHwmDefault
+  # Take it easy and assume that queue records contain full block list (which
+  # is mostly the case anyway.) So the the staging queue is limited by the
+  # number of sub-list records rather than the number of accumulated block
+  # objects.
+  ctx.pool.stagedLenHwm =
+    (ctx.pool.blocksStagedHwm + nFetchBodiesBatch - 1) div nFetchBodiesBatch
+  trace info & ": block lists limit", hwm=ctx.pool.stagedLenHwm
 
 
 proc setupServices*(ctx: BeaconCtxRef; info: static[string]) =

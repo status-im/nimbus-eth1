@@ -53,6 +53,13 @@ proc bodiesFetch*(
       error=($e.name), msg=e.msg, bdyErrors=buddy.bdyErrors
     return err()
 
+  # This round trip time `elapsed` is the real time, not necessarily the
+  # time relevant for network timeout which would throw an exception when
+  # the maximum response time has exceeded (typically set to 10s.)
+  #
+  # If the real round trip time `elapsed` is to long, the error score is
+  # inceased. Not until the error score will pass a certian threshold (for
+  # being too slow in consecutive conversations), the peer will be abandoned.
   let elapsed = Moment.now() - start
 
   # Evaluate result

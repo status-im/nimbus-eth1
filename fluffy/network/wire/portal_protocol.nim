@@ -383,7 +383,7 @@ proc handlePingExtension(
 
     p.radiusCache.put(srcId, payload.data_radius)
 
-    (payloadType, encodePayload(HistoryRadiusPayload(data_radius: p.dataRadius())))
+    (payloadType, encodePayload(BasicRadiusPayload(data_radius: p.dataRadius())))
   of HistoryRadiusType:
     let payload = decodeSsz(encodedPayload.asSeq(), HistoryRadiusPayload).valueOr:
       return encodeErrorPayload(ErrorCode.FailedToDecodePayload)

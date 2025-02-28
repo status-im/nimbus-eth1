@@ -369,11 +369,11 @@ type
       desc: "Number of worker threads (\"0\" = use as many threads as there are CPU cores available)"
       name: "num-threads" .}: int
 
-    beaconChunkSize* {.
+    beaconBlocksQueueHwm* {.
       hidden
-      desc: "Number of blocks per database transaction for beacon sync"
+      desc: "Limit number of blocks on staging queue for beacon sync"
       defaultValue: 0
-      name: "debug-beacon-chunk-size" .}: int
+      name: "debug-beacon-blocks-queue-hwm" .}: int
 
     rocksdbMaxOpenFiles {.
       hidden
