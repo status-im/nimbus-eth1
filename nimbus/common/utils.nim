@@ -7,32 +7,53 @@
 
 {.push raises: [].}
 
-import results
-export results
+import results, ../conf, chronicles
 
-#Parses specific data from a given channel if given in following binary format:
-# (array size Uint) | [ (element size Uint) (element data)]
-proc parseChannelData*(p: pointer): Result[seq[string], string] =
+## Serialize table string elements
+proc serializeTableElem*(offset: var uint, elem: string) =
+  if offset <= 0:
+    fatal "memory offset can't be zero"
+    quit(QuitFailure)
+
+  #element size
+  let optLen = uint(elem.len)
+  copyMem(cast[pointer](offset), addr optLen, sizeof(uint))
+  offset += uint(sizeof(uint))
+
+  #element data
+  copyMem(cast[pointer](offset), unsafeAddr elem[0], elem.len)
+  offset += uint(elem.len)
+
+## Deserialize table string elements
+proc deserializeTableElem*(offset: var uint): string =
+  #element size
+  var strLen: uint
+  copyMem(addr strLen, cast[pointer](offset), sizeof(uint))
+  offset += uint(sizeof(uint))
+
+  #element
+  var strData = newString(strLen)
+  copyMem(addr strData[0], cast[pointer](offset), uint(strLen))
+  offset += uint(strLen)
+
+  strData
+
+## Parse data from a given channel.
+##  schema: (table size:Uint) | [ (option size:Uint) (option data:byte) (arg size: Uint) (arg data:byte)]
+proc parseChannelData*(p: pointer): Result[NimbusConfigTable, string] =
   # Start reading from base pointer
-  var readOffset = cast[uint](p)
-  var recoveredStrings: seq[string]
-  var totalSize: uint = 0
+  var
+    readOffset = cast[uint](p)
+    confTable = NimbusConfigTable()
+    totalSize: uint = 0
 
   # length
   copyMem(addr totalSize, cast[pointer](readOffset), sizeof(uint))
   readOffset += uint(sizeof(uint))
 
   while readOffset < cast[uint](p) + totalSize:
-    #seq element size
-    var strLen: uint
-    copyMem(addr strLen, cast[pointer](readOffset), sizeof(uint))
-    readOffset += uint(sizeof(uint))
+    let opt = deserializeTableElem(readOffset)
+    let arg = deserializeTableElem(readOffset)
+    confTable[opt] = arg
 
-    #element
-    var strData = newString(strLen)
-    copyMem(addr strData[0], cast[pointer](readOffset), uint(strLen))
-    readOffset += uint(strLen)
-
-    recoveredStrings.add(strData)
-
-  ok recoveredStrings
+  ok confTable
