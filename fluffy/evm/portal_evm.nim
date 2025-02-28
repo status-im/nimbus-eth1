@@ -46,23 +46,20 @@ proc call*(
     header = (await evm.historyNetwork.getVerifiedBlockHeader(blockNumOrHash)).valueOr:
       raise
         newException(ValueError, "Could not find header with requested block number")
-    # do we need to get the parent?
-    parent = (await evm.historyNetwork.getVerifiedBlockHeader(header.parentHash)).valueOr:
-      raise newException(
-        ValueError, "Could not find parent header with requested block number"
-      )
-    # update the get account call
-    acc = (await evm.stateNetwork.getAccount(header.stateRoot, to, Opt.none(Hash32))).valueOr:
+    acc = (await evm.stateNetwork.getAccount(header.stateRoot, to)).valueOr:
       raise newException(ValueError, "Unable to get account")
     code = (await evm.stateNetwork.getCodeByStateRoot(header.stateRoot, to)).valueOr:
       raise newException(ValueError, "Unable to get code")
 
-    com = CommonRef.new(newCoreDbRef DefaultDbMemory, nil)
-    # fork = com.toEVMFork(header)
+    com = CommonRef.new(
+      DefaultDbMemory.newCoreDbRef(),
+      taskpool = nil,
+      config = networkParams(MainNet).config,
+      initializeDb = false
+    )
     vmState = BaseVMState()
 
-  vmState.init(parent, header, com, com.db.baseTxFrame())
-
+  vmState.init(header, header, com, com.db.baseTxFrame())
   vmState.ledger.setBalance(to, acc.balance)
   vmState.ledger.setNonce(to, acc.nonce)
   vmState.ledger.setCode(to, code.asSeq())
