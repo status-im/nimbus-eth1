@@ -27,43 +27,53 @@ from eth/common/eth_types_rlp import rlpHash
 
 export evmc, addresses, stint, headers, state_network
 
-#{.push raises: [].}
+{.push raises: [].}
 
 type PortalEvm* = ref object
   historyNetwork: HistoryNetwork
   stateNetwork: StateNetwork
+  com: CommonRef
 
 proc init*(T: type PortalEvm, hn: HistoryNetwork, sn: StateNetwork): T =
-  PortalEvm(historyNetwork: hn, stateNetwork: sn)
+  let config =
+    try:
+      networkParams(MainNet).config
+    except ValueError as e:
+      raiseAssert(e.msg) # Should not fail
+    except RlpError as e:
+      raiseAssert(e.msg) # Should not fail
+
+  let com = CommonRef.new(
+    DefaultDbMemory.newCoreDbRef(),
+    taskpool = nil,
+    config = config,
+    initializeDb = false,
+  )
+
+  PortalEvm(historyNetwork: hn, stateNetwork: sn, com: com)
 
 proc call*(
     evm: PortalEvm, tx: TransactionArgs, blockNumOrHash: uint64 | Hash32
-): Future[EvmResult[CallResult]] {.async.} =
-  #{.async: (raises: [CancelledError, ValueError]).} =
+): Future[Result[CallResult, string]] {.async: (raises: [CancelledError]).} =
   let
     to = tx.to.valueOr:
-      raise newException(ValueError, "to address missing in transaction")
+      return err("to address is required")
     header = (await evm.historyNetwork.getVerifiedBlockHeader(blockNumOrHash)).valueOr:
-      raise
-        newException(ValueError, "Could not find header with requested block number")
+      return err("Unable to get block header")
     acc = (await evm.stateNetwork.getAccount(header.stateRoot, to)).valueOr:
-      raise newException(ValueError, "Unable to get account")
+      return err("Unable to get account")
     code = (await evm.stateNetwork.getCodeByStateRoot(header.stateRoot, to)).valueOr:
-      raise newException(ValueError, "Unable to get code")
+      return err("Unable to get code")
 
-    com = CommonRef.new(
-      DefaultDbMemory.newCoreDbRef(),
-      taskpool = nil,
-      config = networkParams(MainNet).config,
-      initializeDb = false
-    )
-    vmState = BaseVMState()
+  let txFrame = evm.com.db.baseTxFrame().txFrameBegin()
+  defer:
+    txFrame.dispose() # always dispose state changes
 
-  vmState.init(header, header, com, com.db.baseTxFrame())
+  # TODO: review what child header to use here (second parameter)
+  let vmState = BaseVMState.new(header, header, evm.com, txFrame)
   vmState.ledger.setBalance(to, acc.balance)
   vmState.ledger.setNonce(to, acc.nonce)
   vmState.ledger.setCode(to, code.asSeq())
-  # vmState.ledger.persist(clearEmptyAccount = false)
 
   var
     lastMultiKeysCount = -1
@@ -86,7 +96,7 @@ proc call*(
             header.stateRoot, k.address, Opt.none(Hash32)
           )
         ).valueOr:
-          raise newException(ValueError, "Unable to get account")
+          return err("Unable to get account")
         vmState.ledger.setBalance(k.address, account.balance)
         vmState.ledger.setNonce(k.address, account.nonce)
 
@@ -94,7 +104,7 @@ proc call*(
           let code = (
             await evm.stateNetwork.getCodeByStateRoot(header.stateRoot, k.address)
           ).valueOr:
-            raise newException(ValueError, "Unable to get code")
+            return err("Unable to get code")
           vmState.ledger.setCode(k.address, code.asSeq())
 
         if not k.storageKeys.isNil():
@@ -105,9 +115,10 @@ proc call*(
                 header.stateRoot, k.address, slotKey
               )
             ).valueOr:
-              raise newException(ValueError, "Unable to get slot")
+              return err("Unable to get slot")
             vmState.ledger.setStorage(k.address, slotKey, slotValue)
 
-    # vmState.ledger.persist(clearEmptyAccount = false)
-
-  return callResult
+  callResult.mapErr(
+    proc(e: EvmErrorObj): string =
+      "EVM execution failed: " & $e.code
+  )

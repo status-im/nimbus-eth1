@@ -452,6 +452,9 @@ proc installEthApiHandlers*(
       evm = portalEvm.getOrRaise()
 
     let callResult = (await evm.call(tx, quantityTag.number.uint64)).valueOr:
-      raise newException(ValueError, "Unable to call contract")
+      raise newException(ValueError, error)
+
+    if callResult.error.len() > 0:
+      raise newException(ValueError, callResult.error)
 
     callResult.output
