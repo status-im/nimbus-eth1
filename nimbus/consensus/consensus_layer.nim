@@ -7,7 +7,7 @@
 
 {.push raises: [].}
 
-import std/[atomics, os], chronicles, ../conf, ../common/utils
+import std/[atomics, os], chronos, chronicles, ../conf, ../common/utils, results
 
 logScope:
   topics = "Consensus layer"
@@ -31,7 +31,7 @@ proc consensusLayerHandler*(channel: ptr Channel[pointer]) =
   try:
     while true:
       info "consensus ..."
-      sleep(cNimbusServiceTimeoutMs + 1000)
+      sleep(cNimbusServiceTimeoutMs)
   except CatchableError as e:
     fatal "error", message = e.msg
 
