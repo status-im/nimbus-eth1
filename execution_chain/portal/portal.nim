@@ -166,3 +166,25 @@ proc getBlockByHash*(pc: PortalClientRef, blockHash: Hash32, fullTxs: bool = tru
   except CatchableError as e:
     debug "Failed to fetch block from portal", err=e.msg
     return err(e.msg)
+
+proc getHeaderByHash*(pc: PortalClientRef, blockHash: Hash32): Result[Header, string] =
+  debug "Fetching header from portal"
+  try:
+    let res = waitFor pc.rpcProvider.eth_getBlockByHash(blockHash, false)
+    if res.isNil:
+      return err("Header not found in portal")
+    return ok(res.toHeader())
+  except CatchableError as e:
+    debug "Failed to fetch header from portal", err=e.msg
+    return err(e.msg)
+
+proc getHeaderByNumber*(pc: PortalClientRef, blockNumber: uint64): Result[Header, string] =
+  debug "Fetching header from portal"
+  try:
+    let res = waitFor pc.rpcProvider.eth_getBlockByNumber(blockId(blockNumber), false)
+    if res.isNil:
+      return err("Header not found in portal")
+    return ok(res.toHeader())
+  except CatchableError as e:
+    debug "Failed to fetch header from portal", err=e.msg
+    return err(e.msg)
