@@ -643,13 +643,17 @@ proc latestBlock*(c: ForkedChainRef): Block =
     return c.baseTxFrame.getEthBlock(c.activeBranch.headHash).expect("cursorBlock exists")
   c.activeBranch.blocks[^1].blk
 
-# TODO: Doesn't serve portal data
 proc headerByNumber*(c: ForkedChainRef, number: BlockNumber): Result[Header, string] =
   if number > c.activeBranch.headNumber:
     return err("Requested block number not exists: " & $number)
 
   if number < c.baseBranch.tailNumber:
-    return c.baseTxFrame.getBlockHeader(number)
+    let hdr = c.baseTxFrame.getBlockHeader(number).valueOr:
+      if c.isPortalActive:
+        return c.portal.getHeaderByNumber(number)
+      else:
+        return err("Portal inactive, block not found, number = " & $number)
+    return ok(hdr)
 
   var branch = c.activeBranch
   while not branch.isNil:
@@ -657,14 +661,21 @@ proc headerByNumber*(c: ForkedChainRef, number: BlockNumber): Result[Header, str
       return ok(branch.blocks[number - branch.tailNumber].blk.header)
     branch = branch.parent
 
-  err("Header not found, number = " & $number)
+  err("Block not found, number = " & $number)
 
 proc headerByHash*(c: ForkedChainRef, blockHash: Hash32): Result[Header, string] =
   c.hashToBlock.withValue(blockHash, loc):
     return ok(loc[].header)
-  c.baseTxFrame.getBlockHeader(blockHash)
+  let hdr = c.baseTxFrame.getBlockHeader(blockHash).valueOr:
+    if c.isPortalActive:
+      return c.portal.getHeaderByHash(blockHash)
+    else:
+      return err("Block header not found")
+  ok(hdr)
 
 # TODO: Doesn't fetch data from portal
+# Aristo returns empty txs for both non-existent blocks and existing blocks with no txs [ Solve ? ]
+# Is fetching big block bodies from portal a good idea ?
 proc blockBodyByHash*(c: ForkedChainRef, blockHash: Hash32): Result[BlockBody, string] =
   c.hashToBlock.withValue(blockHash, loc):
     let blk = loc[].blk
@@ -675,7 +686,6 @@ proc blockBodyByHash*(c: ForkedChainRef, blockHash: Hash32): Result[BlockBody, s
     ))
   c.baseTxFrame.getBlockBody(blockHash)
 
-# Serves portal data if block not found in db
 proc blockByHash*(c: ForkedChainRef, blockHash: Hash32): Result[Block, string] =
   # used by getPayloadBodiesByHash
   # https://github.com/ethereum/execution-apis/blob/v1.0.0-beta.4/src/engine/shanghai.md#specification-3
@@ -683,12 +693,12 @@ proc blockByHash*(c: ForkedChainRef, blockHash: Hash32): Result[Block, string] =
   c.hashToBlock.withValue(blockHash, loc):
     return ok(loc[].blk)
   let blk = c.baseTxFrame.getEthBlock(blockHash)
+  # Serves portal data if block not found in db
   if blk.isErr or (blk.get.transactions.len == 0 and blk.get.header.transactionsRoot != zeroHash32):
     if c.isPortalActive:
       return c.portal.getBlockByHash(blockHash)
   blk
 
-# Serves portal data if block not found in db
 proc blockByNumber*(c: ForkedChainRef, number: BlockNumber): Result[Block, string] =
   if number > c.activeBranch.headNumber:
     return err("Requested block number not exists: " & $number)
@@ -701,7 +711,8 @@ proc blockByNumber*(c: ForkedChainRef, number: BlockNumber): Result[Block, strin
       unavailable = true
     else:
       return blk
-
+    
+    # Serves portal data if block not found in d
     if unavailable and c.isPortalActive:
       return c.portal.getBlockByNumber(number)
 
