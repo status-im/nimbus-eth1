@@ -86,7 +86,7 @@
 import
   std/hashes,
   chronos,
-  eth/[p2p, p2p/peer_pool],
+  ../networking/[p2p, peer_pool],
   stew/keyed_queue,
   ./sync_desc
 

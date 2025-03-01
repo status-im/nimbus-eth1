@@ -12,9 +12,10 @@
 
 import
   pkg/[chronicles, chronos],
-  pkg/eth/[common, p2p],
+  pkg/eth/common,
   pkg/stew/[interval_set, sorted_set],
   ../../common,
+  ../../networking/p2p,
   ./worker/update/[metrics, ticker],
   ./worker/[blocks_staged, headers_staged, headers_unproc, start_stop, update],
   ./worker_desc

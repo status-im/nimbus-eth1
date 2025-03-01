@@ -1,5 +1,5 @@
 # Nimbus
-# Copyright (c) 2018-2024 Status Research & Development GmbH
+# Copyright (c) 2018-2025 Status Research & Development GmbH
 # Licensed under either of
 #  * Apache License, version 2.0, ([LICENSE-APACHE](LICENSE-APACHE))
 #  * MIT license ([LICENSE-MIT](LICENSE-MIT))
@@ -9,7 +9,7 @@
 
 import
   stint, json_rpc/server, json_rpc/errors,
-  eth/p2p, eth/p2p/enode,
+  ../networking/[p2p, discoveryv4/enode],
   ../config,
   ../beacon/web3_eth_conv,
   web3/conversions

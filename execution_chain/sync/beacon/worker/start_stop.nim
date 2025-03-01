@@ -11,13 +11,14 @@
 {.push raises:[].}
 
 import
-  pkg/eth/[common, p2p],
+  pkg/eth/common,
   ../../../core/chain,
+  ../../../networking/p2p,
   ../../protocol,
   ../worker_desc,
   ./blocks_staged/staged_queue,
   ./headers_staged/staged_queue,
-  "."/[blocks_unproc, db, headers_unproc, update]
+  ./[blocks_unproc, db, headers_unproc, update]
 
 # ------------------------------------------------------------------------------
 # Private functions

@@ -13,10 +13,11 @@
 import
   std/options,
   pkg/[chronicles, chronos, results],
-  pkg/eth/[common, p2p],
+  pkg/eth/common,
   pkg/stew/interval_set,
   ../../../protocol,
-  ../../worker_desc
+  ../../worker_desc,
+  ../../../../networking/p2p
 
 # ------------------------------------------------------------------------------
 # Public functions

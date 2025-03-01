@@ -11,7 +11,8 @@
 {.push raises:[].}
 
 import
-  pkg/[chronos, eth/p2p/peer_pool, metrics],
+  pkg/[chronos,  metrics],
+  ../../../../networking/peer_pool,
   ../../../../core/chain,
   ../../worker_desc,
   ../blocks_staged/staged_queue,
