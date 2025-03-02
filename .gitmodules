@@ -143,11 +143,6 @@
   url = https://github.com/ethereum/tests
   ignore = dirty
   branch = develop
-[submodule "vendor/nim-graphql"]
-  path = vendor/nim-graphql
-  url = https://github.com/status-im/nim-graphql
-  ignore = dirty
-  branch = master
 [submodule "vendor/nim-toml-serialization"]
   path = vendor/nim-toml-serialization
   url = https://github.com/status-im/nim-toml-serialization

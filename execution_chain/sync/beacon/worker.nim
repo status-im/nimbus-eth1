@@ -12,9 +12,10 @@
 
 import
   pkg/[chronicles, chronos],
-  pkg/eth/[common, p2p],
+  pkg/eth/common,
   pkg/stew/[interval_set, sorted_set],
   ../../common,
+  ../../networking/p2p,
   ./worker/update/[metrics, ticker],
   ./worker/[blocks_staged, headers_staged, headers_unproc, start_stop, update],
   ./worker_desc
@@ -118,10 +119,11 @@ proc runDaemon*(
   if ctx.blocksStagedCanImportOk():
 
     block:
-      # Set advisory flag telling that a slow/long running process will take
-      # place. So there might be some peers active. If they are waiting for
-      # a message reply, this will most probably time out as all processing
-      # power is usurped by the import task here.
+      # Set flag informing peers to go into idle mode while importing takes
+      # place. It has been observed that importing blocks and downloading
+      # at the same time does not work very well, most probably due to high
+      # system activity while importing. Peers will get lost pretty soon after
+      # downloading starts if they continue downloading.
       ctx.pool.blockImportOk = true
       defer: ctx.pool.blockImportOk = false
 

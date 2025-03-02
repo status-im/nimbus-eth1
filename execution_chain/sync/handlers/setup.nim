@@ -11,7 +11,7 @@
 {.used, push raises: [].}
 
 import
-  eth/p2p,
+  ../../networking/p2p,
   ../../core/[chain, tx_pool],
   ../protocol,
   ./eth as handlers_eth

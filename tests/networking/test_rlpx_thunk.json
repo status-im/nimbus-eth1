@@ -1,0 +1,85 @@
+{
+  "Invalid list when decoding for object": {
+    "payload": "03",
+    "error": "PeerDisconnected",
+    "description": "Object parameters are expected to be encoded in an RLP list"
+  },
+  "Message id that is not supported": {
+    "payload": "08",
+    "error": "UnsupportedMessageError",
+    "description": "This is a message id not used by devp2p or eth"
+  },
+  "Message id that is bigger than uint32": {
+    "payload": "888888888888888888",
+    "error": "UnsupportedRlpError",
+    "description": "This payload will result in too large int for a message id"
+  },
+  "Unsupported big message id": {
+    "payload": "848888888888",
+    "error": "UnsupportedMessageError",
+    "description": "This payload will result in a negative number as message id"
+  },
+  "No Hash nor Status, but empty list": {
+    "payload": "20c1c0",
+    "error": "PeerDisconnected",
+    "description": "Decoding to HashOrStatus expects blob of size 1 or 32"
+  },
+  "No Hash nor Status, list instead of blob": {
+    "payload": "20c2c1c0",
+    "error": "PeerDisconnected",
+    "description": "Decoding to HashOrStatus expects blob of size 1 or 32"
+  },
+  "No Hash nor Status, blob of 2 bytes": {
+    "payload": "20c4c3820011",
+    "error": "PeerDisconnected",
+    "description": "Decoding to HashOrStatus expects blob of size 1 or 32"
+  },
+  "No Hash nor Status, blob of 33 bytes": {
+    "payload": "20e3e2a100112233445566778899aabbccddeeff00112233445566778899aabbcceeddff33",
+    "error": "PeerDisconnected",
+    "description": "Decoding to HashOrStatus expects blob of size 1 or 32"
+  },
+  "Listing elements when no data": {
+    "payload": "01e1",
+    "error": "PeerDisconnected",
+    "description": "listElem to error on empty list"
+  },
+  "Listing elements when invalid length": {
+    "payload": "01ffdada",
+    "error": "PeerDisconnected",
+    "description": "listElem to error on invalid size encoding"
+  },
+  "Listing single element list when having more entries": {
+    "payload": "01c20420",
+    "error": "PeerDisconnected",
+    "description": "listElem to assert on not a single entry list"
+  },
+  "Listing single element list when having empty list": {
+    "payload": "01c0",
+    "error": "PeerDisconnected",
+    "description": "listElem to assert on not a single entry list"
+  },
+  "DisconnectReason: single element list with entry out off enum range": {
+    "payload": "01c111",
+    "error": "PeerDisconnected",
+    "description": "Disconnect reason code out of bounds 0..16 (got: 17)"
+  },
+  "DisconnectReason: single element out off enum range": {
+    "payload": "0111",
+    "error": "PeerDisconnected",
+    "description": "Disconnect reason code out of bounds 0..16 (got: 17)"
+  },
+  "DisconnectReason: single element list with enum hole value": {
+    "payload": "01c10C",
+    "error": "PeerDisconnected",
+    "description": "Error on Disconnect reason with enum hole value"
+  },
+  "DisconnectReason: single element with enum hole value": {
+    "payload": "010C",
+    "error": "PeerDisconnected",
+    "description": "Error on Disconnect reason with enum hole value"
+  },
+  "devp2p hello packet version 22 + additional list elements for EIP-8": {
+    "payload": "00f87137916b6e6574682f76302e39312f706c616e39cdc5836574683dc6846d6f726b1682270fb840fda1cff674c90c9a197539fe3dfb53086ace64f83ed7c6eabec741f7f381cc803e52ab2cd55d5569bce4347107a310dfd5f88a010cd2ffd1005ca406f1842877c883666f6f836261720304"
+  }
+}

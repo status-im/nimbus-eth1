@@ -13,10 +13,11 @@
 import
   std/strutils,
   pkg/[chronicles, chronos],
-  pkg/eth/[common, p2p],
+  pkg/eth/common,
   pkg/stew/[interval_set, sorted_set],
   ../../../common,
   ../worker_desc,
+  ../../../networking/p2p,
   ./headers_staged/[headers, linked_hchain],
   "."/[headers_unproc, update]
 

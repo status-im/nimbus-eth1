@@ -144,7 +144,11 @@ proc validateBlock(c: ForkedChainRef,
   c.writeBaggage(blk, blkHash, txFrame, receipts)
 
   # Block fully written to txFrame, mark it as such
+  # Checkpoint creates a snapshot of ancestor changes in txFrame - it is an
+  # expensive operation, specially when creating a new branch (ie when blk
+  # is being applied to a block that is currently not a head)
   txFrame.checkpoint(blk.header.number)
+
 
   c.updateBranch(parent, blk, blkHash, txFrame, move(receipts))
 
@@ -726,13 +730,19 @@ func blockFromBaseTo*(c: ForkedChainRef, number: BlockNumber): seq[Block] =
       result.add(branch.blocks[i].blk)
     branch = branch.parent
 
-func isCanonical*(c: ForkedChainRef, blockHash: Hash32): bool =
-  c.hashToBlock.withValue(blockHash, loc):
-    var branch = c.activeBranch
-    while not branch.isNil:
-      if loc.branch == branch:
-        return true
-      branch = branch.parent
+func equalOrAncestorOf*(c: ForkedChainRef, blockHash: Hash32, ancestorHash: Hash32): bool =
+  if blockHash == ancestorHash:
+    return true
+
+  c.hashToBlock.withValue(ancestorHash, ancestorLoc):
+    c.hashToBlock.withValue(blockHash, loc):
+      var branch = ancestorLoc.branch
+      while not branch.isNil:
+        if loc.branch == branch:
+          return true
+        branch = branch.parent
+
+  false
 
 proc isCanonicalAncestor*(c: ForkedChainRef,
                     blockNumber: BlockNumber,

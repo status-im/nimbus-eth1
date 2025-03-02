@@ -11,13 +11,14 @@
 
 import
   std/[tables, strutils, times, macros],
-  eth/[rlp, p2p], eth/common/eth_types_json_serialization,
+  eth/rlp, eth/common/eth_types_json_serialization,
   eth/common/eth_types_rlp,
   stint, stew/[byteutils],
   json_serialization, chronicles,
   json_serialization/stew/results,
   json_serialization/lexer,
-  "."/[genesis_alloc, hardforks]
+  ../networking/p2p,
+  ./[genesis_alloc, hardforks]
 
 export
   tables, hardforks

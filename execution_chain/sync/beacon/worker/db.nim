@@ -128,10 +128,6 @@ proc dbLoadSyncStateLayout*(ctx: BeaconCtxRef; info: static[string]): bool =
 
 # ------------------
 
-proc dbHeadersClear*(ctx: BeaconCtxRef) =
-  ## Clear stashed in-memory headers
-  ctx.stash.clear
-
 proc dbHeadersStash*(
     ctx: BeaconCtxRef;
     first: BlockNumber;
@@ -158,13 +154,7 @@ proc dbHeadersStash*(
 
 proc dbHeaderPeek*(ctx: BeaconCtxRef; num: BlockNumber): Opt[Header] =
   ## Retrieve some stashed header.
-  # Try cache first
-  ctx.stash.withValue(num, val):
-    try:
-      return ok(rlp.decode(val[], Header))
-    except RlpError:
-      discard
-  # Use persistent storage next
+  # Use persistent storage
   let
     key = beaconHeaderKey(num)
     rc = ctx.pool.chain.fcKvtGet(key.toOpenArray)
@@ -181,9 +171,6 @@ proc dbHeaderParentHash*(ctx: BeaconCtxRef; num: BlockNumber): Opt[Hash32] =
 
 proc dbHeaderUnstash*(ctx: BeaconCtxRef; bn: BlockNumber) =
   ## Remove header from temporary DB list
-  ctx.stash.withValue(bn, _):
-    ctx.stash.del bn
-    return
   ctx.pool.chain.fcKvtDel(beaconHeaderKey(bn).toOpenArray)
 
 # ------------------------------------------------------------------------------

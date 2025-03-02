@@ -116,7 +116,6 @@ proc startHibernating(ctx: BeaconCtxRef; info: static[string]) =
   ctx.blocksUnprocClear()
   ctx.headersStagedQueueClear()
   ctx.blocksStagedQueueClear()
-  ctx.dbHeadersClear()
 
   ctx.hibernate = true
 

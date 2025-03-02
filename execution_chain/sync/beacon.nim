@@ -11,9 +11,10 @@
 {.push raises: [].}
 
 import
-  pkg/[chronicles, chronos, eth/p2p, results],
+  pkg/[chronicles, chronos, results],
   pkg/stew/[interval_set, sorted_set],
   ../core/chain,
+  ../networking/p2p,
   ./beacon/[worker, worker_desc, worker/db],
   "."/[sync_desc, sync_sched, protocol]
 
@@ -60,11 +61,11 @@ proc init*(
     ethNode: EthereumNode;
     chain: ForkedChainRef;
     maxPeers: int;
-    chunkSize = 0;
+    blockQueueHwm = 0;
       ): T =
   var desc = T()
   desc.initSync(ethNode, maxPeers)
-  desc.ctx.pool.nBodiesBatch = chunkSize
+  desc.ctx.pool.blocksStagedHwm = blockQueueHwm
   desc.ctx.pool.chain = chain
   desc
 

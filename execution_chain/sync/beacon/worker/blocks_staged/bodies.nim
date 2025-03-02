@@ -1,5 +1,5 @@
 # Nimbus
-# Copyright (c) 2023-2024 Status Research & Development GmbH
+# Copyright (c) 2023-2025 Status Research & Development GmbH
 # Licensed and distributed under either of
 #   * MIT license (license terms in the root directory or at
 #     https://opensource.org/licenses/MIT).
@@ -13,10 +13,11 @@
 import
   std/options,
   pkg/[chronicles, chronos, results],
-  pkg/eth/[common, p2p],
+  pkg/eth/common,
   pkg/stew/interval_set,
   ../../../protocol,
-  ../../worker_desc
+  ../../worker_desc,
+  ../../../../networking/p2p
 
 # ------------------------------------------------------------------------------
 # Public functions
@@ -53,6 +54,13 @@ proc bodiesFetch*(
       error=($e.name), msg=e.msg, bdyErrors=buddy.bdyErrors
     return err()
 
+  # This round trip time `elapsed` is the real time, not necessarily the
+  # time relevant for network timeout which would throw an exception when
+  # the maximum response time has exceeded (typically set to 10s.)
+  #
+  # If the real round trip time `elapsed` is to long, the error score is
+  # inceased. Not until the error score will pass a certian threshold (for
+  # being too slow in consecutive conversations), the peer will be abandoned.
   let elapsed = Moment.now() - start
 
   # Evaluate result

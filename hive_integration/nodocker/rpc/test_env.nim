@@ -9,7 +9,7 @@
 
 import
   std/[os, net],
-  eth/p2p as ethp2p,
+  ../../../execution_chain/networking/p2p as ethp2p,
   results,
   chronos, json_rpc/[rpcserver, rpcclient],
   ../../../execution_chain/sync/protocol,

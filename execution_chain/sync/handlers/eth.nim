@@ -14,11 +14,10 @@ import
   std/[tables, times, hashes, sets],
   chronicles, chronos,
   stew/endians2,
-  eth/p2p,
-  eth/p2p/peer_pool,
   ../protocol,
   ../protocol/eth/eth_types,
-  ../../core/[chain, tx_pool]
+  ../../core/[chain, tx_pool],
+  ../../networking/[p2p, peer_pool]
 
 logScope:
   topics = "eth-wire"

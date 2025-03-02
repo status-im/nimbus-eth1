@@ -147,8 +147,22 @@ func blocksStagedCanImportOk*(ctx: BeaconCtxRef): bool =
       if ctx.pool.nBuddies == 0:
         return true
 
-      # Start importing if the queue is long enough.
-      if ctx.pool.blocksStagedQuLenMax <= ctx.blk.staged.len:
+      # If importing starts while peers are actively downloading, the system
+      # tends to loose download peers, most probably due to high system
+      # activity.
+      #
+      # * Typical download time to download and stage a queue record ~15s (raw
+      #   download time typically ranges ~30ms ..~10s)
+      #
+      # * Anecdotal time to connect to a new download peer ~5m..~10m
+      #
+      # This implies that a staged full queue with 4 records typically does
+      # not take more than a minute, much less if enough peers are available
+      # while the penalty of potentially losing peers is a multiple of the
+      # queue ramp up time.
+      #
+      # So importing does not start before the queue is filled up.
+      if ctx.pool.stagedLenHwm <= ctx.blk.staged.len:
         return true
 
   false
@@ -158,9 +172,8 @@ func blocksStagedFetchOk*(ctx: BeaconCtxRef): bool =
   ## Check whether body records can be fetched and stored on the `staged` queue.
   ##
   if 0 < ctx.blocksUnprocAvail():
-    # Not to start fetching while the queue is busy (i.e. larger than Lwm)
-    # so that import might still be running strong.
-    if ctx.blk.staged.len < ctx.pool.blocksStagedQuLenMax:
+    # Fetch if there is space on the queue.
+    if ctx.blk.staged.len < ctx.pool.stagedLenHwm:
       return true
 
     # Make sure that there is no gap at the bottom which needs to be
@@ -186,8 +199,7 @@ proc blocksStagedCollect*(
     peer = buddy.peer
 
     # Fetch the full range of headers to be completed to blocks
-    iv = ctx.blocksUnprocFetch(
-      ctx.pool.nBodiesBatch.uint64).expect "valid interval"
+    iv = ctx.blocksUnprocFetch(nFetchBodiesBatch.uint64).expect "valid interval"
 
   var
     # This value is used for splitting the interval `iv` into

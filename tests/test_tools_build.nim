@@ -12,8 +12,6 @@
 {.warning[UnusedImport]: off.}
 
 import
-  #./tracerTestGen,          # -- ditto
-  #./persistBlockTestGen,    # -- ditto
   ../hive_integration/nodocker/rpc/rpc_sim,
   ../hive_integration/nodocker/consensus/consensus_sim,
   ../hive_integration/nodocker/engine/engine_sim,

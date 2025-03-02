@@ -86,7 +86,7 @@
 import
   std/hashes,
   chronos,
-  eth/[p2p, p2p/peer_pool],
+  ../networking/[p2p, peer_pool],
   stew/keyed_queue,
   ./sync_desc
 
@@ -483,7 +483,7 @@ proc initSync*[S,W](
   dsc.buddiesMax = max(1, slots + 1)
   dsc.pool = node.peerPool
   dsc.buddies.init(dsc.buddiesMax)
-  dsc.ctx = CtxRef[S]()
+  dsc.ctx = CtxRef[S](node: node)
 
 
 proc startSync*[S,W](dsc: RunnerSyncRef[S,W]): bool =

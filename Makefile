@@ -250,6 +250,9 @@ test_import: nimbus_execution_client
 test-evm: | build deps rocksdb
 	$(ENV_SCRIPT) nim test_evm $(NIM_PARAMS) nimbus.nims
 
+build_fuzzers:
+	$(ENV_SCRIPT) nim build_fuzzers $(NIM_PARAMS) nimbus.nims
+  
 # Primitive reproducibility test.
 #
 # On some platforms, with some GCC versions, it may not be possible to get a

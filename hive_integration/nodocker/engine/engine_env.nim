@@ -11,7 +11,7 @@
 import
   std/os,
   eth/common/keys,
-  eth/p2p as eth_p2p,
+  ../../../execution_chain/networking/p2p as eth_p2p,
   chronos,
   json_rpc/[rpcserver, rpcclient],
   results,

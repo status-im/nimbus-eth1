@@ -7,11 +7,12 @@
 
 import
   std/[os, macros, json, strformat, strutils, tables],
-  stew/byteutils, net, eth/[common/keys, p2p], unittest2,
+  stew/byteutils, net, eth/common/keys, unittest2,
   testutils/markdown_reports,
   ../execution_chain/[constants, config, transaction, errors],
   ../execution_chain/db/ledger,
-  ../execution_chain/common/[context, common]
+  ../execution_chain/common/[context, common],
+  ../execution_chain/networking/p2p
 
 func revTable(list: array[FkFrontier..FkLatest, string]): Table[string, EVMFork] =
   for k, v in list:
