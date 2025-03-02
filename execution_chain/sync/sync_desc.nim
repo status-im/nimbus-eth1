@@ -16,7 +16,7 @@
 {.push raises: [].}
 
 import
-  eth/p2p
+  ../networking/p2p
 
 type
   BuddyRunState* = enum

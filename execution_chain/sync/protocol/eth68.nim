@@ -17,10 +17,11 @@ import
   stint,
   chronicles,
   chronos,
-  eth/[common, p2p, p2p/private/p2p_types],
+  eth/common,
   stew/byteutils,
   ./trace_config,
   ./eth/eth_types,
+  ../../networking/[p2p, p2p_types],
   ../../utils/utils,
   ../../common/logging
 

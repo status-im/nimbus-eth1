@@ -1,5 +1,5 @@
 # Nimbus
-# Copyright (c) 2018-2024 Status Research & Development GmbH
+# Copyright (c) 2018-2025 Status Research & Development GmbH
 # Licensed under either of
 #  * Apache License, version 2.0, ([LICENSE-APACHE](LICENSE-APACHE) or
 #    http://www.apache.org/licenses/LICENSE-2.0)
@@ -13,7 +13,8 @@
 import
   chronicles,
   results,
-  eth/[common, p2p, p2p/private/p2p_types]
+  eth/common,
+  ../../../networking/[p2p, p2p_types]
 
 logScope:
   topics = "eth-wire"

@@ -23,10 +23,11 @@ import
     confutils/defs,
     confutils/std/net
   ],
-  eth/[common, net/utils, net/nat, p2p/bootnodes, p2p/enode, p2p/discoveryv5/enr],
-  "."/[constants, compile_info, version],
-  common/chain_config,
-  db/opts
+  eth/[common, net/utils, net/nat, p2p/discoveryv5/enr],
+  ./networking/[bootnodes, discoveryv4/enode],
+  ./[constants, compile_info, version],
+  ./common/chain_config,
+  ./db/opts
 
 from beacon_chain/nimbus_binary_common import setupLogging, StdoutLogKind
 

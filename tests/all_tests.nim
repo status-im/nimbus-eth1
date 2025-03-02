@@ -34,8 +34,8 @@ import
     test_tracer_json,
     test_transaction_json,
     test_txpool,
-
+    test_networking,
     # These two suites are much slower than all the rest, so run them last
     test_blockchain_json,
     test_generalstate_json,
-  ]
+]

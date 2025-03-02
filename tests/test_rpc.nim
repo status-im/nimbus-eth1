@@ -12,7 +12,7 @@ import
   web3/eth_api,
   stew/byteutils,
   json_rpc/[rpcserver, rpcclient],
-  eth/[p2p, rlp, trie/hexary_proof_verification],
+  eth/[rlp, trie/hexary_proof_verification],
   eth/common/[transaction_utils, addresses],
   ../hive_integration/nodocker/engine/engine_client,
   ../execution_chain/[constants, transaction, config, version],
@@ -23,6 +23,7 @@ import
   ../execution_chain/[common, rpc],
   ../execution_chain/rpc/rpc_types,
   ../execution_chain/beacon/web3_eth_conv,
+  ../execution_chain/networking/p2p,
    ./test_helpers,
    ./macro_assembler,
    ./test_block_fixture

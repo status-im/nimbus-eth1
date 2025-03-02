@@ -11,10 +11,11 @@
 {.push raises:[].}
 
 import
-  pkg/eth/[common, p2p],
+  pkg/eth/common,
   pkg/results,
   pkg/stew/interval_set,
-  ../worker_desc
+  ../worker_desc,
+  ../../../networking/p2p
 
 # ------------------------------------------------------------------------------
 # Public functions

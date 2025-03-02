@@ -1,5 +1,5 @@
 # Nimbus
-# Copyright (c) 2023-2024 Status Research & Development GmbH
+# Copyright (c) 2023-2025 Status Research & Development GmbH
 # Licensed and distributed under either of
 #   * MIT license (license terms in the root directory or at
 #     https://opensource.org/licenses/MIT).
@@ -11,9 +11,10 @@
 {.push raises:[].}
 
 import
-  pkg/eth/[common, p2p, rlp],
+  pkg/eth/[common, rlp],
   ../../../../common,
-  ../../worker_desc
+  ../../worker_desc,
+  ../../../../networking/p2p
 
 # ------------------------------------------------------------------------------
 # Public functions
