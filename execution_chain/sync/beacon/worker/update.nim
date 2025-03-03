@@ -189,6 +189,8 @@ proc startHibernating(ctx: BeaconCtxRef; info: static[string]) =
   ctx.blocksUnprocClear()
   ctx.headersStagedQueueClear()
   ctx.blocksStagedQueueClear()
+  ctx.pool.failedPeers.clear()
+  ctx.pool.seenData = false
 
   ctx.hdrCache.init()
 
@@ -220,6 +222,8 @@ proc setupCollectingHeaders(ctx: BeaconCtxRef; info: static[string]) =
   doAssert ctx.headersStagedQueueIsEmpty()
   doAssert ctx.blocksUnprocIsEmpty()
   doAssert ctx.blocksStagedQueueIsEmpty()
+  doAssert ctx.pool.failedPeers.len == 0
+  doAssert ctx.pool.seenData == false
 
   if c+1 < t:                                 # header chain interval is `(C,T]`
     ctx.sst.layout = SyncStateLayout(
@@ -260,12 +264,21 @@ proc setupCancelHeaders(ctx: BeaconCtxRef; info: static[string]) =
   ctx.layout.lastState = cancelHeaders
   ctx.poolMode = true # reorg, clear header queues
 
+proc setupCancelBlocks(ctx: BeaconCtxRef; info: static[string]) =
+  ## Trivial state transition handler
+  ctx.layout.lastState = cancelBlocks
+  ctx.poolMode = true # reorg, clear block queues
+
 
 proc setupProcessingBlocks(ctx: BeaconCtxRef; info: static[string]) =
   doAssert ctx.headersUnprocIsEmpty()
   doAssert ctx.headersStagedQueueIsEmpty()
   doAssert ctx.blocksUnprocIsEmpty()
   doAssert ctx.blocksStagedQueueIsEmpty()
+
+  # Reset for useles block download detection (to avoid deadlock)
+  ctx.pool.failedPeers.clear()
+  ctx.pool.seenData = false
 
   # Update layout, finalised variable
   let rc = ctx.hdrCache.fcHeaderGet(ctx.layout.finalHash)
@@ -302,18 +315,34 @@ proc updateSyncState*(ctx: BeaconCtxRef; info: static[string]) =
   # change.
   let prevState = ctx.layout.lastState   # previous state
   var thisState =                        # figure out current state
-    if prevState == cancelHeaders:
+    if prevState in {cancelHeaders,cancelBlocks}:
       prevState                          # no need to change state here
     else:
       ctx.syncState info                 # currently observed state, the std way
 
   # Handle same state cases first (i.e. no state change.) Depending on the
-  # context, the new state might be forced to change.
+  # context, a new state might be forced so that there will be a state change.
   case statePair(prevState, thisState)
   of statePair(idleSyncState):
     if not ctx.clReq.changed:            # no new request from `CL`?
       return
     thisState = collectingHeaders
+    # proceed
+
+  of statePair(collectingHeaders):
+    if ctx.pool.seenData or              # checks for cul-de-sac syncing
+       ctx.pool.failedPeers.len <= fetchHeadersFailedInitialFailPeersHwm:
+      return
+    debug info & ": too many failed header peers",
+      failedPeers=ctx.pool.failedPeers.len,
+      limit=fetchHeadersFailedInitialFailPeersHwm
+    thisState = cancelHeaders
+    # proceed
+
+  of statePair(cancelHeaders):           # was not assigned by `syncState()`
+    if not ctx.headersBorrowedIsEmpty(): # wait for peers to reorg in `poolMode`
+      return
+    thisState = idleSyncState            # will continue hibernating
     # proceed
 
   of statePair(finishedHeaders):
@@ -324,8 +353,22 @@ proc updateSyncState*(ctx: BeaconCtxRef; info: static[string]) =
     # proceed
 
   of statePair(processingBlocks):
-    if not ctx.blocksStagedQueueIsEmpty() or
-       not ctx.blocksUnprocIsEmpty():
+    if not ctx.pool.seenData and         # checks for cul-de-sac syncing
+       fetchBodiesFailedInitialFailPeersHwm < ctx.pool.failedPeers.len:
+      debug info & ": too many failed block peers",
+        failedPeers=ctx.pool.failedPeers.len,
+        limit=fetchBodiesFailedInitialFailPeersHwm
+      thisState = cancelBlocks
+      # proceed
+    elif ctx.blocksStagedQueueIsEmpty() and
+         ctx.blocksUnprocIsEmpty():
+      thisState = idleSyncState          # will continue hibernating
+      # proceed
+    else:
+      return
+
+  of statePair(cancelBlocks):
+    if not ctx.blocksBorrowedIsEmpty():  # wait for peers to reorg in `poolMode`
       return
     thisState = idleSyncState            # will continue hibernating
     # proceed
@@ -345,6 +388,10 @@ proc updateSyncState*(ctx: BeaconCtxRef; info: static[string]) =
 
   of statePair(finishedHeaders, processingBlocks):
     ctx.setupProcessingBlocks info       # start downloading block bodies
+    thisState = ctx.layout.lastState     # assign result from state handler
+
+  of statePair(processingBlocks, cancelBlocks):
+    ctx.setupCancelBlocks info           # cancel blocks download
     thisState = ctx.layout.lastState     # assign result from state handler
 
   of statePair(collectingHeaders, finishedHeaders):

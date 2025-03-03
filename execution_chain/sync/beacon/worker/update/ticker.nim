@@ -137,6 +137,7 @@ proc tickerLogger(t: TickerRef; ctx: BeaconCtxRef) =
            of cancelHeaders: "x"
            of finishedHeaders: "f"
            of processingBlocks: "b"
+           of cancelBlocks: "z"
       rrg = data.reorg
       nP = data.nBuddies
 

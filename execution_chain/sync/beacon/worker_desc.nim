@@ -11,6 +11,7 @@
 {.push raises:[].}
 
 import
+  std/sets,
   pkg/chronos,
   pkg/eth/common,
   pkg/stew/[interval_set, sorted_set],
@@ -57,6 +58,7 @@ type
     cancelHeaders                    ## stop this scrum
     finishedHeaders                  ## see clause *(10)* of `README.md`
     processingBlocks                 ## see clause *(11)* of `README.md`
+    cancelBlocks                     ## stop this scrum
 
   SyncClMesg* = object
     ## Beacon state to be implicitely updated by RPC method
@@ -146,6 +148,8 @@ type
     # Info, debugging, and error handling stuff
     nReorg*: int                     ## Number of reorg invocations (info only)
     hdrProcError*: Table[Hash,uint8] ## Some globally accessible header errors
+    failedPeers*: HashSet[Hash]      ## Detect dead end sync by collecting peers
+    seenData*: bool                  ## Set `true` is data were fetched, already
 
     # Debugging stuff
     when enableTicker:

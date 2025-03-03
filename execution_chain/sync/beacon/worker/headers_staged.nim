@@ -11,11 +11,12 @@
 {.push raises:[].}
 
 import
+  std/sets,
   pkg/[chronicles, chronos],
   pkg/eth/common,
   pkg/stew/[interval_set, sorted_set],
   ../worker_desc,
-  ./headers_staged/staged_collect,
+  ./headers_staged/[headers, staged_collect],
   ./headers_unproc
 
 # ------------------------------------------------------------------------------
@@ -67,9 +68,12 @@ proc headersStagedCollect*(
         # get returned the last unprocessed block number
         bottom = await buddy.collectAndStashOnDiskCache(iv, parent, info)
 
-      nDeterministic += (iv.maxPt - bottom)          # statistics
+      # Check whether there were some headers fetched at all
+      if bottom < iv.maxPt:
+        nDeterministic += (iv.maxPt - bottom)        # statistics
+        ctx.pool.seenData = true                     # data for scrum exists
 
-      # Commit processed block numbers
+      # Commit partially processed block numbers
       if iv.minPt <= bottom:
         ctx.headersUnprocCommit(iv,iv.minPt,bottom)  # partial success only
         break fetchHeadersBody                       # done, exit this function
@@ -122,6 +126,13 @@ proc headersStagedCollect*(
 
   let nHeaders = nDeterministic + nOpportunistic.uint64
   if nHeaders == 0:
+    if not ctx.pool.seenData:
+      # Collect peer for detecting cul-de-sac syncing (i.e. non-existing
+      # block chain or similar.)
+      ctx.pool.failedPeers.incl buddy.peerID
+
+      debug info & ": no headers yet", peer, ctrl=buddy.ctrl.state,
+        failedPeers=ctx.pool.failedPeers.len, hdrErrors=buddy.hdrErrors
     return false
 
   info "Downloaded headers", unprocTop=ctx.headersUnprocAvailTop.bnStr,
@@ -218,6 +229,16 @@ proc headersStagedReorg*(ctx: BeaconCtxRef; info: static[string]) =
 
   # Update counter
   ctx.pool.nReorg.inc
+
+  # Check for cancel request
+  if ctx.layout.lastState == cancelHeaders:
+    # Reset header queues
+    debug info & ": Flushing header queues", nUnproc=ctx.headersUnprocTotal(),
+      nStaged=ctx.hdr.staged.len, nReorg=ctx.pool.nReorg
+
+    ctx.headersUnprocClear()
+    ctx.hdr.staged.clear()
+    return
 
   let nStaged = ctx.hdr.staged.len
   if headersStagedQueueLengthHwm < nStaged:

@@ -53,6 +53,12 @@ const
 
   # ----------------------
 
+  fetchHeadersFailedInitialFailPeersHwm* = 30
+    ## If there are more failing peers than this `hwm` right at the begining
+    ## of a header chain download scrum (before any data received), then this
+    ## scrum is discarded and the suncer is reset and suspened (waiting for
+    ## the next instruction to run a scrum.)
+
   nFetchHeadersRequest* = 1_024
     ## Number of headers that will be requested with a single `eth/xx` message.
     ##
@@ -97,6 +103,9 @@ const
     ## from scratch.
 
   # ----------------------
+
+  fetchBodiesFailedInitialFailPeersHwm* = 50
+    ## Similar to `fetchHeadersFailedInitialFailPeersHwm`
 
   nFetchBodiesRequest* = 128
     ## Similar to `nFetchHeadersRequest`

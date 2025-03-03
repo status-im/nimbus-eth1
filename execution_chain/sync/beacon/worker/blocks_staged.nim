@@ -26,7 +26,7 @@ formatIt(Hash32):
   it.short
 
 # ------------------------------------------------------------------------------
-# Private functions
+# Private helpers
 # ------------------------------------------------------------------------------
 
 func getNthHash(blk: BlocksForImport; n: int): Hash32 =
@@ -35,6 +35,20 @@ func getNthHash(blk: BlocksForImport; n: int): Hash32 =
   else:
     rlp.encode(blk.blocks[n].header).keccak256
 
+
+proc updateBuddyErrorState(buddy: BeaconBuddyRef) =
+  ## Helper/wrapper
+  if ((0 < buddy.only.nBdyRespErrors or
+       0 < buddy.only.nBdyProcErrors) and buddy.ctrl.stopped) or
+     fetchBodiesReqErrThresholdCount < buddy.only.nBdyRespErrors or
+     fetchBodiesProcessErrThresholdCount < buddy.only.nBdyProcErrors:
+
+    # Make sure that this peer does not immediately reconnect
+    buddy.ctrl.zombie = true
+
+# ------------------------------------------------------------------------------
+# Private function(s)
+# ------------------------------------------------------------------------------
 
 proc fetchAndCheck(
     buddy: BeaconBuddyRef;
@@ -241,16 +255,20 @@ proc blocksStagedCollect*(
       # Throw away first time block fetch data. Keep other data for a
       # partially assembled list.
       if nBlkBlocks == 0:
-        if ((0 < buddy.only.nBdyRespErrors or
-             0 < buddy.only.nBdyProcErrors) and buddy.ctrl.stopped) or
-           fetchBodiesReqErrThresholdCount < buddy.only.nBdyRespErrors or
-           fetchBodiesProcessErrThresholdCount < buddy.only.nBdyProcErrors:
-          # Make sure that this peer does not immediately reconnect
-          buddy.ctrl.zombie = true
+        buddy.updateBuddyErrorState()
 
-        trace info & ": current block list discarded", peer, iv, ivReq,
-          nStaged=ctx.blk.staged.len, ctrl=buddy.ctrl.state,
-          bdyErrors=buddy.bdyErrors
+        if ctx.pool.seenData:
+          trace info & ": current blocks discarded", peer, iv, ivReq,
+            nStaged=ctx.blk.staged.len, ctrl=buddy.ctrl.state,
+            bdyErrors=buddy.bdyErrors
+        else:
+          # Collect peer for detecting cul-de-sac syncing (i.e. non-existing
+          # block chain or similar.) This covers the case when headers are
+          # available but not block bodies.
+          ctx.pool.failedPeers.incl buddy.peerID
+
+          debug info & ": no blocks yet", peer, ctrl=buddy.ctrl.state,
+            failedPeers=ctx.pool.failedPeers.len, bdyErrors=buddy.bdyErrors
 
         ctx.blocksUnprocCommit(iv, iv)
         # At this stage allow a task switch so that some other peer might try
@@ -266,6 +284,9 @@ proc blocksStagedCollect*(
       # There is some left over to store back
       ctx.blocksUnprocCommit(iv, ivBottom, iv.maxPt)
       break
+
+    # There are block body data for this scrum
+    ctx.pool.seenData = true
 
     # Update remaining interval
     let ivRespLen = blk.blocks.len - nBlkBlocks
@@ -415,7 +436,7 @@ proc blocksStagedReorg*(ctx: BeaconCtxRef; info: static[string]) =
   ctx.pool.nReorg.inc
 
   # Reset block queues
-  debug info & ": Flushing Block queues", nUnproc=ctx.blocksUnprocTotal(),
+  debug info & ": Flushing block queues", nUnproc=ctx.blocksUnprocTotal(),
     nStaged=ctx.blk.staged.len, nReorg=ctx.pool.nReorg
 
   ctx.blocksUnprocClear()

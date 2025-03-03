@@ -70,17 +70,23 @@ proc release*(ctx: BeaconCtxRef; info: static[string]) =
 
 proc start*(buddy: BeaconBuddyRef; info: static[string]): bool =
   ## Initialise worker peer
-  let peer = buddy.peer
+  let
+    peer = buddy.peer
+    ctx = buddy.ctx
 
   if runsThisManyPeersOnly <= buddy.ctx.pool.nBuddies:
-    if not buddy.ctx.hibernate: debug info & ": peers limit reached", peer
+    if not ctx.hibernate: debug info & ": peers limit reached", peer
+    return false
+
+  if not ctx.pool.seenData and buddy.peerID in ctx.pool.failedPeers:
+    if not ctx.hibernate: debug info & ": useless peer already tried", peer
     return false
 
   if not buddy.startBuddy():
-    if not buddy.ctx.hibernate: debug info & ": failed", peer
+    if not ctx.hibernate: debug info & ": failed", peer
     return false
 
-  if not buddy.ctx.hibernate: debug info & ": new peer", peer
+  if not ctx.hibernate: debug info & ": new peer", peer
   true
 
 proc stop*(buddy: BeaconBuddyRef; info: static[string]) =
