@@ -105,7 +105,8 @@ proc runDaemon*(
     info: static[string];
       ) {.async: (raises: []).} =
   ## Global background job that will be re-started as long as the variable
-  ## `ctx.daemon` is set `true`.
+  ## `ctx.daemon` is set `true` which corresponds to `ctx.hibernating` set
+  ## to false`.
   ##
   ## On a fresh start, the flag `ctx.daemon` will not be set `true` before the
   ## first usable request from the CL (via RPC) stumbles in.
@@ -174,9 +175,10 @@ proc runPeer*(
     buddy.only.multiRunIdle = Moment.now() - buddy.only.stoppedMultiRun
   buddy.only.nMultiLoop.inc                     # statistics/debugging
 
-  # Update consensus header target when needed. It comes with a finalised
-  # header hash where we need to complete the block number.
-  await buddy.headerStagedUpdateTarget info
+  # Wake up from hibernating if there is a new `CL` scrum target available.
+  # Note that this check must be done on a peer and the `Daemon` is not
+  # running while thr system is hibernating.
+  buddy.updateFromHibernatingForNextScrum info
 
   if not await buddy.napUnlessSomethingToFetch():
     #

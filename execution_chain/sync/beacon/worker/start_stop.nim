@@ -18,7 +18,7 @@ import
   ../worker_desc,
   ./blocks_staged/staged_queue,
   ./headers_staged/staged_queue,
-  ./[blocks_unproc, headers_unproc, update]
+  ./[blocks_unproc, headers_unproc]
 
 # ------------------------------------------------------------------------------
 # Private functions
@@ -46,28 +46,13 @@ proc updateBeaconHeaderCB(
   return proc(h: Header; f: Hash32) {.gcsafe, raises: [].} =
 
     # Check whether there is an update running (otherwise take next upate)
-    if not ctx.clRequest.locked and              # ignore if currently updating
-       ctx.clRequest.final == 0 and              # ignore if complete already
-       f != zeroHash32 and                       # finalised hash is set
+    if f != zeroHash32 and                       # finalised hash is set
        ctx.layout.head < h.number and            # update is advancing
        ctx.clRequest.consHead.number < h.number: # .. ditto
 
       ctx.clRequest.consHead = h
       ctx.clRequest.finalHash = f
       ctx.clRequest.changed = true
-
-      # Check whether `FC` knows about the finalised block already.
-      #
-      # On a full node, all blocks before the current state are stored on the
-      # database which is also accessed by `FC`. So one can already decude here
-      # whether `FC` id capable of handling that finalised block (the number of
-      # must be at least the `base` from `FC`.)
-      #
-      # Otherwise the block header will need to be fetched from a peer when
-      # available and checked there (see `headerStagedUpdateTarget()`.)
-      #
-      let finHdr = ctx.chain.headerByHash(f).valueOr: return
-      ctx.updateFinalBlockHeader(finHdr, f, info)
 
 # ------------------------------------------------------------------------------
 # Public functions

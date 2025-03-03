@@ -58,10 +58,8 @@ type
 
   SyncClRequest* = object
     ## Beacon state to be implicitely updated by RPC method
-    locked*: bool                    ## Don't update while fetching header
     changed*: bool                   ## Tell that something has changed
     consHead*: Header                ## Consensus head
-    final*: BlockNumber              ## Finalised block number
     finalHash*: Hash32               ## Finalised hash
 
   SyncStateLayout* = object

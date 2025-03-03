@@ -15,41 +15,12 @@ import
   pkg/eth/common,
   pkg/stew/[interval_set, sorted_set],
   ../worker_desc,
-  ./headers_staged/[headers, staged_collect],
-  ./[headers_unproc, update]
+  ./headers_staged/staged_collect,
+  ./headers_unproc
 
 # ------------------------------------------------------------------------------
 # Public functions
 # ------------------------------------------------------------------------------
-
-proc headerStagedUpdateTarget*(
-    buddy: BeaconBuddyRef;
-    info: static[string];
-      ) {.async: (raises: []).} =
-  ## Fetch finalised beacon header if there is an update available
-  let
-    ctx = buddy.ctx
-    peer = buddy.peer
-  if ctx.layout.lastState == idleSyncState and
-     ctx.clRequest.final == 0 and
-     ctx.clRequest.finalHash != zeroHash32 and
-     not ctx.clRequest.locked:
-    const iv = BnRange.new(1u,1u) # dummy interval
-
-    ctx.clRequest.locked = true
-    let rc = await buddy.headersFetchReversed(iv, ctx.clRequest.finalHash, info)
-    ctx.clRequest.locked = false
-
-    if rc.isOk:
-      let hash = rlp.encode(rc.value[0]).keccak256
-      if hash != ctx.clRequest.finalHash:
-        # Oops
-        buddy.ctrl.zombie = true
-        debug info & ": finalised header hash mismatch", peer, hash,
-          expected=ctx.clRequest.finalHash
-      else:
-        ctx.updateFinalBlockHeader(rc.value[0], ctx.clRequest.finalHash, info)
-
 
 proc headersStagedCollect*(
     buddy: BeaconBuddyRef;

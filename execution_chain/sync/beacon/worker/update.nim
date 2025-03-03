@@ -151,12 +151,12 @@ proc setupCollectingHeaders(ctx: BeaconCtxRef; info: static[string]) =
     ctx.sst.layout = SyncStateLayout(
       coupler:   c,
       dangling:  h,
-      final:     ctx.clRequest.final,
+      final:     BlockNumber(0),
       finalHash: ctx.clRequest.finalHash,
       head:      h,
       lastState: collectingHeaders)           # state transition
 
-    # Prepare cacahe for a new scrum
+    # Prepare cache for a new scrum
     ctx.hdrCache.init(ctx.clRequest.consHead, @[ctx.clRequest.finalHash])
 
     # Update range
@@ -231,12 +231,23 @@ proc linkIntoFc(ctx: BeaconCtxRef; info: static[string]): bool =
   false
 
 
-proc setupProcessingBlocks(ctx: BeaconCtxRef; info: static[string]) =
+proc setupProcessingBlocks(ctx: BeaconCtxRef; info: static[string]): bool =
   doAssert ctx.headersUnprocIsEmpty()
   doAssert ctx.headersStagedQueueIsEmpty()
   doAssert ctx.blocksUnprocIsEmpty()
   doAssert ctx.blocksStagedQueueIsEmpty()
 
+  # Update finalised variable
+  let finalHeader = ctx.hdrCache.fcHeaderGet(ctx.layout.finalHash).valueOr:
+    debug info & ": cannot resolve finalised hash",
+      finalHash=ctx.layout.finalHash.toStr
+    doAssert error == true # verify: hash registered but no header found
+    return false
+
+  # Update layout
+  ctx.layout.final = finalHeader.number
+
+  # Prepare for blocks processing
   let
     c = ctx.layout.coupler
     h = ctx.layout.head
@@ -248,6 +259,8 @@ proc setupProcessingBlocks(ctx: BeaconCtxRef; info: static[string]) =
   ctx.layout.lastState = processingBlocks
 
   trace info & ": collecting block bodies", iv=BnRange.new(c+1, h)
+
+  true
 
 # ------------------------------------------------------------------------------
 # Public functions
@@ -263,9 +276,11 @@ proc updateSyncState*(ctx: BeaconCtxRef; info: static[string]) =
     # session can be set up
     case prevState:
     of idleSyncState:
-      if ctx.clRequest.changed and       # and there is a new target from CL
-         ctx.clRequest.final != 0:       # .. ditto
+      if ctx.clRequest.changed:          # and there is a new target from CL
         ctx.setupCollectingHeaders info  # set up new header sync
+        info "Sync state changed", prevState, thisState,
+          base=ctx.chain.baseNumber.bnStr, head=ctx.chain.latestNumber.bnStr,
+          target=ctx.layout.head.bnStr
       return
     of processingBlocks:
       if not ctx.blocksStagedQueueIsEmpty() or
@@ -288,11 +303,7 @@ proc updateSyncState*(ctx: BeaconCtxRef; info: static[string]) =
       return
 
   info "Sync state changed", prevState, thisState,
-    head=ctx.chain.latestNumber.bnStr,
-    oldBase=(if ctx.layout.coupler == ctx.layout.dangling: "downloaded"
-       else: ctx.layout.coupler.bnStr),
-    downloaded=(if ctx.layout.dangling == ctx.layout.head: "target"
-       else: ctx.layout.dangling.bnStr),
+    base=ctx.chain.baseNumber.bnStr, head=ctx.chain.latestNumber.bnStr,
     target=ctx.layout.head.bnStr
 
   # So there is a states transition. The only relevant transition here
@@ -302,43 +313,29 @@ proc updateSyncState*(ctx: BeaconCtxRef; info: static[string]) =
   if prevState == collectingHeaders and
      thisState == finishedHeaders and
      ctx.linkIntoFc(info):               # commit downloading headers
-    ctx.setupProcessingBlocks info       # start downloading block bodies
-    info "Sync state changed",
-      prevState=thisState, thisState=ctx.syncState(info)
-    return
-    # Notreached
+    if ctx.setupProcessingBlocks info:   # start downloading block bodies
+      info "Sync state changed",
+        prevState=thisState, thisState=ctx.syncState(info)
+      return
 
   # Final sync target reached or inconsistent/impossible state
   ctx.startHibernating info
 
 
-proc updateFinalBlockHeader*(
-    ctx: BeaconCtxRef;
-    finHdr: Header;
-    finHash: Hash32;
+proc updateFromHibernatingForNextScrum*(
+    buddy: BeaconBuddyRef;
     info: static[string];
       ) =
-  ## Update the finalised header cache. If the finalised header is acceptable,
-  ## the syncer will be activated from hibernation if necessary.
+  ## In hibernate mode, check for a new instruction from the `CL`. This
+  ## function must be invoked from a `buddy` (aka sync peer) as the `Daemon`
+  ## is de-activated while `buddy.ctx.hibernate` is `true`.
   ##
-  let
-    b = ctx.chain.baseNumber()
-    f = finHdr.number
-  if f < b:
-    trace info & ": finalised block # too low",
-      B=b.bnStr, finalised=f.bnStr, delta=(b - f)
-
-    ctx.clRequest.reset
-
-  else:
-    ctx.clRequest.final = f
-    ctx.clRequest.finalHash = finHash
-
+  let ctx = buddy.ctx
+  if ctx.hibernate and ctx.clRequest.changed:
     # Activate running (unless done yet)
-    if ctx.hibernate:
-      ctx.hibernate = false
-      info "Activating syncer", base=b.bnStr, head=ctx.chain.latestNumber.bnStr,
-        finalised=f.bnStr, consHead=ctx.clRequest.consHead.bnStr
+    ctx.hibernate = false
+    info "Activating syncer", base=ctx.chain.baseNumber.bnStr,
+      head=ctx.chain.latestNumber.bnStr, consHead=ctx.clRequest.consHead.bnStr
 
 
 proc updateAsyncTasks*(

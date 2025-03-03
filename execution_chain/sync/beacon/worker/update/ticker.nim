@@ -76,7 +76,7 @@ proc updater(ctx: BeaconCtxRef): TickerStats =
     head:            ctx.layout.head,
     headOk:          ctx.layout.lastState != idleSyncState,
     target:          ctx.clRequest.consHead.number,
-    targetOk:        ctx.clRequest.final != 0,
+    targetOk:        ctx.clRequest.changed,
 
     nHdrStaged:      ctx.headersStagedQueueLen(),
     hdrStagedTop:    ctx.headersStagedQueueTopKey(),
