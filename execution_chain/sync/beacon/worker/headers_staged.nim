@@ -75,11 +75,12 @@ proc headersStagedCollect*(
         break fetchHeadersBody                       # done, exit this function
 
       ctx.headersUnprocCommit(iv)                    # all headers processed
-      # End while: `collectAndStashOnDiskCache()`
 
-    trace info & ": deterministic fetch done", peer,
-      unprocTop=ctx.headersUnprocAvailTop.bnStr, D=ctx.layout.dangling.bnStr,
-      nDeterministic, nStaged=ctx.hdr.staged.len
+      debug info & ": deterministic headers fetch count", peer,
+        unprocTop=ctx.headersUnprocAvailTop.bnStr, D=ctx.layout.dangling.bnStr,
+        nDeterministic, nStaged=ctx.hdr.staged.len
+
+      # End while: `collectAndStashOnDiskCache()`
 
     # Continue opportunistic by block number, the fetched headers need to be
     # staged and checked/serialised later
@@ -118,12 +119,13 @@ proc headersStagedCollect*(
   # The cache `antecedent` must match variable `D` (aka dangling)
   doAssert ctx.hdrCache.fcHeaderAntecedent().number <= ctx.layout.dangling
 
-  if nDeterministic == 0 and nOpportunistic == 0:
+  let nHeaders = nDeterministic + nOpportunistic.uint64
+  if nHeaders == 0:
     return false
 
   info "Downloaded headers", unprocTop=ctx.headersUnprocAvailTop.bnStr,
-    nDeterministic, nOpportunistic, nStaged=ctx.hdr.staged.len,
-    nSyncPeers=ctx.pool.nBuddies, reorgReq=ctx.poolMode
+    nHeaders, nStaged=ctx.hdr.staged.len, nSyncPeers=ctx.pool.nBuddies,
+    reorgReq=ctx.poolMode
 
   return true
 
@@ -220,8 +222,8 @@ proc headersStagedReorg*(ctx: BeaconCtxRef; info: static[string]) =
 
   let nStaged = ctx.hdr.staged.len
   if headersStagedQueueLengthHwm < nStaged:
-    trace info & ": hwm reached, flushing staged queue",
-      nStaged, max=headersStagedQueueLengthLwm
+    debug info & ": hwm reached, flushing staged queue",
+      headersStagedQueueLengthLwm, nStaged, nReorg=ctx.pool.nReorg
 
     # Remove the leading `1 + nStaged - headersStagedQueueLengthLwm` entries
     # from list so that the upper `headersStagedQueueLengthLwm-1` entries

@@ -88,7 +88,7 @@ proc setupDatabase*(ctx: BeaconCtxRef; info: static[string]) =
 
 proc setupServices*(ctx: BeaconCtxRef; info: static[string]) =
   ## Helper for `setup()`: Enable external call-back based services
-  # Activate target request. Will be called from RPC handler.
+  # Activate `CL` requests. Will be called from RPC handler.
   ctx.pool.chain.com.reqBeaconSyncerTarget = ctx.updateBeaconHeaderCB info
   # Provide progress info
   ctx.pool.chain.com.beaconSyncerProgress = ctx.queryProgressCB info
@@ -105,7 +105,8 @@ proc startBuddy*(buddy: BeaconBuddyRef): bool =
   let
     ctx = buddy.ctx
     peer = buddy.peer
-  if peer.supports(wire_protocol.eth) and peer.state(wire_protocol.eth).initialized:
+  if peer.supports(wire_protocol.eth) and
+     peer.state(wire_protocol.eth).initialized:
     ctx.pool.nBuddies.inc
     buddy.initHdrProcErrors()
     return true

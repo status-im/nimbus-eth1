@@ -31,8 +31,13 @@ func bnStr*(b: EthBlock): string =
   b.header.bnStr
 
 func bnStr*(w: (BlockNumber,BlockNumber)): string =
-  if w[0] == w[1]: w[0].bnStr
-  else: w[0].bnStr & ".." & w[1].bnStr
+  if w[0] < w[1]: w[0].bnStr & ".." & w[1].bnStr
+  elif w[0] == w[1]: w[0].bnStr
+  else: "n/a"
+
+func bnStr*(w: seq[EthBlock]): string =
+  if w.len == 0: "n/a"
+  else: (w[0].header.number, w[^1].header.number).bnStr
 
 func bnStr*(w: Interval[BlockNumber,uint64]): string =
   (w.minPt,w.maxPt).bnStr

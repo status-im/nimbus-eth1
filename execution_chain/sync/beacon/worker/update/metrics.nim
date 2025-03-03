@@ -31,10 +31,10 @@ declareGauge nec_sync_dangling, "" &
   "Starting/min block number for higher up headers chain"
 
 declareGauge nec_sync_head, "" &
-  "Ending/max block number of higher up headers chain"
+  "Current sync scrum target block number (if any)"
 
 declareGauge nec_sync_consensus_head, "" &
-  "Block number of sync target (would be consensus header)"
+  "Block number of sync scrum request block number "
 
 
 declareGauge nec_sync_header_lists_staged, "" &
@@ -77,7 +77,7 @@ template updateMetricsImpl(ctx: BeaconCtxRef) =
   metrics.set(nec_sync_peers, ctx.pool.nBuddies)
   metrics.set(nec_sync_non_peers_connected,
               # nBuddies might not be commited/updated yet
-              max(0,ctx.node.peerPool.len - ctx.pool.nBuddies))
+              max(0,ctx.node.peerPool.connectedNodes.len - ctx.pool.nBuddies))
 
 # ---------------
 
