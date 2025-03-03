@@ -158,9 +158,6 @@ proc setupCollectingHeaders(ctx: BeaconCtxRef; info: static[string]) =
     # somewhere else.
     ctx.dbHeadersStash(h, @[rlp.encode(ctx.target.consHead)], info)
 
-    # Save state
-    ctx.dbStoreSyncStateLayout info
-
     # Update range
     ctx.headersUnprocSet(c+1, h-1)
 
@@ -226,8 +223,6 @@ proc linkIntoFc(ctx: BeaconCtxRef; info: static[string]): bool =
       trace info & ": linked into FC", B=b.bnStr,
         C=(if yNum==l: "L" else: yNum.bnStr), L=l.bnStr, H=h.bnStr
 
-      # Save layout state
-      ctx.dbStoreSyncStateLayout info
       return true
 
   trace info & ": cannot link into FC", B=b.bnStr, L=l.bnStr,

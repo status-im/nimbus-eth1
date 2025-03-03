@@ -18,7 +18,7 @@ import
   ../worker_desc,
   ./blocks_staged/staged_queue,
   ./headers_staged/staged_queue,
-  ./[blocks_unproc, db, headers_unproc, update]
+  ./[blocks_unproc, headers_unproc, update]
 
 # ------------------------------------------------------------------------------
 # Private functions
@@ -82,11 +82,8 @@ proc setupDatabase*(ctx: BeaconCtxRef; info: static[string]) =
   ctx.headersUnprocInit()
   ctx.blocksUnprocInit()
 
-  # Load initial state from database if there is any. If the loader returns
-  # `true`, then the syncer will resume from previous sync in which case the
-  # system becomes fully active. Otherwise there is some polling only waiting
-  # for a new target so there is reduced service (aka `hibernate`.).
-  ctx.hibernate = not ctx.dbLoadSyncStateLayout info
+  # Start in suspended mode
+  ctx.hibernate = true
 
   # Set blocks batch import queue size
   if ctx.pool.blocksStagedHwm < blocksStagedLwm:

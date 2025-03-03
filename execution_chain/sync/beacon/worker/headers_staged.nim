@@ -244,7 +244,6 @@ proc headersStagedProcess*(ctx: BeaconCtxRef; info: static[string]): int =
     # Store headers on database
     ctx.dbHeadersStash(iv.minPt, qItem.data.revHdrs, info)
     ctx.layout.dangling = iv.minPt
-    ctx.dbStoreSyncStateLayout info
 
     result += qItem.data.revHdrs.len # count headers
 
