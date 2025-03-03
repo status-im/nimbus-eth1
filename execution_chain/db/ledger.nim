@@ -789,8 +789,7 @@ proc update(wd: var WitnessData, acc: AccountRef) =
     wd.codeTouched = CodeChanged in acc.flags or acc.code != nil
 
   if not acc.originalStorage.isNil:
-    for k, v in acc.originalStorage:
-      if v.isZero: continue
+    for k in acc.originalStorage.keys():
       wd.storageKeys.incl k
 
   for k, v in acc.overlayStorage:
