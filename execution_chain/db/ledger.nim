@@ -26,7 +26,7 @@ import
   ./aristo/aristo_blobify
 
 export
-  code_bytes
+  code_bytes, multi_keys
 
 const
   debugLedgerRef = false
