@@ -140,7 +140,7 @@ proc setupCollectingHeaders(ctx: BeaconCtxRef; info: static[string]) =
   ##
   let
     c = ctx.chain.baseNumber()
-    h = ctx.target.consHead.number
+    h = ctx.clRequest.consHead.number
 
   if c+1 < h:                                 # header chain interval is `(C,H]`
     doAssert ctx.headersUnprocIsEmpty()
@@ -151,19 +151,19 @@ proc setupCollectingHeaders(ctx: BeaconCtxRef; info: static[string]) =
     ctx.sst.layout = SyncStateLayout(
       coupler:   c,
       dangling:  h,
-      final:     ctx.target.final,
-      finalHash: ctx.target.finalHash,
+      final:     ctx.clRequest.final,
+      finalHash: ctx.clRequest.finalHash,
       head:      h,
       lastState: collectingHeaders)           # state transition
 
     # Prepare cacahe for a new scrum
-    ctx.hdrCache.init(ctx.target.consHead,@[ctx.target.finalHash])
+    ctx.hdrCache.init(ctx.clRequest.consHead, @[ctx.clRequest.finalHash])
 
     # Update range
     ctx.headersUnprocSet(c+1, h-1)
 
     # Mark target used, reset for re-fill
-    ctx.target.changed = false
+    ctx.clRequest.changed = false
 
     trace info & ": new header target", C=c.bnStr, D="H", H="T", T=h.bnStr
 
@@ -263,8 +263,8 @@ proc updateSyncState*(ctx: BeaconCtxRef; info: static[string]) =
     # session can be set up
     case prevState:
     of idleSyncState:
-      if ctx.target.changed and          # and there is a new target from CL
-         ctx.target.final != 0:          # .. ditto
+      if ctx.clRequest.changed and       # and there is a new target from CL
+         ctx.clRequest.final != 0:       # .. ditto
         ctx.setupCollectingHeaders info  # set up new header sync
       return
     of processingBlocks:
@@ -328,17 +328,17 @@ proc updateFinalBlockHeader*(
     trace info & ": finalised block # too low",
       B=b.bnStr, finalised=f.bnStr, delta=(b - f)
 
-    ctx.target.reset
+    ctx.clRequest.reset
 
   else:
-    ctx.target.final = f
-    ctx.target.finalHash = finHash
+    ctx.clRequest.final = f
+    ctx.clRequest.finalHash = finHash
 
     # Activate running (unless done yet)
     if ctx.hibernate:
       ctx.hibernate = false
       info "Activating syncer", base=b.bnStr, head=ctx.chain.latestNumber.bnStr,
-        finalised=f.bnStr, target=ctx.target.consHead.bnStr
+        finalised=f.bnStr, consHead=ctx.clRequest.consHead.bnStr
 
 
 proc updateAsyncTasks*(

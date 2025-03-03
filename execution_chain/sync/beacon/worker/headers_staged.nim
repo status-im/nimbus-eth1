@@ -31,24 +31,24 @@ proc headerStagedUpdateTarget*(
     ctx = buddy.ctx
     peer = buddy.peer
   if ctx.layout.lastState == idleSyncState and
-     ctx.target.final == 0 and
-     ctx.target.finalHash != zeroHash32 and
-     not ctx.target.locked:
+     ctx.clRequest.final == 0 and
+     ctx.clRequest.finalHash != zeroHash32 and
+     not ctx.clRequest.locked:
     const iv = BnRange.new(1u,1u) # dummy interval
 
-    ctx.target.locked = true
-    let rc = await buddy.headersFetchReversed(iv, ctx.target.finalHash, info)
-    ctx.target.locked = false
+    ctx.clRequest.locked = true
+    let rc = await buddy.headersFetchReversed(iv, ctx.clRequest.finalHash, info)
+    ctx.clRequest.locked = false
 
     if rc.isOk:
       let hash = rlp.encode(rc.value[0]).keccak256
-      if hash != ctx.target.finalHash:
+      if hash != ctx.clRequest.finalHash:
         # Oops
         buddy.ctrl.zombie = true
         debug info & ": finalised header hash mismatch", peer, hash,
-          expected=ctx.target.finalHash
+          expected=ctx.clRequest.finalHash
       else:
-        ctx.updateFinalBlockHeader(rc.value[0], ctx.target.finalHash, info)
+        ctx.updateFinalBlockHeader(rc.value[0], ctx.clRequest.finalHash, info)
 
 
 proc headersStagedCollect*(

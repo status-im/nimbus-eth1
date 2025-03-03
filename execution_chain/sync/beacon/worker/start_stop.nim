@@ -46,15 +46,15 @@ proc updateBeaconHeaderCB(
   return proc(h: Header; f: Hash32) {.gcsafe, raises: [].} =
 
     # Check whether there is an update running (otherwise take next upate)
-    if not ctx.target.locked and                 # ignore if currently updating
-       ctx.target.final == 0 and                 # ignore if complete already
+    if not ctx.clRequest.locked and              # ignore if currently updating
+       ctx.clRequest.final == 0 and              # ignore if complete already
        f != zeroHash32 and                       # finalised hash is set
        ctx.layout.head < h.number and            # update is advancing
-       ctx.target.consHead.number < h.number:    # .. ditto
+       ctx.clRequest.consHead.number < h.number: # .. ditto
 
-      ctx.target.consHead = h
-      ctx.target.finalHash = f
-      ctx.target.changed = true
+      ctx.clRequest.consHead = h
+      ctx.clRequest.finalHash = f
+      ctx.clRequest.changed = true
 
       # Check whether `FC` knows about the finalised block already.
       #
