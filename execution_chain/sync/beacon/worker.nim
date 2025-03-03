@@ -224,7 +224,7 @@ proc runPeer*(
 
         # * Save updated state and headers
         # * Decrease the dangling left boundary `D` of the trusted range `[D,H]`
-        discard buddy.ctx.headersStagedProcess info
+        buddy.headersStagedProcess info
 
     # Fetch bodies and combine them with headers to blocks to be staged. These
     # staged blocks are then excuted by the daemon process (no `peer` needed.)
