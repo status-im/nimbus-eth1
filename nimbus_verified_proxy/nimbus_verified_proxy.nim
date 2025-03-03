@@ -55,7 +55,6 @@ func getConfiguredChainId(networkMetadata: Eth2NetworkMetadata): Quantity =
 proc run*(
     config: VerifiedProxyConf, ctx: ptr Context
 ) {.raises: [CatchableError], gcsafe.} =
-    # Required as both Eth2Node and LightClient requires correct config type
 
   {.gcsafe.}:
     setupLogging(config.logLevel, config.logStdout, none(OutFile))
@@ -140,6 +139,11 @@ proc run*(
       LightClientFinalizationMode.Optimistic,
     )
 
+  # find out what this does
+  network.registerProtocol(
+    PeerSync, PeerSync.NetworkState.init(
+      cfg, forkDigests, genesisBlockRoot, getBeaconTime))
+
   # start the p2p network and rpcProxy
   waitFor network.startListening()
   waitFor network.start()
@@ -176,6 +180,7 @@ proc run*(
   lightClient.onFinalizedHeader = onFinalizedHeader
   lightClient.onOptimisticHeader = onOptimisticHeader
   lightClient.trustedBlockRoot = some config.trustedBlockRoot
+  lightClient.installMessageValidators()
 
   func shouldSyncOptimistically(wallSlot: Slot): bool =
     let optimisticHeader = lightClient.optimisticHeader
