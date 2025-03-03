@@ -30,13 +30,22 @@ func bnStr*(h: Header): string =
 func bnStr*(b: EthBlock): string =
   b.header.bnStr
 
+func bnStr*(w: (BlockNumber,BlockNumber)): string =
+  if w[0] == w[1]: w[0].bnStr
+  else: w[0].bnStr & ".." & w[1].bnStr
+
 func bnStr*(w: Interval[BlockNumber,uint64]): string =
-  if w.len == 1: w.minPt.bnStr else: w.minPt.bnStr & ".." & w.maxPt.bnStr
+  (w.minPt,w.maxPt).bnStr
 
 func toStr*(a: chronos.Duration): string =
   var s = a.toString 2
   if s.len == 0: s="0"
   s
+
+func toStr*(h: Hash32): string =
+  if h == emptyRoot: "n/a"
+  elif h == zeroHash32: "n/a"
+  else: h.short
 
 
 proc `$`*(w: Interval[BlockNumber,uint64]): string =

@@ -39,8 +39,7 @@ type
     ## sequence with parent headers, i.e. decreasing block numbers.
     ##
     hash*: Hash32                    ## Hash of `headers[0]`
-    revHdrs*: seq[seq[byte]]         ## Encoded linked header chain
-    parentHash*: Hash32              ## Parent hash of `headers[^1]`
+    revHdrs*: seq[Header]            ## Linked header chain, reversed
 
   StagedBlocksQueue* = SortedSet[BlockNumber,BlocksForImport]
     ## Blocks sorted by least block number.
