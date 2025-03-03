@@ -12,7 +12,7 @@ import
   ../../../execution_chain/networking/p2p as ethp2p,
   results,
   chronos, json_rpc/[rpcserver, rpcclient],
-  ../../../execution_chain/sync/protocol,
+  ../../../execution_chain/sync/wire_protocol,
   ../../../execution_chain/common,
   ../../../execution_chain/config,
   ../../../execution_chain/rpc,

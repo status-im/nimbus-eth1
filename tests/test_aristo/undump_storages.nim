@@ -12,7 +12,6 @@ import
   std/[os, strformat, strutils],
   eth/common,
   stew/byteutils,
-  ../../execution_chain/sync/protocol,
   ../replay/gunzip,
   ./undump_desc
 

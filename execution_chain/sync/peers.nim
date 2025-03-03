@@ -14,7 +14,7 @@ import
   chronicles,
   chronos,
   ../networking/[p2p, peer_pool],
-  ./protocol
+  ./wire_protocol
 
 # Currently, this module only handles static peers
 # but we can extend it to handles trusted peers as well

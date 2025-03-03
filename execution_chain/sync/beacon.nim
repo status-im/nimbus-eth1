@@ -16,7 +16,7 @@ import
   ../core/chain,
   ../networking/p2p,
   ./beacon/[worker, worker_desc, worker/db],
-  "."/[sync_desc, sync_sched, protocol]
+  "."/[sync_desc, sync_sched, wire_protocol]
 
 logScope:
   topics = "beacon sync"

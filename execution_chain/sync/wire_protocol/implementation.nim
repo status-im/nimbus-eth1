@@ -20,20 +20,21 @@ import
   eth/common,
   stew/byteutils,
   ./trace_config,
-  ./eth/eth_types,
+  ./types,
+  ./handler,
   ../../networking/[p2p, p2p_types],
   ../../utils/utils,
   ../../common/logging
 
 export
-  eth_types
+  types
 
 logScope:
   topics = "eth68"
 
 const
-  ethVersion* = 68
-  prettyEthProtoName* = "[eth/" & $ethVersion & "]"
+  protocolVersion* = 68
+  prettyEthProtoName* = "[eth/" & $protocolVersion & "]"
 
   # Pickeled tracer texts
   trEthRecvReceived* =
@@ -74,10 +75,6 @@ const
   trEthSendNewBlockHashes* =
     ">> " & prettyEthProtoName & " Sending NewBlockHashes"
 
-template handleHandlerError(x: untyped) =
-  if x.isErr:
-    raise newException(EthP2PError, x.error)
-
 when trEthTraceGossipOk:
   import std/[sequtils,strutils]
 
@@ -87,20 +84,17 @@ when trEthTraceGossipOk:
       else: n.toHex.strip(trailing=false,chars={'0'}).toLowerAscii
     w.mapIt(it.toStr).join(":")
 
-p2pProtocol eth68(version = ethVersion,
+p2pProtocol eth68(version = protocolVersion,
                   rlpxName = "eth",
                   peerState = EthPeerState,
-                  networkState = EthWireBase,
+                  networkState = EthWireRef,
                   useRequestIds = true):
 
   onPeerConnected do (peer: Peer):
     let
-      network   = peer.network
-      ctx       = peer.networkState
-      statusRes = ctx.getStatus()
-
-    handleHandlerError(statusRes)
-    let status = statusRes.get
+      network = peer.network
+      ctx     = peer.networkState
+      status  = ctx.getStatus()
 
     trace trEthSendSending & "Status (0x00)", peer,
       td        = status.totalDifficulty,
@@ -110,7 +104,7 @@ p2pProtocol eth68(version = ethVersion,
       forkHash  = status.forkId.forkHash.toHex,
       forkNext  = status.forkId.forkNext
 
-    let m = await peer.status(ethVersion,
+    let m = await peer.status(protocolVersion,
                               network.networkId,
                               status.totalDifficulty,
                               status.bestBlockHash,
@@ -163,9 +157,7 @@ p2pProtocol eth68(version = ethVersion,
       trace trEthRecvReceived & "NewBlockHashes (0x01)", peer,
         hashes=hashes.len
 
-    let ctx = peer.networkState()
-    let res = ctx.handleNewBlockHashes(peer, hashes)
-    handleHandlerError(res)
+    raise newException(EthP2PError, "block broadcasts disallowed")
 
   # User message 0x02: Transactions.
   proc transactions(peer: Peer, transactions: openArray[Transaction]) =
@@ -174,8 +166,7 @@ p2pProtocol eth68(version = ethVersion,
         transactions=transactions.len
 
     let ctx = peer.networkState()
-    let res = ctx.handleAnnouncedTxs(peer, transactions)
-    handleHandlerError(res)
+    ctx.handleAnnouncedTxs(transactions)
 
   requestResponse:
     # User message 0x03: GetBlockHeaders.
@@ -184,23 +175,16 @@ p2pProtocol eth68(version = ethVersion,
         trace trEthRecvReceived & "GetBlockHeaders (0x03)", peer,
           count=request.maxResults
 
-      if request.maxResults > uint64(maxHeadersFetch):
-        debug "GetBlockHeaders (0x03) requested too many headers",
-          peer, requested=request.maxResults, max=maxHeadersFetch
-        await peer.disconnect(BreachOfProtocol)
-        return
-
       let ctx = peer.networkState()
       let headers = ctx.getBlockHeaders(request)
-      handleHandlerError(headers)
-      if headers.get.len > 0:
+      if headers.len > 0:
         trace trEthSendReplying & "with BlockHeaders (0x04)", peer,
-          sent=headers.get.len, requested=request.maxResults
+          sent=headers.len, requested=request.maxResults
       else:
         trace trEthSendReplying & "EMPTY BlockHeaders (0x04)", peer,
           sent=0, requested=request.maxResults
 
-      await response.send(headers.get)
+      await response.send(headers)
 
     # User message 0x04: BlockHeaders.
     proc blockHeaders(p: Peer, headers: openArray[Header])
@@ -210,23 +194,17 @@ p2pProtocol eth68(version = ethVersion,
     proc getBlockBodies(peer: Peer, hashes: openArray[Hash32]) =
       trace trEthRecvReceived & "GetBlockBodies (0x05)", peer,
         hashes=hashes.len
-      if hashes.len > maxBodiesFetch:
-        debug "GetBlockBodies (0x05) requested too many bodies",
-          peer, requested=hashes.len, max=maxBodiesFetch
-        await peer.disconnect(BreachOfProtocol)
-        return
 
       let ctx = peer.networkState()
       let bodies = ctx.getBlockBodies(hashes)
-      handleHandlerError(bodies)
-      if bodies.get.len > 0:
+      if bodies.len > 0:
         trace trEthSendReplying & "with BlockBodies (0x06)", peer,
-          sent=bodies.get.len, requested=hashes.len
+          sent=bodies.len, requested=hashes.len
       else:
         trace trEthSendReplying & "EMPTY BlockBodies (0x06)", peer,
           sent=0, requested=hashes.len
 
-      await response.send(bodies.get)
+      await response.send(bodies)
 
     # User message 0x06: BlockBodies.
     proc blockBodies(peer: Peer, blocks: openArray[BlockBody])
@@ -241,9 +219,7 @@ p2pProtocol eth68(version = ethVersion,
         blockNumber = blk.header.number,
         blockDifficulty = blk.header.difficulty
 
-    let ctx = peer.networkState()
-    let res = ctx.handleNewBlock(peer, blk, totalDifficulty)
-    handleHandlerError(res)
+    raise newException(EthP2PError, "block broadcasts disallowed")
 
   # User message 0x08: NewPooledTransactionHashes.
   proc newPooledTransactionHashes(
@@ -257,9 +233,7 @@ p2pProtocol eth68(version = ethVersion,
         txTypes=txTypes.toHex, txSizes=txSizes.toStr,
         hashes=txHashes.len
 
-    let ctx = peer.networkState()
-    let res = ctx.handleAnnouncedTxsHashes(peer, txTypes, txSizes, txHashes)
-    handleHandlerError(res)
+    # TODO: implementation
 
   requestResponse:
     # User message 0x09: GetPooledTransactions.
@@ -268,16 +242,15 @@ p2pProtocol eth68(version = ethVersion,
         hashes=txHashes.len
 
       let ctx = peer.networkState()
-      let txs = ctx.getPooledTxs(txHashes)
-      handleHandlerError(txs)
-      if txs.get.len > 0:
+      let txs = ctx.getPooledTransactions(txHashes)
+      if txs.len > 0:
         trace trEthSendReplying & "with PooledTransactions (0x0a)", peer,
-          sent=txs.get.len, requested=txHashes.len
+          sent=txs.len, requested=txHashes.len
       else:
         trace trEthSendReplying & "EMPTY PooledTransactions (0x0a)", peer,
           sent=0, requested=txHashes.len
 
-      await response.send(txs.get)
+      await response.send(txs)
 
     # User message 0x0a: PooledTransactions.
     proc pooledTransactions(
@@ -296,15 +269,14 @@ p2pProtocol eth68(version = ethVersion,
 
       let ctx = peer.networkState()
       let rec = ctx.getReceipts(hashes)
-      handleHandlerError(rec)
-      if rec.get.len > 0:
+      if rec.len > 0:
         trace trEthSendReplying & "with Receipts (0x10)", peer,
-          sent=rec.get.len, requested=hashes.len
+          sent=rec.len, requested=hashes.len
       else:
         trace trEthSendReplying & "EMPTY Receipts (0x10)", peer,
           sent=0, requested=hashes.len
 
-      await response.send(rec.get)
+      await response.send(rec)
 
     # User message 0x10: Receipts.
     proc receipts(peer: Peer, receipts: openArray[seq[Receipt]])

@@ -14,7 +14,7 @@ import
   pkg/eth/common,
   ../../../core/chain,
   ../../../networking/p2p,
-  ../../protocol,
+  ../../wire_protocol,
   ../worker_desc,
   ./blocks_staged/staged_queue,
   ./headers_staged/staged_queue,
@@ -119,7 +119,7 @@ proc startBuddy*(buddy: BeaconBuddyRef): bool =
   let
     ctx = buddy.ctx
     peer = buddy.peer
-  if peer.supports(protocol.eth) and peer.state(protocol.eth).initialized:
+  if peer.supports(wire_protocol.eth) and peer.state(wire_protocol.eth).initialized:
     ctx.pool.nBuddies.inc
     return true
 

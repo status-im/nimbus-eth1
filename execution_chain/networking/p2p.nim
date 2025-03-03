@@ -21,7 +21,6 @@ export
 logScope:
   topics = "eth p2p"
 
-
 proc addCapability*(node: EthereumNode,
                     p: ProtocolInfo,
                     networkState: RootRef = nil) =

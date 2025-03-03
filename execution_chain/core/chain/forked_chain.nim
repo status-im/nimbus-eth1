@@ -575,6 +575,9 @@ func txFrame*(c: ForkedChainRef, blockHash: Hash32): CoreDbTxRef =
 
   c.baseTxFrame
 
+func baseTxFrame*(c: ForkedChainRef): CoreDbTxRef =
+  c.baseTxFrame
+
 func txFrame*(c: ForkedChainRef, header: Header): CoreDbTxRef =
   c.txFrame(header.blockHash())
 
