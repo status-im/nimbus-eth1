@@ -28,6 +28,35 @@ export evmc, addresses, stint, headers, state_network
 
 {.push raises: [].}
 
+# The Portal EVM uses the Nimbus in-memory EVM to execute transactions using the
+# portal state network state data. Currently only call is supported.
+#
+# Rather than wire in the portal state lookups into the EVM directly, the approach
+# taken here is to optimistically execute the transaction multiple times with the
+# goal of building the correct access list so that we can then lookup the accessed
+# state from the portal network, store the state in the in-memory EVM and then
+# finally execute the transaction using the correct state. The Portal EVM makes
+# use of data in memory during the call and therefore each piece of state is never
+# fetched more than once.
+#
+# The assumption here is that network lookups for state data are generally much
+# slower than the time it takes to execute a transaction in the EVM and therefore
+# executing the transaction multiple times should not significally slow down the
+# call given that we gain the ability to fetch the state concurrently.
+#
+# There are multiple reasons for choosing this approach:
+# - Firstly updating the existing Nimbus EVM to support using a different state
+#   backend (portal state in this case) is difficult and would require making
+#   non-trivial changes to the EVM.
+# - This new approach allows us to look up the state concurrently in the event that
+#   multiple new state keys are discovered after executing the transaction. This
+#   should in theory result in improved performance for certain scenarios. The
+#   default approach where the state lookups are wired directly into the EVM gives
+#   the worst case performance because all state accesses inside the EVM are
+#   completely sequential.
+
+# Limit the max number of calls to prevent infinite loops and/or DOS in the event
+# of a bug in the implementation
 const evmCallLimit = 10000
 
 type
@@ -97,6 +126,7 @@ proc call*(
   # TODO: review what child header to use here (second parameter)
   let vmState = BaseVMState.new(header, header, evm.com, txFrame)
 
+  # Fetch account and code of the 'to' address so that we can execute the transaction
   let acc = (await accFut).valueOr:
     return err("Unable to get account")
   vmState.ledger.setBalance(to, acc.balance)
@@ -106,6 +136,7 @@ proc call*(
     return err("Unable to get code")
   vmState.ledger.setCode(to, code.asSeq())
 
+  # Collects the keys of read or modified accounts, code and storage slots
   vmState.ledger.collectWitnessData()
 
   var
@@ -113,7 +144,8 @@ proc call*(
     multiKeys = vmState.ledger.makeMultiKeys()
     callResult: EvmResult[CallResult]
     evmCallCount = 0
-
+    # Record the keys of fetched accounts, storage and code so that we don't
+    # bother to fetch them multiple times
     fetchedAccounts = initHashSet[Address]()
     fetchedStorage = initHashSet[(Address, UInt256)]()
     fetchedCode = initHashSet[Address]()
@@ -122,8 +154,9 @@ proc call*(
     let sp = vmState.ledger.beginSavepoint()
     callResult = rpcCallEvm(tx, header, vmState)
     inc evmCallCount
-    vmState.ledger.rollback(sp)
+    vmState.ledger.rollback(sp) # all state changes from the call are reverted
 
+    # Collect the keys after executing the transaction
     lastMultiKeys = multiKeys
     vmState.ledger.collectWitnessData()
     multiKeys = vmState.ledger.makeMultiKeys()
@@ -134,6 +167,8 @@ proc call*(
         storageQueries = newSeq[StorageQuery]()
         codeQueries = newSeq[CodeQuery]()
 
+      # Loop through the collected keys and fetch all state concurrently
+      
       for k in multiKeys.keys:
         if not k.storageMode and k.address != default(Address):
           if k.address notin fetchedAccounts:
@@ -156,6 +191,8 @@ proc call*(
                 )
                 storageQueries.add(StorageQuery.init(k.address, slotKey, storageFut))
 
+      # Store fetched state in the in-memory EVM
+
       for q in accountQueries:
         let acc = (await q.accFut).valueOr:
           return err("Unable to get account")
@@ -174,6 +211,7 @@ proc call*(
           return err("Unable to get code")
         vmState.ledger.setCode(q.address, code.asSeq())
         fetchedCode.incl(q.address)
+
     except CatchableError as e:
       # TODO: why do the above futures throw a CatchableError and not CancelledError?
       raiseAssert(e.msg)

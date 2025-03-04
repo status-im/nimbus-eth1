@@ -187,34 +187,58 @@ proc visitMatch*(m: var MultiKeysRef, mg: MatchGroup, depth: int): KeyData =
   m.keys[mg.group.first].visited = true
   result = m.keys[mg.group.first]
 
-func equals*(mkeys1: MultiKeysRef, mkeys2: MultiKeysRef): bool =
-  doAssert(not mkeys1.isNil())
-  doAssert(not mkeys2.isNil())
+func equalsStorageMode(m1: MultiKeysRef, m2: MultiKeysRef): bool =
+  doAssert(not m1.isNil())
+  doAssert(not m2.isNil())
 
-  let
-    keys1 = mkeys1.keys
-    keys2 = mkeys2.keys
-
-  if keys1.len() != keys2.len():
+  if m1.keys.len() != m2.keys.len():
     return false
 
-  for i in 0..keys1.high:
+  for i in 0..m1.keys.high:
     let
-      k1 = keys1[i]
-      k2 = keys2[i]
+      kd1 = m1.keys[i]
+      kd2 = m2.keys[i]
+    doAssert(kd1.storageMode)
+    doAssert(kd2.storageMode)
 
-    if k1.hash != k2.hash or k1.address != k2.address or k1.codeTouched != k2.codeTouched:
+    if kd1.hash != kd2.hash or kd1.storageSlot != kd2.storageSlot:
       return false
 
-    if k1.storageKeys.isNil() or k2.storageKeys.isNil():
-      if k1.storageKeys != k2.storageKeys:
-        return false
-    else:
-      if k1.storageKeys.keys.len() != k2.storageKeys.keys.len():
-        return false
+  return true
 
-      for j in 0..k1.storageKeys.keys.high:
-        if k1.storageKeys.keys[j].storageSlot != k2.storageKeys.keys[j].storageSlot:
-          return false
+func equals*(m1: MultiKeysRef, m2: MultiKeysRef): bool =
+  doAssert(not m1.isNil())
+  doAssert(not m2.isNil())
+
+  if m1.keys.len() != m2.keys.len():
+    return false
+
+  for i in 0..m1.keys.high:
+    let
+      kd1 = m1.keys[i]
+      kd2 = m2.keys[i]
+
+    if kd1.storageMode != kd2.storageMode:
+      return false
+
+    if kd1.storageMode:
+      if kd1.hash != kd2.hash or kd1.storageSlot != kd2.storageSlot:
+        return false
+      else:
+        continue
+
+    # Not storageMode
+    if kd1.hash != kd2.hash or kd1.address != kd2.address or kd1.codeTouched != kd2.codeTouched:
+      return false
+
+    if kd1.storageKeys.isNil() or kd2.storageKeys.isNil():
+      if kd1.storageKeys != kd2.storageKeys:
+        return false
+      else:
+        continue
+
+    # storageKeys not nil
+    if not equalsStorageMode(kd1.storageKeys, kd2.storageKeys):
+      return false
 
   return true
