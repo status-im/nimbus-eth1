@@ -5,28 +5,30 @@
 #   * Apache v2 license (license terms in the root directory or at https://www.apache.org/licenses/LICENSE-2.0).
 # at your option. This file may not be copied, modified, or distributed except according to those terms.
 
+{.push raises: [].}
+
 import
-  std/[tables, sets],
-  chronos,
-  # chronicles,
+  std/sets,
   stew/byteutils,
+  chronos,
+  chronicles,
   stint,
   results,
-  eth/common/[hashes, accounts, addresses, headers, transactions],
-  web3/[primitives, eth_api_types, eth_api],
-  ../../execution_chain/beacon/web3_eth_conv,
+  eth/common/[hashes, addresses, accounts, headers],
   ../../execution_chain/db/ledger,
   ../../execution_chain/common/common,
   ../../execution_chain/transaction/call_evm,
   ../../execution_chain/evm/[types, state, evm_errors],
   ../network/history/history_network,
-  ../network/state/[state_endpoints, state_network, state_content]
+  ../network/state/[state_endpoints, state_network]
 
-from eth/common/eth_types_rlp import rlpHash
+from web3/eth_api_types import TransactionArgs
 
-export evmc, addresses, stint, headers, state_network
+export
+  results, chronos, hashes, history_network, state_network, TransactionArgs, CallResult
 
-{.push raises: [].}
+logScope:
+  topics = "portal_evm"
 
 # The Portal EVM uses the Nimbus in-memory EVM to execute transactions using the
 # portal state network state data. Currently only call is supported.
@@ -115,9 +117,10 @@ proc call*(
       return err("to address is required")
     header = (await evm.historyNetwork.getVerifiedBlockHeader(blockNumOrHash)).valueOr:
       return err("Unable to get block header")
-    # Fetch account and code concurrently
-    accFut = evm.stateNetwork.getAccount(header.stateRoot, to)
+    # Start fetching code in the background while setting up the EVM
     codeFut = evm.stateNetwork.getCodeByStateRoot(header.stateRoot, to)
+
+  debug "Executing call", to, blockNumOrHash
 
   let txFrame = evm.com.db.baseTxFrame().txFrameBegin()
   defer:
@@ -126,15 +129,11 @@ proc call*(
   # TODO: review what child header to use here (second parameter)
   let vmState = BaseVMState.new(header, header, evm.com, txFrame)
 
-  # Fetch account and code of the 'to' address so that we can execute the transaction
-  let acc = (await accFut).valueOr:
-    return err("Unable to get account")
-  vmState.ledger.setBalance(to, acc.balance)
-  vmState.ledger.setNonce(to, acc.nonce)
-
+  # Set code of the 'to' address in the EVM so that we can execute the transaction
   let code = (await codeFut).valueOr:
     return err("Unable to get code")
   vmState.ledger.setCode(to, code.asSeq())
+  debug "Code to be executed", code = code.asSeq().to0xHex()
 
   # Collects the keys of read or modified accounts, code and storage slots
   vmState.ledger.collectWitnessData()
@@ -151,6 +150,8 @@ proc call*(
     fetchedCode = initHashSet[Address]()
 
   while evmCallCount < evmCallLimit and not lastMultiKeys.equals(multiKeys):
+    debug "Starting PortalEvm execution", evmCallCount
+
     let sp = vmState.ledger.beginSavepoint()
     callResult = rpcCallEvm(tx, header, vmState)
     inc evmCallCount
@@ -168,14 +169,15 @@ proc call*(
         codeQueries = newSeq[CodeQuery]()
 
       # Loop through the collected keys and fetch all state concurrently
-      
       for k in multiKeys.keys:
         if not k.storageMode and k.address != default(Address):
           if k.address notin fetchedAccounts:
+            debug "Fetching account", address = k.address
             let accFut = evm.stateNetwork.getAccount(header.stateRoot, k.address)
             accountQueries.add(AccountQuery.init(k.address, accFut))
 
           if k.codeTouched and k.address notin fetchedCode:
+            debug "Fetching code", address = k.address
             let codeFut =
               evm.stateNetwork.getCodeByStateRoot(header.stateRoot, k.address)
             codeQueries.add(CodeQuery.init(k.address, codeFut))
@@ -186,13 +188,13 @@ proc call*(
                 slotKey = UInt256.fromBytesBE(sk.storageSlot)
                 slotIdx = (k.address, slotKey)
               if slotIdx notin fetchedStorage:
+                debug "Fetching storage slot", address = k.address, slotKey
                 let storageFut = evm.stateNetwork.getStorageAtByStateRoot(
                   header.stateRoot, k.address, slotKey
                 )
                 storageQueries.add(StorageQuery.init(k.address, slotKey, storageFut))
 
       # Store fetched state in the in-memory EVM
-
       for q in accountQueries:
         let acc = (await q.accFut).valueOr:
           return err("Unable to get account")
@@ -211,7 +213,6 @@ proc call*(
           return err("Unable to get code")
         vmState.ledger.setCode(q.address, code.asSeq())
         fetchedCode.incl(q.address)
-
     except CatchableError as e:
       # TODO: why do the above futures throw a CatchableError and not CancelledError?
       raiseAssert(e.msg)
