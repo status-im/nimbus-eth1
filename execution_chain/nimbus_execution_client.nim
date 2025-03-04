@@ -205,11 +205,9 @@ proc run(nimbus: NimbusNode, conf: NimbusConf) =
   createDir(string conf.dataDir)
   let coreDB =
     # Resolve statically for database type
-    case conf.chainDbMode:
-    of Aristo,AriPrune:
-      AristoDbRocks.newCoreDbRef(
-        string conf.dataDir,
-        conf.dbOptions(noKeyCache = conf.cmd == NimbusCmd.`import`))
+    AristoDbRocks.newCoreDbRef(
+      string conf.dataDir,
+      conf.dbOptions(noKeyCache = conf.cmd == NimbusCmd.`import`))
 
   preventLoadingDataDirForTheWrongNetwork(coreDB, conf)
   setupMetrics(nimbus, conf)
@@ -232,7 +230,6 @@ proc run(nimbus: NimbusNode, conf: NimbusConf) =
   let com = CommonRef.new(
     db = coreDB,
     taskpool = taskpool,
-    pruneHistory = (conf.chainDbMode == AriPrune),
     networkId = conf.networkId,
     params = conf.networkParams)
 
