@@ -69,7 +69,7 @@ proc getVtxRc*(
     else:
       return err(GetVtxNotFound)
 
-  ok (?db.db.getVtxBe(rvid, flags), -2)
+  ok (?db.db.getVtxBe(rvid, flags), dbLevel)
 
 proc getVtx*(db: AristoTxRef; rvid: RootedVertexID, flags: set[GetVtxFlag] = {}): VertexRef =
   ## Cascaded attempt to fetch a vertex from the cache layers or the backend.
@@ -103,7 +103,7 @@ proc getKeyRc*(
       # The vertex is to be deleted. So is the value key.
       return err(GetKeyNotFound)
 
-  ok (?db.db.getKeyBe(rvid, flags), -2)
+  ok (?db.db.getKeyBe(rvid, flags), dbLevel)
 
 proc getKey*(db: AristoTxRef; rvid: RootedVertexID): HashKey =
   ## Cascaded attempt to fetch a vertex from the cache layers or the backend.

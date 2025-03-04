@@ -22,7 +22,7 @@
 {.push raises: [].}
 
 import
-  std/[hashes, sets, tables],
+  std/[hashes, sequtils, sets, tables],
   eth/common/hashes,
   results,
   ./aristo_constants,
@@ -73,6 +73,21 @@ type
 
     blockNumber*: Opt[uint64]              ## Block number set when checkpointing the frame
 
+    snapshot*: Table[RootedVertexID, Snapshot]
+      ## Optional snapshot containing the cumulative changes from ancestors and
+      ## the current frame
+    snapshotLevel*: Opt[int] # base level when the snapshot was taken
+
+    level*: int
+      ## Ancestry level of frame, increases with age but otherwise meaningless -
+      ## used to order data by age when working with layers.
+      ## -1 = stored in database, where relevant though typically should be
+      ## compared with the base layer level instead.
+
+  Snapshot* = (VertexRef, HashKey, int)
+    ## Unlike sTab/kMap, snapshot contains both vertex and key since at the time
+    ## of writing, it's primarily used in contexts where both are present
+
   AristoDbRef* = ref object
     ## Backend interface.
     getVtxFn*: GetVtxFn              ## Read vertex record
@@ -88,7 +103,7 @@ type
 
     closeFn*: CloseFn                ## Generic destructor
 
-    txRef*: AristoTxRef               ## Bottom-most in-memory frame
+    txRef*: AristoTxRef              ## Bottom-most in-memory frame
 
     accLeaves*: LruCache[Hash32, VertexRef]
       ## Account path to payload cache - accounts are frequently accessed by
@@ -115,6 +130,8 @@ type
     root*: VertexID                ## Handy for some fringe cases
     legs*: ArrayBuf[NibblesBuf.high + 1, Leg] ## Chain of vertices and IDs
     tail*: NibblesBuf              ## Portion of non completed path
+
+const dbLevel* = -1
 
 # ------------------------------------------------------------------------------
 # Public helpers
@@ -181,52 +198,40 @@ func isValid*(sqv: HashSet[RootedVertexID]): bool =
 # Public functions, miscellaneous
 # ------------------------------------------------------------------------------
 
-# Hash set helper
-func hash*(db: AristoDbRef): Hash =
-  ## Table/KeyedQueue/HashSet mixin
-  cast[pointer](db).hash
+func hash*(db: AristoDbRef): Hash {.error.}
+func hash*(db: AristoTxRef): Hash {.error.}
 
 # ------------------------------------------------------------------------------
 # Public helpers
 # ------------------------------------------------------------------------------
 
-iterator stack*(tx: AristoTxRef): AristoTxRef =
-  # Stack going from base to tx
-  var frames: seq[AristoTxRef]
+iterator rstack*(tx: AristoTxRef, stopAtSnapshot = false): AristoTxRef =
+  # Stack in reverse order, ie going from tx to base
   var tx = tx
+
   while tx != nil:
-    frames.add tx
+    yield tx
+
+    if stopAtSnapshot and tx.snapshotLevel.isSome():
+      break
+
     tx = tx.parent
+
+iterator stack*(tx: AristoTxRef, stopAtSnapshot = false): AristoTxRef =
+  # Stack going from base to tx
+  var frames = toSeq(tx.rstack(stopAtSnapshot))
 
   while frames.len > 0:
     yield frames.pop()
 
-iterator rstack*(tx: AristoTxRef): (AristoTxRef, int) =
-  # Stack in reverse order, ie going from tx to base
-  var tx = tx
-
-  var i = 0
-  while tx != nil:
-    let level = if tx.parent == nil: -1 else: i
-    yield (tx, level)
-    tx = tx.parent
-    i += 1
-
 proc deltaAtLevel*(db: AristoTxRef, level: int): AristoTxRef =
-  if level == -2:
+  if level < db.db.txRef.level:
     nil
-  elif level == -1:
-    db.db.txRef
   else:
-    var
-      frame = db
-      level = level
-
-    while level > 0:
-      frame = frame.parent
-      level -= 1
-
-    frame
+    for frame in db.rstack():
+      if frame.level == level:
+        return frame
+    nil
 
 # ------------------------------------------------------------------------------
 # End

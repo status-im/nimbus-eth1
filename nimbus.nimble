@@ -42,7 +42,7 @@ when declared(namedBin):
     "nimbus_verified_proxy/nimbus_verified_proxy": "nimbus_verified_proxy",
   }.toTable()
 
-import std/os
+import std/[os, strutils]
 
 proc buildBinary(name: string, srcDir = "./", params = "", lang = "c") =
   if not dirExists "build":
@@ -126,3 +126,14 @@ task nimbus_verified_proxy, "Build Nimbus verified proxy":
 
 task nimbus_verified_proxy_test, "Run Nimbus verified proxy tests":
   test "nimbus_verified_proxy/tests", "test_proof_validation", "-d:chronicles_log_level=ERROR -d:nimbus_db_backend=sqlite"
+
+task build_fuzzers, "Build fuzzer test cases":
+  # This file is there to be able to quickly build the fuzzer test cases in
+  # order to avoid bit rot (e.g. for CI). Not for actual fuzzing.
+  # TODO: Building fuzzer test case one by one will make it take a bit longer,
+  # but we cannot import them in one Nim file due to the usage of
+  # `exportc: "AFLmain"` in the fuzzing test template for Windows:
+  # https://github.com/status-im/nim-testutils/blob/master/testutils/fuzzing.nim#L100
+  for file in walkDirRec("tests/networking/fuzzing/"):
+    if file.endsWith("nim"):
+      exec "nim c -c -d:release " & file

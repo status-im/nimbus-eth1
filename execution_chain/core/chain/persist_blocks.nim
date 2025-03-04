@@ -102,7 +102,9 @@ proc checkpoint*(p: var Persister): Result[void, string] =
       )
 
   # Move in-memory state to disk
+  p.vmState.ledger.txFrame.checkpoint(p.parent.number, skipSnapshot = true)
   p.com.db.persist(p.vmState.ledger.txFrame)
+
   # Get a new frame since the DB assumes ownership
   p.vmState.ledger.txFrame = p.com.db.baseTxFrame().txFrameBegin()
 
@@ -171,8 +173,6 @@ proc persistBlock*(p: var Persister, blk: Block): Result[void, string] =
   p.stats.blocks += 1
   p.stats.txs += blk.transactions.len
   p.stats.gas += blk.header.gasUsed
-
-  txFrame.checkpoint(header.number)
 
   assign(p.parent, header)
 

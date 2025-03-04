@@ -11,13 +11,14 @@
 {.push raises:[].}
 
 import
-  pkg/eth/[common, p2p],
+  pkg/eth/common,
   ../../../core/chain,
-  ../../protocol,
+  ../../../networking/p2p,
+  ../../wire_protocol,
   ../worker_desc,
   ./blocks_staged/staged_queue,
   ./headers_staged/staged_queue,
-  "."/[blocks_unproc, db, headers_unproc, update]
+  ./[blocks_unproc, db, headers_unproc, update]
 
 # ------------------------------------------------------------------------------
 # Private functions
@@ -118,7 +119,7 @@ proc startBuddy*(buddy: BeaconBuddyRef): bool =
   let
     ctx = buddy.ctx
     peer = buddy.peer
-  if peer.supports(protocol.eth) and peer.state(protocol.eth).initialized:
+  if peer.supports(wire_protocol.eth) and peer.state(wire_protocol.eth).initialized:
     ctx.pool.nBuddies.inc
     return true
 

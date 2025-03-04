@@ -1,5 +1,5 @@
 # Nimbus
-# Copyright (c) 2023-2024 Status Research & Development GmbH
+# Copyright (c) 2023-2025 Status Research & Development GmbH
 # Licensed and distributed under either of
 #   * MIT license (license terms in the root directory or at
 #     https://opensource.org/licenses/MIT).
@@ -13,11 +13,11 @@
 import
   std/options,
   pkg/[chronicles, chronos, results],
-  pkg/eth/[common, p2p],
+  pkg/eth/common,
   pkg/stew/interval_set,
-  ../../../protocol,
-  ../../../protocol/eth/eth_types,
-  ../../worker_desc
+  ../../worker_desc,
+  ../../../wire_protocol,
+  ../../../../networking/p2p
 
 # ------------------------------------------------------------------------------
 # Private functions

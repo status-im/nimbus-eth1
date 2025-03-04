@@ -713,6 +713,45 @@ proc runLedgerBasicOperationsTests() =
       check 2.u256 in vals
       check 3.u256 in vals
 
+    test "Test MultiKeys - Set storage":
+      var
+        ac = LedgerRef.init(memDB.baseTxFrame())
+        addr1 = initAddr(1)
+
+      ac.setStorage(addr1, 1.u256, 1.u256) # Non-zero value
+      ac.setStorage(addr1, 2.u256, 0.u256) # Zero value
+
+      ac.collectWitnessData()
+      let multikeys = ac.makeMultiKeys().keys
+
+      check:
+        multikeys.len() == 1
+        multikeys[0].storageMode == false
+        multikeys[0].address == addr1
+        multikeys[0].storageKeys.keys.len() == 2
+        multikeys[0].storageKeys.keys[0].storageSlot == 2.u256.toBytesBE()
+        multikeys[0].storageKeys.keys[1].storageSlot == 1.u256.toBytesBE()
+
+    test "Test MultiKeys - Get storage":
+      var
+        ac = LedgerRef.init(memDB.baseTxFrame())
+        addr1 = initAddr(1)
+
+      ac.setStorage(addr1, 3.u256, 1.u256)
+      discard ac.getStorage(addr1, 3.u256) # Returns non-zero value
+      discard ac.getStorage(addr1, 4.u256) # Returns default zero value
+
+      ac.collectWitnessData()
+      let multikeys = ac.makeMultiKeys().keys
+
+      check:
+        multikeys.len() == 1
+        multikeys[0].storageMode == false
+        multikeys[0].address == addr1
+        multikeys[0].storageKeys.keys.len() == 2
+        multikeys[0].storageKeys.keys[0].storageSlot == 4.u256.toBytesBE()
+        multikeys[0].storageKeys.keys[1].storageSlot == 3.u256.toBytesBE()
+
 # ------------------------------------------------------------------------------
 # Main function(s)
 # ------------------------------------------------------------------------------

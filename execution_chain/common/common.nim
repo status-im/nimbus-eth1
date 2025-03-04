@@ -147,7 +147,11 @@ proc initializeDb(com: CommonRef) =
     txFrame.persistHeaderAndSetHead(com.genesisHeader,
       startOfHistory=com.genesisHeader.parentHash).
       expect("can persist genesis header")
+
     doAssert(canonicalHeadHashKey().toOpenArray in txFrame)
+
+    txFrame.checkpoint(com.genesisHeader.number)
+    com.db.persist(txFrame)
 
   # The database must at least contain the base and head pointers - the base
   # is implicitly considered finalized

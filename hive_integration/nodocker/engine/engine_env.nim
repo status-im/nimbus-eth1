@@ -11,7 +11,7 @@
 import
   std/os,
   eth/common/keys,
-  eth/p2p as eth_p2p,
+  ../../../execution_chain/networking/p2p as eth_p2p,
   chronos,
   json_rpc/[rpcserver, rpcclient],
   results,
@@ -20,10 +20,9 @@ import
     constants,
     core/chain,
     core/tx_pool,
-    core/tx_pool/tx_item,
     core/block_import,
     rpc,
-    sync/handlers,
+    sync/wire_protocol,
     beacon/beacon_engine,
     beacon/web3_eth_conv,
     common
@@ -81,16 +80,12 @@ proc newEngineEnv*(conf: var NimbusConf, chainFile: string, enableAuth: bool): E
     quit(QuitFailure)
 
   let
-    node  = setupEthNode(conf, ctx)
-    com   = makeCom(conf)
-    chain = ForkedChainRef.init(com)
+    node   = setupEthNode(conf, ctx)
+    com    = makeCom(conf)
+    chain  = ForkedChainRef.init(com)
+    txPool = TxPoolRef.new(chain)
 
-  let txPool = TxPoolRef.new(chain)
-
-  node.addEthHandlerCapability(
-    node.peerPool,
-    chain,
-    txPool)
+  node.addEthHandlerCapability(txPool)
 
   var key: JwtSharedKey
   key.fromHex(jwtSecret).isOkOr:

@@ -11,11 +11,12 @@
 {.push raises: [].}
 
 import
-  pkg/[chronicles, chronos, eth/p2p, results],
+  pkg/[chronicles, chronos, results],
   pkg/stew/[interval_set, sorted_set],
   ../core/chain,
+  ../networking/p2p,
   ./beacon/[worker, worker_desc, worker/db],
-  "."/[sync_desc, sync_sched, protocol]
+  "."/[sync_desc, sync_sched, wire_protocol]
 
 logScope:
   topics = "beacon sync"

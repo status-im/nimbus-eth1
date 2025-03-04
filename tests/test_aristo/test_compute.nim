@@ -122,7 +122,7 @@ suite "Aristo compute":
     for (k, v, r) in samples[^1]:
       check:
         txFrame.mergeAccountRecord(k, v) == Result[bool, AristoError].ok(true)
-    txFrame.checkpoint(1)
+    txFrame.checkpoint(1, skipSnapshot = true)
 
     let batch = db.putBegFn()[]
     db.persist(batch, txFrame)
