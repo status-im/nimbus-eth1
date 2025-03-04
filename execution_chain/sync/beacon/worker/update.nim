@@ -18,7 +18,7 @@ import
   ../worker_desc,
   ./blocks_staged/staged_queue,
   ./headers_staged/staged_queue,
-  "."/[blocks_unproc, db, headers_unproc, helpers]
+  ./[blocks_unproc, headers_unproc, helpers]
 
 # ------------------------------------------------------------------------------
 # Private functions
@@ -117,6 +117,8 @@ proc startHibernating(ctx: BeaconCtxRef; info: static[string]) =
   ctx.headersStagedQueueClear()
   ctx.blocksStagedQueueClear()
 
+  ctx.hdrCache.init()
+
   ctx.hibernate = true
 
   info "Suspending syncer", head=ctx.chain.latestNumber.bnStr
@@ -154,9 +156,8 @@ proc setupCollectingHeaders(ctx: BeaconCtxRef; info: static[string]) =
       head:      h,
       lastState: collectingHeaders)           # state transition
 
-    # Save this header on the database so it needs not be fetched again from
-    # somewhere else.
-    ctx.dbHeadersStash(h, @[rlp.encode(ctx.target.consHead)], info)
+    # Prepare cacahe for a new scrum
+    ctx.hdrCache.init(ctx.target.consHead,@[ctx.target.finalHash])
 
     # Update range
     ctx.headersUnprocSet(c+1, h-1)
@@ -213,7 +214,7 @@ proc linkIntoFc(ctx: BeaconCtxRef; info: static[string]): bool =
       # The syncer cache holds headers for `(C,H]`. It starts with checking
       # whether `L<-Z` holds (i.e. `Y==L` can be chosen.)
       let
-        yHash = ctx.dbHeaderParentHash(bn).expect "Hash32"     # maybe `Y`
+        yHash = ctx.hdrCache.fcHeaderGetParentHash(bn).expect "parentHash"
         yHdr = ctx.chain.headerByHash(yHash).valueOr: continue # test for `Y`
         yNum = yHdr.number                                     # == bn-1
 

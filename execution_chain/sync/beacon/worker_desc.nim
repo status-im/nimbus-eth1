@@ -20,7 +20,7 @@ import
   ./worker_config
 
 export
-  helpers, sync_desc, worker_config
+  helpers, sync_desc, worker_config, chain
 
 type
   BnRangeSet* = IntervalSetRef[BlockNumber,uint64]
@@ -133,6 +133,7 @@ type
     nextAsyncNanoSleep*: Moment      ## Use nano-sleeps for task switch
 
     chain*: ForkedChainRef           ## Core database, FCU support
+    hdrCache*: ForkedCacheRef        ## Currently in tandem with `chain`
 
     # Blocks import/execution settings
     blockImportOk*: bool             ## Don't fetch data while block importing
@@ -179,6 +180,10 @@ func target*(ctx: BeaconCtxRef): var SyncStateTarget =
 func chain*(ctx: BeaconCtxRef): ForkedChainRef =
   ## Getter
   ctx.pool.chain
+
+func hdrCache*(ctx: BeaconCtxRef): ForkedCacheRef =
+  ## Getter
+  ctx.pool.hdrCache
 
 func db*(ctx: BeaconCtxRef): CoreDbRef =
   ## Getter

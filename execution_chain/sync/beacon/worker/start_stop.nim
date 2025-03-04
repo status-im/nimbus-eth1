@@ -85,6 +85,10 @@ proc setupDatabase*(ctx: BeaconCtxRef; info: static[string]) =
   # Start in suspended mode
   ctx.hibernate = true
 
+  # Set up header cache descriptor. This will evenually be integrated
+  # into `ForkedChainRef` (i.e. `ctx.pool.chain`.)
+  ctx.pool.hdrCache = ForkedCacheRef.init(ctx.pool.chain)
+
   # Set blocks batch import queue size
   if ctx.pool.blocksStagedHwm < blocksStagedLwm:
     ctx.pool.blocksStagedHwm = blocksStagedHwmDefault

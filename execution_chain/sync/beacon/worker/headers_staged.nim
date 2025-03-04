@@ -11,7 +11,7 @@
 {.push raises:[].}
 
 import
-  std/strutils,
+  std/sequtils,
   pkg/[chronicles, chronos],
   pkg/eth/common,
   pkg/stew/[interval_set, sorted_set],
@@ -121,7 +121,8 @@ proc headersStagedCollect*(
 
     # Parent hash for `lhc` below
     topLink = if isOpportunistic: EMPTY_ROOT_HASH
-              else: ctx.dbHeaderParentHash(ctx.layout.dangling).expect "Hash32"
+              else: ctx.hdrCache.fcHeaderGetParentHash(ctx.layout.dangling)
+                                .expect "parentHash"
 
   var
     # This value is used for splitting the interval `iv` into
@@ -234,7 +235,8 @@ proc headersStagedProcess*(ctx: BeaconCtxRef; info: static[string]): int =
     # anymore.
     discard ctx.hdr.staged.delete(iv.maxPt)
 
-    if qItem.data.hash != ctx.dbHeaderParentHash(dangling).expect "Hash32":
+    if qItem.data.hash != ctx.hdrCache.fcHeaderGetParentHash(dangling)
+                                      .expect "parentHash":
       # Discard wrong chain and merge back the range into the `unproc` list.
       ctx.headersUnprocAppend(iv)
       debug info & ": discarding staged header list", iv, D=dangling.bnStr,
@@ -242,7 +244,12 @@ proc headersStagedProcess*(ctx: BeaconCtxRef; info: static[string]): int =
       break
 
     # Store headers on database
-    ctx.dbHeadersStash(iv.minPt, qItem.data.revHdrs, info)
+    try:
+      let rev = qItem.data.revHdrs.mapIt(rlp.decode(it,Header))
+      ctx.hdrCache.fcHeaderPut(rev).isOkOr:
+        break
+    except RlpError:
+      break
     ctx.layout.dangling = iv.minPt
 
     result += qItem.data.revHdrs.len # count headers

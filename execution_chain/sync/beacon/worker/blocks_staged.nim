@@ -17,7 +17,7 @@ import
   ../../../core/chain,
   ../worker_desc,
   ./blocks_staged/bodies,
-  "."/[blocks_unproc, db, helpers, update]
+  "."/[blocks_unproc, helpers, update]
 
 # ------------------------------------------------------------------------------
 # Private debugging & logging helpers
@@ -56,7 +56,7 @@ proc fetchAndCheck(
   blk.blocks.setLen(offset + ivReq.len)
   var blockHash = newSeq[Hash32](ivReq.len)
   for n in 1u ..< ivReq.len:
-    let header = ctx.dbHeaderPeek(ivReq.minPt + n).valueOr:
+    let header = ctx.hdrCache.fcHeaderGet(ivReq.minPt + n).valueOr:
       # There is nothing one can do here
       info "Block header missing (reorg triggered)", ivReq, n,
         nth=(ivReq.minPt + n).bnStr
@@ -66,7 +66,7 @@ proc fetchAndCheck(
       return false
     blockHash[n - 1] = header.parentHash
     blk.blocks[offset + n].header = header
-  blk.blocks[offset].header = ctx.dbHeaderPeek(ivReq.minPt).valueOr:
+  blk.blocks[offset].header = ctx.hdrCache.fcHeaderGet(ivReq.minPt).valueOr:
     # There is nothing one can do here
     info "Block header missing (reorg triggered)", ivReq, n=0,
       nth=ivReq.minPt.bnStr
@@ -109,9 +109,6 @@ proc fetchAndCheck(
       blk.blocks[offset + n].transactions = bodies[n].transactions
       blk.blocks[offset + n].uncles       = bodies[n].uncles
       blk.blocks[offset + n].withdrawals  = bodies[n].withdrawals
-
-      # Remove stashed header
-      ctx.dbHeaderUnstash blk.blocks[offset + n].header.number
 
   if offset < blk.blocks.len.uint64:
     return true
@@ -374,6 +371,9 @@ proc blocksStagedImport*(
         (await ctx.updateAsyncTasks()).isOkOr:
           maxImport = nBn # shutdown?
           break importLoop
+
+  # Remove some older stashed headers
+  ctx.hdrCache.fcHeaderDelBaseAndOlder()
 
   # Import probably incomplete, so a partial roll back may be needed
   if maxImport < iv.maxPt:
