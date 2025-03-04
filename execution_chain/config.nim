@@ -100,10 +100,6 @@ const sharedLibText = if defined(linux): " (*.so, *.so.N)"
                       else: ""
 
 type
-  ChainDbMode* {.pure.} = enum
-    Aristo
-    AriPrune
-
   NimbusCmd* {.pure.} = enum
     noCommand
     `import`
@@ -146,17 +142,6 @@ type
       defaultValueDesc: "inside datadir"
       abbr: "k"
       name: "key-store" }: OutDir
-
-    chainDbMode* {.
-      desc: "Blockchain database"
-      longDesc:
-        "- Aristo   -- Single state DB, full node\n" &
-        "- AriPrune -- Aristo with curbed block history (for testing)\n" &
-        ""
-      defaultValue: ChainDbMode.Aristo
-      defaultValueDesc: $ChainDbMode.Aristo
-      abbr : "p"
-      name: "chaindb" }: ChainDbMode
 
     importKey* {.
       desc: "Import unencrypted 32 bytes hex private key from a file"
