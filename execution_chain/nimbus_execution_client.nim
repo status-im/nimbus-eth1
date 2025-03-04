@@ -27,7 +27,7 @@ import
   ./core/eip4844,
   ./db/core_db/persistent,
   ./db/storage_types,
-  ./sync/handlers,
+  ./sync/wire_protocol,
   ./common/chain_config_hash
 
 from beacon_chain/nimbus_binary_common import setupFileLimits
@@ -43,12 +43,12 @@ when defined(evmc_enabled):
 proc basicServices(nimbus: NimbusNode,
                    conf: NimbusConf,
                    com: CommonRef) =
-  nimbus.chainRef = ForkedChainRef.init(com)
+  nimbus.fc = ForkedChainRef.init(com)
 
   # txPool must be informed of active head
   # so it can know the latest account state
   # e.g. sender nonce, etc
-  nimbus.txPool = TxPoolRef.new(nimbus.chainRef)
+  nimbus.txPool = TxPoolRef.new(nimbus.fc)
   nimbus.beaconEngine = BeaconEngineRef.new(nimbus.txPool)
 
 proc manageAccounts(nimbus: NimbusNode, conf: NimbusConf) =
@@ -107,12 +107,11 @@ proc setupP2P(nimbus: NimbusNode, conf: NimbusConf,
     rng = nimbus.ctx.rng)
 
   # Add protocol capabilities
-  nimbus.ethNode.addEthHandlerCapability(
-    nimbus.ethNode.peerPool, nimbus.chainRef, nimbus.txPool)
+  nimbus.ethNode.addEthHandlerCapability(nimbus.txPool)
 
   # Always initialise beacon syncer
   nimbus.beaconSyncRef = BeaconSyncRef.init(
-    nimbus.ethNode, nimbus.chainRef, conf.maxPeers, conf.beaconBlocksQueueHwm)
+    nimbus.ethNode, nimbus.fc, conf.maxPeers, conf.beaconBlocksQueueHwm)
 
   # Connect directly to the static nodes
   let staticPeers = conf.getStaticPeers()
