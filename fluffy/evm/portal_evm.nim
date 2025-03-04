@@ -39,7 +39,8 @@ logScope:
 # state from the portal network, store the state in the in-memory EVM and then
 # finally execute the transaction using the correct state. The Portal EVM makes
 # use of data in memory during the call and therefore each piece of state is never
-# fetched more than once.
+# fetched more than once. We know we have found the correct access list if it
+# doesn't change after another execution of the transaction.
 #
 # The assumption here is that network lookups for state data are generally much
 # slower than the time it takes to execute a transaction in the EVM and therefore
@@ -149,6 +150,8 @@ proc call*(
     fetchedStorage = initHashSet[(Address, UInt256)]()
     fetchedCode = initHashSet[Address]()
 
+  # If the multikeys did not change after the last execution then we can stop
+  # because we have already executed the transaction with the correct state
   while evmCallCount < evmCallLimit and not lastMultiKeys.equals(multiKeys):
     debug "Starting PortalEvm execution", evmCallCount
 
