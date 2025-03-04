@@ -1,5 +1,5 @@
 # Fluffy
-# Copyright (c) 2022-2024 Status Research & Development GmbH
+# Copyright (c) 2022-2025 Status Research & Development GmbH
 # Licensed and distributed under either of
 #   * MIT license (license terms in the root directory or at https://opensource.org/licenses/MIT).
 #   * Apache v2 license (license terms in the root directory or at https://www.apache.org/licenses/LICENSE-2.0).
@@ -78,10 +78,12 @@ import
   ssz_serialization,
   ssz_serialization/[proofs, merkleization],
   beacon_chain/spec/eth2_ssz_serialization,
+  beacon_chain/spec/ssz_codec,
   beacon_chain/spec/datatypes/bellatrix,
+  beacon_chain/spec/forks,
   ./block_proof_common
 
-export block_proof_common
+export block_proof_common, ssz_codec
 
 type
   BeaconBlockProofHistoricalRoots* = array[14, Digest]
@@ -92,6 +94,8 @@ type
     beaconBlockRoot*: Digest
     executionBlockProof*: ExecutionBlockProof
     slot*: Slot
+
+  HistoricalRoots* = HashList[Digest, Limit HISTORICAL_ROOTS_LIMIT]
 
 func getHistoricalRootsIndex*(slot: Slot): uint64 =
   slot div SLOTS_PER_HISTORICAL_ROOT
@@ -149,7 +153,7 @@ func verifyProof*(
   verify_merkle_multiproof(@[blockHeaderRoot], proof, @[gIndex], historicalRoot)
 
 func verifyProof*(
-    historical_roots: HashList[Eth2Digest, Limit HISTORICAL_ROOTS_LIMIT],
+    historical_roots: HistoricalRoots,
     proof: BlockProofHistoricalRoots,
     blockHash: Digest,
 ): bool =
