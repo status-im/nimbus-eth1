@@ -6,7 +6,7 @@
 # at your option. This file may not be copied, modified, or distributed except according to those terms.
 
 import
-  # std/[tables, sets],
+  std/[tables, sets],
   chronos,
   # chronicles,
   stew/byteutils,
@@ -28,7 +28,7 @@ export evmc, addresses, stint, headers, state_network
 
 {.push raises: [].}
 
-const evmCallLimit = 1024
+const evmCallLimit = 10000
 
 type
   AccountQuery = object
@@ -49,13 +49,15 @@ type
     stateNetwork: StateNetwork
     com: CommonRef
 
-template init(T: type AccountQuery, adr: Address, fut: Future[Opt[Account]]): T =
+func init(T: type AccountQuery, adr: Address, fut: Future[Opt[Account]]): T =
   T(address: adr, accFut: fut)
 
-template init(T: type StorageQuery, adr: Address, slotKey: UInt256, fut: Future[Opt[UInt256]]): T =
+func init(
+    T: type StorageQuery, adr: Address, slotKey: UInt256, fut: Future[Opt[UInt256]]
+): T =
   T(address: adr, slotKey: slotKey, storageFut: fut)
 
-template init(T: type CodeQuery, adr: Address, fut: Future[Opt[Bytecode]]): T =
+func init(T: type CodeQuery, adr: Address, fut: Future[Opt[Bytecode]]): T =
   T(address: adr, codeFut: fut)
 
 proc init*(T: type PortalEvm, hn: HistoryNetwork, sn: StateNetwork): T =
@@ -76,41 +78,9 @@ proc init*(T: type PortalEvm, hn: HistoryNetwork, sn: StateNetwork): T =
 
   PortalEvm(historyNetwork: hn, stateNetwork: sn, com: com)
 
-func equals(mkeys1: MultiKeysRef, mkeys2: MultiKeysRef): bool =
-  doAssert(not mkeys1.isNil())
-  doAssert(not mkeys2.isNil())
-
-  let
-    keys1 = mkeys1.keys
-    keys2 = mkeys2.keys
-
-  if keys1.len() != keys2.len():
-    return false
-
-  for i in 0..keys1.high:
-    let
-      k1 = keys1[i]
-      k2 = keys2[i]
-
-    if k1.hash != k2.hash or k1.address != k2.address or k1.codeTouched != k2.codeTouched:
-      return false
-
-    if k1.storageKeys.isNil() or k2.storageKeys.isNil():
-      if k1.storageKeys != k2.storageKeys:
-        return false
-    else:
-      if k1.storageKeys.keys.len() != k2.storageKeys.keys.len():
-        return false
-
-      for j in 0..k1.storageKeys.keys.high:
-        if k1.storageKeys.keys[j].storageSlot != k2.storageKeys.keys[j].storageSlot:
-          return false
-
-  return true
-
 proc call*(
     evm: PortalEvm, tx: TransactionArgs, blockNumOrHash: uint64 | Hash32
-): Future[Result[CallResult, string]] {.async: (raises: [CancelledError, CatchableError]).} =
+): Future[Result[CallResult, string]] {.async: (raises: [CancelledError]).} =
   let
     to = tx.to.valueOr:
       return err("to address is required")
@@ -144,6 +114,10 @@ proc call*(
     callResult: EvmResult[CallResult]
     evmCallCount = 0
 
+    fetchedAccounts = initHashSet[Address]()
+    fetchedStorage = initHashSet[(Address, UInt256)]()
+    fetchedCode = initHashSet[Address]()
+
   while evmCallCount < evmCallLimit and not lastMultiKeys.equals(multiKeys):
     let sp = vmState.ledger.beginSavepoint()
     callResult = rpcCallEvm(tx, header, vmState)
@@ -154,43 +128,55 @@ proc call*(
     vmState.ledger.collectWitnessData()
     multiKeys = vmState.ledger.makeMultiKeys()
 
+    try:
+      var
+        accountQueries = newSeq[AccountQuery]()
+        storageQueries = newSeq[StorageQuery]()
+        codeQueries = newSeq[CodeQuery]()
 
-    var
-      accountQueries = newSeq[AccountQuery]()
-      storageQueries = newSeq[StorageQuery]()
-      codeQueries = newSeq[CodeQuery]()
+      for k in multiKeys.keys:
+        if not k.storageMode and k.address != default(Address):
+          if k.address notin fetchedAccounts:
+            let accFut = evm.stateNetwork.getAccount(header.stateRoot, k.address)
+            accountQueries.add(AccountQuery.init(k.address, accFut))
 
-    for k in multiKeys.keys:
-      if not k.storageMode and k.address != default(Address):
-        let accFut = evm.stateNetwork.getAccount(header.stateRoot, k.address)
-        accountQueries.add(AccountQuery.init(k.address, accFut))
+          if k.codeTouched and k.address notin fetchedCode:
+            let codeFut =
+              evm.stateNetwork.getCodeByStateRoot(header.stateRoot, k.address)
+            codeQueries.add(CodeQuery.init(k.address, codeFut))
 
-        if k.codeTouched:
-          let codeFut = evm.stateNetwork.getCodeByStateRoot(header.stateRoot, k.address)
-          codeQueries.add(CodeQuery.init(k.address, codeFut))
+          if not k.storageKeys.isNil():
+            for sk in k.storageKeys.keys:
+              let
+                slotKey = UInt256.fromBytesBE(sk.storageSlot)
+                slotIdx = (k.address, slotKey)
+              if slotIdx notin fetchedStorage:
+                let storageFut = evm.stateNetwork.getStorageAtByStateRoot(
+                  header.stateRoot, k.address, slotKey
+                )
+                storageQueries.add(StorageQuery.init(k.address, slotKey, storageFut))
 
-        if not k.storageKeys.isNil():
-          for sk in k.storageKeys.keys:
-            let
-              slotKey = UInt256.fromBytesBE(sk.storageSlot)
-              storageFut = evm.stateNetwork.getStorageAtByStateRoot(header.stateRoot, k.address, slotKey)
-            storageQueries.add(StorageQuery.init(k.address, slotKey, storageFut))
+      for q in accountQueries:
+        let acc = (await q.accFut).valueOr:
+          return err("Unable to get account")
+        vmState.ledger.setBalance(q.address, acc.balance)
+        vmState.ledger.setNonce(q.address, acc.nonce)
+        fetchedAccounts.incl(q.address)
 
-    for q in accountQueries:
-      let acc = (await q.accFut).valueOr:
-        return err("Unable to get account")
-      vmState.ledger.setBalance(q.address, acc.balance)
-      vmState.ledger.setNonce(q.address, acc.nonce)
+      for q in storageQueries:
+        let slotValue = (await q.storageFut).valueOr:
+          return err("Unable to get slot")
+        vmState.ledger.setStorage(q.address, q.slotKey, slotValue)
+        fetchedStorage.incl((q.address, q.slotKey))
 
-    for q in storageQueries:
-      let slotValue = (await q.storageFut).valueOr:
-        return err("Unable to get slot")
-      vmState.ledger.setStorage(q.address, q.slotKey, slotValue)
-
-    for q in codeQueries:
-      let code = (await q.codeFut).valueOr:
-        return err("Unable to get code")
-      vmState.ledger.setCode(q.address, code.asSeq())
+      for q in codeQueries:
+        let code = (await q.codeFut).valueOr:
+          return err("Unable to get code")
+        vmState.ledger.setCode(q.address, code.asSeq())
+        fetchedCode.incl(q.address)
+    except CatchableError as e:
+      # TODO: why do the above futures throw a CatchableError and not CancelledError?
+      raiseAssert(e.msg)
 
   callResult.mapErr(
     proc(e: EvmErrorObj): string =

@@ -186,3 +186,35 @@ proc visitMatch*(m: var MultiKeysRef, mg: MatchGroup, depth: int): KeyData =
   doAssert(mg.isValidMatch, "Multiple identical keys are not allowed")
   m.keys[mg.group.first].visited = true
   result = m.keys[mg.group.first]
+
+func equals*(mkeys1: MultiKeysRef, mkeys2: MultiKeysRef): bool =
+  doAssert(not mkeys1.isNil())
+  doAssert(not mkeys2.isNil())
+
+  let
+    keys1 = mkeys1.keys
+    keys2 = mkeys2.keys
+
+  if keys1.len() != keys2.len():
+    return false
+
+  for i in 0..keys1.high:
+    let
+      k1 = keys1[i]
+      k2 = keys2[i]
+
+    if k1.hash != k2.hash or k1.address != k2.address or k1.codeTouched != k2.codeTouched:
+      return false
+
+    if k1.storageKeys.isNil() or k2.storageKeys.isNil():
+      if k1.storageKeys != k2.storageKeys:
+        return false
+    else:
+      if k1.storageKeys.keys.len() != k2.storageKeys.keys.len():
+        return false
+
+      for j in 0..k1.storageKeys.keys.high:
+        if k1.storageKeys.keys[j].storageSlot != k2.storageKeys.keys[j].storageSlot:
+          return false
+
+  return true
