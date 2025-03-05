@@ -22,6 +22,7 @@ import
 
 const
   depositRequestSize = 192
+  DEPOSIT_EVENT_SIGNATURE_HASH = bytes32"0x649bbc62d0e31342afea4e5cd82d4049e7e1ee912fc0889aa790803be39038c5"
 
 type
   DepositRequest = array[depositRequestSize, byte]
@@ -73,7 +74,9 @@ func depositLogToRequest(data: openArray[byte]): DepositRequest =
 func parseDepositLogs*(logs: openArray[Log], depositContractAddress: Address): Result[seq[byte], string] =
   var res = newSeqOfCap[byte](logs.len*depositRequestSize)
   for i, log in logs:
-    if log.address != depositContractAddress:
+    let isDepositEvent = log.topics.len > 0 and
+                         log.topics[0] == DEPOSIT_EVENT_SIGNATURE_HASH
+    if not(log.address == depositContractAddress and isDepositEvent):
       continue
     if log.data.len != 576:
       return err("deposit wrong length: want 576, have " & $log.data.len)
