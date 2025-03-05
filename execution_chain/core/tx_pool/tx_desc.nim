@@ -167,7 +167,7 @@ proc getNonce(xp: TxPoolRef; account: Address): AccountNonce =
   xp.vmState.ledger.getNonce(account)
 
 proc classifyValid(xp: TxPoolRef; tx: Transaction, sender: Address): bool =
-  if tx.tip(xp.baseFee) <= 0.GasInt:
+  if tx.tip(xp.baseFee) < 0.GasInt:
     debug "Invalid transaction: No tip"
     return false
 
