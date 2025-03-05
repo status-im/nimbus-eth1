@@ -153,7 +153,6 @@ proc initRunnerDB(
     path: string;
     specs: CaptureSpecs;
     dbType: CoreDbType;
-    pruneHistory: bool;
      ): CommonRef =
   let coreDB =
     # Resolve for static `dbType`
@@ -181,8 +180,7 @@ proc initRunnerDB(
     db = coreDB,
     taskpool = nil,
     networkId = networkId,
-    params = params,
-    pruneHistory = pruneHistory)
+    params = params)
 
   setErrorLevel()
 
@@ -194,7 +192,6 @@ proc chainSyncRunner(
     noisy = true;
     capture = memorySampleDefault;
     dbType =  CoreDbType(0);
-    pruneHistory = false;
     profilingOk = false;
     finalDiskCleanUpOk = true;
     enaLoggingOk = false;
@@ -231,7 +228,7 @@ proc chainSyncRunner(
 
     test &"Ledger API {numBlocksInfo} blocks":
       let
-        com = initRunnerDB(dbDir, capture, dbType, pruneHistory)
+        com = initRunnerDB(dbDir, capture, dbType)
       defer:
         com.db.finish(eradicate = finalDiskCleanUpOk)
         if profilingOk: noisy.test_chainSyncProfilingPrint numBlocks
@@ -247,7 +244,6 @@ proc persistentSyncPreLoadAndResumeRunner(
     capture = persistentSampleDefault;
     dbType = CoreDbType(0);
     profilingOk = false;
-    pruneHistory = false;
     finalDiskCleanUpOk = true;
     enaLoggingOk = false;
     lastOneExtraOk = true;
@@ -280,7 +276,7 @@ proc persistentSyncPreLoadAndResumeRunner(
 
     test "Populate db by initial sample parts":
       let
-        com = initRunnerDB(dbDir, capture, dbType, pruneHistory)
+        com = initRunnerDB(dbDir, capture, dbType)
       defer:
         com.db.finish(eradicate = finalDiskCleanUpOk)
         if profilingOk: noisy.test_chainSyncProfilingPrint firstPart
@@ -291,7 +287,7 @@ proc persistentSyncPreLoadAndResumeRunner(
 
     test &"Continue with rest of sample":
       let
-        com = initRunnerDB(dbDir, capture, dbType, pruneHistory)
+        com = initRunnerDB(dbDir, capture, dbType)
       defer:
         com.db.finish(eradicate = finalDiskCleanUpOk)
         if profilingOk: noisy.test_chainSyncProfilingPrint secndPart
@@ -332,7 +328,6 @@ when isMainModule:
         noisy.chainSyncRunner(
           #dbType = CdbAristoDualRocks,
           capture = capture,
-          #pruneHistory = true,
           #profilingOk = true,
           #finalDiskCleanUpOk = false,
           oldLogAlign = true
