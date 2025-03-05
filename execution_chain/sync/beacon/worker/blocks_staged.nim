@@ -14,7 +14,6 @@ import
   pkg/[chronicles, chronos],
   pkg/eth/common,
   pkg/stew/[interval_set, sorted_set],
-  ../../../core/chain,
   ../worker_desc,
   ./blocks_staged/bodies,
   "."/[blocks_unproc, helpers, update]

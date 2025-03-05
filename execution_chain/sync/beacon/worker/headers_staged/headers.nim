@@ -15,9 +15,8 @@ import
   pkg/[chronicles, chronos, results],
   pkg/eth/common,
   pkg/stew/interval_set,
-  ../../worker_desc,
   ../../../wire_protocol,
-  ../../../../networking/p2p
+  ../../worker_desc
 
 # ------------------------------------------------------------------------------
 # Private functions

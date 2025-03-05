@@ -12,8 +12,7 @@
 
 import
   pkg/[chronos,  metrics],
-  ../../../../networking/peer_pool,
-  ../../../../core/chain,
+  ../../../../networking/p2p,
   ../../worker_desc,
   ../blocks_staged/staged_queue,
   ../headers_staged/staged_queue,

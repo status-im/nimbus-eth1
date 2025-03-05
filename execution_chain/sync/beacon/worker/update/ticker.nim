@@ -15,7 +15,6 @@ import
   std/strutils,
   pkg/[chronos, chronicles, eth/common, stew/interval_set, stint],
   ../../../../utils/prettify,
-  ../../../../core/chain,
   ../../worker_desc,
   ../blocks_staged/staged_queue,
   ../headers_staged/staged_queue,

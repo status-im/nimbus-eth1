@@ -11,8 +11,8 @@
 {.push raises:[].}
 
 import
+  pkg/chronicles,
   pkg/eth/common,
-  ../../../core/chain,
   ../../../networking/p2p,
   ../../wire_protocol,
   ../worker_desc,
