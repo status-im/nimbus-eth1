@@ -129,11 +129,13 @@ func blocksStagedCanImportOk*(ctx: BeaconCtxRef): bool =
     return false
 
   if 0 < ctx.blk.staged.len:
-    # Import if what is on the queue is all we have got. Note that the function
-    # `blocksUnprocIsEmpty()` returns `true` only if all blocks possible have
-    # been fetched (i.e. the `borrowed` list is also empty.)
-    if ctx.blocksUnprocIsEmpty():
-      return true
+    # Start importing if there are no more blocks available. So they have
+    # either been all staged, or are about to be staged. For the latter
+    # case wait until finished with current block downloads.
+    if ctx.blocksUnprocAvail() == 0:
+
+      # Wait until finished with current block downloads
+      return ctx.blocksBorrowedIsEmpty()
 
     # Make sure that the lowest block is available, already. Or the other way
     # round: no unprocessed block number range precedes the least staged block.
@@ -160,7 +162,9 @@ func blocksStagedCanImportOk*(ctx: BeaconCtxRef): bool =
       #
       # So importing does not start before the queue is filled up.
       if ctx.pool.stagedLenHwm <= ctx.blk.staged.len:
-        return true
+
+        # Wait until finished with current block downloads
+        return ctx.blocksBorrowedIsEmpty()
 
   false
 
@@ -187,14 +191,15 @@ proc blocksStagedCollect*(
       ): Future[bool] {.async: (raises: []).} =
   ## Collect bodies and stage them.
   ##
-  if buddy.ctx.blocksUnprocAvail() == 0:
-    # Nothing to do
-    return false
-
   let
     ctx = buddy.ctx
     peer = buddy.peer
 
+  if ctx.blocksUnprocAvail() == 0 or                   # all done already?
+     ctx.poolMode:                                     # reorg mode?
+    return false                                       # nothing to do
+
+  let
     # Fetch the full range of headers to be completed to blocks
     iv = ctx.blocksUnprocFetch(nFetchBodiesBatch.uint64).expect "valid interval"
 

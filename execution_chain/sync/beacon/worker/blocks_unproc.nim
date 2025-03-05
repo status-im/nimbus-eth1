@@ -134,6 +134,9 @@ proc blocksUnprocIsEmpty*(ctx: BeaconCtxRef): bool =
   ctx.blk.unprocessed.chunks() == 0 and
   ctx.blk.borrowed.chunks() == 0
 
+proc blocksBorrowedIsEmpty*(ctx: BeaconCtxRef): bool =
+  ctx.blk.borrowed.chunks() == 0
+
 # ------------------
 
 proc blocksUnprocInit*(ctx: BeaconCtxRef) =
