@@ -232,21 +232,22 @@ proc linkIntoFc(ctx: BeaconCtxRef; info: static[string]): bool =
   false
 
 
-proc setupProcessingBlocks(ctx: BeaconCtxRef; info: static[string]): bool =
+proc setupProcessingBlocks(ctx: BeaconCtxRef; info: static[string]) =
   doAssert ctx.headersUnprocIsEmpty()
   doAssert ctx.headersStagedQueueIsEmpty()
   doAssert ctx.blocksUnprocIsEmpty()
   doAssert ctx.blocksStagedQueueIsEmpty()
 
-  # Update finalised variable
-  let finalHeader = ctx.hdrCache.fcHeaderGet(ctx.layout.finalHash).valueOr:
-    debug info & ": cannot resolve finalised hash",
+  # Update layout, finalised variable
+  let rc = ctx.hdrCache.fcHeaderGet(ctx.layout.finalHash)
+  if rc.isOk:
+    ctx.layout.final = rc.value.number
+  else:
+    debug info & ": fall back to base for finalised",
       finalHash=ctx.layout.finalHash.toStr
-    doAssert error == true # verify: hash registered but no header found
-    return false
-
-  # Update layout
-  ctx.layout.final = finalHeader.number
+    doAssert rc.error == true # verify: hash registered but no header found
+    ctx.layout.final = ctx.chain.baseNumber
+    ctx.layout.finalHash = ctx.chain.baseHash
 
   # Prepare for blocks processing
   let
@@ -260,8 +261,6 @@ proc setupProcessingBlocks(ctx: BeaconCtxRef; info: static[string]): bool =
   ctx.layout.lastState = processingBlocks
 
   trace info & ": collecting block bodies", iv=BnRange.new(c+1, h)
-
-  true
 
 # ------------------------------------------------------------------------------
 # Public functions
@@ -314,11 +313,11 @@ proc updateSyncState*(ctx: BeaconCtxRef; info: static[string]) =
   if prevState == collectingHeaders and
      thisState == finishedHeaders and
      ctx.linkIntoFc(info):               # commit downloading headers
-    if ctx.setupProcessingBlocks info:   # start downloading block bodies
-      info "Sync state changed",
-        prevState=thisState, thisState=ctx.syncState(info),
-        startBlock=ctx.blocksUnprocAvailBottom.bnStr
-      return
+    ctx.setupProcessingBlocks info       # start downloading block bodies
+    info "Sync state changed",
+      prevState=thisState, thisState=ctx.syncState(info),
+      startBlock=ctx.blocksUnprocAvailBottom.bnStr
+    return
 
   # Final sync scrum layout reached or inconsistent/impossible state
   ctx.startHibernating info
