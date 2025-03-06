@@ -31,18 +31,19 @@ func bnStr(w: seq[Header]): string =
 
 proc updateBuddyErrorState(buddy: BeaconBuddyRef) =
   ## Helper/wrapper
-  if ((0 < buddy.only.nHdrRespErrors or
-       0 < buddy.only.nHdrProcErrors) and buddy.ctrl.stopped) or
-     fetchHeadersReqErrThresholdCount < buddy.only.nHdrRespErrors or
-     fetchHeadersProcessErrThresholdCount < buddy.only.nHdrProcErrors:
+  if ((0 < buddy.nHdrRespErrors or
+       0 < buddy.nHdrProcErrors) and buddy.ctrl.stopped) or
+     fetchHeadersReqErrThresholdCount < buddy.nHdrRespErrors or
+     fetchHeadersProcessErrThresholdCount < buddy.nHdrProcErrors:
 
     # Make sure that this peer does not immediately reconnect
     buddy.ctrl.zombie = true
 
 proc updateBuddyProcError(buddy: BeaconBuddyRef) =
-  buddy.only.nHdrProcErrors.inc
+  buddy.incHdrProcErrors()
   buddy.updateBuddyErrorState()
 
+# ------------------
 
 proc fetchRev(
     buddy: BeaconBuddyRef;
@@ -137,7 +138,7 @@ proc collectAndStashOnDiskCache*(
       nHeaders=iv.len, ctrl=buddy.ctrl.state, hdrErrors=buddy.hdrErrors
 
     # Reset header process errors (not too many consecutive failures this time)
-    buddy.only.nHdrProcErrors = 0        # all OK, reset error count
+    buddy.nHdrProcErrors = 0             # all OK, reset error count
 
     return iv.minPt-1
 
@@ -225,7 +226,7 @@ proc collectAndStageOnMemQueue*(
       nHeaders=iv.len, ctrl=buddy.ctrl.state, hdrErrors=buddy.hdrErrors
 
     # Reset header process errors (not too many consecutive failures this time)
-    buddy.only.nHdrProcErrors = 0        # all OK, reset error count
+    buddy.nHdrProcErrors = 0             # all OK, reset error count
 
     return iv.minPt-1                    # all fetched as instructed
     # End block: `fetchHeadersBody`

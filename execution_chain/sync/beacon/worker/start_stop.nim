@@ -107,11 +107,13 @@ proc startBuddy*(buddy: BeaconBuddyRef): bool =
     peer = buddy.peer
   if peer.supports(wire_protocol.eth) and peer.state(wire_protocol.eth).initialized:
     ctx.pool.nBuddies.inc
+    buddy.initHdrProcErrors()
     return true
 
 proc stopBuddy*(buddy: BeaconBuddyRef) =
   let ctx = buddy.ctx
   ctx.pool.nBuddies.dec
+  buddy.clearHdrProcErrors()
 
 # ------------------------------------------------------------------------------
 # End

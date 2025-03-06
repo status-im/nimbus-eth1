@@ -24,8 +24,8 @@ import
 # ------------------------------------------------------------------------------
 
 proc registerError(buddy: BeaconBuddyRef) =
-  buddy.only.nHdrRespErrors.inc
-  if fetchHeadersReqErrThresholdCount < buddy.only.nHdrRespErrors:
+  buddy.incHdrRespErrors()
+  if fetchHeadersReqErrThresholdCount < buddy.nHdrRespErrors:
     buddy.ctrl.zombie = true # abandon slow peer
 
 # ------------------------------------------------------------------------------
@@ -33,8 +33,7 @@ proc registerError(buddy: BeaconBuddyRef) =
 # ------------------------------------------------------------------------------
 
 func hdrErrors*(buddy: BeaconBuddyRef): string =
-  $buddy.only.nHdrRespErrors & "/" & $buddy.only.nHdrProcErrors
-
+  $buddy.nHdrRespErrors & "/" & $buddy.nHdrProcErrors()
 
 # ------------------------------------------------------------------------------
 # Public functions
@@ -120,7 +119,7 @@ proc headersFetchReversed*(
      h.len.uint64 * 100 < req.maxResults * fetchHeadersReqMinResponsePC:
     buddy.registerError()
   else:
-    buddy.only.nHdrRespErrors = 0 # reset error count
+    buddy.nHdrRespErrors = 0 # reset error count
 
   trace trEthRecvReceivedBlockHeaders, peer, nReq=req.maxResults, useHash,
     ivResp=BnRange.new(h[^1].number,h[0].number), nResp=h.len,
