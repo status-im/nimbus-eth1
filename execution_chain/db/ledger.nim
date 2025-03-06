@@ -453,6 +453,10 @@ proc getCode*(ac: LedgerRef,
               returnHash: static[bool] = false): auto =
   let acc = ac.getAccount(address, false)
   if acc.isNil:
+    # We need to record that the code was read even if the account doesn't exist
+    # so that the returned multikeys correctly show that the code lookup occurred
+    ac.witnessCache[address] = WitnessData(codeTouched: true)
+
     when returnHash:
       return (EMPTY_CODE_HASH, CodeBytesRef())
     else:
