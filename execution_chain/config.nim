@@ -541,7 +541,7 @@ type
       portalWorkers* {.
         hidden
         desc: "Amount of Portal workers to use for downloading blocks"
-        defaultValue: 512
+        defaultValue: 128
         name: "debug-portal-workers".}: int
 
     of `import-rlp`:

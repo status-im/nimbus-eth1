@@ -221,39 +221,45 @@ proc run(config: NimbusConf): PortalNode {.
 
   node
 
-proc getBlockLoop(node: PortalNode, blockQueue: AsyncQueue[EthBlock], startBlock: uint64, portalWorkers: int): Future[void] {.async.} =
+proc getBlockLoop(
+    node: PortalNode,
+    blockQueue: AsyncQueue[EthBlock],
+    startBlock: uint64,
+    portalWorkers: int,
+): Future[void] {.async.} =
   const bufferSize = 8192
 
-  let historyNetwork = node.historyNetwork.value()
-  let blockNumberQueue = newAsyncQueue[(uint64, uint64)](2048)
+  let
+    historyNetwork = node.historyNetwork.value()
+    blockNumberQueue = newAsyncQueue[(uint64, uint64)](portalWorkers * 2)
 
-  var blockNumber = startBlock
-  var blocks: seq[EthBlock] = newSeq[EthBlock](bufferSize)
-  var count = 0
-  var failureCount = 0
-
-  # Note: Could make these stuint bitmasks
-  var downloadFinished: array[bufferSize, bool]
-  var downloadStarted: array[bufferSize, bool]
+  var
+    blocks: array[bufferSize, EthBlock]
+    # Note: Could make this stuint bitmask
+    downloadFinished: array[bufferSize, bool]
+    # stats counters
+    totalDownloadCount = 0
+    totalFailureCount = 0
 
   proc blockWorker(node: PortalNode): Future[void] {.async.} =
     while true:
-      let (blockNumber, i) = await blockNumberQueue.popFirst()
-      var currentBlockFailures = 0
+      let (blockNumberOffset, i) = await blockNumberQueue.popFirst()
+      var blockFailureCount = 0
       while true:
-        let (header, body) = (await historyNetwork.getBlock(blockNumber + i)).valueOr:
-          currentBlockFailures.inc()
-          if currentBlockFailures > 10:
-            fatal "Block download failed too many times", blockNumber = blockNumber + i, currentBlockFailures
+        let blockNumber = blockNumberOffset + i
+        let (header, body) = (await historyNetwork.getBlock(blockNumber)).valueOr:
+          blockFailureCount.inc()
+          totalFailureCount.inc()
+          debug "Failed to get block", blockNumber, blockFailureCount
+          if blockFailureCount > 10:
+            fatal "Block download failed too many times", blockNumber, blockFailureCount
             quit(QuitFailure)
 
-          debug "Failed to get block", blockNumber = blockNumber + i, currentBlockFailures
-          failureCount.inc()
           continue
 
         blocks[i] = init(EthBlock, header, body)
         downloadFinished[i] = true
-        count.inc()
+        totalDownloadCount.inc()
 
         break
 
@@ -261,34 +267,44 @@ proc getBlockLoop(node: PortalNode, blockQueue: AsyncQueue[EthBlock], startBlock
   for i in 0 ..< portalWorkers:
     workers.add node.blockWorker()
 
-  info "Start downloading blocks", startBlock = blockNumber
-  var i = 0'u64
-  var nextDownloadedIndex = 0
+  info "Start downloading blocks", startBlock
+  var
+    blockNumberOffset = startBlock
+    nextReadIndex = 0
+    nextWriteIndex = 0
+
   let t0 = Moment.now()
 
   while true:
-    while downloadFinished[nextDownloadedIndex]:
-      debug "Adding block to the processing queue", blockNumber = nextDownloadedIndex.uint64 + blockNumber
-      await blockQueue.addLast(blocks[nextDownloadedIndex])
-      downloadFinished[nextDownloadedIndex] = false
-      downloadStarted[nextDownloadedIndex] = false
-      nextDownloadedIndex = (nextDownloadedIndex + 1) mod bufferSize
-
-    # TODO: can use the read pointer nextDownloadedIndex instead and get rid of downloadStarted
-    if not downloadStarted[i]:
-      debug "Adding block to the download queue", blockNumber = blockNumber + i
-      await blockNumberQueue.addLast((blockNumber, i))
-      downloadStarted[i] = true
-      # TODO clean this up by directly using blocknumber with modulo calc
-      if i == bufferSize.uint64 - 1:
-        blockNumber += bufferSize.uint64
+    while downloadFinished[nextReadIndex]:
+      debug "Adding block to the processing queue",
+        blockNumber = blockNumberOffset + nextReadIndex.uint64
+      await blockQueue.addLast(blocks[nextReadIndex])
+      downloadFinished[nextReadIndex] = false
+      nextReadIndex = (nextReadIndex + 1) mod bufferSize
+      if nextReadIndex == 0:
         let t1 = Moment.now()
         let diff = (t1 - t0).nanoseconds().float / 1000000000
-        let avgBps = count.float / diff
-        info "Total blocks downloaded", count = count, failureCount = failureCount, failureRate = failureCount.float / count.float, avgBps = avgBps
-      i = (i + 1'u64) mod bufferSize.uint64
+        let avgBps = totalDownloadCount.float / diff
+        info "Total blocks downloaded",
+          totalDownloadCount,
+          totalFailureCount,
+          avgBps,
+          failureRate = totalFailureCount.float / totalDownloadCount.float
+
+    if nextWriteIndex != (nextReadIndex + bufferSize - 1) mod bufferSize:
+      debug "Adding block to the download queue",
+        blockNumber = blockNumberOffset + nextWriteIndex.uint64
+      await blockNumberQueue.addLast((blockNumberOffset, nextWriteIndex.uint64))
+      nextWriteIndex = (nextWriteIndex + 1) mod bufferSize
+      if nextWriteIndex == 0:
+        blockNumberOffset += bufferSize.uint64
     else:
-      await sleepAsync(1.nanoseconds)
+      debug "Waiting to add block downloads",
+        nextReadIndex,
+        nextWriteIndex,
+        blockNumber = blockNumberOffset + nextReadIndex.uint64
+      await sleepAsync(1.seconds)
 
 proc importBlocks*(conf: NimbusConf, com: CommonRef, node: PortalNode, blockQueue: AsyncQueue[EthBlock]) {.async.} =
   proc controlCHandler() {.noconv.} =
