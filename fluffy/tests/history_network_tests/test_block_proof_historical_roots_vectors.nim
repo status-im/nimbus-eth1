@@ -1,5 +1,5 @@
 # Fluffy
-# Copyright (c) 2024 Status Research & Development GmbH
+# Copyright (c) 2024-2025 Status Research & Development GmbH
 # Licensed and distributed under either of
 #   * MIT license (license terms in the root directory or at https://opensource.org/licenses/MIT).
 #   * Apache v2 license (license terms in the root directory or at https://www.apache.org/licenses/LICENSE-2.0).
@@ -33,10 +33,10 @@ suite "History Block Proofs - Historical Roots - Test Vectors":
 
           blockHash = Digest.fromHex(testProof.execution_block_header)
           blockProof = BlockProofHistoricalRoots(
-            beaconBlockProof:
-              array[14, Digest].fromHex(testProof.historical_roots_proof),
+            beaconBlockProof: array[14, Digest].fromHex(testProof.beacon_block_proof),
             beaconBlockRoot: Digest.fromHex(testProof.beacon_block_root),
-            executionBlockProof: array[11, Digest].fromHex(testProof.beacon_block_proof),
+            executionBlockProof:
+              array[11, Digest].fromHex(testProof.execution_block_proof),
             slot: Slot(testProof.slot),
           )
 

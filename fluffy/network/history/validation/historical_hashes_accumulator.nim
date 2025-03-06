@@ -69,6 +69,8 @@ type
     historicalEpochs*: List[Bytes32, int(MAX_HISTORICAL_EPOCHS)]
     currentEpoch*: EpochRecord
 
+  HistoricalHashesAccumulatorProof* = array[15, Digest]
+
   Bytes32 = common_types.Bytes32
 
 func init*(T: type HistoricalHashesAccumulator): T =
@@ -146,8 +148,10 @@ func isPreMerge*(blockNumber: uint64): bool =
 func isPreMerge*(header: Header): bool =
   isPreMerge(header.number)
 
-func verifyProof(
-    a: FinishedHistoricalHashesAccumulator, header: Header, proof: openArray[Digest]
+func verifyProof*(
+    a: FinishedHistoricalHashesAccumulator,
+    header: Header,
+    proof: HistoricalHashesAccumulatorProof,
 ): bool =
   let
     epochIndex = getEpochIndex(header)
@@ -159,21 +163,6 @@ func verifyProof(
     gIndex = GeneralizedIndex(EPOCH_SIZE * 2 * 2 + (headerRecordIndex * 2))
 
   verify_merkle_multiproof(@[leave], proof, @[gIndex], epochRecordHash)
-
-func verifyAccumulatorProof*(
-    a: FinishedHistoricalHashesAccumulator,
-    header: Header,
-    proof: HistoricalHashesAccumulatorProof,
-): Result[void, string] =
-  if header.isPreMerge():
-    # Note: The proof is typed with correct depth, so no check on this is
-    # required here.
-    if a.verifyProof(header, proof):
-      ok()
-    else:
-      err("Proof verification failed")
-  else:
-    err("Cannot verify post merge header with accumulator proof")
 
 func buildProof*(
     header: Header, epochRecord: EpochRecord | EpochRecordCached

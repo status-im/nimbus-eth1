@@ -15,6 +15,7 @@ import
   ../../network/history/
     [history_network, history_content, validation/historical_hashes_accumulator],
   ../../database/content_db,
+  ../../network/beacon/beacon_init_loader,
   ../test_helpers,
   ./test_history_util
 
@@ -35,8 +36,10 @@ proc newHistoryNode(
       "", uint32.high, RadiusConfig(kind: Dynamic), node.localNode.id, inMemory = true
     )
     streamManager = StreamManager.new(node)
+    networkData = loadNetworkData("mainnet")
+    cfg = networkData.metadata.cfg
     historyNetwork =
-      HistoryNetwork.new(PortalNetwork.none, node, db, streamManager, accumulator)
+      HistoryNetwork.new(PortalNetwork.none, node, db, streamManager, cfg, accumulator)
 
   return HistoryNode(discoveryProtocol: node, historyNetwork: historyNetwork)
 
@@ -72,7 +75,7 @@ proc createEmptyHeaders(fromNum: int, toNum: int): seq[Header] =
   var headers: seq[Header]
   for i in fromNum .. toNum:
     var bh = Header()
-    bh.number = BlockNumber(i)
+    bh.number = i.uint64
     bh.difficulty = u256(i)
     # empty so that we won't care about creating fake block bodies
     bh.ommersHash = EMPTY_UNCLE_HASH

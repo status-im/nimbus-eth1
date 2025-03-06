@@ -39,13 +39,6 @@ proc configurationMain*() =
       check dd.dataDir.string == "apple\\bin"
       check dd.keyStore.string == "banana/bin"
 
-    test "chaindb-mode":
-      let ee = makeConfig(@["--chaindb:aristo"])
-      check ee.chainDbMode == ChainDbMode.Aristo
-
-      let ff = makeConfig(@["--chaindb:ariPrune"])
-      check ff.chainDbMode == ChainDbMode.AriPrune
-
     test "import-rlp":
       let aa = makeTestConfig()
       check aa.cmd == NimbusCmd.noCommand

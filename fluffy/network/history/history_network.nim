@@ -14,6 +14,7 @@ import
   eth/trie/ordered_trie,
   eth/common/[hashes, headers_rlp, blocks_rlp, receipts_rlp, transactions_rlp],
   eth/p2p/discoveryv5/[protocol, enr],
+  beacon_chain/spec/presets,
   ../../common/common_types,
   ../../database/content_db,
   ../../network_metadata,
@@ -27,7 +28,7 @@ from eth/common/accounts import EMPTY_ROOT_HASH
 logScope:
   topics = "portal_hist"
 
-export blocks_rlp
+export blocks_rlp, presets
 
 const pingExtensionCapabilities = {CapabilitiesType, HistoryRadiusType}
 
@@ -36,8 +37,8 @@ type
     portalProtocol*: PortalProtocol
     contentDB*: ContentDB
     contentQueue*: AsyncQueue[(Opt[NodeId], ContentKeysList, seq[seq[byte]])]
-    accumulator*: FinishedHistoricalHashesAccumulator
-    historicalRoots*: HistoricalRoots
+    cfg*: RuntimeConfig
+    accumulators*: HistoryAccumulators
     processContentLoop: Future[void]
     statusLogLoop: Future[void]
     contentRequestRetries: int
@@ -146,7 +147,9 @@ proc getVerifiedBlockHeader*(
         debug "Failed fetching block header with proof from the network"
         return Opt.none(Header)
 
-      header = validateCanonicalHeaderBytes(headerContent.content, id, n.accumulator).valueOr:
+      header = validateCanonicalHeaderBytes(
+        headerContent.content, id, n.accumulators, n.cfg
+      ).valueOr:
         n.portalProtocol.banNode(
           headerContent.receivedFrom.id, NodeBanDurationContentLookupFailedValidation
         )
@@ -304,7 +307,7 @@ proc validateContent(
   case contentKey.contentType
   of blockHeader:
     let _ = validateCanonicalHeaderBytes(
-      content, contentKey.blockHeaderKey.blockHash, n.accumulator
+      content, contentKey.blockHeaderKey.blockHash, n.accumulators, n.cfg
     ).valueOr:
       return err("Failed validating block header: " & error)
 
@@ -327,7 +330,7 @@ proc validateContent(
     ok()
   of blockNumber:
     let _ = validateCanonicalHeaderBytes(
-      content, contentKey.blockNumberKey.blockNumber, n.accumulator
+      content, contentKey.blockNumberKey.blockNumber, n.accumulators, n.cfg
     ).valueOr:
       return err("Failed validating block header: " & error)
 
@@ -341,7 +344,8 @@ proc new*(
     baseProtocol: protocol.Protocol,
     contentDB: ContentDB,
     streamManager: StreamManager,
-    accumulator: FinishedHistoricalHashesAccumulator,
+    cfg: RuntimeConfig,
+    accumulator: FinishedHistoricalHashesAccumulator = loadAccumulator(),
     historicalRoots: HistoricalRoots = loadHistoricalRoots(),
     bootstrapRecords: openArray[Record] = [],
     portalConfig: PortalProtocolConfig = defaultPortalProtocolConfig,
@@ -370,8 +374,10 @@ proc new*(
     portalProtocol: portalProtocol,
     contentDB: contentDB,
     contentQueue: contentQueue,
-    accumulator: accumulator,
-    historicalRoots: historicalRoots,
+    cfg: cfg,
+    accumulators: HistoryAccumulators(
+      historicalHashes: accumulator, historicalRoots: historicalRoots
+    ),
     contentRequestRetries: contentRequestRetries,
   )
 
@@ -432,7 +438,8 @@ proc statusLogLoop(n: HistoryNetwork) {.async: (raises: []).} =
 proc start*(n: HistoryNetwork) =
   info "Starting Portal execution history network",
     protocolId = n.portalProtocol.protocolId,
-    accumulatorRoot = hash_tree_root(n.accumulator)
+    historicalHashesAccumulatorRoot = hash_tree_root(n.accumulators.historicalHashes),
+    historiricalRootsRoot = hash_tree_root(n.accumulators.historicalRoots)
 
   n.portalProtocol.start()
 

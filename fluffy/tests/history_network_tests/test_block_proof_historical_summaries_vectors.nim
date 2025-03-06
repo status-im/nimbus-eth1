@@ -1,5 +1,5 @@
 # Fluffy
-# Copyright (c) 2024 Status Research & Development GmbH
+# Copyright (c) 2024-2025 Status Research & Development GmbH
 # Licensed and distributed under either of
 #   * MIT license (license terms in the root directory or at https://opensource.org/licenses/MIT).
 #   * Apache v2 license (license terms in the root directory or at https://www.apache.org/licenses/LICENSE-2.0).
@@ -18,30 +18,8 @@ import
   beacon_chain/spec/datatypes/capella,
   ../../network/history/validation/block_proof_historical_summaries,
   ../../network/beacon/beacon_init_loader,
-  ../../eth_data/[yaml_utils, yaml_eth_types]
-
-proc toString(v: IoErrorCode): string =
-  try:
-    ioErrorMsg(v)
-  except Exception as e:
-    raiseAssert e.msg
-
-# Testing only proc as in the real network the historical_summaries are
-# retrieved from the network.
-proc readHistoricalSummaries(
-    file: string
-): Result[HashList[HistoricalSummary, Limit HISTORICAL_ROOTS_LIMIT], string] =
-  let encodedHistoricalSummaries = ?readAllFile(file).mapErr(toString)
-
-  try:
-    ok(
-      SSZ.decode(
-        encodedHistoricalSummaries,
-        HashList[HistoricalSummary, Limit HISTORICAL_ROOTS_LIMIT],
-      )
-    )
-  except SerializationError as err:
-    err("Failed decoding historical_summaries: " & err.msg)
+  ../../eth_data/[yaml_utils, yaml_eth_types],
+  ./test_history_util
 
 suite "History Block Proofs - Historical Summaries - Test Vectors":
   test "BlockProofHistoricalSummaries for Execution BlockHeader":
@@ -62,10 +40,11 @@ suite "History Block Proofs - Historical Summaries - Test Vectors":
 
           blockHash = Digest.fromHex(testProof.execution_block_header)
           blockProof = BlockProofHistoricalSummaries(
-            beaconBlockProof:
-              array[13, Digest].fromHex(testProof.historical_summaries_proof),
+            beaconBlockProof: array[13, Digest].fromHex(testProof.beacon_block_proof),
             beaconBlockRoot: Digest.fromHex(testProof.beacon_block_root),
-            executionBlockProof: array[11, Digest].fromHex(testProof.beacon_block_proof),
+            executionBlockProof: ExecutionBlockProof(
+              array[11, Digest].fromHex(testProof.execution_block_proof)
+            ),
             slot: Slot(testProof.slot),
           )
 

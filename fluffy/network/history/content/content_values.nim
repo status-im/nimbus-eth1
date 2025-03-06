@@ -30,8 +30,6 @@ const
 
 type
   ## BlockHeader types
-  HistoricalHashesAccumulatorProof* = array[15, Digest]
-
   BlockHeaderWithProof* = object
     header*: ByteList[MAX_HEADER_LENGTH] # RLP data
     proof*: ByteList[MAX_HEADER_PROOF_LENGTH]
