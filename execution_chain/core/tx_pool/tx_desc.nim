@@ -174,15 +174,6 @@ proc classifyValid(xp: TxPoolRef; tx: Transaction, sender: Address): bool =
       gasLimit = xp.gasLimit
     return false
 
-  # Ensure that the user was willing to at least pay the base fee
-  # And to at least pay the current data gasprice
-  if tx.txType >= TxEip1559:
-    if tx.maxFeePerGas < xp.baseFee:
-      debug "Invalid transaction: maxFeePerGas lower than baseFee",
-        maxFeePerGas = tx.maxFeePerGas,
-        baseFee = xp.baseFee
-      return false
-
   if tx.txType == TxEip4844:
     let
       excessBlobGas = xp.excessBlobGas
@@ -223,10 +214,15 @@ proc classifyValid(xp: TxPoolRef; tx: Transaction, sender: Address): bool =
       return false
 
   if tx.txType >= TxEip1559:
-    if tx.tip(xp.baseFee) < 0.GasInt:
-      debug "Invalid transaction: EIP-1559 transaction with tip lower than 0"
+    # Ensure that the user was willing to at least pay the base fee
+    # And to at least pay the current data gasprice
+    if tx.maxFeePerGas < xp.baseFee:
+      debug "Invalid transaction: maxFeePerGas lower than baseFee",
+        maxFeePerGas = tx.maxFeePerGas,
+        baseFee = xp.baseFee
       return false
 
+    # No tip checking as tip is optional after EIP-1559
     if tx.maxFeePerGas < 1.GasInt:
       debug "Invalid transaction: EIP-1559 transaction with maxFeePerGas lower than 1"
       return false
