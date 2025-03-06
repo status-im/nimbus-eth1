@@ -274,7 +274,7 @@ proc fcHeaderGet*(fc: ForkedCacheRef; hash: Hash32): Result[Header,bool] =
   ## `hash` argument was not registered.
   ##
   fc.state.byHash.withValue(hash, val):
-    if fc.state.ante.number < val[]: # no need to lookup database, otherwise
+    if fc.state.ante.number <= val[]: # no need to lookup database, otherwise
       var hdr = fc.chain.baseTxFrame.getHeader(val[]).valueOr:
         return err(true)
       return ok(move hdr)
