@@ -171,6 +171,12 @@ func subgroupCheck*(P: BLS_G1P): bool {.inline.} =
 func subgroupCheck*(P: BLS_G2P): bool {.inline.} =
   blst_p2_affine_in_g2(toCC(P)).int == 1
 
+func isInfinity*(P: BLS_G1P): bool {.inline.} =
+  blst_p1_affine_is_inf(toCC(P)).int == 1
+
+func isInfinity*(P: BLS_G2P): bool {.inline.} =
+  blst_p2_affine_is_inf(toCC(P)).int == 1
+
 func millerLoop*(P: BLS_G1P, Q: BLS_G2P): BLS_ACC {.inline.} =
   blst_miller_loop(toCV(result), toCC(Q), toCC(P))
 

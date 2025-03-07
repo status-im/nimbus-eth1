@@ -605,6 +605,10 @@ func blsPairing(c: Computation): EvmResultVoid =
 
     if not g2.subgroupCheck:
       return err(prcErr(PrcInvalidPoint))
+    
+    # https://ethereum-magicians.org/t/bls12-381-pairing-consensus-issue/23019#p-55887-root-cause-analysis-2
+    if g1.isInfinity or g2.isInfinity:
+      continue
 
     # Update pairing engine with G1 and G2 points
     if i == 0:
