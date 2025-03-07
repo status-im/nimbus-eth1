@@ -142,12 +142,20 @@ proc validateBlock(c: ForkedChainRef,
 
   c.writeBaggage(blk, blkHash, txFrame, receipts)
 
+  while c.lastSnapshots.len() >= 10:
+    # Put a cap on frame memory usage by clearing out the oldest snapshots -
+    # this works at the expense of making building on said branches slower.
+    # 10 is quite arbitrary.
+    let oldFrame = c.lastSnapshots.popFirst()
+    oldFrame.clearSnapshot()
+
   # Block fully written to txFrame, mark it as such
   # Checkpoint creates a snapshot of ancestor changes in txFrame - it is an
   # expensive operation, specially when creating a new branch (ie when blk
   # is being applied to a block that is currently not a head)
   txFrame.checkpoint(blk.header.number)
 
+  c.lastSnapshots.addLast(txFrame)
 
   c.updateBranch(parent, blk, blkHash, txFrame, move(receipts))
 
