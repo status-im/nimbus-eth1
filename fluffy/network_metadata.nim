@@ -1,5 +1,5 @@
 # Nimbus
-# Copyright (c) 2022-2024 Status Research & Development GmbH
+# Copyright (c) 2022-2025 Status Research & Development GmbH
 # Licensed and distributed under either of
 #   * MIT license (license terms in the root directory or at https://opensource.org/licenses/MIT).
 #   * Apache v2 license (license terms in the root directory or at https://www.apache.org/licenses/LICENSE-2.0).
@@ -73,6 +73,7 @@ type
     mergeNetsplitBlock*: uint64
     shanghaiTime*: Opt[Moment]
     cancunTime*: Opt[Moment]
+    pragueTime*: Opt[Moment]
 
 const
   # Allow this to be adjusted at compile time for testing. If more constants
@@ -82,8 +83,9 @@ const
 
   chainConfig* = ChainConfig(
     mergeNetsplitBlock: mergeBlockNumber,
-    shanghaiTime: Opt.some(Moment.init(1681338455'i64, Second)),
-    cancunTime: Opt.none(Moment),
+    shanghaiTime: Opt.some(Moment.init(1_681_338_455'i64, Second)),
+    cancunTime: Opt.some(Moment.init(1_710_338_135'i64, Second)),
+    pragueTime: Opt.some(Moment.init(1_740_434_112'i64, Second)),
   )
 
 func isTimestampForked(forkTime: Opt[Moment], timestamp: Moment): bool =
@@ -100,3 +102,6 @@ func isShanghai*(c: ChainConfig, timestamp: Moment): bool =
 
 func isCancun*(c: ChainConfig, timestamp: Moment): bool =
   isTimestampForked(c.cancunTime, timestamp)
+
+func isPrague*(c: ChainConfig, timestamp: Moment): bool =
+  isTimestampForked(c.pragueTime, timestamp)
