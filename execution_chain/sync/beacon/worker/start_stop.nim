@@ -46,13 +46,14 @@ proc updateBeaconHeaderCB(
   return proc(h: Header; f: Hash32) {.gcsafe, raises: [].} =
 
     # Check whether there is an update running (otherwise take next upate)
-    if f != zeroHash32 and                       # finalised hash is set
-       ctx.layout.head < h.number and            # update is advancing
-       ctx.clRequest.consHead.number < h.number: # .. ditto
+    if not ctx.clReq.locked and                   # can update ok
+       f != zeroHash32 and                        # finalised hash is set
+       ctx.layout.head < h.number and             # update is advancing
+       ctx.clReq.mesg.consHead.number < h.number: # .. ditto
 
-      ctx.clRequest.consHead = h
-      ctx.clRequest.finalHash = f
-      ctx.clRequest.changed = true
+      ctx.clReq.mesg.consHead = h
+      ctx.clReq.mesg.finalHash = f
+      ctx.clReq.changed = true
 
 # ------------------------------------------------------------------------------
 # Public functions

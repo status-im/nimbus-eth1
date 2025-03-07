@@ -57,11 +57,16 @@ type
     finishedHeaders                  ## see clause *(10)* of `README.md`
     processingBlocks                 ## see clause *(11)* of `README.md`
 
-  SyncClRequest* = object
+  SyncClMesg* = object
     ## Beacon state to be implicitely updated by RPC method
-    changed*: bool                   ## Tell that something has changed
     consHead*: Header                ## Consensus head
     finalHash*: Hash32               ## Finalised hash
+
+  SyncClRequest* = object
+    ## Internal management object for the `SyncClMesg`
+    locked*: bool                    ## Don't update while set `true`
+    changed*: bool                   ## Tell that something has changed
+    mesg*: SyncClMesg                ## The request message from the `CL`
 
   SyncStateLayout* = object
     ## Layout of a linked header chains defined by the triple `(C,D,H)` as
@@ -90,7 +95,7 @@ type
 
   SyncState* = object
     ## Sync state for header and block chains
-    clRequest*: SyncClRequest        ## Consensus head, see `T` in `README.md`
+    clReq*: SyncClRequest            ## Consensus head, see `T` in `README.md`
     layout*: SyncStateLayout         ## Current header chains layout
 
   # -------------------
@@ -171,9 +176,9 @@ func layout*(ctx: BeaconCtxRef): var SyncStateLayout =
   ## Shortcut
   ctx.sst.layout
 
-func clRequest*(ctx: BeaconCtxRef): var SyncClRequest =
+func clReq*(ctx: BeaconCtxRef): var SyncClRequest =
   ## Shortcut
-  ctx.sst.clRequest
+  ctx.sst.clReq
 
 func chain*(ctx: BeaconCtxRef): ForkedChainRef =
   ## Getter

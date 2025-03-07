@@ -140,7 +140,7 @@ proc setupCollectingHeaders(ctx: BeaconCtxRef; info: static[string]) =
   ##
   let
     c = ctx.chain.baseNumber()
-    h = ctx.clRequest.consHead.number
+    h = ctx.clReq.mesg.consHead.number
 
   if c+1 < h:                                 # header chain interval is `(C,H]`
     doAssert ctx.headersUnprocIsEmpty()
@@ -152,18 +152,22 @@ proc setupCollectingHeaders(ctx: BeaconCtxRef; info: static[string]) =
       coupler:   c,
       dangling:  h,
       final:     BlockNumber(0),
-      finalHash: ctx.clRequest.finalHash,
+      finalHash: ctx.clReq.mesg.finalHash,
       head:      h,
       lastState: collectingHeaders)           # state transition
 
     # Prepare cache for a new scrum
-    ctx.hdrCache.init(ctx.clRequest.consHead, @[ctx.clRequest.finalHash])
+    ctx.hdrCache.init(ctx.clReq.mesg.consHead, @[ctx.clReq.mesg.finalHash])
 
     # Update range
     ctx.headersUnprocSet(c+1, h-1)
 
     # Mark cl request used (to be set `true` when new request arrives)
-    ctx.clRequest.changed = false
+    ctx.clReq.changed = false
+
+    # Unlock, might have been set to not update the `ctx.clReq.mesg` until
+    # it is consumed by the scrum set up (i.e. here)
+    ctx.clReq.locked = false
 
     trace info & ": new sync scrum target head",
       C=c.bnStr, D="H", H="T", T=h.bnStr
@@ -276,7 +280,7 @@ proc updateSyncState*(ctx: BeaconCtxRef; info: static[string]) =
     # session can be set up
     case prevState:
     of idleSyncState:
-      if ctx.clRequest.changed:          # and there is a new request from CL
+      if ctx.clReq.changed:              # and there is a new request from CL
         ctx.setupCollectingHeaders info  # set up new header sync
         info "Sync state changed", prevState, thisState,
           base=ctx.chain.baseNumber.bnStr, head=ctx.chain.latestNumber.bnStr,
@@ -332,11 +336,11 @@ proc updateFromHibernatingForNextScrum*(
   ## is de-activated while `buddy.ctx.hibernate` is `true`.
   ##
   let ctx = buddy.ctx
-  if ctx.hibernate and ctx.clRequest.changed:
+  if ctx.hibernate and ctx.clReq.changed:
     # Activate running (unless done yet)
     ctx.hibernate = false
     info "Activating syncer", base=ctx.chain.baseNumber.bnStr,
-      head=ctx.chain.latestNumber.bnStr, consHead=ctx.clRequest.consHead.bnStr
+      head=ctx.chain.latestNumber.bnStr, consHead=ctx.clReq.mesg.consHead.bnStr
 
 
 proc updateAsyncTasks*(
