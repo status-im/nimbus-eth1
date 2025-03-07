@@ -19,6 +19,9 @@ import results, ./[aristo_desc, aristo_layers]
 # Public functions
 # ------------------------------------------------------------------------------
 
+proc isKeyframe(txFrame: AristoTxRef): bool =
+  txFrame == txFrame.db.txRef
+
 proc buildSnapshot(txFrame: AristoTxRef, minLevel: int) =
   # Starting from the previous snapshot, build a snapshot that includes all
   # ancestor changes as well as the changes in txFrame itself
@@ -28,7 +31,7 @@ proc buildSnapshot(txFrame: AristoTxRef, minLevel: int) =
       # frame - right now, only the base frame is a keyframe but this support
       # could be extended for example to epoch boundary frames which are likely
       # to become new bases.
-      let isKeyframe = frame == frame.db.txRef
+      let isKeyframe = txFrame.isKeyframe()
 
       if frame.snapshotLevel.isSome() and not isKeyframe:
         # `frame` has a snapshot only in the first iteration of the for loop
@@ -85,6 +88,10 @@ proc checkpoint*(tx: AristoTxRef, blockNumber: uint64, skipSnapshot: bool) =
     # Snapshots are expensive, therefore we only do it at checkpoints (which
     # presumably have gone through enough validation)
     tx.buildSnapshot(tx.db.txRef.level)
+
+proc clearSnapshot*(txFrame: AristoTxRef) =
+  if not txFrame.isKeyframe():
+    txFrame.snapshot.reset()
 
 proc persist*(db: AristoDbRef, batch: PutHdlRef, txFrame: AristoTxRef) =
   if txFrame == db.txRef and txFrame.isEmpty():
