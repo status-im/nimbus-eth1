@@ -130,29 +130,33 @@ proc call*(
   # TODO: review what child header to use here (second parameter)
   let vmState = BaseVMState.new(header, header, evm.com, txFrame)
 
-  # Set code of the 'to' address in the EVM so that we can execute the transaction
-  let code = (await codeFut).valueOr:
-    return err("Unable to get code")
-  vmState.ledger.setCode(to, code.asSeq())
-  debug "Code to be executed", code = code.asSeq().to0xHex()
-
-  # Collects the keys of read or modified accounts, code and storage slots
-  vmState.ledger.collectWitnessData()
-
   var
-    lastMultiKeys = new MultiKeysRef
-    multiKeys = vmState.ledger.makeMultiKeys()
-    callResult: EvmResult[CallResult]
-    evmCallCount = 0
     # Record the keys of fetched accounts, storage and code so that we don't
     # bother to fetch them multiple times
     fetchedAccounts = initHashSet[Address]()
     fetchedStorage = initHashSet[(Address, UInt256)]()
     fetchedCode = initHashSet[Address]()
 
+  # Set code of the 'to' address in the EVM so that we can execute the transaction
+  let code = (await codeFut).valueOr:
+    return err("Unable to get code")
+  vmState.ledger.setCode(to, code.asSeq())
+  fetchedCode.incl(to)
+  debug "Code to be executed", code = code.asSeq().to0xHex()
+
+  # Collects the keys of read or modified accounts, code and storage slots
+  vmState.ledger.collectWitnessData()
+
+  var
+    lastMultiKeys: MultiKeysRef
+    multiKeys = vmState.ledger.makeMultiKeys()
+    callResult: EvmResult[CallResult]
+    evmCallCount = 0
+
   # If the multikeys did not change after the last execution then we can stop
   # because we have already executed the transaction with the correct state
-  while evmCallCount < EVM_CALL_LIMIT and not lastMultiKeys.equals(multiKeys):
+  while evmCallCount < EVM_CALL_LIMIT and lastMultiKeys.isNil() or
+      not lastMultiKeys.equals(multiKeys):
     debug "Starting PortalEvm execution", evmCallCount
 
     let sp = vmState.ledger.beginSavepoint()
