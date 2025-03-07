@@ -19,7 +19,7 @@ import
   ../../evm/state,
   ../validate,
   ../executor/process_block,
-  ./forked_chain/[chain_desc, chain_kvt, chain_branch]
+  ./forked_chain/[chain_desc, chain_header_cache, chain_branch]
 
 from std/sequtils import mapIt
 
@@ -29,7 +29,7 @@ logScope:
 export
   BlockDesc,
   ForkedChainRef,
-  chain_kvt,
+  chain_header_cache,
   common,
   core_db
 

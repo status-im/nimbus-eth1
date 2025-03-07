@@ -11,14 +11,14 @@
 {.push raises:[].}
 
 import
+  pkg/chronicles,
   pkg/eth/common,
-  ../../../core/chain,
   ../../../networking/p2p,
   ../../wire_protocol,
   ../worker_desc,
   ./blocks_staged/staged_queue,
   ./headers_staged/staged_queue,
-  ./[blocks_unproc, db, headers_unproc, update]
+  ./[blocks_unproc, headers_unproc]
 
 # ------------------------------------------------------------------------------
 # Private functions
@@ -46,28 +46,13 @@ proc updateBeaconHeaderCB(
   return proc(h: Header; f: Hash32) {.gcsafe, raises: [].} =
 
     # Check whether there is an update running (otherwise take next upate)
-    if not ctx.target.locked and                 # ignore if currently updating
-       ctx.target.final == 0 and                 # ignore if complete already
-       f != zeroHash32 and                       # finalised hash is set
+    if f != zeroHash32 and                       # finalised hash is set
        ctx.layout.head < h.number and            # update is advancing
-       ctx.target.consHead.number < h.number:    # .. ditto
+       ctx.clRequest.consHead.number < h.number: # .. ditto
 
-      ctx.target.consHead = h
-      ctx.target.finalHash = f
-      ctx.target.changed = true
-
-      # Check whether `FC` knows about the finalised block already.
-      #
-      # On a full node, all blocks before the current state are stored on the
-      # database which is also accessed by `FC`. So one can already decude here
-      # whether `FC` id capable of handling that finalised block (the number of
-      # must be at least the `base` from `FC`.)
-      #
-      # Otherwise the block header will need to be fetched from a peer when
-      # available and checked there (see `headerStagedUpdateTarget()`.)
-      #
-      let finHdr = ctx.chain.headerByHash(f).valueOr: return
-      ctx.updateFinalBlockHeader(finHdr, f, info)
+      ctx.clRequest.consHead = h
+      ctx.clRequest.finalHash = f
+      ctx.clRequest.changed = true
 
 # ------------------------------------------------------------------------------
 # Public functions
@@ -82,11 +67,12 @@ proc setupDatabase*(ctx: BeaconCtxRef; info: static[string]) =
   ctx.headersUnprocInit()
   ctx.blocksUnprocInit()
 
-  # Load initial state from database if there is any. If the loader returns
-  # `true`, then the syncer will resume from previous sync in which case the
-  # system becomes fully active. Otherwise there is some polling only waiting
-  # for a new target so there is reduced service (aka `hibernate`.).
-  ctx.hibernate = not ctx.dbLoadSyncStateLayout info
+  # Start in suspended mode
+  ctx.hibernate = true
+
+  # Set up header cache descriptor. This will evenually be integrated
+  # into `ForkedChainRef` (i.e. `ctx.pool.chain`.)
+  ctx.pool.hdrCache = ForkedCacheRef.init(ctx.pool.chain)
 
   # Set blocks batch import queue size
   if ctx.pool.blocksStagedHwm < blocksStagedLwm:
@@ -102,7 +88,7 @@ proc setupDatabase*(ctx: BeaconCtxRef; info: static[string]) =
 
 proc setupServices*(ctx: BeaconCtxRef; info: static[string]) =
   ## Helper for `setup()`: Enable external call-back based services
-  # Activate target request. Will be called from RPC handler.
+  # Activate `CL` requests. Will be called from RPC handler.
   ctx.pool.chain.com.reqBeaconSyncerTarget = ctx.updateBeaconHeaderCB info
   # Provide progress info
   ctx.pool.chain.com.beaconSyncerProgress = ctx.queryProgressCB info
@@ -119,13 +105,16 @@ proc startBuddy*(buddy: BeaconBuddyRef): bool =
   let
     ctx = buddy.ctx
     peer = buddy.peer
-  if peer.supports(wire_protocol.eth) and peer.state(wire_protocol.eth).initialized:
+  if peer.supports(wire_protocol.eth) and
+     peer.state(wire_protocol.eth).initialized:
     ctx.pool.nBuddies.inc
+    buddy.initHdrProcErrors()
     return true
 
 proc stopBuddy*(buddy: BeaconBuddyRef) =
   let ctx = buddy.ctx
   ctx.pool.nBuddies.dec
+  buddy.clearHdrProcErrors()
 
 # ------------------------------------------------------------------------------
 # End

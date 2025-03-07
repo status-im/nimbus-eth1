@@ -14,10 +14,9 @@ import
   pkg/[chronicles, chronos],
   pkg/eth/common,
   pkg/stew/[interval_set, sorted_set],
-  ../../../core/chain,
   ../worker_desc,
   ./blocks_staged/bodies,
-  "."/[blocks_unproc, db, helpers, update]
+  "."/[blocks_unproc, helpers, update]
 
 # ------------------------------------------------------------------------------
 # Private debugging & logging helpers
@@ -56,7 +55,7 @@ proc fetchAndCheck(
   blk.blocks.setLen(offset + ivReq.len)
   var blockHash = newSeq[Hash32](ivReq.len)
   for n in 1u ..< ivReq.len:
-    let header = ctx.dbHeaderPeek(ivReq.minPt + n).valueOr:
+    let header = ctx.hdrCache.fcHeaderGet(ivReq.minPt + n).valueOr:
       # There is nothing one can do here
       info "Block header missing (reorg triggered)", ivReq, n,
         nth=(ivReq.minPt + n).bnStr
@@ -66,7 +65,7 @@ proc fetchAndCheck(
       return false
     blockHash[n - 1] = header.parentHash
     blk.blocks[offset + n].header = header
-  blk.blocks[offset].header = ctx.dbHeaderPeek(ivReq.minPt).valueOr:
+  blk.blocks[offset].header = ctx.hdrCache.fcHeaderGet(ivReq.minPt).valueOr:
     # There is nothing one can do here
     info "Block header missing (reorg triggered)", ivReq, n=0,
       nth=ivReq.minPt.bnStr
@@ -110,9 +109,6 @@ proc fetchAndCheck(
       blk.blocks[offset + n].uncles       = bodies[n].uncles
       blk.blocks[offset + n].withdrawals  = bodies[n].withdrawals
 
-      # Remove stashed header
-      ctx.dbHeaderUnstash blk.blocks[offset + n].header.number
-
   if offset < blk.blocks.len.uint64:
     return true
 
@@ -132,11 +128,13 @@ func blocksStagedCanImportOk*(ctx: BeaconCtxRef): bool =
     return false
 
   if 0 < ctx.blk.staged.len:
-    # Import if what is on the queue is all we have got. Note that the function
-    # `blocksUnprocIsEmpty()` returns `true` only if all blocks possible have
-    # been fetched (i.e. the `borrowed` list is also empty.)
-    if ctx.blocksUnprocIsEmpty():
-      return true
+    # Start importing if there are no more blocks available. So they have
+    # either been all staged, or are about to be staged. For the latter
+    # case wait until finished with current block downloads.
+    if ctx.blocksUnprocAvail() == 0:
+
+      # Wait until finished with current block downloads
+      return ctx.blocksBorrowedIsEmpty()
 
     # Make sure that the lowest block is available, already. Or the other way
     # round: no unprocessed block number range precedes the least staged block.
@@ -163,7 +161,9 @@ func blocksStagedCanImportOk*(ctx: BeaconCtxRef): bool =
       #
       # So importing does not start before the queue is filled up.
       if ctx.pool.stagedLenHwm <= ctx.blk.staged.len:
-        return true
+
+        # Wait until finished with current block downloads
+        return ctx.blocksBorrowedIsEmpty()
 
   false
 
@@ -184,20 +184,22 @@ func blocksStagedFetchOk*(ctx: BeaconCtxRef): bool =
   false
 
 
+
 proc blocksStagedCollect*(
     buddy: BeaconBuddyRef;
     info: static[string];
       ): Future[bool] {.async: (raises: []).} =
   ## Collect bodies and stage them.
   ##
-  if buddy.ctx.blocksUnprocAvail() == 0:
-    # Nothing to do
-    return false
-
   let
     ctx = buddy.ctx
     peer = buddy.peer
 
+  if ctx.blocksUnprocAvail() == 0 or                   # all done already?
+     ctx.poolMode:                                     # reorg mode?
+    return false                                       # nothing to do
+
+  let
     # Fetch the full range of headers to be completed to blocks
     iv = ctx.blocksUnprocFetch(nFetchBodiesBatch.uint64).expect "valid interval"
 
@@ -214,7 +216,6 @@ proc blocksStagedCollect*(
     # Flag, not to reset error count
     haveError = false
 
-  # nFetchBodiesRequest
   while true:
     # Extract bottom range interval and fetch/stage it
     let
@@ -275,7 +276,7 @@ proc blocksStagedCollect*(
 
     ivBottom += ivRespLen.uint64 # will mostly result into `ivReq.maxPt+1`
 
-    if buddy.ctrl.stopped:
+    if buddy.ctrl.stopped or ctx.poolMode:
       # There is some left over to store back. And `ivBottom <= iv.maxPt`
       # because of the check against `ivRespLen` above.
       ctx.blocksUnprocCommit(iv, ivBottom, iv.maxPt)
@@ -290,11 +291,12 @@ proc blocksStagedCollect*(
   if not haveError:
     buddy.only.nBdyProcErrors = 0
 
-  info "Downloaded blocks", bottomBlock=iv.minPt.bnStr,
+  info "Downloaded blocks", iv=blk.blocks.bnStr,
     nBlocks=blk.blocks.len, nStaged=ctx.blk.staged.len,
-    bdyErrors=buddy.bdyErrors
+    nSyncPeers=ctx.pool.nBuddies, reorgReq=ctx.poolMode
 
   return true
+
 
 
 proc blocksStagedImport*(
@@ -312,7 +314,7 @@ proc blocksStagedImport*(
   # round: no unprocessed block number range precedes the least staged block.
   let uBottom = ctx.blocksUnprocTotalBottom()
   if uBottom < qItem.key:
-    trace info & ": block queue not ready yet", nBuddies=ctx.pool.nBuddies,
+    trace info & ": block queue not ready yet", nSyncPeers=ctx.pool.nBuddies,
       unprocBottom=uBottom.bnStr, least=qItem.key.bnStr
     return false
 
@@ -327,7 +329,7 @@ proc blocksStagedImport*(
     base=ctx.chain.baseNumber.bnStr, head=ctx.chain.latestNumber.bnStr,
     target=ctx.layout.final.bnStr
 
-  var maxImport = iv.maxPt
+  var maxImport = iv.maxPt                         # tentatively assume all ok
   block importLoop:
     for n in 0 ..< nBlocks:
       let nBn = qItem.data.blocks[n].header.number
@@ -339,18 +341,19 @@ proc blocksStagedImport*(
       ctx.pool.chain.importBlock(qItem.data.blocks[n]).isOkOr:
         # The way out here is simply to re-compile the block queue. At any
         # point, the `FC` module data area might have been moved to a new
-        # canonocal branch.
+        # canonical branch.
         #
         ctx.poolMode = true
         warn info & ": import block error (reorg triggered)", n, iv,
           B=ctx.chain.baseNumber.bnStr, L=ctx.chain.latestNumber.bnStr,
           nthBn=nBn.bnStr, nthHash=qItem.data.getNthHash(n).short,
           `error`=error
+        maxImport = nBn
         break importLoop
 
       # Allow pseudo/async thread switch.
       (await ctx.updateAsyncTasks()).isOkOr:
-        maxImport = nBn # shutdown?
+        maxImport = nBn                            # shutdown?
         break importLoop
 
       # Occasionally mark the chain finalized
@@ -362,27 +365,34 @@ proc blocksStagedImport*(
 
         doAssert nBn == ctx.chain.latestNumber()
         ctx.pool.chain.forkChoice(nthHash, finHash).isOkOr:
+          ctx.poolMode = true
           warn info & ": fork choice error (reorg triggered)", n, iv,
             B=ctx.chain.baseNumber.bnStr, L=ctx.chain.latestNumber.bnStr,
             F=ctx.layout.final.bnStr, nthBn=nBn.bnStr, nthHash=nthHash.short,
             finHash=(if finHash == nthHash: "nthHash" else: "F"), `error`=error
           # Restore what is left over below
-          ctx.poolMode = true
+          maxImport = nBn
           break importLoop
 
         # Allow pseudo/async thread switch.
         (await ctx.updateAsyncTasks()).isOkOr:
-          maxImport = nBn # shutdown?
+          maxImport = nBn                          # shutdown?
           break importLoop
+
+  # Remove some older stashed headers
+  ctx.hdrCache.fcHeaderDelBaseAndOlder()
 
   # Import probably incomplete, so a partial roll back may be needed
   if maxImport < iv.maxPt:
     ctx.blocksUnprocAppend(maxImport+1, iv.maxPt)
 
-  info "Import done", iv, nBlocks, base=ctx.chain.baseNumber.bnStr,
-    head=ctx.chain.latestNumber.bnStr, target=ctx.layout.final.bnStr
+  info "Import done", iv=(iv.minPt, maxImport).bnStr,
+    nBlocks=(maxImport-iv.minPt+1), nFailed=(iv.maxPt-maxImport),
+    base=ctx.chain.baseNumber.bnStr, head=ctx.chain.latestNumber.bnStr,
+    target=ctx.layout.head.bnStr, reorgReq=ctx.poolMode
 
   return true
+
 
 
 proc blocksStagedReorg*(ctx: BeaconCtxRef; info: static[string]) =
@@ -406,8 +416,8 @@ proc blocksStagedReorg*(ctx: BeaconCtxRef; info: static[string]) =
   ctx.pool.nReorg.inc
 
   # Reset block queues
-  trace info & ": Flushing Block queues", nUnproc=ctx.blocksUnprocTotal(),
-    nStaged=ctx.blk.staged.len
+  debug info & ": Flushing Block queues", nUnproc=ctx.blocksUnprocTotal(),
+    nStaged=ctx.blk.staged.len, nReorg=ctx.pool.nReorg
 
   ctx.blocksUnprocClear()
   ctx.blk.staged.clear()
