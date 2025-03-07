@@ -60,7 +60,7 @@ logScope:
 
 # Limit the max number of calls to prevent infinite loops and/or DOS in the event
 # of a bug in the implementation
-const evmCallLimit = 10000
+const EVM_CALL_LIMIT = 10000
 
 type
   AccountQuery = object
@@ -152,7 +152,7 @@ proc call*(
 
   # If the multikeys did not change after the last execution then we can stop
   # because we have already executed the transaction with the correct state
-  while evmCallCount < evmCallLimit and not lastMultiKeys.equals(multiKeys):
+  while evmCallCount < EVM_CALL_LIMIT and not lastMultiKeys.equals(multiKeys):
     debug "Starting PortalEvm execution", evmCallCount
 
     let sp = vmState.ledger.beginSavepoint()
