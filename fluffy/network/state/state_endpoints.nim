@@ -1,5 +1,5 @@
 # Fluffy
-# Copyright (c) 2021-2024 Status Research & Development GmbH
+# Copyright (c) 2021-2025 Status Research & Development GmbH
 # Licensed and distributed under either of
 #   * MIT license (license terms in the root directory or at https://opensource.org/licenses/MIT).
 #   * Apache v2 license (license terms in the root directory or at https://www.apache.org/licenses/LICENSE-2.0).
@@ -161,8 +161,11 @@ proc getStorageProof(
   doAssert(nibblesIdx <= nibbles.len())
   ok((proof, nibblesIdx == nibbles.len()))
 
-proc getAccount(
-    n: StateNetwork, stateRoot: Hash32, address: Address, maybeBlockHash: Opt[Hash32]
+proc getAccount*(
+    n: StateNetwork,
+    stateRoot: Hash32,
+    address: Address,
+    maybeBlockHash = Opt.none(Hash32),
 ): Future[Opt[Account]] {.async: (raises: [CancelledError]).} =
   let (accountProof, exists) = (
     await n.getAccountProof(stateRoot, address, maybeBlockHash)
