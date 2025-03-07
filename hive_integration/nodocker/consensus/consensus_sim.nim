@@ -14,7 +14,6 @@ import
   ../../../execution_chain/core/chain,
   ../../../execution_chain/core/block_import,
   ../../../execution_chain/common,
-  ../../../execution_chain/core/eip4844,
   ../sim_utils,
   ./extract_consensus_data
 
@@ -65,11 +64,6 @@ proc main() =
   var stat: SimStat
   let taskPool = Taskpool.new()
   let start = getTime()
-
-  let res = loadKzgTrustedSetup()
-  if res.isErr:
-    echo "FATAL: ", res.error
-    quit(QuitFailure)
 
   for fileName in walkDirRec(basePath):
     if not fileName.endsWith(".json"):

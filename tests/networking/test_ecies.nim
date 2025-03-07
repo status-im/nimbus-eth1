@@ -11,7 +11,7 @@
 
 import
   unittest2,
-  nimcrypto/[utils, sha2, hmac, rijndael],
+  nimcrypto/[utils, sha2, hmac],
   eth/common/keys,
   ../../execution_chain/networking/rlpx/ecies
 
