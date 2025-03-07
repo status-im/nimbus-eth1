@@ -161,8 +161,11 @@ proc getStorageProof(
   doAssert(nibblesIdx <= nibbles.len())
   ok((proof, nibblesIdx == nibbles.len()))
 
-proc getAccount(
-    n: StateNetwork, stateRoot: Hash32, address: Address, maybeBlockHash: Opt[Hash32]
+proc getAccount*(
+    n: StateNetwork,
+    stateRoot: Hash32,
+    address: Address,
+    maybeBlockHash = Opt.none(Hash32),
 ): Future[Opt[Account]] {.async: (raises: [CancelledError]).} =
   let (accountProof, exists) = (
     await n.getAccountProof(stateRoot, address, maybeBlockHash)
