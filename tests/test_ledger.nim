@@ -752,6 +752,26 @@ proc runLedgerBasicOperationsTests() =
         multikeys[0].storageKeys.keys[0].storageSlot == 4.u256.toBytesBE()
         multikeys[0].storageKeys.keys[1].storageSlot == 3.u256.toBytesBE()
 
+    test "Test MultiKeys - Get code":
+      var
+        ac = LedgerRef.init(memDB.baseTxFrame())
+        addr1 = initAddr(1)
+        addr2 = initAddr(2)
+
+      ac.setCode(addr1, code)
+      discard ac.getCode(addr1) # Returns code
+      discard ac.getCode(addr2) # Returns default empty code
+
+      ac.collectWitnessData()
+      let multikeys = ac.makeMultiKeys().keys
+
+      check:
+        multikeys.len() == 2
+        multikeys[0].storageMode == false
+        multikeys[0].address == addr1
+        multikeys[1].storageMode == false
+        multikeys[1].address == addr2
+
 # ------------------------------------------------------------------------------
 # Main function(s)
 # ------------------------------------------------------------------------------
