@@ -66,11 +66,21 @@ func verifyBlockHeaderProof*(
 ): Result[void, string] =
   let timestamp = Moment.init(header.timestamp.int64, Second)
 
-  if isShanghai(chainConfig, timestamp):
-    # Note: currently disabled
-    # - No effective means to get historical summaries yet over the network
-    # - Proof is currently not as per spec, as we prefer to use SSZ Vectors
+  # Note: Capella onwards currently disabled
+  # - No effective means to get historical summaries yet over the network
+  # - Proof is currently not as per spec, as we prefer to use SSZ Vectors
+  if isCancun(chainConfig, timestamp):
+    # let proof = decodeSsz(proof.asSeq(), BlockProofHistoricalSummariesDeneb).valueOr:
+    #   return err("Failed decoding historical_summaries based block proof: " & error)
 
+    # if a.historicalSummaries.verifyProof(
+    #   proof, Digest(data: header.rlpHash().data), cfg
+    # ):
+    #   ok()
+    # else:
+    #   err("Block proof verification failed (historical_summaries)")
+    err("Cancun block proof verification not yet activated")
+  elif isShanghai(chainConfig, timestamp):
     # let proof = decodeSsz(proof.asSeq(), BlockProofHistoricalSummaries).valueOr:
     #   return err("Failed decoding historical_summaries based block proof: " & error)
 
