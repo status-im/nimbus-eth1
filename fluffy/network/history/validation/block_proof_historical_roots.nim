@@ -89,7 +89,7 @@ type
   BeaconBlockProofHistoricalRoots* = array[14, Digest]
 
   BlockProofHistoricalRoots* = object
-    # Total size (11 + 1 + 14) * 32 bytes + 4 bytes = 836 bytes
+    # Total size (14 + 1 + 11) * 32 bytes + 4 bytes = 836 bytes
     beaconBlockProof*: BeaconBlockProofHistoricalRoots
     beaconBlockRoot*: Digest
     executionBlockProof*: ExecutionBlockProof
