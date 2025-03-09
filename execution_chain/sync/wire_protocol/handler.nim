@@ -110,6 +110,11 @@ proc getBlockBodies*(ctx: EthWireRef,
     list: seq[BlockBody]
     totalBytes = 0
 
+  # EIP-4444 limit
+  # The way to prevent not to fetch till a particular limit 
+  # for in-future all storage profiles, if to check the header number
+  # and limit the number of blocks to fetch
+
   for blockHash in hashes:
     let body = ctx.chain.blockBodyByHash(blockHash).valueOr:
       trace "handlers.getBlockBodies: blockBody not found", blockHash
@@ -135,6 +140,16 @@ proc getBlockHeaders*(ctx: EthWireRef,
     header = chain.blockHeader(req.startBlock).valueOr:
       return move(list)
     totalBytes = 0
+
+  # EIP-4444 limit
+  if chain.isPortalActive:
+    case req.reverse:
+    of false:
+      if req.startBlock.number + req.maxResults > chain.portal.limit:
+        return move(list)
+    of true:
+      if req.startBlock.number > chain.portal.limit:
+        return move(list)
 
   totalBytes += getEncodedLength(header)
   list.add header
