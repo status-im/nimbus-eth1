@@ -169,7 +169,8 @@ proc init(com         : CommonRef,
           taskpool    : Taskpool,
           networkId   : NetworkId,
           config      : ChainConfig,
-          genesis     : Genesis) =
+          genesis     : Genesis,
+          initializeDb: bool) =
 
   config.daoCheck()
 
@@ -204,7 +205,8 @@ proc init(com         : CommonRef,
   # By default, history begins at genesis.
   com.startOfHistory = GENESIS_PARENT_HASH
 
-  com.initializeDb()
+  if initializeDb:
+    com.initializeDb()
 
 proc isBlockAfterTtd(com: CommonRef, header: Header, txFrame: CoreDbTxRef): bool =
   if com.config.terminalTotalDifficulty.isNone:
@@ -227,6 +229,7 @@ proc new*(
     taskpool: Taskpool;
     networkId: NetworkId = MainNet;
     params = networkParams(MainNet);
+    initializeDb = true;
       ): CommonRef =
 
   ## If genesis data is present, the forkIds will be initialized
@@ -237,7 +240,8 @@ proc new*(
     taskpool,
     networkId,
     params.config,
-    params.genesis)
+    params.genesis,
+    initializeDb)
 
 proc new*(
     _: type CommonRef;
@@ -245,6 +249,7 @@ proc new*(
     taskpool: Taskpool;
     config: ChainConfig;
     networkId: NetworkId = MainNet;
+    initializeDb = true;
       ): CommonRef =
 
   ## There is no genesis data present
@@ -255,7 +260,8 @@ proc new*(
     taskpool,
     networkId,
     config,
-    nil)
+    nil,
+    initializeDb)
 
 func clone*(com: CommonRef, db: CoreDbRef): CommonRef =
   ## clone but replace the db
