@@ -453,6 +453,16 @@ type
         defaultValueDesc: $RpcFlag.Eth
         name: "ws-api" }: seq[string]
 
+      portalEnabled* {.
+        desc: "Enable the data from Portal Network"
+        defaultValue: false
+        name: "portal" }: bool
+
+      portalUrl* {.
+        desc: "URL of the Portal Network"
+        defaultValue: ""
+        name: "portal-url" }: string
+
       engineApiEnabled* {.
         desc: "Enable the Engine API"
         defaultValue: false
