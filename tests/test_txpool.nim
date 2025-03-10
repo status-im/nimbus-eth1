@@ -181,7 +181,6 @@ proc makeTx(
 
 proc txPoolMain*() =
   suite "TxPool test suite":
-    loadKzgTrustedSetup().expect("KZG trusted setup loaded")
     let
       env = initEnv(Cancun)
       xp = env.xp

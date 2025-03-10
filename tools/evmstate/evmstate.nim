@@ -22,7 +22,6 @@ import
   ../../execution_chain/core/executor,
   ../../execution_chain/common/common,
   ../../execution_chain/evm/tracer/json_tracer,
-  ../../execution_chain/core/eip4844,
   ../../execution_chain/utils/state_dump,
   ../common/helpers as chp,
   "."/[config, helpers],
@@ -253,13 +252,12 @@ when defined(chronicles_runtime_filtering):
     setLogLevel(level)
 
 proc main() =
+  # https://github.com/status-im/nimbus-eth1/issues/3131
+  setStdIoUnbuffered()
+
   let conf = StateConf.init()
   when defined(chronicles_runtime_filtering):
     setVerbosity(conf.verbosity)
-
-  loadKzgTrustedSetup().isOkOr:
-    echo "FATAL: ", error
-    quit(QuitFailure)
 
   if conf.inputFile.len > 0:
     if not prepareAndRun(conf.inputFile, conf):

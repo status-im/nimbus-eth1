@@ -16,7 +16,6 @@ import
   eth/net/nat,
   metrics,
   metrics/chronicles_support,
-  kzg4844/kzg,
   stew/byteutils,
   ./rpc,
   ./version,
@@ -24,7 +23,7 @@ import
   ./nimbus_desc,
   ./nimbus_import,
   ./core/block_import,
-  ./core/eip4844,
+  ./core/lazy_kzg,
   ./db/core_db/persistent,
   ./db/storage_types,
   ./sync/wire_protocol,
@@ -190,16 +189,13 @@ proc run(nimbus: NimbusNode, conf: NimbusConf) =
     evmcSetLibraryPath(conf.evm)
 
   # Trusted setup is needed for processing Cancun+ blocks
+  # If user not specify the trusted setup, baked in
+  # trusted setup will be loaded, lazily.
   if conf.trustedSetupFile.isSome:
     let fileName = conf.trustedSetupFile.get()
     let res = loadTrustedSetup(fileName, 0)
     if res.isErr:
       fatal "Cannot load Kzg trusted setup from file", msg=res.error
-      quit(QuitFailure)
-  else:
-    let res = loadKzgTrustedSetup()
-    if res.isErr:
-      fatal "Cannot load baked in Kzg trusted setup", msg=res.error
       quit(QuitFailure)
 
   createDir(string conf.dataDir)
