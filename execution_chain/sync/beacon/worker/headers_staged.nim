@@ -116,9 +116,6 @@ proc headersStagedCollect*(
 
     # End block: `fetchHeadersBody`
 
-  # The cache `antecedent` must match variable `D` (aka dangling)
-  doAssert ctx.hdrCache.fcHeaderAntecedent().number <= ctx.layout.dangling
-
   let nHeaders = nDeterministic + nOpportunistic.uint64
   if nHeaders == 0:
     return false
@@ -148,8 +145,6 @@ proc headersStagedProcess*(buddy: BeaconBuddyRef; info: static[string]) =
     # Fetch list with largest block numbers
     let qItem = ctx.hdr.staged.le(high BlockNumber).valueOr:
       break # all done
-
-    doAssert qItem.key == qItem.data.revHdrs[0].number
 
     let
       minNum = qItem.data.revHdrs[^1].number

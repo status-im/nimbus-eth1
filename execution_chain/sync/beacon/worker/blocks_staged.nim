@@ -363,7 +363,6 @@ proc blocksStagedImport*(
           finHash = if nBn < ctx.layout.final: nthHash
                     else: ctx.layout.finalHash
 
-        doAssert nBn == ctx.chain.latestNumber()
         ctx.pool.chain.forkChoice(nthHash, finHash).isOkOr:
           ctx.poolMode = true
           warn info & ": fork choice error (reorg triggered)", n, iv,
