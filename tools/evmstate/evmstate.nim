@@ -252,6 +252,9 @@ when defined(chronicles_runtime_filtering):
     setLogLevel(level)
 
 proc main() =
+  # https://github.com/status-im/nimbus-eth1/issues/3131
+  setStdIoUnbuffered()
+
   let conf = StateConf.init()
   when defined(chronicles_runtime_filtering):
     setVerbosity(conf.verbosity)
