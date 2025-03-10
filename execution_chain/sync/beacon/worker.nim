@@ -11,6 +11,7 @@
 {.push raises:[].}
 
 import
+  std/[strutils, syncio],
   pkg/[chronicles, chronos],
   pkg/eth/common,
   pkg/stew/[interval_set, sorted_set],
@@ -88,6 +89,31 @@ proc stop*(buddy: BeaconBuddyRef; info: static[string]) =
     ctrl=buddy.ctrl.state, nLaps=buddy.only.nMultiLoop,
     lastIdleGap=buddy.only.multiRunIdle.toStr
   buddy.stopBuddy()
+
+# --------------------
+
+proc initalScrumFromFile*(
+    ctx: BeaconCtxRef;
+    file: string;
+    info: static[string];
+      ): Result[void,string] =
+  ## Set up inital sprint from argument file (itended for debugging)
+  var
+    mesg: SyncClMesg
+  try:
+    var f = file.open(fmRead)
+    defer: f.close()
+    var rlp = rlpFromHex(f.readAll().strip)
+    mesg = rlp.read(SyncClMesg)
+  except CatchableError as e:
+    return err("Error decoding file: \"" & file & "\"" &
+      " (" & $e.name & ": " & e.msg & ")")
+  ctx.clReq.mesg = mesg
+  ctx.clReq.locked = true
+  ctx.clReq.changed = true
+  debug info & ": Initialised from file", file, consHead=mesg.consHead.bnStr,
+    finalHash=mesg.finalHash.short
+  ok()
 
 # ------------------------------------------------------------------------------
 # Public functions
