@@ -47,6 +47,9 @@ when defined(chronicles_runtime_filtering):
     setLogLevel(level)
 
 proc main() =
+  # https://github.com/status-im/nimbus-eth1/issues/3131
+  setStdIoUnbuffered()
+
   wrapException:
     let conf = T8NConf.init()
     when defined(chronicles_runtime_filtering):
