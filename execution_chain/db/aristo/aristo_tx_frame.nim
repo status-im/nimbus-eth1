@@ -92,6 +92,7 @@ proc checkpoint*(tx: AristoTxRef, blockNumber: uint64, skipSnapshot: bool) =
 proc clearSnapshot*(txFrame: AristoTxRef) =
   if not txFrame.isKeyframe():
     txFrame.snapshot.reset()
+    txFrame.snapshotLevel.reset()
 
 proc persist*(db: AristoDbRef, batch: PutHdlRef, txFrame: AristoTxRef) =
   if txFrame == db.txRef and txFrame.isEmpty():
