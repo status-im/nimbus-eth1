@@ -15,6 +15,7 @@
 # Ignore dynamic, static libs and libtool archive files
 *.so
 *.dylib
+*.dSYM
 *.a
 *.la
 *.exe

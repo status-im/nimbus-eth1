@@ -14,7 +14,8 @@ import
   std/[deques, tables],
   ./chain_branch,
   ../../../common,
-  ../../../db/core_db
+  ../../../db/core_db,
+  ../../../portal/portal
 
 export deques, tables
 
@@ -33,6 +34,7 @@ type
 
     extraValidation*: bool
     baseDistance*: uint64
+    portal*: PortalClientRef
 
     lastSnapshots*: Deque[CoreDbTxRef]
 # ----------------
