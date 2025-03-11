@@ -134,6 +134,7 @@ proc tickerLogger(t: TickerRef; ctx: BeaconCtxRef) =
       st = case data.state
            of idleSyncState: "0"
            of collectingHeaders: "h"
+           of cancelHeaders: "x"
            of finishedHeaders: "f"
            of processingBlocks: "b"
       rrg = data.reorg

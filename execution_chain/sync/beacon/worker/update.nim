@@ -20,8 +20,17 @@ import
   ./[blocks_unproc, headers_unproc, helpers]
 
 # ------------------------------------------------------------------------------
-# Private functions
+# Private helpers
 # ------------------------------------------------------------------------------
+
+func statePair(a, b: SyncLayoutState): int =
+  ## Represent state pair `(a,b)` as a single entity
+  a.ord * 100 + b.ord
+
+func statePair(a: SyncLayoutState): int =
+  a.statePair a
+
+# ------------
 
 proc syncState(ctx: BeaconCtxRef; info: static[string]): SyncLayoutState =
   ## Calculate `SyncLayoutState` from the download context
@@ -105,73 +114,6 @@ proc syncState(ctx: BeaconCtxRef; info: static[string]): SyncLayoutState =
 
   idleSyncState
 
-# ------------
-
-proc startHibernating(ctx: BeaconCtxRef; info: static[string]) =
-  ## Clean up sync scrum target buckets and await a new request from `CL`.
-  ##
-  ctx.sst.reset                               # => clRequest.reset, layout.reset
-  ctx.headersUnprocClear()
-  ctx.blocksUnprocClear()
-  ctx.headersStagedQueueClear()
-  ctx.blocksStagedQueueClear()
-
-  ctx.hdrCache.init()
-
-  ctx.hibernate = true
-
-  info "Suspending syncer", base=ctx.chain.baseNumber.bnStr,
-    head=ctx.chain.latestNumber.bnStr
-
-
-proc setupCollectingHeaders(ctx: BeaconCtxRef; info: static[string]) =
-  ## Set up sync scrum target header (see clause *(9)* in `README.md`) by
-  ## modifying layout to:
-  ## ::
-  ##   0            B
-  ##   o------------o-------o
-  ##   | <--- imported ---> |                           D
-  ##                C                                   H
-  ##                o-----------------------------------o
-  ##                | <--------- unprocessed ---------> |
-  ##
-  ## where *B* is the **base** entity of the `FC` module and `C ~ B`. The
-  ## parameter `H` is set to the new sync request `T` from the `CL`.
-  ##
-  let
-    c = ctx.chain.baseNumber()
-    h = ctx.clReq.mesg.consHead.number
-
-  if c+1 < h:                                 # header chain interval is `(C,H]`
-    doAssert ctx.headersUnprocIsEmpty()
-    doAssert ctx.headersStagedQueueIsEmpty()
-    doAssert ctx.blocksUnprocIsEmpty()
-    doAssert ctx.blocksStagedQueueIsEmpty()
-
-    ctx.sst.layout = SyncStateLayout(
-      coupler:   c,
-      dangling:  h,
-      final:     BlockNumber(0),
-      finalHash: ctx.clReq.mesg.finalHash,
-      head:      h,
-      lastState: collectingHeaders)           # state transition
-
-    # Prepare cache for a new scrum
-    ctx.hdrCache.init(ctx.clReq.mesg.consHead, @[ctx.clReq.mesg.finalHash])
-
-    # Update range
-    ctx.headersUnprocSet(c+1, h-1)
-
-    # Mark cl request used (to be set `true` when new request arrives)
-    ctx.clReq.changed = false
-
-    # Unlock, might have been set to not update the `ctx.clReq.mesg` until
-    # it is consumed by the scrum set up (i.e. here)
-    ctx.clReq.locked = false
-
-    trace info & ": new sync scrum target head",
-      C=c.bnStr, D="H", H="T", T=h.bnStr
-
 
 proc linkIntoFc(ctx: BeaconCtxRef; info: static[string]): bool =
   ## Link `(C,H]` into the `FC` logic. If successful, `true` is returned.
@@ -226,7 +168,7 @@ proc linkIntoFc(ctx: BeaconCtxRef; info: static[string]): bool =
       ctx.layout.coupler = yNum                                # parent of `Z`
       ctx.layout.dangling = yNum                               # .. ditto
 
-      trace info & ": linked into FC", B=b.bnStr,
+      trace info & ": header chain linked into FC", B=b.bnStr,
         C=(if yNum==l: "L" else: yNum.bnStr), L=l.bnStr, H=h.bnStr
 
       return true
@@ -234,6 +176,89 @@ proc linkIntoFc(ctx: BeaconCtxRef; info: static[string]): bool =
   trace info & ": cannot link into FC", B=b.bnStr, L=l.bnStr,
     C=c.bnStr, H=h.bnStr
   false
+
+# ------------------------------------------------------------------------------
+# Private functions, state handlers
+# ------------------------------------------------------------------------------
+
+proc startHibernating(ctx: BeaconCtxRef; info: static[string]) =
+  ## Clean up sync scrum target buckets and await a new request from `CL`.
+  ##
+  ctx.sst.reset                               # => clRequest.reset, layout.reset
+  ctx.headersUnprocClear()
+  ctx.blocksUnprocClear()
+  ctx.headersStagedQueueClear()
+  ctx.blocksStagedQueueClear()
+
+  ctx.hdrCache.init()
+
+  ctx.hibernate = true
+
+  info "Suspending syncer", base=ctx.chain.baseNumber.bnStr,
+    head=ctx.chain.latestNumber.bnStr
+
+
+proc setupCollectingHeaders(ctx: BeaconCtxRef; info: static[string]) =
+  ## Set up sync scrum target header (see clause *(9)* in `README.md`) by
+  ## modifying layout to:
+  ## ::
+  ##   0            B
+  ##   o------------o-------o
+  ##   | <--- imported ---> |                           D
+  ##                C                                   H
+  ##                o-----------------------------------o
+  ##                | <--------- unprocessed ---------> |
+  ##
+  ## where *B* is the **base** entity of the `FC` module and `C ~ B`. The
+  ## parameter `H` is set to the new sync request `T` from the `CL`.
+  ##
+  let
+    c = ctx.chain.baseNumber()
+    t = ctx.clReq.mesg.consHead.number
+
+  doAssert ctx.headersUnprocIsEmpty()
+  doAssert ctx.headersStagedQueueIsEmpty()
+  doAssert ctx.blocksUnprocIsEmpty()
+  doAssert ctx.blocksStagedQueueIsEmpty()
+
+  if c+1 < t:                                 # header chain interval is `(C,T]`
+    ctx.sst.layout = SyncStateLayout(
+      coupler:   c,
+      dangling:  t,
+      final:     BlockNumber(0),
+      finalHash: ctx.clReq.mesg.finalHash,
+      head:      t,
+      lastState: collectingHeaders)           # state transition
+
+    # Prepare cache for a new scrum
+    ctx.hdrCache.init(ctx.clReq.mesg.consHead, @[ctx.clReq.mesg.finalHash])
+
+    # Update range
+    ctx.headersUnprocSet(c+1, t-1)
+
+    trace info & ": new sync scrum target", C=c.bnStr, D="H", H="T", T=t.bnStr
+
+  else:
+    ctx.layout.lastState = cancelHeaders      # no way, go back hibernate
+
+    trace info & ": no usable sync scrum target", C=c.bnStr, T=t.bnStr
+
+  # Unlock. This flag might have been set to not update the `ctx.clReq.mesg`
+  # until it is consumed by the scrum set up (i.e. here)
+  ctx.clReq.locked = false
+
+  # Mark cl request used (to be set `true` when new request arrives)
+  ctx.clReq.changed = false
+
+
+proc setupFinishedHeaders(ctx: BeaconCtxRef; info: static[string]) =
+  ## Trivial state transition handler
+  ctx.layout.lastState = finishedHeaders
+
+proc setupCancelHeaders(ctx: BeaconCtxRef; info: static[string]) =
+  ## Trivial state transition handler
+  ctx.layout.lastState = cancelHeaders
+  ctx.poolMode = true # reorg, clear header queues
 
 
 proc setupProcessingBlocks(ctx: BeaconCtxRef; info: static[string]) =
@@ -272,59 +297,72 @@ proc setupProcessingBlocks(ctx: BeaconCtxRef; info: static[string]) =
 
 proc updateSyncState*(ctx: BeaconCtxRef; info: static[string]) =
   ## Update internal state when needed
-  let prevState = ctx.layout.lastState   # previous state
-  var thisState = ctx.syncState info     # currently observed state
 
-  if thisState == prevState:
-    # Check whether the system has been idle and a new header download
-    # session can be set up
-    case prevState:
-    of idleSyncState:
-      if ctx.clReq.changed:              # and there is a new request from CL
-        ctx.setupCollectingHeaders info  # set up new header sync
-        info "Sync state changed", prevState, thisState,
-          base=ctx.chain.baseNumber.bnStr, head=ctx.chain.latestNumber.bnStr,
-          target=ctx.layout.head.bnStr
-      return
-    of processingBlocks:
-      if not ctx.blocksStagedQueueIsEmpty() or
-         not ctx.blocksUnprocIsEmpty():
-        return
-      # Set to idle
-      debug info & ": blocks processing cancelled",
-        B=(if ctx.chain.baseNumber() == ctx.layout.coupler: "C"
-           else: ctx.chain.baseNumber().bnStr),
-        C=(if ctx.layout.coupler == ctx.chain.latestNumber(): "L"
-           else: ctx.layout.coupler.bnStr),
-        L=(if ctx.chain.latestNumber() == ctx.layout.dangling: "D"
-           else: ctx.chain.latestNumber().bnStr),
-        D=(if ctx.layout.dangling == ctx.layout.head: "H"
-           else: ctx.layout.dangling.bnStr),
-        H=ctx.layout.head.bnStr
-      thisState = idleSyncState
-      # proceed
+  # Calculate the pair `(prevState,thisState)` in order to check for a state
+  # change.
+  let prevState = ctx.layout.lastState   # previous state
+  var thisState =                        # figure out current state
+    if prevState == cancelHeaders:
+      prevState                          # no need to change state here
     else:
+      ctx.syncState info                 # currently observed state, the std way
+
+  # Handle same state cases first (i.e. no state change.) Depending on the
+  # context, the new state might be forced to change.
+  case statePair(prevState, thisState)
+  of statePair(idleSyncState):
+    if not ctx.clReq.changed:            # no new request from `CL`?
       return
+    thisState = collectingHeaders
+    # proceed
+
+  of statePair(finishedHeaders):
+    if ctx.linkIntoFc(info):             # commit downloading headers
+      thisState = processingBlocks
+    else:
+      thisState = idleSyncState          # will continue hibernating
+    # proceed
+
+  of statePair(processingBlocks):
+    if not ctx.blocksStagedQueueIsEmpty() or
+       not ctx.blocksUnprocIsEmpty():
+      return
+    thisState = idleSyncState            # will continue hibernating
+    # proceed
+
+  elif prevState == thisState:
+    return
+
+  # Process state transition
+  case statePair(prevState, thisState)
+  of statePair(idleSyncState, collectingHeaders):
+    ctx.setupCollectingHeaders info      # set up new header sync request
+    thisState = ctx.layout.lastState     # assign result from state handler
+
+  of statePair(collectingHeaders, cancelHeaders):
+    ctx.setupCancelHeaders info          # cancel header download
+    thisState = ctx.layout.lastState     # assign result from state handler
+
+  of statePair(finishedHeaders, processingBlocks):
+    ctx.setupProcessingBlocks info       # start downloading block bodies
+    thisState = ctx.layout.lastState     # assign result from state handler
+
+  of statePair(collectingHeaders, finishedHeaders):
+    ctx.setupFinishedHeaders info        # call state handler
+    thisState = ctx.layout.lastState     # assign result from state handler
+
+  else:
+    # Use transition as is (no handler)
+    discard
 
   info "Sync state changed", prevState, thisState,
     base=ctx.chain.baseNumber.bnStr, head=ctx.chain.latestNumber.bnStr,
     target=ctx.layout.head.bnStr
 
-  # So there is a states transition. The only relevant transition here
-  # is `collectingHeaders -> finishedHeaders` which will be continued
-  # as `finishedHeaders -> processingBlocks`.
-  #
-  if prevState == collectingHeaders and
-     thisState == finishedHeaders and
-     ctx.linkIntoFc(info):               # commit downloading headers
-    ctx.setupProcessingBlocks info       # start downloading block bodies
-    info "Sync state changed",
-      prevState=thisState, thisState=ctx.syncState(info),
-      startBlock=ctx.blocksUnprocAvailBottom.bnStr
-    return
-
   # Final sync scrum layout reached or inconsistent/impossible state
-  ctx.startHibernating info
+  if thisState == idleSyncState:
+    ctx.startHibernating info
+
 
 
 proc updateFromHibernatingForNextScrum*(
@@ -341,6 +379,7 @@ proc updateFromHibernatingForNextScrum*(
     ctx.hibernate = false
     info "Activating syncer", base=ctx.chain.baseNumber.bnStr,
       head=ctx.chain.latestNumber.bnStr, consHead=ctx.clReq.mesg.consHead.bnStr
+
 
 
 proc updateAsyncTasks*(
