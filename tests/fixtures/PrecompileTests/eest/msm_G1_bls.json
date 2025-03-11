@@ -1,5 +1,5 @@
 {
-  "func": "blsMapG1",
+  "func": "blsG1MultiExp",
   "fork": "prague",
   "data":
 [
