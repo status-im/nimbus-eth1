@@ -36,11 +36,6 @@ type
     current: BlockNumber
     highest: BlockNumber
 
-  SyncState* = enum
-    Waiting
-    Syncing
-    Synced
-
   SyncReqNewHeadCB* = proc(header: Header) {.gcsafe, raises: [].}
     ## Update head for syncing
 
@@ -75,8 +70,6 @@ type
     # synchronizer need this
     syncProgress: SyncProgress
 
-    syncState: SyncState
-
     syncReqNewHead: SyncReqNewHeadCB
       ## Call back function for the sync processor. This function stages
       ## the arguent header to a private aerea for subsequent processing.
@@ -98,9 +91,6 @@ type
       ## This setting is needed for resuming blockwise syncying after
       ## installing a snapshot pivot. The default value for this field is
       ## `GENESIS_PARENT_HASH` to start at the very beginning.
-
-    pruneHistory: bool
-      ## Must not not set for a full node, might go away some time
 
     extraData: string
       ## Value of extraData field when building a block
@@ -180,7 +170,7 @@ proc init(com         : CommonRef,
           networkId   : NetworkId,
           config      : ChainConfig,
           genesis     : Genesis,
-          pruneHistory: bool) =
+          initializeDb: bool) =
 
   config.daoCheck()
 
@@ -189,8 +179,6 @@ proc init(com         : CommonRef,
   com.forkTransitionTable = config.toForkTransitionTable()
   com.networkId   = networkId
   com.syncProgress= SyncProgress()
-  com.syncState   = Waiting
-  com.pruneHistory= pruneHistory
   com.extraData   = ShortClientId
   com.taskpool    = taskpool
   com.gasLimit    = DEFAULT_GAS_LIMIT
@@ -217,7 +205,8 @@ proc init(com         : CommonRef,
   # By default, history begins at genesis.
   com.startOfHistory = GENESIS_PARENT_HASH
 
-  com.initializeDb()
+  if initializeDb:
+    com.initializeDb()
 
 proc isBlockAfterTtd(com: CommonRef, header: Header, txFrame: CoreDbTxRef): bool =
   if com.config.terminalTotalDifficulty.isNone:
@@ -240,7 +229,7 @@ proc new*(
     taskpool: Taskpool;
     networkId: NetworkId = MainNet;
     params = networkParams(MainNet);
-    pruneHistory = false;
+    initializeDb = true;
       ): CommonRef =
 
   ## If genesis data is present, the forkIds will be initialized
@@ -252,7 +241,7 @@ proc new*(
     networkId,
     params.config,
     params.genesis,
-    pruneHistory)
+    initializeDb)
 
 proc new*(
     _: type CommonRef;
@@ -260,7 +249,7 @@ proc new*(
     taskpool: Taskpool;
     config: ChainConfig;
     networkId: NetworkId = MainNet;
-    pruneHistory = false;
+    initializeDb = true;
       ): CommonRef =
 
   ## There is no genesis data present
@@ -272,7 +261,7 @@ proc new*(
     networkId,
     config,
     nil,
-    pruneHistory)
+    initializeDb)
 
 func clone*(com: CommonRef, db: CoreDbRef): CommonRef =
   ## clone but replace the db
@@ -286,7 +275,7 @@ func clone*(com: CommonRef, db: CoreDbRef): CommonRef =
     genesisHeader: com.genesisHeader,
     syncProgress : com.syncProgress,
     networkId    : com.networkId,
-    pruneHistory : com.pruneHistory)
+  )
 
 func clone*(com: CommonRef): CommonRef =
   com.clone(com.db)
@@ -399,9 +388,6 @@ func daoForkSupport*(com: CommonRef): bool =
 func ttd*(com: CommonRef): Opt[DifficultyInt] =
   com.config.terminalTotalDifficulty
 
-func pruneHistory*(com: CommonRef): bool =
-  com.pruneHistory
-
 # always remember ChainId and NetworkId
 # are two distinct things that often got mixed
 # because some client do not make distinction
@@ -431,9 +417,6 @@ func syncCurrent*(com: CommonRef): BlockNumber =
 
 func syncHighest*(com: CommonRef): BlockNumber =
   com.syncProgress.highest
-
-func syncState*(com: CommonRef): SyncState =
-  com.syncState
 
 func extraData*(com: CommonRef): string =
   com.extraData
@@ -465,9 +448,6 @@ func `syncCurrent=`*(com: CommonRef, number: BlockNumber) =
 
 func `syncHighest=`*(com: CommonRef, number: BlockNumber) =
   com.syncProgress.highest = number
-
-func `syncState=`*(com: CommonRef, state: SyncState) =
-  com.syncState = state
 
 func `startOfHistory=`*(com: CommonRef, val: Hash32) =
   ## Setter

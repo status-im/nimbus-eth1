@@ -1,5 +1,5 @@
 # Fluffy
-# Copyright (c) 2023-2024 Status Research & Development GmbH
+# Copyright (c) 2023-2025 Status Research & Development GmbH
 # Licensed and distributed under either of
 #   * MIT license (license terms in the root directory or at https://opensource.org/licenses/MIT).
 #   * Apache v2 license (license terms in the root directory or at https://www.apache.org/licenses/LICENSE-2.0).
@@ -287,16 +287,16 @@ proc exportBeaconBlockProofBellatrix(
       error "Failed to load Bellatrix block", slot
       quit QuitFailure
 
-    blockProof = buildProof(batch, beaconBlock.message).valueOr:
+    blockProof = block_proof_historical_roots.buildProof(batch, beaconBlock.message).valueOr:
       error "Failed to build proof for Bellatrix block", slot, error
       quit QuitFailure
 
   let yamlTestProof = YamlTestProofBellatrix(
     execution_block_header:
       beaconBlock.message.body.execution_payload.block_hash.data.to0xHex(),
-    beacon_block_proof: blockProof.executionBlockProof.toHex(array[11, string]),
+    execution_block_proof: blockProof.executionBlockProof.toHex(array[11, string]),
     beacon_block_root: blockProof.beaconBlockRoot.data.to0xHex(),
-    historical_roots_proof: blockProof.beaconBlockProof.toHex(array[14, string]),
+    beacon_block_proof: blockProof.beaconBlockProof.toHex(array[14, string]),
     slot: blockProof.slot.uint64,
   )
 
@@ -413,9 +413,9 @@ proc exportBeaconBlockProofCapella(
   let yamlTestProof = YamlTestProof(
     execution_block_header:
       beaconBlock.message.body.execution_payload.block_hash.data.to0xHex(),
-    beacon_block_proof: blockProof.executionBlockProof.toHex(array[11, string]),
+    execution_block_proof: blockProof.executionBlockProof.toHex(array[11, string]),
     beacon_block_root: blockProof.beaconBlockRoot.data.to0xHex(),
-    historical_summaries_proof: blockProof.beaconBlockProof.toHex(array[13, string]),
+    beacon_block_proof: blockProof.beaconBlockProof.toHex(array[13, string]),
     slot: blockProof.slot.uint64,
   )
 

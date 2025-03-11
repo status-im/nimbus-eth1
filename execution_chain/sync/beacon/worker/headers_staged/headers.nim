@@ -15,18 +15,16 @@ import
   pkg/[chronicles, chronos, results],
   pkg/eth/common,
   pkg/stew/interval_set,
-  ../../../protocol,
-  ../../../protocol/eth/eth_types,
-  ../../worker_desc,
-  ../../../../networking/p2p
+  ../../../wire_protocol,
+  ../../worker_desc
 
 # ------------------------------------------------------------------------------
 # Private functions
 # ------------------------------------------------------------------------------
 
 proc registerError(buddy: BeaconBuddyRef) =
-  buddy.only.nHdrRespErrors.inc
-  if fetchHeadersReqErrThresholdCount < buddy.only.nHdrRespErrors:
+  buddy.incHdrRespErrors()
+  if fetchHeadersReqErrThresholdCount < buddy.nHdrRespErrors:
     buddy.ctrl.zombie = true # abandon slow peer
 
 # ------------------------------------------------------------------------------
@@ -34,8 +32,7 @@ proc registerError(buddy: BeaconBuddyRef) =
 # ------------------------------------------------------------------------------
 
 func hdrErrors*(buddy: BeaconBuddyRef): string =
-  $buddy.only.nHdrRespErrors & "/" & $buddy.only.nHdrProcErrors
-
+  $buddy.nHdrRespErrors & "/" & $buddy.nHdrProcErrors()
 
 # ------------------------------------------------------------------------------
 # Public functions
@@ -51,9 +48,8 @@ proc headersFetchReversed*(
   ## Get a list of headers in reverse order.
   let
     peer = buddy.peer
-    useHash = (topHash != emptyRoot)
     req = block:
-      if useHash:
+      if topHash != emptyRoot:
         EthBlocksRequest(
           maxResults: ivReq.len.uint,
           skip:       0,
@@ -72,7 +68,7 @@ proc headersFetchReversed*(
     start = Moment.now()
 
   trace trEthSendSendingGetBlockHeaders & " reverse", peer, ivReq,
-    nReq=req.maxResults, useHash, hdrErrors=buddy.hdrErrors
+    nReq=req.maxResults, hash=topHash.toStr, hdrErrors=buddy.hdrErrors
 
   # Fetch headers from peer
   var resp: Option[blockHeadersObj]
@@ -85,9 +81,9 @@ proc headersFetchReversed*(
     resp = await peer.getBlockHeaders(req)
   except CatchableError as e:
     buddy.registerError()
-    `info` info & " error", peer, ivReq, nReq=req.maxResults, useHash,
-      elapsed=(Moment.now() - start).toStr, error=($e.name), msg=e.msg,
-      hdrErrors=buddy.hdrErrors
+    `info` info & " error", peer, ivReq, nReq=req.maxResults,
+      hash=topHash.toStr, elapsed=(Moment.now() - start).toStr,
+      error=($e.name), msg=e.msg, hdrErrors=buddy.hdrErrors
     return err()
 
   # This round trip time `elapsed` is the real time, not necessarily the
@@ -102,17 +98,17 @@ proc headersFetchReversed*(
   # Evaluate result
   if resp.isNone or buddy.ctrl.stopped:
     buddy.registerError()
-    trace trEthRecvReceivedBlockHeaders, peer, nReq=req.maxResults, useHash,
-      nResp=0, elapsed=elapsed.toStr, ctrl=buddy.ctrl.state,
+    trace trEthRecvReceivedBlockHeaders, peer, nReq=req.maxResults,
+      hash=topHash.toStr, nResp=0, elapsed=elapsed.toStr, ctrl=buddy.ctrl.state,
       hdrErrors=buddy.hdrErrors
     return err()
 
   let h: seq[Header] = resp.get.headers
   if h.len == 0 or ivReq.len < h.len.uint64:
     buddy.registerError()
-    trace trEthRecvReceivedBlockHeaders, peer, nReq=req.maxResults, useHash,
-      nResp=h.len, elapsed=elapsed.toStr, ctrl=buddy.ctrl.state,
-      hdrErrors=buddy.hdrErrors
+    trace trEthRecvReceivedBlockHeaders, peer, nReq=req.maxResults,
+      hash=topHash.toStr, nResp=h.len, elapsed=elapsed.toStr,
+      ctrl=buddy.ctrl.state, hdrErrors=buddy.hdrErrors
     return err()
 
   # Ban an overly slow peer for a while when seen in a row. Also there is a
@@ -121,11 +117,12 @@ proc headersFetchReversed*(
      h.len.uint64 * 100 < req.maxResults * fetchHeadersReqMinResponsePC:
     buddy.registerError()
   else:
-    buddy.only.nHdrRespErrors = 0 # reset error count
+    buddy.nHdrRespErrors = 0 # reset error count
 
-  trace trEthRecvReceivedBlockHeaders, peer, nReq=req.maxResults, useHash,
-    ivResp=BnRange.new(h[^1].number,h[0].number), nResp=h.len,
-    elapsed=elapsed.toStr, ctrl=buddy.ctrl.state, hdrErrors=buddy.hdrErrors
+  trace trEthRecvReceivedBlockHeaders, peer, nReq=req.maxResults,
+    hash=topHash.toStr, ivResp=BnRange.new(h[^1].number,h[0].number),
+    nResp=h.len, elapsed=elapsed.toStr, ctrl=buddy.ctrl.state,
+    hdrErrors=buddy.hdrErrors
 
   return ok(h)
 

@@ -15,7 +15,6 @@ import
   std/strutils,
   pkg/[chronos, chronicles, eth/common, stew/interval_set, stint],
   ../../../../utils/prettify,
-  ../../../../core/chain,
   ../../worker_desc,
   ../blocks_staged/staged_queue,
   ../headers_staged/staged_queue,
@@ -75,8 +74,8 @@ proc updater(ctx: BeaconCtxRef): TickerStats =
     dangling:        ctx.layout.dangling,
     head:            ctx.layout.head,
     headOk:          ctx.layout.lastState != idleSyncState,
-    target:          ctx.target.consHead.number,
-    targetOk:        ctx.target.final != 0,
+    target:          ctx.clRequest.consHead.number,
+    targetOk:        ctx.clRequest.changed,
 
     nHdrStaged:      ctx.headersStagedQueueLen(),
     hdrStagedTop:    ctx.headersStagedQueueTopKey(),

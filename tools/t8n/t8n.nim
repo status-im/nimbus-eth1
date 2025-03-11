@@ -1,5 +1,5 @@
 # Nimbus
-# Copyright (c) 2022 Status Research & Development GmbH
+# Copyright (c) 2022-2025 Status Research & Development GmbH
 # Licensed under either of
 #  * Apache License, version 2.0, ([LICENSE-APACHE](LICENSE-APACHE) or
 #    http://www.apache.org/licenses/LICENSE-2.0)
@@ -47,6 +47,9 @@ when defined(chronicles_runtime_filtering):
     setLogLevel(level)
 
 proc main() =
+  # https://github.com/status-im/nimbus-eth1/issues/3131
+  setStdIoUnbuffered()
+
   wrapException:
     let conf = T8NConf.init()
     when defined(chronicles_runtime_filtering):

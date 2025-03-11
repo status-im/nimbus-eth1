@@ -13,8 +13,7 @@ import
   chronicles,
   results,
   ./types,
-  ../sim_utils,
-  ../../../execution_chain/core/eip4844
+  ../sim_utils
 
 import
   ./engine_tests,
@@ -36,11 +35,6 @@ let
 proc main() =
   var stat: SimStat
   let start = getTime()
-
-  let res = loadKzgTrustedSetup()
-  if res.isErr:
-    fatal "Cannot load baked in Kzg trusted setup", msg=res.error
-    quit(QuitFailure)
 
   for x in testList:
     let status = if x.run(x.spec):

@@ -16,6 +16,7 @@
 {.push raises: [].}
 
 import
+  std/hashes,
   ../networking/p2p
 
 type
@@ -32,7 +33,8 @@ type
   BuddyRef*[S,W] = ref object
     ## Worker peer state descriptor.
     ctx*: CtxRef[S]             ## Shared data descriptor back reference
-    peer*: Peer                 ## Reference to eth p2pProtocol entry
+    peer*: Peer                 ## Reference to eth `p2p` protocol entry
+    peerID*: Hash               ## Hash of peer node
     ctrl*: BuddyCtrlRef         ## Control and state settings
     only*: W                    ## Worker peer specific data
 

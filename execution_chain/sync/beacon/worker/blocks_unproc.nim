@@ -14,8 +14,7 @@ import
   pkg/eth/common,
   pkg/results,
   pkg/stew/interval_set,
-  ../worker_desc,
-  ../../../networking/p2p
+  ../worker_desc
 
 # ------------------------------------------------------------------------------
 # Public functions
@@ -132,6 +131,9 @@ proc blocksUnprocTotalBottom*(ctx: BeaconCtxRef): uint64 =
 proc blocksUnprocIsEmpty*(ctx: BeaconCtxRef): bool =
   ## True iff there are neither `borrowed` or `unprocessed` entries.
   ctx.blk.unprocessed.chunks() == 0 and
+  ctx.blk.borrowed.chunks() == 0
+
+proc blocksBorrowedIsEmpty*(ctx: BeaconCtxRef): bool =
   ctx.blk.borrowed.chunks() == 0
 
 # ------------------

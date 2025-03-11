@@ -12,24 +12,21 @@
 
 import
   ../../networking/p2p,
-  ../../core/[chain, tx_pool],
-  ../protocol,
-  ./eth as handlers_eth
+  ../../core/tx_pool,
+  ./implementation,
+  ./handler
 
 # ------------------------------------------------------------------------------
 # Public functions: convenience mappings for `eth`
 # ------------------------------------------------------------------------------
 proc addEthHandlerCapability*(
     node: EthereumNode;
-    peerPool: PeerPool;
-    chain: ForkedChainRef;
-    txPool = TxPoolRef(nil);
+    txPool: TxPoolRef;
       ) =
-  ## Install `eth` handlers. Passing `txPool` as `nil` installs the handler
-  ## in minimal/outbound mode.
+  ## Install `eth` handlers.
   node.addCapability(
-    protocol.eth,
-    EthWireRef.new(chain, txPool, peerPool))
+    implementation.eth68,
+    EthWireRef.new(txPool))
 
 # ------------------------------------------------------------------------------
 # End

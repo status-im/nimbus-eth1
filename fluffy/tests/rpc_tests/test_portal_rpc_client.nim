@@ -38,7 +38,12 @@ proc newHistoryNode(rng: ref HmacDrbgContext, port: int): HistoryNode =
     )
     streamManager = StreamManager.new(node)
     historyNetwork = HistoryNetwork.new(
-      PortalNetwork.none, node, db, streamManager, FinishedHistoricalHashesAccumulator()
+      PortalNetwork.none,
+      node,
+      db,
+      streamManager,
+      RuntimeConfig(),
+      FinishedHistoricalHashesAccumulator(),
     )
 
   return HistoryNode(discoveryProtocol: node, historyNetwork: historyNetwork)

@@ -10,13 +10,22 @@
 import
   chronos/timer,
   eth/trie/ordered_trie,
+  beacon_chain/spec/presets,
   ../../network_metadata,
   ./history_type_conversions,
-  ./validation/historical_hashes_accumulator
+  ./validation/[
+    historical_hashes_accumulator, block_proof_historical_roots,
+    block_proof_historical_summaries,
+  ]
 
 from eth/common/eth_types_rlp import rlpHash
 
 export historical_hashes_accumulator
+
+type HistoryAccumulators* = object
+  historicalHashes*: FinishedHistoricalHashesAccumulator
+  historicalRoots*: HistoricalRoots
+  historicalSummaries*: HistoricalSummaries
 
 func validateHeader(header: Header, blockHash: Hash32): Result[void, string] =
   if not (header.rlpHash() == blockHash):
@@ -50,32 +59,67 @@ func validateHeaderBytes*(
   ok(header)
 
 func verifyBlockHeaderProof*(
-    a: FinishedHistoricalHashesAccumulator,
+    a: HistoryAccumulators,
     header: Header,
     proof: ByteList[MAX_HEADER_PROOF_LENGTH],
+    cfg: RuntimeConfig,
 ): Result[void, string] =
   let timestamp = Moment.init(header.timestamp.int64, Second)
 
-  if isShanghai(chainConfig, timestamp):
-    # TODO: Add verification post merge based on historical_summaries
-    err("Shanghai block verification not implemented")
+  # Note: Capella onwards currently disabled
+  # - No effective means to get historical summaries yet over the network
+  # - Proof is currently not as per spec, as we prefer to use SSZ Vectors
+  if isCancun(chainConfig, timestamp):
+    # let proof = decodeSsz(proof.asSeq(), BlockProofHistoricalSummariesDeneb).valueOr:
+    #   return err("Failed decoding historical_summaries based block proof: " & error)
+
+    # if a.historicalSummaries.verifyProof(
+    #   proof, Digest(data: header.rlpHash().data), cfg
+    # ):
+    #   ok()
+    # else:
+    #   err("Block proof verification failed (historical_summaries)")
+    err("Cancun block proof verification not yet activated")
+  elif isShanghai(chainConfig, timestamp):
+    # let proof = decodeSsz(proof.asSeq(), BlockProofHistoricalSummaries).valueOr:
+    #   return err("Failed decoding historical_summaries based block proof: " & error)
+
+    # if a.historicalSummaries.verifyProof(
+    #   proof, Digest(data: header.rlpHash().data), cfg
+    # ):
+    #   ok()
+    # else:
+    #   err("Block proof verification failed (historical_summaries)")
+    err("Shanghai block proof verification not yet activated")
   elif isPoSBlock(chainConfig, header.number):
-    # TODO: Add verification post merge based on historical_roots
-    err("PoS block verification not implemented")
+    let proof = decodeSsz(proof.asSeq(), BlockProofHistoricalRoots).valueOr:
+      return err("Failed decoding historical_roots based block proof: " & error)
+
+    if a.historicalRoots.verifyProof(proof, Digest(data: header.rlpHash().data)):
+      ok()
+    else:
+      err("Block proof verification failed (historical roots)")
   else:
     let accumulatorProof = decodeSsz(proof.asSeq(), HistoricalHashesAccumulatorProof).valueOr:
-      return err("Failed decoding accumulator proof: " & error)
+      return
+        err("Failed decoding historical hashes accumulator based block proof: " & error)
 
-    a.verifyAccumulatorProof(header, accumulatorProof)
+    if a.historicalHashes.verifyProof(header, accumulatorProof):
+      ok()
+    else:
+      err("Block proof verification failed (historical hashes accumulator)")
 
 func validateCanonicalHeaderBytes*(
-    bytes: openArray[byte], id: uint64 | Hash32, a: FinishedHistoricalHashesAccumulator
+    bytes: openArray[byte],
+    id: uint64 | Hash32,
+    accumulators: HistoryAccumulators,
+    cfg: RuntimeConfig,
 ): Result[Header, string] =
   let headerWithProof = decodeSsz(bytes, BlockHeaderWithProof).valueOr:
     return err("Failed decoding header with proof: " & error)
   let header = ?validateHeaderBytes(headerWithProof.header.asSeq(), id)
 
-  ?a.verifyBlockHeaderProof(header, headerWithProof.proof)
+  ?accumulators.verifyBlockHeaderProof(header, headerWithProof.proof, cfg)
 
   ok(header)
 
