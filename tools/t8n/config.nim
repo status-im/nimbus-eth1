@@ -24,8 +24,6 @@ const
   availableForks = combineForks()
 
 type
-  HexOrInt* = distinct uint64
-
   T8NConf* = object of RootObj
     traceEnabled* {.
       desc: "Enable and set where to put full EVM trace logs"
@@ -106,8 +104,9 @@ type
 
     stateChainId* {.
       desc: "ChainID to use"
-      defaultValue: 1
-      name: "state.chainid" }: HexOrInt
+      defaultValue: 1.u256
+      defaultValueDesc: "1"
+      name: "state.chainid" }: UInt256
 
     stateFork* {.
       desc: "Name of ruleset to use."
@@ -133,13 +132,13 @@ proc parseCmdArg(T: type Option[UInt256], p: string): T =
 proc completeCmdArg(T: type Option[UInt256], val: string): seq[string] =
   return @[]
 
-proc parseCmdArg(T: type HexOrInt, p: string): T =
+proc parseCmdArg(T: type UInt256, p: string): T =
   if startsWith(p, "0x"):
-    parseHexInt(p).T
+    parse(p, UInt256, 16)
   else:
-    parseInt(p).T
+    parse(p, UInt256, 10)
 
-proc completeCmdArg(T: type HexOrInt, val: string): seq[string] =
+proc completeCmdArg(T: type UInt256, val: string): seq[string] =
   return @[]
 
 proc notCmd(x: string): bool =

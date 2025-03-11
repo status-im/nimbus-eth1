@@ -116,7 +116,7 @@ proc populateTransactionObject*(tx: Transaction,
   result.maxPriorityFeePerGas = Opt.some Quantity(tx.maxPriorityFeePerGas)
 
   if tx.txType >= TxEip2930:
-    result.chainId = Opt.some(Quantity(tx.chainId))
+    result.chainId = Opt.some(tx.chainId)
     result.accessList = Opt.some(tx.accessList)
 
   if tx.txType >= TxEip4844:

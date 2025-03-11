@@ -1,5 +1,5 @@
 # Nimbus
-# Copyright (c) 2018-2024 Status Research & Development GmbH
+# Copyright (c) 2018-2025 Status Research & Development GmbH
 # Licensed under either of
 #  * Apache License, version 2.0, ([LICENSE-APACHE](LICENSE-APACHE) or http://www.apache.org/licenses/LICENSE-2.0)
 #  * MIT license ([LICENSE-MIT](LICENSE-MIT) or http://opensource.org/licenses/MIT)
@@ -20,13 +20,13 @@ func deriveChainId*(v: uint64, chainId: ChainId): ChainId =
   if v == 27 or v == 28:
     chainId
   else:
-    ((v - 35) div 2).ChainId
+    ((v - 35) div 2).u256
 
 func validateChainId*(tx: Transaction, chainId: ChainId): bool =
   if tx.txType == TxLegacy:
-    chainId.uint64 == deriveChainId(tx.V, chainId).uint64
+    chainId == deriveChainId(tx.V, chainId)
   else:
-    chainId.uint64 == tx.chainId.uint64
+    chainId == tx.chainId
 
 func maxPriorityFeePerGasNorm*(tx: Transaction): GasInt =
   if tx.txType < TxEip1559:

@@ -1,0 +1,65 @@
+{
+  "00001742-mixed-2": {
+    "env": {
+      "currentCoinbase": "b94f5374fce5edbc8e2a8697c15331677e6ebf0b",
+      "currentDifficulty": "0x200000",
+      "currentRandom": "0x0000000000000000000000000000000000000000000000000000000000200000",
+      "currentGasLimit": "0x26e1f476fe1e22",
+      "currentNumber": "0x1",
+      "currentTimestamp": "0x3e8",
+      "previousHash": "0x044852b2a670ade5407e78fb2863c51de9fcb96542a07186fe3aeda6bb8a116d",
+      "currentBaseFee": "0x10"
+    },
+    "pre": {
+      "0xa94f5374fce5edbc8e2a8697c15331677e6ebf0b": {
+        "code": "0x",
+        "storage": {},
+        "balance": "0xffffffffff",
+        "nonce": "0x0"
+      }
+    },
+    "transaction": {
+      "maxFeePerGas": "0x10",
+      "maxPriorityFeePerGas": "0x10",
+      "nonce": "0x0",
+      "to": "0x0000000000000000000000000000000000000000",
+      "data": [
+        "0x3c6d1f3d365bf7d10712e6934e09d8b2f28c5645a8018b0255ad73b0ad36fc92a7cdf0bc59111aabd65923075266c828a98013182430da2d0d3a93c93c5dbafff3aa21089445c39579680761"
+      ],
+      "gasLimit": [
+        "0xb870"
+      ],
+      "value": [
+        "0xe72e62"
+      ],
+      "secretKey": "0x45a915e4d060149eb4365960e6a7a45f334393093061116b197e3240065ff2d8",
+      "sender": "0xa94f5374fce5edbc8e2a8697c15331677e6ebf0b",
+      "authorizationList": [
+        {
+          "chainId": "0x2939ab535c74e9aa824a2efbbc11f91c00000000000000000000000000000000",
+          "address": "0x00000000000000000000000000000000000000f2",
+          "nonce": "0x0",
+          "v": "0x1",
+          "yParity": "0x1",
+          "r": "0xf09626f06661f1efa9079f8f8495f5ab229f3b55e8c4299045ae6a4cef2db22",
+          "s": "0x3d945637851a990cc2987f778e623451daa1ce348567c18506071e3ff2cb2d67",
+          "signer": "0xa94f5374fce5edbc8e2a8697c15331677e6ebf0b"
+        }
+      ]
+    },
+    "out": "0x",
+    "post": {
+      "Prague": [
+        {
+          "hash": "0x12e38cde59bfa04f65b95b325233af0cd4a275c92c730fa2612ddac8a1f48e1c",
+          "logs": "0x1dcc4de8dec75d7aab85b567b6ccd41ad312451b948a7413f0a142fd40d49347",
+          "indexes": {
+            "data": 0,
+            "gas": 0,
+            "value": 0
+          }
+        }
+      ]
+    }
+  }
+}

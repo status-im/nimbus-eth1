@@ -303,7 +303,7 @@ proc rpcMain*() =
 
     test "eth_chainId":
       let res = await client.eth_chainId()
-      check res == w3Qty(distinctBase(com.chainId))
+      check res == com.chainId
 
     test "eth_syncing":
       let res = await client.eth_syncing()
