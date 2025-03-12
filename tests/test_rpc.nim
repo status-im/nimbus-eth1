@@ -18,6 +18,7 @@ import
   ../execution_chain/[constants, transaction, config, version],
   ../execution_chain/db/[ledger, storage_types],
   ../execution_chain/sync/wire_protocol,
+  ../execution_chain/portal/portal,
   ../execution_chain/core/[tx_pool, chain, pow/difficulty],
   ../execution_chain/utils/utils,
   ../execution_chain/[common, rpc],
@@ -187,6 +188,7 @@ proc setupEnv(envFork: HardFork = MergeFork): TestEnv =
     com   = setupCom(conf)
     chain = ForkedChainRef.init(com)
     txPool = TxPoolRef.new(chain)
+  # chain.portal = PortalClientRef.init(conf)
 
   let
     server = newRpcHttpServerWithParams("127.0.0.1:0").valueOr:
