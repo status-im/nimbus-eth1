@@ -10,6 +10,7 @@
 import
   std/strutils,
   chronos,
+  stint,
   eth/common/keys,
   ../../execution_chain/networking/[p2p, discoveryv4]
 
@@ -26,9 +27,11 @@ proc setupTestNode*(
   # Don't create new RNG every time in production code!
   let keys1 = KeyPair.random(rng[])
   var node = newEthereumNode(
-    keys1, localAddress(nextPort), NetworkId(1),
+    keys1, localAddress(nextPort),
+    networkId = 1.u256,
     addAllCapabilities = false,
-    bindUdpPort = Port(nextPort), bindTcpPort = Port(nextPort),
+    bindUdpPort = Port(nextPort),
+    bindTcpPort = Port(nextPort),
     rng = rng)
   nextPort.inc
   for capability in capabilities:

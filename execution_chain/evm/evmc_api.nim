@@ -5,7 +5,13 @@
 #  * MIT license ([LICENSE-MIT](LICENSE-MIT) or http://opensource.org/licenses/MIT)
 # at your option. This file may not be copied, modified, or distributed except according to those terms.
 
-import evmc/evmc, ./evmc_helpers, eth/common, ../constants
+import
+  evmc/evmc,
+  ./evmc_helpers,
+  eth/common/addresses,
+  ../constants
+
+import eth/common/base except chainId
 
 {.push raises: [].}
 
@@ -198,5 +204,5 @@ proc setTransientStorage*(ctx: HostContext, address: Address,
 template getBlockNumber*(ctx: HostContext): uint64 =
   ctx.getTxContext().block_number.uint64
 
-template getChainId*(ctx: HostContext): uint64 =
-  UInt256.fromEvmc(ctx.getTxContext().chain_id).truncate(uint64)
+template getChainId*(ctx: HostContext): UInt256 =
+  UInt256.fromEvmc(ctx.getTxContext().chain_id)

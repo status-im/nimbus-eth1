@@ -102,8 +102,8 @@ proc verifyTransactionFromNode*(client: RpcClient, tx: Transaction): Result[void
   if returnedTx.chainId.isNone:
     return err("chain id is none, expect is some")
 
-  if returnedTx.chainId.get.uint64 != tx.chainId.uint64:
-    return err("chain id mismatch: $1 != $2" % [$returnedTx.chainId.get.uint64, $tx.chainId.uint64])
+  if returnedTx.chainId.get != tx.chainId:
+    return err("chain id mismatch: $1 != $2" % [$returnedTx.chainId.get, $tx.chainId])
 
   if returnedTx.maxFeePerGas != tx.maxFeePerGas:
     return err("max fee per gas mismatch: $1 != $2" % [$returnedTx.maxFeePerGas, $tx.maxFeePerGas])

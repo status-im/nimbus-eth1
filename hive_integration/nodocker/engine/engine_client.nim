@@ -239,11 +239,6 @@ proc maybeBool(n: Opt[Quantity]): Opt[bool] =
     return Opt.none(bool)
   Opt.some(n.get.bool)
 
-proc maybeChainId(n: Opt[Quantity]): Opt[ChainId] =
-  if n.isNone:
-    return Opt.none(ChainId)
-  Opt.some(n.get.ChainId)
-
 proc toBlockHeader*(bc: BlockObject): Header =
   Header(
     number         : distinctBase(bc.number),
@@ -280,7 +275,7 @@ func authList(x: Opt[seq[Authorization]]): seq[Authorization] =
 proc toTransaction(tx: TransactionObject): Transaction =
   Transaction(
     txType          : tx.`type`.get(0.Web3Quantity).TxType,
-    chainId         : tx.chainId.get(0.Web3Quantity).ChainId,
+    chainId         : tx.chainId.get(0.u256),
     nonce           : tx.nonce.AccountNonce,
     gasPrice        : tx.gasPrice.GasInt,
     maxPriorityFeePerGas: tx.maxPriorityFeePerGas.get(0.Web3Quantity).GasInt,
@@ -387,7 +382,7 @@ proc toRPCTx(tx: eth_api.TransactionObject): RPCTx =
     v: tx.v.uint64,
     r: tx.r,
     s: tx.s,
-    chainId: maybeChainId(tx.chainId),
+    chainId: tx.chainId,
     accessList: tx.accessList,
     maxFeePerBlobGas: tx.maxFeePerBlobGas,
     versionedHashes: if tx.blobVersionedHashes.isSome:

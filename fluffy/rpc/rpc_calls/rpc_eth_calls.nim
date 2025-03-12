@@ -1,5 +1,5 @@
 # fluffy
-# Copyright (c) 2021-2024 Status Research & Development GmbH
+# Copyright (c) 2021-2025 Status Research & Development GmbH
 # Licensed and distributed under either of
 #   * MIT license (license terms in the root directory or at https://opensource.org/licenses/MIT).
 #   * Apache v2 license (license terms in the root directory or at https://www.apache.org/licenses/LICENSE-2.0).
@@ -19,7 +19,7 @@ export eth_api_types
 
 createRpcSigsFromNim(RpcClient):
   proc web3_clientVersion(): string
-  proc eth_chainId(): Quantity
+  proc eth_chainId(): UInt256
   proc eth_getBlockByHash(data: Hash32, fullTransactions: bool): Opt[BlockObject]
   proc eth_getBlockByNumber(
     blockId: BlockIdentifier, fullTransactions: bool

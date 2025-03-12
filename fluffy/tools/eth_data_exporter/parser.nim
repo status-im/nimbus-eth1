@@ -1,5 +1,5 @@
 # Nimbus
-# Copyright (c) 2020-2024 Status Research & Development GmbH
+# Copyright (c) 2020-2025 Status Research & Development GmbH
 # Licensed under either of
 #  * Apache License, version 2.0, ([LICENSE-APACHE](LICENSE-APACHE) or
 #    http://www.apache.org/licenses/LICENSE-2.0)
@@ -118,13 +118,6 @@ proc fromJson*[T: Bytes32 | Hash32](n: JsonNode, name: string, x: var seq[T]) =
     hexToByteArray(v.getStr(), h.data)
     x.add h
 
-proc fromJson*(n: JsonNode, name: string, x: var ChainId) =
-  let node = n[name]
-  if node.kind == JInt:
-    x = ChainId(node.getInt)
-  else:
-    x = hexToInt(node.getStr(), int).ChainId
-
 proc parseAuth(n: JsonNode): Authorization =
   n.fromJson("chainId", result.chainId)
   n.fromJson("address", result.address)
@@ -197,8 +190,8 @@ proc parseTransaction*(n: JsonNode): Transaction =
 
   if tx.txType >= TxEip2930:
     if n.hasKey("chainId"):
-      let id = hexToInt(n["chainId"].getStr(), int)
-      tx.chainId = ChainId(id)
+      let id = parse(n["chainId"].getStr(), UInt256, 16)
+      tx.chainId = id
 
     let accessList = n["accessList"]
     if accessList.len > 0:
