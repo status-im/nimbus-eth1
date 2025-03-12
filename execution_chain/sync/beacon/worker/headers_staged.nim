@@ -76,6 +76,10 @@ proc headersStagedCollect*(
 
       ctx.headersUnprocCommit(iv)                    # all headers processed
 
+      # Job might have been cancelled while downloading headrs
+      if buddy.ctrl.stopped or ctx.poolMode:
+        break fetchHeadersBody
+
       debug info & ": deterministic headers fetch count", peer,
         unprocTop=ctx.headersUnprocAvailTop.bnStr, D=ctx.layout.dangling.bnStr,
         nDeterministic, nStaged=ctx.hdr.staged.len
