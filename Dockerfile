@@ -15,13 +15,13 @@ SHELL ["/bin/bash", "-c"]
 RUN apt-get clean && apt update \
  && apt -y install curl build-essential git-lfs librocksdb-dev
 
-RUN ldd --version ldd
+RUN ldd --version
 
 ADD . /root/nimbus-eth1
 
 RUN cd /root/nimbus-eth1 \
  && make -j$(nproc) update-from-ci \
- && make -j$(nproc) V=1 LOG_LEVEL=TRACE nimbus
+ && make -j$(nproc) V=1 nimbus
 
 # --------------------------------- #
 # Starting new image to reduce size #
@@ -33,7 +33,7 @@ RUN apt-get clean && apt update \
  && apt -y install build-essential librocksdb-dev
 RUN apt update && apt -y upgrade
 
-RUN ldd --version ldd
+RUN ldd --version
 
 RUN rm -f /home/user/nimbus-eth1/build/nimbus_execution_client
 
