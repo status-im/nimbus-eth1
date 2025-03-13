@@ -75,7 +75,7 @@ proc setupTxContext(host: TransactionHost) =
   # vmState.gasLimit now unused
   host.txContext.block_gas_limit  = int64.saturate(vmState.blockCtx.gasLimit)
   # vmState.difficulty now unused
-  host.txContext.chain_id         = vmState.com.chainId.uint.u256.toEvmc
+  host.txContext.chain_id         = vmState.com.chainId.toEvmc
   host.txContext.block_base_fee   = vmState.blockCtx.baseFeePerGas.get(0.u256).toEvmc
 
   if vmState.txCtx.versionedHashes.len > 0:

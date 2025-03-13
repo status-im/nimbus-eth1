@@ -43,7 +43,7 @@ template doTest(fixture: JsonNode; vmState: BaseVMState; address: PrecompileAddr
       gasLimit: 1_000_000_000.GasInt,
       to: Opt.some initAddress(address.byte),
       value: 0.u256,
-      chainId: ChainId(1),
+      chainId: 1.u256,
       payload: if dataStr.len > 0: dataStr.hexToSeqByte else: @[]
     )
     let tx = signTransaction(unsignedTx, privateKey, false)

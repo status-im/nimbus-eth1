@@ -12,8 +12,7 @@
 
 import
   pkg/[chronos,  metrics],
-  ../../../../networking/peer_pool,
-  ../../../../core/chain,
+  ../../../../networking/p2p,
   ../../worker_desc,
   ../blocks_staged/staged_queue,
   ../headers_staged/staged_queue,
@@ -32,10 +31,10 @@ declareGauge nec_sync_dangling, "" &
   "Starting/min block number for higher up headers chain"
 
 declareGauge nec_sync_head, "" &
-  "Ending/max block number of higher up headers chain"
+  "Current sync scrum target block number (if any)"
 
 declareGauge nec_sync_consensus_head, "" &
-  "Block number of sync target (would be consensus header)"
+  "Block number of sync scrum request block number "
 
 
 declareGauge nec_sync_header_lists_staged, "" &
@@ -66,8 +65,8 @@ template updateMetricsImpl(ctx: BeaconCtxRef) =
   metrics.set(nec_sync_head, ctx.layout.head.int64)
 
   # Show last valid state.
-  if 0 < ctx.target.consHead.number:
-    metrics.set(nec_sync_consensus_head, ctx.target.consHead.number.int64)
+  if 0 < ctx.clRequest.consHead.number:
+    metrics.set(nec_sync_consensus_head, ctx.clRequest.consHead.number.int64)
 
   metrics.set(nec_sync_header_lists_staged, ctx.headersStagedQueueLen())
   metrics.set(nec_sync_headers_unprocessed, ctx.headersUnprocTotal().int64)
@@ -78,7 +77,7 @@ template updateMetricsImpl(ctx: BeaconCtxRef) =
   metrics.set(nec_sync_peers, ctx.pool.nBuddies)
   metrics.set(nec_sync_non_peers_connected,
               # nBuddies might not be commited/updated yet
-              max(0,ctx.node.peerPool.len - ctx.pool.nBuddies))
+              max(0,ctx.node.peerPool.connectedNodes.len - ctx.pool.nBuddies))
 
 # ---------------
 

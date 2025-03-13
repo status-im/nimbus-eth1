@@ -65,7 +65,7 @@ func getChainConfig*(network: string, c: ChainConfig) =
   const DEPOSIT_CONTRACT_ADDRESS = address"0x00000000219ab540356cbb839cbe05303d7705fa"
 
   c.daoForkSupport = false
-  c.chainId = 1.ChainId
+  c.chainId = 1.u256
   c.terminalTotalDifficulty = Opt.none(UInt256)
   c.blobSchedule = defaultBlobSchedule()
   c.depositContractAddress = Opt.some(DEPOSIT_CONTRACT_ADDRESS)

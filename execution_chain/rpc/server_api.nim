@@ -161,8 +161,8 @@ proc setupServerAPI*(api: ServerAPIRef, server: RpcServer, ctx: EthContext) =
     ## Returns integer of the current block number the client is on.
     Quantity(api.chain.latestNumber)
 
-  server.rpc("eth_chainId") do() -> Quantity:
-    return Quantity(distinctBase(api.com.chainId))
+  server.rpc("eth_chainId") do() -> UInt256:
+    return api.com.chainId
 
   server.rpc("eth_getCode") do(data: Address, blockTag: BlockTag) -> seq[byte]:
     ## Returns code at a given address.

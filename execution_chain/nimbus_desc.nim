@@ -43,7 +43,7 @@ type
     ethNode*: EthereumNode
     state*: NimbusState
     ctx*: EthContext
-    chainRef*: ForkedChainRef
+    fc*: ForkedChainRef
     txPool*: TxPoolRef
     networkLoop*: Future[void]
     peerManager*: PeerManagerRef

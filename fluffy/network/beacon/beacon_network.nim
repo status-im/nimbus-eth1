@@ -448,10 +448,10 @@ proc processContentLoop(n: BeaconNetwork) {.async: (raises: []).} =
 proc statusLogLoop(n: BeaconNetwork) {.async: (raises: []).} =
   try:
     while true:
+      await sleepAsync(60.seconds)
+
       info "Beacon network status",
         routingTableNodes = n.portalProtocol.routingTable.len()
-
-      await sleepAsync(60.seconds)
   except CancelledError:
     trace "statusLogLoop canceled"
 

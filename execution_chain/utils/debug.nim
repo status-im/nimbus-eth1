@@ -102,9 +102,6 @@ proc debug*(vms: BaseVMState): string =
   result.add "tx.blobBaseFee   : " & $vms.txCtx.blobBaseFee   & "\n"
   result.add "fork             : " & $vms.fork                & "\n"
 
-proc `$`(x: ChainId): string =
-  $int(x)
-
 proc `$`(acl: transactions.AccessList): string =
   if acl.len == 0:
     return "zero length"

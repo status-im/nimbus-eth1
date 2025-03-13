@@ -17,7 +17,7 @@ import
   ../types,
   ../test_env,
   ../../../../execution_chain/utils/utils,
-  ../../../../execution_chain/sync/protocol
+  ../../../../execution_chain/sync/wire_protocol
 
 # A step that requests a Transaction hash via P2P and expects the correct full blob tx
 type

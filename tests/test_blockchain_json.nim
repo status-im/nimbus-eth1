@@ -18,8 +18,7 @@ import
   ../execution_chain/core/chain/forked_chain,
   ../tools/common/helpers as chp,
   ../tools/evmstate/helpers,
-  ../execution_chain/common/common,
-  ../execution_chain/core/eip4844
+  ../execution_chain/common/common
 
 const
   debugMode = false
@@ -124,10 +123,6 @@ proc blockchainJsonMain*() =
     legacyFolder = "eth_tests/LegacyTests/Constantinople/BlockchainTests"
     newFolder = "eth_tests/BlockchainTests"
 
-  loadKzgTrustedSetup().isOkOr:
-    echo "FATAL: ", error
-    quit(QuitFailure)
-
   if false:
     suite "block chain json tests":
       jsonTest(legacyFolder, "BlockchainTests", executeFile, skipBCTests)
@@ -137,10 +132,6 @@ proc blockchainJsonMain*() =
 
 when debugMode:
   proc executeFile(name: string) =
-    loadKzgTrustedSetup().isOkOr:
-      echo "FATAL: ", error
-      quit(QuitFailure)
-
     var testStatusIMPL: TestStatus
     let node = json.parseFile(name)
     executeFile(node, testStatusIMPL)

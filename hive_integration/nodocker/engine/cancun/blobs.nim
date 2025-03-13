@@ -10,12 +10,12 @@
 
 import
   eth/common/[base, hashes],
-  kzg4844/kzg,
   kzg4844/kzg_abi,
   stew/endians2,
   nimcrypto/sha2,
   results,
-  ../../../../execution_chain/core/eip4844
+  ../../../../execution_chain/core/eip4844,
+  ../../../../execution_chain/core/lazy_kzg as kzg
 
 export base, hashes
 type

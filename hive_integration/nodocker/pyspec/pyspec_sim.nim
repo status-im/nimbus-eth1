@@ -19,7 +19,6 @@ import
   ../../../tools/evmstate/helpers as ehp,
   ../../../execution_chain/beacon/web3_eth_conv,
   ../../../execution_chain/beacon/payload_conv,
-  ../../../execution_chain/core/eip4844,
   ../engine/engine_client,
   ../engine/types,
   ./test_env
@@ -201,11 +200,6 @@ proc main() =
   var stat: SimStat
   let taskPool = Taskpool.new()
   let start = getTime()
-
-  let res = loadKzgTrustedSetup()
-  if res.isErr:
-    echo "FATAL: ", res.error
-    quit(QuitFailure)
 
   let testVectors = collectTestVectors()
   for fileName in testVectors:

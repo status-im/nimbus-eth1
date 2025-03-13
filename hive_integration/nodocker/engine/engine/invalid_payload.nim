@@ -423,7 +423,7 @@ method execute(cs: InvalidTxChainIDTest, env: TestEnv): bool =
         chainId = eng.com.chainId
 
       let txCustomizerData = CustomTransactionData(
-        chainID: Opt.some((chainId.uint64 + 1'u64).ChainId)
+        chainID: Opt.some(chainId + 1)
       )
 
       shadow.invalidTx = tx

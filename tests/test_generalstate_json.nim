@@ -15,7 +15,6 @@ import
   ../execution_chain/common/common,
   ../execution_chain/utils/[utils, debug],
   ../execution_chain/evm/tracer/legacy_tracer,
-  ../execution_chain/core/eip4844,
   ../tools/common/helpers as chp,
   ../tools/evmstate/helpers,
   ../tools/common/state_clearing,
@@ -39,9 +38,6 @@ type
     index: int
     subFixture: int
     fork: string
-
-var
-  trustedSetupLoaded = false
 
 proc toBytes(x: string): seq[byte] =
   result = newSeq[byte](x.len)
@@ -85,14 +81,6 @@ proc testFixtureIndexes(ctx: var TestCtx, testStatusIMPL: var TestStatus) =
                newLegacyTracer({})
              else:
                LegacyTracer(nil)
-
-  if com.isCancunOrLater(ctx.header.timestamp):
-    if not trustedSetupLoaded:
-      let res = loadKzgTrustedSetup()
-      if res.isErr:
-        echo "FATAL: ", res.error
-        quit(QuitFailure)
-      trustedSetupLoaded = true
 
   let vmState = BaseVMState.new(
       parent = parent,

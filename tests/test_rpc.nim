@@ -17,7 +17,7 @@ import
   ../hive_integration/nodocker/engine/engine_client,
   ../execution_chain/[constants, transaction, config, version],
   ../execution_chain/db/[ledger, storage_types],
-  ../execution_chain/sync/protocol,
+  ../execution_chain/sync/wire_protocol,
   ../execution_chain/core/[tx_pool, chain, pow/difficulty],
   ../execution_chain/utils/utils,
   ../execution_chain/[common, rpc],
@@ -303,7 +303,7 @@ proc rpcMain*() =
 
     test "eth_chainId":
       let res = await client.eth_chainId()
-      check res == w3Qty(distinctBase(com.chainId))
+      check res == com.chainId
 
     test "eth_syncing":
       let res = await client.eth_syncing()

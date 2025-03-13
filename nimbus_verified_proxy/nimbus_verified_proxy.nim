@@ -40,18 +40,18 @@ proc cleanup*(ctx: ptr Context) =
   dealloc(ctx.configJson)
   freeShared(ctx)
 
-func getConfiguredChainId(networkMetadata: Eth2NetworkMetadata): Quantity =
+func getConfiguredChainId(networkMetadata: Eth2NetworkMetadata): UInt256 =
   if networkMetadata.eth1Network.isSome():
     let
       net = networkMetadata.eth1Network.get()
       chainId =
         case net
-        of mainnet: 1.Quantity
-        of sepolia: 11155111.Quantity
-        of holesky: 17000.Quantity
+        of mainnet: 1.u256
+        of sepolia: 11155111.u256
+        of holesky: 17000.u256
     return chainId
   else:
-    return networkMetadata.cfg.DEPOSIT_CHAIN_ID.Quantity
+    return networkMetadata.cfg.DEPOSIT_CHAIN_ID.u256
 
 proc run*(
     config: VerifiedProxyConf, ctx: ptr Context

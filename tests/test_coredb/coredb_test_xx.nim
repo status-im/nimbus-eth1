@@ -29,7 +29,7 @@ type
 func cloneWith(
     dsc: CaptureSpecs;
     name = "";
-    network = NetworkId(0);
+    network = 0.u256;
     genesis = "";
     files = seq[string].default;
     numBlocks = 0;
@@ -37,7 +37,7 @@ func cloneWith(
     dbName = "";
       ): CaptureSpecs =
   result = dsc
-  if network != NetworkId(0):
+  if network != 0.u256:
     result.builtIn = true
     result.network = network
   elif 0 < genesis.len:

@@ -1,5 +1,5 @@
 # nimbus_verified_proxy
-# Copyright (c) 2022-2024 Status Research & Development GmbH
+# Copyright (c) 2022-2025 Status Research & Development GmbH
 # Licensed and distributed under either of
 #   * MIT license (license terms in the root directory or at https://opensource.org/licenses/MIT).
 #   * Apache v2 license (license terms in the root directory or at https://www.apache.org/licenses/LICENSE-2.0).
@@ -11,9 +11,9 @@ import
   std/strutils,
   results,
   chronicles,
-  json_rpc/[rpcproxy, rpcserver, rpcclient],
+  json_rpc/[rpcserver, rpcclient, rpcproxy],
   eth/common/accounts,
-  web3/[primitives, eth_api_types, eth_api],
+  web3/eth_api,
   ../validate_proof,
   ../block_cache
 
@@ -24,7 +24,7 @@ type
   VerifiedRpcProxy* = ref object
     proxy: RpcProxy
     blockCache: BlockCache
-    chainId: Quantity
+    chainId: UInt256
 
   QuantityTagKind = enum
     LatestBlock
@@ -80,15 +80,15 @@ proc getBlockByTagOrThrow(
     raise newException(ValueError, "No block stored for given tag " & $quantityTag)
 
 proc installEthApiHandlers*(lcProxy: VerifiedRpcProxy) =
-  lcProxy.proxy.rpc("eth_chainId") do() -> Quantity:
+  lcProxy.proxy.rpc("eth_chainId") do() -> UInt256:
     lcProxy.chainId
 
-  lcProxy.proxy.rpc("eth_blockNumber") do() -> Quantity:
+  lcProxy.proxy.rpc("eth_blockNumber") do() -> uint64:
     ## Returns the number of the most recent block.
     let latest = lcProxy.blockCache.latest.valueOr:
-      raise (ref ValueError)(msg: "Syncing")
+      raise newException(ValueError, "Syncing")
 
-    latest.number
+    latest.number.uint64
 
   lcProxy.proxy.rpc("eth_getBalance") do(
     address: Address, quantityTag: BlockTag
@@ -130,7 +130,7 @@ proc installEthApiHandlers*(lcProxy: VerifiedRpcProxy) =
 
   lcProxy.proxy.rpc("eth_getTransactionCount") do(
     address: Address, quantityTag: BlockTag
-  ) -> Quantity:
+  ) -> uint64:
     let
       blk = lcProxy.getBlockByTagOrThrow(quantityTag)
       blockNumber = blk.number.uint64
@@ -146,7 +146,7 @@ proc installEthApiHandlers*(lcProxy: VerifiedRpcProxy) =
       ).valueOr:
         raise newException(ValueError, error)
 
-    Quantity(account.nonce)
+    account.nonce
 
   lcProxy.proxy.rpc("eth_getCode") do(
     address: Address, quantityTag: BlockTag
@@ -198,7 +198,7 @@ proc installEthApiHandlers*(lcProxy: VerifiedRpcProxy) =
     lcProxy.blockCache.getPayloadByHash(blockHash)
 
 proc new*(
-    T: type VerifiedRpcProxy, proxy: RpcProxy, blockCache: BlockCache, chainId: Quantity
+    T: type VerifiedRpcProxy, proxy: RpcProxy, blockCache: BlockCache, chainId: UInt256
 ): T =
   VerifiedRpcProxy(proxy: proxy, blockCache: blockCache, chainId: chainId)
 
@@ -251,7 +251,5 @@ proc verifyChaindId*(p: VerifiedRpcProxy): Future[void] {.async.} =
   # the configuration.
   if localId != providerId:
     fatal "The specified data provider serves data for a different chain",
-      expectedChain = distinctBase(localId), providerChain = distinctBase(providerId)
+      expectedChain = localId, providerChain = providerId
     quit 1
-
-  return

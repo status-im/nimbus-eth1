@@ -119,7 +119,7 @@ proc customGenesisTest() =
       let genesisHash = hash32"b5f7f912443c940f21fd611f12828d75b534364ed9e95ca4e307729a4661bde4"
       check com.genesisHeader.stateRoot == stateRoot
       check com.genesisHeader.blockHash == genesisHash
-      check com.chainId == 17000.ChainId
+      check com.chainId == 17000.u256
 
     test "Geth Holesky":
       # parse using geth format should produce the same result with nimbus format
@@ -130,7 +130,7 @@ proc customGenesisTest() =
       let genesisHash = hash32"b5f7f912443c940f21fd611f12828d75b534364ed9e95ca4e307729a4661bde4"
       check com.genesisHeader.stateRoot == stateRoot
       check com.genesisHeader.blockHash == genesisHash
-      check com.chainId == 17000.ChainId
+      check com.chainId == 17000.u256
 
     test "Prague genesis":
       # pre Prague

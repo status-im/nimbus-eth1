@@ -100,10 +100,6 @@ const sharedLibText = if defined(linux): " (*.so, *.so.N)"
                       else: ""
 
 type
-  ChainDbMode* {.pure.} = enum
-    Aristo
-    AriPrune
-
   NimbusCmd* {.pure.} = enum
     noCommand
     `import`
@@ -146,17 +142,6 @@ type
       defaultValueDesc: "inside datadir"
       abbr: "k"
       name: "key-store" }: OutDir
-
-    chainDbMode* {.
-      desc: "Blockchain database"
-      longDesc:
-        "- Aristo   -- Single state DB, full node\n" &
-        "- AriPrune -- Aristo with curbed block history (for testing)\n" &
-        ""
-      defaultValue: ChainDbMode.Aristo
-      defaultValueDesc: $ChainDbMode.Aristo
-      abbr : "p"
-      name: "chaindb" }: ChainDbMode
 
     importKey* {.
       desc: "Import unencrypted 32 bytes hex private key from a file"
@@ -210,6 +195,7 @@ type
     networkId* {.
       ignore # this field is not processed by confutils
       defaultValue: MainNet # the defaultValue value is set by `makeConfig`
+      defaultValueDesc: "MainNet"
       name: "network-id"}: NetworkId
 
     networkParams* {.
@@ -561,9 +547,15 @@ type
         desc: "One or more RLP encoded block(s) files"
         name: "blocks-file" }: seq[InputFile]
 
+func parseHexOrDec256(p: string): UInt256 {.raises: [ValueError].} =
+  if startsWith(p, "0x"):
+    parse(p, UInt256, 16)
+  else:
+    parse(p, UInt256, 10)
+
 func parseCmdArg(T: type NetworkId, p: string): T
     {.gcsafe, raises: [ValueError].} =
-  parseBiggestUInt(p).T
+  parseHexOrDec256(p)
 
 func completeCmdArg(T: type NetworkId, val: string): seq[string] =
   return @[]
@@ -668,7 +660,7 @@ proc getNetworkId(conf: NimbusConf): Option[NetworkId] =
   of "holesky": return some HoleskyNet
   else:
     try:
-      some parseBiggestUInt(network).NetworkId
+      some parseHexOrDec256(network)
     except CatchableError:
       error "Failed to parse network name or id", network
       quit QuitFailure
@@ -719,12 +711,11 @@ proc getBootNodes*(conf: NimbusConf): seq[ENode] =
   var bootstrapNodes: seq[ENode]
   # Ignore standard bootnodes if customNetwork is loaded
   if conf.customNetwork.isNone:
-    case conf.networkId
-    of MainNet:
+    if conf.networkId == MainNet:
       bootstrapNodes.setBootnodes(MainnetBootnodes)
-    of SepoliaNet:
+    elif conf.networkId == SepoliaNet:
       bootstrapNodes.setBootnodes(SepoliaBootnodes)
-    of HoleskyNet:
+    elif conf.networkId == HoleskyNet:
       bootstrapNodes.setBootnodes(HoleskyBootnodes)
     else:
       # custom network id

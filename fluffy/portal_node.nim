@@ -1,5 +1,5 @@
 # Fluffy
-# Copyright (c) 2024 Status Research & Development GmbH
+# Copyright (c) 2024-2025 Status Research & Development GmbH
 # Licensed and distributed under either of
 #   * MIT license (license terms in the root directory or at https://opensource.org/licenses/MIT).
 #   * Apache v2 license (license terms in the root directory or at https://www.apache.org/licenses/LICENSE-2.0).
@@ -25,7 +25,7 @@ export
   beacon_light_client, history_network, state_network, portal_protocol_config, forks
 
 type
-  PortalNodeState* = enum
+  PortalNodeStatus* = enum
     Starting
     Running
     Stopping
@@ -40,7 +40,7 @@ type
     contentRequestRetries*: int
 
   PortalNode* = ref object
-    state*: PortalNodeState
+    status*: PortalNodeStatus
     discovery: protocol.Protocol
     contentDB: ContentDB
     streamManager: StreamManager
@@ -137,6 +137,7 @@ proc new*(
             discovery,
             contentDB,
             streamManager,
+            networkData.metadata.cfg,
             accumulator,
             bootstrapRecords = bootstrapRecords,
             portalConfig = config.portalConfig,
@@ -227,7 +228,7 @@ proc start*(n: PortalNode) =
 
   n.statusLogLoop = statusLogLoop(n)
 
-  n.state = PortalNodeState.Running
+  n.status = PortalNodeStatus.Running
 
 proc stop*(n: PortalNode) {.async: (raises: []).} =
   debug "Stopping Portal node"

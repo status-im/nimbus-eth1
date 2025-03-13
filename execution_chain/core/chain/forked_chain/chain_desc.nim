@@ -11,11 +11,13 @@
 {.push raises: [].}
 
 import
-  std/tables,
+  std/[deques, tables],
   ./chain_branch,
   ./block_quarantine,
   ../../../common,
   ../../../db/core_db
+
+export deques, tables
 
 type
   ForkedChainRef* = ref object
@@ -34,6 +36,7 @@ type
     extraValidation*: bool
     baseDistance*: uint64
 
+    lastSnapshots*: Deque[CoreDbTxRef]
 # ----------------
 
 func txRecords*(c: ForkedChainRef): var Table[Hash32, (Hash32, uint64)] =

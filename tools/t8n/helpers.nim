@@ -100,11 +100,6 @@ proc readValue*(r: var JsonReader[T8Conv], val: var uint64)
     wrapValueError:
       val = parseHexOrInt[uint64](r.parseString())
 
-proc readValue*(r: var JsonReader[T8Conv], val: var ChainId)
-       {.raises: [IOError, JsonReaderError].} =
-  wrapValueError:
-    val = parseHexOrInt[uint64](r.parseString()).ChainId
-
 proc readValue*(r: var JsonReader[T8Conv], val: var EthTime)
        {.raises: [IOError, JsonReaderError].} =
   wrapValueError:

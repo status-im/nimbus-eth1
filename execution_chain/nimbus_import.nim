@@ -48,8 +48,7 @@ proc getMetadata(networkId: NetworkId): auto =
   # Network Specific Configurations
   # TODO: the merge block number could be fetched from the era1 file instead,
   #       specially if the accumulator is added to the chain metadata
-  case networkId
-  of MainNet:
+  if networkId == MainNet:
     (
       getMetadataForNetwork("mainnet").cfg,
       # Mainnet Validators Root
@@ -59,7 +58,7 @@ proc getMetadata(networkId: NetworkId): auto =
       15537393'u64, # Last pre-merge block
       4700013'u64, # First post-merge slot
     )
-  of SepoliaNet:
+  elif networkId == SepoliaNet:
     (
       getMetadataForNetwork("sepolia").cfg,
       Eth2Digest.fromHex(
@@ -68,7 +67,7 @@ proc getMetadata(networkId: NetworkId): auto =
       1450408'u64, # Last pre-merge block number
       115193'u64, # First post-merge slot
     )
-  of HoleskyNet:
+  elif networkId == HoleskyNet:
     (
       getMetadataForNetwork("holesky").cfg,
       Eth2Digest.fromHex(
@@ -268,10 +267,9 @@ proc importBlocks*(conf: NimbusConf, com: CommonRef) =
   if lastEra1Block > 0 and start <= lastEra1Block:
     let
       era1Name =
-        case conf.networkId
-        of MainNet:
+        if conf.networkId == MainNet:
           "mainnet"
-        of SepoliaNet:
+        elif conf.networkId == SepoliaNet:
           "sepolia"
         else:
           raiseAssert "Other networks are unsupported or do not have an era1"

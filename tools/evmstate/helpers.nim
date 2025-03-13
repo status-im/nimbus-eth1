@@ -48,9 +48,6 @@ template fromJson(T: type uint64, n: JsonNode): uint64 =
 template fromJson(T: type EthTime, n: JsonNode): EthTime =
   EthTime(fromHex[uint64](n.getStr))
 
-template fromJson(T: type ChainId, n: JsonNode): ChainId =
-  ChainId(fromHex[uint64](n.getStr))
-
 proc fromJson(T: type PrivateKey, n: JsonNode): PrivateKey =
   var secretKey = n.getStr
   removePrefix(secretKey, "0x")
@@ -151,7 +148,7 @@ proc parseTx*(n: JsonNode, dataIndex, gasIndex, valueIndex: int): Transaction =
     gasLimit: required(GasInt, "gasLimit", gasIndex),
     value   : required(UInt256, "value", valueIndex),
     payload : required(seq[byte], "data", dataIndex),
-    chainId : ChainId(1),
+    chainId : 1.u256,
     gasPrice: defaultZero(GasInt, "gasPrice"),
     maxFeePerGas        : defaultZero(GasInt, "maxFeePerGas"),
     accessList          : defaultZero(AccessList, "accessLists", dataIndex),

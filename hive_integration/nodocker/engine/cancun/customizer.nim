@@ -666,7 +666,7 @@ proc generateInvalidPayload*(sender: TxSender, data: ExecutableData, payloadFiel
       # Vault account initially has 0x123450000000000000000, so this value should overflow
       custTx.value = Opt.some(UInt256.fromHex("0x123450000000000000001"))
     of InvalidTransactionChainID:
-      custTx.chainId = Opt.some(ChainId(baseTx.chainId.uint64 + 1))
+      custTx.chainId = Opt.some(baseTx.chainId + 1)
     else: discard
 
     let acc = sender.getNextAccount()

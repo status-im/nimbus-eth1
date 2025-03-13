@@ -56,11 +56,11 @@ type
   Address = addresses.Address
 
 const
-  CustomNet*  = 0.NetworkId
+  CustomNet*  = 0.u256
   # these are public network id
-  MainNet*    = 1.NetworkId
-  SepoliaNet* = 11155111.NetworkId
-  HoleskyNet* = 17000.NetworkId
+  MainNet*    = 1.u256
+  SepoliaNet* = 11155111.u256
+  HoleskyNet* = 17000.u256
 
 createJsonFlavor JGenesis,
   automaticObjectSerialization = false,
@@ -203,10 +203,6 @@ proc readValue(reader: var JsonReader[JGenesis], value: var UInt256)
   if not ok:
     reader.raiseUnexpectedValue("Uint256 parse error")
   value = accu
-
-proc readValue(reader: var JsonReader[JGenesis], value: var ChainId)
-    {.gcsafe, raises: [SerializationError, IOError].} =
-  value = reader.readValue(int).ChainId
 
 proc readValue(reader: var JsonReader[JGenesis], value: var Hash32)
     {.gcsafe, raises: [SerializationError, IOError].} =
@@ -503,13 +499,12 @@ func chainConfigForNetwork*(id: NetworkId): ChainConfig =
   # For some public networks, NetworkId and ChainId value are identical
   # but that is not always the case
 
-  result = case id
-  of MainNet:
+  result = if id == MainNet:
     const
       mainNetTTD = parse("58750000000000000000000",UInt256)
       MAINNET_DEPOSIT_CONTRACT_ADDRESS = address"0x00000000219ab540356cbb839cbe05303d7705fa"
     ChainConfig(
-      chainId:             MainNet.ChainId,
+      chainId:             MainNet,
       # Genesis (Frontier):                                  # 2015-07-30 15:26:13 UTC
       # Frontier Thawing:  200_000.BlockNumber,              # 2015-09-07 21:33:09 UTC
       homesteadBlock:      Opt.some(1_150_000.BlockNumber),  # 2016-03-14 18:49:53 UTC
@@ -535,13 +530,13 @@ func chainConfigForNetwork*(id: NetworkId): ChainConfig =
       depositContractAddress: Opt.some(MAINNET_DEPOSIT_CONTRACT_ADDRESS),
       blobSchedule:        defaultBlobSchedule(),
     )
-  of SepoliaNet:
+  elif id == SepoliaNet:
     # https://github.com/eth-clients/sepolia/blob/f5e3652be045250fd2de1631683b110317592bd3/metadata/genesis.json
     const
       sepoliaTTD = parse("17000000000000000",UInt256)
       SEPOLIANET_DEPOSIT_CONTRACT_ADDRESS = address"0x7f02C3E3c98b133055B8B348B2Ac625669Ed295D"
     ChainConfig(
-      chainId:             SepoliaNet.ChainId,
+      chainId:             SepoliaNet,
       homesteadBlock:      Opt.some(0.BlockNumber),
       daoForkSupport:      false,
       eip150Block:         Opt.some(0.BlockNumber),
@@ -563,12 +558,12 @@ func chainConfigForNetwork*(id: NetworkId): ChainConfig =
       depositContractAddress: Opt.some(SEPOLIANET_DEPOSIT_CONTRACT_ADDRESS),
       blobSchedule:        defaultBlobSchedule(),
     )
-  of HoleskyNet:
+  elif id == HoleskyNet:
     #https://github.com/eth-clients/holesky
     const
       HOLESKYNET_DEPOSIT_CONTRACT_ADDRESS = address"0x4242424242424242424242424242424242424242"
     ChainConfig(
-      chainId:             HoleskyNet.ChainId,
+      chainId:             HoleskyNet,
       homesteadBlock:      Opt.some(0.BlockNumber),
       eip150Block:         Opt.some(0.BlockNumber),
       eip155Block:         Opt.some(0.BlockNumber),
@@ -592,8 +587,7 @@ func chainConfigForNetwork*(id: NetworkId): ChainConfig =
 
 func genesisBlockForNetwork*(id: NetworkId): Genesis
     {.gcsafe, raises: [ValueError, RlpError].} =
-  result = case id
-  of MainNet:
+  result = if id == MainNet:
     Genesis(
       nonce: uint64(66).to(Bytes8),
       extraData: hexToSeqByte("0x11bbe8db4e347b4e8c937c1c8370e4b5ed33adb3db69cbdb7a38e1e50b1b82fa"),
@@ -601,7 +595,7 @@ func genesisBlockForNetwork*(id: NetworkId): Genesis
       difficulty: 17179869184.u256,
       alloc: decodePrealloc(mainnetAllocData)
     )
-  of SepoliaNet:
+  elif id == SepoliaNet:
     Genesis(
       nonce: uint64(0).to(Bytes8),
       timestamp: EthTime(0x6159af19),
@@ -610,7 +604,7 @@ func genesisBlockForNetwork*(id: NetworkId): Genesis
       difficulty: 0x20000.u256,
       alloc: decodePrealloc(sepoliaAllocData)
     )
-  of HoleskyNet:
+  elif id == HoleskyNet:
     Genesis(
       difficulty: 0x01.u256,
       gasLimit: 0x17D7840,

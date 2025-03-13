@@ -16,7 +16,7 @@ import
 
 # nim-eth
 proc writeValue*(
-    w: var JsonWriter, v: EthTime | NetworkId | ChainId
+    w: var JsonWriter, v: EthTime
 ) {.inline, raises: [IOError].} =
   w.writeValue distinctBase(v)
 

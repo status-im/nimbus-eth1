@@ -93,11 +93,11 @@ template getBaseFee*(c: Computation): UInt256 =
   else:
     c.vmState.blockCtx.baseFeePerGas.get(0.u256)
 
-template getChainId*(c: Computation): uint64 =
+template getChainId*(c: Computation): UInt256 =
   when evmc_enabled:
     c.host.getChainId()
   else:
-    c.vmState.com.chainId.uint64
+    c.vmState.com.chainId
 
 template getOrigin*(c: Computation): Address =
   when evmc_enabled:

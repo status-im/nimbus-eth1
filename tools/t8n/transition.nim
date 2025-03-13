@@ -498,10 +498,6 @@ proc transitionAction*(ctx: var TransContext, conf: T8NConf) =
     if com.isCancunOrLater(ctx.env.currentTimestamp):
       if ctx.env.parentBeaconBlockRoot.isNone:
         raise newError(ErrorConfig, "Cancun config but missing 'parentBeaconBlockRoot' in env section")
-
-      let res = loadKzgTrustedSetup()
-      if res.isErr:
-        raise newError(ErrorConfig, res.error)
     else:
       # un-set it if it has been set too early
       ctx.env.parentBeaconBlockRoot = Opt.none(Hash32)

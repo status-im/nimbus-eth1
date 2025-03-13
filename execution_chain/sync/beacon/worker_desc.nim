@@ -20,7 +20,7 @@ import
   ./worker_config
 
 export
-  helpers, sync_desc, worker_config
+  helpers, sync_desc, worker_config, chain
 
 type
   BnRangeSet* = IntervalSetRef[BlockNumber,uint64]
@@ -39,8 +39,8 @@ type
     ## sequence with parent headers, i.e. decreasing block numbers.
     ##
     hash*: Hash32                    ## Hash of `headers[0]`
-    revHdrs*: seq[seq[byte]]         ## Encoded linked header chain
-    parentHash*: Hash32              ## Parent hash of `headers[^1]`
+    revHdrs*: seq[Header]            ## Linked header chain, reversed
+    peerID*: Hash                    ## For comparing peers
 
   StagedBlocksQueue* = SortedSet[BlockNumber,BlocksForImport]
     ## Blocks sorted by least block number.
@@ -57,12 +57,10 @@ type
     finishedHeaders                  ## see clause *(10)* of `README.md`
     processingBlocks                 ## see clause *(11)* of `README.md`
 
-  SyncStateTarget* = object
+  SyncClRequest* = object
     ## Beacon state to be implicitely updated by RPC method
-    locked*: bool                    ## Don't update while fetching header
     changed*: bool                   ## Tell that something has changed
     consHead*: Header                ## Consensus head
-    final*: BlockNumber              ## Finalised block number
     finalHash*: Hash32               ## Finalised hash
 
   SyncStateLayout* = object
@@ -92,7 +90,7 @@ type
 
   SyncState* = object
     ## Sync state for header and block chains
-    target*: SyncStateTarget         ## Consensus head, see `T` in `README.md`
+    clRequest*: SyncClRequest        ## Consensus head, see `T` in `README.md`
     layout*: SyncStateLayout         ## Current header chains layout
 
   # -------------------
@@ -114,9 +112,8 @@ type
   BeaconBuddyData* = object
     ## Local descriptor data extension
     nHdrRespErrors*: uint8           ## Number of errors/slow responses in a row
-    nHdrProcErrors*: uint8           ## Number of post processing errors
     nBdyRespErrors*: uint8           ## Ditto for bodies
-    nBdyProcErrors*: uint8
+    nBdyProcErrors*: uint8           ## Number of body post processing errors
 
     # Debugging and logging.
     nMultiLoop*: int                 ## Number of runs
@@ -133,14 +130,16 @@ type
     nextAsyncNanoSleep*: Moment      ## Use nano-sleeps for task switch
 
     chain*: ForkedChainRef           ## Core database, FCU support
+    hdrCache*: ForkedCacheRef        ## Currently in tandem with `chain`
 
     # Blocks import/execution settings
     blockImportOk*: bool             ## Don't fetch data while block importing
     blocksStagedHwm*: int            ## Set a `staged` queue limit
     stagedLenHwm*: int               ## Figured out as # staged records
 
-    # Info & debugging stuff, no functional contribution
+    # Info, debugging, and error handling stuff
     nReorg*: int                     ## Number of reorg invocations (info only)
+    hdrProcError*: Table[Hash,uint8] ## Some globally accessible header errors
 
     # Debugging stuff
     when enableTicker:
@@ -172,13 +171,17 @@ func layout*(ctx: BeaconCtxRef): var SyncStateLayout =
   ## Shortcut
   ctx.sst.layout
 
-func target*(ctx: BeaconCtxRef): var SyncStateTarget =
+func clRequest*(ctx: BeaconCtxRef): var SyncClRequest =
   ## Shortcut
-  ctx.sst.target
+  ctx.sst.clRequest
 
 func chain*(ctx: BeaconCtxRef): ForkedChainRef =
   ## Getter
   ctx.pool.chain
+
+func hdrCache*(ctx: BeaconCtxRef): ForkedCacheRef =
+  ## Getter
+  ctx.pool.hdrCache
 
 func db*(ctx: BeaconCtxRef): CoreDbRef =
   ## Getter
@@ -199,6 +202,59 @@ proc `hibernate=`*(ctx: BeaconCtxRef; val: bool) =
   # Control some error messages on the scheduler (e.g. zombie/banned-peer
   # reconnection attempts, LRU flushing out oldest peer etc.)
   ctx.noisyLog = not val
+
+# -----
+
+proc nHdrRespErrors*(buddy: BeaconBuddyRef): int =
+  ## Getter, returns the number of `resp` errors for argument `buddy`
+  buddy.only.nHdrRespErrors.int
+
+proc `nHdrRespErrors=`*(buddy: BeaconBuddyRef; count: uint8) =
+  ## Setter, set arbitrary `resp` error count for argument `buddy`.
+  buddy.only.nHdrRespErrors = count
+
+proc incHdrRespErrors*(buddy: BeaconBuddyRef) =
+  ## Increment `resp` error count for for argument `buddy`.
+  buddy.only.nHdrRespErrors.inc
+
+
+proc initHdrProcErrors*(buddy: BeaconBuddyRef) =
+  ## Create error slot for argument `buddy`
+  buddy.ctx.pool.hdrProcError[buddy.peerID] = 0u8
+
+proc clearHdrProcErrors*(buddy: BeaconBuddyRef) =
+  ## Delete error slot for argument `buddy`
+  buddy.ctx.pool.hdrProcError.del buddy.peerID
+  doAssert buddy.ctx.pool.hdrProcError.len <= buddy.ctx.pool.nBuddies
+
+proc nHdrProcErrors*(buddy: BeaconBuddyRef): int =
+  ## Getter, returns the number of `proc` errors for argument `buddy`
+  buddy.ctx.pool.hdrProcError.withValue(buddy.peerID, val):
+    return val[].int
+
+proc `nHdrProcErrors=`*(buddy: BeaconBuddyRef; count: uint8) =
+  ## Setter, set arbitrary `proc` error count for argument `buddy`. Due
+  ## to (hypothetical) hash collisions, the error register might have
+  ## vanished in case a new one is instantiated.
+  buddy.ctx.pool.hdrProcError.withValue(buddy.peerID, val):
+    val[] = count
+  do:
+    buddy.ctx.pool.hdrProcError[buddy.peerID] = count
+
+proc incHdrProcErrors*(buddy: BeaconBuddyRef) =
+  ## Increment `proc` error count for for argument `buddy`. Due to
+  ## (hypothetical) hash collisions, the error register might have
+  ## vanished in case a new one is instantiated.
+  buddy.ctx.pool.hdrProcError.withValue(buddy.peerID, val):
+    val[].inc
+  do:
+    buddy.ctx.pool.hdrProcError[buddy.peerID] = 1u8
+
+proc incHdrProcErrors*(buddy: BeaconBuddyRef; peerID: Hash) =
+  ## Increment `proc` error count for for argument `peerID` entry if it
+  ## has a slot. Otherwise the instruction is ignored.
+  buddy.ctx.pool.hdrProcError.withValue(peerID, val):
+    val[].inc
 
 # ------------------------------------------------------------------------------
 # End

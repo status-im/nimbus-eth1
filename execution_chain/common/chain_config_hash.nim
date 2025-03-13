@@ -39,7 +39,7 @@ import
 func update(ctx: var sha256, val: uint64 | UInt256) =
   ctx.update(val.toBytesLE)
 
-func update(ctx: var sha256, val: ChainId | EthTime | NetworkId) =
+func update(ctx: var sha256, val: EthTime) =
   ctx.update(distinctBase val)
 
 func update(ctx: var sha256, val: bool) =
