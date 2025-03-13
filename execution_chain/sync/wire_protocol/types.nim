@@ -11,10 +11,49 @@
 {.push raises: [].}
 
 import
+  std/[sets, tables, times],
   eth/common,
-  ../../core/[chain, tx_pool]
-  
+  chronos,
+  chronos/ratelimit,
+  ../../core/[chain, tx_pool],
+  ../../networking/p2p_types
+
 type
+  StatusPacket* = object
+    ethVersion*: uint64
+    networkId*: NetworkId
+    totalDifficulty*: DifficultyInt
+    bestHash*: Hash32
+    genesisHash*: Hash32
+    forkId*: ChainForkId
+
+  BlockHeadersPacket* = object
+    headers*: seq[Header]
+
+  BlockBodiesPacket* = object
+    bodies*: seq[BlockBody]
+
+  PooledTransactionsPacket* = object
+    transactions*: seq[PooledTransaction]
+
+  ReceiptsPacket* = object
+    receipts*: seq[seq[Receipt]]
+
+  NewBlockHashesPacket* = object
+    hashes*: seq[NewBlockHashesAnnounce]
+
+  NewBlockPacket* = object
+    blk*: EthBlock
+    totalDifficulty*: DifficultyInt
+
+  TransactionsPacket* = ref object
+    transactions*: seq[Transaction]
+
+  NewPooledTransactionHashesPacket* = ref object
+    txTypes*: seq[byte]
+    txSizes*: seq[uint64]
+    txHashes*: seq[Hash32]
+
   NewBlockHashesAnnounce* = object
     hash*: Hash32
     number*: BlockNumber
@@ -39,16 +78,27 @@ type
     maxResults*, skip*: uint
     reverse*: bool
 
-  BlockBodiesRequest* =object
+  BlockBodiesRequest* = object
     blockHashes*: seq[Hash32]
 
-  PooledTransactionsRequest* =object
+  PooledTransactionsRequest* = object
     txHashes*: seq[Hash32]
 
-  ReceiptsRequest* =object
+  ReceiptsRequest* = object
     blockHashes*: seq[Hash32]
+
+  SeenObject* = ref object
+    lastSeen*: Time
+    peers*: HashSet[NodeId]
+
+  ActionHandler* = proc(): Future[void] {.async: (raises: [CancelledError]).}
 
   EthWireRef* = ref object of RootRef
     chain* : ForkedChainRef
     txPool*: TxPoolRef
-    
+    node*  : EthereumNode
+    quota* : TokenBucket
+    seenTransactions*: Table[Hash32, SeenObject]
+    cleanupHeartbeat*: Future[void].Raising([CancelledError])
+    actionQueue*: AsyncQueue[ActionHandler]
+    actionHeartbeat*: Future[void].Raising([CancelledError])

@@ -270,20 +270,6 @@ proc start*(p: PeerPool) =
     asyncSpawn p.run()
 
 proc len*(p: PeerPool): int = p.connectedNodes.len
-# @property
-# def peers(self) -> List[BasePeer]:
-#   peers = list(self.connected_nodes.values())
-#   # Shuffle the list of peers so that dumb callsites are less likely to send
-#   # all requests to
-#   # a single peer even if they always pick the first one from the list.
-#   random.shuffle(peers)
-#   return peers
-
-# async def get_random_peer(self) -> BasePeer:
-#   while not self.peers:
-#     self.logger.debug("No connected peers, sleeping a bit")
-#     await asyncio.sleep(0.5)
-#   return random.choice(self.peers)
 
 iterator peers*(p: PeerPool): Peer =
   for remote, peer in p.connectedNodes:
