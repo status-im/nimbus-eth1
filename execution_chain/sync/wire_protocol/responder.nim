@@ -11,9 +11,12 @@ import
   stint,
   chronicles,
   stew/byteutils,
+  eth/common/transactions_rlp,
+  ./types,
   ./handler,
   ./requester,
-  ./trace_config,  
+  ./broadcast,
+  ./trace_config,
   ../../utils/utils,
   ../../common/logging,
   ../../networking/p2p_protocol_dsl,
@@ -104,7 +107,7 @@ proc transactionsUserHandler(peer: Peer; packet: TransactionsPacket) {.
     trace trEthRecvReceived & "Transactions (0x02)", peer,
           transactions = packet.transactions.len
   let ctx = peer.networkState(eth68)
-  ctx.handleAnnouncedTxs(packet)
+  await ctx.handleTransactionsBroadcast(packet, peer)
 
 proc transactionsThunk(peer: Peer; data: Rlp) {.
     async: (raises: [CancelledError, EthP2PError]).} =
@@ -190,6 +193,8 @@ proc newPooledTransactionHashesUserHandler(peer: Peer; packet: NewPooledTransact
     trace trEthRecvReceived & "NewPooledTransactionHashes (0x08)", peer,
           txTypes = packet.txTypes.toHex, txSizes = packet.txSizes.toStr,
           hashes = packet.txHashes.len
+  let ctx = peer.networkState(eth68)
+  await ctx.handleTxHashesBroadcast(packet, peer)
 
 proc newPooledTransactionHashesThunk(peer: Peer; data: Rlp) {.
     async: (raises: [CancelledError, EthP2PError]).} =
