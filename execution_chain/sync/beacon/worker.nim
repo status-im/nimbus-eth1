@@ -11,6 +11,7 @@
 {.push raises:[].}
 
 import
+  std/[strutils, syncio],
   pkg/[chronicles, chronos],
   pkg/eth/common,
   pkg/stew/[interval_set, sorted_set],
@@ -37,7 +38,7 @@ proc napUnlessSomethingToFetch(
     buddy: BeaconBuddyRef;
       ): Future[bool] {.async: (raises: []).} =
   ## When idle, save cpu cycles waiting for something to do.
-  if buddy.ctx.pool.blockImportOk or             # currently importing blocks
+  if buddy.ctx.pool.blkImportOk or               # currently importing blocks
      buddy.ctx.hibernate or                      # not activated yet?
      not (buddy.headersToFetchOk() or            # something on TODO list
           buddy.bodiesToFetchOk()):
@@ -69,17 +70,23 @@ proc release*(ctx: BeaconCtxRef; info: static[string]) =
 
 proc start*(buddy: BeaconBuddyRef; info: static[string]): bool =
   ## Initialise worker peer
-  let peer = buddy.peer
+  let
+    peer = buddy.peer
+    ctx = buddy.ctx
 
   if runsThisManyPeersOnly <= buddy.ctx.pool.nBuddies:
-    if not buddy.ctx.hibernate: debug info & ": peers limit reached", peer
+    if not ctx.hibernate: debug info & ": peers limit reached", peer
+    return false
+
+  if not ctx.pool.seenData and buddy.peerID in ctx.pool.failedPeers:
+    if not ctx.hibernate: debug info & ": useless peer already tried", peer
     return false
 
   if not buddy.startBuddy():
-    if not buddy.ctx.hibernate: debug info & ": failed", peer
+    if not ctx.hibernate: debug info & ": failed", peer
     return false
 
-  if not buddy.ctx.hibernate: debug info & ": new peer", peer
+  if not ctx.hibernate: debug info & ": new peer", peer
   true
 
 proc stop*(buddy: BeaconBuddyRef; info: static[string]) =
@@ -88,6 +95,31 @@ proc stop*(buddy: BeaconBuddyRef; info: static[string]) =
     ctrl=buddy.ctrl.state, nLaps=buddy.only.nMultiLoop,
     lastIdleGap=buddy.only.multiRunIdle.toStr
   buddy.stopBuddy()
+
+# --------------------
+
+proc initalScrumFromFile*(
+    ctx: BeaconCtxRef;
+    file: string;
+    info: static[string];
+      ): Result[void,string] =
+  ## Set up inital sprint from argument file (itended for debugging)
+  var
+    mesg: SyncClMesg
+  try:
+    var f = file.open(fmRead)
+    defer: f.close()
+    var rlp = rlpFromHex(f.readAll().strip)
+    mesg = rlp.read(SyncClMesg)
+  except CatchableError as e:
+    return err("Error decoding file: \"" & file & "\"" &
+      " (" & $e.name & ": " & e.msg & ")")
+  ctx.clReq.mesg = mesg
+  ctx.clReq.locked = true
+  ctx.clReq.changed = true
+  debug info & ": Initialised from file", file, consHead=mesg.consHead.bnStr,
+    finalHash=mesg.finalHash.short
+  ok()
 
 # ------------------------------------------------------------------------------
 # Public functions
@@ -124,8 +156,8 @@ proc runDaemon*(
       # at the same time does not work very well, most probably due to high
       # system activity while importing. Peers will get lost pretty soon after
       # downloading starts if they continue downloading.
-      ctx.pool.blockImportOk = true
-      defer: ctx.pool.blockImportOk = false
+      ctx.pool.blkImportOk = true
+      defer: ctx.pool.blkImportOk = false
 
       # Import from staged queue.
       while await ctx.blocksStagedImport(info):

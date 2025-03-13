@@ -46,13 +46,14 @@ proc updateBeaconHeaderCB(
   return proc(h: Header; f: Hash32) {.gcsafe, raises: [].} =
 
     # Check whether there is an update running (otherwise take next upate)
-    if f != zeroHash32 and                       # finalised hash is set
-       ctx.layout.head < h.number and            # update is advancing
-       ctx.clRequest.consHead.number < h.number: # .. ditto
+    if not ctx.clReq.locked and                   # can update ok
+       f != zeroHash32 and                        # finalised hash is set
+       ctx.layout.head < h.number and             # update is advancing
+       ctx.clReq.mesg.consHead.number < h.number: # .. ditto
 
-      ctx.clRequest.consHead = h
-      ctx.clRequest.finalHash = f
-      ctx.clRequest.changed = true
+      ctx.clReq.mesg.consHead = h
+      ctx.clReq.mesg.finalHash = f
+      ctx.clReq.changed = true
 
 # ------------------------------------------------------------------------------
 # Public functions
@@ -74,16 +75,18 @@ proc setupDatabase*(ctx: BeaconCtxRef; info: static[string]) =
   # into `ForkedChainRef` (i.e. `ctx.pool.chain`.)
   ctx.pool.hdrCache = ForkedCacheRef.init(ctx.pool.chain)
 
-  # Set blocks batch import queue size
-  if ctx.pool.blocksStagedHwm < blocksStagedLwm:
-    ctx.pool.blocksStagedHwm = blocksStagedHwmDefault
   # Take it easy and assume that queue records contain full block list (which
   # is mostly the case anyway.) So the the staging queue is limited by the
   # number of sub-list records rather than the number of accumulated block
   # objects.
-  ctx.pool.stagedLenHwm =
-    (ctx.pool.blocksStagedHwm + nFetchBodiesBatch - 1) div nFetchBodiesBatch
-  trace info & ": block lists limit", hwm=ctx.pool.stagedLenHwm
+  let hwm = if blocksStagedLwm <= ctx.pool.blkStagedHwm: ctx.pool.blkStagedHwm
+            else: blocksStagedHwmDefault
+  ctx.pool.blkStagedLenHwm = (hwm + nFetchBodiesBatch - 1) div nFetchBodiesBatch
+
+  # Set blocks batch import queue size
+  if ctx.pool.blkStagedHwm != 0:
+    debug info & ": import block lists queue", limit=ctx.pool.blkStagedLenHwm
+  ctx.pool.blkStagedHwm = hwm
 
 
 proc setupServices*(ctx: BeaconCtxRef; info: static[string]) =

@@ -113,8 +113,9 @@ proc collectAndStashOnDiskCache*(
         rev = (await buddy.fetchRev(ivReq, parent, info)).valueOr:
           break fetchHeadersBody         # error => exit block
 
-      if buddy.ctrl.stopped:
-        break fetchHeadersBody           # error => exit block
+      # Job might have been cancelled while downloading headrs
+      if buddy.ctrl.stopped or ctx.poolMode:
+        break fetchHeadersBody           # stop => exit block
 
       # Store it on the header chain cache
       ctx.hdrCache.fcHeaderPut(rev).isOkOr:
@@ -187,6 +188,10 @@ proc collectAndStageOnMemQueue*(
         rev = (await buddy.fetchRev(ivReq, parent, info)).valueOr:
           break fetchHeadersBody         # error => exit block
 
+      # Job might have been cancelled while downloading headrs
+      if buddy.ctrl.stopped or ctx.poolMode:
+        break fetchHeadersBody           # stop => exit block
+
       # While assembling a `LinkedHChainRef`, only boundary checks are used to
       # verify that the header lists are acceptable. A thorough check will be
       # performed later when storing this list on the header chain cache.
@@ -198,7 +203,7 @@ proc collectAndStageOnMemQueue*(
         debug info & ": header queue error", peer, iv, ivReq,
           receivedHeaders=rev.bnStr,  expected=(ivBottom,ivTop).bnStr,
           ctrl=buddy.ctrl.state, hdrErrors=buddy.hdrErrors
-        break fetchHeadersBody         # error => exit block
+        break fetchHeadersBody           # error => exit block
 
       # Check/update hashes
       let hash0 = rlp.encode(rev[0]).keccak256
@@ -210,7 +215,7 @@ proc collectAndStageOnMemQueue*(
           debug info & ": header queue error", peer, iv, ivReq,
             hash=hash0.toStr, expected=lhc.revHdrs[^1].parentHash.toStr,
             ctrl=buddy.ctrl.state, hdrErrors=buddy.hdrErrors
-          break fetchHeadersBody           # error => exit block
+          break fetchHeadersBody         # error => exit block
 
       lhc.revHdrs &= rev
 
