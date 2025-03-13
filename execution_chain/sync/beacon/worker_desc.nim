@@ -141,9 +141,9 @@ type
     hdrCache*: ForkedCacheRef        ## Currently in tandem with `chain`
 
     # Blocks import/execution settings
-    blockImportOk*: bool             ## Don't fetch data while block importing
-    blocksStagedHwm*: int            ## Set a `staged` queue limit
-    stagedLenHwm*: int               ## Figured out as # staged records
+    blkImportOk*: bool               ## Don't fetch data while block importing
+    blkStagedHwm*: int               ## Set a `staged` queue limit
+    blkStagedLenHwm*: int            ## Figured out as # staged records
 
     # Info, debugging, and error handling stuff
     nReorg*: int                     ## Number of reorg invocations (info only)

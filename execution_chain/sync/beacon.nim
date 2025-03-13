@@ -66,7 +66,7 @@ proc init*(
       ): T =
   var desc = T()
   desc.initSync(ethNode, maxPeers)
-  desc.ctx.pool.blocksStagedHwm = blockQueueHwm
+  desc.ctx.pool.blkStagedHwm = blockQueueHwm
   desc.ctx.pool.chain = chain
   desc
 

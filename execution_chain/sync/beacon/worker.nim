@@ -38,7 +38,7 @@ proc napUnlessSomethingToFetch(
     buddy: BeaconBuddyRef;
       ): Future[bool] {.async: (raises: []).} =
   ## When idle, save cpu cycles waiting for something to do.
-  if buddy.ctx.pool.blockImportOk or             # currently importing blocks
+  if buddy.ctx.pool.blkImportOk or               # currently importing blocks
      buddy.ctx.hibernate or                      # not activated yet?
      not (buddy.headersToFetchOk() or            # something on TODO list
           buddy.bodiesToFetchOk()):
@@ -156,8 +156,8 @@ proc runDaemon*(
       # at the same time does not work very well, most probably due to high
       # system activity while importing. Peers will get lost pretty soon after
       # downloading starts if they continue downloading.
-      ctx.pool.blockImportOk = true
-      defer: ctx.pool.blockImportOk = false
+      ctx.pool.blkImportOk = true
+      defer: ctx.pool.blkImportOk = false
 
       # Import from staged queue.
       while await ctx.blocksStagedImport(info):

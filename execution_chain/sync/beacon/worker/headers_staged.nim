@@ -136,8 +136,7 @@ proc headersStagedCollect*(
     return false
 
   info "Downloaded headers", unprocTop=ctx.headersUnprocAvailTop.bnStr,
-    nHeaders, nStaged=ctx.hdr.staged.len, nSyncPeers=ctx.pool.nBuddies,
-    reorgReq=ctx.poolMode
+    nHeaders, nStaged=ctx.hdr.staged.len, nSyncPeers=ctx.pool.nBuddies
 
   return true
 

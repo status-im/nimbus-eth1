@@ -174,7 +174,7 @@ func blocksStagedCanImportOk*(ctx: BeaconCtxRef): bool =
       # queue ramp up time.
       #
       # So importing does not start before the queue is filled up.
-      if ctx.pool.stagedLenHwm <= ctx.blk.staged.len:
+      if ctx.pool.blkStagedLenHwm <= ctx.blk.staged.len:
 
         # Wait until finished with current block downloads
         return ctx.blocksBorrowedIsEmpty()
@@ -187,7 +187,7 @@ func blocksStagedFetchOk*(ctx: BeaconCtxRef): bool =
   ##
   if 0 < ctx.blocksUnprocAvail():
     # Fetch if there is space on the queue.
-    if ctx.blk.staged.len < ctx.pool.stagedLenHwm:
+    if ctx.blk.staged.len < ctx.pool.blkStagedLenHwm:
       return true
 
     # Make sure that there is no gap at the bottom which needs to be
@@ -314,7 +314,7 @@ proc blocksStagedCollect*(
 
   info "Downloaded blocks", iv=blk.blocks.bnStr,
     nBlocks=blk.blocks.len, nStaged=ctx.blk.staged.len,
-    nSyncPeers=ctx.pool.nBuddies, reorgReq=ctx.poolMode
+    nSyncPeers=ctx.pool.nBuddies
 
   return true
 
@@ -409,7 +409,7 @@ proc blocksStagedImport*(
   info "Import done", iv=(iv.minPt, maxImport).bnStr,
     nBlocks=(maxImport-iv.minPt+1), nFailed=(iv.maxPt-maxImport),
     base=ctx.chain.baseNumber.bnStr, head=ctx.chain.latestNumber.bnStr,
-    target=ctx.layout.head.bnStr, reorgReq=ctx.poolMode
+    target=ctx.layout.head.bnStr
 
   return true
 
