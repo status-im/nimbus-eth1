@@ -31,41 +31,8 @@ defineProtocol(PROTO = eth68,
                networkState = EthWireRef)
 
 type
-  StatusPacket* = object
-    ethVersion*: uint64
-    networkId*: NetworkId
-    totalDifficulty*: DifficultyInt
-    bestHash*: Hash32
-    genesisHash*: Hash32
-    forkId*: ChainForkId
-
-  BlockHeadersPacket* = object
-    headers*: seq[Header]
-
-  BlockBodiesPacket* = object
-    bodies*: seq[BlockBody]
-
-  PooledTransactionsPacket* = object
-    transactions*: seq[PooledTransaction]
-
-  ReceiptsPacket* = object
-    receipts*: seq[seq[Receipt]]
-
-  NewBlockHashesPacket* = object
-    hashes*: seq[NewBlockHashesAnnounce]
-
-  NewBlockPacket* = object
-    blk*: EthBlock
-    totalDifficulty*: DifficultyInt
-
-  TransactionsPacket* = object
-    transactions*: seq[Transaction]
-
-  NewPooledTransactionHashesPacket* = object
-    txTypes*: seq[byte]
-    txSizes*: seq[uint64]
-    txHashes*: seq[Hash32]
-
+  eth* = eth68
+  
 const
   StatusMsg*                     =  0'u64
   NewBlockHashesMsg*             =  1'u64

@@ -219,3 +219,6 @@ proc `$`*(v: Capability): string = v.name & "/" & $v.version
 
 proc toENode*(v: EthereumNode): ENode =
   ENode(pubkey: v.keys.pubkey, address: v.address)
+
+func id*(peer: Peer): NodeId =
+  peer.remote.id
