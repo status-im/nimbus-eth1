@@ -30,188 +30,92 @@ export
 logScope:
   topics = "vm computation"
 
-when defined(evmc_enabled):
-  import
-    evmc/evmc,
-    evmc_helpers,
-    evmc_api,
-    stew/ptrops
-
-  export
-    evmc,
-    evmc_helpers,
-    evmc_api,
-    ptrops
-
-const
-  evmc_enabled* = defined(evmc_enabled)
-
 # ------------------------------------------------------------------------------
 # Public functions
 # ------------------------------------------------------------------------------
 
 template getCoinbase*(c: Computation): Address =
-  when evmc_enabled:
-    c.host.getTxContext().block_coinbase
-  else:
-    c.vmState.coinbase
+  c.vmState.coinbase
 
 template getTimestamp*(c: Computation): uint64 =
-  when evmc_enabled:
-    # TODO:
-    # while the choice of using int64 in evmc will not affect
-    # normal evm/evmc operations.
-    # the reason why cast[uint64] is being used here because
-    # some of the tests will fail if the value from test vector overflow
-    # see setupTxContext of host_services.nim too
-    # block timestamp overflow should be checked before entering EVM
-    cast[uint64](c.host.getTxContext().block_timestamp)
-  else:
-    c.vmState.blockCtx.timestamp.uint64
+  c.vmState.blockCtx.timestamp.uint64
 
 template getBlockNumber*(c: Computation): UInt256 =
-  when evmc_enabled:
-    c.host.getBlockNumber().u256
-  else:
-    c.vmState.blockNumber.u256
+  c.vmState.blockNumber.u256
 
 template getDifficulty*(c: Computation): DifficultyInt =
-  when evmc_enabled:
-    UInt256.fromEvmc c.host.getTxContext().block_prev_randao
-  else:
-    c.vmState.difficultyOrPrevRandao
+  c.vmState.difficultyOrPrevRandao
 
 template getGasLimit*(c: Computation): GasInt =
-  when evmc_enabled:
-    c.host.getTxContext().block_gas_limit.GasInt
-  else:
-    c.vmState.blockCtx.gasLimit
+  c.vmState.blockCtx.gasLimit
 
 template getBaseFee*(c: Computation): UInt256 =
-  when evmc_enabled:
-    UInt256.fromEvmc c.host.getTxContext().block_base_fee
-  else:
-    c.vmState.blockCtx.baseFeePerGas.get(0.u256)
+  c.vmState.blockCtx.baseFeePerGas.get(0.u256)
 
 template getChainId*(c: Computation): UInt256 =
-  when evmc_enabled:
-    c.host.getChainId()
-  else:
-    c.vmState.com.chainId
+  c.vmState.com.chainId
 
 template getOrigin*(c: Computation): Address =
-  when evmc_enabled:
-    c.host.getTxContext().tx_origin
-  else:
-    c.vmState.txCtx.origin
+  c.vmState.txCtx.origin
 
 template getGasPrice*(c: Computation): GasInt =
-  when evmc_enabled:
-    UInt256.fromEvmc(c.host.getTxContext().tx_gas_price).truncate(GasInt)
-  else:
-    c.vmState.txCtx.gasPrice
+  c.vmState.txCtx.gasPrice
 
 template getVersionedHash*(c: Computation, index: int): VersionedHash =
-  when evmc_enabled:
-    cast[ptr UncheckedArray[VersionedHash]](c.host.getTxContext().blob_hashes)[index]
-  else:
-    c.vmState.txCtx.versionedHashes[index]
+  c.vmState.txCtx.versionedHashes[index]
 
 template getVersionedHashesLen*(c: Computation): int =
-  when evmc_enabled:
-    c.host.getTxContext().blob_hashes_count.int
-  else:
-    c.vmState.txCtx.versionedHashes.len
+  c.vmState.txCtx.versionedHashes.len
 
 template getBlobBaseFee*(c: Computation): UInt256 =
-  when evmc_enabled:
-    UInt256.fromEvmc c.host.getTxContext().blob_base_fee
-  else:
-    c.vmState.txCtx.blobBaseFee
+  c.vmState.txCtx.blobBaseFee
 
 proc getBlockHash*(c: Computation, number: BlockNumber): Hash32 =
-  when evmc_enabled:
-    let
-      blockNumber = BlockNumber c.host.getTxContext().block_number
-      ancestorDepth  = blockNumber - number - 1
-    if ancestorDepth >= constants.MAX_PREV_HEADER_DEPTH:
-      return default(Hash32)
-    if number >= blockNumber:
-      return default(Hash32)
-    c.host.getBlockHash(number)
-  else:
-    let
-      blockNumber = c.vmState.blockNumber
-      ancestorDepth = blockNumber - number - 1
-    if ancestorDepth >= constants.MAX_PREV_HEADER_DEPTH:
-      return default(Hash32)
-    if number >= blockNumber:
-      return default(Hash32)
-    c.vmState.getAncestorHash(number)
+  let
+    blockNumber = c.vmState.blockNumber
+    ancestorDepth = blockNumber - number - 1
+  if ancestorDepth >= constants.MAX_PREV_HEADER_DEPTH:
+    return default(Hash32)
+  if number >= blockNumber:
+    return default(Hash32)
+  c.vmState.getAncestorHash(number)
 
 template accountExists*(c: Computation, address: Address): bool =
-  when evmc_enabled:
-    c.host.accountExists(address)
+  if c.fork >= FkSpurious:
+    not c.vmState.readOnlyLedger.isDeadAccount(address)
   else:
-    if c.fork >= FkSpurious:
-      not c.vmState.readOnlyLedger.isDeadAccount(address)
-    else:
-      c.vmState.readOnlyLedger.accountExists(address)
+    c.vmState.readOnlyLedger.accountExists(address)
 
 template getStorage*(c: Computation, slot: UInt256): UInt256 =
-  when evmc_enabled:
-    c.host.getStorage(c.msg.contractAddress, slot)
-  else:
-    c.vmState.readOnlyLedger.getStorage(c.msg.contractAddress, slot)
+  c.vmState.readOnlyLedger.getStorage(c.msg.contractAddress, slot)
 
 template getBalance*(c: Computation, address: Address): UInt256 =
-  when evmc_enabled:
-    c.host.getBalance(address)
-  else:
-    c.vmState.readOnlyLedger.getBalance(address)
+  c.vmState.readOnlyLedger.getBalance(address)
 
 template getCodeSize*(c: Computation, address: Address): uint =
-  when evmc_enabled:
-    c.host.getCodeSize(address)
-  else:
-    uint(c.vmState.readOnlyLedger.getCodeSize(address))
+  uint(c.vmState.readOnlyLedger.getCodeSize(address))
 
 template getCodeHash*(c: Computation, address: Address): Hash32 =
-  when evmc_enabled:
-    c.host.getCodeHash(address)
+  let
+    db = c.vmState.readOnlyLedger
+  if not db.accountExists(address) or db.isEmptyAccount(address):
+    default(Hash32)
   else:
-    let
-      db = c.vmState.readOnlyLedger
-    if not db.accountExists(address) or db.isEmptyAccount(address):
-      default(Hash32)
-    else:
-      db.getCodeHash(address)
+    db.getCodeHash(address)
 
 template selfDestruct*(c: Computation, address: Address) =
-  when evmc_enabled:
-    c.host.selfDestruct(c.msg.contractAddress, address)
-  else:
-    c.execSelfDestruct(address)
+  c.execSelfDestruct(address)
 
 template getCode*(c: Computation, address: Address): CodeBytesRef =
-  when evmc_enabled:
-    CodeBytesRef.init(c.host.copyCode(address))
-  else:
-    c.vmState.readOnlyLedger.getCode(address)
+  c.vmState.readOnlyLedger.getCode(address)
 
 template setTransientStorage*(c: Computation, slot, val: UInt256) =
-  when evmc_enabled:
-    c.host.setTransientStorage(c.msg.contractAddress, slot, val)
-  else:
-    c.vmState.ledger.
-      setTransientStorage(c.msg.contractAddress, slot, val)
+  c.vmState.ledger.
+    setTransientStorage(c.msg.contractAddress, slot, val)
 
 template getTransientStorage*(c: Computation, slot: UInt256): UInt256 =
-  when evmc_enabled:
-    c.host.getTransientStorage(c.msg.contractAddress, slot)
-  else:
-    c.vmState.readOnlyLedger.
-      getTransientStorage(c.msg.contractAddress, slot)
+  c.vmState.readOnlyLedger.
+    getTransientStorage(c.msg.contractAddress, slot)
 
 func newComputation*(vmState: BaseVMState,
                      keepStack: bool,
@@ -271,12 +175,6 @@ func setError*(c: Computation, code: evmc_status_code, burnsGas = false) =
 func setError*(
     c: Computation, code: evmc_status_code, msg: sink string, burnsGas = false) =
   c.error = Error(evmcStatus: code, info: move(msg), burnsGas: burnsGas)
-
-func evmcStatus*(c: Computation): evmc_status_code =
-  if c.isSuccess:
-    EVMC_SUCCESS
-  else:
-    c.error.evmcStatus
 
 func errorOpt*(c: Computation): Opt[string] =
   if c.isSuccess:

@@ -374,11 +374,8 @@ proc runTestOverflow() =
     let tx = signTransaction(unsignedTx, privateKey, false)
     let res = testCallEvm(tx, tx.recoverSender().expect("valid signature"), s)
 
-    when defined(evmc_enabled):
-      check res.error == "EVMC_FAILURE"
-    else:
-      # After gasCall values always on positive, this test become OOG
-      check res.error == "Opcode Dispatch Error: OutOfGas, depth=1"
+    # After gasCall values always on positive, this test become OOG
+    check res.error == "Opcode Dispatch Error: OutOfGas, depth=1"
 
 proc evmSupportMain() =
   runStackTests()

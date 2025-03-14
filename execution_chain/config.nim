@@ -33,16 +33,15 @@ from beacon_chain/nimbus_binary_common import setupLogging, StdoutLogKind
 
 export net, defs, StdoutLogKind
 
-
 const
-  # e.g.: Copyright (c) 2018-2021 Status Research & Development GmbH
+  # e.g.: Copyright (c) 2018-2025 Status Research & Development GmbH
   NimbusCopyright* = "Copyright (c) 2018-" &
     CompileDate.split('-')[0] &
     " Status Research & Development GmbH"
 
   # e.g.:
   # nimbus_execution_client/v0.1.0-abcdef/os-cpu/nim-a.b.c/emvc
-  # Copyright (c) 2018-2021 Status Research & Development GmbH
+  # Copyright (c) 2018-2025 Status Research & Development GmbH
   NimbusBuild* = "$#\p$#" % [
     ClientId,
     NimbusCopyright,
@@ -86,18 +85,6 @@ const
 let
   defaultListenAddress      = getAutoAddress(Port(0)).toIpAddress()
   defaultListenAddressDesc  = $defaultListenAddress & ", meaning all network interfaces"
-
-# `when` around an option doesn't work with confutils; it fails to compile.
-# Workaround that by setting the `ignore` pragma on EVMC-specific options.
-when defined(evmc_enabled):
-  {.pragma: includeIfEvmc.}
-else:
-  {.pragma: includeIfEvmc, ignore.}
-
-const sharedLibText = if defined(linux): " (*.so, *.so.N)"
-                      elif defined(windows): " (*.dll)"
-                      elif defined(macosx): " (*.dylib)"
-                      else: ""
 
 type
   NimbusCmd* {.pure.} = enum
@@ -148,12 +135,6 @@ type
       defaultValue: ""
       abbr: "e"
       name: "import-key" }: InputFile
-
-    evm* {.
-      desc: "Load alternative EVM from EVMC-compatible shared library" & sharedLibText
-      defaultValue: ""
-      name: "evm"
-      includeIfEvmc }: string
 
     trustedSetupFile* {.
       desc: "Load EIP-4844 trusted setup file"

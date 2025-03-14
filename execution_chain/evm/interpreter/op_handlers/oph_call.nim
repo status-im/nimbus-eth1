@@ -1,5 +1,5 @@
 # Nimbus
-# Copyright (c) 2021-2024 Status Research & Development GmbH
+# Copyright (c) 2021-2025 Status Research & Development GmbH
 # Licensed under either of
 #  * Apache License, version 2.0, ([LICENSE-APACHE](LICENSE-APACHE) or
 #    http://www.apache.org/licenses/LICENSE-2.0)
@@ -32,16 +32,10 @@ import
   chronicles,
   eth/common/addresses,
   stew/assign2,
-  stint
-
-when not defined(evmc_enabled):
-  import
-    ../../state,
-    ../../message,
-    ../../../db/ledger
-else:
-  import
-    stew/saturation_arith
+  stint,
+  ../../state,
+  ../../message,
+  ../../../db/ledger
 
 # ------------------------------------------------------------------------------
 # Private
@@ -64,17 +58,13 @@ type
     gasCallEIPs:     GasInt
 
 proc gasCallEIP2929(c: Computation, address: Address): GasInt =
-  when evmc_enabled:
-    if c.host.accessAccount(address) == EVMC_ACCESS_COLD:
-      return ColdAccountAccessCost - WarmStorageReadCost
-  else:
-    c.vmState.mutateLedger:
-      if not db.inAccessList(address):
-        db.accessList(address)
+  c.vmState.mutateLedger:
+    if not db.inAccessList(address):
+      db.accessList(address)
 
-        # The WarmStorageReadCostEIP2929 (100) is already deducted in
-        # the form of a constant `gasCall`
-        return ColdAccountAccessCost - WarmStorageReadCost
+      # The WarmStorageReadCostEIP2929 (100) is already deducted in
+      # the form of a constant `gasCall`
+      return ColdAccountAccessCost - WarmStorageReadCost
 
 proc updateStackAndParams(q: var LocalParams; c: Computation) =
   c.stack.lsTop(0)
@@ -175,50 +165,29 @@ proc staticCallParams(c: Computation):  EvmResult[LocalParams] =
   res.updateStackAndParams(c)
   ok(res)
 
-when evmc_enabled:
-  template execSubCall(c: Computation; msg: ref nimbus_message; p: LocalParams) =
-    c.chainTo(msg):
-      assign(c.returnData, makeOpenArray(c.res.output_data, c.res.output_size.int))
+proc execSubCall(c: Computation; childMsg: Message; memPos, memLen: int) =
+  ## Call new VM -- helper for `Call`-like operations
 
-      let actualOutputSize = min(p.memOutLen, c.returnData.len)
-      if actualOutputSize > 0:
-        ? c.memory.write(p.memOutPos,
-          c.returnData.toOpenArray(0, actualOutputSize - 1))
+  # need to provide explicit <c> and <child> for capturing in chainTo proc()
+  # <memPos> and <memLen> are provided by value and need not be captured
+  var
+    code = getCallCode(c.vmState, childMsg.codeAddress)
+    child = newComputation(
+      c.vmState, keepStack = false, childMsg, code)
 
-      c.gasMeter.returnGas(GasInt c.res.gas_left)
-      c.gasMeter.refundGas(c.res.gas_refund)
+  c.chainTo(child):
+    if not child.shouldBurnGas:
+      c.gasMeter.returnGas(child.gasMeter.gasRemaining)
 
-      if c.res.status_code == EVMC_SUCCESS:
-        c.stack.lsTop(1)
+    if child.isSuccess:
+      c.gasMeter.refundGas(child.gasMeter.gasRefunded)
+      c.stack.lsTop(1)
 
-      if not c.res.release.isNil:
-        c.res.release(c.res)
-      ok()
-
-else:
-  proc execSubCall(c: Computation; childMsg: Message; memPos, memLen: int) =
-    ## Call new VM -- helper for `Call`-like operations
-
-    # need to provide explicit <c> and <child> for capturing in chainTo proc()
-    # <memPos> and <memLen> are provided by value and need not be captured
-    var
-      code = getCallCode(c.vmState, childMsg.codeAddress)
-      child = newComputation(
-        c.vmState, keepStack = false, childMsg, code)
-
-    c.chainTo(child):
-      if not child.shouldBurnGas:
-        c.gasMeter.returnGas(child.gasMeter.gasRemaining)
-
-      if child.isSuccess:
-        c.gasMeter.refundGas(child.gasMeter.gasRefunded)
-        c.stack.lsTop(1)
-
-      let actualOutputSize = min(memLen, child.output.len)
-      if actualOutputSize > 0:
-        ? c.memory.write(memPos, child.output.toOpenArray(0, actualOutputSize - 1))
-      c.returnData = move(child.output)
-      ok()
+    let actualOutputSize = min(memLen, child.output.len)
+    if actualOutputSize > 0:
+      ? c.memory.write(memPos, child.output.toOpenArray(0, actualOutputSize - 1))
+    c.returnData = move(child.output)
+    ok()
 
 # ------------------------------------------------------------------------------
 # Private, op handlers implementation
@@ -265,38 +234,20 @@ proc callOp(cpt: VmCpt): EvmResultVoid =
     cpt.gasMeter.returnGas(childGasLimit)
     return ok()
 
-  when evmc_enabled:
-    let
-      msg = new(nimbus_message)
-      c   = cpt
-    msg[] = nimbus_message(
-      kind        : EVMC_CALL,
-      depth       : (cpt.msg.depth + 1).int32,
-      gas         : int64.saturate(childGasLimit),
-      sender      : p.sender,
-      recipient   : p.contractAddress,
-      code_address: p.codeAddress,
-      input_data  : cpt.memory.readPtr(p.memInPos),
-      input_size  : p.memInLen.uint,
-      value       : toEvmc(p.value),
-      flags       : p.flags
-    )
-    c.execSubCall(msg, p)
-  else:
-    var childMsg = Message(
-      kind:            EVMC_CALL,
-      depth:           cpt.msg.depth + 1,
-      gas:             childGasLimit,
-      sender:          p.sender,
-      contractAddress: p.contractAddress,
-      codeAddress:     p.codeAddress,
-      value:           p.value,
-      flags:           p.flags)
-    assign(childMsg.data, cpt.memory.read(p.memInPos, p.memInLen))
-    cpt.execSubCall(
-      memPos = p.memOutPos,
-      memLen = p.memOutLen,
-      childMsg = childMsg)
+  var childMsg = Message(
+    kind:            EVMC_CALL,
+    depth:           cpt.msg.depth + 1,
+    gas:             childGasLimit,
+    sender:          p.sender,
+    contractAddress: p.contractAddress,
+    codeAddress:     p.codeAddress,
+    value:           p.value,
+    flags:           p.flags)
+  assign(childMsg.data, cpt.memory.read(p.memInPos, p.memInLen))
+  cpt.execSubCall(
+    memPos = p.memOutPos,
+    memLen = p.memOutLen,
+    childMsg = childMsg)
   ok()
 
 # ---------------------
@@ -337,38 +288,20 @@ proc callCodeOp(cpt: VmCpt): EvmResultVoid =
     cpt.gasMeter.returnGas(childGasLimit)
     return ok()
 
-  when evmc_enabled:
-    let
-      msg = new(nimbus_message)
-      c   = cpt
-    msg[] = nimbus_message(
-      kind        : EVMC_CALLCODE,
-      depth       : (cpt.msg.depth + 1).int32,
-      gas         : int64.saturate(childGasLimit),
-      sender      : p.sender,
-      recipient   : p.contractAddress,
-      code_address: p.codeAddress,
-      input_data  : cpt.memory.readPtr(p.memInPos),
-      input_size  : p.memInLen.uint,
-      value       : toEvmc(p.value),
-      flags       : p.flags
-    )
-    c.execSubCall(msg, p)
-  else:
-    var childMsg = Message(
-      kind:            EVMC_CALLCODE,
-      depth:           cpt.msg.depth + 1,
-      gas:             childGasLimit,
-      sender:          p.sender,
-      contractAddress: p.contractAddress,
-      codeAddress:     p.codeAddress,
-      value:           p.value,
-      flags:           p.flags)
-    assign(childMsg.data, cpt.memory.read(p.memInPos, p.memInLen))
-    cpt.execSubCall(
-      memPos = p.memOutPos,
-      memLen = p.memOutLen,
-      childMsg = childMsg)
+  var childMsg = Message(
+    kind:            EVMC_CALLCODE,
+    depth:           cpt.msg.depth + 1,
+    gas:             childGasLimit,
+    sender:          p.sender,
+    contractAddress: p.contractAddress,
+    codeAddress:     p.codeAddress,
+    value:           p.value,
+    flags:           p.flags)
+  assign(childMsg.data, cpt.memory.read(p.memInPos, p.memInLen))
+  cpt.execSubCall(
+    memPos = p.memOutPos,
+    memLen = p.memOutLen,
+    childMsg = childMsg)
   ok()
 
 # ---------------------
@@ -404,38 +337,20 @@ proc delegateCallOp(cpt: VmCpt): EvmResultVoid =
   cpt.memory.extend(p.memInPos, p.memInLen)
   cpt.memory.extend(p.memOutPos, p.memOutLen)
 
-  when evmc_enabled:
-    let
-      msg = new(nimbus_message)
-      c   = cpt
-    msg[] = nimbus_message(
-      kind        : EVMC_DELEGATECALL,
-      depth       : (cpt.msg.depth + 1).int32,
-      gas         : int64.saturate(childGasLimit),
-      sender      : p.sender,
-      recipient   : p.contractAddress,
-      code_address: p.codeAddress,
-      input_data  : cpt.memory.readPtr(p.memInPos),
-      input_size  : p.memInLen.uint,
-      value       : toEvmc(p.value),
-      flags       : p.flags
-    )
-    c.execSubCall(msg, p)
-  else:
-    var childMsg = Message(
-      kind:            EVMC_DELEGATECALL,
-      depth:           cpt.msg.depth + 1,
-      gas:             childGasLimit,
-      sender:          p.sender,
-      contractAddress: p.contractAddress,
-      codeAddress:     p.codeAddress,
-      value:           p.value,
-      flags:           p.flags)
-    assign(childMsg.data, cpt.memory.read(p.memInPos, p.memInLen))
-    cpt.execSubCall(
-      memPos = p.memOutPos,
-      memLen = p.memOutLen,
-      childMsg = childMsg)
+  var childMsg = Message(
+    kind:            EVMC_DELEGATECALL,
+    depth:           cpt.msg.depth + 1,
+    gas:             childGasLimit,
+    sender:          p.sender,
+    contractAddress: p.contractAddress,
+    codeAddress:     p.codeAddress,
+    value:           p.value,
+    flags:           p.flags)
+  assign(childMsg.data, cpt.memory.read(p.memInPos, p.memInLen))
+  cpt.execSubCall(
+    memPos = p.memOutPos,
+    memLen = p.memOutLen,
+    childMsg = childMsg)
   ok()
 
 # ---------------------
@@ -472,38 +387,20 @@ proc staticCallOp(cpt: VmCpt): EvmResultVoid =
   cpt.memory.extend(p.memInPos, p.memInLen)
   cpt.memory.extend(p.memOutPos, p.memOutLen)
 
-  when evmc_enabled:
-    let
-      msg = new(nimbus_message)
-      c   = cpt
-    msg[] = nimbus_message(
-      kind        : EVMC_CALL,
-      depth       : (cpt.msg.depth + 1).int32,
-      gas         : int64.saturate(childGasLimit),
-      sender      : p.sender,
-      recipient   : p.contractAddress,
-      code_address: p.codeAddress,
-      input_data  : cpt.memory.readPtr(p.memInPos),
-      input_size  : p.memInLen.uint,
-      value       : toEvmc(p.value),
-      flags       : p.flags
-    )
-    c.execSubCall(msg, p)
-  else:
-    var childMsg = Message(
-      kind:            EVMC_CALL,
-      depth:           cpt.msg.depth + 1,
-      gas:             childGasLimit,
-      sender:          p.sender,
-      contractAddress: p.contractAddress,
-      codeAddress:     p.codeAddress,
-      value:           p.value,
-      flags:           p.flags)
-    assign(childMsg.data, cpt.memory.read(p.memInPos, p.memInLen))
-    cpt.execSubCall(
-      memPos = p.memOutPos,
-      memLen = p.memOutLen,
-      childMsg = childMsg)
+  var childMsg = Message(
+    kind:            EVMC_CALL,
+    depth:           cpt.msg.depth + 1,
+    gas:             childGasLimit,
+    sender:          p.sender,
+    contractAddress: p.contractAddress,
+    codeAddress:     p.codeAddress,
+    value:           p.value,
+    flags:           p.flags)
+  assign(childMsg.data, cpt.memory.read(p.memInPos, p.memInLen))
+  cpt.execSubCall(
+    memPos = p.memOutPos,
+    memLen = p.memOutLen,
+    childMsg = childMsg)
   ok()
 
 # ------------------------------------------------------------------------------

@@ -24,11 +24,6 @@ import
 
 import ../evm/computation except fromEvmc, toEvmc
 
-when defined(evmc_enabled):
-  import
-    ../utils/utils,
-    ./host_services
-
 export
   call_types
 
@@ -187,27 +182,6 @@ proc setupHost(call: CallParams, keepStack: bool): TransactionHost =
 
   return host
 
-when defined(evmc_enabled):
-  proc doExecEvmc(host: TransactionHost, call: CallParams) =
-    var callResult = evmcExecComputation(host)
-    let c = host.computation
-
-    if callResult.status_code == EVMC_SUCCESS:
-      c.error = nil
-    elif callResult.status_code == EVMC_REVERT:
-      c.setError(EVMC_REVERT, false)
-    else:
-      c.setError(callResult.status_code, true)
-
-    c.gasMeter.gasRemaining = GasInt callResult.gas_left
-    c.msg.contractAddress = callResult.create_address.fromEvmc
-    c.output = if callResult.output_size <= 0: @[]
-               else: @(makeOpenArray(callResult.output_data,
-                                     callResult.output_size.int))
-    if not callResult.release.isNil:
-      {.gcsafe.}:
-        callResult.release(callResult)
-
 # FIXME-awkwardFactoring: the factoring out of the pre and
 # post parts feels awkward to me, but for now I'd really like
 # not to have too much duplicated code between sync and async.
@@ -306,11 +280,8 @@ proc runComputation*(call: CallParams, T: type): T =
   let host = setupHost(call, keepStack = T is DebugCallResult)
   prepareToRunComputation(host, call)
 
-  when defined(evmc_enabled):
-    doExecEvmc(host, call)
-  else:
-    host.computation.execCallOrCreate()
-    if not call.sysCall:
-      host.computation.postExecComputation()
+  host.computation.execCallOrCreate()
+  if not call.sysCall:
+    host.computation.postExecComputation()
 
   finishRunningComputation(host, call, T)
