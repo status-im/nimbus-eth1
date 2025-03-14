@@ -9,7 +9,7 @@
 {.push raises: [].}
 
 import
-  eth/common/eth_types, stint, stew/ptrops,
+  eth/common/eth_types, stint,
   chronos,
   results,
   ../evm/[types, state],

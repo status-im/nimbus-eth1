@@ -180,10 +180,6 @@ proc collectAndStageOnMemQueue*(
         # Request interval
         ivReq = BnRange.new(ivReqMin, ivTop)
 
-        # Current length of the headers queue. This is used to calculate the
-        # response length from the network.
-        nLhcHeaders = lhc.revHdrs.len
-
         # Fetch headers for this range of block numbers
         rev = (await buddy.fetchRev(ivReq, parent, info)).valueOr:
           break fetchHeadersBody         # error => exit block

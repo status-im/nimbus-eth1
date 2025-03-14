@@ -11,7 +11,6 @@
 {.push raises:[].}
 
 import
-  std/options,
   pkg/[chronicles, chronos, results],
   pkg/eth/common,
   pkg/stew/interval_set,
@@ -50,7 +49,7 @@ proc headersFetchReversed*(
     peer = buddy.peer
     req = block:
       if topHash != emptyRoot:
-        EthBlocksRequest(
+        BlockHeadersRequest(
           maxResults: ivReq.len.uint,
           skip:       0,
           reverse:    true,
@@ -58,7 +57,7 @@ proc headersFetchReversed*(
             isHash:   true,
             hash:     topHash))
       else:
-        EthBlocksRequest(
+        BlockHeadersRequest(
           maxResults: ivReq.len.uint,
           skip:       0,
           reverse:    true,
@@ -71,7 +70,7 @@ proc headersFetchReversed*(
     nReq=req.maxResults, hash=topHash.toStr, hdrErrors=buddy.hdrErrors
 
   # Fetch headers from peer
-  var resp: Option[blockHeadersObj]
+  var resp: Opt[BlockHeadersPacket]
   try:
     # There is no obvious way to set an individual timeout for this call. The
     # eth/xx driver sets a global response timeout to `10s`. By how it is

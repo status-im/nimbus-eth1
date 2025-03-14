@@ -90,8 +90,10 @@ method execute*(step: DevP2PRequestPooledTransactionHash, ctx: CancunTestContext
         return false
 
   # Send the request for the pooled transactions
-  let peer = sec.peer
-  let res = waitFor peer.getPooledTransactions(txHashes)
+  let 
+    peer = sec.peer
+    request = PooledTransactionsRequest(txHashes: txHashes)
+    res = waitFor peer.getPooledTransactions(request)
   if res.isNone:
     error "getPooledTransactions returns none"
     return false

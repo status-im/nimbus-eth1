@@ -8,12 +8,14 @@
 # those terms.
 
 import
-  ./wire_protocol/implementation,
+  ./wire_protocol/requester,
+  ./wire_protocol/responder,
   ./wire_protocol/types,
   ./wire_protocol/setup
 
 export
-  implementation,
+  requester,
+  responder,
   types,
   setup
 
