@@ -9,15 +9,8 @@
 # according to those terms.
 
 {.push raises: [].}
-
-const
-  chronicles_line_numbers {.strdefine.} = "0"
-  warningMsg = block:
-    var rc = "*** Compiling with nimvm"
-    if chronicles_line_numbers notin ["0", "off"]:
-      rc &= ", logger line numbers"
-    rc & " enabled"
-
-{.warning: warningMsg.}
-
 {.used.}
+
+const chronicles_line_numbers {.strdefine.} = "0"
+when chronicles_line_numbers notin ["0", "off"]:
+  {.warning: "*** Compiling with logger line numbers enabled".}

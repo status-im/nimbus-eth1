@@ -26,11 +26,6 @@ import
 
 export evmc
 
-# Select between small-stack recursion and no recursion.  Both are good, fast,
-# low resource using methods.  Keep both here because true EVMC API requires
-# the small-stack method, but Chronos `async` is better without recursion.
-const vm_use_recursion* = false
-
 type
   VMFlag* = enum
     ExecutionOK
