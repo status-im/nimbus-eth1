@@ -161,9 +161,6 @@ all: | $(TOOLS) nimbus_execution_client
 # must be included after the default target
 -include $(BUILD_SYSTEM_DIR)/makefiles/targets.mk
 
-# default: use nim native evm
-ENABLE_EVMC := 0
-
 # "-d:release" cannot be added to config.nims
 
 NIM_PARAMS += -d:release
@@ -183,11 +180,6 @@ endif
 deps: | deps-common nat-libs nimbus.nims
 ifneq ($(USE_LIBBACKTRACE), 0)
 deps: | libbacktrace
-endif
-
-ifneq ($(ENABLE_EVMC), 0)
-  NIM_PARAMS += -d:evmc_enabled
-  T8N_PARAMS := -d:chronicles_enabled=off
 endif
 
 # eth protocol settings, rules from "execution_chain/sync/protocol/eth/variables.mk"

@@ -31,7 +31,7 @@ import
 # Private, op handlers implementation
 # ------------------------------------------------------------------------------
 
-proc addressOp(cpt: VmCpt): EvmResultVoid =
+func addressOp(cpt: VmCpt): EvmResultVoid =
   ## 0x30, Get address of currently executing account.
   cpt.stack.push cpt.msg.contractAddress
 
@@ -53,20 +53,20 @@ proc balanceEIP2929Op(cpt: VmCpt): EvmResultVoid =
 
 # ------------------
 
-proc originOp(cpt: VmCpt): EvmResultVoid =
+func originOp(cpt: VmCpt): EvmResultVoid =
   ## 0x32, Get execution origination address.
   cpt.stack.push cpt.getOrigin()
 
-proc callerOp(cpt: VmCpt): EvmResultVoid =
+func callerOp(cpt: VmCpt): EvmResultVoid =
   ## 0x33, Get caller address.
   cpt.stack.push cpt.msg.sender
 
-proc callValueOp(cpt: VmCpt): EvmResultVoid =
+func callValueOp(cpt: VmCpt): EvmResultVoid =
   ## 0x34, Get deposited value by the instruction/transaction
   ##       responsible for this execution
   cpt.stack.push cpt.msg.value
 
-proc callDataLoadOp(cpt: VmCpt): EvmResultVoid =
+func callDataLoadOp(cpt: VmCpt): EvmResultVoid =
   ## 0x35, Get input data of current environment
   ? cpt.stack.lsCheck(1)
   let start = cpt.stack.lsPeekMemRef(^1)
@@ -86,7 +86,7 @@ proc callDataLoadOp(cpt: VmCpt): EvmResultVoid =
   cpt.stack.lsTop value
   ok()
 
-proc callDataSizeOp(cpt: VmCpt): EvmResultVoid =
+func callDataSizeOp(cpt: VmCpt): EvmResultVoid =
   ## 0x36, Get size of input data in current environment.
   cpt.stack.push cpt.msg.data.len.u256
 
@@ -108,7 +108,7 @@ proc callDataCopyOp(cpt: VmCpt): EvmResultVoid =
   ok()
 
 
-proc codeSizeOp(cpt: VmCpt): EvmResultVoid =
+func codeSizeOp(cpt: VmCpt): EvmResultVoid =
   ## 0x38, Get size of code running in current environment.
   cpt.stack.push cpt.code.len
 
@@ -129,7 +129,7 @@ proc codeCopyOp(cpt: VmCpt): EvmResultVoid =
   cpt.memory.writePadded(cpt.code.bytes, memPos, copyPos, len)
   ok()
 
-proc gasPriceOp(cpt: VmCpt): EvmResultVoid =
+func gasPriceOp(cpt: VmCpt): EvmResultVoid =
   ## 0x3A, Get price of gas in current environment.
   cpt.stack.push cpt.getGasPrice()
 
@@ -191,7 +191,7 @@ proc extCodeCopyEIP2929Op(cpt: VmCpt): EvmResultVoid =
 
 # -----------
 
-proc returnDataSizeOp(cpt: VmCpt): EvmResultVoid =
+func returnDataSizeOp(cpt: VmCpt): EvmResultVoid =
   ## 0x3d, Get size of output data from the previous call from the
   ##       current environment.
   cpt.stack.push cpt.returnData.len

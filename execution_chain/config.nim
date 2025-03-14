@@ -86,11 +86,6 @@ let
   defaultListenAddress      = getAutoAddress(Port(0)).toIpAddress()
   defaultListenAddressDesc  = $defaultListenAddress & ", meaning all network interfaces"
 
-const sharedLibText = if defined(linux): " (*.so, *.so.N)"
-                      elif defined(windows): " (*.dll)"
-                      elif defined(macosx): " (*.dylib)"
-                      else: ""
-
 type
   NimbusCmd* {.pure.} = enum
     noCommand
