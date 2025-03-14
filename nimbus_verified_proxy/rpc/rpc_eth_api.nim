@@ -103,7 +103,7 @@ proc walkBlocks(
   for i in 0 ..< sourceNum - targetNum:
     # TODO: use a verified hash cache
     let blk = await self.rpcClient.eth_getBlockByHash(nextHash, false)
-    info "getting next block", hash=nextHash, number=blk.number, remaining=sourceNum-base.BlockNumber(distinctBase(blk.number))
+    info "getting next block", hash=nextHash, number=blk.number, remaining=distinctBase(blk.number) - targetNum
 
     if blk.parentHash == targetHash:
       return true
@@ -130,6 +130,13 @@ proc getHeaderByHash(
   # get the target block
   let blk = await self.rpcClient.eth_getBlockByHash(blockHash, false)
   let header = convHeader(blk)
+
+  # verify header hash
+  if header.rlpHash != blk.hash:
+    raise newException(ValueError, "hashed block header doesn't match with blk.hash(downloaded)")
+
+  if blockHash != blk.hash:
+    raise newException(ValueError, "the blk.hash(downloaded) doesn't match with the provided hash")
 
   # walk blocks backwards(time) from source to target
   let isLinked = await self.walkBlocks(earliestHeader.number, header.number, earliestHeader.parentHash, blockHash)
@@ -158,6 +165,13 @@ proc getHeaderByTag(
   # get the target block
   let blk = await self.rpcClient.eth_getBlockByNumber(blockTag, false)
   let header = convHeader(blk)
+
+# verify header hash
+  if header.rlpHash != blk.hash:
+    raise newException(ValueError, "hashed block header doesn't match with blk.hash(downloaded)")
+
+  if blockHash != blk.hash:
+    raise newException(ValueError, "the blk.hash(downloaded) doesn't match with the provided hash")
 
   # walk blocks backwards(time) from source to target
   let isLinked = await self.walkBlocks(earliestHeader.number, header.number, earliestHeader.parentHash, blk.hash)
