@@ -351,10 +351,6 @@ evmstate_test: | build deps evmstate
 txparse: | build deps
 	$(ENV_SCRIPT) nim c $(NIM_PARAMS) "tools/txparse/$@.nim"
 
-# builds the nimbus evmc shared library
-libnimbusevm: | build deps
-	$(ENV_SCRIPT) nim c $(NIM_PARAMS) -d:evmc_enabled --app:lib --noMain -o:build/libnimbusevm/$@.$(SHAREDLIBEXT) execution_chain/transaction/evmc_vm_glue.nim
-
 # usual cleaning
 clean: | clean-common
 	rm -rf build/{nimbus,nimbus_execution_client,fluffy,libverifproxy,nimbus_verified_proxy,$(TOOLS_CSV),$(FLUFFY_TOOLS_CSV),all_tests,test_kvstore_rocksdb,test_rpc,all_fluffy_tests,all_history_network_custom_chain_tests,test_portal_testnet,utp_test_app,utp_test,*.dSYM}
