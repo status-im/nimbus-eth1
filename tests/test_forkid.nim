@@ -86,7 +86,7 @@ template runTest(network: untyped, name: string) =
 
 func config(shanghai, cancun: uint64): ChainConfig =
   ChainConfig(
-    chainID:                       ChainId(1337),
+    chainID:                       1337.u256,
     homesteadBlock:                Opt.some(0'u64),
     dAOForkBlock:                  Opt.none(BlockNumber),
     dAOForkSupport:                true,

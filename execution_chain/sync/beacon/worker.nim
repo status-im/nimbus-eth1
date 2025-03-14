@@ -11,11 +11,11 @@
 {.push raises:[].}
 
 import
+  std/[strutils, syncio],
   pkg/[chronicles, chronos],
   pkg/eth/common,
   pkg/stew/[interval_set, sorted_set],
   ../../common,
-  ../../networking/p2p,
   ./worker/update/[metrics, ticker],
   ./worker/[blocks_staged, headers_staged, headers_unproc, start_stop, update],
   ./worker_desc
@@ -38,7 +38,7 @@ proc napUnlessSomethingToFetch(
     buddy: BeaconBuddyRef;
       ): Future[bool] {.async: (raises: []).} =
   ## When idle, save cpu cycles waiting for something to do.
-  if buddy.ctx.pool.blockImportOk or             # currently importing blocks
+  if buddy.ctx.pool.blkImportOk or               # currently importing blocks
      buddy.ctx.hibernate or                      # not activated yet?
      not (buddy.headersToFetchOk() or            # something on TODO list
           buddy.bodiesToFetchOk()):
@@ -70,17 +70,23 @@ proc release*(ctx: BeaconCtxRef; info: static[string]) =
 
 proc start*(buddy: BeaconBuddyRef; info: static[string]): bool =
   ## Initialise worker peer
-  let peer = buddy.peer
+  let
+    peer = buddy.peer
+    ctx = buddy.ctx
 
   if runsThisManyPeersOnly <= buddy.ctx.pool.nBuddies:
-    if not buddy.ctx.hibernate: debug info & ": peers limit reached", peer
+    if not ctx.hibernate: debug info & ": peers limit reached", peer
+    return false
+
+  if not ctx.pool.seenData and buddy.peerID in ctx.pool.failedPeers:
+    if not ctx.hibernate: debug info & ": useless peer already tried", peer
     return false
 
   if not buddy.startBuddy():
-    if not buddy.ctx.hibernate: debug info & ": failed", peer
+    if not ctx.hibernate: debug info & ": failed", peer
     return false
 
-  if not buddy.ctx.hibernate: debug info & ": new peer", peer
+  if not ctx.hibernate: debug info & ": new peer", peer
   true
 
 proc stop*(buddy: BeaconBuddyRef; info: static[string]) =
@@ -89,6 +95,31 @@ proc stop*(buddy: BeaconBuddyRef; info: static[string]) =
     ctrl=buddy.ctrl.state, nLaps=buddy.only.nMultiLoop,
     lastIdleGap=buddy.only.multiRunIdle.toStr
   buddy.stopBuddy()
+
+# --------------------
+
+proc initalScrumFromFile*(
+    ctx: BeaconCtxRef;
+    file: string;
+    info: static[string];
+      ): Result[void,string] =
+  ## Set up inital sprint from argument file (itended for debugging)
+  var
+    mesg: SyncClMesg
+  try:
+    var f = file.open(fmRead)
+    defer: f.close()
+    var rlp = rlpFromHex(f.readAll().strip)
+    mesg = rlp.read(SyncClMesg)
+  except CatchableError as e:
+    return err("Error decoding file: \"" & file & "\"" &
+      " (" & $e.name & ": " & e.msg & ")")
+  ctx.clReq.mesg = mesg
+  ctx.clReq.locked = true
+  ctx.clReq.changed = true
+  debug info & ": Initialised from file", file, consHead=mesg.consHead.bnStr,
+    finalHash=mesg.finalHash.short
+  ok()
 
 # ------------------------------------------------------------------------------
 # Public functions
@@ -105,7 +136,8 @@ proc runDaemon*(
     info: static[string];
       ) {.async: (raises: []).} =
   ## Global background job that will be re-started as long as the variable
-  ## `ctx.daemon` is set `true`.
+  ## `ctx.daemon` is set `true` which corresponds to `ctx.hibernating` set
+  ## to false`.
   ##
   ## On a fresh start, the flag `ctx.daemon` will not be set `true` before the
   ## first usable request from the CL (via RPC) stumbles in.
@@ -124,8 +156,8 @@ proc runDaemon*(
       # at the same time does not work very well, most probably due to high
       # system activity while importing. Peers will get lost pretty soon after
       # downloading starts if they continue downloading.
-      ctx.pool.blockImportOk = true
-      defer: ctx.pool.blockImportOk = false
+      ctx.pool.blkImportOk = true
+      defer: ctx.pool.blkImportOk = false
 
       # Import from staged queue.
       while await ctx.blocksStagedImport(info):
@@ -174,55 +206,23 @@ proc runPeer*(
     buddy.only.multiRunIdle = Moment.now() - buddy.only.stoppedMultiRun
   buddy.only.nMultiLoop.inc                     # statistics/debugging
 
-  # Update consensus header target when needed. It comes with a finalised
-  # header hash where we need to complete the block number.
-  await buddy.headerStagedUpdateTarget info
+  # Wake up from hibernating if there is a new `CL` scrum target available.
+  # Note that this check must be done on a peer and the `Daemon` is not
+  # running while thr system is hibernating.
+  buddy.updateFromHibernatingForNextScrum info
 
   if not await buddy.napUnlessSomethingToFetch():
-    #
-    # Layout of a triple of linked header chains (see `README.md`)
-    # ::
-    #   0                C                     D                H
-    #   | <--- [0,C] --> | <----- (C,D) -----> | <-- [D,H] ---> |
-    #   o----------------o---------------------o----------------o--->
-    #   | <-- linked --> | <-- unprocessed --> | <-- linked --> |
-    #
-    # This function is run concurrently for fetching the next batch of
-    # headers and stashing them on the database. Each concurrently running
-    # actor works as follows:
-    #
-    # * Get a range of block numbers from the `unprocessed` range `(C,D)`.
-    # * Fetch headers for this range (as much as one can get).
-    # * Stash then on the database.
-    # * Rinse and repeat.
-    #
-    # The block numbers range concurrently taken from `(C,D)` are chosen
-    # from the upper range. So exactly one of the actors has a range
-    # `[whatever,D-1]` adjacent to `[D,H]`. Call this actor the lead actor.
-    #
-    # For the lead actor, headers can be downloaded all by the hashes as
-    # the parent hash for the header with block number `D` is known. All
-    # other non-lead actors will download headers by the block number only
-    # and stage it to be re-ordered and stashed on the database when ready.
-    #
-    # Once the lead actor stashes the dowloaded headers, the other staged
-    # headers will also be stashed on the database until there is a gap or
-    # the stashed haeders are exhausted.
-    #
-    # Due to the nature of the `async` logic, the current lead actor will
-    # stay lead when fetching the next range of block numbers.
-    #
+
+    # Download and process headers and blocks
     while buddy.headersToFetchOk():
 
-      # * Get unprocessed range from pool
-      # * Fetch headers for this range (as much as one can get)
-      # * Verify that a block is contiguous, chained by parent hash, etc.
-      # * Stash this range on the staged queue on the pool
+      # Collect headers and either stash them on the header chain cache
+      # directly, or stage then on the header queue to get them serialised,
+      # later.
       if await buddy.headersStagedCollect info:
 
-        # * Save updated state and headers
-        # * Decrease the dangling left boundary `D` of the trusted range `[D,H]`
-        discard buddy.ctx.headersStagedProcess info
+        # Store headers from the `staged` queue onto the header chain cache.
+        buddy.headersStagedProcess info
 
     # Fetch bodies and combine them with headers to blocks to be staged. These
     # staged blocks are then excuted by the daemon process (no `peer` needed.)
@@ -233,7 +233,7 @@ proc runPeer*(
     # re-invoked by the scheduler unless necessary. While the time gap
     # until restarting is typically a few millisecs, there are always
     # outliers which well exceed several seconds. This seems to let
-    # remote peers run into timeouts.
+    # remote peers run into timeouts so they eventually get lost early.
 
   buddy.only.stoppedMultiRun = Moment.now()     # statistics/debugging
 

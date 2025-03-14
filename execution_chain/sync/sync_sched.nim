@@ -398,11 +398,12 @@ proc onPeerConnected[S,W](dsc: RunnerSyncRef[S,W]; peer: Peer) =
 
   # Initialise worker for this peer
   let buddy = RunnerBuddyRef[S,W](
-    dsc:    dsc,
-    worker: BuddyRef[S,W](
-      ctx:  dsc.ctx,
-      ctrl: BuddyCtrlRef(),
-      peer: peer))
+    dsc:      dsc,
+    worker:   BuddyRef[S,W](
+      ctx:    dsc.ctx,
+      ctrl:   BuddyCtrlRef(),
+      peer:   peer,
+      peerID: peer.key.hash))
   if not buddy.worker.runStart():
     if dsc.ctx.noisyLog: trace "Ignoring useless peer", peer, nPeers,
       nWorkers=dsc.buddies.len, maxWorkers

@@ -14,19 +14,27 @@ import
   pkg/[chronicles, chronos],
   pkg/eth/[common, rlp],
   pkg/stew/[byteutils, sorted_set],
-  ../../../core/chain,
   ../worker_desc,
   ./blocks_staged/staged_queue,
   ./headers_staged/staged_queue,
-  "."/[blocks_unproc, db, headers_unproc, helpers]
+  ./[blocks_unproc, headers_unproc, helpers]
 
 # ------------------------------------------------------------------------------
-# Private functions
+# Private helpers
 # ------------------------------------------------------------------------------
+
+func statePair(a, b: SyncLayoutState): int =
+  ## Represent state pair `(a,b)` as a single entity
+  a.ord * 100 + b.ord
+
+func statePair(a: SyncLayoutState): int =
+  a.statePair a
+
+# ------------
 
 proc syncState(ctx: BeaconCtxRef; info: static[string]): SyncLayoutState =
   ## Calculate `SyncLayoutState` from the download context
-
+  ##
   let
     b = ctx.chain.baseNumber()
     l = ctx.chain.latestNumber()
@@ -106,69 +114,6 @@ proc syncState(ctx: BeaconCtxRef; info: static[string]): SyncLayoutState =
 
   idleSyncState
 
-# ------------
-
-proc startHibernating(ctx: BeaconCtxRef; info: static[string]) =
-  ## Clean up target bucket and await a new target.
-  ##
-  ctx.sst.reset # => target.reset, layout.reset
-  ctx.headersUnprocClear()
-  ctx.blocksUnprocClear()
-  ctx.headersStagedQueueClear()
-  ctx.blocksStagedQueueClear()
-
-  ctx.hibernate = true
-
-  info "Suspending syncer", head=ctx.chain.latestNumber.bnStr
-
-
-proc setupCollectingHeaders(ctx: BeaconCtxRef; info: static[string]) =
-  ## Set up sync target (see clause *(9)* in `README.md`) by modifying
-  ## layout to:
-  ## ::
-  ##   0            B
-  ##   o------------o-------o
-  ##   | <--- imported ---> |                           D
-  ##                C                                   H
-  ##                o-----------------------------------o
-  ##                | <--------- unprocessed ---------> |
-  ##
-  ## where *B* is the **base** entity of the `FC` module and `C ~ B`. The
-  ## parameter `H` is set to the new sync head target `T`.
-  ##
-  let
-    c = ctx.chain.baseNumber()
-    h = ctx.target.consHead.number
-
-  if c+1 < h:                                 # header chain interval is `(C,H]`
-    doAssert ctx.headersUnprocIsEmpty()
-    doAssert ctx.headersStagedQueueIsEmpty()
-    doAssert ctx.blocksUnprocIsEmpty()
-    doAssert ctx.blocksStagedQueueIsEmpty()
-
-    ctx.sst.layout = SyncStateLayout(
-      coupler:   c,
-      dangling:  h,
-      final:     ctx.target.final,
-      finalHash: ctx.target.finalHash,
-      head:      h,
-      lastState: collectingHeaders)           # state transition
-
-    # Save this header on the database so it needs not be fetched again from
-    # somewhere else.
-    ctx.dbHeadersStash(h, @[rlp.encode(ctx.target.consHead)], info)
-
-    # Save state
-    ctx.dbStoreSyncStateLayout info
-
-    # Update range
-    ctx.headersUnprocSet(c+1, h-1)
-
-    # Mark target used, reset for re-fill
-    ctx.target.changed = false
-
-    trace info & ": new header target", C=c.bnStr, D="H", H="T", T=h.bnStr
-
 
 proc linkIntoFc(ctx: BeaconCtxRef; info: static[string]): bool =
   ## Link `(C,H]` into the `FC` logic. If successful, `true` is returned.
@@ -216,23 +161,113 @@ proc linkIntoFc(ctx: BeaconCtxRef; info: static[string]): bool =
       # The syncer cache holds headers for `(C,H]`. It starts with checking
       # whether `L<-Z` holds (i.e. `Y==L` can be chosen.)
       let
-        yHash = ctx.dbHeaderParentHash(bn).expect "Hash32"     # maybe `Y`
+        yHash = ctx.hdrCache.fcHeaderGetParentHash(bn).expect "parentHash"
         yHdr = ctx.chain.headerByHash(yHash).valueOr: continue # test for `Y`
         yNum = yHdr.number                                     # == bn-1
 
       ctx.layout.coupler = yNum                                # parent of `Z`
       ctx.layout.dangling = yNum                               # .. ditto
 
-      trace info & ": linked into FC", B=b.bnStr,
+      trace info & ": header chain linked into FC", B=b.bnStr,
         C=(if yNum==l: "L" else: yNum.bnStr), L=l.bnStr, H=h.bnStr
 
-      # Save layout state
-      ctx.dbStoreSyncStateLayout info
       return true
 
   trace info & ": cannot link into FC", B=b.bnStr, L=l.bnStr,
     C=c.bnStr, H=h.bnStr
   false
+
+# ------------------------------------------------------------------------------
+# Private functions, state handlers
+# ------------------------------------------------------------------------------
+
+proc startHibernating(ctx: BeaconCtxRef; info: static[string]) =
+  ## Clean up sync scrum target buckets and await a new request from `CL`.
+  ##
+  ctx.sst.reset                               # => clRequest.reset, layout.reset
+  ctx.headersUnprocClear()
+  ctx.blocksUnprocClear()
+  ctx.headersStagedQueueClear()
+  ctx.blocksStagedQueueClear()
+  ctx.pool.failedPeers.clear()
+  ctx.pool.seenData = false
+
+  ctx.hdrCache.init()
+
+  ctx.hibernate = true
+
+  info "Suspending syncer", base=ctx.chain.baseNumber.bnStr,
+    head=ctx.chain.latestNumber.bnStr
+
+
+proc setupCollectingHeaders(ctx: BeaconCtxRef; info: static[string]) =
+  ## Set up sync scrum target header (see clause *(9)* in `README.md`) by
+  ## modifying layout to:
+  ## ::
+  ##   0            B
+  ##   o------------o-------o
+  ##   | <--- imported ---> |                           D
+  ##                C                                   H
+  ##                o-----------------------------------o
+  ##                | <--------- unprocessed ---------> |
+  ##
+  ## where *B* is the **base** entity of the `FC` module and `C ~ B`. The
+  ## parameter `H` is set to the new sync request `T` from the `CL`.
+  ##
+  let
+    c = ctx.chain.baseNumber()
+    t = ctx.clReq.mesg.consHead.number
+
+  doAssert ctx.headersUnprocIsEmpty()
+  doAssert ctx.headersStagedQueueIsEmpty()
+  doAssert ctx.blocksUnprocIsEmpty()
+  doAssert ctx.blocksStagedQueueIsEmpty()
+  doAssert ctx.pool.failedPeers.len == 0
+  doAssert ctx.pool.seenData == false
+
+  if c+1 < t:                                 # header chain interval is `(C,T]`
+    ctx.sst.layout = SyncStateLayout(
+      coupler:   c,
+      dangling:  t,
+      final:     BlockNumber(0),
+      finalHash: ctx.clReq.mesg.finalHash,
+      head:      t,
+      lastState: collectingHeaders)           # state transition
+
+    # Prepare cache for a new scrum
+    ctx.hdrCache.init(ctx.clReq.mesg.consHead, @[ctx.clReq.mesg.finalHash])
+
+    # Update range
+    ctx.headersUnprocSet(c+1, t-1)
+
+    trace info & ": new sync scrum target", C=c.bnStr, D="H", H="T", T=t.bnStr
+
+  else:
+    ctx.layout.lastState = cancelHeaders      # no way, go back hibernate
+
+    trace info & ": no usable sync scrum target", C=c.bnStr, T=t.bnStr
+
+  # Unlock. This flag might have been set to not update the `ctx.clReq.mesg`
+  # until it is consumed by the scrum set up (i.e. here)
+  ctx.clReq.locked = false
+
+  # Mark cl request used (to be set `true` when new request arrives)
+  ctx.clReq.changed = false
+
+
+proc setupFinishedHeaders(ctx: BeaconCtxRef; info: static[string]) =
+  ## Trivial state transition handler
+  ctx.layout.lastState = finishedHeaders
+
+proc setupCancelHeaders(ctx: BeaconCtxRef; info: static[string]) =
+  ## Trivial state transition handler
+  ctx.layout.lastState = cancelHeaders
+  ctx.poolMode = true # reorg, clear header queues
+
+proc setupCancelBlocks(ctx: BeaconCtxRef; info: static[string]) =
+  ## Trivial state transition handler
+  ctx.layout.lastState = cancelBlocks
+  ctx.poolMode = true # reorg, clear block queues
 
 
 proc setupProcessingBlocks(ctx: BeaconCtxRef; info: static[string]) =
@@ -241,6 +276,22 @@ proc setupProcessingBlocks(ctx: BeaconCtxRef; info: static[string]) =
   doAssert ctx.blocksUnprocIsEmpty()
   doAssert ctx.blocksStagedQueueIsEmpty()
 
+  # Reset for useles block download detection (to avoid deadlock)
+  ctx.pool.failedPeers.clear()
+  ctx.pool.seenData = false
+
+  # Update layout, finalised variable
+  let rc = ctx.hdrCache.fcHeaderGet(ctx.layout.finalHash)
+  if rc.isOk:
+    ctx.layout.final = rc.value.number
+  else:
+    debug info & ": fall back to base for finalised",
+      finalHash=ctx.layout.finalHash.toStr
+    doAssert rc.error == true # verify: hash registered but no header found
+    ctx.layout.final = ctx.chain.baseNumber
+    ctx.layout.finalHash = ctx.chain.baseHash
+
+  # Prepare for blocks processing
   let
     c = ctx.layout.coupler
     h = ctx.layout.head
@@ -259,90 +310,123 @@ proc setupProcessingBlocks(ctx: BeaconCtxRef; info: static[string]) =
 
 proc updateSyncState*(ctx: BeaconCtxRef; info: static[string]) =
   ## Update internal state when needed
-  let prevState = ctx.layout.lastState   # previous state
-  var thisState = ctx.syncState info     # currently observed state
 
-  if thisState == prevState:
-    # Check whether the system has been idle and a new header download
-    # session can be set up
-    case prevState:
-    of idleSyncState:
-      if ctx.target.changed and          # and there is a new target from CL
-         ctx.target.final != 0:          # .. ditto
-        ctx.setupCollectingHeaders info  # set up new header sync
+  # Calculate the pair `(prevState,thisState)` in order to check for a state
+  # change.
+  let prevState = ctx.layout.lastState   # previous state
+  var thisState =                        # figure out current state
+    if prevState in {cancelHeaders,cancelBlocks}:
+      prevState                          # no need to change state here
+    else:
+      ctx.syncState info                 # currently observed state, the std way
+
+  # Handle same state cases first (i.e. no state change.) Depending on the
+  # context, a new state might be forced so that there will be a state change.
+  case statePair(prevState, thisState)
+  of statePair(idleSyncState):
+    if not ctx.clReq.changed:            # no new request from `CL`?
       return
-    of processingBlocks:
-      if not ctx.blocksStagedQueueIsEmpty() or
-         not ctx.blocksUnprocIsEmpty():
-        return
-      # Set to idle
-      debug info & ": blocks processing cancelled",
-        B=(if ctx.chain.baseNumber() == ctx.layout.coupler: "C"
-           else: ctx.chain.baseNumber().bnStr),
-        C=(if ctx.layout.coupler == ctx.chain.latestNumber(): "L"
-           else: ctx.layout.coupler.bnStr),
-        L=(if ctx.chain.latestNumber() == ctx.layout.dangling: "D"
-           else: ctx.chain.latestNumber().bnStr),
-        D=(if ctx.layout.dangling == ctx.layout.head: "H"
-           else: ctx.layout.dangling.bnStr),
-        H=ctx.layout.head.bnStr
-      thisState = idleSyncState
+    thisState = collectingHeaders
+    # proceed
+
+  of statePair(collectingHeaders):
+    if ctx.pool.seenData or              # checks for cul-de-sac syncing
+       ctx.pool.failedPeers.len <= fetchHeadersFailedInitialFailPeersHwm:
+      return
+    debug info & ": too many failed header peers",
+      failedPeers=ctx.pool.failedPeers.len,
+      limit=fetchHeadersFailedInitialFailPeersHwm
+    thisState = cancelHeaders
+    # proceed
+
+  of statePair(cancelHeaders):           # was not assigned by `syncState()`
+    if not ctx.headersBorrowedIsEmpty(): # wait for peers to reorg in `poolMode`
+      return
+    thisState = idleSyncState            # will continue hibernating
+    # proceed
+
+  of statePair(finishedHeaders):
+    if ctx.linkIntoFc(info):             # commit downloading headers
+      thisState = processingBlocks
+    else:
+      thisState = idleSyncState          # will continue hibernating
+    # proceed
+
+  of statePair(processingBlocks):
+    if not ctx.pool.seenData and         # checks for cul-de-sac syncing
+       fetchBodiesFailedInitialFailPeersHwm < ctx.pool.failedPeers.len:
+      debug info & ": too many failed block peers",
+        failedPeers=ctx.pool.failedPeers.len,
+        limit=fetchBodiesFailedInitialFailPeersHwm
+      thisState = cancelBlocks
+      # proceed
+    elif ctx.blocksStagedQueueIsEmpty() and
+         ctx.blocksUnprocIsEmpty():
+      thisState = idleSyncState          # will continue hibernating
       # proceed
     else:
       return
 
-  info "Sync state changed", prevState, thisState,
-    head=ctx.chain.latestNumber.bnStr,
-    oldBase=(if ctx.layout.coupler == ctx.layout.dangling: "downloaded"
-       else: ctx.layout.coupler.bnStr),
-    downloaded=(if ctx.layout.dangling == ctx.layout.head: "target"
-       else: ctx.layout.dangling.bnStr),
-    target=ctx.layout.head.bnStr
+  of statePair(cancelBlocks):
+    if not ctx.blocksBorrowedIsEmpty():  # wait for peers to reorg in `poolMode`
+      return
+    thisState = idleSyncState            # will continue hibernating
+    # proceed
 
-  # So there is a states transition. The only relevant transition here
-  # is `collectingHeaders -> finishedHeaders` which will be continued
-  # as `finishedHeaders -> processingBlocks`.
-  #
-  if prevState == collectingHeaders and
-     thisState == finishedHeaders and
-     ctx.linkIntoFc(info):               # commit downloading headers
-    ctx.setupProcessingBlocks info       # start downloading block bodies
-    info "Sync state changed",
-      prevState=thisState, thisState=ctx.syncState(info)
+  elif prevState == thisState:
     return
-    # Notreached
 
-  # Final sync target reached or inconsistent/impossible state
-  ctx.startHibernating info
+  # Process state transition
+  case statePair(prevState, thisState)
+  of statePair(idleSyncState, collectingHeaders):
+    ctx.setupCollectingHeaders info      # set up new header sync request
+    thisState = ctx.layout.lastState     # assign result from state handler
 
+  of statePair(collectingHeaders, cancelHeaders):
+    ctx.setupCancelHeaders info          # cancel header download
+    thisState = ctx.layout.lastState     # assign result from state handler
 
-proc updateFinalBlockHeader*(
-    ctx: BeaconCtxRef;
-    finHdr: Header;
-    finHash: Hash32;
-    info: static[string];
-      ) =
-  ## Update the finalised header cache. If the finalised header is acceptable,
-  ## the syncer will be activated from hibernation if necessary.
-  ##
-  let
-    b = ctx.chain.baseNumber()
-    f = finHdr.number
-  if f < b:
-    trace info & ": finalised block # too low",
-      B=b.bnStr, finalised=f.bnStr, delta=(b - f)
+  of statePair(finishedHeaders, processingBlocks):
+    ctx.setupProcessingBlocks info       # start downloading block bodies
+    thisState = ctx.layout.lastState     # assign result from state handler
 
-    ctx.target.reset
+  of statePair(processingBlocks, cancelBlocks):
+    ctx.setupCancelBlocks info           # cancel blocks download
+    thisState = ctx.layout.lastState     # assign result from state handler
+
+  of statePair(collectingHeaders, finishedHeaders):
+    ctx.setupFinishedHeaders info        # call state handler
+    thisState = ctx.layout.lastState     # assign result from state handler
 
   else:
-    ctx.target.final = f
-    ctx.target.finalHash = finHash
+    # Use transition as is (no handler)
+    discard
 
+  info "Sync state changed", prevState, thisState,
+    base=ctx.chain.baseNumber.bnStr, head=ctx.chain.latestNumber.bnStr,
+    target=ctx.layout.head.bnStr
+
+  # Final sync scrum layout reached or inconsistent/impossible state
+  if thisState == idleSyncState:
+    ctx.startHibernating info
+
+
+
+proc updateFromHibernatingForNextScrum*(
+    buddy: BeaconBuddyRef;
+    info: static[string];
+      ) =
+  ## In hibernate mode, check for a new instruction from the `CL`. This
+  ## function must be invoked from a `buddy` (aka sync peer) as the `Daemon`
+  ## is de-activated while `buddy.ctx.hibernate` is `true`.
+  ##
+  let ctx = buddy.ctx
+  if ctx.hibernate and ctx.clReq.changed:
     # Activate running (unless done yet)
-    if ctx.hibernate:
-      ctx.hibernate = false
-      info "Activating syncer", base=b.bnStr, head=ctx.chain.latestNumber.bnStr,
-        finalised=f.bnStr, target=ctx.target.consHead.bnStr
+    ctx.hibernate = false
+    info "Activating syncer", base=ctx.chain.baseNumber.bnStr,
+      head=ctx.chain.latestNumber.bnStr, consHead=ctx.clReq.mesg.consHead.bnStr
+
 
 
 proc updateAsyncTasks*(

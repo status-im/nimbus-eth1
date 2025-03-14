@@ -63,21 +63,21 @@ proc configurationMain*() =
       check aa.networkParams != NetworkParams()
 
       let conf = makeConfig(@["--custom-network:" & genesisFile, "--network:345"])
-      check conf.networkId == 345.NetworkId
+      check conf.networkId == 345.u256
 
     test "network-id first, custom-network next":
       let conf = makeConfig(@["--network:678", "--custom-network:" & genesisFile])
-      check conf.networkId == 678.NetworkId
+      check conf.networkId == 678.u256
 
     test "network-id set, no custom-network":
       let conf = makeConfig(@["--network:678"])
-      check conf.networkId == 678.NetworkId
+      check conf.networkId == 678.u256
       check conf.networkParams.genesis == Genesis()
       check conf.networkParams.config == ChainConfig()
 
     test "network-id not set, copy from chainId of custom network":
       let conf = makeConfig(@["--custom-network:" & genesisFile])
-      check conf.networkId == 123.NetworkId
+      check conf.networkId == 123.u256
 
     test "network-id not set, sepolia set":
       let conf = makeConfig(@["--network:sepolia"])
@@ -85,7 +85,7 @@ proc configurationMain*() =
 
     test "network-id set, sepolia set":
       let conf = makeConfig(@["--network:sepolia", "--network:123"])
-      check conf.networkId == 123.NetworkId
+      check conf.networkId == 123.u256
 
     test "rpc-api":
       let conf = makeTestConfig()
@@ -162,7 +162,7 @@ proc configurationMain*() =
         chainid1 = "tests" / "customgenesis" / "chainid1.json"
 
       let conf = makeConfig(@["--custom-network:" & chainid1])
-      check conf.networkId == 1.NetworkId
+      check conf.networkId == 1.u256
       check conf.networkParams.config.londonBlock.get() == 1337
       check conf.getBootNodes().len == 0
 

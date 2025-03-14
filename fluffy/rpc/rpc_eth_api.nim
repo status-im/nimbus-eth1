@@ -141,10 +141,10 @@ proc installEthApiHandlers*(
   rpcServer.rpc("web3_clientVersion") do() -> string:
     return clientVersion
 
-  rpcServer.rpc("eth_chainId") do() -> Quantity:
+  rpcServer.rpc("eth_chainId") do() -> UInt256:
     # The Portal Network can only support MainNet at the moment, so always return
     # 1
-    return Quantity(uint64(1))
+    return 1.u256
 
   rpcServer.rpc("eth_blockNumber") do() -> Quantity:
     let blc = beaconLightClient.getOrRaise()

@@ -194,7 +194,7 @@
             "barAlignment": 0,
             "barWidthFactor": 0.6,
             "drawStyle": "line",
-            "fillOpacity": 50,
+            "fillOpacity": 30,
             "gradientMode": "opacity",
             "hideFrom": {
               "legend": false,
@@ -264,6 +264,21 @@
                 }
               }
             ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "nec_sync_header_lists_staged"
+            },
+            "properties": [
+              {
+                "id": "color",
+                "value": {
+                  "fixedColor": "dark-orange",
+                  "mode": "fixed"
+                }
+              }
+            ]
           }
         ]
       },
@@ -314,6 +329,23 @@
           },
           "disableTextWrap": false,
           "editorMode": "builder",
+          "expr": "nec_sync_header_lists_staged{instance=\"172.16.210.1:9099\", job=\"mainnet\"}",
+          "fullMetaSearch": false,
+          "hide": false,
+          "includeNullMetadata": true,
+          "instant": false,
+          "legendFormat": "nec_sync_header_lists_staged",
+          "range": true,
+          "refId": "C",
+          "useBackend": false
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "bdvimuocv3fggc"
+          },
+          "disableTextWrap": false,
+          "editorMode": "builder",
           "exemplar": false,
           "expr": "nec_sync_block_lists_staged{instance=\"172.16.210.1:9099\", job=\"mainnet\"}",
           "format": "time_series",
@@ -327,7 +359,7 @@
           "useBackend": false
         }
       ],
-      "title": "Buddies vs Import Block Lists",
+      "title": "Buddies vs Block Import and Staged Header Lists",
       "transparent": true,
       "type": "timeseries"
     },
@@ -350,7 +382,7 @@
             "barAlignment": 0,
             "barWidthFactor": 0.6,
             "drawStyle": "line",
-            "fillOpacity": 50,
+            "fillOpacity": 30,
             "gradientMode": "opacity",
             "hideFrom": {
               "legend": false,
@@ -946,13 +978,13 @@
     "list": []
   },
   "time": {
-    "from": "2025-02-25T11:03:15.000Z",
+    "from": "2025-03-04T15:46:00.000Z",
     "to": "now"
   },
   "timepicker": {},
   "timezone": "browser",
   "title": "Mainnet Sync",
   "uid": "beavm2j26dvr4b",
-  "version": 49,
+  "version": 54,
   "weekStart": ""
 }

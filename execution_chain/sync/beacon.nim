@@ -15,8 +15,9 @@ import
   pkg/stew/[interval_set, sorted_set],
   ../core/chain,
   ../networking/p2p,
-  ./beacon/[worker, worker_desc, worker/db],
-  "."/[sync_desc, sync_sched, wire_protocol]
+  ./beacon/[worker, worker_desc],
+  ./[sync_desc, sync_sched, wire_protocol]
+
 
 logScope:
   topics = "beacon sync"
@@ -65,9 +66,14 @@ proc init*(
       ): T =
   var desc = T()
   desc.initSync(ethNode, maxPeers)
-  desc.ctx.pool.blocksStagedHwm = blockQueueHwm
+  desc.ctx.pool.blkStagedHwm = blockQueueHwm
   desc.ctx.pool.chain = chain
   desc
+
+proc scrumInit*(desc: BeaconSyncRef; rlpFile: string) =
+  ## Set up inital sprint (intended for debugging)
+  desc.ctx.initalScrumFromFile(rlpFile, "scrumInit").isOkOr:
+    raiseAssert error
 
 proc start*(desc: BeaconSyncRef): bool =
   desc.startSync()

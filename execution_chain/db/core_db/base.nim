@@ -451,6 +451,9 @@ proc txFrameBegin*(parent: CoreDbTxRef): CoreDbTxRef =
 proc checkpoint*(tx: CoreDbTxRef, blockNumber: BlockNumber, skipSnapshot = false) =
   tx.aTx.checkpoint(blockNumber, skipSnapshot)
 
+proc clearSnapshot*(tx: CoreDbTxRef) =
+  tx.aTx.clearSnapshot()
+
 proc dispose*(tx: CoreDbTxRef) =
   tx.aTx.dispose()
   tx.kTx.dispose()

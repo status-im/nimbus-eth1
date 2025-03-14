@@ -15,11 +15,11 @@ import
   eth/common/eth_types_rlp,
   chronicles,
   stew/byteutils,
-  kzg4844/kzg,
   ../types,
   ../engine_client,
   ../../../../execution_chain/constants,
   ../../../../execution_chain/core/eip4844,
+  ../../../../execution_chain/core/lazy_kzg as kzg,
   ../../../../execution_chain/rpc/rpc_types,
   web3/execution_types,
   ../../../../execution_chain/beacon/web3_eth_conv,
@@ -102,8 +102,8 @@ proc verifyTransactionFromNode*(client: RpcClient, tx: Transaction): Result[void
   if returnedTx.chainId.isNone:
     return err("chain id is none, expect is some")
 
-  if returnedTx.chainId.get.uint64 != tx.chainId.uint64:
-    return err("chain id mismatch: $1 != $2" % [$returnedTx.chainId.get.uint64, $tx.chainId.uint64])
+  if returnedTx.chainId.get != tx.chainId:
+    return err("chain id mismatch: $1 != $2" % [$returnedTx.chainId.get, $tx.chainId])
 
   if returnedTx.maxFeePerGas != tx.maxFeePerGas:
     return err("max fee per gas mismatch: $1 != $2" % [$returnedTx.maxFeePerGas, $tx.maxFeePerGas])

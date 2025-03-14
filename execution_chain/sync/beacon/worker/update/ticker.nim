@@ -15,7 +15,6 @@ import
   std/strutils,
   pkg/[chronos, chronicles, eth/common, stew/interval_set, stint],
   ../../../../utils/prettify,
-  ../../../../core/chain,
   ../../worker_desc,
   ../blocks_staged/staged_queue,
   ../headers_staged/staged_queue,
@@ -35,6 +34,7 @@ type
     headOk: bool
     target: BlockNumber
     targetOk: bool
+    trgLckOk: bool
 
     hdrUnprocTop: BlockNumber
     nHdrUnprocessed: uint64
@@ -75,8 +75,9 @@ proc updater(ctx: BeaconCtxRef): TickerStats =
     dangling:        ctx.layout.dangling,
     head:            ctx.layout.head,
     headOk:          ctx.layout.lastState != idleSyncState,
-    target:          ctx.target.consHead.number,
-    targetOk:        ctx.target.final != 0,
+    target:          ctx.clReq.mesg.consHead.number,
+    targetOk:        ctx.clReq.changed,
+    trgLckOk:        ctx.clReq.locked,
 
     nHdrStaged:      ctx.headersStagedQueueLen(),
     hdrStagedTop:    ctx.headersStagedQueueTopKey(),
@@ -108,13 +109,13 @@ proc tickerLogger(t: TickerRef; ctx: BeaconCtxRef) =
       B = if data.base == data.latest: "L" else: data.base.bnStr
       L = if data.latest == data.coupler: "C" else: data.latest.bnStr
       C = if data.coupler == data.dangling: "D" else: data.coupler.bnStr
-      D = if data.dangling == data.head: "H"
-          else: data.dangling.bnStr
+      D = if data.dangling == data.head: "H" else: data.dangling.bnStr
       H = if data.headOk:
             if data.head == data.target: "T" else: data.head.bnStr
           else:
             if data.head == data.target: "?T" else: "?" & $data.head
-      T = if data.targetOk: data.target.bnStr else: "?" & $data.target
+      T = ["?", "~", "#", "!"][data.targetOk.ord*2 + data.trgLckOk.ord] &
+            $data.target
 
       hS = if data.nHdrStaged == 0: "n/a"
            else: data.hdrStagedTop.bnStr & "(" & $data.nHdrStaged & ")"
@@ -135,8 +136,10 @@ proc tickerLogger(t: TickerRef; ctx: BeaconCtxRef) =
       st = case data.state
            of idleSyncState: "0"
            of collectingHeaders: "h"
+           of cancelHeaders: "x"
            of finishedHeaders: "f"
            of processingBlocks: "b"
+           of cancelBlocks: "z"
       rrg = data.reorg
       nP = data.nBuddies
 

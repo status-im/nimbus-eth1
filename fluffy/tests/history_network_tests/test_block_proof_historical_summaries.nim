@@ -69,7 +69,7 @@ suite "History Block Proofs - Historical Summaries":
 
   # One more slot to hit second SLOTS_PER_HISTORICAL_ROOT, hitting first
   # historical_summary.
-  blocks.add(addTestBlock(state[], cache, cfg = cfg).capellaData)
+  discard addTestBlock(state[], cache, cfg = cfg)
 
   # Starts from the block after genesis.
   const blocksToTest = [

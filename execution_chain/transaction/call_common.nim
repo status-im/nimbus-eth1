@@ -88,7 +88,7 @@ proc preExecComputation(vmState: BaseVMState, call: CallParams): int64 =
   # EIP-7702
   for auth in call.authorizationList:
     # 1. Verify the chain id is either 0 or the chain's current ID.
-    if not(auth.chainId == 0.ChainId or auth.chainId == vmState.com.chainId):
+    if not(auth.chainId == 0.u256 or auth.chainId == vmState.com.chainId):
       continue
 
     # 2. Verify the nonce is less than 2**64 - 1.

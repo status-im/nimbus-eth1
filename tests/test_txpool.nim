@@ -181,7 +181,6 @@ proc makeTx(
 
 proc txPoolMain*() =
   suite "TxPool test suite":
-    loadKzgTrustedSetup().expect("KZG trusted setup loaded")
     let
       env = initEnv(Cancun)
       xp = env.xp
@@ -213,8 +212,8 @@ proc txPoolMain*() =
         gasLimit: 75000
       )
       var ptx = mx.makeTx(tc, 0)
-      let ccid = ptx.tx.chainId.uint64
-      let cid = Opt.some(ChainId(ccid.not))
+      let ccid = ptx.tx.chainId
+      let cid = Opt.some(ccid.not)
       ptx.tx = mx.customizeTransaction(acc, ptx.tx, CustomTx(chainId: cid))
       xp.checkAddTx(ptx, txErrorChainIdMismatch)
 
