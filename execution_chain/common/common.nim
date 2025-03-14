@@ -172,16 +172,17 @@ proc init(com         : CommonRef,
           genesis     : Genesis,
           initializeDb: bool) =
 
+
   config.daoCheck()
 
-  com.db          = db
-  com.config      = config
+  com.db = db
+  com.config = config
   com.forkTransitionTable = config.toForkTransitionTable()
-  com.networkId   = networkId
-  com.syncProgress= SyncProgress()
-  com.extraData   = ShortClientId
-  com.taskpool    = taskpool
-  com.gasLimit    = DEFAULT_GAS_LIMIT
+  com.networkId = networkId
+  com.syncProgress = SyncProgress()
+  com.extraData = ShortClientId
+  com.taskpool = taskpool
+  com.gasLimit = DEFAULT_GAS_LIMIT
 
   # com.forkIdCalculator and com.genesisHash are set
   # by setForkId
