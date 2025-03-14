@@ -8,23 +8,15 @@
 # at your option. This file may not be copied, modified, or distributed except
 # according to those terms.
 
-func vmName(): string =
-  when defined(evmc_enabled):
-    "evmc"
-  else:
-    "nimvm"
+{.push raises: [].}
 
 const
   chronicles_line_numbers {.strdefine.} = "0"
-  VmName* = vmName()
   warningMsg = block:
-    var rc = "*** Compiling with " & VmName
+    var rc = "*** Compiling with nimvm"
     if chronicles_line_numbers notin ["0", "off"]:
       rc &= ", logger line numbers"
-    when defined(boehmgc):
-      rc &= ", boehm/gc"
-    rc &= " enabled"
-    rc
+    rc & " enabled"
 
 {.warning: warningMsg.}
 

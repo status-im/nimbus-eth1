@@ -1,5 +1,5 @@
 # Nimbus
-# Copyright (c) 2018-2024 Status Research & Development GmbH
+# Copyright (c) 2018-2025 Status Research & Development GmbH
 # Licensed under either of
 #  * Apache License, version 2.0, ([LICENSE-APACHE](LICENSE-APACHE) or
 #    http://www.apache.org/licenses/LICENSE-2.0)
@@ -230,10 +230,7 @@ when vm_use_recursion:
       while not c.continuation.isNil:
         # If there's a continuation, then it's because there's either
         # a child (i.e. call or create)
-        when evmc_enabled:
-          c.res = c.host.call(c.child[])
-        else:
-          execCallOrCreate(c.child)
+        execCallOrCreate(c.child)
         c.child = nil
         c.executeOpcodes()
       c.afterExec()

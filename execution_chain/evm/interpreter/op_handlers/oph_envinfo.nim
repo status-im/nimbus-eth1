@@ -24,10 +24,8 @@ import
   ../op_codes,
   ./oph_defs,
   ./oph_helpers,
-  stew/assign2
-
-when not defined(evmc_enabled):
-  import ../../state
+  stew/assign2,
+  ../../state
 
 # ------------------------------------------------------------------------------
 # Private, op handlers implementation

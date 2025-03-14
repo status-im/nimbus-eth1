@@ -1,5 +1,5 @@
 # Nimbus
-# Copyright (c) 2021-2024 Status Research & Development GmbH
+# Copyright (c) 2021-2025 Status Research & Development GmbH
 # Licensed under either of
 #  * Apache License, version 2.0, ([LICENSE-APACHE](LICENSE-APACHE) or
 #    http://www.apache.org/licenses/LICENSE-2.0)
@@ -28,56 +28,34 @@ import
   ../op_codes,
   ./oph_defs,
   ./oph_helpers,
-  chronicles
-
-when not defined(evmc_enabled):
-  import
-    ../../state,
-    ../../message,
-    ../../../db/ledger
-else:
-  import
-    stew/assign2,
-    stew/saturation_arith
+  chronicles,
+  ../../state,
+  ../../message,
+  ../../../db/ledger
 
 # ------------------------------------------------------------------------------
 # Private helpers
 # ------------------------------------------------------------------------------
 
-when evmc_enabled:
-  template execSubCreate(c: Computation; msg: ref nimbus_message) =
-    c.chainTo(msg):
-      c.gasMeter.returnGas(GasInt c.res.gas_left)
-      c.gasMeter.refundGas(c.res.gas_refund)
-      if c.res.status_code == EVMC_SUCCESS:
-        c.stack.lsTop(c.res.create_address)
-      elif c.res.status_code == EVMC_REVERT:
-        # From create, only use `outputData` if child returned with `REVERT`.
-        assign(c.returnData, makeOpenArray(c.res.output_data, c.res.output_size.int))
-      if not c.res.release.isNil:
-        c.res.release(c.res)
-      ok()
+proc execSubCreate(c: Computation; childMsg: Message;
+                   code: CodeBytesRef) {.raises: [].} =
+  ## Create new VM -- helper for `Create`-like operations
 
-else:
-  proc execSubCreate(c: Computation; childMsg: Message;
-                     code: CodeBytesRef) {.raises: [].} =
-    ## Create new VM -- helper for `Create`-like operations
+  # need to provide explicit <c> and <child> for capturing in chainTo proc()
+  var
+    child = newComputation(c.vmState, keepStack = false, childMsg, code)
 
-    # need to provide explicit <c> and <child> for capturing in chainTo proc()
-    var
-      child = newComputation(c.vmState, keepStack = false, childMsg, code)
+  c.chainTo(child):
+    if not child.shouldBurnGas:
+      c.gasMeter.returnGas(child.gasMeter.gasRemaining)
 
-    c.chainTo(child):
-      if not child.shouldBurnGas:
-        c.gasMeter.returnGas(child.gasMeter.gasRemaining)
-
-      if child.isSuccess:
-        c.gasMeter.refundGas(child.gasMeter.gasRefunded)
-        c.stack.lsTop child.msg.contractAddress
-      elif not child.error.burnsGas: # Means return was `REVERT`.
-        # From create, only use `outputData` if child returned with `REVERT`.
-        c.returnData = move(child.output)
-      ok()
+    if child.isSuccess:
+      c.gasMeter.refundGas(child.gasMeter.gasRefunded)
+      c.stack.lsTop child.msg.contractAddress
+    elif not child.error.burnsGas: # Means return was `REVERT`.
+      # From create, only use `outputData` if child returned with `REVERT`.
+      c.returnData = move(child.output)
+    ok()
 
 
 # ------------------------------------------------------------------------------
@@ -136,35 +114,19 @@ proc createOp(cpt: VmCpt): EvmResultVoid =
     createMsgGas -= createMsgGas div 64
   ? cpt.gasMeter.consumeGas(createMsgGas, reason = "CREATE msg gas")
 
-  when evmc_enabled:
-    let
-      msg = new(nimbus_message)
-      c   = cpt
-    msg[] = nimbus_message(
-      kind: EVMC_CREATE,
-      depth: (cpt.msg.depth + 1).int32,
-      gas: int64.saturate(createMsgGas),
+  var
+    childMsg = Message(
+      kind:   EVMC_CREATE,
+      depth:  cpt.msg.depth + 1,
+      gas:    createMsgGas,
       sender: cpt.msg.contractAddress,
-      input_data: cpt.memory.readPtr(memPos),
-      input_size: memLen.uint,
-      value: toEvmc(endowment),
-      create2_salt: toEvmc(ZERO_CONTRACTSALT),
-    )
-    c.execSubCreate(msg)
-  else:
-    var
-      childMsg = Message(
-        kind:   EVMC_CREATE,
-        depth:  cpt.msg.depth + 1,
-        gas:    createMsgGas,
-        sender: cpt.msg.contractAddress,
-        contractAddress: generateContractAddress(
-          cpt.vmState,
-          EVMC_CREATE,
-          cpt.msg.contractAddress),
-        value:  endowment)
-      code = CodeBytesRef.init(cpt.memory.read(memPos, memLen))
-    cpt.execSubCreate(childMsg, code)
+      contractAddress: generateContractAddress(
+        cpt.vmState,
+        EVMC_CREATE,
+        cpt.msg.contractAddress),
+      value:  endowment)
+    code = CodeBytesRef.init(cpt.memory.read(memPos, memLen))
+  cpt.execSubCreate(childMsg, code)
   ok()
 
 # ---------------------
@@ -224,37 +186,21 @@ proc create2Op(cpt: VmCpt): EvmResultVoid =
     createMsgGas -= createMsgGas div 64
   ? cpt.gasMeter.consumeGas(createMsgGas, reason = "CREATE2 msg gas")
 
-  when evmc_enabled:
-    let
-      msg = new(nimbus_message)
-      c   = cpt
-    msg[] = nimbus_message(
-      kind: EVMC_CREATE2,
-      depth: (cpt.msg.depth + 1).int32,
-      gas: int64.saturate(createMsgGas),
+  var
+    code = CodeBytesRef.init(cpt.memory.read(memPos, memLen))
+    childMsg = Message(
+      kind:   EVMC_CREATE2,
+      depth:  cpt.msg.depth + 1,
+      gas:    createMsgGas,
       sender: cpt.msg.contractAddress,
-      input_data: cpt.memory.readPtr(memPos),
-      input_size: memLen.uint,
-      value: toEvmc(endowment),
-      create2_salt: toEvmc(salt),
-    )
-    c.execSubCreate(msg)
-  else:
-    var
-      code = CodeBytesRef.init(cpt.memory.read(memPos, memLen))
-      childMsg = Message(
-        kind:   EVMC_CREATE2,
-        depth:  cpt.msg.depth + 1,
-        gas:    createMsgGas,
-        sender: cpt.msg.contractAddress,
-        contractAddress: generateContractAddress(
-          cpt.vmState,
-          EVMC_CREATE2,
-          cpt.msg.contractAddress,
-          salt,
-          code),
-        value:  endowment)
-    cpt.execSubCreate(childMsg, code)
+      contractAddress: generateContractAddress(
+        cpt.vmState,
+        EVMC_CREATE2,
+        cpt.msg.contractAddress,
+        salt,
+        code),
+      value:  endowment)
+  cpt.execSubCreate(childMsg, code)
   ok()
 
 # ------------------------------------------------------------------------------

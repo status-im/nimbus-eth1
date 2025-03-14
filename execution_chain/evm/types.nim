@@ -1,5 +1,5 @@
 # Nimbus
-# Copyright (c) 2018-2024 Status Research & Development GmbH
+# Copyright (c) 2018-2025 Status Research & Development GmbH
 # Licensed under either of
 #  * Apache License, version 2.0, ([LICENSE-APACHE](LICENSE-APACHE) or
 #    http://www.apache.org/licenses/LICENSE-2.0)
@@ -7,6 +7,8 @@
 #    http://opensource.org/licenses/MIT)
 # at your option. This file may not be copied, modified, or distributed except
 # according to those terms.
+
+{.push raises: [].}
 
 import
   "."/[stack, memory, code_stream, evm_errors],
@@ -24,16 +26,10 @@ import
 
 export evmc
 
-{.push raises: [].}
-
-when defined(evmc_enabled):
-  import
-    ./evmc_api
-
 # Select between small-stack recursion and no recursion.  Both are good, fast,
 # low resource using methods.  Keep both here because true EVMC API requires
 # the small-stack method, but Chronos `async` is better without recursion.
-const vm_use_recursion* = defined(evmc_enabled)
+const vm_use_recursion* = false
 
 type
   VMFlag* = enum
@@ -87,12 +83,7 @@ type
     savePoint*:             LedgerSpRef
     instr*:                 Op
     opIndex*:               int
-    when defined(evmc_enabled):
-      host*:                HostContext
-      child*:               ref nimbus_message
-      res*:                 nimbus_result
-    else:
-      parent*, child*:      Computation
+    parent*, child*:        Computation
     continuation*:          proc(): EvmResultVoid {.gcsafe, raises: [].}
     keepStack*:             bool
     finalStack*:            seq[UInt256]
