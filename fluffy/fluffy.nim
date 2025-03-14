@@ -254,7 +254,7 @@ proc run(
       case flag
       of RpcFlag.eth:
         rpcServer.installEthApiHandlers(
-          node.historyNetwork, node.beaconLightClient, node.stateNetwork, node.portalEvm
+          node.historyNetwork, node.beaconLightClient, node.stateNetwork
         )
       of RpcFlag.debug:
         rpcServer.installDebugApiHandlers(node.stateNetwork)
