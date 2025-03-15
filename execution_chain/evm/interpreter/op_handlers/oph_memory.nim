@@ -67,12 +67,6 @@ proc sstoreNetGasMeteringImpl(c: Computation; slot, newValue: UInt256, coldAcces
     db.setStorage(c.msg.contractAddress, slot, newValue)
   ok()
 
-template sstoreEvmcOrSstore(cpt, slot, newValue: untyped): auto =
-  sstoreImpl(cpt, slot, newValue)
-
-template sstoreEvmcOrNetGasMetering(cpt, slot, newValue: untyped, coldAccess = 0.GasInt): auto =
-  sstoreNetGasMeteringImpl(cpt, slot, newValue, coldAccess)
-
 func jumpImpl(c: Computation; jumpTarget: UInt256): EvmResultVoid =
   if jumpTarget >= c.code.len.u256:
     return err(opErr(InvalidJumpDest))
@@ -172,7 +166,7 @@ proc sstoreOp(cpt: VmCpt): EvmResultVoid =
   cpt.stack.lsShrink(2)
 
   ? checkInStaticContext(cpt)
-  sstoreEvmcOrSstore(cpt, slot, newValue)
+  sstoreImpl(cpt, slot, newValue)
 
 
 proc sstoreEIP1283Op(cpt: VmCpt): EvmResultVoid =
@@ -184,7 +178,7 @@ proc sstoreEIP1283Op(cpt: VmCpt): EvmResultVoid =
   cpt.stack.lsShrink(2)
 
   ? checkInStaticContext(cpt)
-  sstoreEvmcOrNetGasMetering(cpt, slot, newValue)
+  sstoreNetGasMeteringImpl(cpt, slot, newValue)
 
 
 proc sstoreEIP2200Op(cpt: VmCpt): EvmResultVoid =
@@ -201,7 +195,7 @@ proc sstoreEIP2200Op(cpt: VmCpt): EvmResultVoid =
   if cpt.gasMeter.gasRemaining <= SentryGasEIP2200:
     return err(opErr(OutOfGas))
 
-  sstoreEvmcOrNetGasMetering(cpt, slot, newValue)
+  sstoreNetGasMeteringImpl(cpt, slot, newValue)
 
 
 proc sstoreEIP2929Op(cpt: VmCpt): EvmResultVoid =
@@ -226,7 +220,7 @@ proc sstoreEIP2929Op(cpt: VmCpt): EvmResultVoid =
       db.accessList(cpt.msg.contractAddress, slot)
       coldAccessGas = ColdSloadCost
 
-  sstoreEvmcOrNetGasMetering(cpt, slot, newValue, coldAccessGas)
+  sstoreNetGasMeteringImpl(cpt, slot, newValue, coldAccessGas)
 
 # -------
 

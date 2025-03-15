@@ -65,7 +65,7 @@ proc revertOp(cpt: VmCpt): EvmResultVoid =
   cpt.memory.extend(pos, len)
   assign(cpt.output, cpt.memory.read(pos, len))
   # setError(msg, false) will signal cheap revert
-  cpt.setError(EVMC_REVERT, "REVERT opcode executed", false)
+  cpt.setError(StatusCode.Revert, "REVERT opcode executed", false)
   ok()
 
 func invalidOp(cpt: VmCpt): EvmResultVoid =

@@ -51,7 +51,7 @@ type
     memInLen:        int
     memOutPos:       int
     memOutLen:       int
-    flags:           MsgFlags
+    flags:           set[MsgFlags]
     memOffset:       int
     memLength:       int
     contractAddress: Address
@@ -157,7 +157,7 @@ proc staticCallParams(c: Computation):  EvmResult[LocalParams] =
     memOutLen      : c.stack.lsPeekMemRef(^6),
     value          : 0.u256,
     sender         : c.msg.contractAddress,
-    flags          : {EVMC_STATIC},
+    flags          : {MsgFlags.Static},
   )
 
   c.stack.lsShrink(5)
@@ -195,7 +195,7 @@ proc execSubCall(c: Computation; childMsg: Message; memPos, memLen: int) =
 
 proc callOp(cpt: VmCpt): EvmResultVoid =
   ## 0xf1, Message-Call into an account
-  if EVMC_STATIC in cpt.msg.flags:
+  if MsgFlags.Static in cpt.msg.flags:
     let val = ? cpt.stack[^3, UInt256]
     if val > 0.u256:
       return err(opErr(StaticContext))
@@ -235,7 +235,7 @@ proc callOp(cpt: VmCpt): EvmResultVoid =
     return ok()
 
   var childMsg = Message(
-    kind:            EVMC_CALL,
+    kind:            CallKind.Call,
     depth:           cpt.msg.depth + 1,
     gas:             childGasLimit,
     sender:          p.sender,
@@ -289,7 +289,7 @@ proc callCodeOp(cpt: VmCpt): EvmResultVoid =
     return ok()
 
   var childMsg = Message(
-    kind:            EVMC_CALLCODE,
+    kind:            CallKind.CallCode,
     depth:           cpt.msg.depth + 1,
     gas:             childGasLimit,
     sender:          p.sender,
@@ -338,7 +338,7 @@ proc delegateCallOp(cpt: VmCpt): EvmResultVoid =
   cpt.memory.extend(p.memOutPos, p.memOutLen)
 
   var childMsg = Message(
-    kind:            EVMC_DELEGATECALL,
+    kind:            CallKind.DelegateCall,
     depth:           cpt.msg.depth + 1,
     gas:             childGasLimit,
     sender:          p.sender,
@@ -388,7 +388,7 @@ proc staticCallOp(cpt: VmCpt): EvmResultVoid =
   cpt.memory.extend(p.memOutPos, p.memOutLen)
 
   var childMsg = Message(
-    kind:            EVMC_CALL,
+    kind:            CallKind.Call,
     depth:           cpt.msg.depth + 1,
     gas:             childGasLimit,
     sender:          p.sender,

@@ -727,10 +727,10 @@ proc execPrecompile*(c: Computation, precompile: PrecompileAddresses) =
 
   if res.isErr:
     if res.error.code == EvmErrorCode.OutOfGas:
-      c.setError(EVMC_OUT_OF_GAS, $res.error.code, true)
+      c.setError(StatusCode.OutOfGas, $res.error.code, true)
     else:
       if fork >= FkByzantium and precompile > paIdentity:
-        c.setError(EVMC_PRECOMPILE_FAILURE, $res.error.code, true)
+        c.setError(StatusCode.PrecompileFailure, $res.error.code, true)
       else:
         # swallow any other precompiles errors
         debug "execPrecompiles validation error", errCode = $res.error.code

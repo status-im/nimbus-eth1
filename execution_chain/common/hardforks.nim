@@ -284,7 +284,7 @@ func populateFromForkTransitionTable*(conf: ChainConfig, t: ForkTransitionTable)
   conf.osakaTime           = t.timeThresholds[HardFork.Osaka]
 
 # ------------------------------------------------------------------------------
-# Map HardFork to EVM/EVMC Fork
+# Map HardFork to EVM Fork
 # ------------------------------------------------------------------------------
 
 const

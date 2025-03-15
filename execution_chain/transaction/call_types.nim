@@ -10,12 +10,13 @@
 {.push raises: [].}
 
 import
+  results,
   eth/common/transactions,
+  eth/common/addresses,
   ../common/evmforks,
   ../evm/types,
   ../evm/internals,
-  ../core/eip7702,
-  ./host_types
+  ../core/eip7702
 
 export types
 
@@ -23,13 +24,13 @@ type
   # Standard call parameters.
   CallParams* = object
     vmState*:      BaseVMState          # Chain, database, state, block, fork.
-    origin*:       Opt[HostAddress]     # Default origin is `sender`.
+    origin*:       Opt[addresses.Address] # Default origin is `sender`.
     gasPrice*:     GasInt               # Gas price for this call.
     gasLimit*:     GasInt               # Maximum gas available for this call.
-    sender*:       HostAddress          # Sender account.
-    to*:           HostAddress          # Recipient (ignored when `isCreate`).
+    sender*:       addresses.Address    # Sender account.
+    to*:           addresses.Address    # Recipient (ignored when `isCreate`).
     isCreate*:     bool                 # True if this is a contract creation.
-    value*:        HostValue            # Value sent from sender to recipient.
+    value*:        UInt256              # Value sent from sender to recipient.
     input*:        seq[byte]            # Input data.
     accessList*:   AccessList           # EIP-2930 (Berlin) tx access list.
     versionedHashes*: seq[VersionedHash]   # EIP-4844 (Cancun) blob versioned hashes
@@ -40,12 +41,11 @@ type
     noRefund*:     bool                 # Don't apply gas refund/burn rule.
     sysCall*:      bool                 # System call or ordinary call
 
-  # Standard call result.  (Some fields are beyond what EVMC can return,
-  # and must only be used from tests because they will not always be set).
+  # Standard call result.
   CallResult* = object of RootObj
     error*:           string            # Something if the call failed.
     gasUsed*:         GasInt            # Gas used by the call.
-    contractAddress*: Address           # Created account (when `isCreate`).
+    contractAddress*: addresses.Address # Created account (when `isCreate`).
     output*:          seq[byte]         # Output data.
 
   DebugCallResult* = object of CallResult

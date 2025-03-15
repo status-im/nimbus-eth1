@@ -12,35 +12,25 @@ import
   eth/common/eth_types, stint, stew/ptrops,
   chronos,
   results,
-  stew/saturation_arith,
   ../evm/[types, state],
   ../evm/[message, precompiles, internals, interpreter_dispatch],
   ../db/ledger,
   ../common/evmforks,
   ../core/eip4844,
   ../core/eip7702,
-  ./host_types,
   ./call_types
 
-import ../evm/computation except fromEvmc, toEvmc
+import ../evm/computation
 
 export
   call_types
 
-proc hostToComputationMessage*(msg: EvmcMessage): Message =
-  Message(
-    kind:            CallKind(msg.kind.ord),
-    depth:           msg.depth,
-    gas:             GasInt msg.gas,
-    sender:          msg.sender.fromEvmc,
-    contractAddress: msg.recipient.fromEvmc,
-    codeAddress:     msg.code_address.fromEvmc,
-    value:           msg.value.fromEvmc,
-    # When input size is zero, input data pointer may be null.
-    data:            if msg.input_size <= 0: @[]
-                     else: @(makeOpenArray(msg.input_data, msg.input_size.int)),
-    flags:           msg.flags
-  )
+type
+  TransactionHost = ref object
+    vmState:         BaseVMState
+    computation:     Computation
+    sysCall:         bool
+    floorDataGas:    GasInt
 
 proc initialAccessListEIP2929(call: CallParams) =
   # EIP2929 initial access list.
@@ -141,40 +131,34 @@ proc setupHost(call: CallParams, keepStack: bool): TransactionHost =
     host = TransactionHost(
       vmState: vmState,
       sysCall: call.sysCall,
-      msg: EvmcMessage(
-        kind:         if call.isCreate: EVMC_CREATE else: EVMC_CALL,
-        # Default: flags:       {},
-        # Default: depth:       0,
-        gas:          int64.saturate(call.gasLimit - intrinsicGas),
-        recipient:    call.to.toEvmc,
-        code_address: call.to.toEvmc,
-        sender:       call.sender.toEvmc,
-        value:        call.value.toEvmc,
-      ),
       floorDataGas: floorDataGas,
       # All other defaults in `TransactionHost` are fine.
     )
+
+    msg = Message(
+      kind:            if call.isCreate:
+                         CallKind.Create
+                       else:
+                         CallKind.Call,
+      # flags: {},
+      # depth: 0,
+      gas:             call.gasLimit - intrinsicGas,
+      contractAddress: call.to,
+      codeAddress:     call.to,
+      sender:          call.sender,
+      value:           call.value,
+    )
+
     gasRefund = if call.sysCall: 0
                 else: preExecComputation(vmState, call)
     code = if call.isCreate:
-             let contractAddress = generateContractAddress(call.vmState, EVMC_CREATE, call.sender)
-             host.msg.recipient = contractAddress.toEvmc
-             host.msg.input_size = 0
-             host.msg.input_data = nil
+             msg.contractAddress = generateContractAddress(call.vmState, CallKind.Create, call.sender)
              CodeBytesRef.init(call.input)
            else:
-             if call.input.len > 0:
-               host.msg.input_size = call.input.len.csize_t
-               # Must copy the data so the `host.msg.input_data` pointer
-               # remains valid after the end of `call` lifetime.
-               host.input = call.input
-               host.msg.input_data = host.input[0].addr
-             getCallCode(host.vmState, host.msg.code_address.fromEvmc)
-    cMsg = hostToComputationMessage(host.msg)
+             msg.data = call.input
+             getCallCode(host.vmState, msg.codeAddress)
 
-  host.computation = newComputation(vmState, keepStack, cMsg, code)
-  host.code = code
-
+  host.computation = newComputation(vmState, keepStack, msg, code)
   host.computation.addRefund(gasRefund)
   vmState.captureStart(host.computation, call.sender, call.to,
                        call.isCreate, call.input,
@@ -250,7 +234,7 @@ proc finishRunningComputation(
 
   let gasRemaining = calculateAndPossiblyRefundGas(host, call)
   # evm gas used without intrinsic gas
-  let evmGasUsed = host.msg.gas.GasInt - gasRemaining
+  let evmGasUsed = c.msg.gas - gasRemaining
   host.vmState.captureEnd(c, c.output, evmGasUsed, c.errorOpt)
 
   when T is CallResult|DebugCallResult:
@@ -261,7 +245,7 @@ proc finishRunningComputation(
     result.gasUsed = call.gasLimit - gasRemaining
     result.output = system.move(c.output)
     result.contractAddress = if call.isCreate: c.msg.contractAddress
-                            else: default(HostAddress)
+                             else: default(Address)
 
     when T is DebugCallResult:
       result.stack = move(c.finalStack)

@@ -167,19 +167,19 @@ proc rollback*(c: Computation) =
   c.vmState.ledger.rollback(c.savePoint)
 
 func setError*(c: Computation, msg: sink string, burnsGas = false) =
-  c.error = Error(evmcStatus: EVMC_FAILURE, info: move(msg), burnsGas: burnsGas)
+  c.error = Error(status: StatusCode.Failure, info: move(msg), burnsGas: burnsGas)
 
-func setError*(c: Computation, code: evmc_status_code, burnsGas = false) =
-  c.error = Error(evmcStatus: code, info: $code, burnsGas: burnsGas)
+func setError*(c: Computation, code: StatusCode, burnsGas = false) =
+  c.error = Error(status: code, info: $code, burnsGas: burnsGas)
 
 func setError*(
-    c: Computation, code: evmc_status_code, msg: sink string, burnsGas = false) =
-  c.error = Error(evmcStatus: code, info: move(msg), burnsGas: burnsGas)
+    c: Computation, code: StatusCode, msg: sink string, burnsGas = false) =
+  c.error = Error(status: code, info: move(msg), burnsGas: burnsGas)
 
 func errorOpt*(c: Computation): Opt[string] =
   if c.isSuccess:
     return Opt.none(string)
-  if c.error.evmcStatus == EVMC_REVERT:
+  if c.error.status == StatusCode.Revert:
     return Opt.none(string)
   Opt.some(c.error.info)
 
@@ -199,14 +199,14 @@ proc writeContract*(c: Computation) =
   # EIP-3541 constraint (https://eips.ethereum.org/EIPS/eip-3541).
   if fork >= FkLondon and c.output[0] == 0xEF.byte:
     withExtra trace, "New contract code starts with 0xEF byte, not allowed by EIP-3541"
-    c.setError(EVMC_CONTRACT_VALIDATION_FAILURE, true)
+    c.setError(StatusCode.ContractValidationFailure, true)
     return
 
   # EIP-170 constraint (https://eips.ethereum.org/EIPS/eip-3541).
   if fork >= FkSpurious and len > EIP170_MAX_CODE_SIZE:
     withExtra trace, "New contract code exceeds EIP-170 limit",
       codeSize=len, maxSize=EIP170_MAX_CODE_SIZE
-    c.setError(EVMC_OUT_OF_GAS, true)
+    c.setError(StatusCode.OutOfGas, true)
     return
 
   # Charge gas and write the code even if the code address is self-destructed.
@@ -231,7 +231,7 @@ proc writeContract*(c: Computation) =
 
   if fork >= FkHomestead:
     # EIP-2 (https://eips.ethereum.org/EIPS/eip-2).
-    c.setError(EVMC_OUT_OF_GAS, true)
+    c.setError(StatusCode.OutOfGas, true)
   else:
     # Before EIP-2, when out of gas for code storage, the account ends up with
     # zero-length code and no error.  No gas is charged.  Code cited in EIP-2:
