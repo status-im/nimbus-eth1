@@ -8,24 +8,9 @@
 # at your option. This file may not be copied, modified, or distributed except
 # according to those terms.
 
-func vmName(): string =
-  when defined(evmc_enabled):
-    "evmc"
-  else:
-    "nimvm"
-
-const
-  chronicles_line_numbers {.strdefine.} = "0"
-  VmName* = vmName()
-  warningMsg = block:
-    var rc = "*** Compiling with " & VmName
-    if chronicles_line_numbers notin ["0", "off"]:
-      rc &= ", logger line numbers"
-    when defined(boehmgc):
-      rc &= ", boehm/gc"
-    rc &= " enabled"
-    rc
-
-{.warning: warningMsg.}
-
+{.push raises: [].}
 {.used.}
+
+const chronicles_line_numbers {.strdefine.} = "0"
+when chronicles_line_numbers notin ["0", "off"]:
+  {.warning: "*** Compiling with logger line numbers enabled".}

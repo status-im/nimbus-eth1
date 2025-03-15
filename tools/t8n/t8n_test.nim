@@ -1,5 +1,5 @@
 # Nimbus
-# Copyright (c) 2022-2024 Status Research & Development GmbH
+# Copyright (c) 2022-2025 Status Research & Development GmbH
 # Licensed under either of
 #  * Apache License, version 2.0, ([LICENSE-APACHE](LICENSE-APACHE) or
 #    http://www.apache.org/licenses/LICENSE-2.0)
@@ -150,14 +150,6 @@ proc notRejectedError(path: string): bool =
     path.endsWith("/error"))
 
 proc runTest(appDir: string, spec: TestSpec): bool =
-  when defined(evmc_enabled):
-    # TODO: test both evm?
-    # skip trace test if evmc_enabled
-    # because the error msg of trace output is
-    # different for nimvm and evmc
-    if spec.output.trace:
-      return true
-
   let base = appDir / spec.base
   let args = spec.input.get(base) & spec.output.get()
   let cmd  = appDir / "t8n" & args

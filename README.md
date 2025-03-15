@@ -194,9 +194,6 @@ available.)
  * ENABLE_LINE_NUMBERS=1<br>
    Enables logger to print out source code location with log message
 
- * ENABLE_EVMC=1<br>
-   Enable mostly EVMC compliant wrapper around the native Nim VM
-
 For these variables, using &lt;variable&gt;=0 is ignored and &lt;variable&gt;=2
 has the same effect as &lt;variable&gt;=1 (ditto for other numbers.)
 

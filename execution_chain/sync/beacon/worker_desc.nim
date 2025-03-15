@@ -11,6 +11,7 @@
 {.push raises:[].}
 
 import
+  std/sets,
   pkg/chronos,
   pkg/eth/common,
   pkg/stew/[interval_set, sorted_set],
@@ -54,14 +55,21 @@ type
   SyncLayoutState* = enum
     idleSyncState = 0                ## see clause *(8)*, *(12)* of `README.md`
     collectingHeaders                ## see clauses *(5)*, *(9)* of `README.md`
+    cancelHeaders                    ## stop this scrum
     finishedHeaders                  ## see clause *(10)* of `README.md`
     processingBlocks                 ## see clause *(11)* of `README.md`
+    cancelBlocks                     ## stop this scrum
 
-  SyncClRequest* = object
+  SyncClMesg* = object
     ## Beacon state to be implicitely updated by RPC method
-    changed*: bool                   ## Tell that something has changed
     consHead*: Header                ## Consensus head
     finalHash*: Hash32               ## Finalised hash
+
+  SyncClRequest* = object
+    ## Internal management object for the `SyncClMesg`
+    locked*: bool                    ## Don't update while set `true`
+    changed*: bool                   ## Tell that something has changed
+    mesg*: SyncClMesg                ## The request message from the `CL`
 
   SyncStateLayout* = object
     ## Layout of a linked header chains defined by the triple `(C,D,H)` as
@@ -90,7 +98,7 @@ type
 
   SyncState* = object
     ## Sync state for header and block chains
-    clRequest*: SyncClRequest        ## Consensus head, see `T` in `README.md`
+    clReq*: SyncClRequest            ## Consensus head, see `T` in `README.md`
     layout*: SyncStateLayout         ## Current header chains layout
 
   # -------------------
@@ -133,13 +141,15 @@ type
     hdrCache*: ForkedCacheRef        ## Currently in tandem with `chain`
 
     # Blocks import/execution settings
-    blockImportOk*: bool             ## Don't fetch data while block importing
-    blocksStagedHwm*: int            ## Set a `staged` queue limit
-    stagedLenHwm*: int               ## Figured out as # staged records
+    blkImportOk*: bool               ## Don't fetch data while block importing
+    blkStagedHwm*: int               ## Set a `staged` queue limit
+    blkStagedLenHwm*: int            ## Figured out as # staged records
 
     # Info, debugging, and error handling stuff
     nReorg*: int                     ## Number of reorg invocations (info only)
     hdrProcError*: Table[Hash,uint8] ## Some globally accessible header errors
+    failedPeers*: HashSet[Hash]      ## Detect dead end sync by collecting peers
+    seenData*: bool                  ## Set `true` is data were fetched, already
 
     # Debugging stuff
     when enableTicker:
@@ -171,9 +181,9 @@ func layout*(ctx: BeaconCtxRef): var SyncStateLayout =
   ## Shortcut
   ctx.sst.layout
 
-func clRequest*(ctx: BeaconCtxRef): var SyncClRequest =
+func clReq*(ctx: BeaconCtxRef): var SyncClRequest =
   ## Shortcut
-  ctx.sst.clRequest
+  ctx.sst.clReq
 
 func chain*(ctx: BeaconCtxRef): ForkedChainRef =
   ## Getter

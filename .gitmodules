@@ -113,11 +113,6 @@
   url = https://github.com/status-im/nimbus-build-system.git
   ignore = dirty
   branch = master
-[submodule "vendor/nim-evmc"]
-  path = vendor/nim-evmc
-  url = https://github.com/status-im/nim-evmc
-  ignore = dirty
-  branch = api-version-7.5
 [submodule "vendor/nim-libbacktrace"]
   path = vendor/nim-libbacktrace
   url = https://github.com/status-im/nim-libbacktrace.git

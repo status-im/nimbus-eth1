@@ -1,5 +1,5 @@
 # Nimbus
-# Copyright (c) 2018-2024 Status Research & Development GmbH
+# Copyright (c) 2018-2025 Status Research & Development GmbH
 # Licensed under either of
 #  * Apache License, version 2.0, ([LICENSE-APACHE](LICENSE-APACHE) or
 #    http://www.apache.org/licenses/LICENSE-2.0)
@@ -37,7 +37,7 @@ func returnGas*(gasMeter: var GasMeter; amount: GasInt) =
 func refundGas*(gasMeter: var GasMeter; amount: int64) =
   # EIP-2183 Net gas metering for sstore is built upon idea
   # that the refund counter is only one in an EVM like geth does.
-  # EIP-2183 gurantee that the counter can never go below zero.
+  # EIP-2183 guarantee that the counter can never go below zero.
   # But nimbus, EVMC, and emvone taken different route, the refund counter
   # is present at each level of recursion. That's why EVMC/evmone is using
   # int64 while geth using uint64 for their gas calculation.

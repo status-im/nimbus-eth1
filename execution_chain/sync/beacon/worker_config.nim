@@ -53,6 +53,12 @@ const
 
   # ----------------------
 
+  fetchHeadersFailedInitialFailPeersHwm* = 30
+    ## If there are more failing peers than this `hwm` right at the begining
+    ## of a header chain download scrum (before any data received), then this
+    ## scrum is discarded and the suncer is reset and suspened (waiting for
+    ## the next instruction to run a scrum.)
+
   nFetchHeadersRequest* = 1_024
     ## Number of headers that will be requested with a single `eth/xx` message.
     ##
@@ -60,12 +66,12 @@ const
     ## entries (see `Geth` constant `maxHeadersServe`.)
 
   fetchHeadersReqErrThresholdZombie* = chronos.seconds(2)
-  fetchHeadersReqErrThresholdCount* = 3
+  fetchHeadersReqErrThresholdCount* = 2
     ## Response time allowance. If the response time for the set of headers
     ## exceeds this threshold for more than `fetchHeadersReqThresholdCount`
     ## times in a row, then this peer will be banned for a while.
 
-  fetchHeadersProcessErrThresholdCount* = 3
+  fetchHeadersProcessErrThresholdCount* = 2
     ## Similar to `fetchHeadersReqErrThresholdCount` but for the later part
     ## when errors occur while block headers are queued and further processed.
 
@@ -98,14 +104,17 @@ const
 
   # ----------------------
 
+  fetchBodiesFailedInitialFailPeersHwm* = 50
+    ## Similar to `fetchHeadersFailedInitialFailPeersHwm`
+
   nFetchBodiesRequest* = 128
     ## Similar to `nFetchHeadersRequest`
 
   fetchBodiesReqErrThresholdZombie* = chronos.seconds(4)
-  fetchBodiesReqErrThresholdCount* = 3
+  fetchBodiesReqErrThresholdCount* = 2
     ## Similar to `fetchHeadersReqThreshold*`
 
-  fetchBodiesProcessErrThresholdCount* = 3
+  fetchBodiesProcessErrThresholdCount* = 2
     ## Similar to `fetchHeadersProcessErrThresholdCount`.
 
   fetchBodiesReqMinResponsePC* = 10

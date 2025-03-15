@@ -1,5 +1,5 @@
 # Nimbus
-# Copyright (c) 2018-2024 Status Research & Development GmbH
+# Copyright (c) 2018-2025 Status Research & Development GmbH
 # Licensed under either of
 #  * Apache License, version 2.0, ([LICENSE-APACHE](LICENSE-APACHE) or
 #    http://www.apache.org/licenses/LICENSE-2.0)
@@ -63,23 +63,14 @@ proc logImpl(c: Computation, opcode: Op, topicCount: static int): EvmResultVoid 
     reason = "Memory expansion, Log topic and data gas cost")
   c.memory.extend(memPos, len)
 
-  when evmc_enabled:
-    var topics: array[4, evmc_bytes32]
-    for i in 0 ..< topicCount:
-      topics[i].bytes = c.stack.lsPeekTopic(^(i+3)).data
+  var log: Log
+  log.topics = newSeqOfCap[Topic](topicCount)
+  for i in 0 ..< topicCount:
+    log.topics.add c.stack.lsPeekTopic(^(i+3))
 
-    c.host.emitLog(c.msg.contractAddress,
-      c.memory.read(memPos, len),
-      topics[0].addr, topicCount)
-  else:
-    var log: Log
-    log.topics = newSeqOfCap[Topic](topicCount)
-    for i in 0 ..< topicCount:
-      log.topics.add c.stack.lsPeekTopic(^(i+3))
-
-    assign(log.data, c.memory.read(memPos, len))
-    log.address = c.msg.contractAddress
-    c.addLogEntry(log)
+  assign(log.data, c.memory.read(memPos, len))
+  log.address = c.msg.contractAddress
+  c.addLogEntry(log)
 
   c.stack.lsShrink(stackSize)
   ok()

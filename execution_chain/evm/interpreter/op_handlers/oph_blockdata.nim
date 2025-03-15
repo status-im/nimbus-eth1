@@ -1,5 +1,5 @@
 # Nimbus
-# Copyright (c) 2018-2024 Status Research & Development GmbH
+# Copyright (c) 2018-2025 Status Research & Development GmbH
 # Licensed under either of
 #  * Apache License, version 2.0, ([LICENSE-APACHE](LICENSE-APACHE) or
 #    http://www.apache.org/licenses/LICENSE-2.0)
@@ -20,10 +20,8 @@ import
   ../../evm_errors,
   ../utils/utils_numeric,
   ../op_codes,
-  ./oph_defs
-
-when not defined(evmc_enabled):
-  import ../../state
+  ./oph_defs,
+  ../../state
 
 # ------------------------------------------------------------------------------
 # Private, op handlers implementation
@@ -39,15 +37,15 @@ proc blockhashOp(cpt: VmCpt): EvmResultVoid =
 
   cpt.stack.unaryWithTop(block256)
 
-proc coinBaseOp(cpt: VmCpt): EvmResultVoid =
+func coinBaseOp(cpt: VmCpt): EvmResultVoid =
   ## 0x41, Get the block's beneficiary address.
   cpt.stack.push cpt.getCoinbase
 
-proc timestampOp(cpt: VmCpt): EvmResultVoid =
+func timestampOp(cpt: VmCpt): EvmResultVoid =
   ## 0x42, Get the block's timestamp.
   cpt.stack.push cpt.getTimestamp
 
-proc blocknumberOp(cpt: VmCpt): EvmResultVoid =
+func blocknumberOp(cpt: VmCpt): EvmResultVoid =
   ## 0x43, Get the block's number.
   cpt.stack.push cpt.getBlockNumber
 
@@ -55,11 +53,11 @@ proc difficultyOp(cpt: VmCpt): EvmResultVoid =
   ## 0x44, Get the block's difficulty
   cpt.stack.push cpt.getDifficulty
 
-proc gasLimitOp(cpt: VmCpt): EvmResultVoid =
+func gasLimitOp(cpt: VmCpt): EvmResultVoid =
   ## 0x45, Get the block's gas limit
   cpt.stack.push cpt.getGasLimit
 
-proc chainIdOp(cpt: VmCpt): EvmResultVoid =
+func chainIdOp(cpt: VmCpt): EvmResultVoid =
   ## 0x46, Get current chain’s EIP-155 unique identifier.
   cpt.stack.push cpt.getChainId
 
@@ -67,11 +65,11 @@ proc selfBalanceOp(cpt: VmCpt): EvmResultVoid =
   ## 0x47, Get current contract's balance.
   cpt.stack.push cpt.getBalance(cpt.msg.contractAddress)
 
-proc baseFeeOp(cpt: VmCpt): EvmResultVoid =
+func baseFeeOp(cpt: VmCpt): EvmResultVoid =
   ## 0x48, Get the block's base fee.
   cpt.stack.push cpt.getBaseFee
 
-proc blobHashOp(cpt: VmCpt): EvmResultVoid =
+func blobHashOp(cpt: VmCpt): EvmResultVoid =
   ## 0x49, Get current transaction's EIP-4844 versioned hash.
   template blob256(top, number, conv) =
     let
@@ -85,7 +83,7 @@ proc blobHashOp(cpt: VmCpt): EvmResultVoid =
 
   cpt.stack.unaryWithTop(blob256)
 
-proc blobBaseFeeOp(cpt: VmCpt): EvmResultVoid =
+func blobBaseFeeOp(cpt: VmCpt): EvmResultVoid =
   ## 0x4a, Get the block's base fee.
   cpt.stack.push cpt.getBlobBaseFee
 

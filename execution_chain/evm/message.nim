@@ -1,5 +1,5 @@
 # Nimbus
-# Copyright (c) 2018-2024 Status Research & Development GmbH
+# Copyright (c) 2018-2025 Status Research & Development GmbH
 # Licensed under either of
 #  * Apache License, version 2.0, ([LICENSE-APACHE](LICENSE-APACHE) or
 #    http://www.apache.org/licenses/LICENSE-2.0)
@@ -18,14 +18,14 @@ import
   ../db/ledger
 
 proc isCreate*(message: Message): bool =
-  message.kind in {EVMC_CREATE, EVMC_CREATE2}
+  message.kind in {CallKind.Create, CallKind.Create2}
 
 proc generateContractAddress*(vmState: BaseVMState,
                               kind: CallKind,
                               sender: Address,
                               salt = ZERO_CONTRACTSALT,
                               code = CodeBytesRef(nil)): Address =
-  if kind == EVMC_CREATE:
+  if kind == CallKind.Create:
     let creationNonce = vmState.readOnlyLedger().getNonce(sender)
     generateAddress(sender, creationNonce)
   else:

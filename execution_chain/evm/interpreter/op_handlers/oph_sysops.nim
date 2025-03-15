@@ -1,5 +1,5 @@
 # Nimbus
-# Copyright (c) 2021-2024 Status Research & Development GmbH
+# Copyright (c) 2021-2025 Status Research & Development GmbH
 # Licensed under either of
 #  * Apache License, version 2.0, ([LICENSE-APACHE](LICENSE-APACHE) or
 #    http://www.apache.org/licenses/LICENSE-2.0)
@@ -24,12 +24,9 @@ import
   ../gas_costs,
   ../op_codes,
   ./oph_defs,
-  ./oph_helpers
-
-when not defined(evmc_enabled):
-  import
-    ../../state,
-    ../../../db/ledger
+  ./oph_helpers,
+  ../../state,
+  ../../../db/ledger
 
 # ------------------------------------------------------------------------------
 # Private
@@ -68,10 +65,10 @@ proc revertOp(cpt: VmCpt): EvmResultVoid =
   cpt.memory.extend(pos, len)
   assign(cpt.output, cpt.memory.read(pos, len))
   # setError(msg, false) will signal cheap revert
-  cpt.setError(EVMC_REVERT, "REVERT opcode executed", false)
+  cpt.setError(StatusCode.Revert, "REVERT opcode executed", false)
   ok()
 
-proc invalidOp(cpt: VmCpt): EvmResultVoid =
+func invalidOp(cpt: VmCpt): EvmResultVoid =
   err(opErr(InvalidInstruction))
 
 # -----------
@@ -80,10 +77,7 @@ proc selfDestructOp(cpt: VmCpt): EvmResultVoid =
   ## 0xff, Halt execution and register account for later deletion.
   let beneficiary = ? cpt.stack.popAddress()
 
-  when defined(evmc_enabled):
-    cpt.selfDestruct(beneficiary)
-  else:
-    cpt.selfDestruct(beneficiary)
+  cpt.selfDestruct(beneficiary)
   ok()
 
 proc selfDestructEIP150Op(cpt: VmCpt): EvmResultVoid =
@@ -127,14 +121,10 @@ proc selfDestructEIP2929Op(cpt: VmCpt): EvmResultVoid =
   var
     gasCost = cpt.gasCosts[SelfDestruct].sc_handler(condition)
 
-  when evmc_enabled:
-    if cpt.host.accessAccount(beneficiary) == EVMC_ACCESS_COLD:
+  cpt.vmState.mutateLedger:
+    if not db.inAccessList(beneficiary):
+      db.accessList(beneficiary)
       gasCost = gasCost + ColdAccountAccessCost
-  else:
-    cpt.vmState.mutateLedger:
-      if not db.inAccessList(beneficiary):
-        db.accessList(beneficiary)
-        gasCost = gasCost + ColdAccountAccessCost
 
   ? cpt.opcodeGasCost(SelfDestruct,
     gasCost, reason = "SELFDESTRUCT EIP2929")
