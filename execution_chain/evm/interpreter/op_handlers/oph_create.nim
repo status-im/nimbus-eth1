@@ -116,13 +116,13 @@ proc createOp(cpt: VmCpt): EvmResultVoid =
 
   var
     childMsg = Message(
-      kind:   EVMC_CREATE,
+      kind:   CallKind.Create,
       depth:  cpt.msg.depth + 1,
       gas:    createMsgGas,
       sender: cpt.msg.contractAddress,
       contractAddress: generateContractAddress(
         cpt.vmState,
-        EVMC_CREATE,
+        CallKind.Create,
         cpt.msg.contractAddress),
       value:  endowment)
     code = CodeBytesRef.init(cpt.memory.read(memPos, memLen))
@@ -189,13 +189,13 @@ proc create2Op(cpt: VmCpt): EvmResultVoid =
   var
     code = CodeBytesRef.init(cpt.memory.read(memPos, memLen))
     childMsg = Message(
-      kind:   EVMC_CREATE2,
+      kind:   CallKind.Create2,
       depth:  cpt.msg.depth + 1,
       gas:    createMsgGas,
       sender: cpt.msg.contractAddress,
       contractAddress: generateContractAddress(
         cpt.vmState,
-        EVMC_CREATE2,
+        CallKind.Create2,
         cpt.msg.contractAddress,
         salt,
         code),

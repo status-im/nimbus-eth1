@@ -45,7 +45,7 @@ proc gasEip2929AccountCheck*(c: Computation; address: Address, slot: UInt256): G
 
 func checkInStaticContext*(c: Computation): EvmResultVoid =
   ## Verify static context in handler function, raise an error otherwise
-  if EVMC_STATIC in c.msg.flags:
+  if MsgFlags.Static in c.msg.flags:
     # TODO: if possible, this check only appear
     # when fork >= FkByzantium
     return err(opErr(StaticContext))

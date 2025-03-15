@@ -177,8 +177,8 @@ const
 
 # force the compiler to instantiate T8NConf.load
 # rather than have to export parseCmdArg
-# because it will use wrong parseCmdArg from execution_chain/config.nim
-# when evmc_enabled
+# because it will use wrong parseCmdArg under certain
+# condition.
 proc initT8NConf(cmdLine: openArray[string]): T8NConf =
   {.push warning[ProveInit]: off.}
   result = T8NConf.load(

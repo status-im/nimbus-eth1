@@ -18,14 +18,6 @@ import
 
 export stack, memory
 
-# this import not guarded by `when defined(evmc_enabled)`
-# because we want to use evmc types such as evmc_call_kind
-# and evmc_flags
-import
-  evmc/evmc
-
-export evmc
-
 type
   VMFlag* = enum
     ExecutionOK
@@ -83,8 +75,16 @@ type
     keepStack*:             bool
     finalStack*:            seq[UInt256]
 
+  StatusCode* {.pure.} = enum
+    None
+    Revert
+    Failure
+    ContractValidationFailure
+    OutOfGas
+    PrecompileFailure
+
   Error* = ref object
-    evmcStatus*: evmc_status_code
+    status*    : StatusCode
     info*      : string
     burnsGas*  : bool
 
@@ -92,9 +92,17 @@ type
     gasRefunded*: int64
     gasRemaining*: GasInt
 
-  CallKind* = evmc_call_kind
+  CallKind* {.pure.} = enum
+    Call          # Request CALL.
+    DelegateCall  # Request DELEGATECALL. Valid since Homestead.
+                  # The value param ignored.
+    CallCode      # Request CALLCODE.
+    Create        # Request CREATE.
+    Create2       # Request CREATE2. Valid since Constantinople.
+    EofCreate     # Request EOFCREATE. Valid since Osaka.
 
-  MsgFlags* = evmc_flags
+  MsgFlags* {.pure.} = enum
+    Static
 
   Message* = ref object
     kind*:             CallKind
@@ -105,7 +113,7 @@ type
     codeAddress*:      Address
     value*:            UInt256
     data*:             seq[byte]
-    flags*:            MsgFlags
+    flags*:            set[MsgFlags]
 
   TracerFlags* {.pure.} = enum
     DisableStorage

@@ -67,7 +67,7 @@ macro selectVM(v: VmCpt, fork: EVMFork, tracingEnabled: bool): EvmResultVoid =
 
 proc beforeExecCall(c: Computation) =
   c.snapshot()
-  if c.msg.kind == EVMC_CALL:
+  if c.msg.kind == CallKind.Call:
     c.vmState.mutateLedger:
       db.subBalance(c.msg.sender, c.msg.value)
       db.addBalance(c.msg.contractAddress, c.msg.value)
@@ -141,7 +141,7 @@ const MsgKindToOp: array[CallKind, Op] =
   [Call, DelegateCall, CallCode, Create, Create2, EofCreate]
 
 func msgToOp(msg: Message): Op =
-  if EVMC_STATIC in msg.flags:
+  if MsgFlags.Static in msg.flags:
     return StaticCall
   MsgKindToOp[msg.kind]
 
@@ -252,7 +252,7 @@ func postExecComputation*(c: Computation) =
       # EIP-3529: Reduction in refunds
       c.refundSelfDestruct()
   c.vmState.status = c.isSuccess
-  
+
 # ------------------------------------------------------------------------------
 # End
 # ------------------------------------------------------------------------------
