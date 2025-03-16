@@ -11,7 +11,6 @@
 {.push raises:[].}
 
 import
-  std/options,
   pkg/[chronicles, chronos, results],
   pkg/eth/common,
   pkg/stew/interval_set,
@@ -32,7 +31,7 @@ proc fetchRegisterError*(buddy: BeaconBuddyRef) =
 
 proc bodiesFetch*(
     buddy: BeaconBuddyRef;
-    blockHashes: seq[Hash32];
+    request: BlockBodiesRequest;
     info: static[string];
       ): Future[Result[seq[BlockBody],void]]
       {.async: (raises: []).} =
@@ -40,13 +39,13 @@ proc bodiesFetch*(
   let
     peer = buddy.peer
     start = Moment.now()
-    nReq = blockHashes.len
+    nReq = request.blockHashes.len
 
   trace trEthSendSendingGetBlockBodies, peer, nReq, bdyErrors=buddy.bdyErrors
 
-  var resp: Option[blockBodiesObj]
+  var resp: Opt[BlockBodiesPacket]
   try:
-    resp = await peer.getBlockBodies(blockHashes)
+    resp = await peer.getBlockBodies(request)
   except CatchableError as e:
     buddy.fetchRegisterError()
     `info` info & " error", peer, nReq, elapsed=(Moment.now() - start).toStr,
@@ -69,7 +68,7 @@ proc bodiesFetch*(
       elapsed=elapsed.toStr, ctrl=buddy.ctrl.state, bdyErrors=buddy.bdyErrors
     return err()
 
-  let b: seq[BlockBody] = resp.get.blocks
+  let b: seq[BlockBody] = resp.get.bodies
   if b.len == 0 or nReq < b.len:
     buddy.fetchRegisterError()
     trace trEthRecvReceivedBlockBodies, peer, nReq, nResp=b.len,

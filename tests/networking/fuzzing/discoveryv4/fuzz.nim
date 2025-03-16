@@ -10,7 +10,7 @@
 import
   std/net,
   testutils/fuzzing, chronicles, nimcrypto/keccak,
-  eth/[keys, rlp],
+  eth/[common/keys, rlp],
   ../../../../execution_chain/networking/discoveryv4,
   ../../p2p_test_helper
 

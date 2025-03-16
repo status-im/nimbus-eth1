@@ -12,13 +12,18 @@
 {.push raises: [].}
 
 import
-  std/strutils,
-  pkg/[chronos, chronicles, eth/common, stew/interval_set, stint],
-  ../../../../utils/prettify,
-  ../../worker_desc,
-  ../blocks_staged/staged_queue,
-  ../headers_staged/staged_queue,
-  ".."/[blocks_unproc, headers_unproc, helpers]
+  pkg/[chronos, chronicles, eth/common],
+  ../../worker_desc
+
+when enableTicker:
+  import
+    std/strutils,
+    pkg/[stint, stew/interval_set],
+    ../headers_staged/staged_queue,
+    ../blocks_staged/staged_queue,
+    ../../../../utils/prettify,
+    ../helpers,
+    ../[blocks_unproc, headers_unproc]
 
 logScope:
   topics = "beacon ticker"
@@ -58,99 +63,100 @@ type
     visited: Moment
     lastStats: TickerStats
 
-const
-  tickerLogInterval = chronos.seconds(2)
-  tickerLogSuppressMax = chronos.seconds(100)
-
 # ------------------------------------------------------------------------------
 # Private functions: printing ticker messages
 # ------------------------------------------------------------------------------
 
-proc updater(ctx: BeaconCtxRef): TickerStats =
-  ## Legacy stuff, will be probably be superseded by `metrics`
-  TickerStats(
-    base:            ctx.chain.baseNumber(),
-    latest:          ctx.chain.latestNumber(),
-    coupler:         ctx.layout.coupler,
-    dangling:        ctx.layout.dangling,
-    head:            ctx.layout.head,
-    headOk:          ctx.layout.lastState != idleSyncState,
-    target:          ctx.clReq.mesg.consHead.number,
-    targetOk:        ctx.clReq.changed,
-    trgLckOk:        ctx.clReq.locked,
+when enableTicker:
+  const
+    tickerLogInterval = chronos.seconds(2)
+    tickerLogSuppressMax = chronos.seconds(100)
 
-    nHdrStaged:      ctx.headersStagedQueueLen(),
-    hdrStagedTop:    ctx.headersStagedQueueTopKey(),
-    hdrUnprocTop:    ctx.headersUnprocTotalTop(),
-    nHdrUnprocessed: ctx.headersUnprocTotal(),
-    nHdrUnprocFragm: ctx.hdr.unprocessed.chunks(),
+  proc updater(ctx: BeaconCtxRef): TickerStats =
+    ## Legacy stuff, will be probably be superseded by `metrics`
+    TickerStats(
+      base:            ctx.chain.baseNumber(),
+      latest:          ctx.chain.latestNumber(),
+      coupler:         ctx.layout.coupler,
+      dangling:        ctx.layout.dangling,
+      head:            ctx.layout.head,
+      headOk:          ctx.layout.lastState != idleSyncState,
+      target:          ctx.clReq.mesg.consHead.number,
+      targetOk:        ctx.clReq.changed,
+      trgLckOk:        ctx.clReq.locked,
 
-    nBlkStaged:      ctx.blocksStagedQueueLen(),
-    blkStagedBottom: ctx.blocksStagedQueueBottomKey(),
-    blkUnprocBottom: ctx.blocksUnprocTotalBottom(),
-    nBlkUnprocessed: ctx.blocksUnprocTotal(),
-    nBlkUnprocFragm: ctx.blk.unprocessed.chunks(),
+      nHdrStaged:      ctx.headersStagedQueueLen(),
+      hdrStagedTop:    ctx.headersStagedQueueTopKey(),
+      hdrUnprocTop:    ctx.headersUnprocTotalTop(),
+      nHdrUnprocessed: ctx.headersUnprocTotal(),
+      nHdrUnprocFragm: ctx.hdr.unprocessed.chunks(),
 
-    state:           ctx.layout.lastState,
-    reorg:           ctx.pool.nReorg,
-    nBuddies:        ctx.pool.nBuddies)
+      nBlkStaged:      ctx.blocksStagedQueueLen(),
+      blkStagedBottom: ctx.blocksStagedQueueBottomKey(),
+      blkUnprocBottom: ctx.blocksUnprocTotalBottom(),
+      nBlkUnprocessed: ctx.blocksUnprocTotal(),
+      nBlkUnprocFragm: ctx.blk.unprocessed.chunks(),
 
-proc tickerLogger(t: TickerRef; ctx: BeaconCtxRef) =
-  let
-    data = ctx.updater()
-    now = Moment.now()
+      state:           ctx.layout.lastState,
+      reorg:           ctx.pool.nReorg,
+      nBuddies:        ctx.pool.nBuddies)
 
-  if now <= t.visited + tickerLogInterval:
-    return
-
-  if data != t.lastStats or
-     tickerLogSuppressMax < (now - t.visited):
+  proc tickerLogger(t: TickerRef; ctx: BeaconCtxRef) =
     let
-      B = if data.base == data.latest: "L" else: data.base.bnStr
-      L = if data.latest == data.coupler: "C" else: data.latest.bnStr
-      C = if data.coupler == data.dangling: "D" else: data.coupler.bnStr
-      D = if data.dangling == data.head: "H" else: data.dangling.bnStr
-      H = if data.headOk:
-            if data.head == data.target: "T" else: data.head.bnStr
-          else:
-            if data.head == data.target: "?T" else: "?" & $data.head
-      T = ["?", "~", "#", "!"][data.targetOk.ord*2 + data.trgLckOk.ord] &
-            $data.target
+      data = ctx.updater()
+      now = Moment.now()
 
-      hS = if data.nHdrStaged == 0: "n/a"
-           else: data.hdrStagedTop.bnStr & "(" & $data.nHdrStaged & ")"
-      hU = if data.nHdrUnprocFragm == 0 and data.nHdrUnprocessed == 0: "n/a"
-           elif data.hdrUnprocTop == 0:
-             "(" & data.nHdrUnprocessed.toSI & "," & $data.nHdrUnprocFragm & ")"
-           else: data.hdrUnprocTop.bnStr & "(" &
-                 data.nHdrUnprocessed.toSI & "," & $data.nHdrUnprocFragm & ")"
+    if now <= t.visited + tickerLogInterval:
+      return
 
-      bS = if data.nBlkStaged == 0: "n/a"
-           else: data.blkStagedBottom.bnStr & "(" & $data.nBlkStaged & ")"
-      bU = if data.nBlkUnprocFragm == 0 and data.nBlkUnprocessed == 0: "n/a"
-           elif data.blkUnprocBottom == high(BlockNumber):
-             "(" & data.nBlkUnprocessed.toSI & "," & $data.nBlkUnprocFragm & ")"
-           else: data.blkUnprocBottom.bnStr & "(" &
-                 data.nBlkUnprocessed.toSI & "," & $data.nBlkUnprocFragm & ")"
+    if data != t.lastStats or
+      tickerLogSuppressMax < (now - t.visited):
+      let
+        B = if data.base == data.latest: "L" else: data.base.bnStr
+        L = if data.latest == data.coupler: "C" else: data.latest.bnStr
+        C = if data.coupler == data.dangling: "D" else: data.coupler.bnStr
+        D = if data.dangling == data.head: "H" else: data.dangling.bnStr
+        H = if data.headOk:
+              if data.head == data.target: "T" else: data.head.bnStr
+            else:
+              if data.head == data.target: "?T" else: "?" & $data.head
+        T = ["?", "~", "#", "!"][data.targetOk.ord*2 + data.trgLckOk.ord] &
+              $data.target
 
-      st = case data.state
-           of idleSyncState: "0"
-           of collectingHeaders: "h"
-           of cancelHeaders: "x"
-           of finishedHeaders: "f"
-           of processingBlocks: "b"
-           of cancelBlocks: "z"
-      rrg = data.reorg
-      nP = data.nBuddies
+        hS = if data.nHdrStaged == 0: "n/a"
+            else: data.hdrStagedTop.bnStr & "(" & $data.nHdrStaged & ")"
+        hU = if data.nHdrUnprocFragm == 0 and data.nHdrUnprocessed == 0: "n/a"
+            elif data.hdrUnprocTop == 0:
+              "(" & data.nHdrUnprocessed.toSI & "," & $data.nHdrUnprocFragm & ")"
+            else: data.hdrUnprocTop.bnStr & "(" &
+                  data.nHdrUnprocessed.toSI & "," & $data.nHdrUnprocFragm & ")"
 
-      # With `int64`, there are more than 29*10^10 years range for seconds
-      up = (now - t.started).seconds.uint64.toSI
-      mem = getTotalMem().uint.toSI
+        bS = if data.nBlkStaged == 0: "n/a"
+            else: data.blkStagedBottom.bnStr & "(" & $data.nBlkStaged & ")"
+        bU = if data.nBlkUnprocFragm == 0 and data.nBlkUnprocessed == 0: "n/a"
+            elif data.blkUnprocBottom == high(BlockNumber):
+              "(" & data.nBlkUnprocessed.toSI & "," & $data.nBlkUnprocFragm & ")"
+            else: data.blkUnprocBottom.bnStr & "(" &
+                  data.nBlkUnprocessed.toSI & "," & $data.nBlkUnprocFragm & ")"
 
-    t.lastStats = data
-    t.visited = now
+        st = case data.state
+            of idleSyncState: "0"
+            of collectingHeaders: "h"
+            of cancelHeaders: "x"
+            of finishedHeaders: "f"
+            of processingBlocks: "b"
+            of cancelBlocks: "z"
+        rrg = data.reorg
+        nP = data.nBuddies
 
-    debug "Sync state", up, nP, st, B, L, C, D, H, T, hS, hU, bS, bU, rrg, mem
+        # With `int64`, there are more than 29*10^10 years range for seconds
+        up = (now - t.started).seconds.uint64.toSI
+        mem = getTotalMem().uint.toSI
+
+      t.lastStats = data
+      t.visited = now
+
+      debug "Sync state", up, nP, st, B, L, C, D, H, T, hS, hU, bS, bU, rrg, mem
 
 # ------------------------------------------------------------------------------
 # Public function

@@ -14,16 +14,12 @@ import
   chronicles, chronos,
   stew/endians2,
   ./types,
+  ./requester,
   ../../core/[chain, tx_pool],
   ../../networking/p2p
 
 logScope:
   topics = "eth-wire"
-
-type
-  EthWireRef* = ref object of RootRef
-    chain : ForkedChainRef
-    txPool: TxPoolRef
 
 const
   MAX_RECEIPTS_SERVE  = 1024
@@ -129,7 +125,7 @@ proc getBlockBodies*(ctx: EthWireRef,
   move(list)
 
 proc getBlockHeaders*(ctx: EthWireRef,
-                      req: EthBlocksRequest):
+                      req: BlockHeadersRequest):
                         seq[Header] =
   let
     chain = ctx.chain
@@ -161,20 +157,17 @@ proc getBlockHeaders*(ctx: EthWireRef,
   move(list)
 
 proc handleAnnouncedTxs*(ctx: EthWireRef,
-                         txs: openArray[Transaction]) =
-  if txs.len == 0:
+                         packet: TransactionsPacket) =
+  if packet.transactions.len == 0:
     return
 
   debug "received new transactions",
-    number = txs.len
+    number = packet.transactions.len
 
-  for tx in txs:
-    if tx.versionedHashes.len > 0:
-      # EIP-4844 blobs are not persisted and cannot be broadcasted
+  for tx in packet.transactions:
+    ctx.txPool.addTx(tx).isOkOr:
       continue
-    ctx.txPool.addTx(PooledTransaction(tx: tx)).isOkOr:
-      continue
-    
+
 # ------------------------------------------------------------------------------
 # End
 # ------------------------------------------------------------------------------

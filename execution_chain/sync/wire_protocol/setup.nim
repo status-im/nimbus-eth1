@@ -13,7 +13,7 @@
 import
   ../../networking/p2p,
   ../../core/tx_pool,
-  ./implementation,
+  ./requester,
   ./handler
 
 # ------------------------------------------------------------------------------
@@ -25,7 +25,7 @@ proc addEthHandlerCapability*(
       ) =
   ## Install `eth` handlers.
   node.addCapability(
-    implementation.eth68,
+    requester.eth68,
     EthWireRef.new(txPool))
 
 # ------------------------------------------------------------------------------
