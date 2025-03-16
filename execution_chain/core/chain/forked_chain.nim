@@ -12,6 +12,7 @@
 
 import
   chronicles,
+  results,
   std/[tables, algorithm],
   ../../common,
   ../../db/core_db,
@@ -19,7 +20,11 @@ import
   ../../evm/state,
   ../validate,
   ../executor/process_block,
-  ./forked_chain/[chain_desc, chain_header_cache, chain_branch]
+  ./forked_chain/[chain_desc,
+    chain_header_cache,
+    chain_branch,
+    block_quarantine
+  ]
 
 from std/sequtils import mapIt
 
@@ -105,12 +110,12 @@ proc writeBaggage(c: ForkedChainRef,
 
 proc validateBlock(c: ForkedChainRef,
           parent: BlockPos,
-          blk: Block): Result[void, string] =
+          blk: Block): Result[Hash32, string] =
   let blkHash = blk.header.blockHash
 
   if c.hashToBlock.hasKey(blkHash):
     # Block exists, just return
-    return ok()
+    return ok(blkHash)
 
   let
     parentFrame = parent.txFrame
@@ -162,7 +167,7 @@ proc validateBlock(c: ForkedChainRef,
   for i, tx in blk.transactions:
     c.txRecords[rlpHash(tx)] = (blkHash, uint64(i))
 
-  ok()
+  ok(blkHash)
 
 func findHeadPos(c: ForkedChainRef, hash: Hash32): Result[BlockPos, string] =
   ## Find the `BlockPos` that contains the block relative to the
@@ -497,7 +502,8 @@ proc init*(
     hashToBlock:     {baseHash: baseBranch.lastBlockPos}.toTable,
     baseTxFrame:     baseTxFrame,
     extraValidation: extraValidation,
-    baseDistance:    baseDistance)
+    baseDistance:    baseDistance,
+    quarantine:      Quarantine.init())
 
 proc importBlock*(c: ForkedChainRef, blk: Block): Result[void, string] =
   ## Try to import block to canonical or side chain.
@@ -505,20 +511,37 @@ proc importBlock*(c: ForkedChainRef, blk: Block): Result[void, string] =
   template header(): Header =
     blk.header
 
-  c.hashToBlock.withValue(header.parentHash, bd) do:
+  c.hashToBlock.withValue(header.parentHash, parentPos) do:
     # TODO: If engine API keep importing blocks
     # but not finalized it, e.g. current chain length > StagedBlocksThreshold
     # We need to persist some of the in-memory stuff
     # to a "staging area" or disk-backed memory but it must not afect `base`.
     # `base` is the point of no return, we only update it on finality.
 
-    ?c.validateBlock(bd[], blk)
+    var parentHash = ?c.validateBlock(parentPos[], blk)
+
+    while c.quarantine.hasOrphans():
+      let orphan = c.quarantine.popOrphan(parentHash).valueOr:
+        break
+
+      c.hashToBlock.withValue(parentHash, parentCandidatePos) do:
+        parentHash = c.validateBlock(parentCandidatePos[], orphan).valueOr:
+          # Silent?
+          # We don't return error here because the import is still ok()
+          # but the quarantined blocks may not linked
+          break
+      do:
+        break
+
   do:
     # If it's parent is an invalid block
     # there is no hope the descendant is valid
     debug "Parent block not found",
       blockHash = header.blockHash.short,
       parentHash = header.parentHash.short
+
+    # Put into quarantine and hope we receive the parent block
+    c.quarantine.addOrphan(blk)
     return err("Block is not part of valid chain")
 
   ok()

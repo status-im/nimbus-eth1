@@ -13,6 +13,7 @@
 import
   std/[deques, tables],
   ./chain_branch,
+  ./block_quarantine,
   ../../../common,
   ../../../db/core_db
 
@@ -25,6 +26,7 @@ type
     branches*    : seq[BranchRef]
     baseBranch*  : BranchRef
     activeBranch*: BranchRef
+    quarantine*  : Quarantine
 
     txRecords    : Table[Hash32, (Hash32, uint64)]
     baseTxFrame* : CoreDbTxRef
