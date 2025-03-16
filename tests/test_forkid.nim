@@ -73,6 +73,12 @@ const
     (number: 123'u64, time: 2740434112'u64, id: (crc: 0xdfbd9bed'u32, next: 0'u64)), # Future Prague block
   ]
 
+  HoodiNetIDs = [
+    (number: 0'u64,   time: 0'u64, id: (crc: 0xBEF71D30'u32, next: 1742999832'u64)), # Unsynced, last Frontier, Homestead, Tangerine, Spurious, Byzantium, Constantinople, Petersburg, Istanbul, Berlin, London, Paris, Shanghai, Cancun block
+    (number: 123'u64, time: 0'u64, id: (crc: 0xBEF71D30'u32, next: 1742999832'u64)), # First Prague block
+    (number: 123'u64, time: 2740434112'u64, id: (crc: 0x0929E24E'u32, next: 0'u64)), # Future Prague block
+  ]
+
 template runTest(network: untyped, name: string) =
   test name:
     var
@@ -136,5 +142,6 @@ suite "Fork ID tests":
   runTest(MainNet, "MainNet")
   runTest(SepoliaNet, "SepoliaNet")
   runTest(HoleskyNet, "HoleskyNet")
+  runTest(HoodiNet, "HoodiNet")
   test "Genesis Time Fork ID":
     runGenesisTimeIdTests()
