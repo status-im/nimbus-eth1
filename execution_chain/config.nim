@@ -566,19 +566,11 @@ func processList(v: string, o: var seq[string])
       if len(n) > 0:
         o.add(n)
 
-import stew/byteutils
-
 proc parseCmdArg(T: type NetworkParams, p: string): T
     {.gcsafe, raises: [ValueError].} =
   try:
     if not loadNetworkParams(p, result):
       raise newException(ValueError, "failed to load customNetwork")
-
-    var w = initRlpWriter()
-    w.append(result.genesis.alloc)
-    let bytes = w.finish()
-    debugEcho bytes.toHex
-
   except CatchableError:
     raise newException(ValueError, "failed to load customNetwork")
 
