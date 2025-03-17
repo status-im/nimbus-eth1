@@ -73,11 +73,14 @@ type
       abbr: "i"
       name: "network" }: string
 
-    customNetwork {.
-      desc: "Use custom genesis block for private Ethereum Network (as /path/to/genesis.json)"
-      defaultValueDesc: ""
-      abbr: "c"
-      name: "custom-network" }: Option[NetworkParams]
+    customNetworkFolder* {.
+        desc: "Use custom config for private Ethereum Network (as /path/to/metadata)"
+        longDesc:
+          "Path to a folder containing custom network configuration files\n" &
+          "such as genesis.json, config.yaml, etc.\n" &
+          "config.yaml is the configuration file for the CL client"
+        defaultValue: ""
+        name: "custom-network" .}: string
 
     networkId* {.
       ignore # this field is not processed by confutils
@@ -105,11 +108,6 @@ type
       desc: "" }: NRpcCmd
 
     of `sync`:
-
-      customNetworkFile* {.
-        desc: "Use custom CL config for private Ethereum Network (as /path/to/metadata.yaml)"
-        defaultValueDesc: ""
-        name: "custom-network-file" .}: string
 
       # https://github.com/ethereum/execution-apis/blob/v1.0.0-beta.4/src/engine/authentication.md#key-distribution
       jwtSecret* {.
@@ -192,8 +190,12 @@ proc makeConfig*(cmdLine = commandLineParams()): NRpcConf
 
   var networkId = result.getNetworkId()
 
-  if result.customNetwork.isSome:
-    result.networkParams = result.customNetwork.get()
+  if result.customNetworkFolder.len > 0:
+    var networkParams = NetworkParams()
+    if not loadNetworkParams(result.customNetworkFolder&"/genesis.json", networkParams):
+      error "Failed to load customNetwork", path=result.customNetworkFolder
+      quit QuitFailure
+    result.networkParams = networkParams
     if networkId.isNone:
       # WARNING: networkId and chainId are two distinct things
       # they usage should not be mixed in other places.
@@ -209,7 +211,7 @@ proc makeConfig*(cmdLine = commandLineParams()): NRpcConf
 
   result.networkId = networkId.get()
 
-  if result.customNetwork.isNone:
+  if result.customNetworkFolder.len == 0:
     result.networkParams = networkParams(result.networkId)
 
 
