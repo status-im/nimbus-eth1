@@ -1,5 +1,5 @@
 # Nimbus
-# Copyright (c) 2018-2024 Status Research & Development GmbH
+# Copyright (c) 2018-2025 Status Research & Development GmbH
 # Licensed under either of
 #  * Apache License, version 2.0, ([LICENSE-APACHE](LICENSE-APACHE) or
 #    http://www.apache.org/licenses/LICENSE-2.0)
@@ -181,15 +181,27 @@ type
     Nop0xBD, Nop0xBE, Nop0xBF, Nop0xC0, Nop0xC1, Nop0xC2,
     Nop0xC3, Nop0xC4, Nop0xC5, Nop0xC6, Nop0xC7, Nop0xC8,
     Nop0xC9, Nop0xCA, Nop0xCB, Nop0xCC, Nop0xCD, Nop0xCE,
-    Nop0xCF, Nop0xD0, Nop0xD1, Nop0xD2, Nop0xD3, Nop0xD4,
+    Nop0xCF,
+
+    DataLoad =       0xd0,
+    DataLoadN =      0xd1,
+    DataSize =       0xd2,
+    DataCopy =       0xd3,
+
+    Nop0xD4,
     Nop0xD5, Nop0xD6, Nop0xD7, Nop0xD8, Nop0xD9, Nop0xDA,
     Nop0xDB, Nop0xDC, Nop0xDD, Nop0xDE, Nop0xDF, Nop0xE0,
-    Nop0xE1, Nop0xE2, Nop0xE3, Nop0xE4, Nop0xE5, Nop0xE6,
-    Nop0xE7, Nop0xE8, Nop0xE9, Nop0xEA, Nop0xEB,
+    Nop0xE1, Nop0xE2, Nop0xE3, Nop0xE4, Nop0xE5,
+
+    DupN =           0xe6,
+    SwapN =          0xe7,
+    Exchange =       0xe8,
+
+    Nop0xE9, Nop0xEA, Nop0xEB,
 
     EofCreate =      0xec,
     TxCreate =       0xed,
-    ReturnContract = 0xee,
+    ReturnCode =     0xee,
 
     Nop0xEF, ## ..
 
@@ -205,11 +217,17 @@ type
     Create2 =        0xf5, ## Behaves identically to CREATE, except using
                            ## keccak256
 
-    Nop0xF6, Nop0xF7, Nop0xF8, Nop0xF9,  ## ..
+    Nop0xF6,
+
+    ReturnDataLoad = 0xf7,
+    ExtCall        = 0xf8,
+    ExtDelegateCall= 0xf9,
 
     StaticCall =     0xfa, ## Static message-call into an account.
 
-    Nop0xFB, Nop0xFC, ## ..
+    ExtStaticCall  = 0xfb,
+
+    Nop0xFC, ## ..
 
     Revert =         0xfd, ## Halt execution reverting state changes but
                            ## returning data and remaining gas.

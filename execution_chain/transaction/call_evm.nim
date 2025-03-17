@@ -188,6 +188,9 @@ proc callParamsForTx(tx: Transaction, sender: Address, vmState: BaseVMState, bas
   if tx.txType == TxEip7702:
     assign(result.authorizationList, tx.authorizationList)
 
+  if tx.txType == TxEip7873:
+    assign(result.initCodes, tx.initCodes)
+
 proc callParamsForTest(tx: Transaction, sender: Address, vmState: BaseVMState): CallParams =
   result = CallParams(
     vmState:      vmState,
@@ -210,6 +213,9 @@ proc callParamsForTest(tx: Transaction, sender: Address, vmState: BaseVMState): 
 
   if tx.txType == TxEip7702:
     assign(result.authorizationList, tx.authorizationList)
+
+  if tx.txType == TxEip7873:
+    assign(result.initCodes, tx.initCodes)
 
 proc txCallEvm*(tx: Transaction,
                 sender: Address,

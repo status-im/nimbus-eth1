@@ -36,6 +36,7 @@ type
     accessList*:   AccessList           # EIP-2930 (Berlin) tx access list.
     versionedHashes*: seq[VersionedHash]   # EIP-4844 (Cancun) blob versioned hashes
     authorizationList*: seq[Authorization] # EIP-7702 (Prague) authorization list
+    initCodes*:    seq[seq[byte]]       # EIP-7873 (Osaka) init codes
     noIntrinsic*:  bool                 # Don't charge intrinsic gas.
     noAccessList*: bool                 # Don't initialise EIP-2929 access list.
     noGasCharge*:  bool                 # Don't charge sender account for gas.
@@ -96,7 +97,16 @@ func intrinsicGas*(call: CallParams | Transaction, fork: EVMFork): (GasInt, GasI
       intrinsicGas += gasNonZero
       tokens += 4
 
-
+  # EIP-7873 (Osaka) init codes cost
+  for i in 0..<call.initCodes.len:
+    for b in call.initCodes[i]:
+      if b == 0:
+        intrinsicGas += gasZero
+        tokens += 1
+      else:
+        intrinsicGas += gasNonZero
+        tokens += 4
+  
   # EIP-2930 (Berlin) intrinsic gas for transaction access list.
   if fork >= FkBerlin:
     for account in call.accessList:
