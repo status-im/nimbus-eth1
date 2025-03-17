@@ -7,7 +7,4 @@
 
 {.warning[UnusedImport]: off.}
 
-import
-  ./test_nimbus,
-  ./consensus/test_consensus_layer,
-  ./execution/test_execution_layer
+import ./test_nimbus, ./consensus/test_consensus_layer, ./execution/test_execution_layer
