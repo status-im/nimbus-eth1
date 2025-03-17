@@ -59,14 +59,9 @@ type
     originalStorage: TableRef[UInt256, UInt256]
     overlayStorage: Table[UInt256, UInt256]
 
-  WitnessData* = object
-    storageKeys*: HashSet[UInt256]
-    codeTouched*: bool
-
   LedgerRef* = ref object
     txFrame*: CoreDbTxRef
     savePoint: LedgerSpRef
-    witnessCache: Table[Address, WitnessData]
     isDirty: bool
     ripemdSpecial: bool
     storeSlotHash*: bool
@@ -360,7 +355,6 @@ proc makeDirty(ac: LedgerRef, address: Address, cloneStorage = true): AccountRef
 proc init*(x: typedesc[LedgerRef], db: CoreDbTxRef, storeSlotHash: bool): LedgerRef =
   new result
   result.txFrame = db
-  result.witnessCache = Table[Address, WitnessData]()
   result.storeSlotHash = storeSlotHash
   result.code = typeof(result.code).init(codeLruSize)
   result.slots = typeof(result.slots).init(slotsLruSize)
@@ -782,46 +776,6 @@ proc getStorageRoot*(ac: LedgerRef, address: Address): Hash32 =
   let acc = ac.getAccount(address, false)
   if acc.isNil: EMPTY_ROOT_HASH
   else: ac.txFrame.slotStorageRoot(acc.toAccountKey).valueOr: EMPTY_ROOT_HASH
-
-proc update(wd: var WitnessData, acc: AccountRef) =
-  # once the code is touched make sure it doesn't get reset back to false in another update
-  if not wd.codeTouched:
-    wd.codeTouched = CodeChanged in acc.flags or acc.code != nil
-
-  if not acc.originalStorage.isNil:
-    for k in acc.originalStorage.keys():
-      wd.storageKeys.incl k
-
-  for k, v in acc.overlayStorage:
-    wd.storageKeys.incl k
-
-proc witnessData(acc: AccountRef): WitnessData =
-  result.storageKeys = HashSet[UInt256]()
-  update(result, acc)
-
-proc collectWitnessData*(ac: LedgerRef) =
-  # make sure all savepoint already committed
-  doAssert(ac.savePoint.parentSavepoint.isNil)
-  # usually witness data is collected before we call persist()
-  for address, acc in ac.savePoint.cache:
-    ac.witnessCache.withValue(address, val) do:
-      update(val[], acc)
-    do:
-      ac.witnessCache[address] = witnessData(acc)
-
-func multiKeys(slots: HashSet[UInt256]): MultiKeysRef =
-  if slots.len == 0: return
-  new result
-  for x in slots:
-    result.add x.toBytesBE
-  result.sort()
-
-proc makeMultiKeys*(ac: LedgerRef): MultiKeysRef =
-  # this proc is called after we done executing a block
-  new result
-  for k, v in ac.witnessCache:
-    result.add(k, v.codeTouched, multiKeys(v.storageKeys))
-  result.sort()
 
 proc accessList*(ac: LedgerRef, address: Address) =
   ac.savePoint.accessList.add(address)
