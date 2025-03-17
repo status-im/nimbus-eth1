@@ -170,7 +170,7 @@ p2pProtocol eth68(version = protocolVersion,
 
   requestResponse:
     # User message 0x03: GetBlockHeaders.
-    proc getBlockHeaders(peer: Peer, request: EthBlocksRequest) =
+    proc getBlockHeaders(peer: Peer, request: BlockHeadersRequest) =
       when trEthTracePacketsOk:
         trace trEthRecvReceived & "GetBlockHeaders (0x03)", peer,
           count=request.maxResults

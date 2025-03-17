@@ -143,10 +143,6 @@ proc putState(db: CoreDbTxRef; state: FcHdrState) =
   db.put(LhcStateKey.toOpenArray, encodePayload(state)).isOkOr:
     raiseAssert RaisePfx & "put(state) failed: " & $$error
 
-proc delState(db: CoreDbTxRef) =
-  discard db.del(LhcStateKey.toOpenArray)
-
-
 proc putHeader(db: CoreDbTxRef; bn: BlockNumber; data: seq[byte]) =
   ## Store rlp encoded header
   db.put(beaconHeaderKey(bn).toOpenArray, data).isOkOr:

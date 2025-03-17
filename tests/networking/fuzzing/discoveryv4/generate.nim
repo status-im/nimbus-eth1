@@ -10,7 +10,7 @@
 import
   std/[times, os, strformat, strutils],
   chronos, stew/byteutils, stint, chronicles, nimcrypto,
-  eth/[keys, rlp],
+  eth/[common/keys, rlp],
   ../../../../execution_chain/networking/discoveryv4,
   ../../p2p_test_helper,
   ../fuzzing_helpers
