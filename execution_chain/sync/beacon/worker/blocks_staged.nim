@@ -94,7 +94,7 @@ proc fetchAndCheck(
     rlp.encode(blk.blocks[offset + ivReq.len - 1].header).keccak256
 
   # Fetch bodies
-  let bodies = block:
+  let b = block:
     let rc = await buddy.bodiesFetch(request, info)
     if rc.isErr:
       blk.blocks.setLen(offset)
@@ -103,28 +103,28 @@ proc fetchAndCheck(
 
   # Append bodies, note that the bodies are not fully verified here but rather
   # when they are imported and executed.
-  let nBodies = bodies.len.uint64
+  let nBodies = b.bodies.len.uint64
   if nBodies < ivReq.len:
     blk.blocks.setLen(offset + nBodies)
   block loop:
     for n in 0 ..< nBodies:
       block checkTxLenOk:
         if blk.blocks[offset + n].header.transactionsRoot != emptyRoot:
-          if 0 < bodies[n].transactions.len:
+          if 0 < b.bodies[n].transactions.len:
             break checkTxLenOk
         else:
-          if bodies[n].transactions.len == 0:
+          if b.bodies[n].transactions.len == 0:
             break checkTxLenOk
         # Oops, cut off the rest
         blk.blocks.setLen(offset + n)
         buddy.fetchRegisterError()
         trace info & ": cut off fetched junk", peer=buddy.peer, ivReq, n,
-          nTxs=bodies[n].transactions.len, nBodies, bdyErrors=buddy.bdyErrors
+          nTxs=b.bodies[n].transactions.len, nBodies, bdyErrors=buddy.bdyErrors
         break loop
 
-      blk.blocks[offset + n].transactions = bodies[n].transactions
-      blk.blocks[offset + n].uncles       = bodies[n].uncles
-      blk.blocks[offset + n].withdrawals  = bodies[n].withdrawals
+      blk.blocks[offset + n].transactions = b.bodies[n].transactions
+      blk.blocks[offset + n].uncles       = b.bodies[n].uncles
+      blk.blocks[offset + n].withdrawals  = b.bodies[n].withdrawals
 
   if offset < blk.blocks.len.uint64:
     return true
@@ -412,7 +412,7 @@ proc blocksStagedImport*(
   info "Import done", iv=(iv.minPt, maxImport).bnStr,
     nBlocks=(maxImport-iv.minPt+1), nFailed=(iv.maxPt-maxImport),
     base=ctx.chain.baseNumber.bnStr, head=ctx.chain.latestNumber.bnStr,
-    target=ctx.layout.head.bnStr
+    target=ctx.layout.head.bnStr, nSyncPeers=ctx.pool.nBuddies
 
   return true
 

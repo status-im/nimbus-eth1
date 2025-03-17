@@ -111,7 +111,7 @@ const
     ## Similar to `nFetchHeadersRequest`
 
   fetchBodiesReqErrThresholdZombie* = chronos.seconds(4)
-  fetchBodiesReqErrThresholdCount* = 2
+  fetchBodiesReqErrThresholdCount* = 3
     ## Similar to `fetchHeadersReqThreshold*`
 
   fetchBodiesProcessErrThresholdCount* = 2
@@ -119,6 +119,11 @@ const
 
   fetchBodiesReqMinResponsePC* = 10
     ## Similar to `fetchHeadersReqMinResponsePC`
+
+  fetchBodiesReqMinAvgBodySize* = 90 * 1024
+    ## Calculatory body size to figure out the minimum expected response size
+    ## when applying `fetchBodiesReqMinResponsePC`. On `mainnet`, an average
+    ## body size of 90KiB/block is typical at block height ~#22m.
 
   nFetchBodiesBatch* = 3 * nFetchBodiesRequest
     ## Similar to `nFetchHeadersBatch`

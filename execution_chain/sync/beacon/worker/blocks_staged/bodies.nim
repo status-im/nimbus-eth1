@@ -17,6 +17,21 @@ import
   ../../../wire_protocol,
   ../../worker_desc
 
+type
+  BodyList* = object
+    size*: int
+    bodies*: seq[BlockBody]
+
+# ------------------------------------------------------------------------------
+# Private helpers
+# ------------------------------------------------------------------------------
+
+func hasAcceptableMinSize(nReq, respSize: int): bool =
+  ## Measure the response against a typical body data size
+  (nReq *
+   fetchBodiesReqMinAvgBodySize *
+   fetchBodiesReqMinResponsePC) <= respSize * 100
+
 # ------------------------------------------------------------------------------
 # Public functions
 # ------------------------------------------------------------------------------
@@ -29,11 +44,12 @@ proc fetchRegisterError*(buddy: BeaconBuddyRef) =
   if fetchBodiesReqErrThresholdCount < buddy.only.nBdyRespErrors:
     buddy.ctrl.zombie = true # abandon slow peer
 
+
 proc bodiesFetch*(
     buddy: BeaconBuddyRef;
     request: BlockBodiesRequest;
     info: static[string];
-      ): Future[Result[seq[BlockBody],void]]
+      ): Future[Result[BodyList,void]]
       {.async: (raises: []).} =
   ## Fetch bodies from the network.
   let
@@ -68,23 +84,24 @@ proc bodiesFetch*(
       elapsed=elapsed.toStr, ctrl=buddy.ctrl.state, bdyErrors=buddy.bdyErrors
     return err()
 
-  let b: seq[BlockBody] = resp.get.bodies
-  if b.len == 0 or nReq < b.len:
+  var b = BodyList(bodies: resp.get.bodies)
+  if b.bodies.len == 0 or nReq < b.bodies.len:
     buddy.fetchRegisterError()
-    trace trEthRecvReceivedBlockBodies, peer, nReq, nResp=b.len,
+    trace trEthRecvReceivedBlockBodies, peer, nReq, nResp=b.bodies.len,
       elapsed=elapsed.toStr, ctrl=buddy.ctrl.state,
       nRespErrors=buddy.only.nBdyRespErrors
     return err()
 
   # Ban an overly slow peer for a while when seen in a row. Also there is a
   # mimimum share of the number of requested headers expected, typically 10%.
-  if fetchBodiesReqErrThresholdZombie < elapsed or
-     b.len.uint64 * 100 < nReq.uint64 * fetchBodiesReqMinResponsePC:
+  b.size = b.bodies.getEncodedLength
+  if not nReq.hasAcceptableMinSize(b.size) or
+     fetchBodiesReqErrThresholdZombie < elapsed:
     buddy.fetchRegisterError()
   else:
     buddy.only.nBdyRespErrors = 0 # reset error count
 
-  trace trEthRecvReceivedBlockBodies, peer, nReq, nResp=b.len,
+  trace trEthRecvReceivedBlockBodies, peer, nReq, nResp=b.bodies.len,
     elapsed=elapsed.toStr, ctrl=buddy.ctrl.state, bdyErrors=buddy.bdyErrors
 
   return ok(b)
