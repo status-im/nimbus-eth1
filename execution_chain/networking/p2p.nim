@@ -82,6 +82,7 @@ proc newEthereumNode*(
     clientId = "nim-eth-p2p",
     addAllCapabilities = true,
     minPeers = 10,
+    maxPeers = 25,
     bootstrapNodes: seq[ENode] = @[],
     bindUdpPort: Port,
     bindTcpPort: Port,
@@ -101,6 +102,7 @@ proc newEthereumNode*(
   result.connectionState = ConnectionState.None
   result.bindIp = bindIp
   result.bindPort = bindTcpPort
+  result.maxPeers = maxPeers
 
   result.discovery = newDiscoveryProtocol(
     keys.seckey, address, bootstrapNodes, bindUdpPort, bindIp, rng)
@@ -121,6 +123,11 @@ proc processIncoming(server: StreamServer,
                      remote: StreamTransport): Future[void] {.async: (raises: []).} =
   try:
     var node = getUserData[EthereumNode](server)
+
+    if node.maxPeers <= node.peerPool.connectedNodes.len:
+      await node.rlpxReject(remote, TooManyPeers)
+      return
+
     let peer = await node.rlpxAccept(remote)
     if not peer.isNil:
       trace "Connection established (incoming)", peer

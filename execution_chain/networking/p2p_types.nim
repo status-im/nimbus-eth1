@@ -39,6 +39,7 @@ type
     protocolStates*: seq[RootRef]
     discovery*: DiscoveryProtocol
     rng*: ref HmacDrbgContext
+    maxPeers*: int # limit on accepting incoming connection requests
 
   Peer* = ref object
     remote*: Node

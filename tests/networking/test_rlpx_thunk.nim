@@ -20,24 +20,35 @@ import
 
 let rng = newRng()
 
-var
-  node1 = setupTestNode(rng, eth)
-  node2 = setupTestNode(rng, eth)
+type ClientServerPair = tuple
+  client, server: EthereumNode
 
-node2.startListening()
-let res = waitFor node1.rlpxConnect(newNode(node2.toENode()))
-check res.isOk()
+proc setupClientServer(): ClientServerPair =
+  let
+    client = setupTestNode(rng, eth)
+    server = setupTestNode(rng, eth)
+  server.startListening()
+  (client, server)
 
-let peer = res.get()
+proc connectClient(cs: ClientServerPair): Result[Peer,RlpxError] =
+  waitFor cs.client.rlpxConnect(newNode(cs.server.toENode()))
 
-proc testThunk(payload: openArray[byte]) =
+
+proc testThunk(peer: Peer, payload: openArray[byte]) =
   var (msgId, msgData) = recvMsgMock(payload)
   waitFor peer.invokeThunk(msgId, msgData)
 
-proc testPayloads(filename: string) =
-  let js = json.parseFile(filename)
 
+proc testPayloads(filename: string) =
   suite extractFilename(filename):
+    let
+      js = json.parseFile(filename)
+      cs = setupClientServer()
+      res = cs.connectClient()
+
+    check res.isOk()
+    let peer = res.get()
+
     for testname, testdata in js:
       test testname:
         let
@@ -51,7 +62,7 @@ proc testPayloads(filename: string) =
         let payload = hexToSeqByte(payloadHex.str)
 
         if error.isNil:
-          testThunk(payload)
+          peer.testThunk(payload)
         else:
           if error.kind != JString:
             skip()
@@ -60,9 +71,22 @@ proc testPayloads(filename: string) =
           # TODO: can I convert the error string to an Exception type at runtime?
           expect CatchableError:
             try:
-              testThunk(payload)
+              peer.testThunk(payload)
             except CatchableError as e:
               check: e.name == error.str
               raise e
 
+
+proc testRejectHello() =
+  suite "Reject incoming connection":
+    let cs = setupClientServer()
+    cs.server.maxPeers = 0 # so incoming messages will be rejected
+
+    test "Hello message TooManyPeersError reply":
+      let rc = cs.connectClient()
+      check rc.isErr()
+      check rc.error == TooManyPeersError
+
+
 testPayloads(sourceDir / "test_rlpx_thunk.json")
+testRejectHello()

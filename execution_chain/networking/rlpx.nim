@@ -72,6 +72,19 @@ declarePublicCounter rlpx_accept_success, "Number of successful rlpx accepted pe
 declarePublicCounter rlpx_accept_failure,
   "Number of rlpx accept attempts that failed", labels = ["reason"]
 
+declarePublicCounter rlpx_reject_success,
+  "Number of successfully rejected rlpx peers"
+
+declarePublicCounter rlpx_reject_failure,
+  "Number of failed rlpx reject attempts", labels = ["reason"]
+
+
+formatIt(TransportAddress):
+  $it # remoteAddress=stream.remoteAddress()
+
+formatIt(cstring):
+  $it # exc=e.name
+
 logScope:
   topics = "eth p2p rlpx"
 
@@ -1304,7 +1317,7 @@ proc rlpxAccept*(
       debug "Could not get remote address", err = exc.msg
       return nil
 
-  trace "Incoming connection", remoteAddress = $remoteAddress
+  trace "Incoming connection to accept", remoteAddress = $remoteAddress
 
   peer.transport =
     try:
@@ -1402,6 +1415,78 @@ proc rlpxAccept*(
   rlpx_accept_success.inc()
 
   return peer
+
+proc rlpxReject*(
+    node: EthereumNode;
+    stream: StreamTransport;
+    reason: DisconnectionReason;
+      ): Future[void] {.async: (raises: [CancelledError]).} =
+  ## Instead of accepting a connection running the Hello handshake,
+  ## a Disconnect message is sent.
+  initTracing(devp2pInfo, node.protocols)
+
+  let
+    peer = Peer(network: node)
+    deadline = sleepAsync(connectionTimeout)
+
+  defer:
+    deadline.cancelSoon()
+    stream.close()
+
+  let remoteAddress =
+    try:
+      stream.remoteAddress()
+    except TransportOsError as e:
+      debug "Could not get remote address", exc=e.name, err=e.msg
+      return
+
+  trace "Incoming connection to reject", remoteAddress, reason
+
+  peer.transport =
+    try:
+      await RlpxTransport.accept(node.rng, node.keys, stream).wait(deadline)
+    except AsyncTimeoutError:
+      debug "Timeout while rejecting", remoteAddress
+      rlpx_reject_failure.inc(labelValues = ["timeout"])
+      return
+    except RlpxTransportError as e:
+      debug "Rlpx error while rejecting",
+        remoteAddress, exc=e.name, err=e.msg
+      rlpx_reject_failure.inc(labelValues = [$BreachOfProtocol])
+      return
+    except TransportError as e:
+      debug "Transport error while rejecting",
+        remoteAddress, exc=e.name, err=e.msg
+      rlpx_reject_failure.inc(labelValues = [$TcpError])
+      return
+
+  let
+    ip = try:
+           remoteAddress.address
+         except ValueError:
+           raiseAssert "only tcp sockets supported"
+    address = Address(
+      ip: ip, tcpPort: remoteAddress.port, udpPort: remoteAddress.port)
+
+  peer.remote = newNode(ENode(pubkey: peer.transport.pubkey, address: address))
+
+  logDisconnectedPeer peer
+  logScope: remote=peer.remote
+
+  try:
+    await peer.sendDisconnectMsg(
+      DisconnectionReasonList(value: reason)).wait(deadline)
+  except AsyncTimeoutError:
+    debug "Disconnect handshake timeout"
+    rlpx_reject_failure.inc(labelValues = ["timeout"])
+    return
+  except EthP2PError as e:
+    debug "Disconnect handshake error", name=e.name, err=e.msg
+    rlpx_reject_failure.inc(labelValues = ["error"])
+    return
+
+  trace "DevP2P sent Disconnect", reason
+  rlpx_reject_success.inc()
 
 #------------------------------------------------------------------------------
 # Mini Protocol DSL

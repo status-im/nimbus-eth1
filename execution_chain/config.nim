@@ -296,8 +296,13 @@ type
       defaultValueDesc: "default to --tcp-port"
       name: "udp-port" }: Port
 
+    minPeers* {.
+      desc: "Minimum number of peers to keep connected with"
+      defaultValue: 10
+      name: "min-peers" }: int
+
     maxPeers* {.
-      desc: "Maximum number of peers to connect to"
+      desc: "Maximum number of peer connections"
       defaultValue: 25
       name: "max-peers" }: int
 
@@ -832,6 +837,11 @@ proc makeConfig*(cmdLine = commandLineParams()): NimbusConf
     if result.udpPort == Port(0):
       # if udpPort not set in cli, then
       result.udpPort = result.tcpPort
+
+  if not (0 <= result.minPeers and result.minPeers <= result.maxPeers):
+    fatal "Invalid min/max peers options", `min-peers`=result.minPeers,
+      `max-peers`=result.maxPeers
+    quit QuitFailure
 
   # see issue #1346
   if result.keyStore.string == defaultKeystoreDir() and
