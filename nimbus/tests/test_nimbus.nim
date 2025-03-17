@@ -32,7 +32,7 @@ proc handlerService_1(channel: ptr Channel[pointer]) =
 
 #handles data for a given service
 proc handlerService_2(channel: ptr Channel[pointer]) =
-  const expectedConfigTable = {"4": "four", "5": "five", "6": "six"}.toTable
+  const expectedConfigTable = {"4": "four", "5": "", "6": "six"}.toTable
   let p = channel[].recv()
 
   let configs = parseChannelData(p).valueOr:
@@ -51,7 +51,7 @@ suite "Nimbus Service Management":
     nimbus = Nimbus.new
 
   const configTable_1 = {"0": "zero", "1": "one", "2": "two"}.toTable
-  const configTable_2 = {"4": "four", "5": "five", "6": "six"}.toTable
+  const configTable_2 = {"4": "four", "5": "", "6": "six"}.toTable
 
   # Test: Creating a new service successfully
   test "startService successfully adds a service":
