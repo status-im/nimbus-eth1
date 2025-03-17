@@ -17,6 +17,7 @@ on:
       - '**/*.md'
       - 'hive_integration/**'
       - 'fluffy/**'
+      - 'nimbus/**'
       - '.github/workflows/fluffy*.yml'
       - 'nimbus_verified_proxy/**'
       - '.github/workflows/nimbus_verified_proxy.yml'
