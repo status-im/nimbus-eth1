@@ -1,5 +1,5 @@
 # Nimbus
-# Copyright (c) 2018-2024 Status Research & Development GmbH
+# Copyright (c) 2018-2025 Status Research & Development GmbH
 # Licensed under either of
 #  * Apache License, version 2.0, ([LICENSE-APACHE](LICENSE-APACHE) or
 #    http://www.apache.org/licenses/LICENSE-2.0)
@@ -67,12 +67,12 @@ macro selectVM(v: VmCpt, fork: EVMFork, tracingEnabled: bool): EvmResultVoid =
 
 proc beforeExecCall(c: Computation) =
   c.snapshot()
-  if c.msg.kind == EVMC_CALL:
+  if c.msg.kind == CallKind.Call:
     c.vmState.mutateLedger:
       db.subBalance(c.msg.sender, c.msg.value)
       db.addBalance(c.msg.contractAddress, c.msg.value)
 
-proc afterExecCall(c: Computation) =
+func afterExecCall(c: Computation) =
   ## Collect all of the accounts that *may* need to be deleted based on EIP161
   ## https://github.com/ethereum/EIPs/blob/master/EIPS/eip-161.md
   ## also see: https://github.com/ethereum/EIPs/issues/716
@@ -141,7 +141,7 @@ const MsgKindToOp: array[CallKind, Op] =
   [Call, DelegateCall, CallCode, Create, Create2, EofCreate]
 
 func msgToOp(msg: Message): Op =
-  if EVMC_STATIC in msg.flags:
+  if MsgFlags.Static in msg.flags:
     return StaticCall
   MsgKindToOp[msg.kind]
 
@@ -222,55 +222,37 @@ proc executeOpcodes*(c: Computation) =
     if c.tracingEnabled:
       c.traceError()
 
-when vm_use_recursion:
-  # Recursion with tiny stack frame per level.
-  proc execCallOrCreate*(c: Computation) =
-    if not c.beforeExec():
-      c.executeOpcodes()
-      while not c.continuation.isNil:
-        # If there's a continuation, then it's because there's either
-        # a child (i.e. call or create)
-        when evmc_enabled:
-          c.res = c.host.call(c.child[])
-        else:
-          execCallOrCreate(c.child)
-        c.child = nil
-        c.executeOpcodes()
-      c.afterExec()
-    c.dispose()
+proc execCallOrCreate*(cParam: Computation) =
+  var (c, before) = (cParam, true)
 
-else:
-  proc execCallOrCreate*(cParam: Computation) =
-    var (c, before) = (cParam, true)
-
-    # No actual recursion, but simulate recursion including before/after/dispose.
+  # No actual recursion, but simulate recursion including before/after/dispose.
+  while true:
     while true:
-      while true:
-        if before and c.beforeExec():
-          break
-        c.executeOpcodes()
-        if c.continuation.isNil:
-          c.afterExec()
-          break
-        (before, c.child, c, c.parent) =
-          (true, nil.Computation, c.child, c)
-      if c.parent.isNil:
+      if before and c.beforeExec():
         break
-      c.dispose()
-      (before, c.parent, c) =
-        (false, nil.Computation, c.parent)
+      c.executeOpcodes()
+      if c.continuation.isNil:
+        c.afterExec()
+        break
+      (before, c.child, c, c.parent) =
+        (true, nil.Computation, c.child, c)
+    if c.parent.isNil:
+      break
+    c.dispose()
+    (before, c.parent, c) =
+      (false, nil.Computation, c.parent)
 
-    while not c.isNil:
-      c.dispose()
-      c = c.parent
+  while not c.isNil:
+    c.dispose()
+    c = c.parent
 
-proc postExecComputation*(c: Computation) =
+func postExecComputation*(c: Computation) =
   if c.isSuccess:
     if c.fork < FkLondon:
       # EIP-3529: Reduction in refunds
       c.refundSelfDestruct()
   c.vmState.status = c.isSuccess
-  
+
 # ------------------------------------------------------------------------------
 # End
 # ------------------------------------------------------------------------------

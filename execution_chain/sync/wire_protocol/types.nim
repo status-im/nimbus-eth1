@@ -11,8 +11,9 @@
 {.push raises: [].}
 
 import
-  eth/common
-
+  eth/common,
+  ../../core/[chain, tx_pool]
+  
 type
   NewBlockHashesAnnounce* = object
     hash*: Hash32
@@ -33,7 +34,21 @@ type
     bestBlockHash*: Hash32
     bestDifficulty*: DifficultyInt
 
-  EthBlocksRequest* = object
+  BlockHeadersRequest* = object
     startBlock*: BlockHashOrNumber
     maxResults*, skip*: uint
     reverse*: bool
+
+  BlockBodiesRequest* =object
+    blockHashes*: seq[Hash32]
+
+  PooledTransactionsRequest* =object
+    txHashes*: seq[Hash32]
+
+  ReceiptsRequest* =object
+    blockHashes*: seq[Hash32]
+
+  EthWireRef* = ref object of RootRef
+    chain* : ForkedChainRef
+    txPool*: TxPoolRef
+    

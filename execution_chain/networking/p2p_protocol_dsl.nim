@@ -22,7 +22,7 @@
 {.push raises: [].}
 
 import
-  std/[options, sequtils, macrocache],
+  std/[sequtils, macrocache],
   results,
   stew/shims/macros, chronos
 
@@ -158,7 +158,7 @@ let
   resultIdent*          {.compileTime.} = ident "result"
 
   # Locally used symbols:
-  Option                {.compileTime.} = ident "Option"
+  OptionT               {.compileTime.} = ident "Opt"
   Future                {.compileTime.} = ident "Future"
   Void                  {.compileTime.} = ident "void"
   writeField            {.compileTime.} = ident "writeField"
@@ -176,6 +176,11 @@ proc initFuture*[T](loc: var Future[T]) =
 
 proc isRlpx*(p: P2PProtocol): bool =
   p.rlpxName.len > 0
+
+func getProtocolIndex*(): int {.compileTime.} =
+  let protocolIndex = protocolCounter.value
+  protocolCounter.inc
+  protocolIndex
 
 template applyDecorator(p: NimNode, decorator: NimNode) =
   if decorator.kind != nnkNilLit:
@@ -207,13 +212,13 @@ when tracingEnabled:
                         `protocolInfo`, `msgName`,
                         getOutput(`tracerStream`, string))
 
-proc createPeerState[Peer, ProtocolState](peer: Peer): RootRef =
+proc createPeerState*[Peer, ProtocolState](peer: Peer): RootRef =
   var res = new ProtocolState
   mixin initProtocolState
   initProtocolState(res, peer)
   return cast[RootRef](res)
 
-proc createNetworkState[NetworkNode, NetworkState](network: NetworkNode): RootRef {.gcsafe.} =
+proc createNetworkState*[NetworkNode, NetworkState](network: NetworkNode): RootRef {.gcsafe.} =
   var res = new NetworkState
   mixin initProtocolState
   initProtocolState(res, network)
@@ -561,7 +566,7 @@ proc requestResultType*(msg: Message): NimNode =
     else:
       return newTree(nnkBracketExpr, wrapperType, responseRec)
   else:
-    return newTree(nnkBracketExpr, Option, responseRec)
+    return newTree(nnkBracketExpr, OptionT, responseRec)
 
 proc createSendProc*(msg: Message,
                      procType = nnkProcDef,

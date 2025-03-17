@@ -103,3 +103,4 @@ suite "ENode":
     check runBNTest(MainnetBootnodes)
     check runBNTest(SepoliaBootnodes)
     check runBNTest(HoleskyBootnodes)
+    check runBNTest(HoodiBootnodes)

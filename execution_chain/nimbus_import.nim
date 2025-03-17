@@ -76,6 +76,15 @@ proc getMetadata(networkId: NetworkId): auto =
       0'u64, # Last pre-merge block number
       0'u64, # First post-merge slot
     )
+  elif networkId == HoodiNet:
+    (
+      getMetadataForNetwork("hoodi").cfg,
+      Eth2Digest.fromHex(
+        "0x212f13fc4df078b6cb7db228f1c8307566dcecf900867401a92023d7ba99cb5f"
+      ),
+      0'u64, # Last pre-merge block number
+      0'u64, # First post-merge slot
+    )
   else:
     fatal "Unsupported network", network = networkId
     quit(QuitFailure)

@@ -1,5 +1,5 @@
 # Nimbus
-# Copyright (c) 2018-2024 Status Research & Development GmbH
+# Copyright (c) 2018-2025 Status Research & Development GmbH
 # Licensed under either of
 #  * Apache License, version 2.0, ([LICENSE-APACHE](LICENSE-APACHE) or
 #    http://www.apache.org/licenses/LICENSE-2.0)
@@ -44,11 +44,6 @@ template read*(memory: EvmMemory, startPos, size: int): openArray[byte] =
 
 template read32Bytes*(memory: EvmMemory, startPos: int): openArray[byte] =
   memory.bytes.toOpenArray(startPos, startPos + 31)
-
-when defined(evmc_enabled):
-  func readPtr*(memory: EvmMemory, startPos: Natural): ptr byte =
-    if memory.bytes.len == 0 or startPos >= memory.bytes.len: return
-    result = memory.bytes[startPos].addr
 
 func write*(memory: var EvmMemory, startPos: Natural, value: openArray[byte]): EvmResultVoid =
   let size = value.len

@@ -11,7 +11,7 @@ import
   ../execution_chain/compile_info
 
 import
-  std/[os, osproc, strutils, net],
+  std/[os, osproc, strutils, net, options],
   chronicles,
   eth/net/nat,
   metrics,
@@ -30,9 +30,6 @@ import
   ./common/chain_config_hash
 
 from beacon_chain/nimbus_binary_common import setupFileLimits
-
-when defined(evmc_enabled):
-  import transaction/evmc_dynamic_loader
 
 ## TODO:
 ## * No IPv6 support
@@ -64,7 +61,7 @@ proc manageAccounts(nimbus: NimbusNode, conf: NimbusConf) =
       quit(QuitFailure)
 
 proc setupP2P(nimbus: NimbusNode, conf: NimbusConf,
-              com: CommonRef) =
+              com: CommonRef) {.raises: [OSError].} =
   ## Creating P2P Server
   let kpres = nimbus.ctx.getNetKeys(conf.netKey, conf.dataDir.string)
   if kpres.isErr:
@@ -134,7 +131,8 @@ proc setupP2P(nimbus: NimbusNode, conf: NimbusConf,
       waitForPeers = true)
 
 
-proc setupMetrics(nimbus: NimbusNode, conf: NimbusConf) =
+proc setupMetrics(nimbus: NimbusNode, conf: NimbusConf)
+    {.raises: [CancelledError, MetricsError].} =
   # metrics logging
   if conf.logMetricsEnabled:
     # https://github.com/nim-lang/Nim/issues/17369
@@ -184,13 +182,9 @@ proc preventLoadingDataDirForTheWrongNetwork(db: CoreDbRef; conf: NimbusConf) =
     quit(QuitFailure)
 
 proc run(nimbus: NimbusNode, conf: NimbusConf) =
-
   info "Launching execution client",
       version = FullVersionStr,
       conf
-
-  when defined(evmc_enabled):
-    evmcSetLibraryPath(conf.evm)
 
   # Trusted setup is needed for processing Cancun+ blocks
   # If user not specify the trusted setup, baked in

@@ -16,7 +16,8 @@ import
   pkg/stew/[interval_set, sorted_set],
   ../worker_desc,
   ./blocks_staged/bodies,
-  "."/[blocks_unproc, helpers, update]
+  ../../wire_protocol/types,
+  ./[blocks_unproc, helpers, update]
 
 # ------------------------------------------------------------------------------
 # Private debugging & logging helpers
@@ -67,7 +68,9 @@ proc fetchAndCheck(
   # Preset/append headers to be completed with bodies. Also collect block hashes
   # for fetching missing blocks.
   blk.blocks.setLen(offset + ivReq.len)
-  var blockHash = newSeq[Hash32](ivReq.len)
+  var request = BlockBodiesRequest(
+    blockHashes: newSeq[Hash32](ivReq.len)
+  )
   for n in 1u ..< ivReq.len:
     let header = ctx.hdrCache.fcHeaderGet(ivReq.minPt + n).valueOr:
       # There is nothing one can do here
@@ -77,7 +80,7 @@ proc fetchAndCheck(
       blk.blocks.setLen(offset)
       ctx.poolMode = true
       return false
-    blockHash[n - 1] = header.parentHash
+    request.blockHashes[n - 1] = header.parentHash
     blk.blocks[offset + n].header = header
   blk.blocks[offset].header = ctx.hdrCache.fcHeaderGet(ivReq.minPt).valueOr:
     # There is nothing one can do here
@@ -87,12 +90,12 @@ proc fetchAndCheck(
     blk.blocks.setLen(offset)
     ctx.poolMode = true
     return false
-  blockHash[ivReq.len - 1] =
+  request.blockHashes[ivReq.len - 1] =
     rlp.encode(blk.blocks[offset + ivReq.len - 1].header).keccak256
 
   # Fetch bodies
   let bodies = block:
-    let rc = await buddy.bodiesFetch(blockHash, info)
+    let rc = await buddy.bodiesFetch(request, info)
     if rc.isErr:
       blk.blocks.setLen(offset)
       return false

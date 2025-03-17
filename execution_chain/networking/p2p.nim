@@ -13,6 +13,7 @@ import
   std/[tables, algorithm, random, typetraits, strutils, net],
   chronos, chronos/timer, chronicles,
   eth/common/keys,
+  results,
   ./[discoveryv4, peer_pool, rlpx, p2p_types]
 
 export
@@ -213,7 +214,7 @@ proc randomPeerWith*(node: EthereumNode, Protocol: type): Peer =
   if candidates.len > 0:
     return candidates.rand()
 
-proc getPeer*(node: EthereumNode, peerId: NodeId, Protocol: type): Option[Peer] =
+proc getPeer*(node: EthereumNode, peerId: NodeId, Protocol: type): Opt[Peer] =
   for peer in node.peers(Protocol):
     if peer.remote.id == peerId:
       return some(peer)

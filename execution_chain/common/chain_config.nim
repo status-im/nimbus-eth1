@@ -61,6 +61,7 @@ const
   MainNet*    = 1.u256
   SepoliaNet* = 11155111.u256
   HoleskyNet* = 17000.u256
+  HoodiNet*   = 560048.u256
 
 createJsonFlavor JGenesis,
   automaticObjectSerialization = false,
@@ -582,6 +583,29 @@ func chainConfigForNetwork*(id: NetworkId): ChainConfig =
       depositContractAddress: Opt.some(HOLESKYNET_DEPOSIT_CONTRACT_ADDRESS),
       blobSchedule:        defaultBlobSchedule(),
     )
+  elif id == HoodiNet:
+    const
+      HOODI_DEPOSIT_CONTRACT_ADDRESS = address"0x00000000219ab540356cBB839Cbe05303d7705Fa"
+    ChainConfig(
+      chainId:             HoodiNet,
+      homesteadBlock:      Opt.some(0.BlockNumber),
+      eip150Block:         Opt.some(0.BlockNumber),
+      eip155Block:         Opt.some(0.BlockNumber),
+      eip158Block:         Opt.some(0.BlockNumber),
+      byzantiumBlock:      Opt.some(0.BlockNumber),
+      constantinopleBlock: Opt.some(0.BlockNumber),
+      petersburgBlock:     Opt.some(0.BlockNumber),
+      istanbulBlock:       Opt.some(0.BlockNumber),
+      berlinBlock:         Opt.some(0.BlockNumber),
+      londonBlock:         Opt.some(0.BlockNumber),
+      mergeNetsplitBlock:  Opt.some(0.BlockNumber),
+      terminalTotalDifficulty: Opt.some(0.u256),
+      shanghaiTime:        Opt.some(10.EthTime),
+      cancunTime:          Opt.some(0.EthTime), 
+      pragueTime:          Opt.some(1_742_999_832.EthTime), 
+      depositContractAddress: Opt.some(HOODI_DEPOSIT_CONTRACT_ADDRESS),
+      blobSchedule:        defaultBlobSchedule(),
+    )
   else:
     ChainConfig()
 
@@ -611,6 +635,14 @@ func genesisBlockForNetwork*(id: NetworkId): Genesis
       nonce: uint64(0x1234).to(Bytes8),
       timestamp: EthTime(0x65156994),
       alloc: decodePrealloc(holeskyAllocData)
+    )
+  elif id == HoodiNet:
+    Genesis(
+      difficulty: 0x01.u256,
+      gasLimit: 0x2255100,
+      nonce: uint64(0x1234).to(Bytes8),
+      timestamp: EthTime(1742212800), # 2025-Mar-17 12:00:00 PM UTC
+      alloc: decodePrealloc(hoodiAllocData)
     )
   else:
     Genesis()

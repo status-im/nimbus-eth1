@@ -61,11 +61,13 @@ type
       name: "beacon-api" .}: string
 
     network {.
-      desc: "Name or id number of Ethereum network(mainnet(1), sepolia(11155111), holesky(17000), other=custom)"
+      desc: "Name or id number of Ethereum network"
       longDesc:
-        "- mainnet: Ethereum main network\n" &
-        "- sepolia: Test network (pow+pos) with merge\n" &
-        "- holesky: The holesovice post-merge testnet"
+        "- mainnet/1       : Ethereum main network\n" &
+        "- sepolia/11155111: Test network (proof-of-work)\n" &
+        "- holesky/17000   : The holesovice post-merge testnet\n" &
+        "- hoodi/560048    : The second long-standing, merged-from-genesis, public Ethereum testnet\n" &
+        "- other           : Custom"
       defaultValue: "" # the default value is set in makeConfig
       defaultValueDesc: "mainnet(1)"
       abbr: "i"

@@ -1,5 +1,5 @@
 # Nimbus
-# Copyright (c) 2021-2024 Status Research & Development GmbH
+# Copyright (c) 2021-2025 Status Research & Development GmbH
 # Licensed under either of
 #  * Apache License, version 2.0, ([LICENSE-APACHE](LICENSE-APACHE) or
 #    http://www.apache.org/licenses/LICENSE-2.0)
@@ -25,77 +25,47 @@ import
   ../gas_costs,
   ../op_codes,
   ./oph_defs,
-  ./oph_helpers
-
-when not defined(evmc_enabled):
-  import
-    ../../state,
-    ../../../db/ledger
-else:
-  import
-    ../evmc_gas_costs
+  ./oph_helpers,
+  ../../state,
+  ../../../db/ledger
 
 # ------------------------------------------------------------------------------
 # Private helpers
 # ------------------------------------------------------------------------------
 
-when evmc_enabled:
-  proc sstoreEvmc(c: Computation, slot, newValue: UInt256, coldAccess = 0.GasInt): EvmResultVoid =
-    let
-      status  = c.host.setStorage(c.msg.contractAddress, slot, newValue)
-      res     = ForkToSstoreCost[c.fork][status]
-      gasCost = res.gasCost.GasInt + coldAccess
+proc sstoreImpl(c: Computation, slot, newValue: UInt256): EvmResultVoid =
+  let
+    currentValue = c.getStorage(slot)
+    gasParam = GasParamsSs(
+      currentValue: currentValue)
+    res = c.gasCosts[Sstore].ss_handler(newValue, gasParam)
 
-    ? c.opcodeGasCost(Sstore, gasCost, "SSTORE")
-    c.gasMeter.refundGas(res.gasRefund)
-    ok()
+  ? c.opcodeGasCost(Sstore, res.gasCost, "SSTORE")
+  c.gasMeter.refundGas(res.gasRefund)
 
-else:
-  proc sstoreImpl(c: Computation, slot, newValue: UInt256): EvmResultVoid =
-    let
-      currentValue = c.getStorage(slot)
-      gasParam = GasParamsSs(
-        currentValue: currentValue)
-      res = c.gasCosts[Sstore].ss_handler(newValue, gasParam)
-
-    ? c.opcodeGasCost(Sstore, res.gasCost, "SSTORE")
-    c.gasMeter.refundGas(res.gasRefund)
-
-    c.vmState.mutateLedger:
-      db.setStorage(c.msg.contractAddress, slot, newValue)
-    ok()
+  c.vmState.mutateLedger:
+    db.setStorage(c.msg.contractAddress, slot, newValue)
+  ok()
 
 
-  proc sstoreNetGasMeteringImpl(c: Computation; slot, newValue: UInt256, coldAccess = 0.GasInt): EvmResultVoid =
-    let
-      ledger = c.vmState.readOnlyLedger
-      currentValue = c.getStorage(slot)
+proc sstoreNetGasMeteringImpl(c: Computation; slot, newValue: UInt256, coldAccess = 0.GasInt): EvmResultVoid =
+  let
+    ledger = c.vmState.readOnlyLedger
+    currentValue = c.getStorage(slot)
 
-      gasParam = GasParamsSs(
-        currentValue: currentValue,
-        originalValue: ledger.getCommittedStorage(c.msg.contractAddress, slot))
+    gasParam = GasParamsSs(
+      currentValue: currentValue,
+      originalValue: ledger.getCommittedStorage(c.msg.contractAddress, slot))
 
-      res = c.gasCosts[Sstore].ss_handler(newValue, gasParam)
+    res = c.gasCosts[Sstore].ss_handler(newValue, gasParam)
 
-    ? c.opcodeGasCost(Sstore, res.gasCost + coldAccess, "SSTORE")
+  ? c.opcodeGasCost(Sstore, res.gasCost + coldAccess, "SSTORE")
 
-    c.gasMeter.refundGas(res.gasRefund)
+  c.gasMeter.refundGas(res.gasRefund)
 
-    c.vmState.mutateLedger:
-      db.setStorage(c.msg.contractAddress, slot, newValue)
-    ok()
-
-template sstoreEvmcOrSstore(cpt, slot, newValue: untyped): auto =
-  when evmc_enabled:
-    sstoreEvmc(cpt, slot, newValue, 0.GasInt)
-  else:
-    sstoreImpl(cpt, slot, newValue)
-
-template sstoreEvmcOrNetGasMetering(cpt, slot, newValue: untyped, coldAccess = 0.GasInt): auto =
-  when evmc_enabled:
-    sstoreEvmc(cpt, slot, newValue, coldAccess)
-  else:
-    sstoreNetGasMeteringImpl(cpt, slot, newValue, coldAccess)
+  c.vmState.mutateLedger:
+    db.setStorage(c.msg.contractAddress, slot, newValue)
+  ok()
 
 func jumpImpl(c: Computation; jumpTarget: UInt256): EvmResultVoid =
   if jumpTarget >= c.code.len.u256:
@@ -118,7 +88,7 @@ func jumpImpl(c: Computation; jumpTarget: UInt256): EvmResultVoid =
 # Private, op handlers implementation
 # ------------------------------------------------------------------------------
 
-proc popOp(cpt: VmCpt): EvmResultVoid =
+func popOp(cpt: VmCpt): EvmResultVoid =
   ## 0x50, Remove item from stack.
   cpt.stack.pop()
 
@@ -196,7 +166,7 @@ proc sstoreOp(cpt: VmCpt): EvmResultVoid =
   cpt.stack.lsShrink(2)
 
   ? checkInStaticContext(cpt)
-  sstoreEvmcOrSstore(cpt, slot, newValue)
+  sstoreImpl(cpt, slot, newValue)
 
 
 proc sstoreEIP1283Op(cpt: VmCpt): EvmResultVoid =
@@ -208,7 +178,7 @@ proc sstoreEIP1283Op(cpt: VmCpt): EvmResultVoid =
   cpt.stack.lsShrink(2)
 
   ? checkInStaticContext(cpt)
-  sstoreEvmcOrNetGasMetering(cpt, slot, newValue)
+  sstoreNetGasMeteringImpl(cpt, slot, newValue)
 
 
 proc sstoreEIP2200Op(cpt: VmCpt): EvmResultVoid =
@@ -225,7 +195,7 @@ proc sstoreEIP2200Op(cpt: VmCpt): EvmResultVoid =
   if cpt.gasMeter.gasRemaining <= SentryGasEIP2200:
     return err(opErr(OutOfGas))
 
-  sstoreEvmcOrNetGasMetering(cpt, slot, newValue)
+  sstoreNetGasMeteringImpl(cpt, slot, newValue)
 
 
 proc sstoreEIP2929Op(cpt: VmCpt): EvmResultVoid =
@@ -245,26 +215,22 @@ proc sstoreEIP2929Op(cpt: VmCpt): EvmResultVoid =
     return err(opErr(OutOfGas))
 
   var coldAccessGas = 0.GasInt
-  when evmc_enabled:
-    if cpt.host.accessStorage(cpt.msg.contractAddress, slot) == EVMC_ACCESS_COLD:
+  cpt.vmState.mutateLedger:
+    if not db.inAccessList(cpt.msg.contractAddress, slot):
+      db.accessList(cpt.msg.contractAddress, slot)
       coldAccessGas = ColdSloadCost
-  else:
-    cpt.vmState.mutateLedger:
-      if not db.inAccessList(cpt.msg.contractAddress, slot):
-        db.accessList(cpt.msg.contractAddress, slot)
-        coldAccessGas = ColdSloadCost
 
-  sstoreEvmcOrNetGasMetering(cpt, slot, newValue, coldAccessGas)
+  sstoreNetGasMeteringImpl(cpt, slot, newValue, coldAccessGas)
 
 # -------
 
-proc jumpOp(cpt: VmCpt): EvmResultVoid =
+func jumpOp(cpt: VmCpt): EvmResultVoid =
   ## 0x56, Alter the program counter
   let jumpTarget = ? cpt.stack.popInt()
   cpt.jumpImpl(jumpTarget)
 
 
-proc jumpIOp(cpt: VmCpt): EvmResultVoid =
+func jumpIOp(cpt: VmCpt): EvmResultVoid =
   ## 0x57, Conditionally alter the program counter.
   ? cpt.stack.lsCheck(2)
   let
@@ -276,26 +242,26 @@ proc jumpIOp(cpt: VmCpt): EvmResultVoid =
     return ok()
   cpt.jumpImpl(jumpTarget)
 
-proc pcOp(cpt: VmCpt): EvmResultVoid =
+func pcOp(cpt: VmCpt): EvmResultVoid =
   ## 0x58, Get the value of the program counter prior to the increment
   ##       corresponding to this instruction.
   cpt.stack.push max(cpt.code.pc - 1, 0)
 
-proc msizeOp(cpt: VmCpt): EvmResultVoid =
+func msizeOp(cpt: VmCpt): EvmResultVoid =
   ## 0x59, Get the size of active memory in bytes.
   cpt.stack.push cpt.memory.len
 
-proc gasOp(cpt: VmCpt): EvmResultVoid =
+func gasOp(cpt: VmCpt): EvmResultVoid =
   ## 0x5a, Get the amount of available gas, including the corresponding
   ##       reduction for the cost of this instruction.
   cpt.stack.push cpt.gasMeter.gasRemaining
 
-proc jumpDestOp(cpt: VmCpt): EvmResultVoid =
+func jumpDestOp(cpt: VmCpt): EvmResultVoid =
   ## 0x5b, Mark a valid destination for jumps. This operation has no effect
   ##       on machine state during execution.
   ok()
 
-proc tloadOp(cpt: VmCpt): EvmResultVoid =
+func tloadOp(cpt: VmCpt): EvmResultVoid =
   ## 0x5c, Load word from transient storage.
   ? cpt.stack.lsCheck(1)
   let
@@ -304,7 +270,7 @@ proc tloadOp(cpt: VmCpt): EvmResultVoid =
   cpt.stack.lsTop val
   ok()
 
-proc tstoreOp(cpt: VmCpt): EvmResultVoid =
+func tstoreOp(cpt: VmCpt): EvmResultVoid =
   ## 0x5d, Save word to transient storage.
   ? cpt.checkInStaticContext()
 
