@@ -104,6 +104,11 @@ type
 
     of `sync`:
 
+      customNetworkFile* {.
+        desc: "Use custom CL config for private Ethereum Network (as /path/to/metadata.yaml)"
+        defaultValueDesc: ""
+        name: "custom-network-file" .}: string
+
       # https://github.com/ethereum/execution-apis/blob/v1.0.0-beta.4/src/engine/authentication.md#key-distribution
       jwtSecret* {.
         desc: "Path to a file containing a 32 byte hex-encoded shared secret" &

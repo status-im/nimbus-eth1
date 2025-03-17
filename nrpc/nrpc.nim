@@ -78,8 +78,14 @@ template loadNetworkConfig(conf: NRpcConf): (RuntimeConfig, uint64, uint64) =
   elif conf.networkId == HoleskyNet:
     (getMetadataForNetwork("holesky").cfg, 0'u64, 0'u64)
   else:
-    error "Unsupported network", network = conf.networkId
-    quit(QuitFailure)
+    notice "Loading custom network, assuming post-merge"
+    if conf.customNetworkFile.len == 0:
+      error "Custom network file not provided"
+      quit(QuitFailure)
+    let (cfg, unloaded) = readRuntimeConfig(conf.customNetworkFile)
+    debug "Fields unknown", unloaded = unloaded
+    (cfg, 0'u64, 0'u64)
+
 
 # Slot Finding Mechanism
 # First it sets the initial lower bound to `firstSlotAfterMerge` + number of blocks after Era1
