@@ -181,7 +181,7 @@ func blocksStagedCanImportOk*(ctx: BeaconCtxRef): bool =
       # queue ramp up time.
       #
       # So importing does not start before the queue is filled up.
-      if ctx.pool.blkStagedLenHwm <= ctx.blk.staged.len:
+      if ctx.pool.blkStagedWeightHwm <= ctx.blk.weight:
 
         # Wait until finished with current block downloads
         return ctx.blocksBorrowedIsEmpty()
@@ -194,7 +194,7 @@ func blocksStagedFetchOk*(ctx: BeaconCtxRef): bool =
   ##
   if 0 < ctx.blocksUnprocAvail():
     # Fetch if there is space on the queue.
-    if ctx.blk.staged.len < ctx.pool.blkStagedLenHwm:
+    if ctx.blk.weight < ctx.pool.blkStagedWeightHwm:
       return true
 
     # Make sure that there is no gap at the bottom which needs to be
@@ -315,6 +315,7 @@ proc blocksStagedCollect*(
   let qItem = ctx.blk.staged.insert(iv.minPt).valueOr:
     raiseAssert info & ": duplicate key on staged queue iv=" & $iv
   qItem.data = blk[]
+  ctx.blk.weight.inc blk.weight
 
   # Reset block process errors (not too many consecutive failures this time)
   if not haveError:
@@ -325,7 +326,6 @@ proc blocksStagedCollect*(
     nSyncPeers=ctx.pool.nBuddies
 
   return true
-
 
 
 proc blocksStagedImport*(
@@ -349,6 +349,7 @@ proc blocksStagedImport*(
 
   # Remove from queue
   discard ctx.blk.staged.delete qItem.key
+  ctx.blk.weight.dec qItem.data.weight
 
   let
     nBlocks = qItem.data.blocks.len
@@ -449,6 +450,7 @@ proc blocksStagedReorg*(ctx: BeaconCtxRef; info: static[string]) =
 
   ctx.blocksUnprocClear()
   ctx.blk.staged.clear()
+  ctx.blk.weight = 0
 
 # ------------------------------------------------------------------------------
 # End

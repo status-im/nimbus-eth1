@@ -115,6 +115,7 @@ type
     unprocessed*: BnRangeSet         ## Blocks download requested
     borrowed*: BnRangeSet            ## Fetched/locked fetched ranges
     staged*: StagedBlocksQueue       ## Blocks ready for import
+    weight*: int                     ## Accumulated `staged` weights
 
   # -------------------
 
@@ -144,7 +145,7 @@ type
     # Blocks import/execution settings
     blkImportOk*: bool               ## Don't fetch data while block importing
     blkStagedHwm*: int               ## Set a `staged` queue limit
-    blkStagedLenHwm*: int            ## Figured out as # staged records
+    blkStagedWeightHwm*: int         ## Translated to the data size
 
     # Info, debugging, and error handling stuff
     nReorg*: int                     ## Number of reorg invocations (info only)

@@ -81,11 +81,11 @@ proc setupDatabase*(ctx: BeaconCtxRef; info: static[string]) =
   # objects.
   let hwm = if blocksStagedLwm <= ctx.pool.blkStagedHwm: ctx.pool.blkStagedHwm
             else: blocksStagedHwmDefault
-  ctx.pool.blkStagedLenHwm = (hwm + nFetchBodiesBatch - 1) div nFetchBodiesBatch
+  ctx.pool.blkStagedWeightHwm = hwm * (fetchBodiesReqMinAvgBodySize + 1024)
 
   # Set blocks batch import queue size
   if ctx.pool.blkStagedHwm != 0:
-    debug info & ": import block lists queue", limit=ctx.pool.blkStagedLenHwm
+    debug info & ": import block lists queue", limit=ctx.pool.blkStagedWeightHwm
   ctx.pool.blkStagedHwm = hwm
 
 

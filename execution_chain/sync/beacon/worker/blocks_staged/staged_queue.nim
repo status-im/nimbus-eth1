@@ -27,13 +27,16 @@ func blocksStagedQueueLen*(ctx: BeaconCtxRef): int =
 
 func blocksStagedQueueIsEmpty*(ctx: BeaconCtxRef): bool =
   ## `true` iff no data are on the queue.
-  ctx.blk.staged.len == 0
+  if ctx.blk.staged.len == 0:
+    doAssert ctx.blk.weight == 0
+    return true
 
 # ----------------
 
 func blocksStagedQueueClear*(ctx: BeaconCtxRef) =
   ## Clear queue
-  ctx.blk.staged.clear
+  ctx.blk.staged.clear()
+  ctx.blk.weight = 0
 
 func blocksStagedQueueInit*(ctx: BeaconCtxRef) =
   ## Constructor

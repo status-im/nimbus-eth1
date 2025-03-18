@@ -138,7 +138,9 @@ const
     ##
     ## If the staged block queue exceeds this many number of block objects for
     ## import, no further block objets are added (but the current sub-list is
-    ## completed.)
+    ## completed.) This again is used relative to the average block size. So
+    ## the data size to work with assuming data blocks `(i.e. header+body)`
+    ## is `blocksStagedHwmDefault * (fetchBodiesReqMinAvgBodySize+1024)`.
 
   blocksStagedLwm* = nFetchBodiesBatch
     ## Minimal accepted initialisation value for `blocksStagedHwm`. The latter
