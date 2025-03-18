@@ -15,7 +15,7 @@ import
   chronicles,
   eth/common/[accounts_rlp, base_rlp, hashes_rlp],
   results,
-  "."/[aristo_desc, aristo_get, aristo_tx_frame, aristo_walk/persistent],
+  "."/[aristo_desc, aristo_get, aristo_tx_frame],
   ./aristo_desc/desc_backend
 
 type WriteBatch = tuple[writer: PutHdlRef, count: int, depth: int, prefix: uint64]
