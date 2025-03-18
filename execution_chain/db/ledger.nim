@@ -94,7 +94,7 @@ type
       ## write amplification that ensues
 
     when statelessEnabled:
-      witnessKeys: OrderedTableRef[(Address, Hash32), WitnessKey]
+      witnessKeys: OrderedTable[(Address, Hash32), WitnessKey]
         ## Used to collect the keys of all read accounts, code and storage slots.
         ## Maps a tuple of address and hash of the key (address or slot) to the
         ## witness key which can be either a storage key or an account key
@@ -386,7 +386,7 @@ proc init*(x: typedesc[LedgerRef], db: CoreDbTxRef, storeSlotHash: bool): Ledger
   discard result.beginSavepoint
 
   when statelessEnabled:
-    result.witnessKeys = newOrderedTable[(Address, Hash32), WitnessKey]()
+    result.witnessKeys = initOrderedTable[(Address, Hash32), WitnessKey]()
 
 proc init*(x: typedesc[LedgerRef], db: CoreDbTxRef): LedgerRef =
   init(x, db, false)
@@ -920,7 +920,7 @@ proc getStorageProof*(ac: LedgerRef, address: Address, slots: openArray[UInt256]
   storageProof
 
 when statelessEnabled:
-  func getWitnessKeys*(ac: LedgerRef): OrderedTableRef[(Address, Hash32), WitnessKey] =
+  func getWitnessKeys*(ac: LedgerRef): OrderedTable[(Address, Hash32), WitnessKey] =
     ac.witnessKeys
 
 # ------------------------------------------------------------------------------
