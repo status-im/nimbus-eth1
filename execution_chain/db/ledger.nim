@@ -41,9 +41,12 @@ const
   statelessEnabled = defined(stateless)
 
 when statelessEnabled:
-  import ../stateless/multi_keys
-
-  export multi_keys
+  type
+    WitnessKey* = object
+      storageMode*: bool
+      address*: Address
+      codeTouched*: bool
+      storageSlot*: UInt256
 
 type
   AccountFlag = enum
@@ -91,7 +94,10 @@ type
       ## write amplification that ensues
 
     when statelessEnabled:
-      witnessKeys: OrderedTableRef[(Address, KeyHash), KeyData]
+      witnessKeys: OrderedTableRef[(Address, Hash32), WitnessKey]
+        ## Used to collect the keys of all read accounts, code and storage slots.
+        ## Maps a tuple of address and hash of the key (address or slot) to the
+        ## witness key which can be either a storage key or an account key
 
 
   ReadOnlyLedger* = distinct LedgerRef
@@ -165,13 +171,10 @@ proc getAccount(
     shouldCreate = true;
       ): AccountRef =
   when statelessEnabled:
-    let
-      keyHash = address.toAccountKey.data
-      lookupKey = (address, keyHash)
+    let lookupKey = (address, address.toAccountKey)
     if not ac.witnessKeys.contains(lookupKey):
-      ac.witnessKeys[lookupKey] = KeyData(
+      ac.witnessKeys[lookupKey] = WitnessKey(
         storageMode: false,
-        hash: keyHash,
         address: address)
 
   # search account from layers of cache
@@ -383,7 +386,7 @@ proc init*(x: typedesc[LedgerRef], db: CoreDbTxRef, storeSlotHash: bool): Ledger
   discard result.beginSavepoint
 
   when statelessEnabled:
-    result.witnessKeys = newOrderedTable[(Address, KeyHash), KeyData]()
+    result.witnessKeys = newOrderedTable[(Address, Hash32), WitnessKey]()
 
 proc init*(x: typedesc[LedgerRef], db: CoreDbTxRef): LedgerRef =
   init(x, db, false)
@@ -471,14 +474,11 @@ proc getCode*(ac: LedgerRef,
               address: Address,
               returnHash: static[bool] = false): auto =
   when statelessEnabled:
-    let
-      keyHash = address.toAccountKey.data
-      lookupKey = (address, keyHash)
+    let lookupKey = (address, address.toAccountKey)
     # We overwrite any existing record here so that codeTouched is always set to
     # true even if an account was previously accessed without touching the code
-    ac.witnessKeys[lookupKey] = KeyData(
+    ac.witnessKeys[lookupKey] = WitnessKey(
       storageMode: false,
-      hash: keyHash,
       address: address,
       codeTouched: true)
 
@@ -539,14 +539,11 @@ proc resolveCode*(ac: LedgerRef, address: Address): CodeBytesRef =
 
 proc getCommittedStorage*(ac: LedgerRef, address: Address, slot: UInt256): UInt256 =
   when statelessEnabled:
-    let
-      keyHash = slot.toSlotKey.data
-      lookupKey = (address, keyHash)
+    let lookupKey = (address, slot.toSlotKey)
     if not ac.witnessKeys.contains(lookupKey):
-      ac.witnessKeys[lookupKey] = KeyData(
+      ac.witnessKeys[lookupKey] = WitnessKey(
         storageMode: true,
-        hash: keyHash,
-        storageSlot: slot.toBytesBE())
+        storageSlot: slot)
 
   let acc = ac.getAccount(address, false)
   if acc.isNil:
@@ -555,14 +552,11 @@ proc getCommittedStorage*(ac: LedgerRef, address: Address, slot: UInt256): UInt2
 
 proc getStorage*(ac: LedgerRef, address: Address, slot: UInt256): UInt256 =
   when statelessEnabled:
-    let
-      keyHash = slot.toSlotKey.data
-      lookupKey = (address, keyHash)
+    let lookupKey = (address, slot.toSlotKey)
     if not ac.witnessKeys.contains(lookupKey):
-      ac.witnessKeys[lookupKey] = KeyData(
+      ac.witnessKeys[lookupKey] = WitnessKey(
         storageMode: true,
-        hash: keyHash,
-        storageSlot: slot.toBytesBE())
+        storageSlot: slot)
 
   let acc = ac.getAccount(address, false)
   if acc.isNil:
@@ -926,7 +920,7 @@ proc getStorageProof*(ac: LedgerRef, address: Address, slots: openArray[UInt256]
   storageProof
 
 when statelessEnabled:
-  func getWitnessKeys(ac: LedgerRef): OrderedTableRef[(Address, KeyHash), KeyData] =
+  func getWitnessKeys*(ac: LedgerRef): OrderedTableRef[(Address, Hash32), WitnessKey] =
     ac.witnessKeys
 
 # ------------------------------------------------------------------------------

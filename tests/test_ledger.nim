@@ -724,7 +724,7 @@ proc runLedgerBasicOperationsTests() =
 
         let
           witnessKeys = ac.getWitnessKeys()
-          keyData = witnessKeys.getOrDefault((addr1, addr1.toAccountKey.data))
+          keyData = witnessKeys.getOrDefault((addr1, addr1.toAccountKey))
         check:
           witnessKeys.len() == 1
           keyData.address == addr1
@@ -739,7 +739,7 @@ proc runLedgerBasicOperationsTests() =
 
         let
           witnessKeys = ac.getWitnessKeys()
-          keyData = witnessKeys.getOrDefault((addr1, addr1.toAccountKey.data))
+          keyData = witnessKeys.getOrDefault((addr1, addr1.toAccountKey))
         check:
           witnessKeys.len() == 1
           keyData.address == addr1
@@ -755,10 +755,10 @@ proc runLedgerBasicOperationsTests() =
 
         let
           witnessKeys = ac.getWitnessKeys()
-          keyData = witnessKeys.getOrDefault((addr1, slot1.toSlotKey.data))
+          keyData = witnessKeys.getOrDefault((addr1, slot1.toSlotKey))
         check:
           witnessKeys.len() == 2
-          keyData.storageSlot == slot1.toBytesBE()
+          keyData.storageSlot == slot1
 
       test "Witness keys - Get account, code and storage":
         var
@@ -780,7 +780,7 @@ proc runLedgerBasicOperationsTests() =
         let witnessKeys = ac.getWitnessKeys()
         check witnessKeys.len() == 5
 
-        var keysList = newSeq[(Address, KeyData)]()
+        var keysList = newSeq[(Address, WitnessKey)]()
         for k, v in witnessKeys:
           let (adr, _) = k
           keysList.add((adr, v))
@@ -795,10 +795,10 @@ proc runLedgerBasicOperationsTests() =
           keysList[1][1].codeTouched == true
 
           keysList[2][0] == addr2
-          keysList[2][1].storageSlot == slot1.toBytesBE()
+          keysList[2][1].storageSlot == slot1
 
           keysList[3][0] == addr1
-          keysList[3][1].storageSlot == slot1.toBytesBE()
+          keysList[3][1].storageSlot == slot1
 
           keysList[4][0] == addr3
           keysList[4][1].address == addr3
