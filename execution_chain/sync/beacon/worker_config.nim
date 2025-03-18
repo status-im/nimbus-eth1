@@ -104,20 +104,20 @@ const
 
   # ----------------------
 
-  fetchBodiesFailedInitialFailPeersHwm* = 50
+  fetchBodiesFailedInitialFailPeersHwm* = 200
     ## Similar to `fetchHeadersFailedInitialFailPeersHwm`
 
   nFetchBodiesRequest* = 128
     ## Similar to `nFetchHeadersRequest`
 
-  fetchBodiesReqErrThresholdZombie* = chronos.seconds(4)
-  fetchBodiesReqErrThresholdCount* = 2
+  fetchBodiesReqErrThresholdZombie* = chronos.seconds(25)
+  fetchBodiesReqErrThresholdCount* = 80
     ## Similar to `fetchHeadersReqThreshold*`
 
-  fetchBodiesProcessErrThresholdCount* = 2
+  fetchBodiesProcessErrThresholdCount* = 80
     ## Similar to `fetchHeadersProcessErrThresholdCount`.
 
-  fetchBodiesReqMinResponsePC* = 10
+  fetchBodiesReqMinResponsePC* = 80
     ## Similar to `fetchHeadersReqMinResponsePC`
 
   nFetchBodiesBatch* = 3 * nFetchBodiesRequest
