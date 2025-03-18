@@ -192,7 +192,7 @@ proc makeConfig*(cmdLine = commandLineParams()): NRpcConf
 
   if result.customNetworkFolder.len > 0:
     var networkParams = NetworkParams()
-    if not loadNetworkParams(result.customNetworkFolder&"/genesis.json", networkParams):
+    if not loadNetworkParams(result.customNetworkFolder.joinPath("genesis.json"), networkParams):
       error "Failed to load customNetwork", path=result.customNetworkFolder
       quit QuitFailure
     result.networkParams = networkParams

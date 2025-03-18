@@ -8,7 +8,7 @@
 # those terms.
 
 import
-  std/sequtils,
+  std/[sequtils, os],
   chronicles,
   ../execution_chain/constants,
   ../execution_chain/core/chain,
@@ -84,7 +84,7 @@ template loadNetworkConfig(conf: NRpcConf): (RuntimeConfig, uint64, uint64) =
     if conf.customNetworkFolder.len == 0:
       error "Custom network file not provided"
       quit(QuitFailure)
-    let (cfg, unloaded) = readRuntimeConfig(conf.customNetworkFolder&"/config.yaml")
+    let (cfg, unloaded) = readRuntimeConfig(conf.customNetworkFolder.joinPath("config.yaml"))
     debug "Fields unknown", unloaded = unloaded
     (cfg, 0'u64, 0'u64)
 
