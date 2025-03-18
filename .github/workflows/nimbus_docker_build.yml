@@ -24,7 +24,7 @@ on:
   workflow_dispatch:
 
 env:
-  REGISTRY_IMAGE: ${{ secrets.DOCKERHUB_USERNAME }}/nimbus-eth1
+  REGISTRY_IMAGE: statusim/nimbus-eth1
 
 jobs:
   build:
