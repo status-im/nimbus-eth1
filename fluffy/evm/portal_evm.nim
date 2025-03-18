@@ -145,7 +145,7 @@ proc call*(
   debug "Code to be executed", code = code.asSeq().to0xHex()
 
   var
-    lastWitnessKeys: OrderedTable[(Address, Hash32), WitnessKey]
+    lastWitnessKeys: WitnessTable
     witnessKeys = vmState.ledger.getWitnessKeys()
     callResult: EvmResult[CallResult]
     evmCallCount = 0
@@ -159,8 +159,9 @@ proc call*(
     vmState.ledger.rollback(sp) # all state changes from the call are reverted
 
     # Collect the keys after executing the transaction
-    lastWitnessKeys = witnessKeys
+    lastWitnessKeys = ensureMove(witnessKeys)
     witnessKeys = vmState.ledger.getWitnessKeys()
+    vmState.ledger.clearWitnessKeys()
 
     # If the witness keys did not change after the last execution then we can stop
     # the execution loop because we have already executed the transaction with the
