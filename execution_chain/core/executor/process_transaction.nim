@@ -120,9 +120,6 @@ proc processTransactionImpl(
     else:
       err(txRes.error)
 
-  if vmState.collectWitnessData:
-    vmState.ledger.collectWitnessData()
-
   vmState.ledger.persist(clearEmptyAccount = fork >= FkSpurious)
 
   res

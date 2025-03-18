@@ -21,7 +21,6 @@ export stack, memory
 type
   VMFlag* = enum
     ExecutionOK
-    CollectWitnessData
 
   BlockContext* = object
     timestamp*        : EthTime

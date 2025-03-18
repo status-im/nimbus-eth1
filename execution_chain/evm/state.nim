@@ -237,13 +237,6 @@ proc `status=`*(vmState: BaseVMState, status: bool) =
  if status: vmState.flags.incl ExecutionOK
  else: vmState.flags.excl ExecutionOK
 
-proc collectWitnessData*(vmState: BaseVMState): bool =
-  CollectWitnessData in vmState.flags
-
-proc `collectWitnessData=`*(vmState: BaseVMState, status: bool) =
-  if status: vmState.flags.incl CollectWitnessData
-  else: vmState.flags.excl CollectWitnessData
-
 func tracingEnabled*(vmState: BaseVMState): bool =
   vmState.tracer.isNil.not
 

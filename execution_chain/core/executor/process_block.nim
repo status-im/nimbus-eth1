@@ -191,8 +191,6 @@ proc procBlkEpilogue(
 
   # Reward beneficiary
   vmState.mutateLedger:
-    if vmState.collectWitnessData:
-      db.collectWitnessData()
 
     # Clearing the account cache here helps manage its size when replaying
     # large ranges of blocks, implicitly limiting its size using the gas limit

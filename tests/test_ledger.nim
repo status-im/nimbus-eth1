@@ -25,6 +25,7 @@ import
 
 import results
 
+
 const
   genesisFile = "tests/customgenesis/cancun123.json"
   hexPrivKey  = "af1a9be9f1a54421cac82943820a0fe0f601bb5f4f6d0bccc81c613f0ce6ae22"
@@ -713,44 +714,98 @@ proc runLedgerBasicOperationsTests() =
       check 2.u256 in vals
       check 3.u256 in vals
 
-    test "Test MultiKeys - Set storage":
-      var
-        ac = LedgerRef.init(memDB.baseTxFrame())
-        addr1 = initAddr(1)
+    when defined(stateless):
+      test "Witness keys - Get account":
+        var
+          ac = LedgerRef.init(memDB.baseTxFrame())
+          addr1 = initAddr(1)
 
-      ac.setStorage(addr1, 1.u256, 1.u256) # Non-zero value
-      ac.setStorage(addr1, 2.u256, 0.u256) # Zero value
+        discard ac.getAccount(addr1)
 
-      ac.collectWitnessData()
-      let multikeys = ac.makeMultiKeys().keys
+        let
+          witnessKeys = ac.getWitnessKeys()
+          keyData = witnessKeys.getOrDefault((addr1, addr1.toAccountKey.data))
+        check:
+          witnessKeys.len() == 1
+          keyData.address == addr1
+          keyData.codeTouched == false
 
-      check:
-        multikeys.len() == 1
-        multikeys[0].storageMode == false
-        multikeys[0].address == addr1
-        multikeys[0].storageKeys.keys.len() == 2
-        multikeys[0].storageKeys.keys[0].storageSlot == 2.u256.toBytesBE()
-        multikeys[0].storageKeys.keys[1].storageSlot == 1.u256.toBytesBE()
+      test "Witness keys - Get code":
+        var
+          ac = LedgerRef.init(memDB.baseTxFrame())
+          addr1 = initAddr(1)
 
-    test "Test MultiKeys - Get storage":
-      var
-        ac = LedgerRef.init(memDB.baseTxFrame())
-        addr1 = initAddr(1)
+        discard ac.getCode(addr1)
 
-      ac.setStorage(addr1, 3.u256, 1.u256)
-      discard ac.getStorage(addr1, 3.u256) # Returns non-zero value
-      discard ac.getStorage(addr1, 4.u256) # Returns default zero value
+        let
+          witnessKeys = ac.getWitnessKeys()
+          keyData = witnessKeys.getOrDefault((addr1, addr1.toAccountKey.data))
+        check:
+          witnessKeys.len() == 1
+          keyData.address == addr1
+          keyData.codeTouched == true
 
-      ac.collectWitnessData()
-      let multikeys = ac.makeMultiKeys().keys
+      test "Witness keys - Get storage":
+        var
+          ac = LedgerRef.init(memDB.baseTxFrame())
+          addr1 = initAddr(1)
+          slot1 = 1.u256
 
-      check:
-        multikeys.len() == 1
-        multikeys[0].storageMode == false
-        multikeys[0].address == addr1
-        multikeys[0].storageKeys.keys.len() == 2
-        multikeys[0].storageKeys.keys[0].storageSlot == 4.u256.toBytesBE()
-        multikeys[0].storageKeys.keys[1].storageSlot == 3.u256.toBytesBE()
+        discard ac.getStorage(addr1, slot1)
+
+        let
+          witnessKeys = ac.getWitnessKeys()
+          keyData = witnessKeys.getOrDefault((addr1, slot1.toSlotKey.data))
+        check:
+          witnessKeys.len() == 2
+          keyData.storageSlot == slot1.toBytesBE()
+
+      test "Witness keys - Get account, code and storage":
+        var
+          ac = LedgerRef.init(memDB.baseTxFrame())
+          addr1 = initAddr(1)
+          addr2 = initAddr(2)
+          addr3 = initAddr(3)
+          slot1 = 1.u256
+
+
+        discard ac.getAccount(addr1)
+        discard ac.getCode(addr2)
+        discard ac.getCode(addr1)
+        discard ac.getStorage(addr2, slot1)
+        discard ac.getStorage(addr1, slot1)
+        discard ac.getStorage(addr2, slot1)
+        discard ac.getAccount(addr3)
+
+        let witnessKeys = ac.getWitnessKeys()
+        check witnessKeys.len() == 5
+
+        var keysList = newSeq[(Address, KeyData)]()
+        for k, v in witnessKeys:
+          let (adr, _) = k
+          keysList.add((adr, v))
+
+        check:
+          keysList[0][0] == addr1
+          keysList[0][1].address == addr1
+          keysList[0][1].codeTouched == true
+
+          keysList[1][0] == addr2
+          keysList[1][1].address == addr2
+          keysList[1][1].codeTouched == true
+
+          keysList[2][0] == addr2
+          keysList[2][1].storageSlot == slot1.toBytesBE()
+
+          keysList[3][0] == addr1
+          keysList[3][1].storageSlot == slot1.toBytesBE()
+
+          keysList[4][0] == addr3
+          keysList[4][1].address == addr3
+          keysList[4][1].codeTouched == false
+
+
+
 
 # ------------------------------------------------------------------------------
 # Main function(s)
