@@ -148,7 +148,7 @@ when debugLedgerRef:
 template logTxt(info: static[string]): static[string] =
   "LedgerRef " & info
 
-template toAccountKey*(acc: AccountRef): Hash32 =
+template toAccountKey(acc: AccountRef): Hash32 =
   acc.accPath
 
 template toAccountKey*(eAddr: Address): Hash32 =

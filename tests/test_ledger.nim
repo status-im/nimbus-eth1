@@ -715,6 +715,7 @@ proc runLedgerBasicOperationsTests() =
       check 3.u256 in vals
 
     when defined(stateless):
+    
       test "Witness keys - Get account":
         var
           ac = LedgerRef.init(memDB.baseTxFrame())
@@ -752,6 +753,21 @@ proc runLedgerBasicOperationsTests() =
           slot1 = 1.u256
 
         discard ac.getStorage(addr1, slot1)
+
+        let
+          witnessKeys = ac.getWitnessKeys()
+          keyData = witnessKeys.getOrDefault((addr1, slot1.toSlotKey))
+        check:
+          witnessKeys.len() == 2
+          keyData.storageSlot == slot1
+
+      test "Witness keys - Set storage":
+        var
+          ac = LedgerRef.init(memDB.baseTxFrame())
+          addr1 = initAddr(1)
+          slot1 = 1.u256
+
+        ac.setStorage(addr1, slot1, slot1)
 
         let
           witnessKeys = ac.getWitnessKeys()
