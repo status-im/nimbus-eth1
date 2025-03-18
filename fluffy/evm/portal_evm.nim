@@ -145,14 +145,12 @@ proc call*(
   debug "Code to be executed", code = code.asSeq().to0xHex()
 
   var
-    lastWitnessKeys: OrderedTableRef[(Address, Hash32), WitnessKey]
+    lastWitnessKeys: OrderedTable[(Address, Hash32), WitnessKey]
     witnessKeys = vmState.ledger.getWitnessKeys()
     callResult: EvmResult[CallResult]
     evmCallCount = 0
 
-  # If the witness keys did not change after the last execution then we can stop
-  # because we have already executed the transaction with the correct state
-  while evmCallCount < EVM_CALL_LIMIT and (lastWitnessKeys.isNil() or lastWitnessKeys != witnessKeys):
+  while evmCallCount < EVM_CALL_LIMIT:
     debug "Starting PortalEvm execution", evmCallCount
 
     let sp = vmState.ledger.beginSavepoint()
@@ -163,6 +161,12 @@ proc call*(
     # Collect the keys after executing the transaction
     lastWitnessKeys = witnessKeys
     witnessKeys = vmState.ledger.getWitnessKeys()
+
+    # If the witness keys did not change after the last execution then we can stop
+    # the execution loop because we have already executed the transaction with the
+    # correct state
+    if lastWitnessKeys == witnessKeys:
+      break
 
     try:
       var
