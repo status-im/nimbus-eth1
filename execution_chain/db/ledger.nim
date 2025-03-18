@@ -25,7 +25,7 @@ import
   ./aristo/aristo_blobify
 
 export
-  code_bytes, multi_keys
+  code_bytes
 
 const
   debugLedgerRef = false
@@ -484,10 +484,6 @@ proc getCode*(ac: LedgerRef,
 
   let acc = ac.getAccount(address, false)
   if acc.isNil:
-    # We need to record that the code was read even if the account doesn't exist
-    # so that the returned multikeys correctly show that the code lookup occurred
-    ac.witnessCache[address] = WitnessData(codeTouched: true)
-
     when returnHash:
       return (EMPTY_CODE_HASH, CodeBytesRef())
     else:
@@ -930,7 +926,7 @@ proc getStorageProof*(ac: LedgerRef, address: Address, slots: openArray[UInt256]
   storageProof
 
 when statelessEnabled:
-  func getWitnessKeys(ac: LedgerRef): OrderedTableRef[(Address, KeyHash), KeyData] =
+  func getWitnessKeys*(ac: LedgerRef): OrderedTableRef[(Address, KeyHash), KeyData] =
     ac.witnessKeys
 
 # ------------------------------------------------------------------------------

@@ -144,19 +144,16 @@ proc call*(
   fetchedCode.incl(to)
   debug "Code to be executed", code = code.asSeq().to0xHex()
 
-  # Collects the keys of read or modified accounts, code and storage slots
-  vmState.ledger.collectWitnessData()
 
   var
-    lastMultiKeys: MultiKeysRef
-    multiKeys = vmState.ledger.makeMultiKeys()
+    lastWitnessKeys: OrderedTableRef[(Address, KeyHash), KeyData]
+    witnessKeys = vmState.ledger.getWitnessKeys()
     callResult: EvmResult[CallResult]
     evmCallCount = 0
 
-  # If the multikeys did not change after the last execution then we can stop
+  # If the witness keys did not change after the last execution then we can stop
   # because we have already executed the transaction with the correct state
-  while evmCallCount < EVM_CALL_LIMIT and lastMultiKeys.isNil() or
-      not lastMultiKeys.equals(multiKeys):
+  while evmCallCount < EVM_CALL_LIMIT and lastWitnessKeys.isNil() or lastWitnessKeys != witnessKeys:
     debug "Starting PortalEvm execution", evmCallCount
 
     let sp = vmState.ledger.beginSavepoint()
@@ -165,9 +162,8 @@ proc call*(
     vmState.ledger.rollback(sp) # all state changes from the call are reverted
 
     # Collect the keys after executing the transaction
-    lastMultiKeys = multiKeys
-    vmState.ledger.collectWitnessData()
-    multiKeys = vmState.ledger.makeMultiKeys()
+    lastWitnessKeys = witnessKeys
+    witnessKeys = vmState.ledger.getWitnessKeys()
 
     try:
       var
@@ -176,30 +172,31 @@ proc call*(
         codeQueries = newSeq[CodeQuery]()
 
       # Loop through the collected keys and fetch all state concurrently
-      for k in multiKeys.keys:
-        if not k.storageMode and k.address != default(Address):
-          if k.address notin fetchedAccounts:
-            debug "Fetching account", address = k.address
-            let accFut = evm.stateNetwork.getAccount(header.stateRoot, k.address)
-            accountQueries.add(AccountQuery.init(k.address, accFut))
+      for k, v in witnessKeys:
+        let (adr, _) = k
+        if v.storageMode:
+          let
+            slotKey = UInt256.fromBytesBE(v.storageSlot)
+            slotIdx = (adr, slotKey)
+          if slotIdx notin fetchedStorage:
+            debug "Fetching storage slot", address = adr, slotKey
+            let storageFut = evm.stateNetwork.getStorageAtByStateRoot(
+              header.stateRoot, adr, slotKey
+            )
+            storageQueries.add(StorageQuery.init(adr, slotKey, storageFut))
+        elif adr != default(Address):
+          doAssert(adr == v.address)
 
-          if k.codeTouched and k.address notin fetchedCode:
-            debug "Fetching code", address = k.address
+          if adr notin fetchedAccounts:
+            debug "Fetching account", address = adr
+            let accFut = evm.stateNetwork.getAccount(header.stateRoot, adr)
+            accountQueries.add(AccountQuery.init(adr, accFut))
+
+          if v.codeTouched and adr notin fetchedCode:
+            debug "Fetching code", address = adr
             let codeFut =
-              evm.stateNetwork.getCodeByStateRoot(header.stateRoot, k.address)
-            codeQueries.add(CodeQuery.init(k.address, codeFut))
-
-          if not k.storageKeys.isNil():
-            for sk in k.storageKeys.keys:
-              let
-                slotKey = UInt256.fromBytesBE(sk.storageSlot)
-                slotIdx = (k.address, slotKey)
-              if slotIdx notin fetchedStorage:
-                debug "Fetching storage slot", address = k.address, slotKey
-                let storageFut = evm.stateNetwork.getStorageAtByStateRoot(
-                  header.stateRoot, k.address, slotKey
-                )
-                storageQueries.add(StorageQuery.init(k.address, slotKey, storageFut))
+              evm.stateNetwork.getCodeByStateRoot(header.stateRoot, adr)
+            codeQueries.add(CodeQuery.init(adr, codeFut))
 
       # Store fetched state in the in-memory EVM
       for q in accountQueries:
