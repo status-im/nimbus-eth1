@@ -144,8 +144,7 @@ type
 
     # Blocks import/execution settings
     blkImportOk*: bool               ## Don't fetch data while block importing
-    blkStagedHwm*: int               ## Set a `staged` queue limit
-    blkStagedWeightHwm*: int         ## Translated to the data size
+    blkStagedWeightHwm*: int         ## Block queue size threshold
 
     # Info, debugging, and error handling stuff
     nReorg*: int                     ## Number of reorg invocations (info only)

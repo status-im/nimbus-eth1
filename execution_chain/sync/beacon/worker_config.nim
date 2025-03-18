@@ -133,20 +133,23 @@ const
     ## is translated into the calculatory data size of a block (i.e.
     ## header+body), `nFetchBodiesBatch * (fetchBodiesReqMinAvgBodySize+1024)`.
 
-  blocksStagedHwmDefault* = 8 * nFetchBodiesBatch
-    ## This is an initialiser value for `blocksStagedHwm`.
+  blocksStagedWeightHwmDefault* =
+      8 * nFetchBodiesBatch * fetchBodiesReqMinAvgBodySize
+    ## This is an initialiser value for `blocksStagedWeightHwm`.
     ##
-    ## If the staged block queue exceeds this many number of block objects for
-    ## import, no further block objets are added (but the current sub-list is
-    ## completed.) This again is used relative to the average block size. So
-    ## the data size to work with assuming data blocks `(i.e. header+body)`
-    ## is `blocksStagedHwmDefault * (fetchBodiesReqMinAvgBodySize+1024)`.
+    ## If the accumulated size of staged block queue exceeds this data size,
+    ## no further block objects are added.
+    ##
+    ## The calculation of block sizes uses rlp based estimates. So it is
+    ## called weight rather than size (where the latter suggest somewhat more
+    ## accurateness.)
 
-  blocksStagedLwm* = nFetchBodiesBatch
-    ## Minimal accepted initialisation value for `blocksStagedHwm`. The latter
-    ## will be initalised with `blocksStagedHwmDefault` if smaller than the LWM.
+  blocksStagedWeightLwm* = nFetchBodiesBatch * fetchBodiesReqMinAvgBodySize
+    ## Minimal accepted initialisation value for `blocksStagedWeihgtHwm`. The
+    ## latter will be initalised with `blocksStagedHwmDefault` if smaller than
+    ## the LWM.
 
-  finaliserChainLengthMax* = 32 # -- to be obsoleted soon
+  finaliserChainLengthMax* = 32
     ## When importing with `importBlock()`, finalise after at most this many
     ## invocations of `importBlock()`.
 
@@ -162,7 +165,7 @@ static:
 
   doAssert 0 < nFetchBodiesRequest
   doAssert nFetchBodiesRequest <= nFetchBodiesBatch
-  doAssert 0 < blocksStagedLwm
-  doAssert blocksStagedLwm <= blocksStagedHwmDefault
+  doAssert 0 < blocksStagedWeightLwm
+  doAssert blocksStagedWeightLwm <= blocksStagedWeightHwmDefault
 
 # End

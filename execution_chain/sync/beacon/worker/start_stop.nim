@@ -75,18 +75,9 @@ proc setupDatabase*(ctx: BeaconCtxRef; info: static[string]) =
   # into `ForkedChainRef` (i.e. `ctx.pool.chain`.)
   ctx.pool.hdrCache = ForkedCacheRef.init(ctx.pool.chain)
 
-  # Take it easy and assume that queue records contain full block list (which
-  # is mostly the case anyway.) So the the staging queue is limited by the
-  # number of sub-list records rather than the number of accumulated block
-  # objects.
-  let hwm = if blocksStagedLwm <= ctx.pool.blkStagedHwm: ctx.pool.blkStagedHwm
-            else: blocksStagedHwmDefault
-  ctx.pool.blkStagedWeightHwm = hwm * (fetchBodiesReqMinAvgBodySize + 1024)
-
-  # Set blocks batch import queue size
-  if ctx.pool.blkStagedHwm != 0:
-    debug info & ": import block lists queue", limit=ctx.pool.blkStagedWeightHwm
-  ctx.pool.blkStagedHwm = hwm
+  # Initialise block queue size limit
+  if ctx.pool.blkStagedWeightHwm < blocksStagedWeightLwm:
+    ctx.pool.blkStagedWeightHwm = blocksStagedWeightHwmDefault
 
 
 proc setupServices*(ctx: BeaconCtxRef; info: static[string]) =
