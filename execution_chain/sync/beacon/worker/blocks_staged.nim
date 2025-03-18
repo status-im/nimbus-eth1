@@ -127,6 +127,10 @@ proc fetchAndCheck(
       blk.blocks[offset + n].withdrawals  = b.bodies[n].withdrawals
 
   if offset < blk.blocks.len.uint64:
+    # For simplicity, always use the full size of the whole response even
+    # if some blocks were rejected as bogus. All that can happen in that case
+    # is that the import queue becomes a bit smaller than necessary.
+    blk.weight += b.size + nBodies.int * 1024 # header assumed to be ~1k of size
     return true
 
   buddy.only.nBdyProcErrors.inc
@@ -300,7 +304,8 @@ proc blocksStagedCollect*(
 
     ivBottom += ivRespLen.uint64 # will mostly result into `ivReq.maxPt+1`
 
-    if buddy.ctrl.stopped or ctx.poolMode:
+    if fetchBodiesReqMinAvgBodySize * nFetchBodiesBatch <= blk.weight or
+       buddy.ctrl.stopped or ctx.poolMode:
       # There is some left over to store back. And `ivBottom <= iv.maxPt`
       # because of the check against `ivRespLen` above.
       ctx.blocksUnprocCommit(iv, ivBottom, iv.maxPt)

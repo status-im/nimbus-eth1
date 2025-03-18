@@ -126,10 +126,12 @@ const
     ## body size of 90KiB/block is typical at block height ~#22m.
 
   nFetchBodiesBatch* = 3 * nFetchBodiesRequest
-    ## Similar to `nFetchHeadersBatch`
+    ## Similar to `nFetchHeadersBatch`, this limits the record size of the
+    ## the blocks queue.
     ##
-    ## With an average less than 90KiB/block (on `mainnet` at block ~#22m),
-    ## one arrives at a total of at most 35MiB per block batch.
+    ## Similar to the minimum expected response size, the block count argument
+    ## is translated into the calculatory data size of a block (i.e.
+    ## header+body), `nFetchBodiesBatch * (fetchBodiesReqMinAvgBodySize+1024)`.
 
   blocksStagedHwmDefault* = 8 * nFetchBodiesBatch
     ## This is an initialiser value for `blocksStagedHwm`.

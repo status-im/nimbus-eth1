@@ -49,6 +49,7 @@ type
   BlocksForImport* = object
     ## Block request item sorted by least block number (i.e. from `blocks[0]`.)
     blocks*: seq[EthBlock]           ## List of blocks for import
+    weight*: int                     ## Calculatory size of this record
 
   # -------------------
 
