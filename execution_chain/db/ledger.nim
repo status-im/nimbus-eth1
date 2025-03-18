@@ -48,6 +48,8 @@ when statelessEnabled:
       codeTouched*: bool
       storageSlot*: UInt256
 
+    WitnessTable* = OrderedTable[(Address, Hash32), WitnessKey]
+
 type
   AccountFlag = enum
     Alive
@@ -94,7 +96,7 @@ type
       ## write amplification that ensues
 
     when statelessEnabled:
-      witnessKeys: OrderedTable[(Address, Hash32), WitnessKey]
+      witnessKeys: WitnessTable
         ## Used to collect the keys of all read accounts, code and storage slots.
         ## Maps a tuple of address and hash of the key (address or slot) to the
         ## witness key which can be either a storage key or an account key
@@ -175,7 +177,8 @@ proc getAccount(
     if not ac.witnessKeys.contains(lookupKey):
       ac.witnessKeys[lookupKey] = WitnessKey(
         storageMode: false,
-        address: address)
+        address: address,
+        codeTouched: false)
 
   # search account from layers of cache
   var sp = ac.savePoint
@@ -239,7 +242,6 @@ proc originalStorageValue(
     slot: UInt256;
     ac: LedgerRef;
       ): UInt256 =
-
   # share the same original storage between multiple
   # versions of account
   if acc.originalStorage.isNil:
@@ -384,9 +386,6 @@ proc init*(x: typedesc[LedgerRef], db: CoreDbTxRef, storeSlotHash: bool): Ledger
   result.code = typeof(result.code).init(codeLruSize)
   result.slots = typeof(result.slots).init(slotsLruSize)
   discard result.beginSavepoint
-
-  when statelessEnabled:
-    result.witnessKeys = initOrderedTable[(Address, Hash32), WitnessKey]()
 
 proc init*(x: typedesc[LedgerRef], db: CoreDbTxRef): LedgerRef =
   init(x, db, false)
@@ -538,6 +537,8 @@ proc resolveCode*(ac: LedgerRef, address: Address): CodeBytesRef =
   ac.getCode(delegateTo)
 
 proc getCommittedStorage*(ac: LedgerRef, address: Address, slot: UInt256): UInt256 =
+  let acc = ac.getAccount(address, false)
+
   when statelessEnabled:
     let lookupKey = (address, slot.toSlotKey)
     if not ac.witnessKeys.contains(lookupKey):
@@ -545,12 +546,13 @@ proc getCommittedStorage*(ac: LedgerRef, address: Address, slot: UInt256): UInt2
         storageMode: true,
         storageSlot: slot)
 
-  let acc = ac.getAccount(address, false)
   if acc.isNil:
     return
   acc.originalStorageValue(slot, ac)
 
 proc getStorage*(ac: LedgerRef, address: Address, slot: UInt256): UInt256 =
+  let acc = ac.getAccount(address, false)
+
   when statelessEnabled:
     let lookupKey = (address, slot.toSlotKey)
     if not ac.witnessKeys.contains(lookupKey):
@@ -558,7 +560,6 @@ proc getStorage*(ac: LedgerRef, address: Address, slot: UInt256): UInt256 =
         storageMode: true,
         storageSlot: slot)
 
-  let acc = ac.getAccount(address, false)
   if acc.isNil:
     return
   acc.storageValue(slot, ac)
@@ -640,6 +641,14 @@ proc setCode*(ac: LedgerRef, address: Address, code: seq[byte]) =
 proc setStorage*(ac: LedgerRef, address: Address, slot, value: UInt256) =
   let acc = ac.getAccount(address)
   acc.flags.incl {Alive}
+
+  when statelessEnabled:
+    let lookupKey = (address, slot.toSlotKey)
+    if not ac.witnessKeys.contains(lookupKey):
+      ac.witnessKeys[lookupKey] = WitnessKey(
+        storageMode: true,
+        storageSlot: slot)
+
   let oldValue = acc.storageValue(slot, ac)
   if oldValue != value:
     var acc = ac.makeDirty(address)
@@ -776,9 +785,6 @@ proc persist*(ac: LedgerRef,
   ac.savePoint.accessList.clear()
 
   ac.isDirty = false
-
-  when statelessEnabled:
-    ac.witnessKeys.clear()
 
 iterator addresses*(ac: LedgerRef): Address =
   # make sure all savepoint already committed
@@ -920,8 +926,11 @@ proc getStorageProof*(ac: LedgerRef, address: Address, slots: openArray[UInt256]
   storageProof
 
 when statelessEnabled:
-  func getWitnessKeys*(ac: LedgerRef): OrderedTable[(Address, Hash32), WitnessKey] =
+  func getWitnessKeys*(ac: LedgerRef): WitnessTable =
     ac.witnessKeys
+
+  proc clearWitnessKeys*(ac: LedgerRef) =
+    ac.witnessKeys.clear()
 
 # ------------------------------------------------------------------------------
 # Public virtual read-only methods
