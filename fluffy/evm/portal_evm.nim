@@ -144,16 +144,15 @@ proc call*(
   fetchedCode.incl(to)
   debug "Code to be executed", code = code.asSeq().to0xHex()
 
-
   var
-    lastWitnessKeys: OrderedTableRef[(Address, KeyHash), KeyData]
+    lastWitnessKeys: OrderedTableRef[(Address, Hash32), WitnessKey]
     witnessKeys = vmState.ledger.getWitnessKeys()
     callResult: EvmResult[CallResult]
     evmCallCount = 0
 
   # If the witness keys did not change after the last execution then we can stop
   # because we have already executed the transaction with the correct state
-  while evmCallCount < EVM_CALL_LIMIT and lastWitnessKeys.isNil() or lastWitnessKeys != witnessKeys:
+  while evmCallCount < EVM_CALL_LIMIT and (lastWitnessKeys.isNil() or lastWitnessKeys != witnessKeys):
     debug "Starting PortalEvm execution", evmCallCount
 
     let sp = vmState.ledger.beginSavepoint()
@@ -175,15 +174,13 @@ proc call*(
       for k, v in witnessKeys:
         let (adr, _) = k
         if v.storageMode:
-          let
-            slotKey = UInt256.fromBytesBE(v.storageSlot)
-            slotIdx = (adr, slotKey)
+          let slotIdx = (adr, v.storageSlot)
           if slotIdx notin fetchedStorage:
-            debug "Fetching storage slot", address = adr, slotKey
+            debug "Fetching storage slot", address = adr, slotKey = v.storageSlot
             let storageFut = evm.stateNetwork.getStorageAtByStateRoot(
-              header.stateRoot, adr, slotKey
+              header.stateRoot, adr, v.storageSlot
             )
-            storageQueries.add(StorageQuery.init(adr, slotKey, storageFut))
+            storageQueries.add(StorageQuery.init(adr, v.storageSlot, storageFut))
         elif adr != default(Address):
           doAssert(adr == v.address)
 
