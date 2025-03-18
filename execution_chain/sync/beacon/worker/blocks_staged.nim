@@ -321,8 +321,10 @@ proc blocksStagedCollect*(
   if not haveError:
     buddy.only.nBdyProcErrors = 0
 
-  info "Downloaded blocks", iv=blk.blocks.bnStr,
-    nBlocks=blk.blocks.len, nStaged=ctx.blk.staged.len,
+  info "Downloaded blocks", peer, iv=blk.blocks.bnStr, nBlocks=blk.blocks.len,
+    nStaged=ctx.blk.staged.len.uint.toSI,
+    estimStagedSize=ctx.blk.weight.uint.toSI,
+    stagedSizeHwm=ctx.pool.blkStagedWeightHwm.uint.toSI,
     nSyncPeers=ctx.pool.nBuddies
 
   return true

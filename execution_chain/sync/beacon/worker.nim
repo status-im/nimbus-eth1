@@ -86,24 +86,25 @@ proc start*(buddy: BeaconBuddyRef; info: static[string]): bool =
     if not ctx.hibernate: debug info & ": failed", peer
     return false
 
-  if not ctx.hibernate: debug info & ": new peer", peer
+  if not ctx.hibernate: debug info & ": new peer",
+    peer, nSyncPeers=buddy.ctx.pool.nBuddies
   true
 
 proc stop*(buddy: BeaconBuddyRef; info: static[string]) =
   ## Clean up this peer
   if not buddy.ctx.hibernate: debug info & ": release peer", peer=buddy.peer,
-    ctrl=buddy.ctrl.state, nLaps=buddy.only.nMultiLoop,
-    lastIdleGap=buddy.only.multiRunIdle.toStr
+    ctrl=buddy.ctrl.state, nSyncPeers=buddy.ctx.pool.nBuddies,
+    nLaps=buddy.only.nMultiLoop, lastIdleGap=buddy.only.multiRunIdle.toStr
   buddy.stopBuddy()
 
 # --------------------
 
-proc initalScrumFromFile*(
+proc initalTargetFromFile*(
     ctx: BeaconCtxRef;
     file: string;
     info: static[string];
       ): Result[void,string] =
-  ## Set up inital sprint from argument file (itended for debugging)
+  ## Set up inital target from argument file (itended for debugging)
   var
     mesg: SyncClMesg
   try:

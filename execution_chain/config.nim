@@ -339,13 +339,13 @@ type
       desc: "Number of worker threads (\"0\" = use as many threads as there are CPU cores available)"
       name: "num-threads" .}: int
 
-    beaconSyncScrumFile* {.
+    beaconSyncTargetFile* {.
       hidden
       desc: "Load a file containg an rlp-encoded object \"(Header,Hash32)\" " &
             "to be used " &
-            "as the first scrum target before any other request from the CL " &
-            " is accepted"
-      name: "debug-beacon-sync-scrum-file" .}: Option[InputFile]
+            "as the first target before any other request from the CL " &
+            "is accepted"
+      name: "debug-beacon-sync-target-file" .}: Option[InputFile]
 
     beaconSyncBlocksQueueHwm* {.
       hidden
