@@ -12,8 +12,7 @@
 
 import
   pkg/[chronicles, chronos],
-  pkg/eth/[common, rlp],
-  pkg/stew/[byteutils, sorted_set],
+  pkg/eth/common,
   ../worker_desc,
   ./blocks_staged/staged_queue,
   ./headers_staged/staged_queue,

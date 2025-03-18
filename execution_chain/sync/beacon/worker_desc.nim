@@ -82,7 +82,7 @@ type
     ##
     coupler*: BlockNumber            ## Bottom end `C` of full chain `(C,H]`
     dangling*: BlockNumber           ## Left end `D` of linked chain `[D,H]`
-    head*: BlockNumber               ## `H`, block num of some finalised block
+    head*: BlockNumber               ## `H`, target block to reach
     lastState*: SyncLayoutState      ## Last known layout state
 
   SyncState* = object

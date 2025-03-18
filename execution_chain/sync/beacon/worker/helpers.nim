@@ -16,10 +16,11 @@ import
   pkg/chronos,
   pkg/eth/common,
   pkg/stew/interval_set,
+  ../../../utils/prettify,
   ../../../utils/utils
 
 export
-  short
+  prettify, short
 
 func bnStr*(w: BlockNumber): string =
   "#" & $w

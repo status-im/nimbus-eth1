@@ -21,7 +21,6 @@ when enableTicker:
     pkg/[stint, stew/interval_set],
     ../headers_staged/staged_queue,
     ../blocks_staged/staged_queue,
-    ../../../../utils/prettify,
     ../helpers,
     ../[blocks_unproc, headers_unproc]
 

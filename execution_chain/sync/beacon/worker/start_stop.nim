@@ -20,22 +20,22 @@ import
   ./headers_staged/staged_queue,
   ./[blocks_unproc, headers_unproc, update]
 
+type
+  SyncStateData = tuple
+    start, current, target: BlockNumber
+
 # ------------------------------------------------------------------------------
 # Private functions
 # ------------------------------------------------------------------------------
 
-proc queryProgressCB(
-    ctx: BeaconCtxRef;
-    info: static[string];
-      ): BeaconSyncerProgressCB =
-  ## Syncer status query function/closure.
-  return proc(): tuple[start, current, target: BlockNumber] =
-    if not ctx.hibernate():
-      return (ctx.layout.coupler,
-              max(ctx.layout.coupler,
-                  min(ctx.chain.latestNumber(), ctx.layout.head)),
-              ctx.layout.head)
-    # (0,0,0)
+proc querySyncProgress(ctx: BeaconCtxRef): SyncStateData =
+  ## Syncer status query function (for call back closure)
+  if not ctx.hibernate():
+    return (ctx.layout.coupler,
+            max(ctx.layout.coupler,
+              min(ctx.chain.latestNumber(), ctx.layout.head)),
+            ctx.layout.head)
+  # (0,0,0)
 
 # ------------------------------------------------------------------------------
 # Public functions
@@ -70,8 +70,8 @@ proc setupServices*(ctx: BeaconCtxRef; info: static[string]) =
   # into `ForkedChainRef` (i.e. `ctx.pool.chain`.)
   ctx.pool.hdrCache = ForkedCacheRef.init(ctx.pool.chain)
 
-  # Set up new notifier telling when the new head is available from the `CL`
-  ctx.hdrCache.start proc() {.gcsafe, raises: [].} =
+  # Set up new notifier informing when the new head is available from the `CL`
+  ctx.hdrCache.start proc() =
     ctx.updateFromHibernateSetTarget info
 
   # Manual first run?
@@ -80,8 +80,9 @@ proc setupServices*(ctx: BeaconCtxRef; info: static[string]) =
       finalHash=ctx.clReq.finalHash.short
     ctx.hdrCache.fcHeaderTargetUpdate(ctx.clReq.consHead, ctx.clReq.finalHash)
 
-  # Provide progress info
-  ctx.pool.chain.com.beaconSyncerProgress = ctx.queryProgressCB info
+  # Provide progress info call back handler
+  ctx.pool.chain.com.beaconSyncerProgress = proc(): SyncStateData =
+    ctx.querySyncProgress()
 
 
 proc destroyServices*(ctx: BeaconCtxRef) =
