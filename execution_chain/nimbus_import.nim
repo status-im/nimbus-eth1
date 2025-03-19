@@ -41,6 +41,11 @@ declareCounter nec_imported_transactions, "Transactions processed during import"
 
 declareCounter nec_imported_gas, "Gas processed during import"
 
+declareGauge nec_download_block_number, "Latest in order downloaded block number"
+
+declareCounter nec_downloaded_blocks, "Blocks downloaded during import"
+
+
 var running {.volatile.} = true
 
 proc openCsv(name: string): File =
@@ -187,7 +192,7 @@ proc run(config: NimbusConf): PortalNode {.
   ## Portal node setup
   let
     portalProtocolConfig = PortalProtocolConfig.init(
-      DefaultTableIpLimit, DefaultBucketIpLimit, DefaultBitsPerHop, defaultAlpha, RadiusConfig(kind: Static, logRadius: 249),
+      DefaultTableIpLimit, DefaultBucketIpLimit, DefaultBitsPerHop, config.alpha, RadiusConfig(kind: Static, logRadius: 249),
       defaultDisablePoke, defaultMaxGossipNodes, defaultContentCacheSize,
       defaultDisableContentCache, defaultMaxConcurrentOffers, defaultDisableBanNodes,
     )
@@ -227,7 +232,7 @@ proc getBlockLoop(
     startBlock: uint64,
     portalWorkers: int,
 ): Future[void] {.async.} =
-  const bufferSize = 8192
+  const bufferSize = 8192*4
 
   let
     historyNetwork = node.historyNetwork.value()
@@ -257,6 +262,7 @@ proc getBlockLoop(
 
           continue
 
+        nec_downloaded_blocks.inc()
         blocks[i] = init(EthBlock, header, body)
         downloadFinished[i] = true
         totalDownloadCount.inc()
@@ -277,6 +283,9 @@ proc getBlockLoop(
 
   while true:
     while downloadFinished[nextReadIndex]:
+      # TODO: Fix this counter, it's not accurate as blockNumberOffset updates
+      # differently than the block being passed around here
+      nec_download_block_number.set((blockNumberOffset + nextReadIndex.uint64).int64)
       debug "Adding block to the processing queue",
         blockNumber = blockNumberOffset + nextReadIndex.uint64
       await blockQueue.addLast(blocks[nextReadIndex])

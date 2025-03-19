@@ -544,6 +544,13 @@ type
         defaultValue: 128
         name: "debug-portal-workers".}: int
 
+      alpha* {.
+        hidden,
+        desc: "The Kademlia concurrency factor",
+        defaultValue: 3,
+        name: "debug-alpha"
+      .}: int
+
     of `import-rlp`:
       blocksFile* {.
         argument
