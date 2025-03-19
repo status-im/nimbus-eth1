@@ -79,10 +79,9 @@ import
   ./[chain_branch, chain_desc]
 
 type
-  FcNotifyCB* = proc(finHash: Hash32) {.gcsafe, raises: [].}
-    ## Call back function telling a client app that a new chain was initialised.
-    ## The hash passed as argument is from the finaliser and must be resolved
-    ## as header argument in `startSession()`.
+  FcHdrtDbTabInfo = object
+    ## For database table storage and clean up
+    least, last: BlockNumber
 
   FcHdrVetted = tuple
     ## Helper structure used in `fcHeaderPut()`
@@ -119,6 +118,11 @@ type
     finHash: Hash32
     consHeadNum: BlockNumber   # for logging, metrics etc.
 
+  FcNotifyCB* = proc(finHash: Hash32) {.gcsafe, raises: [].}
+    ## Call back function telling a client app that a new chain was initialised.
+    ## The hash passed as argument is from the finaliser and must be resolved
+    ## as header argument in `startSession()`.
+
   ForkedCacheRef* = ref object
     ## For now, this is a replacement of `ForkedChainRef` for as long as
     ## `FcHdrState` is not integrated into `ForkedChainRef`.
@@ -130,6 +134,10 @@ type
                                # isolated from ordinary headers storage.
 
 const
+  MaxDeleteBatch = 10 * 1024
+    ## Insert `persist()` statements in bulk action every `MaxDeleteBatch`
+    ## `del()` directives.
+
   FinaliserChoiceDelta = 192
     ## Temporary for `fcHeaderImportBlock()` which will go away.
     ##
@@ -140,7 +148,7 @@ const
     ## Message prefix used when bailing out raising an exception
 
 let
-  LhcStateKey = 0.beaconHeaderKey
+  FcHdrInfoKey = 0.beaconHeaderKey
 
 # ------------------------------------------------------------------------------
 # Private debugging and print functions
@@ -180,27 +188,29 @@ func decodePayload(data: seq[byte]; T: type): T =
 # Private cache helpers: database related
 # ------------------------------------------------------------------------------
 
-proc getState(db: KvtTxRef): Opt[FcHdrSession] =
-  let data = db.get(LhcStateKey.toOpenArray).valueOr:
+proc putInfo(db: KvtTxRef; state: FcHdrtDbTabInfo) =
+  db.put(FcHdrInfoKey.toOpenArray, encodePayload(state)).isOkOr:
+    raiseAssert RaisePfx & "put(info) failed: " & $error
+
+proc getInfo(db: KvtTxRef): Opt[FcHdrtDbTabInfo] =
+  let data = db.get(FcHdrInfoKey.toOpenArray).valueOr:
     return err()
   # Ignore state decode error, might be from an earlier state version release
-  var
-    state: FcHdrSession
   try:
-    state = rlp.decode(data, FcHdrSession) # catch/accept rlp error
+    return ok rlp.decode(data, FcHdrtDbTabInfo) # catch/accept rlp error
   except RlpError:
-    return err()
-  ok(move state)
+    discard
+  err()
 
-proc putState(db: KvtTxRef; state: FcHdrSession) =
-  db.put(LhcStateKey.toOpenArray, encodePayload(state)).isOkOr:
-    raiseAssert RaisePfx & "put(state) failed: " & $error
+proc delInfo(db: KvtTxRef) =
+  ## Remove info record from cache
+  discard db.del(FcHdrInfoKey.toOpenArray)
+
 
 proc putHeader(db: KvtTxRef; bn: BlockNumber; data: seq[byte]) =
   ## Store rlp encoded header
   db.put(beaconHeaderKey(bn).toOpenArray, data).isOkOr:
-    raiseAssert RaisePfx & "put() failed: " & $error
-
+    raiseAssert RaisePfx & "put(header) failed: " & $error
 
 proc getHeader(db: KvtTxRef; bn: BlockNumber): Opt[Header] =
   ## Retrieve some header from cache
@@ -208,52 +218,38 @@ proc getHeader(db: KvtTxRef; bn: BlockNumber): Opt[Header] =
     return err()
   ok decodePayload(data, Header)
 
-proc getHeaderAlways(db: KvtTxRef; bn: BlockNumber): Header =
-  ## Retrieve some header from cache, raise exception on failure
-  var hdr = db.getHeader(bn).valueOr:
-    raiseAssert RaisePfx & "get() failed: " & bn.bnStr
-  move(hdr)
-
-
-proc delHeader(db: KvtTxRef; bn: BlockNumber) =
-  ## Remove header from cache
-  discard db.del(beaconHeaderKey(bn).toOpenArray)
-
-proc delHeaders(db: KvtTxRef; first, last: BlockNumber) =
-  for bn in first .. last:
+proc delHeaders(db: KvtTxRef; fromBn, toBn: BlockNumber) =
+  ## Remove headers from cache
+  for bn in fromBn .. toBn:
     discard db.del(beaconHeaderKey(bn).toOpenArray)
+    # Occasionally flush the current data
+    if (bn - fromBn) mod MaxDeleteBatch == 0:
+      db.persist()
 
 # ----------------------
 
-proc persistPutState(fc: ForkedCacheRef) =
-  ## Persist state records and database updates
-  let
-    db = fc.kvt
+proc persistInfo(fc: ForkedCacheRef) =
+  ## Persist info record (and whatever was in the kvt cache)
+  fc.kvt.putInfo FcHdrtDbTabInfo(
+    least: fc.session.ante.number,
+    last:  fc.session.head.number)
+  fc.kvt.persist()
 
-  # Save updated state record
-  db.putState(fc.session)
-
-  # Persist state to database
-  db.persist()
+proc persistClear(fc: ForkedCacheRef) =
+  ## Clear persistent database
+  let w = fc.kvt.getInfo.valueOr: return
+  fc.kvt.delHeaders(w.least, w.last)
+  fc.kvt.delInfo()
+  fc.kvt.persist()
 
 proc persistDelUpTo(fc: ForkedCacheRef; bn: BlockNumber) =
   ## Remove headers from the lower end of the cache starting at the
   ## `antecedent` up to the argument block number.
-  if fc.session.ante.number <= bn:
-    let
-      bn = min(bn, fc.session.head.number-1)
-      db = fc.kvt
-      ante = db.getHeader(bn + 1).valueOr:
-        raiseAssert RaisePfx & "get() failed: " & (bn + 1).bnStr
-
-    for bn in fc.session.ante.number .. bn:
-      db.delHeader bn
-
-    # Save state
-    fc.session.ante = ante
-
-    # Save updates. persist to DB
-    fc.persistPutState()
+  if fc.session.ante.number <= bn and fc.session.head.number <= bn:
+    fc.kvt.delHeaders(fc.session.ante.number, bn)
+    fc.session.ante = fc.kvt.getHeader(bn + 1).valueOr:
+      raiseAssert RaisePfx & "get(header) failed: " & (bn + 1).bnStr
+    fc.persistInfo()
 
 # ------------------------------------------------------------------------------
 # Private helper functions
@@ -332,10 +328,8 @@ proc clear*(fc: ForkedCacheRef) =
   ## call back argument from `start()`.)
   ##
   if 0 < fc.session.head.number:
-    let db = fc.kvt
-    db.delHeaders(fc.session.ante.number, fc.session.head.number)
     fc.session.reset                 # clear session state object
-    fc.persistPutState()
+    fc.persistClear()                # clear database
 
 
 proc stop*(fc: ForkedCacheRef) =
@@ -370,12 +364,8 @@ proc init*(T: type ForkedCacheRef; c: ForkedChainRef): T =
   ## using the cache, `start()` needs to be called so that the client app gets
   ## informed when and how the API is fully functional.
   ##
-  let
-    be = c.db.kvtBackend()
-    kvt = be.synchronizerKvt()
-    state = kvt.getState.valueOr: FcHdrSession()
-    fc = T(chain: c, session: state, kvt: kvt)
-  fc.clear()
+  let fc = T(chain: c, kvt: c.db.kvtBackend().synchronizerKvt())
+  fc.persistClear()                  # clear database
   fc
 
 proc destroy*(fc: ForkedCacheRef) =
@@ -540,16 +530,15 @@ proc fcHeaderPut*(
         break
 
     # Commit to database
-    let db = fc.kvt
     for n in 1 ..< vetted.len:
       # Store on database
-      db.putHeader(vetted[n].number, vetted[n].data)
+      fc.kvt.putHeader(vetted[n].number, vetted[n].data)
 
     # Set new antecedent `ante` and save to disk (if any)
     fc.session.ante = rev[revTopInx]
 
     # Save updates. persist to DB
-    fc.persistPutState()
+    fc.persistInfo()
 
   ok()
 
@@ -567,7 +556,7 @@ proc fcHeaderCommit*(fc: ForkedCacheRef): Result[void,string] =
 
   if not fc.chain.hashToBlock.hasKey(fc.session.ante.parentHash):
     # Beware of a re-org right after the last `fcHeaderPut()`
-    return err("Link into FC module is lost")
+    return err("Link into FC module has been lost")
 
   # Update internal state
   fc.session.mode = locked
@@ -621,8 +610,7 @@ proc fcHeaderImportBlock*(fc: ForkedCacheRef; blk: Block): Result[void,string] =
   ## base value of the `FC` module proper accomplised by invocation of
   ## `forkChoice()`.
   ##
-  ## This module uses the latest finalised value that was collected over time
-  ## for updating the base value mentioned above.
+  ## To be integrated into `FC` module proper
   ##
   ?fc.chain.importBlock(blk)
 
