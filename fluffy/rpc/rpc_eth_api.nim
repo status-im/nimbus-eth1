@@ -432,7 +432,7 @@ proc installEthApiHandlers*(
     )
 
   rpcServer.rpc("eth_call") do(
-    tx: TransactionArgs, quantityTag: RtBlockIdentifier
+    tx: TransactionArgs, quantityTag: RtBlockIdentifier, optimisticStateFetch: Opt[bool]
   ) -> seq[byte]:
     # TODO: add documentation
 
@@ -447,7 +447,16 @@ proc installEthApiHandlers*(
       sn = stateNetwork.getOrRaise()
       evm = portalEvm.getOrRaise()
 
-    let callResult = (await evm.call(tx, quantityTag.number.uint64)).valueOr:
+    let callResult = (
+      await evm.call(
+        tx,
+        quantityTag.number.uint64,
+        if optimisticStateFetch.isNone():
+          true
+        else:
+          optimisticStateFetch.get(),
+      )
+    ).valueOr:
       raise newException(ValueError, error)
 
     if callResult.error.len() > 0:

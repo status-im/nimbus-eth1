@@ -58,8 +58,6 @@ logScope:
 #   the worst case performance because all state accesses inside the EVM are
 #   completely sequential.
 
-# Limit the max number of calls to prevent infinite loops and/or DOS in the event
-# of a bug in the implementation
 const EVM_CALL_LIMIT = 10000
 
 type
@@ -111,7 +109,10 @@ proc init*(T: type PortalEvm, hn: HistoryNetwork, sn: StateNetwork): T =
   PortalEvm(historyNetwork: hn, stateNetwork: sn, com: com)
 
 proc call*(
-    evm: PortalEvm, tx: TransactionArgs, blockNumOrHash: uint64 | Hash32
+    evm: PortalEvm,
+    tx: TransactionArgs,
+    blockNumOrHash: uint64 | Hash32,
+    optimisticStateFetch = true,
 ): Future[Result[CallResult, string]] {.async: (raises: [CancelledError]).} =
   let
     to = tx.to.valueOr:
@@ -150,6 +151,8 @@ proc call*(
     callResult: EvmResult[CallResult]
     evmCallCount = 0
 
+  # Limit the max number of calls to prevent infinite loops and/or DOS in the
+  # event of a bug in the implementation.
   while evmCallCount < EVM_CALL_LIMIT:
     debug "Starting PortalEvm execution", evmCallCount
 
@@ -163,21 +166,23 @@ proc call*(
     witnessKeys = vmState.ledger.getWitnessKeys()
     vmState.ledger.clearWitnessKeys()
 
-    # If the witness keys did not change after the last execution then we can stop
-    # the execution loop because we have already executed the transaction with the
-    # correct state
-    if lastWitnessKeys == witnessKeys:
-      break
-
     try:
       var
         accountQueries = newSeq[AccountQuery]()
         storageQueries = newSeq[StorageQuery]()
         codeQueries = newSeq[CodeQuery]()
 
-      # Loop through the collected keys and fetch all state concurrently
+      # Loop through the collected keys and fetch the state concurrently.
+      # If optimisticStateFetch is enabled then we fetch state for all the witness
+      # keys and await all queries before continuing to the next call.
+      # If optimisticStateFetch is disabled then we only fetch and then await on
+      # one piece of state (the next in the ordered witness keys) while the remaining
+      # state queries are still issued in the background just incase the state is
+      # needed in the next iteration.
+      var stateFetchDone = false
       for k, v in witnessKeys:
         let (adr, _) = k
+
         if v.storageMode:
           let slotIdx = (adr, v.storageSlot)
           if slotIdx notin fetchedStorage:
@@ -185,20 +190,42 @@ proc call*(
             let storageFut = evm.stateNetwork.getStorageAtByStateRoot(
               header.stateRoot, adr, v.storageSlot
             )
-            storageQueries.add(StorageQuery.init(adr, v.storageSlot, storageFut))
+            if not stateFetchDone:
+              storageQueries.add(StorageQuery.init(adr, v.storageSlot, storageFut))
+              if not optimisticStateFetch:
+                stateFetchDone = true
         elif adr != default(Address):
           doAssert(adr == v.address)
 
           if adr notin fetchedAccounts:
             debug "Fetching account", address = adr
             let accFut = evm.stateNetwork.getAccount(header.stateRoot, adr)
-            accountQueries.add(AccountQuery.init(adr, accFut))
+            if not stateFetchDone:
+              accountQueries.add(AccountQuery.init(adr, accFut))
+              if not optimisticStateFetch:
+                stateFetchDone = true
 
           if v.codeTouched and adr notin fetchedCode:
             debug "Fetching code", address = adr
-            let codeFut =
-              evm.stateNetwork.getCodeByStateRoot(header.stateRoot, adr)
-            codeQueries.add(CodeQuery.init(adr, codeFut))
+            let codeFut = evm.stateNetwork.getCodeByStateRoot(header.stateRoot, adr)
+            if not stateFetchDone:
+              codeQueries.add(CodeQuery.init(adr, codeFut))
+              if not optimisticStateFetch:
+                stateFetchDone = true
+
+      if optimisticStateFetch:
+        # If the witness keys did not change after the last execution then we can
+        # stop the execution loop because we have already executed the transaction
+        # with the correct state.
+        if lastWitnessKeys == witnessKeys:
+          break
+      else:
+        # When optimisticStateFetch is disabled and stateFetchDone is not set then
+        # we know that all the state has already been fetched in the last iteration
+        # of the loop and therefore we have already executed the transaction with
+        # the correct state.
+        if not stateFetchDone:
+          break
 
       # Store fetched state in the in-memory EVM
       for q in accountQueries:
