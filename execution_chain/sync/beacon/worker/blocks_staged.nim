@@ -351,7 +351,7 @@ proc blocksStagedImport*(
 
   info "Importing blocks", iv, nBlocks,
     base=ctx.chain.baseNumber.bnStr, head=ctx.chain.latestNumber.bnStr,
-    target=ctx.layout.final.bnStr
+    target=ctx.layout.head.bnStr
 
   var maxImport = iv.maxPt                         # tentatively assume all ok
   block importLoop:
@@ -384,14 +384,15 @@ proc blocksStagedImport*(
       if (n + 1) mod finaliserChainLengthMax == 0 or (n + 1) == nBlocks:
         let
           nthHash = qItem.data.getNthHash(n)
-          finHash = if nBn < ctx.layout.final: nthHash
-                    else: ctx.layout.finalHash
+          final = ctx.hdrCache.fcHeaderGetFinalNumberOrBase()
+          finHash = if nBn < final: nthHash
+                    else: ctx.hdrCache.fcHeaderGetFinalHashOrBase()
 
         ctx.pool.chain.forkChoice(nthHash, finHash).isOkOr:
           ctx.poolMode = true
           warn info & ": fork choice error (reorg triggered)", n, iv,
             B=ctx.chain.baseNumber.bnStr, L=ctx.chain.latestNumber.bnStr,
-            F=ctx.layout.final.bnStr, nthBn=nBn.bnStr, nthHash=nthHash.short,
+            F=final.bnStr, nthBn=nBn.bnStr, nthHash=nthHash.short,
             finHash=(if finHash == nthHash: "nthHash" else: "F"), `error`=error
           # Restore what is left over below
           maxImport = nBn

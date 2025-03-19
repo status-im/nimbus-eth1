@@ -18,7 +18,7 @@ import
   ../worker_desc,
   ./blocks_staged/staged_queue,
   ./headers_staged/staged_queue,
-  ./[blocks_unproc, headers_unproc]
+  ./[blocks_unproc, headers_unproc, update]
 
 # ------------------------------------------------------------------------------
 # Private functions
@@ -37,30 +37,12 @@ proc queryProgressCB(
               ctx.layout.head)
     # (0,0,0)
 
-proc updateBeaconHeaderCB(
-    ctx: BeaconCtxRef;
-    info: static[string];
-      ): ReqBeaconSyncerTargetCB =
-  ## Update beacon header. This function is intended as a call back function
-  ## for the RPC module.
-  return proc(h: Header; f: Hash32) {.gcsafe, raises: [].} =
-
-    # Check whether there is an update running (otherwise take next upate)
-    if not ctx.clReq.locked and                   # can update ok
-       f != zeroHash32 and                        # finalised hash is set
-       ctx.layout.head < h.number and             # update is advancing
-       ctx.clReq.mesg.consHead.number < h.number: # .. ditto
-
-      ctx.clReq.mesg.consHead = h
-      ctx.clReq.mesg.finalHash = f
-      ctx.clReq.changed = true
-
 # ------------------------------------------------------------------------------
 # Public functions
 # ------------------------------------------------------------------------------
 
-proc setupDatabase*(ctx: BeaconCtxRef; info: static[string]) =
-  ## Initalise database related stuff
+proc setupServices*(ctx: BeaconCtxRef; info: static[string]) =
+  ## Helper for `setup()`: Enable external call-back based services
 
   # Initialise up queues and lists
   ctx.headersStagedQueueInit()
@@ -70,10 +52,6 @@ proc setupDatabase*(ctx: BeaconCtxRef; info: static[string]) =
 
   # Start in suspended mode
   ctx.hibernate = true
-
-  # Set up header cache descriptor. This will evenually be integrated
-  # into `ForkedChainRef` (i.e. `ctx.pool.chain`.)
-  ctx.pool.hdrCache = ForkedCacheRef.init(ctx.pool.chain)
 
   # Take it easy and assume that queue records contain full block list (which
   # is mostly the case anyway.) So the the staging queue is limited by the
@@ -88,17 +66,27 @@ proc setupDatabase*(ctx: BeaconCtxRef; info: static[string]) =
     debug info & ": import block lists queue", limit=ctx.pool.blkStagedLenHwm
   ctx.pool.blkStagedHwm = hwm
 
+  # Set up header cache descriptor. This will evenually be integrated
+  # into `ForkedChainRef` (i.e. `ctx.pool.chain`.)
+  ctx.pool.hdrCache = ForkedCacheRef.init(ctx.pool.chain)
 
-proc setupServices*(ctx: BeaconCtxRef; info: static[string]) =
-  ## Helper for `setup()`: Enable external call-back based services
-  # Activate `CL` requests. Will be called from RPC handler.
-  ctx.pool.chain.com.reqBeaconSyncerTarget = ctx.updateBeaconHeaderCB info
+  # Set up new notifier telling when the new head is available from the `CL`
+  ctx.hdrCache.start proc() {.gcsafe, raises: [].} =
+    ctx.updateFromHibernateSetTarget info
+
+  # Manual first run?
+  if 0 < ctx.clReq.consHead.number:
+    debug info & ": pre-set target", consHead=ctx.clReq.consHead.bnStr,
+      finalHash=ctx.clReq.finalHash.short
+    ctx.hdrCache.fcHeaderTargetUpdate(ctx.clReq.consHead, ctx.clReq.finalHash)
+
   # Provide progress info
   ctx.pool.chain.com.beaconSyncerProgress = ctx.queryProgressCB info
 
+
 proc destroyServices*(ctx: BeaconCtxRef) =
   ## Helper for `release()`
-  ctx.pool.chain.com.reqBeaconSyncerTarget = ReqBeaconSyncerTargetCB(nil)
+  ctx.hdrCache.destroy()
   ctx.pool.chain.com.beaconSyncerProgress = BeaconSyncerProgressCB(nil)
 
 # ---------

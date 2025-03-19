@@ -58,9 +58,6 @@ proc napUnlessSomethingToFetch(
 proc setup*(ctx: BeaconCtxRef; info: static[string]): bool =
   ## Global set up
   ctx.setupServices info
-
-  # Load initial state from database if there is any
-  ctx.setupDatabase info
   true
 
 proc release*(ctx: BeaconCtxRef; info: static[string]) =
@@ -104,21 +101,14 @@ proc initalScrumFromFile*(
     info: static[string];
       ): Result[void,string] =
   ## Set up inital sprint from argument file (itended for debugging)
-  var
-    mesg: SyncClMesg
   try:
     var f = file.open(fmRead)
     defer: f.close()
-    var rlp = rlpFromHex(f.readAll().strip)
-    mesg = rlp.read(SyncClMesg)
+    var rlp = rlpFromHex(f.readAll().splitWhitespace.join)
+    ctx.sst.clReq = rlp.read(SyncClMesg)
   except CatchableError as e:
     return err("Error decoding file: \"" & file & "\"" &
       " (" & $e.name & ": " & e.msg & ")")
-  ctx.clReq.mesg = mesg
-  ctx.clReq.locked = true
-  ctx.clReq.changed = true
-  debug info & ": Initialised from file", file, consHead=mesg.consHead.bnStr,
-    finalHash=mesg.finalHash.short
   ok()
 
 # ------------------------------------------------------------------------------
@@ -205,11 +195,6 @@ proc runPeer*(
   if 0 < buddy.only.nMultiLoop:                 # statistics/debugging
     buddy.only.multiRunIdle = Moment.now() - buddy.only.stoppedMultiRun
   buddy.only.nMultiLoop.inc                     # statistics/debugging
-
-  # Wake up from hibernating if there is a new `CL` scrum target available.
-  # Note that this check must be done on a peer and the `Daemon` is not
-  # running while thr system is hibernating.
-  buddy.updateFromHibernatingForNextScrum info
 
   if not await buddy.napUnlessSomethingToFetch():
 

@@ -28,7 +28,18 @@
 ## Note that there can be only one header cache active at a time. This will
 ## not be checked when initialising the system.
 ##
-## Operations:
+## Setup operation:
+##
+## * After initialisation, the `start()` function is called which will cause
+##   this module to listen to fork-choice update request from the `CL`.
+##
+## * If the fork-choice update request from the `CL` was useful, a new session
+##   is initialised. The client app invoking `start()` might pass a notifier
+##   call back function for an event driven approach to get informed about a
+##   a new session. Alternatively, one can use the function `fcHeaderHead()`
+##   for polling.
+##
+## Client API available:
 ##
 ## * Headers can be appended to the cache at the stack bottom away from `head`
 ##   (i.e. on the left end of the above diagram before `antecedent`.) There
@@ -45,30 +56,60 @@
 ## * Cached headers can be looked up for by block number or by hash for some
 ##   pre-registered hashes.
 ##
+## * Finalised header values can be looked up (for updaing the `FC` base.)
+##   They are continuously collected as hash from the `CL` and resolved as
+##   header when calling `fcHeaderGet()` when available.
+##
 
 {.push raises:[].}
 
 import
-  std/[sequtils, strutils, tables],
+  std/sets,
   pkg/eth/[common, rlp],
   pkg/results,
   "../../.."/[common, db/core_db, db/storage_types],
   ./[chain_branch, chain_desc]
 
 type
-  FcHdrState* = object
+  FcNotifyCB* = proc() {.gcsafe, raises: [].}
+    ## Call back function telling a client app that a new chain was initialised.
+
+  FcHdrState = object
+    ## Header cache state record
     ante: Header               # antecedent, bottom of header chain
     head: Header               # top end of header chain, highest block number
-    byHash: Table[Hash32,BlockNumber]
+    headHash: Hash32
+    finNumber: BlockNumber     # number of final block
+    finHash: Hash32
+
+  FcHdrSession = object
+    clearRequest: bool         # ephemeral, may be set by `clear()`
+    consHeadNum: BlockNumber   # for logging, metrics etc.
+    byHash: HashSet[Hash32]    # finalized block hashes to resolve
 
   ForkedCacheRef* = ref object
     ## For now, this is a replacement of `ForkedChainRef` for as long as
     ## `FcHdrState` is not integrated into `ForkedChainRef`.
-    chain: ForkedChainRef
-    state: FcHdrState
+    chain: ForkedChainRef      # descriptor will resolve into that in future
+    state: FcHdrState          # state of header chain cache
+    session: FcHdrSession      # additional session variables
+    notify: FcNotifyCB         # client app notification
 
 const
+  HashCacheSize = 50
+    ## Cardinality of `byHash` cache. The cache management has typically
+    ## little effect when the finaliser is near the consensus head. It is
+    ## is collected in `fcUpdateFromCL()`. The next such finaliser collected
+    ## has a high chance to exceed the current consensus head (which is not
+    ## known at the time of collection). So it will turn out to be useless
+    ## and linger in the cache.
+    ##
+    ## Where it matters is when the CL is synchronising (e.g. after a cold
+    ## start) and leaves a huge gap between finaliser and consensus head where
+    ## the finaliser is incrementally updated.
+
   RaisePfx = "Header Cache: "
+    ## Message prefix used when bailing out raising an exception
 
 let
   LhcStateKey = 0.beaconHeaderKey
@@ -84,34 +125,19 @@ func bnStr(h: Header): string =
   h.number.bnStr
 
 func toStr(fc: ForkedCacheRef): string =
-  if fc.state.head.number == 0: "{}"
-  else:
-    let tab = ",[" & fc.state.byHash.pairs.toSeq.mapIt(
-      "(" & it[0].short & "," & it[1].bnStr & ")").join(",") & "]"
-    if fc.state.ante == fc.state.head: "{" & fc.state.head.bnStr & tab & "}"
-    else: "{" & fc.state.ante.bnStr & ".." & fc.state.head.bnStr & tab & "}"
+  result = "("
+  if fc.state.head.number != 0:
+    result &= "(" & fc.state.ante.bnStr
+    if fc.state.ante != fc.state.head:
+      result &= ".." & fc.state.head.bnStr
+    result &= "," & fc.state.finNumber.bnStr & ")"
+    result &= "," & fc.session.consHeadNum.bnStr
+    result &= ",{#" & $fc.session.byHash.len & "}"
+  result &= ")"
 
 # ------------------------------------------------------------------------------
 # Private cache helpers: RLP related
 # ------------------------------------------------------------------------------
-
-proc append(rw: var RlpWriter; state: FcHdrState) =
-  ## Support for `rlp.encode(state)`
-  ##
-  rw.append(state.ante)
-  rw.append(state.head)
-  rw.startList(state.byHash.len)
-  for k,v in state.byHash.pairs:
-    rw.append((k,v))
-
-proc read(rlp: var Rlp; T: type FcHdrState): T {.raises: [RlpError].} =
-  ## Support for `rlp.decode(bytes)`
-  ##
-  result.ante = rlp.read(Header)
-  result.head = rlp.read(Header)
-  for w in rlp.items:
-    let (k,v) = w.read((Hash32,BlockNumber))
-    result.byHash[k] = v
 
 func encodePayload[T](arg: T): seq[byte] =
   rlp.encode(arg)
@@ -204,88 +230,185 @@ proc persistDelUpTo(fc: ForkedCacheRef; bn: BlockNumber) =
     fc.persistPutState()
 
 # ------------------------------------------------------------------------------
-# Public heacher cache API
+# Private fork choice call back function
 # ------------------------------------------------------------------------------
 
-proc init*(fc: ForkedCacheRef; hdr = Header(); hashes = seq[Hash32].default) =
-  ## Clean up DB left over data and Initialise new chain cache.
+proc fcUpdateFromCL(fc: ForkedCacheRef; h: Header; f: Hash32) =
+  ## Call back function to register new/prevously-unknown FC updates.
   ##
-  ## If the argument `hdr` is missing or default, then any previous data
-  ## will; be erased from disk (ignoring the `hashes` argument.)
-  ##
-  ## Otherwise, the arguments `hdr` and `hashes` will setup a new session with
-  ##
-  ## * `hdr` being the new `head` of the header chain
-  ##
-  ## * `hashes` will collect header information on the fly while appending
-  ##    headers so that these headers can also be access by `Hash32` rather
-  ##    than `BlockNumber` only.
-  ##
-  let db = fc.chain.baseTxFrame
-  var persistsOk = false
+  ## This function initialises a new session and notifies some registered
+  ## client app.
+  if f != zeroHash32 and                            # finalised hash is set
+     fc.state.head.number < h.number and            # some progress observed
+     fc.chain.baseBranch.tailNumber + 1 < h.number: # otherwise useless
 
-  # Delete previous session (if any)
+    if 0 < fc.state.head.number:
+      # Collect finalised hash to be resolved later
+      if fc.session.byHash.len < HashCacheSize and f notin fc.session.byHash:
+        # The cache entries will potentially be resolved in the function
+        # `fcHeaderGet()`. As this function is expected to be called in a
+        # manner with increasing block numbers, the oldest hash from the
+        # cache is expected to be resolved first so freeing this slot.
+        fc.session.byHash.incl f
+
+    else:
+      # Set up the session environment but do not persist yet so the
+      # session can be cheaply cancelled from within the notifier function.
+      fc.session.reset                              # start new session
+      fc.state = FcHdrState(                        # update state record
+        ante:     h,
+        head:     h,
+        headHash: rlp.encode(h).keccak256,
+        finHash:  f)
+
+      # Inform client app about a new session. This may result in a request
+      # passed on from the `clear()` function (called by `notify()`) for
+      # cancelling the set up and flush data. In that case, the `clear()`
+      # function will have set the flag `clearRequest`.
+      if not fc.notify.isNil:
+        fc.notify()
+
+      # Persist session unless clear request
+      if fc.session.clearRequest:
+        fc.state.reset
+      else:
+        let db = fc.chain.baseTxFrame
+        db.put(beaconHeaderKey(h.number).toOpenArray,encodePayload(h)).isOkOr:
+          raiseAssert RaisePfx & "put() failed: " & $$error
+
+    # For logging and metrics
+    fc.session.consHeadNum = h.number
+
+# ------------------------------------------------------------------------------
+# Public constructor/destructor et al.
+# ------------------------------------------------------------------------------
+
+proc clear*(fc: ForkedCacheRef) =
+  ## Clear current header chain cache session. If `start()` was called
+  ## previously, a new session will be set up when available. When ready,
+  ## the clent app will be notified again via the `notify` argument function
+  ## from `start()`. Alternatively, `fcHeaderHead()` can be used for polling.
+  ##
+  ## It is save to call `clear()` by the client app notifier (set up with
+  ## `start()`) in order to cancel the new session with the particular head.
+  ##
   if 0 < fc.state.head.number:
+    let db = fc.chain.baseTxFrame
     db.delHeaders(fc.state.ante.number, fc.state.head.number)
-    fc.state.reset          # clear session
-    persistsOk = true       # make changes persistent
-
-  # Start a new session.
-  if 0 < hdr.number:
-    db.put(beaconHeaderKey(hdr.number).toOpenArray, encodePayload(hdr)).isOkOr:
-      raiseAssert RaisePfx & "put() failed: " & $$error
-    fc.state.ante = hdr     # Update state record
-    fc.state.head = hdr
-
-    # Add lookup hashes
-    for w in hashes:
-      fc.state.byHash[w] = BlockNumber(0)
-
-    persistsOk = true       # make changes persistent
-
-  # Save updates. persist to DB
-  if persistsOk:
+    fc.state.reset                 # clear session state object
+    fc.session.reset
     fc.persistPutState()
+  else:
+    # Set flag to potentally inform the updater call back function
+    fc.session.clearRequest = true # sort of delayed clear request
 
-proc init*(
-    T: type ForkedCacheRef;
-    c: ForkedChainRef;
-    hdr = Header();
-    hashes = seq[Hash32].default;
-      ): T =
-  ## Constructor, variant of `init()` initialising a new header chain cache
+proc stop*(fc: ForkedCacheRef) =
+  ## Stop updating the client cache. Will automatically be called by the
+  ## destructor `destroy()`.
+  ##
+  fc.chain.com.reqBeaconSyncerTarget = ReqBeaconSyncerTargetCB(nil)
+  fc.notify = FcNotifyCB(nil)
+
+proc start*(fc: ForkedCacheRef; notify = FcNotifyCB(nil)) =
+  ## Initalise the chain so can be filled once a chain head is available.
+  ##
+  ## If so, the peer app that invokes `start()` is informed via the call back
+  ## argument function `notify()` that the header cache was initialised. This
+  ## call back function also passed on the chain head used for initialisation.
+  ## Alternatively, `fcHeaderHead()` can be used for polling if auto
+  ## notification is unwanted.)
+  ##
+  ## The block number of the new chain `head` is always larger than the current
+  ## `base` of the `FC` module, in particular `base.number + 1 < head.number`.
+  ##
+  fc.notify = notify
+  fc.chain.com.reqBeaconSyncerTarget = proc(h: Header; f: Hash32) =
+    fc.fcUpdateFromCL(h, f)
+
+# ------------------
+
+proc init*(T: type ForkedCacheRef; c: ForkedChainRef): T =
+  ## Constructor, for initialising a new header chain cache. In order to start
+  ## using the cache, `start()` needs to be called so that the client app gets
+  ## informed when and how the API is fully functional.
+  ##
   let
     db = c.baseTxFrame
     state = db.getState.valueOr: FcHdrState()
     fc = T(chain: c, state: state)
-  fc.init(hdr, hashes)
+  fc.clear()
   fc
 
-# --------------------
+proc destroy*(fc: ForkedCacheRef) =
+  ## Destructor
+  fc.stop()
+  fc.clear()
 
-proc fcHeaderGet*(fc: ForkedCacheRef; hash: Hash32): Result[Header,bool] =
-  ## Retrieve header by hash. In case of failure the error code will be
-  ## set `true` if the `hash` argument was registered but not available
-  ## yet on the header chain, otherwise `false` to indicate that the
-  ## `hash` argument was not registered.
-  ##
-  fc.state.byHash.withValue(hash, val):
-    if fc.state.ante.number <= val[]: # no need to lookup database, otherwise
-      var hdr = fc.chain.baseTxFrame.getHeader(val[]).valueOr:
-        return err(true)
-      return ok(move hdr)
-    return err(true)
-  err(false)
+# ------------------------------------------------------------------------------
+# Public heacher cache production API
+# ------------------------------------------------------------------------------
+
+proc fcHeaderGetFinalNumber*(fc: ForkedCacheRef): Opt[BlockNumber] =
+  ## Retrieve finalised header (if any)
+  if 0 < fc.state.finNumber: ok(fc.state.finNumber) else: err()
+
+proc fcHeaderGetFinalNumberOrBase*(fc: ForkedCacheRef): BlockNumber =
+  fc.fcHeaderGetFinalNumber.valueOr: fc.chain.baseBranch.tailNumber
+
+
+proc fcHeaderGetFinalHash*(fc: ForkedCacheRef): Opt[Hash32] =
+  ## Retrieve hash of the finalised header (if any)
+  if 0 < fc.state.finNumber: ok(fc.state.finHash) else: err()
+
+proc fcHeaderGetFinalHashOrBase*(fc: ForkedCacheRef): Hash32 =
+  fc.fcHeaderGetFinalHash.valueOr: fc.chain.baseBranch.tailHash
+
+
+proc fcHeaderGetHash*(fc: ForkedCacheRef; bn: BlockNumber): Opt[Hash32] =
+  ## Convenience function, retrieve hash of block header
+  if bn == fc.state.head.number:
+    return ok(fc.state.headHash)
+  # Use parent hash of child entry
+  let hdr = fc.chain.baseTxFrame.getHeader(bn+1).valueOr:
+    return err()
+  ok(hdr.parentHash)
 
 proc fcHeaderGet*(fc: ForkedCacheRef; bn: BlockNumber): Opt[Header] =
   ## Retrieve some stashed header.
-  fc.chain.baseTxFrame.getHeader bn
-
-proc fcHeaderGetParentHash*(fc: ForkedCacheRef; bn: BlockNumber): Opt[Hash32] =
-  ## Convenience function, retrieve parent hash field from header
-  let hdr = fc.chain.baseTxFrame.getHeader(bn).valueOr:
+  var hdr = fc.chain.baseTxFrame.getHeader(bn).valueOr:
     return err()
-  ok(hdr.parentHash)
+
+  block body:
+    # Get `hash(hdr)`
+    let hash = fc.fcHeaderGetHash(bn).valueOr:
+      break body
+
+    # Improve `finHash` if the current `hdr` is a better choice. This
+    # function here is typically called for increasing block numbers. So
+    # there is a high chance to increase the `finNumber` reducing the
+    # distance to the head of the header chain cache. This in turn is an
+    # advantage for updating the `base` of the `FC` module proper when
+    # importing blocks.
+    if hash notin fc.session.byHash:
+      break body
+
+    # Make space, unregister the hash entry from the set.
+    #
+    # For reason to control set cardinality, the `hash(hdr)` value is always
+    # needed. It is expected that the next `fcHeaderGet()` call is for block
+    # number `bn+1`, so the corresponding header chould still be on the
+    # database cache when asked for, later.
+    fc.session.byHash.excl hash
+
+    if hdr.number <= fc.chain.baseBranch.tailNumber or # below `FC` base?
+       hdr.number <= fc.state.finNumber:               # no improvement?
+      break body
+
+    # Replace `final` by current entry if on the cache
+    fc.state.finNumber = hdr.number
+    fc.state.finHash = hash
+
+  ok(move hdr)
 
 
 
@@ -356,10 +479,13 @@ proc fcHeaderPut*(
 
     # No need to store overlapping `rev[]` entries
     if bn < fc.state.ante.number:
-      # Complete pre-registered `hash->block-number` info (if any)
-      fc.state.byHash.withValue(hash, val):
-        val[] = bn
-      # Store data
+
+      # Update finalised header (if any)
+      if fc.state.finNumber == 0 and
+         fc.state.finHash == hash:
+        fc.state.finNumber = bn
+
+      # Store header on database
       db.putHeader(bn, data)
 
   if rev[rev.len-1].number < fc.state.ante.number:
@@ -379,12 +505,33 @@ proc fcHeaderDelBaseAndOlder*(fc: ForkedCacheRef) =
 # --------------------
 
 func fcHeaderHead*(fc: ForkedCacheRef): Header =
-  ## Getter: head of header chain
+  ## Getter: head of header chain. In case there is no header chain
+  ## initialised, the return value is `Header()` (i.e. the block number
+  ## of the result is zero.).
+  ##
   fc.state.head
 
 func fcHeaderAntecedent*(fc: ForkedCacheRef): Header =
-  ## Getter: bottom of header chain
+  ## Getter: bottom of header chain. In case there is no header chain
+  ## initialised, the return value is `Header()` (i.e. the block number
+  ## of the result is zero.).
+  ##
   fc.state.ante
+
+# --------------------
+
+func fcHeaderLastConsHeadNumber*(fc: ForkedCacheRef): BlockNumber =
+  ## Getter: block number of last `CL` head update (aka forkchoice update).
+  ##
+  ## This getter is for metrics or debugging purposes. The returned number
+  ## is typically larger than `fcHeaderHead()` and will increaso over time
+  ## while `fcHeaderHead()` remains constant (for the current session.)
+  ##
+  fc.session.consHeadNum
+
+proc fcHeaderTargetUpdate*(fc: ForkedCacheRef; h: Header; f: Hash32) =
+  ## Emulate request from `CL` (mainly for debugging purposes)
+  fc.fcUpdateFromCL(h, f)
 
 # ------------------------------------------------------------------------------
 # Public debugging helpers
