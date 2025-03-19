@@ -19,7 +19,6 @@ participants:
 additional_services:
   - tx_spammer
   - assertoor
-  - beacon_metrics_gazer
   - blob_spammer
 mev_type: null
 assertoor_params:
