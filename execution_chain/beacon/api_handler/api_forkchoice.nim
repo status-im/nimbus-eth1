@@ -108,9 +108,6 @@ proc forkchoiceUpdated*(ben: BeaconEngineRef,
       number = header.number,
       hash   = headHash.short
 
-    # Update sync header (if any)
-    com.syncReqNewHead(header)
-
     # Inform the header cache (used by the syncer)
     com.fcHeaderClUpdate(header, update.finalizedBlockHash)
 

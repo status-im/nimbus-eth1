@@ -36,9 +36,6 @@ type
     current: BlockNumber
     highest: BlockNumber
 
-  SyncReqNewHeadCB* = proc(header: Header) {.gcsafe, raises: [].}
-    ## Update head for syncing
-
   FcHeaderClUpdateCB* = proc(header: Header; finHash: Hash32) {.gcsafe, raises: [].}
     ## Inform `CL` sub-module `chain_header_cache` about new head.
 
@@ -69,10 +66,6 @@ type
 
     # synchronizer need this
     syncProgress: SyncProgress
-
-    syncReqNewHead: SyncReqNewHeadCB
-      ## Call back function for the sync processor. This function stages
-      ## the arguent header to a private aerea for subsequent processing.
 
     fcHeaderClUpdateCB: FcHeaderClUpdateCB
       ## Call back function for a sync processor that returns the canonical
@@ -340,12 +333,6 @@ proc proofOfStake*(com: CommonRef, header: Header, txFrame: CoreDbTxRef): bool =
 func depositContractAddress*(com: CommonRef): Address =
   com.config.depositContractAddress.get(default(Address))
 
-proc syncReqNewHead*(com: CommonRef; header: Header)
-    {.gcsafe, raises: [].} =
-  ## Used by RPC updater
-  if not com.syncReqNewHead.isNil:
-    com.syncReqNewHead(header)
-
 proc fcHeaderClUpdate*(com: CommonRef; header: Header; finHash: Hash32) =
   ## Used by RPC updater
   if not com.fcHeaderClUpdateCB.isNil:
@@ -459,10 +446,6 @@ func setTTD*(com: CommonRef, ttd: Opt[DifficultyInt]) =
   com.config.terminalTotalDifficulty = ttd
   # rebuild the MergeFork piece of the forkTransitionTable
   com.forkTransitionTable.mergeForkTransitionThreshold = com.config.mergeForkTransitionThreshold
-
-func `syncReqNewHead=`*(com: CommonRef; cb: SyncReqNewHeadCB) =
-  ## Activate or reset a call back handler for syncing.
-  com.syncReqNewHead = cb
 
 func `fcHeaderClUpdate=`*(com: CommonRef; cb: FcHeaderClUpdateCB) =
   ## Activate or reset a call back handler for syncing.
