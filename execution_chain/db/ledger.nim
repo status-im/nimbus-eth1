@@ -18,7 +18,6 @@ import
   minilru,
   ../utils/mergeutils,
   ../evm/code_bytes,
-  ../stateless/multi_keys,
   ../core/eip7702,
   "/.."/[constants, utils/utils],
   ./access_list as ac_access_list,
@@ -38,6 +37,18 @@ const
     # code sizes are much smaller - it would make sense to study these numbers
     # in greater detail.
   slotsLruSize = 16 * 1024
+
+  statelessEnabled = defined(stateless)
+
+when statelessEnabled:
+  type
+    WitnessKey* = object
+      storageMode*: bool
+      address*: Address
+      codeTouched*: bool
+      storageSlot*: UInt256
+
+    WitnessTable* = OrderedTable[(Address, Hash32), WitnessKey]
 
 type
   AccountFlag = enum
@@ -59,14 +70,9 @@ type
     originalStorage: TableRef[UInt256, UInt256]
     overlayStorage: Table[UInt256, UInt256]
 
-  WitnessData* = object
-    storageKeys*: HashSet[UInt256]
-    codeTouched*: bool
-
   LedgerRef* = ref object
     txFrame*: CoreDbTxRef
     savePoint: LedgerSpRef
-    witnessCache: Table[Address, WitnessData]
     isDirty: bool
     ripemdSpecial: bool
     storeSlotHash*: bool
@@ -88,6 +94,13 @@ type
       ## Because the same slots often reappear, we want to avoid writing them
       ## over and over again to the database to avoid the WAL and compation
       ## write amplification that ensues
+
+    when statelessEnabled:
+      witnessKeys: WitnessTable
+        ## Used to collect the keys of all read accounts, code and storage slots.
+        ## Maps a tuple of address and hash of the key (address or slot) to the
+        ## witness key which can be either a storage key or an account key
+
 
   ReadOnlyLedger* = distinct LedgerRef
 
@@ -138,9 +151,11 @@ template logTxt(info: static[string]): static[string] =
 template toAccountKey(acc: AccountRef): Hash32 =
   acc.accPath
 
-template toAccountKey(eAddr: Address): Hash32 =
+template toAccountKey*(eAddr: Address): Hash32 =
   eAddr.data.keccak256
 
+template toSlotKey*(slot: UInt256): Hash32 =
+  slot.toBytesBE.keccak256
 
 proc beginSavepoint*(ac: LedgerRef): LedgerSpRef {.gcsafe.}
 
@@ -157,6 +172,13 @@ proc getAccount(
     address: Address;
     shouldCreate = true;
       ): AccountRef =
+  when statelessEnabled:
+    let lookupKey = (address, address.toAccountKey)
+    if not ac.witnessKeys.contains(lookupKey):
+      ac.witnessKeys[lookupKey] = WitnessKey(
+        storageMode: false,
+        address: address,
+        codeTouched: false)
 
   # search account from layers of cache
   var sp = ac.savePoint
@@ -360,7 +382,6 @@ proc makeDirty(ac: LedgerRef, address: Address, cloneStorage = true): AccountRef
 proc init*(x: typedesc[LedgerRef], db: CoreDbTxRef, storeSlotHash: bool): LedgerRef =
   new result
   result.txFrame = db
-  result.witnessCache = Table[Address, WitnessData]()
   result.storeSlotHash = storeSlotHash
   result.code = typeof(result.code).init(codeLruSize)
   result.slots = typeof(result.slots).init(slotsLruSize)
@@ -451,6 +472,15 @@ proc getNonce*(ac: LedgerRef, address: Address): AccountNonce =
 proc getCode*(ac: LedgerRef,
               address: Address,
               returnHash: static[bool] = false): auto =
+  when statelessEnabled:
+    let lookupKey = (address, address.toAccountKey)
+    # We overwrite any existing record here so that codeTouched is always set to
+    # true even if an account was previously accessed without touching the code
+    ac.witnessKeys[lookupKey] = WitnessKey(
+      storageMode: false,
+      address: address,
+      codeTouched: true)
+
   let acc = ac.getAccount(address, false)
   if acc.isNil:
     when returnHash:
@@ -508,12 +538,28 @@ proc resolveCode*(ac: LedgerRef, address: Address): CodeBytesRef =
 
 proc getCommittedStorage*(ac: LedgerRef, address: Address, slot: UInt256): UInt256 =
   let acc = ac.getAccount(address, false)
+
+  when statelessEnabled:
+    let lookupKey = (address, slot.toSlotKey)
+    if not ac.witnessKeys.contains(lookupKey):
+      ac.witnessKeys[lookupKey] = WitnessKey(
+        storageMode: true,
+        storageSlot: slot)
+
   if acc.isNil:
     return
   acc.originalStorageValue(slot, ac)
 
 proc getStorage*(ac: LedgerRef, address: Address, slot: UInt256): UInt256 =
   let acc = ac.getAccount(address, false)
+
+  when statelessEnabled:
+    let lookupKey = (address, slot.toSlotKey)
+    if not ac.witnessKeys.contains(lookupKey):
+      ac.witnessKeys[lookupKey] = WitnessKey(
+        storageMode: true,
+        storageSlot: slot)
+
   if acc.isNil:
     return
   acc.storageValue(slot, ac)
@@ -595,6 +641,14 @@ proc setCode*(ac: LedgerRef, address: Address, code: seq[byte]) =
 proc setStorage*(ac: LedgerRef, address: Address, slot, value: UInt256) =
   let acc = ac.getAccount(address)
   acc.flags.incl {Alive}
+
+  when statelessEnabled:
+    let lookupKey = (address, slot.toSlotKey)
+    if not ac.witnessKeys.contains(lookupKey):
+      ac.witnessKeys[lookupKey] = WitnessKey(
+        storageMode: true,
+        storageSlot: slot)
+
   let oldValue = acc.storageValue(slot, ac)
   if oldValue != value:
     var acc = ac.makeDirty(address)
@@ -783,46 +837,6 @@ proc getStorageRoot*(ac: LedgerRef, address: Address): Hash32 =
   if acc.isNil: EMPTY_ROOT_HASH
   else: ac.txFrame.slotStorageRoot(acc.toAccountKey).valueOr: EMPTY_ROOT_HASH
 
-proc update(wd: var WitnessData, acc: AccountRef) =
-  # once the code is touched make sure it doesn't get reset back to false in another update
-  if not wd.codeTouched:
-    wd.codeTouched = CodeChanged in acc.flags or acc.code != nil
-
-  if not acc.originalStorage.isNil:
-    for k in acc.originalStorage.keys():
-      wd.storageKeys.incl k
-
-  for k, v in acc.overlayStorage:
-    wd.storageKeys.incl k
-
-proc witnessData(acc: AccountRef): WitnessData =
-  result.storageKeys = HashSet[UInt256]()
-  update(result, acc)
-
-proc collectWitnessData*(ac: LedgerRef) =
-  # make sure all savepoint already committed
-  doAssert(ac.savePoint.parentSavepoint.isNil)
-  # usually witness data is collected before we call persist()
-  for address, acc in ac.savePoint.cache:
-    ac.witnessCache.withValue(address, val) do:
-      update(val[], acc)
-    do:
-      ac.witnessCache[address] = witnessData(acc)
-
-func multiKeys(slots: HashSet[UInt256]): MultiKeysRef =
-  if slots.len == 0: return
-  new result
-  for x in slots:
-    result.add x.toBytesBE
-  result.sort()
-
-proc makeMultiKeys*(ac: LedgerRef): MultiKeysRef =
-  # this proc is called after we done executing a block
-  new result
-  for k, v in ac.witnessCache:
-    result.add(k, v.codeTouched, multiKeys(v.storageKeys))
-  result.sort()
-
 proc accessList*(ac: LedgerRef, address: Address) =
   ac.savePoint.accessList.add(address)
 
@@ -910,6 +924,13 @@ proc getStorageProof*(ac: LedgerRef, address: Address, slots: openArray[UInt256]
     storageProof.add(slotProof[0])
 
   storageProof
+
+when statelessEnabled:
+  func getWitnessKeys*(ac: LedgerRef): WitnessTable =
+    ac.witnessKeys
+
+  proc clearWitnessKeys*(ac: LedgerRef) =
+    ac.witnessKeys.clear()
 
 # ------------------------------------------------------------------------------
 # Public virtual read-only methods
