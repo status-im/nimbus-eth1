@@ -130,8 +130,9 @@ proc run(
 
   ## Discovery v5 protocol setup
   let
-    discoveryConfig =
-      DiscoveryConfig.init(config.tableIpLimit, config.bucketIpLimit, config.bitsPerHop)
+    discoveryConfig = DiscoveryConfig.init(
+      config.tableIpLimit, config.bucketIpLimit, config.bitsPerHop, 512
+    )
     d = newProtocol(
       netkey,
       extIp,
