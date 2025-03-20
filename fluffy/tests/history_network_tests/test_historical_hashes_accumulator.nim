@@ -14,7 +14,8 @@ import
   stint,
   eth/common/headers,
   ../../eth_data/history_data_json_store,
-  ../../network/history/[history_content, validation/historical_hashes_accumulator],
+  ../../network/history/
+    [history_content, validation/block_proof_historical_hashes_accumulator],
   ./test_history_util
 
 suite "Historical Hashes Accumulator":

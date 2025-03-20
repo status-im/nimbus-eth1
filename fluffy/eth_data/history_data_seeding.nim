@@ -1,9 +1,9 @@
-# # Nimbus - Portal Network
-# # Copyright (c) 2022-2024 Status Research & Development GmbH
-# # Licensed and distributed under either of
-# #   * MIT license (license terms in the root directory or at https://opensource.org/licenses/MIT).
-# #   * Apache v2 license (license terms in the root directory or at https://www.apache.org/licenses/LICENSE-2.0).
-# # at your option. This file may not be copied, modified, or distributed except according to those terms.
+# Nimbus - Portal Network
+# Copyright (c) 2022-2025 Status Research & Development GmbH
+# Licensed and distributed under either of
+#   * MIT license (license terms in the root directory or at https://opensource.org/licenses/MIT).
+#   * Apache v2 license (license terms in the root directory or at https://www.apache.org/licenses/LICENSE-2.0).
+# at your option. This file may not be copied, modified, or distributed except according to those terms.
 
 {.push raises: [].}
 
@@ -12,8 +12,11 @@ import
   chronos,
   chronicles,
   ../network/wire/portal_protocol,
-  ../network/history/
-    [history_content, history_network, validation/historical_hashes_accumulator],
+  ../network/history/[
+    history_content,
+    history_network,
+    validation/block_proof_historical_hashes_accumulator,
+  ],
   "."/[era1, history_data_ssz_e2s]
 
 from eth/common/eth_types_rlp import rlpHash

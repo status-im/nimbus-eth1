@@ -19,7 +19,7 @@ from eth/common/eth_types_rlp import rlpHash
 export ssz_serialization, merkleization, proofs, common_types
 
 # HistoricalHashesAccumulator, as per specification:
-# https://github.com/ethereum/portal-network-specs/blob/master/history/history-network.md#the-historical-hashes-accumulator
+# https://github.com/ethereum/portal-network-specs/blob/31bc7e58e2e8acfba895d5a12a9ae3472894d398/history/history-network.md#the-historical-hashes-accumulator
 
 const
   EPOCH_SIZE* = 8192 # block roots per epoch record
@@ -68,8 +68,6 @@ type
   FinishedHistoricalHashesAccumulator* = object
     historicalEpochs*: List[Bytes32, int(MAX_HISTORICAL_EPOCHS)]
     currentEpoch*: EpochRecord
-
-  HistoricalHashesAccumulatorProof* = array[15, Digest]
 
   Bytes32 = common_types.Bytes32
 
@@ -123,71 +121,3 @@ func finishAccumulator*(
   doAssert(a.historicalEpochs.add(epochHash.data))
 
   FinishedHistoricalHashesAccumulator(historicalEpochs: a.historicalEpochs)
-
-## Calls and helper calls for building header proofs and verifying headers
-## against the HistoricalHashesAccumulator and the header proofs.
-
-func getEpochIndex*(blockNumber: uint64): uint64 =
-  blockNumber div EPOCH_SIZE
-
-func getEpochIndex*(header: Header): uint64 =
-  ## Get the index for the historical epochs
-  getEpochIndex(header.number)
-
-func getHeaderRecordIndex*(blockNumber: uint64, epochIndex: uint64): uint64 =
-  ## Get the relative header index for the epoch accumulator
-  uint64(blockNumber - epochIndex * EPOCH_SIZE)
-
-func getHeaderRecordIndex*(header: Header, epochIndex: uint64): uint64 =
-  ## Get the relative header index for the epoch accumulator
-  getHeaderRecordIndex(header.number, epochIndex)
-
-func isPreMerge*(blockNumber: uint64): bool =
-  blockNumber < mergeBlockNumber
-
-func isPreMerge*(header: Header): bool =
-  isPreMerge(header.number)
-
-func verifyProof*(
-    a: FinishedHistoricalHashesAccumulator,
-    header: Header,
-    proof: HistoricalHashesAccumulatorProof,
-): bool =
-  let
-    epochIndex = getEpochIndex(header)
-    epochRecordHash = Digest(data: a.historicalEpochs[epochIndex])
-
-    leave = hash_tree_root(header.rlpHash())
-    headerRecordIndex = getHeaderRecordIndex(header, epochIndex)
-
-    gIndex = GeneralizedIndex(EPOCH_SIZE * 2 * 2 + (headerRecordIndex * 2))
-
-  verify_merkle_multiproof(@[leave], proof, @[gIndex], epochRecordHash)
-
-func buildProof*(
-    header: Header, epochRecord: EpochRecord | EpochRecordCached
-): Result[HistoricalHashesAccumulatorProof, string] =
-  doAssert(header.isPreMerge(), "Must be pre merge header")
-
-  let
-    epochIndex = getEpochIndex(header)
-    headerRecordIndex = getHeaderRecordIndex(header, epochIndex)
-
-    gIndex = GeneralizedIndex(EPOCH_SIZE * 2 * 2 + (headerRecordIndex * 2))
-
-  var proof: HistoricalHashesAccumulatorProof
-  ?epochRecord.build_proof(gIndex, proof)
-
-  ok(proof)
-
-func buildHeaderWithProof*(
-    header: Header, epochRecord: EpochRecord | EpochRecordCached
-): Result[BlockHeaderWithProof, string] =
-  let proof = ?buildProof(header, epochRecord)
-
-  ok(
-    BlockHeaderWithProof(
-      header: ByteList[MAX_HEADER_LENGTH].init(rlp.encode(header)),
-      proof: ByteList[MAX_HEADER_PROOF_LENGTH].init(SSZ.encode(proof)),
-    )
-  )

@@ -14,13 +14,13 @@ import
   ../../network_metadata,
   ./history_type_conversions,
   ./validation/[
-    historical_hashes_accumulator, block_proof_historical_roots,
+    block_proof_historical_hashes_accumulator, block_proof_historical_roots,
     block_proof_historical_summaries,
   ]
 
 from eth/common/eth_types_rlp import rlpHash
 
-export historical_hashes_accumulator
+export block_proof_historical_hashes_accumulator
 
 type HistoryAccumulators* = object
   historicalHashes*: FinishedHistoricalHashesAccumulator
