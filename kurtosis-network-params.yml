@@ -17,9 +17,9 @@ participants:
     cl_extra_params: ["--log-level=DEBUG"]
     use_separate_vc: false
 additional_services:
-  - tx_spammer
+  - spamoor
   - assertoor
-  - blob_spammer
+  - spamoor_blob
 mev_type: null
 assertoor_params:
   image: "ethpandaops/assertoor"
