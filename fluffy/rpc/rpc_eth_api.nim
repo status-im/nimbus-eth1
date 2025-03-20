@@ -17,6 +17,7 @@ import
   ../network/history/[history_network, history_content],
   ../network/state/[state_network, state_content, state_endpoints],
   ../network/beacon/beacon_light_client,
+  ../evm/portal_evm,
   ../version
 
 from ../../execution_chain/errors import ValidationError
@@ -125,12 +126,23 @@ template getOrRaise(stateNetwork: Opt[StateNetwork]): StateNetwork =
     raise newException(ValueError, "state sub-network not enabled")
   sn
 
+template getOrRaise(portalEvm: Opt[PortalEvm]): PortalEvm =
+  let evm = portalEvm.valueOr:
+    raise newException(ValueError, "portal evm not enabled")
+  evm
+
 proc installEthApiHandlers*(
     rpcServer: RpcServer,
     historyNetwork: Opt[HistoryNetwork],
     beaconLightClient: Opt[LightClient],
     stateNetwork: Opt[StateNetwork],
 ) =
+  let portalEvm =
+    if historyNetwork.isSome() and stateNetwork.isSome():
+      Opt.some(PortalEvm.init(historyNetwork.get(), stateNetwork.get()))
+    else:
+      Opt.none(PortalEvm)
+
   rpcServer.rpc("web3_clientVersion") do() -> string:
     return clientVersion
 
@@ -418,3 +430,36 @@ proc installEthApiHandlers*(
       storageHash: proofs.account.storageRoot,
       storageProof: storageProof,
     )
+
+  rpcServer.rpc("eth_call") do(
+    tx: TransactionArgs, quantityTag: RtBlockIdentifier, optimisticStateFetch: Opt[bool]
+  ) -> seq[byte]:
+    # TODO: add documentation
+
+    if tx.to.isNone():
+      raise newException(ValueError, "to address is required")
+
+    if quantityTag.kind == bidAlias:
+      raise newException(ValueError, "tag not yet implemented")
+
+    let
+      hn = historyNetwork.getOrRaise()
+      sn = stateNetwork.getOrRaise()
+      evm = portalEvm.getOrRaise()
+
+    let callResult = (
+      await evm.call(
+        tx,
+        quantityTag.number.uint64,
+        if optimisticStateFetch.isNone():
+          true
+        else:
+          optimisticStateFetch.get(),
+      )
+    ).valueOr:
+      raise newException(ValueError, error)
+
+    if callResult.error.len() > 0:
+      raise newException(ValueError, callResult.error)
+
+    callResult.output
