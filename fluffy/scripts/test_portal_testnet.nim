@@ -1,5 +1,5 @@
 # Fluffy
-# Copyright (c) 2021-2024 Status Research & Development GmbH
+# Copyright (c) 2021-2025 Status Research & Development GmbH
 # Licensed and distributed under either of
 #   * MIT license (license terms in the root directory or at https://opensource.org/licenses/MIT).
 #   * Apache v2 license (license terms in the root directory or at https://www.apache.org/licenses/LICENSE-2.0).
@@ -19,7 +19,8 @@ import
   ../rpc/portal_rpc_client,
   ../rpc/eth_rpc_client,
   ../eth_data/[history_data_seeding, history_data_json_store, history_data_ssz_e2s],
-  ../network/history/[history_content, validation/historical_hashes_accumulator],
+  ../network/history/
+    [history_content, validation/block_proof_historical_hashes_accumulator],
   ../tests/history_network_tests/test_history_util
 
 type

@@ -12,8 +12,11 @@ import
   eth/p2p/discoveryv5/routing_table,
   eth/common/[hashes, headers_rlp, blocks],
   ../../network/wire/[portal_protocol, portal_stream, portal_protocol_config],
-  ../../network/history/
-    [history_network, history_content, validation/historical_hashes_accumulator],
+  ../../network/history/[
+    history_network,
+    history_content,
+    validation/block_proof_historical_hashes_accumulator,
+  ],
   ../../database/content_db,
   ../../network/beacon/beacon_init_loader,
   ../test_helpers,

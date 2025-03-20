@@ -4,21 +4,41 @@
 #   * MIT license (license terms in the root directory or at https://opensource.org/licenses/MIT).
 #   * Apache v2 license (license terms in the root directory or at https://www.apache.org/licenses/LICENSE-2.0).
 # at your option. This file may not be copied, modified, or distributed except according to those terms.
-
-# This is a PoC of how execution block headers in the Portal history network
-# could be proven to be part of the canonical chain by means of a proof that
-# exists out a chain of proofs.
 #
-# It is the equivalent of beacon_chain_block_proof.nim but after Capella fork
-# making use of historical_summaries instead of the frozen historical_roots.
+# Implementation of post-merge block proofs by making use of the historical_summaries
+# accumulator.
+# Types are defined here:
+# https://github.com/ethereum/portal-network-specs/blob/31bc7e58e2e8acfba895d5a12a9ae3472894d398/history/history-network.md#block-header
 #
+# Proof system explained here:
+# https://github.com/ethereum/portal-network-specs/blob/31bc7e58e2e8acfba895d5a12a9ae3472894d398/history/history-network.md#blockproofhistoricalsummaries
 #
-# The usage of this PoC can be seen in
-# ./fluffy/tests/test_beacon_chain_block_proof_capella.nim
+# The proof chain traverses from proving that the block hash is the one of the
+# ExecutionPayload in the BeaconBlock to proving that this BeaconBlock is rooted
+# in the historical_summaries.
 #
-# TODO: Fit both beacon_chain_block_proof_bellatrix.nim and
-# beacon_chain_block_proof_capella.nim better together and add fork selection
-# on top of it.
+# The historical_summaries accumulator is updated for every period since Capella.
+# It can thus be used for block proofs for blocks after the Capella fork.
+#
+# Caveat:
+# Roots in historical_summaries are only added every `SLOTS_PER_HISTORICAL_ROOT`
+# slots. Recent blocks that are not part of a HistoricalSummary cannot be proven
+# through this mechanism.
+#
+# Requirements:
+#
+# - For building the proofs:
+# Portal node/bridge that has access to all the beacon chain data (blocks +
+# specific state) for that specific period. This can be provided through era files.
+#
+# - For verifying the proofs:
+# To verify the proof the historical_summaries field of the BeaconState is required.
+# As the historical_summaries evolve over time, it is made available over the
+# Portal beacon network for retrieval.
+#
+# Caveat:
+# The historical_roots accumulator is frozen at the Capella fork, this means that
+# it can only be used for the blocks before the Capella fork (= Bellatrix).
 #
 
 {.push raises: [].}

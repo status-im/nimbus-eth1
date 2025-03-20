@@ -50,7 +50,8 @@ import
   json_rpc/rpcclient,
   snappy,
   ncli/e2store,
-  ../network/history/[history_content, validation/historical_hashes_accumulator],
+  ../network/history/
+    [history_content, validation/block_proof_historical_hashes_accumulator],
   ../eth_data/[history_data_json_store, history_data_ssz_e2s, era1],
   eth_data_exporter/[exporter_conf, exporter_common, cl_data_exporter],
   eth_data_exporter/[downloader, parser]

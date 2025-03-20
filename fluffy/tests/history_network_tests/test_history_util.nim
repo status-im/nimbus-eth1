@@ -11,12 +11,13 @@ import
   results,
   stew/io2,
   eth/common/headers,
-  ../../network/history/[history_content, validation/historical_hashes_accumulator],
-  ../../network/history/validation/block_proof_historical_summaries
+  ../../network/history/history_content,
+  ../../network/history/validation/
+    [block_proof_historical_summaries, block_proof_historical_hashes_accumulator]
 
 from eth/common/eth_types_rlp import rlpHash
 
-export results, historical_hashes_accumulator, history_content
+export results, block_proof_historical_hashes_accumulator, history_content
 
 proc buildHeadersWithProof*(
     blockHeaders: seq[Header], epochRecord: EpochRecordCached
