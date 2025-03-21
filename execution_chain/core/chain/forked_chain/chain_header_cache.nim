@@ -56,10 +56,6 @@
 ## * Cached headers can be looked up for by block number or by hash for some
 ##   pre-registered hashes.
 ##
-## * Finalised header values can be looked up (for updaing the `FC` base.)
-##   They are continuously collected as hash from the `CL` and resolved as
-##   header when calling `fcHeaderGet()` when available.
-##
 ## * There is a function provided combining `importBlocks()` and `forkChoice()`
 ##   as a wrapper around `importBlock()` followed by occasional update of the
 ##   base value of the `FC` module proper using `forkChoice()`.
@@ -358,22 +354,6 @@ proc destroy*(fc: ForkedCacheRef) =
 # ------------------------------------------------------------------------------
 # Public heacher cache production API
 # ------------------------------------------------------------------------------
-
-proc fcHeaderGetFinalNumber*(fc: ForkedCacheRef): Opt[BlockNumber] =
-  ## Retrieve finalised header (if any)
-  if 0 < fc.state.finNumber: ok(fc.state.finNumber) else: err()
-
-proc fcHeaderGetFinalNumberOrBase*(fc: ForkedCacheRef): BlockNumber =
-  fc.fcHeaderGetFinalNumber.valueOr: fc.chain.baseNumber
-
-
-proc fcHeaderGetFinalHash*(fc: ForkedCacheRef): Opt[Hash32] =
-  ## Retrieve hash of the finalised header (if any)
-  if 0 < fc.state.finNumber: ok(fc.state.finHash) else: err()
-
-proc fcHeaderGetFinalHashOrBase*(fc: ForkedCacheRef): Hash32 =
-  fc.fcHeaderGetFinalHash.valueOr: fc.chain.baseHash
-
 
 proc fcHeaderGetHash*(fc: ForkedCacheRef; bn: BlockNumber): Opt[Hash32] =
   ## Convenience function, retrieve hash of block header
