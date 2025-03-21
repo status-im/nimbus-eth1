@@ -12,7 +12,7 @@
 ## ====================================================
 ##
 ## The implemented logic here will eventually be integrated in a header
-## management API of the `FC` module, e.g. accessible as `importHeader()`.
+## management API of the `FC` module proper.
 ##
 ## The header cache is organised as a reverse stack of headers
 ## ::
@@ -51,7 +51,7 @@
 ##   This most general case for deleting headers is currently not exposed.
 ##   For all practical cases, it is enough to provide a delete function on
 ##   the header chain cache for (the copy of)  the `base` header of the `FC`
-##   module and all its ancestors.
+##   module proper and all its ancestors.
 ##
 ## * Cached headers can be looked up for by block number or by hash for some
 ##   pre-registered hashes.
@@ -59,6 +59,10 @@
 ## * Finalised header values can be looked up (for updaing the `FC` base.)
 ##   They are continuously collected as hash from the `CL` and resolved as
 ##   header when calling `fcHeaderGet()` when available.
+##
+## * There is a function provided combining `importBlocks()` and `forkChoice()`
+##   as a wrapper around `importBlock()` followed by occasional update of the
+##   base value of the `FC` module proper using `forkChoice()`.
 ##
 
 {.push raises:[].}
@@ -68,6 +72,7 @@ import
   pkg/eth/[common, rlp],
   pkg/results,
   "../../.."/[common, db/core_db, db/storage_types],
+  ../forked_chain,
   ./[chain_branch, chain_desc]
 
 type
@@ -86,6 +91,7 @@ type
     clearRequest: bool         # ephemeral, may be set by `clear()`
     consHeadNum: BlockNumber   # for logging, metrics etc.
     byHash: HashSet[Hash32]    # finalized block hashes to resolve
+    nextChoice: BlockNumber    # for covenience wrapper `fcHeaderImportBlock()`
 
   ForkedCacheRef* = ref object
     ## For now, this is a replacement of `ForkedChainRef` for as long as
@@ -99,14 +105,18 @@ const
   HashCacheSize = 50
     ## Cardinality of `byHash` cache. The cache management has typically
     ## little effect when the finaliser is near the consensus head. It is
-    ## is collected in `fcUpdateFromCL()`. The next such finaliser collected
+    ## collected in `fcUpdateFromCL()`. The next such finaliser collected
     ## has a high chance to exceed the current consensus head (which is not
     ## known at the time of collection). So it will turn out to be useless
     ## and linger in the cache.
     ##
-    ## Where it matters is when the CL is synchronising (e.g. after a cold
-    ## start) and leaves a huge gap between finaliser and consensus head where
-    ## the finaliser is incrementally updated.
+    ## Where it might matter is when the CL is synchronising (e.g. after a
+    ## cold start) and leaves a huge gap between finaliser and consensus head
+    ## where the finaliser is incrementally updated.
+
+  FinaliserChoiceDelta = 32
+    ## Suggested minimum block numbers equivalent between consecutive
+    ## invocations of `forkChoice()`
 
   RaisePfx = "Header Cache: "
     ## Message prefix used when bailing out raising an exception
@@ -240,7 +250,7 @@ proc fcUpdateFromCL(fc: ForkedCacheRef; h: Header; f: Hash32) =
   ## client app.
   if f != zeroHash32 and                            # finalised hash is set
      fc.state.head.number < h.number and            # some progress observed
-     fc.chain.baseBranch.tailNumber + 1 < h.number: # otherwise useless
+     fc.chain.baseNumber + 1 < h.number:            # otherwise useless
 
     if 0 < fc.state.head.number:
       # Collect finalised hash to be resolved later
@@ -319,7 +329,8 @@ proc start*(fc: ForkedCacheRef; notify = FcNotifyCB(nil)) =
   ## notification is unwanted.)
   ##
   ## The block number of the new chain `head` is always larger than the current
-  ## `base` of the `FC` module, in particular `base.number + 1 < head.number`.
+  ## base value of the `FC` module proper, in particular the statement
+  ## `base.number + 1 < head.number` holds.
   ##
   fc.notify = notify
   fc.chain.com.fcHeaderClUpdate = proc(h: Header; f: Hash32) =
@@ -353,7 +364,7 @@ proc fcHeaderGetFinalNumber*(fc: ForkedCacheRef): Opt[BlockNumber] =
   if 0 < fc.state.finNumber: ok(fc.state.finNumber) else: err()
 
 proc fcHeaderGetFinalNumberOrBase*(fc: ForkedCacheRef): BlockNumber =
-  fc.fcHeaderGetFinalNumber.valueOr: fc.chain.baseBranch.tailNumber
+  fc.fcHeaderGetFinalNumber.valueOr: fc.chain.baseNumber
 
 
 proc fcHeaderGetFinalHash*(fc: ForkedCacheRef): Opt[Hash32] =
@@ -361,7 +372,7 @@ proc fcHeaderGetFinalHash*(fc: ForkedCacheRef): Opt[Hash32] =
   if 0 < fc.state.finNumber: ok(fc.state.finHash) else: err()
 
 proc fcHeaderGetFinalHashOrBase*(fc: ForkedCacheRef): Hash32 =
-  fc.fcHeaderGetFinalHash.valueOr: fc.chain.baseBranch.tailHash
+  fc.fcHeaderGetFinalHash.valueOr: fc.chain.baseHash
 
 
 proc fcHeaderGetHash*(fc: ForkedCacheRef; bn: BlockNumber): Opt[Hash32] =
@@ -400,7 +411,7 @@ proc fcHeaderGet*(fc: ForkedCacheRef; bn: BlockNumber): Opt[Header] =
     # database cache when asked for, later.
     fc.session.byHash.excl hash
 
-    if hdr.number <= fc.chain.baseBranch.tailNumber or # below `FC` base?
+    if hdr.number <= fc.chain.baseNumber or            # below `FC` base?
        hdr.number <= fc.state.finNumber:               # no improvement?
       break body
 
@@ -500,7 +511,7 @@ proc fcHeaderPut*(
 
 proc fcHeaderDelBaseAndOlder*(fc: ForkedCacheRef) =
   ## Remove `FC` module base header and any ancestors alike.
-  fc.persistDelUpTo fc.chain.baseBranch.tailNumber
+  fc.persistDelUpTo fc.chain.baseNumber
 
 # --------------------
 
@@ -532,6 +543,56 @@ func fcHeaderLastConsHeadNumber*(fc: ForkedCacheRef): BlockNumber =
 proc fcHeaderTargetUpdate*(fc: ForkedCacheRef; h: Header; f: Hash32) =
   ## Emulate request from `CL` (mainly for debugging purposes)
   fc.fcUpdateFromCL(h, f)
+
+# ------------------------------------------------------------------------------
+# Public convenience wrapper
+# ------------------------------------------------------------------------------
+
+proc fcHeaderImportBlock*(fc: ForkedCacheRef; blk: Block): Result[void,string] =
+  ## Wrapper around `importBlock()` followed by occasional update of the
+  ## base value of the `FC` module proper accomplised by invocation of
+  ## `forkChoice()`.
+  ##
+  ## This module uses the latest finalised value that was collected over time
+  ## for updating the base value mentioned above.
+  ##
+  fc.chain.importBlock(blk).isOkOr:
+    return err(error)
+
+  let blkNum = blk.header.number
+  if blkNum < fc.session.nextChoice:
+    return ok()
+
+  # Wait `FinaliserChoiceDelta` steps before `forkChoice()`
+  if fc.session.nextChoice == 0:
+    fc.session.nextChoice = blkNum + FinaliserChoiceDelta - 1
+    if fc.state.head.number < fc.session.nextChoice:
+      fc.session.nextChoice = fc.state.head.number
+    return ok()
+
+  # Update the base variable of the `FC` module proper if there is a valid
+  # finalised value (different from the base.) While there is no such value,
+  # the state is tested consecutively each time this function is invoked
+  # (i.e. the `nextChoice` variable remains set.)
+  let finNum = fc.state.finNumber
+  if finNum == 0:
+    return ok()
+
+  # Update base value of `FC` module proper via `forkChoice()`
+  let
+    blkHash = fc.fcHeaderGetHash(blkNum).expect "hash"
+    finHash = if blkNum < finNum: blkHash else: fc.state.finHash
+
+  fc.chain.forkChoice(blkHash, finHash).isOkOr:
+    return err(error)
+
+  # Remove some older stashed headers
+  fc.persistDelUpTo fc.chain.baseNumber
+
+  # Reset for next cycle
+  fc.session.nextChoice = 0
+
+  ok()
 
 # ------------------------------------------------------------------------------
 # Public debugging helpers

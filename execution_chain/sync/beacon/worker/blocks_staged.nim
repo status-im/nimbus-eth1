@@ -30,12 +30,9 @@ formatIt(Hash32):
 # Private helpers
 # ------------------------------------------------------------------------------
 
-func getNthHash(blk: BlocksForImport; n: int): Hash32 =
-  if n + 1 < blk.blocks.len:
-    blk.blocks[n + 1].header.parentHash
-  else:
-    rlp.encode(blk.blocks[n].header).keccak256
-
+proc getNthHash(ctx: BeaconCtxRef; blk: BlocksForImport; n: int): Hash32 =
+  ctx.hdrCache.fcHeaderGetHash(blk.blocks[n].header.number).valueOr:
+    return zeroHash32
 
 proc updateBuddyErrorState(buddy: BeaconBuddyRef) =
   ## Helper/wrapper
@@ -322,7 +319,6 @@ proc blocksStagedCollect*(
   return true
 
 
-
 proc blocksStagedImport*(
     ctx: BeaconCtxRef;
     info: static[string];
@@ -360,9 +356,10 @@ proc blocksStagedImport*(
       if nBn <= ctx.chain.baseNumber:
         trace info & ": ignoring block less eq. base", n, iv,
           B=ctx.chain.baseNumber.bnStr, L=ctx.chain.latestNumber.bnStr,
-          nthBn=nBn.bnStr, nthHash=qItem.data.getNthHash(n).short
+          nthBn=nBn.bnStr, nthHash=ctx.getNthHash(qItem.data, n).short
         continue
-      ctx.pool.chain.importBlock(qItem.data.blocks[n]).isOkOr:
+
+      ctx.hdrCache.fcHeaderImportBlock(qItem.data.blocks[n]).isOkOr:
         # The way out here is simply to re-compile the block queue. At any
         # point, the `FC` module data area might have been moved to a new
         # canonical branch.
@@ -370,7 +367,7 @@ proc blocksStagedImport*(
         ctx.poolMode = true
         warn info & ": import block error (reorg triggered)", n, iv,
           B=ctx.chain.baseNumber.bnStr, L=ctx.chain.latestNumber.bnStr,
-          nthBn=nBn.bnStr, nthHash=qItem.data.getNthHash(n).short,
+          nthBn=nBn.bnStr, nthHash=ctx.getNthHash(qItem.data, n).short,
           `error`=error
         maxImport = nBn
         break importLoop
@@ -379,32 +376,6 @@ proc blocksStagedImport*(
       (await ctx.updateAsyncTasks()).isOkOr:
         maxImport = nBn                            # shutdown?
         break importLoop
-
-      # Occasionally mark the chain finalized
-      if (n + 1) mod finaliserChainLengthMax == 0 or (n + 1) == nBlocks:
-        let
-          nthHash = qItem.data.getNthHash(n)
-          final = ctx.hdrCache.fcHeaderGetFinalNumberOrBase()
-          finHash = if nBn < final: nthHash
-                    else: ctx.hdrCache.fcHeaderGetFinalHashOrBase()
-
-        ctx.pool.chain.forkChoice(nthHash, finHash).isOkOr:
-          ctx.poolMode = true
-          warn info & ": fork choice error (reorg triggered)", n, iv,
-            B=ctx.chain.baseNumber.bnStr, L=ctx.chain.latestNumber.bnStr,
-            F=final.bnStr, nthBn=nBn.bnStr, nthHash=nthHash.short,
-            finHash=(if finHash == nthHash: "nthHash" else: "F"), `error`=error
-          # Restore what is left over below
-          maxImport = nBn
-          break importLoop
-
-        # Allow pseudo/async thread switch.
-        (await ctx.updateAsyncTasks()).isOkOr:
-          maxImport = nBn                          # shutdown?
-          break importLoop
-
-  # Remove some older stashed headers
-  ctx.hdrCache.fcHeaderDelBaseAndOlder()
 
   # Import probably incomplete, so a partial roll back may be needed
   if maxImport < iv.maxPt:

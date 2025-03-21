@@ -137,10 +137,6 @@ const
     ## Minimal accepted initialisation value for `blocksStagedHwm`. The latter
     ## will be initalised with `blocksStagedHwmDefault` if smaller than the LWM.
 
-  finaliserChainLengthMax* = 32 # -- to be obsoleted soon
-    ## When importing with `importBlock()`, finalise after at most this many
-    ## invocations of `importBlock()`.
-
   # ----------------------
 
 static:
