@@ -25,11 +25,6 @@ export
   beacon_light_client, history_network, state_network, portal_protocol_config, forks
 
 type
-  PortalNodeStatus* = enum
-    Starting
-    Running
-    Stopping
-
   PortalNodeConfig* = object
     accumulatorFile*: Opt[string]
     disableStateRootValidation*: bool
@@ -40,7 +35,6 @@ type
     contentRequestRetries*: int
 
   PortalNode* = ref object
-    status*: PortalNodeStatus
     discovery: protocol.Protocol
     contentDB: ContentDB
     streamManager: StreamManager
@@ -227,8 +221,6 @@ proc start*(n: PortalNode) =
     n.beaconLightClient.value.start()
 
   n.statusLogLoop = statusLogLoop(n)
-
-  n.status = PortalNodeStatus.Running
 
 proc stop*(n: PortalNode) {.async: (raises: []).} =
   debug "Stopping Portal node"
