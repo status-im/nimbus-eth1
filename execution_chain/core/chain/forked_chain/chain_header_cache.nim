@@ -306,7 +306,7 @@ proc stop*(fc: ForkedCacheRef) =
   ## Stop updating the client cache. Will automatically be called by the
   ## destructor `destroy()`.
   ##
-  fc.chain.com.reqBeaconSyncerTarget = ReqBeaconSyncerTargetCB(nil)
+  fc.chain.com.fcHeaderClUpdate = FcHeaderClUpdateCB(nil)
   fc.notify = FcNotifyCB(nil)
 
 proc start*(fc: ForkedCacheRef; notify = FcNotifyCB(nil)) =
@@ -322,7 +322,7 @@ proc start*(fc: ForkedCacheRef; notify = FcNotifyCB(nil)) =
   ## `base` of the `FC` module, in particular `base.number + 1 < head.number`.
   ##
   fc.notify = notify
-  fc.chain.com.reqBeaconSyncerTarget = proc(h: Header; f: Hash32) =
+  fc.chain.com.fcHeaderClUpdate = proc(h: Header; f: Hash32) =
     fc.fcUpdateFromCL(h, f)
 
 # ------------------

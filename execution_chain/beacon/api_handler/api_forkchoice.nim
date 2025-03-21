@@ -111,8 +111,8 @@ proc forkchoiceUpdated*(ben: BeaconEngineRef,
     # Update sync header (if any)
     com.syncReqNewHead(header)
 
-    # Ask the syncer to install missing blcks via RLPX
-    com.reqBeaconSyncerTarget(header, update.finalizedBlockHash)
+    # Inform the header cache (used by the syncer)
+    com.fcHeaderClUpdate(header, update.finalizedBlockHash)
 
     return simpleFCU(PayloadExecutionStatus.syncing)
 
