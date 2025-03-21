@@ -44,11 +44,23 @@ func optionToOpt[T](o: Option[T]): Opt[T] =
   else:
     Opt.none(T)
 
-proc run(
-    config: PortalConf
-): (PortalNode, Opt[MetricsHttpServerRef], Opt[RpcHttpServer], Opt[RpcWebSocketServer]) {.
-    raises: [CatchableError]
-.} =
+type
+  FluffyStatus = enum
+    Starting
+    Running
+    Stopping
+
+  Fluffy = ref object
+    status: FluffyStatus
+    portalNode: PortalNode
+    metricsServer: Opt[MetricsHttpServerRef]
+    rpcHttpServer: Opt[RpcHttpServer]
+    rpcWsServer: Opt[RpcWebSocketServer]
+
+proc init(T: type Fluffy): T =
+  Fluffy(status: FluffyStatus.Starting)
+
+proc run(fluffy: Fluffy, config: PortalConf) {.raises: [CatchableError].} =
   setupLogging(config.logLevel, config.logStdout, none(OutFile))
 
   notice "Launching Fluffy", version = fullVersionStr, cmdParams = commandLineParams()
@@ -110,7 +122,7 @@ proc run(
       else:
         Opt.none(enr.Record)
 
-  var bootstrapRecords: seq[Record]
+  var bootstrapRecords: seq[enr.Record]
   loadBootstrapFile(string config.bootstrapNodesFile, bootstrapRecords)
   bootstrapRecords.add(config.bootstrapNodes)
 
@@ -320,7 +332,38 @@ proc run(
       else:
         Opt.none(RpcWebSocketServer)
 
-  return (node, metricsServer, rpcHttpServer, rpcWsServer)
+  fluffy.status = FluffyStatus.Running
+  fluffy.portalNode = node
+  fluffy.metricsServer = metricsServer
+  fluffy.rpcHttpServer = rpcHttpServer
+  fluffy.rpcWsServer = rpcWsServer
+
+proc stop(f: Fluffy) {.async: (raises: []).} =
+  if f.rpcWsServer.isSome():
+    let server = f.rpcWsServer.get()
+    try:
+      server.stop()
+      await server.closeWait()
+    except CatchableError as e:
+      warn "Failed to stop rpc WS server", exc = e.name, err = e.msg
+
+  if f.rpcHttpServer.isSome():
+    let server = f.rpcHttpServer.get()
+    try:
+      await server.stop()
+      await server.closeWait()
+    except CatchableError as e:
+      warn "Failed to stop rpc HTTP server", exc = e.name, err = e.msg
+
+  if f.metricsServer.isSome():
+    let server = f.metricsServer.get()
+    try:
+      await server.stop()
+      await server.close()
+    except CatchableError as e:
+      warn "Failed to stop metrics HTTP server", exc = e.name, err = e.msg
+
+  await f.portalNode.stop()
 
 when isMainModule:
   {.pop.}
@@ -330,10 +373,10 @@ when isMainModule:
   )
   {.push raises: [].}
 
-  let (node, metricsServer, rpcHttpServer, rpcWsServer) =
-    case config.cmd
-    of PortalCmd.noCommand:
-      run(config)
+  let fluffy = Fluffy.init()
+  case config.cmd
+  of PortalCmd.noCommand:
+    fluffy.run(config)
 
   # Ctrl+C handling
   proc controlCHandler() {.noconv.} =
@@ -345,41 +388,17 @@ when isMainModule:
         raiseAssert exc.msg # shouldn't happen
 
     notice "Shutting down after having received SIGINT"
-    node.status = PortalNodeStatus.Stopping
+    fluffy.status = FluffyStatus.Stopping
 
   try:
     setControlCHook(controlCHandler)
   except Exception as exc: # TODO Exception
     warn "Cannot set ctrl-c handler", msg = exc.msg
 
-  while node.status == PortalNodeStatus.Running:
+  while fluffy.status == FluffyStatus.Running:
     try:
       poll()
     except CatchableError as e:
       warn "Exception in poll()", exc = e.name, err = e.msg
 
-  if rpcWsServer.isSome():
-    let server = rpcWsServer.get()
-    try:
-      server.stop()
-      waitFor server.closeWait()
-    except CatchableError as e:
-      warn "Failed to stop rpc WS server", exc = e.name, err = e.msg
-
-  if rpcHttpServer.isSome():
-    let server = rpcHttpServer.get()
-    try:
-      waitFor server.stop()
-      waitFor server.closeWait()
-    except CatchableError as e:
-      warn "Failed to stop rpc HTTP server", exc = e.name, err = e.msg
-
-  if metricsServer.isSome():
-    let server = metricsServer.get()
-    try:
-      waitFor server.stop()
-      waitFor server.close()
-    except CatchableError as e:
-      warn "Failed to stop metrics HTTP server", exc = e.name, err = e.msg
-
-  waitFor node.stop()
+  waitFor fluffy.stop()
