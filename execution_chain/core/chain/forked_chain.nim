@@ -667,6 +667,17 @@ proc headerByHash*(c: ForkedChainRef, blockHash: Hash32): Result[Header, string]
     return ok(loc[].header)
   c.baseTxFrame.getBlockHeader(blockHash)
 
+proc txDetailsByTxHash*(c: ForkedChainRef, txHash: Hash32): Result[(Hash32, uint64), string] =
+  if c.txRecords.hasKey(txHash):
+    let (blockHash, txid) = c.txRecords(txHash)
+    return ok((blockHash, txid))
+
+  let 
+    txDetails = ?c.baseTxFrame.getTransactionKey(txHash)
+    header = ?c.headerByNumber(txDetails.blockNumber)
+    blockHash = header.blockHash
+  return ok((blockHash, txDetails.index))
+  
 proc blockByHash*(c: ForkedChainRef, blockHash: Hash32): Result[Block, string] =
   # used by getPayloadBodiesByHash
   # https://github.com/ethereum/execution-apis/blob/v1.0.0-beta.4/src/engine/shanghai.md#specification-3
