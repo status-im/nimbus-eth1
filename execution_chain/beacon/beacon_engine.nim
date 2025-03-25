@@ -259,9 +259,4 @@ proc delayPayloadImport*(ben: BeaconEngineRef, header: Header): PayloadStatusV1 
   # at a later time.
   ben.put(blockHash, header)
 
-  # Although we don't want to trigger a sync, if there is one already in
-  # progress, try to extend it with the current payload request to relieve
-  # some strain from the forkchoice update.
-  ben.com.syncReqNewHead(header)
-
   PayloadStatusV1(status: PayloadExecutionStatus.syncing)

@@ -21,7 +21,6 @@ when enableTicker:
     pkg/[stint, stew/interval_set],
     ../headers_staged/staged_queue,
     ../blocks_staged/staged_queue,
-    ../../../../utils/prettify,
     ../helpers,
     ../[blocks_unproc, headers_unproc]
 
@@ -36,10 +35,8 @@ type
     coupler: BlockNumber
     dangling: BlockNumber
     head: BlockNumber
-    headOk: bool
     target: BlockNumber
-    targetOk: bool
-    trgLckOk: bool
+    activeOk: bool
 
     hdrUnprocTop: BlockNumber
     nHdrUnprocessed: uint64
@@ -80,10 +77,8 @@ when enableTicker:
       coupler:         ctx.layout.coupler,
       dangling:        ctx.layout.dangling,
       head:            ctx.layout.head,
-      headOk:          ctx.layout.lastState != idleSyncState,
-      target:          ctx.clReq.mesg.consHead.number,
-      targetOk:        ctx.clReq.changed,
-      trgLckOk:        ctx.clReq.locked,
+      target:          ctx.hdrCache.fcHeaderLastConsHeadNumber(),
+      activeOk:        ctx.layout.lastState != idleSyncState,
 
       nHdrStaged:      ctx.headersStagedQueueLen(),
       hdrStagedTop:    ctx.headersStagedQueueTopKey(),
@@ -116,18 +111,17 @@ when enableTicker:
         L = if data.latest == data.coupler: "C" else: data.latest.bnStr
         C = if data.coupler == data.dangling: "D" else: data.coupler.bnStr
         D = if data.dangling == data.head: "H" else: data.dangling.bnStr
-        H = if data.headOk:
-              if data.head == data.target: "T" else: data.head.bnStr
-            else:
-              if data.head == data.target: "?T" else: "?" & $data.head
-        T = ["?", "~", "#", "!"][data.targetOk.ord*2 + data.trgLckOk.ord] &
-              $data.target
+        H = if data.head == data.target: "T"
+            elif data.activeOk: data.head.bnStr
+            else: "?" & $data.head
+        T = if data.activeOk: data.target.bnStr else: "?" & $data.target
 
         hS = if data.nHdrStaged == 0: "n/a"
             else: data.hdrStagedTop.bnStr & "(" & $data.nHdrStaged & ")"
         hU = if data.nHdrUnprocFragm == 0 and data.nHdrUnprocessed == 0: "n/a"
             elif data.hdrUnprocTop == 0:
-              "(" & data.nHdrUnprocessed.toSI & "," & $data.nHdrUnprocFragm & ")"
+              "(" & data.nHdrUnprocessed.toSI & "," &
+                    $data.nHdrUnprocFragm & ")"
             else: data.hdrUnprocTop.bnStr & "(" &
                   data.nHdrUnprocessed.toSI & "," & $data.nHdrUnprocFragm & ")"
 
@@ -135,7 +129,8 @@ when enableTicker:
             else: data.blkStagedBottom.bnStr & "(" & $data.nBlkStaged & ")"
         bU = if data.nBlkUnprocFragm == 0 and data.nBlkUnprocessed == 0: "n/a"
             elif data.blkUnprocBottom == high(BlockNumber):
-              "(" & data.nBlkUnprocessed.toSI & "," & $data.nBlkUnprocFragm & ")"
+              "(" & data.nBlkUnprocessed.toSI & "," &
+                    $data.nBlkUnprocFragm & ")"
             else: data.blkUnprocBottom.bnStr & "(" &
                   data.nBlkUnprocessed.toSI & "," & $data.nBlkUnprocFragm & ")"
 

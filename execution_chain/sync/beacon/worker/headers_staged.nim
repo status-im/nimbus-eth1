@@ -61,8 +61,8 @@ proc headersStagedCollect*(
           break fetchHeadersBody                     # done, exit this function
 
         # Get parent hash from the last stored header
-        parent = ctx.hdrCache.fcHeaderGetParentHash(ctx.layout.dangling)
-                             .expect "parentHash"
+        parent = ctx.hdrCache.fcHeaderGetHash(ctx.layout.dangling-1)
+                             .expect "parent hash"
 
         # Fetch headers and store them on the header chain cache,
         # get returned the last unprocessed block number

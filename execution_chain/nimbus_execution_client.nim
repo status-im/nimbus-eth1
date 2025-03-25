@@ -110,8 +110,8 @@ proc setupP2P(nimbus: NimbusNode, conf: NimbusConf,
     nimbus.ethNode, nimbus.fc, conf.maxPeers, conf.beaconSyncBlocksQueueHwm)
 
   # Optional for pre-setting the sync target (i.e. debugging)
-  if conf.beaconSyncScrumFile.isSome():
-    nimbus.beaconSyncRef.scrumInit conf.beaconSyncScrumFile.unsafeGet.string
+  if conf.beaconSyncTargetFile.isSome():
+    nimbus.beaconSyncRef.targetInit conf.beaconSyncTargetFile.unsafeGet.string
 
   # Connect directly to the static nodes
   let staticPeers = conf.getStaticPeers()

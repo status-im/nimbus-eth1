@@ -65,8 +65,9 @@ template updateMetricsImpl(ctx: BeaconCtxRef) =
   metrics.set(nec_sync_head, ctx.layout.head.int64)
 
   # Show last valid state.
-  if 0 < ctx.clReq.mesg.consHead.number:
-    metrics.set(nec_sync_consensus_head, ctx.clReq.mesg.consHead.number.int64)
+  let lastConsHeadNumber = ctx.hdrCache.fcHeaderLastConsHeadNumber
+  if 0 < lastConsHeadNumber:
+    metrics.set(nec_sync_consensus_head, lastConsHeadNumber.int64)
 
   metrics.set(nec_sync_header_lists_staged, ctx.headersStagedQueueLen())
   metrics.set(nec_sync_headers_unprocessed, ctx.headersUnprocTotal().int64)
