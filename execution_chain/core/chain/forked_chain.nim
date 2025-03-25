@@ -19,7 +19,7 @@ import
   ../../evm/state,
   ../validate,
   ../executor/process_block,
-  ./forked_chain/[chain_desc, chain_header_cache, chain_branch]
+  ./forked_chain/[chain_desc, chain_branch]
 
 from std/sequtils import mapIt
 
@@ -29,7 +29,6 @@ logScope:
 export
   BlockDesc,
   ForkedChainRef,
-  chain_header_cache,
   common,
   core_db
 
@@ -142,12 +141,14 @@ proc validateBlock(c: ForkedChainRef,
 
   c.writeBaggage(blk, blkHash, txFrame, receipts)
 
-  while c.lastSnapshots.len() >= 10:
+  let pos = c.lastSnapshotPos
+  c.lastSnapshotPos = (c.lastSnapshotPos + 1) mod c.lastSnapshots.len
+  if not isNil(c.lastSnapshots[pos]):
     # Put a cap on frame memory usage by clearing out the oldest snapshots -
     # this works at the expense of making building on said branches slower.
     # 10 is quite arbitrary.
-    let oldFrame = c.lastSnapshots.popFirst()
-    oldFrame.clearSnapshot()
+    c.lastSnapshots[pos].clearSnapshot()
+    c.lastSnapshots[pos] = nil
 
   # Block fully written to txFrame, mark it as such
   # Checkpoint creates a snapshot of ancestor changes in txFrame - it is an
@@ -155,7 +156,7 @@ proc validateBlock(c: ForkedChainRef,
   # is being applied to a block that is currently not a head)
   txFrame.checkpoint(blk.header.number)
 
-  c.lastSnapshots.addLast(txFrame)
+  c.lastSnapshots[pos] = txFrame
 
   c.updateBranch(parent, blk, blkHash, txFrame, move(receipts))
 
@@ -281,6 +282,11 @@ proc removeBlockFromCache(c: ForkedChainRef, bd: BlockDesc) =
   c.hashToBlock.del(bd.hash)
   for tx in bd.blk.transactions:
     c.txRecords.del(rlpHash(tx))
+
+  for v in c.lastSnapshots.mitems():
+    if v == bd.txFrame:
+      v = nil
+
   bd.txFrame.dispose()
 
 proc updateHead(c: ForkedChainRef, head: BlockPos) =

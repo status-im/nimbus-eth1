@@ -36,11 +36,8 @@ type
     current: BlockNumber
     highest: BlockNumber
 
-  SyncReqNewHeadCB* = proc(header: Header) {.gcsafe, raises: [].}
-    ## Update head for syncing
-
-  ReqBeaconSyncerTargetCB* = proc(header: Header; finHash: Hash32) {.gcsafe, raises: [].}
-    ## Ditto (for beacon sync)
+  FcHeaderClUpdateCB* = proc(header: Header; finHash: Hash32) {.gcsafe, raises: [].}
+    ## Inform `CL` sub-module `chain_header_cache` about new head.
 
   BeaconSyncerProgressCB* = proc(): tuple[start, current, target: BlockNumber] {.gcsafe, raises: [].}
     ## Query syncer status
@@ -70,11 +67,7 @@ type
     # synchronizer need this
     syncProgress: SyncProgress
 
-    syncReqNewHead: SyncReqNewHeadCB
-      ## Call back function for the sync processor. This function stages
-      ## the arguent header to a private aerea for subsequent processing.
-
-    reqBeaconSyncerTargetCB: ReqBeaconSyncerTargetCB
+    fcHeaderClUpdateCB: FcHeaderClUpdateCB
       ## Call back function for a sync processor that returns the canonical
       ## header.
 
@@ -340,16 +333,10 @@ proc proofOfStake*(com: CommonRef, header: Header, txFrame: CoreDbTxRef): bool =
 func depositContractAddress*(com: CommonRef): Address =
   com.config.depositContractAddress.get(default(Address))
 
-proc syncReqNewHead*(com: CommonRef; header: Header)
-    {.gcsafe, raises: [].} =
+proc fcHeaderClUpdate*(com: CommonRef; header: Header; finHash: Hash32) =
   ## Used by RPC updater
-  if not com.syncReqNewHead.isNil:
-    com.syncReqNewHead(header)
-
-proc reqBeaconSyncerTarget*(com: CommonRef; header: Header; finHash: Hash32) =
-  ## Used by RPC updater
-  if not com.reqBeaconSyncerTargetCB.isNil:
-    com.reqBeaconSyncerTargetCB(header, finHash)
+  if not com.fcHeaderClUpdateCB.isNil:
+    com.fcHeaderClUpdateCB(header, finHash)
 
 proc beaconSyncerProgress*(com: CommonRef): tuple[start, current, target: BlockNumber] =
   ## Query syncer status
@@ -460,13 +447,9 @@ func setTTD*(com: CommonRef, ttd: Opt[DifficultyInt]) =
   # rebuild the MergeFork piece of the forkTransitionTable
   com.forkTransitionTable.mergeForkTransitionThreshold = com.config.mergeForkTransitionThreshold
 
-func `syncReqNewHead=`*(com: CommonRef; cb: SyncReqNewHeadCB) =
+func `fcHeaderClUpdate=`*(com: CommonRef; cb: FcHeaderClUpdateCB) =
   ## Activate or reset a call back handler for syncing.
-  com.syncReqNewHead = cb
-
-func `reqBeaconSyncerTarget=`*(com: CommonRef; cb: ReqBeaconSyncerTargetCB) =
-  ## Activate or reset a call back handler for syncing.
-  com.reqBeaconSyncerTargetCB = cb
+  com.fcHeaderClUpdateCB = cb
 
 func `beaconSyncerProgress=`*(com: CommonRef; cb: BeaconSyncerProgressCB) =
   ## Activate or reset a call back handler for querying syncer.

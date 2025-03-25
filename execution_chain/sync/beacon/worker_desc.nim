@@ -61,15 +61,9 @@ type
     cancelBlocks                     ## stop this scrum
 
   SyncClMesg* = object
-    ## Beacon state to be implicitely updated by RPC method
+    ## Beacon state message used for manual first target set up
     consHead*: Header                ## Consensus head
     finalHash*: Hash32               ## Finalised hash
-
-  SyncClRequest* = object
-    ## Internal management object for the `SyncClMesg`
-    locked*: bool                    ## Don't update while set `true`
-    changed*: bool                   ## Tell that something has changed
-    mesg*: SyncClMesg                ## The request message from the `CL`
 
   SyncStateLayout* = object
     ## Layout of a linked header chains defined by the triple `(C,D,H)` as
@@ -88,17 +82,12 @@ type
     ##
     coupler*: BlockNumber            ## Bottom end `C` of full chain `(C,H]`
     dangling*: BlockNumber           ## Left end `D` of linked chain `[D,H]`
-    head*: BlockNumber               ## `H`, block num of some finalised block
+    head*: BlockNumber               ## `H`, target block to reach
     lastState*: SyncLayoutState      ## Last known layout state
-
-    # Legacy entries, will be removed some time. This is currently needed
-    # for importing blocks into `FC` the support of which will be deprecated.
-    final*: BlockNumber              ## Finalised block number `F`
-    finalHash*: Hash32               ## Hash of `F`
 
   SyncState* = object
     ## Sync state for header and block chains
-    clReq*: SyncClRequest            ## Consensus head, see `T` in `README.md`
+    clReq*: SyncClMesg               ## Manual first target set up
     layout*: SyncStateLayout         ## Current header chains layout
 
   # -------------------
@@ -181,7 +170,7 @@ func layout*(ctx: BeaconCtxRef): var SyncStateLayout =
   ## Shortcut
   ctx.sst.layout
 
-func clReq*(ctx: BeaconCtxRef): var SyncClRequest =
+func clReq*(ctx: BeaconCtxRef): var SyncClMesg =
   ## Shortcut
   ctx.sst.clReq
 

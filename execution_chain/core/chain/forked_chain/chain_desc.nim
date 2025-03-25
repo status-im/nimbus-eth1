@@ -34,7 +34,8 @@ type
     extraValidation*: bool
     baseDistance*: uint64
 
-    lastSnapshots*: Deque[CoreDbTxRef]
+    lastSnapshots*: array[10, CoreDbTxRef]
+    lastSnapshotPos*: int
 # ----------------
 
 func txRecords*(c: ForkedChainRef): var Table[Hash32, (Hash32, uint64)] =
