@@ -15,9 +15,11 @@ import
   json_rpc/[rpcproxy, rpcserver, rpcclient],
   eth/common/addresses,
   eth/common/eth_types_rlp,
+  eth/trie/[hexary, ordered_trie, db, trie_defs],
   ../../execution_chain/beacon/web3_eth_conv,
   ../types,
-  ../header_store
+  ../header_store,
+  ./transactions
 
 type BlockTag* = eth_api_types.RtBlockIdentifier
 
@@ -93,6 +95,83 @@ proc walkBlocks(
 
   return false
 
+proc getBlockByHash*(
+    self: VerifiedRpcProxy, blockHash: Hash32, fullTransactions: bool
+): Future[BlockObject] {.async: (raises: [ValueError, CatchableError]).} =
+  # get the target block
+  let blk = await self.rpcClient.eth_getBlockByHash(blockHash, fullTransactions)
+  let header = convHeader(blk)
+
+  # verify header hash
+  if header.rlpHash != blockHash:
+    raise newException(ValueError, "hashed block header doesn't match with blk.hash(downloaded)")
+
+  if blockHash != blk.hash:
+    raise newException(ValueError, "the downloaded block hash doesn't match with the requested hash")
+
+  let earliestHeader = self.headerStore.earliest.valueOr:
+    raise newException(ValueError, "Syncing")
+
+  # walk blocks backwards(time) from source to target
+  let isLinked = await self.walkBlocks(earliestHeader.number, header.number, earliestHeader.parentHash, blockHash)
+
+  if not isLinked:
+    raise newException(ValueError, "the requested block is not part of the canonical chain")
+
+  # verify transactions
+  if fullTransactions:
+    let verified = verifyTransactions(header.transactionsRoot, blk.transactions).valueOr:
+      raise newException(ValueError, "error while verifying transactions root")
+    if not verified:
+      raise newException(ValueError, "transactions within the block do not yield the same transaction root")
+
+  # verify withdrawals
+  if blk.withdrawals.isSome():
+    if blk.withdrawalsRoot.get() != orderedTrieRoot(blk.withdrawals.get()):
+      raise newException(ValueError, "withdrawals within the block do not yield the same withdrawals root")
+
+  return blk
+
+proc getBlockByTag*(
+    self: VerifiedRpcProxy, blockTag: BlockTag, fullTransactions: bool
+): Future[BlockObject] {.async: (raises: [ValueError, CatchableError]).} =
+  let n = self.resolveTag(blockTag)
+
+  # get the target block
+  let blk = await self.rpcClient.eth_getBlockByNumber(blockTag, false)
+  let header = convHeader(blk)
+
+  # verify header hash
+  if header.rlpHash != blk.hash:
+    raise newException(ValueError, "hashed block header doesn't match with blk.hash(downloaded)")
+
+  if n != header.number:
+    raise newException(ValueError, "the downloaded block number doesn't match with the requested block number")
+
+  # get the source block
+  let earliestHeader = self.headerStore.earliest.valueOr:
+    raise newException(ValueError, "Syncing")
+
+  # walk blocks backwards(time) from source to target
+  let isLinked = await self.walkBlocks(earliestHeader.number, header.number, earliestHeader.parentHash, blk.hash)
+
+  if not isLinked:
+    raise newException(ValueError, "the requested block is not part of the canonical chain")
+
+  # verify transactions
+  if fullTransactions:
+    let verified = verifyTransactions(header.transactionsRoot, blk.transactions).valueOr:
+      raise newException(ValueError, "error while verifying transactions root")
+    if not verified:
+      raise newException(ValueError, "transactions within the block do not yield the same transaction root")
+
+  # verify withdrawals
+  if blk.withdrawals.isSome():
+    if blk.withdrawalsRoot.get() != orderedTrieRoot(blk.withdrawals.get()):
+      raise newException(ValueError, "withdrawals within the block do not yield the same withdrawals root")
+
+  return blk
+
 proc getHeaderByHash*(
     self: VerifiedRpcProxy, blockHash: Hash32
 ): Future[Header] {.async: (raises: [ValueError, CatchableError]).} =
@@ -129,7 +208,7 @@ proc getHeaderByHash*(
 proc getHeaderByTag*(
     self: VerifiedRpcProxy, blockTag: BlockTag
 ): Future[Header] {.async: (raises: [ValueError, CatchableError]).} =
-  let 
+  let
     n = self.resolveTag(blockTag)
     cachedHeader = self.headerStore.get(n)
 

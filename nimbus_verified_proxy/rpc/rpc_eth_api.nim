@@ -24,7 +24,8 @@ import
   ../header_store,
   ../types,
   ./blocks,
-  ./accounts
+  ./accounts,
+  ./transactions
 
 logScope:
   topics = "verified_proxy"
@@ -35,6 +36,84 @@ template rpcClient*(vp: VerifiedRpcProxy): RpcClient =
 proc installEthApiHandlers*(vp: VerifiedRpcProxy) =
   vp.proxy.rpc("eth_chainId") do() -> Quantity:
     vp.chainId
+
+  vp.proxy.rpc("eth_getBlockByNumber") do(
+    blockTag: BlockTag, fullTransactions: bool
+  ) -> Opt[BlockObject]:
+    try:
+      let blk = await vp.getBlockByTag(blockTag, fullTransactions)
+      return Opt.some(blk)
+    except ValueError as e:
+      # should return Opt.none but we also want to transmit error related info
+      # return Opt.none(BlockObject)
+      raise newException(ValueError, e.msg) # raising an exception will return the error message
+
+  vp.proxy.rpc("eth_getBlockByHash") do(
+    blockHash: Hash32, fullTransactions: bool
+  ) -> Opt[BlockObject]:
+    try:
+      let blk = await vp.getBlockByHash(blockHash, fullTransactions)
+      return Opt.some(blk)
+    except ValueError as e:
+      # should return Opt.none but we also want to transmit error related info
+      # return Opt.none(BlockObject)
+      raise newException(ValueError, e.msg) # raising an exception will return the error message
+
+  vp.proxy.rpc("eth_getUncleCountByBlockNumber") do(
+    blockTag: BlockTag
+  ) -> Quantity:
+    let blk = await vp.getBlockByTag(blockTag, false)
+    return Quantity(blk.uncles.len())
+
+  vp.proxy.rpc("eth_getUncleCountByBlockHash") do(
+    blockHash: Hash32
+  ) -> Quantity:
+    let blk = await vp.getBlockByHash(blockHash, false)
+    return Quantity(blk.uncles.len())
+
+  vp.proxy.rpc("eth_getBlockTransactionCountByNumber") do(
+    blockTag: BlockTag
+  ) -> Quantity:
+    let blk = await vp.getBlockByTag(blockTag, true)
+    return Quantity(blk.transactions.len)
+
+  vp.proxy.rpc("eth_getBlockTransactionCountByHash") do(
+    blockHash: Hash32
+  ) -> Quantity:
+    let blk = await vp.getBlockByHash(blockHash, true)
+    return Quantity(blk.transactions.len)
+
+  vp.proxy.rpc("eth_getTransactionByBlockNumberAndIndex") do(
+    blockTag: BlockTag, index: Quantity
+  ) -> TransactionObject:
+    let blk = await vp.getBlockByTag(blockTag, true)
+    if distinctBase(index) >= uint64(blk.transactions.len):
+      raise newException(ValueError, "provided transaction index is outside bounds")
+    let x = blk.transactions[distinctBase(index)]
+    doAssert x.kind == tohTx
+    return x.tx
+
+  vp.proxy.rpc("eth_getTransactionByBlockHashAndIndex") do(
+    blockHash: Hash32, index: Quantity
+  ) -> TransactionObject:
+    let blk = await vp.getBlockByHash(blockHash, true)
+    if distinctBase(index) >= uint64(blk.transactions.len):
+      raise newException(ValueError, "provided transaction index is outside bounds")
+    let x = blk.transactions[distinctBase(index)]
+    doAssert x.kind == tohTx
+    return x.tx
+
+  vp.proxy.rpc("eth_getTransactionByHash") do(
+    txHash: Hash32
+  ) -> TransactionObject:
+    let tx = await vp.rpcClient.eth_getTransactionByHash(txHash)
+    if tx.hash != txHash:
+      raise newException(ValueError, "the downloaded transaction hash doesn't match the requested transaction hash")
+
+    if not checkTxHash(tx, txHash):
+      raise newException(ValueError, "the transaction doesn't hash to the provided hash")
+
+    return tx
 
   # eth_blockNumber - get latest tag from header store
   vp.proxy.rpc("eth_blockNumber") do() -> Quantity:
@@ -134,18 +213,6 @@ proc installEthApiHandlers*(vp: VerifiedRpcProxy) =
   vp.proxy.registerProxyMethod("net_version")
   vp.proxy.registerProxyMethod("eth_sendRawTransaction")
   vp.proxy.registerProxyMethod("eth_getTransactionReceipt")
-
-  # TODO currently we do not handle fullTransactions flag. It require updates on
-  # nim-web3 side
-#  vp.proxy.rpc("eth_getBlockByNumber") do(
-#    blockTag: BlockTag, fullTransactions: bool
-#  ) -> Opt[BlockObject]:
-#    vp.getBlockByTag(blockTag)
-#
-#  vp.proxy.rpc("eth_getBlockByHash") do(
-#    blockHash: Hash32, fullTransactions: bool
-#  ) -> Opt[BlockObject]:
-#    vp.blockCache.getPayloadByHash(blockHash)
 
 # Used to be in eth1_monitor.nim; not sure why it was deleted,
 # so I copied it here. --Adam
