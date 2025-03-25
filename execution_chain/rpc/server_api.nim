@@ -240,7 +240,7 @@ proc setupServerAPI*(api: ServerAPIRef, server: RpcServer, ctx: EthContext) =
       if blockBody.transactions.len != receipts.len:
         warn "Transactions and receipts length mismatch",
           number = header.number, hash = blkHash.short,
-          txs = txs.len, receipts = receipts.len
+          txs = blockBody.transactions.len, receipts = receipts.len
         return Opt.none(seq[FilterLog])
       let logs = deriveLogs(header, blockBody.transactions, receipts, opts, cachedHashes)
       return Opt.some(logs)
