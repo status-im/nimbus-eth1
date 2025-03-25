@@ -630,16 +630,19 @@ func memoryTransaction*(c: ForkedChainRef, txHash: Hash32): Opt[(Transaction, Bl
     return Opt.some( (loc[].tx(index), loc[].number) )
   return Opt.none((Transaction, BlockNumber))
 
-func memoryTxHashesForBlock*(c: ForkedChainRef, blockHash: Hash32): seq[Hash32] =
+func memoryTxHashesForBlock*(c: ForkedChainRef, blockHash: Hash32): Opt[seq[Hash32]] =
   var cachedTxHashes = newSeq[(Hash32, uint64)]()
   for txHash, (blkHash, txIdx) in c.txRecords.pairs:
     if blkHash == blockHash:
       cachedTxHashes.add((txHash, txIdx))
 
+  if cachedTxHashes.len <= 0:
+    return Opt.none(seq[Hash32])
+
   cachedTxHashes.sort(proc(a, b: (Hash32, uint64)): int =
       cmp(a[1], b[1])
     )
-  cachedTxHashes.mapIt(it[0])
+  Opt.some(cachedTxHashes.mapIt(it[0]))
 
 proc latestBlock*(c: ForkedChainRef): Block =
   if c.activeBranch.headNumber == c.baseBranch.tailNumber:

@@ -226,27 +226,23 @@ proc setupServerAPI*(api: ServerAPIRef, server: RpcServer, ctx: EthContext) =
       chain: ForkedChainRef, header: Header, opts: FilterOptions
   ): Opt[seq[FilterLog]] {.gcsafe, raises: [].} =
     if headerBloomFilter(header, opts.address, opts.topics):
-      let blkHash = header.blockHash
-      let (receipts, txs, cachedHashes) =
-        if api.chain.isInMemory(blkHash):
-          let blk = api.chain.memoryBlock(blkHash)
-          (blk.receipts, blk.blk.transactions, Opt.some(chain.memoryTxHashesForBlock(blkHash)))
-        else:
-          let rcs = chain.baseTxFrame.getReceipts(header.receiptsRoot).valueOr:
-            return Opt.some(newSeq[FilterLog](0))
-          let txs = chain.baseTxFrame.getTransactions(header.txRoot).valueOr:
-            return Opt.some(newSeq[FilterLog](0))
-          (rcs, txs, Opt.none(seq[Hash32]))
+      let 
+        blkHash = header.blockHash
+        blockBody = chain.blockBodyByHash(blkHash).valueOr:
+          return Opt.none(seq[FilterLog])
+        receipts = chain.receiptsByBlockHash(blkHash).valueOr:
+          return Opt.none(seq[FilterLog])
+        cachedHashes = chain.memoryTxHashesForBlock(blkHash)
       # Note: this will hit assertion error if number of block transactions
       # do not match block receipts.
       # Although this is fine as number of receipts should always match number
       # of transactions
-      if txs.len != receipts.len:
+      if blockBody.transactions.len != receipts.len:
         warn "Transactions and receipts length mismatch",
           number = header.number, hash = blkHash.short,
           txs = txs.len, receipts = receipts.len
         return Opt.none(seq[FilterLog])
-      let logs = deriveLogs(header, txs, receipts, opts, cachedHashes)
+      let logs = deriveLogs(header, blockBody.transactions, receipts, opts, cachedHashes)
       return Opt.some(logs)
     else:
       return Opt.some(newSeq[FilterLog](0))
