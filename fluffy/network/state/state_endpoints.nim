@@ -258,18 +258,18 @@ proc getCodeByStateRoot*(
     stateRoot: Hash32,
     address: Address,
     maybeBlockHash = Opt.none(Hash32),
-): Future[Opt[Bytecode]] {.async: (raises: [CancelledError]).} =
+): Future[Opt[seq[byte]]] {.async: (raises: [CancelledError]).} =
   let (accountProof, exists) = (
     await n.getAccountProof(stateRoot, address, maybeBlockHash)
   ).valueOr:
     warn "Failed to get account proof", error = error
-    return Opt.none(Bytecode)
+    return Opt.none(seq[byte])
 
   let account =
     if exists:
       accountProof.toAccount().valueOr:
         error "Failed to get account from accountProof"
-        return Opt.none(Bytecode)
+        return Opt.none(seq[byte])
     else:
       info "Account doesn't exist, returning default account"
       # return an empty account if the account doesn't exist
@@ -278,7 +278,7 @@ proc getCodeByStateRoot*(
   if account.codeHash == EMPTY_CODE_HASH:
     info "Code doesn't exist, returning default code value"
     # return empty bytecode if the code doesn't exist
-    return Opt.some(Bytecode.empty())
+    return Opt.some(Bytecode.empty().asSeq())
 
   let
     contractCodeKey = ContractCodeKey.init(keccak256(address.data), account.codeHash)
@@ -291,9 +291,9 @@ proc getCodeByStateRoot*(
         Opt.none(ContractCodeOffer)
     contractCodeRetrieval = (await n.getContractCode(contractCodeKey, maybeParentOffer)).valueOr:
       warn "Failed to get contract code"
-      return Opt.none(Bytecode)
+      return Opt.none(seq[byte])
 
-  Opt.some(contractCodeRetrieval.code)
+  Opt.some(contractCodeRetrieval.code.asSeq())
 
 type Proofs* = ref object
   account*: Account
@@ -394,10 +394,10 @@ proc getStorageAt*(
 # Used by: eth_getCode
 proc getCode*(
     n: StateNetwork, blockNumOrHash: uint64 | Hash32, address: Address
-): Future[Opt[Bytecode]] {.async: (raises: [CancelledError]).} =
+): Future[Opt[seq[byte]]] {.async: (raises: [CancelledError]).} =
   let header = (await n.getBlockHeaderByBlockNumOrHash(blockNumOrHash)).valueOr:
     warn "Failed to get block header by block number or hash", blockNumOrHash
-    return Opt.none(Bytecode)
+    return Opt.none(seq[byte])
 
   await n.getCodeByStateRoot(header.stateRoot, address, Opt.some(header.rlpHash()))
 

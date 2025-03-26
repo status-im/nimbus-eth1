@@ -128,7 +128,8 @@ template getOrRaise(stateNetwork: Opt[StateNetwork]): StateNetwork =
 
 template getOrRaise(portalEvm: Opt[PortalEvm]): PortalEvm =
   let evm = portalEvm.valueOr:
-    raise newException(ValueError, "portal evm not enabled")
+    raise
+      newException(ValueError, "portal evm requires state sub-network to be enabled")
   evm
 
 proc installEthApiHandlers*(
@@ -138,8 +139,23 @@ proc installEthApiHandlers*(
     stateNetwork: Opt[StateNetwork],
 ) =
   let portalEvm =
-    if historyNetwork.isSome() and stateNetwork.isSome():
-      Opt.some(PortalEvm.init(historyNetwork.get(), stateNetwork.get()))
+    if stateNetwork.isSome():
+      Opt.some(
+        PortalEvm.init(
+          proc(
+              stateRoot: Hash32, address: Address
+          ): Future[Opt[Account]] {.async: (raw: true, raises: [CancelledError]).} =
+            stateNetwork.get().getAccount(stateRoot, address),
+          proc(
+              stateRoot: Hash32, address: Address, slotKey: UInt256
+          ): Future[Opt[UInt256]] {.async: (raw: true, raises: [CancelledError]).} =
+            stateNetwork.get().getStorageAtByStateRoot(stateRoot, address, slotKey),
+          proc(
+              stateRoot: Hash32, address: Address
+          ): Future[Opt[seq[byte]]] {.async: (raw: true, raises: [CancelledError]).} =
+            stateNetwork.get().getCodeByStateRoot(stateRoot, address),
+        )
+      )
     else:
       Opt.none(PortalEvm)
 
@@ -380,9 +396,9 @@ proc installEthApiHandlers*(
     let
       sn = stateNetwork.getOrRaise()
       blockNumber = quantityTag.number.uint64
-      bytecode = (await sn.getCode(blockNumber, data)).valueOr:
+      code = (await sn.getCode(blockNumber, data)).valueOr:
         raise newException(ValueError, "Unable to get code")
-    return bytecode.asSeq()
+    return code
 
   rpcServer.rpc("eth_getProof") do(
     data: Address, slots: seq[UInt256], quantityTag: RtBlockIdentifier
@@ -444,13 +460,14 @@ proc installEthApiHandlers*(
 
     let
       hn = historyNetwork.getOrRaise()
-      sn = stateNetwork.getOrRaise()
       evm = portalEvm.getOrRaise()
+      header = (await hn.getVerifiedBlockHeader(quantityTag.number.uint64)).valueOr:
+        raise newException(ValueError, "Unable to get block header")
 
     let callResult = (
       await evm.call(
+        header,
         tx,
-        quantityTag.number.uint64,
         if optimisticStateFetch.isNone():
           true
         else:
