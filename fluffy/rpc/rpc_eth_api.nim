@@ -152,7 +152,7 @@ proc installEthApiHandlers*(
             stateNetwork.get().getStorageAtByStateRoot(stateRoot, address, slotKey),
           proc(
               stateRoot: Hash32, address: Address
-          ): Future[Opt[Bytecode]] {.async: (raw: true, raises: [CancelledError]).} =
+          ): Future[Opt[seq[byte]]] {.async: (raw: true, raises: [CancelledError]).} =
             stateNetwork.get().getCodeByStateRoot(stateRoot, address),
         )
       )
@@ -396,9 +396,9 @@ proc installEthApiHandlers*(
     let
       sn = stateNetwork.getOrRaise()
       blockNumber = quantityTag.number.uint64
-      bytecode = (await sn.getCode(blockNumber, data)).valueOr:
+      code = (await sn.getCode(blockNumber, data)).valueOr:
         raise newException(ValueError, "Unable to get code")
-    return bytecode.asSeq()
+    return code
 
   rpcServer.rpc("eth_getProof") do(
     data: Address, slots: seq[UInt256], quantityTag: RtBlockIdentifier

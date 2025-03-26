@@ -273,7 +273,7 @@ procSuite "State Endpoints":
           addresses.Address.fromHex("0xc02aaa39b223fe8d0a0e5c4f27ead9083c756cc2")
         badAddress =
           addresses.Address.fromHex("0xbadaaa39b223fe8d0a0e5c4f27ead9083c756cc2")
-        expectedCode = contentValue.code
+        expectedCode = contentValue.code.asSeq()
 
         codeRes = await stateNode2.stateNetwork.getCode(contentValue.blockHash, address)
         badCodeRes =

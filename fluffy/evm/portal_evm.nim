@@ -18,14 +18,12 @@ import
   ../../execution_chain/db/ledger,
   ../../execution_chain/common/common,
   ../../execution_chain/transaction/call_evm,
-  ../../execution_chain/evm/[types, state, evm_errors],
-  ../network/history/history_network,
-  ../network/state/[state_endpoints, state_network]
+  ../../execution_chain/evm/[types, state, evm_errors]
 
 from web3/eth_api_types import TransactionArgs
 
 export
-  results, chronos, hashes, history_network, state_network, TransactionArgs, CallResult
+  results, chronos, hashes, addresses, accounts, headers, TransactionArgs, CallResult
 
 logScope:
   topics = "portal_evm"
@@ -72,15 +70,17 @@ type
 
   CodeQuery = object
     address: Address
-    codeFut: Future[Opt[Bytecode]]
+    codeFut: Future[Opt[seq[byte]]]
 
   GetAccountProc* = proc(stateRoot: Hash32, address: Address): Future[Opt[Account]] {.
     async: (raises: [CancelledError])
   .}
+
   GetStorageProc* = proc(
     stateRoot: Hash32, address: Address, slotKey: UInt256
   ): Future[Opt[UInt256]] {.async: (raises: [CancelledError]).}
-  GetCodeProc* = proc(stateRoot: Hash32, address: Address): Future[Opt[Bytecode]] {.
+
+  GetCodeProc* = proc(stateRoot: Hash32, address: Address): Future[Opt[seq[byte]]] {.
     async: (raises: [CancelledError])
   .}
 
@@ -98,7 +98,7 @@ func init(
 ): T =
   T(address: adr, slotKey: slotKey, storageFut: fut)
 
-func init(T: type CodeQuery, adr: Address, fut: Future[Opt[Bytecode]]): T =
+func init(T: type CodeQuery, adr: Address, fut: Future[Opt[seq[byte]]]): T =
   T(address: adr, codeFut: fut)
 
 proc init*(
@@ -108,7 +108,6 @@ proc init*(
     codeProc: GetCodeProc,
     networkId: NetworkId = MainNet,
 ): T =
-
   let com = CommonRef.new(
     DefaultDbMemory.newCoreDbRef(),
     taskpool = nil,
@@ -147,9 +146,9 @@ proc call*(
   # Set code of the 'to' address in the EVM so that we can execute the transaction
   let code = (await codeFut).valueOr:
     return err("Unable to get code")
-  vmState.ledger.setCode(to, code.asSeq())
+  vmState.ledger.setCode(to, code)
   fetchedCode.incl(to)
-  debug "Code to be executed", code = code.asSeq().to0xHex()
+  debug "Code to be executed", code = code.to0xHex()
 
   var
     lastWitnessKeys: WitnessTable
@@ -248,7 +247,7 @@ proc call*(
       for q in codeQueries:
         let code = (await q.codeFut).valueOr:
           return err("Unable to get code")
-        vmState.ledger.setCode(q.address, code.asSeq())
+        vmState.ledger.setCode(q.address, code)
         fetchedCode.incl(q.address)
     except CatchableError as e:
       # TODO: why do the above futures throw a CatchableError and not CancelledError?

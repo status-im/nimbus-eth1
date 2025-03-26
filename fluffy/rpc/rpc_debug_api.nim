@@ -79,10 +79,10 @@ proc installDebugApiHandlers*(rpcServer: RpcServer, stateNetwork: Opt[StateNetwo
 
     let
       sn = stateNetwork.getOrRaise()
-      bytecode = (await sn.getCodeByStateRoot(stateRoot, address)).valueOr:
+      code = (await sn.getCodeByStateRoot(stateRoot, address)).valueOr:
         raise newException(ValueError, "Unable to get code")
 
-    return bytecode.asSeq()
+    return code
 
   rpcServer.rpc("debug_getProofByStateRoot") do(
     address: Address, slots: seq[UInt256], stateRoot: Hash32
