@@ -226,27 +226,23 @@ proc setupServerAPI*(api: ServerAPIRef, server: RpcServer, ctx: EthContext) =
       chain: ForkedChainRef, header: Header, opts: FilterOptions
   ): Opt[seq[FilterLog]] {.gcsafe, raises: [].} =
     if headerBloomFilter(header, opts.address, opts.topics):
-      let blkHash = header.blockHash
-      let (receipts, txs, cachedHashes) =
-        if api.chain.isInMemory(blkHash):
-          let blk = api.chain.memoryBlock(blkHash)
-          (blk.receipts, blk.blk.transactions, Opt.some(chain.memoryTxHashesForBlock(blkHash)))
-        else:
-          let rcs = chain.baseTxFrame.getReceipts(header.receiptsRoot).valueOr:
-            return Opt.some(newSeq[FilterLog](0))
-          let txs = chain.baseTxFrame.getTransactions(header.txRoot).valueOr:
-            return Opt.some(newSeq[FilterLog](0))
-          (rcs, txs, Opt.none(seq[Hash32]))
+      let 
+        blkHash = header.blockHash
+        blockBody = chain.blockBodyByHash(blkHash).valueOr:
+          return Opt.none(seq[FilterLog])
+        receipts = chain.receiptsByBlockHash(blkHash).valueOr:
+          return Opt.none(seq[FilterLog])
+        cachedHashes = chain.memoryTxHashesForBlock(blkHash)
       # Note: this will hit assertion error if number of block transactions
       # do not match block receipts.
       # Although this is fine as number of receipts should always match number
       # of transactions
-      if txs.len != receipts.len:
+      if blockBody.transactions.len != receipts.len:
         warn "Transactions and receipts length mismatch",
           number = header.number, hash = blkHash.short,
-          txs = txs.len, receipts = receipts.len
+          txs = blockBody.transactions.len, receipts = receipts.len
         return Opt.none(seq[FilterLog])
-      let logs = deriveLogs(header, txs, receipts, opts, cachedHashes)
+      let logs = deriveLogs(header, blockBody.transactions, receipts, opts, cachedHashes)
       return Opt.some(logs)
     else:
       return Opt.some(newSeq[FilterLog](0))
@@ -348,49 +344,22 @@ proc setupServerAPI*(api: ServerAPIRef, server: RpcServer, ctx: EthContext) =
     ##
     ## data: Hash of a transaction.
     ## Returns ReceiptObject or nil when no receipt was found.
-    var
-      idx = 0'u64
-      prevGasUsed = GasInt(0)
-
     let
       txHash = data
-      (blockhash, txid) = api.chain.txRecords(txHash)
-
-    if blockhash == zeroHash32:
-      # Receipt in database
-      let txDetails = api.chain.baseTxFrame.getTransactionKey(data).valueOr:
-        raise newException(ValueError, "TransactionKey not found")
-      if txDetails.index < 0:
+      (blockHash, txid) = api.chain.txDetailsByTxHash(txHash).valueOr:
         return nil
-
-      let header = api.chain.headerByNumber(txDetails.blockNumber).valueOr:
-        raise newException(ValueError, "Block not found")
-      let tx = api.chain.baseTxFrame.getTransactionByIndex(
-                 header.txRoot, uint16(txDetails.index)).valueOr:
+      blk = api.chain.blockByHash(blockHash).valueOr:
         return nil
-      let receipts = api.chain.baseTxFrame.getReceipts(header.receiptsRoot).valueOr:
+      receipts = api.chain.receiptsByBlockHash(blockHash).valueOr:
         return nil
-      for receipt in receipts:
-        let gasUsed = receipt.cumulativeGasUsed - prevGasUsed
-        prevGasUsed = receipt.cumulativeGasUsed
-        if idx == txDetails.index:
-          return populateReceipt(receipt, gasUsed, tx, txDetails.index, header, api.com)
-        idx.inc
-    else:
-      # Receipt in memory
-      let blkdesc = api.chain.memoryBlock(blockhash)
+    
+    var prevGasUsed = 0'u64
+    for idx, receipt in receipts:
+      let gasUsed = receipt.cumulativeGasUsed - prevGasUsed
+      prevGasUsed = receipt.cumulativeGasUsed
 
-      while idx <= txid:
-        let receipt = blkdesc.receipts[idx]
-        let gasUsed = receipt.cumulativeGasUsed - prevGasUsed
-        prevGasUsed = receipt.cumulativeGasUsed
-
-        if txid == idx:
-          return populateReceipt(
-            receipt, gasUsed, blkdesc.blk.transactions[txid], txid, blkdesc.blk.header,
-            api.com)
-
-        idx.inc
+      if txid == uint64(idx):
+        return populateReceipt(receipt, gasUsed, blk.transactions[txid], txid, blk.header, api.com)
 
   server.rpc("eth_estimateGas") do(args: TransactionArgs) -> Quantity:
     ## Generates and returns an estimate of how much gas is necessary to allow the transaction to complete.
@@ -561,29 +530,26 @@ proc setupServerAPI*(api: ServerAPIRef, server: RpcServer, ctx: EthContext) =
     ##
     ## data: hash of a transaction.
     ## Returns requested transaction information.
-    let txHash = data
-    let res = api.txPool.getItem(txHash)
+    let 
+      txHash = data
+      res = api.txPool.getItem(txHash)
     if res.isOk:
       return populateTransactionObject(res.get().tx, Opt.none(Hash32), Opt.none(uint64))
 
-    block blockOne:
-      let
-        (blockHash, txid) = api.chain.txRecords(txHash)
-        (tx, number) = api.chain.memoryTransaction(txHash).valueOr:
-                         break blockOne
-      return populateTransactionObject(tx, Opt.some(blockHash), Opt.some(number), Opt.some(txid))
-
-    let txDetails = api.chain.baseTxFrame.getTransactionKey(txHash).valueOr:
+    let 
+      (blockHash, txId) = api.chain.txDetailsByTxHash(txHash).valueOr:
+        return nil
+      blk = api.chain.blockByHash(blockHash).valueOr:
+        return nil
+    
+    if blk.transactions.len <= int(txId):
       return nil
-    let header = api.chain.baseTxFrame.getBlockHeader(txDetails.blockNumber).valueOr:
-      return nil
-    let tx = api.chain.baseTxFrame.getTransactionByIndex(header.txRoot, uint16(txDetails.index)).valueOr:
-      return nil
+    
     return populateTransactionObject(
-      tx,
-      Opt.some(header.blockHash),
-      Opt.some(header.number),
-      Opt.some(txDetails.index.uint64),
+      blk.transactions[txId],
+      Opt.some(blockHash),
+      Opt.some(blk.header.number),
+      Opt.some(txId),
     )
 
   server.rpc("eth_getTransactionByBlockHashAndIndex") do(
@@ -646,34 +612,22 @@ proc setupServerAPI*(api: ServerAPIRef, server: RpcServer, ctx: EthContext) =
   ) -> Opt[seq[ReceiptObject]]:
     ## Returns the receipts of a block.
     let
-      header = api.headerFromTag(quantityTag).valueOr:
+      blk = api.blockFromTag(quantityTag).valueOr:
         raise newException(ValueError, "Block not found")
-      blkHash = header.blockHash
+      blkHash = blk.header.blockHash
+      receipts = api.chain.receiptsByBlockHash(blkHash).valueOr:
+        return Opt.none(seq[ReceiptObject])
 
     var
       prevGasUsed = GasInt(0)
-      receipts: seq[Receipt]
       recs: seq[ReceiptObject]
-      txs: seq[Transaction]
       index = 0'u64
-
-    if api.chain.haveBlockAndState(blkHash):
-      let blkdesc = api.chain.memoryBlock(blkHash)
-      receipts = blkdesc.receipts
-      txs = blkdesc.blk.transactions
-    else:
-      let receiptList = api.chain.baseTxFrame.getReceipts(header.receiptsRoot).valueOr:
-        return Opt.none(seq[ReceiptObject])
-      for receipt in receiptList:
-        receipts.add receipt
-      txs = api.chain.baseTxFrame.getTransactions(header.txRoot).valueOr:
-        return Opt.none(seq[ReceiptObject])
 
     try:
       for receipt in receipts:
         let gasUsed = receipt.cumulativeGasUsed - prevGasUsed
         prevGasUsed = receipt.cumulativeGasUsed
-        recs.add populateReceipt(receipt, gasUsed, txs[index], index, header, api.com)
+        recs.add populateReceipt(receipt, gasUsed, blk.transactions[index], index, blk.header, api.com)
         inc index
       return Opt.some(recs)
     except CatchableError:
