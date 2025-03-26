@@ -1,5 +1,5 @@
 # nimbus-eth1
-# Copyright (c) 2023-2024 Status Research & Development GmbH
+# Copyright (c) 2023-2025 Status Research & Development GmbH
 # Licensed under either of
 #  * Apache License, version 2.0, ([LICENSE-APACHE](LICENSE-APACHE) or
 #    http://www.apache.org/licenses/LICENSE-2.0)
@@ -41,9 +41,9 @@ template limb(i: int | uint8): uint8 =
   # In which limb can nibble i be found?
   uint8(i) shr 4 # shr 4 = div 16 = 16 nibbles per limb
 
-template shift(i: int | uint8): int =
+template shift(i: int | uint8): uint8 =
   # How many bits to shift to find nibble i within its limb?
-  60 - ((i mod 16) shl 2) # shl 2 = 4 bits per nibble
+  60 - ((uint8(i) mod 16) shl 2) # shl 2 = 4 bits per nibble
 
 func `[]`*(r: NibblesBuf, i: int): byte =
   let
@@ -160,6 +160,13 @@ func slice*(r: NibblesBuf, ibegin: int, iend = -1): NibblesBuf {.noinit.} =
             cur or next
           else:
             cur
+
+  if result.iend mod 16 > 0:
+    # Clear last limb past iend so that we can compare full limbs
+    let
+      elimb = result.iend.limb
+      eshift = result.iend.shift + 4
+    result.limbs[elimb] = result.limbs[elimb] and (0xffffffffffffffff'u64 shl eshift)
 
 template copyshr(aend: uint8) =
   block adone: # copy aend nibbles of a

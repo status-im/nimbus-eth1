@@ -172,3 +172,12 @@ suite "Nibbles":
       check:
         $n0.replaceSuffix(n1.slice(0, i)) ==
           (strutils.repeat('0', 64 - i) & strutils.repeat('1', i))
+
+  test "slice must clear last limb":
+    let
+      xx = NibblesBuf.fromBytes(hexToSeqByte"1111111111111111111111111111111111111111111111111111111111111111")
+      yy = NibblesBuf.fromBytes(hexToSeqByte"1111111111111111111111111111111111111111111111111111111111111110")
+
+    check:
+      xx.slice(0, xx.len - 1) == yy.slice(0, yy.len-1)
+      xx.slice(1, xx.len - 1) == yy.slice(1, yy.len-1)
