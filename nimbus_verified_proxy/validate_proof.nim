@@ -35,7 +35,7 @@ proc getAccountFromProof*(
       codeHash: accountCodeHash,
     )
     accountEncoded = rlp.encode(acc)
-    accountKey = toSeq(keccak256((accountAddress.data)).data)
+    accountKey = keccak256((accountAddress.data)).data
 
   let proofResult = verifyMptProof(mptNodesBytes, stateRoot, accountKey, accountEncoded)
 
@@ -52,7 +52,7 @@ proc getStorageData(
 ): Result[UInt256, string] =
   let
     storageMptNodes = storageProof.proof.mapIt(distinctBase(it))
-    key = toSeq(keccak256(toBytesBE(storageProof.key)).data)
+    key = keccak256(toBytesBE(storageProof.key)).data
     encodedValue = rlp.encode(storageProof.value)
     proofResult =
       verifyMptProof(storageMptNodes, account.storageRoot, key, encodedValue)

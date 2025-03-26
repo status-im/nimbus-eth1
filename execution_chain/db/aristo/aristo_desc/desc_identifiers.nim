@@ -17,15 +17,14 @@
 import
   std/[algorithm, sequtils, sets, strutils, hashes],
   eth/common/[base, hashes],
-  eth/rlp,
+  eth/rlp, eth/trie/nibbles,
   stew/byteutils,
   chronicles,
   results,
-  stint,
-  ./desc_nibbles
+  stint
 
 export
-  desc_nibbles, base, hashes, rlp
+  nibbles, base, hashes, rlp
 
 type
   VertexID* = distinct uint64
