@@ -106,19 +106,13 @@ proc init*(
     accProc: GetAccountProc,
     storageProc: GetStorageProc,
     codeProc: GetCodeProc,
+    networkId: NetworkId = MainNet,
 ): T =
-  let config =
-    try:
-      networkParams(MainNet).config
-    except ValueError as e:
-      raiseAssert(e.msg) # Should not fail
-    except RlpError as e:
-      raiseAssert(e.msg) # Should not fail
 
   let com = CommonRef.new(
     DefaultDbMemory.newCoreDbRef(),
     taskpool = nil,
-    config = config,
+    config = chainConfigForNetwork(networkId),
     initializeDb = false,
   )
 
