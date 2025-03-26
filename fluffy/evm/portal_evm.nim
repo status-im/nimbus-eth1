@@ -74,10 +74,21 @@ type
     address: Address
     codeFut: Future[Opt[Bytecode]]
 
+  GetAccountProc* = proc(stateRoot: Hash32, address: Address): Future[Opt[Account]] {.
+    async: (raises: [CancelledError])
+  .}
+  GetStorageProc* = proc(
+    stateRoot: Hash32, address: Address, slotKey: UInt256
+  ): Future[Opt[UInt256]] {.async: (raises: [CancelledError]).}
+  GetCodeProc* = proc(stateRoot: Hash32, address: Address): Future[Opt[Bytecode]] {.
+    async: (raises: [CancelledError])
+  .}
+
   PortalEvm* = ref object
-    historyNetwork: HistoryNetwork
-    stateNetwork: StateNetwork
     com: CommonRef
+    getAccount: GetAccountProc
+    getStorage: GetStorageProc
+    getCode: GetCodeProc
 
 func init(T: type AccountQuery, adr: Address, fut: Future[Opt[Account]]): T =
   T(address: adr, accFut: fut)
@@ -90,7 +101,12 @@ func init(
 func init(T: type CodeQuery, adr: Address, fut: Future[Opt[Bytecode]]): T =
   T(address: adr, codeFut: fut)
 
-proc init*(T: type PortalEvm, hn: HistoryNetwork, sn: StateNetwork): T =
+proc init*(
+    T: type PortalEvm,
+    accProc: GetAccountProc,
+    storageProc: GetStorageProc,
+    codeProc: GetCodeProc,
+): T =
   let config =
     try:
       networkParams(MainNet).config
@@ -106,23 +122,19 @@ proc init*(T: type PortalEvm, hn: HistoryNetwork, sn: StateNetwork): T =
     initializeDb = false,
   )
 
-  PortalEvm(historyNetwork: hn, stateNetwork: sn, com: com)
+  PortalEvm(com: com, getAccount: accProc, getStorage: storageProc, getCode: codeProc)
 
 proc call*(
-    evm: PortalEvm,
-    tx: TransactionArgs,
-    blockNumOrHash: uint64 | Hash32,
-    optimisticStateFetch = true,
+    evm: PortalEvm, header: Header, tx: TransactionArgs, optimisticStateFetch = true
 ): Future[Result[CallResult, string]] {.async: (raises: [CancelledError]).} =
   let
     to = tx.to.valueOr:
       return err("to address is required")
-    header = (await evm.historyNetwork.getVerifiedBlockHeader(blockNumOrHash)).valueOr:
-      return err("Unable to get block header")
-    # Start fetching code in the background while setting up the EVM
-    codeFut = evm.stateNetwork.getCodeByStateRoot(header.stateRoot, to)
 
-  debug "Executing call", to, blockNumOrHash
+    # Start fetching code in the background while setting up the EVM
+    codeFut = evm.getCode(header.stateRoot, to)
+
+  debug "Executing call", blockNumber = header.number, to
 
   let txFrame = evm.com.db.baseTxFrame().txFrameBegin()
   defer:
@@ -187,9 +199,7 @@ proc call*(
           let slotIdx = (adr, v.storageSlot)
           if slotIdx notin fetchedStorage:
             debug "Fetching storage slot", address = adr, slotKey = v.storageSlot
-            let storageFut = evm.stateNetwork.getStorageAtByStateRoot(
-              header.stateRoot, adr, v.storageSlot
-            )
+            let storageFut = evm.getStorage(header.stateRoot, adr, v.storageSlot)
             if not stateFetchDone:
               storageQueries.add(StorageQuery.init(adr, v.storageSlot, storageFut))
               if not optimisticStateFetch:
@@ -199,7 +209,7 @@ proc call*(
 
           if adr notin fetchedAccounts:
             debug "Fetching account", address = adr
-            let accFut = evm.stateNetwork.getAccount(header.stateRoot, adr)
+            let accFut = evm.getAccount(header.stateRoot, adr)
             if not stateFetchDone:
               accountQueries.add(AccountQuery.init(adr, accFut))
               if not optimisticStateFetch:
@@ -207,7 +217,7 @@ proc call*(
 
           if v.codeTouched and adr notin fetchedCode:
             debug "Fetching code", address = adr
-            let codeFut = evm.stateNetwork.getCodeByStateRoot(header.stateRoot, adr)
+            let codeFut = evm.getCode(header.stateRoot, adr)
             if not stateFetchDone:
               codeQueries.add(CodeQuery.init(adr, codeFut))
               if not optimisticStateFetch:
