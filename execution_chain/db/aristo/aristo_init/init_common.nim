@@ -83,7 +83,7 @@ proc finishSession*(hdl: TypedPutHdlRef; db: TypedBackendRef) =
 
 proc initInstance*(db: AristoDbRef): Result[void, AristoError] =
   let vTop = ?db.getTuvFn()
-  db.txRef = AristoTxRef(db: db, vTop: vTop, snapshotLevel: Opt.some(0))
+  db.txRef = AristoTxRef(db: db, vTop: vTop, snapshot: Snapshot(level: Opt.some(0)))
   db.accLeaves = LruCache[Hash32, VertexRef].init(ACC_LRU_SIZE)
   db.stoLeaves = LruCache[Hash32, VertexRef].init(ACC_LRU_SIZE)
   ok()
