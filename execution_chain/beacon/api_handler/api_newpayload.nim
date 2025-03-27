@@ -140,12 +140,14 @@ proc newPayload*(ben: BeaconEngineRef,
     txFrame = ben.chain.latestTxFrame()
     timestamp = ethTime payload.timestamp
     version = payload.version
-    requestsHash = calcRequestsHash(executionRequests)
 
   validatePayload(apiVersion, version, payload)
   validateVersion(com, timestamp, version, apiVersion)
 
-  var blk = ethBlock(payload, beaconRoot, requestsHash)
+  let
+    requestsHash = calcRequestsHash(executionRequests)
+    blk = ethBlock(payload, beaconRoot, requestsHash)
+
   template header: Header = blk.header
 
   if apiVersion >= Version.V3:
@@ -162,7 +164,7 @@ proc newPayload*(ben: BeaconEngineRef,
   # If we already have the block locally, ignore the entire execution and just
   # return a fake success.
   if ben.chain.haveBlockAndState(blockHash):
-    warn "Ignoring already known beacon payload",
+    notice "Ignoring already known beacon payload",
       number = header.number, hash = blockHash.short
     return validStatus(blockHash)
 
@@ -202,14 +204,6 @@ proc newPayload*(ben: BeaconEngineRef,
       number = header.number, parentNumber = parent.number,
       parent = parent.timestamp, header = header.timestamp
     return invalidStatus(parent.blockHash, "Invalid timestamp")
-
-  # Another corner case: if the node is in snap sync mode, but the CL client
-  # tries to make it import a block. That should be denied as pushing something
-  # into the database directly will conflict with the assumptions of snap sync
-  # that it has an empty db that it can fill itself.
-  when false:
-    if api.eth.SyncMode() != downloader.FullSync:
-      return api.delayPayloadImport(header)
 
   if not ben.chain.haveBlockAndState(header.parentHash):
     ben.put(blockHash, header)

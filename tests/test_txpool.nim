@@ -522,9 +522,9 @@ proc txPoolMain*() =
 
         xp.checkImportBlock(txPerblock, 0)
 
-      check com.syncCurrent == lastNumber + numBlocks
+      let syncCurrent = lastNumber + numBlocks
       let
-        head = chain.headerByNumber(com.syncCurrent).expect("block header exists")
+        head = chain.headerByNumber(syncCurrent).expect("block header exists")
         sdb = LedgerRef.init(chain.latestTxFrame)
         expected = u256(txPerblock * numBlocks) * amount
         balance = sdb.getBalance(recipient214)

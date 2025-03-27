@@ -311,9 +311,10 @@ proc rpcMain*() =
         let syncing = node.peerPool.connectedNodes.len > 0
         check syncing == false
       else:
-        check com.syncStart == res.syncObject.startingBlock.uint64
-        check com.syncCurrent == res.syncObject.currentBlock.uint64
-        check com.syncHighest == res.syncObject.highestBlock.uint64
+        let progress = com.beaconSyncerProgress()
+        check progress.start == res.syncObject.startingBlock.uint64
+        check progress.current == res.syncObject.currentBlock.uint64
+        check progress.target == res.syncObject.highestBlock.uint64
 
     test "eth_gasPrice":
       let res = await client.eth_gasPrice()

@@ -49,8 +49,7 @@ proc processBlock(c: ForkedChainRef,
   let vmState = BaseVMState()
   vmState.init(parent, header, c.com, txFrame)
 
-  if c.extraValidation:
-    ?c.com.validateHeaderAndKinship(blk, vmState.parent, txFrame)
+  ?c.com.validateHeaderAndKinship(blk, vmState.parent, txFrame)
 
   ?vmState.processBlock(
     blk,
@@ -62,11 +61,6 @@ proc processBlock(c: ForkedChainRef,
   # We still need to write header to database
   # because validateUncles still need it
   ?txFrame.persistHeader(blkHash, header, c.com.startOfHistory)
-
-  # update currentBlock *after* we persist it
-  # so the rpc return consistent result
-  # between eth_blockNumber and eth_syncing
-  c.com.syncCurrent = header.number
 
   ok(move(vmState.receipts))
 
@@ -293,8 +287,6 @@ proc updateHead(c: ForkedChainRef, head: BlockPos) =
   ## Update head if the new head is different from current head.
   ## All branches with block number greater than head will be removed too.
 
-  # Update global syncHighest
-  c.com.syncHighest = head.branch.headNumber
   c.activeBranch = head.branch
 
   # Pruning if necessary
@@ -472,7 +464,6 @@ proc init*(
     T: type ForkedChainRef;
     com: CommonRef;
     baseDistance = BaseDistance.uint64;
-    extraValidation = true;
       ): T =
   ## Constructor that uses the current database ledger state for initialising.
   ## This state coincides with the canonical head that would be used for
@@ -493,16 +484,12 @@ proc init*(
     baseHeader = baseTxFrame.getBlockHeader(baseHash).expect("base header exists")
     baseBranch = branch(baseHeader, baseHash, baseTxFrame)
 
-  # update global syncStart
-  com.syncStart = baseHeader.number
-
   T(com:             com,
     baseBranch:      baseBranch,
     activeBranch:    baseBranch,
     branches:        @[baseBranch],
     hashToBlock:     {baseHash: baseBranch.lastBlockPos}.toTable,
     baseTxFrame:     baseTxFrame,
-    extraValidation: extraValidation,
     baseDistance:    baseDistance)
 
 proc importBlock*(c: ForkedChainRef, blk: Block): Result[void, string] =
