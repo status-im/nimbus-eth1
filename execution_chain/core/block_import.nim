@@ -75,7 +75,6 @@ proc importRlpBlocks*(importFile: string,
                      chain: ForkedChainRef,
                      finalize: bool): Result[void, string] =
   let bytes = io2.readAllBytes(importFile).valueOr:
-    ? chain.forkChoice(chain.latestHash, chain.latestHash)
     return err($error)
   importRlpBlocks(bytes, chain, finalize)
 
@@ -86,6 +85,8 @@ proc importRlpBlocks*(conf: NimbusConf, com: CommonRef) =
   for i, blocksFile in conf.blocksFile:
     importRlpBlocks(string blocksFile, chain, i == conf.blocksFile.len-1).isOkOr:
       warn "Error when importing blocks", msg=error
+      chain.forkChoice(chain.latestHash, chain.latestHash).isOkOr:
+        error "Error when finalizing chain", msg=error
       quit(QuitFailure)
 
   quit(QuitSuccess)
