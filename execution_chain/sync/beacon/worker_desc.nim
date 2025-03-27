@@ -92,13 +92,13 @@ type
 
   # -------------------
 
-  HeaderImportSync* = object
+  HeaderFetchSync* = object
     ## Header sync staging area
     unprocessed*: BnRangeSet         ## Block or header ranges to fetch
     borrowed*: BnRangeSet            ## Fetched/locked ranges
     staged*: LinkedHChainQueue       ## Blocks fetched but not stored yet
 
-  BlocksImportSync* = object
+  BlocksFetchSync* = object
     ## Block sync staging area
     unprocessed*: BnRangeSet         ## Blocks download requested
     borrowed*: BnRangeSet            ## Fetched/locked fetched ranges
@@ -121,8 +121,9 @@ type
     ## Globally shared data extension
     nBuddies*: int                   ## Number of active workers
     syncState*: SyncState            ## Save/resume state descriptor
-    hdrSync*: HeaderImportSync       ## Syncing by linked header chains
-    blkSync*: BlocksImportSync       ## For importing/executing blocks
+    finRequest*: Hash32              ## To be resolved before session
+    hdrSync*: HeaderFetchSync        ## Syncing by linked header chains
+    blkSync*: BlocksFetchSync        ## For importing/executing blocks
     nextMetricsUpdate*: Moment       ## For updating metrics
     nextAsyncNanoSleep*: Moment      ## Use nano-sleeps for task switch
 
@@ -158,11 +159,11 @@ func sst*(ctx: BeaconCtxRef): var SyncState =
   ## Shortcut
   ctx.pool.syncState
 
-func hdr*(ctx: BeaconCtxRef): var HeaderImportSync =
+func hdr*(ctx: BeaconCtxRef): var HeaderFetchSync =
   ## Shortcut
   ctx.pool.hdrSync
 
-func blk*(ctx: BeaconCtxRef): var BlocksImportSync =
+func blk*(ctx: BeaconCtxRef): var BlocksFetchSync =
   ## Shortcut
   ctx.pool.blkSync
 

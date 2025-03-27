@@ -375,14 +375,26 @@ proc updateSyncState*(ctx: BeaconCtxRef; info: static[string]) =
     ctx.startHibernating info
 
 
-proc updateFromHibernateSetTarget*(ctx: BeaconCtxRef; info: static[string]) =
-  ## In hibernate mode, expect a new instruction from the `CL` to prepare for
-  ## the next syncer run.
+proc updateFromHibernateSetTarget*(
+    ctx: BeaconCtxRef;
+    fin: Header;
+    info: static[string];
+      ) =
+  ## If in hibernate mode, accept a cache session and activate syncer
+  ##
   if ctx.hibernate:
-    if ctx.setupCollectingHeaders(info):
-      ctx.hibernate = false
-      info "Activating syncer", base=ctx.chain.baseNumber.bnStr,
-        head=ctx.chain.latestNumber.bnStr, target=ctx.layout.head.bnStr
+    if ctx.hdrCache.accept(fin):
+      if ctx.setupCollectingHeaders(info):
+        ctx.hibernate = false
+        info "Activating syncer", base=ctx.chain.baseNumber.bnStr,
+          head=ctx.chain.latestNumber.bnStr, fin=fin.bnStr,
+          target=ctx.layout.head.bnStr
+        return
+
+    # Failed somewhere on the way
+    ctx.hdrCache.clear()
+    debug info & ": activation rejected", base=ctx.chain.baseNumber.bnStr,
+      head=ctx.chain.latestNumber.bnStr, fin=fin.bnStr
 
 
 proc updateAsyncTasks*(

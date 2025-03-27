@@ -17,11 +17,35 @@ import
   pkg/stew/[interval_set, sorted_set],
   ../worker_desc,
   ./headers_staged/[headers, staged_collect],
-  ./headers_unproc
+  ./[headers_unproc, update]
 
 # ------------------------------------------------------------------------------
 # Public functions
 # ------------------------------------------------------------------------------
+
+proc headerStagedResolveFinalizer*(
+    buddy: BeaconBuddyRef;
+    info: static[string];
+      ) {.async: (raises: []).} =
+  ## Fetch finalised beacon header if there is an update available
+  let ctx = buddy.ctx
+  if ctx.layout.lastState == idleSyncState and
+     ctx.pool.finRequest != zeroHash32:
+
+    # So no other peer will interfere
+    let finRequest = ctx.pool.finRequest
+    ctx.pool.finRequest = zeroHash32
+
+    # Fetch header
+    const iv = BnRange.new(0,0) # dummy interval of length 1
+    let rc = await buddy.headersFetchReversed(iv, finRequest, info)
+    if rc.isErr:
+      # Postponed, try later
+      ctx.pool.finRequest = finRequest
+      return
+
+    ctx.updateFromHibernateSetTarget(rc.value[0], info)
+
 
 proc headersStagedCollect*(
     buddy: BeaconBuddyRef;
