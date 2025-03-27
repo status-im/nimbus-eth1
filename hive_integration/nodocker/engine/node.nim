@@ -105,11 +105,6 @@ proc setBlock*(com: CommonRef; blk: Block): Result[void, string] =
   # `persistent()` together with the respective block number.
   com.db.persist(txFrame)
 
-  # update currentBlock *after* we persist it
-  # so the rpc return consistent result
-  # between eth_blockNumber and eth_syncing
-  com.syncCurrent = header.number
-
   ok()
 
 # ------------------------------------------------------------------------------

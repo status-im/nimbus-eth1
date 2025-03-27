@@ -31,11 +31,6 @@ export
   logging
 
 type
-  SyncProgress = object
-    start  : BlockNumber
-    current: BlockNumber
-    highest: BlockNumber
-
   FcHeaderClUpdateCB* = proc(header: Header; finHash: Hash32) {.gcsafe, raises: [].}
     ## Inform `CL` sub-module `chain_header_cache` about new head.
 
@@ -63,9 +58,6 @@ type
     # Eth wire protocol need this
     forkIdCalculator: ForkIdCalculator
     networkId: NetworkId
-
-    # synchronizer need this
-    syncProgress: SyncProgress
 
     fcHeaderClUpdateCB: FcHeaderClUpdateCB
       ## Call back function for a sync processor that returns the canonical
@@ -172,7 +164,6 @@ proc init(com         : CommonRef,
   com.config = config
   com.forkTransitionTable = config.toForkTransitionTable()
   com.networkId = networkId
-  com.syncProgress = SyncProgress()
   com.extraData = ShortClientId
   com.taskpool = taskpool
   com.gasLimit = DEFAULT_GAS_LIMIT
@@ -267,7 +258,6 @@ func clone*(com: CommonRef, db: CoreDbRef): CommonRef =
     forkIdCalculator: com.forkIdCalculator,
     genesisHash  : com.genesisHash,
     genesisHeader: com.genesisHeader,
-    syncProgress : com.syncProgress,
     networkId    : com.networkId,
   )
 
@@ -397,15 +387,6 @@ func genesisHeader*(com: CommonRef): Header =
   ## Getter
   com.genesisHeader
 
-func syncStart*(com: CommonRef): BlockNumber =
-  com.syncProgress.start
-
-func syncCurrent*(com: CommonRef): BlockNumber =
-  com.syncProgress.current
-
-func syncHighest*(com: CommonRef): BlockNumber =
-  com.syncProgress.highest
-
 func extraData*(com: CommonRef): string =
   com.extraData
 
@@ -426,16 +407,6 @@ func baseFeeUpdateFraction*(com: CommonRef, fork: HardFork): uint64 =
 
 # ------------------------------------------------------------------------------
 # Setters
-# ------------------------------------------------------------------------------
-
-func `syncStart=`*(com: CommonRef, number: BlockNumber) =
-  com.syncProgress.start = number
-
-func `syncCurrent=`*(com: CommonRef, number: BlockNumber) =
-  com.syncProgress.current = number
-
-func `syncHighest=`*(com: CommonRef, number: BlockNumber) =
-  com.syncProgress.highest = number
 
 func `startOfHistory=`*(com: CommonRef, val: Hash32) =
   ## Setter
