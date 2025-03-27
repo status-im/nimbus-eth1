@@ -653,4 +653,90 @@ proc txPoolMain*() =
       # restore blobSchedule
       cc.blobSchedule[Cancun] = bs
 
+    test "non blob tx size limit":
+      proc dataTx(nonce: AccountNonce, env: TestEnv, btx: BaseTx): (PooledTransaction, PooledTransaction) =
+        const largeDataLength = TX_MAX_SIZE - 200 # enough to have a 5 bytes RLP encoding of the data length number
+        var tc = btx
+        tc.payload = newSeq[byte](largeDataLength)
+
+        let
+          mx = env.sender
+          acc = mx.getAccount(27)
+          ptx = mx.makeTx(tc, 0)
+          txSize = getEncodedLength(ptx.tx)
+          maxTxLengthWithoutData = txSize - largeDataLength
+          maxTxDataLength = TX_MAX_SIZE - maxTxLengthWithoutData
+
+        tc.payload = newSeq[byte](maxTxDataLength)
+        let ptx1 = mx.makeTx(tc, acc, nonce)
+        tc.payload = newSeq[byte](maxTxDataLength + 1)
+        let ptx2 = mx.makeTx(tc, acc, nonce)
+        (ptx1, ptx2)
+
+      let
+        env = initEnv(Prague)
+        xp = env.xp
+        mx = env.sender
+        acc = mx.getAccount(27)
+
+      let
+        auth = mx.makeAuth(acc, 0)
+
+        (tx1ok, tx1bad) = dataTx(0, env, BaseTx(
+          txType: Opt.some(TxEip7702),
+          gasLimit: 3_000_000,
+          recipient: Opt.some(recipient214),
+          amount: amount,
+          authorizationList: @[auth],
+        ))
+
+        (tx2ok, tx2bad) = dataTx(1, env, BaseTx(
+          txType: Opt.some(TxLegacy),
+          recipient: Opt.some(recipient214),
+          gasLimit: 3_000_000
+        ))
+
+        (tx3ok, tx3bad) = dataTx(2, env, BaseTx(
+          txType: Opt.some(TxEip1559),
+          recipient: Opt.some(recipient214),
+          gasLimit: 3_000_000
+        ))
+
+        (tx4init, tx4bad) = dataTx(3, env, BaseTx(
+          txType: Opt.some(TxLegacy),
+          gasLimit: 3_000_000
+        ))
+
+      xp.checkAddTx(tx1ok)
+      xp.checkAddTx(tx2ok)
+      xp.checkAddTx(tx3ok)
+
+      xp.checkAddTx(tx1bad, txErrorOversized)
+      xp.checkAddTx(tx2bad, txErrorOversized)
+      xp.checkAddTx(tx2bad, txErrorOversized)
+
+      # exceeds max init code size
+      xp.checkAddTx(tx4init, txErrorBasicValidation)
+      xp.checkAddTx(tx4bad, txErrorOversized)
+
+      xp.checkImportBlock(1, 2)
+      xp.checkImportBlock(1, 1)
+      xp.checkImportBlock(1, 0)
+
+    test "EIP-7702 transaction invalid zero auth":
+      let
+        env = initEnv(Prague)
+        xp = env.xp
+        mx = env.sender
+        acc = mx.getAccount(29)
+        tc = BaseTx(
+          txType: Opt.some(TxEip7702),
+          gasLimit: 75000,
+          recipient: Opt.some(recipient214),
+          amount: amount,
+        )
+        tx = mx.makeTx(tc, acc, 0)
+
+      xp.checkAddTx(tx, txErrorBasicValidation)
+
 txPoolMain()

@@ -37,6 +37,7 @@ type
     txErrorSenderMaxTxs
     txErrorTxInvalid
     txErrorChainIdMismatch
+    txErrorOversized
 
   TxItemRef* = ref object
     ptx   : PooledTransaction  ## Transaction data
