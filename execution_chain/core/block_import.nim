@@ -1,5 +1,5 @@
 # Nimbus
-# Copyright (c) 2021-2024 Status Research & Development GmbH
+# Copyright (c) 2021-2025 Status Research & Development GmbH
 # Licensed under either of
 #  * Apache License, version 2.0, ([LICENSE-APACHE](LICENSE-APACHE))
 #  * MIT license ([LICENSE-MIT](LICENSE-MIT))
@@ -33,9 +33,7 @@ proc importRlpBlocks*(blocksRlp: openArray[byte],
       rlp.read(Block)
     except RlpError as e:
       # terminate if there was a decoding error
-      error "Error decoding block",
-        msg=e.msg
-      continue
+      return err($e.name & ": " & e.msg)
 
     if blk.header.number <= chain.baseNumber:
       if firstSkip.isNone:
@@ -77,6 +75,7 @@ proc importRlpBlocks*(importFile: string,
                      chain: ForkedChainRef,
                      finalize: bool): Result[void, string] =
   let bytes = io2.readAllBytes(importFile).valueOr:
+    ? chain.forkChoice(chain.latestHash, chain.latestHash)
     return err($error)
   importRlpBlocks(bytes, chain, finalize)
 
