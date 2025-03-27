@@ -85,6 +85,7 @@ proc importRlpBlocks*(conf: NimbusConf, com: CommonRef) =
   for i, blocksFile in conf.blocksFile:
     importRlpBlocks(string blocksFile, chain, i == conf.blocksFile.len-1).isOkOr:
       warn "Error when importing blocks", msg=error
+      # Finalize the existing chain in case of rlp read error
       chain.forkChoice(chain.latestHash, chain.latestHash).isOkOr:
         error "Error when finalizing chain", msg=error
       quit(QuitFailure)
