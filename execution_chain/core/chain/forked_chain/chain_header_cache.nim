@@ -34,10 +34,14 @@
 ##   this module to listen to fork-choice update request from the `CL`.
 ##
 ## * If the fork-choice update request from the `CL` was useful, a new session
-##   is initialised. The client app invoking `start()` might pass a notifier
-##   call back function for an event driven approach to get informed about a
-##   a new session. Alternatively, one can use the function `fcHeaderHead()`
-##   for polling.
+##   is proposed with the parameters sent from the `CL`. The client app that
+##   was invoking `start()` must have pass a notifier call back function for
+##   an event driven approach to get informed about a new session proposal.
+##
+## * After notification, the client app must `accept()` the new session so it
+##   can go ahead. Along with this notification/accept handshake, the client
+##   up must resolve the finaliser hash passed with the notification and use
+##   the resolved header as argument into `accept()`.
 ##
 ## Client API available:
 ##
@@ -45,16 +49,7 @@
 ##   (i.e. on the left end of the above diagram before `antecedent`.) There
 ##   can be no gaps on the header stack chain.
 ##
-## * Headers can be deleted from the stack bottom upwards towards the `head`.
-##   There can be no gaps on the header stack chain.
-##
-##   This most general case for deleting headers is currently not exposed.
-##   For all practical cases, it is enough to provide a delete function on
-##   the header chain cache for (the copy of)  the `base` header of the `FC`
-##   module proper and all its ancestors.
-##
-## * Cached headers can be looked up for by block number or by hash for some
-##   pre-registered hashes.
+## * Cached headers can be looked up for by block number.
 ##
 ## * There is a function provided combining `importBlocks()` and `forkChoice()`
 ##   as a wrapper around `importBlock()` followed by occasional update of the
@@ -79,15 +74,21 @@ type
     ## The hash passed as argument is from the finaliser and must be resolved
     ## as header argument in `startSession()`.
 
-  FcHdrState = object
+  FcHdrMode = enum
+    ## Current state of the header chain
+    closed = 0                 # no session
+    notified                   # client app was offered a new session
+    collecting                 # may append session headers
+    locked                     # done with session headers, read-only state
+
+  FcHdrSession = object
     ## Header cache state record
+    mode: FcHdrMode            # header chain state
     ante: Header               # antecedent, bottom of header chain
     head: Header               # top end of header chain, highest block number
     headHash: Hash32
     finHeader: Header          # final block header
     finHash: Hash32
-
-  FcHdrSession = object
     consHeadNum: BlockNumber   # for logging, metrics etc.
     nextChoice: BlockNumber    # for covenience wrapper `fcHeaderImportBlock()`
 
@@ -95,7 +96,6 @@ type
     ## For now, this is a replacement of `ForkedChainRef` for as long as
     ## `FcHdrState` is not integrated into `ForkedChainRef`.
     chain: ForkedChainRef      # descriptor will resolve into that in future
-    state: FcHdrState          # state of header chain cache
     session: FcHdrSession      # additional session variables
     notify: FcNotifyCB         # client app notification
     kvt: KvtTxRef              # metadata and temporary headers storage with
@@ -124,13 +124,12 @@ func bnStr(h: Header): string =
   h.number.bnStr
 
 func toStr(fc: ForkedCacheRef): string =
-  result = "("
-  if fc.state.head.number != 0:
-    result &= "(" & fc.state.ante.bnStr
-    if fc.state.ante != fc.state.head:
-      result &= ".." & fc.state.head.bnStr
-    result &= "," & fc.state.finHeader.bnStr & ")"
-    result &= "," & fc.session.consHeadNum.bnStr
+  result = "(" & $fc.session.mode.ord
+  result &= ", " & fc.session.ante.bnStr
+  if fc.session.ante != fc.session.head:
+    result &= ".." & fc.session.head.bnStr
+  result &= "," & fc.session.finHeader.bnStr
+  result &= "," & fc.session.consHeadNum.bnStr
   result &= ")"
 
 # ------------------------------------------------------------------------------
@@ -140,30 +139,30 @@ func toStr(fc: ForkedCacheRef): string =
 func encodePayload[T](arg: T): seq[byte] =
   rlp.encode(arg)
 
-func decodePayload(data: seq[byte]; T: type ): T =
+func decodePayload(data: seq[byte]; T: type): T =
   try:
     result = rlp.decode(data, T)
   except RlpError as e:
-    raiseAssert RaisePfx & "rlp.decode(" & $T & ") failed: " &
+    raiseAssert RaisePfx & "rlp.decode(" & $T & ") failed:" &
       " name=" & $e.name & " error=" & e.msg
 
 # ------------------------------------------------------------------------------
 # Private cache helpers: database related
 # ------------------------------------------------------------------------------
 
-proc getState(db: KvtTxRef): Opt[FcHdrState] =
+proc getState(db: KvtTxRef): Opt[FcHdrSession] =
   let data = db.get(LhcStateKey.toOpenArray).valueOr:
     return err()
   # Ignore state decode error, might be from an earlier state version release
   var
-    state: FcHdrState
+    state: FcHdrSession
   try:
-    state = rlp.decode(data, FcHdrState)
+    state = rlp.decode(data, FcHdrSession) # catch/accept rlp error
   except RlpError:
     return err()
   ok(move state)
 
-proc putState(db: KvtTxRef; state: FcHdrState) =
+proc putState(db: KvtTxRef; state: FcHdrSession) =
   db.put(LhcStateKey.toOpenArray, encodePayload(state)).isOkOr:
     raiseAssert RaisePfx & "put(state) failed: " & $error
 
@@ -202,7 +201,7 @@ proc persistPutState(fc: ForkedCacheRef) =
     db = fc.kvt
 
   # Save updated state record
-  db.putState(fc.state)
+  db.putState(fc.session)
 
   # Persist state to database
   db.persist()
@@ -210,21 +209,31 @@ proc persistPutState(fc: ForkedCacheRef) =
 proc persistDelUpTo(fc: ForkedCacheRef; bn: BlockNumber) =
   ## Remove headers from the lower end of the cache starting at the
   ## `antecedent` up to the argument block number.
-  if fc.state.ante.number <= bn:
+  if fc.session.ante.number <= bn:
     let
-      bn = min(bn, fc.state.head.number-1)
+      bn = min(bn, fc.session.head.number-1)
       db = fc.kvt
-      ante = fc.kvt.getHeader(bn + 1).valueOr:
+      ante = db.getHeader(bn + 1).valueOr:
         raiseAssert RaisePfx & "get() failed: " & (bn + 1).bnStr
 
-    for bn in fc.state.ante.number .. bn:
+    for bn in fc.session.ante.number .. bn:
       db.delHeader bn
 
     # Save state
-    fc.state.ante = ante
+    fc.session.ante = ante
 
     # Save updates. persist to DB
     fc.persistPutState()
+
+# ------------------------------------------------------------------------------
+# Private helper functions
+# ------------------------------------------------------------------------------
+
+func expectingMode(fc: ForkedCacheRef; mode: FcHdrMode): Result[void,string] =
+  if fc.session.mode == mode:
+    return ok()
+  err("fcHeader session in wrong state: got=" &
+    $fc.session.mode & " expected=" & $mode)
 
 # ------------------------------------------------------------------------------
 # Private fork choice call back function
@@ -233,16 +242,16 @@ proc persistDelUpTo(fc: ForkedCacheRef; bn: BlockNumber) =
 proc fcUpdateFromCL(fc: ForkedCacheRef; h: Header; f: Hash32) =
   ## Call back function to register new/prevously-unknown FC updates.
   ##
-  ## This function initialises a new session and notifies some registered
+  ## This function prepares a new session and notifies some registered
   ## client app.
+  ##
   if f != zeroHash32 and                            # finalised hash is set
      fc.chain.baseNumber + 1 < h.number:            # otherwise useless
 
-    if fc.state.head.number == 0:
-      # Set up the session environment but do not persist yet so the
-      # session can be cheaply cancelled from within the notifier function.
-      fc.session.reset                              # start new session
-      fc.state = FcHdrState(                        # update state record
+    if fc.session.mode == closed:
+      # Set up the session environment
+      fc.session = FcHdrSession(                    # start new session
+        mode:     notified,
         ante:     h,
         head:     h,
         headHash: h.blockHash(),
@@ -261,13 +270,14 @@ proc fcUpdateFromCL(fc: ForkedCacheRef; h: Header; f: Hash32) =
 proc accept*(fc: ForkedCacheRef; fin: Header): bool =
   ## Accept and activate session
   ##
-  let head = fc.state.head
-  if 0 < head.number and
+  let head = fc.session.head
+  if fc.session.mode == notified and
      fc.chain.baseNumber < fin.number and
-     fc.state.finHash == fin.blockHash():
-    fc.state.finHeader = fin
+     fc.session.finHash == fin.blockHash():
+    fc.session.finHeader = fin
 
-    fc.kvt.putHeader(fc.state.head.number, encodePayload fc.state.head)
+    fc.kvt.putHeader(fc.session.head.number, encodePayload fc.session.head)
+    fc.session.mode = collecting
     return true
 
 proc clear*(fc: ForkedCacheRef) =
@@ -275,11 +285,10 @@ proc clear*(fc: ForkedCacheRef) =
   ## accepted session (via `accept()`) or a mere notified session (via `notify`
   ## call back argument from `start()`.)
   ##
-  if 0 < fc.state.head.number:
+  if 0 < fc.session.head.number:
     let db = fc.kvt
-    db.delHeaders(fc.state.ante.number, fc.state.head.number)
-    fc.state.reset                 # clear session state object
-    fc.session.reset
+    db.delHeaders(fc.session.ante.number, fc.session.head.number)
+    fc.session.reset                 # clear session state object
     fc.persistPutState()
 
 
@@ -318,8 +327,8 @@ proc init*(T: type ForkedCacheRef; c: ForkedChainRef): T =
   let
     be = c.db.kvtBackend()
     kvt = be.synchronizerKvt()
-    state = kvt.getState.valueOr: FcHdrState()
-    fc = T(chain: c, state: state, kvt: kvt)
+    state = kvt.getState.valueOr: FcHdrSession()
+    fc = T(chain: c, session: state, kvt: kvt)
   fc.clear()
   fc
 
@@ -334,8 +343,8 @@ proc destroy*(fc: ForkedCacheRef) =
 
 proc fcHeaderGetHash*(fc: ForkedCacheRef; bn: BlockNumber): Opt[Hash32] =
   ## Convenience function, retrieve hash of block header
-  if bn == fc.state.head.number:
-    return ok(fc.state.headHash)
+  if bn == fc.session.head.number:
+    return ok(fc.session.headHash)
   # Use parent hash of child entry
   let hdr = fc.kvt.getHeader(bn+1).valueOr:
     return err()
@@ -346,7 +355,6 @@ proc fcHeaderGet*(fc: ForkedCacheRef; bn: BlockNumber): Opt[Header] =
   var hdr = fc.kvt.getHeader(bn).valueOr:
     return err()
   ok(move hdr)
-
 
 
 proc fcHeaderPut*(
@@ -370,27 +378,26 @@ proc fcHeaderPut*(
   ## the headers chain will be left as is (effecting only in checking the
   ## the `rev[]` argument.)
   ##
-  if fc.state.finHeader.number == 0:
-    return err("fcHeader session not accepted and confirmed yet")
-
+  fc.expectingMode(collecting).isOkOr:
+    return err(error)
   if rev.len == 0:
     return ok()
 
   # Check whether argument list closes up to headers chain
   let lastNumber = rev[0].number
-  if lastNumber + 1 < fc.state.ante.number:
+  if lastNumber + 1 < fc.session.ante.number:
     return err("Gap between rev[] and headers chain antecedent " &
-               fc.state.ante.bnStr)
+               fc.session.ante.bnStr)
 
   # Must not overwrite or exceed the top end of headers chain
-  if fc.state.head.number <= lastNumber:
-    return err("Argument rev[] exceeds chain head " & fc.state.head.bnStr)
+  if fc.session.head.number <= lastNumber:
+    return err("Argument rev[] exceeds chain head " & fc.session.head.bnStr)
 
   let db = fc.kvt
 
   # Initalise helper variable for verifying parent links
   var lastParentHash =
-    if lastNumber + 1 == fc.state.ante.number: fc.state.ante.parentHash
+    if lastNumber + 1 == fc.session.ante.number: fc.session.ante.parentHash
     else: db.getHeaderAlways(lastNumber + 1).parentHash
 
   # Save headers, loop runs top down starting at header with highest
@@ -401,37 +408,70 @@ proc fcHeaderPut*(
     let bn = lastNumber - n.uint64
     if bn != hdr.number:
       # Undo updated records so far
-      db.delHeaders(bn+1, fc.state.ante.number-1)
+      db.delHeaders(bn+1, fc.session.ante.number-1)
       return err("Block number mismatch for rev[" & $n & "].number=" &
                  hdr.number.bnStr & " expected=" & bn.bnStr)
 
     # Check parent link
     if lastParentHash != hdr.blockHash:
       # Undo updated records so far
-      db.delHeaders(bn+1, fc.state.ante.number-1)
+      db.delHeaders(bn+1, fc.session.ante.number-1)
       return err("Parent hash mismatch for rev[" & $n & "].number=" & bn.bnStr)
 
     # Update helper variable, set to current parent hash
     lastParentHash = hdr.parentHash
 
     # No need to store overlapping `rev[]` entries
-    if bn < fc.state.ante.number:
+    if bn < fc.session.ante.number:
       # Store on database
       db.putHeader(bn, encodePayload hdr)
 
-  if rev[rev.len-1].number < fc.state.ante.number:
+  if rev[rev.len-1].number < fc.session.ante.number:
     # Set new `antecedent`
-    fc.state.ante = rev[rev.len-1]
+    fc.session.ante = rev[rev.len-1]
 
     # Save updates. persist to DB
     fc.persistPutState()
 
   ok()
 
+proc fcHeaderPutCommit*(
+    fc: ForkedCacheRef;
+    link: BlockNumber;
+      ): Result[void,string] =
+  ## Finish header chain, it will become read-only if this function succeeds.
+  ##
+  ## The argument `link` refers to a chain header that will become the new
+  ## antecedent (lower end) of the header chain. It is required that the
+  ## `base` of the `FC` module proper is ancestor of, or equal to, this
+  ## antecedent.
+  ##
+  ## This function will provide its collected data to the `FC` module proper
+  ## for optimisation purposes.
+  ##
+  fc.expectingMode(collecting).isOkOr:
+    return err(error)
 
-proc fcHeaderDelBaseAndOlder*(fc: ForkedCacheRef) =
-  ## Remove `FC` module base header and any ancestors alike.
-  fc.persistDelUpTo fc.chain.baseNumber
+  let db = fc.kvt
+  let linkHdr = db.getHeader(link).valueOr:
+    return err("fcHeader chain did not find " & link.bnStr & " on the chain")
+
+  let linkParent = fc.chain.headerByHash(linkHdr.parentHash).valueOr:
+    return err(error)
+  if linkParent.number < fc.chain.baseNumber:
+    return err("fcHeader chain links into FC before base")
+
+  # Re-adjust `ante` to linkHdr
+  fc.persistDelUpTo link-1
+
+  doAssert fc.session.ante.number == link
+  fc.session.mode = locked
+
+  # Inform `FC` module proper about finalised header
+  if fc.chain.hdrChainFinHeader.number < fc.session.finHeader.number:
+    fc.chain.hdrChainFinHeader = fc.session.finHeader
+    fc.chain.hdrChainFinHash = fc.session.finHash
+  ok()
 
 # --------------------
 
@@ -440,16 +480,16 @@ func fcHeaderHead*(fc: ForkedCacheRef): Header =
   ## initialised, the return value is `Header()` (i.e. the block number
   ## of the result is zero.).
   ##
-  if 0 < fc.state.finHeader.number:
-    return fc.state.head
+  if collecting <= fc.session.mode:
+    return fc.session.head
 
 func fcHeaderAntecedent*(fc: ForkedCacheRef): Header =
   ## Getter: bottom of header chain. In case there is no header chain
   ## initialised, the return value is `Header()` (i.e. the block number
   ## of the result is zero.).
   ##
-  if 0 < fc.state.finHeader.number:
-    return fc.state.ante
+  if collecting <= fc.session.mode:
+    return fc.session.ante
 
 # --------------------
 
@@ -479,10 +519,6 @@ proc fcHeaderImportBlock*(fc: ForkedCacheRef; blk: Block): Result[void,string] =
   ## This module uses the latest finalised value that was collected over time
   ## for updating the base value mentioned above.
   ##
-  let finNum = fc.state.finHeader.number
-  if finNum == 0:
-    return err("fcHeader session not accepted and confirmed yet")
-
   fc.chain.importBlock(blk).isOkOr:
     return err(error)
 
@@ -493,14 +529,15 @@ proc fcHeaderImportBlock*(fc: ForkedCacheRef; blk: Block): Result[void,string] =
   # Wait `FinaliserChoiceDelta` steps before `forkChoice()`
   if fc.session.nextChoice == 0:
     fc.session.nextChoice = blkNum + FinaliserChoiceDelta - 1
-    if fc.state.head.number < fc.session.nextChoice:
-      fc.session.nextChoice = fc.state.head.number
+    if fc.session.head.number < fc.session.nextChoice:
+      fc.session.nextChoice = fc.session.head.number
     return ok()
 
   # Update base value of `FC` module proper via `forkChoice()`
   let
     blkHash = fc.fcHeaderGetHash(blkNum).expect "hash"
-    finHash = if blkNum < finNum: blkHash else: fc.state.finHash
+    finNum = fc.session.finHeader.number
+    finHash = if blkNum < finNum: blkHash else: fc.session.finHash
 
   fc.chain.forkChoice(blkHash, finHash).isOkOr:
     return err(error)
@@ -519,8 +556,8 @@ proc fcHeaderImportBlock*(fc: ForkedCacheRef; blk: Block): Result[void,string] =
 
 proc verify*(fc: ForkedCacheRef): Result[void,string] =
   ## Verify that the descriptor range is on the database as well
-  if 0 < fc.state.head.number:
-    for bn in fc.state.ante.number .. fc.state.head.number:
+  if 0 < fc.session.head.number:
+    for bn in fc.session.ante.number .. fc.session.head.number:
       discard fc.fcHeaderGet(bn).valueOr:
         return err("Missing db entry " & bn.bnStr & " for fc=" & fc.toStr)
   ok()

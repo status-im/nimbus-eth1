@@ -155,20 +155,24 @@ proc linkIntoFc(ctx: BeaconCtxRef; info: static[string]): bool =
     # Try to find a parent in the `FC` data domain. For practical reasons the
     # loop does not go further back than the base `B`. Blocks below/older than
     # that will not be handled by the `FC`.
-    for bn in (l+1).countdown(max(b,c)):
+    for bn in l.countdown(max(b,c)):
 
-      # The syncer cache holds headers for `(C,H]`. It starts with checking
-      # whether `L<-Z` holds (i.e. `Y==L` can be chosen.)
-      let
-        yHash = ctx.hdrCache.fcHeaderGetHash(bn-1).expect "parent hash"
-        yHdr = ctx.chain.headerByHash(yHash).valueOr: continue # test for `Y`
-        yNum = yHdr.number                                     # == bn-1
+      # Get child header `Z` from header queue
+      let zHdr = ctx.hdrCache.fcHeaderGet(bn+1).expect "header"
 
-      ctx.layout.coupler = yNum                                # parent of `Z`
-      ctx.layout.dangling = yNum                               # .. ditto
+      # Check whether `Z` links into the `FC` module
+      let yHdr = ctx.chain.headerByHash(zHdr.parentHash).valueOr: continue
+
+      ctx.layout.coupler = bn                                  # parent of `Z`
+      ctx.layout.dangling = bn                                 # .. ditto
+
+      ctx.hdrCache.fcHeaderPutCommit(bn+1).isOkOr:
+        trace info & ": cannot commit header chain", B=b.bnStr, L=l.bnStr,
+          C=c.bnStr, H=h.bnStr, `error`=error
+        return false
 
       trace info & ": header chain linked into FC", B=b.bnStr,
-        C=(if yNum==l: "L" else: yNum.bnStr), L=l.bnStr, H=h.bnStr
+        C=(if bn==l: "L" else: bn.bnStr), L=l.bnStr, H=h.bnStr
 
       return true
 
