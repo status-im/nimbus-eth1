@@ -33,7 +33,9 @@ proc importRlpBlocks*(blocksRlp: openArray[byte],
       rlp.read(Block)
     except RlpError as e:
       # terminate if there was a decoding error
-      return err($e.name & ": " & e.msg)
+      error "Error decoding block",
+        msg=e.msg
+      continue
 
     if blk.header.number <= chain.baseNumber:
       if firstSkip.isNone:
