@@ -30,11 +30,8 @@ type
 
 proc querySyncProgress(ctx: BeaconCtxRef): SyncStateData =
   ## Syncer status query function (for call back closure)
-  if not ctx.hibernate():
-    return (ctx.layout.coupler,
-            max(ctx.layout.coupler,
-              min(ctx.chain.latestNumber(), ctx.layout.head)),
-            ctx.layout.head)
+  if collectingHeaders <= ctx.pool.lastState:
+    return (ctx.chain.baseNumber, ctx.dangling.number, ctx.head.number)
   # (0,0,0)
 
 # ------------------------------------------------------------------------------

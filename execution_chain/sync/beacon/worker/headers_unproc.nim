@@ -114,18 +114,36 @@ proc headersUnprocTotalTop*(ctx: BeaconCtxRef): uint64 =
   ## It will  default to `0` if both range sets are empty.
   let
     uMax = block:
-      let rc = ctx.blk.unprocessed.ge(0)
+      let rc = ctx.hdr.unprocessed.le()
       if rc.isOk:
         rc.value.maxPt
       else:
         0
     bMax = block:
-      let rc = ctx.blk.borrowed.ge(0)
+      let rc = ctx.hdr.borrowed.le()
       if rc.isOk:
         rc.value.maxPt
       else:
         0
   min(uMax, bMax)
+
+proc headersUnprocTotalBottom*(ctx: BeaconCtxRef): uint64 =
+  ## Similar to `headersUnprocTotalTop()` dor the least block number
+  let
+    uMin = block:
+      let rc = ctx.hdr.unprocessed.ge()
+      if rc.isOk:
+        rc.value.minPt
+      else:
+        high(uint64)
+    bMin = block:
+      let rc = ctx.hdr.borrowed.ge()
+      if rc.isOk:
+        rc.value.minPt
+      else:
+        high(uint64)
+  min(uMin, bMin)
+
 
 proc headersUnprocIsEmpty*(ctx: BeaconCtxRef): bool =
   ctx.hdr.unprocessed.chunks() == 0 and

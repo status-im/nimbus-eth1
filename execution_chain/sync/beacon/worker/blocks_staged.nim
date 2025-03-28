@@ -347,7 +347,7 @@ proc blocksStagedImport*(
 
   info "Importing blocks", iv, nBlocks,
     base=ctx.chain.baseNumber.bnStr, head=ctx.chain.latestNumber.bnStr,
-    target=ctx.layout.head.bnStr
+    target=ctx.head.bnStr
 
   var maxImport = iv.maxPt                         # tentatively assume all ok
   block importLoop:
@@ -384,7 +384,7 @@ proc blocksStagedImport*(
   info "Import done", iv=(iv.minPt, maxImport).bnStr,
     nBlocks=(maxImport-iv.minPt+1), nFailed=(iv.maxPt-maxImport),
     base=ctx.chain.baseNumber.bnStr, head=ctx.chain.latestNumber.bnStr,
-    target=ctx.layout.head.bnStr
+    target=ctx.head.bnStr
 
   return true
 

@@ -17,7 +17,7 @@ import
   pkg/stew/[interval_set, sorted_set],
   ../../common,
   ./worker/update/[metrics, ticker],
-  ./worker/[blocks_staged, headers_staged, headers_unproc, start_stop, update],
+  ./worker/[blocks_staged, headers_staged, start_stop, update],
   ./worker_desc
 
 # ------------------------------------------------------------------------------
@@ -25,9 +25,7 @@ import
 # ------------------------------------------------------------------------------
 
 proc headersToFetchOk(buddy: BeaconBuddyRef): bool =
-  0 < buddy.ctx.headersUnprocAvail() and
-    buddy.ctrl.running and
-    not buddy.ctx.poolMode
+  buddy.headersStagedFetchOk()
 
 proc bodiesToFetchOk(buddy: BeaconBuddyRef): bool =
   buddy.ctx.blocksStagedFetchOk() and
@@ -106,7 +104,7 @@ proc initalTargetFromFile*(
     var f = file.open(fmRead)
     defer: f.close()
     var rlp = rlpFromHex(f.readAll().splitWhitespace.join)
-    ctx.sst.clReq = rlp.read(SyncClMesg)
+    ctx.pool.clReq = rlp.read(SyncClMesg)
   except CatchableError as e:
     return err("Error decoding file: \"" & file & "\"" &
       " (" & $e.name & ": " & e.msg & ")")

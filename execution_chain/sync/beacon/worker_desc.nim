@@ -65,31 +65,6 @@ type
     consHead*: Header                ## Consensus head
     finalHash*: Hash32               ## Finalised hash
 
-  SyncStateLayout* = object
-    ## Layout of a linked header chains defined by the triple `(C,D,H)` as
-    ## described in clause *(5)* of the `README.md` text.
-    ## ::
-    ##   0         B          L
-    ##   o---------o----------o
-    ##   | <--- imported ---> |
-    ##                C                     D                H
-    ##                o---------------------o----------------o
-    ##                | <-- unprocessed --> | <-- linked --> |
-    ##
-    ## Additional positions known but not declared in this descriptor:
-    ## * `B`: `base` parameter from `FC` logic
-    ## * `L`: `latest` (aka cursor) parameter from `FC` logic
-    ##
-    coupler*: BlockNumber            ## Bottom end `C` of full chain `(C,H]`
-    dangling*: BlockNumber           ## Left end `D` of linked chain `[D,H]`
-    head*: BlockNumber               ## `H`, target block to reach
-    lastState*: SyncLayoutState      ## Last known layout state
-
-  SyncState* = object
-    ## Sync state for header and block chains
-    clReq*: SyncClMesg               ## Manual first target set up
-    layout*: SyncStateLayout         ## Current header chains layout
-
   # -------------------
 
   HeaderFetchSync* = object
@@ -120,7 +95,8 @@ type
   BeaconCtxData* = object
     ## Globally shared data extension
     nBuddies*: int                   ## Number of active workers
-    syncState*: SyncState            ## Save/resume state descriptor
+    clReq*: SyncClMesg               ## Manual first target set up
+    lastState*: SyncLayoutState      ## Last known layout state
     finRequest*: Hash32              ## To be resolved before session
     hdrSync*: HeaderFetchSync        ## Syncing by linked header chains
     blkSync*: BlocksFetchSync        ## For importing/executing blocks
@@ -155,9 +131,23 @@ type
 # Public helpers
 # ------------------------------------------------------------------------------
 
-func sst*(ctx: BeaconCtxRef): var SyncState =
+func hdrCache*(ctx: BeaconCtxRef): ForkedCacheRef =
   ## Shortcut
-  ctx.pool.syncState
+  ctx.pool.hdrCache
+
+func head*(ctx: BeaconCtxRef): Header =
+  ## Shortcut
+  ctx.hdrCache.fcHeaderHead()
+
+func dangling*(ctx: BeaconCtxRef): Header =
+  ## Shortcut
+  ctx.hdrCache.fcHeaderAntecedent()
+
+func consHeadNumber*(ctx: BeaconCtxRef): BlockNumber =
+  ## Shortcut
+  ctx.hdrCache.fcHeaderLastConsHeadNumber()
+
+# ------------
 
 func hdr*(ctx: BeaconCtxRef): var HeaderFetchSync =
   ## Shortcut
@@ -167,21 +157,13 @@ func blk*(ctx: BeaconCtxRef): var BlocksFetchSync =
   ## Shortcut
   ctx.pool.blkSync
 
-func layout*(ctx: BeaconCtxRef): var SyncStateLayout =
-  ## Shortcut
-  ctx.sst.layout
-
 func clReq*(ctx: BeaconCtxRef): var SyncClMesg =
   ## Shortcut
-  ctx.sst.clReq
+  ctx.pool.clReq
 
 func chain*(ctx: BeaconCtxRef): ForkedChainRef =
   ## Getter
   ctx.pool.chain
-
-func hdrCache*(ctx: BeaconCtxRef): ForkedCacheRef =
-  ## Getter
-  ctx.pool.hdrCache
 
 func db*(ctx: BeaconCtxRef): CoreDbRef =
   ## Getter

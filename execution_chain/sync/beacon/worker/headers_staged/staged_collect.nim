@@ -81,6 +81,14 @@ func bnStr*(w: LinkedHChain | ref LinkedHChain): string =
 # Public helper functions
 # ------------------------------------------------------------------------------
 
+func collectCanContinue*(buddy: BeaconBuddyRef): bool =
+  ## Hepler, checks whether there is a general stop conditions
+  buddy.ctrl.running and
+  not buddy.ctx.poolMode and
+  buddy.ctx.pool.lastState == collectingHeaders and
+  buddy.ctx.hdrCache.state == collecting
+
+
 proc collectAndStashOnDiskCache*(
     buddy: BeaconBuddyRef;
     iv: BnRange;
@@ -114,7 +122,7 @@ proc collectAndStashOnDiskCache*(
           break fetchHeadersBody         # error => exit block
 
       # Job might have been cancelled while downloading headrs
-      if buddy.ctrl.stopped or ctx.poolMode:
+      if not buddy.collectCanContinue():
         break fetchHeadersBody           # stop => exit block
 
       # Store it on the header chain cache
@@ -124,14 +132,12 @@ proc collectAndStashOnDiskCache*(
           ctrl=buddy.ctrl.state, hdrErrors=buddy.hdrErrors, `error`=error
         break fetchHeadersBody           # error => exit block
 
-      # Update local progress counter
-      ctx.layout.dangling = rev[rev.len-1].number
-
       # Update remaining range to fetch and check for end-of-loop condition
-      if ivTop < iv.minPt + rev.len.uint64:
-        break                            # exit while loop
+      let newTopBefore = ivTop - BlockNumber(rev.len)
+      if newTopBefore < iv.minPt:
+        break                            # exit while() loop
 
-      ivTop -= rev.len.uint64            # mostly results in `ivReq.minPt-1`
+      ivTop = newTopBefore               # mostly results in `ivReq.minPt-1`
       parent = rev[rev.len-1].parentHash # parent hash for next fetch request
       # End loop
 
@@ -140,7 +146,6 @@ proc collectAndStashOnDiskCache*(
 
     # Reset header process errors (not too many consecutive failures this time)
     buddy.nHdrProcErrors = 0             # all OK, reset error count
-
     return iv.minPt-1
 
   # Start processing some error or an incomplete fetch/store result
@@ -185,7 +190,7 @@ proc collectAndStageOnMemQueue*(
           break fetchHeadersBody         # error => exit block
 
       # Job might have been cancelled while downloading headrs
-      if buddy.ctrl.stopped or ctx.poolMode:
+      if not buddy.collectCanContinue():
         break fetchHeadersBody           # stop => exit block
 
       # While assembling a `LinkedHChainRef`, only boundary checks are used to
@@ -202,7 +207,7 @@ proc collectAndStageOnMemQueue*(
         break fetchHeadersBody           # error => exit block
 
       # Check/update hashes
-      let hash0 = rlp.encode(rev[0]).keccak256
+      let hash0 = rev[0].blockHash
       if lhc.revHdrs.len == 0:
         lhc.hash = hash0
       else:
