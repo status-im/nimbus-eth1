@@ -113,7 +113,7 @@ proc headersStagedCollect*(
         nDeterministic, nStaged=ctx.hdr.staged.len
 
       # Might be enough, already
-      if ctx.hdrCache.fcHeaderCompleteOk():
+      if ctx.hdrCache.state != collecting:
         break fetchHeadersBody
 
       # End while: `collectAndStashOnDiskCache()`
@@ -182,7 +182,7 @@ proc headersStagedProcess*(buddy: BeaconBuddyRef; info: static[string]) =
   var
     nProcessed = 0                                          # statistics
 
-  while not ctx.hdrCache.fcHeaderCompleteOk():
+  while ctx.hdrCache.state == collecting:
 
     # Fetch list with largest block numbers
     let qItem = ctx.hdr.staged.le(high BlockNumber).valueOr:

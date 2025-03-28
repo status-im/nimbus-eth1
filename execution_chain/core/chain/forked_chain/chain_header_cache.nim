@@ -80,7 +80,7 @@ type
     number: BlockNumber
     data: seq[byte]
 
-  FcHdrMode = enum
+  FcHdrMode* = enum
     ## Current state of the header chain.
     ## ::
     ##   FSA:
@@ -142,7 +142,8 @@ func bnStr(h: Header): string =
   h.number.bnStr
 
 func toStr(fc: ForkedCacheRef): string =
-  result = "(" & $fc.session.mode.ord
+  result = "("
+  result &= $fc.session.mode
   result &= ", " & fc.session.ante.bnStr
   if fc.session.ante != fc.session.head:
     result &= ".." & fc.session.head.bnStr
@@ -285,11 +286,26 @@ proc fcUpdateFromCL(fc: ForkedCacheRef; h: Header; f: Hash32) =
 # Public constructor/destructor et al.
 # ------------------------------------------------------------------------------
 
-proc accept*(fc: ForkedCacheRef; fin: Header): bool =
-  ## Accept and activate session
+func state*(fc: ForkedCacheRef): FcHdrMode =
+  ## Getter: Current run state
   ##
-  let head = fc.session.head
-  if fc.session.mode == notified and
+  ## Requested system state for running function:
+  ## ::
+  ##    closed         -- *internal*
+  ##    notified       -- accept()
+  ##    collecting     -- fcHeaderPut()
+  ##    ready          -- fcHeaderComplete()
+  ##    orphan         -- n/a
+  ##    locked         -- fcHeaderImportBlock()
+  ##
+  fc.session.mode
+
+proc accept*(fc: ForkedCacheRef; fin: Header): bool =
+  ## Accept and activate session.
+  ##
+  ## Required system state is to run this function is `notified`.
+  ##
+  if fc.state == notified and
      fc.chain.baseNumber < fin.number and
      fin.number <= fc.session.head.number and
      fc.session.finHash == fin.blockHash():
@@ -380,8 +396,13 @@ proc fcHeaderPut*(
     fc: ForkedCacheRef;
     rev: openArray[Header];
       ): Result[void,string] =
-  ## This function will store argument headers to the persistent header
-  ## chain. The `rev[]` arguments contain the headers in reverse order as
+  ## This function will store argument headers to the persistent header chain.
+  ##
+  ## Required system state for running this function is `collecting`, `ready`,
+  ## or `orphan` where only `collecting` implies some action (described below.)
+  ## When in the other two states, the function returns with OK immediately.
+  ##
+  ## The `rev[]` arguments contain the headers in reverse order as
   ## ::
   ##   rev[0]: number = lastNumber,   parentHash = rev[1].hash
   ##   rev[1]: number = lastNumber-1, parentHash = rev[2].hash
@@ -390,20 +411,28 @@ proc fcHeaderPut*(
   ##
   ## If `rev[]` overlaps with the existing headers chain, only the headers
   ## from `rev[]` that do not overlap will be checked and appended to the
-  ## header chain.
+  ## header chain. The function returns an error if the check fails.
   ##
-  ## The header chain is appended to as long as the antecedent (lowest header)
-  ## links into the `FC` module proper. If this becomes impossible, the
-  ## function terminates OK but any subsequent commit will return an error.
+  ## There are three outcomes regarding the antecedent (lowest header).
   ##
-  if fc.session.mode in {ready,orphan}:
+  ## * If it has a parent on the `FC` module proper. In that case the function
+  ##   stops appending headers and sets the system to state `ready`
+  ##
+  ## * If it transpires that linking into the `FC` module becomes impossible.
+  ##   So the function stops appending headers and the system state will be
+  ##   changed to `orphan`.
+  ##
+  ## * Otherwise, the function continues appending headers.
+  ##
+  ## In either of the three cases, OK is returned.
+  ##
+  if fc.state in {ready,orphan}:
     return ok() # nothing to do
 
-  fc.expectingMode(collecting).isOkOr:
-    return err(error)
+  ?fc.expectingMode(collecting)
 
   if rev.len == 0:
-    return ok()
+    return ok() # nothing to do
 
   # Check whether argument list closes up to headers chain
   let lastNumber = rev[0].number
@@ -514,24 +543,15 @@ proc fcHeaderPut*(
   ok()
 
 
-proc fcHeaderCompleteOk*(fc: ForkedCacheRef): bool =
-  ## This function returns `true` if `fcHeaderPut()` will have no effect
-  ## anymore and `fcHeaderPutCommit()` can be called to finish with
-  ## appending headers.
-  ##
-  fc.session.mode in {ready,orphan}
-
-
 proc fcHeaderCommit*(fc: ForkedCacheRef): Result[void,string] =
   ## Finish appending headers to header chain cache which will become
   ## read-only (if this function succeeds.)
   ##
+  ## Required system state for running this function is `ready`.
+  ##
   ## This function will provide its collected data to the `FC` module proper
   ## for optimisation purposes.
   ##
-  if fc.session.mode == orphan:
-    return err("Cannot link into FC module")
-
   ?fc.expectingMode(ready)
 
   if not fc.chain.hashToBlock.hasKey(fc.session.ante.parentHash):
@@ -554,7 +574,7 @@ func fcHeaderHead*(fc: ForkedCacheRef): Header =
   ## initialised, the return value is `Header()` (i.e. the block number
   ## of the result is zero.).
   ##
-  if collecting <= fc.session.mode:
+  if collecting <= fc.state:
     return fc.session.head
 
 func fcHeaderAntecedent*(fc: ForkedCacheRef): Header =
@@ -562,7 +582,7 @@ func fcHeaderAntecedent*(fc: ForkedCacheRef): Header =
   ## initialised, the return value is `Header()` (i.e. the block number
   ## of the result is zero.).
   ##
-  if collecting <= fc.session.mode:
+  if collecting <= fc.state:
     return fc.session.ante
 
 # --------------------

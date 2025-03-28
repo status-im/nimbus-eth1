@@ -31,92 +31,6 @@ func statePair(a: SyncLayoutState): int =
 
 # ------------
 
-proc syncState(ctx: BeaconCtxRef; info: static[string]): SyncLayoutState =
-  ## Calculate `SyncLayoutState` from the download context
-  ##
-  let
-    b = ctx.chain.baseNumber()
-    l = ctx.chain.latestNumber()
-    c = ctx.layout.coupler
-    d = ctx.layout.dangling
-    h = ctx.layout.head
-
-  # See clause *(8)* in `README.md`:
-  # ::
-  #     0               H    L
-  #     o---------------o----o
-  #     | <--- imported ---> |
-  #
-  # where `H << L` with `L` is the `latest` (aka cursor) parameter from
-  # `FC` the logic will be updated to (see clause *(9)* in `README.md`):
-  #
-  if h <= c or h <= l:                 # empty interval `(C,H]` or nothing to do
-    return idleSyncState
-
-  # See clauses *(9)* and *(10)* in `README.md`:
-  # ::
-  #   0               B
-  #   o---------------o----o
-  #   | <--- imported ---> |
-  #                C                     D                H
-  #                o---------------------o----------------o
-  #                | <-- unprocessed --> | <-- linked --> |
-  #
-  # where *B* is the **base** entity of the `FC` module and `C` is sort of
-  # a placehoder with block number equal to *B* at some earlier time (the
-  # value *B* increases over time.)
-  #
-  # It is already known that `C < H` (see first check)
-  #
-  if c <= b:                           # check for `C <= B` as sketched above
-    if ctx.hdrCache.fcHeaderCompleteOk():
-      return finishedHeaders
-
-    # Case `C < D-1` => not ready yet
-    if c + 1 < d:
-      return collectingHeaders
-
-    # Case `C == D-1` => just finished the download
-    if c + 1 == d:
-      # Mmight be obsolete due to `fcHeaderCompleteOk()`
-      return finishedHeaders
-
-    # Case `C == D` => see below for general case
-
-  # Case `C == D` => set to import blocks (see *(10)* in `README.md`):
-  # ::
-  #   0                    L
-  #   o--------------------o
-  #   | <--- imported ---> |
-  #                     D
-  #                     C                                H
-  #                     o--------------------------------o
-  #                     | <-- blocks to be completed --> |
-  #
-  # It is known already (see first check) that `L <`H`
-  #
-  if c == d:
-    return processingBlocks
-
-  # Case `B < C` oops:
-  # ::
-  #     0               B
-  #     o---------------o----o
-  #     | <--- imported ---> |
-  #                        C                     D                H
-  #                        o---------------------o----------------o
-  #                        | <-- unprocessed --> | <-- linked --> |
-  #
-  debug info & ": inconsistent state",
-    B=(if b == c: "C" else: b.bnStr),
-    C=(if c == l: "L" else: c.bnStr),
-    L=(if l == d: "D" else: l.bnStr),
-    D=(if d == h: "H" else: d.bnStr),
-    H=h.bnStr
-
-  idleSyncState
-
-
 proc linkIntoFc(ctx: BeaconCtxRef; info: static[string]): bool =
   ## Link `(C,H]` into the `FC` logic. If successful, `true` is returned.
   ## Otherwise the chain `(C,H]` must be discarded.
@@ -234,6 +148,8 @@ proc setupCollectingHeaders(ctx: BeaconCtxRef; info: static[string]): bool =
 
 proc setupFinishedHeaders(ctx: BeaconCtxRef; info: static[string]) =
   ## Trivial state transition handler
+  ctx.headersUnprocClear()
+  ctx.headersStagedQueueClear()
   ctx.layout.lastState = finishedHeaders
 
 proc setupCancelHeaders(ctx: BeaconCtxRef; info: static[string]) =
@@ -248,8 +164,6 @@ proc setupCancelBlocks(ctx: BeaconCtxRef; info: static[string]) =
 
 
 proc setupProcessingBlocks(ctx: BeaconCtxRef; info: static[string]) =
-  doAssert ctx.headersUnprocIsEmpty()
-  doAssert ctx.headersStagedQueueIsEmpty()
   doAssert ctx.blocksUnprocIsEmpty()
   doAssert ctx.blocksStagedQueueIsEmpty()
 
@@ -284,7 +198,11 @@ proc updateSyncState*(ctx: BeaconCtxRef; info: static[string]) =
     if prevState in {cancelHeaders,cancelBlocks}:
       prevState                          # no need to change state here
     else:
-      ctx.syncState info                 # currently observed state, the std way
+      case ctx.hdrCache.state:           # currently observed state, the std way
+      of collecting: collectingHeaders
+      of ready:      finishedHeaders
+      of locked:     processingBlocks
+      else:          idleSyncState
 
   # Handle same state cases first (i.e. no state change.) Depending on the
   # context, a new state might be forced so that there will be a state change.
