@@ -1,5 +1,5 @@
 # nimbus_verified_proxy
-# Copyright (c) 2022-2024 Status Research & Development GmbH
+# Copyright (c) 2022-2025 Status Research & Development GmbH
 # Licensed and distributed under either of
 #   * MIT license (license terms in the root directory or at https://opensource.org/licenses/MIT).
 #   * Apache v2 license (license terms in the root directory or at https://www.apache.org/licenses/LICENSE-2.0).
@@ -35,7 +35,7 @@ proc getAccountFromProof*(
       codeHash: accountCodeHash,
     )
     accountEncoded = rlp.encode(acc)
-    accountKey = toSeq(keccak256((accountAddress.data)).data)
+    accountKey = keccak256((accountAddress.data)).data
 
   let proofResult = verifyMptProof(mptNodesBytes, stateRoot, accountKey, accountEncoded)
 
@@ -52,7 +52,7 @@ proc getStorageData(
 ): Result[UInt256, string] =
   let
     storageMptNodes = storageProof.proof.mapIt(distinctBase(it))
-    key = toSeq(keccak256(toBytesBE(storageProof.key)).data)
+    key = keccak256(toBytesBE(storageProof.key)).data
     encodedValue = rlp.encode(storageProof.value)
     proofResult =
       verifyMptProof(storageMptNodes, account.storageRoot, key, encodedValue)

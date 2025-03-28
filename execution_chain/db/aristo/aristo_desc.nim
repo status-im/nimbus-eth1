@@ -23,17 +23,17 @@
 
 import
   std/[hashes, sequtils, sets, tables],
-  eth/common/hashes,
+  eth/common/hashes, eth/trie/nibbles,
   results,
   ./aristo_constants,
-  ./aristo_desc/[desc_error, desc_identifiers, desc_nibbles, desc_structural],
+  ./aristo_desc/[desc_error, desc_identifiers, desc_structural],
   ./aristo_desc/desc_backend,
   minilru
 
 
 # Not auto-exporting backend
 export
-  tables, aristo_constants, desc_error, desc_identifiers, desc_nibbles,
+  tables, aristo_constants, desc_error, desc_identifiers, nibbles,
   desc_structural, minilru, hashes, PutHdlRef
 
 type

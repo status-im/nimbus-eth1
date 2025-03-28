@@ -26,7 +26,7 @@ template toHash32(hash: untyped): Hash32 =
 
 proc verifyAccountProof(trustedStateRoot: Hash32, res: ProofResponse): MptProofVerificationResult =
   let
-    key = toSeq(keccakHash(res.address).data)
+    key = keccakHash(res.address).data
     value = rlp.encode(Account(
         nonce: res.nonce.uint64,
         balance: res.balance,
@@ -41,7 +41,7 @@ proc verifyAccountProof(trustedStateRoot: Hash32, res: ProofResponse): MptProofV
 
 proc verifySlotProof(trustedStorageRoot: Hash32, slot: StorageProof): MptProofVerificationResult =
   let
-    key = toSeq(keccakHash(toBytesBE(slot.key)).data)
+    key = keccakHash(toBytesBE(slot.key)).data
     value = rlp.encode(slot.value)
 
   verifyMptProof(

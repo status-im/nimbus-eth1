@@ -41,7 +41,7 @@ proc multiKeysMain*() =
 
       let m  = initMultiKeys(keys)
       let pg = m.initGroup()
-      let n  = initNibbleRange(hexToByteArray[2]("0abc"))
+      let n  = NibblesBuf.fromBytes(hexToByteArray[2]("0abc"))
       let mg = m.groups(0, n, pg)
       check:
         mg.match == true
@@ -57,7 +57,7 @@ proc multiKeysMain*() =
 
       let m  = initMultiKeys(keys)
       let pg = m.initGroup()
-      let n  = initNibbleRange(hexToByteArray[2]("0abc"))
+      let n  = NibblesBuf.fromBytes(hexToByteArray[2]("0abc"))
       let mg = m.groups(0, n, pg)
       check:
         mg.match == false
@@ -72,7 +72,7 @@ proc multiKeysMain*() =
 
       let m  = initMultiKeys(keys)
       let pg = m.initGroup()
-      let n  = initNibbleRange(hexToByteArray[2]("0abc"))
+      let n  = NibblesBuf.fromBytes(hexToByteArray[2]("0abc"))
       let mg = m.groups(0, n, pg)
       check:
         mg.match == true
@@ -89,7 +89,7 @@ proc multiKeysMain*() =
 
       let m  = initMultiKeys(keys)
       let pg = m.initGroup()
-      let n  = initNibbleRange(hexToByteArray[2]("0abc"))
+      let n  = NibblesBuf.fromBytes(hexToByteArray[2]("0abc"))
       let mg = m.groups(0, n, pg)
       check:
         mg.match == true
@@ -108,7 +108,7 @@ proc multiKeysMain*() =
 
       let m  = initMultiKeys(keys)
       let pg = m.initGroup()
-      let n  = initNibbleRange(hexToByteArray[2]("0abc"))
+      let n  = NibblesBuf.fromBytes(hexToByteArray[2]("0abc"))
       let mg = m.groups(0, n, pg)
       check:
         mg.match == true
