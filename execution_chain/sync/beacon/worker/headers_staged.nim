@@ -112,6 +112,10 @@ proc headersStagedCollect*(
         unprocTop=ctx.headersUnprocAvailTop.bnStr, D=ctx.layout.dangling.bnStr,
         nDeterministic, nStaged=ctx.hdr.staged.len
 
+      # Might be enough, already
+      if ctx.hdrCache.fcHeaderCompleteOk():
+        break fetchHeadersBody
+
       # End while: `collectAndStashOnDiskCache()`
 
     # Continue opportunistic by block number, the fetched headers need to be
@@ -178,7 +182,7 @@ proc headersStagedProcess*(buddy: BeaconBuddyRef; info: static[string]) =
   var
     nProcessed = 0                                          # statistics
 
-  while true:
+  while not ctx.hdrCache.fcHeaderCompleteOk():
 
     # Fetch list with largest block numbers
     let qItem = ctx.hdr.staged.le(high BlockNumber).valueOr:

@@ -74,11 +74,29 @@ type
     ## The hash passed as argument is from the finaliser and must be resolved
     ## as header argument in `startSession()`.
 
+  FcHdrVetted = tuple
+    ## Helper structure used in `fcHeaderPut()`
+    parent: Hash32
+    number: BlockNumber
+    data: seq[byte]
+
   FcHdrMode = enum
-    ## Current state of the header chain
+    ## Current state of the header chain.
+    ## ::
+    ##   FSA:
+    ##
+    ##   <start> ..                                       <terminal>
+    ##
+    ##   closed -> notified -> collecting -+--+--> ready -> locked
+    ##                             ^       |  |
+    ##                             |       |  +-----------> orphan
+    ##                             +-------+
+    ##
     closed = 0                 # no session
     notified                   # client app was offered a new session
     collecting                 # may append session headers
+    ready                      # `ante` has a parent on the `FC` module proper
+    orphan                     # no way to link into `FC` module proper
     locked                     # done with session headers, read-only state
 
   FcHdrSession = object
@@ -249,7 +267,7 @@ proc fcUpdateFromCL(fc: ForkedCacheRef; h: Header; f: Hash32) =
      fc.chain.baseNumber + 1 < h.number:            # otherwise useless
 
     if fc.session.mode == closed:
-      # Set up the session environment
+      # Set new session environment
       fc.session = FcHdrSession(                    # start new session
         mode:     notified,
         ante:     h,
@@ -273,6 +291,7 @@ proc accept*(fc: ForkedCacheRef; fin: Header): bool =
   let head = fc.session.head
   if fc.session.mode == notified and
      fc.chain.baseNumber < fin.number and
+     fin.number <= fc.session.head.number and
      fc.session.finHash == fin.blockHash():
     fc.session.finHeader = fin
 
@@ -369,17 +388,20 @@ proc fcHeaderPut*(
   ##   rev[2]: number = lastNumber-2, parentHash = rev[3].hash
   ##   ..
   ##
-  ## The function will always check for the consistency of all of the `rev[]`
-  ## argument headers. If `rev[]` overlaps with the existing headers chain,
-  ## only the headers from `rev[]` that do not overlap will be saved to the
-  ## database.
+  ## If `rev[]` overlaps with the existing headers chain, only the headers
+  ## from `rev[]` that do not overlap will be checked and appended to the
+  ## header chain.
   ##
-  ## If the `rev[]` argument is fully contained in the existing headers chain,
-  ## the headers chain will be left as is (effecting only in checking the
-  ## the `rev[]` argument.)
+  ## The header chain is appended to as long as the antecedent (lowest header)
+  ## links into the `FC` module proper. If this becomes impossible, the
+  ## function terminates OK but any subsequent commit will return an error.
   ##
+  if fc.session.mode in {ready,orphan}:
+    return ok() # nothing to do
+
   fc.expectingMode(collecting).isOkOr:
     return err(error)
+
   if rev.len == 0:
     return ok()
 
@@ -393,78 +415,130 @@ proc fcHeaderPut*(
   if fc.session.head.number <= lastNumber:
     return err("Argument rev[] exceeds chain head " & fc.session.head.bnStr)
 
-  let db = fc.kvt
+  # The tail must not go below the `base`. It cannot be handled even if it
+  # has a parent on the database.
+  let baseNum = fc.chain.baseNumber()
 
-  # Initalise helper variable for verifying parent links
-  var lastParentHash =
-    if lastNumber + 1 == fc.session.ante.number: fc.session.ante.parentHash
-    else: db.getHeaderAlways(lastNumber + 1).parentHash
+ # Start at the entry that is parent to `ante` (if any)
+  let offset = ((lastNumber + 1) - fc.session.ante.number).int
+  if offset < rev.len:
+    # Verify headers. The loop runs top down starting at header with highest
+    # block number `lastNumber`. Serialised blocks from rev`[]` are collected
+    # in the `vetted[]` list and stored if they turn out consistent.
+    var
+      vetted: seq[FcHdrVetted] = @[(fc.session.ante.parentHash, 0, @[])]
+      revTopInx = rev.len - 1
+    for n in offset .. revTopInx:
+      let
+        hdr = rev[n]
+        bn = lastNumber - n.uint64
 
-  # Save headers, loop runs top down starting at header with highest
-  # block number `lastNumber`
-  for n,hdr in rev:
+      # Check block number
+      if bn != hdr.number:
+        # There is no need to clean up as nothing was store on the DB
+        return err("Block number mismatch for rev[" & $n & "].number=" &
+                   hdr.bnStr & " expected=" & bn.bnStr)
 
-    # Check block number
-    let bn = lastNumber - n.uint64
-    if bn != hdr.number:
-      # Undo updated records so far
-      db.delHeaders(bn+1, fc.session.ante.number-1)
-      return err("Block number mismatch for rev[" & $n & "].number=" &
-                 hdr.number.bnStr & " expected=" & bn.bnStr)
+      if bn < baseNum:
+        # Delayed error so any batch using this function has a soft landing
+        fc.session.mode = orphan
+        return ok()
 
-    # Check parent link
-    if lastParentHash != hdr.blockHash:
-      # Undo updated records so far
-      db.delHeaders(bn+1, fc.session.ante.number-1)
-      return err("Parent hash mismatch for rev[" & $n & "].number=" & bn.bnStr)
+      # Check parent link
+      let hash = hdr.blockHash
+      if vetted[^1].parent != hash:
+        # There is no need to clean up as nothing was store on the DB
+        return err("Parent hash mismatch for rev[" & $n & "].number=" &
+          bn.bnStr)
 
-    # Update helper variable, set to current parent hash
-    lastParentHash = hdr.parentHash
+      # Check whether the current header matches the `finalised` one. If so,
+      # headers must match.
+      if fc.session.finHeader.number == bn:
+        if fc.session.finHash != hash:
+          # Delayed error so any batch using this function has a soft landing
+          fc.session.mode = orphan
+          return ok()
 
-    # No need to store overlapping `rev[]` entries
-    if bn < fc.session.ante.number:
+      # Update list of verified entries
+      vetted.add (hdr.parentHash, bn, encodePayload hdr)
+
+      # Check whether the `hdr` has a parent on the `FC` module
+      if fc.chain.hashToBlock.hasKey(hdr.parentHash):
+        let finNumber = fc.session.finHeader.number
+
+        # Verify that the `finalised` header is on the current chain. If the
+        # `finalised` block number is at least `bn`, this has been verified
+        # already.
+        if finNumber < bn:
+
+          # Cheap check whether `finalised` header cannot be on the
+          # `finalised` header database.
+          if finNumber < fc.chain.baseNumber:
+            fc.session.mode = orphan
+            return ok()
+
+          # Now, the `finalised` block number is between the one of `base`
+          # and `hdr.number` (aka `bn`.) If acceptable, the `finalised`
+          # header must be on the ancestor chain `base`..`hdr`.
+          #
+          # Simply checking the `finalised` header against `hashToBlock[]`
+          # is not too useful. Knowing that the `finalised` header is on
+          # the `hashToBlock[]` table does not tell whether is on the right
+          # branch `base`..`hdr`.
+          var finChild = hdr
+          while finNumber+1 < finChild.number:
+            fc.chain.hashToBlock.withValue(finChild.parentHash,val):
+              finChild = val[].blk.header
+          if fc.session.finHash != finChild.parentHash:
+            # Fail: The `finalised` header is on the wrong branch.
+            fc.session.mode = orphan
+            return ok()
+
+        # Chaining headers stops here
+        fc.session.mode = ready
+        revTopInx = n
+        break
+
+    # Commit to database
+    let db = fc.kvt
+    for n in 1 ..< vetted.len:
       # Store on database
-      db.putHeader(bn, encodePayload hdr)
+      db.putHeader(vetted[n].number, vetted[n].data)
 
-  if rev[rev.len-1].number < fc.session.ante.number:
-    # Set new `antecedent`
-    fc.session.ante = rev[rev.len-1]
+    # Set new antecedent `ante` and save to disk (if any)
+    fc.session.ante = rev[revTopInx]
 
     # Save updates. persist to DB
     fc.persistPutState()
 
   ok()
 
-proc fcHeaderPutCommit*(
-    fc: ForkedCacheRef;
-    link: BlockNumber;
-      ): Result[void,string] =
-  ## Finish header chain, it will become read-only if this function succeeds.
+
+proc fcHeaderCompleteOk*(fc: ForkedCacheRef): bool =
+  ## This function returns `true` if `fcHeaderPut()` will have no effect
+  ## anymore and `fcHeaderPutCommit()` can be called to finish with
+  ## appending headers.
   ##
-  ## The argument `link` refers to a chain header that will become the new
-  ## antecedent (lower end) of the header chain. It is required that the
-  ## `base` of the `FC` module proper is ancestor of, or equal to, this
-  ## antecedent.
+  fc.session.mode in {ready,orphan}
+
+
+proc fcHeaderCommit*(fc: ForkedCacheRef): Result[void,string] =
+  ## Finish appending headers to header chain cache which will become
+  ## read-only (if this function succeeds.)
   ##
   ## This function will provide its collected data to the `FC` module proper
   ## for optimisation purposes.
   ##
-  fc.expectingMode(collecting).isOkOr:
-    return err(error)
+  if fc.session.mode == orphan:
+    return err("Cannot link into FC module")
 
-  let db = fc.kvt
-  let linkHdr = db.getHeader(link).valueOr:
-    return err("fcHeader chain did not find " & link.bnStr & " on the chain")
+  ?fc.expectingMode(ready)
 
-  let linkParent = fc.chain.headerByHash(linkHdr.parentHash).valueOr:
-    return err(error)
-  if linkParent.number < fc.chain.baseNumber:
-    return err("fcHeader chain links into FC before base")
+  if not fc.chain.hashToBlock.hasKey(fc.session.ante.parentHash):
+    # Beware of a re-org right after the last `fcHeaderPut()`
+    return err("Link into FC module is lost")
 
-  # Re-adjust `ante` to linkHdr
-  fc.persistDelUpTo link-1
-
-  doAssert fc.session.ante.number == link
+  # Update internal state
   fc.session.mode = locked
 
   # Inform `FC` module proper about finalised header
@@ -519,8 +593,7 @@ proc fcHeaderImportBlock*(fc: ForkedCacheRef; blk: Block): Result[void,string] =
   ## This module uses the latest finalised value that was collected over time
   ## for updating the base value mentioned above.
   ##
-  fc.chain.importBlock(blk).isOkOr:
-    return err(error)
+  ?fc.chain.importBlock(blk)
 
   let blkNum = blk.header.number
   if blkNum < fc.session.nextChoice:
@@ -539,8 +612,7 @@ proc fcHeaderImportBlock*(fc: ForkedCacheRef; blk: Block): Result[void,string] =
     finNum = fc.session.finHeader.number
     finHash = if blkNum < finNum: blkHash else: fc.session.finHash
 
-  fc.chain.forkChoice(blkHash, finHash).isOkOr:
-    return err(error)
+  ?fc.chain.forkChoice(blkHash, finHash)
 
   # Remove some older stashed headers
   fc.persistDelUpTo fc.chain.baseNumber

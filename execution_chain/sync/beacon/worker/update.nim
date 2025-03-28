@@ -69,6 +69,8 @@ proc syncState(ctx: BeaconCtxRef; info: static[string]): SyncLayoutState =
   # It is already known that `C < H` (see first check)
   #
   if c <= b:                           # check for `C <= B` as sketched above
+    if ctx.hdrCache.fcHeaderCompleteOk():
+      return finishedHeaders
 
     # Case `C < D-1` => not ready yet
     if c + 1 < d:
@@ -76,6 +78,7 @@ proc syncState(ctx: BeaconCtxRef; info: static[string]): SyncLayoutState =
 
     # Case `C == D-1` => just finished the download
     if c + 1 == d:
+      # Mmight be obsolete due to `fcHeaderCompleteOk()`
       return finishedHeaders
 
     # Case `C == D` => see below for general case
@@ -148,37 +151,22 @@ proc linkIntoFc(ctx: BeaconCtxRef; info: static[string]): bool =
   let
     b = ctx.chain.baseNumber()
     l = ctx.chain.latestNumber()
-    c = ctx.layout.coupler
     h = ctx.layout.head
 
-  if l < h:
-    # Try to find a parent in the `FC` data domain. For practical reasons the
-    # loop does not go further back than the base `B`. Blocks below/older than
-    # that will not be handled by the `FC`.
-    for bn in l.countdown(max(b,c)):
+  # This function does the job linking into `FC` module proper
+  ctx.hdrCache.fcHeaderCommit().isOkOr:
+    trace info & ": cannot commit header chain", B=b.bnStr, L=l.bnStr,
+      C=ctx.layout.coupler.bnStr, H=h.bnStr, `error`=error
+    return false
 
-      # Get child header `Z` from header queue
-      let zHdr = ctx.hdrCache.fcHeaderGet(bn+1).expect "header"
+  let bn = ctx.hdrCache.fcHeaderAntecedent().number - 1    # parent # of `Z`
+  ctx.layout.coupler = bn                                  # of `C`
+  ctx.layout.dangling = bn                                 # .. ditto
 
-      # Check whether `Z` links into the `FC` module
-      let yHdr = ctx.chain.headerByHash(zHdr.parentHash).valueOr: continue
+  trace info & ": header chain linked into FC", B=b.bnStr,
+    L=(if l==bn: "C" else: l.bnStr), C="D", D=bn.bnStr, H=h.bnStr
 
-      ctx.layout.coupler = bn                                  # parent of `Z`
-      ctx.layout.dangling = bn                                 # .. ditto
-
-      ctx.hdrCache.fcHeaderPutCommit(bn+1).isOkOr:
-        trace info & ": cannot commit header chain", B=b.bnStr, L=l.bnStr,
-          C=c.bnStr, H=h.bnStr, `error`=error
-        return false
-
-      trace info & ": header chain linked into FC", B=b.bnStr,
-        C=(if bn==l: "L" else: bn.bnStr), L=l.bnStr, H=h.bnStr
-
-      return true
-
-  trace info & ": cannot link into FC", B=b.bnStr, L=l.bnStr,
-    C=c.bnStr, H=h.bnStr
-  false
+  true
 
 # ------------------------------------------------------------------------------
 # Private functions, state handlers

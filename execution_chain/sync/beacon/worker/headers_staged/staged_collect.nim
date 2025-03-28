@@ -101,7 +101,7 @@ proc collectAndStashOnDiskCache*(
 
   block fetchHeadersBody:
 
-    while true:
+    while not ctx.hdrCache.fcHeaderCompleteOk():
       let
         # Figure out base point for top-most sub-range of argument `iv`
         ivReqMin = iv.subRangeMinEndingAt ivTop
