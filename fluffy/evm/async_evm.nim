@@ -26,7 +26,7 @@ export
   results, chronos, hashes, addresses, accounts, headers, TransactionArgs, CallResult
 
 logScope:
-  topics = "portal_evm"
+  topics = "async_evm"
 
 # The Portal EVM uses the Nimbus in-memory EVM to execute transactions using the
 # portal state network state data. Currently only call is supported.
@@ -84,11 +84,14 @@ type
     async: (raises: [CancelledError])
   .}
 
-  PortalEvm* = ref object
-    com: CommonRef
+  AsyncEvmStateBackend* = object
     getAccount: GetAccountProc
     getStorage: GetStorageProc
     getCode: GetCodeProc
+
+  AsyncEvm* = ref object
+    com: CommonRef
+    backend: AsyncEvmStateBackend
 
 func init(T: type AccountQuery, adr: Address, fut: Future[Opt[Account]]): T =
   T(address: adr, accFut: fut)
@@ -102,11 +105,15 @@ func init(T: type CodeQuery, adr: Address, fut: Future[Opt[seq[byte]]]): T =
   T(address: adr, codeFut: fut)
 
 proc init*(
-    T: type PortalEvm,
+    T: type AsyncEvmStateBackend,
     accProc: GetAccountProc,
     storageProc: GetStorageProc,
     codeProc: GetCodeProc,
-    networkId: NetworkId = MainNet,
+): T =
+  AsyncEvmStateBackend(getAccount: accProc, getStorage: storageProc, getCode: codeProc)
+
+proc init*(
+    T: type AsyncEvm, backend: AsyncEvmStateBackend, networkId: NetworkId = MainNet
 ): T =
   let com = CommonRef.new(
     DefaultDbMemory.newCoreDbRef(),
@@ -115,17 +122,17 @@ proc init*(
     initializeDb = false,
   )
 
-  PortalEvm(com: com, getAccount: accProc, getStorage: storageProc, getCode: codeProc)
+  AsyncEvm(com: com, backend: backend)
 
 proc call*(
-    evm: PortalEvm, header: Header, tx: TransactionArgs, optimisticStateFetch = true
+    evm: AsyncEvm, header: Header, tx: TransactionArgs, optimisticStateFetch = true
 ): Future[Result[CallResult, string]] {.async: (raises: [CancelledError]).} =
   let
     to = tx.to.valueOr:
       return err("to address is required")
 
     # Start fetching code in the background while setting up the EVM
-    codeFut = evm.getCode(header.stateRoot, to)
+    codeFut = evm.backend.getCode(header.stateRoot, to)
 
   debug "Executing call", blockNumber = header.number, to
 
@@ -159,7 +166,7 @@ proc call*(
   # Limit the max number of calls to prevent infinite loops and/or DOS in the
   # event of a bug in the implementation.
   while evmCallCount < EVM_CALL_LIMIT:
-    debug "Starting PortalEvm execution", evmCallCount
+    debug "Starting AsyncEvm execution", evmCallCount
 
     let sp = vmState.ledger.beginSavepoint()
     callResult = rpcCallEvm(tx, header, vmState)
@@ -192,7 +199,8 @@ proc call*(
           let slotIdx = (adr, v.storageSlot)
           if slotIdx notin fetchedStorage:
             debug "Fetching storage slot", address = adr, slotKey = v.storageSlot
-            let storageFut = evm.getStorage(header.stateRoot, adr, v.storageSlot)
+            let storageFut =
+              evm.backend.getStorage(header.stateRoot, adr, v.storageSlot)
             if not stateFetchDone:
               storageQueries.add(StorageQuery.init(adr, v.storageSlot, storageFut))
               if not optimisticStateFetch:
@@ -202,7 +210,7 @@ proc call*(
 
           if adr notin fetchedAccounts:
             debug "Fetching account", address = adr
-            let accFut = evm.getAccount(header.stateRoot, adr)
+            let accFut = evm.backend.getAccount(header.stateRoot, adr)
             if not stateFetchDone:
               accountQueries.add(AccountQuery.init(adr, accFut))
               if not optimisticStateFetch:
@@ -210,7 +218,7 @@ proc call*(
 
           if v.codeTouched and adr notin fetchedCode:
             debug "Fetching code", address = adr
-            let codeFut = evm.getCode(header.stateRoot, adr)
+            let codeFut = evm.backend.getCode(header.stateRoot, adr)
             if not stateFetchDone:
               codeQueries.add(CodeQuery.init(adr, codeFut))
               if not optimisticStateFetch:
