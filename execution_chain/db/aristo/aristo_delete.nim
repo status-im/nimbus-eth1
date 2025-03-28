@@ -155,53 +155,6 @@ proc deleteAccountRecord*(
 
   ok()
 
-proc deleteGenericData*(
-    db: AristoTxRef;
-    root: VertexID;
-    path: openArray[byte];
-      ): Result[bool,AristoError] =
-  ## Delete the leaf data entry addressed by the argument `path`.  The MPT
-  ## sub-tree the leaf data entry is subsumed under is passed as argument
-  ## `root` which must be greater than `VertexID(1)` and smaller than
-  ## `LEAST_FREE_VID`.
-  ##
-  ## The return value is `true` if the argument `path` deleted was the last
-  ## one and the tree does not exist anymore.
-  ##
-  # Verify that `root` is neither an accounts tree nor a strorage tree.
-  if not root.isValid:
-    return err(DelRootVidMissing)
-  elif root == VertexID(1):
-    return err(DelAccRootNotAccepted)
-  elif LEAST_FREE_VID <= root.distinctBase:
-    return err(DelStoRootNotAccepted)
-
-  var hike: Hike
-  path.hikeUp(root, db, Opt.none(VertexRef), hike).isOkOr:
-    if error[1] in HikeAcceptableStopsNotFound:
-      return err(DelPathNotFound)
-    return err(error[1])
-
-  discard ?db.deleteImpl(hike)
-
-  ok(not db.getVtx((root, root)).isValid)
-
-proc deleteGenericTree*(
-    db: AristoTxRef;                   # Database, top layer
-    root: VertexID;                    # Root vertex
-      ): Result[void,AristoError] =
-  ## Variant of `deleteGenericData()` for purging the whole MPT sub-tree.
-  ##
-  # Verify that `root` is neither an accounts tree nor a strorage tree.
-  if not root.isValid:
-    return err(DelRootVidMissing)
-  elif root == VertexID(1):
-    return err(DelAccRootNotAccepted)
-  elif LEAST_FREE_VID <= root.distinctBase:
-    return err(DelStoRootNotAccepted)
-
-  db.delSubTreeImpl root
-
 proc deleteStorageData*(
     db: AristoTxRef;
     accPath: Hash32;          # Implies storage data tree
