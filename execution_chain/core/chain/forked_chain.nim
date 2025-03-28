@@ -19,7 +19,8 @@ import
   ../../evm/state,
   ../validate,
   ../executor/process_block,
-  ./forked_chain/[chain_desc, chain_branch]
+  ./forked_chain/[chain_desc, chain_branch],
+  ../../portal/portal
 
 from std/sequtils import mapIt
 
@@ -612,6 +613,9 @@ func txRecords*(c: ForkedChainRef, txHash: Hash32): (Hash32, uint64) =
 func isInMemory*(c: ForkedChainRef, blockHash: Hash32): bool =
   c.hashToBlock.hasKey(blockHash)
 
+func isPortalActive*(c: ForkedChainRef): bool =
+  not c.portal.isNil
+
 func memoryBlock*(c: ForkedChainRef, blockHash: Hash32): BlockDesc =
   c.hashToBlock.withValue(blockHash, loc):
     return loc.branch.blocks[loc.index]
@@ -648,7 +652,12 @@ proc headerByNumber*(c: ForkedChainRef, number: BlockNumber): Result[Header, str
     return err("Requested block number not exists: " & $number)
 
   if number < c.baseBranch.tailNumber:
-    return c.baseTxFrame.getBlockHeader(number)
+    let hdr = c.baseTxFrame.getBlockHeader(number).valueOr:
+      if c.isPortalActive:
+        return c.portal.getHeaderByNumber(number)
+      else:
+        return err("Portal inactive, block not found, number = " & $number)
+    return ok(hdr)
 
   var branch = c.activeBranch
   while not branch.isNil:
@@ -656,12 +665,17 @@ proc headerByNumber*(c: ForkedChainRef, number: BlockNumber): Result[Header, str
       return ok(branch.blocks[number - branch.tailNumber].blk.header)
     branch = branch.parent
 
-  err("Header not found, number = " & $number)
+  err("Block not found, number = " & $number)
 
 proc headerByHash*(c: ForkedChainRef, blockHash: Hash32): Result[Header, string] =
   c.hashToBlock.withValue(blockHash, loc):
     return ok(loc[].header)
-  c.baseTxFrame.getBlockHeader(blockHash)
+  let hdr = c.baseTxFrame.getBlockHeader(blockHash).valueOr:
+    if c.isPortalActive:
+      return c.portal.getHeaderByHash(blockHash)
+    else:
+      return err("Block header not found")
+  ok(hdr)
 
 proc txDetailsByTxHash*(c: ForkedChainRef, txHash: Hash32): Result[(Hash32, uint64), string] =
   if c.txRecords.hasKey(txHash):
@@ -674,14 +688,9 @@ proc txDetailsByTxHash*(c: ForkedChainRef, txHash: Hash32): Result[(Hash32, uint
     blockHash = header.blockHash
   return ok((blockHash, txDetails.index))
   
-proc blockByHash*(c: ForkedChainRef, blockHash: Hash32): Result[Block, string] =
-  # used by getPayloadBodiesByHash
-  # https://github.com/ethereum/execution-apis/blob/v1.0.0-beta.4/src/engine/shanghai.md#specification-3
-  # 4. Client software MAY NOT respond to requests for finalized blocks by hash.
-  c.hashToBlock.withValue(blockHash, loc):
-    return ok(loc[].blk)
-  c.baseTxFrame.getEthBlock(blockHash)
-
+# TODO: Doesn't fetch data from portal
+# Aristo returns empty txs for both non-existent blocks and existing blocks with no txs [ Solve ? ]
+# Is fetching big block bodies from portal a good idea ?
 proc blockBodyByHash*(c: ForkedChainRef, blockHash: Hash32): Result[BlockBody, string] =
   c.hashToBlock.withValue(blockHash, loc):
     let blk = loc[].blk
@@ -692,12 +701,35 @@ proc blockBodyByHash*(c: ForkedChainRef, blockHash: Hash32): Result[BlockBody, s
     ))
   c.baseTxFrame.getBlockBody(blockHash)
 
+proc blockByHash*(c: ForkedChainRef, blockHash: Hash32): Result[Block, string] =
+  # used by getPayloadBodiesByHash
+  # https://github.com/ethereum/execution-apis/blob/v1.0.0-beta.4/src/engine/shanghai.md#specification-3
+  # 4. Client software MAY NOT respond to requests for finalized blocks by hash.
+  c.hashToBlock.withValue(blockHash, loc):
+    return ok(loc[].blk)
+  let blk = c.baseTxFrame.getEthBlock(blockHash)
+  # Serves portal data if block not found in db
+  if blk.isErr or (blk.get.transactions.len == 0 and blk.get.header.transactionsRoot != zeroHash32):
+    if c.isPortalActive:
+      return c.portal.getBlockByHash(blockHash)
+  blk
+
 proc blockByNumber*(c: ForkedChainRef, number: BlockNumber): Result[Block, string] =
   if number > c.activeBranch.headNumber:
     return err("Requested block number not exists: " & $number)
 
   if number <= c.baseBranch.tailNumber:
-    return c.baseTxFrame.getEthBlock(number)
+    var unavailable = false
+    let blk = c.baseTxFrame.getEthBlock(number)
+    # Txs not there in db - Happens during era1/era import, when we don't store txs and receipts
+    if blk.isErr or (blk.get.transactions.len == 0 and blk.get.header.transactionsRoot != emptyRoot):
+      unavailable = true
+    else:
+      return blk
+    
+    # Serves portal data if block not found in d
+    if unavailable and c.isPortalActive:
+      return c.portal.getBlockByNumber(number)
 
   var branch = c.activeBranch
   while not branch.isNil:
