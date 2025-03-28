@@ -17,7 +17,7 @@ import
   ../network/history/[history_network, history_content],
   ../network/state/[state_network, state_content, state_endpoints],
   ../network/beacon/beacon_light_client,
-  ../evm/portal_evm,
+  ../evm/[async_evm, async_evm_portal_backend],
   ../version
 
 from ../../execution_chain/errors import ValidationError
@@ -126,8 +126,8 @@ template getOrRaise(stateNetwork: Opt[StateNetwork]): StateNetwork =
     raise newException(ValueError, "state sub-network not enabled")
   sn
 
-template getOrRaise(portalEvm: Opt[PortalEvm]): PortalEvm =
-  let evm = portalEvm.valueOr:
+template getOrRaise(asyncEvm: Opt[AsyncEvm]): AsyncEvm =
+  let evm = asyncEvm.valueOr:
     raise
       newException(ValueError, "portal evm requires state sub-network to be enabled")
   evm
@@ -138,26 +138,11 @@ proc installEthApiHandlers*(
     beaconLightClient: Opt[LightClient],
     stateNetwork: Opt[StateNetwork],
 ) =
-  let portalEvm =
+  let asyncEvm =
     if stateNetwork.isSome():
-      Opt.some(
-        PortalEvm.init(
-          proc(
-              stateRoot: Hash32, address: Address
-          ): Future[Opt[Account]] {.async: (raw: true, raises: [CancelledError]).} =
-            stateNetwork.get().getAccount(stateRoot, address),
-          proc(
-              stateRoot: Hash32, address: Address, slotKey: UInt256
-          ): Future[Opt[UInt256]] {.async: (raw: true, raises: [CancelledError]).} =
-            stateNetwork.get().getStorageAtByStateRoot(stateRoot, address, slotKey),
-          proc(
-              stateRoot: Hash32, address: Address
-          ): Future[Opt[seq[byte]]] {.async: (raw: true, raises: [CancelledError]).} =
-            stateNetwork.get().getCodeByStateRoot(stateRoot, address),
-        )
-      )
+      Opt.some(AsyncEvm.init(stateNetwork.get().toAsyncEvmStateBackend()))
     else:
-      Opt.none(PortalEvm)
+      Opt.none(AsyncEvm)
 
   rpcServer.rpc("web3_clientVersion") do() -> string:
     return clientVersion
@@ -460,7 +445,7 @@ proc installEthApiHandlers*(
 
     let
       hn = historyNetwork.getOrRaise()
-      evm = portalEvm.getOrRaise()
+      evm = asyncEvm.getOrRaise()
       header = (await hn.getVerifiedBlockHeader(quantityTag.number.uint64)).valueOr:
         raise newException(ValueError, "Unable to get block header")
 
