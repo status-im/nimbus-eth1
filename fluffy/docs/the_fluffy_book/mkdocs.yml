@@ -70,6 +70,7 @@ nav:
     - Access the network:
       - 'connect-to-portal.md'
       - 'access-content.md'
+      - 'calling-a-contract.md'
     - Portal bridge:
       - 'history-content-bridging.md'
       - 'beacon-content-bridging.md'
