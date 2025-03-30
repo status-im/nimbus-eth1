@@ -91,7 +91,7 @@ proc putVtx*(
     # likely to evict more useful items (when putting many items, we might even
     # evict those that were just added)
 
-    if vtx.vType == Branch and vtx.pfx.len == 0:
+    if isTrivialBranch(vtx):
       rdb.rdVtxLru.del(rvid.vid)
       if rdb.rdBranchLru.len < rdb.rdBranchLru.capacity:
         rdb.rdBranchLru.put(rvid.vid, (vtx.startVid, vtx.used))

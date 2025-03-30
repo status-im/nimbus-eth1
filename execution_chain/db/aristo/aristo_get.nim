@@ -54,10 +54,16 @@ proc getKeyBe*(
 proc getVtxRc*(
     db: AristoTxRef;
     rvid: RootedVertexID;
+    branch: (VertexRef, int);
     flags: set[GetVtxFlag] = {};
       ): Result[(VertexRef, int),AristoError] =
   ## Cascaded attempt to fetch a vertex from the cache layers or the backend.
   ##
+  if branch[0] != nil:
+    let vtx = branch[0].leaves[rvid.vid - branch[0].startVid]
+    if vtx != nil:
+      return ok (vtx, branch[1])
+
   block body:
     # If the vertex marked is to be deleted on the backend, a `VertexRef(nil)`
     # entry is kept in the local table in which case it is returned as the
@@ -71,11 +77,11 @@ proc getVtxRc*(
 
   ok (?db.db.getVtxBe(rvid, flags), dbLevel)
 
-proc getVtx*(db: AristoTxRef; rvid: RootedVertexID, flags: set[GetVtxFlag] = {}): VertexRef =
+proc getVtx*(db: AristoTxRef; rvid: RootedVertexID, branch: VertexRef, flags: set[GetVtxFlag] = {}): VertexRef =
   ## Cascaded attempt to fetch a vertex from the cache layers or the backend.
   ## The function returns `nil` on error or failure.
   ##
-  db.getVtxRc(rvid).valueOr((VertexRef(nil), 0))[0]
+  db.getVtxRc(rvid, (branch, 0), flags).valueOr((VertexRef(nil), 0))[0]
 
 proc getKeyRc*(
     db: AristoTxRef; rvid: RootedVertexID, flags: set[GetVtxFlag]): Result[((HashKey, VertexRef), int),AristoError] =

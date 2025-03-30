@@ -133,19 +133,6 @@ proc digestTo*(node: NodeRef; T: type HashKey): T =
 
   wr.finish().digestTo(HashKey)
 
-proc serialise*(
-    db: AristoTxRef;
-    root: VertexID;
-    pyl: LeafPayload;
-      ): Result[seq[byte],(VertexID,AristoError)] =
-  ## Encode the data payload of the argument `pyl` as RLP `seq[byte]` if it is
-  ## of account type, otherwise pass the data as is.
-  ##
-  proc getKey(vid: VertexID): Result[HashKey,AristoError] =
-    ok (?db.computeKey((root, vid)))
-
-  pyl.serialise getKey
-
 # ------------------------------------------------------------------------------
 # End
 # ------------------------------------------------------------------------------

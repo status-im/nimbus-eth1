@@ -37,11 +37,12 @@ proc chainRlpNodes(
     db: AristoTxRef;
     rvid: RootedVertexID;
     path: NibblesBuf,
+    branch: VertexRef,
     chain: var seq[seq[byte]];
       ): Result[void,AristoError] =
   ## Inspired by the `getBranchAux()` function from `hexary.nim`
   let
-    (vtx,_) = ? db.getVtxRc rvid
+    (vtx,_) = ?db.getVtxRc(rvid, (branch, 0))
     node = vtx.toNode(rvid.root, db).valueOr:
       return err(PartChnNodeConvError)
 
@@ -69,7 +70,7 @@ proc chainRlpNodes(
       if not vtx.bVid(nibble).isValid:
         return err(PartChnBranchVoidEdge)
       # Recursion!
-      db.chainRlpNodes((rvid.root,vtx.bVid(nibble)), rest, chain)
+      db.chainRlpNodes((rvid.root,vtx.bVid(nibble)), rest, vtx, chain)
 
 
 proc trackRlpNodes(
@@ -134,7 +135,7 @@ proc makeProof(
   ## Errors will only be returned for invalid paths.
   ##
   var chain: seq[seq[byte]]
-  let rc = db.chainRlpNodes((root,root), path, chain)
+  let rc = db.chainRlpNodes((root,root), path, nil, chain)
   if rc.isOk:
     ok((chain, true))
   elif rc.error in ChainRlpNodesNoEntry:

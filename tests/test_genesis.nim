@@ -57,7 +57,7 @@ proc genesisTest() =
       let b = makeGenesis(HoodiNet)
       check b.blockHash == hash32"bbe312868b376a3001692a646dd2d7d1e4406380dfd86b98aa8a34d1557c971b"
       check b.stateRoot == hash32"da87d7f5f91c51508791bbcbd4aa5baf04917830b86985eeb9ad3d5bfb657576"
-
+import ../execution_chain/db/aristo/aristo_debug
 proc customGenesisTest() =
   suite "Custom Genesis":
     test "loadCustomGenesis":

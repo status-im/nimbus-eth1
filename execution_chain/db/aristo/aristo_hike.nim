@@ -62,10 +62,10 @@ func legsTo*(hike: Hike; numLegs: int; T: type NibblesBuf): T =
 # --------
 
 proc step*(
-    path: NibblesBuf, rvid: RootedVertexID, db: AristoTxRef
+    path: NibblesBuf, rvid: RootedVertexID, db: AristoTxRef, branch: VertexRef,
       ): Result[(VertexRef, NibblesBuf, VertexID), AristoError] =
   # Fetch next vertex
-  let (vtx, _) = db.getVtxRc(rvid).valueOr:
+  let (vtx, _) = db.getVtxRc(rvid, (branch, 0)).valueOr:
     if error != GetVtxNotFound:
       return err(error)
 
@@ -110,9 +110,10 @@ iterator stepUp*(
     path = path
     next = root
     vtx: VertexRef
+
   block iter:
     while true:
-      (vtx, path, next) = step(path, (root, next), db).valueOr:
+      (vtx, path, next) = step(path, (root, next), db, vtx).valueOr:
         yield Result[VertexRef, AristoError].err(error)
         break iter
 
@@ -142,14 +143,17 @@ proc hikeUp*(
   if path.len == 0:
     return err((VertexID(0),HikeEmptyPath))
 
-  var vid = root
+  var
+    vid = root
+    prev = VertexRef(nil)
+
   while true:
     if leaf.isSome() and leaf[].isValid and path == leaf[].pfx:
       hike.legs.add Leg(wp: VidVtxPair(vid: vid, vtx: leaf[]), nibble: -1)
       reset(hike.tail)
       break
 
-    let (vtx, path, next) = step(hike.tail, (root, vid), db).valueOr:
+    let (vtx, path, next) = step(hike.tail, (root, vid), db, prev).valueOr:
       return err((vid,error))
 
     let wp = VidVtxPair(vid:vid, vtx:vtx)
@@ -166,6 +170,7 @@ proc hikeUp*(
 
     hike.tail = path
     vid = next
+    prev = vtx
 
   ok()
 

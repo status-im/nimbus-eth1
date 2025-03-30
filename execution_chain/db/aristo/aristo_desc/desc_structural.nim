@@ -58,7 +58,7 @@ type
     of StoData:
       stoData*: UInt256
 
-  VertexRef* = ref object
+  VertexRef* {.acyclic.} = ref object
     ## Vertex for building a hexary Patricia or Merkle Patricia Trie
     pfx*: NibblesBuf
       ## Portion of path segment - extension nodes are branch nodes with
@@ -69,6 +69,8 @@ type
     of Branch:
       startVid*: VertexID
       used*: uint16
+
+      leaves*: array[16, VertexRef]
 
   NodeRef* = ref object of RootRef
     ## Combined record for a *traditional* ``Merkle Patricia Tree` node merged
@@ -119,6 +121,17 @@ func hash*(node: NodeRef): Hash =
 # Public helpers: `NodeRef` and `LeafPayload`
 # ------------------------------------------------------------------------------
 
+import std/sequtils
+func `$`*(v: VertexRef): string =
+  if v == nil:
+    "0"
+  else:
+    case v.vType
+    of Leaf:
+      "L(" & $v.lData & ")"
+    of Branch:
+      "B(" & $v.startVid & ", " & $v.used & ", " & $(@(v.leaves)) & ")"
+
 proc `==`*(a, b: LeafPayload): bool =
   ## Beware, potential deep comparison
   if unsafeAddr(a) != unsafeAddr(b):
@@ -150,9 +163,13 @@ proc `==`*(a, b: VertexRef): bool =
     of Branch:
       if a.pfx != b.pfx or a.startVid != b.startVid or a.used != b.used:
         return false
+
+      for i in 0..<15:
+        if a.leaves[i] != b.leaves[i]:
+          return false
   true
 
-iterator pairs*(vtx: VertexRef): tuple[nibble: uint8, vid: VertexID] =
+iterator pairs*(vtx: VertexRef): tuple[nibble: uint8, vid: VertexID] {.deprecated.} =
   ## Iterates over the sub-vids of a branch (does nothing for leaves)
   case vtx.vType:
   of Leaf:
@@ -224,7 +241,8 @@ func dup*(vtx: VertexRef): VertexRef =
         vType: Branch,
         pfx:   vtx.pfx,
         startVid: vtx.startVid,
-        used: vtx.used)
+        used: vtx.used,
+        leaves: vtx.leaves)
 
 func dup*(node: NodeRef): NodeRef =
   ## Duplicate node.

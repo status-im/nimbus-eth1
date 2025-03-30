@@ -14,7 +14,7 @@ import unittest2, std/sequtils, ../../execution_chain/db/aristo/aristo_blobify
 
 suite "Aristo blobify":
   test "VertexRef roundtrip":
-    let
+    var
       leafAccount = VertexRef(
         vType: Leaf,
         pfx: NibblesBuf.nibble(1),
@@ -38,11 +38,19 @@ suite "Aristo blobify":
 
       key = HashKey.fromBytes(repeat(0x34'u8, 32))[]
 
+    branch.leaves[2] = leafAccount
+    branch.leaves[15] = leafAccount
+
     check:
       deblobify(blobify(leafAccount, key), VertexRef)[] == leafAccount
       deblobify(blobify(leafStoData, key), VertexRef)[] == leafStoData
       deblobify(blobify(branch, key), VertexRef)[] == branch
       deblobify(blobify(extension, key), VertexRef)[] == extension
+
+      deblobify(blobify(leafAccount, VOID_HASH_KEY), VertexRef)[] == leafAccount
+      deblobify(blobify(leafStoData, VOID_HASH_KEY), VertexRef)[] == leafStoData
+      deblobify(blobify(branch, VOID_HASH_KEY), VertexRef)[] == branch
+      deblobify(blobify(extension, VOID_HASH_KEY), VertexRef)[] == extension
 
       deblobify(blobify(branch, key), HashKey)[] == key
       deblobify(blobify(extension, key), HashKey)[] == key

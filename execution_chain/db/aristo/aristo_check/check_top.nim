@@ -48,7 +48,7 @@ proc checkTopStrict*(
 
   for (rvid,key) in db.layersWalkKey:
     if not key.isValid and rvid.vid notin zeroKeys:
-      if not db.getVtx(rvid).isValid:
+      if not db.getVtx(rvid, nil).isValid:
         return err((rvid.vid,CheckStkKeyStrayZeroEntry))
 
   ok()
@@ -59,7 +59,7 @@ proc checkTopProofMode*(
       ): Result[void,(VertexID,AristoError)] =
   for (rvid,key) in db.layersWalkKey:
     if key.isValid:                              # Otherwise to be deleted
-      let vtx = db.getVtx rvid
+      let vtx = db.getVtx(rvid, nil)
       if vtx.isValid:
         let node = vtx.toNode(rvid.root, db).valueOr:
           continue

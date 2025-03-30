@@ -87,7 +87,7 @@ suite "Aristo compute":
           txFrame.mergeAccountRecord(k, v) == Result[bool, AristoError].ok(true)
 
         # Check state against expected value
-        let w = txFrame.computeKey((root, root)).expect("no errors")
+        let w = txFrame.computeKey(root).expect("no errors")
         check r == w.to(Hash32)
 
         let rc = txFrame.check
@@ -102,7 +102,7 @@ suite "Aristo compute":
         deletedKeys.incl k
 
         # Check state against expected value
-        let w = txFrame.computeKey((root, root)).value.to(Hash32)
+        let w = txFrame.computeKey(root).value.to(Hash32)
 
         check r == w
 
@@ -130,5 +130,5 @@ suite "Aristo compute":
 
     check txFrame.computeKeys(root).isOk()
 
-    let w = txFrame.computeKey((root, root)).value.to(Hash32)
+    let w = txFrame.computeKey(root).value.to(Hash32)
     check w == samples[^1][^1][2]

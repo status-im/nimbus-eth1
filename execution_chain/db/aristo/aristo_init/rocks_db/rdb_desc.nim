@@ -14,7 +14,7 @@
 {.push raises: [].}
 
 import
-  std/os,
+  std/[os, sequtils],
   std/concurrency/atomics,
   stew/endians2,
   ../../../core_db/backend/rocksdb_desc,
@@ -98,6 +98,9 @@ template inc*(v: var RdbLruCounter, hit: bool) =
 
 template get*(v: RdbLruCounter, hit: bool): uint64 =
   v[hit].load(moRelaxed)
+
+proc isTrivialBranch*(vtx: VertexRef): bool =
+  vtx.vType == Branch and vtx.pfx.len == 0 and vtx.leaves.allIt(it == nil)
 
 # ------------------------------------------------------------------------------
 # End

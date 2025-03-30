@@ -220,7 +220,7 @@ proc getVtx*(
 
   # Update cache and return - in peek mode, avoid evicting cache items
   if GetVtxFlag.PeekCache notin flags:
-    if res.value.vType == Branch and res.value.pfx.len == 0:
+    if isTrivialBranch(res.value):
       rdb.rdBranchLru.put(rvid.vid, (res.value().startVid, res.value.used))
     else:
       rdb.rdVtxLru.put(rvid.vid, res.value())

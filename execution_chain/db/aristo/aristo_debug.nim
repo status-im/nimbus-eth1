@@ -142,7 +142,7 @@ proc ppKey(key: HashKey; db: AristoTxRef; pfx = true): string =
     let rvid = db.db.xMap.getOrVoid key
     if rvid.isValid:
       result &= rvid.ppVid(pfx=false)
-      let vtx = db.getVtx rvid
+      let vtx = db.getVtx(rvid, nil)
       if vtx.isValid:
         let rc = vtx.toNode(rvid.root, db)
         if rc.isErr or key != rc.value.digestTo(HashKey):
@@ -198,6 +198,8 @@ func ppVtx(nd: VertexRef, db: AristoTxRef, rvid: RootedVertexID): string =
       for n in 0'u8..15'u8:
         if nd.bVid(n).isValid:
           result &= nd.bVid(n).ppVid
+        if nd.leaves[n] != nil:
+          result &= "L"
         if n < 15:
           result &= ","
     result &= ")"
@@ -285,7 +287,7 @@ proc ppXMap*(
             0
           else:
             db.db.xMap[key] = w
-            let vtx = db.getVtx(w)
+            let vtx = db.getVtx(w, nil)
             if not vtx.isValid:
               1
             else:

@@ -34,14 +34,14 @@ iterator rightPairs*(
   ## Depth-first iteration over leaves in trie in numerical nibble order, moving
   ## right (with the lowest nibbles on the left)
   var
-    next = root
+    next = (root, VertexRef(nil))
     hike = Hike(root: root)
 
-  while next.isValid():
-    let vtx = db.getVtx((root, next))
+  while next[0].isValid():
+    let vtx = db.getVtx((root, next[0]), next[1])
     if not vtx.isValid:
       break
-    hike.legs.add(Leg(nibble: -1, wp: VidVtxPair(vid: next, vtx: vtx)))
+    hike.legs.add(Leg(nibble: -1, wp: VidVtxPair(vid: next[0], vtx: vtx)))
     reset(next)
 
     block nextLeg:
@@ -55,7 +55,7 @@ iterator rightPairs*(
             if b.isValid():
               hike.legs[^1].nibble = int8(i)
 
-              next = b
+              next = (b, x.wp.vtx)
               break nextLeg
 
           hike.legs.setLen(hike.legs.len - 1)

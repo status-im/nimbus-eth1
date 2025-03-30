@@ -60,6 +60,7 @@ proc retrieveAccountLeaf(
   if (let leafVtx = db.cachedAccLeaf(accPath); leafVtx.isSome()):
     if not leafVtx[].isValid():
       return err(FetchPathNotFound)
+
     return ok leafVtx[]
 
   # Updated payloads are stored in the layers so if we didn't find them there,
@@ -79,7 +80,7 @@ proc retrieveMerkleHash(
     root: VertexID;
       ): Result[Hash32,AristoError] =
   let key =
-    db.computeKey((root, root)).valueOr:
+    db.computeKey(root).valueOr:
       if error in [GetVtxNotFound, GetKeyNotFound]:
         return ok(emptyRoot)
       return err(error)

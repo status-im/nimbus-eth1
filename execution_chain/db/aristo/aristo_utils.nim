@@ -45,7 +45,7 @@ proc toNode*(
     if vtx.lData.pType == AccountData:
       let stoID = vtx.lData.stoID
       if stoID.isValid:
-        let key = db.computeKey((stoID.vid, stoID.vid)).valueOr:
+        let key = db.computeKey(stoID.vid).valueOr:
           return err(@[stoID.vid])
 
         node.key[0] = key
@@ -54,7 +54,7 @@ proc toNode*(
   of Branch:
     let node = NodeRef(vtx: vtx.dup())
     for n, subvid in vtx.pairs():
-      let key = db.computeKey((root, subvid)).valueOr:
+      let key = db.computeKey((root, subvid), vtx).valueOr:
         return err(@[subvid])
       node.key[n] = key
     return ok node

@@ -187,7 +187,11 @@ proc computeKeyImpl(
       # to exploit their on-disk order
       var keyvtxs: array[16, ((HashKey, VertexRef), int)]
       for n, subvid in vtx.pairs:
-        keyvtxs[n] = ?db.getKey((rvid.root, subvid), skipLayers)
+        keyvtxs[n] =
+          if vtx.leaves[n] != nil:
+            ((VOID_HASH_KEY, vtx.leaves[n]), level)
+          else:
+            ?db.getKey((rvid.root, subvid), skipLayers)
 
       # Make sure we have keys computed for each hash
       block keysComputed:
@@ -266,13 +270,16 @@ proc computeKeyImpl(
   ok (key, level)
 
 proc computeKeyImpl(
-    db: AristoTxRef, rvid: RootedVertexID, skipLayers: static bool
+    db: AristoTxRef, rvid: RootedVertexID, branch: VertexRef, skipLayers: static bool
 ): Result[HashKey, AristoError] =
   let (keyvtx, level) =
-    when skipLayers:
-      (?db.db.getKeyBe(rvid, {GetVtxFlag.PeekCache}), dbLevel)
+    if branch != nil and branch.leaves[rvid.vid - branch.startVid] != nil:
+      ((VOID_HASH_KEY, branch.leaves[rvid.vid - branch.startVid]), db.level)
     else:
-      ?db.getKeyRc(rvid, {})
+      when skipLayers:
+        (?db.db.getKeyBe(rvid, {GetVtxFlag.PeekCache}), dbLevel)
+      else:
+        ?db.getKeyRc(rvid, {})
 
   if keyvtx[0].isValid:
     return ok(keyvtx[0])
@@ -293,17 +300,29 @@ proc computeKeyImpl(
 proc computeKey*(
     db: AristoTxRef, # Database, top layer
     rvid: RootedVertexID, # Vertex to convert
+    branch: VertexRef
 ): Result[HashKey, AristoError] =
   ## Compute the key for an arbitrary vertex ID. If successful, the length of
   ## the resulting key might be smaller than 32. If it is used as a root vertex
   ## state/hash, it must be converted to a `Hash32` (using (`.to(Hash32)`) as
   ## in `db.computeKey(rvid).value.to(Hash32)` which always results in a
   ## 32 byte value.
-  computeKeyImpl(db, rvid, skipLayers = false)
+  computeKeyImpl(db, rvid, branch, skipLayers = false)
+
+proc computeKey*(
+    db: AristoTxRef, # Database, top layer
+    root: VertexID, # Vertex to convert
+): Result[HashKey, AristoError] =
+  ## Compute the key for an arbitrary vertex ID. If successful, the length of
+  ## the resulting key might be smaller than 32. If it is used as a root vertex
+  ## state/hash, it must be converted to a `Hash32` (using (`.to(Hash32)`) as
+  ## in `db.computeKey(rvid).value.to(Hash32)` which always results in a
+  ## 32 byte value.
+  computeKeyImpl(db, (root, root), nil, skipLayers = false)
 
 proc computeKeys*(db: AristoTxRef, root: VertexID): Result[void, AristoError] =
   ## Ensure that key cache is topped up with the latest state root
-  discard db.computeKeyImpl((root, root), skipLayers = true)
+  discard db.computeKeyImpl((root, root), nil, skipLayers = true)
 
   ok()
 

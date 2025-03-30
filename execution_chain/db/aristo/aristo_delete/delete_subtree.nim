@@ -10,23 +10,22 @@
 
 {.push raises: [].}
 
-import
-  eth/common/hashes,
-  ".."/[aristo_desc, aristo_get, aristo_layers]
+import eth/common/hashes, ".."/[aristo_desc, aristo_get, aristo_layers]
 
 # ------------------------------------------------------------------------------
 # Private heplers
 # ------------------------------------------------------------------------------
 
 proc delStoTreeNow(
-  db: AristoTxRef;                   # Database, top layer
-  rvid: RootedVertexID;              # Root vertex
-  accPath: Hash32;                   # Accounts cache designator
-  stoPath: NibblesBuf;               # Current storage path
-    ): Result[void,AristoError] =
+    db: AristoTxRef, # Database, top layer
+    rvid: RootedVertexID, # Root vertex
+    branch: VertexRef,
+    accPath: Hash32, # Accounts cache designator
+    stoPath: NibblesBuf, # Current storage path
+): Result[void, AristoError] =
   ## Implementation of *delete* sub-trie.
 
-  let (vtx, _) = db.getVtxRc(rvid).valueOr:
+  let (vtx, _) = db.getVtxRc(rvid, (branch, 0)).valueOr:
     if error == GetVtxNotFound:
       return ok()
     return err(error)
@@ -34,10 +33,9 @@ proc delStoTreeNow(
   case vtx.vType
   of Branch:
     for n, subvid in vtx.pairs():
-      ? db.delStoTreeNow(
-        (rvid.root, subvid), accPath,
-        stoPath & vtx.pfx & NibblesBuf.nibble(n))
-
+      ?db.delStoTreeNow(
+        (rvid.root, subvid), vtx, accPath, stoPath & vtx.pfx & NibblesBuf.nibble(n)
+      )
   of Leaf:
     let stoPath = Hash32((stoPath & vtx.pfx).getBytes())
     db.layersPutStoLeaf(mixUp(accPath, stoPath), nil)
@@ -56,7 +54,7 @@ proc delStoTreeImpl*(
     accPath: Hash32;
       ): Result[void,AristoError] =
   ## Implementation of *delete* sub-trie.
-  db.delStoTreeNow((root, root), accPath, NibblesBuf())
+  db.delStoTreeNow((root, root),  nil, accPath, NibblesBuf())
 
 # ------------------------------------------------------------------------------
 # End
