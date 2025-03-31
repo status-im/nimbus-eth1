@@ -47,9 +47,19 @@
 ##
 ## * Headers can be appended to the cache at the stack bottom away from `head`
 ##   (i.e. on the left end of the above diagram before `antecedent`.) There
-##   can be no gaps on the header stack chain.
+##   can be no gaps on the cached header chain.
 ##
 ## * Cached headers can be looked up for by block number.
+##
+## * While appending headers, the current `antecedent` is tested whether it has
+##   a parent on the `FC` module proper. If this is tha case, then any attempt
+##   to add more headers will be silently ignored.
+##
+## * After headers have been collected and the `antecedent` has a parent on
+##   the `FC` module proper, the header append process must be finished by a
+##   dedicated commit statement `fcHeaderCommit()`.
+##
+## Temporary extra:
 ##
 ## * There is a function provided combining `importBlocks()` and `forkChoice()`
 ##   as a wrapper around `importBlock()` followed by occasional update of the

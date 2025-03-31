@@ -24,22 +24,14 @@ import
 # Private functions
 # ------------------------------------------------------------------------------
 
-proc headersToFetchOk(buddy: BeaconBuddyRef): bool =
-  buddy.headersStagedFetchOk()
-
-proc bodiesToFetchOk(buddy: BeaconBuddyRef): bool =
-  buddy.ctx.blocksStagedFetchOk() and
-    buddy.ctrl.running and
-    not buddy.ctx.poolMode
-
 proc napUnlessSomethingToFetch(
     buddy: BeaconBuddyRef;
       ): Future[bool] {.async: (raises: []).} =
   ## When idle, save cpu cycles waiting for something to do.
   if buddy.ctx.pool.blkImportOk or               # currently importing blocks
      buddy.ctx.hibernate or                      # not activated yet?
-     not (buddy.headersToFetchOk() or            # something on TODO list
-          buddy.bodiesToFetchOk()):
+     not (buddy.headersStagedFetchOk() or            # something on TODO list
+          buddy.blocksStagedFetchOk()):
     try:
       await sleepAsync workerIdleWaitInterval
     except CancelledError:
@@ -202,7 +194,7 @@ proc runPeer*(
   if not await buddy.napUnlessSomethingToFetch():
 
     # Download and process headers and blocks
-    while buddy.headersToFetchOk():
+    while buddy.headersStagedFetchOk():
 
       # Collect headers and either stash them on the header chain cache
       # directly, or stage then on the header queue to get them serialised,
@@ -214,7 +206,7 @@ proc runPeer*(
 
     # Fetch bodies and combine them with headers to blocks to be staged. These
     # staged blocks are then excuted by the daemon process (no `peer` needed.)
-    while buddy.bodiesToFetchOk():
+    while buddy.blocksStagedFetchOk():
       discard await buddy.blocksStagedCollect info
 
     # Note that it is important **not** to leave this function to be
