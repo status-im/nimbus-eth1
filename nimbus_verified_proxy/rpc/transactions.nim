@@ -73,35 +73,6 @@ proc checkTxHash*(txObj: TransactionObject, txHash: Hash32): bool =
 
   return true
 
-template toLog(lg: LogObject): Log = 
-  Log(
-    address: lg.address,
-    topics: lg.topics,
-    data: lg.data
-  )
-
-proc toLogs(logs: openArray[LogObject]): seq[Log] =
-  result = map(logs, proc(x: LogObject): Log = toLog(x))
-
-proc toReceipt(rec: ReceiptObject): Receipt =
-  let isHash = if rec.status.isSome: false
-               else: true
-
-  var status = false 
-  if rec.status.isSome:
-    if rec.status.get() == 1.Quantity:
-      status = true
-
-  return Receipt(
-    hash: rec.transactionHash,
-    isHash: isHash,
-    status: status, 
-    cumulativeGasUsed: rec.cumulativeGasUsed.GasInt,
-    logs: toLogs(rec.logs),
-    logsBloom: rec.logsBloom,
-    receiptType: rec.`type`.get(0.Web3Quantity).ReceiptType
-  )
-
 proc verifyTransactions*(
     txRoot: Hash32,
     transactions: seq[TxOrHash],

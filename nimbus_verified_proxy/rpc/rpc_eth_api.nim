@@ -25,7 +25,8 @@ import
   ../types,
   ./blocks,
   ./accounts,
-  ./transactions
+  ./transactions,
+  ./receipts
 
 logScope:
   topics = "verified_proxy"
@@ -114,6 +115,26 @@ proc installEthApiHandlers*(vp: VerifiedRpcProxy) =
       raise newException(ValueError, "the transaction doesn't hash to the provided hash")
 
     return tx
+
+  # TODO: this method should also support block hashes. For that, the client call should also suupport block hashes
+  vp.proxy.rpc("eth_getBlockReceipts") do(
+    blockTag: BlockTag
+  ) -> Opt[seq[ReceiptObject]]:
+    let rxs = await vp.getReceiptsByBlockTag(blockTag)
+    return Opt.some(rxs)
+
+  vp.proxy.rpc("eth_getTransactionReceipt") do(
+    txHash: Hash32
+  ) -> ReceiptObject:
+    let 
+      rx = await vp.rpcClient.eth_getTransactionReceipt(txHash)
+      rxs = await vp.getReceiptsByBlockHash(rx.blockHash)
+
+    for r in rxs:
+      if r.transactionHash == txHash:
+        return r
+
+    raise newException(ValueError, "receipt couldn't be verified")
 
   # eth_blockNumber - get latest tag from header store
   vp.proxy.rpc("eth_blockNumber") do() -> Quantity:
