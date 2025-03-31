@@ -322,7 +322,7 @@ proc updateHead(c: ForkedChainRef, head: BlockPos) =
     c.removeBlockFromCache(head.branch.blocks[i])
 
   head.branch.blocks.setLen(head.index+1)
-  c.baseTxFrame.setHead(head.branch.headHeader,
+  head.txFrame.setHead(head.branch.headHeader,
     head.branch.headHash).expect("OK")
 
 proc updateFinalized(c: ForkedChainRef, finalized: BlockPos) =
@@ -360,6 +360,9 @@ proc updateFinalized(c: ForkedChainRef, finalized: BlockPos) =
       continue
 
     inc i
+
+  let txFrame = finalized.txFrame
+  txFrame.finalizedHeaderHash(finalized.hash)
 
 proc updateBase(c: ForkedChainRef, newBase: BlockPos) =
   ##
@@ -562,11 +565,6 @@ func haveBlockAndState*(c: ForkedChainRef, blockHash: Hash32): bool =
   ## Blocks still in memory with it's txFrame
   c.hashToBlock.hasKey(blockHash)
 
-proc haveBlockLocally*(c: ForkedChainRef, blockHash: Hash32): bool =
-  if c.hashToBlock.hasKey(blockHash):
-    return true
-  c.baseTxFrame.headerExists(blockHash)
-
 func txFrame*(c: ForkedChainRef, blockHash: Hash32): CoreDbTxRef =
   if blockHash == c.baseBranch.tailHash:
     return c.baseTxFrame
@@ -668,12 +666,12 @@ proc txDetailsByTxHash*(c: ForkedChainRef, txHash: Hash32): Result[(Hash32, uint
     let (blockHash, txid) = c.txRecords(txHash)
     return ok((blockHash, txid))
 
-  let 
+  let
     txDetails = ?c.baseTxFrame.getTransactionKey(txHash)
     header = ?c.headerByNumber(txDetails.blockNumber)
     blockHash = header.blockHash
   return ok((blockHash, txDetails.index))
-  
+
 proc blockByHash*(c: ForkedChainRef, blockHash: Hash32): Result[Block, string] =
   # used by getPayloadBodiesByHash
   # https://github.com/ethereum/execution-apis/blob/v1.0.0-beta.4/src/engine/shanghai.md#specification-3

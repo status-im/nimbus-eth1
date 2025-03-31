@@ -276,21 +276,6 @@ proc persistTransactions*(
       trace info, blockKey, error=($$error)
       return
 
-proc forgetHistory*(
-    db: CoreDbTxRef;
-    blockNum: BlockNumber;
-      ): bool =
-  ## Remove all data related to the block number argument `num`. This function
-  ## returns `true`, if some history was available and deleted.
-  let blockHash = db.getBlockHash(blockNum).valueOr:
-    return false
-
-  # delete blockNum->blockHash
-  discard db.del(blockNumberToHashKey(blockNum).toOpenArray)
-  # delete blockHash->header, stateRoot->blockNum
-  discard db.del(genericHashKey(blockHash).toOpenArray)
-  true
-
 proc getTransactionByIndex*(
     db: CoreDbTxRef;
     txRoot: Hash32;
@@ -476,7 +461,7 @@ proc getTransactionKey*(
         return ok(default(TransactionKey))
     return ok(rlp.decode(tx, TransactionKey))
 
-proc headerExists*(db: CoreDbTxRef; blockHash: Hash32): bool =
+proc headerExists(db: CoreDbTxRef; blockHash: Hash32): bool =
   ## Returns True if the header with the given block hash is in our DB.
   db.hasKeyRc(genericHashKey(blockHash).toOpenArray).valueOr:
     if error.error != KvtNotFound:
@@ -529,7 +514,7 @@ proc getReceipts*(
       receipts.add(r)
     return ok(receipts)
 
-proc persistScore*(
+proc persistScore(
     db: CoreDbTxRef;
     blockHash: Hash32;
     score: UInt256

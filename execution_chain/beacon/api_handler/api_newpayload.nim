@@ -213,7 +213,7 @@ proc newPayload*(ben: BeaconEngineRef,
     let blockHash = latestValidHash(txFrame, parent, ttd)
     return acceptedStatus(blockHash)
 
-  trace "Inserting block without sethead",
+  trace "Importing block without sethead",
     hash = blockHash, number = header.number
   let vres = ben.chain.importBlock(blk)
   if vres.isErr:
