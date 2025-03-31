@@ -108,7 +108,6 @@ type
     finHeader: Header          # final block header
     finHash: Hash32
     consHeadNum: BlockNumber   # for logging, metrics etc.
-    nextChoice: BlockNumber    # for covenience wrapper `fcHeaderImportBlock()`
 
   ForkedCacheRef* = ref object
     ## For now, this is a replacement of `ForkedChainRef` for as long as
@@ -121,9 +120,11 @@ type
                                # isolated from ordinary headers storage.
 
 const
-  FinaliserChoiceDelta = 32
+  FinaliserChoiceDelta = 192
+    ## Temporary for `fcHeaderImportBlock()` which will go away.
+    ##
     ## Suggested minimum block numbers equivalent between consecutive
-    ## invocations of `forkChoice()`
+    ## invocations of `forkChoice()` (should be > `BaseDistance`.)
 
   RaisePfx = "Header Cache: "
     ## Message prefix used when bailing out raising an exception
@@ -615,30 +616,20 @@ proc fcHeaderImportBlock*(fc: ForkedCacheRef; blk: Block): Result[void,string] =
   ##
   ?fc.chain.importBlock(blk)
 
-  let blkNum = blk.header.number
-  if blkNum < fc.session.nextChoice:
-    return ok()
+  if fc.chain.baseNumber + FinaliserChoiceDelta < fc.chain.latestNumber and
+     fc.chain.baseNumber < fc.chain.hdrChainFinHeader.number:
 
-  # Wait `FinaliserChoiceDelta` steps before `forkChoice()`
-  if fc.session.nextChoice == 0:
-    fc.session.nextChoice = blkNum + FinaliserChoiceDelta - 1
-    if fc.session.head.number < fc.session.nextChoice:
-      fc.session.nextChoice = fc.session.head.number
-    return ok()
+    # Update base value of `FC` module proper via `forkChoice()`
+    let
+      blkNum = blk.header.number
+      blkHash = fc.fcHeaderGetHash(blkNum).expect "hash"
+      finNum = fc.chain.hdrChainFinHeader.number
+      finHash = if blkNum < finNum: blkHash else: fc.chain.hdrChainFinHash
 
-  # Update base value of `FC` module proper via `forkChoice()`
-  let
-    blkHash = fc.fcHeaderGetHash(blkNum).expect "hash"
-    finNum = fc.session.finHeader.number
-    finHash = if blkNum < finNum: blkHash else: fc.session.finHash
+    ?fc.chain.forkChoice(blkHash, finHash)
 
-  ?fc.chain.forkChoice(blkHash, finHash)
-
-  # Remove some older stashed headers
-  fc.persistDelUpTo fc.chain.baseNumber
-
-  # Reset for next cycle
-  fc.session.nextChoice = 0
+    # Remove some older stashed headers
+    fc.persistDelUpTo fc.chain.baseNumber
 
   ok()
 
