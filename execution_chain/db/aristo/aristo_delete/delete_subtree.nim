@@ -52,11 +52,11 @@ proc delStoTreeNow(
 
 proc delStoTreeImpl*(
     db: AristoTxRef;                   # Database, top layer
-    rvid: RootedVertexID;              # Root vertex
+    root: VertexID;                    # Root vertex
     accPath: Hash32;
       ): Result[void,AristoError] =
   ## Implementation of *delete* sub-trie.
-  db.delStoTreeNow(rvid, accPath, NibblesBuf())
+  db.delStoTreeNow((root, root), accPath, NibblesBuf())
 
 # ------------------------------------------------------------------------------
 # End
