@@ -7,16 +7,16 @@
 
 import
   json_rpc/[rpcproxy],
-  web3/[primitives, eth_api_types, eth_api],
+  stint,
   ./header_store
 
 type
   VerifiedRpcProxy* = ref object
     proxy*: RpcProxy
     headerStore*: HeaderStore
-    chainId*: Quantity
+    chainId*: UInt256
 
 proc new*(
-    T: type VerifiedRpcProxy, proxy: RpcProxy, headerStore: HeaderStore, chainId: Quantity
+    T: type VerifiedRpcProxy, proxy: RpcProxy, headerStore: HeaderStore, chainId: UInt256
 ): T =
   VerifiedRpcProxy(proxy: proxy, headerStore: headerStore, chainId: chainId)

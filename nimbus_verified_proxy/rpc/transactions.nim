@@ -41,7 +41,7 @@ func authList(x: Opt[seq[Authorization]]): seq[Authorization] =
 proc toTransaction(tx: TransactionObject): Transaction =
   Transaction(
     txType          : tx.`type`.get(0.Web3Quantity).TxType,
-    chainId         : tx.chainId.get(0.Web3Quantity).ChainId,
+    chainId         : tx.chainId.get(0.u256),
     nonce           : tx.nonce.AccountNonce,
     gasPrice        : tx.gasPrice.GasInt,
     maxPriorityFeePerGas: tx.maxPriorityFeePerGas.get(0.Web3Quantity).GasInt,

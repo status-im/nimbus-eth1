@@ -35,7 +35,7 @@ template rpcClient*(vp: VerifiedRpcProxy): RpcClient =
   vp.proxy.getClient()
 
 proc installEthApiHandlers*(vp: VerifiedRpcProxy) =
-  vp.proxy.rpc("eth_chainId") do() -> Quantity:
+  vp.proxy.rpc("eth_chainId") do() -> UInt256:
     vp.chainId
 
   vp.proxy.rpc("eth_getBlockByNumber") do(
