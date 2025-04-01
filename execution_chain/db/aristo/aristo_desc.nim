@@ -73,10 +73,9 @@ type
 
     blockNumber*: Opt[uint64]              ## Block number set when checkpointing the frame
 
-    snapshot*: Table[RootedVertexID, Snapshot]
+    snapshot*: Snapshot
       ## Optional snapshot containing the cumulative changes from ancestors and
       ## the current frame
-    snapshotLevel*: Opt[int] # base level when the snapshot was taken
 
     level*: int
       ## Ancestry level of frame, increases with age but otherwise meaningless -
@@ -84,7 +83,13 @@ type
       ## -1 = stored in database, where relevant though typically should be
       ## compared with the base layer level instead.
 
-  Snapshot* = (VertexRef, HashKey, int)
+  Snapshot* = object
+    vtx*: Table[RootedVertexID, VtxSnapshot]
+    acc*: Table[Hash32, (VertexRef, int)]
+    sto*: Table[Hash32, (VertexRef, int)]
+    level*: Opt[int] # when this snapshot was taken
+
+  VtxSnapshot* = (VertexRef, HashKey, int)
     ## Unlike sTab/kMap, snapshot contains both vertex and key since at the time
     ## of writing, it's primarily used in contexts where both are present
 
@@ -172,9 +177,6 @@ func isValid*(vtx: VertexRef): bool =
 func isValid*(nd: NodeRef): bool =
   nd != NodeRef(nil)
 
-func isValid*(pid: PathID): bool =
-  pid != VOID_PATH_ID
-
 func isValid*(tx: AristoTxRef): bool =
   tx != AristoTxRef(nil)
 
@@ -212,7 +214,7 @@ iterator rstack*(tx: AristoTxRef, stopAtSnapshot = false): AristoTxRef =
   while tx != nil:
     yield tx
 
-    if stopAtSnapshot and tx.snapshotLevel.isSome():
+    if stopAtSnapshot and tx.snapshot.level.isSome():
       break
 
     tx = tx.parent

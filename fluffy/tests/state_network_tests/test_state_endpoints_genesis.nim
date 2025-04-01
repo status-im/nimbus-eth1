@@ -157,7 +157,7 @@ suite "State Endpoints - Genesis JSON Files":
           # get code of existing account
           let codeRes = await stateNode.stateNetwork.getCode(blockNumber, address)
           check:
-            codeRes.get().asSeq() == account.code
+            codeRes.get() == account.code
 
           let storageState = storageStates.getOrDefault(address)
           for slotKey, slotValue in account.storage:
@@ -177,7 +177,7 @@ suite "State Endpoints - Genesis JSON Files":
             slotRes1 =
               await stateNode.stateNetwork.getStorageAt(blockNumber, address, 1.u256)
           check:
-            codeRes.get().asSeq().len() == 0
+            codeRes.get().len() == 0
             slotRes0.get() == 0.u256
             slotRes1.get() == 0.u256
 
@@ -197,7 +197,7 @@ suite "State Endpoints - Genesis JSON Files":
         check:
           balanceRes.get() == 0.u256
           nonceRes.get() == 0.uint64
-          codeRes.get().asSeq().len() == 0
+          codeRes.get().len() == 0
           slotRes.get() == 0.u256
 
     await stateNode.stop()

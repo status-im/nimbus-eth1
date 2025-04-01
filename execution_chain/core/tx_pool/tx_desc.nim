@@ -56,6 +56,12 @@ const
   MAX_POOL_SIZE = 5000
   MAX_TXS_PER_ACCOUNT = 100
   TX_ITEM_LIFETIME = initDuration(minutes = 60)
+  TX_MAX_SIZE* = 128 * 1024
+  # BLOB_TX_MAX_SIZE is the maximum size a single transaction can have, outside
+  # the included blobs. Since blob transactions are pulled instead of pushed,
+  # and only a small metadata is kept in ram, there is no critical limit that
+  # should be enforced. Still, capping it to some sane limit can never hurt.
+  BLOB_TX_MAX_SIZE* = 1024 * 1024
 
 # ------------------------------------------------------------------------------
 # Private functions
@@ -318,14 +324,20 @@ proc addTx*(xp: TxPoolRef, ptx: PooledTransaction): Result[void, TxError] =
       chainId = xp.chain.com.chainId
     return err(txErrorChainIdMismatch)
 
-  let id = ptx.rlpHash
+  let (size, id) = getEncodedLengthAndHash(ptx.tx)
 
   if ptx.tx.txType == TxEip4844:
+    if size > BLOB_TX_MAX_SIZE:
+      return err(txErrorOversized)
+
     ptx.validateBlobTransactionWrapper().isOkOr:
       debug "Invalid transaction: Blob transaction wrapper validation failed",
         tx = ptx.tx,
         error = error
       return err(txErrorInvalidBlob)
+  else:
+    if size > TX_MAX_SIZE:
+      return err(txErrorOversized)
 
   if xp.alreadyKnown(id):
     debug "Transaction already known", txHash = id

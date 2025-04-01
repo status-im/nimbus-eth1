@@ -18,17 +18,15 @@ import
   ../../execution_chain/db/ledger,
   ../../execution_chain/common/common,
   ../../execution_chain/transaction/call_evm,
-  ../../execution_chain/evm/[types, state, evm_errors],
-  ../network/history/history_network,
-  ../network/state/[state_endpoints, state_network]
+  ../../execution_chain/evm/[types, state, evm_errors]
 
 from web3/eth_api_types import TransactionArgs
 
 export
-  results, chronos, hashes, history_network, state_network, TransactionArgs, CallResult
+  results, chronos, hashes, addresses, accounts, headers, TransactionArgs, CallResult
 
 logScope:
-  topics = "portal_evm"
+  topics = "async_evm"
 
 # The Portal EVM uses the Nimbus in-memory EVM to execute transactions using the
 # portal state network state data. Currently only call is supported.
@@ -72,12 +70,28 @@ type
 
   CodeQuery = object
     address: Address
-    codeFut: Future[Opt[Bytecode]]
+    codeFut: Future[Opt[seq[byte]]]
 
-  PortalEvm* = ref object
-    historyNetwork: HistoryNetwork
-    stateNetwork: StateNetwork
+  GetAccountProc* = proc(stateRoot: Hash32, address: Address): Future[Opt[Account]] {.
+    async: (raises: [CancelledError])
+  .}
+
+  GetStorageProc* = proc(
+    stateRoot: Hash32, address: Address, slotKey: UInt256
+  ): Future[Opt[UInt256]] {.async: (raises: [CancelledError]).}
+
+  GetCodeProc* = proc(stateRoot: Hash32, address: Address): Future[Opt[seq[byte]]] {.
+    async: (raises: [CancelledError])
+  .}
+
+  AsyncEvmStateBackend* = object
+    getAccount: GetAccountProc
+    getStorage: GetStorageProc
+    getCode: GetCodeProc
+
+  AsyncEvm* = ref object
     com: CommonRef
+    backend: AsyncEvmStateBackend
 
 func init(T: type AccountQuery, adr: Address, fut: Future[Opt[Account]]): T =
   T(address: adr, accFut: fut)
@@ -87,42 +101,40 @@ func init(
 ): T =
   T(address: adr, slotKey: slotKey, storageFut: fut)
 
-func init(T: type CodeQuery, adr: Address, fut: Future[Opt[Bytecode]]): T =
+func init(T: type CodeQuery, adr: Address, fut: Future[Opt[seq[byte]]]): T =
   T(address: adr, codeFut: fut)
 
-proc init*(T: type PortalEvm, hn: HistoryNetwork, sn: StateNetwork): T =
-  let config =
-    try:
-      networkParams(MainNet).config
-    except ValueError as e:
-      raiseAssert(e.msg) # Should not fail
-    except RlpError as e:
-      raiseAssert(e.msg) # Should not fail
+proc init*(
+    T: type AsyncEvmStateBackend,
+    accProc: GetAccountProc,
+    storageProc: GetStorageProc,
+    codeProc: GetCodeProc,
+): T =
+  AsyncEvmStateBackend(getAccount: accProc, getStorage: storageProc, getCode: codeProc)
 
+proc init*(
+    T: type AsyncEvm, backend: AsyncEvmStateBackend, networkId: NetworkId = MainNet
+): T =
   let com = CommonRef.new(
     DefaultDbMemory.newCoreDbRef(),
     taskpool = nil,
-    config = config,
+    config = chainConfigForNetwork(networkId),
     initializeDb = false,
   )
 
-  PortalEvm(historyNetwork: hn, stateNetwork: sn, com: com)
+  AsyncEvm(com: com, backend: backend)
 
 proc call*(
-    evm: PortalEvm,
-    tx: TransactionArgs,
-    blockNumOrHash: uint64 | Hash32,
-    optimisticStateFetch = true,
+    evm: AsyncEvm, header: Header, tx: TransactionArgs, optimisticStateFetch = true
 ): Future[Result[CallResult, string]] {.async: (raises: [CancelledError]).} =
   let
     to = tx.to.valueOr:
       return err("to address is required")
-    header = (await evm.historyNetwork.getVerifiedBlockHeader(blockNumOrHash)).valueOr:
-      return err("Unable to get block header")
-    # Start fetching code in the background while setting up the EVM
-    codeFut = evm.stateNetwork.getCodeByStateRoot(header.stateRoot, to)
 
-  debug "Executing call", to, blockNumOrHash
+    # Start fetching code in the background while setting up the EVM
+    codeFut = evm.backend.getCode(header.stateRoot, to)
+
+  debug "Executing call", blockNumber = header.number, to
 
   let txFrame = evm.com.db.baseTxFrame().txFrameBegin()
   defer:
@@ -141,9 +153,9 @@ proc call*(
   # Set code of the 'to' address in the EVM so that we can execute the transaction
   let code = (await codeFut).valueOr:
     return err("Unable to get code")
-  vmState.ledger.setCode(to, code.asSeq())
+  vmState.ledger.setCode(to, code)
   fetchedCode.incl(to)
-  debug "Code to be executed", code = code.asSeq().to0xHex()
+  debug "Code to be executed", code = code.to0xHex()
 
   var
     lastWitnessKeys: WitnessTable
@@ -154,7 +166,7 @@ proc call*(
   # Limit the max number of calls to prevent infinite loops and/or DOS in the
   # event of a bug in the implementation.
   while evmCallCount < EVM_CALL_LIMIT:
-    debug "Starting PortalEvm execution", evmCallCount
+    debug "Starting AsyncEvm execution", evmCallCount
 
     let sp = vmState.ledger.beginSavepoint()
     callResult = rpcCallEvm(tx, header, vmState)
@@ -187,9 +199,8 @@ proc call*(
           let slotIdx = (adr, v.storageSlot)
           if slotIdx notin fetchedStorage:
             debug "Fetching storage slot", address = adr, slotKey = v.storageSlot
-            let storageFut = evm.stateNetwork.getStorageAtByStateRoot(
-              header.stateRoot, adr, v.storageSlot
-            )
+            let storageFut =
+              evm.backend.getStorage(header.stateRoot, adr, v.storageSlot)
             if not stateFetchDone:
               storageQueries.add(StorageQuery.init(adr, v.storageSlot, storageFut))
               if not optimisticStateFetch:
@@ -199,7 +210,7 @@ proc call*(
 
           if adr notin fetchedAccounts:
             debug "Fetching account", address = adr
-            let accFut = evm.stateNetwork.getAccount(header.stateRoot, adr)
+            let accFut = evm.backend.getAccount(header.stateRoot, adr)
             if not stateFetchDone:
               accountQueries.add(AccountQuery.init(adr, accFut))
               if not optimisticStateFetch:
@@ -207,7 +218,7 @@ proc call*(
 
           if v.codeTouched and adr notin fetchedCode:
             debug "Fetching code", address = adr
-            let codeFut = evm.stateNetwork.getCodeByStateRoot(header.stateRoot, adr)
+            let codeFut = evm.backend.getCode(header.stateRoot, adr)
             if not stateFetchDone:
               codeQueries.add(CodeQuery.init(adr, codeFut))
               if not optimisticStateFetch:
@@ -244,7 +255,7 @@ proc call*(
       for q in codeQueries:
         let code = (await q.codeFut).valueOr:
           return err("Unable to get code")
-        vmState.ledger.setCode(q.address, code.asSeq())
+        vmState.ledger.setCode(q.address, code)
         fetchedCode.incl(q.address)
     except CatchableError as e:
       # TODO: why do the above futures throw a CatchableError and not CancelledError?

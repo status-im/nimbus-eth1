@@ -193,11 +193,6 @@ proc persistBlocks*(
       p.dispose()
       return err(error)
 
-  # update currentBlock *after* we persist it
-  # so the rpc return consistent result
-  # between eth_blockNumber and eth_syncing
-  com.syncCurrent = p.parent.number
-
   let res = p.checkpoint()
   p.dispose()
   res and ok(p.stats)

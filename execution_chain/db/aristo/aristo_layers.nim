@@ -26,8 +26,8 @@ func layersGetVtx*(db: AristoTxRef; rvid: RootedVertexID): Opt[(VertexRef, int)]
   ## `nil` vertex if it is stored on the cache  that way.
   ##
   for w in db.rstack(stopAtSnapshot = true):
-    if w.snapshotLevel.isSome():
-      w.snapshot.withValue(rvid, item):
+    if w.snapshot.level.isSome():
+      w.snapshot.vtx.withValue(rvid, item):
         return Opt.some((item[][0], item[][2]))
       break
 
@@ -42,8 +42,8 @@ func layersGetKey*(db: AristoTxRef; rvid: RootedVertexID): Opt[(HashKey, int)] =
   ##
 
   for w in db.rstack(stopAtSnapshot = true):
-    if w.snapshotLevel.isSome():
-      w.snapshot.withValue(rvid, item):
+    if w.snapshot.level.isSome():
+      w.snapshot.vtx.withValue(rvid, item):
         return Opt.some((item[][1], item[][2]))
       break
 
@@ -60,14 +60,24 @@ func layersGetKeyOrVoid*(db: AristoTxRef; rvid: RootedVertexID): HashKey =
   (db.layersGetKey(rvid).valueOr (VOID_HASH_KEY, 0))[0]
 
 func layersGetAccLeaf*(db: AristoTxRef; accPath: Hash32): Opt[VertexRef] =
-  for w in db.rstack:
+  for w in db.rstack(stopAtSnapshot = true):
+    if w.snapshot.level.isSome():
+      w.snapshot.acc.withValue(accPath, item):
+        return Opt.some(item[][0])
+      break
+
     w.accLeaves.withValue(accPath, item):
       return Opt.some(item[])
 
   Opt.none(VertexRef)
 
 func layersGetStoLeaf*(db: AristoTxRef; mixPath: Hash32): Opt[VertexRef] =
-  for w in db.rstack:
+  for w in db.rstack(stopAtSnapshot = true):
+    if w.snapshot.level.isSome():
+      w.snapshot.sto.withValue(mixPath, item):
+        return Opt.some(item[][0])
+      break
+
     w.stoLeaves.withValue(mixPath, item):
       return Opt.some(item[])
 
@@ -86,8 +96,8 @@ func layersPutVtx*(
   db.sTab[rvid] = vtx
   db.kMap.del(rvid)
 
-  if db.snapshotLevel.isSome():
-    db.snapshot[rvid] = (vtx, VOID_HASH_KEY, db.level)
+  if db.snapshot.level.isSome():
+    db.snapshot.vtx[rvid] = (vtx, VOID_HASH_KEY, db.level)
 
 func layersResVtx*(
     db: AristoTxRef;
@@ -107,8 +117,8 @@ func layersPutKey*(
   db.sTab[rvid] = vtx
   db.kMap[rvid] = key
 
-  if db.snapshotLevel.isSome():
-    db.snapshot[rvid] = (vtx, key, db.level)
+  if db.snapshot.level.isSome():
+    db.snapshot.vtx[rvid] = (vtx, key, db.level)
 
 func layersResKey*(db: AristoTxRef; rvid: RootedVertexID, vtx: VertexRef) =
   ## Shortcut for `db.layersPutKey(vid, VOID_HASH_KEY)`. It is sort of the
@@ -123,8 +133,14 @@ func layersResKeys*(db: AristoTxRef; hike: Hike) =
 func layersPutAccLeaf*(db: AristoTxRef; accPath: Hash32; leafVtx: VertexRef) =
   db.accLeaves[accPath] = leafVtx
 
+  if db.snapshot.level.isSome():
+    db.snapshot.acc[accPath] = (leafVtx, db.level)
+
 func layersPutStoLeaf*(db: AristoTxRef; mixPath: Hash32; leafVtx: VertexRef) =
   db.stoLeaves[mixPath] = leafVtx
+
+  if db.snapshot.level.isSome():
+    db.snapshot.sto[mixPath] = (leafVtx, db.level)
 
 # ------------------------------------------------------------------------------
 # Public functions
@@ -133,18 +149,25 @@ func layersPutStoLeaf*(db: AristoTxRef; mixPath: Hash32; leafVtx: VertexRef) =
 func isEmpty*(ly: AristoTxRef): bool =
   ## Returns `true` if the layer does not contain any changes, i.e. all the
   ## tables are empty.
-  ly.snapshot.len == 0 and
+  ly.snapshot.vtx.len == 0 and
+  ly.snapshot.acc.len == 0 and
+  ly.snapshot.sto.len == 0 and
   ly.sTab.len == 0 and
   ly.kMap.len == 0 and
   ly.accLeaves.len == 0 and
   ly.stoLeaves.len == 0
 
-proc copyFrom*(snapshot: var Table[RootedVertexID, Snapshot], tx: AristoTxRef) =
+proc copyFrom*(snapshot: var Snapshot, tx: AristoTxRef) =
   for rvid, vtx in tx.sTab:
     tx.kMap.withValue(rvid, key):
-      snapshot[rvid] = (vtx, key[], tx.level)
+      snapshot.vtx[rvid] = (vtx, key[], tx.level)
     do:
-      snapshot[rvid] = (vtx, VOID_HASH_KEY, tx.level)
+      snapshot.vtx[rvid] = (vtx, VOID_HASH_KEY, tx.level)
+
+  for k, v in tx.accLeaves:
+    snapshot.acc[k] = (v, tx.level)
+  for k, v in tx.stoLeaves:
+    snapshot.sto[k] = (v, tx.level)
 
 proc mergeAndReset*(trg, src: AristoTxRef) =
   ## Merges the argument `src` into the argument `trg` and clears `src`.
@@ -153,10 +176,10 @@ proc mergeAndReset*(trg, src: AristoTxRef) =
   trg.level = src.level
   trg.parent = move(src.parent)
 
-  doAssert not src.snapshotLevel.isSome(),
+  doAssert not src.snapshot.level.isSome(),
     "If the source is a snapshot, it should have been used as a starting point for merge"
 
-  if trg.snapshotLevel.isSome():
+  if trg.snapshot.level.isSome():
     # If there already was a snapshot, we might as well add to it
     trg.snapshot.copyFrom(src)
     src.sTab.reset()

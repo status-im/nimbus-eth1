@@ -31,7 +31,6 @@ type
       # Frame that skips all in-memory state that ForkedChain holds - used to
       # lookup items straight from the database
 
-    extraValidation*: bool
     baseDistance*: uint64
 
     lastSnapshots*: array[10, CoreDbTxRef]

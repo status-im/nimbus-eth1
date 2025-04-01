@@ -649,6 +649,7 @@ proc getNetworkId(conf: NimbusConf): Option[NetworkId] =
   of "mainnet": return some MainNet
   of "sepolia": return some SepoliaNet
   of "holesky": return some HoleskyNet
+  of "hoodi": return some HoodiNet
   else:
     try:
       some parseHexOrDec256(network)

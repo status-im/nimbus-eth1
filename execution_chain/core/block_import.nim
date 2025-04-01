@@ -1,5 +1,5 @@
 # Nimbus
-# Copyright (c) 2021-2024 Status Research & Development GmbH
+# Copyright (c) 2021-2025 Status Research & Development GmbH
 # Licensed under either of
 #  * Apache License, version 2.0, ([LICENSE-APACHE](LICENSE-APACHE))
 #  * MIT license ([LICENSE-MIT](LICENSE-MIT))
@@ -85,6 +85,9 @@ proc importRlpBlocks*(conf: NimbusConf, com: CommonRef) =
   for i, blocksFile in conf.blocksFile:
     importRlpBlocks(string blocksFile, chain, i == conf.blocksFile.len-1).isOkOr:
       warn "Error when importing blocks", msg=error
+      # Finalize the existing chain in case of rlp read error
+      chain.forkChoice(chain.latestHash, chain.latestHash).isOkOr:
+        error "Error when finalizing chain", msg=error
       quit(QuitFailure)
 
   quit(QuitSuccess)

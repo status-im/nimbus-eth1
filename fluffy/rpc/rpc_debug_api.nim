@@ -1,5 +1,5 @@
 # Fluffy
-# Copyright (c) 2021-2024 Status Research & Development GmbH
+# Copyright (c) 2021-2025 Status Research & Development GmbH
 # Licensed and distributed under either of
 #   * MIT license (license terms in the root directory or at https://opensource.org/licenses/MIT).
 #   * Apache v2 license (license terms in the root directory or at https://www.apache.org/licenses/LICENSE-2.0).
@@ -79,10 +79,10 @@ proc installDebugApiHandlers*(rpcServer: RpcServer, stateNetwork: Opt[StateNetwo
 
     let
       sn = stateNetwork.getOrRaise()
-      bytecode = (await sn.getCodeByStateRoot(stateRoot, address)).valueOr:
+      code = (await sn.getCodeByStateRoot(stateRoot, address)).valueOr:
         raise newException(ValueError, "Unable to get code")
 
-    return bytecode.asSeq()
+    return code
 
   rpcServer.rpc("debug_getProofByStateRoot") do(
     address: Address, slots: seq[UInt256], stateRoot: Hash32

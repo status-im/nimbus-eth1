@@ -49,8 +49,7 @@ proc processBlock(c: ForkedChainRef,
   let vmState = BaseVMState()
   vmState.init(parent, header, c.com, txFrame)
 
-  if c.extraValidation:
-    ?c.com.validateHeaderAndKinship(blk, vmState.parent, txFrame)
+  ?c.com.validateHeaderAndKinship(blk, vmState.parent, txFrame)
 
   ?vmState.processBlock(
     blk,
@@ -62,11 +61,6 @@ proc processBlock(c: ForkedChainRef,
   # We still need to write header to database
   # because validateUncles still need it
   ?txFrame.persistHeader(blkHash, header, c.com.startOfHistory)
-
-  # update currentBlock *after* we persist it
-  # so the rpc return consistent result
-  # between eth_blockNumber and eth_syncing
-  c.com.syncCurrent = header.number
 
   ok(move(vmState.receipts))
 
@@ -293,8 +287,6 @@ proc updateHead(c: ForkedChainRef, head: BlockPos) =
   ## Update head if the new head is different from current head.
   ## All branches with block number greater than head will be removed too.
 
-  # Update global syncHighest
-  c.com.syncHighest = head.branch.headNumber
   c.activeBranch = head.branch
 
   # Pruning if necessary
@@ -330,7 +322,7 @@ proc updateHead(c: ForkedChainRef, head: BlockPos) =
     c.removeBlockFromCache(head.branch.blocks[i])
 
   head.branch.blocks.setLen(head.index+1)
-  c.baseTxFrame.setHead(head.branch.headHeader,
+  head.txFrame.setHead(head.branch.headHeader,
     head.branch.headHash).expect("OK")
 
 proc updateFinalized(c: ForkedChainRef, finalized: BlockPos) =
@@ -368,6 +360,9 @@ proc updateFinalized(c: ForkedChainRef, finalized: BlockPos) =
       continue
 
     inc i
+
+  let txFrame = finalized.txFrame
+  txFrame.finalizedHeaderHash(finalized.hash)
 
 proc updateBase(c: ForkedChainRef, newBase: BlockPos) =
   ##
@@ -472,7 +467,6 @@ proc init*(
     T: type ForkedChainRef;
     com: CommonRef;
     baseDistance = BaseDistance.uint64;
-    extraValidation = true;
       ): T =
   ## Constructor that uses the current database ledger state for initialising.
   ## This state coincides with the canonical head that would be used for
@@ -493,16 +487,12 @@ proc init*(
     baseHeader = baseTxFrame.getBlockHeader(baseHash).expect("base header exists")
     baseBranch = branch(baseHeader, baseHash, baseTxFrame)
 
-  # update global syncStart
-  com.syncStart = baseHeader.number
-
   T(com:             com,
     baseBranch:      baseBranch,
     activeBranch:    baseBranch,
     branches:        @[baseBranch],
     hashToBlock:     {baseHash: baseBranch.lastBlockPos}.toTable,
     baseTxFrame:     baseTxFrame,
-    extraValidation: extraValidation,
     baseDistance:    baseDistance)
 
 proc importBlock*(c: ForkedChainRef, blk: Block): Result[void, string] =
@@ -574,11 +564,6 @@ proc forkChoice*(c: ForkedChainRef,
 func haveBlockAndState*(c: ForkedChainRef, blockHash: Hash32): bool =
   ## Blocks still in memory with it's txFrame
   c.hashToBlock.hasKey(blockHash)
-
-proc haveBlockLocally*(c: ForkedChainRef, blockHash: Hash32): bool =
-  if c.hashToBlock.hasKey(blockHash):
-    return true
-  c.baseTxFrame.headerExists(blockHash)
 
 func txFrame*(c: ForkedChainRef, blockHash: Hash32): CoreDbTxRef =
   if blockHash == c.baseBranch.tailHash:
@@ -681,12 +666,12 @@ proc txDetailsByTxHash*(c: ForkedChainRef, txHash: Hash32): Result[(Hash32, uint
     let (blockHash, txid) = c.txRecords(txHash)
     return ok((blockHash, txid))
 
-  let 
+  let
     txDetails = ?c.baseTxFrame.getTransactionKey(txHash)
     header = ?c.headerByNumber(txDetails.blockNumber)
     blockHash = header.blockHash
   return ok((blockHash, txDetails.index))
-  
+
 proc blockByHash*(c: ForkedChainRef, blockHash: Hash32): Result[Block, string] =
   # used by getPayloadBodiesByHash
   # https://github.com/ethereum/execution-apis/blob/v1.0.0-beta.4/src/engine/shanghai.md#specification-3
