@@ -63,17 +63,6 @@ iterator rightPairs*(
           yield (Hash32(hike.to(NibblesBuf).getBytes()), hike.legs[^1].wp.vtx)
           hike.legs.setLen(hike.legs.len - 1)
 
-iterator rightPairsAccount*(
-    db: AristoTxRef;                    # Database layer
-      ): (Hash32,LeafPayload) =
-  ## Variant of `rightPairs()` traversing accounts (without entering their storage tries)
-  block body:
-    let stoID = db.fetchStorageID(accPath).valueOr:
-      break body
-    if stoID.isValid:
-      for (path, vtx) in db.rightPairs(VertexID(0)):
-        yield (path, vtx.lData)
-
 iterator rightPairsStorage*(
     db: AristoTxRef;                    # Database layer
     accPath: Hash32;                    # Account the storage data belong to
