@@ -13,194 +13,217 @@ import
   chronicles,
   json_rpc/[rpcserver, rpcclient, rpcproxy],
   eth/common/accounts,
-  web3/eth_api,
+  eth/common/addresses,
+  web3/[primitives, eth_api_types, eth_api],
+  ../../execution_chain/beacon/web3_eth_conv,
+  ../../execution_chain/common/common,
+  ../../execution_chain/db/ledger,
+  ../../execution_chain/transaction/call_evm,
+  ../../execution_chain/[evm/types, evm/state],
   ../validate_proof,
-  ../block_cache
+  ../header_store,
+  ../types,
+  ./blocks,
+  ./accounts,
+  ./transactions,
+  ./receipts
 
 logScope:
   topics = "verified_proxy"
 
-type
-  VerifiedRpcProxy* = ref object
-    proxy: RpcProxy
-    blockCache: BlockCache
-    chainId: UInt256
+template rpcClient*(vp: VerifiedRpcProxy): RpcClient =
+  vp.proxy.getClient()
 
-  QuantityTagKind = enum
-    LatestBlock
-    BlockNumber
+proc installEthApiHandlers*(vp: VerifiedRpcProxy) =
+  vp.proxy.rpc("eth_chainId") do() -> UInt256:
+    vp.chainId
 
-  BlockTag = eth_api_types.RtBlockIdentifier
+  vp.proxy.rpc("eth_getBlockByNumber") do(
+    blockTag: BlockTag, fullTransactions: bool
+  ) -> BlockObject:
+    await vp.getBlockByTag(blockTag, fullTransactions)
 
-  QuantityTag = object
-    case kind: QuantityTagKind
-    of LatestBlock:
-      discard
-    of BlockNumber:
-      blockNumber: Quantity
+  vp.proxy.rpc("eth_getBlockByHash") do(
+    blockHash: Hash32, fullTransactions: bool
+  ) -> BlockObject:
+    await vp.getBlockByHash(blockHash, fullTransactions)
 
-func parseQuantityTag(blockTag: BlockTag): Result[QuantityTag, string] =
-  if blockTag.kind == bidAlias:
-    let tag = blockTag.alias.toLowerAscii
-    case tag
-    of "latest":
-      return ok(QuantityTag(kind: LatestBlock))
-    else:
-      return err("Unsupported blockTag: " & tag)
-  else:
-    let quantity = blockTag.number
-    return ok(QuantityTag(kind: BlockNumber, blockNumber: quantity))
+  vp.proxy.rpc("eth_getUncleCountByBlockNumber") do(
+    blockTag: BlockTag
+  ) -> Quantity:
+    let blk = await vp.getBlockByTag(blockTag, false)
+    return Quantity(blk.uncles.len())
 
-template checkPreconditions(proxy: VerifiedRpcProxy) =
-  if proxy.blockCache.isEmpty():
-    raise newException(ValueError, "Syncing")
+  vp.proxy.rpc("eth_getUncleCountByBlockHash") do(
+    blockHash: Hash32
+  ) -> Quantity:
+    let blk = await vp.getBlockByHash(blockHash, false)
+    return Quantity(blk.uncles.len())
 
-template rpcClient(lcProxy: VerifiedRpcProxy): RpcClient =
-  lcProxy.proxy.getClient()
+  vp.proxy.rpc("eth_getBlockTransactionCountByNumber") do(
+    blockTag: BlockTag
+  ) -> Quantity:
+    let blk = await vp.getBlockByTag(blockTag, true)
+    return Quantity(blk.transactions.len)
 
-proc getBlockByTag(
-    proxy: VerifiedRpcProxy, quantityTag: BlockTag
-): results.Opt[BlockObject] {.raises: [ValueError].} =
-  checkPreconditions(proxy)
+  vp.proxy.rpc("eth_getBlockTransactionCountByHash") do(
+    blockHash: Hash32
+  ) -> Quantity:
+    let blk = await vp.getBlockByHash(blockHash, true)
+    return Quantity(blk.transactions.len)
 
-  let tag = parseQuantityTag(quantityTag).valueOr:
-    raise newException(ValueError, error)
+  vp.proxy.rpc("eth_getTransactionByBlockNumberAndIndex") do(
+    blockTag: BlockTag, index: Quantity
+  ) -> TransactionObject:
+    let blk = await vp.getBlockByTag(blockTag, true)
+    if distinctBase(index) >= uint64(blk.transactions.len):
+      raise newException(ValueError, "provided transaction index is outside bounds")
+    let x = blk.transactions[distinctBase(index)]
+    doAssert x.kind == tohTx
+    return x.tx
 
-  case tag.kind
-  of LatestBlock:
-    # this will always return some block, as we always checkPreconditions
-    proxy.blockCache.latest
-  of BlockNumber:
-    proxy.blockCache.getByNumber(tag.blockNumber)
+  vp.proxy.rpc("eth_getTransactionByBlockHashAndIndex") do(
+    blockHash: Hash32, index: Quantity
+  ) -> TransactionObject:
+    let blk = await vp.getBlockByHash(blockHash, true)
+    if distinctBase(index) >= uint64(blk.transactions.len):
+      raise newException(ValueError, "provided transaction index is outside bounds")
+    let x = blk.transactions[distinctBase(index)]
+    doAssert x.kind == tohTx
+    return x.tx
 
-proc getBlockByTagOrThrow(
-    proxy: VerifiedRpcProxy, quantityTag: BlockTag
-): BlockObject {.raises: [ValueError].} =
-  getBlockByTag(proxy, quantityTag).valueOr:
-    raise newException(ValueError, "No block stored for given tag " & $quantityTag)
+  vp.proxy.rpc("eth_getTransactionByHash") do(
+    txHash: Hash32
+  ) -> TransactionObject:
+    let tx = await vp.rpcClient.eth_getTransactionByHash(txHash)
+    if tx.hash != txHash:
+      raise newException(ValueError, "the downloaded transaction hash doesn't match the requested transaction hash")
 
-proc installEthApiHandlers*(lcProxy: VerifiedRpcProxy) =
-  lcProxy.proxy.rpc("eth_chainId") do() -> UInt256:
-    lcProxy.chainId
+    if not checkTxHash(tx, txHash):
+      raise newException(ValueError, "the transaction doesn't hash to the provided hash")
 
-  lcProxy.proxy.rpc("eth_blockNumber") do() -> uint64:
-    ## Returns the number of the most recent block.
-    let latest = lcProxy.blockCache.latest.valueOr:
+    return tx
+
+  # TODO: this method should also support block hashes. For that, the client call should also suupport block hashes
+  vp.proxy.rpc("eth_getBlockReceipts") do(
+    blockTag: BlockTag
+  ) -> Opt[seq[ReceiptObject]]:
+    let rxs = await vp.getReceiptsByBlockTag(blockTag)
+    return Opt.some(rxs)
+
+  vp.proxy.rpc("eth_getTransactionReceipt") do(
+    txHash: Hash32
+  ) -> ReceiptObject:
+    let 
+      rx = await vp.rpcClient.eth_getTransactionReceipt(txHash)
+      rxs = await vp.getReceiptsByBlockHash(rx.blockHash)
+
+    for r in rxs:
+      if r.transactionHash == txHash:
+        return r
+
+    raise newException(ValueError, "receipt couldn't be verified")
+
+  # eth_blockNumber - get latest tag from header store
+  vp.proxy.rpc("eth_blockNumber") do() -> Quantity:
+    # Returns the number of the most recent block seen by the light client.
+    let hLatest = vp.headerStore.latest()
+    if hLatest.isNone:
       raise newException(ValueError, "Syncing")
 
-    latest.number.uint64
+    return Quantity(hLatest.get().number)
 
-  lcProxy.proxy.rpc("eth_getBalance") do(
-    address: Address, quantityTag: BlockTag
+  vp.proxy.rpc("eth_getBalance") do(
+    address: addresses.Address, blockTag: BlockTag
   ) -> UInt256:
-    # When requesting state for `latest` block number, we need to translate
-    # `latest` to actual block number as `latest` on proxy and on data provider
-    # can mean different blocks and ultimatly piece received piece of state
-    # must by validated against correct state root
     let
-      blk = lcProxy.getBlockByTagOrThrow(quantityTag)
-      blockNumber = blk.number.uint64
-
-    info "Forwarding eth_getBalance call", blockNumber
-
-    let
-      proof = await lcProxy.rpcClient.eth_getProof(address, @[], blockId(blockNumber))
-      account = getAccountFromProof(
-        blk.stateRoot, proof.address, proof.balance, proof.nonce, proof.codeHash,
-        proof.storageHash, proof.accountProof,
-      ).valueOr:
-        raise newException(ValueError, error)
+      header = await vp.getHeaderByTag(blockTag)
+      account = await vp.getAccount(address, header.number, header.stateRoot)
 
     account.balance
 
-  lcProxy.proxy.rpc("eth_getStorageAt") do(
-    address: Address, slot: UInt256, quantityTag: BlockTag
-  ) -> UInt256:
+  vp.proxy.rpc("eth_getStorageAt") do(
+    address: addresses.Address, slot: UInt256, blockTag: BlockTag
+  ) -> FixedBytes[32]:
+    let 
+      header = await vp.getHeaderByTag(blockTag)
+      storage = await vp.getStorageAt(address, slot, header.number, header.stateRoot)
+
+    FixedBytes[32](storage.toBytesBE)
+
+  vp.proxy.rpc("eth_getTransactionCount") do(
+    address: addresses.Address, blockTag: BlockTag
+  ) -> Quantity:
     let
-      blk = lcProxy.getBlockByTagOrThrow(quantityTag)
-      blockNumber = blk.number.uint64
+      header = await vp.getHeaderByTag(blockTag)
+      account = await vp.getAccount(address, header.number, header.stateRoot)
 
-    info "Forwarding eth_getStorageAt", blockNumber
+    Quantity(account.nonce)
 
-    let proof =
-      await lcProxy.rpcClient.eth_getProof(address, @[slot], blockId(blockNumber))
-
-    getStorageData(blk.stateRoot, slot, proof).valueOr:
-      raise newException(ValueError, error)
-
-  lcProxy.proxy.rpc("eth_getTransactionCount") do(
-    address: Address, quantityTag: BlockTag
-  ) -> uint64:
-    let
-      blk = lcProxy.getBlockByTagOrThrow(quantityTag)
-      blockNumber = blk.number.uint64
-
-    info "Forwarding eth_getTransactionCount", blockNumber
-
-    let
-      proof = await lcProxy.rpcClient.eth_getProof(address, @[], blockId(blockNumber))
-
-      account = getAccountFromProof(
-        blk.stateRoot, proof.address, proof.balance, proof.nonce, proof.codeHash,
-        proof.storageHash, proof.accountProof,
-      ).valueOr:
-        raise newException(ValueError, error)
-
-    account.nonce
-
-  lcProxy.proxy.rpc("eth_getCode") do(
-    address: Address, quantityTag: BlockTag
+  vp.proxy.rpc("eth_getCode") do(
+    address: addresses.Address, blockTag: BlockTag
   ) -> seq[byte]:
     let
-      blk = lcProxy.getBlockByTagOrThrow(quantityTag)
-      blockNumber = blk.number.uint64
+      header = await vp.getHeaderByTag(blockTag)
 
-    info "Forwarding eth_getCode", blockNumber
-    let
-      proof = await lcProxy.rpcClient.eth_getProof(address, @[], blockId(blockNumber))
-      account = getAccountFromProof(
-        blk.stateRoot, proof.address, proof.balance, proof.nonce, proof.codeHash,
-        proof.storageHash, proof.accountProof,
-      ).valueOr:
-        raise newException(ValueError, error)
+    await vp.getCode(address,header.number, header.stateRoot)
 
-    if account.codeHash == EMPTY_CODE_HASH:
-      # account does not have any code, return empty hex data
-      return @[]
+  vp.proxy.rpc("eth_call") do(
+    args: TransactionArgs, blockTag: BlockTag
+  ) -> seq[byte]:
 
-    let code = await lcProxy.rpcClient.eth_getCode(address, blockId(blockNumber))
+    # eth_call
+    # 1. get the code with proof
+    let 
+      to = if args.to.isSome(): args.to.get()
+           else: raise newException(ValueError, "contract address missing in transaction args")
+      header = await vp.getHeaderByTag(blockTag)
+      code = await vp.getCode(to, header.number, header.stateRoot)
 
-    if isValidCode(account, code):
-      return code
-    else:
-      raise newException(
-        ValueError, "Received code which does not match the account code hash"
-      )
+    # 2. get all storage locations that are accessed
+    let 
+      parent = await vp.getHeaderByHash(header.parentHash)
+      accessListResult = await vp.rpcClient.eth_createAccessList(args, blockId(header.number)) 
+      accessList = if not accessListResult.error.isSome(): accessListResult.accessList
+                   else: raise newException(ValueError, "couldn't get an access list for eth call")
+
+    # 3. pull the storage values that are access along with their accounts and initialize db
+    let 
+      com = CommonRef.new(newCoreDbRef DefaultDbMemory, nil)
+      fork = com.toEVMFork(header)
+      vmState = BaseVMState()
+
+    vmState.init(parent, header, com, com.db.baseTxFrame())
+    vmState.mutateLedger:
+      for accessPair in accessList:
+        let 
+          accountAddr = accessPair.address
+          acc = await vp.getAccount(accountAddr, header.number, header.stateRoot)
+          accCode = await vp.getCode(accountAddr, header.number, header.stateRoot)
+
+        db.setNonce(accountAddr, acc.nonce)
+        db.setBalance(accountAddr, acc.balance)
+        db.setCode(accountAddr, accCode)
+
+        for slot in accessPair.storageKeys:
+          let 
+            slotInt = UInt256.fromHex(toHex(slot))
+            slotValue = await vp.getStorageAt(accountAddr, slotInt, header.number, header.stateRoot) 
+          db.setStorage(accountAddr, slotInt, slotValue)
+      db.persist(clearEmptyAccount = false) # settle accounts storage
+
+    # 4. run the evm with the initialized storage
+    let evmResult = rpcCallEvm(args, header, vmState).valueOr:
+      raise newException(ValueError, "rpcCallEvm error: " & $error.code)
+
+    evmResult.output
 
   # TODO:
   # Following methods are forwarded directly to the web3 provider and therefore
   # are not validated in any way.
-  lcProxy.proxy.registerProxyMethod("net_version")
-  lcProxy.proxy.registerProxyMethod("eth_call")
-  lcProxy.proxy.registerProxyMethod("eth_sendRawTransaction")
-  lcProxy.proxy.registerProxyMethod("eth_getTransactionReceipt")
-
-  # TODO currently we do not handle fullTransactions flag. It require updates on
-  # nim-web3 side
-  lcProxy.proxy.rpc("eth_getBlockByNumber") do(
-    quantityTag: BlockTag, fullTransactions: bool
-  ) -> Opt[BlockObject]:
-    lcProxy.getBlockByTag(quantityTag)
-
-  lcProxy.proxy.rpc("eth_getBlockByHash") do(
-    blockHash: Hash32, fullTransactions: bool
-  ) -> Opt[BlockObject]:
-    lcProxy.blockCache.getPayloadByHash(blockHash)
-
-proc new*(
-    T: type VerifiedRpcProxy, proxy: RpcProxy, blockCache: BlockCache, chainId: UInt256
-): T =
-  VerifiedRpcProxy(proxy: proxy, blockCache: blockCache, chainId: chainId)
+  vp.proxy.registerProxyMethod("net_version")
+  vp.proxy.registerProxyMethod("eth_sendRawTransaction")
+  vp.proxy.registerProxyMethod("eth_getTransactionReceipt")
 
 # Used to be in eth1_monitor.nim; not sure why it was deleted,
 # so I copied it here. --Adam
@@ -238,13 +261,13 @@ template awaitWithRetries*[T](
 
   read(f)
 
-proc verifyChaindId*(p: VerifiedRpcProxy): Future[void] {.async.} =
-  let localId = p.chainId
+proc verifyChaindId*(vp: VerifiedRpcProxy): Future[void] {.async.} =
+  let localId = vp.chainId
 
   # retry 2 times, if the data provider fails despite the re-tries, propagate
   # exception to the caller.
   let providerId =
-    awaitWithRetries(p.rpcClient.eth_chainId(), retries = 2, timeout = seconds(30))
+    awaitWithRetries(vp.rpcClient.eth_chainId(), retries = 2, timeout = seconds(30))
 
   # This is a chain/network mismatch error between the Nimbus verified proxy and
   # the application using it. Fail fast to avoid misusage. The user must fix
