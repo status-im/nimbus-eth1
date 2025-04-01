@@ -31,8 +31,8 @@ iterator rightPairs*(
     db: AristoTxRef;                    # Database layer
     root: VertexID;
       ): (Hash32,VertexRef) =
-  ## Traverse the sub-trie implied by the argument `start` with increasing
-  ## order.
+  ## Depth-first iteration over leaves in trie in numerical nibble order, moving
+  ## right (with the lowest nibbles on the left)
   var
     next = root
     hike = Hike(root: root)
@@ -62,6 +62,17 @@ iterator rightPairs*(
         of Leaf:
           yield (Hash32(hike.to(NibblesBuf).getBytes()), hike.legs[^1].wp.vtx)
           hike.legs.setLen(hike.legs.len - 1)
+
+iterator rightPairsAccount*(
+    db: AristoTxRef;                    # Database layer
+      ): (Hash32,LeafPayload) =
+  ## Variant of `rightPairs()` traversing accounts (without entering their storage tries)
+  block body:
+    let stoID = db.fetchStorageID(accPath).valueOr:
+      break body
+    if stoID.isValid:
+      for (path, vtx) in db.rightPairs(VertexID(0)):
+        yield (path, vtx.lData)
 
 iterator rightPairsStorage*(
     db: AristoTxRef;                    # Database layer
