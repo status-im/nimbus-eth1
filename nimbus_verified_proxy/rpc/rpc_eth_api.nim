@@ -40,25 +40,13 @@ proc installEthApiHandlers*(vp: VerifiedRpcProxy) =
 
   vp.proxy.rpc("eth_getBlockByNumber") do(
     blockTag: BlockTag, fullTransactions: bool
-  ) -> Opt[BlockObject]:
-    try:
-      let blk = await vp.getBlockByTag(blockTag, fullTransactions)
-      return Opt.some(blk)
-    except ValueError as e:
-      # should return Opt.none but we also want to transmit error related info
-      # return Opt.none(BlockObject)
-      raise newException(ValueError, e.msg) # raising an exception will return the error message
+  ) -> BlockObject:
+    await vp.getBlockByTag(blockTag, fullTransactions)
 
   vp.proxy.rpc("eth_getBlockByHash") do(
     blockHash: Hash32, fullTransactions: bool
-  ) -> Opt[BlockObject]:
-    try:
-      let blk = await vp.getBlockByHash(blockHash, fullTransactions)
-      return Opt.some(blk)
-    except ValueError as e:
-      # should return Opt.none but we also want to transmit error related info
-      # return Opt.none(BlockObject)
-      raise newException(ValueError, e.msg) # raising an exception will return the error message
+  ) -> BlockObject:
+    await vp.getBlockByHash(blockHash, fullTransactions)
 
   vp.proxy.rpc("eth_getUncleCountByBlockNumber") do(
     blockTag: BlockTag
@@ -156,10 +144,12 @@ proc installEthApiHandlers*(vp: VerifiedRpcProxy) =
 
   vp.proxy.rpc("eth_getStorageAt") do(
     address: addresses.Address, slot: UInt256, blockTag: BlockTag
-  ) -> UInt256:
-    let header = await vp.getHeaderByTag(blockTag)
+  ) -> FixedBytes[32]:
+    let 
+      header = await vp.getHeaderByTag(blockTag)
+      storage = await vp.getStorageAt(address, slot, header.number, header.stateRoot)
 
-    await vp.getStorageAt(address, slot, header.number, header.stateRoot)
+    FixedBytes[32](storage.toBytesBE)
 
   vp.proxy.rpc("eth_getTransactionCount") do(
     address: addresses.Address, blockTag: BlockTag
