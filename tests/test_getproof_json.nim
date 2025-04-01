@@ -118,34 +118,31 @@ proc checkProofsForMissingLeafs(
     if account.storage.len() > 0:
       check verifySlotProof(proofResponse2.storageHash.toHash32(), slotProofs[0]).isMissing()
 
-proc getProofJsonMain*() =
-  suite "Get proof json tests":
 
-    let genesisFiles = ["berlin2000.json", "chainid1.json", "chainid7.json", "merge.json", "devnet4.json", "devnet5.json", "holesky.json"]
+suite "Get proof json tests":
 
-    test "Get proofs for existing leafs":
-      for file in genesisFiles:
+  let genesisFiles = ["berlin2000.json", "chainid1.json", "chainid7.json", "merge.json", "devnet4.json", "devnet5.json", "holesky.json"]
 
-        let
-          accounts = getGenesisAlloc("tests" / "customgenesis" / file)
-          coreDb = newCoreDbRef(DefaultDbMemory)
-          ledger = LedgerRef.init(coreDb.baseTxFrame())
-          stateRootHash = setupLedger(accounts, ledger)
-          accountDb = LedgerRef.init(coreDb.baseTxFrame())
+  test "Get proofs for existing leafs":
+    for file in genesisFiles:
 
-        checkProofsForExistingLeafs(accounts, accountDb, stateRootHash)
+      let
+        accounts = getGenesisAlloc("tests" / "customgenesis" / file)
+        coreDb = newCoreDbRef(DefaultDbMemory)
+        ledger = LedgerRef.init(coreDb.baseTxFrame())
+        stateRootHash = setupLedger(accounts, ledger)
+        accountDb = LedgerRef.init(coreDb.baseTxFrame())
 
-    test "Get proofs for missing leafs":
-      for file in genesisFiles:
+      checkProofsForExistingLeafs(accounts, accountDb, stateRootHash)
 
-        let
-          accounts = getGenesisAlloc("tests" / "customgenesis" / file)
-          coreDb = newCoreDbRef(DefaultDbMemory)
-          ledger = LedgerRef.init(coreDb.baseTxFrame())
-          stateRootHash = setupLedger(accounts, ledger)
-          accountDb = LedgerRef.init(coreDb.baseTxFrame())
+  test "Get proofs for missing leafs":
+    for file in genesisFiles:
 
-        checkProofsForMissingLeafs(accounts, accountDb, stateRootHash)
+      let
+        accounts = getGenesisAlloc("tests" / "customgenesis" / file)
+        coreDb = newCoreDbRef(DefaultDbMemory)
+        ledger = LedgerRef.init(coreDb.baseTxFrame())
+        stateRootHash = setupLedger(accounts, ledger)
+        accountDb = LedgerRef.init(coreDb.baseTxFrame())
 
-when isMainModule:
-  getProofJsonMain()
+      checkProofsForMissingLeafs(accounts, accountDb, stateRootHash)
