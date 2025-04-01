@@ -63,15 +63,15 @@ proc put*(
     rdb: RdbInst;
     session: SharedWriteBatchRef,
     key, val: openArray[byte];
-      ): Result[void,(KvtError,string)] =
+    cf: static[KvtCFs]): Result[void,(KvtError,string)] =
   if val.len == 0:
-    session.batch.delete(key, rdb.store[KvtGeneric].handle()).isOkOr:
+    session.batch.delete(key, rdb.store[cf].handle()).isOkOr:
       const errSym = RdbBeDriverDelError
       when extraTraceMessages:
         trace logTxt "del", key, error=errSym, info=error
       return err((errSym,error))
   else:
-    session.batch.put(key, val, rdb.store[KvtGeneric].handle()).isOkOr:
+    session.batch.put(key, val, rdb.store[cf].handle()).isOkOr:
       const errSym = RdbBeDriverPutError
       when extraTraceMessages:
         trace logTxt "put", key, error=errSym, info=error

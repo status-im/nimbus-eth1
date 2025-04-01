@@ -8,7 +8,9 @@
 # those terms.
 
 import
-  ../execution_chain/compile_info
+  ../execution_chain/compile_info,
+  # make sure the compiler increase the persistent counter first
+  ./db/core_db/persistent
 
 import
   std/[os, osproc, strutils, net, options],
@@ -24,7 +26,6 @@ import
   ./nimbus_import,
   ./core/block_import,
   ./core/lazy_kzg,
-  ./db/core_db/persistent,
   ./db/storage_types,
   ./sync/wire_protocol,
   ./common/chain_config_hash

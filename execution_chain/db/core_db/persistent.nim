@@ -20,6 +20,15 @@
 ##     import ./path/to/core_db/persistent
 ##
 {.push raises: [].}
+import
+  std/macrocache,
+  ./base/base_desc
+
+static:
+  # import this file first before importing
+  # other db modules to trigger the compiler linking
+  # with rocksdb library.
+  persistentDBCounter.inc
 
 import
   ../aristo,

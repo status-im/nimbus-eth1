@@ -11,6 +11,7 @@
 {.push raises: [].}
 
 import
+  std/macrocache,
   results,
   "../.."/[aristo, kvt]
 
@@ -73,6 +74,9 @@ type
     else:
       kErr*: KvtError
 
+const
+  persistentDBCounter* = CacheCounter"persistentDBCounter"
+  
 # ------------------------------------------------------------------------------
 # End
 # ------------------------------------------------------------------------------

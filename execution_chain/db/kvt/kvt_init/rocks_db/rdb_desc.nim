@@ -27,6 +27,7 @@ type
   KvtCFs* = enum
     ## Column family symbols/handles and names used on the database
     KvtGeneric = "KvtGen"            ## Generic column family
+    KvtHeaderCache = "KvtHC"
 
   KvtCfStore* = array[KvtCFs, ColFamilyReadWrite]
     ## List of column family handlers

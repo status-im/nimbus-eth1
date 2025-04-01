@@ -11,10 +11,11 @@
 {.push raises: [].}
 
 import
-  std/typetraits,
+  std/[typetraits, macrocache],
   eth/common/[accounts, base, hashes],
   ../../constants,
   ../[kvt, aristo],
+  ../kvt/kvt_init/init_common,
   ./base/[base_desc, base_helpers]
 
 export
@@ -46,6 +47,31 @@ proc baseTxFrame*(db: CoreDbRef): CoreDbTxRef =
   CoreDbTxRef(
     aTx: db.mpt.baseTxFrame(),
     kTx: db.kvt.baseTxFrame())
+
+const
+  rocksDBEnabled = persistentDBCounter.value > 0
+
+when rocksDBEnabled:
+  import
+    chronicles,
+    ../kvt/kvt_init/rocks_db
+
+proc kvtHCTxFrame*(db: CoreDbRef): KvtTxRef =
+  ## Create a special TxFrame for storing Block Header
+  ## with it's own Column Family
+  let be = db.kvt.getBackendFn()
+  case be.beKind
+  of BackendMemory:
+    db.kvt.baseTxFrame()
+  of BackendRocksDB:
+    when rocksDBEnabled:
+      let
+        baseDb = RdbBackendRef(be).getBaseDb()
+        rdb = rocksDbKvtBackend(baseDb, KvtHeaderCache)
+      rdb.txRef = KvtTxRef(db: rdb)
+      rdb.txRef
+    else:
+      db.kvt.baseTxFrame()
 
 # ------------------------------------------------------------------------------
 # Public base descriptor methods
@@ -96,14 +122,14 @@ proc persist*(
     db.mpt.persist(mptBatch[], txFrame.aTx)
 
     db.kvt.putEndFn(kvtBatch[]).isOkOr:
-      raiseAssert "" & ": " & $error
+      raiseAssert $error
 
     db.mpt.putEndFn(mptBatch[]).isOkOr:
-      raiseAssert "" & ": " & $error
+      raiseAssert $error
 
   else:
-    discard kvtBatch.expect("" & ": should always be able to create batch")
-    discard mptBatch.expect("" & ": should always be able to create batch")
+    discard kvtBatch.expect("should always be able to create batch")
+    discard mptBatch.expect("should always be able to create batch")
 
 proc stateBlockNumber*(db: CoreDbTxRef): BlockNumber =
   ## This function returns the block number stored with the latest `persist()`

@@ -11,7 +11,7 @@
 {.push raises: [].}
 
 import
-  ../kvt_desc
+  ../kvt_desc/desc_error
 
 const
   verifyIxId = true # and false
@@ -28,6 +28,12 @@ type
     when verifyIxId:
       txGen: uint                    ## Transaction ID generator (for debugging)
       txId: uint                     ## Active transaction ID (for debugging)
+
+  PutHdlRef* = ref object of RootRef
+    ## Persistent database transaction frame handle. This handle is used to
+    ## wrap any of `PutVtxFn`, `PutKeyFn`, and `PutIdgFn` into and atomic
+    ## transaction frame. These transaction frames must not be interleaved
+    ## by any library function using the backend.
 
   TypedPutHdlRef* = ref object of PutHdlRef
     error*: KvtError                 ## Track error while collecting transaction

@@ -33,10 +33,10 @@ export
 proc init*(
     T: type KvtDbRef;
     baseDb: RocksDbInstanceRef;
-      ): T =
+    cf: static[KvtCFs] = KvtGeneric): T =
   ## Generic constructor for `RocksDb` backend
   ##
-  let db = rocksDbKvtBackend(baseDb)
+  let db = rocksDbKvtBackend(baseDb, cf)
   db.txRef = KvtTxRef(db: db)
   db
 
