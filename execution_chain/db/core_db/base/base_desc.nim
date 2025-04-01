@@ -11,9 +11,8 @@
 {.push raises: [].}
 
 import
-  std/macrocache,
   results,
-  "../.."/[aristo, kvt]
+  ../../[aristo, kvt]
 
 type
   CoreDbType* = enum
@@ -74,9 +73,6 @@ type
     else:
       kErr*: KvtError
 
-const
-  persistentDBCounter* = CacheCounter"persistentDBCounter"
-  
 # ------------------------------------------------------------------------------
 # End
 # ------------------------------------------------------------------------------

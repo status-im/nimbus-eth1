@@ -11,7 +11,7 @@
 {.push raises: [].}
 
 import
-  std/[typetraits, macrocache],
+  std/typetraits,
   eth/common/[accounts, base, hashes],
   ../../constants,
   ../[kvt, aristo],
@@ -48,30 +48,9 @@ proc baseTxFrame*(db: CoreDbRef): CoreDbTxRef =
     aTx: db.mpt.baseTxFrame(),
     kTx: db.kvt.baseTxFrame())
 
-const
-  rocksDBEnabled = persistentDBCounter.value > 0
-
-when rocksDBEnabled:
-  import
-    chronicles,
-    ../kvt/kvt_init/rocks_db
-
-proc kvtHCTxFrame*(db: CoreDbRef): KvtTxRef =
-  ## Create a special TxFrame for storing Block Header
-  ## with it's own Column Family
-  let be = db.kvt.getBackendFn()
-  case be.beKind
-  of BackendMemory:
-    db.kvt.baseTxFrame()
-  of BackendRocksDB:
-    when rocksDBEnabled:
-      let
-        baseDb = RdbBackendRef(be).getBaseDb()
-        rdb = rocksDbKvtBackend(baseDb, KvtHeaderCache)
-      rdb.txRef = KvtTxRef(db: rdb)
-      rdb.txRef
-    else:
-      db.kvt.baseTxFrame()
+proc kvtBackend*(db: CoreDbRef): TypedBackendRef =
+  ## Get KVT backend
+  db.kvt.getBackendFn()
 
 # ------------------------------------------------------------------------------
 # Public base descriptor methods
