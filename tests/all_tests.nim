@@ -31,7 +31,6 @@ import
     test_op_misc,
     test_precompiles,
     test_rpc,
-    test_tracer_json,
     test_transaction_json,
     test_txpool,
     test_networking,

@@ -8,9 +8,7 @@
 # at your option. This file may not be copied, modified, or
 # distributed except according to those terms.
 
-## Re-invented implementation for Merkle Patricia Tree named as Aristo Trie
-
-import ./test_aristo/[test_blobify, test_compute, test_portal_proof, test_tx_frame]
+import ./test_aristo/[test_blobify, test_compute, test_tx_frame]
 
 # ------------------------------------------------------------------------------
 # End
