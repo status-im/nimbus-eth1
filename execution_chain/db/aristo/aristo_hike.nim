@@ -170,15 +170,6 @@ proc hikeUp*(
   ok()
 
 proc hikeUp*(
-    lty: LeafTie;
-    db: AristoTxRef;
-    leaf: Opt[VertexRef];
-    hike: var Hike
-      ): Result[void,(VertexID,AristoError)] =
-  ## Variant of `hike()`
-  lty.path.to(NibblesBuf).hikeUp(lty.root, db, leaf, hike)
-
-proc hikeUp*(
     path: openArray[byte];
     root: VertexID;
     db: AristoTxRef;

@@ -23,12 +23,6 @@ import
 export stint, tables, accounts, base, hashes
 
 type
-  LeafTiePayload* = object
-    ## Generalised key-value pair for a sub-trie. The main trie is the
-    ## sub-trie with `root=VertexID(1)`.
-    leafTie*: LeafTie                ## Full `Patricia Trie` path root-to-leaf
-    payload*: LeafPayload             ## Leaf data payload (see below)
-
   VertexType* = enum
     ## Type of `Aristo Trie` vertex
     Leaf

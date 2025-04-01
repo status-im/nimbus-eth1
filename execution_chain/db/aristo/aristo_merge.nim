@@ -11,7 +11,7 @@
 ## Aristo DB -- Patricia Trie builder, raw node insertion
 ## ======================================================
 ##
-## This module merges `PathID` values as hexary lookup paths into the
+## This module merges Hash32 values as hexary lookup paths into the
 ## `Patricia Trie`. When changing vertices (aka nodes without Merkle hashes),
 ## associated (but separated) Merkle hashes will be deleted unless locked.
 ## Instead of deleting locked hashes error handling is applied.
