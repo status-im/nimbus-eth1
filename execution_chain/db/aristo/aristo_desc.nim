@@ -177,9 +177,6 @@ func isValid*(vtx: VertexRef): bool =
 func isValid*(nd: NodeRef): bool =
   nd != NodeRef(nil)
 
-func isValid*(pid: PathID): bool =
-  pid != VOID_PATH_ID
-
 func isValid*(tx: AristoTxRef): bool =
   tx != AristoTxRef(nil)
 

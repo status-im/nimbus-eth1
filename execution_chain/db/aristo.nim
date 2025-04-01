@@ -28,9 +28,7 @@ export
 import
   aristo/aristo_nearby
 export
-  leftPairs, # iterators
   rightPairs,
-  rightPairsAccount,
   rightPairsStorage
 
 import

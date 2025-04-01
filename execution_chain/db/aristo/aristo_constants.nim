@@ -27,9 +27,6 @@ const
   VOID_HASH_KEY* = HashKey()
     ## Void equivalent for Merkle hash value
 
-  VOID_PATH_ID* = PathID()
-    ## Void equivalent for Merkle hash value
-
   LEAST_FREE_VID* = 100
     ## Vids smaller are used as known state roots and cannot be recycled. Only
     ## the `VertexID(1)` state root is used by the `Aristo` methods. The other

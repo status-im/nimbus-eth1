@@ -352,7 +352,7 @@ proc persistStorage(acc: AccountRef, ac: LedgerRef) =
       # Write only if it was not cached to avoid writing the same data over and
       # over..
       let
-        key = slotKey.data.slotHashToSlotKey
+        key = slotKey.slotHashToSlotKey
         rc = ac.txFrame.put(key.toOpenArray, blobify(slot).data)
       if rc.isErr:
         warn logTxt "persistStorage()", slot, error=($$rc.error)

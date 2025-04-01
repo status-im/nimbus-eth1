@@ -64,10 +64,9 @@ func dataDirIdKey*(): DbKey {.inline.} =
   result.data[0] = byte ord(dataDirId)
   result.dataEndPos = 1
 
-func slotHashToSlotKey*(h: openArray[byte]): DbKey {.inline.} =
-  doAssert(h.len == 32)
+func slotHashToSlotKey*(h: Hash32): DbKey {.inline.} =
   result.data[0] = byte ord(slotHashToSlot)
-  result.data[1 .. 32] = h
+  result.data[1 .. 32] = h.data()
   result.dataEndPos = uint8 32
 
 func contractHashKey*(h: Hash32): DbKey {.inline.} =
