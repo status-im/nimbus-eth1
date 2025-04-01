@@ -70,7 +70,7 @@ const
 
 proc verifyAccountProof(trustedStateRoot: Hash32, res: ProofResponse): MptProofVerificationResult =
   let
-    key = toSeq(keccak256(res.address.data).data)
+    key = keccak256(res.address.data).data
     value = rlp.encode(Account(
         nonce: res.nonce.uint64,
         balance: res.balance,
@@ -85,7 +85,7 @@ proc verifyAccountProof(trustedStateRoot: Hash32, res: ProofResponse): MptProofV
 
 proc verifySlotProof(trustedStorageRoot: Hash32, slot: StorageProof): MptProofVerificationResult =
   let
-    key = toSeq(keccak256(toBytesBE(slot.key)).data)
+    key = keccak256(toBytesBE(slot.key)).data
     value = rlp.encode(slot.value)
 
   verifyMptProof(
