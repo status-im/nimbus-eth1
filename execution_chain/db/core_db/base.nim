@@ -28,7 +28,7 @@ export
 
 import
   ../aristo/[
-    aristo_delete, aristo_desc, aristo_fetch, aristo_merge, aristo_part,
+    aristo_delete, aristo_desc, aristo_fetch, aristo_merge, aristo_proof,
     aristo_tx_frame],
   ../kvt/[kvt_desc, kvt_utils, kvt_tx_frame]
 
@@ -121,7 +121,7 @@ proc verify*(
     path: Hash32;
       ): CoreDbRc[Opt[seq[byte]]] =
   ## Variant of `verify()`.
-  let rc = partUntwigPath(proof, root, path).valueOr:
+  let rc = verifyProof(proof, root, path).valueOr:
     return err(error.toError("", ProofVerify))
 
   ok(rc)
@@ -215,7 +215,7 @@ proc proof*(
   ## and `false` otherwise. In the latter case, the chain of rlp-encoded blobs
   ## are the nodes proving that the `key` path does not exist.
   ##
-  let rc = acc.aTx.partAccountTwig(accPath).valueOr:
+  let rc = acc.aTx.makeAccountProof(accPath).valueOr:
     return err(error.toError("", ProofCreate))
 
   ok(rc)
@@ -313,7 +313,7 @@ proc slotProof*(
   ## Note that the function always returns an error unless the `accPath` is
   ## valid.
   ##
-  let rc = acc.aTx.partStorageTwig(accPath, stoPath).valueOr:
+  let rc = acc.aTx.makeStorageProof(accPath, stoPath).valueOr:
     return err(error.toError("", ProofCreate))
 
   ok(rc)

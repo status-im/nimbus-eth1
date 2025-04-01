@@ -13,7 +13,7 @@
 import
   eth/common/hashes,
   results,
-  ".."/[aristo_compute, aristo_desc, aristo_fetch, aristo_part]
+  ".."/[aristo_compute, aristo_desc, aristo_fetch, aristo_proof]
 
 # ------------------------------------------------------------------------------
 # Public functions
@@ -24,9 +24,9 @@ proc checkTwig*(
     accPath: Hash32;             # Data path
       ): Result[void,AristoError] =
   let
-    proof = ? db.partAccountTwig(accPath)
+    proof = ? db.makeAccountProof(accPath)
     key = ? db.computeKey (VertexID(1),VertexID(1))
-  discard ? proof[0].partUntwigPath(key.to(Hash32), accPath)
+  discard ? proof[0].verifyProof(key.to(Hash32), accPath)
 
   ok()
 
@@ -36,10 +36,10 @@ proc checkTwig*(
     stoPath: Hash32;                  # Storage key
       ): Result[void,AristoError] =
   let
-    proof = ? db.partStorageTwig(accPath, stoPath)
+    proof = ? db.makeStorageProof(accPath, stoPath)
     vid = ? db.fetchStorageID accPath
     key = ? db.computeKey (VertexID(1),vid)
-  discard ? proof[0].partUntwigPath(key.to(Hash32), stoPath)
+  discard ? proof[0].verifyProof(key.to(Hash32), stoPath)
 
   ok()
 
