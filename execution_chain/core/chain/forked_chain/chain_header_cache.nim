@@ -68,7 +68,7 @@ import
   pkg/eth/[common, rlp],
   pkg/results,
   "../../.."/[common, db/core_db, db/storage_types],
-  ../../../db/[kvt, kvt_hc],
+  ../../../db/[kvt, kvt_cf],
   ../../../db/kvt/[kvt_utils, kvt_tx_frame],
   ../forked_chain,
   ./[chain_branch, chain_desc]
@@ -344,7 +344,7 @@ proc init*(T: type ForkedCacheRef; c: ForkedChainRef): T =
   ##
   let
     be = c.db.kvtBackend()
-    kvt = be.kvtTemporaryHeaderStorage()
+    kvt = be.synchronizerKvt()
     state = kvt.getState.valueOr: FcHdrState()
     fc = T(chain: c, state: state, kvt: kvt)
   fc.clear()

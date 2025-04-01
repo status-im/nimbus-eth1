@@ -14,13 +14,13 @@ import
   ./kvt/kvt_desc,
   ./kvt/kvt_init/[rocks_db, init_common]
 
-proc kvtTemporaryHeaderStorage*(be: TypedBackendRef): KvtTxRef =
+proc synchronizerKvt*(be: TypedBackendRef): KvtTxRef =
   ## Create a special txFrame for storing temporary
   ## block headers from syncer with it's own column family.
   ## This txFrame is completely isolated from ordinary headers.
   doAssert be.beKind == BackendRocksDB
   let
     baseDb = RdbBackendRef(be).getBaseDb()
-    rdb = rocksDbKvtBackend(baseDb, KvtHeaderCache)
+    rdb = rocksDbKvtBackend(baseDb, KvtSynchro)
   rdb.txRef = KvtTxRef(db: rdb)
   rdb.txRef
