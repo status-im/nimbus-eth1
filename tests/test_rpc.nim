@@ -187,8 +187,6 @@ proc setupEnv(envFork: HardFork = MergeFork): TestEnv =
     com   = setupCom(conf)
     chain = ForkedChainRef.init(com)
     txPool = TxPoolRef.new(chain)
-
-  let
     server = newRpcHttpServerWithParams("127.0.0.1:0").valueOr:
       echo "Failed to create rpc server: ", error
       quit(QuitFailure)

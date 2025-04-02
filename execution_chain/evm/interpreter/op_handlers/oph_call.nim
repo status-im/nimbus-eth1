@@ -180,7 +180,7 @@ proc execSubCall(c: Computation; childMsg: Message; memPos, memLen: int) =
       c.gasMeter.returnGas(child.gasMeter.gasRemaining)
 
     if child.isSuccess:
-      c.gasMeter.refundGas(child.gasMeter.gasRefunded)
+      c.merge(child)
       c.stack.lsTop(1)
 
     let actualOutputSize = min(memLen, child.output.len)

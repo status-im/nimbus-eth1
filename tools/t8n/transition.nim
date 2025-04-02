@@ -282,11 +282,10 @@ proc exec(ctx: TransContext,
       )
       continue
 
-    let gasUsed = rc.get()
-    let rec = vmState.makeReceipt(tx.txType)
+    let rec = vmState.makeReceipt(tx.txType, rc.value)
     vmState.receipts.add rec
     receipts.add toTxReceipt(
-      rec, tx, sender, txIndex, gasUsed
+      rec, tx, sender, txIndex, rc.value.gasUsed
     )
     includedTx.add tx
 

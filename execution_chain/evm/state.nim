@@ -227,9 +227,6 @@ template mutateLedger*(vmState: BaseVMState, body: untyped) =
     var db {.inject.} = vmState.ledger
     body
 
-proc getAndClearLogEntries*(vmState: BaseVMState): seq[Log] =
-  vmState.ledger.getAndClearLogEntries()
-
 proc status*(vmState: BaseVMState): bool =
   ExecutionOK in vmState.flags
 

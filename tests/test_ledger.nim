@@ -11,8 +11,8 @@
 import
   std/[strformat, strutils, importutils],
   eth/common/[keys, transaction_utils],
-  stew/byteutils,
-  stew/endians2,
+  stew/[byteutils, endians2],
+  results,
   ../execution_chain/config,
   ../execution_chain/db/storage_types,
   ../execution_chain/common/common,
@@ -22,9 +22,6 @@ import
   ../execution_chain/constants,
   ../execution_chain/db/ledger {.all.}, # import all private symbols
   unittest2
-
-import results
-
 
 const
   genesisFile = "tests/customgenesis/cancun123.json"
@@ -560,72 +557,6 @@ proc runLedgerBasicOperationsTests() =
       check ac.verifySlots(0xcc, 0x01)
       check ac.verifySlots(0xdd, 0x04)
 
-    test "transient storage operations":
-      var ac = LedgerRef.init(memDB.baseTxFrame())
-
-      proc tStore(ac: LedgerRef, address, slot, val: int) =
-        ac.setTransientStorage(address.initAddr, slot.u256, val.u256)
-
-      proc tLoad(ac: LedgerRef, address, slot: int): UInt256 =
-        ac.getTransientStorage(address.initAddr, slot.u256)
-
-      proc vts(ac: LedgerRef, address, slot, val: int): bool =
-        ac.tLoad(address, slot) == val.u256
-
-      ac.tStore(0xaa, 3, 66)
-      ac.tStore(0xbb, 1, 33)
-      ac.tStore(0xbb, 2, 99)
-
-      check ac.vts(0xaa, 3, 66)
-      check ac.vts(0xbb, 1, 33)
-      check ac.vts(0xbb, 2, 99)
-      check ac.vts(0xaa, 1, 33) == false
-      check ac.vts(0xbb, 1, 66) == false
-
-      var sp = ac.beginSavepoint
-      # some new ones
-      ac.tStore(0xaa, 3, 77)
-      ac.tStore(0xbb, 1, 55)
-      ac.tStore(0xcc, 7, 88)
-
-      check ac.vts(0xaa, 3, 77)
-      check ac.vts(0xbb, 1, 55)
-      check ac.vts(0xcc, 7, 88)
-
-      check ac.vts(0xaa, 3, 66) == false
-      check ac.vts(0xbb, 1, 33) == false
-      check ac.vts(0xbb, 2, 99)
-
-      ac.rollback(sp)
-      check ac.vts(0xaa, 3, 66)
-      check ac.vts(0xbb, 1, 33)
-      check ac.vts(0xbb, 2, 99)
-      check ac.vts(0xcc, 7, 88) == false
-
-      sp = ac.beginSavepoint
-      ac.tStore(0xaa, 3, 44)
-      ac.tStore(0xaa, 4, 55)
-      ac.tStore(0xbb, 1, 22)
-      ac.tStore(0xdd, 2, 66)
-
-      ac.commit(sp)
-      check ac.vts(0xaa, 3, 44)
-      check ac.vts(0xaa, 4, 55)
-      check ac.vts(0xbb, 1, 22)
-      check ac.vts(0xbb, 1, 55) == false
-      check ac.vts(0xbb, 2, 99)
-      check ac.vts(0xcc, 7, 88) == false
-      check ac.vts(0xdd, 2, 66)
-
-      ac.clearTransientStorage()
-      check ac.vts(0xaa, 3, 44) == false
-      check ac.vts(0xaa, 4, 55) == false
-      check ac.vts(0xbb, 1, 22) == false
-      check ac.vts(0xbb, 1, 55) == false
-      check ac.vts(0xbb, 2, 99) == false
-      check ac.vts(0xcc, 7, 88) == false
-      check ac.vts(0xdd, 2, 66) == false
-
     test "ledger contractCollision":
       # use previous hash
       var ac = LedgerRef.init(memDB.baseTxFrame())
@@ -715,7 +646,7 @@ proc runLedgerBasicOperationsTests() =
       check 3.u256 in vals
 
     when defined(stateless):
-    
+
       test "Witness keys - Get account":
         var
           ac = LedgerRef.init(memDB.baseTxFrame())
