@@ -167,7 +167,7 @@ proc traceTransactionImpl(
       stateCtx = CaptCtxRef.init(com, ledger.getStateRoot())
 
     let rc = vmState.processTransaction(tx, sender, header)
-    gasUsed = if rc.isOk: rc.value else: 0
+    gasUsed = if rc.isOk: rc.value.gasUsed else: 0
 
     if idx.uint64 == txIndex:
       after.captureAccount(ledger, sender, senderName)
@@ -283,7 +283,7 @@ proc traceBlockImpl(
       sender = tx.recoverSender().expect("valid signature")
       rc = vmState.processTransaction(tx, sender, header)
     if rc.isOk:
-      gasUsed = gasUsed + rc.value
+      gasUsed = gasUsed + rc.value.gasUsed
 
   result = tracerInst.getTracingResult()
   result["gas"] = %gasUsed
