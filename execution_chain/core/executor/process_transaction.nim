@@ -108,10 +108,7 @@ proc processTransactionImpl(
   let
     com = vmState.com
     txRes = roDB.validateTransaction(tx, sender, header.gasLimit, baseFee256, excessBlobGas, com, fork)
-    res = if txRes.isOk:
-      # EIP-1153
-      vmState.ledger.clearTransientStorage()
-
+    res = if txRes.isOk:      
       # Execute the transaction.
       vmState.captureTxStart(tx.gasLimit)
       let

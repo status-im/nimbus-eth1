@@ -103,7 +103,7 @@ func baseFee(pst: TxPacker): GasInt =
 # ------------------------------------------------------------------------------
 # Private functions
 # ------------------------------------------------------------------------------
-  
+
 proc runTxCommit(pst: var TxPacker; item: TxItemRef; callResult: LogResult, xp: TxPoolRef) =
   ## Book keeping after executing argument `item` transaction in the VM. The
   ## function returns the next number of items `nItems+1`.
@@ -184,14 +184,11 @@ proc vmExecGrabItem(pst: var TxPacker; item: TxItemRef, xp: TxPoolRef): bool =
   if not vmState.classifyValidatePacked(item):
     return ContinueWithNextAccount
 
-  # EIP-1153
-  vmState.ledger.clearTransientStorage()
-
   # Execute EVM for this transaction
   let
     accTx = vmState.ledger.beginSavepoint
     callResult = item.tx.txCallEvm(item.sender, pst.vmState, pst.baseFee)
-    
+
   doAssert 0 <= callResult.gasUsed
 
   # Find out what to do next: accepting this tx or trying the next account

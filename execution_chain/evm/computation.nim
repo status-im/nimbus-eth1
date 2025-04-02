@@ -110,12 +110,15 @@ template getCode*(c: Computation, address: Address): CodeBytesRef =
   c.vmState.readOnlyLedger.getCode(address)
 
 template setTransientStorage*(c: Computation, slot, val: UInt256) =
-  c.vmState.ledger.
-    setTransientStorage(c.msg.contractAddress, slot, val)
+  c.transientStorage.setStorage(c.msg.contractAddress, slot, val)
 
-template getTransientStorage*(c: Computation, slot: UInt256): UInt256 =
-  c.vmState.readOnlyLedger.
-    getTransientStorage(c.msg.contractAddress, slot)
+func getTransientStorage*(c: Computation, slot: UInt256): UInt256 =
+  var cpt = c
+  while cpt != nil:
+    let (ok, res) = cpt.transientStorage.getStorage(c.msg.contractAddress, slot)
+    if ok:
+      return res
+    cpt = cpt.parent
 
 func newComputation*(vmState: BaseVMState,
                      keepStack: bool,
@@ -248,7 +251,7 @@ template chainTo*(c: Computation,
   c.continuation = proc(): EvmResultVoid {.gcsafe, raises: [].} =
     c.continuation = nil
     after
-  
+
 proc execSelfDestruct*(c: Computation, beneficiary: Address) =
   c.vmState.mutateLedger:
     let localBalance = c.getBalance(c.msg.contractAddress)
@@ -282,6 +285,7 @@ func merge*(c, child: Computation) =
     c.logEntries = move(child.logEntries)
   else:
     c.logEntries.add(child.logEntries)
+  c.transientStorage.mergeAndReset(child.transientStorage)
   c.gasMeter.refundGas(child.gasMeter.gasRefunded)
 
 # some gasRefunded operations still relying
