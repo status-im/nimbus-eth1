@@ -125,9 +125,9 @@ func layersResKey*(db: AristoTxRef; rvid: RootedVertexID, vtx: VertexRef) =
   ## equivalent of a delete function.
   db.layersPutVtx(rvid, vtx)
 
-func layersResKeys*(db: AristoTxRef; hike: Hike) =
+func layersResKeys*(db: AristoTxRef; hike: Hike, skip: int) =
   ## Reset all cached keys along the given hike
-  for i in 1..hike.legs.len:
+  for i in (skip + 1)..hike.legs.len:
     db.layersResKey((hike.root, hike.legs[^i].wp.vid), hike.legs[^i].wp.vtx)
 
 func layersPutAccLeaf*(db: AristoTxRef; accPath: Hash32; leafVtx: VertexRef) =
