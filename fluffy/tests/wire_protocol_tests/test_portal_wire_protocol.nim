@@ -92,9 +92,10 @@ procSuite "Portal Wire Protocol Tests":
 
     check pong.isOk()
 
-    let (enrSeq, payload) = pong.value()
+    let (enrSeq, payloadType, payload) = pong.value()
     check:
       enrSeq == 1'u64
+      payloadType == 0
       payload == customPayload
 
     await proto1.stopPortalProtocol()
