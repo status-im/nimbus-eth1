@@ -1,5 +1,5 @@
 # nimbus-eth1
-# Copyright (c) 2023-2024 Status Research & Development GmbH
+# Copyright (c) 2023-2025 Status Research & Development GmbH
 # Licensed under either of
 #  * Apache License, version 2.0, ([LICENSE-APACHE](LICENSE-APACHE) or
 #    http://www.apache.org/licenses/LICENSE-2.0)
@@ -36,12 +36,12 @@ when extraTraceMessages:
 proc get*(
     rdb: RdbInst;
     key: openArray[byte],
-      ): Result[seq[byte],(KvtError,string)] =
+    cf: static[KvtCFs]): Result[seq[byte],(KvtError,string)] =
   var res: seq[byte]
   let onData: DataProc = proc(data: openArray[byte]) =
     res = @data
 
-  let gotData = rdb.store[KvtGeneric].get(key, onData).valueOr:
+  let gotData = rdb.store[cf].get(key, onData).valueOr:
     const errSym = RdbBeDriverGetError
     when extraTraceMessages:
       trace logTxt "get", error=errSym, info=error
@@ -54,12 +54,12 @@ proc get*(
 proc len*(
     rdb: RdbInst;
     key: openArray[byte],
-      ): Result[int,(KvtError,string)] =
+    cf: static[KvtCFs]): Result[int,(KvtError,string)] =
   var res: int
   let onData: DataProc = proc(data: openArray[byte]) =
     res = data.len
 
-  let gotData = rdb.store[KvtGeneric].get(key, onData).valueOr:
+  let gotData = rdb.store[cf].get(key, onData).valueOr:
     const errSym = RdbBeDriverGetError
     when extraTraceMessages:
       trace logTxt "len", error=errSym, info=error

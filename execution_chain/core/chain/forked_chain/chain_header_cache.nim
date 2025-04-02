@@ -68,6 +68,8 @@ import
   pkg/eth/[common, rlp],
   pkg/results,
   "../../.."/[common, db/core_db, db/storage_types],
+  ../../../db/[kvt, kvt_cf],
+  ../../../db/kvt/[kvt_utils, kvt_tx_frame],
   ../forked_chain,
   ./[chain_branch, chain_desc]
 
@@ -96,6 +98,8 @@ type
     state: FcHdrState          # state of header chain cache
     session: FcHdrSession      # additional session variables
     notify: FcNotifyCB         # client app notification
+    kvt: KvtTxRef              # metadata and temporary headers storage with it's own column family
+                               # isolated from ordinary headers storage.
 
 const
   HashCacheSize = 50
@@ -159,7 +163,7 @@ func decodePayload(data: seq[byte]; T: type ): T =
 # Private cache helpers: database related
 # ------------------------------------------------------------------------------
 
-proc getState(db: CoreDbTxRef): Opt[FcHdrState] =
+proc getState(db: KvtTxRef): Opt[FcHdrState] =
   let data = db.get(LhcStateKey.toOpenArray).valueOr:
     return err()
   # Ignore state decode error, might be from an earlier state version release
@@ -171,34 +175,34 @@ proc getState(db: CoreDbTxRef): Opt[FcHdrState] =
     return err()
   ok(move state)
 
-proc putState(db: CoreDbTxRef; state: FcHdrState) =
+proc putState(db: KvtTxRef; state: FcHdrState) =
   db.put(LhcStateKey.toOpenArray, encodePayload(state)).isOkOr:
-    raiseAssert RaisePfx & "put(state) failed: " & $$error
+    raiseAssert RaisePfx & "put(state) failed: " & $error
 
-proc putHeader(db: CoreDbTxRef; bn: BlockNumber; data: seq[byte]) =
+proc putHeader(db: KvtTxRef; bn: BlockNumber; data: seq[byte]) =
   ## Store rlp encoded header
   db.put(beaconHeaderKey(bn).toOpenArray, data).isOkOr:
-    raiseAssert RaisePfx & "put() failed: " & $$error
+    raiseAssert RaisePfx & "put() failed: " & $error
 
 
-proc getHeader(db: CoreDbTxRef; bn: BlockNumber): Opt[Header] =
+proc getHeader(db: KvtTxRef; bn: BlockNumber): Opt[Header] =
   ## Retrieve some header from cache
   let data = db.get(beaconHeaderKey(bn).toOpenArray).valueOr:
     return err()
   ok decodePayload(data, Header)
 
-proc getHeaderAlways(db: CoreDbTxRef; bn: BlockNumber): Header =
+proc getHeaderAlways(db: KvtTxRef; bn: BlockNumber): Header =
   ## Retrieve some header from cache, raise exception on failure
   var hdr = db.getHeader(bn).valueOr:
     raiseAssert RaisePfx & "get() failed: " & bn.bnStr
   move(hdr)
 
 
-proc delHeader(db: CoreDbTxRef; bn: BlockNumber) =
+proc delHeader(db: KvtTxRef; bn: BlockNumber) =
   ## Remove header from cache
   discard db.del(beaconHeaderKey(bn).toOpenArray)
 
-proc delHeaders(db: CoreDbTxRef; first, last: BlockNumber) =
+proc delHeaders(db: KvtTxRef; first, last: BlockNumber) =
   for bn in first .. last:
     discard db.del(beaconHeaderKey(bn).toOpenArray)
 
@@ -207,14 +211,13 @@ proc delHeaders(db: CoreDbTxRef; first, last: BlockNumber) =
 proc persistPutState(fc: ForkedCacheRef) =
   ## Persist state records and database updates
   let
-    c = fc.chain
-    db = c.baseTxFrame
+    db = fc.kvt
 
   # Save updated state record
   db.putState(fc.state)
 
   # Persist state to database
-  c.com.db.persist(db)
+  db.persist()
 
 proc persistDelUpTo(fc: ForkedCacheRef; bn: BlockNumber) =
   ## Remove headers from the lower end of the cache starting at the
@@ -222,8 +225,8 @@ proc persistDelUpTo(fc: ForkedCacheRef; bn: BlockNumber) =
   if fc.state.ante.number <= bn:
     let
       bn = min(bn, fc.state.head.number-1)
-      db = fc.chain.baseTxFrame
-      ante = fc.chain.baseTxFrame.getHeader(bn + 1).valueOr:
+      db = fc.kvt
+      ante = fc.kvt.getHeader(bn + 1).valueOr:
         raiseAssert RaisePfx & "get() failed: " & (bn + 1).bnStr
 
     for bn in fc.state.ante.number .. bn:
@@ -278,9 +281,9 @@ proc fcUpdateFromCL(fc: ForkedCacheRef; h: Header; f: Hash32) =
       if fc.session.clearRequest:
         fc.state.reset
       else:
-        let db = fc.chain.baseTxFrame
+        let db = fc.kvt
         db.put(beaconHeaderKey(h.number).toOpenArray,encodePayload(h)).isOkOr:
-          raiseAssert RaisePfx & "put() failed: " & $$error
+          raiseAssert RaisePfx & "put() failed: " & $error
 
     # For logging and metrics
     fc.session.consHeadNum = h.number
@@ -299,7 +302,7 @@ proc clear*(fc: ForkedCacheRef) =
   ## `start()`) in order to cancel the new session with the particular head.
   ##
   if 0 < fc.state.head.number:
-    let db = fc.chain.baseTxFrame
+    let db = fc.kvt
     db.delHeaders(fc.state.ante.number, fc.state.head.number)
     fc.state.reset                 # clear session state object
     fc.session.reset
@@ -340,9 +343,10 @@ proc init*(T: type ForkedCacheRef; c: ForkedChainRef): T =
   ## informed when and how the API is fully functional.
   ##
   let
-    db = c.baseTxFrame
-    state = db.getState.valueOr: FcHdrState()
-    fc = T(chain: c, state: state)
+    be = c.db.kvtBackend()
+    kvt = be.synchronizerKvt()
+    state = kvt.getState.valueOr: FcHdrState()
+    fc = T(chain: c, state: state, kvt: kvt)
   fc.clear()
   fc
 
@@ -360,13 +364,13 @@ proc fcHeaderGetHash*(fc: ForkedCacheRef; bn: BlockNumber): Opt[Hash32] =
   if bn == fc.state.head.number:
     return ok(fc.state.headHash)
   # Use parent hash of child entry
-  let hdr = fc.chain.baseTxFrame.getHeader(bn+1).valueOr:
+  let hdr = fc.kvt.getHeader(bn+1).valueOr:
     return err()
   ok(hdr.parentHash)
 
 proc fcHeaderGet*(fc: ForkedCacheRef; bn: BlockNumber): Opt[Header] =
   ## Retrieve some stashed header.
-  var hdr = fc.chain.baseTxFrame.getHeader(bn).valueOr:
+  var hdr = fc.kvt.getHeader(bn).valueOr:
     return err()
 
   block body:
@@ -437,7 +441,7 @@ proc fcHeaderPut*(
   if fc.state.head.number <= lastNumber:
     return err("Argument rev[] exceeds chain head " & fc.state.head.bnStr)
 
-  let db = fc.chain.baseTxFrame
+  let db = fc.kvt
 
   # Initalise helper variable for verifying parent links
   var lastParentHash =

@@ -14,6 +14,8 @@
 {.push raises: [].}
 
 import
+  results,
+  ./kvt_init/init_common,
   ./[kvt_desc, kvt_layers]
 
 # ------------------------------------------------------------------------------
@@ -64,6 +66,19 @@ proc persist*(
 
   # Done with txRef, all saved to backend
   txFrame.sTab.clear()
+
+proc persist*(txFrame: KvtTxRef) =
+  let
+    kvt = txFrame.db
+    kvtBatch = kvt.putBegFn()
+
+  if kvtBatch.isOk():
+    kvt.persist(kvtBatch[], txFrame)
+
+    kvt.putEndFn(kvtBatch[]).isOkOr:
+      raiseAssert $error
+  else:
+    discard kvtBatch.expect("should always be able to create batch")
 
 # ------------------------------------------------------------------------------
 # End

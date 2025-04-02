@@ -15,6 +15,7 @@ import
   eth/common/[accounts, base, hashes],
   ../../constants,
   ../[kvt, aristo],
+  ../kvt/kvt_init/init_common,
   ./base/[base_desc, base_helpers]
 
 export
@@ -46,6 +47,10 @@ proc baseTxFrame*(db: CoreDbRef): CoreDbTxRef =
   CoreDbTxRef(
     aTx: db.mpt.baseTxFrame(),
     kTx: db.kvt.baseTxFrame())
+
+proc kvtBackend*(db: CoreDbRef): TypedBackendRef =
+  ## Get KVT backend
+  db.kvt.getBackendFn()
 
 # ------------------------------------------------------------------------------
 # Public base descriptor methods
@@ -96,14 +101,14 @@ proc persist*(
     db.mpt.persist(mptBatch[], txFrame.aTx)
 
     db.kvt.putEndFn(kvtBatch[]).isOkOr:
-      raiseAssert "" & ": " & $error
+      raiseAssert $error
 
     db.mpt.putEndFn(mptBatch[]).isOkOr:
-      raiseAssert "" & ": " & $error
+      raiseAssert $error
 
   else:
-    discard kvtBatch.expect("" & ": should always be able to create batch")
-    discard mptBatch.expect("" & ": should always be able to create batch")
+    discard kvtBatch.expect("should always be able to create batch")
+    discard mptBatch.expect("should always be able to create batch")
 
 proc stateBlockNumber*(db: CoreDbTxRef): BlockNumber =
   ## This function returns the block number stored with the latest `persist()`
