@@ -11,14 +11,27 @@ import
   json_rpc/rpcserver,
   chronicles,
   web3/[eth_api_types, conversions],
-  ../network/state/state_endpoints
+  ../network/state/state_endpoints,
+  ../evm/[async_evm, async_evm_portal_backend]
 
 template getOrRaise(stateNetwork: Opt[StateNetwork]): StateNetwork =
   let sn = stateNetwork.valueOr:
     raise newException(ValueError, "state sub-network not enabled")
   sn
 
+template getOrRaise(asyncEvm: Opt[AsyncEvm]): AsyncEvm =
+  let evm = asyncEvm.valueOr:
+    raise
+      newException(ValueError, "portal evm requires state sub-network to be enabled")
+  evm
+
 proc installDebugApiHandlers*(rpcServer: RpcServer, stateNetwork: Opt[StateNetwork]) =
+  let asyncEvm =
+    if stateNetwork.isSome():
+      Opt.some(AsyncEvm.init(stateNetwork.get().toAsyncEvmStateBackend()))
+    else:
+      Opt.none(AsyncEvm)
+
   rpcServer.rpc("debug_getBalanceByStateRoot") do(
     address: Address, stateRoot: Hash32
   ) -> UInt256:
@@ -120,3 +133,37 @@ proc installDebugApiHandlers*(rpcServer: RpcServer, stateNetwork: Opt[StateNetwo
       storageHash: proofs.account.storageRoot,
       storageProof: storageProof,
     )
+
+  rpcServer.rpc("debug_callByStateRoot") do(
+    tx: TransactionArgs,
+    stateRoot: Hash32,
+    quantityTag: Opt[RtBlockIdentifier],
+    optimisticStateFetch: Opt[bool]
+  ) -> seq[byte]:
+    # TODO: add documentation
+
+    # This endpoint can be used to test eth_call without requiring the history network
+    # to be enabled. This is useful for scenarios where we don't yet have the block headers
+    # seeded into the history network.
+
+    if tx.to.isNone():
+      raise newException(ValueError, "to address is required")
+
+    let quantityTag = quantityTag.valueOr:
+      blockId(0.uint64)
+    if quantityTag.kind == bidAlias:
+      raise newException(ValueError, "tag not yet implemented")
+
+    let
+      evm = asyncEvm.getOrRaise()
+      header = Header(stateRoot: stateRoot, number: quantityTag.number.uint64)
+      optimisticStateFetch = optimisticStateFetch.valueOr:
+        true
+
+    let callResult = (await evm.call(header, tx, optimisticStateFetch)).valueOr:
+      raise newException(ValueError, error)
+
+    if callResult.error.len() > 0:
+      raise newException(ValueError, callResult.error)
+
+    callResult.output
