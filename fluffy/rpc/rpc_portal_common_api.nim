@@ -79,7 +79,7 @@ proc installPortalCommonApiHandlers*(
   rpcServer.rpc("portal_" & networkStr & "Ping") do(
     enr: Record, payloadType: Opt[uint16], payload: Opt[UnknownPayload]
   ) -> PingResult:
-    if payloadType.isSome() and payloadType.get() != 0:
+    if payloadType.isSome() and payloadType.get() != CapabilitiesType:
       # We only support sending the default CapabilitiesPayload for now.
       # This is fine because according to the spec clients are only required
       # to support the standard extensions.
@@ -88,8 +88,8 @@ proc installPortalCommonApiHandlers*(
     if payload.isSome():
       # We don't support passing in a custom payload. In order to implement
       # this we use the empty UnknownPayload type which is defined in the spec
-      # as a json object with no defined fields. Just using it here to indicate
-      # if an object was supplied or not and then throw the correct error.
+      # as a json object with no required fields. Just using it here to indicate
+      # if an object was supplied or not and then throw the correct error if so.
       raise userSpecifiedPayloadBlockedByClientError()
 
     let
