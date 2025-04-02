@@ -95,7 +95,7 @@ proc processTransactions*(
       if collectLogs:
         vmState.allLogs.add rc.value.logEntries
     else:
-      vmState.receipts[txIndex] = vmState.makeReceipt(tx.txType, rc.value.logEntries)
+      vmState.receipts[txIndex] = vmState.makeReceipt(tx.txType, rc.value)
       if collectLogs:
         vmState.allLogs.add vmState.receipts[txIndex].logs
   ok()

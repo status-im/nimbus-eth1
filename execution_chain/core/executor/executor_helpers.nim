@@ -12,10 +12,12 @@
 
 import
   eth/bloom,
+  stew/assign2,
   ../../db/ledger,
   ../../evm/state,
   ../../evm/types,
-  ../../common/common
+  ../../common/common,
+  ../../transaction/call_types
 
 type
   ExecutorError* = object of CatchableError
@@ -46,7 +48,7 @@ func createBloom*(receipts: openArray[Receipt]): Bloom =
   bloom.value.to(Bloom)
 
 proc makeReceipt*(
-    vmState: BaseVMState; txType: TxType, logs: seq[Log]): Receipt =
+    vmState: BaseVMState; txType: TxType, callResult: LogResult): Receipt =
   var rec: Receipt
   if vmState.com.isByzantiumOrLater(vmState.blockNumber):
     rec.isHash = false
@@ -59,7 +61,7 @@ proc makeReceipt*(
 
   rec.receiptType = txType
   rec.cumulativeGasUsed = vmState.cumulativeGasUsed
-  rec.logs = logs
+  assign(rec.logs, callResult.logEntries)
   rec.logsBloom = logsBloom(rec.logs).value.to(Bloom)
   rec
 

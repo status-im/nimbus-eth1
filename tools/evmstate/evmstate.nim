@@ -65,19 +65,17 @@ proc toBytes(x: string): seq[byte] =
 method getAncestorHash(vmState: TestVMState; blockNumber: BlockNumber): Hash32 =
   keccak256(toBytes($blockNumber))
 
-<<<<<<< HEAD
-proc verifyResult(ctx: var StateContext, vmState: BaseVMState, obtainedHash: Hash32) =
-=======
-proc verifyResult(ctx: var StateContext, vmState: BaseVMState, callResult: CallResult) =
->>>>>>> 291a72b21 (Move `logEntries` back to `Computation`)
+proc verifyResult(ctx: var StateContext,
+                  vmState: BaseVMState,
+                  obtainedHash: Hash32,
+                  callResult: LogResult) =
   ctx.error = ""
   if obtainedHash != ctx.expectedHash:
     ctx.error = "post state root mismatch: got $1, want $2" %
       [($obtainedHash).toLowerAscii, $ctx.expectedHash]
     return
 
-  let logEntries = callResult.logEntries
-  let actualLogsHash = rlpHash(logEntries)
+  let actualLogsHash = rlpHash(callResult.logEntries)
   if actualLogsHash != ctx.expectedLogs:
     ctx.error = "post state log hash mismatch: got $1, want $2" %
       [($actualLogsHash).toLowerAscii, $ctx.expectedLogs]
@@ -123,21 +121,16 @@ proc runExecution(ctx: var StateContext, conf: StateConf, pre: JsonNode): StateR
     txFrame = com.db.baseTxFrame(),
     tracer = tracer)
 
-  var gasUsed: GasInt
   let sender = ctx.tx.recoverSender().expect("valid signature")
 
   vmState.mutateLedger:
     setupLedger(pre, db)
     db.persist(clearEmptyAccount = false) # settle accounts storage
 
-  var callResult: CallResult
+  var callResult: LogResult
   defer:
-<<<<<<< HEAD
     let stateRoot = vmState.readOnlyLedger.getStateRoot()
-    ctx.verifyResult(vmState, stateRoot)
-=======
-    ctx.verifyResult(vmState, callResult)
->>>>>>> 291a72b21 (Move `logEntries` back to `Computation`)
+    ctx.verifyResult(vmState, stateRoot, callResult)
     result = StateResult(
       name : ctx.name,
       pass : ctx.error.len == 0,
@@ -151,12 +144,10 @@ proc runExecution(ctx: var StateContext, conf: StateConf, pre: JsonNode): StateR
       writeRootHashToStderr(stateRoot)
 
   try:
-    let rc = vmState.processTransaction(
-                  ctx.tx, sender, ctx.header)
-    if rc.isOk:
-      gasUsed = rc.value.gasUsed
-      callResult = rc.value
-
+    let res = vmState.processTransaction(
+                   ctx.tx, sender, ctx.header)
+    if res.isOk:
+      callResult = res.value
     coinbaseStateClearing(vmState, ctx.header.coinbase)
   except CatchableError as ex:
     echo "FATAL: ", ex.msg

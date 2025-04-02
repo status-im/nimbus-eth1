@@ -187,22 +187,6 @@ proc setupEnv(envFork: HardFork = MergeFork): TestEnv =
     com   = setupCom(conf)
     chain = ForkedChainRef.init(com)
     txPool = TxPoolRef.new(chain)
-
-<<<<<<< HEAD
-=======
-  let txRoot = com.db.ctx.getMpt(CtTxs).getColumn().state().valueOr(EMPTY_ROOT_HASH)
-
-  vmState.receipts = newSeq[Receipt](txs.len)
-  vmState.cumulativeGasUsed = 0
-  for txIndex, tx in txs:
-    let sender = tx.getSender()
-    let rc = vmState.processTransaction(tx, sender, vmHeader)
-    doAssert(rc.isOk, "Invalid transaction: " & rc.error)
-    vmState.receipts[txIndex] = makeReceipt(vmState, tx.txType, rc.value.logEntries())
-
-  com.db.persistReceipts(vmState.receipts)
->>>>>>> 04eb445f9 (fixes)
-  let
     server = newRpcHttpServerWithParams("127.0.0.1:0").valueOr:
       echo "Failed to create rpc server: ", error
       quit(QuitFailure)

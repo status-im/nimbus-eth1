@@ -82,7 +82,7 @@ proc testFixtureIndexes(ctx: var TestCtx, testStatusIMPL: var TestStatus) =
              else:
                LegacyTracer(nil)
 
-  let vmState = BaseVMState.new(
+    vmState = BaseVMState.new(
       parent = parent,
       header = ctx.header,
       com    = com,
@@ -91,14 +91,7 @@ proc testFixtureIndexes(ctx: var TestCtx, testStatusIMPL: var TestStatus) =
       storeSlotHash = ctx.trace,
     )
 
-  var gasUsed: GasInt
-<<<<<<< HEAD
-  let sender = ctx.tx.recoverSender().expect("valid signature")
-=======
-  var logEntries: seq[Log]
-  let sender = ctx.tx.getSender()
-  let fork = com.toEVMFork(ctx.header.forkDeterminationInfo)
->>>>>>> 291a72b21 (Move `logEntries` back to `Computation`)
+    sender = ctx.tx.recoverSender().expect("valid signature")
 
   vmState.mutateLedger:
     setupLedger(ctx.pre, db)
@@ -108,11 +101,13 @@ proc testFixtureIndexes(ctx: var TestCtx, testStatusIMPL: var TestStatus) =
     # during the next call to `getComittedStorage`
     db.persist()
 
-  let rc = vmState.processTransaction(
+  let
+    rc = vmState.processTransaction(
                 ctx.tx, sender, ctx.header)
-  if rc.isOk:
-    gasUsed = rc.value.gasUsed
-    logEntries = rc.value.logEntries
+    callResult = if rc.isOk:
+                   rc.value
+                 else:
+                   LogResult()
 
   let miner = ctx.header.coinbase
   coinbaseStateClearing(vmState, miner)
@@ -120,11 +115,11 @@ proc testFixtureIndexes(ctx: var TestCtx, testStatusIMPL: var TestStatus) =
   block post:
     let obtainedHash = vmState.readOnlyLedger.getStateRoot()
     check obtainedHash == ctx.expectedHash
-    let actualLogsHash = rlpHash(logEntries)
+    let actualLogsHash = rlpHash(callResult.logEntries)
     check(ctx.expectedLogs == actualLogsHash)
     if ctx.debugMode:
       let success = ctx.expectedLogs == actualLogsHash and obtainedHash == ctx.expectedHash
-      ctx.dumpDebugData(vmState, gasUsed, success)
+      ctx.dumpDebugData(vmState, callResult.gasUsed, success)
 
 proc testSubFixture(ctx: var TestCtx, fixture: JsonNode, testStatusIMPL: var TestStatus,
                  trace = false, debugMode = false) =
@@ -227,7 +222,6 @@ proc generalStateJsonMain*(debugMode = false) =
     testFixture(n, testStatusIMPL, config.trace, true)
 
 when isMainModule:
-  import std/times
   var message: string
 
   ## Processing command line arguments

@@ -44,7 +44,7 @@ proc commitOrRollbackDependingOnGasUsed(
     accTx: LedgerSpRef;
     header: Header;
     tx: Transaction;
-    gasBurned: GasInt;
+    gasUsed: GasInt;
     priorityFee: GasInt;
     blobGasUsed: GasInt;
       ): Result[void, string] =
@@ -52,18 +52,18 @@ proc commitOrRollbackDependingOnGasUsed(
   # set in the block header. Again, the eip-1559 reference does not mention
   # an early stop. It would rather detect differing values for the  block
   # header `gasUsed` and the `vmState.cumulativeGasUsed` at a later stage.
-  if header.gasLimit < vmState.cumulativeGasUsed + gasBurned:
+  if header.gasLimit < vmState.cumulativeGasUsed + gasUsed:
     vmState.ledger.rollback(accTx)
-    err(&"invalid tx: block header gasLimit reached. gasLimit={header.gasLimit}, gasUsed={vmState.cumulativeGasUsed}, addition={gasBurned}")
+    err(&"invalid tx: block header gasLimit reached. gasLimit={header.gasLimit}, gasUsed={vmState.cumulativeGasUsed}, addition={gasUsed}")
   else:
     # Accept transaction and collect mining fee.
     vmState.ledger.commit(accTx)
-    vmState.ledger.addBalance(vmState.coinbase(), gasBurned.u256 * priorityFee.u256)
-    vmState.cumulativeGasUsed += gasBurned
+    vmState.ledger.addBalance(vmState.coinbase(), gasUsed.u256 * priorityFee.u256)
+    vmState.cumulativeGasUsed += gasUsed
 
     # Return remaining gas to the block gas counter so it is
     # available for the next transaction.
-    vmState.gasPool += tx.gasLimit - gasBurned
+    vmState.gasPool += tx.gasLimit - gasUsed
     vmState.blobGasUsed += blobGasUsed
     ok()
 
@@ -72,7 +72,7 @@ proc processTransactionImpl(
     tx:      Transaction; ## Transaction to validate
     sender:  Address;  ## tx.recoverSender
     header:  Header; ## Header for the block containing the current tx
-      ): Result[CallResult, string] =
+      ): Result[LogResult, string] =
   ## Modelled after `https://eips.ethereum.org/EIPS/eip-1559#specification`_
   ## which provides a backward compatible framwork for EIP1559.
 
@@ -116,10 +116,17 @@ proc processTransactionImpl(
       vmState.captureTxStart(tx.gasLimit)
       let
         accTx = vmState.ledger.beginSavepoint
-        gasBurned = tx.txCallEvm(sender, vmState, baseFee)
-      vmState.captureTxEnd(tx.gasLimit - gasBurned)
+      var
+        callResult = tx.txCallEvm(sender, vmState, baseFee)
+      vmState.captureTxEnd(tx.gasLimit - callResult.gasUsed)
 
-      commitOrRollbackDependingOnGasUsed(vmState, accTx, header, tx, gasBurned, priorityFee, blobGasUsed)
+      let tmp = commitOrRollbackDependingOnGasUsed(
+        vmState, accTx, header, tx, callResult.gasUsed, priorityFee, blobGasUsed)
+
+      if tmp.isErr():
+        err(tmp.error)
+      else:
+        ok(move(callResult))
     else:
       err(txRes.error)
 
@@ -246,7 +253,7 @@ proc processTransaction*(
     tx:      Transaction; ## Transaction to validate
     sender:  Address;  ## tx.recoverSender
     header:  Header; ## Header for the block containing the current tx
-      ): Result[GasInt,string] =
+      ): Result[LogResult, string] =
   vmState.processTransactionImpl(tx, sender, header)
 
 # ------------------------------------------------------------------------------

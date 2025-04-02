@@ -250,8 +250,12 @@ proc finishRunningComputation(
     when T is DebugCallResult:
       result.stack = move(c.finalStack)
       result.memory = move(c.memory)
+      result.logEntries = move(c.logEntries)
   elif T is GasInt:
     result = call.gasLimit - gasRemaining
+  elif T is LogResult:
+    result.gasUsed = call.gasLimit - gasRemaining
+    result.logEntries = move(c.logEntries)
   elif T is string:
     if c.isError:
       result = c.error.info

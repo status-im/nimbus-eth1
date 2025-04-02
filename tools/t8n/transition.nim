@@ -282,11 +282,10 @@ proc exec(ctx: TransContext,
       )
       continue
 
-    let callResult = rc.get()
-    let rec = vmState.makeReceipt(tx.txType, callResult.logEntries)
+    let rec = vmState.makeReceipt(tx.txType, rc.value)
     vmState.receipts.add rec
     receipts.add toTxReceipt(
-      rec, tx, sender, txIndex, callResult.gasUsed
+      rec, tx, sender, txIndex, rc.value.gasUsed
     )
     includedTx.add tx
 
