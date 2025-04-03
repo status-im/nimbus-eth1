@@ -126,7 +126,7 @@ proc collectAndStashOnDiskCache*(
         break fetchHeadersBody           # stop => exit block
 
       # Store it on the header chain cache
-      ctx.hdrCache.fcHeaderPut(rev).isOkOr:
+      ctx.hdrCache.put(rev).isOkOr:
         buddy.updateBuddyProcError()
         debug info & ": header stash error", peer, iv, ivReq,
           ctrl=buddy.ctrl.state, hdrErrors=buddy.hdrErrors, `error`=error

@@ -218,7 +218,7 @@ proc headersStagedProcess*(buddy: BeaconBuddyRef; info: static[string]) =
     discard ctx.hdr.staged.delete(qItem.key)
 
     # Store headers on database
-    ctx.hdrCache.fcHeaderPut(qItem.data.revHdrs).isOkOr:
+    ctx.hdrCache.put(qItem.data.revHdrs).isOkOr:
       ctx.headersUnprocAppend(minNum, maxNum)
 
       # Error mark buddy that produced that unusable headers list

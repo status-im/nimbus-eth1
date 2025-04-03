@@ -79,7 +79,7 @@ proc setupServices*(ctx: BeaconCtxRef; info: static[string]) =
   if 0 < ctx.clReq.consHead.number:
     debug info & ": pre-set target", consHead=ctx.clReq.consHead.bnStr,
       finalHash=ctx.clReq.finalHash.short
-    ctx.hdrCache.fcHeaderTargetUpdate(ctx.clReq.consHead, ctx.clReq.finalHash)
+    ctx.hdrCache.headTargetUpdate(ctx.clReq.consHead, ctx.clReq.finalHash)
 
   # Provide progress info call back handler
   ctx.pool.chain.com.beaconSyncerProgress = proc(): SyncStateData =

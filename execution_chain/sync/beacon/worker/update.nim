@@ -62,7 +62,7 @@ proc commitCollectHeaders(ctx: BeaconCtxRef; info: static[string]): bool =
     h = ctx.head.number
 
   # This function does the job linking into `FC` module proper
-  ctx.hdrCache.fcHeaderCommit().isOkOr:
+  ctx.hdrCache.commit().isOkOr:
     trace info & ": cannot commit header chain", B=b.bnStr, L=l.bnStr,
       D=ctx.dangling.bnStr, H=h.bnStr, `error`=error
     return false

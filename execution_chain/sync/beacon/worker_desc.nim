@@ -137,15 +137,15 @@ func hdrCache*(ctx: BeaconCtxRef): HeaderChainRef =
 
 func head*(ctx: BeaconCtxRef): Header =
   ## Shortcut
-  ctx.hdrCache.fcHeaderHead()
+  ctx.hdrCache.head()
 
 func dangling*(ctx: BeaconCtxRef): Header =
   ## Shortcut
-  ctx.hdrCache.fcHeaderAntecedent()
+  ctx.hdrCache.antecedent()
 
 func consHeadNumber*(ctx: BeaconCtxRef): BlockNumber =
   ## Shortcut
-  ctx.hdrCache.fcHeaderLastConsHeadNumber()
+  ctx.hdrCache.latestConsHeadNumber()
 
 # ------------
 

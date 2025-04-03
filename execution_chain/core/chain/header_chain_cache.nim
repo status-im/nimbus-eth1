@@ -11,9 +11,6 @@
 ## Header Chain Cache for Collecting Headers for Syncing Apps
 ## ==========================================================
 ##
-## The implemented logic here will eventually be integrated in a header
-## management API of the `FC` module proper.
-##
 ## The header cache is organised as a reverse stack of headers
 ## ::
 ##     <header> <- <header> <- <header> .. <- <header>
@@ -52,12 +49,12 @@
 ## * Cached headers can be looked up for by block number.
 ##
 ## * While appending headers, the current `antecedent` is tested whether it has
-##   a parent on the `FC` module proper. If this is tha case, then any attempt
-##   to add more headers will be silently ignored.
+##   a parent on the `FC` module. If this is tha case, then any attempt to add
+##   more headers will be silently ignored.
 ##
 ## * After headers have been collected and the `antecedent` has a parent on
-##   the `FC` module proper, the header append process must be finished by a
-##   dedicated commit statement `fcHeaderCommit()`.
+##   the `FC` module, the header append process must be finished by a dedicated
+##   commit statement `commit()`.
 ##
 ## Temporary extra:
 ##
@@ -83,7 +80,7 @@ type
     least, last: BlockNumber
 
   HccVetted = tuple
-    ## Helper structure used in `fcHeaderPut()`
+    ## Helper structure used in `put()`
     parent: Hash32
     number: BlockNumber
     data: seq[byte]
@@ -115,8 +112,8 @@ type
     closed = 0                  # no session
     notified                    # client app was offered a new session
     collecting                  # may append session headers
-    ready                       # `ante` has a parent on the `FC` module proper
-    orphan                      # no way to link into `FC` module proper
+    ready                       # `ante` has a parent on the `FC` module
+    orphan                      # no way to link into `FC` module
     locked                      # done with session headers, read-only state
 
   HeaderChainNotifyCB* = proc(finHash: Hash32) {.gcsafe, raises: [].}
@@ -125,15 +122,13 @@ type
     ## as header argument in `startSession()`.
 
   HeaderChainRef* = ref object
-    ## For now, this is a replacement of `ForkedChainRef` for as long as
-    ## `HeaderChainState` is not integrated into `ForkedChainRef`.
+    ## Module descriptor
     chain: ForkedChainRef       # descriptor will resolve into that in future
     session: HccSession         # additional session variables
     notify: HeaderChainNotifyCB # client app notification
     kvt: KvtTxRef               # metadata and temporary headers storage with
                                 # it's own column family
                                 # isolated from ordinary headers storage.
-
 const
   MaxDeleteBatch = 10 * 1024
     ## Insert `persist()` statements in bulk action every `MaxDeleteBatch`
@@ -367,13 +362,10 @@ proc start*(fc: HeaderChainRef; notify: HeaderChainNotifyCB) =
   ## Initalise the chain so can be filled once a chain head is available.
   ##
   ## If so, the peer app that invokes `start()` is informed via the call back
-  ## argument function `notify()` that the header cache was initialised. This
-  ## call back function also passed on the chain head used for initialisation.
-  ## Alternatively, `fcHeaderHead()` can be used for polling if auto
-  ## notification is unwanted.)
+  ## argument function `notify()` that the header cache was initialised.
   ##
-  ## The block number of the new chain `head` is always larger than the current
-  ## base value of the `FC` module proper, in particular the statement
+  ## The block number of the new chain `head` is always larger than the
+  ## current base value of the `FC` module, in particular the statement
   ## `base.number + 1 < head.number` holds.
   ##
   doAssert not notify.isNil
@@ -401,7 +393,7 @@ proc destroy*(fc: HeaderChainRef) =
 # Public heacher cache production API
 # ------------------------------------------------------------------------------
 
-proc fcHeaderGetHash*(fc: HeaderChainRef; bn: BlockNumber): Opt[Hash32] =
+proc getHash*(fc: HeaderChainRef; bn: BlockNumber): Opt[Hash32] =
   ## Convenience function, retrieve hash of block header
   if bn == fc.session.head.number:
     return ok(fc.session.headHash)
@@ -410,14 +402,14 @@ proc fcHeaderGetHash*(fc: HeaderChainRef; bn: BlockNumber): Opt[Hash32] =
     return err()
   ok(hdr.parentHash)
 
-proc fcHeaderGet*(fc: HeaderChainRef; bn: BlockNumber): Opt[Header] =
+proc get*(fc: HeaderChainRef; bn: BlockNumber): Opt[Header] =
   ## Retrieve some stashed header.
   var hdr = fc.kvt.getHeader(bn).valueOr:
     return err()
   ok(move hdr)
 
 
-proc fcHeaderPut*(
+proc put*(
     fc: HeaderChainRef;
     rev: openArray[Header];
       ): Result[void,string] =
@@ -440,11 +432,11 @@ proc fcHeaderPut*(
   ##
   ## There are three outcomes regarding the antecedent (lowest header).
   ##
-  ## * If it has a parent on the `FC` module proper. In that case the function
+  ## * If it has a parent on the `FC` module. In that case the function
   ##   stops appending headers and sets the system to state `ready`
   ##
-  ## * If it transpires that linking into the `FC` module becomes impossible.
-  ##   So the function stops appending headers and the system state will be
+  ## * If it transpires that linking into the `FC` module becomes impossible,
+  ##   then the function stops appending headers and the system state will be
   ##   changed to `orphan`.
   ##
   ## * Otherwise, the function continues appending headers.
@@ -567,13 +559,13 @@ proc fcHeaderPut*(
   ok()
 
 
-proc fcHeaderCommit*(fc: HeaderChainRef): Result[void,string] =
+proc commit*(fc: HeaderChainRef): Result[void,string] =
   ## Finish appending headers to header chain cache which will become
   ## read-only (if this function succeeds.)
   ##
   ## Required system state for running this function is `ready`.
   ##
-  ## This function will provide its collected data to the `FC` module proper
+  ## This function will provide its collected data to the `FC` module
   ## for optimisation purposes.
   ##
   ?fc.expectingMode(ready)
@@ -589,7 +581,7 @@ proc fcHeaderCommit*(fc: HeaderChainRef): Result[void,string] =
 
 # --------------------
 
-func fcHeaderHead*(fc: HeaderChainRef): Header =
+func head*(fc: HeaderChainRef): Header =
   ## Getter: head of header chain. In case there is no header chain
   ## initialised, the return value is `Header()` (i.e. the block number
   ## of the result is zero.).
@@ -597,7 +589,7 @@ func fcHeaderHead*(fc: HeaderChainRef): Header =
   if collecting <= fc.state:
     return fc.session.head
 
-func fcHeaderAntecedent*(fc: HeaderChainRef): Header =
+func antecedent*(fc: HeaderChainRef): Header =
   ## Getter: bottom of header chain. In case there is no header chain
   ## initialised, the return value is `Header()` (i.e. the block number
   ## of the result is zero.).
@@ -607,16 +599,16 @@ func fcHeaderAntecedent*(fc: HeaderChainRef): Header =
 
 # --------------------
 
-func fcHeaderLastConsHeadNumber*(fc: HeaderChainRef): BlockNumber =
+func latestConsHeadNumber*(fc: HeaderChainRef): BlockNumber =
   ## Getter: block number of last `CL` head update (aka forkchoice update).
   ##
   ## This getter is for metrics or debugging purposes. The returned number
-  ## is typically larger than `fcHeaderHead()` and will increaso over time
-  ## while `fcHeaderHead()` remains constant (for the current session.)
+  ## is typically larger than `head()` and will increased over time while
+  ## `head()` remains constant (for the current session.)
   ##
   fc.session.consHeadNum
 
-proc fcHeaderTargetUpdate*(fc: HeaderChainRef; h: Header; f: Hash32) =
+proc headTargetUpdate*(fc: HeaderChainRef; h: Header; f: Hash32) =
   ## Emulate request from `CL` (mainly for debugging purposes)
   if not fc.notify.isNil:
     fc.headUpdateFromCL(h, f)
@@ -629,8 +621,7 @@ import ./forked_chain
 
 proc fcHeaderImportBlock*(fc: HeaderChainRef; blk: Block): Result[void,string] =
   ## Wrapper around `importBlock()` followed by occasional update of the
-  ## base value of the `FC` module proper accomplised by invocation of
-  ## `forkChoice()`.
+  ## base value of the `FC` module accomplised by invocation of `forkChoice()`.
   ##
   ## To be integrated into `FC` module proper
   ##
@@ -651,7 +642,7 @@ proc verify*(fc: HeaderChainRef): Result[void,string] =
   ## Verify that the descriptor range is on the database as well
   if 0 < fc.session.head.number:
     for bn in fc.session.ante.number .. fc.session.head.number:
-      discard fc.fcHeaderGet(bn).valueOr:
+      discard fc.get(bn).valueOr:
         return err("Missing db entry " & bn.bnStr & " for fc=" & fc.toStr)
   ok()
 
