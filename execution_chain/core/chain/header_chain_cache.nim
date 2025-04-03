@@ -130,15 +130,9 @@ type
                                 # it's own column family
                                 # isolated from ordinary headers storage.
 const
-  MaxDeleteBatch = 10 * 1024
+  MaxDeleteBatch = 100 * 1024
     ## Insert `persist()` statements in bulk action every `MaxDeleteBatch`
     ## `del()` directives.
-
-  FinaliserChoiceDelta = 192
-    ## Temporary for `fcHeaderImportBlock()` which will go away.
-    ##
-    ## Suggested minimum block numbers equivalent between consecutive
-    ## invocations of `forkChoice()` (should be > `BaseDistance`.)
 
   RaisePfx = "Header Cache: "
     ## Message prefix used when bailing out raising an exception
@@ -214,13 +208,9 @@ proc getHeader(db: KvtTxRef; bn: BlockNumber): Opt[Header] =
     return err()
   ok decodePayload(data, Header)
 
-proc delHeaders(db: KvtTxRef; fromBn, toBn: BlockNumber) =
-  ## Remove headers from cache
-  for bn in fromBn .. toBn:
-    discard db.del(beaconHeaderKey(bn).toOpenArray)
-    # Occasionally flush the current data
-    if (bn - fromBn) mod MaxDeleteBatch == 0:
-      db.persist()
+proc delHeader(db: KvtTxRef; bn: BlockNumber) =
+  ## Remove header from cache
+  discard db.del(beaconHeaderKey(bn).toOpenArray)
 
 # ----------------------
 
@@ -234,18 +224,13 @@ proc persistInfo(hc: HeaderChainRef) =
 proc persistClear(hc: HeaderChainRef) =
   ## Clear persistent database
   let w = hc.kvt.getInfo.valueOr: return
-  hc.kvt.delHeaders(w.least, w.last)
+  for bn in w.least .. w.last:
+    hc.kvt.delHeader(bn)
+    # Occasionally flush the current data
+    if (bn - w.least) mod MaxDeleteBatch == 0:
+      hc.kvt.persist()
   hc.kvt.delInfo()
   hc.kvt.persist()
-
-proc persistDelUpTo(hc: HeaderChainRef; bn: BlockNumber) =
-  ## Remove headers from the lower end of the cache starting at the
-  ## `antecedent` up to the argument block number.
-  if hc.session.ante.number <= bn and hc.session.head.number <= bn:
-    hc.kvt.delHeaders(hc.session.ante.number, bn)
-    hc.session.ante = hc.kvt.getHeader(bn + 1).valueOr:
-      raiseAssert RaisePfx & "get(header) failed: " & (bn + 1).bnStr
-    hc.persistInfo()
 
 # ------------------------------------------------------------------------------
 # Private helper functions
@@ -346,9 +331,8 @@ proc clear*(hc: HeaderChainRef) =
   ## accepted session (via `accept()`) or a mere notified session (via `notify`
   ## call back argument from `start()`.)
   ##
-  if 0 < hc.session.head.number:
-    hc.session.reset                 # clear session state object
-    hc.persistClear()                # clear database
+  hc.session.reset                   # clear session state object
+  hc.persistClear()                  # clear database
 
 
 proc stop*(hc: HeaderChainRef) =
@@ -612,27 +596,6 @@ proc headTargetUpdate*(hc: HeaderChainRef; h: Header; f: Hash32) =
   ## Emulate request from `CL` (mainly for debugging purposes)
   if not hc.notify.isNil:
     hc.headUpdateFromCL(h, f)
-
-# ------------------------------------------------------------------------------
-# Public convenience wrapper
-# ------------------------------------------------------------------------------
-
-import ./forked_chain
-
-proc fcHeaderImportBlock*(hc: HeaderChainRef; blk: Block): Result[void,string] =
-  ## Wrapper around `importBlock()` followed by occasional update of the
-  ## base value of the `FC` module accomplised by invocation of `forkChoice()`.
-  ##
-  ## To be integrated into `FC` module proper
-  ##
-  ?hc.chain.importBlock(blk)
-
-  if hc.baseNum + FinaliserChoiceDelta < hc.latestNum:
-
-    # Remove some older stashed headers
-    hc.persistDelUpTo hc.baseNum
-
-  ok()
 
 # ------------------------------------------------------------------------------
 # Public debugging helpers

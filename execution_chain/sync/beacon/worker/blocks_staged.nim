@@ -363,7 +363,7 @@ proc blocksStagedImport*(
           nthBn=nBn.bnStr, nthHash=ctx.getNthHash(qItem.data, n).short
         continue
 
-      ctx.hdrCache.fcHeaderImportBlock(qItem.data.blocks[n]).isOkOr:
+      ctx.chain.importBlock(qItem.data.blocks[n]).isOkOr:
         # The way out here is simply to re-compile the block queue. At any
         # point, the `FC` module data area might have been moved to a new
         # canonical branch.
