@@ -21,6 +21,7 @@ import
     test_genesis,
     test_getproof_json,
     test_jwt_auth,
+    test_kvt,
     test_ledger,
     test_multi_keys,
     test_op_arith,

@@ -426,6 +426,13 @@ proc rollback*(ac: LedgerRef, sp: LedgerSpRef) =
   when debugLedgerRef:
     inspectSavePoint("rollback", ac.savePoint)
 
+proc mergeAndReset(tgt, src: var seq[Log]) =
+  if tgt.len == 0:
+    tgt = move(src)
+  else:
+    tgt.add src
+    src.reset
+
 proc commit*(ac: LedgerRef, sp: LedgerSpRef) =
   # Transactions should be handled in a strictly nested fashion.
   # Any child transaction must be committed or rolled-back before

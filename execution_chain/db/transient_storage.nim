@@ -25,7 +25,10 @@ type
 # Private helpers
 #######################################################################
 
-proc mergeAndReset*(a, b: StorageTable) =
+proc mergeAndDiscard*(trg, src: var UInt256) =
+  trg = src # no need to reset, the entire source map gets cleared
+
+proc mergeAndDiscard*(a, b: StorageTable) =
   a.map.mergeAndReset(b.map)
 
 #######################################################################
