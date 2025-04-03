@@ -65,7 +65,7 @@ proc setupServices*(ctx: BeaconCtxRef; info: static[string]) =
 
   # Set up header cache descriptor. This will evenually be integrated
   # into `ForkedChainRef` (i.e. `ctx.pool.chain`.)
-  ctx.pool.hdrCache = ForkedCacheRef.init(ctx.pool.chain)
+  ctx.pool.hdrCache = HeaderChainRef.init(ctx.pool.chain)
 
   # Set up new notifier informing when the new head is available from the
   # `CL`. If there is a new session available, the notifier is called with

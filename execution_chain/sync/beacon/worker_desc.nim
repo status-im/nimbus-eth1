@@ -104,7 +104,7 @@ type
     nextAsyncNanoSleep*: Moment      ## Use nano-sleeps for task switch
 
     chain*: ForkedChainRef           ## Core database, FCU support
-    hdrCache*: ForkedCacheRef        ## Currently in tandem with `chain`
+    hdrCache*: HeaderChainRef        ## Currently in tandem with `chain`
 
     # Blocks import/execution settings
     blkImportOk*: bool               ## Don't fetch data while block importing
@@ -131,7 +131,7 @@ type
 # Public helpers
 # ------------------------------------------------------------------------------
 
-func hdrCache*(ctx: BeaconCtxRef): ForkedCacheRef =
+func hdrCache*(ctx: BeaconCtxRef): HeaderChainRef =
   ## Shortcut
   ctx.pool.hdrCache
 
