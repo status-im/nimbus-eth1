@@ -32,7 +32,7 @@ export
 
 type
   FcHeaderClUpdateCB* = proc(header: Header; finHash: Hash32) {.gcsafe, raises: [].}
-    ## Inform `CL` sub-module `chain_header_cache` about new head.
+    ## Inform `CL` sub-module `header_chain_cache` about new head.
 
   BeaconSyncerProgressCB* = proc(): tuple[start, current, target: BlockNumber] {.gcsafe, raises: [].}
     ## Query syncer status

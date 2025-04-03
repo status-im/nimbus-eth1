@@ -8,8 +8,8 @@
 # at your option. This file may not be copied, modified, or distributed
 # except according to those terms.
 
-## Header Cache for Collecting Headers for Syncing Apps
-## ====================================================
+## Header Chain Cache for Collecting Headers for Syncing Apps
+## ==========================================================
 ##
 ## The implemented logic here will eventually be integrated in a header
 ## management API of the `FC` module proper.
@@ -72,10 +72,10 @@ import
   std/sets,
   pkg/eth/[common, rlp],
   pkg/results,
-  "../../.."/[common, db/core_db, db/storage_types],
-  ../../../db/[kvt, kvt_cf],
-  ../../../db/kvt/[kvt_utils, kvt_tx_frame],
-  ./[chain_branch, chain_desc]
+  "../.."/[common, db/core_db, db/storage_types],
+  ../../db/[kvt, kvt_cf],
+  ../../db/kvt/[kvt_utils, kvt_tx_frame],
+  ./forked_chain/[chain_branch, chain_desc]
 
 type
   FcHdrtDbTabInfo = object
@@ -620,7 +620,7 @@ proc fcHeaderTargetUpdate*(fc: ForkedCacheRef; h: Header; f: Hash32) =
 # Public convenience wrapper
 # ------------------------------------------------------------------------------
 
-import ../forked_chain
+import ./forked_chain
 
 proc fcHeaderImportBlock*(fc: ForkedCacheRef; blk: Block): Result[void,string] =
   ## Wrapper around `importBlock()` followed by occasional update of the
