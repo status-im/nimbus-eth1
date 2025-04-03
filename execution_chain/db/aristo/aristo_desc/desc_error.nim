@@ -61,10 +61,7 @@ type
     DelBranchWithoutRefs
     DelDanglingStoTrie
     DelLeafExpexted
-    DelPathNotFound
     DelRootVidMissing
-    DelStoAccMissing
-    DelStoRootMissing
     DelStoRootNotAccepted
     DelVidStaleVtx
 
@@ -129,58 +126,17 @@ type
 
 
     # Part/proof node errors
-    PartArgNotGenericRoot
-    PartArgNotInCore
-    PartArgRootAlreadyOnDatabase
-    PartArgRootAlreadyUsed
-    PartChkChangedKeyNotInKeyTab
-    PartChkChangedVtxMissing
-    PartChkCoreKeyLookupFailed
-    PartChkCoreRVidLookupFailed
-    PartChkCoreVidLookupFailed
-    PartChkCoreVtxMissing
-    PartChkKeyTabCoreKeyMissing
-    PartChkKeyTabRootMissing
-    PartChkPerimeterVtxMustNotExist
-    PartChkVidKeyTabKeyMismatch
-    PartChkVidKeyTabLengthsDiffer
-    PartChkVidTabCoreRootMissing
-    PartChkVidTabVidMissing
     PartChnBranchPathExhausted
     PartChnBranchVoidEdge
     PartChnExtPfxMismatch
     PartChnLeafPathMismatch
     PartChnNodeConvError
-    PartCtxNotAvailable
-    PartCtxStaleDescriptor
-    PartExtVtxExistsAlready
-    PartExtVtxHasVanished
-    PartExtVtxWasModified
-    PartGarbledExtsInProofs
-    PartMissingUplinkInternalError
-    PartNoMoreRootVidsLeft
-    PartPayloadAccRejected
-    PartPayloadAccRequired
-    PartRlp1r4ListEntries
-    PartRlp2Or17ListEntries
-    PartRlpBlobExpected
-    PartRlpBranchHashKeyExpected
-    PartRlpEmptyBlobExpected
-    PartRlpExtHashKeyExpected
-    PartRlpNodeException
-    PartRlpNonEmptyBlobExpected
-    PartRlpPayloadException
-    PartRootKeysDontMatch
-    PartRootVidsDontMatch
     PartTrkEmptyPath
     PartTrkFollowUpKeyMismatch
     PartTrkGarbledNode
     PartTrkLeafPfxMismatch
     PartTrkLinkExpected
-    PartTrkPayloadMismatch
     PartTrkRlpError
-    PartVtxSlotWasModified
-    PartVtxSlotWasNotModified
 
     # RocksDB backend
     RdbBeCantCreateTmpDir

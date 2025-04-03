@@ -33,15 +33,14 @@ proc buildSnapshot(txFrame: AristoTxRef, minLevel: int) =
       # to become new bases.
       let isKeyframe = txFrame.isKeyframe()
 
-      if frame.snapshotLevel.isSome() and not isKeyframe:
+      if frame.snapshot.level.isSome() and not isKeyframe:
         # `frame` has a snapshot only in the first iteration of the for loop
         txFrame.snapshot = move(frame.snapshot)
-        txFrame.snapshotLevel = frame.snapshotLevel
 
-        assert frame.snapshot.len == 0 # https://github.com/nim-lang/Nim/issues/23759
-        frame.snapshotLevel.reset() # in case there was a snapshot in txFrame already
+        # Verify that https://github.com/nim-lang/Nim/issues/23759 is not present
+        assert frame.snapshot.vtx.len == 0 and frame.snapshot.level.isNone()
 
-        if txFrame.snapshotLevel != Opt.some(minLevel):
+        if txFrame.snapshot.level != Opt.some(minLevel):
           # When recycling an existing snapshot, some of its content may have
           # already been persisted to disk (since it was made base on the
           # in-memory frames at the time of its creation).
@@ -49,27 +48,48 @@ proc buildSnapshot(txFrame: AristoTxRef, minLevel: int) =
           # with the extra seq, move + remove turns out to be faster than
           # creating a new table - specially when the ratio between old and
           # and current items favors current items.
-          var toRemove = newSeqOfCap[RootedVertexID](txFrame.snapshot.len div 2)
-          for rvid, v in txFrame.snapshot:
-            if v[2] < minLevel:
-              toRemove.add rvid
-          for rvid in toRemove:
-            txFrame.snapshot.del(rvid)
+          template delIfIt(tbl: var Table, body: untyped) =
+            var toRemove = newSeqOfCap[typeof(tbl).A](tbl.len div 2)
+            for k, it {.inject.} in tbl:
+              if body:
+                toRemove.add k
+            for k in toRemove:
+              tbl.del(k)
 
-      if frame.snapshotLevel.isSome() and isKeyframe:
-        txFrame.snapshot = initTable[RootedVertexID, Snapshot](
-          max(1024, max(frame.sTab.len, frame.snapshot.len))
+          txFrame.snapshot.vtx.delIfIt(it[2] < minLevel)
+          txFrame.snapshot.acc.delIfIt(it[1] < minLevel)
+          txFrame.snapshot.sto.delIfIt(it[1] < minLevel)
+
+      if frame.snapshot.level.isSome() and isKeyframe:
+        txFrame.snapshot.vtx = initTable[RootedVertexID, VtxSnapshot](
+          max(1024, max(frame.sTab.len, frame.snapshot.vtx.len))
         )
 
-        for k, v in frame.snapshot:
+        txFrame.snapshot.acc = initTable[Hash32, (VertexRef, int)](
+          max(1024, max(frame.accLeaves.len, frame.snapshot.acc.len))
+        )
+
+        txFrame.snapshot.sto = initTable[Hash32, (VertexRef, int)](
+          max(1024, max(frame.stoLeaves.len, frame.snapshot.sto.len))
+        )
+
+        for k, v in frame.snapshot.vtx:
           if v[2] >= minLevel:
-            txFrame.snapshot[k] = v
+            txFrame.snapshot.vtx[k] = v
+
+        for k, v in frame.snapshot.acc:
+          if v[1] >= minLevel:
+            txFrame.snapshot.acc[k] = v
+
+        for k, v in frame.snapshot.sto:
+          if v[1] >= minLevel:
+            txFrame.snapshot.sto[k] = v
 
     # Copy changes into snapshot but keep the diff - the next builder might
     # steal the snapshot!
     txFrame.snapshot.copyFrom(frame)
 
-  txFrame.snapshotLevel = Opt.some(minLevel)
+  txFrame.snapshot.level = Opt.some(minLevel)
 
 proc txFrameBegin*(db: AristoDbRef, parent: AristoTxRef): AristoTxRef =
   let parent = if parent == nil: db.txRef else: parent
@@ -92,7 +112,6 @@ proc checkpoint*(tx: AristoTxRef, blockNumber: uint64, skipSnapshot: bool) =
 proc clearSnapshot*(txFrame: AristoTxRef) =
   if not txFrame.isKeyframe():
     txFrame.snapshot.reset()
-    txFrame.snapshotLevel.reset()
 
 proc persist*(db: AristoDbRef, batch: PutHdlRef, txFrame: AristoTxRef) =
   if txFrame == db.txRef and txFrame.isEmpty():
@@ -123,8 +142,9 @@ proc persist*(db: AristoDbRef, batch: PutHdlRef, txFrame: AristoTxRef) =
         # which caters to the scenario where changes from multiple blocks
         # have already been written to sTab and the changes can moved into
         # the bottom.
-        if bottom.snapshot.len == 0:
-          bottom.snapshotLevel.reset()
+        if (bottom.snapshot.vtx.len + bottom.snapshot.acc.len + bottom.snapshot.sto.len) ==
+            0:
+          bottom.snapshot.level.reset()
         else:
           # Incoming snapshots already have sTab baked in - make sure we don't
           # overwrite merged data from more recent layers with this old version
@@ -148,16 +168,16 @@ proc persist*(db: AristoDbRef, batch: PutHdlRef, txFrame: AristoTxRef) =
 
       txFrame.parent = nil
   else:
-    if txFrame.snapshotLevel.isSome():
+    if txFrame.snapshot.level.isSome():
       # Clear out redundant copy so we don't write it twice, below
       txFrame.sTab.reset()
       txFrame.kMap.reset()
 
   # Store structural single trie entries
-  assert txFrame.snapshot.len == 0 or txFrame.sTab.len == 0,
+  assert txFrame.snapshot.vtx.len == 0 or txFrame.sTab.len == 0,
     "Either snapshot or sTab should have been cleared as part of merging"
 
-  for rvid, item in txFrame.snapshot:
+  for rvid, item in txFrame.snapshot.vtx:
     if item[2] >= oldLevel:
       db.putVtxFn(batch, rvid, item[0], item[1])
 
@@ -177,15 +197,23 @@ proc persist*(db: AristoDbRef, batch: PutHdlRef, txFrame: AristoTxRef) =
 
   # Copy back updated payloads
   for accPath, vtx in txFrame.accLeaves:
-    db.accLeaves.put(accPath, vtx)
+    if vtx == nil:
+      db.accLeaves.del(accPath)
+    else:
+      discard db.accLeaves.update(accPath, vtx)
 
   for mixPath, vtx in txFrame.stoLeaves:
-    db.stoLeaves.put(mixPath, vtx)
+    if vtx == nil:
+      db.stoLeaves.del(mixPath)
+    else:
+      discard db.stoLeaves.update(mixPath, vtx)
 
-  txFrame.snapshot.clear()
+  txFrame.snapshot.vtx.clear()
+  txFrame.snapshot.acc.clear()
+  txFrame.snapshot.sto.clear()
   # Since txFrame is now the base, it contains all changes and therefore acts
   # as a snapshot
-  txFrame.snapshotLevel = Opt.some(txFrame.level)
+  txFrame.snapshot.level = Opt.some(txFrame.level)
   txFrame.sTab.clear()
   txFrame.kMap.clear()
   txFrame.accLeaves.clear()

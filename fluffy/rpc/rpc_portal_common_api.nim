@@ -11,7 +11,8 @@ import
   std/[sequtils, json],
   json_rpc/rpcserver,
   stew/byteutils,
-  ../network/wire/[portal_protocol, portal_protocol_config],
+  results,
+  ../network/wire/[portal_protocol, portal_protocol_config, ping_extensions],
   ./rpc_types
 
 {.warning[UnusedImport]: off.}
@@ -75,16 +76,37 @@ proc installPortalCommonApiHandlers*(
     else:
       raise newException(ValueError, "Record not found in DHT lookup.")
 
-  rpcServer.rpc("portal_" & networkStr & "Ping") do(enr: Record) -> PingResult:
+  rpcServer.rpc("portal_" & networkStr & "Ping") do(
+    enr: Record, payloadType: Opt[uint16], payload: Opt[UnknownPayload]
+  ) -> PingResult:
+    if payloadType.isSome() and payloadType.get() != CapabilitiesType:
+      # We only support sending the default CapabilitiesPayload for now.
+      # This is fine because according to the spec clients are only required
+      # to support the standard extensions.
+      raise payloadTypeNotSupportedError()
+
+    if payload.isSome():
+      # We don't support passing in a custom payload. In order to implement
+      # this we use the empty UnknownPayload type which is defined in the spec
+      # as a json object with no required fields. Just using it here to indicate
+      # if an object was supplied or not and then throw the correct error if so.
+      raise userSpecifiedPayloadBlockedByClientError()
+
     let
       node = toNodeWithAddress(enr)
-      pong = await p.ping(node)
+      pong = (await p.ping(node)).valueOr:
+        raise newException(ValueError, $error)
 
-    if pong.isErr():
-      raise newException(ValueError, $pong.error)
-    else:
-      let (enrSeq, pongPayload) = pong.get()
-      return (enrSeq, pongPayload.data_radius)
+    let
+      (enrSeq, payloadType, capabilitiesPayload) = pong
+      clientInfo = capabilitiesPayload.client_info.asSeq()
+      payload = (
+        string.fromBytes(clientInfo),
+        capabilitiesPayload.data_radius,
+        capabilitiesPayload.capabilities.asSeq(),
+      )
+
+    return PingResult(enrSeq: enrSeq, payloadType: payloadType, payload: payload)
 
   rpcServer.rpc("portal_" & networkStr & "FindNodes") do(
     enr: Record, distances: seq[uint16]

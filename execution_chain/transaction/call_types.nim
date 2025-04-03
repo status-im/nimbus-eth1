@@ -13,6 +13,7 @@ import
   results,
   eth/common/transactions,
   eth/common/addresses,
+  eth/common/receipts,
   ../common/evmforks,
   ../evm/types,
   ../evm/internals,
@@ -51,6 +52,11 @@ type
   DebugCallResult* = object of CallResult
     stack*:           seq[UInt256]      # EVM stack on return (for test only).
     memory*:          EvmMemory         # EVM memory on return (for test only).
+    logEntries*: seq[Log]
+
+  LogResult* = object
+    logEntries*: seq[Log]
+    gasUsed*:    GasInt
 
 template isCreate(tx: Transaction): bool =
   tx.contractCreation

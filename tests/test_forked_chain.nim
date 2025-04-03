@@ -101,8 +101,21 @@ proc makeBlk(txFrame: CoreDbTxRef, number: BlockNumber, parentBlk: Block, extraD
   blk.header.extraData = @[extraData]
   blk
 
-proc headHash(c: ForkedChainRef): Hash32 =
-  c.latestTxFrame.getCanonicalHead().expect("canonical head exists").blockHash
+template checkHeadHash(chain: ForkedChainRef, hashParam: Hash32) =
+  let
+    headHash = hashParam
+    txFrame = chain.txFrame(headHash)
+    res = txFrame.getCanonicalHeaderHash()
+
+  check res.isOk
+  if res.isErr:
+    debugEcho "Canonical head hash should exists: ", res.error
+  else:
+    let canonicalHeadHash = res.get
+    check headHash == canonicalHeadHash
+
+  # also check if the header actually exists
+  check txFrame.getCanonicalHead().isOk
 
 func blockHash(x: Block): Hash32 =
   x.header.blockHash
@@ -190,7 +203,7 @@ proc forkedChainMain*() =
       check chain.validate info & " (1)"
       # no parent
       checkImportBlockErr(chain, blk5)
-      check chain.headHash == genesisHash
+      checkHeadHash chain, genesisHash
       check chain.latestHash == blk3.blockHash
       check chain.validate info & " (2)"
       # finalized > head -> error
@@ -204,12 +217,12 @@ proc forkedChainMain*() =
       checkForkChoiceErr(chain, blk2, blk4)
       # finalized < head -> ok
       checkForkChoice(chain, blk2, blk1)
-      check chain.headHash == blk2.blockHash
+      checkHeadHash chain, blk2.blockHash
       check chain.latestHash == blk2.blockHash
       check chain.validate info & " (7)"
       # finalized == head -> ok
       checkForkChoice(chain, blk2, blk2)
-      check chain.headHash == blk2.blockHash
+      checkHeadHash chain, blk2.blockHash
       check chain.latestHash == blk2.blockHash
       check chain.baseNumber == 0'u64
       check chain.validate info & " (8)"
@@ -233,12 +246,19 @@ proc forkedChainMain*() =
       # newbase == head
       checkForkChoice(chain, blk7, blk6)
       check chain.validate info & " (2)"
-      check chain.headHash == blk7.blockHash
+      checkHeadHash chain, blk7.blockHash
       check chain.latestHash == blk7.blockHash
       check chain.baseBranch == chain.activeBranch
       check chain.wdWritten(blk7) == 7
       # head - baseDistance must been persisted
       checkPersisted(chain, blk3)
+
+      # It is FC module who is responsible for saving
+      # finalized hash on a correct txFrame.
+      let txFrame = chain.txFrame(blk6.blockHash)
+      let savedFinalizedHash = txFrame.finalizedHeaderHash()
+      check blk6.blockHash == savedFinalizedHash
+
       # make sure aristo not wiped out baggage
       check chain.wdWritten(blk3) == 3
       check chain.validate info & " (9)"
@@ -256,7 +276,7 @@ proc forkedChainMain*() =
       check chain.validate info & " (1)"
       checkForkChoice(chain, blk7, blk6)
       check chain.validate info & " (2)"
-      check chain.headHash == blk7.blockHash
+      checkHeadHash chain, blk7.blockHash
       check chain.latestHash == blk7.blockHash
       check chain.baseBranch == chain.activeBranch
       check chain.wdWritten(blk6) == 6
@@ -283,7 +303,7 @@ proc forkedChainMain*() =
       checkImportBlock(chain, B7)
       check chain.validate info & " (1)"
       checkForkChoice(chain, B7, B5)
-      check chain.headHash == B7.blockHash
+      checkHeadHash chain, B7.blockHash
       check chain.latestHash == B7.blockHash
       check chain.baseNumber == 0'u64
       check chain.branches.len == 2
@@ -307,7 +327,7 @@ proc forkedChainMain*() =
       check chain.validate info & " (1)"
       checkForkChoice(chain, B6, B4)
       check chain.validate info & " (2)"
-      check chain.headHash == B6.blockHash
+      checkHeadHash chain, B6.blockHash
       check chain.latestHash == B6.blockHash
       check chain.baseNumber == 3'u64
       check chain.branches.len == 2
@@ -330,7 +350,7 @@ proc forkedChainMain*() =
       check chain.validate info & " (1)"
       checkForkChoice(chain, B7, B6)
       check chain.validate info & " (2)"
-      check chain.headHash == B7.blockHash
+      checkHeadHash chain, B7.blockHash
       check chain.latestHash == B7.blockHash
       check chain.baseNumber == 4'u64
       check chain.branches.len == 1
@@ -353,7 +373,7 @@ proc forkedChainMain*() =
       check chain.validate info & " (1)"
       checkForkChoice(chain, B7, B5)
       check chain.validate info & " (2)"
-      check chain.headHash == B7.blockHash
+      checkHeadHash chain, B7.blockHash
       check chain.latestHash == B7.blockHash
       check chain.baseNumber > 0
       check chain.baseNumber < B4.header.number
@@ -377,7 +397,7 @@ proc forkedChainMain*() =
       check chain.validate info & " (1)"
       checkForkChoice(chain, blk7, blk5)
       check chain.validate info & " (2)"
-      check chain.headHash == blk7.blockHash
+      checkHeadHash chain, blk7.blockHash
       check chain.latestHash == blk7.blockHash
       check chain.baseNumber == 0'u64
       check chain.validate info & " (9)"
@@ -400,7 +420,7 @@ proc forkedChainMain*() =
       check chain.validate info & " (1)"
       checkForkChoice(chain, blk7, blk5)
       check chain.validate info & " (2)"
-      check chain.headHash == blk7.blockHash
+      checkHeadHash chain, blk7.blockHash
       check chain.latestHash == blk7.blockHash
       check chain.baseBranch == chain.activeBranch
       check chain.validate info & " (9)"
@@ -424,7 +444,7 @@ proc forkedChainMain*() =
       check chain.validate info & " (1)"
       checkForkChoice(chain, B7, B5)
       check chain.validate info & " (2)"
-      check chain.headHash == B7.blockHash
+      checkHeadHash chain, B7.blockHash
       check chain.latestHash == B7.blockHash
       check chain.baseNumber == 4'u64
       check chain.branches.len == 1
@@ -447,7 +467,7 @@ proc forkedChainMain*() =
       check chain.validate info & " (1)"
       checkForkChoice(chain, blk7, blk5)
       check chain.validate info & " (2)"
-      check chain.headHash == blk7.blockHash
+      checkHeadHash chain, blk7.blockHash
       check chain.latestHash == blk7.blockHash
       check chain.baseNumber > 0
       check chain.baseNumber < blk5.header.number
@@ -524,7 +544,7 @@ proc forkedChainMain*() =
       check chain.validate info & " (1)"
       let cc = env.newCom(com.db)
       let fc = ForkedChainRef.init(cc, baseDistance = 0)
-      check fc.headHash == blk3.blockHash
+      checkHeadHash fc, blk3.blockHash
       checkImportBlock(fc, blk4)
       checkForkChoice(fc, blk4, blk4)
       check chain.validate info & " (2)"
@@ -537,7 +557,7 @@ proc forkedChainMain*() =
       check chain.validate info & " (1)"
       let cc = env.newCom(com.db)
       let fc = ForkedChainRef.init(cc, baseDistance = 0)
-      check fc.headHash == blk1.blockHash
+      checkHeadHash fc, blk1.blockHash
       checkImportBlock(fc, blk2)
       checkForkChoice(fc, blk2, blk2)
       check chain.validate info & " (2)"

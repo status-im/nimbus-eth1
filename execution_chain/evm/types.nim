@@ -13,10 +13,11 @@
 import
   "."/[stack, memory, code_stream, evm_errors],
   ./interpreter/[gas_costs, op_codes],
+  ./transient_storage,
   ../db/ledger,
   ../common/[common, evmforks]
 
-export stack, memory
+export stack, memory, transient_storage
 
 type
   VMFlag* = enum
@@ -65,6 +66,8 @@ type
     code*:                  CodeStream
     output*:                seq[byte]
     returnData*:            seq[byte]
+    logEntries*:            seq[Log]
+    transientStorage*:      TransientStorage
     error*:                 Error
     savePoint*:             LedgerSpRef
     instr*:                 Op

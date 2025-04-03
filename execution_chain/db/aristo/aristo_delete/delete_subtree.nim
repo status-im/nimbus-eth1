@@ -18,25 +18,6 @@ import
 # Private heplers
 # ------------------------------------------------------------------------------
 
-proc delSubTreeNow(
-    db: AristoTxRef;
-    rvid: RootedVertexID;
-      ): Result[void,AristoError] =
-  ## Delete sub-tree now
-  let (vtx, _) = db.getVtxRc(rvid).valueOr:
-    if error == GetVtxNotFound:
-      return ok()
-    return err(error)
-
-  if vtx.vType == Branch:
-    for _, subvid in vtx.pairs():
-      ? db.delSubTreeNow((rvid.root, subvid))
-
-  db.layersResVtx(rvid)
-
-  ok()
-
-
 proc delStoTreeNow(
   db: AristoTxRef;                   # Database, top layer
   rvid: RootedVertexID;              # Root vertex
@@ -69,20 +50,13 @@ proc delStoTreeNow(
 # Public functions
 # ------------------------------------------------------------------------------
 
-proc delSubTreeImpl*(
-    db: AristoTxRef;
-    root: VertexID;
-      ): Result[void,AristoError] =
-  db.delSubTreeNow (root,root)
-
-
 proc delStoTreeImpl*(
     db: AristoTxRef;                   # Database, top layer
-    rvid: RootedVertexID;              # Root vertex
+    root: VertexID;                    # Root vertex
     accPath: Hash32;
       ): Result[void,AristoError] =
   ## Implementation of *delete* sub-trie.
-  db.delStoTreeNow(rvid, accPath, NibblesBuf())
+  db.delStoTreeNow((root, root), accPath, NibblesBuf())
 
 # ------------------------------------------------------------------------------
 # End

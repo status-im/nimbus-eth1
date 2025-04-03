@@ -73,10 +73,8 @@ proc deleteImpl(
     nbl = br.vtx.branchStillNeeded(hike.legs[^2].nibble).valueOr:
       return err(DelBranchWithoutRefs)
 
-  # Clear all Merkle hash keys up to the root key
-  for n in 0 .. hike.legs.len - 2:
-    let wp = hike.legs[n].wp
-    db.layersResKey((hike.root, wp.vid), wp.vtx)
+  # Clear keys that include `br` - `br` itself will be replaced below
+  db.layersResKeys(hike, skip = 2)
 
   if 0 <= nbl:
     # Branch has only one entry - move that entry to where the branch was and
@@ -130,19 +128,19 @@ proc deleteAccountRecord*(
     accPath: Hash32;
       ): Result[void,AristoError] =
   ## Delete the account leaf entry addressed by the argument `path`. If this
-  ## leaf entry referres to a storage tree, this one will be deleted as well.
+  ## leaf entry references a storage tree, this one will be deleted as well.
   ##
   var accHike: Hike
   db.fetchAccountHike(accPath, accHike).isOkOr:
     if error == FetchAccInaccessible:
-      return err(DelPathNotFound)
+      return ok() # Trying to delete something that doesn't exist is ok
     return err(error)
   let
     stoID = accHike.legs[^1].wp.vtx.lData.stoID
 
   # Delete storage tree if present
   if stoID.isValid:
-    ? db.delStoTreeImpl((stoID.vid, stoID.vid), accPath)
+    ? db.delStoTreeImpl(stoID.vid, accPath)
 
   let otherLeaf = ?db.deleteImpl(accHike)
 
@@ -155,64 +153,16 @@ proc deleteAccountRecord*(
 
   ok()
 
-proc deleteGenericData*(
-    db: AristoTxRef;
-    root: VertexID;
-    path: openArray[byte];
-      ): Result[bool,AristoError] =
-  ## Delete the leaf data entry addressed by the argument `path`.  The MPT
-  ## sub-tree the leaf data entry is subsumed under is passed as argument
-  ## `root` which must be greater than `VertexID(1)` and smaller than
-  ## `LEAST_FREE_VID`.
-  ##
-  ## The return value is `true` if the argument `path` deleted was the last
-  ## one and the tree does not exist anymore.
-  ##
-  # Verify that `root` is neither an accounts tree nor a strorage tree.
-  if not root.isValid:
-    return err(DelRootVidMissing)
-  elif root == VertexID(1):
-    return err(DelAccRootNotAccepted)
-  elif LEAST_FREE_VID <= root.distinctBase:
-    return err(DelStoRootNotAccepted)
-
-  var hike: Hike
-  path.hikeUp(root, db, Opt.none(VertexRef), hike).isOkOr:
-    if error[1] in HikeAcceptableStopsNotFound:
-      return err(DelPathNotFound)
-    return err(error[1])
-
-  discard ?db.deleteImpl(hike)
-
-  ok(not db.getVtx((root, root)).isValid)
-
-proc deleteGenericTree*(
-    db: AristoTxRef;                   # Database, top layer
-    root: VertexID;                    # Root vertex
-      ): Result[void,AristoError] =
-  ## Variant of `deleteGenericData()` for purging the whole MPT sub-tree.
-  ##
-  # Verify that `root` is neither an accounts tree nor a strorage tree.
-  if not root.isValid:
-    return err(DelRootVidMissing)
-  elif root == VertexID(1):
-    return err(DelAccRootNotAccepted)
-  elif LEAST_FREE_VID <= root.distinctBase:
-    return err(DelStoRootNotAccepted)
-
-  db.delSubTreeImpl root
-
 proc deleteStorageData*(
     db: AristoTxRef;
     accPath: Hash32;          # Implies storage data tree
     stoPath: Hash32;
-      ): Result[bool,AristoError] =
+      ): Result[void,AristoError] =
   ## For a given account argument `accPath`, this function deletes the
   ## argument `stoPath` from the associated storage tree (if any, at all.) If
   ## the if the argument `stoPath` deleted was the last one on the storage tree,
   ## account leaf referred to by `accPath` will be updated so that it will
-  ## not refer to a storage tree anymore. In the latter case only the function
-  ## will return `true`.
+  ## not refer to a storage tree anymore.
   ##
 
   let
@@ -220,12 +170,12 @@ proc deleteStorageData*(
     stoLeaf = db.cachedStoLeaf(mixPath)
 
   if stoLeaf == Opt.some(nil):
-    return err(DelPathNotFound)
+    return ok() # Trying to delete something that doesn't exist is ok
 
   var accHike: Hike
   db.fetchAccountHike(accPath, accHike).isOkOr:
     if error == FetchAccInaccessible:
-      return err(DelStoAccMissing)
+      return ok() # Trying to delete something that doesn't exist is ok
     return err(error)
 
   let
@@ -233,17 +183,17 @@ proc deleteStorageData*(
     stoID = wpAcc.vtx.lData.stoID
 
   if not stoID.isValid:
-    return err(DelStoRootMissing)
+    return ok() # Trying to delete something that doesn't exist is ok
 
   let stoNibbles = NibblesBuf.fromBytes(stoPath.data)
   var stoHike: Hike
   stoNibbles.hikeUp(stoID.vid, db, stoLeaf, stoHike).isOkOr:
     if error[1] in HikeAcceptableStopsNotFound:
-      return err(DelPathNotFound)
+      return ok()
     return err(error[1])
 
-  # Mark account path Merkle keys for update
-  db.layersResKeys accHike
+  # Mark account path Merkle keys for update, except for the vtx we update below
+  db.layersResKeys(accHike, skip = if stoHike.legs.len == 1: 1 else: 0)
 
   let otherLeaf = ?db.deleteImpl(stoHike)
   db.layersPutStoLeaf(mixPath, nil)
@@ -255,15 +205,14 @@ proc deleteStorageData*(
     db.layersPutStoLeaf(leafMixPath, otherLeaf)
 
   # If there was only one item (that got deleted), update the account as well
-  if stoHike.legs.len > 1:
-    return ok(false)
+  if stoHike.legs.len == 1:
+    # De-register the deleted storage tree from the account record
+    let leaf = wpAcc.vtx.dup           # Dup on modify
+    leaf.lData.stoID.isValid = false
+    db.layersPutAccLeaf(accPath, leaf)
+    db.layersPutVtx((accHike.root, wpAcc.vid), leaf)
 
-  # De-register the deleted storage tree from the account record
-  let leaf = wpAcc.vtx.dup           # Dup on modify
-  leaf.lData.stoID.isValid = false
-  db.layersPutAccLeaf(accPath, leaf)
-  db.layersPutVtx((accHike.root, wpAcc.vid), leaf)
-  ok(true)
+  ok()
 
 proc deleteStorageTree*(
     db: AristoTxRef;                   # Database, top layer
@@ -275,7 +224,7 @@ proc deleteStorageTree*(
   var accHike: Hike
   db.fetchAccountHike(accPath, accHike).isOkOr:
     if error == FetchAccInaccessible:
-      return err(DelStoAccMissing)
+      return ok() # Trying to delete something that doesn't exist is ok
     return err(error)
 
   let
@@ -283,12 +232,12 @@ proc deleteStorageTree*(
     stoID = wpAcc.vtx.lData.stoID
 
   if not stoID.isValid:
-    return err(DelStoRootMissing)
+    return ok() # Trying to delete something that doesn't exist is ok
 
-  # Mark account path Merkle keys for update
-  db.layersResKeys accHike
+  # Mark account path Merkle keys for update, except for the vtx we update below
+  db.layersResKeys(accHike, skip = 1)
 
-  ? db.delStoTreeImpl((stoID.vid, stoID.vid), accPath)
+  ? db.delStoTreeImpl(stoID.vid, accPath)
 
   # De-register the deleted storage tree from the accounts record
   let leaf = wpAcc.vtx.dup             # Dup on modify

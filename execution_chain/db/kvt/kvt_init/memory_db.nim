@@ -121,6 +121,14 @@ proc closeFn(db: MemBackendRef): CloseFn =
     proc(ignore: bool) =
       discard
 
+
+# -------------
+
+proc getBackendFn(db: MemBackendRef): GetBackendFn =
+  result =
+    proc(): TypedBackendRef =
+      db
+      
 # ------------------------------------------------------------------------------
 # Public functions
 # ------------------------------------------------------------------------------
@@ -138,6 +146,7 @@ proc memoryBackend*: KvtDbRef =
   db.putEndFn = putEndFn be
 
   db.closeFn = closeFn be
+  db.getBackendFn = getBackendFn be
   db
 
 # ------------------------------------------------------------------------------

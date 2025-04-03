@@ -19,15 +19,15 @@ import
 export stint, hashes
 
 import
-  ../aristo/[aristo_desc, aristo_path]
+  ../aristo/[aristo_desc]
 
 # ------------------------------------------------------------------------------
 # Public iterators
 # ------------------------------------------------------------------------------
 
-iterator slotPairs*(acc: CoreDbTxRef; accPath: Hash32): (seq[byte], UInt256) =
-  for (path,data) in acc.aTx.rightPairsStorage accPath:
-    yield (pathAsBlob(path), data)
+iterator slotPairs*(acc: CoreDbTxRef; accPath: Hash32): (Hash32, UInt256) =
+  for a in acc.aTx.rightPairsStorage accPath:
+    yield a
 
 # ------------------------------------------------------------------------------
 # End

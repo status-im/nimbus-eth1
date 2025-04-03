@@ -69,12 +69,12 @@ proc endSession(hdl: PutHdlRef; db: RdbBackendRef): RdbPutHdlRef =
 # Private functions: standard interface
 # ------------------------------------------------------------------------------
 
-proc getKvpFn(db: RdbBackendRef): GetKvpFn =
+proc getKvpFn(db: RdbBackendRef, cf: static[KvtCFs]): GetKvpFn =
   result =
     proc(key: openArray[byte]): Result[seq[byte],KvtError] =
 
       # Get data record
-      var data = db.rdb.get(key).valueOr:
+      var data = db.rdb.get(key, cf).valueOr:
         when extraTraceMessages:
           debug "getKvpFn() failed", key, error=error[0], info=error[1]
         return err(error[0])
@@ -85,12 +85,12 @@ proc getKvpFn(db: RdbBackendRef): GetKvpFn =
 
       err(GetNotFound)
 
-proc lenKvpFn(db: RdbBackendRef): LenKvpFn =
+proc lenKvpFn(db: RdbBackendRef, cf: static[KvtCFs]): LenKvpFn =
   result =
     proc(key: openArray[byte]): Result[int,KvtError] =
 
       # Get data record
-      var len = db.rdb.len(key).valueOr:
+      var len = db.rdb.len(key, cf).valueOr:
         when extraTraceMessages:
           debug "lenKvpFn() failed", key, error=error[0], info=error[1]
         return err(error[0])
@@ -109,14 +109,14 @@ proc putBegFn(db: RdbBackendRef): PutBegFn =
       ok db.newSession(db.rdb.begin())
 
 
-proc putKvpFn(db: RdbBackendRef): PutKvpFn =
+proc putKvpFn(db: RdbBackendRef, cf: static[KvtCFs]): PutKvpFn =
   result =
     proc(hdl: PutHdlRef; k, v: openArray[byte]) =
       let hdl = hdl.getSession db
       if hdl.error == KvtError(0):
 
         # Collect batch session arguments
-        db.rdb.put(hdl.session, k, v).isOkOr:
+        db.rdb.put(hdl.session, k, v, cf).isOkOr:
           hdl.error = error[0]
           hdl.info = error[1]
           return
@@ -139,17 +139,25 @@ proc putEndFn(db: RdbBackendRef): PutEndFn =
           return err(error[0])
       ok()
 
+# -------------
 
 proc closeFn(db: RdbBackendRef): CloseFn =
   result =
     proc(eradicate: bool) =
       db.rdb.destroy(eradicate)
 
+# -------------
+
+proc getBackendFn(db: RdbBackendRef): GetBackendFn =
+  result =
+    proc(): TypedBackendRef =
+      db
+
 # ------------------------------------------------------------------------------
 # Public functions
 # ------------------------------------------------------------------------------
 
-proc rocksDbKvtBackend*(baseDb: RocksDbInstanceRef): KvtDbRef =
+proc rocksDbKvtBackend*(baseDb: RocksDbInstanceRef, cf: static[KvtCFs]): KvtDbRef =
   let
     be = RdbBackendRef(beKind: BackendRocksDB)
     db = KvtDbRef()
@@ -157,16 +165,19 @@ proc rocksDbKvtBackend*(baseDb: RocksDbInstanceRef): KvtDbRef =
   # Initialise RocksDB
   be.rdb.init(baseDb)
 
-  db.getKvpFn = getKvpFn be
-  db.lenKvpFn = lenKvpFn be
+  db.getKvpFn = getKvpFn(be, cf)
+  db.lenKvpFn = lenKvpFn(be, cf)
 
   db.putBegFn = putBegFn be
-  db.putKvpFn = putKvpFn be
+  db.putKvpFn = putKvpFn(be, cf)
   db.putEndFn = putEndFn be
 
   db.closeFn = closeFn be
-
+  db.getBackendFn = getBackendFn be
   db
+
+proc getBaseDb*(db: RdbBackendRef): RocksDbInstanceRef =
+  db.rdb.baseDb
 
 # ------------------------------------------------------------------------------
 # Public iterators (needs direct backend access)

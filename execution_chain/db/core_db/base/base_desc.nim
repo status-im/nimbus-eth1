@@ -12,7 +12,7 @@
 
 import
   results,
-  "../.."/[aristo, kvt]
+  ../../[aristo, kvt]
 
 type
   CoreDbType* = enum

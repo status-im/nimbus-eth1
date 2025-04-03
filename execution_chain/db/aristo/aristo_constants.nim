@@ -1,5 +1,5 @@
 # nimbus-eth1
-# Copyright (c) 2023-2024 Status Research & Development GmbH
+# Copyright (c) 2023-2025 Status Research & Development GmbH
 # Licensed under either of
 #  * Apache License, version 2.0, ([LICENSE-APACHE](LICENSE-APACHE) or
 #    http://www.apache.org/licenses/LICENSE-2.0)
@@ -25,9 +25,6 @@ const
     ## Useful shortcut
 
   VOID_HASH_KEY* = HashKey()
-    ## Void equivalent for Merkle hash value
-
-  VOID_PATH_ID* = PathID()
     ## Void equivalent for Merkle hash value
 
   LEAST_FREE_VID* = 100

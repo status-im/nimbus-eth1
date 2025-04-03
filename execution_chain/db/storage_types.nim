@@ -1,5 +1,5 @@
 # Nimbus
-# Copyright (c) 2023-2024 Status Research & Development GmbH
+# Copyright (c) 2023-2025 Status Research & Development GmbH
 # Licensed under either of
 #  * Apache License, version 2.0, ([LICENSE-APACHE](LICENSE-APACHE) or
 #    http://www.apache.org/licenses/LICENSE-2.0)
@@ -64,10 +64,9 @@ func dataDirIdKey*(): DbKey {.inline.} =
   result.data[0] = byte ord(dataDirId)
   result.dataEndPos = 1
 
-func slotHashToSlotKey*(h: openArray[byte]): DbKey {.inline.} =
-  doAssert(h.len == 32)
+func slotHashToSlotKey*(h: Hash32): DbKey {.inline.} =
   result.data[0] = byte ord(slotHashToSlot)
-  result.data[1 .. 32] = h
+  result.data[1 .. 32] = h.data()
   result.dataEndPos = uint8 32
 
 func contractHashKey*(h: Hash32): DbKey {.inline.} =

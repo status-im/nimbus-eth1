@@ -8,12 +8,20 @@
 # at your option. This file may not be copied, modified, or distributed
 # except according to those terms.
 
+## Aristo DB -- Create and verify MPT proofs
+## ===========================================================
+##
 {.push raises: [].}
 
 import
-  eth/common,
+  eth/common/hashes,
   results,
-  ".."/[aristo_desc, aristo_get, aristo_utils, aristo_serialise]
+  ./[aristo_desc, aristo_fetch, aristo_get, aristo_serialise, aristo_utils]
+
+# ------------------------------------------------------------------------------
+# Public functions
+# ------------------------------------------------------------------------------
+
 
 const
   ChainRlpNodesNoEntry* = {
@@ -25,11 +33,7 @@ const
     ## This is the opposite of `ChainRlpNodesNoEntry` when verifying that a
     ## node does not exist.
 
-# ------------------------------------------------------------------------------
-# Public functions
-# ------------------------------------------------------------------------------
-
-proc chainRlpNodes*(
+proc chainRlpNodes(
     db: AristoTxRef;
     rvid: RootedVertexID;
     path: NibblesBuf,
@@ -68,7 +72,7 @@ proc chainRlpNodes*(
       db.chainRlpNodes((rvid.root,vtx.bVid(nibble)), rest, chain)
 
 
-proc trackRlpNodes*(
+proc trackRlpNodes(
     chain: openArray[seq[byte]];
     topKey: HashKey;
     path: NibblesBuf;
@@ -112,6 +116,70 @@ proc trackRlpNodes*(
   let nextKey = HashKey.fromBytes(link).valueOr:
     return err(PartTrkLinkExpected)
   chain.toOpenArray(1,chain.len-1).trackRlpNodes(nextKey, path.slice nChewOff)
+
+# ------------------------------------------------------------------------------
+# Public functions
+# ------------------------------------------------------------------------------
+
+proc makeProof(
+    db: AristoTxRef;
+    root: VertexID;
+    path: NibblesBuf;
+      ): Result[(seq[seq[byte]],bool), AristoError] =
+  ## This function returns a chain of rlp-encoded nodes along the argument
+  ## path `(root,path)` followed by a `true` value if the `path` argument
+  ## exists in the database. If the argument `path` is not on the database,
+  ## a partial path will be returned follwed by a `false` value.
+  ##
+  ## Errors will only be returned for invalid paths.
+  ##
+  var chain: seq[seq[byte]]
+  let rc = db.chainRlpNodes((root,root), path, chain)
+  if rc.isOk:
+    ok((chain, true))
+  elif rc.error in ChainRlpNodesNoEntry:
+    ok((chain, false))
+  else:
+    err(rc.error)
+
+proc makeAccountProof*(
+    db: AristoTxRef;
+    accPath: Hash32;
+      ): Result[(seq[seq[byte]],bool), AristoError] =
+  db.makeProof(VertexID(1), NibblesBuf.fromBytes accPath.data)
+
+proc makeStorageProof*(
+    db: AristoTxRef;
+    accPath: Hash32;
+    stoPath: Hash32;
+      ): Result[(seq[seq[byte]],bool), AristoError] =
+  ## Note that the function returns an error unless
+  ## the argument `accPath` is valid.
+  let vid = db.fetchStorageID(accPath).valueOr:
+    if error == FetchPathStoRootMissing:
+      return ok((@[],false))
+    return err(error)
+  db.makeProof(vid, NibblesBuf.fromBytes stoPath.data)
+
+# ----------
+
+proc verifyProof*(
+    chain: openArray[seq[byte]];
+    root: Hash32;
+    path: Hash32;
+      ): Result[Opt[seq[byte]],AristoError] =
+  ## Variant of `partUntwigGeneric()`.
+  try:
+    let
+      nibbles = NibblesBuf.fromBytes path.data
+      rc = chain.trackRlpNodes(root.to(HashKey), nibbles, start=true)
+    if rc.isOk:
+      return ok(Opt.some rc.value)
+    if rc.error in TrackRlpNodesNoEntry:
+      return ok(Opt.none seq[byte])
+    return err(rc.error)
+  except RlpError:
+    return err(PartTrkRlpError)
 
 # ------------------------------------------------------------------------------
 # End

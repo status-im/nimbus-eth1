@@ -339,7 +339,7 @@ proc verifyAsmResult(vmState: BaseVMState, boa: Assembler, asmResult: DebugCallR
       error "storage has different value", key=key, expected=val, actual
       return false
 
-  let logs = vmState.getAndClearLogEntries()
+  let logs = asmResult.logEntries
   if logs.len != boa.logs.len:
     error "different logs len", expected=boa.logs.len, actual=logs.len
     return false

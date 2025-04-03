@@ -15,6 +15,7 @@ on:
       - 'doc/**'
       - 'docs/**'
       - '**/*.md'
+      - '**/*.yml'
       - 'hive_integration/**'
       - 'fluffy/**'
       - '.github/workflows/fluffy*.yml'

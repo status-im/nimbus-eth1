@@ -69,7 +69,7 @@ func getNibble(x: openArray[byte], i: int): byte =
   else:
     result = x[i shr 1] shr 4
 
-func compareNibbles(x: openArray[byte], start: int, n: NibblesSeq): bool =
+func compareNibbles(x: openArray[byte], start: int, n: NibblesBuf): bool =
   var i = 0
   while i < n.len:
     if getNibble(x, start + i) != n[i]:
@@ -137,7 +137,7 @@ func groups*(m: MultiKeysRef, parentGroup: Group, depth: int): BranchGroup =
   setBranchMaskBit(result.mask, nibble.int)
   result.groups[nibble.int] = g
 
-func groups*(m: MultiKeysRef, depth: int, n: NibblesSeq, parentGroup: Group): MatchGroup =
+func groups*(m: MultiKeysRef, depth: int, n: NibblesBuf, parentGroup: Group): MatchGroup =
   # using common-prefix comparison, this func
   # will produce one match group or no match at all
   var g = Group(first: parentGroup.first)

@@ -71,7 +71,7 @@ const
 
 proc verifyAccountProof(trustedStateRoot: Hash32, res: ProofResponse): MptProofVerificationResult =
   let
-    key = toSeq(keccak256(res.address.data).data)
+    key = keccak256(res.address.data).data
     value = rlp.encode(Account(
         nonce: res.nonce.uint64,
         balance: res.balance,
@@ -86,7 +86,7 @@ proc verifyAccountProof(trustedStateRoot: Hash32, res: ProofResponse): MptProofV
 
 proc verifySlotProof(trustedStorageRoot: Hash32, slot: StorageProof): MptProofVerificationResult =
   let
-    key = toSeq(keccak256(toBytesBE(slot.key)).data)
+    key = keccak256(toBytesBE(slot.key)).data
     value = rlp.encode(slot.value)
 
   verifyMptProof(
@@ -188,9 +188,6 @@ proc setupEnv(envFork: HardFork = MergeFork): TestEnv =
     com   = setupCom(conf)
     chain = ForkedChainRef.init(com)
     txPool = TxPoolRef.new(chain)
-  # chain.portal = PortalClientRef.init(conf)
-
-  let
     server = newRpcHttpServerWithParams("127.0.0.1:0").valueOr:
       echo "Failed to create rpc server: ", error
       quit(QuitFailure)

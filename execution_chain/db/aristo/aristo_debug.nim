@@ -153,11 +153,6 @@ proc ppKey(key: HashKey; db: AristoTxRef; pfx = true): string =
       let tag = if key.len < 32: "[#" & $key.len & "]" else: ""
       result &= @(key.data).toHex.squeeze(hex=true,ignLen=true) & tag
 
-func ppLeafTie(lty: LeafTie, db: AristoTxRef): string =
-  let pfx = lty.path.to(NibblesBuf)
-  "@" & lty.root.ppVid(pfx=false) & ":" &
-    ($pfx).squeeze(hex=true,ignLen=(pfx.len==64))
-
 func ppPathPfx(pfx: NibblesBuf): string =
   let s = $pfx
   if s.len < 20: s else: s[0 .. 5] & ".." & s[s.len-8 .. ^1] & ":" & $s.len
@@ -503,9 +498,6 @@ proc pp*(w: Hash32; db = AristoTxRef(nil)): string =
 
 proc pp*(w: openArray[HashKey]; db = AristoTxRef(nil)): string =
   "[" & @w.mapIt(it.ppKey(db.orDefault)).join(",") & "]"
-
-func pp*(lty: LeafTie, db = AristoTxRef(nil)): string =
-  lty.ppLeafTie(db.orDefault)
 
 proc pp*(a: Account, db = AristoTxRef(nil)): string =
   a.ppEthAccount(db.orDefault)

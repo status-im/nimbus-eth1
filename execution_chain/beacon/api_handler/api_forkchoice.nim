@@ -159,14 +159,13 @@ proc forkchoiceUpdated*(ben: BeaconEngineRef,
 
   # If the beacon client also advertised a finalized block, mark the local
   # chain final and completely in PoS mode.
-  let baseTxFrame = ben.chain.baseTxFrame
   let finalizedBlockHash = update.finalizedBlockHash
   if finalizedBlockHash != zeroHash32:
     if not ben.chain.equalOrAncestorOf(finalizedBlockHash, headHash):
       warn "Final block not in canonical tree",
         hash=finalizedBlockHash.short
       raise invalidForkChoiceState("finalized block not in canonical tree")
-    baseTxFrame.finalizedHeaderHash(finalizedBlockHash)
+    # similar to headHash, finalizedBlockHash is saved by FC module
 
   let safeBlockHash = update.safeBlockHash
   if safeBlockHash != zeroHash32:
@@ -174,7 +173,10 @@ proc forkchoiceUpdated*(ben: BeaconEngineRef,
       warn "Safe block not in canonical tree",
         hash=safeBlockHash.short
       raise invalidForkChoiceState("safe block not in canonical tree")
-    baseTxFrame.safeHeaderHash(safeBlockHash)
+    # Current version of FC module is not interested in safeBlockHash
+    # so we save it here
+    let txFrame = ben.chain.txFrame(safeBlockHash)
+    txFrame.safeHeaderHash(safeBlockHash)
 
   chain.forkChoice(headHash, update.finalizedBlockHash).isOkOr:
     return invalidFCU(error, chain, header)
