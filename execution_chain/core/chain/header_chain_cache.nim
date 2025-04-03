@@ -156,14 +156,14 @@ func bnStr(w: BlockNumber): string =
 func bnStr(h: Header): string =
   h.number.bnStr
 
-func toStr(fc: HeaderChainRef): string =
+func toStr(hc: HeaderChainRef): string =
   result = "("
-  result &= $fc.session.mode
-  result &= ", " & fc.session.ante.bnStr
-  if fc.session.ante != fc.session.head:
-    result &= ".." & fc.session.head.bnStr
-  result &= "," & fc.session.finHeader.bnStr
-  result &= "," & fc.session.consHeadNum.bnStr
+  result &= $hc.session.mode
+  result &= ", " & hc.session.ante.bnStr
+  if hc.session.ante != hc.session.head:
+    result &= ".." & hc.session.head.bnStr
+  result &= "," & hc.session.finHeader.bnStr
+  result &= "," & hc.session.consHeadNum.bnStr
   result &= ")"
 
 # ------------------------------------------------------------------------------
@@ -224,66 +224,66 @@ proc delHeaders(db: KvtTxRef; fromBn, toBn: BlockNumber) =
 
 # ----------------------
 
-proc persistInfo(fc: HeaderChainRef) =
+proc persistInfo(hc: HeaderChainRef) =
   ## Persist info record (and whatever was in the kvt cache)
-  fc.kvt.putInfo HccDbInfo(
-    least: fc.session.ante.number,
-    last:  fc.session.head.number)
-  fc.kvt.persist()
+  hc.kvt.putInfo HccDbInfo(
+    least: hc.session.ante.number,
+    last:  hc.session.head.number)
+  hc.kvt.persist()
 
-proc persistClear(fc: HeaderChainRef) =
+proc persistClear(hc: HeaderChainRef) =
   ## Clear persistent database
-  let w = fc.kvt.getInfo.valueOr: return
-  fc.kvt.delHeaders(w.least, w.last)
-  fc.kvt.delInfo()
-  fc.kvt.persist()
+  let w = hc.kvt.getInfo.valueOr: return
+  hc.kvt.delHeaders(w.least, w.last)
+  hc.kvt.delInfo()
+  hc.kvt.persist()
 
-proc persistDelUpTo(fc: HeaderChainRef; bn: BlockNumber) =
+proc persistDelUpTo(hc: HeaderChainRef; bn: BlockNumber) =
   ## Remove headers from the lower end of the cache starting at the
   ## `antecedent` up to the argument block number.
-  if fc.session.ante.number <= bn and fc.session.head.number <= bn:
-    fc.kvt.delHeaders(fc.session.ante.number, bn)
-    fc.session.ante = fc.kvt.getHeader(bn + 1).valueOr:
+  if hc.session.ante.number <= bn and hc.session.head.number <= bn:
+    hc.kvt.delHeaders(hc.session.ante.number, bn)
+    hc.session.ante = hc.kvt.getHeader(bn + 1).valueOr:
       raiseAssert RaisePfx & "get(header) failed: " & (bn + 1).bnStr
-    fc.persistInfo()
+    hc.persistInfo()
 
 # ------------------------------------------------------------------------------
 # Private helper functions
 # ------------------------------------------------------------------------------
 
-func baseNum(fc: HeaderChainRef): BlockNumber =
-  ## Aka `fc.chain.baseNumber()` (avoiding `forked_chain` import)
-  fc.chain.baseBranch.tailNumber
+func baseNum(hc: HeaderChainRef): BlockNumber =
+  ## Aka `hc.chain.baseNumber()` (avoiding `forked_chain` import)
+  hc.chain.baseBranch.tailNumber
 
-func latestNum(fc: HeaderChainRef): BlockNumber =
-  ## Aka `fc.chain.latestNumber()` (avoiding `forked_chain` import)
-  fc.chain.activeBranch.headNumber
+func latestNum(hc: HeaderChainRef): BlockNumber =
+  ## Aka `hc.chain.latestNumber()` (avoiding `forked_chain` import)
+  hc.chain.activeBranch.headNumber
 
 func expectingMode(
-    fc: HeaderChainRef;
+    hc: HeaderChainRef;
     mode: HeaderChainMode;
       ): Result[void,string] =
-  if fc.session.mode == mode:
+  if hc.session.mode == mode:
     return ok()
-  err("fcHeader session in wrong state: got=" &
-    $fc.session.mode & " expected=" & $mode)
+  err("HeaderChain session in wrong state: got=" &
+    $hc.session.mode & " expected=" & $mode)
 
 # ------------------------------------------------------------------------------
 # Private fork choice call back function
 # ------------------------------------------------------------------------------
 
-proc headUpdateFromCL(fc: HeaderChainRef; h: Header; f: Hash32) =
+proc headUpdateFromCL(hc: HeaderChainRef; h: Header; f: Hash32) =
   ## Call back function to register new/prevously-unknown FC updates.
   ##
   ## This function prepares a new session and notifies some registered
   ## client app.
   ##
   if f != zeroHash32 and                            # finalised hash is set
-     fc.baseNum + 1 < h.number:                     # otherwise useless
+     hc.baseNum + 1 < h.number:                     # otherwise useless
 
-    if fc.session.mode == closed:
+    if hc.session.mode == closed:
       # Set new session environment
-      fc.session = HccSession(                      # start new session
+      hc.session = HccSession(                      # start new session
         mode:     notified,
         ante:     h,
         head:     h,
@@ -291,44 +291,44 @@ proc headUpdateFromCL(fc: HeaderChainRef; h: Header; f: Hash32) =
         finHash:  f)
 
       # Inform client app about that a new session is available.
-      fc.notify(f)
+      hc.notify(f)
 
     # For logging and metrics
-    fc.session.consHeadNum = h.number
+    hc.session.consHeadNum = h.number
 
 # ------------------------------------------------------------------------------
 # Public constructor/destructor et al.
 # ------------------------------------------------------------------------------
 
-func state*(fc: HeaderChainRef): HeaderChainMode =
+func state*(hc: HeaderChainRef): HeaderChainMode =
   ## Getter: Current run state
   ##
   ## Requested system state for running function:
   ## ::
   ##    closed         -- *internal*
   ##    notified       -- accept()
-  ##    collecting     -- fcHeaderPut()
-  ##    ready          -- fcHeaderComplete()
+  ##    collecting     -- put()
+  ##    ready          -- complete()
   ##    orphan         -- n/a
   ##    locked         -- fcHeaderImportBlock()
   ##
-  fc.session.mode
+  hc.session.mode
 
-proc accept*(fc: HeaderChainRef; fin: Header): bool =
+proc accept*(hc: HeaderChainRef; fin: Header): bool =
   ## Accept and activate session.
   ##
   ## Required system state is to run this function is `notified`.
   ##
-  if fc.state == notified and
-     fc.baseNum < fin.number and
-     fin.number <= fc.session.head.number:
+  if hc.state == notified and
+     hc.baseNum < fin.number and
+     fin.number <= hc.session.head.number:
 
     let finHash = fin.computeBlockHash()
-    if fc.session.finHash != finHash:
+    if hc.session.finHash != finHash:
       return false
 
-    fc.session.finHeader = fin
-    fc.kvt.putHeader(fc.session.head.number, encodePayload fc.session.head)
+    hc.session.finHeader = fin
+    hc.kvt.putHeader(hc.session.head.number, encodePayload hc.session.head)
 
     # TODO: syncer and also ForkedCache should not start session
     # using finalizedHash, as evident from hive test
@@ -336,29 +336,29 @@ proc accept*(fc: HeaderChainRef; fin: Header): bool =
     # Syncer and ForkedCache should only deal with FCU headHash.
     # TODO: move notifyBlockHashAndNumber call to fcPutHeader
     # where one of the headers should also the finalized header.
-    fc.chain.notifyBlockHashAndNumber(finHash, fin.number)
+    hc.chain.notifyBlockHashAndNumber(finHash, fin.number)
 
-    fc.session.mode = collecting
+    hc.session.mode = collecting
     return true
 
-proc clear*(fc: HeaderChainRef) =
+proc clear*(hc: HeaderChainRef) =
   ## Clear and flush current header chain cache session. This applies to an
   ## accepted session (via `accept()`) or a mere notified session (via `notify`
   ## call back argument from `start()`.)
   ##
-  if 0 < fc.session.head.number:
-    fc.session.reset                 # clear session state object
-    fc.persistClear()                # clear database
+  if 0 < hc.session.head.number:
+    hc.session.reset                 # clear session state object
+    hc.persistClear()                # clear database
 
 
-proc stop*(fc: HeaderChainRef) =
+proc stop*(hc: HeaderChainRef) =
   ## Stop updating the client cache. Will automatically be called by the
   ## destructor `destroy()`.
   ##
-  fc.chain.com.headerChainUpdate = HeaderChainUpdateCB(nil)
-  fc.notify = HeaderChainNotifyCB(nil)
+  hc.chain.com.headerChainUpdate = HeaderChainUpdateCB(nil)
+  hc.notify = HeaderChainNotifyCB(nil)
 
-proc start*(fc: HeaderChainRef; notify: HeaderChainNotifyCB) =
+proc start*(hc: HeaderChainRef; notify: HeaderChainNotifyCB) =
   ## Initalise the chain so can be filled once a chain head is available.
   ##
   ## If so, the peer app that invokes `start()` is informed via the call back
@@ -369,9 +369,9 @@ proc start*(fc: HeaderChainRef; notify: HeaderChainNotifyCB) =
   ## `base.number + 1 < head.number` holds.
   ##
   doAssert not notify.isNil
-  fc.notify = notify
-  fc.chain.com.headerChainUpdate = proc(h: Header; f: Hash32) =
-    fc.headUpdateFromCL(h, f)
+  hc.notify = notify
+  hc.chain.com.headerChainUpdate = proc(h: Header; f: Hash32) =
+    hc.headUpdateFromCL(h, f)
 
 # ------------------
 
@@ -380,37 +380,37 @@ proc init*(T: type HeaderChainRef; c: ForkedChainRef): T =
   ## using the cache, `start()` needs to be called so that the client app gets
   ## informed when and how the API is fully functional.
   ##
-  let fc = T(chain: c, kvt: c.com.db.kvtBackend().synchronizerKvt())
-  fc.persistClear()                  # clear database
-  fc
+  let hc = T(chain: c, kvt: c.com.db.kvtBackend().synchronizerKvt())
+  hc.persistClear()                  # clear database
+  hc
 
-proc destroy*(fc: HeaderChainRef) =
+proc destroy*(hc: HeaderChainRef) =
   ## Destructor
-  fc.stop()
-  fc.clear()
+  hc.stop()
+  hc.clear()
 
 # ------------------------------------------------------------------------------
 # Public heacher cache production API
 # ------------------------------------------------------------------------------
 
-proc getHash*(fc: HeaderChainRef; bn: BlockNumber): Opt[Hash32] =
+proc getHash*(hc: HeaderChainRef; bn: BlockNumber): Opt[Hash32] =
   ## Convenience function, retrieve hash of block header
-  if bn == fc.session.head.number:
-    return ok(fc.session.headHash)
+  if bn == hc.session.head.number:
+    return ok(hc.session.headHash)
   # Use parent hash of child entry
-  let hdr = fc.kvt.getHeader(bn+1).valueOr:
+  let hdr = hc.kvt.getHeader(bn+1).valueOr:
     return err()
   ok(hdr.parentHash)
 
-proc get*(fc: HeaderChainRef; bn: BlockNumber): Opt[Header] =
+proc get*(hc: HeaderChainRef; bn: BlockNumber): Opt[Header] =
   ## Retrieve some stashed header.
-  var hdr = fc.kvt.getHeader(bn).valueOr:
+  var hdr = hc.kvt.getHeader(bn).valueOr:
     return err()
   ok(move hdr)
 
 
 proc put*(
-    fc: HeaderChainRef;
+    hc: HeaderChainRef;
     rev: openArray[Header];
       ): Result[void,string] =
   ## This function will store argument headers to the persistent header chain.
@@ -443,36 +443,36 @@ proc put*(
   ##
   ## In either of the three cases, OK is returned.
   ##
-  if fc.state in {ready,orphan}:
+  if hc.state in {ready,orphan}:
     return ok() # nothing to do
 
-  ?fc.expectingMode(collecting)
+  ?hc.expectingMode(collecting)
 
   if rev.len == 0:
     return ok() # nothing to do
 
   # Check whether argument list closes up to headers chain
   let lastNumber = rev[0].number
-  if lastNumber + 1 < fc.session.ante.number:
+  if lastNumber + 1 < hc.session.ante.number:
     return err("Gap between rev[] and headers chain antecedent " &
-               fc.session.ante.bnStr)
+               hc.session.ante.bnStr)
 
   # Must not overwrite or exceed the top end of headers chain
-  if fc.session.head.number <= lastNumber:
-    return err("Argument rev[] exceeds chain head " & fc.session.head.bnStr)
+  if hc.session.head.number <= lastNumber:
+    return err("Argument rev[] exceeds chain head " & hc.session.head.bnStr)
 
   # The tail must not go below the `base`. It cannot be handled even if it
   # has a parent on the database.
-  let baseNum = fc.baseNum()
+  let baseNum = hc.baseNum()
 
  # Start at the entry that is parent to `ante` (if any)
-  let offset = ((lastNumber + 1) - fc.session.ante.number).int
+  let offset = ((lastNumber + 1) - hc.session.ante.number).int
   if offset < rev.len:
     # Verify headers. The loop runs top down starting at header with highest
     # block number `lastNumber`. Serialised blocks from rev`[]` are collected
     # in the `vetted[]` list and stored if they turn out consistent.
     var
-      vetted: seq[HccVetted] = @[(fc.session.ante.parentHash, 0, @[])]
+      vetted: seq[HccVetted] = @[(hc.session.ante.parentHash, 0, @[])]
       revTopInx = rev.len - 1
     for n in offset .. revTopInx:
       let
@@ -487,7 +487,7 @@ proc put*(
 
       if bn < baseNum:
         # Delayed error so any batch using this function has a soft landing
-        fc.session.mode = orphan
+        hc.session.mode = orphan
         return ok()
 
       # Check parent link
@@ -499,18 +499,18 @@ proc put*(
 
       # Check whether the current header matches the `finalised` one. If so,
       # headers must match.
-      if fc.session.finHeader.number == bn:
-        if fc.session.finHash != hash:
+      if hc.session.finHeader.number == bn:
+        if hc.session.finHash != hash:
           # Delayed error so any batch using this function has a soft landing
-          fc.session.mode = orphan
+          hc.session.mode = orphan
           return ok()
 
       # Update list of verified entries
       vetted.add (hdr.parentHash, bn, encodePayload hdr)
 
       # Check whether the `hdr` has a parent on the `FC` module
-      if fc.chain.hashToBlock.hasKey(hdr.parentHash):
-        let finNumber = fc.session.finHeader.number
+      if hc.chain.hashToBlock.hasKey(hdr.parentHash):
+        let finNumber = hc.session.finHeader.number
 
         # Verify that the `finalised` header is on the current chain. If the
         # `finalised` block number is at least `bn`, this has been verified
@@ -519,8 +519,8 @@ proc put*(
 
           # Cheap check whether `finalised` header cannot be on the
           # `finalised` header database.
-          if finNumber < fc.baseNum:
-            fc.session.mode = orphan
+          if finNumber < hc.baseNum:
+            hc.session.mode = orphan
             return ok()
 
           # Now, the `finalised` block number is between the one of `base`
@@ -533,33 +533,33 @@ proc put*(
           # branch `base`..`hdr`.
           var finChild = hdr
           while finNumber+1 < finChild.number:
-            fc.chain.hashToBlock.withValue(finChild.parentHash,val):
+            hc.chain.hashToBlock.withValue(finChild.parentHash,val):
               finChild = val[].blk.header
-          if fc.session.finHash != finChild.parentHash:
+          if hc.session.finHash != finChild.parentHash:
             # Fail: The `finalised` header is on the wrong branch.
-            fc.session.mode = orphan
+            hc.session.mode = orphan
             return ok()
 
         # Chaining headers stops here
-        fc.session.mode = ready
+        hc.session.mode = ready
         revTopInx = n
         break
 
     # Commit to database
     for n in 1 ..< vetted.len:
       # Store on database
-      fc.kvt.putHeader(vetted[n].number, vetted[n].data)
+      hc.kvt.putHeader(vetted[n].number, vetted[n].data)
 
     # Set new antecedent `ante` and save to disk (if any)
-    fc.session.ante = rev[revTopInx]
+    hc.session.ante = rev[revTopInx]
 
     # Save updates. persist to DB
-    fc.persistInfo()
+    hc.persistInfo()
 
   ok()
 
 
-proc commit*(fc: HeaderChainRef): Result[void,string] =
+proc commit*(hc: HeaderChainRef): Result[void,string] =
   ## Finish appending headers to header chain cache which will become
   ## read-only (if this function succeeds.)
   ##
@@ -568,50 +568,50 @@ proc commit*(fc: HeaderChainRef): Result[void,string] =
   ## This function will provide its collected data to the `FC` module
   ## for optimisation purposes.
   ##
-  ?fc.expectingMode(ready)
+  ?hc.expectingMode(ready)
 
-  if not fc.chain.hashToBlock.hasKey(fc.session.ante.parentHash):
-    # Beware of a re-org right after the last `fcHeaderPut()`
+  if not hc.chain.hashToBlock.hasKey(hc.session.ante.parentHash):
+    # Beware of a re-org right after the last `put()`
     return err("Link into FC module has been lost")
 
   # Update internal state
-  fc.session.mode = locked
+  hc.session.mode = locked
 
   ok()
 
 # --------------------
 
-func head*(fc: HeaderChainRef): Header =
+func head*(hc: HeaderChainRef): Header =
   ## Getter: head of header chain. In case there is no header chain
   ## initialised, the return value is `Header()` (i.e. the block number
   ## of the result is zero.).
   ##
-  if collecting <= fc.state:
-    return fc.session.head
+  if collecting <= hc.state:
+    return hc.session.head
 
-func antecedent*(fc: HeaderChainRef): Header =
+func antecedent*(hc: HeaderChainRef): Header =
   ## Getter: bottom of header chain. In case there is no header chain
   ## initialised, the return value is `Header()` (i.e. the block number
   ## of the result is zero.).
   ##
-  if collecting <= fc.state:
-    return fc.session.ante
+  if collecting <= hc.state:
+    return hc.session.ante
 
 # --------------------
 
-func latestConsHeadNumber*(fc: HeaderChainRef): BlockNumber =
+func latestConsHeadNumber*(hc: HeaderChainRef): BlockNumber =
   ## Getter: block number of last `CL` head update (aka forkchoice update).
   ##
   ## This getter is for metrics or debugging purposes. The returned number
   ## is typically larger than `head()` and will increased over time while
   ## `head()` remains constant (for the current session.)
   ##
-  fc.session.consHeadNum
+  hc.session.consHeadNum
 
-proc headTargetUpdate*(fc: HeaderChainRef; h: Header; f: Hash32) =
+proc headTargetUpdate*(hc: HeaderChainRef; h: Header; f: Hash32) =
   ## Emulate request from `CL` (mainly for debugging purposes)
-  if not fc.notify.isNil:
-    fc.headUpdateFromCL(h, f)
+  if not hc.notify.isNil:
+    hc.headUpdateFromCL(h, f)
 
 # ------------------------------------------------------------------------------
 # Public convenience wrapper
@@ -619,18 +619,18 @@ proc headTargetUpdate*(fc: HeaderChainRef; h: Header; f: Hash32) =
 
 import ./forked_chain
 
-proc fcHeaderImportBlock*(fc: HeaderChainRef; blk: Block): Result[void,string] =
+proc fcHeaderImportBlock*(hc: HeaderChainRef; blk: Block): Result[void,string] =
   ## Wrapper around `importBlock()` followed by occasional update of the
   ## base value of the `FC` module accomplised by invocation of `forkChoice()`.
   ##
   ## To be integrated into `FC` module proper
   ##
-  ?fc.chain.importBlock(blk)
+  ?hc.chain.importBlock(blk)
 
-  if fc.baseNum + FinaliserChoiceDelta < fc.latestNum:
+  if hc.baseNum + FinaliserChoiceDelta < hc.latestNum:
 
     # Remove some older stashed headers
-    fc.persistDelUpTo fc.baseNum
+    hc.persistDelUpTo hc.baseNum
 
   ok()
 
@@ -638,12 +638,12 @@ proc fcHeaderImportBlock*(fc: HeaderChainRef; blk: Block): Result[void,string] =
 # Public debugging helpers
 # ------------------------------------------------------------------------------
 
-proc verify*(fc: HeaderChainRef): Result[void,string] =
+proc verify*(hc: HeaderChainRef): Result[void,string] =
   ## Verify that the descriptor range is on the database as well
-  if 0 < fc.session.head.number:
-    for bn in fc.session.ante.number .. fc.session.head.number:
-      discard fc.get(bn).valueOr:
-        return err("Missing db entry " & bn.bnStr & " for fc=" & fc.toStr)
+  if 0 < hc.session.head.number:
+    for bn in hc.session.ante.number .. hc.session.head.number:
+      discard hc.get(bn).valueOr:
+        return err("Missing db entry " & bn.bnStr & " for hc=" & hc.toStr)
   ok()
 
 # ------------------------------------------------------------------------------
