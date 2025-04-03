@@ -75,7 +75,6 @@ import
   "../../.."/[common, db/core_db, db/storage_types],
   ../../../db/[kvt, kvt_cf],
   ../../../db/kvt/[kvt_utils, kvt_tx_frame],
-  ../forked_chain,
   ./[chain_branch, chain_desc]
 
 type
@@ -255,6 +254,14 @@ proc persistDelUpTo(fc: ForkedCacheRef; bn: BlockNumber) =
 # Private helper functions
 # ------------------------------------------------------------------------------
 
+func baseNum(fc: ForkedCacheRef): BlockNumber =
+  ## Aka `fc.chain.baseNumber()` (avoiding `forked_chain` import)
+  fc.chain.baseBranch.tailNumber
+
+func latestNum(fc: ForkedCacheRef): BlockNumber =
+  ## Aka `fc.chain.latestNumber()` (avoiding `forked_chain` import)
+  fc.chain.activeBranch.headNumber
+
 func expectingMode(fc: ForkedCacheRef; mode: FcHdrMode): Result[void,string] =
   if fc.session.mode == mode:
     return ok()
@@ -272,7 +279,7 @@ proc fcUpdateFromCL(fc: ForkedCacheRef; h: Header; f: Hash32) =
   ## client app.
   ##
   if f != zeroHash32 and                            # finalised hash is set
-     fc.chain.baseNumber + 1 < h.number:            # otherwise useless
+     fc.baseNum + 1 < h.number:                     # otherwise useless
 
     if fc.session.mode == closed:
       # Set new session environment
@@ -313,7 +320,7 @@ proc accept*(fc: ForkedCacheRef; fin: Header): bool =
   ## Required system state is to run this function is `notified`.
   ##
   if fc.state == notified and
-     fc.chain.baseNumber < fin.number and
+     fc.baseNum < fin.number and
      fin.number <= fc.session.head.number and
      fc.session.finHash == fin.blockHash():
     fc.session.finHeader = fin
@@ -364,7 +371,7 @@ proc init*(T: type ForkedCacheRef; c: ForkedChainRef): T =
   ## using the cache, `start()` needs to be called so that the client app gets
   ## informed when and how the API is fully functional.
   ##
-  let fc = T(chain: c, kvt: c.db.kvtBackend().synchronizerKvt())
+  let fc = T(chain: c, kvt: c.com.db.kvtBackend().synchronizerKvt())
   fc.persistClear()                  # clear database
   fc
 
@@ -447,7 +454,7 @@ proc fcHeaderPut*(
 
   # The tail must not go below the `base`. It cannot be handled even if it
   # has a parent on the database.
-  let baseNum = fc.chain.baseNumber()
+  let baseNum = fc.baseNum()
 
  # Start at the entry that is parent to `ante` (if any)
   let offset = ((lastNumber + 1) - fc.session.ante.number).int
@@ -503,7 +510,7 @@ proc fcHeaderPut*(
 
           # Cheap check whether `finalised` header cannot be on the
           # `finalised` header database.
-          if finNumber < fc.chain.baseNumber:
+          if finNumber < fc.baseNum:
             fc.session.mode = orphan
             return ok()
 
@@ -605,6 +612,8 @@ proc fcHeaderTargetUpdate*(fc: ForkedCacheRef; h: Header; f: Hash32) =
 # Public convenience wrapper
 # ------------------------------------------------------------------------------
 
+import ../forked_chain
+
 proc fcHeaderImportBlock*(fc: ForkedCacheRef; blk: Block): Result[void,string] =
   ## Wrapper around `importBlock()` followed by occasional update of the
   ## base value of the `FC` module proper accomplised by invocation of
@@ -614,8 +623,8 @@ proc fcHeaderImportBlock*(fc: ForkedCacheRef; blk: Block): Result[void,string] =
   ##
   ?fc.chain.importBlock(blk)
 
-  if fc.chain.baseNumber + FinaliserChoiceDelta < fc.chain.latestNumber and
-     fc.chain.baseNumber < fc.chain.hdrChainFinHeader.number:
+  if fc.baseNum + FinaliserChoiceDelta < fc.latestNum and
+     fc.baseNum < fc.chain.hdrChainFinHeader.number:
 
     # Update base value of `FC` module proper via `forkChoice()`
     let
@@ -627,7 +636,7 @@ proc fcHeaderImportBlock*(fc: ForkedCacheRef; blk: Block): Result[void,string] =
     ?fc.chain.forkChoice(blkHash, finHash)
 
     # Remove some older stashed headers
-    fc.persistDelUpTo fc.chain.baseNumber
+    fc.persistDelUpTo fc.baseNum
 
   ok()
 
