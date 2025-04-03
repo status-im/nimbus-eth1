@@ -88,7 +88,7 @@ proc fetchAndCheck(
     ctx.poolMode = true
     return false
   request.blockHashes[ivReq.len - 1] =
-    rlp.encode(blk.blocks[offset + ivReq.len - 1].header).keccak256
+    blk.blocks[offset + ivReq.len - 1].header.blockHash
 
   # Fetch bodies
   let bodies = block:
@@ -182,19 +182,23 @@ func blocksStagedCanImportOk*(ctx: BeaconCtxRef): bool =
   false
 
 
-func blocksStagedFetchOk*(ctx: BeaconCtxRef): bool =
+func blocksStagedFetchOk*(buddy: BeaconBuddyRef): bool =
   ## Check whether body records can be fetched and stored on the `staged` queue.
   ##
-  if 0 < ctx.blocksUnprocAvail():
-    # Fetch if there is space on the queue.
-    if ctx.blk.staged.len < ctx.pool.blkStagedLenHwm:
-      return true
+  if buddy.ctrl.running:
 
-    # Make sure that there is no gap at the bottom which needs to be
-    # fetched regardless of the length of the queue.
-    if ctx.blocksUnprocAvailBottom() < ctx.blk.staged.ge(0).value.key:
-      return true
+    let ctx = buddy.ctx
+    if not ctx.poolMode:
 
+      if 0 < ctx.blocksUnprocAvail():
+        # Fetch if there is space on the queue.
+        if ctx.blk.staged.len < ctx.pool.blkStagedLenHwm:
+          return true
+
+        # Make sure that there is no gap at the bottom which needs to be
+        # fetched regardless of the length of the queue.
+        if ctx.blocksUnprocAvailBottom() < ctx.blk.staged.ge(0).value.key:
+          return true
   false
 
 
@@ -347,7 +351,7 @@ proc blocksStagedImport*(
 
   info "Importing blocks", iv, nBlocks,
     base=ctx.chain.baseNumber.bnStr, head=ctx.chain.latestNumber.bnStr,
-    target=ctx.layout.head.bnStr
+    target=ctx.head.bnStr
 
   var maxImport = iv.maxPt                         # tentatively assume all ok
   block importLoop:
@@ -384,7 +388,7 @@ proc blocksStagedImport*(
   info "Import done", iv=(iv.minPt, maxImport).bnStr,
     nBlocks=(maxImport-iv.minPt+1), nFailed=(iv.maxPt-maxImport),
     base=ctx.chain.baseNumber.bnStr, head=ctx.chain.latestNumber.bnStr,
-    target=ctx.layout.head.bnStr
+    target=ctx.head.bnStr
 
   return true
 

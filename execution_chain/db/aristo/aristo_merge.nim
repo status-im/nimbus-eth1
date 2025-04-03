@@ -233,8 +233,8 @@ proc mergeStorageData*(
 
       return err(error)
 
-  # Mark account path Merkle keys for update
-  db.layersResKeys(accHike)
+  # Mark account path Merkle keys for update, except for the vtx we update below
+  db.layersResKeys(accHike, skip = if not stoID.isValid: 1 else: 0)
 
   # Update leaf cache both of the merged value and potentially the displaced
   # leaf resulting from splitting a leaf into a branch with two leaves

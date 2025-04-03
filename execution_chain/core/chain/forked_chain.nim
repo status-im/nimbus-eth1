@@ -56,6 +56,7 @@ proc processBlock(c: ForkedChainRef,
     skipValidation = false,
     skipReceipts = false,
     skipUncles = true,
+    taskpool = c.com.taskpool,
   )
 
   # We still need to write header to database

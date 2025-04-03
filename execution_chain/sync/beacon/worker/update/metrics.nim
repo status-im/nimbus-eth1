@@ -25,13 +25,13 @@ declareGauge nec_execution_head, "" &
   "Block number of latest imported blocks"
 
 declareGauge nec_sync_coupler, "" &
-  "Max block number for header chain starting at genesis"
+  "Lower limit block number for header chain to fetch"
 
 declareGauge nec_sync_dangling, "" &
-  "Starting/min block number for higher up headers chain"
+  "Least block number for header chain already fetched"
 
 declareGauge nec_sync_head, "" &
-  "Current sync scrum target block number (if any)"
+  "Current sync target block number (if any)"
 
 declareGauge nec_sync_consensus_head, "" &
   "Block number of sync scrum request block number "
@@ -60,14 +60,17 @@ declareGauge nec_sync_non_peers_connected, "" &
 template updateMetricsImpl(ctx: BeaconCtxRef) =
   metrics.set(nec_base, ctx.chain.baseNumber().int64)
   metrics.set(nec_execution_head, ctx.chain.latestNumber().int64)
-  metrics.set(nec_sync_coupler, ctx.layout.coupler.int64)
-  metrics.set(nec_sync_dangling, ctx.layout.dangling.int64)
-  metrics.set(nec_sync_head, ctx.layout.head.int64)
+  var coupler = ctx.headersUnprocTotalBottom()
+  if high(int64).uint64 <= coupler:
+    coupler = 0
+  metrics.set(nec_sync_coupler, coupler.int64)
+  metrics.set(nec_sync_dangling, ctx.dangling.number.int64)
+  metrics.set(nec_sync_head, ctx.head.number.int64)
 
   # Show last valid state.
-  let lastConsHeadNumber = ctx.hdrCache.fcHeaderLastConsHeadNumber
-  if 0 < lastConsHeadNumber:
-    metrics.set(nec_sync_consensus_head, lastConsHeadNumber.int64)
+  let consHeadNumber = ctx.consHeadNumber
+  if 0 < consHeadNumber:
+    metrics.set(nec_sync_consensus_head, consHeadNumber.int64)
 
   metrics.set(nec_sync_header_lists_staged, ctx.headersStagedQueueLen())
   metrics.set(nec_sync_headers_unprocessed, ctx.headersUnprocTotal().int64)

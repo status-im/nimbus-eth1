@@ -50,7 +50,7 @@ proc execSubCreate(c: Computation; childMsg: Message;
       c.gasMeter.returnGas(child.gasMeter.gasRemaining)
 
     if child.isSuccess:
-      c.gasMeter.refundGas(child.gasMeter.gasRefunded)
+      c.merge(child)
       c.stack.lsTop child.msg.contractAddress
     elif not child.error.burnsGas: # Means return was `REVERT`.
       # From create, only use `outputData` if child returned with `REVERT`.

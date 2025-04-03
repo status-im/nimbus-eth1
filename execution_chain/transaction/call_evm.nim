@@ -202,10 +202,10 @@ proc callParamsForTest(tx: Transaction, sender: Address, vmState: BaseVMState): 
 
 proc txCallEvm*(tx: Transaction,
                 sender: Address,
-                vmState: BaseVMState, baseFee: GasInt): GasInt =
+                vmState: BaseVMState, baseFee: GasInt): LogResult =
   let
     call = callParamsForTx(tx, sender, vmState, baseFee)
-  runComputation(call, GasInt)
+  runComputation(call, LogResult)
 
 proc testCallEvm*(tx: Transaction,
                   sender: Address,

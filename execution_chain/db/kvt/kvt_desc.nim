@@ -16,6 +16,7 @@
 import
   std/[hashes, tables],
   results,
+  ./kvt_init/init_common,
   ./kvt_constants,
   ./kvt_desc/desc_error
 
@@ -32,12 +33,6 @@ type
       ## Generic backend database retrieval function
 
   # -------------
-
-  PutHdlRef* = ref object of RootRef
-    ## Persistent database transaction frame handle. This handle is used to
-    ## wrap any of `PutVtxFn`, `PutKeyFn`, and `PutIdgFn` into and atomic
-    ## transaction frame. These transaction frames must not be interleaved
-    ## by any library function using the backend.
 
   PutBegFn* =
     proc(): Result[PutHdlRef,KvtError] {.gcsafe, raises: [].}
@@ -60,6 +55,12 @@ type
       ## `false` the outcome might differ depending on the type of backend
       ## (e.g. in-memory backends would eradicate on close.)
 
+  # -------------
+
+  GetBackendFn* =
+    proc(): TypedBackendRef {.gcsafe, raises: [].}
+      ## Get a reference to typed backend.
+
   KvtTxRef* = ref object
     ## Transaction descriptor
     db*: KvtDbRef                     ## Database descriptor
@@ -77,6 +78,8 @@ type
 
     closeFn*: CloseFn                ## Generic destructor
 
+    getBackendFn*: GetBackendFn
+    
     txRef*: KvtTxRef
       ## Tx holding data scheduled to be written to disk during the next
       ## `persist` call

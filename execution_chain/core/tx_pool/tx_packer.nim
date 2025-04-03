@@ -104,14 +104,7 @@ func baseFee(pst: TxPacker): GasInt =
 # Private functions
 # ------------------------------------------------------------------------------
 
-proc runTx(pst: var TxPacker; item: TxItemRef): GasInt =
-  ## Execute item transaction and update `vmState` book keeping. Returns the
-  ## `gasUsed` after executing the transaction.
-  let gasUsed = item.tx.txCallEvm(item.sender, pst.vmState, pst.baseFee)
-  doAssert 0 <= gasUsed
-  gasUsed
-
-proc runTxCommit(pst: var TxPacker; item: TxItemRef; gasBurned: GasInt, xp: TxPoolRef) =
+proc runTxCommit(pst: var TxPacker; item: TxItemRef; callResult: LogResult, xp: TxPoolRef) =
   ## Book keeping after executing argument `item` transaction in the VM. The
   ## function returns the next number of items `nItems+1`.
   let
@@ -119,7 +112,7 @@ proc runTxCommit(pst: var TxPacker; item: TxItemRef; gasBurned: GasInt, xp: TxPo
     inx     = pst.packedTxs.len
     gasTip  = item.tx.tip(pst.baseFee)
 
-  let reward = gasBurned.u256 * gasTip.u256
+  let reward = callResult.gasUsed.u256 * gasTip.u256
   vmState.ledger.addBalance(xp.feeRecipient, reward)
   pst.blockValue += reward
 
@@ -129,11 +122,11 @@ proc runTxCommit(pst: var TxPacker; item: TxItemRef; gasBurned: GasInt, xp: TxPo
 
   # Return remaining gas to the block gas counter so it is
   # available for the next transaction.
-  vmState.gasPool += item.tx.gasLimit - gasBurned
+  vmState.gasPool += item.tx.gasLimit - callResult.gasUsed
 
   # gasUsed accounting
-  vmState.cumulativeGasUsed += gasBurned
-  vmState.receipts[inx] = vmState.makeReceipt(item.tx.txType)
+  vmState.cumulativeGasUsed += callResult.gasUsed
+  vmState.receipts[inx] = vmState.makeReceipt(item.tx.txType, callResult)
   pst.packedTxs.add item
 
 # ------------------------------------------------------------------------------
@@ -191,16 +184,15 @@ proc vmExecGrabItem(pst: var TxPacker; item: TxItemRef, xp: TxPoolRef): bool =
   if not vmState.classifyValidatePacked(item):
     return ContinueWithNextAccount
 
-  # EIP-1153
-  vmState.ledger.clearTransientStorage()
-
   # Execute EVM for this transaction
   let
     accTx = vmState.ledger.beginSavepoint
-    gasUsed = pst.runTx(item)
+    callResult = item.tx.txCallEvm(item.sender, pst.vmState, pst.baseFee)
+
+  doAssert 0 <= callResult.gasUsed
 
   # Find out what to do next: accepting this tx or trying the next account
-  if not vmState.classifyPacked(gasUsed):
+  if not vmState.classifyPacked(callResult.gasUsed):
     vmState.ledger.rollback(accTx)
     if vmState.classifyPackedNext():
       return ContinueWithNextAccount
@@ -212,7 +204,7 @@ proc vmExecGrabItem(pst: var TxPacker; item: TxItemRef, xp: TxPoolRef): bool =
   vmState.ledger.persist(clearEmptyAccount = vmState.fork >= FkSpurious)
 
   # Finish book-keeping
-  pst.runTxCommit(item, gasUsed, xp)
+  pst.runTxCommit(item, callResult, xp)
 
   pst.numBlobPerBlock += item.tx.versionedHashes.len
   vmState.blobGasUsed += blobGasUsed

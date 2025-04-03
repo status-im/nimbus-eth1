@@ -187,7 +187,8 @@ proc terminate[S,W](dsc: RunnerSyncRef[S,W]) {.async.} =
       except CancelledError:
         trace "Shutdown: peer timeout was cancelled", nWorkers=dsc.buddies.len
 
-    while dsc.daemonRunning:
+    while dsc.daemonRunning or
+          dsc.tickerRunning:
       # Activate async job so it can finish
       try:
         await sleepAsync termWaitPollingTime
@@ -247,7 +248,7 @@ proc tickerLoop[S,W](dsc: RunnerSyncRef[S,W]) {.async: (raises: []).} =
   if dsc.runCtrl == running:
     dsc.tickerRunning = true
 
-    while true:
+    while dsc.runCtrl == running:
       # Dispatch daemon sevice if needed
       if not dsc.daemonRunning and dsc.ctx.daemon:
         asyncSpawn dsc.daemonLoop()

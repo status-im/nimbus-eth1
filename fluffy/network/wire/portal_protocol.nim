@@ -779,7 +779,7 @@ proc recordsFromBytes(rawRecords: List[ByteList[2048], 32]): PortalResult[seq[Re
 
 proc ping*(
     p: PortalProtocol, dst: Node
-): Future[PortalResult[(uint64, CapabilitiesPayload)]] {.
+): Future[PortalResult[(uint64, uint16, CapabilitiesPayload)]] {.
     async: (raises: [CancelledError])
 .} =
   if p.isBanned(dst.id):
@@ -800,7 +800,7 @@ proc ping*(
 
   p.radiusCache.put(dst.id, payload.data_radius)
 
-  ok((pong.enrSeq, payload))
+  ok((pong.enrSeq, pong.payload_type, payload))
 
 proc findNodes*(
     p: PortalProtocol, dst: Node, distances: seq[uint16]
@@ -1774,7 +1774,7 @@ proc revalidateNode*(p: PortalProtocol, n: Node) {.async: (raises: [CancelledErr
   let pong = await p.ping(n)
 
   if pong.isOk():
-    let (enrSeq, _) = pong.get()
+    let (enrSeq, _, _) = pong.get()
     if enrSeq > n.record.seqNum:
       # Request new ENR
       let nodesMessage = await p.findNodes(n, @[0'u16])

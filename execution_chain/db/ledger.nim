@@ -21,7 +21,7 @@ import
   ../core/eip7702,
   "/.."/[constants, utils/utils],
   ./access_list as ac_access_list,
-  "."/[core_db, storage_types, transient_storage],
+  "."/[core_db, storage_types],
   ./aristo/aristo_blobify
 
 export
@@ -114,9 +114,7 @@ type
     cache: Table[Address, AccountRef]
     dirty: Table[Address, AccountRef]
     selfDestruct: HashSet[Address]
-    logEntries: seq[Log]
     accessList: ac_access_list.AccessList
-    transientStorage: TransientStorage
     state: TransactionState
     when debugLedgerRef:
       depth: int
@@ -343,9 +341,7 @@ proc persistStorage(acc: AccountRef, ac: LedgerRef) =
 
     else:
       ac.txFrame.slotDelete(acc.toAccountKey, slotKey).isOkOr:
-        if error.error != StoNotFound:
-          raiseAssert info & $$error
-        discard
+        raiseAssert info & $$error
       acc.originalStorage.del(slot)
 
     if ac.storeSlotHash and not cached:
@@ -405,8 +401,6 @@ proc beginSavepoint*(ac: LedgerRef): LedgerSpRef =
   new result
   result.cache = Table[Address, AccountRef]()
   result.accessList.init()
-  result.transientStorage.init()
-  result.state = Pending
   result.parentSavepoint = ac.savePoint
   ac.savePoint = result
 
@@ -444,10 +438,8 @@ proc commit*(ac: LedgerRef, sp: LedgerSpRef) =
   ac.savePoint = sp.parentSavepoint
   ac.savePoint.cache.mergeAndReset(sp.cache)
   ac.savePoint.dirty.mergeAndReset(sp.dirty)
-  ac.savePoint.transientStorage.mergeAndReset(sp.transientStorage)
   ac.savePoint.accessList.mergeAndReset(sp.accessList)
   ac.savePoint.selfDestruct.mergeAndReset(sp.selfDestruct)
-  ac.savePoint.logEntries.mergeAndReset(sp.logEntries)
   sp.state = Committed
 
   when debugLedgerRef:
@@ -706,12 +698,6 @@ proc selfDestruct6780*(ac: LedgerRef, address: Address) =
 proc selfDestructLen*(ac: LedgerRef): int =
   ac.savePoint.selfDestruct.len
 
-proc addLogEntry*(ac: LedgerRef, log: Log) =
-  ac.savePoint.logEntries.add log
-
-proc getAndClearLogEntries*(ac: LedgerRef): seq[Log] =
-  swap(result, ac.savePoint.logEntries)
-
 proc ripemdSpecial*(ac: LedgerRef) =
   ac.ripemdSpecial = true
 
@@ -866,24 +852,6 @@ func inAccessList*(ac: LedgerRef, address: Address, slot: UInt256): bool =
       return
     sp = sp.parentSavepoint
 
-func getTransientStorage*(ac: LedgerRef,
-                          address: Address, slot: UInt256): UInt256 =
-  var sp = ac.savePoint
-  while sp != nil:
-    let (ok, res) = sp.transientStorage.getStorage(address, slot)
-    if ok:
-      return res
-    sp = sp.parentSavepoint
-
-proc setTransientStorage*(ac: LedgerRef,
-                          address: Address, slot, val: UInt256) =
-  ac.savePoint.transientStorage.setStorage(address, slot, val)
-
-proc clearTransientStorage*(ac: LedgerRef) =
-  # make sure all savepoint already committed
-  doAssert(ac.savePoint.parentSavepoint.isNil)
-  ac.savePoint.transientStorage.clear()
-
 func getAccessList*(ac: LedgerRef): transactions.AccessList =
   # make sure all savepoint already committed
   doAssert(ac.savePoint.parentSavepoint.isNil)
@@ -958,8 +926,6 @@ proc isEmptyAccount*(db: ReadOnlyLedger, address: Address): bool = isEmptyAccoun
 proc getCommittedStorage*(db: ReadOnlyLedger, address: Address, slot: UInt256): UInt256 = getCommittedStorage(distinctBase db, address, slot)
 proc inAccessList*(db: ReadOnlyLedger, address: Address): bool = inAccessList(distinctBase db, address)
 proc inAccessList*(db: ReadOnlyLedger, address: Address, slot: UInt256): bool = inAccessList(distinctBase db, address)
-proc getTransientStorage*(db: ReadOnlyLedger,
-                          address: Address, slot: UInt256): UInt256 = getTransientStorage(distinctBase db, address, slot)
 proc getAccountProof*(db: ReadOnlyLedger, address: Address): seq[seq[byte]] = getAccountProof(distinctBase db, address)
 proc getStorageProof*(db: ReadOnlyLedger, address: Address, slots: openArray[UInt256]): seq[seq[seq[byte]]] = getStorageProof(distinctBase db, address, slots)
 proc resolveCode*(db: ReadOnlyLedger, address: Address): CodeBytesRef = resolveCode(distinctBase db, address)

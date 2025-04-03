@@ -15,6 +15,7 @@ import
   eth/common/[accounts, base, hashes],
   ../../constants,
   ../[kvt, aristo],
+  ../kvt/kvt_init/init_common,
   ./base/[base_desc, base_helpers]
 
 export
@@ -46,6 +47,10 @@ proc baseTxFrame*(db: CoreDbRef): CoreDbTxRef =
   CoreDbTxRef(
     aTx: db.mpt.baseTxFrame(),
     kTx: db.kvt.baseTxFrame())
+
+proc kvtBackend*(db: CoreDbRef): TypedBackendRef =
+  ## Get KVT backend
+  db.kvt.getBackendFn()
 
 # ------------------------------------------------------------------------------
 # Public base descriptor methods
@@ -96,14 +101,14 @@ proc persist*(
     db.mpt.persist(mptBatch[], txFrame.aTx)
 
     db.kvt.putEndFn(kvtBatch[]).isOkOr:
-      raiseAssert "" & ": " & $error
+      raiseAssert $error
 
     db.mpt.putEndFn(mptBatch[]).isOkOr:
-      raiseAssert "" & ": " & $error
+      raiseAssert $error
 
   else:
-    discard kvtBatch.expect("" & ": should always be able to create batch")
-    discard mptBatch.expect("" & ": should always be able to create batch")
+    discard kvtBatch.expect("should always be able to create batch")
+    discard mptBatch.expect("should always be able to create batch")
 
 proc stateBlockNumber*(db: CoreDbTxRef): BlockNumber =
   ## This function returns the block number stored with the latest `persist()`
@@ -242,14 +247,10 @@ proc delete*(
   ## Delete the particular account indexed by the key `accPath`. This
   ## will also destroy an associated storage area.
   ##
-  let rc = acc.aTx.deleteAccountRecord(accPath)
-  if rc.isOk:
-    ok()
-  elif rc.error == DelPathNotFound:
-    # TODO: Would it be conseqient to just return `ok()` here?
-    err(rc.error.toError("", AccNotFound))
-  else:
-    err(rc.error.toError(""))
+  acc.aTx.deleteAccountRecord(accPath).isOkOr:
+    return err(error.toError(""))
+
+  ok()
 
 proc clearStorage*(
     acc: CoreDbTxRef;
@@ -258,11 +259,10 @@ proc clearStorage*(
   ## Delete all data slots from the storage area associated with the
   ## particular account indexed by the key `accPath`.
   ##
-  let rc = acc.aTx.deleteStorageTree(accPath)
-  if rc.isOk or rc.error in {DelStoRootMissing,DelStoAccMissing}:
-    ok()
-  else:
-    err(rc.error.toError(""))
+  acc.aTx.deleteStorageTree(accPath).isOkOr:
+    return err(error.toError(""))
+
+  ok()
 
 proc merge*(
     acc: CoreDbTxRef;
@@ -338,15 +338,10 @@ proc slotDelete*(
     stoPath: Hash32;
       ):  CoreDbRc[void] =
   ## Like `delete()` but with cascaded index `(accPath,slot)`.
-  let rc = acc.aTx.deleteStorageData(accPath, stoPath)
-  if rc.isOk or rc.error == DelStoRootMissing:
-    # The second `if` clause is insane but legit: A storage column was
-    # announced for an account but no data have been added, yet.
-    ok()
-  elif rc.error == DelPathNotFound:
-    err(rc.error.toError("", StoNotFound))
-  else:
-    err(rc.error.toError(""))
+  acc.aTx.deleteStorageData(accPath, stoPath).isOkOr:
+    return err(error.toError(""))
+
+  ok()
 
 proc slotHasPath*(
     acc: CoreDbTxRef;
