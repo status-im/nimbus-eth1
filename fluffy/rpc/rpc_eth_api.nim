@@ -448,17 +448,10 @@ proc installEthApiHandlers*(
       evm = asyncEvm.getOrRaise()
       header = (await hn.getVerifiedBlockHeader(quantityTag.number.uint64)).valueOr:
         raise newException(ValueError, "Unable to get block header")
+      optimisticStateFetch = optimisticStateFetch.valueOr:
+        true
 
-    let callResult = (
-      await evm.call(
-        header,
-        tx,
-        if optimisticStateFetch.isNone():
-          true
-        else:
-          optimisticStateFetch.get(),
-      )
-    ).valueOr:
+    let callResult = (await evm.call(header, tx, optimisticStateFetch)).valueOr:
       raise newException(ValueError, error)
 
     if callResult.error.len() > 0:
