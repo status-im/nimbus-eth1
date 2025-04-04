@@ -29,8 +29,10 @@ proc rpcCallEvm*(args: TransactionArgs,
                  header: Header,
                  headerHash: Hash32,
                  com: CommonRef,
-                 parentFrame: CoreDbTxRef): EvmResult[CallResult] =
-  const globalGasCap = 0 # TODO: globalGasCap should configurable by user
+                 parentFrame: CoreDbTxRef,
+                 globalGasCap = 0.GasInt): EvmResult[CallResult] =
+  # TODO: globalGasCap should configurable by user
+
   let topHeader = Header(
     parentHash: headerHash,
     timestamp:  EthTime.now(),
@@ -48,8 +50,9 @@ proc rpcCallEvm*(args: TransactionArgs,
 
 proc rpcCallEvm*(args: TransactionArgs,
                  header: Header,
-                 vmState: BaseVMState): EvmResult[CallResult] =
-  const globalGasCap = 0 # TODO: globalGasCap should configurable by user
+                 vmState: BaseVMState,
+                 globalGasCap = 0.GasInt): EvmResult[CallResult] =
+  # TODO: globalGasCap should configurable by user
   let params  = ? toCallParams(vmState, args, globalGasCap, header.baseFeePerGas)
   ok(runComputation(params, CallResult))
 

@@ -55,8 +55,16 @@ logScope:
 #   default approach where the state lookups are wired directly into the EVM gives
 #   the worst case performance because all state accesses inside the EVM are
 #   completely sequential.
+#
+# Note: The BLOCKHASH opt code is not yet supported by this implementation and so
+# transactions which use this opt code will simply get the empty/default hash
+# for any requested block. After the Pectra hard fork this opt code will be
+# implemented using a system contract with the data stored in the Ethereum state
+# trie/s and at that point it should just work without changes to the async evm here.
 
-const EVM_CALL_LIMIT = 10000
+const
+  EVM_CALL_LIMIT = 10_000
+  EVM_CALL_GAS_CAP = 50_000_000.GasInt
 
 type
   AccountQuery = object
@@ -130,9 +138,11 @@ proc call*(
   let
     to = tx.to.valueOr:
       return err("to address is required")
-
     # Start fetching code in the background while setting up the EVM
     codeFut = evm.backend.getCode(header.stateRoot, to)
+
+  if tx.gas.isSome() and tx.gas.get().uint64 > EVM_CALL_GAS_CAP:
+    return err("gas larger than max allowed")
 
   debug "Executing call", blockNumber = header.number, to
 
@@ -140,8 +150,17 @@ proc call*(
   defer:
     txFrame.dispose() # always dispose state changes
 
-  # TODO: review what child header to use here (second parameter)
-  let vmState = BaseVMState.new(header, header, evm.com, txFrame)
+  let blockContext = BlockContext(
+    timestamp: header.timestamp,
+    gasLimit: header.gasLimit,
+    baseFeePerGas: header.baseFeePerGas,
+    prevRandao: header.prevRandao,
+    difficulty: header.difficulty,
+    coinbase: header.coinbase,
+    excessBlobGas: header.excessBlobGas.get(0'u64),
+    parentHash: header.blockHash(),
+  )
+  let vmState = BaseVMState.new(header, blockContext, evm.com, txFrame)
 
   var
     # Record the keys of fetched accounts, storage and code so that we don't
@@ -169,7 +188,7 @@ proc call*(
     debug "Starting AsyncEvm execution", evmCallCount
 
     let sp = vmState.ledger.beginSavepoint()
-    callResult = rpcCallEvm(tx, header, vmState)
+    callResult = rpcCallEvm(tx, header, vmState, EVM_CALL_GAS_CAP)
     inc evmCallCount
     vmState.ledger.rollback(sp) # all state changes from the call are reverted
 
