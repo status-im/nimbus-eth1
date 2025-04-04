@@ -55,6 +55,12 @@ logScope:
 #   default approach where the state lookups are wired directly into the EVM gives
 #   the worst case performance because all state accesses inside the EVM are
 #   completely sequential.
+#
+# Note: The BLOCKHASH opt code is not yet supported by this implementation and so
+# transactions which use this opt code will simply get the empty/default hash
+# for any requested block. After the Pectra hard fork this opt code will be
+# implemented using a system contract with the data stored in the Ethereum state
+# trie/s and at that point it should just work without changes to the async evm here.
 
 const EVM_CALL_LIMIT = 10000
 
@@ -140,8 +146,17 @@ proc call*(
   defer:
     txFrame.dispose() # always dispose state changes
 
-  # TODO: review what child header to use here (second parameter)
-  let vmState = BaseVMState.new(header, header, evm.com, txFrame)
+  let blockContext = BlockContext(
+    timestamp: EthTime.now(),
+    gasLimit: header.gasLimit,
+    baseFeePerGas: header.baseFeePerGas,
+    prevRandao: header.prevRandao,
+    difficulty: header.difficulty,
+    coinbase: header.coinbase,
+    excessBlobGas: header.excessBlobGas.get(0'u64),
+    parentHash: header.blockHash(),
+  )
+  let vmState = BaseVMState.new(header, blockContext, evm.com, txFrame)
 
   var
     # Record the keys of fetched accounts, storage and code so that we don't
