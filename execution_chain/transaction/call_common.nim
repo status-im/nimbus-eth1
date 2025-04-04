@@ -142,7 +142,7 @@ proc setupHost(call: CallParams, keepStack: bool): TransactionHost =
                          CallKind.Call,
       # flags: {},
       # depth: 0,
-      gas:             call.gasLimit - intrinsicGas,
+      gas:             if call.gasLimit < intrinsicGas: 0.GasInt else: call.gasLimit - intrinsicGas,
       contractAddress: call.to,
       codeAddress:     call.to,
       sender:          call.sender,
