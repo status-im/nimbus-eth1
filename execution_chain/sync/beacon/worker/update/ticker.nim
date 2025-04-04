@@ -74,11 +74,11 @@ when enableTicker:
     TickerStats(
       base:            ctx.chain.baseNumber(),
       latest:          ctx.chain.latestNumber(),
-      coupler:         ctx.layout.coupler,
-      dangling:        ctx.layout.dangling,
-      head:            ctx.layout.head,
-      target:          ctx.hdrCache.fcHeaderLastConsHeadNumber(),
-      activeOk:        ctx.layout.lastState != idleSyncState,
+      coupler:         ctx.headersUnprocTotalBottom(),
+      dangling:        ctx.dangling.number,
+      head:            ctx.head.number,
+      target:          ctx.consHeadNumber,
+      activeOk:        ctx.pool.lastState != idleSyncState,
 
       nHdrStaged:      ctx.headersStagedQueueLen(),
       hdrStagedTop:    ctx.headersStagedQueueTopKey(),
@@ -92,7 +92,7 @@ when enableTicker:
       nBlkUnprocessed: ctx.blocksUnprocTotal(),
       nBlkUnprocFragm: ctx.blk.unprocessed.chunks(),
 
-      state:           ctx.layout.lastState,
+      state:           ctx.pool.lastState,
       reorg:           ctx.pool.nReorg,
       nBuddies:        ctx.pool.nBuddies)
 
@@ -109,7 +109,9 @@ when enableTicker:
       let
         B = if data.base == data.latest: "L" else: data.base.bnStr
         L = if data.latest == data.coupler: "C" else: data.latest.bnStr
-        C = if data.coupler == data.dangling: "D" else: data.coupler.bnStr
+        C = if data.coupler == data.dangling: "D"
+            elif data.coupler < high(int64).uint64: data.coupler.bnStr
+            else: "n/a"
         D = if data.dangling == data.head: "H" else: data.dangling.bnStr
         H = if data.head == data.target: "T"
             elif data.activeOk: data.head.bnStr

@@ -18,7 +18,7 @@ import
   ../worker_desc,
   ./blocks_staged/staged_queue,
   ./headers_staged/staged_queue,
-  ./[blocks_unproc, headers_unproc, update]
+  ./[blocks_unproc, headers_unproc]
 
 type
   SyncStateData = tuple
@@ -30,11 +30,8 @@ type
 
 proc querySyncProgress(ctx: BeaconCtxRef): SyncStateData =
   ## Syncer status query function (for call back closure)
-  if not ctx.hibernate():
-    return (ctx.layout.coupler,
-            max(ctx.layout.coupler,
-              min(ctx.chain.latestNumber(), ctx.layout.head)),
-            ctx.layout.head)
+  if collectingHeaders <= ctx.pool.lastState:
+    return (ctx.chain.baseNumber, ctx.dangling.number, ctx.head.number)
   # (0,0,0)
 
 # ------------------------------------------------------------------------------
@@ -70,9 +67,13 @@ proc setupServices*(ctx: BeaconCtxRef; info: static[string]) =
   # into `ForkedChainRef` (i.e. `ctx.pool.chain`.)
   ctx.pool.hdrCache = ForkedCacheRef.init(ctx.pool.chain)
 
-  # Set up new notifier informing when the new head is available from the `CL`
-  ctx.hdrCache.start proc() =
-    ctx.updateFromHibernateSetTarget info
+  # Set up new notifier informing when the new head is available from the
+  # `CL`. If there is a new session available, the notifier is called with
+  # the hash of a finalised header that needs to be resolved. This hash is
+  # stored on the `ctx.pool` descriptor to be picked up by the next available
+  # sync peer.
+  ctx.hdrCache.start proc(fin: Hash32) =
+    ctx.pool.finRequest = fin
 
   # Manual first run?
   if 0 < ctx.clReq.consHead.number:

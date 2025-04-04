@@ -37,6 +37,10 @@ type
 
     lastSnapshots*: array[10, CoreDbTxRef]
     lastSnapshotPos*: int
+
+    hdrChainFinHeader*: Header # finalised block header from the `CL` (if any)
+    hdrChainFinHash*: Hash32   # block hash of `hdrChainFinHeader`
+
 # ----------------
 
 func txRecords*(c: ForkedChainRef): var Table[Hash32, (Hash32, uint64)] =

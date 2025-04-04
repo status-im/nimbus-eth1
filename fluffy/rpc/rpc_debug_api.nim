@@ -140,11 +140,22 @@ proc installDebugApiHandlers*(rpcServer: RpcServer, stateNetwork: Opt[StateNetwo
     quantityTag: Opt[RtBlockIdentifier],
     optimisticStateFetch: Opt[bool]
   ) -> seq[byte]:
-    # TODO: add documentation
-
-    # This endpoint can be used to test eth_call without requiring the history network
-    # to be enabled. This is useful for scenarios where we don't yet have the block headers
-    # seeded into the history network.
+    ## Executes a new message call immediately without creating a transaction on
+    ## the blockchain. This endpoint can be used to test the evm call functionality
+    ## without requiring the history network to be enabled.
+    ##
+    ## tx: the transaction call object which contains
+    ##   from: (optional) The address the transaction is sent from.
+    ##   to: The address the transaction is directed to.
+    ##   gas: (optional) Integer of the gas provided for the transaction execution.
+    ##     eth_call consumes zero gas, but this parameter may be needed by some executions.
+    ##   gasPrice: (optional) Integer of the gasPrice used for each paid gas.
+    ##   value: (optional) Integer of the value sent with this transaction.
+    ##   input: (optional) Hash of the method signature and encoded parameters.
+    ## stateRoot: the state root to be used to look up the state from the network.
+    ## quantityTag: (optional) integer block number, or the string "latest", "earliest" or "pending",
+    ##   see the default block parameter.
+    ## Returns: the return value of the executed contract.
 
     if tx.to.isNone():
       raise newException(ValueError, "to address is required")

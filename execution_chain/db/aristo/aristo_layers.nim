@@ -52,7 +52,6 @@ func layersGetKey*(db: AristoTxRef; rvid: RootedVertexID): Opt[(HashKey, int)] =
     if rvid in w.sTab:
       return Opt.some((VOID_HASH_KEY, w.level))
 
-
   Opt.none((HashKey, int))
 
 func layersGetKeyOrVoid*(db: AristoTxRef; rvid: RootedVertexID): HashKey =
@@ -168,6 +167,9 @@ proc copyFrom*(snapshot: var Snapshot, tx: AristoTxRef) =
     snapshot.acc[k] = (v, tx.level)
   for k, v in tx.stoLeaves:
     snapshot.sto[k] = (v, tx.level)
+
+proc mergeAndDiscard*(trg, src: var HashKey) =
+  trg = src
 
 proc mergeAndReset*(trg, src: AristoTxRef) =
   ## Merges the argument `src` into the argument `trg` and clears `src`.

@@ -245,7 +245,7 @@ proc finishRunningComputation(
     result.gasUsed = call.gasLimit - gasRemaining
     result.output = system.move(c.output)
     result.contractAddress = if call.isCreate: c.msg.contractAddress
-                             else: default(Address)
+                             else: default(addresses.Address)
 
     when T is DebugCallResult:
       result.stack = move(c.finalStack)

@@ -1,5 +1,5 @@
 # Nimbus
-# Copyright (c) 2023-2024 Status Research & Development GmbH
+# Copyright (c) 2023-2025 Status Research & Development GmbH
 # Licensed under either of
 #  * Apache License, version 2.0, ([LICENSE-APACHE](LICENSE-APACHE) or
 #    http://www.apache.org/licenses/LICENSE-2.0)
@@ -15,37 +15,35 @@ import
 
 # Utilities for merging source data into a target taking care to move data and
 # leave the source empty
-func mergeAndReset*(tgt, src: var auto) =
+
+type MoveType = seq[byte]|ref
+  # Types that we simply move over when merging (instead of trying to join their
+  # elements)
+
+func mergeAndDiscard*(tgt, src: var MoveType) =
+  # The `src` item will be discarded after the merge, hence it can either be
+  # reset for reuse or left as is, whichever is more efficient
   tgt = move(src)
 
-func mergeAndReset*(tgt, src: var seq) =
-  mixin mergeAndReset
-  if tgt.len == 0:
-    swap(tgt, src)
-  else:
-    let tlen = tgt.len
-    tgt.setLen(tgt.len + src.len)
-    for i, sv in src.mpairs():
-      mergeAndReset(tgt[tlen + i], sv)
-    src.reset()
-
-func mergeAndReset*(tgt, src: var HashSet) =
-  mixin mergeAndReset
+func mergeAndDiscard*(tgt, src: var HashSet) =
   if tgt.len == 0:
     swap(tgt, src)
   else:
     for sv in src.items():
       tgt.incl(sv)
-    src.reset()
+
+func mergeAndReset*(tgt, src: var HashSet) =
+  mergeAndDiscard(tgt, src)
+  src.reset()
 
 func mergeAndReset*(tgt, src: var Table) =
-  mixin mergeAndReset
+  mixin mergeAndDiscard
   if tgt.len == 0:
     swap(tgt, src)
   else:
     for k, sv in src.mpairs():
       tgt.withValue(k, tv):
-        mergeAndReset(tv[], sv)
+        mergeAndDiscard(tv[], sv)
       do:
         tgt[k] = move(sv)
     src.reset()
