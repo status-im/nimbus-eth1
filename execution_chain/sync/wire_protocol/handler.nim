@@ -110,18 +110,27 @@ proc getBlockBodies*(ctx: EthWireRef,
     list: seq[BlockBody]
     totalBytes = 0
 
-  # EIP-4444 limit
-  # The way to prevent not to fetch till a particular limit 
-  # for in-future all storage profiles, if to check the header number
-  # and limit the number of blocks to fetch
+  template body(blk: Block): BlockBody =
+    BlockBody(
+      transactions: blk.transactions,
+      uncles: blk.uncles,
+      withdrawals: blk.withdrawals
+    )
 
   for blockHash in hashes:
-    let body = ctx.chain.blockBodyByHash(blockHash).valueOr:
+    let blk = ctx.chain.blockByHash(blockHash).valueOr:
       trace "handlers.getBlockBodies: blockBody not found", blockHash
       continue
 
-    totalBytes += getEncodedLength(body)
-    list.add body
+    # EIP-4444 limit
+    if ctx.chain.isHistoryExpiryActive:
+      if blk.header.number > ctx.chain.portal.limit:
+        trace "handlers.getBlockBodies: blockBody older than expiry limit", blockHash
+        continue
+    
+    let blkBody = blk.body
+    totalBytes += getEncodedLength(blkBody)
+    list.add blkBody
 
     if list.len >= MAX_BODIES_SERVE or
        totalBytes > SOFT_RESPONSE_LIMIT:
@@ -142,7 +151,7 @@ proc getBlockHeaders*(ctx: EthWireRef,
     totalBytes = 0
 
   # EIP-4444 limit
-  if chain.isPortalActive:
+  if chain.isHistoryExpiryActive:
     case req.reverse:
     of false:
       if req.startBlock.number + req.maxResults > chain.portal.limit:

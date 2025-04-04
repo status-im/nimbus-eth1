@@ -33,7 +33,7 @@ type
       # lookup items straight from the database
 
     baseDistance*: uint64
-    portal*: PortalClientRef
+    portal*: HistoryExpiryRef
 
     lastSnapshots*: array[10, CoreDbTxRef]
     lastSnapshotPos*: int

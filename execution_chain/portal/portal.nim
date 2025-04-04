@@ -22,15 +22,15 @@ logScope:
   topic = "portal"
 
 type
-  PortalRpc* = object
+  PortalRpc* = ref object
     url*: string
     provider: RpcClient
 
 type
-  PortalClientRef* = ref object
-    rpc: PortalRpc
+  HistoryExpiryRef* = ref object
+    portalEnabled*: bool
+    rpc: Opt[PortalRpc]
     limit*: base.BlockNumber # blockNumber limit till portal is activated, EIP specific
-
 
 proc init*(T: type PortalRpc, url: string): T =
   let web3 = waitFor newWeb3(url)
@@ -48,22 +48,45 @@ proc getPortalRpc(conf: NimbusConf): Opt[PortalRpc] =
   else:
     Opt.none(PortalRpc)
 
-proc init*(T: type PortalClientRef, conf: NimbusConf, com: CommonRef): T =
+proc init*(T: type HistoryExpiryRef, conf: NimbusConf, com: CommonRef): T =
   # Portal is only available for mainnet
-  if not (conf.portalEnabled and com.networkId == MainNet):
+  notice "Initiating portal with the following config",
+    portalUrl = conf.portalUrl,
+    historyExpiry = conf.historyExpiry,
+    networkId = com.networkId,
+    portalLimit = conf.historyExpiryLimit
+  
+  if conf.historyExpiry:
+    let 
+      rpc = conf.getPortalRpc()
+      portalEnabled =
+        if com.networkId == MainNet and rpc.isSome:
+          # Portal is only available for mainnet
+          true
+        else:
+          warn "Portal is only available for mainnet, history expiry won't be available"
+          false
+      limit = 
+        if conf.historyExpiryLimit.isSome:
+          conf.historyExpiryLimit.get()
+        else:
+          com.posBlock().get()
+
+    return T(
+      portalEnabled: portalEnabled,
+      rpc: rpc,
+      limit: limit
+    )
+    
+  else:
+    # history expiry haven't been activated yet
     return nil
 
-  let rpc = conf.getPortalRpc().valueOr:
-    error "Portal RPC url is not available"
-    return nil
-
-  T(
-    rpc: rpc,
-    limit: com.posBlock.get()
-  )
-
-proc rpcProvider*(pc: PortalClientRef): RpcClient =
-  pc.rpc.provider
+proc rpcProvider*(historyExpiry: HistoryExpiryRef): Result[RpcClient, string] =
+  if historyExpiry.portalEnabled and historyExpiry.rpc.isSome:
+    return ok(historyExpiry.rpc.get().provider)
+  else:
+    return err("Portal RPC is not enabled or not available")
 
 proc toHeader(blkObj: BlockObject): Header =
   Header(
@@ -116,7 +139,7 @@ proc toTransactions(blkObj: BlockObject): seq[Transaction] =
       txs.add(
         Transaction(
           txType: txType,
-          chainId: ChainId txOrHash.tx.chainId.get(),
+          chainId: MainNet, # Portal RPC doesn't support other networks
           nonce: AccountNonce txOrHash.tx.nonce,
           gasPrice: GasInt txOrHash.tx.gasPrice,
           maxPriorityFeePerGas: GasInt txOrHash.tx.maxPriorityFeePerGas.get(),
@@ -145,10 +168,20 @@ proc toBlock(blkObj: BlockObject): Block =
     withdrawals: blkObj.withdrawals
   )
 
-proc getBlockByNumber*(pc: PortalClientRef, blockNumber: uint64, fullTxs: bool = true): Result[Block, string] =
+proc toBlockBody(blkObj: BlockObject): BlockBody =
+  BlockBody(
+    transactions: toTransactions(blkObj),
+    uncles: @[],
+    withdrawals: blkObj.withdrawals
+  )
+
+proc getBlockByNumber*(historyExpiry: HistoryExpiryRef, blockNumber: uint64, fullTxs: bool = true): Result[Block, string] =
   debug "Fetching block from portal"
   try:
-    let res = waitFor pc.rpcProvider.eth_getBlockByNumber(blockId(blockNumber), fullTxs)
+    let 
+      rpc = historyExpiry.rpcProvider.valueOr:
+        return err("Portal RPC is not available")
+      res = waitFor rpc.eth_getBlockByNumber(blockId(blockNumber), fullTxs)
     if res.isNil:
       return err("Block not found in portal")
     return ok(res.toBlock())
@@ -156,10 +189,13 @@ proc getBlockByNumber*(pc: PortalClientRef, blockNumber: uint64, fullTxs: bool =
     debug "Failed to fetch block from portal", err=e.msg
     return err(e.msg)
 
-proc getBlockByHash*(pc: PortalClientRef, blockHash: Hash32, fullTxs: bool = true): Result[Block, string] =
+proc getBlockByHash*(historyExpiry: HistoryExpiryRef, blockHash: Hash32, fullTxs: bool = true): Result[Block, string] =
   debug "Fetching block from portal"
   try:
-    let res = waitFor pc.rpcProvider.eth_getBlockByHash(blockHash, fullTxs)
+    let 
+      rpc = historyExpiry.rpcProvider.valueOr:
+        return err("Portal RPC is not available")
+      res = waitFor rpc.eth_getBlockByHash(blockHash, fullTxs)
     if res.isNil:
       return err("Block not found in portal")
     return ok(res.toBlock())
@@ -167,10 +203,27 @@ proc getBlockByHash*(pc: PortalClientRef, blockHash: Hash32, fullTxs: bool = tru
     debug "Failed to fetch block from portal", err=e.msg
     return err(e.msg)
 
-proc getHeaderByHash*(pc: PortalClientRef, blockHash: Hash32): Result[Header, string] =
+proc getBlockBodyByHash*(historyExpiry: HistoryExpiryRef, blockHash: Hash32, fullTxs: bool = true): Result[BlockBody, string] =
+  debug "Fetching block from portal"
+  try:
+    let 
+      rpc = historyExpiry.rpcProvider.valueOr:
+        return err("Portal RPC is not available")
+      res = waitFor rpc.eth_getBlockByHash(blockHash, fullTxs)
+    if res.isNil:
+      return err("Block not found in portal")
+    return ok(res.toBlockBody())
+  except CatchableError as e:
+    debug "Failed to fetch block from portal", err=e.msg
+    return err(e.msg)
+
+proc getHeaderByHash*(historyExpiry: HistoryExpiryRef, blockHash: Hash32): Result[Header, string] =
   debug "Fetching header from portal"
   try:
-    let res = waitFor pc.rpcProvider.eth_getBlockByHash(blockHash, false)
+    let 
+      rpc = historyExpiry.rpcProvider.valueOr:
+        return err("Portal RPC is not available")
+      res = waitFor rpc.eth_getBlockByHash(blockHash, false)
     if res.isNil:
       return err("Header not found in portal")
     return ok(res.toHeader())
@@ -178,10 +231,13 @@ proc getHeaderByHash*(pc: PortalClientRef, blockHash: Hash32): Result[Header, st
     debug "Failed to fetch header from portal", err=e.msg
     return err(e.msg)
 
-proc getHeaderByNumber*(pc: PortalClientRef, blockNumber: uint64): Result[Header, string] =
+proc getHeaderByNumber*(historyExpiry: HistoryExpiryRef, blockNumber: uint64): Result[Header, string] =
   debug "Fetching header from portal"
   try:
-    let res = waitFor pc.rpcProvider.eth_getBlockByNumber(blockId(blockNumber), false)
+    let 
+      rpc = historyExpiry.rpcProvider.valueOr:
+        return err("Portal RPC is not available")
+      res = waitFor rpc.eth_getBlockByNumber(blockId(blockNumber), false)
     if res.isNil:
       return err("Header not found in portal")
     return ok(res.toHeader())

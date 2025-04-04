@@ -612,8 +612,11 @@ func txRecords*(c: ForkedChainRef, txHash: Hash32): (Hash32, uint64) =
 func isInMemory*(c: ForkedChainRef, blockHash: Hash32): bool =
   c.hashToBlock.hasKey(blockHash)
 
-func isPortalActive*(c: ForkedChainRef): bool =
+func isHistoryExpiryActive*(c: ForkedChainRef): bool =
   not c.portal.isNil
+
+func isPortalActive*(c: ForkedChainRef): bool =
+  (not c.portal.isNil) and c.portal.portalEnabled
 
 func memoryBlock*(c: ForkedChainRef, blockHash: Hash32): BlockDesc =
   c.hashToBlock.withValue(blockHash, loc):
@@ -689,7 +692,6 @@ proc txDetailsByTxHash*(c: ForkedChainRef, txHash: Hash32): Result[(Hash32, uint
   
 # TODO: Doesn't fetch data from portal
 # Aristo returns empty txs for both non-existent blocks and existing blocks with no txs [ Solve ? ]
-# Is fetching big block bodies from portal a good idea ?
 proc blockBodyByHash*(c: ForkedChainRef, blockHash: Hash32): Result[BlockBody, string] =
   c.hashToBlock.withValue(blockHash, loc):
     let blk = loc[].blk
