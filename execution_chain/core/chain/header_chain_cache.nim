@@ -20,7 +20,7 @@
 ##
 ## where the top header is called `head` and following headers are chained by
 ## `parentHash` links (indicated above by `<-`.) The stack bottom entry (or
-## oldest ancestor of `head`) is called `antecedent`
+## oldest ancestor of `head`) is called `antecedent` (i.e. most senior header.)
 ##
 ## Note that there can be only one header cache active at a time. This will
 ## not be checked when initialising the system.
@@ -66,7 +66,6 @@
 {.push raises:[].}
 
 import
-  std/sets,
   pkg/eth/[common, rlp],
   pkg/results,
   "../.."/[common, db/core_db, db/storage_types],
@@ -239,10 +238,6 @@ proc persistClear(hc: HeaderChainRef) =
 func baseNum(hc: HeaderChainRef): BlockNumber =
   ## Aka `hc.chain.baseNumber()` (avoiding `forked_chain` import)
   hc.chain.baseBranch.tailNumber
-
-func latestNum(hc: HeaderChainRef): BlockNumber =
-  ## Aka `hc.chain.latestNumber()` (avoiding `forked_chain` import)
-  hc.chain.activeBranch.headNumber
 
 func expectingMode(
     hc: HeaderChainRef;
@@ -544,24 +539,51 @@ proc put*(
 
 
 proc commit*(hc: HeaderChainRef): Result[void,string] =
-  ## Finish appending headers to header chain cache which will become
-  ## read-only (if this function succeeds.)
+  ## This function finishes appending headers (aka `put()`) by declaring it
+  ## read-only (if successful.)
   ##
   ## Required system state for running this function is `ready`.
   ##
-  ## This function will provide its collected data to the `FC` module
-  ## for optimisation purposes.
+  ## It will be double checked whether the `FC` module is still in a state
+  ## where it can provide a parent to the header chain. If necessary, the
+  ## antecenent will be adjusted.
   ##
   ?hc.expectingMode(ready)
 
-  if not hc.chain.hashToBlock.hasKey(hc.session.ante.parentHash):
-    # Beware of a re-org right after the last `put()`
-    return err("Link into FC module has been lost")
+  # The benign case: verify that `ante` has still parent on the `FC` module
+  if hc.chain.hashToBlock.hasKey(hc.session.ante.parentHash):
+    hc.session.mode = locked                          # update internal state
+    return ok()
 
-  # Update internal state
-  hc.session.mode = locked
+  let baseNum = hc.baseNum
+  if baseNum < hc.session.finHeader.number:
+    #
+    # There are two segments of the canonical chain, `base..finalised` and
+    # `ante..finalised` (the latter possibly degraded) which both share at
+    # least `finalised` on the header chain cache.
+    #
+    # On the intersection of `ante..finalised` and `base..finalised` there is
+    # a header with a parent on the `FC` module. Note that the intersecion is
+    # fully part of the header chain cache where the most senior element can
+    # be discarded. Neither `base` nor `ante` have a parent on the `FC` module.
+    #
+    let startHere = max(baseNum, hc.session.ante.number) + 1
 
-  ok()
+    # Find out where the parent to some `FC` module header is.
+    for bn in startHere .. hc.session.finHeader.number:
+      let newAnte = hc.kvt.getHeader(bn).valueOr:
+        raiseAssert RaisePfx & "getHeader(" & bn.bnStr & ") failed"
+      if hc.chain.hashToBlock.hasKey(newAnte.parentHash):
+        hc.session.ante = newAnte                     # update header chain
+        hc.session.mode = locked                      # update internal state
+        return ok()
+
+    # Impossible situation!
+    raiseAssert RaisePfx & "No parent on FC module for anu of " &
+      startHere.bnStr & ".." & hc.session.finHeader.number.bnStr
+
+  hc.session.mode = orphan
+  err("Parent on FC module has been lost: obsolete branch segment")
 
 # --------------------
 
