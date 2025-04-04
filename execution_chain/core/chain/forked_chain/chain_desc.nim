@@ -36,8 +36,16 @@ type
     lastSnapshots*: array[10, CoreDbTxRef]
     lastSnapshotPos*: int
 
-    hdrChainFinHeader*: Header # finalised block header from the `CL` (if any)
-    hdrChainFinHash*: Hash32   # block hash of `hdrChainFinHeader`
+    pendingFCU*  : Hash32
+      # When we know finalizedHash from CL but has yet to resolve
+      # the hash into a latestFinalizedBlockNumber
+    latestFinalizedBlockNumber*: uint64
+      # When our latest imported block is far away from
+      # latestFinalizedBlockNumber, we can move the base
+      # forward when importing block
+    baseAutoForwardDistance*: uint64
+      # When in auto base forward mode, this is the minimum distance
+      # to move the base
 
 # ----------------
 
@@ -45,4 +53,10 @@ func txRecords*(c: ForkedChainRef): var Table[Hash32, (Hash32, uint64)] =
   ## Avoid clash with `forked_chain.txRecords()`
   c.txRecords
 
+func notifyBlockHashAndNumber*(c: ForkedChainRef,
+                               blockHash: Hash32,
+                               blockNumber: uint64) =
+  if blockHash == c.pendingFCU:
+    c.latestFinalizedBlockNumber = blockNumber
+    
 # End
