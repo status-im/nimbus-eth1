@@ -33,7 +33,15 @@ export
   core_db
 
 const
-  BaseDistance = 128
+  BaseDistance = 128'u64
+  BaseAutoForwardDistance = 32'u64
+  NonFinalizedBranchLimit = 8 * 1024 # What is a sane number for this limit?
+
+# ------------------------------------------------------------------------------
+# Forward declarations
+# ------------------------------------------------------------------------------
+
+proc updateBase(c: ForkedChainRef, newBase: BlockPos) {.gcsafe.}
 
 # ------------------------------------------------------------------------------
 # Private functions
@@ -106,6 +114,14 @@ proc validateBlock(c: ForkedChainRef,
     # Block exists, just return
     return ok()
 
+  if blkHash == c.pendingFCU:
+    # Resolve the number into latestFinalizedBlockNumber
+    c.latestFinalizedBlockNumber = blk.header.number
+
+  if parent.branch.len >= NonFinalizedBranchLimit:
+    return err("Non finalized blocks queue is too long, exceeds limit: " &
+      $NonFinalizedBranchLimit)
+
   let
     parentFrame = parent.txFrame
     txFrame = parentFrame.txFrameBegin
@@ -157,6 +173,26 @@ proc validateBlock(c: ForkedChainRef,
 
   for i, tx in blk.transactions:
     c.txRecords[rlpHash(tx)] = (blkHash, uint64(i))
+
+  # Entering base auto forward mode while avoiding forkChoice
+  # handled region(head - baseDistance)
+  # e.g. live syncing with the tip very far from from our latest head
+  if c.pendingFCU != zeroHash32 and
+     blk.header.number < c.latestFinalizedBlockNumber:
+
+   let distance = c.latestFinalizedBlockNumber - blk.header.number
+   if distance > c.baseDistance + c.baseAutoForwardDistance:
+      for branch in c.branches:
+        if branch != c.activeBranch and
+           branch.tailNumber < c.activeBranch.tailNumber:
+          return err("Should not have any branches when in base auto forward mode")
+      let
+        target = c.baseBranch.tailNumber + c.baseAutoForwardDistance
+        newBase = BlockPos(
+          branch: c.baseBranch,
+          index : int(target - c.baseBranch.tailNumber)
+        )
+      c.updateBase(newBase)
 
   ok()
 
@@ -467,7 +503,8 @@ proc updateBase(c: ForkedChainRef, newBase: BlockPos) =
 proc init*(
     T: type ForkedChainRef;
     com: CommonRef;
-    baseDistance = BaseDistance.uint64;
+    baseDistance = BaseDistance;
+    baseAutoForwardDistance = BaseAutoForwardDistance;
       ): T =
   ## Constructor that uses the current database ledger state for initialising.
   ## This state coincides with the canonical head that would be used for
@@ -494,7 +531,8 @@ proc init*(
     branches:        @[baseBranch],
     hashToBlock:     {baseHash: baseBranch.lastBlockPos}.toTable,
     baseTxFrame:     baseTxFrame,
-    baseDistance:    baseDistance)
+    baseDistance:    baseDistance,
+    baseAutoForwardDistance: baseAutoForwardDistance)
 
 proc importBlock*(c: ForkedChainRef, blk: Block): Result[void, string] =
   ## Try to import block to canonical or side chain.
@@ -523,10 +561,13 @@ proc importBlock*(c: ForkedChainRef, blk: Block): Result[void, string] =
 proc forkChoice*(c: ForkedChainRef,
                  headHash: Hash32,
                  finalizedHash: Hash32): Result[void, string] =
-  if headHash == c.activeBranch.headHash and finalizedHash == zeroHash32:
-    # Do nothing if the new head already our current head
-    # and there is no request to new finality.
-    return ok()
+  if headHash == c.activeBranch.headHash:
+    if finalizedHash == zeroHash32:
+      # Do nothing if the new head already our current head
+      # and there is no request to new finality.
+      return ok()
+    else:
+      c.pendingFCU = finalizedHash
 
   let
     # Find the unique branch where `headHash` is a member of.
@@ -728,13 +769,13 @@ func blockFromBaseTo*(c: ForkedChainRef, number: BlockNumber): seq[Block] =
       result.add(branch.blocks[i].blk)
     branch = branch.parent
 
-func equalOrAncestorOf*(c: ForkedChainRef, blockHash: Hash32, ancestorHash: Hash32): bool =
-  if blockHash == ancestorHash:
+func equalOrAncestorOf*(c: ForkedChainRef, blockHash: Hash32, childHash: Hash32): bool =
+  if blockHash == childHash:
     return true
 
-  c.hashToBlock.withValue(ancestorHash, ancestorLoc):
+  c.hashToBlock.withValue(childHash, childLoc):
     c.hashToBlock.withValue(blockHash, loc):
-      var branch = ancestorLoc.branch
+      var branch = childLoc.branch
       while not branch.isNil:
         if loc.branch == branch:
           return true

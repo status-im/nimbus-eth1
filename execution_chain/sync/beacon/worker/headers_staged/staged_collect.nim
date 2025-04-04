@@ -169,7 +169,6 @@ proc collectAndStageOnMemQueue*(
   ## The function returns the largest block number not fetched/stored.
   ##
   let
-    ctx = buddy.ctx
     peer = buddy.peer
   var
     ivTop = iv.maxPt                     # top end of the current range to fetch
