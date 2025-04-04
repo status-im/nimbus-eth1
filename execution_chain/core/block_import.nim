@@ -56,7 +56,7 @@ proc importRlpBlocks*(blocksRlp: openArray[byte],
         number=blk.header.number
       printBanner = true
 
-    let res = chain.importBlock(blk)
+    let res = chain.importBlock(blk, finalized = false)
     if res.isErr:
       error "Error occured when importing block",
         hash=blk.header.blockHash.short,

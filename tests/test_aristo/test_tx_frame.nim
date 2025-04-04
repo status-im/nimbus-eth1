@@ -95,7 +95,7 @@ suite "Aristo TxFrame":
       ) == 1
 
     let batch = db.putBegFn().expect("working batch")
-    db.persist(batch, tx2)
+    db.persist(batch, tx2, Opt.none(Hash32))
     check:
       db.putEndFn(batch).isOk()
 

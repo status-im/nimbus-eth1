@@ -405,6 +405,11 @@ type
       desc: "Rewrite selected network config hash to database"
       name: "debug-rewrite-datadir-id".}: bool
 
+    eagerStateRootCheck* {.
+      hidden
+      desc: "Eagerly check state roots when syncing finalized blocks"
+      name: "debug-eager-state-root".}: bool
+
     case cmd* {.
       command
       defaultValue: NimbusCmd.noCommand }: NimbusCmd
