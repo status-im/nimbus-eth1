@@ -36,6 +36,8 @@ type
     lastSnapshots*: array[10, CoreDbTxRef]
     lastSnapshotPos*: int
 
+    eagerStateRoot*: bool
+
     hdrChainFinHeader*: Header # finalised block header from the `CL` (if any)
     hdrChainFinHash*: Hash32   # block hash of `hdrChainFinHeader`
 

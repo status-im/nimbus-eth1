@@ -113,7 +113,7 @@ type
     ante: Header               # antecedent, bottom of header chain
     head: Header               # top end of header chain, highest block number
     headHash: Hash32
-    finHeader: Header          # final block header
+    finHeader: Header          # final block header TODO move this to ForkedChain
     finHash: Hash32
     consHeadNum: BlockNumber   # for logging, metrics etc.
 
@@ -621,7 +621,8 @@ proc fcHeaderImportBlock*(fc: ForkedCacheRef; blk: Block): Result[void,string] =
   ##
   ## To be integrated into `FC` module proper
   ##
-  ?fc.chain.importBlock(blk)
+  ?fc.chain.importBlock(
+    blk, finalized = blk.header.number < fc.chain.hdrChainFinHeader.number)
 
   if fc.baseNum + FinaliserChoiceDelta < fc.latestNum and
      fc.baseNum < fc.chain.hdrChainFinHeader.number:
