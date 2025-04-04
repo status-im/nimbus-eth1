@@ -36,10 +36,11 @@ proc installPortalCommonApiHandlers*(
 
   rpcServer.rpc("portal_" & networkStr & "AddEnr") do(enr: Record) -> bool:
     let node = Node.fromRecord(enr)
-    let addResult = p.addNode(node)
-    if addResult == Added:
+    if p.addNode(node) == Added:
       p.routingTable.setJustSeen(node)
-    return addResult == Added
+      true
+    else:
+      false
 
   rpcServer.rpc("portal_" & networkStr & "AddEnrs") do(enrs: seq[Record]) -> bool:
     # Note: unspecified RPC, but useful for our local testnet test
