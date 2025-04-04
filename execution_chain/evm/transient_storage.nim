@@ -1,5 +1,5 @@
 # Nimbus
-# Copyright (c) 2023-2024 Status Research & Development GmbH
+# Copyright (c) 2023-2025 Status Research & Development GmbH
 # Licensed under either of
 #  * Apache License, version 2.0, ([LICENSE-APACHE](LICENSE-APACHE) or
 #    http://www.apache.org/licenses/LICENSE-2.0)
@@ -25,7 +25,10 @@ type
 # Private helpers
 #######################################################################
 
-proc mergeAndReset*(a, b: StorageTable) =
+proc mergeAndDiscard*(trg, src: var UInt256) =
+  trg = src # no need to reset, the entire source map gets cleared
+
+proc mergeAndDiscard*(a, b: StorageTable) =
   a.map.mergeAndReset(b.map)
 
 #######################################################################
