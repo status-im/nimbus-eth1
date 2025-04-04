@@ -45,15 +45,18 @@ func fromHex*(T: type CodeBytesRef, hex: string): Opt[CodeBytesRef] =
   except ValueError:
     Opt.none(CodeBytesRef)
 
-func invalidPosition(c: CodeBytesRef, pos: int): bool =
-  let (bpos, bbit) = bitpos(pos)
-  (c.invalidPositions[bpos] and bbit) > 0
-
 func bytes*(c: CodeBytesRef): lent seq[byte] =
   c[].bytes
 
 func len*(c: CodeBytesRef): int =
   len(c.bytes)
+
+# Bounds checking done manually - this is a hotspot in the EVM
+{.push checks: off.}
+
+template invalidPosition(c: CodeBytesRef, pos: int): bool =
+  let (bpos, bbit) = bitpos(pos)
+  (c.invalidPositions[bpos] and bbit) > 0
 
 func isValidOpcode*(c: CodeBytesRef, position: int): bool =
   if position >= len(c):
@@ -78,6 +81,8 @@ func isValidOpcode*(c: CodeBytesRef, position: int): bool =
     c.processed = i - 1
 
     not c.invalidPosition(position)
+
+{.pop.}
 
 func `==`*(a: CodeBytesRef, b: openArray[byte]): bool =
   a.bytes == b

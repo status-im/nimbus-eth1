@@ -49,12 +49,13 @@ template next*(c: var CodeStream): Op =
   # Retrieve the next opcode (or stop) - this is a hot spot in the interpreter
   # and must be kept small for performance
   let
-    # uint: range checked manually -> benefit from smaller codegen
-    pc = uint(c.pc)
+    pc = c.pc
     bytes {.cursor.} = c.code.bytes
-  if pc < uint(bytes.len):
+  if pc < bytes.len:
+    {.push checks: off.}
     let op = Op(bytes[pc])
-    c.pc = cast[int](pc + 1)
+    c.pc = pc + 1
+    {.pop.}
     op
   else:
     Op.Stop
@@ -66,13 +67,17 @@ iterator items*(c: var CodeStream): Op =
     nextOpcode = c.next()
 
 func `[]`*(c: CodeStream, offset: int): Op =
-  Op(c.code.bytes[offset])
-
-func peek*(c: var CodeStream): Op =
-  if c.pc < c.code.bytes.len:
-    Op(c.code.bytes[c.pc])
+  let bytes {.cursor.} = c.code.bytes
+  if offset >= 0 and offset < bytes.len:
+    {.push checks: off.}
+    let op = Op(bytes[offset])
+    {.pop.}
+    op
   else:
     Op.Stop
+
+func peek*(c: var CodeStream): Op =
+  c[c.pc]
 
 func updatePc*(c: var CodeStream, value: int) =
   c.pc = min(value, len(c))
