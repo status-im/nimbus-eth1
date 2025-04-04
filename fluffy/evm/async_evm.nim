@@ -62,7 +62,9 @@ logScope:
 # implemented using a system contract with the data stored in the Ethereum state
 # trie/s and at that point it should just work without changes to the async evm here.
 
-const EVM_CALL_LIMIT = 10000
+const
+  EVM_CALL_LIMIT = 10_000
+  EVM_CALL_GAS_CAP = 50_000_000.GasInt
 
 type
   AccountQuery = object
@@ -136,9 +138,11 @@ proc call*(
   let
     to = tx.to.valueOr:
       return err("to address is required")
-
     # Start fetching code in the background while setting up the EVM
     codeFut = evm.backend.getCode(header.stateRoot, to)
+
+  if tx.gas.isSome() and tx.gas.get().uint64 > EVM_CALL_GAS_CAP:
+    return err("gas larger than max allowed")
 
   debug "Executing call", blockNumber = header.number, to
 
@@ -147,7 +151,7 @@ proc call*(
     txFrame.dispose() # always dispose state changes
 
   let blockContext = BlockContext(
-    timestamp: EthTime.now(),
+    timestamp: header.timestamp,
     gasLimit: header.gasLimit,
     baseFeePerGas: header.baseFeePerGas,
     prevRandao: header.prevRandao,
@@ -184,7 +188,7 @@ proc call*(
     debug "Starting AsyncEvm execution", evmCallCount
 
     let sp = vmState.ledger.beginSavepoint()
-    callResult = rpcCallEvm(tx, header, vmState)
+    callResult = rpcCallEvm(tx, header, vmState, EVM_CALL_GAS_CAP)
     inc evmCallCount
     vmState.ledger.rollback(sp) # all state changes from the call are reverted
 
