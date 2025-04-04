@@ -253,7 +253,10 @@ proc connectTo*(
   else:
     ok(connectRes.value())
 
-proc writeContentRequest(
+template lenu32*(x: untyped): untyped =
+  uint32(len(x))
+
+proc writeContentRequestV0(
     socket: UtpSocket[NodeAddress], stream: PortalStream, request: ContentRequest
 ) {.async: (raises: [CancelledError]).} =
   let dataWritten = await socket.write(request.content)
@@ -261,6 +264,23 @@ proc writeContentRequest(
     debug "Error writing requested data", error = dataWritten.error
 
   await socket.closeWait()
+
+# proc writeContentRequestV1(
+#     socket: UtpSocket[NodeAddress], stream: PortalStream, request: ContentRequest
+# ) {.async: (raises: [CancelledError]).} =
+#   var output = memoryOutput()
+#   try:
+#     output.write(toBytes(request.content.lenu32, Leb128).toOpenArray())
+#     output.write(request.content)
+#   except IOError as e:
+#     # This should not happen in case of in-memory streams
+#     raiseAssert e.msg
+
+#   let dataWritten = await socket.write(output.getOutput)
+#   if dataWritten.isErr():
+#     debug "Error writing requested data", error = dataWritten.error
+
+#   await socket.closeWait()
 
 proc readVarint(
     socket: UtpSocket[NodeAddress]
@@ -282,7 +302,7 @@ proc readVarint(
     else:
       return err("Failed to read varint")
 
-proc readContentValue(
+proc readContentValue*(
     socket: UtpSocket[NodeAddress]
 ): Future[Result[seq[byte], string]] {.async: (raises: [CancelledError]).} =
   let len = (await socket.readVarint()).valueOr:
@@ -415,7 +435,9 @@ proc handleIncomingConnection(
     if stream.contentRequests.contains(socket.connectionId):
       let request = stream.contentRequests.getOrDefault(socket.connectionId)
       if request.nodeId == socket.remoteAddress.nodeId:
-        let fut = socket.writeContentRequest(stream, request)
+        # TODO: Need access to node ENR for version selection. This will require
+        # discv5 level changes to do in a clean manner.
+        let fut = socket.writeContentRequestV0(stream, request)
 
         stream.removePendingTransfer(request.nodeId, request.contentId)
         stream.contentRequests.del(socket.connectionId)
