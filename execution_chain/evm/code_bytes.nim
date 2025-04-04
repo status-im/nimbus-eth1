@@ -1,5 +1,5 @@
 # Nimbus
-# Copyright (c) 2018-2024 Status Research & Development GmbH
+# Copyright (c) 2018-2025 Status Research & Development GmbH
 # Licensed under either of
 #  * Apache License, version 2.0, ([LICENSE-APACHE](LICENSE-APACHE) or http://www.apache.org/licenses/LICENSE-2.0)
 #  * MIT license ([LICENSE-MIT](LICENSE-MIT) or http://opensource.org/licenses/MIT)
@@ -45,15 +45,18 @@ func fromHex*(T: type CodeBytesRef, hex: string): Opt[CodeBytesRef] =
   except ValueError:
     Opt.none(CodeBytesRef)
 
-func invalidPosition(c: CodeBytesRef, pos: int): bool =
-  let (bpos, bbit) = bitpos(pos)
-  (c.invalidPositions[bpos] and bbit) > 0
-
 func bytes*(c: CodeBytesRef): lent seq[byte] =
   c[].bytes
 
 func len*(c: CodeBytesRef): int =
   len(c.bytes)
+
+# Bounds checking done manually - this is a hotspot in the EVM
+{.push checks: off.}
+
+template invalidPosition(c: CodeBytesRef, pos: int): bool =
+  let (bpos, bbit) = bitpos(pos)
+  (c.invalidPositions[bpos] and bbit) > 0
 
 func isValidOpcode*(c: CodeBytesRef, position: int): bool =
   if position >= len(c):
@@ -78,6 +81,8 @@ func isValidOpcode*(c: CodeBytesRef, position: int): bool =
     c.processed = i - 1
 
     not c.invalidPosition(position)
+
+{.pop.}
 
 func `==`*(a: CodeBytesRef, b: openArray[byte]): bool =
   a.bytes == b
