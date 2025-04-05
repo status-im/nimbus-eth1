@@ -24,7 +24,7 @@ import
   minilru,
   eth/rlp,
   eth/p2p/discoveryv5/[protocol, node, enr, routing_table, random2, nodes_verification],
-  "."/[portal_stream, portal_protocol_config, ping_extensions],
+  "."/[portal_stream, portal_protocol_config, ping_extensions, portal_protocol_version],
   ./messages
 
 from std/times import epochTime # For system timestamp in traceContentLookup
@@ -300,11 +300,17 @@ proc isBanned*(p: PortalProtocol, nodeId: NodeId): bool =
 func `$`(id: PortalProtocolId): string =
   id.toHex()
 
-proc addNode*(p: PortalProtocol, node: Node): NodeStatus =
-  p.routingTable.addNode(node)
+proc addNode*(p: PortalProtocol, node: Node): bool =
+  if node.highestCommonPortalVersion(localSupportedVersions).isOk():
+    let status = p.routingTable.addNode(node)
+    trace "Adding node to routing table", status, node
+    status == Added
+  else:
+    trace "Not adding node to routing table, no compatible protocol version", node
+    false
 
 proc addNode*(p: PortalProtocol, r: Record): bool =
-  p.addNode(Node.fromRecord(r)) == Added
+  p.addNode(Node.fromRecord(r))
 
 func getNode*(p: PortalProtocol, id: NodeId): Opt[Node] =
   p.routingTable.getNode(id)
@@ -593,14 +599,12 @@ proc messageHandler(
     # Note: As third measure, could run a findNodes request with distance 0.
     if nodeOpt.isSome():
       let node = nodeOpt.value()
-      let status = p.addNode(node)
-      trace "Adding new node to routing table after incoming request", status, node
+      discard p.addNode(node)
     else:
       let nodeOpt = p.baseProtocol.getNode(srcId)
       if nodeOpt.isSome():
         let node = nodeOpt.value()
-        let status = p.addNode(node)
-        trace "Adding new node to routing table after incoming request", status, node
+        discard p.addNode(node)
 
     portal_message_requests_incoming.inc(labelValues = [$p.protocolId, $message.kind])
 
@@ -782,6 +786,9 @@ proc ping*(
 ): Future[PortalResult[(uint64, uint16, CapabilitiesPayload)]] {.
     async: (raises: [CancelledError])
 .} =
+  # Fail if no common portal version is found
+  let _ = ?dst.highestCommonPortalVersion(localSupportedVersions)
+
   if p.isBanned(dst.id):
     return err("destination node is banned")
 
@@ -805,6 +812,9 @@ proc ping*(
 proc findNodes*(
     p: PortalProtocol, dst: Node, distances: seq[uint16]
 ): Future[PortalResult[seq[Node]]] {.async: (raises: [CancelledError]).} =
+  # Fail if no common portal version is found
+  let _ = ?dst.highestCommonPortalVersion(localSupportedVersions)
+
   if p.isBanned(dst.id):
     return err("destination node is banned")
 
@@ -824,6 +834,8 @@ proc findContent*(
   logScope:
     node = dst
     contentKey
+  # Fail if no common portal version is found
+  let portalVersion = ?dst.highestCommonPortalVersion(localSupportedVersions)
 
   if p.isBanned(dst.id):
     return err("destination node is banned")
@@ -845,13 +857,17 @@ proc findContent*(
         )
       )
 
+    proc readContentValueVersioned(
+        socket: UtpSocket[NodeAddress]
+    ): Future[Result[seq[byte], string]] {.async: (raises: [CancelledError]).} =
+      if portalVersion >= 1:
+        await socket.readContentValue()
+      else:
+        ok(await socket.read())
+
     try:
-      # Read all bytes from the socket
-      # This will either end with a FIN, or because the read action times out.
-      # A FIN does not necessarily mean that the data read is complete.
-      # Further validation is required, using a length prefix here might be
-      # beneficial for this.
-      let readFut = socket.read()
+      # Read one content item from the socket, fails on invalid length prefix
+      let readFut = socket.readContentValueVersioned()
 
       readFut.cancelCallback = proc(udate: pointer) {.gcsafe.} =
         debug "Socket read cancelled", socketKey = socket.socketKey
@@ -860,11 +876,14 @@ proc findContent*(
         socket.close()
 
       if await readFut.withTimeout(p.stream.contentReadTimeout):
-        let content = await readFut
-        # socket received remote FIN and drained whole buffer, it can be
-        # safely destroyed without notifing remote
-        trace "Socket read fully", socketKey = socket.socketKey
+        let contentRes = await readFut
+        let content = contentRes.valueOr:
+          socket.close() # Sending FIN to remote
+          return err("Error reading content item from socket")
+
+        trace "Content value read from socket", socketKey = socket.socketKey
         socket.destroy()
+
         return
           ok(FoundContent(src: dst, kind: Content, content: content, utpTransfer: true))
       else:
@@ -950,6 +969,9 @@ proc offer(
     node = o.dst
     contentKeys
 
+  # Fail if no common portal version is found
+  let _ = ?o.dst.highestCommonPortalVersion(localSupportedVersions)
+
   trace "Offering content"
 
   portal_content_keys_offered.observe(
@@ -990,9 +1012,6 @@ proc offer(
 
   let socket =
     ?(await p.stream.connectTo(nodeAddress, uint16.fromBytesBE(response.connectionId)))
-
-  template lenu32(x: untyped): untyped =
-    uint32(len(x))
 
   case o.kind
   of Direct:
