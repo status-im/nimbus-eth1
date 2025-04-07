@@ -116,7 +116,7 @@ proc validateBlock(c: ForkedChainRef,
     return ok()
 
   if blkHash == c.pendingFCU:
-    # Resolve the number into latestFinalizedBlockNumber
+    # Resolve the hash into latestFinalizedBlockNumber
     c.latestFinalizedBlockNumber = blk.header.number
 
   let
@@ -263,7 +263,7 @@ func calculateNewBase(
 
   # If there is a new base, make sure it moves
   # with large enough step to accomodate for bulk
-  # state root verification.
+  # state root verification/bulk persist.
   let distance = target - c.baseBranch.tailNumber
   if distance < c.persistBatchSize:
     # If the step is not large enough, do nothing.
@@ -546,7 +546,7 @@ proc importBlock*(c: ForkedChainRef, blk: Block): Result[void, string] =
 
     ?c.validateBlock(bd[], blk)
   do:
-    # If it's parent is an invalid block
+    # If its parent is an invalid block
     # there is no hope the descendant is valid
     debug "Parent block not found",
       blockHash = header.blockHash.short,
