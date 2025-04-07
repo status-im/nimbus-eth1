@@ -133,7 +133,7 @@ proc getKey*(
     # We don't store keys for leaves, no need to hit the database
     let rc = rdb.rdVtxLru.peek(rvid.vid)
     if rc.isOk():
-      if rc.value().vType == Leaf:
+      if rc.value().vType in Leaves:
         return ok((VOID_HASH_KEY, rc.value()))
 
   # Otherwise fetch from backend database
@@ -180,7 +180,7 @@ proc getVtx*(
         rdb.rdBranchLru.get(rvid.vid)
     if rc.isOk():
       rdbBranchLruStats[rvid.to(RdbStateType)].inc(true)
-      return ok(VertexRef(vType: Branch, startVid: rc[][0], used: rc[][1]))
+      return ok(BranchRef.init(rc[][0], rc[][1]))
 
   block:
     var rc =
@@ -207,21 +207,22 @@ proc getVtx*(
 
   if not gotData:
     # As a hack, we count missing data as leaf nodes
-    rdbVtxLruStats[rvid.to(RdbStateType)][VertexType.Leaf].inc(false)
+    rdbVtxLruStats[rvid.to(RdbStateType)][VertexType.StoLeaf].inc(false)
     return ok(VertexRef(nil))
 
   if res.isErr():
     return err((res.error(), "Parsing failed")) # Parsing failed
 
-  if res.value.vType == Branch and res.value.pfx.len == 0:
+  if res.value.vType == Branch:
     rdbBranchLruStats[rvid.to(RdbStateType)].inc(false)
   else:
     rdbVtxLruStats[rvid.to(RdbStateType)][res.value().vType].inc(false)
 
   # Update cache and return - in peek mode, avoid evicting cache items
   if GetVtxFlag.PeekCache notin flags:
-    if res.value.vType == Branch and res.value.pfx.len == 0:
-      rdb.rdBranchLru.put(rvid.vid, (res.value().startVid, res.value.used))
+    if res.value.vType == Branch:
+      let vtx = BranchRef(res.value())
+      rdb.rdBranchLru.put(rvid.vid, (vtx.startVid, vtx.used))
     else:
       rdb.rdVtxLru.put(rvid.vid, res.value())
 

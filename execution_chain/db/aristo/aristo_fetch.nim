@@ -34,29 +34,29 @@ proc retrieveLeaf(
         return err(FetchPathNotFound)
       return err(error)
 
-    if vtx.vType == Leaf:
+    if vtx.vType in Leaves:
       return ok vtx
 
   return err(FetchPathNotFound)
 
-proc cachedAccLeaf*(db: AristoTxRef; accPath: Hash32): Opt[VertexRef] =
+proc cachedAccLeaf*(db: AristoTxRef; accPath: Hash32): Opt[AccLeafRef] =
   # Return vertex from layers or cache, `nil` if it's known to not exist and
   # none otherwise
   db.layersGetAccLeaf(accPath) or
     db.db.accLeaves.get(accPath) or
-    Opt.none(VertexRef)
+    Opt.none(AccLeafRef)
 
-proc cachedStoLeaf*(db: AristoTxRef; mixPath: Hash32): Opt[VertexRef] =
+proc cachedStoLeaf*(db: AristoTxRef; mixPath: Hash32): Opt[StoLeafRef] =
   # Return vertex from layers or cache, `nil` if it's known to not exist and
   # none otherwise
   db.layersGetStoLeaf(mixPath) or
     db.db.stoLeaves.get(mixPath) or
-    Opt.none(VertexRef)
+    Opt.none(StoLeafRef)
 
-proc retrieveAccountLeaf(
+proc retrieveAccLeaf(
     db: AristoTxRef;
     accPath: Hash32;
-      ): Result[VertexRef,AristoError] =
+      ): Result[AccLeafRef,AristoError] =
   if (let leafVtx = db.cachedAccLeaf(accPath); leafVtx.isSome()):
     if not leafVtx[].isValid():
       return err(FetchPathNotFound)
@@ -70,9 +70,9 @@ proc retrieveAccountLeaf(
         db.db.accLeaves.put(accPath, nil)
       return err(error)
 
-  db.db.accLeaves.put(accPath, leafVtx)
+  db.db.accLeaves.put(accPath, AccLeafRef(leafVtx))
 
-  ok leafVtx
+  ok AccLeafRef(leafVtx)
 
 proc retrieveMerkleHash(
     db: AristoTxRef;
@@ -90,7 +90,7 @@ proc hasAccountPayload(
     db: AristoTxRef;
     accPath: Hash32;
       ): Result[bool,AristoError] =
-  let error = db.retrieveAccountLeaf(accPath).errorOr:
+  let error = db.retrieveAccLeaf(accPath).errorOr:
     return ok(true)
 
   if error == FetchPathNotFound:
@@ -104,8 +104,8 @@ proc fetchStorageIdImpl(
       ): Result[VertexID,AristoError] =
   ## Helper function for retrieving a storage (vertex) ID for a given account.
   let
-    leafVtx = ?db.retrieveAccountLeaf(accPath)
-    stoID = leafVtx[].lData.stoID
+    leafVtx = ?db.retrieveAccLeaf(accPath)
+    stoID = leafVtx[].stoID
 
   if stoID.isValid:
     ok stoID.vid
@@ -127,17 +127,15 @@ proc fetchAccountHike*(
 
   # Prefer the leaf cache so as not to burden the lower layers
   let leaf = db.cachedAccLeaf(accPath)
-  if leaf == Opt.some(VertexRef(nil)):
+  if leaf == Opt.some(AccLeafRef(nil)):
     return err(FetchAccInaccessible)
 
   accPath.hikeUp(VertexID(1), db, leaf, accHike).isOkOr:
     return err(FetchAccInaccessible)
 
   # Extract the account payload from the leaf
-  if accHike.legs.len == 0 or accHike.legs[^1].wp.vtx.vType != Leaf:
+  if accHike.legs.len == 0 or accHike.legs[^1].wp.vtx.vType != AccLeaf:
     return err(FetchAccPathWithoutLeaf)
-
-  assert accHike.legs[^1].wp.vtx.lData.pType == AccountData
 
   ok()
 
@@ -161,7 +159,7 @@ proc retrieveStoragePayload(
   if (let leafVtx = db.cachedStoLeaf(mixPath); leafVtx.isSome()):
     if not leafVtx[].isValid():
       return err(FetchPathNotFound)
-    return ok leafVtx[].lData.stoData
+    return ok leafVtx[].stoData
 
   # Updated payloads are stored in the layers so if we didn't find them there,
   # it must have been in the database
@@ -170,9 +168,9 @@ proc retrieveStoragePayload(
       db.db.stoLeaves.put(mixPath, nil)
     return err(error)
 
-  db.db.stoLeaves.put(mixPath, leafVtx)
+  db.db.stoLeaves.put(mixPath, StoLeafRef(leafVtx))
 
-  ok leafVtx.lData.stoData
+  ok StoLeafRef(leafVtx).stoData
 
 proc hasStoragePayload(
     db: AristoTxRef;
@@ -208,10 +206,9 @@ proc fetchAccountRecord*(
       ): Result[AristoAccount,AristoError] =
   ## Fetch an account record from the database indexed by `accPath`.
   ##
-  let leafVtx = ? db.retrieveAccountLeaf(accPath)
-  assert leafVtx.lData.pType == AccountData   # debugging only
+  let leafVtx = ? db.retrieveAccLeaf(accPath)
 
-  ok leafVtx.lData.account
+  ok leafVtx.account
 
 proc fetchStateRoot*(
     db: AristoTxRef;

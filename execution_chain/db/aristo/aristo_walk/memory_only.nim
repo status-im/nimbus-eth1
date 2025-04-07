@@ -29,7 +29,7 @@ export
 iterator walkVtxBe*[T: MemBackendRef](
    _: type T;
    db: AristoDbRef;
-   kinds = {Branch, Leaf};
+   kinds = {Branch, ExtBranch, AccLeaf, StoLeaf};
      ): tuple[rvid: RootedVertexID, vtx: VertexRef] =
   ## Iterate over filtered memory backend or backend-less vertices. This
   ## function depends on the particular backend type name which must match
