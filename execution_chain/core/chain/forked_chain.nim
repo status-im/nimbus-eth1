@@ -179,9 +179,19 @@ proc validateBlock(c: ForkedChainRef,
 
     let
       head = c.activeBranch.lastBlockPos
-      newBase = c.calculateNewBase(c.latestFinalizedBlockNumber, head)
+      newBaseCandidate = c.calculateNewBase(c.latestFinalizedBlockNumber, head)
+      prevBaseNumber = c.baseBranch.tailNumber
 
-    c.updateBase(newBase)
+    c.updateBase(newBaseCandidate)
+
+    # If on disk head behind base, move it to base too.
+    let newBaseNumber = c.baseBranch.tailNumber
+    if newBaseNumber > prevBaseNumber:
+      let canonicalHead = ?c.baseTxFrame.getCanonicalHead()
+      if canonicalHead.number < newBaseNumber:
+        let head = c.baseBranch.firstBlockPos
+        head.txFrame.setHead(head.branch.tailHeader,
+          head.branch.tailHash).expect("OK")
 
   ok()
 
@@ -427,6 +437,10 @@ proc updateBase(c: ForkedChainRef, newBase: BlockPos) =
         break
       dec number
 
+  if newBase.number == c.baseBranch.tailNumber:
+    # No update, return
+    return
+
   let
     # Cache to prevent crash after we shift
     # the blocks
@@ -558,13 +572,15 @@ proc importBlock*(c: ForkedChainRef, blk: Block): Result[void, string] =
 proc forkChoice*(c: ForkedChainRef,
                  headHash: Hash32,
                  finalizedHash: Hash32): Result[void, string] =
+
+  if finalizedHash != zeroHash32:
+    c.pendingFCU = finalizedHash
+
   if headHash == c.activeBranch.headHash:
     if finalizedHash == zeroHash32:
       # Do nothing if the new head already our current head
       # and there is no request to new finality.
       return ok()
-    else:
-      c.pendingFCU = finalizedHash
 
   let
     # Find the unique branch where `headHash` is a member of.
