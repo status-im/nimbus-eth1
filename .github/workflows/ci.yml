@@ -203,9 +203,6 @@ jobs:
           # find . -type d -name ".git" -exec rm -rf {} +
           find . -type d -name "nimcache" -exec rm -rf {} +
           mingw32-make ${DEFAULT_MAKE_FLAGS} test t8n_test
-          if [[ '${{ matrix.target.cpu }}' == 'amd64' ]]; then
-            mingw32-make ${DEFAULT_MAKE_FLAGS}
-          fi
 
       - name: Run nimbus-eth1 tests (Linux)
         if: runner.os == 'Linux'
