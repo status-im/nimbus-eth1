@@ -34,14 +34,15 @@ export
 
 const
   BaseDistance = 128'u64
-  BaseAutoForwardDistance = 32'u64
-  NonFinalizedBranchLimit = 8 * 1024 # What is a sane number for this limit?
+  PersistBatchSize = 32'u64
 
 # ------------------------------------------------------------------------------
 # Forward declarations
 # ------------------------------------------------------------------------------
 
 proc updateBase(c: ForkedChainRef, newBase: BlockPos) {.gcsafe.}
+func calculateNewBase(c: ForkedChainRef;
+       finalizedNumber: uint64; head: BlockPos): BlockPos {.gcsafe.}
 
 # ------------------------------------------------------------------------------
 # Private functions
@@ -118,10 +119,6 @@ proc validateBlock(c: ForkedChainRef,
     # Resolve the number into latestFinalizedBlockNumber
     c.latestFinalizedBlockNumber = blk.header.number
 
-  if parent.branch.len >= NonFinalizedBranchLimit:
-    return err("Non finalized blocks queue is too long, exceeds limit: " &
-      $NonFinalizedBranchLimit)
-
   let
     parentFrame = parent.txFrame
     txFrame = parentFrame.txFrameBegin
@@ -180,19 +177,11 @@ proc validateBlock(c: ForkedChainRef,
   if c.pendingFCU != zeroHash32 and
      blk.header.number < c.latestFinalizedBlockNumber:
 
-   let distance = c.latestFinalizedBlockNumber - blk.header.number
-   if distance > c.baseDistance + c.baseAutoForwardDistance:
-      for branch in c.branches:
-        if branch != c.activeBranch and
-           branch.tailNumber < c.activeBranch.tailNumber:
-          return err("Should not have any branches when in base auto forward mode")
-      let
-        target = c.baseBranch.tailNumber + c.baseAutoForwardDistance
-        newBase = BlockPos(
-          branch: c.baseBranch,
-          index : int(target - c.baseBranch.tailNumber)
-        )
-      c.updateBase(newBase)
+    let
+      head = c.activeBranch.lastBlockPos
+      newBase = c.calculateNewBase(c.latestFinalizedBlockNumber, head)
+
+    c.updateBase(newBase)
 
   ok()
 
@@ -246,10 +235,10 @@ func findFinalizedPos(
 
 func calculateNewBase(
     c: ForkedChainRef;
-    finalized: BlockPos;
+    finalizedNumber: uint64;
     head: BlockPos;
       ): BlockPos =
-  ## It is required that the `finalized` argument is on the `head` chain, i.e.
+  ## It is required that the `finalizedNumber` argument is on the `head` chain, i.e.
   ## it ranges beween `c.baseBranch.tailNumber` and
   ## `head.branch.headNumber`.
   ##
@@ -257,19 +246,27 @@ func calculateNewBase(
   ## calculated as follows.
   ##
   ## Starting at the argument `head.branch` searching backwards, the new base
-  ## is the position of the block with number `finalized`.
+  ## is the position of the block with `finalizedNumber`.
   ##
-  ## Before searching backwards, the `finalized` argument might be adjusted
+  ## Before searching backwards, the `finalizedNumber` argument might be adjusted
   ## and made smaller so that a minimum distance to the head on the cursor arc
   ## applies.
   ##
   # It's important to have base at least `baseDistance` behind head
   # so we can answer state queries about history that deep.
-  let target = min(finalized.number,
+  let target = min(finalizedNumber,
     max(head.number, c.baseDistance) - c.baseDistance)
 
   # Do not update base.
   if target <= c.baseBranch.tailNumber:
+    return BlockPos(branch: c.baseBranch)
+
+  # If there is a new base, make sure it moves
+  # with large enough step to accomodate for bulk
+  # state root verification.
+  let distance = target - c.baseBranch.tailNumber
+  if distance < c.persistBatchSize:
+    # If the step is not large enough, do nothing.
     return BlockPos(branch: c.baseBranch)
 
   if target >= head.branch.tailNumber:
@@ -504,7 +501,7 @@ proc init*(
     T: type ForkedChainRef;
     com: CommonRef;
     baseDistance = BaseDistance;
-    baseAutoForwardDistance = BaseAutoForwardDistance;
+    persistBatchSize = PersistBatchSize;
       ): T =
   ## Constructor that uses the current database ledger state for initialising.
   ## This state coincides with the canonical head that would be used for
@@ -532,7 +529,7 @@ proc init*(
     hashToBlock:     {baseHash: baseBranch.lastBlockPos}.toTable,
     baseTxFrame:     baseTxFrame,
     baseDistance:    baseDistance,
-    baseAutoForwardDistance: baseAutoForwardDistance)
+    persistBatchSize: persistBatchSize)
 
 proc importBlock*(c: ForkedChainRef, blk: Block): Result[void, string] =
   ## Try to import block to canonical or side chain.
@@ -585,7 +582,10 @@ proc forkChoice*(c: ForkedChainRef,
 
   c.updateFinalized(finalized)
 
-  let newBase = c.calculateNewBase(finalized, head)
+  let
+    finalizedNumber = finalized.number
+    newBase = c.calculateNewBase(finalizedNumber, head)
+
   if newBase.hash == c.baseBranch.tailHash:
     # The base is not updated, return.
     return ok()
@@ -597,8 +597,8 @@ proc forkChoice*(c: ForkedChainRef,
   # At this point head.number >= base.number.
   # At this point finalized.number is <= head.number,
   # and possibly switched to other chain beside the one with head.
-  doAssert(finalized.number <= head.number)
-  doAssert(newBaseNumber <= finalized.number)
+  doAssert(finalizedNumber <= head.number)
+  doAssert(newBaseNumber <= finalizedNumber)
   c.updateBase(newBase)
 
   ok()

@@ -43,7 +43,7 @@ type
       # When our latest imported block is far away from
       # latestFinalizedBlockNumber, we can move the base
       # forward when importing block
-    baseAutoForwardDistance*: uint64
+    persistBatchSize*: uint64
       # When in auto base forward mode, this is the minimum distance
       # to move the base
 
@@ -58,5 +58,5 @@ func notifyBlockHashAndNumber*(c: ForkedChainRef,
                                blockNumber: uint64) =
   if blockHash == c.pendingFCU:
     c.latestFinalizedBlockNumber = blockNumber
-    
+
 # End
