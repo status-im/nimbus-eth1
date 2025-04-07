@@ -77,7 +77,7 @@ proc executeCase(node: JsonNode): bool =
     debugEcho "Failed to put genesis header into database: ", error
     return false
 
-  var c = ForkedChainRef.init(com)
+  var c = ForkedChainRef.init(com, persistBatchSize = 0)
   if c.latestHash != env.genesisHeader.blockHash:
     debugEcho "Genesis block hash in database is different with expected genesis block hash"
     return false
