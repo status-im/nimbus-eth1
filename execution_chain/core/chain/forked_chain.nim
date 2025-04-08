@@ -477,7 +477,8 @@ proc updateBase(c: ForkedChainRef, newBase: BlockPos) =
   # Older branches will gone
   branch = branch.parent
   while not branch.isNil:
-    disposeBlocks(number, branch)
+    var delNumber = branch.headNumber    
+    disposeBlocks(delNumber, branch)
 
     for i, brc in c.branches:
       if brc == branch:
