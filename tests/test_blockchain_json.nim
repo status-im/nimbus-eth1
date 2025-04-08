@@ -125,10 +125,10 @@ proc blockchainJsonMain*() =
 
   if false:
     suite "block chain json tests":
-      jsonTest(legacyFolder, "BlockchainTests", executeFile, skipBCTests)
+      jsonTest(legacyFolder, "LegacyBlockchainTests", executeFile, skipBCTests)
   else:
     suite "new block chain json tests":
-      jsonTest(newFolder, "newBlockchainTests", executeFile, skipNewBCTests)
+      jsonTest(newFolder, "BlockchainTests", executeFile, skipNewBCTests)
 
 when debugMode:
   proc executeFile(name: string) =
