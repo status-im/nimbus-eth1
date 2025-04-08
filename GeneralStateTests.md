@@ -1,4 +1,4 @@
-newGeneralStateTests
+GeneralStateTests
 ===
 ## eip1153_tstore
 ```diff

@@ -19,7 +19,7 @@ import
   ./evm_errors,
   ./code_bytes,
   ../common/[evmforks],
-  ../utils/utils,
+  ../utils/[utils, mergeutils],
   ../common/common,
   eth/common/eth_types_rlp,
   chronicles, chronos
@@ -281,10 +281,7 @@ proc addLogEntry*(c: Computation, log: Log) =
   c.logEntries.add log
 
 func merge*(c, child: Computation) =
-  if c.logEntries.len == 0:
-    c.logEntries = move(child.logEntries)
-  else:
-    c.logEntries.add(child.logEntries)
+  c.logEntries.mergeAndReset(child.logEntries)
   c.transientStorage.mergeAndReset(child.transientStorage)
   c.gasMeter.refundGas(child.gasMeter.gasRefunded)
 
