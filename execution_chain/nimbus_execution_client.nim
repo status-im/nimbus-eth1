@@ -39,7 +39,7 @@ from beacon_chain/nimbus_binary_common import setupFileLimits
 proc basicServices(nimbus: NimbusNode,
                    conf: NimbusConf,
                    com: CommonRef) =
-  nimbus.fc = ForkedChainRef.init(com)
+  nimbus.fc = ForkedChainRef.init(com, eagerStateRoot = conf.eagerStateRootCheck)
 
   # txPool must be informed of active head
   # so it can know the latest account state
@@ -161,7 +161,7 @@ proc preventLoadingDataDirForTheWrongNetwork(db: CoreDbRef; conf: NimbusConf) =
     kvt.put(dataDirIdKey().toOpenArray, calculatedId.data).isOkOr:
       fatal "Cannot write data dir ID", ID=calculatedId
       quit(QuitFailure)
-    db.persist(kvt)
+    db.persist(kvt, Opt.none(Hash32))
 
   let
     kvt = db.baseTxFrame()

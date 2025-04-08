@@ -215,7 +215,7 @@ proc newPayload*(ben: BeaconEngineRef,
 
   trace "Importing block without sethead",
     hash = blockHash, number = header.number
-  let vres = ben.chain.importBlock(blk)
+  let vres = ben.chain.importBlock(blk, finalized = false)
   if vres.isErr:
     warn "Error importing block",
       number = header.number,

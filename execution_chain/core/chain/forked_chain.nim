@@ -42,7 +42,9 @@ const
 proc processBlock(c: ForkedChainRef,
                   parent: Header,
                   txFrame: CoreDbTxRef,
-                  blk: Block, blkHash: Hash32): Result[seq[Receipt], string] =
+                  blk: Block,
+                  blkHash: Hash32,
+                  finalized: bool): Result[seq[Receipt], string] =
   template header(): Header =
     blk.header
 
@@ -51,11 +53,15 @@ proc processBlock(c: ForkedChainRef,
 
   ?c.com.validateHeaderAndKinship(blk, vmState.parent, txFrame)
 
+  # When processing a finalized block, we optimistically assume that the state
+  # root will check out and delay such validation for when it's time to persist
+  # changes to disk
   ?vmState.processBlock(
     blk,
     skipValidation = false,
     skipReceipts = false,
     skipUncles = true,
+    skipStateRootCheck = finalized and not c.eagerStateRoot,
     taskpool = c.com.taskpool,
   )
 
@@ -99,7 +105,7 @@ proc writeBaggage(c: ForkedChainRef,
 
 proc validateBlock(c: ForkedChainRef,
           parent: BlockPos,
-          blk: Block): Result[void, string] =
+          blk: Block, finalized: bool): Result[void, string] =
   let blkHash = blk.header.blockHash
 
   if c.hashToBlock.hasKey(blkHash):
@@ -130,7 +136,7 @@ proc validateBlock(c: ForkedChainRef,
       requestsHash: blk.header.requestsHash,
     )
 
-  var receipts = c.processBlock(parent.header, txFrame, blk, blkHash).valueOr:
+  var receipts = c.processBlock(parent.header, txFrame, blk, blkHash, finalized).valueOr:
     txFrame.dispose()
     return err(error)
 
@@ -407,7 +413,7 @@ proc updateBase(c: ForkedChainRef, newBase: BlockPos) =
   let nextIndex  = int(newBase.number - branch.tailNumber)
 
   # Persist the new base block - this replaces the base tx in coredb!
-  c.com.db.persist(newBase.txFrame)
+  c.com.db.persist(newBase.txFrame, Opt.some(newBase.blk.header.stateRoot))
   c.baseTxFrame = newBase.txFrame
 
   disposeBlocks(number, branch)
@@ -468,6 +474,7 @@ proc init*(
     T: type ForkedChainRef;
     com: CommonRef;
     baseDistance = BaseDistance.uint64;
+    eagerStateRoot = false;
       ): T =
   ## Constructor that uses the current database ledger state for initialising.
   ## This state coincides with the canonical head that would be used for
@@ -496,9 +503,15 @@ proc init*(
     baseTxFrame:     baseTxFrame,
     baseDistance:    baseDistance)
 
-proc importBlock*(c: ForkedChainRef, blk: Block): Result[void, string] =
+proc importBlock*(c: ForkedChainRef, blk: Block, finalized = false): Result[void, string] =
   ## Try to import block to canonical or side chain.
   ## return error if the block is invalid
+  ##
+  ## `finalized` should be set to true for blocks that are known to be finalized
+  ## already per the latest fork choice update from the consensus client, for
+  ## example by following the header chain back from the fcu hash - in such
+  ## cases, we perform state root checking in bulk while writing the state to
+  ## disk (instead of once for every block).
   template header(): Header =
     blk.header
 
@@ -509,7 +522,7 @@ proc importBlock*(c: ForkedChainRef, blk: Block): Result[void, string] =
     # to a "staging area" or disk-backed memory but it must not afect `base`.
     # `base` is the point of no return, we only update it on finality.
 
-    ?c.validateBlock(bd[], blk)
+    ?c.validateBlock(bd[], blk, finalized)
   do:
     # If it's parent is an invalid block
     # there is no hope the descendant is valid

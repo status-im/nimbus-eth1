@@ -126,7 +126,7 @@ proc initializeDb(com: CommonRef) =
     doAssert(canonicalHeadHashKey().toOpenArray in txFrame)
 
     txFrame.checkpoint(com.genesisHeader.number)
-    com.db.persist(txFrame)
+    com.db.persist(txFrame, Opt.none(Hash32))
 
   # The database must at least contain the base and head pointers - the base
   # is implicitly considered finalized
