@@ -66,16 +66,104 @@ procSuite "Async EVM":
     callData = "0xa888c2cd0000000000000000000000000000000000000000000000000000000000000007".hexToSeqByte()
     tx = TransactionArgs(to: Opt.some(address), input: Opt.some(callData))
 
-  asyncTest "Test basic call - optimistic state fetch enabled":
+  asyncTest "Basic call - optimistic state fetch enabled":
     let callResult = (await evm.call(header, tx, optimisticStateFetch = true)).expect(
       "successful call"
     )
     check callResult.output ==
       "0x000000000000000000000000fb7bc66a002762e28545ea0a7fc970d381863c420000000000000000000000000000000000000000000000000000000000000060000000000000000000000000000000000000000000000000000000000000c5df000000000000000000000000000000000000000000000000000000000000002d536174697366792056616c756573207468726f75676820467269656e647368697020616e6420506f6e6965732100000000000000000000000000000000000000".hexToSeqByte()
 
-  asyncTest "Test basic call - optimistic state fetch disabled":
+  asyncTest "Basic call - optimistic state fetch disabled":
     let callResult = (await evm.call(header, tx, optimisticStateFetch = false)).expect(
       "successful call"
     )
     check callResult.output ==
       "0x000000000000000000000000fb7bc66a002762e28545ea0a7fc970d381863c420000000000000000000000000000000000000000000000000000000000000060000000000000000000000000000000000000000000000000000000000000c5df000000000000000000000000000000000000000000000000000000000000002d536174697366792056616c756573207468726f75676820467269656e647368697020616e6420506f6e6965732100000000000000000000000000000000000000".hexToSeqByte()
+
+  asyncTest "Create access list - optimistic state fetch enabled":
+    let (accessList, gasUsed) = (
+      await evm.createAccessList(header, tx, optimisticStateFetch = true)
+    ).expect("successful call")
+
+    check:
+      accessList.len() == 1
+      gasUsed > 0
+      accessList[0].address == address
+
+    let storageKeys = accessList[0].storageKeys
+    check:
+      storageKeys.len() == 6
+      storageKeys.contains(
+        Bytes32.fromHex(
+          "0x80f0598597d7a1012e2e0a89cab2b766e02a3a5e30768662751fe258f5389667"
+        )
+      )
+      storageKeys.contains(
+        Bytes32.fromHex(
+          "0x80f0598597d7a1012e2e0a89cab2b766e02a3a5e30768662751fe258f5389668"
+        )
+      )
+      storageKeys.contains(
+        Bytes32.fromHex(
+          "0x0000000000000000000000000000000000000000000000000000000000000000"
+        )
+      )
+      storageKeys.contains(
+        Bytes32.fromHex(
+          "0x290decd9548b62a8d60345a988386fc84ba6bc95484008f6362f93160ef3e578"
+        )
+      )
+      storageKeys.contains(
+        Bytes32.fromHex(
+          "0x290decd9548b62a8d60345a988386fc84ba6bc95484008f6362f93160ef3e57a"
+        )
+      )
+      storageKeys.contains(
+        Bytes32.fromHex(
+          "0x290decd9548b62a8d60345a988386fc84ba6bc95484008f6362f93160ef3e579"
+        )
+      )
+
+  asyncTest "Create access list - optimistic state fetch disabled":
+    let (accessList, gasUsed) = (
+      await evm.createAccessList(header, tx, optimisticStateFetch = false)
+    ).expect("successful call")
+
+    check:
+      accessList.len() == 1
+      gasUsed > 0
+      accessList[0].address == address
+
+    let storageKeys = accessList[0].storageKeys
+    check:
+      storageKeys.len() == 6
+      storageKeys.contains(
+        Bytes32.fromHex(
+          "0x80f0598597d7a1012e2e0a89cab2b766e02a3a5e30768662751fe258f5389667"
+        )
+      )
+      storageKeys.contains(
+        Bytes32.fromHex(
+          "0x80f0598597d7a1012e2e0a89cab2b766e02a3a5e30768662751fe258f5389668"
+        )
+      )
+      storageKeys.contains(
+        Bytes32.fromHex(
+          "0x0000000000000000000000000000000000000000000000000000000000000000"
+        )
+      )
+      storageKeys.contains(
+        Bytes32.fromHex(
+          "0x290decd9548b62a8d60345a988386fc84ba6bc95484008f6362f93160ef3e578"
+        )
+      )
+      storageKeys.contains(
+        Bytes32.fromHex(
+          "0x290decd9548b62a8d60345a988386fc84ba6bc95484008f6362f93160ef3e57a"
+        )
+      )
+      storageKeys.contains(
+        Bytes32.fromHex(
+          "0x290decd9548b62a8d60345a988386fc84ba6bc95484008f6362f93160ef3e579"
+        )
+      )
