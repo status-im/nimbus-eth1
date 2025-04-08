@@ -42,11 +42,13 @@ const
     (number: 13773000'u64, time: 0'u64, id: (crc: 0x20c327fc'u32, next: 15050000'u64)), # First Arrow Glacier block
     (number: 15049999'u64, time: 0'u64, id: (crc: 0x20c327fc'u32, next: 15050000'u64)), # Last Arrow Glacier block
     (number: 15050000'u64, time: 0'u64, id: (crc: 0xf0afd0e3'u32, next: 1681338455'u64)), # First Gray Glacier block
-    (number: 20000000'u64, time: 1681338454'u64, id: (crc: 0xf0afd0e3'u32, next: 1681338455'u64)), # Last Gray Glacier block
-    (number: 20000000'u64, time: 1681338455'u64, id: (crc: 0xdce96c2d'u32, next: 1710338135'u64)), # First Shanghai block
-    (number: 30000000'u64, time: 1710338134'u64, id: (crc: 0xdce96c2d'u32, next: 1710338135'u64)), # Last Shanghai block
-    (number: 40000000'u64, time: 1710338135'u64, id: (crc: 0x9f3d2254'u32, next: 0'u64)),          # First Cancun block
-    (number: 50000000'u64, time: 2000000000'u64, id: (crc: 0x9f3d2254'u32, next: 0'u64)),          # Future Cancun block
+    (number: 15050000'u64, time: 1681338454'u64, id: (crc: 0xf0afd0e3'u32, next: 1681338455'u64)), # Last Gray Glacier block
+    (number: 15050000'u64, time: 1681338455'u64, id: (crc: 0xdce96c2d'u32, next: 1710338135'u64)), # First Shanghai block
+    (number: 15050000'u64, time: 1710338134'u64, id: (crc: 0xdce96c2d'u32, next: 1710338135'u64)), # Last Shanghai block
+    (number: 15050000'u64, time: 1710338135'u64, id: (crc: 0x9f3d2254'u32, next: 1746612311'u64)), # First Cancun block
+    (number: 15050000'u64, time: 1746612310'u64, id: (crc: 0x9f3d2254'u32, next: 1746612311'u64)), # Last Cancun block
+    (number: 15050000'u64, time: 1746612311'u64, id: (crc: 0xc376cf8b'u32, next: 0'u64)),          # First Prague block
+    (number: 15050000'u64, time: 2746612311'u64, id: (crc: 0xc376cf8b'u32, next: 0'u64)),          # Future Prague block
   ]
 
   SepoliaNetIDs = [
@@ -58,8 +60,8 @@ const
     (number: 1450410'u64, time: 1706655071'u64, id: (crc: 0xce82fa52'u32, next: 1706655072'u64)), # Last Shanghai block
     (number: 1450410'u64, time: 1706655072'u64, id: (crc: 0xa6260961'u32, next: 1741159776'u64)), # First Cancun block
     (number: 1450410'u64, time: 1741159775'u64, id: (crc: 0xa6260961'u32, next: 1741159776'u64)), # Last Cancun block
-    (number: 1450410'u64, time: 1741159776'u64, id: (crc: 0x1cd80755'u32, next: 0'u64)), # First Prague block
-    (number: 1450410'u64, time: 2741159776'u64, id: (crc: 0x1cd80755'u32, next: 0'u64)), # Future Prague block
+    (number: 1450410'u64, time: 1741159776'u64, id: (crc: 0x1cd80755'u32, next: 0'u64)),          # First Prague block
+    (number: 1450410'u64, time: 2741159776'u64, id: (crc: 0x1cd80755'u32, next: 0'u64)),          # Future Prague block
   ]
 
   HoleskyNetIDs = [
