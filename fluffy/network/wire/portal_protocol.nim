@@ -131,6 +131,14 @@ const
   NodeBanDurationContentLookupFailedValidation* = 60.minutes
   NodeBanDurationOfferFailedValidation* = 60.minutes
 
+  # Accept codes for the accept message
+  Accepted* = byte 0x0
+  DeclinedGeneric* = byte 0x1
+  DeclinedAlreadyStored* = byte 0x2
+  DeclinedNotWithinRadius* = byte 0x3
+  DeclinedRateLimited* = byte 0x4
+  DeclinedInboundTransferInProgress* = byte 0x5
+
 type
   ToContentIdHandler* =
     proc(contentKey: ContentKeyByteList): results.Opt[ContentId] {.raises: [], gcsafe.}
@@ -508,7 +516,8 @@ proc handleOffer(p: PortalProtocol, o: OfferMessage, srcId: NodeId): seq[byte] =
     return encodeMessage(
       AcceptMessage(
         connectionId: Bytes2([byte 0x00, 0x00]),
-        contentKeys: ContentKeysBitList.init(o.contentKeys.len),
+        contentKeys:
+          ContentKeysAcceptList.init(repeat(DeclinedRateLimited, o.contentKeys.len)),
       )
     )
 
@@ -516,9 +525,10 @@ proc handleOffer(p: PortalProtocol, o: OfferMessage, srcId: NodeId): seq[byte] =
   p.stream.pruneAllowedOfferConnections()
 
   var
-    contentKeysBitList = ContentKeysBitList.init(o.contentKeys.len)
+    contentKeysAcceptList = ContentKeysAcceptList.init(@[])
     contentKeys = ContentKeysList.init(@[])
     contentIds = newSeq[ContentId]()
+    contentAccepted = false
   # TODO: Do we need some protection against a peer offering lots (64x) of
   # content that fits our Radius but is actually bogus?
   # Additional TODO, but more of a specification clarification: What if we don't
@@ -534,18 +544,24 @@ proc handleOffer(p: PortalProtocol, o: OfferMessage, srcId: NodeId): seq[byte] =
         int64(logDistance), labelValues = [$p.protocolId]
       )
 
-      if p.inRange(contentId) and p.stream.canAddPendingTransfer(srcId, contentId) and
-          not p.dbContains(contentKey, contentId):
+      if not p.inRange(contentId):
+        discard contentKeysAcceptList.add(DeclinedNotWithinRadius)
+      elif not p.stream.canAddPendingTransfer(srcId, contentId):
+        discard contentKeysAcceptList.add(DeclinedInboundTransferInProgress)
+      elif p.dbContains(contentKey, contentId):
+        discard contentKeysAcceptList.add(DeclinedAlreadyStored)
+      else:
         p.stream.addPendingTransfer(srcId, contentId)
-        contentKeysBitList.setBit(i)
+        discard contentKeysAcceptList.add(Accepted)
         discard contentKeys.add(contentKey)
         contentIds.add(contentId)
+        contentAccepted = true
     else:
       # Return empty response when content key validation fails
       return @[]
 
   let connectionId =
-    if contentKeysBitList.countOnes() != 0:
+    if contentAccepted:
       p.stream.addContentOffer(srcId, contentKeys, contentIds)
     else:
       # When the node does not accept any of the content offered, reply with an
@@ -554,7 +570,7 @@ proc handleOffer(p: PortalProtocol, o: OfferMessage, srcId: NodeId): seq[byte] =
       Bytes2([byte 0x00, 0x00])
 
   encodeMessage(
-    AcceptMessage(connectionId: connectionId, contentKeys: contentKeysBitList)
+    AcceptMessage(connectionId: connectionId, contentKeys: contentKeysAcceptList)
   )
 
 proc messageHandler(
@@ -926,7 +942,7 @@ func getMaxOfferedContentKeys*(protocolIdLen: uint32, maxKeySize: uint32): int =
 
 proc offer(
     p: PortalProtocol, o: OfferRequest
-): Future[PortalResult[ContentKeysBitList]] {.async: (raises: [CancelledError]).} =
+): Future[PortalResult[ContentKeysAcceptList]] {.async: (raises: [CancelledError]).} =
   ## Offer triggers offer-accept interaction with one peer
   ## Whole flow has two phases:
   ## 1. Come to an agreement on what content to transfer, by using offer and
@@ -975,7 +991,14 @@ proc offer(
       bitListLen = response.contentKeys.len(), contentKeysLen
     return err("Accepted content key bitlist has invalid size")
 
-  let acceptedKeysAmount = response.contentKeys.countOnes()
+  proc countAccepted(acceptList: ContentKeysAcceptList): int =
+    var count = 0
+    for code in acceptList:
+      if code == Accepted:
+        inc(count)
+    return count
+
+  let acceptedKeysAmount = response.contentKeys.countAccepted()
   portal_content_keys_accepted.observe(
     acceptedKeysAmount.int64, labelValues = [$p.protocolId]
   )
@@ -997,7 +1020,7 @@ proc offer(
   case o.kind
   of Direct:
     for i, b in response.contentKeys:
-      if b:
+      if b == Accepted:
         let content = o.contentList[i].content
         var output = memoryOutput()
         try:
@@ -1016,7 +1039,7 @@ proc offer(
         trace "Offered content item send", dataWritten = dataWritten
   of Database:
     for i, b in response.contentKeys:
-      if b:
+      if b == Accepted:
         let
           contentKey = o.contentKeys[i]
           contentIdResult = p.toContentId(contentKey)
@@ -1055,13 +1078,13 @@ proc offer(
 
 proc offer*(
     p: PortalProtocol, dst: Node, contentKeys: ContentKeysList
-): Future[PortalResult[ContentKeysBitList]] {.async: (raises: [CancelledError]).} =
+): Future[PortalResult[ContentKeysAcceptList]] {.async: (raises: [CancelledError]).} =
   let req = OfferRequest(dst: dst, kind: Database, contentKeys: contentKeys)
   await p.offer(req)
 
 proc offer*(
     p: PortalProtocol, dst: Node, content: seq[ContentKV]
-): Future[PortalResult[ContentKeysBitList]] {.async: (raises: [CancelledError]).} =
+): Future[PortalResult[ContentKeysAcceptList]] {.async: (raises: [CancelledError]).} =
   if len(content) > contentKeysLimit:
     return err("Cannot offer more than 64 content items")
   if len(content) == 0:
