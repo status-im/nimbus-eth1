@@ -208,7 +208,7 @@ proc memoryBackend*(): AristoDbRef =
 
 iterator walkVtx*(
     be: MemBackendRef;
-    kinds = {Branch, Leaf};
+    kinds = {Branch, ExtBranch, AccLeaf, StoLeaf};
       ): tuple[rvid: RootedVertexID, vtx: VertexRef] =
   ##  Iteration over the vertex sub-table.
   for n,rvid in be.sTab.keys.toSeq.mapIt(it).sorted:

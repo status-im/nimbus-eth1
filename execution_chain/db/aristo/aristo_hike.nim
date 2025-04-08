@@ -35,9 +35,13 @@ func getNibblesImpl(hike: Hike; start = 0; maxLen = high(int)): NibblesBuf =
     let leg = hike.legs[n]
     case leg.wp.vtx.vType:
     of Branch:
-      result = result & leg.wp.vtx.pfx & NibblesBuf.nibble(leg.nibble.byte)
-    of Leaf:
-      result = result & leg.wp.vtx.pfx
+      result = result & NibblesBuf.nibble(leg.nibble.byte)
+    of ExtBranch:
+      let vtx = ExtBranchRef(leg.wp.vtx)
+      result = result & vtx.pfx & NibblesBuf.nibble(leg.nibble.byte)
+    of Leaves:
+      let vtx = LeafRef(leg.wp.vtx)
+      result = result & vtx.pfx
 
 # ------------------------------------------------------------------------------
 # Public functions
@@ -77,8 +81,9 @@ proc step*(
     return err(HikeDanglingEdge)
 
   case vtx.vType:
-  of Leaf:
+  of Leaves:
     # This must be the last vertex, so there cannot be any `tail` left.
+    let vtx = LeafRef(vtx)
     if path.len != path.sharedPrefixLen(vtx.pfx):
       return err(HikeLeafUnexpected)
 
@@ -86,6 +91,22 @@ proc step*(
 
   of Branch:
     # There must be some more data (aka `tail`) after a `Branch` vertex.
+    let vtx = BranchRef(vtx)
+    if path.len <= 0:
+      return err(HikeBranchTailEmpty)
+
+    let
+      nibble = path[0]
+      nextVid = vtx.bVid(nibble)
+
+    if not nextVid.isValid:
+      return err(HikeBranchMissingEdge)
+
+    ok (vtx, path.slice(1), nextVid)
+
+  of ExtBranch:
+    # There must be some more data (aka `tail`) after a `Branch` vertex.
+    let vtx = ExtBranchRef(vtx)
     if path.len <= vtx.pfx.len:
       return err(HikeBranchTailEmpty)
 
@@ -121,11 +142,11 @@ iterator stepUp*(
       if path.len == 0:
         break
 
-proc hikeUp*(
+proc hikeUp*[LeafType](
     path: NibblesBuf;                            # Partial path
     root: VertexID;                              # Start vertex
     db: AristoTxRef;                             # Database
-    leaf: Opt[VertexRef];
+    leaf: Opt[LeafType];
     hike: var Hike;
       ): Result[void,(VertexID,AristoError)] =
   ## For the argument `path`, find and return the logest possible path in the
@@ -155,13 +176,17 @@ proc hikeUp*(
     let wp = VidVtxPair(vid:vid, vtx:vtx)
 
     case vtx.vType
-    of Leaf:
+    of Leaves:
       hike.legs.add Leg(wp: wp, nibble: -1)
       hike.tail = path
 
       break
 
     of Branch:
+      hike.legs.add Leg(wp: wp, nibble: int8 hike.tail[0])
+
+    of ExtBranch:
+      let vtx = ExtBranchRef(vtx)
       hike.legs.add Leg(wp: wp, nibble: int8 hike.tail[vtx.pfx.len])
 
     hike.tail = path
@@ -169,21 +194,21 @@ proc hikeUp*(
 
   ok()
 
-proc hikeUp*(
-    path: openArray[byte];
-    root: VertexID;
-    db: AristoTxRef;
-    leaf: Opt[VertexRef];
-    hike: var Hike
-      ): Result[void,(VertexID,AristoError)] =
-  ## Variant of `hike()`
-  NibblesBuf.fromBytes(path).hikeUp(root, db, leaf, hike)
+# proc hikeUp*[LeafType](
+#     path: openArray[byte];
+#     root: VertexID;
+#     db: AristoTxRef;
+#     leaf: Opt[LeafType];
+#     hike: var Hike
+#       ): Result[void,(VertexID,AristoError)] =
+#   ## Variant of `hike()`
+#   NibblesBuf.fromBytes(path).hikeUp(root, db, leaf, hike)
 
-proc hikeUp*(
+proc hikeUp*[LeafType](
     path: Hash32;
     root: VertexID;
     db: AristoTxRef;
-    leaf: Opt[VertexRef];
+    leaf: Opt[LeafType];
     hike: var Hike
       ): Result[void,(VertexID,AristoError)] =
   ## Variant of `hike()`

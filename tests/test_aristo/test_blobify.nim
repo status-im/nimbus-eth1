@@ -15,22 +15,21 @@ import unittest2, std/sequtils, ../../execution_chain/db/aristo/aristo_blobify
 suite "Aristo blobify":
   test "VertexRef roundtrip":
     let
-      leafAccount = VertexRef(
-        vType: Leaf,
+      leafAccount = AccLeafRef(
+        vType: AccLeaf,
         pfx: NibblesBuf.nibble(1),
-        lData: LeafPayload(
-          pType: AccountData, account: AristoAccount(nonce: 100, balance: 123.u256)
-        ),
+        account: AristoAccount(nonce: 100, balance: 123.u256),
+        stoID: (isValid: true, vid: VertexID(5))
       )
-      leafStoData = VertexRef(
-        vType: Leaf,
+      leafStoData = StoLeafRef(
+        vType: StoLeaf,
         pfx: NibblesBuf.nibble(3),
-        lData: LeafPayload(pType: StoData, stoData: 42.u256),
+        stoData: 42.u256,
       )
-      branch = VertexRef(vType: Branch, startVid: VertexID(0x334452), used: 0x43'u16)
+      branch = BranchRef(vType: Branch, startVid: VertexID(0x334452), used: 0x43'u16)
 
-      extension = VertexRef(
-        vType: Branch,
+      extension = ExtBranchRef(
+        vType: ExtBranch,
         pfx: NibblesBuf.nibble(2),
         startVid: VertexID(0x55),
         used: 0x12'u16,
@@ -46,3 +45,8 @@ suite "Aristo blobify":
 
       deblobify(blobify(branch, key), HashKey)[] == key
       deblobify(blobify(extension, key), HashKey)[] == key
+
+      deblobifyType(blobify(leafAccount, key), VertexRef)[] == AccLeaf
+      deblobifyType(blobify(leafStoData, key), VertexRef)[] == StoLeaf
+      deblobifyType(blobify(branch, key), VertexRef)[] == Branch
+      deblobifyType(blobify(extension, key), VertexRef)[] == ExtBranch
