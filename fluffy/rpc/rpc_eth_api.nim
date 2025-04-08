@@ -468,7 +468,43 @@ proc installEthApiHandlers*(
     let callResult = (await evm.call(header, tx, optimisticStateFetch)).valueOr:
       raise newException(ValueError, error)
 
-    if callResult.error.len() > 0:
-      raise newException(ValueError, callResult.error)
+    return callResult.output
 
-    callResult.output
+  rpcServer.rpc("eth_createAccessList") do(
+    tx: TransactionArgs, quantityTag: RtBlockIdentifier, optimisticStateFetch: Opt[bool]
+  ) -> AccessListResult:
+    ## Creates an EIP-2930 access list that you can include in a transaction.
+    ##
+    ## tx: the transaction call object which contains
+    ##   from: (optional) The address the transaction is sent from.
+    ##   to: The address the transaction is directed to.
+    ##   gas: (optional) Integer of the gas provided for the transaction execution.
+    ##     eth_call consumes zero gas, but this parameter may be needed by some executions.
+    ##   gasPrice: (optional) Integer of the gasPrice used for each paid gas.
+    ##   value: (optional) Integer of the value sent with this transaction.
+    ##   input: (optional) Hash of the method signature and encoded parameters.
+    ## quantityTag: integer block number, or the string "latest", "earliest" or "pending",
+    ##   see the default block parameter.
+    ## Returns: the access list object which contains the addresses and storage keys which
+    ##   are read by the transaction.
+
+    if tx.to.isNone():
+      raise newException(ValueError, "to address is required")
+
+    if quantityTag.kind == bidAlias:
+      raise newException(ValueError, "tag not yet implemented")
+
+    let
+      hn = historyNetwork.getOrRaise()
+      evm = asyncEvm.getOrRaise()
+      header = (await hn.getVerifiedBlockHeader(quantityTag.number.uint64)).valueOr:
+        raise newException(ValueError, "Unable to get block header")
+      optimisticStateFetch = optimisticStateFetch.valueOr:
+        true
+
+    let (accessList, gasUsed) = (
+      await evm.createAccessList(header, tx, optimisticStateFetch)
+    ).valueOr:
+      raise newException(ValueError, error)
+
+    return AccessListResult(accessList: accessList, gasUsed: gasUsed.Quantity)
