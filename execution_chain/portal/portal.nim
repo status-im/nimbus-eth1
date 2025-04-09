@@ -26,7 +26,6 @@ type
     url*: string
     provider: RpcClient
 
-type
   HistoryExpiryRef* = ref object
     portalEnabled*: bool
     rpc: Opt[PortalRpc]
