@@ -13,4 +13,4 @@
 
 const chronicles_line_numbers {.strdefine.} = "0"
 when chronicles_line_numbers notin ["0", "off"]:
-  {.warning: "*** Compiling with logger line numbers enabled".}
+  {.hint: "*** Compiling with logger line numbers enabled".}

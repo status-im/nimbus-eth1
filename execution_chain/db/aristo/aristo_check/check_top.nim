@@ -87,9 +87,8 @@ proc checkTopCommon*(
       if topVid < rvid.vid:
         topVid = rvid.vid
       case vtx.vType:
-      of Leaf:
-        if vtx.lData.pType == AccountData:
-          let stoID = vtx.lData.stoID
+      of AccLeaf:
+          let stoID = AccLeafRef(vtx).stoID
           if stoID.isValid:
             let stoVid = stoID.vid
             if stoVid in stoRoots:
@@ -97,7 +96,8 @@ proc checkTopCommon*(
             if vTop < stoVid:
               return err((stoVid,CheckAnyVidDeadStorageRoot))
             stoRoots.incl stoVid
-      of Branch:
+      of StoLeaf: discard
+      of Branches:
         block check42Links:
           var seen = false
           for _, _ in vtx.pairs():

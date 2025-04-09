@@ -34,7 +34,16 @@ export
   core_db
 
 const
-  BaseDistance = 128
+  BaseDistance = 128'u64
+  PersistBatchSize = 32'u64
+
+# ------------------------------------------------------------------------------
+# Forward declarations
+# ------------------------------------------------------------------------------
+
+proc updateBase(c: ForkedChainRef, newBase: BlockPos) {.gcsafe.}
+func calculateNewBase(c: ForkedChainRef;
+       finalizedNumber: uint64; head: BlockPos): BlockPos {.gcsafe.}
 
 # ------------------------------------------------------------------------------
 # Private functions
@@ -107,6 +116,10 @@ proc validateBlock(c: ForkedChainRef,
     # Block exists, just return
     return ok()
 
+  if blkHash == c.pendingFCU:
+    # Resolve the hash into latestFinalizedBlockNumber
+    c.latestFinalizedBlockNumber = blk.header.number
+
   let
     parentFrame = parent.txFrame
     txFrame = parentFrame.txFrameBegin
@@ -158,6 +171,28 @@ proc validateBlock(c: ForkedChainRef,
 
   for i, tx in blk.transactions:
     c.txRecords[rlpHash(tx)] = (blkHash, uint64(i))
+
+  # Entering base auto forward mode while avoiding forkChoice
+  # handled region(head - baseDistance)
+  # e.g. live syncing with the tip very far from from our latest head
+  if c.pendingFCU != zeroHash32 and
+     blk.header.number < c.latestFinalizedBlockNumber:
+
+    let
+      head = c.activeBranch.lastBlockPos
+      newBaseCandidate = c.calculateNewBase(c.latestFinalizedBlockNumber, head)
+      prevBaseNumber = c.baseBranch.tailNumber
+
+    c.updateBase(newBaseCandidate)
+
+    # If on disk head behind base, move it to base too.
+    let newBaseNumber = c.baseBranch.tailNumber
+    if newBaseNumber > prevBaseNumber:
+      let canonicalHead = ?c.baseTxFrame.getCanonicalHead()
+      if canonicalHead.number < newBaseNumber:
+        let head = c.baseBranch.firstBlockPos
+        head.txFrame.setHead(head.branch.tailHeader,
+          head.branch.tailHash).expect("OK")
 
   ok()
 
@@ -211,10 +246,10 @@ func findFinalizedPos(
 
 func calculateNewBase(
     c: ForkedChainRef;
-    finalized: BlockPos;
+    finalizedNumber: uint64;
     head: BlockPos;
       ): BlockPos =
-  ## It is required that the `finalized` argument is on the `head` chain, i.e.
+  ## It is required that the `finalizedNumber` argument is on the `head` chain, i.e.
   ## it ranges beween `c.baseBranch.tailNumber` and
   ## `head.branch.headNumber`.
   ##
@@ -222,19 +257,27 @@ func calculateNewBase(
   ## calculated as follows.
   ##
   ## Starting at the argument `head.branch` searching backwards, the new base
-  ## is the position of the block with number `finalized`.
+  ## is the position of the block with `finalizedNumber`.
   ##
-  ## Before searching backwards, the `finalized` argument might be adjusted
+  ## Before searching backwards, the `finalizedNumber` argument might be adjusted
   ## and made smaller so that a minimum distance to the head on the cursor arc
   ## applies.
   ##
   # It's important to have base at least `baseDistance` behind head
   # so we can answer state queries about history that deep.
-  let target = min(finalized.number,
+  let target = min(finalizedNumber,
     max(head.number, c.baseDistance) - c.baseDistance)
 
   # Do not update base.
   if target <= c.baseBranch.tailNumber:
+    return BlockPos(branch: c.baseBranch)
+
+  # If there is a new base, make sure it moves
+  # with large enough step to accomodate for bulk
+  # state root verification/bulk persist.
+  let distance = target - c.baseBranch.tailNumber
+  if distance < c.persistBatchSize:
+    # If the step is not large enough, do nothing.
     return BlockPos(branch: c.baseBranch)
 
   if target >= head.branch.tailNumber:
@@ -395,6 +438,10 @@ proc updateBase(c: ForkedChainRef, newBase: BlockPos) =
         break
       dec number
 
+  if newBase.number == c.baseBranch.tailNumber:
+    # No update, return
+    return
+
   let
     # Cache to prevent crash after we shift
     # the blocks
@@ -431,7 +478,8 @@ proc updateBase(c: ForkedChainRef, newBase: BlockPos) =
   # Older branches will gone
   branch = branch.parent
   while not branch.isNil:
-    disposeBlocks(number, branch)
+    var delNumber = branch.headNumber    
+    disposeBlocks(delNumber, branch)
 
     for i, brc in c.branches:
       if brc == branch:
@@ -468,7 +516,8 @@ proc updateBase(c: ForkedChainRef, newBase: BlockPos) =
 proc init*(
     T: type ForkedChainRef;
     com: CommonRef;
-    baseDistance = BaseDistance.uint64;
+    baseDistance = BaseDistance;
+    persistBatchSize = PersistBatchSize;
       ): T =
   ## Constructor that uses the current database ledger state for initialising.
   ## This state coincides with the canonical head that would be used for
@@ -495,7 +544,8 @@ proc init*(
     branches:        @[baseBranch],
     hashToBlock:     {baseHash: baseBranch.lastBlockPos}.toTable,
     baseTxFrame:     baseTxFrame,
-    baseDistance:    baseDistance)
+    baseDistance:    baseDistance,
+    persistBatchSize: persistBatchSize)
 
 proc importBlock*(c: ForkedChainRef, blk: Block): Result[void, string] =
   ## Try to import block to canonical or side chain.
@@ -512,7 +562,7 @@ proc importBlock*(c: ForkedChainRef, blk: Block): Result[void, string] =
 
     ?c.validateBlock(bd[], blk)
   do:
-    # If it's parent is an invalid block
+    # If its parent is an invalid block
     # there is no hope the descendant is valid
     debug "Parent block not found",
       blockHash = header.blockHash.short,
@@ -524,10 +574,15 @@ proc importBlock*(c: ForkedChainRef, blk: Block): Result[void, string] =
 proc forkChoice*(c: ForkedChainRef,
                  headHash: Hash32,
                  finalizedHash: Hash32): Result[void, string] =
-  if headHash == c.activeBranch.headHash and finalizedHash == zeroHash32:
-    # Do nothing if the new head already our current head
-    # and there is no request to new finality.
-    return ok()
+
+  if finalizedHash != zeroHash32:
+    c.pendingFCU = finalizedHash
+
+  if headHash == c.activeBranch.headHash:
+    if finalizedHash == zeroHash32:
+      # Do nothing if the new head already our current head
+      # and there is no request to new finality.
+      return ok()
 
   let
     # Find the unique branch where `headHash` is a member of.
@@ -545,7 +600,10 @@ proc forkChoice*(c: ForkedChainRef,
 
   c.updateFinalized(finalized)
 
-  let newBase = c.calculateNewBase(finalized, head)
+  let
+    finalizedNumber = finalized.number
+    newBase = c.calculateNewBase(finalizedNumber, head)
+
   if newBase.hash == c.baseBranch.tailHash:
     # The base is not updated, return.
     return ok()
@@ -557,8 +615,8 @@ proc forkChoice*(c: ForkedChainRef,
   # At this point head.number >= base.number.
   # At this point finalized.number is <= head.number,
   # and possibly switched to other chain beside the one with head.
-  doAssert(finalized.number <= head.number)
-  doAssert(newBaseNumber <= finalized.number)
+  doAssert(finalizedNumber <= head.number)
+  doAssert(newBaseNumber <= finalizedNumber)
   c.updateBase(newBase)
 
   ok()
@@ -762,13 +820,13 @@ func blockFromBaseTo*(c: ForkedChainRef, number: BlockNumber): seq[Block] =
       result.add(branch.blocks[i].blk)
     branch = branch.parent
 
-func equalOrAncestorOf*(c: ForkedChainRef, blockHash: Hash32, ancestorHash: Hash32): bool =
-  if blockHash == ancestorHash:
+func equalOrAncestorOf*(c: ForkedChainRef, blockHash: Hash32, childHash: Hash32): bool =
+  if blockHash == childHash:
     return true
 
-  c.hashToBlock.withValue(ancestorHash, ancestorLoc):
+  c.hashToBlock.withValue(childHash, childLoc):
     c.hashToBlock.withValue(blockHash, loc):
-      var branch = ancestorLoc.branch
+      var branch = childLoc.branch
       while not branch.isNil:
         if loc.branch == branch:
           return true

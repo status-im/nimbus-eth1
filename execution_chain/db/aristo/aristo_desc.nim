@@ -68,8 +68,8 @@ type
     kMap*: Table[RootedVertexID,HashKey]   ## Merkle hash key mapping
     vTop*: VertexID                        ## Last used vertex ID
 
-    accLeaves*: Table[Hash32, VertexRef]   ## Account path -> VertexRef
-    stoLeaves*: Table[Hash32, VertexRef]   ## Storage path -> VertexRef
+    accLeaves*: Table[Hash32, AccLeafRef]  ## Account path -> VertexRef
+    stoLeaves*: Table[Hash32, StoLeafRef]  ## Storage path -> VertexRef
 
     blockNumber*: Opt[uint64]              ## Block number set when checkpointing the frame
 
@@ -85,8 +85,8 @@ type
 
   Snapshot* = object
     vtx*: Table[RootedVertexID, VtxSnapshot]
-    acc*: Table[Hash32, (VertexRef, int)]
-    sto*: Table[Hash32, (VertexRef, int)]
+    acc*: Table[Hash32, (AccLeafRef, int)]
+    sto*: Table[Hash32, (StoLeafRef, int)]
     level*: Opt[int] # when this snapshot was taken
 
   VtxSnapshot* = (VertexRef, HashKey, int)
@@ -110,7 +110,7 @@ type
 
     txRef*: AristoTxRef              ## Bottom-most in-memory frame
 
-    accLeaves*: LruCache[Hash32, VertexRef]
+    accLeaves*: LruCache[Hash32, AccLeafRef]
       ## Account path to payload cache - accounts are frequently accessed by
       ## account path when contracts interact with them - this cache ensures
       ## that we don't have to re-traverse the storage trie for every such
@@ -118,7 +118,7 @@ type
       ## TODO a better solution would probably be to cache this in a type
       ## exposed to the high-level API
 
-    stoLeaves*: LruCache[Hash32, VertexRef]
+    stoLeaves*: LruCache[Hash32, StoLeafRef]
       ## Mixed account/storage path to payload cache - same as above but caches
       ## the full lookup of storage slots
 
@@ -172,13 +172,13 @@ func getOrVoid*[W](tab: Table[W,HashSet[RootedVertexID]]; w: W): HashSet[RootedV
 # --------
 
 func isValid*(vtx: VertexRef): bool =
-  vtx != VertexRef(nil)
+  not isNil(vtx)
 
 func isValid*(nd: NodeRef): bool =
-  nd != NodeRef(nil)
+  not isNil(nd)
 
 func isValid*(tx: AristoTxRef): bool =
-  tx != AristoTxRef(nil)
+  not isNil(tx)
 
 func isValid*(root: Hash32): bool =
   root != emptyRoot

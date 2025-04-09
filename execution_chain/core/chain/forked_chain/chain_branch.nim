@@ -62,6 +62,12 @@ func lastBlockPos*(brc: BranchRef): BlockPos =
     index : brc.len - 1,
   )
 
+func firstBlockPos*(brc: BranchRef): BlockPos =
+  BlockPos(
+    branch: brc,
+    index : 0,
+  )
+
 func `==`*(a, b: BranchRef): bool =
   a.headHash == b.headHash
 

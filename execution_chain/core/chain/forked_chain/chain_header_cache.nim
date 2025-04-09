@@ -321,11 +321,23 @@ proc accept*(fc: ForkedCacheRef; fin: Header): bool =
   ##
   if fc.state == notified and
      fc.baseNum < fin.number and
-     fin.number <= fc.session.head.number and
-     fc.session.finHash == fin.blockHash():
-    fc.session.finHeader = fin
+     fin.number <= fc.session.head.number:
 
+    let finHash = fin.blockHash()
+    if fc.session.finHash != finHash:
+      return false
+
+    fc.session.finHeader = fin
     fc.kvt.putHeader(fc.session.head.number, encodePayload fc.session.head)
+
+    # TODO: syncer and also ForkedCache should not start session
+    # using finalizedHash, as evident from hive test
+    # the FCU head can have block number bigger than finalized block.
+    # Syncer and ForkedCache should only deal with FCU headHash.
+    # TODO: move notifyBlockHashAndNumber call to fcPutHeader
+    # where one of the headers should also the finalized header.
+    fc.chain.notifyBlockHashAndNumber(finHash, fin.number)
+
     fc.session.mode = collecting
     return true
 
@@ -568,10 +580,6 @@ proc fcHeaderCommit*(fc: ForkedCacheRef): Result[void,string] =
   # Update internal state
   fc.session.mode = locked
 
-  # Inform `FC` module proper about finalised header
-  if fc.chain.hdrChainFinHeader.number < fc.session.finHeader.number:
-    fc.chain.hdrChainFinHeader = fc.session.finHeader
-    fc.chain.hdrChainFinHash = fc.session.finHash
   ok()
 
 # --------------------
@@ -623,17 +631,7 @@ proc fcHeaderImportBlock*(fc: ForkedCacheRef; blk: Block): Result[void,string] =
   ##
   ?fc.chain.importBlock(blk)
 
-  if fc.baseNum + FinaliserChoiceDelta < fc.latestNum and
-     fc.baseNum < fc.chain.hdrChainFinHeader.number:
-
-    # Update base value of `FC` module proper via `forkChoice()`
-    let
-      blkNum = blk.header.number
-      blkHash = fc.fcHeaderGetHash(blkNum).expect "hash"
-      finNum = fc.chain.hdrChainFinHeader.number
-      finHash = if blkNum < finNum: blkHash else: fc.chain.hdrChainFinHash
-
-    ?fc.chain.forkChoice(blkHash, finHash)
+  if fc.baseNum + FinaliserChoiceDelta < fc.latestNum:
 
     # Remove some older stashed headers
     fc.persistDelUpTo fc.baseNum

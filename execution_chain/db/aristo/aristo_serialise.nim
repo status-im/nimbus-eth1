@@ -13,64 +13,36 @@
 import
   eth/[common, rlp],
   results,
-  "."/[aristo_constants, aristo_desc, aristo_compute]
-
-type
-  ResolveVidFn = proc(
-      vid: VertexID;
-        ): Result[HashKey,AristoError]
-        {.gcsafe, raises: [].}
-    ## Resolve storage root vertex ID
-
-# ------------------------------------------------------------------------------
-# Private helper
-# ------------------------------------------------------------------------------
-
-proc serialise(
-    pyl: LeafPayload;
-    getKey: ResolveVidFn;
-      ): Result[seq[byte],(VertexID,AristoError)] =
-  ## Encode the data payload of the argument `pyl` as RLP `seq[byte]` if it is
-  ## of account type, otherwise pass the data as is.
-  ##
-  case pyl.pType:
-  of AccountData:
-    let key = block:
-      if pyl.stoID.isValid:
-        pyl.stoID.vid.getKey.valueOr:
-          let w = (pyl.stoID.vid, error)
-          return err(w)
-      else:
-        VOID_HASH_KEY
-
-    ok rlp.encode Account(
-      nonce:       pyl.account.nonce,
-      balance:     pyl.account.balance,
-      storageRoot: key.to(Hash32),
-      codeHash:    pyl.account.codeHash)
-  of StoData:
-    ok rlp.encode pyl.stoData
+  ./[aristo_constants, aristo_desc]
 
 # ------------------------------------------------------------------------------
 # Public RLP transcoder mixins
 # ------------------------------------------------------------------------------
 
-proc to*(node: NodeRef; T: type seq[seq[byte]]): T =
+proc toRlpBytes*(acc: AristoAccount, key: HashKey): seq[byte] =
+  rlp.encode Account(
+    nonce: acc.nonce,
+    balance: acc.balance,
+    storageRoot: key.to(Hash32),
+    codeHash: acc.codeHash,
+  )
+
+proc to*(node: NodeRef, T: type seq[seq[byte]]): T =
   ## Convert the argument pait `w` to a single or a double item list item of
   ## `<rlp-encoded-node>` type entries. Only in case of a combined extension
   ## and branch vertex argument, there will be a double item list result.
   ##
-  case node.vtx.vType:
-  of Branch:
+  case node.vtx.vType
+  of Branches:
     # Do branch node
     var wr = initRlpWriter()
     wr.startList(17)
-    for n in 0..15:
-      wr.append node.key[n]
+    for key in node.key:
+      wr.append key
     wr.append EmptyBlob
     let brData = wr.finish()
 
-    if 0 < node.vtx.pfx.len:
+    if node.vtx.vType == ExtBranch:
       # Prefix branch by embedded extension node
       let brHash = brData.digestTo(HashKey)
 
@@ -84,18 +56,20 @@ proc to*(node: NodeRef; T: type seq[seq[byte]]): T =
     else:
       # Do for pure branch node
       result.add brData
-
-  of Leaf:
-    proc getKey0(
-        vid: VertexID;
-          ): Result[HashKey,AristoError]
-          {.gcsafe, raises: [].} =
-      ok(node.key[0]) # always succeeds
-
+  of AccLeaf:
+    let vtx = AccLeafRef(node.vtx)
     var wr = initRlpWriter()
     wr.startList(2)
-    wr.append node.vtx.pfx.toHexPrefix(isleaf = true).data()
-    wr.append node.vtx.lData.serialise(getKey0).value
+    wr.append vtx.pfx.toHexPrefix(isleaf = true).data()
+    wr.append vtx.account.toRlpBytes(node.key[0])
+
+    result.add (wr.finish())
+  of StoLeaf:
+    let vtx = StoLeafRef(node.vtx)
+    var wr = initRlpWriter()
+    wr.startList(2)
+    wr.append vtx.pfx.toHexPrefix(isleaf = true).data()
+    wr.append rlp.encode vtx.stoData
 
     result.add (wr.finish())
 
@@ -104,12 +78,12 @@ proc digestTo*(node: NodeRef; T: type HashKey): T =
   ## that a `Dummy` node is encoded as as a `Leaf`.
   ##
   var wr = initRlpWriter()
-  case node.vtx.vType:
-  of Branch:
+  case node.vtx.vType
+  of Branches:
     # Do branch node
     wr.startList(17)
-    for n in 0..15:
-      wr.append node.key[n]
+    for key in node.key:
+      wr.append key
     wr.append EmptyBlob
 
     # Do for embedded extension node
@@ -119,32 +93,20 @@ proc digestTo*(node: NodeRef; T: type HashKey): T =
       wr.startList(2)
       wr.append node.vtx.pfx.toHexPrefix(isleaf = false).data()
       wr.append brHash
-
-  of Leaf:
-    proc getKey0(
-        vid: VertexID;
-          ): Result[HashKey,AristoError]
-          {.gcsafe, raises: [].} =
-      ok(node.key[0]) # always succeeds
+  of AccLeaf:
+    let vtx = AccLeafRef(node.vtx)
 
     wr.startList(2)
     wr.append node.vtx.pfx.toHexPrefix(isleaf = true).data()
-    wr.append node.vtx.lData.serialise(getKey0).value
+    wr.append vtx.account.toRlpBytes(node.key[0])
+  of StoLeaf:
+    let vtx = StoLeafRef(node.vtx)
+    var wr = initRlpWriter()
+    wr.startList(2)
+    wr.append vtx.pfx.toHexPrefix(isleaf = true).data()
+    wr.append rlp.encode vtx.stoData
 
   wr.finish().digestTo(HashKey)
-
-proc serialise*(
-    db: AristoTxRef;
-    root: VertexID;
-    pyl: LeafPayload;
-      ): Result[seq[byte],(VertexID,AristoError)] =
-  ## Encode the data payload of the argument `pyl` as RLP `seq[byte]` if it is
-  ## of account type, otherwise pass the data as is.
-  ##
-  proc getKey(vid: VertexID): Result[HashKey,AristoError] =
-    ok (?db.computeKey((root, vid)))
-
-  pyl.serialise getKey
 
 # ------------------------------------------------------------------------------
 # End

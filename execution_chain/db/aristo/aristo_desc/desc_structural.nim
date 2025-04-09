@@ -25,8 +25,10 @@ export stint, tables, accounts, base, hashes
 type
   VertexType* = enum
     ## Type of `Aristo Trie` vertex
-    Leaf
+    AccLeaf
+    StoLeaf
     Branch
+    ExtBranch
 
   AristoAccount* = object
     ## Application relevant part of an Ethereum account. Note that the storage
@@ -34,11 +36,6 @@ type
     nonce*:     AccountNonce         ## Some `uint64` type
     balance*:   UInt256
     codeHash*:  Hash32
-
-  PayloadType* = enum
-    ## Type of leaf data.
-    AccountData                      ## `Aristo account` with vertex IDs links
-    StoData                          ## Slot storage data
 
   StorageID* = tuple
     ## Once a storage tree is allocated, its root vertex ID is registered in
@@ -48,27 +45,26 @@ type
     isValid: bool                    ## See also `isValid()` for `VertexID`
     vid: VertexID                    ## Storage root vertex ID
 
-  LeafPayload* = object
-    ## The payload type depends on the sub-tree used. The `VertexID(1)` rooted
-    ## sub-tree only has `AccountData` type payload, stoID-based have StoData
-    case pType*: PayloadType
-    of AccountData:
-      account*: AristoAccount
-      stoID*: StorageID              ## Storage vertex ID (if any)
-    of StoData:
-      stoData*: UInt256
-
-  VertexRef* = ref object
+  VertexRef* {.inheritable, pure.} = ref object
     ## Vertex for building a hexary Patricia or Merkle Patricia Trie
+    vType*: VertexType
+
+  BranchRef* = ref object of VertexRef
+    used*: uint16
+    startVid*: VertexID
+
+  ExtBranchRef* = ref object of BranchRef
     pfx*: NibblesBuf
-      ## Portion of path segment - extension nodes are branch nodes with
-      ## non-empty prefix
-    case vType*: VertexType
-    of Leaf:
-      lData*: LeafPayload            ## Reference to data payload
-    of Branch:
-      startVid*: VertexID
-      used*: uint16
+
+  LeafRef* = ref object of VertexRef
+    pfx*: NibblesBuf
+
+  AccLeafRef* = ref object of LeafRef
+    account*: AristoAccount
+    stoID*: StorageID              ## Storage vertex ID (if any)
+
+  StoLeafRef* = ref object of LeafRef
+    stoData*: UInt256
 
   NodeRef* = ref object of RootRef
     ## Combined record for a *traditional* ``Merkle Patricia Tree` node merged
@@ -93,17 +89,56 @@ type
       ## Peek into, but don't update cache - useful on work loads that are
       ## unfriendly to caches
 
+const
+  Leaves* = {AccLeaf, StoLeaf}
+  Branches* = {Branch, ExtBranch}
+
 # ------------------------------------------------------------------------------
 # Public helpers (misc)
 # ------------------------------------------------------------------------------
 
-func bVid*(vtx: VertexRef, nibble: uint8): VertexID =
+template init*(
+    _: type AccLeafRef, pfxp: NibblesBuf, accountp: AristoAccount, stoIDp: StorageID
+): AccLeafRef =
+  AccLeafRef(vType: AccLeaf, pfx: pfxp, account: accountp, stoID: stoIDp)
+
+template init*(_: type StoLeafRef, pfxp: NibblesBuf, stoDatap: UInt256): StoLeafRef =
+  StoLeafRef(vType: StoLeaf, pfx: pfxp, stoData: stoDatap)
+
+template init*(_: type BranchRef, startVidp: VertexID, usedp: uint16): BranchRef =
+  BranchRef(vType: Branch, startVid: startVidp, used: usedp)
+
+template init*(
+    _: type ExtBranchRef, pfxp: NibblesBuf, startVidp: VertexID, usedp: uint16
+): ExtBranchRef =
+  ExtBranchRef(vType: ExtBranch, pfx: pfxp, startVid: startVidp, used: usedp)
+
+const emptyNibbles = NibblesBuf()
+
+# template used*(vtx: VertexRef): uint16 = BranchRef(vtx).used
+# template startVid*(vtx: VertexRef): VertexID = BranchRef(vtx).startVid
+template pfx*(vtx: VertexRef): NibblesBuf =
+  case vtx.vType
+  of Leaves:
+    LeafRef(vtx).pfx
+  of ExtBranch:
+    ExtBranchRef(vtx).pfx
+  of Branch:
+    emptyNibbles
+
+template pfx*(vtx: BranchRef): NibblesBuf =
+  if vtx.vType == ExtBranch:
+    ExtBranchRef(vtx).pfx
+  else:
+    emptyNibbles
+
+func bVid*(vtx: BranchRef, nibble: uint8): VertexID =
   if (vtx.used and (1'u16 shl nibble)) > 0:
     VertexID(uint64(vtx.startVid) + nibble)
   else:
     default(VertexID)
 
-func setUsed*(vtx: VertexRef, nibble: uint8, used: static bool): VertexID =
+func setUsed*(vtx: BranchRef, nibble: uint8, used: static bool): VertexID =
   vtx.used =
     when used:
       vtx.used or (1'u16 shl nibble)
@@ -116,23 +151,8 @@ func hash*(node: NodeRef): Hash =
   cast[pointer](node).hash
 
 # ------------------------------------------------------------------------------
-# Public helpers: `NodeRef` and `LeafPayload`
+# Public helpers: `NodeRef` and `VertexRef`
 # ------------------------------------------------------------------------------
-
-proc `==`*(a, b: LeafPayload): bool =
-  ## Beware, potential deep comparison
-  if unsafeAddr(a) != unsafeAddr(b):
-    if a.pType != b.pType:
-      return false
-    case a.pType:
-    of AccountData:
-      if a.account != b.account or
-         a.stoID != b.stoID:
-        return false
-    of StoData:
-      if a.stoData != b.stoData:
-        return false
-  true
 
 proc `==`*(a, b: VertexRef): bool =
   ## Beware, potential deep comparison
@@ -140,24 +160,29 @@ proc `==`*(a, b: VertexRef): bool =
     return b.isNil
   if b.isNil:
     return false
+
   if unsafeAddr(a[]) != unsafeAddr(b[]):
     if a.vType != b.vType:
       return false
-    case a.vType:
-    of Leaf:
-      if a.pfx != b.pfx or a.lData != b.lData:
-        return false
+    case a.vType
+    of AccLeaf:
+      AccLeafRef(a)[] == AccLeafRef(b)[]
+    of StoLeaf:
+      StoLeafRef(a)[] == StoLeafRef(b)[]
     of Branch:
-      if a.pfx != b.pfx or a.startVid != b.startVid or a.used != b.used:
-        return false
-  true
+      BranchRef(a)[] == BranchRef(b)[]
+    of ExtBranch:
+      ExtBranchRef(a)[] == ExtBranchRef(b)[]
+  else:
+    true
 
 iterator pairs*(vtx: VertexRef): tuple[nibble: uint8, vid: VertexID] =
   ## Iterates over the sub-vids of a branch (does nothing for leaves)
-  case vtx.vType:
-  of Leaf:
+  case vtx.vType
+  of Leaves:
     discard
-  of Branch:
+  of Branches:
+    let vtx = BranchRef(vtx)
     for n in 0'u8 .. 15'u8:
       if (vtx.used and (1'u16 shl n)) > 0:
         yield (n, VertexID(uint64(vtx.startVid) + n))
@@ -165,10 +190,11 @@ iterator pairs*(vtx: VertexRef): tuple[nibble: uint8, vid: VertexID] =
 iterator allPairs*(vtx: VertexRef): tuple[nibble: uint8, vid: VertexID] =
   ## Iterates over the sub-vids of a branch (does nothing for leaves) including
   ## currently unset nodes
-  case vtx.vType:
-  of Leaf:
+  case vtx.vType
+  of Leaves:
     discard
-  of Branch:
+  of Branches:
+    let vtx = BranchRef(vtx)
     for n in 0'u8 .. 15'u8:
       if (vtx.used and (1'u16 shl n)) > 0:
         yield (n, VertexID(uint64(vtx.startVid) + n))
@@ -179,10 +205,10 @@ proc `==`*(a, b: NodeRef): bool =
   ## Beware, potential deep comparison
   if a.vtx != b.vtx:
     return false
-  case a.vtx.vType:
+  case a.vtx.vType
   of Branch:
     for n in 0'u8..15'u8:
-      if a.vtx.bVid(n) != 0.VertexID or b.vtx.bVid(n) != 0.VertexID:
+      if BranchRef(a.vtx).bVid(n) != VertexID(0):
         if a.key[n] != b.key[n]:
           return false
   else:
@@ -193,60 +219,37 @@ proc `==`*(a, b: NodeRef): bool =
 # Public helpers, miscellaneous functions
 # ------------------------------------------------------------------------------
 
-func dup*(pld: LeafPayload): LeafPayload =
-  ## Duplicate payload.
-  case pld.pType:
-  of AccountData:
-    LeafPayload(
-      pType:   AccountData,
-      account: pld.account,
-      stoID:   pld.stoID)
-  of StoData:
-    LeafPayload(
-      pType:   StoData,
-      stoData: pld.stoData
-    )
-
 func dup*(vtx: VertexRef): VertexRef =
   ## Duplicate vertex.
   # Not using `deepCopy()` here (some `gc` needs `--deepcopy:on`.)
   if vtx.isNil:
     VertexRef(nil)
   else:
-    case vtx.vType:
-    of Leaf:
-      VertexRef(
-        vType: Leaf,
-        pfx:   vtx.pfx,
-        lData: vtx.lData.dup)
+    case vtx.vType
+    of AccLeaf:
+      let vtx = AccLeafRef(vtx)
+      AccLeafRef.init(vtx.pfx, vtx.account, vtx.stoID)
+    of StoLeaf:
+      let vtx = StoLeafRef(vtx)
+      StoLeafRef.init(vtx.pfx, vtx.stoData)
     of Branch:
-      VertexRef(
-        vType: Branch,
-        pfx:   vtx.pfx,
-        startVid: vtx.startVid,
-        used: vtx.used)
+      let vtx = BranchRef(vtx)
+      BranchRef.init(vtx.startVid, vtx.used)
+    of ExtBranch:
+      let vtx = ExtBranchRef(vtx)
+      ExtBranchRef.init(vtx.pfx, vtx.startVid, vtx.used)
 
-func dup*(node: NodeRef): NodeRef =
-  ## Duplicate node.
-  # Not using `deepCopy()` here (some `gc` needs `--deepcopy:on`.)
-  if node.isNil:
-    NodeRef(nil)
-  else:
-    NodeRef(
-      vtx: node.vtx.dup(),
-      key:   node.key)
+template dup*(vtx: StoLeafRef): StoLeafRef =
+  StoLeafRef(VertexRef(vtx).dup())
 
-func dup*(wp: VidVtxPair): VidVtxPair =
-  ## Safe copy of `wp` argument
-  VidVtxPair(
-    vid: wp.vid,
-    vtx: wp.vtx.dup)
+template dup*(vtx: AccLeafRef): AccLeafRef =
+  AccLeafRef(VertexRef(vtx).dup())
 
-# ---------------
+template dup*(vtx: BranchRef): BranchRef =
+  BranchRef(VertexRef(vtx).dup())
 
-func to*(node: NodeRef; T: type VertexRef): T =
-  ## Extract a copy of the `VertexRef` part from a `NodeRef`.
-  node.VertexRef.dup
+template dup*(vtx: ExtBranchRef): ExtBranchRef =
+  ExtBranchRef(VertexRef(vtx).dup())
 
 # ------------------------------------------------------------------------------
 # End

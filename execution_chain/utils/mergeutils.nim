@@ -47,3 +47,10 @@ func mergeAndReset*(tgt, src: var Table) =
       do:
         tgt[k] = move(sv)
     src.reset()
+
+proc mergeAndReset*[T](tgt, src: var seq[T]) =
+  if tgt.len == 0:
+    tgt = move(src)
+  else:
+    tgt.add src
+    src.reset

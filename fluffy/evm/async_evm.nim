@@ -14,8 +14,8 @@ import
   chronicles,
   stint,
   results,
-  eth/common/[hashes, addresses, accounts, headers],
-  ../../execution_chain/db/ledger,
+  eth/common/[base, hashes, addresses, accounts, headers, transactions],
+  ../../execution_chain/db/[ledger, access_list],
   ../../execution_chain/common/common,
   ../../execution_chain/transaction/call_evm,
   ../../execution_chain/evm/[types, state, evm_errors]
@@ -23,7 +23,8 @@ import
 from web3/eth_api_types import TransactionArgs
 
 export
-  results, chronos, hashes, addresses, accounts, headers, TransactionArgs, CallResult
+  results, chronos, hashes, addresses, accounts, headers, TransactionArgs, CallResult,
+  transactions.AccessList, GasInt
 
 logScope:
   topics = "async_evm"
@@ -132,9 +133,15 @@ proc init*(
 
   AsyncEvm(com: com, backend: backend)
 
-proc call*(
-    evm: AsyncEvm, header: Header, tx: TransactionArgs, optimisticStateFetch = true
-): Future[Result[CallResult, string]] {.async: (raises: [CancelledError]).} =
+proc call(
+    evm: AsyncEvm,
+    header: Header,
+    tx: TransactionArgs,
+    optimisticStateFetch: bool,
+    collectAccessList: bool,
+): Future[Result[(CallResult, transactions.AccessList), string]] {.
+    async: (raises: [CancelledError])
+.} =
   let
     to = tx.to.valueOr:
       return err("to address is required")
@@ -179,7 +186,7 @@ proc call*(
   var
     lastWitnessKeys: WitnessTable
     witnessKeys = vmState.ledger.getWitnessKeys()
-    callResult: EvmResult[CallResult]
+    evmResult: EvmResult[CallResult]
     evmCallCount = 0
 
   # Limit the max number of calls to prevent infinite loops and/or DOS in the
@@ -188,7 +195,7 @@ proc call*(
     debug "Starting AsyncEvm execution", evmCallCount
 
     let sp = vmState.ledger.beginSavepoint()
-    callResult = rpcCallEvm(tx, header, vmState, EVM_CALL_GAS_CAP)
+    evmResult = rpcCallEvm(tx, header, vmState, EVM_CALL_GAS_CAP)
     inc evmCallCount
     vmState.ledger.rollback(sp) # all state changes from the call are reverted
 
@@ -213,6 +220,8 @@ proc call*(
       var stateFetchDone = false
       for k, v in witnessKeys:
         let (adr, _) = k
+        if adr == default(Address):
+          continue
 
         if v.storageMode:
           let slotIdx = (adr, v.storageSlot)
@@ -224,7 +233,7 @@ proc call*(
               storageQueries.add(StorageQuery.init(adr, v.storageSlot, storageFut))
               if not optimisticStateFetch:
                 stateFetchDone = true
-        elif adr != default(Address):
+        else:
           doAssert(adr == v.address)
 
           if adr notin fetchedAccounts:
@@ -280,7 +289,57 @@ proc call*(
       # TODO: why do the above futures throw a CatchableError and not CancelledError?
       raiseAssert(e.msg)
 
-  callResult.mapErr(
-    proc(e: EvmErrorObj): string =
-      "EVM execution failed: " & $e.code
-  )
+  # If collectAccessList is enabled then build the access list from the
+  # witness keys and then execute the transaction one last time using the final
+  # access list which will impact the gas used value returned in the callResult.
+  var tx = tx
+  if evmResult.isOk() and collectAccessList:
+    let fromAdr = tx.`from`.get(default(Address))
+
+    var al = access_list.AccessList.init()
+    for lookupKey, witnessKey in witnessKeys:
+      let (adr, _) = lookupKey
+      if adr == fromAdr:
+        continue
+
+      if witnessKey.storageMode:
+        al.add(adr, witnessKey.storageSlot)
+      else:
+        al.add(adr)
+
+    tx.accessList = Opt.some(al.getAccessList()) # converts to transactions.AccessList
+
+    let sp = vmState.ledger.beginSavepoint()
+    evmResult = rpcCallEvm(tx, header, vmState, EVM_CALL_GAS_CAP)
+    inc evmCallCount
+    vmState.ledger.rollback(sp) # all state changes from the call are reverted
+
+  let callResult =
+    ?evmResult.mapErr(
+      proc(e: EvmErrorObj): string =
+        "EVM execution failed: " & $e.code
+    )
+
+  if callResult.error.len() > 0:
+    err("EVM execution failed: " & callResult.error)
+  else:
+    ok((callResult, tx.accessList.get(@[])))
+
+proc call*(
+    evm: AsyncEvm, header: Header, tx: TransactionArgs, optimisticStateFetch = true
+): Future[Result[CallResult, string]] {.async: (raises: [CancelledError]).} =
+  let (callResult, _) =
+    ?(await evm.call(header, tx, optimisticStateFetch, collectAccessList = false))
+  ok(callResult)
+
+proc createAccessList*(
+    evm: AsyncEvm, header: Header, tx: TransactionArgs, optimisticStateFetch = true
+): Future[Result[(transactions.AccessList, GasInt), string]] {.
+    async: (raises: [CancelledError])
+.} =
+  let (callResult, accessList) =
+    ?(await evm.call(header, tx, optimisticStateFetch, collectAccessList = true))
+
+  # TODO: Do we need to use the estimate gas calculation here to get a more acturate
+  # estimation of the gas requirement?
+  ok((accessList, callResult.gasUsed))

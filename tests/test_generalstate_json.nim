@@ -205,10 +205,10 @@ proc generalStateJsonMain*(debugMode = false) =
     # run all test fixtures
     if config.legacy:
       suite "generalstate json tests":
-        jsonTest(legacyFolder, "GeneralStateTests", testFixture, skipGSTTests)
+        jsonTest(legacyFolder, "LegacyGeneralStateTests", testFixture, skipGSTTests)
     else:
       suite "new generalstate json tests":
-        jsonTest(newFolder, "newGeneralStateTests", testFixture, skipNewGSTTests)
+        jsonTest(newFolder, "GeneralStateTests", testFixture, skipNewGSTTests)
   else:
     # execute single test in debug mode
     if config.testSubject.len == 0:
