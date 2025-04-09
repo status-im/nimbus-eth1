@@ -54,32 +54,31 @@ proc init*(T: type HistoryExpiryRef, conf: NimbusConf, com: CommonRef): T =
     historyExpiry = conf.historyExpiry,
     networkId = com.networkId,
     portalLimit = conf.historyExpiryLimit
-  
-  if conf.historyExpiry:
-    let 
-      rpc = conf.getPortalRpc()
-      portalEnabled =
-        if com.networkId == MainNet and rpc.isSome:
-          # Portal is only available for mainnet
-          true
-        else:
-          warn "Portal is only available for mainnet, skipping fetching data from portal"
-          false
-      limit = 
-        if conf.historyExpiryLimit.isSome:
-          conf.historyExpiryLimit.get()
-        else:
-          com.posBlock().get()
 
-    return T(
-      portalEnabled: portalEnabled,
-      rpc: rpc,
-      limit: limit
-    )
-    
-  else:
+  if not conf.historyExpiry:
     # history expiry haven't been activated yet
     return nil
+  
+  let 
+    rpc = conf.getPortalRpc()
+    portalEnabled =
+      if com.networkId == MainNet and rpc.isSome:
+        # Portal is only available for mainnet
+        true
+      else:
+        warn "Portal is only available for mainnet, skipping fetching data from portal"
+        false
+    limit = 
+      if conf.historyExpiryLimit.isSome:
+        conf.historyExpiryLimit.get()
+      else:
+        com.posBlock().get()
+
+  return T(
+    portalEnabled: portalEnabled,
+    rpc: rpc,
+    limit: limit
+  )
 
 proc rpcProvider*(historyExpiry: HistoryExpiryRef): Result[RpcClient, string] =
   if historyExpiry.portalEnabled and historyExpiry.rpc.isSome:
