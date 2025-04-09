@@ -63,7 +63,7 @@ proc init*(T: type HistoryExpiryRef, conf: NimbusConf, com: CommonRef): T =
           # Portal is only available for mainnet
           true
         else:
-          warn "Portal is only available for mainnet, history expiry won't be available"
+          warn "Portal is only available for mainnet, skipping fetching data from portal"
           false
       limit = 
         if conf.historyExpiryLimit.isSome:
