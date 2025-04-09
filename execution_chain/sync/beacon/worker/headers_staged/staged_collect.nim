@@ -132,13 +132,16 @@ proc collectAndStashOnDiskCache*(
           ctrl=buddy.ctrl.state, hdrErrors=buddy.hdrErrors, `error`=error
         break fetchHeadersBody           # error => exit block
 
+      # Antecedent `dangling` of the header cache might not be at `rev[^1]`.
+      let revLen = rev[0].number - ctx.dangling.number + 1
+
       # Update remaining range to fetch and check for end-of-loop condition
-      let newTopBefore = ivTop - BlockNumber(rev.len)
+      let newTopBefore = ivTop - revLen
       if newTopBefore < iv.minPt:
         break                            # exit while() loop
 
       ivTop = newTopBefore               # mostly results in `ivReq.minPt-1`
-      parent = rev[rev.len-1].parentHash # parent hash for next fetch request
+      parent = rev[revLen-1].parentHash  # parent hash for next fetch request
       # End loop
 
     trace info & ": fetched and stored headers", peer, iv,

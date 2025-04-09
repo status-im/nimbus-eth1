@@ -41,10 +41,9 @@ proc headerStagedResolveFinalizer*(
     let fin = (await buddy.headersFetchReversed(iv, finHash, info)).valueOr:
       # Postponed, try later
       ctx.pool.finRequest = finHash
+      debug info & ": finalised hash not yet resolved", peer=buddy.peer,
+        finHash=finHash.short
       return
-
-    debug info & ": resolved fin", peer=buddy.peer, finHash=finHash.short,
-      fin=fin[0].bnStr
 
     ctx.updateFromHibernateSetTarget(fin[0], info)
 
@@ -86,12 +85,7 @@ proc headersStagedCollect*(
   block fetchHeadersBody:
 
     # Start deterministically. Explicitely fetch/append by parent hash.
-    #
-    # This loop stops at the `while()` directive when or the next unprocessed
-    # header available excludes (by block number) that the next header joins
-    # the antecedent (i.e. `dangling`, the lower end) of the header chain
-    # cache.
-    while ctx.dangling.number <= ctx.headersUnprocAvailTop() + 1:
+    while true:
 
       let
         # Reserve the full range of block numbers so they can be appended in a
@@ -252,7 +246,10 @@ proc headersStagedProcess*(buddy: BeaconBuddyRef; info: static[string]) =
         `error`=error
       return
 
-    nProcessed += qItem.data.revHdrs.len # count headers
+    # Antecedent `dangling` of the header cache might not be at `revHdrs[^1]`.
+    let revHdrsLen = maxNum - ctx.dangling.number + 1
+
+    nProcessed += revHdrsLen.int # count headers
     # End while loop
 
   if headersStagedQueueLengthLwm < ctx.hdr.staged.len:

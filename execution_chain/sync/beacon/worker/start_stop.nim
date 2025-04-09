@@ -72,8 +72,10 @@ proc setupServices*(ctx: BeaconCtxRef; info: static[string]) =
   # the hash of a finalised header that needs to be resolved. This hash is
   # stored on the `ctx.pool` descriptor to be picked up by the next available
   # sync peer.
-  ctx.hdrCache.start proc(fin: Hash32) =
+  ctx.hdrCache.start proc(hdr: BlockNumber, fin: Hash32) =
     ctx.pool.finRequest = fin
+    info "Finalised hash registered", target=hdr.bnStr,
+      finHash=fin.short, nSyncPeers=ctx.pool.nBuddies
 
   # Manual first run?
   if 0 < ctx.clReq.consHead.number:
@@ -105,8 +107,7 @@ proc startBuddy*(buddy: BeaconBuddyRef): bool =
     return true
 
 proc stopBuddy*(buddy: BeaconBuddyRef) =
-  let ctx = buddy.ctx
-  ctx.pool.nBuddies.dec
+  buddy.ctx.pool.nBuddies.dec
   buddy.clearHdrProcErrors()
 
 # ------------------------------------------------------------------------------

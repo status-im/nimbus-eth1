@@ -109,7 +109,8 @@ type
     orphan                      # no way to link into `FC` module
     locked                      # done with session headers, read-only state
 
-  HeaderChainNotifyCB* = proc(finHash: Hash32) {.gcsafe, raises: [].}
+  HeaderChainNotifyCB* =
+      proc(hdrNum: BlockNumber, finHash: Hash32) {.gcsafe, raises: [].}
     ## Call back function telling a client app that a new chain was initialised.
     ## The hash passed as argument is from the finaliser and must be resolved
     ## as header argument in `startSession()`.
@@ -318,7 +319,7 @@ proc headUpdateFromCL(hc: HeaderChainRef; h: Header; f: Hash32) =
         finHash:  f)
 
       # Inform client app about that a new session is available.
-      hc.notify(f)
+      hc.notify(h.number, f)
 
     # For logging and metrics
     hc.session.consHeadNum = h.number
@@ -421,8 +422,13 @@ proc destroy*(hc: HeaderChainRef) =
 
 proc getHash*(hc: HeaderChainRef; bn: BlockNumber): Opt[Hash32] =
   ## Convenience function, retrieve hash of block header
-  if bn == hc.session.head.number:
-    return ok(hc.session.headHash)
+  if hc.session.head.number <= bn+1:
+    if bn == hc.session.head.number:
+      return ok(hc.session.headHash)
+    elif bn+1 == hc.session.head.number:
+      return ok(hc.session.head.parentHash)
+    else:
+      return err()
   # Use parent hash of child entry
   let hdr = hc.kvt.getHeader(bn+1).valueOr:
     return err()
@@ -615,20 +621,20 @@ func antecedent*(hc: HeaderChainRef): Header =
 func latestConsHeadNumber*(hc: HeaderChainRef): BlockNumber =
   ## Getter: block number of last `CL` head update (aka forkchoice update).
   ##
-  ## This getter is for metrics or debugging purposes. The returned number
-  ## is typically larger than `head()` and will increased over time while
-  ## `head()` remains constant (for the current session.)
+  ## This getter is for metrics purposes. The returned number is typically
+  ## larger than `head()` and will increased over time while `head()`
+  ## remains constant (for the current session.)
   ##
   hc.session.consHeadNum
+
+# ------------------------------------------------------------------------------
+# Public debugging helpers
+# ------------------------------------------------------------------------------
 
 proc headTargetUpdate*(hc: HeaderChainRef; h: Header; f: Hash32) =
   ## Emulate request from `CL` (mainly for debugging purposes)
   if not hc.notify.isNil:
     hc.headUpdateFromCL(h, f)
-
-# ------------------------------------------------------------------------------
-# Public debugging helpers
-# ------------------------------------------------------------------------------
 
 proc verify*(hc: HeaderChainRef): Result[void,string] =
   ## Verify that the descriptor range is on the database as well
