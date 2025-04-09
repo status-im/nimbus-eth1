@@ -620,6 +620,10 @@ proc forkChoice*(c: ForkedChainRef,
 
   ok()
 
+func notifyFinalizedHash*(c: ForkedChainRef, finHash: Hash32) =
+  if finHash != zeroHash32:
+    c.pendingFCU = finHash
+
 func haveBlockAndState*(c: ForkedChainRef, blockHash: Hash32): bool =
   ## Blocks still in memory with it's txFrame
   c.hashToBlock.hasKey(blockHash)

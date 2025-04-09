@@ -75,8 +75,7 @@ proc forkchoiceUpdated*(ben: BeaconEngineRef,
                         attrsOpt: Opt[PayloadAttributes]):
                              ForkchoiceUpdatedResponse =
   let
-    com   = ben.com
-    txFrame = ben.chain.latestTxFrame()
+    com = ben.com
     chain = ben.chain
     headHash = update.headBlockHash
 
@@ -87,7 +86,7 @@ proc forkchoiceUpdated*(ben: BeaconEngineRef,
   # Check whether we have the block yet in our database or not. If not, we'll
   # need to either trigger a sync, or to reject this forkchoice update for a
   # reason.
-  let header = ben.chain.headerByHash(headHash).valueOr:
+  let header = chain.headerByHash(headHash).valueOr:
     # If this block was previously invalidated, keep rejecting it here too
     let res = ben.checkInvalidAncestor(headHash, headHash)
     if res.isSome:
@@ -109,6 +108,7 @@ proc forkchoiceUpdated*(ben: BeaconEngineRef,
       hash   = headHash.short
 
     # Inform the header cache (used by the syncer)
+    chain.notifyFinalizedHash(update.finalizedBlockHash)
     com.fcHeaderClUpdate(header, update.finalizedBlockHash)
 
     return simpleFCU(PayloadExecutionStatus.syncing)
@@ -124,6 +124,7 @@ proc forkchoiceUpdated*(ben: BeaconEngineRef,
     let blockNumber = header.number
     if header.difficulty > 0.u256 or blockNumber ==  0'u64:
       let
+        txFrame = chain.latestTxFrame()
         td  = txFrame.getScore(headHash)
         ptd = txFrame.getScore(header.parentHash)
         ttd = com.ttd.get(high(UInt256))
@@ -151,7 +152,7 @@ proc forkchoiceUpdated*(ben: BeaconEngineRef,
   # probably resyncing. Ignore the update.
   # See point 2 of fCUV1 specification
   # https://github.com/ethereum/execution-apis/blob/v1.0.0-beta.4/src/engine/paris.md#specification-1
-  if ben.chain.isCanonicalAncestor(header.number, headHash):
+  if chain.isCanonicalAncestor(header.number, headHash):
     notice "Ignoring beacon update to old head",
       headHash=headHash.short,
       blockNumber=header.number
@@ -161,7 +162,7 @@ proc forkchoiceUpdated*(ben: BeaconEngineRef,
   # chain final and completely in PoS mode.
   let finalizedBlockHash = update.finalizedBlockHash
   if finalizedBlockHash != zeroHash32:
-    if not ben.chain.equalOrAncestorOf(finalizedBlockHash, headHash):
+    if not chain.equalOrAncestorOf(finalizedBlockHash, headHash):
       warn "Final block not in canonical tree",
         hash=finalizedBlockHash.short
       raise invalidForkChoiceState("finalized block not in canonical tree")
@@ -169,13 +170,13 @@ proc forkchoiceUpdated*(ben: BeaconEngineRef,
 
   let safeBlockHash = update.safeBlockHash
   if safeBlockHash != zeroHash32:
-    if not ben.chain.equalOrAncestorOf(safeBlockHash, headHash):
+    if not chain.equalOrAncestorOf(safeBlockHash, headHash):
       warn "Safe block not in canonical tree",
         hash=safeBlockHash.short
       raise invalidForkChoiceState("safe block not in canonical tree")
     # Current version of FC module is not interested in safeBlockHash
     # so we save it here
-    let txFrame = ben.chain.txFrame(safeBlockHash)
+    let txFrame = chain.txFrame(safeBlockHash)
     txFrame.safeHeaderHash(safeBlockHash)
 
   chain.forkChoice(headHash, update.finalizedBlockHash).isOkOr:
@@ -210,8 +211,8 @@ proc forkchoiceUpdated*(ben: BeaconEngineRef,
   info "Fork choice updated",
     requested = header.number,
     hash = headHash.short,
-    head = ben.chain.latestNumber,
-    base = ben.chain.baseNumber,
-    baseHash = ben.chain.baseHash.short
+    head = chain.latestNumber,
+    base = chain.baseNumber,
+    baseHash = chain.baseHash.short
 
   return validFCU(Opt.none(Bytes8), headHash)
