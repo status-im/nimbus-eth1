@@ -7,7 +7,7 @@
 
 import
   chronicles,
-  std/[json, typetraits, sequtils],
+  std/[json, typetraits],
   asynctest,
   web3/eth_api,
   stew/byteutils,
