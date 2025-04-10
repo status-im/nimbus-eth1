@@ -120,7 +120,8 @@ proc newPayload*(ben: BeaconEngineRef,
   trace "Engine API request received",
     meth = "newPayload",
     number = payload.blockNumber,
-    hash = payload.blockHash
+    hash = payload.blockHash,
+    payload = payload
 
   if apiVersion >= Version.V3:
     if beaconRoot.isNone:
