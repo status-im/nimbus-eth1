@@ -12,9 +12,7 @@
 
 import
   unittest2,
-  stew/endians2,
   results,
-  eth/common/hashes,
   ../execution_chain/db/kvt, ../execution_chain/db/kvt/[kvt_tx_frame, kvt_utils]
 
 suite "Kvt TxFrame":

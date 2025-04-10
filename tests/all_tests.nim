@@ -23,7 +23,6 @@ import
     test_jwt_auth,
     test_kvt,
     test_ledger,
-    test_multi_keys,
     test_op_arith,
     test_op_bit,
     test_op_custom,
