@@ -120,8 +120,7 @@ proc newPayload*(ben: BeaconEngineRef,
   trace "Engine API request received",
     meth = "newPayload",
     number = payload.blockNumber,
-    hash = payload.blockHash,
-    payload = payload
+    hash = payload.blockHash
 
   if apiVersion >= Version.V3:
     if beaconRoot.isNone:
@@ -147,7 +146,13 @@ proc newPayload*(ben: BeaconEngineRef,
 
   let
     requestsHash = calcRequestsHash(executionRequests)
-    blk = ethBlock(payload, beaconRoot, requestsHash)
+    blk = 
+      try:
+        ethBlock(payload, beaconRoot, requestsHash)
+      except RlpError as e:
+        warn "Failed to decode payload",
+          error = e.msg
+        return invalidStatus(payload.blockHash, "Failed to decode payload")
 
   template header: Header = blk.header
 
