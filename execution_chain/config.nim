@@ -451,8 +451,9 @@ type
         name: "history-expiry" }: bool
 
       historyExpiryLimit* {.
+        hidden
         desc: "Limit the number of blocks to be kept in history"
-        name: "history-expiry-limit" }: Option[BlockNumber]
+        name: "debug-history-expiry-limit" }: Option[BlockNumber]
 
       portalUrl* {.
         desc: "URL of the Portal Network"
