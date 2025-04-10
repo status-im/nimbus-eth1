@@ -79,7 +79,9 @@ proc importRlpBlocks*(importFile: string,
   importRlpBlocks(bytes, chain, finalize)
 
 proc importRlpBlocks*(conf: NimbusConf, com: CommonRef) =
-  let chain = ForkedChainRef.init(com, baseDistance = 0)
+  # Both baseDistance and persistBatchSize are 0,
+  # we want changes persisted immediately
+  let chain = ForkedChainRef.init(com, baseDistance = 0, persistBatchSize = 0)
 
   # success or not, we quit after importing blocks
   for i, blocksFile in conf.blocksFile:
