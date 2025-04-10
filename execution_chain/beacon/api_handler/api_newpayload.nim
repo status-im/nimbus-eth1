@@ -146,7 +146,13 @@ proc newPayload*(ben: BeaconEngineRef,
 
   let
     requestsHash = calcRequestsHash(executionRequests)
-    blk = ethBlock(payload, beaconRoot, requestsHash)
+    blk = 
+      try:
+        ethBlock(payload, beaconRoot, requestsHash)
+      except RlpError as e:
+        warn "Failed to decode payload",
+          error = e.msg
+        return invalidStatus(payload.blockHash, "Failed to decode payload")
 
   template header: Header = blk.header
 
