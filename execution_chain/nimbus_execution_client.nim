@@ -27,7 +27,8 @@ import
   ./db/core_db/persistent,
   ./db/storage_types,
   ./sync/wire_protocol,
-  ./common/chain_config_hash
+  ./common/chain_config_hash,
+  ./portal/portal
 
 from beacon_chain/nimbus_binary_common import setupFileLimits
 
@@ -40,6 +41,7 @@ proc basicServices(nimbus: NimbusNode,
                    conf: NimbusConf,
                    com: CommonRef) =
   nimbus.fc = ForkedChainRef.init(com)
+  nimbus.fc.portal = HistoryExpiryRef.init(conf, com)
 
   # txPool must be informed of active head
   # so it can know the latest account state
