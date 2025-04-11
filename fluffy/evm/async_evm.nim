@@ -133,41 +133,31 @@ proc init*(
 
   AsyncEvm(com: com, backend: backend)
 
-proc call(
+template toCallResult(evmResult: EvmResult[CallResult]): Result[CallResult, string] =
+  let callResult =
+    ?evmResult.mapErr(
+      proc(e: EvmErrorObj): string =
+        "EVM execution failed: " & $e.code
+    )
+
+  if callResult.error.len() > 0:
+    err("EVM execution failed: " & callResult.error)
+  else:
+    ok(callResult)
+
+proc callFetchingState(
     evm: AsyncEvm,
+    vmState: BaseVMState,
     header: Header,
     tx: TransactionArgs,
     optimisticStateFetch: bool,
-    collectAccessList: bool,
-): Future[Result[(CallResult, transactions.AccessList), string]] {.
-    async: (raises: [CancelledError])
-.} =
-  let
-    to = tx.to.valueOr:
-      return err("to address is required")
-    # Start fetching code in the background while setting up the EVM
-    codeFut = evm.backend.getCode(header.stateRoot, to)
+): Future[Result[CallResult, string]] {.async: (raises: [CancelledError]).} =
+  doAssert(tx.to.isSome())
+  if tx.gas.isSome():
+    doAssert(tx.gas.get().uint64 <= EVM_CALL_GAS_CAP)
 
-  if tx.gas.isSome() and tx.gas.get().uint64 > EVM_CALL_GAS_CAP:
-    return err("gas larger than max allowed")
-
-  debug "Executing call", blockNumber = header.number, to
-
-  let txFrame = evm.com.db.baseTxFrame().txFrameBegin()
-  defer:
-    txFrame.dispose() # always dispose state changes
-
-  let blockContext = BlockContext(
-    timestamp: header.timestamp,
-    gasLimit: header.gasLimit,
-    baseFeePerGas: header.baseFeePerGas,
-    prevRandao: header.prevRandao,
-    difficulty: header.difficulty,
-    coinbase: header.coinbase,
-    excessBlobGas: header.excessBlobGas.get(0'u64),
-    parentHash: header.blockHash(),
-  )
-  let vmState = BaseVMState.new(header, blockContext, evm.com, txFrame)
+  let to = tx.to.get()
+  debug "Executing call fetching state", blockNumber = header.number, to
 
   var
     # Record the keys of fetched accounts, storage and code so that we don't
@@ -177,7 +167,7 @@ proc call(
     fetchedCode = initHashSet[Address]()
 
   # Set code of the 'to' address in the EVM so that we can execute the transaction
-  let code = (await codeFut).valueOr:
+  let code = (await evm.backend.getCode(header.stateRoot, to)).valueOr:
     return err("Unable to get code")
   vmState.ledger.setCode(to, code)
   fetchedCode.incl(to)
@@ -194,6 +184,7 @@ proc call(
   while evmCallCount < EVM_CALL_LIMIT:
     debug "Starting AsyncEvm execution", evmCallCount
 
+    vmState.ledger.clearWitnessKeys()
     let sp = vmState.ledger.beginSavepoint()
     evmResult = rpcCallEvm(tx, header, vmState, EVM_CALL_GAS_CAP)
     inc evmCallCount
@@ -202,7 +193,6 @@ proc call(
     # Collect the keys after executing the transaction
     lastWitnessKeys = ensureMove(witnessKeys)
     witnessKeys = vmState.ledger.getWitnessKeys()
-    vmState.ledger.clearWitnessKeys()
 
     try:
       var
@@ -289,57 +279,96 @@ proc call(
       # TODO: why do the above futures throw a CatchableError and not CancelledError?
       raiseAssert(e.msg)
 
-  # If collectAccessList is enabled then build the access list from the
-  # witness keys and then execute the transaction one last time using the final
-  # access list which will impact the gas used value returned in the callResult.
-  var tx = tx
-  if evmResult.isOk() and collectAccessList:
-    let fromAdr = tx.`from`.get(default(Address))
+  evmResult.toCallResult()
 
-    var al = access_list.AccessList.init()
-    for lookupKey, witnessKey in witnessKeys:
-      let (adr, _) = lookupKey
-      if adr == fromAdr:
-        continue
+proc call(
+    evm: AsyncEvm, vmState: BaseVMState, header: Header, tx: TransactionArgs
+): Result[CallResult, string] =
+  doAssert(tx.to.isSome())
+  if tx.gas.isSome():
+    doAssert(tx.gas.get().uint64 <= EVM_CALL_GAS_CAP)
 
-      if witnessKey.storageMode:
-        al.add(adr, witnessKey.storageSlot)
-      else:
-        al.add(adr)
+  debug "Executing call", blockNumber = header.number, to = tx.to.get()
 
-    tx.accessList = Opt.some(al.getAccessList()) # converts to transactions.AccessList
-
-    let sp = vmState.ledger.beginSavepoint()
+  vmState.ledger.clearWitnessKeys()
+  let
+    sp = vmState.ledger.beginSavepoint()
     evmResult = rpcCallEvm(tx, header, vmState, EVM_CALL_GAS_CAP)
-    inc evmCallCount
-    vmState.ledger.rollback(sp) # all state changes from the call are reverted
+  vmState.ledger.rollback(sp) # all state changes from the call are reverted
 
-  let callResult =
-    ?evmResult.mapErr(
-      proc(e: EvmErrorObj): string =
-        "EVM execution failed: " & $e.code
-    )
+  evmResult.toCallResult()
 
-  if callResult.error.len() > 0:
-    err("EVM execution failed: " & callResult.error)
-  else:
-    ok((callResult, tx.accessList.get(@[])))
+template setupVmState(
+    evm: AsyncEvm, txFrame: CoreDbTxRef, header: Header
+): BaseVMState =
+  let blockContext = BlockContext(
+    timestamp: header.timestamp,
+    gasLimit: header.gasLimit,
+    baseFeePerGas: header.baseFeePerGas,
+    prevRandao: header.prevRandao,
+    difficulty: header.difficulty,
+    coinbase: header.coinbase,
+    excessBlobGas: header.excessBlobGas.get(0'u64),
+    parentHash: header.blockHash(),
+  )
+  BaseVMState.new(header, blockContext, evm.com, txFrame)
 
 proc call*(
     evm: AsyncEvm, header: Header, tx: TransactionArgs, optimisticStateFetch = true
 ): Future[Result[CallResult, string]] {.async: (raises: [CancelledError]).} =
-  let (callResult, _) =
-    ?(await evm.call(header, tx, optimisticStateFetch, collectAccessList = false))
-  ok(callResult)
+  if tx.to.isNone():
+    return err("to address is required")
+  if tx.gas.isSome() and tx.gas.get().uint64 > EVM_CALL_GAS_CAP:
+    return err("gas larger than max allowed")
+
+  let txFrame = evm.com.db.baseTxFrame().txFrameBegin()
+  defer:
+    txFrame.dispose() # always dispose state changes
+
+  let vmState = evm.setupVmState(txFrame, header)
+  await evm.callFetchingState(vmState, header, tx, optimisticStateFetch)
 
 proc createAccessList*(
     evm: AsyncEvm, header: Header, tx: TransactionArgs, optimisticStateFetch = true
 ): Future[Result[(transactions.AccessList, GasInt), string]] {.
     async: (raises: [CancelledError])
 .} =
-  let (callResult, accessList) =
-    ?(await evm.call(header, tx, optimisticStateFetch, collectAccessList = true))
+  if tx.to.isNone():
+    return err("to address is required")
+  if tx.gas.isSome() and tx.gas.get().uint64 > EVM_CALL_GAS_CAP:
+    return err("gas larger than max allowed")
+
+  let txFrame = evm.com.db.baseTxFrame().txFrameBegin()
+  defer:
+    txFrame.dispose() # always dispose state changes
+
+  let
+    vmState = evm.setupVmState(txFrame, header)
+    callResult =
+      ?(await evm.callFetchingState(vmState, header, tx, optimisticStateFetch))
+    witnessKeys = vmState.ledger.getWitnessKeys()
+    fromAdr = tx.`from`.get(default(Address))
+
+  # Build the access list from the witness keys and then execute the transaction
+  # one more time using the final access list which will impact the gas used value
+  # returned in the callResult.
+
+  var al = access_list.AccessList.init()
+  for lookupKey, witnessKey in witnessKeys:
+    let (adr, _) = lookupKey
+    if adr == fromAdr:
+      continue
+
+    if witnessKey.storageMode:
+      al.add(adr, witnessKey.storageSlot)
+    else:
+      al.add(adr)
+
+  var tx = tx
+  tx.accessList = Opt.some(al.getAccessList()) # converts to transactions.AccessList
+
+  let finalCallResult = ?evm.call(vmState, header, tx)
 
   # TODO: Do we need to use the estimate gas calculation here to get a more acturate
   # estimation of the gas requirement?
-  ok((accessList, callResult.gasUsed))
+  ok((tx.accessList.get(@[]), finalCallResult.gasUsed))
