@@ -35,7 +35,7 @@ const
 
 type
   ContentKeysList* = List[ContentKeyByteList, contentKeysLimit]
-  ContentKeysBitList* = BitList[contentKeysLimit]
+  ContentKeysAcceptList* = ByteList[contentKeysLimit]
 
   # Accept list for portal wire v1 accept message
   ContentKeysAcceptList* = ByteList[contentKeysLimit]
@@ -91,7 +91,7 @@ type
 
   AcceptMessage* = object
     connectionId*: Bytes2
-    contentKeys*: ContentKeysBitList
+    contentKeys*: ContentKeysAcceptList
 
   Message* = object
     case kind*: MessageKind

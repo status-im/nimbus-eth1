@@ -246,14 +246,13 @@ suite "Portal Wire Protocol Message Encodings":
       message.offer.contentKeys == contentKeys
 
   test "Accept Response":
-    var contentKeys = ContentKeysBitList.init(8)
-    contentKeys.setBit(0)
     let
+      contentKeys = ContentKeysAcceptList.init(@[byte 0, 1, 2, 3, 4, 5, 1, 1])
       connectionId = Bytes2([byte 0x01, 0x02])
       a = AcceptMessage(connectionId: connectionId, contentKeys: contentKeys)
 
     let encoded = encodeMessage(a)
-    check encoded.toHex == "070102060000000101"
+    check encoded.toHex == "070102060000000001020304050101"
 
     let decoded = decodeMessage(encoded)
     check decoded.isOk()
