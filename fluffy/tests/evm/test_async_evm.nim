@@ -62,7 +62,7 @@ procSuite "Async EVM":
     address = "0x6e38a457c722c6011b2dfa06d49240e797844d66".address()
     testState = setupTestEvmState(address)
     evm = AsyncEvm.init(testState.toAsyncEvmStateBackend())
-    header = Header(number: 999962.uint64)
+    header = Header(number: 999962.uint64, gasLimit: 50_000_000.GasInt)
     callData = "0xa888c2cd0000000000000000000000000000000000000000000000000000000000000007".hexToSeqByte()
     tx = TransactionArgs(to: Opt.some(address), input: Opt.some(callData))
 
@@ -167,3 +167,15 @@ procSuite "Async EVM":
           "0x290decd9548b62a8d60345a988386fc84ba6bc95484008f6362f93160ef3e579"
         )
       )
+
+  asyncTest "Estimate Gas - optimistic state fetch enabled":
+    let gasEstimate = (await evm.estimateGas(header, tx, optimisticStateFetch = true)).expect(
+      "successful call"
+    )
+    check gasEstimate == 22497.GasInt
+
+  asyncTest "Estimate Gas - optimistic state fetch disabled":
+    let gasEstimate = (await evm.estimateGas(header, tx, optimisticStateFetch = false)).expect(
+      "successful call"
+    )
+    check gasEstimate == 22497.GasInt

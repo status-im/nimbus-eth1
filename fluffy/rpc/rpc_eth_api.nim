@@ -508,3 +508,43 @@ proc installEthApiHandlers*(
       raise newException(ValueError, error)
 
     return AccessListResult(accessList: accessList, gasUsed: gasUsed.Quantity)
+
+  rpcServer.rpc("eth_estimateGas") do(
+    tx: TransactionArgs, quantityTag: RtBlockIdentifier, optimisticStateFetch: Opt[bool]
+  ) -> Quantity:
+    ## Generates and returns an estimate of how much gas is necessary to allow the
+    ## transaction to complete. The transaction will not be added to the blockchain.
+    ## Note that the estimate may be significantly more than the amount of gas actually
+    ## used by the transaction, for a variety of reasons including EVM mechanics and
+    ## node performance.
+    ##
+    ## tx: the transaction call object which contains
+    ##   from: (optional) The address the transaction is sent from.
+    ##   to: The address the transaction is directed to.
+    ##   gas: (optional) Integer of the gas provided for the transaction execution.
+    ##     eth_call consumes zero gas, but this parameter may be needed by some executions.
+    ##   gasPrice: (optional) Integer of the gasPrice used for each paid gas.
+    ##   value: (optional) Integer of the value sent with this transaction.
+    ##   input: (optional) Hash of the method signature and encoded parameters.
+    ## quantityTag: integer block number, or the string "latest", "earliest" or "pending",
+    ##   see the default block parameter.
+    ## Returns: the amount of gas used.
+
+    if tx.to.isNone():
+      raise newException(ValueError, "to address is required")
+
+    if quantityTag.kind == bidAlias:
+      raise newException(ValueError, "tag not yet implemented")
+
+    let
+      hn = historyNetwork.getOrRaise()
+      evm = asyncEvm.getOrRaise()
+      header = (await hn.getVerifiedBlockHeader(quantityTag.number.uint64)).valueOr:
+        raise newException(ValueError, "Unable to get block header")
+      optimisticStateFetch = optimisticStateFetch.valueOr:
+        true
+
+    let gasEstimate = (await evm.estimateGas(header, tx, optimisticStateFetch)).valueOr:
+      raise newException(ValueError, error)
+
+    return gasEstimate.Quantity
