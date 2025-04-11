@@ -87,7 +87,7 @@ template validatePayload(apiVersion, payloadVersion, payload) =
       raise invalidParams("newPayload" & $apiVersion &
         "excessBlobGas is expected from execution payload")
 
-# https://github.com/ethereum/execution-apis/blob/main/src/engine/prague.md#engine_newpayloadv4
+# https://github.com/ethereum/execution-apis/blob/40088597b8b4f48c45184da002e27ffc3c37641f/src/engine/prague.md#request
 template validateExecutionRequest(requests: openArray[seq[byte]], apiVersion: Version) =
   var previousRequestType = -1
   for request in requests:

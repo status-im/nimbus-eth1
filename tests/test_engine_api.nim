@@ -285,7 +285,7 @@ proc newPayloadV4InvalidRequestType(env: TestEnv): Result[void, string] =
     return err("res should success")
 
   if res.get.status != PayloadExecutionStatus.invalid:
-    return err("res.status should equals to PayloadExecutionStatus.invalid")
+    return err("res.status should be equal to PayloadExecutionStatus.invalid")
 
   ok()
 
