@@ -87,28 +87,31 @@ template validatePayload(apiVersion, payloadVersion, payload) =
       raise invalidParams("newPayload" & $apiVersion &
         "excessBlobGas is expected from execution payload")
 
-func validateExecutionRequest(requests: openArray[seq[byte]]): Result[void, string] {.raises:[].} =
+# https://github.com/ethereum/execution-apis/blob/40088597b8b4f48c45184da002e27ffc3c37641f/src/engine/prague.md#request
+template validateExecutionRequest(requests: openArray[seq[byte]], apiVersion: Version) =
   var previousRequestType = -1
   for request in requests:
     if request.len == 0:
-      return err("Execution request data must not be empty")
+      raise invalidParams("newPayload" & $apiVersion &
+        ": " & "Execution request data must not be empty")
 
     let requestType = request[0]
     if requestType.int <= previousRequestType:
-      return err("Execution requests are not in strictly ascending order")
+      raise invalidParams("newPayload" & $apiVersion &
+        ": " & "Execution requests are not in strictly ascending order")
 
     if request.len == 1:
-      return err("Empty data for request type " & $requestType)
+      raise invalidParams("newPayload" & $apiVersion &
+        ": " & "Empty data for request type " & $requestType)
 
     if requestType notin [
        DEPOSIT_REQUEST_TYPE,
        WITHDRAWAL_REQUEST_TYPE,
        CONSOLIDATION_REQUEST_TYPE]:
-      return err("Invalid execution request type: " & $requestType)
+      return invalidStatus(payload.blockHash, "Invalid execution request type" & $requestType)
 
     previousRequestType = requestType.int
 
-  ok()
 
 proc newPayload*(ben: BeaconEngineRef,
                  apiVersion: Version,
@@ -131,9 +134,7 @@ proc newPayload*(ben: BeaconEngineRef,
       raise invalidParams("newPayload" & $apiVersion &
         ": executionRequests is expected from execution payload")
 
-    validateExecutionRequest(executionRequests.get).isOkOr:
-      raise invalidParams("newPayload" & $apiVersion &
-        ": " & error)
+    validateExecutionRequest(executionRequests.get, apiVersion)
 
   let
     com = ben.com
