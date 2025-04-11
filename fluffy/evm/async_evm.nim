@@ -21,6 +21,7 @@ import
   ../../execution_chain/evm/[types, state, evm_errors]
 
 from web3/eth_api_types import TransactionArgs
+from web3/eth_api_types import Quantity
 
 export
   results, chronos, hashes, addresses, accounts, headers, TransactionArgs, CallResult,
@@ -298,9 +299,7 @@ proc call(
 
   evmResult.toCallResult()
 
-template setupVmState(
-    evm: AsyncEvm, txFrame: CoreDbTxRef, header: Header
-): BaseVMState =
+proc setupVmState(evm: AsyncEvm, txFrame: CoreDbTxRef, header: Header): BaseVMState =
   let blockContext = BlockContext(
     timestamp: header.timestamp,
     gasLimit: header.gasLimit,
@@ -313,15 +312,26 @@ template setupVmState(
   )
   BaseVMState.new(header, blockContext, evm.com, txFrame)
 
-proc call*(
-    evm: AsyncEvm, header: Header, tx: TransactionArgs, optimisticStateFetch = true
-): Future[Result[CallResult, string]] {.async: (raises: [CancelledError]).} =
+func validateSetDefaults(tx: TransactionArgs): Result[TransactionArgs, string] =
   if tx.to.isNone():
     return err("to address is required")
   if tx.gas.isSome() and tx.gas.get().uint64 > EVM_CALL_GAS_CAP:
     return err("gas larger than max allowed")
 
-  let txFrame = evm.com.db.baseTxFrame().txFrameBegin()
+  var tx = tx
+  if tx.`from`.isNone():
+    tx.`from` = Opt.some(default(Address))
+  if tx.gas.isNone():
+    tx.gas = Opt.some(EVM_CALL_GAS_CAP.Quantity)
+
+  ok(ensureMove(tx))
+
+proc call*(
+    evm: AsyncEvm, header: Header, tx: TransactionArgs, optimisticStateFetch = true
+): Future[Result[CallResult, string]] {.async: (raises: [CancelledError]).} =
+  let
+    tx = ?validateSetDefaults(tx)
+    txFrame = evm.com.db.baseTxFrame().txFrameBegin()
   defer:
     txFrame.dispose() # always dispose state changes
 
@@ -333,12 +343,9 @@ proc createAccessList*(
 ): Future[Result[(transactions.AccessList, GasInt), string]] {.
     async: (raises: [CancelledError])
 .} =
-  if tx.to.isNone():
-    return err("to address is required")
-  if tx.gas.isSome() and tx.gas.get().uint64 > EVM_CALL_GAS_CAP:
-    return err("gas larger than max allowed")
-
-  let txFrame = evm.com.db.baseTxFrame().txFrameBegin()
+  let
+    tx = ?validateSetDefaults(tx)
+    txFrame = evm.com.db.baseTxFrame().txFrameBegin()
   defer:
     txFrame.dispose() # always dispose state changes
 
@@ -364,11 +371,37 @@ proc createAccessList*(
     else:
       al.add(adr)
 
-  var tx = tx
-  tx.accessList = Opt.some(al.getAccessList()) # converts to transactions.AccessList
+  var txWithAl = ensureMove(tx)
+  txWithAl.accessList = Opt.some(al.getAccessList())
+    # converts to transactions.AccessList
 
-  let finalCallResult = ?evm.call(vmState, header, tx)
+  let finalCallResult = ?evm.call(vmState, header, txWithAl)
 
   # TODO: Do we need to use the estimate gas calculation here to get a more acturate
   # estimation of the gas requirement?
-  ok((tx.accessList.get(@[]), finalCallResult.gasUsed))
+  ok((txWithAl.accessList.get(@[]), finalCallResult.gasUsed))
+
+proc estimateGas*(
+    evm: AsyncEvm, header: Header, tx: TransactionArgs, optimisticStateFetch = true
+): Future[Result[GasInt, string]] {.async: (raises: [CancelledError]).} =
+  let
+    tx = ?validateSetDefaults(tx)
+    txFrame = evm.com.db.baseTxFrame().txFrameBegin()
+  defer:
+    txFrame.dispose() # always dispose state changes
+
+  let
+    vmState = evm.setupVmState(txFrame, header)
+    callResult =
+      ?(await evm.callFetchingState(vmState, header, tx, optimisticStateFetch))
+  # we only invoke callFetchingState in order to collect the state in the BaseVMState
+  discard callResult
+
+  let
+    evmResult = rpcEstimateGas(tx, header, vmState, EVM_CALL_GAS_CAP)
+    gasEstimate =
+      ?evmResult.mapErr(
+        proc(e: EvmErrorObj): string =
+          "EVM execution failed: " & $e.code
+      )
+  ok(gasEstimate)

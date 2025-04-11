@@ -544,7 +544,7 @@ proc installEthApiHandlers*(
       optimisticStateFetch = optimisticStateFetch.valueOr:
         true
 
-    # let gasUsed = (await evm.estimateGas(header, tx, optimisticStateFetch)).valueOr:
-    #   raise newException(ValueError, error)
+    let gasEstimate = (await evm.estimateGas(header, tx, optimisticStateFetch)).valueOr:
+      raise newException(ValueError, error)
 
-    # return gasUsed.Quantity
+    return gasEstimate.Quantity
