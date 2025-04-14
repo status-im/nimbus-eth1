@@ -30,7 +30,7 @@ proc napUnlessSomethingToFetch(
   ## When idle, save cpu cycles waiting for something to do.
   if buddy.ctx.pool.blkImportOk or               # currently importing blocks
      buddy.ctx.hibernate or                      # not activated yet?
-     not (buddy.headersStagedFetchOk() or            # something on TODO list
+     not (buddy.headersStagedFetchOk() or        # something on TODO list
           buddy.blocksStagedFetchOk()):
     try:
       await sleepAsync workerIdleWaitInterval

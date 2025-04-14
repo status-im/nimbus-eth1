@@ -81,12 +81,12 @@ func bnStr*(w: LinkedHChain | ref LinkedHChain): string =
 # Public helper functions
 # ------------------------------------------------------------------------------
 
-func collectCanContinue*(buddy: BeaconBuddyRef): bool =
-  ## Hepler, checks whether there is a general stop conditions
-  buddy.ctrl.running and
-  not buddy.ctx.poolMode and
-  buddy.ctx.pool.lastState == collectingHeaders and
-  buddy.ctx.hdrCache.state == collecting
+func collectModeStopped*(ctx: BeaconCtxRef): bool =
+  ## Hepler, checks whether there is a general stop conditions based on
+  ## state settings (not on sync peer ctrl as `buddy.ctrl.running`.)
+  ctx.poolMode or
+  ctx.pool.lastState != collectingHeaders or
+  ctx.hdrCache.state != collecting
 
 
 proc collectAndStashOnDiskCache*(
@@ -122,7 +122,7 @@ proc collectAndStashOnDiskCache*(
           break fetchHeadersBody         # error => exit block
 
       # Job might have been cancelled while downloading headrs
-      if not buddy.collectCanContinue():
+      if ctx.collectModeStopped():
         break fetchHeadersBody           # stop => exit block
 
       # Store it on the header chain cache
@@ -169,6 +169,7 @@ proc collectAndStageOnMemQueue*(
   ## The function returns the largest block number not fetched/stored.
   ##
   let
+    ctx = buddy.ctx
     peer = buddy.peer
   var
     ivTop = iv.maxPt                     # top end of the current range to fetch
@@ -189,7 +190,7 @@ proc collectAndStageOnMemQueue*(
           break fetchHeadersBody         # error => exit block
 
       # Job might have been cancelled while downloading headrs
-      if not buddy.collectCanContinue():
+      if ctx.collectModeStopped():
         break fetchHeadersBody           # stop => exit block
 
       # While assembling a `LinkedHChainRef`, only boundary checks are used to
