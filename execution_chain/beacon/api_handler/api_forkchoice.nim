@@ -75,7 +75,7 @@ proc forkchoiceUpdated*(ben: BeaconEngineRef,
                         attrsOpt: Opt[PayloadAttributes]):
                              ForkchoiceUpdatedResponse =
   let
-    com = ben.com
+    com   = ben.com
     chain = ben.chain
     headHash = update.headBlockHash
 
@@ -90,14 +90,13 @@ proc forkchoiceUpdated*(ben: BeaconEngineRef,
     # If this block was previously invalidated, keep rejecting it here too
     let res = ben.checkInvalidAncestor(headHash, headHash)
     if res.isSome:
-      return simpleFCU(res.get)
+      return simpleFCU(res.value)
 
     # If the head hash is unknown (was not given to us in a newPayload request),
     # we cannot resolve the header, so not much to do. This could be extended in
     # the future to resolve from the `eth` network, but it's an unexpected case
     # that should be fixed, not papered over.
-    var header: Header
-    if not ben.get(headHash, header):
+    let header = chain.quarantine.getHeader(headHash).valueOr:
       warn "Forkchoice requested unknown head",
         hash = headHash.short
       return simpleFCU(PayloadExecutionStatus.syncing)
@@ -138,12 +137,12 @@ proc forkchoiceUpdated*(ben: BeaconEngineRef,
           ptd = ptd
         return simpleFCU(PayloadExecutionStatus.invalid, "TDs unavailable for TTD check")
 
-      if td.get < ttd or (blockNumber > 0'u64 and ptd.get > ttd):
+      if td.value < ttd or (blockNumber > 0'u64 and ptd.value > ttd):
         notice "Refusing beacon update to pre-merge",
           number = blockNumber,
           hash = headHash.short,
           diff = header.difficulty,
-          ptd = ptd.get,
+          ptd = ptd.value,
           ttd = ttd
 
         return invalidFCU("Refusing beacon update to pre-merge")
@@ -186,7 +185,7 @@ proc forkchoiceUpdated*(ben: BeaconEngineRef,
   # sealed by the beacon client. The payload will be requested later, and we
   # might replace it arbitrarilly many times in between.
   if attrsOpt.isSome:
-    let attrs = attrsOpt.get()
+    let attrs = attrsOpt.value
     validateVersion(attrs, com, apiVersion)
 
     let bundle = ben.generateExecutionBundle(attrs).valueOr:
@@ -194,7 +193,7 @@ proc forkchoiceUpdated*(ben: BeaconEngineRef,
       raise invalidAttr(error)
 
     let id = computePayloadId(headHash, attrs)
-    ben.put(id, bundle)
+    ben.putPayloadBundle(id, bundle)
 
     info "Created payload for block proposal",
       number = bundle.payload.blockNumber,

@@ -6,7 +6,7 @@
 # at your option. This file may not be copied, modified, or distributed except according to those terms.
 
 import
-  std/[os, sequtils],
+  std/os,
   unittest2,
   stew/byteutils,
   web3/eth_api,
