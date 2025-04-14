@@ -13,6 +13,7 @@
 import
   std/[deques, tables],
   ./chain_branch,
+  ./block_quarantine,
   ../../../common,
   ../../../db/core_db,
   ../../../portal/portal
@@ -32,6 +33,8 @@ type
     activeBranch*: BranchRef
       # Every time a new block added to a branch,
       # that branch automatically become the active branch.
+
+    quarantine*  : Quarantine
 
     txRecords    : Table[Hash32, (Hash32, uint64)]
       # A map of transsaction hashes to block hash and block number.

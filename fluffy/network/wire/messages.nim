@@ -25,9 +25,20 @@ const
   # key overhead when serialized
   perContentKeyOverhead* = 4
 
+  # Accept codes for the portal wire v1 accept message
+  Accepted* = byte 0x0
+  DeclinedGeneric* = byte 0x1
+  DeclinedAlreadyStored* = byte 0x2
+  DeclinedNotWithinRadius* = byte 0x3
+  DeclinedRateLimited* = byte 0x4
+  DeclinedInboundTransferInProgress* = byte 0x5
+
 type
   ContentKeysList* = List[ContentKeyByteList, contentKeysLimit]
   ContentKeysBitList* = BitList[contentKeysLimit]
+
+  # Accept list for portal wire v1 accept message
+  ContentKeysAcceptList* = ByteList[contentKeysLimit]
 
   MessageKind* = enum
     ping = 0x00
@@ -190,3 +201,14 @@ func getTalkReqOverhead*(protocolIdLen: int): int =
 
 func getTalkReqOverhead*(protocolId: openArray[byte]): int =
   return getTalkReqOverhead(len(protocolId))
+
+# To convert from portal wire v0 BitList to portal wire v1 ByteList
+func fromBitList*(T: type ContentKeysAcceptList, bitList: ContentKeysBitList): T =
+  var contentKeysAcceptList = ContentKeysAcceptList.init(@[])
+  for bit in bitList:
+    if bit:
+      discard contentKeysAcceptList.add(Accepted)
+    else:
+      discard contentKeysAcceptList.add(DeclinedGeneric)
+
+  contentKeysAcceptList

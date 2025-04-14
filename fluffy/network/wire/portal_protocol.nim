@@ -926,7 +926,7 @@ func getMaxOfferedContentKeys*(protocolIdLen: uint32, maxKeySize: uint32): int =
 
 proc offer(
     p: PortalProtocol, o: OfferRequest
-): Future[PortalResult[ContentKeysBitList]] {.async: (raises: [CancelledError]).} =
+): Future[PortalResult[ContentKeysAcceptList]] {.async: (raises: [CancelledError]).} =
   ## Offer triggers offer-accept interaction with one peer
   ## Whole flow has two phases:
   ## 1. Come to an agreement on what content to transfer, by using offer and
@@ -982,7 +982,7 @@ proc offer(
   if acceptedKeysAmount == 0:
     debug "No content accepted"
     # Don't open an uTP stream if no content was requested
-    return ok(response.contentKeys)
+    return ok(ContentKeysAcceptList.fromBitList(response.contentKeys))
 
   let nodeAddress = NodeAddress.init(o.dst).valueOr:
     # This should not happen as it comes a after succesfull talkreq/talkresp
@@ -1051,17 +1051,17 @@ proc offer(
   await socket.closeWait()
   trace "Content successfully offered"
 
-  return ok(response.contentKeys)
+  ok(ContentKeysAcceptList.fromBitList(response.contentKeys))
 
 proc offer*(
     p: PortalProtocol, dst: Node, contentKeys: ContentKeysList
-): Future[PortalResult[ContentKeysBitList]] {.async: (raises: [CancelledError]).} =
+): Future[PortalResult[ContentKeysAcceptList]] {.async: (raises: [CancelledError]).} =
   let req = OfferRequest(dst: dst, kind: Database, contentKeys: contentKeys)
   await p.offer(req)
 
 proc offer*(
     p: PortalProtocol, dst: Node, content: seq[ContentKV]
-): Future[PortalResult[ContentKeysBitList]] {.async: (raises: [CancelledError]).} =
+): Future[PortalResult[ContentKeysAcceptList]] {.async: (raises: [CancelledError]).} =
   if len(content) > contentKeysLimit:
     return err("Cannot offer more than 64 content items")
   if len(content) == 0:
