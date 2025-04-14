@@ -76,7 +76,6 @@ proc forkchoiceUpdated*(ben: BeaconEngineRef,
                              ForkchoiceUpdatedResponse =
   let
     com   = ben.com
-    txFrame = ben.chain.latestTxFrame()
     chain = ben.chain
     headHash = update.headBlockHash
 
@@ -91,14 +90,13 @@ proc forkchoiceUpdated*(ben: BeaconEngineRef,
     # If this block was previously invalidated, keep rejecting it here too
     let res = ben.checkInvalidAncestor(headHash, headHash)
     if res.isSome:
-      return simpleFCU(res.get)
+      return simpleFCU(res.value)
 
     # If the head hash is unknown (was not given to us in a newPayload request),
     # we cannot resolve the header, so not much to do. This could be extended in
     # the future to resolve from the `eth` network, but it's an unexpected case
     # that should be fixed, not papered over.
-    var header: Header
-    if not ben.get(headHash, header):
+    let header = chain.quarantine.getHeader(headHash).valueOr:
       warn "Forkchoice requested unknown head",
         hash = headHash.short
       return simpleFCU(PayloadExecutionStatus.syncing)
@@ -124,6 +122,7 @@ proc forkchoiceUpdated*(ben: BeaconEngineRef,
     let blockNumber = header.number
     if header.difficulty > 0.u256 or blockNumber ==  0'u64:
       let
+        txFrame = chain.latestTxFrame()
         td  = txFrame.getScore(headHash)
         ptd = txFrame.getScore(header.parentHash)
         ttd = com.ttd.get(high(UInt256))
@@ -137,12 +136,12 @@ proc forkchoiceUpdated*(ben: BeaconEngineRef,
           ptd = ptd
         return simpleFCU(PayloadExecutionStatus.invalid, "TDs unavailable for TTD check")
 
-      if td.get < ttd or (blockNumber > 0'u64 and ptd.get > ttd):
+      if td.value < ttd or (blockNumber > 0'u64 and ptd.value > ttd):
         notice "Refusing beacon update to pre-merge",
           number = blockNumber,
           hash = headHash.short,
           diff = header.difficulty,
-          ptd = ptd.get,
+          ptd = ptd.value,
           ttd = ttd
 
         return invalidFCU("Refusing beacon update to pre-merge")
@@ -151,7 +150,7 @@ proc forkchoiceUpdated*(ben: BeaconEngineRef,
   # probably resyncing. Ignore the update.
   # See point 2 of fCUV1 specification
   # https://github.com/ethereum/execution-apis/blob/v1.0.0-beta.4/src/engine/paris.md#specification-1
-  if ben.chain.isCanonicalAncestor(header.number, headHash):
+  if chain.isCanonicalAncestor(header.number, headHash):
     notice "Ignoring beacon update to old head",
       headHash=headHash.short,
       blockNumber=header.number
@@ -161,7 +160,7 @@ proc forkchoiceUpdated*(ben: BeaconEngineRef,
   # chain final and completely in PoS mode.
   let finalizedBlockHash = update.finalizedBlockHash
   if finalizedBlockHash != zeroHash32:
-    if not ben.chain.equalOrAncestorOf(finalizedBlockHash, headHash):
+    if not chain.equalOrAncestorOf(finalizedBlockHash, headHash):
       warn "Final block not in canonical tree",
         hash=finalizedBlockHash.short
       raise invalidForkChoiceState("finalized block not in canonical tree")
@@ -169,13 +168,13 @@ proc forkchoiceUpdated*(ben: BeaconEngineRef,
 
   let safeBlockHash = update.safeBlockHash
   if safeBlockHash != zeroHash32:
-    if not ben.chain.equalOrAncestorOf(safeBlockHash, headHash):
+    if not chain.equalOrAncestorOf(safeBlockHash, headHash):
       warn "Safe block not in canonical tree",
         hash=safeBlockHash.short
       raise invalidForkChoiceState("safe block not in canonical tree")
     # Current version of FC module is not interested in safeBlockHash
     # so we save it here
-    let txFrame = ben.chain.txFrame(safeBlockHash)
+    let txFrame = chain.txFrame(safeBlockHash)
     txFrame.safeHeaderHash(safeBlockHash)
 
   chain.forkChoice(headHash, update.finalizedBlockHash).isOkOr:
@@ -185,7 +184,7 @@ proc forkchoiceUpdated*(ben: BeaconEngineRef,
   # sealed by the beacon client. The payload will be requested later, and we
   # might replace it arbitrarilly many times in between.
   if attrsOpt.isSome:
-    let attrs = attrsOpt.get()
+    let attrs = attrsOpt.value
     validateVersion(attrs, com, apiVersion)
 
     let bundle = ben.generateExecutionBundle(attrs).valueOr:
@@ -193,7 +192,7 @@ proc forkchoiceUpdated*(ben: BeaconEngineRef,
       raise invalidAttr(error)
 
     let id = computePayloadId(headHash, attrs)
-    ben.put(id, bundle)
+    ben.putPayloadBundle(id, bundle)
 
     info "Created payload for block proposal",
       number = bundle.payload.blockNumber,
@@ -210,8 +209,8 @@ proc forkchoiceUpdated*(ben: BeaconEngineRef,
   info "Fork choice updated",
     requested = header.number,
     hash = headHash.short,
-    head = ben.chain.latestNumber,
-    base = ben.chain.baseNumber,
-    baseHash = ben.chain.baseHash.short
+    head = chain.latestNumber,
+    base = chain.baseNumber,
+    baseHash = chain.baseHash.short
 
   return validFCU(Opt.none(Bytes8), headHash)

@@ -39,10 +39,10 @@ proc computePayloadId*(blockHash: common.Hash32,
   ctx.update(distinctBase params.prevRandao)
   ctx.update(distinctBase params.suggestedFeeRecipient)
   if params.withdrawals.isSome:
-    for wd in params.withdrawals.get:
+    for wd in params.withdrawals.value:
       ctx.update(wd)
   if params.parentBeaconBlockRoot.isSome:
-    ctx.update(distinctBase params.parentBeaconBlockRoot.get)
+    ctx.update(distinctBase params.parentBeaconBlockRoot.value)
   ctx.finish dest.data
   ctx.clear()
   (distinctBase result)[0..7] = dest.data[0..7]
