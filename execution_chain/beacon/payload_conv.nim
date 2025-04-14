@@ -1,5 +1,5 @@
 # Nimbus
-# Copyright (c) 2023-2024 Status Research & Development GmbH
+# Copyright (c) 2023-2025 Status Research & Development GmbH
 # Licensed under either of
 #  * Apache License, version 2.0, ([LICENSE-APACHE](LICENSE-APACHE))
 #  * MIT license ([LICENSE-MIT](LICENSE-MIT))
@@ -58,7 +58,7 @@ func executionPayload*(blk: Block): ExecutionPayload =
     timestamp    : w3Qty blk.header.timestamp,
     extraData    : w3ExtraData blk.header.extraData,
     baseFeePerGas: blk.header.baseFeePerGas.get(0.u256),
-    blockHash    : blk.header.rlpHash,
+    blockHash    : blk.header.computeRlpHash,
     transactions : w3Txs blk.txs,
     withdrawals  : w3Withdrawals blk.withdrawals,
     blobGasUsed  : w3Qty blk.header.blobGasUsed,
@@ -79,7 +79,7 @@ func executionPayloadV1V2*(blk: Block): ExecutionPayloadV1OrV2 =
     timestamp    : w3Qty blk.header.timestamp,
     extraData    : w3ExtraData blk.header.extraData,
     baseFeePerGas: blk.header.baseFeePerGas.get(0.u256),
-    blockHash    : blk.header.rlpHash,
+    blockHash    : blk.header.computeRlpHash,
     transactions : w3Txs blk.txs,
     withdrawals  : w3Withdrawals blk.withdrawals,
   )

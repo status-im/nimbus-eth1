@@ -119,7 +119,7 @@ proc validateUncles(com: CommonRef; header: Header; txFrame: CoreDbTxRef,
   # Check for duplicates
   var uncleSet = HashSet[Hash32]()
   for uncle in uncles:
-    let uncleHash = uncle.blockHash
+    let uncleHash = uncle.computeBlockHash
     if uncleHash in uncleSet:
       return err("Block contains duplicate uncles")
     else:
@@ -128,10 +128,10 @@ proc validateUncles(com: CommonRef; header: Header; txFrame: CoreDbTxRef,
   let
     recentAncestorHashes = ?txFrame.getAncestorsHashes(MAX_UNCLE_DEPTH + 1, header)
     recentUncleHashes = ?txFrame.getUncleHashes(recentAncestorHashes)
-    blockHash = header.blockHash
+    blockHash = header.computeBlockHash
 
   for uncle in uncles:
-    let uncleHash = uncle.blockHash
+    let uncleHash = uncle.computeBlockHash
 
     if uncleHash == blockHash:
       return err("Uncle has same hash as block")

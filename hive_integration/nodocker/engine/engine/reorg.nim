@@ -1,5 +1,5 @@
 # Nimbus
-# Copyright (c) 2023-2024 Status Research & Development GmbH
+# Copyright (c) 2023-2025 Status Research & Development GmbH
 # Licensed under either of
 #  * Apache License, version 2.0, ([LICENSE-APACHE](LICENSE-APACHE) or
 #    http://www.apache.org/licenses/LICENSE-2.0)
@@ -137,7 +137,7 @@ proc txHash(shadow: ShadowTx): Hash32 =
   if shadow.tx.isNone:
     error "SHADOW TX IS NONE"
     return
-  shadow.tx.get.rlpHash
+  shadow.tx.get.computeRlpHash
 
 # Test transaction status after a forkchoiceUpdated re-orgs to an alternative hash where a transaction is not present
 method execute(cs: TransactionReOrgTest, env: TestEnv): bool =
@@ -254,7 +254,7 @@ method execute(cs: TransactionReOrgTest, env: TestEnv): bool =
             g.expectNoError()
 
             let payload = g.get.executionPayload
-            testCond txInPayload(payload, shadow.nextTx.rlpHash):
+            testCond txInPayload(payload, shadow.nextTx.computeRlpHash):
               fatal "Payload built does not contain the transaction"
 
             # Send the new payload and forkchoiceUpdated to it

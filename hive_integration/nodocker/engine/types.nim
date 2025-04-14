@@ -244,8 +244,8 @@ template expectHash*(res: untyped, hash: Hash32) =
   testCond res.isOk:
     error "Unexpected expectHash Error", msg=res.error
   let s = res.get()
-  testCond s.blockHash == hash:
-    error "Unexpected expectHash", expect=hash.short, get=s.blockHash.short
+  testCond s.computeBlockHash == hash:
+    error "Unexpected expectHash", expect=hash.short, get=s.computeBlockHash.short
 
 template expectStorageEqual*(res: untyped, expectedValue: FixedBytes[32]) =
   testCond res.isOk:

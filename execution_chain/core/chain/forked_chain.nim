@@ -114,7 +114,7 @@ proc writeBaggage(c: ForkedChainRef,
 proc validateBlock(c: ForkedChainRef,
           parent: BlockPos,
           blk: Block): Result[Hash32, string] =
-  let blkHash = blk.header.blockHash
+  let blkHash = blk.header.computeBlockHash
 
   if c.hashToBlock.hasKey(blkHash):
     # Block exists, just return
@@ -174,7 +174,7 @@ proc validateBlock(c: ForkedChainRef,
   c.updateBranch(parent, blk, blkHash, txFrame, move(receipts))
 
   for i, tx in blk.transactions:
-    c.txRecords[rlpHash(tx)] = (blkHash, uint64(i))
+    c.txRecords[computeRlpHash(tx)] = (blkHash, uint64(i))
 
   # Entering base auto forward mode while avoiding forkChoice
   # handled region(head - baseDistance)
@@ -324,7 +324,7 @@ func calculateNewBase(
 proc removeBlockFromCache(c: ForkedChainRef, bd: BlockDesc) =
   c.hashToBlock.del(bd.hash)
   for tx in bd.blk.transactions:
-    c.txRecords.del(rlpHash(tx))
+    c.txRecords.del(computeRlpHash(tx))
 
   for v in c.lastSnapshots.mitems():
     if v == bd.txFrame:
@@ -583,7 +583,7 @@ proc importBlock*(c: ForkedChainRef, blk: Block): Result[void, string] =
   do:
     # If its parent is an invalid block
     # there is no hope the descendant is valid
-    let blockHash = header.blockHash
+    let blockHash = header.computeBlockHash
     debug "Parent block not found",
       blockHash = blockHash.short,
       parentHash = header.parentHash.short
@@ -661,7 +661,7 @@ func baseTxFrame*(c: ForkedChainRef): CoreDbTxRef =
   c.baseTxFrame
 
 func txFrame*(c: ForkedChainRef, header: Header): CoreDbTxRef =
-  c.txFrame(header.blockHash())
+  c.txFrame(header.computeBlockHash())
 
 func latestTxFrame*(c: ForkedChainRef): CoreDbTxRef =
   c.activeBranch.headTxFrame
@@ -752,7 +752,7 @@ proc txDetailsByTxHash*(c: ForkedChainRef, txHash: Hash32): Result[(Hash32, uint
   let
     txDetails = ?c.baseTxFrame.getTransactionKey(txHash)
     header = ?c.headerByNumber(txDetails.blockNumber)
-    blockHash = header.blockHash
+    blockHash = header.computeBlockHash
   return ok((blockHash, txDetails.index))
 
 proc blockByHash*(c: ForkedChainRef, blockHash: Hash32): Result[Block, string] =
@@ -859,7 +859,7 @@ iterator txHashInRange*(c: ForkedChainRef, fromHash: Hash32, toHash: Hash32): Ha
       if toHash == prevHash:
         break
       for tx in loc[].transactions:
-        let txHash = rlpHash(tx)
+        let txHash = computeRlpHash(tx)
         yield txHash
       prevHash = loc[].parentHash
     do:

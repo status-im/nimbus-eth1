@@ -62,12 +62,12 @@ func getMinExcessBlobsForBlobGasPrice*(data_gas_price: uint64): uint64 =
   return getMinExcessBlobGasForBlobGasPrice(data_gas_price) div GAS_PER_BLOB.uint64
 
 proc addBlobTransaction*(pool: TestBlobTxPool, tx: PooledTransaction) =
-  let txHash = rlpHash(tx)
+  let txHash = computeRlpHash(tx)
   pool.transactions[txHash] = tx
 
 # Test two different transactions with the same blob, and check the blob bundle.
 proc verifyTransactionFromNode*(client: RpcClient, tx: Transaction): Result[void, string] =
-  let txHash = tx.rlpHash
+  let txHash = tx.computeRlpHash
   let res = client.txByHash(txHash)
   if res.isErr:
     return err(res.error)
@@ -160,7 +160,7 @@ proc getBlobDataInPayload*(pool: TestBlobTxPool, payload: ExecutionPayload): Res
     if txData.txType != TxEip4844:
       continue
 
-    let txHash = rlpHash(txData)
+    let txHash = computeRlpHash(txData)
 
     # Find the transaction in the current pool of known transactions
     if not pool.transactions.hasKey(txHash):
