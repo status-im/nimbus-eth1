@@ -27,6 +27,7 @@ type
     safeHash = 8
     finalizedHash = 9
     beaconHeader = 10
+    fcState = 11
 
   DbKey* = object
     # The first byte stores the key type. The rest are key-specific values
@@ -89,6 +90,12 @@ func hashIndexKey*(hash: Hash32, index: uint16): HashIndexKey =
 
 func beaconHeaderKey*(u: BlockNumber): DbKey =
   result.data[0] = byte ord(beaconHeader)
+  doAssert sizeof(u) <= 32
+  copyMem(addr result.data[1], unsafeAddr u, sizeof(u))
+  result.dataEndPos = uint8 sizeof(u)
+
+func fcStateKey*(u: uint64): DbKey {.inline.} =
+  result.data[0] = byte ord(fcState)
   doAssert sizeof(u) <= 32
   copyMem(addr result.data[1], unsafeAddr u, sizeof(u))
   result.dataEndPos = uint8 sizeof(u)

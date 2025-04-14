@@ -1,0 +1,226 @@
+# nimbus-execution-client
+# Copyright (c) 2025 Status Research & Development GmbH
+# Licensed under either of
+#  * Apache License, version 2.0, ([LICENSE-APACHE](LICENSE-APACHE))
+#  * MIT license ([LICENSE-MIT](LICENSE-MIT))
+# at your option.
+# This file may not be copied, modified, or distributed except according to
+# those terms.
+
+{.push raises: [].}
+
+import
+  results,
+  eth/common/blocks_rlp,
+  ./chain_desc,
+  ./chain_branch,
+  ./chain_private,
+  ../../../db/core_db,
+  ../../../db/storage_types
+
+type
+  TxRecord = object
+    txHash: Hash32
+    blockHash: Hash32
+    blockNumber: uint64
+
+  FcState = object
+    numBranches: uint
+    baseBranch: uint
+    activeBranch: uint
+    pendingFCU: Hash32
+    latestFinalizedBlockNumber: uint64
+    txRecords: seq[TxRecord]
+
+proc append*(w: var RlpWriter, bd: BlockDesc) =
+  w.startList(2)
+  w.append(bd.blk)
+  w.append(bd.hash)
+
+proc append*(w: var RlpWriter, brc: BranchRef) =
+  w.startList(2)
+  let parentIndex = if brc.parent.isNil: 0'u
+                    else: brc.parent.index + 1'u
+  w.append(parentIndex)
+  w.append(brc.blocks)
+
+proc append*(w: var RlpWriter, fc: ForkedChainRef) =
+  w.startList(4)
+  w.append(fc.branches.len.uint)
+  w.append(fc.baseBranch.index)
+  w.append(fc.activeBranch.index)
+  w.append(fc.pendingFCU)
+  w.append(fc.latestFinalizedBlockNumber)
+  w.startList(fc.txRecords.len)
+  for k, v in fc.txRecords:
+    w.append(TxRecord(
+      txHash: k,
+      blockHash: v[0],
+      blockNumber: v[1],
+    ))
+
+proc read*(rlp: var Rlp, T: type BlockDesc): T {.raises: [RlpError].} =
+  rlp.tryEnterList()
+  result = T()
+  rlp.read(result.blk)
+  rlp.read(result.hash)
+
+proc read*(rlp: var Rlp, T: type BranchRef): T {.raises: [RlpError].} =
+  rlp.tryEnterList()
+  result = T()
+  rlp.read(result.index)
+  rlp.read(result.blocks)
+
+proc read*(rlp: var Rlp, T: type FcState): T {.raises: [RlpError].} =
+  rlp.tryEnterList()
+  rlp.read(result.numBranches)
+  rlp.read(result.baseBranch)
+  rlp.read(result.activeBranch)
+  rlp.read(result.pendingFCU)
+  rlp.read(result.latestFinalizedBlockNumber)
+  rlp.read(result.txRecords)
+
+let
+  # The state always use 0 index
+  FcStateKey = fcStateKey 0
+
+template branchIndexKey(i: SomeInteger): openArray[byte] =
+  # We reuse the fcStateKey but +1
+  fcStateKey((i+1).uint).toOpenArray
+
+proc serialize*(fc: ForkedChainRef, txFrame: CoreDbTxRef): Result[void, CoreDbError] =
+  for i, brc in fc.branches:
+    brc.index = uint i
+  ?txFrame.put(FcStateKey.toOpenArray, rlp.encode(fc))
+  for i, brc in fc.branches:
+    ?txFrame.put(branchIndexKey(i), rlp.encode(brc))
+  ok()
+
+proc getState(db: CoreDbTxRef): Opt[FcState] =
+  let data = db.get(FcStateKey.toOpenArray).valueOr:
+    return err()
+
+  # Ignore state decode error, might be from an earlier state version release
+  try:
+    return ok rlp.decode(data, FcState) # catch/accept rlp error
+  except RlpError:
+    discard
+
+  err()
+
+proc replayBlock(fc: ForkedChainRef;
+                 parent: BlockPos,
+                 bd: var BlockDesc): Result[void, string] =
+  let
+    parentFrame = parent.txFrame
+    txFrame = parentFrame.txFrameBegin
+
+  var receipts = fc.processBlock(parent.header, txFrame, bd.blk, bd.hash).valueOr:
+    txFrame.dispose()
+    return err(error)
+
+  fc.writeBaggage(bd.blk, bd.hash, txFrame, receipts)
+  fc.updateSnapshot(bd.blk, txFrame)
+
+  bd.txFrame = txFrame
+  bd.receipts = move(receipts)
+
+  ok()
+
+proc replayBranch(fc: ForkedChainRef;
+    parent: BlockPos;
+    branch: BranchRef;
+    start: int;): Result[void, string] =
+
+  var parent = parent
+  for i in start..<branch.len:
+    ?fc.replayBlock(parent, branch.blocks[i])
+    parent.index = i
+
+  # Use the index as a flag, if index == 0,
+  # it means it is already replayed.
+  branch.index = 0
+
+  for brc in fc.branches:
+    # Skip already replayed branch
+    if brc.index == 0:
+      continue
+
+    if brc.parent == branch:
+      doAssert(brc.tailNumber > branch.tailNumber)
+      doAssert((brc.tailNumber - branch.tailNumber) > 0)
+      parent.index = int(brc.tailNumber - branch.tailNumber - 1)
+      ?fc.replayBranch(parent, brc, 0)
+
+  ok()
+
+proc replay(fc: ForkedChainRef): Result[void, string] =
+  # Should have no parent
+  doAssert fc.baseBranch.index == 0
+  doAssert fc.baseBranch.parent.isNil
+
+  # Receipts for base block are loaded from database
+  # see `receiptsByBlockHash`
+  fc.baseBranch.blocks[0].txFrame = fc.baseTxFrame
+
+  # Replay, exclude base block, start from 1
+  let parent = BlockPos(
+    branch: fc.baseBranch
+  )
+  fc.replayBranch(parent, fc.baseBranch, 1)
+
+proc reset(fc: ForkedChainRef, branches: sink seq[BranchRef]) =
+  let baseBranch = branches[0]
+
+  fc.baseBranch   = baseBranch
+  fc.activeBranch = baseBranch
+  fc.branches     = move(branches)
+  fc.hashToBlock  = {baseBranch.tailHash: baseBranch.lastBlockPos}.toTable
+  fc.pendingFCU   = zeroHash32
+  fc.latestFinalizedBlockNumber = 0'u64
+  fc.txRecords.clear()
+
+proc deserialize*(fc: ForkedChainRef): Result[void, string] =
+  let state = fc.baseTxFrame.getState().valueOr:
+    return err("Cannot find previous FC state in database")
+
+  let prevBaseHash = fc.baseBranch.tailHash
+  var branches = move(fc.branches)
+
+  fc.branches.setLen(state.numBranches)
+  try:
+    for i in 0..<state.numBranches:
+      let data = fc.baseTxFrame.get(branchIndexKey(i)).valueOr:
+        return err("Cannot find branch data")
+      fc.branches[i] = rlp.decode(data, BranchRef)
+  except RlpError as exc:
+    fc.branches = move(branches)
+    return err(exc.msg)
+
+  fc.baseBranch = fc.branches[state.baseBranch]
+  fc.activeBranch = fc.branches[state.activeBranch]
+  fc.pendingFCU = state.pendingFCU
+  fc.latestFinalizedBlockNumber = state.latestFinalizedBlockNumber
+
+  if fc.baseBranch.tailHash != prevBaseHash:
+    fc.reset(branches)
+    return err("loaded baseHash != baseHash")
+
+  for tx in state.txRecords:
+    fc.txRecords[tx.txHash] = (tx.blockHash, tx.blockNumber)
+
+  for brc in fc.branches:
+    if brc.index > 0:
+      brc.parent = fc.branches[brc.index-1]
+
+    for i in 0..<brc.len:
+      fc.hashToBlock[brc.blocks[i].hash] = BlockPos(
+        branch: brc,
+        index : i,
+      )
+
+  fc.replay().isOkOr:
+    fc.reset(branches)
+    return err(error)
+
+  ok()
