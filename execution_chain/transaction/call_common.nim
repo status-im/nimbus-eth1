@@ -142,6 +142,10 @@ proc setupHost(call: CallParams, keepStack: bool): TransactionHost =
                          CallKind.Call,
       # flags: {},
       # depth: 0,
+      # Prevent underflow which can occur when gasLimit is less than intrinsicGas.
+      # Note that this is only a short term fix. In the longer term we need to
+      # implement validation on all fields in the Message before executing in the EVM.
+      # TODO: Implement full validation on all fields. See related issue: https://github.com/status-im/nimbus-eth1/issues/1524
       gas:             if call.gasLimit < intrinsicGas: 0.GasInt else: call.gasLimit - intrinsicGas,
       contractAddress: call.to,
       codeAddress:     call.to,
