@@ -74,7 +74,7 @@ proc init*(T: type HistoryExpiryRef, conf: NimbusConf, com: CommonRef): T =
       else:
         com.posBlock().get()
 
-  return T(
+  T(
     portalEnabled: portalEnabled,
     rpc: rpc,
     limit: limit
