@@ -87,7 +87,7 @@ proc execute*(ws: MaxInitcodeSizeSpec, env: TestEnv): bool =
     testCond not env.sendTx(tx):
       error "Client accepted tx exceeding the MAX_INITCODE_SIZE"
 
-    let res = env.client.txByHash(rlpHash(tx))
+    let res = env.client.txByHash(computeRlpHash(tx))
     testCond res.isErr:
       error "Invalid tx was not unknown to the client"
 

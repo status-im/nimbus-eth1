@@ -76,7 +76,7 @@ proc deriveLogs*(
   if txHashes.isSome:
     doAssert(txHashes.get.len == len(transactions))
 
-  let blkHash = header.blockHash
+  let blkHash = header.computeBlockHash
   var resLogs: seq[FilterLog] = @[]
   var logIndex = 0'u64
 
@@ -84,11 +84,11 @@ proc deriveLogs*(
     let logs = receipt.logs.filterIt(it.match(filterOptions.address, filterOptions.topics))
     if logs.len > 0:
       # TODO avoid recomputing entirely - we should have this cached somewhere
-      let txHash = 
+      let txHash =
         if txHashes.isSome:
-            txHashes.get[i] # cached txHashes 
+            txHashes.get[i] # cached txHashes
         else:
-          transactions[i].rlpHash
+          transactions[i].computeRlpHash
 
       for log in logs:
         let filterLog = FilterLog(

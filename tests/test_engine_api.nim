@@ -123,7 +123,7 @@ proc runBasicCycleTest(env: TestEnv): Result[void, string] =
     client = env.client
     header = ? client.latestHeader()
     update = ForkchoiceStateV1(
-      headBlockHash: header.blockHash
+      headBlockHash: header.computeBlockHash
     )
     time = getTime().toUnix
     attr = PayloadAttributes(
@@ -151,7 +151,7 @@ proc runNewPayloadV4Test(env: TestEnv): Result[void, string] =
     client = env.client
     header = ? client.latestHeader()
     update = ForkchoiceStateV1(
-      headBlockHash: header.blockHash
+      headBlockHash: header.computeBlockHash
     )
     time = getTime().toUnix
     attr = PayloadAttributes(

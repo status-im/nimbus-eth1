@@ -204,7 +204,7 @@ proc setupServerAPI*(api: ServerAPIRef, server: RpcServer, ctx: EthContext) =
     let blk = api.blockFromTag(blockTag).valueOr:
       return nil
 
-    let blockHash = blk.header.blockHash
+    let blockHash = blk.header.computeBlockHash
     return populateBlockObject(
       blockHash, blk, api.getTotalDifficulty(blockHash), fullTransactions
     )
@@ -226,8 +226,8 @@ proc setupServerAPI*(api: ServerAPIRef, server: RpcServer, ctx: EthContext) =
       chain: ForkedChainRef, header: Header, opts: FilterOptions
   ): Opt[seq[FilterLog]] {.gcsafe, raises: [].} =
     if headerBloomFilter(header, opts.address, opts.topics):
-      let 
-        blkHash = header.blockHash
+      let
+        blkHash = header.computeBlockHash
         blockBody = chain.blockBodyByHash(blkHash).valueOr:
           return Opt.none(seq[FilterLog])
         receipts = chain.receiptsByBlockHash(blkHash).valueOr:
@@ -308,7 +308,7 @@ proc setupServerAPI*(api: ServerAPIRef, server: RpcServer, ctx: EthContext) =
     ## Note: Use eth_getTransactionReceipt to get the contract address, after the transaction was mined, when you created a contract.
     let
       pooledTx = decodePooledTx(txBytes)
-      txHash = rlpHash(pooledTx)
+      txHash = computeRlpHash(pooledTx)
       sender = pooledTx.tx.recoverSender().get()
 
     api.txPool.addTx(pooledTx).isOkOr:
@@ -333,7 +333,7 @@ proc setupServerAPI*(api: ServerAPIRef, server: RpcServer, ctx: EthContext) =
     let
       header = api.headerFromTag(blockTag).valueOr:
         raise newException(ValueError, "Block not found")
-      headerHash = header.blockHash
+      headerHash = header.computeBlockHash
       txFrame = api.chain.txFrame(headerHash)
       res = rpcCallEvm(args, header, headerHash, api.com, txFrame).valueOr:
         raise newException(ValueError, "rpcCallEvm error: " & $error.code)
@@ -352,7 +352,7 @@ proc setupServerAPI*(api: ServerAPIRef, server: RpcServer, ctx: EthContext) =
         return nil
       receipts = api.chain.receiptsByBlockHash(blockHash).valueOr:
         return nil
-    
+
     var prevGasUsed = 0'u64
     for idx, receipt in receipts:
       let gasUsed = receipt.cumulativeGasUsed - prevGasUsed
@@ -372,7 +372,7 @@ proc setupServerAPI*(api: ServerAPIRef, server: RpcServer, ctx: EthContext) =
     let
       header = api.headerFromTag(blockId("latest")).valueOr:
         raise newException(ValueError, "Block not found")
-      headerHash = header.blockHash
+      headerHash = header.computeBlockHash
       txFrame = api.chain.txFrame(headerHash)
       #TODO: change 0 to configureable gas cap
       gasUsed = rpcEstimateGas(args, header, headerHash, api.com, txFrame, DEFAULT_RPC_GAS_CAP).valueOr:
@@ -514,7 +514,7 @@ proc setupServerAPI*(api: ServerAPIRef, server: RpcServer, ctx: EthContext) =
     api.txPool.addTx(pooledTx).isOkOr:
       raise newException(ValueError, $error)
 
-    let txHash = rlpHash(signedTx)
+    let txHash = computeRlpHash(signedTx)
     info "Submitted transaction",
       endpoint = "eth_sendTransaction",
       txHash = txHash,
@@ -530,21 +530,21 @@ proc setupServerAPI*(api: ServerAPIRef, server: RpcServer, ctx: EthContext) =
     ##
     ## data: hash of a transaction.
     ## Returns requested transaction information.
-    let 
+    let
       txHash = data
       res = api.txPool.getItem(txHash)
     if res.isOk:
       return populateTransactionObject(res.get().tx, Opt.none(Hash32), Opt.none(uint64))
 
-    let 
+    let
       (blockHash, txId) = api.chain.txDetailsByTxHash(txHash).valueOr:
         return nil
       blk = api.chain.blockByHash(blockHash).valueOr:
         return nil
-    
+
     if blk.transactions.len <= int(txId):
       return nil
-    
+
     return populateTransactionObject(
       blk.transactions[txId],
       Opt.some(blockHash),
@@ -587,7 +587,7 @@ proc setupServerAPI*(api: ServerAPIRef, server: RpcServer, ctx: EthContext) =
       return nil
 
     populateTransactionObject(
-      blk.transactions[index], Opt.some(blk.header.blockHash), Opt.some(blk.header.number), Opt.some(index)
+      blk.transactions[index], Opt.some(blk.header.computeBlockHash), Opt.some(blk.header.number), Opt.some(index)
     )
 
   server.rpc("eth_getProof") do(
@@ -614,7 +614,7 @@ proc setupServerAPI*(api: ServerAPIRef, server: RpcServer, ctx: EthContext) =
     let
       blk = api.blockFromTag(quantityTag).valueOr:
         raise newException(ValueError, "Block not found")
-      blkHash = blk.header.blockHash
+      blkHash = blk.header.computeBlockHash
       receipts = api.chain.receiptsByBlockHash(blkHash).valueOr:
         return Opt.none(seq[ReceiptObject])
 
@@ -674,9 +674,9 @@ proc setupServerAPI*(api: ServerAPIRef, server: RpcServer, ctx: EthContext) =
       return nil
 
     let
-      uncle = api.chain.blockByHash(blk.uncles[index].blockHash).valueOr:
+      uncle = api.chain.blockByHash(blk.uncles[index].computeBlockHash).valueOr:
         return nil
-      uncleHash = uncle.header.blockHash
+      uncleHash = uncle.header.computeBlockHash
 
     return populateBlockObject(
       uncleHash, uncle, api.getTotalDifficulty(uncleHash), false, true
@@ -698,9 +698,9 @@ proc setupServerAPI*(api: ServerAPIRef, server: RpcServer, ctx: EthContext) =
       return nil
 
     let
-      uncle = api.chain.blockByHash(blk.uncles[index].blockHash).valueOr:
+      uncle = api.chain.blockByHash(blk.uncles[index].computeBlockHash).valueOr:
         return nil
-      uncleHash = uncle.header.blockHash
+      uncleHash = uncle.header.computeBlockHash
 
     return populateBlockObject(
       uncleHash, uncle, api.getTotalDifficulty(uncleHash), false, true

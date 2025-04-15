@@ -147,5 +147,5 @@ proc createAccount*(v: Vault, amount: UInt256): Future[Address] {.async.} =
     let period = chronos.seconds(1)
     await sleepAsync(period)
 
-  let txHash = tx.rlpHash().data.toHex
+  let txHash = tx.computeRlpHash().data.toHex
   raise newException(ValueError, "could not fund account $2 in transaction $2" % [address.toHex, txHash])

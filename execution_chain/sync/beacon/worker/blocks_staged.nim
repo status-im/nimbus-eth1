@@ -88,7 +88,7 @@ proc fetchAndCheck(
     ctx.poolMode = true
     return false
   request.blockHashes[ivReq.len - 1] =
-    blk.blocks[offset + ivReq.len - 1].header.blockHash
+    blk.blocks[offset + ivReq.len - 1].header.computeBlockHash
 
   # Fetch bodies
   let bodies = block:

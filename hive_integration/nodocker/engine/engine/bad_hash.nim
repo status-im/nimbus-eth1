@@ -1,5 +1,5 @@
 # Nimbus
-# Copyright (c) 2023-2024 Status Research & Development GmbH
+# Copyright (c) 2023-2025 Status Research & Development GmbH
 # Licensed under either of
 #  * Apache License, version 2.0, ([LICENSE-APACHE](LICENSE-APACHE) or
 #    http://www.apache.org/licenses/LICENSE-2.0)
@@ -85,7 +85,7 @@ method execute(cs: BadHashOnNewPayload, env: TestEnv): bool =
         # We need to send an fcU to put the client in syncing state.
         let
           randomHeadBlock = Hash32.randomBytes()
-          latestHash = env.clMock.latestHeader.blockHash
+          latestHash = env.clMock.latestHeader.computeBlockHash
           fcU = ForkchoiceStateV1(
             headblockHash:      randomHeadBlock,
             safeblockHash:      latestHash,

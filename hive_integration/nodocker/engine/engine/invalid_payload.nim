@@ -438,7 +438,7 @@ method execute(cs: InvalidTxChainIDTest, env: TestEnv): bool =
   testCond pbRes
 
   # Verify that the latest payload built does NOT contain the invalid chain Tx
-  let txHash = shadow.invalidTx.rlpHash
+  let txHash = shadow.invalidTx.computeRlpHash
   if txInPayload(env.clMock.latestPayloadBuilt, txHash):
     fatal "Invalid chain ID tx was included in payload"
     return false

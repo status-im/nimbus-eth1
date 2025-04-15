@@ -258,6 +258,10 @@ proc parseTxJson(txo: TxObject, chainId: ChainId): Result[Transaction, string] =
     required(maxFeePerGas)
     optional(accessList)
     required(authorizationList)
+  of TxEip7873:
+    required(chainId)
+    optional(accessList)
+    required(initCodes)
 
   # Ignore chainId if txType == TxLegacy
   if tx.txType > TxLegacy and tx.chainId != chainId:

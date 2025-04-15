@@ -337,7 +337,7 @@ method execute(cs: InvalidMissingAncestorReOrgSyncTest, env: TestEnv): bool =
         fatal "TEST ISSUE - Secondary Node unable to reatrieve latest header: ", msg=res.error
 
       let head = res.get()
-      testCond head.blockHash == shadow.payloads[shadow.n-1].blockHash:
+      testCond head.computeBlockHash == shadow.payloads[shadow.n-1].blockHash:
         fatal "TEST ISSUE - Secondary Node has invalid blockHash",
           got=head.blockHash.short,
           want=shadow.payloads[shadow.n-1].blockHash.short,
