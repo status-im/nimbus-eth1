@@ -15,7 +15,7 @@ import
   ../../network/history/validation/
     [block_proof_historical_summaries, block_proof_historical_hashes_accumulator]
 
-from eth/common/eth_types_rlp import rlpHash
+from eth/rlp import computeRlpHash
 
 export results, block_proof_historical_hashes_accumulator, history_content
 
@@ -29,7 +29,7 @@ proc buildHeadersWithProof*(
         content = ?buildHeaderWithProof(header, epochRecord)
         contentKey = ContentKey(
           contentType: blockHeader,
-          blockHeaderKey: BlockKey(blockHash: header.rlpHash()),
+          blockHeaderKey: BlockKey(blockHash: header.computeRlpHash()),
         )
 
       blockHeadersWithProof.add((encode(contentKey).asSeq(), SSZ.encode(content)))
