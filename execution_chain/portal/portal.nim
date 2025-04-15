@@ -38,7 +38,7 @@ proc init*(T: type PortalRpc, url: string): T =
     provider: web3.provider
   )
 
-func isPortalRpcEnabled*(conf: NimbusConf): bool =
+func isPortalRpcEnabled(conf: NimbusConf): bool =
   conf.portalUrl.len > 0
 
 proc getPortalRpc(conf: NimbusConf): Opt[PortalRpc] =

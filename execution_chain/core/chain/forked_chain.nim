@@ -698,7 +698,7 @@ func isInMemory*(c: ForkedChainRef, blockHash: Hash32): bool =
 func isHistoryExpiryActive*(c: ForkedChainRef): bool =
   not c.portal.isNil
 
-func isPortalActive*(c: ForkedChainRef): bool =
+func isPortalActive(c: ForkedChainRef): bool =
   (not c.portal.isNil) and c.portal.portalEnabled
 
 func memoryBlock*(c: ForkedChainRef, blockHash: Hash32): BlockDesc =
