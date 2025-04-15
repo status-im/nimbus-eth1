@@ -38,7 +38,7 @@ proc init*(T: type PortalRpc, url: string): T =
     provider: web3.provider
   )
 
-proc isPortalRpcEnabled*(conf: NimbusConf): bool =
+func isPortalRpcEnabled*(conf: NimbusConf): bool =
   conf.portalUrl.len > 0
 
 proc getPortalRpc(conf: NimbusConf): Opt[PortalRpc] =
@@ -49,7 +49,7 @@ proc getPortalRpc(conf: NimbusConf): Opt[PortalRpc] =
 
 proc init*(T: type HistoryExpiryRef, conf: NimbusConf, com: CommonRef): T =
   # Portal is only available for mainnet
-  notice "Initiating portal with the following config",
+  notice "Initiating Portal with the following config",
     portalUrl = conf.portalUrl,
     historyExpiry = conf.historyExpiry,
     networkId = com.networkId,
@@ -66,7 +66,7 @@ proc init*(T: type HistoryExpiryRef, conf: NimbusConf, com: CommonRef): T =
         # Portal is only available for mainnet
         true
       else:
-        warn "Portal is only available for mainnet, skipping fetching data from portal"
+        warn "Portal is only available for mainnet, skipping fetching data from Portal"
         false
     limit = 
       if conf.historyExpiryLimit.isSome:
@@ -174,71 +174,71 @@ proc toBlockBody(blkObj: BlockObject): BlockBody =
   )
 
 proc getBlockByNumber*(historyExpiry: HistoryExpiryRef, blockNumber: uint64, fullTxs: bool = true): Result[Block, string] =
-  debug "Fetching block from portal"
+  debug "Fetching block from Portal"
   try:
     let 
       rpc = historyExpiry.rpcProvider.valueOr:
         return err("Portal RPC is not available")
       res = waitFor rpc.eth_getBlockByNumber(blockId(blockNumber), fullTxs)
     if res.isNil:
-      return err("Block not found in portal")
+      return err("Block not found in Portal")
     return ok(res.toBlock())
   except CatchableError as e:
-    debug "Failed to fetch block from portal", err=e.msg
+    debug "Failed to fetch block from Portal", err=e.msg
     return err(e.msg)
 
 proc getBlockByHash*(historyExpiry: HistoryExpiryRef, blockHash: Hash32, fullTxs: bool = true): Result[Block, string] =
-  debug "Fetching block from portal"
+  debug "Fetching block from Portal"
   try:
     let 
       rpc = historyExpiry.rpcProvider.valueOr:
         return err("Portal RPC is not available")
       res = waitFor rpc.eth_getBlockByHash(blockHash, fullTxs)
     if res.isNil:
-      return err("Block not found in portal")
+      return err("Block not found in Portal")
     return ok(res.toBlock())
   except CatchableError as e:
-    debug "Failed to fetch block from portal", err=e.msg
+    debug "Failed to fetch block from Portal", err=e.msg
     return err(e.msg)
 
 proc getBlockBodyByHash*(historyExpiry: HistoryExpiryRef, blockHash: Hash32, fullTxs: bool = true): Result[BlockBody, string] =
-  debug "Fetching block from portal"
+  debug "Fetching block from Portal"
   try:
     let 
       rpc = historyExpiry.rpcProvider.valueOr:
         return err("Portal RPC is not available")
       res = waitFor rpc.eth_getBlockByHash(blockHash, fullTxs)
     if res.isNil:
-      return err("Block not found in portal")
+      return err("Block not found in Portal")
     return ok(res.toBlockBody())
   except CatchableError as e:
-    debug "Failed to fetch block from portal", err=e.msg
+    debug "Failed to fetch block from Portal", err=e.msg
     return err(e.msg)
 
 proc getHeaderByHash*(historyExpiry: HistoryExpiryRef, blockHash: Hash32): Result[Header, string] =
-  debug "Fetching header from portal"
+  debug "Fetching header from Portal"
   try:
     let 
       rpc = historyExpiry.rpcProvider.valueOr:
         return err("Portal RPC is not available")
       res = waitFor rpc.eth_getBlockByHash(blockHash, false)
     if res.isNil:
-      return err("Header not found in portal")
+      return err("Header not found in Portal")
     return ok(res.toHeader())
   except CatchableError as e:
-    debug "Failed to fetch header from portal", err=e.msg
+    debug "Failed to fetch header from Portal", err=e.msg
     return err(e.msg)
 
 proc getHeaderByNumber*(historyExpiry: HistoryExpiryRef, blockNumber: uint64): Result[Header, string] =
-  debug "Fetching header from portal"
+  debug "Fetching header from Portal"
   try:
     let 
       rpc = historyExpiry.rpcProvider.valueOr:
         return err("Portal RPC is not available")
       res = waitFor rpc.eth_getBlockByNumber(blockId(blockNumber), false)
     if res.isNil:
-      return err("Header not found in portal")
+      return err("Header not found in Portal")
     return ok(res.toHeader())
   except CatchableError as e:
-    debug "Failed to fetch header from portal", err=e.msg
+    debug "Failed to fetch header from Portal", err=e.msg
     return err(e.msg)

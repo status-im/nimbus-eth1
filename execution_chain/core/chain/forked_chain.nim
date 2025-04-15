@@ -803,17 +803,14 @@ proc blockByNumber*(c: ForkedChainRef, number: BlockNumber): Result[Block, strin
     return err("Requested block number not exists: " & $number)
 
   if number <= c.baseBranch.tailNumber:
-    var unavailable = false
     let blk = c.baseTxFrame.getEthBlock(number)
     # Txs not there in db - Happens during era1/era import, when we don't store txs and receipts
     if blk.isErr or (blk.get.transactions.len == 0 and blk.get.header.transactionsRoot != emptyRoot):
-      unavailable = true
+      # Serves portal data if block not found in database
+      if c.isPortalActive:
+        return c.portal.getBlockByNumber(number)
     else:
       return blk
-    
-    # Serves portal data if block not found in d
-    if unavailable and c.isPortalActive:
-      return c.portal.getBlockByNumber(number)
 
   var branch = c.activeBranch
   while not branch.isNil:
