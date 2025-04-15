@@ -21,7 +21,7 @@ import
   ../validate,
   ../executor/process_block,
   ./forked_chain/[chain_desc, chain_branch],
-  ../../portal/portal
+  ../../portal/portal,
   ./forked_chain/[
     chain_desc,
     chain_branch,
