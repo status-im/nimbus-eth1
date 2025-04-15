@@ -81,7 +81,7 @@ proc makeBlk(txFrame: CoreDbTxRef, number: BlockNumber, parentBlk: Block): Block
 
   let header = Header(
     number     : number,
-    parentHash : parent.blockHash,
+    parentHash : parent.computeBlockHash,
     difficulty : 0.u256,
     timestamp  : parent.timestamp + 1,
     gasLimit   : parent.gasLimit,
@@ -120,7 +120,7 @@ template checkHeadHash(chain: ForkedChainRef, hashParam: Hash32) =
   check txFrame.getCanonicalHead().isOk
 
 func blockHash(x: Block): Hash32 =
-  x.header.blockHash
+  x.header.computeBlockHash
 
 proc wdWritten(c: ForkedChainRef, blk: Block): int =
   if blk.header.withdrawalsRoot.isSome:
@@ -170,7 +170,7 @@ proc forkedChainMain*() =
     var env = setupEnv()
     let
       cc = env.newCom
-      genesisHash = cc.genesisHeader.blockHash
+      genesisHash = cc.genesisHeader.computeBlockHash
       genesis = Block.init(cc.genesisHeader, BlockBody())
       baseTxFrame = cc.db.baseTxFrame()
       txFrame = baseTxFrame.txFrameBegin
@@ -499,16 +499,16 @@ proc forkedChainMain*() =
       # cursor
       check chain.headerByNumber(8).isErr
       check chain.headerByNumber(7).expect("OK").number == 7
-      check chain.headerByNumber(7).expect("OK").blockHash == blk7.blockHash
+      check chain.headerByNumber(7).expect("OK").computeBlockHash == blk7.blockHash
       # from db
       check chain.headerByNumber(3).expect("OK").number == 3
-      check chain.headerByNumber(3).expect("OK").blockHash == blk3.blockHash
+      check chain.headerByNumber(3).expect("OK").computeBlockHash == blk3.blockHash
       # base
       check chain.headerByNumber(4).expect("OK").number == 4
-      check chain.headerByNumber(4).expect("OK").blockHash == blk4.blockHash
+      check chain.headerByNumber(4).expect("OK").computeBlockHash == blk4.blockHash
       # from cache
       check chain.headerByNumber(5).expect("OK").number == 5
-      check chain.headerByNumber(5).expect("OK").blockHash == blk5.blockHash
+      check chain.headerByNumber(5).expect("OK").computeBlockHash == blk5.blockHash
       check chain.validate info & " (9)"
     test "3 branches, alternating imports":
       const info = "3 branches, alternating imports"

@@ -210,3 +210,5 @@ func fromBitList*(T: type ContentKeysAcceptList, bitList: ContentKeysBitList): T
       discard contentKeysAcceptList.add(Accepted)
     else:
       discard contentKeysAcceptList.add(DeclinedGeneric)
+
+  contentKeysAcceptList

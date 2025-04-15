@@ -154,13 +154,13 @@ func toInput(prevAlloc: JsonString,
 func collectHashes(genesis: Block, blocks: openArray[Block]): BCTHashes =
   result.hashes.add BCTHash(
     number: w3Qty(genesis.header.number),
-    hash: rlpHash(genesis.header),
+    hash: computeRlpHash(genesis.header),
   )
 
   for blk in blocks:
     result.hashes.add BCTHash(
       number: w3Qty(blk.header.number),
-      hash: rlpHash(blk.header),
+      hash: computeRlpHash(blk.header),
     )
 
 func eth(n: int): UInt256 {.compileTime.} =

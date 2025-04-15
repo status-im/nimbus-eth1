@@ -1,5 +1,5 @@
 # Nimbus
-# Copyright (c) 2021-2024 Status Research & Development GmbH
+# Copyright (c) 2021-2025 Status Research & Development GmbH
 # Licensed under either of
 #  * Apache License, version 2.0, ([LICENSE-APACHE](LICENSE-APACHE))
 #  * MIT license ([LICENSE-MIT](LICENSE-MIT))
@@ -85,7 +85,7 @@ proc balanceAndNonceAtTest(t: TestEnv): Future[TestStatus] {.async.} =
   let tx = vault.signTx(sourceAddr, sourceNonce, targetAddr, amount, gasLimit, gasPrice)
   inc sourceNonce
 
-  let txHash = rlpHash(tx)
+  let txHash = computeRlpHash(tx)
   echo "BalanceAt: send $1 wei from 0x$2 to 0x$3 in 0x$4" % [
     $tx.tx.value, sourceAddr.toHex, targetAddr.toHex, txHash.data.toHex]
 

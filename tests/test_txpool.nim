@@ -186,7 +186,6 @@ proc txPoolMain*() =
       xp = env.xp
       mx = env.sender
       chain = env.chain
-      com = env.com
 
     xp.prevRandao = prevRandao
     xp.feeRecipient = feeRecipient
@@ -556,11 +555,11 @@ proc txPoolMain*() =
       check env.chain.forkChoice(latestHash, latestHash).isOk
 
       let hs = [
-        rlpHash(tx1),
-        rlpHash(tx2),
-        rlpHash(tx3),
-        rlpHash(tx4),
-        rlpHash(tx5),
+        computeRlpHash(tx1),
+        computeRlpHash(tx2),
+        computeRlpHash(tx3),
+        computeRlpHash(tx4),
+        computeRlpHash(tx5),
       ]
 
       let res = chain.blockByNumber(chain.latestHeader.number - 1)
@@ -713,7 +712,7 @@ proc txPoolMain*() =
 
       xp.checkAddTx(tx1bad, txErrorOversized)
       xp.checkAddTx(tx2bad, txErrorOversized)
-      xp.checkAddTx(tx2bad, txErrorOversized)
+      xp.checkAddTx(tx3bad, txErrorOversized)
 
       # exceeds max init code size
       xp.checkAddTx(tx4init, txErrorBasicValidation)

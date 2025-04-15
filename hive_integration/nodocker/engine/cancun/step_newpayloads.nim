@@ -103,7 +103,7 @@ proc verifyPayload(step: NewPayloads,
       totalBlobCount += blobCount
 
       # Retrieve receipt from client
-      let r = client.txReceipt(tx.rlpHash)
+      let r = client.txReceipt(tx.computeRlpHash)
       let expectedBlobGasUsed = blobCount.uint64 * GAS_PER_BLOB
 
       r.expectBlobGasUsed(expectedBlobGasUsed)
