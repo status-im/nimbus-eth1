@@ -11,13 +11,12 @@
 {.push raises: [].}
 
 import
-  std/[deques, tables],
-  ./chain_branch,
-  ./block_quarantine,
+  std/[tables],
   ../../../common,
-  ../../../db/core_db
+  ./block_quarantine,
+  ./chain_branch
 
-export deques, tables
+export tables
 
 type
   ForkedChainRef* = ref object
@@ -66,7 +65,9 @@ type
       # to move the base. And the bulk writing can works
       # efficiently.
 
-# ----------------
+# ------------------------------------------------------------------------------
+# These functions are private to ForkedChainRef
+# ------------------------------------------------------------------------------
 
 func txRecords*(c: ForkedChainRef): var Table[Hash32, (Hash32, uint64)] =
   ## Avoid clash with `forked_chain.txRecords()`

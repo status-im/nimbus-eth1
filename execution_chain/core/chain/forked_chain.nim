@@ -16,15 +16,11 @@ import
   std/[tables, algorithm],
   ../../common,
   ../../db/core_db,
-  ../../evm/types,
-  ../../evm/state,
-  ../validate,
-  ../executor/process_block,
   ./forked_chain/[
     chain_desc,
     chain_branch,
-    block_quarantine
-  ]
+    chain_private,
+    block_quarantine]
 
 from std/sequtils import mapIt
 
@@ -53,32 +49,6 @@ func calculateNewBase(c: ForkedChainRef;
 # Private functions
 # ------------------------------------------------------------------------------
 
-proc processBlock(c: ForkedChainRef,
-                  parent: Header,
-                  txFrame: CoreDbTxRef,
-                  blk: Block, blkHash: Hash32): Result[seq[Receipt], string] =
-  template header(): Header =
-    blk.header
-
-  let vmState = BaseVMState()
-  vmState.init(parent, header, c.com, txFrame)
-
-  ?c.com.validateHeaderAndKinship(blk, vmState.parent, txFrame)
-
-  ?vmState.processBlock(
-    blk,
-    skipValidation = false,
-    skipReceipts = false,
-    skipUncles = true,
-    taskpool = c.com.taskpool,
-  )
-
-  # We still need to write header to database
-  # because validateUncles still need it
-  ?txFrame.persistHeader(blkHash, header, c.com.startOfHistory)
-
-  ok(move(vmState.receipts))
-
 func updateBranch(c: ForkedChainRef,
          parent: BlockPos,
          blk: Block,
@@ -95,21 +65,6 @@ func updateBranch(c: ForkedChainRef,
   c.hashToBlock[blkHash] = newBranch.lastBlockPos
   c.branches.add(newBranch)
   c.activeBranch = newBranch
-
-proc writeBaggage(c: ForkedChainRef,
-        blk: Block, blkHash: Hash32,
-        txFrame: CoreDbTxRef,
-        receipts: openArray[Receipt]) =
-  template header(): Header =
-    blk.header
-
-  txFrame.persistTransactions(header.number, header.txRoot, blk.transactions)
-  txFrame.persistReceipts(header.receiptsRoot, receipts)
-  discard txFrame.persistUncles(blk.uncles)
-  if blk.withdrawals.isSome:
-    txFrame.persistWithdrawals(
-      header.withdrawalsRoot.expect("WithdrawalsRoot should be verified before"),
-      blk.withdrawals.get)
 
 proc validateBlock(c: ForkedChainRef,
           parent: BlockPos,
@@ -154,22 +109,7 @@ proc validateBlock(c: ForkedChainRef,
 
   c.writeBaggage(blk, blkHash, txFrame, receipts)
 
-  let pos = c.lastSnapshotPos
-  c.lastSnapshotPos = (c.lastSnapshotPos + 1) mod c.lastSnapshots.len
-  if not isNil(c.lastSnapshots[pos]):
-    # Put a cap on frame memory usage by clearing out the oldest snapshots -
-    # this works at the expense of making building on said branches slower.
-    # 10 is quite arbitrary.
-    c.lastSnapshots[pos].clearSnapshot()
-    c.lastSnapshots[pos] = nil
-
-  # Block fully written to txFrame, mark it as such
-  # Checkpoint creates a snapshot of ancestor changes in txFrame - it is an
-  # expensive operation, specially when creating a new branch (ie when blk
-  # is being applied to a block that is currently not a head)
-  txFrame.checkpoint(blk.header.number)
-
-  c.lastSnapshots[pos] = txFrame
+  c.updateSnapshot(blk, txFrame)
 
   c.updateBranch(parent, blk, blkHash, txFrame, move(receipts))
 
@@ -330,8 +270,6 @@ proc removeBlockFromCache(c: ForkedChainRef, bd: BlockDesc) =
     if v == bd.txFrame:
       v = nil
 
-  bd.txFrame.dispose()
-
 proc updateHead(c: ForkedChainRef, head: BlockPos) =
   ## Update head if the new head is different from current head.
   ## All branches with block number greater than head will be removed too.
@@ -446,21 +384,21 @@ proc updateBase(c: ForkedChainRef, newBase: BlockPos) =
     # No update, return
     return
 
-  let
-    # Cache to prevent crash after we shift
-    # the blocks
-    newBaseHash = newBase.hash
-
   var
     branch = newBase.branch
     number = newBase.number - 1
     count  = 0
 
-  let nextIndex  = int(newBase.number - branch.tailNumber)
+  let
+    # Cache to prevent crash after we shift
+    # the blocks
+    newBaseHash = newBase.hash
+    nextIndex   = int(newBase.number - branch.tailNumber)
+    baseTxFrame = newBase.txFrame
 
   # Persist the new base block - this replaces the base tx in coredb!
-  c.com.db.persist(newBase.txFrame)
-  c.baseTxFrame = newBase.txFrame
+  c.com.db.persist(baseTxFrame)
+  c.baseTxFrame = baseTxFrame
 
   disposeBlocks(number, branch)
 
@@ -794,8 +732,9 @@ proc blockHeader*(c: ForkedChainRef, blk: BlockHashOrNumber): Result[Header, str
   c.headerByNumber(blk.number)
 
 proc receiptsByBlockHash*(c: ForkedChainRef, blockHash: Hash32): Result[seq[Receipt], string] =
-  c.hashToBlock.withValue(blockHash, loc):
-    return ok(loc[].receipts)
+  if blockHash != c.baseBranch.tailHash:
+    c.hashToBlock.withValue(blockHash, loc):
+      return ok(loc[].receipts)
 
   let header = c.baseTxFrame.getBlockHeader(blockHash).valueOr:
     return err("Block header not found")
