@@ -18,7 +18,7 @@ import
     block_proof_historical_summaries,
   ]
 
-from eth/common/eth_types_rlp import rlpHash
+from eth/rlp import computeRlpHash
 
 export block_proof_historical_hashes_accumulator
 
@@ -28,7 +28,7 @@ type HistoryAccumulators* = object
   historicalSummaries*: HistoricalSummaries
 
 func validateHeader(header: Header, blockHash: Hash32): Result[void, string] =
-  if not (header.rlpHash() == blockHash):
+  if not (header.computeRlpHash() == blockHash):
     err("Header hash does not match")
   else:
     ok()
@@ -74,7 +74,7 @@ func verifyBlockHeaderProof*(
     #   return err("Failed decoding historical_summaries based block proof: " & error)
 
     # if a.historicalSummaries.verifyProof(
-    #   proof, Digest(data: header.rlpHash().data), cfg
+    #   proof, Digest(data: header.computeRlpHash().data), cfg
     # ):
     #   ok()
     # else:
@@ -85,7 +85,7 @@ func verifyBlockHeaderProof*(
     #   return err("Failed decoding historical_summaries based block proof: " & error)
 
     # if a.historicalSummaries.verifyProof(
-    #   proof, Digest(data: header.rlpHash().data), cfg
+    #   proof, Digest(data: header.computeRlpHash().data), cfg
     # ):
     #   ok()
     # else:
@@ -95,7 +95,7 @@ func verifyBlockHeaderProof*(
     let proof = decodeSsz(proof.asSeq(), BlockProofHistoricalRoots).valueOr:
       return err("Failed decoding historical_roots based block proof: " & error)
 
-    if a.historicalRoots.verifyProof(proof, Digest(data: header.rlpHash().data)):
+    if a.historicalRoots.verifyProof(proof, Digest(data: header.computeRlpHash().data)):
       ok()
     else:
       err("Block proof verification failed (historical roots)")
