@@ -128,9 +128,8 @@ proc getBlockBodies*(ctx: EthWireRef,
         trace "handlers.getBlockBodies: blockBody older than expiry limit", blockHash
         continue
     
-    let blkBody = blk.body
-    totalBytes += getEncodedLength(blkBody)
-    list.add blkBody
+    totalBytes += getEncodedLength(blk.body)
+    list.add blk.body
 
     if list.len >= MAX_BODIES_SERVE or
        totalBytes > SOFT_RESPONSE_LIMIT:
