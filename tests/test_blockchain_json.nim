@@ -78,7 +78,7 @@ proc executeCase(node: JsonNode): bool =
     return false
 
   var c = ForkedChainRef.init(com, persistBatchSize = 0)
-  if c.latestHash != env.genesisHeader.blockHash:
+  if c.latestHash != env.genesisHeader.computeBlockHash:
     debugEcho "Genesis block hash in database is different with expected genesis block hash"
     return false
 
@@ -86,7 +86,7 @@ proc executeCase(node: JsonNode): bool =
   for blk in env.blocks:
     let res = c.importBlock(blk.blk)
     if res.isOk:
-      if env.lastBlockHash == blk.blk.header.blockHash:
+      if env.lastBlockHash == blk.blk.header.computeBlockHash:
         lastStateRoot = blk.blk.header.stateRoot
       if blk.badBlock:
         debugEcho "A bug? bad block imported"

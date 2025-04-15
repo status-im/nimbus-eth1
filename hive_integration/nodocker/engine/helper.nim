@@ -19,7 +19,7 @@ import
 proc txInPayload*(payload: ExecutionPayload, txHash: Hash32): bool =
   for txBytes in payload.transactions:
     let currTx = rlp.decode(seq[byte](txBytes), Transaction)
-    if rlpHash(currTx) == txHash:
+    if computeRlpHash(currTx) == txHash:
       return true
 
 proc checkPrevRandaoValue*(client: RpcClient, expectedPrevRandao: Bytes32, blockNumber: uint64): bool =

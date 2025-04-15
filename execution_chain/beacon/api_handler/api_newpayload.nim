@@ -88,7 +88,8 @@ template validatePayload(apiVersion, payloadVersion, payload) =
         "excessBlobGas is expected from execution payload")
 
 # https://github.com/ethereum/execution-apis/blob/40088597b8b4f48c45184da002e27ffc3c37641f/src/engine/prague.md#request
-template validateExecutionRequest(requests: openArray[seq[byte]], apiVersion: Version) =
+template validateExecutionRequest(blockHash: Hash32,
+            requests: openArray[seq[byte]], apiVersion: Version) =
   var previousRequestType = -1
   for request in requests:
     if request.len == 0:
@@ -108,7 +109,7 @@ template validateExecutionRequest(requests: openArray[seq[byte]], apiVersion: Ve
        DEPOSIT_REQUEST_TYPE,
        WITHDRAWAL_REQUEST_TYPE,
        CONSOLIDATION_REQUEST_TYPE]:
-      return invalidStatus(payload.blockHash, "Invalid execution request type" & $requestType)
+      return invalidStatus(blockHash, "Invalid execution request type" & $requestType)
 
     previousRequestType = requestType.int
 
@@ -134,7 +135,7 @@ proc newPayload*(ben: BeaconEngineRef,
       raise invalidParams("newPayload" & $apiVersion &
         ": executionRequests is expected from execution payload")
 
-    validateExecutionRequest(executionRequests.value, apiVersion)
+    validateExecutionRequest(payload.blockHash, executionRequests.value, apiVersion)
 
   let
     com = ben.com
@@ -211,7 +212,7 @@ proc newPayload*(ben: BeaconEngineRef,
     warn "Invalid timestamp",
       number = header.number, parentNumber = parent.number,
       parent = parent.timestamp, header = header.timestamp
-    return invalidStatus(parent.blockHash, "Invalid timestamp")
+    return invalidStatus(parent.computeBlockHash, "Invalid timestamp")
 
   if not chain.haveBlockAndState(header.parentHash):
     chain.quarantine.addOrphan(blockHash, blk)

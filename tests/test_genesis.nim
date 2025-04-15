@@ -42,20 +42,20 @@ proc genesisTest() =
   suite "Genesis":
     test "Correct mainnet hash":
       let b = makeGenesis(MainNet)
-      check(b.blockHash == hash32"D4E56740F876AEF8C010B86A40D5F56745A118D0906A34E69AEC8C0DB1CB8FA3")
+      check(b.computeBlockHash == hash32"D4E56740F876AEF8C010B86A40D5F56745A118D0906A34E69AEC8C0DB1CB8FA3")
 
     test "Correct sepolia hash":
       let b = makeGenesis(SepoliaNet)
-      check b.blockHash == hash32"25a5cc106eea7138acab33231d7160d69cb777ee0c2c553fcddf5138993e6dd9"
+      check b.computeBlockHash == hash32"25a5cc106eea7138acab33231d7160d69cb777ee0c2c553fcddf5138993e6dd9"
 
     test "Correct holesky hash":
       let b = makeGenesis(HoleskyNet)
-      check b.blockHash == hash32"b5f7f912443c940f21fd611f12828d75b534364ed9e95ca4e307729a4661bde4"
+      check b.computeBlockHash == hash32"b5f7f912443c940f21fd611f12828d75b534364ed9e95ca4e307729a4661bde4"
       check b.stateRoot == hash32"69D8C9D72F6FA4AD42D4702B433707212F90DB395EB54DC20BC85DE253788783"
 
     test "Correct hoodi hash":
       let b = makeGenesis(HoodiNet)
-      check b.blockHash == hash32"bbe312868b376a3001692a646dd2d7d1e4406380dfd86b98aa8a34d1557c971b"
+      check b.computeBlockHash == hash32"bbe312868b376a3001692a646dd2d7d1e4406380dfd86b98aa8a34d1557c971b"
       check b.stateRoot == hash32"da87d7f5f91c51508791bbcbd4aa5baf04917830b86985eeb9ad3d5bfb657576"
 
 proc customGenesisTest() =
@@ -76,7 +76,7 @@ proc customGenesisTest() =
       let stateRoot = hash32"3b84f313bfd49c03cc94729ade2e0de220688f813c0c895a99bd46ecc9f45e1e"
       let genesisHash = hash32"a28d8d73e087a01d09d8cb806f60863652f30b6b6dfa4e0157501ff07d422399"
       check com.genesisHeader.stateRoot == stateRoot
-      check com.genesisHeader.blockHash == genesisHash
+      check com.genesisHeader.computeBlockHash == genesisHash
       check com.proofOfStake(com.genesisHeader, com.db.baseTxFrame()) == false
 
     test "Devnet5.json (aka Kiln in all but chainId and TTD)":
@@ -86,7 +86,7 @@ proc customGenesisTest() =
       let stateRoot = hash32"52e628c7f35996ba5a0402d02b34535993c89ff7fc4c430b2763ada8554bee62"
       let genesisHash = hash32"51c7fe41be669f69c45c33a56982cbde405313342d9e2b00d7c91a7b284dd4f8"
       check com.genesisHeader.stateRoot == stateRoot
-      check com.genesisHeader.blockHash == genesisHash
+      check com.genesisHeader.computeBlockHash == genesisHash
       check com.proofOfStake(com.genesisHeader, com.db.baseTxFrame()) == false
 
     test "Mainnet shadow fork 1":
@@ -97,7 +97,7 @@ proc customGenesisTest() =
       let genesisHash = hash32"d4e56740f876aef8c010b86a40d5f56745a118d0906a34e69aec8c0db1cb8fa3"
       let ttd = "46_089_003_871_917_200_000_000".parse(UInt256)
       check com.genesisHeader.stateRoot == stateRoot
-      check com.genesisHeader.blockHash == genesisHash
+      check com.genesisHeader.computeBlockHash == genesisHash
       check com.ttd.get == ttd
       check com.proofOfStake(com.genesisHeader, com.db.baseTxFrame()) == false
 
@@ -110,7 +110,7 @@ proc customGenesisTest() =
       let genesisHash = hash32"d4e56740f876aef8c010b86a40d5f56745a118d0906a34e69aec8c0db1cb8fa3"
       let ttd = "46_089_003_871_917_200_000_000".parse(UInt256)
       check com.genesisHeader.stateRoot == stateRoot
-      check com.genesisHeader.blockHash == genesisHash
+      check com.genesisHeader.computeBlockHash == genesisHash
       check com.ttd.get == ttd
       check com.proofOfStake(com.genesisHeader, com.db.baseTxFrame()) == false
       check cg.config.mergeNetsplitBlock.isSome
@@ -123,7 +123,7 @@ proc customGenesisTest() =
       let stateRoot = hash32"69D8C9D72F6FA4AD42D4702B433707212F90DB395EB54DC20BC85DE253788783"
       let genesisHash = hash32"b5f7f912443c940f21fd611f12828d75b534364ed9e95ca4e307729a4661bde4"
       check com.genesisHeader.stateRoot == stateRoot
-      check com.genesisHeader.blockHash == genesisHash
+      check com.genesisHeader.computeBlockHash == genesisHash
       check com.chainId == 17000.u256
 
     test "Geth Holesky":
@@ -134,7 +134,7 @@ proc customGenesisTest() =
       let stateRoot = hash32"69D8C9D72F6FA4AD42D4702B433707212F90DB395EB54DC20BC85DE253788783"
       let genesisHash = hash32"b5f7f912443c940f21fd611f12828d75b534364ed9e95ca4e307729a4661bde4"
       check com.genesisHeader.stateRoot == stateRoot
-      check com.genesisHeader.blockHash == genesisHash
+      check com.genesisHeader.computeBlockHash == genesisHash
       check com.chainId == 17000.u256
 
     test "Prague genesis":
