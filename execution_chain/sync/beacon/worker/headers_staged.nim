@@ -41,8 +41,15 @@ proc headerStagedResolveFinalizer*(
     let fin = (await buddy.headersFetchReversed(iv, finHash, info)).valueOr:
       # Postponed, try later
       ctx.pool.finRequest = finHash
+      ctx.pool.failedPeers.incl buddy.peerID
+
       debug info & ": finalised hash not yet resolved", peer=buddy.peer,
-        finHash=finHash.short
+        finHash=finHash.short, hdrErrors=buddy.hdrErrors,
+        failedPeers=ctx.pool.failedPeers.len
+
+      # Check failed peers whether there was a limit reaced and a reset is
+      # necessary.
+      ctx.updateFailedPeersFromResolvingFinalizer info
       return
 
     ctx.updateFromHibernateSetTarget(fin[0], info)
