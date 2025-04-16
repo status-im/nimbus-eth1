@@ -91,7 +91,7 @@ type
 # ------------------------------------------------------------------------------
 
 func setForkId(com: CommonRef, genesis: Header) =
-  com.genesisHash = genesis.blockHash
+  com.genesisHash = genesis.computeBlockHash
   let genesisCRC = crc32(0, com.genesisHash.data)
   com.forkIdCalculator = initForkIdCalculator(
     com.forkTransitionTable,
@@ -111,7 +111,7 @@ proc initializeDb(com: CommonRef) =
     txFrame.hasKeyRc(key).expect "valid bool"
   if canonicalHeadHashKey().toOpenArray notin txFrame:
     info "Writing genesis to DB",
-      blockHash = com.genesisHeader.rlpHash,
+      blockHash = com.genesisHeader.computeBlockHash,
       stateRoot = com.genesisHeader.stateRoot,
       difficulty = com.genesisHeader.difficulty,
       gasLimit = com.genesisHeader.gasLimit,
@@ -145,9 +145,9 @@ proc initializeDb(com: CommonRef) =
       quit 1
 
   info "Database initialized",
-    base = (base.blockHash, base.number),
-    finalized = (finalized.blockHash, finalized.number),
-    head = (head.blockHash, head.number)
+    base = (base.computeBlockHash, base.number),
+    finalized = (finalized.computeBlockHash, finalized.number),
+    head = (head.computeBlockHash, head.number)
 
 proc init(com         : CommonRef,
           db          : CoreDbRef,

@@ -123,7 +123,7 @@ template runGenesisTimeIdTests() =
   let
     time       = 1690475657'u64
     genesis    = common.Header(timestamp: time.EthTime)
-    genesisCRC = crc32(0, genesis.blockHash.data)
+    genesisCRC = crc32(0, genesis.computeBlockHash.data)
     cases = [
       # Shanghai active before genesis, skip
       (c: config(time-1, time+1), want: (crc: genesisCRC, next: time + 1)),

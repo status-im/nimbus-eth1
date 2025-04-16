@@ -287,7 +287,7 @@ proc fcUpdateFromCL(fc: ForkedCacheRef; h: Header; f: Hash32) =
         mode:     notified,
         ante:     h,
         head:     h,
-        headHash: h.blockHash(),
+        headHash: h.computeBlockHash(),
         finHash:  f)
 
       # Inform client app about that a new session is available.
@@ -323,7 +323,7 @@ proc accept*(fc: ForkedCacheRef; fin: Header): bool =
      fc.baseNum < fin.number and
      fin.number <= fc.session.head.number:
 
-    let finHash = fin.blockHash()
+    let finHash = fin.computeBlockHash()
     if fc.session.finHash != finHash:
       return false
 
@@ -494,7 +494,7 @@ proc fcHeaderPut*(
         return ok()
 
       # Check parent link
-      let hash = hdr.blockHash
+      let hash = hdr.computeBlockHash
       if vetted[^1].parent != hash:
         # There is no need to clean up as nothing was store on the DB
         return err("Parent hash mismatch for rev[" & $n & "].number=" &

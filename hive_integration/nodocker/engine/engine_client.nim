@@ -471,7 +471,7 @@ proc sendTransaction*(
   wrapTry:
     let encodedTx = rlp.encode(tx)
     let res = waitFor client.eth_sendRawTransaction(encodedTx)
-    let txHash = rlpHash(tx)
+    let txHash = computeRlpHash(tx)
     let getHash = res
     if txHash != getHash:
       return err("sendTransaction: tx hash mismatch")
@@ -570,7 +570,7 @@ proc debugPrevRandaoTransaction*(
     tx: PooledTransaction,
     expectedPrevRandao: Bytes32): Result[void, string] =
   wrapTry:
-    let hash = tx.rlpHash
+    let hash = tx.computeRlpHash
     # we only interested in stack, disable all other elems
     let opts = TraceOpts(
       disableStorage: true,

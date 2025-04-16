@@ -24,8 +24,6 @@ import
   ../../rpc/[portal_rpc_client, rpc_portal_history_api],
   ../test_helpers
 
-from eth/common/eth_types_rlp import rlpHash
-
 type HistoryNode = ref object
   discoveryProtocol*: discv5_protocol.Protocol
   historyNetwork*: HistoryNetwork
@@ -143,7 +141,7 @@ procSuite "Portal RPC Client":
     let
       tc = await setupTest(rng)
       blockHeader = Header(number: 100)
-      blockHash = blockHeader.rlpHash()
+      blockHash = blockHeader.computeRlpHash()
 
     # Test content not found
     block:
@@ -179,7 +177,7 @@ procSuite "Portal RPC Client":
     let
       tc = await setupTest(rng)
       blockHeader = Header(number: 200)
-      blockHash = blockHeader.rlpHash()
+      blockHash = blockHeader.computeRlpHash()
 
     # Test content not found
     block:
@@ -206,7 +204,7 @@ procSuite "Portal RPC Client":
       tc = await setupTest(rng)
       blockHeader = Header(number: 300)
       blockBody = BlockBody()
-      blockHash = blockHeader.rlpHash()
+      blockHash = blockHeader.computeRlpHash()
 
     # Test content not found
     block:
@@ -234,7 +232,7 @@ procSuite "Portal RPC Client":
       tc = await setupTest(rng)
       blockHeader = Header(number: 300)
       blockBody = BlockBody()
-      blockHash = blockHeader.rlpHash()
+      blockHash = blockHeader.computeRlpHash()
 
     # Test content not found
     block:
@@ -262,7 +260,7 @@ procSuite "Portal RPC Client":
       tc = await setupTest(rng)
       blockHeader = Header(number: 300)
       receipts = @[Receipt()]
-      blockHash = blockHeader.rlpHash()
+      blockHash = blockHeader.computeRlpHash()
 
     # Test content not found
     block:
@@ -290,7 +288,7 @@ procSuite "Portal RPC Client":
       tc = await setupTest(rng)
       blockHeader = Header(number: 300)
       receipts = @[Receipt()]
-      blockHash = blockHeader.rlpHash()
+      blockHash = blockHeader.computeRlpHash()
 
     # Test content not found
     block:

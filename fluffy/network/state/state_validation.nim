@@ -1,5 +1,5 @@
 # Fluffy
-# Copyright (c) 2024 Status Research & Development GmbH
+# Copyright (c) 2024-2025 Status Research & Development GmbH
 # Licensed and distributed under either of
 #   * MIT license (license terms in the root directory or at https://opensource.org/licenses/MIT).
 #   * Apache v2 license (license terms in the root directory or at https://www.apache.org/licenses/LICENSE-2.0).
@@ -10,8 +10,6 @@
 import results, eth/rlp, eth/common/hashes, ./state_content, ./state_utils
 
 export results, state_content, hashes
-
-from eth/common/eth_types_rlp import rlpHash
 
 template hashEquals(value: TrieNode | Bytecode, expectedHash: Hash32): bool =
   keccak256(value.asSeq()) == expectedHash
@@ -26,7 +24,7 @@ func isValidNextNode(
   let nextHash =
     if hashOrShortRlp.isList():
       # is a short node
-      rlpHash(hashOrShortRlp)
+      computeRlpHash(hashOrShortRlp)
     else:
       let hash = hashOrShortRlp.toBytes()
       if hash.len() != 32:

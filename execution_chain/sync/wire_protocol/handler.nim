@@ -54,7 +54,7 @@ proc getStatus*(ctx: EthWireRef): EthState =
   EthState(
     totalDifficulty: txFrame.headTotalDifficulty,
     genesisHash: com.genesisHash,
-    bestBlockHash: bestBlock.blockHash,
+    bestBlockHash: bestBlock.computeBlockHash,
     forkId: ChainForkId(
       forkHash: forkId.crc.toBytesBE,
       forkNext: forkId.nextFork

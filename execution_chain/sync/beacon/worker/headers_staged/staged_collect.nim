@@ -206,7 +206,7 @@ proc collectAndStageOnMemQueue*(
         break fetchHeadersBody           # error => exit block
 
       # Check/update hashes
-      let hash0 = rev[0].blockHash
+      let hash0 = rev[0].computeBlockHash
       if lhc.revHdrs.len == 0:
         lhc.hash = hash0
       else:
