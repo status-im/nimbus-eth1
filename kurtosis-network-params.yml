@@ -19,7 +19,6 @@ participants:
 additional_services:
   - spamoor
   - assertoor
-  - spamoor_blob
 mev_type: null
 assertoor_params:
   image: "ethpandaops/assertoor"
