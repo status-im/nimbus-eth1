@@ -22,11 +22,13 @@ import
 proc addEthHandlerCapability*(
     node: EthereumNode;
     txPool: TxPoolRef;
-      ) =
+      ): EthWireRef =
   ## Install `eth` handlers.
+  let wire = EthWireRef.new(txPool, node)
   node.addCapability(
     requester.eth68,
-    EthWireRef.new(txPool))
+    wire)
+  wire
 
 # ------------------------------------------------------------------------------
 # End
