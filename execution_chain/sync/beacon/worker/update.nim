@@ -11,6 +11,7 @@
 {.push raises:[].}
 
 import
+  std/sets,
   pkg/[chronicles, chronos],
   pkg/eth/common,
   ../worker_desc,
@@ -220,6 +221,10 @@ proc updateFromHibernateSetTarget*(
   ## If in hibernate mode, accept a cache session and activate syncer
   ##
   if ctx.hibernate:
+    # Clear cul-de-sac prevention registry. This applies to both, successful
+    # access handshake or error.
+    ctx.pool.failedPeers.clear()
+
     if ctx.hdrCache.accept(fin):
       let (b, t) = (ctx.chain.baseNumber, ctx.head.number)
 
@@ -242,11 +247,29 @@ proc updateFromHibernateSetTarget*(
     head=ctx.chain.latestNumber.bnStr, state=ctx.hdrCache.state
 
 
+proc updateFailedPeersFromResolvingFinalizer*(
+    ctx: BeaconCtxRef;
+    info: static[string];
+      ) =
+  ## This function resets the finalised hash resolver if there are too many
+  ## sync peer download errors. This prevents from a potential deadlock if
+  ## the syncer is notified with bogus `(finaliser,sync-head)` data.
+  ##
+  if ctx.hibernate:
+    if fetchFinalisedHashResolverFailedPeersHwm < ctx.pool.failedPeers.len:
+      info "Abandoned resolving hash (try next)",
+        finHash=ctx.pool.finRequest.short, failedPeers=ctx.pool.failedPeers.len
+      ctx.hdrCache.clear()
+      ctx.pool.failedPeers.clear()
+      ctx.pool.finRequest = zeroHash32
+
+
 proc updateAsyncTasks*(
     ctx: BeaconCtxRef;
       ): Future[Opt[void]] {.async: (raises: []).} =
   ## Allow task switch by issuing a short sleep request. The `due` argument
   ## allows to maintain a minimum time gap when invoking this function.
+  ##
   let start = Moment.now()
   if ctx.pool.nextAsyncNanoSleep < start:
 
