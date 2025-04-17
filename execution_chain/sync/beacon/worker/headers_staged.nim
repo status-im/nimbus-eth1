@@ -146,7 +146,7 @@ proc headersStagedCollect*(
         lhc = (ref LinkedHChain)(peerID: buddy.peerID)
 
         # Fetch headers and fill up the headers list of `lhc`. The function
-        # returnedsthe last unprocessed block number.
+        # returns the last unprocessed block number.
         bottom = await buddy.collectAndStageOnMemQueue(iv, lhc, info)
 
       nOpportunistic = lhc.revHdrs.len               # statistics
