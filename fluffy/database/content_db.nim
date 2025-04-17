@@ -37,17 +37,13 @@ declareCounter portal_pruning_counter,
   "Number of pruning events which occured during the node's uptime",
   labels = ["protocol_id"]
 
-declareGauge portal_pruning_deleted_elements,
-  "Number of elements deleted in the last pruning", labels = ["protocol_id"]
+declareGauge portal_pruning_used_size,
+  "Total used size after the last pruning", labels = ["protocol_id"]
 
-const
-  contentDeletionFraction = 0.05 ## 5% of the content will be deleted when the
-  ## storage capacity is hit and radius gets adjusted.
+declareGauge portal_pruning_size,
+  "Total size after the last pruning", labels = ["protocol_id"]
 
 type
-  RowInfo =
-    tuple[contentId: array[32, byte], payloadLength: int64, distance: array[32, byte]]
-
   ContentDB* = ref object
     backend: SqStoreRef
     kv: KvStoreRef
@@ -60,7 +56,6 @@ type
     vacuumStmt: SqliteStmt[NoParams, void]
     contentCountStmt: SqliteStmt[NoParams, int64]
     contentSizeStmt: SqliteStmt[NoParams, int64]
-    getAllOrderedByDistanceStmt: SqliteStmt[array[32, byte], RowInfo]
     deleteOutOfRadiusStmt: SqliteStmt[(array[32, byte], array[32, byte]), void]
     largestDistanceStmt: SqliteStmt[array[32, byte], array[32, byte]]
 
@@ -234,12 +229,6 @@ proc new*(
   let contentCountStmt =
     db.prepareStmt("SELECT COUNT(key) FROM kvstore;", NoParams, int64)[]
 
-  let getAllOrderedByDistanceStmt = db.prepareStmt(
-    "SELECT key, length(value), xorDistance(?, key) as distance FROM kvstore ORDER BY distance DESC",
-    array[32, byte],
-    RowInfo,
-  )[]
-
   let deleteOutOfRadiusStmt = db.prepareStmt(
     "DELETE FROM kvstore WHERE isInRadius(?, key, ?) == 0",
     (array[32, byte], array[32, byte]),
@@ -261,7 +250,6 @@ proc new*(
     vacuumStmt: vacuumStmt,
     contentSizeStmt: contentSizeStmt,
     contentCountStmt: contentCountStmt,
-    getAllOrderedByDistanceStmt: getAllOrderedByDistanceStmt,
     deleteOutOfRadiusStmt: deleteOutOfRadiusStmt,
     largestDistanceStmt: largestDistanceStmt,
   )
@@ -280,7 +268,6 @@ proc close*(db: ContentDB) =
   db.vacuumStmt.disposeSafe()
   db.contentCountStmt.disposeSafe()
   db.contentSizeStmt.disposeSafe()
-  db.getAllOrderedByDistanceStmt.disposeSafe()
   db.deleteOutOfRadiusStmt.disposeSafe()
   db.largestDistanceStmt.disposeSafe()
   discard db.kv.close()
@@ -325,36 +312,6 @@ proc del*(db: ContentDB, key: ContentId) =
 
 ## Pruning related calls
 
-proc deleteContentFraction*(
-    db: ContentDB, target: UInt256, fraction: float64
-): (UInt256, int64, int64, int64) =
-  ## Deletes at most `fraction` percent of content from the database.
-  ## The content furthest from the provided `target` is deleted first.
-  # TODO: The usage of `db.contentSize()` for the deletion calculation versus
-  # `db.usedSize()` for the pruning threshold leads sometimes to some unexpected
-  # results of how much content gets up deleted.
-  doAssert(fraction > 0 and fraction < 1, "Deleted fraction should be > 0 and < 1")
-
-  let totalContentSize = db.contentSize()
-  let bytesToDelete = int64(fraction * float64(totalContentSize))
-  var deletedElements: int64 = 0
-
-  var ri: RowInfo
-  var deletedBytes: int64 = 0
-  let targetBytes = target.toBytesBE()
-  for e in db.getAllOrderedByDistanceStmt.exec(targetBytes, ri):
-    if deletedBytes + ri.payloadLength <= bytesToDelete:
-      db.del(ri.contentId)
-      deletedBytes = deletedBytes + ri.payloadLength
-      inc deletedElements
-    else:
-      return (
-        UInt256.fromBytesBE(ri.distance),
-        deletedBytes,
-        totalContentSize,
-        deletedElements,
-      )
-
 proc reclaimSpace*(db: ContentDB): void =
   ## Runs sqlite VACUUM commands which rebuilds the db, repacking it into a
   ## minimal amount of disk space.
@@ -390,9 +347,33 @@ proc forcePrune*(db: ContentDB, localId: UInt256, radius: UInt256) =
   db.reclaimAndTruncate()
   notice "Finished database pruning"
 
-proc putAndPrune*(db: ContentDB, key: ContentId, value: openArray[byte]): PutResult =
-  db.put(key, value)
+proc prune*(db: ContentDB) =
+  ## Decrease the radius with `radiusDecreasePercentage` and prune the content
+  ## outside of the new radius.
+  const radiusDecreasePercentage = 5
+  # The amount here is somewhat arbitrary but should be big enough to not
+  # constantly require pruning. If it is too small, it would adjust the radius
+  # so often that the network might not be able to keep up with the current
+  # radius of the node. At the same time, it would iterate over the content also
+  # way to often. If the amount is too big it could render the node unresponsive
+  # for too long.
 
+  let newRadius = db.dataRadius div 100 * (100 - radiusDecreasePercentage)
+
+  info "Pruning content outside of radius",
+    oldRadius = db.dataRadius, newRadius = newRadius
+  db.deleteContentOutOfRadius(db.localId, newRadius)
+  db.dataRadius = newRadius
+
+  let usedSize = db.usedSize()
+  let size = db.size()
+  portal_pruning_counter.inc()
+  portal_pruning_used_size.set(usedSize)
+  portal_pruning_size.set(size)
+
+  info "Finished pruning content", usedSize, size, storageCapacity = db.storageCapacity
+
+proc putAndPrune*(db: ContentDB, key: ContentId, value: openArray[byte]) =
   # The used size is used as pruning threshold. This means that the database
   # size will reach the size specified in db.storageCapacity and will stay
   # around that size throughout the node's lifetime, as after content deletion
@@ -404,55 +385,12 @@ proc putAndPrune*(db: ContentDB, key: ContentId, value: openArray[byte]): PutRes
   # static radius.
   # When not using the `forcePrune` functionality, pruning to the required
   # capacity will not be very effictive and free pages will not be returned.
-  let dbSize = db.usedSize()
+  db.put(key, value)
 
-  if dbSize < int64(db.storageCapacity):
-    return PutResult(kind: ContentStored)
-  else:
-    # Note:
-    # An approach of a deleting a full fraction is chosen here, in an attempt
-    # to not continuously require radius updates, which could have a negative
-    # impact on the network. However this should be further investigated, as
-    # doing a large fraction deletion could cause a temporary node performance
-    # degradation. The `contentDeletionFraction` might need further tuning or
-    # one could opt for a much more granular approach using sql statement
-    # in the trend of:
-    # "SELECT key FROM kvstore ORDER BY xorDistance(?, key) DESC LIMIT 1"
-    # Potential adjusting the LIMIT for how many items require deletion.
-    let (distanceOfFurthestElement, deletedBytes, totalContentSize, deletedElements) =
-      db.deleteContentFraction(db.localId, contentDeletionFraction)
-
-    let deletedFraction = float64(deletedBytes) / float64(totalContentSize)
-    info "Deleted content fraction", deletedBytes, deletedElements, deletedFraction
-
-    return PutResult(
-      kind: DbPruned,
-      distanceOfFurthestElement: distanceOfFurthestElement,
-      deletedFraction: deletedFraction,
-      deletedElements: deletedElements,
-    )
-
-proc adjustRadius(
-    db: ContentDB, deletedFraction: float64, distanceOfFurthestElement: UInt256
-) =
-  # Invert fraction as the UInt256 implementation does not support
-  # multiplication by float
-  let invertedFractionAsInt = int64(1.0 / deletedFraction)
-  let scaledRadius = db.dataRadius div u256(invertedFractionAsInt)
-
-  # Choose a larger value to avoid the situation where the
-  # `distanceOfFurthestElement is very close to the local id so that the local
-  # radius would end up too small to accept any more data to the database.
-  # If scaledRadius radius will be larger it will still contain all elements.
-  let newRadius = max(scaledRadius, distanceOfFurthestElement)
-
-  info "Database radius adjusted",
-    oldRadius = db.dataRadius, newRadius = newRadius, distanceOfFurthestElement
-
-  # Both scaledRadius and distanceOfFurthestElement are smaller than current
-  # dataRadius, so the radius will constantly decrease through the node its
-  # lifetime.
-  db.dataRadius = newRadius
+  while db.usedSize() >= int64(db.storageCapacity):
+    # Note: This should typically only happen once, but if the content is not
+    # distributed uniformly over the id range, it could happen multiple times.
+    db.prune()
 
 proc createGetHandler*(db: ContentDB): DbGetHandler =
   return (
@@ -477,21 +415,7 @@ proc createStoreHandler*(db: ContentDB, cfg: RadiusConfig): DbStoreHandler =
       of Dynamic:
         # In case of dynamic radius, the radius gets adjusted based on the
         # to storage capacity and content gets pruned accordingly.
-        let res = db.putAndPrune(contentId, content)
-        if res.kind == DbPruned:
-          portal_pruning_counter.inc()
-          portal_pruning_deleted_elements.set(res.deletedElements.int64)
-
-          if res.deletedFraction > 0.0:
-            db.adjustRadius(res.deletedFraction, res.distanceOfFurthestElement)
-          else:
-            # Note:
-            # This can occur when the furthest content is bigger than the fraction
-            # size. This is unlikely to happen as it would require either very
-            # small storage capacity or a very small `contentDeletionFraction`
-            # combined with some big content.
-            info "Database pruning attempt resulted in no content deleted"
-            return
+        db.putAndPrune(contentId, content)
       of Static:
         # If the radius is static, it may never be adjusted, database capacity
         # is disabled and no pruning is ever done.
