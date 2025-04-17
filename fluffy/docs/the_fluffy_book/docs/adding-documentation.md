@@ -9,7 +9,7 @@ All the documentation related files can be found under the `./fluffy/docs/the_fl
 ## How to test and add documentation changes
 
 - Install `mkdocs`
-- Install Material for MkDocs by running `pip install mkdocs-material`.
+- Install Material for MkDocs by running `pip install mkdocs-material mkdocs-mermaid2-plugin`.
 - Make your changes to the documentation
 - Run `mkdocs serve` from the `./fluffy/docs/the_fluffy_book` directory and test your changes. Alter as required.
 - Push your changes to a PR on nimbus-eth1
