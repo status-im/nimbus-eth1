@@ -31,6 +31,7 @@ import
     rpc_portal_nimbus_beacon_api, rpc_portal_debug_history_api,
   ],
   ./database/content_db,
+  ./network/wire/portal_protocol_version,
   ./portal_node,
   ./version,
   ./logging
@@ -153,7 +154,8 @@ proc run(fluffy: Fluffy, config: PortalConf) {.raises: [CatchableError].} =
       # Note: The addition of default clientInfo to the ENR is a temporary
       # measure to easily identify & debug the clients used in the testnet.
       # Might make this into a, default off, cli option.
-      localEnrFields = {"c": enrClientInfoShort},
+      localEnrFields =
+        {"c": enrClientInfoShort, portalVersionKey: SSZ.encode(localSupportedVersions)},
       bootstrapRecords = bootstrapRecords,
       previousRecord = previousEnr,
       bindIp = bindIp,
