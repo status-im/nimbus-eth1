@@ -14,8 +14,8 @@ import
   ./beacon_network_tests/all_beacon_network_tests,
   ./state_network_tests/all_state_network_tests,
   ./rpc_tests/all_rpc_tests
-  # The evm tests are intermittently failing with a SIGSEGV crash.
-  # This appears to be related to this chronos issue which is
-  # not yet fixed: https://github.com/status-im/nim-chronos/issues/518
-  # Leaving this disabled for now to prevent CI test failures.
-  # ./evm/all_evm_tests,
+    # The evm tests are intermittently failing with a SIGSEGV crash.
+    # This appears to be related to this chronos issue which is
+    # not yet fixed: https://github.com/status-im/nim-chronos/issues/518
+    # Leaving this disabled for now to prevent CI test failures.
+    # ./evm/all_evm_tests
