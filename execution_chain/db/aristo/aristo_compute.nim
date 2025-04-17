@@ -90,24 +90,46 @@ proc putKeyAtLevel(
 
   ok()
 
-template encodeLeaf(w: var RlpWriter, pfx: NibblesBuf, leafData: untyped): HashKey =
-  w.startList(2)
-  w.append(pfx.toHexPrefix(isLeaf = true).data())
-  w.append(leafData)
-  w.finish().digestTo(HashKey)
+template encodeHashAppend(w: var RlpWriter, body: untyped): HashKey =
+  result.len = 0
 
-template encodeBranch(w: var RlpWriter, vtx: VertexRef, subKeyForN: untyped): HashKey =
-  w.startList(17)
-  for (n {.inject.}, subvid {.inject.}) in vtx.allPairs():
-    w.append(subKeyForN)
-  w.append EmptyBlob
-  w.finish().digestTo(HashKey)
+  var tracker: DynamicRlpLengthTracker
+  tracker.initLengthTracker()
+  `body`
+  let length = tracker.totalLength
 
-template encodeExt(w: var RlpWriter, pfx: NibblesBuf, branchKey: HashKey): HashKey =
-  w.startList(2)
-  w.append(pfx.toHexPrefix(isLeaf = false).data())
-  w.append(branchKey)
-  w.finish().digestTo(HashKey)
+  if length < 32:
+    var writer = initTwoPassWriter(tracker)
+    `body`
+    let buf = writer.finish()
+    result.len = int8 buf.len
+    (addr result.data[0]).copyMem(unsafeAddr buf[0]], buf.len)
+  else:
+    var writer = initHashWriter(tracker)
+    `body`
+    let buf = writer.finish()
+    result.len = 32
+    result.buf = buf.to(HashKey)
+
+template encodeLeaf(pfx: NibblesBuf, leafData: untyped): HashKey =
+  encodeHashAppend(w):
+    w.startList(2)
+    w.append(pfx.toHexPrefix(isLeaf = true).data())
+    w.wrapEncoding(1)
+    w.append(leafData)
+
+template encodeBranch(vtx: VertexRef, subKeyForN: untyped): HashKey =
+  encodeHashAppend(w):
+    w.startList(17)
+    for (n {.inject.}, subvid {.inject.}) in vtx.allPairs():
+      w.append(subKeyForN)
+    w.append EmptyBlob
+
+template encodeExt(pfx: NibblesBuf, branchKey: HashKey): HashKey =
+  encodeHashAppend(w):
+    w.startList(2)
+    w.append(pfx.toHexPrefix(isLeaf = false).data())
+    w.append(branchKey)
 
 proc getKey(
     db: AristoTxRef, rvid: RootedVertexID, skipLayers: static bool
@@ -142,13 +164,10 @@ proc computeKeyImpl(
   # Top-most level of all the verticies this hash computation depends on
   var level = level
 
-  # TODO this is the same code as when serializing NodeRef, without the NodeRef
-  var writer = initRlpWriter()
-
   let key =
     case vtx.vType
     of Leaf:
-      writer.encodeLeaf(vtx.pfx):
+      encodeLeaf(vtx.pfx):
         case vtx.lData.pType
         of AccountData:
           let
@@ -173,7 +192,7 @@ proc computeKeyImpl(
               else:
                 VOID_HASH_KEY
 
-          rlp.encode Account(
+          Account(
             nonce: vtx.lData.account.nonce,
             balance: vtx.lData.account.balance,
             storageRoot: skey.to(Hash32),
@@ -181,7 +200,7 @@ proc computeKeyImpl(
           )
         of StoData:
           # TODO avoid memory allocation when encoding storage data
-          rlp.encode(vtx.lData.stoData)
+          vtx.lData.stoData
     of Branch:
       # For branches, we need to load the vertices before recursing into them
       # to exploit their on-disk order
@@ -239,8 +258,8 @@ proc computeKeyImpl(
             )
           batch.leave(n)
 
-      template writeBranch(w: var RlpWriter): HashKey =
-        w.encodeBranch(vtx):
+      template writeBranch(): HashKey =
+        encodeBranch(vtx):
           if subvid.isValid:
             level = max(level, keyvtxs[n][1])
             keyvtxs[n][0][0]
@@ -248,11 +267,10 @@ proc computeKeyImpl(
             VOID_HASH_KEY
 
       if vtx.pfx.len > 0: # Extension node
-        writer.encodeExt(vtx.pfx):
-          var bwriter = initRlpWriter()
-          bwriter.writeBranch()
+        encodeExt(vtx.pfx):
+          writeBranch()
       else:
-        writer.writeBranch()
+        writeBranch()
 
   # Cache the hash into the same storage layer as the the top-most value that it
   # depends on (recursively) - this could be an ephemeral in-memory layer or the
