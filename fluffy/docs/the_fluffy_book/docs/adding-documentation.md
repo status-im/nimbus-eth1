@@ -1,4 +1,4 @@
-# Adding Documentation
+# Adding documentation
 
 The documentation visible on [https://fluffy.guide](https://fluffy.guide) is generated with [mkdocs](https://www.mkdocs.org/getting-started/).
 
