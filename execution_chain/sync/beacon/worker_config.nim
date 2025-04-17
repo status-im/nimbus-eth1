@@ -40,7 +40,7 @@ const
     ## Some waiting time at the end of the daemon task which always lingers
     ## in the background.
 
-  workerIdleWaitInterval* = chronos.seconds(10)
+  workerIdleWaitInterval* = chronos.seconds(1)
     ## Sleep some time in multi-mode if there is nothing to do
 
   asyncThreadSwitchTimeSlot* = chronos.nanoseconds(1)

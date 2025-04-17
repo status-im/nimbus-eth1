@@ -81,12 +81,12 @@ func bnStr*(w: LinkedHChain | ref LinkedHChain): string =
 # Public helper functions
 # ------------------------------------------------------------------------------
 
-func collectCanContinue*(buddy: BeaconBuddyRef): bool =
-  ## Hepler, checks whether there is a general stop conditions
-  buddy.ctrl.running and
-  not buddy.ctx.poolMode and
-  buddy.ctx.pool.lastState == collectingHeaders and
-  buddy.ctx.hdrCache.state == collecting
+func collectModeStopped*(ctx: BeaconCtxRef): bool =
+  ## Hepler, checks whether there is a general stop conditions based on
+  ## state settings (not on sync peer ctrl as `buddy.ctrl.running`.)
+  ctx.poolMode or
+  ctx.pool.lastState != collectingHeaders or
+  ctx.hdrCache.state != collecting
 
 
 proc collectAndStashOnDiskCache*(
@@ -122,23 +122,26 @@ proc collectAndStashOnDiskCache*(
           break fetchHeadersBody         # error => exit block
 
       # Job might have been cancelled while downloading headrs
-      if not buddy.collectCanContinue():
+      if ctx.collectModeStopped():
         break fetchHeadersBody           # stop => exit block
 
       # Store it on the header chain cache
-      ctx.hdrCache.fcHeaderPut(rev).isOkOr:
+      ctx.hdrCache.put(rev).isOkOr:
         buddy.updateBuddyProcError()
         debug info & ": header stash error", peer, iv, ivReq,
           ctrl=buddy.ctrl.state, hdrErrors=buddy.hdrErrors, `error`=error
         break fetchHeadersBody           # error => exit block
 
+      # Antecedent `dangling` of the header cache might not be at `rev[^1]`.
+      let revLen = rev[0].number - ctx.dangling.number + 1
+
       # Update remaining range to fetch and check for end-of-loop condition
-      let newTopBefore = ivTop - BlockNumber(rev.len)
+      let newTopBefore = ivTop - revLen
       if newTopBefore < iv.minPt:
         break                            # exit while() loop
 
       ivTop = newTopBefore               # mostly results in `ivReq.minPt-1`
-      parent = rev[rev.len-1].parentHash # parent hash for next fetch request
+      parent = rev[revLen-1].parentHash  # parent hash for next fetch request
       # End loop
 
     trace info & ": fetched and stored headers", peer, iv,
@@ -169,6 +172,7 @@ proc collectAndStageOnMemQueue*(
   ## The function returns the largest block number not fetched/stored.
   ##
   let
+    ctx = buddy.ctx
     peer = buddy.peer
   var
     ivTop = iv.maxPt                     # top end of the current range to fetch
@@ -189,7 +193,7 @@ proc collectAndStageOnMemQueue*(
           break fetchHeadersBody         # error => exit block
 
       # Job might have been cancelled while downloading headrs
-      if not buddy.collectCanContinue():
+      if ctx.collectModeStopped():
         break fetchHeadersBody           # stop => exit block
 
       # While assembling a `LinkedHChainRef`, only boundary checks are used to

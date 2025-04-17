@@ -62,7 +62,7 @@ proc commitCollectHeaders(ctx: BeaconCtxRef; info: static[string]): bool =
     h = ctx.head.number
 
   # This function does the job linking into `FC` module proper
-  ctx.hdrCache.fcHeaderCommit().isOkOr:
+  ctx.hdrCache.commit().isOkOr:
     trace info & ": cannot commit header chain", B=b.bnStr, L=l.bnStr,
       D=ctx.dangling.bnStr, H=h.bnStr, `error`=error
     return false
@@ -231,15 +231,15 @@ proc updateFromHibernateSetTarget*(
         # Update range
         ctx.headersUnprocSet(b+1, t-1)
 
-        info "Activating syncer", base=ctx.chain.baseNumber.bnStr,
-          head=ctx.chain.latestNumber.bnStr, fin=fin.bnStr,
-          target=ctx.head.bnStr
+        info "Activating syncer", base=b.bnStr,
+          head=ctx.chain.latestNumber.bnStr, fin=fin.bnStr, target=t.bnStr
         return
 
     # Failed somewhere on the way
     ctx.hdrCache.clear()
-    debug info & ": activation rejected", base=ctx.chain.baseNumber.bnStr,
-      head=ctx.chain.latestNumber.bnStr, fin=fin.bnStr
+
+  debug info & ": activation rejected", base=ctx.chain.baseNumber.bnStr,
+    head=ctx.chain.latestNumber.bnStr, state=ctx.hdrCache.state
 
 
 proc updateAsyncTasks*(

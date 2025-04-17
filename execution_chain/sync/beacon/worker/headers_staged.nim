@@ -41,10 +41,9 @@ proc headerStagedResolveFinalizer*(
     let fin = (await buddy.headersFetchReversed(iv, finHash, info)).valueOr:
       # Postponed, try later
       ctx.pool.finRequest = finHash
+      debug info & ": finalised hash not yet resolved", peer=buddy.peer,
+        finHash=finHash.short
       return
-
-    debug info & ": resolved fin", peer=buddy.peer, finHash=finHash.short,
-      fin=fin[0].bnStr
 
     ctx.updateFromHibernateSetTarget(fin[0], info)
 
@@ -52,7 +51,8 @@ proc headerStagedResolveFinalizer*(
 func headersStagedFetchOk*(buddy: BeaconBuddyRef): bool =
   # Helper for `worker.nim`, etc.
   0 < buddy.ctx.headersUnprocAvail() and
-    buddy.collectCanContinue()
+    buddy.ctrl.running and
+    not buddy.ctx.collectModeStopped()
 
 
 proc headersStagedCollect*(
@@ -85,12 +85,7 @@ proc headersStagedCollect*(
   block fetchHeadersBody:
 
     # Start deterministically. Explicitely fetch/append by parent hash.
-    #
-    # This loop stops at the `while()` directive when or the next unprocessed
-    # header available excludes (by block number) that the next header joins
-    # the antecedent (i.e. `dangling`, the lower end) of the header chain
-    # cache.
-    while ctx.dangling.number <= ctx.headersUnprocAvailTop() + 1:
+    while true:
 
       let
         # Reserve the full range of block numbers so they can be appended in a
@@ -102,14 +97,23 @@ proc headersStagedCollect*(
         # Get parent hash from the most senior stored header
         parent = ctx.dangling.parentHash
 
-        # Fetch headers and store them on the header chain cache,
-        # get returned the last unprocessed block number
+        # Fetch headers and store them on the header chain cache. The function
+        # returns the last unprocessed block number
         bottom = await buddy.collectAndStashOnDiskCache(iv, parent, info)
 
       # Check whether there were some headers fetched at all
       if bottom < iv.maxPt:
         nDeterministic += (iv.maxPt - bottom)        # statistics
         ctx.pool.seenData = true                     # header data exist
+
+      # Job might have been cancelled or completed while downloading headers.
+      # If so, no more bookkeeping of headers must take place. The *books*
+      # might have been reset and prepared for the next stage.
+      if ctx.collectModeStopped():
+        trace info & ": deterministic headers fetch stopped", peer, iv,
+          bottom=bottom.bnStr, nDeterministic, syncState=ctx.pool.lastState,
+          cacheMode=ctx.hdrCache.state
+        break fetchHeadersBody                       # done, exit this function
 
       # Commit partially processed block numbers
       if iv.minPt <= bottom:
@@ -118,18 +122,19 @@ proc headersStagedCollect*(
 
       ctx.headersUnprocCommit(iv)                    # all headers processed
 
-      # Job might have been cancelled while downloading headrs
-      if not buddy.collectCanContinue():
-        break fetchHeadersBody
-
       debug info & ": deterministic headers fetch count", peer,
         unprocTop=ctx.headersUnprocAvailTop.bnStr, D=ctx.dangling.bnStr,
-        nDeterministic, nStaged=ctx.hdr.staged.len
+        nDeterministic, nStaged=ctx.hdr.staged.len, ctrl=buddy.ctrl.state
+
+      # Buddy might have been cancelled while downloading headers. Still
+      # bookkeeping (aka commiting unused `iv`) needed to proceed.
+      if buddy.ctrl.stopped:
+        break fetchHeadersBody
 
       # End while: `collectAndStashOnDiskCache()`
 
-    # Continue opportunistic by block number, the fetched headers need to be
-    # staged and checked/serialised later
+    # Continue opportunistically fetching by block number rather than hash. The
+    # fetched headers need to be staged and checked/serialised later.
     block:
       let
         # Comment see deterministic case
@@ -140,17 +145,26 @@ proc headersStagedCollect*(
         # heap so that `async` can capture that properly.
         lhc = (ref LinkedHChain)(peerID: buddy.peerID)
 
-        # Fetch headers and fill up the headers list of `lhc`,
-        # get returned the last unprocessed block number
+        # Fetch headers and fill up the headers list of `lhc`. The function
+        # returns the last unprocessed block number.
         bottom = await buddy.collectAndStageOnMemQueue(iv, lhc, info)
+
+      nOpportunistic = lhc.revHdrs.len               # statistics
+
+      # Job might have been cancelled or completed while downloading headers.
+      # If so, no more bookkeeping of headers must take place. The *books*
+      # might have been reset and prepared for the next stage.
+      if ctx.collectModeStopped():
+        trace info & ": staging headers fetch stopped", peer, iv,
+          bottom=bottom.bnStr, nDeterministic, syncState=ctx.pool.lastState,
+          cacheMode=ctx.hdrCache.state
+        break fetchHeadersBody                       # done, exit this function
 
       # Store `lhc` chain on the `staged` queue if there is any
       if 0 < lhc.revHdrs.len:
         let qItem = ctx.hdr.staged.insert(iv.maxPt).valueOr:
           raiseAssert info & ": duplicate key on staged queue iv=" & $iv
         qItem.data = lhc[]
-
-      nOpportunistic = lhc.revHdrs.len               # statistics
 
       # Commit processed block numbers
       if iv.minPt <= bottom:
@@ -173,7 +187,9 @@ proc headersStagedCollect*(
         failedPeers=ctx.pool.failedPeers.len, hdrErrors=buddy.hdrErrors
     return false
 
-  info "Downloaded headers", unprocTop=ctx.headersUnprocAvailTop.bnStr,
+  info "Downloaded headers",
+    unprocTop=(if ctx.collectModeStopped(): "n/a"
+               else: ctx.headersUnprocAvailTop.bnStr),
     nHeaders, nStaged=ctx.hdr.staged.len, nSyncPeers=ctx.pool.nBuddies
 
   return true
@@ -218,7 +234,7 @@ proc headersStagedProcess*(buddy: BeaconBuddyRef; info: static[string]) =
     discard ctx.hdr.staged.delete(qItem.key)
 
     # Store headers on database
-    ctx.hdrCache.fcHeaderPut(qItem.data.revHdrs).isOkOr:
+    ctx.hdrCache.put(qItem.data.revHdrs).isOkOr:
       ctx.headersUnprocAppend(minNum, maxNum)
 
       # Error mark buddy that produced that unusable headers list
@@ -230,7 +246,10 @@ proc headersStagedProcess*(buddy: BeaconBuddyRef; info: static[string]) =
         `error`=error
       return
 
-    nProcessed += qItem.data.revHdrs.len # count headers
+    # Antecedent `dangling` of the header cache might not be at `revHdrs[^1]`.
+    let revHdrsLen = maxNum - ctx.dangling.number + 1
+
+    nProcessed += revHdrsLen.int # count headers
     # End while loop
 
   if headersStagedQueueLengthLwm < ctx.hdr.staged.len:
