@@ -338,7 +338,7 @@ func state*(hc: HeaderChainRef): HeaderChainMode =
   ##    collecting     -- put()
   ##    ready          -- complete()
   ##    orphan         -- n/a
-  ##    locked         -- fcHeaderImportBlock()
+  ##    locked         -- importBlock() from FC module
   ##
   hc.session.mode
 
