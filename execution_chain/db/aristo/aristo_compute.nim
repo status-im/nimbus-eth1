@@ -90,46 +90,94 @@ proc putKeyAtLevel(
 
   ok()
 
-template encodeHashAppend(w: var RlpWriter, body: untyped): HashKey =
-  result.len = 0
-
+template encodeHashAppend(body: untyped): HashKey =
   var tracker: DynamicRlpLengthTracker
   tracker.initLengthTracker()
-  `body`
+  body
   let length = tracker.totalLength
 
   if length < 32:
     var writer = initTwoPassWriter(tracker)
-    `body`
+    body
     let buf = writer.finish()
-    result.len = int8 buf.len
-    (addr result.data[0]).copyMem(unsafeAddr buf[0]], buf.len)
+    return HashKey.fromBytes(buf)
   else:
     var writer = initHashWriter(tracker)
-    `body`
+    body
     let buf = writer.finish()
-    result.len = 32
-    result.buf = buf.to(HashKey)
+    return buf.to(HashKey)
+
+template appendLeaf(w: var RlpWriter, pfx: NibblesBuf, leafData: untyped): HashKey =
+  w.startList(2)
+  w.append(pfx.toHexPrefix(isLeaf = true).data())
+  w.wrapEncoding(1)
+  w.append(leafData)
 
 template encodeLeaf(pfx: NibblesBuf, leafData: untyped): HashKey =
-  encodeHashAppend(w):
-    w.startList(2)
-    w.append(pfx.toHexPrefix(isLeaf = true).data())
-    w.wrapEncoding(1)
-    w.append(leafData)
+  var tracker: DynamicRlpLengthTracker
+  tracker.initLengthTracker()
+  tracker.appendLeaf(pfx, leafData)
+  let length = tracker.totalLength
 
-template encodeBranch(vtx: VertexRef, subKeyForN: untyped): HashKey =
-  encodeHashAppend(w):
+  if length < 32:
+    var writer = initTwoPassWriter(tracker)
+    writer.appendLeaf(pfx, leafData)
+    let buf = writer.finish()
+    return HashKey.fromBytes(buf)
+  else:
+    var writer = initHashWriter(tracker)
+    writer.appendLeaf(pfx, leafData)
+    let buf = writer.finish()
+    return buf.to(HashKey)
+
+template appendBranch(w: var RlpWriter, vtx: VertexRef, subKeyForN: untyped): HashKey =
+  encodeHashAppend:
     w.startList(17)
     for (n {.inject.}, subvid {.inject.}) in vtx.allPairs():
       w.append(subKeyForN)
     w.append EmptyBlob
 
-template encodeExt(pfx: NibblesBuf, branchKey: HashKey): HashKey =
-  encodeHashAppend(w):
+template encodeBranch(vtx: VertexRef, subKeyForN: untyped): HashKey =
+  var tracker: DynamicRlpLengthTracker
+  tracker.initLengthTracker()
+  tracker.appendBranch(vtx, subKeyForN)
+  let length = tracker.totalLength
+
+  if length < 32:
+    var writer = initTwoPassWriter(tracker)
+    writer.appendBranch(vtx, subKeyForN)
+    let buf = writer.finish()
+    return HashKey.fromBytes(buf)
+  else:
+    var writer = initHashWriter(tracker)
+    writer.appendBranch(vtx, subKeyForN)
+    let buf = writer.finish()
+    return buf.to(HashKey)
+
+
+template appendExt(w: var RlpWriter, pfx: NibblesBuf, branchKey: HashKey): HashKey =
+  encodeHashAppend:
     w.startList(2)
     w.append(pfx.toHexPrefix(isLeaf = false).data())
     w.append(branchKey)
+
+template encodeExt(pfx: NibblesBuf, branchKey: untyped): HashKey =
+  var tracker: DynamicRlpLengthTracker
+  tracker.initLengthTracker()
+  tracker.appendExt(pfx, branchKey)
+  let length = tracker.totalLength
+
+  if length < 32:
+    var writer = initTwoPassWriter(tracker)
+    writer.appendExt(pfx, branchKey)
+    let buf = writer.finish()
+    return HashKey.fromBytes(buf)
+  else:
+    var writer = initHashWriter(tracker)
+    writer.appendExt(pfx, branchKey)
+    let buf = writer.finish()
+    return buf.to(HashKey)
+
 
 proc getKey(
     db: AristoTxRef, rvid: RootedVertexID, skipLayers: static bool
