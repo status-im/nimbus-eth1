@@ -40,7 +40,7 @@ const
     ## Some waiting time at the end of the daemon task which always lingers
     ## in the background.
 
-  workerIdleWaitInterval* = chronos.seconds(10)
+  workerIdleWaitInterval* = chronos.seconds(1)
     ## Sleep some time in multi-mode if there is nothing to do
 
   asyncThreadSwitchTimeSlot* = chronos.nanoseconds(1)
@@ -52,6 +52,12 @@ const
     ## invoking a nano-sleep utility.
 
   # ----------------------
+
+  fetchFinalisedHashResolverFailedPeersHwm* = 10
+    ## If there are more failing peers than this `hwm` when initially resolving
+    ## the finalised hash then the whole procedure gets cancelled and reset.
+    ## The system will proceed waiting for a new request to resolve a finalised
+    ## hash.
 
   fetchHeadersFailedInitialFailPeersHwm* = 30
     ## If there are more failing peers than this `hwm` right at the begining

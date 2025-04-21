@@ -119,22 +119,28 @@ when enableTicker:
         T = if data.activeOk: data.target.bnStr else: "?" & $data.target
 
         hS = if data.nHdrStaged == 0: "n/a"
-            else: data.hdrStagedTop.bnStr & "(" & $data.nHdrStaged & ")"
+            else: data.hdrStagedTop.bnStr & "[" & $data.nHdrStaged & "]"
         hU = if data.nHdrUnprocFragm == 0 and data.nHdrUnprocessed == 0: "n/a"
             elif data.hdrUnprocTop == 0:
               "(" & data.nHdrUnprocessed.toSI & "," &
                     $data.nHdrUnprocFragm & ")"
             else: data.hdrUnprocTop.bnStr & "(" &
                   data.nHdrUnprocessed.toSI & "," & $data.nHdrUnprocFragm & ")"
+        hQ = if hS == "n/a": hU
+             elif hU == "n/a": hS
+             else: hS & "<-" & hU
 
         bS = if data.nBlkStaged == 0: "n/a"
-            else: data.blkStagedBottom.bnStr & "(" & $data.nBlkStaged & ")"
+            else: data.blkStagedBottom.bnStr & "[" & $data.nBlkStaged & "]"
         bU = if data.nBlkUnprocFragm == 0 and data.nBlkUnprocessed == 0: "n/a"
             elif data.blkUnprocBottom == high(BlockNumber):
               "(" & data.nBlkUnprocessed.toSI & "," &
                     $data.nBlkUnprocFragm & ")"
             else: data.blkUnprocBottom.bnStr & "(" &
                   data.nBlkUnprocessed.toSI & "," & $data.nBlkUnprocFragm & ")"
+        bQ = if bS == "n/a": bU
+             elif bU == "n/a": bS
+             else: bS & "<-" & bU
 
         st = case data.state
             of idleSyncState: "0"
@@ -153,7 +159,7 @@ when enableTicker:
       t.lastStats = data
       t.visited = now
 
-      debug "Sync state", up, nP, st, B, L, C, D, H, T, hS, hU, bS, bU, rrg, mem
+      debug "Sync state", up, nP, st, B, L, C, D, H, T, hQ, bQ, rrg, mem
 
 # ------------------------------------------------------------------------------
 # Public function

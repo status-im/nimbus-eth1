@@ -10,4 +10,5 @@
 import
   ./test_portal_wire_encoding,
   ./test_portal_wire_protocol,
+  ./test_portal_wire_version,
   ./test_ping_extensions_encoding

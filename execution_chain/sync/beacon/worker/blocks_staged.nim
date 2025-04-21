@@ -31,7 +31,7 @@ formatIt(Hash32):
 # ------------------------------------------------------------------------------
 
 proc getNthHash(ctx: BeaconCtxRef; blk: BlocksForImport; n: int): Hash32 =
-  ctx.hdrCache.fcHeaderGetHash(blk.blocks[n].header.number).valueOr:
+  ctx.hdrCache.getHash(blk.blocks[n].header.number).valueOr:
     return zeroHash32
 
 proc updateBuddyErrorState(buddy: BeaconBuddyRef) =
@@ -69,7 +69,7 @@ proc fetchAndCheck(
     blockHashes: newSeq[Hash32](ivReq.len)
   )
   for n in 1u ..< ivReq.len:
-    let header = ctx.hdrCache.fcHeaderGet(ivReq.minPt + n).valueOr:
+    let header = ctx.hdrCache.get(ivReq.minPt + n).valueOr:
       # There is nothing one can do here
       info "Block header missing (reorg triggered)", ivReq, n,
         nth=(ivReq.minPt + n).bnStr
@@ -79,7 +79,7 @@ proc fetchAndCheck(
       return false
     request.blockHashes[n - 1] = header.parentHash
     blk.blocks[offset + n].header = header
-  blk.blocks[offset].header = ctx.hdrCache.fcHeaderGet(ivReq.minPt).valueOr:
+  blk.blocks[offset].header = ctx.hdrCache.get(ivReq.minPt).valueOr:
     # There is nothing one can do here
     info "Block header missing (reorg triggered)", ivReq, n=0,
       nth=ivReq.minPt.bnStr
@@ -363,7 +363,7 @@ proc blocksStagedImport*(
           nthBn=nBn.bnStr, nthHash=ctx.getNthHash(qItem.data, n).short
         continue
 
-      ctx.hdrCache.fcHeaderImportBlock(qItem.data.blocks[n]).isOkOr:
+      ctx.chain.importBlock(qItem.data.blocks[n]).isOkOr:
         # The way out here is simply to re-compile the block queue. At any
         # point, the `FC` module data area might have been moved to a new
         # canonical branch.
