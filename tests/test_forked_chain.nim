@@ -19,6 +19,7 @@ import
   ../execution_chain/core/chain/forked_chain/chain_desc,
   ../execution_chain/db/ledger,
   ../execution_chain/db/era1_db,
+  ../execution_chain/db/fcu_db,
   ./test_forked_chain/chain_debug
 
 const
@@ -117,6 +118,10 @@ template checkHeadHash(chain: ForkedChainRef, hashParam: Hash32) =
 
   # also check if the header actually exists
   check txFrame.getCanonicalHead().isOk
+  let rc = txFrame.fcuHead()
+  check rc.isOk
+  if rc.isErr:
+    debugEcho "FCU HEAD: ", rc.error
 
 func blockHash(x: Block): Hash32 =
   x.header.computeBlockHash
@@ -257,8 +262,8 @@ proc forkedChainMain*() =
       # It is FC module who is responsible for saving
       # finalized hash on a correct txFrame.
       let txFrame = chain.txFrame(blk6.blockHash)
-      let savedFinalizedHash = txFrame.finalizedHeaderHash()
-      check blk6.blockHash == savedFinalizedHash
+      let savedFinalized = txFrame.fcuFinalized().expect("OK")
+      check blk6.blockHash == savedFinalized.hash
 
       # make sure aristo not wiped out baggage
       check chain.wdWritten(blk3) == 3

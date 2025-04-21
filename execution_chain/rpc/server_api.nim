@@ -95,6 +95,10 @@ proc headerFromTag(api: ServerAPIRef, blockTag: BlockTag): Result[Header, string
     case tag
     of "latest":
       return ok(api.chain.latestHeader)
+    of "finalized":
+      return ok(api.chain.finalizedHeader)
+    of "safe":
+      return ok(api.chain.safeHeader)
     else:
       return err("Unsupported block tag " & tag)
   else:
@@ -120,6 +124,10 @@ proc blockFromTag(api: ServerAPIRef, blockTag: BlockTag): Result[Block, string] 
     case tag
     of "latest":
       return ok(api.chain.latestBlock)
+    of "finalized":
+      return ok(api.chain.finalizedBlock)
+    of "safe":
+      return ok(api.chain.safeBlock)
     else:
       return err("Unsupported block tag " & tag)
   else:
