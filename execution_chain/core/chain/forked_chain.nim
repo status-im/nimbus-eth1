@@ -117,8 +117,8 @@ proc fcuSetHead(c: ForkedChainRef,
                 header: Header,
                 hash: Hash32,
                 number: uint64) =
-  txFrame.setHead(header, hash).expect("OK")
-  txFrame.fcuHead(hash, number).expect("OK")
+  txFrame.setHead(header, hash).expect("setHead OK")
+  txFrame.fcuHead(hash, number).expect("fcuHead OK")
   c.fcuHead.number = number
   c.fcuHead.hash = hash
 
@@ -426,7 +426,7 @@ proc updateFinalized(c: ForkedChainRef, finalized: BlockPos) =
     inc i
 
   let txFrame = finalized.txFrame
-  txFrame.fcuFinalized(finalized.hash, finalized.number).expect("OK")
+  txFrame.fcuFinalized(finalized.hash, finalized.number).expect("fcuFinalized OK")
 
 proc updateBase(c: ForkedChainRef, newBase: BlockPos) =
   ##

@@ -40,7 +40,7 @@ template fcuReadImpl(key: DbKey, name: string): auto =
 
 template fcuWriteImpl(key: DbKey, hash: Hash32, number: uint64): auto =
   var data: array[DataLen, byte]
-  assign(data, number.toBytesBE)
+  assign(data.toOpenArray(0, sizeof(uint64)-1), number.toBytesBE)
   assign(data.toOpenArray(sizeof(uint64), data.len-1), hash.data)
   db.put(key.toOpenArray, data).isOkOr:
     return err($error)

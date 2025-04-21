@@ -110,8 +110,9 @@ proc initializeDb(com: CommonRef) =
   proc contains(txFrame: CoreDbTxRef; key: openArray[byte]): bool =
     txFrame.hasKeyRc(key).expect "valid bool"
   if canonicalHeadHashKey().toOpenArray notin txFrame:
+    let genesisHash = com.genesisHeader.computeBlockHash
     info "Writing genesis to DB",
-      blockHash = com.genesisHeader.computeBlockHash,
+      blockHash = genesisHash ,
       stateRoot = com.genesisHeader.stateRoot,
       difficulty = com.genesisHeader.difficulty,
       gasLimit = com.genesisHeader.gasLimit,
@@ -122,7 +123,8 @@ proc initializeDb(com: CommonRef) =
     txFrame.persistHeaderAndSetHead(com.genesisHeader,
       startOfHistory=com.genesisHeader.parentHash).
       expect("can persist genesis header")
-
+    txFrame.fcuHead(genesisHash, com.genesisHeader.number).
+      expect("fcuHead OK")
     doAssert(canonicalHeadHashKey().toOpenArray in txFrame)
 
     txFrame.checkpoint(com.genesisHeader.number)
