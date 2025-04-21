@@ -16,6 +16,7 @@ import
   std/[tables, algorithm],
   ../../common,
   ../../db/core_db,
+  ../../db/fcu_db,
   ../../evm/types,
   ../../evm/state,
   ../validate,
@@ -113,6 +114,16 @@ proc writeBaggage(c: ForkedChainRef,
       header.withdrawalsRoot.expect("WithdrawalsRoot should be verified before"),
       blk.withdrawals.get)
 
+proc fcuSetHead(c: ForkedChainRef,
+                txFrame: CoreDbTxRef,
+                header: Header,
+                hash: Hash32,
+                number: uint64) =
+  txFrame.setHead(header, hash).expect("setHead OK")
+  txFrame.fcuHead(hash, number).expect("fcuHead OK")
+  c.fcuHead.number = number
+  c.fcuHead.hash = hash
+
 proc validateBlock(c: ForkedChainRef,
           parent: BlockPos,
           blk: Block): Result[Hash32, string] =
@@ -124,7 +135,8 @@ proc validateBlock(c: ForkedChainRef,
 
   if blkHash == c.pendingFCU:
     # Resolve the hash into latestFinalizedBlockNumber
-    c.latestFinalizedBlockNumber = blk.header.number
+    c.latestFinalizedBlockNumber = max(blk.header.number,
+      c.latestFinalizedBlockNumber)
 
   let
     parentFrame = parent.txFrame
@@ -194,11 +206,12 @@ proc validateBlock(c: ForkedChainRef,
     # If on disk head behind base, move it to base too.
     let newBaseNumber = c.baseBranch.tailNumber
     if newBaseNumber > prevBaseNumber:
-      let canonicalHead = ?c.baseTxFrame.getCanonicalHead()
-      if canonicalHead.number < newBaseNumber:
+      if c.fcuHead.number < newBaseNumber:
         let head = c.baseBranch.firstBlockPos
-        head.txFrame.setHead(head.branch.tailHeader,
-          head.branch.tailHash).expect("OK")
+        c.fcuSetHead(head.txFrame,
+          head.branch.tailHeader,
+          head.branch.tailHash,
+          head.branch.tailNumber)
 
   ok(blkHash)
 
@@ -373,8 +386,10 @@ proc updateHead(c: ForkedChainRef, head: BlockPos) =
     c.removeBlockFromCache(head.branch.blocks[i])
 
   head.branch.blocks.setLen(head.index+1)
-  head.txFrame.setHead(head.branch.headHeader,
-    head.branch.headHash).expect("OK")
+  c.fcuSetHead(head.txFrame,
+    head.branch.headHeader,
+    head.branch.headHash,
+    head.branch.headNumber)
 
 proc updateFinalized(c: ForkedChainRef, finalized: BlockPos) =
   # Pruning
@@ -413,7 +428,7 @@ proc updateFinalized(c: ForkedChainRef, finalized: BlockPos) =
     inc i
 
   let txFrame = finalized.txFrame
-  txFrame.finalizedHeaderHash(finalized.hash)
+  txFrame.fcuFinalized(finalized.hash, finalized.number).expect("fcuFinalized OK")
 
 proc updateBase(c: ForkedChainRef, newBase: BlockPos) =
   ##
@@ -543,6 +558,10 @@ proc init*(
     baseHash = baseTxFrame.getBlockHash(base).expect("baseHash exists")
     baseHeader = baseTxFrame.getBlockHeader(baseHash).expect("base header exists")
     baseBranch = branch(baseHeader, baseHash, baseTxFrame)
+    fcuHead = baseTxFrame.fcuHead().valueOr:
+      FcuHashAndNumber(hash: baseHash, number: baseHeader.number)
+    fcuSafe = baseTxFrame.fcuSafe().valueOr:
+      FcuHashAndNumber(hash: baseHash, number: baseHeader.number)
 
   T(com:             com,
     baseBranch:      baseBranch,
@@ -552,7 +571,9 @@ proc init*(
     baseTxFrame:     baseTxFrame,
     baseDistance:    baseDistance,
     persistBatchSize:persistBatchSize,
-    quarantine:      Quarantine.init())
+    quarantine:      Quarantine.init(),
+    fcuHead:         fcuHead,
+    fcuSafe:         fcuSafe)
 
 proc importBlock*(c: ForkedChainRef, blk: Block): Result[void, string] =
   ## Try to import block to canonical or side chain.
@@ -598,10 +619,18 @@ proc importBlock*(c: ForkedChainRef, blk: Block): Result[void, string] =
 
 proc forkChoice*(c: ForkedChainRef,
                  headHash: Hash32,
-                 finalizedHash: Hash32): Result[void, string] =
+                 finalizedHash: Hash32,
+                 safeHash: Hash32 = zeroHash32): Result[void, string] =
 
   if finalizedHash != zeroHash32:
     c.pendingFCU = finalizedHash
+
+  if safeHash != zeroHash32:
+    c.hashToBlock.withValue(safeHash, loc):
+      let number = loc[].number
+      c.fcuSafe.number = number
+      c.fcuSafe.hash = safeHash
+      ?loc[].txFrame.fcuSafe(c.fcuSafe)
 
   if headHash == c.activeBranch.headHash:
     if finalizedHash == zeroHash32:
@@ -645,6 +674,10 @@ proc forkChoice*(c: ForkedChainRef,
   c.updateBase(newBase)
 
   ok()
+
+func notifyFinalizedHash*(c: ForkedChainRef, finHash: Hash32) =
+  if finHash != zeroHash32:
+    c.pendingFCU = finHash
 
 func haveBlockAndState*(c: ForkedChainRef, blockHash: Hash32): bool =
   ## Blocks still in memory with it's txFrame
@@ -751,6 +784,30 @@ proc headerByNumber*(c: ForkedChainRef, number: BlockNumber): Result[Header, str
     branch = branch.parent
 
   err("Block not found, number = " & $number)
+
+func finalizedHeader*(c: ForkedChainRef): Header =
+  c.hashToBlock.withValue(c.pendingFCU, loc):
+    return loc[].header
+
+  c.baseBranch.tailHeader
+
+func safeHeader*(c: ForkedChainRef): Header =
+  c.hashToBlock.withValue(c.fcuSafe.hash, loc):
+    return loc[].header
+
+  c.baseBranch.tailHeader
+
+func finalizedBlock*(c: ForkedChainRef): Block =
+  c.hashToBlock.withValue(c.pendingFCU, loc):
+    return loc[].blk
+
+  c.baseBranch.tailBlock
+
+func safeBlock*(c: ForkedChainRef): Block =
+  c.hashToBlock.withValue(c.fcuSafe.hash, loc):
+    return loc[].blk
+
+  c.baseBranch.tailBlock
 
 proc headerByHash*(c: ForkedChainRef, blockHash: Hash32): Result[Header, string] =
   c.hashToBlock.withValue(blockHash, loc):

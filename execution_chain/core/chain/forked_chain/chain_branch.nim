@@ -29,6 +29,9 @@ type
     parent*: BranchRef
       # If parent.isNil: it is a base branch
 
+func tailBlock*(brc: BranchRef): Block =
+  brc.blocks[0].blk
+
 func tailNumber*(brc: BranchRef): BlockNumber =
   brc.blocks[0].blk.header.number
 

@@ -15,7 +15,7 @@ import
   ./chain_branch,
   ./block_quarantine,
   ../../../common,
-  ../../../db/core_db,
+  ../../../db/[core_db, fcu_db],
   ../../../portal/portal
 
 export deques, tables
@@ -69,6 +69,9 @@ type
       
     portal*: HistoryExpiryRef
       # History Expiry tracker and portal access entry point
+
+    fcuHead*: FcuHashAndNumber
+    fcuSafe*: FcuHashAndNumber
 
 # ----------------
 
