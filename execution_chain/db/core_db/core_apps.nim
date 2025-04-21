@@ -601,37 +601,6 @@ proc persistUncles*(db: CoreDbTxRef, uncles: openArray[Header]): Hash32 =
     warn "persistUncles()", unclesHash=result, error=($$error)
     return EMPTY_ROOT_HASH
 
-
-proc safeHeaderHash*(db: CoreDbTxRef): Hash32 =
-  db.getHash(safeHashKey()).valueOr(default(Hash32))
-
-proc safeHeaderHash*(db: CoreDbTxRef, headerHash: Hash32) =
-  let safeHashKey = safeHashKey()
-  db.put(safeHashKey.toOpenArray, rlp.encode(headerHash)).isOkOr:
-    warn "safeHeaderHash()", safeHashKey, error=($$error)
-    return
-
-proc finalizedHeaderHash*(
-    db: CoreDbTxRef;
-      ): Hash32 =
-  db.getHash(finalizedHashKey()).valueOr(default(Hash32))
-
-proc finalizedHeaderHash*(db: CoreDbTxRef, headerHash: Hash32) =
-  let finalizedHashKey = finalizedHashKey()
-  db.put(finalizedHashKey.toOpenArray, rlp.encode(headerHash)).isOkOr:
-    warn "finalizedHeaderHash()", finalizedHashKey, error=($$error)
-    return
-
-proc safeHeader*(
-    db: CoreDbTxRef;
-      ): Result[Header, string] =
-  db.getBlockHeader(db.safeHeaderHash)
-
-proc finalizedHeader*(
-    db: CoreDbTxRef;
-      ): Result[Header, string] =
-  db.getBlockHeader(db.finalizedHeaderHash)
-
 # ------------------------------------------------------------------------------
 # End
 # ------------------------------------------------------------------------------

@@ -12,7 +12,7 @@
 import
   chronicles,
   logging,
-  ../db/[core_db, ledger, storage_types],
+  ../db/[core_db, ledger, storage_types, fcu_db],
   ../utils/[utils],
   ".."/[constants, errors, version],
   "."/[chain_config, evmforks, genesis, hardforks],
@@ -136,18 +136,18 @@ proc initializeDb(com: CommonRef) =
       fatal "Cannot load base block header",
         baseNum, err = error
       quit 1
-    finalized = txFrame.finalizedHeader().valueOr:
-      debug "No finalized block stored in database, reverting to base"
-      base
-    head = txFrame.getCanonicalHead().valueOr:
-      fatal "Cannot load canonical block header",
-        err = error
-      quit 1
+    baseHash = base.computeBlockHash
+    finalized = txFrame.fcuFinalized().valueOr:
+      debug "Reverting to base", err = error
+      FcuHashAndNumber(hash: baseHash, number: base.number)
+    head = txFrame.fcuHead().valueOr:
+      fatal "Reverting to base", err = error
+      FcuHashAndNumber(hash: baseHash, number: base.number)
 
   info "Database initialized",
-    base = (base.computeBlockHash, base.number),
-    finalized = (finalized.computeBlockHash, finalized.number),
-    head = (head.computeBlockHash, head.number)
+    base = (baseHash, base.number),
+    finalized = (finalized.hash, finalized.number),
+    head = (head.hash, head.number)
 
 proc init(com         : CommonRef,
           db          : CoreDbRef,

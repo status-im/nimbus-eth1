@@ -15,7 +15,8 @@ import
   ./chain_branch,
   ./block_quarantine,
   ../../../common,
-  ../../../db/core_db
+  ../../../db/core_db,
+  ../../../db/fcu_db
 
 export deques, tables
 
@@ -65,6 +66,9 @@ type
       # When move forward, this is the minimum distance
       # to move the base. And the bulk writing can works
       # efficiently.
+
+    fcuHead*: FcuHashAndNumber
+    fcuSafe*: FcuHashAndNumber
 
 # ----------------
 
