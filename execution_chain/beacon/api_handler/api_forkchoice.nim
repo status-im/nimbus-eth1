@@ -106,9 +106,9 @@ proc forkchoiceUpdated*(ben: BeaconEngineRef,
       number = header.number,
       hash   = headHash.short
 
-    # Inform the header cache (used by the syncer)
     chain.notifyFinalizedHash(update.finalizedBlockHash)
-    com.fcHeaderClUpdate(header, update.finalizedBlockHash)
+    # Inform the header chain cache (used by the syncer)
+    com.headerChainUpdate(header, update.finalizedBlockHash)
 
     return simpleFCU(PayloadExecutionStatus.syncing)
 

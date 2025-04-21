@@ -19,7 +19,7 @@ import
   ],
   "."/[era1, history_data_ssz_e2s]
 
-from eth/common/eth_types_rlp import rlpHash
+from eth/rlp import computeRlpHash
 
 export results
 
@@ -41,7 +41,7 @@ iterator headersWithProof*(
     let
       contentKey = ContentKey(
         contentType: ContentType.blockHeader,
-        blockHeaderKey: BlockKey(blockHash: blockHeader.rlpHash()),
+        blockHeaderKey: BlockKey(blockHash: blockHeader.computeRlpHash()),
       ).encode()
 
       headerWithProof = buildHeaderWithProof(blockHeader, epochRecord).valueOr:
@@ -53,7 +53,7 @@ iterator headersWithProof*(
 
 iterator blockContent*(f: Era1File): (ContentKeyByteList, seq[byte]) =
   for (header, body, receipts, _) in f.era1BlockTuples:
-    let blockHash = header.rlpHash()
+    let blockHash = header.computeRlpHash()
 
     block: # block body
       let

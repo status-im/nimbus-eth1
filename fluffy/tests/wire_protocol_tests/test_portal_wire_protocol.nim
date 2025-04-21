@@ -16,12 +16,16 @@ import
   eth/p2p/discoveryv5/routing_table,
   nimcrypto/[hash, sha2],
   eth/p2p/discoveryv5/protocol as discv5_protocol,
-  ../../network/wire/
-    [portal_protocol, portal_stream, portal_protocol_config, ping_extensions],
+  ../../network/wire/[
+    portal_protocol, portal_stream, portal_protocol_config, portal_protocol_version,
+    ping_extensions,
+  ],
   ../../database/content_db,
   ../test_helpers
 
-const protocolId = [byte 0x50, 0x00]
+const
+  protocolId = [byte 0x50, 0x00]
+  connectionTimeoutTest = 2.seconds
 
 proc toContentId(contentKey: ContentKeyByteList): results.Opt[ContentId] =
   # Note: Returning sha256 digest as content id here. This content key to
@@ -37,13 +41,19 @@ proc initPortalProtocol(
     bootstrapRecords: openArray[Record] = [],
 ): PortalProtocol =
   let
-    d = initDiscoveryNode(rng, privKey, address, bootstrapRecords)
+    d = initDiscoveryNode(
+      rng,
+      privKey,
+      address,
+      bootstrapRecords,
+      localEnrFields = {portalVersionKey: SSZ.encode(localSupportedVersions)},
+    )
     db = ContentDB.new(
       "", uint32.high, RadiusConfig(kind: Dynamic), d.localNode.id, inMemory = true
     )
     manager = StreamManager.new(d)
     q = newAsyncQueue[(Opt[NodeId], ContentKeysList, seq[seq[byte]])](50)
-    stream = manager.registerNewStream(q, connectionTimeout = 2.seconds)
+    stream = manager.registerNewStream(q, connectionTimeout = connectionTimeoutTest)
 
   var config = defaultPortalProtocolConfig
   config.disableBanNodes = false
@@ -184,20 +194,20 @@ procSuite "Portal Wire Protocol Tests":
     let contentKeys = ContentKeysList(@[ContentKeyByteList(@[byte 0x01, 0x02, 0x03])])
 
     let accept = await proto1.offerImpl(proto2.baseProtocol.localNode, contentKeys)
-    var expectedBitlist = ContentKeysBitList.init(contentKeys.len)
-    expectedBitlist.setBit(0)
+    let expectedByteList = ContentKeysAcceptList.init(@[Accepted])
 
     check:
       accept.isOk()
       # Content accepted
-      accept.get().contentKeys == expectedBitlist
+      accept.get().contentKeys == expectedByteList
 
     let accept2 = await proto1.offerImpl(proto2.baseProtocol.localNode, contentKeys)
 
     check:
       accept2.isOk()
       # Content not accepted
-      accept2.get().contentKeys == ContentKeysBitList.init(contentKeys.len)
+      accept2.get().contentKeys ==
+        ContentKeysAcceptList.init(@[DeclinedInboundTransferInProgress])
 
     await proto1.stopPortalProtocol()
     await proto2.stopPortalProtocol()
@@ -207,21 +217,20 @@ procSuite "Portal Wire Protocol Tests":
     let contentKeys = ContentKeysList(@[ContentKeyByteList(@[byte 0x01, 0x02, 0x03])])
 
     let accept = await proto1.offerImpl(proto2.baseProtocol.localNode, contentKeys)
-    var expectedBitlist = ContentKeysBitList.init(contentKeys.len)
-    expectedBitlist.setBit(0)
+    let expectedByteList = ContentKeysAcceptList.init(@[Accepted])
 
     check:
       accept.isOk()
       # Content accepted
-      accept.get().contentKeys == expectedBitlist
+      accept.get().contentKeys == expectedByteList
 
-    await sleepAsync(chronos.seconds(5))
+    await sleepAsync(connectionTimeoutTest)
 
     let accept2 = await proto1.offerImpl(proto2.baseProtocol.localNode, contentKeys)
     check:
       accept2.isOk()
       # Content accepted because previous offer was pruned
-      accept2.get().contentKeys == expectedBitlist
+      accept2.get().contentKeys == expectedByteList
 
     await proto1.stopPortalProtocol()
     await proto2.stopPortalProtocol()
