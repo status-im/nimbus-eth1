@@ -277,8 +277,7 @@ proc callFetchingState(
         vmState.ledger.setCode(q.address, code)
         fetchedCode.incl(q.address)
     except CatchableError as e:
-      # TODO: why do the above futures throw a CatchableError and not CancelledError?
-      raiseAssert(e.msg)
+      raise newException(CancelledError, e.msg)
 
   evmResult.toCallResult()
 
@@ -377,8 +376,6 @@ proc createAccessList*(
 
   let finalCallResult = ?evm.call(vmState, header, txWithAl)
 
-  # TODO: Do we need to use the estimate gas calculation here to get a more acturate
-  # estimation of the gas requirement?
   ok((txWithAl.accessList.get(@[]), finalCallResult.gasUsed))
 
 proc estimateGas*(
