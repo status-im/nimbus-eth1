@@ -104,7 +104,7 @@ func updateAccumulator*(a: var HistoricalHashesAccumulator, header: Header) =
     a.currentEpoch = EpochRecord.init(@[])
 
   let headerRecord = HeaderRecord(
-    blockHash: header.rlpHash(),
+    blockHash: header.computeRlpHash(),
     totalDifficulty: lastTotalDifficulty + header.difficulty,
   )
 

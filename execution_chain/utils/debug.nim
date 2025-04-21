@@ -58,7 +58,7 @@ proc debug*(h: Header): string =
     result.add "beaconRoot     : " & $h.parentBeaconBlockRoot.get() & "\n"
   if h.requestsHash.isSome:
     result.add "requestsHash   : " & $h.requestsHash.get() & "\n"
-  result.add "blockHash      : " & $blockHash(h) & "\n"
+  result.add "blockHash      : " & $computeBlockHash(h) & "\n"
 
 proc dumpAccounts*(vmState: BaseVMState): JsonNode =
   %dumpAccounts(vmState.ledger)
@@ -84,7 +84,7 @@ proc debugAccounts*(vmState: BaseVMState): string =
 
 proc debug*(vms: BaseVMState): string =
   result.add "proofOfStake     : " & $vms.proofOfStake()      & "\n"
-  result.add "parent           : " & $vms.parent.blockHash    & "\n"
+  result.add "parent           : " & $vms.parent.computeBlockHash    & "\n"
   result.add "timestamp        : " & $vms.blockCtx.timestamp  & "\n"
   result.add "gasLimit         : " & $vms.blockCtx.gasLimit   & "\n"
   result.add "baseFeePerGas    : " & $vms.blockCtx.baseFeePerGas & "\n"

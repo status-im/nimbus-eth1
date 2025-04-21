@@ -16,8 +16,6 @@ import
   ./state_network,
   ./state_utils
 
-from eth/common/eth_types_rlp import rlpHash
-
 export results, state_network, hashes, addresses
 
 logScope:
@@ -365,7 +363,9 @@ proc getBalance*(
     warn "Failed to get block header by block number or hash", blockNumOrHash
     return Opt.none(UInt256)
 
-  await n.getBalanceByStateRoot(header.stateRoot, address, Opt.some(header.rlpHash()))
+  await n.getBalanceByStateRoot(
+    header.stateRoot, address, Opt.some(header.computeRlpHash())
+  )
 
 # Used by: eth_getTransactionCount
 proc getTransactionCount*(
@@ -376,7 +376,7 @@ proc getTransactionCount*(
     return Opt.none(AccountNonce)
 
   await n.getTransactionCountByStateRoot(
-    header.stateRoot, address, Opt.some(header.rlpHash())
+    header.stateRoot, address, Opt.some(header.computeRlpHash())
   )
 
 # Used by: eth_getStorageAt
@@ -388,7 +388,7 @@ proc getStorageAt*(
     return Opt.none(UInt256)
 
   await n.getStorageAtByStateRoot(
-    header.stateRoot, address, slotKey, Opt.some(header.rlpHash())
+    header.stateRoot, address, slotKey, Opt.some(header.computeRlpHash())
   )
 
 # Used by: eth_getCode
@@ -399,7 +399,9 @@ proc getCode*(
     warn "Failed to get block header by block number or hash", blockNumOrHash
     return Opt.none(seq[byte])
 
-  await n.getCodeByStateRoot(header.stateRoot, address, Opt.some(header.rlpHash()))
+  await n.getCodeByStateRoot(
+    header.stateRoot, address, Opt.some(header.computeRlpHash())
+  )
 
 # Used by: eth_getProof
 proc getProofs*(
@@ -413,5 +415,5 @@ proc getProofs*(
     return Opt.none(Proofs)
 
   await n.getProofsByStateRoot(
-    header.stateRoot, address, slotKeys, Opt.some(header.rlpHash())
+    header.stateRoot, address, slotKeys, Opt.some(header.computeRlpHash())
   )

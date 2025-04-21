@@ -1,5 +1,5 @@
 # Nimbus
-# Copyright (c) 2023-2024 Status Research & Development GmbH
+# Copyright (c) 2023-2025 Status Research & Development GmbH
 # Licensed under either of
 #  * Apache License, version 2.0, ([LICENSE-APACHE](LICENSE-APACHE) or
 #    http://www.apache.org/licenses/LICENSE-2.0)
@@ -64,7 +64,7 @@ method execute(cs: BlockStatus, env: TestEnv): bool =
       )
 
       let tx = env.makeNextTx(tc)
-      shadow.txHash = tx.rlpHash
+      shadow.txHash = tx.computeRlpHash
       let ok = env.sendTx(tx)
       testCond ok:
         fatal "Error trying to send transaction"

@@ -246,7 +246,7 @@ proc execute*(ws: WDBaseSpec, env: TestEnv): bool =
         # withdrawals before Shanghai
         var r = env.client.forkchoiceUpdatedV2(
           ForkchoiceStateV1(
-            headBlockHash: env.clMock.latestHeader.blockHash,
+            headBlockHash: env.clMock.latestHeader.computeBlockHash,
           ),
           Opt.some(PayloadAttributes(
             timestamp:             w3Qty(env.clMock.latestHeader.timestamp, ws.getBlockTimeIncrements()),
@@ -262,7 +262,7 @@ proc execute*(ws: WDBaseSpec, env: TestEnv): bool =
         # (clMock uses V1 by default)
         r = env.client.forkchoiceUpdatedV2(
           ForkchoiceStateV1(
-            headBlockHash: env.clMock.latestHeader.blockHash,
+            headBlockHash: env.clMock.latestHeader.computeBlockHash,
           ),
           Opt.some(PayloadAttributes(
             timestamp:             w3Qty(env.clMock.latestHeader.timestamp, ws.getBlockTimeIncrements()),
@@ -334,7 +334,7 @@ proc execute*(ws: WDBaseSpec, env: TestEnv): bool =
         # Shanghai
         let r = env.client.forkchoiceUpdatedV2(
           ForkchoiceStateV1(
-            headBlockHash: env.clMock.latestHeader.blockHash,
+            headBlockHash: env.clMock.latestHeader.computeBlockHash,
           ),
           Opt.some(PayloadAttributes(
             timestamp:             w3Qty(env.clMock.latestHeader.timestamp, ws.getBlockTimeIncrements()),

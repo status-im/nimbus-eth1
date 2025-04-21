@@ -240,3 +240,76 @@ suite "History Content Values":
     check:
       encode(contentValue.get()) == contentValueEncoded
       encode(contentKey.get()).asSeq() == contentKeyEncoded
+
+  test "Ephemeral headers Encoding/Decoding - FindContent":
+    const dataFile =
+      "./vendor/portal-spec-tests/tests/mainnet/history/ephemeral_headers/20000000-findcontent.yaml"
+
+    let
+      content = YamlPortalContent.loadFromYaml(dataFile).valueOr:
+        raiseAssert "Invalid data file: " & error
+
+      contentKeyEncoded = content.content_key.hexToSeqByte()
+      contentValueEncoded = content.content_value.hexToSeqByte()
+
+    # Decode content key
+    let contentKey = decodeSsz(contentKeyEncoded, ContentKey)
+    check contentKey.isOk()
+
+    # Decode content value
+    let contentValue = decodeSsz(contentValueEncoded, EphemeralBlockHeaderList)
+    check contentValue.isOk()
+
+    let headerList = contentValue.value()
+    check headerList.len() == 2
+
+    let headerEncoded1 = headerList[0].asSeq()
+    # RLP decode and hash verify the first header
+    let headerRes = validateHeaderBytes(
+      headerEncoded1, contentKey.value().ephemeralBlockHeaderFindContentKey.blockHash
+    )
+    check headerRes.isOk()
+
+    let parentHash = headerRes.value().parentHash
+
+    let headerEncoded2 = headerList[1].asSeq()
+    # RLP decode and hash verify the second header
+    let headerRes2 = validateHeaderBytes(headerEncoded2, parentHash)
+    check headerRes2.isOk()
+
+    # Encode content
+    check:
+      SSZ.encode(contentValue.value()) == contentValueEncoded
+      encode(contentKey.value()).asSeq() == contentKeyEncoded
+
+  test "Ephemeral headers Encoding/Decoding - Offer":
+    const dataFile =
+      "./vendor/portal-spec-tests/tests/mainnet/history/ephemeral_headers/20000000-offer.yaml"
+
+    let
+      content = YamlPortalContent.loadFromYaml(dataFile).valueOr:
+        raiseAssert "Invalid data file: " & error
+
+      contentKeyEncoded = content.content_key.hexToSeqByte()
+      contentValueEncoded = content.content_value.hexToSeqByte()
+
+    # Decode content key
+    let contentKey = decodeSsz(contentKeyEncoded, ContentKey)
+    check contentKey.isOk()
+
+    # Decode content value
+    let contentValue = decodeSsz(contentValueEncoded, EphemeralBlockHeader)
+    check contentValue.isOk()
+
+    let headerEncoded = contentValue.value().header.asSeq()
+
+    # Rlp decode and hash verify the header
+    let headerRes = validateHeaderBytes(
+      headerEncoded, contentKey.value().ephemeralBlockHeaderOfferKey.blockHash
+    )
+    check headerRes.isOk()
+
+    # Encode content
+    check:
+      SSZ.encode(contentValue.value()) == contentValueEncoded
+      encode(contentKey.value()).asSeq() == contentKeyEncoded

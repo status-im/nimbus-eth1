@@ -50,7 +50,7 @@ func pp*(a: NetworkPayload): string =
 
 func pp*(h: Header; sep = " "): string =
   "" &
-    &"hash={h.blockHash.pp}{sep}" &
+    &"hash={h.computeBlockHash.pp}{sep}" &
     &"blockNumber={h.number}{sep}" &
     &"parentHash={h.parentHash.pp}{sep}" &
     &"coinbase={h.coinbase.pp}{sep}" &

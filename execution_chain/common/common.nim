@@ -31,8 +31,8 @@ export
   logging
 
 type
-  FcHeaderClUpdateCB* = proc(header: Header; finHash: Hash32) {.gcsafe, raises: [].}
-    ## Inform `CL` sub-module `chain_header_cache` about new head.
+  HeaderChainUpdateCB* = proc(hdr: Header; fin: Hash32) {.gcsafe, raises: [].}
+    ## Inform `CL` sub-module `header_chain_cache` about new head.
 
   BeaconSyncerProgressCB* = proc(): tuple[start, current, target: BlockNumber] {.gcsafe, raises: [].}
     ## Query syncer status
@@ -59,7 +59,7 @@ type
     forkIdCalculator: ForkIdCalculator
     networkId: NetworkId
 
-    fcHeaderClUpdateCB: FcHeaderClUpdateCB
+    headerChainUpdateCB: HeaderChainUpdateCB
       ## Call back function for a sync processor that returns the canonical
       ## header.
 
@@ -91,7 +91,7 @@ type
 # ------------------------------------------------------------------------------
 
 func setForkId(com: CommonRef, genesis: Header) =
-  com.genesisHash = genesis.blockHash
+  com.genesisHash = genesis.computeBlockHash
   let genesisCRC = crc32(0, com.genesisHash.data)
   com.forkIdCalculator = initForkIdCalculator(
     com.forkTransitionTable,
@@ -111,7 +111,7 @@ proc initializeDb(com: CommonRef) =
     txFrame.hasKeyRc(key).expect "valid bool"
   if canonicalHeadHashKey().toOpenArray notin txFrame:
     info "Writing genesis to DB",
-      blockHash = com.genesisHeader.rlpHash,
+      blockHash = com.genesisHeader.computeBlockHash,
       stateRoot = com.genesisHeader.stateRoot,
       difficulty = com.genesisHeader.difficulty,
       gasLimit = com.genesisHeader.gasLimit,
@@ -145,9 +145,9 @@ proc initializeDb(com: CommonRef) =
       quit 1
 
   info "Database initialized",
-    base = (base.blockHash, base.number),
-    finalized = (finalized.blockHash, finalized.number),
-    head = (head.blockHash, head.number)
+    base = (base.computeBlockHash, base.number),
+    finalized = (finalized.computeBlockHash, finalized.number),
+    head = (head.computeBlockHash, head.number)
 
 proc init(com         : CommonRef,
           db          : CoreDbRef,
@@ -323,10 +323,10 @@ proc proofOfStake*(com: CommonRef, header: Header, txFrame: CoreDbTxRef): bool =
 func depositContractAddress*(com: CommonRef): Address =
   com.config.depositContractAddress.get(default(Address))
 
-proc fcHeaderClUpdate*(com: CommonRef; header: Header; finHash: Hash32) =
+proc headerChainUpdate*(com: CommonRef; header: Header; finHash: Hash32) =
   ## Used by RPC updater
-  if not com.fcHeaderClUpdateCB.isNil:
-    com.fcHeaderClUpdateCB(header, finHash)
+  if not com.headerChainUpdateCB.isNil:
+    com.headerChainUpdateCB(header, finHash)
 
 proc beaconSyncerProgress*(com: CommonRef): tuple[start, current, target: BlockNumber] =
   ## Query syncer status
@@ -418,9 +418,9 @@ func setTTD*(com: CommonRef, ttd: Opt[DifficultyInt]) =
   # rebuild the MergeFork piece of the forkTransitionTable
   com.forkTransitionTable.mergeForkTransitionThreshold = com.config.mergeForkTransitionThreshold
 
-func `fcHeaderClUpdate=`*(com: CommonRef; cb: FcHeaderClUpdateCB) =
+func `headerChainUpdate=`*(com: CommonRef; cb: HeaderChainUpdateCB) =
   ## Activate or reset a call back handler for syncing.
-  com.fcHeaderClUpdateCB = cb
+  com.headerChainUpdateCB = cb
 
 func `beaconSyncerProgress=`*(com: CommonRef; cb: BeaconSyncerProgressCB) =
   ## Activate or reset a call back handler for querying syncer.

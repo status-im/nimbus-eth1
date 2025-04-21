@@ -75,7 +75,7 @@ proc verifyResult(ctx: var StateContext,
       [($obtainedHash).toLowerAscii, $ctx.expectedHash]
     return
 
-  let actualLogsHash = rlpHash(callResult.logEntries)
+  let actualLogsHash = computeRlpHash(callResult.logEntries)
   if actualLogsHash != ctx.expectedLogs:
     ctx.error = "post state log hash mismatch: got $1, want $2" %
       [($actualLogsHash).toLowerAscii, $ctx.expectedLogs]

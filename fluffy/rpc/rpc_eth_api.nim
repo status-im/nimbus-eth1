@@ -23,7 +23,7 @@ import
 from ../../execution_chain/errors import ValidationError
 from ../../execution_chain/rpc/filters import headerBloomFilter, deriveLogs
 
-from eth/common/eth_types_rlp import rlpHash
+from eth/rlp import computeRlpHash
 
 export rpcserver
 
@@ -41,12 +41,12 @@ func init*(
     raise (ref ValidationError)(msg: "Invalid tx signature")
 
   TransactionObject(
-    blockHash: Opt.some(header.rlpHash),
+    blockHash: Opt.some(header.computeRlpHash),
     blockNumber: Opt.some(Quantity(header.number)),
     `from`: sender,
     gas: Quantity(tx.gasLimit),
     gasPrice: Quantity(tx.gasPrice),
-    hash: tx.rlpHash,
+    hash: tx.computeRlpHash,
     input: tx.payload,
     nonce: Quantity(tx.nonce),
     to: Opt.some(tx.destination),
@@ -65,7 +65,7 @@ func init*(
 func init*(
     T: type BlockObject, header: Header, body: BlockBody, fullTx = true, isUncle = false
 ): T {.raises: [ValidationError].} =
-  let blockHash = header.rlpHash
+  let blockHash = header.computeRlpHash
 
   var blockObject = BlockObject(
     number: Quantity(header.number),
@@ -97,7 +97,7 @@ func init*(
   if not isUncle:
     blockObject.uncles = body.uncles.map(
       proc(h: Header): Hash32 =
-        h.rlpHash
+        h.computeRlpHash
     )
 
     if fullTx:
@@ -107,7 +107,7 @@ func init*(
         inc i
     else:
       for tx in body.transactions:
-        blockObject.transactions.add txOrHash(rlpHash(tx))
+        blockObject.transactions.add txOrHash(computeRlpHash(tx))
 
   blockObject
 

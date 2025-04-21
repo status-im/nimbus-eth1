@@ -17,8 +17,6 @@ import
   ../../execution_chain/common/[chain_config, genesis],
   ../network/history/[history_content, validation/historical_hashes_accumulator]
 
-from eth/common/eth_types_rlp import rlpHash
-
 export results, tables
 
 # Helper calls to read/write history data from/to json files.
@@ -202,7 +200,7 @@ proc writeHeaderRecord*(writer: var JsonWriter, header: Header) {.raises: [IOErr
     dataRecord =
       HeaderRecord(header: rlp.encode(header).to0xHex(), number: header.number)
 
-    headerHash = to0xHex(rlpHash(header).data)
+    headerHash = to0xHex(computeRlpHash(header).data)
 
   writer.writeField(headerHash, dataRecord)
 
@@ -217,6 +215,6 @@ proc writeBlockRecord*(
       number: header.number,
     )
 
-    headerHash = to0xHex(rlpHash(header).data)
+    headerHash = to0xHex(computeRlpHash(header).data)
 
   writer.writeField(headerHash, dataRecord)

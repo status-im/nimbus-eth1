@@ -1,5 +1,5 @@
 # Nimbus
-# Copyright (c) 2023-2024 Status Research & Development GmbH
+# Copyright (c) 2023-2025 Status Research & Development GmbH
 # Licensed under either of
 #  * Apache License, version 2.0, ([LICENSE-APACHE](LICENSE-APACHE) or
 #    http://www.apache.org/licenses/LICENSE-2.0)
@@ -412,7 +412,7 @@ method execute(cs: NewPayloadWithMissingFcUTest, env: TestEnv): bool =
 
   # Get last genesis block hash
   let res = env.engine.client.latestHeader()
-  let genesisHash = res.get.blockHash
+  let genesisHash = res.get.computeBlockHash
 
   # Produce blocks on the main client, these payloads will be replayed on the secondary client.
   let pbRes = env.clMock.produceBlocks(5, BlockProcessCallbacks(

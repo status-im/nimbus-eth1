@@ -65,21 +65,23 @@ proc setupServices*(ctx: BeaconCtxRef; info: static[string]) =
 
   # Set up header cache descriptor. This will evenually be integrated
   # into `ForkedChainRef` (i.e. `ctx.pool.chain`.)
-  ctx.pool.hdrCache = ForkedCacheRef.init(ctx.pool.chain)
+  ctx.pool.hdrCache = HeaderChainRef.init(ctx.pool.chain)
 
   # Set up new notifier informing when the new head is available from the
   # `CL`. If there is a new session available, the notifier is called with
   # the hash of a finalised header that needs to be resolved. This hash is
   # stored on the `ctx.pool` descriptor to be picked up by the next available
   # sync peer.
-  ctx.hdrCache.start proc(fin: Hash32) =
+  ctx.hdrCache.start proc(hdr: BlockNumber, fin: Hash32) =
     ctx.pool.finRequest = fin
+    info "Finalised hash registered", target=hdr.bnStr,
+      finHash=fin.short, nSyncPeers=ctx.pool.nBuddies
 
   # Manual first run?
   if 0 < ctx.clReq.consHead.number:
     debug info & ": pre-set target", consHead=ctx.clReq.consHead.bnStr,
       finalHash=ctx.clReq.finalHash.short
-    ctx.hdrCache.fcHeaderTargetUpdate(ctx.clReq.consHead, ctx.clReq.finalHash)
+    ctx.hdrCache.headTargetUpdate(ctx.clReq.consHead, ctx.clReq.finalHash)
 
   # Provide progress info call back handler
   ctx.pool.chain.com.beaconSyncerProgress = proc(): SyncStateData =
@@ -105,8 +107,7 @@ proc startBuddy*(buddy: BeaconBuddyRef): bool =
     return true
 
 proc stopBuddy*(buddy: BeaconBuddyRef) =
-  let ctx = buddy.ctx
-  ctx.pool.nBuddies.dec
+  buddy.ctx.pool.nBuddies.dec
   buddy.clearHdrProcErrors()
 
 # ------------------------------------------------------------------------------

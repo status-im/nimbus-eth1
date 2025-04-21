@@ -66,7 +66,7 @@ logScope:
 
 const
   EVM_CALL_LIMIT = 10_000
-  EVM_CALL_GAS_CAP = 50_000_000.GasInt
+  EVM_CALL_GAS_CAP* = 50_000_000.GasInt
 
 type
   AccountQuery = object
@@ -308,7 +308,7 @@ proc setupVmState(evm: AsyncEvm, txFrame: CoreDbTxRef, header: Header): BaseVMSt
     difficulty: header.difficulty,
     coinbase: header.coinbase,
     excessBlobGas: header.excessBlobGas.get(0'u64),
-    parentHash: header.blockHash(),
+    parentHash: header.computeRlpHash(),
   )
   BaseVMState.new(header, blockContext, evm.com, txFrame)
 

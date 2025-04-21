@@ -106,7 +106,7 @@ export
 
 proc removeNewBlockTxs*(xp: TxPoolRef, blk: Block, optHash = Opt.none(Hash32)) =
   let fromHash = if optHash.isSome: optHash.get
-                 else: blk.header.blockHash
+                 else: blk.header.computeBlockHash
 
   # Up to date, no need for further actions
   if fromHash == xp.rmHash:
@@ -115,7 +115,7 @@ proc removeNewBlockTxs*(xp: TxPoolRef, blk: Block, optHash = Opt.none(Hash32)) =
   # Remove only the latest block transactions
   if blk.header.parentHash == xp.rmHash:
     for tx in blk.transactions:
-      let txHash = rlpHash(tx)
+      let txHash = computeRlpHash(tx)
       xp.removeTx(txHash)
 
     xp.rmHash = fromHash

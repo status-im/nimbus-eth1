@@ -22,8 +22,6 @@ import
   ../test_helpers,
   ./test_history_util
 
-from eth/common/eth_types_rlp import rlpHash
-
 type HistoryNode = ref object
   discoveryProtocol*: discv5_protocol.Protocol
   historyNetwork*: HistoryNetwork
@@ -92,7 +90,7 @@ proc headersToContentKV(headersWithProof: seq[BlockHeaderWithProof]): seq[Conten
     let
       # TODO: Decoding step could be avoided
       header = rlp.decode(headerWithProof.header.asSeq(), Header)
-      headerHash = header.rlpHash()
+      headerHash = header.computeRlpHash()
       blockKey = BlockKey(blockHash: headerHash)
       contentKey =
         encode(ContentKey(contentType: blockHeader, blockHeaderKey: blockKey))

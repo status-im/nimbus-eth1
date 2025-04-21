@@ -30,7 +30,7 @@ proc napUnlessSomethingToFetch(
   ## When idle, save cpu cycles waiting for something to do.
   if buddy.ctx.pool.blkImportOk or               # currently importing blocks
      buddy.ctx.hibernate or                      # not activated yet?
-     not (buddy.headersStagedFetchOk() or            # something on TODO list
+     not (buddy.headersStagedFetchOk() or        # something on TODO list
           buddy.blocksStagedFetchOk()):
     try:
       await sleepAsync workerIdleWaitInterval
@@ -80,7 +80,7 @@ proc start*(buddy: BeaconBuddyRef; info: static[string]): bool =
 proc stop*(buddy: BeaconBuddyRef; info: static[string]) =
   ## Clean up this peer
   if not buddy.ctx.hibernate: debug info & ": release peer", peer=buddy.peer,
-    ctrl=buddy.ctrl.state, nSyncPeers=buddy.ctx.pool.nBuddies,
+    ctrl=buddy.ctrl.state, nSyncPeers=(buddy.ctx.pool.nBuddies-1),
     nLaps=buddy.only.nMultiLoop, lastIdleGap=buddy.only.multiRunIdle.toStr
   buddy.stopBuddy()
 

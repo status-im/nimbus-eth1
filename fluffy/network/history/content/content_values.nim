@@ -34,9 +34,13 @@ type
     header*: ByteList[MAX_HEADER_LENGTH] # RLP data
     proof*: ByteList[MAX_HEADER_PROOF_LENGTH]
 
-  ## Ephemeral BlockHeader list
+  ## Ephemeral BlockHeader list for FindContent
   EphemeralBlockHeaderList* =
     List[ByteList[MAX_HEADER_LENGTH], MAX_EPHEMERAL_HEADER_PAYLOAD]
+
+  # Ephemeral BlockHeader for Offer
+  EphemeralBlockHeader* = object
+    header*: ByteList[MAX_HEADER_LENGTH] # RLP data
 
   ## BlockBody types
   TransactionByteList* = ByteList[MAX_TRANSACTION_LENGTH] # RLP data

@@ -85,7 +85,7 @@ method execute*(step: SendBlobTransactions, ctx: CancunTestContext): bool =
         error "verify tx from node", msg=r.error
         return false
 
-    let txHash = rlpHash(blobTx)
+    let txHash = computeRlpHash(blobTx)
     ctx.txPool.addBlobTransaction(blobTx)
     ctx.txPool.hashesByIndex[ctx.txPool.currentTxIndex] = txHash
     ctx.txPool.currentTxIndex += 1

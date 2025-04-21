@@ -33,7 +33,7 @@ proc transactionJsonMain*() =
 transactionJsonMain()
 
 proc txHash(tx: Transaction): string =
-  rlpHash(tx).toHex()
+  computeRlpHash(tx).toHex()
 
 proc testTxByFork(tx: Transaction, forkData: JsonNode, forkName: string, testStatusIMPL: var TestStatus) =
   let

@@ -25,8 +25,8 @@ import
   ../evm/precompiles,
   ../evm/tracer/access_list_tracer,
   ../evm/evm_errors,
-  eth/common/transaction_utils,
   ../common/common,
+  eth/common/transaction_utils,
   web3/eth_api_types
 
 proc calculateMedianGasPrice*(chain: ForkedChainRef): GasInt =
@@ -102,7 +102,7 @@ proc populateTransactionObject*(tx: Transaction,
     result.`from` = sender[]
   result.gas = Quantity(tx.gasLimit)
   result.gasPrice = Quantity(tx.gasPrice)
-  result.hash = tx.rlpHash
+  result.hash = tx.computeRlpHash
   result.input = tx.payload
   result.nonce = Quantity(tx.nonce)
   result.to = Opt.some(tx.destination)
@@ -159,7 +159,7 @@ proc populateBlockObject*(blockHash: Hash32,
   result.totalDifficulty = totalDifficulty
 
   if not withUncles:
-    result.uncles = blk.uncles.mapIt(it.blockHash)
+    result.uncles = blk.uncles.mapIt(it.computeBlockHash)
 
   if fullTx:
     for i, tx in blk.transactions:
@@ -169,7 +169,7 @@ proc populateBlockObject*(blockHash: Hash32,
       result.transactions.add txOrHash(txObj)
   else:
     for i, tx in blk.transactions:
-      let txHash = rlpHash(tx)
+      let txHash = computeRlpHash(tx)
       result.transactions.add txOrHash(txHash)
 
   result.withdrawalsRoot = header.withdrawalsRoot
@@ -183,9 +183,9 @@ proc populateReceipt*(receipt: Receipt, gasUsed: GasInt, tx: Transaction,
                       txIndex: uint64, header: Header, com: CommonRef): ReceiptObject =
   let sender = tx.recoverSender()
   var res = ReceiptObject()
-  res.transactionHash = tx.rlpHash
+  res.transactionHash = tx.computeRlpHash
   res.transactionIndex = Quantity(txIndex)
-  res.blockHash = header.blockHash
+  res.blockHash = header.computeBlockHash
   res.blockNumber = Quantity(header.number)
   if sender.isSome():
     res.`from` = sender.get()
@@ -257,7 +257,7 @@ proc createAccessList*(header: Header,
     args.gas = Opt.some(Quantity DEFAULT_RPC_GAS_CAP)
 
   let
-    txFrame = chain.txFrame(header.blockHash)
+    txFrame = chain.txFrame(header.computeBlockHash)
     parent  = txFrame.getBlockHeader(header.parentHash).valueOr:
       handleError(error)
     vmState = BaseVMState.new(parent, header, com, txFrame)

@@ -115,7 +115,7 @@ proc testFixtureIndexes(ctx: var TestCtx, testStatusIMPL: var TestStatus) =
   block post:
     let obtainedHash = vmState.readOnlyLedger.getStateRoot()
     check obtainedHash == ctx.expectedHash
-    let actualLogsHash = rlpHash(callResult.logEntries)
+    let actualLogsHash = computeRlpHash(callResult.logEntries)
     check(ctx.expectedLogs == actualLogsHash)
     if ctx.debugMode:
       let success = ctx.expectedLogs == actualLogsHash and obtainedHash == ctx.expectedHash

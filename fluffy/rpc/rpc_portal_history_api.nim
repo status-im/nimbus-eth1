@@ -72,7 +72,7 @@ proc installPortalHistoryApiHandlers*(rpcServer: RpcServer, p: PortalProtocol) =
     let offerResult = (await p.offer(node, contentOffers)).valueOr:
       raise newException(ValueError, $error)
 
-    SSZ.encode(ContentKeysAcceptList.fromBitList(offerResult)).to0xHex()
+    SSZ.encode(offerResult).to0xHex()
 
   rpcServer.rpc("portal_historyGetContent") do(contentKey: string) -> ContentInfo:
     let

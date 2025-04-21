@@ -144,25 +144,25 @@ suite "History Content Keys":
       # In stint this does BE hex string
       toContentId(contentKey).toHex() == contentIdHexBE
 
-  test "Ehpemeral BlockHeaders":
+  test "Ephemeral BlockHeaders - by FindContent":
     # Input
     const
       blockHash = Hash32.fromHex(
-        "0xd1c390624d3bd4e409a61a858e5dcc5517729a9170d014a6c96530d64dd8621d"
+        "0xd24fd73f794058a3807db926d8898c6481e902b7edb91ce0d479d6760f276183"
       )
-      ancestorCount = 242'u8
+      ancestorCount = 1'u8
 
     # Output
     const
       contentKeyHex =
-        "04d1c390624d3bd4e409a61a858e5dcc5517729a9170d014a6c96530d64dd8621df2"
+        "04d24fd73f794058a3807db926d8898c6481e902b7edb91ce0d479d6760f27618301"
       contentId =
-        "107754593760180144978479156856849717135578675732374967927631096183784899947859"
+        "86673067728773827953572202865791108477333088977683100454782145089217210483928"
       # or
       contentIdHexBE =
-        "ee3af053669ddd2130227b62f899547d6b6cc94f2492e9bbc731025a5ff92d53"
+        "bf9f37c72f6635bbe8dbb4d9377a56d8d579a434399f4c5ba4aad5a213ca04d8"
 
-    let contentKey = ephemeralBlockHeaderContentKey(blockHash, ancestorCount)
+    let contentKey = ephemeralBlockHeaderFindContentContentKey(blockHash, ancestorCount)
 
     let encoded = encode(contentKey)
     check encoded.asSeq.toHex == contentKeyHex
@@ -172,7 +172,41 @@ suite "History Content Keys":
     let contentKeyDecoded = decoded.get()
     check:
       contentKeyDecoded.contentType == contentKey.contentType
-      contentKeyDecoded.ephemeralBlockHeaderKey == contentKey.ephemeralBlockHeaderKey
+      contentKeyDecoded.ephemeralBlockHeaderFindContentKey ==
+        contentKey.ephemeralBlockHeaderFindContentKey
+
+      toContentId(contentKey) == parse(contentId, StUint[256], 10)
+      # In stint this does BE hex string
+      toContentId(contentKey).toHex() == contentIdHexBE
+
+  test "Ephemeral BlockHeaders - by Offer":
+    # Input
+    const blockHash = Hash32.fromHex(
+      "0xd24fd73f794058a3807db926d8898c6481e902b7edb91ce0d479d6760f276183"
+    )
+
+    # Output
+    const
+      contentKeyHex =
+        "05d24fd73f794058a3807db926d8898c6481e902b7edb91ce0d479d6760f276183"
+      contentId =
+        "53578383365152416879548583252310683576041629183471230085103111329525692700007"
+      # or
+      contentIdHexBE =
+        "76744a5338183a04ea39bbb94906e539b9a839b4aa508f8493b2afbba2491567"
+
+    let contentKey = ephemeralBlockHeaderOfferContentKey(blockHash)
+
+    let encoded = encode(contentKey)
+    check encoded.asSeq.toHex == contentKeyHex
+    let decoded = decode(encoded)
+    check decoded.isSome()
+
+    let contentKeyDecoded = decoded.get()
+    check:
+      contentKeyDecoded.contentType == contentKey.contentType
+      contentKeyDecoded.ephemeralBlockHeaderOfferKey ==
+        contentKey.ephemeralBlockHeaderOfferKey
 
       toContentId(contentKey) == parse(contentId, StUint[256], 10)
       # In stint this does BE hex string

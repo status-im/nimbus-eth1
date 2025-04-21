@@ -35,7 +35,7 @@ proc execute*(ws: BlockValueSpec, env: TestEnv): bool =
     error "No transactions included in latest block"
 
   for tx in blk.txs:
-    let txHash = rlpHash(tx)
+    let txHash = computeRlpHash(tx)
     let r = env.client.txReceipt(txHash)
     r.expectNoError()
 

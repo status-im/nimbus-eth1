@@ -19,7 +19,7 @@ import
   ncli/e2store,
   ../network/history/validation/historical_hashes_accumulator
 
-from eth/common/eth_types_rlp import rlpHash
+from eth/common/eth_types_rlp import computeRlpHash
 from nimcrypto/hash import fromHex
 from ../../execution_chain/utils/utils import calcTxRoot, calcReceiptsRoot
 
@@ -462,7 +462,7 @@ proc buildAccumulator*(f: Era1File): Result[EpochRecordCached, string] =
     let totalDifficulty = ?f.getTotalDifficulty(blockNumber)
 
     headerRecords.add(
-      HeaderRecord(blockHash: header.rlpHash(), totalDifficulty: totalDifficulty)
+      HeaderRecord(blockHash: header.computeRlpHash(), totalDifficulty: totalDifficulty)
     )
 
   ok(EpochRecordCached.init(headerRecords))
@@ -478,7 +478,7 @@ proc verify*(f: Era1File): Result[Digest, string] =
     ?f.getBlockTuple(blockNumber, blockTuple)
     let
       txRoot = calcTxRoot(blockTuple.body.transactions)
-      ommershHash = rlpHash(blockTuple.body.uncles)
+      ommershHash = computeRlpHash(blockTuple.body.uncles)
 
     if blockTuple.header.txRoot != txRoot:
       return err("Invalid transactions root")
@@ -491,7 +491,7 @@ proc verify*(f: Era1File): Result[Digest, string] =
 
     headerRecords.add(
       HeaderRecord(
-        blockHash: blockTuple.header.rlpHash(), totalDifficulty: blockTuple.td
+        blockHash: blockTuple.header.computeRlpHash(), totalDifficulty: blockTuple.td
       )
     )
 

@@ -74,7 +74,7 @@ method execute(cs: SuggestedFeeRecipientTest, env: TestEnv): bool =
   for tx in blockIncluded.transactions:
     let effGasTip = tx.effectiveGasTip(blockIncluded.header.baseFeePerGas)
 
-    let r = env.engine.client.txReceipt(tx.rlpHash)
+    let r = env.engine.client.txReceipt(tx.computeRlpHash)
     testCond r.isOk:
       fatal "unable to obtain receipt", msg=r.error
 

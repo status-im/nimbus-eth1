@@ -27,7 +27,6 @@ import
   ./[portal_bridge_conf, portal_bridge_common]
 
 from stew/objects import checkedEnumAssign
-from eth/common/eth_types_rlp import rlpHash
 
 const newHeadPollInterval = 6.seconds # Slot with potential block is every 12s
 
@@ -267,7 +266,7 @@ proc gossipHeadersWithProof(
     let
       headerWithProof = buildHeaderWithProof(blockHeader, epochRecord).valueOr:
         raiseAssert "Failed to build header with proof: " & $blockHeader.number
-      blockHash = blockHeader.rlpHash()
+      blockHash = blockHeader.computeRlpHash()
 
     # gossip block header by hash
     await bridge.gossipBlockHeader(blockHash, headerWithProof)
@@ -288,7 +287,7 @@ proc gossipBlockContent(
   info "Gossip bodies and receipts from era1 file", era1File
 
   for (header, body, receipts, _) in f.era1BlockTuples:
-    let blockHash = header.rlpHash()
+    let blockHash = header.computeRlpHash()
 
     # gossip block body
     await bridge.gossipBlockBody(blockHash, PortalBlockBodyLegacy.fromBlockBody(body))
@@ -368,7 +367,7 @@ proc runBackfillLoopAuditMode(
     db.getBlockTuple(blockNumber, blockTuple).isOkOr:
       error "Failed to get block tuple", error, blockNumber
       continue
-    let blockHash = blockTuple.header.rlpHash()
+    let blockHash = blockTuple.header.computeRlpHash()
 
     var headerSuccess, bodySuccess, receiptsSuccess = false
 

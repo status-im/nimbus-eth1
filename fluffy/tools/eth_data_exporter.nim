@@ -56,7 +56,6 @@ import
   eth_data_exporter/[exporter_conf, exporter_common, cl_data_exporter],
   eth_data_exporter/[downloader, parser]
 
-from eth/common/eth_types_rlp import rlpHash
 # Need to be selective due to the `Block` type conflict from downloader
 from ../network/history/history_network import encode
 
@@ -223,7 +222,7 @@ proc cmdExportEra1(config: ExporterConf) =
 
         headerRecords.add(
           historical_hashes_accumulator.HeaderRecord(
-            blockHash: blck.header.rlpHash(), totalDifficulty: ttd
+            blockHash: blck.header.computeRlpHash(), totalDifficulty: ttd
           )
         )
 
@@ -363,7 +362,7 @@ when isMainModule:
                 except RlpError as e:
                   return err("Invalid block header: " & e.msg)
 
-              headerHash = to0xHex(rlpHash(blockHeader).data)
+              headerHash = to0xHex(computeRlpHash(blockHeader).data)
             debug "Header decoded successfully",
               hash = headerHash, blockNumber = blockHeader.number
           else:
@@ -597,7 +596,7 @@ when isMainModule:
             content = headerWithProof.get()
             contentKey = ContentKey(
               contentType: blockHeader,
-              blockHeaderKey: BlockKey(blockHash: header.rlpHash()),
+              blockHeaderKey: BlockKey(blockHash: header.computeRlpHash()),
             )
             encodedContentKey = history_content.encode(contentKey)
             encodedContent = SSZ.encode(content)

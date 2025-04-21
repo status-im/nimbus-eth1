@@ -98,8 +98,8 @@ template wrapException(body: untyped): auto =
 # is encountered during the async sync.
 func setInvalidAncestor(ben: BeaconEngineRef,
                          invalid, origin: Header) =
-  ben.invalidTipsets[origin.blockHash] = invalid
-  inc ben.invalidBlocksHits.mgetOrPut(invalid.blockHash, 0)
+  ben.invalidTipsets[origin.computeBlockHash] = invalid
+  inc ben.invalidBlocksHits.mgetOrPut(invalid.computeBlockHash, 0)
 
 # ------------------------------------------------------------------------------
 # Constructors
@@ -205,7 +205,7 @@ proc checkInvalidAncestor*(ben: BeaconEngineRef,
   ben.invalidTipsets.withValue(check, invalid) do:
     # If the bad hash was hit too many times, evict it and try to reprocess in
     # the hopes that we have a data race that we can exit out of.
-    let badHash = invalid[].blockHash
+    let badHash = invalid[].computeBlockHash
 
     inc ben.invalidBlocksHits.mgetOrPut(badHash, 0)
     if ben.invalidBlocksHits.getOrDefault(badHash) >= invalidBlockHitEviction:
@@ -216,7 +216,7 @@ proc checkInvalidAncestor*(ben: BeaconEngineRef,
 
       var deleted = newSeq[Hash32]()
       for descendant, badHeader in ben.invalidTipsets:
-        if badHeader.blockHash == badHash:
+        if badHeader.computeBlockHash == badHash:
           deleted.add descendant
 
       for x in deleted:
@@ -254,12 +254,8 @@ proc checkInvalidAncestor*(ben: BeaconEngineRef,
 proc delayPayloadImport*(ben: BeaconEngineRef, blockHash: Hash32, blk: Block): PayloadStatusV1 =
   # Sanity check that this block's parent is not on a previously invalidated
   # chain. If it is, mark the block as invalid too.
-  let res = ben.checkInvalidAncestor(blk.header.parentHash, blockHash)
-  if res.isSome:
-    return res.get
-
-  # Stash the block away for a potential forced forkchoice update to it
-  # at a later time.
-  ben.chain.quarantine.addOrphan(blockHash, blk)
-
-  PayloadStatusV1(status: PayloadExecutionStatus.syncing)
+  ben.checkInvalidAncestor(blk.header.parentHash, blockHash).valueOr:
+    # Stash the block away for a potential forced forkchoice update to it
+    # at a later time.
+    ben.chain.quarantine.addOrphan(blockHash, blk)
+    return PayloadStatusV1(status: PayloadExecutionStatus.syncing)
