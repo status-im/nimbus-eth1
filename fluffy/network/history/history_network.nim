@@ -334,7 +334,9 @@ proc validateContent(
       return err("Failed validating block header: " & error)
 
     ok()
-  of ephemeralBlockHeader:
+  of ephemeralBlockHeaderFindContent:
+    err("Ephemeral block header FindContent type is not allowed on offers")
+  of ephemeralBlockHeaderOffer:
     err("Ephemeral block headers are not yet supported")
 
 proc new*(

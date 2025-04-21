@@ -66,7 +66,7 @@ logScope:
 
 const
   EVM_CALL_LIMIT = 10_000
-  EVM_CALL_GAS_CAP = 50_000_000.GasInt
+  EVM_CALL_GAS_CAP* = 50_000_000.GasInt
 
 type
   AccountQuery = object

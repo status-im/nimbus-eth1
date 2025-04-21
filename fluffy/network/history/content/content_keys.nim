@@ -31,7 +31,8 @@ type
     blockBody = 0x01
     receipts = 0x02
     blockNumber = 0x03
-    ephemeralBlockHeader = 0x04
+    ephemeralBlockHeaderFindContent = 0x04
+    ephemeralBlockHeaderOffer = 0x05
 
   BlockKey* = object
     blockHash*: Hash32
@@ -39,9 +40,12 @@ type
   BlockNumberKey* = object
     blockNumber*: uint64
 
-  EphemeralBlockHeaderKey = object
+  EphemeralBlockHeaderFindContentKey = object
     blockHash*: Hash32
     ancestorCount*: uint8
+
+  EphemeralBlockHeaderOfferKey = object
+    blockHash*: Hash32
 
   ContentKey* = object
     case contentType*: ContentType
@@ -53,8 +57,10 @@ type
       receiptsKey*: BlockKey
     of blockNumber:
       blockNumberKey*: BlockNumberKey
-    of ephemeralBlockHeader:
-      ephemeralBlockHeaderKey*: EphemeralBlockHeaderKey
+    of ephemeralBlockHeaderFindContent:
+      ephemeralBlockHeaderFindContentKey*: EphemeralBlockHeaderFindContentKey
+    of ephemeralBlockHeaderOffer:
+      ephemeralBlockHeaderOfferKey*: EphemeralBlockHeaderOfferKey
 
 func blockHeaderContentKey*(id: Hash32 | uint64): ContentKey =
   when id is Hash32:
@@ -70,13 +76,20 @@ func blockBodyContentKey*(blockHash: Hash32): ContentKey =
 func receiptsContentKey*(blockHash: Hash32): ContentKey =
   ContentKey(contentType: receipts, receiptsKey: BlockKey(blockHash: blockHash))
 
-func ephemeralBlockHeaderContentKey*(
+func ephemeralBlockHeaderFindContentContentKey*(
     blockHash: Hash32, ancestorCount: uint8
 ): ContentKey =
   ContentKey(
-    contentType: ephemeralBlockHeader,
-    ephemeralBlockHeaderKey:
-      EphemeralBlockHeaderKey(blockHash: blockHash, ancestorCount: ancestorCount),
+    contentType: ephemeralBlockHeaderFindContent,
+    ephemeralBlockHeaderFindContentKey: EphemeralBlockHeaderFindContentKey(
+      blockHash: blockHash, ancestorCount: ancestorCount
+    ),
+  )
+
+func ephemeralBlockHeaderOfferContentKey*(blockHash: Hash32): ContentKey =
+  ContentKey(
+    contentType: ephemeralBlockHeaderOffer,
+    ephemeralBlockHeaderOfferKey: EphemeralBlockHeaderOfferKey(blockHash: blockHash),
   )
 
 func encode*(contentKey: ContentKey): ContentKeyByteList =
@@ -111,8 +124,10 @@ func `$`*(x: ContentKey): string =
     res.add($x.receiptsKey)
   of blockNumber:
     res.add($x.blockNumberKey)
-  of ephemeralBlockHeader:
-    res.add($x.ephemeralBlockHeaderKey)
+  of ephemeralBlockHeaderFindContent:
+    res.add($x.ephemeralBlockHeaderFindContentKey)
+  of ephemeralBlockHeaderOffer:
+    res.add($x.ephemeralBlockHeaderOfferKey)
 
   res.add(")")
 

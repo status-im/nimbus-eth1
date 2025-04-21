@@ -1,5 +1,5 @@
 # Nimbus
-# Copyright (c) 2023-2024 Status Research & Development GmbH
+# Copyright (c) 2023-2025 Status Research & Development GmbH
 # Licensed under either of
 #  * Apache License, version 2.0, ([LICENSE-APACHE](LICENSE-APACHE) or
 #    http://www.apache.org/licenses/LICENSE-2.0)
@@ -65,7 +65,7 @@ method execute(cs: InvalidPayloadAttributesTest, env: TestEnv): bool =
       # 4) Start payload build process and respond with VALID
       let timeVer = env.clMock.latestPayloadBuilt.timestamp
       if cs.syncing:
-        # If we are SYNCING, the outcome should be SYNCING regardless of the validity of the payload atttributes
+        # If we are SYNCING, the outcome should be SYNCING regardless of the validity of the payload attributes
         let r = env.engine.forkchoiceUpdated(timeVer, fcu, attr)
         r.expectPayloadStatus(PayloadExecutionStatus.syncing)
         r.expectPayloadID(Opt.none(Bytes8))

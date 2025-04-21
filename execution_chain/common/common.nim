@@ -31,8 +31,8 @@ export
   logging
 
 type
-  FcHeaderClUpdateCB* = proc(header: Header; finHash: Hash32) {.gcsafe, raises: [].}
-    ## Inform `CL` sub-module `chain_header_cache` about new head.
+  HeaderChainUpdateCB* = proc(hdr: Header; fin: Hash32) {.gcsafe, raises: [].}
+    ## Inform `CL` sub-module `header_chain_cache` about new head.
 
   BeaconSyncerProgressCB* = proc(): tuple[start, current, target: BlockNumber] {.gcsafe, raises: [].}
     ## Query syncer status
@@ -59,7 +59,7 @@ type
     forkIdCalculator: ForkIdCalculator
     networkId: NetworkId
 
-    fcHeaderClUpdateCB: FcHeaderClUpdateCB
+    headerChainUpdateCB: HeaderChainUpdateCB
       ## Call back function for a sync processor that returns the canonical
       ## header.
 
@@ -323,10 +323,10 @@ proc proofOfStake*(com: CommonRef, header: Header, txFrame: CoreDbTxRef): bool =
 func depositContractAddress*(com: CommonRef): Address =
   com.config.depositContractAddress.get(default(Address))
 
-proc fcHeaderClUpdate*(com: CommonRef; header: Header; finHash: Hash32) =
+proc headerChainUpdate*(com: CommonRef; header: Header; finHash: Hash32) =
   ## Used by RPC updater
-  if not com.fcHeaderClUpdateCB.isNil:
-    com.fcHeaderClUpdateCB(header, finHash)
+  if not com.headerChainUpdateCB.isNil:
+    com.headerChainUpdateCB(header, finHash)
 
 proc beaconSyncerProgress*(com: CommonRef): tuple[start, current, target: BlockNumber] =
   ## Query syncer status
@@ -421,9 +421,9 @@ func setTTD*(com: CommonRef, ttd: Opt[DifficultyInt]) =
   # rebuild the MergeFork piece of the forkTransitionTable
   com.forkTransitionTable.mergeForkTransitionThreshold = com.config.mergeForkTransitionThreshold
 
-func `fcHeaderClUpdate=`*(com: CommonRef; cb: FcHeaderClUpdateCB) =
+func `headerChainUpdate=`*(com: CommonRef; cb: HeaderChainUpdateCB) =
   ## Activate or reset a call back handler for syncing.
-  com.fcHeaderClUpdateCB = cb
+  com.headerChainUpdateCB = cb
 
 func `beaconSyncerProgress=`*(com: CommonRef; cb: BeaconSyncerProgressCB) =
   ## Activate or reset a call back handler for querying syncer.

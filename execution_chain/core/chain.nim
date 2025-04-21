@@ -9,10 +9,10 @@
 # according to those terms.
 
 import
-  ./chain/[persist_blocks, forked_chain, forked_chain/chain_header_cache]
+  ./chain/[persist_blocks, forked_chain, header_chain_cache]
 
 export
-  chain_header_cache,
+  header_chain_cache,
   persist_blocks,
   forked_chain
 

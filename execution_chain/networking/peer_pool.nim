@@ -13,7 +13,7 @@
 {.push raises: [].}
 
 import
-  std/[os, tables, times, random, sequtils, options],
+  std/[os, tables, times, random, options],
   chronos, chronicles,
   ./[discoveryv4, rlpx, p2p_types]
 
@@ -63,7 +63,7 @@ proc addSeen(
   do:
     p.seenTable[nodeId] = item
 
-proc newPeerPool*(
+func newPeerPool*(
     network: EthereumNode, networkId: NetworkId, keyPair: KeyPair,
     discovery: DiscoveryProtocol, clientId: string, minPeers = 10): PeerPool =
   new result
@@ -77,8 +77,10 @@ proc newPeerPool*(
   result.connectingNodes = initHashSet[Node]()
   result.observers = initTable[int, PeerObserver]()
 
-proc nodesToConnect(p: PeerPool): seq[Node] =
-  p.discovery.randomNodes(p.minPeers).filterIt(it notin p.discovery.bootstrapNodes)
+iterator nodesToConnect(p: PeerPool): Node =
+  for node in p.discovery.randomNodes(p.minPeers):
+    if node notin p.discovery.bootstrapNodes:
+      yield node
 
 proc addObserver*(p: PeerPool, observerId: int, observer: PeerObserver) =
   doAssert(observerId notin p.observers)
@@ -88,13 +90,13 @@ proc addObserver*(p: PeerPool, observerId: int, observer: PeerObserver) =
       if observer.protocol.isNil or peer.supports(observer.protocol):
         observer.onPeerConnected(peer)
 
-proc delObserver*(p: PeerPool, observerId: int) =
+func delObserver*(p: PeerPool, observerId: int) =
   p.observers.del(observerId)
 
 proc addObserver*(p: PeerPool, observerId: ref, observer: PeerObserver) =
   p.addObserver(cast[int](observerId), observer)
 
-proc delObserver*(p: PeerPool, observerId: ref) =
+func delObserver*(p: PeerPool, observerId: ref) =
   p.delObserver(cast[int](observerId))
 
 template setProtocol*(observer: PeerObserver, Protocol: type) =
@@ -269,21 +271,7 @@ proc start*(p: PeerPool) =
   if not p.running:
     asyncSpawn p.run()
 
-proc len*(p: PeerPool): int = p.connectedNodes.len
-# @property
-# def peers(self) -> List[BasePeer]:
-#   peers = list(self.connected_nodes.values())
-#   # Shuffle the list of peers so that dumb callsites are less likely to send
-#   # all requests to
-#   # a single peer even if they always pick the first one from the list.
-#   random.shuffle(peers)
-#   return peers
-
-# async def get_random_peer(self) -> BasePeer:
-#   while not self.peers:
-#     self.logger.debug("No connected peers, sleeping a bit")
-#     await asyncio.sleep(0.5)
-#   return random.choice(self.peers)
+func len*(p: PeerPool): int = p.connectedNodes.len
 
 iterator peers*(p: PeerPool): Peer =
   for remote, peer in p.connectedNodes:

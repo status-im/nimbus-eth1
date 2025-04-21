@@ -24,7 +24,7 @@ import
   minilru,
   eth/rlp,
   eth/p2p/discoveryv5/[protocol, node, enr, routing_table, random2, nodes_verification],
-  "."/[portal_stream, portal_protocol_config, ping_extensions],
+  "."/[portal_stream, portal_protocol_config, ping_extensions, portal_protocol_version],
   ./messages
 
 from std/times import epochTime # For system timestamp in traceContentLookup
@@ -238,6 +238,17 @@ type
     utpTransfer*: bool
     trace*: TraceObject
 
+  NodeAddResult* = enum
+    Added
+    LocalNode
+    Existing
+    IpLimitReached
+    ReplacementAdded
+    ReplacementExisting
+    NoAddress
+    Banned
+    IncompatibleVersion
+
 func init*(T: type ContentKV, contentKey: ContentKeyByteList, content: seq[byte]): T =
   ContentKV(contentKey: contentKey, content: content)
 
@@ -300,11 +311,28 @@ proc isBanned*(p: PortalProtocol, nodeId: NodeId): bool =
 func `$`(id: PortalProtocolId): string =
   id.toHex()
 
-proc addNode*(p: PortalProtocol, node: Node): NodeStatus =
-  p.routingTable.addNode(node)
+func fromNodeStatus(T: type NodeAddResult, status: NodeStatus): T =
+  case status
+  of NodeStatus.Added: T.Added
+  of NodeStatus.LocalNode: T.LocalNode
+  of NodeStatus.Existing: T.Existing
+  of NodeStatus.IpLimitReached: T.IpLimitReached
+  of NodeStatus.ReplacementAdded: T.ReplacementAdded
+  of NodeStatus.ReplacementExisting: T.ReplacementExisting
+  of NodeStatus.NoAddress: T.NoAddress
+  of NodeStatus.Banned: T.Banned
+
+proc addNode*(p: PortalProtocol, node: Node): NodeAddResult =
+  if node.highestCommonPortalVersion(localSupportedVersions).isOk():
+    let status = p.routingTable.addNode(node)
+    trace "Adding node to routing table", status, node
+    NodeAddResult.fromNodeStatus(status)
+  else:
+    trace "Not adding node to routing table, no compatible protocol version", node
+    NodeAddResult.IncompatibleVersion
 
 proc addNode*(p: PortalProtocol, r: Record): bool =
-  p.addNode(Node.fromRecord(r)) == Added
+  p.addNode(Node.fromRecord(r)) == NodeAddResult.Added
 
 func getNode*(p: PortalProtocol, id: NodeId): Opt[Node] =
   p.routingTable.getNode(id)
@@ -449,7 +477,7 @@ proc handleFindNodes(p: PortalProtocol, fn: FindNodesMessage): seq[byte] =
       encodeMessage(NodesMessage(total: 1, enrs: enrs))
 
 proc handleFindContent(
-    p: PortalProtocol, fc: FindContentMessage, srcId: NodeId
+    p: PortalProtocol, fc: FindContentMessage, srcId: NodeId, version: uint8
 ): seq[byte] =
   const
     contentOverhead = 1 + 1 # msg id + SSZ Union selector
@@ -483,7 +511,8 @@ proc handleFindContent(
         )
       else:
         p.stream.addPendingTransfer(srcId, contentId)
-        let connectionId = p.stream.addContentRequest(srcId, contentId, content)
+        let connectionId =
+          p.stream.addContentRequest(srcId, contentId, content, version)
 
         return encodeMessage(
           ContentMessage(
@@ -500,15 +529,18 @@ proc handleFindContent(
 
   encodeMessage(ContentMessage(contentMessageType: enrsType, enrs: enrs))
 
-proc handleOffer(p: PortalProtocol, o: OfferMessage, srcId: NodeId): seq[byte] =
+proc handleOffer(
+    p: PortalProtocol, o: OfferMessage, srcId: NodeId
+): Result[AcceptMessage, string] =
   # Early return when our contentQueue is full. This means there is a backlog
   # of content to process and potentially gossip around. Don't accept more
   # data in this case.
   if p.stream.contentQueue.full():
-    return encodeMessage(
+    return ok(
       AcceptMessage(
         connectionId: Bytes2([byte 0x00, 0x00]),
-        contentKeys: ContentKeysBitList.init(o.contentKeys.len),
+        contentKeys:
+          ContentKeysAcceptList.init(repeat(DeclinedRateLimited, o.contentKeys.len)),
       )
     )
 
@@ -516,9 +548,10 @@ proc handleOffer(p: PortalProtocol, o: OfferMessage, srcId: NodeId): seq[byte] =
   p.stream.pruneAllowedOfferConnections()
 
   var
-    contentKeysBitList = ContentKeysBitList.init(o.contentKeys.len)
+    contentKeysAcceptList = ContentKeysAcceptList.init(@[])
     contentKeys = ContentKeysList.init(@[])
     contentIds = newSeq[ContentId]()
+    contentAccepted = false
   # TODO: Do we need some protection against a peer offering lots (64x) of
   # content that fits our Radius but is actually bogus?
   # Additional TODO, but more of a specification clarification: What if we don't
@@ -534,18 +567,24 @@ proc handleOffer(p: PortalProtocol, o: OfferMessage, srcId: NodeId): seq[byte] =
         int64(logDistance), labelValues = [$p.protocolId]
       )
 
-      if p.inRange(contentId) and p.stream.canAddPendingTransfer(srcId, contentId) and
-          not p.dbContains(contentKey, contentId):
+      if not p.inRange(contentId):
+        discard contentKeysAcceptList.add(DeclinedNotWithinRadius)
+      elif not p.stream.canAddPendingTransfer(srcId, contentId):
+        discard contentKeysAcceptList.add(DeclinedInboundTransferInProgress)
+      elif p.dbContains(contentKey, contentId):
+        discard contentKeysAcceptList.add(DeclinedAlreadyStored)
+      else:
         p.stream.addPendingTransfer(srcId, contentId)
-        contentKeysBitList.setBit(i)
+        discard contentKeysAcceptList.add(Accepted)
         discard contentKeys.add(contentKey)
         contentIds.add(contentId)
+        contentAccepted = true
     else:
       # Return empty response when content key validation fails
-      return @[]
+      return err("Invalid content key")
 
   let connectionId =
-    if contentKeysBitList.countOnes() != 0:
+    if contentAccepted:
       p.stream.addContentOffer(srcId, contentKeys, contentIds)
     else:
       # When the node does not accept any of the content offered, reply with an
@@ -553,9 +592,18 @@ proc handleOffer(p: PortalProtocol, o: OfferMessage, srcId: NodeId): seq[byte] =
       # Note: What to do in this scenario is not defined in the Portal spec.
       Bytes2([byte 0x00, 0x00])
 
-  encodeMessage(
-    AcceptMessage(connectionId: connectionId, contentKeys: contentKeysBitList)
-  )
+  ok(AcceptMessage(connectionId: connectionId, contentKeys: contentKeysAcceptList))
+
+proc handleOffer(
+    p: PortalProtocol, o: OfferMessage, srcId: NodeId, version: uint8
+): seq[byte] =
+  let response = p.handleOffer(o, srcId).valueOr:
+    return @[]
+
+  if version >= 1:
+    encodeMessage(response)
+  else:
+    encodeMessage(AcceptMessageV0.fromAcceptMessage(response))
 
 proc messageHandler(
     protocol: TalkProtocol,
@@ -577,7 +625,16 @@ proc messageHandler(
     debug "Dropping message from banned node", srcId, srcUdpAddress
     return @[] # Reply with an empty response message
 
-  let decoded = decodeMessage(request)
+  let enr = p.baseProtocol.getEnr(srcId, srcUdpAddress).valueOr:
+    # This should not occur as a session should be up and the ENR should have been added
+    warn "No ENR found for node", srcId, srcUdpAddress
+    return @[]
+
+  let version = enr.highestCommonPortalVersion(localSupportedVersions).valueOr:
+    debug "No compatible protocol version found", error, srcId, srcUdpAddress
+    return @[]
+
+  let decoded = decodeMessage(request, version)
   if decoded.isOk():
     let message = decoded.get()
     trace "Received message request", srcId, srcUdpAddress, kind = message.kind
@@ -593,14 +650,12 @@ proc messageHandler(
     # Note: As third measure, could run a findNodes request with distance 0.
     if nodeOpt.isSome():
       let node = nodeOpt.value()
-      let status = p.addNode(node)
-      trace "Adding new node to routing table after incoming request", status, node
+      discard p.addNode(node)
     else:
       let nodeOpt = p.baseProtocol.getNode(srcId)
       if nodeOpt.isSome():
         let node = nodeOpt.value()
-        let status = p.addNode(node)
-        trace "Adding new node to routing table after incoming request", status, node
+        discard p.addNode(node)
 
     portal_message_requests_incoming.inc(labelValues = [$p.protocolId, $message.kind])
 
@@ -610,9 +665,9 @@ proc messageHandler(
     of MessageKind.findNodes:
       p.handleFindNodes(message.findNodes)
     of MessageKind.findContent:
-      p.handleFindContent(message.findContent, srcId)
+      p.handleFindContent(message.findContent, srcId, version)
     of MessageKind.offer:
-      p.handleOffer(message.offer, srcId)
+      p.handleOffer(message.offer, srcId, version)
     else:
       # This would mean a that Portal wire response message is being send over a
       # discv5 talkreq message.
@@ -671,7 +726,7 @@ proc new*(
 # Sends the discv5 talkreq message with provided Portal message, awaits and
 # validates the proper response, and updates the Portal Network routing table.
 proc reqResponse[Request: SomeMessage, Response: SomeMessage](
-    p: PortalProtocol, dst: Node, request: Request
+    p: PortalProtocol, dst: Node, request: Request, version: uint8 = 1'u8
 ): Future[PortalResult[Response]] {.async: (raises: [CancelledError]).} =
   logScope:
     protocolId = p.protocolId
@@ -696,7 +751,7 @@ proc reqResponse[Request: SomeMessage, Response: SomeMessage](
     )
     .flatMap(
       proc(x: seq[byte]): Result[Message, string] =
-        decodeMessage(x)
+        decodeMessage(x, version)
     )
     .flatMap(
       proc(m: Message): Result[Response, string] =
@@ -759,11 +814,11 @@ proc findContentImpl*(
   return await reqResponse[FindContentMessage, ContentMessage](p, dst, fc)
 
 proc offerImpl*(
-    p: PortalProtocol, dst: Node, contentKeys: ContentKeysList
+    p: PortalProtocol, dst: Node, contentKeys: ContentKeysList, version: uint8 = 1'u8
 ): Future[PortalResult[AcceptMessage]] {.async: (raises: [CancelledError]).} =
   let offer = OfferMessage(contentKeys: contentKeys)
 
-  return await reqResponse[OfferMessage, AcceptMessage](p, dst, offer)
+  return await reqResponse[OfferMessage, AcceptMessage](p, dst, offer, version)
 
 proc recordsFromBytes(rawRecords: List[ByteList[2048], 32]): PortalResult[seq[Record]] =
   var records: seq[Record]
@@ -782,6 +837,9 @@ proc ping*(
 ): Future[PortalResult[(uint64, uint16, CapabilitiesPayload)]] {.
     async: (raises: [CancelledError])
 .} =
+  # Fail if no common portal version is found
+  let _ = ?dst.highestCommonPortalVersion(localSupportedVersions)
+
   if p.isBanned(dst.id):
     return err("destination node is banned")
 
@@ -805,6 +863,9 @@ proc ping*(
 proc findNodes*(
     p: PortalProtocol, dst: Node, distances: seq[uint16]
 ): Future[PortalResult[seq[Node]]] {.async: (raises: [CancelledError]).} =
+  # Fail if no common portal version is found
+  let _ = ?dst.highestCommonPortalVersion(localSupportedVersions)
+
   if p.isBanned(dst.id):
     return err("destination node is banned")
 
@@ -821,9 +882,13 @@ proc findNodes*(
 proc findContent*(
     p: PortalProtocol, dst: Node, contentKey: ContentKeyByteList
 ): Future[PortalResult[FoundContent]] {.async: (raises: [CancelledError]).} =
+  # Fail if no common portal version is found
+  let version = ?dst.highestCommonPortalVersion(localSupportedVersions)
+
   logScope:
     node = dst
     contentKey
+    version
 
   if p.isBanned(dst.id):
     return err("destination node is banned")
@@ -845,13 +910,22 @@ proc findContent*(
         )
       )
 
+    proc readContentValueVersioned(
+        socket: UtpSocket[NodeAddress]
+    ): Future[seq[byte]] {.async: (raises: [CancelledError]).} =
+      if version >= 1:
+        # Note: Using readContentValueNoResult instead of readContentValue as
+        # else we hit this issue:
+        # https://github.com/nim-lang/Nim/issues/24847
+        # This issue got resolved and next Nim update shoul allow to remove this
+        # workaround.
+        await socket.readContentValueNoResult()
+      else:
+        await socket.read()
+
     try:
-      # Read all bytes from the socket
-      # This will either end with a FIN, or because the read action times out.
-      # A FIN does not necessarily mean that the data read is complete.
-      # Further validation is required, using a length prefix here might be
-      # beneficial for this.
-      let readFut = socket.read()
+      # Read one content item from the socket, fails on invalid length prefix
+      let readFut = socket.readContentValueVersioned()
 
       readFut.cancelCallback = proc(udate: pointer) {.gcsafe.} =
         debug "Socket read cancelled", socketKey = socket.socketKey
@@ -861,10 +935,13 @@ proc findContent*(
 
       if await readFut.withTimeout(p.stream.contentReadTimeout):
         let content = await readFut
-        # socket received remote FIN and drained whole buffer, it can be
-        # safely destroyed without notifing remote
-        trace "Socket read fully", socketKey = socket.socketKey
+        if content.len == 0:
+          socket.close() # Sending FIN to remote
+          return err("Error reading content item from socket")
+
+        trace "Content value read from socket", socketKey = socket.socketKey
         socket.destroy()
+
         return
           ok(FoundContent(src: dst, kind: Content, content: content, utpTransfer: true))
       else:
@@ -944,11 +1021,15 @@ proc offer(
   ## Main drawback is that content may be deleted from the node database
   ## by the cleanup process before it will be transferred, so this way does not
   ## guarantee content transfer.
+  # Fail if no common portal version is found
+  let version = ?o.dst.highestCommonPortalVersion(localSupportedVersions)
+
   let contentKeys = getContentKeys(o)
 
   logScope:
     node = o.dst
     contentKeys
+    version
 
   trace "Offering content"
 
@@ -959,7 +1040,7 @@ proc offer(
   if p.isBanned(o.dst.id):
     return err("destination node is banned")
 
-  let response = ?(await p.offerImpl(o.dst, contentKeys))
+  let response = ?(await p.offerImpl(o.dst, contentKeys, version))
 
   let contentKeysLen =
     case o.kind
@@ -971,18 +1052,25 @@ proc offer(
   if response.contentKeys.len() != contentKeysLen:
     # TODO:
     # When there is such system, the peer should get scored negatively here.
-    error "Accepted content key bitlist has invalid size",
-      bitListLen = response.contentKeys.len(), contentKeysLen
-    return err("Accepted content key bitlist has invalid size")
+    error "Accepted content key accept list has invalid size",
+      acceptListLen = response.contentKeys.len(), contentKeysLen
+    return err("Accepted content key accept list has invalid size")
 
-  let acceptedKeysAmount = response.contentKeys.countOnes()
+  proc countAccepted(acceptList: ContentKeysAcceptList): int =
+    var count = 0
+    for code in acceptList:
+      if code == Accepted:
+        inc(count)
+    return count
+
+  let acceptedKeysAmount = response.contentKeys.countAccepted()
   portal_content_keys_accepted.observe(
     acceptedKeysAmount.int64, labelValues = [$p.protocolId]
   )
   if acceptedKeysAmount == 0:
     debug "No content accepted"
     # Don't open an uTP stream if no content was requested
-    return ok(ContentKeysAcceptList.fromBitList(response.contentKeys))
+    return ok(response.contentKeys)
 
   let nodeAddress = NodeAddress.init(o.dst).valueOr:
     # This should not happen as it comes a after succesfull talkreq/talkresp
@@ -991,13 +1079,10 @@ proc offer(
   let socket =
     ?(await p.stream.connectTo(nodeAddress, uint16.fromBytesBE(response.connectionId)))
 
-  template lenu32(x: untyped): untyped =
-    uint32(len(x))
-
   case o.kind
   of Direct:
     for i, b in response.contentKeys:
-      if b:
+      if b == Accepted:
         let content = o.contentList[i].content
         var output = memoryOutput()
         try:
@@ -1016,7 +1101,7 @@ proc offer(
         trace "Offered content item send", dataWritten = dataWritten
   of Database:
     for i, b in response.contentKeys:
-      if b:
+      if b == Accepted:
         let
           contentKey = o.contentKeys[i]
           contentIdResult = p.toContentId(contentKey)
@@ -1051,7 +1136,7 @@ proc offer(
   await socket.closeWait()
   trace "Content successfully offered"
 
-  ok(ContentKeysAcceptList.fromBitList(response.contentKeys))
+  ok(response.contentKeys)
 
 proc offer*(
     p: PortalProtocol, dst: Node, contentKeys: ContentKeysList
