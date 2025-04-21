@@ -133,7 +133,8 @@ proc validateBlock(c: ForkedChainRef,
 
   if blkHash == c.pendingFCU:
     # Resolve the hash into latestFinalizedBlockNumber
-    c.latestFinalizedBlockNumber = blk.header.number
+    c.latestFinalizedBlockNumber = max(blk.header.number,
+      c.latestFinalizedBlockNumber)
 
   let
     parentFrame = parent.txFrame
