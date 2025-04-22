@@ -11,14 +11,19 @@
 {.push raises: [].}
 
 import
-  std/[deques, tables],
-  ./chain_branch,
-  ./block_quarantine,
+  std/[tables],
   ../../../common,
+<<<<<<< HEAD
   ../../../db/[core_db, fcu_db],
   ../../../portal/portal
+=======
+  ../../../db/core_db,
+  ../../../db/fcu_db,
+  ./block_quarantine,
+  ./chain_branch
+>>>>>>> master
 
-export deques, tables
+export tables
 
 type
   ForkedChainRef* = ref object
@@ -73,7 +78,9 @@ type
     fcuHead*: FcuHashAndNumber
     fcuSafe*: FcuHashAndNumber
 
-# ----------------
+# ------------------------------------------------------------------------------
+# These functions are private to ForkedChainRef
+# ------------------------------------------------------------------------------
 
 func txRecords*(c: ForkedChainRef): var Table[Hash32, (Hash32, uint64)] =
   ## Avoid clash with `forked_chain.txRecords()`

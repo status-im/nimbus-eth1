@@ -17,6 +17,7 @@ import
   ../execution_chain/utils/utils,
   ../execution_chain/core/chain/forked_chain,
   ../execution_chain/core/chain/forked_chain/chain_desc,
+  ../execution_chain/core/chain/forked_chain/chain_serialize,
   ../execution_chain/db/ledger,
   ../execution_chain/db/era1_db,
   ../execution_chain/db/fcu_db,
@@ -128,7 +129,8 @@ func blockHash(x: Block): Hash32 =
 
 proc wdWritten(c: ForkedChainRef, blk: Block): int =
   if blk.header.withdrawalsRoot.isSome:
-    c.latestTxFrame.getWithdrawals(blk.header.withdrawalsRoot.get).
+    let txFrame = c.txFrame(blk.blockHash)
+    txFrame.getWithdrawals(blk.header.withdrawalsRoot.get).
       expect("withdrawals exists").len
   else:
     0
@@ -176,27 +178,29 @@ proc forkedChainMain*() =
       genesisHash = cc.genesisHeader.computeBlockHash
       genesis = Block.init(cc.genesisHeader, BlockBody())
       baseTxFrame = cc.db.baseTxFrame()
+      txFrame = baseTxFrame.txFrameBegin
     let
-      blk1 = baseTxFrame.makeBlk(1, genesis)
-      blk2 = baseTxFrame.makeBlk(2, blk1)
-      blk3 = baseTxFrame.makeBlk(3, blk2)
-      dbTx = baseTxFrame.txFrameBegin
+      blk1 = txFrame.makeBlk(1, genesis)
+      blk2 = txFrame.makeBlk(2, blk1)
+      blk3 = txFrame.makeBlk(3, blk2)
+      dbTx = txFrame.txFrameBegin
       blk4 = dbTx.makeBlk(4, blk3)
       blk5 = dbTx.makeBlk(5, blk4)
       blk6 = dbTx.makeBlk(6, blk5)
       blk7 = dbTx.makeBlk(7, blk6)
     dbTx.dispose()
     let
-      B4 = baseTxFrame.makeBlk(4, blk3, 1.byte)
-      dbTx2 = baseTxFrame.txFrameBegin
+      B4 = txFrame.makeBlk(4, blk3, 1.byte)
+      dbTx2 = txFrame.txFrameBegin
       B5 = dbTx2.makeBlk(5, B4)
       B6 = dbTx2.makeBlk(6, B5)
       B7 = dbTx2.makeBlk(7, B6)
     dbTx2.dispose()
     let
-      C5 = baseTxFrame.makeBlk(5, blk4, 1.byte)
-      C6 = baseTxFrame.makeBlk(6, C5)
-      C7 = baseTxFrame.makeBlk(7, C6)
+      C5 = txFrame.makeBlk(5, blk4, 1.byte)
+      C6 = txFrame.makeBlk(6, C5)
+      C7 = txFrame.makeBlk(7, C6)
+    txFrame.dispose()
     test "newBase == oldBase":
       const info = "newBase == oldBase"
       let com = env.newCom()
@@ -265,7 +269,7 @@ proc forkedChainMain*() =
       let savedFinalized = txFrame.fcuFinalized().expect("OK")
       check blk6.blockHash == savedFinalized.hash
 
-      # make sure aristo not wiped out baggage
+      # make sure aristo not wipe out baggage
       check chain.wdWritten(blk3) == 3
       check chain.validate info & " (9)"
     test "newBase between oldBase and head":
@@ -289,7 +293,7 @@ proc forkedChainMain*() =
       check chain.wdWritten(blk7) == 7
       # head - baseDistance must been persisted
       checkPersisted(chain, blk3)
-      # make sure aristo not wiped out baggage
+      # make sure aristo not wipe out baggage
       check chain.wdWritten(blk3) == 3
       check chain.validate info & " (9)"
     test "newBase == oldBase, fork and stay on that fork":
@@ -682,6 +686,53 @@ proc forkedChainMain*() =
       check chain.baseNumber == 0'u64
       check chain.branches.len == 1
       check chain.validate info & " (2)"
+
+    test "serialize roundtrip":
+      const info = "serialize roundtrip"
+      let com = env.newCom()
+      var chain = ForkedChainRef.init(com, baseDistance = 3)
+      checkImportBlock(chain, blk1)
+      checkImportBlock(chain, blk2)
+      checkImportBlock(chain, blk3)
+      checkImportBlock(chain, blk4)
+      checkImportBlock(chain, blk5)
+      checkImportBlock(chain, blk6)
+      checkImportBlock(chain, blk7)
+      checkImportBlock(chain, B4)
+      checkImportBlock(chain, B5)
+      checkImportBlock(chain, B6)
+      checkImportBlock(chain, B7)
+      checkImportBlock(chain, blk4)
+      check chain.validate info & " (1)"
+      checkForkChoice(chain, blk7, blk5)
+      check chain.validate info & " (2)"
+      checkHeadHash chain, blk7.blockHash
+      check chain.baseNumber == 0'u64
+      check chain.latestHash == blk7.blockHash
+      check chain.baseBranch == chain.activeBranch
+      check chain.validate info & " (3)"
+
+      let txFrame = chain.baseTxFrame
+      let src = chain.serialize(txFrame)
+      if src.isErr:
+        echo "FAILED TO SERIALIZE: ", src.error
+      check src.isOk
+      com.db.persist(txFrame)
+
+      var fc = ForkedChainRef.init(com, baseDistance = 3)
+      let rc = fc.deserialize()
+      if rc.isErr:
+        echo "FAILED TO DESERIALIZE: ", rc.error
+      check rc.isOk
+
+      check fc.branches.len == chain.branches.len
+      check fc.hashToBlock.len == chain.hashToBlock.len
+
+      checkHeadHash fc, blk7.blockHash
+
+      check fc.latestHash == blk7.blockHash
+      check fc.baseBranch == fc.activeBranch
+      check fc.validate info & " (4)"
 
   suite "ForkedChain mainnet replay":
     # A short mainnet replay test to check that the first few hundred blocks can
