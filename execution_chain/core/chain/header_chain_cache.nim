@@ -269,6 +269,18 @@ proc tryFcParent(hc: HeaderChainRef; hdr: Header): HeaderChainMode =
   # The block number of `hdr` must not go below the `base`. It cannot be
   # handled even if it has a parent on the block chain (but not on the
   # `FC` module.)
+  #
+  # Rationale:
+  #   This situataion might arise by means of `CL` requests via RPC updating
+  #   the `base` concurrently to a syncer client. This can only happen if the
+  #   base is near the canonical head. Which in turn means that the header
+  #   chain is short.
+  #
+  #   Reversing the antecedent (above `base`) is avoided. This goes with the
+  #   argument that completely re-syncing a short header chain is worth it
+  #   comparing additional administrative costs (for a syncer client of that
+  #   module) of handling backward moves of the antecedent.
+  #
   if hdr.number <= baseNum:
     return orphan                              # beyond reach
 
@@ -492,6 +504,14 @@ proc put*(
   if hc.session.head.number <= lastNumber:
     return err("Argument rev[] exceeds chain head " &
       hc.session.head.bnStr)
+
+  # Check whether the `FC` module has changed and the current antecedent
+  # already is the end of it.
+  block:
+    let newMode = hc.tryFcParent(hc.session.ante)
+    if newMode in {ready,orphan}:
+      hc.session.mode = newMode
+      return ok()
 
  # Start at the entry that is parent to `ante` (if any)
   let offset = ((lastNumber + 1) - hc.session.ante.number).int
