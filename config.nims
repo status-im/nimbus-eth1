@@ -167,6 +167,9 @@ if canEnableDebuggingSymbols:
 # `switch("warning[CaseTransition]", "off")` fails with "Error: invalid command line option: '--warning[CaseTransition]'"
 switch("warning", "CaseTransition:off")
 
+# Transitional for Nim v2.2, due to newSeqUninit replacing newSeqUninitialized.
+switch("warning", "Deprecated:off")
+
 # nim-kzg shipping their own blst, nimbus-eth1 too.
 # disable nim-kzg's blst
 switch("define", "kzgExternalBlst")
