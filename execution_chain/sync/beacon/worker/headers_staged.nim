@@ -11,49 +11,16 @@
 {.push raises:[].}
 
 import
-  std/sets,
   pkg/[chronicles, chronos],
   pkg/eth/common,
   pkg/stew/[interval_set, sorted_set],
   ../worker_desc,
   ./headers_staged/[headers, staged_collect],
-  ./[headers_unproc, update]
+  ./headers_unproc
 
 # ------------------------------------------------------------------------------
 # Public functions
 # ------------------------------------------------------------------------------
-
-proc headerStagedResolveFinalizer*(
-    buddy: BeaconBuddyRef;
-    info: static[string];
-      ) {.async: (raises: []).} =
-  ## Fetch finalised beacon header if there is an update available
-  let ctx = buddy.ctx
-  if ctx.pool.lastState == idleSyncState and
-     ctx.pool.finRequest != zeroHash32:
-
-    # Grap `finRequest`. So no other peer will interfere
-    let finHash = ctx.pool.finRequest
-    ctx.pool.finRequest = zeroHash32
-
-    # Fetch header
-    const iv = BnRange.new(0,0) # dummy interval of length 1
-    let fin = (await buddy.headersFetchReversed(iv, finHash, info)).valueOr:
-      # Postponed, try later
-      ctx.pool.finRequest = finHash
-      ctx.pool.failedPeers.incl buddy.peerID
-
-      debug info & ": finalised hash not yet resolved", peer=buddy.peer,
-        finHash=finHash.short, hdrErrors=buddy.hdrErrors,
-        failedPeers=ctx.pool.failedPeers.len
-
-      # Check failed peers whether there was a limit reaced and a reset is
-      # necessary.
-      ctx.updateFailedPeersFromResolvingFinalizer info
-      return
-
-    ctx.updateFromHibernateSetTarget(fin[0], info)
-
 
 func headersStagedFetchOk*(buddy: BeaconBuddyRef): bool =
   # Helper for `worker.nim`, etc.

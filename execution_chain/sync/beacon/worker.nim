@@ -187,10 +187,6 @@ proc runPeer*(
     buddy.only.multiRunIdle = Moment.now() - buddy.only.stoppedMultiRun
   buddy.only.nMultiLoop.inc                     # statistics/debugging
 
-  # Resolve consensus header target when needed. It comes with a finalised
-  # header hash where we need to complete the block number.
-  await buddy.headerStagedResolveFinalizer info
-
   if not await buddy.napUnlessSomethingToFetch():
 
     # Download and process headers and blocks
