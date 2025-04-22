@@ -13,12 +13,8 @@
 import
   std/[tables],
   ../../../common,
-<<<<<<< HEAD
   ../../../db/[core_db, fcu_db],
-  ../../../portal/portal
-=======
-  ../../../db/core_db,
-  ../../../db/fcu_db,
+  ../../../portal/portal,
   ./block_quarantine,
   ./chain_branch
 >>>>>>> master
