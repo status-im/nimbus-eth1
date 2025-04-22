@@ -186,6 +186,8 @@ proc reset(fc: ForkedChainRef, branches: sink seq[BranchRef]) =
   fc.pendingFCU   = zeroHash32
   fc.latestFinalizedBlockNumber = 0'u64
   fc.txRecords.clear()
+  fc.fcuHead.reset()
+  fc.fcuSafe.reset()
 
 # ------------------------------------------------------------------------------
 # Public functions

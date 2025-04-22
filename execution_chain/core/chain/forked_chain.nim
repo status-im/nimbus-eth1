@@ -283,6 +283,8 @@ proc removeBlockFromCache(c: ForkedChainRef, bd: BlockDesc) =
     if v == bd.txFrame:
       v = nil
 
+  bd.txFrame.dispose()
+
 proc updateHead(c: ForkedChainRef, head: BlockPos) =
   ## Update head if the new head is different from current head.
   ## All branches with block number greater than head will be removed too.
