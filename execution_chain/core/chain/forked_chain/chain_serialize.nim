@@ -35,19 +35,23 @@ type
     fcuHead: FcuHashAndNumber
     fcuSafe: FcuHashAndNumber
 
-proc append*(w: var RlpWriter, bd: BlockDesc) =
+# ------------------------------------------------------------------------------
+# RLP serializer functions
+# ------------------------------------------------------------------------------
+
+proc append(w: var RlpWriter, bd: BlockDesc) =
   w.startList(2)
   w.append(bd.blk)
   w.append(bd.hash)
 
-proc append*(w: var RlpWriter, brc: BranchRef) =
+proc append(w: var RlpWriter, brc: BranchRef) =
   w.startList(2)
   let parentIndex = if brc.parent.isNil: 0'u
                     else: brc.parent.index + 1'u
   w.append(parentIndex)
   w.append(brc.blocks)
 
-proc append*(w: var RlpWriter, fc: ForkedChainRef) =
+proc append(w: var RlpWriter, fc: ForkedChainRef) =
   w.startList(8)
   w.append(fc.branches.len.uint)
   w.append(fc.baseBranch.index)
@@ -64,19 +68,19 @@ proc append*(w: var RlpWriter, fc: ForkedChainRef) =
   w.append(fc.fcuHead)
   w.append(fc.fcuSafe)
 
-proc read*(rlp: var Rlp, T: type BlockDesc): T {.raises: [RlpError].} =
+proc read(rlp: var Rlp, T: type BlockDesc): T {.raises: [RlpError].} =
   rlp.tryEnterList()
   result = T()
   rlp.read(result.blk)
   rlp.read(result.hash)
 
-proc read*(rlp: var Rlp, T: type BranchRef): T {.raises: [RlpError].} =
+proc read(rlp: var Rlp, T: type BranchRef): T {.raises: [RlpError].} =
   rlp.tryEnterList()
   result = T()
   rlp.read(result.index)
   rlp.read(result.blocks)
 
-proc read*(rlp: var Rlp, T: type FcState): T {.raises: [RlpError].} =
+proc read(rlp: var Rlp, T: type FcState): T {.raises: [RlpError].} =
   rlp.tryEnterList()
   rlp.read(result.numBranches)
   rlp.read(result.baseBranch)
@@ -87,6 +91,10 @@ proc read*(rlp: var Rlp, T: type FcState): T {.raises: [RlpError].} =
   rlp.read(result.fcuHead)
   rlp.read(result.fcuSafe)
 
+# ------------------------------------------------------------------------------
+# Private functions
+# ------------------------------------------------------------------------------
+
 const
   # The state always use 0 index
   FcStateKey = fcStateKey 0
@@ -94,14 +102,6 @@ const
 template branchIndexKey(i: SomeInteger): openArray[byte] =
   # We reuse the fcStateKey but +1
   fcStateKey((i+1).uint).toOpenArray
-
-proc serialize*(fc: ForkedChainRef, txFrame: CoreDbTxRef): Result[void, CoreDbError] =
-  for i, brc in fc.branches:
-    brc.index = uint i
-  ?txFrame.put(FcStateKey.toOpenArray, rlp.encode(fc))
-  for i, brc in fc.branches:
-    ?txFrame.put(branchIndexKey(i), rlp.encode(brc))
-  ok()
 
 proc getState(db: CoreDbTxRef): Opt[FcState] =
   let data = db.get(FcStateKey.toOpenArray).valueOr:
@@ -145,7 +145,7 @@ proc replayBranch(fc: ForkedChainRef;
     parent.index = i
 
   # Use the index as a flag, if index == 0,
-  # it means it is already replayed.
+  # it means the branch already replayed.
   branch.index = 0
 
   for brc in fc.branches:
@@ -186,6 +186,18 @@ proc reset(fc: ForkedChainRef, branches: sink seq[BranchRef]) =
   fc.pendingFCU   = zeroHash32
   fc.latestFinalizedBlockNumber = 0'u64
   fc.txRecords.clear()
+
+# ------------------------------------------------------------------------------
+# Public functions
+# ------------------------------------------------------------------------------
+
+proc serialize*(fc: ForkedChainRef, txFrame: CoreDbTxRef): Result[void, CoreDbError] =
+  for i, brc in fc.branches:
+    brc.index = uint i
+  ?txFrame.put(FcStateKey.toOpenArray, rlp.encode(fc))
+  for i, brc in fc.branches:
+    ?txFrame.put(branchIndexKey(i), rlp.encode(brc))
+  ok()
 
 proc deserialize*(fc: ForkedChainRef): Result[void, string] =
   let state = fc.baseTxFrame.getState().valueOr:
