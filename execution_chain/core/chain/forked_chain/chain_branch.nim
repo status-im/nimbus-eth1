@@ -39,6 +39,9 @@ type
       # Also used as a flag when replaying state
       # after deserialize.
 
+func tailBlock*(brc: BranchRef): Block =
+  brc.blocks[0].blk
+
 func tailNumber*(brc: BranchRef): BlockNumber =
   brc.blocks[0].blk.header.number
 

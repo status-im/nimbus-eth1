@@ -13,6 +13,8 @@
 import
   std/[tables],
   ../../../common,
+  ../../../db/core_db,
+  ../../../db/fcu_db,
   ./block_quarantine,
   ./chain_branch
 
@@ -64,6 +66,9 @@ type
       # When move forward, this is the minimum distance
       # to move the base. And the bulk writing can works
       # efficiently.
+
+    fcuHead*: FcuHashAndNumber
+    fcuSafe*: FcuHashAndNumber
 
 # ------------------------------------------------------------------------------
 # These functions are private to ForkedChainRef
