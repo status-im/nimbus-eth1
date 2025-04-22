@@ -11,13 +11,12 @@
 {.push raises: [].}
 
 import
-  std/[tables],
+  std/tables,
   ../../../common,
   ../../../db/[core_db, fcu_db],
   ../../../portal/portal,
   ./block_quarantine,
   ./chain_branch
->>>>>>> master
 
 export tables
 

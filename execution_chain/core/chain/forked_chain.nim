@@ -19,7 +19,6 @@ import
   ../../evm/types,
   ../../evm/state,
   ../validate,
-  ../executor/process_block,
   ../../portal/portal,
   ./forked_chain/[
     chain_desc,
