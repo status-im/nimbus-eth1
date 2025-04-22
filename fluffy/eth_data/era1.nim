@@ -125,7 +125,7 @@ proc readBlockIndex*(f: IoHandle): Result[BlockIndex, string] =
   if blockNumber > int32.high().uint64:
     return err("fishy block number")
 
-  var offsets = newSeqUninitialized[int64](count)
+  var offsets = newSeqUninit[int64](count)
   for i in 0 ..< count:
     let
       offset = uint64.fromBytesLE(buf.toOpenArray(pos, pos + 7))
