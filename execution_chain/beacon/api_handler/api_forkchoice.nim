@@ -86,7 +86,7 @@ proc forkchoiceUpdated*(ben: BeaconEngineRef,
   # Check whether we have the block yet in our database or not. If not, we'll
   # need to either trigger a sync, or to reject this forkchoice update for a
   # reason.
-  let header = ben.chain.headerByHash(headHash).valueOr:
+  let header = chain.headerByHash(headHash).valueOr:
     # If this block was previously invalidated, keep rejecting it here too
     let res = ben.checkInvalidAncestor(headHash, headHash)
     if res.isSome:
@@ -106,6 +106,7 @@ proc forkchoiceUpdated*(ben: BeaconEngineRef,
       number = header.number,
       hash   = headHash.short
 
+    chain.notifyFinalizedHash(update.finalizedBlockHash)
     # Inform the header chain cache (used by the syncer)
     com.headerChainUpdate(header, update.finalizedBlockHash)
 
@@ -172,12 +173,9 @@ proc forkchoiceUpdated*(ben: BeaconEngineRef,
       warn "Safe block not in canonical tree",
         hash=safeBlockHash.short
       raise invalidForkChoiceState("safe block not in canonical tree")
-    # Current version of FC module is not interested in safeBlockHash
-    # so we save it here
-    let txFrame = chain.txFrame(safeBlockHash)
-    txFrame.safeHeaderHash(safeBlockHash)
+    # similar to headHash, safeBlockHash is saved by FC module
 
-  chain.forkChoice(headHash, update.finalizedBlockHash).isOkOr:
+  chain.forkChoice(headHash, finalizedBlockHash, safeBlockHash).isOkOr:
     return invalidFCU(error, chain, header)
 
   # If payload generation was requested, create a new block to be potentially
