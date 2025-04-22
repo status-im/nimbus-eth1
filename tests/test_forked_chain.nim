@@ -728,8 +728,7 @@ proc forkedChainMain*() =
       check fc.branches.len == chain.branches.len
       check fc.hashToBlock.len == chain.hashToBlock.len
 
-      # TODO
-      # checkHeadHash fc, blk7.blockHash
+      checkHeadHash fc, blk7.blockHash
 
       check fc.latestHash == blk7.blockHash
       check fc.baseBranch == fc.activeBranch

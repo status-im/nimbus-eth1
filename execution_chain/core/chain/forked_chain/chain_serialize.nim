@@ -16,6 +16,7 @@ import
   ./chain_branch,
   ./chain_private,
   ../../../db/core_db,
+  ../../../db/fcu_db,
   ../../../db/storage_types
 
 type
@@ -31,6 +32,8 @@ type
     pendingFCU: Hash32
     latestFinalizedBlockNumber: uint64
     txRecords: seq[TxRecord]
+    fcuHead: FcuHashAndNumber
+    fcuSafe: FcuHashAndNumber
 
 proc append*(w: var RlpWriter, bd: BlockDesc) =
   w.startList(2)
@@ -45,7 +48,7 @@ proc append*(w: var RlpWriter, brc: BranchRef) =
   w.append(brc.blocks)
 
 proc append*(w: var RlpWriter, fc: ForkedChainRef) =
-  w.startList(4)
+  w.startList(8)
   w.append(fc.branches.len.uint)
   w.append(fc.baseBranch.index)
   w.append(fc.activeBranch.index)
@@ -58,6 +61,8 @@ proc append*(w: var RlpWriter, fc: ForkedChainRef) =
       blockHash: v[0],
       blockNumber: v[1],
     ))
+  w.append(fc.fcuHead)
+  w.append(fc.fcuSafe)
 
 proc read*(rlp: var Rlp, T: type BlockDesc): T {.raises: [RlpError].} =
   rlp.tryEnterList()
@@ -79,8 +84,10 @@ proc read*(rlp: var Rlp, T: type FcState): T {.raises: [RlpError].} =
   rlp.read(result.pendingFCU)
   rlp.read(result.latestFinalizedBlockNumber)
   rlp.read(result.txRecords)
+  rlp.read(result.fcuHead)
+  rlp.read(result.fcuSafe)
 
-let
+const
   # The state always use 0 index
   FcStateKey = fcStateKey 0
 
@@ -201,6 +208,8 @@ proc deserialize*(fc: ForkedChainRef): Result[void, string] =
   fc.activeBranch = fc.branches[state.activeBranch]
   fc.pendingFCU = state.pendingFCU
   fc.latestFinalizedBlockNumber = state.latestFinalizedBlockNumber
+  fc.fcuHead = state.fcuHead
+  fc.fcuSafe = state.fcuSafe
 
   if fc.baseBranch.tailHash != prevBaseHash:
     fc.reset(branches)
@@ -222,5 +231,18 @@ proc deserialize*(fc: ForkedChainRef): Result[void, string] =
   fc.replay().isOkOr:
     fc.reset(branches)
     return err(error)
+
+  fc.hashToBlock.withValue(fc.fcuHead.hash, val) do:
+    let txFrame = val[].txFrame
+    ?txFrame.setHead(val[].header, fc.fcuHead.hash)
+    ?txFrame.fcuHead(fc.fcuHead.hash, fc.fcuHead.number)
+
+  fc.hashToBlock.withValue(fc.fcuSafe.hash, val) do:
+    let txFrame = val[].txFrame
+    ?txFrame.fcuSafe(fc.fcuSafe.hash, fc.fcuSafe.number)
+
+  fc.hashToBlock.withValue(fc.pendingFCU, val) do:
+    let txFrame = val[].txFrame
+    ?txFrame.fcuFinalized(fc.pendingFCU, fc.latestFinalizedBlockNumber)
 
   ok()
