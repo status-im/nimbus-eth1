@@ -445,6 +445,21 @@ type
         defaultValueDesc: $RpcFlag.Eth
         name: "ws-api" }: seq[string]
 
+      historyExpiry* {.
+        desc: "Enable the data from Portal Network"
+        defaultValue: false
+        name: "history-expiry" }: bool
+
+      historyExpiryLimit* {.
+        hidden
+        desc: "Limit the number of blocks to be kept in history"
+        name: "debug-history-expiry-limit" }: Option[BlockNumber]
+
+      portalUrl* {.
+        desc: "URL of the Portal Network"
+        defaultValue: ""
+        name: "portal-url" }: string
+
       engineApiEnabled* {.
         desc: "Enable the Engine API"
         defaultValue: false
