@@ -140,7 +140,7 @@ type
 
   DbStoreHandler* = proc(
     contentKey: ContentKeyByteList, contentId: ContentId, content: seq[byte]
-  ) {.raises: [], gcsafe.}
+  ): bool {.raises: [], gcsafe.}
 
   DbContainsHandler* = proc(contentKey: ContentKeyByteList, contentId: ContentId): bool {.
     raises: [], gcsafe
@@ -499,7 +499,12 @@ proc storeContent*(
   # Always re-check that the key is still in the node range to make sure only
   # content in range is stored.
   if p.inRange(contentId):
-    p.dbPut(contentKey, contentId, content)
+    let dbPruned = p.dbPut(contentKey, contentId, content)
+    if dbPruned:
+      # invalidate all cached content incase it was removed from the database
+      # during pruning
+      for k, v in p.offerCache.mpairs():
+        v = false
 
     if cacheOffer and not p.config.disableOfferCache:
       p.offerCache.put(contentId, true)
@@ -621,7 +626,9 @@ proc handleOffer(
         discard contentKeysAcceptList.add(DeclinedNotWithinRadius)
       elif not p.stream.canAddPendingTransfer(srcId, contentId):
         discard contentKeysAcceptList.add(DeclinedInboundTransferInProgress)
-      elif p.offerCache.contains(contentId) or p.dbContains(contentKey, contentId):
+      elif (
+        p.offerCache.contains(contentId) and p.offerCache.get(contentId).value() == true
+      ) or p.dbContains(contentKey, contentId):
         discard contentKeysAcceptList.add(DeclinedAlreadyStored)
       else:
         p.stream.addPendingTransfer(srcId, contentId)
