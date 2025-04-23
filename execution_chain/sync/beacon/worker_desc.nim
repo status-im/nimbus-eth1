@@ -97,7 +97,6 @@ type
     nBuddies*: int                   ## Number of active workers
     clReq*: SyncClMesg               ## Manual first target set up
     lastState*: SyncLayoutState      ## Last known layout state
-    finRequest*: Hash32              ## To be resolved before session
     hdrSync*: HeaderFetchSync        ## Syncing by linked header chains
     blkSync*: BlocksFetchSync        ## For importing/executing blocks
     nextMetricsUpdate*: Moment       ## For updating metrics

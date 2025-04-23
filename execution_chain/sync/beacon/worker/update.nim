@@ -215,53 +215,30 @@ proc updateSyncState*(ctx: BeaconCtxRef; info: static[string]) =
 
 proc updateFromHibernateSetTarget*(
     ctx: BeaconCtxRef;
-    fin: Header;
     info: static[string];
       ) =
   ## If in hibernate mode, accept a cache session and activate syncer
   ##
   if ctx.hibernate:
-    # Clear cul-de-sac prevention registry. This applies to both, successful
-    # access handshake or error.
-    ctx.pool.failedPeers.clear()
+    let (b, t) = (ctx.chain.baseNumber, ctx.hdrCache.head.number)
 
-    if ctx.hdrCache.accept(fin):
-      let (b, t) = (ctx.chain.baseNumber, ctx.head.number)
+    # Exclude the case of a single header chain which would be `T` only
+    if b+1 < t:
+      ctx.pool.lastState = collectingHeaders    # state transition
+      ctx.hibernate = false                     # wake up
 
-      # Exclude the case of a single header chain which would be `T` only
-      if b+1 < t:
-        ctx.pool.lastState = collectingHeaders    # state transition
-        ctx.hibernate = false                     # wake up
+      # Update range
+      ctx.headersUnprocSet(b+1, t-1)
 
-        # Update range
-        ctx.headersUnprocSet(b+1, t-1)
-
-        info "Activating syncer", base=b.bnStr,
-          head=ctx.chain.latestNumber.bnStr, fin=fin.bnStr, target=t.bnStr
-        return
+      info "Activating syncer", base=b.bnStr,
+        head=ctx.chain.latestNumber.bnStr, target=t.bnStr
+      return
 
     # Failed somewhere on the way
     ctx.hdrCache.clear()
 
   debug info & ": activation rejected", base=ctx.chain.baseNumber.bnStr,
     head=ctx.chain.latestNumber.bnStr, state=ctx.hdrCache.state
-
-
-proc updateFailedPeersFromResolvingFinalizer*(
-    ctx: BeaconCtxRef;
-    info: static[string];
-      ) =
-  ## This function resets the finalised hash resolver if there are too many
-  ## sync peer download errors. This prevents from a potential deadlock if
-  ## the syncer is notified with bogus `(finaliser,sync-head)` data.
-  ##
-  if ctx.hibernate:
-    if fetchFinalisedHashResolverFailedPeersHwm < ctx.pool.failedPeers.len:
-      info "Abandoned resolving hash (try next)",
-        finHash=ctx.pool.finRequest.short, failedPeers=ctx.pool.failedPeers.len
-      ctx.hdrCache.clear()
-      ctx.pool.failedPeers.clear()
-      ctx.pool.finRequest = zeroHash32
 
 
 proc updateAsyncTasks*(

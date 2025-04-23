@@ -53,12 +53,6 @@ const
 
   # ----------------------
 
-  fetchFinalisedHashResolverFailedPeersHwm* = 10
-    ## If there are more failing peers than this `hwm` when initially resolving
-    ## the finalised hash then the whole procedure gets cancelled and reset.
-    ## The system will proceed waiting for a new request to resolve a finalised
-    ## hash.
-
   fetchHeadersFailedInitialFailPeersHwm* = 30
     ## If there are more failing peers than this `hwm` right at the begining
     ## of a header chain download scrum (before any data received), then this

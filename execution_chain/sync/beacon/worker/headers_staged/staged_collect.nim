@@ -132,16 +132,27 @@ proc collectAndStashOnDiskCache*(
           ctrl=buddy.ctrl.state, hdrErrors=buddy.hdrErrors, `error`=error
         break fetchHeadersBody           # error => exit block
 
-      # Antecedent `dangling` of the header cache might not be at `rev[^1]`.
-      let revLen = rev[0].number - ctx.dangling.number + 1
+      # Note that `put()` might not have used all of the `rev[]` items for
+      # updating the antecedent (aka `ctx.dangling`.) So `rev[^1]` might be
+      # an ancestor of the antecedent.
+      #
+      # By design, the unused items from `rev[]` list may savely be considered
+      # as consumed so that the next cycle can continue. In practice, if there
+      # are used `rev[]` items then the `state` will have changed which is
+      # handled in the `while` loop header clause.
+      #
+      # Other possibilities would imply that `put()` was called from several
+      # instances with oberlapping `rev[]` argument lists which is included
+      # by the administration of the `iv` argument for this function
+      # `collectAndStashOnDiskCache()`.
 
       # Update remaining range to fetch and check for end-of-loop condition
-      let newTopBefore = ivTop - revLen
+      let newTopBefore = ivTop - BlockNumber(rev.len)
       if newTopBefore < iv.minPt:
         break                            # exit while() loop
 
       ivTop = newTopBefore               # mostly results in `ivReq.minPt-1`
-      parent = rev[revLen-1].parentHash  # parent hash for next fetch request
+      parent = rev[^1].parentHash        # parent hash for next fetch request
       # End loop
 
     trace info & ": fetched and stored headers", peer, iv,
