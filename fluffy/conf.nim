@@ -361,7 +361,7 @@ type
       hidden,
       desc:
         "Size of the in memory local offer cache. This is the max number " &
-        "of content values that can be stored in the cache.",
+        "of content id values that can be stored in the cache.",
       defaultValue: defaultPortalProtocolConfig.offerCacheSize,
       name: "debug-offer-cache-size"
     .}: int
