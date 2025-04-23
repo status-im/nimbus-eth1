@@ -90,94 +90,70 @@ proc putKeyAtLevel(
 
   ok()
 
-template encodeHashAppend(body: untyped): HashKey =
-  var tracker: DynamicRlpLengthTracker
-  tracker.initLengthTracker()
-  body
-  let length = tracker.totalLength
-
-  if length < 32:
-    var writer = initTwoPassWriter(tracker)
-    body
-    let buf = writer.finish()
-    return HashKey.fromBytes(buf)
-  else:
-    var writer = initHashWriter(tracker)
-    body
-    let buf = writer.finish()
-    return buf.to(HashKey)
-
-template appendLeaf(w: var RlpWriter, pfx: NibblesBuf, leafData: untyped): HashKey =
+template appendLeaf(w: var RlpWriter, pfx: NibblesBuf, leafData: untyped) =
   w.startList(2)
   w.append(pfx.toHexPrefix(isLeaf = true).data())
   w.wrapEncoding(1)
   w.append(leafData)
 
 template encodeLeaf(pfx: NibblesBuf, leafData: untyped): HashKey =
-  var tracker: DynamicRlpLengthTracker
+  var tracker = DynamicRlpLengthTracker()
   tracker.initLengthTracker()
   tracker.appendLeaf(pfx, leafData)
-  let length = tracker.totalLength
 
-  if length < 32:
+  if tracker.totalLength < 32:
     var writer = initTwoPassWriter(tracker)
     writer.appendLeaf(pfx, leafData)
-    let buf = writer.finish()
-    return HashKey.fromBytes(buf)
+    let buf = HashKey.fromBytes(writer.finish)
+    buf.value
   else:
     var writer = initHashWriter(tracker)
     writer.appendLeaf(pfx, leafData)
     let buf = writer.finish()
-    return buf.to(HashKey)
+    buf.to(HashKey)
 
-template appendBranch(w: var RlpWriter, vtx: VertexRef, subKeyForN: untyped): HashKey =
-  encodeHashAppend:
-    w.startList(17)
-    for (n {.inject.}, subvid {.inject.}) in vtx.allPairs():
-      w.append(subKeyForN)
-    w.append EmptyBlob
+template appendBranch(w: var RlpWriter, vtx: VertexRef, subKeyForN: untyped) =
+  w.startList(17)
+  for (n {.inject.}, subvid {.inject.}) in vtx.allPairs():
+    w.append(subKeyForN)
+  w.append EmptyBlob
 
 template encodeBranch(vtx: VertexRef, subKeyForN: untyped): HashKey =
   var tracker: DynamicRlpLengthTracker
   tracker.initLengthTracker()
   tracker.appendBranch(vtx, subKeyForN)
-  let length = tracker.totalLength
 
-  if length < 32:
+  if tracker.totalLength < 32:
     var writer = initTwoPassWriter(tracker)
     writer.appendBranch(vtx, subKeyForN)
-    let buf = writer.finish()
-    return HashKey.fromBytes(buf)
+    let buf = HashKey.fromBytes(writer.finish)
+    buf.value
   else:
     var writer = initHashWriter(tracker)
     writer.appendBranch(vtx, subKeyForN)
     let buf = writer.finish()
-    return buf.to(HashKey)
+    buf.to(HashKey)
 
-
-template appendExt(w: var RlpWriter, pfx: NibblesBuf, branchKey: HashKey): HashKey =
-  encodeHashAppend:
-    w.startList(2)
-    w.append(pfx.toHexPrefix(isLeaf = false).data())
-    w.append(branchKey)
+template appendExt(w: var RlpWriter, pfx: NibblesBuf, branchKey: HashKey) =
+  w.startList(2)
+  w.append(pfx.toHexPrefix(isLeaf = false).data())
+  w.append(branchKey)
 
 template encodeExt(pfx: NibblesBuf, branchKey: untyped): HashKey =
   var tracker: DynamicRlpLengthTracker
   tracker.initLengthTracker()
   tracker.appendExt(pfx, branchKey)
-  let length = tracker.totalLength
 
-  if length < 32:
+  if tracker.totalLength < 32:
     var writer = initTwoPassWriter(tracker)
     writer.appendExt(pfx, branchKey)
-    let buf = writer.finish()
-    return HashKey.fromBytes(buf)
+    let buf = HashKey.fromBytes(writer.finish)
+    buf.value
   else:
     var writer = initHashWriter(tracker)
     writer.appendExt(pfx, branchKey)
     let buf = writer.finish()
-    return buf.to(HashKey)
-
+    buf.to(HashKey)
 
 proc getKey(
     db: AristoTxRef, rvid: RootedVertexID, skipLayers: static bool
@@ -322,10 +298,10 @@ proc computeKeyImpl(
             VOID_HASH_KEY
 
       if vtx.pfx.len > 0: # Extension node
-        encodeExt(vtx.pfx):
+        key = encodeExt(vtx.pfx):
           writeBranch()
       else:
-        writeBranch()
+        key = writeBranch()
 
   # Cache the hash into the same storage layer as the the top-most value that it
   # depends on (recursively) - this could be an ephemeral in-memory layer or the
@@ -336,7 +312,7 @@ proc computeKeyImpl(
 
   if vtx.vType notin Leaves:
     ?db.putKeyAtLevel(rvid, vtx, key, level, batch)
-  ok (key, level)
+  return ok (key, level)
 
 proc computeKeyImpl(
     db: AristoTxRef, rvid: RootedVertexID, skipLayers: static bool
