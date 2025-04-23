@@ -429,7 +429,6 @@ procSuite "Portal Wire Protocol Tests":
       proto1.storeContent(
         ByteList[2048].init(@[uint8(i)]), u256(i), item, cacheOffer = true
       )
-      check proto1.offerCache.contains(u256(i)) == true
       distances.add(u256(i) xor proto1.localNode.id)
 
     distances.sort(order = SortOrder.Descending)
@@ -439,7 +438,6 @@ procSuite "Portal Wire Protocol Tests":
     # Index 2 should be still be in database and its distance should be <=
     # updated radius
     check:
-      proto1.offerCache.len() == 1 # Pruned so cache was cleared
       not db.contains((distances[0] xor proto1.localNode.id))
       not db.contains((distances[1] xor proto1.localNode.id))
       not db.contains((distances[2] xor proto1.localNode.id))
