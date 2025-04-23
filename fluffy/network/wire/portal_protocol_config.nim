@@ -49,15 +49,14 @@ type
     maxConcurrentOffers*: int
     disableBanNodes*: bool
 
-
 const
   defaultRadiusConfig* = RadiusConfig(kind: Dynamic)
   defaultRadiusConfigDesc* = $defaultRadiusConfig.kind
   defaultDisablePoke* = false
   defaultMaxGossipNodes* = 4
-  defaultContentCacheSize* = 100
+  defaultContentCacheSize* = 128
   defaultDisableContentCache* = false
-  defaultOfferCacheSize* = 100
+  defaultOfferCacheSize* = 1024
   defaultDisableOfferCache* = false
   defaultMaxConcurrentOffers* = 50
   defaultAlpha* = 3

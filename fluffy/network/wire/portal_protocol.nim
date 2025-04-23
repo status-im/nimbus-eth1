@@ -82,13 +82,6 @@ declareCounter portal_content_cache_hits,
 declareCounter portal_content_cache_misses,
   "Portal wire protocol local content lookups that don't hit the content cache",
   labels = ["protocol_id"]
-declareCounter portal_offer_cache_hits,
-  "Portal wire protocol local content lookups that hit the offer cache",
-  labels = ["protocol_id"]
-declareCounter portal_offer_cache_misses,
-  "Portal wire protocol local content lookups that don't hit the offer cache",
-  labels = ["protocol_id"]
-
 declareCounter portal_poke_offers,
   "Portal wire protocol offers through poke mechanism", labels = ["protocol_id"]
 
@@ -164,10 +157,10 @@ type
   # of queries which may lookup data outside our radius.
   ContentCache = LruCache[ContentId, seq[byte]]
 
-  # Caches the most recently received content/offers.
+  # Caches the content ids of the most recently received content offers.
   # Content is only stored in this cache if it falls within our radius and similarly
   # the cache is only checked if the content id is within our radius.
-  OfferCache = LruCache[ContentId, seq[byte]]
+  OfferCache = LruCache[ContentId, bool]
 
   ContentKV* = object
     contentKey*: ContentKeyByteList
@@ -509,7 +502,7 @@ proc storeContent*(
     p.dbPut(contentKey, contentId, content)
 
     if cacheOffer and not p.config.disableOfferCache:
-      p.offerCache.put(contentId, content)
+      p.offerCache.put(contentId, true)
 
     true
   else:
@@ -529,13 +522,6 @@ proc getLocalContent*(
   # Check first if content is in range, as this is a cheaper operation
   # than the database lookup.
   if p.inRange(contentId):
-    let maybeContent = p.offerCache.get(contentId)
-    if maybeContent.isSome():
-      portal_offer_cache_hits.inc(labelValues = [$p.protocolId])
-      return maybeContent
-
-    portal_offer_cache_misses.inc(labelValues = [$p.protocolId])
-
     p.dbGet(contentKey, contentId)
   else:
     Opt.none(seq[byte])
@@ -579,7 +565,9 @@ proc handleFindContent(
           p.stream.addContentRequest(srcId, contentId, content, version)
 
         return encodeMessage(
-          ContentMessage(contentMessageType: connectionIdType, connectionId: connectionId)
+          ContentMessage(
+            contentMessageType: connectionIdType, connectionId: connectionId
+          )
         )
 
   # Node does not have the content, or content is not even in radius,

@@ -199,8 +199,8 @@ proc run(fluffy: Fluffy, config: PortalConf) {.raises: [CatchableError].} =
     portalProtocolConfig = PortalProtocolConfig.init(
       config.tableIpLimit, config.bucketIpLimit, config.bitsPerHop, config.alpha,
       config.radiusConfig, config.disablePoke, config.maxGossipNodes,
-      config.contentCacheSize, config.disableContentCache, config.offerCacheSize, config.disableOfferCache, config.maxConcurrentOffers,
-      config.disableBanNodes,
+      config.contentCacheSize, config.disableContentCache, config.offerCacheSize,
+      config.disableOfferCache, config.maxConcurrentOffers, config.disableBanNodes,
     )
 
     portalNodeConfig = PortalNodeConfig(
