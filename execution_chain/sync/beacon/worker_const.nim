@@ -23,7 +23,7 @@ type SyncState* = enum
   blocksFinish                     ## get ready for `idle`
 
 const
-  enableTicker* = false
+  enableTicker* = false or true
     ## Log regular status updates similar to metrics. Great for debugging.
 
   # ----------------------
