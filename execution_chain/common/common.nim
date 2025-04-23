@@ -362,6 +362,9 @@ func eip150Hash*(com: CommonRef): Hash32 =
 func daoForkBlock*(com: CommonRef): Opt[BlockNumber] =
   com.config.daoForkBlock
 
+func posBlock*(com: CommonRef): Opt[BlockNumber] =
+  com.config.posBlock
+
 func daoForkSupport*(com: CommonRef): bool =
   com.config.daoForkSupport
 

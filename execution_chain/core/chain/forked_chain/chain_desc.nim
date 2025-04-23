@@ -11,10 +11,10 @@
 {.push raises: [].}
 
 import
-  std/[tables],
+  std/tables,
   ../../../common,
-  ../../../db/core_db,
-  ../../../db/fcu_db,
+  ../../../db/[core_db, fcu_db],
+  ../../../portal/portal,
   ./block_quarantine,
   ./chain_branch
 
@@ -66,6 +66,9 @@ type
       # When move forward, this is the minimum distance
       # to move the base. And the bulk writing can works
       # efficiently.
+      
+    portal*: HistoryExpiryRef
+      # History Expiry tracker and portal access entry point
 
     fcuHead*: FcuHashAndNumber
     fcuSafe*: FcuHashAndNumber
