@@ -1,5 +1,5 @@
 # Nimbus
-# Copyright (c) 2021-2024 Status Research & Development GmbH
+# Copyright (c) 2021-2025 Status Research & Development GmbH
 # Licensed under either of
 #  * Apache License, version 2.0, ([LICENSE-APACHE](LICENSE-APACHE))
 #  * MIT license ([LICENSE-MIT](LICENSE-MIT))
@@ -9,16 +9,16 @@
 
 import
   std/[os, net],
-  eth/p2p as ethp2p,
+  ../../../execution_chain/networking/p2p as ethp2p,
   results,
   chronos, json_rpc/[rpcserver, rpcclient],
-  ../../../nimbus/sync/protocol,
-  ../../../nimbus/common,
-  ../../../nimbus/config,
-  ../../../nimbus/rpc,
-  ../../../nimbus/rpc/server_api,
-  ../../../nimbus/utils/utils,
-  ../../../nimbus/core/[chain, tx_pool],
+  ../../../execution_chain/sync/wire_protocol,
+  ../../../execution_chain/common,
+  ../../../execution_chain/config,
+  ../../../execution_chain/rpc,
+  ../../../execution_chain/rpc/server_api,
+  ../../../execution_chain/utils/utils,
+  ../../../execution_chain/core/[chain, tx_pool],
   ../../../tests/test_helpers,
   ./vault
 
@@ -34,7 +34,7 @@ type
 const
   initPath = "hive_integration" / "nodocker" / "rpc" / "init"
   gasPrice* = 30.gwei
-  chainID*  = ChainId(7)
+  chainID*  = 7.u256
 
 proc manageAccounts(ctx: EthContext, conf: NimbusConf) =
   if string(conf.importKey).len > 0:
@@ -46,11 +46,11 @@ proc manageAccounts(ctx: EthContext, conf: NimbusConf) =
 proc setupRpcServer(ctx: EthContext, com: CommonRef,
                     ethNode: EthereumNode, txPool: TxPoolRef,
                     conf: NimbusConf, chain: ForkedChainRef): RpcServer  =
-  let 
+  let
     rpcServer = newRpcHttpServer([initTAddress(conf.httpAddress, conf.httpPort)])
-    serverApi = newServerAPI(chain, txPool)
+    serverApi = newServerAPI(txPool)
 
-  
+
   setupCommonRpc(ethNode, conf, rpcServer)
   setupServerAPI(serverApi, rpcServer, ctx)
 
@@ -62,7 +62,7 @@ proc stopRpcHttpServer(srv: RpcServer) =
   waitFor rpcServer.stop()
   waitFor rpcServer.closeWait()
 
-proc setupEnv*(): TestEnv =
+proc setupEnv*(taskPool: Taskpool): TestEnv =
   let conf = makeConfig(@[
     "--chaindb:archive",
     # "--nat:extip:0.0.0.0",
@@ -80,21 +80,17 @@ proc setupEnv*(): TestEnv =
     ethCtx  = newEthContext()
     ethNode = setupEthNode(conf, ethCtx, eth)
     com     = CommonRef.new(newCoreDbRef DefaultDbMemory,
+      taskPool,
       conf.networkId,
       conf.networkParams
     )
 
   manageAccounts(ethCtx, conf)
 
-  let head = com.db.getCanonicalHead()
-  let chainRef = newForkedChain(com, head)
-  let txPool = TxPoolRef.new(com)
+  let chain = ForkedChainRef.init(com)
+  let txPool = TxPoolRef.new(chain)
 
-  # txPool must be informed of active head
-  # so it can know the latest account state
-  doAssert txPool.smartHead(head, chainRef)
-
-  let rpcServer = setupRpcServer(ethCtx, com, ethNode, txPool, conf, chainRef)
+  let rpcServer = setupRpcServer(ethCtx, com, ethNode, txPool, conf, chain)
   let rpcClient = newRpcHttpClient()
   waitFor rpcClient.connect("127.0.0.1", Port(8545), false)
   let stopServer = stopRpcHttpServer

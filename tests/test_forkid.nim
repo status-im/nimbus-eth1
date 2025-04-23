@@ -1,5 +1,5 @@
 # Nimbus
-# Copyright (c) 2019-2024 Status Research & Development GmbH
+# Copyright (c) 2019-2025 Status Research & Development GmbH
 # Licensed under either of
 #  * Apache License, version 2.0, ([LICENSE-APACHE](LICENSE-APACHE) or
 #    http://www.apache.org/licenses/LICENSE-2.0)
@@ -9,9 +9,10 @@
 # according to those terms.
 
 import
+  std/strutils,
   unittest2,
-  ../nimbus/common/common,
-  ../nimbus/utils/utils
+  ../execution_chain/common/common,
+  ../execution_chain/utils/utils
 
 const
   MainNetIDs = [
@@ -41,11 +42,13 @@ const
     (number: 13773000'u64, time: 0'u64, id: (crc: 0x20c327fc'u32, next: 15050000'u64)), # First Arrow Glacier block
     (number: 15049999'u64, time: 0'u64, id: (crc: 0x20c327fc'u32, next: 15050000'u64)), # Last Arrow Glacier block
     (number: 15050000'u64, time: 0'u64, id: (crc: 0xf0afd0e3'u32, next: 1681338455'u64)), # First Gray Glacier block
-    (number: 20000000'u64, time: 1681338454'u64, id: (crc: 0xf0afd0e3'u32, next: 1681338455'u64)), # Last Gray Glacier block
-    (number: 20000000'u64, time: 1681338455'u64, id: (crc: 0xdce96c2d'u32, next: 1710338135'u64)), # First Shanghai block
-    (number: 30000000'u64, time: 1710338134'u64, id: (crc: 0xdce96c2d'u32, next: 1710338135'u64)), # Last Shanghai block
-    (number: 40000000'u64, time: 1710338135'u64, id: (crc: 0x9f3d2254'u32, next: 0'u64)),          # First Cancun block
-    (number: 50000000'u64, time: 2000000000'u64, id: (crc: 0x9f3d2254'u32, next: 0'u64)),          # Future Cancun block
+    (number: 15050000'u64, time: 1681338454'u64, id: (crc: 0xf0afd0e3'u32, next: 1681338455'u64)), # Last Gray Glacier block
+    (number: 15050000'u64, time: 1681338455'u64, id: (crc: 0xdce96c2d'u32, next: 1710338135'u64)), # First Shanghai block
+    (number: 15050000'u64, time: 1710338134'u64, id: (crc: 0xdce96c2d'u32, next: 1710338135'u64)), # Last Shanghai block
+    (number: 15050000'u64, time: 1710338135'u64, id: (crc: 0x9f3d2254'u32, next: 1746612311'u64)), # First Cancun block
+    (number: 15050000'u64, time: 1746612310'u64, id: (crc: 0x9f3d2254'u32, next: 1746612311'u64)), # Last Cancun block
+    (number: 15050000'u64, time: 1746612311'u64, id: (crc: 0xc376cf8b'u32, next: 0'u64)),          # First Prague block
+    (number: 15050000'u64, time: 2746612311'u64, id: (crc: 0xc376cf8b'u32, next: 0'u64)),          # Future Prague block
   ]
 
   SepoliaNetIDs = [
@@ -55,8 +58,10 @@ const
     (number: 1450410'u64, time: 1677557087'u64, id: (crc: 0x4a85c09c'u32, next: 1677557088'u64)), # Last MergeNetsplit block
     (number: 1450410'u64, time: 1677557088'u64, id: (crc: 0xce82fa52'u32, next: 1706655072'u64)), # First Shanghai block
     (number: 1450410'u64, time: 1706655071'u64, id: (crc: 0xce82fa52'u32, next: 1706655072'u64)), # Last Shanghai block
-    (number: 1450410'u64, time: 1706655072'u64, id: (crc: 0xa6260961'u32, next: 0'u64)),          # First Cancun block
-    (number: 1450410'u64, time: 2706655072'u64, id: (crc: 0xa6260961'u32, next: 0'u64)),          # Future Cancun block
+    (number: 1450410'u64, time: 1706655072'u64, id: (crc: 0xa6260961'u32, next: 1741159776'u64)), # First Cancun block
+    (number: 1450410'u64, time: 1741159775'u64, id: (crc: 0xa6260961'u32, next: 1741159776'u64)), # Last Cancun block
+    (number: 1450410'u64, time: 1741159776'u64, id: (crc: 0x1cd80755'u32, next: 0'u64)),          # First Prague block
+    (number: 1450410'u64, time: 2741159776'u64, id: (crc: 0x1cd80755'u32, next: 0'u64)),          # Future Prague block
   ]
 
   HoleskyNetIDs = [
@@ -64,24 +69,32 @@ const
     (number: 123'u64, time: 0'u64, id: (crc: 0xc61a6098'u32, next: 1696000704'u64)), # First MergeNetsplit block
     (number: 123'u64, time: 1696000704'u64, id: (crc: 0xfd4f016b'u32, next: 1707305664'u64)), # First Shanghai block
     (number: 123'u64, time: 1707305663'u64, id: (crc: 0xfd4f016b'u32, next: 1707305664'u64)), # Last Shanghai block
-    (number: 123'u64, time: 1707305664'u64, id: (crc: 0x9b192ad0'u32, next: 0'u64)), # First Cancun block
-    (number: 123'u64, time: 2707305664'u64, id: (crc: 0x9b192ad0'u32, next: 0'u64)), # Future Cancun block
+    (number: 123'u64, time: 1707305664'u64, id: (crc: 0x9b192ad0'u32, next: 1740434112'u64)), # First Cancun block
+    (number: 123'u64, time: 1740434111'u64, id: (crc: 0x9b192ad0'u32, next: 1740434112'u64)), # Last Cancun block
+    (number: 123'u64, time: 1740434112'u64, id: (crc: 0xdfbd9bed'u32, next: 0'u64)), # First Prague block
+    (number: 123'u64, time: 2740434112'u64, id: (crc: 0xdfbd9bed'u32, next: 0'u64)), # Future Prague block
+  ]
+
+  HoodiNetIDs = [
+    (number: 0'u64,   time: 0'u64, id: (crc: 0xBEF71D30'u32, next: 1742999832'u64)), # Unsynced, last Frontier, Homestead, Tangerine, Spurious, Byzantium, Constantinople, Petersburg, Istanbul, Berlin, London, Paris, Shanghai, Cancun block
+    (number: 123'u64, time: 0'u64, id: (crc: 0xBEF71D30'u32, next: 1742999832'u64)), # First Prague block
+    (number: 123'u64, time: 2740434112'u64, id: (crc: 0x0929E24E'u32, next: 0'u64)), # Future Prague block
   ]
 
 template runTest(network: untyped, name: string) =
   test name:
     var
       params = networkParams(network)
-      com    = CommonRef.new(newCoreDbRef DefaultDbMemory, network, params)
+      com    = CommonRef.new(newCoreDbRef DefaultDbMemory, nil, network, params)
 
     for i, x in `network IDs`:
       let id = com.forkId(x.number, x.time)
-      check id.crc == x.id.crc
+      check toHex(id.crc) == toHex(x.id.crc)
       check id.nextFork == x.id.next
 
 func config(shanghai, cancun: uint64): ChainConfig =
   ChainConfig(
-    chainID:                       ChainId(1337),
+    chainID:                       1337.u256,
     homesteadBlock:                Opt.some(0'u64),
     dAOForkBlock:                  Opt.none(BlockNumber),
     dAOForkSupport:                true,
@@ -96,8 +109,7 @@ func config(shanghai, cancun: uint64): ChainConfig =
     berlinBlock:                   Opt.some(0'u64),
     londonBlock:                   Opt.some(0'u64),
     terminalTotalDifficulty:       Opt.some(0.u256),
-    terminalTotalDifficultyPassed: Opt.some(true),
-    mergeForkBlock:                Opt.some(0'u64),
+    mergeNetsplitBlock:            Opt.some(0'u64),
     shanghaiTime:                  Opt.some(shanghai.EthTime),
     cancunTime:                    Opt.some(cancun.EthTime),
   )
@@ -111,7 +123,7 @@ template runGenesisTimeIdTests() =
   let
     time       = 1690475657'u64
     genesis    = common.Header(timestamp: time.EthTime)
-    genesisCRC = crc32(0, genesis.blockHash.data)
+    genesisCRC = crc32(0, genesis.computeBlockHash.data)
     cases = [
       # Shanghai active before genesis, skip
       (c: config(time-1, time+1), want: (crc: genesisCRC, next: time + 1)),
@@ -128,13 +140,10 @@ template runGenesisTimeIdTests() =
     check get.crc == x.want.crc
     check get.nextFork == x.want.next
 
-proc forkIdMain*() =
-  suite "Fork ID tests":
-    runTest(MainNet, "MainNet")
-    runTest(SepoliaNet, "SepoliaNet")
-    runTest(HoleskyNet, "HoleskyNet")
-    test "Genesis Time Fork ID":
-      runGenesisTimeIdTests()
-
-when isMainModule:
-  forkIdMain()
+suite "Fork ID tests":
+  runTest(MainNet, "MainNet")
+  runTest(SepoliaNet, "SepoliaNet")
+  runTest(HoleskyNet, "HoleskyNet")
+  runTest(HoodiNet, "HoodiNet")
+  test "Genesis Time Fork ID":
+    runGenesisTimeIdTests()

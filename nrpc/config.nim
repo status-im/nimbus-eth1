@@ -1,4 +1,4 @@
-# Copyright (c) 2018-2024 Status Research & Development GmbH
+# Copyright (c) 2018-2025 Status Research & Development GmbH
 # Licensed under either of
 #  * Apache License, version 2.0, ([LICENSE-APACHE](LICENSE-APACHE))
 #  * MIT license ([LICENSE-MIT](LICENSE-MIT))
@@ -21,10 +21,11 @@ import
     confutils/defs,
     confutils/std/net
   ],
-  eth/[common, net/nat, p2p/enode, p2p/discoveryv5/enr],
-  "../nimbus"/[constants, compile_info],
-  ../nimbus/common/chain_config,
-  ../nimbus/db/opts
+  eth/[common, net/nat, p2p/discoveryv5/enr],
+  ../execution_chain/[constants, compile_info],
+  ../execution_chain/common/chain_config,
+  ../execution_chain/networking/discoveryv4/enode,
+  ../execution_chain/db/opts
 
 export net, defs
 
@@ -53,28 +54,33 @@ type
 
   NRpcConf* = object of RootObj
     ## Main NRpc configuration object
-    
+
     beaconApi* {.
       desc: "Beacon API url"
       defaultValue: ""
       name: "beacon-api" .}: string
 
     network {.
-      desc: "Name or id number of Ethereum network(mainnet(1), sepolia(11155111), holesky(17000), other=custom)"
+      desc: "Name or id number of Ethereum network"
       longDesc:
-        "- mainnet: Ethereum main network\n" &
-        "- sepolia: Test network (pow+pos) with merge\n" &
-        "- holesky: The holesovice post-merge testnet"
+        "- mainnet/1       : Ethereum main network\n" &
+        "- sepolia/11155111: Test network (proof-of-work)\n" &
+        "- holesky/17000   : The holesovice post-merge testnet\n" &
+        "- hoodi/560048    : The second long-standing, merged-from-genesis, public Ethereum testnet\n" &
+        "- other           : Custom"
       defaultValue: "" # the default value is set in makeConfig
       defaultValueDesc: "mainnet(1)"
       abbr: "i"
       name: "network" }: string
 
-    customNetwork {.
-      desc: "Use custom genesis block for private Ethereum Network (as /path/to/genesis.json)"
-      defaultValueDesc: ""
-      abbr: "c"
-      name: "custom-network" }: Option[NetworkParams]
+    customNetworkFolder* {.
+        desc: "Use custom config for private Ethereum Network (as /path/to/metadata)"
+        longDesc:
+          "Path to a folder containing custom network configuration files\n" &
+          "such as genesis.json, config.yaml, etc.\n" &
+          "config.yaml is the configuration file for the CL client"
+        defaultValue: ""
+        name: "custom-network" .}: string
 
     networkId* {.
       ignore # this field is not processed by confutils
@@ -116,9 +122,15 @@ type
         defaultValue: ""
         name: "el-engine-api" .}: string
 
+func parseHexOrDec256(p: string): UInt256 {.raises: [ValueError].} =
+  if startsWith(p, "0x"):
+    parse(p, UInt256, 16)
+  else:
+    parse(p, UInt256, 10)
+
 func parseCmdArg(T: type NetworkId, p: string): T
     {.gcsafe, raises: [ValueError].} =
-  parseInt(p).T
+  parseHexOrDec256(p)
 
 func completeCmdArg(T: type NetworkId, val: string): seq[string] =
   return @[]
@@ -153,7 +165,7 @@ proc getNetworkId(conf: NRpcConf): Opt[NetworkId] =
   of "holesky": return Opt.some HoleskyNet
   else:
     try:
-      Opt.some parseInt(network).NetworkId
+      Opt.some parseHexOrDec256(network)
     except CatchableError:
       error "Failed to parse network name or id", network
       quit QuitFailure
@@ -178,8 +190,12 @@ proc makeConfig*(cmdLine = commandLineParams()): NRpcConf
 
   var networkId = result.getNetworkId()
 
-  if result.customNetwork.isSome:
-    result.networkParams = result.customNetwork.get()
+  if result.customNetworkFolder.len > 0:
+    var networkParams = NetworkParams()
+    if not loadNetworkParams(result.customNetworkFolder.joinPath("genesis.json"), networkParams):
+      error "Failed to load customNetwork", path=result.customNetworkFolder
+      quit QuitFailure
+    result.networkParams = networkParams
     if networkId.isNone:
       # WARNING: networkId and chainId are two distinct things
       # they usage should not be mixed in other places.
@@ -195,7 +211,7 @@ proc makeConfig*(cmdLine = commandLineParams()): NRpcConf
 
   result.networkId = networkId.get()
 
-  if result.customNetwork.isNone:
+  if result.customNetworkFolder.len == 0:
     result.networkParams = networkParams(result.networkId)
 
 

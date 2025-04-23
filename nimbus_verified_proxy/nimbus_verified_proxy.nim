@@ -1,5 +1,5 @@
 # nimbus_verified_proxy
-# Copyright (c) 2022-2024 Status Research & Development GmbH
+# Copyright (c) 2022-2025 Status Research & Development GmbH
 # Licensed and distributed under either of
 #   * MIT license (license terms in the root directory or at https://opensource.org/licenses/MIT).
 #   * Apache v2 license (license terms in the root directory or at https://www.apache.org/licenses/LICENSE-2.0).
@@ -21,8 +21,8 @@ import
   beacon_chain/spec/beaconstate,
   beacon_chain/spec/datatypes/[phase0, altair, bellatrix],
   beacon_chain/[light_client, nimbus_binary_common, version],
-  ../nimbus/rpc/[cors, server_api_helpers],
-  ../nimbus/beacon/payload_conv,
+  ../execution_chain/rpc/[cors, rpc_utils],
+  ../execution_chain/beacon/payload_conv,
   ./rpc/rpc_eth_api,
   ./nimbus_verified_proxy_conf,
   ./block_cache
@@ -40,18 +40,18 @@ proc cleanup*(ctx: ptr Context) =
   dealloc(ctx.configJson)
   freeShared(ctx)
 
-func getConfiguredChainId(networkMetadata: Eth2NetworkMetadata): Quantity =
+func getConfiguredChainId(networkMetadata: Eth2NetworkMetadata): UInt256 =
   if networkMetadata.eth1Network.isSome():
     let
       net = networkMetadata.eth1Network.get()
       chainId =
         case net
-        of mainnet: 1.Quantity
-        of sepolia: 11155111.Quantity
-        of holesky: 17000.Quantity
+        of mainnet: 1.u256
+        of sepolia: 11155111.u256
+        of holesky: 17000.u256
     return chainId
   else:
-    return networkMetadata.cfg.DEPOSIT_CHAIN_ID.Quantity
+    return networkMetadata.cfg.DEPOSIT_CHAIN_ID.u256
 
 proc run*(
     config: VerifiedProxyConf, ctx: ptr Context
@@ -147,7 +147,7 @@ proc run*(
                 parentBeaconBlockRoot = Opt.none(Hash32),
                 requestsHash = Opt.none(Hash32),
               )
-              blockCache.add(populateBlockObject(blk.header.rlpHash, blk, true))
+              blockCache.add(populateBlockObject(blk.header.rlpHash, blk, 0.u256, true))
             except RlpError as exc:
               debug "Invalid block received", err = exc.msg
 
@@ -242,7 +242,8 @@ proc run*(
 
       targetGossipState = getTargetGossipState(
         slot.epoch, cfg.ALTAIR_FORK_EPOCH, cfg.BELLATRIX_FORK_EPOCH,
-        cfg.CAPELLA_FORK_EPOCH, cfg.DENEB_FORK_EPOCH, cfg.ELECTRA_FORK_EPOCH, isBehind,
+        cfg.CAPELLA_FORK_EPOCH, cfg.DENEB_FORK_EPOCH, cfg.ELECTRA_FORK_EPOCH,
+        cfg.FULU_FORK_EPOCH, isBehind,
       )
 
     template currentGossipState(): auto =

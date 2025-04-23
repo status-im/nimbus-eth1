@@ -1,5 +1,5 @@
 # Fluffy
-# Copyright (c) 2021-2024 Status Research & Development GmbH
+# Copyright (c) 2021-2025 Status Research & Development GmbH
 # Licensed and distributed under either of
 #   * MIT license (license terms in the root directory or at https://opensource.org/licenses/MIT).
 #   * Apache v2 license (license terms in the root directory or at https://www.apache.org/licenses/LICENSE-2.0).
@@ -38,6 +38,7 @@ type
   PortalProtocolConfig* = object
     tableIpLimits*: TableIpLimits
     bitsPerHop*: int
+    alpha*: int
     radiusConfig*: RadiusConfig
     disablePoke*: bool
     maxGossipNodes*: int
@@ -45,6 +46,9 @@ type
     disableContentCache*: bool
     offerCacheSize*: int
     disableOfferCache*: bool
+    maxConcurrentOffers*: int
+    disableBanNodes*: bool
+
 
 const
   defaultRadiusConfig* = RadiusConfig(kind: Dynamic)
@@ -55,11 +59,15 @@ const
   defaultDisableContentCache* = false
   defaultOfferCacheSize* = 100
   defaultDisableOfferCache* = false
+  defaultMaxConcurrentOffers* = 50
+  defaultAlpha* = 3
   revalidationTimeout* = chronos.seconds(30)
+  defaultDisableBanNodes* = true
 
   defaultPortalProtocolConfig* = PortalProtocolConfig(
     tableIpLimits: DefaultTableIpLimits,
     bitsPerHop: DefaultBitsPerHop,
+    alpha: defaultAlpha,
     radiusConfig: defaultRadiusConfig,
     disablePoke: defaultDisablePoke,
     maxGossipNodes: defaultMaxGossipNodes,
@@ -67,6 +75,8 @@ const
     disableContentCache: defaultDisableContentCache,
     offerCacheSize: defaultOfferCacheSize,
     disableOfferCache: defaultDisableOfferCache,
+    maxConcurrentOffers: defaultMaxConcurrentOffers,
+    disableBanNodes: defaultDisableBanNodes,
   )
 
 proc init*(
@@ -74,6 +84,7 @@ proc init*(
     tableIpLimit: uint,
     bucketIpLimit: uint,
     bitsPerHop: int,
+    alpha: int,
     radiusConfig: RadiusConfig,
     disablePoke: bool,
     maxGossipNodes: int,
@@ -81,11 +92,14 @@ proc init*(
     disableContentCache: bool,
     offerCacheSize: int,
     disableOfferCache: bool,
+    maxConcurrentOffers: int,
+    disableBanNodes: bool,
 ): T =
   PortalProtocolConfig(
     tableIpLimits:
       TableIpLimits(tableIpLimit: tableIpLimit, bucketIpLimit: bucketIpLimit),
     bitsPerHop: bitsPerHop,
+    alpha: alpha,
     radiusConfig: radiusConfig,
     disablePoke: disablePoke,
     maxGossipNodes: maxGossipNodes,
@@ -93,6 +107,8 @@ proc init*(
     disableContentCache: disableContentCache,
     offerCacheSize: offerCacheSize,
     disableOfferCache: disableOfferCache,
+    maxConcurrentOffers: maxConcurrentOffers,
+    disableBanNodes: disableBanNodes,
   )
 
 func fromLogRadius*(T: type UInt256, logRadius: uint16): T =

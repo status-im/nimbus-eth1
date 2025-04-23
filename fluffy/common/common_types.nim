@@ -36,6 +36,12 @@ func decodeRlp*(input: openArray[byte], T: type): Result[T, string] =
   except RlpError as e:
     err(e.msg)
 
+func decodeRlpOrRaise*(input: openArray[byte], T: type): T =
+  try:
+    rlp.decode(input, T)
+  except RlpError as e:
+    raiseAssert(e.msg)
+
 func decodeSsz*(input: openArray[byte], T: type): Result[T, string] =
   try:
     ok(SSZ.decode(input, T))

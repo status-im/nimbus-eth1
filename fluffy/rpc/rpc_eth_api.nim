@@ -1,5 +1,5 @@
 # Fluffy
-# Copyright (c) 2021-2024 Status Research & Development GmbH
+# Copyright (c) 2021-2025 Status Research & Development GmbH
 # Licensed and distributed under either of
 #   * MIT license (license terms in the root directory or at https://opensource.org/licenses/MIT).
 #   * Apache v2 license (license terms in the root directory or at https://www.apache.org/licenses/LICENSE-2.0).
@@ -17,12 +17,13 @@ import
   ../network/history/[history_network, history_content],
   ../network/state/[state_network, state_content, state_endpoints],
   ../network/beacon/beacon_light_client,
+  ../evm/[async_evm, async_evm_portal_backend],
   ../version
 
-from ../../nimbus/errors import ValidationError
-from ../../nimbus/rpc/filters import headerBloomFilter, deriveLogs, filterLogs
+from ../../execution_chain/errors import ValidationError
+from ../../execution_chain/rpc/filters import headerBloomFilter, deriveLogs
 
-from eth/common/eth_types_rlp import rlpHash
+from eth/rlp import computeRlpHash
 
 export rpcserver
 
@@ -40,12 +41,12 @@ func init*(
     raise (ref ValidationError)(msg: "Invalid tx signature")
 
   TransactionObject(
-    blockHash: Opt.some(header.rlpHash),
+    blockHash: Opt.some(header.computeRlpHash),
     blockNumber: Opt.some(Quantity(header.number)),
     `from`: sender,
     gas: Quantity(tx.gasLimit),
     gasPrice: Quantity(tx.gasPrice),
-    hash: tx.rlpHash,
+    hash: tx.computeRlpHash,
     input: tx.payload,
     nonce: Quantity(tx.nonce),
     to: Opt.some(tx.destination),
@@ -64,7 +65,7 @@ func init*(
 func init*(
     T: type BlockObject, header: Header, body: BlockBody, fullTx = true, isUncle = false
 ): T {.raises: [ValidationError].} =
-  let blockHash = header.rlpHash
+  let blockHash = header.computeRlpHash
 
   var blockObject = BlockObject(
     number: Quantity(header.number),
@@ -96,7 +97,7 @@ func init*(
   if not isUncle:
     blockObject.uncles = body.uncles.map(
       proc(h: Header): Hash32 =
-        h.rlpHash
+        h.computeRlpHash
     )
 
     if fullTx:
@@ -106,7 +107,7 @@ func init*(
         inc i
     else:
       for tx in body.transactions:
-        blockObject.transactions.add txOrHash(rlpHash(tx))
+        blockObject.transactions.add txOrHash(computeRlpHash(tx))
 
   blockObject
 
@@ -125,19 +126,40 @@ template getOrRaise(stateNetwork: Opt[StateNetwork]): StateNetwork =
     raise newException(ValueError, "state sub-network not enabled")
   sn
 
+template getOrRaise(asyncEvm: Opt[AsyncEvm]): AsyncEvm =
+  let evm = asyncEvm.valueOr:
+    raise
+      newException(ValueError, "portal evm requires state sub-network to be enabled")
+  evm
+
 proc installEthApiHandlers*(
     rpcServer: RpcServer,
     historyNetwork: Opt[HistoryNetwork],
     beaconLightClient: Opt[LightClient],
     stateNetwork: Opt[StateNetwork],
 ) =
+  let asyncEvm =
+    if stateNetwork.isSome():
+      Opt.some(AsyncEvm.init(stateNetwork.get().toAsyncEvmStateBackend()))
+    else:
+      Opt.none(AsyncEvm)
+
   rpcServer.rpc("web3_clientVersion") do() -> string:
     return clientVersion
 
-  rpcServer.rpc("eth_chainId") do() -> Quantity:
+  rpcServer.rpc("eth_chainId") do() -> UInt256:
     # The Portal Network can only support MainNet at the moment, so always return
     # 1
-    return Quantity(uint64(1))
+    return 1.u256
+
+  rpcServer.rpc("eth_blockNumber") do() -> Quantity:
+    let blc = beaconLightClient.getOrRaise()
+
+    withForkyStore(blc.store[]):
+      when lcDataFork > LightClientDataFork.Altair:
+        return Quantity(forkyStore.optimistic_header.execution.block_number)
+      else:
+        raise newException(ValueError, "Not available before Capella - not synced?")
 
   rpcServer.rpc("eth_getBlockByHash") do(
     blockHash: Hash32, fullTransactions: bool
@@ -165,14 +187,6 @@ proc installEthApiHandlers*(
       let tag = quantityTag.alias.toLowerAscii
       case tag
       of "latest":
-        # TODO:
-        # I assume this would refer to the content in the latest optimistic update
-        # in case the majority treshold is not met. And if it is met it is the
-        # same as the safe version?
-        raise newException(ValueError, "Latest tag not yet implemented")
-      of "earliest":
-        raise newException(ValueError, "Earliest tag not yet implemented")
-      of "safe":
         let blc = beaconLightClient.getOrRaise()
 
         withForkyStore(blc.store[]):
@@ -185,6 +199,15 @@ proc installEthApiHandlers*(
             return Opt.some(BlockObject.init(header, body, fullTransactions))
           else:
             raise newException(ValueError, "Not available before Capella - not synced?")
+      of "earliest":
+        raise newException(ValueError, "Earliest tag not yet implemented")
+      of "safe":
+        # Safe block currently means most recent justified block, see:
+        # - https://github.com/ethereum/consensus-specs/blob/4afe39822c9ad9747e0f5635cca117c18441ec1b/fork_choice/safe-block.md
+        # - https://github.com/status-im/nimbus-eth2/blob/4e440277cf8a3fed72f32eb2f01fc5e910ad6768/beacon_chain/consensus_object_pools/attestation_pool.nim#L1162
+        # This is provided by engineForkChoiceUpdateV1/V2/V3 from CL to EL.
+        # Unclear how to get the block hash from current Portal network.
+        raise newException(ValueError, "safe tag cannot be implemented")
       of "finalized":
         let blc = beaconLightClient.getOrRaise()
 
@@ -259,10 +282,7 @@ proc installEthApiHandlers*(
         receipts = (await hn.getReceipts(hash, header)).valueOr:
           raise newException(ValueError, "Could not find receipts for requested hash")
 
-        logs = deriveLogs(header, body.transactions, receipts)
-        filteredLogs = filterLogs(logs, filterOptions.address, filterOptions.topics)
-
-      return filteredLogs
+      return deriveLogs(header, body.transactions, receipts, filterOptions)
     else:
       # bloomfilter returned false, there are no logs matching the criteria
       return @[]
@@ -361,9 +381,9 @@ proc installEthApiHandlers*(
     let
       sn = stateNetwork.getOrRaise()
       blockNumber = quantityTag.number.uint64
-      bytecode = (await sn.getCode(blockNumber, data)).valueOr:
+      code = (await sn.getCode(blockNumber, data)).valueOr:
         raise newException(ValueError, "Unable to get code")
-    return bytecode.asSeq()
+    return code
 
   rpcServer.rpc("eth_getProof") do(
     data: Address, slots: seq[UInt256], quantityTag: RtBlockIdentifier
@@ -411,3 +431,120 @@ proc installEthApiHandlers*(
       storageHash: proofs.account.storageRoot,
       storageProof: storageProof,
     )
+
+  rpcServer.rpc("eth_call") do(
+    tx: TransactionArgs, quantityTag: RtBlockIdentifier, optimisticStateFetch: Opt[bool]
+  ) -> seq[byte]:
+    ## Executes a new message call immediately without creating a transaction on
+    ## the blockchain. Often used for executing read-only smart contract functions,
+    ## for example the balanceOf for an ERC-20 contract.
+    ##
+    ## tx: the transaction call object which contains
+    ##   from: (optional) The address the transaction is sent from.
+    ##   to: The address the transaction is directed to.
+    ##   gas: (optional) Integer of the gas provided for the transaction execution.
+    ##     eth_call consumes zero gas, but this parameter may be needed by some executions.
+    ##   gasPrice: (optional) Integer of the gasPrice used for each paid gas.
+    ##   value: (optional) Integer of the value sent with this transaction.
+    ##   input: (optional) Hash of the method signature and encoded parameters.
+    ## quantityTag: integer block number, or the string "latest", "earliest" or "pending",
+    ##   see the default block parameter.
+    ## Returns: the return value of the executed contract.
+
+    if tx.to.isNone():
+      raise newException(ValueError, "to address is required")
+
+    if quantityTag.kind == bidAlias:
+      raise newException(ValueError, "tag not yet implemented")
+
+    let
+      hn = historyNetwork.getOrRaise()
+      evm = asyncEvm.getOrRaise()
+      header = (await hn.getVerifiedBlockHeader(quantityTag.number.uint64)).valueOr:
+        raise newException(ValueError, "Unable to get block header")
+      optimisticStateFetch = optimisticStateFetch.valueOr:
+        true
+
+    let callResult = (await evm.call(header, tx, optimisticStateFetch)).valueOr:
+      raise newException(ValueError, error)
+
+    return callResult.output
+
+  rpcServer.rpc("eth_createAccessList") do(
+    tx: TransactionArgs, quantityTag: RtBlockIdentifier, optimisticStateFetch: Opt[bool]
+  ) -> AccessListResult:
+    ## Creates an EIP-2930 access list that you can include in a transaction.
+    ##
+    ## tx: the transaction call object which contains
+    ##   from: (optional) The address the transaction is sent from.
+    ##   to: The address the transaction is directed to.
+    ##   gas: (optional) Integer of the gas provided for the transaction execution.
+    ##     eth_call consumes zero gas, but this parameter may be needed by some executions.
+    ##   gasPrice: (optional) Integer of the gasPrice used for each paid gas.
+    ##   value: (optional) Integer of the value sent with this transaction.
+    ##   input: (optional) Hash of the method signature and encoded parameters.
+    ## quantityTag: integer block number, or the string "latest", "earliest" or "pending",
+    ##   see the default block parameter.
+    ## Returns: the access list object which contains the addresses and storage keys which
+    ##   are read by the transaction.
+
+    if tx.to.isNone():
+      raise newException(ValueError, "to address is required")
+
+    if quantityTag.kind == bidAlias:
+      raise newException(ValueError, "tag not yet implemented")
+
+    let
+      hn = historyNetwork.getOrRaise()
+      evm = asyncEvm.getOrRaise()
+      header = (await hn.getVerifiedBlockHeader(quantityTag.number.uint64)).valueOr:
+        raise newException(ValueError, "Unable to get block header")
+      optimisticStateFetch = optimisticStateFetch.valueOr:
+        true
+
+    let (accessList, gasUsed) = (
+      await evm.createAccessList(header, tx, optimisticStateFetch)
+    ).valueOr:
+      raise newException(ValueError, error)
+
+    return AccessListResult(accessList: accessList, gasUsed: gasUsed.Quantity)
+
+  rpcServer.rpc("eth_estimateGas") do(
+    tx: TransactionArgs, quantityTag: RtBlockIdentifier, optimisticStateFetch: Opt[bool]
+  ) -> Quantity:
+    ## Generates and returns an estimate of how much gas is necessary to allow the
+    ## transaction to complete. The transaction will not be added to the blockchain.
+    ## Note that the estimate may be significantly more than the amount of gas actually
+    ## used by the transaction, for a variety of reasons including EVM mechanics and
+    ## node performance.
+    ##
+    ## tx: the transaction call object which contains
+    ##   from: (optional) The address the transaction is sent from.
+    ##   to: The address the transaction is directed to.
+    ##   gas: (optional) Integer of the gas provided for the transaction execution.
+    ##     eth_call consumes zero gas, but this parameter may be needed by some executions.
+    ##   gasPrice: (optional) Integer of the gasPrice used for each paid gas.
+    ##   value: (optional) Integer of the value sent with this transaction.
+    ##   input: (optional) Hash of the method signature and encoded parameters.
+    ## quantityTag: integer block number, or the string "latest", "earliest" or "pending",
+    ##   see the default block parameter.
+    ## Returns: the amount of gas used.
+
+    if tx.to.isNone():
+      raise newException(ValueError, "to address is required")
+
+    if quantityTag.kind == bidAlias:
+      raise newException(ValueError, "tag not yet implemented")
+
+    let
+      hn = historyNetwork.getOrRaise()
+      evm = asyncEvm.getOrRaise()
+      header = (await hn.getVerifiedBlockHeader(quantityTag.number.uint64)).valueOr:
+        raise newException(ValueError, "Unable to get block header")
+      optimisticStateFetch = optimisticStateFetch.valueOr:
+        true
+
+    let gasEstimate = (await evm.estimateGas(header, tx, optimisticStateFetch)).valueOr:
+      raise newException(ValueError, error)
+
+    return gasEstimate.Quantity

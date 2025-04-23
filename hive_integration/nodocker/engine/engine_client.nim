@@ -1,5 +1,5 @@
 # Nimbus
-# Copyright (c) 2023-2024 Status Research & Development GmbH
+# Copyright (c) 2023-2025 Status Research & Development GmbH
 # Licensed under either of
 #  * Apache License, version 2.0, ([LICENSE-APACHE](LICENSE-APACHE) or
 #    http://www.apache.org/licenses/LICENSE-2.0)
@@ -16,7 +16,7 @@ import
   eth/rlp,
   eth/common/eth_types_rlp, chronos,
   json_rpc/[rpcclient, errors, jsonmarshal],
-  ../../../nimbus/beacon/web3_eth_conv,
+  ../../../execution_chain/beacon/web3_eth_conv,
   ./types
 
 import
@@ -40,6 +40,8 @@ template wrapTry(body: untyped) =
     return err(e.msg)
   except JsonRpcError as ex:
     return err(ex.msg)
+  except JsonReaderError as ex:
+    return err(ex.formatMsg("rpc"))
   except CatchableError as ex:
     return err(ex.msg)
 
@@ -163,7 +165,7 @@ proc newPayloadV4*(client: RpcClient,
       payload: ExecutionPayloadV3,
       versionedHashes: seq[VersionedHash],
       parentBeaconBlockRoot: Hash32,
-      executionRequests: array[3, seq[byte]]):
+      executionRequests: seq[seq[byte]]):
         Result[PayloadStatusV1, string] =
   wrapTrySimpleRes:
     client.engine_newPayloadV4(payload, versionedHashes,
@@ -194,7 +196,7 @@ proc newPayloadV4*(client: RpcClient,
       payload: ExecutionPayload,
       versionedHashes: Opt[seq[VersionedHash]],
       parentBeaconBlockRoot: Opt[Hash32],
-      executionRequests: Opt[array[3, seq[byte]]]):
+      executionRequests: Opt[seq[seq[byte]]]):
         Result[PayloadStatusV1, string] =
   wrapTrySimpleRes:
     client.engine_newPayloadV4(payload, versionedHashes,
@@ -237,16 +239,6 @@ proc maybeBool(n: Opt[Quantity]): Opt[bool] =
     return Opt.none(bool)
   Opt.some(n.get.bool)
 
-proc maybeChainId(n: Opt[Quantity]): Opt[ChainId] =
-  if n.isNone:
-    return Opt.none(ChainId)
-  Opt.some(n.get.ChainId)
-
-proc maybeInt(n: Opt[Quantity]): Opt[int] =
-  if n.isNone:
-    return Opt.none(int)
-  Opt.some(n.get.int)
-
 proc toBlockHeader*(bc: BlockObject): Header =
   Header(
     number         : distinctBase(bc.number),
@@ -269,16 +261,21 @@ proc toBlockHeader*(bc: BlockObject): Header =
     blobGasUsed    : maybeU64(bc.blobGasUsed),
     excessBlobGas  : maybeU64(bc.excessBlobGas),
     parentBeaconBlockRoot: bc.parentBeaconBlockRoot,
+    requestsHash   : bc.requestsHash,
   )
 
 func vHashes(x: Opt[seq[Hash32]]): seq[VersionedHash] =
   if x.isNone: return
   else: x.get
 
+func authList(x: Opt[seq[Authorization]]): seq[Authorization] =
+  if x.isNone: return
+  else: x.get
+
 proc toTransaction(tx: TransactionObject): Transaction =
   Transaction(
     txType          : tx.`type`.get(0.Web3Quantity).TxType,
-    chainId         : tx.chainId.get(0.Web3Quantity).ChainId,
+    chainId         : tx.chainId.get(0.u256),
     nonce           : tx.nonce.AccountNonce,
     gasPrice        : tx.gasPrice.GasInt,
     maxPriorityFeePerGas: tx.maxPriorityFeePerGas.get(0.Web3Quantity).GasInt,
@@ -293,6 +290,7 @@ proc toTransaction(tx: TransactionObject): Transaction =
     V               : tx.v.uint64,
     R               : tx.r,
     S               : tx.s,
+    authorizationList: authList(tx.authorizationList),
   )
 
 proc toTransactions*(txs: openArray[TxOrHash]): seq[Transaction] =
@@ -300,28 +298,10 @@ proc toTransactions*(txs: openArray[TxOrHash]): seq[Transaction] =
     doAssert x.kind == tohTx
     result.add toTransaction(x.tx)
 
-proc toWithdrawal(wd: WithdrawalObject): Withdrawal =
-  Withdrawal(
-    index: wd.index.uint64,
-    validatorIndex: wd.validatorIndex.uint64,
-    address: wd.address,
-    amount: wd.amount.uint64,
-  )
-
-proc toWithdrawals(list: seq[WithdrawalObject]): seq[Withdrawal] =
-  result = newSeqOfCap[Withdrawal](list.len)
-  for wd in list:
-    result.add toWithdrawal(wd)
-
-proc toWithdrawals*(list: Opt[seq[WithdrawalObject]]): Opt[seq[Withdrawal]] =
-  if list.isNone:
-    return Opt.none(seq[Withdrawal])
-  Opt.some(toWithdrawals(list.get))
-
 type
   RPCReceipt* = object
     txHash*: Hash32
-    txIndex*: int
+    txIndex*: uint64
     blockHash*: Hash32
     blockNumber*: uint64
     sender*: Address
@@ -351,7 +331,7 @@ type
     payload*: seq[byte]
     nonce*: AccountNonce
     to*: Opt[Address]
-    txIndex*: Opt[int]
+    txIndex*: Opt[uint64]
     value*: UInt256
     v*: uint64
     r*: UInt256
@@ -360,11 +340,12 @@ type
     accessList*: Opt[seq[AccessPair]]
     maxFeePerBlobGas*: Opt[UInt256]
     versionedHashes*: Opt[seq[VersionedHash]]
+    authorizationList*: Opt[seq[Authorization]]
 
 proc toRPCReceipt(rec: ReceiptObject): RPCReceipt =
   RPCReceipt(
     txHash: rec.transactionHash,
-    txIndex: rec.transactionIndex.int,
+    txIndex: rec.transactionIndex.uint64,
     blockHash: rec.blockHash,
     blockNumber: rec.blockNumber.uint64,
     sender: rec.`from`,
@@ -396,18 +377,19 @@ proc toRPCTx(tx: eth_api.TransactionObject): RPCTx =
     payload: tx.input,
     nonce: tx.nonce.AccountNonce,
     to: tx.to,
-    txIndex: maybeInt(tx.transactionIndex),
+    txIndex: maybeU64(tx.transactionIndex),
     value: tx.value,
     v: tx.v.uint64,
     r: tx.r,
     s: tx.s,
-    chainId: maybeChainId(tx.chainId),
+    chainId: tx.chainId,
     accessList: tx.accessList,
     maxFeePerBlobGas: tx.maxFeePerBlobGas,
     versionedHashes: if tx.blobVersionedHashes.isSome:
       Opt.some(vHashes tx.blobVersionedHashes)
     else:
       Opt.none(seq[VersionedHash]),
+    authorizationList: tx.authorizationList,
   )
 
 proc waitForTTD*(client: RpcClient,
@@ -461,7 +443,19 @@ proc latestBlock*(client: RpcClient): Result[Block, string] =
     let output = Block(
       header: toBlockHeader(res),
       transactions: toTransactions(res.transactions),
-      withdrawals: toWithdrawals(res.withdrawals),
+      withdrawals: res.withdrawals,
+    )
+    return ok(output)
+
+proc blockByNumber*(client: RpcClient, number: uint64): Result[Block, string] =
+  wrapTry:
+    let res = waitFor client.eth_getBlockByNumber(blockId(number), true)
+    if res.isNil:
+      return err("failed to get block " & $number)
+    let output = Block(
+      header: toBlockHeader(res),
+      transactions: toTransactions(res.transactions),
+      withdrawals: res.withdrawals,
     )
     return ok(output)
 
@@ -477,7 +471,7 @@ proc sendTransaction*(
   wrapTry:
     let encodedTx = rlp.encode(tx)
     let res = waitFor client.eth_sendRawTransaction(encodedTx)
-    let txHash = rlpHash(tx)
+    let txHash = computeRlpHash(tx)
     let getHash = res
     if txHash != getHash:
       return err("sendTransaction: tx hash mismatch")
@@ -504,6 +498,13 @@ proc txReceipt*(client: RpcClient, txHash: Hash32): Result[RPCReceipt, string] =
     if res.isNil:
       return err("failed to get receipt: " & txHash.data.toHex)
     return ok(res.toRPCReceipt)
+
+proc getReceipt*(client: RpcClient, txHash: Hash32): Result[ReceiptObject, string] =
+  wrapTry:
+    let res = waitFor client.eth_getTransactionReceipt(txHash)
+    if res.isNil:
+      return err("failed to get receipt: " & txHash.data.toHex)
+    return ok(res)
 
 proc txByHash*(client: RpcClient, txHash: Hash32): Result[RPCTx, string] =
   wrapTry:
@@ -569,7 +570,7 @@ proc debugPrevRandaoTransaction*(
     tx: PooledTransaction,
     expectedPrevRandao: Bytes32): Result[void, string] =
   wrapTry:
-    let hash = tx.rlpHash
+    let hash = tx.computeRlpHash
     # we only interested in stack, disable all other elems
     let opts = TraceOpts(
       disableStorage: true,

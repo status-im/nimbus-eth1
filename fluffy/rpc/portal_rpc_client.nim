@@ -13,7 +13,7 @@ import
   eth/common/[headers_rlp, blocks_rlp, receipts_rlp],
   json_rpc/rpcclient,
   ../common/common_types,
-  ../network/history/[history_content, history_network],
+  ../network/history/[history_content, history_type_conversions, history_validation],
   ./rpc_calls/[rpc_discovery_calls, rpc_portal_calls, rpc_portal_debug_calls]
 
 export rpcclient, rpc_discovery_calls, rpc_portal_calls, rpc_portal_debug_calls, results
@@ -48,15 +48,6 @@ func toPortalRpcError(e: ref CatchableError): PortalRpcError =
   else:
     raiseAssert(e.msg)
 
-proc portal_historyLocalContent(
-    client: PortalRpcClient, contentKey: string
-): Future[Result[string, PortalRpcError]] {.async: (raises: []).} =
-  try:
-    let content = await RpcClient(client).portal_historyLocalContent(contentKey)
-    ok(content)
-  except CatchableError as e:
-    err(e.toPortalRpcError())
-
 proc portal_historyGetContent(
     client: PortalRpcClient, contentKey: string
 ): Future[Result[string, PortalRpcError]] {.async: (raises: []).} =
@@ -78,17 +69,6 @@ template valueOrErr[T](res: Result[T, string], error: PortalRpcError): auto =
   else:
     err(error)
 
-proc historyGetContent(
-    client: PortalRpcClient, contentKey: string
-): Future[Result[string, PortalRpcError]] {.async: (raises: []).} =
-  # Look up the content from the local db before trying to get it from the network
-  let content = (await client.portal_historyLocalContent(contentKey)).valueOr:
-    if error == ContentNotFound:
-      ?await client.portal_historyGetContent(contentKey)
-    else:
-      return err(error)
-  ok(content)
-
 proc historyGetBlockHeader*(
     client: PortalRpcClient, blockHash: Hash32, validateContent = true
 ): Future[Result[Header, PortalRpcError]] {.async: (raises: []).} =
@@ -104,13 +84,13 @@ proc historyGetBlockHeader*(
 
   let
     contentKey = blockHeaderContentKey(blockHash).encode().asSeq().to0xHex()
-    content = ?await client.historyGetContent(contentKey)
+    content = ?await client.portal_historyGetContent(contentKey)
     headerWithProof = decodeSsz(content.toBytes(), BlockHeaderWithProof).valueOr:
       return err(InvalidContentValue)
     headerBytes = headerWithProof.header.asSeq()
 
   if validateContent:
-    validateBlockHeaderBytes(headerBytes, blockHash).valueOrErr(ContentValidationFailed)
+    validateHeaderBytes(headerBytes, blockHash).valueOrErr(ContentValidationFailed)
   else:
     decodeRlp(headerBytes, Header).valueOrErr(InvalidContentValue)
 
@@ -124,7 +104,7 @@ proc historyGetBlockBody*(
 
   let
     contentKey = blockBodyContentKey(blockHash).encode().asSeq().to0xHex()
-    content = ?await client.historyGetContent(contentKey)
+    content = ?await client.portal_historyGetContent(contentKey)
 
   if validateContent:
     let blockHeader = ?await client.historyGetBlockHeader(blockHash)
@@ -132,7 +112,7 @@ proc historyGetBlockBody*(
       ContentValidationFailed
     )
   else:
-    decodeBlockBodyBytes(content.toBytes()).valueOrErr(InvalidContentValue)
+    fromPortalBlockBodyBytes(content.toBytes()).valueOrErr(InvalidContentValue)
 
 proc historyGetReceipts*(
     client: PortalRpcClient, blockHash: Hash32, validateContent = true
@@ -144,7 +124,7 @@ proc historyGetReceipts*(
 
   let
     contentKey = receiptsContentKey(blockHash).encode().asSeq().to0xHex()
-    content = ?await client.historyGetContent(contentKey)
+    content = ?await client.portal_historyGetContent(contentKey)
 
   if validateContent:
     let blockHeader = ?await client.historyGetBlockHeader(blockHash)

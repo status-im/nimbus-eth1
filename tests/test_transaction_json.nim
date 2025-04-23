@@ -1,5 +1,5 @@
 # Nimbus
-# Copyright (c) 2019-2024 Status Research & Development GmbH
+# Copyright (c) 2019-2025 Status Research & Development GmbH
 # Licensed under either of
 #  * Apache License, version 2.0, ([LICENSE-APACHE](LICENSE-APACHE) or
 #    http://www.apache.org/licenses/LICENSE-2.0)
@@ -14,9 +14,12 @@ import
   eth/rlp,
   ./test_helpers,
   eth/common/transaction_utils,
-  ../nimbus/transaction,
-  ../nimbus/core/validate,
-  ../nimbus/utils/utils
+  ../tools/common/helpers as chp,
+  ../execution_chain/db/core_db,
+  ../execution_chain/common/common,
+  ../execution_chain/transaction,
+  ../execution_chain/core/validate,
+  ../execution_chain/utils/utils
 
 const
   FIXTURE_FORK_SKIPS = ["_info", "rlp", "Constantinople"]
@@ -27,14 +30,18 @@ proc transactionJsonMain*() =
   suite "Transactions tests":
     jsonTest("eth_tests" / "TransactionTests", "TransactionTests", testFixture)
 
-when isMainModule:
-  transactionJsonMain()
+transactionJsonMain()
 
 proc txHash(tx: Transaction): string =
-  rlpHash(tx).toHex()
+  computeRlpHash(tx).toHex()
 
 proc testTxByFork(tx: Transaction, forkData: JsonNode, forkName: string, testStatusIMPL: var TestStatus) =
-  tx.validateTxBasic(nameToFork[forkName]).isOkOr:
+  let
+    config = getChainConfig(forkName)
+    memDB  = newCoreDbRef DefaultDbMemory
+    com    = CommonRef.new(memDB, nil, config)
+
+  validateTxBasic(com, tx, nameToFork[forkName]).isOkOr:
     return
 
   if forkData.len > 0 and "sender" in forkData:

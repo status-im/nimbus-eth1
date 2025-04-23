@@ -1,5 +1,5 @@
 # Nimbus
-# Copyright (c) 2022-2024 Status Research & Development GmbH
+# Copyright (c) 2022-2025 Status Research & Development GmbH
 # Licensed and distributed under either of
 #   * MIT license (license terms in the root directory or at https://opensource.org/licenses/MIT).
 #   * Apache v2 license (license terms in the root directory or at https://www.apache.org/licenses/LICENSE-2.0).
@@ -14,7 +14,8 @@ import
   stint,
   eth/common/headers,
   ../../eth_data/history_data_json_store,
-  ../../network/history/[history_content, validation/historical_hashes_accumulator],
+  ../../network/history/
+    [history_content, validation/block_proof_historical_hashes_accumulator],
   ./test_history_util
 
 suite "Historical Hashes Accumulator":
@@ -53,13 +54,13 @@ suite "Historical Hashes Accumulator":
         let proof = buildProof(header, epochRecords)
         check:
           proof.isOk()
-          verifyAccumulatorProof(accumulator, header, proof.get()).isOk()
+          verifyProof(accumulator, header, proof.get())
 
     block: # Test invalid headers
       # Post merge block number must fail (> than latest header in accumulator)
       var proof: HistoricalHashesAccumulatorProof
       let header = Header(number: mergeBlockNumber)
-      check verifyAccumulatorProof(accumulator, header, proof).isErr()
+      check verifyProof(accumulator, header, proof) == false
 
       # Test altered block headers by altering the difficulty
       for i in headersToTest:
@@ -69,13 +70,13 @@ suite "Historical Hashes Accumulator":
         # Alter the block header so the proof no longer matches
         let header = Header(number: i.uint64, difficulty: 2.stuint(256))
 
-        check verifyAccumulatorProof(accumulator, header, proof.get()).isErr()
+        check verifyProof(accumulator, header, proof.get()) == false
 
     block: # Test invalid proofs
       var proof: HistoricalHashesAccumulatorProof
 
       for i in headersToTest:
-        check verifyAccumulatorProof(accumulator, headers[i], proof).isErr()
+        check verifyProof(accumulator, headers[i], proof) == false
 
   test "Historical Hashes Accumulator - Not Finished":
     # Less headers than needed to finish the accumulator

@@ -1,5 +1,5 @@
 # Fluffy
-# Copyright (c) 2021-2024 Status Research & Development GmbH
+# Copyright (c) 2021-2025 Status Research & Development GmbH
 # Licensed and distributed under either of
 #   * MIT license (license terms in the root directory or at https://opensource.org/licenses/MIT).
 #   * Apache v2 license (license terms in the root directory or at https://www.apache.org/licenses/LICENSE-2.0).
@@ -45,6 +45,7 @@ const
   defaultTableIpLimitDesc* = $defaultPortalProtocolConfig.tableIpLimits.tableIpLimit
   defaultBucketIpLimitDesc* = $defaultPortalProtocolConfig.tableIpLimits.bucketIpLimit
   defaultBitsPerHopDesc* = $defaultPortalProtocolConfig.bitsPerHop
+  defaultAlphaDesc* = $defaultPortalProtocolConfig.alpha
   defaultMaxGossipNodesDesc* = $defaultPortalProtocolConfig.maxGossipNodes
   defaultRpcApis* = @["eth", "portal"]
   defaultRpcApisDesc* = "eth,portal"
@@ -190,7 +191,7 @@ type
     .}: bool
 
     rpcAddress* {.
-      desc: "Listening address of the RPC server",
+      desc: "Listening address of the HTTP JSON-RPC server",
       defaultValue: defaultAdminListenAddress,
       defaultValueDesc: $defaultAdminListenAddressDesc,
       name: "rpc-address"
@@ -202,7 +203,7 @@ type
 
     rpcApi* {.
       desc:
-        "Enable specific set of RPC APIs (available: eth, debug, portal, portal_debug, discovery)",
+        "Enable specific set of JSON-RPC APIs over HTTP (available: eth, debug, portal, portal_debug, discovery)",
       defaultValue: defaultRpcApis,
       defaultValueDesc: $defaultRpcApisDesc,
       name: "rpc-api"
@@ -212,11 +213,26 @@ type
       desc: "Enable the WebSocket JSON-RPC server", defaultValue: false, name: "ws"
     .}: bool
 
+    wsAddress* {.
+      desc: "Listening address of the WebSocket JSON-RPC server",
+      defaultValue: defaultAdminListenAddress,
+      defaultValueDesc: $defaultAdminListenAddressDesc,
+      name: "ws-address"
+    .}: IpAddress
+
     wsPort* {.
       desc: "Port for the WebSocket JSON-RPC server",
       defaultValue: 8546,
       name: "ws-port"
     .}: Port
+
+    wsApi* {.
+      desc:
+        "Enable specific set of JSON-RPC APIs over WebSocket (available: eth, debug, portal, portal_debug, discovery)",
+      defaultValue: defaultRpcApis,
+      defaultValueDesc: $defaultRpcApisDesc,
+      name: "ws-api"
+    .}: seq[string]
 
     wsCompression* {.
       desc: "Enable compression for the WebSocket JSON-RPC server",
@@ -254,12 +270,27 @@ type
       name: "bits-per-hop"
     .}: int
 
+    alpha* {.
+      hidden,
+      desc: "The Kademlia concurrency factor",
+      defaultValue: defaultPortalProtocolConfig.alpha,
+      defaultValueDesc: $defaultAlphaDesc,
+      name: "debug-alpha"
+    .}: int
+
     maxGossipNodes* {.
       hidden,
       desc: "The maximum number of nodes to send content to during gossip",
       defaultValue: defaultPortalProtocolConfig.maxGossipNodes,
       defaultValueDesc: $defaultMaxGossipNodesDesc,
-      name: "max-gossip-nodes"
+      name: "debug-max-gossip-nodes"
+    .}: int
+
+    maxConcurrentOffers* {.
+      hidden,
+      desc: "The maximum number of offers to send concurrently",
+      defaultValue: defaultPortalProtocolConfig.maxConcurrentOffers,
+      name: "debug-max-concurrent-offers"
     .}: int
 
     radiusConfig* {.
@@ -355,6 +386,15 @@ type
       desc: "Disables state root validation for content received by the state network.",
       defaultValue: false,
       name: "disable-state-root-validation"
+    .}: bool
+
+    disableBanNodes* {.
+      hidden,
+      desc:
+        "Disable node banning functionality for both discv5 and portal sub-protocols",
+      defaultValue: defaultDisableBanNodes,
+      defaultValueDesc: $defaultDisableBanNodes,
+      name: "debug-disable-ban-nodes"
     .}: bool
 
     case cmd* {.command, defaultValue: noCommand.}: PortalCmd

@@ -81,9 +81,6 @@ nim --version
 ./env.sh nim --version
 ```
 
-Our Wiki provides additional helpful information for [debugging individual test cases][1]
-and for [pairing Nimbus with a locally running copy of Geth][2].
-
 #### Windows
 
 _(Experimental support!)_
@@ -124,8 +121,8 @@ make test # run the test suite
 
 *Experimental* The code can be compiled on a Raspberry PI:
 
-* Raspberry PI 3b+
-* 64gb SD Card (less might work too, but the default recommended 4-8GB will probably be too small)
+* Raspberry Pi 4+
+* 64GB SD Card (less might work too, but the default recommended 4-8GB will probably be too small)
 * [Rasbian Buster Lite](https://www.raspberrypi.org/downloads/raspbian/) - Lite version is enough to get going and will save some disk space!
 
 Assuming you're working with a freshly written image:
@@ -197,9 +194,6 @@ available.)
  * ENABLE_LINE_NUMBERS=1<br>
    Enables logger to print out source code location with log message
 
- * ENABLE_EVMC=1<br>
-   Enable mostly EVMC compliant wrapper around the native Nim VM
-
 For these variables, using &lt;variable&gt;=0 is ignored and &lt;variable&gt;=2
 has the same effect as &lt;variable&gt;=1 (ditto for other numbers.)
 
@@ -245,12 +239,6 @@ make github-ssh
 rm vendor/Nim/bin/nim
 make -j8 build-nim
 ```
-
-- some programs in the _tests_ subdirectory do a replay of blockchain
-  database dumps when compiled and run locally. The dumps are found in
-  [this](https://github.com/status-im/nimbus-eth1-blobs) module which
-  need to be cloned as _nimbus-eth1-blobs_ parellel to the _nimbus-eth1_
-  file system root.
 
 #### Git submodule workflow
 
@@ -336,7 +324,7 @@ cp -a examples/prometheus.yml ../my_metrics/
 cd ../my_metrics
 prometheus --config.file=prometheus.yml # loads ./prometheus.yml, writes metric data to ./data
 # start a fresh Nimbus sync and export metrics
-rm -rf ~/.cache/nimbus/db; ./build/nimbus_execution_client --prune:archive --metricsServer
+rm -rf ~/.cache/execution_chain/db; ./build/nimbus_execution_client --prune:archive --metricsServer
 ```
 
 Start the Grafana server. On Gentoo it's `/etc/init.d/grafana start`. Go to
@@ -381,6 +369,3 @@ or
 * Apache License, Version 2.0, ([LICENSE-APACHEv2](LICENSE-APACHEv2) or https://www.apache.org/licenses/LICENSE-2.0)
 
 at your option. These files may not be copied, modified, or distributed except according to those terms.
-
-[1]: https://github.com/status-im/nimbus/wiki/Understanding-and-debugging-Nimbus-EVM-JSON-tests
-[2]: https://github.com/status-im/nimbus/wiki/Debugging-state-reconstruction

@@ -1,7 +1,7 @@
 # Portal Network Wire Protocol
 ## Introduction
 The `fluffy/network/wire` directory holds a Nim implementation of the
-[Portal Network Wire Protocol](https://github.com/ethereum/portal-network-specs/blob/master/state-network.md#wire-protocol).
+[Portal Network Wire Protocol](https://github.com/ethereum/portal-network-specs/blob/31bc7e58e2e8acfba895d5a12a9ae3472894d398/state/state-network.md#wire-protocol).
 
 The wire protocol builds on top of the Node Discovery v5.1 protocol its
 `talkreq` and `talkresp` messages.

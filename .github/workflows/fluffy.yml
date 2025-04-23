@@ -1,5 +1,5 @@
 # Fluffy
-# Copyright (c) 2021-2024 Status Research & Development GmbH
+# Copyright (c) 2021-2025 Status Research & Development GmbH
 # Licensed and distributed under either of
 #   * MIT license (license terms in the root directory or at https://opensource.org/licenses/MIT).
 #   * Apache v2 license (license terms in the root directory or at https://www.apache.org/licenses/LICENSE-2.0).
@@ -13,9 +13,9 @@ on:
       - 'fluffy/**'
       - '!fluffy/**.md'
       - '!fluffy/docs/**'
-      - 'nimbus/rpc/hexstrings.nim'
-      - 'nimbus/rpc/rpc_*.nim'
-      - 'nimbus/db/**'
+      - 'execution_chain/rpc/hexstrings.nim'
+      - 'execution_chain/rpc/rpc_*.nim'
+      - 'execution_chain/db/**'
       - 'vendor/**'
       - 'Makefile'
       - 'nimbus.nimble'
@@ -26,9 +26,9 @@ on:
       - 'fluffy/**'
       - '!fluffy/**.md'
       - '!fluffy/docs/**'
-      - 'nimbus/rpc/hexstrings.nim'
-      - 'nimbus/rpc/rpc_*.nim'
-      - 'nimbus/db/**'
+      - 'execution_chain/rpc/hexstrings.nim'
+      - 'execution_chain/rpc/rpc_*.nim'
+      - 'execution_chain/db/**'
       - 'vendor/**'
       - 'Makefile'
       - 'nimbus.nimble'
@@ -112,8 +112,6 @@ jobs:
         target:
           - os: linux
             cpu: amd64
-          # - os: linux
-          #   cpu: i386
           - os: macos
             cpu: amd64
           - os: windows
@@ -279,7 +277,7 @@ jobs:
           rm -rf nimcache
           mingw32-make ${DEFAULT_MAKE_FLAGS} fluffy-tools
           rm -rf nimcache
-          mingw32-make ${DEFAULT_MAKE_FLAGS} fluffy-test
+          mingw32-make fluffy-test
           rm -rf nimcache
 
       - name: Run fluffy tests (Linux)
@@ -294,7 +292,7 @@ jobs:
           build/fluffy --help
           env CC=gcc make ${DEFAULT_MAKE_FLAGS} fluffy-tools
           # CC is needed to select correct compiler 32/64 bit
-          env CC=gcc CXX=g++ make ${DEFAULT_MAKE_FLAGS} fluffy-test
+          env CC=gcc CXX=g++ make fluffy-test
 
       - name: Run fluffy tests (Macos)
         if: runner.os == 'Macos'
@@ -304,7 +302,7 @@ jobs:
           build/fluffy --help
           make ${DEFAULT_MAKE_FLAGS} fluffy-tools
           # "-static" option will not work for osx unless static system libraries are provided
-          make ${DEFAULT_MAKE_FLAGS} fluffy-test
+          make fluffy-test
 
       - name: Run fluffy testnet
         run: |
@@ -324,7 +322,7 @@ jobs:
         # Updating nph version should be accompanied with running the new
         # version on the fluffy directory.
         run: |
-          VERSION="v0.6.0"
+          VERSION="v0.6.1"
           ARCHIVE="nph-linux_x64.tar.gz"
           curl -L "https://github.com/arnetheduck/nph/releases/download/${VERSION}/${ARCHIVE}" -o ${ARCHIVE}
           tar -xzf ${ARCHIVE}

@@ -1,5 +1,5 @@
 # Fluffy
-# Copyright (c) 2021-2024 Status Research & Development GmbH
+# Copyright (c) 2021-2025 Status Research & Development GmbH
 # Licensed and distributed under either of
 #   * MIT license (license terms in the root directory or at https://opensource.org/licenses/MIT).
 #   * Apache v2 license (license terms in the root directory or at https://www.apache.org/licenses/LICENSE-2.0).
@@ -31,6 +31,7 @@ import
     rpc_portal_nimbus_beacon_api, rpc_portal_debug_history_api,
   ],
   ./database/content_db,
+  ./network/wire/portal_protocol_version,
   ./portal_node,
   ./version,
   ./logging
@@ -44,11 +45,23 @@ func optionToOpt[T](o: Option[T]): Opt[T] =
   else:
     Opt.none(T)
 
-proc run(
-    config: PortalConf
-): (PortalNode, Opt[MetricsHttpServerRef], Opt[RpcHttpServer], Opt[RpcWebSocketServer]) {.
-    raises: [CatchableError]
-.} =
+type
+  FluffyStatus = enum
+    Starting
+    Running
+    Stopping
+
+  Fluffy = ref object
+    status: FluffyStatus
+    portalNode: PortalNode
+    metricsServer: Opt[MetricsHttpServerRef]
+    rpcHttpServer: Opt[RpcHttpServer]
+    rpcWsServer: Opt[RpcWebSocketServer]
+
+proc init(T: type Fluffy): T =
+  Fluffy(status: FluffyStatus.Starting)
+
+proc run(fluffy: Fluffy, config: PortalConf) {.raises: [CatchableError].} =
   setupLogging(config.logLevel, config.logStdout, none(OutFile))
 
   notice "Launching Fluffy", version = fullVersionStr, cmdParams = commandLineParams()
@@ -110,7 +123,7 @@ proc run(
       else:
         Opt.none(enr.Record)
 
-  var bootstrapRecords: seq[Record]
+  var bootstrapRecords: seq[enr.Record]
   loadBootstrapFile(string config.bootstrapNodesFile, bootstrapRecords)
   bootstrapRecords.add(config.bootstrapNodes)
 
@@ -130,8 +143,9 @@ proc run(
 
   ## Discovery v5 protocol setup
   let
-    discoveryConfig =
-      DiscoveryConfig.init(config.tableIpLimit, config.bucketIpLimit, config.bitsPerHop)
+    discoveryConfig = DiscoveryConfig.init(
+      config.tableIpLimit, config.bucketIpLimit, config.bitsPerHop, 512
+    )
     d = newProtocol(
       netkey,
       extIp,
@@ -140,7 +154,8 @@ proc run(
       # Note: The addition of default clientInfo to the ENR is a temporary
       # measure to easily identify & debug the clients used in the testnet.
       # Might make this into a, default off, cli option.
-      localEnrFields = {"c": enrClientInfoShort},
+      localEnrFields =
+        {"c": enrClientInfoShort, portalVersionKey: SSZ.encode(localSupportedVersions)},
       bootstrapRecords = bootstrapRecords,
       previousRecord = previousEnr,
       bindIp = bindIp,
@@ -148,6 +163,7 @@ proc run(
       enrAutoUpdate = config.enrAutoUpdate,
       config = discoveryConfig,
       rng = rng,
+      banNodes = not config.disableBanNodes,
     )
 
   d.open()
@@ -181,9 +197,10 @@ proc run(
   ## Portal node setup
   let
     portalProtocolConfig = PortalProtocolConfig.init(
-      config.tableIpLimit, config.bucketIpLimit, config.bitsPerHop, config.radiusConfig,
-      config.disablePoke, config.maxGossipNodes, config.contentCacheSize,
-      config.disableContentCache, config.offerCacheSize, config.disableOfferCache,
+      config.tableIpLimit, config.bucketIpLimit, config.bitsPerHop, config.alpha,
+      config.radiusConfig, config.disablePoke, config.maxGossipNodes,
+      config.contentCacheSize, config.disableContentCache, config.offerCacheSize, config.disableOfferCache, config.maxConcurrentOffers,
+      config.disableBanNodes,
     )
 
     portalNodeConfig = PortalNodeConfig(
@@ -245,13 +262,11 @@ proc run(
 
   ## Start the JSON-RPC APIs
 
-  let rpcFlags = getRpcFlags(config.rpcApi)
-
   proc setupRpcServer(
-      rpcServer: RpcHttpServer | RpcWebSocketServer
+      rpcServer: RpcHttpServer | RpcWebSocketServer, flags: set[RpcFlag]
   ) {.raises: [CatchableError].} =
-    for rpcFlag in rpcFlags:
-      case rpcFlag
+    for flag in flags:
+      case flag
       of RpcFlag.eth:
         rpcServer.installEthApiHandlers(
           node.historyNetwork, node.beaconLightClient, node.stateNetwork
@@ -291,31 +306,66 @@ proc run(
 
     rpcServer.start()
 
-  let rpcHttpServer =
-    if config.rpcEnabled:
-      let
-        ta = initTAddress(config.rpcAddress, config.rpcPort)
-        rpcHttpServer = RpcHttpServer.new()
-      # 16mb to comfortably fit 2-3mb blocks + blobs + json overhead
-      rpcHttpServer.addHttpServer(ta, maxRequestBodySize = 16 * 1024 * 1024)
-      setupRpcServer(rpcHttpServer)
+  let
+    rpcFlags = getRpcFlags(config.rpcApi)
+    wsFlags = getRpcFlags(config.wsApi)
 
-      Opt.some(rpcHttpServer)
-    else:
-      Opt.none(RpcHttpServer)
+    rpcHttpServer =
+      if config.rpcEnabled:
+        let
+          ta = initTAddress(config.rpcAddress, config.rpcPort)
+          rpcHttpServer = RpcHttpServer.new()
+        # 16mb to comfortably fit 2-3mb blocks + blobs + json overhead
+        rpcHttpServer.addHttpServer(ta, maxRequestBodySize = 16 * 1024 * 1024)
+        rpcHttpServer.setupRpcServer(rpcFlags)
 
-  let rpcWsServer =
-    if config.wsEnabled:
-      let
-        ta = initTAddress(config.rpcAddress, config.wsPort)
-        rpcWsServer = newRpcWebSocketServer(ta, compression = config.wsCompression)
-      setupRpcServer(rpcWsServer)
+        Opt.some(rpcHttpServer)
+      else:
+        Opt.none(RpcHttpServer)
 
-      Opt.some(rpcWsServer)
-    else:
-      Opt.none(RpcWebSocketServer)
+    rpcWsServer =
+      if config.wsEnabled:
+        let
+          ta = initTAddress(config.wsAddress, config.wsPort)
+          rpcWsServer = newRpcWebSocketServer(ta, compression = config.wsCompression)
+        rpcWsServer.setupRpcServer(wsFlags)
 
-  return (node, metricsServer, rpcHttpServer, rpcWsServer)
+        Opt.some(rpcWsServer)
+      else:
+        Opt.none(RpcWebSocketServer)
+
+  fluffy.status = FluffyStatus.Running
+  fluffy.portalNode = node
+  fluffy.metricsServer = metricsServer
+  fluffy.rpcHttpServer = rpcHttpServer
+  fluffy.rpcWsServer = rpcWsServer
+
+proc stop(f: Fluffy) {.async: (raises: []).} =
+  if f.rpcWsServer.isSome():
+    let server = f.rpcWsServer.get()
+    try:
+      server.stop()
+      await server.closeWait()
+    except CatchableError as e:
+      warn "Failed to stop rpc WS server", exc = e.name, err = e.msg
+
+  if f.rpcHttpServer.isSome():
+    let server = f.rpcHttpServer.get()
+    try:
+      await server.stop()
+      await server.closeWait()
+    except CatchableError as e:
+      warn "Failed to stop rpc HTTP server", exc = e.name, err = e.msg
+
+  if f.metricsServer.isSome():
+    let server = f.metricsServer.get()
+    try:
+      await server.stop()
+      await server.close()
+    except CatchableError as e:
+      warn "Failed to stop metrics HTTP server", exc = e.name, err = e.msg
+
+  await f.portalNode.stop()
 
 when isMainModule:
   {.pop.}
@@ -325,10 +375,10 @@ when isMainModule:
   )
   {.push raises: [].}
 
-  let (node, metricsServer, rpcHttpServer, rpcWsServer) =
-    case config.cmd
-    of PortalCmd.noCommand:
-      run(config)
+  let fluffy = Fluffy.init()
+  case config.cmd
+  of PortalCmd.noCommand:
+    fluffy.run(config)
 
   # Ctrl+C handling
   proc controlCHandler() {.noconv.} =
@@ -340,41 +390,17 @@ when isMainModule:
         raiseAssert exc.msg # shouldn't happen
 
     notice "Shutting down after having received SIGINT"
-    node.state = PortalNodeState.Stopping
+    fluffy.status = FluffyStatus.Stopping
 
   try:
     setControlCHook(controlCHandler)
   except Exception as exc: # TODO Exception
     warn "Cannot set ctrl-c handler", msg = exc.msg
 
-  while node.state == PortalNodeState.Running:
+  while fluffy.status == FluffyStatus.Running:
     try:
       poll()
     except CatchableError as e:
       warn "Exception in poll()", exc = e.name, err = e.msg
 
-  if rpcWsServer.isSome():
-    let server = rpcWsServer.get()
-    try:
-      server.stop()
-      waitFor server.closeWait()
-    except CatchableError as e:
-      warn "Failed to stop rpc WS server", exc = e.name, err = e.msg
-
-  if rpcHttpServer.isSome():
-    let server = rpcHttpServer.get()
-    try:
-      waitFor server.stop()
-      waitFor server.closeWait()
-    except CatchableError as e:
-      warn "Failed to stop rpc HTTP server", exc = e.name, err = e.msg
-
-  if metricsServer.isSome():
-    let server = metricsServer.get()
-    try:
-      waitFor server.stop()
-      waitFor server.close()
-    except CatchableError as e:
-      warn "Failed to stop metrics HTTP server", exc = e.name, err = e.msg
-
-  waitFor node.stop()
+  waitFor fluffy.stop()

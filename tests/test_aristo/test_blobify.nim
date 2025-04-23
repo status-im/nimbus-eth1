@@ -1,5 +1,5 @@
 # Nimbus
-# Copyright (c) 2024 Status Research & Development GmbH
+# Copyright (c) 2024-2025 Status Research & Development GmbH
 # Licensed under either of
 #  * Apache License, version 2.0, ([LICENSE-APACHE](LICENSE-APACHE) or
 #    http://www.apache.org/licenses/LICENSE-2.0)
@@ -10,61 +10,43 @@
 
 {.used.}
 
-import unittest2, ../../nimbus/db/aristo/aristo_blobify
+import unittest2, std/sequtils, ../../execution_chain/db/aristo/aristo_blobify
 
 suite "Aristo blobify":
   test "VertexRef roundtrip":
     let
-      leafAccount = VertexRef(vType: Leaf, lData: LeafPayload(pType: AccountData))
-      leafStoData =
-        VertexRef(vType: Leaf, lData: LeafPayload(pType: StoData, stoData: 42.u256))
-      branch = VertexRef(
-        vType: Branch,
-        bVid: [
-          VertexID(0),
-          VertexID(1),
-          VertexID(0),
-          VertexID(0),
-          VertexID(4),
-          VertexID(0),
-          VertexID(0),
-          VertexID(0),
-          VertexID(0),
-          VertexID(0),
-          VertexID(0),
-          VertexID(0),
-          VertexID(0),
-          VertexID(0),
-          VertexID(0),
-          VertexID(0),
-        ],
+      leafAccount = AccLeafRef(
+        vType: AccLeaf,
+        pfx: NibblesBuf.nibble(1),
+        account: AristoAccount(nonce: 100, balance: 123.u256),
+        stoID: (isValid: true, vid: VertexID(5))
+      )
+      leafStoData = StoLeafRef(
+        vType: StoLeaf,
+        pfx: NibblesBuf.nibble(3),
+        stoData: 42.u256,
+      )
+      branch = BranchRef(vType: Branch, startVid: VertexID(0x334452), used: 0x43'u16)
+
+      extension = ExtBranchRef(
+        vType: ExtBranch,
+        pfx: NibblesBuf.nibble(2),
+        startVid: VertexID(0x55),
+        used: 0x12'u16,
       )
 
-      extension = VertexRef(
-        vType: Branch,
-        pfx: NibblesBuf.nibble(2),
-        bVid: [
-          VertexID(0),
-          VertexID(0),
-          VertexID(2),
-          VertexID(0),
-          VertexID(0),
-          VertexID(5),
-          VertexID(0),
-          VertexID(0),
-          VertexID(0),
-          VertexID(0),
-          VertexID(0),
-          VertexID(0),
-          VertexID(0),
-          VertexID(0),
-          VertexID(0),
-          VertexID(0),
-        ],
-      )
+      key = HashKey.fromBytes(repeat(0x34'u8, 32))[]
 
     check:
-      deblobify(blobify(leafAccount), VertexRef)[] == leafAccount
-      deblobify(blobify(leafStoData), VertexRef)[] == leafStoData
-      deblobify(blobify(branch), VertexRef)[] == branch
-      deblobify(blobify(extension), VertexRef)[] == extension
+      deblobify(blobify(leafAccount, key), VertexRef)[] == leafAccount
+      deblobify(blobify(leafStoData, key), VertexRef)[] == leafStoData
+      deblobify(blobify(branch, key), VertexRef)[] == branch
+      deblobify(blobify(extension, key), VertexRef)[] == extension
+
+      deblobify(blobify(branch, key), HashKey)[] == key
+      deblobify(blobify(extension, key), HashKey)[] == key
+
+      deblobifyType(blobify(leafAccount, key), VertexRef)[] == AccLeaf
+      deblobifyType(blobify(leafStoData, key), VertexRef)[] == StoLeaf
+      deblobifyType(blobify(branch, key), VertexRef)[] == Branch
+      deblobifyType(blobify(extension, key), VertexRef)[] == ExtBranch

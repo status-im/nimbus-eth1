@@ -1,5 +1,5 @@
 # Fluffy
-# Copyright (c) 2021-2024 Status Research & Development GmbH
+# Copyright (c) 2021-2025 Status Research & Development GmbH
 # Licensed and distributed under either of
 #   * MIT license (license terms in the root directory or at https://opensource.org/licenses/MIT).
 #   * Apache v2 license (license terms in the root directory or at https://www.apache.org/licenses/LICENSE-2.0).
@@ -11,14 +11,27 @@ import
   json_rpc/rpcserver,
   chronicles,
   web3/[eth_api_types, conversions],
-  ../network/state/state_endpoints
+  ../network/state/state_endpoints,
+  ../evm/[async_evm, async_evm_portal_backend]
 
 template getOrRaise(stateNetwork: Opt[StateNetwork]): StateNetwork =
   let sn = stateNetwork.valueOr:
     raise newException(ValueError, "state sub-network not enabled")
   sn
 
+template getOrRaise(asyncEvm: Opt[AsyncEvm]): AsyncEvm =
+  let evm = asyncEvm.valueOr:
+    raise
+      newException(ValueError, "portal evm requires state sub-network to be enabled")
+  evm
+
 proc installDebugApiHandlers*(rpcServer: RpcServer, stateNetwork: Opt[StateNetwork]) =
+  let asyncEvm =
+    if stateNetwork.isSome():
+      Opt.some(AsyncEvm.init(stateNetwork.get().toAsyncEvmStateBackend()))
+    else:
+      Opt.none(AsyncEvm)
+
   rpcServer.rpc("debug_getBalanceByStateRoot") do(
     address: Address, stateRoot: Hash32
   ) -> UInt256:
@@ -79,10 +92,10 @@ proc installDebugApiHandlers*(rpcServer: RpcServer, stateNetwork: Opt[StateNetwo
 
     let
       sn = stateNetwork.getOrRaise()
-      bytecode = (await sn.getCodeByStateRoot(stateRoot, address)).valueOr:
+      code = (await sn.getCodeByStateRoot(stateRoot, address)).valueOr:
         raise newException(ValueError, "Unable to get code")
 
-    return bytecode.asSeq()
+    return code
 
   rpcServer.rpc("debug_getProofByStateRoot") do(
     address: Address, slots: seq[UInt256], stateRoot: Hash32
@@ -120,3 +133,45 @@ proc installDebugApiHandlers*(rpcServer: RpcServer, stateNetwork: Opt[StateNetwo
       storageHash: proofs.account.storageRoot,
       storageProof: storageProof,
     )
+
+  rpcServer.rpc("debug_callByStateRoot") do(
+    tx: TransactionArgs,
+    stateRoot: Hash32,
+    quantityTag: Opt[RtBlockIdentifier],
+    optimisticStateFetch: Opt[bool]
+  ) -> seq[byte]:
+    ## Executes a new message call immediately without creating a transaction on
+    ## the blockchain. This endpoint can be used to test the evm call functionality
+    ## without requiring the history network to be enabled.
+    ##
+    ## tx: the transaction call object which contains
+    ##   from: (optional) The address the transaction is sent from.
+    ##   to: The address the transaction is directed to.
+    ##   gas: (optional) Integer of the gas provided for the transaction execution.
+    ##     eth_call consumes zero gas, but this parameter may be needed by some executions.
+    ##   gasPrice: (optional) Integer of the gasPrice used for each paid gas.
+    ##   value: (optional) Integer of the value sent with this transaction.
+    ##   input: (optional) Hash of the method signature and encoded parameters.
+    ## stateRoot: the state root to be used to look up the state from the network.
+    ## quantityTag: (optional) integer block number, or the string "latest", "earliest" or "pending",
+    ##   see the default block parameter.
+    ## Returns: the return value of the executed contract.
+
+    if tx.to.isNone():
+      raise newException(ValueError, "to address is required")
+
+    let quantityTag = quantityTag.valueOr:
+      blockId(0.uint64)
+    if quantityTag.kind == bidAlias:
+      raise newException(ValueError, "tag not yet implemented")
+
+    let
+      evm = asyncEvm.getOrRaise()
+      header = Header(stateRoot: stateRoot, number: quantityTag.number.uint64)
+      optimisticStateFetch = optimisticStateFetch.valueOr:
+        true
+
+    let callResult = (await evm.call(header, tx, optimisticStateFetch)).valueOr:
+      raise newException(ValueError, error)
+
+    callResult.output

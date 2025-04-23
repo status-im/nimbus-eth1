@@ -1,5 +1,5 @@
 # Nimbus
-# Copyright (c) 2018-2024 Status Research & Development GmbH
+# Copyright (c) 2018-2025 Status Research & Development GmbH
 # Licensed under either of
 #  * Apache License, version 2.0, ([LICENSE-APACHE](LICENSE-APACHE) or
 #    http://www.apache.org/licenses/LICENSE-2.0)
@@ -12,8 +12,7 @@
 
 import
   eth/common,
-  stint,
-  ../../nimbus/sync/protocol
+  stint
 
 ## Stripped down version of `sync/snap/range_desc` in order to decode the
 ## snap sync dump samples.
@@ -54,6 +53,12 @@ type
     storageRoot*: Hash32            ## Start of storage tree
     #subRange*: Opt[NodeTagRange]    ## Sub-range of slot range covered
 
+  SnapProof* = distinct seq[byte]
+
+  SnapStorage* = object
+    slotHash*: Hash32
+    slotData*: seq[byte]
+
   AccountStorageRange* = object
     ## List of storage descriptors, the last `AccountSlots` storage data might
     ## be incomplete and the `proof` is needed for proving validity.
@@ -66,6 +71,8 @@ type
     account*: AccountSlotsHeader
     data*: seq[SnapStorage]
 
+func to*(data: seq[byte]; T: type SnapProof): T = data.T
+func to*(node: SnapProof; T: type seq[byte]): T = node.T
 
 proc to*(tag: NodeTag; T: type Hash32): T =
   ## Convert to serialised equivalent

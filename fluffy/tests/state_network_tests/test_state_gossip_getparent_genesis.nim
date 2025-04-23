@@ -1,5 +1,5 @@
 # Nimbus
-# Copyright (c) 2023-2024 Status Research & Development GmbH
+# Copyright (c) 2023-2025 Status Research & Development GmbH
 # Licensed and distributed under either of
 #   * MIT license (license terms in the root directory or at https://opensource.org/licenses/MIT).
 #   * Apache v2 license (license terms in the root directory or at https://www.apache.org/licenses/LICENSE-2.0).
@@ -13,7 +13,7 @@ import
   results,
   eth/[trie, trie/db],
   eth/common/hashes,
-  ../../../nimbus/common/chain_config,
+  ../../../execution_chain/common/chain_config,
   ../../network/state/[state_content, state_validation, state_gossip, state_utils],
   ./state_test_helpers
 
@@ -39,13 +39,13 @@ suite "State Gossip getParent - Genesis JSON Files":
           offer = AccountTrieNodeOffer(proof: proof)
 
         var db = newMemoryDB()
-        db.put(key.nodeHash.data, offer.toRetrievalValue().node.asSeq())
+        db.put(key.nodeHash.data, offer.toRetrieval().node.asSeq())
 
         # validate each parent offer until getting to the root node
         var parent = offer.withKey(key).getParent()
         check validateOffer(Opt.some(accountState.rootHash()), parent.key, parent.offer)
         .isOk()
-        db.put(parent.key.nodeHash.data, parent.offer.toRetrievalValue().node.asSeq())
+        db.put(parent.key.nodeHash.data, parent.offer.toRetrieval().node.asSeq())
 
         for i in proof.low ..< proof.high - 1:
           parent = parent.getParent()
@@ -53,7 +53,7 @@ suite "State Gossip getParent - Genesis JSON Files":
             Opt.some(accountState.rootHash()), parent.key, parent.offer
           )
           .isOk()
-          db.put(parent.key.nodeHash.data, parent.offer.toRetrievalValue().node.asSeq())
+          db.put(parent.key.nodeHash.data, parent.offer.toRetrieval().node.asSeq())
 
         # after putting all parent nodes into the trie, verify can lookup the leaf
         let
@@ -94,7 +94,7 @@ suite "State Gossip getParent - Genesis JSON Files":
               )
 
             var db = newMemoryDB()
-            db.put(key.nodeHash.data, offer.toRetrievalValue().node.asSeq())
+            db.put(key.nodeHash.data, offer.toRetrieval().node.asSeq())
 
             # validate each parent offer until getting to the root node
             var parent = offer.withKey(key).getParent()
@@ -102,9 +102,7 @@ suite "State Gossip getParent - Genesis JSON Files":
               Opt.some(accountState.rootHash()), parent.key, parent.offer
             )
             .isOk()
-            db.put(
-              parent.key.nodeHash.data, parent.offer.toRetrievalValue().node.asSeq()
-            )
+            db.put(parent.key.nodeHash.data, parent.offer.toRetrieval().node.asSeq())
 
             for i in storageProof.low ..< storageProof.high - 1:
               parent = parent.getParent()
@@ -112,9 +110,7 @@ suite "State Gossip getParent - Genesis JSON Files":
                 Opt.some(accountState.rootHash()), parent.key, parent.offer
               )
               .isOk()
-              db.put(
-                parent.key.nodeHash.data, parent.offer.toRetrievalValue().node.asSeq()
-              )
+              db.put(parent.key.nodeHash.data, parent.offer.toRetrieval().node.asSeq())
 
             # after putting all parent nodes into the trie, verify can lookup the leaf
             let

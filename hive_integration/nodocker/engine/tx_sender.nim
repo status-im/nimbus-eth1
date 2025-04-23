@@ -1,5 +1,5 @@
 # Nimbus
-# Copyright (c) 2023-2024 Status Research & Development GmbH
+# Copyright (c) 2023-2025 Status Research & Development GmbH
 # Licensed under either of
 #  * Apache License, version 2.0, ([LICENSE-APACHE](LICENSE-APACHE) or
 #    http://www.apache.org/licenses/LICENSE-2.0)
@@ -16,9 +16,9 @@ import
   chronicles,
   ./engine_client,
   ./cancun/blobs,
-  ../../../nimbus/transaction,
-  ../../../nimbus/common,
-  ../../../nimbus/utils/utils
+  ../../../execution_chain/transaction,
+  ../../../execution_chain/common,
+  ../../../execution_chain/utils/utils
 
 from std/sequtils import mapIt
 
@@ -34,6 +34,7 @@ type
     blobGasFee*: UInt256
     blobCount* : int
     blobID*    : BlobID
+    authorizationList*: seq[Authorization]
 
   BigInitcodeTx* = object of BaseTx
     initcodeLength*: int
@@ -69,11 +70,13 @@ type
     gasPriceOrGasFeeCap*: Opt[GasInt]
     gasTipCap*          : Opt[GasInt]
     gas*                : Opt[GasInt]
+    blobGas*            : Opt[UInt256]
     to*                 : Opt[common.Address]
     value*              : Opt[UInt256]
     data*               : Opt[seq[byte]]
     chainId*            : Opt[ChainId]
     signature*          : Opt[CustSig]
+    auth*               : Opt[Authorization]
 
 const
   TestAccountCount = 1000
@@ -95,8 +98,8 @@ proc createAccount(idx: int): TestAccount =
     quit(QuitFailure)
   result.address = toAddress(result.key)
 
-proc createAccounts(sender: TxSender) =
-  for i in 0..<TestAccountCount:
+proc createAccounts(sender: TxSender, numAccounts: int) =
+  for i in 0..<numAccounts:
     sender.accounts.add createAccount(i.int)
 
 proc getNextAccount*(sender: TxSender): TestAccount =
@@ -113,14 +116,15 @@ proc getLastNonce(sender: TxSender, address: Address): uint64 =
   sender.nonceMap[address] - 1
 
 proc fillBalance(sender: TxSender, params: NetworkParams) =
+  const balance = UInt256.fromHex("0x123450000000000000000")
   for x in sender.accounts:
     params.genesis.alloc[x.address] = GenesisAccount(
-      balance: UInt256.fromHex("0x123450000000000000000"),
+      balance: balance,
     )
 
-proc new*(_: type TxSender, params: NetworkParams): TxSender =
+proc new*(_: type TxSender, params: NetworkParams, numAccounts = TestAccountCount): TxSender =
   result = TxSender(chainId: params.config.chainId)
-  result.createAccounts()
+  result.createAccounts(numAccounts)
   result.fillBalance(params)
 
 proc getTxType(tc: BaseTx, nonce: uint64): TxType =
@@ -199,6 +203,21 @@ proc makeTxOfType(params: MakeTxParams, tc: BaseTx): PooledTransaction =
         blobs: blobData.blobs.mapIt(it.bytes),
         commitments: blobData.commitments.mapIt(KzgCommitment it.bytes),
         proofs: blobData.proofs.mapIt(KzgProof it.bytes),
+      )
+    )
+  of TxEip7702:
+    PooledTransaction(
+      tx: Transaction(
+        txType  : TxEip7702,
+        nonce   : params.nonce,
+        gasLimit: tc.gasLimit,
+        maxFeePerGas: gasFeeCap,
+        maxPriorityFeePerGas: gasTipCap,
+        to      : tc.recipient,
+        value   : tc.amount,
+        payload : tc.payload,
+        chainId : params.chainId,
+        authorizationList: tc.authorizationList,
       )
     )
   else:
@@ -431,7 +450,7 @@ proc customizeTransaction*(sender: TxSender,
   if custTx.chainId.isSome:
     modTx.chainId = custTx.chainId.get
 
-  if baseTx.txType in {TxEip1559, TxEip4844}:
+  if baseTx.txType in {TxEip1559, TxEip4844, TxEip7702}:
     if custTx.gasPriceOrGasFeeCap.isSome:
       modTx.maxFeePerGas = custTx.gasPriceOrGasFeeCap.get.GasInt
 
@@ -443,6 +462,15 @@ proc customizeTransaction*(sender: TxSender,
       var address: Address
       modTx.to = Opt.some(address)
 
+  if custTx.blobGas.isSome:
+    doAssert(baseTx.txType == TxEip4844)
+    modTx.maxFeePerBlobGas = custTx.blobGas.get
+
+  if custTx.auth.isSome:
+    doAssert(baseTx.txType == TxEip7702)
+    doAssert(baseTx.authorizationList.len > 0)
+    modTx.authorizationList[0] = custTx.auth.get
+
   if custTx.signature.isSome:
     let signature = custTx.signature.get
     modTx.V = signature.V
@@ -452,3 +480,17 @@ proc customizeTransaction*(sender: TxSender,
     modTx.signature = modTx.sign(acc.key, eip155 = true)
 
   modTx
+
+proc makeAuth*(sender: TxSender, acc: TestAccount, nonce: AccountNonce): Authorization =
+  var auth = Authorization(
+    chainId: sender.chainId,
+    address: acc.address,
+    nonce: nonce,
+  )
+  let hash = auth.rlpHashForSigning()
+  let sig  = sign(acc.key, SkMessage(hash.data))
+  let raw  = sig.toRaw()
+
+  auth.r = UInt256.fromBytesBE(raw.toOpenArray(0, 31))
+  auth.s = UInt256.fromBytesBE(raw.toOpenArray(32, 63))
+  auth.v = raw[64].uint64

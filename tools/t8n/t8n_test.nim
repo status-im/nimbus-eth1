@@ -1,5 +1,5 @@
 # Nimbus
-# Copyright (c) 2022-2024 Status Research & Development GmbH
+# Copyright (c) 2022-2025 Status Research & Development GmbH
 # Licensed under either of
 #  * Apache License, version 2.0, ([LICENSE-APACHE](LICENSE-APACHE) or
 #    http://www.apache.org/licenses/LICENSE-2.0)
@@ -20,6 +20,7 @@ type
     inEnv   : string
     stFork  : string
     stReward: string
+    chainid : string
 
   T8nOutput = object
     alloc : bool
@@ -39,13 +40,15 @@ type
     path: string
     error: string
 
-proc t8nInput(alloc, txs, env, fork, reward: string): T8nInput =
+proc t8nInput(alloc, txs, env, fork: string;
+              reward = "0"; chainid = ""): T8nInput =
   T8nInput(
     inAlloc : alloc,
     inTxs   : txs,
     inEnv   : env,
     stFork  : fork,
-    stReward: reward
+    stReward: reward,
+    chainid : chainid,
   )
 
 proc get(opt: T8nInput, base  : string): string =
@@ -55,6 +58,8 @@ proc get(opt: T8nInput, base  : string): string =
   result.add(" --state.fork "  & opt.stFork)
   if opt.stReward.len > 0:
     result.add(" --state.reward " & opt.stReward)
+  if opt.chainid.len > 0:
+    result.add(" --state.chainid " & opt.chainid)
 
 proc get(opt: T8nOutput): string =
   if opt.alloc and not opt.trace:
@@ -107,6 +112,8 @@ proc cmp(jsc: var JsonComparator; a, b: JsonNode, path: string): bool =
     of JNull:
       result = true
     of JArray:
+      if a.len != b.len:
+        jsc.exit("ARRAY A.len($1) != B.len($2)" % [$a.len, $b.len])
       for i, x in a.elems:
         if not jsc.cmp(x, b.elems[i], path & "/" & $i):
           return false
@@ -143,14 +150,6 @@ proc notRejectedError(path: string): bool =
     path.endsWith("/error"))
 
 proc runTest(appDir: string, spec: TestSpec): bool =
-  when defined(evmc_enabled):
-    # TODO: test both evm?
-    # skip trace test if evmc_enabled
-    # because the error msg of trace output is
-    # different for nimvm and evmc
-    if spec.output.trace:
-      return true
-
   let base = appDir / spec.base
   let args = spec.input.get(base) & spec.output.get()
   let cmd  = appDir / "t8n" & args
@@ -165,14 +164,19 @@ proc runTest(appDir: string, spec: TestSpec): bool =
   if spec.expOut.len > 0:
     if spec.expOut.endsWith(".json"):
       let path = base / spec.expOut
-      let want = json.parseFile(path)
-      let have = json.parseJson(res)
-      var jsc = JsonComparator()
-      if not jsc.cmp(want, have, "root") and notRejectedError(jsc.path):
-        echo "test $1: output wrong, have \n$2\nwant\n$3\n" %
-          [spec.name, have.pretty, want.pretty]
-        echo "path: $1, error: $2" %
-          [jsc.path, jsc.error]
+      try:
+        let want = json.parseFile(path)
+        let have = json.parseJson(res)
+        var jsc = JsonComparator()
+        if not jsc.cmp(want, have, "root") and notRejectedError(jsc.path):
+          echo "test $1: output wrong, have \n$2\nwant\n$3\n" %
+            [spec.name, have.pretty, want.pretty]
+          echo "path: $1, error: $2" %
+            [jsc.path, jsc.error]
+          return false
+      except JsonParsingError as exc:
+        echo "test $1: ERROR: $2" % [spec.name, exc.msg]
+        echo "test $1: OUTPUT: $2" % [spec.name, res]
         return false
     else:
       # compare as regular text
@@ -496,7 +500,7 @@ const
       name  : "GasUsedHigherThanBlockGasLimitButNotWithRefundsSuicideLast_Frontier",
       base  : "testdata/00-516",
       input : t8nInput(
-        "alloc.json", "txs.rlp", "env.json", "Frontier", "5000000000000000000",
+        "alloc.json", "txs.rlp", "env.json", "Frontier", "5000000000000000000"
       ),
       output: T8nOutput(alloc: true, result: true),
       expOut: "exp.json",
@@ -607,6 +611,78 @@ const
         "alloc.json", "txs.rlp", "env.json", "Cancun", "0",
       ),
       output: T8nOutput(result: true),
+      expOut: "exp.json",
+    ),
+    TestSpec(
+      name  : "Different --state.chainid and tx.chainid",
+      base  : "testdata/00-525",
+      input : t8nInput(
+        "alloc.json", "txs.rlp", "env.json", "Prague",
+      ),
+      output: T8nOutput(result: true),
+      expOut: "exp1.json",
+    ),
+    TestSpec(
+      name  : "Prague execution requests",
+      base  : "testdata/00-525",
+      input : t8nInput(
+        "alloc.json", "txs.rlp", "env.json", "Prague", "", "7078815900"
+      ),
+      output: T8nOutput(result: true),
+      expOut: "exp2.json",
+    ),
+    TestSpec(
+      name  : "Prague depositContractAddress",
+      base  : "testdata/00-525",
+      input : t8nInput(
+        "alloc.json", "txs.rlp", "env_dca.json", "Prague", "", "7078815900"
+      ),
+      output: T8nOutput(result: true),
+      expOut: "exp3.json",
+    ),
+    TestSpec(
+      name: "More cancun test, plus example of rlp-transaction that cannot be decoded properly",
+      base: "testdata/30",
+      input: t8nInput(
+        "alloc.json", "txs_more.rlp", "env.json", "Cancun", "",
+      ),
+      output: T8nOutput(alloc: true, result: true),
+      expOut: "exp.json",
+    ),
+    TestSpec(
+      name: "Prague test, EIP-7702 transaction",
+      base: "testdata/33",
+      input: t8nInput(
+        "alloc.json", "txs.json", "env.json", "Prague", "",
+      ),
+      output: T8nOutput(alloc: true, result: true),
+      expOut: "exp.json",
+    ),
+    TestSpec(
+      name: "Mekong test, EIP-7702 gasRefunded",
+      base: "testdata/00-526",
+      input: t8nInput(
+        "alloc.json", "txs.rlp", "env.json", "Prague", "", "7078815900"
+      ),
+      output: T8nOutput(alloc: true, result: true),
+      expOut: "exp.json",
+    ),
+    TestSpec(
+      name: "Mekong test, EIP-7702 gasRefunded when computation fails",
+      base: "testdata/00-527",
+      input: t8nInput(
+        "alloc.json", "txs.rlp", "env.json", "Prague", "", "7078815900"
+      ),
+      output: T8nOutput(alloc: true, result: true),
+      expOut: "exp.json",
+    ),
+    TestSpec(
+      name: "Blake2b precompiles regression, holesky 2.406.802 # 11",
+      base: "testdata/00-528",
+      input: t8nInput(
+        "alloc.json", "txs.rlp", "env.json", "Cancun", "", "17000"
+      ),
+      output: T8nOutput(alloc: true, result: true),
       expOut: "exp.json",
     ),
   ]

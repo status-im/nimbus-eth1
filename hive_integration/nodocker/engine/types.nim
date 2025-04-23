@@ -1,5 +1,5 @@
 # Nimbus
-# Copyright (c) 2023-2024 Status Research & Development GmbH
+# Copyright (c) 2023-2025 Status Research & Development GmbH
 # Licensed under either of
 #  * Apache License, version 2.0, ([LICENSE-APACHE](LICENSE-APACHE) or
 #    http://www.apache.org/licenses/LICENSE-2.0)
@@ -17,10 +17,10 @@ import
   web3/eth_api_types,
   web3/engine_api_types,
   web3/execution_types,
-  ../../../nimbus/beacon/web3_eth_conv,
-  ../../../nimbus/utils/utils
+  ../../../execution_chain/beacon/web3_eth_conv,
+  ../../../execution_chain/utils/utils
 
-from ../../../nimbus/common/chain_config import NetworkParams
+from ../../../execution_chain/common/chain_config import NetworkParams
 
 export
   execution_types,
@@ -60,7 +60,7 @@ type
     attr*        : PayloadAttributes
     beaconRoot*  : Opt[Hash32]
     versionedHashes*: Opt[seq[Hash32]]
-    executionRequests*: Opt[array[3, seq[byte]]]
+    executionRequests*: Opt[seq[seq[byte]]]
 
 const
   DefaultTimeout* = 60 # seconds
@@ -78,7 +78,7 @@ func toAddress*(x: UInt256): Address =
 const ZeroAddr* = default(Address)
 
 func toHash*(x: UInt256): Hash32 =
-  Hash32(x.toByteArrayBE)
+  Hash32(x.toBytesBE)
 
 func timestampToBeaconRoot*(timestamp: Quantity): Hash32 =
   # Generates a deterministic hash from the timestamp
@@ -244,8 +244,8 @@ template expectHash*(res: untyped, hash: Hash32) =
   testCond res.isOk:
     error "Unexpected expectHash Error", msg=res.error
   let s = res.get()
-  testCond s.blockHash == hash:
-    error "Unexpected expectHash", expect=hash.short, get=s.blockHash.short
+  testCond s.computeBlockHash == hash:
+    error "Unexpected expectHash", expect=hash.short, get=s.computeBlockHash.short
 
 template expectStorageEqual*(res: untyped, expectedValue: FixedBytes[32]) =
   testCond res.isOk:
@@ -347,4 +347,3 @@ func toExecutableData*(payload: ExecutionPayload, attr: PayloadAttributes): Exec
     beaconRoot: attr.parentBeaconBlockRoot,
     versionedHashes: Opt.some(collectBlobHashes(payload.transactions)),
   )
-  

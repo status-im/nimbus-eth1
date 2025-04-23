@@ -52,12 +52,10 @@ type
     AccountTrieNodeRetrieval | ContractTrieNodeRetrieval | ContractCodeRetrieval
   ContentValueType* = ContentOfferType | ContentRetrievalType
 
-func init*(
-    T: type AccountTrieNodeOffer, proof: TrieProof, blockHash: Hash32
-): T {.inline.} =
+func init*(T: type AccountTrieNodeOffer, proof: TrieProof, blockHash: Hash32): T =
   T(proof: proof, blockHash: blockHash)
 
-func init*(T: type AccountTrieNodeRetrieval, node: TrieNode): T {.inline.} =
+func init*(T: type AccountTrieNodeRetrieval, node: TrieNode): T =
   T(node: node)
 
 func init*(
@@ -65,10 +63,10 @@ func init*(
     storageProof: TrieProof,
     accountProof: TrieProof,
     blockHash: Hash32,
-): T {.inline.} =
+): T =
   T(storageProof: storageProof, accountProof: accountProof, blockHash: blockHash)
 
-func init*(T: type ContractTrieNodeRetrieval, node: TrieNode): T {.inline.} =
+func init*(T: type ContractTrieNodeRetrieval, node: TrieNode): T =
   T(node: node)
 
 func init*(
@@ -76,35 +74,50 @@ func init*(
     code: Bytecode,
     accountProof: TrieProof,
     blockHash: Hash32,
-): T {.inline.} =
+): T =
   T(code: code, accountProof: accountProof, blockHash: blockHash)
 
-func init*(T: type ContractCodeRetrieval, code: Bytecode): T {.inline.} =
+func init*(T: type ContractCodeRetrieval, code: Bytecode): T =
   T(code: code)
 
-func toRetrievalValue*(
-    offer: AccountTrieNodeOffer
-): AccountTrieNodeRetrieval {.inline.} =
+template toRetrieval*(offer: AccountTrieNodeOffer): AccountTrieNodeRetrieval =
   AccountTrieNodeRetrieval.init(offer.proof[^1])
 
-func toRetrievalValue*(
-    offer: ContractTrieNodeOffer
-): ContractTrieNodeRetrieval {.inline.} =
+template toRetrieval*(offer: ContractTrieNodeOffer): ContractTrieNodeRetrieval =
   ContractTrieNodeRetrieval.init(offer.storageProof[^1])
 
-func toRetrievalValue*(offer: ContractCodeOffer): ContractCodeRetrieval {.inline.} =
+template toRetrieval*(offer: ContractCodeOffer): ContractCodeRetrieval =
   ContractCodeRetrieval.init(offer.code)
 
-func empty*(T: type TrieProof): T {.inline.} =
+func toOffer*(
+    retrieval: AccountTrieNodeRetrieval, parent: AccountTrieNodeOffer
+): AccountTrieNodeOffer =
+  var proof = parent.proof
+  let added = proof.add(retrieval.node)
+  doAssert(added)
+  AccountTrieNodeOffer.init(proof, parent.blockHash)
+
+func toOffer*(
+    retrieval: ContractTrieNodeRetrieval, parent: ContractTrieNodeOffer
+): ContractTrieNodeOffer =
+  var proof = parent.storageProof
+  let added = proof.add(retrieval.node)
+  doAssert(added)
+  ContractTrieNodeOffer.init(proof, parent.accountProof, parent.blockHash)
+
+func toOffer*(
+    retrieval: ContractCodeRetrieval, parent: ContractCodeOffer
+): ContractCodeOffer =
+  ContractCodeOffer.init(retrieval.code, parent.accountProof, parent.blockHash)
+
+template empty*(T: type TrieProof): T =
   T.init(@[])
 
-func empty*(T: type Bytecode): T {.inline.} =
+template empty*(T: type Bytecode): T =
   T(@[])
 
-func encode*(value: ContentValueType): seq[byte] {.inline.} =
+func encode*(value: ContentValueType): seq[byte] =
   SSZ.encode(value)
 
-func decode*(
-    T: type ContentValueType, bytes: openArray[byte]
-): Result[T, string] {.inline.} =
+func decode*(T: type ContentValueType, bytes: openArray[byte]): Result[T, string] =
   decodeSsz(bytes, T)

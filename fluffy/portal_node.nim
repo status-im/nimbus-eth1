@@ -1,5 +1,5 @@
 # Fluffy
-# Copyright (c) 2024 Status Research & Development GmbH
+# Copyright (c) 2024-2025 Status Research & Development GmbH
 # Licensed and distributed under either of
 #   * MIT license (license terms in the root directory or at https://opensource.org/licenses/MIT).
 #   * Apache v2 license (license terms in the root directory or at https://www.apache.org/licenses/LICENSE-2.0).
@@ -12,6 +12,7 @@ import
   chronos,
   eth/p2p/discoveryv5/protocol,
   beacon_chain/spec/forks,
+  stew/byteutils,
   ./network_metadata,
   ./eth_data/history_data_ssz_e2s,
   ./database/content_db,
@@ -24,11 +25,6 @@ export
   beacon_light_client, history_network, state_network, portal_protocol_config, forks
 
 type
-  PortalNodeState* = enum
-    Starting
-    Running
-    Stopping
-
   PortalNodeConfig* = object
     accumulatorFile*: Opt[string]
     disableStateRootValidation*: bool
@@ -39,7 +35,6 @@ type
     contentRequestRetries*: int
 
   PortalNode* = ref object
-    state*: PortalNodeState
     discovery: protocol.Protocol
     contentDB: ContentDB
     streamManager: StreamManager
@@ -136,6 +131,7 @@ proc new*(
             discovery,
             contentDB,
             streamManager,
+            networkData.metadata.cfg,
             accumulator,
             bootstrapRecords = bootstrapRecords,
             portalConfig = config.portalConfig,
@@ -225,8 +221,6 @@ proc start*(n: PortalNode) =
     n.beaconLightClient.value.start()
 
   n.statusLogLoop = statusLogLoop(n)
-
-  n.state = PortalNodeState.Running
 
 proc stop*(n: PortalNode) {.async: (raises: []).} =
   debug "Stopping Portal node"

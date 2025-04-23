@@ -1,5 +1,5 @@
 # Nimbus
-# Copyright (c) 2021-2024 Status Research & Development GmbH
+# Copyright (c) 2021-2025 Status Research & Development GmbH
 # Licensed under either of
 #  * Apache License, version 2.0, ([LICENSE-APACHE](LICENSE-APACHE) or
 #    http://www.apache.org/licenses/LICENSE-2.0)
@@ -16,7 +16,7 @@ on:
       - 'nimbus_verified_proxy/**'
       - '!nimbus_verified_proxy/**.md'
       - '!nimbus_verified_proxy/docs/**'
-      - 'nimbus/db/**'
+      - 'execution_chain/db/**'
       - 'vendor/**'
       - 'Makefile'
       - 'nimbus.nimble'
@@ -27,7 +27,7 @@ on:
       - 'nimbus_verified_proxy/**'
       - '!nimbus_verified_proxy/**.md'
       - '!nimbus_verified_proxy/docs/**'
-      - 'nimbus/db/**'
+      - 'execution_chain/db/**'
       - 'vendor/**'
       - 'Makefile'
       - 'nimbus.nimble'
@@ -50,7 +50,7 @@ jobs:
         include:
           - target:
               os: linux
-            builder: ubuntu-20.04
+            builder: ubuntu-22.04
           - target:
               os: macos
             builder: macos-13
@@ -102,8 +102,8 @@ jobs:
         if: runner.os == 'Linux' && matrix.target.cpu == 'i386'
         run: |
           sudo dpkg --add-architecture i386
-          sudo apt-fast update -qq
-          sudo DEBIAN_FRONTEND='noninteractive' apt-fast install \
+          sudo apt-get update -qq
+          sudo DEBIAN_FRONTEND='noninteractive' apt-get install \
             --no-install-recommends -yq gcc-multilib g++-multilib \
             libz-dev:i386 libbz2-dev:i386 libssl-dev:i386 libpcre3-dev:i386
           mkdir -p external/bin
@@ -238,7 +238,7 @@ jobs:
         # Updating nph version should be accompanied with running the new
         # version on the fluffy directory.
         run: |
-          VERSION="v0.6.0"
+          VERSION="v0.6.1"
           ARCHIVE="nph-linux_x64.tar.gz"
           curl -L "https://github.com/arnetheduck/nph/releases/download/${VERSION}/${ARCHIVE}" -o ${ARCHIVE}
           tar -xzf ${ARCHIVE}

@@ -78,8 +78,8 @@ procSuite "State Gossip - Gossip Offer":
       check:
         stateNode2.containsId(contentId)
         res1.isOk()
-        res1.get() == contentValue.toRetrievalValue()
-        res1.get().node == contentValue.toRetrievalValue().node
+        res1.get() == contentValue.toRetrieval()
+        res1.get().node == contentValue.toRetrieval().node
 
       # check that the parent offer was not received by the second state instance
       let res2 = await stateNode2.stateNetwork.getAccountTrieNode(
@@ -147,8 +147,8 @@ procSuite "State Gossip - Gossip Offer":
       check:
         stateNode2.containsId(contentId)
         res1.isOk()
-        res1.get() == contentValue.toRetrievalValue()
-        res1.get().node == contentValue.toRetrievalValue().node
+        res1.get() == contentValue.toRetrieval()
+        res1.get().node == contentValue.toRetrieval().node
 
       # check that the offer parent was not received by the second state instance
       let res2 = await stateNode2.stateNetwork.getContractTrieNode(
@@ -205,8 +205,8 @@ procSuite "State Gossip - Gossip Offer":
       check:
         stateNode2.containsId(contentId)
         res1.isOk()
-        res1.get() == contentValue.toRetrievalValue()
-        res1.get().code == contentValue.toRetrievalValue().code
+        res1.get() == contentValue.toRetrieval()
+        res1.get().code == contentValue.toRetrieval().code
 
     await stateNode1.stop()
     await stateNode2.stop()

@@ -1,5 +1,5 @@
 # Nimbus
-# Copyright (c) 2023-2024 Status Research & Development GmbH
+# Copyright (c) 2023-2025 Status Research & Development GmbH
 # Licensed and distributed under either of
 #   * MIT license (license terms in the root directory or at https://opensource.org/licenses/MIT).
 #   * Apache v2 license (license terms in the root directory or at https://www.apache.org/licenses/LICENSE-2.0).
@@ -12,7 +12,7 @@ import
   results,
   eth/trie,
   eth/common/[addresses, hashes],
-  ../../../nimbus/common/chain_config,
+  ../../../execution_chain/common/chain_config,
   ../../network/wire/[portal_protocol, portal_stream],
   ../../network/state/
     [state_content, state_network, state_gossip, state_endpoints, state_utils],
@@ -41,7 +41,7 @@ suite "State Endpoints - Genesis JSON Files":
     # store the account leaf node
     let contentKey = key.toContentKey().encode()
     stateNode.portalProtocol.storeContent(
-      contentKey, contentKey.toContentId(), offer.toRetrievalValue().encode()
+      contentKey, contentKey.toContentId(), offer.toRetrieval().encode()
     )
 
     # store the account parent nodes / all remaining nodes
@@ -52,7 +52,7 @@ suite "State Endpoints - Genesis JSON Files":
     stateNode.portalProtocol.storeContent(
       parentContentKey,
       parentContentKey.toContentId(),
-      parent.offer.toRetrievalValue().encode(),
+      parent.offer.toRetrieval().encode(),
     )
 
     for i in proof.low ..< proof.high - 1:
@@ -62,7 +62,7 @@ suite "State Endpoints - Genesis JSON Files":
       stateNode.portalProtocol.storeContent(
         parentContentKey,
         parentContentKey.toContentId(),
-        parent.offer.toRetrievalValue().encode(),
+        parent.offer.toRetrieval().encode(),
       )
 
   proc setupCodeInDb(
@@ -101,7 +101,7 @@ suite "State Endpoints - Genesis JSON Files":
     # store the contract storage leaf node
     let contentKey = key.toContentKey().encode()
     stateNode.portalProtocol.storeContent(
-      contentKey, contentKey.toContentId(), offer.toRetrievalValue().encode()
+      contentKey, contentKey.toContentId(), offer.toRetrieval().encode()
     )
 
     # store the remaining contract storage nodes
@@ -112,7 +112,7 @@ suite "State Endpoints - Genesis JSON Files":
     stateNode.portalProtocol.storeContent(
       parentContentKey,
       parentContentKey.toContentId(),
-      parent.offer.toRetrievalValue().encode(),
+      parent.offer.toRetrieval().encode(),
     )
 
     for i in storageProof.low ..< storageProof.high - 1:
@@ -122,7 +122,7 @@ suite "State Endpoints - Genesis JSON Files":
       stateNode.portalProtocol.storeContent(
         parentContentKey,
         parentContentKey.toContentId(),
-        parent.offer.toRetrievalValue().encode(),
+        parent.offer.toRetrieval().encode(),
       )
 
   asyncTest "Test getBalance, getTransactionCount, getStorageAt and getCode using JSON files":
@@ -157,7 +157,7 @@ suite "State Endpoints - Genesis JSON Files":
           # get code of existing account
           let codeRes = await stateNode.stateNetwork.getCode(blockNumber, address)
           check:
-            codeRes.get().asSeq() == account.code
+            codeRes.get() == account.code
 
           let storageState = storageStates.getOrDefault(address)
           for slotKey, slotValue in account.storage:
@@ -177,7 +177,7 @@ suite "State Endpoints - Genesis JSON Files":
             slotRes1 =
               await stateNode.stateNetwork.getStorageAt(blockNumber, address, 1.u256)
           check:
-            codeRes.get().asSeq().len() == 0
+            codeRes.get().len() == 0
             slotRes0.get() == 0.u256
             slotRes1.get() == 0.u256
 
@@ -197,7 +197,7 @@ suite "State Endpoints - Genesis JSON Files":
         check:
           balanceRes.get() == 0.u256
           nonceRes.get() == 0.uint64
-          codeRes.get().asSeq().len() == 0
+          codeRes.get().len() == 0
           slotRes.get() == 0.u256
 
     await stateNode.stop()

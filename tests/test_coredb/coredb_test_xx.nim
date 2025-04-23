@@ -1,5 +1,5 @@
 # Nimbus
-# Copyright (c) 2023-2024 Status Research & Development GmbH
+# Copyright (c) 2023-2025 Status Research & Development GmbH
 # Licensed under either of
 #  * Apache License, version 2.0, ([LICENSE-APACHE](LICENSE-APACHE) or
 #    http://www.apache.org/licenses/LICENSE-2.0)
@@ -10,8 +10,8 @@
 
 import
   eth/common,
-  ../../nimbus/db/core_db,
-  ../../nimbus/common/chain_config
+  ../../execution_chain/db/core_db,
+  ../../execution_chain/common/chain_config
 
 type
   CaptureSpecs* = object
@@ -29,7 +29,7 @@ type
 func cloneWith(
     dsc: CaptureSpecs;
     name = "";
-    network = NetworkId(0);
+    network = 0.u256;
     genesis = "";
     files = seq[string].default;
     numBlocks = 0;
@@ -37,7 +37,7 @@ func cloneWith(
     dbName = "";
       ): CaptureSpecs =
   result = dsc
-  if network != NetworkId(0):
+  if network != 0.u256:
     result.builtIn = true
     result.network = network
   elif 0 < genesis.len:

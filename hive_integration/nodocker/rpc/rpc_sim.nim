@@ -1,5 +1,5 @@
 # Nimbus
-# Copyright (c) 2021 Status Research & Development GmbH
+# Copyright (c) 2021-2024 Status Research & Development GmbH
 # Licensed under either of
 #  * Apache License, version 2.0, ([LICENSE-APACHE](LICENSE-APACHE))
 #  * MIT license ([LICENSE-MIT](LICENSE-MIT))
@@ -10,15 +10,17 @@
 import
   std/[times],
   chronos,
+  taskpools,
   "."/[rpc_tests, test_env],
   ../sim_utils
 
 proc runRpcTest() =
   var stat: SimStat
+  let taskPool = Taskpool.new()
   let start = getTime()
   for x in testList:
     try:
-      let env = setupEnv()
+      let env = setupEnv(taskPool)
       let status = waitFor x.run(env)
       env.stopEnv()
       stat.inc(x.name, status)

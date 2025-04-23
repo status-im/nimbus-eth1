@@ -1,5 +1,5 @@
 # Nimbus
-# Copyright (c) 2022 Status Research & Development GmbH
+# Copyright (c) 2022-2024 Status Research & Development GmbH
 # Licensed under either of
 #  * Apache License, version 2.0, ([LICENSE-APACHE](LICENSE-APACHE) or
 #    http://www.apache.org/licenses/LICENSE-2.0)
@@ -9,7 +9,7 @@
 # according to those terms.
 
 import
-  std/[os, options],
+  std/[os, options, strutils],
   confutils, confutils/defs
 
 export
@@ -76,11 +76,14 @@ type
 
     inputFile* {.
       desc: "json file contains state test data"
+      defaultValue: ""
       argument }: string
 
 const
-  Copyright = "Copyright (c) 2022 Status Research & Development GmbH"
-  Version   = "Nimbus-evmstate 0.1.0"
+  Copyright = "Copyright (c) 2022-" &
+    CompileDate.split('-')[0] &
+    " Status Research & Development GmbH"
+  Version   = "Nimbus-evmstate 0.1.2"
 
 proc init*(_: type StateConf, cmdLine = commandLineParams()): StateConf =
   {.push warning[ProveInit]: off.}

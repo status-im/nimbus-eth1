@@ -1,5 +1,5 @@
 # Nimbus
-# Copyright (c) 2023-2024 Status Research & Development GmbH
+# Copyright (c) 2023-2025 Status Research & Development GmbH
 # Licensed under either of
 #  * Apache License, version 2.0, ([LICENSE-APACHE](LICENSE-APACHE) or
 #    http://www.apache.org/licenses/LICENSE-2.0)
@@ -15,14 +15,14 @@ import
   eth/common/eth_types_rlp,
   chronicles,
   stew/byteutils,
-  kzg4844/kzg,
   ../types,
   ../engine_client,
-  ../../../../nimbus/constants,
-  ../../../../nimbus/core/eip4844,
-  ../../../../nimbus/rpc/rpc_types,
+  ../../../../execution_chain/constants,
+  ../../../../execution_chain/core/eip4844,
+  ../../../../execution_chain/core/lazy_kzg as kzg,
+  ../../../../execution_chain/rpc/rpc_types,
   web3/execution_types,
-  ../../../../nimbus/beacon/web3_eth_conv,
+  ../../../../execution_chain/beacon/web3_eth_conv,
   ./blobs
 
 type
@@ -39,6 +39,14 @@ const
   DATAHASH_START_ADDRESS* = toAddress(0x20000.u256)
   DATAHASH_ADDRESS_COUNT* = 1000
 
+func getCancunBlobBaseFee*(excessBlobGas: uint64): UInt256 =
+  const blobBaseFeeUpdateFraction = 3338477.u256
+  fakeExponential(
+    MIN_BLOB_GASPRICE.u256,
+    excessBlobGas.u256,
+    blobBaseFeeUpdateFraction
+  )
+
 func getMinExcessBlobGasForBlobGasPrice(data_gas_price: uint64): uint64 =
   var
     current_excess_data_gas = 0'u64
@@ -46,7 +54,7 @@ func getMinExcessBlobGasForBlobGasPrice(data_gas_price: uint64): uint64 =
 
   while current_data_gas_price < data_gas_price:
     current_excess_data_gas += GAS_PER_BLOB.uint64
-    current_data_gas_price = getBlobBaseFee(current_excess_data_gas).truncate(uint64)
+    current_data_gas_price = getCancunBlobBaseFee(current_excess_data_gas).truncate(uint64)
 
   return current_excess_data_gas
 
@@ -54,12 +62,12 @@ func getMinExcessBlobsForBlobGasPrice*(data_gas_price: uint64): uint64 =
   return getMinExcessBlobGasForBlobGasPrice(data_gas_price) div GAS_PER_BLOB.uint64
 
 proc addBlobTransaction*(pool: TestBlobTxPool, tx: PooledTransaction) =
-  let txHash = rlpHash(tx)
+  let txHash = computeRlpHash(tx)
   pool.transactions[txHash] = tx
 
 # Test two different transactions with the same blob, and check the blob bundle.
 proc verifyTransactionFromNode*(client: RpcClient, tx: Transaction): Result[void, string] =
-  let txHash = tx.rlpHash
+  let txHash = tx.computeRlpHash
   let res = client.txByHash(txHash)
   if res.isErr:
     return err(res.error)
@@ -94,8 +102,8 @@ proc verifyTransactionFromNode*(client: RpcClient, tx: Transaction): Result[void
   if returnedTx.chainId.isNone:
     return err("chain id is none, expect is some")
 
-  if returnedTx.chainId.get.uint64 != tx.chainId.uint64:
-    return err("chain id mismatch: $1 != $2" % [$returnedTx.chainId.get.uint64, $tx.chainId.uint64])
+  if returnedTx.chainId.get != tx.chainId:
+    return err("chain id mismatch: $1 != $2" % [$returnedTx.chainId.get, $tx.chainId])
 
   if returnedTx.maxFeePerGas != tx.maxFeePerGas:
     return err("max fee per gas mismatch: $1 != $2" % [$returnedTx.maxFeePerGas, $tx.maxFeePerGas])
@@ -152,7 +160,7 @@ proc getBlobDataInPayload*(pool: TestBlobTxPool, payload: ExecutionPayload): Res
     if txData.txType != TxEip4844:
       continue
 
-    let txHash = rlpHash(txData)
+    let txHash = computeRlpHash(txData)
 
     # Find the transaction in the current pool of known transactions
     if not pool.transactions.hasKey(txHash):

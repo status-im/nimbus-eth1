@@ -1,5 +1,5 @@
 # Nimbus
-# Copyright (c) 2023-2024 Status Research & Development GmbH
+# Copyright (c) 2023-2025 Status Research & Development GmbH
 # Licensed under either of
 #  * Apache License, version 2.0, ([LICENSE-APACHE](LICENSE-APACHE) or
 #    http://www.apache.org/licenses/LICENSE-2.0)
@@ -18,8 +18,8 @@ import
   ../engine_client,
   ../test_env,
   ../types,
-  ../../../../nimbus/core/eip4844,
-  ../../../../nimbus/common/common
+  ../../../../execution_chain/core/eip4844,
+  ../../../../execution_chain/common/common
 
 type
   NewPayloads* = ref object of TestStep
@@ -73,7 +73,7 @@ proc verifyPayload(step: NewPayloads,
       excessBlobGas: Opt.some(parentExcessBlobGas),
       blobGasUsed: Opt.some(parentBlobGasUsed)
     )
-    expectedExcessBlobGas = calcExcessBlobGas(parent)
+    expectedExcessBlobGas = calcExcessBlobGas(parent, com.isPragueOrLater(payload.timestamp.EthTime))
 
   if com.isCancunOrLater(payload.timestamp.EthTime):
     if payload.excessBlobGas.isNone:
@@ -96,14 +96,14 @@ proc verifyPayload(step: NewPayloads,
 
     var
       totalBlobCount = 0
-      expectedBlobGasPrice = getBlobBaseFee(expectedExcessBlobGas)
+      expectedBlobGasPrice = getCancunBlobBaseFee(expectedExcessBlobGas)
 
     for tx in blobTxsInPayload:
       let blobCount = tx.versionedHashes.len
       totalBlobCount += blobCount
 
       # Retrieve receipt from client
-      let r = client.txReceipt(tx.rlpHash)
+      let r = client.txReceipt(tx.computeRlpHash)
       let expectedBlobGasUsed = blobCount.uint64 * GAS_PER_BLOB
 
       r.expectBlobGasUsed(expectedBlobGasUsed)
@@ -296,7 +296,7 @@ method execute*(step: NewPayloads, ctx: CancunTestContext): bool =
       onNewPayloadBroadcast: proc(): bool =
         if step.newPayloadCustomizer != nil:
           step.newPayloadCustomizer.setEngineAPIVersionResolver(env.engine.com)
-          # Send a test NewPayload directive with either a modified payload or modifed versioned hashes
+          # Send a test NewPayload directive with either a modified payload or modified versioned hashes
           var
             payload        = env.clMock.latestExecutableData
             expectedError  = step.newPayloadCustomizer.getExpectedError()

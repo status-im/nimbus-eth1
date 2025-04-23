@@ -1,5 +1,5 @@
 # Nimbus
-# Copyright (c) 2023-2024 Status Research & Development GmbH
+# Copyright (c) 2023-2025 Status Research & Development GmbH
 # Licensed under either of
 #  * Apache License, version 2.0, ([LICENSE-APACHE](LICENSE-APACHE) or
 #    http://www.apache.org/licenses/LICENSE-2.0)
@@ -11,7 +11,7 @@
 import
   std/strutils,
   ./engine_spec,
-  ../../../../nimbus/common/hardforks
+  ../../../../execution_chain/common/hardforks
 
 type
   ForkIDSpec* = ref object of EngineSpec
@@ -40,7 +40,7 @@ method getForkConfig*(cs: ForkIDSpec): ChainConfig =
   # Merge fork happen at block 0
   let mainFork = cs.getMainFork()
   if mainFork == ForkParis:
-    forkConfig.mergeForkBlock = Opt.some(0'u64)
+    forkConfig.mergeNetsplitBlock = Opt.some(0'u64)
   return forkConfig
 
 method execute(cs: ForkIDSpec, env: TestEnv): bool =

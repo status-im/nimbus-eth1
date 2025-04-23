@@ -1,5 +1,5 @@
 # Nimbus
-# Copyright (c) 2021-2024 Status Research & Development GmbH
+# Copyright (c) 2021-2025 Status Research & Development GmbH
 # Licensed under either of
 #  * Apache License, version 2.0, ([LICENSE-APACHE](LICENSE-APACHE))
 #  * MIT license ([LICENSE-MIT](LICENSE-MIT))
@@ -9,25 +9,24 @@
 
 import
   std/[os, json, strutils, times],
-  stew/byteutils,
   results,
   chronicles,
-  ../../../nimbus/core/chain,
-  ../../../nimbus/core/block_import,
-  ../../../nimbus/common,
-  ../../../nimbus/core/eip4844,
+  ../../../execution_chain/core/chain,
+  ../../../execution_chain/core/block_import,
+  ../../../execution_chain/common,
   ../sim_utils,
   ./extract_consensus_data
 
-proc processChainData(cd: ChainData): TestStatus =
+proc processChainData(cd: ChainData, taskPool: Taskpool): TestStatus =
   let
     networkId = NetworkId(cd.params.config.chainId)
     com = CommonRef.new(newCoreDbRef DefaultDbMemory,
+      taskPool,
       networkId,
       cd.params
     )
 
-  let c = newForkedChain(com, com.genesisHeader)
+  let c = ForkedChainRef.init(com)
 
   for bytes in cd.blocksRlp:
     # ignore return value here
@@ -35,20 +34,18 @@ proc processChainData(cd: ChainData): TestStatus =
     # bad blocks
     discard importRlpBlocks(bytes, c, finalize = true)
 
-  let head = com.db.getCanonicalHead()
-  let blockHash = "0x" & head.blockHash.data.toHex
+  let blockHash = $c.latestHash
   if blockHash == cd.lastBlockHash:
     TestStatus.OK
   else:
     trace "block hash not equal",
       got=blockHash,
-      number=head.number,
+      number=c.latestHeader.number,
       expected=cd.lastBlockHash
     TestStatus.Failed
 
-# except loopMul, all other tests are related to total difficulty
-# which is not supported in ForkedChain
 const unsupportedTests = [
+  # total difficulty cases which is not supported in ForkedChain
   "lotsOfBranchesOverrideAtTheMiddle.json",
   "sideChainWithMoreTransactions.json",
   "uncleBlockAtBlock3afterBlock4.json",
@@ -58,18 +55,20 @@ const unsupportedTests = [
   "blockChainFrontierWithLargerTDvsHomesteadBlockchain.json",
   "blockChainFrontierWithLargerTDvsHomesteadBlockchain2.json",
   "lotsOfLeafs.json",
-  "loopMul.json"
+
+  # super slow case
+  "loopMul.json",
+
+  # zig zag case, similar with total difficulty above
+  "lotsOfBranchesOverrideAtTheEnd.json",
+  "DaoTransactions.json",
   ]
 
 proc main() =
   const basePath = "tests/fixtures/eth_tests/BlockchainTests"
   var stat: SimStat
+  let taskPool = Taskpool.new()
   let start = getTime()
-
-  let res = loadKzgTrustedSetup()
-  if res.isErr:
-    echo "FATAL: ", res.error
-    quit(QuitFailure)
 
   for fileName in walkDirRec(basePath):
     if not fileName.endsWith(".json"):
@@ -81,10 +80,11 @@ proc main() =
       stat.skipped += n.len
       continue
 
+    debugEcho fileName
     let n = json.parseFile(fileName)
     for caseName, unit in n:
       let cd = extractChainData(unit)
-      let status = processChainData(cd)
+      let status = processChainData(cd, taskPool)
       stat.inc(caseName, status)
 
   let elpd = getTime() - start

@@ -1,5 +1,5 @@
 # Nimbus
-# Copyright (c) 2021-2024 Status Research & Development GmbH
+# Copyright (c) 2021-2025 Status Research & Development GmbH
 # Licensed and distributed under either of
 #   * MIT license (license terms in the root directory or at https://opensource.org/licenses/MIT).
 #   * Apache v2 license (license terms in the root directory or at https://www.apache.org/licenses/LICENSE-2.0).
@@ -17,16 +17,29 @@ import
 export jsonmarshal, routing_table, enr, node
 
 # Portal Network JSON-RPC errors
+
 const
   # These errors are defined in the portal jsonrpc spec: https://github.com/ethereum/portal-network-specs/tree/master/jsonrpc
   ContentNotFoundError* = (code: -39001, msg: "Content not found")
   ContentNotFoundErrorWithTrace* = (code: -39002, msg: "Content not found")
+  PayloadTypeNotSupportedError* = (code: -39004, msg: "Payload type not supported")
+  FailedToDecodePayloadError* = (code: -39005, msg: "Failed to decode payload")
+  PayloadTypeRequiredError* =
+    (code: -39006, msg: "Payload type is required if payload is specified")
+  UserSpecifiedPayloadBlockedByClientError* = (
+    code: -39007,
+    msg: "The client has blocked users from specifying the payload for this extension",
+  )
+
   # These errors are used by Fluffy but are not yet in the spec
   InvalidContentKeyError* = (code: -32602, msg: "Invalid content key")
   InvalidContentValueError* = (code: -32602, msg: "Invalid content value")
 
+template applicationError(error: (int, string)): auto =
+  (ref ApplicationError)(code: error.code, msg: error.msg)
+
 template contentNotFoundErr*(): auto =
-  (ref ApplicationError)(code: ContentNotFoundError.code, msg: ContentNotFoundError.msg)
+  ContentNotFoundError.applicationError()
 
 template contentNotFoundErrWithTrace*(data: typed): auto =
   (ref ApplicationError)(
@@ -35,15 +48,30 @@ template contentNotFoundErrWithTrace*(data: typed): auto =
     data: data,
   )
 
-template invalidKeyErr*(): auto =
-  (ref errors.InvalidRequest)(
-    code: InvalidContentKeyError.code, msg: InvalidContentKeyError.msg
+template payloadTypeNotSupportedError*(): auto =
+  (ref ApplicationError)(
+    code: PayloadTypeNotSupportedError.code,
+    msg: PayloadTypeNotSupportedError.msg,
+    data: Opt.some(JsonString("{ \"reason\" : \"client\" }")),
   )
 
+template failedToDecodePayloadError*(): auto =
+  FailedToDecodePayloadError.applicationError()
+
+template payloadTypeRequiredError*(): auto =
+  PayloadTypeRequiredError.applicationError()
+
+template userSpecifiedPayloadBlockedByClientError*(): auto =
+  UserSpecifiedPayloadBlockedByClientError.applicationError()
+
+template invalidRequest(error: (int, string)): auto =
+  (ref errors.InvalidRequest)(code: error.code, msg: error.msg)
+
+template invalidKeyErr*(): auto =
+  InvalidContentKeyError.invalidRequest()
+
 template invalidValueErr*(): auto =
-  (ref errors.InvalidRequest)(
-    code: InvalidContentValueError.code, msg: InvalidContentValueError.msg
-  )
+  InvalidContentValueError.invalidRequest()
 
 type
   NodeInfo* = object
@@ -54,7 +82,15 @@ type
     localNodeId*: NodeId
     buckets*: seq[seq[NodeId]]
 
-  PingResult* = tuple[enrSeq: uint64, dataRadius: UInt256]
+  UnknownPayload* = tuple[]
+
+  CapabilitiesPayload* =
+    tuple[clientInfo: string, dataRadius: UInt256, capabilities: seq[uint16]]
+
+  PingResult* = object
+    enrSeq*: uint64
+    payloadType*: uint16
+    payload*: CapabilitiesPayload
 
   ContentInfo* = object
     content*: string
@@ -62,10 +98,16 @@ type
 
   ContentItem* = array[2, string]
 
+  PutContentResult* = object
+    peerCount*: int
+    storedLocally*: bool
+
 NodeInfo.useDefaultSerializationIn JrpcConv
 RoutingTableInfo.useDefaultSerializationIn JrpcConv
+PingResult.useDefaultSerializationIn JrpcConv
 (string, string).useDefaultSerializationIn JrpcConv
 ContentInfo.useDefaultSerializationIn JrpcConv
+PutContentResult.useDefaultSerializationIn JrpcConv
 
 func getNodeInfo*(r: RoutingTable): NodeInfo =
   NodeInfo(enr: r.localNode.record, nodeId: r.localNode.id)
@@ -135,24 +177,30 @@ proc readValue*(
     r.raiseUnexpectedValue("seq[byte] parser error: " & exc.msg)
 
 proc writeValue*(
-    w: var JsonWriter[JrpcConv], v: PingResult
+    w: var JsonWriter[JrpcConv], v: CapabilitiesPayload
 ) {.gcsafe, raises: [IOError].} =
   w.beginRecord()
-  w.writeField("enrSeq", v.enrSeq)
+
+  w.writeField("clientInfo", v.clientInfo)
   # Portal json-rpc specifications allows for dropping leading zeroes.
   w.writeField("dataRadius", "0x" & v.dataRadius.toHex())
+  w.writeField("capabilities", v.capabilities)
+
   w.endRecord()
 
 proc readValue*(
-    r: var JsonReader[JrpcConv], val: var PingResult
+    r: var JsonReader[JrpcConv], val: var CapabilitiesPayload
 ) {.gcsafe, raises: [IOError, SerializationError].} =
   try:
     for field in r.readObjectFields():
       case field
-      of "enrSeq":
-        val.enrSeq = r.parseInt(uint64)
+      of "clientInfo":
+        val.clientInfo = r.parseString()
       of "dataRadius":
         val.dataRadius = UInt256.fromHex(r.parseString())
+      of "capabilities":
+        r.parseArray:
+          val.capabilities.add(r.parseInt(uint16))
       else:
         discard
   except ValueError as exc:
@@ -176,3 +224,21 @@ proc readValue*(
 
   if count != value.len():
     r.raiseUnexpectedValue("Array length mismatch")
+
+proc readValue*(
+    r: var JsonReader[JrpcConv], val: var Opt[uint16]
+) {.gcsafe, raises: [IOError, SerializationError].} =
+  if r.tokKind == JsonValueKind.Null:
+    reset val
+    r.parseNull()
+  else:
+    val.ok r.readValue(uint16)
+
+proc readValue*(
+    r: var JsonReader[JrpcConv], val: var Opt[UnknownPayload]
+) {.gcsafe, raises: [IOError, SerializationError].} =
+  if r.tokKind == JsonValueKind.Null:
+    reset val
+    r.parseNull()
+  else:
+    val.ok default(UnknownPayload)

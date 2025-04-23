@@ -1,5 +1,5 @@
 # Nimbus
-# Copyright (c) 2023-2024 Status Research & Development GmbH
+# Copyright (c) 2023-2025 Status Research & Development GmbH
 # Licensed under either of
 #  * Apache License, version 2.0, ([LICENSE-APACHE](LICENSE-APACHE) or
 #    http://www.apache.org/licenses/LICENSE-2.0)
@@ -11,19 +11,18 @@
 import
   std/os,
   eth/common/keys,
-  eth/p2p as eth_p2p,
+  ../../../execution_chain/networking/p2p as eth_p2p,
   chronos,
   json_rpc/[rpcserver, rpcclient],
   results,
-  ../../../nimbus/[
+  ../../../execution_chain/[
     config,
     constants,
     core/chain,
     core/tx_pool,
-    core/tx_pool/tx_item,
     core/block_import,
     rpc,
-    sync/handlers,
+    sync/wire_protocol,
     beacon/beacon_engine,
     beacon/web3_eth_conv,
     common
@@ -59,6 +58,7 @@ const
 proc makeCom*(conf: NimbusConf): CommonRef =
   CommonRef.new(
     newCoreDbRef DefaultDbMemory,
+    Taskpool.new(),
     conf.networkId,
     conf.networkParams
   )
@@ -80,21 +80,12 @@ proc newEngineEnv*(conf: var NimbusConf, chainFile: string, enableAuth: bool): E
     quit(QuitFailure)
 
   let
-    node  = setupEthNode(conf, ctx)
-    com   = makeCom(conf)
-    head  = com.db.getCanonicalHead()
-    chain = newForkedChain(com, head)
+    node   = setupEthNode(conf, ctx)
+    com    = makeCom(conf)
+    chain  = ForkedChainRef.init(com)
+    txPool = TxPoolRef.new(chain)
 
-  let txPool = TxPoolRef.new(com)
-
-  node.addEthHandlerCapability(
-    node.peerPool,
-    chain,
-    txPool)
-
-  # txPool must be informed of active head
-  # so it can know the latest account state
-  doAssert txPool.smartHead(head, chain)
+  node.addEthHandlerCapability(txPool)
 
   var key: JwtSharedKey
   key.fromHex(jwtSecret).isOkOr:
@@ -108,8 +99,8 @@ proc newEngineEnv*(conf: var NimbusConf, chainFile: string, enableAuth: bool): E
       echo "Failed to create rpc server: ", error
       quit(QuitFailure)
 
-    beaconEngine = BeaconEngineRef.new(txPool, chain)
-    serverApi = newServerAPI(chain, txPool)
+    beaconEngine = BeaconEngineRef.new(txPool)
+    serverApi = newServerAPI(txPool)
 
   setupServerAPI(serverApi, server, ctx)
   setupEngineAPI(beaconEngine, server)
@@ -178,14 +169,12 @@ proc peer*(env: EngineEnv): Peer =
 proc getTxsInPool*(env: EngineEnv, txHashes: openArray[common.Hash32]): seq[Transaction] =
   result = newSeqOfCap[Transaction](txHashes.len)
   for txHash in txHashes:
-    let res = env.txPool.getItem(txHash)
-    if res.isErr: continue
-    let item = res.get
-    if item.reject == txInfoOk:
-      result.add item.tx
+    let item = env.txPool.getItem(txHash).valueOr:
+      continue
+    result.add item.tx
 
 proc numTxsInPool*(env: EngineEnv): int =
-  env.txPool.numTxs
+  env.txPool.len
 
 func version*(env: EngineEnv, time: EthTime): Version =
   if env.com.isPragueOrLater(time):

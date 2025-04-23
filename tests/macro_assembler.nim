@@ -1,5 +1,5 @@
 # Nimbus
-# Copyright (c) 2019-2024 Status Research & Development GmbH
+# Copyright (c) 2019-2025 Status Research & Development GmbH
 # Licensed under either of
 #  * Apache License, version 2.0, ([LICENSE-APACHE](LICENSE-APACHE) or
 #    http://www.apache.org/licenses/LICENSE-2.0)
@@ -17,19 +17,19 @@ import
   stew/shims/macros
 
 import
-  ../nimbus/db/ledger,
-  ../nimbus/evm/types,
-  ../nimbus/evm/interpreter/op_codes,
-  ../nimbus/evm/internals,
-  ../nimbus/transaction/[call_common, call_evm],
-  ../nimbus/evm/state,
-  ../nimbus/core/pow/difficulty
+  ../execution_chain/db/ledger,
+  ../execution_chain/evm/types,
+  ../execution_chain/evm/interpreter/op_codes,
+  ../execution_chain/evm/internals,
+  ../execution_chain/transaction/[call_common, call_evm],
+  ../execution_chain/evm/state,
+  ../execution_chain/core/pow/difficulty
 
-from ../nimbus/db/aristo
+from ../execution_chain/db/aristo
   import EmptyBlob
 
 # Ditto, for GasPrice.
-import ../nimbus/transaction except GasPrice
+import ../execution_chain/transaction except GasPrice
 import ../tools/common/helpers except LogLevel
 
 export byteutils
@@ -265,10 +265,10 @@ proc initVMEnv*(network: string): BaseVMState =
     cdb = DefaultDbMemory.newCoreDbRef()
     com = CommonRef.new(
       cdb,
-      conf,
+      nil, conf,
       conf.chainId.NetworkId)
     parent = Header(stateRoot: EMPTY_ROOT_HASH)
-    parentHash = rlpHash(parent)
+    parentHash = computeRlpHash(parent)
     header = Header(
       number: 1'u64,
       stateRoot: EMPTY_ROOT_HASH,
@@ -279,9 +279,9 @@ proc initVMEnv*(network: string): BaseVMState =
       gasLimit: 100_000
     )
 
-  BaseVMState.new(parent, header, com)
+  BaseVMState.new(parent, header, com, com.db.baseTxFrame())
 
-proc verifyAsmResult(vmState: BaseVMState, boa: Assembler, asmResult: CallResult): bool =
+proc verifyAsmResult(vmState: BaseVMState, boa: Assembler, asmResult: DebugCallResult): bool =
   let com = vmState.com
   if not asmResult.isError:
     if boa.success == false:
@@ -322,11 +322,11 @@ proc verifyAsmResult(vmState: BaseVMState, boa: Assembler, asmResult: CallResult
       error "different memory value", idx=i, expected=mem, actual=actual
       return false
 
-  var stateDB = vmState.stateDB
-  stateDB.persist()
+  var ledger = vmState.ledger
+  ledger.persist()
 
   let
-    al = com.db.ctx.getAccounts()
+    al = com.db.baseTxFrame()
     accPath = keccak256(codeAddress.data)
 
   for kv in boa.storage:
@@ -339,7 +339,7 @@ proc verifyAsmResult(vmState: BaseVMState, boa: Assembler, asmResult: CallResult
       error "storage has different value", key=key, expected=val, actual
       return false
 
-  let logs = vmState.getAndClearLogEntries()
+  let logs = asmResult.logEntries
   if logs.len != boa.logs.len:
     error "different logs len", expected=boa.logs.len, actual=logs.len
     return false
@@ -392,7 +392,7 @@ proc createSignedTx(payload: seq[byte], chainId: ChainId): Transaction =
 proc runVM*(vmState: BaseVMState, boa: Assembler): bool =
   let
     com  = vmState.com
-  vmState.mutateStateDB:
+  vmState.mutateLedger:
     db.setCode(codeAddress, boa.code)
     db.setBalance(codeAddress, 1_000_000.u256)
   let tx = createSignedTx(boa.data, com.chainId)

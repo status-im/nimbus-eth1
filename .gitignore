@@ -15,6 +15,7 @@
 # Ignore dynamic, static libs and libtool archive files
 *.so
 *.dylib
+*.dSYM
 *.a
 *.la
 *.exe
@@ -22,7 +23,7 @@
 
 # Ignore generated C and doc files
 nimcache
-/nimbus/docs
+/execution_chain/docs
 
 /debug*.json
 /block*.json
@@ -41,3 +42,6 @@ nimble.paths
 
 # nimbus-build-system files
 nimbus-build-system.paths
+
+# vscode generated files for path mapping into vendor
+.vscode

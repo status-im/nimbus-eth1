@@ -1,5 +1,5 @@
 # Nimbus
-# Copyright (c) 2018-2024 Status Research & Development GmbH
+# Copyright (c) 2018-2025 Status Research & Development GmbH
 # Licensed under either of
 #  * Apache License, version 2.0, ([LICENSE-APACHE](LICENSE-APACHE) or http://www.apache.org/licenses/LICENSE-2.0)
 #  * MIT license ([LICENSE-MIT](LICENSE-MIT) or http://opensource.org/licenses/MIT)
@@ -10,9 +10,9 @@ import
   unittest2, stew/byteutils,
   eth/[trie],
   eth/common/[keys, transaction_utils],
-  ../nimbus/common/common,
+  ../execution_chain/common/common,
   ../tools/common/helpers as chp,
-  ../nimbus/[evm/computation,
+  ../execution_chain/[evm/computation,
     evm/state,
     evm/types,
     constants,
@@ -21,7 +21,7 @@ import
     transaction/call_evm
     ],
 
-  ./test_helpers, ./test_allowed_to_fail
+  ./test_helpers
 
 proc initAddress(i: byte): Address = result.data[19] = i
 
@@ -43,7 +43,7 @@ template doTest(fixture: JsonNode; vmState: BaseVMState; address: PrecompileAddr
       gasLimit: 1_000_000_000.GasInt,
       to: Opt.some initAddress(address.byte),
       value: 0.u256,
-      chainId: ChainId(1),
+      chainId: 1.u256,
       payload: if dataStr.len > 0: dataStr.hexToSeqByte else: @[]
     )
     let tx = signTransaction(unsignedTx, privateKey, false)
@@ -71,11 +71,12 @@ proc testFixture(fixtures: JsonNode, testStatusIMPL: var TestStatus) =
     conf  = getChainConfig(parseFork(fixtures["fork"].getStr))
     data  = fixtures["data"]
     privateKey = PrivateKey.fromHex("7a28b5ba57c53603b0b07b56bba752f7784bf506fa95edc395f5cf6c7514fe9d")[]
-    com = CommonRef.new(newCoreDbRef DefaultDbMemory, config = conf)
+    com = CommonRef.new(newCoreDbRef DefaultDbMemory, nil, config = conf)
     vmState = BaseVMState.new(
       Header(number: 1'u64, stateRoot: emptyRlpHash),
       Header(),
-      com
+      com,
+      com.db.baseTxFrame()
     )
 
   case toLowerAscii(label)
@@ -89,10 +90,8 @@ proc testFixture(fixtures: JsonNode, testStatusIMPL: var TestStatus) =
   of "ecpairing": data.doTest(vmState, paPairing)
   of "blake2f"  : data.doTest(vmState, paBlake2bf)
   of "blsg1add" : data.doTest(vmState, paBlsG1Add)
-  of "blsg1mul" : data.doTest(vmState, paBlsG1Mul)
   of "blsg1multiexp" : data.doTest(vmState, paBlsG1MultiExp)
   of "blsg2add" : data.doTest(vmState, paBlsG2Add)
-  of "blsg2mul" : data.doTest(vmState, paBlsG2Mul)
   of "blsg2multiexp": data.doTest(vmState, paBlsG2MultiExp)
   of "blspairing": data.doTest(vmState, paBlsPairing)
   of "blsmapg1": data.doTest(vmState, paBlsMapG1)
@@ -101,9 +100,6 @@ proc testFixture(fixtures: JsonNode, testStatusIMPL: var TestStatus) =
     echo "Unknown test vector '" & $label & "'"
     testStatusIMPL = SKIPPED
 
-proc precompilesMain*() =
-  suite "Precompiles":
-    jsonTest("PrecompileTests", testFixture, skipPrecompilesTests)
+suite "Precompiles":
+  jsonTest("PrecompileTests", testFixture)
 
-when isMainModule:
-  precompilesMain()

@@ -1,5 +1,5 @@
 # Nimbus
-# Copyright (c) 2024 Status Research & Development GmbH
+# Copyright (c) 2024-2025 Status Research & Development GmbH
 # Licensed under either of
 #  * Apache License, version 2.0, ([LICENSE-APACHE](LICENSE-APACHE) or
 #    http://www.apache.org/licenses/LICENSE-2.0)
@@ -17,10 +17,8 @@ participants:
     cl_extra_params: ["--log-level=DEBUG"]
     use_separate_vc: false
 additional_services:
-  - tx_spammer
+  - spamoor
   - assertoor
-  - beacon_metrics_gazer
-  - blob_spammer
 mev_type: null
 assertoor_params:
   image: "ethpandaops/assertoor"

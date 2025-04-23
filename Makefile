@@ -1,4 +1,4 @@
-# Copyright (c) 2018-2024 Status Research & Development GmbH. Licensed under
+# Copyright (c) 2018-2025 Status Research & Development GmbH. Licensed under
 # either of:
 # - Apache License, version 2.0
 # - MIT license
@@ -71,13 +71,11 @@ TOOLS_CSV := $(subst $(SPACE),$(COMMA),$(TOOLS))
 # Fluffy debugging tools + testing tools
 FLUFFY_TOOLS := \
 	portal_bridge \
-	beacon_lc_bridge \
 	eth_data_exporter \
 	blockwalk \
 	portalcli \
 	fcli_db
 FLUFFY_TOOLS_DIRS := \
-	fluffy/tools/beacon_lc_bridge \
 	fluffy/tools/portal_bridge \
 	fluffy/tools/state_bridge \
 	fluffy/tools
@@ -85,14 +83,14 @@ FLUFFY_TOOLS_DIRS := \
 FLUFFY_TOOLS_CSV := $(subst $(SPACE),$(COMMA),$(FLUFFY_TOOLS))
 
 # Namespaced variables to avoid conflicts with other makefiles
-VERIF_PROXY_OS = $(shell $(CC) -dumpmachine)
-ifneq (, $(findstring darwin, $(VERIF_PROXY_OS)))
-  VERIF_PROXY_SHAREDLIBEXT = dylib
+OS_PLATFORM = $(shell $(CC) -dumpmachine)
+ifneq (, $(findstring darwin, $(OS_PLATFORM)))
+  SHAREDLIBEXT = dylib
 else
-ifneq (, $(findstring mingw, $(VERIF_PROXY_OS))$(findstring cygwin, $(VERIF_PROXY_OS))$(findstring msys, $(VERIF_PROXY_OS)))
-  VERIF_PROXY_SHAREDLIBEXT = dll
+ifneq (, $(findstring mingw, $(OS_PLATFORM))$(findstring cygwin, $(OS_PLATFORM))$(findstring msys, $(OS_PLATFORM)))
+  SHAREDLIBEXT = dll
 else
-  VERIF_PROXY_SHAREDLIBEXT = so
+  SHAREDLIBEXT = so
 endif
 endif
 
@@ -163,9 +161,6 @@ all: | $(TOOLS) nimbus_execution_client
 # must be included after the default target
 -include $(BUILD_SYSTEM_DIR)/makefiles/targets.mk
 
-# default: use nim native evm
-ENABLE_EVMC := 0
-
 # "-d:release" cannot be added to config.nims
 
 NIM_PARAMS += -d:release
@@ -187,12 +182,7 @@ ifneq ($(USE_LIBBACKTRACE), 0)
 deps: | libbacktrace
 endif
 
-ifneq ($(ENABLE_EVMC), 0)
-  NIM_PARAMS += -d:evmc_enabled
-  T8N_PARAMS := -d:chronicles_enabled=off
-endif
-
-# eth protocol settings, rules from "nimbus/sync/protocol/eth/variables.mk"
+# eth protocol settings, rules from "execution_chain/sync/protocol/eth/variables.mk"
 NIM_PARAMS := $(NIM_PARAMS) $(NIM_ETH_PARAMS)
 
 #- deletes and recreates "nimbus.nims" which on Windows is a copy instead of a proper symlink
@@ -213,7 +203,7 @@ $(TOOLS): | build deps rocksdb
 
 nimbus_execution_client: | build deps rocksdb
 	echo -e $(BUILD_MSG) "build/nimbus_execution_client" && \
-		$(ENV_SCRIPT) nim c $(NIM_PARAMS) -d:chronicles_log_level=TRACE -o:build/nimbus_execution_client "nimbus/nimbus_execution_client.nim"
+		$(ENV_SCRIPT) nim c $(NIM_PARAMS) -d:chronicles_log_level=TRACE -o:build/nimbus_execution_client "execution_chain/nimbus_execution_client.nim"
 
 nimbus: nimbus_execution_client
 	echo "The nimbus target is deprecated and will soon change meaning, use 'nimbus_execution_client' instead"
@@ -243,7 +233,6 @@ endif
 
 # builds and runs the nimbus test suite
 test: | build deps rocksdb
-	$(ENV_SCRIPT) nim test_rocksdb $(NIM_PARAMS) nimbus.nims
 	$(ENV_SCRIPT) nim test $(NIM_PARAMS) nimbus.nims
 
 test_import: nimbus_execution_client
@@ -253,6 +242,9 @@ test_import: nimbus_execution_client
 test-evm: | build deps rocksdb
 	$(ENV_SCRIPT) nim test_evm $(NIM_PARAMS) nimbus.nims
 
+build_fuzzers:
+	$(ENV_SCRIPT) nim build_fuzzers $(NIM_PARAMS) nimbus.nims
+  
 # Primitive reproducibility test.
 #
 # On some platforms, with some GCC versions, it may not be possible to get a
@@ -322,20 +314,20 @@ utp-test: | build deps
 # Nimbus Verified Proxy related targets
 
 # Builds the nimbus_verified_proxy
-nimbus_verified_proxy: | build deps
+nimbus_verified_proxy: | build deps rocksdb
 	echo -e $(BUILD_MSG) "build/$@" && \
 		$(ENV_SCRIPT) nim nimbus_verified_proxy $(NIM_PARAMS) nimbus.nims
 
 # builds and runs the nimbus_verified_proxy test suite
-nimbus-verified-proxy-test: | build deps
+nimbus-verified-proxy-test: | build deps rocksdb
 	$(ENV_SCRIPT) nim nimbus_verified_proxy_test $(NIM_PARAMS) nimbus.nims
 
 # Shared library for verified proxy
 
-libverifproxy: | build deps
+libverifproxy: | build deps rocksdb
 	+ echo -e $(BUILD_MSG) "build/$@" && \
 		$(ENV_SCRIPT) nim --version && \
-		$(ENV_SCRIPT) nim c --app:lib -d:"libp2p_pki_schemes=secp256k1" --noMain:on --threads:on --nimcache:nimcache/libverifproxy -o:$(VERIF_PROXY_OUT_PATH)/$@.$(VERIF_PROXY_SHAREDLIBEXT) $(NIM_PARAMS) nimbus_verified_proxy/libverifproxy/verifproxy.nim
+		$(ENV_SCRIPT) nim c --app:lib -d:"libp2p_pki_schemes=secp256k1" --noMain:on --threads:on --nimcache:nimcache/libverifproxy -o:$(VERIF_PROXY_OUT_PATH)/$@.$(SHAREDLIBEXT) $(NIM_PARAMS) nimbus_verified_proxy/libverifproxy/verifproxy.nim
 	cp nimbus_verified_proxy/libverifproxy/verifproxy.h $(VERIF_PROXY_OUT_PATH)/
 	echo -e $(BUILD_END_MSG) "build/$@"
 

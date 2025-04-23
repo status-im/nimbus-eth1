@@ -1,5 +1,5 @@
 # Fluffy
-# Copyright (c) 2022-2024 Status Research & Development GmbH
+# Copyright (c) 2022-2025 Status Research & Development GmbH
 # Licensed and distributed under either of
 #   * MIT license (license terms in the root directory or at https://opensource.org/licenses/MIT).
 #   * Apache v2 license (license terms in the root directory or at https://www.apache.org/licenses/LICENSE-2.0).
@@ -50,12 +50,12 @@ import
   json_rpc/rpcclient,
   snappy,
   ncli/e2store,
-  ../network/history/[history_content, validation/historical_hashes_accumulator],
+  ../network/history/
+    [history_content, validation/block_proof_historical_hashes_accumulator],
   ../eth_data/[history_data_json_store, history_data_ssz_e2s, era1],
   eth_data_exporter/[exporter_conf, exporter_common, cl_data_exporter],
   eth_data_exporter/[downloader, parser]
 
-from eth/common/eth_types_rlp import rlpHash
 # Need to be selective due to the `Block` type conflict from downloader
 from ../network/history/history_network import encode
 
@@ -222,7 +222,7 @@ proc cmdExportEra1(config: ExporterConf) =
 
         headerRecords.add(
           historical_hashes_accumulator.HeaderRecord(
-            blockHash: blck.header.rlpHash(), totalDifficulty: ttd
+            blockHash: blck.header.computeRlpHash(), totalDifficulty: ttd
           )
         )
 
@@ -362,7 +362,7 @@ when isMainModule:
                 except RlpError as e:
                   return err("Invalid block header: " & e.msg)
 
-              headerHash = to0xHex(rlpHash(blockHeader).data)
+              headerHash = to0xHex(computeRlpHash(blockHeader).data)
             debug "Header decoded successfully",
               hash = headerHash, blockNumber = blockHeader.number
           else:
@@ -579,7 +579,7 @@ when isMainModule:
 
         let epochRecordRes = readEpochRecordCached(epochRecordFile)
         if epochRecordRes.isErr():
-          error "Could not read epoch record file", error = res.error
+          error "Could not read epoch record file", error = epochRecordRes.error
           quit 1
 
         let epochRecord = epochRecordRes.get()
@@ -596,7 +596,7 @@ when isMainModule:
             content = headerWithProof.get()
             contentKey = ContentKey(
               contentType: blockHeader,
-              blockHeaderKey: BlockKey(blockHash: header.rlpHash()),
+              blockHeaderKey: BlockKey(blockHash: header.computeRlpHash()),
             )
             encodedContentKey = history_content.encode(contentKey)
             encodedContent = SSZ.encode(content)

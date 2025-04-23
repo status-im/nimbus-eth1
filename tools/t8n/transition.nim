@@ -1,5 +1,5 @@
 # Nimbus
-# Copyright (c) 2022-2024 Status Research & Development GmbH
+# Copyright (c) 2022-2025 Status Research & Development GmbH
 # Licensed under either of
 #  * Apache License, version 2.0, ([LICENSE-APACHE](LICENSE-APACHE) or
 #    http://www.apache.org/licenses/LICENSE-2.0)
@@ -15,16 +15,16 @@ import
   stint, results,
   "."/[config, types, helpers],
   ../common/state_clearing,
-  ../../nimbus/[evm/types, evm/state, transaction],
-  ../../nimbus/common/common,
-  ../../nimbus/db/ledger,
-  ../../nimbus/utils/utils,
-  ../../nimbus/core/pow/difficulty,
-  ../../nimbus/core/dao,
-  ../../nimbus/core/executor/[process_transaction, executor_helpers],
-  ../../nimbus/core/eip4844,
-  ../../nimbus/core/eip6110,
-  ../../nimbus/evm/tracer/json_tracer
+  ../../execution_chain/[evm/types, evm/state, transaction],
+  ../../execution_chain/common/common,
+  ../../execution_chain/db/ledger,
+  ../../execution_chain/utils/utils,
+  ../../execution_chain/core/pow/difficulty,
+  ../../execution_chain/core/dao,
+  ../../execution_chain/core/executor/[process_transaction, executor_helpers],
+  ../../execution_chain/core/eip4844,
+  ../../execution_chain/core/eip6110,
+  ../../execution_chain/evm/tracer/json_tracer
 
 const
   wrapExceptionEnabled* {.booldefine.} = true
@@ -133,7 +133,7 @@ proc toTxReceipt(rec: Receipt,
     cumulativeGasUsed: rec.cumulativeGasUsed,
     logsBloom: rec.logsBloom,
     logs: rec.logs,
-    transactionHash: rlpHash(tx),
+    transactionHash: computeRlpHash(tx),
     contractAddress: contractAddress,
     gasUsed: gasUsed,
     blockHash: default(Hash32),
@@ -144,13 +144,13 @@ proc calcLogsHash(receipts: openArray[Receipt]): Hash32 =
   var logs: seq[Log]
   for rec in receipts:
     logs.add rec.logs
-  rlpHash(logs)
+  computeRlpHash(logs)
 
 proc defaultTraceStreamFilename(conf: T8NConf,
                                 txIndex: int,
                                 txHash: Hash32): (string, string) =
   let
-    txHash = "0x" & toLowerAscii($txHash)
+    txHash = toLowerAscii($txHash)
     baseDir = if conf.outputBaseDir.len > 0:
                 conf.outputBaseDir
               else:
@@ -167,8 +167,9 @@ proc traceToFileStream(path: string, txIndex: int): Stream =
   # replace whatever `.ext` to `-${txIndex}.jsonl`
   let
     file = path.splitFile
-    fName = "$1/$2-$3.jsonl" % [file.dir, file.name, $txIndex]
-  createDir(file.dir)
+    folder = if file.dir.len == 0: "." else: file.dir
+    fName = "$1/$2-$3.jsonl" % [folder, file.name, $txIndex]
+  if file.dir.len > 0: createDir(file.dir)
   newFileStream(fName, fmWrite)
 
 proc setupTrace(conf: T8NConf, txIndex: int, txHash: Hash32, vmState: BaseVMState): bool =
@@ -227,7 +228,7 @@ proc exec(ctx: TransContext,
 
   if vmState.com.daoForkSupport and
      vmState.com.daoForkBlock.get == vmState.blockNumber:
-    vmState.mutateStateDB:
+    vmState.mutateLedger:
       db.applyDAOHardFork()
 
   vmState.receipts = newSeqOfCap[Receipt](ctx.txList.len)
@@ -267,7 +268,7 @@ proc exec(ctx: TransContext,
 
     var closeStream = true
     if conf.traceEnabled.isSome:
-      closeStream = setupTrace(conf, txIndex, rlpHash(tx), vmState)
+      closeStream = setupTrace(conf, txIndex, computeRlpHash(tx), vmState)
 
     let rc = vmState.processTransaction(tx, sender, header)
 
@@ -281,11 +282,10 @@ proc exec(ctx: TransContext,
       )
       continue
 
-    let gasUsed = rc.get()
-    let rec = vmState.makeReceipt(tx.txType)
+    let rec = vmState.makeReceipt(tx.txType, rc.value)
     vmState.receipts.add rec
     receipts.add toTxReceipt(
-      rec, tx, sender, txIndex, gasUsed
+      rec, tx, sender, txIndex, rc.value.gasUsed
     )
     includedTx.add tx
 
@@ -302,16 +302,16 @@ proc exec(ctx: TransContext,
       var uncleReward = 8.u256 - uncle.delta.u256
       uncleReward = uncleReward * blockReward
       uncleReward = uncleReward div 8.u256
-      vmState.mutateStateDB:
+      vmState.mutateLedger:
         db.addBalance(uncle.address, uncleReward)
       mainReward += blockReward div 32.u256
 
-    vmState.mutateStateDB:
+    vmState.mutateLedger:
       db.addBalance(ctx.env.currentCoinbase, mainReward)
 
   if ctx.env.withdrawals.isSome:
     for withdrawal in ctx.env.withdrawals.get:
-      vmState.stateDB.addBalance(withdrawal.address, withdrawal.weiAmount)
+      vmState.ledger.addBalance(withdrawal.address, withdrawal.weiAmount)
 
   let miner = ctx.env.currentCoinbase
   coinbaseStateClearing(vmState, miner, stateReward.isSome())
@@ -325,10 +325,10 @@ proc exec(ctx: TransContext,
     withdrawalReqs = processDequeueWithdrawalRequests(vmState)
     consolidationReqs = processDequeueConsolidationRequests(vmState)
 
-  let stateDB = vmState.stateDB
-  stateDB.postState(result.alloc)
+  let ledger = vmState.ledger
+  ledger.postState(result.alloc)
   result.result = ExecutionResult(
-    stateRoot   : stateDB.getStateRoot(),
+    stateRoot   : ledger.getStateRoot(),
     txRoot      : includedTx.calcTxRoot,
     receiptsRoot: calcReceiptsRoot(vmState.receipts),
     logsHash    : calcLogsHash(vmState.receipts),
@@ -343,22 +343,37 @@ proc exec(ctx: TransContext,
     withdrawalsRoot  : header.withdrawalsRoot
   )
 
-  if vmState.com.isCancunOrLater(ctx.env.currentTimestamp):
+  var excessBlobGas = Opt.none(GasInt)
+  if ctx.env.currentExcessBlobGas.isSome:
+    excessBlobGas = ctx.env.currentExcessBlobGas
+  elif ctx.env.parentExcessBlobGas.isSome and ctx.env.parentBlobGasUsed.isSome:
+    excessBlobGas = Opt.some calcExcessBlobGas(vmState.parent, vmState.fork >= FkPrague)
+
+  if excessBlobGas.isSome:
     result.result.blobGasUsed = Opt.some vmState.blobGasUsed
-    if ctx.env.currentExcessBlobGas.isSome:
-      result.result.currentExcessBlobGas = ctx.env.currentExcessBlobGas
-    elif ctx.env.parentExcessBlobGas.isSome and ctx.env.parentBlobGasUsed.isSome:
-      result.result.currentExcessBlobGas = Opt.some calcExcessBlobGas(vmState.parent)
+    result.result.currentExcessBlobGas = excessBlobGas
 
   if vmState.com.isPragueOrLater(ctx.env.currentTimestamp):
     var allLogs: seq[Log]
     for rec in result.result.receipts:
       allLogs.add rec.logs
-    let
-      depositReqs = parseDepositLogs(allLogs).valueOr:
+    var
+      depositReqs = parseDepositLogs(allLogs, vmState.com.depositContractAddress).valueOr:
         raise newError(ErrorEVM, error)
-      requestsHash = calcRequestsHash(depositReqs, withdrawalReqs, consolidationReqs)
+      executionRequests: seq[seq[byte]]
+
+    template append(dst, reqType, reqData) =
+      if reqData.len > 0:
+        reqData.insert(reqType)
+        dst.add(move(reqData))
+
+    executionRequests.append(DEPOSIT_REQUEST_TYPE, depositReqs)
+    executionRequests.append(WITHDRAWAL_REQUEST_TYPE, withdrawalReqs)
+    executionRequests.append(CONSOLIDATION_REQUEST_TYPE, consolidationReqs)
+
+    let requestsHash = calcRequestsHash(executionRequests)
     result.result.requestsHash = Opt.some(requestsHash)
+    result.result.requests = Opt.some(executionRequests)
 
 template wrapException(body: untyped) =
   when wrapExceptionEnabled:
@@ -373,14 +388,14 @@ template wrapException(body: untyped) =
   else:
     body
 
-proc setupAlloc(stateDB: LedgerRef, alloc: GenesisAlloc) =
+proc setupAlloc(ledger: LedgerRef, alloc: GenesisAlloc) =
   for accAddr, acc in alloc:
-    stateDB.setNonce(accAddr, acc.nonce)
-    stateDB.setCode(accAddr, acc.code)
-    stateDB.setBalance(accAddr, acc.balance)
+    ledger.setNonce(accAddr, acc.nonce)
+    ledger.setCode(accAddr, acc.code)
+    ledger.setBalance(accAddr, acc.balance)
 
     for slot, value in acc.storage:
-      stateDB.setStorage(accAddr, slot, value)
+      ledger.setStorage(accAddr, slot, value)
 
 method getAncestorHash(vmState: TestVMState; blockNumber: BlockNumber): Hash32 =
   # we can't raise exception here, it'll mess with EVM exception handler.
@@ -424,11 +439,6 @@ proc transitionAction*(ctx: var TransContext, conf: T8NConf) =
     if conf.inputAlloc.len == 0 and conf.inputEnv.len == 0 and conf.inputTxs.len == 0:
       raise newError(ErrorConfig, "either one of input is needeed(alloc, txs, or env)")
 
-    let config = parseChainConfig(conf.stateFork)
-    config.chainId = conf.stateChainId.ChainId
-
-    let com = CommonRef.new(newCoreDbRef DefaultDbMemory, config)
-
     # We need to load three things: alloc, env and transactions.
     # May be either in stdin input or in files.
 
@@ -446,7 +456,7 @@ proc transitionAction*(ctx: var TransContext, conf: T8NConf) =
     if conf.inputTxs != stdinSelector and conf.inputTxs.len > 0:
       if conf.inputTxs.endsWith(".rlp"):
         let data = readFile(conf.inputTxs)
-        ctx.parseTxsRlp(data.strip(chars={'"'}))
+        ctx.parseTxsRlp(data.strip(chars={'"', ' ', '\r', '\n', '\t'}))
       else:
         ctx.parseTxsJson(conf.inputTxs)
 
@@ -465,6 +475,12 @@ proc transitionAction*(ctx: var TransContext, conf: T8NConf) =
       excessBlobGas: ctx.env.parentExcessBlobGas,
     )
 
+    let config = parseChainConfig(conf.stateFork)
+    config.depositContractAddress = ctx.env.depositContractAddress
+    config.chainId = conf.stateChainId.ChainId
+
+    let com = CommonRef.new(newCoreDbRef DefaultDbMemory, Taskpool.new(), config)
+
     # Sanity check, to not `panic` in state_transition
     if com.isLondonOrLater(ctx.env.currentNumber):
       if ctx.env.currentBaseFee.isSome:
@@ -481,10 +497,6 @@ proc transitionAction*(ctx: var TransContext, conf: T8NConf) =
     if com.isCancunOrLater(ctx.env.currentTimestamp):
       if ctx.env.parentBeaconBlockRoot.isNone:
         raise newError(ErrorConfig, "Cancun config but missing 'parentBeaconBlockRoot' in env section")
-
-      let res = loadKzgTrustedSetup()
-      if res.isErr:
-        raise newError(ErrorConfig, res.error)
     else:
       # un-set it if it has been set too early
       ctx.env.parentBeaconBlockRoot = Opt.none(Hash32)
@@ -519,7 +531,7 @@ proc transitionAction*(ctx: var TransContext, conf: T8NConf) =
       # If it is not explicitly defined, but we have the parent values, we try
       # to calculate it ourselves.
       if parent.excessBlobGas.isSome and parent.blobGasUsed.isSome:
-        ctx.env.currentExcessBlobGas = Opt.some calcExcessBlobGas(parent)
+        ctx.env.currentExcessBlobGas = Opt.some calcExcessBlobGas(parent, com.isPragueOrLater(ctx.env.currentTimestamp))
 
     let header  = envToHeader(ctx.env)
 
@@ -532,10 +544,11 @@ proc transitionAction*(ctx: var TransContext, conf: T8NConf) =
       parent      = parent,
       header      = header,
       com         = com,
+      txFrame     = com.db.baseTxFrame(),
       storeSlotHash = true
     )
 
-    vmState.mutateStateDB:
+    vmState.mutateLedger:
       db.setupAlloc(ctx.alloc)
       db.persist(clearEmptyAccount = false)
 

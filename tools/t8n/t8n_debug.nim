@@ -1,5 +1,5 @@
 # Nimbus
-# Copyright (c) 2024 Status Research & Development GmbH
+# Copyright (c) 2024-2025 Status Research & Development GmbH
 # Licensed under either of
 #  * Apache License, version 2.0, ([LICENSE-APACHE](LICENSE-APACHE) or
 #    http://www.apache.org/licenses/LICENSE-2.0)
@@ -14,7 +14,7 @@ import
   eth/common/eth_types_rlp,
   web3/conversions,
   web3/engine_api_types,
-  ../../nimbus/beacon/web3_eth_conv
+  ../../execution_chain/beacon/web3_eth_conv
 
 const
   testFile = "tests/fixtures/eth_tests/BlockchainTests/GeneralStateTests/Pyspecs/cancun/eip4844_blobs/fork_transition_excess_blob_gas.json"
@@ -154,13 +154,13 @@ func toInput(prevAlloc: JsonString,
 func collectHashes(genesis: Block, blocks: openArray[Block]): BCTHashes =
   result.hashes.add BCTHash(
     number: w3Qty(genesis.header.number),
-    hash: rlpHash(genesis.header),
+    hash: computeRlpHash(genesis.header),
   )
 
   for blk in blocks:
     result.hashes.add BCTHash(
       number: w3Qty(blk.header.number),
-      hash: rlpHash(blk.header),
+      hash: computeRlpHash(blk.header),
     )
 
 func eth(n: int): UInt256 {.compileTime.} =

@@ -1,74 +1,34 @@
 # Fluffy
-# Copyright (c) 2022-2024 Status Research & Development GmbH
+# Copyright (c) 2022-2025 Status Research & Development GmbH
 # Licensed and distributed under either of
 #   * MIT license (license terms in the root directory or at https://opensource.org/licenses/MIT).
 #   * Apache v2 license (license terms in the root directory or at https://www.apache.org/licenses/LICENSE-2.0).
 # at your option. This file may not be copied, modified, or distributed except according to those terms.
-
-# This is a PoC of how execution block headers in the Portal history network
-# could be proven to be part of the canonical chain by means of a proof that
-# exists out a chain of proofs.
 #
-# To verify this proof you need access to the BeaconState field
-# historical_roots and the block hash of the execution block.
+# Implementation of post-merge block proofs by making use of the historical_roots
+# accumulator.
+# Types are defined here:
+# https://github.com/ethereum/portal-network-specs/blob/31bc7e58e2e8acfba895d5a12a9ae3472894d398/history/history-network.md#block-header
 #
-# The chain traverses from proving that the block hash is the one of the
-# ExecutionPayload in the BeaconBlockBody, to proving that this BeaconBlockBody
-# is the one that is rooted in the BeaconBlockHeader, to proving that this
-# BeaconBlockHeader is rooted in the historical_roots.
+# Proof system explained here:
+# https://github.com/ethereum/portal-network-specs/blob/31bc7e58e2e8acfba895d5a12a9ae3472894d398/history/history-network.md#blockproofhistoricalroots
 #
-# TODO: The middle proof is perhaps a bit silly as it doesn't win much space
-# compared to just providing the BeaconHeader.
+# The proof chain traverses from proving that the block hash is the one of the
+# ExecutionPayload in the BeaconBlock to proving that this BeaconBlock is rooted
+# in the historical_roots.
+#
+# The historical_roots accumulator is frozen at the Capella fork, this means that
+# it can only be used for the blocks from TheMerge until the Capella fork (= Bellatrix).
 #
 # Requirements:
 #
-# For building the proofs:
-# - Node that has access to all the beacon chain data (state and blocks) and
-# - it will be required to rebuild the HistoricalBatches.
+# - For building the proofs:
+# Portal node/bridge that has access to all the beacon chain data (blocks +
+# specific state) for that specific period. This can be provided through era files.
 #
-# For verifying the proofs:
-# - As mentioned, the historical_roots field of the state is required. This
-# is currently in no way available over any of the consensus layer libp2p
-# protocols. Thus a light client cannot really be build using these proofs,
-# which makes it rather useless for now.
-# - The historical_roots could be put available on the network together with
-# a proof against the right state root. An example of this can be seen in
-# ./fluffy/network/history/experimental/beacon_chain_historical_roots.nim
-#
-# Caveat:
-#
-# Roots in historical_roots are only added every `SLOTS_PER_HISTORICAL_ROOT`
-# slots. Recent blocks that are not part of a historical_root cannot be proven
-# through this mechanism. They need to be directly looked up in the block_roots
-# BeaconState field.
-#
-# Alternative:
-#
-# This PoC is written with the idea of keeping execution BlockHeaders and
-# BlockBodies available in the Portal history network in the same way post-merge
-# as it is pre-merge. One could also simply decide to store the BeaconBlocks or
-# BeaconBlockHeaders and BeaconBlockBodies directly. And get the execution
-# payloads from there. This would require only 1 (or two, depending on what you
-# store) of the proofs and might be more convenient if you want to / need to
-# store the beacon data also on the network. It would require some rebuilding
-# the structure of the Execution BlockHeader.
-#
-# Alternative ii:
-#
-# Verifying a specific block could also be done by making use of the
-# LightClientUpdates. Picking the closest update, and walking back blocks from
-# that block to the specific block. How much data is required to download would
-# depend on the location of the block, but it could be quite significant.
-# Of course, this again could be thrown in some accumulator, but that would
-# then be required to be stored on the state to make it easy verifiable.
-# A PoC of this process would be nice and it could be more useful for a system
-# like the Nimbus verified proxy.
-#
-#
-# The usage of this PoC can be seen in
-# ./fluffy/tests/test_beacon_chain_block_proof.nim
-#
-# TODO: Probably needs to make usage of forks instead of just bellatrix.
+# - For verifying the proofs:
+# To verify the proof the historical_roots field of the BeaconState is required.
+# As this field is frozen, it can be baked into the client.
 #
 
 {.push raises: [].}
@@ -78,20 +38,24 @@ import
   ssz_serialization,
   ssz_serialization/[proofs, merkleization],
   beacon_chain/spec/eth2_ssz_serialization,
+  beacon_chain/spec/ssz_codec,
   beacon_chain/spec/datatypes/bellatrix,
+  beacon_chain/spec/forks,
   ./block_proof_common
 
-export block_proof_common
+export block_proof_common, ssz_codec
 
 type
   BeaconBlockProofHistoricalRoots* = array[14, Digest]
 
   BlockProofHistoricalRoots* = object
-    # Total size (11 + 1 + 14) * 32 bytes + 4 bytes = 836 bytes
+    # Total size (14 + 1 + 11) * 32 bytes + 4 bytes = 836 bytes
     beaconBlockProof*: BeaconBlockProofHistoricalRoots
     beaconBlockRoot*: Digest
     executionBlockProof*: ExecutionBlockProof
     slot*: Slot
+
+  HistoricalRoots* = HashList[Digest, Limit HISTORICAL_ROOTS_LIMIT]
 
 func getHistoricalRootsIndex*(slot: Slot): uint64 =
   slot div SLOTS_PER_HISTORICAL_ROOT
@@ -149,7 +113,7 @@ func verifyProof*(
   verify_merkle_multiproof(@[blockHeaderRoot], proof, @[gIndex], historicalRoot)
 
 func verifyProof*(
-    historical_roots: HashList[Eth2Digest, Limit HISTORICAL_ROOTS_LIMIT],
+    historical_roots: HistoricalRoots,
     proof: BlockProofHistoricalRoots,
     blockHash: Digest,
 ): bool =

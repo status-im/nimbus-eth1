@@ -1,5 +1,5 @@
 # Nimbus
-# Copyright (c) 2019-2024 Status Research & Development GmbH
+# Copyright (c) 2019-2025 Status Research & Development GmbH
 # Licensed under either of
 #  * Apache License, version 2.0, ([LICENSE-APACHE](LICENSE-APACHE) or
 #    http://www.apache.org/licenses/LICENSE-2.0)
@@ -10,9 +10,9 @@
 
 import
   macro_assembler, unittest2,
-  stew/byteutils, ../nimbus/common/common,
-  ../nimbus/[evm/state, constants],
-  ../nimbus/db/ledger
+  stew/byteutils, ../execution_chain/common/common,
+  ../execution_chain/[evm/state, constants],
+  ../execution_chain/db/ledger
 
 proc opEnvMain*() =
   suite "Environmental Information Opcodes":
@@ -213,7 +213,7 @@ proc opEnvMain*() =
     assembler: # EXTCODECOPY OP
       title: "EXTCODECOPY_1"
       setup:
-        vmState.mutateStateDB:
+        vmState.mutateLedger:
           db.setCode(acc, code)
       code:
         Push1 "0x04" # size
@@ -231,7 +231,7 @@ proc opEnvMain*() =
     assembler: # EXTCODECOPY OP
       title: "EXTCODECOPY_2"
       setup:
-        vmState.mutateStateDB:
+        vmState.mutateLedger:
           db.setCode(acc, code)
       code:
         Push1 "0x3E"
@@ -251,7 +251,7 @@ proc opEnvMain*() =
     assembler: # EXTCODECOPY OP
       title: "EXTCODECOPY_3"
       setup:
-        vmState.mutateStateDB:
+        vmState.mutateLedger:
           db.setCode(acc, code)
       code:
         Push1 "0x5E"
@@ -272,7 +272,7 @@ proc opEnvMain*() =
     assembler: # EXTCODECOPY OP
       title: "EXTCODECOPY_4"
       setup:
-        vmState.mutateStateDB:
+        vmState.mutateLedger:
           db.setCode(acc, code)
       code:
         Push2 "0x1234"
@@ -327,7 +327,7 @@ proc opEnvMain*() =
     assembler: # EXTCODESIZE OP
       title: "EXTCODESIZE_1"
       setup:
-        vmState.mutateStateDB:
+        vmState.mutateLedger:
           db.setCode(acc, code)
       code:
         Push20 "0xfbe0afcd7658ba86be41922059dd879c192d4c73"
@@ -342,7 +342,7 @@ proc opEnvMain*() =
     assembler: # EIP2929 EXTCODESIZE OP
       title: "EIP2929 EXTCODESIZE_1"
       setup:
-        vmState.mutateStateDB:
+        vmState.mutateLedger:
           db.setCode(acc, code)
       code:
         Push20 "0xfbe0afcd7658ba86be41922059dd879c192d4c73"
@@ -355,7 +355,7 @@ proc opEnvMain*() =
     assembler: # EIP2929 EXTCODEHASH OP
       title: "EIP2929 EXTCODEHASH_1"
       setup:
-        vmState.mutateStateDB:
+        vmState.mutateLedger:
           db.setCode(acc, code)
       code:
         Push20 "0xfbe0afcd7658ba86be41922059dd879c192d4c73"
@@ -466,5 +466,4 @@ proc opEnvMain*() =
       gasused: 2
       fork: Cancun
 
-when isMainModule:
-  opEnvMain()
+opEnvMain()

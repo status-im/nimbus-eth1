@@ -1,5 +1,5 @@
 # fluffy
-# Copyright (c) 2021-2024 Status Research & Development GmbH
+# Copyright (c) 2021-2025 Status Research & Development GmbH
 # Licensed and distributed under either of
 #   * MIT license (license terms in the root directory or at https://opensource.org/licenses/MIT).
 #   * Apache v2 license (license terms in the root directory or at https://www.apache.org/licenses/LICENSE-2.0).
@@ -31,12 +31,21 @@ type
     blockBody = 0x01
     receipts = 0x02
     blockNumber = 0x03
+    ephemeralBlockHeaderFindContent = 0x04
+    ephemeralBlockHeaderOffer = 0x05
 
   BlockKey* = object
     blockHash*: Hash32
 
   BlockNumberKey* = object
     blockNumber*: uint64
+
+  EphemeralBlockHeaderFindContentKey = object
+    blockHash*: Hash32
+    ancestorCount*: uint8
+
+  EphemeralBlockHeaderOfferKey = object
+    blockHash*: Hash32
 
   ContentKey* = object
     case contentType*: ContentType
@@ -48,6 +57,10 @@ type
       receiptsKey*: BlockKey
     of blockNumber:
       blockNumberKey*: BlockNumberKey
+    of ephemeralBlockHeaderFindContent:
+      ephemeralBlockHeaderFindContentKey*: EphemeralBlockHeaderFindContentKey
+    of ephemeralBlockHeaderOffer:
+      ephemeralBlockHeaderOfferKey*: EphemeralBlockHeaderOfferKey
 
 func blockHeaderContentKey*(id: Hash32 | uint64): ContentKey =
   when id is Hash32:
@@ -62,6 +75,22 @@ func blockBodyContentKey*(blockHash: Hash32): ContentKey =
 
 func receiptsContentKey*(blockHash: Hash32): ContentKey =
   ContentKey(contentType: receipts, receiptsKey: BlockKey(blockHash: blockHash))
+
+func ephemeralBlockHeaderFindContentContentKey*(
+    blockHash: Hash32, ancestorCount: uint8
+): ContentKey =
+  ContentKey(
+    contentType: ephemeralBlockHeaderFindContent,
+    ephemeralBlockHeaderFindContentKey: EphemeralBlockHeaderFindContentKey(
+      blockHash: blockHash, ancestorCount: ancestorCount
+    ),
+  )
+
+func ephemeralBlockHeaderOfferContentKey*(blockHash: Hash32): ContentKey =
+  ContentKey(
+    contentType: ephemeralBlockHeaderOffer,
+    ephemeralBlockHeaderOfferKey: EphemeralBlockHeaderOfferKey(blockHash: blockHash),
+  )
 
 func encode*(contentKey: ContentKey): ContentKeyByteList =
   ContentKeyByteList.init(SSZ.encode(contentKey))
@@ -95,6 +124,10 @@ func `$`*(x: ContentKey): string =
     res.add($x.receiptsKey)
   of blockNumber:
     res.add($x.blockNumberKey)
+  of ephemeralBlockHeaderFindContent:
+    res.add($x.ephemeralBlockHeaderFindContentKey)
+  of ephemeralBlockHeaderOffer:
+    res.add($x.ephemeralBlockHeaderOfferKey)
 
   res.add(")")
 

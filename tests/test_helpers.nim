@@ -1,5 +1,5 @@
 # Nimbus
-# Copyright (c) 2018-2024 Status Research & Development GmbH
+# Copyright (c) 2018-2025 Status Research & Development GmbH
 # Licensed under either of
 #  * Apache License, version 2.0, ([LICENSE-APACHE](LICENSE-APACHE) or http://www.apache.org/licenses/LICENSE-2.0)
 #  * MIT license ([LICENSE-MIT](LICENSE-MIT) or http://opensource.org/licenses/MIT)
@@ -7,35 +7,38 @@
 
 import
   std/[os, macros, json, strformat, strutils, tables],
-  stew/byteutils, net, eth/[common/keys, p2p], unittest2,
+  stew/byteutils, net, eth/common/keys, unittest2,
   testutils/markdown_reports,
-  ../nimbus/[constants, config, transaction, errors],
-  ../nimbus/db/ledger,
-  ../nimbus/common/[context, common]
+  ../execution_chain/[constants, config, transaction, errors],
+  ../execution_chain/db/ledger,
+  ../execution_chain/common/[context, common],
+  ../execution_chain/networking/p2p
 
-func revmap(x: Table[EVMFork, string]): Table[string, EVMFork] =
-  result = Table[string, EVMFork]()
-  for k, v in x:
+func revTable(list: array[FkFrontier..FkLatest, string]): Table[string, EVMFork] =
+  for k, v in list:
     result[v] = k
 
 const
   # from https://ethereum-tests.readthedocs.io/en/latest/test_types/state_tests.html
-  forkNames* = {
-    FkFrontier: "Frontier",
-    FkHomestead: "Homestead",
-    FkTangerine: "EIP150",
-    FkSpurious: "EIP158",
-    FkByzantium: "Byzantium",
-    FkConstantinople: "Constantinople",
-    FkPetersburg: "ConstantinopleFix",
-    FkIstanbul: "Istanbul",
-    FkBerlin: "Berlin",
-    FkLondon: "London",
-    FkParis: "Merge",
-    FkPrague: "Prague",
-  }.toTable
+  ForkToName: array[FkFrontier..FkLatest, string] = [
+    "Frontier",             # FkFrontier
+    "Homestead",            # FkHomestead
+    "EIP150",               # FkTangerine
+    "EIP158",               # FkSpurious
+    "Byzantium",            # FkByzantium
+    "Constantinople",       # FkConstantinople
+    "ConstantinopleFix",    # FkPetersburg
+    "Istanbul",             # FkIstanbul
+    "Berlin",               # FkBerlin
+    "London",               # FkLondon
+    "Merge",                # FkParis
+    "Shanghai",             # FkShanghai
+    "Cancun",               # FkCancun
+    "Prague",               # FkPrague
+    "Osaka",                # FkOsaka
+  ]
 
-  nameToFork* = revmap(forkNames)
+  nameToFork* = ForkToName.revTable
 
 func skipNothing*(folder: string, name: string): bool = false
 
@@ -107,7 +110,7 @@ func getHexadecimalInt*(j: JsonNode): int64 =
   data = fromHex(StUint[64], j.getStr)
   result = cast[int64](data)
 
-proc verifyStateDB*(wantedState: JsonNode, stateDB: ReadOnlyStateDB) =
+proc verifyLedger*(wantedState: JsonNode, ledger: ReadOnlyLedger) =
   for ac, accountData in wantedState:
     let account = EthAddress.fromHex(ac)
     for slot, value in accountData{"storage"}:
@@ -115,7 +118,7 @@ proc verifyStateDB*(wantedState: JsonNode, stateDB: ReadOnlyStateDB) =
         slotId = UInt256.fromHex slot
         wantedValue = UInt256.fromHex value.getStr
 
-      let actualValue = stateDB.getStorage(account, slotId)
+      let actualValue = ledger.getStorage(account, slotId)
       #if not found:
       #  raise newException(ValidationError, "account not found:  " & ac)
       if actualValue != wantedValue:
@@ -126,9 +129,9 @@ proc verifyStateDB*(wantedState: JsonNode, stateDB: ReadOnlyStateDB) =
       wantedBalance = UInt256.fromHex accountData{"balance"}.getStr
       wantedNonce = accountData{"nonce"}.getHexadecimalInt.AccountNonce
 
-      actualCode = stateDB.getCode(account).bytes()
-      actualBalance = stateDB.getBalance(account)
-      actualNonce = stateDB.getNonce(account)
+      actualCode = ledger.getCode(account).bytes()
+      actualBalance = ledger.getBalance(account)
+      actualNonce = ledger.getNonce(account)
 
     if wantedCode != actualCode:
       raise newException(ValidationError, &"{ac} codeDiff {wantedCode.toHex} != {actualCode.toHex}")

@@ -1,5 +1,5 @@
 # Nimbus
-# Copyright (c) 2020-2024 Status Research & Development GmbH
+# Copyright (c) 2020-2025 Status Research & Development GmbH
 # Licensed under either of
 #  * Apache License, version 2.0, ([LICENSE-APACHE](LICENSE-APACHE) or
 #    http://www.apache.org/licenses/LICENSE-2.0)
@@ -118,6 +118,20 @@ proc fromJson*[T: Bytes32 | Hash32](n: JsonNode, name: string, x: var seq[T]) =
     hexToByteArray(v.getStr(), h.data)
     x.add h
 
+proc parseAuth(n: JsonNode): Authorization =
+  n.fromJson("chainId", result.chainId)
+  n.fromJson("address", result.address)
+  n.fromJson("nonce", result.nonce)
+  n.fromJson("v", result.v)
+  n.fromJson("r", result.r)
+  n.fromJson("s", result.s)
+
+proc fromJson*(n: JsonNode, name: string, x: var seq[Authorization]) =
+  let node = n[name]
+  for v in node:
+    x = newSeqOfCap[Authorization](node.len)
+    x.add parseAuth(node)
+
 proc parseBlockHeader*(n: JsonNode): Header =
   n.fromJson "parentHash", result.parentHash
   n.fromJson "sha3Uncles", result.ommersHash
@@ -176,19 +190,22 @@ proc parseTransaction*(n: JsonNode): Transaction =
 
   if tx.txType >= TxEip2930:
     if n.hasKey("chainId"):
-      let id = hexToInt(n["chainId"].getStr(), int)
-      tx.chainId = ChainId(id)
+      let id = parse(n["chainId"].getStr(), UInt256, 16)
+      tx.chainId = id
 
     let accessList = n["accessList"]
     if accessList.len > 0:
       for acn in accessList:
         tx.accessList.add parseAccessPair(acn)
 
-  if tx.txType >= TxEip4844:
+  if tx.txType == TxEip4844:
     n.fromJson "maxFeePerBlobGas", tx.maxFeePerBlobGas
 
-  if n.hasKey("versionedHashes") and n["versionedHashes"].kind != JNull:
-    n.fromJson "versionedHashes", tx.versionedHashes
+    if n.hasKey("versionedHashes") and n["versionedHashes"].kind != JNull:
+      n.fromJson "versionedHashes", tx.versionedHashes
+
+  if tx.txType == TxEip7702:
+    n.fromJson "authorizationList", tx.authorizationList
 
   tx
 
@@ -203,7 +220,7 @@ proc validateTxSenderAndHash*(n: JsonNode, tx: Transaction) =
   var fromAddr: Address
   n.fromJson "from", fromAddr
   doAssert sender.to0xHex == fromAddr.to0xHex
-  doAssert n["hash"].getStr() == tx.rlpHash().to0xHex
+  doAssert n["hash"].getStr() == tx.computeRlpHash().to0xHex
 
 proc parseLog(n: JsonNode): Log =
   n.fromJson "address", result.address

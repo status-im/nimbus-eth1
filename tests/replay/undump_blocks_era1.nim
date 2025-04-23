@@ -1,5 +1,5 @@
 # Nimbus
-# Copyright (c) 2021-2024 Status Research & Development GmbH
+# Copyright (c) 2021-2025 Status Research & Development GmbH
 # Licensed under either of
 #  * Apache License, version 2.0, ([LICENSE-APACHE](LICENSE-APACHE) or
 #    http://www.apache.org/licenses/LICENSE-2.0)
@@ -8,7 +8,7 @@
 # at your option. This file may not be copied, modified, or distributed except
 # according to those terms.
 
-import results, eth/common, ../../nimbus/db/era1_db
+import results, eth/common, ../../execution_chain/db/era1_db
 
 var noisy* = false
 
@@ -30,14 +30,14 @@ iterator undumpBlocksEra1*(
   #      a time and let the consumer do the chunking
   const blocksPerYield = 192
   var tmp = newSeqOfCap[EthBlock](blocksPerYield)
-
+  var blk: Block
   for i in 0 ..< stopAfter:
-    var bck = db.getEthBlock(least + i).valueOr:
+    db.getEthBlock(least + i, blk).isOkOr:
       if doAssertOk:
         doAssert i > 0, "expected at least one block"
       break
 
-    tmp.add move(bck)
+    tmp.add move(blk)
 
     # Genesis block requires a chunk of its own, for compatibility with current
     # test setup (a bit weird, that...)

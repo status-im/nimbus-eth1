@@ -1,5 +1,5 @@
 # Nimbus - Portal Network
-# Copyright (c) 2021-2024 Status Research & Development GmbH
+# Copyright (c) 2021-2025 Status Research & Development GmbH
 # Licensed and distributed under either of
 #   * MIT license (license terms in the root directory or at https://opensource.org/licenses/MIT).
 #   * Apache v2 license (license terms in the root directory or at https://www.apache.org/licenses/LICENSE-2.0).
@@ -19,12 +19,10 @@ import
   eth/p2p/discoveryv5/protocol as discv5_protocol,
   ../../network/wire/[portal_protocol, portal_stream, portal_protocol_config],
   ../../network/history/
-    [history_network, history_content, validation/historical_hashes_accumulator],
+    [history_network, history_content, history_type_conversions, history_validation],
   ../../database/content_db,
   ../../rpc/[portal_rpc_client, rpc_portal_history_api],
   ../test_helpers
-
-from eth/common/eth_types_rlp import rlpHash
 
 type HistoryNode = ref object
   discoveryProtocol*: discv5_protocol.Protocol
@@ -38,7 +36,12 @@ proc newHistoryNode(rng: ref HmacDrbgContext, port: int): HistoryNode =
     )
     streamManager = StreamManager.new(node)
     historyNetwork = HistoryNetwork.new(
-      PortalNetwork.none, node, db, streamManager, FinishedHistoricalHashesAccumulator()
+      PortalNetwork.none,
+      node,
+      db,
+      streamManager,
+      RuntimeConfig(),
+      FinishedHistoricalHashesAccumulator(),
     )
 
   return HistoryNode(discoveryProtocol: node, historyNetwork: historyNetwork)
@@ -63,7 +66,8 @@ proc store*(hn: HistoryNode, blockHash: Hash32, blockHeader: Header) =
   let
     headerRlp = rlp.encode(blockHeader)
     blockHeaderWithProof = BlockHeaderWithProof(
-      header: ByteList[2048].init(headerRlp), proof: BlockHeaderProof.init()
+      header: ByteList[MAX_HEADER_LENGTH].init(headerRlp),
+      proof: ByteList[MAX_HEADER_PROOF_LENGTH].init(@[]),
     )
     contentKeyBytes = blockHeaderContentKey(blockHash).encode()
     contentId = history_content.toContentId(contentKeyBytes)
@@ -137,7 +141,7 @@ procSuite "Portal RPC Client":
     let
       tc = await setupTest(rng)
       blockHeader = Header(number: 100)
-      blockHash = blockHeader.rlpHash()
+      blockHash = blockHeader.computeRlpHash()
 
     # Test content not found
     block:
@@ -173,7 +177,7 @@ procSuite "Portal RPC Client":
     let
       tc = await setupTest(rng)
       blockHeader = Header(number: 200)
-      blockHash = blockHeader.rlpHash()
+      blockHash = blockHeader.computeRlpHash()
 
     # Test content not found
     block:
@@ -200,7 +204,7 @@ procSuite "Portal RPC Client":
       tc = await setupTest(rng)
       blockHeader = Header(number: 300)
       blockBody = BlockBody()
-      blockHash = blockHeader.rlpHash()
+      blockHash = blockHeader.computeRlpHash()
 
     # Test content not found
     block:
@@ -228,7 +232,7 @@ procSuite "Portal RPC Client":
       tc = await setupTest(rng)
       blockHeader = Header(number: 300)
       blockBody = BlockBody()
-      blockHash = blockHeader.rlpHash()
+      blockHash = blockHeader.computeRlpHash()
 
     # Test content not found
     block:
@@ -256,7 +260,7 @@ procSuite "Portal RPC Client":
       tc = await setupTest(rng)
       blockHeader = Header(number: 300)
       receipts = @[Receipt()]
-      blockHash = blockHeader.rlpHash()
+      blockHash = blockHeader.computeRlpHash()
 
     # Test content not found
     block:
@@ -284,7 +288,7 @@ procSuite "Portal RPC Client":
       tc = await setupTest(rng)
       blockHeader = Header(number: 300)
       receipts = @[Receipt()]
-      blockHash = blockHeader.rlpHash()
+      blockHash = blockHeader.computeRlpHash()
 
     # Test content not found
     block:

@@ -2,7 +2,7 @@
     "payload": {
       "baseFeePerGas": "0x7",
       "blobGasUsed": "0x40000",
-      "blockHash": "0x187307d7dc9beb87af2a1d8340e9f17a3bbe4738963daeaf6d8e13b27b2d6a7f",
+      "blockHash": "0x2ad74d1c5c12bcdedbdc821ae5d18f44e732b4096b6496a23bd9483d202003c5",
       "blockNumber": "0x94b2",
       "excessBlobGas": "0x0",
       "extraData": "0xd883010e0c846765746888676f312e32332e32856c696e7578",
@@ -34,9 +34,5 @@
       "0x0139c61fb5022f854e37742230a76e524166c0f1b2d67a152d4f5a488b5159c1"
     ],
     "parentBeaconBlockRoot": "0x25b66ce21990ffcbbb6248952c6ef7939dbddfb90f6659a2bb43ff369f47c23b",
-    "executionRequests": [
-      "0x",
-      "0x",
-      "0x"
-    ]
+    "executionRequests": []
 }

@@ -39,7 +39,7 @@ suite "State Gossip getParent - Test Vectors":
           parentKey.toContentKey().encode() ==
             parentTestData.content_key.hexToSeqByte().ContentKeyByteList
           parentOffer.encode() == parentTestData.content_value_offer.hexToSeqByte()
-          parentOffer.toRetrievalValue().encode() ==
+          parentOffer.toRetrieval().encode() ==
             parentTestData.content_value_retrieval.hexToSeqByte()
 
   test "Check contract storage trie node parent matches expected recursive gossip":
@@ -68,5 +68,5 @@ suite "State Gossip getParent - Test Vectors":
           parentKey.toContentKey().encode() ==
             parentTestData.content_key.hexToSeqByte().ContentKeyByteList
           parentOffer.encode() == parentTestData.content_value_offer.hexToSeqByte()
-          parentOffer.toRetrievalValue().encode() ==
+          parentOffer.toRetrieval().encode() ==
             parentTestData.content_value_retrieval.hexToSeqByte()

@@ -1,5 +1,5 @@
 # Nimbus
-# Copyright (c) 2023-2024 Status Research & Development GmbH
+# Copyright (c) 2023-2025 Status Research & Development GmbH
 # Licensed and distributed under either of
 #   * MIT license (license terms in the root directory or at https://opensource.org/licenses/MIT).
 #   * Apache v2 license (license terms in the root directory or at https://www.apache.org/licenses/LICENSE-2.0).
@@ -13,7 +13,7 @@ import
   results,
   eth/[trie, trie/trie_defs],
   eth/common/[accounts, addresses, hashes],
-  ../../../nimbus/common/chain_config,
+  ../../../execution_chain/common/chain_config,
   ../../network/state/[state_content, state_validation, state_utils],
   ./state_test_helpers
 

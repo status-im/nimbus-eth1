@@ -1,5 +1,5 @@
 # Nimbus
-# Copyright (c) 2018-2024 Status Research & Development GmbH
+# Copyright (c) 2018-2025 Status Research & Development GmbH
 # Licensed under either of
 #  * Apache License, version 2.0, ([LICENSE-APACHE](LICENSE-APACHE) or
 #    http://www.apache.org/licenses/LICENSE-2.0)
@@ -76,12 +76,6 @@ if defined(windows):
   # toolchain: https://github.com/status-im/nimbus-eth2/issues/3121
   switch("define", "nimRawSetjmp")
 
-# This helps especially for 32-bit x86, which sans SSE2 and newer instructions
-# requires quite roundabout code generation for cryptography, and other 64-bit
-# and larger arithmetic use cases, along with register starvation issues. When
-# engineering a more portable binary release, this should be tweaked but still
-# use at least -msse2 or -msse3.
-#
 # https://github.com/status-im/nimbus-eth2/blob/stable/docs/cpu_features.md#ssse3-supplemental-sse3
 # suggests that SHA256 hashing with SSSE3 is 20% faster than without SSSE3, so
 # given its near-ubiquity in the x86 installed base, it renders a distribution
@@ -100,8 +94,13 @@ if defined(disableMarchNative):
       switch("passL", "-mssse3")
 elif defined(macosx) and defined(arm64):
   # Apple's Clang can't handle "-march=native" on M1: https://github.com/status-im/nimbus-eth2/issues/2758
-  switch("passC", "-mcpu=apple-a14")
-  switch("passL", "-mcpu=apple-a14")
+  switch("passC", "-mcpu=apple-m1")
+  switch("passL", "-mcpu=apple-m1")
+elif defined(riscv64):
+  # riscv64 needs specification of ISA with extensions. 'gc' is widely supported
+  # and seems to be the minimum extensions needed to build.
+  switch("passC", "-march=rv64gc")
+  switch("passL", "-march=rv64gc")
 else:
   switch("passC", "-march=native")
   switch("passL", "-march=native")
@@ -168,6 +167,9 @@ if canEnableDebuggingSymbols:
 # `switch("warning[CaseTransition]", "off")` fails with "Error: invalid command line option: '--warning[CaseTransition]'"
 switch("warning", "CaseTransition:off")
 
+# Transitional for Nim v2.2, due to newSeqUninit replacing newSeqUninitialized.
+switch("warning", "Deprecated:off")
+
 # nim-kzg shipping their own blst, nimbus-eth1 too.
 # disable nim-kzg's blst
 switch("define", "kzgExternalBlst")
@@ -175,17 +177,12 @@ switch("define", "kzgExternalBlst")
 # We lock down rocksdb to a particular version
 # TODO self-build rocksdb dll on windows
 when not defined(use_system_rocksdb) and not defined(windows):
-  switch("define", "rocksdb_static_linking")
 
   # use the C++ linker profile because it's a C++ library
   when defined(macosx):
     switch("clang.linkerexe", "clang++")
   else:
     switch("gcc.linkerexe", "g++")
-
-  switch("dynlibOverride", "rocksdb")
-  switch("dynlibOverride", "lz4")
-  switch("dynlibOverride", "zstd")
 
 # This applies per-file compiler flags to C files
 # which do not support {.localPassC: "...".}

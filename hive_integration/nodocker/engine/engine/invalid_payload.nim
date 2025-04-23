@@ -1,5 +1,5 @@
 # Nimbus
-# Copyright (c) 2023-2024 Status Research & Development GmbH
+# Copyright (c) 2023-2025 Status Research & Development GmbH
 # Licensed under either of
 #  * Apache License, version 2.0, ([LICENSE-APACHE](LICENSE-APACHE) or
 #    http://www.apache.org/licenses/LICENSE-2.0)
@@ -13,7 +13,7 @@ import
   ./engine_spec,
   ../helper,
   ../cancun/customizer,
-  ../../../../nimbus/common
+  ../../../../execution_chain/common
 
 # Generate test cases for each field of NewPayload, where the payload contains a single invalid field and a valid hash.
 type
@@ -423,7 +423,7 @@ method execute(cs: InvalidTxChainIDTest, env: TestEnv): bool =
         chainId = eng.com.chainId
 
       let txCustomizerData = CustomTransactionData(
-        chainID: Opt.some((chainId.uint64 + 1'u64).ChainId)
+        chainID: Opt.some(chainId + 1)
       )
 
       shadow.invalidTx = tx
@@ -438,7 +438,7 @@ method execute(cs: InvalidTxChainIDTest, env: TestEnv): bool =
   testCond pbRes
 
   # Verify that the latest payload built does NOT contain the invalid chain Tx
-  let txHash = shadow.invalidTx.rlpHash
+  let txHash = shadow.invalidTx.computeRlpHash
   if txInPayload(env.clMock.latestPayloadBuilt, txHash):
     fatal "Invalid chain ID tx was included in payload"
     return false

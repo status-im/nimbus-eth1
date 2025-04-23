@@ -1,5 +1,5 @@
 # Fluffy
-# Copyright (c) 2023-2024 Status Research & Development GmbH
+# Copyright (c) 2023-2025 Status Research & Development GmbH
 # Licensed and distributed under either of
 #   * MIT license (license terms in the root directory or at https://opensource.org/licenses/MIT).
 #   * Apache v2 license (license terms in the root directory or at https://www.apache.org/licenses/LICENSE-2.0).
@@ -12,6 +12,8 @@ import
   confutils,
   confutils/std/net,
   nimcrypto/hash,
+  ../../network_metadata,
+  ../../eth_data/era1,
   ../../[conf, logging]
 
 export net
@@ -35,6 +37,8 @@ proc defaultPortalBridgeStateDir*(): string =
     defaultDataDir() / "Bridge" / "State"
   else:
     defaultDataDir() / "bridge" / "state"
+
+const defaultEndEra* = uint64(era(network_metadata.mergeBlockNumber - 1))
 
 type
   TrustedDigest* = MDigest[32 * 8]
@@ -106,7 +110,7 @@ type
       latest* {.
         desc:
           "Follow the head of the chain and gossip latest block header, body and receipts into the network",
-        defaultValue: true,
+        defaultValue: false,
         name: "latest"
       .}: bool
 
@@ -116,6 +120,13 @@ type
         defaultValue: false,
         name: "backfill"
       .}: bool
+
+      startEra* {.desc: "The era to start from", defaultValue: 0, name: "start-era".}:
+        uint64
+
+      endEra* {.
+        desc: "The era to stop at", defaultValue: defaultEndEra, name: "end-era"
+      .}: uint64
 
       audit* {.
         desc:
@@ -130,9 +141,26 @@ type
         defaultValueDesc: defaultEra1DataDir(),
         name: "era1-dir"
       .}: InputDir
+
+      gossipConcurrency* {.
+        desc:
+          "The number of concurrent gossip workers for gossiping content into the portal network",
+        defaultValue: 50,
+        name: "gossip-concurrency"
+      .}: int
     of PortalBridgeCmd.state:
-      web3UrlState* {.desc: "Execution layer JSON-RPC API URL", name: "web3-url".}:
+      web3RpcUrl* {.desc: "Execution layer JSON-RPC API URL", name: "web3-url".}:
         JsonRpcUrl
+
+      portalRpcEndpoints* {.
+        desc:
+          "The number of portal clients to use for gossipping content into the network. " &
+          "Portal clients must be started and running before running the state bridge. " &
+          "The bridge assumes the portal clients are running on the same host using contiguous " &
+          "port numbers in the range starting from the port of the portal-rpc-url",
+        defaultValue: 1,
+        name: "portal-endpoints"
+      .}: uint
 
       stateDir* {.
         desc: "The directory where the state data is stored",
@@ -173,7 +201,14 @@ type
         name: "verify-gossip"
       .}: bool
 
-      gossipWorkersCount* {.
+      skipGossipForExisting* {.
+        desc:
+          "Enable skipping gossip of each content value which is successfully fetched from the network",
+        defaultValue: true,
+        name: "skip-gossip-for-existing"
+      .}: bool
+
+      gossipWorkers* {.
         desc:
           "The number of workers to use for gossiping the state into the portal network",
         defaultValue: 2,

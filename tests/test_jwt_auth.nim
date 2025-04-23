@@ -1,5 +1,5 @@
 # Nimbus
-# Copyright (c) 2022-2024 Status Research & Development GmbH
+# Copyright (c) 2022-2025 Status Research & Development GmbH
 # Licensed under either of
 #  * Apache License, version 2.0, ([LICENSE-APACHE](LICENSE-APACHE) or
 #    http://www.apache.org/licenses/LICENSE-2.0)
@@ -8,28 +8,24 @@
 # at your option. This file may not be copied, modified, or distributed except
 # according to those terms.
 
-## Test Jwt Authorisation Functionality
+## Test JWT Authorisation Functionality
 ## ====================================
 
 import
-  std/[base64, json, options, os, strutils, times],
-  ../nimbus/config,
-  ../nimbus/rpc/jwt_auth,
-  ../nimbus/rpc {.all.},
+  ../execution_chain/config,
+  ../execution_chain/rpc/jwt_auth,
+  ../execution_chain/rpc {.all.},
   ./replay/pp,
   chronicles,
   chronos/apps/http/httpclient as chronoshttpclient,
-  chronos/apps/http/httptable,
-  eth/common/keys, 
-  eth/p2p,
   nimcrypto/[hmac, sha2, utils],
-  results,
-  stint,
   unittest2,
-  graphql,
   websock/websock,
-  graphql/[httpserver, httpclient],
   json_rpc/[rpcserver, rpcclient]
+
+from std/base64 import encode
+from std/os import DirSep, fileExists, removeFile, splitFile, splitPath, `/`
+from std/times import getTime, toUnix
 
 type
   UnGuardedKey =
@@ -70,11 +66,6 @@ proc say(noisy = false; pfx = "***"; args: varargs[string, `$`]) =
     else:
       echo pfx, args.toSeq.join
 
-proc setTraceLevel =
-  discard
-  when defined(chronicles_runtime_filtering) and loggingEnabled:
-    setLogLevel(LogLevel.TRACE)
-
 proc setErrorLevel =
   discard
   when defined(chronicles_runtime_filtering) and loggingEnabled:
@@ -84,12 +75,12 @@ proc setErrorLevel =
 # Private Functions
 # ------------------------------------------------------------------------------
 
-proc fakeGenSecret(fake: JwtSharedKey): JwtGenSecret =
+func fakeGenSecret(fake: JwtSharedKey): JwtGenSecret =
   ## Key random generator, fake version
-  result = proc: JwtSharedKey =
+  proc: JwtSharedKey =
     fake
 
-proc base64urlEncode(x: auto): string =
+func base64urlEncode(x: auto): string =
   ## from nimbus-eth2, engine_authentication.nim
   base64.encode(x, safe = true).replace("=", "")
 
@@ -97,80 +88,37 @@ func getIatToken(time: uint64): JsonNode =
   ## from nimbus-eth2, engine_authentication.nim
   %* {"iat": time}
 
-proc getSignedToken(key: openArray[byte], payload: string): string =
+func getSignedToken(key: openArray[byte], payload: string): string =
   ## from nimbus-eth2, engine_authentication.nim
   # Using hard coded string for """{"typ": "JWT", "alg": "HS256"}"""
   let sData = "eyJ0eXAiOiJKV1QiLCJhbGciOiJIUzI1NiJ9." & base64urlEncode(payload)
   sData & "." & sha256.hmac(key, sData).data.base64urlEncode
 
-proc getSignedToken2(key: openArray[byte], payload: string): string =
+func getSignedToken2(key: openArray[byte], payload: string): string =
   ## Variant of `getSignedToken()`: different algorithm encoding
   let
     jNode = %* {"alg": "HS256", "typ": "JWT" }
     sData = base64urlEncode($jNode) & "." & base64urlEncode(payload)
   sData & "." & sha256.hmac(key, sData).data.base64urlEncode
 
-proc getHttpAuthReqHeader(secret: JwtSharedKey; time: uint64): HttpTable =
+func getHttpAuthReqHeader(secret: JwtSharedKey; time: uint64): HttpTable =
   let bearer = secret.UnGuardedKey.getSignedToken($getIatToken(time))
   result.add("aUtHoRiZaTiOn", "Bearer " & bearer)
 
-proc getHttpAuthReqHeader2(secret: JwtSharedKey; time: uint64): HttpTable =
+func getHttpAuthReqHeader2(secret: JwtSharedKey; time: uint64): HttpTable =
   let bearer = secret.UnGuardedKey.getSignedToken2($getIatToken(time))
   result.add("aUtHoRiZaTiOn", "Bearer " & bearer)
 
-proc createServer(serverAddress: TransportAddress, authHooks: seq[AuthHook] = @[]): GraphqlHttpServerRef =
-  let socketFlags = {ServerFlags.TcpNoDelay, ServerFlags.ReuseAddr}
-  var ctx = GraphqlRef.new()
-
-  const schema = """type Query {name: String}"""
-  let r = ctx.parseSchema(schema)
-  if r.isErr:
-    debugEcho r.error
-    return
-
-  let res = GraphqlHttpServerRef.new(
-    graphql = ctx,
-    address = serverAddress,
-    socketFlags = socketFlags,
-    authHooks = authHooks
-  )
-
-  if res.isErr():
-    debugEcho res.error
-    return
-
-  res.get()
-
-proc setupClient(address: TransportAddress): GraphqlHttpClientRef =
-  GraphqlHttpClientRef.new(address, secure = false).get()
-
-func localAddress(server: GraphqlHttpServerRef): TransportAddress =
-  server.server.instance.localAddress()
-
 # ------------------------------------------------------------------------------
-# Http combo helpers
+# HTTP combo helpers
 # ------------------------------------------------------------------------------
 
-proc newGraphqlHandler(): GraphqlHttpHandlerRef =
-  const schema = """type Query {name: String}"""
-
-  let ctx = GraphqlRef.new()
-  let r = ctx.parseSchema(schema)
-  if r.isErr:
-    debugEcho r.error
-    # continue with empty schema
-
-  GraphqlHttpHandlerRef.new(ctx)
-
-proc installRPC(server: RpcServer) =
+func installRPC(server: RpcServer) =
   server.rpc("rpc_echo") do(input: int) -> string:
-    result = "hello: " & $input
+    "hello: " & $input
 
 proc setupComboServer(hooks: sink seq[RpcAuthHook]): HttpResult[NimbusHttpServerRef] =
   var handlers: seq[RpcHandlerProc]
-
-  let qlServer = newGraphqlHandler()
-  handlers.addHandler(qlServer)
 
   let wsServer = newRpcWebsocketHandler()
   wsServer.installRPC()
@@ -190,7 +138,7 @@ createRpcSigsFromNim(RpcClient):
 # Test Runners
 # ------------------------------------------------------------------------------
 
-proc runKeyLoader(noisy = true;
+proc runKeyLoader(noisy = defined(debug);
                   keyFile = jwtKeyFile; strippedFile = jwtKeyStripped) =
   let
     filePath = keyFile.findFilePath.value
@@ -226,7 +174,7 @@ proc runKeyLoader(noisy = true;
       noisy.say "   ", "text=", hexLine
       noisy.say "   ", "fake=", hexFake
 
-      # Compare key against tcontents of shared key file
+      # Compare key against contents of shared key file
       check hexKey.cmpIgnoreCase(hexLine) == 0
 
       # Just to make sure that there was no random generator used
@@ -250,7 +198,7 @@ proc runKeyLoader(noisy = true;
       noisy.say "   ", "text=", hexLine
       noisy.say "   ", "fake=", hexFake
 
-      # Compare key against tcontents of shared key file
+      # Compare key against contents of shared key file
       check hexKey.cmpIgnoreCase(hexLine) == 0
 
       # Just to make sure that there was no random generator used
@@ -278,16 +226,13 @@ proc runKeyLoader(noisy = true;
       noisy.say "***", "key=", hexKey
       noisy.say "   ", "text=", hexLine
 
-      # Compare key against tcontents of shared key file
+      # Compare key against contents of shared key file
       check hexKey.cmpIgnoreCase(hexLine) == 0
 
-proc runJwtAuth(noisy = true; keyFile = jwtKeyFile) =
+proc runJwtAuth(noisy = defined(debug); keyFile = jwtKeyFile) =
   let
     filePath = keyFile.findFilePath.value
-    fileInfo = keyFile.splitFile.name.split(".")[0]
-
     dataDir = filePath.splitPath.head
-
     dataDirCmdOpt = &"--data-dir={dataDir}"
     jwtSecretCmdOpt = &"--jwt-secret={filePath}"
     config = @[dataDirCmdOpt,jwtSecretCmdOpt].makeConfig
@@ -299,78 +244,7 @@ proc runJwtAuth(noisy = true; keyFile = jwtKeyFile) =
     # The wrapper contains the handler function with the captured shared key
     authHook = secret.value.httpJwtAuth
 
-  const
-    serverAddress = initTAddress("127.0.0.1:0")
-    query = """{ __type(name: "ID") { kind }}"""
-
-  suite "EngineAuth: Http/rpc authentication mechanics":
-    let server = createServer(serverAddress, @[authHook])
-    server.start()
-
-    test &"JSW/HS256 authentication using shared secret file {fileInfo}":
-      # Just to make sure that we made a proper choice. Typically, all
-      # ingredients shoud have been tested, already in the preceeding test
-      # suite.
-      let
-        lines = config.jwtSecret.get.string.readLines(1)
-        hexKey = "0x" & secret.value.UnGuardedKey.toHex
-        hexLine = lines[0].strip
-      noisy.say "***", "key=", hexKey
-      noisy.say "   ", "text=", hexLine
-      check hexKey.cmpIgnoreCase(hexLine) == 0
-
-      let
-        time = getTime().toUnix.uint64
-        req = secret.value.getHttpAuthReqHeader(time)
-      noisy.say "***", "request",
-        " Authorization=", req.getString("Authorization")
-
-      setTraceLevel()
-
-      # Run http authorisation request
-      let client = setupClient(server.localAddress)
-      let res = waitFor client.sendRequest(query, req.toList)
-      check res.isOk
-      if res.isErr:
-        noisy.say "***", res.error
-        return
-
-      let resp = res.get()
-      check resp.status == 200
-      check resp.reason == "OK"
-      check resp.response == """{"data":{"__type":{"kind":"SCALAR"}}}"""
-
-      setErrorLevel()
-
-    test &"JSW/HS256, ditto with protected header variant":
-      let
-        time = getTime().toUnix.uint64
-        req = secret.value.getHttpAuthReqHeader2(time)
-
-      # Assemble request header
-      noisy.say "***", "request",
-        " Authorization=", req.getString("Authorization")
-
-      setTraceLevel()
-
-      # Run http authorisation request
-      let client = setupClient(server.localAddress)
-      let res = waitFor client.sendRequest(query, req.toList)
-      check res.isOk
-      if res.isErr:
-        noisy.say "***", res.error
-        return
-
-      let resp = res.get()
-      check resp.status == 200
-      check resp.reason == "OK"
-      check resp.response == """{"data":{"__type":{"kind":"SCALAR"}}}"""
-
-      setErrorLevel()
-
-    waitFor server.closeWait()
-
-  suite "Test combo http server":
+  suite "Test combo HTTP server":
     let res = setupComboServer(@[authHook])
     if res.isErr:
       debugEcho res.error
@@ -383,25 +257,7 @@ proc runJwtAuth(noisy = true; keyFile = jwtKeyFile) =
 
     server.start()
 
-    test "Graphql query no auth":
-      let client = setupClient(server.localAddress)
-      let res = waitFor client.sendRequest(query)
-      check res.isOk
-      let resp = res.get()
-      check resp.status == 403
-      check resp.reason == "Forbidden"
-      check resp.response == "Missing authorization token"
-
-    test "Graphql query with auth":
-      let client = setupClient(server.localAddress)
-      let res = waitFor client.sendRequest(query, req.toList)
-      check res.isOk
-      let resp = res.get()
-      check resp.status == 200
-      check resp.reason == "OK"
-      check resp.response == """{"data":{"__type":{"kind":"SCALAR"}}}"""
-
-    test "rpc query no auth":
+    test "RPC query no auth":
       let client = newRpcHttpClient()
       waitFor client.connect("http://" & $server.localAddress)
       try:
@@ -411,7 +267,7 @@ proc runJwtAuth(noisy = true; keyFile = jwtKeyFile) =
       except ErrorResponse as exc:
         check exc.msg == "Forbidden"
 
-    test "rpc query with uth":
+    test "RPC query with auth":
       proc authHeaders(): seq[(string, string)] =
         req.toList
       let client = newRpcHttpClient(getHeaders = authHeaders)
@@ -441,18 +297,11 @@ proc runJwtAuth(noisy = true; keyFile = jwtKeyFile) =
 # Main function(s)
 # ------------------------------------------------------------------------------
 
-proc jwtAuthMain*(noisy = defined(debug)) =
-  noisy.runKeyLoader
-  noisy.runJwtAuth
-
 when isMainModule:
-  const
-    noisy = defined(debug)
-
   setErrorLevel()
 
-  noisy.runKeyLoader
-  noisy.runJwtAuth
+runKeyLoader()
+runJwtAuth()
 
 # ------------------------------------------------------------------------------
 # End

@@ -1,5 +1,5 @@
 # Nimbus
-# Copyright (c) 2018-2024 Status Research & Development GmbH
+# Copyright (c) 2018-2025 Status Research & Development GmbH
 # Licensed under either of
 #  * Apache License, version 2.0, ([LICENSE-APACHE](LICENSE-APACHE) or http://www.apache.org/licenses/LICENSE-2.0)
 #  * MIT license ([LICENSE-MIT](LICENSE-MIT) or http://opensource.org/licenses/MIT)
@@ -9,41 +9,37 @@ import
   std/[importutils, sequtils],
   unittest2,
   eth/common/[keys, transaction_utils],
-  ../nimbus/common,
-  ../nimbus/transaction,
-  ../nimbus/evm/types,
-  ../nimbus/evm/state,
-  ../nimbus/evm/evm_errors,
-  ../nimbus/evm/stack,
-  ../nimbus/evm/memory,
-  ../nimbus/evm/code_stream,
-  ../nimbus/evm/internals,
-  ../nimbus/constants,
-  ../nimbus/core/pow/header,
-  ../nimbus/db/ledger,
-  ../nimbus/transaction/call_evm
+  ../execution_chain/common,
+  ../execution_chain/transaction,
+  ../execution_chain/evm/types,
+  ../execution_chain/evm/state,
+  ../execution_chain/evm/evm_errors,
+  ../execution_chain/evm/stack,
+  ../execution_chain/evm/memory,
+  ../execution_chain/evm/code_stream,
+  ../execution_chain/evm/internals,
+  ../execution_chain/constants,
+  ../execution_chain/core/pow/header,
+  ../execution_chain/db/ledger,
+  ../execution_chain/transaction/call_evm
 
 template testPush(value: untyped, expected: untyped): untyped =
   privateAccess(EvmStack)
   var stack = EvmStack.init()
+  defer: stack.dispose()
   check stack.push(value).isOk
-  check(stack.values == @[expected])
-
-func toBytes(s: string): seq[byte] =
-  cast[seq[byte]](s)
-
-func bigEndianToInt(value: openArray[byte]): UInt256 =
-  result.initFromBytesBE(value)
+  check(toSeq(stack.items()) == @[expected])
 
 proc runStackTests() =
   suite "Stack tests":
     test "push only valid":
       testPush(0'u, 0.u256)
       testPush(UINT_256_MAX, UINT_256_MAX)
-      testPush("ves".toBytes, "ves".toBytes.bigEndianToInt)
+      # testPush("ves".toBytes, "ves".toBytes.bigEndianToInt)
 
     test "push does not allow stack to exceed 1024":
       var stack = EvmStack.init()
+      defer: stack.dispose()
       for z in 0 ..< 1024:
         check stack.push(z.uint).isOk
       check(stack.len == 1024)
@@ -51,6 +47,7 @@ proc runStackTests() =
 
     test "dup does not allow stack to exceed 1024":
       var stack = EvmStack.init()
+      defer: stack.dispose()
       check stack.push(1.u256).isOk
       for z in 0 ..< 1023:
         check stack.dup(1).isOk
@@ -59,42 +56,56 @@ proc runStackTests() =
 
     test "pop returns latest stack item":
       var stack = EvmStack.init()
+      defer: stack.dispose()
       for element in @[1'u, 2'u, 3'u]:
         check stack.push(element).isOk
       check(stack.popInt.get == 3.u256)
 
+    test "pop requires stack item":
+      var stack = EvmStack.init()
+      defer: stack.dispose()
+      check:
+        stack.pop().isErr()
+        stack.push(1'u).isOk()
+        stack.pop().isOk()
+
     test "swap correct":
       privateAccess(EvmStack)
       var stack = EvmStack.init()
+      defer: stack.dispose()
       for z in 0 ..< 5:
         check stack.push(z.uint).isOk
-      check(stack.values == @[0.u256, 1.u256, 2.u256, 3.u256, 4.u256])
+      check(toSeq(stack.items()) == @[0.u256, 1.u256, 2.u256, 3.u256, 4.u256])
       check stack.swap(3).isOk
-      check(stack.values == @[0.u256, 4.u256, 2.u256, 3.u256, 1.u256])
+      check(toSeq(stack.items()) == @[0.u256, 4.u256, 2.u256, 3.u256, 1.u256])
       check stack.swap(1).isOk
-      check(stack.values == @[0.u256, 4.u256, 2.u256, 1.u256, 3.u256])
+      check(toSeq(stack.items()) == @[0.u256, 4.u256, 2.u256, 1.u256, 3.u256])
 
     test "dup correct":
       privateAccess(EvmStack)
       var stack = EvmStack.init()
+      defer: stack.dispose()
       for z in 0 ..< 5:
         check stack.push(z.uint).isOk
-      check(stack.values == @[0.u256, 1.u256, 2.u256, 3.u256, 4.u256])
+      check(toSeq(stack.items()) == @[0.u256, 1.u256, 2.u256, 3.u256, 4.u256])
       check stack.dup(1).isOk
-      check(stack.values == @[0.u256, 1.u256, 2.u256, 3.u256, 4.u256, 4.u256])
+      check(toSeq(stack.items()) == @[0.u256, 1.u256, 2.u256, 3.u256, 4.u256, 4.u256])
       check stack.dup(5).isOk
-      check(stack.values == @[0.u256, 1.u256, 2.u256, 3.u256, 4.u256, 4.u256, 1.u256])
+      check(toSeq(stack.items()) == @[0.u256, 1.u256, 2.u256, 3.u256, 4.u256, 4.u256, 1.u256])
 
     test "pop raises InsufficientStack appropriately":
       var stack = EvmStack.init()
+      defer: stack.dispose()
       check stack.popInt().error.code == EvmErrorCode.StackInsufficient
 
     test "swap raises InsufficientStack appropriately":
       var stack = EvmStack.init()
+      defer: stack.dispose()
       check stack.swap(0).error.code == EvmErrorCode.StackInsufficient
 
     test "dup raises InsufficientStack appropriately":
       var stack = EvmStack.init()
+      defer: stack.dispose()
       check stack.dup(0).error.code == EvmErrorCode.StackInsufficient
 
     test "binary operations raises InsufficientStack appropriately":
@@ -102,8 +113,9 @@ proc runStackTests() =
       # ./tests/fixtures/VMTests/vmArithmeticTest/mulUnderFlow.json
 
       var stack = EvmStack.init()
+      defer: stack.dispose()
       check stack.push(123).isOk
-      check stack.popInt(2).error.code == EvmErrorCode.StackInsufficient
+      check stack.binaryOp(`+`).error.code == EvmErrorCode.StackInsufficient
 
 proc memory32: EvmMemory =
   result = EvmMemory.init(32)
@@ -335,6 +347,7 @@ proc runTestOverflow() =
 
     let com = CommonRef.new(
       newCoreDbRef(DefaultDbMemory),
+      nil,
       config = chainConfigForNetwork(MainNet)
     )
 
@@ -342,9 +355,10 @@ proc runTestOverflow() =
       header,
       header,
       com,
+      com.db.baseTxFrame()
     )
 
-    s.stateDB.setCode(codeAddress, @data)
+    s.ledger.setCode(codeAddress, @data)
     let unsignedTx = Transaction(
       txType: TxLegacy,
       nonce: 0,
@@ -360,13 +374,10 @@ proc runTestOverflow() =
     let tx = signTransaction(unsignedTx, privateKey, false)
     let res = testCallEvm(tx, tx.recoverSender().expect("valid signature"), s)
 
-    when defined(evmc_enabled):
-      check res.error == "EVMC_FAILURE"
-    else:
-      # After gasCall values always on positive, this test become OOG
-      check res.error == "Opcode Dispatch Error: OutOfGas, depth=1"
+    # After gasCall values always on positive, this test become OOG
+    check res.error == "Opcode Dispatch Error: OutOfGas, depth=1"
 
-proc evmSupportMain*() =
+proc evmSupportMain() =
   runStackTests()
   runMemoryTests()
   runCodeStreamTests()
@@ -374,5 +385,4 @@ proc evmSupportMain*() =
   runMiscTests()
   runTestOverflow()
 
-when isMainModule:
-  evmSupportMain()
+evmSupportMain()

@@ -1,5 +1,5 @@
 # Nimbus
-# Copyright (c) 2022-2024 Status Research & Development GmbH
+# Copyright (c) 2022-2025 Status Research & Development GmbH
 # Licensed under either of
 #  * Apache License, version 2.0, ([LICENSE-APACHE](LICENSE-APACHE) or
 #    http://www.apache.org/licenses/LICENSE-2.0)
@@ -14,7 +14,7 @@ import
   eth/common/receipts,
   results,
   stint,
-  ../../nimbus/common/chain_config,
+  ../../execution_chain/common/chain_config,
   ../common/types
 
 export
@@ -52,6 +52,7 @@ type
     parentBlobGasUsed*: Opt[uint64]
     parentExcessBlobGas*: Opt[uint64]
     parentBeaconBlockRoot*: Opt[Hash32]
+    depositContractAddress*: Opt[Address]
 
   TxObject* = object
     `type`*: Opt[uint64]
@@ -73,6 +74,7 @@ type
     maxFeePerBlobGas*    : Opt[UInt256]
     blobVersionedHashes* : Opt[seq[Hash32]]
     authorizationList*   : Opt[seq[Authorization]]
+    initCodes* : Opt[seq[seq[byte]]]
 
   TxList* = seq[Result[Transaction, string]]
 
@@ -117,6 +119,7 @@ type
     blobGasUsed*: Opt[uint64]
     currentExcessBlobGas*: Opt[uint64]
     requestsHash*: Opt[Hash32]
+    requests*: Opt[seq[seq[byte]]]
 
 const
   ErrorEVM*              = 2.T8NExitCode

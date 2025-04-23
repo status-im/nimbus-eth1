@@ -1,5 +1,5 @@
 # Nimbus
-# Copyright (c) 2022-2024 Status Research & Development GmbH
+# Copyright (c) 2022-2025 Status Research & Development GmbH
 # Licensed under either of
 #  * Apache License, version 2.0, ([LICENSE-APACHE](LICENSE-APACHE) or
 #    http://www.apache.org/licenses/LICENSE-2.0)
@@ -16,15 +16,13 @@ import
   stew/byteutils,
   results,
   stint,
-  eth/trie/[trie_defs],
-  ../../nimbus/[evm/types, evm/state],
-  ../../nimbus/db/ledger,
-  ../../nimbus/transaction,
-  ../../nimbus/core/executor,
-  ../../nimbus/common/common,
-  ../../nimbus/evm/tracer/json_tracer,
-  ../../nimbus/core/eip4844,
-  ../../nimbus/utils/state_dump,
+  ../../execution_chain/[evm/types, evm/state],
+  ../../execution_chain/db/ledger,
+  ../../execution_chain/transaction,
+  ../../execution_chain/core/executor,
+  ../../execution_chain/common/common,
+  ../../execution_chain/evm/tracer/json_tracer,
+  ../../execution_chain/utils/state_dump,
   ../common/helpers as chp,
   "."/[config, helpers],
   ../common/state_clearing
@@ -42,7 +40,6 @@ type
     index: int
     tracerFlags: set[TracerFlags]
     error: string
-    trustedSetupLoaded: bool
 
   StateResult = object
     name : string
@@ -68,15 +65,17 @@ proc toBytes(x: string): seq[byte] =
 method getAncestorHash(vmState: TestVMState; blockNumber: BlockNumber): Hash32 =
   keccak256(toBytes($blockNumber))
 
-proc verifyResult(ctx: var StateContext, vmState: BaseVMState, obtainedHash: Hash32) =
+proc verifyResult(ctx: var StateContext,
+                  vmState: BaseVMState,
+                  obtainedHash: Hash32,
+                  callResult: LogResult) =
   ctx.error = ""
   if obtainedHash != ctx.expectedHash:
     ctx.error = "post state root mismatch: got $1, want $2" %
       [($obtainedHash).toLowerAscii, $ctx.expectedHash]
     return
 
-  let logEntries = vmState.getAndClearLogEntries()
-  let actualLogsHash = rlpHash(logEntries)
+  let actualLogsHash = computeRlpHash(callResult.logEntries)
   if actualLogsHash != ctx.expectedLogs:
     ctx.error = "post state log hash mismatch: got $1, want $2" %
       [($actualLogsHash).toLowerAscii, $ctx.expectedLogs]
@@ -107,38 +106,31 @@ proc writeRootHashToStderr(stateRoot: Hash32) =
 
 proc runExecution(ctx: var StateContext, conf: StateConf, pre: JsonNode): StateResult =
   let
-    com     = CommonRef.new(newCoreDbRef DefaultDbMemory, ctx.chainConfig)
+    com     = CommonRef.new(newCoreDbRef DefaultDbMemory, nil, ctx.chainConfig)
     stream  = newFileStream(stderr)
     tracer  = if conf.jsonEnabled:
                 newJsonTracer(stream, ctx.tracerFlags, conf.pretty)
               else:
                 JsonTracer(nil)
 
-  if com.isCancunOrLater(ctx.header.timestamp):
-    if not ctx.trustedSetupLoaded:
-      let res = loadKzgTrustedSetup()
-      if res.isErr:
-        echo "FATAL: ", res.error
-        quit(QuitFailure)
-      ctx.trustedSetupLoaded = true
-
   let vmState = TestVMState()
   vmState.init(
     parent = ctx.parent,
     header = ctx.header,
     com    = com,
+    txFrame = com.db.baseTxFrame(),
     tracer = tracer)
 
-  var gasUsed: GasInt
   let sender = ctx.tx.recoverSender().expect("valid signature")
 
-  vmState.mutateStateDB:
-    setupStateDB(pre, db)
+  vmState.mutateLedger:
+    setupLedger(pre, db)
     db.persist(clearEmptyAccount = false) # settle accounts storage
 
+  var callResult: LogResult
   defer:
-    let stateRoot = vmState.readOnlyStateDB.getStateRoot()
-    ctx.verifyResult(vmState, stateRoot)
+    let stateRoot = vmState.readOnlyLedger.getStateRoot()
+    ctx.verifyResult(vmState, stateRoot, callResult)
     result = StateResult(
       name : ctx.name,
       pass : ctx.error.len == 0,
@@ -147,18 +139,16 @@ proc runExecution(ctx: var StateContext, conf: StateConf, pre: JsonNode): StateR
       error: ctx.error
     )
     if conf.dumpEnabled:
-      result.state = dumpState(vmState.stateDB)
+      result.state = dumpState(vmState.ledger)
     if conf.jsonEnabled:
       writeRootHashToStderr(stateRoot)
 
   try:
-    let rc = vmState.processTransaction(
-                  ctx.tx, sender, ctx.header)
-    if rc.isOk:
-      gasUsed = rc.value
-
-    let miner = ctx.header.coinbase
-    coinbaseStateClearing(vmState, miner)
+    let res = vmState.processTransaction(
+                   ctx.tx, sender, ctx.header)
+    if res.isOk:
+      callResult = res.value
+    coinbaseStateClearing(vmState, ctx.header.coinbase)
   except CatchableError as ex:
     echo "FATAL: ", ex.msg
     quit(QuitFailure)
@@ -179,9 +169,12 @@ proc toTracerFlags(conf: StateConf): set[TracerFlags] =
 template hasError(ctx: StateContext): bool =
   ctx.error.len > 0
 
-proc prepareAndRun(ctx: var StateContext, conf: StateConf): bool =
+proc prepareAndRun(inputFile: string, conf: StateConf): bool =
+  var
+    ctx: StateContext
+
   let
-    fixture = json.parseFile(conf.inputFile)
+    fixture = json.parseFile(inputFile)
     n       = ctx.extractNameAndFixture(fixture)
     txData  = n["transaction"]
     post    = n["post"]
@@ -260,11 +253,22 @@ when defined(chronicles_runtime_filtering):
     setLogLevel(level)
 
 proc main() =
+  # https://github.com/status-im/nimbus-eth1/issues/3131
+  setStdIoUnbuffered()
+
   let conf = StateConf.init()
   when defined(chronicles_runtime_filtering):
     setVerbosity(conf.verbosity)
-  var ctx: StateContext
-  if not ctx.prepareAndRun(conf):
-    quit(QuitFailure)
+
+  if conf.inputFile.len > 0:
+    if not prepareAndRun(conf.inputFile, conf):
+      quit(QuitFailure)
+  else:
+    var noError = true
+    for inputFile in lines(stdin):
+      let res = prepareAndRun(inputFile, conf)
+      noError = noError and res
+    if not noError:
+      quit(QuitFailure)
 
 main()

@@ -1,5 +1,5 @@
 # Nimbus
-# Copyright (c) 2023-2024 Status Research & Development GmbH
+# Copyright (c) 2023-2025 Status Research & Development GmbH
 # Licensed under either of
 #  * Apache License, version 2.0, ([LICENSE-APACHE](LICENSE-APACHE) or
 #    http://www.apache.org/licenses/LICENSE-2.0)
@@ -12,22 +12,16 @@
 
 import
   std/[algorithm, sets],
-  stew/byteutils,
   unittest2,
-  ../../nimbus/db/aristo/[
+  ../../execution_chain/db/aristo/[
     aristo_check,
     aristo_compute,
     aristo_delete,
     aristo_merge,
     aristo_desc,
-    aristo_init,
-    aristo_tx/tx_stow,
+    aristo_init/memory_only,
+    aristo_tx_frame,
   ]
-
-func x(s: string): seq[byte] =
-  s.hexToSeqByte
-func k(s: string): HashKey =
-  HashKey.fromBytes(s.x).value
 
 let samples = [
   # Somew on-the-fly provided stuff
@@ -78,20 +72,21 @@ suite "Aristo compute":
   for n, sample in samples:
     test "Add and delete entries " & $n:
       let
-        db = AristoDbRef.init VoidBackendRef
+        db = AristoDbRef.init()
+        txFrame = db.txRef
         root = VertexID(1)
 
       for (k, v, r) in sample:
         checkpoint("k = " & k.toHex & ", v = " & $v)
 
         check:
-          db.mergeAccountRecord(k, v) == Result[bool, AristoError].ok(true)
+          txFrame.mergeAccountRecord(k, v) == Result[bool, AristoError].ok(true)
 
         # Check state against expected value
-        let w = db.computeKey((root, root)).expect("no errors")
+        let w = txFrame.computeKey((root, root)).expect("no errors")
         check r == w.to(Hash32)
 
-        let rc = db.check
+        let rc = txFrame.check
         check rc == typeof(rc).ok()
 
       # Reverse run deleting entries
@@ -103,29 +98,33 @@ suite "Aristo compute":
         deletedKeys.incl k
 
         # Check state against expected value
-        let w = db.computeKey((root, root)).value.to(Hash32)
+        let w = txFrame.computeKey((root, root)).value.to(Hash32)
 
         check r == w
 
         check:
-          db.deleteAccountRecord(k).isOk
+          txFrame.deleteAccountRecord(k).isOk
 
-        let rc = db.check
+        let rc = txFrame.check
         check rc == typeof(rc).ok()
 
   test "Pre-computed key":
     # TODO use mainnet genesis in this test?
     let
-      db = AristoDbRef.init MemBackendRef
+      db = AristoDbRef.init()
+      txFrame = db.txRef
       root = VertexID(1)
 
     for (k, v, r) in samples[^1]:
       check:
-        db.mergeAccountRecord(k, v) == Result[bool, AristoError].ok(true)
+        txFrame.mergeAccountRecord(k, v) == Result[bool, AristoError].ok(true)
+    txFrame.checkpoint(1, skipSnapshot = true)
 
-    check db.txStow(1, true).isOk()
+    let batch = db.putBegFn()[]
+    db.persist(batch, txFrame)
+    check db.putEndFn(batch).isOk()
 
-    check db.computeKeys(root).isOk()
+    check txFrame.computeKeys(root).isOk()
 
-    let w = db.computeKey((root, root)).value.to(Hash32)
+    let w = txFrame.computeKey((root, root)).value.to(Hash32)
     check w == samples[^1][^1][2]

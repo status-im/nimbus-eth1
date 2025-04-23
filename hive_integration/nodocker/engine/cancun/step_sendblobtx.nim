@@ -1,5 +1,5 @@
 # Nimbus
-# Copyright (c) 2023-2024 Status Research & Development GmbH
+# Copyright (c) 2023-2025 Status Research & Development GmbH
 # Licensed under either of
 #  * Apache License, version 2.0, ([LICENSE-APACHE](LICENSE-APACHE) or
 #    http://www.apache.org/licenses/LICENSE-2.0)
@@ -18,7 +18,7 @@ import
   ./blobs,
   ../test_env,
   ../tx_sender,
-  ../../../../nimbus/utils/utils
+  ../../../../execution_chain/utils/utils
 
 type
   # A step that sends multiple new blobs to the client
@@ -85,7 +85,7 @@ method execute*(step: SendBlobTransactions, ctx: CancunTestContext): bool =
         error "verify tx from node", msg=r.error
         return false
 
-    let txHash = rlpHash(blobTx)
+    let txHash = computeRlpHash(blobTx)
     ctx.txPool.addBlobTransaction(blobTx)
     ctx.txPool.hashesByIndex[ctx.txPool.currentTxIndex] = txHash
     ctx.txPool.currentTxIndex += 1

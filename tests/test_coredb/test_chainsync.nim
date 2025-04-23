@@ -1,5 +1,5 @@
 # Nimbus
-# Copyright (c) 2023-2024 Status Research & Development GmbH
+# Copyright (c) 2023-2025 Status Research & Development GmbH
 # Licensed under either of
 #  * Apache License, version 2.0, ([LICENSE-APACHE](LICENSE-APACHE) or
 #    http://www.apache.org/licenses/LICENSE-2.0)
@@ -14,30 +14,10 @@ import
   eth/common,
   results,
   unittest2,
-  ../../nimbus/core/chain,
-  ../../nimbus/db/ledger,
+  ../../execution_chain/core/chain,
+  ../../execution_chain/db/ledger,
   ../replay/[pp, undump_blocks, undump_blocks_era1, xcheck],
   ./test_helpers
-
-when CoreDbEnableProfiling or
-     LedgerEnableApiProfiling:
-  import
-    std/sequtils
-
-when CoreDbEnableProfiling:
-  import
-    ../../nimbus/db/aristo/[aristo_api, aristo_profile],
-    ../../nimbus/db/kvt/kvt_api
-  var
-    aristoProfData: AristoDbProfListRef
-    kvtProfData: KvtDbProfListRef
-    cdbProfData: CoreDbProfListRef
-
-when LedgerEnableApiProfiling:
-  import
-    ../../nimbus/db/ledger/base/base_helpers
-  var
-    ldgProfData: LedgerProfListRef
 
 const
   EnableExtraLoggingControl = true
@@ -70,16 +50,10 @@ template initLogging(noisy: bool, com: CommonRef) =
       debug "start undumping into persistent blocks"
     logStartTime = Time()
     setErrorLevel()
-    when CoreDbEnableApiTracking:
-      logSavedEnv = (com.db.trackCoreDbApi, com.db.trackLedgerApi)
-      com.db.trackCoreDbApi = true
-      com.db.trackLedgerApi = true
 
 proc finishLogging(com: CommonRef) =
   when EnableExtraLoggingControl:
     setErrorLevel()
-    when CoreDbEnableApiTracking:
-      (com.db.trackCoreDbApi, com.db.trackLedgerApi) = logSavedEnv
 
 
 template startLogging(noisy: bool; num: BlockNumber) =
@@ -125,24 +99,6 @@ proc test_chainSyncProfilingPrint*(
       else: ""
     discard info
     var blurb: seq[string]
-    when LedgerEnableApiProfiling:
-      blurb.add ldgProfData.profilingPrinter(
-        names = LedgerFnInx.toSeq.mapIt($it),
-        header = "Ledger profiling results" & info,
-        indent)
-    when CoreDbEnableProfiling:
-      blurb.add cdbProfData.profilingPrinter(
-        names = CoreDbFnInx.toSeq.mapIt($it),
-        header = "CoreDb profiling results" & info,
-        indent)
-      blurb.add aristoProfData.profilingPrinter(
-        names = AristoApiProfNames.toSeq.mapIt($it),
-        header = "Aristo backend profiling results" & info,
-        indent)
-      blurb.add kvtProfData.profilingPrinter(
-        names = KvtApiProfNames.toSeq.mapIt($it),
-        header = "Kvt backend profiling results" & info,
-        indent)
     for s in blurb:
       if 0 < s.len: true.say "***", s, "\n"
 
@@ -158,8 +114,7 @@ proc test_chainSync*(
   ## Store persistent blocks from dump into chain DB
   let
     sayBlocks = 900'u64
-    chain = com.newChain
-    blockOnDb = com.db.getSavedStateBlockNumber()
+    blockOnDb = com.db.baseTxFrame().getSavedStateBlockNumber()
     lastBlock = max(1, numBlocks).BlockNumber
 
   noisy.initLogging com
@@ -185,16 +140,6 @@ proc test_chainSync*(
       noisy.say "***", "stop: sample exhausted"
       return true
 
-  # Profile variables will be non-nil if profiling is available. The profiling
-  # API data need to be captured so it will be available after the services
-  # have terminated.
-  when CoreDbEnableProfiling:
-    aristoProfData = com.db.ariApi.AristoApiProfRef.data
-    kvtProfData = com.db.kvtApi.KvtApiProfRef.data
-    cdbProfData = com.db.profTab
-  when LedgerEnableApiProfiling:
-    ldgProfData = com.db.ldgProfData()
-
   # This will enable printing the `era1` covered block ranges (if any)
   undump_blocks_era1.noisy = noisy
 
@@ -217,7 +162,7 @@ proc test_chainSync*(
   for w in files.undumpBlocks(least = start):
     let (fromBlock, toBlock) = (w[0].header.number, w[^1].header.number)
     if fromBlock == 0'u64:
-      xCheck w[0].header == com.db.getBlockHeader(0'u64)
+      xCheck w[0].header == com.db.baseTxFrame().getBlockHeader(0'u64).expect("block header exists")
       continue
 
     # Process groups of blocks ...
@@ -235,15 +180,12 @@ proc test_chainSync*(
           noisy.startLogging(w[0].header.number)
 
       noisy.stopLoggingAfter():
-        let runPersistBlocksRc = chain.persistBlocks(w)
+        let runPersistBlocksRc = com.persistBlocks(w)
         xCheck runPersistBlocksRc.isOk():
           if noisy:
             noisy.whisper "***", "Re-run with logging enabled...\n"
             setTraceLevel()
-            when CoreDbEnableApiTracking:
-              com.db.trackCoreDbApi = false
-              com.db.trackLedgerApi = false
-            discard chain.persistBlocks(w)
+            discard com.persistBlocks(w)
       blocks += w.len
       continue
 
@@ -268,7 +210,7 @@ proc test_chainSync*(
         sayPerf
         noisy.whisper "***",
            &"processing {dotsOrSpace}[#{fromBlock:>8},#{(lastBlock-1):>8}]"
-      let runPersistBlocks1Rc = chain.persistBlocks(blocks1)
+      let runPersistBlocks1Rc = com.persistBlocks(blocks1)
       xCheck runPersistBlocks1Rc.isOk()
       dotsOrSpace = "   "
 
@@ -284,7 +226,7 @@ proc test_chainSync*(
         noisy.whisper "***",
           &"processing {dotsOrSpace}[#{lastBlock:>8},#{lastBlock:>8}]"
       noisy.stopLoggingAfter():
-        let runPersistBlocks0Rc = chain.persistBlocks(blocks0)
+        let runPersistBlocks0Rc = com.persistBlocks(blocks0)
         xCheck runPersistBlocks0Rc.isOk()
     else:
       if oldLogAlign:
@@ -295,7 +237,7 @@ proc test_chainSync*(
         noisy.whisper "***",
           &"processing {dotsOrSpace}[#{lastBlock:>8},#{toBlock:>8}]"
       noisy.stopLoggingAfter():
-        let runPersistBlocks9Rc = chain.persistBlocks(blocks9)
+        let runPersistBlocks9Rc = com.persistBlocks(blocks9)
         xCheck runPersistBlocks9Rc.isOk()
     break
   if not oldLogAlign:

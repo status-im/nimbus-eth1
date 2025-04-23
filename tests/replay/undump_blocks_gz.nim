@@ -1,5 +1,5 @@
 # Nimbus
-# Copyright (c) 2021-2024 Status Research & Development GmbH
+# Copyright (c) 2021-2025 Status Research & Development GmbH
 # Licensed under either of
 #  * Apache License, version 2.0, ([LICENSE-APACHE](LICENSE-APACHE) or
 #    http://www.apache.org/licenses/LICENSE-2.0)
@@ -12,7 +12,7 @@ import
   std/[os, sequtils, strformat, strutils],
   eth/[common, rlp],
   nimcrypto/utils,
-  ../../nimbus/db/core_db,
+  ../../execution_chain/db/core_db,
   "."/[gunzip, undump_helpers]
 
 # ------------------------------------------------------------------------------
@@ -43,12 +43,12 @@ proc dumpBlocksEndNl*: string =
 proc dumpBlocksListNl*(header: Header; body: BlockBody): string =
   dumpBlocksList(header, body) & "\n"
 
-proc dumpBlocksBeginNl*(db: CoreDbRef;
+proc dumpBlocksBeginNl*(db: CoreDbTxRef;
                        headers: openArray[Header]): string =
   if headers[0].number == 1'u64:
     let
-      h0 = db.getBlockHeader(0'u64)
-      b0 = db.getBlockBody(h0.blockHash)
+      h0 = db.getBlockHeader(0'u64).expect("header exists")
+      b0 = db.getBlockBody(h0.computeBlockHash).expect("block body exists")
     result = "" &
       dumpBlocksBegin(@[h0]) & "\n" &
       dumpBlocksListNl(h0,b0) &
@@ -57,7 +57,7 @@ proc dumpBlocksBeginNl*(db: CoreDbRef;
   result &= dumpBlocksBegin(headers) & "\n"
 
 
-proc dumpBlocksNl*(db: CoreDbRef; headers: openArray[Header];
+proc dumpBlocksNl*(db: CoreDbTxRef; headers: openArray[Header];
                    bodies: openArray[BlockBody]): string =
   ## Add this below the line `transaction.commit()` in the function
   ## `p2p/chain/persist_blocks.persistBlocksImpl()`:

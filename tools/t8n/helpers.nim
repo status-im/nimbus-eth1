@@ -1,5 +1,5 @@
 # Nimbus
-# Copyright (c) 2022-2024 Status Research & Development GmbH
+# Copyright (c) 2022-2025 Status Research & Development GmbH
 # Licensed under either of
 #  * Apache License, version 2.0, ([LICENSE-APACHE](LICENSE-APACHE) or
 #    http://www.apache.org/licenses/LICENSE-2.0)
@@ -19,8 +19,8 @@ import
   eth/common/eth_types_rlp,
   eth/common/keys,
   eth/common/blocks,
-  ../../nimbus/transaction,
-  ../../nimbus/common/chain_config,
+  ../../execution_chain/transaction,
+  ../../execution_chain/common/chain_config,
   ../common/helpers,
   ./types
 
@@ -99,11 +99,6 @@ proc readValue*(r: var JsonReader[T8Conv], val: var uint64)
   else:
     wrapValueError:
       val = parseHexOrInt[uint64](r.parseString())
-
-proc readValue*(r: var JsonReader[T8Conv], val: var ChainId)
-       {.raises: [IOError, JsonReaderError].} =
-  wrapValueError:
-    val = parseHexOrInt[uint64](r.parseString()).ChainId
 
 proc readValue*(r: var JsonReader[T8Conv], val: var EthTime)
        {.raises: [IOError, JsonReaderError].} =
@@ -191,6 +186,7 @@ proc readValue*(r: var JsonReader[T8Conv], val: var EnvStruct)
     of "blockHashes": r.readValue(val.blockHashes)
     of "ommers": r.readValue(val.ommers)
     of "withdrawals": r.readValue(val.withdrawals)
+    of "depositContractAddress": r.readValue(val.depositContractAddress)
     else: discard r.readValue(JsonString)
 
   if not currentCoinbaseParsed:
@@ -235,10 +231,10 @@ proc parseTxJson(txo: TxObject, chainId: ChainId): Result[Transaction, string] =
   required(value)
   required(input, payload)
   tx.to = txo.to
-  tx.chainId = chainId
 
   case tx.txType
   of TxLegacy:
+    tx.chainId = chainId
     required(gasPrice)
   of TxEip2930:
     required(gasPrice)
@@ -262,6 +258,14 @@ proc parseTxJson(txo: TxObject, chainId: ChainId): Result[Transaction, string] =
     required(maxFeePerGas)
     optional(accessList)
     required(authorizationList)
+  of TxEip7873:
+    required(chainId)
+    optional(accessList)
+    required(initCodes)
+
+  # Ignore chainId if txType == TxLegacy
+  if tx.txType > TxLegacy and tx.chainId != chainId:
+    return err("invalid chain id: have " & $tx.chainId & " want " & $chainId)
 
   let eip155 = txo.protected.get(true)
   if txo.secretKey.isSome:
@@ -274,13 +278,17 @@ proc parseTxJson(txo: TxObject, chainId: ChainId): Result[Transaction, string] =
     required(s, S)
     ok(tx)
 
-proc readNestedTx(rlp: var Rlp): Result[Transaction, string] =
+proc readNestedTx(rlp: var Rlp, chainId: ChainId): Result[Transaction, string] =
   try:
-    ok if rlp.isList:
+    let tx = if rlp.isList:
       rlp.read(Transaction)
     else:
       var rr = rlpFromBytes(rlp.read(seq[byte]))
       rr.read(Transaction)
+    # Ignore chainId if txType == TxLegacy
+    if tx.txType > TxLegacy and tx.chainId != chainId:
+      return err("invalid chain id: have " & $tx.chainId & " want " & $chainId)
+    ok(tx)
   except RlpError as exc:
     err(exc.msg)
 
@@ -301,7 +309,7 @@ proc parseTxs*(ctx: var TransContext, chainId: ChainId)
 
   if ctx.txsRlp.len > 0:
     for item in rlp:
-      ctx.txList.add rlp.readNestedTx()
+      ctx.txList.add rlp.readNestedTx(chainId)
 
 proc filterGoodTransactions*(ctx: TransContext): seq[Transaction] =
   for txRes in ctx.txList:
@@ -433,6 +441,11 @@ proc `@@`[T](x: seq[T]): JsonNode =
   for c in x:
     result.add @@(c)
 
+proc `@@`[N, T](x: array[N, T]): JsonNode =
+  result = newJArray()
+  for c in x:
+    result.add @@(c)
+
 proc `@@`[T](x: Opt[T]): JsonNode =
   if x.isNone:
     newJNull()
@@ -462,3 +475,5 @@ proc `@@`*(x: ExecutionResult): JsonNode =
     result["blobGasUsed"] = @@(x.blobGasUsed)
   if x.requestsHash.isSome:
     result["requestsHash"] = @@(x.requestsHash)
+  if x.requests.isSome:
+    result["requests"] = @@(x.requests)

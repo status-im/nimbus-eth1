@@ -1,5 +1,5 @@
 # Nimbus
-# Copyright (c) 2022-2023 Status Research & Development GmbH
+# Copyright (c) 2022-2025 Status Research & Development GmbH
 # Licensed under either of
 #  * Apache License, version 2.0, ([LICENSE-APACHE](LICENSE-APACHE) or
 #    http://www.apache.org/licenses/LICENSE-2.0)
@@ -24,8 +24,6 @@ const
   availableForks = combineForks()
 
 type
-  HexOrInt* = distinct uint64
-
   T8NConf* = object of RootObj
     traceEnabled* {.
       desc: "Enable and set where to put full EVM trace logs"
@@ -106,8 +104,9 @@ type
 
     stateChainId* {.
       desc: "ChainID to use"
-      defaultValue: 1
-      name: "state.chainid" }: HexOrInt
+      defaultValue: 1.u256
+      defaultValueDesc: "1"
+      name: "state.chainid" }: UInt256
 
     stateFork* {.
       desc: "Name of ruleset to use."
@@ -133,13 +132,13 @@ proc parseCmdArg(T: type Option[UInt256], p: string): T =
 proc completeCmdArg(T: type Option[UInt256], val: string): seq[string] =
   return @[]
 
-proc parseCmdArg(T: type HexOrInt, p: string): T =
+proc parseCmdArg(T: type UInt256, p: string): T =
   if startsWith(p, "0x"):
-    parseHexInt(p).T
+    parse(p, UInt256, 16)
   else:
-    parseInt(p).T
+    parse(p, UInt256, 10)
 
-proc completeCmdArg(T: type HexOrInt, val: string): seq[string] =
+proc completeCmdArg(T: type UInt256, val: string): seq[string] =
   return @[]
 
 proc notCmd(x: string): bool =
@@ -171,13 +170,15 @@ proc convertToNimStyle(cmds: openArray[string]): seq[string] =
     inc i
 
 const
-  Copyright = "Copyright (c) 2022 Status Research & Development GmbH"
-  Version   = "Nimbus-t8n 0.2.2"
+  Copyright = "Copyright (c) 2022-" &
+    CompileDate.split('-')[0] &
+    " Status Research & Development GmbH"
+  Version   = "Nimbus-t8n 0.2.4"
 
 # force the compiler to instantiate T8NConf.load
 # rather than have to export parseCmdArg
-# because it will use wrong parseCmdArg from nimbus/config.nim
-# when evmc_enabled
+# because it will use wrong parseCmdArg under certain
+# condition.
 proc initT8NConf(cmdLine: openArray[string]): T8NConf =
   {.push warning[ProveInit]: off.}
   result = T8NConf.load(

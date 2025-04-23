@@ -118,7 +118,7 @@ func skipBCTests*(folder: string, name: string): bool =
 func skipNewBCTests*(folder: string, name: string): bool =
   if folder in ["vmPerformance"]:
     return true
-    
+
   # the new BC tests also contains these slow tests
   # for Istanbul fork
   if slowGSTTests(folder, name):
@@ -129,9 +129,3 @@ func skipNewBCTests*(folder: string, name: string): bool =
     "randomStatetest94.json",
     "DelegateCallSpam.json",
   ]
-  
-func skipPrecompilesTests*(folder: string, name: string): bool =
-  # EIP2565: modExp gas cost
-  # reason: included in berlin
-  # name == "modexp_eip2565.json"
-  return false

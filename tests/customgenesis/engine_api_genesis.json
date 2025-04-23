@@ -12,8 +12,7 @@
     "berlinBlock": 0,
     "londonBlock": 0,
     "mergeNetsplitBlock": 0,
-    "terminalTotalDifficulty": 0,
-    "terminalTotalDifficultyPassed": true,
+    "terminalTotalDifficulty": 0
   },
   "alloc": {
     "0x0000000000000000000000000000000000000000": {

@@ -60,12 +60,12 @@ type
 
   ContentKeyType* = AccountTrieNodeKey | ContractTrieNodeKey | ContractCodeKey
 
-func init*(T: type AccountTrieNodeKey, path: Nibbles, nodeHash: Hash32): T {.inline.} =
+func init*(T: type AccountTrieNodeKey, path: Nibbles, nodeHash: Hash32): T =
   T(path: path, nodeHash: nodeHash)
 
 func init*(
     T: type ContractTrieNodeKey, addressHash: Hash32, path: Nibbles, nodeHash: Hash32
-): T {.inline.} =
+): T =
   T(addressHash: addressHash, path: path, nodeHash: nodeHash)
 
 func init*(
@@ -73,13 +73,13 @@ func init*(
 ): T {.inline.} =
   T(addressHash: addressHash, codeHash: codeHash)
 
-func toContentKey*(key: AccountTrieNodeKey): ContentKey {.inline.} =
+template toContentKey*(key: AccountTrieNodeKey): ContentKey =
   ContentKey(contentType: accountTrieNode, accountTrieNodeKey: key)
 
-func toContentKey*(key: ContractTrieNodeKey): ContentKey {.inline.} =
+template toContentKey*(key: ContractTrieNodeKey): ContentKey =
   ContentKey(contentType: contractTrieNode, contractTrieNodeKey: key)
 
-func toContentKey*(key: ContractCodeKey): ContentKey {.inline.} =
+template toContentKey*(key: ContractCodeKey): ContentKey =
   ContentKey(contentType: contractCode, contractCodeKey: key)
 
 proc readSszBytes*(data: openArray[byte], val: var ContentKey) {.raises: [SszError].} =
@@ -89,7 +89,7 @@ proc readSszBytes*(data: openArray[byte], val: var ContentKey) {.raises: [SszErr
 
   readSszValue(data, val)
 
-func encode*(contentKey: ContentKey): ContentKeyByteList {.inline.} =
+func encode*(contentKey: ContentKey): ContentKeyByteList =
   doAssert(contentKey.contentType != unused)
   ContentKeyByteList.init(SSZ.encode(contentKey))
 
@@ -101,6 +101,6 @@ func decode*(
     return err("ContentKey contentType: unused")
   ok(key)
 
-func toContentId*(contentKey: ContentKeyByteList): ContentId {.inline.} =
+func toContentId*(contentKey: ContentKeyByteList): ContentId =
   let idHash = sha256.digest(contentKey.asSeq())
   readUintBE[256](idHash.data)

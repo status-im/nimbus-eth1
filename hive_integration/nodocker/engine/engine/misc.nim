@@ -1,5 +1,5 @@
 # Nimbus
-# Copyright (c) 2023-2024 Status Research & Development GmbH
+# Copyright (c) 2023-2025 Status Research & Development GmbH
 # Licensed under either of
 #  * Apache License, version 2.0, ([LICENSE-APACHE](LICENSE-APACHE) or
 #    http://www.apache.org/licenses/LICENSE-2.0)
@@ -10,7 +10,7 @@
 
 import
   ./engine_spec,
-  ../../../../nimbus/common/hardforks
+  ../../../../execution_chain/common/hardforks
 
 # Runs a sanity test on a post Merge fork where a previous fork's (London) number is not zero
 type
@@ -31,7 +31,7 @@ method getForkConfig*(cs: NonZeroPreMergeFork): ChainConfig =
 
   # Merge fork & pre-merge happen at block 1
   forkConfig.londonBlock = Opt.some(1'u64)
-  forkConfig.mergeForkBlock = Opt.some(1'u64)
+  forkConfig.mergeNetsplitBlock = Opt.some(1'u64)
 
   # Post-merge fork happens at block 2
   let mainFork = BaseSpec(cs).getMainFork()

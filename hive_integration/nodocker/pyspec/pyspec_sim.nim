@@ -1,5 +1,5 @@
 # Nimbus
-# Copyright (c) 2023-2024 Status Research & Development GmbH
+# Copyright (c) 2023-2025 Status Research & Development GmbH
 # Licensed under either of
 #  * Apache License, version 2.0, ([LICENSE-APACHE](LICENSE-APACHE))
 #  * MIT license ([LICENSE-MIT](LICENSE-MIT))
@@ -13,12 +13,12 @@ import
   eth/common/eth_types_rlp,
   json_rpc/rpcclient,
   web3/execution_types,
+  taskpools,
   ../sim_utils,
   ../../../tools/common/helpers as chp,
   ../../../tools/evmstate/helpers as ehp,
-  ../../../nimbus/beacon/web3_eth_conv,
-  ../../../nimbus/beacon/payload_conv,
-  ../../../nimbus/core/eip4844,
+  ../../../execution_chain/beacon/web3_eth_conv,
+  ../../../execution_chain/beacon/payload_conv,
   ../engine/engine_client,
   ../engine/types,
   ./test_env
@@ -115,9 +115,9 @@ proc validatePostState(node: JsonNode, t: TestEnv): bool =
 
   return true
 
-proc runTest(node: JsonNode, network: string): TestStatus =
+proc runTest(node: JsonNode, taskPool: Taskpool, network: string): TestStatus =
   let conf = getChainConfig(network)
-  var env = setupELClient(conf, node)
+  var env = setupELClient(conf, taskPool, node)
 
   let blks = node["blocks"]
   var
@@ -198,12 +198,8 @@ proc collectTestVectors(): seq[string] =
 
 proc main() =
   var stat: SimStat
+  let taskPool = Taskpool.new()
   let start = getTime()
-
-  let res = loadKzgTrustedSetup()
-  if res.isErr:
-    echo "FATAL: ", res.error
-    quit(QuitFailure)
 
   let testVectors = collectTestVectors()
   for fileName in testVectors:
@@ -225,7 +221,7 @@ proc main() =
         continue
 
       try:
-        let status = runTest(fixture, network)
+        let status = runTest(fixture, taskPool, network)
         stat.inc(name, status)
       except CatchableError as ex:
         debugEcho ex.msg

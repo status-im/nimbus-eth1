@@ -1,5 +1,5 @@
 # Fluffy
-# Copyright (c) 2021-2024 Status Research & Development GmbH
+# Copyright (c) 2021-2025 Status Research & Development GmbH
 # Licensed and distributed under either of
 #   * MIT license (license terms in the root directory or at https://opensource.org/licenses/MIT).
 #   * Apache v2 license (license terms in the root directory or at https://www.apache.org/licenses/LICENSE-2.0).
@@ -16,11 +16,16 @@ import
   eth/p2p/discoveryv5/routing_table,
   nimcrypto/[hash, sha2],
   eth/p2p/discoveryv5/protocol as discv5_protocol,
-  ../../network/wire/[portal_protocol, portal_stream, portal_protocol_config],
+  ../../network/wire/[
+    portal_protocol, portal_stream, portal_protocol_config, portal_protocol_version,
+    ping_extensions,
+  ],
   ../../database/content_db,
   ../test_helpers
 
-const protocolId = [byte 0x50, 0x00]
+const
+  protocolId = [byte 0x50, 0x00]
+  connectionTimeoutTest = 2.seconds
 
 proc toContentId(contentKey: ContentKeyByteList): results.Opt[ContentId] =
   # Note: Returning sha256 digest as content id here. This content key to
@@ -36,25 +41,35 @@ proc initPortalProtocol(
     bootstrapRecords: openArray[Record] = [],
 ): PortalProtocol =
   let
-    d = initDiscoveryNode(rng, privKey, address, bootstrapRecords)
+    d = initDiscoveryNode(
+      rng,
+      privKey,
+      address,
+      bootstrapRecords,
+      localEnrFields = {portalVersionKey: SSZ.encode(localSupportedVersions)},
+    )
     db = ContentDB.new(
       "", uint32.high, RadiusConfig(kind: Dynamic), d.localNode.id, inMemory = true
     )
     manager = StreamManager.new(d)
     q = newAsyncQueue[(Opt[NodeId], ContentKeysList, seq[seq[byte]])](50)
-    stream = manager.registerNewStream(q)
+    stream = manager.registerNewStream(q, connectionTimeout = connectionTimeoutTest)
 
-    proto = PortalProtocol.new(
-      d,
-      protocolId,
-      toContentId,
-      createGetHandler(db),
-      createStoreHandler(db, defaultRadiusConfig),
-      createContainsHandler(db),
-      createRadiusHandler(db),
-      stream,
-      bootstrapRecords = bootstrapRecords,
-    )
+  var config = defaultPortalProtocolConfig
+  config.disableBanNodes = false
+
+  let proto = PortalProtocol.new(
+    d,
+    protocolId,
+    toContentId,
+    createGetHandler(db),
+    createStoreHandler(db, defaultRadiusConfig),
+    createContainsHandler(db),
+    createRadiusHandler(db),
+    stream,
+    bootstrapRecords = bootstrapRecords,
+    config = config,
+  )
 
   return proto
 
@@ -77,13 +92,21 @@ procSuite "Portal Wire Protocol Tests":
 
     let pong = await proto1.ping(proto2.localNode)
 
-    let customPayload =
-      ByteList[2048](SSZ.encode(CustomPayload(dataRadius: UInt256.high())))
+    let customPayload = CapabilitiesPayload(
+      client_info: ByteList[MAX_CLIENT_INFO_BYTE_LENGTH].init(@[]),
+      data_radius: UInt256.high(),
+      capabilities: List[uint16, MAX_CAPABILITIES_LENGTH].init(
+        proto1.pingExtensionCapabilities.toSeq()
+      ),
+    )
 
+    check pong.isOk()
+
+    let (enrSeq, payloadType, payload) = pong.value()
     check:
-      pong.isOk()
-      pong.get().enrSeq == 1'u64
-      pong.get().customPayload == customPayload
+      enrSeq == 1'u64
+      payloadType == 0
+      payload == customPayload
 
     await proto1.stopPortalProtocol()
     await proto2.stopPortalProtocol()
@@ -162,6 +185,52 @@ procSuite "Portal Wire Protocol Tests":
       accept.isOk()
       accept.get().connectionId.len == 2
       accept.get().contentKeys.len == contentKeys.len
+
+    await proto1.stopPortalProtocol()
+    await proto2.stopPortalProtocol()
+
+  asyncTest "Offer/Accept limit reached for the same content key":
+    let (proto1, proto2) = defaultTestSetup(rng)
+    let contentKeys = ContentKeysList(@[ContentKeyByteList(@[byte 0x01, 0x02, 0x03])])
+
+    let accept = await proto1.offerImpl(proto2.baseProtocol.localNode, contentKeys)
+    let expectedByteList = ContentKeysAcceptList.init(@[Accepted])
+
+    check:
+      accept.isOk()
+      # Content accepted
+      accept.get().contentKeys == expectedByteList
+
+    let accept2 = await proto1.offerImpl(proto2.baseProtocol.localNode, contentKeys)
+
+    check:
+      accept2.isOk()
+      # Content not accepted
+      accept2.get().contentKeys ==
+        ContentKeysAcceptList.init(@[DeclinedInboundTransferInProgress])
+
+    await proto1.stopPortalProtocol()
+    await proto2.stopPortalProtocol()
+
+  asyncTest "Offer/Accept trigger pruning of timed out offer":
+    let (proto1, proto2) = defaultTestSetup(rng)
+    let contentKeys = ContentKeysList(@[ContentKeyByteList(@[byte 0x01, 0x02, 0x03])])
+
+    let accept = await proto1.offerImpl(proto2.baseProtocol.localNode, contentKeys)
+    let expectedByteList = ContentKeysAcceptList.init(@[Accepted])
+
+    check:
+      accept.isOk()
+      # Content accepted
+      accept.get().contentKeys == expectedByteList
+
+    await sleepAsync(connectionTimeoutTest)
+
+    let accept2 = await proto1.offerImpl(proto2.baseProtocol.localNode, contentKeys)
+    check:
+      accept2.isOk()
+      # Content accepted because previous offer was pruned
+      accept2.get().contentKeys == expectedByteList
 
     await proto1.stopPortalProtocol()
     await proto2.stopPortalProtocol()
@@ -444,6 +513,132 @@ procSuite "Portal Wire Protocol Tests":
 
       proto1.getLocalContent(contentKey, contentId).isNone()
       proto2.getLocalContent(contentKey, contentId).get() == content
+
+    await proto1.stopPortalProtocol()
+    await proto2.stopPortalProtocol()
+
+  asyncTest "Banned nodes are removed and cannot be added":
+    let (proto1, proto2) = defaultTestSetup(rng)
+
+    # add the node
+    check:
+      proto1.addNode(proto2.localNode) == Added
+      proto1.getNode(proto2.localNode.id).isSome()
+
+    # banning the node should remove it from the routing table
+    proto1.banNode(proto2.localNode.id, 1.minutes)
+    check proto1.getNode(proto2.localNode.id).isNone()
+
+    # cannot add a banned node
+    check:
+      proto1.addNode(proto2.localNode) == Banned
+      proto1.getNode(proto2.localNode.id).isNone()
+
+    await proto1.stopPortalProtocol()
+    await proto2.stopPortalProtocol()
+
+  asyncTest "Banned nodes are filtered out in FindNodes/Nodes":
+    let
+      proto1 = initPortalProtocol(rng, PrivateKey.random(rng[]), localAddress(20302))
+      proto2 = initPortalProtocol(rng, PrivateKey.random(rng[]), localAddress(20303))
+      proto3 = initPortalProtocol(rng, PrivateKey.random(rng[]), localAddress(20304))
+      distance = logDistance(proto2.localNode.id, proto3.localNode.id)
+
+    check proto2.addNode(proto3.localNode) == Added
+    check (await proto2.ping(proto3.localNode)).isOk()
+    check (await proto3.ping(proto2.localNode)).isOk()
+
+    # before banning the node it is returned in the response
+    block:
+      let res = await proto1.findNodes(proto2.localNode, @[distance])
+      check:
+        res.isOk()
+        res.get().len() == 1
+
+    proto1.banNode(proto3.localNode.id, 1.minutes)
+
+    # after banning the node, it is not returned in the response
+    block:
+      let res = await proto1.findNodes(proto2.localNode, @[distance])
+      check:
+        res.isOk()
+        res.get().len() == 0
+
+    await proto1.stopPortalProtocol()
+    await proto2.stopPortalProtocol()
+    await proto3.stopPortalProtocol()
+
+  asyncTest "Banned nodes are filtered out in FindContent/Content - send enrs":
+    let
+      proto1 = initPortalProtocol(rng, PrivateKey.random(rng[]), localAddress(20302))
+      proto2 = initPortalProtocol(rng, PrivateKey.random(rng[]), localAddress(20303))
+      proto3 = initPortalProtocol(rng, PrivateKey.random(rng[]), localAddress(20304))
+
+    check proto2.addNode(proto3.localNode) == Added
+    check (await proto2.ping(proto3.localNode)).isOk()
+    check (await proto3.ping(proto2.localNode)).isOk()
+
+    let contentKey = ContentKeyByteList.init(@[1'u8])
+
+    block:
+      let res = await proto1.findContent(proto2.localNode, contentKey)
+      check:
+        res.isOk()
+        res.get().nodes.len() == 1
+
+    proto1.banNode(proto3.localNode.id, 1.minutes)
+
+    block:
+      let res = await proto1.findContent(proto2.localNode, contentKey)
+      check:
+        res.isOk()
+        res.get().nodes.len() == 0
+
+    await proto1.stopPortalProtocol()
+    await proto2.stopPortalProtocol()
+    await proto3.stopPortalProtocol()
+
+  asyncTest "Drop messages from banned nodes":
+    let
+      proto1 = initPortalProtocol(rng, PrivateKey.random(rng[]), localAddress(20302))
+      proto2 = initPortalProtocol(rng, PrivateKey.random(rng[]), localAddress(20303))
+      proto3 = initPortalProtocol(rng, PrivateKey.random(rng[]), localAddress(20304))
+      proto4 = initPortalProtocol(rng, PrivateKey.random(rng[]), localAddress(20305))
+      contentKey = ContentKeyByteList.init(@[1'u8])
+
+    proto2.banNode(proto1.localNode.id, 1.minutes)
+    proto3.banNode(proto1.localNode.id, 1.minutes)
+    proto4.banNode(proto1.localNode.id, 1.minutes)
+
+    check:
+      (await proto1.ping(proto2.localNode)).error() ==
+        "No message data, peer might not support this talk protocol"
+      (await proto1.findNodes(proto3.localNode, @[0.uint16])).error() ==
+        "No message data, peer might not support this talk protocol"
+      (await proto1.findContent(proto4.localNode, contentKey)).error() ==
+        "No message data, peer might not support this talk protocol"
+
+    await proto1.stopPortalProtocol()
+    await proto2.stopPortalProtocol()
+
+  asyncTest "Cannot send message to banned nodes":
+    let
+      (proto1, proto2) = defaultTestSetup(rng)
+      contentKey = ContentKeyByteList.init(@[1'u8])
+
+    check:
+      (await proto1.ping(proto2.localNode)).isOk()
+      (await proto1.findNodes(proto2.localNode, @[0.uint16])).isOk()
+      (await proto1.findContent(proto2.localNode, contentKey)).isOk()
+
+    proto1.banNode(proto2.localNode.id, 1.minutes)
+
+    check:
+      (await proto1.ping(proto2.localNode)).error() == "destination node is banned"
+      (await proto1.findNodes(proto2.localNode, @[0.uint16])).error() ==
+        "destination node is banned"
+      (await proto1.findContent(proto2.localNode, contentKey)).error() ==
+        "destination node is banned"
 
     await proto1.stopPortalProtocol()
     await proto2.stopPortalProtocol()

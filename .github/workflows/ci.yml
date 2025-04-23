@@ -1,5 +1,5 @@
 # Nimbus
-# Copyright (c) 2020-2024 Status Research & Development GmbH
+# Copyright (c) 2020-2025 Status Research & Development GmbH
 # Licensed under either of
 #  * Apache License, version 2.0, ([LICENSE-APACHE](LICENSE-APACHE) or
 #    http://www.apache.org/licenses/LICENSE-2.0)
@@ -15,6 +15,7 @@ on:
       - 'doc/**'
       - 'docs/**'
       - '**/*.md'
+      - '**/*.yml'
       - 'hive_integration/**'
       - 'fluffy/**'
       - '.github/workflows/fluffy*.yml'
@@ -35,23 +36,8 @@ jobs:
         target:
           - os: linux
             cpu: amd64
-            evmc: evmc
-          - os: macos
-            cpu: amd64
-            evmc: evmc
-          - os: macos
-            cpu: arm64
-            evmc: evmc
-          - os: windows
-            cpu: amd64
-            evmc: evmc
-          - os: linux
-            cpu: amd64
             evmc: nimvm
           - os: windows
-            cpu: amd64
-            evmc: nimvm
-          - os: macos
             cpu: amd64
             evmc: nimvm
           - os: macos
@@ -60,7 +46,7 @@ jobs:
         include:
           - target:
               os: linux
-            builder: ubuntu-20.04
+            builder: ubuntu-22.04
           - target:
               os: macos
             builder: macos-13
@@ -211,22 +197,19 @@ jobs:
         run: |
           gcc --version
           DEFAULT_MAKE_FLAGS="-j${ncpu} ENABLE_EVMC=${ENABLE_EVMC} ENABLE_VMLOWMEM=${ENABLE_VMLOWMEM}"
-          mingw32-make ${DEFAULT_MAKE_FLAGS} all test_import
+          mingw32-make ${DEFAULT_MAKE_FLAGS} all test_import build_fuzzers
           build/nimbus_execution_client.exe --help
           # give us more space
           # find . -type d -name ".git" -exec rm -rf {} +
           find . -type d -name "nimcache" -exec rm -rf {} +
           mingw32-make ${DEFAULT_MAKE_FLAGS} test t8n_test
-          if [[ '${{ matrix.target.cpu }}' == 'amd64' ]]; then
-            mingw32-make ${DEFAULT_MAKE_FLAGS}
-          fi
 
       - name: Run nimbus-eth1 tests (Linux)
         if: runner.os == 'Linux'
         run: |
           export LD_LIBRARY_PATH="${LD_LIBRARY_PATH}:/usr/local/lib"
           DEFAULT_MAKE_FLAGS="-j${ncpu} ENABLE_EVMC=${ENABLE_EVMC}"
-          env CC=gcc make ${DEFAULT_MAKE_FLAGS} all test_import
+          env CC=gcc make ${DEFAULT_MAKE_FLAGS} all test_import build_fuzzers
           build/nimbus_execution_client --help
           # CC, GOARCH, and CGO_ENABLED are needed to select correct compiler 32/64 bit
           # pushd vendor/nimbus-eth2
@@ -241,7 +224,7 @@ jobs:
         run: |
           export ZERO_AR_DATE=1 # avoid timestamps in binaries
           DEFAULT_MAKE_FLAGS="-j${ncpu} ENABLE_EVMC=${ENABLE_EVMC}"
-          make ${DEFAULT_MAKE_FLAGS} all test_import
+          make ${DEFAULT_MAKE_FLAGS} all test_import build_fuzzers
           build/nimbus_execution_client --help
           # "-static" option will not work for osx unless static system libraries are provided
           # pushd vendor/nimbus-eth2

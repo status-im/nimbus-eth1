@@ -1,5 +1,5 @@
 # Nimbus
-# Copyright (c) 2023-2024 Status Research & Development GmbH
+# Copyright (c) 2023-2025 Status Research & Development GmbH
 # Licensed under either of
 #  * Apache License, version 2.0, ([LICENSE-APACHE](LICENSE-APACHE) or
 #    http://www.apache.org/licenses/LICENSE-2.0)
@@ -16,12 +16,12 @@ import
   eth/common,
   results,
   unittest2,
-  ../nimbus/db/opts,
-  ../nimbus/db/core_db/persistent,
-  ../nimbus/core/chain,
+  ../execution_chain/db/opts,
+  ../execution_chain/db/core_db/persistent,
+  ../execution_chain/core/chain,
   ./replay/pp,
   ./test_coredb/[
-    coredb_test_xx, test_chainsync, test_coredb_helpers, test_helpers]
+    coredb_test_xx, test_chainsync, test_helpers]
 
 const
   # If `true`, this compile time option set up `unittest2` for manual parsing
@@ -152,17 +152,14 @@ proc setErrorLevel {.used.} =
 proc initRunnerDB(
     path: string;
     specs: CaptureSpecs;
-    dbType: CdbTypeEx;
-    pruneHistory: bool;
+    dbType: CoreDbType;
      ): CommonRef =
   let coreDB =
     # Resolve for static `dbType`
     case dbType:
-    of CdbAristoMemory: AristoDbMemory.newCoreDbRef()
-    of CdbAristoRocks: AristoDbRocks.newCoreDbRef(path, DbOptions.init())
-    of CdbAristoDualRocks: newCdbAriAristoDualRocks(path, DbOptions.init())
-    of CdbAristoVoid: AristoDbVoid.newCoreDbRef()
-    of CdbOoops: raiseAssert "Ooops"
+    of AristoDbMemory: AristoDbMemory.newCoreDbRef()
+    of AristoDbRocks: AristoDbRocks.newCoreDbRef(path, DbOptions.init())
+    else: raiseAssert $dbType
 
   when false: # or true:
     setDebugLevel()
@@ -181,14 +178,11 @@ proc initRunnerDB(
 
   result = CommonRef.new(
     db = coreDB,
+    taskpool = nil,
     networkId = networkId,
-    params = params,
-    pruneHistory = pruneHistory)
+    params = params)
 
   setErrorLevel()
-  when CoreDbEnableApiTracking:
-    coreDB.trackCoreDbApi = false
-    coreDB.trackLedgerApi = false
 
 # ------------------------------------------------------------------------------
 # Test Runners: accounts and accounts storages
@@ -197,8 +191,7 @@ proc initRunnerDB(
 proc chainSyncRunner(
     noisy = true;
     capture = memorySampleDefault;
-    dbType =  CdbTypeEx(0);
-    pruneHistory = false;
+    dbType =  CoreDbType(0);
     profilingOk = false;
     finalDiskCleanUpOk = true;
     enaLoggingOk = false;
@@ -219,14 +212,14 @@ proc chainSyncRunner(
 
     dbType = block:
       # Decreasing priority: dbType, capture.dbType, dbTypeDefault
-      var effDbType = dbTypeDefault.to(CdbTypeEx)
-      if dbType != CdbTypeEx(0):
+      var effDbType = dbTypeDefault
+      if dbType != CoreDbType(0):
         effDbType = dbType
       elif capture.dbType != CoreDbType(0):
-        effDbType = capture.dbType.to(CdbTypeEx)
+        effDbType = capture.dbType
       effDbType
 
-    persistent = dbType in CdbTypeExPersistent
+    persistent = dbType in CoreDbPersistentTypes
 
   defer:
     if persistent: baseDir.flushDbDir
@@ -235,16 +228,11 @@ proc chainSyncRunner(
 
     test &"Ledger API {numBlocksInfo} blocks":
       let
-        com = initRunnerDB(dbDir, capture, dbType, pruneHistory)
+        com = initRunnerDB(dbDir, capture, dbType)
       defer:
         com.db.finish(eradicate = finalDiskCleanUpOk)
         if profilingOk: noisy.test_chainSyncProfilingPrint numBlocks
         if persistent and finalDiskCleanUpOk: dbDir.flushDbDir
-
-      when CoreDbEnableApiTracking:
-        if noisy:
-          com.db.trackCoreDbApi = true
-          com.db.trackLedgerApi = true
 
       check noisy.test_chainSync(filePaths, com, numBlocks,
         lastOneExtra=lastOneExtraOk, enaLogging=enaLoggingOk,
@@ -254,9 +242,8 @@ proc chainSyncRunner(
 proc persistentSyncPreLoadAndResumeRunner(
     noisy = true;
     capture = persistentSampleDefault;
-    dbType = CdbTypeEx(0);
+    dbType = CoreDbType(0);
     profilingOk = false;
-    pruneHistory = false;
     finalDiskCleanUpOk = true;
     enaLoggingOk = false;
     lastOneExtraOk = true;
@@ -270,14 +257,14 @@ proc persistentSyncPreLoadAndResumeRunner(
 
     dbType = block:
       # Decreasing priority: dbType, capture.dbType, dbTypeDefault
-      var effDbType = dbTypeDefault.to(CdbTypeEx)
-      if dbType != CdbTypeEx(0):
+      var effDbType = dbTypeDefault
+      if dbType != CoreDbType(0):
         effDbType = dbType
       elif capture.dbType != CoreDbType(0):
-        effDbType = capture.dbType.to(CdbTypeEx)
+        effDbType = capture.dbType
       effDbType
 
-  doAssert dbType in CdbTypeExPersistent
+  doAssert dbType in CoreDbPersistentTypes
   defer: baseDir.flushDbDir
 
   let
@@ -289,15 +276,10 @@ proc persistentSyncPreLoadAndResumeRunner(
 
     test "Populate db by initial sample parts":
       let
-        com = initRunnerDB(dbDir, capture, dbType, pruneHistory)
+        com = initRunnerDB(dbDir, capture, dbType)
       defer:
         com.db.finish(eradicate = finalDiskCleanUpOk)
         if profilingOk: noisy.test_chainSyncProfilingPrint firstPart
-
-      when CoreDbEnableApiTracking:
-        if noisy:
-          com.db.trackCoreDbApi = true
-          com.db.trackLedgerApi = true
 
       check noisy.test_chainSync(filePaths, com, firstPart,
         lastOneExtra=lastOneExtraOk, enaLogging=enaLoggingOk,
@@ -305,16 +287,11 @@ proc persistentSyncPreLoadAndResumeRunner(
 
     test &"Continue with rest of sample":
       let
-        com = initRunnerDB(dbDir, capture, dbType, pruneHistory)
+        com = initRunnerDB(dbDir, capture, dbType)
       defer:
         com.db.finish(eradicate = finalDiskCleanUpOk)
         if profilingOk: noisy.test_chainSyncProfilingPrint secndPart
         if finalDiskCleanUpOk: dbDir.flushDbDir
-
-      when CoreDbEnableApiTracking:
-        if noisy:
-          com.db.trackCoreDbApi = true
-          com.db.trackLedgerApi = true
 
       check noisy.test_chainSync(filePaths, com, secndPart,
         lastOneExtra=lastOneExtraOk, enaLogging=enaLoggingOk,
@@ -339,10 +316,6 @@ when isMainModule:
   when true and false:
     false.coreDbMain()
 
-  # This one uses the readily available dump: `bulkTest0` and some huge replay
-  # dumps `bulkTest2`, `bulkTest3`, .. from the `nimbus-eth1-blobs` package.
-  # For specs see `tests/test_coredb/bulk_test_xx.nim`.
-
   sampleList = cmdLineConfig().samples
   if sampleList.len == 0:
     sampleList = @[memorySampleDefault]
@@ -355,13 +328,14 @@ when isMainModule:
         noisy.chainSyncRunner(
           #dbType = CdbAristoDualRocks,
           capture = capture,
-          #pruneHistory = true,
           #profilingOk = true,
           #finalDiskCleanUpOk = false,
           oldLogAlign = true
         )
 
     noisy.say "***", "total: ", state[0].pp, " sections: ", state[1]
+else:
+  coreDbMain()
 
 # ------------------------------------------------------------------------------
 # End

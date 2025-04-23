@@ -1,5 +1,5 @@
 # Nimbus
-# Copyright (c) 2022-2024 Status Research & Development GmbH
+# Copyright (c) 2022-2025 Status Research & Development GmbH
 # Licensed under either of
 #  * Apache License, version 2.0, ([LICENSE-APACHE](LICENSE-APACHE) or
 #    http://www.apache.org/licenses/LICENSE-2.0)
@@ -10,15 +10,12 @@
 
 import
   std/[json, strutils],
-  eth/common/keys,
-  eth/common/headers,
-  eth/common/transactions,
-  eth/trie/trie_defs,
+  eth/common/[base, keys, headers, transactions],
   stint,
   stew/byteutils,
-  ../../nimbus/transaction,
-  ../../nimbus/db/ledger,
-  ../../nimbus/common/chain_config
+  ../../execution_chain/transaction,
+  ../../execution_chain/db/ledger,
+  ../../execution_chain/common/chain_config
 
 template fromJson(T: type Address, n: JsonNode): Address =
   Address.fromHex(n.getStr)
@@ -56,7 +53,7 @@ proc fromJson(T: type PrivateKey, n: JsonNode): PrivateKey =
   removePrefix(secretKey, "0x")
   PrivateKey.fromHex(secretKey).tryGet()
 
-proc fromJson(T: type AccessList, n: JsonNode): AccessList =
+proc fromJson(T: type transactions.AccessList, n: JsonNode): transactions.AccessList =
   if n.kind == JNull:
     return
 
@@ -79,13 +76,13 @@ template required(T: type, nField: string): auto =
 template required(T: type, nField: string, index: int): auto =
   fromJson(T, n[nField][index])
 
-template omitZero(T: type, nField: string): auto =
+template defaultZero(T: type, nField: string): auto =
   if n.hasKey(nField):
     fromJson(T, n[nField])
   else:
     default(T)
 
-template omitZero(T: type, nField: string, index: int): auto =
+template defaultZero(T: type, nField: string, index: int): auto =
   if n.hasKey(nField):
     fromJson(T, n[nField][index])
   else:
@@ -97,7 +94,23 @@ template optional(T: type, nField: string): auto =
   else:
     Opt.none(T)
 
+proc fromJson(T: type Authorization, n: JsonNode): Authorization =
+  Authorization(
+    chainId: required(ChainId, "chainId"),
+    address: required(Address, "address"),
+    nonce: required(AccountNonce, "nonce"),
+    v: required(uint64, "v"),
+    r: required(UInt256, "r"),
+    s: required(UInt256, "s"),
+  )
+
+proc fromJson(T: type seq[Authorization], list: JsonNode): T =
+  for x in list:
+    result.add Authorization.fromJson(x)
+
 proc txType(n: JsonNode): TxType =
+  if "authorizationList" in n:
+    return TxEip7702
   if "blobVersionedHashes" in n:
     return TxEip4844
   if "gasPrice" notin n:
@@ -113,8 +126,8 @@ proc parseHeader*(n: JsonNode): Header =
     number     : required(BlockNumber, "currentNumber"),
     gasLimit   : required(GasInt, "currentGasLimit"),
     timestamp  : required(EthTime, "currentTimestamp"),
-    stateRoot  : emptyRlpHash,
-    mixHash    : omitZero(Bytes32, "currentRandom"),
+    stateRoot  : emptyRoot,
+    mixHash    : defaultZero(Bytes32, "currentRandom"),
     baseFeePerGas  : optional(UInt256, "currentBaseFee"),
     withdrawalsRoot: optional(Hash32, "currentWithdrawalsRoot"),
     excessBlobGas  : optional(uint64, "currentExcessBlobGas"),
@@ -123,7 +136,7 @@ proc parseHeader*(n: JsonNode): Header =
 
 proc parseParentHeader*(n: JsonNode): Header =
   Header(
-    stateRoot: emptyRlpHash,
+    stateRoot: emptyRoot,
     excessBlobGas: optional(uint64, "parentExcessBlobGas"),
     blobGasUsed: optional(uint64, "parentBlobGasUsed"),
   )
@@ -135,13 +148,14 @@ proc parseTx*(n: JsonNode, dataIndex, gasIndex, valueIndex: int): Transaction =
     gasLimit: required(GasInt, "gasLimit", gasIndex),
     value   : required(UInt256, "value", valueIndex),
     payload : required(seq[byte], "data", dataIndex),
-    chainId : ChainId(1),
-    gasPrice: omitZero(GasInt, "gasPrice"),
-    maxFeePerGas        : omitZero(GasInt, "maxFeePerGas"),
-    accessList          : omitZero(AccessList, "accessLists", dataIndex),
-    maxPriorityFeePerGas: omitZero(GasInt, "maxPriorityFeePerGas"),
-    maxFeePerBlobGas    : omitZero(UInt256, "maxFeePerBlobGas"),
-    versionedHashes     : omitZero(seq[Hash32], "blobVersionedHashes")
+    chainId : 1.u256,
+    gasPrice: defaultZero(GasInt, "gasPrice"),
+    maxFeePerGas        : defaultZero(GasInt, "maxFeePerGas"),
+    accessList          : defaultZero(AccessList, "accessLists", dataIndex),
+    maxPriorityFeePerGas: defaultZero(GasInt, "maxPriorityFeePerGas"),
+    maxFeePerBlobGas    : defaultZero(UInt256, "maxFeePerBlobGas"),
+    versionedHashes     : defaultZero(seq[Hash32], "blobVersionedHashes"),
+    authorizationList   : defaultZero(seq[Authorization], "authorizationList"),
   )
 
   let rawTo = n["to"].getStr
@@ -158,15 +172,15 @@ proc parseTx*(txData, index: JsonNode): Transaction =
     valIndex  = index["value"].getInt
   parseTx(txData, dataIndex, gasIndex, valIndex)
 
-proc setupStateDB*(wantedState: JsonNode, stateDB: LedgerRef) =
+proc setupLedger*(wantedState: JsonNode, ledger: LedgerRef) =
   for ac, accountData in wantedState:
     let account = Address.fromHex(ac)
     for slot, value in accountData{"storage"}:
-      stateDB.setStorage(account, fromHex(UInt256, slot), fromHex(UInt256, value.getStr))
+      ledger.setStorage(account, fromHex(UInt256, slot), fromHex(UInt256, value.getStr))
 
-    stateDB.setNonce(account, fromJson(AccountNonce, accountData["nonce"]))
-    stateDB.setCode(account, fromJson(seq[byte], accountData["code"]))
-    stateDB.setBalance(account, fromJson(UInt256, accountData["balance"]))
+    ledger.setNonce(account, fromJson(AccountNonce, accountData["nonce"]))
+    ledger.setCode(account, fromJson(seq[byte], accountData["code"]))
+    ledger.setBalance(account, fromJson(UInt256, accountData["balance"]))
 
 iterator postState*(node: JsonNode): (Address, GenesisAccount) =
   for ac, accountData in node:

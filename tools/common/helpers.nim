@@ -1,5 +1,5 @@
 # Nimbus
-# Copyright (c) 2022-2024 Status Research & Development GmbH
+# Copyright (c) 2022-2025 Status Research & Development GmbH
 # Licensed under either of
 #  * Apache License, version 2.0, ([LICENSE-APACHE](LICENSE-APACHE) or
 #    http://www.apache.org/licenses/LICENSE-2.0)
@@ -9,7 +9,7 @@
 # according to those terms.
 
 import
-  ../../nimbus/common/common,
+  ../../execution_chain/common/common,
   ./types
 
 export
@@ -62,9 +62,13 @@ proc assignTime(c: ChainConfig, transitionFork: HardFork, t: EthTime) =
   c.terminalTotalDifficulty = Opt.some(0.u256)
 
 func getChainConfig*(network: string, c: ChainConfig) =
+  const DEPOSIT_CONTRACT_ADDRESS = address"0x00000000219ab540356cbb839cbe05303d7705fa"
+
   c.daoForkSupport = false
-  c.chainId = 1.ChainId
+  c.chainId = 1.u256
   c.terminalTotalDifficulty = Opt.none(UInt256)
+  c.blobSchedule = defaultBlobSchedule()
+  c.depositContractAddress = Opt.some(DEPOSIT_CONTRACT_ADDRESS)
 
   case network
   of $TestFork.Frontier:
@@ -125,6 +129,8 @@ func getChainConfig*(network: string, c: ChainConfig) =
     c.assignTime(HardFork.Cancun, EthTime(15000))
   of $TestFork.Prague:
     c.assignTime(HardFork.Prague, TimeZero)
+  of $TestFork.CancunToPragueAtTime15k:
+    c.assignTime(HardFork.Prague, EthTime(15000))
   else:
     raise newException(ValueError, "unsupported network " & network)
 
