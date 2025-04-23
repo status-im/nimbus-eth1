@@ -82,6 +82,12 @@ declareCounter portal_content_cache_hits,
 declareCounter portal_content_cache_misses,
   "Portal wire protocol local content lookups that don't hit the content cache",
   labels = ["protocol_id"]
+declareCounter portal_offer_cache_hits,
+  "Portal wire protocol local content lookups that hit the offer cache",
+  labels = ["protocol_id"]
+declareCounter portal_offer_cache_misses,
+  "Portal wire protocol local content lookups that don't hit the offer cache",
+  labels = ["protocol_id"]
 declareCounter portal_poke_offers,
   "Portal wire protocol offers through poke mechanism", labels = ["protocol_id"]
 
@@ -196,7 +202,7 @@ type
     radiusCache: RadiusCache
     offerQueue: AsyncQueue[OfferRequest]
     offerWorkers: seq[Future[void]]
-    offerCache: OfferCache
+    offerCache*: OfferCache
     pingTimings: Table[NodeId, chronos.Moment]
     config*: PortalProtocolConfig
     pingExtensionCapabilities*: set[uint16]
@@ -537,6 +543,16 @@ proc handleFindContent(
 
   encodeMessage(ContentMessage(contentMessageType: enrsType, enrs: enrs))
 
+proc containsContent(
+    p: PortalProtocol, contentKey: ContentKeyByteList, contentId: ContentId
+): bool =
+  if p.offerCache.contains(contentId):
+    portal_offer_cache_hits.inc(labelValues = [$p.protocolId])
+    true
+  else:
+    portal_offer_cache_misses.inc(labelValues = [$p.protocolId])
+    p.dbContains(contentKey, contentId)
+
 proc handleOffer(
     p: PortalProtocol, o: OfferMessage, srcId: NodeId
 ): Result[AcceptMessage, string] =
@@ -579,9 +595,7 @@ proc handleOffer(
         discard contentKeysAcceptList.add(DeclinedNotWithinRadius)
       elif not p.stream.canAddPendingTransfer(srcId, contentId):
         discard contentKeysAcceptList.add(DeclinedInboundTransferInProgress)
-      elif (
-        p.offerCache.contains(contentId) and p.offerCache.get(contentId).value() == true
-      ) or p.dbContains(contentKey, contentId):
+      elif p.containsContent(contentKey, contentId):
         discard contentKeysAcceptList.add(DeclinedAlreadyStored)
       else:
         p.stream.addPendingTransfer(srcId, contentId)
@@ -1815,8 +1829,7 @@ proc storeContent*(
     if dbPruned:
       # invalidate all cached content incase it was removed from the database
       # during pruning
-      for k, v in p.offerCache.mpairs():
-        v = false
+      p.offerCache = OfferCache.init(p.offerCache.capacity)
 
     if cacheOffer and not p.config.disableOfferCache:
       p.offerCache.put(contentId, true)
