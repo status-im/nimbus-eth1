@@ -619,6 +619,9 @@ proc forkChoice*(c: ForkedChainRef,
 func notifyFinalizedHash*(c: ForkedChainRef, finHash: Hash32) =
   if finHash != zeroHash32:
     c.pendingFCU = finHash
+    let header = c.quarantine.getHeader(finHash).valueOr:
+      return
+    c.latestFinalizedBlockNumber = header.number
 
 func haveBlockAndState*(c: ForkedChainRef, blockHash: Hash32): bool =
   ## Blocks still in memory with it's txFrame
@@ -770,7 +773,7 @@ proc txDetailsByTxHash*(c: ForkedChainRef, txHash: Hash32): Result[(Hash32, uint
     header = ?c.headerByNumber(txDetails.blockNumber)
     blockHash = header.computeBlockHash
   return ok((blockHash, txDetails.index))
-  
+
 # TODO: Doesn't fetch data from portal
 # Aristo returns empty txs for both non-existent blocks and existing blocks with no txs [ Solve ? ]
 proc blockBodyByHash*(c: ForkedChainRef, blockHash: Hash32): Result[BlockBody, string] =
