@@ -278,6 +278,11 @@ proc runComputation*(call: CallParams, T: type): T =
   let host = setupHost(call, keepStack = T is DebugCallResult)
   prepareToRunComputation(host, call)
 
+  # Pre-execution sanity checks
+  host.computation.preExecComputation()
+  if host.computation.isError:
+    return finishRunningComputation(host, call, T)
+
   host.computation.execCallOrCreate()
   if not call.sysCall:
     host.computation.postExecComputation()

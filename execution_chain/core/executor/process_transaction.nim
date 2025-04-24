@@ -19,7 +19,6 @@ import
   ../../transaction/call_common,
   ../../transaction,
   ../../evm/state,
-  ../../evm/message,
   ../../evm/types,
   ../../constants,
   ../eip4844,
@@ -201,10 +200,6 @@ proc processParentBlockHash*(vmState: BaseVMState, prevHash: Hash32):
 proc processDequeueWithdrawalRequests*(vmState: BaseVMState): Result[seq[byte], string] =
   ## processDequeueWithdrawalRequests applies the EIP-7002 system call
   ## to the withdrawal requests contract.
-  let code: CodeBytesRef = vmState.getCallCode(WITHDRAWAL_REQUEST_PREDEPLOY_ADDRESS)
-  if code.bytes.len == 0:
-    return err("processDequeueWithdrawalRequests: no code found for withdrawal requests contract")
-
   let
     ledger = vmState.ledger
     call = CallParams(
@@ -233,10 +228,6 @@ proc processDequeueWithdrawalRequests*(vmState: BaseVMState): Result[seq[byte], 
 proc processDequeueConsolidationRequests*(vmState: BaseVMState): Result[seq[byte], string] =
   ## processDequeueConsolidationRequests applies the EIP-7251 system call
   ## to the consolidation requests contract.
-  let code: CodeBytesRef = vmState.getCallCode(CONSOLIDATION_REQUEST_PREDEPLOY_ADDRESS)
-  if code.bytes.len == 0:
-    return err("processDequeueConsolidationRequests: no code found for consolidation requests contract")
-
   let
     ledger = vmState.ledger
     call = CallParams(
