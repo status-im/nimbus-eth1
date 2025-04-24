@@ -44,6 +44,8 @@ type
     maxGossipNodes*: int
     contentCacheSize*: int
     disableContentCache*: bool
+    offerCacheSize*: int
+    disableOfferCache*: bool
     maxConcurrentOffers*: int
     disableBanNodes*: bool
 
@@ -52,8 +54,10 @@ const
   defaultRadiusConfigDesc* = $defaultRadiusConfig.kind
   defaultDisablePoke* = false
   defaultMaxGossipNodes* = 4
-  defaultContentCacheSize* = 100
+  defaultContentCacheSize* = 128
   defaultDisableContentCache* = false
+  defaultOfferCacheSize* = 1024
+  defaultDisableOfferCache* = false
   defaultMaxConcurrentOffers* = 50
   defaultAlpha* = 3
   revalidationTimeout* = chronos.seconds(30)
@@ -68,6 +72,8 @@ const
     maxGossipNodes: defaultMaxGossipNodes,
     contentCacheSize: defaultContentCacheSize,
     disableContentCache: defaultDisableContentCache,
+    offerCacheSize: defaultOfferCacheSize,
+    disableOfferCache: defaultDisableOfferCache,
     maxConcurrentOffers: defaultMaxConcurrentOffers,
     disableBanNodes: defaultDisableBanNodes,
   )
@@ -83,6 +89,8 @@ proc init*(
     maxGossipNodes: int,
     contentCacheSize: int,
     disableContentCache: bool,
+    offerCacheSize: int,
+    disableOfferCache: bool,
     maxConcurrentOffers: int,
     disableBanNodes: bool,
 ): T =
@@ -96,6 +104,8 @@ proc init*(
     maxGossipNodes: maxGossipNodes,
     contentCacheSize: contentCacheSize,
     disableContentCache: disableContentCache,
+    offerCacheSize: offerCacheSize,
+    disableOfferCache: disableOfferCache,
     maxConcurrentOffers: maxConcurrentOffers,
     disableBanNodes: disableBanNodes,
   )
