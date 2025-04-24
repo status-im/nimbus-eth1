@@ -938,16 +938,15 @@ proc findContent*(
 
     proc readContentValueVersioned(
         socket: UtpSocket[NodeAddress]
-    ): Future[seq[byte]] {.async: (raises: [CancelledError]).} =
+    ): Future[Result[seq[byte], string]] {.async: (raises: [CancelledError]).} =
       if version >= 1:
-        # Note: Using readContentValueNoResult instead of readContentValue as
-        # else we hit this issue:
-        # https://github.com/nim-lang/Nim/issues/24847
-        # This issue got resolved and next Nim update shoul allow to remove this
-        # workaround.
-        await socket.readContentValueNoResult()
+        await socket.readContentValue()
       else:
-        await socket.read()
+        let bytes = await socket.read()
+        if bytes.len() == 0:
+          err("No bytes read")
+        else:
+          ok(bytes)
 
     try:
       # Read one content item from the socket, fails on invalid length prefix
@@ -960,10 +959,9 @@ proc findContent*(
         socket.close()
 
       if await readFut.withTimeout(p.stream.contentReadTimeout):
-        let content = await readFut
-        if content.len == 0:
+        let content = (await readFut).valueOr:
           socket.close() # Sending FIN to remote
-          return err("Error reading content item from socket")
+          return err("Error reading content item from socket: " & error)
 
         trace "Content value read from socket", socketKey = socket.socketKey
         socket.destroy()
