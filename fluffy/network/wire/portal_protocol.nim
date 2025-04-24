@@ -77,12 +77,17 @@ declareCounter portal_gossip_without_lookup,
   "Portal wire protocol neighborhood gossip that did not require a node lookup",
   labels = ["protocol_id"]
 declareCounter portal_content_cache_hits,
-  "Portal wire protocol local content lookups that hit the cache",
+  "Portal wire protocol local content lookups that hit the content cache",
   labels = ["protocol_id"]
 declareCounter portal_content_cache_misses,
-  "Portal wire protocol local content lookups that don't hit the cache",
+  "Portal wire protocol local content lookups that don't hit the content cache",
   labels = ["protocol_id"]
-
+declareCounter portal_offer_cache_hits,
+  "Portal wire protocol local content lookups that hit the offer cache",
+  labels = ["protocol_id"]
+declareCounter portal_offer_cache_misses,
+  "Portal wire protocol local content lookups that don't hit the offer cache",
+  labels = ["protocol_id"]
 declareCounter portal_poke_offers,
   "Portal wire protocol offers through poke mechanism", labels = ["protocol_id"]
 
@@ -141,7 +146,7 @@ type
 
   DbStoreHandler* = proc(
     contentKey: ContentKeyByteList, contentId: ContentId, content: seq[byte]
-  ) {.raises: [], gcsafe.}
+  ): bool {.raises: [], gcsafe.}
 
   DbContainsHandler* = proc(contentKey: ContentKeyByteList, contentId: ContentId): bool {.
     raises: [], gcsafe
@@ -153,7 +158,15 @@ type
 
   RadiusCache* = LruCache[NodeId, UInt256]
 
+  # Caches content fetched from the network during lookups.
+  # Content outside our radius is also cached in order to improve performance
+  # of queries which may lookup data outside our radius.
   ContentCache = LruCache[ContentId, seq[byte]]
+
+  # Caches the content ids of the most recently received content offers.
+  # Content is only stored in this cache if it falls within our radius and similarly
+  # the cache is only checked if the content id is within our radius.
+  OfferCache = LruCache[ContentId, bool]
 
   ContentKV* = object
     contentKey*: ContentKeyByteList
@@ -189,6 +202,7 @@ type
     radiusCache: RadiusCache
     offerQueue: AsyncQueue[OfferRequest]
     offerWorkers: seq[Future[void]]
+    offerCache*: OfferCache
     pingTimings: Table[NodeId, chronos.Moment]
     config*: PortalProtocolConfig
     pingExtensionCapabilities*: set[uint16]
@@ -529,6 +543,16 @@ proc handleFindContent(
 
   encodeMessage(ContentMessage(contentMessageType: enrsType, enrs: enrs))
 
+proc containsContent(
+    p: PortalProtocol, contentKey: ContentKeyByteList, contentId: ContentId
+): bool =
+  if p.offerCache.contains(contentId):
+    portal_offer_cache_hits.inc(labelValues = [$p.protocolId])
+    true
+  else:
+    portal_offer_cache_misses.inc(labelValues = [$p.protocolId])
+    p.dbContains(contentKey, contentId)
+
 proc handleOffer(
     p: PortalProtocol, o: OfferMessage, srcId: NodeId
 ): Result[AcceptMessage, string] =
@@ -571,7 +595,7 @@ proc handleOffer(
         discard contentKeysAcceptList.add(DeclinedNotWithinRadius)
       elif not p.stream.canAddPendingTransfer(srcId, contentId):
         discard contentKeysAcceptList.add(DeclinedInboundTransferInProgress)
-      elif p.dbContains(contentKey, contentId):
+      elif p.containsContent(contentKey, contentId):
         discard contentKeysAcceptList.add(DeclinedAlreadyStored)
       else:
         p.stream.addPendingTransfer(srcId, contentId)
@@ -712,6 +736,8 @@ proc new*(
     stream: stream,
     radiusCache: RadiusCache.init(256),
     offerQueue: newAsyncQueue[OfferRequest](config.maxConcurrentOffers),
+    offerCache:
+      OfferCache.init(if config.disableOfferCache: 0 else: config.offerCacheSize),
     pingTimings: Table[NodeId, chronos.Moment](),
     config: config,
     pingExtensionCapabilities: pingExtensionCapabilities,
@@ -912,16 +938,15 @@ proc findContent*(
 
     proc readContentValueVersioned(
         socket: UtpSocket[NodeAddress]
-    ): Future[seq[byte]] {.async: (raises: [CancelledError]).} =
+    ): Future[Result[seq[byte], string]] {.async: (raises: [CancelledError]).} =
       if version >= 1:
-        # Note: Using readContentValueNoResult instead of readContentValue as
-        # else we hit this issue:
-        # https://github.com/nim-lang/Nim/issues/24847
-        # This issue got resolved and next Nim update shoul allow to remove this
-        # workaround.
-        await socket.readContentValueNoResult()
+        await socket.readContentValue()
       else:
-        await socket.read()
+        let bytes = await socket.read()
+        if bytes.len() == 0:
+          err("No bytes read")
+        else:
+          ok(bytes)
 
     try:
       # Read one content item from the socket, fails on invalid length prefix
@@ -934,10 +959,9 @@ proc findContent*(
         socket.close()
 
       if await readFut.withTimeout(p.stream.contentReadTimeout):
-        let content = await readFut
-        if content.len == 0:
+        let content = (await readFut).valueOr:
           socket.close() # Sending FIN to remote
-          return err("Error reading content item from socket")
+          return err("Error reading content item from socket: " & error)
 
         trace "Content value read from socket", socketKey = socket.socketKey
         socket.destroy()
@@ -1133,6 +1157,7 @@ proc offer(
             return err("Error writing requested data")
 
           trace "Offered content item send", dataWritten = dataWritten
+
   await socket.closeWait()
   trace "Content successfully offered"
 
@@ -1789,6 +1814,7 @@ proc storeContent*(
     contentId: ContentId,
     content: seq[byte],
     cacheContent = false,
+    cacheOffer = false,
 ): bool {.discardable.} =
   if cacheContent and not p.config.disableContentCache:
     # We cache content regardless of whether it is in our radius or not
@@ -1797,8 +1823,15 @@ proc storeContent*(
   # Always re-check that the key is still in the node range to make sure only
   # content in range is stored.
   if p.inRange(contentId):
-    doAssert(p.dbPut != nil)
-    p.dbPut(contentKey, contentId, content)
+    let dbPruned = p.dbPut(contentKey, contentId, content)
+    if dbPruned:
+      # invalidate all cached content incase it was removed from the database
+      # during pruning
+      p.offerCache = OfferCache.init(p.offerCache.capacity)
+
+    if cacheOffer and not p.config.disableOfferCache:
+      p.offerCache.put(contentId, true)
+
     true
   else:
     false

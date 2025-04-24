@@ -514,7 +514,7 @@ proc createStoreHandler*(db: BeaconDb): DbStoreHandler =
   return (
     proc(
         contentKey: ContentKeyByteList, contentId: ContentId, content: seq[byte]
-    ) {.raises: [], gcsafe.} =
+    ): bool {.raises: [], gcsafe.} =
       let contentKey = decode(contentKey).valueOr:
         # TODO: as this should not fail, maybe it is better to raiseAssert ?
         return
@@ -575,6 +575,8 @@ proc createStoreHandler*(db: BeaconDb): DbStoreHandler =
             db.put(contentId, content)
         else:
           db.put(contentId, content)
+
+      return false # No data pruned
   )
 
 proc createContainsHandler*(db: BeaconDb): DbContainsHandler =

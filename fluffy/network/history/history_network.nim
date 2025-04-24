@@ -397,7 +397,9 @@ proc validateContent(
         warn "Received offered content with invalid content key", srcNodeId, contentKey
         return false
 
-      n.portalProtocol.storeContent(contentKey, contentId, contentItem)
+      n.portalProtocol.storeContent(
+        contentKey, contentId, contentItem, cacheOffer = true
+      )
 
       debug "Received offered content validated successfully", srcNodeId, contentKey
     else:
