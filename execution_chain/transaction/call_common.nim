@@ -267,6 +267,10 @@ proc finishRunningComputation(
       result = c.error.info
   elif T is seq[byte]:
     result = move(c.output)
+  elif T is OutputResult:
+    if c.isError:
+      result.error = c.error.info
+    result.output = move(c.output)
   else:
     {.error: "Unknown computation output".}
 
