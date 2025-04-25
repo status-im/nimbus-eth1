@@ -11,11 +11,13 @@ import
   std/strutils,
   results,
   chronicles,
+  stew/byteutils,
   json_rpc/[rpcserver, rpcclient, rpcproxy],
-  eth/common/accounts,
+  eth/common/[accounts, headers],
   web3/eth_api,
   ../validate_proof,
-  ../block_cache
+  ../block_cache,
+  ../../fluffy/evm/async_evm
 
 logScope:
   topics = "verified_proxy"
@@ -38,6 +40,31 @@ type
       discard
     of BlockNumber:
       blockNumber: Quantity
+
+proc toHeader(blkObj: BlockObject): Header =
+  Header(
+    parentHash: blkObj.parentHash,
+    ommersHash: blkObj.sha3Uncles,
+    coinbase: blkObj.miner,
+    stateRoot: blkObj.stateRoot,
+    transactionsRoot: blkObj.transactionsRoot,
+    receiptsRoot: blkObj.receiptsRoot,
+    logsBloom: blkObj.logsBloom,
+    difficulty: blkObj.difficulty,
+    number: uint64 blkObj.number,
+    gasLimit: uint64 blkObj.gasLimit,
+    gasUsed: uint64 blkObj.gasUsed,
+    timestamp: EthTime blkObj.timestamp,
+    extraData: seq[byte](blkObj.extraData),
+    mixHash: Bytes32(blkObj.mixHash),
+    nonce: blkObj.nonce.get(),
+    baseFeePerGas: blkObj.baseFeePerGas,
+    withdrawalsRoot: blkObj.withdrawalsRoot,
+    blobGasUsed: if blkObj.blobGasUsed.isNone: Opt.none(uint64) else: Opt.some(uint64 blkObj.blobGasUsed.get()),
+    excessBlobGas: if blkObj.excessBlobGas.isNone: Opt.none(uint64) else: Opt.some(uint64 blkObj.excessBlobGas.get()),
+    parentBeaconBlockRoot: blkObj.parentBeaconBlockRoot,
+    requestsHash: blkObj.requestsHash
+  )
 
 func parseQuantityTag(blockTag: BlockTag): Result[QuantityTag, string] =
   if blockTag.kind == bidAlias:
@@ -181,7 +208,117 @@ proc installEthApiHandlers*(lcProxy: VerifiedRpcProxy) =
   # Following methods are forwarded directly to the web3 provider and therefore
   # are not validated in any way.
   lcProxy.proxy.registerProxyMethod("net_version")
-  lcProxy.proxy.registerProxyMethod("eth_call")
+
+  # lcProxy.proxy.registerProxyMethod("eth_call")
+
+  lcProxy.proxy.rpc("eth_call") do(args: TransactionArgs, blockTag: BlockTag) -> seq[byte]:
+    # let tag = parseQuantityTag(quantityTag).valueOr:
+    #   raise newException(ValueError, error)
+
+    let blk = await lcProxy.rpcClient.eth_getBlockByNumber(blockTag, false)
+    let blockNumber = blk.number.uint64
+    echo "blockNumber: ", blockNumber
+    let accProc = proc(stateRoot: Hash32, address: Address): Future[Opt[Account]] {.async: (raises: [CancelledError]).} =
+      try:
+        let balance = await lcProxy.rpcClient.eth_getBalance(address, blockId(blockNumber))
+        let nonce = await lcProxy.rpcClient.eth_getTransactionCount(address, blockId(blockNumber))
+        let account = Account.init(balance = balance, nonce = distinctBase(nonce))
+        # let
+        #   proof = await lcProxy.rpcClient.eth_getProof(address, @[], blockId(blockNumber))
+        #   account = getAccountFromProof(blk.stateRoot, proof.address, proof.balance, proof.nonce, proof.codeHash, proof.storageHash, proof.accountProof).valueOr:
+        #     raise newException(ValueError, "Failed to find account proof")
+        echo "fetched account: ", address
+        Opt.some(account)
+      except CatchableError as e:
+        echo "shouldn't fail: " & e.msg
+        Opt.none(Account)
+
+    let storageProc = proc(stateRoot: Hash32, address: Address, slotKey: UInt256): Future[Opt[UInt256]] {.async: (raises: [CancelledError]).} =
+      try:
+        let slot = await lcProxy.rpcClient.eth_getStorageAt(address, slotKey, blockId(blockNumber))
+
+        # let slot = getStorageData(blk.stateRoot, slotKey, proof).valueOr:
+        #   raise newException(ValueError, error)
+        echo "fetched slot: ", address, " ", UInt256.fromBytesBE(slot.data)
+        Opt.some(UInt256.fromBytesBE(slot.data))
+      except CatchableError as e:
+        echo "shouldn't fail: " & e.msg
+        Opt.none(UInt256)
+
+    let codeProc = proc(stateRoot: Hash32, address: Address): Future[Opt[seq[byte]]] {.async: (raises: [CancelledError]).} =
+      try:
+        let code = await lcProxy.rpcClient.eth_getCode(address, blockId(blockNumber))
+        echo "fetched code at: ", address
+        Opt.some(code)
+      except CatchableError as e:
+        echo "shouldn't fail: " & e.msg
+        Opt.none(seq[byte])
+
+    let backend = AsyncEvmStateBackend.init(accProc, storageProc, codeProc)
+    let asyncEvm = AsyncEvm.init(backend)
+
+    #let header = Header(stateRoot: blk.stateRoot, number: blockNumber)
+    let header = blk.toHeader()
+    let callResult = (await asyncEvm.call(header, args, true)).valueOr:
+      raise newException(ValueError, error)
+
+    return callResult.output
+
+  lcProxy.proxy.rpc("eth_createAccessList") do(args: TransactionArgs, blockTag: BlockTag) -> AccessListResult:
+    # let tag = parseQuantityTag(quantityTag).valueOr:
+    #   raise newException(ValueError, error)
+
+    let blk = await lcProxy.rpcClient.eth_getBlockByNumber(blockTag, false)
+    let blockNumber = blk.number.uint64
+    echo "blockNumber: ", blockNumber
+    let accProc = proc(stateRoot: Hash32, address: Address): Future[Opt[Account]] {.async: (raises: [CancelledError]).} =
+      try:
+        let balance = await lcProxy.rpcClient.eth_getBalance(address, blockId(blockNumber))
+        let nonce = await lcProxy.rpcClient.eth_getTransactionCount(address, blockId(blockNumber))
+        let account = Account.init(balance = balance, nonce = distinctBase(nonce))
+        # let
+        #   proof = await lcProxy.rpcClient.eth_getProof(address, @[], blockId(blockNumber))
+        #   account = getAccountFromProof(blk.stateRoot, proof.address, proof.balance, proof.nonce, proof.codeHash, proof.storageHash, proof.accountProof).valueOr:
+        #     raise newException(ValueError, "Failed to find account proof")
+        echo "fetched account: ", address
+        Opt.some(account)
+      except CatchableError as e:
+        echo "shouldn't fail: " & e.msg
+        Opt.none(Account)
+
+    let storageProc = proc(stateRoot: Hash32, address: Address, slotKey: UInt256): Future[Opt[UInt256]] {.async: (raises: [CancelledError]).} =
+      try:
+        let slot = await lcProxy.rpcClient.eth_getStorageAt(address, slotKey, blockId(blockNumber))
+
+        # let slot = getStorageData(blk.stateRoot, slotKey, proof).valueOr:
+        #   raise newException(ValueError, error)
+        echo "fetched slot: ", address, " ", UInt256.fromBytesBE(slot.data)
+        Opt.some(UInt256.fromBytesBE(slot.data))
+      except CatchableError as e:
+        echo "shouldn't fail: " & e.msg
+        Opt.none(UInt256)
+
+    let codeProc = proc(stateRoot: Hash32, address: Address): Future[Opt[seq[byte]]] {.async: (raises: [CancelledError]).} =
+      try:
+        let code = await lcProxy.rpcClient.eth_getCode(address, blockId(blockNumber))
+        echo "fetched code at: ", address
+        Opt.some(code)
+      except CatchableError as e:
+        echo "shouldn't fail: " & e.msg
+        Opt.none(seq[byte])
+
+    let backend = AsyncEvmStateBackend.init(accProc, storageProc, codeProc)
+    let asyncEvm = AsyncEvm.init(backend)
+    let header = blk.toHeader()
+    let (accessList, gasUsed) = (
+      await asyncEvm.createAccessList(header, args, true)
+    ).valueOr:
+      raise newException(ValueError, error)
+
+    return AccessListResult(accessList: accessList, gasUsed: gasUsed.Quantity)
+
+
+
   lcProxy.proxy.registerProxyMethod("eth_sendRawTransaction")
   lcProxy.proxy.registerProxyMethod("eth_getTransactionReceipt")
 

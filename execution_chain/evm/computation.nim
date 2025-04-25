@@ -71,6 +71,7 @@ template getBlobBaseFee*(c: Computation): UInt256 =
   c.vmState.txCtx.blobBaseFee
 
 proc getBlockHash*(c: Computation, number: BlockNumber): Hash32 =
+  echo "Get block hash called"
   let
     blockNumber = c.vmState.blockNumber
     ancestorDepth = blockNumber - number - 1
