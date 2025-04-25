@@ -27,7 +27,7 @@ suite "History Block Proofs - Historical Summaries - Test Vectors":
       testsPath =
         "./vendor/portal-spec-tests/tests/mainnet/history/headers_with_proof/block_proofs_capella/"
       historicalSummaries_path =
-        "./vendor/portal-spec-tests/tests/mainnet/history/headers_with_proof/block_proofs_capella/historical_summaries_at_slot_8953856.ssz"
+        "./vendor/portal-spec-tests/tests/mainnet/history/headers_with_proof/beacon_data/historical_summaries_at_slot_11476992.ssz"
       networkData = loadNetworkData("mainnet")
       historicalSummaries = readHistoricalSummaries(historicalSummaries_path).valueOr:
         raiseAssert "Cannot read historical summaries: " & error
@@ -35,7 +35,7 @@ suite "History Block Proofs - Historical Summaries - Test Vectors":
     for kind, path in walkDir(testsPath):
       if kind == pcFile and path.splitFile.ext == ".yaml":
         let
-          testProof = YamlTestProof.loadFromYaml(path).valueOr:
+          testProof = YamlTestProofCapella.loadFromYaml(path).valueOr:
             raiseAssert "Cannot read test vector: " & error
 
           blockHash = Digest.fromHex(testProof.execution_block_header)
@@ -44,6 +44,36 @@ suite "History Block Proofs - Historical Summaries - Test Vectors":
             beaconBlockRoot: Digest.fromHex(testProof.beacon_block_root),
             executionBlockProof: ExecutionBlockProof(
               array[11, Digest].fromHex(testProof.execution_block_proof)
+            ),
+            slot: Slot(testProof.slot),
+          )
+
+        check verifyProof(
+          historicalSummaries, blockProof, blockHash, networkData.metadata.cfg
+        )
+
+  test "BlockProofHistoricalSummariesDeneb for Execution BlockHeader":
+    let
+      testsPath =
+        "./vendor/portal-spec-tests/tests/mainnet/history/headers_with_proof/block_proofs_deneb/"
+      historicalSummaries_path =
+        "./vendor/portal-spec-tests/tests/mainnet/history/headers_with_proof/beacon_data/historical_summaries_at_slot_11476992.ssz"
+      networkData = loadNetworkData("mainnet")
+      historicalSummaries = readHistoricalSummaries(historicalSummaries_path).valueOr:
+        raiseAssert "Cannot read historical summaries: " & error
+
+    for kind, path in walkDir(testsPath):
+      if kind == pcFile and path.splitFile.ext == ".yaml":
+        let
+          testProof = YamlTestProofDeneb.loadFromYaml(path).valueOr:
+            raiseAssert "Cannot read test vector: " & error
+
+          blockHash = Digest.fromHex(testProof.execution_block_header)
+          blockProof = BlockProofHistoricalSummariesDeneb(
+            beaconBlockProof: array[13, Digest].fromHex(testProof.beacon_block_proof),
+            beaconBlockRoot: Digest.fromHex(testProof.beacon_block_root),
+            executionBlockProof: ExecutionBlockProofDeneb(
+              array[12, Digest].fromHex(testProof.execution_block_proof)
             ),
             slot: Slot(testProof.slot),
           )
