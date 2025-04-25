@@ -58,6 +58,10 @@ type
     logEntries*: seq[Log]
     gasUsed*:    GasInt
 
+  OutputResult* = object
+    error*:   string
+    output*:  seq[byte]
+
 template isCreate(tx: Transaction): bool =
   tx.contractCreation
 

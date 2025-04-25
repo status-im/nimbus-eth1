@@ -197,7 +197,7 @@ proc processParentBlockHash*(vmState: BaseVMState, prevHash: Hash32):
   ledger.persist(clearEmptyAccount = true)
   ok()
 
-proc processDequeueWithdrawalRequests*(vmState: BaseVMState): seq[byte] =
+proc processDequeueWithdrawalRequests*(vmState: BaseVMState): Result[seq[byte], string] =
   ## processDequeueWithdrawalRequests applies the EIP-7002 system call
   ## to the withdrawal requests contract.
   let
@@ -205,7 +205,7 @@ proc processDequeueWithdrawalRequests*(vmState: BaseVMState): seq[byte] =
     call = CallParams(
       vmState  : vmState,
       sender   : SYSTEM_ADDRESS,
-      gasLimit : DEFAULT_GAS_LIMIT.GasInt,
+      gasLimit : 30_000_000.GasInt,
       gasPrice : 0.GasInt,
       to       : WITHDRAWAL_REQUEST_PREDEPLOY_ADDRESS,
 
@@ -218,10 +218,14 @@ proc processDequeueWithdrawalRequests*(vmState: BaseVMState): seq[byte] =
     )
 
   # runComputation a.k.a syscall/evm.call
-  result = call.runComputation(seq[byte])
-  ledger.persist(clearEmptyAccount = true)
+  let res = call.runComputation(OutputResult)
+  if res.error.len > 0:
+    return err("processDequeueWithdrawalRequests: " & res.error)
 
-proc processDequeueConsolidationRequests*(vmState: BaseVMState): seq[byte] =
+  ledger.persist(clearEmptyAccount = true)
+  ok(res.output)
+
+proc processDequeueConsolidationRequests*(vmState: BaseVMState): Result[seq[byte], string] =
   ## processDequeueConsolidationRequests applies the EIP-7251 system call
   ## to the consolidation requests contract.
   let
@@ -229,7 +233,7 @@ proc processDequeueConsolidationRequests*(vmState: BaseVMState): seq[byte] =
     call = CallParams(
       vmState  : vmState,
       sender   : SYSTEM_ADDRESS,
-      gasLimit : DEFAULT_GAS_LIMIT.GasInt,
+      gasLimit : 30_000_000.GasInt,
       gasPrice : 0.GasInt,
       to       : CONSOLIDATION_REQUEST_PREDEPLOY_ADDRESS,
 
@@ -242,8 +246,11 @@ proc processDequeueConsolidationRequests*(vmState: BaseVMState): seq[byte] =
     )
 
   # runComputation a.k.a syscall/evm.call
-  result = call.runComputation(seq[byte])
+  let res = call.runComputation(OutputResult)
+  if res.error.len > 0:
+    return err("processDequeueConsolidationRequests: " & res.error)
   ledger.persist(clearEmptyAccount = true)
+  ok(res.output)
 
 proc processTransaction*(
     vmState: BaseVMState; ## Parent accounts environment for transaction

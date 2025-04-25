@@ -204,8 +204,8 @@ proc procBlkEpilogue(
   if header.requestsHash.isSome:
     # Execute EIP-7002 and EIP-7251 before calculating stateRoot
     # because they will alter the state
-    withdrawalReqs = processDequeueWithdrawalRequests(vmState)
-    consolidationReqs = processDequeueConsolidationRequests(vmState)
+    withdrawalReqs = ?processDequeueWithdrawalRequests(vmState)
+    consolidationReqs = ?processDequeueConsolidationRequests(vmState)
 
   if not skipValidation:
     let stateRoot = vmState.ledger.getStateRoot()
