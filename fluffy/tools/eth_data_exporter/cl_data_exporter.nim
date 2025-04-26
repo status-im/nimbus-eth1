@@ -9,10 +9,13 @@
 
 import
   std/os,
+  std/strformat,
   chronicles,
   chronos,
   stew/[byteutils, io2],
   eth/async_utils,
+  eth/common/headers_rlp,
+  json_rpc/rpcclient,
   beacon_chain/era_db,
   beacon_chain/spec/forks,
   beacon_chain/networking/network_metadata,
@@ -20,11 +23,13 @@ import
   beacon_chain/beacon_clock,
   ../../network/beacon/beacon_content,
   ../../network/beacon/beacon_init_loader,
+  ../../network/history/history_content,
   ../../network/history/validation/block_proof_historical_roots,
   ../../network/history/validation/block_proof_historical_summaries,
   ../../network_metadata,
   ../../eth_data/[yaml_utils, yaml_eth_types],
-  ./exporter_common
+  ./exporter_common,
+  ./downloader
 
 from beacon_chain/el/el_manager import toBeaconBlockHeader
 
@@ -253,9 +258,17 @@ proc exportHistoricalRoots*(
   else:
     notice "Succesfully wrote historical_roots to file", file
 
-proc exportBeaconBlockProofBellatrix(
+proc writeToFile(file: string, data: openArray[byte]) =
+  let res = io2.writeFile(file, data)
+  if res.isErr():
+    error "Failed writing data to file", file, error = ioErrorMsg(res.error)
+    quit QuitFailure
+  else:
+    notice "Successfully wrote data to file", file
+
+proc getBlockProofBellatrix(
     dataDir: string, eraDir: string, slotNumber: uint64
-) =
+): (BlockProofHistoricalRoots, uint64, Hash32) =
   let
     networkData = loadNetworkData("mainnet")
     db =
@@ -291,24 +304,17 @@ proc exportBeaconBlockProofBellatrix(
       error "Failed to build proof for Bellatrix block", slot, error
       quit QuitFailure
 
-  let yamlTestProof = YamlTestProofBellatrix(
-    execution_block_header:
-      beaconBlock.message.body.execution_payload.block_hash.data.to0xHex(),
-    execution_block_proof: blockProof.executionBlockProof.toHex(array[11, string]),
-    beacon_block_root: blockProof.beaconBlockRoot.data.to0xHex(),
-    beacon_block_proof: blockProof.beaconBlockProof.toHex(array[14, string]),
-    slot: blockProof.slot.uint64,
-  )
-
-  let
     blockNumber = beaconBlock.message.body.execution_payload.block_number
-    file = dataDir / "beacon_block_proof-" & $blockNumber & ".yaml"
-    res = yamlTestProof.dumpToYaml(file)
-  if res.isErr():
-    error "Failed writing beacon block proof to file", file, error = res.error
-    quit 1
-  else:
-    notice "Successfully wrote beacon block proof to file", file
+    blockHash = beaconBlock.message.body.execution_payload.block_hash.to(Hash32)
+
+  # Writing block.ssz and historical_batch.ssz to be able to regenerate this proof
+  let blockFileName = dataDir / "block_at_slot_" & $blockProof.slot & ".ssz"
+  writeToFile(blockFileName, SSZ.encode(beaconBlock.message))
+
+  let batchFileName = dataDir / "historical_batch_at_slot_" & $blockProof.slot & ".ssz"
+  writeToFile(batchFileName, SSZ.encode(batch))
+
+  (blockProof, blockNumber, blockHash)
 
 proc latestEraFile(eraDir: string): Result[(string, Era), string] =
   ## Find the latest era file in the era directory.
@@ -360,10 +366,10 @@ proc loadHistoricalSummariesFromEra(
 
   return ok((state[].historical_summaries(), getStateField(state[], slot)))
 
-proc exportBeaconBlockProofCapella(
+proc getBlockProofCapella(
     dataDir: string, eraDir: string, slotNumber: uint64
-) =
-  ## Export a beacon block proof for a block from Capella and onwards. Also
+): (BlockProofHistoricalSummaries, uint64, Hash32) =
+  ## Get a beacon block proof for a block from Capella. Also
   ## exports the historical summaries in SSZ encoding as this is required to
   ## verify the proof.
   let
@@ -410,46 +416,202 @@ proc exportBeaconBlockProofCapella(
       error "Failed to build proof for Bellatrix block", slot, error
       quit QuitFailure
 
-  let yamlTestProof = YamlTestProof(
-    execution_block_header:
-      beaconBlock.message.body.execution_payload.block_hash.data.to0xHex(),
-    execution_block_proof: blockProof.executionBlockProof.toHex(array[11, string]),
-    beacon_block_root: blockProof.beaconBlockRoot.data.to0xHex(),
-    beacon_block_proof: blockProof.beaconBlockProof.toHex(array[13, string]),
-    slot: blockProof.slot.uint64,
-  )
-
-  # Also writing the historical_summaries of last state (according to era files)
-  # to a file as it is needed for verifying the proof.
-  let
-    f = dataDir / "historical_summaries_at_slot_" & $historicalSummariesSlot & ".ssz"
-    r = io2.writeFile(f, SSZ.encode(historical_summaries))
-  if r.isErr():
-    error "Failed writing historical_summaries to file", f, error = ioErrorMsg(r.error)
-    quit 1
-  else:
-    notice "Successfully wrote historical_summaries to file", f
-
-  let
     blockNumber = beaconBlock.message.body.execution_payload.block_number
-    file = dataDir / "beacon_block_proof-" & $blockNumber & ".yaml"
-    res = yamlTestProof.dumpToYaml(file)
-  if res.isErr():
-    error "Failed writing beacon block proof to file", file, error = res.error
-    quit 1
-  else:
-    notice "Successfully wrote beacon block proof to file", file
+    blockHash = beaconBlock.message.body.execution_payload.block_hash.to(Hash32)
 
-proc exportBeaconBlockProof*(dataDir: string, eraDir: string, slotNumber: uint64) =
+  # Writing the historical_summaries of last state (according to era files)
+  # to a file as it is needed for verifying the proof.
+  let hsFileName =
+    dataDir / "historical_summaries_at_slot_" & $historicalSummariesSlot & ".ssz"
+  writeToFile(hsFileName, SSZ.encode(historical_summaries))
+
+  # Writing block.ssz and block_roots.ssz to be able to regenerate this proof
+  let blockFileName = dataDir / "block_at_slot_" & $blockProof.slot & ".ssz"
+  writeToFile(blockFileName, SSZ.encode(beaconBlock.message))
+
+  let blockRootsFileName = dataDir / "block_roots_at_slot_" & $blockProof.slot & ".ssz"
+  withState(state):
+    writeToFile(blockRootsFileName, SSZ.encode(blockRoots))
+
+  (blockProof, blockNumber, blockHash)
+
+proc getBlockProofDeneb(
+    dataDir: string, eraDir: string, slotNumber: uint64
+): (BlockProofHistoricalSummariesDeneb, uint64, Hash32) =
+  ## Get a beacon block proof for a block from Deneb and onwards. Also
+  ## exports the historical summaries in SSZ encoding as this is required to
+  ## verify the proof.
+  let
+    networkData = loadNetworkData("mainnet")
+    db =
+      EraDB.new(networkData.metadata.cfg, eraDir, networkData.genesis_validators_root)
+    slot = Slot(slotNumber)
+    era = era(slot)
+    historical_roots = loadHistoricalRoots().asSeq()
+    (historical_summaries, historicalSummariesSlot) = loadHistoricalSummariesFromEra(
+      eraDir, networkData.metadata.cfg
+    ).valueOr:
+      error "Failed to load historical summaries", error
+      quit QuitFailure
+
+  var state: ForkedHashedBeaconState
+
+  db.getState(
+    historical_roots, historical_summaries.asSeq(), start_slot(era + 1), state
+  ).isOkOr:
+    error "Failed to load state", error = error
+    quit QuitFailure
+
+  let
+    beaconBlock = db.getBlock(
+      historical_roots,
+      historical_summaries.asSeq(),
+      slot,
+      Opt.none(Eth2Digest),
+      deneb.TrustedSignedBeaconBlock,
+    ).valueOr:
+      error "Failed to load Capella block", slot
+      quit QuitFailure
+
+    blockRoots = getStateField(state, block_roots).data
+    blockProof = block_proof_historical_summaries.buildProof(
+      blockRoots, beaconBlock.message
+    ).valueOr:
+      error "Failed to build proof for Bellatrix block", slot, error
+      quit QuitFailure
+
+    blockNumber = beaconBlock.message.body.execution_payload.block_number
+    blockHash = beaconBlock.message.body.execution_payload.block_hash.to(Hash32)
+
+  # Writing the historical_summaries of last state (according to era files)
+  # to a file as it is needed for verifying the proof.
+  let hsFileName =
+    dataDir / "historical_summaries_at_slot_" & $historicalSummariesSlot & ".ssz"
+  writeToFile(hsFileName, SSZ.encode(historical_summaries))
+
+  # Writing block.ssz and block_roots.ssz to be able to regenerate this proof
+  let blockFileName = dataDir / "block_at_slot_" & $blockProof.slot & ".ssz"
+  writeToFile(blockFileName, SSZ.encode(beaconBlock.message))
+
+  let blockRootsFileName = dataDir / "block_roots_at_slot_" & $blockProof.slot & ".ssz"
+  withState(state):
+    writeToFile(blockRootsFileName, SSZ.encode(blockRoots))
+
+  (blockProof, blockNumber, blockHash)
+
+proc exportBlockProof*(dataDir: string, eraDir: string, slotNumber: uint64) =
   let
     networkData = loadNetworkData("mainnet")
     cfg = networkData.metadata.cfg
     slot = Slot(slotNumber)
 
-  if slot.epoch() >= cfg.CAPELLA_FORK_EPOCH:
-    exportBeaconBlockProofCapella(dataDir, eraDir, slotNumber)
+  if slot.epoch() >= cfg.DENEB_FORK_EPOCH:
+    let (proof, blockNumber, blockHash) =
+      getBlockProofDeneb(dataDir, eraDir, slotNumber)
+
+    let yamlTestProof = YamlTestProofDeneb(
+      execution_block_header: blockHash.to0xHex(),
+      execution_block_proof: proof.executionBlockProof.toHex(array[12, string]),
+      beacon_block_root: proof.beaconBlockRoot.data.to0xHex(),
+      beacon_block_proof: proof.beaconBlockProof.toHex(array[13, string]),
+      slot: proof.slot.uint64,
+    )
+
+    let file = dataDir / "beacon_block_proof-" & $blockNumber & ".yaml"
+    yamlTestProof.writeDataToYaml(file)
+  elif slot.epoch() >= cfg.CAPELLA_FORK_EPOCH:
+    let (proof, blockNumber, blockHash) =
+      getBlockProofCapella(dataDir, eraDir, slotNumber)
+
+    let yamlTestProof = YamlTestProofCapella(
+      execution_block_header: blockHash.to0xHex(),
+      execution_block_proof: proof.executionBlockProof.toHex(array[11, string]),
+      beacon_block_root: proof.beaconBlockRoot.data.to0xHex(),
+      beacon_block_proof: proof.beaconBlockProof.toHex(array[13, string]),
+      slot: proof.slot.uint64,
+    )
+
+    let file = dataDir / "beacon_block_proof-" & $blockNumber & ".yaml"
+    yamlTestProof.writeDataToYaml(file)
   elif slot.epoch() >= cfg.BELLATRIX_FORK_EPOCH:
-    exportBeaconBlockProofBellatrix(dataDir, eraDir, slotNumber)
+    let (proof, blockNumber, blockHash) =
+      getBlockProofBellatrix(dataDir, eraDir, slotNumber)
+
+    let yamlTestProof = YamlTestProofBellatrix(
+      execution_block_header: blockHash.to0xHex(),
+      execution_block_proof: proof.executionBlockProof.toHex(array[11, string]),
+      beacon_block_root: proof.beaconBlockRoot.data.to0xHex(),
+      beacon_block_proof: proof.beaconBlockProof.toHex(array[14, string]),
+      slot: proof.slot.uint64,
+    )
+
+    let file = dataDir / "beacon_block_proof-" & $blockNumber & ".yaml"
+    yamlTestProof.writeDataToYaml(file)
   else:
     error "Slot number is before Bellatrix fork", slotNumber
-    quit 1
+    quit QuitFailure
+
+proc exportHeaderWithProof*(
+    client: RpcClient, dataDir: string, eraDir: string, slotNumber: uint64
+) =
+  let
+    networkData = loadNetworkData("mainnet")
+    cfg = networkData.metadata.cfg
+    slot = Slot(slotNumber)
+
+  if slot.epoch() >= cfg.DENEB_FORK_EPOCH:
+    let
+      (proof, blockNumber, blockHash) = getBlockProofDeneb(dataDir, eraDir, slotNumber)
+      header = client.downloadHeader(blockNumber)
+
+      blockHeaderWithProof = BlockHeaderWithProof(
+        header: ByteList[MAX_HEADER_LENGTH].init(rlp.encode(header)),
+        proof: ByteList[MAX_HEADER_PROOF_LENGTH].init(SSZ.encode(proof)),
+      )
+
+      file = dataDir / &"{blockNumber:08}.yaml"
+
+    writePortalContentToYaml(
+      file,
+      SSZ.encode(blockHeaderContentKey(blockHash)).to0xHex(),
+      SSZ.encode(blockHeaderWithProof).to0xHex(),
+    )
+  elif slot.epoch() >= cfg.CAPELLA_FORK_EPOCH:
+    let
+      (proof, blockNumber, blockHash) =
+        getBlockProofCapella(dataDir, eraDir, slotNumber)
+      header = client.downloadHeader(blockNumber)
+
+      blockHeaderWithProof = BlockHeaderWithProof(
+        header: ByteList[MAX_HEADER_LENGTH].init(rlp.encode(header)),
+        proof: ByteList[MAX_HEADER_PROOF_LENGTH].init(SSZ.encode(proof)),
+      )
+
+      file = dataDir / &"{blockNumber:08}.yaml"
+
+    writePortalContentToYaml(
+      file,
+      SSZ.encode(blockHeaderContentKey(blockHash)).to0xHex(),
+      SSZ.encode(blockHeaderWithProof).to0xHex(),
+    )
+  elif slot.epoch() >= cfg.BELLATRIX_FORK_EPOCH:
+    let
+      (proof, blockNumber, blockHash) =
+        getBlockProofBellatrix(dataDir, eraDir, slotNumber)
+      header = client.downloadHeader(blockNumber)
+
+      blockHeaderWithProof = BlockHeaderWithProof(
+        header: ByteList[MAX_HEADER_LENGTH].init(rlp.encode(header)),
+        proof: ByteList[MAX_HEADER_PROOF_LENGTH].init(SSZ.encode(proof)),
+      )
+
+      file = dataDir / &"{blockNumber:08}.yaml"
+
+    writePortalContentToYaml(
+      file,
+      SSZ.encode(blockHeaderContentKey(blockHash)).to0xHex(),
+      SSZ.encode(blockHeaderWithProof).to0xHex(),
+    )
+  else:
+    error "Slot number is before Bellatrix fork", slotNumber
+    quit QuitFailure

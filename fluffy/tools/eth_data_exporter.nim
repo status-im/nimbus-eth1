@@ -62,21 +62,6 @@ from ../network/history/history_network import encode
 chronicles.formatIt(IoErrorCode):
   $it
 
-proc downloadHeader(client: RpcClient, i: uint64): headers.Header =
-  try:
-    let jsonHeader = requestHeader(i, client)
-    parseBlockHeader(jsonHeader)
-  except CatchableError as e:
-    fatal "Error while requesting BlockHeader", error = e.msg, number = i
-    quit 1
-
-proc downloadBlock(i: uint64, client: RpcClient): downloader.Block =
-  try:
-    return requestBlock(i, client)
-  except CatchableError as e:
-    fatal "Error while requesting Block", error = e.msg, number = i
-    quit 1
-
 proc writeHeadersToJson(config: ExporterConf, client: RpcClient) =
   let fh = createAndOpenFile(string config.dataDir, config.fileName)
 
@@ -652,7 +637,15 @@ when isMainModule:
       waitFor exportHistoricalRoots(
         config.restUrl, string config.dataDir, cfg, forkDigests
       )
-    of BeaconCmd.exportBeaconBlockProof:
-      exportBeaconBlockProof(
-        string config.dataDir, string config.eraDir, config.slotNumber
+    of BeaconCmd.exportBlockProof:
+      exportBlockProof(string config.dataDir, string config.eraDir, config.slotNumber)
+    of BeaconCmd.exportHeaderWithProof:
+      let client = newRpcClient(config.web3Url1)
+      let connectRes = waitFor client.connectRpcClient(config.web3Url1)
+      if connectRes.isErr():
+        fatal "Failed connecting to JSON-RPC client", error = connectRes.error
+        quit QuitFailure
+
+      exportHeaderWithProof(
+        client, string config.dataDir, string config.eraDir1, config.slotNumber1
       )
