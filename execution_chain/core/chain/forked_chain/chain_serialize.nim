@@ -245,6 +245,9 @@ proc deserialize*(fc: ForkedChainRef): Result[void, string] =
     blocksStored=numBlocksStored,
     latestBlock=fc.baseBranch.tailNumber+numBlocksStored.uint64
 
+  if numBlocksStored > 256:
+    info "Please wait until DAG finish loading..."
+
   if fc.baseBranch.tailHash != prevBaseHash:
     fc.reset(branches)
     return err("loaded baseHash != baseHash")
