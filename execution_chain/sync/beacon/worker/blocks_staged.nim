@@ -42,7 +42,7 @@ proc updateBuddyErrorState(buddy: BeaconBuddyRef) =
      fetchBodiesProcessErrThresholdCount < buddy.only.nBdyProcErrors:
 
     # Make sure that this peer does not immediately reconnect
-    buddy.ctrl.zombie = true
+    buddy.ctrl.zombie = buddy.infectedByTVirus
 
 # ------------------------------------------------------------------------------
 # Private function(s)

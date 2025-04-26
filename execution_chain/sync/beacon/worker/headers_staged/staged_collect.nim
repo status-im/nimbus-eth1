@@ -37,7 +37,7 @@ proc updateBuddyErrorState(buddy: BeaconBuddyRef) =
      fetchHeadersProcessErrThresholdCount < buddy.nHdrProcErrors:
 
     # Make sure that this peer does not immediately reconnect
-    buddy.ctrl.zombie = true
+    buddy.ctrl.zombie = buddy.infectedByTVirus
 
 proc updateBuddyProcError(buddy: BeaconBuddyRef) =
   buddy.incHdrProcErrors()
@@ -131,6 +131,18 @@ proc collectAndStashOnDiskCache*(
         debug info & ": header stash error", peer, iv, ivReq,
           ctrl=buddy.ctrl.state, hdrErrors=buddy.hdrErrors, `error`=error
         break fetchHeadersBody           # error => exit block
+
+      let
+        chainHead = ctx.hdrCache.latestNum
+        minNum = rev[^1].number
+        maxNum = rev[0].number
+
+      if minNum - chainHead > 1024:
+        info "Headers stored",
+          min=minNum,
+          max=maxNum,
+          chainHead,
+          nSyncPeers=ctx.pool.nBuddies
 
       # Note that `put()` might not have used all of the `rev[]` items for
       # updating the antecedent (aka `ctx.dangling`.) So `rev[^1]` might be

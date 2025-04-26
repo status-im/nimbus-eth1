@@ -35,7 +35,7 @@ proc napUnlessSomethingToFetch(
     try:
       await sleepAsync workerIdleWaitInterval
     except CancelledError:
-      buddy.ctrl.zombie = true
+      buddy.ctrl.zombie = buddy.infectedByTVirus
     return true
   else:
     # Returning `false` => no need to check for shutdown

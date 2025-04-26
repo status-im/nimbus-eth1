@@ -68,10 +68,14 @@
 import
   pkg/eth/[common, rlp],
   pkg/results,
+  pkg/chronicles,
   "../.."/[common, db/core_db, db/storage_types],
   ../../db/[kvt, kvt_cf],
   ../../db/kvt/[kvt_utils, kvt_tx_frame],
   ./forked_chain/[chain_branch, chain_desc]
+
+logScope:
+  topics = "hc-cache"
 
 type
   HccDbInfo = object
@@ -128,7 +132,7 @@ const
   RaisePfx = "Header Cache: "
     ## Message prefix used when bailing out raising an exception
 
-let
+const
   HccDbInfoKey = 0.beaconHeaderKey
 
 # ------------------------------------------------------------------------------
@@ -332,6 +336,19 @@ proc headUpdateFromCL(hc: HeaderChainRef; h: Header; f: Hash32) =
       # Inform client app about that a new session has started.
       hc.notify()
 
+      # The way syncer works that is per session.
+      # This is how we tell the FC about pending FCU
+      # 'from' CL, albeit a bit indirect.
+      # If we call `notifyFinalizedHash` inside engine_fCU,
+      # while the session is running, `notifyBlockHashAndNumber`
+      # will miss the finalized block for that session because
+      # engine_fCU might be using new finHash that is newer than the
+      # session^head.
+      # And if the distance between session^head to FC^base is very
+      # large, it will lead to excessive memory consumption.
+      # https://github.com/status-im/nimbus-eth1/issues/3207
+      hc.chain.notifyFinalizedHash(f)
+
     # For logging and metrics
     hc.session.consHeadNum = h.number
 
@@ -521,13 +538,15 @@ proc put*(
         hc.session.finHeader = hdr
 
         # Ackn: moved here from `accept()`
-        #   TODO: syncer and also ForkedCache should not start session
+        #   Syncer and also ForkedCache should not start session
         #   using finalizedHash, as evident from hive test
-        #   the FCU head can have block number bigger than finalized block.
+        #   the FCU head can have block number bigger than finalized block
+        #   and the finalized hash from CL is zero.
         #   Syncer and ForkedCache should only deal with FCU headHash.
-        #   TODO: move notifyBlockHashAndNumber call to fcPutHeader
-        #   where one of the headers should also the finalized header.
-        hc.chain.notifyBlockHashAndNumber(hash, bn)
+        if hc.chain.notifyBlockHashAndNumber(hash, bn):
+          info "PendingFCU resolved to finalized block number",
+            finalizedHash=hash.short,
+            finalizedNumber=bn.bnStr
 
       # Check whether `hdr` has a parent on the `FC` module.
       let newMode = hc.tryFcParent(hdr)
@@ -627,6 +646,10 @@ func latestConsHeadNumber*(hc: HeaderChainRef): BlockNumber =
   ## remains constant (for the current session.)
   ##
   hc.session.consHeadNum
+
+func latestNum*(hc: HeaderChainRef): BlockNumber =
+  ## Aka `hc.chain.latestNumber()` (avoiding `forked_chain` import)
+  hc.chain.activeBranch.headNumber
 
 # ------------------------------------------------------------------------------
 # Public debugging helpers

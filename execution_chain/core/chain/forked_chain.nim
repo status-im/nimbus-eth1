@@ -463,13 +463,17 @@ proc updateBase(c: ForkedChainRef, newBase: BlockPos) =
     notice "Finalized blocks persisted",
       numberOfBlocks = count,
       baseNumber = c.baseBranch.tailNumber,
-      baseHash = c.baseBranch.tailHash.short
+      baseHash   = c.baseBranch.tailHash.short,
+      pendingFCU = c.pendingFCU.short,
+      resolvedFin= c.latestFinalizedBlockNumber
   else:
     debug "Finalized blocks persisted",
       numberOfBlocks = count,
-      target = newBaseHash.short,
+      target     = newBaseHash.short,
       baseNumber = c.baseBranch.tailNumber,
-      baseHash = c.baseBranch.tailHash.short
+      baseHash   = c.baseBranch.tailHash.short,
+      pendingFCU = c.pendingFCU.short,
+      resolvedFin= c.latestFinalizedBlockNumber
 
 # ------------------------------------------------------------------------------
 # Public functions
@@ -616,12 +620,11 @@ proc forkChoice*(c: ForkedChainRef,
 
   ok()
 
-func notifyFinalizedHash*(c: ForkedChainRef, finHash: Hash32) =
-  if finHash != zeroHash32:
-    c.pendingFCU = finHash
-    let header = c.quarantine.getHeader(finHash).valueOr:
-      return
-    c.latestFinalizedBlockNumber = header.number
+func finHash*(c: ForkedChainRef): Hash32 =
+  c.pendingFCU
+
+func resolvedFinNumber*(c: ForkedChainRef): uint64 =
+  c.latestFinalizedBlockNumber
 
 func haveBlockAndState*(c: ForkedChainRef, blockHash: Hash32): bool =
   ## Blocks still in memory with it's txFrame

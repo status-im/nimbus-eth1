@@ -24,7 +24,7 @@ import
 proc registerError(buddy: BeaconBuddyRef) =
   buddy.incHdrRespErrors()
   if fetchHeadersReqErrThresholdCount < buddy.nHdrRespErrors:
-    buddy.ctrl.zombie = true # abandon slow peer
+    buddy.ctrl.zombie = buddy.infectedByTVirus  # abandon slow peer
 
 # ------------------------------------------------------------------------------
 # Public debugging & logging helpers

@@ -170,7 +170,7 @@ proc headersStagedCollect*(
 
 
 
-proc headersStagedProcess*(buddy: BeaconBuddyRef; info: static[string]) =
+proc headersStagedProcess*(buddy: BeaconBuddyRef; msg: static[string]) =
   ## Store headers from the `staged` queue onto the header chain cache.
   ##
   let
@@ -193,14 +193,14 @@ proc headersStagedProcess*(buddy: BeaconBuddyRef; info: static[string]) =
       maxNum = qItem.data.revHdrs[0].number
       dangling = ctx.dangling.number
     if maxNum + 1 < dangling:
-      debug info & ": gap, serialisation postponed", peer,
+      debug msg & ": gap, serialisation postponed", peer,
         qItem=qItem.data.bnStr, D=dangling.bnStr, nProcessed,
         nStaged=ctx.hdr.staged.len, nSyncPeers=ctx.pool.nBuddies
       return # there is a gap -- come back later
 
     # Overlap must not happen
     if maxNum+1 != dangling:
-      raiseAssert info & ": Overlap" &
+      raiseAssert msg & ": Overlap" &
         " qItem=" & qItem.data.bnStr & " D=" & dangling.bnStr
 
     # Process item from `staged` queue. So it is not needed in the list,
@@ -214,7 +214,7 @@ proc headersStagedProcess*(buddy: BeaconBuddyRef; info: static[string]) =
       # Error mark buddy that produced that unusable headers list
       buddy.incHdrProcErrors qItem.data.peerID
 
-      debug info & ": discarding staged header list", peer,
+      debug msg & ": discarding staged header list", peer,
         qItem=qItem.data.bnStr, D=ctx.dangling.bnStr, nProcessed,
         nDiscarded=qItem.data.revHdrs.len, nSyncPeers=ctx.pool.nBuddies,
         `error`=error
@@ -224,12 +224,21 @@ proc headersStagedProcess*(buddy: BeaconBuddyRef; info: static[string]) =
     let revHdrsLen = maxNum - ctx.dangling.number + 1
 
     nProcessed += revHdrsLen.int # count headers
+
+    let chainHead = ctx.hdrCache.latestNum
+    if minNum - chainHead > 1024:
+      info "Headers processed",
+        min=minNum,
+        max=maxNum,
+        chainHead,
+        nSyncPeers=ctx.pool.nBuddies
+
     # End while loop
 
   if headersStagedQueueLengthLwm < ctx.hdr.staged.len:
     ctx.poolMode = true
 
-  debug info & ": headers serialised and stored", peer, D=ctx.dangling.bnStr,
+  debug msg & ": headers serialised and stored", peer, D=ctx.dangling.bnStr,
     nProcessed, nStagedLists=ctx.hdr.staged.len, nSyncPeers=ctx.pool.nBuddies,
     reorgReq=ctx.poolMode
 

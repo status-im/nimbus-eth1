@@ -66,7 +66,7 @@ type
       # When move forward, this is the minimum distance
       # to move the base. And the bulk writing can works
       # efficiently.
-      
+
     portal*: HistoryExpiryRef
       # History Expiry tracker and portal access entry point
 
@@ -83,10 +83,21 @@ func txRecords*(c: ForkedChainRef): var Table[Hash32, (Hash32, uint64)] =
 
 func notifyBlockHashAndNumber*(c: ForkedChainRef,
                                blockHash: Hash32,
-                               blockNumber: uint64) =
+                               blockNumber: uint64): bool =
   ## Syncer will tell FC a block have been downloaded,
   ## please check if it's useful for you.
   if blockHash == c.pendingFCU:
-    c.latestFinalizedBlockNumber = blockNumber
+    c.latestFinalizedBlockNumber = max(blockNumber, c.latestFinalizedBlockNumber)
+    return true
+
+func notifyFinalizedHash*(c: ForkedChainRef, finHash: Hash32) =
+  ## Get notificattion from engine API, a sync session is started
+  ## and try to resolve the finalized hash to finalized block number
+  ## if possible.
+  if finHash != zeroHash32:
+    c.pendingFCU = finHash
+    let header = c.quarantine.getHeader(finHash).valueOr:
+      return
+    c.latestFinalizedBlockNumber = max(header.number, c.latestFinalizedBlockNumber)
 
 # End
