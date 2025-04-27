@@ -135,8 +135,7 @@ proc validateBlock(c: ForkedChainRef,
   # handled region(head - baseDistance)
   # e.g. live syncing with the tip very far from from our latest head
   if c.pendingFCU != zeroHash32 and
-     blk.header.number < c.latestFinalizedBlockNumber:
-
+     c.baseBranch.tailNumber < c.latestFinalizedBlockNumber - c.baseDistance - c.persistBatchSize:
     let
       head = c.activeBranch.lastBlockPos
       newBaseCandidate = c.calculateNewBase(c.latestFinalizedBlockNumber, head)
@@ -461,17 +460,17 @@ proc updateBase(c: ForkedChainRef, newBase: BlockPos) =
   # during `beacon sync` or `nrpc sync`
   if count > 1:
     notice "Finalized blocks persisted",
-      numberOfBlocks = count,
-      baseNumber = c.baseBranch.tailNumber,
-      baseHash   = c.baseBranch.tailHash.short,
+      nBlocks = count,
+      base = c.baseBranch.tailNumber,
+      baseHash = c.baseBranch.tailHash.short,
       pendingFCU = c.pendingFCU.short,
       resolvedFin= c.latestFinalizedBlockNumber
   else:
     debug "Finalized blocks persisted",
-      numberOfBlocks = count,
-      target     = newBaseHash.short,
-      baseNumber = c.baseBranch.tailNumber,
-      baseHash   = c.baseBranch.tailHash.short,
+      nBlocks = count,
+      target = newBaseHash.short,
+      base = c.baseBranch.tailNumber,
+      baseHash = c.baseBranch.tailHash.short,
       pendingFCU = c.pendingFCU.short,
       resolvedFin= c.latestFinalizedBlockNumber
 

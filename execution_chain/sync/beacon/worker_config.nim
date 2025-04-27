@@ -14,7 +14,7 @@ import
   pkg/chronos
 
 const
-  enableTicker* = false
+  enableTicker* = true
     ## Log regular status updates similar to metrics. Great for debugging.
 
   runsThisManyPeersOnly* = 8

@@ -66,7 +66,7 @@ type
 
 when enableTicker:
   const
-    tickerLogInterval = chronos.seconds(2)
+    tickerLogInterval = chronos.seconds(5)
     tickerLogSuppressMax = chronos.seconds(100)
 
   proc updater(ctx: BeaconCtxRef): TickerStats =
@@ -159,7 +159,7 @@ when enableTicker:
       t.lastStats = data
       t.visited = now
 
-      debug "Sync state", up, nP, st, B, L, C, D, H, T, hQ, bQ, rrg, mem
+      notice "Sync state", up, nP, st, B, L, C, D, H, T, hQ, bQ, rrg, mem
 
 # ------------------------------------------------------------------------------
 # Public function

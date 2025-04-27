@@ -225,14 +225,6 @@ proc headersStagedProcess*(buddy: BeaconBuddyRef; msg: static[string]) =
 
     nProcessed += revHdrsLen.int # count headers
 
-    let chainHead = ctx.hdrCache.latestNum
-    if minNum - chainHead > 1024:
-      info "Headers processed",
-        min=minNum,
-        max=maxNum,
-        chainHead,
-        nSyncPeers=ctx.pool.nBuddies
-
     # End while loop
 
   if headersStagedQueueLengthLwm < ctx.hdr.staged.len:
