@@ -1758,21 +1758,24 @@ proc neighborhoodGossip*(
       if srcNodeId.isNone() or node.id != srcNodeId.get():
         gossipNodes.add(node)
 
-  if gossipNodes.len >= p.config.maxGossipNodes: # use local nodes for gossip
+  var numberOfGossipedNodes = 0
+
+  if gossipNodes.len() >= p.config.maxGossipNodes: # use local nodes for gossip
     portal_gossip_without_lookup.inc(labelValues = [$p.protocolId])
-    let numberOfGossipedNodes = min(gossipNodes.len, p.config.maxGossipNodes)
-    for node in gossipNodes[0 ..< numberOfGossipedNodes]:
+
+    for node in gossipNodes:
       let req = OfferRequest(dst: node, kind: Direct, contentList: contentList)
       await p.offerQueue.addLast(req)
-    return numberOfGossipedNodes
+      inc numberOfGossipedNodes
+
+      if numberOfGossipedNodes >= p.config.maxGossipNodes:
+        break
   else: # use looked up nodes for gossip
     portal_gossip_with_lookup.inc(labelValues = [$p.protocolId])
 
-    let
-      closestNodes = await p.lookup(NodeId(contentId))
-      numberOfGossipedNodes = min(closestNodes.len, p.config.maxGossipNodes)
+    let closestNodes = await p.lookup(NodeId(contentId))
 
-    for node in closestNodes[0 ..< numberOfGossipedNodes]:
+    for node in closestNodes:
       if p.radiusCache.get(node.id).isNone():
         # send ping to add the node to the radius cache
         (await p.ping(node)).isOkOr:
@@ -1782,8 +1785,12 @@ proc neighborhoodGossip*(
       if p.inRange(node.id, radius, contentId):
         let req = OfferRequest(dst: node, kind: Direct, contentList: contentList)
         await p.offerQueue.addLast(req)
+        inc numberOfGossipedNodes
 
-    return numberOfGossipedNodes
+      if numberOfGossipedNodes >= p.config.maxGossipNodes:
+        break
+
+  return numberOfGossipedNodes
 
 proc neighborhoodGossipDiscardPeers*(
     p: PortalProtocol,
