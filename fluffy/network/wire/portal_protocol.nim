@@ -747,7 +747,7 @@ proc new*(
     dataRadius: dbRadius,
     bootstrapRecords: @bootstrapRecords,
     stream: stream,
-    radiusCache: RadiusCache.init(256),
+    radiusCache: RadiusCache.init(512),
     offerQueue: newAsyncQueue[OfferRequest](config.maxConcurrentOffers),
     offerCache:
       OfferCache.init(if config.disableOfferCache: 0 else: config.offerCacheSize),
@@ -1752,13 +1752,11 @@ proc neighborhoodGossip*(
 
   var gossipNodes: seq[Node]
   for node in closestLocalNodes:
-    let radius = p.radiusCache.get(node.id)
-    if radius.isSome():
-      if p.inRange(node.id, radius.unsafeGet(), contentId):
-        if srcNodeId.isNone:
-          gossipNodes.add(node)
-        elif node.id != srcNodeId.get():
-          gossipNodes.add(node)
+    let radius = p.radiusCache.get(node.id).valueOr:
+      continue
+    if p.inRange(node.id, radius, contentId):
+      if srcNodeId.isNone() or node.id != srcNodeId.get():
+        gossipNodes.add(node)
 
   if gossipNodes.len >= p.config.maxGossipNodes: # use local nodes for gossip
     portal_gossip_without_lookup.inc(labelValues = [$p.protocolId])
@@ -1769,15 +1767,22 @@ proc neighborhoodGossip*(
     return numberOfGossipedNodes
   else: # use looked up nodes for gossip
     portal_gossip_with_lookup.inc(labelValues = [$p.protocolId])
-    let closestNodes = await p.lookup(NodeId(contentId))
-    let numberOfGossipedNodes = min(closestNodes.len, p.config.maxGossipNodes)
+
+    let
+      closestNodes = await p.lookup(NodeId(contentId))
+      numberOfGossipedNodes = min(closestNodes.len, p.config.maxGossipNodes)
+
     for node in closestNodes[0 ..< numberOfGossipedNodes]:
-      # Note: opportunistically not checking if the radius of the node is known
-      # and thus if the node is in radius with the content. Reason is, these
-      # should really be the closest nodes in the DHT, and thus are most likely
-      # going to be in range of the requested content.
-      let req = OfferRequest(dst: node, kind: Direct, contentList: contentList)
-      await p.offerQueue.addLast(req)
+      if p.radiusCache.get(node.id).isNone():
+        # send ping to add the node to the radius cache
+        (await p.ping(node)).isOkOr:
+          continue
+      let radius = p.radiusCache.get(node.id).valueOr:
+        continue
+      if p.inRange(node.id, radius, contentId):
+        let req = OfferRequest(dst: node, kind: Direct, contentList: contentList)
+        await p.offerQueue.addLast(req)
+
     return numberOfGossipedNodes
 
 proc neighborhoodGossipDiscardPeers*(
