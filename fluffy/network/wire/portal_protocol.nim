@@ -42,6 +42,12 @@ declareCounter portal_message_requests_outgoing,
 declareCounter portal_message_response_incoming,
   "Portal wire protocol incoming message responses",
   labels = ["protocol_id", "message_type"]
+declareCounter portal_offer_accept_codes,
+  "Portal wire protocol accept codes received from peers after sending offers",
+  labels = ["protocol_id", "accept_code"]
+declareCounter portal_handle_offer_accept_codes,
+  "Portal wire protocol accept codes returned to peers when handing offers",
+  labels = ["protocol_id", "accept_code"]
 
 const requestBuckets = [1.0, 3.0, 5.0, 7.0, 9.0, Inf]
 declareHistogram portal_lookup_node_requests,
@@ -560,6 +566,9 @@ proc handleOffer(
   # of content to process and potentially gossip around. Don't accept more
   # data in this case.
   if p.stream.contentQueue.full():
+    portal_handle_offer_accept_codes.inc(
+      o.contentKeys.len, labelValues = [$p.protocolId, $DeclinedRateLimited]
+    )
     return ok(
       AcceptMessage(
         connectionId: Bytes2([byte 0x00, 0x00]),
@@ -603,6 +612,10 @@ proc handleOffer(
         discard contentKeys.add(contentKey)
         contentIds.add(contentId)
         contentAccepted = true
+
+      portal_handle_offer_accept_codes.inc(
+        labelValues = [$p.protocolId, $contentKeysAcceptList[i]]
+      )
     else:
       # Return empty response when content key validation fails
       return err("Invalid content key")
@@ -1080,14 +1093,12 @@ proc offer(
       acceptListLen = response.contentKeys.len(), contentKeysLen
     return err("Accepted content key accept list has invalid size")
 
-  proc countAccepted(acceptList: ContentKeysAcceptList): int =
-    var count = 0
-    for code in acceptList:
-      if code == Accepted:
-        inc(count)
-    return count
+  var acceptedKeysAmount = 0
+  for code in response.contentKeys:
+    portal_offer_accept_codes.inc(labelValues = [$p.protocolId, $code])
+    if code == Accepted:
+      inc(acceptedKeysAmount)
 
-  let acceptedKeysAmount = response.contentKeys.countAccepted()
   portal_content_keys_accepted.observe(
     acceptedKeysAmount.int64, labelValues = [$p.protocolId]
   )
