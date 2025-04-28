@@ -170,7 +170,7 @@ proc headersStagedCollect*(
 
 
 
-proc headersStagedProcess*(buddy: BeaconBuddyRef; msg: static[string]) =
+proc headersStagedProcess*(buddy: BeaconBuddyRef; info: static[string]) =
   ## Store headers from the `staged` queue onto the header chain cache.
   ##
   let
@@ -193,14 +193,14 @@ proc headersStagedProcess*(buddy: BeaconBuddyRef; msg: static[string]) =
       maxNum = qItem.data.revHdrs[0].number
       dangling = ctx.dangling.number
     if maxNum + 1 < dangling:
-      debug msg & ": gap, serialisation postponed", peer,
+      debug info & ": gap, serialisation postponed", peer,
         qItem=qItem.data.bnStr, D=dangling.bnStr, nProcessed,
         nStaged=ctx.hdr.staged.len, nSyncPeers=ctx.pool.nBuddies
       return # there is a gap -- come back later
 
     # Overlap must not happen
     if maxNum+1 != dangling:
-      raiseAssert msg & ": Overlap" &
+      raiseAssert info & ": Overlap" &
         " qItem=" & qItem.data.bnStr & " D=" & dangling.bnStr
 
     # Process item from `staged` queue. So it is not needed in the list,
@@ -214,7 +214,7 @@ proc headersStagedProcess*(buddy: BeaconBuddyRef; msg: static[string]) =
       # Error mark buddy that produced that unusable headers list
       buddy.incHdrProcErrors qItem.data.peerID
 
-      debug msg & ": discarding staged header list", peer,
+      debug info & ": discarding staged header list", peer,
         qItem=qItem.data.bnStr, D=ctx.dangling.bnStr, nProcessed,
         nDiscarded=qItem.data.revHdrs.len, nSyncPeers=ctx.pool.nBuddies,
         `error`=error
@@ -230,7 +230,7 @@ proc headersStagedProcess*(buddy: BeaconBuddyRef; msg: static[string]) =
   if headersStagedQueueLengthLwm < ctx.hdr.staged.len:
     ctx.poolMode = true
 
-  debug msg & ": headers serialised and stored", peer, D=ctx.dangling.bnStr,
+  debug info & ": headers serialised and stored", peer, D=ctx.dangling.bnStr,
     nProcessed, nStagedLists=ctx.hdr.staged.len, nSyncPeers=ctx.pool.nBuddies,
     reorgReq=ctx.poolMode
 
