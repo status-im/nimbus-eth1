@@ -486,7 +486,7 @@ proc installEthApiHandlers*(
     ## quantityTag: integer block number, or the string "latest", "earliest" or "pending",
     ##   see the default block parameter.
     ## Returns: the access list object which contains the addresses and storage keys which
-    ##   are read by the transaction.
+    ##   are read and written by the transaction.
 
     if tx.to.isNone():
       raise newException(ValueError, "to address is required")
@@ -502,12 +502,13 @@ proc installEthApiHandlers*(
       optimisticStateFetch = optimisticStateFetch.valueOr:
         true
 
-    let (accessList, gasUsed) = (
+    let (accessList, error, gasUsed) = (
       await evm.createAccessList(header, tx, optimisticStateFetch)
     ).valueOr:
       raise newException(ValueError, error)
 
-    return AccessListResult(accessList: accessList, gasUsed: gasUsed.Quantity)
+    return
+      AccessListResult(accessList: accessList, error: error, gasUsed: gasUsed.Quantity)
 
   rpcServer.rpc("eth_estimateGas") do(
     tx: TransactionArgs, quantityTag: RtBlockIdentifier, optimisticStateFetch: Opt[bool]

@@ -8,7 +8,7 @@
 {.push raises: [].}
 
 import
-  std/sets,
+  std/[sets, algorithm],
   stew/byteutils,
   chronos,
   chronicles,
@@ -141,10 +141,7 @@ template toCallResult(evmResult: EvmResult[CallResult]): Result[CallResult, stri
         "EVM execution failed: " & $e.code
     )
 
-  if callResult.error.len() > 0:
-    err("EVM execution failed: " & callResult.error)
-  else:
-    ok(callResult)
+  ok(callResult)
 
 proc callFetchingState(
     evm: AsyncEvm,
@@ -277,8 +274,7 @@ proc callFetchingState(
         vmState.ledger.setCode(q.address, code)
         fetchedCode.incl(q.address)
     except CatchableError as e:
-      # TODO: why do the above futures throw a CatchableError and not CancelledError?
-      raiseAssert(e.msg)
+      raise newException(CancelledError, e.msg)
 
   evmResult.toCallResult()
 
@@ -335,12 +331,19 @@ proc call*(
   defer:
     txFrame.dispose() # always dispose state changes
 
-  let vmState = evm.setupVmState(txFrame, header)
-  await evm.callFetchingState(vmState, header, tx, optimisticStateFetch)
+  let
+    vmState = evm.setupVmState(txFrame, header)
+    callResult =
+      ?(await evm.callFetchingState(vmState, header, tx, optimisticStateFetch))
+
+  if callResult.error.len() > 0:
+    err("EVM execution failed: " & callResult.error)
+  else:
+    ok(callResult)
 
 proc createAccessList*(
     evm: AsyncEvm, header: Header, tx: TransactionArgs, optimisticStateFetch = true
-): Future[Result[(transactions.AccessList, GasInt), string]] {.
+): Future[Result[(transactions.AccessList, Opt[string], GasInt), string]] {.
     async: (raises: [CancelledError])
 .} =
   let
@@ -375,11 +378,27 @@ proc createAccessList*(
   txWithAl.accessList = Opt.some(al.getAccessList())
     # converts to transactions.AccessList
 
-  let finalCallResult = ?evm.call(vmState, header, txWithAl)
+  let
+    finalCallResult = ?evm.call(vmState, header, txWithAl)
+    error =
+      if finalCallResult.error.len() > 0:
+        Opt.some(finalCallResult.error)
+      else:
+        Opt.none(string)
 
-  # TODO: Do we need to use the estimate gas calculation here to get a more acturate
-  # estimation of the gas requirement?
-  ok((txWithAl.accessList.get(@[]), finalCallResult.gasUsed))
+  # Sort the access list
+  var accessList = txWithAl.accessList.get(@[])
+  for a in accessList.mitems():
+    a.storageKeys.sort(
+      proc(x, y: Bytes32): int =
+        cmp(x.data, y.data)
+    )
+  accessList.sort(
+    proc(x, y: AccessPair): int =
+      cmp(x.address.data, y.address.data)
+  )
+
+  ok((accessList, error, finalCallResult.gasUsed))
 
 proc estimateGas*(
     evm: AsyncEvm, header: Header, tx: TransactionArgs, optimisticStateFetch = true
