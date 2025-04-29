@@ -186,13 +186,14 @@ suite "Async EVM":
           input: Opt.some(testCase.txArgs.input.hexToSeqByte()),
         )
 
-      let (accessList, gasUsed) = (
+      let (accessList, error, gasUsed) = (
         waitFor evm.createAccessList(header, tx, optimisticStateFetch = true)
       ).expect("success")
 
       check:
         accessList.len() == testCase.expected.accessList.len()
         gasUsed > 0
+        error.isNone()
 
       for accessPair in accessList:
         let
@@ -220,13 +221,14 @@ suite "Async EVM":
           input: Opt.some(testCase.txArgs.input.hexToSeqByte()),
         )
 
-      let (accessList, gasUsed) = (
+      let (accessList, error, gasUsed) = (
         waitFor evm.createAccessList(header, tx, optimisticStateFetch = false)
       ).expect("success")
 
       check:
         accessList.len() == testCase.expected.accessList.len()
         gasUsed > 0
+        error.isNone()
 
       for accessPair in accessList:
         let

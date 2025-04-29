@@ -502,12 +502,12 @@ proc installEthApiHandlers*(
       optimisticStateFetch = optimisticStateFetch.valueOr:
         true
 
-    let (accessList, gasUsed) = (
+    let (accessList, error, gasUsed) = (
       await evm.createAccessList(header, tx, optimisticStateFetch)
     ).valueOr:
       raise newException(ValueError, error)
 
-    return AccessListResult(accessList: accessList, gasUsed: gasUsed.Quantity)
+    return AccessListResult(accessList: accessList, error: error, gasUsed: gasUsed.Quantity)
 
   rpcServer.rpc("eth_estimateGas") do(
     tx: TransactionArgs, quantityTag: RtBlockIdentifier, optimisticStateFetch: Opt[bool]

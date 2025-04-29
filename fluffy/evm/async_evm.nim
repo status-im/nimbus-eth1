@@ -141,10 +141,7 @@ template toCallResult(evmResult: EvmResult[CallResult]): Result[CallResult, stri
         "EVM execution failed: " & $e.code
     )
 
-  if callResult.error.len() > 0:
-    err("EVM execution failed: " & callResult.error)
-  else:
-    ok(callResult)
+  ok(callResult)
 
 proc callFetchingState(
     evm: AsyncEvm,
@@ -334,12 +331,18 @@ proc call*(
   defer:
     txFrame.dispose() # always dispose state changes
 
-  let vmState = evm.setupVmState(txFrame, header)
-  await evm.callFetchingState(vmState, header, tx, optimisticStateFetch)
+  let
+    vmState = evm.setupVmState(txFrame, header)
+    callResult = ?(await evm.callFetchingState(vmState, header, tx, optimisticStateFetch))
+
+  if callResult.error.len() > 0:
+    err("EVM execution failed: " & callResult.error)
+  else:
+    ok(callResult)
 
 proc createAccessList*(
     evm: AsyncEvm, header: Header, tx: TransactionArgs, optimisticStateFetch = true
-): Future[Result[(transactions.AccessList, GasInt), string]] {.
+): Future[Result[(transactions.AccessList, Opt[string], GasInt), string]] {.
     async: (raises: [CancelledError])
 .} =
   let
@@ -374,9 +377,15 @@ proc createAccessList*(
   txWithAl.accessList = Opt.some(al.getAccessList())
     # converts to transactions.AccessList
 
-  let finalCallResult = ?evm.call(vmState, header, txWithAl)
+  let
+    finalCallResult = ?evm.call(vmState, header, txWithAl)
+    error =
+      if finalCallResult.error.len() > 0:
+        Opt.some(finalCallResult.error)
+      else:
+        Opt.none(string)
 
-  ok((txWithAl.accessList.get(@[]), finalCallResult.gasUsed))
+  ok((txWithAl.accessList.get(@[]), error, finalCallResult.gasUsed))
 
 proc estimateGas*(
     evm: AsyncEvm, header: Header, tx: TransactionArgs, optimisticStateFetch = true
