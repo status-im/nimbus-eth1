@@ -507,7 +507,8 @@ proc installEthApiHandlers*(
     ).valueOr:
       raise newException(ValueError, error)
 
-    return AccessListResult(accessList: accessList, error: error, gasUsed: gasUsed.Quantity)
+    return
+      AccessListResult(accessList: accessList, error: error, gasUsed: gasUsed.Quantity)
 
   rpcServer.rpc("eth_estimateGas") do(
     tx: TransactionArgs, quantityTag: RtBlockIdentifier, optimisticStateFetch: Opt[bool]

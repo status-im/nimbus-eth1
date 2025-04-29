@@ -333,7 +333,8 @@ proc call*(
 
   let
     vmState = evm.setupVmState(txFrame, header)
-    callResult = ?(await evm.callFetchingState(vmState, header, tx, optimisticStateFetch))
+    callResult =
+      ?(await evm.callFetchingState(vmState, header, tx, optimisticStateFetch))
 
   if callResult.error.len() > 0:
     err("EVM execution failed: " & callResult.error)
