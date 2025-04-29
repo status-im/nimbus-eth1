@@ -151,6 +151,11 @@ proc getEthBlock*(blck: ForkyTrustedBeaconBlock, res: var EthBlock): bool =
           Opt.some(Hash32(blck.parent_root.data))
         else:
           Opt.none(Hash32)
+      requestsHash =
+        when consensusFork >= ConsensusFork.Electra:
+          Opt.some(payload.requests_hash)
+        else:
+          Opt.none(Hash32)
 
     res.header = Header(
       parentHash: Hash32(payload.parent_hash.data),
@@ -173,6 +178,7 @@ proc getEthBlock*(blck: ForkyTrustedBeaconBlock, res: var EthBlock): bool =
       blobGasUsed: blobGasUsed,
       excessBlobGas: excessBlobGas,
       parentBeaconBlockRoot: parentBeaconBlockRoot,
+      requestsHash: requestsHash,
     )
     res.transactions = move(txs)
     res.uncles.reset()
