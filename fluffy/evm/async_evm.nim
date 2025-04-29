@@ -8,7 +8,7 @@
 {.push raises: [].}
 
 import
-  std/sets,
+  std/[sets, algorithm],
   stew/byteutils,
   chronos,
   chronicles,
@@ -386,7 +386,19 @@ proc createAccessList*(
       else:
         Opt.none(string)
 
-  ok((txWithAl.accessList.get(@[]), error, finalCallResult.gasUsed))
+  # Sort the access list
+  var accessList = txWithAl.accessList.get(@[])
+  for a in accessList.mitems():
+    a.storageKeys.sort(
+      proc(x, y: Bytes32): int =
+        cmp(x.data, y.data)
+    )
+  accessList.sort(
+    proc(x, y: AccessPair): int =
+      cmp(x.address.data, y.address.data)
+  )
+
+  ok((accessList, error, finalCallResult.gasUsed))
 
 proc estimateGas*(
     evm: AsyncEvm, header: Header, tx: TransactionArgs, optimisticStateFetch = true
