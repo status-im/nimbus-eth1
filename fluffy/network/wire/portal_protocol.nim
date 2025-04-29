@@ -747,7 +747,7 @@ proc new*(
     dataRadius: dbRadius,
     bootstrapRecords: @bootstrapRecords,
     stream: stream,
-    radiusCache: RadiusCache.init(512),
+    radiusCache: RadiusCache.init(config.radiusCacheSize),
     offerQueue: newAsyncQueue[OfferRequest](config.maxConcurrentOffers),
     offerCache:
       OfferCache.init(if config.disableOfferCache: 0 else: config.offerCacheSize),
@@ -1777,11 +1777,15 @@ proc neighborhoodGossip*(
 
     for node in closestNodes:
       if p.radiusCache.get(node.id).isNone():
-        # send ping to add the node to the radius cache
+        # Send ping to add the node to the radius cache
         (await p.ping(node)).isOkOr:
           continue
+
       let radius = p.radiusCache.get(node.id).valueOr:
+        # Should only happen if the ping fails, so just skip the node in this case
         continue
+
+      # Only send offers to nodes for which the content is in range of their radius
       if p.inRange(node.id, radius, contentId):
         let req = OfferRequest(dst: node, kind: Direct, contentList: contentList)
         await p.offerQueue.addLast(req)

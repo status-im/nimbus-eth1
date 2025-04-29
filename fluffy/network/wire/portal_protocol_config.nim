@@ -48,6 +48,7 @@ type
     disableOfferCache*: bool
     maxConcurrentOffers*: int
     disableBanNodes*: bool
+    radiusCacheSize*: int
 
 const
   defaultRadiusConfig* = RadiusConfig(kind: Dynamic)
@@ -62,6 +63,7 @@ const
   defaultAlpha* = 3
   revalidationTimeout* = chronos.seconds(30)
   defaultDisableBanNodes* = true
+  defaultRadiusCacheSize* = 512
 
   defaultPortalProtocolConfig* = PortalProtocolConfig(
     tableIpLimits: DefaultTableIpLimits,
@@ -76,6 +78,7 @@ const
     disableOfferCache: defaultDisableOfferCache,
     maxConcurrentOffers: defaultMaxConcurrentOffers,
     disableBanNodes: defaultDisableBanNodes,
+    radiusCacheSize: defaultRadiusCacheSize,
   )
 
 proc init*(
@@ -93,6 +96,7 @@ proc init*(
     disableOfferCache: bool,
     maxConcurrentOffers: int,
     disableBanNodes: bool,
+    radiusCacheSize: int,
 ): T =
   PortalProtocolConfig(
     tableIpLimits:
@@ -108,6 +112,7 @@ proc init*(
     disableOfferCache: disableOfferCache,
     maxConcurrentOffers: maxConcurrentOffers,
     disableBanNodes: disableBanNodes,
+    radiusCacheSize: radiusCacheSize,
   )
 
 func fromLogRadius*(T: type UInt256, logRadius: uint16): T =
