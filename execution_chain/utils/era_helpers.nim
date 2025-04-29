@@ -153,7 +153,16 @@ proc getEthBlock*(blck: ForkyTrustedBeaconBlock, res: var EthBlock): bool =
           Opt.none(Hash32)
       requestsHash =
         when consensusFork >= ConsensusFork.Electra:
-          Opt.some(payload.requests_hash)
+          # Execution Requests for Electra
+          var requests: seq[seq[byte]]
+          for request_type, request_data in [
+            SSZ.encode(blck.body.execution_requests.deposits),
+            SSZ.encode(blck.body.execution_requests.withdrawals),
+            SSZ.encode(blck.body.execution_requests.consolidations),
+          ]:
+            if request_data.len > 0:
+              requests.add @[request_type.byte] & request_data
+          Opt.some(calcRequestsHash(requests))
         else:
           Opt.none(Hash32)
 
