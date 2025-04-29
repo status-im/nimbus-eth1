@@ -646,7 +646,7 @@ proc forkedChainMain*() =
       let com = env.newCom()
       var chain = ForkedChainRef.init(com, baseDistance = 3, persistBatchSize = 2)
       check chain.forkChoice(blk7.blockHash, blk6.blockHash).isErr
-      check chain.notifyBlockHashAndNumber(blk6.blockHash, blk6.header.number)
+      check chain.tryUpdatePendingFCU(blk6.blockHash, blk6.header.number)
       checkImportBlock(chain, blk1)
       checkImportBlock(chain, blk2)
       checkImportBlock(chain, blk3)
@@ -669,7 +669,7 @@ proc forkedChainMain*() =
       let com = env.newCom()
       var chain = ForkedChainRef.init(com, baseDistance = 3, persistBatchSize = 2)
 
-      check chain.notifyBlockHashAndNumber(blk5.blockHash, blk5.header.number) == false
+      check chain.tryUpdatePendingFCU(blk5.blockHash, blk5.header.number)
       checkImportBlock(chain, blk1)
       checkImportBlock(chain, blk2)
       checkImportBlock(chain, blk3)
