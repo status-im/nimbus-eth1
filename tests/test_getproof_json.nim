@@ -6,7 +6,7 @@
 # at your option. This file may not be copied, modified, or distributed except according to those terms.
 
 import
-  std/[os, sequtils],
+  std/os,
   unittest2,
   stew/byteutils,
   web3/eth_api,
@@ -26,7 +26,7 @@ template toHash32(hash: untyped): Hash32 =
 
 proc verifyAccountProof(trustedStateRoot: Hash32, res: ProofResponse): MptProofVerificationResult =
   let
-    key = keccakHash(res.address).data
+    key = keccak256(res.address.data)
     value = rlp.encode(Account(
         nonce: res.nonce.uint64,
         balance: res.balance,
@@ -36,18 +36,18 @@ proc verifyAccountProof(trustedStateRoot: Hash32, res: ProofResponse): MptProofV
   verifyMptProof(
     seq[seq[byte]](res.accountProof),
     trustedStateRoot,
-    key,
+    key.data,
     value)
 
 proc verifySlotProof(trustedStorageRoot: Hash32, slot: StorageProof): MptProofVerificationResult =
   let
-    key = keccakHash(toBytesBE(slot.key)).data
+    key = keccak256(toBytesBE(slot.key))
     value = rlp.encode(slot.value)
 
   verifyMptProof(
     seq[seq[byte]](slot.proof),
     trustedStorageRoot,
-    key,
+    key.data,
     value)
 
 proc getGenesisAlloc(filePath: string): GenesisAlloc =

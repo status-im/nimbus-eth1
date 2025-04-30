@@ -12,7 +12,6 @@
 
 import
   std/[algorithm, sets],
-  stew/byteutils,
   unittest2,
   ../../execution_chain/db/aristo/[
     aristo_check,
@@ -23,9 +22,6 @@ import
     aristo_init/memory_only,
     aristo_tx_frame,
   ]
-
-func x(s: string): seq[byte] =
-  s.hexToSeqByte
 
 let samples = [
   # Somew on-the-fly provided stuff

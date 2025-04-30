@@ -8,6 +8,8 @@
 # at your option. This file may not be copied, modified, or distributed except
 # according to those terms.
 
+{.push raises: [].}
+
 import
   eth/common/blocks,
   eth/common/receipts,
@@ -28,6 +30,17 @@ type
     blocks*: seq[BlockDesc]
     parent*: BranchRef
       # If parent.isNil: it is a base branch
+
+    index* : uint
+      # Used by serializer, a replacement for parent
+      #  0: nil
+      # >0: index-1 to branches list
+      #
+      # Also used as a flag when replaying state
+      # after deserialize.
+
+func tailBlock*(brc: BranchRef): Block =
+  brc.blocks[0].blk
 
 func tailNumber*(brc: BranchRef): BlockNumber =
   brc.blocks[0].blk.header.number
@@ -60,6 +73,12 @@ func lastBlockPos*(brc: BranchRef): BlockPos =
   BlockPos(
     branch: brc,
     index : brc.len - 1,
+  )
+
+func firstBlockPos*(brc: BranchRef): BlockPos =
+  BlockPos(
+    branch: brc,
+    index : 0,
   )
 
 func `==`*(a, b: BranchRef): bool =

@@ -24,10 +24,12 @@ import
   ./nimbus_import,
   ./core/block_import,
   ./core/lazy_kzg,
+  ./core/chain/forked_chain/chain_serialize,
   ./db/core_db/persistent,
   ./db/storage_types,
   ./sync/wire_protocol,
-  ./common/chain_config_hash
+  ./common/chain_config_hash,
+  ./portal/portal
 
 from beacon_chain/nimbus_binary_common import setupFileLimits
 
@@ -39,8 +41,18 @@ from beacon_chain/nimbus_binary_common import setupFileLimits
 proc basicServices(nimbus: NimbusNode,
                    conf: NimbusConf,
                    com: CommonRef) =
+<<<<<<< HEAD
   nimbus.fc = ForkedChainRef.init(com, eagerStateRoot = conf.eagerStateRootCheck)
+=======
+  # Setup the chain
+  let fc = ForkedChainRef.init(com)
+  fc.deserialize().isOkOr:
+    warn "FC.deserialize", msg=error
+>>>>>>> master
 
+  nimbus.fc = fc
+  # Setup history expiry and portal
+  nimbus.fc.portal = HistoryExpiryRef.init(conf, com)
   # txPool must be informed of active head
   # so it can know the latest account state
   # e.g. sender nonce, etc
@@ -243,6 +255,13 @@ proc run(nimbus: NimbusNode, conf: NimbusConf) =
   com.gasLimit = conf.gasLimit
 
   defer:
+    if not nimbus.fc.isNil:
+      let
+        fc = nimbus.fc
+        txFrame = fc.baseTxFrame
+      fc.serialize(txFrame).isOkOr:
+        error "FC.serialize error: ", msg=error
+      com.db.persist(txFrame)
     com.db.finish()
 
   case conf.cmd

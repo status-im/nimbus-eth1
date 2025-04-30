@@ -1,5 +1,5 @@
 # Nimbus
-# Copyright (c) 2020-2024 Status Research & Development GmbH
+# Copyright (c) 2020-2025 Status Research & Development GmbH
 # Licensed under either of
 #  * Apache License, version 2.0, ([LICENSE-APACHE](LICENSE-APACHE) or
 #    http://www.apache.org/licenses/LICENSE-2.0)
@@ -77,3 +77,18 @@ proc requestBlock*(blockNumber: BlockNumber, client: RpcClient): Block =
   result.header = parseBlockHeader(header)
   result.body = requestBlockBody(header, blockNumber, client)
   result.receipts = requestReceipts(header, client)
+
+proc downloadHeader*(client: RpcClient, i: uint64): headers.Header =
+  try:
+    let jsonHeader = requestHeader(i, client)
+    parseBlockHeader(jsonHeader)
+  except CatchableError as e:
+    fatal "Error while requesting BlockHeader", error = e.msg, number = i
+    quit 1
+
+proc downloadBlock*(i: uint64, client: RpcClient): Block =
+  try:
+    return requestBlock(i, client)
+  except CatchableError as e:
+    fatal "Error while requesting Block", error = e.msg, number = i
+    quit 1

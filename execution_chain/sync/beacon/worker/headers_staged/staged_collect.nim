@@ -81,12 +81,12 @@ func bnStr*(w: LinkedHChain | ref LinkedHChain): string =
 # Public helper functions
 # ------------------------------------------------------------------------------
 
-func collectCanContinue*(buddy: BeaconBuddyRef): bool =
-  ## Hepler, checks whether there is a general stop conditions
-  buddy.ctrl.running and
-  not buddy.ctx.poolMode and
-  buddy.ctx.pool.lastState == collectingHeaders and
-  buddy.ctx.hdrCache.state == collecting
+func collectModeStopped*(ctx: BeaconCtxRef): bool =
+  ## Hepler, checks whether there is a general stop conditions based on
+  ## state settings (not on sync peer ctrl as `buddy.ctrl.running`.)
+  ctx.poolMode or
+  ctx.pool.lastState != collectingHeaders or
+  ctx.hdrCache.state != collecting
 
 
 proc collectAndStashOnDiskCache*(
@@ -122,15 +122,29 @@ proc collectAndStashOnDiskCache*(
           break fetchHeadersBody         # error => exit block
 
       # Job might have been cancelled while downloading headrs
-      if not buddy.collectCanContinue():
+      if ctx.collectModeStopped():
         break fetchHeadersBody           # stop => exit block
 
       # Store it on the header chain cache
-      ctx.hdrCache.fcHeaderPut(rev).isOkOr:
+      ctx.hdrCache.put(rev).isOkOr:
         buddy.updateBuddyProcError()
         debug info & ": header stash error", peer, iv, ivReq,
           ctrl=buddy.ctrl.state, hdrErrors=buddy.hdrErrors, `error`=error
         break fetchHeadersBody           # error => exit block
+
+      # Note that `put()` might not have used all of the `rev[]` items for
+      # updating the antecedent (aka `ctx.dangling`.) So `rev[^1]` might be
+      # an ancestor of the antecedent.
+      #
+      # By design, the unused items from `rev[]` list may savely be considered
+      # as consumed so that the next cycle can continue. In practice, if there
+      # are used `rev[]` items then the `state` will have changed which is
+      # handled in the `while` loop header clause.
+      #
+      # Other possibilities would imply that `put()` was called from several
+      # instances with oberlapping `rev[]` argument lists which is included
+      # by the administration of the `iv` argument for this function
+      # `collectAndStashOnDiskCache()`.
 
       # Update remaining range to fetch and check for end-of-loop condition
       let newTopBefore = ivTop - BlockNumber(rev.len)
@@ -138,7 +152,7 @@ proc collectAndStashOnDiskCache*(
         break                            # exit while() loop
 
       ivTop = newTopBefore               # mostly results in `ivReq.minPt-1`
-      parent = rev[rev.len-1].parentHash # parent hash for next fetch request
+      parent = rev[^1].parentHash        # parent hash for next fetch request
       # End loop
 
     trace info & ": fetched and stored headers", peer, iv,
@@ -190,7 +204,7 @@ proc collectAndStageOnMemQueue*(
           break fetchHeadersBody         # error => exit block
 
       # Job might have been cancelled while downloading headrs
-      if not buddy.collectCanContinue():
+      if ctx.collectModeStopped():
         break fetchHeadersBody           # stop => exit block
 
       # While assembling a `LinkedHChainRef`, only boundary checks are used to
@@ -207,7 +221,7 @@ proc collectAndStageOnMemQueue*(
         break fetchHeadersBody           # error => exit block
 
       # Check/update hashes
-      let hash0 = rev[0].blockHash
+      let hash0 = rev[0].computeBlockHash
       if lhc.revHdrs.len == 0:
         lhc.hash = hash0
       else:

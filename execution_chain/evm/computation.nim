@@ -19,7 +19,7 @@ import
   ./evm_errors,
   ./code_bytes,
   ../common/[evmforks],
-  ../utils/utils,
+  ../utils/[utils, mergeutils],
   ../common/common,
   eth/common/eth_types_rlp,
   chronicles, chronos
@@ -190,7 +190,7 @@ proc writeContract*(c: Computation) =
   template withExtra(tracer: untyped, args: varargs[untyped]) =
     tracer args, newContract=($c.msg.contractAddress),
       blockNumber=c.vmState.blockNumber,
-      parentHash=($c.vmState.parent.blockHash)
+      parentHash=($c.vmState.parent.computeBlockHash)
 
   # In each check below, they are guarded by `len > 0`.  This includes writing
   # out the code, because the account already has zero-length code to handle
@@ -281,10 +281,7 @@ proc addLogEntry*(c: Computation, log: Log) =
   c.logEntries.add log
 
 func merge*(c, child: Computation) =
-  if c.logEntries.len == 0:
-    c.logEntries = move(child.logEntries)
-  else:
-    c.logEntries.add(child.logEntries)
+  c.logEntries.mergeAndReset(child.logEntries)
   c.transientStorage.mergeAndReset(child.transientStorage)
   c.gasMeter.refundGas(child.gasMeter.gasRefunded)
 

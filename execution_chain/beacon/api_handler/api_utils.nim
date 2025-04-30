@@ -39,10 +39,10 @@ proc computePayloadId*(blockHash: common.Hash32,
   ctx.update(distinctBase params.prevRandao)
   ctx.update(distinctBase params.suggestedFeeRecipient)
   if params.withdrawals.isSome:
-    for wd in params.withdrawals.get:
+    for wd in params.withdrawals.value:
       ctx.update(wd)
   if params.parentBeaconBlockRoot.isSome:
-    ctx.update(distinctBase params.parentBeaconBlockRoot.get)
+    ctx.update(distinctBase params.parentBeaconBlockRoot.value)
   ctx.finish dest.data
   ctx.clear()
   (distinctBase result)[0..7] = dest.data[0..7]
@@ -51,7 +51,7 @@ proc validateBlockHash*(header: common.Header,
                         wantHash: common.Hash32,
                         version: Version): Result[void, PayloadStatusV1]
                           {.gcsafe, raises: [ValueError].} =
-  let gotHash = header.blockHash
+  let gotHash = header.computeBlockHash
   if wantHash != gotHash:
     let status = if version == Version.V1:
                    PayloadExecutionStatus.invalid_block_hash
@@ -180,7 +180,7 @@ proc latestValidHash*(txFrame: CoreDbTxRef,
   # TODO shouldn't this be in forkedchainref?
   let ptd = txFrame.getScore(parent.parentHash).valueOr(0.u256)
   if ptd >= ttd:
-    parent.blockHash
+    parent.computeBlockHash
   else:
     # If the most recent valid ancestor is a PoW block,
     # latestValidHash MUST be set to ZERO

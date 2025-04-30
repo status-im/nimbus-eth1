@@ -528,6 +528,7 @@ func chainConfigForNetwork*(id: NetworkId): ChainConfig =
       terminalTotalDifficulty: Opt.some(mainNetTTD),
       shanghaiTime:        Opt.some(1_681_338_455.EthTime),  # 2023-04-12 10:27:35 UTC
       cancunTime:          Opt.some(1_710_338_135.EthTime),  # 2024-03-13 13:55:35 UTC
+      pragueTime:          Opt.some(1_746_612_311.EthTime),  # 2025-05-07 10:05:11 UTC
       depositContractAddress: Opt.some(MAINNET_DEPOSIT_CONTRACT_ADDRESS),
       blobSchedule:        defaultBlobSchedule(),
     )
@@ -601,8 +602,8 @@ func chainConfigForNetwork*(id: NetworkId): ChainConfig =
       mergeNetsplitBlock:  Opt.some(0.BlockNumber),
       terminalTotalDifficulty: Opt.some(0.u256),
       shanghaiTime:        Opt.some(10.EthTime),
-      cancunTime:          Opt.some(0.EthTime), 
-      pragueTime:          Opt.some(1_742_999_832.EthTime), 
+      cancunTime:          Opt.some(0.EthTime),
+      pragueTime:          Opt.some(1_742_999_832.EthTime),
       depositContractAddress: Opt.some(HOODI_DEPOSIT_CONTRACT_ADDRESS),
       blobSchedule:        defaultBlobSchedule(),
     )

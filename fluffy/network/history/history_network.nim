@@ -22,7 +22,6 @@ import
   "."/[history_content, history_validation, history_type_conversions],
   ../beacon/beacon_chain_historical_roots
 
-from eth/common/eth_types_rlp import rlpHash
 from eth/common/accounts import EMPTY_ROOT_HASH
 
 logScope:
@@ -235,7 +234,7 @@ proc getBlock*(
       when id is Hash32:
         id
       else:
-        header.rlpHash()
+        header.computeRlpHash()
     body = (await n.getBlockBody(hash, header)).valueOr:
       debug "Failed to get body when getting block", hash
       return Opt.none(Block)
@@ -248,7 +247,7 @@ proc getBlockHashByNumber*(
   let header = (await n.getVerifiedBlockHeader(blockNumber)).valueOr:
     return err("Cannot retrieve block header for given block number")
 
-  ok(header.rlpHash())
+  ok(header.computeRlpHash())
 
 proc getReceipts*(
     n: HistoryNetwork, blockHash: Hash32, header: Header
@@ -335,7 +334,9 @@ proc validateContent(
       return err("Failed validating block header: " & error)
 
     ok()
-  of ephemeralBlockHeader:
+  of ephemeralBlockHeaderFindContent:
+    err("Ephemeral block header FindContent type is not allowed on offers")
+  of ephemeralBlockHeaderOffer:
     err("Ephemeral block headers are not yet supported")
 
 proc new*(
@@ -396,7 +397,9 @@ proc validateContent(
         warn "Received offered content with invalid content key", srcNodeId, contentKey
         return false
 
-      n.portalProtocol.storeContent(contentKey, contentId, contentItem)
+      n.portalProtocol.storeContent(
+        contentKey, contentId, contentItem, cacheOffer = true
+      )
 
       debug "Received offered content validated successfully", srcNodeId, contentKey
     else:

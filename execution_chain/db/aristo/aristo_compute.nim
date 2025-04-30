@@ -117,16 +117,21 @@ proc getKey(
   else:
     ?db.getKeyRc(rvid, {})
 
-template childVid(v: VertexRef): VertexID =
+template childVid(vp: VertexRef): VertexID =
   # If we have to recurse into a child, where would that recusion start?
+  let v = vp
   case v.vType
-  of Leaf:
-    if v.lData.pType == AccountData and v.lData.stoID.isValid:
-      v.lData.stoID.vid
+  of AccLeaf:
+    let v = AccLeafRef(v)
+    if v.stoID.isValid:
+      v.stoID.vid
     else:
       default(VertexID)
-  of Branch:
+  of Branch, ExtBranch:
+    let v = BranchRef(v)
     v.startVid
+  of StoLeaf:
+    default(VertexID)
 
 proc computeKeyImpl(
     db: AristoTxRef,
@@ -147,44 +152,46 @@ proc computeKeyImpl(
 
   let key =
     case vtx.vType
-    of Leaf:
+    of AccLeaf:
+      let vtx = AccLeafRef(vtx)
       writer.encodeLeaf(vtx.pfx):
-        case vtx.lData.pType
-        of AccountData:
-          let
-            stoID = vtx.lData.stoID
-            skey =
-              if stoID.isValid:
-                let
-                  keyvtxl = ?db.getKey((stoID.vid, stoID.vid), skipLayers)
-                  (skey, sl) =
-                    if keyvtxl[0][0].isValid:
-                      (keyvtxl[0][0], keyvtxl[1])
-                    else:
-                      ?db.computeKeyImpl(
-                        (stoID.vid, stoID.vid),
-                        batch,
-                        keyvtxl[0][1],
-                        keyvtxl[1],
-                        skipLayers = skipLayers,
-                      )
-                level = max(level, sl)
-                skey
-              else:
-                VOID_HASH_KEY
+        let
+          stoID = vtx.stoID
+          skey =
+            if stoID.isValid:
+              let
+                keyvtxl = ?db.getKey((stoID.vid, stoID.vid), skipLayers)
+                (skey, sl) =
+                  if keyvtxl[0][0].isValid:
+                    (keyvtxl[0][0], keyvtxl[1])
+                  else:
+                    ?db.computeKeyImpl(
+                      (stoID.vid, stoID.vid),
+                      batch,
+                      keyvtxl[0][1],
+                      keyvtxl[1],
+                      skipLayers = skipLayers,
+                    )
+              level = max(level, sl)
+              skey
+            else:
+              VOID_HASH_KEY
 
-          rlp.encode Account(
-            nonce: vtx.lData.account.nonce,
-            balance: vtx.lData.account.balance,
-            storageRoot: skey.to(Hash32),
-            codeHash: vtx.lData.account.codeHash,
-          )
-        of StoData:
-          # TODO avoid memory allocation when encoding storage data
-          rlp.encode(vtx.lData.stoData)
-    of Branch:
+        rlp.encode Account(
+          nonce: vtx.account.nonce,
+          balance: vtx.account.balance,
+          storageRoot: skey.to(Hash32),
+          codeHash: vtx.account.codeHash,
+        )
+    of StoLeaf:
+      let vtx = StoLeafRef(vtx)
+      writer.encodeLeaf(vtx.pfx):
+        # TODO avoid memory allocation when encoding storage data
+        rlp.encode(vtx.stoData)
+    of Branches:
       # For branches, we need to load the vertices before recursing into them
       # to exploit their on-disk order
+      let vtx = BranchRef(vtx)
       var keyvtxs: array[16, ((HashKey, VertexRef), int)]
       for n, subvid in vtx.pairs:
         keyvtxs[n] = ?db.getKey((rvid.root, subvid), skipLayers)
@@ -239,7 +246,7 @@ proc computeKeyImpl(
             )
           batch.leave(n)
 
-      template writeBranch(w: var RlpWriter): HashKey =
+      template writeBranch(w: var RlpWriter, vtx: BranchRef): HashKey =
         w.encodeBranch(vtx):
           if subvid.isValid:
             level = max(level, keyvtxs[n][1])
@@ -247,12 +254,13 @@ proc computeKeyImpl(
           else:
             VOID_HASH_KEY
 
-      if vtx.pfx.len > 0: # Extension node
+      if vtx.vType == ExtBranch:
+        let vtx = ExtBranchRef(vtx)
         writer.encodeExt(vtx.pfx):
           var bwriter = initRlpWriter()
-          bwriter.writeBranch()
+          bwriter.writeBranch(vtx)
       else:
-        writer.writeBranch()
+        writer.writeBranch(vtx)
 
   # Cache the hash into the same storage layer as the the top-most value that it
   # depends on (recursively) - this could be an ephemeral in-memory layer or the
@@ -261,7 +269,7 @@ proc computeKeyImpl(
   # root key also changing while leaves that have never been hashed will see
   # their hash being saved directly to the backend.
 
-  if vtx.vType != Leaf:
+  if vtx.vType notin Leaves:
     ?db.putKeyAtLevel(rvid, vtx, key, level, batch)
   ok (key, level)
 

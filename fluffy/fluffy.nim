@@ -31,6 +31,7 @@ import
     rpc_portal_nimbus_beacon_api, rpc_portal_debug_history_api,
   ],
   ./database/content_db,
+  ./network/wire/portal_protocol_version,
   ./portal_node,
   ./version,
   ./logging
@@ -153,7 +154,8 @@ proc run(fluffy: Fluffy, config: PortalConf) {.raises: [CatchableError].} =
       # Note: The addition of default clientInfo to the ENR is a temporary
       # measure to easily identify & debug the clients used in the testnet.
       # Might make this into a, default off, cli option.
-      localEnrFields = {"c": enrClientInfoShort},
+      localEnrFields =
+        {"c": enrClientInfoShort, portalVersionKey: SSZ.encode(localSupportedVersions)},
       bootstrapRecords = bootstrapRecords,
       previousRecord = previousEnr,
       bindIp = bindIp,
@@ -197,8 +199,8 @@ proc run(fluffy: Fluffy, config: PortalConf) {.raises: [CatchableError].} =
     portalProtocolConfig = PortalProtocolConfig.init(
       config.tableIpLimit, config.bucketIpLimit, config.bitsPerHop, config.alpha,
       config.radiusConfig, config.disablePoke, config.maxGossipNodes,
-      config.contentCacheSize, config.disableContentCache, config.maxConcurrentOffers,
-      config.disableBanNodes,
+      config.contentCacheSize, config.disableContentCache, config.offerCacheSize,
+      config.disableOfferCache, config.maxConcurrentOffers, config.disableBanNodes,
     )
 
     portalNodeConfig = PortalNodeConfig(

@@ -17,9 +17,16 @@ type
     beacon_block_proof*: array[14, string]
     slot*: uint64
 
-  YamlTestProof* = object
+  YamlTestProofCapella* = object
     execution_block_header*: string # Not part of the actual proof
     execution_block_proof*: array[11, string]
+    beacon_block_root*: string
+    beacon_block_proof*: array[13, string]
+    slot*: uint64
+
+  YamlTestProofDeneb* = object
+    execution_block_header*: string # Not part of the actual proof
+    execution_block_proof*: array[12, string]
     beacon_block_root*: string
     beacon_block_proof*: array[13, string]
     slot*: uint64

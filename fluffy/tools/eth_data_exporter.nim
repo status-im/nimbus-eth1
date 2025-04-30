@@ -56,27 +56,11 @@ import
   eth_data_exporter/[exporter_conf, exporter_common, cl_data_exporter],
   eth_data_exporter/[downloader, parser]
 
-from eth/common/eth_types_rlp import rlpHash
 # Need to be selective due to the `Block` type conflict from downloader
 from ../network/history/history_network import encode
 
 chronicles.formatIt(IoErrorCode):
   $it
-
-proc downloadHeader(client: RpcClient, i: uint64): headers.Header =
-  try:
-    let jsonHeader = requestHeader(i, client)
-    parseBlockHeader(jsonHeader)
-  except CatchableError as e:
-    fatal "Error while requesting BlockHeader", error = e.msg, number = i
-    quit 1
-
-proc downloadBlock(i: uint64, client: RpcClient): downloader.Block =
-  try:
-    return requestBlock(i, client)
-  except CatchableError as e:
-    fatal "Error while requesting Block", error = e.msg, number = i
-    quit 1
 
 proc writeHeadersToJson(config: ExporterConf, client: RpcClient) =
   let fh = createAndOpenFile(string config.dataDir, config.fileName)
@@ -223,7 +207,7 @@ proc cmdExportEra1(config: ExporterConf) =
 
         headerRecords.add(
           historical_hashes_accumulator.HeaderRecord(
-            blockHash: blck.header.rlpHash(), totalDifficulty: ttd
+            blockHash: blck.header.computeRlpHash(), totalDifficulty: ttd
           )
         )
 
@@ -363,7 +347,7 @@ when isMainModule:
                 except RlpError as e:
                   return err("Invalid block header: " & e.msg)
 
-              headerHash = to0xHex(rlpHash(blockHeader).data)
+              headerHash = to0xHex(computeRlpHash(blockHeader).data)
             debug "Header decoded successfully",
               hash = headerHash, blockNumber = blockHeader.number
           else:
@@ -597,7 +581,7 @@ when isMainModule:
             content = headerWithProof.get()
             contentKey = ContentKey(
               contentType: blockHeader,
-              blockHeaderKey: BlockKey(blockHash: header.rlpHash()),
+              blockHeaderKey: BlockKey(blockHash: header.computeRlpHash()),
             )
             encodedContentKey = history_content.encode(contentKey)
             encodedContent = SSZ.encode(content)
@@ -653,7 +637,15 @@ when isMainModule:
       waitFor exportHistoricalRoots(
         config.restUrl, string config.dataDir, cfg, forkDigests
       )
-    of BeaconCmd.exportBeaconBlockProof:
-      exportBeaconBlockProof(
-        string config.dataDir, string config.eraDir, config.slotNumber
+    of BeaconCmd.exportBlockProof:
+      exportBlockProof(string config.dataDir, string config.eraDir, config.slotNumber)
+    of BeaconCmd.exportHeaderWithProof:
+      let client = newRpcClient(config.web3Url1)
+      let connectRes = waitFor client.connectRpcClient(config.web3Url1)
+      if connectRes.isErr():
+        fatal "Failed connecting to JSON-RPC client", error = connectRes.error
+        quit QuitFailure
+
+      exportHeaderWithProof(
+        client, string config.dataDir, string config.eraDir1, config.slotNumber1
       )

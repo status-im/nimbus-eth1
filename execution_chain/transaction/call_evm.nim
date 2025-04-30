@@ -58,22 +58,9 @@ proc rpcCallEvm*(args: TransactionArgs,
 
 proc rpcEstimateGas*(args: TransactionArgs,
                      header: Header,
-                     headerHash: Hash32,
-                     com: CommonRef,
-                     parentFrame: CoreDbTxRef,
+                     vmState: BaseVMState,
                      gasCap: GasInt): EvmResult[GasInt] =
   # Binary search the gas requirement, as it may be higher than the amount used
-  let topHeader = Header(
-    parentHash: headerHash,
-    timestamp:  EthTime.now(),
-    gasLimit:   0.GasInt,              ## ???
-    baseFeePerGas: Opt.none UInt256,   ## ???
-  )
-
-  let txFrame = parentFrame.txFrameBegin()
-  defer: txFrame.dispose() # always dispose state changes
-
-  let vmState = BaseVMState.new(header, topHeader, com, txFrame)
   let fork    = vmState.fork
   let txGas   = GasInt gasFees[fork][GasTransaction] # txGas always 21000, use constants?
   var params  = ? toCallParams(vmState, args, gasCap, header.baseFeePerGas)
@@ -157,6 +144,27 @@ proc rpcEstimateGas*(args: TransactionArgs,
       return err(evmErr(EvmInvalidParam))
 
   ok(hi)
+
+proc rpcEstimateGas*(args: TransactionArgs,
+                     header: Header,
+                     headerHash: Hash32,
+                     com: CommonRef,
+                     parentFrame: CoreDbTxRef,
+                     gasCap: GasInt): EvmResult[GasInt] =
+  # Binary search the gas requirement, as it may be higher than the amount used
+  let topHeader = Header(
+    parentHash: headerHash,
+    timestamp:  EthTime.now(),
+    gasLimit:   0.GasInt,              ## ???
+    baseFeePerGas: Opt.none UInt256,   ## ???
+  )
+
+  let txFrame = parentFrame.txFrameBegin()
+  defer:
+    txFrame.dispose() # always dispose state changes
+
+  let vmState = BaseVMState.new(header, topHeader, com, txFrame)
+  rpcEstimateGas(args, header, vmState, gasCap)
 
 proc callParamsForTx(tx: Transaction, sender: Address, vmState: BaseVMState, baseFee: GasInt): CallParams =
   # Is there a nice idiom for this kind of thing? Should I

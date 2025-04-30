@@ -15,8 +15,6 @@ import
   ../history_content,
   ./historical_hashes_accumulator
 
-from eth/common/eth_types_rlp import rlpHash
-
 export
   ssz_serialization, merkleization, proofs, common_types, historical_hashes_accumulator
 
@@ -78,7 +76,7 @@ func verifyProof*(
     epochIndex = getEpochIndex(header)
     epochRecordHash = Digest(data: a.historicalEpochs[epochIndex])
 
-    leave = hash_tree_root(header.rlpHash())
+    leave = hash_tree_root(header.computeRlpHash())
     headerRecordIndex = getHeaderRecordIndex(header, epochIndex)
 
     # For lists, leaves starts at epochSize*2 (because of the extra len branch).

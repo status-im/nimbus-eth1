@@ -101,8 +101,11 @@ func validate*(c: ForkedChainRef): Result[void,string] =
     if chain[0] != c.baseHash:
       return err("unbased chain: " & chain.cnStr(c))
 
+  var numBlocksInBranches = 0
   # Cursor heads must refer to items of `c.blocks[]`
   for brc in c.branches:
+    numBlocksInBranches += brc.len
+
     for bd in brc.blocks:
       if not c.hashToBlock.hasKey(bd.hash):
         return err("stray block: " & pp(bd))
@@ -114,6 +117,10 @@ func validate*(c: ForkedChainRef): Result[void,string] =
     if not parent.isNil:
       if brc.tailNumber < parent.tailNumber:
         return err("branch junction too small: " & $brc.tailNumber)
+
+  if numBlocksInBranches != c.hashToBlock.len:
+    return err("inconsistent number of blocks in branches: " & $numBlocksInBranches &
+      " vs number of block hashes " & $c.hashToBlock.len)
 
   ok()
 

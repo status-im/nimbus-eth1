@@ -1,5 +1,5 @@
 # Nimbus
-# Copyright (c) 2024 Status Research & Development GmbH
+# Copyright (c) 2024-2025 Status Research & Development GmbH
 # Licensed under either of
 #  * Apache License, version 2.0, ([LICENSE-APACHE](LICENSE-APACHE) or
 #    http://www.apache.org/licenses/LICENSE-2.0)
@@ -22,11 +22,11 @@ const
     ## The row cache is disabled by default as the rdb lru caches do a better
     ## job at a similar abstraction level - ie they work at the same granularity
     ## as the rocksdb row cache but with less overhead
-  defaultBlockCacheSize* = 1024 * 1024 * 1024 * 5 div 2
+  defaultBlockCacheSize* = 1024 * 1024 * 1024 * 2
     ## The block cache is used to cache indicies, ribbon filters and
     ## decompressed data, roughly in that priority order. At the time of writing
     ## we have about 2 giga-entries in the MPT - with the ribbon filter
-    ## using about 8 bits per entry we need 2gb of space just for the filters.
+    ## using about 8 bits per entry we need ~2gb of space just for the filters.
     ##
     ## When the filters don't fit in memory, random access patterns such as
     ## MPT root computations suffer because of filter evictions and subsequent
@@ -35,7 +35,7 @@ const
     ## A bit of space on top of the filter is left for data block caching
   defaultRdbVtxCacheSize* = 512 * 1024 * 1024
     ## Cache of branches and leaves in the state MPTs (world and account)
-  defaultRdbKeyCacheSize* = 256 * 1024 * 1024
+  defaultRdbKeyCacheSize* = 1280 * 1024 * 1024
     ## Hashes of the above
   defaultRdbBranchCacheSize* = 1024 * 1024 * 1024
     ## Cache of branches and leaves in the state MPTs (world and account)

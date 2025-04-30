@@ -77,8 +77,8 @@ proc executeCase(node: JsonNode): bool =
     debugEcho "Failed to put genesis header into database: ", error
     return false
 
-  var c = ForkedChainRef.init(com)
-  if c.latestHash != env.genesisHeader.blockHash:
+  var c = ForkedChainRef.init(com, persistBatchSize = 0)
+  if c.latestHash != env.genesisHeader.computeBlockHash:
     debugEcho "Genesis block hash in database is different with expected genesis block hash"
     return false
 
@@ -86,7 +86,7 @@ proc executeCase(node: JsonNode): bool =
   for blk in env.blocks:
     let res = c.importBlock(blk.blk)
     if res.isOk:
-      if env.lastBlockHash == blk.blk.header.blockHash:
+      if env.lastBlockHash == blk.blk.header.computeBlockHash:
         lastStateRoot = blk.blk.header.stateRoot
       if blk.badBlock:
         debugEcho "A bug? bad block imported"
@@ -125,10 +125,10 @@ proc blockchainJsonMain*() =
 
   if false:
     suite "block chain json tests":
-      jsonTest(legacyFolder, "BlockchainTests", executeFile, skipBCTests)
+      jsonTest(legacyFolder, "LegacyBlockchainTests", executeFile, skipBCTests)
   else:
     suite "new block chain json tests":
-      jsonTest(newFolder, "newBlockchainTests", executeFile, skipNewBCTests)
+      jsonTest(newFolder, "BlockchainTests", executeFile, skipNewBCTests)
 
 when debugMode:
   proc executeFile(name: string) =

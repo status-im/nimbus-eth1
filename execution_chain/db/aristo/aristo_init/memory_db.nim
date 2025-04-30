@@ -59,15 +59,15 @@ when extraTraceMessages:
 # Private helpers
 # ------------------------------------------------------------------------------
 
-proc newSession(db: MemBackendRef): MemPutHdlRef =
+func newSession(db: MemBackendRef): MemPutHdlRef =
   new result
   result.TypedPutHdlRef.beginSession db
 
-proc getSession(hdl: PutHdlRef; db: MemBackendRef): MemPutHdlRef =
+func getSession(hdl: PutHdlRef; db: MemBackendRef): MemPutHdlRef =
   hdl.TypedPutHdlRef.verifySession db
   hdl.MemPutHdlRef
 
-proc endSession(hdl: PutHdlRef; db: MemBackendRef): MemPutHdlRef =
+func endSession(hdl: PutHdlRef; db: MemBackendRef): MemPutHdlRef =
   hdl.TypedPutHdlRef.finishSession db
   hdl.MemPutHdlRef
 
@@ -75,7 +75,7 @@ proc endSession(hdl: PutHdlRef; db: MemBackendRef): MemPutHdlRef =
 # Private functions: interface
 # ------------------------------------------------------------------------------
 
-proc getVtxFn(db: MemBackendRef): GetVtxFn =
+func getVtxFn(db: MemBackendRef): GetVtxFn =
   result =
     proc(rvid: RootedVertexID, flags: set[GetVtxFlag]): Result[VertexRef,AristoError] =
       # Fetch serialised data record
@@ -88,7 +88,7 @@ proc getVtxFn(db: MemBackendRef): GetVtxFn =
         return rc
       err(GetVtxNotFound)
 
-proc getKeyFn(db: MemBackendRef): GetKeyFn =
+func getKeyFn(db: MemBackendRef): GetKeyFn =
   result =
     proc(rvid: RootedVertexID, flags: set[GetVtxFlag]): Result[(HashKey, VertexRef),AristoError] =
       let data = db.sTab.getOrDefault(rvid, EmptyBlob)
@@ -100,25 +100,25 @@ proc getKeyFn(db: MemBackendRef): GetKeyFn =
         return ok((key, nil))
       err(GetKeyNotFound)
 
-proc getTuvFn(db: MemBackendRef): GetTuvFn =
+func getTuvFn(db: MemBackendRef): GetTuvFn =
   result =
     proc(): Result[VertexID,AristoError]=
       db.tUvi or ok(VertexID(0))
 
-proc getLstFn(db: MemBackendRef): GetLstFn =
+func getLstFn(db: MemBackendRef): GetLstFn =
   result =
     proc(): Result[SavedState,AristoError]=
       db.lSst or err(GetLstNotFound)
 
 # -------------
 
-proc putBegFn(db: MemBackendRef): PutBegFn =
+func putBegFn(db: MemBackendRef): PutBegFn =
   result =
     proc(): Result[PutHdlRef,AristoError] =
       ok db.newSession()
 
 
-proc putVtxFn(db: MemBackendRef): PutVtxFn =
+func putVtxFn(db: MemBackendRef): PutVtxFn =
   result =
     proc(hdl: PutHdlRef; rvid: RootedVertexID; vtx: VertexRef, key: HashKey) =
       let hdl = hdl.getSession db
@@ -128,21 +128,21 @@ proc putVtxFn(db: MemBackendRef): PutVtxFn =
         else:
           hdl.sTab[rvid] = EmptyBlob
 
-proc putTuvFn(db: MemBackendRef): PutTuvFn =
+func putTuvFn(db: MemBackendRef): PutTuvFn =
   result =
     proc(hdl: PutHdlRef; vs: VertexID)  =
       let hdl = hdl.getSession db
       if hdl.error.isNil:
         hdl.tUvi = Opt.some(vs)
 
-proc putLstFn(db: MemBackendRef): PutLstFn =
+func putLstFn(db: MemBackendRef): PutLstFn =
   result =
     proc(hdl: PutHdlRef; lst: SavedState) =
       let hdl = hdl.getSession db
       if hdl.error.isNil:
         hdl.lSst = Opt.some(lst)
 
-proc putEndFn(db: MemBackendRef): PutEndFn =
+func putEndFn(db: MemBackendRef): PutEndFn =
   result =
     proc(hdl: PutHdlRef): Result[void,AristoError] =
       let hdl = hdl.endSession db
@@ -174,7 +174,7 @@ proc putEndFn(db: MemBackendRef): PutEndFn =
 
 # -------------
 
-proc closeFn(db: MemBackendRef): CloseFn =
+func closeFn(db: MemBackendRef): CloseFn =
   result =
     proc(ignore: bool) =
       discard
@@ -183,7 +183,7 @@ proc closeFn(db: MemBackendRef): CloseFn =
 # Public functions
 # ------------------------------------------------------------------------------
 
-proc memoryBackend*(): AristoDbRef =
+func memoryBackend*(): AristoDbRef =
   let 
     be = MemBackendRef(beKind: BackendMemory)
     db = AristoDbRef()
@@ -208,10 +208,10 @@ proc memoryBackend*(): AristoDbRef =
 
 iterator walkVtx*(
     be: MemBackendRef;
-    kinds = {Branch, Leaf};
+    kinds = {Branch, ExtBranch, AccLeaf, StoLeaf};
       ): tuple[rvid: RootedVertexID, vtx: VertexRef] =
   ##  Iteration over the vertex sub-table.
-  for n,rvid in be.sTab.keys.toSeq.mapIt(it).sorted:
+  for n,rvid in be.sTab.keys.toSeq.sorted:
     let data = be.sTab.getOrDefault(rvid, EmptyBlob)
     if 0 < data.len:
       let rc = data.deblobify VertexRef
@@ -226,7 +226,7 @@ iterator walkKey*(
     be: MemBackendRef;
       ): tuple[rvid: RootedVertexID, key: HashKey] =
   ## Iteration over the Markle hash sub-table.
-  for n,rvid in be.sTab.keys.toSeq.mapIt(it).sorted:
+  for n,rvid in be.sTab.keys.toSeq.sorted:
     let data = be.sTab.getOrDefault(rvid, EmptyBlob)
     if 0 < data.len:
       let rc = data.deblobify HashKey

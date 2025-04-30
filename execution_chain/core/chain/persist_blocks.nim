@@ -156,7 +156,7 @@ proc persistBlock*(p: var Persister, blk: Block): Result[void, string] =
   )
 
   if NoPersistHeader notin p.flags:
-    let blockHash = header.blockHash()
+    let blockHash = header.computeBlockHash()
     ?txFrame.persistHeaderAndSetHead(blockHash, header, com.startOfHistory)
 
   if NoPersistTransactions notin p.flags:

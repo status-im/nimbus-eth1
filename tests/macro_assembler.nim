@@ -268,7 +268,7 @@ proc initVMEnv*(network: string): BaseVMState =
       nil, conf,
       conf.chainId.NetworkId)
     parent = Header(stateRoot: EMPTY_ROOT_HASH)
-    parentHash = rlpHash(parent)
+    parentHash = computeRlpHash(parent)
     header = Header(
       number: 1'u64,
       stateRoot: EMPTY_ROOT_HASH,

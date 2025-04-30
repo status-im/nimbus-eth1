@@ -44,7 +44,7 @@ proc initializeDb(memDB: CoreDbRef, node: JsonNode): Hash32 =
   ledger.persist()
   doAssert ledger.getStateRoot == genesisHeader.stateRoot
 
-  genesisHeader.blockHash
+  genesisHeader.computeBlockHash
 
 proc setupELClient*(conf: ChainConfig, taskPool: Taskpool, node: JsonNode): TestEnv =
   let

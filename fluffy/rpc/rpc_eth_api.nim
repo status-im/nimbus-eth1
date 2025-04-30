@@ -23,7 +23,7 @@ import
 from ../../execution_chain/errors import ValidationError
 from ../../execution_chain/rpc/filters import headerBloomFilter, deriveLogs
 
-from eth/common/eth_types_rlp import rlpHash
+from eth/rlp import computeRlpHash
 
 export rpcserver
 
@@ -41,12 +41,12 @@ func init*(
     raise (ref ValidationError)(msg: "Invalid tx signature")
 
   TransactionObject(
-    blockHash: Opt.some(header.rlpHash),
+    blockHash: Opt.some(header.computeRlpHash),
     blockNumber: Opt.some(Quantity(header.number)),
     `from`: sender,
     gas: Quantity(tx.gasLimit),
     gasPrice: Quantity(tx.gasPrice),
-    hash: tx.rlpHash,
+    hash: tx.computeRlpHash,
     input: tx.payload,
     nonce: Quantity(tx.nonce),
     to: Opt.some(tx.destination),
@@ -65,7 +65,7 @@ func init*(
 func init*(
     T: type BlockObject, header: Header, body: BlockBody, fullTx = true, isUncle = false
 ): T {.raises: [ValidationError].} =
-  let blockHash = header.rlpHash
+  let blockHash = header.computeRlpHash
 
   var blockObject = BlockObject(
     number: Quantity(header.number),
@@ -97,7 +97,7 @@ func init*(
   if not isUncle:
     blockObject.uncles = body.uncles.map(
       proc(h: Header): Hash32 =
-        h.rlpHash
+        h.computeRlpHash
     )
 
     if fullTx:
@@ -107,7 +107,7 @@ func init*(
         inc i
     else:
       for tx in body.transactions:
-        blockObject.transactions.add txOrHash(rlpHash(tx))
+        blockObject.transactions.add txOrHash(computeRlpHash(tx))
 
   blockObject
 
@@ -468,7 +468,84 @@ proc installEthApiHandlers*(
     let callResult = (await evm.call(header, tx, optimisticStateFetch)).valueOr:
       raise newException(ValueError, error)
 
-    if callResult.error.len() > 0:
-      raise newException(ValueError, callResult.error)
+    return callResult.output
 
-    callResult.output
+  rpcServer.rpc("eth_createAccessList") do(
+    tx: TransactionArgs, quantityTag: RtBlockIdentifier, optimisticStateFetch: Opt[bool]
+  ) -> AccessListResult:
+    ## Creates an EIP-2930 access list that you can include in a transaction.
+    ##
+    ## tx: the transaction call object which contains
+    ##   from: (optional) The address the transaction is sent from.
+    ##   to: The address the transaction is directed to.
+    ##   gas: (optional) Integer of the gas provided for the transaction execution.
+    ##     eth_call consumes zero gas, but this parameter may be needed by some executions.
+    ##   gasPrice: (optional) Integer of the gasPrice used for each paid gas.
+    ##   value: (optional) Integer of the value sent with this transaction.
+    ##   input: (optional) Hash of the method signature and encoded parameters.
+    ## quantityTag: integer block number, or the string "latest", "earliest" or "pending",
+    ##   see the default block parameter.
+    ## Returns: the access list object which contains the addresses and storage keys which
+    ##   are read and written by the transaction.
+
+    if tx.to.isNone():
+      raise newException(ValueError, "to address is required")
+
+    if quantityTag.kind == bidAlias:
+      raise newException(ValueError, "tag not yet implemented")
+
+    let
+      hn = historyNetwork.getOrRaise()
+      evm = asyncEvm.getOrRaise()
+      header = (await hn.getVerifiedBlockHeader(quantityTag.number.uint64)).valueOr:
+        raise newException(ValueError, "Unable to get block header")
+      optimisticStateFetch = optimisticStateFetch.valueOr:
+        true
+
+    let (accessList, error, gasUsed) = (
+      await evm.createAccessList(header, tx, optimisticStateFetch)
+    ).valueOr:
+      raise newException(ValueError, error)
+
+    return
+      AccessListResult(accessList: accessList, error: error, gasUsed: gasUsed.Quantity)
+
+  rpcServer.rpc("eth_estimateGas") do(
+    tx: TransactionArgs, quantityTag: RtBlockIdentifier, optimisticStateFetch: Opt[bool]
+  ) -> Quantity:
+    ## Generates and returns an estimate of how much gas is necessary to allow the
+    ## transaction to complete. The transaction will not be added to the blockchain.
+    ## Note that the estimate may be significantly more than the amount of gas actually
+    ## used by the transaction, for a variety of reasons including EVM mechanics and
+    ## node performance.
+    ##
+    ## tx: the transaction call object which contains
+    ##   from: (optional) The address the transaction is sent from.
+    ##   to: The address the transaction is directed to.
+    ##   gas: (optional) Integer of the gas provided for the transaction execution.
+    ##     eth_call consumes zero gas, but this parameter may be needed by some executions.
+    ##   gasPrice: (optional) Integer of the gasPrice used for each paid gas.
+    ##   value: (optional) Integer of the value sent with this transaction.
+    ##   input: (optional) Hash of the method signature and encoded parameters.
+    ## quantityTag: integer block number, or the string "latest", "earliest" or "pending",
+    ##   see the default block parameter.
+    ## Returns: the amount of gas used.
+
+    if tx.to.isNone():
+      raise newException(ValueError, "to address is required")
+
+    if quantityTag.kind == bidAlias:
+      raise newException(ValueError, "tag not yet implemented")
+
+    let
+      hn = historyNetwork.getOrRaise()
+      evm = asyncEvm.getOrRaise()
+      header = (await hn.getVerifiedBlockHeader(quantityTag.number.uint64)).valueOr:
+        raise newException(ValueError, "Unable to get block header")
+      optimisticStateFetch = optimisticStateFetch.valueOr:
+        true
+
+    let gasEstimate = (await evm.estimateGas(header, tx, optimisticStateFetch)).valueOr:
+      raise newException(ValueError, error)
+
+    return gasEstimate.Quantity

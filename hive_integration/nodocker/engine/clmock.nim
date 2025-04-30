@@ -156,7 +156,7 @@ proc waitForTTD*(cl: CLMocker): Future[bool] {.async.} =
   cl.headerHistory[header.number] = header
   cl.ttdReached = true
 
-  let headerHash = cl.latestHeader.blockHash
+  let headerHash = cl.latestHeader.computeBlockHash
   if cl.slotsToSafe == 0:
     cl.latestForkchoice.safeBlockHash = headerHash
 
@@ -257,8 +257,8 @@ proc pickNextPayloadProducer(cl: CLMocker): bool =
       return false
 
     let latestHeader = res.get
-    let lastBlockHash = latestHeader.blockHash
-    if cl.latestHeader.blockHash != lastBlockHash or
+    let lastBlockHash = latestHeader.computeBlockHash
+    if cl.latestHeader.computeBlockHash != lastBlockHash or
        cl.latestHeadNumber != latestHeader.number:
       # Selected client latest block hash does not match canonical chain, try again
       cl.nextBlockProducer = nil
@@ -346,7 +346,7 @@ proc getNextPayload(cl: CLMocker): bool =
   let parentBeaconBlockRoot = cl.latestPayloadAttributes.parentBeaconBlockRoot
   let requestsHash = calcRequestsHash(x.executionRequests)
   let header = blockHeader(cl.latestPayloadBuilt, parentBeaconBlockRoot, requestsHash)
-  let blockHash = header.blockHash
+  let blockHash = header.computeBlockHash
   if blockHash != cl.latestPayloadBuilt.blockHash:
     error "CLMocker: getNextPayload blockHash mismatch",
       expected=cl.latestPayloadBuilt.blockHash,
@@ -371,7 +371,7 @@ proc getNextPayload(cl: CLMocker): bool =
       get=cl.latestPayloadAttributes.prevRandao
     return false
 
-  if cl.latestPayloadBuilt.parentHash != cl.latestHeader.blockHash:
+  if cl.latestPayloadBuilt.parentHash != cl.latestHeader.computeBlockHash:
     error "CLMocker: Incorrect ParentHash on payload built",
       expect=cl.latestPayloadBuilt.parentHash,
       get=cl.latestHeader.blockHash
@@ -617,7 +617,7 @@ proc produceSingleBlock*(cl: CLMocker, cb: BlockProcessCallbacks): bool {.gcsafe
     return false
 
   let newHeader = res.get
-  let newHash = newHeader.blockHash
+  let newHash = newHeader.computeBlockHash
   if newHash != cl.latestPayloadBuilt.blockHash:
     error "CLMocker: None of the clients accepted the newly constructed payload",
       hash=newHash.toHex
@@ -656,7 +656,7 @@ proc produceSingleBlock*(cl: CLMocker, cb: BlockProcessCallbacks): bool {.gcsafe
   cl.headerHistory[cl.latestHeadNumber] = cl.latestHeader
 
   echo "CLMocker: New block produced: number=", newHeader.number,
-    " hash=", newHeader.blockHash
+    " hash=", newHeader.computeBlockHash
 
   return true
 

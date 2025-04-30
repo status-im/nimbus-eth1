@@ -125,7 +125,7 @@ proc headersUnprocTotalTop*(ctx: BeaconCtxRef): uint64 =
         rc.value.maxPt
       else:
         0
-  min(uMax, bMax)
+  max(uMax, bMax)
 
 proc headersUnprocTotalBottom*(ctx: BeaconCtxRef): uint64 =
   ## Similar to `headersUnprocTotalTop()` dor the least block number

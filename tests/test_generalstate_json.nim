@@ -115,7 +115,7 @@ proc testFixtureIndexes(ctx: var TestCtx, testStatusIMPL: var TestStatus) =
   block post:
     let obtainedHash = vmState.readOnlyLedger.getStateRoot()
     check obtainedHash == ctx.expectedHash
-    let actualLogsHash = rlpHash(callResult.logEntries)
+    let actualLogsHash = computeRlpHash(callResult.logEntries)
     check(ctx.expectedLogs == actualLogsHash)
     if ctx.debugMode:
       let success = ctx.expectedLogs == actualLogsHash and obtainedHash == ctx.expectedHash
@@ -205,10 +205,10 @@ proc generalStateJsonMain*(debugMode = false) =
     # run all test fixtures
     if config.legacy:
       suite "generalstate json tests":
-        jsonTest(legacyFolder, "GeneralStateTests", testFixture, skipGSTTests)
+        jsonTest(legacyFolder, "LegacyGeneralStateTests", testFixture, skipGSTTests)
     else:
       suite "new generalstate json tests":
-        jsonTest(newFolder, "newGeneralStateTests", testFixture, skipNewGSTTests)
+        jsonTest(newFolder, "GeneralStateTests", testFixture, skipNewGSTTests)
   else:
     # execute single test in debug mode
     if config.testSubject.len == 0:

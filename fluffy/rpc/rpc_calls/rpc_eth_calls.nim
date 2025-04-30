@@ -49,3 +49,8 @@ createRpcSigsFromNim(RpcClient):
   ): ProofResponse
 
   proc eth_call(tx: TransactionArgs, blockId: BlockIdentifier): seq[byte]
+  proc eth_createAccessList(
+    tx: TransactionArgs, blockId: BlockIdentifier
+  ): AccessListResult
+
+  proc eth_estimateGas(tx: TransactionArgs, blockId: BlockIdentifier): Quantity

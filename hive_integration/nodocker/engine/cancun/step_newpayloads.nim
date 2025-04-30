@@ -103,7 +103,7 @@ proc verifyPayload(step: NewPayloads,
       totalBlobCount += blobCount
 
       # Retrieve receipt from client
-      let r = client.txReceipt(tx.rlpHash)
+      let r = client.txReceipt(tx.computeRlpHash)
       let expectedBlobGasUsed = blobCount.uint64 * GAS_PER_BLOB
 
       r.expectBlobGasUsed(expectedBlobGasUsed)
@@ -296,7 +296,7 @@ method execute*(step: NewPayloads, ctx: CancunTestContext): bool =
       onNewPayloadBroadcast: proc(): bool =
         if step.newPayloadCustomizer != nil:
           step.newPayloadCustomizer.setEngineAPIVersionResolver(env.engine.com)
-          # Send a test NewPayload directive with either a modified payload or modifed versioned hashes
+          # Send a test NewPayload directive with either a modified payload or modified versioned hashes
           var
             payload        = env.clMock.latestExecutableData
             expectedError  = step.newPayloadCustomizer.getExpectedError()

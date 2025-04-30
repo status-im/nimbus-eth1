@@ -163,6 +163,9 @@ func verifyProof*(
     historicalRootsIndex = getHistoricalSummariesIndex(proof.slot, cfg)
     blockRootIndex = getBlockRootsIndex(proof.slot)
 
+  if historical_summaries.len().uint64 <= historicalRootsIndex:
+    return false
+
   blockHash.verifyProof(proof.executionBlockProof, proof.beaconBlockRoot) and
     proof.beaconBlockRoot.verifyProof(
       proof.beaconBlockProof,

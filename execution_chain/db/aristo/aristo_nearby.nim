@@ -49,9 +49,10 @@ iterator rightPairs*(
         var x = hike.legs[^1]
 
         case x.wp.vtx.vType
-        of Branch:
-          for i in uint8(x.nibble + 1)..<16u8:
-            let b = x.wp.vtx.bVid(i)
+        of Branches:
+          let vtx = BranchRef(x.wp.vtx)
+          for i in uint8(x.nibble + 1) ..< 16u8:
+            let b = vtx.bVid(i)
             if b.isValid():
               hike.legs[^1].nibble = int8(i)
 
@@ -59,8 +60,9 @@ iterator rightPairs*(
               break nextLeg
 
           hike.legs.setLen(hike.legs.len - 1)
-        of Leaf:
-          yield (Hash32(hike.to(NibblesBuf).getBytes()), hike.legs[^1].wp.vtx)
+        of Leaves:
+          let vtx = LeafRef(hike.legs[^1].wp.vtx)
+          yield (Hash32(hike.to(NibblesBuf).getBytes()), vtx)
           hike.legs.setLen(hike.legs.len - 1)
 
 iterator rightPairsStorage*(
@@ -73,7 +75,7 @@ iterator rightPairsStorage*(
       break body
     if stoID.isValid:
       for (path, vtx) in db.rightPairs(stoID):
-        yield (path, vtx.lData.stoData)
+        yield (path, StoLeafRef(vtx).stoData)
 
 # ------------------------------------------------------------------------------
 # End

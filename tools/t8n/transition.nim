@@ -133,7 +133,7 @@ proc toTxReceipt(rec: Receipt,
     cumulativeGasUsed: rec.cumulativeGasUsed,
     logsBloom: rec.logsBloom,
     logs: rec.logs,
-    transactionHash: rlpHash(tx),
+    transactionHash: computeRlpHash(tx),
     contractAddress: contractAddress,
     gasUsed: gasUsed,
     blockHash: default(Hash32),
@@ -144,7 +144,7 @@ proc calcLogsHash(receipts: openArray[Receipt]): Hash32 =
   var logs: seq[Log]
   for rec in receipts:
     logs.add rec.logs
-  rlpHash(logs)
+  computeRlpHash(logs)
 
 proc defaultTraceStreamFilename(conf: T8NConf,
                                 txIndex: int,
@@ -268,7 +268,7 @@ proc exec(ctx: TransContext,
 
     var closeStream = true
     if conf.traceEnabled.isSome:
-      closeStream = setupTrace(conf, txIndex, rlpHash(tx), vmState)
+      closeStream = setupTrace(conf, txIndex, computeRlpHash(tx), vmState)
 
     let rc = vmState.processTransaction(tx, sender, header)
 
@@ -322,8 +322,10 @@ proc exec(ctx: TransContext,
 
   if vmState.com.isPragueOrLater(ctx.env.currentTimestamp):
     # Execute EIP-7002 and EIP-7251 before calculating stateRoot
-    withdrawalReqs = processDequeueWithdrawalRequests(vmState)
-    consolidationReqs = processDequeueConsolidationRequests(vmState)
+    withdrawalReqs = processDequeueWithdrawalRequests(vmState).valueOr:
+      raise newError(ErrorConfig, error)
+    consolidationReqs = processDequeueConsolidationRequests(vmState).valueOr:
+      raise newError(ErrorConfig, error)
 
   let ledger = vmState.ledger
   ledger.postState(result.alloc)

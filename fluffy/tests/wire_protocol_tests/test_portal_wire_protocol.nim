@@ -9,6 +9,7 @@
 
 import
   std/[algorithm, sequtils],
+  minilru,
   chronos,
   testutils/unittests,
   results,
@@ -16,12 +17,16 @@ import
   eth/p2p/discoveryv5/routing_table,
   nimcrypto/[hash, sha2],
   eth/p2p/discoveryv5/protocol as discv5_protocol,
-  ../../network/wire/
-    [portal_protocol, portal_stream, portal_protocol_config, ping_extensions],
+  ../../network/wire/[
+    portal_protocol, portal_stream, portal_protocol_config, portal_protocol_version,
+    ping_extensions,
+  ],
   ../../database/content_db,
   ../test_helpers
 
-const protocolId = [byte 0x50, 0x00]
+const
+  protocolId = [byte 0x50, 0x00]
+  connectionTimeoutTest = 2.seconds
 
 proc toContentId(contentKey: ContentKeyByteList): results.Opt[ContentId] =
   # Note: Returning sha256 digest as content id here. This content key to
@@ -37,13 +42,19 @@ proc initPortalProtocol(
     bootstrapRecords: openArray[Record] = [],
 ): PortalProtocol =
   let
-    d = initDiscoveryNode(rng, privKey, address, bootstrapRecords)
+    d = initDiscoveryNode(
+      rng,
+      privKey,
+      address,
+      bootstrapRecords,
+      localEnrFields = {portalVersionKey: SSZ.encode(localSupportedVersions)},
+    )
     db = ContentDB.new(
       "", uint32.high, RadiusConfig(kind: Dynamic), d.localNode.id, inMemory = true
     )
     manager = StreamManager.new(d)
     q = newAsyncQueue[(Opt[NodeId], ContentKeysList, seq[seq[byte]])](50)
-    stream = manager.registerNewStream(q, connectionTimeout = 2.seconds)
+    stream = manager.registerNewStream(q, connectionTimeout = connectionTimeoutTest)
 
   var config = defaultPortalProtocolConfig
   config.disableBanNodes = false
@@ -184,20 +195,20 @@ procSuite "Portal Wire Protocol Tests":
     let contentKeys = ContentKeysList(@[ContentKeyByteList(@[byte 0x01, 0x02, 0x03])])
 
     let accept = await proto1.offerImpl(proto2.baseProtocol.localNode, contentKeys)
-    var expectedBitlist = ContentKeysBitList.init(contentKeys.len)
-    expectedBitlist.setBit(0)
+    let expectedByteList = ContentKeysAcceptList.init(@[Accepted])
 
     check:
       accept.isOk()
       # Content accepted
-      accept.get().contentKeys == expectedBitlist
+      accept.get().contentKeys == expectedByteList
 
     let accept2 = await proto1.offerImpl(proto2.baseProtocol.localNode, contentKeys)
 
     check:
       accept2.isOk()
       # Content not accepted
-      accept2.get().contentKeys == ContentKeysBitList.init(contentKeys.len)
+      accept2.get().contentKeys ==
+        ContentKeysAcceptList.init(@[DeclinedInboundTransferInProgress])
 
     await proto1.stopPortalProtocol()
     await proto2.stopPortalProtocol()
@@ -207,21 +218,20 @@ procSuite "Portal Wire Protocol Tests":
     let contentKeys = ContentKeysList(@[ContentKeyByteList(@[byte 0x01, 0x02, 0x03])])
 
     let accept = await proto1.offerImpl(proto2.baseProtocol.localNode, contentKeys)
-    var expectedBitlist = ContentKeysBitList.init(contentKeys.len)
-    expectedBitlist.setBit(0)
+    let expectedByteList = ContentKeysAcceptList.init(@[Accepted])
 
     check:
       accept.isOk()
       # Content accepted
-      accept.get().contentKeys == expectedBitlist
+      accept.get().contentKeys == expectedByteList
 
-    await sleepAsync(chronos.seconds(5))
+    await sleepAsync(connectionTimeoutTest)
 
     let accept2 = await proto1.offerImpl(proto2.baseProtocol.localNode, contentKeys)
     check:
       accept2.isOk()
       # Content accepted because previous offer was pruned
-      accept2.get().contentKeys == expectedBitlist
+      accept2.get().contentKeys == expectedByteList
 
     await proto1.stopPortalProtocol()
     await proto2.stopPortalProtocol()
@@ -416,7 +426,9 @@ procSuite "Portal Wire Protocol Tests":
     var distances: seq[UInt256] = @[]
 
     for i in 0 ..< 40:
-      proto1.storeContent(ByteList[2048].init(@[uint8(i)]), u256(i), item)
+      proto1.storeContent(
+        ByteList[2048].init(@[uint8(i)]), u256(i), item, cacheOffer = true
+      )
       distances.add(u256(i) xor proto1.localNode.id)
 
     distances.sort(order = SortOrder.Descending)
@@ -438,7 +450,7 @@ procSuite "Portal Wire Protocol Tests":
     await proto1.stop()
     await node1.closeWait()
 
-  asyncTest "Local content - Cache enabled":
+  asyncTest "Local content - Content cache enabled":
     let (proto1, proto2) = defaultTestSetup(rng)
 
     # proto1 has no radius so the content won't be stored in the local db
@@ -472,7 +484,7 @@ procSuite "Portal Wire Protocol Tests":
     await proto1.stopPortalProtocol()
     await proto2.stopPortalProtocol()
 
-  asyncTest "Local content - Cache disabled":
+  asyncTest "Local content - Content cache disabled":
     let (proto1, proto2) = defaultTestSetup(rng)
     proto1.config.disableContentCache = true
     proto2.config.disableContentCache = true
@@ -504,6 +516,62 @@ procSuite "Portal Wire Protocol Tests":
 
       proto1.getLocalContent(contentKey, contentId).isNone()
       proto2.getLocalContent(contentKey, contentId).get() == content
+
+    await proto1.stopPortalProtocol()
+    await proto2.stopPortalProtocol()
+
+  asyncTest "Offer cache enabled":
+    let (proto1, proto2) = defaultTestSetup(rng)
+
+    # proto1 has no radius so the content won't be stored in the local db
+    proto1.dataRadius = proc(): UInt256 =
+      0.u256
+
+    let
+      contentKey = ContentKeyByteList(@[byte 0x01, 0x02, 0x03])
+      contentId = contentKey.toContentId().get()
+      content = @[byte 0x04, 0x05, 0x06]
+
+    check:
+      proto1.storeContent(contentKey, contentId, content, cacheOffer = true) == false
+      proto2.storeContent(contentKey, contentId, content, cacheOffer = true) == true
+
+      proto1.getLocalContent(contentKey, contentId).isNone()
+      proto2.getLocalContent(contentKey, contentId).get() == content
+
+      proto1.offerCache.contains(contentId) == false
+      proto2.offerCache.contains(contentId) == true
+      proto1.offerCache.len() == 0
+      proto2.offerCache.len() == 1
+
+    await proto1.stopPortalProtocol()
+    await proto2.stopPortalProtocol()
+
+  asyncTest "Offer cache disabled":
+    let (proto1, proto2) = defaultTestSetup(rng)
+    proto1.config.disableOfferCache = true
+    proto2.config.disableOfferCache = true
+
+    # proto1 has no radius so the content won't be stored in the local db
+    proto1.dataRadius = proc(): UInt256 =
+      0.u256
+
+    let
+      contentKey = ContentKeyByteList(@[byte 0x01, 0x02, 0x03])
+      contentId = contentKey.toContentId().get()
+      content = @[byte 0x04, 0x05, 0x06]
+
+    check:
+      proto1.storeContent(contentKey, contentId, content, cacheOffer = true) == false
+      proto2.storeContent(contentKey, contentId, content, cacheOffer = true) == true
+
+      proto1.getLocalContent(contentKey, contentId).isNone()
+      proto2.getLocalContent(contentKey, contentId).get() == content
+
+      proto1.offerCache.contains(contentId) == false
+      proto2.offerCache.contains(contentId) == false
+      proto1.offerCache.len() == 0
+      proto2.offerCache.len() == 0
 
     await proto1.stopPortalProtocol()
     await proto2.stopPortalProtocol()

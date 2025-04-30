@@ -24,8 +24,8 @@ type
     slotHashToSlot = 5
     contractHash = 6
     dataDirId = 7
-    safeHash = 8
-    finalizedHash = 9
+    fcuNumAndHash = 8
+    fcState = 9
     beaconHeader = 10
 
   DbKey* = object
@@ -74,13 +74,18 @@ func contractHashKey*(h: Hash32): DbKey {.inline.} =
   result.data[1 .. 32] = h.data
   result.dataEndPos = uint8 32
 
-func safeHashKey*(): DbKey {.inline.} =
-  result.data[0] = byte ord(safeHash)
-  result.dataEndPos = uint8 1
+template uint64KeyImpl(keyEnum) =
+  result.data[0] = byte ord(keyEnum)
+  doAssert sizeof(u) <= 32
+  when nimvm:
+    for i in 0..<sizeof(u):
+      result.data[i+1] = byte((u shr (i * 8)) and 0xff)
+  else:
+    copyMem(addr result.data[1], unsafeAddr u, sizeof(u))
+  result.dataEndPos = uint8 sizeof(u)
 
-func finalizedHashKey*(): DbKey {.inline.} =
-  result.data[0] = byte ord(finalizedHash)
-  result.dataEndPos = uint8 1
+func fcuKey*(u: uint64): DbKey {.inline.} =
+  uint64KeyImpl(fcuNumAndHash)
 
 func hashIndexKey*(hash: Hash32, index: uint16): HashIndexKey =
   result[0..31] = hash.data
@@ -88,10 +93,10 @@ func hashIndexKey*(hash: Hash32, index: uint16): HashIndexKey =
   result[33] = byte((index shl 8) and 0xFF)
 
 func beaconHeaderKey*(u: BlockNumber): DbKey =
-  result.data[0] = byte ord(beaconHeader)
-  doAssert sizeof(u) <= 32
-  copyMem(addr result.data[1], unsafeAddr u, sizeof(u))
-  result.dataEndPos = uint8 sizeof(u)
+  uint64KeyImpl(beaconHeader)
+
+func fcStateKey*(u: uint64): DbKey {.inline.} =
+  uint64KeyImpl(fcState)
 
 template toOpenArray*(k: DbKey): openArray[byte] =
   k.data.toOpenArray(0, int(k.dataEndPos))

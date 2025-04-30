@@ -18,7 +18,7 @@ import
     block_proof_historical_summaries,
   ]
 
-from eth/common/eth_types_rlp import rlpHash
+from eth/rlp import computeRlpHash
 
 export block_proof_historical_hashes_accumulator
 
@@ -28,7 +28,7 @@ type HistoryAccumulators* = object
   historicalSummaries*: HistoricalSummaries
 
 func validateHeader(header: Header, blockHash: Hash32): Result[void, string] =
-  if not (header.rlpHash() == blockHash):
+  if not (header.computeRlpHash() == blockHash):
     err("Header hash does not match")
   else:
     ok()
@@ -66,36 +66,33 @@ func verifyBlockHeaderProof*(
 ): Result[void, string] =
   let timestamp = Moment.init(header.timestamp.int64, Second)
 
-  # Note: Capella onwards currently disabled
-  # - No effective means to get historical summaries yet over the network
-  # - Proof is currently not as per spec, as we prefer to use SSZ Vectors
+  # Note: As long as no up to date historical_summaries list is provided Capella
+  # and onwards will always fail verification.
   if isCancun(chainConfig, timestamp):
-    # let proof = decodeSsz(proof.asSeq(), BlockProofHistoricalSummariesDeneb).valueOr:
-    #   return err("Failed decoding historical_summaries based block proof: " & error)
+    let proof = decodeSsz(proof.asSeq(), BlockProofHistoricalSummariesDeneb).valueOr:
+      return err("Failed decoding historical_summaries based block proof: " & error)
 
-    # if a.historicalSummaries.verifyProof(
-    #   proof, Digest(data: header.rlpHash().data), cfg
-    # ):
-    #   ok()
-    # else:
-    #   err("Block proof verification failed (historical_summaries)")
-    err("Cancun block proof verification not yet activated")
+    if a.historicalSummaries.verifyProof(
+      proof, Digest(data: header.computeRlpHash().data), cfg
+    ):
+      ok()
+    else:
+      err("Block proof verification failed (historical_summaries)")
   elif isShanghai(chainConfig, timestamp):
-    # let proof = decodeSsz(proof.asSeq(), BlockProofHistoricalSummaries).valueOr:
-    #   return err("Failed decoding historical_summaries based block proof: " & error)
+    let proof = decodeSsz(proof.asSeq(), BlockProofHistoricalSummaries).valueOr:
+      return err("Failed decoding historical_summaries based block proof: " & error)
 
-    # if a.historicalSummaries.verifyProof(
-    #   proof, Digest(data: header.rlpHash().data), cfg
-    # ):
-    #   ok()
-    # else:
-    #   err("Block proof verification failed (historical_summaries)")
-    err("Shanghai block proof verification not yet activated")
+    if a.historicalSummaries.verifyProof(
+      proof, Digest(data: header.computeRlpHash().data), cfg
+    ):
+      ok()
+    else:
+      err("Block proof verification failed (historical_summaries)")
   elif isPoSBlock(chainConfig, header.number):
     let proof = decodeSsz(proof.asSeq(), BlockProofHistoricalRoots).valueOr:
       return err("Failed decoding historical_roots based block proof: " & error)
 
-    if a.historicalRoots.verifyProof(proof, Digest(data: header.rlpHash().data)):
+    if a.historicalRoots.verifyProof(proof, Digest(data: header.computeRlpHash().data)):
       ok()
     else:
       err("Block proof verification failed (historical roots)")

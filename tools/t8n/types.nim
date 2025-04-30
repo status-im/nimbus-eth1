@@ -74,6 +74,7 @@ type
     maxFeePerBlobGas*    : Opt[UInt256]
     blobVersionedHashes* : Opt[seq[Hash32]]
     authorizationList*   : Opt[seq[Authorization]]
+    initCodes* : Opt[seq[seq[byte]]]
 
   TxList* = seq[Result[Transaction, string]]
 

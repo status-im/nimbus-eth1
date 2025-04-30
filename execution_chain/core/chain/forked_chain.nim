@@ -12,14 +12,19 @@
 
 import
   chronicles,
+  results,
   std/[tables, algorithm],
   ../../common,
-  ../../db/core_db,
+  ../../db/[core_db, fcu_db],
   ../../evm/types,
   ../../evm/state,
   ../validate,
-  ../executor/process_block,
-  ./forked_chain/[chain_desc, chain_branch]
+  ../../portal/portal,
+  ./forked_chain/[
+    chain_desc,
+    chain_branch,
+    chain_private,
+    block_quarantine]
 
 from std/sequtils import mapIt
 
@@ -33,12 +38,22 @@ export
   core_db
 
 const
-  BaseDistance = 128
+  BaseDistance = 128'u64
+  PersistBatchSize = 32'u64
+
+# ------------------------------------------------------------------------------
+# Forward declarations
+# ------------------------------------------------------------------------------
+
+proc updateBase(c: ForkedChainRef, newBase: BlockPos) {.gcsafe.}
+func calculateNewBase(c: ForkedChainRef;
+       finalizedNumber: uint64; head: BlockPos): BlockPos {.gcsafe.}
 
 # ------------------------------------------------------------------------------
 # Private functions
 # ------------------------------------------------------------------------------
 
+<<<<<<< HEAD
 proc processBlock(c: ForkedChainRef,
                   parent: Header,
                   txFrame: CoreDbTxRef,
@@ -88,29 +103,29 @@ func updateBranch(c: ForkedChainRef,
   c.branches.add(newBranch)
   c.activeBranch = newBranch
 
-proc writeBaggage(c: ForkedChainRef,
-        blk: Block, blkHash: Hash32,
-        txFrame: CoreDbTxRef,
-        receipts: openArray[Receipt]) =
-  template header(): Header =
-    blk.header
-
-  txFrame.persistTransactions(header.number, header.txRoot, blk.transactions)
-  txFrame.persistReceipts(header.receiptsRoot, receipts)
-  discard txFrame.persistUncles(blk.uncles)
-  if blk.withdrawals.isSome:
-    txFrame.persistWithdrawals(
-      header.withdrawalsRoot.expect("WithdrawalsRoot should be verified before"),
-      blk.withdrawals.get)
+proc fcuSetHead(c: ForkedChainRef,
+                txFrame: CoreDbTxRef,
+                header: Header,
+                hash: Hash32,
+                number: uint64) =
+  txFrame.setHead(header, hash).expect("setHead OK")
+  txFrame.fcuHead(hash, number).expect("fcuHead OK")
+  c.fcuHead.number = number
+  c.fcuHead.hash = hash
 
 proc validateBlock(c: ForkedChainRef,
           parent: BlockPos,
-          blk: Block, finalized: bool): Result[void, string] =
-  let blkHash = blk.header.blockHash
+          blk: Block, finalized: bool): Result[Hash32, string] =
+  let blkHash = blk.header.computeBlockHash
 
   if c.hashToBlock.hasKey(blkHash):
     # Block exists, just return
-    return ok()
+    return ok(blkHash)
+
+  if blkHash == c.pendingFCU:
+    # Resolve the hash into latestFinalizedBlockNumber
+    c.latestFinalizedBlockNumber = max(blk.header.number,
+      c.latestFinalizedBlockNumber)
 
   let
     parentFrame = parent.txFrame
@@ -142,29 +157,37 @@ proc validateBlock(c: ForkedChainRef,
 
   c.writeBaggage(blk, blkHash, txFrame, receipts)
 
-  let pos = c.lastSnapshotPos
-  c.lastSnapshotPos = (c.lastSnapshotPos + 1) mod c.lastSnapshots.len
-  if not isNil(c.lastSnapshots[pos]):
-    # Put a cap on frame memory usage by clearing out the oldest snapshots -
-    # this works at the expense of making building on said branches slower.
-    # 10 is quite arbitrary.
-    c.lastSnapshots[pos].clearSnapshot()
-    c.lastSnapshots[pos] = nil
-
-  # Block fully written to txFrame, mark it as such
-  # Checkpoint creates a snapshot of ancestor changes in txFrame - it is an
-  # expensive operation, specially when creating a new branch (ie when blk
-  # is being applied to a block that is currently not a head)
-  txFrame.checkpoint(blk.header.number)
-
-  c.lastSnapshots[pos] = txFrame
+  c.updateSnapshot(blk, txFrame)
 
   c.updateBranch(parent, blk, blkHash, txFrame, move(receipts))
 
   for i, tx in blk.transactions:
-    c.txRecords[rlpHash(tx)] = (blkHash, uint64(i))
+    c.txRecords[computeRlpHash(tx)] = (blkHash, uint64(i))
 
-  ok()
+  # Entering base auto forward mode while avoiding forkChoice
+  # handled region(head - baseDistance)
+  # e.g. live syncing with the tip very far from from our latest head
+  if c.pendingFCU != zeroHash32 and
+     blk.header.number < c.latestFinalizedBlockNumber:
+
+    let
+      head = c.activeBranch.lastBlockPos
+      newBaseCandidate = c.calculateNewBase(c.latestFinalizedBlockNumber, head)
+      prevBaseNumber = c.baseBranch.tailNumber
+
+    c.updateBase(newBaseCandidate)
+
+    # If on disk head behind base, move it to base too.
+    let newBaseNumber = c.baseBranch.tailNumber
+    if newBaseNumber > prevBaseNumber:
+      if c.fcuHead.number < newBaseNumber:
+        let head = c.baseBranch.firstBlockPos
+        c.fcuSetHead(head.txFrame,
+          head.branch.tailHeader,
+          head.branch.tailHash,
+          head.branch.tailNumber)
+
+  ok(blkHash)
 
 func findHeadPos(c: ForkedChainRef, hash: Hash32): Result[BlockPos, string] =
   ## Find the `BlockPos` that contains the block relative to the
@@ -216,10 +239,10 @@ func findFinalizedPos(
 
 func calculateNewBase(
     c: ForkedChainRef;
-    finalized: BlockPos;
+    finalizedNumber: uint64;
     head: BlockPos;
       ): BlockPos =
-  ## It is required that the `finalized` argument is on the `head` chain, i.e.
+  ## It is required that the `finalizedNumber` argument is on the `head` chain, i.e.
   ## it ranges beween `c.baseBranch.tailNumber` and
   ## `head.branch.headNumber`.
   ##
@@ -227,19 +250,27 @@ func calculateNewBase(
   ## calculated as follows.
   ##
   ## Starting at the argument `head.branch` searching backwards, the new base
-  ## is the position of the block with number `finalized`.
+  ## is the position of the block with `finalizedNumber`.
   ##
-  ## Before searching backwards, the `finalized` argument might be adjusted
+  ## Before searching backwards, the `finalizedNumber` argument might be adjusted
   ## and made smaller so that a minimum distance to the head on the cursor arc
   ## applies.
   ##
   # It's important to have base at least `baseDistance` behind head
   # so we can answer state queries about history that deep.
-  let target = min(finalized.number,
+  let target = min(finalizedNumber,
     max(head.number, c.baseDistance) - c.baseDistance)
 
   # Do not update base.
   if target <= c.baseBranch.tailNumber:
+    return BlockPos(branch: c.baseBranch)
+
+  # If there is a new base, make sure it moves
+  # with large enough step to accomodate for bulk
+  # state root verification/bulk persist.
+  let distance = target - c.baseBranch.tailNumber
+  if distance < c.persistBatchSize:
+    # If the step is not large enough, do nothing.
     return BlockPos(branch: c.baseBranch)
 
   if target >= head.branch.tailNumber:
@@ -282,7 +313,7 @@ func calculateNewBase(
 proc removeBlockFromCache(c: ForkedChainRef, bd: BlockDesc) =
   c.hashToBlock.del(bd.hash)
   for tx in bd.blk.transactions:
-    c.txRecords.del(rlpHash(tx))
+    c.txRecords.del(computeRlpHash(tx))
 
   for v in c.lastSnapshots.mitems():
     if v == bd.txFrame:
@@ -329,8 +360,10 @@ proc updateHead(c: ForkedChainRef, head: BlockPos) =
     c.removeBlockFromCache(head.branch.blocks[i])
 
   head.branch.blocks.setLen(head.index+1)
-  head.txFrame.setHead(head.branch.headHeader,
-    head.branch.headHash).expect("OK")
+  c.fcuSetHead(head.txFrame,
+    head.branch.headHeader,
+    head.branch.headHash,
+    head.branch.headNumber)
 
 proc updateFinalized(c: ForkedChainRef, finalized: BlockPos) =
   # Pruning
@@ -369,7 +402,7 @@ proc updateFinalized(c: ForkedChainRef, finalized: BlockPos) =
     inc i
 
   let txFrame = finalized.txFrame
-  txFrame.finalizedHeaderHash(finalized.hash)
+  txFrame.fcuFinalized(finalized.hash, finalized.number).expect("fcuFinalized OK")
 
 proc updateBase(c: ForkedChainRef, newBase: BlockPos) =
   ##
@@ -400,21 +433,25 @@ proc updateBase(c: ForkedChainRef, newBase: BlockPos) =
         break
       dec number
 
-  let
-    # Cache to prevent crash after we shift
-    # the blocks
-    newBaseHash = newBase.hash
+  if newBase.number == c.baseBranch.tailNumber:
+    # No update, return
+    return
 
   var
     branch = newBase.branch
     number = newBase.number - 1
     count  = 0
 
-  let nextIndex  = int(newBase.number - branch.tailNumber)
+  let
+    # Cache to prevent crash after we shift
+    # the blocks
+    newBaseHash = newBase.hash
+    nextIndex   = int(newBase.number - branch.tailNumber)
+    baseTxFrame = newBase.txFrame
 
   # Persist the new base block - this replaces the base tx in coredb!
-  c.com.db.persist(newBase.txFrame, Opt.some(newBase.blk.header.stateRoot))
-  c.baseTxFrame = newBase.txFrame
+  c.com.db.persist(baseTxFrame, Opt.some(newBase.blk.header.stateRoot))
+  c.baseTxFrame = baseTxFrame
 
   disposeBlocks(number, branch)
 
@@ -436,7 +473,8 @@ proc updateBase(c: ForkedChainRef, newBase: BlockPos) =
   # Older branches will gone
   branch = branch.parent
   while not branch.isNil:
-    disposeBlocks(number, branch)
+    var delNumber = branch.headNumber
+    disposeBlocks(delNumber, branch)
 
     for i, brc in c.branches:
       if brc == branch:
@@ -473,7 +511,8 @@ proc updateBase(c: ForkedChainRef, newBase: BlockPos) =
 proc init*(
     T: type ForkedChainRef;
     com: CommonRef;
-    baseDistance = BaseDistance.uint64;
+    baseDistance = BaseDistance;
+    persistBatchSize = PersistBatchSize;
     eagerStateRoot = false;
       ): T =
   ## Constructor that uses the current database ledger state for initialising.
@@ -494,6 +533,10 @@ proc init*(
     baseHash = baseTxFrame.getBlockHash(base).expect("baseHash exists")
     baseHeader = baseTxFrame.getBlockHeader(baseHash).expect("base header exists")
     baseBranch = branch(baseHeader, baseHash, baseTxFrame)
+    fcuHead = baseTxFrame.fcuHead().valueOr:
+      FcuHashAndNumber(hash: baseHash, number: baseHeader.number)
+    fcuSafe = baseTxFrame.fcuSafe().valueOr:
+      FcuHashAndNumber(hash: baseHash, number: baseHeader.number)
 
   T(com:             com,
     baseBranch:      baseBranch,
@@ -501,7 +544,11 @@ proc init*(
     branches:        @[baseBranch],
     hashToBlock:     {baseHash: baseBranch.lastBlockPos}.toTable,
     baseTxFrame:     baseTxFrame,
-    baseDistance:    baseDistance)
+    baseDistance:    baseDistance,
+    persistBatchSize:persistBatchSize,
+    quarantine:      Quarantine.init(),
+    fcuHead:         fcuHead,
+    fcuSafe:         fcuSafe)
 
 proc importBlock*(c: ForkedChainRef, blk: Block, finalized = false): Result[void, string] =
   ## Try to import block to canonical or side chain.
@@ -515,31 +562,60 @@ proc importBlock*(c: ForkedChainRef, blk: Block, finalized = false): Result[void
   template header(): Header =
     blk.header
 
-  c.hashToBlock.withValue(header.parentHash, bd) do:
+  c.hashToBlock.withValue(header.parentHash, parentPos) do:
     # TODO: If engine API keep importing blocks
     # but not finalized it, e.g. current chain length > StagedBlocksThreshold
     # We need to persist some of the in-memory stuff
     # to a "staging area" or disk-backed memory but it must not afect `base`.
     # `base` is the point of no return, we only update it on finality.
+    var parentHash = ?c.validateBlock(parentPos[], blk, finalized)
 
-    ?c.validateBlock(bd[], blk, finalized)
+    while c.quarantine.hasOrphans():
+      let orphan = c.quarantine.popOrphan(parentHash).valueOr:
+        break
+
+      c.hashToBlock.withValue(parentHash, parentCandidatePos) do:
+        parentHash = c.validateBlock(parentCandidatePos[], orphan).valueOr:
+          # Silent?
+          # We don't return error here because the import is still ok()
+          # but the quarantined blocks may not linked
+          break
+      do:
+        break
   do:
-    # If it's parent is an invalid block
+    # If its parent is an invalid block
     # there is no hope the descendant is valid
+    let blockHash = header.computeBlockHash
     debug "Parent block not found",
-      blockHash = header.blockHash.short,
+      blockHash = blockHash.short,
       parentHash = header.parentHash.short
+
+    # Put into quarantine and hope we receive the parent block
+    c.quarantine.addOrphan(blockHash, blk)
     return err("Block is not part of valid chain")
 
   ok()
 
 proc forkChoice*(c: ForkedChainRef,
                  headHash: Hash32,
-                 finalizedHash: Hash32): Result[void, string] =
-  if headHash == c.activeBranch.headHash and finalizedHash == zeroHash32:
-    # Do nothing if the new head already our current head
-    # and there is no request to new finality.
-    return ok()
+                 finalizedHash: Hash32,
+                 safeHash: Hash32 = zeroHash32): Result[void, string] =
+
+  if finalizedHash != zeroHash32:
+    c.pendingFCU = finalizedHash
+
+  if safeHash != zeroHash32:
+    c.hashToBlock.withValue(safeHash, loc):
+      let number = loc[].number
+      c.fcuSafe.number = number
+      c.fcuSafe.hash = safeHash
+      ?loc[].txFrame.fcuSafe(c.fcuSafe)
+
+  if headHash == c.activeBranch.headHash:
+    if finalizedHash == zeroHash32:
+      # Do nothing if the new head already our current head
+      # and there is no request to new finality.
+      return ok()
 
   let
     # Find the unique branch where `headHash` is a member of.
@@ -557,7 +633,10 @@ proc forkChoice*(c: ForkedChainRef,
 
   c.updateFinalized(finalized)
 
-  let newBase = c.calculateNewBase(finalized, head)
+  let
+    finalizedNumber = finalized.number
+    newBase = c.calculateNewBase(finalizedNumber, head)
+
   if newBase.hash == c.baseBranch.tailHash:
     # The base is not updated, return.
     return ok()
@@ -569,11 +648,15 @@ proc forkChoice*(c: ForkedChainRef,
   # At this point head.number >= base.number.
   # At this point finalized.number is <= head.number,
   # and possibly switched to other chain beside the one with head.
-  doAssert(finalized.number <= head.number)
-  doAssert(newBaseNumber <= finalized.number)
+  doAssert(finalizedNumber <= head.number)
+  doAssert(newBaseNumber <= finalizedNumber)
   c.updateBase(newBase)
 
   ok()
+
+func notifyFinalizedHash*(c: ForkedChainRef, finHash: Hash32) =
+  if finHash != zeroHash32:
+    c.pendingFCU = finHash
 
 func haveBlockAndState*(c: ForkedChainRef, blockHash: Hash32): bool =
   ## Blocks still in memory with it's txFrame
@@ -592,7 +675,7 @@ func baseTxFrame*(c: ForkedChainRef): CoreDbTxRef =
   c.baseTxFrame
 
 func txFrame*(c: ForkedChainRef, header: Header): CoreDbTxRef =
-  c.txFrame(header.blockHash())
+  c.txFrame(header.computeBlockHash())
 
 func latestTxFrame*(c: ForkedChainRef): CoreDbTxRef =
   c.activeBranch.headTxFrame
@@ -623,6 +706,12 @@ func txRecords*(c: ForkedChainRef, txHash: Hash32): (Hash32, uint64) =
 
 func isInMemory*(c: ForkedChainRef, blockHash: Hash32): bool =
   c.hashToBlock.hasKey(blockHash)
+
+func isHistoryExpiryActive*(c: ForkedChainRef): bool =
+  not c.portal.isNil
+
+func isPortalActive(c: ForkedChainRef): bool =
+  (not c.portal.isNil) and c.portal.portalEnabled
 
 func memoryBlock*(c: ForkedChainRef, blockHash: Hash32): BlockDesc =
   c.hashToBlock.withValue(blockHash, loc):
@@ -660,7 +749,12 @@ proc headerByNumber*(c: ForkedChainRef, number: BlockNumber): Result[Header, str
     return err("Requested block number not exists: " & $number)
 
   if number < c.baseBranch.tailNumber:
-    return c.baseTxFrame.getBlockHeader(number)
+    let hdr = c.baseTxFrame.getBlockHeader(number).valueOr:
+      if c.isPortalActive:
+        return c.portal.getHeaderByNumber(number)
+      else:
+        return err("Portal inactive, block not found, number = " & $number)
+    return ok(hdr)
 
   var branch = c.activeBranch
   while not branch.isNil:
@@ -668,12 +762,41 @@ proc headerByNumber*(c: ForkedChainRef, number: BlockNumber): Result[Header, str
       return ok(branch.blocks[number - branch.tailNumber].blk.header)
     branch = branch.parent
 
-  err("Header not found, number = " & $number)
+  err("Block not found, number = " & $number)
+
+func finalizedHeader*(c: ForkedChainRef): Header =
+  c.hashToBlock.withValue(c.pendingFCU, loc):
+    return loc[].header
+
+  c.baseBranch.tailHeader
+
+func safeHeader*(c: ForkedChainRef): Header =
+  c.hashToBlock.withValue(c.fcuSafe.hash, loc):
+    return loc[].header
+
+  c.baseBranch.tailHeader
+
+func finalizedBlock*(c: ForkedChainRef): Block =
+  c.hashToBlock.withValue(c.pendingFCU, loc):
+    return loc[].blk
+
+  c.baseBranch.tailBlock
+
+func safeBlock*(c: ForkedChainRef): Block =
+  c.hashToBlock.withValue(c.fcuSafe.hash, loc):
+    return loc[].blk
+
+  c.baseBranch.tailBlock
 
 proc headerByHash*(c: ForkedChainRef, blockHash: Hash32): Result[Header, string] =
   c.hashToBlock.withValue(blockHash, loc):
     return ok(loc[].header)
-  c.baseTxFrame.getBlockHeader(blockHash)
+  let hdr = c.baseTxFrame.getBlockHeader(blockHash).valueOr:
+    if c.isPortalActive:
+      return c.portal.getHeaderByHash(blockHash)
+    else:
+      return err("Block header not found")
+  ok(hdr)
 
 proc txDetailsByTxHash*(c: ForkedChainRef, txHash: Hash32): Result[(Hash32, uint64), string] =
   if c.txRecords.hasKey(txHash):
@@ -683,17 +806,11 @@ proc txDetailsByTxHash*(c: ForkedChainRef, txHash: Hash32): Result[(Hash32, uint
   let
     txDetails = ?c.baseTxFrame.getTransactionKey(txHash)
     header = ?c.headerByNumber(txDetails.blockNumber)
-    blockHash = header.blockHash
+    blockHash = header.computeBlockHash
   return ok((blockHash, txDetails.index))
 
-proc blockByHash*(c: ForkedChainRef, blockHash: Hash32): Result[Block, string] =
-  # used by getPayloadBodiesByHash
-  # https://github.com/ethereum/execution-apis/blob/v1.0.0-beta.4/src/engine/shanghai.md#specification-3
-  # 4. Client software MAY NOT respond to requests for finalized blocks by hash.
-  c.hashToBlock.withValue(blockHash, loc):
-    return ok(loc[].blk)
-  c.baseTxFrame.getEthBlock(blockHash)
-
+# TODO: Doesn't fetch data from portal
+# Aristo returns empty txs for both non-existent blocks and existing blocks with no txs [ Solve ? ]
 proc blockBodyByHash*(c: ForkedChainRef, blockHash: Hash32): Result[BlockBody, string] =
   c.hashToBlock.withValue(blockHash, loc):
     let blk = loc[].blk
@@ -704,12 +821,32 @@ proc blockBodyByHash*(c: ForkedChainRef, blockHash: Hash32): Result[BlockBody, s
     ))
   c.baseTxFrame.getBlockBody(blockHash)
 
+proc blockByHash*(c: ForkedChainRef, blockHash: Hash32): Result[Block, string] =
+  # used by getPayloadBodiesByHash
+  # https://github.com/ethereum/execution-apis/blob/v1.0.0-beta.4/src/engine/shanghai.md#specification-3
+  # 4. Client software MAY NOT respond to requests for finalized blocks by hash.
+  c.hashToBlock.withValue(blockHash, loc):
+    return ok(loc[].blk)
+  let blk = c.baseTxFrame.getEthBlock(blockHash)
+  # Serves portal data if block not found in db
+  if blk.isErr or (blk.get.transactions.len == 0 and blk.get.header.transactionsRoot != zeroHash32):
+    if c.isPortalActive:
+      return c.portal.getBlockByHash(blockHash)
+  blk
+
 proc blockByNumber*(c: ForkedChainRef, number: BlockNumber): Result[Block, string] =
   if number > c.activeBranch.headNumber:
     return err("Requested block number not exists: " & $number)
 
   if number <= c.baseBranch.tailNumber:
-    return c.baseTxFrame.getEthBlock(number)
+    let blk = c.baseTxFrame.getEthBlock(number)
+    # Txs not there in db - Happens during era1/era import, when we don't store txs and receipts
+    if blk.isErr or (blk.get.transactions.len == 0 and blk.get.header.transactionsRoot != emptyRoot):
+      # Serves portal data if block not found in database
+      if c.isPortalActive:
+        return c.portal.getBlockByNumber(number)
+    else:
+      return blk
 
   var branch = c.activeBranch
   while not branch.isNil:
@@ -725,8 +862,9 @@ proc blockHeader*(c: ForkedChainRef, blk: BlockHashOrNumber): Result[Header, str
   c.headerByNumber(blk.number)
 
 proc receiptsByBlockHash*(c: ForkedChainRef, blockHash: Hash32): Result[seq[Receipt], string] =
-  c.hashToBlock.withValue(blockHash, loc):
-    return ok(loc[].receipts)
+  if blockHash != c.baseBranch.tailHash:
+    c.hashToBlock.withValue(blockHash, loc):
+      return ok(loc[].receipts)
 
   let header = c.baseTxFrame.getBlockHeader(blockHash).valueOr:
     return err("Block header not found")
@@ -741,13 +879,13 @@ func blockFromBaseTo*(c: ForkedChainRef, number: BlockNumber): seq[Block] =
       result.add(branch.blocks[i].blk)
     branch = branch.parent
 
-func equalOrAncestorOf*(c: ForkedChainRef, blockHash: Hash32, ancestorHash: Hash32): bool =
-  if blockHash == ancestorHash:
+func equalOrAncestorOf*(c: ForkedChainRef, blockHash: Hash32, childHash: Hash32): bool =
+  if blockHash == childHash:
     return true
 
-  c.hashToBlock.withValue(ancestorHash, ancestorLoc):
+  c.hashToBlock.withValue(childHash, childLoc):
     c.hashToBlock.withValue(blockHash, loc):
-      var branch = ancestorLoc.branch
+      var branch = childLoc.branch
       while not branch.isNil:
         if loc.branch == branch:
           return true
@@ -790,7 +928,7 @@ iterator txHashInRange*(c: ForkedChainRef, fromHash: Hash32, toHash: Hash32): Ha
       if toHash == prevHash:
         break
       for tx in loc[].transactions:
-        let txHash = rlpHash(tx)
+        let txHash = computeRlpHash(tx)
         yield txHash
       prevHash = loc[].parentHash
     do:

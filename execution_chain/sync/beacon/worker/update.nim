@@ -11,6 +11,7 @@
 {.push raises:[].}
 
 import
+  std/sets,
   pkg/[chronicles, chronos],
   pkg/eth/common,
   ../worker_desc,
@@ -62,7 +63,7 @@ proc commitCollectHeaders(ctx: BeaconCtxRef; info: static[string]): bool =
     h = ctx.head.number
 
   # This function does the job linking into `FC` module proper
-  ctx.hdrCache.fcHeaderCommit().isOkOr:
+  ctx.hdrCache.commit().isOkOr:
     trace info & ": cannot commit header chain", B=b.bnStr, L=l.bnStr,
       D=ctx.dangling.bnStr, H=h.bnStr, `error`=error
     return false
@@ -214,32 +215,30 @@ proc updateSyncState*(ctx: BeaconCtxRef; info: static[string]) =
 
 proc updateFromHibernateSetTarget*(
     ctx: BeaconCtxRef;
-    fin: Header;
     info: static[string];
       ) =
   ## If in hibernate mode, accept a cache session and activate syncer
   ##
   if ctx.hibernate:
-    if ctx.hdrCache.accept(fin):
-      let (b, t) = (ctx.chain.baseNumber, ctx.head.number)
+    let (b, t) = (ctx.chain.baseNumber, ctx.hdrCache.head.number)
 
-      # Exclude the case of a single header chain which would be `T` only
-      if b+1 < t:
-        ctx.pool.lastState = collectingHeaders    # state transition
-        ctx.hibernate = false                     # wake up
+    # Exclude the case of a single header chain which would be `T` only
+    if b+1 < t:
+      ctx.pool.lastState = collectingHeaders    # state transition
+      ctx.hibernate = false                     # wake up
 
-        # Update range
-        ctx.headersUnprocSet(b+1, t-1)
+      # Update range
+      ctx.headersUnprocSet(b+1, t-1)
 
-        info "Activating syncer", base=ctx.chain.baseNumber.bnStr,
-          head=ctx.chain.latestNumber.bnStr, fin=fin.bnStr,
-          target=ctx.head.bnStr
-        return
+      info "Activating syncer", base=b.bnStr,
+        head=ctx.chain.latestNumber.bnStr, target=t.bnStr
+      return
 
     # Failed somewhere on the way
     ctx.hdrCache.clear()
-    debug info & ": activation rejected", base=ctx.chain.baseNumber.bnStr,
-      head=ctx.chain.latestNumber.bnStr, fin=fin.bnStr
+
+  debug info & ": activation rejected", base=ctx.chain.baseNumber.bnStr,
+    head=ctx.chain.latestNumber.bnStr, state=ctx.hdrCache.state
 
 
 proc updateAsyncTasks*(
@@ -247,6 +246,7 @@ proc updateAsyncTasks*(
       ): Future[Opt[void]] {.async: (raises: []).} =
   ## Allow task switch by issuing a short sleep request. The `due` argument
   ## allows to maintain a minimum time gap when invoking this function.
+  ##
   let start = Moment.now()
   if ctx.pool.nextAsyncNanoSleep < start:
 

@@ -174,7 +174,7 @@ proc procBlkPreamble(
       let h = vmState.ledger.txFrame.persistUncles(blk.uncles)
       if h != header.ommersHash:
         return err("ommersHash mismatch")
-    elif not skipValidation and rlpHash(blk.uncles) != header.ommersHash:
+    elif not skipValidation and computeRlpHash(blk.uncles) != header.ommersHash:
       return err("ommersHash mismatch")
   elif blk.uncles.len > 0:
     return err("Uncles in block with empty uncle hash")
@@ -207,8 +207,8 @@ proc procBlkEpilogue(
   if header.requestsHash.isSome:
     # Execute EIP-7002 and EIP-7251 before calculating stateRoot
     # because they will alter the state
-    withdrawalReqs = processDequeueWithdrawalRequests(vmState)
-    consolidationReqs = processDequeueConsolidationRequests(vmState)
+    withdrawalReqs = ?processDequeueWithdrawalRequests(vmState)
+    consolidationReqs = ?processDequeueConsolidationRequests(vmState)
 
   if not skipStateRootCheck:
     let stateRoot = vmState.ledger.getStateRoot()

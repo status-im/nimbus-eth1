@@ -39,19 +39,23 @@ proc toNode*(
   ##
 
   case vtx.vType:
-  of Leaf:
+  of AccLeaf:
     let node = NodeRef(vtx: vtx.dup())
     # Need to resolve storage root for account leaf
-    if vtx.lData.pType == AccountData:
-      let stoID = vtx.lData.stoID
-      if stoID.isValid:
-        let key = db.computeKey((stoID.vid, stoID.vid)).valueOr:
-          return err(@[stoID.vid])
+    let stoID = AccLeafRef(vtx).stoID
+    if stoID.isValid:
+      let key = db.computeKey((stoID.vid, stoID.vid)).valueOr:
+        return err(@[stoID.vid])
 
-        node.key[0] = key
+      node.key[0] = key
     return ok node
 
-  of Branch:
+  of StoLeaf:
+    let node = NodeRef(vtx: vtx.dup())
+    # Need to resolve storage root for account leaf
+    return ok node
+
+  of Branch, ExtBranch:
     let node = NodeRef(vtx: vtx.dup())
     for n, subvid in vtx.pairs():
       let key = db.computeKey((root, subvid)).valueOr:
@@ -62,24 +66,27 @@ proc toNode*(
 iterator subVids*(vtx: VertexRef): VertexID =
   ## Returns the list of all sub-vertex IDs for the argument `vtx`.
   case vtx.vType:
-  of Leaf:
-    if vtx.lData.pType == AccountData:
-      let stoID = vtx.lData.stoID
-      if stoID.isValid:
-        yield stoID.vid
-  of Branch:
+  of AccLeaf:
+    let stoID = AccLeafRef(vtx).stoID
+    if stoID.isValid:
+      yield stoID.vid
+
+  of StoLeaf:
+    discard
+  of Branches:
     for _, subvid in vtx.pairs():
       yield subvid
 
 iterator subVidKeys*(node: NodeRef): (VertexID,HashKey) =
   ## Simolar to `subVids()` but for nodes
   case node.vtx.vType:
-  of Leaf:
-    if node.vtx.lData.pType == AccountData:
-      let stoID = node.vtx.lData.stoID
-      if stoID.isValid:
-        yield (stoID.vid, node.key[0])
-  of Branch:
+  of AccLeaf:
+    let stoID = AccLeafRef(node.vtx).stoID
+    if stoID.isValid:
+      yield (stoID.vid, node.key[0])
+  of StoLeaf:
+    discard
+  of Branches:
     for n, subvid in node.vtx.pairs():
       yield (subvid,node.key[n])
 

@@ -123,7 +123,7 @@ proc runBasicCycleTest(env: TestEnv): Result[void, string] =
     client = env.client
     header = ? client.latestHeader()
     update = ForkchoiceStateV1(
-      headBlockHash: header.blockHash
+      headBlockHash: header.computeBlockHash
     )
     time = getTime().toUnix
     attr = PayloadAttributes(
@@ -151,7 +151,7 @@ proc runNewPayloadV4Test(env: TestEnv): Result[void, string] =
     client = env.client
     header = ? client.latestHeader()
     update = ForkchoiceStateV1(
-      headBlockHash: header.blockHash
+      headBlockHash: header.computeBlockHash
     )
     time = getTime().toUnix
     attr = PayloadAttributes(
@@ -244,7 +244,6 @@ proc newPayloadV4InvalidRequests(env: TestEnv): Result[void, string] =
     paramsFiles = [
       "tests/engine_api/newPayloadV4_invalid_requests.json",
       "tests/engine_api/newPayloadV4_empty_requests_data.json",
-      "tests/engine_api/newPayloadV4_invalid_requests_type.json",
       "tests/engine_api/newPayloadV4_invalid_requests_order.json",
     ]
 
@@ -266,6 +265,27 @@ proc newPayloadV4InvalidRequests(env: TestEnv): Result[void, string] =
 
     if "request" notin res.error:
       return err("expect \"request\" in error message: " & res.error)
+
+  ok()
+
+proc newPayloadV4InvalidRequestType(env: TestEnv): Result[void, string] =
+  const
+    paramsFile = "tests/engine_api/newPayloadV4_invalid_requests_type.json"
+
+  let
+    client = env.client
+    params = JrpcConv.loadFile(paramsFile, NewPayloadV4Params)
+    res = client.newPayloadV4(
+      params.payload,
+      params.expectedBlobVersionedHashes,
+      params.parentBeaconBlockRoot,
+      params.executionRequests)
+
+  if res.isErr:
+    return err("res should success")
+
+  if res.get.status != PayloadExecutionStatus.invalid:
+    return err("res.status should be equal to PayloadExecutionStatus.invalid")
 
   ok()
 
@@ -295,6 +315,11 @@ const testList = [
     name: "newPayloadV4 invalid execution requests",
     fork: Prague,
     testProc: newPayloadV4InvalidRequests
+  ),
+  TestSpec(
+    name: "newPayloadV4 invalid execution request type",
+    fork: Prague,
+    testProc: newPayloadV4InvalidRequestType
   ),
   ]
 

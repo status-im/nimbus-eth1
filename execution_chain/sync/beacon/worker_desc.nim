@@ -97,14 +97,13 @@ type
     nBuddies*: int                   ## Number of active workers
     clReq*: SyncClMesg               ## Manual first target set up
     lastState*: SyncLayoutState      ## Last known layout state
-    finRequest*: Hash32              ## To be resolved before session
     hdrSync*: HeaderFetchSync        ## Syncing by linked header chains
     blkSync*: BlocksFetchSync        ## For importing/executing blocks
     nextMetricsUpdate*: Moment       ## For updating metrics
     nextAsyncNanoSleep*: Moment      ## Use nano-sleeps for task switch
 
     chain*: ForkedChainRef           ## Core database, FCU support
-    hdrCache*: ForkedCacheRef        ## Currently in tandem with `chain`
+    hdrCache*: HeaderChainRef        ## Currently in tandem with `chain`
 
     # Blocks import/execution settings
     blkImportOk*: bool               ## Don't fetch data while block importing
@@ -131,21 +130,21 @@ type
 # Public helpers
 # ------------------------------------------------------------------------------
 
-func hdrCache*(ctx: BeaconCtxRef): ForkedCacheRef =
+func hdrCache*(ctx: BeaconCtxRef): HeaderChainRef =
   ## Shortcut
   ctx.pool.hdrCache
 
 func head*(ctx: BeaconCtxRef): Header =
   ## Shortcut
-  ctx.hdrCache.fcHeaderHead()
+  ctx.hdrCache.head()
 
 func dangling*(ctx: BeaconCtxRef): Header =
   ## Shortcut
-  ctx.hdrCache.fcHeaderAntecedent()
+  ctx.hdrCache.antecedent()
 
 func consHeadNumber*(ctx: BeaconCtxRef): BlockNumber =
   ## Shortcut
-  ctx.hdrCache.fcHeaderLastConsHeadNumber()
+  ctx.hdrCache.latestConsHeadNumber()
 
 # ------------
 

@@ -240,7 +240,7 @@ proc getAncestorsHashes*(
     res = newSeq[Hash32](ancestorCount)
   while ancestorCount > 0:
     h = ?db.getBlockHeader(h.parentHash)
-    res[ancestorCount - 1] = h.rlpHash
+    res[ancestorCount - 1] = h.computeRlpHash
     dec ancestorCount
   ok(res)
 
@@ -417,7 +417,7 @@ proc getEthBlock*(
       ): Result[EthBlock, string] =
   var
     header = ?db.getBlockHeader(blockNumber)
-    headerHash = header.blockHash
+    headerHash = header.computeBlockHash
     blockBody = ?db.getBlockBody(headerHash)
   ok(EthBlock.init(move(header), move(blockBody)))
 
@@ -429,7 +429,7 @@ proc getUncleHashes*(
   var res: seq[Hash32]
   for blockHash in blockHashes:
     let body = ?db.getBlockBody(blockHash)
-    res &= body.uncles.mapIt(it.rlpHash)
+    res &= body.uncles.mapIt(it.computeRlpHash)
   ok(res)
 
 proc getUncleHashes*(
@@ -446,7 +446,7 @@ proc getUncleHashes*(
         if error.error != KvtNotFound:
           warn "getUncleHashes()", ommersHash=header.ommersHash, error=($$error)
         return ok(default(seq[Hash32]))
-    return ok(rlp.decode(encodedUncles, seq[Header]).mapIt(it.rlpHash))
+    return ok(rlp.decode(encodedUncles, seq[Header]).mapIt(it.computeRlpHash))
 
 proc getTransactionKey*(
     db: CoreDbTxRef;
@@ -589,7 +589,7 @@ proc persistHeaderAndSetHead*(
     startOfHistory = GENESIS_PARENT_HASH;
       ): Result[void, string] =
   let
-    blockHash = header.blockHash
+    blockHash = header.computeBlockHash
   db.persistHeaderAndSetHead(blockHash, header, startOfHistory)
 
 proc persistUncles*(db: CoreDbTxRef, uncles: openArray[Header]): Hash32 =
@@ -600,37 +600,6 @@ proc persistUncles*(db: CoreDbTxRef, uncles: openArray[Header]): Hash32 =
   db.put(genericHashKey(result).toOpenArray, enc).isOkOr:
     warn "persistUncles()", unclesHash=result, error=($$error)
     return EMPTY_ROOT_HASH
-
-
-proc safeHeaderHash*(db: CoreDbTxRef): Hash32 =
-  db.getHash(safeHashKey()).valueOr(default(Hash32))
-
-proc safeHeaderHash*(db: CoreDbTxRef, headerHash: Hash32) =
-  let safeHashKey = safeHashKey()
-  db.put(safeHashKey.toOpenArray, rlp.encode(headerHash)).isOkOr:
-    warn "safeHeaderHash()", safeHashKey, error=($$error)
-    return
-
-proc finalizedHeaderHash*(
-    db: CoreDbTxRef;
-      ): Hash32 =
-  db.getHash(finalizedHashKey()).valueOr(default(Hash32))
-
-proc finalizedHeaderHash*(db: CoreDbTxRef, headerHash: Hash32) =
-  let finalizedHashKey = finalizedHashKey()
-  db.put(finalizedHashKey.toOpenArray, rlp.encode(headerHash)).isOkOr:
-    warn "finalizedHeaderHash()", finalizedHashKey, error=($$error)
-    return
-
-proc safeHeader*(
-    db: CoreDbTxRef;
-      ): Result[Header, string] =
-  db.getBlockHeader(db.safeHeaderHash)
-
-proc finalizedHeader*(
-    db: CoreDbTxRef;
-      ): Result[Header, string] =
-  db.getBlockHeader(db.finalizedHeaderHash)
 
 # ------------------------------------------------------------------------------
 # End

@@ -174,7 +174,4 @@ proc installDebugApiHandlers*(rpcServer: RpcServer, stateNetwork: Opt[StateNetwo
     let callResult = (await evm.call(header, tx, optimisticStateFetch)).valueOr:
       raise newException(ValueError, error)
 
-    if callResult.error.len() > 0:
-      raise newException(ValueError, callResult.error)
-
     callResult.output

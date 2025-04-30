@@ -7,7 +7,7 @@
 
 import
   chronicles,
-  std/[json, typetraits, sequtils],
+  std/[json, typetraits],
   asynctest,
   web3/eth_api,
   stew/byteutils,
@@ -18,6 +18,7 @@ import
   ../execution_chain/[constants, transaction, config, version],
   ../execution_chain/db/[ledger, storage_types],
   ../execution_chain/sync/wire_protocol,
+  ../execution_chain/portal/portal,
   ../execution_chain/core/[tx_pool, chain, pow/difficulty],
   ../execution_chain/utils/utils,
   ../execution_chain/[common, rpc],
@@ -97,8 +98,8 @@ proc verifySlotProof(trustedStorageRoot: Hash32, slot: StorageProof): MptProofVe
 proc persistFixtureBlock(chainDB: CoreDbTxRef) =
   let header = getBlockHeader4514995()
   # Manually inserting header to avoid any parent checks
-  discard chainDB.put(genericHashKey(header.blockHash).toOpenArray, rlp.encode(header))
-  chainDB.addBlockNumberToHashLookup(header.number, header.blockHash)
+  discard chainDB.put(genericHashKey(header.computeBlockHash).toOpenArray, rlp.encode(header))
+  chainDB.addBlockNumberToHashLookup(header.number, header.computeBlockHash)
   chainDB.persistTransactions(header.number, header.txRoot, getBlockBody4514995().transactions)
   chainDB.persistReceipts(header.receiptsRoot, getReceipts4514995())
 
@@ -256,8 +257,8 @@ proc generateBlock(env: var TestEnv) =
 
   txFrame.persistFixtureBlock()
 
-  env.txHash = tx1.rlpHash
-  env.blockHash = blk.header.blockHash
+  env.txHash = tx1.computeRlpHash
+  env.blockHash = blk.header.computeBlockHash
 
 createRpcSigsFromNim(RpcClient):
   proc web3_clientVersion(): string
@@ -518,7 +519,7 @@ proc rpcMain*() =
 
     test "eth_getLogs by blockhash, no filters":
       let testHeader = getBlockHeader4514995()
-      let testHash = testHeader.blockHash
+      let testHash = testHeader.computeBlockHash
       let filterOptions = FilterOptions(
         blockHash: Opt.some(testHash),
         topics: @[]
@@ -538,7 +539,7 @@ proc rpcMain*() =
 
     test "eth_getLogs by blockhash, filter logs at specific positions":
       let testHeader = getBlockHeader4514995()
-      let testHash = testHeader.blockHash
+      let testHash = testHeader.computeBlockHash
 
       let topic = bytes32"0xddf252ad1be2c89b69c2b068fc378daa952ba7f163c4a11628f55a4df523b3ef"
       let topic1 = bytes32"0x000000000000000000000000fdc183d01a793613736cd40a5a578f49add1772b"
@@ -560,7 +561,7 @@ proc rpcMain*() =
 
     test "eth_getLogs by blockhash, filter logs at specific postions with or options":
       let testHeader = getBlockHeader4514995()
-      let testHash = testHeader.blockHash
+      let testHash = testHeader.computeBlockHash
 
       let topic = bytes32"0xddf252ad1be2c89b69c2b068fc378daa952ba7f163c4a11628f55a4df523b3ef"
       let topic1 = bytes32"0xa64da754fccf55aa65a1f0128a648633fade3884b236e879ee9f64c78df5d5d7"

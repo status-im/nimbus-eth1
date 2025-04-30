@@ -220,7 +220,7 @@ proc validateTxSenderAndHash*(n: JsonNode, tx: Transaction) =
   var fromAddr: Address
   n.fromJson "from", fromAddr
   doAssert sender.to0xHex == fromAddr.to0xHex
-  doAssert n["hash"].getStr() == tx.rlpHash().to0xHex
+  doAssert n["hash"].getStr() == tx.computeRlpHash().to0xHex
 
 proc parseLog(n: JsonNode): Log =
   n.fromJson "address", result.address

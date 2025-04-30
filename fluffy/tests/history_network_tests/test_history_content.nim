@@ -88,7 +88,7 @@ suite "History Content Values":
     const
       testsPath = "./vendor/portal-spec-tests/tests/mainnet/history/headers_with_proof/"
       historicalSummaries_path =
-        "./vendor/portal-spec-tests/tests/mainnet/history/headers_with_proof/block_proofs_capella/historical_summaries_at_slot_8953856.ssz"
+        "./vendor/portal-spec-tests/tests/mainnet/history/headers_with_proof/beacon_data/historical_summaries_at_slot_11476992.ssz"
 
     let historicalSummaries = readHistoricalSummaries(historicalSummaries_path).valueOr:
       raiseAssert "Cannot read historical summaries: " & error
@@ -112,31 +112,22 @@ suite "History Content Values":
         check contentKeyRes.isOk()
         let contentKey = contentKeyRes.get()
 
-        # Note: This part is only needed to avoid testing the block headers with
-        # proof post shanghai/capella fork as these are currently disabled.
-        # TODO: Remove after bellatrix and later forks are enabled for headers.
-
         # Decode content value
         let contentValueRes = decodeSsz(contentValueEncoded, BlockHeaderWithProof)
         check contentValueRes.isOk()
         let blockHeaderWithProof = contentValueRes.get()
-        # Decode header
-        let res = decodeRlp(blockHeaderWithProof.header.asSeq(), Header)
-        check res.isOk()
-        let header = res.get()
-        let timestamp = Moment.init(header.timestamp.int64, Second)
-        if not isShanghai(chainConfig, timestamp):
-          # Verifies if block header is canonical and if it matches the hash
-          # of provided content key.
-          check validateCanonicalHeaderBytes(
-            contentValueEncoded, contentKey.blockHeaderKey.blockHash, accumulators, cfg
-          )
-          .isOk()
 
-          # Encode content key and content value
-          check:
-            SSZ.encode(blockHeaderWithProof) == contentValueEncoded
-            encode(contentKey).asSeq() == contentKeyEncoded
+        # Verifies if block header is canonical and if it matches the hash
+        # of provided content key.
+        check validateCanonicalHeaderBytes(
+          contentValueEncoded, contentKey.blockHeaderKey.blockHash, accumulators, cfg
+        )
+        .isOk()
+
+        # Re-encode content key and content value
+        check:
+          SSZ.encode(blockHeaderWithProof) == contentValueEncoded
+          encode(contentKey).asSeq() == contentKeyEncoded
 
   test "PortalBlockBody (Legacy) Encoding/Decoding and Verification":
     const
@@ -240,3 +231,76 @@ suite "History Content Values":
     check:
       encode(contentValue.get()) == contentValueEncoded
       encode(contentKey.get()).asSeq() == contentKeyEncoded
+
+  test "Ephemeral headers Encoding/Decoding - FindContent":
+    const dataFile =
+      "./vendor/portal-spec-tests/tests/mainnet/history/ephemeral_headers/20000000-findcontent.yaml"
+
+    let
+      content = YamlPortalContent.loadFromYaml(dataFile).valueOr:
+        raiseAssert "Invalid data file: " & error
+
+      contentKeyEncoded = content.content_key.hexToSeqByte()
+      contentValueEncoded = content.content_value.hexToSeqByte()
+
+    # Decode content key
+    let contentKey = decodeSsz(contentKeyEncoded, ContentKey)
+    check contentKey.isOk()
+
+    # Decode content value
+    let contentValue = decodeSsz(contentValueEncoded, EphemeralBlockHeaderList)
+    check contentValue.isOk()
+
+    let headerList = contentValue.value()
+    check headerList.len() == 2
+
+    let headerEncoded1 = headerList[0].asSeq()
+    # RLP decode and hash verify the first header
+    let headerRes = validateHeaderBytes(
+      headerEncoded1, contentKey.value().ephemeralBlockHeaderFindContentKey.blockHash
+    )
+    check headerRes.isOk()
+
+    let parentHash = headerRes.value().parentHash
+
+    let headerEncoded2 = headerList[1].asSeq()
+    # RLP decode and hash verify the second header
+    let headerRes2 = validateHeaderBytes(headerEncoded2, parentHash)
+    check headerRes2.isOk()
+
+    # Encode content
+    check:
+      SSZ.encode(contentValue.value()) == contentValueEncoded
+      encode(contentKey.value()).asSeq() == contentKeyEncoded
+
+  test "Ephemeral headers Encoding/Decoding - Offer":
+    const dataFile =
+      "./vendor/portal-spec-tests/tests/mainnet/history/ephemeral_headers/20000000-offer.yaml"
+
+    let
+      content = YamlPortalContent.loadFromYaml(dataFile).valueOr:
+        raiseAssert "Invalid data file: " & error
+
+      contentKeyEncoded = content.content_key.hexToSeqByte()
+      contentValueEncoded = content.content_value.hexToSeqByte()
+
+    # Decode content key
+    let contentKey = decodeSsz(contentKeyEncoded, ContentKey)
+    check contentKey.isOk()
+
+    # Decode content value
+    let contentValue = decodeSsz(contentValueEncoded, EphemeralBlockHeader)
+    check contentValue.isOk()
+
+    let headerEncoded = contentValue.value().header.asSeq()
+
+    # Rlp decode and hash verify the header
+    let headerRes = validateHeaderBytes(
+      headerEncoded, contentKey.value().ephemeralBlockHeaderOfferKey.blockHash
+    )
+    check headerRes.isOk()
+
+    # Encode content
+    check:
+      SSZ.encode(contentValue.value()) == contentValueEncoded
+      encode(contentKey.value()).asSeq() == contentKeyEncoded

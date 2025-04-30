@@ -76,12 +76,6 @@ if defined(windows):
   # toolchain: https://github.com/status-im/nimbus-eth2/issues/3121
   switch("define", "nimRawSetjmp")
 
-# This helps especially for 32-bit x86, which sans SSE2 and newer instructions
-# requires quite roundabout code generation for cryptography, and other 64-bit
-# and larger arithmetic use cases, along with register starvation issues. When
-# engineering a more portable binary release, this should be tweaked but still
-# use at least -msse2 or -msse3.
-#
 # https://github.com/status-im/nimbus-eth2/blob/stable/docs/cpu_features.md#ssse3-supplemental-sse3
 # suggests that SHA256 hashing with SSSE3 is 20% faster than without SSSE3, so
 # given its near-ubiquity in the x86 installed base, it renders a distribution
@@ -100,8 +94,8 @@ if defined(disableMarchNative):
       switch("passL", "-mssse3")
 elif defined(macosx) and defined(arm64):
   # Apple's Clang can't handle "-march=native" on M1: https://github.com/status-im/nimbus-eth2/issues/2758
-  switch("passC", "-mcpu=apple-a14")
-  switch("passL", "-mcpu=apple-a14")
+  switch("passC", "-mcpu=apple-m1")
+  switch("passL", "-mcpu=apple-m1")
 elif defined(riscv64):
   # riscv64 needs specification of ISA with extensions. 'gc' is widely supported
   # and seems to be the minimum extensions needed to build.
@@ -172,6 +166,9 @@ if canEnableDebuggingSymbols:
 
 # `switch("warning[CaseTransition]", "off")` fails with "Error: invalid command line option: '--warning[CaseTransition]'"
 switch("warning", "CaseTransition:off")
+
+# Transitional for Nim v2.2, due to newSeqUninit replacing newSeqUninitialized.
+switch("warning", "Deprecated:off")
 
 # nim-kzg shipping their own blst, nimbus-eth1 too.
 # disable nim-kzg's blst
