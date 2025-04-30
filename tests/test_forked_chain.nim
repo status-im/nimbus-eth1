@@ -717,7 +717,7 @@ proc forkedChainMain*() =
       if src.isErr:
         echo "FAILED TO SERIALIZE: ", src.error
       check src.isOk
-      com.db.persist(txFrame)
+      com.db.persist(txFrame, Opt.none(Hash32))
 
       var fc = ForkedChainRef.init(com, baseDistance = 3)
       let rc = fc.deserialize()
