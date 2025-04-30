@@ -53,16 +53,11 @@ type
       # The snapshot contains the cumulative changes of all ancestors and
       # txFrame allowing the lookup recursion to stop whenever it is encountered.
 
-<<<<<<< HEAD
     eagerStateRoot*: bool
 
-    hdrChainFinHeader*: Header # finalised block header from the `CL` (if any)
-    hdrChainFinHash*: Hash32   # block hash of `hdrChainFinHeader`
-=======
     pendingFCU*  : Hash32
       # When we know finalizedHash from CL but has yet to resolve
       # the hash into a latestFinalizedBlockNumber
->>>>>>> master
 
     latestFinalizedBlockNumber*: uint64
       # When our latest imported block is far away from
@@ -73,7 +68,7 @@ type
       # When move forward, this is the minimum distance
       # to move the base. And the bulk writing can works
       # efficiently.
-      
+
     portal*: HistoryExpiryRef
       # History Expiry tracker and portal access entry point
 

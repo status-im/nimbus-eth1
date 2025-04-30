@@ -53,39 +53,6 @@ func calculateNewBase(c: ForkedChainRef;
 # Private functions
 # ------------------------------------------------------------------------------
 
-<<<<<<< HEAD
-proc processBlock(c: ForkedChainRef,
-                  parent: Header,
-                  txFrame: CoreDbTxRef,
-                  blk: Block,
-                  blkHash: Hash32,
-                  finalized: bool): Result[seq[Receipt], string] =
-  template header(): Header =
-    blk.header
-
-  let vmState = BaseVMState()
-  vmState.init(parent, header, c.com, txFrame)
-
-  ?c.com.validateHeaderAndKinship(blk, vmState.parent, txFrame)
-
-  # When processing a finalized block, we optimistically assume that the state
-  # root will check out and delay such validation for when it's time to persist
-  # changes to disk
-  ?vmState.processBlock(
-    blk,
-    skipValidation = false,
-    skipReceipts = false,
-    skipUncles = true,
-    skipStateRootCheck = finalized and not c.eagerStateRoot,
-    taskpool = c.com.taskpool,
-  )
-
-  # We still need to write header to database
-  # because validateUncles still need it
-  ?txFrame.persistHeader(blkHash, header, c.com.startOfHistory)
-
-  ok(move(vmState.receipts))
-
 func updateBranch(c: ForkedChainRef,
          parent: BlockPos,
          blk: Block,
@@ -575,7 +542,7 @@ proc importBlock*(c: ForkedChainRef, blk: Block, finalized = false): Result[void
         break
 
       c.hashToBlock.withValue(parentHash, parentCandidatePos) do:
-        parentHash = c.validateBlock(parentCandidatePos[], orphan).valueOr:
+        parentHash = c.validateBlock(parentCandidatePos[], orphan, finalized).valueOr:
           # Silent?
           # We don't return error here because the import is still ok()
           # but the quarantined blocks may not linked

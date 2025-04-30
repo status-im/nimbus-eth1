@@ -41,14 +41,10 @@ from beacon_chain/nimbus_binary_common import setupFileLimits
 proc basicServices(nimbus: NimbusNode,
                    conf: NimbusConf,
                    com: CommonRef) =
-<<<<<<< HEAD
-  nimbus.fc = ForkedChainRef.init(com, eagerStateRoot = conf.eagerStateRootCheck)
-=======
   # Setup the chain
-  let fc = ForkedChainRef.init(com)
+  let fc = ForkedChainRef.init(com, eagerStateRoot = conf.eagerStateRootCheck)
   fc.deserialize().isOkOr:
     warn "FC.deserialize", msg=error
->>>>>>> master
 
   nimbus.fc = fc
   # Setup history expiry and portal
@@ -261,7 +257,7 @@ proc run(nimbus: NimbusNode, conf: NimbusConf) =
         txFrame = fc.baseTxFrame
       fc.serialize(txFrame).isOkOr:
         error "FC.serialize error: ", msg=error
-      com.db.persist(txFrame)
+      com.db.persist(txFrame, Opt.none(Hash32))
     com.db.finish()
 
   case conf.cmd
