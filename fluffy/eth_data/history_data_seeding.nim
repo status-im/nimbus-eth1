@@ -98,7 +98,10 @@ proc historyGossipHeadersWithProof*(
 
   for (contentKey, contentValue) in f.headersWithProof(epochRecord):
     let peers = await p.neighborhoodGossip(
-      Opt.none(NodeId), ContentKeysList(@[contentKey]), @[contentValue]
+      Opt.none(NodeId),
+      ContentKeysList(@[contentKey]),
+      @[contentValue],
+      enableNodeLookup = true,
     )
     info "Gossiped block header", contentKey, peers
 
@@ -114,7 +117,10 @@ proc historyGossipBlockContent*(
 
   for (contentKey, contentValue) in f.blockContent():
     let peers = await p.neighborhoodGossip(
-      Opt.none(NodeId), ContentKeysList(@[contentKey]), @[contentValue]
+      Opt.none(NodeId),
+      ContentKeysList(@[contentKey]),
+      @[contentValue],
+      enableNodeLookup = true,
     )
     info "Gossiped block content", contentKey, peers
 

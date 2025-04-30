@@ -1710,6 +1710,7 @@ proc neighborhoodGossip*(
     srcNodeId: Opt[NodeId],
     contentKeys: ContentKeysList,
     content: seq[seq[byte]],
+    enableNodeLookup = false,
 ): Future[int] {.async: (raises: [CancelledError]).} =
   ## Run neighborhood gossip for provided content.
   ## Returns the number of peers to which content was attempted to be gossiped.
@@ -1760,7 +1761,8 @@ proc neighborhoodGossip*(
 
   var numberOfGossipedNodes = 0
 
-  if gossipNodes.len() >= p.config.maxGossipNodes: # use local nodes for gossip
+  if not enableNodeLookup or gossipNodes.len() >= p.config.maxGossipNodes:
+    # use local nodes for gossip
     portal_gossip_without_lookup.inc(labelValues = [$p.protocolId])
 
     for node in gossipNodes:
@@ -1801,8 +1803,9 @@ proc neighborhoodGossipDiscardPeers*(
     srcNodeId: Opt[NodeId],
     contentKeys: ContentKeysList,
     content: seq[seq[byte]],
+    enableNodeLookup = false,
 ): Future[void] {.async: (raises: [CancelledError]).} =
-  discard await p.neighborhoodGossip(srcNodeId, contentKeys, content)
+  discard await p.neighborhoodGossip(srcNodeId, contentKeys, content, enableNodeLookup)
 
 proc randomGossip*(
     p: PortalProtocol,
