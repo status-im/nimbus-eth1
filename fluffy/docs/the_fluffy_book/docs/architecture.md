@@ -1,110 +1,41 @@
 # Fluffy Architecture
 
-The following diagram outlines the Fluffy high-level architecture.
+This diagram outlines the Fluffy high-level architecture. The arrows indicate a dependancy relationship between each component. 
 
-```mermaid
-graph LR
-    portal_bridge --> nimbus_execution_client
-    portal_bridge --> fluffy
-```
-
-## Fluffy Components
 
 ```mermaid
 
 graph TD;
-    Fluffy --> id2(PortalNode) & id3(RpcHttpServer) & id4(RpcWebSocketServer) & id5(MetricsHttpServer)
-    id3(RpcHttpServer) & id4(RpcWebSocketServer) & id2(PortalNode) --> id7(BeaconNetwork)
-    id3(RpcHttpServer) & id4(RpcWebSocketServer) & id2(PortalNode) ---> id8(HistoryNetwork)
-    id3(RpcHttpServer) & id4(RpcWebSocketServer) & id2(PortalNode) ----> id9(StateNetwork)
-    id3(RpcHttpServer) & id4(RpcWebSocketServer) ----> id6(AsyncEvm)
+    Fluffy ---> id2(PortalNode) & id5(MetricsHttpServer)
+    Fluffy ---> id3(RpcHttpServer) & id4(RpcWebSocketServer)
+    id3(RpcHttpServer) & id4(RpcWebSocketServer) & id2(PortalNode) ---> id7(BeaconNetwork)
+    id3(RpcHttpServer) & id4(RpcWebSocketServer) & id2(PortalNode) ----> id8(HistoryNetwork)
+    id3(RpcHttpServer) & id4(RpcWebSocketServer) & id2(PortalNode) -----> id9(StateNetwork)
+    id3(RpcHttpServer) & id4(RpcWebSocketServer) -----> id6(AsyncEvm)
+    id2(PortalNode) --> id10(Discv5_Protocol)
 ```
 
-## Portal Node Components
+## Portal Subnetworks
 
 ```mermaid
 
-graph LR
-    PortalNode --> Discv5_Protocol
-    PortalNode --> ContentDB
-    PortalNode --> StreamManager
-    ContentDB --> sqlite
-    PortalNode --> BeaconNetwork
-    PortalNode --> HistoryNetwork
-    PortalNode --> StateNetwork
-    PortalNode --> LightClient
-
+graph TD;
+    PortalSubnetwork --> id1(PortalProtocol)
+    PortalSubnetwork --> id2(ContentQueue)
+    id1(PortalProtocol) --> id3(Discv5Protocol)
+    id1(PortalProtocol) --> id4(RoutingTable)
+    id1(PortalProtocol) ---> id5(RadiusCache)
+    id1(PortalProtocol) --> id6(OfferCache)
+    id1(PortalProtocol) ---> id7(ContentCache)
+    id1(PortalProtocol) --> id8(ContentDb)
+    id1(PortalProtocol) ---> id9(OfferQueue)
+    id1(PortalProtocol) --> id10(PortalStream)
+    id10(PortalStream) --> id11(UtpDiscv5Protocol)
+    id10(PortalStream) --> id2(ContentQueue)
+    id11(UtpDiscv5Protocol) --> id3(Discv5Protocol)
 ```
 
-## State Network Components
-
-```mermaid
-
-graph LR
-    StateNetwork --> State_ContentQueue
-    StateNetwork --> State_PortalProtocol
-    StateNetwork --> HistoryNetwork
-    State_PortalProtocol --> State_PortalStream
-    State_PortalStream --> State_ContentQueue
-    State_PortalProtocol --> ContentDB
-
-```
-
-## History Network Components
-
-```mermaid
-
-graph LR
-    HistoryNetwork --> History_ContentQueue
-    HistoryNetwork --> History_PortalProtocol
-    History_PortalProtocol --> History_PortalStream
-    History_PortalStream --> History_ContentQueue
-    History_PortalProtocol --> ContentDB
-
-```
-
-## Beacon Network Components
-
-```mermaid
-
-graph LR
-    LightClient --> BeaconNetwork
-    LightClient --> ForkedLightClientStore
-    LightClient --> LightClientProcessor
-    LightClient --> LightClientManager
-    LightClientManager --> BeaconNetwork
-    BeaconNetwork --> Beacon_ContentQueue
-    BeaconNetwork --> Beacon_PortalProtocol
-    Beacon_PortalProtocol --> Beacon_PortalStream
-    BeaconNetwork --> BeaconDb
-    BeaconNetwork --> LightClientProcessor
-
-```
-
-## Portal Protocol Components
-
-```mermaid
-
-graph LR
-    PortalProtocol --> Discv5_Protocol & RoutingTable & ContentCache & OfferCache & ContentDb & PortalStream & RadiusCache & OfferQueue
-
-```
-
-## Stream Manager Components
-
-```mermaid
-
-graph LR
-    PortalStream --> UtpDiscv5Protocol
-    PortalStream --> ContentQueue
-    StreamManager --> UtpDiscv5Protocol
-    StreamManager --> PortalStream
-    UtpDiscv5Protocol --> Discv5_Protocol
-
-```
-
-
-## Async Evm Components
+## Async Evm
 
 ```mermaid
 
