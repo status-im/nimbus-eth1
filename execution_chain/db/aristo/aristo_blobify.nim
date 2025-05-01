@@ -51,7 +51,7 @@ template data*(v: SbeBuf): openArray[byte] =
 func blobify*(rvid: RootedVertexID): RVidBuf =
   # Length-prefixed root encoding creates a unique and common prefix for all
   # verticies sharing the same root
-  # TODO evaluate an encoding that colocates short roots (like VertexID(1)) with
+  # TODO evaluate an encoding that colocates short roots (like STATE_ROOT_VID) with
   #      the length
   let root = rvid.root.blobify()
   result.buf[0] = root.len

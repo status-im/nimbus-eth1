@@ -27,19 +27,21 @@ const
   VOID_HASH_KEY* = HashKey()
     ## Void equivalent for Merkle hash value
 
-  LEAST_FREE_VID* = 100
-    ## Vids smaller are used as known state roots and cannot be recycled. Only
-    ## the `VertexID(1)` state root is used by the `Aristo` methods. The other
-    ## numbers smaller than `LEAST_FREE_VID` may be used by application
-    ## functions with fixed assignments of the type of a state root (e.g. for
-    ## a receipt or a transaction root.)
+  STATE_ROOT_VID* = VertexID(1)
+    ## VertexID of state root entry in the MPT
+
+  STATIC_VID_LEVELS* = 8
+    ## Number of MPT levels that get a fixed VertexID(1)
+
+  FIRST_DYNAMIC_VID* = ## First VertexID of the sparse/dynamic part of the MPT
+    block:
+      var v = uint64(STATE_ROOT_VID)
+      for i in 0..<STATIC_VID_LEVELS:
+        v += 1'u64 shl (i * 4)
+      v
 
   ACC_LRU_SIZE* = 1024 * 1024
     ## LRU cache size for accounts that have storage, see `.accLeaves` and
     ## `.stoLeaves` fields of the main descriptor.
-
-static:
-  # must stay away from `VertexID(1)` and `VertexID(2)`
-  doAssert 2 < LEAST_FREE_VID
 
 # End

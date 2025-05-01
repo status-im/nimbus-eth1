@@ -17,7 +17,7 @@ import
   std/typetraits,
   eth/common/[base, hashes],
   results,
-  "."/[aristo_compute, aristo_desc, aristo_get, aristo_layers, aristo_hike]
+  "."/[aristo_compute, aristo_desc, aristo_get, aristo_layers, aristo_hike, aristo_vid]
 
 # ------------------------------------------------------------------------------
 # Private functions
@@ -26,9 +26,10 @@ import
 proc retrieveLeaf(
     db: AristoTxRef;
     root: VertexID;
-    path: Hash32;
+    path: NibblesBuf;
+    next = VertexID(0),
       ): Result[VertexRef,AristoError] =
-  for step in stepUp(NibblesBuf.fromBytes(path.data), root, db):
+  for step in stepUp(path, root, db, next):
     let vtx = step.valueOr:
       if error in HikeAcceptableStopsNotFound:
         return err(FetchPathNotFound)
@@ -62,10 +63,69 @@ proc retrieveAccLeaf(
       return err(FetchPathNotFound)
     return ok leafVtx[]
 
-  # Updated payloads are stored in the layers so if we didn't find them there,
+  let staticLevel = db.db.getStaticLevel()
+
+  var path = NibblesBuf.fromBytes(accPath.data)
+  var next: VertexID
+
+  # Try to skip the initial levels of MPT lookups using the static vid
+  for sl in countdown(staticLevel, 0):
+    let
+      svid = path.staticVid(sl)
+      vtx = db.getVtxRc((STATE_ROOT_VID, svid)).valueOr:
+        continue
+    case vtx[0].vType
+    of Leaves:
+      let vtx = AccLeafRef(vtx[0])
+
+      if sl == staticLevel:
+        db.db.lookups.hits += 1
+      else:
+        db.db.lookups.lower += 1
+
+      return
+        if vtx.pfx == path.slice(sl):
+          db.db.accLeaves.put(accPath, vtx)
+
+          ok vtx
+        else:
+          db.db.accLeaves.put(accPath, nil)
+          err FetchPathNotFound
+
+    of ExtBranch:
+      let vtx = ExtBranchRef(vtx[0])
+      if vtx.pfx == path.slice(sl):
+        let nibble = path[sl + vtx.pfx.len]
+        next = vtx.bVid(nibble)
+
+        if not next.isValid():
+          db.db.lookups.hits += 1
+          db.db.accLeaves.put(accPath, nil)
+          return err FetchPathNotFound
+
+        path = path.slice(sl + vtx.pfx.len)
+
+        break
+
+    of Branch:
+      let vtx = BranchRef(vtx[0])
+      let nibble = path[sl]
+      next = vtx.bVid(nibble)
+      if not next.isValid():
+        db.db.lookups.hits += 1
+        db.db.accLeaves.put(accPath, nil)
+        return err FetchPathNotFound
+
+      path = path.slice(sl + 1)
+      break
+
+  if next.isValid():
+    db.db.lookups.higher += 1
+
+  # Updated payloads are stored in the layers so if we di)dn't find them there,
   # it must have been in the database
   let
-    leafVtx = db.retrieveLeaf(VertexID(1), accPath).valueOr:
+    leafVtx = db.retrieveLeaf(STATE_ROOT_VID, path, next).valueOr:
       if error == FetchPathNotFound:
         db.db.accLeaves.put(accPath, nil)
       return err(error)
@@ -130,7 +190,7 @@ proc fetchAccountHike*(
   if leaf == Opt.some(AccLeafRef(nil)):
     return err(FetchAccInaccessible)
 
-  accPath.hikeUp(VertexID(1), db, leaf, accHike).isOkOr:
+  accPath.hikeUp(STATE_ROOT_VID, db, leaf, accHike).isOkOr:
     return err(FetchAccInaccessible)
 
   # Extract the account payload from the leaf
@@ -163,7 +223,8 @@ proc retrieveStoragePayload(
 
   # Updated payloads are stored in the layers so if we didn't find them there,
   # it must have been in the database
-  let leafVtx = db.retrieveLeaf(? db.fetchStorageIdImpl(accPath), stoPath).valueOr:
+  let leafVtx = db.retrieveLeaf(
+      ? db.fetchStorageIdImpl(accPath), NibblesBuf.fromBytes(stoPath.data)).valueOr:
     if error == FetchPathNotFound:
       db.db.stoLeaves.put(mixPath, nil)
     return err(error)
@@ -214,7 +275,7 @@ proc fetchStateRoot*(
     db: AristoTxRef;
       ): Result[Hash32,AristoError] =
   ## Fetch the Merkle hash of the account root.
-  db.retrieveMerkleHash(VertexID(1))
+  db.retrieveMerkleHash(STATE_ROOT_VID)
 
 proc hasPathAccount*(
     db: AristoTxRef;
