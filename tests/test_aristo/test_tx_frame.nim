@@ -78,7 +78,7 @@ suite "Aristo TxFrame":
       # we find the vtx should be one below tx2c!
       (
         tx2c.level -
-        tx2c.layersGetVtx((VertexID(1), acc1Hike.legs[^1].wp.vid)).value()[1]
+        tx2c.layersGetVtx((STATE_ROOT_VID, acc1Hike.legs[^1].wp.vid)).value()[1]
       ) == 1
 
     tx0.checkpoint(1, skipSnapshot = false)
@@ -91,7 +91,7 @@ suite "Aristo TxFrame":
       # Even after checkpointing, we should maintain the same relative levels
       (
         tx2c.level -
-        tx2c.layersGetVtx((VertexID(1), acc1Hike.legs[^1].wp.vid)).value()[1]
+        tx2c.layersGetVtx((STATE_ROOT_VID, acc1Hike.legs[^1].wp.vid)).value()[1]
       ) == 1
 
     let batch = db.putBegFn().expect("working batch")

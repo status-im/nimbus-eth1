@@ -17,7 +17,7 @@ import
   std/typetraits,
   eth/common/[base, hashes],
   results,
-  "."/[aristo_compute, aristo_desc, aristo_get, aristo_layers, aristo_hike]
+  "."/[aristo_compute, aristo_desc, aristo_get, aristo_layers, aristo_hike, aristo_vid]
 
 # ------------------------------------------------------------------------------
 # Private functions
@@ -26,9 +26,10 @@ import
 proc retrieveLeaf(
     db: AristoTxRef;
     root: VertexID;
-    path: Hash32;
+    path: NibblesBuf;
+    next = VertexID(0),
       ): Result[VertexRef,AristoError] =
-  for step in stepUp(NibblesBuf.fromBytes(path.data), root, db):
+  for step in stepUp(path, root, db, next):
     let vtx = step.valueOr:
       if error in HikeAcceptableStopsNotFound:
         return err(FetchPathNotFound)
@@ -53,6 +54,80 @@ proc cachedStoLeaf*(db: AristoTxRef; mixPath: Hash32): Opt[StoLeafRef] =
     db.db.stoLeaves.get(mixPath) or
     Opt.none(StoLeafRef)
 
+proc retrieveAccStatic(
+    db: AristoTxRef;
+    accPath: Hash32;
+      ): Result[(AccLeafRef, NibblesBuf, VertexID),AristoError] =
+  # A static VertexID essentially splits the path into a prefix encoded in the
+  # vid and the rest of the path stored as normal - here, instead of traversing
+  # the trie from the root and selecting a path nibble by nibble we travers the
+  # trie starting at `staticLevel` and search towards the root until either we
+  # hit the node we're looking for or at least a branch from which we can
+  # shorten the lookup.
+  let staticLevel = db.db.getStaticLevel()
+
+  var path = NibblesBuf.fromBytes(accPath.data)
+  var next: VertexID
+
+  for sl in countdown(staticLevel, 0):
+    template countHitOrLower() =
+      if sl == staticLevel:
+        db.db.lookups.hits += 1
+      else:
+        db.db.lookups.lower += 1
+
+    let
+      svid = path.staticVid(sl)
+      vtx = db.getVtxRc((STATE_ROOT_VID, svid)).valueOr:
+        # Either the node doesn't exist or our guess used too many nibbles and
+        # the trie is not yet this deep at the given path - either way, we'll
+        # try a less deep guess which will result either in a branch,
+        # non-matching leaf or more missing verticies.
+        continue
+
+    case vtx[0].vType
+    of Leaves:
+      let vtx = AccLeafRef(vtx[0])
+
+      countHitOrLower()
+      return
+        if vtx.pfx != path.slice(sl): # Same prefix, different path
+          err FetchPathNotFound
+        else:
+          ok (vtx, path, next)
+    of ExtBranch:
+      let vtx = ExtBranchRef(vtx[0])
+
+      if vtx.pfx != path.slice(sl, sl + vtx.pfx.len): # Same prefix, different path
+        countHitOrLower()
+        return err FetchPathNotFound
+
+      let nibble = path[sl + vtx.pfx.len]
+      next = vtx.bVid(nibble)
+
+      if not next.isValid():
+        countHitOrLower()
+        return err FetchPathNotFound
+
+      path = path.slice(sl + vtx.pfx.len + 1)
+
+      break # Continue the search down the branch children, starting at `next`
+    of Branch: # Same as ExtBranch with vtx.pfx.len == 0!
+      let vtx = BranchRef(vtx[0])
+
+      let nibble = path[sl]
+      next = vtx.bVid(nibble)
+
+      if not next.isValid():
+        countHitOrLower()
+        return err FetchPathNotFound
+
+      path = path.slice(sl + 1)
+      break # Continue the search down the branch children, starting at `next`
+
+  # We end up here when we have to continue the search down a branch
+  ok (nil, path, next)
+
 proc retrieveAccLeaf(
     db: AristoTxRef;
     accPath: Hash32;
@@ -62,13 +137,28 @@ proc retrieveAccLeaf(
       return err(FetchPathNotFound)
     return ok leafVtx[]
 
+  let (staticVtx, path, next) = db.retrieveAccStatic(accPath).valueOr:
+    if error == FetchPathNotFound:
+      db.db.accLeaves.put(accPath, nil)
+    return err(error)
+
+  if staticVtx.isValid():
+    db.db.accLeaves.put(accPath, staticVtx)
+    return ok staticVtx
+
   # Updated payloads are stored in the layers so if we didn't find them there,
   # it must have been in the database
   let
-    leafVtx = db.retrieveLeaf(VertexID(1), accPath).valueOr:
+    leafVtx = db.retrieveLeaf(STATE_ROOT_VID, path, next).valueOr:
       if error == FetchPathNotFound:
+        # The branch was the deepest level where a vertex actually existed
+        # meaning that it was a hit - else searches for non-existing paths would
+        # skew the results towards more depth than exists in the MPT
+        db.db.lookups.hits += 1
         db.db.accLeaves.put(accPath, nil)
       return err(error)
+
+  db.db.lookups.higher += 1
 
   db.db.accLeaves.put(accPath, AccLeafRef(leafVtx))
 
@@ -130,7 +220,7 @@ proc fetchAccountHike*(
   if leaf == Opt.some(AccLeafRef(nil)):
     return err(FetchAccInaccessible)
 
-  accPath.hikeUp(VertexID(1), db, leaf, accHike).isOkOr:
+  accPath.hikeUp(STATE_ROOT_VID, db, leaf, accHike).isOkOr:
     return err(FetchAccInaccessible)
 
   # Extract the account payload from the leaf
@@ -163,7 +253,8 @@ proc retrieveStoragePayload(
 
   # Updated payloads are stored in the layers so if we didn't find them there,
   # it must have been in the database
-  let leafVtx = db.retrieveLeaf(? db.fetchStorageIdImpl(accPath), stoPath).valueOr:
+  let leafVtx = db.retrieveLeaf(
+      ? db.fetchStorageIdImpl(accPath), NibblesBuf.fromBytes(stoPath.data)).valueOr:
     if error == FetchPathNotFound:
       db.db.stoLeaves.put(mixPath, nil)
     return err(error)
@@ -214,7 +305,7 @@ proc fetchStateRoot*(
     db: AristoTxRef;
       ): Result[Hash32,AristoError] =
   ## Fetch the Merkle hash of the account root.
-  db.retrieveMerkleHash(VertexID(1))
+  db.retrieveMerkleHash(STATE_ROOT_VID)
 
 proc hasPathAccount*(
     db: AristoTxRef;

@@ -124,13 +124,14 @@ iterator stepUp*(
     path: NibblesBuf;                            # Partial path
     root: VertexID;                              # Start vertex
     db: AristoTxRef;                             # Database
+    next = VertexID(0)
 ): Result[VertexRef, AristoError] =
   ## For the argument `path`, iterate over the logest possible path in the
   ## argument database `db`.
   var
     path = path
-    next = root
-    vtx: VertexRef
+    next = if next == VertexID(0): root else: next
+    vtx = VertexRef(nil)
   block iter:
     while true:
       (vtx, path, next) = step(path, (root, next), db).valueOr:
