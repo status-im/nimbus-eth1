@@ -560,7 +560,7 @@ proc put*(
       if hash == hc.chain.pendingFCU:
         if hc.chain.tryUpdatePendingFCU(hash, hdr.number):
           debug "PendingFCU resolved to block number",
-            hash=f.short,
+            hash=hash.short,
             number=hdr.number.bnStr
 
       # Check whether `hdr` has a parent on the `FC` module.
