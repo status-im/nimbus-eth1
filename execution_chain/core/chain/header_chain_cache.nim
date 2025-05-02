@@ -73,7 +73,7 @@ import
   "../.."/[common, db/core_db, db/storage_types],
   ../../db/[kvt, kvt_cf],
   ../../db/kvt/[kvt_utils, kvt_tx_frame],
-  ./forked_chain/[chain_branch, chain_desc]
+  ./forked_chain/[chain_branch, chain_desc, block_quarantine]
 
 logScope:
   topics = "hc-cache"
@@ -323,6 +323,25 @@ proc tryFcParent(hc: HeaderChainRef; hdr: Header): HeaderChainMode =
 # Private fork choice call back function
 # ------------------------------------------------------------------------------
 
+proc resolveFinHash(hc: HeaderChainRef; f: Hash32) =
+  block resolveFin:
+    let header = hc.chain.quarantine.getHeader(f).valueOr:
+      break resolveFin
+        
+    if hc.chain.tryUpdatePendingFCU(f, header.number):
+      debug "PendingFCU resolved to block number",
+        hash=f.short,
+        number=number.bnStr
+      return
+    
+  let number = hc.kvt.getNumber(f).valueOr:
+    return
+        
+  if hc.chain.tryUpdatePendingFCU(f, number):
+    debug "PendingFCU resolved to block number",
+      hash=f.short,
+      number=number.bnStr
+
 proc headUpdateFromCL(hc: HeaderChainRef; h: Header; f: Hash32) =
   ## Call back function to register new/prevously-unknown FC updates.
   ##
@@ -331,15 +350,7 @@ proc headUpdateFromCL(hc: HeaderChainRef; h: Header; f: Hash32) =
   ##
   if f != zeroHash32 and                            # finalised hash is set
      hc.baseNum + 1 < h.number:                     # otherwise useless
-
-    block resolveFin:
-     let number = hc.kvt.getNumber(f).valueOr:
-       break resolveFin
-     if hc.chain.tryUpdatePendingFCU(f, number):
-       debug "PendingFCU resolved to block number",
-         hash=f.short,
-         number=number.bnStr
-
+    
     if hc.session.mode == closed:
       # Set new session environment
       hc.session = HccSession(                      # start new session
@@ -352,7 +363,6 @@ proc headUpdateFromCL(hc: HeaderChainRef; h: Header; f: Hash32) =
 
       # Inform client app about that a new session has started.
       hc.notify()
-      hc.chain.pendingFCU = f
 
     # For logging and metrics
     hc.session.consHeadNum = h.number
@@ -406,6 +416,9 @@ proc start*(hc: HeaderChainRef; notify: HeaderChainNotifyCB) =
   hc.chain.com.headerChainUpdate = proc(h: Header; f: Hash32) =
     hc.headUpdateFromCL(h, f)
 
+  hc.chain.com.resolveFinHash = proc(f: Hash32) =
+    hc.resolveFinHash(f)
+  
 # ------------------
 
 proc init*(T: type HeaderChainRef; c: ForkedChainRef): T =
@@ -542,12 +555,6 @@ proc put*(
         # There is no need to clean up as nothing was store on the DB
         return err("Parent hash mismatch for rev[" & $n & "].number=" &
           bn.bnStr)
-
-      if hash == hc.chain.pendingFCU:
-        if hc.chain.tryUpdatePendingFCU(hash, hdr.number):
-          debug "PendingFCU resolved to block number",
-            hash=hash.short,
-            number=hdr.number.bnStr
 
       # Check whether `hdr` has a parent on the `FC` module.
       let newMode = hc.tryFcParent(hdr)

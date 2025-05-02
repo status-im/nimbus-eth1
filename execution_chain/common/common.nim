@@ -40,6 +40,8 @@ type
   NotifyBadBlockCB* = proc(invalid, origin: Header) {.gcsafe, raises: [].}
     ## Notify engine-API of encountered bad block
 
+  ResolveFinHashCB* = proc(fin: Hash32) {.gcsafe, raises: [].}
+
   CommonRef* = ref object
     # all purpose storage
     db: CoreDbRef
@@ -71,6 +73,8 @@ type
     notifyBadBlock: NotifyBadBlockCB
       ## Allow synchronizer to inform engine-API of bad encountered during sync
       ## progress
+
+    resolveFinHash: ResolveFinHashCB
 
     startOfHistory: Hash32
       ## This setting is needed for resuming blockwise syncying after
@@ -342,6 +346,10 @@ proc notifyBadBlock*(com: CommonRef; invalid, origin: Header)
   if not com.notifyBadBlock.isNil:
     com.notifyBadBlock(invalid, origin)
 
+proc resolveFinHash*(com: CommonRef; fin: Hash32) =
+  if not com.resolveFinHash.isNil:
+    com.resolveFinHash(fin)
+
 # ------------------------------------------------------------------------------
 # Getters
 # ------------------------------------------------------------------------------
@@ -434,6 +442,9 @@ func `beaconSyncerProgress=`*(com: CommonRef; cb: BeaconSyncerProgressCB) =
 func `notifyBadBlock=`*(com: CommonRef; cb: NotifyBadBlockCB) =
   ## Activate or reset a call back handler for bad block notification.
   com.notifyBadBlock = cb
+
+func `resolveFinHash=`*(com: CommonRef; cb: ResolveFinHashCB) =
+  com.resolveFinHash = cb
 
 func `extraData=`*(com: CommonRef, val: string) =
   com.extraData = val
