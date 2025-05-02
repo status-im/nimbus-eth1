@@ -52,7 +52,7 @@ have separate instances per subnetwork.
 The `Discv5Protocol` type implements the Discv5 protocol which is used as a transport to send messages between
 Portal nodes. Each Portal subnetwork (such as the `BeaconNetwork`, `HistoryNetwork` and `StateNetwork`) holds an instance of
 `PortalProtocol` which implements the Portal Wire protocol and an instance of `ContentQueue` which receives Portal
-content from the `PortalStream` type when the node receives content from peers. When a content transfer is
+content from the `PortalStream` when the node receives content from peers. When a content transfer is
 initiated which is bigger than the max Discv5 message size, then the `PortalStream` transfers the content using
 the `UtpDiscv5Protocol` type which implements uTP on top of Discv5.
 
