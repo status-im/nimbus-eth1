@@ -336,7 +336,7 @@ proc headUpdateFromCL(hc: HeaderChainRef; h: Header; f: Hash32) =
      let number = hc.kvt.getNumber(f).valueOr:
        break resolveFin
      if hc.chain.tryUpdatePendingFCU(f, number):
-       notice "PendingFCU resolved to block number",
+       debug "PendingFCU resolved to block number",
          hash=f.short,
          number=number.bnStr
 
@@ -488,7 +488,7 @@ proc put*(
   if rev.len == 0:
     return ok()                                    # nothing to do
 
-  notice "HC updated",
+  debug "HC updated",
     minNum=rev[^1].number,
     maxNum=rev[0].number,
     numHeaders=rev.len
@@ -545,7 +545,7 @@ proc put*(
 
       if hash == hc.chain.pendingFCU:
         if hc.chain.tryUpdatePendingFCU(hash, hdr.number):
-          notice "PendingFCU resolved to block number",
+          debug "PendingFCU resolved to block number",
             hash=hash.short,
             number=hdr.number.bnStr
 
