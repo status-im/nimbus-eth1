@@ -46,7 +46,7 @@ graph TD;
 ```
 
 There are some differences between each of the subnetworks but the components used in each are mostly the same.
-Only the `Discv5Protocol` and `ContentDb` instances are shared between the portal subnetworks while the other components
+Only the `Discv5Protocol` and `ContentDb` instances are shared between the Portal subnetworks while the other components
 have separate instances per subnetwork.
 
 The `Discv5Protocol` type implements the Discv5 protocol which is used as a transport to send messages between
