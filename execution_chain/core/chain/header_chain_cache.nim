@@ -331,7 +331,7 @@ proc resolveFinHash(hc: HeaderChainRef; f: Hash32) =
     if hc.chain.tryUpdatePendingFCU(f, header.number):
       debug "PendingFCU resolved to block number",
         hash=f.short,
-        number=number.bnStr
+        number=header.number.bnStr
       return
     
   let number = hc.kvt.getNumber(f).valueOr:
