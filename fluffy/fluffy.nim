@@ -25,6 +25,7 @@ import
   ./conf,
   ./network_metadata,
   ./common/common_utils,
+  ./evm/[async_evm, async_evm_portal_backend],
   ./rpc/[
     rpc_eth_api, rpc_debug_api, rpc_discovery_api, rpc_portal_common_api,
     rpc_portal_history_api, rpc_portal_beacon_api, rpc_portal_state_api,
@@ -260,6 +261,14 @@ proc run(fluffy: Fluffy, config: PortalConf) {.raises: [CatchableError].} =
   ## Start the Portal node.
   node.start()
 
+  # For now the Fluffy EVM is only used by the RPC servers so we create the
+  # instance here and share it between all the RPC handlers that need it
+  let asyncEvm =
+    if node.stateNetwork.isSome():
+      Opt.some(AsyncEvm.init(node.stateNetwork.get().toAsyncEvmStateBackend()))
+    else:
+      Opt.none(AsyncEvm)
+
   ## Start the JSON-RPC APIs
 
   proc setupRpcServer(
@@ -269,10 +278,10 @@ proc run(fluffy: Fluffy, config: PortalConf) {.raises: [CatchableError].} =
       case flag
       of RpcFlag.eth:
         rpcServer.installEthApiHandlers(
-          node.historyNetwork, node.beaconLightClient, node.stateNetwork
+          node.historyNetwork, node.beaconLightClient, node.stateNetwork, asyncEvm
         )
       of RpcFlag.debug:
-        rpcServer.installDebugApiHandlers(node.stateNetwork)
+        rpcServer.installDebugApiHandlers(node.stateNetwork, asyncEvm)
       of RpcFlag.portal:
         if node.historyNetwork.isSome():
           rpcServer.installPortalCommonApiHandlers(
