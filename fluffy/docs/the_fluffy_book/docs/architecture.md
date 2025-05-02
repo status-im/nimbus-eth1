@@ -25,7 +25,7 @@ The `RpcHttpServer` and `RpcWebSocketServer` enable serving JSON-RPC requests fr
 
 ## Portal subnetworks
 
-This diagram outlines the generic architecture of each portal subnetwork.
+This diagram outlines the generic architecture of each Portal subnetwork.
 
 ```mermaid
 
