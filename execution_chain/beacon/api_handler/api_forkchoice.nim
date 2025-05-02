@@ -83,8 +83,7 @@ proc forkchoiceUpdated*(ben: BeaconEngineRef,
     warn "Forkchoice requested update to zero hash"
     return simpleFCU(PayloadExecutionStatus.invalid)
 
-  if update.finalizedBlockHash != zeroHash32:
-    com.resolveFinHash(update.finalizedBlockHash)
+  com.resolveFinHash(update.finalizedBlockHash)
 
   # Check whether we have the block yet in our database or not. If not, we'll
   # need to either trigger a sync, or to reject this forkchoice update for a
