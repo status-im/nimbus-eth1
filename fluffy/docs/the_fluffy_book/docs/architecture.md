@@ -20,7 +20,7 @@ graph TD;
 
 When Fluffy starts it runs an instance of `PortalNode` which manages the `Discv5Protocol`, `BeaconNetwork`, `HistoryNetwork` and `StateNetwork` instances. There is a single instance of each of these components and each of the subnetwork instances can be enabled/disabled depending on the startup configuration selected. The `PortalNode` instance includes everything needed to participate in the Portal network to enable storage of offered content and serving content requests from other Portal nodes. It may become part of a library in the future which would allow other projects to easily embed an instance of Fluffy in their codebase.
 
-The `RpcHttpServer` and `RpcWebSocketServer` enable serving JSON-RPC requests from portal network over HTTP and WebSocket respectively. These RPC servers depend on the Fluffy EVM (`AsyncEvm`) in order to implement the various endpoints which require asyncronous transaction execution while fetching state from the portal network.
+The `RpcHttpServer` and `RpcWebSocketServer` enable serving JSON-RPC requests from Portal network over HTTP and WebSocket respectively. These RPC servers depend on the Fluffy EVM (`AsyncEvm`) in order to implement the various endpoints which require asyncronous transaction execution while fetching state from the Portal network.
 
 
 ## Portal subnetworks
