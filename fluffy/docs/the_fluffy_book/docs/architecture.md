@@ -59,7 +59,7 @@ the `UtpDiscv5Protocol` type which implements uTP on top of Discv5.
 The `RoutingTable` implements a Kademlia based DHT which holds the peer ENRs which Fluffy discovers while participating
 in each of the Portal Wire subprotocols. The `RadiusCache` holds the last known radius for each peer which is collected
 when pinging each node in the routing table periodically. The `OfferCache` caches the content ids of the most recent content successfully offered and stored so that Fluffy can reject content that it already has without doing a database lookup. The `ContentCache` improves the performance of content lookups (used by the JSON-RPC API's) by caching the most recently fetched
-content in a LRUCache.
+content in a LRU cache.
 
 The `ContentDb` is the main database in Fluffy which internally uses sqlite to store the content data on disk. The `PortalProtocol`
 uses the `OfferQueue` to hold pending offer requests which are passed to the `PortalStream` by the concurrent offer workers
