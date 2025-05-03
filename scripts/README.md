@@ -38,3 +38,13 @@ processing a number of blocks - by copying the state at that point, one can
 resume or replay the import of a particular block range
 
 See `make_states.sh` for such an example.
+
+## era_downloader.sh
+
+Era/era1 file parallel downloader, with total progress tracking and download resumability
+### Example Usage
+```bash
+chmod +x download_era.sh
+./download_era.sh https://sepolia.era1.nimbus.team ~/Downloads/sepolia
+```
+For further details please refer https://hackmd.io/@advaita/BkMvD9Qllg
