@@ -202,14 +202,17 @@ proc syncToEngineApi(conf: NRpcConf) {.async.} =
       findSlot(client, currentBlockNumber, lastEra1Block, firstSlotAfterMerge)
     finalizedHash = Eth2Digest.fromHex("0x00")
     headHash: Eth2Digest
-    distance = 0'u64
-    time = Moment.now()
 
-  template estimateProgressForSync(blocks: int = 32) =
+    # Required for progress tracker
+    time = Moment.now()
+    progressTrackedHead = currentBlockNumber
+
+  template estimateProgressForSync() =
     let 
+      blocks = int(currentBlockNumber - progressTrackedHead)
       curTime = Moment.now()
       diff = curTime - time
-      diffSecs = (curTime - time).nanoseconds().float / 1000000000
+      diffSecs = diff.nanoseconds().float / 1000000000
       targetBlkNum = headBlck.header.number
       distance = targetBlkNum - currentBlockNumber
       estimatedTime = (diff*int(distance)).div(blocks)
@@ -222,6 +225,7 @@ proc syncToEngineApi(conf: NRpcConf) {.async.} =
 
     #reset
     time = Moment.now()
+    progressTrackedHead = currentBlockNumber
 
   template sendFCU(clblk: ForkedSignedBeaconBlock) =
     withBlck(clblk):
