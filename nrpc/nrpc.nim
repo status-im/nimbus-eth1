@@ -220,6 +220,8 @@ proc syncToEngineApi(conf: NRpcConf) {.async.} =
       bps = f(blocks.float / diffSecs),
       timeToSync = toString(estimatedTime, 2)
 
+    #reset
+    time = Moment.now()
 
   template sendFCU(clblk: ForkedSignedBeaconBlock) =
     withBlck(clblk):
