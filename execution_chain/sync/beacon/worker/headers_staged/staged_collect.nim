@@ -37,7 +37,7 @@ proc updateBuddyErrorState(buddy: BeaconBuddyRef) =
      fetchHeadersProcessErrThresholdCount < buddy.nHdrProcErrors:
 
     # Make sure that this peer does not immediately reconnect
-    buddy.ctrl.zombie = true
+    buddy.ctrl.zombie = buddy.infectedByTVirus
 
 proc updateBuddyProcError(buddy: BeaconBuddyRef) =
   buddy.incHdrProcErrors()

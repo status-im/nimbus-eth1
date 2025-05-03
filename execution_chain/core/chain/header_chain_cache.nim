@@ -68,10 +68,15 @@
 import
   pkg/eth/[common, rlp],
   pkg/results,
+  pkg/chronicles,
+  pkg/stew/endians2,
   "../.."/[common, db/core_db, db/storage_types],
   ../../db/[kvt, kvt_cf],
   ../../db/kvt/[kvt_utils, kvt_tx_frame],
-  ./forked_chain/[chain_branch, chain_desc]
+  ./forked_chain/[chain_branch, chain_desc, block_quarantine]
+
+logScope:
+  topics = "hc-cache"
 
 type
   HccDbInfo = object
@@ -84,8 +89,6 @@ type
     ante: Header                # antecedent, bottom of header chain
     head: Header                # top end of header chain, highest block number
     headHash: Hash32
-    finHeader: Header           # final block header
-    finHash: Hash32
     consHeadNum: BlockNumber    # for logging, metrics etc.
 
   # -----------------
@@ -128,7 +131,7 @@ const
   RaisePfx = "Header Cache: "
     ## Message prefix used when bailing out raising an exception
 
-let
+const
   HccDbInfoKey = 0.beaconHeaderKey
 
 # ------------------------------------------------------------------------------
@@ -147,7 +150,6 @@ func toStr(hc: HeaderChainRef): string =
   result &= ", " & hc.session.ante.bnStr
   if hc.session.ante != hc.session.head:
     result &= ".." & hc.session.head.bnStr
-  result &= "," & hc.session.finHeader.bnStr
   result &= "," & hc.session.consHeadNum.bnStr
   result &= ")"
 
@@ -188,10 +190,14 @@ proc delInfo(db: KvtTxRef) =
   discard db.del(HccDbInfoKey.toOpenArray)
 
 
-proc putHeader(db: KvtTxRef; bn: BlockNumber; data: seq[byte]) =
+proc putHeader(db: KvtTxRef; h: Header) =
   ## Store rlp encoded header
-  db.put(beaconHeaderKey(bn).toOpenArray, data).isOkOr:
+  let data = encodePayload(h)
+  db.put(beaconHeaderKey(h.number).toOpenArray, data).isOkOr:
     raiseAssert RaisePfx & "put(header) failed: " & $error
+
+  db.put(genericHashKey(h.parentHash).toOpenArray, (h.number-1).toBytesBE).isOkOr:
+    raiseAssert RaisePfx & "put(hash->number) failed: " & $error
 
 proc getHeader(db: KvtTxRef; bn: BlockNumber): Opt[Header] =
   ## Retrieve some header from cache
@@ -201,7 +207,15 @@ proc getHeader(db: KvtTxRef; bn: BlockNumber): Opt[Header] =
 
 proc delHeader(db: KvtTxRef; bn: BlockNumber) =
   ## Remove header from cache
+  let h = db.getHeader(bn).valueOr:
+    raiseAssert RaisePfx & "getHeader failed"
   discard db.del(beaconHeaderKey(bn).toOpenArray)
+  discard db.del(genericHashKey(h.parentHash).toOpenArray)
+
+proc getNumber(db: KvtTxRef, hash: Hash32): Opt[BlockNumber] =
+  let number = db.get(genericHashKey(hash).toOpenArray).valueOr:
+    return err()
+  ok(uint64.fromBytesBE(number))
 
 # ----------------------
 
@@ -286,7 +300,7 @@ proc tryFcParent(hc: HeaderChainRef; hdr: Header): HeaderChainMode =
   # This is the last stop (with least possible block number) where the
   # `hdr` could have a parent on the `FC` module which obviously failed
   # (i.e. `base` is not parent of `hdr`.)
-  if hc.session.finHeader.number <= baseNum:
+  if hc.chain.latestFinalizedBlockNumber <= baseNum:
     # So, if resolved at all then `finalised` is ancestor of, or equal to
     # `base`. In any case, `hdr` has no parent on the canonical branch up
     # to `base`. So it is on another branch.
@@ -309,6 +323,25 @@ proc tryFcParent(hc: HeaderChainRef; hdr: Header): HeaderChainMode =
 # Private fork choice call back function
 # ------------------------------------------------------------------------------
 
+proc resolveFinHash(hc: HeaderChainRef; f: Hash32) =
+  block resolveFin:
+    let header = hc.chain.quarantine.getHeader(f).valueOr:
+      break resolveFin
+
+    if hc.chain.tryUpdatePendingFCU(f, header.number):
+      debug "PendingFCU resolved to block number",
+        hash=f.short,
+        number=header.number.bnStr
+      return
+
+  let number = hc.kvt.getNumber(f).valueOr:
+    return
+
+  if hc.chain.tryUpdatePendingFCU(f, number):
+    debug "PendingFCU resolved to block number",
+      hash=f.short,
+      number=number.bnStr
+
 proc headUpdateFromCL(hc: HeaderChainRef; h: Header; f: Hash32) =
   ## Call back function to register new/prevously-unknown FC updates.
   ##
@@ -324,13 +357,13 @@ proc headUpdateFromCL(hc: HeaderChainRef; h: Header; f: Hash32) =
         mode:     collecting,
         ante:     h,
         head:     h,
-        headHash: h.computeBlockHash(),
-        finHash:  f)
+        headHash: h.computeBlockHash())
 
-      hc.kvt.putHeader(h.number, encodePayload h)
+      hc.kvt.putHeader(h)
 
       # Inform client app about that a new session has started.
       hc.notify()
+      hc.chain.pendingFCU = f
 
     # For logging and metrics
     hc.session.consHeadNum = h.number
@@ -383,6 +416,9 @@ proc start*(hc: HeaderChainRef; notify: HeaderChainNotifyCB) =
   hc.notify = notify
   hc.chain.com.headerChainUpdate = proc(h: Header; f: Hash32) =
     hc.headUpdateFromCL(h, f)
+
+  hc.chain.com.resolveFinHash = proc(f: Hash32) =
+    hc.resolveFinHash(f)
 
 # ------------------
 
@@ -466,6 +502,11 @@ proc put*(
   if rev.len == 0:
     return ok()                                    # nothing to do
 
+  debug "HC updated",
+    minNum=rev[^1].number,
+    maxNum=rev[0].number,
+    numHeaders=rev.len
+
   # Check whether argument list closes up to headers chain
   let lastNumber = rev[0].number
   if lastNumber + 1 < hc.session.ante.number:
@@ -516,18 +557,11 @@ proc put*(
         return err("Parent hash mismatch for rev[" & $n & "].number=" &
           bn.bnStr)
 
-      # Resolve finaliser if possible.
-      if hc.session.finHash == hash:
-        hc.session.finHeader = hdr
-
-        # Ackn: moved here from `accept()`
-        #   TODO: syncer and also ForkedCache should not start session
-        #   using finalizedHash, as evident from hive test
-        #   the FCU head can have block number bigger than finalized block.
-        #   Syncer and ForkedCache should only deal with FCU headHash.
-        #   TODO: move notifyBlockHashAndNumber call to fcPutHeader
-        #   where one of the headers should also the finalized header.
-        hc.chain.notifyBlockHashAndNumber(hash, bn)
+      if hash == hc.chain.pendingFCU:
+        if hc.chain.tryUpdatePendingFCU(hash, hdr.number):
+          debug "PendingFCU resolved to block number",
+            hash=hash.short,
+            number=hdr.number.bnStr
 
       # Check whether `hdr` has a parent on the `FC` module.
       let newMode = hc.tryFcParent(hdr)
@@ -538,7 +572,7 @@ proc put*(
 
     # Store on database
     for n in offset .. revTopInx:
-      hc.kvt.putHeader(rev[n].number, encodePayload rev[n])
+      hc.kvt.putHeader(rev[n])
 
     # Set new antecedent `ante` and save to disk (if any)
     hc.session.ante = rev[revTopInx]
@@ -567,7 +601,7 @@ proc commit*(hc: HeaderChainRef): Result[void,string] =
     return ok()
 
   let baseNum = hc.baseNum
-  if baseNum < hc.session.finHeader.number:
+  if baseNum < hc.chain.latestFinalizedBlockNumber:
     #
     # So the `finalised` hash was resolved (otherwise it would have a zero
     # block number.)
@@ -584,7 +618,7 @@ proc commit*(hc: HeaderChainRef): Result[void,string] =
     let startHere = max(baseNum, hc.session.ante.number) + 1
 
     # Find out where the parent to some `FC` module header is.
-    for bn in startHere .. hc.session.finHeader.number:
+    for bn in startHere .. hc.chain.latestFinalizedBlockNumber:
       let newAnte = hc.kvt.getHeader(bn).valueOr:
         raiseAssert RaisePfx & "getHeader(" & bn.bnStr & ") failed"
       if hc.chain.hashToBlock.hasKey(newAnte.parentHash):
@@ -594,7 +628,7 @@ proc commit*(hc: HeaderChainRef): Result[void,string] =
 
     # Impossible situation!
     raiseAssert RaisePfx & "No parent on FC module for anu of " &
-      startHere.bnStr & ".." & hc.session.finHeader.number.bnStr
+      startHere.bnStr & ".." & hc.chain.latestFinalizedBlockNumber.bnStr
 
   hc.session.mode = orphan
   err("Parent on FC module has been lost: obsolete branch segment")
@@ -627,6 +661,10 @@ func latestConsHeadNumber*(hc: HeaderChainRef): BlockNumber =
   ## remains constant (for the current session.)
   ##
   hc.session.consHeadNum
+
+func latestNum*(hc: HeaderChainRef): BlockNumber =
+  ## Aka `hc.chain.latestNumber()` (avoiding `forked_chain` import)
+  hc.chain.activeBranch.headNumber
 
 # ------------------------------------------------------------------------------
 # Public debugging helpers

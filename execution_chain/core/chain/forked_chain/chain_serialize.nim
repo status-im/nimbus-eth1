@@ -11,13 +11,18 @@
 
 import
   results,
+  chronicles,
   eth/common/blocks_rlp,
   ./chain_desc,
   ./chain_branch,
   ./chain_private,
   ../../../db/core_db,
   ../../../db/fcu_db,
-  ../../../db/storage_types
+  ../../../db/storage_types,
+  ../../../utils/utils
+
+logScope:
+  topics = "forked chain"
 
 type
   TxRecord = object
@@ -206,14 +211,19 @@ proc deserialize*(fc: ForkedChainRef): Result[void, string] =
     return err("Cannot find previous FC state in database")
 
   let prevBaseHash = fc.baseBranch.tailHash
-  var branches = move(fc.branches)
+  var
+    branches = move(fc.branches)
+    numBlocksStored = 0
 
   fc.branches.setLen(state.numBranches)
   try:
     for i in 0..<state.numBranches:
-      let data = fc.baseTxFrame.get(branchIndexKey(i)).valueOr:
-        return err("Cannot find branch data")
-      fc.branches[i] = rlp.decode(data, BranchRef)
+      let
+        data = fc.baseTxFrame.get(branchIndexKey(i)).valueOr:
+          return err("Cannot find branch data")
+        branch = rlp.decode(data, BranchRef)
+      fc.branches[i] = branch
+      numBlocksStored += branch.len
   except RlpError as exc:
     fc.branches = move(branches)
     return err(exc.msg)
@@ -224,6 +234,19 @@ proc deserialize*(fc: ForkedChainRef): Result[void, string] =
   fc.latestFinalizedBlockNumber = state.latestFinalizedBlockNumber
   fc.fcuHead = state.fcuHead
   fc.fcuSafe = state.fcuSafe
+
+  info "Loading block DAG from database",
+    base=fc.baseBranch.tailNumber,
+    pendingFCU=fc.pendingFCU.short,
+    resolvedFin=fc.latestFinalizedBlockNumber,
+    canonicalHead=fc.fcuHead.number,
+    safe=fc.fcuSafe.number,
+    numBranches=state.numBranches,
+    blocksStored=numBlocksStored,
+    latestBlock=fc.baseBranch.tailNumber+numBlocksStored.uint64
+
+  if numBlocksStored > 64:
+    info "Please wait until DAG finish loading..."
 
   if fc.baseBranch.tailHash != prevBaseHash:
     fc.reset(branches)

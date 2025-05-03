@@ -224,6 +224,7 @@ proc headersStagedProcess*(buddy: BeaconBuddyRef; info: static[string]) =
     let revHdrsLen = maxNum - ctx.dangling.number + 1
 
     nProcessed += revHdrsLen.int # count headers
+
     # End while loop
 
   if headersStagedQueueLengthLwm < ctx.hdr.staged.len:
