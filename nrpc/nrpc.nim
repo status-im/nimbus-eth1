@@ -10,6 +10,7 @@
 import
   std/[sequtils, os],
   chronicles,
+  chronos/timer,
   ../execution_chain/constants,
   ../execution_chain/core/chain,
   ../execution_chain/core/lazy_kzg,
@@ -191,6 +192,22 @@ proc syncToEngineApi(conf: NRpcConf) {.async.} =
       findSlot(client, currentBlockNumber, lastEra1Block, firstSlotAfterMerge)
     finalizedHash = Eth2Digest.fromHex("0x00")
     headHash: Eth2Digest
+    distance = 0'u64
+    time = Moment.now()
+
+  template estimateProgressForSync(blocks: uint64 = 32) =
+    let 
+      curTime = Moment.now()
+      diff = (curTime - time).nanoseconds().float / 1000000000
+      targetBlkNum = headBlck.header.number
+      distance = targetBlkNum - currentBlockNumber
+
+    info "Estimated Progress",
+      remainingBlocks = distance,
+      targetBlockNumber = targetBlkNum,
+      bps = f(blocks.float / diff),
+      timeToSync = toString((distance*diff/blocks), 2)
+
 
   template sendFCU(clblk: ForkedSignedBeaconBlock) =
     withBlck(clblk):
