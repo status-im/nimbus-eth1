@@ -8,7 +8,7 @@
 # those terms.
 
 import
-  std/[sequtils, os],
+  std/[sequtils, os, strformat],
   chronicles,
   chronos/timer,
   ../execution_chain/constants,
@@ -29,6 +29,16 @@ import
   eth/async_utils
 
 var running* {.volatile.} = true
+
+func f(value: float): string =
+  if value >= 1000:
+    &"{int(value)}"
+  elif value >= 100:
+    &"{value:4.1f}"
+  elif value >= 10:
+    &"{value:4.2f}"
+  else:
+    &"{value:4.3f}"
 
 # Load the EL block, from CL ( either head or CL root )
 template getCLBlockFromBeaconChain(
@@ -195,18 +205,20 @@ proc syncToEngineApi(conf: NRpcConf) {.async.} =
     distance = 0'u64
     time = Moment.now()
 
-  template estimateProgressForSync(blocks: uint64 = 32) =
+  template estimateProgressForSync(blocks: int = 32) =
     let 
       curTime = Moment.now()
-      diff = (curTime - time).nanoseconds().float / 1000000000
+      diff = curTime - time
+      diffSecs = (curTime - time).nanoseconds().float / 1000000000
       targetBlkNum = headBlck.header.number
       distance = targetBlkNum - currentBlockNumber
+      estimatedTime = (diff*int(distance)).div(blocks)
 
-    info "Estimated Progress",
+    notice "Estimated Progress",
       remainingBlocks = distance,
       targetBlockNumber = targetBlkNum,
-      bps = f(blocks.float / diff),
-      timeToSync = toString((distance*diff/blocks), 2)
+      bps = f(blocks.float / diffSecs),
+      timeToSync = toString(estimatedTime, 2)
 
 
   template sendFCU(clblk: ForkedSignedBeaconBlock) =
@@ -240,6 +252,8 @@ proc syncToEngineApi(conf: NRpcConf) {.async.} =
       else:
         info "forkchoiceUpdated Request sent",
           response = fcuResponse.payloadStatus.status
+
+    estimateProgressForSync()
 
   while running and currentBlockNumber < headBlck.header.number:
     var isAvailable = false
