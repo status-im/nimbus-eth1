@@ -49,6 +49,7 @@ func getConfiguredChainId(networkMetadata: Eth2NetworkMetadata): UInt256 =
         of mainnet: 1.u256
         of sepolia: 11155111.u256
         of holesky: 17000.u256
+        of hoodi: 560048.u256
     return chainId
   else:
     return networkMetadata.cfg.DEPOSIT_CHAIN_ID.u256
