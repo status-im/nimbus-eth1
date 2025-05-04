@@ -73,7 +73,7 @@ import
   "../.."/[common, db/core_db, db/storage_types],
   ../../db/[kvt, kvt_cf],
   ../../db/kvt/[kvt_utils, kvt_tx_frame],
-  ./forked_chain/[chain_branch, chain_desc, block_quarantine]
+  ./forked_chain/[chain_branch, chain_desc, block_quarantine], ./forked_chain
 
 logScope:
   topics = "hc-cache"
@@ -323,24 +323,18 @@ proc tryFcParent(hc: HeaderChainRef; hdr: Header): HeaderChainMode =
 # Private fork choice call back function
 # ------------------------------------------------------------------------------
 
-proc resolveFinHash(hc: HeaderChainRef; f: Hash32) =
-  block resolveFin:
-    let header = hc.chain.quarantine.getHeader(f).valueOr:
-      break resolveFin
+proc resolveFinHash(hc: HeaderChainRef, f: Hash32) =
+  proc toNumber(v: auto): BlockNumber =
+    v.number
 
-    if hc.chain.tryUpdatePendingFCU(f, header.number):
-      debug "PendingFCU resolved to block number",
-        hash=f.short,
-        number=header.number.bnStr
-      return
-
-  let number = hc.kvt.getNumber(f).valueOr:
+  let number = (
+    hc.chain.quarantine.getHeader(f).map(toNumber) or hc.kvt.getNumber(f) or
+    hc.chain.headerByHash(f).map(toNumber)
+  ).valueOr:
     return
 
   if hc.chain.tryUpdatePendingFCU(f, number):
-    debug "PendingFCU resolved to block number",
-      hash=f.short,
-      number=number.bnStr
+    debug "PendingFCU resolved to block number", hash = f.short, number = number.bnStr
 
 proc headUpdateFromCL(hc: HeaderChainRef; h: Header; f: Hash32) =
   ## Call back function to register new/prevously-unknown FC updates.
