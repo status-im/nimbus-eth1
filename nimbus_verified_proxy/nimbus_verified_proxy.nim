@@ -272,7 +272,9 @@ proc run*(
     for gossipFork in newGossipForks:
       let forkDigest = forkDigests[].atConsensusFork(gossipFork)
       network.subscribe(
-        getBeaconBlocksTopic(forkDigest), getBlockTopicParams(), enableTopicMetrics = true
+        getBeaconBlocksTopic(forkDigest),
+        getBlockTopicParams(),
+        enableTopicMetrics = true,
       )
 
     blocksGossipState = targetGossipState
