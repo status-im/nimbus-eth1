@@ -380,12 +380,6 @@ dist-arm64:
 	+ MAKE="$(MAKE)" \
 		scripts/make_dist.sh arm64
 
-# We get an ICE on RocksDB-7.0.2 with "arm-linux-gnueabihf-g++ (Ubuntu 9.4.0-1ubuntu1~20.04.1) 9.4.0"
-# and with "arm-linux-gnueabihf-g++ (Ubuntu 10.3.0-1ubuntu1) 10.3.0".
-#dist-arm:
-	#+ MAKE="$(MAKE)" \
-		#scripts/make_dist.sh arm
-
 dist-win64:
 	+ MAKE="$(MAKE)" \
 		scripts/make_dist.sh win64
@@ -401,7 +395,6 @@ dist-macos-arm64:
 dist:
 	+ $(MAKE) --no-print-directory dist-amd64
 	+ $(MAKE) --no-print-directory dist-arm64
-	#+ $(MAKE) --no-print-directory dist-arm
 	+ $(MAKE) --no-print-directory dist-win64
 	+ $(MAKE) --no-print-directory dist-macos
 	+ $(MAKE) --no-print-directory dist-macos-arm64
