@@ -42,9 +42,9 @@ proc basicServices(nimbus: NimbusNode,
                    conf: NimbusConf,
                    com: CommonRef) =
   # Setup the chain
-  let fc = ForkedChainRef.init(com)
+  let fc = ForkedChainRef.init(com, persistBatchSize=conf.persistBatchSize)
   fc.deserialize().isOkOr:
-    warn "FC.deserialize", msg=error
+    warn "Loading block DAG from database", msg=error
 
   nimbus.fc = fc
   # Setup history expiry and portal

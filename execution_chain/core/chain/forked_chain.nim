@@ -135,8 +135,7 @@ proc validateBlock(c: ForkedChainRef,
   # handled region(head - baseDistance)
   # e.g. live syncing with the tip very far from from our latest head
   if c.pendingFCU != zeroHash32 and
-     blk.header.number < c.latestFinalizedBlockNumber:
-
+     c.baseBranch.tailNumber < c.latestFinalizedBlockNumber - c.baseDistance - c.persistBatchSize:
     let
       head = c.activeBranch.lastBlockPos
       newBaseCandidate = c.calculateNewBase(c.latestFinalizedBlockNumber, head)
@@ -461,15 +460,19 @@ proc updateBase(c: ForkedChainRef, newBase: BlockPos) =
   # during `beacon sync` or `nrpc sync`
   if count > 1:
     notice "Finalized blocks persisted",
-      numberOfBlocks = count,
-      baseNumber = c.baseBranch.tailNumber,
-      baseHash = c.baseBranch.tailHash.short
+      nBlocks = count,
+      base = c.baseBranch.tailNumber,
+      baseHash = c.baseBranch.tailHash.short,
+      pendingFCU = c.pendingFCU.short,
+      resolvedFin= c.latestFinalizedBlockNumber
   else:
     debug "Finalized blocks persisted",
-      numberOfBlocks = count,
+      nBlocks = count,
       target = newBaseHash.short,
-      baseNumber = c.baseBranch.tailNumber,
-      baseHash = c.baseBranch.tailHash.short
+      base = c.baseBranch.tailNumber,
+      baseHash = c.baseBranch.tailHash.short,
+      pendingFCU = c.pendingFCU.short,
+      resolvedFin= c.latestFinalizedBlockNumber
 
 # ------------------------------------------------------------------------------
 # Public functions
@@ -616,9 +619,11 @@ proc forkChoice*(c: ForkedChainRef,
 
   ok()
 
-func notifyFinalizedHash*(c: ForkedChainRef, finHash: Hash32) =
-  if finHash != zeroHash32:
-    c.pendingFCU = finHash
+func finHash*(c: ForkedChainRef): Hash32 =
+  c.pendingFCU
+
+func resolvedFinNumber*(c: ForkedChainRef): uint64 =
+  c.latestFinalizedBlockNumber
 
 func haveBlockAndState*(c: ForkedChainRef, blockHash: Hash32): bool =
   ## Blocks still in memory with it's txFrame
@@ -770,7 +775,7 @@ proc txDetailsByTxHash*(c: ForkedChainRef, txHash: Hash32): Result[(Hash32, uint
     header = ?c.headerByNumber(txDetails.blockNumber)
     blockHash = header.computeBlockHash
   return ok((blockHash, txDetails.index))
-  
+
 # TODO: Doesn't fetch data from portal
 # Aristo returns empty txs for both non-existent blocks and existing blocks with no txs [ Solve ? ]
 proc blockBodyByHash*(c: ForkedChainRef, blockHash: Hash32): Result[BlockBody, string] =

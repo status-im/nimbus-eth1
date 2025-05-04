@@ -279,3 +279,25 @@ suite "Async EVM":
         waitFor evm.estimateGas(header, tx, optimisticStateFetch = false)
       ).expect("success")
       check gasEstimate > 0
+
+  test "Call contract - concurrent":
+    var futs = newSeq[Future[Result[CallResult, string]]]()
+
+    for testCase in testCases:
+      let
+        testState = setupTestEvmState(testCase)
+        evm = AsyncEvm.init(testState.toAsyncEvmStateBackend())
+        header = Header(
+          number: testCase.blockNumber.hexToUInt256().truncate(uint64),
+          gasLimit: EVM_CALL_GAS_CAP,
+        )
+        tx = TransactionArgs(
+          to: Opt.some(Address.fromHex(testCase.txArgs.to)),
+          input: Opt.some(testCase.txArgs.input.hexToSeqByte()),
+        )
+
+      futs.add(evm.call(header, tx, optimisticStateFetch = true))
+      futs.add(evm.call(header, tx, optimisticStateFetch = false))
+
+    for f in futs:
+      check (waitFor f).isOk()
