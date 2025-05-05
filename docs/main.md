@@ -51,13 +51,13 @@
 
 
 ### Nimbus Execution Client
-TODO
+TODO - link architecture document here
 
 ### Fluffy
-TODO
+TODO - link fluffy docs here
 
 ### Nimbus Verified Proxy
-TODO
+TODO - link nvp docs here
 
 ### Hive Integration
 TODO
