@@ -1,5 +1,5 @@
 # fluffy
-# Copyright (c) 2023-2024 Status Research & Development GmbH
+# Copyright (c) 2023-2025 Status Research & Development GmbH
 # Licensed and distributed under either of
 #   * MIT license (license terms in the root directory or at https://opensource.org/licenses/MIT).
 #   * Apache v2 license (license terms in the root directory or at https://www.apache.org/licenses/LICENSE-2.0).
@@ -17,11 +17,16 @@
 
 import stew/arrayops, results, beacon_chain/spec/forks, ../../common/common_types
 
+from stew/bitops2 import log2trunc
+
 export results
+
+const HISTORICAL_SUMMARIES_GINDEX_ELECTRA* = GeneralizedIndex(91)
 
 type
   HistoricalSummaries* = HashList[HistoricalSummary, Limit HISTORICAL_ROOTS_LIMIT]
-  HistoricalSummariesProof* = array[5, Digest]
+  HistoricalSummariesProof* =
+    array[log2trunc(HISTORICAL_SUMMARIES_GINDEX_ELECTRA), Digest]
   HistoricalSummariesWithProof* = object
     epoch*: Epoch
     # TODO:
@@ -32,9 +37,6 @@ type
     historical_summaries*: HistoricalSummaries
     proof*: HistoricalSummariesProof
 
-# TODO: prefixing the summaries with the forkDigest is currently not necessary
-# and might never be. Perhaps we should drop this until it is needed. Propose
-# spec change?
 func encodeSsz*(obj: HistoricalSummariesWithProof, forkDigest: ForkDigest): seq[byte] =
   var res: seq[byte]
   res.add(distinctBase(forkDigest))
@@ -56,8 +58,9 @@ func decodeSsz*(
     contextFork = forkDigests.consensusForkForDigest(forkDigest).valueOr:
       return Result[HistoricalSummariesWithProof, string].err("Unknown fork")
 
-  if contextFork > ConsensusFork.Bellatrix:
-    # There is only one version of HistoricalSummaries starting since Capella
+  if contextFork >= ConsensusFork.Electra:
+    # As only the very latest version of the historical_summaries is useful for
+    # the node it doesn't make sense to support older forks for the proofs.
     decodeSsz(data.toOpenArray(4, len(data) - 1), HistoricalSummariesWithProof)
   else:
     Result[HistoricalSummariesWithProof, string].err(
@@ -67,11 +70,9 @@ func decodeSsz*(
 func buildProof*(
     state: ForkedHashedBeaconState
 ): Result[HistoricalSummariesProof, string] =
-  let gIndex = GeneralizedIndex(59) # 31 + 28 = 59
-
   var proof: HistoricalSummariesProof
   withState(state):
-    ?forkyState.data.build_proof(gIndex, proof)
+    ?forkyState.data.build_proof(HISTORICAL_SUMMARIES_GINDEX_ELECTRA, proof)
 
   ok(proof)
 
@@ -80,11 +81,11 @@ func verifyProof*(
     proof: HistoricalSummariesProof,
     stateRoot: Digest,
 ): bool =
-  let
-    gIndex = GeneralizedIndex(59)
-    leave = hash_tree_root(historical_summaries)
+  let leave = hash_tree_root(historical_summaries)
 
-  verify_merkle_multiproof(@[leave], proof, @[gIndex], stateRoot)
+  verify_merkle_multiproof(
+    @[leave], proof, @[HISTORICAL_SUMMARIES_GINDEX_ELECTRA], stateRoot
+  )
 
 func verifyProof*(
     summariesWithProof: HistoricalSummariesWithProof, stateRoot: Digest
