@@ -123,7 +123,7 @@ proc newPayload*(ben: BeaconEngineRef,
                  versionedHashes = Opt.none(seq[Hash32]),
                  beaconRoot = Opt.none(Hash32),
                  executionRequests = Opt.none(seq[seq[byte]])):
-                   Future[PayloadStatusV1] {.async: (raises: [InvalidRequest, RlpError]).} =
+                   Future[PayloadStatusV1] {.async: (raises: [CancelledError, InvalidRequest, RlpError]).} =
 
   trace "Engine API request received",
     meth = "newPayload",

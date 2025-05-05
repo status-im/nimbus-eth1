@@ -524,7 +524,7 @@ proc init*(
     fcuSafe:         fcuSafe)
 
 proc importBlock*(c: ForkedChainRef, blk: Block):
-       Future[Result[void, string]] {.async: (raises: []).} =
+       Future[Result[void, string]] {.async: (raises: [CancelledError]).} =
   ## Try to import block to canonical or side chain.
   ## return error if the block is invalid
   template header(): Header =

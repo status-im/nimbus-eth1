@@ -21,7 +21,7 @@ import
 proc importRlpBlocks*(blocksRlp:seq[byte],
                       chain: ForkedChainRef,
                       finalize: bool):
-                        Future[Result[void, string]] {.async: (raises: []).} =
+                        Future[Result[void, string]] {.async: (raises: [CancelledError]).} =
   var
     # the encoded rlp can contains one or more blocks
     rlp = rlpFromBytes(blocksRlp)
@@ -74,12 +74,12 @@ proc importRlpBlocks*(blocksRlp:seq[byte],
 
 proc importRlpBlocks*(importFile: string,
                      chain: ForkedChainRef,
-                     finalize: bool): Future[Result[void, string]] {.async: (raises: []).} =
+                     finalize: bool): Future[Result[void, string]] {.async: (raises: [CancelledError]).} =
   let bytes = io2.readAllBytes(importFile).valueOr:
     return err($error)
   await importRlpBlocks(bytes, chain, finalize)
 
-proc importRlpBlocks*(conf: NimbusConf, com: CommonRef): Future[void] {.async: (raises: []).} =
+proc importRlpBlocks*(conf: NimbusConf, com: CommonRef): Future[void] {.async: (raises: [CancelledError]).} =
   # Both baseDistance and persistBatchSize are 0,
   # we want changes persisted immediately
   let chain = ForkedChainRef.init(com, baseDistance = 0, persistBatchSize = 0)

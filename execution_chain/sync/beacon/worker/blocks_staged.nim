@@ -327,7 +327,7 @@ proc blocksStagedImport*(
     ctx: BeaconCtxRef;
     info: static[string];
       ): Future[bool]
-      {.async: (raises: []).} =
+      {.async: (raises: [CancelledError]).} =
   ## Import/execute blocks record from staged queue
   ##
   let qItem = ctx.blk.staged.ge(0).valueOr:
