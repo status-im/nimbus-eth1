@@ -1,5 +1,5 @@
 # fluffy
-# Copyright (c) 2023-2024 Status Research & Development GmbH
+# Copyright (c) 2023-2025 Status Research & Development GmbH
 # Licensed and distributed under either of
 #   * MIT license (license terms in the root directory or at https://opensource.org/licenses/MIT).
 #   * Apache v2 license (license terms in the root directory or at https://www.apache.org/licenses/LICENSE-2.0).
@@ -20,24 +20,24 @@ import
 
 suite "Beacon Chain Historical Summaries":
   let
-    cfg = genesisTestRuntimeConfig(ConsensusFork.Capella)
+    cfg = genesisTestRuntimeConfig(ConsensusFork.Electra)
     state = newClone(initGenesisState(cfg = cfg))
   var cache = StateCache()
 
-  var blocks: seq[capella.SignedBeaconBlock]
+  var blocks: seq[electra.SignedBeaconBlock]
   # Note:
   # Adding 8192 blocks. First block is genesis block and not one of these.
   # Then one extra block is needed to get the historical summaries, block
   # roots and state roots processed.
   # index i = 0 is second block.
   # index i = 8190 is 8192th block and last one that is part of the first
-  # historical root
+  # historical summary
   for i in 0 ..< SLOTS_PER_HISTORICAL_ROOT:
-    blocks.add(addTestBlock(state[], cache, cfg = cfg).capellaData)
+    blocks.add(addTestBlock(state[], cache, cfg = cfg).electraData)
 
   test "Historical Summaries Proof":
     withState(state[]):
-      when consensusFork >= ConsensusFork.Capella:
+      when consensusFork >= ConsensusFork.Electra:
         let historical_summaries = forkyState.data.historical_summaries
         let res = buildProof(state[])
         check res.isOk()
