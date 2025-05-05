@@ -197,7 +197,7 @@ proc computeKeyImpl(
     case vtx.vType
     of AccLeaf:
       let vtx = AccLeafRef(vtx)
-      writer.encodeLeaf(vtx.pfx):
+      encodeLeaf(vtx.pfx):
         let
           stoID = vtx.stoID
           skey =
@@ -220,7 +220,7 @@ proc computeKeyImpl(
             else:
               VOID_HASH_KEY
 
-        rlp.encode Account(
+        Account(
           nonce: vtx.account.nonce,
           balance: vtx.account.balance,
           storageRoot: skey.to(Hash32),
@@ -228,9 +228,8 @@ proc computeKeyImpl(
         )
     of StoLeaf:
       let vtx = StoLeafRef(vtx)
-      writer.encodeLeaf(vtx.pfx):
-        # TODO avoid memory allocation when encoding storage data
-        rlp.encode(vtx.stoData)
+      encodeLeaf(vtx.pfx):
+        vtx.stoData
     of Branches:
       # For branches, we need to load the vertices before recursing into them
       # to exploit their on-disk order
@@ -298,10 +297,10 @@ proc computeKeyImpl(
             VOID_HASH_KEY
 
       if vtx.pfx.len > 0: # Extension node
-        key = encodeExt(vtx.pfx):
+        encodeExt(vtx.pfx):
           writeBranch()
       else:
-        key = writeBranch()
+        writeBranch()
 
   # Cache the hash into the same storage layer as the the top-most value that it
   # depends on (recursively) - this could be an ephemeral in-memory layer or the
