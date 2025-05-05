@@ -539,6 +539,15 @@ proc importBlock*(c: ForkedChainRef, blk: Block):
     var parentHash = ?(await c.validateBlock(parentPos[], blk))
 
     while c.quarantine.hasOrphans():
+      const
+        # We cap waiting for an idle slot in case there's a lot of network traffic
+        # taking up all CPU - we don't want to _completely_ stop processing blocks
+        # in this case - doing so also allows us to benefit from more batching /
+        # larger network reads when under load.
+        idleTimeout = 10.milliseconds
+
+      discard await idleAsync().withTimeout(idleTimeout)
+
       let orphan = c.quarantine.popOrphan(parentHash).valueOr:
         break
 
