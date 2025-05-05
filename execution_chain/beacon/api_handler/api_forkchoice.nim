@@ -10,15 +10,17 @@
 import
   std/[typetraits],
   results,
+  chronos,
   eth/common/[headers, hashes, times],
   web3/execution_types,
+  json_rpc/errors,
   chronicles,
   ../../core/tx_pool,
   ../beacon_engine,
   ../web3_eth_conv,
   ./api_utils
 
-{.push gcsafe, raises:[CatchableError].}
+{.push gcsafe, raises:[].}
 
 logScope:
   topics = "beacon engine"
@@ -73,7 +75,8 @@ proc forkchoiceUpdated*(ben: BeaconEngineRef,
                         apiVersion: Version,
                         update: ForkchoiceStateV1,
                         attrsOpt: Opt[PayloadAttributes]):
-                             ForkchoiceUpdatedResponse =
+                          Future[ForkchoiceUpdatedResponse]
+                            {.async: (raises: [InvalidRequest]).} =
   let
     com   = ben.com
     chain = ben.chain
@@ -185,7 +188,7 @@ proc forkchoiceUpdated*(ben: BeaconEngineRef,
       raise invalidForkChoiceState("safe block not in canonical tree")
     # similar to headHash, safeBlockHash is saved by FC module
 
-  chain.forkChoice(headHash, finalizedBlockHash, safeBlockHash).isOkOr:
+  (await chain.forkChoice(headHash, finalizedBlockHash, safeBlockHash)).isOkOr:
     return invalidFCU(error, chain, header)
 
   # If payload generation was requested, create a new block to be potentially

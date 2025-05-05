@@ -264,7 +264,7 @@ proc run(nimbus: NimbusNode, conf: NimbusConf) =
   of NimbusCmd.`import`:
     importBlocks(conf, com)
   of NimbusCmd.`import-rlp`:
-    importRlpBlocks(conf, com)
+    waitFor importRlpBlocks(conf, com)
   else:
     basicServices(nimbus, conf, com)
     manageAccounts(nimbus, conf)
