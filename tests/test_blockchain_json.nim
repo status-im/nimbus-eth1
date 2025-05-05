@@ -12,6 +12,7 @@ import
   std/json,
   unittest2,
   stew/byteutils,
+  chronos,
   ./test_helpers,
   ./test_allowed_to_fail,
   ../execution_chain/db/ledger,
@@ -62,7 +63,7 @@ proc rootExists(db: CoreDbTxRef; root: Hash32): bool =
     return false
   state == root
 
-proc executeCase(node: JsonNode): bool =
+proc executeCase(node: JsonNode): Future[bool] {.async.} =
   let
     env     = parseEnv(node)
     memDB   = newCoreDbRef DefaultDbMemory
@@ -84,7 +85,7 @@ proc executeCase(node: JsonNode): bool =
 
   var lastStateRoot = env.genesisHeader.stateRoot
   for blk in env.blocks:
-    let res = c.importBlock(blk.blk)
+    let res = await c.importBlock(blk.blk)
     if res.isOk:
       if env.lastBlockHash == blk.blk.header.computeBlockHash:
         lastStateRoot = blk.blk.header.stateRoot
@@ -96,7 +97,7 @@ proc executeCase(node: JsonNode): bool =
         debugEcho "A bug? good block rejected: ", res.error
         return false
 
-  c.forkChoice(env.lastBlockHash, env.lastBlockHash).isOkOr:
+  (await c.forkChoice(env.lastBlockHash, env.lastBlockHash)).isOkOr:
     debugEcho error
     return false
 
@@ -116,7 +117,7 @@ proc executeFile(node: JsonNode, testStatusIMPL: var TestStatus) =
   for name, bctCase in node:
     when debugMode:
       debugEcho "TEST NAME: ", name
-    check executeCase(bctCase)
+    check (waitFor executeCase(bctCase))
 
 proc blockchainJsonMain*() =
   const
