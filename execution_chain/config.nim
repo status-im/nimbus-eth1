@@ -552,6 +552,25 @@ type
         defaultValue: false
         name: "debug-store-slot-hashes".}: bool
 
+      usePortal* {.
+        hidden
+        desc: "Use portal network instead of era files"
+        defaultValue: false
+        name: "debug-use-portal".}: bool
+
+      portalWorkers* {.
+        hidden
+        desc: "Amount of Portal workers to use for downloading blocks"
+        defaultValue: 128
+        name: "debug-portal-workers".}: int
+
+      alpha* {.
+        hidden,
+        desc: "The Kademlia concurrency factor",
+        defaultValue: 3,
+        name: "debug-alpha"
+      .}: int
+
     of `import-rlp`:
       blocksFile* {.
         argument

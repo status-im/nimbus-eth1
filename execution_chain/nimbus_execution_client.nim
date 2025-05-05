@@ -262,7 +262,7 @@ proc run(nimbus: NimbusNode, conf: NimbusConf) =
 
   case conf.cmd
   of NimbusCmd.`import`:
-    importBlocks(conf, com)
+    importBlocksPortal(conf, com)
   of NimbusCmd.`import-rlp`:
     importRlpBlocks(conf, com)
   else:
