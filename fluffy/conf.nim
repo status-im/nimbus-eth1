@@ -397,6 +397,13 @@ type
       name: "debug-disable-ban-nodes"
     .}: bool
 
+    radiusCacheSize* {.
+      hidden,
+      desc: "Size of the in memory radius cache.",
+      defaultValue: defaultPortalProtocolConfig.radiusCacheSize,
+      name: "debug-radius-cache-size"
+    .}: int
+
     case cmd* {.command, defaultValue: noCommand.}: PortalCmd
     of noCommand:
       discard

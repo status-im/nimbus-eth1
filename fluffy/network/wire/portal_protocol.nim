@@ -747,7 +747,7 @@ proc new*(
     dataRadius: dbRadius,
     bootstrapRecords: @bootstrapRecords,
     stream: stream,
-    radiusCache: RadiusCache.init(256),
+    radiusCache: RadiusCache.init(config.radiusCacheSize),
     offerQueue: newAsyncQueue[OfferRequest](config.maxConcurrentOffers),
     offerCache:
       OfferCache.init(if config.disableOfferCache: 0 else: config.offerCacheSize),
@@ -1710,9 +1710,16 @@ proc neighborhoodGossip*(
     srcNodeId: Opt[NodeId],
     contentKeys: ContentKeysList,
     content: seq[seq[byte]],
+    enableNodeLookup = false,
 ): Future[int] {.async: (raises: [CancelledError]).} =
   ## Run neighborhood gossip for provided content.
   ## Returns the number of peers to which content was attempted to be gossiped.
+  ## When enableNodeLookup is true then if the local routing table doesn't
+  ## have enough nodes with a radius in range of the content then a node lookup
+  ## is used to find nodes from the network. Note: For this part to work efficiently
+  ## the radius cache should be relatively large (ideally equal to the total number
+  ## of nodes in the network) to reduce the number of pings required to populate
+  ## the cache over time as old content is removed when the cache is full.
   if content.len() == 0:
     return 0
 
@@ -1752,41 +1759,59 @@ proc neighborhoodGossip*(
 
   var gossipNodes: seq[Node]
   for node in closestLocalNodes:
-    let radius = p.radiusCache.get(node.id)
-    if radius.isSome():
-      if p.inRange(node.id, radius.unsafeGet(), contentId):
-        if srcNodeId.isNone:
-          gossipNodes.add(node)
-        elif node.id != srcNodeId.get():
-          gossipNodes.add(node)
+    let radius = p.radiusCache.get(node.id).valueOr:
+      continue
+    if p.inRange(node.id, radius, contentId):
+      if srcNodeId.isNone() or node.id != srcNodeId.get():
+        gossipNodes.add(node)
 
-  if gossipNodes.len >= p.config.maxGossipNodes: # use local nodes for gossip
+  var numberOfGossipedNodes = 0
+
+  if not enableNodeLookup or gossipNodes.len() >= p.config.maxGossipNodes:
+    # use local nodes for gossip
     portal_gossip_without_lookup.inc(labelValues = [$p.protocolId])
-    let numberOfGossipedNodes = min(gossipNodes.len, p.config.maxGossipNodes)
-    for node in gossipNodes[0 ..< numberOfGossipedNodes]:
+
+    for node in gossipNodes:
       let req = OfferRequest(dst: node, kind: Direct, contentList: contentList)
       await p.offerQueue.addLast(req)
-    return numberOfGossipedNodes
+      inc numberOfGossipedNodes
+
+      if numberOfGossipedNodes >= p.config.maxGossipNodes:
+        break
   else: # use looked up nodes for gossip
     portal_gossip_with_lookup.inc(labelValues = [$p.protocolId])
+
     let closestNodes = await p.lookup(NodeId(contentId))
-    let numberOfGossipedNodes = min(closestNodes.len, p.config.maxGossipNodes)
-    for node in closestNodes[0 ..< numberOfGossipedNodes]:
-      # Note: opportunistically not checking if the radius of the node is known
-      # and thus if the node is in radius with the content. Reason is, these
-      # should really be the closest nodes in the DHT, and thus are most likely
-      # going to be in range of the requested content.
-      let req = OfferRequest(dst: node, kind: Direct, contentList: contentList)
-      await p.offerQueue.addLast(req)
-    return numberOfGossipedNodes
+
+    for node in closestNodes:
+      if p.radiusCache.get(node.id).isNone():
+        # Send ping to add the node to the radius cache
+        (await p.ping(node)).isOkOr:
+          continue
+
+      let radius = p.radiusCache.get(node.id).valueOr:
+        # Should only happen if the ping fails, so just skip the node in this case
+        continue
+
+      # Only send offers to nodes for which the content is in range of their radius
+      if p.inRange(node.id, radius, contentId):
+        let req = OfferRequest(dst: node, kind: Direct, contentList: contentList)
+        await p.offerQueue.addLast(req)
+        inc numberOfGossipedNodes
+
+      if numberOfGossipedNodes >= p.config.maxGossipNodes:
+        break
+
+  return numberOfGossipedNodes
 
 proc neighborhoodGossipDiscardPeers*(
     p: PortalProtocol,
     srcNodeId: Opt[NodeId],
     contentKeys: ContentKeysList,
     content: seq[seq[byte]],
+    enableNodeLookup = false,
 ): Future[void] {.async: (raises: [CancelledError]).} =
-  discard await p.neighborhoodGossip(srcNodeId, contentKeys, content)
+  discard await p.neighborhoodGossip(srcNodeId, contentKeys, content, enableNodeLookup)
 
 proc randomGossip*(
     p: PortalProtocol,
