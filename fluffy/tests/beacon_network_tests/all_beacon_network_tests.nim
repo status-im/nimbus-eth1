@@ -11,7 +11,6 @@ import
   ./test_beacon_content,
   ./test_beacon_historical_roots,
   ./test_beacon_historical_summaries,
-  # TODO: enable again after implementing for Electra.
-  # ./test_beacon_historical_summaries_vectors,
+  ./test_beacon_historical_summaries_vectors,
   ./test_beacon_network,
   ./test_beacon_light_client
