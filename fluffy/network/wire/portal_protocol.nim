@@ -1714,6 +1714,12 @@ proc neighborhoodGossip*(
 ): Future[int] {.async: (raises: [CancelledError]).} =
   ## Run neighborhood gossip for provided content.
   ## Returns the number of peers to which content was attempted to be gossiped.
+  ## When enableNodeLookup is true then if the local routing table doesn't
+  ## have enough nodes with a radius in range of the content then a node lookup
+  ## is used to find nodes from the network. Note: For this part to work efficiently
+  ## the radius cache should be relatively large (ideally equal to the total number
+  ## of nodes in the network) to reduce the number of pings required to populate
+  ## the cache over time as old content is removed when the cache is full.
   if content.len() == 0:
     return 0
 
