@@ -56,12 +56,6 @@
 ##   the `FC` module, the header append process must be finished by a dedicated
 ##   commit statement `commit()`.
 ##
-## Temporary extra:
-##
-## * There is a function provided combining `importBlocks()` and `forkChoice()`
-##   as a wrapper around `importBlock()` followed by occasional update of the
-##   base value of the `FC` module proper using `forkChoice()`.
-##
 
 {.push raises:[].}
 
@@ -73,7 +67,8 @@ import
   "../.."/[common, db/core_db, db/storage_types],
   ../../db/[kvt, kvt_cf],
   ../../db/kvt/[kvt_utils, kvt_tx_frame],
-  ./forked_chain/[chain_branch, chain_desc, block_quarantine], ./forked_chain
+  ./forked_chain,
+  ./forked_chain/[chain_branch, chain_desc, block_quarantine]
 
 logScope:
   topics = "hc-cache"
@@ -191,13 +186,21 @@ proc delInfo(db: KvtTxRef) =
 
 
 proc putHeader(db: KvtTxRef; h: Header) =
-  ## Store rlp encoded header
+  ## Store the argument `header` indexed by block number, and the hash lookup
+  ## of the parent header.
   let data = encodePayload(h)
   db.put(beaconHeaderKey(h.number).toOpenArray, data).isOkOr:
     raiseAssert RaisePfx & "put(header) failed: " & $error
 
-  db.put(genericHashKey(h.parentHash).toOpenArray, (h.number-1).toBytesBE).isOkOr:
-    raiseAssert RaisePfx & "put(hash->number) failed: " & $error
+  let parNumData = (h.number-1).toBytesBE
+  db.put(genericHashKey(h.parentHash).toOpenArray, parNumData).isOkOr:
+    raiseAssert RaisePfx & "put(number-1) failed: " & $error
+
+
+proc getNumber(db: KvtTxRef, hash: Hash32): Opt[BlockNumber] =
+  let number = db.get(genericHashKey(hash).toOpenArray).valueOr:
+    return err()
+  ok(uint64.fromBytesBE(number))
 
 proc getHeader(db: KvtTxRef; bn: BlockNumber): Opt[Header] =
   ## Retrieve some header from cache
@@ -205,17 +208,17 @@ proc getHeader(db: KvtTxRef; bn: BlockNumber): Opt[Header] =
     return err()
   ok decodePayload(data, Header)
 
+proc getHeader(db: KvtTxRef; hash: Hash32): Opt[Header] =
+  ## Variant of `getHeader()`
+  db.getHeader ?db.getNumber(hash)
+
+
 proc delHeader(db: KvtTxRef; bn: BlockNumber) =
   ## Remove header from cache
   let h = db.getHeader(bn).valueOr:
     raiseAssert RaisePfx & "getHeader failed"
   discard db.del(beaconHeaderKey(bn).toOpenArray)
   discard db.del(genericHashKey(h.parentHash).toOpenArray)
-
-proc getNumber(db: KvtTxRef, hash: Hash32): Opt[BlockNumber] =
-  let number = db.get(genericHashKey(hash).toOpenArray).valueOr:
-    return err()
-  ok(uint64.fromBytesBE(number))
 
 # ----------------------
 
@@ -240,10 +243,6 @@ proc persistClear(hc: HeaderChainRef) =
 # ------------------------------------------------------------------------------
 # Private functions
 # ------------------------------------------------------------------------------
-
-func baseNum(hc: HeaderChainRef): BlockNumber =
-  ## Aka `hc.chain.baseNumber()` (avoiding `forked_chain` import)
-  hc.chain.baseBranch.tailNumber
 
 func expectingMode(
     hc: HeaderChainRef;
@@ -273,7 +272,7 @@ proc tryFcParent(hc: HeaderChainRef; hdr: Header): HeaderChainMode =
 
   # Ignore `hdr` unless its block number equals the one of the base (note
   # that this function is called with decreasing block numbers.)
-  let baseNum = hc.baseNum()
+  let baseNum = hc.chain.baseNumber()
   if baseNum + 1 < hdr.number:
     return collecting                          # inconclusive
 
@@ -334,7 +333,9 @@ proc resolveFinHash(hc: HeaderChainRef, f: Hash32) =
     return
 
   if hc.chain.tryUpdatePendingFCU(f, number):
-    debug "PendingFCU resolved to block number", hash = f.short, number = number.bnStr
+    debug "PendingFCU resolved to block number",
+      hash = f.short,
+      number = number.bnStr
 
 proc headUpdateFromCL(hc: HeaderChainRef; h: Header; f: Hash32) =
   ## Call back function to register new/prevously-unknown FC updates.
@@ -343,7 +344,7 @@ proc headUpdateFromCL(hc: HeaderChainRef; h: Header; f: Hash32) =
   ## client app.
   ##
   if f != zeroHash32 and                            # finalised hash is set
-     hc.baseNum + 1 < h.number:                     # otherwise useless
+     hc.chain.baseNumber() + 1 < h.number:          # otherwise useless
 
     if hc.session.mode == closed:
       # Set new session environment
@@ -497,8 +498,8 @@ proc put*(
     return ok()                                    # nothing to do
 
   debug "HC updated",
-    minNum=rev[^1].number,
-    maxNum=rev[0].number,
+    minNum=rev[^1].bnStr,
+    maxNum=rev[0].bnStr,
     numHeaders=rev.len
 
   # Check whether argument list closes up to headers chain
@@ -555,7 +556,7 @@ proc put*(
         if hc.chain.tryUpdatePendingFCU(hash, hdr.number):
           debug "PendingFCU resolved to block number",
             hash=hash.short,
-            number=hdr.number.bnStr
+            number=hdr.bnStr
 
       # Check whether `hdr` has a parent on the `FC` module.
       let newMode = hc.tryFcParent(hdr)
@@ -594,7 +595,7 @@ proc commit*(hc: HeaderChainRef): Result[void,string] =
     hc.session.mode = locked                          # update internal state
     return ok()
 
-  let baseNum = hc.baseNum
+  let baseNum = hc.chain.baseNumber()
   if baseNum < hc.chain.latestFinalizedBlockNumber:
     #
     # So the `finalised` hash was resolved (otherwise it would have a zero
