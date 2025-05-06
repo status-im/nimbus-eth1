@@ -115,7 +115,7 @@ proc runTicker*(ctx: BeaconCtxRef; info: static[string]) =
 proc runDaemon*(
     ctx: BeaconCtxRef;
     info: static[string];
-      ) {.async: (raises: []).} =
+      ) {.async: (raises: [CancelledError]).} =
   ## Global background job that will be re-started as long as the variable
   ## `ctx.daemon` is set `true` which corresponds to `ctx.hibernating` set
   ## to false`.

@@ -13,14 +13,15 @@ import
   chronicles,
   eth/rlp,
   stew/io2,
+  chronos,
   ./chain,
   ../config,
   ../utils/utils
 
-proc importRlpBlocks*(blocksRlp: openArray[byte],
+proc importRlpBlocks*(blocksRlp:seq[byte],
                       chain: ForkedChainRef,
                       finalize: bool):
-                        Result[void, string] =
+                        Future[Result[void, string]] {.async: (raises: [CancelledError]).} =
   var
     # the encoded rlp can contains one or more blocks
     rlp = rlpFromBytes(blocksRlp)
@@ -56,39 +57,39 @@ proc importRlpBlocks*(blocksRlp: openArray[byte],
         number=blk.header.number
       printBanner = true
 
-    let res = chain.importBlock(blk)
+    let res = await chain.importBlock(blk)
     if res.isErr:
       error "Error occured when importing block",
         hash=blk.header.blockHash.short,
         number=blk.header.number,
         msg=res.error
       if finalize:
-        ? chain.forkChoice(chain.latestHash, chain.latestHash)
+        ? (await chain.forkChoice(chain.latestHash, chain.latestHash))
       return res
 
   if finalize:
-    ? chain.forkChoice(chain.latestHash, chain.latestHash)
+    ? (await chain.forkChoice(chain.latestHash, chain.latestHash))
 
   ok()
 
 proc importRlpBlocks*(importFile: string,
                      chain: ForkedChainRef,
-                     finalize: bool): Result[void, string] =
+                     finalize: bool): Future[Result[void, string]] {.async: (raises: [CancelledError]).} =
   let bytes = io2.readAllBytes(importFile).valueOr:
     return err($error)
-  importRlpBlocks(bytes, chain, finalize)
+  await importRlpBlocks(bytes, chain, finalize)
 
-proc importRlpBlocks*(conf: NimbusConf, com: CommonRef) =
+proc importRlpBlocks*(conf: NimbusConf, com: CommonRef): Future[void] {.async: (raises: [CancelledError]).} =
   # Both baseDistance and persistBatchSize are 0,
   # we want changes persisted immediately
   let chain = ForkedChainRef.init(com, baseDistance = 0, persistBatchSize = 0)
 
   # success or not, we quit after importing blocks
   for i, blocksFile in conf.blocksFile:
-    importRlpBlocks(string blocksFile, chain, i == conf.blocksFile.len-1).isOkOr:
+    (await importRlpBlocks(string blocksFile, chain, i == conf.blocksFile.len-1)).isOkOr:
       warn "Error when importing blocks", msg=error
       # Finalize the existing chain in case of rlp read error
-      chain.forkChoice(chain.latestHash, chain.latestHash).isOkOr:
+      (await chain.forkChoice(chain.latestHash, chain.latestHash)).isOkOr:
         error "Error when finalizing chain", msg=error
       quit(QuitFailure)
 

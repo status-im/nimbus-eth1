@@ -208,7 +208,7 @@ proc terminate[S,W](dsc: RunnerSyncRef[S,W]) {.async.} =
     dsc.runCtrl = terminated
 
 
-proc daemonLoop[S,W](dsc: RunnerSyncRef[S,W]) {.async: (raises: []).} =
+proc daemonLoop[S,W](dsc: RunnerSyncRef[S,W]) {.async: (raises: [CancelledError]).} =
   mixin runDaemon
 
   if dsc.ctx.daemon and dsc.runCtrl == running:

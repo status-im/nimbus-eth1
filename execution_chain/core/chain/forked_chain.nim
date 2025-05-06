@@ -13,6 +13,7 @@
 import
   chronicles,
   results,
+  chronos,
   std/[tables, algorithm],
   ../../common,
   ../../db/[core_db, fcu_db],
@@ -45,7 +46,8 @@ const
 # Forward declarations
 # ------------------------------------------------------------------------------
 
-proc updateBase(c: ForkedChainRef, newBase: BlockPos) {.gcsafe.}
+proc updateBase(c: ForkedChainRef, newBase: BlockPos):
+  Future[void] {.async: (raises: []), gcsafe.}
 func calculateNewBase(c: ForkedChainRef;
        finalizedNumber: uint64; head: BlockPos): BlockPos {.gcsafe.}
 
@@ -82,7 +84,8 @@ proc fcuSetHead(c: ForkedChainRef,
 
 proc validateBlock(c: ForkedChainRef,
           parent: BlockPos,
-          blk: Block): Result[Hash32, string] =
+          blk: Block): Future[Result[Hash32, string]]
+            {.async: (raises: []).} =
   let blkHash = blk.header.computeBlockHash
 
   if c.hashToBlock.hasKey(blkHash):
@@ -141,7 +144,7 @@ proc validateBlock(c: ForkedChainRef,
       newBaseCandidate = c.calculateNewBase(c.latestFinalizedBlockNumber, head)
       prevBaseNumber = c.baseBranch.tailNumber
 
-    c.updateBase(newBaseCandidate)
+    await c.updateBase(newBaseCandidate)
 
     # If on disk head behind base, move it to base too.
     let newBaseNumber = c.baseBranch.tailNumber
@@ -370,7 +373,8 @@ proc updateFinalized(c: ForkedChainRef, finalized: BlockPos) =
   let txFrame = finalized.txFrame
   txFrame.fcuFinalized(finalized.hash, finalized.number).expect("fcuFinalized OK")
 
-proc updateBase(c: ForkedChainRef, newBase: BlockPos) =
+proc updateBase(c: ForkedChainRef, newBase: BlockPos):
+  Future[void] {.async: (raises: []), gcsafe.} =
   ##
   ##     A1 - A2 - A3          D5 - D6
   ##    /                     /
@@ -519,7 +523,8 @@ proc init*(
     fcuHead:         fcuHead,
     fcuSafe:         fcuSafe)
 
-proc importBlock*(c: ForkedChainRef, blk: Block): Result[void, string] =
+proc importBlock*(c: ForkedChainRef, blk: Block):
+       Future[Result[void, string]] {.async: (raises: [CancelledError]).} =
   ## Try to import block to canonical or side chain.
   ## return error if the block is invalid
   template header(): Header =
@@ -531,15 +536,23 @@ proc importBlock*(c: ForkedChainRef, blk: Block): Result[void, string] =
     # We need to persist some of the in-memory stuff
     # to a "staging area" or disk-backed memory but it must not afect `base`.
     # `base` is the point of no return, we only update it on finality.
-
-    var parentHash = ?c.validateBlock(parentPos[], blk)
+    var parentHash = ?(await c.validateBlock(parentPos[], blk))
 
     while c.quarantine.hasOrphans():
+      const
+        # We cap waiting for an idle slot in case there's a lot of network traffic
+        # taking up all CPU - we don't want to _completely_ stop processing blocks
+        # in this case - doing so also allows us to benefit from more batching /
+        # larger network reads when under load.
+        idleTimeout = 10.milliseconds
+
+      discard await idleAsync().withTimeout(idleTimeout)
+
       let orphan = c.quarantine.popOrphan(parentHash).valueOr:
         break
 
       c.hashToBlock.withValue(parentHash, parentCandidatePos) do:
-        parentHash = c.validateBlock(parentCandidatePos[], orphan).valueOr:
+        parentHash = (await c.validateBlock(parentCandidatePos[], orphan)).valueOr:
           # Silent?
           # We don't return error here because the import is still ok()
           # but the quarantined blocks may not linked
@@ -564,7 +577,9 @@ proc importBlock*(c: ForkedChainRef, blk: Block): Result[void, string] =
 proc forkChoice*(c: ForkedChainRef,
                  headHash: Hash32,
                  finalizedHash: Hash32,
-                 safeHash: Hash32 = zeroHash32): Result[void, string] =
+                 safeHash: Hash32 = zeroHash32):
+                    Future[Result[void, string]]
+                      {.async: (raises: []).} =
 
   if finalizedHash != zeroHash32:
     c.pendingFCU = finalizedHash
@@ -615,7 +630,7 @@ proc forkChoice*(c: ForkedChainRef,
   # and possibly switched to other chain beside the one with head.
   doAssert(finalizedNumber <= head.number)
   doAssert(newBaseNumber <= finalizedNumber)
-  c.updateBase(newBase)
+  await c.updateBase(newBase)
 
   ok()
 
