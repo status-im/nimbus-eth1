@@ -656,10 +656,6 @@ func latestConsHeadNumber*(hc: HeaderChainRef): BlockNumber =
   ##
   hc.session.consHeadNum
 
-func latestNum*(hc: HeaderChainRef): BlockNumber =
-  ## Aka `hc.chain.latestNumber()` (avoiding `forked_chain` import)
-  hc.chain.activeBranch.headNumber
-
 # ------------------------------------------------------------------------------
 # Public debugging helpers
 # ------------------------------------------------------------------------------
