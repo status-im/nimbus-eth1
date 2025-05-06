@@ -17,7 +17,7 @@ import
   ../network/history/[history_network, history_content],
   ../network/state/[state_network, state_content, state_endpoints],
   ../network/beacon/beacon_light_client,
-  ../evm/[async_evm, async_evm_portal_backend],
+  ../evm/async_evm,
   ../version
 
 from ../../execution_chain/errors import ValidationError
@@ -137,13 +137,8 @@ proc installEthApiHandlers*(
     historyNetwork: Opt[HistoryNetwork],
     beaconLightClient: Opt[LightClient],
     stateNetwork: Opt[StateNetwork],
+    asyncEvm: Opt[AsyncEvm],
 ) =
-  let asyncEvm =
-    if stateNetwork.isSome():
-      Opt.some(AsyncEvm.init(stateNetwork.get().toAsyncEvmStateBackend()))
-    else:
-      Opt.none(AsyncEvm)
-
   rpcServer.rpc("web3_clientVersion") do() -> string:
     return clientVersion
 

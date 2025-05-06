@@ -83,12 +83,11 @@ func txRecords*(c: ForkedChainRef): var Table[Hash32, (Hash32, uint64)] =
   ## Avoid clash with `forked_chain.txRecords()`
   c.txRecords
 
-func notifyBlockHashAndNumber*(c: ForkedChainRef,
-                               blockHash: Hash32,
-                               blockNumber: uint64) =
-  ## Syncer will tell FC a block have been downloaded,
-  ## please check if it's useful for you.
-  if blockHash == c.pendingFCU:
-    c.latestFinalizedBlockNumber = blockNumber
+func tryUpdatePendingFCU*(c: ForkedChainRef, finHash: Hash32, number: uint64): bool =
+  if number > c.latestFinalizedBlockNumber:
+    c.latestFinalizedBlockNumber = number
+    c.pendingFCU = finHash
+    return true
+  false
 
 # End

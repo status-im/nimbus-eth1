@@ -27,7 +27,7 @@ func bdyErrors*(buddy: BeaconBuddyRef): string =
 proc fetchRegisterError*(buddy: BeaconBuddyRef) =
   buddy.only.nBdyRespErrors.inc
   if fetchBodiesReqErrThresholdCount < buddy.only.nBdyRespErrors:
-    buddy.ctrl.zombie = true # abandon slow peer
+    buddy.ctrl.zombie = buddy.infectedByTVirus # abandon slow peer
 
 proc bodiesFetch*(
     buddy: BeaconBuddyRef;

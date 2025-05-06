@@ -1,4 +1,4 @@
-# Protocol Interoperability Testing
+# Protocol interoperability testing
 This document shows a set of commands that can be used to test the individual
 protocol messages per network (Discovery v5 and Portal networks), e.g. to test
 client protocol interoperability.
@@ -19,7 +19,7 @@ Next run it with the JSON-RPC server enabled:
 ./build/fluffy --rpc --rpc-api:portal,discovery --bootstrap-node:enr:<base64 encoding of ENR>
 ```
 
-### Testing Discovery v5 Layer
+### Testing Discovery v5 layer
 Testing the Discovery v5 protocol messages:
 
 ```bash
@@ -38,7 +38,7 @@ curl -s -X POST -H 'Content-Type: application/json' -d '{"jsonrpc":"2.0","id":"1
 curl -s -X POST -H 'Content-Type: application/json' -d '{"jsonrpc":"2.0","id":"1","method":"discv5_routingTableInfo","params":[]}' http://localhost:8545 | jq
 ```
 
-### Testing Portal Networks Layer
+### Testing Portal Networks layer
 Testing the Portal wire protocol messages:
 
 ```bash
@@ -62,7 +62,7 @@ curl -s -X POST -H 'Content-Type: application/json' -d '{"jsonrpc":"2.0","id":"1
 
 ## Test Discovery and Portal Wire protocol messages with cli tools
 
-### Testing Discovery v5 Layer: dcli
+### Testing Discovery v5 layer: dcli
 
 ```bash
 # Build dcli from nim-eth vendor module
@@ -87,7 +87,7 @@ e.g.:
 > Each `dcli` run will default generate a new network key and thus a new node id
 and ENR.
 
-### Testing Portal Networks Layer: portalcli
+### Testing Portal Networks layer: portalcli
 
 ```bash
 # Build portalcli

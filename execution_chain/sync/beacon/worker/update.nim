@@ -52,7 +52,8 @@ proc startHibernating(ctx: BeaconCtxRef; info: static[string]) =
   ctx.hibernate = true
 
   info "Suspending syncer", base=ctx.chain.baseNumber.bnStr,
-    head=ctx.chain.latestNumber.bnStr
+    head=ctx.chain.latestNumber.bnStr,
+    nSyncPeers=ctx.pool.nBuddies
 
 
 proc commitCollectHeaders(ctx: BeaconCtxRef; info: static[string]): bool =
@@ -231,7 +232,8 @@ proc updateFromHibernateSetTarget*(
       ctx.headersUnprocSet(b+1, t-1)
 
       info "Activating syncer", base=b.bnStr,
-        head=ctx.chain.latestNumber.bnStr, target=t.bnStr
+        head=ctx.chain.latestNumber.bnStr, target=t.bnStr,
+        nSyncPeers=ctx.pool.nBuddies
       return
 
     # Failed somewhere on the way

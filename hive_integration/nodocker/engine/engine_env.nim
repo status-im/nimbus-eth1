@@ -108,7 +108,7 @@ proc newEngineEnv*(conf: var NimbusConf, chainFile: string, enableAuth: bool): E
   #setupDebugRpc(com, txPool, server)
 
   if chainFile.len > 0:
-    importRlpBlocks(chainFolder / chainFile, chain, true).isOkOr:
+    (waitFor importRlpBlocks(chainFolder / chainFile, chain, true)).isOkOr:
       echo "Failed to import RLP blocks: ", error
       quit(QuitFailure)
 

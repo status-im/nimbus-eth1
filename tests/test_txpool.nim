@@ -13,6 +13,7 @@ import
   eth/common/keys,
   results,
   unittest2,
+  chronos,
   ../hive_integration/nodocker/engine/tx_sender,
   ../hive_integration/nodocker/engine/cancun/blobs,
   ../execution_chain/db/ledger,
@@ -137,7 +138,7 @@ template checkAssembleBlock(xp, expCount): auto =
   rc.get
 
 template checkImportBlock(xp: TxPoolRef, bundle: AssembledBlock) =
-  let rc = xp.chain.importBlock(bundle.blk)
+  let rc = waitFor xp.chain.importBlock(bundle.blk)
   check rc.isOk == true
   if rc.isErr:
     debugEcho "IMPORT BLOCK: ", rc.error
@@ -356,7 +357,7 @@ proc txPoolMain*() =
 
         numTxsPacked += bundle.blk.transactions.len
 
-        chain.importBlock(bundle.blk).isOkOr:
+        (waitFor chain.importBlock(bundle.blk)).isOkOr:
           check false
           debugEcho error
           return
@@ -565,7 +566,7 @@ proc txPoolMain*() =
 
       xp.checkImportBlock(3, 0)
       let latestHash = chain.latestHash
-      check env.chain.forkChoice(latestHash, latestHash).isOk
+      check (waitFor env.chain.forkChoice(latestHash, latestHash)).isOk
 
       let hs = [
         computeRlpHash(tx1),

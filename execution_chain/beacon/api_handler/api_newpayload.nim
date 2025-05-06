@@ -10,21 +10,23 @@
 import
   results,
   chronicles,
+  chronos,
   eth/common/hashes,
   web3/[execution_types, primitives],
+  json_rpc/errors,
   ../../core/tx_pool,
   ../web3_eth_conv,
   ../beacon_engine,
   ../payload_conv,
   ./api_utils
 
-{.push gcsafe, raises:[CatchableError].}
+{.push gcsafe, raises:[].}
 
 logScope:
   topics = "beacon engine"
 
 func validateVersionedHashed(payload: ExecutionPayload,
-                              expected: openArray[Hash32]): bool  =
+                              expected: openArray[Hash32]): bool {.raises: [RlpError].} =
   var versionedHashes: seq[VersionedHash]
   for x in payload.transactions:
     let tx = rlp.decode(distinctBase(x), Transaction)
@@ -88,8 +90,9 @@ template validatePayload(apiVersion, payloadVersion, payload) =
         "excessBlobGas is expected from execution payload")
 
 # https://github.com/ethereum/execution-apis/blob/40088597b8b4f48c45184da002e27ffc3c37641f/src/engine/prague.md#request
-template validateExecutionRequest(blockHash: Hash32,
-            requests: openArray[seq[byte]], apiVersion: Version) =
+func validateExecutionRequest(blockHash: Hash32,
+            requests: openArray[seq[byte]], apiVersion: Version):
+              Opt[PayloadStatusV1] {.raises: [InvalidRequest].} =
   var previousRequestType = -1
   for request in requests:
     if request.len == 0:
@@ -109,17 +112,18 @@ template validateExecutionRequest(blockHash: Hash32,
        DEPOSIT_REQUEST_TYPE,
        WITHDRAWAL_REQUEST_TYPE,
        CONSOLIDATION_REQUEST_TYPE]:
-      return invalidStatus(blockHash, "Invalid execution request type" & $requestType)
+      return Opt.some(invalidStatus(blockHash, "Invalid execution request type" & $requestType))
 
     previousRequestType = requestType.int
-
+  err()
 
 proc newPayload*(ben: BeaconEngineRef,
                  apiVersion: Version,
                  payload: ExecutionPayload,
                  versionedHashes = Opt.none(seq[Hash32]),
                  beaconRoot = Opt.none(Hash32),
-                 executionRequests = Opt.none(seq[seq[byte]])): PayloadStatusV1 =
+                 executionRequests = Opt.none(seq[seq[byte]])):
+                   Future[PayloadStatusV1] {.async: (raises: [CancelledError, InvalidRequest, RlpError]).} =
 
   trace "Engine API request received",
     meth = "newPayload",
@@ -135,7 +139,9 @@ proc newPayload*(ben: BeaconEngineRef,
       raise invalidParams("newPayload" & $apiVersion &
         ": executionRequests is expected from execution payload")
 
-    validateExecutionRequest(payload.blockHash, executionRequests.value, apiVersion)
+    let res = validateExecutionRequest(payload.blockHash, executionRequests.value, apiVersion)
+    if res.isSome:
+      return res.value
 
   let
     com = ben.com
@@ -227,7 +233,7 @@ proc newPayload*(ben: BeaconEngineRef,
   trace "Importing block without sethead",
     hash = blockHash, number = header.number
 
-  let vres = chain.importBlock(blk, finalized = false)
+  let vres = await chain.importBlock(blk, finalized = false)
   if vres.isErr:
     warn "Error importing block",
       number = header.number,

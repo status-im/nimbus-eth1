@@ -12,7 +12,7 @@ import
   chronicles,
   web3/[eth_api_types, conversions],
   ../network/state/state_endpoints,
-  ../evm/[async_evm, async_evm_portal_backend]
+  ../evm/async_evm
 
 template getOrRaise(stateNetwork: Opt[StateNetwork]): StateNetwork =
   let sn = stateNetwork.valueOr:
@@ -25,13 +25,9 @@ template getOrRaise(asyncEvm: Opt[AsyncEvm]): AsyncEvm =
       newException(ValueError, "portal evm requires state sub-network to be enabled")
   evm
 
-proc installDebugApiHandlers*(rpcServer: RpcServer, stateNetwork: Opt[StateNetwork]) =
-  let asyncEvm =
-    if stateNetwork.isSome():
-      Opt.some(AsyncEvm.init(stateNetwork.get().toAsyncEvmStateBackend()))
-    else:
-      Opt.none(AsyncEvm)
-
+proc installDebugApiHandlers*(
+    rpcServer: RpcServer, stateNetwork: Opt[StateNetwork], asyncEvm: Opt[AsyncEvm]
+) =
   rpcServer.rpc("debug_getBalanceByStateRoot") do(
     address: Address, stateRoot: Hash32
   ) -> UInt256:

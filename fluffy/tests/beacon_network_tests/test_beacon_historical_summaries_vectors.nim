@@ -1,5 +1,5 @@
 # fluffy
-# Copyright (c) 2024 Status Research & Development GmbH
+# Copyright (c) 2024-2025 Status Research & Development GmbH
 # Licensed and distributed under either of
 #   * MIT license (license terms in the root directory or at https://opensource.org/licenses/MIT).
 #   * Apache v2 license (license terms in the root directory or at https://www.apache.org/licenses/LICENSE-2.0).
@@ -16,17 +16,20 @@ import
   ../../network/beacon/[beacon_chain_historical_summaries, beacon_content],
   ../../eth_data/yaml_utils
 
+from stew/bitops2 import log2trunc
+
 type YamlHistoricalSummariesWithProof* = object
   content_key*: string
   content_value*: string
   beacon_state_root*: string
   historical_summaries_root*: string
-  historical_summaries_state_proof*: array[5, string]
+  historical_summaries_state_proof*:
+    array[log2trunc(HISTORICAL_SUMMARIES_GINDEX_ELECTRA), string]
   epoch*: uint64
 
 suite "Beacon Chain Historical Summaries With Proof - Test Vectors":
   const testVectorDir =
-    "./vendor/portal-spec-tests/tests/mainnet/beacon_chain/historical_summaries_with_proof/deneb/"
+    "./vendor/portal-spec-tests/tests/mainnet/beacon_chain/historical_summaries_with_proof/electra/"
 
   let
     metadata = getMetadataForNetwork("mainnet")

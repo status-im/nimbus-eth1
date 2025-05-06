@@ -7,9 +7,12 @@
 # This file may not be copied, modified, or distributed except according to
 # those terms.
 
+{.push raises: [].}
+
 import
-  std/[sequtils, os],
+  std/[sequtils, os, strformat],
   chronicles,
+  chronos/timer,
   ../execution_chain/constants,
   ../execution_chain/core/chain,
   ../execution_chain/core/lazy_kzg,
@@ -28,6 +31,16 @@ import
   eth/async_utils
 
 var running* {.volatile.} = true
+
+func f(value: float): string =
+  if value >= 1000:
+    &"{int(value)}"
+  elif value >= 100:
+    &"{value:4.1f}"
+  elif value >= 10:
+    &"{value:4.2f}"
+  else:
+    &"{value:4.3f}"
 
 # Load the EL block, from CL ( either head or CL root )
 template getCLBlockFromBeaconChain(
@@ -192,6 +205,30 @@ proc syncToEngineApi(conf: NRpcConf) {.async.} =
     finalizedHash = Eth2Digest.fromHex("0x00")
     headHash: Eth2Digest
 
+    # Required for progress tracker
+    time = Moment.now()
+    progressTrackedHead = currentBlockNumber
+
+  template estimateProgressForSync() =
+    let 
+      blocks = int(currentBlockNumber - progressTrackedHead)
+      curTime = Moment.now()
+      diff = curTime - time
+      diffSecs = diff.nanoseconds().float / 1000000000
+      targetBlkNum = headBlck.header.number
+      distance = targetBlkNum - currentBlockNumber
+      estimatedTime = (diff*int(distance)).div(blocks)
+
+    notice "Estimated Progress",
+      remainingBlocks = distance,
+      targetBlockNumber = targetBlkNum,
+      bps = f(blocks.float / diffSecs),
+      timeToSync = toString(estimatedTime, 2)
+
+    #reset
+    time = Moment.now()
+    progressTrackedHead = currentBlockNumber
+
   template sendFCU(clblk: ForkedSignedBeaconBlock) =
     withBlck(clblk):
       let
@@ -223,6 +260,8 @@ proc syncToEngineApi(conf: NRpcConf) {.async.} =
       else:
         info "forkchoiceUpdated Request sent",
           response = fcuResponse.payloadStatus.status
+
+    estimateProgressForSync()
 
   while running and currentBlockNumber < headBlck.header.number:
     var isAvailable = false

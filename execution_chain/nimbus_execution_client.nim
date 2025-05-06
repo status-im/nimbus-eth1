@@ -42,9 +42,11 @@ proc basicServices(nimbus: NimbusNode,
                    conf: NimbusConf,
                    com: CommonRef) =
   # Setup the chain
-  let fc = ForkedChainRef.init(com, eagerStateRoot = conf.eagerStateRootCheck)
+  let fc = ForkedChainRef.init(com,
+    eagerStateRoot = conf.eagerStateRootCheck,
+    persistBatchSize=conf.persistBatchSize)
   fc.deserialize().isOkOr:
-    warn "FC.deserialize", msg=error
+    warn "Loading block DAG from database", msg=error
 
   nimbus.fc = fc
   # Setup history expiry and portal
@@ -264,7 +266,7 @@ proc run(nimbus: NimbusNode, conf: NimbusConf) =
   of NimbusCmd.`import`:
     importBlocks(conf, com)
   of NimbusCmd.`import-rlp`:
-    importRlpBlocks(conf, com)
+    waitFor importRlpBlocks(conf, com)
   else:
     basicServices(nimbus, conf, com)
     manageAccounts(nimbus, conf)

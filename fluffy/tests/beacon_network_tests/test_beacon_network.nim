@@ -1,5 +1,5 @@
 # fluffy
-# Copyright (c) 2022-2024 Status Research & Development GmbH
+# Copyright (c) 2022-2025 Status Research & Development GmbH
 # Licensed and distributed under either of
 #   * MIT license (license terms in the root directory or at https://opensource.org/licenses/MIT).
 #   * Apache v2 license (license terms in the root directory or at https://www.apache.org/licenses/LICENSE-2.0).
@@ -189,14 +189,14 @@ procSuite "Beacon Network":
 
   asyncTest "Get HistoricalSummaries":
     let
-      cfg = genesisTestRuntimeConfig(ConsensusFork.Capella)
+      cfg = genesisTestRuntimeConfig(ConsensusFork.Electra)
       state = newClone(initGenesisState(cfg = cfg))
       networkData = loadNetworkData("mainnet")
       forkDigests = (newClone networkData.forks)[]
 
     var cache = StateCache()
 
-    var blocks: seq[capella.SignedBeaconBlock]
+    var blocks: seq[electra.SignedBeaconBlock]
     # Note:
     # Adding 8192 blocks. First block is genesis block and not one of these.
     # Then one extra block is needed to get the historical summaries, block
@@ -205,10 +205,10 @@ procSuite "Beacon Network":
     # index i = 8190 is 8192th block and last one that is part of the first
     # historical root
     for i in 0 ..< SLOTS_PER_HISTORICAL_ROOT:
-      blocks.add(addTestBlock(state[], cache, cfg = cfg).capellaData)
+      blocks.add(addTestBlock(state[], cache, cfg = cfg).electraData)
 
     let (content, slot, root) = withState(state[]):
-      when consensusFork >= ConsensusFork.Capella:
+      when consensusFork >= ConsensusFork.Electra:
         let historical_summaries = forkyState.data.historical_summaries
         let res = buildProof(state[])
         check res.isOk()
@@ -226,7 +226,7 @@ procSuite "Beacon Network":
 
         (content, forkyState.data.slot, forkyState.root)
       else:
-        raiseAssert("Not implemented pre-Capella")
+        raiseAssert("Not implemented pre-Electra")
     let
       lcNode1 = newLCNode(rng, 20302, networkData)
       lcNode2 = newLCNode(rng, 20303, networkData)
@@ -253,13 +253,13 @@ procSuite "Beacon Network":
       # Add a (fake) finality update but with correct slot and state root
       # so that node 1 can do the validation of the historical summaries.
       let
-        dummyFinalityUpdate = capella.LightClientFinalityUpdate(
-          finalized_header: capella.LightClientHeader(
+        dummyFinalityUpdate = electra.LightClientFinalityUpdate(
+          finalized_header: electra.LightClientHeader(
             beacon: BeaconBlockHeader(slot: slot, state_root: root)
           )
         )
         finalityUpdateForked = ForkedLightClientFinalityUpdate(
-          kind: LightClientDataFork.Capella, capellaData: dummyFinalityUpdate
+          kind: LightClientDataFork.Electra, electraData: dummyFinalityUpdate
         )
         forkDigest = forkDigestAtEpoch(forkDigests, epoch(slot), cfg)
         content = encodeFinalityUpdateForked(forkDigest, finalityUpdateForked)
@@ -274,7 +274,7 @@ procSuite "Beacon Network":
       check:
         res.isOk()
         withState(state[]):
-          when consensusFork >= ConsensusFork.Capella:
+          when consensusFork >= ConsensusFork.Electra:
             res.get() == forkyState.data.historical_summaries
           else:
             false

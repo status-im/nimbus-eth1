@@ -339,6 +339,11 @@ type
       desc: "Number of worker threads (\"0\" = use as many threads as there are CPU cores available)"
       name: "num-threads" .}: int
 
+    persistBatchSize* {.
+      desc: ""
+      defaultValue: 32'u64
+      name: "persist-batch-size" .}: uint64
+
     beaconSyncTargetFile* {.
       hidden
       desc: "Load a file containg an rlp-encoded object \"(Header,Hash32)\" " &

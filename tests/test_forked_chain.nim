@@ -10,6 +10,7 @@
 
 import
   pkg/chronicles,
+  pkg/chronos,
   pkg/unittest2,
   std/[os, strutils],
   ../execution_chain/common,
@@ -136,28 +137,28 @@ proc wdWritten(c: ForkedChainRef, blk: Block): int =
     0
 
 template checkImportBlock(chain, blk) =
-  let res = chain.importBlock(blk)
+  let res = waitFor chain.importBlock(blk)
   check res.isOk
   if res.isErr:
     debugEcho "IMPORT BLOCK FAIL: ", res.error
     debugEcho "Block Number: ", blk.header.number
 
 template checkImportBlockErr(chain, blk) =
-  let res = chain.importBlock(blk)
+  let res = waitFor chain.importBlock(blk)
   check res.isErr
   if res.isOk:
     debugEcho "IMPORT BLOCK SHOULD FAIL"
     debugEcho "Block Number: ", blk.header.number
 
 template checkForkChoice(chain, a, b) =
-  let res = chain.forkChoice(a.blockHash, b.blockHash)
+  let res = waitFor chain.forkChoice(a.blockHash, b.blockHash)
   check res.isOk
   if res.isErr:
     debugEcho "FORK CHOICE FAIL: ", res.error
     debugEcho "Block Number: ", a.header.number, " ", b.header.number
 
 template checkForkChoiceErr(chain, a, b) =
-  let res = chain.forkChoice(a.blockHash, b.blockHash)
+  let res = waitFor chain.forkChoice(a.blockHash, b.blockHash)
   check res.isErr
   if res.isOk:
     debugEcho "FORK CHOICE SHOULD FAIL"
@@ -645,8 +646,8 @@ proc forkedChainMain*() =
       const info = "newBase move forward, auto mode"
       let com = env.newCom()
       var chain = ForkedChainRef.init(com, baseDistance = 3, persistBatchSize = 2)
-      check chain.forkChoice(blk7.blockHash, blk6.blockHash).isErr
-      chain.notifyBlockHashAndNumber(blk6.blockHash, blk6.header.number)
+      check (waitFor chain.forkChoice(blk7.blockHash, blk6.blockHash)).isErr
+      check chain.tryUpdatePendingFCU(blk6.blockHash, blk6.header.number)
       checkImportBlock(chain, blk1)
       checkImportBlock(chain, blk2)
       checkImportBlock(chain, blk3)
@@ -669,7 +670,7 @@ proc forkedChainMain*() =
       let com = env.newCom()
       var chain = ForkedChainRef.init(com, baseDistance = 3, persistBatchSize = 2)
 
-      chain.notifyBlockHashAndNumber(blk5.blockHash, blk5.header.number)
+      check chain.tryUpdatePendingFCU(blk5.blockHash, blk5.header.number)
       checkImportBlock(chain, blk1)
       checkImportBlock(chain, blk2)
       checkImportBlock(chain, blk3)
@@ -751,11 +752,10 @@ proc forkedChainMain*() =
       for i in 1..<fc.baseDistance * 2:
         era0.getEthBlock(i.BlockNumber, blk).expect("block in test database")
         check:
-          # Fake a sync that is importing finalized blocks
-          fc.importBlock(blk, finalized = true) == Result[void, string].ok()
+          (waitFor fc.importBlock(blk, finalized = true)) == Result[void, string].ok()
 
       check:
-        fc.forkChoice(blk.blockHash, blk.blockHash) == Result[void, string].ok()
+        (waitFor fc.forkChoice(blk.blockHash, blk.blockHash)) == Result[void, string].ok()
 
     test "Replay mainnet era, multiple FCU":
       # Simulates the typical case where fcu comes after the block
@@ -767,11 +767,11 @@ proc forkedChainMain*() =
       for i in 1..<fc.baseDistance * 2:
         era0.getEthBlock(i.BlockNumber, blk).expect("block in test database")
         check:
-          fc.importBlock(blk) == Result[void, string].ok()
+          (waitFor fc.importBlock(blk)) == Result[void, string].ok()
 
         let hash = blk.blockHash
         check:
-          fc.forkChoice(hash, blocks[0]) == Result[void, string].ok()
+          (waitFor fc.forkChoice(hash, blocks[0])) == Result[void, string].ok()
         if i mod 32 == 0:
           # in reality, finalized typically lags a bit more than this, but
           # for the purpose of the test, this should be good enough

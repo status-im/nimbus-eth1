@@ -10,15 +10,17 @@
 import
   std/[typetraits],
   results,
+  chronos,
   eth/common/[headers, hashes, times],
   web3/execution_types,
+  json_rpc/errors,
   chronicles,
   ../../core/tx_pool,
   ../beacon_engine,
   ../web3_eth_conv,
   ./api_utils
 
-{.push gcsafe, raises:[CatchableError].}
+{.push gcsafe, raises:[].}
 
 logScope:
   topics = "beacon engine"
@@ -73,7 +75,8 @@ proc forkchoiceUpdated*(ben: BeaconEngineRef,
                         apiVersion: Version,
                         update: ForkchoiceStateV1,
                         attrsOpt: Opt[PayloadAttributes]):
-                             ForkchoiceUpdatedResponse =
+                          Future[ForkchoiceUpdatedResponse]
+                            {.async: (raises: [InvalidRequest]).} =
   let
     com   = ben.com
     chain = ben.chain
@@ -82,6 +85,9 @@ proc forkchoiceUpdated*(ben: BeaconEngineRef,
   if headHash == zeroHash32:
     warn "Forkchoice requested update to zero hash"
     return simpleFCU(PayloadExecutionStatus.invalid)
+
+  chain.pendingFCU = update.finalizedBlockHash
+  com.resolveFinHash(update.finalizedBlockHash)
 
   # Check whether we have the block yet in our database or not. If not, we'll
   # need to either trigger a sync, or to reject this forkchoice update for a
@@ -104,9 +110,13 @@ proc forkchoiceUpdated*(ben: BeaconEngineRef,
     # Header advertised via a past newPayload request. Start syncing to it.
     info "Forkchoice requested sync to new head",
       number = header.number,
-      hash   = headHash.short
+      hash   = headHash.short,
+      base   = chain.baseNumber,
+      finHash= update.finalizedBlockHash,
+      safe   = update.safeBlockHash,
+      pendingFCU = chain.finHash.short,
+      resolvedFin= chain.resolvedFinNumber
 
-    chain.notifyFinalizedHash(update.finalizedBlockHash)
     # Inform the header chain cache (used by the syncer)
     com.headerChainUpdate(header, update.finalizedBlockHash)
 
@@ -153,8 +163,11 @@ proc forkchoiceUpdated*(ben: BeaconEngineRef,
   # https://github.com/ethereum/execution-apis/blob/v1.0.0-beta.4/src/engine/paris.md#specification-1
   if chain.isCanonicalAncestor(header.number, headHash):
     notice "Ignoring beacon update to old head",
-      headHash=headHash.short,
-      blockNumber=header.number
+      headHash   = headHash.short,
+      headNumber = header.number,
+      base       = chain.baseNumber,
+      pendingFCU = chain.finHash.short,
+      resolvedFin= chain.resolvedFinNumber
     return validFCU(Opt.none(Bytes8), headHash)
 
   # If the beacon client also advertised a finalized block, mark the local
@@ -175,7 +188,7 @@ proc forkchoiceUpdated*(ben: BeaconEngineRef,
       raise invalidForkChoiceState("safe block not in canonical tree")
     # similar to headHash, safeBlockHash is saved by FC module
 
-  chain.forkChoice(headHash, finalizedBlockHash, safeBlockHash).isOkOr:
+  (await chain.forkChoice(headHash, finalizedBlockHash, safeBlockHash)).isOkOr:
     return invalidFCU(error, chain, header)
 
   # If payload generation was requested, create a new block to be potentially
