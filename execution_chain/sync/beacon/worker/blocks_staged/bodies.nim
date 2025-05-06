@@ -94,6 +94,10 @@ proc bodiesFetch*(
   if fetchBodiesReqErrThresholdZombie < elapsed or
      b.len.uint64 * 100 < nReq.uint64 * fetchBodiesReqMinResponsePC:
     buddy.fetchRegisterError(slowPeer=true)
+    if buddy.ctx.pool.blkLastSlowPeer.isSome and
+       buddy.ctx.pool.blkLastSlowPeer.value == buddy.peerID:
+      trace info & ": not discarding last slow peer", peer=buddy.peer,
+        peerID=buddy.peerID, bdyErrors=buddy.bdyErrors
   else:
     buddy.only.nBdyRespErrors = 0                   # reset error count
     buddy.ctx.pool.blkLastSlowPeer = Opt.none(Hash) # not last one or not error

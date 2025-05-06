@@ -16,6 +16,7 @@ import
   pkg/stew/[interval_set, sorted_set],
   ../worker_desc,
   ./headers_staged/[headers, staged_collect],
+  ./headers_staged/staged_debug,
   ./headers_unproc
 
 # ------------------------------------------------------------------------------
@@ -46,6 +47,10 @@ proc headersStagedCollect*(
 
   if ctx.headersUnprocIsEmpty() or
      ctx.hdrCache.state != collecting:
+    debug info & ": nothing to do", peer,
+      unprocEmpty=ctx.headersUnprocIsEmpty(), nStaged=ctx.hdr.staged.len,
+      ctrl=buddy.ctrl.state, cacheMode=ctx.hdrCache.state,
+      syncState=ctx.pool.lastState, nSyncPeers=ctx.pool.nBuddies
     return                                           # no action
   var
     nDeterministic = 0u64                            # statistics, to be updated
@@ -113,8 +118,9 @@ proc headersStagedCollect*(
       # might have been reset and prepared for the next stage.
       if ctx.collectModeStopped():
         trace info & ": deterministic headers fetch stopped", peer, iv,
-          bottom=bottom.bnStr, nDeterministic, syncState=ctx.pool.lastState,
-          cacheMode=ctx.hdrCache.state
+          bottom=bottom.bnStr, nDeterministic, ctrl=buddy.ctrl.state,
+          syncState=ctx.pool.lastState, cacheMode=ctx.hdrCache.state,
+          hdr=ctx.hdr.bnStr
         break fetchHeadersBody                       # done, exit this function
 
       # Commit partially processed block numbers
@@ -137,6 +143,8 @@ proc headersStagedCollect*(
     # Continue opportunistically fetching by block number rather than hash. The
     # fetched headers need to be staged and checked/serialised later.
     if ctx.hdr.staged.len < headersStagedQueueLengthHwm:
+      doAssert ctx.hdr.verify()
+
       let
         # Comment see deterministic case
         iv = ctx.headersUnprocFetch(nFetchHeadersBatch).valueOr:
@@ -157,8 +165,9 @@ proc headersStagedCollect*(
       # might have been reset and prepared for the next stage.
       if ctx.collectModeStopped():
         trace info & ": staging headers fetch stopped", peer, iv,
-          bottom=bottom.bnStr, nDeterministic, syncState=ctx.pool.lastState,
-          cacheMode=ctx.hdrCache.state
+          bottom=bottom.bnStr, nDeterministic, ctrl=buddy.ctrl.state,
+          syncState=ctx.pool.lastState, cacheMode=ctx.hdrCache.state,
+          hdr=ctx.hdr.bnStr
         break fetchHeadersBody                       # done, exit this function
 
       # Store `lhc` chain on the `staged` queue if there is any
@@ -177,6 +186,8 @@ proc headersStagedCollect*(
 
     # End block: `fetchHeadersBody`
 
+  doAssert ctx.hdr.verify()
+
   let nHeaders = nDeterministic + nOpportunistic.uint64
   if nHeaders == 0:
     if not ctx.pool.seenData:
@@ -185,6 +196,7 @@ proc headersStagedCollect*(
       ctx.pool.failedPeers.incl buddy.peerID
 
       debug info & ": no headers yet", peer, ctrl=buddy.ctrl.state,
+        cacheMode=ctx.hdrCache.state, syncState=ctx.pool.lastState,
         failedPeers=ctx.pool.failedPeers.len, hdrErrors=buddy.hdrErrors
     return
 

@@ -128,7 +128,7 @@ proc runDaemon*(
     return
 
   # Execute staged block records.
-  if ctx.blocksStagedCanImportOk():
+  if ctx.blocksStagedCanImportOk(info):
 
     # Import from staged queue.
     while await ctx.blocksStagedImport(info):
@@ -177,7 +177,10 @@ proc runPeer*(
     buddy.only.multiRunIdle = Moment.now() - buddy.only.stoppedMultiRun
   buddy.only.nMultiLoop.inc                     # statistics/debugging
 
+  trace info & ": start", peer=buddy.peer
   if not await buddy.napUnlessSomethingToFetch():
+
+    trace info & ": action", peer=buddy.peer
 
     # Download and process headers and blocks
     while buddy.headersStagedCollectOk():
@@ -185,6 +188,7 @@ proc runPeer*(
       # Collect headers and either stash them on the header chain cache
       # directly, or stage then on the header queue to get them serialised,
       # later.
+      trace info & ": headers collect", peer=buddy.peer
       await buddy.headersStagedCollect info
 
       # Store serialised headers from the `staged` queue onto the header
@@ -197,6 +201,8 @@ proc runPeer*(
     # Fetch bodies and combine them with headers to blocks to be staged. These
     # staged blocks are then excuted by the daemon process (no `peer` needed.)
     while buddy.blocksStagedFetchOk():
+
+      trace info & ": blocks collect", peer=buddy.peer
       discard await buddy.blocksStagedCollect info
 
     # Note that it is important **not** to leave this function to be
@@ -205,6 +211,7 @@ proc runPeer*(
     # outliers which well exceed several seconds. This seems to let
     # remote peers run into timeouts so they eventually get lost early.
 
+  trace info & ": end", peer=buddy.peer
   buddy.only.stoppedMultiRun = Moment.now()     # statistics/debugging
 
 # ------------------------------------------------------------------------------

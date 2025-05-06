@@ -129,7 +129,7 @@ proc fetchAndCheck(
 # Public functions
 # ------------------------------------------------------------------------------
 
-func blocksStagedCanImportOk*(ctx: BeaconCtxRef): bool =
+proc blocksStagedCanImportOk*(ctx: BeaconCtxRef; info: static[string]): bool =
   ## Check whether the queue is at its maximum size so import can start with
   ## a full queue.
   ##
@@ -161,6 +161,8 @@ func blocksStagedCanImportOk*(ctx: BeaconCtxRef): bool =
       # As a consequence, the syncer will import blocks immediately allowing
       # the syncer to collect more sync peers.
       if ctx.pool.nBuddies == 1 and ctx.pool.blkLastSlowPeer.isSome:
+        trace info & ": last slow peer",
+          peerID=ctx.pool.blkLastSlowPeer.value, nSyncPeers=ctx.pool.nBuddies
         return true
 
       # Importing does not start before the queue is filled up.

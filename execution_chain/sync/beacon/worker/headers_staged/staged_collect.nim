@@ -15,6 +15,7 @@ import
   pkg/eth/common,
   pkg/stew/interval_set,
   ../../worker_desc,
+  ./staged_debug,
   ./headers
 
 # ------------------------------------------------------------------------------
@@ -110,6 +111,8 @@ proc collectAndStashOnDiskCache*(
   block fetchHeadersBody:
 
     while ctx.hdrCache.state == collecting:
+      doAssert ctx.hdr.verify()
+
       let
         # Figure out base point for top-most sub-range of argument `iv`
         ivReqMin = iv.subRangeMinEndingAt ivTop
@@ -155,19 +158,25 @@ proc collectAndStashOnDiskCache*(
       parent = rev[^1].parentHash        # parent hash for next fetch request
       # End loop
 
-    trace info & ": fetched and stored headers", peer, iv,
-      nHeaders=iv.len, ctrl=buddy.ctrl.state, hdrErrors=buddy.hdrErrors
+    trace info & ": fetched and stored headers", peer, iv, nHeaders=iv.len,
+      ctrl=buddy.ctrl.state, poolMode=ctx.poolMode,
+      cacheMode=ctx.hdrCache.state, syncState=ctx.pool.lastState,
+      D=ctx.dangling.bnStr, hdrErrors=buddy.hdrErrors
 
     # Reset header process errors (not too many consecutive failures this time)
     buddy.nHdrProcErrors = 0             # all OK, reset error count
+    doAssert ctx.hdr.verify()
     return iv.minPt-1
 
   # Start processing some error or an incomplete fetch/store result
 
   trace info & ": partially fetched/stored headers", peer,
     iv=(if ivTop < iv.maxPt: BnRange.new(ivTop+1,iv.maxPt).bnStr else: "n/a"),
-    nHeaders=(iv.maxPt-ivTop), ctrl=buddy.ctrl.state, hdrErrors=buddy.hdrErrors
+    nHeaders=(iv.maxPt-ivTop), ctrl=buddy.ctrl.state, poolMode=ctx.poolMode,
+    cacheMode=ctx.hdrCache.state, syncState=ctx.pool.lastState,
+    D=ctx.dangling.bnStr, hdrErrors=buddy.hdrErrors
 
+  doAssert ctx.hdr.verify()
   return ivTop                           # there is some left over range
 
 
@@ -192,6 +201,8 @@ proc collectAndStageOnMemQueue*(
   block fetchHeadersBody:
 
     while true:
+      doAssert ctx.hdr.verify()
+
       let
         # Figure out base point for top-most sub-range of argument `iv`
         ivReqMin = iv.subRangeMinEndingAt ivTop
@@ -229,7 +240,7 @@ proc collectAndStageOnMemQueue*(
           buddy.updateBuddyProcError()
           debug info & ": header queue error", peer, iv, ivReq,
             hash=hash0.toStr, expected=lhc.revHdrs[^1].parentHash.toStr,
-            ctrl=buddy.ctrl.state, hdrErrors=buddy.hdrErrors
+            hdrErrors=buddy.hdrErrors
           break fetchHeadersBody         # error => exit block
 
       lhc.revHdrs &= rev
@@ -243,20 +254,25 @@ proc collectAndStageOnMemQueue*(
       # End loop
 
     trace info & ": fetched and staged all headers", peer, iv,
-      nHeaders=iv.len, ctrl=buddy.ctrl.state, hdrErrors=buddy.hdrErrors
+      D=ctx.dangling.bnStr, nHeaders=iv.len, ctrl=buddy.ctrl.state,
+      poolMode=ctx.poolMode, cacheMode=ctx.hdrCache.state,
+      syncState=ctx.pool.lastState, hdrErrors=buddy.hdrErrors
 
     # Reset header process errors (not too many consecutive failures this time)
     buddy.nHdrProcErrors = 0             # all OK, reset error count
 
+    doAssert ctx.hdr.verify()
     return iv.minPt-1                    # all fetched as instructed
     # End block: `fetchHeadersBody`
 
   # Start processing some error or an incomplete fetch/stage result
 
   trace info & ": partially fetched and staged headers", peer, iv,
-    staged=lhc.bnStr, nHeaders=lhc.revHdrs.len, ctrl=buddy.ctrl.state,
-    hdrErrors=buddy.hdrErrors
+    D=ctx.dangling.bnStr, stagedHeaders=lhc.bnStr, nHeaders=lhc.revHdrs.len,
+    ctrl=buddy.ctrl.state, poolMode=ctx.poolMode, cacheMode=ctx.hdrCache.state,
+    syncState=ctx.pool.lastState, hdrErrors=buddy.hdrErrors
 
+  doAssert ctx.hdr.verify()
   return ivTop                           # there is some left over range
 
 # ------------------------------------------------------------------------------
