@@ -395,6 +395,7 @@ proc stop*(hc: HeaderChainRef) =
   ## destructor `destroy()`.
   ##
   hc.chain.com.headerChainUpdate = HeaderChainUpdateCB(nil)
+  hc.chain.com.resolveFinHash = ResolveFinHashCB(nil)
   hc.notify = HeaderChainNotifyCB(nil)
 
 proc start*(hc: HeaderChainRef; notify: HeaderChainNotifyCB) =
