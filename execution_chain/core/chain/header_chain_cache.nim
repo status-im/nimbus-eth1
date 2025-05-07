@@ -214,11 +214,14 @@ proc getHeader(db: KvtTxRef; hash: Hash32): Opt[Header] =
 
 
 proc delHeader(db: KvtTxRef; bn: BlockNumber) =
-  ## Remove header from cache
-  let h = db.getHeader(bn).valueOr:
-    raiseAssert RaisePfx & "getHeader failed"
-  discard db.del(beaconHeaderKey(bn).toOpenArray)
-  discard db.del(genericHashKey(h.parentHash).toOpenArray)
+  ## Remove header from cache, ignore non-existing entries
+  let
+    bnKey = beaconHeaderKey(bn)
+    rc = db.get(bnKey.toOpenArray)
+  discard db.del(bnKey.toOpenArray)
+  if rc.isOk:
+    let h =  decodePayload(rc.value, Header)
+    discard db.del(genericHashKey(h.parentHash).toOpenArray)
 
 # ----------------------
 
