@@ -348,6 +348,10 @@ proc new*(
     cfg: RuntimeConfig,
     accumulator: FinishedHistoricalHashesAccumulator = loadAccumulator(),
     historicalRoots: HistoricalRoots = loadHistoricalRoots(),
+    getHistoricalSummariesCallBack: GetHistoricalSummariesCallback = proc(): HistoricalSummaries {.
+        raises: [], gcsafe
+    .} =
+      HistoricalSummaries(),
     bootstrapRecords: openArray[Record] = [],
     portalConfig: PortalProtocolConfig = defaultPortalProtocolConfig,
     contentRequestRetries = 1,
@@ -377,7 +381,9 @@ proc new*(
     contentQueue: contentQueue,
     cfg: cfg,
     accumulators: HistoryAccumulators(
-      historicalHashes: accumulator, historicalRoots: historicalRoots
+      historicalHashes: accumulator,
+      historicalRoots: historicalRoots,
+      historicalSummaries: getHistoricalSummariesCallBack,
     ),
     contentRequestRetries: contentRequestRetries,
   )

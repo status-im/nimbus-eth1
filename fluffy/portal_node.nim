@@ -123,6 +123,15 @@ proc new*(
       else:
         Opt.none(BeaconNetwork)
 
+  proc getHistoricalSummaries(): HistoricalSummaries =
+    # ugh, quite ugly
+    if beaconNetwork.isNone():
+      HistoricalSummaries()
+    else:
+      beaconNetwork.value().beaconDb.getLatestHistoricalSummaries().valueOr:
+        HistoricalSummaries()
+
+  let
     historyNetwork =
       if PortalSubnetwork.history in subnetworks:
         Opt.some(
@@ -133,6 +142,7 @@ proc new*(
             streamManager,
             networkData.metadata.cfg,
             accumulator,
+            getHistoricalSummariesCallBack = getHistoricalSummaries,
             bootstrapRecords = bootstrapRecords,
             portalConfig = config.portalConfig,
             contentRequestRetries = config.contentRequestRetries,

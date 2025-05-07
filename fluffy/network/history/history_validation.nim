@@ -20,12 +20,15 @@ import
 
 from eth/rlp import computeRlpHash
 
-export block_proof_historical_hashes_accumulator
+export block_proof_historical_hashes_accumulator, block_proof_historical_summaries
 
-type HistoryAccumulators* = object
-  historicalHashes*: FinishedHistoricalHashesAccumulator
-  historicalRoots*: HistoricalRoots
-  historicalSummaries*: HistoricalSummaries
+type
+  GetHistoricalSummariesCallback* = proc(): HistoricalSummaries {.raises: [], gcsafe.}
+
+  HistoryAccumulators* = object
+    historicalHashes*: FinishedHistoricalHashesAccumulator
+    historicalRoots*: HistoricalRoots
+    historicalSummaries*: GetHistoricalSummariesCallback
 
 func validateHeader(header: Header, blockHash: Hash32): Result[void, string] =
   if not (header.computeRlpHash() == blockHash):
@@ -58,7 +61,7 @@ func validateHeaderBytes*(
 
   ok(header)
 
-func verifyBlockHeaderProof*(
+proc verifyBlockHeaderProof*(
     a: HistoryAccumulators,
     header: Header,
     proof: ByteList[MAX_HEADER_PROOF_LENGTH],
@@ -72,7 +75,7 @@ func verifyBlockHeaderProof*(
     let proof = decodeSsz(proof.asSeq(), BlockProofHistoricalSummariesDeneb).valueOr:
       return err("Failed decoding historical_summaries based block proof: " & error)
 
-    if a.historicalSummaries.verifyProof(
+    if a.historicalSummaries().verifyProof(
       proof, Digest(data: header.computeRlpHash().data), cfg
     ):
       ok()
@@ -82,7 +85,7 @@ func verifyBlockHeaderProof*(
     let proof = decodeSsz(proof.asSeq(), BlockProofHistoricalSummaries).valueOr:
       return err("Failed decoding historical_summaries based block proof: " & error)
 
-    if a.historicalSummaries.verifyProof(
+    if a.historicalSummaries().verifyProof(
       proof, Digest(data: header.computeRlpHash().data), cfg
     ):
       ok()
@@ -106,7 +109,7 @@ func verifyBlockHeaderProof*(
     else:
       err("Block proof verification failed (historical hashes accumulator)")
 
-func validateCanonicalHeaderBytes*(
+proc validateCanonicalHeaderBytes*(
     bytes: openArray[byte],
     id: uint64 | Hash32,
     accumulators: HistoryAccumulators,

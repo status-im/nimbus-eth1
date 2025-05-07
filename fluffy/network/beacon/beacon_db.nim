@@ -43,6 +43,7 @@ type
 
   HistoricalSummariesStore = ref object
     getStmt: SqliteStmt[int64, seq[byte]]
+    getLatestStmt: SqliteStmt[NoParams, seq[byte]]
     putStmt: SqliteStmt[(int64, seq[byte]), void]
     keepFromStmt: SqliteStmt[int64, void]
 
@@ -265,6 +266,20 @@ proc initHistoricalSummariesStore(
         managed = false,
       )
       .expect("SQL query OK")
+    getLatestStmt = backend
+      .prepareStmt(
+        """
+        SELECT `summaries`
+        FROM `""" & name &
+          """`
+        WHERE `epoch` = (SELECT MAX(epoch) FROM `""" & name &
+          """`);
+      """,
+        NoParams,
+        seq[byte],
+        managed = false,
+      )
+      .expect("SQL query OK")
     putStmt = backend
       .prepareStmt(
         """
@@ -292,7 +307,10 @@ proc initHistoricalSummariesStore(
       .expect("SQL query OK")
 
   ok HistoricalSummariesStore(
-    getStmt: getStmt, putStmt: putStmt, keepFromStmt: keepFromStmt
+    getStmt: getStmt,
+    getLatestStmt: getLatestStmt,
+    putStmt: putStmt,
+    keepFromStmt: keepFromStmt,
   )
 
 func close(store: var BestLightClientUpdateStore) =
@@ -310,6 +328,7 @@ func close(store: var BootstrapStore) =
 
 func close(store: var HistoricalSummariesStore) =
   store.getStmt.disposeSafe()
+  store.getLatestStmt.disposeSafe()
   store.putStmt.disposeSafe()
   store.keepFromStmt.disposeSafe()
 
@@ -514,13 +533,25 @@ func keepBootstrapsFrom*(db: BeaconDb, minSlot: Slot) =
   let res = db.bootstraps.keepFromStmt.exec(minSlot.int64)
   res.expect("SQL query OK")
 
-func getHistoricalSummaries*(db: BeaconDb, epoch: Epoch): Opt[seq[byte]] =
+func getHistoricalSummaries(db: BeaconDb, epoch: Epoch): Opt[seq[byte]] =
   doAssert distinctBase(db.historicalSummaries.getStmt) != nil
 
   var summaries: seq[byte]
   for res in db.historicalSummaries.getStmt.exec(epoch.int64, summaries):
     res.expect("SQL query OK")
     return ok(summaries)
+
+func getLatestHistoricalSummaries*(db: BeaconDb): Opt[HistoricalSummaries] =
+  doAssert distinctBase(db.historicalSummaries.getLatestStmt) != nil
+
+  var summaries: seq[byte]
+  for res in db.historicalSummaries.getLatestStmt.exec(summaries):
+    res.expect("SQL query OK")
+    let summariesWithProof = decodeSsz(
+      db.forkDigests, summaries, HistoricalSummariesWithProof
+    ).valueOr:
+      raiseAssert "Stored historical summaries must be valid"
+    return ok(summariesWithProof.historical_summaries)
 
 func putHistoricalSummaries*(db: BeaconDb, summaries: seq[byte], epoch: Epoch) =
   db.historicalSummaries.putStmt.exec((epoch.int64, summaries)).expect("SQL query OK")
