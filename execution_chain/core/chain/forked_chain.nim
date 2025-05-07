@@ -47,7 +47,7 @@ const
 # ------------------------------------------------------------------------------
 
 proc updateBase(c: ForkedChainRef, newBase: BlockPos):
-  Future[void] {.async: (raises: []), gcsafe.}
+  Future[void] {.async: (raises: [CancelledError]), gcsafe.}
 func calculateNewBase(c: ForkedChainRef;
        finalizedNumber: uint64; head: BlockPos): BlockPos {.gcsafe.}
 
@@ -85,7 +85,7 @@ proc fcuSetHead(c: ForkedChainRef,
 proc validateBlock(c: ForkedChainRef,
           parent: BlockPos,
           blk: Block, finalized: bool): Future[Result[Hash32, string]]
-            {.async: (raises: []).} =
+            {.async: (raises: [CancelledError]).} =
   let blkHash = blk.header.computeBlockHash
 
   if c.hashToBlock.hasKey(blkHash):
@@ -374,7 +374,7 @@ proc updateFinalized(c: ForkedChainRef, finalized: BlockPos) =
   txFrame.fcuFinalized(finalized.hash, finalized.number).expect("fcuFinalized OK")
 
 proc updateBase(c: ForkedChainRef, newBase: BlockPos):
-  Future[void] {.async: (raises: []), gcsafe.} =
+  Future[void] {.async: (raises: [CancelledError]), gcsafe.} =
   ##
   ##     A1 - A2 - A3          D5 - D6
   ##    /                     /
@@ -403,7 +403,8 @@ proc updateBase(c: ForkedChainRef, newBase: BlockPos):
         break
       dec number
 
-  if newBase.number == c.baseBranch.tailNumber:
+  let oldBase = c.baseBranch.tailNumber
+  if newBase.number == oldBase:
     # No update, return
     return
 
@@ -420,7 +421,17 @@ proc updateBase(c: ForkedChainRef, newBase: BlockPos):
     baseTxFrame = newBase.txFrame
 
   # Persist the new base block - this replaces the base tx in coredb!
-  c.com.db.persist(baseTxFrame, Opt.some(newBase.blk.header.stateRoot))
+  for x in newBase.everyNthBlock(4):
+    const
+      # We cap waiting for an idle slot in case there's a lot of network traffic
+      # taking up all CPU - we don't want to _completely_ stop processing blocks
+      # in this case - doing so also allows us to benefit from more batching /
+      # larger network reads when under load.
+      idleTimeout = 10.milliseconds
+
+    discard await idleAsync().withTimeout(idleTimeout)
+    c.com.db.persist(x.txFrame, Opt.some(x.stateRoot))
+
   c.baseTxFrame = baseTxFrame
 
   disposeBlocks(number, branch)
@@ -586,7 +597,7 @@ proc forkChoice*(c: ForkedChainRef,
                  finalizedHash: Hash32,
                  safeHash: Hash32 = zeroHash32):
                     Future[Result[void, string]]
-                      {.async: (raises: []).} =
+                      {.async: (raises: [CancelledError]).} =
 
   if finalizedHash != zeroHash32:
     c.pendingFCU = finalizedHash
