@@ -57,9 +57,42 @@ proc headersStagedCollect*(
     nOpportunistic = 0                               # ditto
 
   block fetchHeadersBody:
-
+    #
     # Start deterministically. Explicitely fetch/append by parent hash.
+    #
+    # Exactly one peer can fetch deterministically (i.e. hash based) and
+    # store headers directly on the header chain cache. All other peers fetch
+    # opportunistcally (i.e. block number based) and queue the headers for
+    # later serialisation.
     while true:
+      let top = ctx.headersUnprocAvailTop() + 1
+      #
+      # A deterministic fetch can directly append to the lower end `dangling`
+      # of header chain cache. So this criteria is unique at a given time
+      # and when an interval is taken out of the `unproc` pool:
+      # ::
+      #    ------------------|                 unproc pool
+      #              |-------|                 block interval to fetch next
+      #                       |----------      already stored headers on cache
+      #                      top
+      #                    dangling
+      #
+      # After claiming the block interval that will be processed next for the
+      # deterministic fetch, the situation looks like
+      # ::
+      #    ---------|                          unproc pool
+      #              |-------|                 block interval to fetch next
+      #                       |----------      already stored headers on cache
+      #             top     dangling
+      #
+      # so any other peer arriving here will see a gap between `top` and
+      # `dangling` which will lead them to fetch opportunistcally.
+      if top < ctx.dangling.number:
+        break
+
+      # Throw away overlap (should not happen anyway)
+      if ctx.dangling.number < top:
+        discard ctx.headersUnprocFetch(top-ctx.dangling.number).expect("iv")
 
       let
         # Reserve the full range of block numbers so they can be appended in a

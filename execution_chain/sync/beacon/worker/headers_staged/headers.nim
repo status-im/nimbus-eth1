@@ -111,6 +111,15 @@ proc headersFetchReversed*(
       ctrl=buddy.ctrl.state, hdrErrors=buddy.hdrErrors
     return err()
 
+  # Verify that first block number matches
+  if h[^1].number != ivReq.minPt:
+    buddy.registerError()
+    trace trEthRecvReceivedBlockHeaders, peer, nReq=req.maxResults,
+      hash=topHash.toStr, ivReqMinPt=ivReq.minPt.bnStr, ivRespMinPt=h[^1].bnStr,
+      nResp=h.len, elapsed=elapsed.toStr,
+      ctrl=buddy.ctrl.state, hdrErrors=buddy.hdrErrors
+    return err()
+
   # Ban an overly slow peer for a while when seen in a row. Also there is a
   # mimimum share of the number of requested headers expected, typically 10%.
   if fetchHeadersReqErrThresholdZombie < elapsed or
