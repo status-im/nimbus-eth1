@@ -382,6 +382,11 @@ proc new*(
     contentRequestRetries: contentRequestRetries,
   )
 
+proc setHistoricalSummaries*(
+    n: HistoryNetwork, historicalSummaries: HistoricalSummaries
+) =
+  n.accumulators.historicalSummaries = historicalSummaries
+
 proc validateContent(
     n: HistoryNetwork,
     srcNodeId: Opt[NodeId],

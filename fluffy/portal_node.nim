@@ -177,6 +177,12 @@ proc new*(
       else:
         Opt.none(LightClient)
 
+  if beaconNetwork.isSome() and historyNetwork.isSome():
+    proc historicalSummariesUpdate(historicalSummaries: HistoricalSummaries) =
+      historyNetwork.value.setHistoricalSummaries(historicalSummaries)
+
+    beaconNetwork.value.setHistoricalSummariesUpdateCallback(historicalSummariesUpdate)
+
   PortalNode(
     discovery: discovery,
     contentDB: contentDB,

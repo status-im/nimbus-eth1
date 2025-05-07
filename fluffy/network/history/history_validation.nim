@@ -20,7 +20,7 @@ import
 
 from eth/rlp import computeRlpHash
 
-export block_proof_historical_hashes_accumulator
+export block_proof_historical_hashes_accumulator, block_proof_historical_summaries
 
 type HistoryAccumulators* = object
   historicalHashes*: FinishedHistoricalHashesAccumulator

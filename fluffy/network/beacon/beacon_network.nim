@@ -24,22 +24,32 @@ logScope:
 
 const pingExtensionCapabilities = {CapabilitiesType, BasicRadiusType}
 
-type BeaconNetwork* = ref object
-  portalProtocol*: PortalProtocol
-  beaconDb*: BeaconDb
-  processor*: ref LightClientProcessor
-  contentQueue*: AsyncQueue[(Opt[NodeId], ContentKeysList, seq[seq[byte]])]
-  forkDigests*: ForkDigests
-  getBeaconTime: GetBeaconTimeFn
-  cfg*: RuntimeConfig
-  trustedBlockRoot*: Opt[Eth2Digest]
-  processContentLoop: Future[void]
-  statusLogLoop: Future[void]
-  onEpochLoop: Future[void]
-  onPeriodLoop: Future[void]
+type
+  HistoricalSummariesUpdateCallback* =
+    proc(historicalSummaries: HistoricalSummaries) {.raises: [], gcsafe.}
+
+  BeaconNetwork* = ref object
+    portalProtocol*: PortalProtocol
+    beaconDb*: BeaconDb
+    processor*: ref LightClientProcessor
+    contentQueue*: AsyncQueue[(Opt[NodeId], ContentKeysList, seq[seq[byte]])]
+    forkDigests*: ForkDigests
+    getBeaconTime: GetBeaconTimeFn
+    cfg*: RuntimeConfig
+    trustedBlockRoot*: Opt[Eth2Digest]
+    historicalSummariesUpdateCallback: Opt[HistoricalSummariesUpdateCallback]
+    processContentLoop: Future[void]
+    statusLogLoop: Future[void]
+    onEpochLoop: Future[void]
+    onPeriodLoop: Future[void]
 
 func toContentIdHandler(contentKey: ContentKeyByteList): results.Opt[ContentId] =
   ok(toContentId(contentKey))
+
+func setHistoricalSummariesUpdateCallback*(
+    n: BeaconNetwork, callback: HistoricalSummariesUpdateCallback
+) =
+  n.historicalSummariesUpdateCallback = Opt.some(callback)
 
 proc validateHistoricalSummaries(
     n: BeaconNetwork, summariesWithProof: HistoricalSummariesWithProof
@@ -340,7 +350,14 @@ proc validateContent(
     let summariesWithProof =
       ?decodeSsz(n.forkDigests, content, HistoricalSummariesWithProof)
 
-    n.validateHistoricalSummaries(summariesWithProof)
+    let res = n.validateHistoricalSummaries(summariesWithProof)
+    if res.isOk():
+      if n.historicalSummariesUpdateCallback.isSome():
+        n.historicalSummariesUpdateCallback.value()(
+          summariesWithProof.historical_summaries
+        )
+
+    res
 
 proc validateContent(
     n: BeaconNetwork,
