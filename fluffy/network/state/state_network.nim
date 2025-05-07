@@ -36,7 +36,7 @@ const pingExtensionCapabilities = {CapabilitiesType, BasicRadiusType}
 type StateNetwork* = ref object
   portalProtocol*: PortalProtocol
   contentQueue*: AsyncQueue[(Opt[NodeId], ContentKeysList, seq[seq[byte]])]
-  processContentLoop: Future[void]
+  processContentLoops: seq[Future[void]]
   statusLogLoop: Future[void]
   historyNetwork: Opt[HistoryNetwork]
   validateStateIsCanonical: bool
@@ -275,7 +275,9 @@ proc start*(n: StateNetwork) =
 
   n.portalProtocol.start()
 
-  n.processContentLoop = processContentLoop(n)
+  for i in 0..<25:
+    n.processContentLoops.add processContentLoop(n)
+
   n.statusLogLoop = statusLogLoop(n)
 
 proc stop*(n: StateNetwork) {.async: (raises: []).} =
@@ -284,12 +286,12 @@ proc stop*(n: StateNetwork) {.async: (raises: []).} =
   var futures: seq[Future[void]]
   futures.add(n.portalProtocol.stop())
 
-  if not n.processContentLoop.isNil():
-    futures.add(n.processContentLoop.cancelAndWait())
+  for loop in n.processContentLoops:
+    futures.add(loop.cancelAndWait())
   if not n.statusLogLoop.isNil():
     futures.add(n.statusLogLoop.cancelAndWait())
 
   await noCancel(allFutures(futures))
 
-  n.processContentLoop = nil
+  n.processContentLoops.setLen(0)
   n.statusLogLoop = nil
