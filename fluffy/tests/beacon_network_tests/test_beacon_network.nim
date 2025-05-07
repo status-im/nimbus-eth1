@@ -239,13 +239,14 @@ procSuite "Beacon Network":
       (await lcNode2.portalProtocol().ping(lcNode1.localNode())).isOk()
 
     let
-      contentKeyEncoded = historicalSummariesContentKey(0).encode()
+      contentKeyEncoded =
+        historicalSummariesContentKey(epoch(slot).distinctBase()).encode()
       contentId = toContentId(contentKeyEncoded)
 
     lcNode2.portalProtocol().storeContent(contentKeyEncoded, contentId, content)
 
     block:
-      let res = await lcNode1.beaconNetwork.getHistoricalSummaries(0)
+      let res = await lcNode1.beaconNetwork.getHistoricalSummaries(epoch(slot))
       # Should fail as it cannot validate
       check res.isErr()
 
@@ -270,7 +271,7 @@ procSuite "Beacon Network":
       lcNode1.portalProtocol().storeContent(contentKeyEncoded, contentId, content)
 
     block:
-      let res = await lcNode1.beaconNetwork.getHistoricalSummaries(0)
+      let res = await lcNode1.beaconNetwork.getHistoricalSummaries(epoch(slot))
       check:
         res.isOk()
         withState(state[]):

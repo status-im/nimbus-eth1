@@ -41,12 +41,18 @@ type
     putStmt: SqliteStmt[(array[32, byte], seq[byte], int64), void]
     keepFromStmt: SqliteStmt[int64, void]
 
+  HistoricalSummariesStore = ref object
+    getStmt: SqliteStmt[int64, seq[byte]]
+    putStmt: SqliteStmt[(int64, seq[byte]), void]
+    keepFromStmt: SqliteStmt[int64, void]
+
   BeaconDb* = ref object
     backend: SqStoreRef
-    kv: KvStoreRef # TODO: kv only used for summaries at this point
+    kv: KvStoreRef
     dataRadius*: UInt256
     bootstraps: BootstrapStore
     bestUpdates: BestLightClientUpdateStore
+    historicalSummaries: HistoricalSummariesStore
     forkDigests: ForkDigests
     cfg*: RuntimeConfig
     finalityUpdateCache: Opt[LightClientFinalityUpdateCache]
@@ -232,6 +238,63 @@ proc initBestUpdateStore(
     keepFromStmt: keepFromStmt,
   )
 
+proc initHistoricalSummariesStore(
+    backend: SqStoreRef, name: string
+): KvResult[HistoricalSummariesStore] =
+  ?backend.exec(
+    """
+    CREATE TABLE IF NOT EXISTS `""" & name &
+      """` (
+      `epoch` INTEGER PRIMARY KEY,   -- `historical_summaries` epoch
+      `summaries` BLOB               -- `HistoricalSummariesWithProof` (SSZ)
+    );
+  """
+  )
+
+  let
+    getStmt = backend
+      .prepareStmt(
+        """
+        SELECT `summaries`
+        FROM `""" & name &
+          """`
+        WHERE `epoch` = ?;
+      """,
+        int64,
+        seq[byte],
+        managed = false,
+      )
+      .expect("SQL query OK")
+    putStmt = backend
+      .prepareStmt(
+        """
+        REPLACE INTO `""" & name &
+          """` (
+          `epoch`, `summaries`
+        ) VALUES (?, ?);
+      """,
+        (int64, seq[byte]),
+        void,
+        managed = false,
+      )
+      .expect("SQL query OK")
+    keepFromStmt = backend
+      .prepareStmt(
+        """
+        DELETE FROM `""" & name &
+          """`
+        WHERE `epoch` < ?;
+      """,
+        int64,
+        void,
+        managed = false,
+      )
+      .expect("SQL query OK")
+
+  ok HistoricalSummariesStore(
+    getStmt: getStmt, putStmt: putStmt, keepFromStmt: keepFromStmt
+  )
+
 func close(store: var BestLightClientUpdateStore) =
   store.getStmt.disposeSafe()
   store.getBulkStmt.disposeSafe()
@@ -242,6 +305,11 @@ func close(store: var BestLightClientUpdateStore) =
 func close(store: var BootstrapStore) =
   store.getStmt.disposeSafe()
   store.getLatestStmt.disposeSafe()
+  store.putStmt.disposeSafe()
+  store.keepFromStmt.disposeSafe()
+
+func close(store: var HistoricalSummariesStore) =
+  store.getStmt.disposeSafe()
   store.putStmt.disposeSafe()
   store.keepFromStmt.disposeSafe()
 
@@ -260,6 +328,8 @@ proc new*(
     kvStore = kvStore db.openKvStore().expectDb()
     bootstraps = initBootstrapStore(db, "lc_bootstraps").expectDb()
     bestUpdates = initBestUpdateStore(db, "lc_best_updates").expectDb()
+    historicalSummaries =
+      initHistoricalSummariesStore(db, "beacon_historical_summaries").expectDb()
 
   BeaconDb(
     backend: db,
@@ -267,6 +337,7 @@ proc new*(
     dataRadius: UInt256.high(), # Radius to max to accept all data
     bootstraps: bootstraps,
     bestUpdates: bestUpdates,
+    historicalSummaries: historicalSummaries,
     cfg: networkData.metadata.cfg,
     forkDigests: (newClone networkData.forks)[],
   )
@@ -274,6 +345,7 @@ proc new*(
 proc close*(db: BeaconDb) =
   db.bootstraps.close()
   db.bestUpdates.close()
+  db.historicalSummaries.close()
   discard db.kv.close()
 
 ## Private KvStoreRef Calls
@@ -442,6 +514,21 @@ func keepBootstrapsFrom*(db: BeaconDb, minSlot: Slot) =
   let res = db.bootstraps.keepFromStmt.exec(minSlot.int64)
   res.expect("SQL query OK")
 
+func getHistoricalSummaries*(db: BeaconDb, epoch: Epoch): Opt[seq[byte]] =
+  doAssert distinctBase(db.historicalSummaries.getStmt) != nil
+
+  var summaries: seq[byte]
+  for res in db.historicalSummaries.getStmt.exec(epoch.int64, summaries):
+    res.expect("SQL query OK")
+    return ok(summaries)
+
+func putHistoricalSummaries*(db: BeaconDb, summaries: seq[byte], epoch: Epoch) =
+  db.historicalSummaries.putStmt.exec((epoch.int64, summaries)).expect("SQL query OK")
+
+func keepHistoricalSummariesFrom*(db: BeaconDb, epoch: Epoch) =
+  let res = db.historicalSummaries.keepFromStmt.exec(epoch.int64)
+  res.expect("SQL query OK")
+
 proc getHandlerImpl(
     db: BeaconDb, contentKey: ContentKeyByteList, contentId: ContentId
 ): results.Opt[seq[byte]] =
@@ -502,7 +589,7 @@ proc getHandlerImpl(
     else:
       Opt.none(seq[byte])
   of beacon_content.ContentType.historicalSummaries:
-    db.get(contentId)
+    db.getHistoricalSummaries(Epoch(contentKey.historicalSummariesKey.epoch))
 
 proc createGetHandler*(db: BeaconDb): DbGetHandler =
   return (
@@ -559,22 +646,10 @@ proc createStoreHandler*(db: BeaconDb): DbStoreHandler =
           )
         )
       of beacon_content.ContentType.historicalSummaries:
-        # TODO: Its probably better to not use the kvstore here and instead use a sql
-        # table with slot as index and move the slot logic to the db store handler.
-        let current = db.get(contentId)
-        if current.isSome():
-          let summariesWithProof = decodeSsz(
-            db.forkDigests, current.get(), HistoricalSummariesWithProof
-          ).valueOr:
-            raiseAssert error
-          let newSummariesWithProof = decodeSsz(
-            db.forkDigests, content, HistoricalSummariesWithProof
-          ).valueOr:
-            return
-          if newSummariesWithProof.epoch > summariesWithProof.epoch:
-            db.put(contentId, content)
-        else:
-          db.put(contentId, content)
+        db.putHistoricalSummaries(
+          content, Epoch(contentKey.historicalSummariesKey.epoch)
+        )
+        db.keepHistoricalSummariesFrom(Epoch(contentKey.historicalSummariesKey.epoch))
 
       return false # No data pruned
   )
