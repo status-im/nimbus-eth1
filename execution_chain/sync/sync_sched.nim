@@ -165,7 +165,7 @@ proc key(peer: Peer): ENode =
 # Private functions
 # ------------------------------------------------------------------------------
 
-proc terminate[S,W](dsc: RunnerSyncRef[S,W]) {.async.} =
+proc terminate[S,W](dsc: RunnerSyncRef[S,W]) {.async: (raises: []).} =
   ## Request termination and wait for sub-tasks to finish
   mixin runRelease
 
@@ -208,7 +208,7 @@ proc terminate[S,W](dsc: RunnerSyncRef[S,W]) {.async.} =
     dsc.runCtrl = terminated
 
 
-proc daemonLoop[S,W](dsc: RunnerSyncRef[S,W]) {.async: (raises: [CancelledError]).} =
+proc daemonLoop[S,W](dsc: RunnerSyncRef[S,W]) {.async: (raises: []).} =
   mixin runDaemon
 
   if dsc.ctx.daemon and dsc.runCtrl == running:

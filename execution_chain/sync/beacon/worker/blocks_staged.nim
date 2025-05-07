@@ -327,7 +327,7 @@ proc blocksStagedImport*(
     ctx: BeaconCtxRef;
     info: static[string];
       ): Future[bool]
-      {.async: (raises: [CancelledError]).} =
+      {.async: (raises: []).} =
   ## Import/execute blocks record from staged queue
   ##
   let qItem = ctx.blk.staged.ge(0).valueOr:
@@ -363,17 +363,22 @@ proc blocksStagedImport*(
           nthBn=nBn.bnStr, nthHash=ctx.getNthHash(qItem.data, n).short
         continue
 
-      (await ctx.chain.importBlock(qItem.data.blocks[n])).isOkOr:
-        # The way out here is simply to re-compile the block queue. At any
-        # point, the `FC` module data area might have been moved to a new
-        # canonical branch.
-        #
-        ctx.poolMode = true
-        warn info & ": import block error (reorg triggered)", n, iv,
-          B=ctx.chain.baseNumber.bnStr, L=ctx.chain.latestNumber.bnStr,
-          nthBn=nBn.bnStr, nthHash=ctx.getNthHash(qItem.data, n).short,
-          `error`=error
-        maxImport = nBn
+      try:
+        (await ctx.chain.importBlock(qItem.data.blocks[n])).isOkOr:
+          # The way out here is simply to re-compile the block queue. At any
+          # point, the `FC` module data area might have been moved to a new
+          # canonical branch.
+          #
+          ctx.poolMode = true
+          warn info & ": import block error (reorg triggered)", n, iv,
+            B=ctx.chain.baseNumber.bnStr, L=ctx.chain.latestNumber.bnStr,
+            nthBn=nBn.bnStr, nthHash=ctx.getNthHash(qItem.data, n).short,
+            `error`=error
+          maxImport = nBn
+          break importLoop
+        # isOk => continue
+      except CancelledError:
+        maxImport = nBn                            # shutdown?
         break importLoop
 
       # Allow pseudo/async thread switch.
