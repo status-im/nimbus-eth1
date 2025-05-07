@@ -718,7 +718,7 @@ proc forkedChainMain*() =
       if src.isErr:
         echo "FAILED TO SERIALIZE: ", src.error
       check src.isOk
-      com.db.persist(txFrame)
+      com.db.persist(txFrame, Opt.none(Hash32))
 
       var fc = ForkedChainRef.init(com, baseDistance = 3)
       let rc = fc.deserialize()
@@ -752,10 +752,10 @@ proc forkedChainMain*() =
       for i in 1..<fc.baseDistance * 2:
         era0.getEthBlock(i.BlockNumber, blk).expect("block in test database")
         check:
-          (waitFor fc.importBlock(blk)).isOk()
+          (waitFor fc.importBlock(blk, finalized = true)) == Result[void, string].ok()
 
       check:
-        (waitFor fc.forkChoice(blk.blockHash, blk.blockHash)).isOk()
+        (waitFor fc.forkChoice(blk.blockHash, blk.blockHash)) == Result[void, string].ok()
 
     test "Replay mainnet era, multiple FCU":
       # Simulates the typical case where fcu comes after the block
@@ -767,11 +767,11 @@ proc forkedChainMain*() =
       for i in 1..<fc.baseDistance * 2:
         era0.getEthBlock(i.BlockNumber, blk).expect("block in test database")
         check:
-          (waitFor fc.importBlock(blk)).isOk()
+          (waitFor fc.importBlock(blk)) == Result[void, string].ok()
 
         let hash = blk.blockHash
         check:
-          (waitFor fc.forkChoice(hash, blocks[0])).isOk()
+          (waitFor fc.forkChoice(hash, blocks[0])) == Result[void, string].ok()
         if i mod 32 == 0:
           # in reality, finalized typically lags a bit more than this, but
           # for the purpose of the test, this should be good enough

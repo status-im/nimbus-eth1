@@ -76,7 +76,7 @@ proc forkchoiceUpdated*(ben: BeaconEngineRef,
                         update: ForkchoiceStateV1,
                         attrsOpt: Opt[PayloadAttributes]):
                           Future[ForkchoiceUpdatedResponse]
-                            {.async: (raises: [InvalidRequest]).} =
+                            {.async: (raises: [CancelledError, InvalidRequest]).} =
   let
     com   = ben.com
     chain = ben.chain

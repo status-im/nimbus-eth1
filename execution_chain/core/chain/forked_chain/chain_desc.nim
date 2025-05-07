@@ -53,6 +53,8 @@ type
       # The snapshot contains the cumulative changes of all ancestors and
       # txFrame allowing the lookup recursion to stop whenever it is encountered.
 
+    eagerStateRoot*: bool
+
     pendingFCU*  : Hash32
       # When we know finalizedHash from CL but has yet to resolve
       # the hash into a latestFinalizedBlockNumber

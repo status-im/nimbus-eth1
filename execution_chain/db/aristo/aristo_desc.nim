@@ -203,6 +203,9 @@ func isValid*(sqv: HashSet[RootedVertexID]): bool =
 func hash*(db: AristoDbRef): Hash {.error.}
 func hash*(db: AristoTxRef): Hash {.error.}
 
+proc baseTxFrame*(db: AristoDbRef): AristoTxRef =
+  db.txRef
+
 # ------------------------------------------------------------------------------
 # Public helpers
 # ------------------------------------------------------------------------------

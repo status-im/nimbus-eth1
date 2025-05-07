@@ -56,7 +56,9 @@ template updateSnapshot*(c: ForkedChainRef,
 proc processBlock*(c: ForkedChainRef,
                   parent: Header,
                   txFrame: CoreDbTxRef,
-                  blk: Block, blkHash: Hash32): Result[seq[Receipt], string] =
+                  blk: Block,
+                  blkHash: Hash32,
+                  finalized: bool): Result[seq[Receipt], string] =
   template header(): Header =
     blk.header
 
@@ -65,11 +67,15 @@ proc processBlock*(c: ForkedChainRef,
 
   ?c.com.validateHeaderAndKinship(blk, vmState.parent, txFrame)
 
+  # When processing a finalized block, we optimistically assume that the state
+  # root will check out and delay such validation for when it's time to persist
+  # changes to disk
   ?vmState.processBlock(
     blk,
     skipValidation = false,
     skipReceipts = false,
     skipUncles = true,
+    skipStateRootCheck = finalized and not c.eagerStateRoot,
     taskpool = c.com.taskpool,
   )
 

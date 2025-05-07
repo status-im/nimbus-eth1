@@ -182,14 +182,17 @@ proc procBlkPreamble(
   ok()
 
 proc procBlkEpilogue(
-    vmState: BaseVMState, blk: Block, skipValidation: bool, skipReceipts: bool
+    vmState: BaseVMState,
+    blk: Block,
+    skipValidation: bool,
+    skipReceipts: bool,
+    skipStateRootCheck: bool,
 ): Result[void, string] =
   template header(): Header =
     blk.header
 
   # Reward beneficiary
   vmState.mutateLedger:
-
     # Clearing the account cache here helps manage its size when replaying
     # large ranges of blocks, implicitly limiting its size using the gas limit
     db.persist(
@@ -207,7 +210,7 @@ proc procBlkEpilogue(
     withdrawalReqs = ?processDequeueWithdrawalRequests(vmState)
     consolidationReqs = ?processDequeueConsolidationRequests(vmState)
 
-  if not skipValidation:
+  if not skipStateRootCheck:
     let stateRoot = vmState.ledger.getStateRoot()
     if header.stateRoot != stateRoot:
       # TODO replace logging with better error
@@ -244,11 +247,13 @@ proc procBlkEpilogue(
       let
         depositReqs =
           ?parseDepositLogs(vmState.allLogs, vmState.com.depositContractAddress)
-        requestsHash = calcRequestsHash([
-          (DEPOSIT_REQUEST_TYPE, depositReqs),
-          (WITHDRAWAL_REQUEST_TYPE, withdrawalReqs),
-          (CONSOLIDATION_REQUEST_TYPE, consolidationReqs)
-        ])
+        requestsHash = calcRequestsHash(
+          [
+            (DEPOSIT_REQUEST_TYPE, depositReqs),
+            (WITHDRAWAL_REQUEST_TYPE, withdrawalReqs),
+            (CONSOLIDATION_REQUEST_TYPE, consolidationReqs),
+          ]
+        )
 
       if header.requestsHash.get != requestsHash:
         debug "wrong requestsHash in block",
@@ -271,6 +276,7 @@ proc processBlock*(
     skipValidation: bool = false,
     skipReceipts: bool = false,
     skipUncles: bool = false,
+    skipStateRootCheck: bool = false,
     taskpool: Taskpool = nil,
 ): Result[void, string] =
   ## Generalised function to processes `blk` for any network.
@@ -280,7 +286,7 @@ proc processBlock*(
   if not vmState.com.proofOfStake(blk.header, vmState.ledger.txFrame):
     vmState.calculateReward(blk.header, blk.uncles)
 
-  ?vmState.procBlkEpilogue(blk, skipValidation, skipReceipts)
+  ?vmState.procBlkEpilogue(blk, skipValidation, skipReceipts, skipStateRootCheck)
 
   ok()
 

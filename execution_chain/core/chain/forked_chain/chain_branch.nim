@@ -39,6 +39,10 @@ type
       # Also used as a flag when replaying state
       # after deserialize.
 
+  TxFrameAndStateRoot* = object
+    txFrame*  : CoreDbTxRef
+    stateRoot*: Hash32
+
 func tailBlock*(brc: BranchRef): Block =
   brc.blocks[0].blk
 
@@ -134,6 +138,9 @@ func hash*(loc: BlockPos): Hash32 =
 func parentHash*(loc: BlockPos): Hash32 =
   loc.branch.blocks[loc.index].blk.header.parentHash
 
+func stateRoot*(loc: BlockPos): Hash32 =
+  loc.branch.blocks[loc.index].blk.header.stateRoot
+
 func tx*(loc: BlockPos, index: uint64): Transaction =
   loc.branch.blocks[loc.index].blk.transactions[index]
 
@@ -158,3 +165,28 @@ func appendBlock*(loc: BlockPos,
 iterator transactions*(loc: BlockPos): Transaction =
   for tx in loc.branch.blocks[loc.index].blk.transactions:
     yield tx
+
+iterator everyNthBlock*(loc: BlockPos, step: uint64): TxFrameAndStateRoot =
+  var
+    branch = loc.branch
+    steps  = newSeqOfCap[TxFrameAndStateRoot](128)
+    number = loc.number
+
+  steps.add TxFrameAndStateRoot(
+    txFrame  : loc.txFrame,
+    stateRoot: loc.stateRoot
+  )
+
+  while not branch.isNil:
+    let tailNumber = branch.tailNumber
+    while tailNumber > step and number > tailNumber:
+      let bd = addr branch.blocks[number-tailNumber]
+      steps.add TxFrameAndStateRoot(
+        txFrame  : bd.txFrame,
+        stateRoot: bd.blk.header.stateRoot
+      )
+      number -= min(number, step)
+    branch = branch.parent
+
+  for i in countdown(steps.len-1, 0):
+    yield steps[i]
