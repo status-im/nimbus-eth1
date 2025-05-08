@@ -41,41 +41,48 @@ proc installEthApiHandlers*(vp: VerifiedRpcProxy) =
   vp.proxy.rpc("eth_getBlockByNumber") do(
     blockTag: BlockTag, fullTransactions: bool
   ) -> BlockObject:
-    await vp.getBlockByTag(blockTag, fullTransactions)
+    (await vp.getBlockByTag(blockTag, fullTransactions)).valueOr:
+      raise newException(ValueError, error)
 
   vp.proxy.rpc("eth_getBlockByHash") do(
     blockHash: Hash32, fullTransactions: bool
   ) -> BlockObject:
-    await vp.getBlockByHash(blockHash, fullTransactions)
+    (await vp.getBlockByHash(blockHash, fullTransactions)).valueOr:
+      raise newException(ValueError, error)
 
-  vp.proxy.rpc("eth_getUncleCountByBlockNumber") do(
-    blockTag: BlockTag
-  ) -> Quantity:
-    let blk = await vp.getBlockByTag(blockTag, false)
-    return Quantity(blk.uncles.len())
-
-  vp.proxy.rpc("eth_getUncleCountByBlockHash") do(
-    blockHash: Hash32
-  ) -> Quantity:
-    let blk = await vp.getBlockByHash(blockHash, false)
-    return Quantity(blk.uncles.len())
-
-  vp.proxy.rpc("eth_getBlockTransactionCountByNumber") do(
-    blockTag: BlockTag
-  ) -> Quantity:
-    let blk = await vp.getBlockByTag(blockTag, true)
-    return Quantity(blk.transactions.len)
-
-  vp.proxy.rpc("eth_getBlockTransactionCountByHash") do(
-    blockHash: Hash32
-  ) -> Quantity:
-    let blk = await vp.getBlockByHash(blockHash, true)
-    return Quantity(blk.transactions.len)
+#  vp.proxy.rpc("eth_getUncleCountByBlockNumber") do(
+#    blockTag: BlockTag
+#  ) -> Quantity:
+#    let blk = (await vp.getBlockByTag(blockTag, false)).valueOr:
+#      raise newException(ValueError, error)
+#    return Quantity(blk.uncles.len())
+#
+#  vp.proxy.rpc("eth_getUncleCountByBlockHash") do(
+#    blockHash: Hash32
+#  ) -> Quantity:
+#    let blk = (await vp.getBlockByHash(blockHash, false)).valueOr:
+#      raise newException(ValueError, error)
+#    return Quantity(blk.uncles.len())
+#
+#  vp.proxy.rpc("eth_getBlockTransactionCountByNumber") do(
+#    blockTag: BlockTag
+#  ) -> Quantity:
+#    let blk = (await vp.getBlockByTag(blockTag, true)).valueOr:
+#      raise newException(ValueError, error)
+#    return Quantity(blk.transactions.len)
+#
+#  vp.proxy.rpc("eth_getBlockTransactionCountByHash") do(
+#    blockHash: Hash32
+#  ) -> Quantity:
+#    let blk = (await vp.getBlockByHash(blockHash, true)).valueOr:
+#      raise newException(ValueError, error)
+#    return Quantity(blk.transactions.len)
 
   vp.proxy.rpc("eth_getTransactionByBlockNumberAndIndex") do(
     blockTag: BlockTag, index: Quantity
   ) -> TransactionObject:
-    let blk = await vp.getBlockByTag(blockTag, true)
+    let blk = (await vp.getBlockByTag(blockTag, true)).valueOr:
+      raise newException(ValueError, error)
     if distinctBase(index) >= uint64(blk.transactions.len):
       raise newException(ValueError, "provided transaction index is outside bounds")
     let x = blk.transactions[distinctBase(index)]
@@ -85,7 +92,9 @@ proc installEthApiHandlers*(vp: VerifiedRpcProxy) =
   vp.proxy.rpc("eth_getTransactionByBlockHashAndIndex") do(
     blockHash: Hash32, index: Quantity
   ) -> TransactionObject:
-    let blk = await vp.getBlockByHash(blockHash, true)
+    let blk = (await vp.getBlockByHash(blockHash, true)).valueOr:
+      raise newException(ValueError, error)
+
     if distinctBase(index) >= uint64(blk.transactions.len):
       raise newException(ValueError, "provided transaction index is outside bounds")
     let x = blk.transactions[distinctBase(index)]
@@ -95,7 +104,11 @@ proc installEthApiHandlers*(vp: VerifiedRpcProxy) =
   vp.proxy.rpc("eth_getTransactionByHash") do(
     txHash: Hash32
   ) -> TransactionObject:
-    let tx = await vp.rpcClient.eth_getTransactionByHash(txHash)
+    let tx = 
+      try:
+        await vp.rpcClient.eth_getTransactionByHash(txHash)
+      except CatchableError as e:
+        raise newException(ValueError, e.msg)
     if tx.hash != txHash:
       raise newException(ValueError, "the downloaded transaction hash doesn't match the requested transaction hash")
 
@@ -108,15 +121,21 @@ proc installEthApiHandlers*(vp: VerifiedRpcProxy) =
   vp.proxy.rpc("eth_getBlockReceipts") do(
     blockTag: BlockTag
   ) -> Opt[seq[ReceiptObject]]:
-    let rxs = await vp.getReceiptsByBlockTag(blockTag)
+    let rxs = (await vp.getReceiptsByBlockTag(blockTag)).valueOr:
+      raise newException(ValueError, error)
     return Opt.some(rxs)
 
   vp.proxy.rpc("eth_getTransactionReceipt") do(
     txHash: Hash32
   ) -> ReceiptObject:
     let 
-      rx = await vp.rpcClient.eth_getTransactionReceipt(txHash)
-      rxs = await vp.getReceiptsByBlockHash(rx.blockHash)
+      rx = 
+        try:
+          await vp.rpcClient.eth_getTransactionReceipt(txHash)
+        except CatchableError as e:
+          raise newException(ValueError, e.msg)
+      rxs = (await vp.getReceiptsByBlockHash(rx.blockHash)).valueOr:
+        raise newException(ValueError, error)
 
     for r in rxs:
       if r.transactionHash == txHash:
@@ -124,21 +143,24 @@ proc installEthApiHandlers*(vp: VerifiedRpcProxy) =
 
     raise newException(ValueError, "receipt couldn't be verified")
 
-  # eth_blockNumber - get latest tag from header store
-  vp.proxy.rpc("eth_blockNumber") do() -> Quantity:
-    # Returns the number of the most recent block seen by the light client.
-    let hLatest = vp.headerStore.latest()
-    if hLatest.isNone:
-      raise newException(ValueError, "Syncing")
-
-    return Quantity(hLatest.get().number)
+#  # eth_blockNumber - get latest tag from header store
+#  vp.proxy.rpc("eth_blockNumber") do() -> Quantity:
+#    # Returns the number of the most recent block seen by the light client.
+#    let hLatest = vp.headerStore.latest()
+#    if hLatest.isNone:
+#      raise newException(ValueError, "Syncing")
+#
+#    return Quantity(hLatest.get().number)
 
   vp.proxy.rpc("eth_getBalance") do(
     address: addresses.Address, blockTag: BlockTag
   ) -> UInt256:
     let
-      header = await vp.getHeaderByTag(blockTag)
-      account = await vp.getAccount(address, header.number, header.stateRoot)
+      header = (await vp.getHeaderByTag(blockTag)).valueOr:
+        raise newException(ValueError, error)
+      account = (await vp.getAccount(address, header.number, header.stateRoot)).valueOr:
+        raise newException(ValueError, error)
+
 
     account.balance
 
@@ -146,27 +168,35 @@ proc installEthApiHandlers*(vp: VerifiedRpcProxy) =
     address: addresses.Address, slot: UInt256, blockTag: BlockTag
   ) -> FixedBytes[32]:
     let 
-      header = await vp.getHeaderByTag(blockTag)
-      storage = await vp.getStorageAt(address, slot, header.number, header.stateRoot)
+      header = (await vp.getHeaderByTag(blockTag)).valueOr:
+        raise newException(ValueError, error)
+
+      storage = (await vp.getStorageAt(address, slot, header.number, header.stateRoot)).valueOr:
+        raise newException(ValueError, error)
 
     FixedBytes[32](storage.toBytesBE)
 
-  vp.proxy.rpc("eth_getTransactionCount") do(
-    address: addresses.Address, blockTag: BlockTag
-  ) -> Quantity:
-    let
-      header = await vp.getHeaderByTag(blockTag)
-      account = await vp.getAccount(address, header.number, header.stateRoot)
-
-    Quantity(account.nonce)
+#  vp.proxy.rpc("eth_getTransactionCount") do(
+#    address: addresses.Address, blockTag: BlockTag
+#  ) -> Quantity:
+#    let
+#      header = (await vp.getHeaderByTag(blockTag)).valueOr:
+#        raise newException(ValueError, error)
+#
+#      account = (await vp.getAccount(address, header.number, header.stateRoot)).valueOr:
+#        raise newException(ValueError, error)
+#
+#    Quantity(account.nonce)
 
   vp.proxy.rpc("eth_getCode") do(
     address: addresses.Address, blockTag: BlockTag
   ) -> seq[byte]:
     let
-      header = await vp.getHeaderByTag(blockTag)
+      header = (await vp.getHeaderByTag(blockTag)).valueOr:
+        raise newException(ValueError, error)
 
-    await vp.getCode(address,header.number, header.stateRoot)
+    (await vp.getCode(address,header.number, header.stateRoot)).valueOr:
+        raise newException(ValueError, error)
 
   vp.proxy.rpc("eth_call") do(
     args: TransactionArgs, blockTag: BlockTag
@@ -177,13 +207,22 @@ proc installEthApiHandlers*(vp: VerifiedRpcProxy) =
     let 
       to = if args.to.isSome(): args.to.get()
            else: raise newException(ValueError, "contract address missing in transaction args")
-      header = await vp.getHeaderByTag(blockTag)
-      code = await vp.getCode(to, header.number, header.stateRoot)
+      header = (await vp.getHeaderByTag(blockTag)).valueOr:
+        raise newException(ValueError, error)
+
+      code = (await vp.getCode(to, header.number, header.stateRoot)).valueOr:
+        raise newException(ValueError, error)
 
     # 2. get all storage locations that are accessed
     let 
-      parent = await vp.getHeaderByHash(header.parentHash)
-      accessListResult = await vp.rpcClient.eth_createAccessList(args, blockId(header.number)) 
+      parent = (await vp.getHeaderByHash(header.parentHash)).valueOr:
+        raise newException(ValueError, error)
+
+      accessListResult = 
+        try:
+          await vp.rpcClient.eth_createAccessList(args, blockId(header.number)) 
+        except CatchableError as e:
+          raise newException(ValueError, e.msg)
       accessList = if not accessListResult.error.isSome(): accessListResult.accessList
                    else: raise newException(ValueError, "couldn't get an access list for eth call")
 
@@ -198,8 +237,12 @@ proc installEthApiHandlers*(vp: VerifiedRpcProxy) =
       for accessPair in accessList:
         let 
           accountAddr = accessPair.address
-          acc = await vp.getAccount(accountAddr, header.number, header.stateRoot)
-          accCode = await vp.getCode(accountAddr, header.number, header.stateRoot)
+          acc = (await vp.getAccount(accountAddr, header.number, header.stateRoot)).valueOr:
+            raise newException(ValueError, error)
+
+          accCode = (await vp.getCode(accountAddr, header.number, header.stateRoot)).valueOr:
+            raise newException(ValueError, error)
+
 
         db.setNonce(accountAddr, acc.nonce)
         db.setBalance(accountAddr, acc.balance)
@@ -208,7 +251,8 @@ proc installEthApiHandlers*(vp: VerifiedRpcProxy) =
         for slot in accessPair.storageKeys:
           let 
             slotInt = UInt256.fromHex(toHex(slot))
-            slotValue = await vp.getStorageAt(accountAddr, slotInt, header.number, header.stateRoot) 
+            slotValue = (await vp.getStorageAt(accountAddr, slotInt, header.number, header.stateRoot)).valueOr:
+              raise newException(ValueError, error)
           db.setStorage(accountAddr, slotInt, slotValue)
       db.persist(clearEmptyAccount = false) # settle accounts storage
 

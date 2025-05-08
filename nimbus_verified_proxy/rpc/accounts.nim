@@ -106,14 +106,21 @@ proc getAccount*(
     lcProxy: VerifiedRpcProxy,
     address: Address,
     blockNumber: base.BlockNumber,
-    stateRoot: Root): Future[Account] {.async: (raises: [ValueError, CatchableError]).} =
+    stateRoot: Root): Future[Result[Account, string]] {.async: (raises: []).} =
+
+  info "Forwarding eth_getAccount", blockNumber
+
   let
-    proof = await lcProxy.rpcClient.eth_getProof(address, @[], blockId(blockNumber))
+    proof = 
+      try:
+        await lcProxy.rpcClient.eth_getProof(address, @[], blockId(blockNumber))
+      except CatchableError as e:
+        return err(e.msg)
+
     account = getAccountFromProof(
       stateRoot, proof.address, proof.balance, proof.nonce, proof.codeHash,
       proof.storageHash, proof.accountProof,
-    ).valueOr:
-      raise newException(ValueError, error)
+    )
 
   return account
 
@@ -121,24 +128,29 @@ proc getCode*(
     lcProxy: VerifiedRpcProxy,
     address: Address,
     blockNumber: base.BlockNumber,
-    stateRoot: Root): Future[seq[byte]] {.async: (raises: [ValueError, CatchableError]).} =
+    stateRoot: Root): Future[Result[seq[byte], string]] {.async: (raises: []).} =
   # get verified account details for the address at blockNumber
-  let account = await lcProxy.getAccount(address, blockNumber, stateRoot)
+  let account = (await lcProxy.getAccount(address, blockNumber, stateRoot)).valueOr:
+    return err(error)
 
   # if the account does not have any code, return empty hex data
   if account.codeHash == EMPTY_CODE_HASH:
-    return @[]
+    return ok(newSeq[byte]())
 
   info "Forwarding eth_getCode", blockNumber
 
-  let code = await lcProxy.rpcClient.eth_getCode(address, blockId(blockNumber))
+  let code = 
+    try:
+      await lcProxy.rpcClient.eth_getCode(address, blockId(blockNumber))
+    except CatchableError as e:
+      return err(e.msg)
 
   # verify the byte code. since we verified the account against
   # the state root we just need to verify the code hash
   if account.codeHash == keccak256(code):
-    return code
+    return ok(code)
   else:
-    raise newException(ValueError, "received code doesn't match the account code hash")
+    return err("received code doesn't match the account code hash")
 
 proc getStorageAt*(
     lcProxy: VerifiedRpcProxy,
@@ -146,13 +158,17 @@ proc getStorageAt*(
     slot: UInt256,
     blockNumber: base.BlockNumber,
     stateRoot: Root
-): Future[UInt256] {.async: (raises: [ValueError, CatchableError]).} =
+): Future[Result[UInt256, string]] {.async: (raises: []).} =
 
   info "Forwarding eth_getStorageAt", blockNumber
 
   let
-    proof = await lcProxy.rpcClient.eth_getProof(address, @[slot], blockId(blockNumber))
-    slotValue = getStorageFromProof(stateRoot, slot, proof).valueOr:
-      raise newException(ValueError, error)
+    proof = 
+      try:
+        await lcProxy.rpcClient.eth_getProof(address, @[slot], blockId(blockNumber))
+      except CatchableError as e:
+        return err(e.msg)
 
-  slotValue
+    slotValue = getStorageFromProof(stateRoot, slot, proof)
+
+  return slotValue

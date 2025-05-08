@@ -63,33 +63,43 @@ proc toReceipts(recs: openArray[ReceiptObject]): seq[Receipt] =
 
 proc getReceiptsByBlockTag*(
     vp: VerifiedRpcProxy, blockTag: BlockTag
-): Future[seq[ReceiptObject]] {.async: (raises: [ValueError, CatchableError]).} =
+): Future[Result[seq[ReceiptObject], string]] {.async: (raises: []).} =
 
   let 
-    header = await vp.getHeaderByTag(blockTag)
-    rxs = await vp.rpcClient.eth_getBlockReceipts(blockTag)
+    header = (await vp.getHeaderByTag(blockTag)).valueOr:
+      return err(error)
+    rxs = 
+      try:
+        await vp.rpcClient.eth_getBlockReceipts(blockTag)
+      except CatchableError as e:
+        return err(e.msg)
 
   if rxs.isSome():
     if orderedTrieRoot(toReceipts(rxs.get())) != header.receiptsRoot:
-      raise newException(ValueError, "downloaded receipts do not evaluate to the receipts root of the block")
+      return err("downloaded receipts do not evaluate to the receipts root of the block")
   else:
-    raise newException(ValueError, "error downloading the receipts")
+    return err("error downloading the receipts")
 
-  return rxs.get()
+  return ok(rxs.get())
 
 proc getReceiptsByBlockHash*(
     vp: VerifiedRpcProxy, blockHash: Hash32
-): Future[seq[ReceiptObject]] {.async: (raises: [ValueError, CatchableError]).} =
+): Future[Result[seq[ReceiptObject], string]] {.async: (raises: []).} =
 
   let 
-    header = await vp.getHeaderByHash(blockHash)
+    header = (await vp.getHeaderByHash(blockHash)).valueOr:
+      return err(error)
     blockTag = BlockTag(RtBlockIdentifier(kind: bidNumber, number: Quantity(header.number)))
-    rxs = await vp.rpcClient.eth_getBlockReceipts(blockTag)
+    rxs = 
+      try:
+        await vp.rpcClient.eth_getBlockReceipts(blockTag)
+      except CatchableError as e:
+        return err(e.msg)
 
   if rxs.isSome():
     if orderedTrieRoot(toReceipts(rxs.get())) != header.receiptsRoot:
-      raise newException(ValueError, "downloaded receipts do not evaluate to the receipts root of the block")
+      return err("downloaded receipts do not evaluate to the receipts root of the block")
   else:
-    raise newException(ValueError, "error downloading the receipts")
+    return err("error downloading the receipts")
 
-  return rxs.get()
+  return ok(rxs.get())

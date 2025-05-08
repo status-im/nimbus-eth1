@@ -28,22 +28,22 @@ template rpcClient(vp: VerifiedRpcProxy): RpcClient =
 
 proc resolveTag(
     self: VerifiedRpcProxy, blockTag: BlockTag
-): base.BlockNumber {.raises: [ValueError].} =
+): Result[base.BlockNumber, string] =
   if blockTag.kind == bidAlias:
     let tag = blockTag.alias.toLowerAscii()
     case tag
     of "latest":
       let hLatest = self.headerStore.latest()
       if hLatest.isSome:
-        return hLatest.get().number
+        return ok(hLatest.get().number)
       else:
-        raise newException(ValueError, "Couldn't get the latest block number from header store")
+        return err("Couldn't get the latest block number from header store")
     else:
-      raise newException(ValueError, "No support for block tag " & $blockTag)
+      return err("No support for block tag " & $blockTag)
   else:
-    return base.BlockNumber(distinctBase(blockTag.number))
+    return ok(base.BlockNumber(distinctBase(blockTag.number)))
 
-proc convHeader(blk: BlockObject): Header =
+proc convHeader(blk: eth_api_types.BlockObject): Header =
   let
     nonce = if blk.nonce.isSome: blk.nonce.get
             else: default(Bytes8)
@@ -77,7 +77,7 @@ proc walkBlocks(
   sourceNum: base.BlockNumber,
   targetNum: base.BlockNumber,
   sourceHash: Hash32,
-  targetHash: Hash32): Future[bool] {.async: (raises: [ValueError, CatchableError]).} =
+  targetHash: Hash32): Future[bool] {.async: (raises: []).} =
 
   var nextHash = sourceHash
   info "starting block walk to verify", blockHash=targetHash
@@ -85,8 +85,14 @@ proc walkBlocks(
   # TODO: use batch calls to get all blocks at once by number
   for i in 0 ..< sourceNum - targetNum:
     # TODO: use a verified hash cache
-    let blk = await self.rpcClient.eth_getBlockByHash(nextHash, false)
-    info "getting next block", hash=nextHash, number=blk.number, remaining=distinctBase(blk.number) - targetNum
+    let blk = 
+      try:
+        await self.rpcClient.eth_getBlockByHash(nextHash, false)
+      except:
+        # TODO: retry before failing?
+        return false
+
+    trace "getting next block", hash=nextHash, number=blk.number, remaining=distinctBase(blk.number) - targetNum
 
     if blk.parentHash == targetHash:
       return true
@@ -97,145 +103,167 @@ proc walkBlocks(
 
 proc getBlockByHash*(
     self: VerifiedRpcProxy, blockHash: Hash32, fullTransactions: bool
-): Future[BlockObject] {.async: (raises: [ValueError, CatchableError]).} =
+): Future[Result[eth_api_types.BlockObject, string]] {.async: (raises: []).} =
   # get the target block
-  let blk = await self.rpcClient.eth_getBlockByHash(blockHash, fullTransactions)
+  let blk = 
+    try:
+      await self.rpcClient.eth_getBlockByHash(blockHash, fullTransactions)
+    except CatchableError as e:
+      return err(e.msg)
+
   let header = convHeader(blk)
 
   # verify header hash
   if header.rlpHash != blockHash:
-    raise newException(ValueError, "hashed block header doesn't match with blk.hash(downloaded)")
+    return err("hashed block header doesn't match with blk.hash(downloaded)")
 
   if blockHash != blk.hash:
-    raise newException(ValueError, "the downloaded block hash doesn't match with the requested hash")
+    return err("the downloaded block hash doesn't match with the requested hash")
 
   let earliestHeader = self.headerStore.earliest.valueOr:
-    raise newException(ValueError, "Syncing")
+    return err("syncing")
 
   # walk blocks backwards(time) from source to target
   let isLinked = await self.walkBlocks(earliestHeader.number, header.number, earliestHeader.parentHash, blockHash)
 
   if not isLinked:
-    raise newException(ValueError, "the requested block is not part of the canonical chain")
+    return err("the requested block is not part of the canonical chain")
 
   # verify transactions
   if fullTransactions:
     let verified = verifyTransactions(header.transactionsRoot, blk.transactions).valueOr:
-      raise newException(ValueError, "error while verifying transactions root")
+      return err("error while verifying transactions root")
     if not verified:
-      raise newException(ValueError, "transactions within the block do not yield the same transaction root")
+      return err("transactions within the block do not yield the same transaction root")
 
   # verify withdrawals
   if blk.withdrawals.isSome():
     if blk.withdrawalsRoot.get() != orderedTrieRoot(blk.withdrawals.get()):
-      raise newException(ValueError, "withdrawals within the block do not yield the same withdrawals root")
+      return err("withdrawals within the block do not yield the same withdrawals root")
 
-  return blk
+  return ok(blk)
 
 proc getBlockByTag*(
     self: VerifiedRpcProxy, blockTag: BlockTag, fullTransactions: bool
-): Future[BlockObject] {.async: (raises: [ValueError, CatchableError]).} =
-  let n = self.resolveTag(blockTag)
+): Future[Result[BlockObject, string]] {.async: (raises: []).} =
+  let n = self.resolveTag(blockTag).valueOr:
+    return err(error)
 
   # get the target block
-  let blk = await self.rpcClient.eth_getBlockByNumber(blockTag, false)
+  let blk = 
+    try:
+      await self.rpcClient.eth_getBlockByNumber(blockTag, false)
+    except CatchableError as e:
+      return err(e.msg)
+
   let header = convHeader(blk)
 
   # verify header hash
   if header.rlpHash != blk.hash:
-    raise newException(ValueError, "hashed block header doesn't match with blk.hash(downloaded)")
+    return err("hashed block header doesn't match with blk.hash(downloaded)")
 
   if n != header.number:
-    raise newException(ValueError, "the downloaded block number doesn't match with the requested block number")
+    return err("the downloaded block number doesn't match with the requested block number")
 
   # get the source block
   let earliestHeader = self.headerStore.earliest.valueOr:
-    raise newException(ValueError, "Syncing")
+    return err("Syncing")
 
   # walk blocks backwards(time) from source to target
   let isLinked = await self.walkBlocks(earliestHeader.number, header.number, earliestHeader.parentHash, blk.hash)
 
   if not isLinked:
-    raise newException(ValueError, "the requested block is not part of the canonical chain")
+    return err("the requested block is not part of the canonical chain")
 
   # verify transactions
   if fullTransactions:
     let verified = verifyTransactions(header.transactionsRoot, blk.transactions).valueOr:
-      raise newException(ValueError, "error while verifying transactions root")
+      return err("error while verifying transactions root")
     if not verified:
-      raise newException(ValueError, "transactions within the block do not yield the same transaction root")
+      return err("transactions within the block do not yield the same transaction root")
 
   # verify withdrawals
   if blk.withdrawals.isSome():
     if blk.withdrawalsRoot.get() != orderedTrieRoot(blk.withdrawals.get()):
-      raise newException(ValueError, "withdrawals within the block do not yield the same withdrawals root")
+      return err("withdrawals within the block do not yield the same withdrawals root")
 
-  return blk
+  return ok(blk)
 
 proc getHeaderByHash*(
     self: VerifiedRpcProxy, blockHash: Hash32
-): Future[Header] {.async: (raises: [ValueError, CatchableError]).} =
+): Future[Result[Header, string]] {.async: (raises: []).} =
   let cachedHeader = self.headerStore.get(blockHash)
 
   if cachedHeader.isNone():
     debug "did not find the header in the cache", blockHash=blockHash
   else:
-    return cachedHeader.get()
+    return ok(cachedHeader.get())
 
   # get the source block
   let earliestHeader = self.headerStore.earliest.valueOr:
-    raise newException(ValueError, "Syncing")
+    return err("Syncing")
 
   # get the target block
-  let blk = await self.rpcClient.eth_getBlockByHash(blockHash, false)
+  let blk = 
+    try:
+      await self.rpcClient.eth_getBlockByHash(blockHash, false)
+    except CatchableError as e:
+      return err(e.msg)
+
   let header = convHeader(blk)
 
   # verify header hash
   if header.rlpHash != blk.hash:
-    raise newException(ValueError, "hashed block header doesn't match with blk.hash(downloaded)")
+    return err("hashed block header doesn't match with blk.hash(downloaded)")
 
   if blockHash != blk.hash:
-    raise newException(ValueError, "the blk.hash(downloaded) doesn't match with the provided hash")
+    return err("the blk.hash(downloaded) doesn't match with the provided hash")
 
   # walk blocks backwards(time) from source to target
   let isLinked = await self.walkBlocks(earliestHeader.number, header.number, earliestHeader.parentHash, blockHash)
 
   if not isLinked:
-    raise newException(ValueError, "the requested block is not part of the canonical chain")
+    return err("the requested block is not part of the canonical chain")
 
-  return header
+  return ok(header)
 
 proc getHeaderByTag*(
     self: VerifiedRpcProxy, blockTag: BlockTag
-): Future[Header] {.async: (raises: [ValueError, CatchableError]).} =
+): Future[Result[Header, string]] {.async: (raises: []).} =
   let
-    n = self.resolveTag(blockTag)
+    n = self.resolveTag(blockTag).valueOr:
+      return err(error)
     cachedHeader = self.headerStore.get(n)
 
   if cachedHeader.isNone():
     debug "did not find the header in the cache", blockTag=blockTag
   else:
-    return cachedHeader.get()
+    return ok(cachedHeader.get())
 
   # get the source block
   let earliestHeader = self.headerStore.earliest.valueOr:
-    raise newException(ValueError, "Syncing")
+    return err("Syncing")
 
   # get the target block
-  let blk = await self.rpcClient.eth_getBlockByNumber(blockTag, false)
+  let blk = 
+    try:
+      await self.rpcClient.eth_getBlockByNumber(blockTag, false)
+    except CatchableError as e:
+      return err(e.msg)
+
   let header = convHeader(blk)
 
   # verify header hash
   if header.rlpHash != blk.hash:
-    raise newException(ValueError, "hashed block header doesn't match with blk.hash(downloaded)")
+    return err("hashed block header doesn't match with blk.hash(downloaded)")
 
   if n != header.number:
-    raise newException(ValueError, "the downloaded block number doesn't match with the requested block number")
+    return err("the downloaded block number doesn't match with the requested block number")
 
   # walk blocks backwards(time) from source to target
   let isLinked = await self.walkBlocks(earliestHeader.number, header.number, earliestHeader.parentHash, blk.hash)
 
   if not isLinked:
-    raise newException(ValueError, "the requested block is not part of the canonical chain")
+    return err("the requested block is not part of the canonical chain")
 
-  return header
+  return ok(header)
