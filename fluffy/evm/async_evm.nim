@@ -82,15 +82,15 @@ type
     address: Address
     codeFut: Future[Opt[seq[byte]]]
 
-  GetAccountProc* = proc(stateRoot: Hash32, address: Address): Future[Opt[Account]] {.
+  GetAccountProc* = proc(header: Header, address: Address): Future[Opt[Account]] {.
     async: (raises: [CancelledError])
   .}
 
   GetStorageProc* = proc(
-    stateRoot: Hash32, address: Address, slotKey: UInt256
+    header: Header, address: Address, slotKey: UInt256
   ): Future[Opt[UInt256]] {.async: (raises: [CancelledError]).}
 
-  GetCodeProc* = proc(stateRoot: Hash32, address: Address): Future[Opt[seq[byte]]] {.
+  GetCodeProc* = proc(header: Header, address: Address): Future[Opt[seq[byte]]] {.
     async: (raises: [CancelledError])
   .}
 
@@ -165,7 +165,7 @@ proc callFetchingState(
     fetchedCode = initHashSet[Address]()
 
   # Set code of the 'to' address in the EVM so that we can execute the transaction
-  let code = (await evm.backend.getCode(header.stateRoot, to)).valueOr:
+  let code = (await evm.backend.getCode(header, to)).valueOr:
     return err("Unable to get code")
   vmState.ledger.setCode(to, code)
   fetchedCode.incl(to)
@@ -216,7 +216,7 @@ proc callFetchingState(
           if slotIdx notin fetchedStorage:
             debug "Fetching storage slot", address = adr, slotKey = v.storageSlot
             let storageFut =
-              evm.backend.getStorage(header.stateRoot, adr, v.storageSlot)
+              evm.backend.getStorage(header, adr, v.storageSlot)
             if not stateFetchDone:
               storageQueries.add(StorageQuery.init(adr, v.storageSlot, storageFut))
               if not optimisticStateFetch:
@@ -226,7 +226,7 @@ proc callFetchingState(
 
           if adr notin fetchedAccounts:
             debug "Fetching account", address = adr
-            let accFut = evm.backend.getAccount(header.stateRoot, adr)
+            let accFut = evm.backend.getAccount(header, adr)
             if not stateFetchDone:
               accountQueries.add(AccountQuery.init(adr, accFut))
               if not optimisticStateFetch:
@@ -234,7 +234,7 @@ proc callFetchingState(
 
           if v.codeTouched and adr notin fetchedCode:
             debug "Fetching code", address = adr
-            let codeFut = evm.backend.getCode(header.stateRoot, adr)
+            let codeFut = evm.backend.getCode(header, adr)
             if not stateFetchDone:
               codeQueries.add(CodeQuery.init(adr, codeFut))
               if not optimisticStateFetch:

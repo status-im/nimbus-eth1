@@ -12,16 +12,16 @@ import ../network/state/state_endpoints, ./async_evm
 proc toAsyncEvmStateBackend*(stateNetwork: StateNetwork): AsyncEvmStateBackend =
   let
     accProc = proc(
-        stateRoot: Hash32, address: Address
+        header: Header, address: Address
     ): Future[Opt[Account]] {.async: (raw: true, raises: [CancelledError]).} =
-      stateNetwork.getAccount(stateRoot, address)
+      stateNetwork.getAccount(header.stateRoot, address)
     storageProc = proc(
-        stateRoot: Hash32, address: Address, slotKey: UInt256
+        header: Header, address: Address, slotKey: UInt256
     ): Future[Opt[UInt256]] {.async: (raw: true, raises: [CancelledError]).} =
-      stateNetwork.getStorageAtByStateRoot(stateRoot, address, slotKey)
+      stateNetwork.getStorageAtByStateRoot(header.stateRoot, address, slotKey)
     codeProc = proc(
-        stateRoot: Hash32, address: Address
+        header: Header, address: Address
     ): Future[Opt[seq[byte]]] {.async: (raw: true, raises: [CancelledError]).} =
-      stateNetwork.getCodeByStateRoot(stateRoot, address)
+      stateNetwork.getCodeByStateRoot(header.stateRoot, address)
 
   AsyncEvmStateBackend.init(accProc, storageProc, codeProc)
