@@ -186,13 +186,6 @@ proc `hibernate=`*(ctx: BeaconCtxRef; val: bool) =
 
 # -----
 
-func infectedByTVirus*(buddy: BeaconBuddyRef): bool =
-  ## T-Virus: A series of mutant Progenitor virus strains developed
-  ## by Umbrella Corporation.
-  ## Keep the sole survivor of virus outbreak, we still can sync
-  ## from it even though it has become mindless.
-  buddy.ctx.pool.nBuddies > 1
-
 proc nHdrRespErrors*(buddy: BeaconBuddyRef): int =
   ## Getter, returns the number of `resp` errors for argument `buddy`
   buddy.only.nHdrRespErrors.int

@@ -21,10 +21,11 @@ import
 # Private functions
 # ------------------------------------------------------------------------------
 
-proc registerError(buddy: BeaconBuddyRef) =
+proc registerError(buddy: BeaconBuddyRef, slowPeer = false) =
   buddy.incHdrRespErrors()
   if fetchHeadersReqErrThresholdCount < buddy.nHdrRespErrors:
-    buddy.ctrl.zombie = buddy.infectedByTVirus  # abandon slow peer
+    if 1 < buddy.ctx.pool.nBuddies or not slowPeer:
+      buddy.ctrl.zombie = true # abandon slow peer unless last one
 
 # ------------------------------------------------------------------------------
 # Public debugging & logging helpers
