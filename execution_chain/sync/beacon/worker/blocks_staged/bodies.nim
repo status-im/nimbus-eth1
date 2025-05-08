@@ -24,10 +24,11 @@ import
 func bdyErrors*(buddy: BeaconBuddyRef): string =
   $buddy.only.nBdyRespErrors & "/" & $buddy.only.nBdyProcErrors
 
-proc fetchRegisterError*(buddy: BeaconBuddyRef) =
+proc fetchRegisterError*(buddy: BeaconBuddyRef, slowPeer = false) =
   buddy.only.nBdyRespErrors.inc
   if fetchBodiesReqErrThresholdCount < buddy.only.nBdyRespErrors:
-    buddy.ctrl.zombie = buddy.infectedByTVirus # abandon slow peer
+    if 1 < buddy.ctx.pool.nBuddies or not slowPeer:
+      buddy.ctrl.zombie = true # abandon slow peer unless last one
 
 proc bodiesFetch*(
     buddy: BeaconBuddyRef;
@@ -80,7 +81,7 @@ proc bodiesFetch*(
   # mimimum share of the number of requested headers expected, typically 10%.
   if fetchBodiesReqErrThresholdZombie < elapsed or
      b.len.uint64 * 100 < nReq.uint64 * fetchBodiesReqMinResponsePC:
-    buddy.fetchRegisterError()
+    buddy.fetchRegisterError(slowPeer=true)
   else:
     buddy.only.nBdyRespErrors = 0 # reset error count
 

@@ -21,10 +21,11 @@ import
 # Private functions
 # ------------------------------------------------------------------------------
 
-proc registerError(buddy: BeaconBuddyRef) =
+proc registerError(buddy: BeaconBuddyRef, slowPeer = false) =
   buddy.incHdrRespErrors()
   if fetchHeadersReqErrThresholdCount < buddy.nHdrRespErrors:
-    buddy.ctrl.zombie = buddy.infectedByTVirus  # abandon slow peer
+    if 1 < buddy.ctx.pool.nBuddies or not slowPeer:
+      buddy.ctrl.zombie = true # abandon slow peer unless last one
 
 # ------------------------------------------------------------------------------
 # Public debugging & logging helpers
@@ -107,6 +108,15 @@ proc headersFetchReversed*(
     buddy.registerError()
     trace trEthRecvReceivedBlockHeaders, peer, nReq=req.maxResults,
       hash=topHash.toStr, nResp=h.len, elapsed=elapsed.toStr,
+      ctrl=buddy.ctrl.state, hdrErrors=buddy.hdrErrors
+    return err()
+
+  # Verify that first block number matches
+  if h[^1].number != ivReq.minPt:
+    buddy.registerError()
+    trace trEthRecvReceivedBlockHeaders, peer, nReq=req.maxResults,
+      hash=topHash.toStr, ivReqMinPt=ivReq.minPt.bnStr, ivRespMinPt=h[^1].bnStr,
+      nResp=h.len, elapsed=elapsed.toStr,
       ctrl=buddy.ctrl.state, hdrErrors=buddy.hdrErrors
     return err()
 
