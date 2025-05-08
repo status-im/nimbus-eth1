@@ -41,6 +41,7 @@ type StateNetwork* = ref object
   historyNetwork: Opt[HistoryNetwork]
   validateStateIsCanonical: bool
   contentRequestRetries: int
+  contentQueueWorkers: int
 
 func toContentIdHandler(contentKey: ContentKeyByteList): results.Opt[ContentId] =
   ok(toContentId(contentKey))
@@ -56,7 +57,11 @@ proc new*(
     historyNetwork = Opt.none(HistoryNetwork),
     validateStateIsCanonical = true,
     contentRequestRetries = 1,
+    contentQueueWorkers = 25,
 ): T =
+  doAssert(contentRequestRetries >= 0)
+  doAssert(contentQueueWorkers >= 1)
+  
   let
     cq = newAsyncQueue[(Opt[NodeId], ContentKeysList, seq[seq[byte]])](50)
     s = streamManager.registerNewStream(cq)
@@ -80,6 +85,7 @@ proc new*(
     historyNetwork: historyNetwork,
     validateStateIsCanonical: validateStateIsCanonical,
     contentRequestRetries: contentRequestRetries,
+    contentQueueWorkers: contentQueueWorkers
   )
 
 proc getContent(
@@ -211,7 +217,7 @@ proc processOffer*(
 
   ok()
 
-proc processContentLoop(n: StateNetwork) {.async: (raises: []).} =
+proc contentQueueWorker(n: StateNetwork) {.async: (raises: []).} =
   try:
     while true:
       let (srcNodeId, contentKeys, contentValues) = await n.contentQueue.popFirst()
@@ -275,8 +281,8 @@ proc start*(n: StateNetwork) =
 
   n.portalProtocol.start()
 
-  for i in 0..<25:
-    n.processContentLoops.add processContentLoop(n)
+  for i in 0 ..< n.contentQueueWorkers:
+    n.processContentLoops.add(contentQueueWorker(n))
 
   n.statusLogLoop = statusLogLoop(n)
 

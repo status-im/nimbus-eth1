@@ -216,6 +216,7 @@ proc run(fluffy: Fluffy, config: PortalConf) {.raises: [CatchableError].} =
       dataDir: string config.dataDir,
       storageCapacity: config.storageCapacityMB * 1_000_000,
       contentRequestRetries: config.contentRequestRetries.int,
+      contentQueueWorkers: config.contentQueueWorkers
     )
 
     node = PortalNode.new(
