@@ -33,6 +33,7 @@ type
     dataDir*: string
     storageCapacity*: uint64
     contentRequestRetries*: int
+    contentQueueWorkers*: int
 
   PortalNode* = ref object
     discovery: protocol.Protocol
@@ -154,6 +155,7 @@ proc new*(
             historyNetwork = historyNetwork,
             not config.disableStateRootValidation,
             contentRequestRetries = config.contentRequestRetries,
+            contentQueueWorkers = config.contentQueueWorkers,
           )
         )
       else:

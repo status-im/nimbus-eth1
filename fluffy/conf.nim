@@ -404,6 +404,14 @@ type
       name: "debug-radius-cache-size"
     .}: int
 
+    contentQueueWorkers* {.
+      hidden,
+      desc:
+        "The number of content queue workers to create for concurrent processing of received offers",
+      defaultValue: 8,
+      name: "debug-content-queue-workers"
+    .}: int
+
     case cmd* {.command, defaultValue: noCommand.}: PortalCmd
     of noCommand:
       discard
