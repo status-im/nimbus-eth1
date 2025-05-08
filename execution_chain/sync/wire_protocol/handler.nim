@@ -15,6 +15,7 @@ import
   stew/endians2,
   ./types,
   ./requester,
+  ./broadcast,
   ../../core/[chain, tx_pool],
   ../../networking/p2p
 
@@ -28,17 +29,25 @@ const
   # https://github.com/ethereum/devp2p/blob/master/caps/eth.md#getpooledtransactions-0x09
   MAX_TXS_SERVE       = 256
   SOFT_RESPONSE_LIMIT = 2 * 1024 * 1024
+  MAX_ACTION_HANDLER  = 128
 
 # ------------------------------------------------------------------------------
 # Public constructor/destructor
 # ------------------------------------------------------------------------------
 
 proc new*(_: type EthWireRef,
-          txPool: TxPoolRef): EthWireRef =
-  EthWireRef(
-    chain: txPool.chain,
-    txPool: txPool
+          txPool: TxPoolRef,
+          node: EthereumNode): EthWireRef =
+  let wire = EthWireRef(
+    chain : txPool.chain,
+    txPool: txPool,
+    node  : node,
+    quota : setupTokenBucket(),
+    actionQueue : newAsyncQueue[ActionHandler](maxsize = MAX_ACTION_HANDLER),
   )
+  wire.cleanupHeartbeat = setupCleanup(wire)
+  wire.actionHeartbeat = setupAction(wire)
+  wire
 
 # ------------------------------------------------------------------------------
 # Public functions: eth wire protocol handlers
@@ -177,18 +186,6 @@ proc getBlockHeaders*(ctx: EthWireRef,
       break
 
   move(list)
-
-proc handleAnnouncedTxs*(ctx: EthWireRef,
-                         packet: TransactionsPacket) =
-  if packet.transactions.len == 0:
-    return
-
-  debug "received new transactions",
-    number = packet.transactions.len
-
-  for tx in packet.transactions:
-    ctx.txPool.addTx(tx).isOkOr:
-      continue
 
 # ------------------------------------------------------------------------------
 # End
