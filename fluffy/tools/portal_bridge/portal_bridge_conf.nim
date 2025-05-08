@@ -210,9 +210,17 @@ type
 
       gossipWorkers* {.
         desc:
-          "The number of workers to use for gossiping the state into the portal network",
+          "The number of concurrent workers to use for gossiping the state into the portal network",
         defaultValue: 2,
         name: "gossip-workers"
+      .}: uint
+
+      minGossipPeers* {.
+        desc:
+          "The minimum number of peers to which we gossip each piece of content. " &
+          "The gossip is retried until this target number of peers is reached.",
+        defaultValue: 1,
+        name: "min-gossip-peers"
       .}: uint
 
 func parseCmdArg*(T: type TrustedDigest, input: string): T {.raises: [ValueError].} =
