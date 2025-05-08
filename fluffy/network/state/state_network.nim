@@ -57,11 +57,11 @@ proc new*(
     historyNetwork = Opt.none(HistoryNetwork),
     validateStateIsCanonical = true,
     contentRequestRetries = 1,
-    contentQueueWorkers = 25,
+    contentQueueWorkers = 8,
 ): T =
   doAssert(contentRequestRetries >= 0)
   doAssert(contentQueueWorkers >= 1)
-  
+
   let
     cq = newAsyncQueue[(Opt[NodeId], ContentKeysList, seq[seq[byte]])](50)
     s = streamManager.registerNewStream(cq)
@@ -85,7 +85,7 @@ proc new*(
     historyNetwork: historyNetwork,
     validateStateIsCanonical: validateStateIsCanonical,
     contentRequestRetries: contentRequestRetries,
-    contentQueueWorkers: contentQueueWorkers
+    contentQueueWorkers: contentQueueWorkers,
   )
 
 proc getContent(

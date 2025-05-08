@@ -406,8 +406,9 @@ type
 
     contentQueueWorkers* {.
       hidden,
-      desc: "The number of content queue workers to create for concurrent processing of received offers",
-      defaultValue: 25,
+      desc:
+        "The number of content queue workers to create for concurrent processing of received offers",
+      defaultValue: 8,
       name: "debug-content-queue-workers"
     .}: int
 

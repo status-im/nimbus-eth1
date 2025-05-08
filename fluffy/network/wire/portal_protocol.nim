@@ -1058,7 +1058,7 @@ proc offer(
   ## Main drawback is that content may be deleted from the node database
   ## by the cleanup process before it will be transferred, so this way does not
   ## guarantee content transfer.
-  
+
   # Fail if no common portal version is found
   let version = ?o.dst.highestCommonPortalVersion(localSupportedVersions)
 
