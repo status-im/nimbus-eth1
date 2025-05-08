@@ -357,6 +357,22 @@ type
       name: "debug-disable-content-cache"
     .}: bool
 
+    offerCacheSize* {.
+      hidden,
+      desc:
+        "Size of the in memory local offer cache. This is the max number " &
+        "of content id values that can be stored in the cache.",
+      defaultValue: defaultPortalProtocolConfig.offerCacheSize,
+      name: "debug-offer-cache-size"
+    .}: int
+
+    disableOfferCache* {.
+      hidden,
+      desc: "Disable the in memory local offer cache",
+      defaultValue: defaultPortalProtocolConfig.disableOfferCache,
+      name: "debug-disable-offer-cache"
+    .}: bool
+
     disablePoke* {.
       hidden,
       desc: "Disable POKE functionality for gossip mechanisms testing",
@@ -380,6 +396,13 @@ type
       defaultValueDesc: $defaultDisableBanNodes,
       name: "debug-disable-ban-nodes"
     .}: bool
+
+    radiusCacheSize* {.
+      hidden,
+      desc: "Size of the in memory radius cache.",
+      defaultValue: defaultPortalProtocolConfig.radiusCacheSize,
+      name: "debug-radius-cache-size"
+    .}: int
 
     case cmd* {.command, defaultValue: noCommand.}: PortalCmd
     of noCommand:

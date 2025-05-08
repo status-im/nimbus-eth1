@@ -224,8 +224,8 @@ proc vmExecCommit(pst: var TxPacker, xp: TxPoolRef): Result[void, string] =
 
   # EIP-6110, EIP-7002, EIP-7251
   if vmState.fork >= FkPrague:
-    pst.withdrawalReqs = processDequeueWithdrawalRequests(vmState)
-    pst.consolidationReqs = processDequeueConsolidationRequests(vmState)
+    pst.withdrawalReqs = ?processDequeueWithdrawalRequests(vmState)
+    pst.consolidationReqs = ?processDequeueConsolidationRequests(vmState)
     pst.depositReqs = ?parseDepositLogs(vmState.allLogs, vmState.com.depositContractAddress)
 
   # Finish up, then vmState.ledger.stateRoot may be accessed

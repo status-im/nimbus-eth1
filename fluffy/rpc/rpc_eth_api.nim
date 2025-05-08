@@ -17,7 +17,7 @@ import
   ../network/history/[history_network, history_content],
   ../network/state/[state_network, state_content, state_endpoints],
   ../network/beacon/beacon_light_client,
-  ../evm/[async_evm, async_evm_portal_backend],
+  ../evm/async_evm,
   ../version
 
 from ../../execution_chain/errors import ValidationError
@@ -137,13 +137,8 @@ proc installEthApiHandlers*(
     historyNetwork: Opt[HistoryNetwork],
     beaconLightClient: Opt[LightClient],
     stateNetwork: Opt[StateNetwork],
+    asyncEvm: Opt[AsyncEvm],
 ) =
-  let asyncEvm =
-    if stateNetwork.isSome():
-      Opt.some(AsyncEvm.init(stateNetwork.get().toAsyncEvmStateBackend()))
-    else:
-      Opt.none(AsyncEvm)
-
   rpcServer.rpc("web3_clientVersion") do() -> string:
     return clientVersion
 
@@ -486,7 +481,7 @@ proc installEthApiHandlers*(
     ## quantityTag: integer block number, or the string "latest", "earliest" or "pending",
     ##   see the default block parameter.
     ## Returns: the access list object which contains the addresses and storage keys which
-    ##   are read by the transaction.
+    ##   are read and written by the transaction.
 
     if tx.to.isNone():
       raise newException(ValueError, "to address is required")
@@ -502,12 +497,13 @@ proc installEthApiHandlers*(
       optimisticStateFetch = optimisticStateFetch.valueOr:
         true
 
-    let (accessList, gasUsed) = (
+    let (accessList, error, gasUsed) = (
       await evm.createAccessList(header, tx, optimisticStateFetch)
     ).valueOr:
       raise newException(ValueError, error)
 
-    return AccessListResult(accessList: accessList, gasUsed: gasUsed.Quantity)
+    return
+      AccessListResult(accessList: accessList, error: error, gasUsed: gasUsed.Quantity)
 
   rpcServer.rpc("eth_estimateGas") do(
     tx: TransactionArgs, quantityTag: RtBlockIdentifier, optimisticStateFetch: Opt[bool]

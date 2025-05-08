@@ -48,17 +48,16 @@ proc getPortalRpc(conf: NimbusConf): Opt[PortalRpc] =
     Opt.none(PortalRpc)
 
 proc init*(T: type HistoryExpiryRef, conf: NimbusConf, com: CommonRef): T =
-  # Portal is only available for mainnet
-  notice "Initiating Portal with the following config",
+  if not conf.historyExpiry:
+    # history expiry haven't been activated yet
+    return nil
+
+  info "Initiating Portal with the following config",
     portalUrl = conf.portalUrl,
     historyExpiry = conf.historyExpiry,
     networkId = com.networkId,
     portalLimit = conf.historyExpiryLimit
 
-  if not conf.historyExpiry:
-    # history expiry haven't been activated yet
-    return nil
-  
   let 
     rpc = conf.getPortalRpc()
     portalEnabled =

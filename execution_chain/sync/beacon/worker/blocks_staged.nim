@@ -42,7 +42,7 @@ proc updateBuddyErrorState(buddy: BeaconBuddyRef) =
      fetchBodiesProcessErrThresholdCount < buddy.only.nBdyProcErrors:
 
     # Make sure that this peer does not immediately reconnect
-    buddy.ctrl.zombie = true
+    buddy.ctrl.zombie = buddy.infectedByTVirus
 
 # ------------------------------------------------------------------------------
 # Private function(s)
@@ -327,7 +327,7 @@ proc blocksStagedImport*(
     ctx: BeaconCtxRef;
     info: static[string];
       ): Future[bool]
-      {.async: (raises: []).} =
+      {.async: (raises: [CancelledError]).} =
   ## Import/execute blocks record from staged queue
   ##
   let qItem = ctx.blk.staged.ge(0).valueOr:
@@ -363,7 +363,7 @@ proc blocksStagedImport*(
           nthBn=nBn.bnStr, nthHash=ctx.getNthHash(qItem.data, n).short
         continue
 
-      ctx.chain.importBlock(qItem.data.blocks[n]).isOkOr:
+      (await ctx.chain.importBlock(qItem.data.blocks[n])).isOkOr:
         # The way out here is simply to re-compile the block queue. At any
         # point, the `FC` module data area might have been moved to a new
         # canonical branch.

@@ -79,6 +79,7 @@ proc `$$`*(e: CoreDbError): string =
 proc persist*(
     db: CoreDbRef;
     txFrame: CoreDbTxRef;
+    stateRoot: Opt[Hash32];
       ) =
   ## This function persists changes up to and including the given frame to the
   ## database.
@@ -98,7 +99,7 @@ proc persist*(
     #      error), we have to panic instead.
 
     db.kvt.persist(kvtBatch[], txFrame.kTx)
-    db.mpt.persist(mptBatch[], txFrame.aTx)
+    db.mpt.persist(mptBatch[], txFrame.aTx, stateRoot)
 
     db.kvt.putEndFn(kvtBatch[]).isOkOr:
       raiseAssert $error

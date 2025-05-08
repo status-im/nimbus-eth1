@@ -47,21 +47,21 @@ proc setupEngineAPI*(engine: BeaconEngineRef, server: RpcServer) =
     return methods.filterIt(supportedMethods.contains(it))
 
   server.rpc("engine_newPayloadV1") do(payload: ExecutionPayloadV1) -> PayloadStatusV1:
-    return engine.newPayload(Version.V1, payload.executionPayload)
+    await engine.newPayload(Version.V1, payload.executionPayload)
 
   server.rpc("engine_newPayloadV2") do(payload: ExecutionPayload) -> PayloadStatusV1:
-    return engine.newPayload(Version.V2, payload)
+    await engine.newPayload(Version.V2, payload)
 
   server.rpc("engine_newPayloadV3") do(payload: ExecutionPayload,
                                        expectedBlobVersionedHashes: Opt[seq[Hash32]],
                                        parentBeaconBlockRoot: Opt[Hash32]) -> PayloadStatusV1:
-    return engine.newPayload(Version.V3, payload, expectedBlobVersionedHashes, parentBeaconBlockRoot)
+    await engine.newPayload(Version.V3, payload, expectedBlobVersionedHashes, parentBeaconBlockRoot)
 
   server.rpc("engine_newPayloadV4") do(payload: ExecutionPayload,
                                        expectedBlobVersionedHashes: Opt[seq[Hash32]],
                                        parentBeaconBlockRoot: Opt[Hash32],
                                        executionRequests: Opt[seq[seq[byte]]]) -> PayloadStatusV1:
-    return engine.newPayload(Version.V4, payload,
+    await engine.newPayload(Version.V4, payload,
       expectedBlobVersionedHashes, parentBeaconBlockRoot, executionRequests)
 
   server.rpc("engine_getPayloadV1") do(payloadId: Bytes8) -> ExecutionPayloadV1:
@@ -78,15 +78,15 @@ proc setupEngineAPI*(engine: BeaconEngineRef, server: RpcServer) =
 
   server.rpc("engine_forkchoiceUpdatedV1") do(update: ForkchoiceStateV1,
                     attrs: Opt[PayloadAttributesV1]) -> ForkchoiceUpdatedResponse:
-    return engine.forkchoiceUpdated(Version.V1, update, attrs.payloadAttributes)
+    await engine.forkchoiceUpdated(Version.V1, update, attrs.payloadAttributes)
 
   server.rpc("engine_forkchoiceUpdatedV2") do(update: ForkchoiceStateV1,
                     attrs: Opt[PayloadAttributes]) -> ForkchoiceUpdatedResponse:
-    return engine.forkchoiceUpdated(Version.V2, update, attrs)
+    await engine.forkchoiceUpdated(Version.V2, update, attrs)
 
   server.rpc("engine_forkchoiceUpdatedV3") do(update: ForkchoiceStateV1,
                     attrs: Opt[PayloadAttributes]) -> ForkchoiceUpdatedResponse:
-    return engine.forkchoiceUpdated(Version.V3, update, attrs)
+    await engine.forkchoiceUpdated(Version.V3, update, attrs)
 
   server.rpc("engine_getPayloadBodiesByHashV1") do(hashes: seq[Hash32]) ->
                                                seq[Opt[ExecutionPayloadBodyV1]]:

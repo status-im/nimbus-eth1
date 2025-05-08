@@ -42,6 +42,12 @@ declareCounter portal_message_requests_outgoing,
 declareCounter portal_message_response_incoming,
   "Portal wire protocol incoming message responses",
   labels = ["protocol_id", "message_type"]
+declareCounter portal_offer_accept_codes,
+  "Portal wire protocol accept codes received from peers after sending offers",
+  labels = ["protocol_id", "accept_code"]
+declareCounter portal_handle_offer_accept_codes,
+  "Portal wire protocol accept codes returned to peers when handing offers",
+  labels = ["protocol_id", "accept_code"]
 
 const requestBuckets = [1.0, 3.0, 5.0, 7.0, 9.0, Inf]
 declareHistogram portal_lookup_node_requests,
@@ -77,12 +83,17 @@ declareCounter portal_gossip_without_lookup,
   "Portal wire protocol neighborhood gossip that did not require a node lookup",
   labels = ["protocol_id"]
 declareCounter portal_content_cache_hits,
-  "Portal wire protocol local content lookups that hit the cache",
+  "Portal wire protocol local content lookups that hit the content cache",
   labels = ["protocol_id"]
 declareCounter portal_content_cache_misses,
-  "Portal wire protocol local content lookups that don't hit the cache",
+  "Portal wire protocol local content lookups that don't hit the content cache",
   labels = ["protocol_id"]
-
+declareCounter portal_offer_cache_hits,
+  "Portal wire protocol local content lookups that hit the offer cache",
+  labels = ["protocol_id"]
+declareCounter portal_offer_cache_misses,
+  "Portal wire protocol local content lookups that don't hit the offer cache",
+  labels = ["protocol_id"]
 declareCounter portal_poke_offers,
   "Portal wire protocol offers through poke mechanism", labels = ["protocol_id"]
 
@@ -141,7 +152,7 @@ type
 
   DbStoreHandler* = proc(
     contentKey: ContentKeyByteList, contentId: ContentId, content: seq[byte]
-  ) {.raises: [], gcsafe.}
+  ): bool {.raises: [], gcsafe.}
 
   DbContainsHandler* = proc(contentKey: ContentKeyByteList, contentId: ContentId): bool {.
     raises: [], gcsafe
@@ -153,7 +164,15 @@ type
 
   RadiusCache* = LruCache[NodeId, UInt256]
 
+  # Caches content fetched from the network during lookups.
+  # Content outside our radius is also cached in order to improve performance
+  # of queries which may lookup data outside our radius.
   ContentCache = LruCache[ContentId, seq[byte]]
+
+  # Caches the content ids of the most recently received content offers.
+  # Content is only stored in this cache if it falls within our radius and similarly
+  # the cache is only checked if the content id is within our radius.
+  OfferCache = LruCache[ContentId, bool]
 
   ContentKV* = object
     contentKey*: ContentKeyByteList
@@ -189,6 +208,7 @@ type
     radiusCache: RadiusCache
     offerQueue: AsyncQueue[OfferRequest]
     offerWorkers: seq[Future[void]]
+    offerCache*: OfferCache
     pingTimings: Table[NodeId, chronos.Moment]
     config*: PortalProtocolConfig
     pingExtensionCapabilities*: set[uint16]
@@ -529,6 +549,16 @@ proc handleFindContent(
 
   encodeMessage(ContentMessage(contentMessageType: enrsType, enrs: enrs))
 
+proc containsContent(
+    p: PortalProtocol, contentKey: ContentKeyByteList, contentId: ContentId
+): bool =
+  if p.offerCache.contains(contentId):
+    portal_offer_cache_hits.inc(labelValues = [$p.protocolId])
+    true
+  else:
+    portal_offer_cache_misses.inc(labelValues = [$p.protocolId])
+    p.dbContains(contentKey, contentId)
+
 proc handleOffer(
     p: PortalProtocol, o: OfferMessage, srcId: NodeId
 ): Result[AcceptMessage, string] =
@@ -536,6 +566,9 @@ proc handleOffer(
   # of content to process and potentially gossip around. Don't accept more
   # data in this case.
   if p.stream.contentQueue.full():
+    portal_handle_offer_accept_codes.inc(
+      o.contentKeys.len, labelValues = [$p.protocolId, $DeclinedRateLimited]
+    )
     return ok(
       AcceptMessage(
         connectionId: Bytes2([byte 0x00, 0x00]),
@@ -571,7 +604,7 @@ proc handleOffer(
         discard contentKeysAcceptList.add(DeclinedNotWithinRadius)
       elif not p.stream.canAddPendingTransfer(srcId, contentId):
         discard contentKeysAcceptList.add(DeclinedInboundTransferInProgress)
-      elif p.dbContains(contentKey, contentId):
+      elif p.containsContent(contentKey, contentId):
         discard contentKeysAcceptList.add(DeclinedAlreadyStored)
       else:
         p.stream.addPendingTransfer(srcId, contentId)
@@ -579,6 +612,10 @@ proc handleOffer(
         discard contentKeys.add(contentKey)
         contentIds.add(contentId)
         contentAccepted = true
+
+      portal_handle_offer_accept_codes.inc(
+        labelValues = [$p.protocolId, $contentKeysAcceptList[i]]
+      )
     else:
       # Return empty response when content key validation fails
       return err("Invalid content key")
@@ -710,8 +747,10 @@ proc new*(
     dataRadius: dbRadius,
     bootstrapRecords: @bootstrapRecords,
     stream: stream,
-    radiusCache: RadiusCache.init(256),
+    radiusCache: RadiusCache.init(config.radiusCacheSize),
     offerQueue: newAsyncQueue[OfferRequest](config.maxConcurrentOffers),
+    offerCache:
+      OfferCache.init(if config.disableOfferCache: 0 else: config.offerCacheSize),
     pingTimings: Table[NodeId, chronos.Moment](),
     config: config,
     pingExtensionCapabilities: pingExtensionCapabilities,
@@ -912,16 +951,15 @@ proc findContent*(
 
     proc readContentValueVersioned(
         socket: UtpSocket[NodeAddress]
-    ): Future[seq[byte]] {.async: (raises: [CancelledError]).} =
+    ): Future[Result[seq[byte], string]] {.async: (raises: [CancelledError]).} =
       if version >= 1:
-        # Note: Using readContentValueNoResult instead of readContentValue as
-        # else we hit this issue:
-        # https://github.com/nim-lang/Nim/issues/24847
-        # This issue got resolved and next Nim update shoul allow to remove this
-        # workaround.
-        await socket.readContentValueNoResult()
+        await socket.readContentValue()
       else:
-        await socket.read()
+        let bytes = await socket.read()
+        if bytes.len() == 0:
+          err("No bytes read")
+        else:
+          ok(bytes)
 
     try:
       # Read one content item from the socket, fails on invalid length prefix
@@ -934,10 +972,9 @@ proc findContent*(
         socket.close()
 
       if await readFut.withTimeout(p.stream.contentReadTimeout):
-        let content = await readFut
-        if content.len == 0:
+        let content = (await readFut).valueOr:
           socket.close() # Sending FIN to remote
-          return err("Error reading content item from socket")
+          return err("Error reading content item from socket: " & error)
 
         trace "Content value read from socket", socketKey = socket.socketKey
         socket.destroy()
@@ -1056,14 +1093,12 @@ proc offer(
       acceptListLen = response.contentKeys.len(), contentKeysLen
     return err("Accepted content key accept list has invalid size")
 
-  proc countAccepted(acceptList: ContentKeysAcceptList): int =
-    var count = 0
-    for code in acceptList:
-      if code == Accepted:
-        inc(count)
-    return count
+  var acceptedKeysAmount = 0
+  for code in response.contentKeys:
+    portal_offer_accept_codes.inc(labelValues = [$p.protocolId, $code])
+    if code == Accepted:
+      inc(acceptedKeysAmount)
 
-  let acceptedKeysAmount = response.contentKeys.countAccepted()
   portal_content_keys_accepted.observe(
     acceptedKeysAmount.int64, labelValues = [$p.protocolId]
   )
@@ -1133,6 +1168,7 @@ proc offer(
             return err("Error writing requested data")
 
           trace "Offered content item send", dataWritten = dataWritten
+
   await socket.closeWait()
   trace "Content successfully offered"
 
@@ -1674,9 +1710,16 @@ proc neighborhoodGossip*(
     srcNodeId: Opt[NodeId],
     contentKeys: ContentKeysList,
     content: seq[seq[byte]],
+    enableNodeLookup = false,
 ): Future[int] {.async: (raises: [CancelledError]).} =
   ## Run neighborhood gossip for provided content.
   ## Returns the number of peers to which content was attempted to be gossiped.
+  ## When enableNodeLookup is true then if the local routing table doesn't
+  ## have enough nodes with a radius in range of the content then a node lookup
+  ## is used to find nodes from the network. Note: For this part to work efficiently
+  ## the radius cache should be relatively large (ideally equal to the total number
+  ## of nodes in the network) to reduce the number of pings required to populate
+  ## the cache over time as old content is removed when the cache is full.
   if content.len() == 0:
     return 0
 
@@ -1716,41 +1759,59 @@ proc neighborhoodGossip*(
 
   var gossipNodes: seq[Node]
   for node in closestLocalNodes:
-    let radius = p.radiusCache.get(node.id)
-    if radius.isSome():
-      if p.inRange(node.id, radius.unsafeGet(), contentId):
-        if srcNodeId.isNone:
-          gossipNodes.add(node)
-        elif node.id != srcNodeId.get():
-          gossipNodes.add(node)
+    let radius = p.radiusCache.get(node.id).valueOr:
+      continue
+    if p.inRange(node.id, radius, contentId):
+      if srcNodeId.isNone() or node.id != srcNodeId.get():
+        gossipNodes.add(node)
 
-  if gossipNodes.len >= p.config.maxGossipNodes: # use local nodes for gossip
+  var numberOfGossipedNodes = 0
+
+  if not enableNodeLookup or gossipNodes.len() >= p.config.maxGossipNodes:
+    # use local nodes for gossip
     portal_gossip_without_lookup.inc(labelValues = [$p.protocolId])
-    let numberOfGossipedNodes = min(gossipNodes.len, p.config.maxGossipNodes)
-    for node in gossipNodes[0 ..< numberOfGossipedNodes]:
+
+    for node in gossipNodes:
       let req = OfferRequest(dst: node, kind: Direct, contentList: contentList)
       await p.offerQueue.addLast(req)
-    return numberOfGossipedNodes
+      inc numberOfGossipedNodes
+
+      if numberOfGossipedNodes >= p.config.maxGossipNodes:
+        break
   else: # use looked up nodes for gossip
     portal_gossip_with_lookup.inc(labelValues = [$p.protocolId])
+
     let closestNodes = await p.lookup(NodeId(contentId))
-    let numberOfGossipedNodes = min(closestNodes.len, p.config.maxGossipNodes)
-    for node in closestNodes[0 ..< numberOfGossipedNodes]:
-      # Note: opportunistically not checking if the radius of the node is known
-      # and thus if the node is in radius with the content. Reason is, these
-      # should really be the closest nodes in the DHT, and thus are most likely
-      # going to be in range of the requested content.
-      let req = OfferRequest(dst: node, kind: Direct, contentList: contentList)
-      await p.offerQueue.addLast(req)
-    return numberOfGossipedNodes
+
+    for node in closestNodes:
+      if p.radiusCache.get(node.id).isNone():
+        # Send ping to add the node to the radius cache
+        (await p.ping(node)).isOkOr:
+          continue
+
+      let radius = p.radiusCache.get(node.id).valueOr:
+        # Should only happen if the ping fails, so just skip the node in this case
+        continue
+
+      # Only send offers to nodes for which the content is in range of their radius
+      if p.inRange(node.id, radius, contentId):
+        let req = OfferRequest(dst: node, kind: Direct, contentList: contentList)
+        await p.offerQueue.addLast(req)
+        inc numberOfGossipedNodes
+
+      if numberOfGossipedNodes >= p.config.maxGossipNodes:
+        break
+
+  return numberOfGossipedNodes
 
 proc neighborhoodGossipDiscardPeers*(
     p: PortalProtocol,
     srcNodeId: Opt[NodeId],
     contentKeys: ContentKeysList,
     content: seq[seq[byte]],
+    enableNodeLookup = false,
 ): Future[void] {.async: (raises: [CancelledError]).} =
-  discard await p.neighborhoodGossip(srcNodeId, contentKeys, content)
+  discard await p.neighborhoodGossip(srcNodeId, contentKeys, content, enableNodeLookup)
 
 proc randomGossip*(
     p: PortalProtocol,
@@ -1789,6 +1850,7 @@ proc storeContent*(
     contentId: ContentId,
     content: seq[byte],
     cacheContent = false,
+    cacheOffer = false,
 ): bool {.discardable.} =
   if cacheContent and not p.config.disableContentCache:
     # We cache content regardless of whether it is in our radius or not
@@ -1797,8 +1859,15 @@ proc storeContent*(
   # Always re-check that the key is still in the node range to make sure only
   # content in range is stored.
   if p.inRange(contentId):
-    doAssert(p.dbPut != nil)
-    p.dbPut(contentKey, contentId, content)
+    let dbPruned = p.dbPut(contentKey, contentId, content)
+    if dbPruned:
+      # invalidate all cached content incase it was removed from the database
+      # during pruning
+      p.offerCache = OfferCache.init(p.offerCache.capacity)
+
+    if cacheOffer and not p.config.disableOfferCache:
+      p.offerCache.put(contentId, true)
+
     true
   else:
     false

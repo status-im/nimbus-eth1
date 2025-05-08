@@ -1,5 +1,5 @@
 # Nimbus
-# Copyright (c) 2023-2024 Status Research & Development GmbH
+# Copyright (c) 2023-2025 Status Research & Development GmbH
 # Licensed and distributed under either of
 #   * MIT license (license terms in the root directory or at https://opensource.org/licenses/MIT).
 #   * Apache v2 license (license terms in the root directory or at https://www.apache.org/licenses/LICENSE-2.0).
@@ -29,16 +29,18 @@ proc writePortalContentToJson*(
     fatal "Error occured while writing to file", error = e.msg
     quit 1
 
-proc writePortalContentToYaml*(file: string, contentKey: string, contentValue: string) =
-  let
-    yamlPortalContent =
-      YamlPortalContent(content_key: contentKey, content_value: contentValue)
-    res = yamlPortalContent.dumpToYaml(file)
+proc writeDataToYaml*[T](data: T, file: string) =
+  let res = data.dumpToYaml(file)
   if res.isErr():
     error "Failed writing content to file", file, error = res.error
-    quit 1
+    quit QuitFailure
   else:
     notice "Successfully wrote content to file", file
+
+proc writePortalContentToYaml*(file: string, contentKey: string, contentValue: string) =
+  let yamlPortalContent =
+    YamlPortalContent(content_key: contentKey, content_value: contentValue)
+  yamlPortalContent.writeDataToYaml(file)
 
 proc createAndOpenFile*(dataDir: string, fileName: string): OutputStreamHandle =
   # Creates directory and file, if file already exists

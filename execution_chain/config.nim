@@ -339,6 +339,11 @@ type
       desc: "Number of worker threads (\"0\" = use as many threads as there are CPU cores available)"
       name: "num-threads" .}: int
 
+    persistBatchSize* {.
+      desc: ""
+      defaultValue: 32'u64
+      name: "persist-batch-size" .}: uint64
+
     beaconSyncTargetFile* {.
       hidden
       desc: "Load a file containg an rlp-encoded object \"(Header,Hash32)\" " &
@@ -404,6 +409,11 @@ type
       hidden
       desc: "Rewrite selected network config hash to database"
       name: "debug-rewrite-datadir-id".}: bool
+
+    eagerStateRootCheck* {.
+      hidden
+      desc: "Eagerly check state roots when syncing finalized blocks"
+      name: "debug-eager-state-root".}: bool
 
     case cmd* {.
       command

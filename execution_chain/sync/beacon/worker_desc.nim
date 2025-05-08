@@ -97,7 +97,6 @@ type
     nBuddies*: int                   ## Number of active workers
     clReq*: SyncClMesg               ## Manual first target set up
     lastState*: SyncLayoutState      ## Last known layout state
-    finRequest*: Hash32              ## To be resolved before session
     hdrSync*: HeaderFetchSync        ## Syncing by linked header chains
     blkSync*: BlocksFetchSync        ## For importing/executing blocks
     nextMetricsUpdate*: Moment       ## For updating metrics
@@ -186,6 +185,13 @@ proc `hibernate=`*(ctx: BeaconCtxRef; val: bool) =
   ctx.noisyLog = not val
 
 # -----
+
+func infectedByTVirus*(buddy: BeaconBuddyRef): bool =
+  ## T-Virus: A series of mutant Progenitor virus strains developed
+  ## by Umbrella Corporation.
+  ## Keep the sole survivor of virus outbreak, we still can sync
+  ## from it even though it has become mindless.
+  buddy.ctx.pool.nBuddies > 1
 
 proc nHdrRespErrors*(buddy: BeaconBuddyRef): int =
   ## Getter, returns the number of `resp` errors for argument `buddy`

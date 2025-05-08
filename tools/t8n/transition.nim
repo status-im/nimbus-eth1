@@ -322,8 +322,10 @@ proc exec(ctx: TransContext,
 
   if vmState.com.isPragueOrLater(ctx.env.currentTimestamp):
     # Execute EIP-7002 and EIP-7251 before calculating stateRoot
-    withdrawalReqs = processDequeueWithdrawalRequests(vmState)
-    consolidationReqs = processDequeueConsolidationRequests(vmState)
+    withdrawalReqs = processDequeueWithdrawalRequests(vmState).valueOr:
+      raise newError(ErrorConfig, error)
+    consolidationReqs = processDequeueConsolidationRequests(vmState).valueOr:
+      raise newError(ErrorConfig, error)
 
   let ledger = vmState.ledger
   ledger.postState(result.alloc)

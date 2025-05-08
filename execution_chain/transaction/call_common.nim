@@ -267,12 +267,21 @@ proc finishRunningComputation(
       result = c.error.info
   elif T is seq[byte]:
     result = move(c.output)
+  elif T is OutputResult:
+    if c.isError:
+      result.error = c.error.info
+    result.output = move(c.output)
   else:
     {.error: "Unknown computation output".}
 
 proc runComputation*(call: CallParams, T: type): T =
   let host = setupHost(call, keepStack = T is DebugCallResult)
   prepareToRunComputation(host, call)
+
+  # Pre-execution sanity checks
+  host.computation.preExecComputation()
+  if host.computation.isError:
+    return finishRunningComputation(host, call, T)
 
   host.computation.execCallOrCreate()
   if not call.sysCall:

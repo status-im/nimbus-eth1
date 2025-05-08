@@ -35,7 +35,7 @@ proc runSetup(ctx: BeaconCtxRef): bool =
 proc runRelease(ctx: BeaconCtxRef) =
   worker.release(ctx, "RunRelease")
 
-proc runDaemon(ctx: BeaconCtxRef) {.async: (raises: []).} =
+proc runDaemon(ctx: BeaconCtxRef) {.async: (raises: [CancelledError]).} =
   await worker.runDaemon(ctx, "RunDaemon")
 
 proc runTicker(ctx: BeaconCtxRef) =

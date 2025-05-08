@@ -18,7 +18,7 @@ import
   ../worker_desc,
   ./blocks_staged/staged_queue,
   ./headers_staged/staged_queue,
-  ./[blocks_unproc, headers_unproc]
+  ./[blocks_unproc, headers_unproc, update]
 
 type
   SyncStateData = tuple
@@ -67,15 +67,10 @@ proc setupServices*(ctx: BeaconCtxRef; info: static[string]) =
   # into `ForkedChainRef` (i.e. `ctx.pool.chain`.)
   ctx.pool.hdrCache = HeaderChainRef.init(ctx.pool.chain)
 
-  # Set up new notifier informing when the new head is available from the
-  # `CL`. If there is a new session available, the notifier is called with
-  # the hash of a finalised header that needs to be resolved. This hash is
-  # stored on the `ctx.pool` descriptor to be picked up by the next available
-  # sync peer.
-  ctx.hdrCache.start proc(hdr: BlockNumber, fin: Hash32) =
-    ctx.pool.finRequest = fin
-    info "Finalised hash registered", target=hdr.bnStr,
-      finHash=fin.short, nSyncPeers=ctx.pool.nBuddies
+  # Set up the notifier informing when a new syncer session has started.
+  ctx.hdrCache.start proc() =
+    # Activates the syncer. Work will be picked up by peers when available.
+    ctx.updateFromHibernateSetTarget info
 
   # Manual first run?
   if 0 < ctx.clReq.consHead.number:

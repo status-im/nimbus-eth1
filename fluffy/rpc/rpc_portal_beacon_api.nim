@@ -115,7 +115,6 @@ proc installPortalBeaconApiHandlers*(rpcServer: RpcServer, p: PortalProtocol) =
         raise invalidKeyErr()
 
     # TODO: Do we need to convert the received offer to a value without proofs before storing?
-
     p.storeContent(keyBytes, contentId, offerValueBytes)
 
   rpcServer.rpc("portal_beaconLocalContent") do(contentKey: string) -> string:
@@ -142,7 +141,10 @@ proc installPortalBeaconApiHandlers*(rpcServer: RpcServer, p: PortalProtocol) =
       # TODO: validate and store content locally
       # storedLocally = p.storeContent(keyBytes, contentId, valueBytes)
       peerCount = await p.neighborhoodGossip(
-        Opt.none(NodeId), ContentKeysList(@[keyBytes]), @[offerValueBytes]
+        Opt.none(NodeId),
+        ContentKeysList(@[keyBytes]),
+        @[offerValueBytes],
+        enableNodeLookup = true,
       )
 
     PutContentResult(storedLocally: false, peerCount: peerCount)

@@ -13,6 +13,7 @@ import
   eth/common/[keys, transaction_utils],
   stew/[byteutils, endians2],
   results,
+  chronos,
   ../execution_chain/config,
   ../execution_chain/db/storage_types,
   ../execution_chain/common/common,
@@ -140,7 +141,7 @@ func initAddr(z: int): Address =
   result.data[L-sizeof(uint32)..^1] = toBytesBE(z.uint32)
 
 proc importBlock(env: TestEnv; blk: Block) =
-  env.chain.importBlock(blk).isOkOr:
+  (waitFor env.chain.importBlock(blk)).isOkOr:
     raiseAssert "persistBlocks() failed at block #" &
       $blk.header.number & " msg: " & error
 

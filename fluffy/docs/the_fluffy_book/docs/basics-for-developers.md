@@ -22,11 +22,11 @@ The code follows the
 
 ## Nim code formatting
 
-The fluffy codebase is formatted with [nph](https://github.com/arnetheduck/nph).
+The Fluffy codebase is formatted with [nph](https://github.com/arnetheduck/nph).
 Check out the [this page](https://arnetheduck.github.io/nph/installation.html)
 on how to install nph.
 
-The fluffy CI tests check the code formatting according to the style rules of nph.
+The Fluffy CI tests check the code formatting according to the style rules of nph.
 Developers will need to make sure the code changes in PRs are formatted as such.
 
 !!! note

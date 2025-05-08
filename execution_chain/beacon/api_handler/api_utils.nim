@@ -8,7 +8,7 @@
 # those terms.
 
 import
-  std/[typetraits, strutils],
+  std/[typetraits],
   web3/execution_types,
   json_rpc/errors,
   nimcrypto/sha2,
@@ -50,7 +50,7 @@ proc computePayloadId*(blockHash: common.Hash32,
 proc validateBlockHash*(header: common.Header,
                         wantHash: common.Hash32,
                         version: Version): Result[void, PayloadStatusV1]
-                          {.gcsafe, raises: [ValueError].} =
+                          {.gcsafe.} =
   let gotHash = header.computeBlockHash
   if wantHash != gotHash:
     let status = if version == Version.V1:
@@ -60,8 +60,8 @@ proc validateBlockHash*(header: common.Header,
 
     let res = PayloadStatusV1(
       status: status,
-      validationError: Opt.some("blockhash mismatch, want $1, got $2" % [
-       $wantHash, $gotHash])
+      validationError: Opt.some("blockhash mismatch, want " &
+        $wantHash & ", got " & $gotHash)
     )
     return err(res)
 

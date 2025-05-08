@@ -42,9 +42,11 @@ proc basicServices(nimbus: NimbusNode,
                    conf: NimbusConf,
                    com: CommonRef) =
   # Setup the chain
-  let fc = ForkedChainRef.init(com)
+  let fc = ForkedChainRef.init(com,
+    eagerStateRoot = conf.eagerStateRootCheck,
+    persistBatchSize=conf.persistBatchSize)
   fc.deserialize().isOkOr:
-    warn "FC.deserialize", msg=error
+    warn "Loading block DAG from database", msg=error
 
   nimbus.fc = fc
   # Setup history expiry and portal
@@ -169,7 +171,7 @@ proc preventLoadingDataDirForTheWrongNetwork(db: CoreDbRef; conf: NimbusConf) =
     kvt.put(dataDirIdKey().toOpenArray, calculatedId.data).isOkOr:
       fatal "Cannot write data dir ID", ID=calculatedId
       quit(QuitFailure)
-    db.persist(kvt)
+    db.persist(kvt, Opt.none(Hash32))
 
   let
     kvt = db.baseTxFrame()
@@ -257,14 +259,14 @@ proc run(nimbus: NimbusNode, conf: NimbusConf) =
         txFrame = fc.baseTxFrame
       fc.serialize(txFrame).isOkOr:
         error "FC.serialize error: ", msg=error
-      com.db.persist(txFrame)
+      com.db.persist(txFrame, Opt.none(Hash32))
     com.db.finish()
 
   case conf.cmd
   of NimbusCmd.`import`:
     importBlocks(conf, com)
   of NimbusCmd.`import-rlp`:
-    importRlpBlocks(conf, com)
+    waitFor importRlpBlocks(conf, com)
   else:
     basicServices(nimbus, conf, com)
     manageAccounts(nimbus, conf)

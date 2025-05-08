@@ -320,17 +320,6 @@ proc readContentValue*(
   else:
     err("Content value length mismatch")
 
-proc readContentValueNoResult*(
-    socket: UtpSocket[NodeAddress]
-): Future[seq[byte]] {.async: (raises: [CancelledError]).} =
-  let len = (await socket.readVarint()).valueOr:
-    return @[]
-  let contentValue = await socket.read(len)
-  if contentValue.len() == len.int:
-    contentValue
-  else:
-    @[]
-
 proc readContentOffer(
     socket: UtpSocket[NodeAddress], stream: PortalStream, offer: ContentOffer
 ) {.async: (raises: [CancelledError]).} =

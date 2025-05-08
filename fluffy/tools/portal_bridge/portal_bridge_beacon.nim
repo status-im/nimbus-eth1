@@ -21,9 +21,7 @@ import
   ../eth_data_exporter/cl_data_exporter,
   ./[portal_bridge_conf, portal_bridge_common]
 
-const
-  largeRequestsTimeout = 120.seconds # For downloading large items such as states.
-  restRequestsTimeout = 30.seconds
+const restRequestsTimeout = 30.seconds
 
 # TODO: From nimbus_binary_common, but we don't want to import that.
 proc sleepAsync(t: TimeDiff): Future[void] =
@@ -236,32 +234,34 @@ proc gossipHistoricalSummaries(
     portalRpcClient: RpcClient,
     cfg: RuntimeConfig,
     forkDigests: ref ForkDigests,
-): Future[Result[void, string]] {.async.} =
-  let state =
+): Future[Result[void, string]] {.async: (raises: [CancelledError]).} =
+  let summariesOpt =
     try:
-      notice "Downloading beacon state"
+      notice "Downloading beacon historical_summaries"
       awaitWithTimeout(
-        restClient.getStateV2(StateIdent.init(StateIdentType.Finalized), cfg),
-        largeRequestsTimeout,
+        restClient.getHistoricalSummariesV1(
+          StateIdent.init(StateIdentType.Finalized), cfg
+        ),
+        restRequestsTimeout,
       ):
-        return err("Attempt to download beacon state timed out")
-    except CatchableError as exc:
-      return err("Unable to download beacon state: " & exc.msg)
+        return err("Attempt to download historical_summaries timed out")
+    except RestError as exc:
+      return err("Unable to download historical_summaries: " & exc.msg)
 
-  if state == nil:
-    return err("No beacon state found")
+  if summariesOpt.isNone():
+    return err("No historical_summaries found")
 
-  withState(state[]):
-    when consensusFork >= ConsensusFork.Capella:
+  let summariesForked = summariesOpt.get()
+  withForkyHistoricalSummariesWithProof(summariesForked):
+    when historicalFork >= HistoricalSummariesFork.Electra:
       let
-        historical_summaries = forkyState.data.historical_summaries
-        proof = ?buildProof(state[])
-        epoch = forkyState.data.slot.epoch()
+        epoch = forkySummaries.slot.epoch()
         forkDigest = forkDigestAtEpoch(forkDigests[], epoch, cfg)
         summariesWithProof = HistoricalSummariesWithProof(
-          epoch: epoch, historical_summaries: historical_summaries, proof: proof
+          epoch: epoch,
+          historical_summaries: forkySummaries.historical_summaries,
+          proof: forkySummaries.proof,
         )
-
         contentKey = encode(historicalSummariesContentKey(epoch.uint64))
         content = encodeSsz(summariesWithProof, forkDigest)
 
@@ -271,11 +271,13 @@ proc gossipHistoricalSummaries(
         )
         info "Beacon historical_summaries gossiped", peers, epoch
 
-        return ok()
+        ok()
       except CatchableError as e:
-        return err("JSON-RPC error: " & $e.msg)
+        err("JSON-RPC error: " & $e.msg)
+    elif historicalFork >= HistoricalSummariesFork.Capella:
+      err("No historical summaries pre-Electra should be gossiped")
     else:
-      return err("No historical_summaries pre Capella")
+      err("No historical summaries pre-Capella")
 
 proc runBeacon*(config: PortalBridgeConf) {.raises: [CatchableError].} =
   notice "Launching Fluffy beacon chain bridge", cmdParams = commandLineParams()

@@ -1,5 +1,5 @@
 # Nimbus
-# Copyright (c) 2023-2024 Status Research & Development GmbH
+# Copyright (c) 2023-2025 Status Research & Development GmbH
 # Licensed and distributed under either of
 #   * MIT license (license terms in the root directory or at https://opensource.org/licenses/MIT).
 #   * Apache v2 license (license terms in the root directory or at https://www.apache.org/licenses/LICENSE-2.0).
@@ -66,8 +66,9 @@ type
     exportLCFinalityUpdate = "Export Light Client Finality Update"
     exportLCOptimisticUpdate = "Export Light Client Optimistic Update"
     exportHistoricalRoots = "Export historical roots from the beacon state (SSZ format)"
-    exportBeaconBlockProof =
-      "Export EL beacon block proof from era files (Bellatrix and later)"
+    exportBlockProof = "Export EL block proof from era files (Bellatrix and later)"
+    exportHeaderWithProof =
+      "Export EL block header with proof from era files + web3 provider (Bellatrix and later)"
 
   ExporterConf* = object
     logLevel* {.
@@ -203,11 +204,21 @@ type
         discard
       of exportHistoricalRoots:
         discard
-      of exportBeaconBlockProof:
+      of exportBlockProof:
         slotNumber* {.
           desc: "The slot for which to export the beacon block proof", name: "slot"
         .}: uint64
         eraDir* {.desc: "Directory containing era files", name: "era-dir".}: InputDir
+      of exportHeaderWithProof:
+        slotNumber1* {.
+          desc: "The slot for which to export the beacon block proof", name: "slot"
+        .}: uint64
+        eraDir1* {.desc: "Directory containing era files", name: "era-dir".}: InputDir
+        web3Url1* {.
+          desc: "Execution layer JSON-RPC API URL",
+          defaultValue: defaultWeb3Url,
+          name: "web3-url"
+        .}: Web3Url
 
 proc parseCmdArg*(T: type Web3Url, p: string): T {.raises: [ValueError].} =
   let

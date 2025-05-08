@@ -13,6 +13,7 @@ import
   eth/common/keys,
   results,
   unittest2,
+  chronos,
   ../hive_integration/nodocker/engine/tx_sender,
   ../hive_integration/nodocker/engine/cancun/blobs,
   ../execution_chain/db/ledger,
@@ -38,6 +39,11 @@ const
     Stop
   slot = 0x11.u256
   amount = 1000.u256
+  withdrawalTriggerContract = address"00000961Ef480Eb55e80D19ad83579A64c007002"
+  consolidationWithdrawalTrigger = address"0000BBdDc7CE488642fb579F8B00f3a590007251"
+  triggerCode = hexToSeqByte(
+    "0x3373fffffffffffffffffffffffffffffffffffffffe1460cb5760115f54807fffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff146101f457600182026001905f5b5f82111560685781019083028483029004916001019190604d565b909390049250505036603814608857366101f457346101f4575f5260205ff35b34106101f457600154600101600155600354806003026004013381556001015f35815560010160203590553360601b5f5260385f601437604c5fa0600101600355005b6003546002548082038060101160df575060105b5f5b8181146101835782810160030260040181604c02815460601b8152601401816001015481526020019060020154807fffffffffffffffffffffffffffffffff00000000000000000000000000000000168252906010019060401c908160381c81600701538160301c81600601538160281c81600501538160201c81600401538160181c81600301538160101c81600201538160081c81600101535360010160e1565b910180921461019557906002556101a0565b90505f6002555f6003555b5f54807fffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff14156101cd57505f5b6001546002828201116101e25750505f6101e8565b01600290035b5f555f600155604c025ff35b5f5ffd"
+  )
 
 type
   TestEnv = object
@@ -68,6 +74,14 @@ proc initEnv(envFork: HardFork): TestEnv =
 
   if envFork >= Prague:
     cc.pragueTime = Opt.some(0.EthTime)
+    conf.networkParams.genesis.alloc[withdrawalTriggerContract] = GenesisAccount(
+      balance: 0.u256,
+      code: triggerCode
+    )
+    conf.networkParams.genesis.alloc[consolidationWithdrawalTrigger] = GenesisAccount(
+      balance: 0.u256,
+      code: triggerCode
+    )
 
   if envFork >= Osaka:
     cc.osakaTime = Opt.some(0.EthTime)
@@ -124,7 +138,7 @@ template checkAssembleBlock(xp, expCount): auto =
   rc.get
 
 template checkImportBlock(xp: TxPoolRef, bundle: AssembledBlock) =
-  let rc = xp.chain.importBlock(bundle.blk)
+  let rc = waitFor xp.chain.importBlock(bundle.blk)
   check rc.isOk == true
   if rc.isErr:
     debugEcho "IMPORT BLOCK: ", rc.error
@@ -343,7 +357,7 @@ proc txPoolMain*() =
 
         numTxsPacked += bundle.blk.transactions.len
 
-        chain.importBlock(bundle.blk).isOkOr:
+        (waitFor chain.importBlock(bundle.blk)).isOkOr:
           check false
           debugEcho error
           return
@@ -552,7 +566,7 @@ proc txPoolMain*() =
 
       xp.checkImportBlock(3, 0)
       let latestHash = chain.latestHash
-      check env.chain.forkChoice(latestHash, latestHash).isOk
+      check (waitFor env.chain.forkChoice(latestHash, latestHash)).isOk
 
       let hs = [
         computeRlpHash(tx1),

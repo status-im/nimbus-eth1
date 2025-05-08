@@ -138,6 +138,7 @@ GIT_SUBMODULE_UPDATE := git -c submodule."vendor/nimbus-eth2".update=none submod
   git $(GIT_SUBMODULE_CONFIG) submodule update --init vendor/eth2-networks; \
   git $(GIT_SUBMODULE_CONFIG) submodule update --init vendor/holesky; \
   git $(GIT_SUBMODULE_CONFIG) submodule update --init vendor/sepolia; \
+  git $(GIT_SUBMODULE_CONFIG) submodule update --init vendor/hoodi; \
   git $(GIT_SUBMODULE_CONFIG) submodule update --init vendor/gnosis-chain-configs; \
   git $(GIT_SUBMODULE_CONFIG) submodule update --init --recursive vendor/nim-kzg4844; \
   git $(GIT_SUBMODULE_CONFIG) submodule update --init vendor/mainnet; \

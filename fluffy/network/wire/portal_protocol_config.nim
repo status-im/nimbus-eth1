@@ -44,20 +44,26 @@ type
     maxGossipNodes*: int
     contentCacheSize*: int
     disableContentCache*: bool
+    offerCacheSize*: int
+    disableOfferCache*: bool
     maxConcurrentOffers*: int
     disableBanNodes*: bool
+    radiusCacheSize*: int
 
 const
   defaultRadiusConfig* = RadiusConfig(kind: Dynamic)
   defaultRadiusConfigDesc* = $defaultRadiusConfig.kind
   defaultDisablePoke* = false
   defaultMaxGossipNodes* = 4
-  defaultContentCacheSize* = 100
+  defaultContentCacheSize* = 128
   defaultDisableContentCache* = false
+  defaultOfferCacheSize* = 1024
+  defaultDisableOfferCache* = false
   defaultMaxConcurrentOffers* = 50
   defaultAlpha* = 3
   revalidationTimeout* = chronos.seconds(30)
   defaultDisableBanNodes* = true
+  defaultRadiusCacheSize* = 512
 
   defaultPortalProtocolConfig* = PortalProtocolConfig(
     tableIpLimits: DefaultTableIpLimits,
@@ -68,8 +74,11 @@ const
     maxGossipNodes: defaultMaxGossipNodes,
     contentCacheSize: defaultContentCacheSize,
     disableContentCache: defaultDisableContentCache,
+    offerCacheSize: defaultOfferCacheSize,
+    disableOfferCache: defaultDisableOfferCache,
     maxConcurrentOffers: defaultMaxConcurrentOffers,
     disableBanNodes: defaultDisableBanNodes,
+    radiusCacheSize: defaultRadiusCacheSize,
   )
 
 proc init*(
@@ -83,8 +92,11 @@ proc init*(
     maxGossipNodes: int,
     contentCacheSize: int,
     disableContentCache: bool,
+    offerCacheSize: int,
+    disableOfferCache: bool,
     maxConcurrentOffers: int,
     disableBanNodes: bool,
+    radiusCacheSize: int,
 ): T =
   PortalProtocolConfig(
     tableIpLimits:
@@ -96,8 +108,11 @@ proc init*(
     maxGossipNodes: maxGossipNodes,
     contentCacheSize: contentCacheSize,
     disableContentCache: disableContentCache,
+    offerCacheSize: offerCacheSize,
+    disableOfferCache: disableOfferCache,
     maxConcurrentOffers: maxConcurrentOffers,
     disableBanNodes: disableBanNodes,
+    radiusCacheSize: radiusCacheSize,
   )
 
 func fromLogRadius*(T: type UInt256, logRadius: uint16): T =

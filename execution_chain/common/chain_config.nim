@@ -17,7 +17,6 @@ import
   json_serialization, chronicles,
   json_serialization/stew/results,
   json_serialization/lexer,
-  ../networking/p2p,
   ./[genesis_alloc, hardforks]
 
 export

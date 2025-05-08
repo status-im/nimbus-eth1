@@ -1,5 +1,5 @@
 # Nimbus
-# Copyright (c) 2024 Status Research & Development GmbH
+# Copyright (c) 2024-2025 Status Research & Development GmbH
 # Licensed under either of
 #  * Apache License, version 2.0, ([LICENSE-APACHE](LICENSE-APACHE) or
 #    http://www.apache.org/licenses/LICENSE-2.0)
@@ -151,6 +151,20 @@ proc getEthBlock*(blck: ForkyTrustedBeaconBlock, res: var EthBlock): bool =
           Opt.some(Hash32(blck.parent_root.data))
         else:
           Opt.none(Hash32)
+      requestsHash =
+        when consensusFork >= ConsensusFork.Electra:
+          # Execution Requests for Electra
+          var requests: seq[seq[byte]]
+          for request_type, request_data in [
+            SSZ.encode(blck.body.execution_requests.deposits),
+            SSZ.encode(blck.body.execution_requests.withdrawals),
+            SSZ.encode(blck.body.execution_requests.consolidations),
+          ]:
+            if request_data.len > 0:
+              requests.add @[request_type.byte] & request_data
+          Opt.some(calcRequestsHash(requests))
+        else:
+          Opt.none(Hash32)
 
     res.header = Header(
       parentHash: Hash32(payload.parent_hash.data),
@@ -173,6 +187,7 @@ proc getEthBlock*(blck: ForkyTrustedBeaconBlock, res: var EthBlock): bool =
       blobGasUsed: blobGasUsed,
       excessBlobGas: excessBlobGas,
       parentBeaconBlockRoot: parentBeaconBlockRoot,
+      requestsHash: requestsHash,
     )
     res.transactions = move(txs)
     res.uncles.reset()

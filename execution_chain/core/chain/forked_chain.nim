@@ -13,6 +13,7 @@
 import
   chronicles,
   results,
+  chronos,
   std/[tables, algorithm],
   ../../common,
   ../../db/[core_db, fcu_db],
@@ -45,7 +46,8 @@ const
 # Forward declarations
 # ------------------------------------------------------------------------------
 
-proc updateBase(c: ForkedChainRef, newBase: BlockPos) {.gcsafe.}
+proc updateBase(c: ForkedChainRef, newBase: BlockPos):
+  Future[void] {.async: (raises: [CancelledError]), gcsafe.}
 func calculateNewBase(c: ForkedChainRef;
        finalizedNumber: uint64; head: BlockPos): BlockPos {.gcsafe.}
 
@@ -82,7 +84,8 @@ proc fcuSetHead(c: ForkedChainRef,
 
 proc validateBlock(c: ForkedChainRef,
           parent: BlockPos,
-          blk: Block): Result[Hash32, string] =
+          blk: Block, finalized: bool): Future[Result[Hash32, string]]
+            {.async: (raises: [CancelledError]).} =
   let blkHash = blk.header.computeBlockHash
 
   if c.hashToBlock.hasKey(blkHash):
@@ -118,7 +121,7 @@ proc validateBlock(c: ForkedChainRef,
       requestsHash: blk.header.requestsHash,
     )
 
-  var receipts = c.processBlock(parent.header, txFrame, blk, blkHash).valueOr:
+  var receipts = c.processBlock(parent.header, txFrame, blk, blkHash, finalized).valueOr:
     txFrame.dispose()
     return err(error)
 
@@ -135,14 +138,13 @@ proc validateBlock(c: ForkedChainRef,
   # handled region(head - baseDistance)
   # e.g. live syncing with the tip very far from from our latest head
   if c.pendingFCU != zeroHash32 and
-     blk.header.number < c.latestFinalizedBlockNumber:
-
+     c.baseBranch.tailNumber < c.latestFinalizedBlockNumber - c.baseDistance - c.persistBatchSize:
     let
       head = c.activeBranch.lastBlockPos
       newBaseCandidate = c.calculateNewBase(c.latestFinalizedBlockNumber, head)
       prevBaseNumber = c.baseBranch.tailNumber
 
-    c.updateBase(newBaseCandidate)
+    await c.updateBase(newBaseCandidate)
 
     # If on disk head behind base, move it to base too.
     let newBaseNumber = c.baseBranch.tailNumber
@@ -371,7 +373,8 @@ proc updateFinalized(c: ForkedChainRef, finalized: BlockPos) =
   let txFrame = finalized.txFrame
   txFrame.fcuFinalized(finalized.hash, finalized.number).expect("fcuFinalized OK")
 
-proc updateBase(c: ForkedChainRef, newBase: BlockPos) =
+proc updateBase(c: ForkedChainRef, newBase: BlockPos):
+  Future[void] {.async: (raises: [CancelledError]), gcsafe.} =
   ##
   ##     A1 - A2 - A3          D5 - D6
   ##    /                     /
@@ -400,7 +403,8 @@ proc updateBase(c: ForkedChainRef, newBase: BlockPos) =
         break
       dec number
 
-  if newBase.number == c.baseBranch.tailNumber:
+  let oldBase = c.baseBranch.tailNumber
+  if newBase.number == oldBase:
     # No update, return
     return
 
@@ -417,7 +421,17 @@ proc updateBase(c: ForkedChainRef, newBase: BlockPos) =
     baseTxFrame = newBase.txFrame
 
   # Persist the new base block - this replaces the base tx in coredb!
-  c.com.db.persist(baseTxFrame)
+  for x in newBase.everyNthBlock(4):
+    const
+      # We cap waiting for an idle slot in case there's a lot of network traffic
+      # taking up all CPU - we don't want to _completely_ stop processing blocks
+      # in this case - doing so also allows us to benefit from more batching /
+      # larger network reads when under load.
+      idleTimeout = 10.milliseconds
+
+    discard await idleAsync().withTimeout(idleTimeout)
+    c.com.db.persist(x.txFrame, Opt.some(x.stateRoot))
+
   c.baseTxFrame = baseTxFrame
 
   disposeBlocks(number, branch)
@@ -461,15 +475,19 @@ proc updateBase(c: ForkedChainRef, newBase: BlockPos) =
   # during `beacon sync` or `nrpc sync`
   if count > 1:
     notice "Finalized blocks persisted",
-      numberOfBlocks = count,
-      baseNumber = c.baseBranch.tailNumber,
-      baseHash = c.baseBranch.tailHash.short
+      nBlocks = count,
+      base = c.baseBranch.tailNumber,
+      baseHash = c.baseBranch.tailHash.short,
+      pendingFCU = c.pendingFCU.short,
+      resolvedFin= c.latestFinalizedBlockNumber
   else:
     debug "Finalized blocks persisted",
-      numberOfBlocks = count,
+      nBlocks = count,
       target = newBaseHash.short,
-      baseNumber = c.baseBranch.tailNumber,
-      baseHash = c.baseBranch.tailHash.short
+      base = c.baseBranch.tailNumber,
+      baseHash = c.baseBranch.tailHash.short,
+      pendingFCU = c.pendingFCU.short,
+      resolvedFin= c.latestFinalizedBlockNumber
 
 # ------------------------------------------------------------------------------
 # Public functions
@@ -480,6 +498,7 @@ proc init*(
     com: CommonRef;
     baseDistance = BaseDistance;
     persistBatchSize = PersistBatchSize;
+    eagerStateRoot = false;
       ): T =
   ## Constructor that uses the current database ledger state for initialising.
   ## This state coincides with the canonical head that would be used for
@@ -516,9 +535,16 @@ proc init*(
     fcuHead:         fcuHead,
     fcuSafe:         fcuSafe)
 
-proc importBlock*(c: ForkedChainRef, blk: Block): Result[void, string] =
+proc importBlock*(c: ForkedChainRef, blk: Block, finalized = false):
+       Future[Result[void, string]] {.async: (raises: [CancelledError]).} =
   ## Try to import block to canonical or side chain.
   ## return error if the block is invalid
+  ##
+  ## `finalized` should be set to true for blocks that are known to be finalized
+  ## already per the latest fork choice update from the consensus client, for
+  ## example by following the header chain back from the fcu hash - in such
+  ## cases, we perform state root checking in bulk while writing the state to
+  ## disk (instead of once for every block).
   template header(): Header =
     blk.header
 
@@ -529,21 +555,29 @@ proc importBlock*(c: ForkedChainRef, blk: Block): Result[void, string] =
     # to a "staging area" or disk-backed memory but it must not afect `base`.
     # `base` is the point of no return, we only update it on finality.
 
-    var parentHash = ?c.validateBlock(parentPos[], blk)
+    var parentHash = ?(await c.validateBlock(parentPos[], blk, finalized))
 
     while c.quarantine.hasOrphans():
+      const
+        # We cap waiting for an idle slot in case there's a lot of network traffic
+        # taking up all CPU - we don't want to _completely_ stop processing blocks
+        # in this case - doing so also allows us to benefit from more batching /
+        # larger network reads when under load.
+        idleTimeout = 10.milliseconds
+
+      discard await idleAsync().withTimeout(idleTimeout)
+
       let orphan = c.quarantine.popOrphan(parentHash).valueOr:
         break
 
       c.hashToBlock.withValue(parentHash, parentCandidatePos) do:
-        parentHash = c.validateBlock(parentCandidatePos[], orphan).valueOr:
+        parentHash = (await c.validateBlock(parentCandidatePos[], orphan, finalized)).valueOr:
           # Silent?
           # We don't return error here because the import is still ok()
           # but the quarantined blocks may not linked
           break
       do:
         break
-
   do:
     # If its parent is an invalid block
     # there is no hope the descendant is valid
@@ -561,7 +595,9 @@ proc importBlock*(c: ForkedChainRef, blk: Block): Result[void, string] =
 proc forkChoice*(c: ForkedChainRef,
                  headHash: Hash32,
                  finalizedHash: Hash32,
-                 safeHash: Hash32 = zeroHash32): Result[void, string] =
+                 safeHash: Hash32 = zeroHash32):
+                    Future[Result[void, string]]
+                      {.async: (raises: [CancelledError]).} =
 
   if finalizedHash != zeroHash32:
     c.pendingFCU = finalizedHash
@@ -612,13 +648,15 @@ proc forkChoice*(c: ForkedChainRef,
   # and possibly switched to other chain beside the one with head.
   doAssert(finalizedNumber <= head.number)
   doAssert(newBaseNumber <= finalizedNumber)
-  c.updateBase(newBase)
+  await c.updateBase(newBase)
 
   ok()
 
-func notifyFinalizedHash*(c: ForkedChainRef, finHash: Hash32) =
-  if finHash != zeroHash32:
-    c.pendingFCU = finHash
+func finHash*(c: ForkedChainRef): Hash32 =
+  c.pendingFCU
+
+func resolvedFinNumber*(c: ForkedChainRef): uint64 =
+  c.latestFinalizedBlockNumber
 
 func haveBlockAndState*(c: ForkedChainRef, blockHash: Hash32): bool =
   ## Blocks still in memory with it's txFrame
@@ -770,7 +808,7 @@ proc txDetailsByTxHash*(c: ForkedChainRef, txHash: Hash32): Result[(Hash32, uint
     header = ?c.headerByNumber(txDetails.blockNumber)
     blockHash = header.computeBlockHash
   return ok((blockHash, txDetails.index))
-  
+
 # TODO: Doesn't fetch data from portal
 # Aristo returns empty txs for both non-existent blocks and existing blocks with no txs [ Solve ? ]
 proc blockBodyByHash*(c: ForkedChainRef, blockHash: Hash32): Result[BlockBody, string] =

@@ -249,7 +249,7 @@ proc generateBlock(env: var TestEnv) =
   doAssert(blk.transactions.len == 2)
 
   # import block
-  chain.importBlock(blk).isOkOr:
+  (waitFor chain.importBlock(blk)).isOkOr:
     debugEcho error
     quit(QuitFailure)
 

@@ -6,13 +6,7 @@
 # at your option. This file may not be copied, modified, or distributed except according to those terms.
 
 import
-  chronicles,
-  confutils,
-  stint,
-  eth/common/keys,
-  ../database/content_db,
-  ../database/content_db_migrate_deprecated,
-  ./benchmark
+  chronicles, confutils, stint, eth/common/keys, ../database/content_db, ./benchmark
 
 when defined(posix):
   import system/ansi_c
@@ -35,7 +29,6 @@ type
     generate = "Generate random content into the database, for testing purposes."
     prune = "Prune the ContentDb in case of resizing or selecting a different local id"
     validate = "Validate all the content in the ContentDb"
-    migrate = "Migrate the ContentDb for new HeaderWithProof format"
 
   DbConf = object
     databaseDir* {.
@@ -67,22 +60,6 @@ type
       .}: bool
     of DbCmd.validate:
       discard
-    of DbCmd.migrate:
-      deleteNoProof* {.
-        desc: "Delete old HeaderWithProof content without proof",
-        defaultValue: true,
-        name: "delete-no-proof"
-      .}: bool
-      updateWithProof* {.
-        desc: "Update old HeaderWithProof per-merge content with proof",
-        defaultValue: true,
-        name: "update-with-proof"
-      .}: bool
-      checkTypes* {.
-        desc: "Iterate and count all content types",
-        defaultValue: false,
-        name: "debug-check-types"
-      .}: bool
 
 const maxDbSize = 4_000_000_000'u64
 
@@ -176,21 +153,6 @@ proc cmdPrune(conf: DbConf) =
     notice "Functionality not yet implemented"
     quit QuitSuccess
 
-proc cmdMigrate(conf: DbConf) =
-  let db = ContentDBDeprecated.new(conf.databaseDir.string)
-
-  if conf.checkTypes:
-    db.iterateAllAndCountTypes()
-
-  if conf.deleteNoProof:
-    db.deleteAllHeadersWithoutProof()
-
-  if conf.updateWithProof:
-    db.updateAllHeadersWithInvalidEncoding()
-
-  if conf.checkTypes and (conf.deleteNoProof or conf.updateWithProof):
-    db.iterateAllAndCountTypes()
-
 proc controlCHook() {.noconv.} =
   notice "Shutting down after having received SIGINT."
   quit QuitSuccess
@@ -215,5 +177,3 @@ when isMainModule:
     cmdPrune(conf)
   of DbCmd.validate:
     notice "Functionality not yet implemented"
-  of DbCmd.migrate:
-    cmdMigrate(conf)

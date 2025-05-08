@@ -37,6 +37,10 @@ repo_url: https://github.com/status-im/nimbus-eth1
 edit_uri: edit/master/fluffy/docs/the_fluffy_book/docs
 docs_dir: docs
 
+plugins:
+  - search
+  - mermaid2
+
 markdown_extensions:
   - admonition
   - pymdownx.details
@@ -51,6 +55,12 @@ markdown_extensions:
   - toc:
       toc_depth: 3
       permalink: "#"
+  - pymdownx.superfences:
+        # make exceptions to highlighting of code:
+      custom_fences:
+        - name: mermaid
+          class: mermaid
+          format: !!python/name:mermaid2.fence_mermaid_custom
 
 nav:
   - Home:
@@ -76,6 +86,9 @@ nav:
       - 'beacon-content-bridging.md'
       - 'state-content-bridging.md'
     - 'db_pruning.md'
+
+  - Concepts:
+    - 'architecture.md'
 
   - Developers:
     - 'basics-for-developers.md'

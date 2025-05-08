@@ -202,7 +202,7 @@ proc processOffer*(
     return err("Received offered content with invalid content key")
 
   n.portalProtocol.storeContent(
-    contentKeyBytes, contentId, contentValue.toRetrieval().encode()
+    contentKeyBytes, contentId, contentValue.toRetrieval().encode(), cacheOffer = true
   )
 
   await gossipOffer(

@@ -472,7 +472,7 @@ proc createStoreHandler*(db: ContentDB, cfg: RadiusConfig): DbStoreHandler =
   return (
     proc(
         contentKey: ContentKeyByteList, contentId: ContentId, content: seq[byte]
-    ) {.raises: [], gcsafe.} =
+    ): bool {.raises: [], gcsafe.} =
       case cfg.kind
       of Dynamic:
         # In case of dynamic radius, the radius gets adjusted based on the
@@ -491,11 +491,12 @@ proc createStoreHandler*(db: ContentDB, cfg: RadiusConfig): DbStoreHandler =
             # small storage capacity or a very small `contentDeletionFraction`
             # combined with some big content.
             info "Database pruning attempt resulted in no content deleted"
-            return
+          return true # Indicate that the database was prunned
       of Static:
         # If the radius is static, it may never be adjusted, database capacity
         # is disabled and no pruning is ever done.
         db.put(contentId, content)
+        return false
   )
 
 proc createContainsHandler*(db: ContentDB): DbContainsHandler =
