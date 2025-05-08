@@ -300,9 +300,12 @@ proc runBuildBlockOffersLoop(
     trace "buildBlockOffersLoop canceled"
 
 proc runGossipBlockOffersLoop(
-    worker: PortalStateGossipWorker, verifyGossip: bool, skipGossipForExisting: bool
+    worker: PortalStateGossipWorker,
+    verifyGossip: bool,
+    skipGossipForExisting: bool,
+    minGossipPeers: int,
 ) {.async: (raises: []).} =
-  info "Starting gossip block offers loop", workerId = worker.id
+  debug "Starting gossip block offers loop", workerId = worker.id
 
   try:
     # Create one client per worker in order to improve performance.
@@ -348,6 +351,7 @@ proc runGossipBlockOffersLoop(
       for k, v in offersMap:
         # Check if we need to gossip the content
         var gossipContent = true
+
         if skipGossipForExisting:
           try:
             let contentInfo =
@@ -368,11 +372,11 @@ proc runGossipBlockOffersLoop(
                 k.to0xHex(), v.to0xHex()
               )
               numPeers = putContentResult.peerCount
-            if numPeers > 0:
-              debug "Offer successfully gossipped to peers: ",
+            if numPeers >= minGossipPeers:
+              debug "Offer successfully gossipped to peers",
                 numPeers, workerId = worker.id
-            elif numPeers == 0:
-              warn "Offer gossipped to no peers", workerId = worker.id
+            else:
+              warn "Offer not gossiped to enough peers", numPeers, workerId = worker.id
               retryGossip = true
               break
           except CancelledError as e:
@@ -409,7 +413,7 @@ proc runGossipBlockOffersLoop(
 
       # Retry if any failures occurred or if the content wasn't found in the network
       if retryGossip:
-        await sleepAsync(3.seconds)
+        await sleepAsync(5.seconds)
 
         # Don't retry gossip for content that was found in the network
         for key in foundContentKeys:
@@ -521,19 +525,25 @@ proc start*(bridge: PortalStateBridge, config: PortalBridgeConf) =
   )
   bridge.metricsLoop = bridge.runMetricsLoop()
 
+  info "Starting concurrent gossip workers", workerCount = bridge.gossipWorkers.len()
+
   for worker in bridge.gossipWorkers:
-    worker.gossipBlockOffersLoop =
-      worker.runGossipBlockOffersLoop(config.verifyGossip, config.skipGossipForExisting)
+    worker.gossipBlockOffersLoop = worker.runGossipBlockOffersLoop(
+      config.verifyGossip, config.skipGossipForExisting, config.minGossipPeers.int
+    )
+
+  info "Portal state bridge started successfully. Running from block: ",
+    startBlockNumber = config.startBlockNumber
 
 proc stop*(bridge: PortalStateBridge) {.async: (raises: []).} =
   info "Stopping Portal state bridge"
 
   var futures = newSeq[Future[void]]()
 
-  # Cancel loops
   for worker in bridge.gossipWorkers:
     if not worker.gossipBlockOffersLoop.isNil():
-      futures.add(worker.gossipBlockOffersLoop.cancelAndWait())
+      # No need to wait for these loops to stop as they don't touch the database
+      worker.gossipBlockOffersLoop.cancelSoon()
 
   if not bridge.metricsLoop.isNil():
     futures.add(bridge.metricsLoop.cancelAndWait())
