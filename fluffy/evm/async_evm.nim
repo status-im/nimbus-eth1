@@ -30,14 +30,14 @@ export
 logScope:
   topics = "async_evm"
 
-# The Portal EVM uses the Nimbus in-memory EVM to execute transactions using the
-# portal state network state data. Currently only call is supported.
+# The Async EVM uses the Nimbus in-memory EVM to execute transactions using state
+# data fetched asyncronously from a supplied state backend.
 #
-# Rather than wire in the portal state lookups into the EVM directly, the approach
+# Rather than wire in the async state lookups into the EVM directly, the approach
 # taken here is to optimistically execute the transaction multiple times with the
 # goal of building the correct access list so that we can then lookup the accessed
-# state from the portal network, store the state in the in-memory EVM and then
-# finally execute the transaction using the correct state. The Portal EVM makes
+# state from the async state backend, store the state in the in-memory EVM and then
+# finally execute the transaction using the correct state. The Async EVM makes
 # use of data in memory during the call and therefore each piece of state is never
 # fetched more than once. We know we have found the correct access list if it
 # doesn't change after another execution of the transaction.
@@ -48,9 +48,8 @@ logScope:
 # call given that we gain the ability to fetch the state concurrently.
 #
 # There are multiple reasons for choosing this approach:
-# - Firstly updating the existing Nimbus EVM to support using a different state
-#   backend (portal state in this case) is difficult and would require making
-#   non-trivial changes to the EVM.
+# - Firstly updating the existing Nimbus EVM to support using different state
+#   backends is difficult and would require making non-trivial changes to the EVM.
 # - This new approach allows us to look up the state concurrently in the event that
 #   multiple new state keys are discovered after executing the transaction. This
 #   should in theory result in improved performance for certain scenarios. The

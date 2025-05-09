@@ -9,7 +9,7 @@
 
 import chronos, stint, eth/common/[hashes, addresses, accounts]
 
-export stint, hashes, addresses, accounts
+export chronos, stint, hashes, addresses, accounts
 
 type
   GetAccountProc* = proc(stateRoot: Hash32, address: Address): Future[Opt[Account]] {.
