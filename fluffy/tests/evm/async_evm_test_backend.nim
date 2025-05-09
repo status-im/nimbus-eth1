@@ -7,7 +7,7 @@
 
 {.used.}
 
-import std/tables, ../../evm/async_evm
+import std/tables, ../../evm/async_evm_backend
 
 type TestEvmState* = ref object
   accounts: Table[Address, Account]
@@ -43,15 +43,15 @@ proc toAsyncEvmStateBackend*(testState: TestEvmState): AsyncEvmStateBackend =
   # State root is ignored because TestEvmState only stores a single state
   let
     accProc = proc(
-        stateRoot: Hash32, address: Address
+        header: Header, address: Address
     ): Future[Opt[Account]] {.async: (raises: [CancelledError]).} =
       Opt.some(testState.getAccount(address))
     storageProc = proc(
-        stateRoot: Hash32, address: Address, slotKey: UInt256
+        header: Header, address: Address, slotKey: UInt256
     ): Future[Opt[UInt256]] {.async: (raises: [CancelledError]).} =
       Opt.some(testState.getStorage(address, slotKey))
     codeProc = proc(
-        stateRoot: Hash32, address: Address
+        header: Header, address: Address
     ): Future[Opt[seq[byte]]] {.async: (raises: [CancelledError]).} =
       Opt.some(testState.getCode(address))
 
