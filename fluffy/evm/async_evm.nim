@@ -18,13 +18,13 @@ import
   ../../execution_chain/db/[ledger, access_list],
   ../../execution_chain/common/common,
   ../../execution_chain/transaction/call_evm,
-  ../../execution_chain/evm/[types, state, evm_errors]
+  ../../execution_chain/evm/[types, state, evm_errors],
+  ./async_evm_backend
 
-from web3/eth_api_types import TransactionArgs
-from web3/eth_api_types import Quantity
+from web3/eth_api_types import TransactionArgs, Quantity
 
 export
-  results, chronos, hashes, addresses, accounts, headers, TransactionArgs, CallResult,
+  async_evm_backend, results, chronos, headers, TransactionArgs, CallResult,
   transactions.AccessList, GasInt
 
 logScope:
@@ -82,23 +82,6 @@ type
     address: Address
     codeFut: Future[Opt[seq[byte]]]
 
-  GetAccountProc* = proc(stateRoot: Hash32, address: Address): Future[Opt[Account]] {.
-    async: (raises: [CancelledError])
-  .}
-
-  GetStorageProc* = proc(
-    stateRoot: Hash32, address: Address, slotKey: UInt256
-  ): Future[Opt[UInt256]] {.async: (raises: [CancelledError]).}
-
-  GetCodeProc* = proc(stateRoot: Hash32, address: Address): Future[Opt[seq[byte]]] {.
-    async: (raises: [CancelledError])
-  .}
-
-  AsyncEvmStateBackend* = object
-    getAccount: GetAccountProc
-    getStorage: GetStorageProc
-    getCode: GetCodeProc
-
   AsyncEvm* = ref object
     com: CommonRef
     backend: AsyncEvmStateBackend
@@ -113,14 +96,6 @@ func init(
 
 func init(T: type CodeQuery, adr: Address, fut: Future[Opt[seq[byte]]]): T =
   T(address: adr, codeFut: fut)
-
-proc init*(
-    T: type AsyncEvmStateBackend,
-    accProc: GetAccountProc,
-    storageProc: GetStorageProc,
-    codeProc: GetCodeProc,
-): T =
-  AsyncEvmStateBackend(getAccount: accProc, getStorage: storageProc, getCode: codeProc)
 
 proc init*(
     T: type AsyncEvm, backend: AsyncEvmStateBackend, networkId: NetworkId = MainNet
