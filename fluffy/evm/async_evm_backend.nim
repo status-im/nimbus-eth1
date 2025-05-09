@@ -7,20 +7,20 @@
 
 {.push raises: [].}
 
-import chronos, stint, eth/common/[hashes, addresses, accounts]
+import chronos, stint, eth/common/[headers, addresses, accounts]
 
-export chronos, stint, hashes, addresses, accounts
+export chronos, stint, headers, addresses, accounts
 
 type
-  GetAccountProc* = proc(stateRoot: Hash32, address: Address): Future[Opt[Account]] {.
+  GetAccountProc* = proc(header: Header, address: Address): Future[Opt[Account]] {.
     async: (raises: [CancelledError])
   .}
 
   GetStorageProc* = proc(
-    stateRoot: Hash32, address: Address, slotKey: UInt256
+    header: Header, address: Address, slotKey: UInt256
   ): Future[Opt[UInt256]] {.async: (raises: [CancelledError]).}
 
-  GetCodeProc* = proc(stateRoot: Hash32, address: Address): Future[Opt[seq[byte]]] {.
+  GetCodeProc* = proc(header: Header, address: Address): Future[Opt[seq[byte]]] {.
     async: (raises: [CancelledError])
   .}
 

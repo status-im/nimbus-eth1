@@ -14,7 +14,7 @@ import
   chronicles,
   stint,
   results,
-  eth/common/[base, hashes, addresses, accounts, headers, transactions],
+  eth/common/[base, addresses, accounts, headers, transactions],
   ../../execution_chain/db/[ledger, access_list],
   ../../execution_chain/common/common,
   ../../execution_chain/transaction/call_evm,
@@ -139,7 +139,7 @@ proc callFetchingState(
     fetchedCode = initHashSet[Address]()
 
   # Set code of the 'to' address in the EVM so that we can execute the transaction
-  let code = (await evm.backend.getCode(header.stateRoot, to)).valueOr:
+  let code = (await evm.backend.getCode(header, to)).valueOr:
     return err("Unable to get code")
   vmState.ledger.setCode(to, code)
   fetchedCode.incl(to)
@@ -190,7 +190,7 @@ proc callFetchingState(
           if slotIdx notin fetchedStorage:
             debug "Fetching storage slot", address = adr, slotKey = v.storageSlot
             let storageFut =
-              evm.backend.getStorage(header.stateRoot, adr, v.storageSlot)
+              evm.backend.getStorage(header, adr, v.storageSlot)
             if not stateFetchDone:
               storageQueries.add(StorageQuery.init(adr, v.storageSlot, storageFut))
               if not optimisticStateFetch:
@@ -200,7 +200,7 @@ proc callFetchingState(
 
           if adr notin fetchedAccounts:
             debug "Fetching account", address = adr
-            let accFut = evm.backend.getAccount(header.stateRoot, adr)
+            let accFut = evm.backend.getAccount(header, adr)
             if not stateFetchDone:
               accountQueries.add(AccountQuery.init(adr, accFut))
               if not optimisticStateFetch:
@@ -208,7 +208,7 @@ proc callFetchingState(
 
           if v.codeTouched and adr notin fetchedCode:
             debug "Fetching code", address = adr
-            let codeFut = evm.backend.getCode(header.stateRoot, adr)
+            let codeFut = evm.backend.getCode(header, adr)
             if not stateFetchDone:
               codeQueries.add(CodeQuery.init(adr, codeFut))
               if not optimisticStateFetch:
