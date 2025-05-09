@@ -215,8 +215,7 @@ proc callFetchingState(
           let slotIdx = (adr, v.storageSlot)
           if slotIdx notin fetchedStorage:
             debug "Fetching storage slot", address = adr, slotKey = v.storageSlot
-            let storageFut =
-              evm.backend.getStorage(header, adr, v.storageSlot)
+            let storageFut = evm.backend.getStorage(header, adr, v.storageSlot)
             if not stateFetchDone:
               storageQueries.add(StorageQuery.init(adr, v.storageSlot, storageFut))
               if not optimisticStateFetch:
