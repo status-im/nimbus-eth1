@@ -25,7 +25,8 @@ import
   ./rpc/rpc_eth_api,
   ./types,
   ./nimbus_verified_proxy_conf,
-  ./header_store
+  ./header_store,
+  ./rpc/evm
 
 from beacon_chain/gossip_processing/eth2_processor import toValidationResult
 
@@ -82,8 +83,10 @@ proc run*(
     )
 
     headerStore = HeaderStore.new(64) # block cache contains blocks downloaded from p2p
-    verifiedProxy = VerifiedRpcProxy.new(rpcProxy, headerStore, chainId)
 
+  var verifiedProxy = VerifiedRpcProxy.new(rpcProxy, headerStore, chainId)
+
+  verifiedProxy.initEvm()
   # add handlers that verify RPC calls /rpc/rpc_eth_api.nim
   verifiedProxy.installEthApiHandlers()
 

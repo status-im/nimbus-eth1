@@ -26,7 +26,8 @@ import
   ./blocks,
   ./accounts,
   ./transactions,
-  ./receipts
+  ./receipts,
+  ./evm
 
 logScope:
   topics = "verified_proxy"
@@ -197,71 +198,73 @@ proc installEthApiHandlers*(vp: VerifiedRpcProxy) =
 
     (await vp.getCode(address,header.number, header.stateRoot)).valueOr:
         raise newException(ValueError, error)
-
+  
   vp.proxy.rpc("eth_call") do(
-    args: TransactionArgs, blockTag: BlockTag
+    tx: TransactionArgs, blockTag: BlockTag, optimisticStateFetch: Opt[bool]
   ) -> seq[byte]:
+    if tx.to.isNone():
+      raise newException(ValueError, "to address is required")
 
-    # eth_call
-    # 1. get the code with proof
-    let 
-      to = if args.to.isSome(): args.to.get()
-           else: raise newException(ValueError, "contract address missing in transaction args")
+    if blockTag.kind == bidAlias:
+      raise newException(ValueError, "tag not yet implemented")
+
+    let
       header = (await vp.getHeaderByTag(blockTag)).valueOr:
         raise newException(ValueError, error)
 
-      code = (await vp.getCode(to, header.number, header.stateRoot)).valueOr:
+      optimisticStateFetch = optimisticStateFetch.valueOr:
+        true
+
+    let callResult = (await vp.evm.call(header, tx, optimisticStateFetch)).valueOr:
+      raise newException(ValueError, error)
+
+    return callResult.output
+
+  vp.proxy.rpc("eth_createAccessList") do(
+    tx: TransactionArgs, blockTag: BlockTag, optimisticStateFetch: Opt[bool]
+  ) -> AccessListResult:
+    if tx.to.isNone():
+      raise newException(ValueError, "to address is required")
+
+    if blockTag.kind == bidAlias:
+      raise newException(ValueError, "tag not yet implemented")
+
+    let
+      header = (await vp.getHeaderByTag(blockTag)).valueOr:
         raise newException(ValueError, error)
 
-    # 2. get all storage locations that are accessed
-    let 
-      parent = (await vp.getHeaderByHash(header.parentHash)).valueOr:
-        raise newException(ValueError, error)
+      optimisticStateFetch = optimisticStateFetch.valueOr:
+        true
 
-      accessListResult = 
-        try:
-          await vp.rpcClient.eth_createAccessList(args, blockId(header.number)) 
-        except CatchableError as e:
-          raise newException(ValueError, e.msg)
-      accessList = if not accessListResult.error.isSome(): accessListResult.accessList
-                   else: raise newException(ValueError, "couldn't get an access list for eth call")
+    let (accessList, error, gasUsed) = (
+      await vp.evm.createAccessList(header, tx, optimisticStateFetch)
+    ).valueOr:
+      raise newException(ValueError, error)
 
-    # 3. pull the storage values that are access along with their accounts and initialize db
-    let 
-      com = CommonRef.new(newCoreDbRef DefaultDbMemory, nil)
-      fork = com.toEVMFork(header)
-      vmState = BaseVMState()
+    return
+      AccessListResult(accessList: accessList, error: error, gasUsed: gasUsed.Quantity)
 
-    vmState.init(parent, header, com, com.db.baseTxFrame())
-    vmState.mutateLedger:
-      for accessPair in accessList:
-        let 
-          accountAddr = accessPair.address
-          acc = (await vp.getAccount(accountAddr, header.number, header.stateRoot)).valueOr:
-            raise newException(ValueError, error)
-
-          accCode = (await vp.getCode(accountAddr, header.number, header.stateRoot)).valueOr:
-            raise newException(ValueError, error)
-
-
-        db.setNonce(accountAddr, acc.nonce)
-        db.setBalance(accountAddr, acc.balance)
-        db.setCode(accountAddr, accCode)
-
-        for slot in accessPair.storageKeys:
-          let 
-            slotInt = UInt256.fromHex(toHex(slot))
-            slotValue = (await vp.getStorageAt(accountAddr, slotInt, header.number, header.stateRoot)).valueOr:
-              raise newException(ValueError, error)
-          db.setStorage(accountAddr, slotInt, slotValue)
-      db.persist(clearEmptyAccount = false) # settle accounts storage
-
-    # 4. run the evm with the initialized storage
-    let evmResult = rpcCallEvm(args, header, vmState).valueOr:
-      raise newException(ValueError, "rpcCallEvm error: " & $error.code)
-
-    evmResult.output
-
+#  vp.proxy.rpc("eth_estimateGas") do(
+#    tx: TransactionArgs, blockTag: BlockTag, optimisticStateFetch: Opt[bool]
+#  ) -> Quantity:
+#    if tx.to.isNone():
+#      raise newException(ValueError, "to address is required")
+#
+#    if blockTag.kind == bidAlias:
+#      raise newException(ValueError, "tag not yet implemented")
+#
+#    let
+#      header = (await vp.getHeaderByTag(blockTag)).valueOr:
+#        raise newException(ValueError, error)
+#
+#      optimisticStateFetch = optimisticStateFetch.valueOr:
+#        true
+#
+#    let gasEstimate = (await vp.evm.estimateGas(header, tx, optimisticStateFetch)).valueOr:
+#      raise newException(ValueError, error)
+#
+#    return gasEstimate.Quantity
+#
   # TODO:
   # Following methods are forwarded directly to the web3 provider and therefore
   # are not validated in any way.

@@ -8,10 +8,12 @@
 import
   json_rpc/[rpcproxy],
   stint,
-  ./header_store
+  ./header_store,
+  ../fluffy/evm/async_evm
 
 type
   VerifiedRpcProxy* = ref object
+    evm*: AsyncEvm
     proxy*: RpcProxy
     headerStore*: HeaderStore
     chainId*: UInt256
