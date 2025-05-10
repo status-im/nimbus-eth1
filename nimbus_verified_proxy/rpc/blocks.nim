@@ -44,9 +44,11 @@ proc resolveTag(
     return ok(base.BlockNumber(distinctBase(blockTag.number)))
 
 proc convHeader(blk: eth_api_types.BlockObject): Header =
-  let
-    nonce = if blk.nonce.isSome: blk.nonce.get
-            else: default(Bytes8)
+  let nonce =
+    if blk.nonce.isSome:
+      blk.nonce.get
+    else:
+      default(Bytes8)
 
   return Header(
     parentHash: blk.parentHash,
@@ -69,30 +71,33 @@ proc convHeader(blk: eth_api_types.BlockObject): Header =
     blobGasUsed: blk.blobGasUsed.u64,
     excessBlobGas: blk.excessBlobGas.u64,
     parentBeaconBlockRoot: blk.parentBeaconBlockRoot,
-    requestsHash: blk.requestsHash
+    requestsHash: blk.requestsHash,
   )
 
 proc walkBlocks(
-  self: VerifiedRpcProxy,
-  sourceNum: base.BlockNumber,
-  targetNum: base.BlockNumber,
-  sourceHash: Hash32,
-  targetHash: Hash32): Future[bool] {.async: (raises: []).} =
-
+    self: VerifiedRpcProxy,
+    sourceNum: base.BlockNumber,
+    targetNum: base.BlockNumber,
+    sourceHash: Hash32,
+    targetHash: Hash32,
+): Future[bool] {.async: (raises: []).} =
   var nextHash = sourceHash
-  info "starting block walk to verify", blockHash=targetHash
+  info "starting block walk to verify", blockHash = targetHash
 
   # TODO: use batch calls to get all blocks at once by number
   for i in 0 ..< sourceNum - targetNum:
     # TODO: use a verified hash cache
-    let blk = 
+    let blk =
       try:
         await self.rpcClient.eth_getBlockByHash(nextHash, false)
       except:
         # TODO: retry before failing?
         return false
 
-    trace "getting next block", hash=nextHash, number=blk.number, remaining=distinctBase(blk.number) - targetNum
+    trace "getting next block",
+      hash = nextHash,
+      number = blk.number,
+      remaining = distinctBase(blk.number) - targetNum
 
     if blk.parentHash == targetHash:
       return true
@@ -105,7 +110,7 @@ proc getBlockByHash*(
     self: VerifiedRpcProxy, blockHash: Hash32, fullTransactions: bool
 ): Future[Result[eth_api_types.BlockObject, string]] {.async: (raises: []).} =
   # get the target block
-  let blk = 
+  let blk =
     try:
       await self.rpcClient.eth_getBlockByHash(blockHash, fullTransactions)
     except CatchableError as e:
@@ -124,7 +129,9 @@ proc getBlockByHash*(
     return err("syncing")
 
   # walk blocks backwards(time) from source to target
-  let isLinked = await self.walkBlocks(earliestHeader.number, header.number, earliestHeader.parentHash, blockHash)
+  let isLinked = await self.walkBlocks(
+    earliestHeader.number, header.number, earliestHeader.parentHash, blockHash
+  )
 
   if not isLinked:
     return err("the requested block is not part of the canonical chain")
@@ -150,7 +157,7 @@ proc getBlockByTag*(
     return err(error)
 
   # get the target block
-  let blk = 
+  let blk =
     try:
       await self.rpcClient.eth_getBlockByNumber(blockTag, false)
     except CatchableError as e:
@@ -163,14 +170,17 @@ proc getBlockByTag*(
     return err("hashed block header doesn't match with blk.hash(downloaded)")
 
   if n != header.number:
-    return err("the downloaded block number doesn't match with the requested block number")
+    return
+      err("the downloaded block number doesn't match with the requested block number")
 
   # get the source block
   let earliestHeader = self.headerStore.earliest.valueOr:
     return err("Syncing")
 
   # walk blocks backwards(time) from source to target
-  let isLinked = await self.walkBlocks(earliestHeader.number, header.number, earliestHeader.parentHash, blk.hash)
+  let isLinked = await self.walkBlocks(
+    earliestHeader.number, header.number, earliestHeader.parentHash, blk.hash
+  )
 
   if not isLinked:
     return err("the requested block is not part of the canonical chain")
@@ -195,7 +205,7 @@ proc getHeaderByHash*(
   let cachedHeader = self.headerStore.get(blockHash)
 
   if cachedHeader.isNone():
-    debug "did not find the header in the cache", blockHash=blockHash
+    debug "did not find the header in the cache", blockHash = blockHash
   else:
     return ok(cachedHeader.get())
 
@@ -204,7 +214,7 @@ proc getHeaderByHash*(
     return err("Syncing")
 
   # get the target block
-  let blk = 
+  let blk =
     try:
       await self.rpcClient.eth_getBlockByHash(blockHash, false)
     except CatchableError as e:
@@ -220,7 +230,9 @@ proc getHeaderByHash*(
     return err("the blk.hash(downloaded) doesn't match with the provided hash")
 
   # walk blocks backwards(time) from source to target
-  let isLinked = await self.walkBlocks(earliestHeader.number, header.number, earliestHeader.parentHash, blockHash)
+  let isLinked = await self.walkBlocks(
+    earliestHeader.number, header.number, earliestHeader.parentHash, blockHash
+  )
 
   if not isLinked:
     return err("the requested block is not part of the canonical chain")
@@ -236,7 +248,7 @@ proc getHeaderByTag*(
     cachedHeader = self.headerStore.get(n)
 
   if cachedHeader.isNone():
-    debug "did not find the header in the cache", blockTag=blockTag
+    debug "did not find the header in the cache", blockTag = blockTag
   else:
     return ok(cachedHeader.get())
 
@@ -245,7 +257,7 @@ proc getHeaderByTag*(
     return err("Syncing")
 
   # get the target block
-  let blk = 
+  let blk =
     try:
       await self.rpcClient.eth_getBlockByNumber(blockTag, false)
     except CatchableError as e:
@@ -258,10 +270,13 @@ proc getHeaderByTag*(
     return err("hashed block header doesn't match with blk.hash(downloaded)")
 
   if n != header.number:
-    return err("the downloaded block number doesn't match with the requested block number")
+    return
+      err("the downloaded block number doesn't match with the requested block number")
 
   # walk blocks backwards(time) from source to target
-  let isLinked = await self.walkBlocks(earliestHeader.number, header.number, earliestHeader.parentHash, blk.hash)
+  let isLinked = await self.walkBlocks(
+    earliestHeader.number, header.number, earliestHeader.parentHash, blk.hash
+  )
 
   if not isLinked:
     return err("the requested block is not part of the canonical chain")

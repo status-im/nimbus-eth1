@@ -7,7 +7,7 @@
 
 {.push raises: [].}
 
-import 
+import
   eth/common/hashes,
   eth/common/headers,
   web3/eth_api_types,
@@ -16,17 +16,17 @@ import
   beacon_chain/spec/datatypes/[phase0, altair, bellatrix],
   beacon_chain/[light_client, nimbus_binary_common],
   beacon_chain/el/engine_api_conversions,
-  minilru, 
+  minilru,
   results
 
-type
-  HeaderStore* = ref object
-    headers: LruCache[Hash32, Header]
-    hashes: Table[base.BlockNumber, Hash32]
+type HeaderStore* = ref object
+  headers: LruCache[Hash32, Header]
+  hashes: Table[base.BlockNumber, Hash32]
 
-func convHeader(lcHeader: ForkedLightClientHeader): Header = 
+func convHeader(lcHeader: ForkedLightClientHeader): Header =
   withForkyHeader(lcHeader):
-    template p(): auto = forkyHeader.execution
+    template p(): auto =
+      forkyHeader.execution
 
     when lcDataFork >= LightClientDataFork.Capella:
       let withdrawalsRoot = Opt.some(p.withdrawals_root.asBlockHash)
@@ -34,12 +34,12 @@ func convHeader(lcHeader: ForkedLightClientHeader): Header =
       let withdrawalsRoot = Opt.none(Hash32)
 
     when lcDataFork >= LightClientDataFork.Deneb:
-      let 
+      let
         blobGasUsed = Opt.some(p.blob_gas_used)
         excessBlobGas = Opt.some(p.excess_blob_gas)
         parentBeaconBlockRoot = Opt.some(forkyHeader.beacon.parent_root.asBlockHash)
     else:
-      let 
+      let
         blobGasUsed = Opt.none(uint64)
         excessBlobGas = Opt.none(uint64)
         parentBeaconBlockRoot = Opt.none(Hash32)
@@ -72,7 +72,7 @@ func convHeader(lcHeader: ForkedLightClientHeader): Header =
         blobGasUsed: blobGasUsed,
         excessBlobGas: excessBlobGas,
         parentBeaconBlockRoot: parentBeaconBlockRoot,
-        requestsHash: requestsHash
+        requestsHash: requestsHash,
       )
     else:
       # INFO: should never reach this point because running verified
@@ -118,7 +118,7 @@ proc earliest*(self: HeaderStore): Opt[Header] =
   self.headers.peek(hash)
 
 proc get*(self: HeaderStore, number: base.BlockNumber): Opt[Header] =
-  let hash = 
+  let hash =
     try:
       self.hashes[number]
     except:

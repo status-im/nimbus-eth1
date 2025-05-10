@@ -28,21 +28,20 @@ export results, stint, hashes_rlp, accounts_rlp, eth_api_types
 template rpcClient(vp: VerifiedRpcProxy): RpcClient =
   vp.proxy.getClient()
 
-template toLog(lg: LogObject): Log = 
-  Log(
-    address: lg.address,
-    topics: lg.topics,
-    data: lg.data
-  )
+template toLog(lg: LogObject): Log =
+  Log(address: lg.address, topics: lg.topics, data: lg.data)
 
 proc toLogs(logs: openArray[LogObject]): seq[Log] =
-  result = map(logs, proc(x: LogObject): Log = toLog(x))
+  result = map(
+    logs,
+    proc(x: LogObject): Log =
+      toLog(x),
+  )
 
 proc toReceipt(rec: ReceiptObject): Receipt =
-  let isHash = if rec.status.isSome: false
-               else: true
+  let isHash = if rec.status.isSome: false else: true
 
-  var status = false 
+  var status = false
   if rec.status.isSome:
     if rec.status.get() == 1.Quantity:
       status = true
@@ -50,11 +49,11 @@ proc toReceipt(rec: ReceiptObject): Receipt =
   return Receipt(
     hash: rec.transactionHash,
     isHash: isHash,
-    status: status, 
+    status: status,
     cumulativeGasUsed: rec.cumulativeGasUsed.GasInt,
     logs: toLogs(rec.logs),
     logsBloom: rec.logsBloom,
-    receiptType: rec.`type`.get(0.Web3Quantity).ReceiptType
+    receiptType: rec.`type`.get(0.Web3Quantity).ReceiptType,
   )
 
 proc toReceipts(recs: openArray[ReceiptObject]): seq[Receipt] =
@@ -64,11 +63,10 @@ proc toReceipts(recs: openArray[ReceiptObject]): seq[Receipt] =
 proc getReceiptsByBlockTag*(
     vp: VerifiedRpcProxy, blockTag: BlockTag
 ): Future[Result[seq[ReceiptObject], string]] {.async: (raises: []).} =
-
-  let 
+  let
     header = (await vp.getHeaderByTag(blockTag)).valueOr:
       return err(error)
-    rxs = 
+    rxs =
       try:
         await vp.rpcClient.eth_getBlockReceipts(blockTag)
       except CatchableError as e:
@@ -76,7 +74,8 @@ proc getReceiptsByBlockTag*(
 
   if rxs.isSome():
     if orderedTrieRoot(toReceipts(rxs.get())) != header.receiptsRoot:
-      return err("downloaded receipts do not evaluate to the receipts root of the block")
+      return
+        err("downloaded receipts do not evaluate to the receipts root of the block")
   else:
     return err("error downloading the receipts")
 
@@ -85,12 +84,12 @@ proc getReceiptsByBlockTag*(
 proc getReceiptsByBlockHash*(
     vp: VerifiedRpcProxy, blockHash: Hash32
 ): Future[Result[seq[ReceiptObject], string]] {.async: (raises: []).} =
-
-  let 
+  let
     header = (await vp.getHeaderByHash(blockHash)).valueOr:
       return err(error)
-    blockTag = BlockTag(RtBlockIdentifier(kind: bidNumber, number: Quantity(header.number)))
-    rxs = 
+    blockTag =
+      BlockTag(RtBlockIdentifier(kind: bidNumber, number: Quantity(header.number)))
+    rxs =
       try:
         await vp.rpcClient.eth_getBlockReceipts(blockTag)
       except CatchableError as e:
@@ -98,7 +97,8 @@ proc getReceiptsByBlockHash*(
 
   if rxs.isSome():
     if orderedTrieRoot(toReceipts(rxs.get())) != header.receiptsRoot:
-      return err("downloaded receipts do not evaluate to the receipts root of the block")
+      return
+        err("downloaded receipts do not evaluate to the receipts root of the block")
   else:
     return err("error downloading the receipts")
 

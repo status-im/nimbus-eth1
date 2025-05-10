@@ -58,7 +58,6 @@ func getConfiguredChainId(networkMetadata: Eth2NetworkMetadata): UInt256 =
 proc run*(
     config: VerifiedProxyConf, ctx: ptr Context
 ) {.raises: [CatchableError], gcsafe.} =
-
   {.gcsafe.}:
     setupLogging(config.logLevel, config.logStdout, none(OutFile))
 
@@ -91,7 +90,8 @@ proc run*(
   verifiedProxy.installEthApiHandlers()
 
   # just for short hand convenience
-  template cfg(): auto = metadata.cfg
+  template cfg(): auto =
+    metadata.cfg
 
   # initiialize beacon node genesis data, beacon clock and forkDigests
   let
@@ -146,8 +146,9 @@ proc run*(
 
   # find out what this does
   network.registerProtocol(
-    PeerSync, PeerSync.NetworkState.init(
-      cfg, forkDigests, genesisBlockRoot, getBeaconTime))
+    PeerSync,
+    PeerSync.NetworkState.init(cfg, forkDigests, genesisBlockRoot, getBeaconTime),
+  )
 
   # start the p2p network and rpcProxy
   waitFor network.startListening()

@@ -106,12 +106,12 @@ proc getAccount*(
     lcProxy: VerifiedRpcProxy,
     address: Address,
     blockNumber: base.BlockNumber,
-    stateRoot: Root): Future[Result[Account, string]] {.async: (raises: []).} =
-
+    stateRoot: Root,
+): Future[Result[Account, string]] {.async: (raises: []).} =
   info "Forwarding eth_getAccount", blockNumber
 
   let
-    proof = 
+    proof =
       try:
         await lcProxy.rpcClient.eth_getProof(address, @[], blockId(blockNumber))
       except CatchableError as e:
@@ -128,7 +128,8 @@ proc getCode*(
     lcProxy: VerifiedRpcProxy,
     address: Address,
     blockNumber: base.BlockNumber,
-    stateRoot: Root): Future[Result[seq[byte], string]] {.async: (raises: []).} =
+    stateRoot: Root,
+): Future[Result[seq[byte], string]] {.async: (raises: []).} =
   # get verified account details for the address at blockNumber
   let account = (await lcProxy.getAccount(address, blockNumber, stateRoot)).valueOr:
     return err(error)
@@ -139,7 +140,7 @@ proc getCode*(
 
   info "Forwarding eth_getCode", blockNumber
 
-  let code = 
+  let code =
     try:
       await lcProxy.rpcClient.eth_getCode(address, blockId(blockNumber))
     except CatchableError as e:
@@ -157,13 +158,12 @@ proc getStorageAt*(
     address: Address,
     slot: UInt256,
     blockNumber: base.BlockNumber,
-    stateRoot: Root
+    stateRoot: Root,
 ): Future[Result[UInt256, string]] {.async: (raises: []).} =
-
   info "Forwarding eth_getStorageAt", blockNumber
 
   let
-    proof = 
+    proof =
       try:
         await lcProxy.rpcClient.eth_getProof(address, @[slot], blockId(blockNumber))
       except CatchableError as e:

@@ -31,40 +31,48 @@ template calcWithdrawalsRoot*(withdrawals: openArray[Withdrawal]): Root =
   orderedTrieRoot(withdrawals)
 
 func vHashes(x: Opt[seq[Hash32]]): seq[VersionedHash] =
-  if x.isNone: return
-  else: x.get
+  if x.isNone:
+    return
+  else:
+    x.get
 
 func authList(x: Opt[seq[Authorization]]): seq[Authorization] =
-  if x.isNone: return
-  else: x.get
+  if x.isNone:
+    return
+  else:
+    x.get
 
 proc toTransaction(tx: TransactionObject): Transaction =
   Transaction(
-    txType          : tx.`type`.get(0.Web3Quantity).TxType,
-    chainId         : tx.chainId.get(0.u256),
-    nonce           : tx.nonce.AccountNonce,
-    gasPrice        : tx.gasPrice.GasInt,
+    txType: tx.`type`.get(0.Web3Quantity).TxType,
+    chainId: tx.chainId.get(0.u256),
+    nonce: tx.nonce.AccountNonce,
+    gasPrice: tx.gasPrice.GasInt,
     maxPriorityFeePerGas: tx.maxPriorityFeePerGas.get(0.Web3Quantity).GasInt,
-    maxFeePerGas    : tx.maxFeePerGas.get(0.Web3Quantity).GasInt,
-    gasLimit        : tx.gas.GasInt,
-    to              : tx.to,
-    value           : tx.value,
-    payload         : tx.input,
-    accessList      : tx.accessList.get(@[]),
+    maxFeePerGas: tx.maxFeePerGas.get(0.Web3Quantity).GasInt,
+    gasLimit: tx.gas.GasInt,
+    to: tx.to,
+    value: tx.value,
+    payload: tx.input,
+    accessList: tx.accessList.get(@[]),
     maxFeePerBlobGas: tx.maxFeePerBlobGas.get(0.u256),
-    versionedHashes : vHashes(tx.blobVersionedHashes),
-    V               : tx.v.uint64,
-    R               : tx.r,
-    S               : tx.s,
+    versionedHashes: vHashes(tx.blobVersionedHashes),
+    V: tx.v.uint64,
+    R: tx.r,
+    S: tx.s,
     authorizationList: authList(tx.authorizationList),
   )
 
-proc toTransactions(txs: openArray[TxOrHash]): seq[Transaction] {.raises: [ValueError].} =
+proc toTransactions(
+    txs: openArray[TxOrHash]
+): seq[Transaction] {.raises: [ValueError].} =
   for x in txs:
     if x.kind == tohTx:
       result.add toTransaction(x.tx)
     else:
-      raise newException(ValueError, "cannot construct a transaction trie using only txhashes")
+      raise newException(
+        ValueError, "cannot construct a transaction trie using only txhashes"
+      )
 
 proc checkTxHash*(txObj: TransactionObject, txHash: Hash32): bool =
   let tx = toTransaction(txObj)
@@ -74,12 +82,10 @@ proc checkTxHash*(txObj: TransactionObject, txHash: Hash32): bool =
   return true
 
 proc verifyTransactions*(
-    txRoot: Hash32,
-    transactions: seq[TxOrHash],
+    txRoot: Hash32, transactions: seq[TxOrHash]
 ): Result[bool, string] =
-
   try:
-    let txs = toTransactions(transactions) 
+    let txs = toTransactions(transactions)
     let rootHash = orderedTrieRoot(txs)
     if rootHash == txRoot:
       return ok(true)

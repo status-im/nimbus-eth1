@@ -51,34 +51,33 @@ proc installEthApiHandlers*(vp: VerifiedRpcProxy) =
     (await vp.getBlockByHash(blockHash, fullTransactions)).valueOr:
       raise newException(ValueError, error)
 
-#  vp.proxy.rpc("eth_getUncleCountByBlockNumber") do(
-#    blockTag: BlockTag
-#  ) -> Quantity:
-#    let blk = (await vp.getBlockByTag(blockTag, false)).valueOr:
-#      raise newException(ValueError, error)
-#    return Quantity(blk.uncles.len())
-#
-#  vp.proxy.rpc("eth_getUncleCountByBlockHash") do(
-#    blockHash: Hash32
-#  ) -> Quantity:
-#    let blk = (await vp.getBlockByHash(blockHash, false)).valueOr:
-#      raise newException(ValueError, error)
-#    return Quantity(blk.uncles.len())
-#
-#  vp.proxy.rpc("eth_getBlockTransactionCountByNumber") do(
-#    blockTag: BlockTag
-#  ) -> Quantity:
-#    let blk = (await vp.getBlockByTag(blockTag, true)).valueOr:
-#      raise newException(ValueError, error)
-#    return Quantity(blk.transactions.len)
-#
-#  vp.proxy.rpc("eth_getBlockTransactionCountByHash") do(
-#    blockHash: Hash32
-#  ) -> Quantity:
-#    let blk = (await vp.getBlockByHash(blockHash, true)).valueOr:
-#      raise newException(ValueError, error)
-#    return Quantity(blk.transactions.len)
-
+  #  vp.proxy.rpc("eth_getUncleCountByBlockNumber") do(
+  #    blockTag: BlockTag
+  #  ) -> Quantity:
+  #    let blk = (await vp.getBlockByTag(blockTag, false)).valueOr:
+  #      raise newException(ValueError, error)
+  #    return Quantity(blk.uncles.len())
+  #
+  #  vp.proxy.rpc("eth_getUncleCountByBlockHash") do(
+  #    blockHash: Hash32
+  #  ) -> Quantity:
+  #    let blk = (await vp.getBlockByHash(blockHash, false)).valueOr:
+  #      raise newException(ValueError, error)
+  #    return Quantity(blk.uncles.len())
+  #
+  #  vp.proxy.rpc("eth_getBlockTransactionCountByNumber") do(
+  #    blockTag: BlockTag
+  #  ) -> Quantity:
+  #    let blk = (await vp.getBlockByTag(blockTag, true)).valueOr:
+  #      raise newException(ValueError, error)
+  #    return Quantity(blk.transactions.len)
+  #
+  #  vp.proxy.rpc("eth_getBlockTransactionCountByHash") do(
+  #    blockHash: Hash32
+  #  ) -> Quantity:
+  #    let blk = (await vp.getBlockByHash(blockHash, true)).valueOr:
+  #      raise newException(ValueError, error)
+  #    return Quantity(blk.transactions.len)
   vp.proxy.rpc("eth_getTransactionByBlockNumberAndIndex") do(
     blockTag: BlockTag, index: Quantity
   ) -> TransactionObject:
@@ -102,35 +101,33 @@ proc installEthApiHandlers*(vp: VerifiedRpcProxy) =
     doAssert x.kind == tohTx
     return x.tx
 
-  vp.proxy.rpc("eth_getTransactionByHash") do(
-    txHash: Hash32
-  ) -> TransactionObject:
-    let tx = 
+  vp.proxy.rpc("eth_getTransactionByHash") do(txHash: Hash32) -> TransactionObject:
+    let tx =
       try:
         await vp.rpcClient.eth_getTransactionByHash(txHash)
       except CatchableError as e:
         raise newException(ValueError, e.msg)
     if tx.hash != txHash:
-      raise newException(ValueError, "the downloaded transaction hash doesn't match the requested transaction hash")
+      raise newException(
+        ValueError,
+        "the downloaded transaction hash doesn't match the requested transaction hash",
+      )
 
     if not checkTxHash(tx, txHash):
-      raise newException(ValueError, "the transaction doesn't hash to the provided hash")
+      raise
+        newException(ValueError, "the transaction doesn't hash to the provided hash")
 
     return tx
 
   # TODO: this method should also support block hashes. For that, the client call should also suupport block hashes
-  vp.proxy.rpc("eth_getBlockReceipts") do(
-    blockTag: BlockTag
-  ) -> Opt[seq[ReceiptObject]]:
+  vp.proxy.rpc("eth_getBlockReceipts") do(blockTag: BlockTag) -> Opt[seq[ReceiptObject]]:
     let rxs = (await vp.getReceiptsByBlockTag(blockTag)).valueOr:
       raise newException(ValueError, error)
     return Opt.some(rxs)
 
-  vp.proxy.rpc("eth_getTransactionReceipt") do(
-    txHash: Hash32
-  ) -> ReceiptObject:
-    let 
-      rx = 
+  vp.proxy.rpc("eth_getTransactionReceipt") do(txHash: Hash32) -> ReceiptObject:
+    let
+      rx =
         try:
           await vp.rpcClient.eth_getTransactionReceipt(txHash)
         except CatchableError as e:
@@ -144,15 +141,14 @@ proc installEthApiHandlers*(vp: VerifiedRpcProxy) =
 
     raise newException(ValueError, "receipt couldn't be verified")
 
-#  # eth_blockNumber - get latest tag from header store
-#  vp.proxy.rpc("eth_blockNumber") do() -> Quantity:
-#    # Returns the number of the most recent block seen by the light client.
-#    let hLatest = vp.headerStore.latest()
-#    if hLatest.isNone:
-#      raise newException(ValueError, "Syncing")
-#
-#    return Quantity(hLatest.get().number)
-
+  #  # eth_blockNumber - get latest tag from header store
+  #  vp.proxy.rpc("eth_blockNumber") do() -> Quantity:
+  #    # Returns the number of the most recent block seen by the light client.
+  #    let hLatest = vp.headerStore.latest()
+  #    if hLatest.isNone:
+  #      raise newException(ValueError, "Syncing")
+  #
+  #    return Quantity(hLatest.get().number)
   vp.proxy.rpc("eth_getBalance") do(
     address: addresses.Address, blockTag: BlockTag
   ) -> UInt256:
@@ -162,13 +158,12 @@ proc installEthApiHandlers*(vp: VerifiedRpcProxy) =
       account = (await vp.getAccount(address, header.number, header.stateRoot)).valueOr:
         raise newException(ValueError, error)
 
-
     account.balance
 
   vp.proxy.rpc("eth_getStorageAt") do(
     address: addresses.Address, slot: UInt256, blockTag: BlockTag
   ) -> FixedBytes[32]:
-    let 
+    let
       header = (await vp.getHeaderByTag(blockTag)).valueOr:
         raise newException(ValueError, error)
 
@@ -177,28 +172,26 @@ proc installEthApiHandlers*(vp: VerifiedRpcProxy) =
 
     FixedBytes[32](storage.toBytesBE)
 
-#  vp.proxy.rpc("eth_getTransactionCount") do(
-#    address: addresses.Address, blockTag: BlockTag
-#  ) -> Quantity:
-#    let
-#      header = (await vp.getHeaderByTag(blockTag)).valueOr:
-#        raise newException(ValueError, error)
-#
-#      account = (await vp.getAccount(address, header.number, header.stateRoot)).valueOr:
-#        raise newException(ValueError, error)
-#
-#    Quantity(account.nonce)
-
+  #  vp.proxy.rpc("eth_getTransactionCount") do(
+  #    address: addresses.Address, blockTag: BlockTag
+  #  ) -> Quantity:
+  #    let
+  #      header = (await vp.getHeaderByTag(blockTag)).valueOr:
+  #        raise newException(ValueError, error)
+  #
+  #      account = (await vp.getAccount(address, header.number, header.stateRoot)).valueOr:
+  #        raise newException(ValueError, error)
+  #
+  #    Quantity(account.nonce)
   vp.proxy.rpc("eth_getCode") do(
     address: addresses.Address, blockTag: BlockTag
   ) -> seq[byte]:
-    let
-      header = (await vp.getHeaderByTag(blockTag)).valueOr:
-        raise newException(ValueError, error)
+    let header = (await vp.getHeaderByTag(blockTag)).valueOr:
+      raise newException(ValueError, error)
 
-    (await vp.getCode(address,header.number, header.stateRoot)).valueOr:
-        raise newException(ValueError, error)
-  
+    (await vp.getCode(address, header.number, header.stateRoot)).valueOr:
+      raise newException(ValueError, error)
+
   vp.proxy.rpc("eth_call") do(
     tx: TransactionArgs, blockTag: BlockTag, optimisticStateFetch: Opt[bool]
   ) -> seq[byte]:
@@ -244,27 +237,27 @@ proc installEthApiHandlers*(vp: VerifiedRpcProxy) =
     return
       AccessListResult(accessList: accessList, error: error, gasUsed: gasUsed.Quantity)
 
-#  vp.proxy.rpc("eth_estimateGas") do(
-#    tx: TransactionArgs, blockTag: BlockTag, optimisticStateFetch: Opt[bool]
-#  ) -> Quantity:
-#    if tx.to.isNone():
-#      raise newException(ValueError, "to address is required")
-#
-#    if blockTag.kind == bidAlias:
-#      raise newException(ValueError, "tag not yet implemented")
-#
-#    let
-#      header = (await vp.getHeaderByTag(blockTag)).valueOr:
-#        raise newException(ValueError, error)
-#
-#      optimisticStateFetch = optimisticStateFetch.valueOr:
-#        true
-#
-#    let gasEstimate = (await vp.evm.estimateGas(header, tx, optimisticStateFetch)).valueOr:
-#      raise newException(ValueError, error)
-#
-#    return gasEstimate.Quantity
-#
+  #  vp.proxy.rpc("eth_estimateGas") do(
+  #    tx: TransactionArgs, blockTag: BlockTag, optimisticStateFetch: Opt[bool]
+  #  ) -> Quantity:
+  #    if tx.to.isNone():
+  #      raise newException(ValueError, "to address is required")
+  #
+  #    if blockTag.kind == bidAlias:
+  #      raise newException(ValueError, "tag not yet implemented")
+  #
+  #    let
+  #      header = (await vp.getHeaderByTag(blockTag)).valueOr:
+  #        raise newException(ValueError, error)
+  #
+  #      optimisticStateFetch = optimisticStateFetch.valueOr:
+  #        true
+  #
+  #    let gasEstimate = (await vp.evm.estimateGas(header, tx, optimisticStateFetch)).valueOr:
+  #      raise newException(ValueError, error)
+  #
+  #    return gasEstimate.Quantity
+  #
   # TODO:
   # Following methods are forwarded directly to the web3 provider and therefore
   # are not validated in any way.
