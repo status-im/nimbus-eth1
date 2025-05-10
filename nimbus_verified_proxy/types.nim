@@ -5,14 +5,18 @@
 #   * Apache v2 license (license terms in the root directory or at https://www.apache.org/licenses/LICENSE-2.0).
 # at your option. This file may not be copied, modified, or distributed except according to those terms.
 
--d:"chronicles_runtime_filtering=on"
--d:"chronicles_disable_thread_id"
+import json_rpc/[rpcproxy], stint, ./header_store, ../fluffy/evm/async_evm
 
-@if release:
-  -d:"chronicles_line_numbers:0"
-@end
+type VerifiedRpcProxy* = ref object
+  evm*: AsyncEvm
+  proxy*: RpcProxy
+  headerStore*: HeaderStore
+  chainId*: UInt256
 
-# Use only `secp256k1` public key cryptography as an identity in LibP2P.
--d:"libp2p_pki_schemes=secp256k1"
--d:stateless
---hint[Processing]:off
+proc new*(
+    T: type VerifiedRpcProxy,
+    proxy: RpcProxy,
+    headerStore: HeaderStore,
+    chainId: UInt256,
+): T =
+  VerifiedRpcProxy(proxy: proxy, headerStore: headerStore, chainId: chainId)
