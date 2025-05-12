@@ -380,6 +380,15 @@ func inRange(
 template inRange*(p: PortalProtocol, contentId: ContentId): bool =
   p.inRange(p.localNode.id, p.dataRadius(), contentId)
 
+proc neighboursInRange*(p: PortalProtocol, id: ContentId, k: int = BUCKET_SIZE, seenOnly = false): seq[Node] =
+
+  func nodeInRange(nodeId: NodeId): bool =
+    let radius = p.radiusCache.get(nodeId).valueOr:
+      return false
+    p.inRange(nodeId, radius, id)
+
+  p.routingTable.neighbours(id, k, seenOnly, nodeInRange)
+
 func truncateEnrs(
     nodes: seq[Node], maxSize: int, enrOverhead: int
 ): List[ByteList[2048], 32] =
@@ -1752,27 +1761,21 @@ proc neighborhoodGossip*(
   # It might still cause issues in data getting propagated in a wider id range.
 
   var closestLocalNodes =
-    p.routingTable.neighbours(NodeId(contentId), BUCKET_SIZE, seenOnly = true)
+    p.neighboursInRange(contentId, BUCKET_SIZE, seenOnly = true)
+
+  closestLocalNodes.keepItIf(srcNodeId.isNone() or it.id != srcNodeId.get())
 
   # Shuffling the order of the nodes in order to not always hit the same node
   # first for the same request.
   p.baseProtocol.rng[].shuffle(closestLocalNodes)
 
-  var gossipNodes: seq[Node]
-  for node in closestLocalNodes:
-    let radius = p.radiusCache.get(node.id).valueOr:
-      continue
-    if p.inRange(node.id, radius, contentId):
-      if srcNodeId.isNone() or node.id != srcNodeId.get():
-        gossipNodes.add(node)
-
   var numberOfGossipedNodes = 0
 
-  if not enableNodeLookup or gossipNodes.len() >= p.config.maxGossipNodes:
+  if not enableNodeLookup or closestLocalNodes.len() >= p.config.maxGossipNodes:
     # use local nodes for gossip
     portal_gossip_without_lookup.inc(labelValues = [$p.protocolId])
 
-    for node in gossipNodes:
+    for node in closestLocalNodes:
       let req = OfferRequest(dst: node, kind: Direct, contentList: contentList)
       await p.offerQueue.addLast(req)
       inc numberOfGossipedNodes
