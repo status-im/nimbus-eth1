@@ -360,11 +360,6 @@ func getNode*(p: PortalProtocol, id: NodeId): Opt[Node] =
 func localNode*(p: PortalProtocol): Node =
   p.baseProtocol.localNode
 
-template neighbours*(
-    p: PortalProtocol, id: NodeId, k: int = BUCKET_SIZE, seenOnly = false
-): seq[Node] =
-  p.routingTable.neighbours(id, k, seenOnly)
-
 func distance(p: PortalProtocol, a, b: NodeId): UInt256 =
   p.routingTable.distance(a, b)
 
@@ -380,21 +375,33 @@ func inRange(
 template inRange*(p: PortalProtocol, contentId: ContentId): bool =
   p.inRange(p.localNode.id, p.dataRadius(), contentId)
 
-proc neighboursInRange*(
+func neighbours*(
+    p: PortalProtocol,
+    id: NodeId,
+    k: int = BUCKET_SIZE,
+    seenOnly = false,
+    excluding = initHashSet[NodeId](),
+): seq[Node] =
+  func nodeNotExcluded(nodeId: NodeId): bool =
+    not excluding.contains(nodeId)
+
+  p.routingTable.neighbours(id, k, seenOnly, nodeNotExcluded)
+
+func neighboursInRange*(
     p: PortalProtocol,
     id: ContentId,
     k: int = BUCKET_SIZE,
     seenOnly = false,
     excluding = initHashSet[NodeId](),
 ): seq[Node] =
-  func nodeInRange(nodeId: NodeId): bool =
+  func nodeNotExcludedAndInRange(nodeId: NodeId): bool =
     if excluding.contains(nodeId):
       return false
     let radius = p.radiusCache.get(nodeId).valueOr:
       return false
     p.inRange(nodeId, radius, id)
 
-  p.routingTable.neighbours(id, k, seenOnly, nodeInRange)
+  p.routingTable.neighbours(id, k, seenOnly, nodeNotExcludedAndInRange)
 
 func truncateEnrs(
     nodes: seq[Node], maxSize: int, enrOverhead: int
@@ -560,9 +567,8 @@ proc handleFindContent(
   # send closest neighbours to the requested content id.
 
   let
-    closestNodes = p.neighboursInRange(
-      contentId, seenOnly = true, excluding = toHashSet([p.localNode.id, srcId])
-    )
+    closestNodes =
+      p.neighbours(contentId, seenOnly = true, excluding = toHashSet([srcId]))
     enrs = truncateEnrs(closestNodes, maxPayloadSize, enrOverhead)
   portal_content_enrs_packed.observe(enrs.len().int64, labelValues = [$p.protocolId])
 
@@ -1771,7 +1777,6 @@ proc neighborhoodGossip*(
   # It might still cause issues in data getting propagated in a wider id range.
 
   var excluding: HashSet[NodeId]
-  excluding.incl(p.localNode.id)
   if srcNodeId.isSome():
     excluding.incl(srcNodeId.get())
 

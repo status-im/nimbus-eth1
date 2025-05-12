@@ -174,7 +174,7 @@ procSuite "Portal Wire Protocol Tests":
     let contentKey = ContentKeyByteList.init(@[1'u8])
 
     # content does not exist so this should provide us with the closest nodes
-    # to the content, which should only be node 3 because node 1 and 2 should be excluded
+    # to the content, which should only be node 3 because node 1 should be excluded
     let content = await proto1.findContentImpl(proto2.localNode, contentKey)
 
     check:
