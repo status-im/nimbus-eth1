@@ -52,7 +52,7 @@ NIMDOC_FLAGS += -d:debug -d:disable_libbacktrace
 NIMDOC_FLAGS += $(NIMFLAGS)
 
 # Nim check flags
-NIMCHK_FLAGS := c -r --verbosity:0 --hints:off --warnings:off
+NIMCHK_FLAGS := c -r --verbosity:0 --warnings:off
 
 # Markdown compiler (test for discount tool with tables support)
 MD_CMD     := markdown
