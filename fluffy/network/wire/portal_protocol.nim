@@ -381,9 +381,15 @@ template inRange*(p: PortalProtocol, contentId: ContentId): bool =
   p.inRange(p.localNode.id, p.dataRadius(), contentId)
 
 proc neighboursInRange*(
-    p: PortalProtocol, id: ContentId, k: int = BUCKET_SIZE, seenOnly = false
+    p: PortalProtocol,
+    id: ContentId,
+    k: int = BUCKET_SIZE,
+    seenOnly = false,
+    excluding = initHashSet[NodeId](),
 ): seq[Node] =
   func nodeInRange(nodeId: NodeId): bool =
+    if excluding.contains(nodeId):
+      return false
     let radius = p.radiusCache.get(nodeId).valueOr:
       return false
     p.inRange(nodeId, radius, id)
@@ -552,8 +558,11 @@ proc handleFindContent(
 
   # Node does not have the content, or content is not even in radius,
   # send closest neighbours to the requested content id.
+
   let
-    closestNodes = p.neighboursInRange(contentId, seenOnly = true)
+    closestNodes = p.neighboursInRange(
+      contentId, seenOnly = true, excluding = toHashSet([p.localNode.id, srcId])
+    )
     enrs = truncateEnrs(closestNodes, maxPayloadSize, enrOverhead)
   portal_content_enrs_packed.observe(enrs.len().int64, labelValues = [$p.protocolId])
 
@@ -1761,9 +1770,13 @@ proc neighborhoodGossip*(
   # table, but at the same time avoid unnecessary node lookups.
   # It might still cause issues in data getting propagated in a wider id range.
 
-  var closestLocalNodes = p.neighboursInRange(contentId, BUCKET_SIZE, seenOnly = true)
+  var excluding: HashSet[NodeId]
+  excluding.incl(p.localNode.id)
+  if srcNodeId.isSome():
+    excluding.incl(srcNodeId.get())
 
-  closestLocalNodes.keepItIf(srcNodeId.isNone() or it.id != srcNodeId.get())
+  var closestLocalNodes =
+    p.neighboursInRange(contentId, BUCKET_SIZE, seenOnly = true, excluding)
 
   # Shuffling the order of the nodes in order to not always hit the same node
   # first for the same request.
