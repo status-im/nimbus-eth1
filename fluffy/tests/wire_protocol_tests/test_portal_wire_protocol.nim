@@ -157,16 +157,24 @@ procSuite "Portal Wire Protocol Tests":
     await proto2.stopPortalProtocol()
 
   asyncTest "FindContent/Content - send enrs":
-    let (proto1, proto2) = defaultTestSetup(rng)
+    let
+      proto1 = initPortalProtocol(rng, PrivateKey.random(rng[]), localAddress(20402))
+      proto2 = initPortalProtocol(rng, PrivateKey.random(rng[]), localAddress(20403))
+      proto3 = initPortalProtocol(rng, PrivateKey.random(rng[]), localAddress(20404))
 
-    # ping in one direction to add, ping in the other to update as seen.
-    check (await proto1.baseProtocol.ping(proto2.localNode)).isOk()
-    check (await proto2.baseProtocol.ping(proto1.localNode)).isOk()
+    # Make node1 know about node2, and node2 about node3
+    check proto1.addNode(proto2.localNode) == Added
+    check proto2.addNode(proto3.localNode) == Added
+
+    # node1 needs to know the radius of the nodes to determine if they are
+    # interested in content, so a ping is done.
+    check (await proto1.ping(proto2.localNode)).isOk()
+    check (await proto2.ping(proto3.localNode)).isOk()
 
     let contentKey = ContentKeyByteList.init(@[1'u8])
 
     # content does not exist so this should provide us with the closest nodes
-    # to the content, which is the only node in the routing table.
+    # to the content, which should only be node 3 because node 1 and 2 should be excluded
     let content = await proto1.findContentImpl(proto2.localNode, contentKey)
 
     check:
