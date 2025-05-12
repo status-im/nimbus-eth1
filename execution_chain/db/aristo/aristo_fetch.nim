@@ -40,13 +40,6 @@ proc retrieveLeaf(
 
   return err(FetchPathNotFound)
 
-proc cachedAccLeaf*(db: AristoTxRef; accPath: Hash32): Opt[AccLeafRef] =
-  # Return vertex from layers or cache, `nil` if it's known to not exist and
-  # none otherwise
-  db.layersGetAccLeaf(accPath) or
-    db.db.accLeaves.get(accPath) or
-    Opt.none(AccLeafRef)
-
 proc cachedStoLeaf*(db: AristoTxRef; mixPath: Hash32): Opt[StoLeafRef] =
   # Return vertex from layers or cache, `nil` if it's known to not exist and
   # none otherwise
@@ -132,18 +125,9 @@ proc retrieveAccLeaf(
     db: AristoTxRef;
     accPath: Hash32;
       ): Result[AccLeafRef,AristoError] =
-  if (let leafVtx = db.cachedAccLeaf(accPath); leafVtx.isSome()):
-    if not leafVtx[].isValid():
-      return err(FetchPathNotFound)
-    return ok leafVtx[]
-
-  let (staticVtx, path, next) = db.retrieveAccStatic(accPath).valueOr:
-    if error == FetchPathNotFound:
-      db.db.accLeaves.put(accPath, nil)
-    return err(error)
+  let (staticVtx, path, next) = ? db.retrieveAccStatic(accPath)
 
   if staticVtx.isValid():
-    db.db.accLeaves.put(accPath, staticVtx)
     return ok staticVtx
 
   # Updated payloads are stored in the layers so if we didn't find them there,
@@ -155,12 +139,9 @@ proc retrieveAccLeaf(
         # meaning that it was a hit - else searches for non-existing paths would
         # skew the results towards more depth than exists in the MPT
         db.db.lookups.hits += 1
-        db.db.accLeaves.put(accPath, nil)
       return err(error)
 
   db.db.lookups.higher += 1
-
-  db.db.accLeaves.put(accPath, AccLeafRef(leafVtx))
 
   ok AccLeafRef(leafVtx)
 
@@ -215,10 +196,15 @@ proc fetchAccountHike*(
       ): Result[void,AristoError] =
   ## Expand account path to account leaf or return failure
 
-  # Prefer the leaf cache so as not to burden the lower layers
-  let leaf = db.cachedAccLeaf(accPath)
-  if leaf == Opt.some(AccLeafRef(nil)):
+  # Pre-lookup in case the account does not exist
+  let (staticVtx, path, next) = db.retrieveAccStatic(accPath).valueOr:
     return err(FetchAccInaccessible)
+
+  let leaf =
+    if staticVtx.isValid():
+      Opt.some(staticVtx)
+    else:
+      Opt.none(AccLeafRef)
 
   accPath.hikeUp(STATE_ROOT_VID, db, leaf, accHike).isOkOr:
     return err(FetchAccInaccessible)

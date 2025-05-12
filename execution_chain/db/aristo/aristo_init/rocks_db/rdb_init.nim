@@ -99,6 +99,7 @@ proc init*(rdb: var RdbInst, opts: DbOptions, baseDb: RocksDbInstanceRef) =
   rdb.rdKeyLru = typeof(rdb.rdKeyLru).init(rdb.rdKeySize)
   rdb.rdVtxLru = typeof(rdb.rdVtxLru).init(rdb.rdVtxSize)
   rdb.rdBranchLru = typeof(rdb.rdBranchLru).init(rdb.rdBranchSize)
+  rdb.rdEmptyLru = typeof(rdb.rdEmptyLru).init(rdb.rdVtxSize) # reuse vtx cache size
 
   if opts.rdbPrintStats:
     let

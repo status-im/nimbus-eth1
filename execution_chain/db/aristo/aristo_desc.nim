@@ -68,7 +68,6 @@ type
     kMap*: Table[RootedVertexID,HashKey]   ## Merkle hash key mapping
     vTop*: VertexID                        ## Last used vertex ID
 
-    accLeaves*: Table[Hash32, AccLeafRef]  ## Account path -> VertexRef
     stoLeaves*: Table[Hash32, StoLeafRef]  ## Storage path -> VertexRef
 
     blockNumber*: Opt[uint64]              ## Block number set when checkpointing the frame
@@ -85,7 +84,6 @@ type
 
   Snapshot* = object
     vtx*: Table[RootedVertexID, VtxSnapshot]
-    acc*: Table[Hash32, (AccLeafRef, int)]
     sto*: Table[Hash32, (StoLeafRef, int)]
     level*: Opt[int] # when this snapshot was taken
 
@@ -109,14 +107,6 @@ type
     closeFn*: CloseFn                ## Generic destructor
 
     txRef*: AristoTxRef              ## Bottom-most in-memory frame
-
-    accLeaves*: LruCache[Hash32, AccLeafRef]
-      ## Account path to payload cache - accounts are frequently accessed by
-      ## account path when contracts interact with them - this cache ensures
-      ## that we don't have to re-traverse the storage trie for every such
-      ## interaction
-      ## TODO a better solution would probably be to cache this in a type
-      ## exposed to the high-level API
 
     stoLeaves*: LruCache[Hash32, StoLeafRef]
       ## Mixed account/storage path to payload cache - same as above but caches
