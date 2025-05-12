@@ -552,7 +552,7 @@ proc handleFindContent(
   # Node does not have the content, or content is not even in radius,
   # send closest neighbours to the requested content id.
   let
-    closestNodes = p.neighbours(NodeId(contentId), seenOnly = true)
+    closestNodes = p.neighboursInRange(contentId, seenOnly = true)
     enrs = truncateEnrs(closestNodes, maxPayloadSize, enrOverhead)
   portal_content_enrs_packed.observe(enrs.len().int64, labelValues = [$p.protocolId])
 
