@@ -58,8 +58,8 @@ proc startService(nimbus: var Nimbus, service: var NimbusService) =
   writeOffset += uint(sizeof(uint))
 
   for opt, arg in optionsTable:
-    serializeTableElement(writeOffset, opt)
-    serializeTableElement(writeOffset, arg)
+    writeConfigString(writeOffset, opt)
+    writeConfigString(writeOffset, arg)
 
   serviceChannel[].send(byteArray)
 

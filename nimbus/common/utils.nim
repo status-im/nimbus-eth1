@@ -7,51 +7,56 @@
 
 {.push raises: [].}
 
-import results, ../conf, chronicles
+import std/[strutils], results, ../conf, chronicles, stew/shims/macros
 
-## Serialize table string elements
-proc serializeTableElement*(offset: var uint, elem: string) =
+logScope:
+  topics = "utils"
+
+## Write a string into a raw memory buffer (prefixed with length)
+proc writeConfigString*(offset: var uint, elem: string) =
   if offset <= 0:
     fatal "memory offset can't be zero"
     quit(QuitFailure)
 
-  let optLen = uint(elem.len) #element size
-
+  let optLen = uint(elem.len)
   copyMem(cast[pointer](offset), addr optLen, sizeof(uint))
   offset += uint(sizeof(uint))
 
   if optLen > 0:
-    copyMem(cast[pointer](offset), unsafeAddr elem[0], elem.len) #element data
+    copyMem(cast[pointer](offset), unsafeAddr elem[0], elem.len)
     offset += uint(elem.len)
 
-## Deserialize table string elements
-proc deserializeTableElement*(offset: var uint): string =
-  var strLen: uint #element size
+## Read a string from a raw memory buffer (expects length prefix)
+proc readConfigString*(offset: var uint): string =
+  var strLen: uint
   copyMem(addr strLen, cast[pointer](offset), sizeof(uint))
   offset += uint(sizeof(uint))
 
   var strData = ""
   if strLen > 0:
-    strData = newString(strLen) #element
+    strData = newString(strLen)
     copyMem(addr strData[0], cast[pointer](offset), uint(strLen))
     offset += uint(strLen)
 
   strData
 
-## Parse data from a given channel.
-##  schema: (table size:Uint) | [ (option size:Uint) (option data:byte) (arg size: Uint) (arg data:byte)]
-proc parseChannelData*(p: pointer): Result[NimbusConfigTable, string] =
+## Parse configuration options from a memory block.
+## Format: (table size:uint) | [ (key size:uint)(key:string) (val size:uint)(val:string) ]*
+proc deserializeConfigArgs*(p: pointer): Result[seq[string], string] =
   var
     readOffset = cast[uint](p)
-    confTable = NimbusConfigTable()
+    optionsList = newSeq[string]()
     totalSize: uint = 0
 
   copyMem(addr totalSize, cast[pointer](readOffset), sizeof(uint))
   readOffset += uint(sizeof(uint))
 
   while readOffset < cast[uint](p) + totalSize:
-    let opt = deserializeTableElement(readOffset)
-    let arg = deserializeTableElement(readOffset)
-    confTable[opt] = arg
+    let
+      optName = readConfigString(readOffset)
+      arg = readConfigString(readOffset)
+      option = "--" & optName & "=" & arg
 
-  ok confTable
+    optionsList.add(option)
+
+  ok optionsList
