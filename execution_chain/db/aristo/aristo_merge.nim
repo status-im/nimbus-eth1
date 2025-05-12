@@ -216,20 +216,10 @@ proc mergeAccountRecord*(
   ## not on the database already or different from `accRec`, and `false`
   ## otherwise.
   ##
-  let updated = db.mergePayloadImpl(
-    STATE_ROOT_VID, accPath, db.cachedAccLeaf(accPath), accRec
-  ).valueOr:
+  discard db.mergePayloadImpl(STATE_ROOT_VID, accPath, Opt.none(AccLeafRef), accRec).valueOr:
     if error == MergeNoAction:
       return ok false
     return err(error)
-
-  # Update leaf cache both of the merged value and potentially the displaced
-  # leaf resulting from splitting a leaf into a branch with two leaves
-  db.layersPutAccLeaf(accPath, updated[0])
-  if updated[1].isValid:
-    let otherPath =
-      Hash32(getBytes(NibblesBuf.fromBytes(accPath.data).replaceSuffix(updated[1].pfx)))
-    db.layersPutAccLeaf(otherPath, updated[2])
 
   ok true
 
@@ -282,7 +272,6 @@ proc mergeStorageData*(
     # Make sure that there is an account that refers to that storage trie
     let leaf = AccLeafRef(accHike.legs[^1].wp.vtx).dup # Dup on modify
     leaf.stoID = useID
-    db.layersPutAccLeaf(accPath, leaf)
     db.layersPutVtx((STATE_ROOT_VID, accHike.legs[^1].wp.vid), leaf)
 
   ok()
