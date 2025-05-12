@@ -56,7 +56,7 @@ when defined(metrics):
     # We don't care about synchronization between each type of metric or between
     # the metrics thread and others since small differences like this don't matter
     for state in RdbStateType:
-      for vtype in VertexType:
+      for vtype in RdbVertexType:
         for hit in [false, true]:
           output(
             name = "aristo_rdb_vtx_lru_total",
@@ -191,7 +191,9 @@ proc getVtx*(
         rdb.rdVtxLru.get(rvid.vid)
 
     if rc.isOk:
-      rdbVtxLruStats[rvid.to(RdbStateType)][rc.value().vType].inc(true)
+      rdbVtxLruStats[rvid.to(RdbStateType)][rc.value().vType.to(RdbVertexType)].inc(
+        true
+      )
       return ok(move(rc.value))
 
   # Otherwise fetch from backend database
@@ -207,8 +209,7 @@ proc getVtx*(
     return err((errSym, error))
 
   if not gotData:
-    # As a hack, we count missing data as leaf nodes
-    rdbVtxLruStats[rvid.to(RdbStateType)][VertexType.StoLeaf].inc(false)
+    rdbVtxLruStats[rvid.to(RdbStateType)][RdbVertexType.Empty].inc(false)
     return ok(VertexRef(nil))
 
   if res.isErr():
@@ -217,7 +218,9 @@ proc getVtx*(
   if res.value.vType == Branch:
     rdbBranchLruStats[rvid.to(RdbStateType)].inc(false)
   else:
-    rdbVtxLruStats[rvid.to(RdbStateType)][res.value().vType].inc(false)
+    rdbVtxLruStats[rvid.to(RdbStateType)][res.value().vType.to(RdbVertexType)].inc(
+      false
+    )
 
   # Update cache and return - in peek mode, avoid evicting cache items
   if GetVtxFlag.PeekCache notin flags:
