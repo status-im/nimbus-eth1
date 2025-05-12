@@ -27,7 +27,13 @@ func bdyErrors*(buddy: BeaconBuddyRef): string =
 proc fetchRegisterError*(buddy: BeaconBuddyRef, slowPeer = false) =
   buddy.only.nBdyRespErrors.inc
   if fetchBodiesReqErrThresholdCount < buddy.only.nBdyRespErrors:
-    if 1 < buddy.ctx.pool.nBuddies or not slowPeer:
+    if buddy.ctx.pool.nBuddies == 1 and slowPeer:
+      # Remember that the current peer is the last one and is lablelled slow.
+      # It would have been zombified if it were not the last one. This can be
+      # used in functions -- depending on context -- that will trigger if the
+      # if the pool of available sync peers becomes empty.
+      buddy.ctx.pool.blkLastSlowPeer = Opt.some(buddy.peerID)
+    else:
       buddy.ctrl.zombie = true # abandon slow peer unless last one
 
 proc bodiesFetch*(
@@ -89,7 +95,8 @@ proc bodiesFetch*(
      b.len.uint64 * 100 < nReq.uint64 * fetchBodiesReqMinResponsePC:
     buddy.fetchRegisterError(slowPeer=true)
   else:
-    buddy.only.nBdyRespErrors = 0 # reset error count
+    buddy.only.nBdyRespErrors = 0                   # reset error count
+    buddy.ctx.pool.blkLastSlowPeer = Opt.none(Hash) # not last one or not error
 
   trace trEthRecvReceivedBlockBodies, peer, nReq, nResp=b.len,
     elapsed=elapsed.toStr, ctrl=buddy.ctrl.state, bdyErrors=buddy.bdyErrors
