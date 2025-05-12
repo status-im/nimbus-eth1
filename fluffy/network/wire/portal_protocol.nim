@@ -380,8 +380,9 @@ func inRange(
 template inRange*(p: PortalProtocol, contentId: ContentId): bool =
   p.inRange(p.localNode.id, p.dataRadius(), contentId)
 
-proc neighboursInRange*(p: PortalProtocol, id: ContentId, k: int = BUCKET_SIZE, seenOnly = false): seq[Node] =
-
+proc neighboursInRange*(
+    p: PortalProtocol, id: ContentId, k: int = BUCKET_SIZE, seenOnly = false
+): seq[Node] =
   func nodeInRange(nodeId: NodeId): bool =
     let radius = p.radiusCache.get(nodeId).valueOr:
       return false
@@ -1760,8 +1761,7 @@ proc neighborhoodGossip*(
   # table, but at the same time avoid unnecessary node lookups.
   # It might still cause issues in data getting propagated in a wider id range.
 
-  var closestLocalNodes =
-    p.neighboursInRange(contentId, BUCKET_SIZE, seenOnly = true)
+  var closestLocalNodes = p.neighboursInRange(contentId, BUCKET_SIZE, seenOnly = true)
 
   closestLocalNodes.keepItIf(srcNodeId.isNone() or it.id != srcNodeId.get())
 
