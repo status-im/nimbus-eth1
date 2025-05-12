@@ -21,7 +21,7 @@ proc executionLayerHandler*(channel: ptr Channel[pointer]) =
     fatal "service unable to receive configuration", err = e.msg
     quit(QuitFailure)
 
-  let configs = parseChannelData(p).valueOr:
+  let configs = deserializeConfigArgs(p).valueOr:
     fatal "unable to parse service data", message = error
     quit(QuitFailure)
 
