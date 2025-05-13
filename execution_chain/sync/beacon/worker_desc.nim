@@ -12,8 +12,7 @@
 
 import
   std/sets,
-  pkg/chronos,
-  pkg/eth/common,
+  pkg/[chronos, eth/common, results],
   pkg/stew/[interval_set, sorted_set],
   ../../core/chain,
   ../sync_desc,
@@ -113,6 +112,7 @@ type
     # Info, debugging, and error handling stuff
     nReorg*: int                     ## Number of reorg invocations (info only)
     hdrProcError*: Table[Hash,uint8] ## Some globally accessible header errors
+    blkLastSlowPeer*: Opt[Hash]      ## Register slow peer when last one
     failedPeers*: HashSet[Hash]      ## Detect dead end sync by collecting peers
     seenData*: bool                  ## Set `true` is data were fetched, already
 

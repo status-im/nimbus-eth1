@@ -11,8 +11,7 @@
 {.push raises:[].}
 
 import
-  pkg/chronicles,
-  pkg/eth/common,
+  pkg/[chronicles, eth/common, results],
   ../../../networking/p2p,
   ../../wire_protocol,
   ../worker_desc,
@@ -98,6 +97,7 @@ proc startBuddy*(buddy: BeaconBuddyRef): bool =
   if peer.supports(wire_protocol.eth) and
      peer.state(wire_protocol.eth).initialized:
     ctx.pool.nBuddies.inc
+    ctx.pool.blkLastSlowPeer = Opt.none(Hash)
     buddy.initHdrProcErrors()
     return true
 
