@@ -108,11 +108,8 @@ proc init*(
 
   AsyncEvm(com: com, backend: backend)
 
-proc init*(
-    T: type AsyncEvm, backend: AsyncEvmStateBackend, com: CommonRef
-): T =
+proc init*(T: type AsyncEvm, backend: AsyncEvmStateBackend, com: CommonRef): T =
   AsyncEvm(com: com, backend: backend)
-
 
 template toCallResult(evmResult: EvmResult[CallResult]): Result[CallResult, string] =
   let callResult =
