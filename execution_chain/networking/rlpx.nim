@@ -1557,7 +1557,27 @@ template rlpxWithFutureHandler*(PROTO: distinct type;
     resolveResponseFuture(peer,
       perPeerMsgId, addr(packet), reqId)
 
+template rlpxWithFutureHandler*(PROTO: distinct type;
+                        MSGTYPE: distinct type;
+                        PROTYPE: distinct type;
+                        msgId: static[uint64];
+                        peer: Peer;
+                        data: Rlp,
+                        fields: untyped): untyped =
+  wrapRlpxWithPacketException(MSGTYPE, peer):
+    var
+      rlp = data
+      packet: MSGTYPE
 
+    tryEnterList(rlp)
+    let
+      reqId = read(rlp, uint64)
+      perPeerMsgId = msgIdImpl(PROTO, peer, msgId)
+    checkedRlpFields(peer, rlp, packet, fields)
+    var proType = packet.to(PROTYPE)
+    resolveResponseFuture(peer,
+      perPeerMsgId, addr(proType), reqId)
+      
 proc nextMsg*(PROTO: distinct type,
               peer: Peer,
               MsgType: distinct type,

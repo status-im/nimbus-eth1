@@ -15,6 +15,7 @@ import
   stew/endians2,
   ./types,
   ./requester,
+  ./receipt69,
   ../../core/[chain, tx_pool],
   ../../networking/p2p
 
@@ -97,6 +98,26 @@ proc getReceipts*(ctx: EthWireRef,
 
   move(list)
 
+proc getReceipts69*(ctx: EthWireRef,
+                  hashes: openArray[Hash32]):
+                    seq[seq[Receipt69]] =
+  var
+    list: seq[seq[Receipt69]]
+    totalBytes = 0
+
+  for blockHash in hashes:
+    var receiptList = ctx.chain.receiptsByBlockHash(blockHash).valueOr:
+      continue
+
+    totalBytes += getEncodedLength(receiptList)
+    list.add(receiptList.to(seq[Receipt69]))
+
+    if list.len >= MAX_RECEIPTS_SERVE or
+       totalBytes > SOFT_RESPONSE_LIMIT:
+      break
+
+  move(list)
+  
 proc getPooledTransactions*(ctx: EthWireRef,
                      hashes: openArray[Hash32]):
                        seq[PooledTransaction] =

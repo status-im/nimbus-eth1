@@ -11,6 +11,7 @@ import
   chronos,
   eth/common,
   ./types,
+  ./receipt69,
   ../../networking/rlpx,
   ../../networking/p2p_types
 
@@ -215,6 +216,12 @@ proc receipts*(responder: Responder;
     async: (raises: [CancelledError, EthP2PError], raw: true).} =
   doAssert(responder.supports(eth68), "'receipts' function only available for eth/68")
   eth68.rlpxSendMessage(responder, ReceiptsMsg, receipts)
+
+proc receipts*(responder: Responder;
+               receipts: openArray[seq[Receipt69]]): Future[void] {.
+    async: (raises: [CancelledError, EthP2PError], raw: true).} =
+  doAssert(responder.supports(eth69), "'receipts' function only available for eth/69")
+  eth69.rlpxSendMessage(responder, ReceiptsMsg, receipts)
 
 proc blockRangeUpdate*(peer: Peer; packet: BlockRangeUpdatePacket): Future[void] {.
     async: (raises: [CancelledError, EthP2PError], raw: true).} =
