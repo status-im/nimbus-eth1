@@ -29,10 +29,15 @@ type
     bestBlockHash*: Hash32
     forkId*: ChainForkId
 
-  Eth68PeerState* = ref object of RootRef
+  Eth69State* = object
+    genesisHash*: Hash32
+    forkId*: ChainForkId
+    earliest*: uint64
+    latest*: uint64
+    latestHash*: Hash32
+
+  EthPeerState* = ref object of RootRef
     initialized*: bool
-    bestBlockHash*: Hash32
-    bestDifficulty*: DifficultyInt
 
   BlockHeadersRequest* = object
     startBlock*: BlockHashOrNumber

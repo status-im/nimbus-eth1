@@ -80,11 +80,29 @@ proc status68UserHandler(peer: Peer; packet: Status68Packet) {.
 proc status68Thunk(peer: Peer; data: Rlp) {.
     async: (raises: [CancelledError, EthP2PError]).} =
   eth68.rlpxWithPacketHandler(Status68Packet, peer, data,
-                               [ethVersion, networkId,
+                               [version, networkId,
                                 totalDifficulty, bestHash,
                                 genesisHash, forkId]):
     await status68UserHandler(peer, packet)
 
+proc status69UserHandler(peer: Peer; packet: Status69Packet) {.
+    async: (raises: [CancelledError, EthP2PError]).} =
+  trace trEthRecvReceived & "Status (0x00)", peer,
+    networkId = packet.networkId,
+    genesisHash = packet.genesisHash.short,
+    forkHash = packet.forkId.forkHash.toHex,
+    forkNext = packet.forkId.forkNext,
+    earliest = packet.earliest,
+    latest = packet.latest,
+    latestHash = packet.latestHash.short
+
+proc status69Thunk(peer: Peer; data: Rlp) {.
+    async: (raises: [CancelledError, EthP2PError]).} =
+  eth68.rlpxWithPacketHandler(Status69Packet, peer, data,
+                               [version, networkId,
+                                genesisHash, forkId,
+                                earliest, latest, latestHash]):
+    await status69UserHandler(peer, packet)
 
 proc newBlockHashesUserHandler(peer: Peer; packet: NewBlockHashesPacket) {.
     async: (raises: [CancelledError, EthP2PError]).} =
@@ -260,7 +278,7 @@ proc eth68PeerConnected(peer: Peer) {.async: (
     ctx = peer.networkState(eth68)
     status = ctx.getStatus68()
     packet = Status68Packet(
-      ethVersion: eth68.protocolVersion,
+      version: eth68.protocolVersion,
       networkId : network.networkId,
       totalDifficulty: status.totalDifficulty,
       bestHash: status.bestBlockHash,
@@ -297,9 +315,53 @@ proc eth68PeerConnected(peer: Peer) {.async: (
   trace "Peer matches our network", peer
 
   peer.state(eth68).initialized = true
-  peer.state(eth68).bestDifficulty = m.totalDifficulty
-  peer.state(eth68).bestBlockHash = m.bestHash
 
+proc eth69PeerConnected(peer: Peer) {.async: (
+    raises: [CancelledError, EthP2PError]).} =
+  let
+    network = peer.network
+    ctx = peer.networkState(eth69)
+    status = ctx.getStatus69()
+    packet = Status69Packet(
+      version: eth69.protocolVersion,
+      networkId : network.networkId,
+      genesisHash: status.genesisHash,
+      forkId: status.forkId,
+      earliest: status.earliest,
+      latest: status.latest,
+      latestHash: status.latestHash,
+    )
+
+  trace trEthSendSending & "Status (0x00)", peer,
+     earliest = status.earliest,
+     latest = status.latest,
+     latestHash = status.latestHash.short,
+     networkId = network.networkId,
+     genesis = short(status.genesisHash),
+     forkHash = status.forkId.forkHash.toHex,
+     forkNext = status.forkId.forkNext
+
+  let m = await peer.status69(packet, timeout = chronos.seconds(10))
+  when trEthTraceHandshakesOk:
+    trace "Handshake: Local and remote networkId", local = network.networkId,
+          remote = m.networkId
+    trace "Handshake: Local and remote genesisHash",
+          local = short(status.genesisHash), remote = short(m.genesisHash)
+    trace "Handshake: Local and remote forkId", local = (
+        status.forkId.forkHash.toHex & "/" & $status.forkId.forkNext),
+          remote = (m.forkId.forkHash.toHex & "/" & $m.forkId.forkNext)
+  if m.networkId != network.networkId:
+    trace "Peer for a different network (networkId)", peer,
+          expectNetworkId = network.networkId, gotNetworkId = m.networkId
+    raise newException(UselessPeerError, "Eth handshake for different network")
+  if m.genesisHash != status.genesisHash:
+    trace "Peer for a different network (genesisHash)", peer,
+          expectGenesis = short(status.genesisHash),
+          gotGenesis = short(m.genesisHash)
+    raise newException(UselessPeerError, "Eth handshake for different network")
+  trace "Peer matches our network", peer
+
+  peer.state(eth69).initialized = true
 
 proc eth68Registration() =
   let

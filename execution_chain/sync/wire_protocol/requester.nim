@@ -24,17 +24,33 @@ export
 defineProtocol(PROTO = eth68,
                version = 68,
                rlpxName = "eth",
-               peerState = Eth68PeerState,
+               peerState = EthPeerState,
+               networkState = EthWireRef)
+
+defineProtocol(PROTO = eth69,
+               version = 69,
+               rlpxName = "eth",
+               peerState = EthPeerState,
                networkState = EthWireRef)
 
 type
   Status68Packet* = object
-    ethVersion*: uint64
+    version*: uint64
     networkId*: NetworkId
     totalDifficulty*: DifficultyInt
     bestHash*: Hash32
     genesisHash*: Hash32
     forkId*: ChainForkId
+
+  # https://github.com/ethereum/devp2p/blob/b0c213de97978053a0f62c3ea4d23c0a3d8784bc/caps/eth.md#status-0x00
+  Status69Packet* = object
+    version*: uint64
+    networkId*: NetworkId
+    genesisHash*: Hash32
+    forkId*: ChainForkId
+    earliest*: uint64 # earliest available full block
+    latest*: uint64 # latest available full block
+    latestHash*: Hash32 # hash of latest available full block
 
   BlockHeadersPacket* = object
     headers*: seq[Header]
@@ -83,7 +99,7 @@ proc status68*(peer: Peer; packet: Status68Packet;
               Future[Status68Packet] {.async: (raises: [CancelledError, EthP2PError], raw: true).} =
   let
     sendingFut = eth68.rlpxSendMessage(peer, StatusMsg,
-                    packet.ethVersion,
+                    packet.version,
                     packet.networkId,
                     packet.totalDifficulty,
                     packet.bestHash,
@@ -92,6 +108,22 @@ proc status68*(peer: Peer; packet: Status68Packet;
 
     responseFut = eth68.nextMsg(peer, Status68Packet, StatusMsg)
   handshakeImpl[Status68Packet](peer, sendingFut, responseFut, timeout)
+
+proc status69*(peer: Peer; packet: Status69Packet;
+             timeout: Duration = milliseconds(10000'i64)):
+              Future[Status69Packet] {.async: (raises: [CancelledError, EthP2PError], raw: true).} =
+  let
+    sendingFut = eth69.rlpxSendMessage(peer, StatusMsg,
+                    packet.version,
+                    packet.networkId,
+                    packet.genesisHash,
+                    packet.forkId,
+                    packet.earliest,
+                    packet.latest,
+                    packet.latestHash)
+
+    responseFut = eth69.nextMsg(peer, Status69Packet, StatusMsg)
+  handshakeImpl[Status69Packet](peer, sendingFut, responseFut, timeout)
 
 proc transactions*(peer: Peer; transactions: openArray[Transaction]): Future[
     void] {.async: (raises: [CancelledError, EthP2PError], raw: true).} =

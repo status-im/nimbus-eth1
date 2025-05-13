@@ -506,9 +506,8 @@ proc startSync*[S,W](dsc: RunnerSyncRef[S,W]): bool =
       po.setProtocol eth68
       dsc.pool.addObserver(dsc, po)
 
-      {.warning: "FIXME".}
-      #po.setProtocol eth69
-      #dsc.pool.addObserver(dsc, po)
+      po.setProtocol eth69
+      dsc.pool.addObserver(dsc, po)
 
       asyncSpawn dsc.tickerLoop()
       return true

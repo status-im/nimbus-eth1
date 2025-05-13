@@ -60,6 +60,23 @@ proc getStatus68*(ctx: EthWireRef): Eth68State =
       forkNext: forkId.nextFork
   ))
 
+proc getStatus69*(ctx: EthWireRef): Eth69State =
+  let
+    com = ctx.chain.com
+    bestBlock = ctx.chain.latestHeader
+    forkId = com.forkId(bestBlock.number, bestBlock.timestamp)
+
+  Eth69State(
+    genesisHash: com.genesisHash,
+    forkId: ChainForkId(
+      forkHash: forkId.crc.toBytesBE,
+      forkNext: forkId.nextFork
+    ),
+    earliest: 0,
+    latest: bestBlock.number,
+    latestHash: bestBlock.computeBlockHash,
+  )
+
 proc getReceipts*(ctx: EthWireRef,
                   hashes: openArray[Hash32]):
                     seq[seq[Receipt]] =
@@ -127,7 +144,7 @@ proc getBlockBodies*(ctx: EthWireRef,
       if blk.header.number > ctx.chain.portal.limit:
         trace "handlers.getBlockBodies: blockBody older than expiry limit", blockHash
         continue
-    
+
     totalBytes += getEncodedLength(blk.body)
     list.add blk.body
 
