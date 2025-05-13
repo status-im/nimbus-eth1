@@ -15,25 +15,14 @@ import unittest2, std/sequtils, ../../execution_chain/db/aristo/aristo_blobify
 suite "Aristo blobify":
   test "VertexRef roundtrip":
     let
-      leafAccount = AccLeafRef(
-        vType: AccLeaf,
-        pfx: NibblesBuf.nibble(1),
-        account: AristoAccount(nonce: 100, balance: 123.u256),
-        stoID: (isValid: true, vid: VertexID(5))
+      leafAccount = AccLeafRef.init(
+        NibblesBuf.nibble(1),
+        AristoAccount(nonce: 100, balance: 123.u256),
+        (isValid: true, vid: VertexID(5)),
       )
-      leafStoData = StoLeafRef(
-        vType: StoLeaf,
-        pfx: NibblesBuf.nibble(3),
-        stoData: 42.u256,
-      )
-      branch = BranchRef(vType: Branch, startVid: VertexID(0x334452), used: 0x43'u16)
-
-      extension = ExtBranchRef(
-        vType: ExtBranch,
-        pfx: NibblesBuf.nibble(2),
-        startVid: VertexID(0x55),
-        used: 0x12'u16,
-      )
+      leafStoData = StoLeafRef.init(NibblesBuf.nibble(3), 42.u256)
+      branch = BranchRef.init(VertexID(0x334452), 0x43'u16)
+      extension = ExtBranchRef.init(NibblesBuf.nibble(2), VertexID(0x55), 0x12'u16)
 
       key = HashKey.fromBytes(repeat(0x34'u8, 32))[]
 
