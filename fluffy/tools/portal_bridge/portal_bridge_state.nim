@@ -334,25 +334,27 @@ proc orderPortalClientsByDistanceFromContent(
   worker.portalClients.sort(portalClientsCmp)
 
 proc contentFoundInNetwork(
-    worker: PortalStateGossipWorker, contentKey: openArray[byte]
+    worker: PortalStateGossipWorker, contentKey: seq[byte]
 ): Future[bool] {.async: (raises: [CancelledError]).} =
   for nodeId, client in worker.portalClients:
     try:
       let contentInfo = await client.portal_stateGetContent(contentKey.to0xHex())
       if contentInfo.content.len() > 0:
+        trace "Found existing content in network",
+          contentKey = contentKey.to0xHex(), nodeId, workerId = worker.id
         return true
     except CancelledError as e:
       raise e
     except CatchableError as e:
-      debug "Unable to find existing content: ",
+      debug "Unable to find existing content in network",
         contentKey = contentKey.to0xHex(), nodeId, error = e.msg, workerId = worker.id
   return false
 
 proc gossipContentIntoNetwork(
     worker: PortalStateGossipWorker,
     minGossipPeers: int,
-    contentKey: openArray[byte],
-    contentOffer: openArray[byte],
+    contentKey: seq[byte],
+    contentOffer: seq[byte],
 ): Future[bool] {.async: (raises: [CancelledError]).} =
   for nodeId, client in worker.portalClients:
     try:
@@ -362,7 +364,7 @@ proc gossipContentIntoNetwork(
         )
         numPeers = putContentResult.peerCount
       if numPeers >= minGossipPeers:
-        debug "Offer successfully gossipped to peers",
+        trace "Offer successfully gossipped to peers",
           contentKey = contentKey.to0xHex(), nodeId, numPeers, workerId = worker.id
         return true
       else:
@@ -411,8 +413,9 @@ proc runGossipLoop(
           minGossipPeers, contentKey, contentOffer
         )
         if not gossipCompleted:
-          # Retry gossip of this block after attempting to gossip all content keys
+          # Retry gossip of this block
           retryGossip = true
+          break
 
       # Check if the content can be found in the network
       var foundContentKeys = newSeq[seq[byte]]()
@@ -428,8 +431,9 @@ proc runGossipLoop(
           if await worker.contentFoundInNetwork(contentKey):
             foundContentKeys.add(contentKey)
           else:
-            # Retry gossip of this block after finishing lookup of all content keys
+            # Retry gossip of this block
             retryGossip = true
+            break
 
       # Retry if any failures occurred or if the content wasn't found in the network
       if retryGossip:
@@ -438,6 +442,7 @@ proc runGossipLoop(
         # Don't retry gossip for content that was found in the network
         for key in foundContentKeys:
           offersMap.del(key)
+
         warn "Retrying state gossip for block: ",
           blockNumber = blockOffers.blockNumber,
           remainingOffers = offersMap.len(),
