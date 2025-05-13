@@ -47,6 +47,12 @@ proc bodiesFetch*(
   var resp: Opt[BlockBodiesPacket]
   try:
     resp = await peer.getBlockBodies(request)
+  except PeerDisconnected as e:
+    buddy.only.nBdyRespErrors.inc
+    buddy.ctrl.zombie = true
+    `info` info & " error", peer, nReq, elapsed=(Moment.now() - start).toStr,
+      error=($e.name), msg=e.msg, bdyErrors=buddy.bdyErrors
+    return err()
   except CatchableError as e:
     buddy.fetchRegisterError()
     `info` info & " error", peer, nReq, elapsed=(Moment.now() - start).toStr,
