@@ -13,7 +13,7 @@ import
   stew/byteutils,
   ./handler,
   ./requester,
-  ./trace_config,  
+  ./trace_config,
   ../../utils/utils,
   ../../common/logging,
   ../../networking/p2p_protocol_dsl,
@@ -23,10 +23,10 @@ export
   requester
 
 logScope:
-  topics = "eth68"
+  topics = "eth68/69"
 
 const
-  prettyEthProtoName* = "[eth/" & $protocolVersion & "]"
+  prettyEthProtoName* = "[eth/68/69]"
 
   # Pickeled tracer texts
   trEthRecvReceived* =
@@ -67,7 +67,7 @@ const
   trEthSendNewBlockHashes* =
     ">> " & prettyEthProtoName & " Sending NewBlockHashes"
 
-proc statusUserHandler(peer: Peer; packet: StatusPacket) {.
+proc status68UserHandler(peer: Peer; packet: Status68Packet) {.
     async: (raises: [CancelledError, EthP2PError]).} =
   trace trEthRecvReceived & "Status (0x00)", peer,
     networkId = packet.networkId,
@@ -77,13 +77,13 @@ proc statusUserHandler(peer: Peer; packet: StatusPacket) {.
     forkHash = packet.forkId.forkHash.toHex,
     forkNext = packet.forkId.forkNext
 
-proc statusThunk(peer: Peer; data: Rlp) {.
+proc status68Thunk(peer: Peer; data: Rlp) {.
     async: (raises: [CancelledError, EthP2PError]).} =
-  eth68.rlpxWithPacketHandler(StatusPacket, peer, data,
+  eth68.rlpxWithPacketHandler(Status68Packet, peer, data,
                                [ethVersion, networkId,
                                 totalDifficulty, bestHash,
                                 genesisHash, forkId]):
-    await statusUserHandler(peer, packet)
+    await status68UserHandler(peer, packet)
 
 
 proc newBlockHashesUserHandler(peer: Peer; packet: NewBlockHashesPacket) {.
@@ -258,9 +258,9 @@ proc eth68PeerConnected(peer: Peer) {.async: (
   let
     network = peer.network
     ctx = peer.networkState(eth68)
-    status = ctx.getStatus()
-    packet = StatusPacket(
-      ethVersion: protocolVersion,
+    status = ctx.getStatus68()
+    packet = Status68Packet(
+      ethVersion: eth68.protocolVersion,
       networkId : network.networkId,
       totalDifficulty: status.totalDifficulty,
       bestHash: status.bestBlockHash,
@@ -276,7 +276,7 @@ proc eth68PeerConnected(peer: Peer) {.async: (
      forkHash = status.forkId.forkHash.toHex,
      forkNext = status.forkId.forkNext
 
-  let m = await peer.status(packet, timeout = chronos.seconds(10))
+  let m = await peer.status68(packet, timeout = chronos.seconds(10))
   when trEthTraceHandshakesOk:
     trace "Handshake: Local and remote networkId", local = network.networkId,
           remote = m.networkId
@@ -307,7 +307,7 @@ proc eth68Registration() =
 
   setEventHandlers(protocol, eth68PeerConnected, nil)
   registerMsg(protocol, StatusMsg, "status",
-              statusThunk, StatusPacket)
+              status68Thunk, Status68Packet)
   registerMsg(protocol, NewBlockHashesMsg, "newBlockHashes",
               newBlockHashesThunk, NewBlockHashesPacket)
   registerMsg(protocol, TransactionMsg, "transactions",

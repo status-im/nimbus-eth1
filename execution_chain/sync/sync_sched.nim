@@ -503,8 +503,13 @@ proc startSync*[S,W](dsc: RunnerSyncRef[S,W]): bool =
         onPeerDisconnected: proc(p: Peer) {.gcsafe.} =
           dsc.onPeerDisconnected(p))
 
-      po.setProtocol eth
+      po.setProtocol eth68
       dsc.pool.addObserver(dsc, po)
+
+      {.warning: "FIXME".}
+      #po.setProtocol eth69
+      #dsc.pool.addObserver(dsc, po)
+
       asyncSpawn dsc.tickerLoop()
       return true
 

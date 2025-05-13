@@ -92,8 +92,12 @@ proc setupManager(pm: PeerManagerRef, enodes: openArray[ENode]) =
       pm.state = Running
       pm.reconnectFut = pm.runReconnectLoop()
 
-  po.setProtocol eth
+  po.setProtocol eth68
   pm.pool.addObserver(pm, po)
+
+  {.warning: "FIXME".}
+  #po.setProtocol eth69
+  #pm.pool.addObserver(pm, po)
 
   for enode in enodes:
     let state = ReconnectState(

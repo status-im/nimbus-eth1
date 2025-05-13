@@ -1618,6 +1618,9 @@ template defineProtocol*(PROTO: untyped,
   template NetworkState*(_: type PROTO): type =
     networkState
 
+  template protocolVersion*(_: type PROTO): int =
+    version
+    
   func initProtocol*(_: type PROTO): auto =
     initProtocol(rlpxName,
       version,

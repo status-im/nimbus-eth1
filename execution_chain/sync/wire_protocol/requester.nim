@@ -21,17 +21,14 @@ export
   rlpx,
   p2p_types
 
-const
-  protocolVersion* = 68
-
 defineProtocol(PROTO = eth68,
-               version = protocolVersion,
+               version = 68,
                rlpxName = "eth",
-               peerState = EthPeerState,
+               peerState = Eth68PeerState,
                networkState = EthWireRef)
 
 type
-  StatusPacket* = object
+  Status68Packet* = object
     ethVersion*: uint64
     networkId*: NetworkId
     totalDifficulty*: DifficultyInt
@@ -81,9 +78,9 @@ const
   GetReceiptsMsg*                = 15'u64
   ReceiptsMsg*                   = 16'u64
 
-proc status*(peer: Peer; packet: StatusPacket;
+proc status68*(peer: Peer; packet: Status68Packet;
              timeout: Duration = milliseconds(10000'i64)):
-              Future[StatusPacket] {.async: (raises: [CancelledError, EthP2PError], raw: true).} =
+              Future[Status68Packet] {.async: (raises: [CancelledError, EthP2PError], raw: true).} =
   let
     sendingFut = eth68.rlpxSendMessage(peer, StatusMsg,
                     packet.ethVersion,
@@ -93,8 +90,8 @@ proc status*(peer: Peer; packet: StatusPacket;
                     packet.genesisHash,
                     packet.forkId)
 
-    responseFut = eth68.nextMsg(peer, StatusPacket, StatusMsg)
-  handshakeImpl[StatusPacket](peer, sendingFut, responseFut, timeout)
+    responseFut = eth68.nextMsg(peer, Status68Packet, StatusMsg)
+  handshakeImpl[Status68Packet](peer, sendingFut, responseFut, timeout)
 
 proc transactions*(peer: Peer; transactions: openArray[Transaction]): Future[
     void] {.async: (raises: [CancelledError, EthP2PError], raw: true).} =

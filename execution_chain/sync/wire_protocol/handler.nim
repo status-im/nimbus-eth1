@@ -44,14 +44,14 @@ proc new*(_: type EthWireRef,
 # Public functions: eth wire protocol handlers
 # ------------------------------------------------------------------------------
 
-proc getStatus*(ctx: EthWireRef): EthState =
+proc getStatus68*(ctx: EthWireRef): Eth68State =
   let
     com = ctx.chain.com
     bestBlock = ctx.chain.latestHeader
     txFrame = ctx.chain.baseTxFrame
     forkId = com.forkId(bestBlock.number, bestBlock.timestamp)
 
-  EthState(
+  Eth68State(
     totalDifficulty: txFrame.headTotalDifficulty,
     genesisHash: com.genesisHash,
     bestBlockHash: bestBlock.computeBlockHash,
