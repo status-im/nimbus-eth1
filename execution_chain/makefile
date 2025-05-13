@@ -1,5 +1,15 @@
 #! /usr/bin/make -f
 
+# Nimbus
+# Copyright (c) 2021-2025 Status Research & Development GmbH
+# Licensed under either of
+#  * Apache License, version 2.0, ([LICENSE-APACHE](LICENSE-APACHE) or
+#    http://www.apache.org/licenses/LICENSE-2.0)
+#  * MIT license ([LICENSE-MIT](LICENSE-MIT) or
+#    http://opensource.org/licenses/MIT)
+# at your option. This file may not be copied, modified, or distributed except
+# according to those terms.
+
 SAVED_PATH := $(PATH)
 PWD        := $(shell pwd)
 
@@ -52,7 +62,7 @@ NIMDOC_FLAGS += -d:debug -d:disable_libbacktrace
 NIMDOC_FLAGS += $(NIMFLAGS)
 
 # Nim check flags
-NIMCHK_FLAGS := c -r --verbosity:0 --hints:off --warnings:off
+NIMCHK_FLAGS := c -r --verbosity:0 --warnings:off
 
 # Markdown compiler (test for discount tool with tables support)
 MD_CMD     := markdown
