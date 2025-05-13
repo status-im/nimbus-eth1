@@ -1595,6 +1595,9 @@ func initResponder*(peer: Peer, reqId: uint64): Responder =
 template state*(response: Responder, PROTO: type): auto =
   state(response.peer, PROTO)
 
+template supports*(response: Responder, Protocol: type): bool =
+  response.peer.supports(Protocol.protocolInfo)
+
 template networkState*(response: Responder, PROTO: type): auto =
   networkState(response.peer, PROTO)
 
@@ -1620,7 +1623,7 @@ template defineProtocol*(PROTO: untyped,
 
   template protocolVersion*(_: type PROTO): int =
     version
-    
+
   func initProtocol*(_: type PROTO): auto =
     initProtocol(rlpxName,
       version,

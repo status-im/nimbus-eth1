@@ -127,53 +127,81 @@ proc status69*(peer: Peer; packet: Status69Packet;
 
 proc transactions*(peer: Peer; transactions: openArray[Transaction]): Future[
     void] {.async: (raises: [CancelledError, EthP2PError], raw: true).} =
-  eth68.rlpxSendMessage(peer, TransactionMsg, transactions)
+  if peer.supports(eth69):
+    eth69.rlpxSendMessage(peer, TransactionMsg, transactions)
+  else:
+    eth68.rlpxSendMessage(peer, TransactionMsg, transactions)
 
 proc getBlockHeaders*(peer: Peer; request: BlockHeadersRequest;
                       timeout: Duration = milliseconds(10000'i64)): Future[
     Opt[BlockHeadersPacket]] {.async: (raises: [CancelledError, EthP2PError],
                                        raw: true).} =
-  eth68.rlpxSendRequest(peer, GetBlockHeadersMsg, request)
+  if peer.supports(eth69):
+    eth69.rlpxSendRequest(peer, GetBlockHeadersMsg, request)
+  else:
+    eth68.rlpxSendRequest(peer, GetBlockHeadersMsg, request)
 
 proc blockHeaders*(responder: Responder;
                    headers: openArray[Header]): Future[void] {.
     async: (raises: [CancelledError, EthP2PError], raw: true).} =
-  eth68.rlpxSendMessage(responder, BlockHeadersMsg, headers)
+  if responder.supports(eth69):
+    eth69.rlpxSendMessage(responder, BlockHeadersMsg, headers)
+  else:
+    eth68.rlpxSendMessage(responder, BlockHeadersMsg, headers)
 
 proc getBlockBodies*(peer: Peer; packet: BlockBodiesRequest;
                      timeout: Duration = milliseconds(10000'i64)): Future[
     Opt[BlockBodiesPacket]] {.async: (raises: [CancelledError, EthP2PError],
                                       raw: true).} =
-  eth68.rlpxSendRequest(peer, GetBlockBodiesMsg, packet.blockHashes)
+  if peer.supports(eth69):
+    eth69.rlpxSendRequest(peer, GetBlockBodiesMsg, packet.blockHashes)
+  else:
+    eth68.rlpxSendRequest(peer, GetBlockBodiesMsg, packet.blockHashes)
 
 proc blockBodies*(responder: Responder;
                   bodies: openArray[BlockBody]): Future[void] {.
     async: (raises: [CancelledError, EthP2PError], raw: true).} =
-  eth68.rlpxSendMessage(responder, BlockBodiesMsg, bodies)
+  if responder.supports(eth69):
+    eth69.rlpxSendMessage(responder, BlockBodiesMsg, bodies)
+  else:
+    eth68.rlpxSendMessage(responder, BlockBodiesMsg, bodies)
 
 proc newPooledTransactionHashes*(peer: Peer; txTypes: seq[byte];
                                  txSizes: openArray[uint64];
                                  txHashes: openArray[Hash32]): Future[void] {.
     async: (raises: [CancelledError, EthP2PError], raw: true).} =
-  eth68.rlpxSendMessage(peer, NewPooledTransactionHashesMsg,
-    txTypes, txSizes, txHashes)
+  if peer.supports(eth69):
+    eth69.rlpxSendMessage(peer, NewPooledTransactionHashesMsg,
+      txTypes, txSizes, txHashes)
+  else:
+    eth68.rlpxSendMessage(peer, NewPooledTransactionHashesMsg,
+      txTypes, txSizes, txHashes)
 
 proc getPooledTransactions*(peer: Peer; packet: PooledTransactionsRequest;
                             timeout: Duration = milliseconds(10000'i64)): Future[
     Opt[PooledTransactionsPacket]] {.async: (
     raises: [CancelledError, EthP2PError], raw: true).} =
-  eth68.rlpxSendRequest(peer, GetPooledTransactionsMsg, packet.txHashes)
+  if peer.supports(eth69):
+    eth69.rlpxSendRequest(peer, GetPooledTransactionsMsg, packet.txHashes)
+  else:
+    eth68.rlpxSendRequest(peer, GetPooledTransactionsMsg, packet.txHashes)
 
 proc pooledTransactions*(responder: Responder;
                          transactions: openArray[PooledTransaction]): Future[
     void] {.async: (raises: [CancelledError, EthP2PError], raw: true).} =
-  eth68.rlpxSendMessage(responder, PooledTransactionsMsg, transactions)
+  if responder.supports(eth69):
+    eth69.rlpxSendMessage(responder, PooledTransactionsMsg, transactions)
+  else:
+    eth68.rlpxSendMessage(responder, PooledTransactionsMsg, transactions)
 
 proc getReceipts*(peer: Peer; packet: ReceiptsRequest;
                   timeout: Duration = milliseconds(10000'i64)): Future[
     Opt[ReceiptsPacket]] {.async: (raises: [CancelledError, EthP2PError],
                                    raw: true).} =
-  eth68.rlpxSendRequest(peer, GetReceiptsMsg, packet.blockHashes)
+  if peer.supports(eth69):
+    eth69.rlpxSendRequest(peer, GetReceiptsMsg, packet.blockHashes)
+  else:
+    eth68.rlpxSendRequest(peer, GetReceiptsMsg, packet.blockHashes)
 
 proc receipts*(responder: Responder;
                receipts: openArray[seq[Receipt]]): Future[void] {.
