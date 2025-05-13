@@ -42,12 +42,19 @@ when defined(metrics):
       "aristo_rdb_vtx_lru_total",
       "Vertex LRU lookup (hit/miss, world/account, branch/leaf)",
       labels = ["state", "vtype", "hit"],
+      standardType = "counter",
     )
     rdbKeyLruStatsMetric {.used.} = RdbKeyLruCounter.newCollector(
-      "aristo_rdb_key_lru_total", "HashKey LRU lookup", labels = ["state", "hit"]
+      "aristo_rdb_key_lru_total",
+      "HashKey LRU lookup",
+      labels = ["state", "hit"],
+      standardType = "counter",
     )
     rdbBranchLruStatsMetric {.used.} = RdbBranchLruCounter.newCollector(
-      "aristo_rdb_branch_lru_total", "Branch LRU lookup", labels = ["state", "hit"]
+      "aristo_rdb_branch_lru_total",
+      "Branch LRU lookup",
+      labels = ["state", "hit"],
+      standardType = "counter",
     )
 
   method collect*(collector: RdbVtxLruCounter, output: MetricHandler) =
