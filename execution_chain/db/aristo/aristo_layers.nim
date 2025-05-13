@@ -86,6 +86,27 @@ func layersPutVtx*(
   if db.snapshot.level.isSome():
     db.snapshot.vtx[rvid] = (vtx, VOID_HASH_KEY, db.level)
 
+func layersPutDup*[T: VertexRef](
+    db: AristoTxRef;
+    rvid: RootedVertexID;
+    vtx: T;
+      ): T =
+  ## Store a (potentally empty) vertex on the top layer
+  var vtxDup = vtx
+  db.sTab.withValue(rvid, cur):
+    if addr(vtx[]) != addr(cur[][]):
+      vtxDup = vtxDup.dup()
+      cur[] = vtxDup
+  do:
+    vtxDup = vtxDup.dup()
+    db.sTab[rvid] = vtxDup
+
+  db.kMap.del(rvid)
+
+  if db.snapshot.level.isSome():
+    db.snapshot.vtx[rvid] = (VertexRef(vtxDup), VOID_HASH_KEY, db.level)
+  vtxDup
+
 func layersResVtx*(
     db: AristoTxRef;
     rvid: RootedVertexID;
@@ -101,16 +122,16 @@ func layersPutKey*(
     key: HashKey;
       ) =
   ## Store a (potentally void) hash key on the top layer
-  db.sTab[rvid] = vtx
+  db.sTab[rvid] = if rvid notin db.sTab: vtx.dup() else: vtx
   db.kMap[rvid] = key
 
   if db.snapshot.level.isSome():
     db.snapshot.vtx[rvid] = (vtx, key, db.level)
 
 func layersResKey*(db: AristoTxRef; rvid: RootedVertexID, vtx: VertexRef) =
-  ## Shortcut for `db.layersPutKey(vid, VOID_HASH_KEY)`. It is sort of the
-  ## equivalent of a delete function.
-  db.layersPutVtx(rvid, vtx)
+  ## Shortcut for `db.layersPutKey(vid, VOID_HASH_KEY)` which resets the hash
+  ## key cache for the given rvid / vtx
+  db.layersPutVtx(rvid, if rvid notin db.sTab: vtx.dup() else: vtx)
 
 func layersResKeys*(db: AristoTxRef; hike: Hike, skip: int) =
   ## Reset all cached keys along the given hike

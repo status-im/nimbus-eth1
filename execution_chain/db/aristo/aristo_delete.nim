@@ -119,9 +119,8 @@ proc deleteImpl(
       ok(nil)
   else:
     # Clear the removed leaf from the branch (that still contains other children)
-    let brDup = brVtx.dup
+    let brDup = db.layersPutDup((hike.root, br.vid), brVtx)
     discard brDup.setUsed(uint8 hike.legs[^2].nibble, false)
-    db.layersPutVtx((hike.root, br.vid), brDup)
 
     ok(nil)
 
@@ -204,9 +203,8 @@ proc deleteStorageData*(
   # If there was only one item (that got deleted), update the account as well
   if stoHike.legs.len == 1:
     # De-register the deleted storage tree from the account record
-    let leaf = AccLeafRef(wpAcc.vtx).dup # Dup on modify
+    let leaf = db.layersPutDup((accHike.root, wpAcc.vid), AccLeafRef(wpAcc.vtx)) # Dup on modify
     leaf.stoID.isValid = false
-    db.layersPutVtx((accHike.root, wpAcc.vid), leaf)
 
   ok()
 
@@ -237,9 +235,8 @@ proc deleteStorageTree*(
   ?db.delStoTreeImpl(stoID.vid, accPath)
 
   # De-register the deleted storage tree from the accounts record
-  let leaf = accVtx.dup # Dup on modify
+  let leaf = db.layersPutDup((accHike.root, wpAcc.vid), accVtx) # Dup on modify
   leaf.stoID.isValid = false
-  db.layersPutVtx((accHike.root, wpAcc.vid), leaf)
   ok()
 
 # ------------------------------------------------------------------------------

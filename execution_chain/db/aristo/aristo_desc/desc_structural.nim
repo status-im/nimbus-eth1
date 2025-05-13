@@ -252,6 +252,21 @@ template dup*(vtx: BranchRef): BranchRef =
 template dup*(vtx: ExtBranchRef): ExtBranchRef =
   ExtBranchRef(VertexRef(vtx).dup())
 
+proc `$`*(vtx: VertexRef): string =
+  if vtx == nil:
+    "VertexRef(nil)"
+  else:
+    case vtx.vType
+    of AccLeaf:
+      $(AccLeafRef(vtx)[])
+    of StoLeaf:
+      $(StoLeafRef(vtx)[])
+    of Branch:
+      $(BranchRef(vtx)[])
+    of ExtBranch:
+      $(ExtBranchRef(vtx)[])
+
+
 # ------------------------------------------------------------------------------
 # End
 # ------------------------------------------------------------------------------
