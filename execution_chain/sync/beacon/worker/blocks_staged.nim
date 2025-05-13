@@ -165,8 +165,6 @@ func blocksStagedCanImportOk*(ctx: BeaconCtxRef): bool =
       # As a consequence, the syncer will import blocks immediately allowing
       # the syncer to collect more sync peers.
       if ctx.pool.nBuddies == 1 and ctx.pool.blkLastSlowPeer.isSome:
-        trace info & ": last slow peer",
-          peerID=ctx.pool.blkLastSlowPeer.value, nSyncPeers=ctx.pool.nBuddies
         return true
 
       # If importing starts while peers are actively downloading, the system
