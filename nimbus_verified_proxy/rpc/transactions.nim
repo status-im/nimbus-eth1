@@ -8,19 +8,16 @@
 {.push raises: [].}
 
 import
-  std/sequtils,
   stint,
   results,
-  chronicles,
   eth/common/[base_rlp, transactions_rlp, receipts_rlp, hashes_rlp],
   ../../execution_chain/beacon/web3_eth_conv,
   eth/common/addresses,
   eth/common/eth_types_rlp,
-  eth/trie/[hexary, ordered_trie, db, trie_defs],
+  eth/trie/[ordered_trie, trie_defs],
   json_rpc/[rpcproxy, rpcserver, rpcclient],
   web3/[primitives, eth_api_types, eth_api],
-  ../types,
-  ../header_store
+  ../types
 
 export results, stint, hashes_rlp, accounts_rlp, eth_api_types
 

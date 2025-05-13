@@ -19,8 +19,7 @@ import
   eth/trie/[hexary_proof_verification],
   json_rpc/[rpcproxy, rpcserver, rpcclient],
   web3/[primitives, eth_api_types, eth_api],
-  ../types,
-  ../header_store
+  ../types
 
 export results, stint, hashes_rlp, accounts_rlp, eth_api_types
 

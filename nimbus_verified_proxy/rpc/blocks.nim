@@ -15,7 +15,7 @@ import
   json_rpc/[rpcproxy, rpcserver, rpcclient],
   eth/common/addresses,
   eth/common/eth_types_rlp,
-  eth/trie/[hexary, ordered_trie, db, trie_defs],
+  eth/trie/[ordered_trie, trie_defs],
   ../../execution_chain/beacon/web3_eth_conv,
   ../types,
   ../header_store,
