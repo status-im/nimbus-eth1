@@ -225,6 +225,9 @@ proc new*(
     else:
       trustedBlockRoot
 
+  # load from db to cache
+  beaconDb.loadHistoricalSummariesCache()
+
   BeaconNetwork(
     portalProtocol: portalProtocol,
     beaconDb: beaconDb,
@@ -339,6 +342,9 @@ proc validateContent(
   of beacon_content.ContentType.historicalSummaries:
     let summariesWithProof =
       ?decodeSsz(n.forkDigests, content, HistoricalSummariesWithProof)
+
+    if key.historicalSummariesKey.epoch != summariesWithProof.epoch:
+      return err("Epoch mismatch in historical_summaries")
 
     n.validateHistoricalSummaries(summariesWithProof)
 

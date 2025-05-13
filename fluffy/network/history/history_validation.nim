@@ -12,6 +12,7 @@ import
   eth/trie/ordered_trie,
   beacon_chain/spec/presets,
   ../../network_metadata,
+  ../beacon/beacon_db,
   ./history_type_conversions,
   ./validation/[
     block_proof_historical_hashes_accumulator, block_proof_historical_roots,
@@ -20,12 +21,17 @@ import
 
 from eth/rlp import computeRlpHash
 
-export block_proof_historical_hashes_accumulator
+export block_proof_historical_hashes_accumulator, beacon_db.BeaconDbCache
 
-type HistoryAccumulators* = object
+type HeaderVerifier* = object
   historicalHashes*: FinishedHistoricalHashesAccumulator
   historicalRoots*: HistoricalRoots
-  historicalSummaries*: HistoricalSummaries
+  beaconDbCache*: BeaconDbCache
+
+template getHistoricalSummaries(
+    verifier: HeaderVerifier
+): Opt[HistoricalSummariesWithProof] =
+  verifier.beaconDbCache.historicalSummariesCache
 
 func validateHeader(header: Header, blockHash: Hash32): Result[void, string] =
   if not (header.computeRlpHash() == blockHash):
@@ -59,30 +65,36 @@ func validateHeaderBytes*(
   ok(header)
 
 func verifyBlockHeaderProof*(
-    a: HistoryAccumulators,
+    v: HeaderVerifier,
     header: Header,
     proof: ByteList[MAX_HEADER_PROOF_LENGTH],
     cfg: RuntimeConfig,
 ): Result[void, string] =
   let timestamp = Moment.init(header.timestamp.int64, Second)
 
-  # Note: As long as no up to date historical_summaries list is provided Capella
-  # and onwards will always fail verification.
+  # Note: If no up to date historical_summaries list is provided verification
+  # will still fail for the most recent headers.
   if isCancun(chainConfig, timestamp):
+    let summaries = v.getHistoricalSummaries().valueOr:
+      return err("No historical_summaries available for verification")
+
     let proof = decodeSsz(proof.asSeq(), BlockProofHistoricalSummariesDeneb).valueOr:
       return err("Failed decoding historical_summaries based block proof: " & error)
 
-    if a.historicalSummaries.verifyProof(
+    if summaries.historical_summaries.verifyProof(
       proof, Digest(data: header.computeRlpHash().data), cfg
     ):
       ok()
     else:
       err("Block proof verification failed (historical_summaries)")
   elif isShanghai(chainConfig, timestamp):
+    let summaries = v.getHistoricalSummaries().valueOr:
+      return err("No historical_summaries available for verification")
+
     let proof = decodeSsz(proof.asSeq(), BlockProofHistoricalSummaries).valueOr:
       return err("Failed decoding historical_summaries based block proof: " & error)
 
-    if a.historicalSummaries.verifyProof(
+    if summaries.historical_summaries.verifyProof(
       proof, Digest(data: header.computeRlpHash().data), cfg
     ):
       ok()
@@ -92,7 +104,7 @@ func verifyBlockHeaderProof*(
     let proof = decodeSsz(proof.asSeq(), BlockProofHistoricalRoots).valueOr:
       return err("Failed decoding historical_roots based block proof: " & error)
 
-    if a.historicalRoots.verifyProof(proof, Digest(data: header.computeRlpHash().data)):
+    if v.historicalRoots.verifyProof(proof, Digest(data: header.computeRlpHash().data)):
       ok()
     else:
       err("Block proof verification failed (historical roots)")
@@ -101,22 +113,19 @@ func verifyBlockHeaderProof*(
       return
         err("Failed decoding historical hashes accumulator based block proof: " & error)
 
-    if a.historicalHashes.verifyProof(header, accumulatorProof):
+    if v.historicalHashes.verifyProof(header, accumulatorProof):
       ok()
     else:
       err("Block proof verification failed (historical hashes accumulator)")
 
 func validateCanonicalHeaderBytes*(
-    bytes: openArray[byte],
-    id: uint64 | Hash32,
-    accumulators: HistoryAccumulators,
-    cfg: RuntimeConfig,
+    bytes: openArray[byte], id: uint64 | Hash32, v: HeaderVerifier, cfg: RuntimeConfig
 ): Result[Header, string] =
   let headerWithProof = decodeSsz(bytes, BlockHeaderWithProof).valueOr:
     return err("Failed decoding header with proof: " & error)
   let header = ?validateHeaderBytes(headerWithProof.header.asSeq(), id)
 
-  ?accumulators.verifyBlockHeaderProof(header, headerWithProof.proof, cfg)
+  ?v.verifyBlockHeaderProof(header, headerWithProof.proof, cfg)
 
   ok(header)
 
