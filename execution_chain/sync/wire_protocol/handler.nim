@@ -152,10 +152,10 @@ proc getBlockHeaders*(ctx: EthWireRef,
   # EIP-4444 limit
   if chain.isHistoryExpiryActive:
     if req.reverse:
-      if req.startBlock.number > chain.portal.limit:
+      if header.number > chain.portal.limit:
         return move(list)
     else:
-      if req.startBlock.number + req.maxResults > chain.portal.limit:
+      if header.number + req.maxResults > chain.portal.limit:
         return move(list)
 
   totalBytes += getEncodedLength(header)
