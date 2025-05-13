@@ -87,7 +87,7 @@ proc addObserver*(p: PeerPool, observerId: int, observer: PeerObserver) =
   p.observers[observerId] = observer
   if not observer.onPeerConnected.isNil:
     for peer in p.connectedNodes.values:
-      if observer.protocol.isNil or peer.supports(observer.protocol):
+      if observer.protocols.len == 0 or peer.supports(observer.protocols):
         observer.onPeerConnected(peer)
 
 func delObserver*(p: PeerPool, observerId: int) =
@@ -99,18 +99,14 @@ proc addObserver*(p: PeerPool, observerId: ref, observer: PeerObserver) =
 func delObserver*(p: PeerPool, observerId: ref) =
   p.delObserver(cast[int](observerId))
 
-template setProtocol*(observer: PeerObserver, Protocol: type) =
-  observer.protocol = Protocol.protocolInfo
+template addProtocol*(observer: PeerObserver, Protocol: type) =
+  observer.protocols.add Protocol.protocolInfo
 
 proc stopAllPeers(p: PeerPool) {.async.} =
   debug "Stopping all peers ..."
   # TODO: ...
   # await asyncio.gather(
   #   *[peer.stop() for peer in self.connected_nodes.values()])
-
-# async def stop(self) -> None:
-#   self.cancel_token.trigger()
-#   await self.stop_all_peers()
 
 proc connect(p: PeerPool, remote: Node): Future[Peer] {.async.} =
   ## Connect to the given remote and return a Peer instance when successful.
@@ -166,10 +162,10 @@ proc addPeer*(pool: PeerPool, peer: Peer) {.gcsafe.} =
   doAssert(peer.remote notin pool.connectedNodes)
   pool.connectedNodes[peer.remote] = peer
   rlpx_connected_peers.inc()
-  for o in pool.observers.values:
-    if not o.onPeerConnected.isNil:
-      if o.protocol.isNil or peer.supports(o.protocol):
-        o.onPeerConnected(peer)
+  for observer in pool.observers.values:
+    if not observer.onPeerConnected.isNil:
+      if observer.protocols.len == 0 or peer.supports(observer.protocols):
+        observer.onPeerConnected(peer)
 
 proc connectToNode*(p: PeerPool, n: Node) {.async.} =
   let peer = await p.connect(n)

@@ -365,6 +365,11 @@ proc supports*(peer: Peer, Protocol: type): bool =
   ## Checks whether a Peer supports a particular protocol
   peer.supports(Protocol.protocolInfo)
 
+proc supports*(peer: Peer, protos: openArray[ProtocolInfo]): bool =
+  for proto in protos:
+    if peer.supports(proto):
+      return true
+
 template perPeerMsgId(peer: Peer, MsgType: type): uint64 =
   perPeerMsgIdImpl(peer, MsgType.msgProtocol.protocolInfo, MsgType.msgId)
 
@@ -981,7 +986,7 @@ proc removePeer(network: EthereumNode, peer: Peer) =
     if not peer.dispatcher.isNil:
       for observer in network.peerPool.observers.values:
         if not observer.onPeerDisconnected.isNil:
-          if observer.protocol.isNil or peer.supports(observer.protocol):
+          if observer.protocols.len == 0 or peer.supports(observer.protocols):
             observer.onPeerDisconnected(peer)
 
 proc callDisconnectHandlers(
@@ -1577,7 +1582,7 @@ template rlpxWithFutureHandler*(PROTO: distinct type;
     var proType = packet.to(PROTYPE)
     resolveResponseFuture(peer,
       perPeerMsgId, addr(proType), reqId)
-      
+
 proc nextMsg*(PROTO: distinct type,
               peer: Peer,
               MsgType: distinct type,

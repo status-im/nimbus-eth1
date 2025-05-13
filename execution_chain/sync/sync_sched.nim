@@ -470,16 +470,6 @@ proc onPeerDisconnected[S,W](dsc: RunnerSyncRef[S,W], peer: Peer) =
     rc.value.worker.ctrl.stopped = true # in case it is hanging somewhere
     dsc.buddies.del peer.key
 
-proc addObserver[S,W](dsc: RunnerSyncRef[S,W], PROTO: type) =
-  var po = PeerObserver(
-    onPeerConnected: proc(p: Peer) {.gcsafe.} =
-      dsc.onPeerConnected(p),
-    onPeerDisconnected: proc(p: Peer) {.gcsafe.} =
-      dsc.onPeerDisconnected(p))
-
-  po.setProtocol PROTO
-  dsc.pool.addObserver(dsc, po)
-
 # ------------------------------------------------------------------------------
 # Public functions
 # ------------------------------------------------------------------------------
@@ -508,8 +498,15 @@ proc startSync*[S,W](dsc: RunnerSyncRef[S,W]): bool =
     if dsc.ctx.runSetup():
       dsc.runCtrl = running
 
-      dsc.addObserver(eth68)
-      dsc.addObserver(eth69)
+      var po = PeerObserver(
+        onPeerConnected: proc(p: Peer) {.gcsafe.} =
+          dsc.onPeerConnected(p),
+        onPeerDisconnected: proc(p: Peer) {.gcsafe.} =
+          dsc.onPeerDisconnected(p))
+
+      po.addProtocol eth68
+      po.addProtocol eth69
+      dsc.pool.addObserver(dsc, po)
 
       asyncSpawn dsc.tickerLoop()
       return true

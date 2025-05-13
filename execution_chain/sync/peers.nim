@@ -79,7 +79,7 @@ proc runReconnectLoop(pm: PeerManagerRef) {.async, gcsafe.} =
       break
     await sleepAsync(pm.retryInterval.seconds)
 
-proc addObserver(pm: PeerManagerRef, PROTO: type) =
+proc setupManager(pm: PeerManagerRef, enodes: openArray[ENode]) =
   var po: PeerObserver
   po.onPeerConnected = proc(peer: Peer) {.gcsafe.} =
     trace "Peer connected", remote=peer.remote.node
@@ -92,12 +92,9 @@ proc addObserver(pm: PeerManagerRef, PROTO: type) =
       pm.state = Running
       pm.reconnectFut = pm.runReconnectLoop()
 
-  po.setProtocol PROTO
+  po.addProtocol eth68
+  po.addProtocol eth69
   pm.pool.addObserver(pm, po)
-
-proc setupManager(pm: PeerManagerRef, enodes: openArray[ENode]) =
-  pm.addObserver(eth68)
-  pm.addObserver(eth69)
 
   for enode in enodes:
     let state = ReconnectState(
