@@ -79,6 +79,11 @@ type
     txSizes*: seq[uint64]
     txHashes*: seq[Hash32]
 
+  BlockRangeUpdatePacket* = object
+    earliest*: uint64
+    latest*: uint64
+    latestHash*: uint64
+
 const
   StatusMsg*                     =  0'u64
   NewBlockHashesMsg*             =  1'u64
@@ -93,6 +98,8 @@ const
   PooledTransactionsMsg*         = 10'u64
   GetReceiptsMsg*                = 15'u64
   ReceiptsMsg*                   = 16'u64
+  # https://github.com/ethereum/devp2p/blob/b0c213de97978053a0f62c3ea4d23c0a3d8784bc/caps/eth.md#blockrangeupdate-0x11
+  BlockRangeUpdateMsg*           = 0x11'u64
 
 proc status68*(peer: Peer; packet: Status68Packet;
              timeout: Duration = milliseconds(10000'i64)):
@@ -206,4 +213,11 @@ proc getReceipts*(peer: Peer; packet: ReceiptsRequest;
 proc receipts*(responder: Responder;
                receipts: openArray[seq[Receipt]]): Future[void] {.
     async: (raises: [CancelledError, EthP2PError], raw: true).} =
+  doAssert(responder.supports(eth68), "'receipts' function only available for eth/68")
   eth68.rlpxSendMessage(responder, ReceiptsMsg, receipts)
+
+proc blockRangeUpdate*(peer: Peer; packet: BlockRangeUpdatePacket): Future[void] {.
+    async: (raises: [CancelledError, EthP2PError], raw: true).} =
+  doAssert(peer.supports(eth69), "'blockRangeUpdate' function only available for eth/69")
+  eth69.rlpxSendMessage(peer, BlockRangeUpdateMsg,
+    packet.earliest, packet.latest, packet.latestHash)

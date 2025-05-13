@@ -270,6 +270,21 @@ proc receiptsThunk[PROTO](peer: Peer; data: Rlp) {.
     ReceiptsMsg, peer, data, [receipts])
 
 
+proc blockRangeUpdateUserHandler(peer: Peer; packet: BlockRangeUpdatePacket) {.
+    async: (raises: [CancelledError, EthP2PError]).} =
+
+  when trEthTraceGossipOk:
+    trace trEthRecvReceived & "BlockRangeUpdate (0x11)", peer,
+      earliest = packet.earliest, latest = packet.latest,
+      latestHash = packet.latestHash.short
+
+proc blockRangeUpdateThunk(peer: Peer; data: Rlp) {.
+    async: (raises: [CancelledError, EthP2PError]).} =
+  eth68.rlpxWithPacketHandler(BlockRangeUpdatePacket,
+                              peer, data, [earliest, latest, latestHash]):
+    await blockRangeUpdateUserHandler(peer, packet)
+
+
 proc eth68PeerConnected(peer: Peer) {.async: (
     raises: [CancelledError, EthP2PError]).} =
   let
@@ -406,6 +421,8 @@ proc eth69Registration() =
   registerMsg(protocol, StatusMsg, "status",
               status69Thunk, Status69Packet)
   registerCommonThunk(protocol, eth69)
+  registerMsg(protocol, BlockRangeUpdateMsg, "blockRangeUpdate",
+              blockRangeUpdateThunk, BlockRangeUpdatePacket)
   registerProtocol(protocol)
 
 eth68Registration()
