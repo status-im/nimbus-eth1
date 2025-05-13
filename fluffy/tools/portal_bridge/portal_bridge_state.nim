@@ -37,7 +37,7 @@ type
     stateRoot: Hash32
     stateDiffs: seq[TransactionDiff]
 
-  BlockOffersRef = ref object
+  BlockOffers = ref object
     blockNumber: uint64
     accountTrieOffers: seq[AccountTrieOfferWithKey]
     contractTrieOffers: seq[ContractTrieOfferWithKey]
@@ -45,10 +45,9 @@ type
 
   PortalStateGossipWorker = ref object
     id: int
-    portalClient: RpcClient
-    portalUrl: JsonRpcUrl
-    nodeId: NodeId
-    blockOffersQueue: AsyncQueue[BlockOffersRef]
+    portalClients: OrderedTable[NodeId, RpcClient]
+    portalEndpoints: seq[(JsonRpcUrl, NodeId)]
+    blockOffersQueue: AsyncQueue[BlockOffers]
     gossipBlockOffersLoop: Future[void]
 
   PortalStateBridge* = ref object
@@ -56,7 +55,7 @@ type
     web3Url: JsonRpcUrl
     db: DatabaseRef
     blockDataQueue: AsyncQueue[BlockData]
-    blockOffersQueue: AsyncQueue[BlockOffersRef]
+    blockOffersQueue: AsyncQueue[BlockOffers]
     gossipWorkers: seq[PortalStateGossipWorker]
     collectBlockDataLoop: Future[void]
     buildBlockOffersLoop: Future[void]
@@ -91,27 +90,6 @@ proc putLastPersistedBlockNumber(db: DatabaseRef, blockNumber: uint64) {.inline.
   # Only update the last persisted block number if it's greater than the current one
   if blockNumber > db.getLastPersistedBlockNumber().valueOr(0):
     db.put(rlp.encode("lastPersistedBlockNumber"), rlp.encode(blockNumber))
-
-proc collectOffer(
-    offersMap: OrderedTableRef[seq[byte], seq[byte]],
-    offerWithKey:
-      AccountTrieOfferWithKey | ContractTrieOfferWithKey | ContractCodeOfferWithKey,
-) {.inline.} =
-  let keyBytes = offerWithKey.key.toContentKey().encode().asSeq()
-  offersMap[keyBytes] = offerWithKey.offer.encode()
-
-proc recursiveCollectOffer(
-    offersMap: OrderedTableRef[seq[byte], seq[byte]],
-    offerWithKey: AccountTrieOfferWithKey | ContractTrieOfferWithKey,
-) =
-  offersMap.collectOffer(offerWithKey)
-
-  # root node, recursive collect is finished
-  if offerWithKey.key.path.unpackNibbles().len() == 0:
-    return
-
-  # continue the recursive collect
-  offersMap.recursiveCollectOffer(offerWithKey.getParent())
 
 proc runCollectBlockDataLoop(
     bridge: PortalStateBridge, startBlockNumber: uint64
@@ -237,7 +215,7 @@ proc runBuildBlockOffersLoop(
           builder.buildBlockOffers()
 
           await bridge.blockOffersQueue.addLast(
-            BlockOffersRef(
+            BlockOffers(
               blockNumber: 0.uint64,
               accountTrieOffers: builder.getAccountTrieOffers(),
               contractTrieOffers: builder.getContractTrieOffers(),
@@ -284,7 +262,7 @@ proc runBuildBlockOffersLoop(
           builder.buildBlockOffers()
 
           await bridge.blockOffersQueue.addLast(
-            BlockOffersRef(
+            BlockOffers(
               blockNumber: blockData.blockNumber,
               accountTrieOffers: builder.getAccountTrieOffers(),
               contractTrieOffers: builder.getContractTrieOffers(),
@@ -299,7 +277,99 @@ proc runBuildBlockOffersLoop(
   except CancelledError:
     trace "buildBlockOffersLoop canceled"
 
-proc runGossipBlockOffersLoop(
+proc collectOffer(
+    offersMap: OrderedTableRef[seq[byte], seq[byte]],
+    offerWithKey:
+      AccountTrieOfferWithKey | ContractTrieOfferWithKey | ContractCodeOfferWithKey,
+) {.inline.} =
+  let keyBytes = offerWithKey.key.toContentKey().encode().asSeq()
+  offersMap[keyBytes] = offerWithKey.offer.encode()
+
+proc recursiveCollectOffer(
+    offersMap: OrderedTableRef[seq[byte], seq[byte]],
+    offerWithKey: AccountTrieOfferWithKey | ContractTrieOfferWithKey,
+) =
+  offersMap.collectOffer(offerWithKey)
+
+  # root node, recursive collect is finished
+  if offerWithKey.key.path.unpackNibbles().len() == 0:
+    return
+
+  # continue the recursive collect
+  offersMap.recursiveCollectOffer(offerWithKey.getParent())
+
+func buildOffersMap(blockOffers: BlockOffers): auto =
+  let offersMap = newOrderedTable[seq[byte], seq[byte]]()
+
+  for offerWithKey in blockOffers.accountTrieOffers:
+    offersMap.recursiveCollectOffer(offerWithKey)
+  for offerWithKey in blockOffers.contractTrieOffers:
+    offersMap.recursiveCollectOffer(offerWithKey)
+  for offerWithKey in blockOffers.contractCodeOffers:
+    offersMap.collectOffer(offerWithKey)
+
+  offersMap
+
+proc sortPortalClients(worker: PortalStateGossipWorker, contentKey: seq[byte]) =
+  let contentId = ContentKeyByteList.init(contentKey).toContentId()
+
+  # Closure to sort the portal clients using their nodeIds
+  # and comparing them to the contentId to be gossipped
+  proc portalClientsCmp(x, y: (NodeId, RpcClient)): int =
+    let
+      xDistance = contentId xor x[0]
+      yDistance = contentId xor y[0]
+
+    if xDistance == yDistance:
+      0
+    elif xDistance > yDistance:
+      1
+    else:
+      -1
+
+  # Sort the portalClients based on distance from the content so that
+  # we gossip each piece of content to the closest node first
+  worker.portalClients.sort(portalClientsCmp)
+
+proc contentFoundInNetwork(worker: PortalStateGossipWorker, contentKey: openArray[byte]): Future[bool] {.async: (raises: [CancelledError]).} =
+  for nodeId, client in worker.portalClients:
+    try:
+      let contentInfo =
+        await client.portal_stateGetContent(contentKey.to0xHex())
+      if contentInfo.content.len() > 0:
+        return true
+    except CancelledError as e:
+      raise e
+    except CatchableError as e:
+      debug "Unable to find existing content: ",
+        contentKey = contentKey.to0xHex(), nodeId, error = e.msg, workerId = worker.id
+  return false
+
+proc gossipContentIntoNetwork(
+    worker: PortalStateGossipWorker,
+    minGossipPeers: int,
+    contentKey: openArray[byte],
+    contentOffer: openArray[byte]): Future[bool] {.async: (raises: [CancelledError]).} =
+  for nodeId, client in worker.portalClients:
+    try:
+      let
+        putContentResult = await client.portal_statePutContent(
+          contentKey.to0xHex(), contentOffer.to0xHex()
+        )
+        numPeers = putContentResult.peerCount
+      if numPeers >= minGossipPeers:
+        debug "Offer successfully gossipped to peers", contentKey = contentKey.to0xHex(), nodeId,
+          numPeers, workerId = worker.id
+        return true
+      else:
+        warn "Offer not gossiped to enough peers", contentKey = contentKey.to0xHex(), nodeId, numPeers, workerId = worker.id
+    except CancelledError as e:
+      raise e
+    except CatchableError as e:
+      error "Failed to gossip offer to peers", contentKey = contentKey.to0xHex(), nodeId, error = e.msg, workerId = worker.id
+  return false
+
+proc runGossipLoop(
     worker: PortalStateGossipWorker,
     verifyGossip: bool,
     skipGossipForExisting: bool,
@@ -308,108 +378,50 @@ proc runGossipBlockOffersLoop(
   debug "Starting gossip block offers loop", workerId = worker.id
 
   try:
-    # Create one client per worker in order to improve performance.
+    # Create separate clients in each worker in order to improve performance.
     # WebSocket connections don't perform well when shared by many
     # concurrent workers.
-    worker.portalClient = newRpcClientConnect(worker.portalUrl)
+    for (rpcUrl, nodeId) in worker.portalEndpoints:
+      worker.portalClients[nodeId] = newRpcClientConnect(rpcUrl)
 
-    var blockOffers = await worker.blockOffersQueue.popFirst()
-
-    while true:
+    var
+      blockOffers = await worker.blockOffersQueue.popFirst()
       # A table of offer key, value pairs is used to filter out duplicates so
       # that we don't gossip the same offer multiple times.
-      let offersMap = newOrderedTable[seq[byte], seq[byte]]()
+      offersMap = buildOffersMap(blockOffers)
 
-      for offerWithKey in blockOffers.accountTrieOffers:
-        offersMap.recursiveCollectOffer(offerWithKey)
-      for offerWithKey in blockOffers.contractTrieOffers:
-        offersMap.recursiveCollectOffer(offerWithKey)
-      for offerWithKey in blockOffers.contractCodeOffers:
-        offersMap.collectOffer(offerWithKey)
-
-      # We need to use a closure here because nodeId is required to calculate the
-      # distance of each content id from the node
-      proc offersMapCmp(x, y: (seq[byte], seq[byte])): int =
-        let
-          xId = ContentKeyByteList.init(x[0]).toContentId()
-          yId = ContentKeyByteList.init(y[0]).toContentId()
-          xDistance = worker.nodeId xor xId
-          yDistance = worker.nodeId xor yId
-
-        if xDistance == yDistance:
-          0
-        elif xDistance > yDistance:
-          1
-        else:
-          -1
-
-      # Sort the offers based on the distance from the node so that we will gossip
-      # content that is closest to the node first
-      offersMap.sort(offersMapCmp)
-
+    while true:
       var retryGossip = false
-      for k, v in offersMap:
-        # Check if we need to gossip the content
-        var gossipContent = true
 
-        if skipGossipForExisting:
-          try:
-            let contentInfo =
-              await worker.portalClient.portal_stateGetContent(k.to0xHex())
-            if contentInfo.content.len() > 0:
-              gossipContent = false
-          except CancelledError as e:
-            raise e
-          except CatchableError as e:
-            debug "Unable to find existing content. Will attempt to gossip content: ",
-              contentKey = k.to0xHex(), error = e.msg, workerId = worker.id
+      for contentKey, contentOffer in offersMap:
+        worker.sortPortalClients(contentKey)
+
+        # Check if we need to gossip the content
+        if skipGossipForExisting and (await worker.contentFoundInNetwork(contentKey)):
+          continue # move on to the next content key
 
         # Gossip the content into the network
-        if gossipContent:
-          try:
-            let
-              putContentResult = await worker.portalClient.portal_statePutContent(
-                k.to0xHex(), v.to0xHex()
-              )
-              numPeers = putContentResult.peerCount
-            if numPeers >= minGossipPeers:
-              debug "Offer successfully gossipped to peers",
-                numPeers, workerId = worker.id
-            else:
-              warn "Offer not gossiped to enough peers", numPeers, workerId = worker.id
-              retryGossip = true
-              break
-          except CancelledError as e:
-            raise e
-          except CatchableError as e:
-            error "Failed to gossip offer to peers", error = e.msg, workerId = worker.id
-            retryGossip = true
-            break
+        let gossipCompleted = await worker.gossipContentIntoNetwork(minGossipPeers, contentKey, contentOffer)
+        if not gossipCompleted:
+          # Retry gossip of this block after attempting to gossip all content keys
+          retryGossip = true
 
       # Check if the content can be found in the network
       var foundContentKeys = newSeq[seq[byte]]()
       if verifyGossip and not retryGossip:
-        # wait for the peers to be updated
+        # Wait for the peers to be updated.
+        # Wait time is proportional to the number of offers
         let waitTimeMs = 200 + (offersMap.len() * 20)
         await sleepAsync(waitTimeMs.milliseconds)
-          # wait time is proportional to the number of offers
 
-        for k, _ in offersMap:
-          try:
-            let contentInfo =
-              await worker.portalClient.portal_stateGetContent(k.to0xHex())
-            if contentInfo.content.len() == 0:
-              error "Found empty contentValue", workerId = worker.id
-              retryGossip = true
-              break
-            foundContentKeys.add(k)
-          except CancelledError as e:
-            raise e
-          except CatchableError as e:
-            warn "Unable to find content with key. Will retry gossipping content:",
-              contentKey = k.to0xHex(), error = e.msg, workerId = worker.id
+        for contentKey, _ in offersMap:
+          worker.sortPortalClients(contentKey)
+
+          if await worker.contentFoundInNetwork(contentKey):
+            foundContentKeys.add(contentKey)
+          else:
+            # Retry gossip of this block after finishing lookup of all content keys
             retryGossip = true
-            break
 
       # Retry if any failures occurred or if the content wasn't found in the network
       if retryGossip:
@@ -423,9 +435,11 @@ proc runGossipBlockOffersLoop(
           remainingOffers = offersMap.len(),
           workerId = worker.id
 
-        # We might need to reconnect if using a WebSocket client
-        await worker.portalClient.tryReconnect(worker.portalUrl)
-        continue
+        # We might need to reconnect if using WebSocket clients
+        for (rpcUrl, nodeId) in worker.portalEndpoints:
+          await worker.portalClients.getOrDefault(nodeId).tryReconnect(rpcUrl)
+
+        continue # Jump back to the top of while loop to retry processing the current block
 
       if blockOffers.blockNumber mod 1000 == 0:
         info "Finished gossiping offers for block: ",
@@ -439,6 +453,8 @@ proc runGossipBlockOffersLoop(
           workerId = worker.id
 
       blockOffers = await worker.blockOffersQueue.popFirst()
+      offersMap = buildOffersMap(blockOffers)
+
   except CancelledError:
     trace "gossipBlockOffersLoop canceled"
 
@@ -528,7 +544,7 @@ proc start*(bridge: PortalStateBridge, config: PortalBridgeConf) =
   info "Starting concurrent gossip workers", workerCount = bridge.gossipWorkers.len()
 
   for worker in bridge.gossipWorkers:
-    worker.gossipBlockOffersLoop = worker.runGossipBlockOffersLoop(
+    worker.gossipBlockOffersLoop = worker.runGossipLoop(
       config.verifyGossip, config.skipGossipForExisting, config.minGossipPeers.int
     )
 
@@ -580,17 +596,15 @@ proc runState*(
     web3Url: config.web3RpcUrl,
     db: db,
     blockDataQueue: newAsyncQueue[BlockData](queueSize),
-    blockOffersQueue: newAsyncQueue[BlockOffersRef](queueSize),
+    blockOffersQueue: newAsyncQueue[BlockOffers](queueSize),
     gossipWorkers: newSeq[PortalStateGossipWorker](),
   )
 
   for i in 0 ..< config.gossipWorkers.int:
     let
-      (rpcUrl, nodeId) = portalEndpoints[i mod config.portalRpcEndpoints.int]
       worker = PortalStateGossipWorker(
         id: i + 1,
-        portalUrl: rpcUrl,
-        nodeId: nodeId,
+        portalEndpoints: portalEndpoints,
         blockOffersQueue: bridge.blockOffersQueue,
       )
     bridge.gossipWorkers.add(worker)
