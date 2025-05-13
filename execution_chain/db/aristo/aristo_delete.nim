@@ -119,9 +119,8 @@ proc deleteImpl(
       ok(nil)
   else:
     # Clear the removed leaf from the branch (that still contains other children)
-    let brDup = brVtx.dup
+    let brDup = db.layersUpdate((hike.root, br.vid), brVtx)
     discard brDup.setUsed(uint8 hike.legs[^2].nibble, false)
-    db.layersPutVtx((hike.root, br.vid), brDup)
 
     ok(nil)
 
@@ -199,7 +198,7 @@ proc deleteStorageData*(
     return err(error[1])
 
   # Mark account path Merkle keys for update, except for the vtx we update below
-  db.layersResKeys(accHike, skip = if stoHike.legs.len == 1: 1 else: 0)
+  db.layersResKeys(accHike, skip = 1)
 
   let otherLeaf = ?db.deleteImpl(stoHike)
   db.layersPutStoLeaf(mixPath, nil)
@@ -212,10 +211,15 @@ proc deleteStorageData*(
   # If there was only one item (that got deleted), update the account as well
   if stoHike.legs.len == 1:
     # De-register the deleted storage tree from the account record
-    let leaf = AccLeafRef(wpAcc.vtx).dup # Dup on modify
+    let leaf = db.layersUpdate((accHike.root, wpAcc.vid), AccLeafRef(wpAcc.vtx)) # Dup on modify
     leaf.stoID.isValid = false
     db.layersPutAccLeaf(accPath, leaf)
-    db.layersPutVtx((accHike.root, wpAcc.vid), leaf)
+  else:
+    # Instances are not shared across layers, so we might have to update the
+    # leaf cache to make it consistent with the current layer
+    let leaf = db.layersResLeafKey((accHike.root, wpAcc.vid), wpAcc.vtx)
+    if leaf != nil:
+      db.layersPutAccLeaf(accPath, AccLeafRef(leaf))
 
   ok()
 
@@ -246,10 +250,10 @@ proc deleteStorageTree*(
   ?db.delStoTreeImpl(stoID.vid, accPath)
 
   # De-register the deleted storage tree from the accounts record
-  let leaf = accVtx.dup # Dup on modify
+  let leaf = db.layersUpdate((accHike.root, wpAcc.vid), accVtx) # Dup on modify
   leaf.stoID.isValid = false
   db.layersPutAccLeaf(accPath, leaf)
-  db.layersPutVtx((accHike.root, wpAcc.vid), leaf)
+
   ok()
 
 # ------------------------------------------------------------------------------

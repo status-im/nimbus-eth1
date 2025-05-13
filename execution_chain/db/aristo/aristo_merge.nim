@@ -85,13 +85,15 @@ proc mergePayloadImpl[LeafType, T](
           when payload is AristoAccount:
             if AccLeafRef(vtx).account == payload:
               return err(MergeNoAction)
-            let leafVtx = db.layersPutLeaf((root, cur), psuffix, payload)
+            let leafVtx = db.layersUpdate((root, cur), AccLeafRef(vtx))
+            leafVtx.account = payload
             leafVtx.stoID = AccLeafRef(vtx).stoID
 
           else:
             if StoLeafRef(vtx).stoData == payload:
               return err(MergeNoAction)
-            let leafVtx = db.layersPutLeaf((root, cur), psuffix, payload)
+            let leafVtx = db.layersUpdate((root, cur), StoLeafRef(vtx))
+            leafVtx.stoData = payload
           (leafVtx, nil, nil)
         else:
           # Turn leaf into a branch (or extension) then insert the two leaves
@@ -153,11 +155,10 @@ proc mergePayloadImpl[LeafType, T](
           # There's no vertex at the branch point - insert the payload as a new
           # leaf and update the existing branch
 
-          let brDup = vtx.dup()
-          let local = BranchRef(brDup).setUsed(nibble, true)
-          db.layersPutVtx((root, cur), brDup)
-
-          let leafVtx = db.layersPutLeaf((root, local), psuffix.slice(n + 1), payload)
+          let
+            brDup = db.layersUpdate((root, cur), BranchRef(vtx))
+            local = brDup.setUsed(nibble, true)
+            leafVtx = db.layersPutLeaf((root, local), psuffix.slice(n + 1), payload)
 
           resetKeys()
           return ok((leafVtx, nil, nil))
@@ -248,7 +249,8 @@ proc mergeStorageData*(
     return err(MergeStoAccMissing)
 
   let
-    stoID = AccLeafRef(accHike.legs[^1].wp.vtx).stoID
+    accVtx = AccLeafRef(accHike.legs[^1].wp.vtx)
+    stoID = accVtx.stoID
 
     # Provide new storage ID when needed
     useID =
@@ -267,7 +269,7 @@ proc mergeStorageData*(
       return err(error)
 
   # Mark account path Merkle keys for update, except for the vtx we update below
-  db.layersResKeys(accHike, skip = if not stoID.isValid: 1 else: 0)
+  db.layersResKeys(accHike, skip = 1)
 
   # Update leaf cache both of the merged value and potentially the displaced
   # leaf resulting from splitting a leaf into a branch with two leaves
@@ -280,10 +282,13 @@ proc mergeStorageData*(
 
   if not stoID.isValid:
     # Make sure that there is an account that refers to that storage trie
-    let leaf = AccLeafRef(accHike.legs[^1].wp.vtx).dup # Dup on modify
+    let leaf = db.layersUpdate((STATE_ROOT_VID, accHike.legs[^1].wp.vid), accVtx) # Dup on modify
     leaf.stoID = useID
     db.layersPutAccLeaf(accPath, leaf)
-    db.layersPutVtx((STATE_ROOT_VID, accHike.legs[^1].wp.vid), leaf)
+  else:
+    let leaf = db.layersResLeafKey((STATE_ROOT_VID, accHike.legs[^1].wp.vid), accVtx)
+    if leaf != nil:
+      db.layersPutAccLeaf(accPath, AccLeafRef(leaf))
 
   ok()
 

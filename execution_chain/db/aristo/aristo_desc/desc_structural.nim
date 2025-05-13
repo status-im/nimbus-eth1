@@ -295,7 +295,7 @@ func `$`*(vtx: ExtBranchRef): string =
 
 func `$`*(vtx: VertexRef): string =
   if vtx == nil:
-    "V(nil)"
+    "VertexRef(nil)"
   else:
     case vtx.vType
     of AccLeaf:
