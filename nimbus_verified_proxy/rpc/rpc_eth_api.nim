@@ -8,7 +8,7 @@
 {.push raises: [].}
 
 import
-  std/strutils,
+  std/[strutils, algorithm],
   results,
   chronicles,
   json_rpc/[rpcserver, rpcclient, rpcproxy],
@@ -18,6 +18,7 @@ import
   ../../execution_chain/beacon/web3_eth_conv,
   ../../execution_chain/common/common,
   ../../execution_chain/db/ledger,
+  ../../execution_chain/core/eip4844,
   ../../execution_chain/transaction/call_evm,
   ../../execution_chain/[evm/types, evm/state],
   ../validate_proof,
@@ -258,6 +259,48 @@ proc installEthApiHandlers*(vp: VerifiedRpcProxy) =
   #
   #    return gasEstimate.Quantity
   #
+
+#  vp.proxy.rpc("eth_blobBaseFee") do() -> Quantity:
+#    let header = vp.headerStore.latest.valueOr:
+#      raise newException(ValueError, "Syncing")
+#
+#    if header.blobGasUsed.isNone():
+#      raise newException(ValueError, "blobGasUsed missing from latest header")
+#    if header.excessBlobGas.isNone():
+#      raise newException(ValueError, "excessBlobGas missing from latest header")
+#    let blobBaseFee =
+#      getBlobBaseFee(header.excessBlobGas.get, vp.com, vp.com.toEVMFork(header)) * header.blobGasUsed.get.u256
+#    if blobBaseFee > high(uint64).u256:
+#      raise newException(ValueError, "blobBaseFee is bigger than uint64.max")
+#    return w3Qty blobBaseFee.truncate(uint64)
+#
+#  vp.proxy.rpc("eth_blobBaseFee") do() -> Quantity:
+#    # TODO: find a constant for this
+#    const minGasPrice = 30_000_000_000.GasInt
+#    var prices  = newSeqOfCap[GasInt](64)
+#    let hash = vp.headerStore.latestHash.valueOr:
+#      raise newException(ValueError, "Syncing")
+#
+#    let blk = (await vp.getBlockByHash(hash, true)).valueOr:
+#      raise newException(ValueError, "couldn't get the latest block")
+#
+#    for tx in blk.transactions:
+#      if tx.kind == tohTx:
+#        prices.add(distinctBase(tx.tx.gasPrice))
+#
+#    var medianPrice: GasInt
+#    if prices.len > 0:
+#      sort(prices)
+#      let middle = prices.len div 2
+#      if prices.len mod 2 == 0:
+#        # prevent overflow
+#        let price = prices[middle].uint64 + prices[middle - 1].uint64
+#        medianPrice = (price div 2).GasInt
+#      else:
+#        medianPrice = prices[middle]
+#
+#    return w3Qty max(medianPrice, minGasPrice)
+
   # TODO:
   # Following methods are forwarded directly to the web3 provider and therefore
   # are not validated in any way.

@@ -22,6 +22,7 @@ import
   beacon_chain/spec/datatypes/[phase0, altair, bellatrix],
   beacon_chain/[light_client, nimbus_binary_common, version],
   ../execution_chain/rpc/cors,
+  ../execution_chain/common/common,
   ./rpc/rpc_eth_api,
   ./types,
   ./nimbus_verified_proxy_conf,
@@ -83,7 +84,14 @@ proc run*(
 
     headerStore = HeaderStore.new(64) # block cache contains blocks downloaded from p2p
 
-  var verifiedProxy = VerifiedRpcProxy.new(rpcProxy, headerStore, chainId)
+  let com = CommonRef.new(
+    DefaultDbMemory.newCoreDbRef(),
+    taskpool = nil,
+    config = chainConfigForNetwork(chainId),
+    initializeDb = false,
+  )
+
+  var verifiedProxy = VerifiedRpcProxy.new(com, rpcProxy, headerStore, chainId)
 
   verifiedProxy.initEvm()
   # add handlers that verify RPC calls /rpc/rpc_eth_api.nim

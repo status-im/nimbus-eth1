@@ -38,4 +38,4 @@ proc toAsyncEvmStateBackend(vp: VerifiedRpcProxy): AsyncEvmStateBackend =
   AsyncEvmStateBackend.init(accProc, storageProc, codeProc)
 
 proc initEvm*(vp: var VerifiedRpcProxy) =
-  vp.evm = AsyncEvm.init(vp.toAsyncEvmStateBackend())
+  vp.evm = AsyncEvm.init(vp.toAsyncEvmStateBackend(), vp.com)

@@ -107,6 +107,17 @@ proc latest*(self: HeaderStore): Opt[Header] =
 
   Opt.none(Header)
 
+proc latestHash*(self: HeaderStore): Opt[Hash32] =
+  for h in self.headers.values:
+    let hash =
+      try:
+        self.hashes[h.number]
+      except:
+        return Opt.none(Hash32)
+    return Opt.some(hash)
+
+  Opt.none(Hash32)
+
 proc earliest*(self: HeaderStore): Opt[Header] =
   if self.headers.len() == 0:
     return Opt.none(Header)
