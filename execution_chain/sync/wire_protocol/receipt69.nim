@@ -63,6 +63,9 @@ proc read*(rlp: var Rlp, receipt: var Receipt69) {.raises: [RlpError].} =
   rlp.read(receipt.cumulativeGas)
   rlp.read(receipt.logs)
 
+proc read*(rlp: var Rlp, T: type Receipt69): T {.raises: [RlpError].} =
+  rlp.read(result)
+
 func logsBloom(logs: openArray[Log]): bloom.BloomFilter =
   for log in logs:
     result.incl log.address

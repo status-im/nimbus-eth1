@@ -15,4 +15,5 @@ import
   ./networking/test_enode,
   ./networking/test_rlpx_thunk,
   ./networking/test_rlpxtransport,
-  ./networking/test_protocol_handlers
+  ./networking/test_protocol_handlers,
+  ./networking/test_receipt69
