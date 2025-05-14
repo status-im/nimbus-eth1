@@ -107,6 +107,7 @@ proc setupProcessingBlocks(ctx: BeaconCtxRef; info: static[string]) =
 
   # Update list of block numbers to process
   ctx.blocksUnprocSet(d, h)
+  ctx.blk.topImported = d - 1
 
   # State transition
   ctx.pool.lastState = processingBlocks

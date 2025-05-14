@@ -15,9 +15,9 @@ import
   pkg/eth/common,
   pkg/stew/[interval_set, sorted_set],
   ../worker_desc,
-  ./blocks_staged/bodies,
+  ./blocks_staged/[bodies, staged_blocks],
   ../../wire_protocol/types,
-  ./[blocks_unproc, helpers, update]
+  ./[blocks_unproc, helpers]
 
 # ------------------------------------------------------------------------------
 # Private debugging & logging helpers
@@ -29,10 +29,6 @@ formatIt(Hash32):
 # ------------------------------------------------------------------------------
 # Private helpers
 # ------------------------------------------------------------------------------
-
-proc getNthHash(ctx: BeaconCtxRef; blk: BlocksForImport; n: int): Hash32 =
-  ctx.hdrCache.getHash(blk.blocks[n].header.number).valueOr:
-    return zeroHash32
 
 proc updateBuddyErrorState(buddy: BeaconBuddyRef) =
   ## Helper/wrapper
@@ -337,55 +333,12 @@ proc blocksStagedImport*(
   # Remove from queue
   discard ctx.blk.staged.delete qItem.key
 
-  let
-    nBlocks = qItem.data.blocks.len
-    iv = BnRange.new(qItem.key, qItem.key + nBlocks.uint64 - 1)
-
-  info "Importing blocks", iv, nBlocks,
-    base=ctx.chain.baseNumber.bnStr, head=ctx.chain.latestNumber.bnStr,
-    target=ctx.head.bnStr
-
-  var maxImport = iv.maxPt                         # tentatively assume all ok
-  block importLoop:
-    for n in 0 ..< nBlocks:
-      let nBn = qItem.data.blocks[n].header.number
-      if nBn <= ctx.chain.baseNumber:
-        trace info & ": ignoring block less eq. base", n, iv,
-          B=ctx.chain.baseNumber.bnStr, L=ctx.chain.latestNumber.bnStr,
-          nthBn=nBn.bnStr, nthHash=ctx.getNthHash(qItem.data, n).short
-        continue
-
-      try:
-        (await ctx.chain.importBlock(qItem.data.blocks[n])).isOkOr:
-          # The way out here is simply to re-compile the block queue. At any
-          # point, the `FC` module data area might have been moved to a new
-          # canonical branch.
-          #
-          ctx.poolMode = true
-          warn info & ": import block error (reorg triggered)", n, iv,
-            B=ctx.chain.baseNumber.bnStr, L=ctx.chain.latestNumber.bnStr,
-            nthBn=nBn.bnStr, nthHash=ctx.getNthHash(qItem.data, n).short,
-            `error`=error
-          maxImport = nBn
-          break importLoop
-        # isOk => continue
-      except CancelledError:
-        maxImport = nBn                            # shutdown?
-        break importLoop
-
-      # Allow pseudo/async thread switch.
-      (await ctx.updateAsyncTasks()).isOkOr:
-        maxImport = nBn                            # shutdown?
-        break importLoop
+  await ctx.blocksImport(qItem.data.blocks, info)
 
   # Import probably incomplete, so a partial roll back may be needed
-  if maxImport < iv.maxPt:
-    ctx.blocksUnprocAppend(maxImport+1, iv.maxPt)
-
-  info "Import done", iv=(iv.minPt, maxImport).bnStr,
-    nBlocks=(maxImport-iv.minPt+1), nFailed=(iv.maxPt-maxImport),
-    base=ctx.chain.baseNumber.bnStr, head=ctx.chain.latestNumber.bnStr,
-    target=ctx.head.bnStr
+  let lastBn = qItem.data.blocks[^1].header.number
+  if ctx.blk.topImported < lastBn:
+    ctx.blocksUnprocAppend(ctx.blk.topImported+1, lastBn)
 
   return true
 
