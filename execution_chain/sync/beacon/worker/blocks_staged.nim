@@ -167,24 +167,8 @@ func blocksStagedCanImportOk*(ctx: BeaconCtxRef): bool =
       if ctx.pool.nBuddies == 1 and ctx.pool.blkLastSlowPeer.isSome:
         return true
 
-      # If importing starts while peers are actively downloading, the system
-      # tends to loose download peers, most probably due to high system
-      # activity.
-      #
-      # * Typical download time to download and stage a queue record ~15s (raw
-      #   download time typically ranges ~30ms ..~10s)
-      #
-      # * Anecdotal time to connect to a new download peer ~5m..~10m
-      #
-      # This implies that a staged full queue with 4 records typically does
-      # not take more than a minute, much less if enough peers are available
-      # while the penalty of potentially losing peers is a multiple of the
-      # queue ramp up time.
-      #
-      # So importing does not start before the queue is filled up.
-      if ctx.pool.blkStagedLenHwm <= ctx.blk.staged.len:
-
-        # Wait until finished with current block downloads
+      # Importing does not start before the queue is filled up.
+      if blocksStagedQueueLengthHwm <= ctx.blk.staged.len:
         return ctx.blocksBorrowedIsEmpty()
 
   false
@@ -200,7 +184,7 @@ func blocksStagedFetchOk*(buddy: BeaconBuddyRef): bool =
 
       if 0 < ctx.blocksUnprocAvail():
         # Fetch if there is space on the queue.
-        if ctx.blk.staged.len < ctx.pool.blkStagedLenHwm:
+        if ctx.blk.staged.len < blocksStagedQueueLengthHwm:
           return true
 
         # Make sure that there is no gap at the bottom which needs to be

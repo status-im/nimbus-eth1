@@ -352,12 +352,6 @@ type
             "is accepted"
       name: "debug-beacon-sync-target-file" .}: Option[InputFile]
 
-    beaconSyncBlocksQueueHwm* {.
-      hidden
-      desc: "Limit number of blocks on staging queue for beacon sync"
-      defaultValue: 0
-      name: "debug-beacon-sync-blocks-queue-hwm" .}: int
-
     rocksdbMaxOpenFiles {.
       hidden
       defaultValue: defaultMaxOpenFiles

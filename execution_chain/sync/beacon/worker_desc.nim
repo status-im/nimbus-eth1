@@ -106,8 +106,6 @@ type
 
     # Blocks import/execution settings
     blkImportOk*: bool               ## Don't fetch data while block importing
-    blkStagedHwm*: int               ## Set a `staged` queue limit
-    blkStagedLenHwm*: int            ## Figured out as # staged records
 
     # Info, debugging, and error handling stuff
     nReorg*: int                     ## Number of reorg invocations (info only)

@@ -117,16 +117,10 @@ const
     ## With an average less than 90KiB/block (on `mainnet` at block ~#22m),
     ## one arrives at a total of at most 35MiB per block batch.
 
-  blocksStagedHwmDefault* = 8 * nFetchBodiesBatch
-    ## This is an initialiser value for `blocksStagedHwm`.
-    ##
-    ## If the staged block queue exceeds this many number of block objects for
+  blocksStagedQueueLengthHwm* = 8
+    ## If the staged block queue exceeds this many number of queue objects for
     ## import, no further block objets are added (but the current sub-list is
     ## completed.)
-
-  blocksStagedLwm* = nFetchBodiesBatch
-    ## Minimal accepted initialisation value for `blocksStagedHwm`. The latter
-    ## will be initalised with `blocksStagedHwmDefault` if smaller than the LWM.
 
   # ----------------------
 
@@ -139,7 +133,6 @@ static:
 
   doAssert 0 < nFetchBodiesRequest
   doAssert nFetchBodiesRequest <= nFetchBodiesBatch
-  doAssert 0 < blocksStagedLwm
-  doAssert blocksStagedLwm <= blocksStagedHwmDefault
+  doAssert 0 < blocksStagedQueueLengthHwm
 
 # End
