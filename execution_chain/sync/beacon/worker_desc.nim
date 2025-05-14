@@ -104,9 +104,6 @@ type
     chain*: ForkedChainRef           ## Core database, FCU support
     hdrCache*: HeaderChainRef        ## Currently in tandem with `chain`
 
-    # Blocks import/execution settings
-    blkImportOk*: bool               ## Don't fetch data while block importing
-
     # Info, debugging, and error handling stuff
     nReorg*: int                     ## Number of reorg invocations (info only)
     hdrProcError*: Table[Hash,uint8] ## Some globally accessible header errors

@@ -98,7 +98,7 @@ const
   fetchBodiesFailedInitialFailPeersHwm* = 50
     ## Similar to `fetchHeadersFailedInitialFailPeersHwm`
 
-  nFetchBodiesRequest* = 128
+  nFetchBodiesRequest* = 64
     ## Similar to `nFetchHeadersRequest`
 
   fetchBodiesReqErrThresholdZombie* = chronos.seconds(4)
@@ -111,13 +111,13 @@ const
   fetchBodiesReqMinResponsePC* = 10
     ## Similar to `fetchHeadersReqMinResponsePC`
 
-  nFetchBodiesBatch* = 3 * nFetchBodiesRequest
+  nFetchBodiesBatch* = nFetchBodiesRequest
     ## Similar to `nFetchHeadersBatch`
     ##
     ## With an average less than 90KiB/block (on `mainnet` at block ~#22m),
     ## one arrives at a total of at most 35MiB per block batch.
 
-  blocksStagedQueueLengthHwm* = 8
+  blocksStagedQueueLengthHwm* = 1
     ## If the staged block queue exceeds this many number of queue objects for
     ## import, no further block objets are added (but the current sub-list is
     ## completed.)

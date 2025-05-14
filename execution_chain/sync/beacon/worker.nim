@@ -28,8 +28,7 @@ proc napUnlessSomethingToFetch(
     buddy: BeaconBuddyRef;
       ): Future[bool] {.async: (raises: []).} =
   ## When idle, save cpu cycles waiting for something to do.
-  if buddy.ctx.pool.blkImportOk or               # currently importing blocks
-     buddy.ctx.hibernate or                      # not activated yet?
+  if buddy.ctx.hibernate or                      # not activated yet?
      not (buddy.headersStagedCollectOk() or      # something on TODO list
           buddy.blocksStagedFetchOk()):
     try:
@@ -118,7 +117,7 @@ proc runDaemon*(
       ) {.async: (raises: []).} =
   ## Global background job that will be re-started as long as the variable
   ## `ctx.daemon` is set `true` which corresponds to `ctx.hibernating` set
-  ## to false`.
+  ## to false.
   ##
   ## On a fresh start, the flag `ctx.daemon` will not be set `true` before the
   ## first usable request from the CL (via RPC) stumbles in.
@@ -131,20 +130,11 @@ proc runDaemon*(
   # Execute staged block records.
   if ctx.blocksStagedCanImportOk():
 
-    block:
-      # Set flag informing peers to go into idle mode while importing takes
-      # place. It has been observed that importing blocks and downloading
-      # at the same time does not work very well, most probably due to high
-      # system activity while importing. Peers will get lost pretty soon after
-      # downloading starts if they continue downloading.
-      ctx.pool.blkImportOk = true
-      defer: ctx.pool.blkImportOk = false
-
-      # Import from staged queue.
-      while await ctx.blocksStagedImport(info):
-        if not ctx.daemon or   # Implied by external sync shutdown?
-           ctx.poolMode:       # Oops, re-org needed?
-          return
+    # Import from staged queue.
+    while await ctx.blocksStagedImport(info):
+      if not ctx.daemon or   # Implied by external sync shutdown?
+         ctx.poolMode:       # Oops, re-org needed?
+        return
 
   # At the end of the cycle, leave time to trigger refill headers/blocks
   try: await sleepAsync daemonWaitInterval
