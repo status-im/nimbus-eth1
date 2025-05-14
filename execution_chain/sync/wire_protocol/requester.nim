@@ -31,7 +31,7 @@ defineProtocol(PROTO = eth68,
 defineProtocol(PROTO = eth69,
                version = 69,
                rlpxName = "eth",
-               peerState = EthPeerState,
+               peerState = Eth69PeerState,
                networkState = EthWireRef)
 
 type
@@ -83,7 +83,7 @@ type
   BlockRangeUpdatePacket* = object
     earliest*: uint64
     latest*: uint64
-    latestHash*: uint64
+    latestHash*: Hash32
 
 const
   StatusMsg*                     =  0'u64
@@ -214,13 +214,13 @@ proc getReceipts*(peer: Peer; packet: ReceiptsRequest;
 proc receipts*(responder: Responder;
                receipts: openArray[seq[Receipt]]): Future[void] {.
     async: (raises: [CancelledError, EthP2PError], raw: true).} =
-  doAssert(responder.supports(eth68), "'receipts' function only available for eth/68")
+  doAssert(responder.supports(eth68), "'receipts' function with 'Receipt' param only available for eth/68")
   eth68.rlpxSendMessage(responder, ReceiptsMsg, receipts)
 
 proc receipts*(responder: Responder;
                receipts: openArray[seq[Receipt69]]): Future[void] {.
     async: (raises: [CancelledError, EthP2PError], raw: true).} =
-  doAssert(responder.supports(eth69), "'receipts' function only available for eth/69")
+  doAssert(responder.supports(eth69), "'receipts' function with 'Receipt69' param only available for eth/69")
   eth69.rlpxSendMessage(responder, ReceiptsMsg, receipts)
 
 proc blockRangeUpdate*(peer: Peer; packet: BlockRangeUpdatePacket): Future[void] {.

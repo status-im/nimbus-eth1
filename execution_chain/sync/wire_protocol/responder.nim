@@ -287,6 +287,10 @@ proc blockRangeUpdateUserHandler(peer: Peer; packet: BlockRangeUpdatePacket) {.
     trace trEthRecvReceived & "BlockRangeUpdate (0x11)", peer,
       earliest = packet.earliest, latest = packet.latest,
       latestHash = packet.latestHash.short
+      
+  peer.state(eth69).earliest = packet.earliest
+  peer.state(eth69).latest = packet.latest
+  peer.state(eth69).latestHash = packet.latestHash
 
 proc blockRangeUpdateThunk(peer: Peer; data: Rlp) {.
     async: (raises: [CancelledError, EthP2PError]).} =
@@ -386,6 +390,9 @@ proc eth69PeerConnected(peer: Peer) {.async: (
   trace "Peer matches our network", peer
 
   peer.state(eth69).initialized = true
+  peer.state(eth69).earliest = m.earliest
+  peer.state(eth69).latest = m.latest
+  peer.state(eth69).latestHash = m.latestHash
 
 template registerCommonThunk(protocol: ProtocolInfo, PROTO: type) =
   registerMsg(protocol, NewBlockHashesMsg, "newBlockHashes",

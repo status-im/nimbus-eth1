@@ -39,6 +39,11 @@ type
   EthPeerState* = ref object of RootRef
     initialized*: bool
 
+  Eth69PeerState* = ref object of EthPeerState
+    earliest*: uint64
+    latest*: uint64
+    latestHash*: Hash32
+
   BlockHeadersRequest* = object
     startBlock*: BlockHashOrNumber
     maxResults*, skip*: uint
