@@ -78,6 +78,7 @@ type
     unprocessed*: BnRangeSet         ## Blocks download requested
     borrowed*: BnRangeSet            ## Fetched/locked fetched ranges
     staged*: StagedBlocksQueue       ## Blocks ready for import
+    topImported*: BlockNumber        ## For syncronising opportunistic import
 
   # -------------------
 
