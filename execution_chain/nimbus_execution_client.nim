@@ -117,7 +117,7 @@ proc setupP2P(nimbus: NimbusNode, conf: NimbusConf,
 
   # Always initialise beacon syncer
   nimbus.beaconSyncRef = BeaconSyncRef.init(
-    nimbus.ethNode, nimbus.fc, conf.maxPeers, conf.beaconSyncBlocksQueueHwm)
+    nimbus.ethNode, nimbus.fc, conf.maxPeers)
 
   # Optional for pre-setting the sync target (i.e. debugging)
   if conf.beaconSyncTargetFile.isSome():
