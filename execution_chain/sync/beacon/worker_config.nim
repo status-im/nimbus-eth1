@@ -111,12 +111,6 @@ const
   fetchBodiesReqMinResponsePC* = 10
     ## Similar to `fetchHeadersReqMinResponsePC`
 
-  nFetchBodiesBatch* = nFetchBodiesRequest
-    ## Similar to `nFetchHeadersBatch`
-    ##
-    ## With an average less than 90KiB/block (on `mainnet` at block ~#22m),
-    ## one arrives at a total of at most 35MiB per block batch.
-
   blocksStagedQueueLengthHwm* = 2
     ## If the staged block queue exceeds this many number of queue objects for
     ## import, no further block objets are added (but the current sub-list is
@@ -132,7 +126,6 @@ static:
   doAssert 0 < headersStagedQueueLengthHwm
 
   doAssert 0 < nFetchBodiesRequest
-  doAssert nFetchBodiesRequest <= nFetchBodiesBatch
   doAssert 0 < blocksStagedQueueLengthHwm
 
 # End

@@ -77,8 +77,9 @@ type
     ## Block sync staging area
     unprocessed*: BnRangeSet         ## Blocks download requested
     borrowed*: BnRangeSet            ## Fetched/locked fetched ranges
-    staged*: StagedBlocksQueue       ## Blocks ready for import
     topImported*: BlockNumber        ## For syncronising opportunistic import
+    staged*: StagedBlocksQueue       ## Blocks ready for import
+    reserveStaged*: int              ## Pre-book staged slot temporarily
 
   # -------------------
 

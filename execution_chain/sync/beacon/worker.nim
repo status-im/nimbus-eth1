@@ -24,13 +24,13 @@ import
 # Private functions
 # ------------------------------------------------------------------------------
 
-proc napUnlessSomethingToFetch(
+proc napUnlessSomethingToCollect(
     buddy: BeaconBuddyRef;
       ): Future[bool] {.async: (raises: []).} =
   ## When idle, save cpu cycles waiting for something to do.
   if buddy.ctx.hibernate or                      # not activated yet?
      not (buddy.headersStagedCollectOk() or      # something on TODO list
-          buddy.blocksStagedFetchOk()):
+          buddy.blocksStagedCollectOk()):
     try:
       await sleepAsync workerIdleWaitInterval
     except CancelledError:
@@ -128,13 +128,14 @@ proc runDaemon*(
     return
 
   # Execute staged block records.
-  if ctx.blocksStagedCanImportOk():
+  if ctx.blocksStagedProcessOk():
 
-    # Import from staged queue.
-    while await ctx.blocksStagedImport(info):
-      if not ctx.daemon or   # Implied by external sync shutdown?
-         ctx.poolMode:       # Oops, re-org needed?
-        return
+    # Import bodies from the `staged` queue.
+    discard await ctx.blocksStagedProcess info
+
+    if not ctx.daemon or   # Implied by external sync shutdown?
+       ctx.poolMode:       # Oops, re-org needed?
+      return
 
   # At the end of the cycle, leave time to trigger refill headers/blocks
   try: await sleepAsync daemonWaitInterval
@@ -177,7 +178,7 @@ proc runPeer*(
     buddy.only.multiRunIdle = Moment.now() - buddy.only.stoppedMultiRun
   buddy.only.nMultiLoop.inc                     # statistics/debugging
 
-  if not await buddy.napUnlessSomethingToFetch():
+  if not await buddy.napUnlessSomethingToCollect():
 
     # Download and process headers and blocks
     while buddy.headersStagedCollectOk():
@@ -196,9 +197,17 @@ proc runPeer*(
 
     # Fetch bodies and combine them with headers to blocks to be staged. These
     # staged blocks are then excuted by the daemon process (no `peer` needed.)
-    while buddy.blocksStagedFetchOk():
+    while buddy.blocksStagedCollectOk():
 
-      discard await buddy.blocksStagedCollect info
+      # Collect bodies and either import them via `FC` module, or stage on
+      # the blocks queue to get them serialised and imported, later.
+      await buddy.blocksStagedCollect info
+
+      # Import bodies from the `staged` queue.
+      if not await buddy.blocksStagedProcess info:
+        # Need to proceed with another peer (e.g. gap between top imported
+        # block and blocks queue.)
+        break
 
     # Note that it is important **not** to leave this function to be
     # re-invoked by the scheduler unless necessary. While the time gap
