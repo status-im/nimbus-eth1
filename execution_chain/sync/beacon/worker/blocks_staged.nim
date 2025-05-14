@@ -129,7 +129,178 @@ proc fetchAndCheck(
 # Public functions
 # ------------------------------------------------------------------------------
 
-proc blocksStagedCanImportOk*(ctx: BeaconCtxRef; info: static[string]): bool =
+func blocksStagedCollectOk*(buddy: BeaconBuddyRef): bool =
+  ## Check whether body records can be fetched and imported or stored
+  ## on the `staged` queue.
+  ##
+  if buddy.ctrl.running:
+    let ctx = buddy.ctx
+    if 0 < ctx.blocksUnprocAvail() and
+       not ctx.blocksModeStopped():
+      return true
+  false
+
+proc blocksStagedProcessOk*(ctx: BeaconCtxRef): bool =
+  ## Check whether import processing is possible
+  ##
+  not ctx.poolMode and
+  0 < ctx.blk.staged.len
+
+# --------------
+
+proc blocksStagedCollect*(
+    buddy: BeaconBuddyRef;
+    info: static[string];
+      ) {.async: (raises: []).} =
+  ## Collect bodies and import or stage them.
+  ##
+  let
+    ctx = buddy.ctx
+    peer = buddy.peer
+
+  if ctx.blocksUnprocIsEmpty():
+    return                                           # no action
+
+  var
+    nDirect = 0u64                                   # statistics, to be updated
+    nQueued = 0                                      # ditto
+
+  block fetchBlocksBody:
+    #
+    # Start deterministically. Explicitely fetch/append by parent hash.
+    #
+    # Exactly one peer can fetch and import store blocks directly on the `FC`
+    # module. All other peers fetch and queue blocks for later serialisation.
+    while true:
+      let bottom = ctx.blocksUnprocAvailBottom() - 1
+      #
+      # A direct fetch and blocks import is possible if the next block to
+      # fetch neigbours the already imported blocks ening at `lastImported`.
+      # So this criteria is unique at a given time and when an interval is
+      # taken out of the `unproc` pool:
+      # ::
+      #               |------------------      unproc pool
+      #               |-------|                block interval to fetch next
+      #    ----------|                         already imported into `FC` module
+      #            bottom
+      #         topImported
+      #
+      # After claiming the block interval that will be processed next for the
+      # deterministic fetch, the situation for the new `bottom` would look like
+      # ::
+      #                        |---------      unproc pool
+      #               |-------|                block interval to fetch next
+      #    ----------|                         already imported into `FC` module
+      #         topImported bottom
+      #
+      if ctx.blk.topImported < bottom:
+        break
+
+      # Throw away overlap (should not happen anyway)
+      if bottom < ctx.blk.topImported:
+        discard ctx.blocksUnprocFetch(ctx.blk.topImported - bottom).expect("iv")
+
+      # Fetch blocks and verify result
+      let blocks = (await buddy.blocksFetch(nFetchBodiesBatch, info)).valueOr:
+        break fetchBlocksBody                        # done, exit this function
+
+      # Set flag that there were some blocks fetched at all
+      ctx.pool.seenData = true                       # blocks data exist
+
+      # Import blocks (no staging)
+      await ctx.blocksImport(blocks, info)
+
+      # Import probably incomplete, so a partial roll back may be needed
+      let lastBn = blocks[^1].header.number
+      if ctx.blk.topImported < lastBn:
+        ctx.blocksUnprocAppend(ctx.blk.topImported + 1, lastBn)
+
+      # statistics
+      nDirect += ctx.blk.topImported - blocks[0].header.number + 1
+
+      # Buddy might have been cancelled while importing blocks.
+      if buddy.ctrl.stopped or ctx.poolMode:
+        break fetchBlocksBody                        # done, exit this function
+
+      # End while: headersUnprocFetch() + blocksImport()
+
+    # Continue fetching blocks and queue them (if any)
+    if ctx.blk.staged.len <= blocksStagedQueueLengthHwm:
+
+      let
+        # Fetch blocks and verify result
+        blocks = (await buddy.blocksFetch(nFetchBodiesBatch, info)).valueOr:
+          break fetchBlocksBody                     # done, exit this function
+
+        # Insert blocks list on the `staged` queue
+        key = blocks[0].header.number
+        qItem = ctx.blk.staged.insert(key).valueOr:
+          raiseAssert info & ": duplicate key on staged queue iv=" &
+            (key, blocks[^1].header.number).bnStr
+
+      qItem.data.blocks = blocks                    # store `blocks[]` list
+
+      nQueued += blocks.len                         # statistics
+
+    # End block: `fetchBlocksBody`
+
+  let nBlocks = nDirect + nQueued.uint64
+  if nBlocks == 0:
+    if not ctx.pool.seenData:
+      # Collect peer for detecting cul-de-sac syncing (i.e. non-existing
+      # block chain or similar.)
+      ctx.pool.failedPeers.incl buddy.peerID
+
+      debug info & ": no blocks yet", peer, ctrl=buddy.ctrl.state,
+        poolMode=ctx.poolMode, syncState=ctx.pool.lastState,
+        failedPeers=ctx.pool.failedPeers.len, bdyErrors=buddy.bdyErrors
+    return
+
+  info "Processed blocks",
+    unprocBottom=(if ctx.blocksModeStopped(): "n/a"
+                  else: ctx.blocksUnprocAvailBottom.bnStr),
+    nBlocks, nStaged=ctx.blk.staged.len, nSyncPeers=ctx.pool.nBuddies
+
+
+proc blocksStagedProcess*(
+    ctx: BeaconCtxRef;
+    info: static[string];
+      ) {.async: (raises: []).} =
+  ## Import/execute blocks record from staged queue
+  ##
+  var
+    nProcessed = 0u64                                        # statistics
+
+  while ctx.pool.lastState != processingBlocks:
+    let qItem = ctx.blk.staged.ge(0).valueOr:
+      # Empty queue
+      break
+
+    # Make sure that the lowest block is available, already. Or the other way
+    # round: no unprocessed block number range precedes the least staged block.
+    if ctx.blk.topImported + 1 < qItem.key:
+      trace info & ": block queue not ready yet", nSyncPeers=ctx.pool.nBuddies,
+        topImported=ctx.blk.topImported.bnStr, least=qItem.key.bnStr
+      break
+
+    # Remove from queue
+    discard ctx.blk.staged.delete qItem.key
+
+    await ctx.blocksImport(qItem.data.blocks, info)
+
+    # Import probably incomplete, so a partial roll back may be needed
+    let lastBn = qItem.data.blocks[^1].header.number
+    if ctx.blk.topImported < lastBn:
+      ctx.blocksUnprocAppend(ctx.blk.topImported+1, lastBn)
+
+    nProcessed += ctx.blk.topImported - qItem.key + 1
+
+  debug info & ": blocks unqueued and imported", nSyncPeers=ctx.pool.nBuddies,
+    nProcessed, topImported=ctx.blk.topImported.bnStr
+
+# ---------------------------
+
+proc blocksStagedCanImportOkLegacy*(ctx: BeaconCtxRef; info: static[string]): bool =
   ## Check whether the queue is at its maximum size so import can start with
   ## a full queue.
   ##
@@ -172,7 +343,7 @@ proc blocksStagedCanImportOk*(ctx: BeaconCtxRef; info: static[string]): bool =
   false
 
 
-func blocksStagedFetchOk*(buddy: BeaconBuddyRef): bool =
+func blocksStagedFetchOkLegacy*(buddy: BeaconBuddyRef): bool =
   ## Check whether body records can be fetched and stored on the `staged` queue.
   ##
   if buddy.ctrl.running:
@@ -193,7 +364,7 @@ func blocksStagedFetchOk*(buddy: BeaconBuddyRef): bool =
 
 
 
-proc blocksStagedCollect*(
+proc blocksStagedCollectLegacy*(
     buddy: BeaconBuddyRef;
     info: static[string];
       ): Future[bool] {.async: (raises: []).} =
@@ -313,7 +484,7 @@ proc blocksStagedCollect*(
   return true
 
 
-proc blocksStagedImport*(
+proc blocksStagedImportLegacy*(
     ctx: BeaconCtxRef;
     info: static[string];
       ): Future[bool]

@@ -49,8 +49,9 @@ proc headersStagedCollect*(
      ctx.hdrCache.state != collecting:
     debug info & ": nothing to do", peer,
       unprocEmpty=ctx.headersUnprocIsEmpty(), nStaged=ctx.hdr.staged.len,
-      ctrl=buddy.ctrl.state, cacheMode=ctx.hdrCache.state,
-      syncState=ctx.pool.lastState, nSyncPeers=ctx.pool.nBuddies
+      ctrl=buddy.ctrl.state, poolMode=ctx.poolMode,
+      cacheMode=ctx.hdrCache.state, syncState=ctx.pool.lastState,
+      nSyncPeers=ctx.pool.nBuddies
     return                                           # no action
   var
     nDeterministic = 0u64                            # statistics, to be updated

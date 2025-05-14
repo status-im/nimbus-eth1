@@ -24,13 +24,13 @@ import
 # Private functions
 # ------------------------------------------------------------------------------
 
-proc napUnlessSomethingToFetch(
+proc napUnlessSomethingToCollect(
     buddy: BeaconBuddyRef;
       ): Future[bool] {.async: (raises: []).} =
   ## When idle, save cpu cycles waiting for something to do.
   if buddy.ctx.hibernate or                      # not activated yet?
      not (buddy.headersStagedCollectOk() or      # something on TODO list
-          buddy.blocksStagedFetchOk()):
+          buddy.blocksStagedCollectOk()):
     try:
       await sleepAsync workerIdleWaitInterval
     except CancelledError:
@@ -128,13 +128,21 @@ proc runDaemon*(
     return
 
   # Execute staged block records.
-  if ctx.blocksStagedCanImportOk(info):
+  # if ctx.blocksStagedCanImportOkLegacy(info):
+  if ctx.blocksStagedProcessOk():
 
-    # Import from staged queue.
-    while await ctx.blocksStagedImport(info):
-      if not ctx.daemon or   # Implied by external sync shutdown?
-         ctx.poolMode:       # Oops, re-org needed?
-        return
+    # Import bodies from the `staged` queue.
+    await ctx.blocksStagedProcess info
+
+    if not ctx.daemon or   # Implied by external sync shutdown?
+       ctx.poolMode:       # Oops, re-org needed?
+      return
+
+    # # Import from staged queue.
+    # while await ctx.blocksStagedImportLegacy(info):
+    #   if not ctx.daemon or   # Implied by external sync shutdown?
+    #      ctx.poolMode:       # Oops, re-org needed?
+    #     return
 
   # At the end of the cycle, leave time to trigger refill headers/blocks
   try: await sleepAsync daemonWaitInterval
@@ -178,7 +186,7 @@ proc runPeer*(
   buddy.only.nMultiLoop.inc                     # statistics/debugging
 
   trace info & ": start", peer=buddy.peer
-  if not await buddy.napUnlessSomethingToFetch():
+  if not await buddy.napUnlessSomethingToCollect():
 
     trace info & ": action", peer=buddy.peer
 
@@ -200,10 +208,10 @@ proc runPeer*(
 
     # Fetch bodies and combine them with headers to blocks to be staged. These
     # staged blocks are then excuted by the daemon process (no `peer` needed.)
-    while buddy.blocksStagedFetchOk():
+    while buddy.blocksStagedCollectOk():
 
       trace info & ": blocks collect", peer=buddy.peer
-      discard await buddy.blocksStagedCollect info
+      await buddy.blocksStagedCollect info
 
     # Note that it is important **not** to leave this function to be
     # re-invoked by the scheduler unless necessary. While the time gap
