@@ -11,7 +11,6 @@ import
   chronos,
   eth/common,
   ./types,
-  ./receipt69,
   ../../networking/rlpx,
   ../../networking/p2p_types
 
@@ -65,6 +64,9 @@ type
   ReceiptsPacket* = object
     receipts*: seq[seq[Receipt]]
 
+  StoredReceiptsPacket* = object
+    receipts*: seq[seq[StoredReceipt]]
+
   NewBlockHashesPacket* = object
     hashes*: seq[NewBlockHashesAnnounce]
 
@@ -101,6 +103,18 @@ const
   ReceiptsMsg*                   = 16'u64
   # https://github.com/ethereum/devp2p/blob/b0c213de97978053a0f62c3ea4d23c0a3d8784bc/caps/eth.md#blockrangeupdate-0x11
   BlockRangeUpdateMsg*           = 0x11'u64
+
+func to*(list: openArray[Receipt], _: type seq[StoredReceipt]): seq[StoredReceipt] =
+  for x in list:
+    result.add x.to(StoredReceipt)
+
+func to*(list: openArray[StoredReceipt], _: type seq[Receipt]): seq[Receipt] =
+  for x in list:
+    result.add x.to(Receipt)
+
+func to*(rec: StoredReceiptsPacket, _: type ReceiptsPacket): ReceiptsPacket =
+  for x in rec.receipts:
+    result.receipts.add x.to(seq[Receipt])
 
 proc status68*(peer: Peer; packet: Status68Packet;
              timeout: Duration = milliseconds(10000'i64)):
@@ -218,9 +232,9 @@ proc receipts*(responder: Responder;
   eth68.rlpxSendMessage(responder, ReceiptsMsg, receipts)
 
 proc receipts*(responder: Responder;
-               receipts: openArray[seq[Receipt69]]): Future[void] {.
+               receipts: openArray[seq[StoredReceipt]]): Future[void] {.
     async: (raises: [CancelledError, EthP2PError], raw: true).} =
-  doAssert(responder.supports(eth69), "'receipts' function with 'Receipt69' param only available for eth/69")
+  doAssert(responder.supports(eth69), "'receipts' function with 'StoredReceipt' param only available for eth/69")
   eth69.rlpxSendMessage(responder, ReceiptsMsg, receipts)
 
 proc blockRangeUpdate*(peer: Peer; packet: BlockRangeUpdatePacket): Future[void] {.

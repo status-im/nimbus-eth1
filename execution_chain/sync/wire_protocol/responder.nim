@@ -13,7 +13,6 @@ import
   stew/byteutils,
   ./handler,
   ./requester,
-  ./receipt69,
   ./trace_config,
   ../../utils/utils,
   ../../common/logging,
@@ -251,7 +250,7 @@ proc getReceiptsUserHandler[PROTO](response: Responder; hashes: seq[Hash32]) {.
   trace trEthRecvReceived & "GetReceipts (0x0f)", peer, hashes = hashes.len
   let ctx = peer.networkState(PROTO)
   let rec = when PROTO is eth69:
-              ctx.getReceipts69(hashes)
+              ctx.getStoredReceipts(hashes)
             else:
               ctx.getReceipts(hashes)
   if rec.len > 0:
@@ -267,14 +266,10 @@ proc getReceiptsThunk[PROTO](peer: Peer; data: Rlp) {.
   PROTO.rlpxWithPacketResponder(seq[Hash32], peer, data):
     await getReceiptsUserHandler[PROTO](response, packet)
 
-func to(rec: Receipts69Packet, _: type ReceiptsPacket): ReceiptsPacket =
-  for x in rec.receipts:
-    result.receipts.add x.to(seq[Receipt])
-
 proc receiptsThunk[PROTO](peer: Peer; data: Rlp) {.
     async: (raises: [CancelledError, EthP2PError]).} =
   when PROTO is eth69:
-    PROTO.rlpxWithFutureHandler(Receipts69Packet, ReceiptsPacket,
+    PROTO.rlpxWithFutureHandler(StoredReceiptsPacket, ReceiptsPacket,
       ReceiptsMsg, peer, data, [receipts])
   else:
     PROTO.rlpxWithFutureHandler(ReceiptsPacket,
@@ -287,7 +282,7 @@ proc blockRangeUpdateUserHandler(peer: Peer; packet: BlockRangeUpdatePacket) {.
     trace trEthRecvReceived & "BlockRangeUpdate (0x11)", peer,
       earliest = packet.earliest, latest = packet.latest,
       latestHash = packet.latestHash.short
-      
+
   peer.state(eth69).earliest = packet.earliest
   peer.state(eth69).latest = packet.latest
   peer.state(eth69).latestHash = packet.latestHash
