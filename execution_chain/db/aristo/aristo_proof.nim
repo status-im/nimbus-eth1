@@ -147,7 +147,7 @@ proc makeAccountProof*(
     db: AristoTxRef;
     accPath: Hash32;
       ): Result[(seq[seq[byte]],bool), AristoError] =
-  db.makeProof(VertexID(1), NibblesBuf.fromBytes accPath.data)
+  db.makeProof(STATE_ROOT_VID, NibblesBuf.fromBytes accPath.data)
 
 proc makeStorageProof*(
     db: AristoTxRef;

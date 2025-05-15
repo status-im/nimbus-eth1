@@ -74,7 +74,7 @@ suite "Aristo compute":
       let
         db = AristoDbRef.init()
         txFrame = db.txRef
-        root = VertexID(1)
+        root = STATE_ROOT_VID
 
       for (k, v, r) in sample:
         checkpoint("k = " & k.toHex & ", v = " & $v)
@@ -113,7 +113,7 @@ suite "Aristo compute":
     let
       db = AristoDbRef.init()
       txFrame = db.txRef
-      root = VertexID(1)
+      root = STATE_ROOT_VID
 
     for (k, v, r) in samples[^1]:
       check:
