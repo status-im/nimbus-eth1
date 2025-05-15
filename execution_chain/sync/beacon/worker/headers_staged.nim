@@ -22,17 +22,20 @@ import
 # Public functions
 # ------------------------------------------------------------------------------
 
-func headersStagedFetchOk*(buddy: BeaconBuddyRef): bool =
-  # Helper for `worker.nim`, etc.
-  0 < buddy.ctx.headersUnprocAvail() and
-    buddy.ctrl.running and
-    not buddy.ctx.collectModeStopped()
-
+func headersStagedCollectOk*(buddy: BeaconBuddyRef): bool =
+  ## Helper for `worker.nim`, etc.
+  if buddy.ctrl.running:
+    let ctx = buddy.ctx
+    if 0 < ctx.headersUnprocAvail() and
+       not ctx.collectModeStopped():
+      return true
+  false
 
 proc headersStagedCollect*(
     buddy: BeaconBuddyRef;
     info: static[string];
-      ): Future[bool] {.async: (raises: []).} =
+      ): Future[bool]
+      {.async: (raises: []).} =
   ## Collect headers and either stash them on the header chain cache directly,
   ## or stage then on the header queue to get them serialised, later. The
   ## header queue serialisation is needed in case of several peers fetching
@@ -78,7 +81,7 @@ proc headersStagedCollect*(
       #                    dangling
       #
       # After claiming the block interval that will be processed next for the
-      # deterministic fetch, the situation looks like
+      # deterministic fetch, the situation for the new `top` would look like
       # ::
       #    ---------|                          unproc pool
       #              |-------|                 block interval to fetch next
@@ -133,8 +136,7 @@ proc headersStagedCollect*(
         unprocTop=ctx.headersUnprocAvailTop.bnStr, D=ctx.dangling.bnStr,
         nDeterministic, nStaged=ctx.hdr.staged.len, ctrl=buddy.ctrl.state
 
-      # Buddy might have been cancelled while downloading headers. Still
-      # bookkeeping (aka commiting unused `iv`) needed to proceed.
+      # Buddy might have been cancelled while downloading headers.
       if buddy.ctrl.stopped:
         break fetchHeadersBody
 
@@ -264,7 +266,7 @@ proc headersStagedProcess*(buddy: BeaconBuddyRef; info: static[string]) =
     ctx.poolMode = true
 
   debug info & ": headers serialised and stored", peer, D=ctx.dangling.bnStr,
-    nProcessed, nStagedLists=ctx.hdr.staged.len, nSyncPeers=ctx.pool.nBuddies,
+    nProcessed, nStaged=ctx.hdr.staged.len, nSyncPeers=ctx.pool.nBuddies,
     reorgReq=ctx.poolMode
 
 
