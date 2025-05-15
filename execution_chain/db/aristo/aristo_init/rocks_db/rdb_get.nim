@@ -203,6 +203,16 @@ proc getVtx*(
       )
       return ok(move(rc.value))
 
+  block:
+    var rc =
+      if GetVtxFlag.PeekCache in flags:
+        rdb.rdEmptyLru.peek(rvid.vid)
+      else:
+        rdb.rdEmptyLru.get(rvid.vid)
+    if rc.isOk():
+      rdbVtxLruStats[rvid.to(RdbStateType)][RdbVertexType.Empty].inc(true)
+      return ok(VertexRef(nil))
+
   # Otherwise fetch from backend database
   # A threadvar is used to avoid allocating an environment for onData
   var res {.threadvar.}: Result[VertexRef, AristoError]
@@ -217,6 +227,9 @@ proc getVtx*(
 
   if not gotData:
     rdbVtxLruStats[rvid.to(RdbStateType)][RdbVertexType.Empty].inc(false)
+    if GetVtxFlag.PeekCache notin flags:
+      rdb.rdEmptyLru.put(rvid.vid, default(tuple[]))
+
     return ok(VertexRef(nil))
 
   if res.isErr():
