@@ -15,7 +15,7 @@ import
   eth/common/accounts,
   web3/eth_api,
   ../validate_proof,
-  ../block_cache
+  ../header_store
 
 logScope:
   topics = "verified_proxy"
@@ -23,7 +23,7 @@ logScope:
 type
   VerifiedRpcProxy* = ref object
     proxy: RpcProxy
-    blockCache: BlockCache
+    headerStore: HeaderStore
     chainId: UInt256
 
   QuantityTagKind = enum
@@ -39,143 +39,12 @@ type
     of BlockNumber:
       blockNumber: Quantity
 
-func parseQuantityTag(blockTag: BlockTag): Result[QuantityTag, string] =
-  if blockTag.kind == bidAlias:
-    let tag = blockTag.alias.toLowerAscii
-    case tag
-    of "latest":
-      return ok(QuantityTag(kind: LatestBlock))
-    else:
-      return err("Unsupported blockTag: " & tag)
-  else:
-    let quantity = blockTag.number
-    return ok(QuantityTag(kind: BlockNumber, blockNumber: quantity))
-
-template checkPreconditions(proxy: VerifiedRpcProxy) =
-  if proxy.blockCache.isEmpty():
-    raise newException(ValueError, "Syncing")
-
-template rpcClient(lcProxy: VerifiedRpcProxy): RpcClient =
+template rpcClient*(lcProxy: VerifiedRpcProxy): RpcClient =
   lcProxy.proxy.getClient()
-
-proc getBlockByTag(
-    proxy: VerifiedRpcProxy, quantityTag: BlockTag
-): results.Opt[BlockObject] {.raises: [ValueError].} =
-  checkPreconditions(proxy)
-
-  let tag = parseQuantityTag(quantityTag).valueOr:
-    raise newException(ValueError, error)
-
-  case tag.kind
-  of LatestBlock:
-    # this will always return some block, as we always checkPreconditions
-    proxy.blockCache.latest
-  of BlockNumber:
-    proxy.blockCache.getByNumber(tag.blockNumber)
-
-proc getBlockByTagOrThrow(
-    proxy: VerifiedRpcProxy, quantityTag: BlockTag
-): BlockObject {.raises: [ValueError].} =
-  getBlockByTag(proxy, quantityTag).valueOr:
-    raise newException(ValueError, "No block stored for given tag " & $quantityTag)
 
 proc installEthApiHandlers*(lcProxy: VerifiedRpcProxy) =
   lcProxy.proxy.rpc("eth_chainId") do() -> UInt256:
     lcProxy.chainId
-
-  lcProxy.proxy.rpc("eth_blockNumber") do() -> uint64:
-    ## Returns the number of the most recent block.
-    let latest = lcProxy.blockCache.latest.valueOr:
-      raise newException(ValueError, "Syncing")
-
-    latest.number.uint64
-
-  lcProxy.proxy.rpc("eth_getBalance") do(
-    address: Address, quantityTag: BlockTag
-  ) -> UInt256:
-    # When requesting state for `latest` block number, we need to translate
-    # `latest` to actual block number as `latest` on proxy and on data provider
-    # can mean different blocks and ultimatly piece received piece of state
-    # must by validated against correct state root
-    let
-      blk = lcProxy.getBlockByTagOrThrow(quantityTag)
-      blockNumber = blk.number.uint64
-
-    info "Forwarding eth_getBalance call", blockNumber
-
-    let
-      proof = await lcProxy.rpcClient.eth_getProof(address, @[], blockId(blockNumber))
-      account = getAccountFromProof(
-        blk.stateRoot, proof.address, proof.balance, proof.nonce, proof.codeHash,
-        proof.storageHash, proof.accountProof,
-      ).valueOr:
-        raise newException(ValueError, error)
-
-    account.balance
-
-  lcProxy.proxy.rpc("eth_getStorageAt") do(
-    address: Address, slot: UInt256, quantityTag: BlockTag
-  ) -> UInt256:
-    let
-      blk = lcProxy.getBlockByTagOrThrow(quantityTag)
-      blockNumber = blk.number.uint64
-
-    info "Forwarding eth_getStorageAt", blockNumber
-
-    let proof =
-      await lcProxy.rpcClient.eth_getProof(address, @[slot], blockId(blockNumber))
-
-    getStorageData(blk.stateRoot, slot, proof).valueOr:
-      raise newException(ValueError, error)
-
-  lcProxy.proxy.rpc("eth_getTransactionCount") do(
-    address: Address, quantityTag: BlockTag
-  ) -> uint64:
-    let
-      blk = lcProxy.getBlockByTagOrThrow(quantityTag)
-      blockNumber = blk.number.uint64
-
-    info "Forwarding eth_getTransactionCount", blockNumber
-
-    let
-      proof = await lcProxy.rpcClient.eth_getProof(address, @[], blockId(blockNumber))
-
-      account = getAccountFromProof(
-        blk.stateRoot, proof.address, proof.balance, proof.nonce, proof.codeHash,
-        proof.storageHash, proof.accountProof,
-      ).valueOr:
-        raise newException(ValueError, error)
-
-    account.nonce
-
-  lcProxy.proxy.rpc("eth_getCode") do(
-    address: Address, quantityTag: BlockTag
-  ) -> seq[byte]:
-    let
-      blk = lcProxy.getBlockByTagOrThrow(quantityTag)
-      blockNumber = blk.number.uint64
-
-    info "Forwarding eth_getCode", blockNumber
-    let
-      proof = await lcProxy.rpcClient.eth_getProof(address, @[], blockId(blockNumber))
-      account = getAccountFromProof(
-        blk.stateRoot, proof.address, proof.balance, proof.nonce, proof.codeHash,
-        proof.storageHash, proof.accountProof,
-      ).valueOr:
-        raise newException(ValueError, error)
-
-    if account.codeHash == EMPTY_CODE_HASH:
-      # account does not have any code, return empty hex data
-      return @[]
-
-    let code = await lcProxy.rpcClient.eth_getCode(address, blockId(blockNumber))
-
-    if isValidCode(account, code):
-      return code
-    else:
-      raise newException(
-        ValueError, "Received code which does not match the account code hash"
-      )
 
   # TODO:
   # Following methods are forwarded directly to the web3 provider and therefore
@@ -185,22 +54,11 @@ proc installEthApiHandlers*(lcProxy: VerifiedRpcProxy) =
   lcProxy.proxy.registerProxyMethod("eth_sendRawTransaction")
   lcProxy.proxy.registerProxyMethod("eth_getTransactionReceipt")
 
-  # TODO currently we do not handle fullTransactions flag. It require updates on
-  # nim-web3 side
-  lcProxy.proxy.rpc("eth_getBlockByNumber") do(
-    quantityTag: BlockTag, fullTransactions: bool
-  ) -> Opt[BlockObject]:
-    lcProxy.getBlockByTag(quantityTag)
-
-  lcProxy.proxy.rpc("eth_getBlockByHash") do(
-    blockHash: Hash32, fullTransactions: bool
-  ) -> Opt[BlockObject]:
-    lcProxy.blockCache.getPayloadByHash(blockHash)
 
 proc new*(
-    T: type VerifiedRpcProxy, proxy: RpcProxy, blockCache: BlockCache, chainId: UInt256
+    T: type VerifiedRpcProxy, proxy: RpcProxy, headerStore: HeaderStore, chainId: UInt256
 ): T =
-  VerifiedRpcProxy(proxy: proxy, blockCache: blockCache, chainId: chainId)
+  VerifiedRpcProxy(proxy: proxy, headerStore: headerStore, chainId: chainId)
 
 # Used to be in eth1_monitor.nim; not sure why it was deleted,
 # so I copied it here. --Adam
