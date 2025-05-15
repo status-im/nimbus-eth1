@@ -159,6 +159,14 @@ func blocksStagedCanImportOk*(ctx: BeaconCtxRef): bool =
       if ctx.pool.nBuddies == 0:
         return true
 
+      # If the last peer is labelled `slow` it will be ignored for the sake
+      # of deciding whether to execute blocks.
+      #
+      # As a consequence, the syncer will import blocks immediately allowing
+      # the syncer to collect more sync peers.
+      if ctx.pool.nBuddies == 1 and ctx.pool.blkLastSlowPeer.isSome:
+        return true
+
       # If importing starts while peers are actively downloading, the system
       # tends to loose download peers, most probably due to high system
       # activity.

@@ -37,7 +37,7 @@ type
     contentDB*: ContentDB
     contentQueue*: AsyncQueue[(Opt[NodeId], ContentKeysList, seq[seq[byte]])]
     cfg*: RuntimeConfig
-    accumulators*: HistoryAccumulators
+    verifier*: HeaderVerifier
     processContentLoop: Future[void]
     statusLogLoop: Future[void]
     contentRequestRetries: int
@@ -147,7 +147,7 @@ proc getVerifiedBlockHeader*(
         return Opt.none(Header)
 
       header = validateCanonicalHeaderBytes(
-        headerContent.content, id, n.accumulators, n.cfg
+        headerContent.content, id, n.verifier, n.cfg
       ).valueOr:
         n.portalProtocol.banNode(
           headerContent.receivedFrom.id, NodeBanDurationContentLookupFailedValidation
@@ -306,7 +306,7 @@ proc validateContent(
   case contentKey.contentType
   of blockHeader:
     let _ = validateCanonicalHeaderBytes(
-      content, contentKey.blockHeaderKey.blockHash, n.accumulators, n.cfg
+      content, contentKey.blockHeaderKey.blockHash, n.verifier, n.cfg
     ).valueOr:
       return err("Failed validating block header: " & error)
 
@@ -329,7 +329,7 @@ proc validateContent(
     ok()
   of blockNumber:
     let _ = validateCanonicalHeaderBytes(
-      content, contentKey.blockNumberKey.blockNumber, n.accumulators, n.cfg
+      content, contentKey.blockNumberKey.blockNumber, n.verifier, n.cfg
     ).valueOr:
       return err("Failed validating block header: " & error)
 
@@ -348,6 +348,7 @@ proc new*(
     cfg: RuntimeConfig,
     accumulator: FinishedHistoricalHashesAccumulator = loadAccumulator(),
     historicalRoots: HistoricalRoots = loadHistoricalRoots(),
+    beaconDbCache: BeaconDbCache = BeaconDbCache(),
     bootstrapRecords: openArray[Record] = [],
     portalConfig: PortalProtocolConfig = defaultPortalProtocolConfig,
     contentRequestRetries = 1,
@@ -376,8 +377,10 @@ proc new*(
     contentDB: contentDB,
     contentQueue: contentQueue,
     cfg: cfg,
-    accumulators: HistoryAccumulators(
-      historicalHashes: accumulator, historicalRoots: historicalRoots
+    verifier: HeaderVerifier(
+      historicalHashes: accumulator,
+      historicalRoots: historicalRoots,
+      beaconDbCache: beaconDbCache,
     ),
     contentRequestRetries: contentRequestRetries,
   )
@@ -441,8 +444,8 @@ proc statusLogLoop(n: HistoryNetwork) {.async: (raises: []).} =
 proc start*(n: HistoryNetwork) =
   info "Starting Portal execution history network",
     protocolId = n.portalProtocol.protocolId,
-    historicalHashesAccumulatorRoot = hash_tree_root(n.accumulators.historicalHashes),
-    historiricalRootsRoot = hash_tree_root(n.accumulators.historicalRoots)
+    historicalHashesAccumulatorRoot = hash_tree_root(n.verifier.historicalHashes),
+    historicalRootsRoot = hash_tree_root(n.verifier.historicalRoots)
 
   n.portalProtocol.start()
 
