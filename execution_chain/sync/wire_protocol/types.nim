@@ -13,7 +13,7 @@
 import
   eth/common,
   ../../core/[chain, tx_pool]
-  
+
 type
   NewBlockHashesAnnounce* = object
     hash*: Hash32
@@ -23,16 +23,26 @@ type
     forkHash*: array[4, byte] # The RLP encoding must be exactly 4 bytes.
     forkNext*: uint64         # The RLP encoding must be variable-length
 
-  EthState* = object
+  Eth68State* = object
     totalDifficulty*: DifficultyInt
     genesisHash*: Hash32
     bestBlockHash*: Hash32
     forkId*: ChainForkId
 
+  Eth69State* = object
+    genesisHash*: Hash32
+    forkId*: ChainForkId
+    earliest*: uint64
+    latest*: uint64
+    latestHash*: Hash32
+
   EthPeerState* = ref object of RootRef
     initialized*: bool
-    bestBlockHash*: Hash32
-    bestDifficulty*: DifficultyInt
+
+  Eth69PeerState* = ref object of EthPeerState
+    earliest*: uint64
+    latest*: uint64
+    latestHash*: Hash32
 
   BlockHeadersRequest* = object
     startBlock*: BlockHashOrNumber
@@ -51,4 +61,3 @@ type
   EthWireRef* = ref object of RootRef
     chain* : ForkedChainRef
     txPool*: TxPoolRef
-    

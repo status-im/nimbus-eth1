@@ -94,8 +94,15 @@ proc startBuddy*(buddy: BeaconBuddyRef): bool =
   let
     ctx = buddy.ctx
     peer = buddy.peer
-  if peer.supports(wire_protocol.eth) and
-     peer.state(wire_protocol.eth).initialized:
+
+  if peer.supports(eth69) and
+     peer.state(eth69).initialized:
+    ctx.pool.nBuddies.inc
+    buddy.initHdrProcErrors()
+    return true
+
+  if peer.supports(eth68) and
+     peer.state(eth68).initialized:
     ctx.pool.nBuddies.inc
     ctx.pool.blkLastSlowPeer = Opt.none(Hash)
     buddy.initHdrProcErrors()
