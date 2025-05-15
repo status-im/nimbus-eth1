@@ -54,9 +54,11 @@ proc installEthApiHandlers*(lcProxy: VerifiedRpcProxy) =
   lcProxy.proxy.registerProxyMethod("eth_sendRawTransaction")
   lcProxy.proxy.registerProxyMethod("eth_getTransactionReceipt")
 
-
 proc new*(
-    T: type VerifiedRpcProxy, proxy: RpcProxy, headerStore: HeaderStore, chainId: UInt256
+    T: type VerifiedRpcProxy,
+    proxy: RpcProxy,
+    headerStore: HeaderStore,
+    chainId: UInt256,
 ): T =
   VerifiedRpcProxy(proxy: proxy, headerStore: headerStore, chainId: chainId)
 
