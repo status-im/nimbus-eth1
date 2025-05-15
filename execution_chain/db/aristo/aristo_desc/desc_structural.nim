@@ -90,8 +90,9 @@ type
       ## unfriendly to caches
 
 const
-  Leaves* = {AccLeaf, StoLeaf}
-  Branches* = {Branch, ExtBranch}
+  Leaves* = {VertexType.AccLeaf, VertexType.StoLeaf}
+  Branches* = {VertexType.Branch, VertexType.ExtBranch}
+  VertexTypes* = Leaves + Branches
 
 # ------------------------------------------------------------------------------
 # Public helpers (misc)
