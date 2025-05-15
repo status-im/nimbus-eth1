@@ -18,7 +18,6 @@ import
   ../execution_chain/[constants, transaction, config, version],
   ../execution_chain/db/[ledger, storage_types],
   ../execution_chain/sync/wire_protocol,
-  ../execution_chain/portal/portal,
   ../execution_chain/core/[tx_pool, chain, pow/difficulty],
   ../execution_chain/utils/utils,
   ../execution_chain/[common, rpc],
@@ -30,8 +29,6 @@ import
    ./test_block_fixture
 
 type
-  Hash32 = common.Hash32
-
   TestEnv = object
     conf     : NimbusConf
     com      : CommonRef
@@ -194,7 +191,7 @@ proc setupEnv(envFork: HardFork = MergeFork): TestEnv =
     serverApi = newServerAPI(txPool)
     client = setupClient(server.localAddress[0].port)
     ctx    = newEthContext()
-    node   = setupEthNode(conf, ctx, eth)
+    node   = setupEthNode(conf, ctx, eth68, eth69)
 
   ctx.am.loadKeystores(keyStore).isOkOr:
     debugEcho error

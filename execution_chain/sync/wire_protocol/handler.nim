@@ -44,14 +44,14 @@ proc new*(_: type EthWireRef,
 # Public functions: eth wire protocol handlers
 # ------------------------------------------------------------------------------
 
-proc getStatus*(ctx: EthWireRef): EthState =
+proc getStatus68*(ctx: EthWireRef): Eth68State =
   let
     com = ctx.chain.com
     bestBlock = ctx.chain.latestHeader
     txFrame = ctx.chain.baseTxFrame
     forkId = com.forkId(bestBlock.number, bestBlock.timestamp)
 
-  EthState(
+  Eth68State(
     totalDifficulty: txFrame.headTotalDifficulty,
     genesisHash: com.genesisHash,
     bestBlockHash: bestBlock.computeBlockHash,
@@ -59,6 +59,23 @@ proc getStatus*(ctx: EthWireRef): EthState =
       forkHash: forkId.crc.toBytesBE,
       forkNext: forkId.nextFork
   ))
+
+proc getStatus69*(ctx: EthWireRef): Eth69State =
+  let
+    com = ctx.chain.com
+    bestBlock = ctx.chain.latestHeader
+    forkId = com.forkId(bestBlock.number, bestBlock.timestamp)
+
+  Eth69State(
+    genesisHash: com.genesisHash,
+    forkId: ChainForkId(
+      forkHash: forkId.crc.toBytesBE,
+      forkNext: forkId.nextFork
+    ),
+    earliest: 0,
+    latest: bestBlock.number,
+    latestHash: bestBlock.computeBlockHash,
+  )
 
 proc getReceipts*(ctx: EthWireRef,
                   hashes: openArray[Hash32]):
@@ -73,6 +90,26 @@ proc getReceipts*(ctx: EthWireRef,
 
     totalBytes += getEncodedLength(receiptList)
     list.add(move(receiptList))
+
+    if list.len >= MAX_RECEIPTS_SERVE or
+       totalBytes > SOFT_RESPONSE_LIMIT:
+      break
+
+  move(list)
+
+proc getStoredReceipts*(ctx: EthWireRef,
+                  hashes: openArray[Hash32]):
+                    seq[seq[StoredReceipt]] =
+  var
+    list: seq[seq[StoredReceipt]]
+    totalBytes = 0
+
+  for blockHash in hashes:
+    var receiptList = ctx.chain.receiptsByBlockHash(blockHash).valueOr:
+      continue
+
+    totalBytes += getEncodedLength(receiptList)
+    list.add(receiptList.to(seq[StoredReceipt]))
 
     if list.len >= MAX_RECEIPTS_SERVE or
        totalBytes > SOFT_RESPONSE_LIMIT:
@@ -127,7 +164,7 @@ proc getBlockBodies*(ctx: EthWireRef,
       if blk.header.number > ctx.chain.portal.limit:
         trace "handlers.getBlockBodies: blockBody older than expiry limit", blockHash
         continue
-    
+
     totalBytes += getEncodedLength(blk.body)
     list.add blk.body
 
@@ -152,10 +189,10 @@ proc getBlockHeaders*(ctx: EthWireRef,
   # EIP-4444 limit
   if chain.isHistoryExpiryActive:
     if req.reverse:
-      if req.startBlock.number > chain.portal.limit:
+      if header.number > chain.portal.limit:
         return move(list)
     else:
-      if req.startBlock.number + req.maxResults > chain.portal.limit:
+      if header.number + req.maxResults > chain.portal.limit:
         return move(list)
 
   totalBytes += getEncodedLength(header)

@@ -88,7 +88,8 @@ import
   chronos,
   ../networking/[p2p, peer_pool],
   stew/keyed_queue,
-  ./sync_desc
+  ./sync_desc,
+  ./wire_protocol
 
 type
   ActiveBuddies[S,W] = ##\
@@ -503,8 +504,10 @@ proc startSync*[S,W](dsc: RunnerSyncRef[S,W]): bool =
         onPeerDisconnected: proc(p: Peer) {.gcsafe.} =
           dsc.onPeerDisconnected(p))
 
-      po.setProtocol eth
+      po.addProtocol eth68
+      po.addProtocol eth69
       dsc.pool.addObserver(dsc, po)
+
       asyncSpawn dsc.tickerLoop()
       return true
 

@@ -18,6 +18,3 @@ export
   responder,
   types,
   setup
-
-type
-  eth* = eth68

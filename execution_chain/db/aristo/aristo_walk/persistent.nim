@@ -34,7 +34,7 @@ export
 iterator walkVtxBe*[T: RdbBackendRef](
    _: type T;
    db: AristoDbRef;
-   kinds = {Branch, ExtBranch, AccLeaf, StoLeaf};
+   kinds = VertexTypes;
      ): tuple[rvid: RootedVertexID, vtx: VertexRef] =
   ## Iterate over RocksDB backend vertices. This function depends on
   ## the particular backend type name which must match the backend descriptor.

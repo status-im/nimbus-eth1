@@ -134,6 +134,11 @@ proc new*(
             streamManager,
             networkData.metadata.cfg,
             accumulator,
+            beaconDbCache =
+              if beaconNetwork.isSome():
+                beaconNetwork.value().beaconDb.beaconDbCache
+              else:
+                BeaconDbCache(),
             bootstrapRecords = bootstrapRecords,
             portalConfig = config.portalConfig,
             contentRequestRetries = config.contentRequestRetries,
