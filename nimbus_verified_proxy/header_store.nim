@@ -84,7 +84,7 @@ func new*(T: type HeaderStore, max: int): T =
   HeaderStore(
     headers: LruCache[Hash32, Header].init(max),
     hashes: LruCache[base.BlockNumber, Hash32].init(max),
-    capacity: max
+    capacity: max,
   )
 
 func len*(self: HeaderStore): int =
@@ -105,19 +105,19 @@ proc add*(self: HeaderStore, header: ForkedLightClientHeader) =
         self.headers.put(execHash, execHeader)
         self.hashes.put(execHeader.number, execHash)
 
-proc latest*(self: HeaderStore): Opt[Header] =
+func latest*(self: HeaderStore): Opt[Header] =
   for h in self.headers.values:
     return Opt.some(h)
 
   Opt.none(Header)
 
-proc latestHash*(self: HeaderStore): Opt[Hash32] =
+func latestHash*(self: HeaderStore): Opt[Hash32] =
   for hash in self.headers.keys:
     return Opt.some(hash)
 
   Opt.none(Hash32)
 
-proc earliest*(self: HeaderStore): Opt[Header] =
+func earliest*(self: HeaderStore): Opt[Header] =
   if self.headers.len() == 0:
     return Opt.none(Header)
 
@@ -127,7 +127,7 @@ proc earliest*(self: HeaderStore): Opt[Header] =
 
   self.headers.peek(hash)
 
-proc earliestHash*(self: HeaderStore): Opt[Hash32] =
+func earliestHash*(self: HeaderStore): Opt[Hash32] =
   if self.headers.len() == 0:
     return Opt.none(Hash32)
 
@@ -137,11 +137,11 @@ proc earliestHash*(self: HeaderStore): Opt[Hash32] =
 
   Opt.some(hash)
 
-proc get*(self: HeaderStore, number: base.BlockNumber): Opt[Header] =
+func get*(self: HeaderStore, number: base.BlockNumber): Opt[Header] =
   let hash = self.hashes.peek(number).valueOr:
     return Opt.none(Header)
 
   return self.headers.peek(hash)
 
-proc get*(self: HeaderStore, hash: Hash32): Opt[Header] =
+func get*(self: HeaderStore, hash: Hash32): Opt[Header] =
   self.headers.peek(hash)
