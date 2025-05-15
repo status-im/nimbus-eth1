@@ -195,10 +195,14 @@ proc runPeer*(
       # Collect headers and either stash them on the header chain cache
       # directly, or stage on the header queue to get them serialised and
       # stashed, later.
-      if await buddy.headersStagedCollect info:
+      await buddy.headersStagedCollect info
 
-        # Store headers from the `staged` queue onto the header chain cache.
-        buddy.headersStagedProcess info
+      # Store serialised headers from the `staged` queue onto the header
+      # chain cache.
+      if not buddy.headersStagedProcess info:
+        # Need to proceed with another peer (e.g. gap between queue and
+        # header chain cache.)
+        break
 
     # Fetch bodies and combine them with headers to blocks to be staged. These
     # staged blocks are then excuted by the daemon process (no `peer` needed.)

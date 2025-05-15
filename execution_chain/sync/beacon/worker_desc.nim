@@ -71,6 +71,7 @@ type
     unprocessed*: BnRangeSet         ## Block or header ranges to fetch
     borrowed*: BnRangeSet            ## Fetched/locked ranges
     staged*: LinkedHChainQueue       ## Blocks fetched but not stored yet
+    reserveStaged*: int              ## Pre-book staged slot temporarily
 
   BlocksFetchSync* = object
     ## Block sync staging area
