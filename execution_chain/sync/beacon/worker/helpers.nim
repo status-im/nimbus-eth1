@@ -54,7 +54,7 @@ func toStr*(h: Hash32): string =
   else: h.short
 
 
-proc `$`*(w: Interval[BlockNumber,uint64]): string =
+func `$`*(w: Interval[BlockNumber,uint64]): string =
   w.bnStr
 
 # End

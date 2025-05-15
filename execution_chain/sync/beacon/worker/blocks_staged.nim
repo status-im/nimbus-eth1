@@ -20,13 +20,6 @@ import
   ./[blocks_unproc, helpers, update]
 
 # ------------------------------------------------------------------------------
-# Private debugging & logging helpers
-# ------------------------------------------------------------------------------
-
-formatIt(Hash32):
-  it.short
-
-# ------------------------------------------------------------------------------
 # Private helpers
 # ------------------------------------------------------------------------------
 
@@ -271,7 +264,7 @@ proc blocksStagedCollect*(
 
         if ctx.pool.seenData:
           trace info & ": current blocks discarded", peer, iv, ivReq,
-            nStaged=ctx.blk.staged.len, ctrl=buddy.ctrl.state,
+            nStagedQ=ctx.blk.staged.len, ctrl=buddy.ctrl.state,
             bdyErrors=buddy.bdyErrors
         else:
           # Collect peer for detecting cul-de-sac syncing (i.e. non-existing
@@ -325,7 +318,7 @@ proc blocksStagedCollect*(
     buddy.only.nBdyProcErrors = 0
 
   info "Downloaded blocks", iv=blk.blocks.bnStr,
-    nBlocks=blk.blocks.len, nStaged=ctx.blk.staged.len,
+    nBlocks=blk.blocks.len, nStagedQ=ctx.blk.staged.len,
     nSyncPeers=ctx.pool.nBuddies
 
   return true
@@ -359,7 +352,7 @@ proc blocksStagedImport*(
 
   info "Importing blocks", iv, nBlocks,
     base=ctx.chain.baseNumber.bnStr, head=ctx.chain.latestNumber.bnStr,
-    target=ctx.head.bnStr
+    target=ctx.head.bnStr, targetHash=ctx.headHash.short
 
   var maxImport = iv.maxPt                         # tentatively assume all ok
   block importLoop:
@@ -401,7 +394,7 @@ proc blocksStagedImport*(
   info "Import done", iv=(iv.minPt, maxImport).bnStr,
     nBlocks=(maxImport-iv.minPt+1), nFailed=(iv.maxPt-maxImport),
     base=ctx.chain.baseNumber.bnStr, head=ctx.chain.latestNumber.bnStr,
-    target=ctx.head.bnStr
+    target=ctx.head.bnStr, targetHash=ctx.headHash.short
 
   return true
 
@@ -429,7 +422,7 @@ proc blocksStagedReorg*(ctx: BeaconCtxRef; info: static[string]) =
 
   # Reset block queues
   debug info & ": Flushing block queues", nUnproc=ctx.blocksUnprocTotal(),
-    nStaged=ctx.blk.staged.len, nReorg=ctx.pool.nReorg
+    nStagedQ=ctx.blk.staged.len, nReorg=ctx.pool.nReorg
 
   ctx.blocksUnprocClear()
   ctx.blk.staged.clear()

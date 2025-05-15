@@ -207,7 +207,7 @@ proc updateSyncState*(ctx: BeaconCtxRef; info: static[string]) =
 
   info "Sync state changed", prevState, thisState,
     base=ctx.chain.baseNumber.bnStr, head=ctx.chain.latestNumber.bnStr,
-    target=ctx.head.bnStr
+    target=ctx.head.bnStr, targetHash=ctx.headHash.short
 
   # Final sync scrum layout reached or inconsistent/impossible state
   if thisState == idleSyncState:
@@ -231,8 +231,8 @@ proc updateFromHibernateSetTarget*(
       # Update range
       ctx.headersUnprocSet(b+1, t-1)
 
-      info "Activating syncer", base=b.bnStr,
-        head=ctx.chain.latestNumber.bnStr, target=t.bnStr,
+      info "Activating syncer", base=b.bnStr, head=ctx.chain.latestNumber.bnStr,
+        target=t.bnStr, targetHash=ctx.headHash.short,
         nSyncPeers=ctx.pool.nBuddies
       return
 

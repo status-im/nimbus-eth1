@@ -82,7 +82,7 @@ func bnStr*(w: LinkedHChain | ref LinkedHChain): string =
 # ------------------------------------------------------------------------------
 
 func collectModeStopped*(ctx: BeaconCtxRef): bool =
-  ## Hepler, checks whether there is a general stop conditions based on
+  ## Helper, checks whether there is a general stop conditions based on
   ## state settings (not on sync peer ctrl as `buddy.ctrl.running`.)
   ctx.poolMode or
   ctx.pool.lastState != collectingHeaders or

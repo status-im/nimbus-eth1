@@ -95,18 +95,17 @@ proc startBuddy*(buddy: BeaconBuddyRef): bool =
     ctx = buddy.ctx
     peer = buddy.peer
 
-  if peer.supports(eth69) and
-     peer.state(eth69).initialized:
-    ctx.pool.nBuddies.inc
-    buddy.initHdrProcErrors()
-    return true
+  template acceptProto(PROTO: type): bool =
+    peer.supports(PROTO) and
+    peer.state(PROTO).initialized
 
-  if peer.supports(eth68) and
-     peer.state(eth68).initialized:
+  if acceptProto(eth69) or
+     acceptProto(eth68):
     ctx.pool.nBuddies.inc
     ctx.pool.blkLastSlowPeer = Opt.none(Hash)
     buddy.initHdrProcErrors()
     return true
+
 
 proc stopBuddy*(buddy: BeaconBuddyRef) =
   buddy.ctx.pool.nBuddies.dec

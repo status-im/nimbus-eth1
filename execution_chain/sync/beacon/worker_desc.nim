@@ -138,6 +138,10 @@ func head*(ctx: BeaconCtxRef): Header =
   ## Shortcut
   ctx.hdrCache.head()
 
+func headHash*(ctx: BeaconCtxRef): Hash32 =
+  ## Shortcut
+  ctx.hdrCache.headHash()
+
 func dangling*(ctx: BeaconCtxRef): Header =
   ## Shortcut
   ctx.hdrCache.antecedent()
