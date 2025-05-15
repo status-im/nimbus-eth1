@@ -19,13 +19,23 @@ import
   ../../networking/p2p_types
 
 type
-  StatusPacket* = object
-    ethVersion*: uint64
+  Status68Packet* = object
+    version*: uint64
     networkId*: NetworkId
     totalDifficulty*: DifficultyInt
     bestHash*: Hash32
     genesisHash*: Hash32
     forkId*: ChainForkId
+
+  # https://github.com/ethereum/devp2p/blob/b0c213de97978053a0f62c3ea4d23c0a3d8784bc/caps/eth.md#status-0x00
+  Status69Packet* = object
+    version*: uint64
+    networkId*: NetworkId
+    genesisHash*: Hash32
+    forkId*: ChainForkId
+    earliest*: uint64 # earliest available full block
+    latest*: uint64 # latest available full block
+    latestHash*: Hash32 # hash of latest available full block
 
   BlockHeadersPacket* = object
     headers*: seq[Header]
@@ -96,6 +106,14 @@ type
 
   ReceiptsRequest* = object
     blockHashes*: seq[Hash32]
+
+  StoredReceiptsPacket* = object
+    receipts*: seq[seq[StoredReceipt]]
+
+  BlockRangeUpdatePacket* = object
+    earliest*: uint64
+    latest*: uint64
+    latestHash*: Hash32
 
   SeenObject* = ref object
     lastSeen*: Time
