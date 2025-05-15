@@ -374,6 +374,11 @@ proc supports*(peer: Peer, Protocol: type): bool =
   ## Checks whether a Peer supports a particular protocol
   peer.supports(Protocol.protocolInfo)
 
+proc supports*(peer: Peer, protos: openArray[ProtocolInfo]): bool =
+  for proto in protos:
+    if peer.supports(proto):
+      return true
+
 template perPeerMsgId(peer: Peer, MsgType: type): uint64 =
   perPeerMsgIdImpl(peer, MsgType.msgProtocol.protocolInfo, MsgType.msgId)
 
@@ -990,7 +995,7 @@ proc removePeer(network: EthereumNode, peer: Peer) =
     if not peer.dispatcher.isNil:
       for observer in network.peerPool.observers.values:
         if not observer.onPeerDisconnected.isNil:
-          if observer.protocol.isNil or peer.supports(observer.protocol):
+          if observer.protocols.len == 0 or peer.supports(observer.protocols):
             observer.onPeerDisconnected(peer)
 
 proc callDisconnectHandlers(
@@ -1566,6 +1571,26 @@ template rlpxWithFutureHandler*(PROTO: distinct type;
     resolveResponseFuture(peer,
       perPeerMsgId, addr(packet), reqId)
 
+template rlpxWithFutureHandler*(PROTO: distinct type;
+                        MSGTYPE: distinct type;
+                        PROTYPE: distinct type;
+                        msgId: static[uint64];
+                        peer: Peer;
+                        data: Rlp,
+                        fields: untyped): untyped =
+  wrapRlpxWithPacketException(MSGTYPE, peer):
+    var
+      rlp = data
+      packet: MSGTYPE
+
+    tryEnterList(rlp)
+    let
+      reqId = read(rlp, uint64)
+      perPeerMsgId = msgIdImpl(PROTO, peer, msgId)
+    checkedRlpFields(peer, rlp, packet, fields)
+    var proType = packet.to(PROTYPE)
+    resolveResponseFuture(peer,
+      perPeerMsgId, addr(proType), reqId)
 
 proc nextMsg*(PROTO: distinct type,
               peer: Peer,
@@ -1604,6 +1629,9 @@ func initResponder*(peer: Peer, reqId: uint64): Responder =
 template state*(response: Responder, PROTO: type): auto =
   state(response.peer, PROTO)
 
+template supports*(response: Responder, Protocol: type): bool =
+  response.peer.supports(Protocol.protocolInfo)
+
 template networkState*(response: Responder, PROTO: type): auto =
   networkState(response.peer, PROTO)
 
@@ -1626,6 +1654,9 @@ template defineProtocol*(PROTO: untyped,
 
   template NetworkState*(_: type PROTO): type =
     networkState
+
+  template protocolVersion*(_: type PROTO): int =
+    version
 
   func initProtocol*(_: type PROTO): auto =
     initProtocol(rlpxName,

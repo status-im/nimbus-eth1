@@ -73,6 +73,12 @@ type
     Account
     World
 
+  RdbVertexType* = enum
+    Empty
+    Leaf
+    Branch
+    ExtBranch
+
 var
   # Hit/miss counters for LRU cache - global so as to integrate easily with
   # nim-metrics and `uint64` to ensure that increasing them is fast - collection
@@ -80,7 +86,7 @@ var
   # TODO maybe turn this into more general framework for LRU reporting since
   #      we have lots of caches of this sort
   rdbBranchLruStats*: array[RdbStateType, RdbLruCounter]
-  rdbVtxLruStats*: array[RdbStateType, array[VertexType, RdbLruCounter]]
+  rdbVtxLruStats*: array[RdbStateType, array[RdbVertexType, RdbLruCounter]]
   rdbKeyLruStats*: array[RdbStateType, RdbLruCounter]
 
 # ------------------------------------------------------------------------------
@@ -92,6 +98,12 @@ template toOpenArray*(xid: AdminTabID): openArray[byte] =
 
 template to*(v: RootedVertexID, T: type RdbStateType): RdbStateType =
   if v.root == VertexID(1): RdbStateType.World else: RdbStateType.Account
+
+template to*(v: VertexType, T: type RdbVertexType): RdbVertexType =
+  case v
+  of VertexType.AccLeaf, VertexType.StoLeaf: RdbVertexType.Leaf
+  of VertexType.Branch: RdbVertexType.Branch
+  of VertexType.ExtBranch: RdbVertexType.ExtBranch
 
 template inc*(v: var RdbLruCounter, hit: bool) =
   discard v[hit].fetchAdd(1, moRelaxed)

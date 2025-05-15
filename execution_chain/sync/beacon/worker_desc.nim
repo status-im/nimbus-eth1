@@ -12,8 +12,7 @@
 
 import
   std/sets,
-  pkg/chronos,
-  pkg/eth/common,
+  pkg/[chronos, eth/common, results],
   pkg/stew/[interval_set, sorted_set],
   ../../core/chain,
   ../sync_desc,
@@ -113,6 +112,7 @@ type
     # Info, debugging, and error handling stuff
     nReorg*: int                     ## Number of reorg invocations (info only)
     hdrProcError*: Table[Hash,uint8] ## Some globally accessible header errors
+    blkLastSlowPeer*: Opt[Hash]      ## Register slow peer when last one
     failedPeers*: HashSet[Hash]      ## Detect dead end sync by collecting peers
     seenData*: bool                  ## Set `true` is data were fetched, already
 
@@ -185,13 +185,6 @@ proc `hibernate=`*(ctx: BeaconCtxRef; val: bool) =
   ctx.noisyLog = not val
 
 # -----
-
-func infectedByTVirus*(buddy: BeaconBuddyRef): bool =
-  ## T-Virus: A series of mutant Progenitor virus strains developed
-  ## by Umbrella Corporation.
-  ## Keep the sole survivor of virus outbreak, we still can sync
-  ## from it even though it has become mindless.
-  buddy.ctx.pool.nBuddies > 1
 
 proc nHdrRespErrors*(buddy: BeaconBuddyRef): int =
   ## Getter, returns the number of `resp` errors for argument `buddy`

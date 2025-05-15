@@ -14,30 +14,30 @@ import
   chronicles,
   stint,
   results,
-  eth/common/[base, hashes, addresses, accounts, headers, transactions],
+  eth/common/[base, addresses, accounts, headers, transactions],
   ../../execution_chain/db/[ledger, access_list],
   ../../execution_chain/common/common,
   ../../execution_chain/transaction/call_evm,
-  ../../execution_chain/evm/[types, state, evm_errors]
+  ../../execution_chain/evm/[types, state, evm_errors],
+  ./async_evm_backend
 
-from web3/eth_api_types import TransactionArgs
-from web3/eth_api_types import Quantity
+from web3/eth_api_types import TransactionArgs, Quantity
 
 export
-  results, chronos, hashes, addresses, accounts, headers, TransactionArgs, CallResult,
+  async_evm_backend, results, chronos, headers, TransactionArgs, CallResult,
   transactions.AccessList, GasInt
 
 logScope:
   topics = "async_evm"
 
-# The Portal EVM uses the Nimbus in-memory EVM to execute transactions using the
-# portal state network state data. Currently only call is supported.
+# The Async EVM uses the Nimbus in-memory EVM to execute transactions using state
+# data fetched asyncronously from a supplied state backend.
 #
-# Rather than wire in the portal state lookups into the EVM directly, the approach
+# Rather than wire in the async state lookups into the EVM directly, the approach
 # taken here is to optimistically execute the transaction multiple times with the
 # goal of building the correct access list so that we can then lookup the accessed
-# state from the portal network, store the state in the in-memory EVM and then
-# finally execute the transaction using the correct state. The Portal EVM makes
+# state from the async state backend, store the state in the in-memory EVM and then
+# finally execute the transaction using the correct state. The Async EVM makes
 # use of data in memory during the call and therefore each piece of state is never
 # fetched more than once. We know we have found the correct access list if it
 # doesn't change after another execution of the transaction.
@@ -48,9 +48,8 @@ logScope:
 # call given that we gain the ability to fetch the state concurrently.
 #
 # There are multiple reasons for choosing this approach:
-# - Firstly updating the existing Nimbus EVM to support using a different state
-#   backend (portal state in this case) is difficult and would require making
-#   non-trivial changes to the EVM.
+# - Firstly updating the existing Nimbus EVM to support using different state
+#   backends is difficult and would require making non-trivial changes to the EVM.
 # - This new approach allows us to look up the state concurrently in the event that
 #   multiple new state keys are discovered after executing the transaction. This
 #   should in theory result in improved performance for certain scenarios. The
@@ -82,23 +81,6 @@ type
     address: Address
     codeFut: Future[Opt[seq[byte]]]
 
-  GetAccountProc* = proc(stateRoot: Hash32, address: Address): Future[Opt[Account]] {.
-    async: (raises: [CancelledError])
-  .}
-
-  GetStorageProc* = proc(
-    stateRoot: Hash32, address: Address, slotKey: UInt256
-  ): Future[Opt[UInt256]] {.async: (raises: [CancelledError]).}
-
-  GetCodeProc* = proc(stateRoot: Hash32, address: Address): Future[Opt[seq[byte]]] {.
-    async: (raises: [CancelledError])
-  .}
-
-  AsyncEvmStateBackend* = object
-    getAccount: GetAccountProc
-    getStorage: GetStorageProc
-    getCode: GetCodeProc
-
   AsyncEvm* = ref object
     com: CommonRef
     backend: AsyncEvmStateBackend
@@ -113,14 +95,6 @@ func init(
 
 func init(T: type CodeQuery, adr: Address, fut: Future[Opt[seq[byte]]]): T =
   T(address: adr, codeFut: fut)
-
-proc init*(
-    T: type AsyncEvmStateBackend,
-    accProc: GetAccountProc,
-    storageProc: GetStorageProc,
-    codeProc: GetCodeProc,
-): T =
-  AsyncEvmStateBackend(getAccount: accProc, getStorage: storageProc, getCode: codeProc)
 
 proc init*(
     T: type AsyncEvm, backend: AsyncEvmStateBackend, networkId: NetworkId = MainNet
@@ -165,7 +139,7 @@ proc callFetchingState(
     fetchedCode = initHashSet[Address]()
 
   # Set code of the 'to' address in the EVM so that we can execute the transaction
-  let code = (await evm.backend.getCode(header.stateRoot, to)).valueOr:
+  let code = (await evm.backend.getCode(header, to)).valueOr:
     return err("Unable to get code")
   vmState.ledger.setCode(to, code)
   fetchedCode.incl(to)
@@ -215,8 +189,7 @@ proc callFetchingState(
           let slotIdx = (adr, v.storageSlot)
           if slotIdx notin fetchedStorage:
             debug "Fetching storage slot", address = adr, slotKey = v.storageSlot
-            let storageFut =
-              evm.backend.getStorage(header.stateRoot, adr, v.storageSlot)
+            let storageFut = evm.backend.getStorage(header, adr, v.storageSlot)
             if not stateFetchDone:
               storageQueries.add(StorageQuery.init(adr, v.storageSlot, storageFut))
               if not optimisticStateFetch:
@@ -226,7 +199,7 @@ proc callFetchingState(
 
           if adr notin fetchedAccounts:
             debug "Fetching account", address = adr
-            let accFut = evm.backend.getAccount(header.stateRoot, adr)
+            let accFut = evm.backend.getAccount(header, adr)
             if not stateFetchDone:
               accountQueries.add(AccountQuery.init(adr, accFut))
               if not optimisticStateFetch:
@@ -234,7 +207,7 @@ proc callFetchingState(
 
           if v.codeTouched and adr notin fetchedCode:
             debug "Fetching code", address = adr
-            let codeFut = evm.backend.getCode(header.stateRoot, adr)
+            let codeFut = evm.backend.getCode(header, adr)
             if not stateFetchDone:
               codeQueries.add(CodeQuery.init(adr, codeFut))
               if not optimisticStateFetch:

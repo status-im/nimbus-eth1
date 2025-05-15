@@ -42,7 +42,7 @@ proc updateBuddyErrorState(buddy: BeaconBuddyRef) =
      fetchBodiesProcessErrThresholdCount < buddy.only.nBdyProcErrors:
 
     # Make sure that this peer does not immediately reconnect
-    buddy.ctrl.zombie = buddy.infectedByTVirus
+    buddy.ctrl.zombie = true
 
 # ------------------------------------------------------------------------------
 # Private function(s)
@@ -157,6 +157,14 @@ func blocksStagedCanImportOk*(ctx: BeaconCtxRef): bool =
       # The `unprocessed` ranges will contain some higher number block ranges,
       # but these can be fetched later.
       if ctx.pool.nBuddies == 0:
+        return true
+
+      # If the last peer is labelled `slow` it will be ignored for the sake
+      # of deciding whether to execute blocks.
+      #
+      # As a consequence, the syncer will import blocks immediately allowing
+      # the syncer to collect more sync peers.
+      if ctx.pool.nBuddies == 1 and ctx.pool.blkLastSlowPeer.isSome:
         return true
 
       # If importing starts while peers are actively downloading, the system
@@ -327,7 +335,7 @@ proc blocksStagedImport*(
     ctx: BeaconCtxRef;
     info: static[string];
       ): Future[bool]
-      {.async: (raises: [CancelledError]).} =
+      {.async: (raises: []).} =
   ## Import/execute blocks record from staged queue
   ##
   let qItem = ctx.blk.staged.ge(0).valueOr:
@@ -363,17 +371,22 @@ proc blocksStagedImport*(
           nthBn=nBn.bnStr, nthHash=ctx.getNthHash(qItem.data, n).short
         continue
 
-      (await ctx.chain.importBlock(qItem.data.blocks[n])).isOkOr:
-        # The way out here is simply to re-compile the block queue. At any
-        # point, the `FC` module data area might have been moved to a new
-        # canonical branch.
-        #
-        ctx.poolMode = true
-        warn info & ": import block error (reorg triggered)", n, iv,
-          B=ctx.chain.baseNumber.bnStr, L=ctx.chain.latestNumber.bnStr,
-          nthBn=nBn.bnStr, nthHash=ctx.getNthHash(qItem.data, n).short,
-          `error`=error
-        maxImport = nBn
+      try:
+        (await ctx.chain.importBlock(qItem.data.blocks[n])).isOkOr:
+          # The way out here is simply to re-compile the block queue. At any
+          # point, the `FC` module data area might have been moved to a new
+          # canonical branch.
+          #
+          ctx.poolMode = true
+          warn info & ": import block error (reorg triggered)", n, iv,
+            B=ctx.chain.baseNumber.bnStr, L=ctx.chain.latestNumber.bnStr,
+            nthBn=nBn.bnStr, nthHash=ctx.getNthHash(qItem.data, n).short,
+            `error`=error
+          maxImport = nBn
+          break importLoop
+        # isOk => continue
+      except CancelledError:
+        maxImport = nBn                            # shutdown?
         break importLoop
 
       # Allow pseudo/async thread switch.

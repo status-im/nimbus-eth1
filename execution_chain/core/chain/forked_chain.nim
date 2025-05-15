@@ -418,7 +418,6 @@ proc updateBase(c: ForkedChainRef, newBase: BlockPos):
     # the blocks
     newBaseHash = newBase.hash
     nextIndex   = int(newBase.number - branch.tailNumber)
-    baseTxFrame = newBase.txFrame
 
   # Persist the new base block - this replaces the base tx in coredb!
   for x in newBase.everyNthBlock(4):
@@ -432,7 +431,9 @@ proc updateBase(c: ForkedChainRef, newBase: BlockPos):
     discard await idleAsync().withTimeout(idleTimeout)
     c.com.db.persist(x.txFrame, Opt.some(x.stateRoot))
 
-  c.baseTxFrame = baseTxFrame
+    # Update baseTxFrame when we about to yield to the event loop
+    # and prevent other modules accessing expired baseTxFrame.
+    c.baseTxFrame = x.txFrame
 
   disposeBlocks(number, branch)
 

@@ -92,7 +92,8 @@ proc setupManager(pm: PeerManagerRef, enodes: openArray[ENode]) =
       pm.state = Running
       pm.reconnectFut = pm.runReconnectLoop()
 
-  po.setProtocol eth
+  po.addProtocol eth68
+  po.addProtocol eth69
   pm.pool.addObserver(pm, po)
 
   for enode in enodes:

@@ -33,6 +33,7 @@ type
     dataDir*: string
     storageCapacity*: uint64
     contentRequestRetries*: int
+    contentQueueWorkers*: int
 
   PortalNode* = ref object
     discovery: protocol.Protocol
@@ -133,6 +134,11 @@ proc new*(
             streamManager,
             networkData.metadata.cfg,
             accumulator,
+            beaconDbCache =
+              if beaconNetwork.isSome():
+                beaconNetwork.value().beaconDb.beaconDbCache
+              else:
+                BeaconDbCache(),
             bootstrapRecords = bootstrapRecords,
             portalConfig = config.portalConfig,
             contentRequestRetries = config.contentRequestRetries,
@@ -154,6 +160,7 @@ proc new*(
             historyNetwork = historyNetwork,
             not config.disableStateRootValidation,
             contentRequestRetries = config.contentRequestRetries,
+            contentQueueWorkers = config.contentQueueWorkers,
           )
         )
       else:

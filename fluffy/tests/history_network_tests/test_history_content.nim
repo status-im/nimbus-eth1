@@ -22,6 +22,9 @@ import
 
 from std/os import walkDir, splitFile, PathComponent
 
+from ../../network/beacon/beacon_chain_historical_summaries import
+  HistoricalSummariesWithProof
+
 suite "History Content Values":
   test "HeaderWithProof Building and Encoding":
     const
@@ -39,7 +42,7 @@ suite "History Content Values":
         raiseAssert "Invalid epoch accumulator file: " & accumulatorFile
       blockHeadersWithProof = buildHeadersWithProof(blockHeaders, epochRecord).valueOr:
         raiseAssert "Could not build headers with proof"
-      accumulators = HistoryAccumulators(historicalHashes: loadAccumulator())
+      accumulators = HeaderVerifier(historicalHashes: loadAccumulator())
       networkData = loadNetworkData("mainnet")
       cfg = networkData.metadata.cfg
 
@@ -99,10 +102,15 @@ suite "History Content Values":
         let
           content = YamlPortalContent.loadFromYaml(path).valueOr:
             raiseAssert "Invalid data file: " & error
-          accumulators = HistoryAccumulators(
+          verifier = HeaderVerifier(
             historicalHashes: loadAccumulator(),
             historicalRoots: loadHistoricalRoots(),
-            historicalSummaries: historicalSummaries,
+            beaconDbCache: BeaconDbCache(
+              historicalSummariesCache: Opt.some(
+                # Note: incomplete but sufficient for the test
+                HistoricalSummariesWithProof(historical_summaries: historicalSummaries)
+              )
+            ),
           )
           contentKeyEncoded = content.content_key.hexToSeqByte()
           contentValueEncoded = content.content_value.hexToSeqByte()
@@ -120,7 +128,7 @@ suite "History Content Values":
         # Verifies if block header is canonical and if it matches the hash
         # of provided content key.
         check validateCanonicalHeaderBytes(
-          contentValueEncoded, contentKey.blockHeaderKey.blockHash, accumulators, cfg
+          contentValueEncoded, contentKey.blockHeaderKey.blockHash, verifier, cfg
         )
         .isOk()
 

@@ -25,7 +25,7 @@ import
 
 from beacon_chain/spec/helpers import is_better_update, toMeta
 
-export kvstore_sqlite3
+export kvstore_sqlite3, beacon_chain_historical_summaries, beacon_content
 
 type
   BestLightClientUpdateStore = ref object
@@ -43,6 +43,7 @@ type
 
   HistoricalSummariesStore = ref object
     getStmt: SqliteStmt[int64, seq[byte]]
+    getLatestStmt: SqliteStmt[NoParams, seq[byte]]
     putStmt: SqliteStmt[(int64, seq[byte]), void]
     keepFromStmt: SqliteStmt[int64, void]
 
@@ -55,19 +56,23 @@ type
     historicalSummaries: HistoricalSummariesStore
     forkDigests: ForkDigests
     cfg*: RuntimeConfig
-    finalityUpdateCache: Opt[LightClientFinalityUpdateCache]
-    optimisticUpdateCache: Opt[LightClientOptimisticUpdateCache]
+    beaconDbCache*: BeaconDbCache
+
+  BeaconDbCache* = ref object
+    finalityUpdateCache*: Opt[LightClientFinalityUpdateCache]
+    optimisticUpdateCache*: Opt[LightClientOptimisticUpdateCache]
+    historicalSummariesCache*: Opt[HistoricalSummariesWithProof]
 
   # Storing the content encoded here. Could also store decoded and access the
   # slot directly. However, that would require is to have access to the
   # fork digests here to be able the re-encode the data.
   LightClientFinalityUpdateCache = object
-    lastFinalityUpdate: seq[byte]
-    lastFinalityUpdateSlot: uint64
+    latestFinalityUpdate: seq[byte]
+    latestFinalityUpdateSlot: uint64
 
   LightClientOptimisticUpdateCache = object
-    lastOptimisticUpdate: seq[byte]
-    lastOptimisticUpdateSlot: uint64
+    latestOptimisticUpdate: seq[byte]
+    latestOptimisticUpdateSlot: uint64
 
 template expectDb(x: auto): untyped =
   # There's no meaningful error handling implemented for a corrupt database or
@@ -265,6 +270,20 @@ proc initHistoricalSummariesStore(
         managed = false,
       )
       .expect("SQL query OK")
+    getLatestStmt = backend
+      .prepareStmt(
+        """
+        SELECT `summaries`
+        FROM `""" & name &
+          """`
+        WHERE `epoch` = (SELECT MAX(epoch) FROM `""" & name &
+          """`);
+      """,
+        NoParams,
+        seq[byte],
+        managed = false,
+      )
+      .expect("SQL query OK")
     putStmt = backend
       .prepareStmt(
         """
@@ -292,7 +311,10 @@ proc initHistoricalSummariesStore(
       .expect("SQL query OK")
 
   ok HistoricalSummariesStore(
-    getStmt: getStmt, putStmt: putStmt, keepFromStmt: keepFromStmt
+    getStmt: getStmt,
+    getLatestStmt: getLatestStmt,
+    putStmt: putStmt,
+    keepFromStmt: keepFromStmt,
   )
 
 func close(store: var BestLightClientUpdateStore) =
@@ -310,6 +332,7 @@ func close(store: var BootstrapStore) =
 
 func close(store: var HistoricalSummariesStore) =
   store.getStmt.disposeSafe()
+  store.getLatestStmt.disposeSafe()
   store.putStmt.disposeSafe()
   store.keepFromStmt.disposeSafe()
 
@@ -340,6 +363,7 @@ proc new*(
     historicalSummaries: historicalSummaries,
     cfg: networkData.metadata.cfg,
     forkDigests: (newClone networkData.forks)[],
+    beaconDbCache: BeaconDbCache(),
   )
 
 proc close*(db: BeaconDb) =
@@ -347,6 +371,15 @@ proc close*(db: BeaconDb) =
   db.bestUpdates.close()
   db.historicalSummaries.close()
   discard db.kv.close()
+
+template finalityUpdateCache(db: BeaconDb): Opt[LightClientFinalityUpdateCache] =
+  db.beaconDbCache.finalityUpdateCache
+
+template optimisticUpdateCache(db: BeaconDb): Opt[LightClientOptimisticUpdateCache] =
+  db.beaconDbCache.optimisticUpdateCache
+
+template historicalSummariesCache(db: BeaconDb): Opt[HistoricalSummariesWithProof] =
+  db.beaconDbCache.historicalSummariesCache
 
 ## Private KvStoreRef Calls
 proc get(kv: KvStoreRef, key: openArray[byte]): results.Opt[seq[byte]] =
@@ -502,7 +535,7 @@ proc putUpdateIfBetter*(db: BeaconDb, period: SyncCommitteePeriod, update: seq[b
 proc getLastFinalityUpdate*(db: BeaconDb): Opt[ForkedLightClientFinalityUpdate] =
   db.finalityUpdateCache.map(
     proc(x: LightClientFinalityUpdateCache): ForkedLightClientFinalityUpdate =
-      decodeLightClientFinalityUpdateForked(db.forkDigests, x.lastFinalityUpdate).valueOr:
+      decodeLightClientFinalityUpdateForked(db.forkDigests, x.latestFinalityUpdate).valueOr:
         raiseAssert "Stored finality update must be valid"
   )
 
@@ -514,20 +547,45 @@ func keepBootstrapsFrom*(db: BeaconDb, minSlot: Slot) =
   let res = db.bootstraps.keepFromStmt.exec(minSlot.int64)
   res.expect("SQL query OK")
 
-func getHistoricalSummaries*(db: BeaconDb, epoch: Epoch): Opt[seq[byte]] =
-  doAssert distinctBase(db.historicalSummaries.getStmt) != nil
+proc getLatestHistoricalSummaries*(db: BeaconDb): Opt[seq[byte]] =
+  doAssert distinctBase(db.historicalSummaries.getLatestStmt) != nil
 
   var summaries: seq[byte]
-  for res in db.historicalSummaries.getStmt.exec(epoch.int64, summaries):
+  for res in db.historicalSummaries.getLatestStmt.exec(summaries):
     res.expect("SQL query OK")
     return ok(summaries)
 
-func putHistoricalSummaries*(db: BeaconDb, summaries: seq[byte], epoch: Epoch) =
+func loadHistoricalSummariesCache*(db: BeaconDb) =
+  let summariesEncoded = db.getLatestHistoricalSummaries().valueOr:
+    return
+
+  let summariesWithProof = decodeSsz(
+    db.forkDigests, summariesEncoded, HistoricalSummariesWithProof
+  ).valueOr:
+    raiseAssert "Stored historical summaries must be valid"
+
+  db.beaconDbCache.historicalSummariesCache = Opt.some(summariesWithProof)
+
+func putHistoricalSummaries(db: BeaconDb, summaries: seq[byte], epoch: Epoch) =
   db.historicalSummaries.putStmt.exec((epoch.int64, summaries)).expect("SQL query OK")
 
-func keepHistoricalSummariesFrom*(db: BeaconDb, epoch: Epoch) =
-  let res = db.historicalSummaries.keepFromStmt.exec(epoch.int64)
-  res.expect("SQL query OK")
+func keepHistoricalSummariesFrom(db: BeaconDb, epoch: Epoch) =
+  db.historicalSummaries.keepFromStmt.exec(epoch.int64).expect("SQL query OK")
+
+func putLatestHistoricalSummaries(db: BeaconDb, summaries: seq[byte]) =
+  let summariesWithProof = decodeSsz(
+    db.forkDigests, summaries, HistoricalSummariesWithProof
+  ).valueOr:
+    raiseAssert "Stored historical summaries must have been validated"
+
+  if db.historicalSummariesCache.isNone() or
+      db.historicalSummariesCache.value().epoch < summariesWithProof.epoch:
+    # Store in cache in its decoded form
+    db.beaconDbCache.historicalSummariesCache = Opt.some(summariesWithProof)
+    # Store in db
+    db.putHistoricalSummaries(summaries, Epoch(summariesWithProof.epoch))
+    # Delete old summaries
+    db.keepHistoricalSummariesFrom(Epoch(summariesWithProof.epoch))
 
 proc getHandlerImpl(
     db: BeaconDb, contentKey: ContentKeyByteList, contentId: ContentId
@@ -571,8 +629,8 @@ proc getHandlerImpl(
     if db.finalityUpdateCache.isSome():
       let slot = contentKey.lightClientFinalityUpdateKey.finalizedSlot
       let cache = db.finalityUpdateCache.get()
-      if cache.lastFinalityUpdateSlot >= slot:
-        Opt.some(cache.lastFinalityUpdate)
+      if cache.latestFinalityUpdateSlot >= slot:
+        Opt.some(cache.latestFinalityUpdate)
       else:
         Opt.none(seq[byte])
     else:
@@ -582,14 +640,19 @@ proc getHandlerImpl(
     if db.optimisticUpdateCache.isSome():
       let slot = contentKey.lightClientOptimisticUpdateKey.optimisticSlot
       let cache = db.optimisticUpdateCache.get()
-      if cache.lastOptimisticUpdateSlot >= slot:
-        Opt.some(cache.lastOptimisticUpdate)
+      if cache.latestOptimisticUpdateSlot >= slot:
+        Opt.some(cache.latestOptimisticUpdate)
       else:
         Opt.none(seq[byte])
     else:
       Opt.none(seq[byte])
   of beacon_content.ContentType.historicalSummaries:
-    db.getHistoricalSummaries(Epoch(contentKey.historicalSummariesKey.epoch))
+    if db.historicalSummariesCache.isSome() and
+        db.historicalSummariesCache.value().epoch >=
+        contentKey.historicalSummariesKey.epoch:
+      db.getLatestHistoricalSummaries()
+    else:
+      Opt.none(seq[byte])
 
 proc createGetHandler*(db: BeaconDb): DbGetHandler =
   return (
@@ -630,26 +693,23 @@ proc createStoreHandler*(db: BeaconDb): DbStoreHandler =
           db.putUpdateIfBetter(SyncCommitteePeriod(period), update.asSeq())
           inc period
       of lightClientFinalityUpdate:
-        db.finalityUpdateCache = Opt.some(
+        db.beaconDbCache.finalityUpdateCache = Opt.some(
           LightClientFinalityUpdateCache(
-            lastFinalityUpdateSlot:
+            latestFinalityUpdateSlot:
               contentKey.lightClientFinalityUpdateKey.finalizedSlot,
-            lastFinalityUpdate: content,
+            latestFinalityUpdate: content,
           )
         )
       of lightClientOptimisticUpdate:
-        db.optimisticUpdateCache = Opt.some(
+        db.beaconDbCache.optimisticUpdateCache = Opt.some(
           LightClientOptimisticUpdateCache(
-            lastOptimisticUpdateSlot:
+            latestOptimisticUpdateSlot:
               contentKey.lightClientOptimisticUpdateKey.optimisticSlot,
-            lastOptimisticUpdate: content,
+            latestOptimisticUpdate: content,
           )
         )
       of beacon_content.ContentType.historicalSummaries:
-        db.putHistoricalSummaries(
-          content, Epoch(contentKey.historicalSummariesKey.epoch)
-        )
-        db.keepHistoricalSummariesFrom(Epoch(contentKey.historicalSummariesKey.epoch))
+        db.putLatestHistoricalSummaries(content)
 
       return false # No data pruned
   )
@@ -657,6 +717,7 @@ proc createStoreHandler*(db: BeaconDb): DbStoreHandler =
 proc createContainsHandler*(db: BeaconDb): DbContainsHandler =
   return (
     proc(contentKey: ContentKeyByteList, contentId: ContentId): bool =
+      # TODO: Implement cheaper `contains` handlers
       db.getHandlerImpl(contentKey, contentId).isSome()
   )
 

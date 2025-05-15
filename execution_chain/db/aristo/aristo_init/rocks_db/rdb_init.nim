@@ -27,7 +27,7 @@ proc dumpCacheStats(keySize, vtxSize, branchSize: int) =
     echo "vtxLru(", vtxSize, ")"
     echo "   state    vtype       miss        hit      total hitrate"
     for state in RdbStateType:
-      for vtype in VertexType:
+      for vtype in RdbVertexType:
         let
           (miss, hit) = (
             rdbVtxLruStats[state][vtype].get(false),

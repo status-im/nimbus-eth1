@@ -24,10 +24,17 @@ import
 func bdyErrors*(buddy: BeaconBuddyRef): string =
   $buddy.only.nBdyRespErrors & "/" & $buddy.only.nBdyProcErrors
 
-proc fetchRegisterError*(buddy: BeaconBuddyRef) =
+proc fetchRegisterError*(buddy: BeaconBuddyRef, slowPeer = false) =
   buddy.only.nBdyRespErrors.inc
   if fetchBodiesReqErrThresholdCount < buddy.only.nBdyRespErrors:
-    buddy.ctrl.zombie = buddy.infectedByTVirus # abandon slow peer
+    if buddy.ctx.pool.nBuddies == 1 and slowPeer:
+      # Remember that the current peer is the last one and is lablelled slow.
+      # It would have been zombified if it were not the last one. This can be
+      # used in functions -- depending on context -- that will trigger if the
+      # if the pool of available sync peers becomes empty.
+      buddy.ctx.pool.blkLastSlowPeer = Opt.some(buddy.peerID)
+    else:
+      buddy.ctrl.zombie = true # abandon slow peer unless last one
 
 proc bodiesFetch*(
     buddy: BeaconBuddyRef;
@@ -46,6 +53,12 @@ proc bodiesFetch*(
   var resp: Opt[BlockBodiesPacket]
   try:
     resp = await peer.getBlockBodies(request)
+  except PeerDisconnected as e:
+    buddy.only.nBdyRespErrors.inc
+    buddy.ctrl.zombie = true
+    `info` info & " error", peer, nReq, elapsed=(Moment.now() - start).toStr,
+      error=($e.name), msg=e.msg, bdyErrors=buddy.bdyErrors
+    return err()
   except CatchableError as e:
     buddy.fetchRegisterError()
     `info` info & " error", peer, nReq, elapsed=(Moment.now() - start).toStr,
@@ -80,9 +93,10 @@ proc bodiesFetch*(
   # mimimum share of the number of requested headers expected, typically 10%.
   if fetchBodiesReqErrThresholdZombie < elapsed or
      b.len.uint64 * 100 < nReq.uint64 * fetchBodiesReqMinResponsePC:
-    buddy.fetchRegisterError()
+    buddy.fetchRegisterError(slowPeer=true)
   else:
-    buddy.only.nBdyRespErrors = 0 # reset error count
+    buddy.only.nBdyRespErrors = 0                   # reset error count
+    buddy.ctx.pool.blkLastSlowPeer = Opt.none(Hash) # not last one or not error
 
   trace trEthRecvReceivedBlockBodies, peer, nReq, nResp=b.len,
     elapsed=elapsed.toStr, ctrl=buddy.ctrl.state, bdyErrors=buddy.bdyErrors

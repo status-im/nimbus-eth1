@@ -36,11 +36,12 @@ const pingExtensionCapabilities = {CapabilitiesType, BasicRadiusType}
 type StateNetwork* = ref object
   portalProtocol*: PortalProtocol
   contentQueue*: AsyncQueue[(Opt[NodeId], ContentKeysList, seq[seq[byte]])]
-  processContentLoop: Future[void]
+  processContentLoops: seq[Future[void]]
   statusLogLoop: Future[void]
   historyNetwork: Opt[HistoryNetwork]
   validateStateIsCanonical: bool
   contentRequestRetries: int
+  contentQueueWorkers: int
 
 func toContentIdHandler(contentKey: ContentKeyByteList): results.Opt[ContentId] =
   ok(toContentId(contentKey))
@@ -56,7 +57,11 @@ proc new*(
     historyNetwork = Opt.none(HistoryNetwork),
     validateStateIsCanonical = true,
     contentRequestRetries = 1,
+    contentQueueWorkers = 8,
 ): T =
+  doAssert(contentRequestRetries >= 0)
+  doAssert(contentQueueWorkers >= 1)
+
   let
     cq = newAsyncQueue[(Opt[NodeId], ContentKeysList, seq[seq[byte]])](50)
     s = streamManager.registerNewStream(cq)
@@ -80,6 +85,7 @@ proc new*(
     historyNetwork: historyNetwork,
     validateStateIsCanonical: validateStateIsCanonical,
     contentRequestRetries: contentRequestRetries,
+    contentQueueWorkers: contentQueueWorkers,
   )
 
 proc getContent(
@@ -211,7 +217,7 @@ proc processOffer*(
 
   ok()
 
-proc processContentLoop(n: StateNetwork) {.async: (raises: []).} =
+proc contentQueueWorker(n: StateNetwork) {.async: (raises: []).} =
   try:
     while true:
       let (srcNodeId, contentKeys, contentValues) = await n.contentQueue.popFirst()
@@ -275,7 +281,9 @@ proc start*(n: StateNetwork) =
 
   n.portalProtocol.start()
 
-  n.processContentLoop = processContentLoop(n)
+  for i in 0 ..< n.contentQueueWorkers:
+    n.processContentLoops.add(contentQueueWorker(n))
+
   n.statusLogLoop = statusLogLoop(n)
 
 proc stop*(n: StateNetwork) {.async: (raises: []).} =
@@ -284,12 +292,12 @@ proc stop*(n: StateNetwork) {.async: (raises: []).} =
   var futures: seq[Future[void]]
   futures.add(n.portalProtocol.stop())
 
-  if not n.processContentLoop.isNil():
-    futures.add(n.processContentLoop.cancelAndWait())
+  for loop in n.processContentLoops:
+    futures.add(loop.cancelAndWait())
   if not n.statusLogLoop.isNil():
     futures.add(n.statusLogLoop.cancelAndWait())
 
   await noCancel(allFutures(futures))
 
-  n.processContentLoop = nil
+  n.processContentLoops.setLen(0)
   n.statusLogLoop = nil

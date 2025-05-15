@@ -88,7 +88,8 @@ import
   chronos,
   ../networking/[p2p, peer_pool],
   stew/keyed_queue,
-  ./sync_desc
+  ./sync_desc,
+  ./wire_protocol
 
 type
   ActiveBuddies[S,W] = ##\
@@ -165,7 +166,7 @@ proc key(peer: Peer): ENode =
 # Private functions
 # ------------------------------------------------------------------------------
 
-proc terminate[S,W](dsc: RunnerSyncRef[S,W]) {.async.} =
+proc terminate[S,W](dsc: RunnerSyncRef[S,W]) {.async: (raises: []).} =
   ## Request termination and wait for sub-tasks to finish
   mixin runRelease
 
@@ -208,7 +209,7 @@ proc terminate[S,W](dsc: RunnerSyncRef[S,W]) {.async.} =
     dsc.runCtrl = terminated
 
 
-proc daemonLoop[S,W](dsc: RunnerSyncRef[S,W]) {.async: (raises: [CancelledError]).} =
+proc daemonLoop[S,W](dsc: RunnerSyncRef[S,W]) {.async: (raises: []).} =
   mixin runDaemon
 
   if dsc.ctx.daemon and dsc.runCtrl == running:
@@ -503,8 +504,10 @@ proc startSync*[S,W](dsc: RunnerSyncRef[S,W]): bool =
         onPeerDisconnected: proc(p: Peer) {.gcsafe.} =
           dsc.onPeerDisconnected(p))
 
-      po.setProtocol eth
+      po.addProtocol eth68
+      po.addProtocol eth69
       dsc.pool.addObserver(dsc, po)
+
       asyncSpawn dsc.tickerLoop()
       return true
 

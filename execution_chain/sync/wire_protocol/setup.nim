@@ -23,12 +23,10 @@ proc addEthHandlerCapability*(
     node: EthereumNode;
     txPool: TxPoolRef;
       ): EthWireRef =
-  ## Install `eth` handlers.
+  ## Install wire prototcol handlers for each cap.
   let wire = EthWireRef.new(txPool, node)
-  node.addCapability(
-    requester.eth68,
-    wire)
-  wire
+  node.addCapability(eth68, wire)
+  node.addCapability(eth69, wire)
 
 # ------------------------------------------------------------------------------
 # End

@@ -220,6 +220,12 @@ procSuite "Beacon Network":
             historical_summaries: historical_summaries,
             proof: proof,
           )
+
+          # Note that this is not the slot deduced forkDigest, as that one would
+          # cause issues for this custom chain.
+          # TODO: If we were to encode the historical summaries in the db code
+          # it would fail due to slot based fork digest until we allow for
+          # custom networks.
           forkDigest = atConsensusFork(forkDigests, consensusFork)
 
           content = encodeSsz(historicalSummariesWithProof, forkDigest)

@@ -245,7 +245,7 @@ proc rocksDbBackend*(
 
 iterator walkVtx*(
     be: RdbBackendRef;
-    kinds = {Branch, ExtBranch, AccLeaf, StoLeaf};
+    kinds = VertexTypes;
       ): tuple[evid: RootedVertexID, vtx: VertexRef] =
   ## Variant of `walk()` iteration over the vertex sub-table.
   for (rvid, vtx) in be.rdb.walkVtx(kinds):

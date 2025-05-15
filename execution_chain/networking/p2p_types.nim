@@ -78,7 +78,7 @@ type
   PeerObserver* = object
     onPeerConnected*: proc(p: Peer) {.gcsafe, raises: [].}
     onPeerDisconnected*: proc(p: Peer) {.gcsafe, raises: [].}
-    protocol*: ProtocolInfo
+    protocols*: seq[ProtocolInfo]
 
   Capability* = object
     name*: string
