@@ -34,19 +34,11 @@ func headersStagedCollectOk*(buddy: BeaconBuddyRef): bool =
 proc headersStagedCollect*(
     buddy: BeaconBuddyRef;
     info: static[string];
-      ): Future[bool]
-      {.async: (raises: []).} =
+      ) {.async: (raises: []).} =
   ## Collect headers and either stash them on the header chain cache directly,
   ## or stage then on the header queue to get them serialised, later. The
   ## header queue serialisation is needed in case of several peers fetching
   ## and processing headers concurrently.
-  ##
-  ## If there are headers left to process, tThis function will always stages
-  ## a header list record on the header queue for serialisation, and returns
-  ## `true`.
-  ##
-  ## Otherwise the function returns `false` if there are no headers left to be
-  ## processed.
   ##
   let
     ctx = buddy.ctx
@@ -54,7 +46,7 @@ proc headersStagedCollect*(
 
   if ctx.headersUnprocIsEmpty() or
      ctx.hdrCache.state != collecting:
-    return false                                     # no action
+    return                                           # no action
   var
     nDeterministic = 0u64                            # statistics, to be updated
     nOpportunistic = 0                               # ditto
@@ -144,7 +136,7 @@ proc headersStagedCollect*(
 
     # Continue opportunistically fetching by block number rather than hash. The
     # fetched headers need to be staged and checked/serialised later.
-    block:
+    if ctx.hdr.staged.len < headersStagedQueueLengthHwm:
       let
         # Comment see deterministic case
         iv = ctx.headersUnprocFetch(nFetchHeadersBatch).valueOr:
@@ -194,28 +186,31 @@ proc headersStagedCollect*(
 
       debug info & ": no headers yet", peer, ctrl=buddy.ctrl.state,
         failedPeers=ctx.pool.failedPeers.len, hdrErrors=buddy.hdrErrors
-    return false
+    return
 
   info "Downloaded headers",
     unprocTop=(if ctx.collectModeStopped(): "n/a"
                else: ctx.headersUnprocAvailTop.bnStr),
     nHeaders, nStaged=ctx.hdr.staged.len, nSyncPeers=ctx.pool.nBuddies
 
-  return true
 
 
-
-proc headersStagedProcess*(buddy: BeaconBuddyRef; info: static[string]) =
+proc headersStagedProcess*(buddy: BeaconBuddyRef; info: static[string]): bool =
   ## Store headers from the `staged` queue onto the header chain cache.
+  ##
+  ## The function returns `false` if the caller should make sure to allow
+  ## to switch to another sync peer for deterministically filling the gap
+  ## between the top of the queue and the `dangling` block number.
   ##
   let
     ctx = buddy.ctx
     peer = buddy.peer
   if ctx.hdr.staged.len == 0:
-    return                                                  # avoids logging
+    return true                                             # avoids logging
 
   var
     nProcessed = 0                                          # statistics
+    switchPeer = false                                      # for return code
 
   while ctx.hdrCache.state == collecting:
 
@@ -231,7 +226,8 @@ proc headersStagedProcess*(buddy: BeaconBuddyRef; info: static[string]) =
       debug info & ": gap, serialisation postponed", peer,
         qItem=qItem.data.bnStr, D=dangling.bnStr, nProcessed,
         nStaged=ctx.hdr.staged.len, nSyncPeers=ctx.pool.nBuddies
-      return # there is a gap -- come back later
+      switchPeer = true # there is a gap -- come back later
+      break
 
     # Overlap must not happen
     if maxNum+1 != dangling:
@@ -253,7 +249,8 @@ proc headersStagedProcess*(buddy: BeaconBuddyRef; info: static[string]) =
         qItem=qItem.data.bnStr, D=ctx.dangling.bnStr, nProcessed,
         nDiscarded=qItem.data.revHdrs.len, nSyncPeers=ctx.pool.nBuddies,
         `error`=error
-      return
+      switchPeer = true
+      break
 
     # Antecedent `dangling` of the header cache might not be at `revHdrs[^1]`.
     let revHdrsLen = maxNum - ctx.dangling.number + 1
@@ -262,25 +259,18 @@ proc headersStagedProcess*(buddy: BeaconBuddyRef; info: static[string]) =
 
     # End while loop
 
-  if headersStagedQueueLengthLwm < ctx.hdr.staged.len:
-    ctx.poolMode = true
-
   debug info & ": headers serialised and stored", peer, D=ctx.dangling.bnStr,
     nProcessed, nStaged=ctx.hdr.staged.len, nSyncPeers=ctx.pool.nBuddies,
-    reorgReq=ctx.poolMode
+    switchPeer
 
+  not switchPeer
 
 
 proc headersStagedReorg*(ctx: BeaconCtxRef; info: static[string]) =
   ## Some pool mode intervention. The effect is that all concurrent peers
   ## finish up their current work and run this function here (which might
-  ## do nothing.) This stopping should be enough in most cases to re-organise
-  ## when re-starting concurrently, again.
-  ##
-  ## Only when the staged list gets too big it will be cleared to be re-filled
-  ## again. In therory, this might happen on a really slow lead actor
-  ## (downloading deterministically by hashes) and many fast opportunistic
-  ## actors filling the staged queue.
+  ## do nothing.) Pool mode is used to sync peers, e.g. for a forced state
+  ## change.
   ##
   doAssert ctx.headersBorrowedIsEmpty()
 
@@ -299,23 +289,6 @@ proc headersStagedReorg*(ctx: BeaconCtxRef; info: static[string]) =
 
     ctx.headersUnprocClear()
     ctx.hdr.staged.clear()
-    return
-
-  let nStaged = ctx.hdr.staged.len
-  if headersStagedQueueLengthHwm < nStaged:
-    debug info & ": hwm reached, flushing staged queue",
-      headersStagedQueueLengthLwm, nStaged, nReorg=ctx.pool.nReorg
-
-    # Remove the leading `1 + nStaged - headersStagedQueueLengthLwm` entries
-    # from list so that the upper `headersStagedQueueLengthLwm-1` entries
-    # remain.
-    for _ in 0 .. nStaged - headersStagedQueueLengthLwm:
-      let
-        qItem = ctx.hdr.staged.ge(BlockNumber 0).expect "valid record"
-        key = qItem.key
-        nHeaders = qItem.data.revHdrs.len.uint64
-      ctx.headersUnprocAppend(key - nHeaders + 1, key)
-      discard ctx.hdr.staged.delete key
 
 # ------------------------------------------------------------------------------
 # End
