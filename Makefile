@@ -168,6 +168,11 @@ NIM_PARAMS += -d:release
 ifneq ($(if $(ENABLE_LINE_NUMBERS),$(ENABLE_LINE_NUMBERS),0),0)
 NIM_PARAMS += -d:chronicles_line_numbers:1
 endif
+
+ifeq ($(DISABLE_MARCH_NATIVE),1)
+NIM_PARAMS += -d:disableMarchNative
+endif
+
 ifeq ($(BOEHM_GC),1)
 NIM_PARAMS += --mm:boehm
 endif
