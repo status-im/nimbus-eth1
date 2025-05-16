@@ -39,7 +39,7 @@ import
 
 const
   enrFileName = "portal_node.enr"
-  lockFileName = "nimbus_portal_client.lock"
+  lockFileName = "portal_node.lock"
   contentDbFileName = "contentdb"
 
 chronicles.formatIt(IoErrorCode):

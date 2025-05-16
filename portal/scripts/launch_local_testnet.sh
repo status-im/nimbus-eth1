@@ -292,7 +292,7 @@ dump_logs() {
 
 BOOTSTRAP_NODE=0
 BOOTSTRAP_TIMEOUT=5 # in seconds
-BOOTSTRAP_ENR_FILE="${DATA_DIR}/node${BOOTSTRAP_NODE}/fluffy_node.enr"
+BOOTSTRAP_ENR_FILE="${DATA_DIR}/node${BOOTSTRAP_NODE}/portal_node.enr"
 
 TRUSTED_BLOCK_ROOT_ARG=""
 if [[ -n ${TRUSTED_BLOCK_ROOT} ]]; then

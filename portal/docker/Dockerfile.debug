@@ -34,6 +34,8 @@ RUN  --mount=type=cache,target=/nimbus-eth1/build --mount=type=cache,target=/nim
 # Starting new image to reduce size #
 # --------------------------------- #
 FROM debian:stable-slim AS deploy
-COPY --from=build /usr/local/bin/nimbus_portal_client /usr/local/bin/nimbus_portal_client
+COPY --from=build /usr/bin/nimbus_portal_client /usr/bin/nimbus_portal_client
 
-ENTRYPOINT ["/usr/local/bin/nimbus_portal_client"]
+RUN ln -s /usr/bin/nimbus_portal_client /usr/bin/fluffy
+
+ENTRYPOINT ["/usr/bin/nimbus_portal_client"]

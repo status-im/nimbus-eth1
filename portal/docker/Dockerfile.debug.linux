@@ -7,4 +7,9 @@
 
 FROM debian:stable-slim
 
-COPY ./build/nimbus_portal_client /usr/local/bin/nimbus_portal_client
+COPY ./build/nimbus_portal_client /usr/bin/nimbus_portal_client
+
+# Legacy name for backwards compatibility
+RUN ln -s /usr/bin/nimbus_portal_client /usr/bin/fluffy
+
+ENTRYPOINT ["/usr/bin/nimbus_portal_client"]
