@@ -119,13 +119,15 @@ proc genAddress(tx: Transaction, sender: Address): Address =
   if tx.to.isNone:
     result = generateAddress(sender, tx.nonce)
 
-proc toTxReceipt(rec: Receipt,
+proc toTxReceipt(receipt: StoredReceipt,
                  tx: Transaction,
                  sender: Address,
                  txIndex: int,
                  gasUsed: GasInt): TxReceipt =
 
-  let contractAddress = genAddress(tx, sender)
+  let
+    contractAddress = genAddress(tx, sender)
+    rec = receipt.to(Receipt)
   TxReceipt(
     txType: tx.txType,
     root: if rec.isHash: rec.hash else: default(Hash32),
@@ -140,7 +142,7 @@ proc toTxReceipt(rec: Receipt,
     transactionIndex: txIndex
   )
 
-proc calcLogsHash(receipts: openArray[Receipt]): Hash32 =
+proc calcLogsHash(receipts: openArray[StoredReceipt]): Hash32 =
   var logs: seq[Log]
   for rec in receipts:
     logs.add rec.logs
@@ -231,7 +233,7 @@ proc exec(ctx: TransContext,
     vmState.mutateLedger:
       db.applyDAOHardFork()
 
-  vmState.receipts = newSeqOfCap[Receipt](ctx.txList.len)
+  vmState.receipts = newSeqOfCap[StoredReceipt](ctx.txList.len)
   vmState.cumulativeGasUsed = 0
 
   if ctx.env.parentBeaconBlockRoot.isSome:

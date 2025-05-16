@@ -64,7 +64,7 @@ proc match*(
 proc deriveLogs*(
     header: Header,
     transactions: openArray[Transaction],
-    receipts: openArray[StoredReceipt],
+    receipts: openArray[StoredReceipt] | seq[Receipt],
     filterOptions: FilterOptions,
     txHashes: Opt[seq[Hash32]] = Opt.none(seq[Hash32])
 ): seq[FilterLog] =
