@@ -49,7 +49,7 @@ type
     flags*            : set[VMFlag]
     fork*             : EVMFork
     tracer*           : TracerRef
-    receipts*         : seq[Receipt]
+    receipts*         : seq[StoredReceipt]
     cumulativeGasUsed*: GasInt
     gasCosts*         : GasCosts
     blobGasUsed*      : uint64

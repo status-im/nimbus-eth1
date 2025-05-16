@@ -30,6 +30,10 @@ template calcTxRoot*(transactions: openArray[Transaction]): Root =
 template calcWithdrawalsRoot*(withdrawals: openArray[Withdrawal]): Root =
   orderedTrieRoot(withdrawals)
 
+template calcReceiptsRoot*(receipts: openArray[StoredReceipt]): Root =
+  let recs = receipts.to(seq[Receipt])
+  orderedTrieRoot(recs)
+
 template calcReceiptsRoot*(receipts: openArray[Receipt]): Root =
   orderedTrieRoot(receipts)
 

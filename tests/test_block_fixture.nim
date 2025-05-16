@@ -19,7 +19,8 @@ var receitsRlp = rlpb.listElem(2)
 
 let blockHeader4514995* = headerRlp.read(Header)
 let blockBody4514995* = bodyRlp.read(BlockBody)
-let receipts4514995* = receitsRlp.read(seq[Receipt])
+let recs = receitsRlp.read(seq[Receipt])
+let receipts4514995* = recs.to(seq[StoredReceipt])
 
 proc getBlockHeader4514995*(): Header {.gcsafe.} =
   var headerRlp = rlpb.listElem(0)
@@ -29,6 +30,7 @@ proc getBlockBody4514995*(): BlockBody {.gcsafe.} =
   var bodyRlp = rlpb.listElem(1)
   return bodyRlp.read(BlockBody)
 
-proc getReceipts4514995*(): seq[Receipt] {.gcsafe.} =
+proc getReceipts4514995*(): seq[StoredReceipt] {.gcsafe.} =
   var receitsRlp = rlpb.listElem(2)
-  return receitsRlp.read(seq[Receipt])
+  let recs = receitsRlp.read(seq[Receipt])
+  return recs.to(seq[StoredReceipt])
