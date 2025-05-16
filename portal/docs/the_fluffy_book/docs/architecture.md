@@ -1,11 +1,11 @@
 # Nimbus Portal Client Architecture
 
-This section outlines `nimbus_portal_client`'s architecture and shows the main components in the codebase. The arrows indicate a dependancy relationship between each component.
+This section outlines the Nimbus Portal client's architecture and shows the main components in the codebase. The arrows indicate a dependancy relationship between each component.
 
 
-## `nimbus_portal_client` high level architecture
+## Nimbus Portal Client high level architecture
 
-This diagram outlines the `nimbus_portal_client` high-level architecture.
+This diagram outlines the Nimbus Portal client high-level architecture.
 ```mermaid
 
 graph TD;
@@ -20,7 +20,7 @@ graph TD;
 
 When `nimbus_portal_client` starts it runs an instance of `PortalNode` which manages the `Discv5Protocol`, `BeaconNetwork`, `HistoryNetwork` and `StateNetwork` instances. There is a single instance of each of these components and each of the subnetwork instances can be enabled/disabled depending on the startup configuration selected. The `PortalNode` instance includes everything needed to participate in the Portal network to enable storage of offered content and serving content requests from other Portal nodes. It may become part of a library in the future which would allow other projects to easily embed an instance of `nimbus_portal_client` in their codebase.
 
-The `RpcHttpServer` and `RpcWebSocketServer` enable serving JSON-RPC requests from Portal network over HTTP and WebSocket respectively. These RPC servers depend on the `nimbus_portal_client` EVM (`AsyncEvm`) in order to implement the various endpoints which require asyncronous transaction execution while fetching state from the Portal network.
+The `RpcHttpServer` and `RpcWebSocketServer` enable serving JSON-RPC requests from Portal network over HTTP and WebSocket respectively. These RPC servers depend on the Nimbus Portal EVM (`AsyncEvm`) in order to implement the various endpoints which require asyncronous transaction execution while fetching state from the Portal network.
 
 
 ## Portal subnetworks
@@ -56,9 +56,9 @@ content from the `PortalStream` when the node receives content from peers. When 
 initiated which is bigger than the max Discv5 message size, then the `PortalStream` transfers the content using
 the `UtpDiscv5Protocol` type which implements uTP on top of Discv5.
 
-The `RoutingTable` implements a Kademlia based DHT which holds the peer ENRs which `nimbus_portal_client` discovers while participating
+The `RoutingTable` implements a Kademlia based DHT which holds the peer ENRs which the Portal node discovers while participating
 in each of the Portal Wire subprotocols. The `RadiusCache` holds the last known radius for each peer which is collected
-when pinging each node in the routing table periodically. The `OfferCache` caches the content ids of the most recent content successfully offered and stored so that `nimbus_portal_client` can reject content that it already has without doing a database lookup. The `ContentCache` improves the performance of content lookups (used by the JSON-RPC API's) by caching the most recently fetched
+when pinging each node in the routing table periodically. The `OfferCache` caches the content ids of the most recent content successfully offered and stored so that the Portal node can reject content that it already has without doing a database lookup. The `ContentCache` improves the performance of content lookups (used by the JSON-RPC API's) by caching the most recently fetched
 content in a LRU cache.
 
 The `ContentDb` is the main database in `nimbus_portal_client` which internally uses sqlite to store the content data on disk. The `PortalProtocol`
@@ -66,9 +66,9 @@ uses the `OfferQueue` to hold pending offer requests which are passed to the `Po
 which run as a part of `PortalProtocol`.
 
 
-## `nimbus_portal_client` EVM
+## Nimbus Portal EVM
 
-This diagram outlines the architecture of the `nimbus_portal_client` EVM.
+This diagram outlines the architecture of the Nimbus Portal EVM.
 
 ```mermaid
 
@@ -79,6 +79,6 @@ graph TD;
 
 ```
 
-The `nimbus_portal_client` EVM is used by the `eth_call` and `eth_estimateGas` RPC endpoints which both need to execute bytecode in the EVM.
+The Nimbus Portal EVM is used by the `eth_call` and `eth_estimateGas` RPC endpoints which both need to execute bytecode in the EVM.
 It uses an instance of the `AsyncEvm` which is built on top of the Nimbus EVM in order to provide asyncronous transaction execution that can fetch state concurrently from a configured backend. In this case we use the `AsyncEvmPortalBackend` which wires in the `StateNetwork` which provides the account, storage and bytecode state on demand from the portal state network when executing
 a transaction.
