@@ -23,6 +23,7 @@ import
   eth/net/nat,
   eth/p2p/discoveryv5/protocol as discv5_protocol,
   ../common/common_utils,
+  ../common/common_deprecation,
   ../evm/[async_evm, async_evm_portal_backend],
   ../rpc/[
     rpc_eth_api, rpc_debug_api, rpc_discovery_api, rpc_portal_common_api,
@@ -36,11 +37,10 @@ import
   ../logging,
   ./nimbus_portal_client_conf
 
-# TODO:
-# Currently still keeping the fluffy name here. Change should first be made to
-# write the Unix epoch as seqNum in ENR and then this file no longer needs to
-# be read.
-const enrFileName = "fluffy_node.enr"
+const
+  enrFileName = "portal_node.enr"
+  lockFileName = "nimbus_portal_client.lock"
+  contentDbFileName = "contentdb"
 
 chronicles.formatIt(IoErrorCode):
   $it
@@ -74,17 +74,17 @@ proc run(portalClient: PortalClient, config: PortalConf) {.raises: [CatchableErr
     version = fullVersionStr, cmdParams = commandLineParams()
 
   let rng = newRng()
+  let dataDir = config.dataDir.string
 
   # Make sure dataDir exists
-  let pathExists = createPath(config.dataDir.string)
+  let pathExists = createPath(dataDir)
   if pathExists.isErr():
-    fatal "Failed to create data directory",
-      dataDir = config.dataDir, error = pathExists.error
+    fatal "Failed to create data directory", dataDir, error = pathExists.error
     quit QuitFailure
 
   # Make sure multiple instances to the same dataDir do not exist
   let
-    lockFilePath = config.dataDir.string / "nimbus_portal_client.lock"
+    lockFilePath = dataDir / lockFileName
     lockFlags = {OpenFlags.Create, OpenFlags.Read, OpenFlags.Write}
     lockFileHandleResult = openFile(lockFilePath, lockFlags)
 
@@ -95,7 +95,7 @@ proc run(portalClient: PortalClient, config: PortalConf) {.raises: [CatchableErr
   let lockFileHandle = lockFile(lockFileHandleResult.value(), LockType.Exclusive)
   if lockFileHandle.isErr():
     fatal "Please ensure no other nimbus_portal_client instances are running with the same data directory",
-      dataDir = config.dataDir
+      dataDir
     quit QuitFailure
 
   let lockFileIoHandle = lockFileHandle.value()
@@ -104,6 +104,11 @@ proc run(portalClient: PortalClient, config: PortalConf) {.raises: [CatchableErr
       discard unlockFile(lockFileIoHandle)
       discard closeFile(lockFileIoHandle.handle)
   )
+
+  # Check for legacy files and move them to the new naming in case they exist
+  # TODO: Remove this at some point in the future
+  moveFileIfExists(dataDir / legacyEnrFileName, dataDir / enrFileName)
+  moveFileIfExists(dataDir / legacyLockFileName, dataDir / lockFileName)
 
   ## Network configuration
   let
@@ -125,7 +130,7 @@ proc run(portalClient: PortalClient, config: PortalConf) {.raises: [CatchableErr
       else:
         getPersistentNetKey(rng[], config.networkKeyFile)
 
-    enrFilePath = config.dataDir / enrFileName
+    enrFilePath = dataDir / enrFileName
     previousEnr =
       if not newNetKey:
         getPersistentEnr(enrFilePath)
@@ -180,7 +185,7 @@ proc run(portalClient: PortalClient, config: PortalConf) {.raises: [CatchableErr
   ## Force pruning - optional
   if config.forcePrune:
     let db = ContentDB.new(
-      config.dataDir / config.network.getDbDirectory() / "contentdb_" &
+      dataDir / config.network.getDbDirectory() / "contentdb_" &
         d.localNode.id.toBytesBE().toOpenArray(0, 8).toHex(),
       storageCapacity = config.storageCapacityMB * 1_000_000,
       radiusConfig = config.radiusConfig,
@@ -203,6 +208,24 @@ proc run(portalClient: PortalClient, config: PortalConf) {.raises: [CatchableErr
     db.forcePrune(d.localNode.id, radius)
     db.close()
 
+  # Check for legacy db naming and move to the new naming in case it exist
+  # TODO: Remove this at some point in the future
+  let dbPath =
+    dataDir / config.network.getDbDirectory() / "contentdb_" &
+    d.localNode.id.toBytesBE().toOpenArray(0, 8).toHex()
+  moveFileIfExists(
+    dbPath / legacyContentDbFileName & ".sqlite3",
+    dbPath / contentDbFileName & ".sqlite3",
+  )
+  moveFileIfExists(
+    dbPath / legacyContentDbFileName & ".sqlite3-shm",
+    dbPath / contentDbFileName & ".sqlite3-shm",
+  )
+  moveFileIfExists(
+    dbPath / legacyContentDbFileName & ".sqlite3-wal",
+    dbPath / contentDbFileName & ".sqlite3-wal",
+  )
+
   ## Portal node setup
   let
     portalProtocolConfig = PortalProtocolConfig.init(
@@ -221,7 +244,7 @@ proc run(portalClient: PortalClient, config: PortalConf) {.raises: [CatchableErr
       disableStateRootValidation: config.disableStateRootValidation,
       trustedBlockRoot: config.trustedBlockRoot.optionToOpt(),
       portalConfig: portalProtocolConfig,
-      dataDir: string config.dataDir,
+      dataDir: dataDir,
       storageCapacity: config.storageCapacityMB * 1_000_000,
       contentRequestRetries: config.contentRequestRetries.int,
       contentQueueWorkers: config.contentQueueWorkers,
@@ -236,7 +259,7 @@ proc run(portalClient: PortalClient, config: PortalConf) {.raises: [CatchableErr
       rng = rng,
     )
 
-  let enrFile = config.dataDir / enrFileName
+  let enrFile = dataDir / enrFileName
   if io2.writeFile(enrFile, d.localNode.record.toURI()).isErr:
     fatal "Failed to write the enr file", file = enrFile
     quit 1

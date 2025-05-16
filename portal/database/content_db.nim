@@ -204,9 +204,7 @@ proc new*(
         "working database (out of memory?)"
       )
     else:
-      # TODO: unfortunate that this was called fluffy and not contentdb
-      # How to deprecate this naming?
-      SqStoreRef.init(path, "fluffy", manualCheckpoint = false).expectDb()
+      SqStoreRef.init(path, "contentdb", manualCheckpoint = false).expectDb()
 
   db.createCustomFunction("xorDistance", 2, xorDistance).expect(
     "Custom function xorDistance creation OK"

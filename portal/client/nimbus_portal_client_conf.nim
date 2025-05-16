@@ -20,18 +20,8 @@ import
   stew/io2,
   eth/net/nat, # must be late (compilation annoyance)
   ../logging,
-  ../network/wire/portal_protocol_config
-
-proc legacyDataDir*(): string =
-  let relativeDataDir =
-    when defined(windows):
-      "AppData" / "Roaming" / "Fluffy"
-    elif defined(macosx):
-      "Library" / "Application Support" / "Fluffy"
-    else:
-      ".cache" / "fluffy"
-
-  getHomeDir() / relativeDataDir
+  ../network/wire/portal_protocol_config,
+  ../common/common_deprecation
 
 proc defaultDataDir*(): string =
   # Backwards compatibility for the old default data directory
