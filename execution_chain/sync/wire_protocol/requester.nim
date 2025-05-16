@@ -104,14 +104,6 @@ const
   # https://github.com/ethereum/devp2p/blob/b0c213de97978053a0f62c3ea4d23c0a3d8784bc/caps/eth.md#blockrangeupdate-0x11
   BlockRangeUpdateMsg*           = 0x11'u64
 
-# func to*(list: openArray[Receipt], _: type seq[StoredReceipt]): seq[StoredReceipt] =
-#   for x in list:
-#     result.add x.to(StoredReceipt)
-
-# func to*(list: openArray[StoredReceipt], _: type seq[Receipt]): seq[Receipt] =
-#   for x in list:
-#     result.add x.to(Receipt)
-
 func to*(rec: StoredReceiptsPacket, _: type ReceiptsPacket): ReceiptsPacket =
   for x in rec.receipts:
     result.receipts.add x.to(seq[Receipt])
