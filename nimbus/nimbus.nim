@@ -11,7 +11,10 @@ import
   consensus/consensus_layer,
   execution/execution_layer,
   common/utils,
-  conf
+  conf,
+  confutils/[cli_parser, toml/defs],
+  ../execution_chain/config,
+  beacon_chain/conf
 
 # ------------------------------------------------------------------------------
 # Private
@@ -84,37 +87,56 @@ proc monitorServices(nimbus: Nimbus) =
 
   notice "Exited all services"
 
+# Setup services
+proc setup(nimbus: var Nimbus) =
+  let
+    executionConfigNames = extractFieldNames(NimbusConf)
+    consensusConfigNames = extractFieldNames(BeaconNodeConf)
+
+  var consensusParams, executionParams = NimbusConfigTable()
+
+  for _, cmdKey, cmdArg in getopt(commandLineParams()):
+    var found = false
+    if cmdKey in consensusConfigNames:
+      consensusParams[cmdKey] = cmdArg
+      found = true
+
+    if cmdKey in executionConfigNames:
+      executionParams[cmdKey] = cmdArg
+      found = true
+
+    if not found:
+      error "Unrecognized option ", option = cmdKey
+      #TODO: invoke configurations helpers
+      quit 0
+
+  let
+    consensusService = NimbusService(
+      name: "Consensus Layer",
+      serviceFunc: consensusLayerHandler,
+      layerConfig: LayerConfig(kind: Consensus, consensusOptions: consensusParams),
+    )
+    executionService = NimbusService(
+      name: "Execution Layer",
+      serviceFunc: executionLayerHandler,
+      layerConfig: LayerConfig(kind: Execution, executionOptions: executionParams),
+    )
+
+  nimbus.serviceList.add(executionService)
+  nimbus.serviceList.add(consensusService)
+
 # ------------------------------------------------------------------------------
 # Public
 # ------------------------------------------------------------------------------
 
 ## start nimbus client
 proc run*(nimbus: var Nimbus) =
-  # to be filled with command line options after parsed according to service
-  var
-    consOpt, execOpt = NimbusConfigTable()
-
-    executionService: NimbusService = NimbusService(
-      name: "Execution Layer",
-      serviceFunc: executionLayerHandler,
-      layerConfig: LayerConfig(kind: Execution, executionOptions: execOpt),
-    )
-
-    consensusService: NimbusService = NimbusService(
-      name: "Consensus Layer",
-      serviceFunc: consensusLayerHandler,
-      layerConfig: LayerConfig(kind: Consensus, consensusOptions: consOpt),
-    )
-
-  nimbus.serviceList.add(executionService)
-  nimbus.serviceList.add(consensusService)
-
   try:
     for service in nimbus.serviceList.mitems():
       info "Starting service ", service = service.name
       nimbus.startService(service)
   except Exception as e:
-    fatal "error", msg = e.msg
+    fatal "error starting service:", msg = e.msg
     quit QuitFailure
 
   ## wait for shutdown
@@ -141,6 +163,8 @@ when isMainModule:
     quit 0
 
   setControlCHook(controlCHandler)
+
+  nimbus.setup()
   nimbus.run()
 
 # -----

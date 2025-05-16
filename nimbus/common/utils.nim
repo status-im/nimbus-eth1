@@ -12,6 +12,26 @@ import std/[strutils], results, ../conf, chronicles, stew/shims/macros
 logScope:
   topics = "utils"
 
+## Macro that collects name-layer pairs from configuration
+macro extractFieldNames*(configType: typed): untyped =
+  # TODO: add abbreviations support
+  var names: seq[string] = newSeq[string]()
+  let recDef = configType.getImpl()
+
+  for field in recordFields(recDef):
+    let namePragma: NimNode = field.readPragma("name")
+    if namePragma.kind == nnkNilLit:
+      # let a: NimNode = field.readPragma("defaultValue")
+      # echo a
+      #error "missing configuration name"
+      continue
+
+    let nameVal = $namePragma
+    names.add(nameVal)
+
+  result = quote:
+    `names . mapIt ( newLit ( it ))`
+
 ## Write a string into a raw memory buffer (prefixed with length)
 proc writeConfigString*(offset: var uint, elem: string) =
   if offset <= 0:
