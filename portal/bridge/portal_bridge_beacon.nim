@@ -1,4 +1,4 @@
-# Fluffy
+# Nimbus
 # Copyright (c) 2023-2025 Status Research & Development GmbH
 # Licensed and distributed under either of
 #   * MIT license (license terms in the root directory or at https://opensource.org/licenses/MIT).
@@ -280,7 +280,7 @@ proc gossipHistoricalSummaries(
       err("No historical summaries pre-Capella")
 
 proc runBeacon*(config: PortalBridgeConf) {.raises: [CatchableError].} =
-  notice "Launching Fluffy beacon chain bridge", cmdParams = commandLineParams()
+  notice "Launching Nimbus Portal beacon chain bridge", cmdParams = commandLineParams()
 
   let
     (cfg, forkDigests, beaconClock) = getBeaconData()

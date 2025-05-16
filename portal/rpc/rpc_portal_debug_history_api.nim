@@ -1,5 +1,5 @@
-# Fluffy
-# Copyright (c) 2022-2024 Status Research & Development GmbH
+# Nimbus
+# Copyright (c) 2022-2025 Status Research & Development GmbH
 # Licensed and distributed under either of
 #   * MIT license (license terms in the root directory or at https://opensource.org/licenses/MIT).
 #   * Apache v2 license (license terms in the root directory or at https://www.apache.org/licenses/LICENSE-2.0).
@@ -16,7 +16,7 @@ import
 export rpcserver
 
 # Non-spec-RPCs that are used for seeding history content into the network without
-# usage of the standalone portal_bridge. As source Era1 files are used.
+# usage of the standalone nimbus_portal_bridge. As source Era1 files are used.
 proc installPortalDebugHistoryApiHandlers*(rpcServer: RpcServer, p: PortalProtocol) =
   ## Portal debug API calls related to storage and seeding from Era1 files.
   rpcServer.rpc("portal_debug_historyGossipHeaders") do(

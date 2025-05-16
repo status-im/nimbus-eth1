@@ -1,6 +1,6 @@
 # Access content on the Portal network
 
-Once you have a Fluffy node [connected to network](./connect-to-portal.md) with
+Once you have a Portal node [connected to network](./connect-to-portal.md) with
 the JSON-RPC interface enabled, then you can access the content available on
 the Portal network.
 

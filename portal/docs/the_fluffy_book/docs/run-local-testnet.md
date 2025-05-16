@@ -9,12 +9,12 @@ on them through the JSON-RPC API.
 
 ```bash
 # Run the script, default start 3 nodes
-./fluffy/scripts/launch_local_testnet.sh
+./portal/scripts/launch_local_testnet.sh
 # Run the script with 16 nodes
-./fluffy/scripts/launch_local_testnet.sh -n 16
+./portal/scripts/launch_local_testnet.sh -n 16
 
 # See the script help
-./fluffy/scripts/launch_local_testnet.sh --help
+./portal/scripts/launch_local_testnet.sh --help
 ```
 
 The nodes will be started and all nodes will use `node0` as bootstrap node.
@@ -24,8 +24,8 @@ The `data-dir`s and logs of each node can be found in `./local_testnet_data/`.
 You can manually start extra nodes that connect to the network by providing
 any of the running nodes their ENR.
 
-E.g. to manually add a Fluffy node to the local testnet run:
+E.g. to manually add a Portal node to the local testnet run:
 
 ```bash
-./build/fluffy --rpc --network:none --udp-port:9010 --nat:extip:127.0.0.1 --bootstrap-node:`cat ./local_testnet_data/node0/fluffy_node.enr`
+./build/nimbus_portal_client --rpc --network:none --udp-port:9010 --nat:extip:127.0.0.1 --bootstrap-node:`cat ./local_testnet_data/node0/portal_node.enr`
 ```

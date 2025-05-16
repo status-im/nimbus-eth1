@@ -1,4 +1,4 @@
-# Fluffy
+# Nimbus
 # Copyright (c) 2021-2025 Status Research & Development GmbH
 # Licensed and distributed under either of
 #   * MIT license (license terms in the root directory or at https://opensource.org/licenses/MIT).
@@ -28,7 +28,7 @@ from eth/rlp import computeRlpHash
 export rpcserver
 
 # See the list of Ethereum execution JSON-RPC APIs which will be supported by
-# Portal Network clients such as Fluffy:
+# Portal Network clients:
 # https://github.com/ethereum/portal-network-specs?tab=readme-ov-file#the-json-rpc-api
 
 func init*(

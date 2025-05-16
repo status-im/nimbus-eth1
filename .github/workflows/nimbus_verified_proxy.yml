@@ -236,7 +236,7 @@ jobs:
       - name: Check nph formatting
         # Pin nph to a specific version to avoid sudden style differences.
         # Updating nph version should be accompanied with running the new
-        # version on the fluffy directory.
+        # version on the nimbus_verified_proxy directory.
         run: |
           VERSION="v0.6.1"
           ARCHIVE="nph-linux_x64.tar.gz"

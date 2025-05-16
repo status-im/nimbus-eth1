@@ -1,6 +1,6 @@
-# Fluffy: The Nimbus Portal Network Client
+# The Nimbus Portal Network Client
 
-[![Fluffy CI](https://github.com/status-im/nimbus-eth1/actions/workflows/fluffy.yml/badge.svg)](https://github.com/status-im/nimbus-eth1/actions/workflows/fluffy.yml)
+[![Nimbus Portal client CI](https://github.com/status-im/nimbus-eth1/actions/workflows/portal.yml/badge.svg)](https://github.com/status-im/nimbus-eth1/actions/workflows/portal.yml)
 ![Stability: experimental](https://img.shields.io/badge/stability-experimental-orange.svg)
 [![License: Apache](https://img.shields.io/badge/license-Apache%202.0-blue.svg)](https://opensource.org/licenses/Apache-2.0)
 [![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](https://opensource.org/licenses/MIT)
@@ -10,11 +10,11 @@
 
 ## Introduction
 
-Fluffy is the Nimbus client implementation of the
+The `nimbus_portal_client` is the Nimbus client implementation of the
 [Portal network specifications](https://github.com/ethereum/portal-network-specs).
 
-You can find all the information you need to run a Fluffy node in
-[The Fluffy Book](https://status-im.github.io/nimbus-eth1).
+You can find all the information you need to run a the `nimbus_portal_client` in
+[the guide](https://status-im.github.io/nimbus-eth1).
 
 The [quickstart page](https://status-im.github.io/nimbus-eth1/quick-start.html)
 in particular will help you to get quickly connected to the Portal network.

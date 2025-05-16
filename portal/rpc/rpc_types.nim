@@ -31,7 +31,7 @@ const
     msg: "The client has blocked users from specifying the payload for this extension",
   )
 
-  # These errors are used by Fluffy but are not yet in the spec
+  # These errors are used by Nimbus Portal but are not yet in the spec
   InvalidContentKeyError* = (code: -32602, msg: "Invalid content key")
   InvalidContentValueError* = (code: -32602, msg: "Invalid content value")
 

@@ -1,6 +1,6 @@
 # Portal Network Wire Protocol
 ## Introduction
-The `fluffy/network/wire` directory holds a Nim implementation of the
+The `portal/network/wire` directory holds a Nim implementation of the
 [Portal Network Wire Protocol](https://github.com/ethereum/portal-network-specs/blob/31bc7e58e2e8acfba895d5a12a9ae3472894d398/state/state-network.md#wire-protocol).
 
 The wire protocol builds on top of the Node Discovery v5.1 protocol its
@@ -9,22 +9,6 @@ The wire protocol builds on top of the Node Discovery v5.1 protocol its
 For further information on the Nim implementation of the Node Discovery v5.1
 protocol check out the
 [discv5](https://github.com/status-im/nim-eth/blob/master/doc/discv5.md) page.
-
-## Test suite
-To run the test suite specifically for the Portal wire protocol, run following
-commands:
-```sh
-git clone https://github.com/status-im/nimbus-eth1.git
-cd nimbus-eth1
-
-# To bring the git submodules up to date
-make update
-
-# Build & run Portal wire protocol encoding test
-./env.sh nim c -r ./fluffy/tests/test_portal_wire_encoding
-# Build & run Portal wire protocol network test
-./env.sh nim c -r ./fluffy/tests/test_portal_wire_protocol
-```
 
 ## portalcli
 This is a small command line application that allows you to run a node running
@@ -43,8 +27,8 @@ send one of the Portal message types, wait for the response, and then shut down.
 git clone https://github.com/status-im/nimbus-eth1.git
 cd nimbus-eth1
 
-# Build the fluffy tools
-make fluffy-tools
+# Build portalcli
+make portalcli
 
 # See all options
 ./build/portalcli --help

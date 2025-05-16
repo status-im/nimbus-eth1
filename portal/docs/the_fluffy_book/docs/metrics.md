@@ -1,14 +1,14 @@
 # Metrics and their visualisation
 
 In this page we'll cover how to enable metrics and how to use Grafana and
-Prometheus to help you visualize these real-time metrics concerning the Fluffy
+Prometheus to help you visualize these real-time metrics concerning the Portal
 node.
 
-## Enable metrics in Fluffy
+## Enable metrics in the Nimbus Portal client
 
-To enable metrics run Fluffy with the `--metrics` flag:
+To enable metrics run the Nimbus Portal client with the `--metrics` flag:
 ```bash
-./build/fluffy --metrics
+./build/nimbus_portal_client --metrics
 ```
 Default the metrics are available at [http://127.0.0.1:8008/metrics](http://127.0.0.1:8008/metrics).
 
@@ -24,9 +24,9 @@ over time and to also visualise them one can use for example Prometheus and Graf
 The steps on how to set up metrics visualisation with Prometheus and Grafana is
 explained in [this guide](https://nimbus.guide/metrics-pretty-pictures.html#prometheus-and-grafana).
 
-A Fluffy specific dashboard can be found [here](https://github.com/status-im/nimbus-eth1/blob/master/fluffy/grafana/fluffy_grafana_dashboard.json).
+A Nimbus Portal specific dashboard can be found [here](https://github.com/status-im/nimbus-eth1/blob/master/portal/metrics/grafana/fluffy_grafana_dashboard.json).
 
-This is the dashboard used for our Fluffy Portal network fleet.
+This is the dashboard used for our Nimbus Portal network fleet.
 In order to use it locally, you will have to remove the
 `{job="nimbus-fluffy-metrics"}` part from the `instance` and `container`
 variables queries in the dashboard settings. Or they can also be changed to a

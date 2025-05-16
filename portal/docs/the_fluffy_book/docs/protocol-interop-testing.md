@@ -10,13 +10,13 @@ that attempt to send 1 specific message and then shutdown.
 The first is more powerful and complete, the second one might be easier to do
 some quick testing.
 
-## Run Fluffy and test protocol messages via JSON-RPC API
+## Run the Nimbus Portal client and test protocol messages via JSON-RPC API
 
-First build Fluffy as explained [here](./quick-start.md#build-the-fluffy-client).
+First build the Nimbus Portal client as explained [here](./quick-start.md#build-the-nimbus-portal-client).
 
 Next run it with the JSON-RPC server enabled:
 ```bash
-./build/fluffy --rpc --rpc-api:portal,discovery --bootstrap-node:enr:<base64 encoding of ENR>
+./build/nimbus_portal_client --rpc --rpc-api:portal,discovery --bootstrap-node:enr:<base64 encoding of ENR>
 ```
 
 ### Testing Discovery v5 layer

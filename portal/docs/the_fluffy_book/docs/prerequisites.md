@@ -1,6 +1,6 @@
 # Prerequisites
 
-The Fluffy client runs on Linux, macOS, Windows, and Android.
+The Nimbus Portal client runs on Linux, macOS, Windows, and Android.
 
 ## Build prerequisites
 
@@ -34,7 +34,7 @@ installed:
     ```
 
 === "Windows"
-    To build Fluffy on Windows, the MinGW-w64 build environment is recommended.
+    To build the Nimbus Portal client on Windows, the MinGW-w64 build environment is recommended.
 
     - Install Mingw-w64 for your architecture using the "[MinGW-W64 Online Installer](https://sourceforge.net/projects/mingw-w64/files/)":
 
@@ -49,14 +49,14 @@ installed:
     - Install [CMake](https://cmake.org/).
 
     - Install [Git for Windows](https://gitforwindows.org/) and use a "Git Bash"
-    shell to clone nimbus-eth1 and build Fluffy.
+    shell to clone nimbus-eth1 and build `nimbus_portal_client`.
 
 
 === "Android"
 
     - Install the [Termux](https://termux.com) app from FDroid or the Google Play store
     - Install a [PRoot](https://wiki.termux.com/wiki/PRoot) of your choice following the instructions for your preferred distribution.
-    The Ubuntu PRoot is known to contain all Fluffy prerequisites compiled on Arm64 architecture (the most common architecture for Android devices).
+    The Ubuntu PRoot is known to contain all `nimbus_portal_client` prerequisites compiled on Arm64 architecture (the most common architecture for Android devices).
 
     Assuming you use Ubuntu PRoot:
 

@@ -1,4 +1,4 @@
-# Fluffy
+# Nimbus
 # Copyright (c) 2023-2025 Status Research & Development GmbH
 # Licensed and distributed under either of
 #   * MIT license (license terms in the root directory or at https://opensource.org/licenses/MIT).

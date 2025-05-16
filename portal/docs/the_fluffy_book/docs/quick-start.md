@@ -1,6 +1,6 @@
 # Quick start - Linux/macOS
 
-This page takes you through the steps of getting the Fluffy Portal node running
+This page takes you through the steps of getting the Nimbus Portal node running
 on the public network.
 
 The guide assumes Linux or macOS is being used. For Windows users follow this
@@ -14,21 +14,21 @@ The guide assumes Linux or macOS is being used. For Windows users follow this
 If you need help installing these tools, you can consult our
 [prerequisites page](./prerequisites.md).
 
-### Build the Fluffy client
+### Build the Nimbus Portal client
 ```bash
 git clone https://github.com/status-im/nimbus-eth1.git
 cd nimbus-eth1
-make fluffy
+make nimbus_portal_client
 
 # Test if binary was successfully build by running the help command.
-./build/fluffy --help
+./build/nimbus_portal_client --help
 ```
 
-### Run a Fluffy client on the Portal network
+### Run a Nimbus Portal client on the Portal network
 
 ```bash
 # Connect to the Portal bootstrap nodes and enable the JSON-RPC APIs
-./build/fluffy --rpc
+./build/nimbus_portal_client --rpc
 ```
 
 ### Try requesting an execution layer block from the network
@@ -42,7 +42,7 @@ BLOCKHASH=0x55b11b918355b1ef9c5db810302ebad0bf2544255b530cdce90674d5887bb286 # R
 curl -s -X POST -H 'Content-Type: application/json' -d '{"jsonrpc":"2.0","id":"1","method":"eth_getBlockByHash","params":["'${BLOCKHASH}'", true]}' http://localhost:8545
 ```
 
-### Update and rebuild the Fluffy client
+### Update and rebuild the Nimbus Portal client
 In order to stay up to date you can pull the latest version from our master
 branch. There are currently released versions tagged.
 
@@ -52,5 +52,5 @@ git pull
 # To bring the git submodules up to date
 make update
 
-make fluffy
+make nimbus_portal_client
 ```

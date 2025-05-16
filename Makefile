@@ -68,7 +68,7 @@ TOOLS_DIRS := \
 # comma-separated values for the "clean" target
 TOOLS_CSV := $(subst $(SPACE),$(COMMA),$(TOOLS))
 
-# Fluffy debugging tools + testing tools
+# Portal debugging tools + testing tools
 PORTAL_TOOLS := \
 	nimbus_portal_bridge \
 	eth_data_exporter \

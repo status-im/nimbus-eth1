@@ -45,11 +45,11 @@ To run integration testing scenarios with different network conditions:
 
 ```
 1. cd nimbus-eth1/
-2. docker build -t test-utp --build-arg BRANCH_NAME={branch-name} fluffy/tools/utp_testing/docker
-3. SCENARIO="scenario_details" docker-compose -f fluffy/tools/utp_testing/docker/docker-compose.yml up
+2. docker build -t test-utp --build-arg BRANCH_NAME={branch-name} portal/tools/utp_testing/docker
+3. SCENARIO="scenario_details" docker-compose -f portal/tools/utp_testing/docker/docker-compose.yml up
 
 For example:
-SCENARIO="drop-rate --delay=15ms --bandwidth=10Mbps --queue=25 --rate_to_client=0 --rate_to_server=0" docker-compose -f fluffy/tools/utp_testing/docker/docker-compose.yml up
+SCENARIO="drop-rate --delay=15ms --bandwidth=10Mbps --queue=25 --rate_to_client=0 --rate_to_server=0" docker-compose -f portal/tools/utp_testing/docker/docker-compose.yml up
 would start `drop-rate` scenario with specified delay, bandwith, and different drop rates
 4. make utp-test
 ```

@@ -11,7 +11,7 @@ nodes will be killed.
 
 ```bash
 # Run the script, default start 64 nodes and run history tests
-./fluffy/scripts/launch_local_testnet.sh --run-tests
+./portal/scripts/launch_local_testnet.sh --run-tests
 ```
 
 ## Details of the `test_portal_testnet` test

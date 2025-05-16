@@ -375,7 +375,7 @@ if [[ "$PORTAL_BRIDGE" == "1" ]]; then
   # Give the nodes time to connect before the bridge (node 0) starts gossip
   sleep 10
   echo "Starting portal bridge for beacon network."
-  ./build/portal_bridge beacon \
+  ./build/nimbus_portal_bridge beacon \
     --rest-url="${REST_URL}" \
     --portal-rpc-url="http://127.0.0.1:${BASE_RPC_PORT}"
     --backfill-amount=128 \

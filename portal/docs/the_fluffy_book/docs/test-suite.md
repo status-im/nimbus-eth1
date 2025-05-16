@@ -1,14 +1,14 @@
-# Fluffy test suite
+# Nimbus Portal test suite
 
-## Run Fluffy test suite
+## Run the Nimbus Portal test suite
 ```bash
 # From the nimbus-eth1 repository
-make fluffy-test
+make portal-test
 ```
 
-## Run Fluffy local testnet script
+## Run Nimbus Portal local testnet script
 ```bash
-./fluffy/scripts/launch_local_testnet.sh --run-tests
+./portal/scripts/launch_local_testnet.sh --run-tests
 ```
 
 Find more details on the usage and workings of the local testnet script

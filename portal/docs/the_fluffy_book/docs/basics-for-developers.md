@@ -1,6 +1,6 @@
 # The basics for developers
 
-When working on Fluffy in the nimbus-eth1 repository, you can run the `env.sh`
+When working on Nimbus Portal client in the nimbus-eth1 repository, you can run the `env.sh`
 script to run a command with the right environment variables set. This means the
 vendored Nim and Nim modules will be used, just as when you use `make`.
 
@@ -22,11 +22,11 @@ The code follows the
 
 ## Nim code formatting
 
-The Fluffy codebase is formatted with [nph](https://github.com/arnetheduck/nph).
+The `portal` codebase is formatted with [nph](https://github.com/arnetheduck/nph).
 Check out the [this page](https://arnetheduck.github.io/nph/installation.html)
 on how to install nph.
 
-The Fluffy CI tests check the code formatting according to the style rules of nph.
+The Nimbus Portal CI tests check the code formatting according to the style rules of nph.
 Developers will need to make sure the code changes in PRs are formatted as such.
 
 !!! note

@@ -1,6 +1,6 @@
-# Testing Fluffy with hive
+# Testing Nimbus Portal client with hive
 
-Fluffy is one of the Portal clients that is being tested with [hive](https://github.com/ethereum/hive).
+The `nimbus_portal_client` is one of the Portal clients that is being tested with [hive](https://github.com/ethereum/hive).
 
 To see the status of the tests for the current version you can access [https://portal-hive.ethdevops.io/](https://portal-hive.ethdevops.io/).
 
@@ -17,7 +17,7 @@ go build .
 Example commands for running test suites:
 
 ```sh
-# Run the portal hive tests with only the fluffy client
+# Run the portal hive tests with only the Nimbus Portal client
 ./hive --sim portal --client fluffy
 
 # Run the portal hive tests with different clients
@@ -39,8 +39,8 @@ go build ./cmd/hiveview
 
 ## Build a local development Docker image for hive
 
-To debug & develop Fluffy code against hive tests you might want to
-create a local development Docker image for Fluffy.
+To debug & develop the Nimbus Portal client code against hive tests you might want to
+create a local development Docker image.
 
 To do that follow next steps:
 
@@ -48,18 +48,18 @@ To do that follow next steps:
 
 2) Build the local development Docker image using the following command:
 ```
-docker build --tag fluffy-dev --file ./fluffy/tools/docker/Dockerfile.debug .
+docker build --tag fluffy-dev --file ./portal/docker/Dockerfile.debug .
 ```
 
 3) Modify the `FROM` tag in the portal-hive `Dockerfile` of fluffy at
 `./hive/clients/fluffy/Dockerfile` to use the image that was build in step 2.
 
-4) Run the tests as [usual](fluffy-with-portal-hive.md/#run-the-hive-tests-locally).
+4) Run the tests as [usual](nimbus-portal-with-portal-hive.md/#run-the-hive-tests-locally).
 
 !!! warning
     The `./vendors` dir is dockerignored and cached. If you have to make local
     changes to one of the dependencies in that directory you will have to remove
-    `vendors/` from `./fluffy/tools/docker/Dockerfile.debug.dockerignore`.
+    `vendors/` from `./portal/docker/Dockerfile.debug.dockerignore`.
 
 !!! note
-    When developing on Linux the `./fluffy/tools/docker/Dockerfile.debug.linux` Dockerfile can also be used instead. It does require to manually build fluffy first as it copies over this binary.
+    When developing on Linux the `./portal/docker/Dockerfile.debug.linux` Dockerfile can also be used instead. It does require to manually build fluffy first as it copies over this binary.

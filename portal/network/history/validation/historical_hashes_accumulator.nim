@@ -52,7 +52,7 @@ type
 
   EpochRecord* = List[HeaderRecord, EPOCH_SIZE]
 
-  # In the core code of Fluffy the `EpochRecord` type is solely used, as
+  # In the core code of the node the `EpochRecord` type is solely used, as
   # `hash_tree_root` is done either once or never on this object after
   # serialization.
   # However for the generation of the proofs for all the headers in an epoch, it

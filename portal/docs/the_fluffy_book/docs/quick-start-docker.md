@@ -1,6 +1,6 @@
 # Quick start - Docker
 
-This page takes you through the steps of getting the Fluffy Portal node running
+This page takes you through the steps of getting the Nimbus Portal client running
 on the public network by use of the [public Docker image](https://hub.docker.com/r/statusim/nimbus-fluffy/tags).
 
 The Docker image gets rebuild from latest master every night and only `amd64` is supported currently.
@@ -10,7 +10,7 @@ The Docker image gets rebuild from latest master every night and only `amd64` is
 ### Prerequisites
 - [Docker](https://www.docker.com/)
 
-### Use the Docker image to run a Fluffy client on the Portal network
+### Use the Docker image to run the Nimbus Portal client on the Portal network
 
 ```bash
 # Connect to the Portal bootstrap nodes and enable the JSON-RPC APIs.
@@ -18,7 +18,7 @@ docker container run -p 8545:8545 statusim/nimbus-fluffy:amd64-master-latest --r
 ```
 !!! note
     Port 8545 is published and `rpc-address` is set to the `ANY` address in this command to allow access to the JSON-RPC API from outside the Docker image. You might want to adjust that depending on the use case & security model.
-    It is also recommended to use a mounted volume for Fluffy's `--data-dir` in case of a long-running container.
+    It is also recommended to use a mounted volume for `nimbus_portal_client`'s `--data-dir` in case of a long-running container.
 
 ### Try requesting an execution layer block from the network
 

@@ -2,25 +2,25 @@
 
 ## Seeding from content bridges
 
-### Seeding state data with the `portal_bridge`
+### Seeding state data with the `nimbus_portal_bridge`
 
 
 #### Step 1: Run a Portal client
 
-Run a Portal client with the Portal JSON-RPC API enabled (e.g. Fluffy) and enable the `state` subnetwork:
+Run a Portal client with the Portal JSON-RPC API enabled (e.g. Nimbus Portal client) and enable the `state` subnetwork:
 
 ```bash
-./build/fluffy --rpc --storage-capacity:0 --portal-subnetworks:state
+./build/nimbus_portal_client --rpc --storage-capacity:0 --portal-subnetworks:state
 ```
 
 > Note: The `--storage-capacity:0` option is not required, but it is added here
 for the use case where the node's only focus is on gossiping content from the
-`portal_bridge`.
+`nimbus_portal_bridge`.
 
 
 #### Step 2: Run an EL client (archive node) that supports `trace_replayBlockTransactions`
 
-The `portal_bridge` needs access to the EL JSON-RPC API, either through a local
+The `nimbus_portal_bridge` needs access to the EL JSON-RPC API, either through a local
 Ethereum client or via a web3 provider.
 
 Currently the portal state bridge requires access to the following EL JSON-RPC APIs:
@@ -39,12 +39,12 @@ to ensure that the state is available for all the historical blocks being synced
 
 #### Step 3: Run the Portal bridge in state mode
 
-Build & run the `portal_bridge`:
+Build & run the `nimbus_portal_bridge`:
 ```bash
-make portal_bridge
+make nimbus_portal_bridge
 
 WEB3_URL="ws://127.0.0.1:8548" # Replace with your provider.
-./build/portal_bridge state --web3-url:${WEB3_URL} --start-block=1 --gossip-workers=2
+./build/nimbus_portal_bridge state --web3-url:${WEB3_URL} --start-block=1 --gossip-workers=2
 ```
 
 > Note: A WebSocket connection to the web3 provider is recommended to improve the
@@ -60,7 +60,7 @@ The `--gossip-workers` parameter can be used to set the number of workers that w
 gossip the portal state data into the portal state subnetwork. Each worker handles
 gossipping the state for a single block and the workers gossip the data concurrently.
 It is recommended to increase the number of workers in order to increase the speed
-and throughput of the gossiping process up until the point where Fluffy is unable
+and throughput of the gossiping process up until the point where `nimbus_portal_bridge` is unable
 keep up.
 
 The optional `--verify-gossip` parameter can be used to verify that the state data has

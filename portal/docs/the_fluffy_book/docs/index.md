@@ -1,6 +1,6 @@
-# The Nimbus Fluffy Guide
+# The Nimbus Portal client Guide
 
-Fluffy is the Nimbus client implementation of the
+The Nimbus Portal client is the Nimbus client implementation of the
 [Portal network specifications](https://github.com/ethereum/portal-network-specs).
 
 The Portal Network aims to deliver a reliable, sync-free, and decentralized
@@ -9,10 +9,10 @@ get access to Ethereum data and as such become a drop-in replacement for full
 nodes by providing that data through the existing
 [Ethereum JSON RPC Execution API](https://github.com/ethereum/execution-apis).
 
-This book describes how to build, run and monitor the Fluffy client, and how to
+This book describes how to build, run and monitor the Nimbus Portal client, and how to
 use and test its currently implemented functionality.
 
-To quickly get your Fluffy node up and running, follow the quickstart page:
+To quickly get your Nimbus Portal client up and running, follow the quickstart page:
 
   - [Quickstart for Linux / macOS users](./quick-start.md)
   - [Quickstart for Windows users](./quick-start-windows.md)
@@ -25,7 +25,7 @@ The development of this client is on par with the latest Portal specifications a
 
 The Portal history, beacon and state sub-networks are already operational on the public Portal mainnet.
 
-Fluffy is default ran on the [Portal mainnet](https://github.com/ethereum/portal-network-specs/blob/master/bootnodes.md#bootnodes-mainnet) but can also be run on a (local) testnet.
+The Nimbus Portal client is default ran on the [Portal mainnet](https://github.com/ethereum/portal-network-specs/blob/master/bootnodes.md#bootnodes-mainnet) but can also be run on a (local) testnet.
 
 ### Supported sub-networks and content
 
@@ -70,6 +70,6 @@ If you'd like to contribute to Nimbus development:
 
 ## Disclaimer
 
-This documentation assumes Nimbus Fluffy is in its ideal state.
+This documentation assumes Nimbus Portal client is in its ideal state.
 The project is still under heavy development.
 Please submit a [Github issue](https://github.com/status-im/nimbus-eth1/issues) if you come across a problem.
