@@ -1,5 +1,5 @@
 # Nimbus
-# Copyright (c) 2018-2024 Status Research & Development GmbH
+# Copyright (c) 2018-2025 Status Research & Development GmbH
 # Licensed under either of
 #  * Apache License, version 2.0, ([LICENSE-APACHE](LICENSE-APACHE) or
 #    http://www.apache.org/licenses/LICENSE-2.0)
@@ -29,6 +29,10 @@ template calcTxRoot*(transactions: openArray[Transaction]): Root =
 
 template calcWithdrawalsRoot*(withdrawals: openArray[Withdrawal]): Root =
   orderedTrieRoot(withdrawals)
+
+template calcReceiptsRoot*(receipts: openArray[StoredReceipt]): Root =
+  let recs = receipts.to(seq[Receipt])
+  orderedTrieRoot(recs)
 
 template calcReceiptsRoot*(receipts: openArray[Receipt]): Root =
   orderedTrieRoot(receipts)
