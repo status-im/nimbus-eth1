@@ -1,0 +1,39 @@
+# Nimbus
+# Copyright (c) 2023-2025 Status Research & Development GmbH
+# Licensed and distributed under either of
+#   * MIT license (license terms in the root directory or at https://opensource.org/licenses/MIT).
+#   * Apache v2 license (license terms in the root directory or at https://www.apache.org/licenses/LICENSE-2.0).
+# at your option. This file may not be copied, modified, or distributed except according to those terms.
+
+name: Nimbus Portal docs CI
+
+on:
+  push:
+    branches:
+      - master
+    paths:
+      - '.github/workflows/portal_docs.yml'
+      - 'portal/docs/**'
+
+permissions:
+  contents: write
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v4
+        with:
+          python-version: 3.x
+      - run: echo "cache_id=$(date --utc '+%V')" >> $GITHUB_ENV
+      - uses: actions/cache@v4
+        with:
+          key: mkdocs-material-${{ env.cache_id }}
+          path: .cache
+          restore-keys: |
+            mkdocs-material-
+      - run: pip install mkdocs-material mkdocs-mermaid2-plugin
+      - name: Run mkdocs github deploy
+        working-directory: ./portal/docs/the_fluffy_book/
+        run: |
+          mkdocs gh-deploy --force

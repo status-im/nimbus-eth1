@@ -19,8 +19,8 @@ on:
       - 'docs/**'
       - '**/*.md'
       - 'hive_integration/**'
-      - 'fluffy/**'
-      - '.github/workflows/fluffy*.yml'
+      - 'portal/**'
+      - '.github/workflows/portal*.yml'
       - 'nimbus_verified_proxy/**'
       - '.github/workflows/nimbus_verified_proxy.yml'
   pull_request:
@@ -31,8 +31,8 @@ on:
       - 'docs/**'
       - '**/*.md'
       - 'hive_integration/**'
-      - 'fluffy/**'
-      - '.github/workflows/fluffy*.yml'
+      - 'portal/**'
+      - '.github/workflows/portal*.yml'
       - 'nimbus_verified_proxy/**'
       - '.github/workflows/nimbus_verified_proxy.yml'
 
