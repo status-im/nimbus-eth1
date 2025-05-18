@@ -87,22 +87,45 @@ proc monitorServices(nimbus: Nimbus) =
 
   notice "Exited all services"
 
+# ------------------------------------------------------------------------------
+# Public
+# ------------------------------------------------------------------------------
+
+# aux function to prepare arguments and options for eth1 and eth2
+func addArg(
+    paramTable: var NimbusConfigTable, cmdKind: CmdLineKind, key: string, arg: string
+) =
+  var
+    newKey = ""
+    newArg = ""
+
+  if cmdKind == cmdLongOption:
+    newKey = "--" & key
+
+  if cmdKind == cmdShortOption:
+    newKey = "-" & key
+
+  if arg != "":
+    newArg = "=" & arg
+
+  paramTable[newKey] = newArg
+
 # Setup services
-proc setup(nimbus: var Nimbus) =
+proc setup*(nimbus: var Nimbus) =
   let
     executionConfigNames = extractFieldNames(NimbusConf)
     consensusConfigNames = extractFieldNames(BeaconNodeConf)
 
   var consensusParams, executionParams = NimbusConfigTable()
 
-  for _, cmdKey, cmdArg in getopt(commandLineParams()):
+  for cmdKind, cmdKey, cmdArg in getopt(commandLineParams()):
     var found = false
     if cmdKey in consensusConfigNames:
-      consensusParams[cmdKey] = cmdArg
+      consensusParams.addArg(cmdKind, cmdKey, cmdArg)
       found = true
 
     if cmdKey in executionConfigNames:
-      executionParams[cmdKey] = cmdArg
+      executionParams.addArg(cmdKind, cmdKey, cmdArg)
       found = true
 
     if not found:
@@ -124,10 +147,6 @@ proc setup(nimbus: var Nimbus) =
 
   nimbus.serviceList.add(executionService)
   nimbus.serviceList.add(consensusService)
-
-# ------------------------------------------------------------------------------
-# Public
-# ------------------------------------------------------------------------------
 
 ## start nimbus client
 proc run*(nimbus: var Nimbus) =
