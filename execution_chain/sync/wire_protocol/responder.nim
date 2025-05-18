@@ -284,9 +284,7 @@ proc blockRangeUpdateUserHandler(peer: Peer; packet: BlockRangeUpdatePacket) {.
       latestHash = packet.latestHash.short
 
   if packet.earliest > packet.latest:
-    peer.disconnectAndRaise(
-      BreachOfProtocol, "earliest higher than latest in blockRangeUpdate"
-    )
+    await peer.disconnect(BreachOfProtocol)
 
   peer.state(eth69).earliest = packet.earliest
   peer.state(eth69).latest = packet.latest
