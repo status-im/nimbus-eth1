@@ -28,6 +28,8 @@ proc executionLayerHandler*(channel: ptr Channel[pointer]) =
   #signal main thread that data is read
   isConfigRead.store(true)
 
+  info "execution configs ", configs = configs
+
   try:
     while true:
       info "execution ..."
