@@ -1,0 +1,33 @@
+# Nimbus
+# Copyright (c) 2023-2024 Status Research & Development GmbH
+# Licensed and distributed under either of
+#   * MIT license (license terms in the root directory or at https://opensource.org/licenses/MIT).
+#   * Apache v2 license (license terms in the root directory or at https://www.apache.org/licenses/LICENSE-2.0).
+# at your option. This file may not be copied, modified, or distributed except according to those terms.
+
+name: Nimbus Portal nightly Docker build
+on:
+  schedule:
+    - cron: "30 0 * * *"
+  workflow_dispatch:
+
+jobs:
+  # Keeping it simple and only providing AMD64 latest image as that is what is
+  # needed for testing Portal-Hive
+  build-amd64:
+    name: Linux AMD64 Docker build
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+      - name: Login to Docker Hub
+        uses: docker/login-action@v1
+        with:
+          username: ${{ secrets.DOCKERHUB_USERNAME }}
+          password: ${{ secrets.DOCKERHUB_TOKEN }}
+      - name: Build and push a nightly Docker image
+        run: |
+          REFNAME="${{ github.ref_name }}"
+          DOCKER_BUILDKIT=1 docker build -f ./portal/docker/Dockerfile -t statusim/nimbus-fluffy:amd64-${REFNAME}-latest -t statusim/nimbus-portal-client:amd64-${REFNAME}-latest .
+          docker push statusim/nimbus-fluffy:amd64-${REFNAME}-latest
+          docker push statusim/nimbus-portal-client:amd64-${REFNAME}-latest

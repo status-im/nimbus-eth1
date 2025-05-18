@@ -68,19 +68,19 @@ TOOLS_DIRS := \
 # comma-separated values for the "clean" target
 TOOLS_CSV := $(subst $(SPACE),$(COMMA),$(TOOLS))
 
-# Fluffy debugging tools + testing tools
-FLUFFY_TOOLS := \
-	portal_bridge \
+# Portal debugging tools + testing tools
+PORTAL_TOOLS := \
+	nimbus_portal_bridge \
 	eth_data_exporter \
 	blockwalk \
 	portalcli \
 	fcli_db
-FLUFFY_TOOLS_DIRS := \
-	fluffy/tools/portal_bridge \
-	fluffy/tools/state_bridge \
-	fluffy/tools
+PORTAL_TOOLS_DIRS := \
+	portal/bridge \
+	portal/bridge/state_bridge \
+	portal/tools
 # comma-separated values for the "clean" target
-FLUFFY_TOOLS_CSV := $(subst $(SPACE),$(COMMA),$(FLUFFY_TOOLS))
+PORTAL_TOOLS_CSV := $(subst $(SPACE),$(COMMA),$(FLUFFY_TOOLS))
 
 # Namespaced variables to avoid conflicts with other makefiles
 OS_PLATFORM = $(shell $(CC) -dumpmachine)
@@ -104,6 +104,7 @@ VERIF_PROXY_OUT_PATH ?= build/libverifproxy/
 	update \
 	nimbus \
 	nimbus_execution_client \
+	nimbus_portal_client \
 	fluffy \
 	nimbus_verified_proxy \
 	libverifproxy \
@@ -250,7 +251,7 @@ test-evm: | build deps rocksdb
 
 build_fuzzers:
 	$(ENV_SCRIPT) nim build_fuzzers $(NIM_PARAMS) nimbus.nims
-  
+
 # Primitive reproducibility test.
 #
 # On some platforms, with some GCC versions, it may not be possible to get a
@@ -265,49 +266,50 @@ test-reproducibility:
 		[ "$$MD5SUM1" = "$$MD5SUM2" ] && echo -e "\e[92mSuccess: identical binaries.\e[39m" || \
 			{ echo -e "\e[91mFailure: the binary changed between builds.\e[39m"; exit 1; }
 
-# Fluffy related targets
+# Portal related targets
 
-# builds the fluffy client
-fluffy: | build deps
+nimbus_portal_client: | build deps
 	echo -e $(BUILD_MSG) "build/$@" && \
-		$(ENV_SCRIPT) nim c $(NIM_PARAMS) -d:chronicles_log_level=TRACE -o:build/$@ "fluffy/$@.nim"
+		$(ENV_SCRIPT) nim c $(NIM_PARAMS) -d:chronicles_log_level=TRACE -o:build/$@ "portal/client/$@.nim"
 
-# primitive reproducibility test
-fluffy-test-reproducibility:
-	+ [ -e build/fluffy ] || $(MAKE) V=0 fluffy; \
-		MD5SUM1=$$($(MD5SUM) build/fluffy | cut -d ' ' -f 1) && \
-		rm -rf nimcache/*/fluffy && \
-		$(MAKE) V=0 fluffy && \
-		MD5SUM2=$$($(MD5SUM) build/fluffy | cut -d ' ' -f 1) && \
+# alias for nimbus_portal_client
+portal: | nimbus_portal_client
+
+# primitive reproducibility test for nimbus_portal_client
+portal-test-reproducibility:
+	+ [ -e build/portal ] || $(MAKE) V=0 nimbus_portal_client; \
+		MD5SUM1=$$($(MD5SUM) build/nimbus_portal_client | cut -d ' ' -f 1) && \
+		rm -rf nimcache/*/nimbus_portal_client && \
+		$(MAKE) V=0 nimbus_portal_client && \
+		MD5SUM2=$$($(MD5SUM) build/nimbus_portal_client | cut -d ' ' -f 1) && \
 		[ "$$MD5SUM1" = "$$MD5SUM2" ] && echo -e "\e[92mSuccess: identical binaries.\e[39m" || \
 			{ echo -e "\e[91mFailure: the binary changed between builds.\e[39m"; exit 1; }
 
-# fluffy tests
+# Portal tests
 all_history_network_custom_chain_tests: | build deps
 	echo -e $(BUILD_MSG) "build/$@" && \
-	$(ENV_SCRIPT) nim c -r $(NIM_PARAMS) -d:chronicles_log_level=ERROR -d:mergeBlockNumber:38130 -d:nimbus_db_backend=sqlite -o:build/$@ "fluffy/tests/history_network_tests/$@.nim"
+	$(ENV_SCRIPT) nim c -r $(NIM_PARAMS) -d:chronicles_log_level=ERROR -d:mergeBlockNumber:38130 -d:nimbus_db_backend=sqlite -o:build/$@ "portal/tests/history_network_tests/$@.nim"
 
-
-all_fluffy_tests: | build deps
+all_portal_tests: | build deps
 	echo -e $(BUILD_MSG) "build/$@" && \
-	$(ENV_SCRIPT) nim c -r $(NIM_PARAMS) -d:chronicles_log_level=ERROR -d:nimbus_db_backend=sqlite -o:build/$@ "fluffy/tests/$@.nim"
+	$(ENV_SCRIPT) nim c -r $(NIM_PARAMS) -d:chronicles_log_level=ERROR -d:nimbus_db_backend=sqlite -o:build/$@ "portal/tests/$@.nim"
 
-# builds and runs the fluffy test suite
-fluffy-test: | all_fluffy_tests all_history_network_custom_chain_tests
+# builds and runs the Portal test suite
+portal-test: | all_portal_tests all_history_network_custom_chain_tests
 
-# builds the fluffy tools, wherever they are
-$(FLUFFY_TOOLS): | build deps rocksdb
-	for D in $(FLUFFY_TOOLS_DIRS); do [ -e "$${D}/$@.nim" ] && TOOL_DIR="$${D}" && break; done && \
+# builds the Portal tools, wherever they are
+$(PORTAL_TOOLS): | build deps rocksdb
+	for D in $(PORTAL_TOOLS_DIRS); do [ -e "$${D}/$@.nim" ] && TOOL_DIR="$${D}" && break; done && \
 		echo -e $(BUILD_MSG) "build/$@" && \
 		$(ENV_SCRIPT) nim c $(NIM_PARAMS) -d:chronicles_log_level=TRACE -o:build/$@ "$${TOOL_DIR}/$@.nim"
 
-# builds all the fluffy tools
-fluffy-tools: | $(FLUFFY_TOOLS)
+# builds all the Portal tools
+portal-tools: | $(PORTAL_TOOLS)
 
-# Build fluffy test_portal_testnet
+# Build test_portal_testnet
 test_portal_testnet: | build deps
 	echo -e $(BUILD_MSG) "build/$@" && \
-		$(ENV_SCRIPT) nim c $(NIM_PARAMS) -o:build/$@ "fluffy/scripts/$@.nim"
+		$(ENV_SCRIPT) nim c $(NIM_PARAMS) -o:build/$@ "portal/scripts/$@.nim"
 
 # builds the uTP test app
 utp-test-app: | build deps
@@ -316,6 +318,20 @@ utp-test-app: | build deps
 # builds and runs the utp integration test suite
 utp-test: | build deps
 	$(ENV_SCRIPT) nim utp_test $(NIM_PARAMS) nimbus.nims
+
+# Deprecated legacy targets, to be removed sometime in the future
+
+# Legacy target, same as nimbus_portal_client, deprecated
+fluffy: | build deps
+	echo -e "\033[0;31mWarning:\033[0m The fluffy target and binary is deprecated, use 'make nimbus_portal_client' instead"
+	echo -e $(BUILD_MSG) "build/$@" && \
+		$(ENV_SCRIPT) nim c $(NIM_PARAMS) -d:chronicles_log_level=TRACE -o:build/$@ "portal/client/nimbus_portal_client.nim"
+
+# Legacy target, same as nimbus_portal_bridge, deprecated
+portal_bridge: | build deps rocksdb
+	echo -e "\033[0;31mWarning:\033[0m The portal_bridge target and binary is deprecated, use 'make nimbus_portal_bridge' instead"
+	echo -e $(BUILD_MSG) "build/$@" && \
+		$(ENV_SCRIPT) nim c $(NIM_PARAMS) -d:chronicles_log_level=TRACE -o:build/$@ "portal/bridge/nimbus_portal_bridge.nim"
 
 # Nimbus Verified Proxy related targets
 
@@ -359,7 +375,7 @@ txparse: | build deps
 
 # usual cleaning
 clean: | clean-common
-	rm -rf build/{nimbus,nimbus_execution_client,fluffy,libverifproxy,nimbus_verified_proxy,$(TOOLS_CSV),$(FLUFFY_TOOLS_CSV),all_tests,test_kvstore_rocksdb,test_rpc,all_fluffy_tests,all_history_network_custom_chain_tests,test_portal_testnet,utp_test_app,utp_test,*.dSYM}
+	rm -rf build/{nimbus,nimbus_execution_client,nimbus_portal_client,fluffy,portal_bridge,libverifproxy,nimbus_verified_proxy,$(TOOLS_CSV),$(PORTAL_TOOLS_CSV),all_tests,test_kvstore_rocksdb,test_rpc,all_portal_tests,all_history_network_custom_chain_tests,test_portal_testnet,utp_test_app,utp_test,*.dSYM}
 	rm -rf tools/t8n/{t8n,t8n_test}
 	rm -rf tools/evmstate/{evmstate,evmstate_test}
 ifneq ($(USE_LIBBACKTRACE), 0)
