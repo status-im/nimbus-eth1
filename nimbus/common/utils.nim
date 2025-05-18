@@ -7,27 +7,28 @@
 
 {.push raises: [].}
 
-import std/[strutils], results, ../conf, chronicles, stew/shims/macros
+import std/[strutils], results, chronicles, stew/shims/macros, confutils, ../conf
 
 logScope:
   topics = "utils"
 
-## Macro that collects name-layer pairs from configuration
+## Macro that collects names and abbreviations per layer from configuration
 macro extractFieldNames*(configType: typed): untyped =
-  # TODO: add abbreviations support
   var names: seq[string] = newSeq[string]()
   let recDef = configType.getImpl()
 
   for field in recordFields(recDef):
-    let namePragma: NimNode = field.readPragma("name")
-    if namePragma.kind == nnkNilLit:
-      # let a: NimNode = field.readPragma("defaultValue")
-      # echo a
-      #error "missing configuration name"
+    let
+      name = field.readPragma("name")
+      abbr = field.readPragma("abbr")
+
+    if name.kind == nnkNilLit:
       continue
 
-    let nameVal = $namePragma
-    names.add(nameVal)
+    names.add($name)
+
+    if abbr.kind != nnkNilLit:
+      names.add($abbr)
 
   result = quote:
     `names . mapIt ( newLit ( it ))`
@@ -75,7 +76,7 @@ proc deserializeConfigArgs*(p: pointer): Result[seq[string], string] =
     let
       optName = readConfigString(readOffset)
       arg = readConfigString(readOffset)
-      option = "--" & optName & "=" & arg
+      option = optName & arg
 
     optionsList.add(option)
 
