@@ -177,6 +177,9 @@ iterator everyNthBlock*(loc: BlockPos, step: uint64): TxFrameAndStateRoot =
     stateRoot: loc.stateRoot
   )
 
+  # Don't add the above txFrame anymore
+  number -= min(number, step)
+
   while not branch.isNil:
     let tailNumber = branch.tailNumber
     while tailNumber > step and number > tailNumber:
