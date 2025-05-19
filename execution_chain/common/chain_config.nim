@@ -609,7 +609,12 @@ func chainConfigForNetwork*(id: NetworkId): ChainConfig =
   else:
     ChainConfig()
 
-  doAssert validateChainConfig(result)
+  {.cast(noSideEffect).}:
+    # Obviously we lie about no side effect.
+    # If chonicles enabled and there is something bad with
+    # the chain config values, `validateChainConfig` will print something.
+    # But it is very rare and must immediately fixed anyway.
+    doAssert validateChainConfig(result)
 
 func genesisBlockForNetwork*(id: NetworkId): Genesis
     {.gcsafe, raises: [ValueError, RlpError].} =
