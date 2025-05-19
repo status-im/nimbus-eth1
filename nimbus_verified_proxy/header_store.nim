@@ -23,7 +23,7 @@ type HeaderStore* = ref object
   hashes: LruCache[base.BlockNumber, Hash32]
   capacity: int
 
-func convHeader(lcHeader: ForkedLightClientHeader): Result[Header, string] =
+func convLCHeader*(lcHeader: ForkedLightClientHeader): Result[Header, string] =
   withForkyHeader(lcHeader):
     template p(): auto =
       forkyHeader.execution
@@ -95,7 +95,7 @@ func isEmpty*(self: HeaderStore): bool =
 proc add*(self: HeaderStore, header: ForkedLightClientHeader): Result[bool, string] =
   # Only add if it didn't exist before - the implementation of `latest` relies
   # on this..
-  let execHeader = convHeader(header).valueOr:
+  let execHeader = convLCHeader(header).valueOr:
     return err(error)
   withForkyHeader(header):
     when lcDataFork > LightClientDataFork.Altair:
