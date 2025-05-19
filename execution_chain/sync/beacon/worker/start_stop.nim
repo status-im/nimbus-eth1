@@ -49,21 +49,7 @@ proc setupServices*(ctx: BeaconCtxRef; info: static[string]) =
   # Start in suspended mode
   ctx.hibernate = true
 
-  # Take it easy and assume that queue records contain full block list (which
-  # is mostly the case anyway.) So the the staging queue is limited by the
-  # number of sub-list records rather than the number of accumulated block
-  # objects.
-  let hwm = if blocksStagedLwm <= ctx.pool.blkStagedHwm: ctx.pool.blkStagedHwm
-            else: blocksStagedHwmDefault
-  ctx.pool.blkStagedLenHwm = (hwm + nFetchBodiesBatch - 1) div nFetchBodiesBatch
-
-  # Set blocks batch import queue size
-  if ctx.pool.blkStagedHwm != 0:
-    debug info & ": import block lists queue", limit=ctx.pool.blkStagedLenHwm
-  ctx.pool.blkStagedHwm = hwm
-
-  # Set up header cache descriptor. This will evenually be integrated
-  # into `ForkedChainRef` (i.e. `ctx.pool.chain`.)
+  # Set up header cache descriptor
   ctx.pool.hdrCache = HeaderChainRef.init(ctx.pool.chain)
 
   # Set up the notifier informing when a new syncer session has started.
@@ -95,18 +81,17 @@ proc startBuddy*(buddy: BeaconBuddyRef): bool =
     ctx = buddy.ctx
     peer = buddy.peer
 
-  if peer.supports(eth69) and
-     peer.state(eth69).initialized:
-    ctx.pool.nBuddies.inc
-    buddy.initHdrProcErrors()
-    return true
+  template acceptProto(PROTO: type): bool =
+    peer.supports(PROTO) and
+    peer.state(PROTO).initialized
 
-  if peer.supports(eth68) and
-     peer.state(eth68).initialized:
+  if acceptProto(eth69) or
+     acceptProto(eth68):
     ctx.pool.nBuddies.inc
     ctx.pool.blkLastSlowPeer = Opt.none(Hash)
     buddy.initHdrProcErrors()
     return true
+
 
 proc stopBuddy*(buddy: BeaconBuddyRef) =
   buddy.ctx.pool.nBuddies.dec
