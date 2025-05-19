@@ -1743,7 +1743,7 @@ proc queryRandom*(
   ## Perform a query for a random target, return all nodes discovered.
   p.query(NodeId.random(p.baseProtocol.rng[]))
 
-proc offerBatchGetAcceptedPeerCount*(
+proc offerBatchGetPeerCount*(
     p: PortalProtocol, offers: seq[OfferRequest]
 ): Future[int] {.async: (raises: [CancelledError]).} =
   # Start up to offers.len() concurrent offers and collect the futures
@@ -1753,7 +1753,7 @@ proc offerBatchGetAcceptedPeerCount*(
 
   # Await each future and for each successful offer where at least one content item
   # was accepted we add to the peer count
-  var peerAcceptedCount = 0
+  var peerCount = 0
   for f in futs:
     let acceptList =
       try:
@@ -1766,11 +1766,11 @@ proc offerBatchGetAcceptedPeerCount*(
           raiseAssert(e.msg) # Shouldn't happen
 
     for acceptCode in acceptList:
-      if acceptCode == Accepted:
-        inc peerAcceptedCount
-        break # only need to get one successfully accepted to count the peer
+      if acceptCode == Accepted or acceptCode == DeclinedAlreadyStored:
+        inc peerCount
+        break # only need to get one success to count the peer
 
-  return peerAcceptedCount
+  return peerCount
 
 proc neighborhoodGossip*(
     p: PortalProtocol,
@@ -1862,7 +1862,7 @@ proc neighborhoodGossip*(
         if offers.len() >= p.config.maxGossipNodes:
           break
 
-  await p.offerBatchGetAcceptedPeerCount(offers)
+  await p.offerBatchGetPeerCount(offers)
 
 proc neighborhoodGossipDiscardPeers*(
     p: PortalProtocol,
@@ -1893,7 +1893,7 @@ proc randomGossip*(
     nodes = p.routingTable.randomNodes(p.config.maxGossipNodes)
     offers = nodes.mapIt(OfferRequest(dst: it, kind: Direct, contentList: contentList))
 
-  await p.offerBatchGetAcceptedPeerCount(offers)
+  await p.offerBatchGetPeerCount(offers)
 
 proc randomGossipDiscardPeers*(
     p: PortalProtocol,
