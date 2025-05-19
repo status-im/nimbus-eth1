@@ -14,7 +14,6 @@ import
   beacon_chain/spec/beaconstate,
   beacon_chain/spec/datatypes/[phase0, altair, bellatrix],
   beacon_chain/[light_client, nimbus_binary_common],
-  beacon_chain/el/engine_api_conversions,
   minilru,
   results
 
