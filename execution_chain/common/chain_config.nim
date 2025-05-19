@@ -600,7 +600,7 @@ func chainConfigForNetwork*(id: NetworkId): ChainConfig =
       londonBlock:         Opt.some(0.BlockNumber),
       mergeNetsplitBlock:  Opt.some(0.BlockNumber),
       terminalTotalDifficulty: Opt.some(0.u256),
-      shanghaiTime:        Opt.some(10.EthTime),
+      shanghaiTime:        Opt.some(0.EthTime),
       cancunTime:          Opt.some(0.EthTime),
       pragueTime:          Opt.some(1_742_999_832.EthTime),
       depositContractAddress: Opt.some(HOODI_DEPOSIT_CONTRACT_ADDRESS),
