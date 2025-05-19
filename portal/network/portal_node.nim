@@ -119,6 +119,7 @@ proc new*(
             config.trustedBlockRoot,
             bootstrapRecords = bootstrapRecords,
             portalConfig = config.portalConfig,
+            contentQueueWorkers = config.contentQueueWorkers,
           )
         Opt.some(beaconNetwork)
       else:
@@ -142,6 +143,7 @@ proc new*(
             bootstrapRecords = bootstrapRecords,
             portalConfig = config.portalConfig,
             contentRequestRetries = config.contentRequestRetries,
+            contentQueueWorkers = config.contentQueueWorkers,
           )
         )
       else:

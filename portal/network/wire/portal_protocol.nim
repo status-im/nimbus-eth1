@@ -1752,7 +1752,7 @@ proc offerBatchGetAcceptedPeerCount*(
     futs.add(p.offerRateLimited(offer))
 
   # Await each future and for each successful offer where at least one content item
-  # was accepted, add to the peer count
+  # was accepted we add to the peer count
   var peerAcceptedCount = 0
   for f in futs:
     let acceptList =
