@@ -23,7 +23,7 @@ type HeaderStore* = ref object
   hashes: LruCache[base.BlockNumber, Hash32]
   capacity: int
 
-func convHeader(lcHeader: ForkedLightClientHeader): Header =
+func convHeader(lcHeader: ForkedLightClientHeader): Result[Header, string] =
   withForkyHeader(lcHeader):
     template p(): auto =
       forkyHeader.execution
@@ -31,7 +31,7 @@ func convHeader(lcHeader: ForkedLightClientHeader): Header =
     when lcDataFork >= LightClientDataFork.Capella:
       let withdrawalsRoot = Opt.some(p.withdrawals_root.asBlockHash)
     else:
-      let withdrawalsRoot = Opt.none(Hash32)
+      const withdrawalsRoot = Opt.none(Hash32)
 
     when lcDataFork >= LightClientDataFork.Deneb:
       let
@@ -39,16 +39,16 @@ func convHeader(lcHeader: ForkedLightClientHeader): Header =
         excessBlobGas = Opt.some(p.excess_blob_gas)
         parentBeaconBlockRoot = Opt.some(forkyHeader.beacon.parent_root.asBlockHash)
     else:
-      let
+      const
         blobGasUsed = Opt.none(uint64)
         excessBlobGas = Opt.none(uint64)
         parentBeaconBlockRoot = Opt.none(Hash32)
 
     when lcDataFork >= LightClientDataFork.Electra:
-      # TODO: there is no visibility of the execution requests hash in light client header 
+      # INFO: there is no visibility of the execution requests hash in light client header 
       let requestsHash = Opt.none(Hash32)
     else:
-      let requestsHash = Opt.none(Hash32)
+      const requestsHash = Opt.none(Hash32)
 
     when lcDataFork > LightClientDataFork.Altair:
       let h = Header(
@@ -74,11 +74,10 @@ func convHeader(lcHeader: ForkedLightClientHeader): Header =
         parentBeaconBlockRoot: parentBeaconBlockRoot,
         requestsHash: requestsHash,
       )
+      return ok(h)
     else:
-      # INFO: should never reach this point because running verified
-      # proxy for altair doesn't make sense
-      let h = Header()
-    return h
+      # running verified  proxy for altair doesn't make sense
+      return err("pre-bellatrix light client headers do not have execution header")
 
 func new*(T: type HeaderStore, max: int): T =
   HeaderStore(
@@ -93,10 +92,11 @@ func len*(self: HeaderStore): int =
 func isEmpty*(self: HeaderStore): bool =
   len(self.headers) == 0
 
-proc add*(self: HeaderStore, header: ForkedLightClientHeader) =
+proc add*(self: HeaderStore, header: ForkedLightClientHeader): Result[bool, string] =
   # Only add if it didn't exist before - the implementation of `latest` relies
   # on this..
-  let execHeader = convHeader(header)
+  let execHeader = convHeader(header).valueOr:
+    return err(error)
   withForkyHeader(header):
     when lcDataFork > LightClientDataFork.Altair:
       let execHash = forkyHeader.execution.block_hash.asBlockHash
@@ -104,6 +104,7 @@ proc add*(self: HeaderStore, header: ForkedLightClientHeader) =
       if execHash notin self.headers:
         self.headers.put(execHash, execHeader)
         self.hashes.put(execHeader.number, execHash)
+  ok(true)
 
 func latest*(self: HeaderStore): Opt[Header] =
   for h in self.headers.values:

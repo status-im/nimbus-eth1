@@ -69,7 +69,7 @@ proc run*(
   # load constants and metadata for the selected chain
   let metadata = loadEth2Network(config.eth2Network)
 
-  # initialze verified proxy
+  # initialize verified proxy
   let
     chainId = getConfiguredChainId(metadata)
     authHooks = @[httpCors(@[])] # TODO: for now we serve all cross origin requests
@@ -91,7 +91,7 @@ proc run*(
   template cfg(): auto =
     metadata.cfg
 
-  # initiialize beacon node genesis data, beacon clock and forkDigests
+  # initialize beacon node genesis data, beacon clock and forkDigests
   let
     genesisState =
       try:
@@ -142,7 +142,7 @@ proc run*(
       LightClientFinalizationMode.Optimistic,
     )
 
-  # find out what this does
+  # registerbasic p2p protocols for maintaing peers ping/status/get_metadata/... etc.
   network.registerProtocol(
     PeerSync,
     PeerSync.NetworkState.init(cfg, forkDigests, genesisBlockRoot, getBeaconTime),
@@ -167,6 +167,8 @@ proc run*(
             ctx.onHeader(cstring(Json.encode(forkyHeader)), 0)
           except SerializationError as e:
             error "finalizedHeaderCallback exception", error = e.msg
+      else:
+        error "pre-bellatrix light client headers do not have the execution payload header"
 
   proc onOptimisticHeader(
       lightClient: LightClient, optimisticHeader: ForkedLightClientHeader
@@ -174,12 +176,18 @@ proc run*(
     withForkyHeader(optimisticHeader):
       when lcDataFork > LightClientDataFork.Altair:
         info "New LC optimistic header", optimistic_header = shortLog(forkyHeader)
-        headerStore.add(optimisticHeader)
+        let res = headerStore.add(optimisticHeader)
+
+        if res.isErr():
+          error "header store add error", error = res.error()
+
         if ctx != nil:
           try:
             ctx.onHeader(cstring(Json.encode(forkyHeader)), 1)
           except SerializationError as e:
             error "optimisticHeaderCallback exception", error = e.msg
+      else:
+        error "pre-bellatrix light client headers do not have the execution payload header"
 
   lightClient.onFinalizedHeader = onFinalizedHeader
   lightClient.onOptimisticHeader = onOptimisticHeader
