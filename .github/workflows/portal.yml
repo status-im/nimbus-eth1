@@ -1,0 +1,335 @@
+# Nimbus
+# Copyright (c) 2021-2025 Status Research & Development GmbH
+# Licensed and distributed under either of
+#   * MIT license (license terms in the root directory or at https://opensource.org/licenses/MIT).
+#   * Apache v2 license (license terms in the root directory or at https://www.apache.org/licenses/LICENSE-2.0).
+# at your option. This file may not be copied, modified, or distributed except according to those terms.
+
+name: Nimbus Portal CI
+on:
+  push:
+    paths:
+      - '.github/workflows/portal.yml'
+      - 'portal/**'
+      - '!portal/**.md'
+      - '!portal/docs/**'
+      - 'execution_chain/rpc/hexstrings.nim'
+      - 'execution_chain/rpc/rpc_*.nim'
+      - 'execution_chain/db/**'
+      - 'vendor/**'
+      - 'Makefile'
+      - 'nimbus.nimble'
+
+  pull_request:
+    paths:
+      - '.github/workflows/portal.yml'
+      - 'portal/**'
+      - '!portal/**.md'
+      - '!portal/docs/**'
+      - 'execution_chain/rpc/hexstrings.nim'
+      - 'execution_chain/rpc/rpc_*.nim'
+      - 'execution_chain/db/**'
+      - 'vendor/**'
+      - 'Makefile'
+      - 'nimbus.nimble'
+
+jobs:
+  # separate job so it can run concurrently with other tests
+  testutp:
+    # whole test setup runs on ubuntu so we do not need multiple arch setup here
+    runs-on: ubuntu-22.04
+    # TODO: for now only push event as this way it is easier to get branch name
+    # to build container
+    if: github.event_name == 'push'
+    steps:
+      - name: Checkout nimbus-eth1
+        uses: actions/checkout@v4
+
+      - name: Install modprobe
+        run: |
+          sudo apt-get install -y kmod
+
+      # It is required to correctly run the simulation
+      - name: Load iptables6 kernel modules
+        run: |
+          sudo modprobe ip6table_filter
+
+      - name: Get latest nimbus-build-system commit hash
+        id: versions
+        run: |
+          getHash() {
+            git ls-remote "https://github.com/$1" "${2:-HEAD}" | cut -f 1
+          }
+          nbsHash=$(getHash status-im/nimbus-build-system)
+          echo "nimbus_build_system=$nbsHash" >> $GITHUB_OUTPUT
+
+      - name: Restore prebuilt Nim binaries from cache
+        id: nim-cache
+        uses: actions/cache@v4
+        with:
+          path: NimBinaries
+          key: 'nim-linux-amd64-${{ steps.versions.outputs.nimbus_build_system }}-portal'
+
+      - name: Build Nim and Nimbus-eth1 dependencies
+        run: |
+          make -j${ncpu} ARCH_OVERRIDE=${PLATFORM} CI_CACHE=NimBinaries update-from-ci
+
+      - name: build uTP test app container
+        run: |
+          docker build -t test-utp --no-cache --build-arg BRANCH_NAME=${{ github.ref_name }} portal/tools/utp_testing/docker
+
+      - name: run test app with simulator
+        run: |
+          : find / -name docker-compose -printf "%h\n%f\n%m\n\n" 2>/dev/null
+          PATH=$PATH$(find /usr/libexec/docker -name docker-compose -printf ":%h")
+          SCENARIO="drop-rate --delay=15ms --bandwidth=10Mbps --queue=25 --rate_to_client=10 --rate_to_server=10" docker-compose -f portal/tools/utp_testing/docker/docker-compose.yml up -d
+
+      - name: wait 5 seconds for containers to start
+        run: |
+          sleep 5
+
+      - name: check containers
+        run: |
+          docker ps -a
+
+      - name: run uTP test
+        run: |
+          export LD_LIBRARY_PATH="${LD_LIBRARY_PATH}:/usr/local/lib"
+          DEFAULT_MAKE_FLAGS="-j${ncpu}"
+          env CC=gcc CXX=g++ make ${DEFAULT_MAKE_FLAGS} utp-test
+
+      - name: Stop containers
+        if: always()
+        run: |
+          PATH=$PATH$(find /usr/libexec/docker -name docker-compose -printf ":%h")
+          docker-compose -f portal/tools/utp_testing/docker/docker-compose.yml down
+
+  build:
+    strategy:
+      fail-fast: false
+      max-parallel: 20
+      matrix:
+        target:
+          - os: linux
+            cpu: amd64
+          - os: macos
+            cpu: amd64
+          - os: windows
+            cpu: amd64
+        include:
+          - target:
+              os: linux
+            builder: ubuntu-22.04
+          - target:
+              os: macos
+            builder: macos-13
+          - target:
+              os: windows
+            builder: windows-latest
+
+    defaults:
+      run:
+        shell: bash
+
+    name: '${{ matrix.target.os }}-${{ matrix.target.cpu }}'
+    runs-on: ${{ matrix.builder }}
+    steps:
+      - name: Checkout nimbus-eth1
+        uses: actions/checkout@v4
+
+      - name: Derive environment variables
+        run: |
+          if [[ '${{ matrix.target.cpu }}' == 'amd64' ]]; then
+            PLATFORM=x64
+          else
+            PLATFORM=x86
+          fi
+          echo "PLATFORM=${PLATFORM}" >> $GITHUB_ENV
+
+          # libminiupnp / natpmp
+          if [[ '${{ runner.os }}' == 'Linux' && '${{ matrix.target.cpu }}' == 'i386' ]]; then
+            export CFLAGS="${CFLAGS} -m32 -mno-adx"
+            echo "CFLAGS=${CFLAGS}" >> $GITHUB_ENV
+          fi
+
+          ncpu=''
+          case '${{ runner.os }}' in
+          'Linux')
+            ncpu=$(nproc)
+            ;;
+          'macOS')
+            ncpu=$(sysctl -n hw.ncpu)
+            ;;
+          'Windows')
+            ncpu=${NUMBER_OF_PROCESSORS}
+            ;;
+          esac
+          [[ -z "$ncpu" || $ncpu -le 0 ]] && ncpu=1
+          echo "ncpu=${ncpu}" >> $GITHUB_ENV
+
+      - name: Install build dependencies (Linux i386)
+        if: runner.os == 'Linux' && matrix.target.cpu == 'i386'
+        run: |
+          sudo dpkg --add-architecture i386
+          sudo apt-fast update -qq
+          sudo DEBIAN_FRONTEND='noninteractive' apt-fast install \
+            --no-install-recommends -yq gcc-multilib g++-multilib
+          mkdir -p external/bin
+          cat << EOF > external/bin/gcc
+          #!/bin/bash
+          exec $(which gcc) -m32 -mno-adx "\$@"
+          EOF
+          cat << EOF > external/bin/g++
+          #!/bin/bash
+          exec $(which g++) -m32 -mno-adx "\$@"
+          EOF
+          chmod 755 external/bin/gcc external/bin/g++
+          echo "${{ github.workspace }}/external/bin" >> $GITHUB_PATH
+
+      # Required for running the local testnet script
+      - name: Install build dependencies (MacOS)
+        if: runner.os == 'macOS'
+        run: |
+          brew install gnu-getopt
+          brew link --force gnu-getopt
+
+      - name: Restore llvm-mingw (Windows) from cache
+        if: runner.os == 'Windows'
+        id: windows-mingw-cache
+        uses: actions/cache@v4
+        with:
+          path: external/mingw-${{ matrix.target.cpu }}
+          key: 'mingw-llvm-17-${{ matrix.target.cpu }}'
+
+      - name: Restore Nim DLLs dependencies (Windows) from cache
+        if: runner.os == 'Windows'
+        id: windows-dlls-cache
+        uses: actions/cache@v4
+        with:
+          path: external/dlls-${{ matrix.target.cpu }}
+          key: 'dlls-${{ matrix.target.cpu }}-portal'
+
+      - name: Install llvm-mingw dependency (Windows)
+        if: >
+          steps.windows-mingw-cache.outputs.cache-hit != 'true' &&
+          runner.os == 'Windows'
+        run: |
+          mkdir -p external
+          MINGW_BASE="https://github.com/mstorsjo/llvm-mingw/releases/download/20230905"
+          if [[ '${{ matrix.target.cpu }}' == 'amd64' ]]; then
+            MINGW_URL="$MINGW_BASE/llvm-mingw-20230905-ucrt-x86_64.zip"
+            ARCH=64
+          else
+            MINGW_URL="$MINGW_BASE/llvm-mingw-20230905-ucrt-x86_64.zip"
+            ARCH=32
+          fi
+          curl -L "$MINGW_URL" -o "external/mingw-${{ matrix.target.cpu }}.zip"
+          7z x -y "external/mingw-${{ matrix.target.cpu }}.zip" -oexternal/mingw-${{ matrix.target.cpu }}/
+          mv external/mingw-${{ matrix.target.cpu }}/**/* ./external/mingw-${{ matrix.target.cpu }}
+
+      - name: Install DLLs dependencies (Windows)
+        if: >
+          steps.windows-dlls-cache.outputs.cache-hit != 'true' &&
+          runner.os == 'Windows'
+        run: |
+          DLLPATH=external/dlls-${{ matrix.target.cpu }}
+          mkdir -p external
+          curl -L "https://nim-lang.org/download/windeps.zip" -o external/windeps.zip
+          7z x -y external/windeps.zip -o"$DLLPATH"
+
+      - name: Path to cached dependencies (Windows)
+        if: >
+          runner.os == 'Windows'
+        run: |
+          echo '${{ github.workspace }}'"/external/mingw-${{ matrix.target.cpu }}/bin" >> $GITHUB_PATH
+          echo '${{ github.workspace }}'"/external/dlls-${{ matrix.target.cpu }}" >> $GITHUB_PATH
+
+      - name: Get latest nimbus-build-system commit hash
+        id: versions
+        run: |
+          getHash() {
+            git ls-remote "https://github.com/$1" "${2:-HEAD}" | cut -f 1
+          }
+          nbsHash=$(getHash status-im/nimbus-build-system)
+          echo "nimbus_build_system=$nbsHash" >> $GITHUB_OUTPUT
+
+      - name: Restore prebuilt Nim binaries from cache
+        id: nim-cache
+        uses: actions/cache@v4
+        with:
+          path: NimBinaries
+          key: 'nim-${{ matrix.target.os }}-${{ matrix.target.cpu }}-${{ steps.versions.outputs.nimbus_build_system }}-portal'
+
+      - name: Build Nim and Nimbus-eth1 dependencies
+        run: |
+          # use CC to make sure Nim compiler and subsequent test
+          # using the same glibc version.
+          env CC=gcc make -j${ncpu} ARCH_OVERRIDE=${PLATFORM} CI_CACHE=NimBinaries update-from-ci
+
+      - name: Run Nimbus Portal tests (Windows)
+        if: runner.os == 'Windows'
+        run: |
+          gcc --version
+          DEFAULT_MAKE_FLAGS="-j1"
+          mingw32-make ${DEFAULT_MAKE_FLAGS} nimbus_portal_client
+          build/nimbus_portal_client.exe --help
+          find . -type d -name ".git" -exec rm -rf {} +
+          rm -rf nimcache
+          mingw32-make ${DEFAULT_MAKE_FLAGS} portal-tools
+          rm -rf nimcache
+          mingw32-make portal-test
+          rm -rf nimcache
+
+      - name: Run Nimbus Portal tests (Linux)
+        if: runner.os == 'Linux'
+        run: |
+          gcc --version
+          ./env.sh nim -v
+          ldd --version
+          export LD_LIBRARY_PATH="${LD_LIBRARY_PATH}:/usr/local/lib"
+          DEFAULT_MAKE_FLAGS="-j${ncpu}"
+          env CC=gcc make ${DEFAULT_MAKE_FLAGS} nimbus_portal_client
+          build/nimbus_portal_client --help
+          env CC=gcc make ${DEFAULT_MAKE_FLAGS} portal-tools
+          # CC is needed to select correct compiler 32/64 bit
+          env CC=gcc CXX=g++ make portal-test
+
+      - name: Run Nimbus Portal tests (Macos)
+        if: runner.os == 'Macos'
+        run: |
+          DEFAULT_MAKE_FLAGS="-j${ncpu}"
+          make ${DEFAULT_MAKE_FLAGS} nimbus_portal_client
+          build/nimbus_portal_client --help
+          make ${DEFAULT_MAKE_FLAGS} portal-tools
+          # "-static" option will not work for osx unless static system libraries are provided
+          make portal-test
+
+      - name: Run Portal testnet
+        run: |
+          ./portal/scripts/launch_local_testnet.sh --nodes=64 --run-tests
+
+  lint:
+    name: "Lint Nimbus Portal"
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 2  # In PR, has extra merge commit: ^1 = PR, ^2 = base
+
+      - name: Check nph formatting
+        # Pin nph to a specific version to avoid sudden style differences.
+        # Updating nph version should be accompanied with running the new
+        # version on the portal directory.
+        run: |
+          VERSION="v0.6.1"
+          ARCHIVE="nph-linux_x64.tar.gz"
+          curl -L "https://github.com/arnetheduck/nph/releases/download/${VERSION}/${ARCHIVE}" -o ${ARCHIVE}
+          tar -xzf ${ARCHIVE}
+          ./nph portal/
+          git diff --exit-code
+
+      - name: Check copyright year
+        if: ${{ !cancelled() }} && github.event_name == 'pull_request'
+        run: |
+          bash scripts/check_copyright_year.sh
