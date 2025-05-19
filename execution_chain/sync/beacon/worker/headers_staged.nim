@@ -275,22 +275,16 @@ proc headersStagedReorg*(ctx: BeaconCtxRef; info: static[string]) =
   ## do nothing.) Pool mode is used to sync peers, e.g. for a forced state
   ## change.
   ##
-  doAssert ctx.headersBorrowedIsEmpty()
-
-  if ctx.hdr.staged.len == 0:
-    # nothing to do
-    return
-
-  # Update counter
-  ctx.pool.nReorg.inc
-
   # Check for cancel request
   if ctx.pool.lastState == cancelHeaders:
+    # Update counter
+    ctx.pool.nReorg.inc
+
     # Reset header queues
     debug info & ": Flushing header queues", nUnproc=ctx.headersUnprocTotal(),
       nStagedQ=ctx.hdr.staged.len, nReorg=ctx.pool.nReorg
 
-    ctx.headersUnprocClear()
+    ctx.headersUnprocClear() # clears `unprocessed` and `borrowed` list
     ctx.hdr.staged.clear()
 
 # ------------------------------------------------------------------------------
