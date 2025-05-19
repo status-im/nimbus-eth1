@@ -609,6 +609,8 @@ func chainConfigForNetwork*(id: NetworkId): ChainConfig =
   else:
     ChainConfig()
 
+  doAssert validateChainConfig(result)
+
 func genesisBlockForNetwork*(id: NetworkId): Genesis
     {.gcsafe, raises: [ValueError, RlpError].} =
   result = if id == MainNet:
