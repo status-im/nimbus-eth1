@@ -447,7 +447,7 @@ proc processContentLoop(n: BeaconNetwork) {.async: (raises: []).} =
       # TODO: Differentiate between failures due to invalid data and failures
       # due to missing network data for validation.
       if await n.validateContent(srcNodeId, contentKeys, contentItems):
-        asyncSpawn n.portalProtocol.randomGossipDiscardPeers(
+        await n.portalProtocol.randomGossipDiscardPeers(
           srcNodeId, contentKeys, contentItems
         )
   except CancelledError:

@@ -161,7 +161,7 @@ proc getVerifiedBlockHeader*(
     n.portalProtocol.storeContent(
       contentKey, contentId, headerContent.content, cacheContent = true
     )
-    n.portalProtocol.triggerPoke(
+    await n.portalProtocol.triggerPoke(
       headerContent.nodesInterestedInContent, contentKey, headerContent.content
     )
 
@@ -209,7 +209,7 @@ proc getBlockBody*(
     n.portalProtocol.storeContent(
       contentKey, contentId, bodyContent.content, cacheContent = true
     )
-    n.portalProtocol.triggerPoke(
+    await n.portalProtocol.triggerPoke(
       bodyContent.nodesInterestedInContent, contentKey, bodyContent.content
     )
 
@@ -288,7 +288,7 @@ proc getReceipts*(
     n.portalProtocol.storeContent(
       contentKey, contentId, receiptsContent.content, cacheContent = true
     )
-    n.portalProtocol.triggerPoke(
+    await n.portalProtocol.triggerPoke(
       receiptsContent.nodesInterestedInContent, contentKey, receiptsContent.content
     )
 
@@ -425,7 +425,7 @@ proc processContentLoop(n: HistoryNetwork) {.async: (raises: []).} =
       # TODO: Differentiate between failures due to invalid data and failures
       # due to missing network data for validation.
       if await n.validateContent(srcNodeId, contentKeys, contentItems):
-        asyncSpawn n.portalProtocol.neighborhoodGossipDiscardPeers(
+        await n.portalProtocol.neighborhoodGossipDiscardPeers(
           srcNodeId, contentKeys, contentItems
         )
   except CancelledError:

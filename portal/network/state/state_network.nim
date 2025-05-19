@@ -134,7 +134,7 @@ proc getContent(
         interestedNodesCount = lookupRes.nodesInterestedInContent.len()
 
       let offer = contentValue.toOffer(maybeParentOffer.get())
-      n.portalProtocol.triggerPoke(
+      await n.portalProtocol.triggerPoke(
         lookupRes.nodesInterestedInContent, contentKeyBytes, offer.encode()
       )
 
