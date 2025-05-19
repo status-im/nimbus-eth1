@@ -161,7 +161,7 @@ proc getVerifiedBlockHeader*(
     n.portalProtocol.storeContent(
       contentKey, contentId, headerContent.content, cacheContent = true
     )
-    await n.portalProtocol.triggerPoke(
+    asyncSpawn n.portalProtocol.triggerPoke(
       headerContent.nodesInterestedInContent, contentKey, headerContent.content
     )
 
@@ -209,7 +209,7 @@ proc getBlockBody*(
     n.portalProtocol.storeContent(
       contentKey, contentId, bodyContent.content, cacheContent = true
     )
-    await n.portalProtocol.triggerPoke(
+    asyncSpawn n.portalProtocol.triggerPoke(
       bodyContent.nodesInterestedInContent, contentKey, bodyContent.content
     )
 
@@ -288,7 +288,7 @@ proc getReceipts*(
     n.portalProtocol.storeContent(
       contentKey, contentId, receiptsContent.content, cacheContent = true
     )
-    await n.portalProtocol.triggerPoke(
+    asyncSpawn n.portalProtocol.triggerPoke(
       receiptsContent.nodesInterestedInContent, contentKey, receiptsContent.content
     )
 
