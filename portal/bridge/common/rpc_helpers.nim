@@ -11,8 +11,8 @@ import
   chronicles,
   json_rpc/rpcclient,
   web3/[eth_api, eth_api_types],
-  ../rpc/rpc_calls/rpc_trace_calls,
-  ./nimbus_portal_bridge_conf
+  ../../rpc/rpc_calls/rpc_trace_calls,
+  ../nimbus_portal_bridge_conf
 
 export rpcclient
 

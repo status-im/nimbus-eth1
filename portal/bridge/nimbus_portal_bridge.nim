@@ -51,10 +51,10 @@ import
   confutils,
   confutils/std/net,
   ../logging,
-  ./[
-    nimbus_portal_bridge_conf, portal_bridge_beacon, portal_bridge_history,
-    portal_bridge_state,
-  ]
+  ./beacon/portal_beacon_bridge,
+  ./history/portal_history_bridge,
+  ./state/portal_state_bridge,
+  ./nimbus_portal_bridge_conf
 
 type PortalBridgeStatus = enum
   Running

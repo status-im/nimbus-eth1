@@ -16,10 +16,11 @@ import
   eth/async_utils,
   json_rpc/clients/httpclient,
   beacon_chain/spec/eth2_apis/rest_beacon_client,
-  ../network/beacon/beacon_content,
-  ../rpc/portal_rpc_client,
-  ../tools/eth_data_exporter/cl_data_exporter,
-  ./[nimbus_portal_bridge_conf, portal_bridge_common]
+  ../../network/beacon/beacon_content,
+  ../../rpc/portal_rpc_client,
+  ../../tools/eth_data_exporter/cl_data_exporter,
+  ../common/rpc_helpers,
+  ../nimbus_portal_bridge_conf
 
 const restRequestsTimeout = 30.seconds
 

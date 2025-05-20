@@ -13,7 +13,7 @@ import
   stint,
   eth/common/base,
   ../../rpc/rpc_calls/rpc_trace_calls,
-  ../portal_bridge_common
+  ../common/rpc_helpers
 
 type
   DiffType* = enum
