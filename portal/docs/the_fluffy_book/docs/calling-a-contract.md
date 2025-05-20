@@ -4,7 +4,7 @@ Once you have a Portal node running and [connected to the network](./connect-to-
 the JSON-RPC interface enabled, then you can call contracts using the `eth_call` JSON-RPC method
 which should be enabled by default.
 
-Note that `eth_call` in `nimbus_portal_client` requires both the history network, state network and the `eth`
+Note that `eth_call` in the Nimbus Portal client requires both the history network, state network and the `eth`
 rpc api to be enabled. These should be enabled by default already but you can also manually
 enable these by running:
 
