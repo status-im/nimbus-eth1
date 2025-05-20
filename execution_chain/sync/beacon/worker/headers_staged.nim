@@ -15,7 +15,7 @@ import
   pkg/eth/common,
   pkg/stew/[interval_set, sorted_set],
   ../worker_desc,
-  ./headers_staged/[headers, staged_collect],
+  ./headers_staged/[headers_fetch, staged_collect],
   ./headers_unproc
 
 # ------------------------------------------------------------------------------
@@ -189,9 +189,10 @@ proc headersStagedCollect*(
       # block chain or similar.)
       ctx.pool.failedPeers.incl buddy.peerID
 
-      debug info & ": no headers yet", peer, ctrl=buddy.ctrl.state,
-        cacheMode=ctx.hdrCache.state, syncState=ctx.pool.lastState,
-        failedPeers=ctx.pool.failedPeers.len, hdrErrors=buddy.hdrErrors
+      debug info & ": no headers yet (failed peer)", peer,
+        ctrl=buddy.ctrl.state, cacheMode=ctx.hdrCache.state,
+        syncState=ctx.pool.lastState, failedPeers=ctx.pool.failedPeers.len,
+        hdrErrors=buddy.hdrErrors
     return
 
   info "Queued/staged or DB/stored headers",

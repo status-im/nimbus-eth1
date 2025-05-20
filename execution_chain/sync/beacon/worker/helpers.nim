@@ -13,12 +13,9 @@
 ## Extracted helpers from `worker_desc` (avoids circular import)
 
 import
-  pkg/[chronos, results],
-  pkg/eth/common,
-  pkg/stew/interval_set,
+  pkg/[chronos, eth/common, results, stew/interval_set],
   ../../../networking/p2p,
-  ../../../utils/prettify,
-  ../../../utils/utils
+  ../../../utils/[prettify, utils]
 
 export
   prettify, short

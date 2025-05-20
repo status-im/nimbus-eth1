@@ -17,15 +17,12 @@ import
   ../../../../networking/p2p,
   ../../../wire_protocol/types,
   ../../worker_desc,
-  ../[blocks_unproc, helpers, update],
-  ./bodies
+  ../[blocks_unproc, update],
+  ./bodies_fetch
 
 # ------------------------------------------------------------------------------
 # Private helpers
 # ------------------------------------------------------------------------------
-
-formatIt(Hash32):
-  it.short
 
 proc getNthHash(ctx: BeaconCtxRef; blocks: seq[EthBlock]; n: int): Hash32 =
   ctx.hdrCache.getHash(blocks[n].header.number).valueOr:
@@ -163,7 +160,7 @@ proc blocksImport*(
 
   trace info & ": Start importing blocks", peer=($maybePeer), iv,
     nBlocks=iv.len, base=ctx.chain.baseNumber.bnStr,
-    head=ctx.chain.latestNumber.bnStr, target=ctx.head.bnStr
+    head=ctx.chain.latestNumber.bnStr
 
   block loop:
     for n in 0 ..< blocks.len:
@@ -171,7 +168,7 @@ proc blocksImport*(
 
       if nBn <= ctx.chain.baseNumber:
         trace info & ": ignoring block less eq. base", n, iv, nBlocks=iv.len,
-          nthBn=nBn.bnStr, nthHash=ctx.getNthHash(blocks, n),
+          nthBn=nBn.bnStr, nthHash=ctx.getNthHash(blocks, n).short,
           B=ctx.chain.baseNumber.bnStr, L=ctx.chain.latestNumber.bnStr
 
         ctx.blk.topImported = nBn                  # well, not really imported
@@ -185,7 +182,8 @@ proc blocksImport*(
           #
           ctx.poolMode = true
           warn info & ": import block error (reorg triggered)", n, iv,
-            nBlocks=iv.len, nthBn=nBn.bnStr, nthHash=ctx.getNthHash(blocks, n),
+            nBlocks=iv.len, nthBn=nBn.bnStr,
+            nthHash=ctx.getNthHash(blocks, n).short,
             B=ctx.chain.baseNumber.bnStr, L=ctx.chain.latestNumber.bnStr,
             `error`=error
           break loop
@@ -204,7 +202,7 @@ proc blocksImport*(
     nBlocks=(ctx.blk.topImported - iv.minPt + 1),
     nFailed=(iv.maxPt - ctx.blk.topImported),
     base=ctx.chain.baseNumber.bnStr, head=ctx.chain.latestNumber.bnStr,
-    target=ctx.head.bnStr
+    target=ctx.head.bnStr, targetHash=ctx.headHash.short
 
 # ------------------------------------------------------------------------------
 # End

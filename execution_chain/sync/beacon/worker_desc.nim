@@ -17,10 +17,10 @@ import
   ../../core/chain,
   ../sync_desc,
   ./worker/helpers,
-  ./worker_config
+  ./worker_const
 
 export
-  helpers, sync_desc, worker_config, chain
+  helpers, sync_desc, worker_const, chain
 
 type
   BnRangeSet* = IntervalSetRef[BlockNumber,uint64]
@@ -50,14 +50,6 @@ type
     blocks*: seq[EthBlock]           ## List of blocks for import
 
   # -------------------
-
-  SyncLayoutState* = enum
-    idleSyncState = 0                ## see clause *(8)*, *(12)* of `README.md`
-    collectingHeaders                ## see clauses *(5)*, *(9)* of `README.md`
-    cancelHeaders                    ## stop this scrum
-    finishedHeaders                  ## see clause *(10)* of `README.md`
-    processingBlocks                 ## see clause *(11)* of `README.md`
-    cancelBlocks                     ## stop this scrum
 
   SyncClMesg* = object
     ## Beacon state message used for manual first target set up
@@ -98,7 +90,7 @@ type
     ## Globally shared data extension
     nBuddies*: int                   ## Number of active workers
     clReq*: SyncClMesg               ## Manual first target set up
-    lastState*: SyncLayoutState      ## Last known layout state
+    lastState*: SyncState            ## Last known layout state
     hdrSync*: HeaderFetchSync        ## Syncing by linked header chains
     blkSync*: BlocksFetchSync        ## For importing/executing blocks
     nextMetricsUpdate*: Moment       ## For updating metrics

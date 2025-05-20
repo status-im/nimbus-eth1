@@ -13,6 +13,14 @@
 import
   pkg/chronos
 
+type SyncState* = enum
+  idleSyncState = 0                ## see clause *(8)*, *(12)* of `README.md`
+  collectingHeaders                ## see clauses *(5)*, *(9)* of `README.md`
+  cancelHeaders                    ## stop this scrum
+  finishedHeaders                  ## see clause *(10)* of `README.md`
+  processingBlocks                 ## see clause *(11)* of `README.md`
+  cancelBlocks                     ## stop this scrum
+
 const
   enableTicker* = false
     ## Log regular status updates similar to metrics. Great for debugging.

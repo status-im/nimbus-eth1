@@ -15,7 +15,7 @@ import
   pkg/eth/common,
   pkg/stew/interval_set,
   ../../worker_desc,
-  ./headers
+  ./headers_fetch
 
 # ------------------------------------------------------------------------------
 # Private logging helpers

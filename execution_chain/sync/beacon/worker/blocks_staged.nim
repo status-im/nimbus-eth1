@@ -16,8 +16,8 @@ import
   pkg/stew/[interval_set, sorted_set],
   ../../../networking/p2p,
   ../worker_desc,
-  ./blocks_staged/[bodies, staged_blocks],
-  ./[blocks_unproc, helpers]
+  ./blocks_staged/[bodies_fetch, staged_blocks],
+  ./blocks_unproc
 
 # ------------------------------------------------------------------------------
 # Private function(s)
@@ -36,22 +36,12 @@ proc blocksStagedProcessImpl(
   ## between the top of the `topImported` and the least queue block number.
   ##
   if ctx.blk.staged.len == 0:
-    trace info & ": blocksStagedProcess empty queue", peer=($maybePeer),
-      topImported=ctx.blk.topImported.bnStr, nStagedQ=ctx.blk.staged.len,
-      poolMode=ctx.poolMode, syncState=ctx.pool.lastState,
-      nSyncPeers=ctx.pool.nBuddies
     return false                                             # switch peer
 
   var
     nImported = 0u64                                         # statistics
     switchPeer = false                                       # for return code
 
-  trace info & ": blocksStagedProcess start", peer=($maybePeer),
-    topImported=ctx.blk.topImported.bnStr, nStagedQ=ctx.blk.staged.len,
-    poolMode=ctx.poolMode, syncState=ctx.pool.lastState,
-    nSyncPeers=ctx.pool.nBuddies
-
-  var minNum = BlockNumber(0)
   while ctx.pool.lastState == processingBlocks:
 
     # Fetch list with the least block numbers
@@ -60,7 +50,7 @@ proc blocksStagedProcessImpl(
 
     # Make sure that the lowest block is available, already. Or the other way
     # round: no unprocessed block number range precedes the least staged block.
-    minNum = qItem.data.blocks[0].header.number
+    let minNum = qItem.data.blocks[0].header.number
     if ctx.blk.topImported + 1 < minNum:
       trace info & ": block queue not ready yet", peer=($maybePeer),
         topImported=ctx.blk.topImported.bnStr, qItem=qItem.data.blocks.bnStr,
@@ -91,10 +81,6 @@ proc blocksStagedProcessImpl(
     trace info & ": no blocks unqueued", peer=($maybePeer),
       topImported=ctx.blk.topImported.bnStr, nStagedQ=ctx.blk.staged.len,
       nSyncPeers=ctx.pool.nBuddies
-
-  trace info & ": blocksStagedProcess end", peer=($maybePeer),
-    topImported=ctx.blk.topImported.bnStr, nImported, minNum,
-    nStagedQ=ctx.blk.staged.len, nSyncPeers=ctx.pool.nBuddies, switchPeer
 
   return not switchPeer
 
@@ -173,11 +159,6 @@ proc blocksStagedCollect*(
       if bottom < ctx.blk.topImported:
         discard ctx.blocksUnprocFetch(ctx.blk.topImported - bottom).expect("iv")
 
-      trace info & ": blocksStagedCollect direct loop", peer,
-        ctrl=buddy.ctrl.state, poolMode=ctx.poolMode,
-        syncState=ctx.pool.lastState, topImported=ctx.blk.topImported.bnStr,
-        bottom=bottom.bnStr
-
       # Fetch blocks and verify result
       let blocks = (await buddy.blocksFetch(nFetchBodiesRequest, info)).valueOr:
         break fetchBlocksBody                        # done, exit this function
@@ -236,9 +217,10 @@ proc blocksStagedCollect*(
       # block chain or similar.)
       ctx.pool.failedPeers.incl buddy.peerID
 
-      debug info & ": no blocks yet", peer, ctrl=buddy.ctrl.state,
-        poolMode=ctx.poolMode, syncState=ctx.pool.lastState,
-        failedPeers=ctx.pool.failedPeers.len, bdyErrors=buddy.bdyErrors
+      debug info & ": no blocks yet (failed peer)", peer,
+        ctrl=buddy.ctrl.state, poolMode=ctx.poolMode,
+        syncState=ctx.pool.lastState, failedPeers=ctx.pool.failedPeers.len,
+        bdyErrors=buddy.bdyErrors
     return
 
   info "Queued/staged or imported blocks",

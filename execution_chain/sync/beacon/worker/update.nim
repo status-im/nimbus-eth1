@@ -17,18 +17,18 @@ import
   ../worker_desc,
   ./blocks_staged/staged_queue,
   ./headers_staged/staged_queue,
-  ./[blocks_unproc, headers_unproc, helpers]
+  ./[blocks_unproc, headers_unproc]
 
 # ------------------------------------------------------------------------------
 # Private helpers
 # ------------------------------------------------------------------------------
 
-func statePair(a, b: SyncLayoutState): int =
+template statePair(a, b: SyncState): int =
   ## Represent state pair `(a,b)` as a single entity
-  a.ord * 100 + b.ord
+  (a.ord * 100 + b.ord)
 
-func statePair(a: SyncLayoutState): int =
-  a.statePair a
+template statePair(a: SyncState): int =
+  (a.statePair a)
 
 # ------------------------------------------------------------------------------
 # Private functions, state handlers
