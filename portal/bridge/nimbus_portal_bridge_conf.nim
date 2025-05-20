@@ -14,7 +14,6 @@ import
   nimcrypto/hash,
   ../network/network_metadata,
   ../eth_data/era1,
-  ../client/nimbus_portal_client_conf,
   ../logging
 
 export net
@@ -33,7 +32,7 @@ proc defaultEthDataDir*(): string =
 proc defaultEra1DataDir*(): string =
   defaultEthDataDir() / "era1"
 
-proc defaultPortalBridgeStateDir*(): string =
+proc defaultPortalBridgeDir*(): string =
   let relativeDataDir =
     when defined(windows):
       "AppData" / "Roaming" / "Nimbus" / "PortalBridge"
@@ -43,6 +42,15 @@ proc defaultPortalBridgeStateDir*(): string =
       ".cache" / "nimbus" / "portal-bridge"
 
   getHomeDir() / relativeDataDir
+
+proc defaultPortalBridgeStateDir*(): string =
+  let stateDir =
+    when defined(windows) or defined(macosx):
+      "State"
+    else:
+      "state"
+
+  defaultPortalBridgeDir() / stateDir
 
 const defaultEndEra* = uint64(era(network_metadata.mergeBlockNumber - 1))
 
