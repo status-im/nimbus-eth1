@@ -1745,30 +1745,14 @@ proc queryRandom*(
 proc offerBatchGetPeerCount*(
     p: PortalProtocol, offers: seq[OfferRequest]
 ): Future[int] {.async: (raises: [CancelledError]).} =
-  # Start up to offers.len() concurrent offers and collect the futures
-  var futs = newSeqOfCap[Future[PortalResult[ContentKeysAcceptList]]](offers.len())
-  for offer in offers:
-    futs.add(p.offerRateLimited(offer))
+  let futs = await allFinished(offers.mapIt(p.offerRateLimited(it)))
 
-  # Await each future and for each successful offer where at least one content item
-  # was accepted or has already been stored, we add to the peer count.
   var peerCount = 0
   for f in futs:
-    let acceptList =
-      try:
-        (await f).valueOr:
-          continue
-      except CancelledError as e:
-        raise e
-      except CatchableError as e:
-        raiseAssert(e.msg) # Shouldn't happen
+    if f.completed() and f.value().isOk():
+      inc peerCount # only count successful offers
 
-    for acceptCode in acceptList:
-      if acceptCode == Accepted or acceptCode == DeclinedAlreadyStored:
-        inc peerCount
-        break # only need to get one success to count the peer
-
-  return peerCount
+  peerCount
 
 proc neighborhoodGossip*(
     p: PortalProtocol,
