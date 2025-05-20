@@ -1225,11 +1225,10 @@ proc offerRateLimited*(
 ): Future[PortalResult[ContentKeysAcceptList]] {.async: (raises: [CancelledError]).} =
   try:
     await p.offerTokenBucket.consume(1)
+  except CancelledError as e:
+    raise e
   except CatchableError as e:
-    if e of CancelledError:
-      raise cast[ref CancelledError](e)
-    else:
-      raiseAssert(e.msg) # Shouldn't happen
+    raiseAssert(e.msg) # Shouldn't happen
 
   let res = await p.offer(offer)
   if res.isOk():
@@ -1752,18 +1751,17 @@ proc offerBatchGetPeerCount*(
     futs.add(p.offerRateLimited(offer))
 
   # Await each future and for each successful offer where at least one content item
-  # was accepted we add to the peer count
+  # was accepted or has already been stored, we add to the peer count.
   var peerCount = 0
   for f in futs:
     let acceptList =
       try:
         (await f).valueOr:
           continue
+      except CancelledError as e:
+        raise e
       except CatchableError as e:
-        if e of CancelledError:
-          raise cast[ref CancelledError](e)
-        else:
-          raiseAssert(e.msg) # Shouldn't happen
+        raiseAssert(e.msg) # Shouldn't happen
 
     for acceptCode in acceptList:
       if acceptCode == Accepted or acceptCode == DeclinedAlreadyStored:
