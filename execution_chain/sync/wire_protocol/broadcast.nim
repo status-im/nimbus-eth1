@@ -8,7 +8,7 @@
 # those terms.
 
 import
-  std/[tables, sets, times, sequtils],
+  std/[tables, sets, times, sequtils, random],
   chronos,
   chronos/ratelimit,
   chronicles,
@@ -203,11 +203,20 @@ proc handleTransactionsBroadcast*(wire: EthWireRef,
       numPeers = wire.node.numPeers
       maxPeers = max(1, numPeers div NUM_PEERS_REBROADCAST_QUOTIENT)
 
-    var i = 0
-    for peer in wire.node.randomPeersWith(eth68):
+    var
+      i = 0
+      peers = newSeqOfCap[Peer](numPeers)
+
+    for peer in wire.node.peers:
       if peer.isNil:
         continue
 
+      if peer.supports(eth68) or peer.supports(eth69):
+        peers.add peer
+
+    shuffle(peers)
+
+    for peer in peers:
       if peer.connectionState != ConnectionState.Connected:
         continue
 
@@ -287,7 +296,15 @@ proc handleTxHashesBroadcast*(wire: EthWireRef,
 
       awaitQuota(wire, txPoolProcessCost, "broadcast transactions hashes")
 
-    for peer in wire.node.peers(eth68):
+    var peers = newSeqOfCap[Peer](wire.node.numPeers)
+    for peer in wire.node.peers:
+      if peer.isNil:
+        continue
+
+      if peer.supports(eth68) or peer.supports(eth69):
+        peers.add peer
+
+    for peer in peers:
       if peer.connectionState != ConnectionState.Connected:
         continue
 
