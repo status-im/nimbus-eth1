@@ -62,11 +62,9 @@ proc init*(
     ethNode: EthereumNode;
     chain: ForkedChainRef;
     maxPeers: int;
-    blockQueueHwm = 0;
       ): T =
   var desc = T()
   desc.initSync(ethNode, maxPeers)
-  desc.ctx.pool.blkStagedHwm = blockQueueHwm
   desc.ctx.pool.chain = chain
   desc
 

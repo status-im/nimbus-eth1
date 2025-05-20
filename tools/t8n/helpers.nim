@@ -46,7 +46,7 @@ template wrapValueError(body: untyped) =
   except ValueError as exc:
     r.raiseUnexpectedValue(exc.msg)
 
-proc parseHexOrInt[T](x: string): T {.raises: [ValueError].} =
+func parseHexOrInt[T](x: string): T {.raises: [ValueError].} =
   when T is UInt256:
     if x.startsWith("0x"):
       UInt256.fromHex(x)
@@ -258,10 +258,6 @@ proc parseTxJson(txo: TxObject, chainId: ChainId): Result[Transaction, string] =
     required(maxFeePerGas)
     optional(accessList)
     required(authorizationList)
-  of TxEip7873:
-    required(chainId)
-    optional(accessList)
-    required(initCodes)
 
   # Ignore chainId if txType == TxLegacy
   if tx.txType > TxLegacy and tx.chainId != chainId:
@@ -278,7 +274,7 @@ proc parseTxJson(txo: TxObject, chainId: ChainId): Result[Transaction, string] =
     required(s, S)
     ok(tx)
 
-proc readNestedTx(rlp: var Rlp, chainId: ChainId): Result[Transaction, string] =
+func readNestedTx(rlp: var Rlp, chainId: ChainId): Result[Transaction, string] =
   try:
     let tx = if rlp.isList:
       rlp.read(Transaction)
@@ -292,7 +288,7 @@ proc readNestedTx(rlp: var Rlp, chainId: ChainId): Result[Transaction, string] =
   except RlpError as exc:
     err(exc.msg)
 
-proc parseTxs*(ctx: var TransContext, chainId: ChainId)
+func parseTxs*(ctx: var TransContext, chainId: ChainId)
                 {.raises: [T8NError, RlpError].} =
   var numTxs = ctx.txsJson.len
   var rlp: Rlp
@@ -311,7 +307,7 @@ proc parseTxs*(ctx: var TransContext, chainId: ChainId)
     for item in rlp:
       ctx.txList.add rlp.readNestedTx(chainId)
 
-proc filterGoodTransactions*(ctx: TransContext): seq[Transaction] =
+func filterGoodTransactions*(ctx: TransContext): seq[Transaction] =
   for txRes in ctx.txList:
     if txRes.isOk:
       result.add txRes.get
@@ -336,7 +332,7 @@ proc parseEnv*(ctx: var TransContext, envFile: string) {.raises: [T8NError].} =
   wrapException:
     ctx.env = T8Conv.loadFile(envFile, EnvStruct)
 
-proc parseTxsRlp*(ctx: var TransContext, hexData: string) {.raises: [ValueError].} =
+func parseTxsRlp*(ctx: var TransContext, hexData: string) {.raises: [ValueError].} =
   ctx.txsRlp = hexToSeqByte(hexData)
 
 proc parseInputFromStdin*(ctx: var TransContext) {.raises: [T8NError].} =
@@ -354,42 +350,42 @@ template stripLeadingZeros(value: string): string =
     cidx.inc
   value[cidx .. ^1]
 
-proc `@@`*[K, V](x: Table[K, V]): JsonNode
-proc `@@`*[T](x: seq[T]): JsonNode
+func `@@`*[K, V](x: Table[K, V]): JsonNode
+func `@@`*[T](x: seq[T]): JsonNode
 
-proc to0xHex(x: UInt256): string =
+func to0xHex(x: UInt256): string =
   "0x" & x.toHex
 
-proc `@@`(x: uint64 | int64 | int): JsonNode =
+func `@@`(x: uint64 | int64 | int): JsonNode =
   let hex = x.toHex.stripLeadingZeros
   %("0x" & hex.toLowerAscii)
 
-proc `@@`(x: UInt256): JsonNode =
+func `@@`(x: UInt256): JsonNode =
   %("0x" & x.toHex)
 
-proc `@@`(x: Hash32): JsonNode =
+func `@@`(x: Hash32): JsonNode =
   %("0x" & x.data.toHex)
 
-proc `@@`*(x: seq[byte]): JsonNode =
+func `@@`*(x: seq[byte]): JsonNode =
   %("0x" & x.toHex)
 
-proc `@@`(x: bool): JsonNode =
+func `@@`(x: bool): JsonNode =
   %(if x: "0x1" else: "0x0")
 
-proc `@@`(x: openArray[byte]): JsonNode =
+func `@@`(x: openArray[byte]): JsonNode =
   %("0x" & x.toHex)
 
-proc `@@`(x: FixedBytes|Hash32|Address): JsonNode =
+func `@@`(x: FixedBytes|Hash32|Address): JsonNode =
   @@(x.data)
 
-proc toJson(x: Table[UInt256, UInt256]): JsonNode =
+func toJson(x: Table[UInt256, UInt256]): JsonNode =
   # special case, we need to convert UInt256 into full 32 bytes
   # and not shorter
   result = newJObject()
   for k, v in x:
     result["0x" & k.dumpHex] = %("0x" & v.dumpHex)
 
-proc `@@`(acc: GenesisAccount): JsonNode =
+func `@@`(acc: GenesisAccount): JsonNode =
   result = newJObject()
   if acc.code.len > 0:
     result["code"] = @@(acc.code)
@@ -399,22 +395,22 @@ proc `@@`(acc: GenesisAccount): JsonNode =
   if acc.storage.len > 0:
     result["storage"] = toJson(acc.storage)
 
-proc `@@`[K, V](x: Table[K, V]): JsonNode =
+func `@@`[K, V](x: Table[K, V]): JsonNode =
   result = newJObject()
   for k, v in x:
     result[k.to0xHex] = @@(v)
 
-proc `@@`(x: Bloom): JsonNode =
+func `@@`(x: Bloom): JsonNode =
   %("0x" & toHex(x))
 
-proc `@@`(x: Log): JsonNode =
+func `@@`(x: Log): JsonNode =
   %{
     "address": @@(x.address),
     "topics" : @@(x.topics),
     "data"   : @@(x.data)
   }
 
-proc `@@`(x: TxReceipt): JsonNode =
+func `@@`(x: TxReceipt): JsonNode =
   result = %{
     "root"             : if x.root == default(Hash32): %("0x") else: @@(x.root),
     "status"           : @@(x.status),
@@ -430,29 +426,29 @@ proc `@@`(x: TxReceipt): JsonNode =
   if x.txType > TxLegacy:
     result["type"] = %("0x" & toHex(x.txType.int, 1))
 
-proc `@@`(x: RejectedTx): JsonNode =
+func `@@`(x: RejectedTx): JsonNode =
   %{
     "index": %(x.index),
     "error": %(x.error)
   }
 
-proc `@@`[T](x: seq[T]): JsonNode =
+func `@@`[T](x: seq[T]): JsonNode =
   result = newJArray()
   for c in x:
     result.add @@(c)
 
-proc `@@`[N, T](x: array[N, T]): JsonNode =
+func `@@`[N, T](x: array[N, T]): JsonNode =
   result = newJArray()
   for c in x:
     result.add @@(c)
 
-proc `@@`[T](x: Opt[T]): JsonNode =
+func `@@`[T](x: Opt[T]): JsonNode =
   if x.isNone:
     newJNull()
   else:
     @@(x.get())
 
-proc `@@`*(x: ExecutionResult): JsonNode =
+func `@@`*(x: ExecutionResult): JsonNode =
   result = %{
     "stateRoot"   : @@(x.stateRoot),
     "txRoot"      : @@(x.txRoot),

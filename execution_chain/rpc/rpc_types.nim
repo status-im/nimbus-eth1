@@ -1,5 +1,5 @@
 # Nimbus
-# Copyright (c) 2018-2024 Status Research & Development GmbH
+# Copyright (c) 2018-2025 Status Research & Development GmbH
 # Licensed under either of
 #  * Apache License, version 2.0, ([LICENSE-APACHE](LICENSE-APACHE))
 #  * MIT license ([LICENSE-MIT](LICENSE-MIT))
@@ -19,5 +19,5 @@ type
   FilterLog* = eth_api_types.LogObject
 
   # BlockTag instead of BlockId:
-  # prevent type clash with eth2 BlockId in fluffy/verified_proxy
+  # prevent type clash with eth2 BlockId in portal/verified_proxy
   BlockTag* = eth_api_types.RtBlockIdentifier

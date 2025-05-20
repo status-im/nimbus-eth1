@@ -2,7 +2,7 @@
 [![License: Apache](https://img.shields.io/badge/License-Apache%202.0-blue.svg)](https://opensource.org/licenses/Apache-2.0)
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](https://opensource.org/licenses/MIT)
 [![GH action-nimbus-eth1](https://github.com/status-im/nimbus-eth1/actions/workflows/ci.yml/badge.svg)](https://github.com/status-im/nimbus-eth1/actions/workflows/ci.yml)
-[![GH action-fluffy](https://github.com/status-im/nimbus-eth1/actions/workflows/fluffy.yml/badge.svg)](https://github.com/status-im/nimbus-eth1/actions/workflows/fluffy.yml)
+[![GH action-portal](https://github.com/status-im/nimbus-eth1/actions/workflows/portal.yml/badge.svg)](https://github.com/status-im/nimbus-eth1/actions/workflows/portal.yml)
 
 [![Discord: Nimbus](https://img.shields.io/badge/discord-nimbus-orange.svg)](https://discord.gg/XRxWahP)
 [![Status: #nimbus-general](https://img.shields.io/badge/status-nimbus--general-orange.svg)](https://get.status.im/chat/public/nimbus-general)
@@ -12,7 +12,7 @@
 This repository contains development work on an execution-layer client to pair with [our consensus-layer client](https://github.com/status-im/nimbus-eth2). This client focuses on efficiency and security and strives to be as light-weight as possible in terms of resources used.
 
 This repository is also home to:
--  [Fluffy](./fluffy/README.md), a
+-  [Nimbus Portal client](./portal/README.md), a
 [Portal Network](https://github.com/ethereum/portal-network-specs/tree/master)
 light client.
 - [Nimbus Verified Proxy](./nimbus_verified_proxy/README.md)

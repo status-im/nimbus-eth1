@@ -593,6 +593,12 @@ func head*(hc: HeaderChainRef): Header =
   if collecting <= hc.state:
     return hc.session.head
 
+func headHash*(hc: HeaderChainRef): Hash32 =
+  ## Getter: hash of `head()`
+  ##
+  if collecting <= hc.state:
+    return hc.session.headHash
+
 func antecedent*(hc: HeaderChainRef): Header =
   ## Getter: bottom of header chain. In case there is no header chain
   ## initialised, the return value is `Header()` (i.e. the block number

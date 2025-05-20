@@ -74,7 +74,6 @@ type
     maxFeePerBlobGas*    : Opt[UInt256]
     blobVersionedHashes* : Opt[seq[Hash32]]
     authorizationList*   : Opt[seq[Authorization]]
-    initCodes* : Opt[seq[seq[byte]]]
 
   TxList* = seq[Result[Transaction, string]]
 
@@ -130,5 +129,5 @@ const
   ErrorIO*   = 11.T8NExitCode
   ErrorRlp*  = 12.T8NExitCode
 
-proc newError*(code: T8NExitCode, msg: string): ref T8NError =
+func newError*(code: T8NExitCode, msg: string): ref T8NError =
   (ref T8NError)(exitCode: code, msg: msg)

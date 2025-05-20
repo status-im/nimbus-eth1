@@ -71,12 +71,15 @@ type
     unprocessed*: BnRangeSet         ## Block or header ranges to fetch
     borrowed*: BnRangeSet            ## Fetched/locked ranges
     staged*: LinkedHChainQueue       ## Blocks fetched but not stored yet
+    reserveStaged*: int              ## Pre-book staged slot temporarily
 
   BlocksFetchSync* = object
     ## Block sync staging area
     unprocessed*: BnRangeSet         ## Blocks download requested
     borrowed*: BnRangeSet            ## Fetched/locked fetched ranges
+    topImported*: BlockNumber        ## For syncronising opportunistic import
     staged*: StagedBlocksQueue       ## Blocks ready for import
+    reserveStaged*: int              ## Pre-book staged slot temporarily
 
   # -------------------
 
@@ -103,11 +106,6 @@ type
 
     chain*: ForkedChainRef           ## Core database, FCU support
     hdrCache*: HeaderChainRef        ## Currently in tandem with `chain`
-
-    # Blocks import/execution settings
-    blkImportOk*: bool               ## Don't fetch data while block importing
-    blkStagedHwm*: int               ## Set a `staged` queue limit
-    blkStagedLenHwm*: int            ## Figured out as # staged records
 
     # Info, debugging, and error handling stuff
     nReorg*: int                     ## Number of reorg invocations (info only)
@@ -137,6 +135,10 @@ func hdrCache*(ctx: BeaconCtxRef): HeaderChainRef =
 func head*(ctx: BeaconCtxRef): Header =
   ## Shortcut
   ctx.hdrCache.head()
+
+func headHash*(ctx: BeaconCtxRef): Hash32 =
+  ## Shortcut
+  ctx.hdrCache.headHash()
 
 func dangling*(ctx: BeaconCtxRef): Header =
   ## Shortcut

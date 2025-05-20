@@ -86,28 +86,19 @@ const
     ## Length of the request/stage batch. Several headers are consecutively
     ## fetched and stashed together as a single record on the staged queue.
 
-  headersStagedQueueLengthLwm* = 16
+  headersStagedQueueLengthHwm* = 8
     ## Limit the number of records in the staged headers queue.
     ##
     ## Queue entries start accumulating if one peer stalls while fetching the
     ## top chain so leaving a gap. This gap must be filled first before
     ## inserting the queue into a contiguous chain of headers.
-    ##
-    ## This low-water mark tryggers the system to do some **magic** to mitigate
-    ## the above problem. Currently the **magic** is to let (pseudo) threads
-    ## terminate and then restart all over again.
-
-  headersStagedQueueLengthHwm* = 24
-    ## If this size is exceeded, the staged queue is flushed and resized to
-    ## `headersStagedQueueLengthLwm-1` entries. Then contents is re-fetched
-    ## from scratch.
 
   # ----------------------
 
   fetchBodiesFailedInitialFailPeersHwm* = 50
     ## Similar to `fetchHeadersFailedInitialFailPeersHwm`
 
-  nFetchBodiesRequest* = 128
+  nFetchBodiesRequest* = 64
     ## Similar to `nFetchHeadersRequest`
 
   fetchBodiesReqErrThresholdZombie* = chronos.seconds(4)
@@ -120,22 +111,10 @@ const
   fetchBodiesReqMinResponsePC* = 10
     ## Similar to `fetchHeadersReqMinResponsePC`
 
-  nFetchBodiesBatch* = 3 * nFetchBodiesRequest
-    ## Similar to `nFetchHeadersBatch`
-    ##
-    ## With an average less than 90KiB/block (on `mainnet` at block ~#22m),
-    ## one arrives at a total of at most 35MiB per block batch.
-
-  blocksStagedHwmDefault* = 8 * nFetchBodiesBatch
-    ## This is an initialiser value for `blocksStagedHwm`.
-    ##
-    ## If the staged block queue exceeds this many number of block objects for
+  blocksStagedQueueLengthHwm* = 2
+    ## If the staged block queue exceeds this many number of queue objects for
     ## import, no further block objets are added (but the current sub-list is
     ## completed.)
-
-  blocksStagedLwm* = nFetchBodiesBatch
-    ## Minimal accepted initialisation value for `blocksStagedHwm`. The latter
-    ## will be initalised with `blocksStagedHwmDefault` if smaller than the LWM.
 
   # ----------------------
 
@@ -144,12 +123,9 @@ static:
 
   doAssert 0 < nFetchHeadersRequest
   doAssert nFetchHeadersRequest <= nFetchHeadersBatch
-  doAssert 0 < headersStagedQueueLengthLwm
-  doAssert headersStagedQueueLengthLwm < headersStagedQueueLengthHwm
+  doAssert 0 < headersStagedQueueLengthHwm
 
   doAssert 0 < nFetchBodiesRequest
-  doAssert nFetchBodiesRequest <= nFetchBodiesBatch
-  doAssert 0 < blocksStagedLwm
-  doAssert blocksStagedLwm <= blocksStagedHwmDefault
+  doAssert 0 < blocksStagedQueueLengthHwm
 
 # End

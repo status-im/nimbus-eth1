@@ -600,7 +600,7 @@ func chainConfigForNetwork*(id: NetworkId): ChainConfig =
       londonBlock:         Opt.some(0.BlockNumber),
       mergeNetsplitBlock:  Opt.some(0.BlockNumber),
       terminalTotalDifficulty: Opt.some(0.u256),
-      shanghaiTime:        Opt.some(10.EthTime),
+      shanghaiTime:        Opt.some(0.EthTime),
       cancunTime:          Opt.some(0.EthTime),
       pragueTime:          Opt.some(1_742_999_832.EthTime),
       depositContractAddress: Opt.some(HOODI_DEPOSIT_CONTRACT_ADDRESS),
@@ -608,6 +608,13 @@ func chainConfigForNetwork*(id: NetworkId): ChainConfig =
     )
   else:
     ChainConfig()
+
+  {.cast(noSideEffect).}:
+    # Obviously we lie about no side effect.
+    # If chonicles enabled and there is something bad with
+    # the chain config values, `validateChainConfig` will print something.
+    # But it is very rare and must immediately fixed anyway.
+    doAssert validateChainConfig(result)
 
 func genesisBlockForNetwork*(id: NetworkId): Genesis
     {.gcsafe, raises: [ValueError, RlpError].} =

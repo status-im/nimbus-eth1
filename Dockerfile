@@ -21,7 +21,7 @@ ADD . /root/nimbus-eth1
 
 RUN cd /root/nimbus-eth1 \
  && make -j$(nproc) update-from-ci \
- && make -j$(nproc) V=1 nimbus
+ && make -j$(nproc) DISABLE_MARCH_NATIVE=1 V=1 nimbus_execution_client
 
 # --------------------------------- #
 # Starting new image to reduce size #
