@@ -44,12 +44,7 @@ proc defaultPortalBridgeDir*(): string =
   getHomeDir() / relativeDataDir
 
 proc defaultPortalBridgeStateDir*(): string =
-  let stateDir =
-    when defined(windows) or defined(macosx):
-      "State"
-    else:
-      "state"
-
+  let stateDir = when defined(windows) or defined(macosx): "State" else: "state"
   defaultPortalBridgeDir() / stateDir
 
 const defaultEndEra* = uint64(era(network_metadata.mergeBlockNumber - 1))
