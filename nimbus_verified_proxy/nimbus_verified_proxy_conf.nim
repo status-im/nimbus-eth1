@@ -64,6 +64,14 @@ type VerifiedProxyConf* = object # Config
     name: "data-dir"
   .}: OutDir
 
+  # In-Memory Cache Size
+  cacheLen* {.
+    desc: "Length of the header cache maintained in memory",
+    defaultValue: 64,
+    defaultValueDesc: "64",
+    name: "cache-len"
+  .}: int
+
   # Network
   eth2Network* {.
     desc: "The Eth2 network to join", defaultValueDesc: "mainnet", name: "network"
@@ -198,6 +206,7 @@ func asLightClientConf*(pc: VerifiedProxyConf): LightClientConf =
     logStdout: pc.logStdout,
     logFile: none(OutFile),
     dataDir: pc.dataDir,
+    cacheLen: pc.cacheLen,
     eth2Network: pc.eth2Network,
     bootstrapNodes: pc.bootstrapNodes,
     bootstrapNodesFile: pc.bootstrapNodesFile,

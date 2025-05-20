@@ -80,7 +80,8 @@ proc run*(
       [initTAddress(config.rpcAddress, config.rpcPort)], clientConfig, authHooks
     )
 
-    headerStore = HeaderStore.new(64) # block cache contains blocks downloaded from p2p
+    # header cache contains headers downloaded from p2p
+    headerStore = HeaderStore.new(config.cacheLen)
 
   var verifiedProxy = VerifiedRpcProxy.new(rpcProxy, headerStore, chainId)
 

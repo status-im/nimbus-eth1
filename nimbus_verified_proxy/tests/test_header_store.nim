@@ -13,8 +13,7 @@ import
   eth/common/headers_rlp,
   ../header_store,
   beacon_chain/spec/forks,
-  beacon_chain/spec/helpers,
-  beacon_chain/el/engine_api_conversions
+  beacon_chain/spec/helpers
 
 func headerGenerator(number: int): ForkedLightClientHeader =
   ForkedLightClientHeader(

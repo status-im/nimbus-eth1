@@ -14,13 +14,13 @@ import
   beacon_chain/spec/beaconstate,
   beacon_chain/spec/datatypes/[phase0, altair, bellatrix],
   beacon_chain/[light_client, nimbus_binary_common],
+  beacon_chain/el/engine_api_conversions,
   minilru,
   results
 
 type HeaderStore* = ref object
   headers: LruCache[Hash32, Header]
   hashes: LruCache[base.BlockNumber, Hash32]
-  capacity: int
 
 func convLCHeader*(lcHeader: ForkedLightClientHeader): Result[Header, string] =
   withForkyHeader(lcHeader):
@@ -82,7 +82,6 @@ func new*(T: type HeaderStore, max: int): T =
   HeaderStore(
     headers: LruCache[Hash32, Header].init(max),
     hashes: LruCache[base.BlockNumber, Hash32].init(max),
-    capacity: max,
   )
 
 func len*(self: HeaderStore): int =
@@ -117,13 +116,18 @@ func latestHash*(self: HeaderStore): Opt[Hash32] =
 
   Opt.none(Hash32)
 
+# TODO: query the last item directly. Probably requires a database update/change
+template getLast(self: HeaderStore): Hash32 =
+  var hash: Hash32
+  for h in self.headers.keys:
+    hash = h
+  hash
+
 func earliest*(self: HeaderStore): Opt[Header] =
   if self.headers.len() == 0:
     return Opt.none(Header)
 
-  var hash: Hash32
-  for h in self.headers.keys:
-    hash = h
+  let hash = self.getLast()
 
   self.headers.peek(hash)
 
@@ -131,9 +135,7 @@ func earliestHash*(self: HeaderStore): Opt[Hash32] =
   if self.headers.len() == 0:
     return Opt.none(Hash32)
 
-  var hash: Hash32
-  for h in self.headers.keys:
-    hash = h
+  let hash = self.getLast()
 
   Opt.some(hash)
 
