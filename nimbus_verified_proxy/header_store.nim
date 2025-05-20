@@ -22,6 +22,9 @@ type HeaderStore* = ref object
   headers: LruCache[Hash32, Header]
   hashes: LruCache[base.BlockNumber, Hash32]
   finalized: Opt[Header]
+  finalizedHash: Opt[Hash32]
+  earliest: Opt[Header]
+  earliestHash: Opt[Hash32]
 
 func convLCHeader*(lcHeader: ForkedLightClientHeader): Result[Header, string] =
   withForkyHeader(lcHeader):
@@ -84,6 +87,9 @@ func new*(T: type HeaderStore, max: int): T =
     headers: LruCache[Hash32, Header].init(max),
     hashes: LruCache[base.BlockNumber, Hash32].init(max),
     finalized: Opt.none(Header),
+    finalizedHash: Opt.none(Hash32),
+    earliest: Opt.none(Header),
+    earliestHash: Opt.none(Hash32),
   )
 
 func len*(self: HeaderStore): int =
@@ -98,19 +104,39 @@ func latest*(self: HeaderStore): Opt[Header] =
 
   Opt.none(Header)
 
+func earliest*(self: HeaderStore): Opt[Header] =
+  self.earliest
+
+func earliestHash*(self: HeaderStore): Opt[Hash32] =
+  self.earliestHash
+
+func finalized*(self: HeaderStore): Opt[Header] =
+  self.finalized
+
+func finalizedHash*(self: HeaderStore): Opt[Hash32] =
+  self.finalizedHash
+
 proc updateFinalized*(
     self: HeaderStore, header: ForkedLightClientHeader
 ): Result[bool, string] =
   let execHeader = convLCHeader(header).valueOr:
     return err(error)
 
-  if self.finalized.isSome():
-    if self.finalized.get().number < execHeader.number:
-      self.finalized = Opt.some(execHeader)
-    else:
-      return err("finalized update header is older")
-  else:
-    self.finalized = Opt.some(execHeader)
+  withForkyHeader(header):
+    when lcDataFork > LightClientDataFork.Altair:
+      let execHash = forkyHeader.execution.block_hash.asBlockHash
+
+      if self.finalized.isSome():
+        if self.finalized.get().number < execHeader.number:
+          self.finalized = Opt.some(execHeader)
+          self.finalizedHash = Opt.some(execHash)
+        else:
+          return err("finalized update header is older")
+      else:
+        self.finalized = Opt.some(execHeader)
+        self.finalizedHash = Opt.some(execHash)
+        self.earliest = Opt.some(execHeader)
+        self.earliestHash = Opt.some(execHash)
 
   return ok(true)
 
@@ -150,6 +176,3 @@ func get*(self: HeaderStore, number: base.BlockNumber): Opt[Header] =
 
 func get*(self: HeaderStore, hash: Hash32): Opt[Header] =
   self.headers.peek(hash)
-
-func getFinalized*(self: HeaderStore): Opt[Header] =
-  self.finalized

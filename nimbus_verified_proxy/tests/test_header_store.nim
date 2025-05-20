@@ -34,26 +34,8 @@ suite "test proxy header store":
     check store.get(default(BlockNumber)).isNone()
     check store.latest.isNone()
     check store.latestHash.isNone()
-    check store.earliest.isNone()
-    check store.earliestHash.isNone()
     check store.len == 0
     check store.isEmpty()
-
-  test "add one item only":
-    let store = HeaderStore.new(10)
-    discard store.add(headerGenerator(0))
-    let
-      latestHeader = store.latest
-      earliestHeader = store.earliest
-      latestHash = store.latestHash
-      earliestHash = store.earliestHash
-
-    check latestHeader.isSome()
-    check earliestHeader.isSome()
-    check latestHeader.get() == earliestHeader.get()
-    check latestHash.isSome()
-    check earliestHash.isSome()
-    check latestHash.get() == earliestHash.get()
 
   test "get from a non-pruned semi-filled store":
     let store = HeaderStore.new(10)
@@ -65,9 +47,6 @@ suite "test proxy header store":
     check store.latest.isSome()
     check store.latest.get().number == 4
     check store.latestHash.isSome()
-    check store.earliest.isSome()
-    check store.earliest.get().number == 0
-    check store.earliestHash.isSome()
     check (not store.isEmpty())
 
   test "header store auto pruning":
@@ -75,13 +54,10 @@ suite "test proxy header store":
     for i in 0 ..< 10:
       discard store.add(headerGenerator(i))
 
-    check store.earliest.isSome()
-    check store.earliest.get().number == 0
+    check store.get(BlockNumber(0)).isSome()
 
     discard store.add(headerGenerator(10))
 
-    check store.earliest.isSome()
-    check store.earliest.get().number == 1
     check store.latest.isSome()
     check store.latest.get().number == 10
     check store.get(BlockNumber(0)).isNone()
@@ -93,19 +69,37 @@ suite "test proxy header store":
 
     discard store.add(headerGenerator(10))
 
-    check store.earliest.isSome()
-    check store.earliest.get().number == 1
     check store.latest.isSome()
     check store.latest.get.number == 10
-    check store.get(BlockNumber(0)).isNone()
+    check store.get(BlockNumber(1)).isSome()
 
     discard store.add(headerGenerator(11))
 
-    check store.earliest.isSome()
-    check store.earliest.get().number == 2
     check store.latest.isSome()
     check store.latest.get.number == 11
     check store.get(BlockNumber(1)).isNone()
+
+  test "update finalized":
+    let store = HeaderStore.new(10)
+    for i in 0 ..< 10:
+      discard store.add(headerGenerator(i))
+
+    discard store.updateFinalized(headerGenerator(0))
+
+    check store.len == 10
+    check store.get(BlockNumber(0)).isSome()
+    check store.finalized.isSome()
+    check store.finalizedHash.isSome()
+    check store.earliest.isSome()
+    check store.earliestHash.isSome()
+    check store.earliestHash.get() == store.finalizedHash.get()
+    check store.earliest.get() == store.finalized.get()
+
+    discard store.updateFinalized(headerGenerator(1))
+
+    check store.earliest.get() != store.finalized.get()
+    check store.earliestHash.get() != store.finalizedHash.get()
+    check store.finalized.get().number == 1
 
   test "add altair header":
     let store = HeaderStore.new(5)
