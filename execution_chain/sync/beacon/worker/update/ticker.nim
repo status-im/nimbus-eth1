@@ -51,7 +51,6 @@ type
     blkTopImported: BlockNumber
 
     state: SyncState
-    reorg: int
     nBuddies: int
 
   TickerRef* = ref object of RootRef
@@ -94,7 +93,6 @@ when enableTicker:
       blkTopImported:  ctx.blk.topImported,
 
       state:           ctx.pool.lastState,
-      reorg:           ctx.pool.nReorg,
       nBuddies:        ctx.pool.nBuddies)
 
   proc tickerLogger(t: TickerRef; ctx: BeaconCtxRef) =

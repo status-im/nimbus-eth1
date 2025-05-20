@@ -268,19 +268,13 @@ proc headersStagedProcess*(buddy: BeaconBuddyRef; info: static[string]): bool =
 
 
 proc headersStagedReorg*(ctx: BeaconCtxRef; info: static[string]) =
-  ## Some pool mode intervention. The effect is that all concurrent peers
-  ## finish up their current work and run this function here (which might
-  ## do nothing.) Pool mode is used to sync peers, e.g. for a forced state
-  ## change.
+  ## Some pool mode intervention.
   ##
-  # Check for cancel request
   if ctx.pool.lastState == headersCancel:
-    # Update counter
-    ctx.pool.nReorg.inc
 
     # Reset header queues
     debug info & ": Flushing header queues", nUnproc=ctx.headersUnprocTotal(),
-      nStagedQ=ctx.hdr.staged.len, nReorg=ctx.pool.nReorg
+      nStagedQ=ctx.hdr.staged.len
 
     ctx.headersUnprocClear() # clears `unprocessed` and `borrowed` list
     ctx.hdr.staged.clear()

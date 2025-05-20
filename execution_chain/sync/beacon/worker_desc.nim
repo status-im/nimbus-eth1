@@ -100,7 +100,6 @@ type
     hdrCache*: HeaderChainRef        ## Currently in tandem with `chain`
 
     # Info, debugging, and error handling stuff
-    nReorg*: int                     ## Number of reorg invocations (info only)
     hdrProcError*: Table[Hash,uint8] ## Some globally accessible header errors
     blkLastSlowPeer*: Opt[Hash]      ## Register slow peer when last one
     failedPeers*: HashSet[Hash]      ## Detect dead end sync by collecting peers

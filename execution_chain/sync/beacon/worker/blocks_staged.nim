@@ -248,12 +248,9 @@ proc blocksStagedReorg*(ctx: BeaconCtxRef; info: static[string]) =
   ##
   if 0 < ctx.blk.staged.len or not ctx.blocksUnprocIsEmpty():
 
-    # Update counter
-    ctx.pool.nReorg.inc
-
     # Reset block queues
     debug info & ": Flushing block queues", nUnproc=ctx.blocksUnprocTotal(),
-      nStagedQ=ctx.blk.staged.len, nReorg=ctx.pool.nReorg
+      nStagedQ=ctx.blk.staged.len
 
     ctx.blocksUnprocClear()
     ctx.blk.staged.clear()
