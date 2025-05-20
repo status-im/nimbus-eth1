@@ -66,14 +66,6 @@ proc toRocksDb*(
   tableOpts.dataBlockIndexType = DataBlockIndexType.binarySearchAndHash
   tableOpts.dataBlockHashRatio = 0.75
 
-  # A smaller block size reduces read amplification at the expense of larger
-  # indices - there should also be some alignment with on-disk blocks so that we
-  # typically perform reads consistent with the disk block size. It's hard
-  # to pick a reasonable number here, but assuming compression to about 2/3,
-  # we should use about ~6k blocks to fit in an ssd block - more benchmarks
-  # needed!
-  tableOpts.blockSize = 6000
-
   let cfOpts = defaultColFamilyOptions(autoClose = true)
 
   cfOpts.blockBasedTableFactory = tableOpts
@@ -100,23 +92,9 @@ proc toRocksDb*(
   # Compared to LZ4 that was tested earlier, the default ZSTD config results
   # in 10% less space and similar or slightly better performance in some
   # simple tests around mainnet block 14M.
-  #
-  # sst_dump --file=005420.sst --command=recompress --set_block_size=6000 --compression_types=kZSTD --compression_level_from=-3 --compression_level_to=3 --compression_max_dict_bytes=16484 --compression_zstd_max_train_bytes=1638400
-  # Compression level: -3 Size: 2497674402 Blocks: 522975 Time Taken:   29957380
-  # Compression level: -1 Size: 2271282060 Blocks: 522975 Time Taken:   34565174
-  # Compression level: 1 Size: 2260978713 Blocks: 522975 Time Taken:   38725150
-  # Compression level: 3 Size: 2241970102 Blocks: 522975 Time Taken:   53415641
-
-  # Based on the above, -1 and -1 would offer similarly reasonable performance
-  # while -3 and 3 each feel like the cost/benefit is worse, in either direction
-
+  # TODO evaluate zstd dictionary compression
+  # https://github.com/facebook/rocksdb/wiki/Dictionary-Compression
   cfOpts.bottommostCompression = Compression.zstdCompression
-
-  # 16kb dictionary size per rocksdb recommendation:
-  # https://rocksdb.org/blog/2021/05/31/dictionary-compression.html
-  cfOpts.setBottommostCompressionOptions(level = 1, maxDictBytes = 16384)
-  cfOpts.bottommostCompressionOptionsZstdMaxTrainBytes = 16384 * 100
-  cfOpts.bottommostCompressionOptionsUseZstdDictTrainer = false
 
   # TODO In the AriVtx table, we don't do lookups that are expected to result
   #      in misses thus we could avoid the filter cost - this does not apply to
