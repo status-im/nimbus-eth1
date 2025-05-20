@@ -19,7 +19,8 @@ import
   ./requester,
   ../../networking/p2p,
   ../../core/tx_pool,
-  ../../core/eip4844
+  ../../core/eip4844,
+  ../../core/chain/forked_chain
 
 logScope:
   topics = "tx-broadcast"
@@ -30,6 +31,8 @@ const
   NUM_PEERS_REBROADCAST_QUOTIENT = 4
   POOLED_STORAGE_TIME_LIMIT = initDuration(minutes = 20)
   cleanupTicker = chronos.minutes(5)
+  # https://github.com/ethereum/devp2p/blob/b0c213de97978053a0f62c3ea4d23c0a3d8784bc/caps/eth.md#blockrangeupdate-0x11
+  blockRangeUpdateTicker = chronos.minutes(2)
 
 template awaitQuota(bcParam: EthWireRef, costParam: float, protocolIdParam: string) =
   let
@@ -63,9 +66,46 @@ const
   txPoolProcessCost = allowedOpsPerSecondCost(1000)
   hashLookupCost = allowedOpsPerSecondCost(2000)
   hashingCost = allowedOpsPerSecondCost(5000)
+  blockRangeUpdateCost = allowedOpsPerSecondCost(20)
 
 func add(seen: SeenObject, peer: Peer) =
   seen.peers.incl(peer.id)
+
+iterator peers(wire: EthWireRef, random: bool = false): Peer =
+  var peers = newSeqOfCap[Peer](wire.node.numPeers)
+  for peer in wire.node.peers:
+    if peer.isNil:
+      continue
+
+    if peer.supports(eth68) or peer.supports(eth69):
+      peers.add peer
+
+  if random:
+    shuffle(peers)
+
+  for peer in peers:
+    if peer.connectionState != ConnectionState.Connected:
+      continue
+
+    yield peer
+
+iterator peers69OrLater(wire: EthWireRef, random: bool = false): Peer =
+  var peers = newSeqOfCap[Peer](wire.node.numPeers)
+  for peer in wire.node.peers:
+    if peer.isNil:
+      continue
+
+    if peer.supports(eth69):
+      peers.add peer
+
+  if random:
+    shuffle(peers)
+
+  for peer in peers:
+    if peer.connectionState != ConnectionState.Connected:
+      continue
+
+    yield peer
 
 proc seenByPeer(wire: EthWireRef,
                 packet: NewPooledTransactionHashesPacket,
@@ -203,23 +243,8 @@ proc handleTransactionsBroadcast*(wire: EthWireRef,
       numPeers = wire.node.numPeers
       maxPeers = max(1, numPeers div NUM_PEERS_REBROADCAST_QUOTIENT)
 
-    var
-      i = 0
-      peers = newSeqOfCap[Peer](numPeers)
-
-    for peer in wire.node.peers:
-      if peer.isNil:
-        continue
-
-      if peer.supports(eth68) or peer.supports(eth69):
-        peers.add peer
-
-    shuffle(peers)
-
-    for peer in peers:
-      if peer.connectionState != ConnectionState.Connected:
-        continue
-
+    var i = 0
+    for peer in wire.peers(random = true):
       if i < maxPeers:
         await wire.broadcastTransactions(newPacket, hashes, peer)
       else:
@@ -296,34 +321,44 @@ proc handleTxHashesBroadcast*(wire: EthWireRef,
 
       awaitQuota(wire, txPoolProcessCost, "broadcast transactions hashes")
 
-    var peers = newSeqOfCap[Peer](wire.node.numPeers)
-    for peer in wire.node.peers:
-      if peer.isNil:
-        continue
-
-      if peer.supports(eth68) or peer.supports(eth69):
-        peers.add peer
-
-    for peer in peers:
-      if peer.connectionState != ConnectionState.Connected:
-        continue
-
+    for peer in wire.peers:
       await wire.broadcastTxHashes(hashes, peer)
 
 proc setupCleanup*(wire: EthWireRef) {.async: (raises: [CancelledError]).} =
   while true:
-    await sleepAsync(cleanupTicker)
+    let
+      cleanup = sleepAsync(cleanupTicker)
+      update  = sleepAsync(blockRangeUpdateTicker)
+      res     = await one(cleanup, update)
 
-    wire.reqisterAction("Periodical cleanup"):
-      var expireds: seq[Hash32]
-      for key, seen in wire.seenTransactions:
-        if getTime() - seen.lastSeen > POOLED_STORAGE_TIME_LIMIT:
-          expireds.add key
-        awaitQuota(wire, hashLookupCost, "broadcast transactions hashes")
+    if res == cleanup:
+      wire.reqisterAction("Periodical cleanup"):
+        var expireds: seq[Hash32]
+        for key, seen in wire.seenTransactions:
+          if getTime() - seen.lastSeen > POOLED_STORAGE_TIME_LIMIT:
+            expireds.add key
+          awaitQuota(wire, hashLookupCost, "broadcast transactions hashes")
 
-      for expire in expireds:
-        wire.seenTransactions.del(expire)
-        awaitQuota(wire, hashLookupCost, "broadcast transactions hashes")
+        for expire in expireds:
+          wire.seenTransactions.del(expire)
+          awaitQuota(wire, hashLookupCost, "broadcast transactions hashes")
+
+    if res == update:
+      wire.reqisterAction("Periodical blockRangeUpdate"):
+        let
+          packet = BlockRangeUpdatePacket(
+            earliest: 0,
+            latest: wire.chain.latestNumber,
+            latestHash: wire.chain.latestHash,
+          )
+
+        for peer in wire.peers69OrLater:
+          try:
+            await peer.blockRangeUpdate(packet)
+          except EthP2PError as exc:
+            debug "broadcast block range update failed",
+              msg=exc.msg
+          awaitQuota(wire, blockRangeUpdateCost, "broadcast blockRangeUpdate")
 
 proc setupTokenBucket*(): TokenBucket =
   TokenBucket.new(maxOperationQuota.int, fullReplenishTime)
