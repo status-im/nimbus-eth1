@@ -56,14 +56,14 @@ proc new*(_: type EthWireRef,
 proc getStatus68*(ctx: EthWireRef): Eth68State =
   let
     com = ctx.chain.com
-    bestBlock = ctx.chain.latestHeader
+    bestBlock = ctx.chain.latestHeader    
     txFrame = ctx.chain.baseTxFrame
     forkId = com.forkId(bestBlock.number, bestBlock.timestamp)
 
   Eth68State(
     totalDifficulty: txFrame.headTotalDifficulty,
     genesisHash: com.genesisHash,
-    bestBlockHash: bestBlock.computeBlockHash,
+    bestBlockHash: ctx.chain.latestHash,
     forkId: ChainForkId(
       forkHash: forkId.crc.toBytesBE,
       forkNext: forkId.nextFork
@@ -83,7 +83,7 @@ proc getStatus69*(ctx: EthWireRef): Eth69State =
     ),
     earliest: 0,
     latest: bestBlock.number,
-    latestHash: bestBlock.computeBlockHash,
+    latestHash: ctx.chain.latestHash,
   )
 
 proc getReceipts*(ctx: EthWireRef,
