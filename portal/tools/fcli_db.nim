@@ -81,7 +81,8 @@ proc cmdGenerate(conf: DbConf) =
 
   for i in 0 ..< conf.contentAmount:
     let key = rng[].generateRandomU256()
-    db.put(key, bytes)
+
+  db.close()
 
 proc cmdBench(conf: DbConf) =
   let
@@ -138,6 +139,8 @@ proc cmdBench(conf: DbConf) =
 
   printTimers(timers)
 
+  db.close()
+
 proc cmdPrune(conf: DbConf) =
   if conf.reclaimOnly:
     let db = ContentDB.new(
@@ -149,6 +152,7 @@ proc cmdPrune(conf: DbConf) =
     )
 
     db.reclaimAndTruncate()
+    db.close()
   else:
     notice "Functionality not yet implemented"
     quit QuitSuccess

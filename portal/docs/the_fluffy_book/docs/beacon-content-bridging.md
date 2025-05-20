@@ -8,7 +8,7 @@ Run a Nimbus Portal client with the JSON-RPC API enabled.
 ./build/nimbus_portal_client --rpc
 ```
 
-Build & run the `nimbus_portal_bridge` for the beacon network:
+Build & run the Nimbus Portal bridge for the beacon network:
 ```bash
 make nimbus_portal_bridge
 
@@ -18,7 +18,7 @@ TRUSTED_BLOCK_ROOT=0x12345678901234567890123456789012345678901234567890123456789
 ./build/nimbus_portal_bridge beacon --trusted-block-root:${TRUSTED_BLOCK_ROOT} --rest-url:http://127.0.0.1:5052 --portal-rpc-url:http://127.0.0.1:8545
 ```
 
-The `nimbus_portal_bridge` will connect to Nimbus Portal client over the JSON-RPC
+The Nimbus Portal bridge will connect to the Nimbus Portal client over the JSON-RPC
 interface and start gossiping an `LightClientBootstrap` for
 given trusted block root and gossip backfill `LightClientUpdate`s.
 
