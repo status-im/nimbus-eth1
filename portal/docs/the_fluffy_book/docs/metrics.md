@@ -24,7 +24,7 @@ over time and to also visualise them one can use for example Prometheus and Graf
 The steps on how to set up metrics visualisation with Prometheus and Grafana is
 explained in [this guide](https://nimbus.guide/metrics-pretty-pictures.html#prometheus-and-grafana).
 
-A Nimbus Portal specific dashboard can be found [here](https://github.com/status-im/nimbus-eth1/blob/master/portal/metrics/grafana/fluffy_grafana_dashboard.json).
+A Nimbus Portal specific dashboard can be found [here](https://github.com/status-im/nimbus-eth1/blob/master/portal/metrics/grafana/portal_grafana_dashboard.json).
 
 This is the dashboard used for our Nimbus Portal network fleet.
 In order to use it locally, you will have to remove the
