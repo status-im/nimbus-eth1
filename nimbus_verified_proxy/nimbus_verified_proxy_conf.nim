@@ -206,7 +206,6 @@ func asLightClientConf*(pc: VerifiedProxyConf): LightClientConf =
     logStdout: pc.logStdout,
     logFile: none(OutFile),
     dataDir: pc.dataDir,
-    cacheLen: pc.cacheLen,
     eth2Network: pc.eth2Network,
     bootstrapNodes: pc.bootstrapNodes,
     bootstrapNodesFile: pc.bootstrapNodesFile,

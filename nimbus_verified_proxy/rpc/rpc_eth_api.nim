@@ -85,7 +85,7 @@ proc installEthApiHandlers*(lcProxy: VerifiedRpcProxy) =
 
   lcProxy.proxy.rpc("eth_blockNumber") do() -> uint64:
     ## Returns the number of the most recent block.
-    let latest = lcProxy.blockCache.latest.valueOr:
+    let latest = lcProxy.headerStore.latest.valueOr:
       raise newException(ValueError, "Syncing")
 
     latest.number.uint64
@@ -106,7 +106,7 @@ proc installEthApiHandlers*(lcProxy: VerifiedRpcProxy) =
     let
       proof = await lcProxy.rpcClient.eth_getProof(address, @[], blockId(blockNumber))
       account = getAccountFromProof(
-        blk.stateRoot, proof.address, proof.balance, proof.nonce, proof.codeHash,
+        header.stateRoot, proof.address, proof.balance, proof.nonce, proof.codeHash,
         proof.storageHash, proof.accountProof,
       ).valueOr:
         raise newException(ValueError, error)
@@ -125,7 +125,7 @@ proc installEthApiHandlers*(lcProxy: VerifiedRpcProxy) =
     let proof =
       await lcProxy.rpcClient.eth_getProof(address, @[slot], blockId(blockNumber))
 
-    getStorageData(blk.stateRoot, slot, proof).valueOr:
+    getStorageData(header.stateRoot, slot, proof).valueOr:
       raise newException(ValueError, error)
 
   lcProxy.proxy.rpc("eth_getTransactionCount") do(
@@ -141,7 +141,7 @@ proc installEthApiHandlers*(lcProxy: VerifiedRpcProxy) =
       proof = await lcProxy.rpcClient.eth_getProof(address, @[], blockId(blockNumber))
 
       account = getAccountFromProof(
-        blk.stateRoot, proof.address, proof.balance, proof.nonce, proof.codeHash,
+        header.stateRoot, proof.address, proof.balance, proof.nonce, proof.codeHash,
         proof.storageHash, proof.accountProof,
       ).valueOr:
         raise newException(ValueError, error)
@@ -159,7 +159,7 @@ proc installEthApiHandlers*(lcProxy: VerifiedRpcProxy) =
     let
       proof = await lcProxy.rpcClient.eth_getProof(address, @[], blockId(blockNumber))
       account = getAccountFromProof(
-        blk.stateRoot, proof.address, proof.balance, proof.nonce, proof.codeHash,
+        header.stateRoot, proof.address, proof.balance, proof.nonce, proof.codeHash,
         proof.storageHash, proof.accountProof,
       ).valueOr:
         raise newException(ValueError, error)
@@ -188,9 +188,12 @@ proc installEthApiHandlers*(lcProxy: VerifiedRpcProxy) =
   lcProxy.proxy.registerProxyMethod("eth_getBlockByHash")
 
 proc new*(
-    T: type VerifiedRpcProxy, proxy: RpcProxy, blockCache: BlockCache, chainId: UInt256
+    T: type VerifiedRpcProxy,
+    proxy: RpcProxy,
+    headerStore: HeaderStore,
+    chainId: UInt256,
 ): T =
-  VerifiedRpcProxy(proxy: proxy, blockCache: blockCache, chainId: chainId)
+  VerifiedRpcProxy(proxy: proxy, headerStore: headerStore, chainId: chainId)
 
 # Used to be in eth1_monitor.nim; not sure why it was deleted,
 # so I copied it here. --Adam

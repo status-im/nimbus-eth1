@@ -1,5 +1,5 @@
 # eth
-# Copyright (c) 2019-2025 Status Research & Development GmbH
+# Copyright (c) 2025 Status Research & Development GmbH
 # Licensed and distributed under either of
 #   * MIT license (license terms in the root directory or at https://opensource.org/licenses/MIT).
 #   * Apache v2 license (license terms in the root directory or at https://www.apache.org/licenses/LICENSE-2.0).
@@ -27,10 +27,9 @@ func headerGenerator(number: int): ForkedLightClientHeader =
     ),
   )
 
-let store = HeaderStore.new(64)
-
 suite "test proxy header store":
   test "get from empty store":
+    let store = HeaderStore.new(1)
     check store.get(default(Hash32)).isNone()
     check store.get(default(BlockNumber)).isNone()
     check store.latest.isNone()
@@ -41,6 +40,7 @@ suite "test proxy header store":
     check store.isEmpty()
 
   test "add one item only":
+    let store = HeaderStore.new(10)
     discard store.add(headerGenerator(0))
     let
       latestHeader = store.latest
@@ -56,16 +56,14 @@ suite "test proxy header store":
     check latestHash.get() == earliestHash.get()
 
   test "get from a non-pruned semi-filled store":
-    for i in 0 ..< 32:
+    let store = HeaderStore.new(10)
+    for i in 0 ..< 5:
       discard store.add(headerGenerator(i))
 
-    check store.len == 32
-
-    let h = store.get(BlockNumber(0))
-
-    check h.isSome()
+    check store.len == 5
+    check store.get(BlockNumber(0)).isSome()
     check store.latest.isSome()
-    check store.latest.get().number == 31
+    check store.latest.get().number == 4
     check store.latestHash.isSome()
     check store.earliest.isSome()
     check store.earliest.get().number == 0
@@ -73,40 +71,44 @@ suite "test proxy header store":
     check (not store.isEmpty())
 
   test "header store auto pruning":
-    for i in 32 ..< 64:
+    let store = HeaderStore.new(10)
+    for i in 0 ..< 10:
       discard store.add(headerGenerator(i))
 
-    let h = store.earliest
+    check store.earliest.isSome()
+    check store.earliest.get().number == 0
 
-    check h.isSome()
-    check h.get.number == 0
-
-    discard store.add(headerGenerator(64))
+    discard store.add(headerGenerator(10))
 
     check store.earliest.isSome()
     check store.earliest.get().number == 1
     check store.latest.isSome()
-    check store.latest.get().number == 64
+    check store.latest.get().number == 10
     check store.get(BlockNumber(0)).isNone()
 
   test "duplicate addition should not work":
-    discard store.add(headerGenerator(64))
+    let store = HeaderStore.new(10)
+    for i in 0 ..< 11:
+      discard store.add(headerGenerator(i))
+
+    discard store.add(headerGenerator(10))
 
     check store.earliest.isSome()
     check store.earliest.get().number == 1
     check store.latest.isSome()
-    check store.latest.get.number == 64
+    check store.latest.get.number == 10
     check store.get(BlockNumber(0)).isNone()
 
-    discard store.add(headerGenerator(65))
+    discard store.add(headerGenerator(11))
 
     check store.earliest.isSome()
     check store.earliest.get().number == 2
     check store.latest.isSome()
-    check store.latest.get.number == 65
+    check store.latest.get.number == 11
     check store.get(BlockNumber(1)).isNone()
 
   test "add altair header":
+    let store = HeaderStore.new(5)
     let altairHeader = ForkedLightClientHeader(
       kind: LightClientDataFork.Altair,
       altairData: altair.LightClientHeader(beacon: default(altair.BeaconBlockHeader)),
@@ -116,6 +118,7 @@ suite "test proxy header store":
     check res.isErr()
 
   test "add electra header":
+    let store = HeaderStore.new(5)
     let electraHeader = ForkedLightClientHeader(
       kind: LightClientDataFork.Electra,
       electraData: electra.LightClientHeader(
