@@ -163,6 +163,11 @@ proc run*(
     withForkyHeader(finalizedHeader):
       when lcDataFork > LightClientDataFork.Altair:
         info "New LC finalized header", finalized_header = shortLog(forkyHeader)
+        let res = headerStore.updateFinalized(finalizedHeader)
+
+        if res.isErr():
+          error "finalized header update error", error = res.error()
+
         if ctx != nil:
           try:
             ctx.onHeader(cstring(Json.encode(forkyHeader)), 0)

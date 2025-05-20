@@ -21,6 +21,7 @@ import
 type HeaderStore* = ref object
   headers: LruCache[Hash32, Header]
   hashes: LruCache[base.BlockNumber, Hash32]
+  finalized: Opt[Header]
 
 func convLCHeader*(lcHeader: ForkedLightClientHeader): Result[Header, string] =
   withForkyHeader(lcHeader):
@@ -82,6 +83,7 @@ func new*(T: type HeaderStore, max: int): T =
   HeaderStore(
     headers: LruCache[Hash32, Header].init(max),
     hashes: LruCache[base.BlockNumber, Hash32].init(max),
+    finalized: Opt.none(Header),
   )
 
 func len*(self: HeaderStore): int =
@@ -90,54 +92,55 @@ func len*(self: HeaderStore): int =
 func isEmpty*(self: HeaderStore): bool =
   len(self.headers) == 0
 
-proc add*(self: HeaderStore, header: ForkedLightClientHeader): Result[bool, string] =
-  # Only add if it didn't exist before - the implementation of `latest` relies
-  # on this..
-  let execHeader = convLCHeader(header).valueOr:
-    return err(error)
-  withForkyHeader(header):
-    when lcDataFork > LightClientDataFork.Altair:
-      let execHash = forkyHeader.execution.block_hash.asBlockHash
-
-      if execHash notin self.headers:
-        self.headers.put(execHash, execHeader)
-        self.hashes.put(execHeader.number, execHash)
-  ok(true)
-
 func latest*(self: HeaderStore): Opt[Header] =
   for h in self.headers.values:
     return Opt.some(h)
 
   Opt.none(Header)
 
+proc updateFinalized*(
+    self: HeaderStore, header: ForkedLightClientHeader
+): Result[bool, string] =
+  let execHeader = convLCHeader(header).valueOr:
+    return err(error)
+
+  if self.finalized.isSome():
+    if self.finalized.get().number < execHeader.number:
+      self.finalized = Opt.some(execHeader)
+    else:
+      return err("finalized update header is older")
+  else:
+    self.finalized = Opt.some(execHeader)
+
+  return ok(true)
+
+proc add*(self: HeaderStore, header: ForkedLightClientHeader): Result[bool, string] =
+  let
+    execHeader = convLCHeader(header).valueOr:
+      return err(error)
+    latestHeader = self.latest
+
+  # check the ordering of headers. This allows for gaps but always maintains an incremental order
+  if latestHeader.isSome():
+    if execHeader.number <= latestHeader.get().number:
+      return err("block is older than the latest one")
+
+  withForkyHeader(header):
+    when lcDataFork > LightClientDataFork.Altair:
+      let execHash = forkyHeader.execution.block_hash.asBlockHash
+
+      # Only add if it didn't exist before - the implementation of `latest` relies
+      # on this..
+      if execHash notin self.headers:
+        self.headers.put(execHash, execHeader)
+        self.hashes.put(execHeader.number, execHash)
+  ok(true)
+
 func latestHash*(self: HeaderStore): Opt[Hash32] =
   for hash in self.headers.keys:
     return Opt.some(hash)
 
   Opt.none(Hash32)
-
-# TODO: query the last item directly. Probably requires a database update/change
-template getLast(self: HeaderStore): Hash32 =
-  var hash: Hash32
-  for h in self.headers.keys:
-    hash = h
-  hash
-
-func earliest*(self: HeaderStore): Opt[Header] =
-  if self.headers.len() == 0:
-    return Opt.none(Header)
-
-  let hash = self.getLast()
-
-  self.headers.peek(hash)
-
-func earliestHash*(self: HeaderStore): Opt[Hash32] =
-  if self.headers.len() == 0:
-    return Opt.none(Hash32)
-
-  let hash = self.getLast()
-
-  Opt.some(hash)
 
 func get*(self: HeaderStore, number: base.BlockNumber): Opt[Header] =
   let hash = self.hashes.peek(number).valueOr:
@@ -147,3 +150,6 @@ func get*(self: HeaderStore, number: base.BlockNumber): Opt[Header] =
 
 func get*(self: HeaderStore, hash: Hash32): Opt[Header] =
   self.headers.peek(hash)
+
+func getFinalized*(self: HeaderStore): Opt[Header] =
+  self.finalized
