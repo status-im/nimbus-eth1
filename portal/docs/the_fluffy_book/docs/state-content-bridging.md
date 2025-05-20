@@ -31,7 +31,7 @@ Currently the portal state bridge requires access to the following EL JSON-RPC A
 `trace_replayBlockTransactions` is a non-standard endpoint that is only implemented
 by some EL clients (e.g. Erigon, Reth and Besu at the time of writing). The bridge uses the
 `stateDiff` trace option parameter to collect the state updates for each block of
-transactions as it syncs and builds the state from genesis onwards. Since access to thef
+transactions as it syncs and builds the state from genesis onwards. Since access to the
 state is required in order to build these state diffs, an EL archive node is required
 to ensure that the state is available for all the historical blocks being synced.
 
