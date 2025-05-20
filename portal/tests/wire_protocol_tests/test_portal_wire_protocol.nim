@@ -282,7 +282,8 @@ procSuite "Portal Wire Protocol Tests":
       contentKeys = ContentKeysList(@[ContentKeyByteList(@[byte 0x01, 0x02, 0x03])])
       content: seq[seq[byte]] = @[@[byte 0x04, 0x05, 0x06]]
 
-    let peerCount = await proto1.neighborhoodGossip(Opt.none(NodeId), contentKeys, content)
+    let peerCount =
+      await proto1.neighborhoodGossip(Opt.none(NodeId), contentKeys, content)
     check peerCount == 1
 
     let (srcNodeId, keys, items) = await proto2.stream.contentQueue.popFirst()
