@@ -225,7 +225,9 @@ proc handleTransactionsBroadcast*(wire: EthWireRef,
     for tx in packet.transactions:
       if tx.txType == TxEip4844:
         # Disallow blob transaction broadcast
-        await peer.disconnect(ClientQuitting)
+        debug "Protocol Breach: Peer broadcast blob transaction",
+          remote=peer.remote, clientId=peer.clientId
+        await peer.disconnect(BreachOfProtocol)
         return
 
       wire.txPool.addTx(tx).isOkOr:
@@ -302,12 +304,14 @@ proc handleTxHashesBroadcast*(wire: EthWireRef,
       # in the header, disconnect from the sending peer.
       if tx.tx.txType == TxEip4844:
         if tx.networkPayload.isNil:
-          debug "Received sidecar-less blob transaction", peer
-          await peer.disconnect(ClientQuitting)
+          debug "Protocol Breach: Received sidecar-less blob transaction",
+            remote=peer.remote, clientId=peer.clientId
+          await peer.disconnect(BreachOfProtocol)
           return
         validateBlobTransactionWrapper(tx).isOkOr:
-          debug "Sidecar validation error", msg=error
-          await peer.disconnect(ClientQuitting)
+          debug "Protocol Breach: Sidecar validation error", msg=error,
+            remote=peer.remote, clientId=peer.clientId
+          await peer.disconnect(BreachOfProtocol)
           return
 
       wire.txPool.addTx(tx).isOkOr:
