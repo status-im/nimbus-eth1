@@ -2,7 +2,7 @@
 
 ## Seeding from content bridges
 
-### Seeding state data with the `nimbus_portal_bridge`
+### Seeding state data with the Nimbus Portal bridge
 
 
 #### Step 1: Run a Portal client
@@ -14,13 +14,12 @@ Run a Portal client with the Portal JSON-RPC API enabled (e.g. Nimbus Portal cli
 ```
 
 > Note: The `--storage-capacity:0` option is not required, but it is added here
-for the use case where the node's only focus is on gossiping content from the
-`nimbus_portal_bridge`.
+for the use case where the node's only focus is on gossiping content from the portal bridge.
 
 
 #### Step 2: Run an EL client (archive node) that supports `trace_replayBlockTransactions`
 
-The `nimbus_portal_bridge` needs access to the EL JSON-RPC API, either through a local
+The Nimbus Portal bridge needs access to the EL JSON-RPC API, either through a local
 Ethereum client or via a web3 provider.
 
 Currently the portal state bridge requires access to the following EL JSON-RPC APIs:
@@ -32,14 +31,14 @@ Currently the portal state bridge requires access to the following EL JSON-RPC A
 `trace_replayBlockTransactions` is a non-standard endpoint that is only implemented
 by some EL clients (e.g. Erigon, Reth and Besu at the time of writing). The bridge uses the
 `stateDiff` trace option parameter to collect the state updates for each block of
-transactions as it syncs and builds the state from genesis onwards. Since access to the
+transactions as it syncs and builds the state from genesis onwards. Since access to thef
 state is required in order to build these state diffs, an EL archive node is required
 to ensure that the state is available for all the historical blocks being synced.
 
 
 #### Step 3: Run the Portal bridge in state mode
 
-Build & run the `nimbus_portal_bridge`:
+Build & run the Nimbus Portal bridge:
 ```bash
 make nimbus_portal_bridge
 
@@ -60,8 +59,8 @@ The `--gossip-workers` parameter can be used to set the number of workers that w
 gossip the portal state data into the portal state subnetwork. Each worker handles
 gossipping the state for a single block and the workers gossip the data concurrently.
 It is recommended to increase the number of workers in order to increase the speed
-and throughput of the gossiping process up until the point where `nimbus_portal_bridge` is unable
-keep up.
+and throughput of the gossiping process up until the point where the connected portal
+client is unable keep up.
 
 The optional `--verify-gossip` parameter can be used to verify that the state data has
 successfully been gossipped and is available on the portal state network. When this

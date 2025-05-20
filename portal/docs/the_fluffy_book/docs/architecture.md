@@ -3,7 +3,7 @@
 This section outlines the Nimbus Portal client's architecture and shows the main components in the codebase. The arrows indicate a dependancy relationship between each component.
 
 
-## Nimbus Portal Client high level architecture
+## Nimbus Portal client high level architecture
 
 This diagram outlines the Nimbus Portal client high-level architecture.
 ```mermaid
@@ -18,7 +18,7 @@ graph TD;
     id2(PortalNode) --> id10(Discv5Protocol)
 ```
 
-When `nimbus_portal_client` starts it runs an instance of `PortalNode` which manages the `Discv5Protocol`, `BeaconNetwork`, `HistoryNetwork` and `StateNetwork` instances. There is a single instance of each of these components and each of the subnetwork instances can be enabled/disabled depending on the startup configuration selected. The `PortalNode` instance includes everything needed to participate in the Portal network to enable storage of offered content and serving content requests from other Portal nodes. It may become part of a library in the future which would allow other projects to easily embed an instance of `nimbus_portal_client` in their codebase.
+When the Nimbus Portal client starts it runs an instance of `PortalNode` which manages the `Discv5Protocol`, `BeaconNetwork`, `HistoryNetwork` and `StateNetwork` instances. There is a single instance of each of these components and each of the subnetwork instances can be enabled/disabled depending on the startup configuration selected. The `PortalNode` instance includes everything needed to participate in the Portal network to enable storage of offered content and serving content requests from other Portal nodes. It may become part of a library in the future which would allow other projects to easily embed an instance of the Nimbus Portal client in their codebase.
 
 The `RpcHttpServer` and `RpcWebSocketServer` enable serving JSON-RPC requests from Portal network over HTTP and WebSocket respectively. These RPC servers depend on the Nimbus Portal EVM (`AsyncEvm`) in order to implement the various endpoints which require asyncronous transaction execution while fetching state from the Portal network.
 
@@ -61,7 +61,7 @@ in each of the Portal Wire subprotocols. The `RadiusCache` holds the last known 
 when pinging each node in the routing table periodically. The `OfferCache` caches the content ids of the most recent content successfully offered and stored so that the Portal node can reject content that it already has without doing a database lookup. The `ContentCache` improves the performance of content lookups (used by the JSON-RPC API's) by caching the most recently fetched
 content in a LRU cache.
 
-The `ContentDb` is the main database in `nimbus_portal_client` which internally uses sqlite to store the content data on disk. The `PortalProtocol`
+The `ContentDb` is the main database in the Nimbus Portal client which internally uses sqlite to store the content data on disk. The `PortalProtocol`
 uses the `OfferQueue` to hold pending offer requests which are passed to the `PortalStream` by the concurrent offer workers
 which run as a part of `PortalProtocol`.
 

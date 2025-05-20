@@ -1,4 +1,4 @@
-# The Nimbus Portal client Guide
+# The Nimbus Portal Client Guide
 
 The Nimbus Portal client is the Nimbus client implementation of the
 [Portal network specifications](https://github.com/ethereum/portal-network-specs).

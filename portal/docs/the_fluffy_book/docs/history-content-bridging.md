@@ -1,8 +1,8 @@
 # Bridging content into the Portal history network
 
-## Seeding history content with the `nimbus_portal_bridge`
+## Seeding history content with the Nimbus Portal bridge
 
-The `nimbus_portal_bridge` requires `era1` files as source for the block content from before the merge.
+The Nimbus Portal bridge requires `era1` files as source for the block content from before the merge.
 It requires access to a full node with EL JSON-RPC API for seeding the latest (head of the chain) block content.
 Any block content between the merge and the latest is currently not implemented, but will be implemented in the future by usage of `era` files as source.
 
@@ -15,17 +15,16 @@ Run a Portal client with the Portal JSON-RPC API enabled, e.g. Nimbus Portal cli
 ```
 
 > Note: The `--storage-capacity:0` option is not required, but it is added here
-for the use case where the node's only focus is on gossiping content from the
-`nimbus_portal_bridge`.
+for the use case where the node's only focus is on gossiping content from the portal bridge.
 
 ### Step 2: Run an EL client
 
-The `nimbus_portal_bridge` needs access to the EL JSON-RPC API, either through a local
+The Nimbus Portal bridge needs access to the EL JSON-RPC API, either through a local
 Ethereum client or via a web3 provider.
 
 ### Step 3: Run the Portal bridge in history mode
 
-Build & run the `nimbus_portal_bridge`:
+Build & run the Nimbus Portal bridge:
 ```bash
 make nimbus_portal_bridge
 
@@ -33,11 +32,11 @@ WEB3_URL="http://127.0.0.1:8548" # Replace with your provider.
 ./build/nimbus_portal_bridge history --web3-url:${WEB3_URL}
 ```
 
-Default the `nimbus_portal_bridge` will run in `--latest` mode, which means that only the
+By default the Nimbus Portal bridge will run in `--latest` mode, which means that only the
 latest block content will be gossiped into the network.
 
-The `nimbus_portal_bridge` also has a `--backfill` mode which will gossip pre-merge blocks
-from `era1` files into the network. Default the bridge will audit first whether
+It also has a `--backfill` mode which will gossip pre-merge blocks
+from `era1` files into the network. By default the bridge will audit first whether
 the content is available on the network and if not it will gossip it into the
 network.
 
@@ -47,7 +46,7 @@ WEB3_URL="http://127.0.0.1:8548" # Replace with your provider.
 ./build/nimbus_portal_bridge history --latest:true --backfill:true --audit:true --era1-dir:/somedir/era1/ --web3-url:${WEB3_URL}
 ```
 
-## Seeding directly from the nimbus_portal_client
+## Seeding directly from the Nimbus Portal client
 
 This method currently only supports seeding block content from before the merge.
 It uses `era1` files as source for the content.
