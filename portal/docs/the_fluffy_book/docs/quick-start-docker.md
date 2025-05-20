@@ -1,7 +1,7 @@
 # Quick start - Docker
 
 This page takes you through the steps of getting the Nimbus Portal client running
-on the public network by use of the [public Docker image](https://hub.docker.com/r/statusim/nimbus-fluffy/tags).
+on the public network by use of the [public Docker image](https://hub.docker.com/r/statusim/nimbus-portal-client/tags).
 
 The Docker image gets rebuild from latest master every night and only `amd64` is supported currently.
 
@@ -14,7 +14,7 @@ The Docker image gets rebuild from latest master every night and only `amd64` is
 
 ```bash
 # Connect to the Portal bootstrap nodes and enable the JSON-RPC APIs.
-docker container run -p 8545:8545 statusim/nimbus-fluffy:amd64-master-latest --rpc --rpc-address:0.0.0.0
+docker container run -p 8545:8545 statusim/nimbus-portal-client:amd64-master-latest --rpc --rpc-address:0.0.0.0
 ```
 !!! note
     Port 8545 is published and `rpc-address` is set to the `ANY` address in this command to allow access to the JSON-RPC API from outside the Docker image. You might want to adjust that depending on the use case & security model.
