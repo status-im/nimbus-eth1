@@ -7,7 +7,12 @@
 
 {.push raises: [].}
 
-import std/[os, strutils], chronicles, stew/io2, eth/p2p/discoveryv5/enr
+import
+  std/[os, strutils],
+  eth/common/hashes,
+  chronicles,
+  stew/[io2, byteutils],
+  eth/p2p/discoveryv5/enr
 
 iterator strippedLines(filename: string): string {.raises: [ref IOError].} =
   for line in lines(filename):
@@ -106,3 +111,31 @@ proc getPersistentEnr*(enrFilePath: string): Opt[enr.Record] =
   else:
     warn "Could not find ENR file. Was it manually deleted?"
     Opt.none(enr.Record)
+
+# With this we can generate node ids at specific locations in the keyspace.
+# Note: This should only be used for testing and debugging purposes.
+proc generateNetKeyHavingNodeIdPrefix*(
+    rng: var HmacDrbgContext, prefixHex: string
+): PrivateKey =
+  doAssert(prefixHex.len() > 0 and prefixHex.len() < 8)
+
+  let prefixBytes =
+    try:
+      prefixHex.hexToSeqByte()
+    except ValueError as e:
+      raiseAssert(e.msg)
+
+  while true:
+    let
+      privKey = PrivateKey.random(rng)
+      pubKey = privKey.toPublicKey.toRaw()
+      nodeIdBytes = keccak256(pubKey).data
+
+    var matching = true
+    for i, b in prefixBytes:
+      if nodeIdBytes[i] != b:
+        matching = false
+        break
+
+    if matching:
+      return privKey

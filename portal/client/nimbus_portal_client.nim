@@ -125,7 +125,14 @@ proc run(portalClient: PortalClient, config: PortalConf) {.raises: [CatchableErr
       except Exception as exc:
         raiseAssert exc.msg
     (netkey, newNetKey) =
-      if config.networkKey.isSome():
+      if config.networkKeyWithNodeIdPrefix.isSome():
+        (
+          generateNetKeyHavingNodeIdPrefix(
+            rng[], config.networkKeyWithNodeIdPrefix.get()
+          ),
+          true,
+        )
+      elif config.networkKey.isSome():
         (config.networkKey.get(), true)
       else:
         getPersistentNetKey(rng[], config.networkKeyFile)
