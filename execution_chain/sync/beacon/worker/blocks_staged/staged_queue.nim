@@ -33,7 +33,8 @@ func blocksStagedQueueIsEmpty*(ctx: BeaconCtxRef): bool =
 
 func blocksStagedQueueClear*(ctx: BeaconCtxRef) =
   ## Clear queue
-  ctx.blk.staged.clear
+  ctx.blk.staged.clear()
+  ctx.blk.reserveStaged = 0
 
 func blocksStagedQueueInit*(ctx: BeaconCtxRef) =
   ## Constructor

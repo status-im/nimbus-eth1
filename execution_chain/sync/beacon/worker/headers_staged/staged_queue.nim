@@ -33,7 +33,8 @@ func headersStagedQueueIsEmpty*(ctx: BeaconCtxRef): bool =
 
 func headersStagedQueueClear*(ctx: BeaconCtxRef) =
   ## Clear queue
-  ctx.hdr.staged.clear
+  ctx.hdr.staged.clear()
+  ctx.hdr.reserveStaged = 0
 
 func headersStagedQueueInit*(ctx: BeaconCtxRef) =
   ## Constructor

@@ -59,7 +59,7 @@ proc blocksFetchCheckImpl(
       # There is nothing one can do here
       info "Block header missing (reorg triggered)", peer, iv, n,
         nth=(iv.minPt + n).bnStr
-      ctx.poolMode = true                                  # So require reorg
+      ctx.blk.cancelRequest = true                         # So require reorg
       return Opt.none(seq[EthBlock])
     request.blockHashes[n - 1] = header.parentHash
     blocks[n].header = header
@@ -67,7 +67,7 @@ proc blocksFetchCheckImpl(
     # There is nothing one can do here
     info "Block header missing (reorg triggered)", peer, iv, n=0,
       nth=iv.minPt.bnStr
-    ctx.poolMode = true                                    # So require reorg
+    ctx.blk.cancelRequest = true                           # So require reorg
     return Opt.none(seq[EthBlock])
   request.blockHashes[^1] = blocks[^1].header.computeBlockHash
 
@@ -180,7 +180,7 @@ proc blocksImport*(
           # point, the `FC` module data area might have been moved to a new
           # canonical branch.
           #
-          ctx.poolMode = true
+          ctx.blk.cancelRequest = true             # So require reorg
           warn info & ": import block error (reorg triggered)", n, iv,
             nBlocks=iv.len, nthBn=nBn.bnStr,
             nthHash=ctx.getNthHash(blocks, n).short,

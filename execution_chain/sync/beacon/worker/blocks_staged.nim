@@ -246,14 +246,13 @@ template blocksStagedProcess*(
 proc blocksStagedReorg*(ctx: BeaconCtxRef; info: static[string]) =
   ## Some pool mode intervention.
   ##
-  if 0 < ctx.blk.staged.len or not ctx.blocksUnprocIsEmpty():
-
-    # Reset block queues
-    debug info & ": Flushing block queues", nUnproc=ctx.blocksUnprocTotal(),
-      nStagedQ=ctx.blk.staged.len
+  if ctx.pool.lastState in {blocksCancel,blocksFinish}:
+    trace info & ": Flushing block queues",
+      nUnproc=ctx.blocksUnprocTotal(), nStagedQ=ctx.blk.staged.len
 
     ctx.blocksUnprocClear()
     ctx.blk.staged.clear()
+    ctx.blk.cancelRequest = false
 
 # ------------------------------------------------------------------------------
 # End

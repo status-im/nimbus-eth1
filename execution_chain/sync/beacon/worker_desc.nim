@@ -72,6 +72,7 @@ type
     topImported*: BlockNumber        ## For syncronising opportunistic import
     staged*: StagedBlocksQueue       ## Blocks ready for import
     reserveStaged*: int              ## Pre-book staged slot temporarily
+    cancelRequest*: bool             ## Cancel block sync via state machine
 
   # -------------------
 

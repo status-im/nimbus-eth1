@@ -26,10 +26,10 @@ import
 proc startHibernating(ctx: BeaconCtxRef; info: static[string]) =
   ## Clean up sync scrum target buckets and await a new request from `CL`.
   ##
-  ctx.headersUnprocClear()
-  ctx.blocksUnprocClear()
-  ctx.headersStagedQueueClear()
-  ctx.blocksStagedQueueClear()
+  doAssert ctx.blocksUnprocIsEmpty()
+  doAssert ctx.blocksStagedQueueIsEmpty()
+  doAssert ctx.headersUnprocIsEmpty()
+  doAssert ctx.headersStagedQueueIsEmpty()
 
   ctx.hdrCache.clear()
 
@@ -127,13 +127,22 @@ proc blocksNext(ctx: BeaconCtxRef; info: static[string]): SyncState =
       limit=fetchBodiesFailedInitialFailPeersHwm
     return blocksCancel
 
+  if ctx.blk.cancelRequest:
+    return blocksCancel
+
   if ctx.blocksStagedQueueIsEmpty() and
      ctx.blocksUnprocIsEmpty():
-    return idle
+    return blocksFinish
 
   SyncState.blocks
 
 func blocksCancelNext(ctx: BeaconCtxRef; info: static[string]): SyncState =
+  ## State transition handler
+  if ctx.poolMode:                     # wait for peers to sync in `poolMode`
+    return blocksCancel
+  idle                                 # will continue hibernating
+
+func blocksFinishNext(ctx: BeaconCtxRef; info: static[string]): SyncState =
   ## State transition handler
   if ctx.poolMode:                     # wait for peers to sync in `poolMode`
     return blocksCancel
@@ -148,16 +157,19 @@ proc updateSyncState*(ctx: BeaconCtxRef; info: static[string]) =
   #
   # State machine
   # ::
-  #     idle <---------------+---+---.
-  #      |                   ^   ^   |
-  #      v                   |   |   |
-  #     headers -> headersCancel |   |
-  #      |                       |   |
-  #      v                       |   |
-  #     headersFinish -----------'   |
-  #      |                           |
-  #      v                           |
-  #     blocks ----------------------'
+  #     idle <---------------+---+---+---.
+  #      |                   ^   ^   ^   |
+  #      v                   |   |   |   |
+  #     headers -> headersCancel |   |   |
+  #      |                       |   |   |
+  #      v                       |   |   |
+  #     headersFinish -----------'   |   |
+  #      |                           |   |
+  #      v                           |   |
+  #     blocks -> blocksCancel ------'   |
+  #      |                               |
+  #      v                               |
+  #     blocksFinish --------------------'
   #
   let newState =
     case ctx.pool.lastState:
@@ -179,6 +191,9 @@ proc updateSyncState*(ctx: BeaconCtxRef; info: static[string]) =
     of blocksCancel:
       ctx.blocksCancelNext info
 
+    of blocksFinish:
+      ctx.blocksFinishNext info
+
   if ctx.pool.lastState == newState:
     return
 
@@ -186,7 +201,7 @@ proc updateSyncState*(ctx: BeaconCtxRef; info: static[string]) =
   ctx.pool.lastState = newState
 
   # Most states require synchronisation via `poolMode`
-  if newState notin {idle, SyncState.headers, headersFinish, SyncState.blocks}:
+  if newState notin {idle, SyncState.headers, SyncState.blocks}:
     ctx.poolMode = true
     info "State change, waiting for sync", prevState, newState,
       nSyncPeers=ctx.pool.nBuddies

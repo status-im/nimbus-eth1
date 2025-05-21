@@ -20,6 +20,7 @@ type SyncState* = enum
   headersFinish                    ## see clause *(10)* of `README.md`
   blocks                           ## see clause *(11)* of `README.md`
   blocksCancel                     ## stop this syncer scrum
+  blocksFinish                     ## get ready for `idle`
 
 const
   enableTicker* = false

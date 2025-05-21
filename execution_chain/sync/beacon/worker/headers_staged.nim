@@ -270,11 +270,9 @@ proc headersStagedProcess*(buddy: BeaconBuddyRef; info: static[string]): bool =
 proc headersStagedReorg*(ctx: BeaconCtxRef; info: static[string]) =
   ## Some pool mode intervention.
   ##
-  if ctx.pool.lastState == headersCancel:
-
-    # Reset header queues
-    debug info & ": Flushing header queues", nUnproc=ctx.headersUnprocTotal(),
-      nStagedQ=ctx.hdr.staged.len
+  if ctx.pool.lastState in {headersCancel,headersFinish}:
+    trace info & ": Flushing header queues",
+      nUnproc=ctx.headersUnprocTotal(), nStagedQ=ctx.hdr.staged.len
 
     ctx.headersUnprocClear() # clears `unprocessed` and `borrowed` list
     ctx.hdr.staged.clear()

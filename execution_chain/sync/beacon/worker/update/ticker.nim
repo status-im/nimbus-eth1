@@ -149,6 +149,7 @@ when enableTicker:
           of headersFinish: "f"
           of blocks: "b"
           of blocksCancel: "x"
+          of blocksFinish: "f"
 
         nP = data.nBuddies
 
@@ -170,7 +171,7 @@ when enableTicker:
           C, D, H, T, hQ,
           mem
 
-      of blocks, blocksCancel:
+      of blocks, blocksCancel, blocksFinish:
         debug "Sync state blocks", up, nP, st, B, L,
           D, I, H, T, bQ,
           mem
