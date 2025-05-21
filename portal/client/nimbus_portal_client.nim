@@ -233,7 +233,7 @@ proc run(portalClient: PortalClient, config: PortalConf) {.raises: [CatchableErr
       config.radiusConfig, config.disablePoke, config.maxGossipNodes,
       config.contentCacheSize, config.disableContentCache, config.offerCacheSize,
       config.disableOfferCache, config.maxConcurrentOffers, config.disableBanNodes,
-      config.radiusCacheSize,
+      config.banOtherClients, config.radiusCacheSize,
     )
 
     portalNodeConfig = PortalNodeConfig(

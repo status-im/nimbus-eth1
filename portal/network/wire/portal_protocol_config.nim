@@ -48,6 +48,7 @@ type
     disableOfferCache*: bool
     maxConcurrentOffers*: int
     disableBanNodes*: bool
+    banOtherClients*: bool
     radiusCacheSize*: int
 
 const
@@ -63,6 +64,7 @@ const
   defaultAlpha* = 3
   revalidationTimeout* = chronos.seconds(30)
   defaultDisableBanNodes* = true
+  defaultBanOtherClients* = false
   defaultRadiusCacheSize* = 512
 
   defaultPortalProtocolConfig* = PortalProtocolConfig(
@@ -78,6 +80,7 @@ const
     disableOfferCache: defaultDisableOfferCache,
     maxConcurrentOffers: defaultMaxConcurrentOffers,
     disableBanNodes: defaultDisableBanNodes,
+    banOtherClients: defaultBanOtherClients,
     radiusCacheSize: defaultRadiusCacheSize,
   )
 
@@ -96,6 +99,7 @@ proc init*(
     disableOfferCache: bool,
     maxConcurrentOffers: int,
     disableBanNodes: bool,
+    banOtherClients: bool,
     radiusCacheSize: int,
 ): T =
   PortalProtocolConfig(
@@ -112,6 +116,7 @@ proc init*(
     disableOfferCache: disableOfferCache,
     maxConcurrentOffers: maxConcurrentOffers,
     disableBanNodes: disableBanNodes,
+    banOtherClients: banOtherClients,
     radiusCacheSize: radiusCacheSize,
   )
 
