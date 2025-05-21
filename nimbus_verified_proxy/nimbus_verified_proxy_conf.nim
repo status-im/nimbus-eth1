@@ -66,10 +66,11 @@ type VerifiedProxyConf* = object # Config
 
   # In-Memory Cache Size
   cacheLen* {.
+    hidden,
     desc: "Length of the header cache maintained in memory",
     defaultValue: 64,
     defaultValueDesc: "64",
-    name: "cache-len"
+    name: "debug-cache-len"
   .}: int
 
   # Network
