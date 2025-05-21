@@ -114,8 +114,7 @@ proc headersStagedCollect*(
       # might have been reset and prepared for the next stage.
       if ctx.collectModeStopped():
         trace info & ": stopped fetching/storing headers", peer, iv,
-          bottom=bottom.bnStr, nStored, ctrl=buddy.ctrl.state,
-          syncState=ctx.pool.lastState, cacheMode=ctx.hdrCache.state
+          bottom=bottom.bnStr, nStored, syncState=($buddy.syncState)
         break fetchHeadersBody                       # done, exit this function
 
       # Commit partially processed block numbers
@@ -127,7 +126,7 @@ proc headersStagedCollect*(
 
       debug info & ": fetched headers count", peer,
         unprocTop=ctx.headersUnprocAvailTop.bnStr, D=ctx.dangling.bnStr,
-        nStored, nStagedQ=ctx.hdr.staged.len, ctrl=buddy.ctrl.state
+        nStored, nStagedQ=ctx.hdr.staged.len, syncState=($buddy.syncState)
 
       # Buddy might have been cancelled while downloading headers.
       if buddy.ctrl.stopped:
@@ -161,8 +160,7 @@ proc headersStagedCollect*(
       # might have been reset and prepared for the next stage.
       if ctx.collectModeStopped():
         trace info & ": stopped fetching/staging headers", peer, iv,
-          bottom=bottom.bnStr, nStored, ctrl=buddy.ctrl.state,
-          syncState=ctx.pool.lastState, cacheMode=ctx.hdrCache.state
+          bottom=bottom.bnStr, nStored, syncState=($buddy.syncState)
         break fetchHeadersBody                       # done, exit this function
 
       # Store `lhc` chain on the `staged` queue if there is any
@@ -190,9 +188,8 @@ proc headersStagedCollect*(
       ctx.pool.failedPeers.incl buddy.peerID
 
       debug info & ": no headers yet (failed peer)", peer,
-        ctrl=buddy.ctrl.state, cacheMode=ctx.hdrCache.state,
-        syncState=ctx.pool.lastState, failedPeers=ctx.pool.failedPeers.len,
-        hdrErrors=buddy.hdrErrors
+        failedPeers=ctx.pool.failedPeers.len,
+        syncState=($buddy.syncState), hdrErrors=buddy.hdrErrors
     return
 
   info "Queued/staged or DB/stored headers",
@@ -277,7 +274,7 @@ proc headersStagedReorg*(ctx: BeaconCtxRef; info: static[string]) =
   ## change.
   ##
   # Check for cancel request
-  if ctx.pool.lastState == cancelHeaders:
+  if ctx.pool.lastState == headersCancel:
     # Update counter
     ctx.pool.nReorg.inc
 

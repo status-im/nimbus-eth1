@@ -164,6 +164,23 @@ func db*(ctx: BeaconCtxRef): CoreDbRef =
 
 # -----
 
+func syncState*(
+    ctx: BeaconCtxRef;
+      ): (SyncState,HeaderChainMode,bool) =
+  ## Getter, triple of relevant run-time states
+  (ctx.pool.lastState,
+   ctx.hdrCache.state,
+   ctx.poolMode)
+
+func syncState*(
+    buddy: BeaconBuddyRef;
+      ): (BuddyRunState,SyncState,HeaderChainMode,bool) =
+  ## Getter, also includes buddy state
+  (buddy.ctrl.state,
+   buddy.ctx.pool.lastState,
+   buddy.ctx.hdrCache.state,
+   buddy.ctx.poolMode)
+
 func hibernate*(ctx: BeaconCtxRef): bool =
   ## Getter, re-interpretation of the daemon flag for reduced service mode
   # No need for running the daemon with reduced service mode. So it is

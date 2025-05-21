@@ -116,7 +116,7 @@ func blocksModeStopped*(ctx: BeaconCtxRef): bool =
   ## Helper, checks whether there is a general stop conditions based on
   ## state settings (not on sync peer ctrl as `buddy.ctrl.running`.)
   ctx.poolMode or
-  ctx.pool.lastState != processingBlocks
+  ctx.pool.lastState != blocks
 
 
 proc blocksFetch*(

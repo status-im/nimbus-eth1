@@ -29,7 +29,7 @@ type
 
 proc querySyncProgress(ctx: BeaconCtxRef): SyncStateData =
   ## Syncer status query function (for call back closure)
-  if collectingHeaders <= ctx.pool.lastState:
+  if headers <= ctx.pool.lastState:
     return (ctx.chain.baseNumber, ctx.dangling.number, ctx.head.number)
   # (0,0,0)
 

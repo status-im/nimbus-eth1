@@ -42,7 +42,7 @@ proc blocksStagedProcessImpl(
     nImported = 0u64                                         # statistics
     switchPeer = false                                       # for return code
 
-  while ctx.pool.lastState == processingBlocks:
+  while ctx.pool.lastState == SyncState.blocks:
 
     # Fetch list with the least block numbers
     let qItem = ctx.blk.staged.ge(0).valueOr:
@@ -218,9 +218,8 @@ proc blocksStagedCollect*(
       ctx.pool.failedPeers.incl buddy.peerID
 
       debug info & ": no blocks yet (failed peer)", peer,
-        ctrl=buddy.ctrl.state, poolMode=ctx.poolMode,
-        syncState=ctx.pool.lastState, failedPeers=ctx.pool.failedPeers.len,
-        bdyErrors=buddy.bdyErrors
+        failedPeers=ctx.pool.failedPeers.len,
+        syncState=($buddy.syncState), bdyErrors=buddy.bdyErrors
     return
 
   info "Queued/staged or imported blocks",
@@ -247,29 +246,17 @@ template blocksStagedProcess*(
 proc blocksStagedReorg*(ctx: BeaconCtxRef; info: static[string]) =
   ## Some pool mode intervention.
   ##
-  ## One scenario is that some blocks do not have a matching header available.
-  ## The main reson might be that the queue of block lists had a gap so that
-  ## some blocks could not be imported. This in turn can happen when the `FC`
-  ## module was reset (e.g. by `CL` via RPC.)
-  ##
-  ## A reset by `CL` via RPC would mostly happen if the syncer is near the
-  ## top of the block chain anyway. So the savest way to re-org is to flush
-  ## the block queues as there won't be mant data cached, then.
-  ##
-  if ctx.blk.staged.len == 0 and
-     ctx.blocksUnprocIsEmpty():
-    # nothing to do
-    return
+  if 0 < ctx.blk.staged.len or not ctx.blocksUnprocIsEmpty():
 
-  # Update counter
-  ctx.pool.nReorg.inc
+    # Update counter
+    ctx.pool.nReorg.inc
 
-  # Reset block queues
-  debug info & ": Flushing block queues", nUnproc=ctx.blocksUnprocTotal(),
-    nStagedQ=ctx.blk.staged.len, nReorg=ctx.pool.nReorg
+    # Reset block queues
+    debug info & ": Flushing block queues", nUnproc=ctx.blocksUnprocTotal(),
+      nStagedQ=ctx.blk.staged.len, nReorg=ctx.pool.nReorg
 
-  ctx.blocksUnprocClear()
-  ctx.blk.staged.clear()
+    ctx.blocksUnprocClear()
+    ctx.blk.staged.clear()
 
 # ------------------------------------------------------------------------------
 # End

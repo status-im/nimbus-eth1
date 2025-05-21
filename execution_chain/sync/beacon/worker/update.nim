@@ -79,16 +79,16 @@ proc setupFinishedHeaders(ctx: BeaconCtxRef; info: static[string]) =
   ## Trivial state transition handler
   ctx.headersUnprocClear()
   ctx.headersStagedQueueClear()
-  ctx.pool.lastState = finishedHeaders
+  ctx.pool.lastState = headersFinish
 
 proc setupCancelHeaders(ctx: BeaconCtxRef; info: static[string]) =
   ## Trivial state transition handler
-  ctx.pool.lastState = cancelHeaders
+  ctx.pool.lastState = headersCancel
   ctx.poolMode = true # reorg, clear header queues
 
 proc setupCancelBlocks(ctx: BeaconCtxRef; info: static[string]) =
   ## Trivial state transition handler
-  ctx.pool.lastState = cancelBlocks
+  ctx.pool.lastState = blocksCancel
   ctx.poolMode = true # reorg, clear block queues
 
 
@@ -110,7 +110,7 @@ proc setupProcessingBlocks(ctx: BeaconCtxRef; info: static[string]) =
   ctx.blk.topImported = d - 1
 
   # State transition
-  ctx.pool.lastState = processingBlocks
+  ctx.pool.lastState = SyncState.blocks
 
   trace info & ": collecting block bodies", iv=BnRange.new(d+1, h)
 
@@ -125,60 +125,60 @@ proc updateSyncState*(ctx: BeaconCtxRef; info: static[string]) =
   # change.
   let prevState = ctx.pool.lastState     # previous state
   var thisState =                        # figure out current state
-    if prevState in {cancelHeaders,cancelBlocks}:
+    if prevState in {headersCancel,blocksCancel}:
       prevState                          # no need to change state here
     else:
       case ctx.hdrCache.state:           # currently observed state, the std way
-      of collecting: collectingHeaders
-      of ready:      finishedHeaders
-      of locked:     processingBlocks
-      else:          idleSyncState
+      of collecting: SyncState.headers
+      of ready:      headersFinish
+      of locked:     SyncState.blocks
+      else:          idle
 
   # Handle same state cases first (i.e. no state change.) Depending on the
   # context, a new state might be forced so that there will be a state change.
   case statePair(prevState, thisState)
-  of statePair(collectingHeaders):
+  of statePair(SyncState.headers):
     if ctx.pool.seenData or              # checks for cul-de-sac syncing
        ctx.pool.failedPeers.len <= fetchHeadersFailedInitialFailPeersHwm:
       return
     debug info & ": too many failed header peers",
       failedPeers=ctx.pool.failedPeers.len,
       limit=fetchHeadersFailedInitialFailPeersHwm
-    thisState = cancelHeaders
+    thisState = headersCancel
     # proceed
 
-  of statePair(cancelHeaders):           # was not assigned by `syncState()`
+  of statePair(headersCancel):           # was not assigned by `syncState()`
     if not ctx.headersBorrowedIsEmpty(): # wait for peers to reorg in `poolMode`
       return
-    thisState = idleSyncState            # will continue hibernating
+    thisState = idle                     # will continue hibernating
     # proceed
 
-  of statePair(finishedHeaders):
+  of statePair(headersFinish):
     if ctx.commitCollectHeaders(info):   # commit downloading headers
-      thisState = processingBlocks
+      thisState = SyncState.blocks
     else:
-      thisState = idleSyncState          # will continue hibernating
+      thisState = idle                   # will continue hibernating
     # proceed
 
-  of statePair(processingBlocks):
+  of statePair(SyncState.blocks):
     if not ctx.pool.seenData and         # checks for cul-de-sac syncing
        fetchBodiesFailedInitialFailPeersHwm < ctx.pool.failedPeers.len:
       debug info & ": too many failed block peers",
         failedPeers=ctx.pool.failedPeers.len,
         limit=fetchBodiesFailedInitialFailPeersHwm
-      thisState = cancelBlocks
+      thisState = blocksCancel
       # proceed
     elif ctx.blocksStagedQueueIsEmpty() and
          ctx.blocksUnprocIsEmpty():
-      thisState = idleSyncState          # will continue hibernating
+      thisState = idle                   # will continue hibernating
       # proceed
     else:
       return
 
-  of statePair(cancelBlocks):
+  of statePair(blocksCancel):
     if not ctx.blocksBorrowedIsEmpty():  # wait for peers to reorg in `poolMode`
       return
-    thisState = idleSyncState            # will continue hibernating
+    thisState = idle                     # will continue hibernating
     # proceed
 
   elif prevState == thisState:
@@ -186,19 +186,19 @@ proc updateSyncState*(ctx: BeaconCtxRef; info: static[string]) =
 
   # Process state transition
   case statePair(prevState, thisState)
-  of statePair(collectingHeaders, cancelHeaders):
+  of statePair(SyncState.headers, headersCancel):
     ctx.setupCancelHeaders info          # cancel header download
     thisState = ctx.pool.lastState       # assign result from state handler
 
-  of statePair(finishedHeaders, processingBlocks):
+  of statePair(headersFinish, SyncState.blocks):
     ctx.setupProcessingBlocks info       # start downloading block bodies
     thisState = ctx.pool.lastState       # assign result from state handler
 
-  of statePair(processingBlocks, cancelBlocks):
+  of statePair(SyncState.blocks, blocksCancel):
     ctx.setupCancelBlocks info           # cancel blocks download
     thisState = ctx.pool.lastState       # assign result from state handler
 
-  of statePair(collectingHeaders, finishedHeaders):
+  of statePair(SyncState.headers, headersFinish):
     ctx.setupFinishedHeaders info        # call state handler
     thisState = ctx.pool.lastState       # assign result from state handler
 
@@ -211,7 +211,7 @@ proc updateSyncState*(ctx: BeaconCtxRef; info: static[string]) =
     target=ctx.head.bnStr, targetHash=ctx.headHash.short
 
   # Final sync scrum layout reached or inconsistent/impossible state
-  if thisState == idleSyncState:
+  if thisState == idle:
     ctx.startHibernating info
 
 
@@ -226,7 +226,7 @@ proc updateFromHibernateSetTarget*(
 
     # Exclude the case of a single header chain which would be `T` only
     if b+1 < t:
-      ctx.pool.lastState = collectingHeaders    # state transition
+      ctx.pool.lastState = SyncState.headers    # state transition
       ctx.hibernate = false                     # wake up
 
       # Update range

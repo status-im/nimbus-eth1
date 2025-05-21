@@ -78,7 +78,7 @@ when enableTicker:
       dangling:        ctx.dangling.number,
       head:            ctx.head.number,
       target:          ctx.consHeadNumber,
-      activeOk:        ctx.pool.lastState != idleSyncState,
+      activeOk:        ctx.pool.lastState != idle,
 
       nHdrStaged:      ctx.headersStagedQueueLen(),
       hdrStagedTop:    ctx.headersStagedQueueTopKey(),
@@ -145,12 +145,12 @@ when enableTicker:
              else: bS & "<-" & bU
 
         st = case data.state
-          of idleSyncState: "0"
-          of collectingHeaders: "h"
-          of cancelHeaders: "x"
-          of finishedHeaders: "f"
-          of processingBlocks: "b"
-          of cancelBlocks: "x"
+          of idle: "0"
+          of headers: "h"
+          of headersCancel: "x"
+          of headersFinish: "f"
+          of blocks: "b"
+          of blocksCancel: "x"
 
         nP = data.nBuddies
 
@@ -162,17 +162,17 @@ when enableTicker:
       t.visited = now
 
       case data.state
-      of idleSyncState:
+      of idle:
         debug "Sync state idle", up, nP, B, L,
           D, H, T, hQ, bQ,
           mem
 
-      of collectingHeaders, cancelHeaders, finishedHeaders:
+      of headers, headersCancel, headersFinish:
         debug "Sync state headers", up, nP, st, B, L,
           C, D, H, T, hQ,
           mem
 
-      of processingBlocks, cancelBlocks:
+      of blocks, blocksCancel:
         debug "Sync state blocks", up, nP, st, B, L,
           D, I, H, T, bQ,
           mem
