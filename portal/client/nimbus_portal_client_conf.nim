@@ -408,7 +408,7 @@ type
       desc:
         "Ban nodes that don't have a ping capabilities payload client info string matching the value used by Nimbus Portal. " &
         "This can be useful for testing when we would like to only connect to Nimbus Portal nodes on the network.",
-      defaultValue: $defaultBanOtherClients,
+      defaultValue: defaultBanOtherClients,
       name: "debug-ban-other-clients"
     .}: bool
 
