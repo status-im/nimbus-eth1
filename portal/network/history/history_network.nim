@@ -38,9 +38,10 @@ type
     contentQueue*: AsyncQueue[(Opt[NodeId], ContentKeysList, seq[seq[byte]])]
     cfg*: RuntimeConfig
     verifier*: HeaderVerifier
-    processContentLoop: Future[void]
+    processContentLoops: seq[Future[void]]
     statusLogLoop: Future[void]
     contentRequestRetries: int
+    contentQueueWorkers: int
 
   Block* = (Header, BlockBody)
 
@@ -161,7 +162,7 @@ proc getVerifiedBlockHeader*(
     n.portalProtocol.storeContent(
       contentKey, contentId, headerContent.content, cacheContent = true
     )
-    n.portalProtocol.triggerPoke(
+    asyncSpawn n.portalProtocol.triggerPoke(
       headerContent.nodesInterestedInContent, contentKey, headerContent.content
     )
 
@@ -209,7 +210,7 @@ proc getBlockBody*(
     n.portalProtocol.storeContent(
       contentKey, contentId, bodyContent.content, cacheContent = true
     )
-    n.portalProtocol.triggerPoke(
+    asyncSpawn n.portalProtocol.triggerPoke(
       bodyContent.nodesInterestedInContent, contentKey, bodyContent.content
     )
 
@@ -288,7 +289,7 @@ proc getReceipts*(
     n.portalProtocol.storeContent(
       contentKey, contentId, receiptsContent.content, cacheContent = true
     )
-    n.portalProtocol.triggerPoke(
+    asyncSpawn n.portalProtocol.triggerPoke(
       receiptsContent.nodesInterestedInContent, contentKey, receiptsContent.content
     )
 
@@ -352,6 +353,7 @@ proc new*(
     bootstrapRecords: openArray[Record] = [],
     portalConfig: PortalProtocolConfig = defaultPortalProtocolConfig,
     contentRequestRetries = 1,
+    contentQueueWorkers = 8,
 ): T =
   let
     contentQueue = newAsyncQueue[(Opt[NodeId], ContentKeysList, seq[seq[byte]])](50)
@@ -383,6 +385,7 @@ proc new*(
       beaconDbCache: beaconDbCache,
     ),
     contentRequestRetries: contentRequestRetries,
+    contentQueueWorkers: contentQueueWorkers,
   )
 
 proc validateContent(
@@ -415,7 +418,7 @@ proc validateContent(
 
   return true
 
-proc processContentLoop(n: HistoryNetwork) {.async: (raises: []).} =
+proc contentQueueWorker(n: HistoryNetwork) {.async: (raises: []).} =
   try:
     while true:
       let (srcNodeId, contentKeys, contentItems) = await n.contentQueue.popFirst()
@@ -425,11 +428,11 @@ proc processContentLoop(n: HistoryNetwork) {.async: (raises: []).} =
       # TODO: Differentiate between failures due to invalid data and failures
       # due to missing network data for validation.
       if await n.validateContent(srcNodeId, contentKeys, contentItems):
-        asyncSpawn n.portalProtocol.neighborhoodGossipDiscardPeers(
+        await n.portalProtocol.neighborhoodGossipDiscardPeers(
           srcNodeId, contentKeys, contentItems
         )
   except CancelledError:
-    trace "processContentLoop canceled"
+    trace "contentQueueWorker canceled"
 
 proc statusLogLoop(n: HistoryNetwork) {.async: (raises: []).} =
   try:
@@ -449,7 +452,9 @@ proc start*(n: HistoryNetwork) =
 
   n.portalProtocol.start()
 
-  n.processContentLoop = processContentLoop(n)
+  for i in 0 ..< n.contentQueueWorkers:
+    n.processContentLoops.add(contentQueueWorker(n))
+
   n.statusLogLoop = statusLogLoop(n)
 
 proc stop*(n: HistoryNetwork) {.async: (raises: []).} =
@@ -458,11 +463,11 @@ proc stop*(n: HistoryNetwork) {.async: (raises: []).} =
   var futures: seq[Future[void]]
   futures.add(n.portalProtocol.stop())
 
-  if not n.processContentLoop.isNil:
-    futures.add(n.processContentLoop.cancelAndWait())
+  for loop in n.processContentLoops:
+    futures.add(loop.cancelAndWait())
   if not n.statusLogLoop.isNil:
     futures.add(n.statusLogLoop.cancelAndWait())
   await noCancel(allFutures(futures))
 
-  n.processContentLoop = nil
+  n.processContentLoops.setLen(0)
   n.statusLogLoop = nil

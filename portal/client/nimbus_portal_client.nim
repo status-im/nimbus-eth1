@@ -128,7 +128,8 @@ proc run(portalClient: PortalClient, config: PortalConf) {.raises: [CatchableErr
       if config.networkKey.isSome():
         (config.networkKey.get(), true)
       else:
-        getPersistentNetKey(rng[], config.networkKeyFile)
+        let nodeIdPrefixHex = config.networkKeyNodeIdPrefix.get("")
+        getPersistentNetKey(rng[], config.networkKeyFile, nodeIdPrefixHex)
 
     enrFilePath = dataDir / enrFileName
     previousEnr =

@@ -134,7 +134,7 @@ proc getContent(
         interestedNodesCount = lookupRes.nodesInterestedInContent.len()
 
       let offer = contentValue.toOffer(maybeParentOffer.get())
-      n.portalProtocol.triggerPoke(
+      asyncSpawn n.portalProtocol.triggerPoke(
         lookupRes.nodesInterestedInContent, contentKeyBytes, offer.encode()
       )
 
@@ -263,7 +263,7 @@ proc contentQueueWorker(n: StateNetwork) {.async: (raises: []).} =
           error "Received offered content failed validation",
             srcNodeId, contentKeyBytes, error = offerRes.error()
   except CancelledError:
-    trace "processContentLoop canceled"
+    trace "contentQueueWorker canceled"
 
 proc statusLogLoop(n: StateNetwork) {.async: (raises: []).} =
   try:

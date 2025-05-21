@@ -33,10 +33,11 @@ type BeaconNetwork* = ref object
   getBeaconTime: GetBeaconTimeFn
   cfg*: RuntimeConfig
   trustedBlockRoot*: Opt[Eth2Digest]
-  processContentLoop: Future[void]
+  processContentLoops: seq[Future[void]]
   statusLogLoop: Future[void]
   onEpochLoop: Future[void]
   onPeriodLoop: Future[void]
+  contentQueueWorkers: int
 
 func toContentIdHandler(contentKey: ContentKeyByteList): results.Opt[ContentId] =
   ok(toContentId(contentKey))
@@ -198,6 +199,7 @@ proc new*(
     trustedBlockRoot: Opt[Eth2Digest],
     bootstrapRecords: openArray[Record] = [],
     portalConfig: PortalProtocolConfig = defaultPortalProtocolConfig,
+    contentQueueWorkers = 8,
 ): T =
   let
     contentQueue = newAsyncQueue[(Opt[NodeId], ContentKeysList, seq[seq[byte]])](50)
@@ -236,6 +238,7 @@ proc new*(
     getBeaconTime: getBeaconTime,
     cfg: cfg,
     trustedBlockRoot: beaconBlockRoot,
+    contentQueueWorkers: contentQueueWorkers,
   )
 
 proc lightClientVerifier(
@@ -437,7 +440,7 @@ proc onPeriodLoop(n: BeaconNetwork) {.async: (raises: []).} =
   except CancelledError:
     trace "onPeriodLoop canceled"
 
-proc processContentLoop(n: BeaconNetwork) {.async: (raises: []).} =
+proc contentQueueWorker(n: BeaconNetwork) {.async: (raises: []).} =
   try:
     while true:
       let (srcNodeId, contentKeys, contentItems) = await n.contentQueue.popFirst()
@@ -447,11 +450,11 @@ proc processContentLoop(n: BeaconNetwork) {.async: (raises: []).} =
       # TODO: Differentiate between failures due to invalid data and failures
       # due to missing network data for validation.
       if await n.validateContent(srcNodeId, contentKeys, contentItems):
-        asyncSpawn n.portalProtocol.randomGossipDiscardPeers(
+        await n.portalProtocol.randomGossipDiscardPeers(
           srcNodeId, contentKeys, contentItems
         )
   except CancelledError:
-    trace "processContentLoop canceled"
+    trace "contentQueueWorker canceled"
 
 proc statusLogLoop(n: BeaconNetwork) {.async: (raises: []).} =
   try:
@@ -467,7 +470,10 @@ proc start*(n: BeaconNetwork) =
   info "Starting Portal beacon chain network"
 
   n.portalProtocol.start()
-  n.processContentLoop = processContentLoop(n)
+
+  for i in 0 ..< n.contentQueueWorkers:
+    n.processContentLoops.add(contentQueueWorker(n))
+
   n.statusLogLoop = statusLogLoop(n)
   n.onEpochLoop = onEpochLoop(n)
   n.onPeriodLoop = onPeriodLoop(n)
@@ -478,8 +484,8 @@ proc stop*(n: BeaconNetwork) {.async: (raises: []).} =
   var futures: seq[Future[void]]
   futures.add(n.portalProtocol.stop())
 
-  if not n.processContentLoop.isNil():
-    futures.add(n.processContentLoop.cancelAndWait())
+  for loop in n.processContentLoops:
+    futures.add(loop.cancelAndWait())
 
   if not n.statusLogLoop.isNil():
     futures.add(n.statusLogLoop.cancelAndWait())
@@ -494,5 +500,5 @@ proc stop*(n: BeaconNetwork) {.async: (raises: []).} =
 
   n.beaconDb.close()
 
-  n.processContentLoop = nil
+  n.processContentLoops.setLen(0)
   n.statusLogLoop = nil
