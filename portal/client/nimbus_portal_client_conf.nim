@@ -166,16 +166,17 @@ type
       name: "netkey-unsafe"
     .}: Option[PrivateKey]
 
-    networkKeyWithNodeIdPrefix* {.
+    networkKeyNodeIdPrefix* {.
       hidden,
       desc:
-        "Generate a new private key (secp256k1) which has a node id where " &
-        "the most significant bits match the supplied prefix (in hex). " &
-        "Between 2 and 8 hex characters are supported but no more than 4 characters " &
-        "are recommended because otherwise the generation process is very slow.",
+        "If an existing network key is not found, then generate a new private key " &
+        "(secp256k1) which has a node id where the most significant bits match the " &
+        "specified prefix (in hex). Between 2 and 8 hex characters are supported " &
+        "(excluding the 0x) but generally no more than 4 characters are recommended " &
+        "because otherwise the generation process is very slow.",
       defaultValue: none(string),
       defaultValueDesc: "none",
-      name: "debug-netkey-with-nodeid-prefix-unsafe"
+      name: "debug-netkey-nodeid-prefix-unsafe"
     .}: Option[string]
 
     accumulatorFile* {.

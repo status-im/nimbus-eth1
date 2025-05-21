@@ -45,13 +45,41 @@ proc loadBootstrapFile*(bootstrapFile: string, bootstrapEnrs: var seq[Record]) =
     fatal "Unknown bootstrap file format", ext
     quit 1
 
+# With this we can generate node ids at specific locations in the keyspace.
+# Note: This should only be used for testing and debugging purposes.
+proc generateNetKeyHavingNodeIdPrefix*(
+    rng: var HmacDrbgContext, prefixHex: string
+): PrivateKey =
+  let prefixBytes =
+    try:
+      prefixHex.hexToSeqByte()
+    except ValueError as e:
+      raiseAssert(e.msg)
+
+  doAssert(prefixBytes.len() >= 1 and prefixBytes.len() <= 4)
+
+  while true:
+    let
+      privKey = PrivateKey.random(rng)
+      pubKey = privKey.toPublicKey.toRaw()
+      nodeIdBytes = keccak256(pubKey).data
+
+    var matching = true
+    for i, b in prefixBytes:
+      if nodeIdBytes[i] != b:
+        matching = false
+        break
+
+    if matching:
+      return privKey
+
 # Note:
 # Currently just works with the network private key stored as hex in a file.
 # In the future it would be nice to re-use keystore from nimbus-eth2 for this.
 # However that would require the pull the keystore.nim and parts of
 # keystore_management.nim out of nimbus-eth2.
 proc getPersistentNetKey*(
-    rng: var HmacDrbgContext, keyFilePath: string
+    rng: var HmacDrbgContext, keyFilePath: string, nodeIdPrefixHex: string
 ): tuple[key: PrivateKey, newNetKey: bool] =
   logScope:
     key_file = keyFilePath
@@ -78,7 +106,12 @@ proc getPersistentNetKey*(
       quit QuitFailure
   else:
     info "Network key file is missing, creating a new one"
-    let key = PrivateKey.random(rng)
+
+    let key =
+      if nodeIdPrefixHex.len() > 0:
+        generateNetKeyHavingNodeIdPrefix(rng, nodeIdPrefixHex)
+      else:
+        PrivateKey.random(rng)
 
     if (let res = io2.writeFile(keyFilePath, $key); res.isErr):
       fatal "Failed to write the network key file", error = ioErrorMsg(res.error)
@@ -111,31 +144,3 @@ proc getPersistentEnr*(enrFilePath: string): Opt[enr.Record] =
   else:
     warn "Could not find ENR file. Was it manually deleted?"
     Opt.none(enr.Record)
-
-# With this we can generate node ids at specific locations in the keyspace.
-# Note: This should only be used for testing and debugging purposes.
-proc generateNetKeyHavingNodeIdPrefix*(
-    rng: var HmacDrbgContext, prefixHex: string
-): PrivateKey =
-  let prefixBytes =
-    try:
-      prefixHex.hexToSeqByte()
-    except ValueError as e:
-      raiseAssert(e.msg)
-
-  doAssert(prefixBytes.len() >= 1 and prefixBytes.len() <= 4)
-
-  while true:
-    let
-      privKey = PrivateKey.random(rng)
-      pubKey = privKey.toPublicKey.toRaw()
-      nodeIdBytes = keccak256(pubKey).data
-
-    var matching = true
-    for i, b in prefixBytes:
-      if nodeIdBytes[i] != b:
-        matching = false
-        break
-
-    if matching:
-      return privKey
