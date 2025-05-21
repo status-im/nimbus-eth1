@@ -117,13 +117,13 @@ proc getPersistentEnr*(enrFilePath: string): Opt[enr.Record] =
 proc generateNetKeyHavingNodeIdPrefix*(
     rng: var HmacDrbgContext, prefixHex: string
 ): PrivateKey =
-  doAssert(prefixHex.len() > 0 and prefixHex.len() < 8)
-
   let prefixBytes =
     try:
       prefixHex.hexToSeqByte()
     except ValueError as e:
       raiseAssert(e.msg)
+
+  doAssert(prefixBytes.len() >= 1 and prefixBytes.len() <= 4)
 
   while true:
     let
