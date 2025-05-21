@@ -30,6 +30,9 @@ declareGauge nec_sync_coupler, "" &
 declareGauge nec_sync_dangling, "" &
   "Least block number for header chain already fetched"
 
+declareGauge nec_sync_last_block_imported, "" &
+  "last block successfully imported/executed by FC module"
+
 declareGauge nec_sync_head, "" &
   "Current sync target block number (if any)"
 
@@ -65,6 +68,7 @@ template updateMetricsImpl(ctx: BeaconCtxRef) =
     coupler = 0
   metrics.set(nec_sync_coupler, coupler.int64)
   metrics.set(nec_sync_dangling, ctx.hdrCache.antecedent.number.int64)
+  metrics.set(nec_sync_last_block_imported, ctx.subState.top.int64)
   metrics.set(nec_sync_head, ctx.subState.head.int64)
 
   # Show last valid state.
