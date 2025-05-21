@@ -58,18 +58,6 @@ func layersGetKeyOrVoid*(db: AristoTxRef; rvid: RootedVertexID): HashKey =
   ## Simplified version of `layersGetKey()`
   (db.layersGetKey(rvid).valueOr (VOID_HASH_KEY, 0))[0]
 
-func layersGetAccLeaf*(db: AristoTxRef; accPath: Hash32): Opt[AccLeafRef] =
-  for w in db.rstack(stopAtSnapshot = true):
-    if w.snapshot.level.isSome():
-      w.snapshot.acc.withValue(accPath, item):
-        return Opt.some(item[][0])
-      break
-
-    w.accLeaves.withValue(accPath, item):
-      return Opt.some(item[])
-
-  Opt.none(AccLeafRef)
-
 func layersGetStoLeaf*(db: AristoTxRef; mixPath: Hash32): Opt[StoLeafRef] =
   for w in db.rstack(stopAtSnapshot = true):
     if w.snapshot.level.isSome():
@@ -98,6 +86,27 @@ func layersPutVtx*(
   if db.snapshot.level.isSome():
     db.snapshot.vtx[rvid] = (vtx, VOID_HASH_KEY, db.level)
 
+func layersPutDup*[T: VertexRef](
+    db: AristoTxRef;
+    rvid: RootedVertexID;
+    vtx: T;
+      ): T =
+  ## Store a (potentally empty) vertex on the top layer
+  var vtxDup = vtx
+  db.sTab.withValue(rvid, cur):
+    if addr(vtx[]) != addr(cur[][]):
+      vtxDup = vtxDup.dup()
+      cur[] = vtxDup
+  do:
+    vtxDup = vtxDup.dup()
+    db.sTab[rvid] = vtxDup
+
+  db.kMap.del(rvid)
+
+  if db.snapshot.level.isSome():
+    db.snapshot.vtx[rvid] = (VertexRef(vtxDup), VOID_HASH_KEY, db.level)
+  vtxDup
+
 func layersResVtx*(
     db: AristoTxRef;
     rvid: RootedVertexID;
@@ -113,27 +122,21 @@ func layersPutKey*(
     key: HashKey;
       ) =
   ## Store a (potentally void) hash key on the top layer
-  db.sTab[rvid] = vtx
+  db.sTab[rvid] = if rvid notin db.sTab: vtx.dup() else: vtx
   db.kMap[rvid] = key
 
   if db.snapshot.level.isSome():
     db.snapshot.vtx[rvid] = (vtx, key, db.level)
 
 func layersResKey*(db: AristoTxRef; rvid: RootedVertexID, vtx: VertexRef) =
-  ## Shortcut for `db.layersPutKey(vid, VOID_HASH_KEY)`. It is sort of the
-  ## equivalent of a delete function.
-  db.layersPutVtx(rvid, vtx)
+  ## Shortcut for `db.layersPutKey(vid, VOID_HASH_KEY)` which resets the hash
+  ## key cache for the given rvid / vtx
+  db.layersPutVtx(rvid, if rvid notin db.sTab: vtx.dup() else: vtx)
 
 func layersResKeys*(db: AristoTxRef; hike: Hike, skip: int) =
   ## Reset all cached keys along the given hike
   for i in (skip + 1)..hike.legs.len:
     db.layersResKey((hike.root, hike.legs[^i].wp.vid), hike.legs[^i].wp.vtx)
-
-func layersPutAccLeaf*(db: AristoTxRef; accPath: Hash32; leafVtx: AccLeafRef) =
-  db.accLeaves[accPath] = leafVtx
-
-  if db.snapshot.level.isSome():
-    db.snapshot.acc[accPath] = (leafVtx, db.level)
 
 func layersPutStoLeaf*(db: AristoTxRef; mixPath: Hash32; leafVtx: StoLeafRef) =
   db.stoLeaves[mixPath] = leafVtx
@@ -149,11 +152,9 @@ func isEmpty*(ly: AristoTxRef): bool =
   ## Returns `true` if the layer does not contain any changes, i.e. all the
   ## tables are empty.
   ly.snapshot.vtx.len == 0 and
-  ly.snapshot.acc.len == 0 and
   ly.snapshot.sto.len == 0 and
   ly.sTab.len == 0 and
   ly.kMap.len == 0 and
-  ly.accLeaves.len == 0 and
   ly.stoLeaves.len == 0
 
 proc copyFrom*(snapshot: var Snapshot, tx: AristoTxRef) =
@@ -163,8 +164,6 @@ proc copyFrom*(snapshot: var Snapshot, tx: AristoTxRef) =
     do:
       snapshot.vtx[rvid] = (vtx, VOID_HASH_KEY, tx.level)
 
-  for k, v in tx.accLeaves:
-    snapshot.acc[k] = (v, tx.level)
   for k, v in tx.stoLeaves:
     snapshot.sto[k] = (v, tx.level)
 
@@ -195,7 +194,6 @@ proc mergeAndReset*(trg, src: AristoTxRef) =
     mergeAndReset(trg.sTab, src.sTab)
     mergeAndReset(trg.kMap, src.kMap)
 
-  mergeAndReset(trg.accLeaves, src.accLeaves)
   mergeAndReset(trg.stoLeaves, src.stoLeaves)
 
 # ------------------------------------------------------------------------------

@@ -15,7 +15,7 @@ import
   chronicles,
   eth/common/[accounts_rlp, base_rlp, hashes_rlp],
   results,
-  "."/[aristo_desc, aristo_get],
+  "."/[aristo_desc, aristo_get, aristo_layers],
   ./aristo_desc/desc_backend
 
 type WriteBatch = tuple[writer: PutHdlRef, count: int, depth: int, prefix: uint64]
@@ -85,8 +85,7 @@ proc putKeyAtLevel(
       else:
         debug "Writing computeKey cache", keys = batch.count, accounts = batch.progress
   else:
-    db.deltaAtLevel(level).sTab[rvid] = vtx
-    db.deltaAtLevel(level).kMap[rvid] = key
+    db.deltaAtLevel(level).layersPutKey(rvid, vtx, key)
 
   ok()
 
