@@ -16,6 +16,7 @@ import
   results,
   chronicles,
   chronos,
+  chronos/ratelimit,
   nimcrypto/hash,
   bearssl,
   ssz_serialization,
@@ -206,12 +207,11 @@ type
     revalidateLoop: Future[void]
     stream*: PortalStream
     radiusCache: RadiusCache
-    offerQueue: AsyncQueue[OfferRequest]
-    offerWorkers: seq[Future[void]]
     offerCache*: OfferCache
     pingTimings: Table[NodeId, chronos.Moment]
     config*: PortalProtocolConfig
     pingExtensionCapabilities*: set[uint16]
+    offerTokenBucket: TokenBucket
 
   PortalResult*[T] = Result[T, string]
 
@@ -773,12 +773,14 @@ proc new*(
     bootstrapRecords: @bootstrapRecords,
     stream: stream,
     radiusCache: RadiusCache.init(config.radiusCacheSize),
-    offerQueue: newAsyncQueue[OfferRequest](config.maxConcurrentOffers),
     offerCache:
       OfferCache.init(if config.disableOfferCache: 0 else: config.offerCacheSize),
     pingTimings: Table[NodeId, chronos.Moment](),
     config: config,
     pingExtensionCapabilities: pingExtensionCapabilities,
+    # 0 seconds here indicates no timeout on the TokenBucket which means we need
+    # to manually call replenish to return tokens to the bucket after usage.
+    offerTokenBucket: TokenBucket.new(config.maxConcurrentOffers, 0.seconds),
   )
 
   proto.baseProtocol.registerTalkProtocol(@(proto.protocolId), proto).expect(
@@ -1218,18 +1220,25 @@ proc offer*(
   let req = OfferRequest(dst: dst, kind: Direct, contentList: contentList)
   await p.offer(req)
 
-proc offerWorker(p: PortalProtocol) {.async: (raises: [CancelledError]).} =
-  while true:
-    let req = await p.offerQueue.popFirst()
+proc offerRateLimited*(
+    p: PortalProtocol, offer: OfferRequest
+): Future[PortalResult[ContentKeysAcceptList]] {.async: (raises: [CancelledError]).} =
+  try:
+    await p.offerTokenBucket.consume(1)
+  except CancelledError as e:
+    raise e
+  except CatchableError as e:
+    raiseAssert(e.msg) # Shouldn't happen
 
-    let res = await p.offer(req)
-    if res.isOk():
-      portal_gossip_offers_successful.inc(labelValues = [$p.protocolId])
-    else:
-      portal_gossip_offers_failed.inc(labelValues = [$p.protocolId])
+  let res = await p.offer(offer)
+  if res.isOk():
+    portal_gossip_offers_successful.inc(labelValues = [$p.protocolId])
+  else:
+    portal_gossip_offers_failed.inc(labelValues = [$p.protocolId])
 
-proc offerQueueEmpty*(p: PortalProtocol): bool =
-  p.offerQueue.empty()
+  p.offerTokenBucket.replenish(1)
+
+  res
 
 proc lookupWorker(
     p: PortalProtocol, dst: Node, target: NodeId
@@ -1320,7 +1329,7 @@ proc triggerPoke*(
     nodes: seq[Node],
     contentKey: ContentKeyByteList,
     content: seq[byte],
-) =
+): Future[void] {.async: (raises: [CancelledError]).} =
   ## In order to properly test gossip mechanisms (e.g. in Portal Hive),
   ## we need the option to turn off the POKE functionality as it influences
   ## how data moves around the network.
@@ -1329,19 +1338,21 @@ proc triggerPoke*(
   ## Triggers asynchronous offer-accept interaction to provided nodes.
   ## Provided content should be in range of provided nodes.
   for node in nodes:
-    if not p.offerQueue.full():
-      try:
-        let
-          contentKV = ContentKV(contentKey: contentKey, content: content)
-          list = List[ContentKV, contentKeysLimit].init(@[contentKV])
-          req = OfferRequest(dst: node, kind: Direct, contentList: list)
-        p.offerQueue.putNoWait(req)
-        portal_poke_offers.inc(labelValues = [$p.protocolId])
-      except AsyncQueueFullError as e:
-        # Should not occur as full() check is done.
-        raiseAssert(e.msg)
+    if p.offerTokenBucket.tryConsume(1):
+      # tryConsume actually deducts tokens and there is currently
+      # no API to check the remaining capacity of the bucket so we just
+      # add the token back here
+      p.offerTokenBucket.replenish(1)
+
+      let
+        contentKV = ContentKV(contentKey: contentKey, content: content)
+        list = List[ContentKV, contentKeysLimit].init(@[contentKV])
+        req = OfferRequest(dst: node, kind: Direct, contentList: list)
+      discard await p.offerRateLimited(req)
+
+      portal_poke_offers.inc(labelValues = [$p.protocolId])
     else:
-      # Offer queue is full, do not start more offer-accept interactions
+      # The offerTokenBucket is at capacity so do not start more offer-accept interactions
       return
 
 # TODO ContentLookup and Lookup look almost exactly the same, also lookups in other
@@ -1731,6 +1742,18 @@ proc queryRandom*(
   ## Perform a query for a random target, return all nodes discovered.
   p.query(NodeId.random(p.baseProtocol.rng[]))
 
+proc offerBatchGetPeerCount*(
+    p: PortalProtocol, offers: seq[OfferRequest]
+): Future[int] {.async: (raises: [CancelledError]).} =
+  let futs = await allFinished(offers.mapIt(p.offerRateLimited(it)))
+
+  var peerCount = 0
+  for f in futs:
+    if f.completed() and f.value().isOk():
+      inc peerCount # only count successful offers
+
+  peerCount
+
 proc neighborhoodGossip*(
     p: PortalProtocol,
     srcNodeId: Opt[NodeId],
@@ -1787,7 +1810,7 @@ proc neighborhoodGossip*(
   # first for the same request.
   p.baseProtocol.rng[].shuffle(closestLocalNodes)
 
-  var numberOfGossipedNodes = 0
+  var offers = newSeqOfCap[OfferRequest](p.config.maxGossipNodes)
 
   if not enableNodeLookup or closestLocalNodes.len() >= p.config.maxGossipNodes:
     # use local nodes for gossip
@@ -1795,10 +1818,9 @@ proc neighborhoodGossip*(
 
     for node in closestLocalNodes:
       let req = OfferRequest(dst: node, kind: Direct, contentList: contentList)
-      await p.offerQueue.addLast(req)
-      inc numberOfGossipedNodes
+      offers.add(req)
 
-      if numberOfGossipedNodes >= p.config.maxGossipNodes:
+      if offers.len() >= p.config.maxGossipNodes:
         break
   else: # use looked up nodes for gossip
     portal_gossip_with_lookup.inc(labelValues = [$p.protocolId])
@@ -1817,13 +1839,12 @@ proc neighborhoodGossip*(
       # Only send offers to nodes for which the content is in range of their radius
       if p.inRange(node.id, radius, contentId):
         let req = OfferRequest(dst: node, kind: Direct, contentList: contentList)
-        await p.offerQueue.addLast(req)
-        inc numberOfGossipedNodes
+        offers.add(req)
 
-      if numberOfGossipedNodes >= p.config.maxGossipNodes:
-        break
+        if offers.len() >= p.config.maxGossipNodes:
+          break
 
-  return numberOfGossipedNodes
+  await p.offerBatchGetPeerCount(offers)
 
 proc neighborhoodGossipDiscardPeers*(
     p: PortalProtocol,
@@ -1850,12 +1871,11 @@ proc randomGossip*(
     let contentKV = ContentKV(contentKey: contentKeys[i], content: contentItem)
     discard contentList.add(contentKV)
 
-  let nodes = p.routingTable.randomNodes(p.config.maxGossipNodes)
+  let
+    nodes = p.routingTable.randomNodes(p.config.maxGossipNodes)
+    offers = nodes.mapIt(OfferRequest(dst: it, kind: Direct, contentList: contentList))
 
-  for node in nodes[0 ..< nodes.len()]:
-    let req = OfferRequest(dst: node, kind: Direct, contentList: contentList)
-    await p.offerQueue.addLast(req)
-  return nodes.len()
+  await p.offerBatchGetPeerCount(offers)
 
 proc randomGossipDiscardPeers*(
     p: PortalProtocol,
@@ -2017,21 +2037,6 @@ proc start*(p: PortalProtocol) =
   p.refreshLoop = refreshLoop(p)
   p.revalidateLoop = revalidateLoop(p)
 
-  # These are the concurrent offers per Portal wire protocol that is running.
-  # Using the `offerQueue` allows for limiting the amount of offers send and
-  # thus how many streams can be started.
-  # TODO:
-  # More thought needs to go into this as it is currently on a per network
-  # basis. Keep it simple like that? Or limit it better at the stream transport
-  # level? In the latter case, this might still need to be checked/blocked at
-  # the very start of sending the offer, because blocking/waiting too long
-  # between the received accept message and actually starting the stream and
-  # sending data could give issues due to timeouts on the other side.
-  # And then there are still limits to be applied also for FindContent and the
-  # incoming directions.
-  for i in 0 ..< p.config.maxConcurrentOffers:
-    p.offerWorkers.add(offerWorker(p))
-
 proc stop*(p: PortalProtocol) {.async: (raises: []).} =
   var futures: seq[Future[void]]
 
@@ -2040,14 +2045,10 @@ proc stop*(p: PortalProtocol) {.async: (raises: []).} =
   if not p.refreshLoop.isNil():
     futures.add(p.refreshLoop.cancelAndWait())
 
-  for worker in p.offerWorkers:
-    futures.add(worker.cancelAndWait())
-
   await noCancel(allFutures(futures))
 
   p.revalidateLoop = nil
   p.refreshLoop = nil
-  p.offerWorkers = @[]
 
 proc resolve*(
     p: PortalProtocol, id: NodeId
