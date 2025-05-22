@@ -23,6 +23,7 @@ import
   beacon_chain/[light_client, nimbus_binary_common, version],
   ../execution_chain/rpc/cors,
   ../execution_chain/common/common,
+  ./types,
   ./rpc/rpc_eth_api,
   ./nimbus_verified_proxy_conf,
   ./header_store
