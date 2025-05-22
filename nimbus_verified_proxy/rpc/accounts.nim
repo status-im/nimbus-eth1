@@ -171,10 +171,6 @@ proc installEthApiAccountHandlers*(lcProxy: VerifiedRpcProxy) =
   lcProxy.proxy.rpc("eth_getBalance") do(
     address: Address, quantityTag: BlockTag
   ) -> UInt256:
-    # When requesting state for `latest` block number, we need to translate
-    # `latest` to actual block number as `latest` on proxy and on data provider
-    # can mean different blocks and ultimatly piece received piece of state
-    # must by validated against correct state root
     let
       header = lcProxy.getHeaderByTagOrThrow(quantityTag)
 
