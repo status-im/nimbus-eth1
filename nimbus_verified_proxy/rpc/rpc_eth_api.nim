@@ -21,16 +21,9 @@ logScope:
   topics = "verified_proxy"
 
 type
-  VerifiedRpcProxy* = ref object
-    proxy: RpcProxy
-    headerStore: HeaderStore
-    chainId: UInt256
-
   QuantityTagKind = enum
     LatestBlock
     BlockNumber
-
-  BlockTag = eth_api_types.RtBlockIdentifier
 
   QuantityTag = object
     case kind: QuantityTagKind
@@ -54,9 +47,6 @@ func parseQuantityTag(blockTag: BlockTag): Result[QuantityTag, string] =
 template checkPreconditions(proxy: VerifiedRpcProxy) =
   if proxy.headerStore.isEmpty():
     raise newException(ValueError, "Syncing")
-
-template rpcClient(lcProxy: VerifiedRpcProxy): RpcClient =
-  lcProxy.proxy.getClient()
 
 proc getHeaderByTag(
     proxy: VerifiedRpcProxy, quantityTag: BlockTag
@@ -99,16 +89,8 @@ proc installEthApiHandlers*(lcProxy: VerifiedRpcProxy) =
     # must by validated against correct state root
     let
       header = lcProxy.getHeaderByTagOrThrow(quantityTag)
-      blockNumber = header.number.uint64
 
-    info "Forwarding eth_getBalance call", blockNumber
-
-    let
-      proof = await lcProxy.rpcClient.eth_getProof(address, @[], blockId(blockNumber))
-      account = getAccountFromProof(
-        header.stateRoot, proof.address, proof.balance, proof.nonce, proof.codeHash,
-        proof.storageHash, proof.accountProof,
-      ).valueOr:
+      account = (await vp.getAccount(address, header.number, header.stateRoot)).valueOr:
         raise newException(ValueError, error)
 
     account.balance
@@ -118,32 +100,17 @@ proc installEthApiHandlers*(lcProxy: VerifiedRpcProxy) =
   ) -> UInt256:
     let
       header = lcProxy.getHeaderByTagOrThrow(quantityTag)
-      blockNumber = header.number.uint64
+      storage = (await vp.getStorageAt(address, slot, header.number, header.stateRoot)).valueOr:
+        raise newException(ValueError, error)
 
-    info "Forwarding eth_getStorageAt", blockNumber
-
-    let proof =
-      await lcProxy.rpcClient.eth_getProof(address, @[slot], blockId(blockNumber))
-
-    getStorageData(header.stateRoot, slot, proof).valueOr:
-      raise newException(ValueError, error)
+    storage
 
   lcProxy.proxy.rpc("eth_getTransactionCount") do(
     address: Address, quantityTag: BlockTag
   ) -> uint64:
     let
       header = lcProxy.getHeaderByTagOrThrow(quantityTag)
-      blockNumber = header.number.uint64
-
-    info "Forwarding eth_getTransactionCount", blockNumber
-
-    let
-      proof = await lcProxy.rpcClient.eth_getProof(address, @[], blockId(blockNumber))
-
-      account = getAccountFromProof(
-        header.stateRoot, proof.address, proof.balance, proof.nonce, proof.codeHash,
-        proof.storageHash, proof.accountProof,
-      ).valueOr:
+      account = (await vp.getAccount(address, header.number, header.stateRoot)).valueOr:
         raise newException(ValueError, error)
 
     account.nonce
@@ -153,29 +120,10 @@ proc installEthApiHandlers*(lcProxy: VerifiedRpcProxy) =
   ) -> seq[byte]:
     let
       header = lcProxy.getHeaderByTagOrThrow(quantityTag)
-      blockNumber = header.number.uint64
-
-    info "Forwarding eth_getCode", blockNumber
-    let
-      proof = await lcProxy.rpcClient.eth_getProof(address, @[], blockId(blockNumber))
-      account = getAccountFromProof(
-        header.stateRoot, proof.address, proof.balance, proof.nonce, proof.codeHash,
-        proof.storageHash, proof.accountProof,
-      ).valueOr:
+      code = (await vp.getCode(address, header.number, header.stateRoot)).valueOr:
         raise newException(ValueError, error)
 
-    if account.codeHash == EMPTY_CODE_HASH:
-      # account does not have any code, return empty hex data
-      return @[]
-
-    let code = await lcProxy.rpcClient.eth_getCode(address, blockId(blockNumber))
-
-    if isValidCode(account, code):
-      return code
-    else:
-      raise newException(
-        ValueError, "Received code which does not match the account code hash"
-      )
+    code
 
   # TODO:
   # Following methods are forwarded directly to the web3 provider and therefore
@@ -186,14 +134,6 @@ proc installEthApiHandlers*(lcProxy: VerifiedRpcProxy) =
   lcProxy.proxy.registerProxyMethod("eth_getTransactionReceipt")
   lcProxy.proxy.registerProxyMethod("eth_getBlockByNumber")
   lcProxy.proxy.registerProxyMethod("eth_getBlockByHash")
-
-proc new*(
-    T: type VerifiedRpcProxy,
-    proxy: RpcProxy,
-    headerStore: HeaderStore,
-    chainId: UInt256,
-): T =
-  VerifiedRpcProxy(proxy: proxy, headerStore: headerStore, chainId: chainId)
 
 # Used to be in eth1_monitor.nim; not sure why it was deleted,
 # so I copied it here. --Adam
