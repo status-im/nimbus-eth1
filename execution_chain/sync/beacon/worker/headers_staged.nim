@@ -15,7 +15,7 @@ import
   pkg/eth/common,
   pkg/stew/[interval_set, sorted_set],
   ../worker_desc,
-  ./headers_staged/[headers_fetch, staged_collect],
+  ./headers_staged/[headers_fetch, staged_collect, staged_headers],
   ./headers_unproc
 
 # ------------------------------------------------------------------------------
@@ -237,16 +237,11 @@ proc headersStagedProcess*(buddy: BeaconBuddyRef; info: static[string]): bool =
     discard ctx.hdr.staged.delete(qItem.key)
 
     # Store headers on database
-    ctx.hdrCache.put(qItem.data.revHdrs).isOkOr:
-      ctx.headersUnprocAppend(minNum, maxNum)
-
+    if not buddy.headersStashOnDisk(qItem.data.revHdrs, info):
       # Error mark buddy that produced that unusable headers list
       buddy.incHdrProcErrors qItem.data.peerID
 
-      debug info & ": discarding staged header list", peer,
-        qItem=qItem.data.bnStr, D=ctx.dangling.bnStr, nStored,
-        nDiscarded=qItem.data.revHdrs.len, nSyncPeers=ctx.pool.nBuddies,
-        `error`=error
+      ctx.headersUnprocAppend(minNum, maxNum)
       switchPeer = true
       break
 
