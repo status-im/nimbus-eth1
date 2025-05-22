@@ -1742,7 +1742,7 @@ proc queryRandom*(
   ## Perform a query for a random target, return all nodes discovered.
   p.query(NodeId.random(p.baseProtocol.rng[]))
 
-proc offerBatchGetPeerCount*(
+proc offerBatchGetPeerCount(
     p: PortalProtocol, offers: seq[OfferRequest]
 ): Future[int] {.async: (raises: [CancelledError]).} =
   let futs = await allFinished(offers.mapIt(p.offerRateLimited(it)))
@@ -1757,8 +1757,8 @@ proc offerBatchGetPeerCount*(
 proc neighborhoodGossip*(
     p: PortalProtocol,
     srcNodeId: Opt[NodeId],
-    contentKeys: ContentKeysList,
-    content: seq[seq[byte]],
+    contentKey: ContentKeyByteList,
+    content: seq[byte],
     enableNodeLookup = false,
 ): Future[int] {.async: (raises: [CancelledError]).} =
   ## Run neighborhood gossip for provided content.
@@ -1769,18 +1769,12 @@ proc neighborhoodGossip*(
   ## the radius cache should be relatively large (ideally equal to the total number
   ## of nodes in the network) to reduce the number of pings required to populate
   ## the cache over time as old content is removed when the cache is full.
-  if content.len() == 0:
-    return 0
 
-  var contentList = List[ContentKV, contentKeysLimit].init(@[])
-  for i, contentItem in content:
-    let contentKV = ContentKV(contentKey: contentKeys[i], content: contentItem)
-    discard contentList.add(contentKV)
-
-  # Just taking the first content item as target id.
-  # TODO: come up with something better?
-  let contentId = p.toContentId(contentList[0].contentKey).valueOr:
-    return 0
+  let
+    contentKV = ContentKV(contentKey: contentKey, content: content)
+    contentList = List[ContentKV, contentKeysLimit].init(@[contentKV])
+    contentId = p.toContentId(contentKey).valueOr:
+      return 0
 
   # For selecting the closest nodes to whom to gossip the content a mixed
   # approach is taken:
@@ -1846,44 +1840,24 @@ proc neighborhoodGossip*(
 
   await p.offerBatchGetPeerCount(offers)
 
-proc neighborhoodGossipDiscardPeers*(
-    p: PortalProtocol,
-    srcNodeId: Opt[NodeId],
-    contentKeys: ContentKeysList,
-    content: seq[seq[byte]],
-    enableNodeLookup = false,
-): Future[void] {.async: (raises: [CancelledError]).} =
-  discard await p.neighborhoodGossip(srcNodeId, contentKeys, content, enableNodeLookup)
-
 proc randomGossip*(
     p: PortalProtocol,
     srcNodeId: Opt[NodeId],
-    contentKeys: ContentKeysList,
-    content: seq[seq[byte]],
+    contentKey: ContentKeyByteList,
+    content: seq[byte],
 ): Future[int] {.async: (raises: [CancelledError]).} =
   ## Run random gossip for provided content.
   ## Returns the number of peers to which content was attempted to be gossiped.
-  if content.len() == 0:
-    return 0
 
-  var contentList = List[ContentKV, contentKeysLimit].init(@[])
-  for i, contentItem in content:
-    let contentKV = ContentKV(contentKey: contentKeys[i], content: contentItem)
-    discard contentList.add(contentKV)
+  let
+    contentKV = ContentKV(contentKey: contentKey, content: content)
+    contentList = List[ContentKV, contentKeysLimit].init(@[contentKV])
 
   let
     nodes = p.routingTable.randomNodes(p.config.maxGossipNodes)
     offers = nodes.mapIt(OfferRequest(dst: it, kind: Direct, contentList: contentList))
 
   await p.offerBatchGetPeerCount(offers)
-
-proc randomGossipDiscardPeers*(
-    p: PortalProtocol,
-    srcNodeId: Opt[NodeId],
-    contentKeys: ContentKeysList,
-    content: seq[seq[byte]],
-): Future[void] {.async: (raises: [CancelledError]).} =
-  discard await p.randomGossip(srcNodeId, contentKeys, content)
 
 proc storeContent*(
     p: PortalProtocol,

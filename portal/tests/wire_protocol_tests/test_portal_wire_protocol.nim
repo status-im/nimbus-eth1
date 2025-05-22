@@ -271,7 +271,7 @@ procSuite "Portal Wire Protocol Tests":
     await proto1.stopPortalProtocol()
     await proto2.stopPortalProtocol()
 
-  asyncTest "Neighborhood gossip - single content key, value":
+  asyncTest "Neighborhood gossip - to single peer":
     let (proto1, proto2) = defaultTestSetup(rng)
 
     check proto1.addNode(proto2.localNode) == Added
@@ -279,25 +279,25 @@ procSuite "Portal Wire Protocol Tests":
     check pong.isOk()
 
     let
-      contentKeys = ContentKeysList(@[ContentKeyByteList(@[byte 0x01, 0x02, 0x03])])
-      content: seq[seq[byte]] = @[@[byte 0x04, 0x05, 0x06]]
+      contentKey = ContentKeyByteList(@[byte 0x01, 0x02, 0x03])
+      content: seq[byte] = @[byte 0x04, 0x05, 0x06]
 
     let peerCount =
-      await proto1.neighborhoodGossip(Opt.none(NodeId), contentKeys, content)
+      await proto1.neighborhoodGossip(Opt.none(NodeId), contentKey, content)
     check peerCount == 1
 
     let (srcNodeId, keys, items) = await proto2.stream.contentQueue.popFirst()
     check:
       srcNodeId.get() == proto1.localNode.id
-      keys.len() == items.len()
       keys.len() == 1
-      keys == contentKeys
-      items == content
+      items.len() == 1
+      keys[0] == contentKey
+      items[0] == content
 
     await proto1.stopPortalProtocol()
     await proto2.stopPortalProtocol()
 
-  asyncTest "Random gossip - single content key, value":
+  asyncTest "Random gossip - to single peer":
     let (proto1, proto2) = defaultTestSetup(rng)
 
     check proto1.addNode(proto2.localNode) == Added
@@ -305,19 +305,19 @@ procSuite "Portal Wire Protocol Tests":
     check pong.isOk()
 
     let
-      contentKeys = ContentKeysList(@[ContentKeyByteList(@[byte 0x01, 0x02, 0x03])])
-      content: seq[seq[byte]] = @[@[byte 0x04, 0x05, 0x06]]
+      contentKey = ContentKeyByteList(@[byte 0x01, 0x02, 0x03])
+      content: seq[byte] = @[byte 0x04, 0x05, 0x06]
 
-    let peerCount = await proto1.randomGossip(Opt.none(NodeId), contentKeys, content)
+    let peerCount = await proto1.randomGossip(Opt.none(NodeId), contentKey, content)
     check peerCount == 1
 
     let (srcNodeId, keys, items) = await proto2.stream.contentQueue.popFirst()
     check:
       srcNodeId.get() == proto1.localNode.id
-      keys.len() == items.len()
       keys.len() == 1
-      keys == contentKeys
-      items == content
+      items.len() == 1
+      keys[0] == contentKey
+      items[0] == content
 
     await proto1.stopPortalProtocol()
     await proto2.stopPortalProtocol()

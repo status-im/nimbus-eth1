@@ -141,10 +141,7 @@ proc installPortalBeaconApiHandlers*(rpcServer: RpcServer, p: PortalProtocol) =
       # TODO: validate and store content locally
       # storedLocally = p.storeContent(keyBytes, contentId, valueBytes)
       peerCount = await p.neighborhoodGossip(
-        Opt.none(NodeId),
-        ContentKeysList(@[keyBytes]),
-        @[offerValueBytes],
-        enableNodeLookup = true,
+        Opt.none(NodeId), keyBytes, offerValueBytes, enableNodeLookup = true
       )
 
     PutContentResult(storedLocally: false, peerCount: peerCount)
@@ -156,8 +153,6 @@ proc installPortalBeaconApiHandlers*(rpcServer: RpcServer, p: PortalProtocol) =
       keyBytes = ContentKeyByteList.init(hexToSeqByte(contentKey))
       offerValueBytes = hexToSeqByte(contentValue)
 
-      peerCount = await p.randomGossip(
-        Opt.none(NodeId), ContentKeysList(@[keyBytes]), @[offerValueBytes]
-      )
+      peerCount = await p.randomGossip(Opt.none(NodeId), keyBytes, offerValueBytes)
 
     peerCount

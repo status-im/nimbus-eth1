@@ -220,9 +220,9 @@ proc processOffer*(
 proc contentQueueWorker(n: StateNetwork) {.async: (raises: []).} =
   try:
     while true:
-      let (srcNodeId, contentKeys, contentValues) = await n.contentQueue.popFirst()
+      let (srcNodeId, contentKeys, contentItems) = await n.contentQueue.popFirst()
 
-      for i, contentBytes in contentValues:
+      for i, contentBytes in contentItems:
         let
           contentKeyBytes = contentKeys[i]
           contentKey = ContentKey.decode(contentKeyBytes).valueOr:

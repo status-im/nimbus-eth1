@@ -391,46 +391,38 @@ proc new*(
 proc validateContent(
     n: HistoryNetwork,
     srcNodeId: Opt[NodeId],
-    contentKeys: ContentKeysList,
-    contentItems: seq[seq[byte]],
+    contentKey: ContentKeyByteList,
+    content: seq[byte],
 ): Future[bool] {.async: (raises: [CancelledError]).} =
-  # content passed here can have less items then contentKeys, but not more.
-  for i, contentItem in contentItems:
-    let contentKey = contentKeys[i]
-    let res = await n.validateContent(contentItem, contentKey)
-    if res.isOk():
-      let contentId = n.portalProtocol.toContentId(contentKey).valueOr:
-        warn "Received offered content with invalid content key", srcNodeId, contentKey
-        return false
-
-      n.portalProtocol.storeContent(
-        contentKey, contentId, contentItem, cacheOffer = true
-      )
-
-      debug "Received offered content validated successfully", srcNodeId, contentKey
-    else:
-      if srcNodeId.isSome():
-        n.portalProtocol.banNode(srcNodeId.get(), NodeBanDurationOfferFailedValidation)
-
-      debug "Received offered content failed validation",
-        srcNodeId, contentKey, error = res.error
+  let validation = await n.validateContent(content, contentKey)
+  if validation.isOk():
+    let contentId = n.portalProtocol.toContentId(contentKey).valueOr:
+      warn "Received offered content with invalid content key", srcNodeId, contentKey
       return false
 
-  return true
+    n.portalProtocol.storeContent(contentKey, contentId, content, cacheOffer = true)
+
+    debug "Received offered content validated successfully", srcNodeId, contentKey
+    return true
+  else:
+    if srcNodeId.isSome():
+      n.portalProtocol.banNode(srcNodeId.get(), NodeBanDurationOfferFailedValidation)
+
+    debug "Received offered content failed validation",
+      srcNodeId, contentKey, error = validation.error
+    return false
 
 proc contentQueueWorker(n: HistoryNetwork) {.async: (raises: []).} =
   try:
     while true:
       let (srcNodeId, contentKeys, contentItems) = await n.contentQueue.popFirst()
 
-      # When there is one invalid content item, all other content items are
-      # dropped and not gossiped around.
-      # TODO: Differentiate between failures due to invalid data and failures
-      # due to missing network data for validation.
-      if await n.validateContent(srcNodeId, contentKeys, contentItems):
-        await n.portalProtocol.neighborhoodGossipDiscardPeers(
-          srcNodeId, contentKeys, contentItems
-        )
+      for i, content in contentItems:
+        let contentKey = contentKeys[i]
+
+        if await n.validateContent(srcNodeId, contentKey, content):
+          discard
+            await n.portalProtocol.neighborhoodGossip(srcNodeId, contentKey, content)
   except CancelledError:
     trace "contentQueueWorker canceled"
 

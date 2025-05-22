@@ -94,10 +94,8 @@ proc gossipOffer*(
     keyBytes: ContentKeyByteList,
     offerBytes: seq[byte],
 ) {.async: (raises: [CancelledError]).} =
-  let peers = await p.neighborhoodGossip(
-    srcNodeId, ContentKeysList.init(@[keyBytes]), @[offerBytes]
-  )
-  debug "Offered content gossipped successfully with peers", keyBytes, peers
+  let peerCount = await p.neighborhoodGossip(srcNodeId, keyBytes, offerBytes)
+  debug "Content gossipped successfully with peers", keyBytes, peerCount
 
 # Currently only used for testing to gossip an entire account trie proof
 proc recursiveGossipOffer*(

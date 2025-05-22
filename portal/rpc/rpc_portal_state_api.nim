@@ -183,10 +183,7 @@ proc installPortalStateApiHandlers*(rpcServer: RpcServer, p: PortalProtocol) =
 
       storedLocally = p.storeContent(keyBytes, contentId, valueBytes)
       peerCount = await p.neighborhoodGossip(
-        Opt.none(NodeId),
-        ContentKeysList(@[keyBytes]),
-        @[offerValueBytes],
-        enableNodeLookup = true,
+        Opt.none(NodeId), keyBytes, offerValueBytes, enableNodeLookup = true
       )
 
     PutContentResult(storedLocally: storedLocally, peerCount: peerCount)
