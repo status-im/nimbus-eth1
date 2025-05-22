@@ -197,13 +197,13 @@ proc installEthApiAccountHandlers*(lcProxy: VerifiedRpcProxy) =
 
   lcProxy.proxy.rpc("eth_getTransactionCount") do(
     address: Address, quantityTag: BlockTag
-  ) -> uint64:
+  ) -> Quantity:
     let
       header = lcProxy.getHeaderByTagOrThrow(quantityTag)
       account = (await lcProxy.getAccount(address, header.number, header.stateRoot)).valueOr:
         raise newException(ValueError, error)
 
-    account.nonce
+    Quantity(account.nonce)
 
   lcProxy.proxy.rpc("eth_getCode") do(
     address: Address, quantityTag: BlockTag
