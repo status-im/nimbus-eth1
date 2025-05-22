@@ -18,7 +18,8 @@ import
   json_rpc/[rpcproxy, rpcserver, rpcclient],
   web3/[primitives, eth_api_types, eth_api],
   ../../execution_chain/beacon/web3_eth_conv,
-  ../types
+  ../types,
+  ./blocks
 
 proc getAccountFromProof*(
     stateRoot: Hash32,
@@ -50,7 +51,7 @@ proc getAccountFromProof*(
   of InvalidProof:
     return err(proofResult.errorMsg)
 
-proc getStorageFromProof*(
+proc getStorageFromProof(
     account: Account, storageProof: StorageProof
 ): Result[UInt256, string] =
   let
@@ -165,3 +166,51 @@ proc getStorageAt*(
     slotValue = getStorageFromProof(stateRoot, slot, proof)
 
   return slotValue
+
+proc installEthApiAccountHandlers*(lcProxy: VerifiedRpcProxy) =
+  lcProxy.proxy.rpc("eth_getBalance") do(
+    address: Address, quantityTag: BlockTag
+  ) -> UInt256:
+    # When requesting state for `latest` block number, we need to translate
+    # `latest` to actual block number as `latest` on proxy and on data provider
+    # can mean different blocks and ultimatly piece received piece of state
+    # must by validated against correct state root
+    let
+      header = lcProxy.getHeaderByTagOrThrow(quantityTag)
+
+      account = (await lcProxy.getAccount(address, header.number, header.stateRoot)).valueOr:
+        raise newException(ValueError, error)
+
+    account.balance
+
+  lcProxy.proxy.rpc("eth_getStorageAt") do(
+    address: Address, slot: UInt256, quantityTag: BlockTag
+  ) -> UInt256:
+    let
+      header = lcProxy.getHeaderByTagOrThrow(quantityTag)
+      storage = (
+        await lcProxy.getStorageAt(address, slot, header.number, header.stateRoot)
+      ).valueOr:
+        raise newException(ValueError, error)
+
+    storage
+
+  lcProxy.proxy.rpc("eth_getTransactionCount") do(
+    address: Address, quantityTag: BlockTag
+  ) -> uint64:
+    let
+      header = lcProxy.getHeaderByTagOrThrow(quantityTag)
+      account = (await lcProxy.getAccount(address, header.number, header.stateRoot)).valueOr:
+        raise newException(ValueError, error)
+
+    account.nonce
+
+  lcProxy.proxy.rpc("eth_getCode") do(
+    address: Address, quantityTag: BlockTag
+  ) -> seq[byte]:
+    let
+      header = lcProxy.getHeaderByTagOrThrow(quantityTag)
+      code = (await lcProxy.getCode(address, header.number, header.stateRoot)).valueOr:
+        raise newException(ValueError, error)
+
+    code

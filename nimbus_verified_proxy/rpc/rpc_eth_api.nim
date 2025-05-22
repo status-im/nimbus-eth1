@@ -8,66 +8,18 @@
 {.push raises: [].}
 
 import
-  std/strutils,
   results,
   chronicles,
   json_rpc/[rpcserver, rpcclient, rpcproxy],
   eth/common/accounts,
   web3/eth_api,
   ../validate_proof,
-  ../header_store
+  ../types,
+  ../header_store,
+  ./accounts
 
 logScope:
   topics = "verified_proxy"
-
-type
-  QuantityTagKind = enum
-    LatestBlock
-    BlockNumber
-
-  QuantityTag = object
-    case kind: QuantityTagKind
-    of LatestBlock:
-      discard
-    of BlockNumber:
-      blockNumber: Quantity
-
-func parseQuantityTag(blockTag: BlockTag): Result[QuantityTag, string] =
-  if blockTag.kind == bidAlias:
-    let tag = blockTag.alias.toLowerAscii
-    case tag
-    of "latest":
-      return ok(QuantityTag(kind: LatestBlock))
-    else:
-      return err("Unsupported blockTag: " & tag)
-  else:
-    let quantity = blockTag.number
-    return ok(QuantityTag(kind: BlockNumber, blockNumber: quantity))
-
-template checkPreconditions(proxy: VerifiedRpcProxy) =
-  if proxy.headerStore.isEmpty():
-    raise newException(ValueError, "Syncing")
-
-proc getHeaderByTag(
-    proxy: VerifiedRpcProxy, quantityTag: BlockTag
-): results.Opt[Header] {.raises: [ValueError].} =
-  checkPreconditions(proxy)
-
-  let tag = parseQuantityTag(quantityTag).valueOr:
-    raise newException(ValueError, error)
-
-  case tag.kind
-  of LatestBlock:
-    # this will always return some block, as we always checkPreconditions
-    proxy.headerStore.latest
-  of BlockNumber:
-    proxy.headerStore.get(base.BlockNumber(distinctBase(tag.blockNumber)))
-
-proc getHeaderByTagOrThrow(
-    proxy: VerifiedRpcProxy, quantityTag: BlockTag
-): Header {.raises: [ValueError].} =
-  getHeaderByTag(proxy, quantityTag).valueOr:
-    raise newException(ValueError, "No block stored for given tag " & $quantityTag)
 
 proc installEthApiHandlers*(lcProxy: VerifiedRpcProxy) =
   lcProxy.proxy.rpc("eth_chainId") do() -> UInt256:
@@ -80,50 +32,7 @@ proc installEthApiHandlers*(lcProxy: VerifiedRpcProxy) =
 
     latest.number.uint64
 
-  lcProxy.proxy.rpc("eth_getBalance") do(
-    address: Address, quantityTag: BlockTag
-  ) -> UInt256:
-    # When requesting state for `latest` block number, we need to translate
-    # `latest` to actual block number as `latest` on proxy and on data provider
-    # can mean different blocks and ultimatly piece received piece of state
-    # must by validated against correct state root
-    let
-      header = lcProxy.getHeaderByTagOrThrow(quantityTag)
-
-      account = (await vp.getAccount(address, header.number, header.stateRoot)).valueOr:
-        raise newException(ValueError, error)
-
-    account.balance
-
-  lcProxy.proxy.rpc("eth_getStorageAt") do(
-    address: Address, slot: UInt256, quantityTag: BlockTag
-  ) -> UInt256:
-    let
-      header = lcProxy.getHeaderByTagOrThrow(quantityTag)
-      storage = (await vp.getStorageAt(address, slot, header.number, header.stateRoot)).valueOr:
-        raise newException(ValueError, error)
-
-    storage
-
-  lcProxy.proxy.rpc("eth_getTransactionCount") do(
-    address: Address, quantityTag: BlockTag
-  ) -> uint64:
-    let
-      header = lcProxy.getHeaderByTagOrThrow(quantityTag)
-      account = (await vp.getAccount(address, header.number, header.stateRoot)).valueOr:
-        raise newException(ValueError, error)
-
-    account.nonce
-
-  lcProxy.proxy.rpc("eth_getCode") do(
-    address: Address, quantityTag: BlockTag
-  ) -> seq[byte]:
-    let
-      header = lcProxy.getHeaderByTagOrThrow(quantityTag)
-      code = (await vp.getCode(address, header.number, header.stateRoot)).valueOr:
-        raise newException(ValueError, error)
-
-    code
+  lcProxy.installEthApiAccountHandlers()
 
   # TODO:
   # Following methods are forwarded directly to the web3 provider and therefore
