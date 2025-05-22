@@ -18,7 +18,7 @@ type
 template rpcClient*(vp: VerifiedRpcProxy): RpcClient =
   vp.proxy.getClient()
 
-proc new*(
+proc init*(
     T: type VerifiedRpcProxy,
     proxy: RpcProxy,
     headerStore: HeaderStore,
