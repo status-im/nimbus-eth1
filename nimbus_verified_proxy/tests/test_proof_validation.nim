@@ -9,7 +9,7 @@
 
 {.push raises: [].}
 
-import unittest2, stint, stew/byteutils, web3, ../validate_proof
+import unittest2, stint, stew/byteutils, web3, ../rpc/accounts
 
 suite "Merkle proof of inclusion validation":
   test "Validate account proof":
@@ -145,7 +145,7 @@ suite "Merkle proof of inclusion validation":
         ],
     )
 
-    let validationResult = getStorageData(stateRoot, u256(0), proof)
+    let validationResult = getStorageFromProof(stateRoot, u256(0), proof)
 
     check:
       validationResult.isOk()
