@@ -13,7 +13,6 @@ import
   json_rpc/[rpcserver, rpcclient, rpcproxy],
   eth/common/accounts,
   web3/eth_api,
-  ../validate_proof,
   ../types,
   ../header_store,
   ./accounts
