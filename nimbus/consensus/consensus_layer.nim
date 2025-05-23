@@ -7,10 +7,32 @@
 
 {.push raises: [].}
 
-import std/[atomics, os], chronos, chronicles, ../conf, ../common/utils, results
+import
+  std/[atomics, os],
+  chronos,
+  chronicles,
+  ../conf,
+  ../common/utils,
+  results,
+  beacon_chain/[beacon_node_status, nimbus_binary_common]
 
 logScope:
   topics = "Consensus layer"
+
+proc startBeaconNode(configs: seq[string]) =
+  proc commandLineParams(): seq[string] =
+    configs
+
+  var config = makeBannerAndConfig(
+    "clientId", "copyrights", "nimBanner", "SPEC_VERSION", [], BeaconNodeConf
+  ).valueOr:
+    error "Error starting consensus", err = error
+    quit QuitFailure
+
+  setupLogging(config.logLevel, config.logStdout, config.logFile)
+
+  #TODO: create public entry on beacon node
+  #handleStartUpCmd(config)
 
 ## Consensus Layer handler
 proc consensusLayerHandler*(channel: ptr Channel[pointer]) =
@@ -21,14 +43,15 @@ proc consensusLayerHandler*(channel: ptr Channel[pointer]) =
     fatal " service unable to receive configuration", err = e.msg
     quit(QuitFailure)
 
-  let configs = deserializeConfigArgs(p).valueOr:
+  let configList = deserializeConfigArgs(p).valueOr:
     fatal "unable to parse service data", message = error
     quit(QuitFailure)
 
   #signal main thread that data is read
   isConfigRead.store(true)
 
-  info "consensus configs ", configs = configs
+  {.gcsafe.}:
+    startBeaconNode(configList)
 
   try:
     while true:
