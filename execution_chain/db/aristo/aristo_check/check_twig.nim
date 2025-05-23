@@ -25,7 +25,7 @@ proc checkTwig*(
       ): Result[void,AristoError] =
   let
     proof = ? db.makeAccountProof(accPath)
-    key = ? db.computeKey (VertexID(1),VertexID(1))
+    key = ? db.computeKey (STATE_ROOT_VID,STATE_ROOT_VID)
   discard ? proof[0].verifyProof(key.to(Hash32), accPath)
 
   ok()
@@ -38,7 +38,7 @@ proc checkTwig*(
   let
     proof = ? db.makeStorageProof(accPath, stoPath)
     vid = ? db.fetchStorageID accPath
-    key = ? db.computeKey (VertexID(1),vid)
+    key = ? db.computeKey (STATE_ROOT_VID,vid)
   discard ? proof[0].verifyProof(key.to(Hash32), stoPath)
 
   ok()
