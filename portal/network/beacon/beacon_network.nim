@@ -315,15 +315,18 @@ proc validateContent(
     # This means that no backfill is possible, for that we need updates that
     # get provided with a proof against historical_summaries, see also:
     # https://github.com/ethereum/portal-network-specs/issues/305
-    # It is however a little more tricky, even updates that we do not have
-    # applied yet may fail here if the list of updates does not contain first
-    # the next update that is required currently for the sync.
+    # TODO: The light client will try to apply each update in dumb fashion.
+    # Could check the status of the sync and the content key to start from the
+    # exact right position.
+    var unverifiedUpdate = false
     for update in updates:
-      let res = await n.processor.updateVerifier(update)
-      if res.isErr():
-        return err("Error verifying LC updates: " & $res.error)
+      (await n.processor.updateVerifier(update)).isOkOr:
+        unverifiedUpdate = true
 
-    ok()
+    if unverifiedUpdate:
+      err("Error verifying LC updates: could not verify all updates")
+    else:
+      ok()
   of lightClientFinalityUpdate:
     let update = decodeLightClientFinalityUpdateForked(n.forkDigests, content).valueOr:
       return err("Error decoding content: " & error)
