@@ -60,7 +60,7 @@ func updateBranch(c: ForkedChainRef,
          blk: Block,
          blkHash: Hash32,
          txFrame: CoreDbTxRef,
-         receipts: sink seq[Receipt]) =
+         receipts: sink seq[StoredReceipt]) =
   if parent.isHead:
     parent.appendBlock(blk, blkHash, txFrame, move(receipts))
     c.hashToBlock[blkHash] = parent.lastBlockPos
@@ -862,7 +862,7 @@ proc blockHeader*(c: ForkedChainRef, blk: BlockHashOrNumber): Result[Header, str
     return c.headerByHash(blk.hash)
   c.headerByNumber(blk.number)
 
-proc receiptsByBlockHash*(c: ForkedChainRef, blockHash: Hash32): Result[seq[Receipt], string] =
+proc receiptsByBlockHash*(c: ForkedChainRef, blockHash: Hash32): Result[seq[StoredReceipt], string] =
   if blockHash != c.baseBranch.tailHash:
     c.hashToBlock.withValue(blockHash, loc):
       return ok(loc[].receipts)

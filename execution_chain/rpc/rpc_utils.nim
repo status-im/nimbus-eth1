@@ -179,9 +179,11 @@ proc populateBlockObject*(blockHash: Hash32,
   result.excessBlobGas = w3Qty(header.excessBlobGas)
   result.requestsHash = header.requestsHash
 
-proc populateReceipt*(receipt: Receipt, gasUsed: GasInt, tx: Transaction,
+proc populateReceipt*(rec: StoredReceipt, gasUsed: GasInt, tx: Transaction,
                       txIndex: uint64, header: Header, com: CommonRef): ReceiptObject =
-  let sender = tx.recoverSender()
+  let 
+    sender = tx.recoverSender()
+    receipt = rec.to(Receipt)
   var res = ReceiptObject()
   res.transactionHash = tx.computeRlpHash
   res.transactionIndex = Quantity(txIndex)

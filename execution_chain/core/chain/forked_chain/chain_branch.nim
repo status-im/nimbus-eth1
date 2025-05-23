@@ -19,7 +19,7 @@ type
   BlockDesc* = object
     blk*     : Block
     txFrame* : CoreDbTxRef
-    receipts*: seq[Receipt]
+    receipts*: seq[StoredReceipt]
     hash*    : Hash32
 
   BlockPos* = object
@@ -105,7 +105,7 @@ func branch*(header: Header, hash: Hash32, txFrame: CoreDbTxRef): BranchRef =
 
 func branch*(parent: BranchRef, blk: Block,
              hash: Hash32, txFrame: CoreDbTxRef,
-             receipts: sink seq[Receipt]): BranchRef =
+             receipts: sink seq[StoredReceipt]): BranchRef =
   BranchRef(
     blocks: @[BlockDesc(
       blk: blk,
@@ -126,7 +126,7 @@ func header*(loc: BlockPos): Header =
 func blk*(loc: BlockPos): Block =
   loc.branch.blocks[loc.index].blk
 
-func receipts*(loc: BlockPos): seq[Receipt] =
+func receipts*(loc: BlockPos): seq[StoredReceipt] =
   loc.branch.blocks[loc.index].receipts
 
 func number*(loc: BlockPos): BlockNumber =
@@ -154,7 +154,7 @@ func appendBlock*(loc: BlockPos,
              blk: Block,
              blkHash: Hash32,
              txFrame: CoreDbTxRef,
-             receipts: sink seq[Receipt]) =
+             receipts: sink seq[StoredReceipt]) =
   loc.branch.append(BlockDesc(
     blk     : blk,
     txFrame : txFrame,
