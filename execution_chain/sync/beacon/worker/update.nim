@@ -137,8 +137,7 @@ proc blocksNext(ctx: BeaconCtxRef; info: static[string]): SyncState =
   if ctx.subState.cancelRequest:
     return blocksCancel
 
-  if ctx.blocksStagedQueueIsEmpty() and
-     ctx.blocksUnprocIsEmpty():
+  if ctx.subState.head <= ctx.subState.top:
     return blocksFinish
 
   SyncState.blocks
