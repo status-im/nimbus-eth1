@@ -23,10 +23,10 @@ import
 
 proc headersUpdateBuddyErrorState*(buddy: BeaconBuddyRef) =
   ## Helper/wrapper
-  if ((0 < buddy.nHdrRespErrors or
-       0 < buddy.nHdrProcErrors) and buddy.ctrl.stopped) or
-     fetchHeadersReqErrThresholdCount < buddy.nHdrRespErrors or
-     fetchHeadersProcessErrThresholdCount < buddy.nHdrProcErrors:
+  if ((0 < buddy.only.nRespErrors.hdr or
+       0 < buddy.nHdrProcErrors()) and buddy.ctrl.stopped) or
+     fetchHeadersReqErrThresholdCount < buddy.only.nRespErrors.hdr or
+     fetchHeadersProcErrThresholdCount < buddy.nHdrProcErrors():
 
     # Make sure that this peer does not immediately reconnect
     buddy.ctrl.zombie = true

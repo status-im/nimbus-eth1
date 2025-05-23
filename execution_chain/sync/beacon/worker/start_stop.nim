@@ -95,13 +95,13 @@ proc startBuddy*(buddy: BeaconBuddyRef): bool =
      acceptProto(eth68):
     ctx.pool.nBuddies.inc
     ctx.pool.blkLastSlowPeer = Opt.none(Hash)
-    buddy.initHdrProcErrors()
+    buddy.initProcErrors()
     return true
 
 
 proc stopBuddy*(buddy: BeaconBuddyRef) =
   buddy.ctx.pool.nBuddies.dec
-  buddy.clearHdrProcErrors()
+  buddy.clearProcErrors()
 
 # ------------------------------------------------------------------------------
 # End

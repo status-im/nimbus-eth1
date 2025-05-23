@@ -105,7 +105,7 @@ proc blocksFetchCheckImpl(
   if 0 < blocks.len.uint64:
     return Opt.some(blocks)
 
-  buddy.only.nBdyProcErrors.inc
+  buddy.incBlkProcErrors()
   return Opt.none(seq[EthBlock])
 
 # ------------------------------------------------------------------------------

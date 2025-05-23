@@ -80,7 +80,7 @@ const
     ## exceeds this threshold for more than `fetchHeadersReqThresholdCount`
     ## times in a row, then this peer will be banned for a while.
 
-  fetchHeadersProcessErrThresholdCount* = 2
+  fetchHeadersProcErrThresholdCount* = 2
     ## Similar to `fetchHeadersReqErrThresholdCount` but for the later part
     ## when errors occur while block headers are queued and further processed.
 
@@ -114,7 +114,7 @@ const
   fetchBodiesReqErrThresholdCount* = 2
     ## Similar to `fetchHeadersReqThreshold*`
 
-  fetchBodiesProcessErrThresholdCount* = 2
+  fetchBodiesProcErrThresholdCount* = 2
     ## Similar to `fetchHeadersProcessErrThresholdCount`.
 
   fetchBodiesReqMinResponsePC* = 10

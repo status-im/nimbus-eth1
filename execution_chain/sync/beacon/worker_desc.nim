@@ -81,11 +81,13 @@ type
 
   # -------------------
 
+  BuddyError* = tuple
+    ## Count fetching or processing errors
+    hdr, blk: uint8
+
   BeaconBuddyData* = object
     ## Local descriptor data extension
-    nHdrRespErrors*: uint8           ## Number of errors/slow responses in a row
-    nBdyRespErrors*: uint8           ## Ditto for bodies
-    nBdyProcErrors*: uint8           ## Number of body post processing errors
+    nRespErrors*: BuddyError         ## Number of errors/slow responses in a row
 
     # Debugging and logging.
     nMultiLoop*: int                 ## Number of runs
@@ -107,7 +109,7 @@ type
     hdrCache*: HeaderChainRef        ## Currently in tandem with `chain`
 
     # Info, debugging, and error handling stuff
-    hdrProcError*: Table[Hash,uint8] ## Some globally accessible header errors
+    nProcError*: Table[Hash,BuddyError] ## Per peer processing error
     blkLastSlowPeer*: Opt[Hash]      ## Register slow peer when last one
     failedPeers*: HashSet[Hash]      ## Detect dead end sync by collecting peers
     seenData*: bool                  ## Set `true` is data were fetched, already
@@ -183,56 +185,71 @@ func syncState*(
 
 # -----
 
-proc nHdrRespErrors*(buddy: BeaconBuddyRef): int =
-  ## Getter, returns the number of `resp` errors for argument `buddy`
-  buddy.only.nHdrRespErrors.int
-
-proc `nHdrRespErrors=`*(buddy: BeaconBuddyRef; count: uint8) =
-  ## Setter, set arbitrary `resp` error count for argument `buddy`.
-  buddy.only.nHdrRespErrors = count
-
-proc incHdrRespErrors*(buddy: BeaconBuddyRef) =
-  ## Increment `resp` error count for for argument `buddy`.
-  buddy.only.nHdrRespErrors.inc
-
-
-proc initHdrProcErrors*(buddy: BeaconBuddyRef) =
+proc initProcErrors*(buddy: BeaconBuddyRef) =
   ## Create error slot for argument `buddy`
-  buddy.ctx.pool.hdrProcError[buddy.peerID] = 0u8
+  buddy.ctx.pool.nProcError[buddy.peerID] = (0u8,0u8)
 
-proc clearHdrProcErrors*(buddy: BeaconBuddyRef) =
+proc clearProcErrors*(buddy: BeaconBuddyRef) =
   ## Delete error slot for argument `buddy`
-  buddy.ctx.pool.hdrProcError.del buddy.peerID
-  doAssert buddy.ctx.pool.hdrProcError.len <= buddy.ctx.pool.nBuddies
+  buddy.ctx.pool.nProcError.del buddy.peerID
+  doAssert buddy.ctx.pool.nProcError.len <= buddy.ctx.pool.nBuddies
+
+# -----
 
 proc nHdrProcErrors*(buddy: BeaconBuddyRef): int =
   ## Getter, returns the number of `proc` errors for argument `buddy`
-  buddy.ctx.pool.hdrProcError.withValue(buddy.peerID, val):
-    return val[].int
+  buddy.ctx.pool.nProcError.withValue(buddy.peerID, val):
+    return val.hdr.int
 
 proc `nHdrProcErrors=`*(buddy: BeaconBuddyRef; count: uint8) =
   ## Setter, set arbitrary `proc` error count for argument `buddy`. Due
   ## to (hypothetical) hash collisions, the error register might have
   ## vanished in case a new one is instantiated.
-  buddy.ctx.pool.hdrProcError.withValue(buddy.peerID, val):
-    val[] = count
+  buddy.ctx.pool.nProcError.withValue(buddy.peerID, val):
+    val.hdr = count
   do:
-    buddy.ctx.pool.hdrProcError[buddy.peerID] = count
+    buddy.ctx.pool.nProcError[buddy.peerID] = (count,0u8)
 
 proc incHdrProcErrors*(buddy: BeaconBuddyRef) =
   ## Increment `proc` error count for for argument `buddy`. Due to
   ## (hypothetical) hash collisions, the error register might have
   ## vanished in case a new one is instantiated.
-  buddy.ctx.pool.hdrProcError.withValue(buddy.peerID, val):
-    val[].inc
+  buddy.ctx.pool.nProcError.withValue(buddy.peerID, val):
+    val.hdr.inc
   do:
-    buddy.ctx.pool.hdrProcError[buddy.peerID] = 1u8
+    buddy.ctx.pool.nProcError[buddy.peerID] = (1u8,0u8)
 
-proc incHdrProcErrors*(buddy: BeaconBuddyRef; peerID: Hash) =
+proc incHdrProcErrors*(ctx: BeaconCtxRef; peerID: Hash) =
   ## Increment `proc` error count for for argument `peerID` entry if it
   ## has a slot. Otherwise the instruction is ignored.
-  buddy.ctx.pool.hdrProcError.withValue(peerID, val):
-    val[].inc
+  ctx.pool.nProcError.withValue(peerID, val):
+    val.hdr.inc
+
+# -----
+
+proc nBlkProcErrors*(buddy: BeaconBuddyRef): int =
+  ## Getter, similar to `nHdrProcErrors()`
+  buddy.ctx.pool.nProcError.withValue(buddy.peerID, val):
+    return val.blk.int
+
+proc `nBlkProcErrors=`*(buddy: BeaconBuddyRef; count: uint8) =
+  ## Setter, simolar to `nHdrProcErrors()`
+  buddy.ctx.pool.nProcError.withValue(buddy.peerID, val):
+    val.blk = count
+  do:
+    buddy.ctx.pool.nProcError[buddy.peerID] = (0u8,count)
+
+proc incBlkProcErrors*(buddy: BeaconBuddyRef) =
+  ## Increment `proc` error count, similar to `incHdrProcErrors()`
+  buddy.ctx.pool.nProcError.withValue(buddy.peerID, val):
+    val.blk.inc
+  do:
+    buddy.ctx.pool.nProcError[buddy.peerID] = (0u8,1u8)
+
+proc incBlkProcErrors*(ctx: BeaconCtxRef; peerID: Hash) =
+  ## Increment `proc` error count, similar to `incHdrProcErrors()`
+  ctx.pool.nProcError.withValue(peerID, val):
+    val.blk.inc
 
 # ------------------------------------------------------------------------------
 # End

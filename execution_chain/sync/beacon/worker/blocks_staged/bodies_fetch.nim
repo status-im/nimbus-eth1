@@ -22,11 +22,11 @@ import
 # ------------------------------------------------------------------------------
 
 func bdyErrors*(buddy: BeaconBuddyRef): string =
-  $buddy.only.nBdyRespErrors & "/" & $buddy.only.nBdyProcErrors
+  $buddy.only.nRespErrors.blk & "/" & $buddy.nBlkProcErrors()
 
 proc fetchRegisterError*(buddy: BeaconBuddyRef, slowPeer = false) =
-  buddy.only.nBdyRespErrors.inc
-  if fetchBodiesReqErrThresholdCount < buddy.only.nBdyRespErrors:
+  buddy.only.nRespErrors.blk.inc
+  if fetchBodiesReqErrThresholdCount < buddy.only.nRespErrors.blk:
     if buddy.ctx.pool.nBuddies == 1 and slowPeer:
       # Remember that the current peer is the last one and is lablelled slow.
       # It would have been zombified if it were not the last one. This can be
@@ -54,7 +54,7 @@ proc bodiesFetch*(
   try:
     resp = await peer.getBlockBodies(request)
   except PeerDisconnected as e:
-    buddy.only.nBdyRespErrors.inc
+    buddy.only.nRespErrors.blk.inc
     buddy.ctrl.zombie = true
     `info` info & " error", peer, nReq, elapsed=(Moment.now() - start).toStr,
       error=($e.name), msg=e.msg, bdyErrors=buddy.bdyErrors
@@ -87,7 +87,7 @@ proc bodiesFetch*(
     buddy.fetchRegisterError()
     trace trEthRecvReceivedBlockBodies, peer, nReq, nResp=b.len,
       elapsed=elapsed.toStr, syncState=($buddy.syncState),
-      nRespErrors=buddy.only.nBdyRespErrors
+      nRespErrors=buddy.only.nRespErrors.blk
     return err()
 
   # Ban an overly slow peer for a while when seen in a row. Also there is a
@@ -96,7 +96,7 @@ proc bodiesFetch*(
      b.len.uint64 * 100 < nReq.uint64 * fetchBodiesReqMinResponsePC:
     buddy.fetchRegisterError(slowPeer=true)
   else:
-    buddy.only.nBdyRespErrors = 0                   # reset error count
+    buddy.only.nRespErrors.blk = 0                  # reset error count
     buddy.ctx.pool.blkLastSlowPeer = Opt.none(Hash) # not last one or not error
 
   trace trEthRecvReceivedBlockBodies, peer, nReq, nResp=b.len,

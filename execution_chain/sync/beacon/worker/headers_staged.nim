@@ -242,7 +242,7 @@ proc headersStagedProcess*(buddy: BeaconBuddyRef; info: static[string]): bool =
     # Store headers on database
     if not buddy.headersStashOnDisk(qItem.data.revHdrs, info):
       # Error mark buddy that produced that unusable headers list
-      buddy.incHdrProcErrors qItem.data.peerID
+      ctx.incHdrProcErrors qItem.data.peerID
 
       ctx.headersUnprocAppend(minNum, maxNum)
       switchPeer = true
