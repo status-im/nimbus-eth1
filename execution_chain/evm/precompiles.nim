@@ -204,6 +204,14 @@ func modExpFee(c: Computation,
     result = result div 8
     result = result * result
 
+  func mulComplexityEIP7883(maxLen: UInt256): UInt256 =
+    # gas = ceil(x div 8) ^ 2
+    result = maxLen + 7
+    result = result div 8
+    result = result * result
+    if maxLen > 32.u256:
+      result = result * 2
+
   let adjExpLen = block:
     let
       baseL = baseLen.safeInt
@@ -217,10 +225,12 @@ func modExpFee(c: Computation,
       if first32.isZero(): 0.u256
       else: first32.log2.u256    # highest-bit in exponent
     else:
+      let expMul = if fork >= FkOsaka: 16.u256
+                   else: 8.u256
       if not first32.isZero:
-        8.u256 * (expLen - 32.u256) + first32.log2.u256
+        expMul * (expLen - 32.u256) + first32.log2.u256
       else:
-        8.u256 * (expLen - 32.u256)
+        expMul * (expLen - 32.u256)
 
   template gasCalc(comp, divisor: untyped): untyped =
     (
@@ -229,16 +239,20 @@ func modExpFee(c: Computation,
     ) div divisor
 
   # EIP2565: modExp gas cost
-  let gasFee = if fork >= FkBerlin: gasCalc(mulComplexityEIP2565, GasQuadDivisorEIP2565)
+  let gasFee = if fork >= FkOsaka: gasCalc(mulComplexityEIP7883, GasQuadDivisorEIP2565)
+               elif fork >= FkBerlin: gasCalc(mulComplexityEIP2565, GasQuadDivisorEIP2565)
                else: gasCalc(mulComplexity, GasQuadDivisor)
 
   if gasFee > high(GasInt).u256:
     return err(gasErr(OutOfGas))
 
+  let minPrice = if fork >= FkOsaka: 500.GasInt
+                 else: 200.GasInt
+
   var res = gasFee.truncate(GasInt)
   # EIP2565: modExp gas cost
-  if fork >= FkBerlin and res < 200.GasInt:
-    res = 200.GasInt
+  if fork >= FkBerlin and res < minPrice:
+    res = minPrice
   ok(res)
 
 func modExp(c: Computation, fork: EVMFork = FkByzantium): EvmResultVoid =
