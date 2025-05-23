@@ -1,5 +1,5 @@
 # Nimbus
-# Copyright (c) 2022-2023 Status Research & Development GmbH
+# Copyright (c) 2022-2025 Status Research & Development GmbH
 # Licensed under either of
 #  * Apache License, version 2.0, ([LICENSE-APACHE](LICENSE-APACHE) or
 #    http://www.apache.org/licenses/LICENSE-2.0)
@@ -74,7 +74,7 @@ proc runTest(fileName: string): bool =
 
 proc collectFileNames(inputPath: string, fileNames: var seq[TestFile]) =
   for filename in walkDirRec(inputPath):
-    if not fileName.endsWith(".json"):
+    if not filename.endsWith(".json"):
       continue
 
     fileNames.add TestFile(
@@ -88,6 +88,7 @@ proc main() =
     collectFileNames(testData, filenames)
 
     for input in filenames:
+      let input = input # Workaround compiler lent issue
       test input.dispName:
         let res = runTest(input.fullPath)
         check true == res

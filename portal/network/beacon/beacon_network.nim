@@ -286,7 +286,7 @@ proc validateContent(
                   forkyBootstrap.header.beacon:
                 return err("Bootstrap header does not match recent finalized header")
 
-              if forkyBootstrap.isValidBootstrap(n.beaconDb.cfg):
+              if forkyBootstrap.isValidBootstrap(lcDataFork, n.beaconDb.cfg):
                 ok()
               else:
                 err("Error validating LC bootstrap")
@@ -298,7 +298,7 @@ proc validateContent(
           if blockRoot != n.trustedBlockRoot.get():
             return err("Bootstrap header does not match trusted block root")
 
-          if forkyBootstrap.isValidBootstrap(n.beaconDb.cfg):
+          if forkyBootstrap.isValidBootstrap(lcDataFork, n.beaconDb.cfg):
             ok()
           else:
             err("Error validating LC bootstrap")
