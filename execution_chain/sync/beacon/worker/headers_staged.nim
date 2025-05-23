@@ -15,7 +15,7 @@ import
   pkg/eth/common,
   pkg/stew/[interval_set, sorted_set],
   ../worker_desc,
-  ./headers_staged/[headers, staged_collect],
+  ./headers_staged/[headers_fetch, staged_collect],
   ./headers_unproc
 
 # ------------------------------------------------------------------------------
@@ -114,8 +114,7 @@ proc headersStagedCollect*(
       # might have been reset and prepared for the next stage.
       if ctx.collectModeStopped():
         trace info & ": stopped fetching/storing headers", peer, iv,
-          bottom=bottom.bnStr, nStored, ctrl=buddy.ctrl.state,
-          syncState=ctx.pool.lastState, cacheMode=ctx.hdrCache.state
+          bottom=bottom.bnStr, nStored, syncState=($buddy.syncState)
         break fetchHeadersBody                       # done, exit this function
 
       # Commit partially processed block numbers
@@ -127,7 +126,7 @@ proc headersStagedCollect*(
 
       debug info & ": fetched headers count", peer,
         unprocTop=ctx.headersUnprocAvailTop.bnStr, D=ctx.dangling.bnStr,
-        nStored, nStagedQ=ctx.hdr.staged.len, ctrl=buddy.ctrl.state
+        nStored, nStagedQ=ctx.hdr.staged.len, syncState=($buddy.syncState)
 
       # Buddy might have been cancelled while downloading headers.
       if buddy.ctrl.stopped:
@@ -161,8 +160,7 @@ proc headersStagedCollect*(
       # might have been reset and prepared for the next stage.
       if ctx.collectModeStopped():
         trace info & ": stopped fetching/staging headers", peer, iv,
-          bottom=bottom.bnStr, nStored, ctrl=buddy.ctrl.state,
-          syncState=ctx.pool.lastState, cacheMode=ctx.hdrCache.state
+          bottom=bottom.bnStr, nStored, syncState=($buddy.syncState)
         break fetchHeadersBody                       # done, exit this function
 
       # Store `lhc` chain on the `staged` queue if there is any
@@ -189,9 +187,9 @@ proc headersStagedCollect*(
       # block chain or similar.)
       ctx.pool.failedPeers.incl buddy.peerID
 
-      debug info & ": no headers yet", peer, ctrl=buddy.ctrl.state,
-        cacheMode=ctx.hdrCache.state, syncState=ctx.pool.lastState,
-        failedPeers=ctx.pool.failedPeers.len, hdrErrors=buddy.hdrErrors
+      debug info & ": no headers yet (failed peer)", peer,
+        failedPeers=ctx.pool.failedPeers.len,
+        syncState=($buddy.syncState), hdrErrors=buddy.hdrErrors
     return
 
   info "Queued/staged or DB/stored headers",
@@ -270,19 +268,11 @@ proc headersStagedProcess*(buddy: BeaconBuddyRef; info: static[string]): bool =
 
 
 proc headersStagedReorg*(ctx: BeaconCtxRef; info: static[string]) =
-  ## Some pool mode intervention. The effect is that all concurrent peers
-  ## finish up their current work and run this function here (which might
-  ## do nothing.) Pool mode is used to sync peers, e.g. for a forced state
-  ## change.
+  ## Some pool mode intervention.
   ##
-  # Check for cancel request
-  if ctx.pool.lastState == cancelHeaders:
-    # Update counter
-    ctx.pool.nReorg.inc
-
-    # Reset header queues
-    debug info & ": Flushing header queues", nUnproc=ctx.headersUnprocTotal(),
-      nStagedQ=ctx.hdr.staged.len, nReorg=ctx.pool.nReorg
+  if ctx.pool.lastState in {headersCancel,headersFinish}:
+    trace info & ": Flushing header queues",
+      nUnproc=ctx.headersUnprocTotal(), nStagedQ=ctx.hdr.staged.len
 
     ctx.headersUnprocClear() # clears `unprocessed` and `borrowed` list
     ctx.hdr.staged.clear()

@@ -78,14 +78,15 @@ proc bodiesFetch*(
   if resp.isNone or buddy.ctrl.stopped:
     buddy.fetchRegisterError()
     trace trEthRecvReceivedBlockBodies, peer, nReq, nResp=0,
-      elapsed=elapsed.toStr, ctrl=buddy.ctrl.state, bdyErrors=buddy.bdyErrors
+      elapsed=elapsed.toStr, syncState=($buddy.syncState),
+      bdyErrors=buddy.bdyErrors
     return err()
 
   let b: seq[BlockBody] = resp.get.bodies
   if b.len == 0 or nReq < b.len:
     buddy.fetchRegisterError()
     trace trEthRecvReceivedBlockBodies, peer, nReq, nResp=b.len,
-      elapsed=elapsed.toStr, ctrl=buddy.ctrl.state,
+      elapsed=elapsed.toStr, syncState=($buddy.syncState),
       nRespErrors=buddy.only.nBdyRespErrors
     return err()
 
@@ -99,7 +100,8 @@ proc bodiesFetch*(
     buddy.ctx.pool.blkLastSlowPeer = Opt.none(Hash) # not last one or not error
 
   trace trEthRecvReceivedBlockBodies, peer, nReq, nResp=b.len,
-    elapsed=elapsed.toStr, ctrl=buddy.ctrl.state, bdyErrors=buddy.bdyErrors
+    elapsed=elapsed.toStr, syncState=($buddy.syncState),
+    bdyErrors=buddy.bdyErrors
 
   return ok(b)
 
