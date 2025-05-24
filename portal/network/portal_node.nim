@@ -21,6 +21,8 @@ import
   ./history/[history_network, history_content],
   ./state/[state_network, state_content]
 
+from eth/p2p/discoveryv5/routing_table import logDistance
+
 export
   beacon_light_client, history_network, state_network, portal_protocol_config, forks
 
@@ -203,12 +205,18 @@ proc statusLogLoop(n: PortalNode) {.async: (raises: []).} =
       # drop a lot when using the logbase2 scale, namely `/ 2` per 1 logaritmic
       # radius drop.
       # TODO: Get some float precision calculus?
-      let radiusPercentage = n.contentDB.dataRadius div (UInt256.high() div u256(100))
+      let
+        radius = n.contentDB.dataRadius
+        radiusPercentage = radius div (UInt256.high() div u256(100))
+        logRadius = logDistance(radius, u256(0))
+        logRadiusPercentage = (logRadius * 100) div 256
 
       info "Portal node status",
+        logRadiusPercentage = $logRadiusPercentage & "%",
+        logRadius,
         radiusPercentage = radiusPercentage.toString(10) & "%",
-        radius = n.contentDB.dataRadius.toHex(),
-        dbSize = $(n.contentDB.size() div 1000) & "kb"
+        radius = radius.toHex(),
+        dbSize = $(n.contentDB.size() div 1_000_000) & "MB"
 
       await sleepAsync(60.seconds)
   except CancelledError:
