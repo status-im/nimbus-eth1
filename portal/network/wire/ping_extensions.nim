@@ -21,6 +21,8 @@ const
   MAX_CAPABILITIES_LENGTH* = 400
   MAX_ERROR_BYTE_LENGTH* = 300
 
+  NIMBUS_PORTAL_CLIENT_INFO* = ByteList[MAX_CLIENT_INFO_BYTE_LENGTH].init(@[])
+
 # Different ping extension payloads, TODO: could be moved to each their own file?
 type
   CapabilitiesPayload* = object

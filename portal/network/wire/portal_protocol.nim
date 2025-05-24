@@ -142,6 +142,7 @@ const
   NodeBanDurationInvalidResponse = 30.minutes
   NodeBanDurationContentLookupFailedValidation* = 60.minutes
   NodeBanDurationOfferFailedValidation* = 60.minutes
+  NodeBanDurationBanOtherClients* = 24.hours # for testing only
 
 type
   ToContentIdHandler* =
@@ -440,7 +441,7 @@ proc handlePingExtension(
       payloadType,
       encodePayload(
         CapabilitiesPayload(
-          client_info: ByteList[MAX_CLIENT_INFO_BYTE_LENGTH].init(@[]),
+          client_info: NIMBUS_PORTAL_CLIENT_INFO,
           data_radius: p.dataRadius(),
           capabilities: List[uint16, MAX_CAPABILITIES_LENGTH].init(
             p.pingExtensionCapabilities.toSeq()
@@ -849,7 +850,7 @@ proc pingImpl*(
 ): Future[PortalResult[PongMessage]] {.async: (raises: [CancelledError]).} =
   let pingPayload = encodePayload(
     CapabilitiesPayload(
-      client_info: ByteList[MAX_CLIENT_INFO_BYTE_LENGTH].init(@[]),
+      client_info: NIMBUS_PORTAL_CLIENT_INFO,
       data_radius: p.dataRadius(),
       capabilities:
         List[uint16, MAX_CAPABILITIES_LENGTH].init(p.pingExtensionCapabilities.toSeq()),
@@ -923,6 +924,9 @@ proc ping*(
     return err("Pong message contains invalid CapabilitiesPayload")
 
   p.radiusCache.put(dst.id, payload.data_radius)
+
+  if p.config.banOtherClients and payload.client_info != NIMBUS_PORTAL_CLIENT_INFO:
+    p.banNode(dst.id, NodeBanDurationBanOtherClients)
 
   ok((pong.enrSeq, pong.payload_type, payload))
 

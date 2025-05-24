@@ -94,7 +94,7 @@ procSuite "Portal Wire Protocol Tests":
     let pong = await proto1.ping(proto2.localNode)
 
     let customPayload = CapabilitiesPayload(
-      client_info: ByteList[MAX_CLIENT_INFO_BYTE_LENGTH].init(@[]),
+      client_info: NIMBUS_PORTAL_CLIENT_INFO,
       data_radius: UInt256.high(),
       capabilities: List[uint16, MAX_CAPABILITIES_LENGTH].init(
         proto1.pingExtensionCapabilities.toSeq()
