@@ -212,7 +212,7 @@ proc statusLogLoop(n: PortalNode) {.async: (raises: []).} =
         logRadiusPercentage = (logRadius * 100) div 256
 
       info "Portal node status",
-        dbSize = $(n.contentDB.size() div 1_000_000) & " MB",
+        dbSize = $(n.contentDB.size() div 1_000_000) & "MB",
         logRadiusPercentage = $logRadiusPercentage & "%",
         logRadius,
         radiusPercentage = radiusPercentage.toString(10) & "%",
