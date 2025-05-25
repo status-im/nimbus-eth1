@@ -84,7 +84,7 @@ proc run*(
     # header cache contains headers downloaded from p2p
     headerStore = HeaderStore.new(config.cacheLen)
 
-  var verifiedProxy = VerifiedRpcProxy.init(rpcProxy, headerStore, chainId)
+  let verifiedProxy = VerifiedRpcProxy.init(rpcProxy, headerStore, chainId)
 
   # add handlers that verify RPC calls /rpc/rpc_eth_api.nim
   verifiedProxy.installEthApiHandlers()
