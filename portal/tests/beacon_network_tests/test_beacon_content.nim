@@ -16,6 +16,7 @@ import
   beacon_chain/networking/network_metadata,
   beacon_chain/spec/forks,
   ../../network/beacon/beacon_content,
+  ../../network/beacon/beacon_init_loader,
   ../../eth_data/yaml_utils,
   "."/light_client_test_data
 
@@ -111,17 +112,11 @@ suite "Beacon Content Keys and Values - Test Vectors":
               (SLOTS_PER_EPOCH * EPOCHS_PER_SYNC_COMMITTEE_PERIOD) ==
               key.lightClientUpdateKey.startPeriod + uint64(i)
 
-            let forkDigest = forkDigestAtEpoch(
-              forkDigests[],
-              epoch(forkyObject.attested_header.beacon.slot),
-              metadata.cfg,
-            )
+      # re-encode content and content key
+      let encoded = encodeLightClientUpdatesForked(updates, forkDigests[], metadata.cfg)
 
-            # re-encode content and content key
-            let encoded = encodeLightClientUpdatesForked(forkDigest, updates.asSeq())
-
-            check encoded.toHex() == contentValueEncoded.toHex()
-            check encode(key).asSeq() == contentKeyEncoded
+      check encoded.toHex() == contentValueEncoded.toHex()
+      check encode(key).asSeq() == contentKeyEncoded
 
     test "LightClientFinalityUpdate":
       let
@@ -202,6 +197,8 @@ suite "Beacon Content Keys and Values":
     bellatrix: ForkDigest([0'u8, 0, 0, 3]),
     capella: ForkDigest([0'u8, 0, 0, 4]),
     deneb: ForkDigest([0'u8, 0, 0, 5]),
+    electra: ForkDigest([0'u8, 0, 0, 6]),
+    fulu: ForkDigest([0'u8, 0, 0, 7]),
   )
 
   test "LightClientBootstrap":
@@ -240,9 +237,10 @@ suite "Beacon Content Keys and Values":
       update = ForkedLightClientUpdate(
         kind: LightClientDataFork.Altair, altairData: altairData
       )
-      updateList = @[update, update]
+      updateList = ForkedLightClientUpdateList.init(@[update, update])
+      cfg = loadNetworkData("mainnet").metadata.cfg
 
-      encoded = encodeLightClientUpdatesForked(forkDigests.altair, updateList)
+      encoded = encodeLightClientUpdatesForked(updateList, forkDigests, cfg)
       decoded = decodeLightClientUpdatesByRange(forkDigests, encoded)
 
     check:
