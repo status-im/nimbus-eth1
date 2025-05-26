@@ -96,36 +96,32 @@ proc gossipLCUpdates(
       return err("Unable to download LC updates: " & exc.msg)
 
   if updates.len() > 0:
-    withForkyObject(updates[0]):
+    let period = withForkyObject(updates[0]):
       when lcDataFork > LightClientDataFork.None:
-        let
-          slot = forkyObject.attested_header.beacon.slot
-          period = slot.sync_committee_period
-          contentKey = encode(updateContentKey(period.uint64, count))
-          forkDigest = forkDigestAtEpoch(forkDigests[], epoch(slot), cfg)
-
-          content = encodeLightClientUpdatesForked(forkDigest, updates)
-
-        proc GossipRpcAndClose(): Future[Result[void, string]] {.async.} =
-          try:
-            let
-              contentKeyHex = contentKey.asSeq().toHex()
-              peers = await portalRpcClient.portal_beaconRandomGossip(
-                contentKeyHex, content.toHex()
-              )
-            info "Beacon LC update gossiped",
-              peers, contentKey = contentKeyHex, period, count
-            return ok()
-          except CatchableError as e:
-            return err("JSON-RPC error: " & $e.msg)
-
-        let res = await GossipRpcAndClose()
-        if res.isOk():
-          return ok()
-        else:
-          return err(res.error)
+        let slot = forkyObject.attested_header.beacon.slot
+        slot.sync_committee_period
       else:
         return err("No LC updates pre Altair")
+
+    let contentKey = encode(updateContentKey(period.uint64, count))
+    let contentItem = encodeLightClientUpdatesForked(
+      ForkedLightClientUpdateList.init(updates), forkDigests[], cfg
+    )
+
+    proc GossipRpcAndClose(): Future[Result[void, string]] {.async.} =
+      try:
+        let
+          contentKeyHex = contentKey.asSeq().toHex()
+          peers = await portalRpcClient.portal_beaconRandomGossip(
+            contentKeyHex, contentItem.toHex()
+          )
+        info "Beacon LC update gossiped",
+          peers, contentKey = contentKeyHex, period, count
+        return ok()
+      except CatchableError as e:
+        return err("JSON-RPC error: " & $e.msg)
+
+    await GossipRpcAndClose()
   else:
     # TODO:
     # currently only error if no updates at all found. This might be due
@@ -310,12 +306,12 @@ proc runBeacon*(config: PortalBridgeConf) {.raises: [CatchableError].} =
     # Bootstrap backfill, currently just one bootstrap selected by
     # trusted-block-root, could become a selected list, or some other way.
     if trustedBlockRoot.isSome():
-      let res = await gossipLCBootstrapUpdate(
-        beaconRestClient, portalRpcClient, trustedBlockRoot.get(), cfg, forkDigests
-      )
-
-      if res.isErr():
-        warn "Error gossiping LC bootstrap", error = res.error
+      (
+        await gossipLCBootstrapUpdate(
+          beaconRestClient, portalRpcClient, trustedBlockRoot.get(), cfg, forkDigests
+        )
+      ).isOkOr:
+        warn "Error gossiping LC bootstrap", error
 
       await portalRpcClient.close()
 
@@ -337,32 +333,35 @@ proc runBeacon*(config: PortalBridgeConf) {.raises: [CatchableError].} =
       leftOver = backfillAmount mod updatesPerRequest
 
     for i in 0 ..< requestAmount:
-      let res = await gossipLCUpdates(
-        beaconRestClient,
-        portalRpcClient,
-        currentPeriod - updatesPerRequest * (i + 1) + 1,
-        updatesPerRequest,
-        cfg,
-        forkDigests,
-      )
-
-      if res.isErr():
-        warn "Error gossiping LC updates", error = res.error
+      (
+        await gossipLCUpdates(
+          beaconRestClient,
+          portalRpcClient,
+          (currentPeriod - backfillAmount) + i * updatesPerRequest + 1,
+          updatesPerRequest,
+          cfg,
+          forkDigests,
+        )
+      ).isOkOr:
+        warn "Error gossiping LC updates", error
 
       await portalRpcClient.close()
 
-    if leftOver > 0:
-      let res = await gossipLCUpdates(
-        beaconRestClient,
-        portalRpcClient,
-        currentPeriod - updatesPerRequest * requestAmount - leftOver + 1,
-        leftOver,
-        cfg,
-        forkDigests,
-      )
+      # Give time to the nodes to process the data
+      await sleepAsync(3.seconds)
 
-      if res.isErr():
-        warn "Error gossiping LC updates", error = res.error
+    if leftOver > 0:
+      (
+        await gossipLCUpdates(
+          beaconRestClient,
+          portalRpcClient,
+          (currentPeriod - backfillAmount) + requestAmount * updatesPerRequest + 1,
+          leftOver,
+          cfg,
+          forkDigests,
+        )
+      ).isOkOr:
+        warn "Error gossiping LC updates", error
 
       await portalRpcClient.close()
 
@@ -399,37 +398,36 @@ proc runBeacon*(config: PortalBridgeConf) {.raises: [CatchableError].} =
       # Or basically `lightClientOptimisticUpdateSlotOffset`
       await sleepAsync((SECONDS_PER_SLOT div INTERVALS_PER_SLOT).int.seconds)
 
-      let res =
+      let lastOptimisticUpdateSlot = (
         await gossipLCOptimisticUpdate(restClient, portalRpcClient, cfg, forkDigests)
+      ).valueOr:
+        warn "Error gossiping LC optimistic update", error
+        return
 
-      if res.isErr():
-        warn "Error gossiping LC optimistic update", error = res.error
-      else:
-        if wallEpoch > lastFinalityUpdateEpoch + 2 and wallSlot > start_slot(wallEpoch):
-          let res =
-            await gossipLCFinalityUpdate(restClient, portalRpcClient, cfg, forkDigests)
+      if wallEpoch > lastFinalityUpdateEpoch + 2 and wallSlot > start_slot(wallEpoch):
+        let (slot, blockRoot) = (
+          await gossipLCFinalityUpdate(restClient, portalRpcClient, cfg, forkDigests)
+        ).valueOr:
+          warn "Error gossiping LC finality update", error
+          return
 
-          if res.isErr():
-            warn "Error gossiping LC finality update", error = res.error
-          else:
-            let (slot, blockRoot) = res.value()
-            lastFinalityUpdateEpoch = epoch(slot)
-            let res = await gossipLCBootstrapUpdate(
-              restClient, portalRpcClient, blockRoot, cfg, forkDigests
-            )
+        lastFinalityUpdateEpoch = epoch(slot)
 
-            if res.isErr():
-              warn "Error gossiping LC bootstrap", error = res.error
-
-          let res2 = await gossipHistoricalSummaries(
-            restClient, portalRpcClient, cfg, forkDigests
+        (
+          await gossipLCBootstrapUpdate(
+            restClient, portalRpcClient, blockRoot, cfg, forkDigests
           )
-          if res2.isErr():
-            warn "Error gossiping historical summaries", error = res.error
+        ).isOkOr:
+          warn "Error gossiping LC bootstrap", error
+          return
 
-        if wallPeriod > lastUpdatePeriod and wallSlot > start_slot(wallEpoch):
-          # TODO: Need to delay timing here also with one slot?
-          let res = await gossipLCUpdates(
+        (await gossipHistoricalSummaries(restClient, portalRpcClient, cfg, forkDigests)).isOkOr:
+          warn "Error gossiping historical summaries", error
+          return
+
+      if wallPeriod > lastUpdatePeriod and wallSlot > start_slot(wallEpoch):
+        (
+          await gossipLCUpdates(
             restClient,
             portalRpcClient,
             sync_committee_period(wallSlot).uint64,
@@ -437,13 +435,11 @@ proc runBeacon*(config: PortalBridgeConf) {.raises: [CatchableError].} =
             cfg,
             forkDigests,
           )
+        ).isOkOr:
+          warn "Error gossiping LC update", error
+          return
 
-          if res.isErr():
-            warn "Error gossiping LC update", error = res.error
-          else:
-            lastUpdatePeriod = wallPeriod
-
-        lastOptimisticUpdateSlot = res.get()
+        lastUpdatePeriod = wallPeriod
 
   proc runOnSlotLoop() {.async.} =
     var
