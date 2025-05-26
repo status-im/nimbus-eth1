@@ -7,13 +7,13 @@
 
 {.push raises: [].}
 
-import json_rpc/rpcserver, ../network/beacon/beacon_network
+import json_rpc/rpcserver, ../network/beacon/beacon_light_client
 
 export rpcserver
 
 # nimbus portal specific RPC methods for the Portal beacon network.
-proc installPortalNimbusBeaconApiHandlers*(rpcServer: RpcServer, n: BeaconNetwork) =
+proc installPortalNimbusBeaconApiHandlers*(rpcServer: RpcServer, lc: LightClient) =
   rpcServer.rpc("portal_nimbus_beaconSetTrustedBlockRoot") do(blockRoot: string) -> bool:
     let root = Digest.fromHex(blockRoot)
-    n.trustedBlockRoot = Opt.some(root)
+    await lc.resetToTrustedBlockRoot(root)
     true
