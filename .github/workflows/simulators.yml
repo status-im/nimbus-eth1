@@ -1,5 +1,5 @@
 # Nimbus
-# Copyright (c) 2021-2024 Status Research & Development GmbH
+# Copyright (c) 2021-2025 Status Research & Development GmbH
 # Licensed under either of
 #  * Apache License, version 2.0, ([LICENSE-APACHE](LICENSE-APACHE) or
 #    http://www.apache.org/licenses/LICENSE-2.0)
@@ -109,23 +109,6 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v4
 
-      - name: Restore Nim DLLs dependencies from cache
-        id: windows-dlls-cache
-        uses: actions/cache@v4
-        with:
-          path: external/dlls
-          # according to docu, idle caches are kept for up to 7 days
-          # so change dlls# to force new cache contents (for some number #)
-          key: dlls1
-
-      - name: Install DLLs dependencies
-        if: steps.windows-dlls-cache.outputs.cache-hit != 'true'
-        run: |
-          DLLPATH=external/dlls
-          mkdir -p external
-          curl -L "https://nim-lang.org/download/windeps.zip" -o external/windeps.zip
-          7z x -y external/windeps.zip -o"$DLLPATH"
-
       - name: Restore llvm-mingw from cache
         id: windows-mingw-cache
         uses: actions/cache@v4
@@ -146,7 +129,6 @@ jobs:
       - name: Path to cached dependencies
         run: |
           echo '${{ github.workspace }}'"/external/mingw-amd64/bin" >> $GITHUB_PATH
-          echo '${{ github.workspace }}'"/external/dlls" >> $GITHUB_PATH
 
       - name: Get latest nimbus-build-system commit hash
         id: versions
