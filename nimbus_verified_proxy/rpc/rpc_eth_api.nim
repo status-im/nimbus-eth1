@@ -15,7 +15,8 @@ import
   web3/eth_api,
   ../types,
   ../header_store,
-  ./accounts
+  ./accounts,
+  ./blocks
 
 logScope:
   topics = "verified_proxy"
@@ -31,7 +32,48 @@ proc installEthApiHandlers*(lcProxy: VerifiedRpcProxy) =
 
     latest.number.uint64
 
-  lcProxy.installEthApiAccountHandlers()
+  lcProxy.proxy.rpc("eth_getBalance") do(
+    address: Address, quantityTag: BlockTag
+  ) -> UInt256:
+    let
+      header = lcProxy.getHeaderByTagOrThrow(quantityTag)
+
+      account = (await lcProxy.getAccount(address, header.number, header.stateRoot)).valueOr:
+        raise newException(ValueError, error)
+
+    account.balance
+
+  lcProxy.proxy.rpc("eth_getStorageAt") do(
+    address: Address, slot: UInt256, quantityTag: BlockTag
+  ) -> UInt256:
+    let
+      header = lcProxy.getHeaderByTagOrThrow(quantityTag)
+      storage = (
+        await lcProxy.getStorageAt(address, slot, header.number, header.stateRoot)
+      ).valueOr:
+        raise newException(ValueError, error)
+
+    storage
+
+  lcProxy.proxy.rpc("eth_getTransactionCount") do(
+    address: Address, quantityTag: BlockTag
+  ) -> Quantity:
+    let
+      header = lcProxy.getHeaderByTagOrThrow(quantityTag)
+      account = (await lcProxy.getAccount(address, header.number, header.stateRoot)).valueOr:
+        raise newException(ValueError, error)
+
+    Quantity(account.nonce)
+
+  lcProxy.proxy.rpc("eth_getCode") do(
+    address: Address, quantityTag: BlockTag
+  ) -> seq[byte]:
+    let
+      header = lcProxy.getHeaderByTagOrThrow(quantityTag)
+      code = (await lcProxy.getCode(address, header.number, header.stateRoot)).valueOr:
+        raise newException(ValueError, error)
+
+    code
 
   # TODO:
   # Following methods are forwarded directly to the web3 provider and therefore
