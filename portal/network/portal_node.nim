@@ -214,7 +214,7 @@ proc statusLogLoop(n: PortalNode) {.async: (raises: []).} =
         dbSize = $(n.contentDB.size() div 1_000_000) & "mb",
         radiusPercentage = radiusPercentage.toString(10) & "%",
         radius = radius.toHex(),
-        logRadius = logRadius & " / 256"
+        logRadius = $logRadius & " / 256"
 
       await sleepAsync(60.seconds)
   except CancelledError:
