@@ -279,30 +279,6 @@ const
     "osaka": Osaka
   }.toTable
 
-# func ofStmt(fork: HardFork, keyName: string, reader: NimNode, value: NimNode): NimNode =
-#   let branchStmt = quote do:
-#     `value`[`fork`] = reader.readValue(Opt[BlobSchedule])
-
-#   nnkOfBranch.newTree(
-#     newLit(keyName),
-#     branchStmt
-#   )
-
-# macro blobScheduleParser(reader, key, value: typed): untyped =
-#   # Automated blob schedule parser generator
-#   var caseStmt = nnkCaseStmt.newTree(
-#     quote do: `key`
-#   )
-
-#   for fork in Cancun..HardFork.high:
-#     let keyName = BlobScheduleTable[fork]
-#     caseStmt.add ofStmt(fork, keyName, reader, value)
-
-#   caseStmt.add nnkElse.newTree(
-#     quote do: discard
-#   )
-#   result = caseStmt
-
 proc readValue(reader: var JsonReader[JGenesis], value: var seq[BpoFork])
     {.gcsafe, raises: [SerializationError, IOError].} =
   wrapError:
