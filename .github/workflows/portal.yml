@@ -40,7 +40,8 @@ jobs:
     runs-on: ubuntu-22.04
     # TODO: for now only push event as this way it is easier to get branch name
     # to build container
-    if: github.event_name == 'push'
+    # if: github.event_name == 'push'
+    if: false
     steps:
       - name: Checkout nimbus-eth1
         uses: actions/checkout@v4
