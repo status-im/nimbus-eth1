@@ -200,9 +200,11 @@ proc new*(
     bootstrapRecords: openArray[Record] = [],
     portalConfig: PortalProtocolConfig = defaultPortalProtocolConfig,
     contentQueueWorkers = 8,
+    contentQueueSize = 50,
 ): T =
   let
-    contentQueue = newAsyncQueue[(Opt[NodeId], ContentKeysList, seq[seq[byte]])](50)
+    contentQueue =
+      newAsyncQueue[(Opt[NodeId], ContentKeysList, seq[seq[byte]])](contentQueueSize)
 
     stream = streamManager.registerNewStream(contentQueue)
 

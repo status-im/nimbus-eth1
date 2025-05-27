@@ -58,12 +58,10 @@ proc new*(
     validateStateIsCanonical = true,
     contentRequestRetries = 1,
     contentQueueWorkers = 8,
+    contentQueueSize = 50,
 ): T =
-  doAssert(contentRequestRetries >= 0)
-  doAssert(contentQueueWorkers >= 1)
-
   let
-    cq = newAsyncQueue[(Opt[NodeId], ContentKeysList, seq[seq[byte]])](50)
+    cq = newAsyncQueue[(Opt[NodeId], ContentKeysList, seq[seq[byte]])](contentQueueSize)
     s = streamManager.registerNewStream(cq)
     portalProtocol = PortalProtocol.new(
       baseProtocol,

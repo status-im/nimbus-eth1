@@ -249,6 +249,7 @@ proc run(portalClient: PortalClient, config: PortalConf) {.raises: [CatchableErr
       storageCapacity: config.storageCapacityMB * 1_000_000,
       contentRequestRetries: config.contentRequestRetries.int,
       contentQueueWorkers: config.contentQueueWorkers,
+      contentQueueSize: config.contentQueueSize,
     )
 
     node = PortalNode.new(

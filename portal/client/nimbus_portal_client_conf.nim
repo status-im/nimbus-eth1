@@ -431,6 +431,13 @@ type
       name: "debug-content-queue-workers"
     .}: int
 
+    contentQueueSize* {.
+      hidden,
+      desc: "Size of the in memory content queue.",
+      defaultValue: 50,
+      name: "debug-content-queue-size"
+    .}: int
+
     case cmd* {.command, defaultValue: noCommand.}: PortalCmd
     of noCommand:
       discard
