@@ -440,7 +440,7 @@ proc handlePingExtension(
       payloadType,
       encodePayload(
         CapabilitiesPayload(
-          client_info: ByteList[MAX_CLIENT_INFO_BYTE_LENGTH].init(@[]),
+          client_info: NIMBUS_PORTAL_CLIENT_INFO,
           data_radius: p.dataRadius(),
           capabilities: List[uint16, MAX_CAPABILITIES_LENGTH].init(
             p.pingExtensionCapabilities.toSeq()
@@ -849,7 +849,7 @@ proc pingImpl*(
 ): Future[PortalResult[PongMessage]] {.async: (raises: [CancelledError]).} =
   let pingPayload = encodePayload(
     CapabilitiesPayload(
-      client_info: ByteList[MAX_CLIENT_INFO_BYTE_LENGTH].init(@[]),
+      client_info: NIMBUS_PORTAL_CLIENT_INFO,
       data_radius: p.dataRadius(),
       capabilities:
         List[uint16, MAX_CAPABILITIES_LENGTH].init(p.pingExtensionCapabilities.toSeq()),
@@ -1846,15 +1846,6 @@ proc neighborhoodGossip*(
 
   await p.offerBatchGetPeerCount(offers)
 
-proc neighborhoodGossipDiscardPeers*(
-    p: PortalProtocol,
-    srcNodeId: Opt[NodeId],
-    contentKeys: ContentKeysList,
-    content: seq[seq[byte]],
-    enableNodeLookup = false,
-): Future[void] {.async: (raises: [CancelledError]).} =
-  discard await p.neighborhoodGossip(srcNodeId, contentKeys, content, enableNodeLookup)
-
 proc randomGossip*(
     p: PortalProtocol,
     srcNodeId: Opt[NodeId],
@@ -1876,14 +1867,6 @@ proc randomGossip*(
     offers = nodes.mapIt(OfferRequest(dst: it, kind: Direct, contentList: contentList))
 
   await p.offerBatchGetPeerCount(offers)
-
-proc randomGossipDiscardPeers*(
-    p: PortalProtocol,
-    srcNodeId: Opt[NodeId],
-    contentKeys: ContentKeysList,
-    content: seq[seq[byte]],
-): Future[void] {.async: (raises: [CancelledError]).} =
-  discard await p.randomGossip(srcNodeId, contentKeys, content)
 
 proc storeContent*(
     p: PortalProtocol,
