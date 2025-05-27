@@ -559,8 +559,8 @@ proc init*(
     )
 
   if enableQueue:
-   fc.queue = newAsyncQueue[QueueItem](maxsize = MaxQueueSize)
-   fc.processingQueueLoop = fc.processQueue()
+    fc.queue = newAsyncQueue[QueueItem](maxsize = MaxQueueSize)
+    fc.processingQueueLoop = fc.processQueue()
 
   fc
 
