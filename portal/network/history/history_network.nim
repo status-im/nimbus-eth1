@@ -428,7 +428,7 @@ proc contentQueueWorker(n: HistoryNetwork) {.async: (raises: []).} =
       # TODO: Differentiate between failures due to invalid data and failures
       # due to missing network data for validation.
       if await n.validateContent(srcNodeId, contentKeys, contentItems):
-        await n.portalProtocol.neighborhoodGossipDiscardPeers(
+        discard await n.portalProtocol.neighborhoodGossip(
           srcNodeId, contentKeys, contentItems
         )
   except CancelledError:

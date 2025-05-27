@@ -54,7 +54,7 @@ proc getStatus68*(ctx: EthWireRef): Eth68State =
   Eth68State(
     totalDifficulty: txFrame.headTotalDifficulty,
     genesisHash: com.genesisHash,
-    bestBlockHash: bestBlock.computeBlockHash,
+    bestBlockHash: ctx.chain.latestHash,
     forkId: ChainForkId(
       forkHash: forkId.crc.toBytesBE,
       forkNext: forkId.nextFork
@@ -74,7 +74,7 @@ proc getStatus69*(ctx: EthWireRef): Eth69State =
     ),
     earliest: 0,
     latest: bestBlock.number,
-    latestHash: bestBlock.computeBlockHash,
+    latestHash: ctx.chain.latestHash,
   )
 
 proc getReceipts*(ctx: EthWireRef,

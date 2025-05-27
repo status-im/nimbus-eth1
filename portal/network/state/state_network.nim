@@ -262,6 +262,10 @@ proc contentQueueWorker(n: StateNetwork) {.async: (raises: []).} =
           state_network_offers_failed.inc(labelValues = [$n.portalProtocol.protocolId])
           error "Received offered content failed validation",
             srcNodeId, contentKeyBytes, error = offerRes.error()
+
+          # The content validation failed so drop the remaining content (if any) from
+          # this offer, because the remainly content is also likely to fail validation.
+          break
   except CancelledError:
     trace "contentQueueWorker canceled"
 

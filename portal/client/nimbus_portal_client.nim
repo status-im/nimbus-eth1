@@ -328,7 +328,8 @@ proc run(portalClient: PortalClient, config: PortalConf) {.raises: [CatchableErr
           rpcServer.installPortalBeaconApiHandlers(
             node.beaconNetwork.value.portalProtocol
           )
-          rpcServer.installPortalNimbusBeaconApiHandlers(node.beaconNetwork.value)
+        if node.beaconLightClient.isSome():
+          rpcServer.installPortalNimbusBeaconApiHandlers(node.beaconLightClient.value)
         if node.stateNetwork.isSome():
           rpcServer.installPortalCommonApiHandlers(
             node.stateNetwork.value.portalProtocol, PortalSubnetwork.state
