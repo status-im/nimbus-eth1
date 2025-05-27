@@ -89,7 +89,7 @@ proc setupEnv(envFork: HardFork = MergeFork,
 
   let
     com   = setupCom(conf)
-    chain = ForkedChainRef.init(com)
+    chain = ForkedChainRef.init(com, enableQueue = true)
     txPool = TxPoolRef.new(chain)
 
   let
@@ -117,6 +117,7 @@ proc setupEnv(envFork: HardFork = MergeFork,
 proc close(env: TestEnv) =
   waitFor env.client.close()
   waitFor env.server.closeWait()
+  waitFor env.chain.stopProcessingQueue()
 
 proc runBasicCycleTest(env: TestEnv): Result[void, string] =
   let
