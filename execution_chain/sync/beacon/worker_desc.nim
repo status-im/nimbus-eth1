@@ -33,12 +33,15 @@ type
     ## Block intervals sorted by largest block number.
 
   LinkedHChain* = object
-    ## Public block items for the `StagedHeaderQueue` list, indexed by the
-    ## largest block number. The list `revHdrs[]` is reversed, i.e. the largest
-    ## block number has the least index `0`. This makes it easier to grow the
-    ## sequence with parent headers, i.e. decreasing block numbers.
+    ## Headers list item.
     ##
-    hash*: Hash32                    ## Hash of `headers[0]`
+    ## The list `revHdrs[]` is reversed, i.e. the largest block number has
+    ## the least index `0`. This makes it easier to grow the sequence with
+    ## parent headers, i.e. decreasing block numbers.
+    ##
+    ## The headers list item indexed by the greatest block number (i.e. by
+    ## `revHdrs[0]`.)
+    ##
     revHdrs*: seq[Header]            ## Linked header chain, reversed
     peerID*: Hash                    ## For comparing peers
 
@@ -204,15 +207,6 @@ proc nHdrProcErrors*(buddy: BeaconBuddyRef): int =
   buddy.ctx.pool.nProcError.withValue(buddy.peerID, val):
     return val.hdr.int
 
-proc `nHdrProcErrors=`*(buddy: BeaconBuddyRef; count: uint8) =
-  ## Setter, set arbitrary `proc` error count for argument `buddy`. Due
-  ## to (hypothetical) hash collisions, the error register might have
-  ## vanished in case a new one is instantiated.
-  buddy.ctx.pool.nProcError.withValue(buddy.peerID, val):
-    val.hdr = count
-  do:
-    buddy.ctx.pool.nProcError[buddy.peerID] = (count,0u8)
-
 proc incHdrProcErrors*(buddy: BeaconBuddyRef) =
   ## Increment `proc` error count for for argument `buddy`. Due to
   ## (hypothetical) hash collisions, the error register might have
@@ -222,11 +216,16 @@ proc incHdrProcErrors*(buddy: BeaconBuddyRef) =
   do:
     buddy.ctx.pool.nProcError[buddy.peerID] = (1u8,0u8)
 
-proc incHdrProcErrors*(ctx: BeaconCtxRef; peerID: Hash) =
-  ## Increment `proc` error count for for argument `peerID` entry if it
-  ## has a slot. Otherwise the instruction is ignored.
+proc setHdrProcFail*(ctx: BeaconCtxRef; peerID: Hash) =
+  ## Set `proc` error count high enough so that the implied sync peer will
+  ## be zombified on the next attempt to download data.
   ctx.pool.nProcError.withValue(peerID, val):
-    val.hdr.inc
+    val.hdr = nProcHeadersErrThreshold + 1
+
+proc resetHdrProcErrors*(ctx: BeaconCtxRef; peerID: Hash) =
+  ## Reset `proc` error count.
+  ctx.pool.nProcError.withValue(peerID, val):
+    val.hdr = 0
 
 # -----
 

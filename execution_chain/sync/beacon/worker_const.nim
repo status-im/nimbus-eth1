@@ -92,9 +92,9 @@ const
     ## so that the peers is not treated as a slow responder (see also above
     ## for slow responder timeout.)
 
-  nFetchHeadersBatchListLen* = 8 * nFetchHeadersRequest
-    ## Length of a request/stage batch list. Several headers are consecutively
-    ## fetched and stashed together as a single record on the staged queue.
+  nStashHeadersErrThreshold* = 2
+    ## Abort headers download and the whole sync session with it if too many
+    ## failed header chain cache storage requests occur.
 
   headersStagedQueueLengthMax* = 8
     ## If the staged header queue reaches this many queue objects for
@@ -131,7 +131,6 @@ static:
   doAssert 0 < runsThisManyPeersOnly
 
   doAssert 0 < nFetchHeadersRequest
-  doAssert nFetchHeadersRequest <= nFetchHeadersBatchListLen
   doAssert 0 < headersStagedQueueLengthMax
 
   doAssert 0 < nFetchBodiesRequest
