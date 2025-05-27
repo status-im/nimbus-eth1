@@ -1238,6 +1238,10 @@ proc offerRateLimited*(
 
   p.offerTokenBucket.replenish(1)
 
+  if res.isErr():
+    # Retry the offer once if it failed for any reason
+    return await p.offerRateLimited(offer)
+
   res
 
 proc lookupWorker(
