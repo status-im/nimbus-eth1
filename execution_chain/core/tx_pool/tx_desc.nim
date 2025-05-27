@@ -183,7 +183,7 @@ proc classifyValid(xp: TxPoolRef; tx: Transaction, sender: Address): bool =
   if tx.txType == TxEip4844:
     let
       excessBlobGas = xp.excessBlobGas
-      blobGasPrice = getBlobBaseFee(excessBlobGas, xp.vmState.com, xp.vmState.fork)
+      blobGasPrice = getBlobBaseFee(excessBlobGas, xp.vmState.com, xp.vmState.fork, EthTime.now())
     if tx.maxFeePerBlobGas < blobGasPrice:
       debug "Invalid transaction: maxFeePerBlobGas lower than blobGasPrice",
         maxFeePerBlobGas = tx.maxFeePerBlobGas,
@@ -290,6 +290,45 @@ proc updateVmState*(xp: TxPoolRef) =
     xp.pos, xp.chain.txFrame(xp.chain.latestHash))
 
 # ------------------------------------------------------------------------------
+# PoS payload attributes getters
+# ------------------------------------------------------------------------------
+
+func feeRecipient*(xp: TxPoolRef): Address =
+  xp.pos.feeRecipient
+
+func timestamp*(xp: TxPoolRef): EthTime =
+  xp.pos.timestamp
+
+func prevRandao*(xp: TxPoolRef): Bytes32 =
+  xp.pos.prevRandao
+
+proc withdrawals*(xp: TxPoolRef): seq[Withdrawal] =
+  xp.pos.withdrawals
+
+func parentBeaconBlockRoot*(xp: TxPoolRef): Hash32 =
+  xp.pos.beaconRoot
+
+# ------------------------------------------------------------------------------
+# PoS payload attributes setters
+# ------------------------------------------------------------------------------
+
+proc `feeRecipient=`*(xp: TxPoolRef, val: Address) =
+  xp.pos.feeRecipient = val
+
+proc `timestamp=`*(xp: TxPoolRef, val: EthTime) =
+  xp.pos.timestamp = val
+
+proc `prevRandao=`*(xp: TxPoolRef, val: Bytes32) =
+  xp.pos.prevRandao = val
+
+proc `withdrawals=`*(xp: TxPoolRef, val: sink seq[Withdrawal]) =
+  xp.pos.withdrawals = system.move(val)
+
+proc `parentBeaconBlockRoot=`*(xp: TxPoolRef, val: Hash32) =
+  xp.pos.beaconRoot = val
+
+
+# ------------------------------------------------------------------------------
 # Public functions
 # ------------------------------------------------------------------------------
 
@@ -347,6 +386,7 @@ proc addTx*(xp: TxPoolRef, ptx: PooledTransaction): Result[void, TxError] =
     xp.com,
     ptx.tx,
     xp.nextFork,
+    xp.timestamp,
     validateFork = true).isOkOr:
     debug "Invalid transaction: Basic validation failed",
       txHash = id,
@@ -419,41 +459,3 @@ func getBlobAndProofV1*(xp: TxPoolRef, v: VersionedHash): Opt[BlobAndProofV1] =
       proof: np.proofs[val.blobIndex]))
 
   Opt.none(BlobAndProofV1)
-
-# ------------------------------------------------------------------------------
-# PoS payload attributes getters
-# ------------------------------------------------------------------------------
-
-func feeRecipient*(xp: TxPoolRef): Address =
-  xp.pos.feeRecipient
-
-func timestamp*(xp: TxPoolRef): EthTime =
-  xp.pos.timestamp
-
-func prevRandao*(xp: TxPoolRef): Bytes32 =
-  xp.pos.prevRandao
-
-proc withdrawals*(xp: TxPoolRef): seq[Withdrawal] =
-  xp.pos.withdrawals
-
-func parentBeaconBlockRoot*(xp: TxPoolRef): Hash32 =
-  xp.pos.beaconRoot
-
-# ------------------------------------------------------------------------------
-# PoS payload attributes setters
-# ------------------------------------------------------------------------------
-
-proc `feeRecipient=`*(xp: TxPoolRef, val: Address) =
-  xp.pos.feeRecipient = val
-
-proc `timestamp=`*(xp: TxPoolRef, val: EthTime) =
-  xp.pos.timestamp = val
-
-proc `prevRandao=`*(xp: TxPoolRef, val: Bytes32) =
-  xp.pos.prevRandao = val
-
-proc `withdrawals=`*(xp: TxPoolRef, val: sink seq[Withdrawal]) =
-  xp.pos.withdrawals = system.move(val)
-
-proc `parentBeaconBlockRoot=`*(xp: TxPoolRef, val: Hash32) =
-  xp.pos.beaconRoot = val

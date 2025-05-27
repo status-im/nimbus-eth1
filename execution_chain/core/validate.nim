@@ -209,6 +209,7 @@ func validateTxBasic*(
     com:      CommonRef,
     tx:       Transaction;     ## tx to validate
     fork:     EVMFork,
+    timestamp: EthTime,
     validateFork: bool = true): Result[void, string] =
 
   if validateFork:
@@ -265,7 +266,7 @@ func validateTxBasic*(
     if tx.versionedHashes.len == 0:
       return err("invalid tx: there must be at least one blob")
 
-    let maxBlobsPerBlock = getMaxBlobsPerBlock(com, fork)
+    let maxBlobsPerBlock = getMaxBlobsPerBlock(com, timestamp)
     if tx.versionedHashes.len.uint64 > maxBlobsPerBlock:
       return err(&"invalid tx: versioned hashes len exceeds MAX_BLOBS_PER_BLOCK={maxBlobsPerBlock}, get={tx.versionedHashes.len}")
 
@@ -288,9 +289,10 @@ proc validateTransaction*(
     baseFee:  UInt256;         ## baseFee from block header
     excessBlobGas: uint64;     ## excessBlobGas from parent block header
     com:      CommonRef,
-    fork:     EVMFork): Result[void, string] =
+    fork:     EVMFork,
+    timestamp: EthTime): Result[void, string] =
 
-  ? validateTxBasic(com, tx, fork)
+  ? validateTxBasic(com, tx, fork, timestamp)
 
   let
     balance = roDB.getBalance(sender)
@@ -346,7 +348,7 @@ proc validateTransaction*(
 
   if tx.txType == TxEip4844:
     # ensure that the user was willing to at least pay the current data gasprice
-    let blobGasPrice = getBlobBaseFee(excessBlobGas, com, fork)
+    let blobGasPrice = getBlobBaseFee(excessBlobGas, com, fork, timestamp)
     if tx.maxFeePerBlobGas < blobGasPrice:
       return err("invalid tx: maxFeePerBlobGas smaller than blobGasPrice. " &
         &"maxFeePerBlobGas={tx.maxFeePerBlobGas}, blobGasPrice={blobGasPrice}")

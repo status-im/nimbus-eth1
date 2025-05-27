@@ -40,6 +40,12 @@ const
 
   nameToFork* = ForkToName.revTable
 
+  EVMForkToFork*: array[FkCancun..FkLatest, HardFork] = [
+    Cancun,
+    Prague,
+    Osaka,
+  ]
+
 func skipNothing*(folder: string, name: string): bool = false
 
 var status = initOrderedTable[string, OrderedTable[string, Status]]()

@@ -40,8 +40,10 @@ proc testTxByFork(tx: Transaction, forkData: JsonNode, forkName: string, testSta
     config = getChainConfig(forkName)
     memDB  = newCoreDbRef DefaultDbMemory
     com    = CommonRef.new(memDB, nil, config)
+    fork   = nameToFork[forkName]
+    timestamp = com.forkTimestamp(EVMForkToFork[fork]).get()
 
-  validateTxBasic(com, tx, nameToFork[forkName]).isOkOr:
+  validateTxBasic(com, tx, fork, timestamp).isOkOr:
     return
 
   if forkData.len > 0 and "sender" in forkData:

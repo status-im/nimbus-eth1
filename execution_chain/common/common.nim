@@ -316,6 +316,10 @@ func isCancunOrLater*(com: CommonRef, t: EthTime): bool =
 func isPragueOrLater*(com: CommonRef, t: EthTime): bool =
   com.config.pragueTime.isSome and t >= com.config.pragueTime.get
 
+func forkTimestamp*(com: CommonRef, fork: HardFork): Opt[EthTime] =
+  ## Get the timestamp of the fork
+  com.forkTransitionTable.timeThresholds[fork]
+
 proc proofOfStake*(com: CommonRef, header: Header, txFrame: CoreDbTxRef): bool =
   if com.config.posBlock.isSome:
     # see comments of posBlock in common/hardforks.nim
@@ -406,23 +410,37 @@ func extraData*(com: CommonRef): string =
 func gasLimit*(com: CommonRef): uint64 =
   com.gasLimit
 
-func maxBlobsPerBlock*(com: CommonRef, fork: HardFork): uint64 =
-  doAssert(fork >= Cancun)
-  # Get timestamp from fork 
-  let timestamp = com.forkTransitionTable.timeThresholds[fork]
-  com.config.blobSchedule.getOrDefault($timestamp).max
+proc findBlobSchedule*(com: CommonRef, timestamp: EthTime): BlobSchedule =
+  var bestTime= 0.EthTime
+  var bestSchedule: BlobSchedule
 
-func targetBlobsPerBlock*(com: CommonRef, fork: HardFork): uint64 =
-  doAssert(fork >= Cancun)
-  # Get timestamp from fork 
-  let timestamp = com.forkTransitionTable.timeThresholds[fork]
-  com.config.blobSchedule.getOrDefault($timestamp).target
+  for bpo in com.config.blobSchedule:
+    var bpoTime: Opt[EthTime]
 
-func baseFeeUpdateFraction*(com: CommonRef, fork: HardFork): uint64 =
-  doAssert(fork >= Cancun)
-  # Get timestamp from fork 
-  let timestamp = com.forkTransitionTable.timeThresholds[fork]
-  com.config.blobSchedule.getOrDefault($timestamp).baseFeeUpdateFraction
+    if bpo.forkTimestamp.isSome:
+      bpoTime = bpo.forkTimestamp
+    elif bpo.forkName.isSome:
+      let fork = bpo.forkName.get
+      bpoTime = com.forkTransitionTable.timeThresholds[fork]  # Direct indexing
+
+    if bpoTime.isSome and bpoTime.get <= timestamp and bpoTime.get >= bestTime:
+      bestTime = bpoTime.get
+      bestSchedule = bpo.blobSchedule
+
+  return bestSchedule
+
+# Now the wrapper functions
+func maxBlobsPerBlock*(com: CommonRef, timestamp: EthTime): uint64 =
+  doAssert(com.isCancunOrLater(timestamp))
+  com.findBlobSchedule(timestamp).max
+
+func targetBlobsPerBlock*(com: CommonRef, timestamp: EthTime): uint64 =
+  doAssert(com.isCancunOrLater(timestamp))
+  com.findBlobSchedule(timestamp).target
+
+func baseFeeUpdateFraction*(com: CommonRef, timestamp: EthTime): uint64 =
+  doAssert(com.isCancunOrLater(timestamp))
+  com.findBlobSchedule(timestamp).baseFeeUpdateFraction
 
 # ------------------------------------------------------------------------------
 # Setters

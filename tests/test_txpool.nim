@@ -652,10 +652,11 @@ proc txPoolMain*() =
       xp.checkAddTx(tx4)
 
       # override current blobSchedule
-      let bs = cc.blobSchedule[Cancun]
-      cc.blobSchedule[Cancun] = Opt.some(
-        BlobSchedule(target: 2, max: 3, baseFeeUpdateFraction: 3338477)
-      )
+      var bs: BlobSchedule
+      for bpo in cc.blobSchedule.mitems:
+        if bpo.forkName.isSome and bpo.forkName.get == Cancun:
+          bs = bpo.blobSchedule
+          bpo.blobSchedule = BlobSchedule(target: 2, max: 3, baseFeeUpdateFraction: 3338477)
 
       # allow 3 blobs
       xp.checkImportBlock(3, 1)
@@ -664,7 +665,9 @@ proc txPoolMain*() =
       xp.checkImportBlock(1, 0)
 
       # restore blobSchedule
-      cc.blobSchedule[Cancun] = bs
+      for bpo in cc.blobSchedule.mitems:
+        if bpo.forkName.isSome and bpo.forkName.get == Cancun:
+          bpo.blobSchedule = bs
 
     test "non blob tx size limit":
       proc dataTx(nonce: AccountNonce, env: TestEnv, btx: BaseTx): (PooledTransaction, PooledTransaction) =

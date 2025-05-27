@@ -31,10 +31,13 @@ const
     Osaka,
   ]
 
-func getMaxBlobsPerBlock*(com: CommonRef, fork: EVMFork): uint64 =
-  doAssert(fork >= FkCancun)
-  com.maxBlobsPerBlock(EVMForkToFork[fork])
+# Should be based on timestamp and not on Fork after introduction 
+# of BPO forks - EIP-7892 https://eips.ethereum.org/EIPS/eip-7892
 
-func getBlobBaseFeeUpdateFraction*(com: CommonRef, fork: EVMFork): uint64 =
-  doAssert(fork >= FkCancun)
-  com.baseFeeUpdateFraction(EVMForkToFork[fork])
+func getMaxBlobsPerBlock*(com: CommonRef, timestamp: EthTime): uint64 =
+  doAssert(com.isCancunOrLater(timestamp))
+  com.maxBlobsPerBlock(timestamp)
+
+func getBlobBaseFeeUpdateFraction*(com: CommonRef, timestamp: EthTime): uint64 =
+  doAssert(com.isCancunOrLater(timestamp))
+  com.baseFeeUpdateFraction(timestamp)

@@ -18,6 +18,9 @@ import
   ../../execution_chain/common/evmforks,
   ../../execution_chain/common/common
 
+const
+  pragueTimestamp = 1_741_159_776.EthTime
+
 proc parseTx(com: CommonRef, hexLine: string) =
   try:
     let
@@ -25,7 +28,7 @@ proc parseTx(com: CommonRef, hexLine: string) =
       tx = decodeTx(bytes)
       address = tx.recoverSender().expect("valid signature")
 
-    validateTxBasic(com, tx, FkPrague).isOkOr:
+    validateTxBasic(com, tx, FkPrague, pragueTimestamp).isOkOr:
       echo "err: ", error
 
     # everything ok

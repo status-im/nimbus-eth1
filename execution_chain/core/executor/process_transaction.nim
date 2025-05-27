@@ -107,7 +107,7 @@ proc processTransactionImpl(
   # statement, here.
   let
     com = vmState.com
-    txRes = roDB.validateTransaction(tx, sender, header.gasLimit, baseFee256, excessBlobGas, com, fork)
+    txRes = roDB.validateTransaction(tx, sender, header.gasLimit, baseFee256, excessBlobGas, com, fork, header.timestamp)
     res = if txRes.isOk:      
       # Execute the transaction.
       vmState.captureTxStart(tx.gasLimit)

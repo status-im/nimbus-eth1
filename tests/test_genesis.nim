@@ -158,12 +158,28 @@ proc customGenesisTest() =
 
     test "BlobSchedule":
       template validateBlobSchedule(cg, fork, tgt, mx, fee) =
-        check cg.config.blobSchedule[fork].isSome
-        if cg.config.blobSchedule[fork].isSome:
-          let bs = cg.config.blobSchedule[fork].get
-          check bs.target == tgt
-          check bs.max == mx
-          check bs.baseFeeUpdateFraction == fee
+        var found = false
+        for bpo in cg.config.blobSchedule:
+          if bpo.forkName.isSome and bpo.forkName.get == fork:
+            found = true
+            check bpo.blobSchedule.target == tgt
+            check bpo.blobSchedule.max == mx
+            check bpo.blobSchedule.baseFeeUpdateFraction == fee
+            break
+        check found
+
+      template validateBlobScheduleTimestamp(cg, timestamp, tgt, mx, fee) =
+        var found = false
+        echo cg.config.blobSchedule
+        for bpo in cg.config.blobSchedule:
+          if bpo.forkTimestamp.isSome and bpo.forkTimestamp.get == timestamp:
+            found = true
+            check bpo.blobSchedule.target == tgt
+            check bpo.blobSchedule.max == mx
+            check bpo.blobSchedule.baseFeeUpdateFraction == fee
+            break
+        check found
+
 
       var cg: NetworkParams
       check loadNetworkParams("blobschedule_cancun_prague.json".findFilePath, cg)
@@ -185,6 +201,14 @@ proc customGenesisTest() =
       validateBlobSchedule(cg, Cancun, 3, 6, 3338477)
       validateBlobSchedule(cg, Prague, 6, 9, 3338477)
       validateBlobSchedule(cg, Osaka, 6, 9, 3338477)
+
+      # New test for genesis file with both named and timestamp forks
+      check loadNetworkParams("blobschedule_bpo.json".findFilePath, cg)
+      validateBlobSchedule(cg, Cancun, 3, 6, 3338477)
+      validateBlobSchedule(cg, Prague, 6, 9, 5007716)
+      validateBlobSchedule(cg, Osaka, 6, 9, 5007716)
+      validateBlobScheduleTimestamp(cg, 1740693335.EthTime, 24, 48, 5007716)
+      validateBlobScheduleTimestamp(cg, 1743285335.EthTime, 36, 56, 5007716)
 
 proc genesisMain() =
   genesisTest()
