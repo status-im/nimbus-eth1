@@ -23,6 +23,7 @@ import
   beacon_chain/[light_client, nimbus_binary_common, version],
   ../execution_chain/rpc/cors,
   ../execution_chain/common/common,
+  ./types,
   ./rpc/rpc_eth_api,
   ./nimbus_verified_proxy_conf,
   ./header_store
@@ -83,7 +84,7 @@ proc run*(
     # header cache contains headers downloaded from p2p
     headerStore = HeaderStore.new(config.cacheLen)
 
-  var verifiedProxy = VerifiedRpcProxy.new(rpcProxy, headerStore, chainId)
+  let verifiedProxy = VerifiedRpcProxy.init(rpcProxy, headerStore, chainId)
 
   # add handlers that verify RPC calls /rpc/rpc_eth_api.nim
   verifiedProxy.installEthApiHandlers()

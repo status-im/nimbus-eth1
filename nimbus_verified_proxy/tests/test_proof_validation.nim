@@ -1,5 +1,5 @@
 # nimbus_verified_proxy
-# Copyright (c) 2022-2024 Status Research & Development GmbH
+# Copyright (c) 2022-2025 Status Research & Development GmbH
 # Licensed and distributed under either of
 #   * MIT license (license terms in the root directory or at https://opensource.org/licenses/MIT).
 #   * Apache v2 license (license terms in the root directory or at https://www.apache.org/licenses/LICENSE-2.0).
@@ -9,7 +9,7 @@
 
 {.push raises: [].}
 
-import unittest2, stint, stew/byteutils, web3, ../validate_proof
+import unittest2, stint, stew/byteutils, web3, ../rpc/accounts
 
 suite "Merkle proof of inclusion validation":
   test "Validate account proof":
@@ -145,7 +145,7 @@ suite "Merkle proof of inclusion validation":
         ],
     )
 
-    let validationResult = getStorageData(stateRoot, u256(0), proof)
+    let validationResult = getStorageFromProof(stateRoot, u256(0), proof)
 
     check:
       validationResult.isOk()
