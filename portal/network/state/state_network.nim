@@ -266,7 +266,6 @@ proc contentQueueWorker(n: StateNetwork) {.async: (raises: []).} =
           # The content validation failed so drop the remaining content (if any) from
           # this offer, because the remainly content is also likely to fail validation.
           break
-
   except CancelledError:
     trace "contentQueueWorker canceled"
 
