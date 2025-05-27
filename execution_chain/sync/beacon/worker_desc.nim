@@ -249,7 +249,7 @@ proc incBlkProcErrors*(buddy: BeaconBuddyRef) =
 proc incBlkProcErrors*(ctx: BeaconCtxRef; peerID: Hash) =
   ## Increment `proc` error count, similar to `incHdrProcErrors()`
   ctx.pool.nProcError.withValue(peerID, val):
-    val.blk.inc
+    val.blk = nProcBlocksErrThreshold + 1
 
 # ------------------------------------------------------------------------------
 # End

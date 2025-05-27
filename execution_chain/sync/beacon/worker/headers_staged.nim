@@ -96,7 +96,7 @@ proc headersStagedCollect*(
         # Reserve the full range of block numbers so they can be appended in a
         # row. This avoid some fragmentation when header chains are stashed by
         # multiple peers, i.e. they interleave peer task-wise.
-        iv = ctx.headersUnprocFetch(nFetchHeadersBatch).valueOr:
+        iv = ctx.headersUnprocFetch(nFetchHeadersBatchListLen).valueOr:
           break fetchHeadersBody                     # done, exit this function
 
         # Get parent hash from the most senior stored header
@@ -139,11 +139,11 @@ proc headersStagedCollect*(
 
     # Continue opportunistically fetching by block number rather than hash. The
     # fetched headers need to be staged and checked/serialised later.
-    if ctx.hdr.staged.len + ctx.hdr.reserveStaged < headersStagedQueueLengthHwm:
+    if ctx.hdr.staged.len + ctx.hdr.reserveStaged < headersStagedQueueLengthMax:
 
       let
         # Comment see deterministic case
-        iv = ctx.headersUnprocFetch(nFetchHeadersBatch).valueOr:
+        iv = ctx.headersUnprocFetch(nFetchHeadersBatchListLen).valueOr:
           break fetchHeadersBody                     # done, exit this function
 
         # This record will accumulate the fetched headers. It must be on the

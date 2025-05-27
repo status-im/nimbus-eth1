@@ -93,10 +93,10 @@ func idleNext(ctx: BeaconCtxRef; info: static[string]): SyncState =
 proc headersNext(ctx: BeaconCtxRef; info: static[string]): SyncState =
   ## State transition handler
   if not ctx.pool.seenData and         # checks for cul-de-sac syncing
-     fetchHeadersFailedInitialFailPeersHwm < ctx.pool.failedPeers.len:
+     nFetchHeadersFailedInitialPeersThreshold < ctx.pool.failedPeers.len:
     debug info & ": too many failed header peers",
       failedPeers=ctx.pool.failedPeers.len,
-      limit=fetchHeadersFailedInitialFailPeersHwm
+      limit=nFetchHeadersFailedInitialPeersThreshold
     return headersCancel
 
   if ctx.hdrCache.state == collecting:
@@ -128,10 +128,10 @@ proc headersFinishNext(ctx: BeaconCtxRef; info: static[string]): SyncState =
 proc blocksNext(ctx: BeaconCtxRef; info: static[string]): SyncState =
   ## State transition handler
   if not ctx.pool.seenData and         # checks for cul-de-sac syncing
-     fetchBodiesFailedInitialFailPeersHwm < ctx.pool.failedPeers.len:
+     nFetchBodiesFailedInitialPeersThreshold < ctx.pool.failedPeers.len:
     debug info & ": too many failed block peers",
       failedPeers=ctx.pool.failedPeers.len,
-      limit=fetchBodiesFailedInitialFailPeersHwm
+      limit=nFetchBodiesFailedInitialPeersThreshold
     return blocksCancel
 
   if ctx.subState.cancelRequest:

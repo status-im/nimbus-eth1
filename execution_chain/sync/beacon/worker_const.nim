@@ -62,11 +62,12 @@ const
 
   # ----------------------
 
-  fetchHeadersFailedInitialFailPeersHwm* = 30
-    ## If there are more failing peers than this `hwm` right at the begining
-    ## of a header chain download scrum (before any data received), then this
-    ## scrum is discarded and the suncer is reset and suspened (waiting for
-    ## the next instruction to run a scrum.)
+  nFetchHeadersFailedInitialPeersThreshold* = 30
+    ## If there are more failing peers than this threshold right at the
+    ## begining of a header chain download scrum (before any data received),
+    ## then this session (scrum or sprint) is discarded and the suncer is
+    ## reset and suspened (waiting for the next activation to restart a new
+    ## session.)
 
   nFetchHeadersRequest* = 1_024
     ## Number of headers that will be requested with a single `eth/xx` message.
@@ -74,56 +75,51 @@ const
     ## On `Geth`, responses to larger requests are all truncted to 1024 header
     ## entries (see `Geth` constant `maxHeadersServe`.)
 
-  fetchHeadersReqErrThresholdZombie* = chronos.seconds(2)
-  fetchHeadersReqErrThresholdCount* = 2
+  fetchHeadersErrTimeout* = chronos.seconds(2)
+  nFetchHeadersErrThreshold* = 2
     ## Response time allowance. If the response time for the set of headers
-    ## exceeds this threshold for more than `fetchHeadersReqThresholdCount`
+    ## exceeds this threshold for more than `nFetchHeadersErrThreshold`
     ## times in a row, then this peer will be banned for a while.
 
-  fetchHeadersProcErrThresholdCount* = 2
-    ## Similar to `fetchHeadersReqErrThresholdCount` but for the later part
+  nProcHeadersErrThreshold* = 2
+    ## Similar to `nFetchHeadersErrThreshold` but for the later part
     ## when errors occur while block headers are queued and further processed.
 
-  fetchHeadersReqMinResponsePC* = 10
+  fetchHeadersMinResponsePC* = 10
     ## Some peers only returned one header at a time. If these peers sit on a
     ## farm, they might collectively slow down the download process. So this
-    ## constant sets a percentage of minimum headers needed to return so that
-    ## the peers is not treated as a slow responder (see above for slow
-    ## responder count.)
+    ## constant sets a percentage of minimum headers needed to response with
+    ## so that the peers is not treated as a slow responder (see also above
+    ## for slow responder timeout.)
 
-  nFetchHeadersBatch* = 8 * nFetchHeadersRequest
-    ## Length of the request/stage batch. Several headers are consecutively
+  nFetchHeadersBatchListLen* = 8 * nFetchHeadersRequest
+    ## Length of a request/stage batch list. Several headers are consecutively
     ## fetched and stashed together as a single record on the staged queue.
 
-  headersStagedQueueLengthHwm* = 8
-    ## Limit the number of records in the staged headers queue.
-    ##
-    ## Queue entries start accumulating if one peer stalls while fetching the
-    ## top chain so leaving a gap. This gap must be filled first before
-    ## inserting the queue into a contiguous chain of headers.
+  headersStagedQueueLengthMax* = 8
+    ## If the staged header queue reaches this many queue objects for
+    ## serialising and caching on disk, no further objects are added.
 
   # ----------------------
 
-  fetchBodiesFailedInitialFailPeersHwm* = 50
-    ## Similar to `fetchHeadersFailedInitialFailPeersHwm`
+  nFetchBodiesFailedInitialPeersThreshold* = 50
+    ## Similar to `nFetchHeadersFailedInitialPeersThreshold`.
 
   nFetchBodiesRequest* = 64
-    ## Similar to `nFetchHeadersRequest`
+    ## Similar to `nFetchHeadersRequest`.
 
-  fetchBodiesReqErrThresholdZombie* = chronos.seconds(4)
-  fetchBodiesReqErrThresholdCount* = 2
-    ## Similar to `fetchHeadersReqThreshold*`
+  fetchBodiesErrTimeout* = chronos.seconds(4)
+  nFetchBodiesErrThreshold* = 2
+    ## Similar to `nFetchHeadersErrThreshold`.
 
-  fetchBodiesProcErrThresholdCount* = 2
-    ## Similar to `fetchHeadersProcessErrThresholdCount`.
+  fetchBodiesMinResponsePC* = 10
+    ## Similar to ``fetchHeadersMinResponsePC`.
 
-  fetchBodiesReqMinResponsePC* = 10
-    ## Similar to `fetchHeadersReqMinResponsePC`
+  nProcBlocksErrThreshold* = 2
+    ## Similar to `nProcHeadersErrThreshold`.
 
-  blocksStagedQueueLengthHwm* = 2
-    ## If the staged block queue exceeds this many number of queue objects for
-    ## import, no further block objets are added (but the current sub-list is
-    ## completed.)
+  blocksStagedQueueLengthMax* = 2
+    ## Similar to `headersStagedQueueLengthMax`.
 
   # ----------------------
 
@@ -131,10 +127,10 @@ static:
   doAssert 0 < runsThisManyPeersOnly
 
   doAssert 0 < nFetchHeadersRequest
-  doAssert nFetchHeadersRequest <= nFetchHeadersBatch
-  doAssert 0 < headersStagedQueueLengthHwm
+  doAssert nFetchHeadersRequest <= nFetchHeadersBatchListLen
+  doAssert 0 < headersStagedQueueLengthMax
 
   doAssert 0 < nFetchBodiesRequest
-  doAssert 0 < blocksStagedQueueLengthHwm
+  doAssert 0 < blocksStagedQueueLengthMax
 
 # End

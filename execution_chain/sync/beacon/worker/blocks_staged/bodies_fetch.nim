@@ -26,7 +26,7 @@ func bdyErrors*(buddy: BeaconBuddyRef): string =
 
 proc fetchRegisterError*(buddy: BeaconBuddyRef, slowPeer = false) =
   buddy.only.nRespErrors.blk.inc
-  if fetchBodiesReqErrThresholdCount < buddy.only.nRespErrors.blk:
+  if nFetchBodiesErrThreshold < buddy.only.nRespErrors.blk:
     if buddy.ctx.pool.nBuddies == 1 and slowPeer:
       # Remember that the current peer is the last one and is lablelled slow.
       # It would have been zombified if it were not the last one. This can be
@@ -92,8 +92,8 @@ proc bodiesFetch*(
 
   # Ban an overly slow peer for a while when seen in a row. Also there is a
   # mimimum share of the number of requested headers expected, typically 10%.
-  if fetchBodiesReqErrThresholdZombie < elapsed or
-     b.len.uint64 * 100 < nReq.uint64 * fetchBodiesReqMinResponsePC:
+  if fetchBodiesErrTimeout < elapsed or
+     b.len.uint64 * 100 < nReq.uint64 * fetchBodiesMinResponsePC:
     buddy.fetchRegisterError(slowPeer=true)
   else:
     buddy.only.nRespErrors.blk = 0                  # reset error count

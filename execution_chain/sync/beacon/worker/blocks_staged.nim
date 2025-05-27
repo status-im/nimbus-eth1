@@ -184,7 +184,7 @@ proc blocksStagedCollect*(
       # End while: headersUnprocFetch() + blocksImport()
 
     # Continue fetching blocks and queue them (if any)
-    if ctx.blk.staged.len + ctx.blk.reserveStaged < blocksStagedQueueLengthHwm:
+    if ctx.blk.staged.len + ctx.blk.reserveStaged < blocksStagedQueueLengthMax:
 
       # Fetch blocks and verify result
       ctx.blk.reserveStaged.inc                     # Book a slot on `staged`
