@@ -175,7 +175,7 @@ proc blocksImport*(
         continue
 
       try:
-        (await ctx.chain.importBlock(blocks[n])).isOkOr:
+        (await ctx.chain.queueImportBlock(blocks[n])).isOkOr:
           # The way out here is simply to re-compile the block queue. At any
           # point, the `FC` module data area might have been moved to a new
           # canonical branch.
@@ -196,7 +196,7 @@ proc blocksImport*(
       # Allow pseudo/async thread switch.
       (await ctx.updateAsyncTasks()).isOkOr:
         break loop
-      
+
   info "Imported blocks", iv=(if iv.minPt <= ctx.blk.topImported:
     (iv.minPt, ctx.blk.topImported).bnStr else: "n/a"),
     nBlocks=(ctx.blk.topImported - iv.minPt + 1),

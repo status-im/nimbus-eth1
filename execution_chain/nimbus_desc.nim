@@ -55,17 +55,27 @@ type
 
 proc stop*(nimbus: NimbusNode, conf: NimbusConf) {.async, gcsafe.} =
   trace "Graceful shutdown"
+  var waitedFutures: seq[Future[void]]
   if nimbus.httpServer.isNil.not:
-    await nimbus.httpServer.stop()
+    waitedFutures.add nimbus.httpServer.stop()
   if nimbus.engineApiServer.isNil.not:
-    await nimbus.engineApiServer.stop()
-  if nimbus.beaconSyncRef.isNil.not:
-    await nimbus.beaconSyncRef.stop()
+    waitedFutures.add nimbus.engineApiServer.stop()
   if conf.maxPeers > 0:
-    await nimbus.networkLoop.cancelAndWait()
+    waitedFutures.add nimbus.networkLoop.cancelAndWait()
   if nimbus.peerManager.isNil.not:
-    await nimbus.peerManager.stop()
+    waitedFutures.add nimbus.peerManager.stop()
+  if nimbus.beaconSyncRef.isNil.not:
+    waitedFutures.add nimbus.beaconSyncRef.stop()
   if nimbus.metricsServer.isNil.not:
-    await nimbus.metricsServer.stop()
+    waitedFutures.add nimbus.metricsServer.stop()
+
+  waitedFutures.add nimbus.fc.stopProcessingQueue()
+
+  let
+    timeout = chronos.seconds(5)
+    completed = await withTimeout(allFutures(waitedFutures), timeout)
+  if not completed:
+    trace "Nimbus.stop(): timeout reached", timeout,
+      futureErrors = waitedFutures.filterIt(it.error != nil).mapIt(it.error.msg)
 
 {.pop.}
