@@ -2151,7 +2151,7 @@
           "exemplar": false,
           "expr": "rate(portal_offer_accept_codes_total{instance=\"${instance}\",container=\"${container}\"}[$__rate_interval])",
           "interval": "",
-          "legendFormat": "portal_offer_accept_codes[protocol_id={{protocol_id}, accept_code={{accept_code}}]",
+          "legendFormat": "portal_offer_accept_codes[protocol_id={{protocol_id}}, accept_code={{accept_code}}]",
           "refId": "A"
         },
         {
@@ -2163,11 +2163,11 @@
           "expr": "rate(portal_handle_offer_accept_codes_total{instance=\"${instance}\",container=\"${container}\"}[$__rate_interval])",
           "hide": false,
           "interval": "",
-          "legendFormat": "portal_handle_offer_accept_codes[protocol_id={{protocol_id}, accept_code={{accept_code}}]",
+          "legendFormat": "portal_handle_offer_accept_codes[protocol_id={{protocol_id}}, accept_code={{accept_code}}]",
           "refId": "B"
         }
       ],
-      "title": "",
+      "title": "Neighborhood gossip content offer accept codes",
       "type": "timeseries"
     },
     {
