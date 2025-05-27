@@ -36,8 +36,8 @@ proc installEthApiHandlers*(lcProxy: VerifiedRpcProxy) =
     address: Address, quantityTag: BlockTag
   ) -> UInt256:
     let
-      header = lcProxy.getHeaderByTagOrThrow(quantityTag)
-
+      header = (await lcProxy.getHeader(quantityTag)).valueOr:
+        raise newException(ValueError, error)
       account = (await lcProxy.getAccount(address, header.number, header.stateRoot)).valueOr:
         raise newException(ValueError, error)
 
@@ -47,7 +47,8 @@ proc installEthApiHandlers*(lcProxy: VerifiedRpcProxy) =
     address: Address, slot: UInt256, quantityTag: BlockTag
   ) -> UInt256:
     let
-      header = lcProxy.getHeaderByTagOrThrow(quantityTag)
+      header = (await lcProxy.getHeader(quantityTag)).valueOr:
+        raise newException(ValueError, error)
       storage = (
         await lcProxy.getStorageAt(address, slot, header.number, header.stateRoot)
       ).valueOr:
@@ -59,7 +60,8 @@ proc installEthApiHandlers*(lcProxy: VerifiedRpcProxy) =
     address: Address, quantityTag: BlockTag
   ) -> Quantity:
     let
-      header = lcProxy.getHeaderByTagOrThrow(quantityTag)
+      header = (await lcProxy.getHeader(quantityTag)).valueOr:
+        raise newException(ValueError, error)
       account = (await lcProxy.getAccount(address, header.number, header.stateRoot)).valueOr:
         raise newException(ValueError, error)
 
@@ -69,7 +71,8 @@ proc installEthApiHandlers*(lcProxy: VerifiedRpcProxy) =
     address: Address, quantityTag: BlockTag
   ) -> seq[byte]:
     let
-      header = lcProxy.getHeaderByTagOrThrow(quantityTag)
+      header = (await lcProxy.getHeader(quantityTag)).valueOr:
+        raise newException(ValueError, error)
       code = (await lcProxy.getCode(address, header.number, header.stateRoot)).valueOr:
         raise newException(ValueError, error)
 
