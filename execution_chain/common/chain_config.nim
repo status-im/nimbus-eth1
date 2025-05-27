@@ -279,35 +279,36 @@ const
     "osaka"
   ]
 
-func ofStmt(fork: HardFork, keyName: string, reader: NimNode, value: NimNode): NimNode =
-  let branchStmt = quote do:
-    `value`[`fork`] = reader.readValue(Opt[BlobSchedule])
+# func ofStmt(fork: HardFork, keyName: string, reader: NimNode, value: NimNode): NimNode =
+#   let branchStmt = quote do:
+#     `value`[`fork`] = reader.readValue(Opt[BlobSchedule])
 
-  nnkOfBranch.newTree(
-    newLit(keyName),
-    branchStmt
-  )
+#   nnkOfBranch.newTree(
+#     newLit(keyName),
+#     branchStmt
+#   )
 
-macro blobScheduleParser(reader, key, value: typed): untyped =
-  # Automated blob schedule parser generator
-  var caseStmt = nnkCaseStmt.newTree(
-    quote do: `key`
-  )
+# macro blobScheduleParser(reader, key, value: typed): untyped =
+#   # Automated blob schedule parser generator
+#   var caseStmt = nnkCaseStmt.newTree(
+#     quote do: `key`
+#   )
 
-  for fork in Cancun..HardFork.high:
-    let keyName = BlobScheduleTable[fork]
-    caseStmt.add ofStmt(fork, keyName, reader, value)
+#   for fork in Cancun..HardFork.high:
+#     let keyName = BlobScheduleTable[fork]
+#     caseStmt.add ofStmt(fork, keyName, reader, value)
 
-  caseStmt.add nnkElse.newTree(
-    quote do: discard
-  )
-  result = caseStmt
+#   caseStmt.add nnkElse.newTree(
+#     quote do: discard
+#   )
+#   result = caseStmt
 
-proc readValue(reader: var JsonReader[JGenesis], value: var array[Cancun..HardFork.high, Opt[BlobSchedule]])
+proc readValue(reader: var JsonReader[JGenesis], value: var Table[string, BlobSchedule])
     {.gcsafe, raises: [SerializationError, IOError].} =
   wrapError:
     for key in reader.readObjectFields:
-      blobScheduleParser(reader, key, value)
+      let keyName = key.toLowerAscii()
+      value[key] = reader.readValue(BlobSchedule)
 
 macro fillArrayOfBlockNumberBasedForkOptionals(conf, tmp: typed): untyped =
   result = newStmtList()
@@ -388,22 +389,60 @@ proc validateChainConfig(conf: ChainConfig): bool =
     if cur.time.isSome:
       lastTimeBasedFork = cur
 
-proc configureBlobSchedule(conf: ChainConfig) =
-  var prevFork = Cancun
-  if conf.blobSchedule[Cancun].isNone:
-    conf.blobSchedule[Cancun] = Opt.some(BlobSchedule(target: 3'u64, max: 6'u64, baseFeeUpdateFraction: 3_338_477'u64))
-  else:
-    if conf.blobSchedule[Cancun].value.baseFeeUpdateFraction == 0:
-      conf.blobSchedule[Cancun].value.baseFeeUpdateFraction = 3_338_477'u64
+# proc configureBlobSchedule(conf: ChainConfig) =
+#   var prevFork = Cancun
+#   if conf.blobSchedule[Cancun].isNone:
+#     conf.blobSchedule[Cancun] = Opt.some(BlobSchedule(target: 3'u64, max: 6'u64, baseFeeUpdateFraction: 3_338_477'u64))
+#   else:
+#     if conf.blobSchedule[Cancun].value.baseFeeUpdateFraction == 0:
+#       conf.blobSchedule[Cancun].value.baseFeeUpdateFraction = 3_338_477'u64
 
-  for fork in Prague..HardFork.high:
-    if conf.blobSchedule[fork].isNone:
-      conf.blobSchedule[fork] = conf.blobSchedule[prevFork]
-    if conf.blobSchedule[fork].value.baseFeeUpdateFraction == 0:
-      # Set fallback to Cancun's baseFeeUpdateFraction and prevent division by zero
-      warn "baseFeeUpdateFraction not set, fallback to Cancun's", fork=fork
-      conf.blobSchedule[fork].value.baseFeeUpdateFraction = 3_338_477'u64
-    prevFork = fork
+#   for fork in Prague..HardFork.high:
+#     if conf.blobSchedule[fork].isNone:
+#       conf.blobSchedule[fork] = conf.blobSchedule[prevFork]
+#     if conf.blobSchedule[fork].value.baseFeeUpdateFraction == 0:
+#       # Set fallback to Cancun's baseFeeUpdateFraction and prevent division by zero
+#       warn "baseFeeUpdateFraction not set, fallback to Cancun's", fork=fork
+#       conf.blobSchedule[fork].value.baseFeeUpdateFraction = 3_338_477'u64
+#     prevFork = fork
+
+proc configureBlobSchedule(conf: ChainConfig) = 
+  var timeBasedForkOptionals: array[forkTimeField.len, TimeBasedForkOptional]
+  fillArrayOfTimeBasedForkOptionals(conf, timeBasedForkOptionals)
+
+  info "Loaded time based fork options", options = timeBasedForkOptionals
+  for fork in BlobScheduleTable:
+    if conf.blobSchedule.hasKey(fork):
+      let blobSchedule = conf.blobSchedule.getOrDefault(fork)
+
+      # Converting to timestamp based
+      for i in timeBasedForkOptionals:
+        if i.name == fork:
+          if i.time.isSome:
+            conf.blobSchedule[$(i.time.get)] = blobSchedule
+          else:
+            warn "Blob schedule not set for time based fork", fork = fork
+          break
+    else:
+      # Default Cases
+      if fork == "cancun":
+        conf.blobSchedule[fork] = BlobSchedule(
+          target: 3'u64,
+          max: 6'u64,
+          baseFeeUpdateFraction: 3_338_477'u64
+        )
+      elif fork == "prague":
+        conf.blobSchedule[fork] = BlobSchedule(
+          target: 6'u64,
+          max: 9'u64,
+          baseFeeUpdateFraction: 5_007_716'u64
+        )
+      elif fork == "osaka":
+        conf.blobSchedule[fork] = BlobSchedule(
+          target: 9'u64,
+          max: 12'u64,
+          baseFeeUpdateFraction: 5_007_716'u64
+        )
 
 proc parseGenesis*(data: string): Genesis
      {.gcsafe.} =
@@ -488,12 +527,28 @@ proc parseGenesisAlloc*(data: string, ga: var GenesisAlloc): bool
 
   return true
 
-func defaultBlobSchedule*(): array[Cancun..HardFork.high, Opt[BlobSchedule]] =
-  [
-    Cancun: Opt.some(BlobSchedule(target: 3'u64, max: 6'u64, baseFeeUpdateFraction: 3_338_477'u64)),
-    Prague: Opt.some(BlobSchedule(target: 6'u64, max: 9'u64, baseFeeUpdateFraction: 5_007_716'u64)),
-    Osaka : Opt.some(BlobSchedule(target: 9'u64, max: 12'u64, baseFeeUpdateFraction: 5_007_716'u64)),
-  ]
+func defaultBlobSchedule*(): Table[string, BlobSchedule] =
+  ## Returns a default blob schedule for the Cancun fork.
+  ## This is used when the blob schedule is not specified in the genesis config.
+  ## Need to call `configureBlobSchedule()` to convert to real values
+  var res = initTable[string, BlobSchedule]()
+  res["cancun"] = BlobSchedule(
+    target: 3'u64,
+    max: 6'u64,
+    baseFeeUpdateFraction: 3_338_477'u64
+  )
+  res["prague"] = BlobSchedule(
+    target: 6'u64,
+    max: 9'u64,
+    baseFeeUpdateFraction: 5_007_716'u64
+  )
+  res["osaka"] = BlobSchedule(
+    target: 9'u64,
+    max: 12'u64,
+    baseFeeUpdateFraction: 5_007_716'u64
+  )
+
+  return res
 
 func chainConfigForNetwork*(id: NetworkId): ChainConfig =
   # For some public networks, NetworkId and ChainId value are identical
@@ -614,6 +669,7 @@ func chainConfigForNetwork*(id: NetworkId): ChainConfig =
     # If chonicles enabled and there is something bad with
     # the chain config values, `validateChainConfig` will print something.
     # But it is very rare and must immediately fixed anyway.
+    configureBlobSchedule(result)
     doAssert validateChainConfig(result)
 
 func genesisBlockForNetwork*(id: NetworkId): Genesis

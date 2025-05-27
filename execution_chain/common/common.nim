@@ -408,15 +408,21 @@ func gasLimit*(com: CommonRef): uint64 =
 
 func maxBlobsPerBlock*(com: CommonRef, fork: HardFork): uint64 =
   doAssert(fork >= Cancun)
-  com.config.blobSchedule[fork].expect("blobSchedule initialized").max
+  # Get timestamp from fork 
+  let timestamp = com.forkTransitionTable.timeThresholds[fork]
+  com.config.blobSchedule.getOrDefault($timestamp).max
 
 func targetBlobsPerBlock*(com: CommonRef, fork: HardFork): uint64 =
   doAssert(fork >= Cancun)
-  com.config.blobSchedule[fork].expect("blobSchedule initialized").target
+  # Get timestamp from fork 
+  let timestamp = com.forkTransitionTable.timeThresholds[fork]
+  com.config.blobSchedule.getOrDefault($timestamp).target
 
 func baseFeeUpdateFraction*(com: CommonRef, fork: HardFork): uint64 =
   doAssert(fork >= Cancun)
-  com.config.blobSchedule[fork].expect("blobSchedule initialized").baseFeeUpdateFraction
+  # Get timestamp from fork 
+  let timestamp = com.forkTransitionTable.timeThresholds[fork]
+  com.config.blobSchedule.getOrDefault($timestamp).baseFeeUpdateFraction
 
 # ------------------------------------------------------------------------------
 # Setters

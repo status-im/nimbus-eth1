@@ -177,7 +177,7 @@ type
 
     terminalTotalDifficulty*: Opt[UInt256]
     depositContractAddress*: Opt[Address]
-    blobSchedule*       : array[Cancun..HardFork.high, Opt[BlobSchedule]]
+    blobSchedule*       : Table[string, BlobSchedule]
 
   # These are used for checking that the values of the fields
   # are in a valid order.
