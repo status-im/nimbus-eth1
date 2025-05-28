@@ -102,7 +102,7 @@ task nimbus_portal_client, "Build nimbus_portal_client":
   buildBinary "nimbus_portal_client", "portal/client/", "-d:chronicles_log_level=TRACE"
 
 task portal_test, "Run Portal tests":
-  test "portal/tests/history_network_tests/", "all_history_network_custom_chain_tests", "-d:chronicles_log_level=ERROR
+  test "portal/tests/history_network_tests/", "all_history_network_custom_chain_tests", "-d:chronicles_log_level=ERROR"
   # Seperate build for these tests as they are run with a low `mergeBlockNumber`
   # to make the tests faster. Using the real mainnet merge block number is not
   # realistic for these tests.
@@ -123,7 +123,7 @@ task nimbus_verified_proxy, "Build Nimbus verified proxy":
   buildBinary "nimbus_verified_proxy", "nimbus_verified_proxy/", "-d:chronicles_log_level=TRACE"
 
 task nimbus_verified_proxy_test, "Run Nimbus verified proxy tests":
-  test "nimbus_verified_proxy/tests", "all_proxy_tests", "-d:chronicles_log_level=ERROR
+  test "nimbus_verified_proxy/tests", "all_proxy_tests", "-d:chronicles_log_level=ERROR"
 
 task build_fuzzers, "Build fuzzer test cases":
   # This file is there to be able to quickly build the fuzzer test cases in
