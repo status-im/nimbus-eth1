@@ -1230,17 +1230,18 @@ proc offerRateLimited*(
   except CatchableError as e:
     raiseAssert(e.msg) # Shouldn't happen
 
-  let res = await p.offer(offer)
+  var res = await p.offer(offer)
+
+  if res.isErr():
+    # Retry the offer once if it failed for any reason
+    res = await p.offer(offer)
+
   if res.isOk():
     portal_gossip_offers_successful.inc(labelValues = [$p.protocolId])
   else:
     portal_gossip_offers_failed.inc(labelValues = [$p.protocolId])
 
   p.offerTokenBucket.replenish(1)
-
-  if res.isErr():
-    # Retry the offer once if it failed for any reason
-    return await p.offerRateLimited(offer)
 
   res
 
