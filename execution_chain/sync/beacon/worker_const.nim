@@ -118,6 +118,10 @@ const
   nProcBlocksErrThreshold* = 2
     ## Similar to `nProcHeadersErrThreshold`.
 
+  nImportBlocksErrThreshold* = 2
+    ## Abort block import and the whole sync session with it if too many
+    ## failed imports occur into `FC` module.
+
   blocksStagedQueueLengthMax* = 2
     ## Similar to `headersStagedQueueLengthMax`.
 

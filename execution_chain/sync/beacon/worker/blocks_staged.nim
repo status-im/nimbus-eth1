@@ -62,7 +62,8 @@ proc blocksStagedProcessImpl(
     discard ctx.blk.staged.delete qItem.key
 
     # Import blocks list
-    await ctx.blocksImport(maybePeer, qItem.data.blocks, info)
+    await ctx.blocksImport(
+      maybePeer, qItem.data.blocks, qItem.data.peerID, info)
 
     # Import probably incomplete, so a partial roll back may be needed
     let lastBn = qItem.data.blocks[^1].header.number
@@ -167,9 +168,9 @@ proc blocksStagedCollect*(
       ctx.pool.seenData = true                       # blocks data exist
 
       # Import blocks (no staging)
-      await ctx.blocksImport(Opt.some(peer), blocks, info)
+      await ctx.blocksImport(Opt.some(peer), blocks, buddy.peerID, info)
 
-      # Import probably incomplete, so a partial roll back may be needed
+      # Import may be incomplete, so a partial roll back may be needed
       let lastBn = blocks[^1].header.number
       if ctx.subState.top < lastBn:
         ctx.blocksUnprocAppend(ctx.subState.top + 1, lastBn)
@@ -179,11 +180,11 @@ proc blocksStagedCollect*(
 
       # Buddy might have been cancelled while importing blocks.
       if buddy.ctrl.stopped or ctx.poolMode:
-        break fetchBlocksBody                        # done, exit this function
+        break fetchBlocksBody                        # done, exit this block
 
       # End while: headersUnprocFetch() + blocksImport()
 
-    # Continue fetching blocks and queue them (if any)
+    # Continue fetching blocks and stage/queue them (if any)
     if ctx.blk.staged.len + ctx.blk.reserveStaged < blocksStagedQueueLengthMax:
 
       # Fetch blocks and verify result
@@ -192,20 +193,20 @@ proc blocksStagedCollect*(
       ctx.blk.reserveStaged.dec                     # Free that slot again
 
       if rc.isErr:
-        break fetchBlocksBody                     # done, exit this function
+        break fetchBlocksBody                       # done, exit this block
 
       let
-        blocks = rc.value
-
         # Insert blocks list on the `staged` queue
-        key = blocks[0].header.number
+        key = rc.value[0].header.number
         qItem = ctx.blk.staged.insert(key).valueOr:
           raiseAssert info & ": duplicate key on staged queue iv=" &
-            (key, blocks[^1].header.number).bnStr
+            (key, rc.value[^1].header.number).bnStr
 
-      qItem.data.blocks = blocks                    # store `blocks[]` list
+      qItem.data.blocks = rc.value                  # store `blocks[]` list
+      qItem.data.peerID = buddy.peerID
 
-      nQueued += blocks.len                         # statistics
+      nQueued += rc.value.len                       # statistics
+      # End if
 
     # End block: `fetchBlocksBody`
 

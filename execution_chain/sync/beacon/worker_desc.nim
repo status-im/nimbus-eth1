@@ -46,8 +46,9 @@ type
     ## Blocks sorted by least block number.
 
   BlocksForImport* = object
-    ## Block request item sorted by least block number (i.e. from `blocks[0]`.)
-    blocks*: seq[EthBlock]           ## List of blocks for import
+    ## Blocks list item indexed by least block number (i.e. by `blocks[0]`.)
+    blocks*: seq[EthBlock]           ## List of blocks lineage for import
+    peerID*: Hash                    ## For comparing peers
 
   # -------------------
 
@@ -64,6 +65,8 @@ type
     head*: BlockNumber               ## Copy of `ctx.hdrCache.head()`
     headHash*: Hash32                ## Copy of `ctx.hdrCache.headHash()`
     cancelRequest*: bool             ## Cancel block sync via state machine
+    procFailNum*: BlockNumber        ## Block (or header) error location
+    procFailCount*: uint8            ## Number of failures at location
 
   HeaderFetchSync* = object
     ## Header sync staging area
@@ -232,13 +235,6 @@ proc nBlkProcErrors*(buddy: BeaconBuddyRef): int =
   buddy.ctx.pool.nProcError.withValue(buddy.peerID, val):
     return val.blk.int
 
-proc `nBlkProcErrors=`*(buddy: BeaconBuddyRef; count: uint8) =
-  ## Setter, simolar to `nHdrProcErrors()`
-  buddy.ctx.pool.nProcError.withValue(buddy.peerID, val):
-    val.blk = count
-  do:
-    buddy.ctx.pool.nProcError[buddy.peerID] = (0u8,count)
-
 proc incBlkProcErrors*(buddy: BeaconBuddyRef) =
   ## Increment `proc` error count, similar to `incHdrProcErrors()`
   buddy.ctx.pool.nProcError.withValue(buddy.peerID, val):
@@ -246,10 +242,16 @@ proc incBlkProcErrors*(buddy: BeaconBuddyRef) =
   do:
     buddy.ctx.pool.nProcError[buddy.peerID] = (0u8,1u8)
 
-proc incBlkProcErrors*(ctx: BeaconCtxRef; peerID: Hash) =
-  ## Increment `proc` error count, similar to `incHdrProcErrors()`
+proc setBlkProcFail*(ctx: BeaconCtxRef; peerID: Hash) =
+  ## Set `proc` error count high enough so that the implied sync peer will
+  ## be zombified on the next attempt to download data.
   ctx.pool.nProcError.withValue(peerID, val):
     val.blk = nProcBlocksErrThreshold + 1
+
+proc resetBlkProcErrors*(ctx: BeaconCtxRef; peerID: Hash) =
+  ## Reset `proc` error count.
+  ctx.pool.nProcError.withValue(peerID, val):
+    val.blk = 0
 
 # ------------------------------------------------------------------------------
 # End
