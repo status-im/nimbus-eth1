@@ -354,9 +354,11 @@ proc new*(
     portalConfig: PortalProtocolConfig = defaultPortalProtocolConfig,
     contentRequestRetries = 1,
     contentQueueWorkers = 8,
+    contentQueueSize = 50,
 ): T =
   let
-    contentQueue = newAsyncQueue[(Opt[NodeId], ContentKeysList, seq[seq[byte]])](50)
+    contentQueue =
+      newAsyncQueue[(Opt[NodeId], ContentKeysList, seq[seq[byte]])](contentQueueSize)
 
     stream = streamManager.registerNewStream(contentQueue)
 
