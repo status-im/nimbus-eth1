@@ -1,4 +1,4 @@
-# Fluffy
+# Nimbus
 # Copyright (c) 2021-2025 Status Research & Development GmbH
 # Licensed and distributed under either of
 #   * MIT license (license terms in the root directory or at https://opensource.org/licenses/MIT).
@@ -94,7 +94,7 @@ procSuite "Portal Wire Protocol Tests":
     let pong = await proto1.ping(proto2.localNode)
 
     let customPayload = CapabilitiesPayload(
-      client_info: ByteList[MAX_CLIENT_INFO_BYTE_LENGTH].init(@[]),
+      client_info: NIMBUS_PORTAL_CLIENT_INFO,
       data_radius: UInt256.high(),
       capabilities: List[uint16, MAX_CAPABILITIES_LENGTH].init(
         proto1.pingExtensionCapabilities.toSeq()
@@ -267,6 +267,57 @@ procSuite "Portal Wire Protocol Tests":
       check:
         contentItem == contentKV.content
         contentKeys[i] == contentKV.contentKey
+
+    await proto1.stopPortalProtocol()
+    await proto2.stopPortalProtocol()
+
+  asyncTest "Neighborhood gossip - single content key, value":
+    let (proto1, proto2) = defaultTestSetup(rng)
+
+    check proto1.addNode(proto2.localNode) == Added
+    let pong = await proto1.ping(proto2.localNode)
+    check pong.isOk()
+
+    let
+      contentKeys = ContentKeysList(@[ContentKeyByteList(@[byte 0x01, 0x02, 0x03])])
+      content: seq[seq[byte]] = @[@[byte 0x04, 0x05, 0x06]]
+
+    let peerCount =
+      await proto1.neighborhoodGossip(Opt.none(NodeId), contentKeys, content)
+    check peerCount == 1
+
+    let (srcNodeId, keys, items) = await proto2.stream.contentQueue.popFirst()
+    check:
+      srcNodeId.get() == proto1.localNode.id
+      keys.len() == items.len()
+      keys.len() == 1
+      keys == contentKeys
+      items == content
+
+    await proto1.stopPortalProtocol()
+    await proto2.stopPortalProtocol()
+
+  asyncTest "Random gossip - single content key, value":
+    let (proto1, proto2) = defaultTestSetup(rng)
+
+    check proto1.addNode(proto2.localNode) == Added
+    let pong = await proto1.ping(proto2.localNode)
+    check pong.isOk()
+
+    let
+      contentKeys = ContentKeysList(@[ContentKeyByteList(@[byte 0x01, 0x02, 0x03])])
+      content: seq[seq[byte]] = @[@[byte 0x04, 0x05, 0x06]]
+
+    let peerCount = await proto1.randomGossip(Opt.none(NodeId), contentKeys, content)
+    check peerCount == 1
+
+    let (srcNodeId, keys, items) = await proto2.stream.contentQueue.popFirst()
+    check:
+      srcNodeId.get() == proto1.localNode.id
+      keys.len() == items.len()
+      keys.len() == 1
+      keys == contentKeys
+      items == content
 
     await proto1.stopPortalProtocol()
     await proto2.stopPortalProtocol()

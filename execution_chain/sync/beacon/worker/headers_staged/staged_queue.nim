@@ -1,5 +1,5 @@
 # Nimbus
-# Copyright (c) 2023-2024 Status Research & Development GmbH
+# Copyright (c) 2023-2025 Status Research & Development GmbH
 # Licensed and distributed under either of
 #   * MIT license (license terms in the root directory or at
 #     https://opensource.org/licenses/MIT).
@@ -33,7 +33,8 @@ func headersStagedQueueIsEmpty*(ctx: BeaconCtxRef): bool =
 
 func headersStagedQueueClear*(ctx: BeaconCtxRef) =
   ## Clear queue
-  ctx.hdr.staged.clear
+  ctx.hdr.staged.clear()
+  ctx.hdr.reserveStaged = 0
 
 func headersStagedQueueInit*(ctx: BeaconCtxRef) =
   ## Constructor

@@ -142,7 +142,9 @@ proc exportLCUpdates*(
             forkDigests[], epoch(forkyObject.attested_header.beacon.slot), cfg
           )
 
-          content = encodeLightClientUpdatesForked(forkDigest, updates)
+          content = encodeLightClientUpdatesForked(
+            ForkedLightClientUpdateList.init(updates), forkDigests[], cfg
+          )
 
           file = dataDir / fileName
         writePortalContentToYaml(file, contentKey.asSeq().to0xHex(), content.to0xHex())

@@ -1,5 +1,5 @@
 # Nimbus
-# Copyright (c) 2021-2024 Status Research & Development GmbH
+# Copyright (c) 2021-2025 Status Research & Development GmbH
 # Licensed and distributed under either of
 #   * MIT license (license terms in the root directory or at https://opensource.org/licenses/MIT).
 #   * Apache v2 license (license terms in the root directory or at https://www.apache.org/licenses/LICENSE-2.0).
@@ -7,7 +7,12 @@
 
 {.push raises: [].}
 
-import std/[os, strutils], chronicles, stew/io2, eth/p2p/discoveryv5/enr
+import
+  std/[os, strutils],
+  eth/common/hashes,
+  chronicles,
+  stew/[io2, byteutils],
+  eth/p2p/discoveryv5/enr
 
 iterator strippedLines(filename: string): string {.raises: [ref IOError].} =
   for line in lines(filename):
@@ -40,13 +45,41 @@ proc loadBootstrapFile*(bootstrapFile: string, bootstrapEnrs: var seq[Record]) =
     fatal "Unknown bootstrap file format", ext
     quit 1
 
+# With this we can generate node ids at specific locations in the keyspace.
+# Note: This should only be used for testing and debugging purposes.
+proc generateNetKeyHavingNodeIdPrefix*(
+    rng: var HmacDrbgContext, prefixHex: string
+): PrivateKey =
+  let prefixBytes =
+    try:
+      prefixHex.hexToSeqByte()
+    except ValueError as e:
+      raiseAssert(e.msg)
+
+  doAssert(prefixBytes.len() >= 1 and prefixBytes.len() <= 4)
+
+  while true:
+    let
+      privKey = PrivateKey.random(rng)
+      pubKey = privKey.toPublicKey.toRaw()
+      nodeIdBytes = keccak256(pubKey).data
+
+    var matching = true
+    for i, b in prefixBytes:
+      if nodeIdBytes[i] != b:
+        matching = false
+        break
+
+    if matching:
+      return privKey
+
 # Note:
 # Currently just works with the network private key stored as hex in a file.
 # In the future it would be nice to re-use keystore from nimbus-eth2 for this.
 # However that would require the pull the keystore.nim and parts of
 # keystore_management.nim out of nimbus-eth2.
 proc getPersistentNetKey*(
-    rng: var HmacDrbgContext, keyFilePath: string
+    rng: var HmacDrbgContext, keyFilePath: string, nodeIdPrefixHex: string
 ): tuple[key: PrivateKey, newNetKey: bool] =
   logScope:
     key_file = keyFilePath
@@ -73,7 +106,12 @@ proc getPersistentNetKey*(
       quit QuitFailure
   else:
     info "Network key file is missing, creating a new one"
-    let key = PrivateKey.random(rng)
+
+    let key =
+      if nodeIdPrefixHex.len() > 0:
+        generateNetKeyHavingNodeIdPrefix(rng, nodeIdPrefixHex)
+      else:
+        PrivateKey.random(rng)
 
     if (let res = io2.writeFile(keyFilePath, $key); res.isErr):
       fatal "Failed to write the network key file", error = ioErrorMsg(res.error)

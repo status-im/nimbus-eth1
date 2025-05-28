@@ -340,9 +340,9 @@ type
       name: "num-threads" .}: int
 
     persistBatchSize* {.
-      desc: ""
+      hidden
       defaultValue: 32'u64
-      name: "persist-batch-size" .}: uint64
+      name: "debug-persist-batch-size" .}: uint64
 
     beaconSyncTargetFile* {.
       hidden

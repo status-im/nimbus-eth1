@@ -12,17 +12,21 @@ import
   eth/[common, rlp],
   stew/byteutils,
   eth/common/transaction_utils,
+  ../common/helpers,
   ../../execution_chain/transaction,
-  ../../execution_chain/common/evmforks
+  ../../execution_chain/core/validate,
+  ../../execution_chain/common/evmforks,
+  ../../execution_chain/common/common
 
-proc parseTx(hexLine: string) =
+proc parseTx(com: CommonRef, hexLine: string) =
   try:
     let
       bytes = hexToSeqByte(hexLine)
       tx = decodeTx(bytes)
       address = tx.recoverSender().expect("valid signature")
 
-    tx.validate(FkLondon)
+    validateTxBasic(com, tx, FkPrague).isOkOr:
+      echo "err: ", error
 
     # everything ok
     echo "0x", address.toHex
@@ -37,7 +41,12 @@ proc parseTx(hexLine: string) =
     echo "err: malformed rlp"
 
 proc main() =
+  let
+    memDB  = newCoreDbRef DefaultDbMemory
+    config = getChainConfig("Prague")
+    com    = CommonRef.new(memDB, nil, config)
+
   for hexLine in stdin.lines:
-    parseTx(hexLine)
+    com.parseTx(hexLine)
 
 main()

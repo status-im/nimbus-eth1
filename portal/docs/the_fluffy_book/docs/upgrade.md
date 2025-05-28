@@ -24,5 +24,5 @@ make -j4 nimbus_portal_client
 Complete the upgrade by restarting the node.
 
 !!! tip
-    To check which version of `nimbus_portal_client` you're currently running, run
+    To check which version of the Nimbus Portal client you're currently running, run
     `./build/nimbus_portal_client --version`

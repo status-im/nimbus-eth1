@@ -13,14 +13,18 @@ import
   beacon_chain/spec/forks,
   beacon_chain/spec/forks_light_client
 
-func isValidBootstrap*(bootstrap: ForkyLightClientBootstrap, cfg: RuntimeConfig): bool =
+func isValidBootstrap*(
+    bootstrap: ForkyLightClientBootstrap,
+    kind: static LightClientDataFork,
+    cfg: RuntimeConfig,
+): bool =
   ## Verify if the bootstrap is valid. This does not verify if the header is
   ## part of the canonical chain.
   is_valid_light_client_header(bootstrap.header, cfg) and
     is_valid_merkle_branch(
       hash_tree_root(bootstrap.current_sync_committee),
       bootstrap.current_sync_committee_branch,
-      log2trunc(altair.CURRENT_SYNC_COMMITTEE_GINDEX),
-      get_subtree_index(altair.CURRENT_SYNC_COMMITTEE_GINDEX),
+      log2trunc(current_sync_committee_gindex(kind)),
+      get_subtree_index(current_sync_committee_gindex(kind)),
       bootstrap.header.beacon.state_root,
     )

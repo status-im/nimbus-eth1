@@ -18,12 +18,13 @@ PrecompileTests
 + identity.json                                                   OK
 + modexp.json                                                     OK
 + modexp_eip2565.json                                             OK
++ modexp_eip7883.json                                             OK
 + pairing.json                                                    OK
 + pairing_istanbul.json                                           OK
 + ripemd160.json                                                  OK
 + sha256.json                                                     OK
 ```
-OK: 20/20 Fail: 0/20 Skip: 0/20
+OK: 21/21 Fail: 0/21 Skip: 0/21
 ## eest
 ```diff
 + add_G1_bls.json                                                 OK
@@ -48,4 +49,4 @@ OK: 20/20 Fail: 0/20 Skip: 0/20
 OK: 18/18 Fail: 0/18 Skip: 0/18
 
 ---TOTAL---
-OK: 38/38 Fail: 0/38 Skip: 0/38
+OK: 39/39 Fail: 0/39 Skip: 0/39

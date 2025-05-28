@@ -106,8 +106,8 @@ proc headersFetchReversed*(
   if resp.isNone or buddy.ctrl.stopped:
     buddy.registerError()
     trace trEthRecvReceivedBlockHeaders, peer, nReq=req.maxResults,
-      hash=topHash.toStr, nResp=0, elapsed=elapsed.toStr, ctrl=buddy.ctrl.state,
-      hdrErrors=buddy.hdrErrors
+      hash=topHash.toStr, nResp=0, elapsed=elapsed.toStr,
+      syncState=($buddy.syncState), hdrErrors=buddy.hdrErrors
     return err()
 
   let h: seq[Header] = resp.get.headers
@@ -115,7 +115,7 @@ proc headersFetchReversed*(
     buddy.registerError()
     trace trEthRecvReceivedBlockHeaders, peer, nReq=req.maxResults,
       hash=topHash.toStr, nResp=h.len, elapsed=elapsed.toStr,
-      ctrl=buddy.ctrl.state, hdrErrors=buddy.hdrErrors
+      syncState=($buddy.syncState), hdrErrors=buddy.hdrErrors
     return err()
 
   # Verify that first block number matches
@@ -124,7 +124,7 @@ proc headersFetchReversed*(
     trace trEthRecvReceivedBlockHeaders, peer, nReq=req.maxResults,
       hash=topHash.toStr, ivReqMinPt=ivReq.minPt.bnStr, ivRespMinPt=h[^1].bnStr,
       nResp=h.len, elapsed=elapsed.toStr,
-      ctrl=buddy.ctrl.state, hdrErrors=buddy.hdrErrors
+      syncState=($buddy.syncState), hdrErrors=buddy.hdrErrors
     return err()
 
   # Ban an overly slow peer for a while when seen in a row. Also there is a
@@ -137,7 +137,7 @@ proc headersFetchReversed*(
 
   trace trEthRecvReceivedBlockHeaders, peer, nReq=req.maxResults,
     hash=topHash.toStr, ivResp=BnRange.new(h[^1].number,h[0].number),
-    nResp=h.len, elapsed=elapsed.toStr, ctrl=buddy.ctrl.state,
+    nResp=h.len, elapsed=elapsed.toStr, syncState=($buddy.syncState),
     hdrErrors=buddy.hdrErrors
 
   return ok(h)

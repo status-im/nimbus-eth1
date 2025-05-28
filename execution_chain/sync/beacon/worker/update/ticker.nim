@@ -21,7 +21,6 @@ when enableTicker:
     pkg/[stint, stew/interval_set],
     ../headers_staged/staged_queue,
     ../blocks_staged/staged_queue,
-    ../helpers,
     ../[blocks_unproc, headers_unproc]
 
 logScope:
@@ -49,9 +48,9 @@ type
     nBlkUnprocFragm: int
     nBlkStaged: int
     blkStagedBottom: BlockNumber
+    blkTopImported: BlockNumber
 
-    state: SyncLayoutState
-    reorg: int
+    state: SyncState
     nBuddies: int
 
   TickerRef* = ref object of RootRef
@@ -78,7 +77,7 @@ when enableTicker:
       dangling:        ctx.dangling.number,
       head:            ctx.head.number,
       target:          ctx.consHeadNumber,
-      activeOk:        ctx.pool.lastState != idleSyncState,
+      activeOk:        ctx.pool.lastState != idle,
 
       nHdrStaged:      ctx.headersStagedQueueLen(),
       hdrStagedTop:    ctx.headersStagedQueueTopKey(),
@@ -91,9 +90,9 @@ when enableTicker:
       blkUnprocBottom: ctx.blocksUnprocTotalBottom(),
       nBlkUnprocessed: ctx.blocksUnprocTotal(),
       nBlkUnprocFragm: ctx.blk.unprocessed.chunks(),
+      blkTopImported:  ctx.blk.topImported,
 
       state:           ctx.pool.lastState,
-      reorg:           ctx.pool.nReorg,
       nBuddies:        ctx.pool.nBuddies)
 
   proc tickerLogger(t: TickerRef; ctx: BeaconCtxRef) =
@@ -109,6 +108,7 @@ when enableTicker:
       let
         B = if data.base == data.latest: "L" else: data.base.bnStr
         L = if data.latest == data.coupler: "C" else: data.latest.bnStr
+        I = if data.blkTopImported == 0: "n/a" else : data.blkTopImported.bnStr
         C = if data.coupler == data.dangling: "D"
             elif data.coupler < high(int64).uint64: data.coupler.bnStr
             else: "n/a"
@@ -143,13 +143,14 @@ when enableTicker:
              else: bS & "<-" & bU
 
         st = case data.state
-            of idleSyncState: "0"
-            of collectingHeaders: "h"
-            of cancelHeaders: "x"
-            of finishedHeaders: "f"
-            of processingBlocks: "b"
-            of cancelBlocks: "z"
-        rrg = data.reorg
+          of idle: "0"
+          of headers: "h"
+          of headersCancel: "x"
+          of headersFinish: "f"
+          of blocks: "b"
+          of blocksCancel: "x"
+          of blocksFinish: "f"
+
         nP = data.nBuddies
 
         # With `int64`, there are more than 29*10^10 years range for seconds
@@ -159,7 +160,21 @@ when enableTicker:
       t.lastStats = data
       t.visited = now
 
-      debug "Sync state", up, nP, st, B, L, C, D, H, T, hQ, bQ, rrg, mem
+      case data.state
+      of idle:
+        debug "Sync state idle", up, nP, B, L,
+          D, H, T, hQ, bQ,
+          mem
+
+      of headers, headersCancel, headersFinish:
+        debug "Sync state headers", up, nP, st, B, L,
+          C, D, H, T, hQ,
+          mem
+
+      of blocks, blocksCancel, blocksFinish:
+        debug "Sync state blocks", up, nP, st, B, L,
+          D, I, H, T, bQ,
+          mem
 
 # ------------------------------------------------------------------------------
 # Public function

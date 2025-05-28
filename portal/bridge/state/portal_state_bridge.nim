@@ -17,12 +17,13 @@ import
   web3/[eth_api, eth_api_types],
   results,
   eth/common/[addresses_rlp, hashes_rlp],
-  ../../execution_chain/common/chain_config,
-  ../rpc/rpc_calls/rpc_trace_calls,
-  ../rpc/portal_rpc_client,
-  ../network/state/[state_content, state_gossip],
-  ./state_bridge/[database, state_diff, world_state_helper, offers_builder],
-  ./[nimbus_portal_bridge_conf, portal_bridge_common]
+  ../../../execution_chain/common/chain_config,
+  ../../rpc/rpc_calls/rpc_trace_calls,
+  ../../rpc/portal_rpc_client,
+  ../../network/state/[state_content, state_gossip],
+  ./[database, state_diff, world_state_helper, offers_builder],
+  ../common/rpc_helpers,
+  ../nimbus_portal_bridge_conf
 
 logScope:
   topics = "portal_bridge"

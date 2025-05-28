@@ -5,7 +5,7 @@ turned on.
 The build process itself is simple and fully automated, but may take a few minutes.
 
 !!! note "Nim"
-    `nimbus_portal_client` is written in the [Nim](https://nim-lang.org) programming language.
+    The Nimbus Portal client is written in the [Nim](https://nim-lang.org) programming language.
     The correct version will automatically be downloaded as part of the build process!
 
 ## Prerequisites

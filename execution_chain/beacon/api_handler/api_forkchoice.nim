@@ -188,7 +188,7 @@ proc forkchoiceUpdated*(ben: BeaconEngineRef,
       raise invalidForkChoiceState("safe block not in canonical tree")
     # similar to headHash, safeBlockHash is saved by FC module
 
-  (await chain.forkChoice(headHash, finalizedBlockHash, safeBlockHash)).isOkOr:
+  (await chain.queueForkChoice(headHash, finalizedBlockHash, safeBlockHash)).isOkOr:
     return invalidFCU(error, chain, header)
 
   # If payload generation was requested, create a new block to be potentially

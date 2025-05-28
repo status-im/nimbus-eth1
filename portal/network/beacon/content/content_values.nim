@@ -83,13 +83,20 @@ func encodeOptimisticUpdateForked*(
   encodeForkedLightClientObject(optimisticUpdate, forkDigest)
 
 func encodeLightClientUpdatesForked*(
-    forkDigest: ForkDigest, updates: openArray[ForkedLightClientUpdate]
+    updates: ForkedLightClientUpdateList, forkDigests: ForkDigests, cfg: RuntimeConfig
 ): seq[byte] =
   var list: ForkedLightClientUpdateBytesList
   for update in updates:
-    discard list.add(
-      ForkedLightClientUpdateBytes(encodeForkedLightClientObject(update, forkDigest))
-    )
+    withForkyObject(update):
+      when lcDataFork > LightClientDataFork.None:
+        let slot = forkyObject.attested_header.beacon.slot
+        let forkDigest = forkDigestAtEpoch(forkDigests, epoch(slot), cfg)
+
+        discard list.add(
+          ForkedLightClientUpdateBytes(
+            encodeForkedLightClientObject(update, forkDigest)
+          )
+        )
 
   SSZ.encode(list)
 

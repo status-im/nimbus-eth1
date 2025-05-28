@@ -75,12 +75,13 @@ proc stop*(nimbus: NimbusNode, conf: NimbusConf) {.async, gcsafe.} =
   if nimbus.wire.isNil.not:
     waitedFutures.add nimbus.wire.stop()
 
-  if waitedFutures.len > 0:
-    let
-      timeout = chronos.seconds(5)
-      completed = await withTimeout(allFutures(waitedFutures), timeout)
-    if not completed:
-      trace "Nimbus.stop(): timeout reached", timeout,
-        futureErrors = waitedFutures.filterIt(it.error != nil).mapIt(it.error.msg)
+  waitedFutures.add nimbus.fc.stopProcessingQueue()
+
+  let
+    timeout = chronos.seconds(5)
+    completed = await withTimeout(allFutures(waitedFutures), timeout)
+  if not completed:
+    trace "Nimbus.stop(): timeout reached", timeout,
+      futureErrors = waitedFutures.filterIt(it.error != nil).mapIt(it.error.msg)
 
 {.pop.}

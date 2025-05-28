@@ -39,6 +39,7 @@ type
     ShanghaiToCancunAtTime15k
     Prague
     CancunToPragueAtTime15k
+    Osaka
 
   LogLevel* = enum
     Silent

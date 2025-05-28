@@ -159,8 +159,9 @@ procSuite "Beacon Network":
       update2 = ForkedLightClientUpdate(
         kind: LightClientDataFork.Altair, altairData: altairData2
       )
-      updates = @[update1, update2]
-      content = encodeLightClientUpdatesForked(forkDigests.altair, updates)
+      updates = ForkedLightClientUpdateList.init(@[update1, update2])
+      content =
+        encodeLightClientUpdatesForked(updates, forkDigests, networkData.metadata.cfg)
       startPeriod = altairData1.attested_header.beacon.slot.sync_committee_period
       contentKey = ContentKey(
         contentType: lightClientUpdate,

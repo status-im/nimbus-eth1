@@ -164,6 +164,8 @@ if canEnableDebuggingSymbols:
 
 --define:nimOldCaseObjects # https://github.com/status-im/nim-confutils/issues/9
 
+switch("warningAsError", "BareExcept:on")
+
 # `switch("warning[CaseTransition]", "off")` fails with "Error: invalid command line option: '--warning[CaseTransition]'"
 switch("warning", "CaseTransition:off")
 

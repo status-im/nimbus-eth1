@@ -1,5 +1,5 @@
 # Nimbus - Portal Network
-# Copyright (c) 2022-2024 Status Research & Development GmbH
+# Copyright (c) 2022-2025 Status Research & Development GmbH
 # Licensed and distributed under either of
 #   * MIT license (license terms in the root directory or at https://opensource.org/licenses/MIT).
 #   * Apache v2 license (license terms in the root directory or at https://www.apache.org/licenses/LICENSE-2.0).
@@ -193,6 +193,29 @@ proc stop*(lightClient: LightClient) {.async: (raises: []).} =
 proc resetToFinalizedHeader*(
     lightClient: LightClient,
     header: ForkedLightClientHeader,
-    current_sync_committee: altair.SyncCommittee,
+    current_sync_committee: SyncCommittee,
 ) =
   lightClient.processor[].resetToFinalizedHeader(header, current_sync_committee)
+
+proc resetToTrustedBlockRoot*(
+    lightClient: LightClient, trustedBlockRoot: Digest
+) {.async: (raises: [CancelledError]).} =
+  lightClient.network.trustedBlockRoot = Opt.some(trustedBlockRoot)
+
+  let bootstrap = (await lightClient.network.getLightClientBootstrap(trustedBlockRoot)).valueOr:
+    warn "Could not get bootstrap, wait for offer"
+    # Empty, this will reset the LC store.
+    # Then it will continue requesting or can receive through an offer
+    lightClient.processor[].resetToFinalizedHeader(
+      ForkedLightClientHeader(), SyncCommittee()
+    )
+    return
+
+  withForkyBootstrap(bootstrap):
+    when lcDataFork > LightClientDataFork.None:
+      let forkedHeader = ForkedLightClientHeader.init(forkyBootstrap.header)
+      lightClient.resetToFinalizedHeader(
+        forkedHeader, forkyBootstrap.current_sync_committee
+      )
+    else:
+      warn "Could not reset to trusted block root: no light client header pre Altair"

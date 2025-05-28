@@ -18,13 +18,13 @@ Example commands for running test suites:
 
 ```sh
 # Run the portal hive tests with only the Nimbus Portal client
-./hive --sim portal --client fluffy
+./hive --sim portal --client nimbus-portal
 
 # Run the portal hive tests with different clients
-./hive --sim portal --client fluffy,trin,ultralight,shisui
+./hive --sim portal --client nimbus-portal,trin,ultralight,shisui
 
 # Run portal hive tests from a specific portal hive simulator
-./hive --sim portal --client fluffy --sim.limit history-interop
+./hive --sim portal --client nimbus-portal --sim.limit history-interop
 ```
 
 Access the results through web-ui:
@@ -48,11 +48,11 @@ To do that follow next steps:
 
 2) Build the local development Docker image using the following command:
 ```
-docker build --tag fluffy-dev --file ./portal/docker/Dockerfile.debug .
+docker build --tag nimbus-portal-dev --file ./portal/docker/Dockerfile.debug .
 ```
 
-3) Modify the `FROM` tag in the portal-hive `Dockerfile` of fluffy at
-`./hive/clients/fluffy/Dockerfile` to use the image that was build in step 2.
+3) Modify the `FROM` tag in the portal-hive `Dockerfile` of Nimbus Portal client at
+`./hive/clients/nimbus-portal/Dockerfile` to use the image that was build in step 2.
 
 4) Run the tests as [usual](nimbus-portal-with-portal-hive.md/#run-the-hive-tests-locally).
 
@@ -62,4 +62,4 @@ docker build --tag fluffy-dev --file ./portal/docker/Dockerfile.debug .
     `vendors/` from `./portal/docker/Dockerfile.debug.dockerignore`.
 
 !!! note
-    When developing on Linux the `./portal/docker/Dockerfile.debug.linux` Dockerfile can also be used instead. It does require to manually build fluffy first as it copies over this binary.
+    When developing on Linux the `./portal/docker/Dockerfile.debug.linux` Dockerfile can also be used instead. It does require to manually build `nimbus_portal_client` first as it copies over this binary.

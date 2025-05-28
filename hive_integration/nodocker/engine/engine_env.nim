@@ -83,7 +83,7 @@ proc newEngineEnv*(conf: var NimbusConf, chainFile: string, enableAuth: bool): E
   let
     node   = setupEthNode(conf, ctx)
     com    = makeCom(conf)
-    chain  = ForkedChainRef.init(com)
+    chain  = ForkedChainRef.init(com, enableQueue = true)
     txPool = TxPoolRef.new(chain)
     wire   = node.addEthHandlerCapability(txPool)
 
@@ -135,6 +135,7 @@ proc close*(env: EngineEnv) =
   waitFor env.client.close()
   waitFor env.server.closeWait()
   waitFor env.wire.stop()
+  waitFor env.chain.stopProcessingQueue()
 
 proc setRealTTD*(env: EngineEnv) =
   let genesis = env.com.genesisHeader

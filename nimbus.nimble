@@ -125,7 +125,7 @@ task nimbus_verified_proxy, "Build Nimbus verified proxy":
   buildBinary "nimbus_verified_proxy", "nimbus_verified_proxy/", "-d:chronicles_log_level=TRACE"
 
 task nimbus_verified_proxy_test, "Run Nimbus verified proxy tests":
-  test "nimbus_verified_proxy/tests", "test_proof_validation", "-d:chronicles_log_level=ERROR -d:nimbus_db_backend=sqlite"
+  test "nimbus_verified_proxy/tests", "all_proxy_tests", "-d:chronicles_log_level=ERROR -d:nimbus_db_backend=sqlite"
 
 task build_fuzzers, "Build fuzzer test cases":
   # This file is there to be able to quickly build the fuzzer test cases in

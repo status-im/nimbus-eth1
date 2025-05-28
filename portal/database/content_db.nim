@@ -269,21 +269,11 @@ proc new*(
   contentDb.setInitialRadius(radiusConfig)
   contentDb
 
-template disposeSafe(s: untyped): untyped =
-  if distinctBase(s) != nil:
-    s.dispose()
-    s = typeof(s)(nil)
-
 proc close*(db: ContentDB) =
-  db.sizeStmt.disposeSafe()
-  db.unusedSizeStmt.disposeSafe()
-  db.vacuumStmt.disposeSafe()
-  db.contentCountStmt.disposeSafe()
-  db.contentSizeStmt.disposeSafe()
-  db.getAllOrderedByDistanceStmt.disposeSafe()
-  db.deleteOutOfRadiusStmt.disposeSafe()
-  db.largestDistanceStmt.disposeSafe()
   discard db.kv.close()
+  # statements get "disposed" in `close` call as they got created as managed = true
+  db.backend.close()
+  db.backend = nil
 
 ## Private ContentDB calls
 

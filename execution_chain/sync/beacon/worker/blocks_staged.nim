@@ -16,8 +16,8 @@ import
   pkg/stew/[interval_set, sorted_set],
   ../../../networking/p2p,
   ../worker_desc,
-  ./blocks_staged/[bodies, staged_blocks],
-  ./[blocks_unproc, helpers]
+  ./blocks_staged/[bodies_fetch, staged_blocks],
+  ./blocks_unproc
 
 # ------------------------------------------------------------------------------
 # Private function(s)
@@ -36,23 +36,13 @@ proc blocksStagedProcessImpl(
   ## between the top of the `topImported` and the least queue block number.
   ##
   if ctx.blk.staged.len == 0:
-    trace info & ": blocksStagedProcess empty queue", peer=($maybePeer),
-      topImported=ctx.blk.topImported.bnStr, nStagedQ=ctx.blk.staged.len,
-      poolMode=ctx.poolMode, syncState=ctx.pool.lastState,
-      nSyncPeers=ctx.pool.nBuddies
     return false                                             # switch peer
 
   var
     nImported = 0u64                                         # statistics
     switchPeer = false                                       # for return code
 
-  trace info & ": blocksStagedProcess start", peer=($maybePeer),
-    topImported=ctx.blk.topImported.bnStr, nStagedQ=ctx.blk.staged.len,
-    poolMode=ctx.poolMode, syncState=ctx.pool.lastState,
-    nSyncPeers=ctx.pool.nBuddies
-
-  var minNum = BlockNumber(0)
-  while ctx.pool.lastState == processingBlocks:
+  while ctx.pool.lastState == SyncState.blocks:
 
     # Fetch list with the least block numbers
     let qItem = ctx.blk.staged.ge(0).valueOr:
@@ -60,7 +50,7 @@ proc blocksStagedProcessImpl(
 
     # Make sure that the lowest block is available, already. Or the other way
     # round: no unprocessed block number range precedes the least staged block.
-    minNum = qItem.data.blocks[0].header.number
+    let minNum = qItem.data.blocks[0].header.number
     if ctx.blk.topImported + 1 < minNum:
       trace info & ": block queue not ready yet", peer=($maybePeer),
         topImported=ctx.blk.topImported.bnStr, qItem=qItem.data.blocks.bnStr,
@@ -91,10 +81,6 @@ proc blocksStagedProcessImpl(
     trace info & ": no blocks unqueued", peer=($maybePeer),
       topImported=ctx.blk.topImported.bnStr, nStagedQ=ctx.blk.staged.len,
       nSyncPeers=ctx.pool.nBuddies
-
-  trace info & ": blocksStagedProcess end", peer=($maybePeer),
-    topImported=ctx.blk.topImported.bnStr, nImported, minNum,
-    nStagedQ=ctx.blk.staged.len, nSyncPeers=ctx.pool.nBuddies, switchPeer
 
   return not switchPeer
 
@@ -173,11 +159,6 @@ proc blocksStagedCollect*(
       if bottom < ctx.blk.topImported:
         discard ctx.blocksUnprocFetch(ctx.blk.topImported - bottom).expect("iv")
 
-      trace info & ": blocksStagedCollect direct loop", peer,
-        ctrl=buddy.ctrl.state, poolMode=ctx.poolMode,
-        syncState=ctx.pool.lastState, topImported=ctx.blk.topImported.bnStr,
-        bottom=bottom.bnStr
-
       # Fetch blocks and verify result
       let blocks = (await buddy.blocksFetch(nFetchBodiesRequest, info)).valueOr:
         break fetchBlocksBody                        # done, exit this function
@@ -236,9 +217,9 @@ proc blocksStagedCollect*(
       # block chain or similar.)
       ctx.pool.failedPeers.incl buddy.peerID
 
-      debug info & ": no blocks yet", peer, ctrl=buddy.ctrl.state,
-        poolMode=ctx.poolMode, syncState=ctx.pool.lastState,
-        failedPeers=ctx.pool.failedPeers.len, bdyErrors=buddy.bdyErrors
+      debug info & ": no blocks yet (failed peer)", peer,
+        failedPeers=ctx.pool.failedPeers.len,
+        syncState=($buddy.syncState), bdyErrors=buddy.bdyErrors
     return
 
   info "Queued/staged or imported blocks",
@@ -265,29 +246,13 @@ template blocksStagedProcess*(
 proc blocksStagedReorg*(ctx: BeaconCtxRef; info: static[string]) =
   ## Some pool mode intervention.
   ##
-  ## One scenario is that some blocks do not have a matching header available.
-  ## The main reson might be that the queue of block lists had a gap so that
-  ## some blocks could not be imported. This in turn can happen when the `FC`
-  ## module was reset (e.g. by `CL` via RPC.)
-  ##
-  ## A reset by `CL` via RPC would mostly happen if the syncer is near the
-  ## top of the block chain anyway. So the savest way to re-org is to flush
-  ## the block queues as there won't be mant data cached, then.
-  ##
-  if ctx.blk.staged.len == 0 and
-     ctx.blocksUnprocIsEmpty():
-    # nothing to do
-    return
+  if ctx.pool.lastState in {blocksCancel,blocksFinish}:
+    trace info & ": Flushing block queues",
+      nUnproc=ctx.blocksUnprocTotal(), nStagedQ=ctx.blk.staged.len
 
-  # Update counter
-  ctx.pool.nReorg.inc
-
-  # Reset block queues
-  debug info & ": Flushing block queues", nUnproc=ctx.blocksUnprocTotal(),
-    nStagedQ=ctx.blk.staged.len, nReorg=ctx.pool.nReorg
-
-  ctx.blocksUnprocClear()
-  ctx.blk.staged.clear()
+    ctx.blocksUnprocClear()
+    ctx.blk.staged.clear()
+    ctx.blk.cancelRequest = false
 
 # ------------------------------------------------------------------------------
 # End

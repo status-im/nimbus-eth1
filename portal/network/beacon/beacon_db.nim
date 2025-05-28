@@ -370,7 +370,11 @@ proc close*(db: BeaconDb) =
   db.bootstraps.close()
   db.bestUpdates.close()
   db.historicalSummaries.close()
+
   discard db.kv.close()
+
+  db.backend.close()
+  db.backend = nil
 
 template finalityUpdateCache(db: BeaconDb): Opt[LightClientFinalityUpdateCache] =
   db.beaconDbCache.finalityUpdateCache

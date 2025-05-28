@@ -1,4 +1,4 @@
-# Fluffy
+# Nimbus
 # Copyright (c) 2021-2025 Status Research & Development GmbH
 # Licensed and distributed under either of
 #   * MIT license (license terms in the root directory or at https://opensource.org/licenses/MIT).
@@ -134,7 +134,7 @@ proc getContent(
         interestedNodesCount = lookupRes.nodesInterestedInContent.len()
 
       let offer = contentValue.toOffer(maybeParentOffer.get())
-      n.portalProtocol.triggerPoke(
+      asyncSpawn n.portalProtocol.triggerPoke(
         lookupRes.nodesInterestedInContent, contentKeyBytes, offer.encode()
       )
 
@@ -262,8 +262,12 @@ proc contentQueueWorker(n: StateNetwork) {.async: (raises: []).} =
           state_network_offers_failed.inc(labelValues = [$n.portalProtocol.protocolId])
           error "Received offered content failed validation",
             srcNodeId, contentKeyBytes, error = offerRes.error()
+
+          # The content validation failed so drop the remaining content (if any) from
+          # this offer, because the remainly content is also likely to fail validation.
+          break
   except CancelledError:
-    trace "processContentLoop canceled"
+    trace "contentQueueWorker canceled"
 
 proc statusLogLoop(n: StateNetwork) {.async: (raises: []).} =
   try:

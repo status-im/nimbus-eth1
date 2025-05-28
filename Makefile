@@ -77,7 +77,10 @@ PORTAL_TOOLS := \
 	fcli_db
 PORTAL_TOOLS_DIRS := \
 	portal/bridge \
-	portal/bridge/state_bridge \
+	portal/bridge/common \
+	portal/bridge/beacon \
+	portal/bridge/history \
+	portal/bridge/state \
 	portal/tools
 # comma-separated values for the "clean" target
 PORTAL_TOOLS_CSV := $(subst $(SPACE),$(COMMA),$(FLUFFY_TOOLS))

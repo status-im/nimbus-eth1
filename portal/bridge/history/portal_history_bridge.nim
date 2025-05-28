@@ -17,14 +17,15 @@ import
   eth/common/keys,
   eth/common/[base, headers_rlp, blocks_rlp, receipts],
   eth/p2p/discoveryv5/random2,
-  ../../execution_chain/beacon/web3_eth_conv,
-  ../../hive_integration/nodocker/engine/engine_client,
-  ../rpc/portal_rpc_client,
-  ../network/history/[history_content, history_type_conversions, history_validation],
-  ../network/network_metadata,
-  ../eth_data/[era1, history_data_ssz_e2s, history_data_seeding],
-  ../database/era1_db,
-  ./[nimbus_portal_bridge_conf, portal_bridge_common]
+  ../../../execution_chain/beacon/web3_eth_conv,
+  ../../../hive_integration/nodocker/engine/engine_client,
+  ../../rpc/portal_rpc_client,
+  ../../network/history/[history_content, history_type_conversions, history_validation],
+  ../../network/network_metadata,
+  ../../eth_data/[era1, history_data_ssz_e2s, history_data_seeding],
+  ../../database/era1_db,
+  ../common/rpc_helpers,
+  ../nimbus_portal_bridge_conf
 
 from stew/objects import checkedEnumAssign
 
