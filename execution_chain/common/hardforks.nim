@@ -38,6 +38,11 @@ type
     Cancun
     Prague
     Osaka
+    Bpo1
+    Bpo2
+    Bpo3
+    Bpo4
+    Bpo5
 
 const lastPurelyBlockNumberBasedFork* = GrayGlacier
 # MergeFork is special because of TTD.
@@ -52,7 +57,7 @@ type
   ForkTransitionTable* = object
     blockNumberThresholds*: array[Frontier..GrayGlacier, Opt[BlockNumber]]
     mergeForkTransitionThreshold*: MergeForkTransitionThreshold
-    timeThresholds*: array[Shanghai..Osaka, Opt[EthTime]]
+    timeThresholds*: array[Shanghai..Bpo5, Opt[EthTime]]
 
   # Starting with Shanghai, forking is based on timestamp
   # rather than block number.
@@ -174,6 +179,11 @@ type
     cancunTime*         : Opt[EthTime]
     pragueTime*         : Opt[EthTime]
     osakaTime*          : Opt[EthTime]
+    bpo1Time*           : Opt[EthTime]
+    bpo2Time*           : Opt[EthTime]
+    bpo3Time*           : Opt[EthTime]
+    bpo4Time*           : Opt[EthTime]
+    bpo5Time*           : Opt[EthTime]
 
     terminalTotalDifficulty*: Opt[UInt256]
     depositContractAddress*: Opt[Address]
@@ -258,6 +268,11 @@ func toForkTransitionTable*(conf: ChainConfig): ForkTransitionTable =
   result.timeThresholds[Cancun] = conf.cancunTime
   result.timeThresholds[Prague] = conf.pragueTime
   result.timeThresholds[Osaka] = conf.osakaTime
+  result.timeThresholds[Bpo1] = conf.bpo1Time
+  result.timeThresholds[Bpo2] = conf.bpo2Time
+  result.timeThresholds[Bpo3] = conf.bpo3Time
+  result.timeThresholds[Bpo4] = conf.bpo4Time
+  result.timeThresholds[Bpo5] = conf.bpo5Time
 
 func populateFromForkTransitionTable*(conf: ChainConfig, t: ForkTransitionTable) =
   conf.homesteadBlock      = t.blockNumberThresholds[HardFork.Homestead]
@@ -282,6 +297,11 @@ func populateFromForkTransitionTable*(conf: ChainConfig, t: ForkTransitionTable)
   conf.cancunTime          = t.timeThresholds[HardFork.Cancun]
   conf.pragueTime          = t.timeThresholds[HardFork.Prague]
   conf.osakaTime           = t.timeThresholds[HardFork.Osaka]
+  conf.bpo1Time            = t.timeThresholds[HardFork.Bpo1]
+  conf.bpo2Time            = t.timeThresholds[HardFork.Bpo2]
+  conf.bpo3Time            = t.timeThresholds[HardFork.Bpo3]
+  conf.bpo4Time            = t.timeThresholds[HardFork.Bpo4]
+  conf.bpo5Time            = t.timeThresholds[HardFork.Bpo5]
 
 # ------------------------------------------------------------------------------
 # Map HardFork to EVM Fork
@@ -308,6 +328,11 @@ const
     FkCancun,         # Cancun
     FkPrague,         # Prague
     FkOsaka,          # Osaka
+    FkOsaka,          # Bpo1
+    FkOsaka,          # Bpo2
+    FkOsaka,          # Bpo3
+    FkOsaka,          # Bpo4
+    FkOsaka,          # Bpo5
   ]
 
 # ------------------------------------------------------------------------------
