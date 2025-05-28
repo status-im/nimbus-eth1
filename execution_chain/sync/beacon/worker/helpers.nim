@@ -13,11 +13,12 @@
 ## Extracted helpers from `worker_desc` (avoids circular import)
 
 import
-  pkg/chronos,
-  pkg/eth/common,
-  pkg/stew/interval_set,
-  ../../../utils/prettify,
-  ../../../utils/utils
+  pkg/[chronos, eth/common, results, stew/interval_set],
+  ../../../core/chain,
+  ../../../networking/p2p,
+  ../../../utils/[prettify, utils],
+  ../../sync_desc,
+  ../worker_const
 
 export
   prettify, short
@@ -54,7 +55,16 @@ func toStr*(h: Hash32): string =
   else: h.short
 
 
-proc `$`*(w: Interval[BlockNumber,uint64]): string =
+func `$`*(w: Interval[BlockNumber,uint64]): string =
   w.bnStr
+
+func `$`*(w: Opt[Peer]): string =
+  if w.isSome: $w.value else: "n/a"
+
+func `$`*(w: (SyncState,HeaderChainMode,bool)): string =
+  $w[0] & "." & $w[1] & (if w[2]: ":" & "poolMode" else: "")
+
+func `$`*(w: (BuddyRunState,SyncState,HeaderChainMode,bool)): string =
+  $w[0] & ":" & $(w[1],w[2],w[3])
 
 # End

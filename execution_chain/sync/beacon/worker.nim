@@ -24,14 +24,13 @@ import
 # Private functions
 # ------------------------------------------------------------------------------
 
-proc napUnlessSomethingToFetch(
+proc napUnlessSomethingToCollect(
     buddy: BeaconBuddyRef;
       ): Future[bool] {.async: (raises: []).} =
   ## When idle, save cpu cycles waiting for something to do.
-  if buddy.ctx.pool.blkImportOk or               # currently importing blocks
-     buddy.ctx.hibernate or                      # not activated yet?
-     not (buddy.headersStagedFetchOk() or        # something on TODO list
-          buddy.blocksStagedFetchOk()):
+  if buddy.ctx.hibernate or                      # not activated yet?
+     not (buddy.headersStagedCollectOk() or      # something on TODO list
+          buddy.blocksStagedCollectOk()):
     try:
       await sleepAsync workerIdleWaitInterval
     except CancelledError:
@@ -80,7 +79,7 @@ proc start*(buddy: BeaconBuddyRef; info: static[string]): bool =
 proc stop*(buddy: BeaconBuddyRef; info: static[string]) =
   ## Clean up this peer
   if not buddy.ctx.hibernate: debug info & ": release peer", peer=buddy.peer,
-    ctrl=buddy.ctrl.state, nSyncPeers=(buddy.ctx.pool.nBuddies-1),
+    nSyncPeers=(buddy.ctx.pool.nBuddies-1), syncState=($buddy.syncState),
     nLaps=buddy.only.nMultiLoop, lastIdleGap=buddy.only.multiRunIdle.toStr
   buddy.stopBuddy()
 
@@ -118,7 +117,7 @@ proc runDaemon*(
       ) {.async: (raises: []).} =
   ## Global background job that will be re-started as long as the variable
   ## `ctx.daemon` is set `true` which corresponds to `ctx.hibernating` set
-  ## to false`.
+  ## to false.
   ##
   ## On a fresh start, the flag `ctx.daemon` will not be set `true` before the
   ## first usable request from the CL (via RPC) stumbles in.
@@ -129,22 +128,14 @@ proc runDaemon*(
     return
 
   # Execute staged block records.
-  if ctx.blocksStagedCanImportOk():
+  if ctx.blocksStagedProcessOk():
 
-    block:
-      # Set flag informing peers to go into idle mode while importing takes
-      # place. It has been observed that importing blocks and downloading
-      # at the same time does not work very well, most probably due to high
-      # system activity while importing. Peers will get lost pretty soon after
-      # downloading starts if they continue downloading.
-      ctx.pool.blkImportOk = true
-      defer: ctx.pool.blkImportOk = false
+    # Import bodies from the `staged` queue.
+    discard await ctx.blocksStagedProcess info
 
-      # Import from staged queue.
-      while await ctx.blocksStagedImport(info):
-        if not ctx.daemon or   # Implied by external sync shutdown?
-           ctx.poolMode:       # Oops, re-org needed?
-          return
+    if not ctx.daemon or   # Implied by external sync shutdown?
+       ctx.poolMode:       # Oops, re-org needed?
+      return
 
   # At the end of the cycle, leave time to trigger refill headers/blocks
   try: await sleepAsync daemonWaitInterval
@@ -187,23 +178,36 @@ proc runPeer*(
     buddy.only.multiRunIdle = Moment.now() - buddy.only.stoppedMultiRun
   buddy.only.nMultiLoop.inc                     # statistics/debugging
 
-  if not await buddy.napUnlessSomethingToFetch():
+  if not await buddy.napUnlessSomethingToCollect():
 
     # Download and process headers and blocks
-    while buddy.headersStagedFetchOk():
+    while buddy.headersStagedCollectOk():
 
       # Collect headers and either stash them on the header chain cache
-      # directly, or stage then on the header queue to get them serialised,
-      # later.
-      if await buddy.headersStagedCollect info:
+      # directly, or stage on the header queue to get them serialised and
+      # stashed, later.
+      await buddy.headersStagedCollect info
 
-        # Store headers from the `staged` queue onto the header chain cache.
-        buddy.headersStagedProcess info
+      # Store serialised headers from the `staged` queue onto the header
+      # chain cache.
+      if not buddy.headersStagedProcess info:
+        # Need to proceed with another peer (e.g. gap between queue and
+        # header chain cache.)
+        break
 
     # Fetch bodies and combine them with headers to blocks to be staged. These
     # staged blocks are then excuted by the daemon process (no `peer` needed.)
-    while buddy.blocksStagedFetchOk():
-      discard await buddy.blocksStagedCollect info
+    while buddy.blocksStagedCollectOk():
+
+      # Collect bodies and either import them via `FC` module, or stage on
+      # the blocks queue to get them serialised and imported, later.
+      await buddy.blocksStagedCollect info
+
+      # Import bodies from the `staged` queue.
+      if not await buddy.blocksStagedProcess info:
+        # Need to proceed with another peer (e.g. gap between top imported
+        # block and blocks queue.)
+        break
 
     # Note that it is important **not** to leave this function to be
     # re-invoked by the scheduler unless necessary. While the time gap

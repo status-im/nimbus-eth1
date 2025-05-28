@@ -14,18 +14,19 @@ import
   confutils,
   eth/common/[keys, eth_types_rlp],
   json_rpc/rpcproxy,
-  beacon_chain/el/[el_manager, engine_api_conversions],
+  beacon_chain/el/[el_manager],
   beacon_chain/gossip_processing/optimistic_processor,
   beacon_chain/networking/network_metadata,
   beacon_chain/networking/topic_params,
   beacon_chain/spec/beaconstate,
   beacon_chain/spec/datatypes/[phase0, altair, bellatrix],
   beacon_chain/[light_client, nimbus_binary_common, version],
-  ../execution_chain/rpc/[cors, rpc_utils],
-  ../execution_chain/beacon/payload_conv,
+  ../execution_chain/rpc/cors,
+  ../execution_chain/common/common,
+  ./types,
   ./rpc/rpc_eth_api,
   ./nimbus_verified_proxy_conf,
-  ./block_cache
+  ./header_store
 
 from beacon_chain/gossip_processing/eth2_processor import toValidationResult
 
@@ -57,13 +58,6 @@ func getConfiguredChainId(networkMetadata: Eth2NetworkMetadata): UInt256 =
 proc run*(
     config: VerifiedProxyConf, ctx: ptr Context
 ) {.raises: [CatchableError], gcsafe.} =
-  var headerCallback: OnHeaderCallback
-  if ctx != nil:
-    headerCallback = ctx.onHeader
-
-  # Required as both Eth2Node and LightClient requires correct config type
-  var lcConfig = config.asLightClientConf()
-
   {.gcsafe.}:
     setupLogging(config.logLevel, config.logStdout, none(OutFile))
 
@@ -73,16 +67,33 @@ proc run*(
     except Exception:
       notice "commandLineParams() exception"
 
+  # load constants and metadata for the selected chain
+  let metadata = loadEth2Network(config.eth2Network)
+
+  # initialize verified proxy
   let
-    metadata = loadEth2Network(config.eth2Network)
     chainId = getConfiguredChainId(metadata)
+    authHooks = @[httpCors(@[])] # TODO: for now we serve all cross origin requests
+    # TODO: write a comment
+    clientConfig = config.web3url.asClientConfig()
 
-  for node in metadata.bootstrapNodes:
-    lcConfig.bootstrapNodes.add node
+    rpcProxy = RpcProxy.new(
+      [initTAddress(config.rpcAddress, config.rpcPort)], clientConfig, authHooks
+    )
 
+    # header cache contains headers downloaded from p2p
+    headerStore = HeaderStore.new(config.cacheLen)
+
+  let verifiedProxy = VerifiedRpcProxy.init(rpcProxy, headerStore, chainId)
+
+  # add handlers that verify RPC calls /rpc/rpc_eth_api.nim
+  verifiedProxy.installEthApiHandlers()
+
+  # just for short hand convenience
   template cfg(): auto =
     metadata.cfg
 
+  # initialize beacon node genesis data, beacon clock and forkDigests
   let
     genesisState =
       try:
@@ -97,11 +108,14 @@ proc run*(
       except CatchableError as err:
         raiseAssert "Invalid baked-in state: " & err.msg
 
+    # getStateField reads seeks info directly from a byte array
+    # get genesis time and instantiate the beacon clock
     genesisTime = getStateField(genesisState[], genesis_time)
     beaconClock = BeaconClock.init(genesisTime).valueOr:
       error "Invalid genesis time in state", genesisTime
       quit QuitFailure
 
+    # get the function that itself get the current beacon time
     getBeaconTime = beaconClock.getBeaconTimeFn()
 
     genesis_validators_root = getStateField(genesisState[], genesis_validators_root)
@@ -109,6 +123,13 @@ proc run*(
 
     genesisBlockRoot = get_initial_beacon_block(genesisState[]).root
 
+  # transform the config to fit as a light client config and as a p2p node(Eth2Node) config
+  var lcConfig = config.asLightClientConf()
+  for node in metadata.bootstrapNodes:
+    lcConfig.bootstrapNodes.add node
+
+  # create new network keys, create a p2p node(Eth2Node) and create a light client
+  let
     rng = keys.newRng()
 
     netKeys = getRandomNetKeys(rng[])
@@ -117,114 +138,68 @@ proc run*(
       rng, lcConfig, netKeys, cfg, forkDigests, getBeaconTime, genesis_validators_root
     )
 
-    blockCache = BlockCache.new(uint32(64))
-
-    # TODO: for now we serve all cross origin requests
-    authHooks = @[httpCors(@[])]
-
-    clientConfig = config.web3url.asClientConfig()
-
-    rpcProxy = RpcProxy.new(
-      [initTAddress(config.rpcAddress, config.rpcPort)], clientConfig, authHooks
-    )
-
-    verifiedProxy = VerifiedRpcProxy.new(rpcProxy, blockCache, chainId)
-
-    optimisticHandler = proc(
-        signedBlock: ForkedSignedBeaconBlock
-    ) {.async: (raises: [CancelledError]).} =
-      notice "New LC optimistic block",
-        opt = signedBlock.toBlockId(), wallSlot = getBeaconTime().slotOrZero
-      withBlck(signedBlock):
-        when consensusFork >= ConsensusFork.Bellatrix:
-          if forkyBlck.message.is_execution_block:
-            template payload(): auto =
-              forkyBlck.message.body
-
-            try:
-              # TODO parentBeaconBlockRoot / requestsHash
-              let blk = ethBlock(
-                executionPayload(payload.asEngineExecutionPayload()),
-                parentBeaconBlockRoot = Opt.none(Hash32),
-                requestsHash = Opt.none(Hash32),
-              )
-              blockCache.add(populateBlockObject(blk.header.rlpHash, blk, 0.u256, true))
-            except RlpError as exc:
-              debug "Invalid block received", err = exc.msg
-
-    optimisticProcessor = initOptimisticProcessor(getBeaconTime, optimisticHandler)
-
+    # light client is set to optimistic finalization mode
     lightClient = createLightClient(
       network, rng, lcConfig, cfg, forkDigests, getBeaconTime, genesis_validators_root,
       LightClientFinalizationMode.Optimistic,
     )
 
-  verifiedProxy.installEthApiHandlers()
-
-  info "Listening to incoming network requests"
+  # registerbasic p2p protocols for maintaing peers ping/status/get_metadata/... etc.
   network.registerProtocol(
     PeerSync,
     PeerSync.NetworkState.init(cfg, forkDigests, genesisBlockRoot, getBeaconTime),
   )
-  network.addValidator(
-    getBeaconBlocksTopic(forkDigests.phase0),
-    proc(signedBlock: phase0.SignedBeaconBlock): ValidationResult =
-      toValidationResult(optimisticProcessor.processSignedBeaconBlock(signedBlock)),
-  )
-  network.addValidator(
-    getBeaconBlocksTopic(forkDigests.altair),
-    proc(signedBlock: altair.SignedBeaconBlock): ValidationResult =
-      toValidationResult(optimisticProcessor.processSignedBeaconBlock(signedBlock)),
-  )
-  network.addValidator(
-    getBeaconBlocksTopic(forkDigests.bellatrix),
-    proc(signedBlock: bellatrix.SignedBeaconBlock): ValidationResult =
-      toValidationResult(optimisticProcessor.processSignedBeaconBlock(signedBlock)),
-  )
-  network.addValidator(
-    getBeaconBlocksTopic(forkDigests.capella),
-    proc(signedBlock: capella.SignedBeaconBlock): ValidationResult =
-      toValidationResult(optimisticProcessor.processSignedBeaconBlock(signedBlock)),
-  )
-  network.addValidator(
-    getBeaconBlocksTopic(forkDigests.deneb),
-    proc(signedBlock: deneb.SignedBeaconBlock): ValidationResult =
-      toValidationResult(optimisticProcessor.processSignedBeaconBlock(signedBlock)),
-  )
-  lightClient.installMessageValidators()
 
+  # start the p2p network and rpcProxy
   waitFor network.startListening()
   waitFor network.start()
   waitFor rpcProxy.start()
+
+  # verify chain id that the proxy is connected to
   waitFor verifiedProxy.verifyChaindId()
 
   proc onFinalizedHeader(
       lightClient: LightClient, finalizedHeader: ForkedLightClientHeader
   ) =
     withForkyHeader(finalizedHeader):
-      when lcDataFork > LightClientDataFork.None:
+      when lcDataFork > LightClientDataFork.Altair:
         info "New LC finalized header", finalized_header = shortLog(forkyHeader)
-        if headerCallback != nil:
+        let res = headerStore.updateFinalized(finalizedHeader)
+
+        if res.isErr():
+          error "finalized header update error", error = res.error()
+
+        if ctx != nil:
           try:
-            headerCallback(cstring(Json.encode(forkyHeader)), 0)
+            ctx.onHeader(cstring(Json.encode(forkyHeader)), 0)
           except SerializationError as e:
             error "finalizedHeaderCallback exception", error = e.msg
+      else:
+        error "pre-bellatrix light client headers do not have the execution payload header"
 
   proc onOptimisticHeader(
       lightClient: LightClient, optimisticHeader: ForkedLightClientHeader
   ) =
     withForkyHeader(optimisticHeader):
-      when lcDataFork > LightClientDataFork.None:
+      when lcDataFork > LightClientDataFork.Altair:
         info "New LC optimistic header", optimistic_header = shortLog(forkyHeader)
-        if headerCallback != nil:
+        let res = headerStore.add(optimisticHeader)
+
+        if res.isErr():
+          error "header store add error", error = res.error()
+
+        if ctx != nil:
           try:
-            headerCallback(cstring(Json.encode(forkyHeader)), 1)
+            ctx.onHeader(cstring(Json.encode(forkyHeader)), 1)
           except SerializationError as e:
             error "optimisticHeaderCallback exception", error = e.msg
+      else:
+        error "pre-bellatrix light client headers do not have the execution payload header"
 
   lightClient.onFinalizedHeader = onFinalizedHeader
   lightClient.onOptimisticHeader = onOptimisticHeader
   lightClient.trustedBlockRoot = some config.trustedBlockRoot
+  lightClient.installMessageValidators()
 
   func shouldSyncOptimistically(wallSlot: Slot): bool =
     let optimisticHeader = lightClient.optimisticHeader
@@ -279,11 +254,12 @@ proc run*(
 
     blocksGossipState = targetGossipState
 
-  proc onSecond(time: Moment) =
+  proc updateGossipStatus(time: Moment) =
     let wallSlot = getBeaconTime().slotOrZero()
     updateBlocksGossipStatus(wallSlot + 1)
     lightClient.updateGossipStatus(wallSlot + 1)
 
+  # updates gossip status every second every second
   proc runOnSecondLoop() {.async.} =
     let sleepTime = chronos.seconds(1)
     while true:
@@ -291,15 +267,20 @@ proc run*(
       await chronos.sleepAsync(sleepTime)
       let afterSleep = chronos.now(chronos.Moment)
       let sleepTime = afterSleep - start
-      onSecond(start)
+      updateGossipStatus(start)
       let finished = chronos.now(chronos.Moment)
       let processingTime = finished - afterSleep
       trace "onSecond task completed", sleepTime, processingTime
 
-  onSecond(Moment.now())
+  # update gossip status before starting the light client
+  updateGossipStatus(Moment.now())
+  # start the light client
   lightClient.start()
 
+  # launch a async routine
   asyncSpawn runOnSecondLoop()
+
+  # run an infinite loop and wait for a stop signal
   while true:
     poll()
     if ctx != nil and ctx.stop:
@@ -308,7 +289,7 @@ proc run*(
       waitFor rpcProxy.stop()
       ctx.cleanup()
       # Notify client that cleanup is finished
-      headerCallback(nil, 2)
+      ctx.onHeader(nil, 2)
       break
 
 when isMainModule:

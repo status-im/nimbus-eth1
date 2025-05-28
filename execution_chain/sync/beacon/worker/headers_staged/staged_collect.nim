@@ -15,7 +15,7 @@ import
   pkg/eth/common,
   pkg/stew/interval_set,
   ../../worker_desc,
-  ./headers
+  ./headers_fetch
 
 # ------------------------------------------------------------------------------
 # Private logging helpers
@@ -56,7 +56,7 @@ proc fetchRev(
   var rev = (await buddy.headersFetchReversed(ivReq, parent, info)).valueOr:
     buddy.updateBuddyErrorState()
     debug info & ": header fetch error", peer=buddy.peer, ivReq,
-      nReq=ivReq.len, parent=parent.toStr, ctrl=buddy.ctrl.state,
+      nReq=ivReq.len, parent=parent.toStr, syncState=($buddy.syncState),
       hdrErrors=buddy.hdrErrors
     return err()
   ok(rev)
@@ -82,10 +82,10 @@ func bnStr*(w: LinkedHChain | ref LinkedHChain): string =
 # ------------------------------------------------------------------------------
 
 func collectModeStopped*(ctx: BeaconCtxRef): bool =
-  ## Hepler, checks whether there is a general stop conditions based on
+  ## Helper, checks whether there is a general stop conditions based on
   ## state settings (not on sync peer ctrl as `buddy.ctrl.running`.)
   ctx.poolMode or
-  ctx.pool.lastState != collectingHeaders or
+  ctx.pool.lastState != headers or
   ctx.hdrCache.state != collecting
 
 
@@ -129,7 +129,7 @@ proc collectAndStashOnDiskCache*(
       ctx.hdrCache.put(rev).isOkOr:
         buddy.updateBuddyProcError()
         debug info & ": header stash error", peer, iv, ivReq,
-          ctrl=buddy.ctrl.state, hdrErrors=buddy.hdrErrors, `error`=error
+          syncState=($buddy.syncState), hdrErrors=buddy.hdrErrors, `error`=error
         break fetchHeadersBody           # error => exit block
 
       # Note that `put()` might not have used all of the `rev[]` items for
@@ -155,8 +155,9 @@ proc collectAndStashOnDiskCache*(
       parent = rev[^1].parentHash        # parent hash for next fetch request
       # End loop
 
-    trace info & ": fetched and stored headers", peer, iv,
-      nHeaders=iv.len, ctrl=buddy.ctrl.state, hdrErrors=buddy.hdrErrors
+    trace info & ": fetched and stored headers", peer, iv, nHeaders=iv.len,
+      D=ctx.dangling.bnStr, syncState=($buddy.syncState),
+      hdrErrors=buddy.hdrErrors
 
     # Reset header process errors (not too many consecutive failures this time)
     buddy.nHdrProcErrors = 0             # all OK, reset error count
@@ -166,7 +167,8 @@ proc collectAndStashOnDiskCache*(
 
   trace info & ": partially fetched/stored headers", peer,
     iv=(if ivTop < iv.maxPt: BnRange.new(ivTop+1,iv.maxPt).bnStr else: "n/a"),
-    nHeaders=(iv.maxPt-ivTop), ctrl=buddy.ctrl.state, hdrErrors=buddy.hdrErrors
+    nHeaders=(iv.maxPt-ivTop), D=ctx.dangling.bnStr,
+    syncState=($buddy.syncState), hdrErrors=buddy.hdrErrors
 
   return ivTop                           # there is some left over range
 
@@ -216,8 +218,8 @@ proc collectAndStageOnMemQueue*(
       if rev[0].number != ivTop or rev[^1].number != ivBottom:
         buddy.updateBuddyProcError()
         debug info & ": header queue error", peer, iv, ivReq,
-          receivedHeaders=rev.bnStr,  expected=(ivBottom,ivTop).bnStr,
-          ctrl=buddy.ctrl.state, hdrErrors=buddy.hdrErrors
+          receivedHeaders=rev.bnStr, expected=(ivBottom,ivTop).bnStr,
+          syncState=($buddy.syncState), hdrErrors=buddy.hdrErrors
         break fetchHeadersBody           # error => exit block
 
       # Check/update hashes
@@ -243,7 +245,8 @@ proc collectAndStageOnMemQueue*(
       # End loop
 
     trace info & ": fetched and staged all headers", peer, iv,
-      nHeaders=iv.len, ctrl=buddy.ctrl.state, hdrErrors=buddy.hdrErrors
+      D=ctx.dangling.bnStr, nHeaders=iv.len, syncState=($buddy.syncState),
+      hdrErrors=buddy.hdrErrors
 
     # Reset header process errors (not too many consecutive failures this time)
     buddy.nHdrProcErrors = 0             # all OK, reset error count
@@ -254,8 +257,8 @@ proc collectAndStageOnMemQueue*(
   # Start processing some error or an incomplete fetch/stage result
 
   trace info & ": partially fetched and staged headers", peer, iv,
-    staged=lhc.bnStr, nHeaders=lhc.revHdrs.len, ctrl=buddy.ctrl.state,
-    hdrErrors=buddy.hdrErrors
+    D=ctx.dangling.bnStr, stagedHeaders=lhc.bnStr, nHeaders=lhc.revHdrs.len,
+    syncState=($buddy.syncState), hdrErrors=buddy.hdrErrors
 
   return ivTop                           # there is some left over range
 

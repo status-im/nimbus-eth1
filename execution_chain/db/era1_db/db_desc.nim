@@ -1,5 +1,5 @@
 # Nimbus
-# Copyright (c) 2021-2024 Status Research & Development GmbH
+# Copyright (c) 2021-2025 Status Research & Development GmbH
 # Licensed under either of
 #  * Apache License, version 2.0, ([LICENSE-APACHE](LICENSE-APACHE) or
 #    http://www.apache.org/licenses/LICENSE-2.0)
@@ -15,11 +15,11 @@ import
   std/[os, parseutils, strutils, tables],
   results,
   eth/common/blocks,
-  ../../../fluffy/eth_data/era1
+  ../../../portal/eth_data/era1
 
 export results, blocks
 
-# TODO this is a "rough copy" of the fluffy DB, minus the accumulator (it goes
+# TODO this is a "rough copy" of the portal era1 DB, minus the accumulator (it goes
 #      by era number alone instead of rooted name) - eventually the two should
 #      be merged, when eth1 gains accumulators in its metadata
 

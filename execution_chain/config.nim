@@ -340,9 +340,9 @@ type
       name: "num-threads" .}: int
 
     persistBatchSize* {.
-      desc: ""
+      hidden
       defaultValue: 32'u64
-      name: "persist-batch-size" .}: uint64
+      name: "debug-persist-batch-size" .}: uint64
 
     beaconSyncTargetFile* {.
       hidden
@@ -351,12 +351,6 @@ type
             "as the first target before any other request from the CL " &
             "is accepted"
       name: "debug-beacon-sync-target-file" .}: Option[InputFile]
-
-    beaconSyncBlocksQueueHwm* {.
-      hidden
-      desc: "Limit number of blocks on staging queue for beacon sync"
-      defaultValue: 0
-      name: "debug-beacon-sync-blocks-queue-hwm" .}: int
 
     rocksdbMaxOpenFiles {.
       hidden

@@ -38,7 +38,7 @@ binDir = "build"
 when declared(namedBin):
   namedBin = {
     "execution_chain/nimbus_execution_client": "nimbus_execution_client",
-    "fluffy/fluffy": "fluffy",
+    "portal/client/nimbus_portal_client": "nimbus_portal_client",
     "nimbus_verified_proxy/nimbus_verified_proxy": "nimbus_verified_proxy",
   }.toTable()
 
@@ -96,28 +96,28 @@ task test_import, "Run block import test":
 task test_evm, "Run EVM tests":
   test "tests", "evm_tests", "-d:chronicles_log_level=ERROR -d:unittest2DisableParamFiltering"
 
-## Fluffy tasks
+## Portal tasks
 
-task fluffy, "Build fluffy":
-  buildBinary "fluffy", "fluffy/", "-d:chronicles_log_level=TRACE"
+task nimbus_portal_client, "Build nimbus_portal_client":
+  buildBinary "nimbus_portal_client", "portal/client/", "-d:chronicles_log_level=TRACE"
 
-task fluffy_test, "Run fluffy tests":
+task portal_test, "Run Portal tests":
   # Need the nimbus_db_backend in state network tests as we need a Hexary to
   # start from, even though it only uses the MemoryDb.
-  test "fluffy/tests/portal_spec_tests/mainnet", "all_fluffy_portal_spec_tests", "-d:chronicles_log_level=ERROR -d:nimbus_db_backend=sqlite"
+  test "portal/tests/history_network_tests/", "all_history_network_custom_chain_tests", "-d:chronicles_log_level=ERROR -d:nimbus_db_backend=sqlite"
   # Seperate build for these tests as they are run with a low `mergeBlockNumber`
   # to make the tests faster. Using the real mainnet merge block number is not
   # realistic for these tests.
-  test "fluffy/tests", "all_fluffy_tests", "-d:chronicles_log_level=ERROR -d:nimbus_db_backend=sqlite -d:mergeBlockNumber:38130"
+  test "portal/tests", "all_portal_tests", "-d:chronicles_log_level=ERROR -d:nimbus_db_backend=sqlite -d:mergeBlockNumber:38130"
 
 task utp_test_app, "Build uTP test app":
-  buildBinary "utp_test_app", "fluffy/tools/utp_testing/", "-d:chronicles_log_level=TRACE"
+  buildBinary "utp_test_app", "portal/tools/utp_testing/", "-d:chronicles_log_level=TRACE"
 
 task utp_test, "Run uTP integration tests":
-  test "fluffy/tools/utp_testing", "utp_test", "-d:chronicles_log_level=ERROR"
+  test "portal/tools/utp_testing", "utp_test", "-d:chronicles_log_level=ERROR"
 
 task test_portal_testnet, "Build test_portal_testnet":
-  buildBinary "test_portal_testnet", "fluffy/scripts/", "-d:chronicles_log_level=DEBUG -d:unittest2DisableParamFiltering"
+  buildBinary "test_portal_testnet", "portal/scripts/", "-d:chronicles_log_level=DEBUG -d:unittest2DisableParamFiltering"
 
 ## Nimbus Verified Proxy tasks
 
@@ -125,7 +125,7 @@ task nimbus_verified_proxy, "Build Nimbus verified proxy":
   buildBinary "nimbus_verified_proxy", "nimbus_verified_proxy/", "-d:chronicles_log_level=TRACE"
 
 task nimbus_verified_proxy_test, "Run Nimbus verified proxy tests":
-  test "nimbus_verified_proxy/tests", "test_proof_validation", "-d:chronicles_log_level=ERROR -d:nimbus_db_backend=sqlite"
+  test "nimbus_verified_proxy/tests", "all_proxy_tests", "-d:chronicles_log_level=ERROR -d:nimbus_db_backend=sqlite"
 
 task build_fuzzers, "Build fuzzer test cases":
   # This file is there to be able to quickly build the fuzzer test cases in

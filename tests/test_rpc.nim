@@ -191,7 +191,7 @@ proc setupEnv(envFork: HardFork = MergeFork): TestEnv =
     serverApi = newServerAPI(txPool)
     client = setupClient(server.localAddress[0].port)
     ctx    = newEthContext()
-    node   = setupEthNode(conf, ctx, eth)
+    node   = setupEthNode(conf, ctx, eth68, eth69)
 
   ctx.am.loadKeystores(keyStore).isOkOr:
     debugEcho error

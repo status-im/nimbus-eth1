@@ -78,7 +78,7 @@ proc setupEnv*(taskPool: Taskpool): TestEnv =
 
   let
     ethCtx  = newEthContext()
-    ethNode = setupEthNode(conf, ethCtx, eth)
+    ethNode = setupEthNode(conf, ethCtx, eth68, eth69)
     com     = CommonRef.new(newCoreDbRef DefaultDbMemory,
       taskPool,
       conf.networkId,

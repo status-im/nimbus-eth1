@@ -17,10 +17,10 @@ import
   ../../core/chain,
   ../sync_desc,
   ./worker/helpers,
-  ./worker_config
+  ./worker_const
 
 export
-  helpers, sync_desc, worker_config, chain
+  helpers, sync_desc, worker_const, chain
 
 type
   BnRangeSet* = IntervalSetRef[BlockNumber,uint64]
@@ -51,14 +51,6 @@ type
 
   # -------------------
 
-  SyncLayoutState* = enum
-    idleSyncState = 0                ## see clause *(8)*, *(12)* of `README.md`
-    collectingHeaders                ## see clauses *(5)*, *(9)* of `README.md`
-    cancelHeaders                    ## stop this scrum
-    finishedHeaders                  ## see clause *(10)* of `README.md`
-    processingBlocks                 ## see clause *(11)* of `README.md`
-    cancelBlocks                     ## stop this scrum
-
   SyncClMesg* = object
     ## Beacon state message used for manual first target set up
     consHead*: Header                ## Consensus head
@@ -71,12 +63,16 @@ type
     unprocessed*: BnRangeSet         ## Block or header ranges to fetch
     borrowed*: BnRangeSet            ## Fetched/locked ranges
     staged*: LinkedHChainQueue       ## Blocks fetched but not stored yet
+    reserveStaged*: int              ## Pre-book staged slot temporarily
 
   BlocksFetchSync* = object
     ## Block sync staging area
     unprocessed*: BnRangeSet         ## Blocks download requested
     borrowed*: BnRangeSet            ## Fetched/locked fetched ranges
+    topImported*: BlockNumber        ## For syncronising opportunistic import
     staged*: StagedBlocksQueue       ## Blocks ready for import
+    reserveStaged*: int              ## Pre-book staged slot temporarily
+    cancelRequest*: bool             ## Cancel block sync via state machine
 
   # -------------------
 
@@ -95,7 +91,7 @@ type
     ## Globally shared data extension
     nBuddies*: int                   ## Number of active workers
     clReq*: SyncClMesg               ## Manual first target set up
-    lastState*: SyncLayoutState      ## Last known layout state
+    lastState*: SyncState            ## Last known layout state
     hdrSync*: HeaderFetchSync        ## Syncing by linked header chains
     blkSync*: BlocksFetchSync        ## For importing/executing blocks
     nextMetricsUpdate*: Moment       ## For updating metrics
@@ -104,13 +100,7 @@ type
     chain*: ForkedChainRef           ## Core database, FCU support
     hdrCache*: HeaderChainRef        ## Currently in tandem with `chain`
 
-    # Blocks import/execution settings
-    blkImportOk*: bool               ## Don't fetch data while block importing
-    blkStagedHwm*: int               ## Set a `staged` queue limit
-    blkStagedLenHwm*: int            ## Figured out as # staged records
-
     # Info, debugging, and error handling stuff
-    nReorg*: int                     ## Number of reorg invocations (info only)
     hdrProcError*: Table[Hash,uint8] ## Some globally accessible header errors
     blkLastSlowPeer*: Opt[Hash]      ## Register slow peer when last one
     failedPeers*: HashSet[Hash]      ## Detect dead end sync by collecting peers
@@ -137,6 +127,10 @@ func hdrCache*(ctx: BeaconCtxRef): HeaderChainRef =
 func head*(ctx: BeaconCtxRef): Header =
   ## Shortcut
   ctx.hdrCache.head()
+
+func headHash*(ctx: BeaconCtxRef): Hash32 =
+  ## Shortcut
+  ctx.hdrCache.headHash()
 
 func dangling*(ctx: BeaconCtxRef): Header =
   ## Shortcut
@@ -169,6 +163,23 @@ func db*(ctx: BeaconCtxRef): CoreDbRef =
   ctx.pool.chain.db
 
 # -----
+
+func syncState*(
+    ctx: BeaconCtxRef;
+      ): (SyncState,HeaderChainMode,bool) =
+  ## Getter, triple of relevant run-time states
+  (ctx.pool.lastState,
+   ctx.hdrCache.state,
+   ctx.poolMode)
+
+func syncState*(
+    buddy: BeaconBuddyRef;
+      ): (BuddyRunState,SyncState,HeaderChainMode,bool) =
+  ## Getter, also includes buddy state
+  (buddy.ctrl.state,
+   buddy.ctx.pool.lastState,
+   buddy.ctx.hdrCache.state,
+   buddy.ctx.poolMode)
 
 func hibernate*(ctx: BeaconCtxRef): bool =
   ## Getter, re-interpretation of the daemon flag for reduced service mode

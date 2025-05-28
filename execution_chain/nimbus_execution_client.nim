@@ -44,7 +44,8 @@ proc basicServices(nimbus: NimbusNode,
   # Setup the chain
   let fc = ForkedChainRef.init(com,
     eagerStateRoot = conf.eagerStateRootCheck,
-    persistBatchSize=conf.persistBatchSize)
+    persistBatchSize=conf.persistBatchSize,
+    enableQueue = true)
   fc.deserialize().isOkOr:
     warn "Loading block DAG from database", msg=error
 
@@ -117,7 +118,7 @@ proc setupP2P(nimbus: NimbusNode, conf: NimbusConf,
 
   # Always initialise beacon syncer
   nimbus.beaconSyncRef = BeaconSyncRef.init(
-    nimbus.ethNode, nimbus.fc, conf.maxPeers, conf.beaconSyncBlocksQueueHwm)
+    nimbus.ethNode, nimbus.fc, conf.maxPeers)
 
   # Optional for pre-setting the sync target (i.e. debugging)
   if conf.beaconSyncTargetFile.isSome():

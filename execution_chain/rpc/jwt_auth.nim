@@ -1,5 +1,5 @@
 # Nimbus
-# Copyright (c) 2022-2024 Status Research & Development GmbH
+# Copyright (c) 2022-2025 Status Research & Development GmbH
 # Licensed and distributed under either of
 #   * MIT license (license terms in the root directory or at
 #     https://opensource.org/licenses/MIT).
@@ -15,7 +15,7 @@
 {.push gcsafe, raises: [].}
 
 import
-  std/[base64, options, strutils, times],
+  std/[os, base64, options, strutils, times],
   bearssl/rand,
   chronicles,
   chronos,
@@ -209,7 +209,9 @@ proc jwtSharedSecret*(
   # startup, or show error and continue without exposing the authenticated
   # port.
   #
-  if config.jwtSecret.isNone:
+  var jwtSecretPath = config.dataDir.string / jwtSecretFile # default path
+  let jwtDoesNotExist = not fileExists(jwtSecretPath)
+  if config.jwtSecret.isNone and jwtDoesNotExist:
     # If such a parameter is not given, the client SHOULD generate such a
     # token, valid for the duration of the execution, and store it the
     # hex-encoded secret as a jwt.hex file on the filesystem. This file can
@@ -218,7 +220,6 @@ proc jwtSharedSecret*(
     # github.com/ethereum/
     #   /execution-apis/blob/v1.0.0-alpha.8/src/engine/
     #   /authentication.md#key-distribution
-    let jwtSecretPath = config.dataDir.string & "/" & jwtSecretFile
     try:
       let newSecret = rndSecret()
       jwtSecretPath.writeFile(newSecret.JwtSharedKeyRaw.to0xHex)
@@ -234,14 +235,16 @@ proc jwtSharedSecret*(
       return err(jwtCreationError)
 
   try:
-    let lines = config.jwtSecret.get.string.readLines(1)
+    if jwtDoesNotExist:
+      jwtSecretPath = config.jwtSecret.get.string
+    let lines = jwtSecretPath.readLines(1)
     if lines.len == 0:
       return err(jwtKeyEmptyFile)
     var key: JwtSharedKey
     let rc = key.fromHex(lines[0])
     if rc.isErr:
       return err(rc.error)
-    info "JWT secret loaded", jwtSecretPath = config.jwtSecret.get.string
+    info "JWT secret loaded", jwtSecretPath = jwtSecretPath
     return ok(key)
   except IOError:
     return err(jwtKeyFileCannotOpen)
