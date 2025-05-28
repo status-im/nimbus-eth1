@@ -129,7 +129,7 @@ proc collectAndStashOnDiskCache*(
       # End loop
 
     trace info & ": fetched and stored headers", peer, iv, nHeaders=iv.len,
-      D=ctx.dangling.bnStr, syncState=($buddy.syncState),
+      D=ctx.hdrCache.antecedent.bnStr, syncState=($buddy.syncState),
       hdrErrors=buddy.hdrErrors
 
     # Reset header process errors (not too many consecutive failures this time)
@@ -140,7 +140,7 @@ proc collectAndStashOnDiskCache*(
 
   trace info & ": partially fetched/stored headers", peer,
     iv=(if ivTop < iv.maxPt: BnRange.new(ivTop+1,iv.maxPt).bnStr else: "n/a"),
-    nHeaders=(iv.maxPt-ivTop), D=ctx.dangling.bnStr,
+    nHeaders=(iv.maxPt-ivTop), D=ctx.hdrCache.antecedent.bnStr,
     syncState=($buddy.syncState), hdrErrors=buddy.hdrErrors
 
   return ivTop                         # there is some left over range
@@ -218,8 +218,8 @@ proc collectAndStageOnMemQueue*(
       # End loop
 
     trace info & ": fetched and staged all headers", peer, iv,
-      D=ctx.dangling.bnStr, nHeaders=iv.len, syncState=($buddy.syncState),
-      hdrErrors=buddy.hdrErrors
+      D=ctx.hdrCache.antecedent.bnStr, nHeaders=iv.len,
+      syncState=($buddy.syncState), hdrErrors=buddy.hdrErrors
 
     # Reset header process errors (not too many consecutive failures this time)
     buddy.nHdrProcErrors = 0           # all OK, reset error count
@@ -230,8 +230,9 @@ proc collectAndStageOnMemQueue*(
   # Start processing some error or an incomplete fetch/stage result
 
   trace info & ": partially fetched and staged headers", peer, iv,
-    D=ctx.dangling.bnStr, stagedHeaders=lhc.bnStr, nHeaders=lhc.revHdrs.len,
-    syncState=($buddy.syncState), hdrErrors=buddy.hdrErrors
+    D=ctx.hdrCache.antecedent.bnStr, stagedHeaders=lhc.bnStr,
+    nHeaders=lhc.revHdrs.len, syncState=($buddy.syncState),
+    hdrErrors=buddy.hdrErrors
 
   return ivTop                         # there is some left over range
 

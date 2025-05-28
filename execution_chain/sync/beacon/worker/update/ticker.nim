@@ -33,6 +33,7 @@ type
     latest: BlockNumber
     coupler: BlockNumber
     dangling: BlockNumber
+    top: BlockNumber
     head: BlockNumber
     target: BlockNumber
     activeOk: bool
@@ -48,7 +49,6 @@ type
     nBlkUnprocFragm: int
     nBlkStaged: int
     blkStagedBottom: BlockNumber
-    blkTopImported: BlockNumber
 
     state: SyncState
     nBuddies: int
@@ -71,26 +71,26 @@ when enableTicker:
   proc updater(ctx: BeaconCtxRef): TickerStats =
     ## Legacy stuff, will be probably be superseded by `metrics`
     TickerStats(
-      base:            ctx.chain.baseNumber(),
-      latest:          ctx.chain.latestNumber(),
+      base:            ctx.chain.baseNumber,
+      latest:          ctx.chain.latestNumber,
       coupler:         ctx.headersUnprocTotalBottom(),
-      dangling:        ctx.dangling.number,
-      head:            ctx.head.number,
-      target:          ctx.consHeadNumber,
+      dangling:        ctx.hdrCache.antecedent.number,
+      top:             ctx.subState.top,
+      head:            ctx.subState.head,
+      target:          ctx.hdrCache.latestConsHeadNumber,
       activeOk:        ctx.pool.lastState != idle,
 
       nHdrStaged:      ctx.headersStagedQueueLen(),
       hdrStagedTop:    ctx.headersStagedQueueTopKey(),
       hdrUnprocTop:    ctx.headersUnprocTotalTop(),
       nHdrUnprocessed: ctx.headersUnprocTotal(),
-      nHdrUnprocFragm: ctx.hdr.unprocessed.chunks(),
+      nHdrUnprocFragm: ctx.hdr.unprocessed.chunks,
 
       nBlkStaged:      ctx.blocksStagedQueueLen(),
       blkStagedBottom: ctx.blocksStagedQueueBottomKey(),
       blkUnprocBottom: ctx.blocksUnprocTotalBottom(),
       nBlkUnprocessed: ctx.blocksUnprocTotal(),
-      nBlkUnprocFragm: ctx.blk.unprocessed.chunks(),
-      blkTopImported:  ctx.blk.topImported,
+      nBlkUnprocFragm: ctx.blk.unprocessed.chunks,
 
       state:           ctx.pool.lastState,
       nBuddies:        ctx.pool.nBuddies)
@@ -108,7 +108,7 @@ when enableTicker:
       let
         B = if data.base == data.latest: "L" else: data.base.bnStr
         L = if data.latest == data.coupler: "C" else: data.latest.bnStr
-        I = if data.blkTopImported == 0: "n/a" else : data.blkTopImported.bnStr
+        I = if data.top == 0: "n/a" else : data.top.bnStr
         C = if data.coupler == data.dangling: "D"
             elif data.coupler < high(int64).uint64: data.coupler.bnStr
             else: "n/a"

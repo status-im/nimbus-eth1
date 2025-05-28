@@ -29,11 +29,11 @@ type
   BnRange* = Interval[BlockNumber,uint64]
     ## Single block number interval
 
-  LinkedHChainQueue* = SortedSet[BlockNumber,LinkedHChain]
+  StagedHeaderQueue* = SortedSet[BlockNumber,LinkedHChain]
     ## Block intervals sorted by largest block number.
 
   LinkedHChain* = object
-    ## Public block items for the `LinkedHChainQueue` list, indexed by the
+    ## Public block items for the `StagedHeaderQueue` list, indexed by the
     ## largest block number. The list `revHdrs[]` is reversed, i.e. the largest
     ## block number has the least index `0`. This makes it easier to grow the
     ## sequence with parent headers, i.e. decreasing block numbers.
@@ -58,21 +58,26 @@ type
 
   # -------------------
 
+  SyncSubState* = object
+    ## Bundelled state variables, easy to clear all with one `reset`.
+    top*: BlockNumber                ## For locally syncronising block import
+    head*: BlockNumber               ## Copy of `ctx.hdrCache.head()`
+    headHash*: Hash32                ## Copy of `ctx.hdrCache.headHash()`
+    cancelRequest*: bool             ## Cancel block sync via state machine
+
   HeaderFetchSync* = object
     ## Header sync staging area
     unprocessed*: BnRangeSet         ## Block or header ranges to fetch
     borrowed*: BnRangeSet            ## Fetched/locked ranges
-    staged*: LinkedHChainQueue       ## Blocks fetched but not stored yet
+    staged*: StagedHeaderQueue       ## Blocks fetched but not stored yet
     reserveStaged*: int              ## Pre-book staged slot temporarily
 
   BlocksFetchSync* = object
     ## Block sync staging area
     unprocessed*: BnRangeSet         ## Blocks download requested
     borrowed*: BnRangeSet            ## Fetched/locked fetched ranges
-    topImported*: BlockNumber        ## For syncronising opportunistic import
     staged*: StagedBlocksQueue       ## Blocks ready for import
     reserveStaged*: int              ## Pre-book staged slot temporarily
-    cancelRequest*: bool             ## Cancel block sync via state machine
 
   # -------------------
 
@@ -94,6 +99,7 @@ type
     lastState*: SyncState            ## Last known layout state
     hdrSync*: HeaderFetchSync        ## Syncing by linked header chains
     blkSync*: BlocksFetchSync        ## For importing/executing blocks
+    subState*: SyncSubState          ## Additional state variables
     nextMetricsUpdate*: Moment       ## For updating metrics
     nextAsyncNanoSleep*: Moment      ## Use nano-sleeps for task switch
 
@@ -120,28 +126,6 @@ type
 # Public helpers
 # ------------------------------------------------------------------------------
 
-func hdrCache*(ctx: BeaconCtxRef): HeaderChainRef =
-  ## Shortcut
-  ctx.pool.hdrCache
-
-func head*(ctx: BeaconCtxRef): Header =
-  ## Shortcut
-  ctx.hdrCache.head()
-
-func headHash*(ctx: BeaconCtxRef): Hash32 =
-  ## Shortcut
-  ctx.hdrCache.headHash()
-
-func dangling*(ctx: BeaconCtxRef): Header =
-  ## Shortcut
-  ctx.hdrCache.antecedent()
-
-func consHeadNumber*(ctx: BeaconCtxRef): BlockNumber =
-  ## Shortcut
-  ctx.hdrCache.latestConsHeadNumber()
-
-# ------------
-
 func hdr*(ctx: BeaconCtxRef): var HeaderFetchSync =
   ## Shortcut
   ctx.pool.hdrSync
@@ -150,17 +134,33 @@ func blk*(ctx: BeaconCtxRef): var BlocksFetchSync =
   ## Shortcut
   ctx.pool.blkSync
 
-func clReq*(ctx: BeaconCtxRef): var SyncClMesg =
+func subState*(ctx: BeaconCtxRef): var SyncSubState =
   ## Shortcut
-  ctx.pool.clReq
+  ctx.pool.subState
 
 func chain*(ctx: BeaconCtxRef): ForkedChainRef =
   ## Getter
   ctx.pool.chain
 
-func db*(ctx: BeaconCtxRef): CoreDbRef =
-  ## Getter
-  ctx.pool.chain.db
+func hdrCache*(ctx: BeaconCtxRef): HeaderChainRef =
+  ## Shortcut
+  ctx.pool.hdrCache
+
+# -----
+
+func hibernate*(ctx: BeaconCtxRef): bool =
+  ## Getter, re-interpretation of the daemon flag for reduced service mode
+  # No need for running the daemon with reduced service mode. So it is
+  # convenient to use this flag for indicating this.
+  not ctx.daemon
+
+proc `hibernate=`*(ctx: BeaconCtxRef; val: bool) =
+  ## Setter
+  ctx.daemon = not val
+
+  # Control some error messages on the scheduler (e.g. zombie/banned-peer
+  # reconnection attempts, LRU flushing out oldest peer etc.)
+  ctx.noisyLog = not val
 
 # -----
 
@@ -180,20 +180,6 @@ func syncState*(
    buddy.ctx.pool.lastState,
    buddy.ctx.hdrCache.state,
    buddy.ctx.poolMode)
-
-func hibernate*(ctx: BeaconCtxRef): bool =
-  ## Getter, re-interpretation of the daemon flag for reduced service mode
-  # No need for running the daemon with reduced service mode. So it is
-  # convenient to use this flag for indicating this.
-  not ctx.daemon
-
-proc `hibernate=`*(ctx: BeaconCtxRef; val: bool) =
-  ## Setter
-  ctx.daemon = not val
-
-  # Control some error messages on the scheduler (e.g. zombie/banned-peer
-  # reconnection attempts, LRU flushing out oldest peer etc.)
-  ctx.noisyLog = not val
 
 # -----
 

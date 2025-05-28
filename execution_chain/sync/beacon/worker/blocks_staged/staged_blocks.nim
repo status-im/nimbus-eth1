@@ -59,7 +59,7 @@ proc blocksFetchCheckImpl(
       # There is nothing one can do here
       info "Block header missing (reorg triggered)", peer, iv, n,
         nth=(iv.minPt + n).bnStr
-      ctx.blk.cancelRequest = true                         # So require reorg
+      ctx.subState.cancelRequest = true                    # So require reorg
       return Opt.none(seq[EthBlock])
     request.blockHashes[n - 1] = header.parentHash
     blocks[n].header = header
@@ -67,7 +67,7 @@ proc blocksFetchCheckImpl(
     # There is nothing one can do here
     info "Block header missing (reorg triggered)", peer, iv, n=0,
       nth=iv.minPt.bnStr
-    ctx.blk.cancelRequest = true                           # So require reorg
+    ctx.subState.cancelRequest = true                      # So require reorg
     return Opt.none(seq[EthBlock])
   request.blockHashes[^1] = blocks[^1].header.computeBlockHash
 
@@ -171,7 +171,7 @@ proc blocksImport*(
           nthBn=nBn.bnStr, nthHash=ctx.getNthHash(blocks, n).short,
           B=ctx.chain.baseNumber.bnStr, L=ctx.chain.latestNumber.bnStr
 
-        ctx.blk.topImported = nBn                  # well, not really imported
+        ctx.subState.top = nBn                     # well, not really imported
         continue
 
       try:
@@ -180,7 +180,7 @@ proc blocksImport*(
           # point, the `FC` module data area might have been moved to a new
           # canonical branch.
           #
-          ctx.blk.cancelRequest = true             # So require reorg
+          ctx.subState.cancelRequest = true         # So require reorg
           warn info & ": import block error (reorg triggered)", n, iv,
             nBlocks=iv.len, nthBn=nBn.bnStr,
             nthHash=ctx.getNthHash(blocks, n).short,
@@ -191,18 +191,18 @@ proc blocksImport*(
       except CancelledError:
         break loop                                 # shutdown?
 
-      ctx.blk.topImported = nBn                    # Block imported OK
+      ctx.subState.top = nBn                       # Block imported OK
 
       # Allow pseudo/async thread switch.
       (await ctx.updateAsyncTasks()).isOkOr:
         break loop
-
-  info "Imported blocks", iv=(if iv.minPt <= ctx.blk.topImported:
-    (iv.minPt, ctx.blk.topImported).bnStr else: "n/a"),
-    nBlocks=(ctx.blk.topImported - iv.minPt + 1),
-    nFailed=(iv.maxPt - ctx.blk.topImported),
+      
+  info "Imported blocks", iv=(if iv.minPt <= ctx.subState.top:
+    (iv.minPt, ctx.subState.top).bnStr else: "n/a"),
+    nBlocks=(ctx.subState.top - iv.minPt + 1),
+    nFailed=(iv.maxPt - ctx.subState.top),
     base=ctx.chain.baseNumber.bnStr, head=ctx.chain.latestNumber.bnStr,
-    target=ctx.head.bnStr, targetHash=ctx.headHash.short
+    target=ctx.subState.head.bnStr, targetHash=ctx.subState.headHash.short
 
 # ------------------------------------------------------------------------------
 # End

@@ -46,7 +46,7 @@ proc headersStashOnDisk*(
   ## whenever it is called similar to `blocksImport()`.
   let
     ctx = buddy.ctx
-    d9 = ctx.dangling.number # for logging
+    d9 = ctx.hdrCache.antecedent.number # for logging
     rc = ctx.hdrCache.put(revHdrs)
 
   if rc.isErr:
@@ -54,14 +54,14 @@ proc headersStashOnDisk*(
     debug info & ": header stash error", peer=buddy.peer, iv=revHdrs.bnStr,
       syncState=($buddy.syncState), hdrErrors=buddy.hdrErrors, error=rc.error
 
-  let d0 = ctx.dangling.number
+  let d0 = ctx.hdrCache.antecedent.number
   info "Cached headers", iv=(if d0 < d9: (d0,d9-1).bnStr else: "n/a"),
     nHeaders=(d9 - d0),
     nSkipped=(if rc.isErr: 0u64
               elif revHdrs[^1].number <= d0: (d0 - revHdrs[^1].number)
               else: revHdrs.len.uint64),
     base=ctx.chain.baseNumber.bnStr, head=ctx.chain.latestNumber.bnStr,
-    target=ctx.head.bnStr, targetHash=ctx.headHash.short
+    target=ctx.subState.head.bnStr, targetHash=ctx.subState.headHash.short
 
   rc.isOk
 

@@ -58,17 +58,17 @@ declareGauge nec_sync_non_peers_connected, "" &
 
 
 template updateMetricsImpl(ctx: BeaconCtxRef) =
-  metrics.set(nec_base, ctx.chain.baseNumber().int64)
-  metrics.set(nec_execution_head, ctx.chain.latestNumber().int64)
+  metrics.set(nec_base, ctx.chain.baseNumber.int64)
+  metrics.set(nec_execution_head, ctx.chain.latestNumber.int64)
   var coupler = ctx.headersUnprocTotalBottom()
   if high(int64).uint64 <= coupler:
     coupler = 0
   metrics.set(nec_sync_coupler, coupler.int64)
-  metrics.set(nec_sync_dangling, ctx.dangling.number.int64)
-  metrics.set(nec_sync_head, ctx.head.number.int64)
+  metrics.set(nec_sync_dangling, ctx.hdrCache.antecedent.number.int64)
+  metrics.set(nec_sync_head, ctx.subState.head.int64)
 
   # Show last valid state.
-  let consHeadNumber = ctx.consHeadNumber
+  let consHeadNumber = ctx.hdrCache.latestConsHeadNumber
   if 0 < consHeadNumber:
     metrics.set(nec_sync_consensus_head, consHeadNumber.int64)
 
