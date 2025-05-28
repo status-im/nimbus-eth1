@@ -102,13 +102,11 @@ task nimbus_portal_client, "Build nimbus_portal_client":
   buildBinary "nimbus_portal_client", "portal/client/", "-d:chronicles_log_level=TRACE"
 
 task portal_test, "Run Portal tests":
-  # Need the nimbus_db_backend in state network tests as we need a Hexary to
-  # start from, even though it only uses the MemoryDb.
-  test "portal/tests/history_network_tests/", "all_history_network_custom_chain_tests", "-d:chronicles_log_level=ERROR -d:nimbus_db_backend=sqlite"
+  test "portal/tests/history_network_tests/", "all_history_network_custom_chain_tests", "-d:chronicles_log_level=ERROR
   # Seperate build for these tests as they are run with a low `mergeBlockNumber`
   # to make the tests faster. Using the real mainnet merge block number is not
   # realistic for these tests.
-  test "portal/tests", "all_portal_tests", "-d:chronicles_log_level=ERROR -d:nimbus_db_backend=sqlite -d:mergeBlockNumber:38130"
+  test "portal/tests", "all_portal_tests", "-d:chronicles_log_level=ERROR -d:mergeBlockNumber:38130"
 
 task utp_test_app, "Build uTP test app":
   buildBinary "utp_test_app", "portal/tools/utp_testing/", "-d:chronicles_log_level=TRACE"
@@ -125,7 +123,7 @@ task nimbus_verified_proxy, "Build Nimbus verified proxy":
   buildBinary "nimbus_verified_proxy", "nimbus_verified_proxy/", "-d:chronicles_log_level=TRACE"
 
 task nimbus_verified_proxy_test, "Run Nimbus verified proxy tests":
-  test "nimbus_verified_proxy/tests", "all_proxy_tests", "-d:chronicles_log_level=ERROR -d:nimbus_db_backend=sqlite"
+  test "nimbus_verified_proxy/tests", "all_proxy_tests", "-d:chronicles_log_level=ERROR
 
 task build_fuzzers, "Build fuzzer test cases":
   # This file is there to be able to quickly build the fuzzer test cases in
