@@ -12,6 +12,7 @@
 
 import
   std/tables,
+  chronos,
   ../../../common,
   ../../../db/[core_db, fcu_db],
   ../../../portal/portal,
@@ -21,6 +22,10 @@ import
 export tables
 
 type
+  QueueItem* = object
+    responseFut*: Future[Result[void, string]].Raising([CancelledError])
+    handler*: proc(): Future[Result[void, string]] {.async: (raises: [CancelledError]).}
+
   ForkedChainRef* = ref object
     com*: CommonRef
     hashToBlock* : Table[Hash32, BlockPos]
@@ -74,6 +79,12 @@ type
 
     fcuHead*: FcuHashAndNumber
     fcuSafe*: FcuHashAndNumber
+      # Tracking current head and safe block of FC serialization.
+
+    queue*: AsyncQueue[QueueItem]
+    processingQueueLoop*: Future[void].Raising([CancelledError])
+      # Prevent async re-entrancy messing up FC state
+      # on both `importBlock` and `forkChoice`.
 
 # ------------------------------------------------------------------------------
 # These functions are private to ForkedChainRef

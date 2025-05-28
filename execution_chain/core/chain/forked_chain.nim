@@ -41,6 +41,7 @@ export
 const
   BaseDistance = 128'u64
   PersistBatchSize = 32'u64
+  MaxQueueSize = 9
 
 # ------------------------------------------------------------------------------
 # Forward declarations
@@ -490,6 +491,26 @@ proc updateBase(c: ForkedChainRef, newBase: BlockPos):
       pendingFCU = c.pendingFCU.short,
       resolvedFin= c.latestFinalizedBlockNumber
 
+proc processQueue(c: ForkedChainRef) {.async: (raises: [CancelledError]).} =
+  while true:
+    # Cooperative concurrency: one block per loop iteration - because
+    # we run both networking and CPU-heavy things like block processing
+    # on the same thread, we need to make sure that there is steady progress
+    # on the networking side or we get long lockups that lead to timeouts.
+    const
+      # We cap waiting for an idle slot in case there's a lot of network traffic
+      # taking up all CPU - we don't want to _completely_ stop processing blocks
+      # in this case - doing so also allows us to benefit from more batching /
+      # larger network reads when under load.
+      idleTimeout = 10.milliseconds
+
+    discard await idleAsync().withTimeout(idleTimeout)
+    let
+      item = await c.queue.popFirst()
+      res = await item.handler()
+    if not item.responseFut.finished:
+      item.responseFut.complete res
+
 # ------------------------------------------------------------------------------
 # Public functions
 # ------------------------------------------------------------------------------
@@ -500,6 +521,7 @@ proc init*(
     baseDistance = BaseDistance;
     persistBatchSize = PersistBatchSize;
     eagerStateRoot = false;
+    enableQueue = false;
       ): T =
   ## Constructor that uses the current database ledger state for initialising.
   ## This state coincides with the canonical head that would be used for
@@ -523,18 +545,24 @@ proc init*(
       FcuHashAndNumber(hash: baseHash, number: baseHeader.number)
     fcuSafe = baseTxFrame.fcuSafe().valueOr:
       FcuHashAndNumber(hash: baseHash, number: baseHeader.number)
+    fc = T(com:             com,
+      baseBranch:      baseBranch,
+      activeBranch:    baseBranch,
+      branches:        @[baseBranch],
+      hashToBlock:     {baseHash: baseBranch.lastBlockPos}.toTable,
+      baseTxFrame:     baseTxFrame,
+      baseDistance:    baseDistance,
+      persistBatchSize:persistBatchSize,
+      quarantine:      Quarantine.init(),
+      fcuHead:         fcuHead,
+      fcuSafe:         fcuSafe,
+    )
 
-  T(com:             com,
-    baseBranch:      baseBranch,
-    activeBranch:    baseBranch,
-    branches:        @[baseBranch],
-    hashToBlock:     {baseHash: baseBranch.lastBlockPos}.toTable,
-    baseTxFrame:     baseTxFrame,
-    baseDistance:    baseDistance,
-    persistBatchSize:persistBatchSize,
-    quarantine:      Quarantine.init(),
-    fcuHead:         fcuHead,
-    fcuSafe:         fcuSafe)
+  if enableQueue:
+    fc.queue = newAsyncQueue[QueueItem](maxsize = MaxQueueSize)
+    fc.processingQueueLoop = fc.processQueue()
+
+  fc
 
 proc importBlock*(c: ForkedChainRef, blk: Block, finalized = false):
        Future[Result[void, string]] {.async: (raises: [CancelledError]).} =
@@ -652,6 +680,35 @@ proc forkChoice*(c: ForkedChainRef,
   await c.updateBase(newBase)
 
   ok()
+
+proc stopProcessingQueue*(c: ForkedChainRef) {.async: (raises: [CancelledError]).} =
+  doAssert(c.processingQueueLoop.isNil.not, "Please set enableQueue=true when constructing FC")
+  await c.processingQueueLoop.cancelAndWait()
+
+template queueImportBlock*(c: ForkedChainRef, blk: Block, finalized = false): auto =
+  proc asyncHandler(): Future[Result[void, string]] {.async: (raises: [CancelledError]).} =
+    await c.importBlock(blk, finalized)
+
+  let item = QueueItem(
+    responseFut: Future[Result[void, string]].Raising([CancelledError]).init(),
+    handler: asyncHandler
+  )
+  await c.queue.addLast(item)
+  item.responseFut
+
+template queueForkChoice*(c: ForkedChainRef,
+                 headHash: Hash32,
+                 finalizedHash: Hash32,
+                 safeHash: Hash32 = zeroHash32): auto =
+  proc asyncHandler(): Future[Result[void, string]] {.async: (raises: [CancelledError]).} =
+    await c.forkChoice(headHash, finalizedHash, safeHash)
+
+  let item = QueueItem(
+    responseFut: Future[Result[void, string]].Raising([CancelledError]).init(),
+    handler: asyncHandler
+  )
+  await c.queue.addLast(item)
+  item.responseFut
 
 func finHash*(c: ForkedChainRef): Hash32 =
   c.pendingFCU
