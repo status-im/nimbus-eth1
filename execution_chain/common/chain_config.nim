@@ -514,7 +514,7 @@ proc parseGenesisAlloc*(data: string, ga: var GenesisAlloc): bool
 func defaultBlobSchedule*(): seq[BpoFork] =
   ## Returns a default blob schedule for named forks.
   ## This is used when the blob schedule is not specified in the genesis config.
-  result = @[
+  @[
     BpoFork(
       forkName: Opt.some(Cancun),
       forkTimestamp: Opt.none(EthTime),

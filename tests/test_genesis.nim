@@ -170,7 +170,6 @@ proc customGenesisTest() =
 
       template validateBlobScheduleTimestamp(cg, timestamp, tgt, mx, fee) =
         var found = false
-        echo cg.config.blobSchedule
         for bpo in cg.config.blobSchedule:
           if bpo.forkTimestamp.isSome and bpo.forkTimestamp.get == timestamp:
             found = true
