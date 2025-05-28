@@ -113,7 +113,7 @@ type
 
     # Info, debugging, and error handling stuff
     nProcError*: Table[Hash,BuddyError] ## Per peer processing error
-    blkLastSlowPeer*: Opt[Hash]      ## Register slow peer when last one
+    lastSlowPeer*: Opt[Hash]         ## Register slow peer when the last one
     failedPeers*: HashSet[Hash]      ## Detect dead end sync by collecting peers
     seenData*: bool                  ## Set `true` is data were fetched, already
 
