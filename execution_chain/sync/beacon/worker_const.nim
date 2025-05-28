@@ -26,20 +26,6 @@ const
   enableTicker* = false
     ## Log regular status updates similar to metrics. Great for debugging.
 
-  runsThisManyPeersOnly* = 8
-    ## Set to `1` for running a single peer only at a time. Great for debugging.
-    ##
-    ## Otherwise, this setting limits the number of peers accepted by the
-    ## `runStart()` peer initialiser. When testing with an unlimited number of
-    ## peers with some double digit number of connected peers, the observed
-    ## response times when fetching headers seemed to degrade considerable into
-    ## seconds (rather than ms.) This will be further looked at to be confirmed
-    ## or rejected as insignificant.
-    ##
-    ## Note:
-    ##   This setting has priority over the `maxPeers` setting of the
-    ##   `BeaconSyncRef.init()` initaliser.
-
   # ----------------------
 
   metricsUpdateInterval* = chronos.seconds(10)
@@ -128,8 +114,6 @@ const
   # ----------------------
 
 static:
-  doAssert 0 < runsThisManyPeersOnly
-
   doAssert 0 < nFetchHeadersRequest
   doAssert 0 < headersStagedQueueLengthMax
 
