@@ -47,6 +47,7 @@ type
     client : RpcHttpClient
     txPool : TxPoolRef
     chain  : ForkedChainRef
+    wire   : EthWireRef
 
 const
   baseFolder  = "hive_integration/nodocker/engine"
@@ -84,8 +85,7 @@ proc newEngineEnv*(conf: var NimbusConf, chainFile: string, enableAuth: bool): E
     com    = makeCom(conf)
     chain  = ForkedChainRef.init(com, enableQueue = true)
     txPool = TxPoolRef.new(chain)
-
-  node.addEthHandlerCapability(txPool)
+    wire   = node.addEthHandlerCapability(txPool)
 
   var key: JwtSharedKey
   key.fromHex(jwtSecret).isOkOr:
@@ -126,13 +126,15 @@ proc newEngineEnv*(conf: var NimbusConf, chainFile: string, enableAuth: bool): E
     server : server,
     client : client,
     txPool : txPool,
-    chain  : chain
+    chain  : chain,
+    wire   : wire,
   )
 
 proc close*(env: EngineEnv) =
   waitFor env.node.closeWait()
   waitFor env.client.close()
   waitFor env.server.closeWait()
+  waitFor env.wire.stop()
   waitFor env.chain.stopProcessingQueue()
 
 proc setRealTTD*(env: EngineEnv) =

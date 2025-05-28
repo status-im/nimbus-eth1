@@ -18,6 +18,7 @@ import
   ./core/tx_pool,
   ./sync/peers,
   ./sync/beacon as beacon_sync,
+  ./sync/wire_protocol,
   ./beacon/beacon_engine,
   ./common,
   ./config
@@ -52,6 +53,7 @@ type
     beaconSyncRef*: BeaconSyncRef
     beaconEngine*: BeaconEngineRef
     metricsServer*: MetricsHttpServerRef
+    wire*: EthWireRef
 
 {.push gcsafe, raises: [].}
 
@@ -70,6 +72,8 @@ proc stop*(nimbus: NimbusNode, conf: NimbusConf) {.async, gcsafe.} =
     waitedFutures.add nimbus.beaconSyncRef.stop()
   if nimbus.metricsServer.isNil.not:
     waitedFutures.add nimbus.metricsServer.stop()
+  if nimbus.wire.isNil.not:
+    waitedFutures.add nimbus.wire.stop()
 
   waitedFutures.add nimbus.fc.stopProcessingQueue()
 
