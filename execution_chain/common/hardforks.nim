@@ -328,11 +328,11 @@ const
     FkCancun,         # Cancun
     FkPrague,         # Prague
     FkOsaka,          # Osaka
-    FkOsaka,          # Bpo1
-    FkOsaka,          # Bpo2
-    FkOsaka,          # Bpo3
-    FkOsaka,          # Bpo4
-    FkOsaka,          # Bpo5
+    FkBpo1,          # Bpo1
+    FkBpo2,          # Bpo2
+    FkBpo3,          # Bpo3
+    FkBpo4,          # Bpo4
+    FkBpo5,          # Bpo5
   ]
 
 # ------------------------------------------------------------------------------
