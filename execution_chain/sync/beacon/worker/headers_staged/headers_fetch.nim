@@ -22,8 +22,8 @@ import
 # ------------------------------------------------------------------------------
 
 proc registerError(buddy: BeaconBuddyRef, slowPeer = false) =
-  buddy.incHdrRespErrors()
-  if fetchHeadersReqErrThresholdCount < buddy.nHdrRespErrors:
+  buddy.only.nRespErrors.hdr.inc
+  if nFetchHeadersErrThreshold < buddy.only.nRespErrors.hdr:
     if 1 < buddy.ctx.pool.nBuddies or not slowPeer:
       buddy.ctrl.zombie = true # abandon slow peer unless last one
 
@@ -32,7 +32,7 @@ proc registerError(buddy: BeaconBuddyRef, slowPeer = false) =
 # ------------------------------------------------------------------------------
 
 func hdrErrors*(buddy: BeaconBuddyRef): string =
-  $buddy.nHdrRespErrors & "/" & $buddy.nHdrProcErrors()
+  $buddy.only.nRespErrors.hdr & "/" & $buddy.nHdrProcErrors()
 
 # ------------------------------------------------------------------------------
 # Public functions
@@ -80,7 +80,7 @@ proc headersFetchReversed*(
     # in `rplx` with a violated `req.timeoutAt <= Moment.now()` assertion.
     resp = await peer.getBlockHeaders(req)
   except PeerDisconnected as e:
-    buddy.only.nBdyRespErrors.inc
+    buddy.only.nRespErrors.hdr.inc
     buddy.ctrl.zombie = true
     `info` info & " error", peer, ivReq, nReq=req.maxResults,
       hash=topHash.toStr, elapsed=(Moment.now() - start).toStr,
@@ -129,11 +129,11 @@ proc headersFetchReversed*(
 
   # Ban an overly slow peer for a while when seen in a row. Also there is a
   # mimimum share of the number of requested headers expected, typically 10%.
-  if fetchHeadersReqErrThresholdZombie < elapsed or
-     h.len.uint64 * 100 < req.maxResults * fetchHeadersReqMinResponsePC:
+  if fetchHeadersErrTimeout < elapsed or
+     h.len.uint64 * 100 < req.maxResults * fetchHeadersMinResponsePC:
     buddy.registerError()
   else:
-    buddy.nHdrRespErrors = 0 # reset error count
+    buddy.only.nRespErrors.hdr = 0 # reset error count
 
   trace trEthRecvReceivedBlockHeaders, peer, nReq=req.maxResults,
     hash=topHash.toStr, ivResp=BnRange.new(h[^1].number,h[0].number),

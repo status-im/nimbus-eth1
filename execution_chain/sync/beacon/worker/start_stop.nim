@@ -29,8 +29,13 @@ type
 
 proc querySyncProgress(ctx: BeaconCtxRef): SyncStateData =
   ## Syncer status query function (for call back closure)
+  if blocks <= ctx.pool.lastState:
+    return (ctx.hdrCache.antecedent.number, ctx.subState.top, ctx.subState.head)
+
   if headers <= ctx.pool.lastState:
-    return (ctx.chain.baseNumber, ctx.dangling.number, ctx.head.number)
+    let b = ctx.chain.baseNumber
+    return (b, b, ctx.subState.head)
+
   # (0,0,0)
 
 # ------------------------------------------------------------------------------
@@ -50,7 +55,7 @@ proc setupServices*(ctx: BeaconCtxRef; info: static[string]) =
   ctx.hibernate = true
 
   # Set up header cache descriptor
-  ctx.pool.hdrCache = HeaderChainRef.init(ctx.pool.chain)
+  ctx.pool.hdrCache = HeaderChainRef.init(ctx.chain)
 
   # Set up the notifier informing when a new syncer session has started.
   ctx.hdrCache.start proc() =
@@ -58,10 +63,11 @@ proc setupServices*(ctx: BeaconCtxRef; info: static[string]) =
     ctx.updateFromHibernateSetTarget info
 
   # Manual first run?
-  if 0 < ctx.clReq.consHead.number:
-    debug info & ": pre-set target", consHead=ctx.clReq.consHead.bnStr,
-      finalHash=ctx.clReq.finalHash.short
-    ctx.hdrCache.headTargetUpdate(ctx.clReq.consHead, ctx.clReq.finalHash)
+  if 0 < ctx.pool.clReq.consHead.number:
+    debug info & ": pre-set target", consHead=ctx.pool.clReq.consHead.bnStr,
+      finalHash=ctx.pool.clReq.finalHash.short
+    ctx.hdrCache.headTargetUpdate(
+      ctx.pool.clReq.consHead, ctx.pool.clReq.finalHash)
 
   # Provide progress info call back handler
   ctx.pool.chain.com.beaconSyncerProgress = proc(): SyncStateData =
@@ -89,13 +95,13 @@ proc startBuddy*(buddy: BeaconBuddyRef): bool =
      acceptProto(eth68):
     ctx.pool.nBuddies.inc
     ctx.pool.blkLastSlowPeer = Opt.none(Hash)
-    buddy.initHdrProcErrors()
+    buddy.initProcErrors()
     return true
 
 
 proc stopBuddy*(buddy: BeaconBuddyRef) =
   buddy.ctx.pool.nBuddies.dec
-  buddy.clearHdrProcErrors()
+  buddy.clearProcErrors()
 
 # ------------------------------------------------------------------------------
 # End

@@ -30,6 +30,9 @@ proc startHibernating(ctx: BeaconCtxRef; info: static[string]) =
   doAssert ctx.blocksStagedQueueIsEmpty()
   doAssert ctx.headersUnprocIsEmpty()
   doAssert ctx.headersStagedQueueIsEmpty()
+  doAssert ctx.subState.top == 0
+  doAssert ctx.subState.head == 0
+  doAssert not ctx.subState.cancelRequest
 
   ctx.hdrCache.clear()
 
@@ -50,28 +53,32 @@ proc commitCollectHeaders(ctx: BeaconCtxRef; info: static[string]): bool =
   ctx.hdrCache.commit().isOkOr:
     trace info & ": cannot finalise header chain",
       B=ctx.chain.baseNumber.bnStr, L=ctx.chain.latestNumber.bnStr,
-      D=ctx.dangling.bnStr, H=ctx.head.bnStr, `error`=error
+      D=ctx.hdrCache.antecedent.bnStr, H=ctx.hdrCache.head.bnStr,
+      `error`=error
     return false
 
   true
 
 
 proc setupProcessingBlocks(ctx: BeaconCtxRef; info: static[string]) =
+  ## Prepare for blocks processing
   doAssert ctx.blocksUnprocIsEmpty()
   doAssert ctx.blocksStagedQueueIsEmpty()
+  doAssert ctx.subState.top == 0
+  doAssert ctx.subState.head == 0
+  doAssert not ctx.subState.cancelRequest
 
   # Reset for useles block download detection (to avoid deadlock)
   ctx.pool.failedPeers.clear()
   ctx.pool.seenData = false
 
-  # Prepare for blocks processing
-  let
-    d = ctx.dangling.number
-    h = ctx.head().number
+  # Re-initialise sub-state variables
+  ctx.subState.top = ctx.hdrCache.antecedent.number - 1
+  ctx.subState.head = ctx.hdrCache.head.number
+  ctx.subState.headHash = ctx.hdrCache.headHash
 
   # Update list of block numbers to process
-  ctx.blocksUnprocSet(d, h)
-  ctx.blk.topImported = d - 1
+  ctx.blocksUnprocSet(ctx.subState.top + 1, ctx.subState.head)
 
 # ------------------------------------------------------------------------------
 # Private state transition handlers
@@ -86,10 +93,10 @@ func idleNext(ctx: BeaconCtxRef; info: static[string]): SyncState =
 proc headersNext(ctx: BeaconCtxRef; info: static[string]): SyncState =
   ## State transition handler
   if not ctx.pool.seenData and         # checks for cul-de-sac syncing
-     fetchHeadersFailedInitialFailPeersHwm < ctx.pool.failedPeers.len:
+     nFetchHeadersFailedInitialPeersThreshold < ctx.pool.failedPeers.len:
     debug info & ": too many failed header peers",
       failedPeers=ctx.pool.failedPeers.len,
-      limit=fetchHeadersFailedInitialFailPeersHwm
+      limit=nFetchHeadersFailedInitialPeersThreshold
     return headersCancel
 
   if ctx.hdrCache.state == collecting:
@@ -121,17 +128,16 @@ proc headersFinishNext(ctx: BeaconCtxRef; info: static[string]): SyncState =
 proc blocksNext(ctx: BeaconCtxRef; info: static[string]): SyncState =
   ## State transition handler
   if not ctx.pool.seenData and         # checks for cul-de-sac syncing
-     fetchBodiesFailedInitialFailPeersHwm < ctx.pool.failedPeers.len:
+     nFetchBodiesFailedInitialPeersThreshold < ctx.pool.failedPeers.len:
     debug info & ": too many failed block peers",
       failedPeers=ctx.pool.failedPeers.len,
-      limit=fetchBodiesFailedInitialFailPeersHwm
+      limit=nFetchBodiesFailedInitialPeersThreshold
     return blocksCancel
 
-  if ctx.blk.cancelRequest:
+  if ctx.subState.cancelRequest:
     return blocksCancel
 
-  if ctx.blocksStagedQueueIsEmpty() and
-     ctx.blocksUnprocIsEmpty():
+  if ctx.subState.head <= ctx.subState.top:
     return blocksFinish
 
   SyncState.blocks
@@ -200,15 +206,22 @@ proc updateSyncState*(ctx: BeaconCtxRef; info: static[string]) =
   let prevState = ctx.pool.lastState
   ctx.pool.lastState = newState
 
-  # Most states require synchronisation via `poolMode`
-  if newState notin {idle, SyncState.headers, SyncState.blocks}:
+  case newState:
+  of idle:
+    info "State changed", prevState, newState,
+      base=ctx.chain.baseNumber.bnStr, head=ctx.chain.latestNumber.bnStr,
+      nSyncPeers=ctx.pool.nBuddies
+
+  of SyncState.headers, SyncState.blocks:
+    info "State changed", prevState, newState,
+      base=ctx.chain.baseNumber.bnStr, head=ctx.chain.latestNumber.bnStr,
+      target=ctx.subState.head.bnStr, targetHash=ctx.subState.headHash.short
+
+  else:
+    # Most states require synchronisation via `poolMode`
     ctx.poolMode = true
     info "State change, waiting for sync", prevState, newState,
       nSyncPeers=ctx.pool.nBuddies
-  else:
-    info "State changed", prevState, newState,
-      base=ctx.chain.baseNumber.bnStr, head=ctx.chain.latestNumber.bnStr,
-      target=ctx.head.bnStr, targetHash=ctx.headHash.short
 
   # Final sync scrum layout reached or inconsistent/impossible state
   if newState == idle:
@@ -231,9 +244,11 @@ proc updateFromHibernateSetTarget*(
 
       # Update range
       ctx.headersUnprocSet(b+1, t-1)
+      ctx.subState.head = t
+      ctx.subState.headHash = ctx.hdrCache.headHash
 
       info "Activating syncer", base=b.bnStr, head=ctx.chain.latestNumber.bnStr,
-        target=t.bnStr, targetHash=ctx.headHash.short,
+        target=t.bnStr, targetHash=ctx.subState.headHash.short,
         nSyncPeers=ctx.pool.nBuddies
       return
 

@@ -64,9 +64,9 @@ proc match*(
 proc deriveLogs*(
     header: Header,
     transactions: openArray[Transaction],
-    receipts: openArray[Receipt],
+    receipts: openArray[StoredReceipt | Receipt],
     filterOptions: FilterOptions,
-    txHashes: Opt[seq[Hash32]] = Opt.none(seq[Hash32])
+    txHashes: Opt[seq[Hash32]] = Opt.none(seq[Hash32]),
 ): seq[FilterLog] =
   ## Derive log fields, does not deal with pending log, only the logs with
   ## full data set
@@ -81,12 +81,13 @@ proc deriveLogs*(
   var logIndex = 0'u64
 
   for i, receipt in receipts:
-    let logs = receipt.logs.filterIt(it.match(filterOptions.address, filterOptions.topics))
+    let logs =
+      receipt.logs.filterIt(it.match(filterOptions.address, filterOptions.topics))
     if logs.len > 0:
       # TODO avoid recomputing entirely - we should have this cached somewhere
       let txHash =
         if txHashes.isSome:
-            txHashes.get[i] # cached txHashes
+          txHashes.get[i] # cached txHashes
         else:
           transactions[i].computeRlpHash
 

@@ -38,6 +38,6 @@ func headersStagedQueueClear*(ctx: BeaconCtxRef) =
 
 func headersStagedQueueInit*(ctx: BeaconCtxRef) =
   ## Constructor
-  ctx.hdr.staged = LinkedHChainQueue.init()
+  ctx.hdr.staged = StagedHeaderQueue.init()
 
 # End

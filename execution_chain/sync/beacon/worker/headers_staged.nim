@@ -15,7 +15,7 @@ import
   pkg/eth/common,
   pkg/stew/[interval_set, sorted_set],
   ../worker_desc,
-  ./headers_staged/[headers_fetch, staged_collect],
+  ./headers_staged/[headers_fetch, staged_collect, staged_headers],
   ./headers_unproc
 
 # ------------------------------------------------------------------------------
@@ -83,22 +83,24 @@ proc headersStagedCollect*(
       #
       # so any other peer arriving here will see a gap between `top` and
       # `dangling` which will lead them to fetch opportunistcally.
-      if top < ctx.dangling.number:
+      #
+      let dangling = ctx.hdrCache.antecedent.number
+      if top < dangling:
         break
 
       # Throw away overlap (should not happen anyway)
-      if ctx.dangling.number < top:
-        discard ctx.headersUnprocFetch(top-ctx.dangling.number).expect("iv")
+      if dangling < top:
+        discard ctx.headersUnprocFetch(top - dangling).expect("iv")
 
       let
         # Reserve the full range of block numbers so they can be appended in a
         # row. This avoid some fragmentation when header chains are stashed by
         # multiple peers, i.e. they interleave peer task-wise.
-        iv = ctx.headersUnprocFetch(nFetchHeadersBatch).valueOr:
+        iv = ctx.headersUnprocFetch(nFetchHeadersBatchListLen).valueOr:
           break fetchHeadersBody                     # done, exit this function
 
         # Get parent hash from the most senior stored header
-        parent = ctx.dangling.parentHash
+        parent = ctx.hdrCache.antecedent.parentHash
 
         # Fetch headers and store them on the header chain cache. The function
         # returns the last unprocessed block number
@@ -125,8 +127,9 @@ proc headersStagedCollect*(
       ctx.headersUnprocCommit(iv)                    # all headers processed
 
       debug info & ": fetched headers count", peer,
-        unprocTop=ctx.headersUnprocAvailTop.bnStr, D=ctx.dangling.bnStr,
-        nStored, nStagedQ=ctx.hdr.staged.len, syncState=($buddy.syncState)
+        unprocTop=ctx.headersUnprocAvailTop.bnStr,
+        D=ctx.hdrCache.antecedent.bnStr, nStored, nStagedQ=ctx.hdr.staged.len,
+        syncState=($buddy.syncState)
 
       # Buddy might have been cancelled while downloading headers.
       if buddy.ctrl.stopped:
@@ -136,11 +139,11 @@ proc headersStagedCollect*(
 
     # Continue opportunistically fetching by block number rather than hash. The
     # fetched headers need to be staged and checked/serialised later.
-    if ctx.hdr.staged.len + ctx.hdr.reserveStaged < headersStagedQueueLengthHwm:
+    if ctx.hdr.staged.len + ctx.hdr.reserveStaged < headersStagedQueueLengthMax:
 
       let
         # Comment see deterministic case
-        iv = ctx.headersUnprocFetch(nFetchHeadersBatch).valueOr:
+        iv = ctx.headersUnprocFetch(nFetchHeadersBatchListLen).valueOr:
           break fetchHeadersBody                     # done, exit this function
 
         # This record will accumulate the fetched headers. It must be on the
@@ -225,7 +228,7 @@ proc headersStagedProcess*(buddy: BeaconBuddyRef; info: static[string]): bool =
     let
       minNum = qItem.data.revHdrs[^1].number
       maxNum = qItem.data.revHdrs[0].number
-      dangling = ctx.dangling.number
+      dangling = ctx.hdrCache.antecedent.number
     if maxNum + 1 < dangling:
       debug info & ": gap, serialisation postponed", peer,
         qItem=qItem.data.bnStr, D=dangling.bnStr, nStored,
@@ -237,32 +240,29 @@ proc headersStagedProcess*(buddy: BeaconBuddyRef; info: static[string]): bool =
     discard ctx.hdr.staged.delete(qItem.key)
 
     # Store headers on database
-    ctx.hdrCache.put(qItem.data.revHdrs).isOkOr:
-      ctx.headersUnprocAppend(minNum, maxNum)
-
+    if not buddy.headersStashOnDisk(qItem.data.revHdrs, info):
       # Error mark buddy that produced that unusable headers list
-      buddy.incHdrProcErrors qItem.data.peerID
+      ctx.incHdrProcErrors qItem.data.peerID
 
-      debug info & ": discarding staged header list", peer,
-        qItem=qItem.data.bnStr, D=ctx.dangling.bnStr, nStored,
-        nDiscarded=qItem.data.revHdrs.len, nSyncPeers=ctx.pool.nBuddies,
-        `error`=error
+      ctx.headersUnprocAppend(minNum, maxNum)
       switchPeer = true
       break
 
     # Antecedent `dangling` of the header cache might not be at `revHdrs[^1]`.
-    let revHdrsLen = maxNum - ctx.dangling.number + 1
+    let revHdrsLen = maxNum - ctx.hdrCache.antecedent.number + 1
 
     nStored += revHdrsLen.int # count headers
     # End while loop
 
   if 0 < nStored:
-    info "Headers serialised and stored", D=ctx.dangling.bnStr, nStored,
-      nStagedQ=ctx.hdr.staged.len, nSyncPeers=ctx.pool.nBuddies, switchPeer
+    info "Headers serialised and stored", D=ctx.hdrCache.antecedent.bnStr,
+      nStored, nStagedQ=ctx.hdr.staged.len, nSyncPeers=ctx.pool.nBuddies,
+      switchPeer
 
   elif 0 < ctx.hdr.staged.len and not switchPeer:
-    trace info & ": no headers processed", peer, D=ctx.dangling.bnStr,
-      nStagedQ=ctx.hdr.staged.len, nSyncPeers=ctx.pool.nBuddies
+    trace info & ": no headers processed", peer,
+      D=ctx.hdrCache.antecedent.bnStr, nStagedQ=ctx.hdr.staged.len,
+      nSyncPeers=ctx.pool.nBuddies
 
   not switchPeer
 
@@ -276,6 +276,7 @@ proc headersStagedReorg*(ctx: BeaconCtxRef; info: static[string]) =
 
     ctx.headersUnprocClear() # clears `unprocessed` and `borrowed` list
     ctx.hdr.staged.clear()
+    ctx.subState.reset
 
 # ------------------------------------------------------------------------------
 # End

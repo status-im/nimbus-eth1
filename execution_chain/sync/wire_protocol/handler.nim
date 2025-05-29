@@ -89,7 +89,7 @@ proc getReceipts*(ctx: EthWireRef,
       continue
 
     totalBytes += getEncodedLength(receiptList)
-    list.add(move(receiptList))
+    list.add(receiptList.to(seq[Receipt]))
 
     if list.len >= MAX_RECEIPTS_SERVE or
        totalBytes > SOFT_RESPONSE_LIMIT:
@@ -109,7 +109,7 @@ proc getStoredReceipts*(ctx: EthWireRef,
       continue
 
     totalBytes += getEncodedLength(receiptList)
-    list.add(receiptList.to(seq[StoredReceipt]))
+    list.add(move(receiptList))
 
     if list.len >= MAX_RECEIPTS_SERVE or
        totalBytes > SOFT_RESPONSE_LIMIT:

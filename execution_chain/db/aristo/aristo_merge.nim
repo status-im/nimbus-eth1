@@ -55,6 +55,7 @@ proc mergePayloadImpl[LeafType, T](
   ##
   var
     path = NibblesBuf.fromBytes(path.data)
+    pos = 0
     cur = root
     (vtx, _) = db.getVtxRc((root, cur)).valueOr:
       if error != GetVtxNotFound:
@@ -71,12 +72,12 @@ proc mergePayloadImpl[LeafType, T](
     for i in 2..vids.len:
       db.layersResKey((root, vids[^i]), vtxs[^i])
 
-  while path.len > 0:
+  while pos < path.len:
     # Clear existing merkle keys along the traversal path
     vids.add cur
     vtxs.add vtx
-
-    let n = path.sharedPrefixLen(vtx.pfx)
+    var psuffix = path.slice(pos)
+    let n = psuffix.sharedPrefixLen(vtx.pfx)
     case vtx.vType
     of Leaves:
       let res =
@@ -86,22 +87,28 @@ proc mergePayloadImpl[LeafType, T](
           when payload is AristoAccount:
             if AccLeafRef(vtx).account == payload:
               return err(MergeNoAction)
-            let leafVtx = db.layersPutLeaf((root, cur), path, payload)
+            let leafVtx = db.layersPutLeaf((root, cur), psuffix, payload)
             leafVtx.stoID = AccLeafRef(vtx).stoID
 
           else:
             if StoLeafRef(vtx).stoData == payload:
               return err(MergeNoAction)
-            let leafVtx = db.layersPutLeaf((root, cur), path, payload)
+            let leafVtx = db.layersPutLeaf((root, cur), psuffix, payload)
           (leafVtx, nil, nil)
         else:
           # Turn leaf into a branch (or extension) then insert the two leaves
           # into the branch
-          let branch =
-            if n > 0:
-              ExtBranchRef.init(path.slice(0, n), db.vidFetch(16), 0)
-            else:
-              BranchRef.init(db.vidFetch(16), 0)
+          let
+            startVid =
+              if root == STATE_ROOT_VID:
+                db.accVidFetch(path.slice(0, pos + n) & NibblesBuf.nibble(0), 16)
+              else:
+                db.vidFetch(16)
+            branch =
+              if n > 0:
+                ExtBranchRef.init(psuffix.slice(0, n), startVid, 0)
+              else:
+                BranchRef.init(startVid, 0)
           let other = block: # Copy of existing leaf node, now one level deeper
             let
               local = branch.setUsed(vtx.pfx[n], true)
@@ -114,8 +121,8 @@ proc mergePayloadImpl[LeafType, T](
               db.layersPutLeaf((root, local), pfx, StoLeafRef(vtx).stoData)
 
           let leafVtx = block: # Newly inserted leaf node
-            let local = branch.setUsed(path[n], true)
-            db.layersPutLeaf((root, local), path.slice(n + 1), payload)
+            let local = branch.setUsed(psuffix[n], true)
+            db.layersPutLeaf((root, local), psuffix.slice(n + 1), payload)
 
           # Put the branch at the vid where the leaf was
           db.layersPutVtx((root, cur), branch)
@@ -130,14 +137,15 @@ proc mergePayloadImpl[LeafType, T](
       if vtx.pfx.len == n:
         # The existing branch is a prefix of the new entry
         let
-          nibble = path[vtx.pfx.len]
+          nibble = psuffix[vtx.pfx.len]
           next = BranchRef(vtx).bVid(nibble)
 
         if next.isValid:
           cur = next
-          path = path.slice(n + 1)
+          psuffix = psuffix.slice(n + 1)
+          pos += n + 1
           vtx =
-            if leaf.isSome and leaf[].isValid and leaf[].pfx == path:
+            if leaf.isSome and leaf[].isValid and leaf[].pfx == psuffix:
               leaf[]
             else:
               (?db.getVtxRc((root, next)))[0]
@@ -149,18 +157,24 @@ proc mergePayloadImpl[LeafType, T](
           let local = BranchRef(brDup).setUsed(nibble, true)
           db.layersPutVtx((root, cur), brDup)
 
-          let leafVtx = db.layersPutLeaf((root, local), path.slice(n + 1), payload)
+          let leafVtx = db.layersPutLeaf((root, local), psuffix.slice(n + 1), payload)
 
           resetKeys()
           return ok((leafVtx, nil, nil))
       else:
         # Partial path match - we need to split the existing branch at
         # the point of divergence, inserting a new branch
-        let branch =
-          if n > 0:
-            ExtBranchRef.init(path.slice(0, n), db.vidFetch(16), 0)
-          else:
-            BranchRef.init(db.vidFetch(16), 0)
+        let
+          startVid =
+            if root == STATE_ROOT_VID:
+              db.accVidFetch(path.slice(0, pos + n) & NibblesBuf.nibble(0), 16)
+            else:
+              db.vidFetch(16)
+          branch =
+            if n > 0:
+              ExtBranchRef.init(psuffix.slice(0, n), startVid, 0)
+            else:
+              BranchRef.init(startVid, 0)
 
         block: # Copy the existing vertex and add it to the new branch
           let
@@ -176,8 +190,8 @@ proc mergePayloadImpl[LeafType, T](
           )
 
         let leafVtx = block: # add the new entry
-          let local = branch.setUsed(path[n], true)
-          db.layersPutLeaf((root, local), path.slice(n + 1), payload)
+          let local = branch.setUsed(psuffix[n], true)
+          db.layersPutLeaf((root, local), psuffix.slice(n + 1), payload)
 
         db.layersPutVtx((root, cur), branch)
 
@@ -196,14 +210,14 @@ proc mergeAccountRecord*(
     accRec: AristoAccount;             # Account data
       ): Result[bool,AristoError] =
   ## Merge the  key-value-pair argument `(accKey,accRec)` as an account
-  ## ledger value, i.e. the the sub-tree starting at `VertexID(1)`.
+  ## ledger value, i.e. the the sub-tree starting at `STATE_ROOT_VID`.
   ##
   ## On success, the function returns `true` if the `accRec` argument was
   ## not on the database already or different from `accRec`, and `false`
   ## otherwise.
   ##
   let updated = db.mergePayloadImpl(
-    VertexID(1), accPath, db.cachedAccLeaf(accPath), accRec
+    STATE_ROOT_VID, accPath, db.cachedAccLeaf(accPath), accRec
   ).valueOr:
     if error == MergeNoAction:
       return ok false
@@ -269,7 +283,7 @@ proc mergeStorageData*(
     let leaf = AccLeafRef(accHike.legs[^1].wp.vtx).dup # Dup on modify
     leaf.stoID = useID
     db.layersPutAccLeaf(accPath, leaf)
-    db.layersPutVtx((VertexID(1), accHike.legs[^1].wp.vid), leaf)
+    db.layersPutVtx((STATE_ROOT_VID, accHike.legs[^1].wp.vid), leaf)
 
   ok()
 

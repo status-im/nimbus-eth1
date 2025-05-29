@@ -59,7 +59,7 @@ proc blocksFetchCheckImpl(
       # There is nothing one can do here
       info "Block header missing (reorg triggered)", peer, iv, n,
         nth=(iv.minPt + n).bnStr
-      ctx.blk.cancelRequest = true                         # So require reorg
+      ctx.subState.cancelRequest = true                    # So require reorg
       return Opt.none(seq[EthBlock])
     request.blockHashes[n - 1] = header.parentHash
     blocks[n].header = header
@@ -67,7 +67,7 @@ proc blocksFetchCheckImpl(
     # There is nothing one can do here
     info "Block header missing (reorg triggered)", peer, iv, n=0,
       nth=iv.minPt.bnStr
-    ctx.blk.cancelRequest = true                           # So require reorg
+    ctx.subState.cancelRequest = true                      # So require reorg
     return Opt.none(seq[EthBlock])
   request.blockHashes[^1] = blocks[^1].header.computeBlockHash
 
@@ -98,6 +98,15 @@ proc blocksFetchCheckImpl(
           nTxs=bodies[n].transactions.len, nBodies, bdyErrors=buddy.bdyErrors
         break loop
 
+      # In order to avoid extensive checking here and also within the `FC`
+      # module, thourough checking is left to the `FC` module. Staging a few
+      # bogus blocks is not too expensive.
+      #
+      # If there is a mere block body error, all that will happen is that
+      # this block and the rest of the `blocks[]` list is discarded. This
+      # is also what will happen here if an error is detected (see above for
+      # erroneously empty `transactions[]`.)
+      #
       blocks[n].transactions = bodies[n].transactions
       blocks[n].uncles       = bodies[n].uncles
       blocks[n].withdrawals  = bodies[n].withdrawals
@@ -105,7 +114,7 @@ proc blocksFetchCheckImpl(
   if 0 < blocks.len.uint64:
     return Opt.some(blocks)
 
-  buddy.only.nBdyProcErrors.inc
+  buddy.incBlkProcErrors()
   return Opt.none(seq[EthBlock])
 
 # ------------------------------------------------------------------------------
@@ -126,15 +135,26 @@ proc blocksFetch*(
       ): Future[Opt[seq[EthBlock]]]
       {.async: (raises: []).} =
   ## From the p2p/ethXX network fetch as many blocks as given as argument `num`.
-  let
-    ctx = buddy.ctx
+  let ctx = buddy.ctx
 
-    # Fetch nect available interval
+  # Make sure that this sync peer is not banned from block processing, already.
+  if nProcBlocksErrThreshold < buddy.nBlkProcErrors():
+    buddy.ctrl.zombie = true
+    return Opt.none(seq[EthBlock])                  # stop, exit this function
+
+  let
+    # Fetch next available interval
     iv = ctx.blocksUnprocFetch(num).valueOr:
       return Opt.none(seq[EthBlock])
 
-    # Fetch blocks and verify result
+    # Fetch blocks and pre-verify result
     rc = await buddy.blocksFetchCheckImpl(iv, info)
+
+  # Job might have been cancelled or completed while downloading blocks.
+  # If so, no more bookkeeping of blocks must take place. The *books*
+  # might have been reset and prepared for the next stage.
+  if ctx.blocksModeStopped():
+    return Opt.none(seq[EthBlock])                  # stop, exit this function
 
   # Commit blocks received
   if rc.isErr:
@@ -149,6 +169,7 @@ proc blocksImport*(
     ctx: BeaconCtxRef;
     maybePeer: Opt[Peer];
     blocks: seq[EthBlock];
+    peerID: Hash;
     info: static[string];
       ) {.async: (raises: []).} =
   ## Import/execute a list of argument blocks. The function sets the global
@@ -162,6 +183,7 @@ proc blocksImport*(
     nBlocks=iv.len, base=ctx.chain.baseNumber.bnStr,
     head=ctx.chain.latestNumber.bnStr
 
+  var isError = false
   block loop:
     for n in 0 ..< blocks.len:
       let nBn = blocks[n].header.number
@@ -171,38 +193,64 @@ proc blocksImport*(
           nthBn=nBn.bnStr, nthHash=ctx.getNthHash(blocks, n).short,
           B=ctx.chain.baseNumber.bnStr, L=ctx.chain.latestNumber.bnStr
 
-        ctx.blk.topImported = nBn                  # well, not really imported
+        ctx.subState.top = nBn                     # well, not really imported
         continue
 
       try:
-        (await ctx.chain.queueImportBlock(blocks[n])).isOkOr:
-          # The way out here is simply to re-compile the block queue. At any
-          # point, the `FC` module data area might have been moved to a new
-          # canonical branch.
-          #
-          ctx.blk.cancelRequest = true             # So require reorg
-          warn info & ": import block error (reorg triggered)", n, iv,
-            nBlocks=iv.len, nthBn=nBn.bnStr,
-            nthHash=ctx.getNthHash(blocks, n).short,
-            B=ctx.chain.baseNumber.bnStr, L=ctx.chain.latestNumber.bnStr,
-            `error`=error
-          break loop
+        (await ctx.chain.queueImportBlock blocks[n]).isOkOr:
+          isError = true
+
+          # Mark peer that produced that unusable headers list as a zombie
+          ctx.setBlkProcFail peerID
+
+          # Check whether it is enough to skip the current blocks list, only
+          if ctx.subState.procFailNum != nBn:
+            ctx.subState.procFailNum = nBn         # OK, this is a new block
+            ctx.subState.procFailCount = 1
+
+          else:
+            ctx.subState.procFailCount.inc         # block num was seen, already
+
+            # Cancel the whole download if needed
+            if nImportBlocksErrThreshold < ctx.subState.procFailCount:
+              ctx.subState.cancelRequest = true    # So require queue reset
+
+          # Proper logging ..
+          if ctx.subState.cancelRequest:
+            warn "Import error (cancel this session)", n, iv,
+              nBlocks=iv.len, nthBn=nBn.bnStr,
+              nthHash=ctx.getNthHash(blocks, n).short,
+              base=ctx.chain.baseNumber.bnStr,
+              head=ctx.chain.latestNumber.bnStr,
+              blkFailCount=ctx.subState.procFailCount, `error`=error
+          else:
+            info "Import error (skip remaining)", n, iv,
+              nBlocks=iv.len, nthBn=nBn.bnStr,
+              nthHash=ctx.getNthHash(blocks, n).short,
+              base=ctx.chain.baseNumber.bnStr,
+              head=ctx.chain.latestNumber.bnStr,
+              blkFailCount=ctx.subState.procFailCount, `error`=error
+
+          break loop                               # stop
         # isOk => next instruction
       except CancelledError:
         break loop                                 # shutdown?
 
-      ctx.blk.topImported = nBn                    # Block imported OK
+      ctx.subState.top = nBn                       # Block imported OK
 
       # Allow pseudo/async thread switch.
       (await ctx.updateAsyncTasks()).isOkOr:
         break loop
 
-  info "Imported blocks", iv=(if iv.minPt <= ctx.blk.topImported:
-    (iv.minPt, ctx.blk.topImported).bnStr else: "n/a"),
-    nBlocks=(ctx.blk.topImported - iv.minPt + 1),
-    nFailed=(iv.maxPt - ctx.blk.topImported),
+  if not isError:
+    ctx.resetBlkProcErrors peerID
+
+  info "Imported blocks", iv=(if iv.minPt <= ctx.subState.top:
+    (iv.minPt, ctx.subState.top).bnStr else: "n/a"),
+    nBlocks=(ctx.subState.top - iv.minPt + 1),
+    nFailed=(iv.maxPt - ctx.subState.top),
     base=ctx.chain.baseNumber.bnStr, head=ctx.chain.latestNumber.bnStr,
-    target=ctx.head.bnStr, targetHash=ctx.headHash.short
+    target=ctx.subState.head.bnStr, targetHash=ctx.subState.headHash.short
 
 # ------------------------------------------------------------------------------
 # End

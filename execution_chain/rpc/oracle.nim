@@ -44,7 +44,7 @@ type
     blockNumber: uint64
     header     : Header
     txs        : seq[Transaction]
-    receipts   : seq[Receipt]
+    receipts   : seq[StoredReceipt]
 
   CacheKey = object
     number:      uint64
