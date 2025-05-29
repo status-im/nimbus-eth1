@@ -105,7 +105,7 @@ const
   nFetchBodiesFailedInitialPeersThreshold* = 50
     ## Similar to `nFetchHeadersFailedInitialPeersThreshold`.
 
-  nFetchBodiesRequest* = 64
+  nFetchBodiesRequest* = 40
     ## Similar to `nFetchHeadersRequest`.
 
   fetchBodiesErrTimeout* = chronos.seconds(4)
