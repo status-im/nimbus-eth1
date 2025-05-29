@@ -7,6 +7,7 @@
 
 import
   ./[constants],
+  ./core/pooled_txs_rlp,
   eth/common/[addresses, keys, transactions, transactions_rlp, transaction_utils]
 
 export addresses, keys, transactions

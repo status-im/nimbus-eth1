@@ -15,7 +15,7 @@ import
   stew/endians2,
   ./types,
   ./requester,
-  ../../core/[chain, tx_pool],
+  ../../core/[chain, tx_pool, pooled_txs_rlp],
   ../../networking/p2p
 
 logScope:

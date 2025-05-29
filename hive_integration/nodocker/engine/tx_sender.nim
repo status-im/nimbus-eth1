@@ -18,7 +18,8 @@ import
   ./cancun/blobs,
   ../../../execution_chain/transaction,
   ../../../execution_chain/common,
-  ../../../execution_chain/utils/utils
+  ../../../execution_chain/utils/utils,
+  ../../../execution_chain/core/pooled_txs
 
 from std/sequtils import mapIt
 

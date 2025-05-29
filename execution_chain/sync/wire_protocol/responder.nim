@@ -16,6 +16,7 @@ import
   ./trace_config,
   ../../utils/utils,
   ../../common/logging,
+  ../../core/pooled_txs_rlp,
   ../../networking/p2p_protocol_dsl,
   ../../networking/p2p_types
 
