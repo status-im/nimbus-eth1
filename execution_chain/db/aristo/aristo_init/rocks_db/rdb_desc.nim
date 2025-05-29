@@ -97,7 +97,7 @@ template toOpenArray*(xid: AdminTabID): openArray[byte] =
   xid.uint64.toBytesBE.toOpenArray(0,7)
 
 template to*(v: RootedVertexID, T: type RdbStateType): RdbStateType =
-  if v.root == VertexID(1): RdbStateType.World else: RdbStateType.Account
+  if v.root == STATE_ROOT_VID: RdbStateType.World else: RdbStateType.Account
 
 template to*(v: VertexType, T: type RdbVertexType): RdbVertexType =
   case v
