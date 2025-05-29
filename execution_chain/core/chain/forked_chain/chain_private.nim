@@ -21,7 +21,7 @@ import
 proc writeBaggage*(c: ForkedChainRef,
         blk: Block, blkHash: Hash32,
         txFrame: CoreDbTxRef,
-        receipts: openArray[Receipt]) =
+        receipts: openArray[StoredReceipt]) =
   template header(): Header =
     blk.header
 
@@ -58,7 +58,7 @@ proc processBlock*(c: ForkedChainRef,
                   txFrame: CoreDbTxRef,
                   blk: Block,
                   blkHash: Hash32,
-                  finalized: bool): Result[seq[Receipt], string] =
+                  finalized: bool): Result[seq[StoredReceipt], string] =
   template header(): Header =
     blk.header
 

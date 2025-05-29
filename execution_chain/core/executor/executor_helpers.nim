@@ -41,15 +41,15 @@ func logsBloom(logs: openArray[Log]): LogsBloom =
 # Public functions
 # ------------------------------------------------------------------------------
 
-func createBloom*(receipts: openArray[Receipt]): Bloom =
+func createBloom*(receipts: openArray[StoredReceipt]): Bloom =
   var bloom: LogsBloom
   for rec in receipts:
     bloom.value = bloom.value or logsBloom(rec.logs).value
   bloom.value.to(Bloom)
 
 proc makeReceipt*(
-    vmState: BaseVMState; txType: TxType, callResult: LogResult): Receipt =
-  var rec: Receipt
+    vmState: BaseVMState; txType: TxType, callResult: LogResult): StoredReceipt =
+  var rec: StoredReceipt
   if vmState.com.isByzantiumOrLater(vmState.blockNumber):
     rec.isHash = false
     rec.status = vmState.status
@@ -62,7 +62,6 @@ proc makeReceipt*(
   rec.receiptType = txType
   rec.cumulativeGasUsed = vmState.cumulativeGasUsed
   assign(rec.logs, callResult.logEntries)
-  rec.logsBloom = logsBloom(rec.logs).value.to(Bloom)
   rec
 
 # ------------------------------------------------------------------------------
