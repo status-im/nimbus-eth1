@@ -14,21 +14,6 @@ import
   web3/[eth_api_types, eth_api],
   ../../execution_chain/beacon/web3_eth_conv
 
-template calcWithdrawalsRoot*(withdrawals: openArray[Withdrawal]): Root =
-  orderedTrieRoot(withdrawals)
-
-func vHashes(x: Opt[seq[Hash32]]): seq[VersionedHash] =
-  if x.isNone:
-    return
-  else:
-    x.get
-
-func authList(x: Opt[seq[Authorization]]): seq[Authorization] =
-  if x.isNone:
-    return
-  else:
-    x.get
-
 proc toTransaction(tx: TransactionObject): Transaction =
   Transaction(
     txType: tx.`type`.get(0.Web3Quantity).TxType,
@@ -43,15 +28,15 @@ proc toTransaction(tx: TransactionObject): Transaction =
     payload: tx.input,
     accessList: tx.accessList.get(@[]),
     maxFeePerBlobGas: tx.maxFeePerBlobGas.get(0.u256),
-    versionedHashes: vHashes(tx.blobVersionedHashes),
+    versionedHashes: tx.blobVersionedHashes.get(@[]),
     V: tx.v.uint64,
     R: tx.r,
     S: tx.s,
-    authorizationList: authList(tx.authorizationList),
+    authorizationList: tx.authorizationList.get(@[]),
   )
 
 proc toTransactions(txs: openArray[TxOrHash]): Result[seq[Transaction], string] =
-  var convertedTxs = newSeq[Transaction]()
+  var convertedTxs = newSeqOfCap[Transaction](txs.len)
   for x in txs:
     if x.kind == tohTx:
       convertedTxs.add toTransaction(x.tx)
@@ -61,21 +46,17 @@ proc toTransactions(txs: openArray[TxOrHash]): Result[seq[Transaction], string] 
   return ok(convertedTxs)
 
 proc checkTxHash*(txObj: TransactionObject, txHash: Hash32): bool =
-  let tx = toTransaction(txObj)
-  if tx.rlpHash != txHash:
-    return false
-
-  return true
+  toTransaction(txObj).rlpHash == txHash
 
 proc verifyTransactions*(
     txRoot: Hash32, transactions: seq[TxOrHash]
-): Result[bool, string] =
+): Result[void, string] =
   let
     txs = toTransactions(transactions).valueOr:
       return err(error)
     rootHash = orderedTrieRoot(txs)
 
   if rootHash == txRoot:
-    return ok(true)
+    return ok()
 
   err("calculated tx trie root doesn't match the provided tx trie root")

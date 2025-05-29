@@ -22,28 +22,23 @@ import
   ./transactions
 
 proc resolveBlockTag*(
-    self: VerifiedRpcProxy, blockTag: BlockTag
+    vp: VerifiedRpcProxy, blockTag: BlockTag
 ): Result[base.BlockNumber, string] =
   if blockTag.kind == bidAlias:
     let tag = blockTag.alias.toLowerAscii()
     case tag
     of "latest":
-      let hLatest = self.headerStore.latest()
-      if hLatest.isSome:
-        return ok(hLatest.get().number)
-      else:
+      let hLatest = vp.headerStore.latest.valueOr:
         return err("Couldn't get the latest block number from header store")
+      ok(hLatest.number)
     else:
-      return err("No support for block tag " & $blockTag)
+      err("No support for block tag " & $blockTag)
   else:
-    return ok(base.BlockNumber(distinctBase(blockTag.number)))
+    ok(base.BlockNumber(distinctBase(blockTag.number)))
 
-proc convHeader(blk: eth_api_types.BlockObject): Header =
-  let nonce =
-    if blk.nonce.isSome:
-      blk.nonce.get
-    else:
-      default(Bytes8)
+func convHeader(blk: eth_api_types.BlockObject): Header =
+  let nonce = blk.nonce.valueOr:
+    default(Bytes8)
 
   return Header(
     parentHash: blk.parentHash,
@@ -70,29 +65,29 @@ proc convHeader(blk: eth_api_types.BlockObject): Header =
   )
 
 proc walkBlocks(
-    self: VerifiedRpcProxy,
+    vp: VerifiedRpcProxy,
     sourceNum: base.BlockNumber,
     targetNum: base.BlockNumber,
     sourceHash: Hash32,
     targetHash: Hash32,
-): Future[bool] {.async: (raises: []).} =
+): Future[Result[void, string]] {.async: (raises: []).} =
   var nextHash = sourceHash
-  info "starting block walk to verify", blockHash = targetHash
+  info "Starting block walk to verify requested block", blockHash = targetHash
 
   let numBlocks = sourceNum - targetNum
-  if numBlocks > self.maxBlockWalk:
-    return false
+  if numBlocks > vp.maxBlockWalk:
+    return err("Cannot query more than " & $vp.maxBlockWalk & " to verify the chain for the requested block")
 
   for i in 0 ..< numBlocks:
     let nextHeader =
-      if self.headerStore.contains(nextHash):
-        self.headerStore.get(nextHash).get()
+      if vp.headerStore.contains(nextHash):
+        vp.headerStore.get(nextHash).get()
       else:
         let blk =
           try:
-            await self.rpcClient.eth_getBlockByHash(nextHash, false)
+            await vp.rpcClient.eth_getBlockByHash(nextHash, false)
           except:
-            return false
+            return err("Couldn't get block " & $nextHash & " during the chain traversal")
 
         trace "getting next block",
           hash = nextHash,
@@ -102,61 +97,54 @@ proc walkBlocks(
         convHeader(blk)
 
     if nextHeader.parentHash == targetHash:
-      return true
+      return ok()
 
     nextHash = nextHeader.parentHash
 
-  return false
+  err("the requested block is not part of the canonical chain")
 
 proc verifyHeader(
-    self: VerifiedRpcProxy, header: Header, hash: Hash32
-): Future[Result[bool, string]] {.async.} =
+    vp: VerifiedRpcProxy, header: Header, hash: Hash32
+): Future[Result[void, string]] {.async.} =
   # verify calculated hash with the requested hash
   if header.rlpHash != hash:
     return err("hashed block header doesn't match with blk.hash(downloaded)")
 
-  let latestHeader = self.headerStore.latest.valueOr:
+  let latestHeader = vp.headerStore.latest.valueOr:
     return err("syncing")
 
   # walk blocks backwards(time) from source to target
-  let isLinked = await self.walkBlocks(
+  ?(await vp.walkBlocks(
     latestHeader.number, header.number, latestHeader.parentHash, hash
-  )
+  ))
 
-  if not isLinked:
-    return err("the requested block is not part of the canonical chain")
-
-  return ok(true)
+  ok()
 
 proc verifyBlock(
-    self: VerifiedRpcProxy, blk: BlockObject, fullTransactions: bool
-): Future[Result[bool, string]] {.async.} =
+    vp: VerifiedRpcProxy, blk: BlockObject, fullTransactions: bool
+): Future[Result[void, string]] {.async.} =
   let header = convHeader(blk)
 
-  let status = await self.verifyHeader(header, blk.hash)
-
-  if status.isErr():
-    return err(status.error)
+  ?(await vp.verifyHeader(header, blk.hash))
 
   # verify transactions
   if fullTransactions:
-    let verified = verifyTransactions(header.transactionsRoot, blk.transactions).valueOr:
-      return err(error)
+    ?verifyTransactions(header.transactionsRoot, blk.transactions)
 
   # verify withdrawals
   if blk.withdrawals.isSome():
     if blk.withdrawalsRoot.get() != orderedTrieRoot(blk.withdrawals.get()):
       return err("withdrawals within the block do not yield the same withdrawals root")
 
-  return ok(true)
+  ok()
 
 proc getBlock*(
-    self: VerifiedRpcProxy, blockHash: Hash32, fullTransactions: bool
-): Future[Result[eth_api_types.BlockObject, string]] {.async.} =
+    vp: VerifiedRpcProxy, blockHash: Hash32, fullTransactions: bool
+): Future[Result[BlockObject, string]] {.async.} =
   # get the target block
   let blk =
     try:
-      await self.rpcClient.eth_getBlockByHash(blockHash, fullTransactions)
+      await vp.rpcClient.eth_getBlockByHash(blockHash, fullTransactions)
     except CatchableError as e:
       return err(e.msg)
 
@@ -165,23 +153,20 @@ proc getBlock*(
     return err("the downloaded block hash doesn't match with the requested hash")
 
   # verify the block
-  let status = await self.verifyBlock(blk, fullTransactions)
+  ?(await vp.verifyBlock(blk, fullTransactions))
 
-  if status.isErr():
-    return err(status.error)
-
-  return ok(blk)
+  ok(blk)
 
 proc getBlock*(
-    self: VerifiedRpcProxy, blockTag: BlockTag, fullTransactions: bool
+    vp: VerifiedRpcProxy, blockTag: BlockTag, fullTransactions: bool
 ): Future[Result[BlockObject, string]] {.async.} =
-  let n = self.resolveBlockTag(blockTag).valueOr:
+  let n = vp.resolveBlockTag(blockTag).valueOr:
     return err(error)
 
   # get the target block
   let blk =
     try:
-      await self.rpcClient.eth_getBlockByNumber(blockTag, fullTransactions)
+      await vp.rpcClient.eth_getBlockByNumber(blockTag, fullTransactions)
     except CatchableError as e:
       return err(e.msg)
 
@@ -190,17 +175,14 @@ proc getBlock*(
       err("the downloaded block number doesn't match with the requested block number")
 
   # verify the block
-  let status = await self.verifyBlock(blk, fullTransactions)
+  ?(await vp.verifyBlock(blk, fullTransactions))
 
-  if status.isErr():
-    return err(status.error)
-
-  return ok(blk)
+  ok(blk)
 
 proc getHeader*(
-    self: VerifiedRpcProxy, blockHash: Hash32
+    vp: VerifiedRpcProxy, blockHash: Hash32
 ): Future[Result[Header, string]] {.async.} =
-  let cachedHeader = self.headerStore.get(blockHash)
+  let cachedHeader = vp.headerStore.get(blockHash)
 
   if cachedHeader.isNone():
     debug "did not find the header in the cache", blockHash = blockHash
@@ -210,7 +192,7 @@ proc getHeader*(
   # get the target block
   let blk =
     try:
-      await self.rpcClient.eth_getBlockByHash(blockHash, false)
+      await vp.rpcClient.eth_getBlockByHash(blockHash, false)
     except CatchableError as e:
       return err(e.msg)
 
@@ -219,20 +201,17 @@ proc getHeader*(
   if blockHash != blk.hash:
     return err("the blk.hash(downloaded) doesn't match with the provided hash")
 
-  let status = await self.verifyHeader(header, blockHash)
+  ?(await vp.verifyHeader(header, blockHash))
 
-  if status.isErr():
-    return err(status.error)
-
-  return ok(header)
+  ok(header)
 
 proc getHeader*(
-    self: VerifiedRpcProxy, blockTag: BlockTag
+    vp: VerifiedRpcProxy, blockTag: BlockTag
 ): Future[Result[Header, string]] {.async.} =
   let
-    n = self.resolveBlockTag(blockTag).valueOr:
+    n = vp.resolveBlockTag(blockTag).valueOr:
       return err(error)
-    cachedHeader = self.headerStore.get(n)
+    cachedHeader = vp.headerStore.get(n)
 
   if cachedHeader.isNone():
     debug "did not find the header in the cache", blockTag = blockTag
@@ -242,7 +221,7 @@ proc getHeader*(
   # get the target block
   let blk =
     try:
-      await self.rpcClient.eth_getBlockByNumber(blockTag, false)
+      await vp.rpcClient.eth_getBlockByNumber(blockTag, false)
     except CatchableError as e:
       return err(e.msg)
 
@@ -252,9 +231,6 @@ proc getHeader*(
     return
       err("the downloaded block number doesn't match with the requested block number")
 
-  let status = await self.verifyHeader(header, blk.hash)
+  ?(await vp.verifyHeader(header, blk.hash))
 
-  if status.isErr():
-    return err(status.error)
-
-  return ok(header)
+  ok(header)
