@@ -315,7 +315,7 @@ cp -a examples/prometheus.yml ../my_metrics/
 cd ../my_metrics
 prometheus --config.file=prometheus.yml # loads ./prometheus.yml, writes metric data to ./data
 # start a fresh Nimbus sync and export metrics
-rm -rf ~/.cache/execution_chain/db; ./build/nimbus_execution_client --prune:archive --metricsServer
+rm -rf ~/.cache/execution_chain/db; ./build/nimbus_execution_client --metrics:true
 ```
 
 Start the Grafana server. On Gentoo it's `/etc/init.d/grafana start`. Go to
