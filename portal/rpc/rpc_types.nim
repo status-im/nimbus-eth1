@@ -98,15 +98,25 @@ type
 
   ContentItem* = array[2, string]
 
+  AcceptMetadata* = object
+    acceptedCount*: int
+    genericDeclineCount*: int
+    alreadyStoredCount*: int
+    notWithinRadiusCount*: int
+    rateLimitedCount*: int
+    transferInProgressCount*: int
+
   PutContentResult* = object
-    peerCount*: int
     storedLocally*: bool
+    peerCount*: int
+    acceptMetadata*: AcceptMetadata
 
 NodeInfo.useDefaultSerializationIn JrpcConv
 RoutingTableInfo.useDefaultSerializationIn JrpcConv
 PingResult.useDefaultSerializationIn JrpcConv
 (string, string).useDefaultSerializationIn JrpcConv
 ContentInfo.useDefaultSerializationIn JrpcConv
+AcceptMetadata.useDefaultSerializationIn JrpcConv
 PutContentResult.useDefaultSerializationIn JrpcConv
 
 func getNodeInfo*(r: RoutingTable): NodeInfo =

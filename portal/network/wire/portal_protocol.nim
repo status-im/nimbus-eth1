@@ -191,6 +191,15 @@ type
     of Database:
       contentKeys: ContentKeysList
 
+  OfferBatchMetadata* = object
+    successCount*: int
+    acceptedCount*: int
+    genericDeclineCount*: int
+    alreadyStoredCount*: int
+    notWithinRadiusCount*: int
+    rateLimitedCount*: int
+    transferInProgressCount*: int
+
   PortalProtocol* = ref object of TalkProtocol
     protocolId*: PortalProtocolId
     routingTable*: RoutingTable
@@ -1747,17 +1756,38 @@ proc queryRandom*(
   ## Perform a query for a random target, return all nodes discovered.
   p.query(NodeId.random(p.baseProtocol.rng[]))
 
-proc offerBatchGetPeerCount*(
+proc offerBatchGetMetadata*(
     p: PortalProtocol, offers: seq[OfferRequest]
-): Future[int] {.async: (raises: [CancelledError]).} =
+): Future[OfferBatchMetadata] {.async: (raises: [CancelledError]).} =
   let futs = await allFinished(offers.mapIt(p.offerRateLimited(it)))
 
-  var peerCount = 0
+  var metadata: OfferBatchMetadata
   for f in futs:
-    if f.completed() and f.value().isOk():
-      inc peerCount # only count successful offers
+    if not f.completed():
+      continue
+    let acceptCodes = f.value().valueOr:
+      continue
 
-  peerCount
+    inc metadata.successCount
+
+    for code in acceptCodes:
+      case code
+      of Accepted:
+        inc metadata.acceptedCount
+      of DeclinedGeneric:
+        inc metadata.genericDeclineCount
+      of DeclinedAlreadyStored:
+        inc metadata.alreadyStoredCount
+      of DeclinedNotWithinRadius:
+        inc metadata.notWithinRadiusCount
+      of DeclinedRateLimited:
+        inc metadata.rateLimitedCount
+      of DeclinedInboundTransferInProgress:
+        inc metadata.transferInProgressCount
+      else:
+        discard
+
+  metadata
 
 proc neighborhoodGossip*(
     p: PortalProtocol,
@@ -1765,7 +1795,7 @@ proc neighborhoodGossip*(
     contentKeys: ContentKeysList,
     content: seq[seq[byte]],
     enableNodeLookup = false,
-): Future[int] {.async: (raises: [CancelledError]).} =
+): Future[OfferBatchMetadata] {.async: (raises: [CancelledError]).} =
   ## Run neighborhood gossip for provided content.
   ## Returns the number of peers to which content was attempted to be gossiped.
   ## When enableNodeLookup is true then if the local routing table doesn't
@@ -1775,7 +1805,7 @@ proc neighborhoodGossip*(
   ## of nodes in the network) to reduce the number of pings required to populate
   ## the cache over time as old content is removed when the cache is full.
   if content.len() == 0:
-    return 0
+    return default(OfferBatchMetadata)
 
   var contentList = List[ContentKV, contentKeysLimit].init(@[])
   for i, contentItem in content:
@@ -1785,7 +1815,7 @@ proc neighborhoodGossip*(
   # Just taking the first content item as target id.
   # TODO: come up with something better?
   let contentId = p.toContentId(contentList[0].contentKey).valueOr:
-    return 0
+    return default(OfferBatchMetadata)
 
   # For selecting the closest nodes to whom to gossip the content a mixed
   # approach is taken:
@@ -1849,18 +1879,18 @@ proc neighborhoodGossip*(
         if offers.len() >= p.config.maxGossipNodes:
           break
 
-  await p.offerBatchGetPeerCount(offers)
+  await p.offerBatchGetMetadata(offers)
 
 proc randomGossip*(
     p: PortalProtocol,
     srcNodeId: Opt[NodeId],
     contentKeys: ContentKeysList,
     content: seq[seq[byte]],
-): Future[int] {.async: (raises: [CancelledError]).} =
+): Future[OfferBatchMetadata] {.async: (raises: [CancelledError]).} =
   ## Run random gossip for provided content.
   ## Returns the number of peers to which content was attempted to be gossiped.
   if content.len() == 0:
-    return 0
+    return default(OfferBatchMetadata)
 
   var contentList = List[ContentKV, contentKeysLimit].init(@[])
   for i, contentItem in content:
@@ -1871,7 +1901,7 @@ proc randomGossip*(
     nodes = p.routingTable.randomNodes(p.config.maxGossipNodes)
     offers = nodes.mapIt(OfferRequest(dst: it, kind: Direct, contentList: contentList))
 
-  await p.offerBatchGetPeerCount(offers)
+  await p.offerBatchGetMetadata(offers)
 
 proc storeContent*(
     p: PortalProtocol,
