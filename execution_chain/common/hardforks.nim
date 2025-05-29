@@ -57,7 +57,7 @@ type
   ForkTransitionTable* = object
     blockNumberThresholds*: array[Frontier..GrayGlacier, Opt[BlockNumber]]
     mergeForkTransitionThreshold*: MergeForkTransitionThreshold
-    timeThresholds*: array[Shanghai..Bpo5, Opt[EthTime]]
+    timeThresholds*: array[Shanghai..HardFork.high, Opt[EthTime]]
 
   # Starting with Shanghai, forking is based on timestamp
   # rather than block number.
