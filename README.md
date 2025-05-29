@@ -22,9 +22,6 @@ All consensus-layer client development is happening in parallel in the
 
 ## Development Updates
 
-Monthly development updates are shared
-[here](https://hackmd.io/jRpxY4WBQJ-hnsKaPDYqTw).
-
 For more detailed write-ups on the development progress, follow the
 [Nimbus blog](https://blog.nimbus.team/).
 
@@ -53,18 +50,18 @@ nix-shell default.nix
 # You'll run `make update` after each `git pull`, in the future, to keep those submodules up to date.
 # Assuming you have 4 CPU cores available, you can ask Make to run 4 parallel jobs, with "-j4".
 
-make -j4 nimbus
+make -j4 nimbus_execution_client
 
 # See available command line options
-build/nimbus --help
+build/nimbus_execution_client --help
 
 # Start syncing with mainnet
-build/nimbus
+build/nimbus_execution_client
 
 # Update to latest version
 git pull && make update
 # Build the newly downloaded version
-make -j4 nimbus
+make -j4 nimbus_execution_client
 
 # Run tests
 make test
@@ -112,7 +109,7 @@ ln -s mingw32-make.exe make.exe
 You can now follow those instructions in the previous section. For example:
 
 ```bash
-make nimbus # build the Nimbus execution client binary
+make nimbus_execution_client # build the Nimbus execution client binary
 make test # run the test suite
 # etc.
 ```
@@ -144,9 +141,9 @@ cd status
 # Raspberry pi doesn't include /usr/local/lib in library search path - need to add
 export LD_LIBRARY_PATH=/usr/local/lib:$LD_LIBRARY_PATH
 
-git clone https://github.com/status-im/nimbus.git
+git clone https://github.com/status-im/nimbus-eth1.git
 
-cd nimbus
+cd nimbus-eth1
 
 # Follow instructions above!
 ```
@@ -168,15 +165,15 @@ Note, the Ubuntu PRoot is known to contain all Nimbus prerequisites compiled on 
 apt install git make gcc
 
 # Clone repo and build Nimbus just like above
-git clone https://github.com/status-im/nimbus.git
+git clone https://github.com/status-im/nimbus-eth1.git
 
-cd nimbus
+cd nimbus_execution_client
 
-make
+make update
 
-make nimbus
+make nimbus_execution_client
 
-build/nimbus
+build/nimbus_execution_client
 ```
 ### <a name="make-xvars"></a>Experimental make variables
 
@@ -201,12 +198,6 @@ has the same effect as &lt;variable&gt;=1 (ditto for other numbers.)
 
 Interesting Make variables and targets are documented in the [nimbus-build-system](https://github.com/status-im/nimbus-build-system) repo.
 
-- you can switch the DB backend with a Nim compiler define:
-  `-d:nimbus_db_backend=...` where the (case-insensitive) value is one of
-  "rocksdb" (the default), "sqlite", "lmdb"
-
-- the Premix debugging tools are [documented separately](premix/readme.md)
-
 - you can control the Makefile's verbosity with the V variable (defaults to 0):
 
 ```bash
@@ -217,8 +208,8 @@ make V=2 test # even more verbose
 - same for the [Chronicles log level](https://github.com/status-im/nim-chronicles#chronicles_log_level):
 
 ```bash
-make LOG_LEVEL=DEBUG nimbus # this is the default
-make LOG_LEVEL=TRACE nimbus # log everything
+make LOG_LEVEL=DEBUG nimbus_execution_client # this is the default
+make LOG_LEVEL=TRACE nimbus_execution_client # log everything
 ```
 
 - pass arbitrary parameters to the Nim compiler:
@@ -315,7 +306,7 @@ Install Prometheus and Grafana. On Gentoo, it's `emerge prometheus grafana-bin`.
 
 ```bash
 # build Nimbus execution client
-make nimbus
+make nimbus_execution_client
 # the Prometheus daemon will create its data dir in the current dir, so give it its own directory
 mkdir ../my_metrics
 # copy the basic config file over there
@@ -349,7 +340,7 @@ to the combined view. To edit a panel, click on its title and select "Edit".
 
 ### Troubleshooting
 
-Report any errors you encounter, please, if not [already documented](https://github.com/status-im/nimbus/issues)!
+Report any errors you encounter, please, if not [already documented](https://github.com/status-im/nimbus-eth1/issues)!
 
 * Turn it off and on again:
 
