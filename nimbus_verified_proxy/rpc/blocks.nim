@@ -76,7 +76,10 @@ proc walkBlocks(
 
   let numBlocks = sourceNum - targetNum
   if numBlocks > vp.maxBlockWalk:
-    return err("Cannot query more than " & $vp.maxBlockWalk & " to verify the chain for the requested block")
+    return err(
+      "Cannot query more than " & $vp.maxBlockWalk &
+        " to verify the chain for the requested block"
+    )
 
   for i in 0 ..< numBlocks:
     let nextHeader =
@@ -87,7 +90,8 @@ proc walkBlocks(
           try:
             await vp.rpcClient.eth_getBlockByHash(nextHash, false)
           except:
-            return err("Couldn't get block " & $nextHash & " during the chain traversal")
+            return
+              err("Couldn't get block " & $nextHash & " during the chain traversal")
 
         trace "getting next block",
           hash = nextHash,
@@ -114,9 +118,11 @@ proc verifyHeader(
     return err("syncing")
 
   # walk blocks backwards(time) from source to target
-  ?(await vp.walkBlocks(
-    latestHeader.number, header.number, latestHeader.parentHash, hash
-  ))
+  ?(
+    await vp.walkBlocks(
+      latestHeader.number, header.number, latestHeader.parentHash, hash
+    )
+  )
 
   ok()
 
