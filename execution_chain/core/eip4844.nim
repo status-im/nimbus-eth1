@@ -14,6 +14,7 @@ import
   results,
   stint,
   ./eip7691,
+  ./pooled_txs,
   ./lazy_kzg as kzg,
   ../constants,
   ../common/common

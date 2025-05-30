@@ -22,6 +22,7 @@ import
   ../execution_chain/[config, transaction, constants],
   ../execution_chain/core/tx_pool,
   ../execution_chain/core/tx_pool/tx_desc,
+  ../execution_chain/core/pooled_txs,
   ../execution_chain/common/common,
   ../execution_chain/utils/utils,
   ./macro_assembler

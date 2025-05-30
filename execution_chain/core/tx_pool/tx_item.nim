@@ -17,6 +17,7 @@
 import
   std/[hashes, times],
   results,
+  ../pooled_txs,
   ../../utils/utils,
   ../../transaction
 

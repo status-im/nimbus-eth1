@@ -11,7 +11,7 @@
 {.push raises: [].}
 
 import
-  std/[sequtils, sets, typetraits],
+  std/[sequtils, sets],
   eth/common,
   results,
   ".."/[aristo_desc, aristo_get, aristo_layers, aristo_serialise, aristo_utils]

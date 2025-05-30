@@ -15,6 +15,7 @@ import
   ../evm/state,
   ../evm/types,
   ../db/ledger,
+  ../core/pooled_txs,
   ./utils,
   ./state_dump
 
