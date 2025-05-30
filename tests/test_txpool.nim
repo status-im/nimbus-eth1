@@ -215,9 +215,9 @@ proc txPoolMain*() =
         blobID: 0.BlobID
       )
       var ptx = mx.makeTx(tc, 0)
-      var z = ptx.networkPayload.blobs[0]
+      var z = ptx.blobsBundle.blobs[0].bytes
       z[0] = not z[0]
-      ptx.networkPayload.blobs[0] = z
+      ptx.blobsBundle.blobs[0] = KzgBlob z
       xp.checkAddTx(ptx, txErrorInvalidBlob)
 
     test "Bad chainId":

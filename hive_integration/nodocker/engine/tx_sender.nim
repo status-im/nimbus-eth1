@@ -200,8 +200,8 @@ proc makeTxOfType(params: MakeTxParams, tc: BaseTx): PooledTransaction =
         maxFeePerBlobGas: blobFeeCap,
         versionedHashes: system.move(blobData.hashes),
       ),
-      networkPayload: NetworkPayload(
-        blobs: blobData.blobs.mapIt(it.bytes),
+      blobsBundle: BlobsBundle(
+        blobs: blobData.blobs.mapIt(KzgBlob it.bytes),
         commitments: blobData.commitments.mapIt(KzgCommitment it.bytes),
         proofs: blobData.proofs.mapIt(KzgProof it.bytes),
       )
@@ -229,7 +229,7 @@ proc makeTx(params: MakeTxParams, tc: BaseTx): PooledTransaction =
   let tx = makeTxOfType(params, tc)
   PooledTransaction(
     tx: signTransaction(tx.tx, params.key),
-    networkPayload: tx.networkPayload)
+    blobsBundle: tx.blobsBundle)
 
 proc makeTx(params: MakeTxParams, tc: BigInitcodeTx): PooledTransaction =
   var tx = tc
@@ -359,8 +359,8 @@ proc makeTx*(params: MakeTxParams, tc: BlobTx): PooledTransaction =
 
   PooledTransaction(
     tx: signTransaction(unsignedTx, params.key),
-    networkPayload: NetworkPayload(
-      blobs      : data.blobs.mapIt(it.bytes),
+    blobsBundle: BlobsBundle(
+      blobs      : data.blobs.mapIt(KzgBlob it.bytes),
       commitments: data.commitments.mapIt(KzgCommitment it.bytes),
       proofs     : data.proofs.mapIt(KzgProof it.bytes),
     ),

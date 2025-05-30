@@ -17,22 +17,28 @@ export
   transactions_rlp,
   pooled_txs
 
-proc append(w: var RlpWriter, networkPayload: NetworkPayload) =
-  w.append(networkPayload.blobs)
-  w.append(networkPayload.commitments)
-  w.append(networkPayload.proofs)
+proc append(w: var RlpWriter, blob: Blob) =
+  w.append(blob.bytes)
+
+proc append(w: var RlpWriter, blobsBundle: BlobsBundle) =
+  w.append(blobsBundle.blobs)
+  w.append(blobsBundle.commitments)
+  w.append(blobsBundle.proofs)
 
 proc append*(w: var RlpWriter, tx: PooledTransaction) =
   if tx.tx.txType != TxLegacy:
     w.append(tx.tx.txType)
-  if tx.networkPayload != nil:
+  if tx.blobsBundle != nil:
     w.startList(4) # spec: rlp([tx_payload, blobs, commitments, proofs])
   w.appendTxPayload(tx.tx)
-  if tx.networkPayload != nil:
-    w.append(tx.networkPayload)
+  if tx.blobsBundle != nil:
+    w.append(tx.blobsBundle)
 
-proc read(rlp: var Rlp, T: type NetworkPayload): T {.raises: [RlpError].} =
-  result = NetworkPayload()
+proc read(rlp: var Rlp, T: type Blob): T {.raises: [RlpError].} =
+  rlp.read(result.bytes)
+
+proc read(rlp: var Rlp, T: type BlobsBundle): T {.raises: [RlpError].} =
+  result = BlobsBundle()
   rlp.read(result.blobs)
   rlp.read(result.commitments)
   rlp.read(result.proofs)
@@ -40,16 +46,16 @@ proc read(rlp: var Rlp, T: type NetworkPayload): T {.raises: [RlpError].} =
 proc readTxTyped(rlp: var Rlp, tx: var PooledTransaction) {.raises: [RlpError].} =
   let
     txType = rlp.readTxType()
-    hasNetworkPayload =
+    hasBlobsBundle =
       if txType == TxEip4844:
         rlp.listLen == 4
       else:
         false
-  if hasNetworkPayload:
+  if hasBlobsBundle:
     rlp.tryEnterList() # spec: rlp([tx_payload, blobs, commitments, proofs])
   rlp.readTxPayload(tx.tx, txType)
-  if hasNetworkPayload:
-    rlp.read(tx.networkPayload)
+  if hasBlobsBundle:
+    rlp.read(tx.blobsBundle)
 
 proc read*(rlp: var Rlp, T: type PooledTransaction): T {.raises: [RlpError].} =
   if rlp.isList:
