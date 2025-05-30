@@ -51,7 +51,7 @@ proc setupELClient*(conf: ChainConfig, taskPool: Taskpool, node: JsonNode): Test
     memDB = newCoreDbRef DefaultDbMemory
     genesisHash = initializeDb(memDB, node)
     com = CommonRef.new(memDB, taskPool, conf)
-    chain = ForkedChainRef.init(com)
+    chain = ForkedChainRef.init(com, enableQueue=true)
 
   let headHash = chain.latestHash
   doAssert(headHash == genesisHash)
@@ -78,3 +78,4 @@ proc setupELClient*(conf: ChainConfig, taskPool: Taskpool, node: JsonNode): Test
 proc stopELClient*(env: TestEnv) =
   waitFor env.rpcClient.close()
   waitFor env.rpcServer.closeWait()
+  waitFor env.chain.stopProcessingQueue()

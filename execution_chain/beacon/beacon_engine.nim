@@ -8,7 +8,7 @@
 # those terms.
 
 import
-  std/[sequtils, tables],
+  std/[tables],
   eth/common/[hashes, headers],
   chronicles,
   minilru,
@@ -178,7 +178,7 @@ proc generateExecutionBundle*(ben: BeaconEngineRef,
       blobsBundle = Opt.some BlobsBundleV1(
         commitments: blobData.commitments,
         proofs: blobData.proofs,
-        blobs: blobData.blobs.mapIt it.Web3Blob)
+        blobs: blobData.blobs)
 
     ok ExecutionBundle(
       payload: executionPayload(bundle.blk),
