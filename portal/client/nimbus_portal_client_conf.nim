@@ -427,7 +427,7 @@ type
       hidden,
       desc:
         "The number of content queue workers to create for concurrent processing of received offers",
-      defaultValue: 8,
+      defaultValue: 50,
       name: "debug-content-queue-workers"
     .}: int
 

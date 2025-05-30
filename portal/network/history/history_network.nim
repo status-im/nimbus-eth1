@@ -353,7 +353,7 @@ proc new*(
     bootstrapRecords: openArray[Record] = [],
     portalConfig: PortalProtocolConfig = defaultPortalProtocolConfig,
     contentRequestRetries = 1,
-    contentQueueWorkers = 8,
+    contentQueueWorkers = 50,
     contentQueueSize = 50,
 ): T =
   let
