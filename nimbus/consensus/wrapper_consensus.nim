@@ -15,15 +15,16 @@ import
   metrics/chronos_httpserver,
   stew/[byteutils, io2],
   eth/p2p/discoveryv5/[enr, random2],
-  ./consensus_object_pools/[blob_quarantine, data_column_quarantine, blockchain_list],
-  ./consensus_object_pools/vanity_logs/vanity_logs,
-  ./networking/[topic_params, network_metadata_downloads],
-  ./rpc/[rest_api, state_ttl_cache],
-  ./spec/datatypes/[altair, bellatrix, phase0],
-  ./spec/[engine_authentication, weak_subjectivity, peerdas_helpers],
-  ./sync/[sync_protocol, light_client_protocol, sync_overseer],
-  ./validators/[keystore_management, beacon_validators],
-  "."/[
+  beacon_chain/consensus_object_pools/
+    [blob_quarantine, data_column_quarantine, blockchain_list],
+  beacon_chain/consensus_object_pools/vanity_logs/vanity_logs,
+  beacon_chain/networking/[topic_params, network_metadata_downloads],
+  beacon_chain/rpc/[rest_api, state_ttl_cache],
+  beacon_chain/spec/datatypes/[altair, bellatrix, phase0],
+  beacon_chain/spec/[engine_authentication, weak_subjectivity, peerdas_helpers],
+  beacon_chain/sync/[sync_protocol, light_client_protocol, sync_overseer],
+  beacon_chain/validators/[keystore_management, beacon_validators],
+  beacon_chain/[
     beacon_node, beacon_node_light_client, deposits, nimbus_binary_common, statusbar,
     trusted_node_sync, wallets,
   ]
@@ -31,7 +32,7 @@ import
 when defined(posix):
   import system/ansi_c
 
-from ./spec/datatypes/deneb import SignedBeaconBlock
+from beacon_chain/spec/datatypes/deneb import SignedBeaconBlock
 
 from libp2p/protocols/pubsub/gossipsub import TopicParams, validateParameters, init
 
@@ -282,7 +283,7 @@ proc checkWeakSubjectivityCheckpoint(
       headStateSlot = getStateField(dag.headState, slot)
     quit 1
 
-from ./spec/state_transition_block import kzg_commitment_to_versioned_hash
+from beacon_chain/spec/state_transition_block import kzg_commitment_to_versioned_hash
 
 proc isSlotWithinWeakSubjectivityPeriod(dag: ChainDAGRef, slot: Slot): bool =
   let checkpoint = Checkpoint(
@@ -2014,7 +2015,7 @@ proc installRestHandlers(restServer: RestServerRef, node: BeaconNode) =
   if node.dag.lcDataStore.serve:
     restServer.router.installLightClientApiHandlers(node)
 
-from ./spec/datatypes/capella import SignedBeaconBlock
+from beacon_chain/spec/datatypes/capella import SignedBeaconBlock
 
 proc installMessageValidators(node: BeaconNode) =
   # These validators stay around the whole time, regardless of which specific
@@ -2659,7 +2660,7 @@ proc doSlashingInterchange(conf: BeaconNodeConf) {.raises: [CatchableError].} =
   of SlashProtCmd.`import`:
     conf.doSlashingImport()
 
-proc handleStartUpCmd(config: var BeaconNodeConf) {.raises: [CatchableError].} =
+proc handleStartUpCmd*(config: var BeaconNodeConf) {.raises: [CatchableError].} =
   # Single RNG instance for the application - will be seeded on construction
   # and avoid using system resources (such as urandom) after that
   let rng = HmacDrbgContext.new()

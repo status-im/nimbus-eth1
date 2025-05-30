@@ -11,15 +11,16 @@ import
   std/[atomics, os],
   chronos,
   chronicles,
+  results,
   ../conf,
   ../common/utils,
-  results,
+  ./wrapper_consensus,
   beacon_chain/[beacon_node_status, nimbus_binary_common]
 
 logScope:
   topics = "Consensus layer"
 
-proc startBeaconNode(configs: seq[string]) =
+proc startBeaconNode(configs: seq[string]) {.raises: [CatchableError].} =
   proc commandLineParams(): seq[string] =
     configs
 
@@ -31,8 +32,7 @@ proc startBeaconNode(configs: seq[string]) =
 
   setupLogging(config.logLevel, config.logStdout, config.logFile)
 
-  #TODO: create public entry on beacon node
-  #handleStartUpCmd(config)
+  handleStartUpCmd(config)
 
 ## Consensus Layer handler
 proc consensusLayerHandler*(channel: ptr Channel[pointer]) =
@@ -50,13 +50,9 @@ proc consensusLayerHandler*(channel: ptr Channel[pointer]) =
   #signal main thread that data is read
   isConfigRead.store(true)
 
-  {.gcsafe.}:
-    startBeaconNode(configList)
-
   try:
-    while true:
-      info "consensus ..."
-      sleep(cNimbusServiceTimeoutMs)
+    {.gcsafe.}:
+      startBeaconNode(configList)
   except CatchableError as e:
     fatal "error", message = e.msg
 
