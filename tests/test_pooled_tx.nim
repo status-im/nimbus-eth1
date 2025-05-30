@@ -21,7 +21,7 @@ const
   source    = address"0x0000000000000000000000000000000000000001"
   storageKey= default(Bytes32)
   accesses  = @[AccessPair(address: source, storageKeys: @[storageKey])]
-  blob      = default(NetworkBlob)
+  blob      = default(KzgBlob)
   abcdef    = hexToSeqByte("abcdef")
   authList  = @[Authorization(
     chainID: chainId(1),
@@ -113,7 +113,7 @@ proc tx6(i: int): PooledTransaction =
       maxFeePerGas:        10.GasInt,
       accessList:          accesses,
       versionedHashes:     @[digest]),
-    networkPayload: NetworkPayload(
+    blobsBundle: BlobsBundle(
       blobs: @[blob],
       commitments: @[zeroG1],
       proofs: @[zeroG1]))
@@ -210,16 +210,16 @@ suite "Transactions":
     let tx = tx6(10)
     let bytes = rlp.encode(tx)
     let zz = rlp.decode(bytes, PooledTransaction)
-    check not zz.networkPayload.isNil
-    check zz.networkPayload.proofs == tx.networkPayload.proofs
-    check zz.networkPayload.blobs == tx.networkPayload.blobs
-    check zz.networkPayload.commitments == tx.networkPayload.commitments
+    check not zz.blobsBundle.isNil
+    check zz.blobsBundle.proofs == tx.blobsBundle.proofs
+    check zz.blobsBundle.blobs == tx.blobsBundle.blobs
+    check zz.blobsBundle.commitments == tx.blobsBundle.commitments
 
   test "No Network payload still no network payload":
     let tx = tx7(11)
     let bytes = rlp.encode(tx)
     let zz = rlp.decode(bytes, PooledTransaction)
-    check zz.networkPayload.isNil
+    check zz.blobsBundle.isNil
 
   test "Minimal Blob tx recipient survive encode decode":
     let tx = tx8(12)

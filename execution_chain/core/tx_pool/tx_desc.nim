@@ -414,9 +414,9 @@ iterator byPriceAndNonce*(xp: TxPoolRef): TxItemRef =
 
 func getBlobAndProofV1*(xp: TxPoolRef, v: VersionedHash): Opt[BlobAndProofV1] =
   xp.blobTab.withValue(v, val):
-    let np = val.item.pooledTx.networkPayload
+    let np = val.item.pooledTx.blobsBundle
     return Opt.some(BlobAndProofV1(
-      blob: engine_api_types.Blob(np.blobs[val.blobIndex]),
+      blob: np.blobs[val.blobIndex],
       proof: np.proofs[val.blobIndex]))
 
   Opt.none(BlobAndProofV1)

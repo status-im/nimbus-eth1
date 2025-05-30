@@ -168,10 +168,10 @@ proc getBlobDataInPayload*(pool: TestBlobTxPool, payload: ExecutionPayload): Res
       return err("could not find transaction in the pool")
 
     let blobTx = pool.transactions[txHash]
-    if blobTx.networkPayload.isNil:
+    if blobTx.blobsBundle.isNil:
       return err("blob data is nil")
 
-    let np = blobTx.networkPayload
+    let np = blobTx.blobsBundle
     if blobTx.tx.versionedHashes.len != np.commitments.len or
        np.commitments.len != np.blobs.len or
        np.blobs.len != np.proofs.len:
@@ -181,7 +181,7 @@ proc getBlobDataInPayload*(pool: TestBlobTxPool, payload: ExecutionPayload): Res
       blobData.data.add BlobWrapData(
         versionedHash: blobTx.tx.versionedHashes[i],
         commitment   : kzg.KzgCommitment(bytes: np.commitments[i].data),
-        blob         : kzg.KzgBlob(bytes: np.blobs[i]),
+        blob         : kzg.KzgBlob(bytes: np.blobs[i].bytes),
         proof        : kzg.KzgProof(bytes: np.proofs[i].data),
       )
     blobData.txs.add blobTx.tx

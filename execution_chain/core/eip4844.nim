@@ -177,35 +177,35 @@ func validateEip4844Header*(
 
 proc validateBlobTransactionWrapper*(tx: PooledTransaction):
                                      Result[void, string] {.raises: [].} =
-  if tx.networkPayload.isNil:
+  if tx.blobsBundle.isNil:
     return err("tx wrapper is none")
 
   # note: assert blobs are not malformatted
   let goodFormatted = tx.tx.versionedHashes.len ==
-                      tx.networkPayload.commitments.len and
+                      tx.blobsBundle.commitments.len and
                       tx.tx.versionedHashes.len ==
-                      tx.networkPayload.blobs.len and
+                      tx.blobsBundle.blobs.len and
                       tx.tx.versionedHashes.len ==
-                      tx.networkPayload.proofs.len
+                      tx.blobsBundle.proofs.len
 
   if not goodFormatted:
     return err("tx wrapper is ill formatted")
 
-  let commitments = tx.networkPayload.commitments.mapIt(
+  let commitments = tx.blobsBundle.commitments.mapIt(
                       kzg.KzgCommitment(bytes: it.data))
 
   # Verify that commitments match the blobs by checking the KZG proof
   let res = kzg.verifyBlobKzgProofBatch(
-              tx.networkPayload.blobs.mapIt(kzg.KzgBlob(bytes: it)),
+              tx.blobsBundle.blobs.mapIt(kzg.KzgBlob(bytes: it.bytes)),
               commitments,
-              tx.networkPayload.proofs.mapIt(kzg.KzgProof(bytes: it.data)))
+              tx.blobsBundle.proofs.mapIt(kzg.KzgProof(bytes: it.data)))
 
   if res.isErr:
     return err(res.error)
 
   # Actual verification result
   if not res.get():
-    return err("Failed to verify network payload of a transaction")
+    return err("Failed to verify blobs bundle of a transaction")
 
   # Now that all commitments have been verified, check that versionedHashes matches the commitments
   for i in 0 ..< tx.tx.versionedHashes.len:

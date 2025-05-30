@@ -499,7 +499,7 @@ proc setupServerAPI*(api: ServerAPIRef, server: RpcServer, ctx: EthContext) =
       tx = unsignedTx(data, api.chain, accDB.getNonce(address) + 1, api.com.chainId)
       eip155 = api.com.isEIP155(api.chain.latestNumber)
       signedTx = signTransaction(tx, acc.privateKey, eip155)
-      networkPayload =
+      blobsBundle =
         if signedTx.txType == TxEip4844:
           if data.blobs.isNone or data.commitments.isNone or data.proofs.isNone:
             raise newException(ValueError, "EIP-4844 transaction needs blobs")
@@ -509,8 +509,8 @@ proc setupServerAPI*(api: ServerAPIRef, server: RpcServer, ctx: EthContext) =
             raise newException(ValueError, "Incorrect number of commitments")
           if data.proofs.get.len != signedTx.versionedHashes.len:
             raise newException(ValueError, "Incorrect number of proofs")
-          NetworkPayload(
-            blobs: data.blobs.get.mapIt it.NetworkBlob,
+          BlobsBundle(
+            blobs: data.blobs.get,
             commitments: data.commitments.get,
             proofs: data.proofs.get,
           )
@@ -518,7 +518,7 @@ proc setupServerAPI*(api: ServerAPIRef, server: RpcServer, ctx: EthContext) =
           if data.blobs.isSome or data.commitments.isSome or data.proofs.isSome:
             raise newException(ValueError, "Blobs require EIP-4844 transaction")
           nil
-      pooledTx = PooledTransaction(tx: signedTx, networkPayload: networkPayload)
+      pooledTx = PooledTransaction(tx: signedTx, blobsBundle: blobsBundle)
 
     api.txPool.addTx(pooledTx).isOkOr:
       raise newException(ValueError, $error)

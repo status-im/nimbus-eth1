@@ -1,5 +1,5 @@
 # Nimbus
-# Copyright (c) 2023-2024 Status Research & Development GmbH
+# Copyright (c) 2023-2025 Status Research & Development GmbH
 # Licensed under either of
 #  * Apache License, version 2.0, ([LICENSE-APACHE](LICENSE-APACHE))
 #  * MIT license ([LICENSE-MIT](LICENSE-MIT))
@@ -27,7 +27,6 @@ type
   Web3Quantity*      = web3types.Quantity
   Web3ExtraData*     = web3types.DynamicBytes[0, 32]
   Web3Tx*            = engine_api_types.TypedTransaction
-  Web3Blob*          = engine_api_types.Blob
 
 {.push gcsafe, raises:[].}
 

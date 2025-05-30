@@ -147,16 +147,16 @@ proc assembleBlock*(
   var blk = EthBlock(
     header: pst.assembleHeader(xp)
   )
-  var blobsBundle: BlobsBundle
+  var blobsBundle = BlobsBundle()
   for item in pst.packedTxs:
     let tx = item.pooledTx
     blk.txs.add tx.tx
-    if tx.networkPayload != nil:
-      for k in tx.networkPayload.commitments:
+    if tx.blobsBundle != nil:
+      for k in tx.blobsBundle.commitments:
         blobsBundle.commitments.add k
-      for p in tx.networkPayload.proofs:
+      for p in tx.blobsBundle.proofs:
         blobsBundle.proofs.add p
-      for blob in tx.networkPayload.blobs:
+      for blob in tx.blobsBundle.blobs:
         blobsBundle.blobs.add blob
   blk.header.transactionsRoot = calcTxRoot(blk.txs)
 

@@ -137,13 +137,13 @@ proc debug*(tx: Transaction): string =
 
 proc debug*(tx: PooledTransaction): string =
   result.add debug(tx.tx)
-  if tx.networkPayload.isNil:
+  if tx.blobsBundle.isNil:
     result.add "networkPaylod : nil\n"
   else:
     result.add "networkPaylod : \n"
-    result.add " - blobs       : " & $tx.networkPayload.blobs.len & "\n"
-    result.add " - commitments : " & $tx.networkPayload.commitments.len & "\n"
-    result.add " - proofs      : " & $tx.networkPayload.proofs.len & "\n"
+    result.add " - blobs       : " & $tx.blobsBundle.blobs.len & "\n"
+    result.add " - commitments : " & $tx.blobsBundle.commitments.len & "\n"
+    result.add " - proofs      : " & $tx.blobsBundle.proofs.len & "\n"
 
 proc debugSum*(h: Header): string =
   result.add "txRoot         : " & $h.txRoot      & "\n"

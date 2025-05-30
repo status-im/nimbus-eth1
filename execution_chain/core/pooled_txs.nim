@@ -10,23 +10,21 @@
 {.push raises: [].}
 
 import
-  eth/common/transactions
+  eth/common/transactions,
+  web3/primitives
 
 export
-  transactions
+  transactions,
+  primitives
 
 type
-  # 32 -> UInt256
-  # 4096 -> FIELD_ELEMENTS_PER_BLOB
-  NetworkBlob* = array[32*4096, byte]
+  KzgBlob* = primitives.Blob
 
-  BlobsBundle* = object
+  BlobsBundle* = ref object
     commitments*: seq[KzgCommitment]
     proofs*: seq[KzgProof]
-    blobs*: seq[NetworkBlob]
-
-  NetworkPayload* = ref BlobsBundle
+    blobs*: seq[KzgBlob]
 
   PooledTransaction* = object
     tx*: Transaction
-    networkPayload*: NetworkPayload       # EIP-4844
+    blobsBundle*: BlobsBundle       # EIP-4844
