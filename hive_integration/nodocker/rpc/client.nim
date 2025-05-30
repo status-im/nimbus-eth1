@@ -15,6 +15,7 @@ import
   ../../../execution_chain/transaction,
   ../../../execution_chain/utils/utils,
   ../../../execution_chain/beacon/web3_eth_conv,
+  ../../../execution_chain/core/pooled_txs_rlp,
   web3/eth_api
 
 export eth_api

@@ -16,6 +16,7 @@ import
   eth/common,
   stew/byteutils,
   ../../execution_chain/common/chain_config,
+  ../../execution_chain/core/pooled_txs,
   ./pp_light
 
 export

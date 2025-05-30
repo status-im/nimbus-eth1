@@ -27,6 +27,7 @@ import
   ../pow/header,
   ../eip4844,
   ../validate,
+  ../pooled_txs,
   ./tx_tabs,
   ./tx_item
 

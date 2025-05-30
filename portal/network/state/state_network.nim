@@ -57,7 +57,7 @@ proc new*(
     historyNetwork = Opt.none(HistoryNetwork),
     validateStateIsCanonical = true,
     contentRequestRetries = 1,
-    contentQueueWorkers = 8,
+    contentQueueWorkers = 50,
     contentQueueSize = 50,
 ): T =
   let

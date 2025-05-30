@@ -42,7 +42,8 @@ import
   ./tx_pool/tx_item,
   ./tx_pool/tx_desc,
   ./tx_pool/tx_packer,
-  ./chain/forked_chain
+  ./chain/forked_chain,
+  ./pooled_txs
 
 from eth/common/eth_types_rlp import rlpHash
 

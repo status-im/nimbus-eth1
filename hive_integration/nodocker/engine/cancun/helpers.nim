@@ -19,6 +19,7 @@ import
   ../engine_client,
   ../../../../execution_chain/constants,
   ../../../../execution_chain/core/eip4844,
+  ../../../../execution_chain/core/pooled_txs,
   ../../../../execution_chain/core/lazy_kzg as kzg,
   ../../../../execution_chain/rpc/rpc_types,
   web3/execution_types,
