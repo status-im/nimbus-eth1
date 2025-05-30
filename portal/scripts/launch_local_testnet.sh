@@ -38,9 +38,9 @@ LONGOPTS="help,nodes:,data-dir:,run-tests,log-level:,base-port:,base-rpc-port:,w
 
 # default values
 
-NUM_NODES="8" # With the default radius of 254 which should result in ~1/4th
-# of the data set stored on each node at least 8 nodes are recommended to
-# provide complete coverage of the data set with approx replication factor of 2.
+NUM_NODES="16" # With the default radius of 254 which should result in ~1/4th
+# of the data set stored on each node at least 16 nodes are recommended to
+# provide complete coverage of the data set with approx replication factor of 4.
 RADIUS="static:254"
 DATA_DIR="local_testnet_data"
 RUN_TESTS="0"
@@ -301,7 +301,10 @@ fi
 
 for NUM_NODE in $(seq 0 $(( NUM_NODES - 1 ))); do
   NODE_DATA_DIR="${DATA_DIR}/node${NUM_NODE}"
-  rm -rf "${NODE_DATA_DIR}"
+
+  if [[ "$REUSE_EXISTING_DATA_DIR" == "0" ]]; then
+    rm -rf "${NODE_DATA_DIR}"
+  fi
   "${SCRIPTS_DIR}"/makedir.sh "${NODE_DATA_DIR}" 2>&1
 done
 
