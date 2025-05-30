@@ -199,7 +199,7 @@ proc new*(
     trustedBlockRoot: Opt[Eth2Digest],
     bootstrapRecords: openArray[Record] = [],
     portalConfig: PortalProtocolConfig = defaultPortalProtocolConfig,
-    contentQueueWorkers = 8,
+    contentQueueWorkers = 50,
     contentQueueSize = 50,
 ): T =
   let
