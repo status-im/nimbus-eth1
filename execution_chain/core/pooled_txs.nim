@@ -20,10 +20,18 @@ export
 type
   KzgBlob* = primitives.Blob
 
+  WrapperVersion* = enum
+    WrapperVersionEIP4844  # 0
+    WrapperVersionEIP7594  # 1
+
   BlobsBundle* = ref object
+    wrapperVersion*: WrapperVersion
+    blobs*: seq[KzgBlob]
     commitments*: seq[KzgCommitment]
     proofs*: seq[KzgProof]
-    blobs*: seq[KzgBlob]
+      # The 'proofs' field is shared between
+      # EIP-4844's 'proofs' and EIP-7594's
+      # cell_proofs
 
   PooledTransaction* = object
     tx*: Transaction

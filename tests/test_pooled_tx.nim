@@ -175,6 +175,18 @@ template roundTrip(txFunc: untyped, i: int) =
   let bytes2 = rlp.encode(tx2)
   check bytes == bytes2
 
+const
+  rlpBytes0 = hexToSeqByte(slurp("pooled_tx/ptx0.rlp"))
+  rlpBytes1 = hexToSeqByte(slurp("pooled_tx/ptx1.rlp"))
+  rlpBytes2 = hexToSeqByte(slurp("pooled_tx/ptx2.rlp"))
+  rlpBytes3 = hexToSeqByte(slurp("pooled_tx/ptx3.rlp"))
+  rlpBytes4 = hexToSeqByte(slurp("pooled_tx/ptx4.rlp"))
+  rlpBytes5 = hexToSeqByte(slurp("pooled_tx/ptx5.rlp"))
+  rlpBytes6 = hexToSeqByte(slurp("pooled_tx/ptx6.rlp"))
+  rlpBytes7 = hexToSeqByte(slurp("pooled_tx/ptx7.rlp"))
+  rlpBytes8 = hexToSeqByte(slurp("pooled_tx/ptx8.rlp"))
+  rlpBytesInvalid = hexToSeqByte(slurp("pooled_tx/invalid_blobsbundle_type.rlp"))
+
 suite "Transactions":
   test "Legacy Tx Call":
     roundTrip(tx0, 1)
@@ -298,3 +310,44 @@ suite "Transactions":
 
       check:
         tx.recoverKey().expect("valid key").to(Address) == sender
+
+  test "encode compare from hex":
+    let
+      ptx0 = tx0(4)
+      ptx1 = tx1(4)
+      ptx2 = tx2(4)
+      ptx3 = tx3(4)
+      ptx4 = tx4(4)
+      ptx5 = tx5(4)
+      ptx6 = tx6(4)
+      ptx7 = tx7(4)
+      ptx8 = tx8(4)
+
+    check rlp.encode(ptx0) == rlpBytes0
+    check rlp.encode(ptx1) == rlpBytes1
+    check rlp.encode(ptx2) == rlpBytes2
+    check rlp.encode(ptx3) == rlpBytes3
+    check rlp.encode(ptx4) == rlpBytes4
+    check rlp.encode(ptx5) == rlpBytes5
+    check rlp.encode(ptx6) == rlpBytes6
+    check rlp.encode(ptx7) == rlpBytes7
+    check rlp.encode(ptx8) == rlpBytes8
+
+  test "PooledTransaction types":
+    var ptx = rlp.decode(rlpBytes6, PooledTransaction)
+    check rlp.encode(ptx) == rlpBytes6
+
+    ptx.blobsBundle.wrapperVersion = WrapperVersionEIP7594
+    let rlpBytes = rlp.encode(ptx)
+    let tx = rlp.decode(rlpBytes, PooledTransaction)
+    check tx.tx == ptx.tx
+    check tx.blobsBundle.wrapperVersion == WrapperVersionEIP7594
+    check tx.blobsBundle.blobs == ptx.blobsBundle.blobs
+    check tx.blobsBundle.proofs == ptx.blobsBundle.proofs
+    check tx.blobsBundle.commitments == ptx.blobsBundle.commitments
+
+  test "PooledTransaction invalid blobsBundle types":
+    expect UnsupportedRlpError:
+      let ptx = rlp.decode(rlpBytesInvalid, PooledTransaction)
+      discard ptx
+
