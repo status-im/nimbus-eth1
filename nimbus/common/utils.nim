@@ -7,7 +7,7 @@
 
 {.push raises: [].}
 
-import std/[strutils], results, chronicles, stew/shims/macros, confutils, ../conf
+import results, chronicles, stew/shims/macros, ../conf
 
 logScope:
   topics = "utils"
