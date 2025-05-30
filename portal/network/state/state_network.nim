@@ -244,11 +244,15 @@ proc contentQueueWorker(n: StateNetwork) {.async: (raises: []).} =
               )
 
         if offerRes.isOk():
-          portal_subnetwork_offer_validation_successful.inc(labelValues = [$n.portalProtocol.protocolId])
+          portal_subnetwork_offer_validation_successful.inc(
+            labelValues = [$n.portalProtocol.protocolId]
+          )
           debug "Received offered content validated successfully",
             srcNodeId, contentKeyBytes
         else:
-          portal_subnetwork_offer_validation_failed.inc(labelValues = [$n.portalProtocol.protocolId])
+          portal_subnetwork_offer_validation_failed.inc(
+            labelValues = [$n.portalProtocol.protocolId]
+          )
           error "Received offered content failed validation",
             srcNodeId, contentKeyBytes, error = offerRes.error()
 

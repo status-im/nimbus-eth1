@@ -431,13 +431,17 @@ proc contentQueueWorker(n: HistoryNetwork) {.async: (raises: []).} =
       # TODO: Differentiate between failures due to invalid data and failures
       # due to missing network data for validation.
       if await n.validateContent(srcNodeId, contentKeys, contentItems):
-        portal_subnetwork_offer_validation_successful.inc(labelValues = [$n.portalProtocol.protocolId])
+        portal_subnetwork_offer_validation_successful.inc(
+          labelValues = [$n.portalProtocol.protocolId]
+        )
 
         discard await n.portalProtocol.neighborhoodGossip(
           srcNodeId, contentKeys, contentItems
         )
       else:
-        portal_subnetwork_offer_validation_failed.inc(labelValues = [$n.portalProtocol.protocolId])
+        portal_subnetwork_offer_validation_failed.inc(
+          labelValues = [$n.portalProtocol.protocolId]
+        )
   except CancelledError:
     trace "contentQueueWorker canceled"
 
