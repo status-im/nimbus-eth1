@@ -351,7 +351,7 @@ proc exec(ctx: TransContext,
   if ctx.env.currentExcessBlobGas.isSome:
     excessBlobGas = ctx.env.currentExcessBlobGas
   elif ctx.env.parentExcessBlobGas.isSome and ctx.env.parentBlobGasUsed.isSome:
-    excessBlobGas = Opt.some calcExcessBlobGas(vmState.parent, vmState.fork >= FkPrague)
+    excessBlobGas = Opt.some calcExcessBlobGas(vmState.com, vmState.parent, vmState.fork)
 
   if excessBlobGas.isSome:
     result.result.blobGasUsed = Opt.some vmState.blobGasUsed
@@ -535,7 +535,7 @@ proc transitionAction*(ctx: var TransContext, conf: T8NConf) =
       # If it is not explicitly defined, but we have the parent values, we try
       # to calculate it ourselves.
       if parent.excessBlobGas.isSome and parent.blobGasUsed.isSome:
-        ctx.env.currentExcessBlobGas = Opt.some calcExcessBlobGas(parent, com.isPragueOrLater(ctx.env.currentTimestamp))
+        ctx.env.currentExcessBlobGas = Opt.some com.calcExcessBlobGas(parent, com.toEVMFork(ctx.env.currentTimestamp))
 
     let header  = envToHeader(ctx.env)
 
