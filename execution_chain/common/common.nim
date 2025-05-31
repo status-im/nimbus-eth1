@@ -278,6 +278,16 @@ func toHardFork*(
     com: CommonRef, forkDeterminer: ForkDeterminationInfo): HardFork =
   toHardFork(com.forkTransitionTable, forkDeterminer)
 
+func toHardFork*(com: CommonRef, timestamp: EthTime): HardFork =
+  for fork in countdown(com.forkTransitionTable.timeThresholds.high, Shanghai):
+    if com.forkTransitionTable.timeThresholds[fork].isSome and timestamp >= com.forkTransitionTable.timeThresholds[fork].get:
+      return fork
+
+func toEVMFork*(com: CommonRef, timestamp: EthTime): EVMFork =
+  ## similar to toHardFork, but produce EVMFork
+  let fork = com.toHardFork(timestamp)
+  ToEVMFork[fork]
+
 func toEVMFork*(com: CommonRef, forkDeterminer: ForkDeterminationInfo): EVMFork =
   ## similar to toFork, but produce EVMFork
   let fork = com.toHardFork(forkDeterminer)

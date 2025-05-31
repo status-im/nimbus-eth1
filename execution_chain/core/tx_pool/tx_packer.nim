@@ -71,7 +71,7 @@ proc classifyValidatePacked(vmState: BaseVMState; item: TxItemRef): bool =
     baseFee = vmState.blockCtx.baseFeePerGas.get(0.u256)
     fork = vmState.fork
     gasLimit = vmState.blockCtx.gasLimit
-    excessBlobGas = calcExcessBlobGas(vmState.parent, fork >= FkPrague)
+    excessBlobGas = calcExcessBlobGas(vmState.com, vmState.parent, fork)
 
   roDB.validateTransaction(
     item.tx, item.sender, gasLimit, baseFee, excessBlobGas, vmState.com, fork).isOk
@@ -159,7 +159,6 @@ proc vmExecGrabItem(pst: var TxPacker; item: TxItemRef, xp: TxPoolRef): bool =
   ## values are below the maximum block size.
   let
     vmState = pst.vmState
-    electra = vmState.fork >= FkPrague
 
   # EIP-4844
   if item.tx.txType == TxEip4844:
@@ -169,7 +168,7 @@ proc vmExecGrabItem(pst: var TxPacker; item: TxItemRef, xp: TxPoolRef): bool =
 
   let
     blobGasUsed = item.tx.getTotalBlobGas
-    maxBlobGasPerBlock = getMaxBlobGasPerBlock(electra)
+    maxBlobGasPerBlock = getMaxBlobGasPerBlock(vmState.com, vmState.fork)
   if vmState.blobGasUsed + blobGasUsed > maxBlobGasPerBlock:
     return ContinueWithNextAccount
 

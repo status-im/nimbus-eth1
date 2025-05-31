@@ -82,11 +82,11 @@ proc pointEvaluation*(input: openArray[byte]): Result[void, string] =
   ok()
 
 # calcExcessBlobGas implements calc_excess_data_gas from EIP-4844
-proc calcExcessBlobGas*(parent: Header, electra: bool): uint64 =
+proc calcExcessBlobGas*(com: CommonRef, parent: Header, fork: EVMFork): uint64 =
   let
     excessBlobGas = parent.excessBlobGas.get(0'u64)
     blobGasUsed = parent.blobGasUsed.get(0'u64)
-    targetBlobGasPerBlock = getTargetBlobGasPerBlock(electra)
+    targetBlobGasPerBlock = com.getTargetBlobsPerBlock(fork) * GAS_PER_BLOB
 
   if excessBlobGas + blobGasUsed < targetBlobGasPerBlock:
     0'u64
@@ -157,12 +157,12 @@ func validateEip4844Header*(
     return err("expect EIP-4844 excessBlobGas in block header")
 
   let
-    electra = com.isPragueOrLater(header.timestamp)
+    fork = com.toEVMFork(header)
     headerBlobGasUsed = header.blobGasUsed.get()
     blobGasUsed = blobGasUsed(txs)
     headerExcessBlobGas = header.excessBlobGas.get
-    excessBlobGas = calcExcessBlobGas(parentHeader, electra)
-    maxBlobGasPerBlock = getMaxBlobGasPerBlock(electra)
+    excessBlobGas = calcExcessBlobGas(com, parentHeader, fork)
+    maxBlobGasPerBlock = com.getMaxBlobGasPerBlock(fork)
 
   if blobGasUsed > maxBlobGasPerBlock:
     return err("blobGasUsed " & $blobGasUsed & " exceeds maximum allowance " & $maxBlobGasPerBlock)
