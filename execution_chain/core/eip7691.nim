@@ -24,17 +24,19 @@ const
   ]
 
 func getMaxBlobsPerBlock*(com: CommonRef, fork: EVMFork): uint64 =
-  doAssert(fork >= FkCancun)
+  if fork < FkCancun:
+    return 0
   com.maxBlobsPerBlock(EVMForkToFork[fork])
 
-func getMaxBlobGasPerBlock*(com: CommonRef, fork: EVMFork): uint64 =
-  doAssert(fork >= FkCancun)
-  com.getMaxBlobsPerBlock(fork) * GAS_PER_BLOB
-
 func getTargetBlobsPerBlock*(com: CommonRef, fork: EVMFork): uint64 =
-  doAssert(fork >= FkCancun)
+  if fork < FkCancun:
+    return 0
   com.targetBlobsPerBlock(EVMForkToFork[fork])
 
 func getBlobBaseFeeUpdateFraction*(com: CommonRef, fork: EVMFork): uint64 =
-  doAssert(fork >= FkCancun)
+  if fork < FkCancun:
+    return 0
   com.baseFeeUpdateFraction(EVMForkToFork[fork])
+
+func getMaxBlobGasPerBlock*(com: CommonRef, fork: EVMFork): uint64 =
+  com.getMaxBlobsPerBlock(fork) * GAS_PER_BLOB
