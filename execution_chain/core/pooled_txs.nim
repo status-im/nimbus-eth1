@@ -11,11 +11,14 @@
 
 import
   eth/common/transactions,
+  web3/engine_api_types,
   web3/primitives
 
 export
   transactions,
-  primitives
+  primitives,
+  BlobsBundleV1,
+  BlobsBundleV2
 
 type
   KzgBlob* = primitives.Blob
@@ -36,3 +39,19 @@ type
   PooledTransaction* = object
     tx*: Transaction
     blobsBundle*: BlobsBundle       # EIP-4844
+
+func V1*(bundle: BlobsBundle): BlobsBundleV1 =
+  doAssert(bundle.wrapperVersion == WrapperVersionEIP4844)
+  BlobsBundleV1(
+    commitments: bundle.commitments,
+    proofs: bundle.proofs,
+    blobs: bundle.blobs
+  )
+
+func V2*(bundle: BlobsBundle): BlobsBundleV2 =
+  doAssert(bundle.wrapperVersion == WrapperVersionEIP7594)
+  BlobsBundleV2(
+    commitments: bundle.commitments,
+    proofs: bundle.proofs,
+    blobs: bundle.blobs
+  )
