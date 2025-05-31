@@ -36,6 +36,11 @@ const
     "Cancun",               # FkCancun
     "Prague",               # FkPrague
     "Osaka",                # FkOsaka
+    "Bpo1",                 # FkBpo1
+    "Bpo2",                 # FkBpo2
+    "Bpo3",                 # FkBpo3
+    "Bpo4",                 # FkBpo4
+    "Bpo5"                  # FkBpo5
   ]
 
   nameToFork* = ForkToName.revTable
