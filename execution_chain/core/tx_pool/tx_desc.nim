@@ -87,7 +87,7 @@ proc setupVMState(com: CommonRef;
                   pos: PosPayloadAttr,
                   parentFrame: CoreDbTxRef): BaseVMState =
   let
-    electra = com.isPragueOrLater(pos.timestamp)
+    fork = com.toEVMFork(pos.timestamp)
 
   BaseVMState.new(
     parent   = parent,
@@ -98,7 +98,7 @@ proc setupVMState(com: CommonRef;
       prevRandao   : pos.prevRandao,
       difficulty   : UInt256.zero(),
       coinbase     : pos.feeRecipient,
-      excessBlobGas: calcExcessBlobGas(parent, electra),
+      excessBlobGas: com.calcExcessBlobGas(parent, fork),
       parentHash   : parentHash,
     ),
     txFrame = parentFrame.txFrameBegin(),
