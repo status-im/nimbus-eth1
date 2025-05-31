@@ -94,7 +94,7 @@ proc processTransactionImpl(
   # blobGasUsed will be added to vmState.blobGasUsed if the tx is ok.
   let
     blobGasUsed = tx.getTotalBlobGas
-    maxBlobGasPerBlock = getMaxBlobGasPerBlock(vmState.fork >= FkPrague)
+    maxBlobGasPerBlock = getMaxBlobGasPerBlock(vmState.com, vmState.fork)
   if vmState.blobGasUsed + blobGasUsed > maxBlobGasPerBlock:
     return err("blobGasUsed " & $blobGasUsed &
       " exceeds maximum allowance " & $maxBlobGasPerBlock)
