@@ -175,11 +175,11 @@ func validateEip4844Header*(
 
   return ok()
 
-proc validateBlobTransactionWrapper*(tx: PooledTransaction):
+proc validateBlobTransactionWrapper4844*(tx: PooledTransaction):
                                      Result[void, string] {.raises: [].} =
-  if tx.blobsBundle.isNil:
-    return err("tx wrapper is none")
-
+  doAssert(tx.blobsBundle.isNil.not)
+  doAssert(tx.blobsBundle.wrapperVersion == WrapperVersionEIP4844)
+                                     
   # note: assert blobs are not malformatted
   let goodFormatted = tx.tx.versionedHashes.len ==
                       tx.blobsBundle.commitments.len and

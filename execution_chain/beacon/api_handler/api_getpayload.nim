@@ -31,7 +31,7 @@ proc getPayload*(ben: BeaconEngineRef,
     raise unsupportedFork("getPayload" & $expectedVersion &
       " expect payload" & $expectedVersion &
       " but get payload" & $version)
-  if bundle.blobsBundle.isSome:
+  if bundle.blobsBundle.isNil.not:
     raise unsupportedFork("getPayload" & $expectedVersion &
       " contains unsupported BlobsBundleV1")
 
@@ -50,7 +50,7 @@ proc getPayloadV3*(ben: BeaconEngineRef, id: Bytes8): GetPayloadV3Response =
   let version = bundle.payload.version
   if version != Version.V3:
     raise unsupportedFork("getPayloadV3 expect payloadV3 but get payload" & $version)
-  if bundle.blobsBundle.isNone:
+  if bundle.blobsBundle.isNil:
     raise unsupportedFork("getPayloadV3 is missing BlobsBundleV1")
 
   let com = ben.com
@@ -60,7 +60,7 @@ proc getPayloadV3*(ben: BeaconEngineRef, id: Bytes8): GetPayloadV3Response =
   GetPayloadV3Response(
     executionPayload: bundle.payload.V3,
     blockValue: bundle.blockValue,
-    blobsBundle: bundle.blobsBundle.value,
+    blobsBundle: bundle.blobsBundle.V1,
     shouldOverrideBuilder: false
   )
 
@@ -74,7 +74,7 @@ proc getPayloadV4*(ben: BeaconEngineRef, id: Bytes8): GetPayloadV4Response =
   let version = bundle.payload.version
   if version != Version.V3:
     raise unsupportedFork("getPayloadV4 expect payloadV3 but get payload" & $version)
-  if bundle.blobsBundle.isNone:
+  if bundle.blobsBundle.isNil:
     raise unsupportedFork("getPayloadV4 is missing BlobsBundleV1")
   if bundle.executionRequests.isNone:
     raise unsupportedFork("getPayloadV4 is missing executionRequests")
@@ -86,7 +86,7 @@ proc getPayloadV4*(ben: BeaconEngineRef, id: Bytes8): GetPayloadV4Response =
   GetPayloadV4Response(
     executionPayload: bundle.payload.V3,
     blockValue: bundle.blockValue,
-    blobsBundle: bundle.blobsBundle.value,
+    blobsBundle: bundle.blobsBundle.V1,
     shouldOverrideBuilder: false,
     executionRequests: bundle.executionRequests.get,
   )

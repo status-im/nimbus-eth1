@@ -315,16 +315,19 @@ func forkId*(com: CommonRef, head: BlockNumber, time: EthTime): ForkID {.gcsafe.
   com.forkIdCalculator.newID(head, time.uint64)
 
 func isEIP155*(com: CommonRef, number: BlockNumber): bool =
-  com.config.eip155Block.isSome and number >= com.config.eip155Block.get
+  com.config.eip155Block.isSome and number >= com.config.eip155Block.value
 
 func isShanghaiOrLater*(com: CommonRef, t: EthTime): bool =
-  com.config.shanghaiTime.isSome and t >= com.config.shanghaiTime.get
+  com.config.shanghaiTime.isSome and t >= com.config.shanghaiTime.value
 
 func isCancunOrLater*(com: CommonRef, t: EthTime): bool =
-  com.config.cancunTime.isSome and t >= com.config.cancunTime.get
+  com.config.cancunTime.isSome and t >= com.config.cancunTime.value
 
 func isPragueOrLater*(com: CommonRef, t: EthTime): bool =
-  com.config.pragueTime.isSome and t >= com.config.pragueTime.get
+  com.config.pragueTime.isSome and t >= com.config.pragueTime.value
+
+func isOsakaOrLater*(com: CommonRef, t: EthTime): bool =
+  com.config.osakaTime.isSome and t >= com.config.osakaTime.value
 
 proc proofOfStake*(com: CommonRef, header: Header, txFrame: CoreDbTxRef): bool =
   if com.config.posBlock.isSome:

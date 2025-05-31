@@ -26,6 +26,7 @@ import
   ../chain/forked_chain,
   ../pow/header,
   ../eip4844,
+  ../eip7594,
   ../validate,
   ../pooled_txs,
   ./tx_tabs,
@@ -242,6 +243,21 @@ proc classifyValid(xp: TxPoolRef; tx: Transaction, sender: Address): bool =
     value = tx.value
   true
 
+proc validateBlobTransactionWrapper(tx: PooledTransaction, fork: EVMFork):
+                                     Result[void, string] {.raises: [].} =
+  if tx.blobsBundle.isNil:
+    return err("tx wrapper is none")
+
+  case tx.blobsBundle.wrapperVersion
+  of WrapperVersionEIP4844:
+    if fork >= FkOsaka:
+      return err("Blobsbundle version expect fork before Osaka")
+    validateBlobTransactionWrapper4844(tx)
+  of WrapperVersionEIP7594:
+    if fork < FkOsaka:
+      return err("Blobsbundle version expect Osaka or later")
+    validateBlobTransactionWrapper7594(tx)
+
 # ------------------------------------------------------------------------------
 # Public functions, constructor
 # ------------------------------------------------------------------------------
@@ -331,7 +347,7 @@ proc addTx*(xp: TxPoolRef, ptx: PooledTransaction): Result[void, TxError] =
     if size > BLOB_TX_MAX_SIZE:
       return err(txErrorOversized)
 
-    ptx.validateBlobTransactionWrapper().isOkOr:
+    ptx.validateBlobTransactionWrapper(xp.nextFork).isOkOr:
       debug "Invalid transaction: Blob transaction wrapper validation failed",
         tx = ptx.tx,
         error = error
