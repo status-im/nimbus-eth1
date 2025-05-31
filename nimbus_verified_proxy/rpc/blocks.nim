@@ -89,9 +89,10 @@ proc walkBlocks(
         let blk =
           try:
             await vp.rpcClient.eth_getBlockByHash(nextHash, false)
-          except:
-            return
-              err("Couldn't get block " & $nextHash & " during the chain traversal")
+          except CatchableError as e:
+            return err(
+              "Couldn't get block " & $nextHash & " during the chain traversal: " & e.msg
+            )
 
         trace "getting next block",
           hash = nextHash,
