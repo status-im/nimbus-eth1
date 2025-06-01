@@ -41,8 +41,8 @@ const
 
 
 # kzgToVersionedHash implements kzg_to_versioned_hash from EIP-4844
-proc kzgToVersionedHash*(kzg: kzg.KzgCommitment): VersionedHash =
-  result = sha256.digest(kzg.bytes).to(Hash32)
+proc kzgToVersionedHash*(commitment: array[48, byte]): VersionedHash =
+  result = sha256.digest(commitment).to(Hash32)
   result.data[0] = VERSIONED_HASH_VERSION_KZG
 
 # pointEvaluation implements point_evaluation_precompile from EIP-4844
@@ -67,7 +67,7 @@ proc pointEvaluation*(input: openArray[byte]): Result[void, string] =
     commitment =  KzgBytes48.copyFrom(input, 96, 143)
     kzgProof =  KzgBytes48.copyFrom(input, 144, 191)
 
-  if kzgToVersionedHash(commitment).data != versionedHash.bytes:
+  if kzgToVersionedHash(commitment.bytes).data != versionedHash.bytes:
     return err("versionedHash should equal to kzgToVersionedHash(commitment)")
 
   # Verify KZG proof
@@ -213,7 +213,7 @@ proc validateBlobTransactionWrapper4844*(tx: PooledTransaction):
     if tx.tx.versionedHashes[i].data[0] != VERSIONED_HASH_VERSION_KZG:
       return err("wrong kzg version in versioned hash at index " & $i)
 
-    if tx.tx.versionedHashes[i] != kzgToVersionedHash(commitments[i]):
+    if tx.tx.versionedHashes[i] != kzgToVersionedHash(commitments[i].bytes):
       return err("tx versioned hash not match commitments at index " & $i)
 
   ok()

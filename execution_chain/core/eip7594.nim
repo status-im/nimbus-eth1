@@ -10,7 +10,6 @@
 {.push raises: [].}
 
 import
-  web3/primitives,
   ../constants,
   ./eip4844,
   ./pooled_txs,
@@ -41,26 +40,30 @@ proc validateBlobTransactionWrapper7594*(tx: PooledTransaction):
       $expectedProofsLen &
       ", get: " & $getProofsLen)
 
-  let commitments = tx.blobsBundle.commitments.mapIt(
-                      kzg.KzgCommitment(bytes: it.data))
-
   for i in 0 ..< tx.tx.versionedHashes.len:
     # this additional check also done in tx validation
     if tx.tx.versionedHashes[i].data[0] != VERSIONED_HASH_VERSION_KZG:
       return err("wrong kzg version in versioned hash at index " & $i)
 
-    if tx.tx.versionedHashes[i] != kzgToVersionedHash(commitments[i]):
+    if tx.tx.versionedHashes[i] != kzgToVersionedHash(tx.blobsBundle.commitments[i].data):
       return err("tx versioned hash not match commitments at index " & $i)
 
   var
     cells = newSeqOfCap[KzgCell](getProofsLen)
     cellIndices = newSeqOfCap[uint64](getProofsLen)
+    commitments = newSeqOfCap[kzg.KzgCommitment](getProofsLen)
 
-  for blob in tx.blobsBundle.blobs:
+  # https://github.com/ethereum/execution-apis/blob/5d634063ccfd897a6974ea589c00e2c1d889abc9/src/engine/osaka.md#specification
+  for k, blob in tx.blobsBundle.blobs:
+    for i in 0..<CELLS_PER_EXT_BLOB:
+      # bullet 3.iii.a
+      commitments.add kzg.KzgCommitment(bytes: tx.blobsBundle.commitments[k].data)
+      # bullet 3.iii.b
+      cellIndices.add i.uint64
+
+    # bullet 3.iii.c
     let cf = ?kzg.computeCellsAndKzgProofs(kzg.KzgBlob(bytes: blob.bytes))
     cells.add cf.cells
-    for i in 0..<CELLS_PER_EXT_BLOB:
-      cellIndices.add i.uint64
 
   let res = kzg.verifyCellKzgProofBatch(
     commitments,
@@ -70,6 +73,7 @@ proc validateBlobTransactionWrapper7594*(tx: PooledTransaction):
   )
 
   if res.isErr:
+    debugEcho "UUUUU: ", res
     return err(res.error)
 
   # Actual verification result

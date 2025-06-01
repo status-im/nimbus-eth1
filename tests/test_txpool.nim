@@ -91,7 +91,7 @@ proc initEnv(envFork: HardFork): TestEnv =
 
   let
     # create the sender first, because it will modify networkParams
-    sender = TxSender.new(conf.networkParams, 30)
+    sender = TxSender.new(conf.networkParams, 35)
     com    = CommonRef.new(newCoreDbRef DefaultDbMemory,
                nil, conf.networkId, conf.networkParams)
     chain  = ForkedChainRef.init(com)
@@ -178,7 +178,40 @@ proc createPooledTransactionWithBlob(
       blobID: 1,
     )
 
-  mx.makeTx(tc, acc, nonce)
+  let params = MakeTxParams(
+    chainId: mx.chainId,
+    key: acc.key,
+    nonce: nonce,
+  )
+
+  makeTx(params, tc)
+
+proc createPooledTransactionWithBlob7594(
+    mx: TxSender,
+    acc: TestAccount,
+    recipient: Address,
+    amount: UInt256,
+    nonce: AccountNonce
+): PooledTransaction =
+  # Create the transaction
+  let
+    tc = BlobTx7594(
+      recipient: Opt.some(recipient),
+      gasLimit: 100000.GasInt,
+      gasTip: GasInt(10 ^ 9),
+      gasFee: GasInt(10 ^ 9),
+      blobGasFee: u256(1),
+      blobCount: 1,
+      blobID: 2,
+    )
+
+  let params = MakeTxParams(
+    chainId: mx.chainId,
+    key: acc.key,
+    nonce: nonce,
+  )
+
+  makeTx(params, tc)
 
 proc makeTx(
   mx: TxSender,
@@ -752,5 +785,39 @@ proc txPoolMain*() =
         tx = mx.makeTx(tc, acc, 0)
 
       xp.checkAddTx(tx, txErrorBasicValidation)
+
+    test "EIP-7594 BlobsBundle on Prague":
+      let
+        env = initEnv(Prague)
+        xp = env.xp
+        mx = env.sender
+        acc = mx.getAccount(30)
+        tx = mx.createPooledTransactionWithBlob7594(acc, recipient, amount, 0)
+
+      check tx.blobsBundle.wrapperVersion == WrapperVersionEIP7594
+      xp.checkAddTx(tx, txErrorInvalidBlob)
+
+    test "EIP-4844 BlobsBundle on Osaka":
+      let
+        env = initEnv(Osaka)
+        xp = env.xp
+        mx = env.sender
+        acc = mx.getAccount(30)
+        tx = mx.createPooledTransactionWithBlob(acc, recipient, amount, 0)
+
+      check tx.blobsBundle.wrapperVersion == WrapperVersionEIP4844
+      xp.checkAddTx(tx, txErrorInvalidBlob)
+
+    test "EIP-7594 BlobsBundle on Osaka":
+      let
+        env = initEnv(Osaka)
+        xp = env.xp
+        mx = env.sender
+        acc = mx.getAccount(30)
+        tx = mx.createPooledTransactionWithBlob7594(acc, recipient, amount, 0)
+
+      check tx.blobsBundle.wrapperVersion == WrapperVersionEIP7594
+      xp.checkAddTx(tx)
+      xp.checkImportBlock(1, 0)
 
 txPoolMain()

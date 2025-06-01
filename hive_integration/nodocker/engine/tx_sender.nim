@@ -44,6 +44,7 @@ type
 
   # Blob transaction creator
   BlobTx* = object of BaseTx
+  BlobTx7594* = object of BaseTx
 
   TestAccount* = object
     key*    : PrivateKey
@@ -201,6 +202,7 @@ proc makeTxOfType(params: MakeTxParams, tc: BaseTx): PooledTransaction =
         versionedHashes: system.move(blobData.hashes),
       ),
       blobsBundle: BlobsBundle(
+        wrapperVersion: WrapperVersionEIP4844,
         blobs: blobData.blobs.mapIt(KzgBlob it.bytes),
         commitments: blobData.commitments.mapIt(KzgCommitment it.bytes),
         proofs: blobData.proofs.mapIt(KzgProof it.bytes),
@@ -244,6 +246,9 @@ proc makeTx(params: MakeTxParams, tc: BigInitcodeTx): PooledTransaction =
 
   doAssert(tx.recipient.isNone, "invalid configuration for big contract tx creator")
   params.makeTx(tx.BaseTx)
+
+func chainId*(sender: TxSender): ChainId =
+  sender.chainId
 
 proc makeTx*(
     sender: TxSender, tc: BaseTx, nonce: AccountNonce): PooledTransaction =
@@ -360,6 +365,43 @@ proc makeTx*(params: MakeTxParams, tc: BlobTx): PooledTransaction =
   PooledTransaction(
     tx: signTransaction(unsignedTx, params.key),
     blobsBundle: BlobsBundle(
+      wrapperVersion: WrapperVersionEIP4844,
+      blobs      : data.blobs.mapIt(KzgBlob it.bytes),
+      commitments: data.commitments.mapIt(KzgCommitment it.bytes),
+      proofs     : data.proofs.mapIt(KzgProof it.bytes),
+    ),
+  )
+
+proc makeTx*(params: MakeTxParams, tc: BlobTx7594): PooledTransaction =
+  # Need tx wrap data that will pass blob verification
+  let data = blobDataGenerator7594(tc.blobID, tc.blobCount)
+  doAssert(tc.recipient.isSome, "nil recipient address")
+
+  let
+    gasFeeCap = if tc.gasFee != 0.GasInt: tc.gasFee
+                else: gasPrice
+    gasTipCap = if tc.gasTip != 0.GasInt: tc.gasTip
+                else: gasTipPrice
+
+  # Collect fields for transaction
+  let unsignedTx = Transaction(
+    txType    : TxEip4844,
+    chainId   : params.chainId,
+    nonce     : params.nonce,
+    maxPriorityFeePerGas: gasTipCap,
+    maxFeePerGas: gasFeeCap,
+    gasLimit  : tc.gasLimit,
+    to        : tc.recipient,
+    value     : tc.amount,
+    payload   : tc.payload,
+    maxFeePerBlobGas: tc.blobGasFee,
+    versionedHashes: data.hashes,
+  )
+
+  PooledTransaction(
+    tx: signTransaction(unsignedTx, params.key),
+    blobsBundle: BlobsBundle(
+      wrapperVersion: WrapperVersionEIP7594,
       blobs      : data.blobs.mapIt(KzgBlob it.bytes),
       commitments: data.commitments.mapIt(KzgCommitment it.bytes),
       proofs     : data.proofs.mapIt(KzgProof it.bytes),

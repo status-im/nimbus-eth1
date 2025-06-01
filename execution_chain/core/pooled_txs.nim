@@ -18,7 +18,8 @@ export
   transactions,
   primitives,
   BlobsBundleV1,
-  BlobsBundleV2
+  BlobsBundleV2,
+  CELLS_PER_EXT_BLOB
 
 type
   KzgBlob* = primitives.Blob

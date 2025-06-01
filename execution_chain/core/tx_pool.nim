@@ -177,7 +177,11 @@ proc assembleBlock*(
   if not com.isCancunOrLater(blk.header.timestamp) and blobsBundle.commitments.len > 0:
     return err("PooledTransaction contains blobs prior to Cancun")
   let blobsBundleOpt =
-    if com.isCancunOrLater(blk.header.timestamp):
+    if com.isOsakaOrLater(blk.header.timestamp):
+      doAssert blobsBundle.commitments.len == blobsBundle.blobs.len
+      doAssert blobsBundle.proofs.len == blobsBundle.blobs.len * CELLS_PER_EXT_BLOB
+      blobsBundle
+    elif com.isCancunOrLater(blk.header.timestamp):
       doAssert blobsBundle.commitments.len == blobsBundle.blobs.len
       doAssert blobsBundle.proofs.len == blobsBundle.blobs.len
       blobsBundle
