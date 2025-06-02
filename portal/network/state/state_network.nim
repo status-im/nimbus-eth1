@@ -26,11 +26,6 @@ export results, state_content, hashes
 logScope:
   topics = "portal_state"
 
-declareCounter state_network_offers_success,
-  "Portal state network offers successfully validated", labels = ["protocol_id"]
-declareCounter state_network_offers_failed,
-  "Portal state network offers which failed validation", labels = ["protocol_id"]
-
 const pingExtensionCapabilities = {CapabilitiesType, BasicRadiusType}
 
 type StateNetwork* = ref object
@@ -249,17 +244,22 @@ proc contentQueueWorker(n: StateNetwork) {.async: (raises: []).} =
               )
 
         if offerRes.isOk():
-          state_network_offers_success.inc(labelValues = [$n.portalProtocol.protocolId])
+          portal_offer_validation_successful.inc(
+            labelValues = [$n.portalProtocol.protocolId]
+          )
           debug "Received offered content validated successfully",
             srcNodeId, contentKeyBytes
         else:
+          portal_offer_validation_failed.inc(
+            labelValues = [$n.portalProtocol.protocolId]
+          )
+          error "Received offered content failed validation",
+            srcNodeId, contentKeyBytes, error = offerRes.error()
+
           if srcNodeId.isSome():
             n.portalProtocol.banNode(
               srcNodeId.get(), NodeBanDurationOfferFailedValidation
             )
-          state_network_offers_failed.inc(labelValues = [$n.portalProtocol.protocolId])
-          error "Received offered content failed validation",
-            srcNodeId, contentKeyBytes, error = offerRes.error()
 
           # The content validation failed so drop the remaining content (if any) from
           # this offer, because the remainly content is also likely to fail validation.

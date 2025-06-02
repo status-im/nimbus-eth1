@@ -99,6 +99,9 @@ proc headersNext(ctx: BeaconCtxRef; info: static[string]): SyncState =
       limit=nFetchHeadersFailedInitialPeersThreshold
     return headersCancel
 
+  if ctx.subState.cancelRequest:
+    return headersCancel
+
   if ctx.hdrCache.state == collecting:
     return SyncState.headers
 
