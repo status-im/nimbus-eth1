@@ -114,15 +114,17 @@ proc setupP2P(nimbus: NimbusNode, conf: NimbusConf,
   # Add protocol capabilities
   nimbus.wire = nimbus.ethNode.addEthHandlerCapability(nimbus.txPool)
 
-  # Always initialise beacon syncer
+  # Always initialise beacon syncer. It might turn out that it will not
+  # be started if there will be no point in doing so.
   nimbus.beaconSyncRef = BeaconSyncRef.init(
-    nimbus.ethNode, nimbus.fc, conf.maxPeers)
+    nimbus.ethNode, nimbus.fc, conf.maxPeers,
+    conf.engineApiServerEnabled())
 
   # Min peers (if set)
   if 0 < conf.beaconSyncInitPeersMin:
     nimbus.beaconSyncRef.peersMinInit conf.beaconSyncInitPeersMin
 
-  # Optional for pre-setting the sync target (i.e. debugging)
+  # Optional for pre-setting the sync target (e.g. for debugging)
   if conf.beaconSyncTarget.isSome():
     let hex = conf.beaconSyncTarget.unsafeGet
     if not nimbus.beaconSyncRef.targetInit(hex, conf.beaconSyncTargetIsFinal):
@@ -282,12 +284,11 @@ proc run(nimbus: NimbusNode, conf: NimbusConf) =
     setupP2P(nimbus, conf, com)
     setupRpc(nimbus, conf, com)
 
-    if (conf.maxPeers > 0 and conf.engineApiServerEnabled()) or
-       conf.beaconSyncTarget.isSome():
-      # Not starting syncer if there is definitely no way to run it. This
-      # avoids polling (i.e. waiting for instructions) and some logging.
-      if not nimbus.beaconSyncRef.start():
-        nimbus.beaconSyncRef = BeaconSyncRef(nil)
+    # Not starting syncer if there is definitely no way to run it. This
+    # avoids polling (i.e. waiting for instructions) and some logging.
+    if not nimbus.beaconSyncRef.shouldRun() or
+       not nimbus.beaconSyncRef.start():
+      nimbus.beaconSyncRef = BeaconSyncRef(nil)
 
     # Be graceful about ctrl-c during init
     if ProcessState.stopping.isNone:
