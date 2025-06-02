@@ -357,7 +357,6 @@ proc runBackfillLoop(
 proc runBackfillLoopAuditMode(
     bridge: PortalHistoryBridge, era1Dir: string, startEra: uint64, endEra: uint64
 ) {.async: (raises: [CancelledError]).} =
-
   let
     rng = newRng()
     db = Era1DB.new(era1Dir, "mainnet", loadAccumulator())
