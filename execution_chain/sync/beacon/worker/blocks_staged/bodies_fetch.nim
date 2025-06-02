@@ -32,7 +32,7 @@ proc fetchRegisterError*(buddy: BeaconBuddyRef, slowPeer = false) =
       # It would have been zombified if it were not the last one. This can be
       # used in functions -- depending on context -- that will trigger if the
       # if the pool of available sync peers becomes empty.
-      buddy.ctx.pool.blkLastSlowPeer = Opt.some(buddy.peerID)
+      buddy.ctx.pool.lastSlowPeer = Opt.some(buddy.peerID)
     else:
       buddy.ctrl.zombie = true # abandon slow peer unless last one
 
@@ -97,7 +97,7 @@ proc bodiesFetch*(
     buddy.fetchRegisterError(slowPeer=true)
   else:
     buddy.only.nRespErrors.blk = 0                  # reset error count
-    buddy.ctx.pool.blkLastSlowPeer = Opt.none(Hash) # not last one or not error
+    buddy.ctx.pool.lastSlowPeer = Opt.none(Hash)    # not last one or not error
 
   trace trEthRecvReceivedBlockBodies, peer, nReq, nResp=b.len,
     elapsed=elapsed.toStr, syncState=($buddy.syncState),
