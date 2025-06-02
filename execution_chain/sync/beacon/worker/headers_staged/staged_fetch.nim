@@ -15,43 +15,21 @@ import
   pkg/eth/common,
   pkg/stew/interval_set,
   ../../../wire_protocol,
-  ../../worker_desc
-
-# ------------------------------------------------------------------------------
-# Private functions
-# ------------------------------------------------------------------------------
-
-proc registerError(buddy: BeaconBuddyRef, slowPeer = false) =
-  buddy.only.nRespErrors.hdr.inc
-  if nFetchHeadersErrThreshold < buddy.only.nRespErrors.hdr:
-    if buddy.ctx.pool.nBuddies == 1 and slowPeer:
-      # Remember that the current peer is the last one and is lablelled slow.
-      # It would have been zombified if it were not the last one. This can be
-      # used in functions -- depending on context -- that will trigger if the
-      # if the pool of available sync peers becomes empty.
-      buddy.ctx.pool.lastSlowPeer = Opt.some(buddy.peerID)
-    else:
-      buddy.ctrl.zombie = true # abandon slow peer unless last one
-
-# ------------------------------------------------------------------------------
-# Public debugging & logging helpers
-# ------------------------------------------------------------------------------
-
-func hdrErrors*(buddy: BeaconBuddyRef): string =
-  $buddy.only.nRespErrors.hdr & "/" & $buddy.nHdrProcErrors()
+  ../../worker_desc,
+  ./staged_helpers
 
 # ------------------------------------------------------------------------------
 # Public functions
 # ------------------------------------------------------------------------------
 
-proc headersFetchReversed*(
+proc fetchHeadersReversed*(
     buddy: BeaconBuddyRef;
     ivReq: BnRange;
     topHash: Hash32;
-    info: static[string];
       ): Future[Result[seq[Header],void]]
       {.async: (raises: []).} =
-  ## Get a list of headers in reverse order.
+  ## From the ethXX argument peer implied by `buddy` fetch a list of headers
+  ## in reversed order.
   let
     peer = buddy.peer
     req = block:
@@ -88,14 +66,16 @@ proc headersFetchReversed*(
   except PeerDisconnected as e:
     buddy.only.nRespErrors.hdr.inc
     buddy.ctrl.zombie = true
-    `info` info & " error", peer, ivReq, nReq=req.maxResults,
-      hash=topHash.toStr, elapsed=(Moment.now() - start).toStr,
+    info trEthRecvReceivedBlockHeaders & ": error", peer, ivReq,
+      nReq=req.maxResults, hash=topHash.toStr,
+      elapsed=(Moment.now() - start).toStr,
       error=($e.name), msg=e.msg, hdrErrors=buddy.hdrErrors
     return err()
   except CatchableError as e:
-    buddy.registerError()
-    `info` info & " error", peer, ivReq, nReq=req.maxResults,
-      hash=topHash.toStr, elapsed=(Moment.now() - start).toStr,
+    buddy.hdrFetchRegisterError()
+    info trEthRecvReceivedBlockHeaders & ": error", peer, ivReq,
+      nReq=req.maxResults, hash=topHash.toStr,
+      elapsed=(Moment.now() - start).toStr,
       error=($e.name), msg=e.msg, hdrErrors=buddy.hdrErrors
     return err()
 
@@ -110,7 +90,7 @@ proc headersFetchReversed*(
 
   # Evaluate result
   if resp.isNone or buddy.ctrl.stopped:
-    buddy.registerError()
+    buddy.hdrFetchRegisterError()
     trace trEthRecvReceivedBlockHeaders, peer, nReq=req.maxResults,
       hash=topHash.toStr, nResp=0, elapsed=elapsed.toStr,
       syncState=($buddy.syncState), hdrErrors=buddy.hdrErrors
@@ -118,7 +98,7 @@ proc headersFetchReversed*(
 
   let h: seq[Header] = resp.get.headers
   if h.len == 0 or ivReq.len < h.len.uint64:
-    buddy.registerError()
+    buddy.hdrFetchRegisterError()
     trace trEthRecvReceivedBlockHeaders, peer, nReq=req.maxResults,
       hash=topHash.toStr, nResp=h.len, elapsed=elapsed.toStr,
       syncState=($buddy.syncState), hdrErrors=buddy.hdrErrors
@@ -126,7 +106,7 @@ proc headersFetchReversed*(
 
   # Verify that first block number matches
   if h[^1].number != ivReq.minPt:
-    buddy.registerError()
+    buddy.hdrFetchRegisterError()
     trace trEthRecvReceivedBlockHeaders, peer, nReq=req.maxResults,
       hash=topHash.toStr, ivReqMinPt=ivReq.minPt.bnStr, ivRespMinPt=h[^1].bnStr,
       nResp=h.len, elapsed=elapsed.toStr,
@@ -137,7 +117,7 @@ proc headersFetchReversed*(
   # mimimum share of the number of requested headers expected, typically 10%.
   if fetchHeadersErrTimeout < elapsed or
      h.len.uint64 * 100 < req.maxResults * fetchHeadersMinResponsePC:
-    buddy.registerError(slowPeer=true)
+    buddy.hdrFetchRegisterError(slowPeer=true)
   else:
     buddy.only.nRespErrors.hdr = 0                 # reset error count
     buddy.ctx.pool.lastSlowPeer = Opt.none(Hash)   # not last one or not error

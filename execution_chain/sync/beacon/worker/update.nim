@@ -15,25 +15,16 @@ import
   pkg/[chronicles, chronos],
   pkg/eth/common,
   ../worker_desc,
-  ./blocks_staged/staged_queue,
-  ./headers_staged/staged_queue,
   ./[blocks_unproc, headers_unproc]
 
 # ------------------------------------------------------------------------------
 # Private functions, state handler helpers
 # ------------------------------------------------------------------------------
 
-proc startHibernating(ctx: BeaconCtxRef; info: static[string]) =
-  ## Clean up sync scrum target buckets and await a new request from `CL`.
+proc updateSuspendSyncer(ctx: BeaconCtxRef) =
+  ## Clean up sync target buckets, stop syncer activity, and and get ready
+  ## for awaiting a new request from the `CL`.
   ##
-  doAssert ctx.blocksUnprocIsEmpty()
-  doAssert ctx.blocksStagedQueueIsEmpty()
-  doAssert ctx.headersUnprocIsEmpty()
-  doAssert ctx.headersStagedQueueIsEmpty()
-  doAssert ctx.subState.top == 0
-  doAssert ctx.subState.head == 0
-  doAssert not ctx.subState.cancelRequest
-
   ctx.hdrCache.clear()
 
   ctx.pool.clReq.reset
@@ -45,10 +36,9 @@ proc startHibernating(ctx: BeaconCtxRef; info: static[string]) =
   info "Suspending syncer", base=ctx.chain.baseNumber.bnStr,
     head=ctx.chain.latestNumber.bnStr, nSyncPeers=ctx.pool.nBuddies
 
-
 proc commitCollectHeaders(ctx: BeaconCtxRef; info: static[string]): bool =
   ## Link header chain into `FC` module. Gets ready for block import.
-
+  ##
   # This function does the job linking into `FC` module proper
   ctx.hdrCache.commit().isOkOr:
     trace info & ": cannot finalise header chain",
@@ -59,15 +49,9 @@ proc commitCollectHeaders(ctx: BeaconCtxRef; info: static[string]): bool =
 
   true
 
-
 proc setupProcessingBlocks(ctx: BeaconCtxRef; info: static[string]) =
   ## Prepare for blocks processing
-  doAssert ctx.blocksUnprocIsEmpty()
-  doAssert ctx.blocksStagedQueueIsEmpty()
-  doAssert ctx.subState.top == 0
-  doAssert ctx.subState.head == 0
-  doAssert not ctx.subState.cancelRequest
-
+  ##
   # Reset for useles block download detection (to avoid deadlock)
   ctx.pool.failedPeers.clear()
   ctx.pool.seenData = false
@@ -163,7 +147,7 @@ func blocksFinishNext(ctx: BeaconCtxRef; info: static[string]): SyncState =
 
 proc updateSyncState*(ctx: BeaconCtxRef; info: static[string]) =
   ## Update internal state when needed
-  #
+  ##
   # State machine
   # ::
   #     idle <---------------+---+---+---.
@@ -228,13 +212,31 @@ proc updateSyncState*(ctx: BeaconCtxRef; info: static[string]) =
 
   # Final sync scrum layout reached or inconsistent/impossible state
   if newState == idle:
-    ctx.startHibernating info
+    ctx.updateSuspendSyncer()
 
 
-proc updateFromHibernateSetTarget*(
+proc updateAsyncTasks*(
     ctx: BeaconCtxRef;
-    info: static[string];
-      ) =
+      ): Future[Opt[void]] {.async: (raises: []).} =
+  ## Allow task switch by issuing a short sleep request. The `due` argument
+  ## allows to maintain a minimum time gap when invoking this function.
+  ##
+  let start = Moment.now()
+  if ctx.pool.nextAsyncNanoSleep < start:
+
+    try: await sleepAsync asyncThreadSwitchTimeSlot
+    except CancelledError: discard
+
+    if ctx.daemon:
+      ctx.pool.nextAsyncNanoSleep = Moment.now() + asyncThreadSwitchGap
+      return ok()
+    # Shutdown?
+    return err()
+
+  return ok()
+
+
+proc updateActivateSyncer*(ctx: BeaconCtxRef) =
   ## If in hibernate mode, accept a cache session and activate syncer
   ##
   if ctx.hibernate:
@@ -258,29 +260,8 @@ proc updateFromHibernateSetTarget*(
     # Failed somewhere on the way
     ctx.hdrCache.clear()
 
-  debug info & ": activation rejected", base=ctx.chain.baseNumber.bnStr,
+  debug "Syncer activation rejected", base=ctx.chain.baseNumber.bnStr,
     head=ctx.chain.latestNumber.bnStr, state=ctx.hdrCache.state
-
-
-proc updateAsyncTasks*(
-    ctx: BeaconCtxRef;
-      ): Future[Opt[void]] {.async: (raises: []).} =
-  ## Allow task switch by issuing a short sleep request. The `due` argument
-  ## allows to maintain a minimum time gap when invoking this function.
-  ##
-  let start = Moment.now()
-  if ctx.pool.nextAsyncNanoSleep < start:
-
-    try: await sleepAsync asyncThreadSwitchTimeSlot
-    except CancelledError: discard
-
-    if ctx.daemon:
-      ctx.pool.nextAsyncNanoSleep = Moment.now() + asyncThreadSwitchGap
-      return ok()
-    # Shutdown?
-    return err()
-
-  return ok()
 
 # ------------------------------------------------------------------------------
 # End

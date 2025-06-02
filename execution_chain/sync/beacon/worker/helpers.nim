@@ -21,7 +21,7 @@ import
   ../worker_const
 
 export
-  prettify, short
+  prettify, short, `$`
 
 func bnStr*(w: BlockNumber): string =
   "#" & $w

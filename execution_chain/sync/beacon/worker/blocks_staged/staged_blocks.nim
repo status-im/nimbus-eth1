@@ -18,7 +18,7 @@ import
   ../../../wire_protocol/types,
   ../../worker_desc,
   ../[blocks_unproc, update],
-  ./bodies_fetch
+  ./[staged_fetch, staged_helpers]
 
 # ------------------------------------------------------------------------------
 # Private helpers
@@ -72,7 +72,7 @@ proc blocksFetchCheckImpl(
   request.blockHashes[^1] = blocks[^1].header.computeBlockHash
 
   # Fetch bodies
-  let bodies = (await buddy.bodiesFetch(request, info)).valueOr:
+  let bodies = (await buddy.fetchBodies request).valueOr:
     return Opt.none(seq[EthBlock])
   if buddy.ctrl.stopped:
     return Opt.none(seq[EthBlock])
@@ -93,8 +93,8 @@ proc blocksFetchCheckImpl(
             break checkTxLenOk
         # Oops, cut off the rest
         blocks.setLen(n)                                   # curb off junk
-        buddy.fetchRegisterError()
-        trace info & ": cut off junk blocks", peer, iv, n,
+        buddy.bdyFetchRegisterError()
+        trace info & ": Cut off junk blocks", peer, iv, n,
           nTxs=bodies[n].transactions.len, nBodies, bdyErrors=buddy.bdyErrors
         break loop
 
@@ -121,13 +121,6 @@ proc blocksFetchCheckImpl(
 # Public functions
 # ------------------------------------------------------------------------------
 
-func blocksModeStopped*(ctx: BeaconCtxRef): bool =
-  ## Helper, checks whether there is a general stop conditions based on
-  ## state settings (not on sync peer ctrl as `buddy.ctrl.running`.)
-  ctx.poolMode or
-  ctx.pool.lastState != blocks
-
-
 proc blocksFetch*(
     buddy: BeaconBuddyRef;
     num: uint;
@@ -153,7 +146,7 @@ proc blocksFetch*(
   # Job might have been cancelled or completed while downloading blocks.
   # If so, no more bookkeeping of blocks must take place. The *books*
   # might have been reset and prepared for the next stage.
-  if ctx.blocksModeStopped():
+  if ctx.blkSessionStopped():
     return Opt.none(seq[EthBlock])                  # stop, exit this function
 
   # Commit blocks received
@@ -189,7 +182,7 @@ proc blocksImport*(
       let nBn = blocks[n].header.number
 
       if nBn <= ctx.chain.baseNumber:
-        trace info & ": ignoring block less eq. base", n, iv, nBlocks=iv.len,
+        trace info & ": Ignoring block less eq. base", n, iv, nBlocks=iv.len,
           nthBn=nBn.bnStr, nthHash=ctx.getNthHash(blocks, n).short,
           B=ctx.chain.baseNumber.bnStr, L=ctx.chain.latestNumber.bnStr
 

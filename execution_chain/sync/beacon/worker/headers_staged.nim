@@ -15,23 +15,23 @@ import
   pkg/eth/common,
   pkg/stew/[interval_set, sorted_set],
   ../worker_desc,
-  ./headers_staged/[headers_fetch, staged_headers],
+  ./headers_staged/[staged_headers, staged_helpers],
   ./headers_unproc
 
 # ------------------------------------------------------------------------------
 # Public functions
 # ------------------------------------------------------------------------------
 
-func headersStagedCollectOk*(buddy: BeaconBuddyRef): bool =
+func headersCollectOk*(buddy: BeaconBuddyRef): bool =
   ## Helper for `worker.nim`, etc.
   if buddy.ctrl.running:
     let ctx = buddy.ctx
     if 0 < ctx.headersUnprocAvail() and
-       not ctx.headersModeStopped():
+       not ctx.hdrSessionStopped():
       return true
   false
 
-proc headersStagedCollect*(
+proc headersCollect*(
     buddy: BeaconBuddyRef;
     info: static[string];
       ) {.async: (raises: []).} =
@@ -160,13 +160,14 @@ proc headersStagedCollect*(
     return
 
   info "Queued/staged or DB/stored headers",
-    unprocTop=(if ctx.headersModeStopped(): "n/a"
+    unprocTop=(if ctx.hdrSessionStopped(): "n/a"
                else: ctx.headersUnprocAvailTop.bnStr),
     nQueued, nStored, nStagedQ=ctx.hdr.staged.len,
     nSyncPeers=ctx.pool.nBuddies
 
+# --------------
 
-proc headersStagedProcess*(buddy: BeaconBuddyRef; info: static[string]): bool =
+proc headersUnstage*(buddy: BeaconBuddyRef; info: static[string]): bool =
   ## Store headers from the `staged` queue onto the header chain cache.
   ##
   ## The function returns `false` if the caller should make sure to allow
@@ -227,6 +228,7 @@ proc headersStagedProcess*(buddy: BeaconBuddyRef; info: static[string]): bool =
 
   not switchPeer
 
+# --------------
 
 proc headersStagedReorg*(ctx: BeaconCtxRef; info: static[string]) =
   ## Some pool mode intervention.

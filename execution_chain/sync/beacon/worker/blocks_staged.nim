@@ -16,7 +16,7 @@ import
   pkg/stew/[interval_set, sorted_set],
   ../../../networking/p2p,
   ../worker_desc,
-  ./blocks_staged/[bodies_fetch, staged_blocks],
+  ./blocks_staged/[staged_blocks, staged_helpers],
   ./blocks_unproc
 
 # ------------------------------------------------------------------------------
@@ -89,26 +89,18 @@ proc blocksStagedProcessImpl(
 # Public functions
 # ------------------------------------------------------------------------------
 
-func blocksStagedCollectOk*(buddy: BeaconBuddyRef): bool =
+func blocksCollectOk*(buddy: BeaconBuddyRef): bool =
   ## Check whether body records can be fetched and imported or stored
   ## on the `staged` queue.
   ##
   if buddy.ctrl.running:
     let ctx = buddy.ctx
     if 0 < ctx.blocksUnprocAvail() and
-       not ctx.blocksModeStopped():
+       not ctx.blkSessionStopped():
       return true
   false
 
-proc blocksStagedProcessOk*(ctx: BeaconCtxRef): bool =
-  ## Check whether import processing is possible
-  ##
-  not ctx.poolMode and
-  0 < ctx.blk.staged.len
-
-# --------------
-
-proc blocksStagedCollect*(
+proc blocksCollect*(
     buddy: BeaconBuddyRef;
     info: static[string];
       ) {.async: (raises: []).} =
@@ -225,24 +217,32 @@ proc blocksStagedCollect*(
 
   info "Queued/staged or imported blocks",
     topImported=ctx.subState.top.bnStr,
-    unprocBottom=(if ctx.blocksModeStopped(): "n/a"
+    unprocBottom=(if ctx.blkSessionStopped(): "n/a"
                   else: ctx.blocksUnprocAvailBottom.bnStr),
     nQueued, nImported, nStagedQ=ctx.blk.staged.len,
     nSyncPeers=ctx.pool.nBuddies
 
+# --------------
 
-template blocksStagedProcess*(
+proc blocksUnstageOk*(ctx: BeaconCtxRef): bool =
+  ## Check whether import processing is possible
+  ##
+  not ctx.poolMode and
+  0 < ctx.blk.staged.len
+
+template blocksUnstage*(
     ctx: BeaconCtxRef;
     info: static[string];
       ): auto =
   ctx.blocksStagedProcessImpl(Opt.none(Peer), info)
 
-template blocksStagedProcess*(
+template blocksUnstage*(
     buddy: BeaconBuddyRef;
     info: static[string];
       ): auto =
   buddy.ctx.blocksStagedProcessImpl(Opt.some(buddy.peer), info)
 
+# --------------
 
 proc blocksStagedReorg*(ctx: BeaconCtxRef; info: static[string]) =
   ## Some pool mode intervention.

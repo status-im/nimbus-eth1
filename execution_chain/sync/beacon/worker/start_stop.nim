@@ -60,7 +60,7 @@ proc setupServices*(ctx: BeaconCtxRef; info: static[string]) =
   # Set up the notifier informing when a new syncer session has started.
   ctx.hdrCache.start proc() =
     # Activates the syncer. Work will be picked up by peers when available.
-    ctx.updateFromHibernateSetTarget info
+    ctx.updateActivateSyncer()
 
   # Manual first run?
   if 0 < ctx.pool.clReq.consHead.number:

@@ -23,6 +23,14 @@ export
   helpers, sync_desc, worker_const, chain
 
 type
+  BeaconBuddyRef* = BuddyRef[BeaconCtxData,BeaconBuddyData]
+    ## Extended worker peer descriptor
+
+  BeaconCtxRef* = CtxRef[BeaconCtxData]
+    ## Extended global descriptor
+
+  # -------------------
+
   BnRangeSet* = IntervalSetRef[BlockNumber,uint64]
     ## Disjunct sets of block number intervals
 
@@ -95,15 +103,9 @@ type
     ## Local descriptor data extension
     nRespErrors*: BuddyError         ## Number of errors/slow responses in a row
 
-    # Debugging and logging.
-    nMultiLoop*: int                 ## Number of runs
-    stoppedMultiRun*: chronos.Moment ## Time when run-multi stopped
-    multiRunIdle*: chronos.Duration  ## Idle time between runs
-
   BeaconCtxData* = object
     ## Globally shared data extension
     nBuddies*: int                   ## Number of active workers
-    clReq*: SyncClMesg               ## Manual first target set up
     lastState*: SyncState            ## Last known layout state
     hdrSync*: HeaderFetchSync        ## Syncing by linked header chains
     blkSync*: BlocksFetchSync        ## For importing/executing blocks
@@ -118,17 +120,13 @@ type
     nProcError*: Table[Hash,BuddyError] ## Per peer processing error
     lastSlowPeer*: Opt[Hash]         ## Register slow peer when the last one
     failedPeers*: HashSet[Hash]      ## Detect dead end sync by collecting peers
-    seenData*: bool                  ## Set `true` is data were fetched, already
+    seenData*: bool                  ## Set `true` if data were fetched, already
 
     # Debugging stuff
+    clReq*: SyncClMesg               ## Manual first target set up
+
     when enableTicker:
       ticker*: RootRef               ## Logger ticker
-
-  BeaconBuddyRef* = BuddyRef[BeaconCtxData,BeaconBuddyData]
-    ## Extended worker peer descriptor
-
-  BeaconCtxRef* = CtxRef[BeaconCtxData]
-    ## Extended global descriptor
 
 # ------------------------------------------------------------------------------
 # Public helpers

@@ -14,37 +14,14 @@ import
   pkg/[chronicles, chronos],
   pkg/eth/common,
   pkg/stew/interval_set,
+  ../../../../networking/p2p,
   ../../worker_desc,
   ../headers_unproc,
-  ./headers_fetch
+  ./[staged_fetch, staged_helpers]
 
 # ------------------------------------------------------------------------------
 # Public helper functions
 # ------------------------------------------------------------------------------
-
-proc headersUpdateBuddyErrorState*(buddy: BeaconBuddyRef) =
-  ## Helper/wrapper
-  if ((0 < buddy.only.nRespErrors.hdr or
-       0 < buddy.nHdrProcErrors()) and buddy.ctrl.stopped) or
-     nFetchHeadersErrThreshold < buddy.only.nRespErrors.hdr or
-     nProcHeadersErrThreshold < buddy.nHdrProcErrors():
-
-    # Make sure that this peer does not immediately reconnect
-    buddy.ctrl.zombie = true
-
-proc headersUpdateBuddyProcError*(buddy: BeaconBuddyRef) =
-  buddy.incHdrProcErrors()
-  buddy.headersUpdateBuddyErrorState()
-
-# -----------------
-
-func headersModeStopped*(ctx: BeaconCtxRef): bool =
-  ## Helper, checks whether there is a general stop conditions based on
-  ## state settings (not on sync peer ctrl as `buddy.ctrl.running`.)
-  ctx.poolMode or
-  ctx.pool.lastState != headers or
-  ctx.hdrCache.state != collecting
-
 
 proc headersFetch*(
     buddy: BeaconBuddyRef;
@@ -72,12 +49,12 @@ proc headersFetch*(
       return Opt.none(seq[Header])                  # stop, exit function
 
     # Fetch headers for this range of block numbers
-    rc = await buddy.headersFetchReversed(iv, parent, info)
+    rc = await buddy.fetchHeadersReversed(iv, parent)
 
   # Job might have been cancelled or completed while downloading headers.
   # If so, no more bookkeeping of headers must take place. The *books*
   # might have been reset and prepared for the next stage.
-  if ctx.headersModeStopped():
+  if ctx.hdrSessionStopped():
     return Opt.none(seq[Header])                    # stop, exit function
 
   if rc.isErr:
@@ -89,9 +66,9 @@ proc headersFetch*(
     nHeaders = rc.value.len.uint64
     ivBottom = iv.maxPt - nHeaders + 1
   if rc.value[0].number != iv.maxPt or rc.value[^1].number != ivBottom:
-    buddy.headersUpdateBuddyProcError()
+    buddy.hdrProcRegisterError()
     ctx.headersUnprocCommit(iv, iv)                 # clean up, revert `iv`
-    debug info & ": garbled header list", peer, iv, headers=rc.value.bnStr,
+    debug info & ": Garbled header list", peer, iv, headers=rc.value.bnStr,
       expected=(ivBottom,iv.maxPt).bnStr, syncState=($buddy.syncState),
       hdrErrors=buddy.hdrErrors
     return Opt.none(seq[Header])                    # stop, exit function
