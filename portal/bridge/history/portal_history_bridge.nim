@@ -355,17 +355,20 @@ proc runBackfillLoop(
         continue
 
 proc runBackfillLoopAuditMode(
-    bridge: PortalHistoryBridge, era1Dir: string
+    bridge: PortalHistoryBridge, era1Dir: string, startEra: uint64, endEra: uint64
 ) {.async: (raises: [CancelledError]).} =
   let
     rng = newRng()
     db = Era1DB.new(era1Dir, "mainnet", loadAccumulator())
+    blockLowerBound = startEra * EPOCH_SIZE # inclusive
+    blockUpperBound = ((endEra + 1) * EPOCH_SIZE) - 1 # inclusive
+    blockRange = blockUpperBound - blockLowerBound
 
   var blockTuple: BlockTuple
   while true:
     let
       # Grab a random blockNumber to audit and potentially gossip
-      blockNumber = rng[].rand(network_metadata.mergeBlockNumber - 1).uint64
+      blockNumber = blockLowerBound + rng[].rand(blockRange).uint64
     db.getBlockTuple(blockNumber, blockTuple).isOkOr:
       error "Failed to get block tuple", error, blockNumber
       continue
@@ -525,7 +528,9 @@ proc runHistory*(config: PortalBridgeConf) =
 
   if config.backfill:
     if config.audit:
-      asyncSpawn bridge.runBackfillLoopAuditMode(config.era1Dir.string)
+      asyncSpawn bridge.runBackfillLoopAuditMode(
+        config.era1Dir.string, config.startEra, config.endEra
+      )
     else:
       asyncSpawn bridge.runBackfillLoop(
         config.era1Dir.string, config.startEra, config.endEra
