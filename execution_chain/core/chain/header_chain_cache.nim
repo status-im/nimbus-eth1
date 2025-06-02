@@ -325,8 +325,8 @@ proc headUpdateFromCL(hc: HeaderChainRef; h: Header; f: Hash32) =
       metrics.set(nec_sync_dangling, h.number.int64)
 
       # Inform client app about that a new session has started.
-      hc.notify()
       hc.chain.pendingFCU = f
+      hc.notify()
 
     # For logging and metrics
     hc.session.consHeadNum = h.number

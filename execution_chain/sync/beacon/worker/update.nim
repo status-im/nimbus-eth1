@@ -15,8 +15,7 @@ import
   pkg/[chronicles, chronos, metrics],
   pkg/eth/common,
   ../worker_desc,
-  ./blocks/blocks_unproc,
-  ./headers
+  ./[blocks, headers]
 
 logScope:
   topics = "beacon sync"
@@ -30,24 +29,6 @@ declareGauge nec_sync_head, "" &
 # ------------------------------------------------------------------------------
 # Private functions, state handler helpers
 # ------------------------------------------------------------------------------
-
-proc updateSuspendSyncer(ctx: BeaconCtxRef) =
-  ## Clean up sync target buckets, stop syncer activity, and and get ready
-  ## for awaiting a new request from the `CL`.
-  ##
-  ctx.hdrCache.clear()
-
-  ctx.pool.clReq.reset
-  ctx.pool.failedPeers.clear()
-  ctx.pool.seenData = false
-
-  ctx.hibernate = true
-
-  metrics.set(nec_sync_last_block_imported, 0)
-  metrics.set(nec_sync_head, 0)
-
-  info "Suspending syncer", base=ctx.chain.baseNumber.bnStr,
-    head=ctx.chain.latestNumber.bnStr, nSyncPeers=ctx.pool.nBuddies
 
 proc commitCollectHeaders(ctx: BeaconCtxRef; info: static[string]): bool =
   ## Link header chain into `FC` module. Gets ready for block import.
@@ -228,7 +209,7 @@ proc updateSyncState*(ctx: BeaconCtxRef; info: static[string]) =
 
   # Final sync scrum layout reached or inconsistent/impossible state
   if newState == idle:
-    ctx.updateSuspendSyncer()
+    ctx.handler.suspend(ctx)
 
 
 proc updateLastBlockImported*(ctx: BeaconCtxRef; bn: BlockNumber) =
@@ -239,7 +220,7 @@ proc updateLastBlockImported*(ctx: BeaconCtxRef; bn: BlockNumber) =
 # Public functions, call-back handler ready
 # ------------------------------------------------------------------------------
 
-proc updateActivateSyncer*(ctx: BeaconCtxRef) =
+proc updateActivateCB*(ctx: BeaconCtxRef) =
   ## If in hibernate mode, accept a cache session and activate syncer
   ##
   if ctx.hibernate:
@@ -267,6 +248,25 @@ proc updateActivateSyncer*(ctx: BeaconCtxRef) =
 
   debug "Syncer activation rejected", base=ctx.chain.baseNumber.bnStr,
     head=ctx.chain.latestNumber.bnStr, state=ctx.hdrCache.state
+
+
+proc updateSuspendCB*(ctx: BeaconCtxRef) =
+  ## Clean up sync target buckets, stop syncer activity, and and get ready
+  ## for a new sync request from the `CL`.
+  ##
+  ctx.hdrCache.clear()
+
+  ctx.pool.clReq.reset
+  ctx.pool.failedPeers.clear()
+  ctx.pool.seenData = false
+
+  ctx.hibernate = true
+
+  metrics.set(nec_sync_last_block_imported, 0)
+  metrics.set(nec_sync_head, 0)
+
+  info "Suspending syncer", base=ctx.chain.baseNumber.bnStr,
+    head=ctx.chain.latestNumber.bnStr, nSyncPeers=ctx.pool.nBuddies
 
 # ------------------------------------------------------------------------------
 # End

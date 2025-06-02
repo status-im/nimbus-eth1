@@ -15,9 +15,12 @@ import
   pkg/stew/[interval_set, sorted_set],
   ../core/chain,
   ../networking/p2p,
+  ./beacon/worker/blocks/blocks_fetch,
+  ./beacon/worker/blocks/blocks_import,
+  ./beacon/worker/headers/headers_fetch,
+  ./beacon/worker/update,
   ./beacon/[worker, worker_desc],
   ./[sync_desc, sync_sched, wire_protocol]
-
 
 logScope:
   topics = "beacon sync"
@@ -26,32 +29,62 @@ type
   BeaconSyncRef* = RunnerSyncRef[BeaconCtxData,BeaconBuddyData]
 
 # ------------------------------------------------------------------------------
+# Interceptable handlers
+# ------------------------------------------------------------------------------
+
+proc schedDaemonCB(
+    ctx: BeaconCtxRef;
+      ): Future[Duration]
+      {.async: (raises: []).} =
+  return worker.runDaemon(ctx, "RunDaemon") # async/template
+
+proc schedStartCB(buddy: BeaconBuddyRef): bool =
+  worker.start(buddy, "RunStart")
+
+proc schedStopCB(buddy: BeaconBuddyRef) =
+  worker.stop(buddy, "RunStop")
+
+proc schedPoolCB(buddy: BeaconBuddyRef; last: bool; laps: int): bool =
+  worker.runPool(buddy, last, laps, "RunPool")
+
+proc schedPeerCB(
+    buddy: BeaconBuddyRef;
+      ): Future[Duration]
+      {.async: (raises: []).} =
+  return worker.runPeer(buddy, "RunPeer") # async/template
+
+proc noOpBuddy(buddy: BeaconBuddyRef) = discard
+
+proc noOpCtx(ctx: BeaconCtxRef; maybePeer: Opt[BeaconBuddyRef]) = discard
+
+# ------------------------------------------------------------------------------
 # Virtual methods/interface, `mixin` functions
 # ------------------------------------------------------------------------------
 
 proc runSetup(ctx: BeaconCtxRef): bool =
-  worker.setup(ctx, "RunSetup")
+  return worker.setup(ctx, "RunSetup")
 
 proc runRelease(ctx: BeaconCtxRef) =
   worker.release(ctx, "RunRelease")
 
-proc runDaemon(ctx: BeaconCtxRef): Future[Duration] {.async: (raises: []).} =
-  return worker.runDaemon(ctx, "RunDaemon")
-
 proc runTicker(ctx: BeaconCtxRef) =
   worker.runTicker(ctx, "RunTicker")
 
+
+proc runDaemon(ctx: BeaconCtxRef): Future[Duration] {.async: (raises: []).} =
+  return await ctx.handler.schedDaemon(ctx)
+
 proc runStart(buddy: BeaconBuddyRef): bool =
-  worker.start(buddy, "RunStart")
+  return buddy.ctx.handler.schedStart(buddy)
 
 proc runStop(buddy: BeaconBuddyRef) =
-  worker.stop(buddy, "RunStop")
+  buddy.ctx.handler.schedStop(buddy)
 
 proc runPool(buddy: BeaconBuddyRef; last: bool; laps: int): bool =
-  worker.runPool(buddy, last, laps, "RunPool")
+  return buddy.ctx.handler.schedPool(buddy, last, laps)
 
 proc runPeer(buddy: BeaconBuddyRef): Future[Duration] {.async: (raises: []).} =
-  return worker.runPeer(buddy, "RunPeer")
+  return await buddy.ctx.handler.schedPeer(buddy)
 
 # ------------------------------------------------------------------------------
 # Public functions
@@ -66,6 +99,24 @@ proc init*(
   var desc = T()
   desc.initSync(ethNode, maxPeers)
   desc.ctx.pool.chain = chain
+
+  # Set up handlers so they can be overlayed
+  desc.ctx.pool.handlers = BeaconHandlersRef(
+    version:          0,
+    activate:         updateActivateCB,
+    suspend:          updateSuspendCB,
+    schedDaemon:      schedDaemonCB,
+    schedStart:       schedStartCB,
+    schedStop:        schedStopCB,
+    schedPool:        schedPoolCB,
+    schedPeer:        schedPeerCB,
+    getBlockHeaders:  getBlockHeadersCB,
+    syncBlockHeaders: noOpBuddy,
+    getBlockBodies:   getBlockBodiesCB,
+    syncBlockBodies:  noOpBuddy,
+    importBlock:      importBlockCB,
+    syncImportBlock:  noOpCtx)
+
   desc
 
 proc targetInit*(desc: BeaconSyncRef; rlpFile: string) =
