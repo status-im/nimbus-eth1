@@ -94,7 +94,7 @@ proc startBuddy*(buddy: BeaconBuddyRef): bool =
   if acceptProto(eth69) or
      acceptProto(eth68):
     ctx.pool.nBuddies.inc
-    ctx.pool.blkLastSlowPeer = Opt.none(Hash)
+    ctx.pool.lastSlowPeer = Opt.none(Hash)
     buddy.initProcErrors()
     return true
 
