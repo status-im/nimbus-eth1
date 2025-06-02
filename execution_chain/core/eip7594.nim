@@ -18,7 +18,7 @@ import
 from std/sequtils import mapIt
 
 proc validateBlobTransactionWrapper7594*(tx: PooledTransaction):
-                                     Result[void, string] {.raises: [].} =
+                                     Result[void, string] =
   doAssert(tx.blobsBundle.isNil.not)
   doAssert(tx.blobsBundle.wrapperVersion == WrapperVersionEIP7594)
 
@@ -73,7 +73,6 @@ proc validateBlobTransactionWrapper7594*(tx: PooledTransaction):
   )
 
   if res.isErr:
-    debugEcho "UUUUU: ", res
     return err(res.error)
 
   # Actual verification result

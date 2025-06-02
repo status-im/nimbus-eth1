@@ -818,4 +818,3 @@ suite "TxPool test suite":
     check tx.blobsBundle.wrapperVersion == WrapperVersionEIP7594
     xp.checkAddTx(tx)
     xp.checkImportBlock(1, 0)
-

@@ -187,7 +187,7 @@ const
   rlpBytes8 = hexToSeqByte(slurp("pooled_tx/ptx8.rlp"))
   rlpBytesInvalid = hexToSeqByte(slurp("pooled_tx/invalid_blobsbundle_type.rlp"))
 
-suite "Transactions":
+suite "Pooled Transactions":
   test "Legacy Tx Call":
     roundTrip(tx0, 1)
 

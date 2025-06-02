@@ -55,7 +55,10 @@ proc buildBinary(name: string, srcDir = "./", params = "", lang = "c") =
 
 proc test(path: string, name: string, params = "", lang = "c") =
   # Verify stack usage is kept low by setting 1mb stack limit in tests.
-  const stackLimitKiB = 1024
+  # Previous value of stackLimitKiB is 1024 but calling compute_cells_and_kzg_proofs of kzg-4844
+  # make the program crash with `Segmentation fault (core dumped)`.
+  # https://github.com/status-im/nimbus-eth1/pull/3353
+  const stackLimitKiB = 2048
   when not defined(windows):
     const (buildOption, runPrefix) = ("", "ulimit -s " & $stackLimitKiB & " && ")
   else:

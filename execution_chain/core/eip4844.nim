@@ -139,7 +139,7 @@ func blobGasUsed(txs: openArray[Transaction]): uint64 =
 # https://eips.ethereum.org/EIPS/eip-4844
 func validateEip4844Header*(
     com: CommonRef, header, parentHeader: Header,
-    txs: openArray[Transaction]): Result[void, string] {.raises: [].} =
+    txs: openArray[Transaction]): Result[void, string] =
 
   if not com.isCancunOrLater(header.timestamp):
     if header.blobGasUsed.isSome:
@@ -176,10 +176,10 @@ func validateEip4844Header*(
   return ok()
 
 proc validateBlobTransactionWrapper4844*(tx: PooledTransaction):
-                                     Result[void, string] {.raises: [].} =
+                                     Result[void, string] =
   doAssert(tx.blobsBundle.isNil.not)
   doAssert(tx.blobsBundle.wrapperVersion == WrapperVersionEIP4844)
-                                     
+
   # note: assert blobs are not malformatted
   let goodFormatted = tx.tx.versionedHashes.len ==
                       tx.blobsBundle.commitments.len and
