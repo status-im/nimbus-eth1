@@ -18,11 +18,6 @@ Practically, if using an Ubuntu Linux and you want to use the version of Go
 shipped with Ubuntu, you will need Ubuntu 21.04 or later.  It's enough to run
 `apt-get install golang`.
 
-If using Ubuntu 20.04 LTS (likely because it's the long-term stable version),
-the shipped Go isn't recent enough, and there will be build errors.  You can
-either install a non-Ubuntu packaged version of Go (maybe from
-[`golang.org`](https://golang.org/), or use a more recent Ubuntu.
-
 If you want to run Hive in a Linux container, you will need Docker to work in
 the container because Hive calls Docker (a lot!).  This is sometimes called
 "Docker in Docker".  Inside LXD containers, Docker doesn't work by default, but
