@@ -175,10 +175,10 @@ proc getNonce(xp: TxPoolRef; account: Address): AccountNonce =
 
 proc classifyValid(xp: TxPoolRef; tx: Transaction, sender: Address): bool =
 
-  if tx.gasLimit > xp.gasLimit:
+  if tx.gasLimit > TX_GAS_LIMIT:
     debug "Invalid transaction: Gas limit too high",
       txGasLimit = tx.gasLimit,
-      gasLimit = xp.gasLimit
+      gasLimit = TX_GAS_LIMIT
     return false
 
   if tx.txType == TxEip4844:

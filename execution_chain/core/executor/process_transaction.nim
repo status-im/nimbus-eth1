@@ -84,6 +84,10 @@ proc processTransactionImpl(
     priorityFee = min(tx.maxPriorityFeePerGasNorm(), tx.maxFeePerGasNorm() - baseFee)
     excessBlobGas = header.excessBlobGas.get(0'u64)
 
+  # https://eips.ethereum.org/EIPS/eip-7825
+  if fork >= FkOsaka and tx.gasLimit > TX_GAS_LIMIT:
+    return err("tx.gasLimit " & $tx.gasLimit & " exceeds maximum " & $TX_GAS_LIMIT)
+
   # buy gas, then the gas goes into gasMeter
   if vmState.gasPool < tx.gasLimit:
     return err("gas limit reached. gasLimit=" & $vmState.gasPool &
