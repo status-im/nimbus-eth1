@@ -36,7 +36,7 @@ proc headersFetch*(
     ctx = buddy.ctx
     peer = buddy.peer
 
-  # Make share that this sync peer is not banned from header processing,
+  # Make sure that this sync peer is not banned from header processing,
   # already
   if nStashHeadersErrThreshold < buddy.nHdrProcErrors():
     buddy.ctrl.zombie = true

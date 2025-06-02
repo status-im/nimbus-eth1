@@ -17,7 +17,7 @@ import
   ../../../../networking/p2p,
   ../../../wire_protocol/types,
   ../../worker_desc,
-  ./[blocks_fetch, blocks_helpers, blocks_import, blocks_unproc]
+  ./[blocks_fetch, blocks_helpers, blocks_unproc]
 
 # ------------------------------------------------------------------------------
 # Private helpers
@@ -179,7 +179,8 @@ proc blocksImport*(
   block loop:
     for n in 0 ..< blocks.len:
       let nBn = blocks[n].header.number
-      discard (await ctx.importBlock(maybePeer, blocks[n], peerID)).valueOr:
+      discard (await ctx.handler.importBlock(
+                 ctx, maybePeer, blocks[n], peerID)).valueOr:
         if error.excp != ECancelledError:
           isError = true
 

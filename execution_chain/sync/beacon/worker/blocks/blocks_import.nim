@@ -17,11 +17,14 @@ import
   ../../worker_desc,
   ./blocks_helpers
 
+logScope:
+  topics = "beacon sync"
+
 # ------------------------------------------------------------------------------
-# Public function
+# Public handler
 # ------------------------------------------------------------------------------
 
-proc importBlock*(
+proc importCB*(
     ctx: BeaconCtxRef;
     maybePeer: Opt[BeaconBuddyRef];
     blk: EthBlock;

@@ -63,6 +63,9 @@ proc headersCollect*(
     # opportunistcally (i.e. block number based) and queue the headers for
     # later serialisation.
     while true:
+      # Environment capture for `trace`/sync point for `replay`
+      await ctx.handler.beginHeaders(buddy)
+
       let top = ctx.headersUnprocAvailTop() + 1
       #
       # A deterministic fetch can directly append to the lower end `dangling`

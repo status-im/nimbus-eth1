@@ -126,6 +126,9 @@ proc blocksCollect*(
     # Exactly one peer can fetch and import store blocks directly on the `FC`
     # module. All other peers fetch and queue blocks for later serialisation.
     while true:
+      # Environment capture for `trace`/sync point for `replay`
+      await ctx.handler.beginBlocks(buddy)
+
       let bottom = ctx.blocksUnprocAvailBottom() - 1
       #
       # A direct fetch and blocks import is possible if the next block to

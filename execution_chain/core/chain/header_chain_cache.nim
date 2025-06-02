@@ -320,8 +320,8 @@ proc headUpdateFromCL(hc: HeaderChainRef; h: Header; f: Hash32) =
       hc.kvt.putHeader(h)
 
       # Inform client app about that a new session has started.
-      hc.notify()
       hc.chain.pendingFCU = f
+      hc.notify()
 
     # For logging and metrics
     hc.session.consHeadNum = h.number

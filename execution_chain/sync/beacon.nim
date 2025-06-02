@@ -15,15 +15,40 @@ import
   pkg/stew/[interval_set, sorted_set],
   ../core/chain,
   ../networking/p2p,
+  ./beacon/worker/blocks/blocks_fetch as bodies,
+  ./beacon/worker/blocks/blocks_import as blocks,
+  ./beacon/worker/headers/headers_fetch as headers,
+  ./beacon/worker/update,
   ./beacon/[worker, worker_desc],
   ./[sync_desc, sync_sched, wire_protocol]
-
 
 logScope:
   topics = "beacon sync"
 
 type
   BeaconSyncRef* = RunnerSyncRef[BeaconCtxData,BeaconBuddyData]
+
+# ------------------------------------------------------------------------------
+# Interceptable handlers
+# ------------------------------------------------------------------------------
+
+proc schedDaemonCB(ctx: BeaconCtxRef) {.async: (raises: []).} =
+  await worker.runDaemon(ctx, "RunDaemon")
+
+proc schedStartCB(buddy: BeaconBuddyRef): bool =
+  worker.start(buddy, "RunStart")
+
+proc schedStopCB(buddy: BeaconBuddyRef) =
+  worker.stop(buddy, "RunStop")
+
+proc schedPoolCB(buddy: BeaconBuddyRef; last: bool; laps: int): bool =
+  worker.runPool(buddy, last, laps, "RunPool")
+
+proc schedPeerCB(buddy: BeaconBuddyRef) {.async: (raises: []).} =
+  await worker.runPeer(buddy, "RunPeer")
+
+proc muteBeginCB(buddy: BeaconBuddyRef) {.async: (raises: []).} =
+  discard
 
 # ------------------------------------------------------------------------------
 # Virtual methods/interface, `mixin` functions
@@ -35,23 +60,24 @@ proc runSetup(ctx: BeaconCtxRef): bool =
 proc runRelease(ctx: BeaconCtxRef) =
   worker.release(ctx, "RunRelease")
 
-proc runDaemon(ctx: BeaconCtxRef) {.async: (raises: []).} =
-  await worker.runDaemon(ctx, "RunDaemon")
-
 proc runTicker(ctx: BeaconCtxRef) =
   worker.runTicker(ctx, "RunTicker")
 
+
+proc runDaemon(ctx: BeaconCtxRef) {.async: (raises: []).} =
+  await ctx.handler.schedDaemon(ctx)
+
 proc runStart(buddy: BeaconBuddyRef): bool =
-  worker.start(buddy, "RunStart")
+  buddy.ctx.handler.schedStart(buddy)
 
 proc runStop(buddy: BeaconBuddyRef) =
-  worker.stop(buddy, "RunStop")
+  buddy.ctx.handler.schedStop(buddy)
 
 proc runPool(buddy: BeaconBuddyRef; last: bool; laps: int): bool =
-  worker.runPool(buddy, last, laps, "RunPool")
+  buddy.ctx.handler.schedPool(buddy, last, laps)
 
 proc runPeer(buddy: BeaconBuddyRef) {.async: (raises: []).} =
-  await worker.runPeer(buddy, "RunPeer")
+  await buddy.ctx.handler.schedPeer(buddy)
 
 # ------------------------------------------------------------------------------
 # Public functions
@@ -66,6 +92,23 @@ proc init*(
   var desc = T()
   desc.initSync(ethNode, maxPeers)
   desc.ctx.pool.chain = chain
+
+  # Set up handlers so they can be overlayed
+  desc.ctx.pool.handlers = BeaconHandlersRef(
+    version:         0,
+    activate:        updateActivateCB,
+    suspend:         updateSuspendCB,
+    schedDaemon:     schedDaemonCB,
+    schedStart:      schedStartCB,
+    schedStop:       schedStopCB,
+    schedPool:       schedPoolCB,
+    schedPeer:       schedPeerCB,
+    beginHeaders:    muteBeginCB,
+    getBlockHeaders: getBlockHeadersCB,
+    beginBlocks:     muteBeginCB,
+    getBlockBodies:  getBlockBodiesCB,
+    importBlock:     blocks.importCB)
+
   desc
 
 proc targetInit*(desc: BeaconSyncRef; rlpFile: string) =
