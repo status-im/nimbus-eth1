@@ -126,9 +126,9 @@ declareHistogram portal_offer_log_distance,
   labels = ["protocol_id"],
   buckets = distanceBuckets
 
-declarePublicCounter portal_subnetwork_offer_validation_successful,
+declarePublicCounter portal_offer_validation_successful,
   "Portal sub-network offers successfully validated", labels = ["protocol_id"]
-declarePublicCounter portal_subnetwork_offer_validation_failed,
+declarePublicCounter portal_offer_validation_failed,
   "Portal sub-network offers which failed validation", labels = ["protocol_id"]
 
 logScope:
