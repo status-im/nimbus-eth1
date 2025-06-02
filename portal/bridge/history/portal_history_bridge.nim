@@ -357,13 +357,12 @@ proc runBackfillLoop(
 proc runBackfillLoopAuditMode(
     bridge: PortalHistoryBridge, era1Dir: string, startEra: uint64, endEra: uint64
 ) {.async: (raises: [CancelledError]).} =
-  const eraSize = 8192
 
   let
     rng = newRng()
     db = Era1DB.new(era1Dir, "mainnet", loadAccumulator())
-    blockLowerBound = startEra * eraSize # inclusive
-    blockUpperBound = ((endEra + 1) * eraSize) - 1 # inclusive
+    blockLowerBound = startEra * EPOCH_SIZE # inclusive
+    blockUpperBound = ((endEra + 1) * EPOCH_SIZE) - 1 # inclusive
     blockRange = blockUpperBound - blockLowerBound
 
   var blockTuple: BlockTuple
