@@ -16,11 +16,14 @@ import
   ../../../wire_protocol,
   ../worker_desc
 
+logScope:
+  topics = "beacon sync"
+
 # ------------------------------------------------------------------------------
-# Public function
+# Public handler
 # ------------------------------------------------------------------------------
 
-proc importBlock*(
+proc importBlockCB*(
     buddy: BeaconBuddyRef;
     blk: EthBlock;
     effPeerID: Hash;
