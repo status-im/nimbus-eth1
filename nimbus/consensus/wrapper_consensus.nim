@@ -29,6 +29,11 @@ import
     trusted_node_sync, wallets,
   ]
 
+# This module is a copy from nimbus_beacon_node modulem where 'handleStartUpCmd' procedure
+#   visibility is changed to public.
+# This file should be removed when 'handleStartUpCmd' is made public or we create a public
+#   entry point on nimbus_beacon_node module.
+
 when defined(posix):
   import system/ansi_c
 
