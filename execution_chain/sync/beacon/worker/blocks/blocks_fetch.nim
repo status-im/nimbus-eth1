@@ -18,9 +18,24 @@ import
   ../worker_desc,
   ./blocks_helpers
 
+logScope:
+  topics = "beacon sync"
+
 # ------------------------------------------------------------------------------
-# Private helpers
+# Private helper
 # -----------------------------------------------------------------------------
+
+template getBlockBodies(
+    buddy: BeaconBuddyRef;
+    req: BlockBodiesRequest;
+       ): Result[FetchBodiesData,BeaconError] =
+  ## Async/template
+  ##
+  ## Wrapper around `getBlockBodies()` handler
+  ##
+  let rc = await buddy.ctx.handler.getBlockBodies(buddy, req)
+  buddy.ctx.handler.syncBlockBodies(buddy) # debugging, sync, replay
+  rc
 
 proc maybeSlowPeerError(
     buddy: BeaconBuddyRef;
@@ -40,8 +55,11 @@ proc maybeSlowPeerError(
 
   # false
 
+# ------------------------------------------------------------------------------
+# Public handler
+# -----------------------------------------------------------------------------
 
-proc getBlockBodies(
+proc getBlockBodiesCB*(
     buddy: BeaconBuddyRef;
     req: BlockBodiesRequest;
       ): Future[Result[FetchBodiesData,BeaconError]]
@@ -95,7 +113,7 @@ template fetchBodies*(
       startHash=request.blockHashes[0].short, nReq,
       nErrors=buddy.nErrors.fetch.bdy
 
-    let rc = await buddy.getBlockBodies(request)
+    let rc = buddy.getBlockBodies(request)
     var elapsed: Duration
     if rc.isOk:
       elapsed = rc.value.elapsed
