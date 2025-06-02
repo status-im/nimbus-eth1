@@ -66,26 +66,6 @@ proc mergeAndReset*(trg, src: KvtTxRef) =
   mergeAndReset(trg.sTab, src.sTab)
 
 # ------------------------------------------------------------------------------
-# Public functions
-# ------------------------------------------------------------------------------
-
-func layersCc*(db: KvtDbRef; level = high(int)): KvtTxRef =
-  ## Provide a collapsed copy of layers up to a particular transaction level.
-  ## If the `level` argument is too large, the maximum transaction level is
-  ## returned. For the result layer, the `txUid` value set to `0`.
-  # let layers = if db.stack.len <= level: db.stack & @[db.top]
-  #              else:                     db.stack[0 .. level]
-
-  # # Set up initial layer (bottom layer)
-  # result = LayerRef(sTab: layers[0].sTab)
-
-  # # Consecutively merge other layers on top
-  # for n in 1 ..< layers.len:
-  #   for (key,val) in layers[n].sTab.pairs:
-  #     result.sTab[key] = val
-  discard # TODO
-
-# ------------------------------------------------------------------------------
 # Public iterators
 # ------------------------------------------------------------------------------
 

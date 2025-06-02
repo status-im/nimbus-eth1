@@ -69,13 +69,11 @@ proc mergePayloadImpl[LeafType, T](
 
   template resetKeys() =
     # Reset cached hashes of touched verticies
-    for i in 2..vids.len:
+    for i in 1..vids.len:
       db.layersResKey((root, vids[^i]), vtxs[^i])
 
   while pos < path.len:
     # Clear existing merkle keys along the traversal path
-    vids.add cur
-    vtxs.add vtx
     var psuffix = path.slice(pos)
     let n = psuffix.sharedPrefixLen(vtx.pfx)
     case vtx.vType
@@ -141,6 +139,8 @@ proc mergePayloadImpl[LeafType, T](
           next = BranchRef(vtx).bVid(nibble)
 
         if next.isValid:
+          vids.add cur
+          vtxs.add vtx
           cur = next
           psuffix = psuffix.slice(n + 1)
           pos += n + 1
