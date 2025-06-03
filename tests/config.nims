@@ -1,5 +1,5 @@
-# Nimbus
-# Copyright (c) 2019-2023 Status Research & Development GmbH
+# nimbus-execution-client
+# Copyright (c) 2025 Status Research & Development GmbH
 # Licensed under either of
 #  * Apache License, version 2.0, ([LICENSE-APACHE](LICENSE-APACHE) or
 #    http://www.apache.org/licenses/LICENSE-2.0)
@@ -8,14 +8,6 @@
 # at your option. This file may not be copied, modified, or distributed except
 # according to those terms.
 
--d:chronicles_line_numbers
--d:"chronicles_sinks=textlines"
-# comment this out, to run the tests in a serial manner:
-#-d:nimtestParallel
-
--d:"chronicles_disable_thread_id"
--d:"chronicles_runtime_filtering=on"
-
 if not defined(windows):
   # This limits stack usage of each individual function to 1MB - the option is
   # available on some GCC versions but not all - run with `-d:limitStackUsage`
@@ -23,3 +15,8 @@ if not defined(windows):
   # stack size of each function.
   switch("passC", "-fstack-usage -Werror=stack-usage=1048576")
   switch("passL", "-fstack-usage -Werror=stack-usage=1048576")
+
+switch("define", "chronicles_line_numbers")
+switch("define", "chronicles_sinks=textlines")
+switch("define", "chronicles_disable_thread_id")
+switch("define", "chronicles_runtime_filtering=on")
