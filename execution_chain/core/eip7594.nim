@@ -60,7 +60,7 @@ proc validateBlobTransactionWrapper7594*(tx: PooledTransaction):
     commitments = newSeqOfCap[kzg.KzgCommitment](getProofsLen)
 
   # https://github.com/ethereum/execution-apis/blob/5d634063ccfd897a6974ea589c00e2c1d889abc9/src/engine/osaka.md#specification
-  for k, blob in blobs:
+  for k in 0..<blobs.len:
     for i in 0..<CELLS_PER_EXT_BLOB:
       # bullet 3.iii.a
       commitments.add kzg.KzgCommitment(bytes: tx.blobsBundle.commitments[k].data)
@@ -68,7 +68,7 @@ proc validateBlobTransactionWrapper7594*(tx: PooledTransaction):
       cellIndices.add i.uint64
 
     # bullet 3.iii.c
-    let cf = ?kzg.computeCellsAndKzgProofs(blob)
+    let cf = ?kzg.computeCellsAndKzgProofs(blobs[k])
     cells.add cf.cells
 
   let res = kzg.verifyCellKzgProofBatch(
