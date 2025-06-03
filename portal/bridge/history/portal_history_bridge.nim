@@ -506,10 +506,11 @@ proc runHistory*(config: PortalBridgeConf) =
           contentValueHex = contentValue.toHex()
 
         try:
-          let peers = await bridge.portalClient.portal_historyPutContent(
+          let putContentResult = await bridge.portalClient.portal_historyPutContent(
             contentKeyHex, contentValueHex
           )
-          debug "Content gossiped", peers, contentKey = contentKeyHex
+          debug "Content gossiped",
+            peers = putContentResult.peerCount, contentKey = contentKeyHex
         except CancelledError as e:
           trace "Cancelled gossipWorker"
           raise e
