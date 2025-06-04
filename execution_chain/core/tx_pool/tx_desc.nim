@@ -254,8 +254,10 @@ proc validateBlobTransactionWrapper(tx: PooledTransaction, fork: EVMFork):
       return err("Blobsbundle version expect fork before Osaka")
     validateBlobTransactionWrapper4844(tx)
   of WrapperVersionEIP7594:
-    if fork < FkOsaka:
-      return err("Blobsbundle version expect Osaka or later")
+    # Allow this kind of Blob when Prague still active
+    # an then maybe transitioned to Osaka or later
+    if fork < FkPrague:
+      return err("Blobsbundle version expect Prague or later")
     validateBlobTransactionWrapper7594(tx)
 
 # ------------------------------------------------------------------------------
@@ -425,7 +427,7 @@ proc addTx*(xp: TxPoolRef, tx: Transaction): Result[void, TxError] =
 
 iterator byPriceAndNonce*(xp: TxPoolRef): TxItemRef =
   for item in byPriceAndNonce(xp.senderTab, xp.idTab,
-      xp.blobTab, xp.vmState.ledger, xp.baseFee):
+      xp.blobTab, xp.vmState.ledger, xp.baseFee, xp.nextFork):
     yield item
 
 func getBlobAndProofV1*(xp: TxPoolRef, v: VersionedHash): Opt[BlobAndProofV1] =
