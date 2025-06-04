@@ -34,7 +34,7 @@ proc getBlobsV1*(ben: BeaconEngineRef,
 
 proc getBlobsV2*(ben: BeaconEngineRef,
                versionedHashes: openArray[VersionedHash]):
-                  seq[Opt[BlobAndProofV2]] =
+                  Opt[seq[BlobAndProofV2]] =
   # https://github.com/ethereum/execution-apis/blob/de87e24e0f2fbdbaee0fa36ab61b8ec25d3013d0/src/engine/osaka.md#engine_getblobsv2
   if versionedHashes.len > 128:
     raise tooLargeRequest("the number of requested blobs is too large")
@@ -43,5 +43,10 @@ proc getBlobsV2*(ben: BeaconEngineRef,
     raise unsupportedFork(
       "getBlobsV2 called before Osaka has been activated")
 
+  var list = newSeqOfCap[BlobAndProofV2](versionedHashes.len)
   for v in versionedHashes:
-    result.add ben.txPool.getBlobAndProofV2(v)
+    let blobAndProof = ben.txPool.getBlobAndProofV2(v).valueOr:
+      return Opt.none(seq[BlobAndProofV2])
+    list.add blobAndProof
+
+  ok(list)
