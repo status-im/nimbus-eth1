@@ -21,6 +21,11 @@ const
     Cancun,
     Prague,
     Osaka,
+    Bpo1,
+    Bpo2,
+    Bpo3,
+    Bpo4,
+    Bpo5
   ]
 
 func getMaxBlobsPerBlock*(com: CommonRef, fork: EVMFork): uint64 =
