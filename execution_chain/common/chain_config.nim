@@ -276,7 +276,12 @@ const
   BlobScheduleTable: array[Cancun..HardFork.high, string] = [
     "cancun",
     "prague",
-    "osaka"
+    "osaka",
+    "bpo1",
+    "bpo2",
+    "bpo3",
+    "bpo4",
+    "bpo5"
   ]
 
 func ofStmt(fork: HardFork, keyName: string, reader: NimNode, value: NimNode): NimNode =
@@ -493,6 +498,11 @@ func defaultBlobSchedule*(): array[Cancun..HardFork.high, Opt[BlobSchedule]] =
     Cancun: Opt.some(BlobSchedule(target: 3'u64, max: 6'u64, baseFeeUpdateFraction: 3_338_477'u64)),
     Prague: Opt.some(BlobSchedule(target: 6'u64, max: 9'u64, baseFeeUpdateFraction: 5_007_716'u64)),
     Osaka : Opt.some(BlobSchedule(target: 9'u64, max: 12'u64, baseFeeUpdateFraction: 5_007_716'u64)),
+    Bpo1  : Opt.none(BlobSchedule),
+    Bpo2  : Opt.none(BlobSchedule),
+    Bpo3  : Opt.none(BlobSchedule),
+    Bpo4  : Opt.none(BlobSchedule),
+    Bpo5  : Opt.none(BlobSchedule)
   ]
 
 func chainConfigForNetwork*(id: NetworkId): ChainConfig =
