@@ -24,6 +24,7 @@ export
   getPayload,
   getPayloadV3,
   getPayloadV4,
+  getPayloadV5,
   getPayloadBodiesByHash,
   getPayloadBodiesByRange,
   newPayload,

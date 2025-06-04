@@ -90,3 +90,30 @@ proc getPayloadV4*(ben: BeaconEngineRef, id: Bytes8): GetPayloadV4Response =
     shouldOverrideBuilder: false,
     executionRequests: bundle.executionRequests.get,
   )
+
+proc getPayloadV5*(ben: BeaconEngineRef, id: Bytes8): GetPayloadV5Response =
+  trace "Engine API request received",
+    meth = "GetPayload", id
+
+  let bundle = ben.getPayloadBundle(id).valueOr:
+    raise unknownPayload("Unknown bundle")
+
+  let version = bundle.payload.version
+  if version != Version.V5:
+    raise unsupportedFork("getPayloadV5 expect payloadV5 but get payload" & $version)
+  if bundle.blobsBundle.isNil:
+    raise unsupportedFork("getPayloadV5 is missing BlobsBundleV1")
+  if bundle.executionRequests.isNone:
+    raise unsupportedFork("getPayloadV5 is missing executionRequests")
+
+  let com = ben.com
+  if not com.isOsakaOrLater(ethTime bundle.payload.timestamp):
+    raise unsupportedFork("bundle timestamp is less than Osaka activation")
+
+  GetPayloadV5Response(
+    executionPayload: bundle.payload.V3,
+    blockValue: bundle.blockValue,
+    blobsBundle: bundle.blobsBundle.V2,
+    shouldOverrideBuilder: false,
+    executionRequests: bundle.executionRequests.get,
+  )
