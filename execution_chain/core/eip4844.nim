@@ -81,18 +81,6 @@ proc pointEvaluation*(input: openArray[byte]): Result[void, string] =
 
   ok()
 
-# calcExcessBlobGas implements calc_excess_data_gas from EIP-4844
-proc calcExcessBlobGas*(com: CommonRef, parent: Header, fork: EVMFork): uint64 =
-  let
-    excessBlobGas = parent.excessBlobGas.get(0'u64)
-    blobGasUsed = parent.blobGasUsed.get(0'u64)
-    targetBlobGasPerBlock = com.getTargetBlobsPerBlock(fork) * GAS_PER_BLOB
-
-  if excessBlobGas + blobGasUsed < targetBlobGasPerBlock:
-    0'u64
-  else:
-    excessBlobGas + blobGasUsed - targetBlobGasPerBlock
-
 # fakeExponential approximates factor * e ** (num / denom) using a taylor expansion
 # as described in the EIP-4844 spec.
 func fakeExponential*(factor, numerator, denominator: UInt256): UInt256 =
@@ -135,6 +123,24 @@ proc calcDataFee*(versionedHashesLen: int,
 func blobGasUsed(txs: openArray[Transaction]): uint64 =
   for tx in txs:
     result += tx.getTotalBlobGas
+
+# calcExcessBlobGas implements calc_excess_data_gas from EIP-4844
+proc calcExcessBlobGas*(com: CommonRef, parent: Header, fork: EVMFork): uint64 =
+  let
+    excessBlobGas = parent.excessBlobGas.get(0'u64)
+    blobGasUsed = parent.blobGasUsed.get(0'u64)
+    targetBlobsPerBlock = com.getTargetBlobsPerBlock(fork)
+    maxBlobsPerBlock = com.getMaxBlobsPerBlock(fork)
+    targetBlobGasPerBlock = targetBlobsPerBlock * GAS_PER_BLOB
+
+  if excessBlobGas + blobGasUsed < targetBlobGasPerBlock:
+    return 0'u64
+
+  # https://eips.ethereum.org/EIPS/eip-7918
+  if fork >= FkOsaka and (BLOB_BASE_COST * blobGasUsed).u256 > getBlobBaseFee(excessBlobGas, com, com.toEVMFork(parent)):
+    return excessBlobGas + blobGasUsed * (maxBlobsPerBlock - targetBlobsPerBlock) div targetBlobsPerBlock
+  
+  return excessBlobGas + blobGasUsed - targetBlobGasPerBlock
 
 # https://eips.ethereum.org/EIPS/eip-4844
 func validateEip4844Header*(
