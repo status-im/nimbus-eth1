@@ -431,11 +431,31 @@ iterator byPriceAndNonce*(xp: TxPoolRef): TxItemRef =
 func getBlobAndProofV1*(xp: TxPoolRef, v: VersionedHash): Opt[BlobAndProofV1] =
   xp.blobTab.withValue(v, val):
     let np = val.item.pooledTx.blobsBundle
-    return Opt.some(BlobAndProofV1(
-      blob: np.blobs[val.blobIndex],
-      proof: np.proofs[val.blobIndex]))
+    if np.wrapperVersion == WrapperVersionEIP4844:
+      return Opt.some(BlobAndProofV1(
+        blob: np.blobs[val.blobIndex],
+        proof: np.proofs[val.blobIndex]))
 
   Opt.none(BlobAndProofV1)
+
+func getBlobAndProofV2*(xp: TxPoolRef, v: VersionedHash): Opt[BlobAndProofV2] =
+  func getProofs(list: openArray[KzgProof], index: int): array[CELLS_PER_EXT_BLOB, KzgProof] =
+    let
+      startIndex = index * CELLS_PER_EXT_BLOB
+      endIndex   = startIndex + CELLS_PER_EXT_BLOB
+    doAssert(list.len >= endIndex)
+
+    for i in 0..<CELLS_PER_EXT_BLOB:
+      result[i] = list[startIndex + i]
+
+  xp.blobTab.withValue(v, val):
+    let np = val.item.pooledTx.blobsBundle
+    if np.wrapperVersion == WrapperVersionEIP7594:
+      return Opt.some(BlobAndProofV2(
+        blob: np.blobs[val.blobIndex],
+        proofs: getProofs(np.proofs, val.blobIndex)))
+
+  Opt.none(BlobAndProofV2)
 
 # ------------------------------------------------------------------------------
 # PoS payload attributes getters

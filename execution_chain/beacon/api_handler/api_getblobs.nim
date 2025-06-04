@@ -24,5 +24,24 @@ proc getBlobsV1*(ben: BeaconEngineRef,
   if versionedHashes.len > 128:
     raise tooLargeRequest("the number of requested blobs is too large")
 
+  # https://github.com/ethereum/execution-apis/blob/de87e24e0f2fbdbaee0fa36ab61b8ec25d3013d0/src/engine/osaka.md#cancun-api
+  if ben.latestFork >= Osaka:
+    raise unsupportedFork(
+      "getBlobsV1 called after Osaka has been activated")
+
   for v in versionedHashes:
     result.add ben.txPool.getBlobAndProofV1(v)
+
+proc getBlobsV2*(ben: BeaconEngineRef,
+               versionedHashes: openArray[VersionedHash]):
+                  seq[Opt[BlobAndProofV2]] =
+  # https://github.com/ethereum/execution-apis/blob/de87e24e0f2fbdbaee0fa36ab61b8ec25d3013d0/src/engine/osaka.md#engine_getblobsv2
+  if versionedHashes.len > 128:
+    raise tooLargeRequest("the number of requested blobs is too large")
+
+  if ben.latestFork < Osaka:
+    raise unsupportedFork(
+      "getBlobsV2 called before Osaka has been activated")
+
+  for v in versionedHashes:
+    result.add ben.txPool.getBlobAndProofV2(v)
