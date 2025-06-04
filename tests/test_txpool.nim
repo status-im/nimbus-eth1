@@ -853,11 +853,16 @@ suite "TxPool test suite":
     xp.checkAddTx(tx0)
     xp.checkAddTx(tx1)
 
-    # allow 1 blobs, remaining 1
+    # allow 1 blob tx, remaining 1
     xp.checkImportBlock(1, 1)
 
     let tx2 = mx.createPooledTransactionWithBlob7594(acc1, recipient, amount, 0)
     xp.checkAddTx(tx2)
+
+    # still 2 txs in pool
+    check xp.len == 2
+
+    # only allow 1 blob tx, the other one removed automatically
     xp.checkImportBlock(1, 0)
 
     check xp.com.isOsakaOrLater(xp.timestamp)
