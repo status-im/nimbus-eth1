@@ -123,6 +123,13 @@ template price*(item: TxItemRef): GasInt =
   ## Getter
   item.price
 
+func wrapperVersion*(item: TxItemRef): Opt[WrapperVersion] =
+  ## Getter
+  if item.ptx.blobsBundle.isNil:
+    return Opt.none(WrapperVersion)
+  else:
+    return Opt.some(item.ptx.blobsBundle.wrapperVersion)
+
 func calculatePrice*(item: TxItemRef; baseFee: GasInt) =
   ## Profit calculator
   item.price = item.tx.gasLimit * item.tx.tip(baseFee) + item.tx.getTotalBlobGas
