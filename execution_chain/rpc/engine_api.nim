@@ -29,6 +29,7 @@ const supportedMethods: HashSet[string] =
     "engine_getPayloadV2",
     "engine_getPayloadV3",
     "engine_getPayloadV4",
+    "engine_getPayloadV5",
     "engine_forkchoiceUpdatedV1",
     "engine_forkchoiceUpdatedV2",
     "engine_forkchoiceUpdatedV3",
@@ -75,6 +76,9 @@ proc setupEngineAPI*(engine: BeaconEngineRef, server: RpcServer) =
 
   server.rpc("engine_getPayloadV4") do(payloadId: Bytes8) -> GetPayloadV4Response:
     return engine.getPayloadV4(payloadId)
+
+  server.rpc("engine_getPayloadV5") do(payloadId: Bytes8) -> GetPayloadV5Response:
+    return engine.getPayloadV5(payloadId)
 
   server.rpc("engine_forkchoiceUpdatedV1") do(update: ForkchoiceStateV1,
                     attrs: Opt[PayloadAttributesV1]) -> ForkchoiceUpdatedResponse:
