@@ -26,7 +26,10 @@ proc getPayload*(ben: BeaconEngineRef,
   let bundle = ben.getPayloadBundle(id).valueOr:
     raise unknownPayload("Unknown bundle")
 
-  let version = bundle.payload.version
+  let 
+    version = bundle.payload.version
+    com = ben.com
+
   if version > expectedVersion:
     raise unsupportedFork("getPayload" & $expectedVersion &
       " expect payload" & $expectedVersion &
@@ -34,6 +37,9 @@ proc getPayload*(ben: BeaconEngineRef,
   if bundle.blobsBundle.isNil.not:
     raise unsupportedFork("getPayload" & $expectedVersion &
       " contains unsupported BlobsBundleV1")
+
+  if com.isOsakaOrLater(ethTime bundle.payload.timestamp):
+    raise unsupportedFork("bundle timestamp greater than Osaka can't use getPayload" & $version)
 
   GetPayloadV2Response(
     executionPayload: bundle.payload.V1V2,
@@ -56,6 +62,9 @@ proc getPayloadV3*(ben: BeaconEngineRef, id: Bytes8): GetPayloadV3Response =
   let com = ben.com
   if not com.isCancunOrLater(ethTime bundle.payload.timestamp):
     raise unsupportedFork("bundle timestamp is less than Cancun activation")
+
+  if com.isOsakaOrLater(ethTime bundle.payload.timestamp):
+    raise unsupportedFork("bundle timestamp greater than Osaka can't use getPayload" & $version)
 
   GetPayloadV3Response(
     executionPayload: bundle.payload.V3,
@@ -83,6 +92,9 @@ proc getPayloadV4*(ben: BeaconEngineRef, id: Bytes8): GetPayloadV4Response =
   if not com.isPragueOrLater(ethTime bundle.payload.timestamp):
     raise unsupportedFork("bundle timestamp is less than Prague activation")
 
+  if com.isOsakaOrLater(ethTime bundle.payload.timestamp):
+    raise unsupportedFork("bundle timestamp greater than Osaka can't use getPayload" & $version)
+
   GetPayloadV4Response(
     executionPayload: bundle.payload.V3,
     blockValue: bundle.blockValue,
@@ -99,10 +111,10 @@ proc getPayloadV5*(ben: BeaconEngineRef, id: Bytes8): GetPayloadV5Response =
     raise unknownPayload("Unknown bundle")
 
   let version = bundle.payload.version
-  if version != Version.V5:
+  if version != Version.V3:
     raise unsupportedFork("getPayloadV5 expect payloadV5 but get payload" & $version)
   if bundle.blobsBundle.isNil:
-    raise unsupportedFork("getPayloadV5 is missing BlobsBundleV1")
+    raise unsupportedFork("getPayloadV5 is missing BlobsBundleV2")
   if bundle.executionRequests.isNone:
     raise unsupportedFork("getPayloadV5 is missing executionRequests")
 
