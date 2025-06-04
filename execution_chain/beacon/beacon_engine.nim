@@ -253,3 +253,7 @@ proc delayPayloadImport*(ben: BeaconEngineRef, blockHash: Hash32, blk: Block): P
     # at a later time.
     ben.chain.quarantine.addOrphan(blockHash, blk)
     return PayloadStatusV1(status: PayloadExecutionStatus.syncing)
+
+func latestFork*(ben: BeaconEngineRef): HardFork =
+  let timestamp = max(ben.txPool.timestamp, ben.chain.latestHeader.timestamp)
+  ben.com.toHardFork(timestamp)

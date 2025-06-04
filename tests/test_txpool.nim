@@ -56,7 +56,7 @@ type
 
   CustomTx = CustomTransactionData
 
-proc initEnv(envFork: HardFork): TestEnv =
+proc initConf(envFork: HardFork): NimbusConf =
   var conf = makeConfig(
     @["--custom-network:" & genesisFile]
   )
@@ -88,10 +88,12 @@ proc initEnv(envFork: HardFork): TestEnv =
     cc.osakaTime = Opt.some(0.EthTime)
 
   conf.networkParams.genesis.alloc[recipient] = GenesisAccount(code: contractCode)
+  conf
 
+proc initEnv(conf: NimbusConf): TestEnv =
   let
     # create the sender first, because it will modify networkParams
-    sender = TxSender.new(conf.networkParams, 35)
+    sender = TxSender.new(conf.networkParams, 30)
     com    = CommonRef.new(newCoreDbRef DefaultDbMemory,
                nil, conf.networkId, conf.networkParams)
     chain  = ForkedChainRef.init(com)
@@ -103,6 +105,10 @@ proc initEnv(envFork: HardFork): TestEnv =
     xp    : TxPoolRef.new(chain),
     sender: sender
   )
+
+proc initEnv(envFork: HardFork): TestEnv =
+  let conf = initConf(envFork)
+  initEnv(conf)
 
 template checkAddTx(xp, tx, errorCode) =
   let prevCount = xp.len
@@ -790,18 +796,19 @@ suite "TxPool test suite":
       env = initEnv(Prague)
       xp = env.xp
       mx = env.sender
-      acc = mx.getAccount(30)
+      acc = mx.getAccount(0)
       tx = mx.createPooledTransactionWithBlob7594(acc, recipient, amount, 0)
 
     check tx.blobsBundle.wrapperVersion == WrapperVersionEIP7594
-    xp.checkAddTx(tx, txErrorInvalidBlob)
+    xp.checkAddTx(tx)
+    xp.checkImportBlock(0, 1)
 
   test "EIP-4844 BlobsBundle on Osaka":
     let
       env = initEnv(Osaka)
       xp = env.xp
       mx = env.sender
-      acc = mx.getAccount(30)
+      acc = mx.getAccount(0)
       tx = mx.createPooledTransactionWithBlob(acc, recipient, amount, 0)
 
     check tx.blobsBundle.wrapperVersion == WrapperVersionEIP4844
@@ -812,9 +819,53 @@ suite "TxPool test suite":
       env = initEnv(Osaka)
       xp = env.xp
       mx = env.sender
-      acc = mx.getAccount(30)
+      acc = mx.getAccount(0)
       tx = mx.createPooledTransactionWithBlob7594(acc, recipient, amount, 0)
 
     check tx.blobsBundle.wrapperVersion == WrapperVersionEIP7594
     xp.checkAddTx(tx)
     xp.checkImportBlock(1, 0)
+
+  test "EIP-7594 BlobsBundle transition from Prague to Osaka":
+    let
+      conf = initConf(Prague)
+      cc = conf.networkParams.config
+      timestamp = EthTime.now()
+
+    # set osaka transition time
+    cc.osakaTime = Opt.some(timestamp + 2)
+
+    let
+      env = initEnv(conf)
+      xp = env.xp
+      mx = env.sender
+      acc = mx.getAccount(0)
+      acc1 = mx.getAccount(1)
+      tx0 = mx.createPooledTransactionWithBlob(acc, recipient, amount, 0)
+      tx1 = mx.createPooledTransactionWithBlob(acc, recipient, amount, 1)
+
+    let bs = cc.blobSchedule[Prague]
+    cc.blobSchedule[Prague] = Opt.some(
+      BlobSchedule(target: 1, max: 1, baseFeeUpdateFraction: 5_007_716'u64)
+    )
+
+    xp.timestamp = timestamp
+    xp.checkAddTx(tx0)
+    xp.checkAddTx(tx1)
+
+    # allow 1 blob tx, remaining 1
+    xp.checkImportBlock(1, 1)
+
+    let tx2 = mx.createPooledTransactionWithBlob7594(acc1, recipient, amount, 0)
+    xp.checkAddTx(tx2)
+
+    # still 2 txs in pool
+    check xp.len == 2
+
+    # only allow 1 blob tx, the other one removed automatically
+    xp.checkImportBlock(1, 0)
+
+    check xp.com.isOsakaOrLater(xp.timestamp)
+
+    # restore blobSchedule
+    cc.blobSchedule[Prague] = bs

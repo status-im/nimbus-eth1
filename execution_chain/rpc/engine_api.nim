@@ -29,6 +29,7 @@ const supportedMethods: HashSet[string] =
     "engine_getPayloadV2",
     "engine_getPayloadV3",
     "engine_getPayloadV4",
+    "engine_getPayloadV5",
     "engine_forkchoiceUpdatedV1",
     "engine_forkchoiceUpdatedV2",
     "engine_forkchoiceUpdatedV3",
@@ -36,6 +37,7 @@ const supportedMethods: HashSet[string] =
     "engine_getPayloadBodiesByRangeV1",
     "engine_getClientVersionV1",
     "engine_getBlobsV1",
+    "engine_getBlobsV2",
   ])
 
 # I'm trying to keep the handlers below very thin, and move the
@@ -76,6 +78,9 @@ proc setupEngineAPI*(engine: BeaconEngineRef, server: RpcServer) =
   server.rpc("engine_getPayloadV4") do(payloadId: Bytes8) -> GetPayloadV4Response:
     return engine.getPayloadV4(payloadId)
 
+  server.rpc("engine_getPayloadV5") do(payloadId: Bytes8) -> GetPayloadV5Response:
+    return engine.getPayloadV5(payloadId)
+
   server.rpc("engine_forkchoiceUpdatedV1") do(update: ForkchoiceStateV1,
                     attrs: Opt[PayloadAttributesV1]) -> ForkchoiceUpdatedResponse:
     await engine.forkchoiceUpdated(Version.V1, update, attrs.payloadAttributes)
@@ -109,3 +114,7 @@ proc setupEngineAPI*(engine: BeaconEngineRef, server: RpcServer) =
   server.rpc("engine_getBlobsV1") do(versionedHashes: seq[VersionedHash]) ->
                                          seq[Opt[BlobAndProofV1]]:
     return engine.getBlobsV1(versionedHashes)
+
+  server.rpc("engine_getBlobsV2") do(versionedHashes: seq[VersionedHash]) ->
+                                         Opt[seq[BlobAndProofV2]]:
+    return engine.getBlobsV2(versionedHashes)
