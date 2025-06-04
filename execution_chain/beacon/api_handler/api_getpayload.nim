@@ -39,7 +39,7 @@ proc getPayload*(ben: BeaconEngineRef,
       " contains unsupported BlobsBundleV1")
 
   if com.isOsakaOrLater(ethTime bundle.payload.timestamp):
-    raise unsupportedFork("bundle timestamp greater than Osaka can't use getPayload" & $version)
+    raise unsupportedFork("bundle timestamp greater than Osaka must use getPayloadV5")
 
   GetPayloadV2Response(
     executionPayload: bundle.payload.V1V2,
@@ -64,7 +64,7 @@ proc getPayloadV3*(ben: BeaconEngineRef, id: Bytes8): GetPayloadV3Response =
     raise unsupportedFork("bundle timestamp is less than Cancun activation")
 
   if com.isOsakaOrLater(ethTime bundle.payload.timestamp):
-    raise unsupportedFork("bundle timestamp greater than Osaka can't use getPayload" & $version)
+    raise unsupportedFork("bundle timestamp greater than Osaka must use getPayloadV5")
 
   GetPayloadV3Response(
     executionPayload: bundle.payload.V3,
@@ -93,7 +93,7 @@ proc getPayloadV4*(ben: BeaconEngineRef, id: Bytes8): GetPayloadV4Response =
     raise unsupportedFork("bundle timestamp is less than Prague activation")
 
   if com.isOsakaOrLater(ethTime bundle.payload.timestamp):
-    raise unsupportedFork("bundle timestamp greater than Osaka can't use getPayload" & $version)
+    raise unsupportedFork("bundle timestamp greater than Osaka must use getPayloadV5")
 
   GetPayloadV4Response(
     executionPayload: bundle.payload.V3,
@@ -112,7 +112,7 @@ proc getPayloadV5*(ben: BeaconEngineRef, id: Bytes8): GetPayloadV5Response =
 
   let version = bundle.payload.version
   if version != Version.V3:
-    raise unsupportedFork("getPayloadV5 expect payloadV5 but get payload" & $version)
+    raise unsupportedFork("getPayloadV5 expect payloadV3 but get payload" & $version)
   if bundle.blobsBundle.isNil:
     raise unsupportedFork("getPayloadV5 is missing BlobsBundleV2")
   if bundle.executionRequests.isNone:
