@@ -37,6 +37,7 @@ const supportedMethods: HashSet[string] =
     "engine_getPayloadBodiesByRangeV1",
     "engine_getClientVersionV1",
     "engine_getBlobsV1",
+    "engine_getBlobsV2",
   ])
 
 # I'm trying to keep the handlers below very thin, and move the
@@ -113,3 +114,7 @@ proc setupEngineAPI*(engine: BeaconEngineRef, server: RpcServer) =
   server.rpc("engine_getBlobsV1") do(versionedHashes: seq[VersionedHash]) ->
                                          seq[Opt[BlobAndProofV1]]:
     return engine.getBlobsV1(versionedHashes)
+
+  server.rpc("engine_getBlobsV2") do(versionedHashes: seq[VersionedHash]) ->
+                                         Opt[seq[BlobAndProofV2]]:
+    return engine.getBlobsV2(versionedHashes)

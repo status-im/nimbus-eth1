@@ -29,4 +29,5 @@ export
   getPayloadBodiesByRange,
   newPayload,
   forkchoiceUpdated,
-  getBlobsV1
+  getBlobsV1,
+  getBlobsV2
