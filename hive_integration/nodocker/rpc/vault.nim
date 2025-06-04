@@ -15,6 +15,7 @@ import
   json_rpc/[rpcclient],
   ../../../execution_chain/utils/utils,
   ../../../execution_chain/transaction,
+  ../../../execution_chain/core/pooled_txs_rlp,
   ./client
 
 when false:

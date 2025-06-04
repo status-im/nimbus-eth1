@@ -15,6 +15,7 @@ import
   json_rpc/rpcclient,
   ../../../execution_chain/config,
   ../../../execution_chain/common,
+  ../../../execution_chain/core/pooled_txs,
   ./clmock,
   ./engine_client,
   ./client_pool,

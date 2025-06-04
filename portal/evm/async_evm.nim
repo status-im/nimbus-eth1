@@ -246,8 +246,10 @@ proc callFetchingState(
           return err("Unable to get code")
         vmState.ledger.setCode(q.address, code)
         fetchedCode.incl(q.address)
+    except CancelledError as e:
+      raise e
     except CatchableError as e:
-      raise newException(CancelledError, e.msg)
+      raiseAssert(e.msg) # Shouldn't happen
 
   evmResult.toCallResult()
 

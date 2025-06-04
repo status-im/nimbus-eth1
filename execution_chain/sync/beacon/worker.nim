@@ -60,10 +60,6 @@ proc start*(buddy: BeaconBuddyRef; info: static[string]): bool =
     peer = buddy.peer
     ctx = buddy.ctx
 
-  if runsThisManyPeersOnly <= buddy.ctx.pool.nBuddies:
-    if not ctx.hibernate: debug info & ": peers limit reached", peer
-    return false
-
   if not ctx.pool.seenData and buddy.peerID in ctx.pool.failedPeers:
     if not ctx.hibernate: debug info & ": useless peer already tried", peer
     return false
@@ -73,7 +69,7 @@ proc start*(buddy: BeaconBuddyRef; info: static[string]): bool =
     return false
 
   if not ctx.hibernate: debug info & ": new peer",
-    peer, nSyncPeers=buddy.ctx.pool.nBuddies
+    peer, nSyncPeers=ctx.pool.nBuddies
   true
 
 proc stop*(buddy: BeaconBuddyRef; info: static[string]) =

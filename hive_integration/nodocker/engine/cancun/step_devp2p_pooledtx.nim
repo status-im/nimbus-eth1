@@ -17,7 +17,8 @@ import
   ../types,
   ../test_env,
   ../../../../execution_chain/utils/utils,
-  ../../../../execution_chain/sync/wire_protocol
+  ../../../../execution_chain/sync/wire_protocol,
+  ../../../../execution_chain/core/pooled_txs
 
 # A step that requests a Transaction hash via P2P and expects the correct full blob tx
 type
@@ -90,7 +91,7 @@ method execute*(step: DevP2PRequestPooledTransactionHash, ctx: CancunTestContext
         return false
 
   # Send the request for the pooled transactions
-  let 
+  let
     peer = sec.peer
     request = PooledTransactionsRequest(txHashes: txHashes)
     res = waitFor peer.getPooledTransactions(request)

@@ -22,9 +22,15 @@ import
 # ------------------------------------------------------------------------------
 
 proc registerError(buddy: BeaconBuddyRef, slowPeer = false) =
-  buddy.incHdrRespErrors()
-  if fetchHeadersReqErrThresholdCount < buddy.nHdrRespErrors:
-    if 1 < buddy.ctx.pool.nBuddies or not slowPeer:
+  buddy.only.nRespErrors.hdr.inc
+  if nFetchHeadersErrThreshold < buddy.only.nRespErrors.hdr:
+    if buddy.ctx.pool.nBuddies == 1 and slowPeer:
+      # Remember that the current peer is the last one and is lablelled slow.
+      # It would have been zombified if it were not the last one. This can be
+      # used in functions -- depending on context -- that will trigger if the
+      # if the pool of available sync peers becomes empty.
+      buddy.ctx.pool.lastSlowPeer = Opt.some(buddy.peerID)
+    else:
       buddy.ctrl.zombie = true # abandon slow peer unless last one
 
 # ------------------------------------------------------------------------------
@@ -32,7 +38,7 @@ proc registerError(buddy: BeaconBuddyRef, slowPeer = false) =
 # ------------------------------------------------------------------------------
 
 func hdrErrors*(buddy: BeaconBuddyRef): string =
-  $buddy.nHdrRespErrors & "/" & $buddy.nHdrProcErrors()
+  $buddy.only.nRespErrors.hdr & "/" & $buddy.nHdrProcErrors()
 
 # ------------------------------------------------------------------------------
 # Public functions
@@ -80,7 +86,7 @@ proc headersFetchReversed*(
     # in `rplx` with a violated `req.timeoutAt <= Moment.now()` assertion.
     resp = await peer.getBlockHeaders(req)
   except PeerDisconnected as e:
-    buddy.only.nBdyRespErrors.inc
+    buddy.only.nRespErrors.hdr.inc
     buddy.ctrl.zombie = true
     `info` info & " error", peer, ivReq, nReq=req.maxResults,
       hash=topHash.toStr, elapsed=(Moment.now() - start).toStr,
@@ -129,11 +135,12 @@ proc headersFetchReversed*(
 
   # Ban an overly slow peer for a while when seen in a row. Also there is a
   # mimimum share of the number of requested headers expected, typically 10%.
-  if fetchHeadersReqErrThresholdZombie < elapsed or
-     h.len.uint64 * 100 < req.maxResults * fetchHeadersReqMinResponsePC:
-    buddy.registerError()
+  if fetchHeadersErrTimeout < elapsed or
+     h.len.uint64 * 100 < req.maxResults * fetchHeadersMinResponsePC:
+    buddy.registerError(slowPeer=true)
   else:
-    buddy.nHdrRespErrors = 0 # reset error count
+    buddy.only.nRespErrors.hdr = 0                 # reset error count
+    buddy.ctx.pool.lastSlowPeer = Opt.none(Hash)   # not last one or not error
 
   trace trEthRecvReceivedBlockHeaders, peer, nReq=req.maxResults,
     hash=topHash.toStr, ivResp=BnRange.new(h[^1].number,h[0].number),

@@ -17,6 +17,8 @@ import
   eth/common/hashes,
   stew/sorted_set,
   ../../db/ledger,
+  ../../common/evmforks,
+  ../pooled_txs,
   ./tx_item
 
 type
@@ -55,11 +57,42 @@ func removeLookup*(blobTab: var BlobLookupTab, item: TxItemRef) =
   for v in item.tx.versionedHashes:
     blobTab.del(v)
 
+proc validBlobItem(item: TxItemRef;
+                   fork: EVMFork;
+                   sn: TxSenderNonceRef;
+                   idTab: var TxIdTab;
+                   blobTab: var BlobLookupTab;
+                   ): bool =
+  let wrapperVersion = item.wrapperVersion.valueOr:
+    # Without blobs is ok
+    return true
+
+  if fork < FkCancun:
+    # No blobs allowed
+    return false
+
+  case wrapperVersion
+  of WrapperVersionEIP4844:
+    if fork >= FkOsaka:
+      # Should not exist anymore
+      idTab.del(item.id)
+      blobTab.removeLookup(item)
+      discard sn.list.delete(item.nonce)
+      return false
+
+  of WrapperVersionEIP7594:
+    if fork < FkOsaka:
+      # Not participate in block building but maybe eligible for next fork
+      return false
+
+  true
+
 iterator byPriceAndNonce*(senderTab: TxSenderTab,
                           idTab: var TxIdTab,
                           blobTab: var BlobLookupTab,
                           ledger: LedgerRef,
-                          baseFee: GasInt): TxItemRef =
+                          baseFee: GasInt,
+                          fork: EVMFork): TxItemRef =
 
   ## This algorithm and comment is taken from ethereumjs but modified.
   ##
@@ -86,8 +119,9 @@ iterator byPriceAndNonce*(senderTab: TxSenderTab,
     let rc = sn.list.ge(nonce)
     if rc.isOk:
       let item = rc.get.data
-      item.calculatePrice(baseFee)
-      byPrice.push(item)
+      if item.validBlobItem(fork, sn, idTab, blobTab):
+        item.calculatePrice(baseFee)
+        byPrice.push(item)
 
   # HeapQueue needs `<` to be overloaded for custom object
   # and in this case, we want to pop highest price first.

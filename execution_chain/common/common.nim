@@ -278,6 +278,16 @@ func toHardFork*(
     com: CommonRef, forkDeterminer: ForkDeterminationInfo): HardFork =
   toHardFork(com.forkTransitionTable, forkDeterminer)
 
+func toHardFork*(com: CommonRef, timestamp: EthTime): HardFork =
+  for fork in countdown(com.forkTransitionTable.timeThresholds.high, Shanghai):
+    if com.forkTransitionTable.timeThresholds[fork].isSome and timestamp >= com.forkTransitionTable.timeThresholds[fork].get:
+      return fork
+
+func toEVMFork*(com: CommonRef, timestamp: EthTime): EVMFork =
+  ## similar to toHardFork, but produce EVMFork
+  let fork = com.toHardFork(timestamp)
+  ToEVMFork[fork]
+
 func toEVMFork*(com: CommonRef, forkDeterminer: ForkDeterminationInfo): EVMFork =
   ## similar to toFork, but produce EVMFork
   let fork = com.toHardFork(forkDeterminer)
@@ -305,16 +315,19 @@ func forkId*(com: CommonRef, head: BlockNumber, time: EthTime): ForkID {.gcsafe.
   com.forkIdCalculator.newID(head, time.uint64)
 
 func isEIP155*(com: CommonRef, number: BlockNumber): bool =
-  com.config.eip155Block.isSome and number >= com.config.eip155Block.get
+  com.config.eip155Block.isSome and number >= com.config.eip155Block.value
 
 func isShanghaiOrLater*(com: CommonRef, t: EthTime): bool =
-  com.config.shanghaiTime.isSome and t >= com.config.shanghaiTime.get
+  com.config.shanghaiTime.isSome and t >= com.config.shanghaiTime.value
 
 func isCancunOrLater*(com: CommonRef, t: EthTime): bool =
-  com.config.cancunTime.isSome and t >= com.config.cancunTime.get
+  com.config.cancunTime.isSome and t >= com.config.cancunTime.value
 
 func isPragueOrLater*(com: CommonRef, t: EthTime): bool =
-  com.config.pragueTime.isSome and t >= com.config.pragueTime.get
+  com.config.pragueTime.isSome and t >= com.config.pragueTime.value
+
+func isOsakaOrLater*(com: CommonRef, t: EthTime): bool =
+  com.config.osakaTime.isSome and t >= com.config.osakaTime.value
 
 proc proofOfStake*(com: CommonRef, header: Header, txFrame: CoreDbTxRef): bool =
   if com.config.posBlock.isSome:

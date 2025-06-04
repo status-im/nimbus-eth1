@@ -17,6 +17,7 @@ import
   eth/common/eth_types_rlp, chronos,
   json_rpc/[rpcclient, errors, jsonmarshal],
   ../../../execution_chain/beacon/web3_eth_conv,
+  ../../../execution_chain/core/pooled_txs_rlp,
   ./types
 
 import

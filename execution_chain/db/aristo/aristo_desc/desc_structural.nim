@@ -15,7 +15,7 @@
 {.push raises: [].}
 
 import
-  std/[hashes as std_hashes, tables],
+  std/[hashes as std_hashes, strutils, tables],
   stint,
   eth/common/[accounts, base, hashes],
   ./desc_identifiers
@@ -251,6 +251,56 @@ template dup*(vtx: BranchRef): BranchRef =
 
 template dup*(vtx: ExtBranchRef): ExtBranchRef =
   ExtBranchRef(VertexRef(vtx).dup())
+
+func `$`*(aa: AristoAccount): string =
+  $aa.nonce & "," & $aa.balance & "," &
+    (if aa.codeHash == EMPTY_CODE_HASH: ""
+    else: $aa.codeHash)
+
+func `$`*(stoID: StorageID): string =
+  if stoID.isValid:
+    $stoID.vid
+  else:
+    $default(VertexID)
+
+func `$`*(vtx: AccLeafRef): string =
+  if vtx == nil:
+    "A(nil)"
+  else:
+    "A(" & $vtx.pfx & ":" & $vtx.account & "," & $vtx.stoID & ")"
+
+func `$`*(vtx: StoLeafRef): string =
+  if vtx == nil:
+    "S(nil)"
+  else:
+    "S(" & $vtx.pfx & ":" & $vtx.stoData & ")"
+
+func `$`*(vtx: BranchRef): string =
+  if vtx == nil:
+    "B(nil)"
+  else:
+    "B(" & $vtx.startVid & "+" & toBin(BiggestInt(vtx.used), 16) & ")"
+
+func `$`*(vtx: ExtBranchRef): string =
+  if vtx == nil:
+    "E(nil)"
+  else:
+    "E(" & $vtx.pfx & ":"  & $vtx.startVid & "+" & toBin(BiggestInt(vtx.used), 16) & ")"
+
+func `$`*(vtx: VertexRef): string =
+  if vtx == nil:
+    "V(nil)"
+  else:
+    case vtx.vType
+    of AccLeaf:
+      $(AccLeafRef(vtx)[])
+    of StoLeaf:
+      $(StoLeafRef(vtx)[])
+    of Branch:
+      $(BranchRef(vtx)[])
+    of ExtBranch:
+      $(ExtBranchRef(vtx)[])
+
 
 # ------------------------------------------------------------------------------
 # End

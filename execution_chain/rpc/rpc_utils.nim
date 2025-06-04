@@ -149,7 +149,8 @@ proc populateBlockObject*(blockHash: Hash32,
   result.mixHash = Hash32 header.mixHash
 
   # discard sizeof(seq[byte]) of extraData and use actual length
-  let size = sizeof(eth_types.Header) - sizeof(eth_api_types.Blob) + header.extraData.len
+  type ExtraDataType = typeof(header.extraData)
+  let size = sizeof(eth_types.Header) - sizeof(ExtraDataType) + header.extraData.len
   result.size = Quantity(size)
 
   result.gasLimit  = Quantity(header.gasLimit)
@@ -179,9 +180,11 @@ proc populateBlockObject*(blockHash: Hash32,
   result.excessBlobGas = w3Qty(header.excessBlobGas)
   result.requestsHash = header.requestsHash
 
-proc populateReceipt*(receipt: Receipt, gasUsed: GasInt, tx: Transaction,
+proc populateReceipt*(rec: StoredReceipt, gasUsed: GasInt, tx: Transaction,
                       txIndex: uint64, header: Header, com: CommonRef): ReceiptObject =
-  let sender = tx.recoverSender()
+  let
+    sender = tx.recoverSender()
+    receipt = rec.to(Receipt)
   var res = ReceiptObject()
   res.transactionHash = tx.computeRlpHash
   res.transactionIndex = Quantity(txIndex)

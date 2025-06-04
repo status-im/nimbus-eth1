@@ -41,8 +41,13 @@ func bnStr*(w: seq[EthBlock]): string =
   if w.len == 0: "n/a"
   else: (w[0].header.number, w[^1].header.number).bnStr
 
+func bnStr*(rev: seq[Header]): string =
+  ## Pretty print *reverse* sequence of headers as interval
+  if rev.len == 0: "n/a" else: (rev[^1].number,rev[0].number).bnStr
+
 func bnStr*(w: Interval[BlockNumber,uint64]): string =
   (w.minPt,w.maxPt).bnStr
+
 
 func toStr*(a: chronos.Duration): string =
   var s = a.toString 2

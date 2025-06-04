@@ -16,6 +16,7 @@ import
   eth/common,
   stew/byteutils,
   ../../execution_chain/common/chain_config,
+  ../../execution_chain/core/pooled_txs,
   ./pp_light
 
 export
@@ -40,7 +41,7 @@ func pp*(a: openArray[Address]): string =
 func pp*(a: Bytes8|Bytes32): string =
   a.toHex
 
-func pp*(a: NetworkPayload): string =
+func pp*(a: BlobsBundle): string =
   if a.isNil:
     "n/a"
   else:

@@ -11,6 +11,7 @@ import
   results,
   chronos,
   chronicles,
+  metrics,
   eth/trie/ordered_trie,
   eth/common/[hashes, headers_rlp, blocks_rlp, receipts_rlp, transactions_rlp],
   eth/p2p/discoveryv5/[protocol, enr],
@@ -353,10 +354,12 @@ proc new*(
     bootstrapRecords: openArray[Record] = [],
     portalConfig: PortalProtocolConfig = defaultPortalProtocolConfig,
     contentRequestRetries = 1,
-    contentQueueWorkers = 8,
+    contentQueueWorkers = 50,
+    contentQueueSize = 50,
 ): T =
   let
-    contentQueue = newAsyncQueue[(Opt[NodeId], ContentKeysList, seq[seq[byte]])](50)
+    contentQueue =
+      newAsyncQueue[(Opt[NodeId], ContentKeysList, seq[seq[byte]])](contentQueueSize)
 
     stream = streamManager.registerNewStream(contentQueue)
 
@@ -428,9 +431,15 @@ proc contentQueueWorker(n: HistoryNetwork) {.async: (raises: []).} =
       # TODO: Differentiate between failures due to invalid data and failures
       # due to missing network data for validation.
       if await n.validateContent(srcNodeId, contentKeys, contentItems):
+        portal_offer_validation_successful.inc(
+          labelValues = [$n.portalProtocol.protocolId]
+        )
+
         discard await n.portalProtocol.neighborhoodGossip(
           srcNodeId, contentKeys, contentItems
         )
+      else:
+        portal_offer_validation_failed.inc(labelValues = [$n.portalProtocol.protocolId])
   except CancelledError:
     trace "contentQueueWorker canceled"
 

@@ -36,6 +36,7 @@ type
     storageCapacity*: uint64
     contentRequestRetries*: int
     contentQueueWorkers*: int
+    contentQueueSize*: int
 
   PortalNode* = ref object
     discovery: protocol.Protocol
@@ -122,6 +123,7 @@ proc new*(
             bootstrapRecords = bootstrapRecords,
             portalConfig = config.portalConfig,
             contentQueueWorkers = config.contentQueueWorkers,
+            contentQueueSize = config.contentQueueSize,
           )
         Opt.some(beaconNetwork)
       else:
@@ -146,6 +148,7 @@ proc new*(
             portalConfig = config.portalConfig,
             contentRequestRetries = config.contentRequestRetries,
             contentQueueWorkers = config.contentQueueWorkers,
+            contentQueueSize = config.contentQueueSize,
           )
         )
       else:
@@ -165,6 +168,7 @@ proc new*(
             not config.disableStateRootValidation,
             contentRequestRetries = config.contentRequestRetries,
             contentQueueWorkers = config.contentQueueWorkers,
+            contentQueueSize = config.contentQueueSize,
           )
         )
       else:

@@ -11,6 +11,7 @@ import
   chronos,
   eth/common,
   ./types,
+  ../../core/pooled_txs_rlp,
   ../../networking/rlpx,
   ../../networking/p2p_types
 

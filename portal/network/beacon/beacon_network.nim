@@ -11,6 +11,7 @@ import
   results,
   chronos,
   chronicles,
+  metrics,
   eth/p2p/discoveryv5/[protocol, enr],
   beacon_chain/spec/forks,
   beacon_chain/gossip_processing/light_client_processor,
@@ -199,10 +200,12 @@ proc new*(
     trustedBlockRoot: Opt[Eth2Digest],
     bootstrapRecords: openArray[Record] = [],
     portalConfig: PortalProtocolConfig = defaultPortalProtocolConfig,
-    contentQueueWorkers = 8,
+    contentQueueWorkers = 50,
+    contentQueueSize = 50,
 ): T =
   let
-    contentQueue = newAsyncQueue[(Opt[NodeId], ContentKeysList, seq[seq[byte]])](50)
+    contentQueue =
+      newAsyncQueue[(Opt[NodeId], ContentKeysList, seq[seq[byte]])](contentQueueSize)
 
     stream = streamManager.registerNewStream(contentQueue)
 
@@ -453,8 +456,13 @@ proc contentQueueWorker(n: BeaconNetwork) {.async: (raises: []).} =
       # TODO: Differentiate between failures due to invalid data and failures
       # due to missing network data for validation.
       if await n.validateContent(srcNodeId, contentKeys, contentItems):
+        portal_offer_validation_successful.inc(
+          labelValues = [$n.portalProtocol.protocolId]
+        )
         discard
           await n.portalProtocol.randomGossip(srcNodeId, contentKeys, contentItems)
+      else:
+        portal_offer_validation_failed.inc(labelValues = [$n.portalProtocol.protocolId])
   except CancelledError:
     trace "contentQueueWorker canceled"
 

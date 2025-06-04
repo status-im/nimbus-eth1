@@ -165,7 +165,7 @@ proc newRocksDbCoreDbRef*(basePath: string, opts: DbOptions): CoreDbRef =
 
   if opts.rdbKeyCacheSize > 0:
     # Make sure key cache isn't empty
-    adb.txRef.computeKeys(VertexID(1)).isOkOr:
+    adb.txRef.computeKeys(STATE_ROOT_VID).isOkOr:
       fatal "Cannot compute root keys", msg = error
       quit(QuitFailure)
 

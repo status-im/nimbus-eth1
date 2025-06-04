@@ -42,7 +42,8 @@ import
   ./tx_pool/tx_item,
   ./tx_pool/tx_desc,
   ./tx_pool/tx_packer,
-  ./chain/forked_chain
+  ./chain/forked_chain,
+  ./pooled_txs
 
 from eth/common/eth_types_rlp import rlpHash
 
@@ -62,7 +63,8 @@ export
   tx,        # : Transaction
   pooledTx,  # : PooledTransaction
   id,        # : Hash32
-  sender     # : Address
+  sender,    # : Address
+  nextFork   # : EVMFork
 
 # ------------------------------------------------------------------------------
 # TxPoolRef constructor
@@ -95,7 +97,8 @@ export
   getItem,
   removeTx,
   removeExpiredTxs,
-  getBlobAndProofV1
+  getBlobAndProofV1,
+  getBlobAndProofV2
 
 # addTx(xp: TxPoolRef, ptx: PooledTransaction): Result[void, TxError]
 # addTx(xp: TxPoolRef, tx: Transaction): Result[void, TxError]
@@ -129,9 +132,14 @@ proc removeNewBlockTxs*(xp: TxPoolRef, blk: Block, optHash = Opt.none(Hash32)) =
 
 type AssembledBlock* = object
   blk*: EthBlock
-  blobsBundle*: Opt[BlobsBundle]
+  blobsBundle*: BlobsBundle
   blockValue*: UInt256
   executionRequests*: Opt[seq[seq[byte]]]
+
+func getWrapperVersion(com: CommonRef, timestamp: EthTime): WrapperVersion =
+  if com.isOsakaOrLater(timestamp):
+    return WrapperVersionEIP7594
+  WrapperVersionEIP4844
 
 proc assembleBlock*(
     xp: TxPoolRef,
@@ -139,39 +147,48 @@ proc assembleBlock*(
 ): Result[AssembledBlock, string] =
   xp.updateVmState()
 
-  # Run EVM with most profitable transactions
-  var pst = xp.packerVmExec().valueOr:
-    return err(error)
+  let com = xp.vmState.com
 
-  var blk = EthBlock(
-    header: pst.assembleHeader(xp)
-  )
-  var blobsBundle: BlobsBundle
+  # Run EVM with most profitable transactions
+  var
+    pst = xp.packerVmExec().valueOr:
+      return err(error)
+    blk = EthBlock(
+      header: pst.assembleHeader(xp)
+    )
+    blobsBundle = BlobsBundle(
+      wrapperVersion: getWrapperVersion(com, blk.header.timestamp)
+    )
+
   for item in pst.packedTxs:
     let tx = item.pooledTx
     blk.txs.add tx.tx
-    if tx.networkPayload != nil:
-      for k in tx.networkPayload.commitments:
+    if tx.blobsBundle != nil:
+      doAssert(tx.blobsBundle.wrapperVersion == blobsBundle.wrapperVersion)
+      for k in tx.blobsBundle.commitments:
         blobsBundle.commitments.add k
-      for p in tx.networkPayload.proofs:
+      for p in tx.blobsBundle.proofs:
         blobsBundle.proofs.add p
-      for blob in tx.networkPayload.blobs:
+      for blob in tx.blobsBundle.blobs:
         blobsBundle.blobs.add blob
   blk.header.transactionsRoot = calcTxRoot(blk.txs)
 
-  let com = xp.vmState.com
   if com.isShanghaiOrLater(blk.header.timestamp):
     blk.withdrawals = Opt.some(xp.withdrawals)
 
   if not com.isCancunOrLater(blk.header.timestamp) and blobsBundle.commitments.len > 0:
     return err("PooledTransaction contains blobs prior to Cancun")
   let blobsBundleOpt =
-    if com.isCancunOrLater(blk.header.timestamp):
+    if com.isOsakaOrLater(blk.header.timestamp):
+      doAssert blobsBundle.commitments.len == blobsBundle.blobs.len
+      doAssert blobsBundle.proofs.len == blobsBundle.blobs.len * CELLS_PER_EXT_BLOB
+      blobsBundle
+    elif com.isCancunOrLater(blk.header.timestamp):
       doAssert blobsBundle.commitments.len == blobsBundle.blobs.len
       doAssert blobsBundle.proofs.len == blobsBundle.blobs.len
-      Opt.some blobsBundle
+      blobsBundle
     else:
-      Opt.none BlobsBundle
+      BlobsBundle(nil)
 
   if someBaseFee:
     # make sure baseFee always has something

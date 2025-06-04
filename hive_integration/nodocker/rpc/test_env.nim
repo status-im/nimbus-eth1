@@ -64,11 +64,9 @@ proc stopRpcHttpServer(srv: RpcServer) =
 
 proc setupEnv*(taskPool: Taskpool): TestEnv =
   let conf = makeConfig(@[
-    "--chaindb:archive",
     # "--nat:extip:0.0.0.0",
     "--network:7",
     "--import-key:" & initPath / "private-key",
-    "--engine-signer:658bdf435d810c91414ec09147daa6db62406379",
     "--custom-network:" & initPath / "genesis.json",
     "--rpc",
     "--rpc-api:eth,debug",

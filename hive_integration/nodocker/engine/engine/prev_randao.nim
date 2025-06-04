@@ -1,5 +1,5 @@
 # Nimbus
-# Copyright (c) 2023-2024 Status Research & Development GmbH
+# Copyright (c) 2023-2025 Status Research & Development GmbH
 # Licensed under either of
 #  * Apache License, version 2.0, ([LICENSE-APACHE](LICENSE-APACHE) or
 #    http://www.apache.org/licenses/LICENSE-2.0)
@@ -13,7 +13,8 @@ import
   eth/common,
   chronicles,
   ./engine_spec,
-  ../helper
+  ../helper,
+  ../../../../execution_chain/core/pooled_txs
 
 type
   PrevRandaoTransactionTest* = ref object of EngineSpec

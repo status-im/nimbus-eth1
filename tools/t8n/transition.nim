@@ -119,13 +119,15 @@ proc genAddress(tx: Transaction, sender: Address): Address =
   if tx.to.isNone:
     result = generateAddress(sender, tx.nonce)
 
-proc toTxReceipt(rec: Receipt,
+proc toTxReceipt(receipt: StoredReceipt,
                  tx: Transaction,
                  sender: Address,
                  txIndex: int,
                  gasUsed: GasInt): TxReceipt =
 
-  let contractAddress = genAddress(tx, sender)
+  let
+    contractAddress = genAddress(tx, sender)
+    rec = receipt.to(Receipt)
   TxReceipt(
     txType: tx.txType,
     root: if rec.isHash: rec.hash else: default(Hash32),
@@ -140,7 +142,7 @@ proc toTxReceipt(rec: Receipt,
     transactionIndex: txIndex
   )
 
-proc calcLogsHash(receipts: openArray[Receipt]): Hash32 =
+proc calcLogsHash(receipts: openArray[StoredReceipt]): Hash32 =
   var logs: seq[Log]
   for rec in receipts:
     logs.add rec.logs
@@ -231,7 +233,7 @@ proc exec(ctx: TransContext,
     vmState.mutateLedger:
       db.applyDAOHardFork()
 
-  vmState.receipts = newSeqOfCap[Receipt](ctx.txList.len)
+  vmState.receipts = newSeqOfCap[StoredReceipt](ctx.txList.len)
   vmState.cumulativeGasUsed = 0
 
   if ctx.env.parentBeaconBlockRoot.isSome:
@@ -349,7 +351,7 @@ proc exec(ctx: TransContext,
   if ctx.env.currentExcessBlobGas.isSome:
     excessBlobGas = ctx.env.currentExcessBlobGas
   elif ctx.env.parentExcessBlobGas.isSome and ctx.env.parentBlobGasUsed.isSome:
-    excessBlobGas = Opt.some calcExcessBlobGas(vmState.parent, vmState.fork >= FkPrague)
+    excessBlobGas = Opt.some calcExcessBlobGas(vmState.com, vmState.parent, vmState.fork)
 
   if excessBlobGas.isSome:
     result.result.blobGasUsed = Opt.some vmState.blobGasUsed
@@ -533,7 +535,7 @@ proc transitionAction*(ctx: var TransContext, conf: T8NConf) =
       # If it is not explicitly defined, but we have the parent values, we try
       # to calculate it ourselves.
       if parent.excessBlobGas.isSome and parent.blobGasUsed.isSome:
-        ctx.env.currentExcessBlobGas = Opt.some calcExcessBlobGas(parent, com.isPragueOrLater(ctx.env.currentTimestamp))
+        ctx.env.currentExcessBlobGas = Opt.some com.calcExcessBlobGas(parent, com.toEVMFork(ctx.env.currentTimestamp))
 
     let header  = envToHeader(ctx.env)
 

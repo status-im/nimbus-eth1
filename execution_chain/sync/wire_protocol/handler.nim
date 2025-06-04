@@ -16,7 +16,7 @@ import
   ./types,
   ./requester,
   ./broadcast,
-  ../../core/[chain, tx_pool],
+  ../../core/[chain, tx_pool, pooled_txs_rlp],
   ../../networking/p2p
 
 logScope:
@@ -56,7 +56,7 @@ proc new*(_: type EthWireRef,
 proc getStatus68*(ctx: EthWireRef): Eth68State =
   let
     com = ctx.chain.com
-    bestBlock = ctx.chain.latestHeader    
+    bestBlock = ctx.chain.latestHeader
     txFrame = ctx.chain.baseTxFrame
     forkId = com.forkId(bestBlock.number, bestBlock.timestamp)
 
@@ -98,7 +98,7 @@ proc getReceipts*(ctx: EthWireRef,
       continue
 
     totalBytes += getEncodedLength(receiptList)
-    list.add(move(receiptList))
+    list.add(receiptList.to(seq[Receipt]))
 
     if list.len >= MAX_RECEIPTS_SERVE or
        totalBytes > SOFT_RESPONSE_LIMIT:
@@ -118,7 +118,7 @@ proc getStoredReceipts*(ctx: EthWireRef,
       continue
 
     totalBytes += getEncodedLength(receiptList)
-    list.add(receiptList.to(seq[StoredReceipt]))
+    list.add(move(receiptList))
 
     if list.len >= MAX_RECEIPTS_SERVE or
        totalBytes > SOFT_RESPONSE_LIMIT:

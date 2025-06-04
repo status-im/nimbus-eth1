@@ -14,6 +14,7 @@ import
   results,
   stint,
   ./eip7691,
+  ./pooled_txs,
   ./lazy_kzg as kzg,
   ../constants,
   ../common/common
@@ -40,8 +41,8 @@ const
 
 
 # kzgToVersionedHash implements kzg_to_versioned_hash from EIP-4844
-proc kzgToVersionedHash*(kzg: kzg.KzgCommitment): VersionedHash =
-  result = sha256.digest(kzg.bytes).to(Hash32)
+proc kzgToVersionedHash*(commitment: array[48, byte]): VersionedHash =
+  result = sha256.digest(commitment).to(Hash32)
   result.data[0] = VERSIONED_HASH_VERSION_KZG
 
 # pointEvaluation implements point_evaluation_precompile from EIP-4844
@@ -66,7 +67,7 @@ proc pointEvaluation*(input: openArray[byte]): Result[void, string] =
     commitment =  KzgBytes48.copyFrom(input, 96, 143)
     kzgProof =  KzgBytes48.copyFrom(input, 144, 191)
 
-  if kzgToVersionedHash(commitment).data != versionedHash.bytes:
+  if kzgToVersionedHash(commitment.bytes).data != versionedHash.bytes:
     return err("versionedHash should equal to kzgToVersionedHash(commitment)")
 
   # Verify KZG proof
@@ -81,11 +82,11 @@ proc pointEvaluation*(input: openArray[byte]): Result[void, string] =
   ok()
 
 # calcExcessBlobGas implements calc_excess_data_gas from EIP-4844
-proc calcExcessBlobGas*(parent: Header, electra: bool): uint64 =
+proc calcExcessBlobGas*(com: CommonRef, parent: Header, fork: EVMFork): uint64 =
   let
     excessBlobGas = parent.excessBlobGas.get(0'u64)
     blobGasUsed = parent.blobGasUsed.get(0'u64)
-    targetBlobGasPerBlock = getTargetBlobGasPerBlock(electra)
+    targetBlobGasPerBlock = com.getTargetBlobsPerBlock(fork) * GAS_PER_BLOB
 
   if excessBlobGas + blobGasUsed < targetBlobGasPerBlock:
     0'u64
@@ -138,7 +139,7 @@ func blobGasUsed(txs: openArray[Transaction]): uint64 =
 # https://eips.ethereum.org/EIPS/eip-4844
 func validateEip4844Header*(
     com: CommonRef, header, parentHeader: Header,
-    txs: openArray[Transaction]): Result[void, string] {.raises: [].} =
+    txs: openArray[Transaction]): Result[void, string] =
 
   if not com.isCancunOrLater(header.timestamp):
     if header.blobGasUsed.isSome:
@@ -156,12 +157,12 @@ func validateEip4844Header*(
     return err("expect EIP-4844 excessBlobGas in block header")
 
   let
-    electra = com.isPragueOrLater(header.timestamp)
+    fork = com.toEVMFork(header)
     headerBlobGasUsed = header.blobGasUsed.get()
     blobGasUsed = blobGasUsed(txs)
     headerExcessBlobGas = header.excessBlobGas.get
-    excessBlobGas = calcExcessBlobGas(parentHeader, electra)
-    maxBlobGasPerBlock = getMaxBlobGasPerBlock(electra)
+    excessBlobGas = calcExcessBlobGas(com, parentHeader, fork)
+    maxBlobGasPerBlock = com.getMaxBlobGasPerBlock(fork)
 
   if blobGasUsed > maxBlobGasPerBlock:
     return err("blobGasUsed " & $blobGasUsed & " exceeds maximum allowance " & $maxBlobGasPerBlock)
@@ -174,37 +175,37 @@ func validateEip4844Header*(
 
   return ok()
 
-proc validateBlobTransactionWrapper*(tx: PooledTransaction):
-                                     Result[void, string] {.raises: [].} =
-  if tx.networkPayload.isNil:
-    return err("tx wrapper is none")
+proc validateBlobTransactionWrapper4844*(tx: PooledTransaction):
+                                     Result[void, string] =
+  doAssert(tx.blobsBundle.isNil.not)
+  doAssert(tx.blobsBundle.wrapperVersion == WrapperVersionEIP4844)
 
   # note: assert blobs are not malformatted
   let goodFormatted = tx.tx.versionedHashes.len ==
-                      tx.networkPayload.commitments.len and
+                      tx.blobsBundle.commitments.len and
                       tx.tx.versionedHashes.len ==
-                      tx.networkPayload.blobs.len and
+                      tx.blobsBundle.blobs.len and
                       tx.tx.versionedHashes.len ==
-                      tx.networkPayload.proofs.len
+                      tx.blobsBundle.proofs.len
 
   if not goodFormatted:
     return err("tx wrapper is ill formatted")
 
-  let commitments = tx.networkPayload.commitments.mapIt(
+  let commitments = tx.blobsBundle.commitments.mapIt(
                       kzg.KzgCommitment(bytes: it.data))
 
   # Verify that commitments match the blobs by checking the KZG proof
   let res = kzg.verifyBlobKzgProofBatch(
-              tx.networkPayload.blobs.mapIt(kzg.KzgBlob(bytes: it)),
+              tx.blobsBundle.blobs.mapIt(kzg.KzgBlob(bytes: it.bytes)),
               commitments,
-              tx.networkPayload.proofs.mapIt(kzg.KzgProof(bytes: it.data)))
+              tx.blobsBundle.proofs.mapIt(kzg.KzgProof(bytes: it.data)))
 
   if res.isErr:
     return err(res.error)
 
   # Actual verification result
   if not res.get():
-    return err("Failed to verify network payload of a transaction")
+    return err("Failed to verify blobs bundle of a transaction")
 
   # Now that all commitments have been verified, check that versionedHashes matches the commitments
   for i in 0 ..< tx.tx.versionedHashes.len:
@@ -212,7 +213,7 @@ proc validateBlobTransactionWrapper*(tx: PooledTransaction):
     if tx.tx.versionedHashes[i].data[0] != VERSIONED_HASH_VERSION_KZG:
       return err("wrong kzg version in versioned hash at index " & $i)
 
-    if tx.tx.versionedHashes[i] != kzgToVersionedHash(commitments[i]):
+    if tx.tx.versionedHashes[i] != kzgToVersionedHash(commitments[i].bytes):
       return err("tx versioned hash not match commitments at index " & $i)
 
   ok()

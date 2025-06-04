@@ -62,6 +62,7 @@ const unsupportedTests = [
   # zig zag case, similar with total difficulty above
   "lotsOfBranchesOverrideAtTheEnd.json",
   "DaoTransactions.json",
+  "ChainAtoChainBtoChainAtoChainB.json",
   ]
 
 proc main() =

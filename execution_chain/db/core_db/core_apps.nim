@@ -129,7 +129,7 @@ iterator getWithdrawals*(
 iterator getReceipts*(
     db: CoreDbTxRef;
     receiptsRoot: Hash32;
-      ): Receipt
+      ): StoredReceipt
       {.gcsafe, raises: [RlpError].} =
   block body:
     if receiptsRoot == EMPTY_ROOT_HASH:
@@ -142,7 +142,7 @@ iterator getReceipts*(
         break body
       if data.len == 0:
         break body
-      yield rlp.decode(data, Receipt)
+      yield rlp.decode(data, StoredReceipt)
 
 # ------------------------------------------------------------------------------
 # Public functions
@@ -493,7 +493,7 @@ proc setHead*(
 proc persistReceipts*(
     db: CoreDbTxRef;
     receiptsRoot: Hash32;
-    receipts: openArray[Receipt];
+    receipts: openArray[StoredReceipt];
       ) =
   const info = "persistReceipts()"
   if receipts.len == 0:
@@ -507,9 +507,9 @@ proc persistReceipts*(
 proc getReceipts*(
     db: CoreDbTxRef;
     receiptsRoot: Hash32;
-      ): Result[seq[Receipt], string] =
+      ): Result[seq[StoredReceipt], string] =
   wrapRlpException "getReceipts":
-    var receipts = newSeq[Receipt]()
+    var receipts = newSeq[StoredReceipt]()
     for r in db.getReceipts(receiptsRoot):
       receipts.add(r)
     return ok(receipts)

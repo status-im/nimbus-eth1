@@ -13,7 +13,8 @@ import
   ./engine_spec,
   ../helper,
   ../cancun/customizer,
-  ../../../../execution_chain/common
+  ../../../../execution_chain/common,
+  ../../../../execution_chain/core/pooled_txs
 
 # Generate test cases for each field of NewPayload, where the payload contains a single invalid field and a valid hash.
 type

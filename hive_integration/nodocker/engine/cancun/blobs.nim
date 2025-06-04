@@ -154,8 +154,24 @@ proc blobDataGenerator*(startBlobId: BlobID, blobCount: int): BlobTxWrapData =
     let res = generateBlob(startBlobId + BlobID(i))
     result.blobs[i] = res.blob
     result.commitments[i] = res.commitment
-    result.hashes[i] = kzgToVersionedHash(result.commitments[i])
+    result.hashes[i] = kzgToVersionedHash(result.commitments[i].bytes)
     let z = computeBlobKzgProof(result.blobs[i], result.commitments[i])
     if z.isErr:
       doAssert(false, z.error)
     result.proofs[i] = z.get()
+
+proc blobDataGenerator7594*(startBlobId: BlobID, blobCount: int): BlobTxWrapData =
+  result.blobs = newSeq[kzg.KzgBlob](blobCount)
+  result.commitments = newSeq[kzg.KzgCommitment](blobCount)
+  result.hashes = newSeq[Hash32](blobCount)
+  result.proofs = newSeqOfCap[kzg.KzgProof](blobCount * CELLS_PER_EXT_BLOB)
+
+  for i in 0..<blobCount:
+    let res = generateBlob(startBlobId + BlobID(i))
+    result.blobs[i] = res.blob
+    result.commitments[i] = res.commitment
+    result.hashes[i] = kzgToVersionedHash(result.commitments[i].bytes)
+    let z = kzg.computeCellsAndKzgProofs(result.blobs[i])
+    if z.isErr:
+      doAssert(false, z.error)
+    result.proofs.add z.value.proofs

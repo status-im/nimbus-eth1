@@ -126,6 +126,11 @@ declareHistogram portal_offer_log_distance,
   labels = ["protocol_id"],
   buckets = distanceBuckets
 
+declarePublicCounter portal_offer_validation_successful,
+  "Portal sub-network offers successfully validated", labels = ["protocol_id"]
+declarePublicCounter portal_offer_validation_failed,
+  "Portal sub-network offers which failed validation", labels = ["protocol_id"]
+
 logScope:
   topics = "portal_wire"
 
@@ -328,7 +333,7 @@ proc banNode*(p: PortalProtocol, nodeId: NodeId, period: chronos.Duration) =
 proc isBanned*(p: PortalProtocol, nodeId: NodeId): bool =
   p.config.disableBanNodes == false and p.routingTable.isBanned(nodeId)
 
-func `$`(id: PortalProtocolId): string =
+func `$`*(id: PortalProtocolId): string =
   id.toHex()
 
 func fromNodeStatus(T: type NodeAddResult, status: NodeStatus): T =
@@ -1230,7 +1235,12 @@ proc offerRateLimited*(
   except CatchableError as e:
     raiseAssert(e.msg) # Shouldn't happen
 
-  let res = await p.offer(offer)
+  var res = await p.offer(offer)
+
+  if res.isErr():
+    # Retry the offer once if it failed for any reason
+    res = await p.offer(offer)
+
   if res.isOk():
     portal_gossip_offers_successful.inc(labelValues = [$p.protocolId])
   else:

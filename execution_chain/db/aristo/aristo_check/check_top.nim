@@ -11,7 +11,7 @@
 {.push raises: [].}
 
 import
-  std/[sequtils, sets, typetraits],
+  std/[sequtils, sets],
   eth/common,
   results,
   ".."/[aristo_desc, aristo_get, aristo_layers, aristo_serialise, aristo_utils]
@@ -112,13 +112,6 @@ proc checkTopCommon*(
         return err((rvid.vid,CheckAnyVtxEmptyKeyMissing))
       if rc.value[0].isValid:
         return err((rvid.vid,CheckAnyVtxEmptyKeyExpected))
-
-  if vTop.distinctBase < LEAST_FREE_VID:
-    # Verify that all vids are below `LEAST_FREE_VID`
-    if topVid.distinctBase < LEAST_FREE_VID:
-      for (rvid,key) in db.layersWalkKey:
-        if key.isValid and LEAST_FREE_VID <= rvid.vid.distinctBase:
-          return err((topVid,CheckAnyVTopUnset))
 
   # If present, there are at least as many deleted hashes as there are deleted
   # vertices.

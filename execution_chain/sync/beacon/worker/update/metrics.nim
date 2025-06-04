@@ -30,6 +30,9 @@ declareGauge nec_sync_coupler, "" &
 declareGauge nec_sync_dangling, "" &
   "Least block number for header chain already fetched"
 
+declareGauge nec_sync_last_block_imported, "" &
+  "last block successfully imported/executed by FC module"
+
 declareGauge nec_sync_head, "" &
   "Current sync target block number (if any)"
 
@@ -58,17 +61,18 @@ declareGauge nec_sync_non_peers_connected, "" &
 
 
 template updateMetricsImpl(ctx: BeaconCtxRef) =
-  metrics.set(nec_base, ctx.chain.baseNumber().int64)
-  metrics.set(nec_execution_head, ctx.chain.latestNumber().int64)
+  metrics.set(nec_base, ctx.chain.baseNumber.int64)
+  metrics.set(nec_execution_head, ctx.chain.latestNumber.int64)
   var coupler = ctx.headersUnprocTotalBottom()
   if high(int64).uint64 <= coupler:
     coupler = 0
   metrics.set(nec_sync_coupler, coupler.int64)
-  metrics.set(nec_sync_dangling, ctx.dangling.number.int64)
-  metrics.set(nec_sync_head, ctx.head.number.int64)
+  metrics.set(nec_sync_dangling, ctx.hdrCache.antecedent.number.int64)
+  metrics.set(nec_sync_last_block_imported, ctx.subState.top.int64)
+  metrics.set(nec_sync_head, ctx.subState.head.int64)
 
   # Show last valid state.
-  let consHeadNumber = ctx.consHeadNumber
+  let consHeadNumber = ctx.hdrCache.latestConsHeadNumber
   if 0 < consHeadNumber:
     metrics.set(nec_sync_consensus_head, consHeadNumber.int64)
 

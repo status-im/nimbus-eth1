@@ -17,6 +17,7 @@
 import
   std/[hashes, times],
   results,
+  ../pooled_txs,
   ../../utils/utils,
   ../../transaction
 
@@ -121,6 +122,13 @@ template nonce*(item: TxItemRef): AccountNonce =
 template price*(item: TxItemRef): GasInt =
   ## Getter
   item.price
+
+func wrapperVersion*(item: TxItemRef): Opt[WrapperVersion] =
+  ## Getter
+  if item.ptx.blobsBundle.isNil:
+    return Opt.none(WrapperVersion)
+  else:
+    return Opt.some(item.ptx.blobsBundle.wrapperVersion)
 
 func calculatePrice*(item: TxItemRef; baseFee: GasInt) =
   ## Profit calculator

@@ -122,8 +122,9 @@ type
       ## Mixed account/storage path to payload cache - same as above but caches
       ## the full lookup of storage slots
 
-    # Debugging data below, might go away in future
-    xMap*: Table[HashKey,RootedVertexID] ## For pretty printing/debugging
+    staticLevel*: int
+      ## MPT level where "most" leaves can be found, for static vid lookups
+    lookups*: tuple[lower, hits, higher: int]
 
   Leg* = object
     ## For constructing a `VertexPath`
@@ -237,6 +238,23 @@ proc deltaAtLevel*(db: AristoTxRef, level: int): AristoTxRef =
       if frame.level == level:
         return frame
     nil
+
+func getStaticLevel*(db: AristoDbRef): int =
+  # Retrieve the level where we can expect to find a leaf, updating it based on
+  # recent lookups
+
+  if db.lookups[0] + db.lookups[1] + db.lookups[2] >= 1024:
+    if db.lookups.lower > db.lookups.hits + db.lookups.higher:
+      db.staticLevel = max(1, db.staticLevel - 1)
+    elif db.lookups.higher > db.lookups.hits + db.lookups.lower:
+      db.staticLevel = min(STATIC_VID_LEVELS, db.staticLevel + 1)
+    reset(db.lookups)
+
+  if db.staticLevel == 0:
+    db.staticLevel = 1
+
+  db.staticLevel
+
 
 # ------------------------------------------------------------------------------
 # End

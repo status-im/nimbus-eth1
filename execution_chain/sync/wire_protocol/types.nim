@@ -15,7 +15,7 @@ import
   eth/common,
   chronos,
   chronos/ratelimit,
-  ../../core/[chain, tx_pool],
+  ../../core/[chain, tx_pool, pooled_txs],
   ../../networking/p2p_types
 
 type
@@ -66,7 +66,7 @@ type
 
   NewBlockHashesAnnounce* = object
     hash*: Hash32
-    number*: BlockNumber
+    number*: base.BlockNumber
 
   ChainForkId* = object
     forkHash*: array[4, byte] # The RLP encoding must be exactly 4 bytes.

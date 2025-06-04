@@ -24,8 +24,10 @@ export
   getPayload,
   getPayloadV3,
   getPayloadV4,
+  getPayloadV5,
   getPayloadBodiesByHash,
   getPayloadBodiesByRange,
   newPayload,
   forkchoiceUpdated,
-  getBlobsV1
+  getBlobsV1,
+  getBlobsV2

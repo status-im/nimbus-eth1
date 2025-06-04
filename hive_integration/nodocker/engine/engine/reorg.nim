@@ -14,7 +14,8 @@ import
   stew/byteutils,
   ./engine_spec,
   ../cancun/customizer,
-  ../helper
+  ../helper,
+  ../../../../execution_chain/core/pooled_txs
 
 type
   SidechainReOrgTest* = ref object of EngineSpec

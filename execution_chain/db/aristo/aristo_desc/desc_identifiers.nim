@@ -227,14 +227,10 @@ func append*(w: var RlpWriter; key: HashKey) =
 # ------------------------------------------------------------------------------
 
 func `$`*(vids: seq[VertexID]): string =
-  "[" & vids.toSeq.mapIt(
-    "$" & it.uint64.toHex.strip(trailing=false,chars={'0'})
-    ).join(",") & "]"
+  "[" & vids.mapIt($it).join(",") & "]"
 
 func `$`*(vids: HashSet[VertexID]): string =
-  "{" & vids.toSeq.sorted.mapIt(
-    "$" & it.uint64.toHex.strip(trailing=false,chars={'0'})
-    ).join(",") & "}"
+  "{" & vids.toSeq.sorted.mapIt($it).join(",") & "}"
 
 func `$`*(key: HashKey): string =
   toHex(key.data)

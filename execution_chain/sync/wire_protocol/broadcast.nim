@@ -19,7 +19,9 @@ import
   ./requester,
   ../../networking/p2p,
   ../../core/tx_pool,
+  ../../core/pooled_txs,
   ../../core/eip4844,
+  ../../core/eip7594,
   ../../core/chain/forked_chain
 
 logScope:
@@ -303,16 +305,25 @@ proc handleTxHashesBroadcast*(wire: EthWireRef,
       # sidecars that don't correspond to the versioned hashes reported
       # in the header, disconnect from the sending peer.
       if tx.tx.txType == TxEip4844:
-        if tx.networkPayload.isNil:
+        if tx.blobsBundle.isNil:
           debug "Protocol Breach: Received sidecar-less blob transaction",
             remote=peer.remote, clientId=peer.clientId
           await peer.disconnect(BreachOfProtocol)
           return
-        validateBlobTransactionWrapper(tx).isOkOr:
-          debug "Protocol Breach: Sidecar validation error", msg=error,
-            remote=peer.remote, clientId=peer.clientId
-          await peer.disconnect(BreachOfProtocol)
-          return
+
+        if tx.blobsBundle.wrapperVersion == WrapperVersionEIP4844:
+          validateBlobTransactionWrapper4844(tx).isOkOr:
+            debug "Protocol Breach: Sidecar validation error", msg=error,
+              remote=peer.remote, clientId=peer.clientId
+            await peer.disconnect(BreachOfProtocol)
+            return
+
+        if tx.blobsBundle.wrapperVersion == WrapperVersionEIP7594:
+          validateBlobTransactionWrapper7594(tx).isOkOr:
+            debug "Protocol Breach: Sidecar validation error", msg=error,
+              remote=peer.remote, clientId=peer.clientId
+            await peer.disconnect(BreachOfProtocol)
+            return
 
       wire.txPool.addTx(tx).isOkOr:
         continue
