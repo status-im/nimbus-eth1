@@ -251,11 +251,14 @@ proc validateBlobTransactionWrapper(tx: PooledTransaction, fork: EVMFork):
   case tx.blobsBundle.wrapperVersion
   of WrapperVersionEIP4844:
     if fork >= FkOsaka:
-      return err("Blobsbundle version expect fork before Osaka")
+      return err("Blobsbundle version 0 expect fork before Osaka")
     validateBlobTransactionWrapper4844(tx)
   of WrapperVersionEIP7594:
-    if fork < FkOsaka:
-      return err("Blobsbundle version expect Osaka or later")
+    # Allow this kind of Blob when Prague still active.
+    # Because after transitioned to Osaka or later,
+    # it can be included in the next fork
+    if fork < FkPrague:
+      return err("Blobsbundle version 1 expect Prague or later")
     validateBlobTransactionWrapper7594(tx)
 
 # ------------------------------------------------------------------------------
@@ -425,17 +428,37 @@ proc addTx*(xp: TxPoolRef, tx: Transaction): Result[void, TxError] =
 
 iterator byPriceAndNonce*(xp: TxPoolRef): TxItemRef =
   for item in byPriceAndNonce(xp.senderTab, xp.idTab,
-      xp.blobTab, xp.vmState.ledger, xp.baseFee):
+      xp.blobTab, xp.vmState.ledger, xp.baseFee, xp.nextFork):
     yield item
 
 func getBlobAndProofV1*(xp: TxPoolRef, v: VersionedHash): Opt[BlobAndProofV1] =
   xp.blobTab.withValue(v, val):
     let np = val.item.pooledTx.blobsBundle
-    return Opt.some(BlobAndProofV1(
-      blob: np.blobs[val.blobIndex],
-      proof: np.proofs[val.blobIndex]))
+    if np.wrapperVersion == WrapperVersionEIP4844:
+      return Opt.some(BlobAndProofV1(
+        blob: np.blobs[val.blobIndex],
+        proof: np.proofs[val.blobIndex]))
 
   Opt.none(BlobAndProofV1)
+
+func getBlobAndProofV2*(xp: TxPoolRef, v: VersionedHash): Opt[BlobAndProofV2] =
+  func getProofs(list: openArray[KzgProof], index: int): array[CELLS_PER_EXT_BLOB, KzgProof] =
+    let
+      startIndex = index * CELLS_PER_EXT_BLOB
+      endIndex   = startIndex + CELLS_PER_EXT_BLOB
+    doAssert(list.len >= endIndex)
+
+    for i in 0..<CELLS_PER_EXT_BLOB:
+      result[i] = list[startIndex + i]
+
+  xp.blobTab.withValue(v, val):
+    let np = val.item.pooledTx.blobsBundle
+    if np.wrapperVersion == WrapperVersionEIP7594:
+      return Opt.some(BlobAndProofV2(
+        blob: np.blobs[val.blobIndex],
+        proofs: getProofs(np.proofs, val.blobIndex)))
+
+  Opt.none(BlobAndProofV2)
 
 # ------------------------------------------------------------------------------
 # PoS payload attributes getters
