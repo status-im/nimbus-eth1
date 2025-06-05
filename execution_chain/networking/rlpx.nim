@@ -309,9 +309,18 @@ proc nextMsgResolver[MsgType](
     msgData: Rlp, future: FutureBase
 ) {.gcsafe, raises: [RlpError].} =
   var reader = msgData
-  Future[MsgType](future).complete reader.readRecordType(
-    MsgType, MsgType.rlpFieldsCount > 1
-  )
+  when MsgType is ref:
+    # TODO: rlp support ref types
+    type T = typeof(MsgType()[])
+    var msg = MsgType()
+    msg[] = reader.readRecordType(
+      T, T.rlpFieldsCount > 1
+    )
+    Future[MsgType](future).complete msg
+  else:
+    Future[MsgType](future).complete reader.readRecordType(
+      MsgType, MsgType.rlpFieldsCount > 1
+    )
 
 proc failResolver[MsgType](reason: DisconnectionReason, future: FutureBase) =
   Future[MsgType](future).fail(
@@ -1353,11 +1362,11 @@ proc rlpxAccept*(
       rlpx_accept_failure.inc(labelValues = ["timeout"])
       return nil
     except PeerDisconnected as exc:
-      debug "Accped handshake disconnection", err = exc.msg, reason = exc.reason
+      debug "Accept handshake disconnection", err = exc.msg, reason = exc.reason
       rlpx_accept_failure.inc(labelValues = [$exc.reason])
       return nil
     except EthP2PError as exc:
-      debug "Accped handshake error", err = exc.msg
+      debug "Accept handshake error", err = exc.msg
       rlpx_accept_failure.inc(labelValues = ["error"])
       return nil
 
@@ -1521,7 +1530,7 @@ template rlpxWithPacketHandler*(PROTO: distinct type;
   wrapRlpxWithPacketException(MSGTYPE, peer):
     var
       rlp = data
-      packet {.inject.}: MSGTYPE
+      packet {.inject.} = MSGTYPE()
 
     when numFields > 1:
       tryEnterList(rlp)
@@ -1552,7 +1561,7 @@ template rlpxWithFutureHandler*(PROTO: distinct type;
   wrapRlpxWithPacketException(MSGTYPE, peer):
     var
       rlp = data
-      packet: MSGTYPE
+      packet = MSGTYPE()
 
     tryEnterList(rlp)
     let
