@@ -345,14 +345,6 @@ type
       defaultValue: 4'u64
       name: "debug-persist-batch-size" .}: uint64
 
-    beaconSyncTargetFile* {.
-      hidden
-      desc: "Load a file containg an rlp-encoded object \"(Header,Hash32)\" " &
-            "to be used " &
-            "as the first target before any other request from the CL " &
-            "is accepted"
-      name: "debug-beacon-sync-target-file" .}: Option[InputFile]
-
     rocksdbMaxOpenFiles {.
       hidden
       defaultValue: defaultMaxOpenFiles
@@ -509,6 +501,24 @@ type
           " is auto-generated."
         defaultValueDesc: "\"jwt.hex\" in the data directory (see --data-dir)"
         name: "jwt-secret" .}: Option[InputFile]
+
+      beaconSyncTraceFile* {.
+        separator: "\pBEACON SYNC OPTIONS:"
+        desc: "Enable tracer and write capture data to the argument file"
+        name: "beacon-sync-trace-file" .}: Option[OutFile]
+
+      beaconSyncTraceSessions* {.
+        defaultValue: 1
+        desc: "Run a trace for this many sessions " &
+              "(i.e. from activation to suspension)"
+        name: "beacon-sync-trace-sessions" .}: int
+
+      beaconSyncTargetFile* {.
+        hidden
+        desc: "Load a file containg an rlp-encoded object " &
+              "\"(Header,Hash32)\" to be used as the first target before " &
+              "any other request from the CL is accepted"
+        name: "debug-beacon-sync-target-file" .}: Option[InputFile]
 
     of `import`:
       maxBlocks* {.

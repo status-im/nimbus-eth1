@@ -120,6 +120,11 @@ proc setupP2P(nimbus: NimbusNode, conf: NimbusConf,
   nimbus.beaconSyncRef = BeaconSyncRef.init(
     nimbus.ethNode, nimbus.fc, conf.maxPeers)
 
+  # Optional tracer
+  if conf.beaconSyncTraceFile.isSome():
+    nimbus.beaconSyncRef.tracerInit(
+      conf.beaconSyncTraceFile.unsafeGet.string, conf.beaconSyncTraceSessions)
+
   # Optional for pre-setting the sync target (i.e. debugging)
   if conf.beaconSyncTargetFile.isSome():
     nimbus.beaconSyncRef.targetInit conf.beaconSyncTargetFile.unsafeGet.string
