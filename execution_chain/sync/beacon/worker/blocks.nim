@@ -16,8 +16,10 @@ import
   pkg/stew/[interval_set, sorted_set],
   ../../../networking/p2p,
   ../worker_desc,
-  ./blocks_staged/[staged_blocks, staged_helpers],
-  ./blocks_unproc
+  ./blocks/[blocks_blocks, blocks_helpers, blocks_queue, blocks_unproc]
+
+export
+  blocks_queue, blocks_unproc
 
 # ------------------------------------------------------------------------------
 # Private function(s)
@@ -25,7 +27,7 @@ import
 
 proc blocksStagedProcessImpl(
     ctx: BeaconCtxRef;
-    maybePeer: Opt[Peer];
+    maybePeer: Opt[BeaconBuddyRef];
     info: static[string];
       ): Future[bool]
       {.async: (raises: []).} =
@@ -52,7 +54,7 @@ proc blocksStagedProcessImpl(
     # round: no unprocessed block number range precedes the least staged block.
     let minNum = qItem.data.blocks[0].header.number
     if ctx.subState.top + 1 < minNum:
-      trace info & ": block queue not ready yet", peer=($maybePeer),
+      trace info & ": block queue not ready yet", peer=maybePeer.toStr,
         topImported=ctx.subState.top.bnStr, qItem=qItem.data.blocks.bnStr,
         nStagedQ=ctx.blk.staged.len, nSyncPeers=ctx.pool.nBuddies
       switchPeer = true # there is a gap -- come back later
@@ -79,7 +81,7 @@ proc blocksStagedProcessImpl(
       nStagedQ=ctx.blk.staged.len, nSyncPeers=ctx.pool.nBuddies, switchPeer
 
   elif 0 < ctx.blk.staged.len and not switchPeer:
-    trace info & ": no blocks unqueued", peer=($maybePeer),
+    trace info & ": no blocks unqueued", peer=maybePeer.toStr,
       topImported=ctx.subState.top.bnStr, nStagedQ=ctx.blk.staged.len,
       nSyncPeers=ctx.pool.nBuddies
 
@@ -160,7 +162,7 @@ proc blocksCollect*(
       ctx.pool.seenData = true                       # blocks data exist
 
       # Import blocks (no staging)
-      await ctx.blocksImport(Opt.some(peer), blocks, buddy.peerID, info)
+      await ctx.blocksImport(Opt.some(buddy), blocks, buddy.peerID, info)
 
       # Import may be incomplete, so a partial roll back may be needed
       let lastBn = blocks[^1].header.number
@@ -234,13 +236,13 @@ template blocksUnstage*(
     ctx: BeaconCtxRef;
     info: static[string];
       ): auto =
-  ctx.blocksStagedProcessImpl(Opt.none(Peer), info)
+  ctx.blocksStagedProcessImpl(Opt.none(BeaconBuddyRef), info)
 
 template blocksUnstage*(
     buddy: BeaconBuddyRef;
     info: static[string];
       ): auto =
-  buddy.ctx.blocksStagedProcessImpl(Opt.some(buddy.peer), info)
+  buddy.ctx.blocksStagedProcessImpl(Opt.some(buddy), info)
 
 # --------------
 

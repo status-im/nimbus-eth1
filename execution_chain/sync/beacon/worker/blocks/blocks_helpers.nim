@@ -17,6 +17,11 @@ import
 # Public functions
 # ------------------------------------------------------------------------------
 
+func toStr*(w: Opt[BeaconBuddyRef]): string =
+  if w.isSome: $w.value.peer else: "n/a"
+
+# -------------
+
 func bdyErrors*(buddy: BeaconBuddyRef): string =
   $buddy.only.nRespErrors.blk & "/" & $buddy.nBlkProcErrors()
 

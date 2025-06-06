@@ -15,7 +15,7 @@ import
   pkg/[chronicles, chronos],
   pkg/eth/common,
   ../worker_desc,
-  ./blocks_unproc,
+  ./blocks/blocks_unproc,
   ./headers
 
 # ------------------------------------------------------------------------------

@@ -17,7 +17,7 @@ import
   pkg/stew/[interval_set, sorted_set],
   ../../common,
   ./worker/update/[metrics, ticker],
-  ./worker/[blocks_staged, headers, start_stop, update],
+  ./worker/[blocks, headers, start_stop, update],
   ./worker_desc
 
 # ------------------------------------------------------------------------------

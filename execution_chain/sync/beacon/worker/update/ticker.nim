@@ -19,9 +19,7 @@ when enableTicker:
   import
     std/strutils,
     pkg/[stint, stew/interval_set],
-    ../blocks_staged/staged_queue,
-    ../blocks_unproc,
-    ../headers
+    ".."/[blocks, headers]
 
 logScope:
   topics = "beacon ticker"

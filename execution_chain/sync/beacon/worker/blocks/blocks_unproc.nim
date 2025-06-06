@@ -14,7 +14,7 @@ import
   pkg/eth/common,
   pkg/results,
   pkg/stew/interval_set,
-  ../worker_desc
+  ../../worker_desc
 
 # ------------------------------------------------------------------------------
 # Public functions

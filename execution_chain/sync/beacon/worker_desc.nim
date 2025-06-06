@@ -31,6 +31,10 @@ type
 
   # -------------------
 
+  ImportBlockError* = tuple
+    info: string
+    cancelled: bool
+
   BnRangeSet* = IntervalSetRef[BlockNumber,uint64]
     ## Disjunct sets of block number intervals
 

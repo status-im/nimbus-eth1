@@ -17,8 +17,8 @@ import
   ../../../../networking/p2p,
   ../../../wire_protocol/types,
   ../../worker_desc,
-  ../[blocks_unproc, update],
-  ./[staged_fetch, staged_helpers]
+  ../update,
+  ./[blocks_fetch, blocks_helpers, blocks_import, blocks_unproc]
 
 # ------------------------------------------------------------------------------
 # Private helpers
@@ -160,7 +160,7 @@ proc blocksFetch*(
 
 proc blocksImport*(
     ctx: BeaconCtxRef;
-    maybePeer: Opt[Peer];
+    maybePeer: Opt[BeaconBuddyRef];
     blocks: seq[EthBlock];
     peerID: Hash;
     info: static[string];
@@ -172,7 +172,7 @@ proc blocksImport*(
   let iv = BnRange.new(blocks[0].header.number, blocks[^1].header.number)
   doAssert iv.len == blocks.len.uint64
 
-  trace info & ": Start importing blocks", peer=($maybePeer), iv,
+  trace info & ": Start importing blocks", peer=maybePeer.toStr, iv,
     nBlocks=iv.len, base=ctx.chain.baseNumber.bnStr,
     head=ctx.chain.latestNumber.bnStr
 
@@ -181,16 +181,8 @@ proc blocksImport*(
     for n in 0 ..< blocks.len:
       let nBn = blocks[n].header.number
 
-      if nBn <= ctx.chain.baseNumber:
-        trace info & ": Ignoring block less eq. base", n, iv, nBlocks=iv.len,
-          nthBn=nBn.bnStr, nthHash=ctx.getNthHash(blocks, n).short,
-          B=ctx.chain.baseNumber.bnStr, L=ctx.chain.latestNumber.bnStr
-
-        ctx.subState.top = nBn                     # well, not really imported
-        continue
-
-      try:
-        (await ctx.chain.queueImportBlock blocks[n]).isOkOr:
+      (await ctx.importBlock(maybePeer, blocks[n], peerID)).isOkOr:
+        if not error.cancelled:
           isError = true
 
           # Mark peer that produced that unusable headers list as a zombie
@@ -224,11 +216,9 @@ proc blocksImport*(
               head=ctx.chain.latestNumber.bnStr,
               blkFailCount=ctx.subState.procFailCount, `error`=error
 
-          break loop                               # stop
-        # isOk => next instruction
-      except CancelledError:
-        break loop                                 # shutdown?
+        break loop
 
+      # isOk => next instruction
       ctx.subState.top = nBn                       # Block imported OK
 
       # Allow pseudo/async thread switch.
