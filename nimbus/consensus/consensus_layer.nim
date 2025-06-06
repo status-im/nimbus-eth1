@@ -15,6 +15,7 @@ import
   ../conf,
   ../common/utils,
   ./wrapper_consensus,
+  beacon_chain/validators/keystore_management,
   beacon_chain/[beacon_node_status, nimbus_binary_common]
 
 logScope:
@@ -28,6 +29,10 @@ proc startBeaconNode(configs: seq[string]) {.raises: [CatchableError].} =
     "clientId", "copyrights", "nimBanner", "SPEC_VERSION", [], BeaconNodeConf
   ).valueOr:
     error "Error starting consensus", err = error
+    quit QuitFailure
+
+  # required for db
+  if not (checkAndCreateDataDir(string(config.dataDir))):
     quit QuitFailure
 
   setupLogging(config.logLevel, config.logStdout, config.logFile)

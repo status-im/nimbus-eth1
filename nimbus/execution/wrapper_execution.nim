@@ -7,7 +7,7 @@
 # This file may not be copied, modified, or distributed except according to
 # those terms.
 
-import ../execution_chain/compile_info
+import ../../execution_chain/compile_info
 
 import
   std/[os, osproc, strutils, net, options],
@@ -16,21 +16,26 @@ import
   metrics,
   metrics/chronicles_support,
   stew/byteutils,
-  ./rpc,
-  ./version,
-  ./constants,
-  ./nimbus_desc,
-  ./nimbus_import,
-  ./core/block_import,
-  ./core/lazy_kzg,
-  ./core/chain/forked_chain/chain_serialize,
-  ./db/core_db/persistent,
-  ./db/storage_types,
-  ./sync/wire_protocol,
-  ./common/chain_config_hash,
-  ./portal/portal
+  ../../execution_chain/rpc,
+  ../../execution_chain/version,
+  ../../execution_chain/constants,
+  ../../execution_chain/nimbus_desc,
+  ../../execution_chain/nimbus_import,
+  ../../execution_chain/core/block_import,
+  ../../execution_chain/core/lazy_kzg,
+  ../../execution_chain/core/chain/forked_chain/chain_serialize,
+  ../../execution_chain/db/core_db/persistent,
+  ../../execution_chain/db/storage_types,
+  ../../execution_chain/sync/wire_protocol,
+  ../../execution_chain/common/chain_config_hash,
+  ../../execution_chain/portal/portal
 
 from beacon_chain/nimbus_binary_common import setupFileLimits
+
+# This module is a copy from nimbus_execution_client module where 'run' procedure
+#   visibility is changed to public.
+# This file should be removed when 'run' is made public or we create a public
+#   entry point on nimbus_execution_client module.
 
 ## TODO:
 ## * No IPv6 support
@@ -194,7 +199,7 @@ proc preventLoadingDataDirForTheWrongNetwork(db: CoreDbRef, conf: NimbusConf) =
       get = dataDirIdBytes.toHex, expected = calculatedId
     quit(QuitFailure)
 
-proc run(nimbus: NimbusNode, conf: NimbusConf) =
+proc run*(nimbus: NimbusNode, conf: NimbusConf) =
   info "Launching execution client", version = FullVersionStr, conf
 
   # Trusted setup is needed for processing Cancun+ blocks
