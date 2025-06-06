@@ -138,7 +138,7 @@ proc calcExcessBlobGas*(com: CommonRef, parent: Header, fork: EVMFork): uint64 =
 
   # https://eips.ethereum.org/EIPS/eip-7918
   if fork >= FkOsaka and (BLOB_BASE_COST * blobGasUsed).u256 > getBlobBaseFee(excessBlobGas, com, com.toEVMFork(parent)):
-    return excessBlobGas + blobGasUsed * (maxBlobsPerBlock - targetBlobsPerBlock) div targetBlobsPerBlock
+    return excessBlobGas + blobGasUsed * (maxBlobsPerBlock - targetBlobsPerBlock) div maxBlobsPerBlock
   
   return excessBlobGas + blobGasUsed - targetBlobGasPerBlock
 
