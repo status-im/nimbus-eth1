@@ -26,6 +26,7 @@ import
   ../chain/forked_chain,
   ../pow/header,
   ../eip4844,
+  ../eip7594,
   ../validate,
   ../pooled_txs,
   ./tx_tabs,
@@ -242,6 +243,24 @@ proc classifyValid(xp: TxPoolRef; tx: Transaction, sender: Address): bool =
     value = tx.value
   true
 
+proc validateBlobTransactionWrapper(tx: PooledTransaction, fork: EVMFork):
+                                     Result[void, string] {.raises: [].} =
+  if tx.blobsBundle.isNil:
+    return err("tx wrapper is none")
+
+  case tx.blobsBundle.wrapperVersion
+  of WrapperVersionEIP4844:
+    if fork >= FkOsaka:
+      return err("Blobsbundle version 0 expect fork before Osaka")
+    validateBlobTransactionWrapper4844(tx)
+  of WrapperVersionEIP7594:
+    # Allow this kind of Blob when Prague still active.
+    # Because after transitioned to Osaka or later,
+    # it can be included in the next fork
+    if fork < FkPrague:
+      return err("Blobsbundle version 1 expect Prague or later")
+    validateBlobTransactionWrapper7594(tx)
+
 # ------------------------------------------------------------------------------
 # Public functions, constructor
 # ------------------------------------------------------------------------------
@@ -331,7 +350,7 @@ proc addTx*(xp: TxPoolRef, ptx: PooledTransaction): Result[void, TxError] =
     if size > BLOB_TX_MAX_SIZE:
       return err(txErrorOversized)
 
-    ptx.validateBlobTransactionWrapper().isOkOr:
+    ptx.validateBlobTransactionWrapper(xp.nextFork).isOkOr:
       debug "Invalid transaction: Blob transaction wrapper validation failed",
         tx = ptx.tx,
         error = error
@@ -409,17 +428,37 @@ proc addTx*(xp: TxPoolRef, tx: Transaction): Result[void, TxError] =
 
 iterator byPriceAndNonce*(xp: TxPoolRef): TxItemRef =
   for item in byPriceAndNonce(xp.senderTab, xp.idTab,
-      xp.blobTab, xp.vmState.ledger, xp.baseFee):
+      xp.blobTab, xp.vmState.ledger, xp.baseFee, xp.nextFork):
     yield item
 
 func getBlobAndProofV1*(xp: TxPoolRef, v: VersionedHash): Opt[BlobAndProofV1] =
   xp.blobTab.withValue(v, val):
     let np = val.item.pooledTx.blobsBundle
-    return Opt.some(BlobAndProofV1(
-      blob: np.blobs[val.blobIndex],
-      proof: np.proofs[val.blobIndex]))
+    if np.wrapperVersion == WrapperVersionEIP4844:
+      return Opt.some(BlobAndProofV1(
+        blob: np.blobs[val.blobIndex],
+        proof: np.proofs[val.blobIndex]))
 
   Opt.none(BlobAndProofV1)
+
+func getBlobAndProofV2*(xp: TxPoolRef, v: VersionedHash): Opt[BlobAndProofV2] =
+  func getProofs(list: openArray[KzgProof], index: int): array[CELLS_PER_EXT_BLOB, KzgProof] =
+    let
+      startIndex = index * CELLS_PER_EXT_BLOB
+      endIndex   = startIndex + CELLS_PER_EXT_BLOB
+    doAssert(list.len >= endIndex)
+
+    for i in 0..<CELLS_PER_EXT_BLOB:
+      result[i] = list[startIndex + i]
+
+  xp.blobTab.withValue(v, val):
+    let np = val.item.pooledTx.blobsBundle
+    if np.wrapperVersion == WrapperVersionEIP7594:
+      return Opt.some(BlobAndProofV2(
+        blob: np.blobs[val.blobIndex],
+        proofs: getProofs(np.proofs, val.blobIndex)))
+
+  Opt.none(BlobAndProofV2)
 
 # ------------------------------------------------------------------------------
 # PoS payload attributes getters

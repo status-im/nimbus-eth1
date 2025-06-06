@@ -11,20 +11,48 @@
 
 import
   eth/common/transactions,
+  web3/engine_api_types,
   web3/primitives
 
 export
   transactions,
-  primitives
+  primitives,
+  BlobsBundleV1,
+  BlobsBundleV2,
+  CELLS_PER_EXT_BLOB
 
 type
   KzgBlob* = primitives.Blob
 
+  WrapperVersion* = enum
+    WrapperVersionEIP4844  # 0
+    WrapperVersionEIP7594  # 1
+
   BlobsBundle* = ref object
+    wrapperVersion*: WrapperVersion
+    blobs*: seq[KzgBlob]
     commitments*: seq[KzgCommitment]
     proofs*: seq[KzgProof]
-    blobs*: seq[KzgBlob]
+      # The 'proofs' field is shared between
+      # EIP-4844's 'proofs' and EIP-7594's
+      # cell_proofs
 
   PooledTransaction* = object
     tx*: Transaction
     blobsBundle*: BlobsBundle       # EIP-4844
+
+func V1*(bundle: BlobsBundle): BlobsBundleV1 =
+  doAssert(bundle.wrapperVersion == WrapperVersionEIP4844)
+  BlobsBundleV1(
+    commitments: bundle.commitments,
+    proofs: bundle.proofs,
+    blobs: bundle.blobs
+  )
+
+func V2*(bundle: BlobsBundle): BlobsBundleV2 =
+  doAssert(bundle.wrapperVersion == WrapperVersionEIP7594)
+  BlobsBundleV2(
+    commitments: bundle.commitments,
+    proofs: bundle.proofs,
+    blobs: bundle.blobs
+  )

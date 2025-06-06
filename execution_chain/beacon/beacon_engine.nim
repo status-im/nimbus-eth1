@@ -17,18 +17,20 @@ import
   ./payload_conv,
   ./api_handler/api_utils,
   ../core/tx_pool,
+  ../core/pooled_txs,
   ../core/chain/forked_chain,
   ../core/chain/forked_chain/block_quarantine
 
 export
   forked_chain,
-  block_quarantine
+  block_quarantine,
+  pooled_txs
 
 type
   ExecutionBundle* = object
     payload*: ExecutionPayload
     blockValue*: UInt256
-    blobsBundle*: Opt[BlobsBundleV1]
+    blobsBundle*: BlobsBundle
     executionRequests*: Opt[seq[seq[byte]]]
 
   BeaconEngineRef* = ref object
@@ -172,17 +174,9 @@ proc generateExecutionBundle*(ben: BeaconEngineRef,
     if bundle.blk.header.extraData.len > 32:
       return err "extraData length should not exceed 32 bytes"
 
-    var blobsBundle: Opt[BlobsBundleV1]
-    if bundle.blobsBundle.isSome:
-      template blobData: untyped = bundle.blobsBundle.get
-      blobsBundle = Opt.some BlobsBundleV1(
-        commitments: blobData.commitments,
-        proofs: blobData.proofs,
-        blobs: blobData.blobs)
-
     ok ExecutionBundle(
       payload: executionPayload(bundle.blk),
-      blobsBundle: blobsBundle,
+      blobsBundle: bundle.blobsBundle,
       blockValue: bundle.blockValue,
       executionRequests: bundle.executionRequests)
 
@@ -259,3 +253,7 @@ proc delayPayloadImport*(ben: BeaconEngineRef, blockHash: Hash32, blk: Block): P
     # at a later time.
     ben.chain.quarantine.addOrphan(blockHash, blk)
     return PayloadStatusV1(status: PayloadExecutionStatus.syncing)
+
+func latestFork*(ben: BeaconEngineRef): HardFork =
+  let timestamp = max(ben.txPool.timestamp, ben.chain.latestHeader.timestamp)
+  ben.com.toHardFork(timestamp)

@@ -271,7 +271,7 @@ func modExp(c: Computation, fork: EVMFork = FkByzantium): EvmResultVoid =
     expLen  = expL.safeInt
     modLen  = modL.safeInt
 
-  if fork == FkOsaka:
+  if fork >= FkOsaka:
     # EIP-7823
     if baseLen > 1024 or expLen > 1024 or modLen > 1024:
       return err(prcErr(PrcInvalidParam))

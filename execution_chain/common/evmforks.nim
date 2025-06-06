@@ -24,7 +24,12 @@ type
     FkShanghai       
     FkCancun         
     FkPrague         
-    FkOsaka          
+    FkOsaka
+    FkBpo1
+    FkBpo2
+    FkBpo3
+    FkBpo4
+    FkBpo5       
     
 const
   FkLatest* = EVMFork.high

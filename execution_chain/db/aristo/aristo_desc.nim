@@ -122,9 +122,6 @@ type
       ## Mixed account/storage path to payload cache - same as above but caches
       ## the full lookup of storage slots
 
-    # Debugging data below, might go away in future
-    xMap*: Table[HashKey,RootedVertexID] ## For pretty printing/debugging
-
     staticLevel*: int
       ## MPT level where "most" leaves can be found, for static vid lookups
     lookups*: tuple[lower, hits, higher: int]
