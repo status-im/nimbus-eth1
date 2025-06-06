@@ -15,7 +15,8 @@ import
   pkg/[chronicles, chronos],
   pkg/eth/common,
   ../worker_desc,
-  ./[blocks_unproc, headers_unproc]
+  ./blocks_unproc,
+  ./headers
 
 # ------------------------------------------------------------------------------
 # Private functions, state handler helpers

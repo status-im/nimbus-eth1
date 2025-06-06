@@ -15,8 +15,10 @@ import
   pkg/eth/common,
   pkg/stew/[interval_set, sorted_set],
   ../worker_desc,
-  ./headers_staged/[staged_headers, staged_helpers],
-  ./headers_unproc
+  ./headers/[headers_headers, headers_helpers, headers_queue, headers_unproc]
+
+export
+  headers_queue, headers_unproc
 
 # ------------------------------------------------------------------------------
 # Public functions

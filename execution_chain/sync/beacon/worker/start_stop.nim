@@ -16,8 +16,8 @@ import
   ../../wire_protocol,
   ../worker_desc,
   ./blocks_staged/staged_queue,
-  ./headers_staged/staged_queue,
-  ./[blocks_unproc, headers_unproc, update]
+  ./[blocks_unproc, update],
+  ./headers
 
 type
   SyncStateData = tuple
@@ -32,7 +32,7 @@ proc querySyncProgress(ctx: BeaconCtxRef): SyncStateData =
   if blocks <= ctx.pool.lastState:
     return (ctx.hdrCache.antecedent.number, ctx.subState.top, ctx.subState.head)
 
-  if headers <= ctx.pool.lastState:
+  if SyncState.headers <= ctx.pool.lastState:
     let b = ctx.chain.baseNumber
     return (b, b, ctx.subState.head)
 

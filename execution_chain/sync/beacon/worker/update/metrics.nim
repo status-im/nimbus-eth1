@@ -15,8 +15,8 @@ import
   ../../../../networking/p2p,
   ../../worker_desc,
   ../blocks_staged/staged_queue,
-  ../headers_staged/staged_queue,
-  ".."/[blocks_unproc, headers_unproc]
+  ../blocks_unproc,
+  ../headers
 
 declareGauge nec_base, "" &
   "Max block number of imported finalised blocks"

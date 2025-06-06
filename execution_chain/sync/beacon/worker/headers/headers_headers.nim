@@ -16,8 +16,7 @@ import
   pkg/stew/interval_set,
   ../../../../networking/p2p,
   ../../worker_desc,
-  ../headers_unproc,
-  ./[staged_fetch, staged_helpers]
+  ./[headers_fetch, headers_helpers, headers_unproc]
 
 # ------------------------------------------------------------------------------
 # Public helper functions

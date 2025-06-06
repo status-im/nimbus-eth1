@@ -16,7 +16,7 @@ import
   pkg/stew/interval_set,
   ../../../wire_protocol,
   ../../worker_desc,
-  ./staged_helpers
+  ./headers_helpers
 
 # ------------------------------------------------------------------------------
 # Public functions
