@@ -8,13 +8,13 @@
 import
   std/[concurrency/atomics, os],
   chronicles,
-  consensus/consensus_layer,
   execution/execution_layer,
+  consensus/consensus_layer,
   common/utils,
   conf,
   confutils/[cli_parser, toml/defs],
-  ../execution_chain/config,
-  beacon_chain/conf
+  beacon_chain/conf,
+  ../execution_chain/config
 
 # ------------------------------------------------------------------------------
 # Private
