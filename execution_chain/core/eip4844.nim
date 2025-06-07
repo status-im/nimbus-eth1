@@ -81,18 +81,6 @@ proc pointEvaluation*(input: openArray[byte]): Result[void, string] =
 
   ok()
 
-# calcExcessBlobGas implements calc_excess_data_gas from EIP-4844
-proc calcExcessBlobGas*(com: CommonRef, parent: Header, fork: EVMFork): uint64 =
-  let
-    excessBlobGas = parent.excessBlobGas.get(0'u64)
-    blobGasUsed = parent.blobGasUsed.get(0'u64)
-    targetBlobGasPerBlock = com.getTargetBlobsPerBlock(fork) * GAS_PER_BLOB
-
-  if excessBlobGas + blobGasUsed < targetBlobGasPerBlock:
-    0'u64
-  else:
-    excessBlobGas + blobGasUsed - targetBlobGasPerBlock
-
 # fakeExponential approximates factor * e ** (num / denom) using a taylor expansion
 # as described in the EIP-4844 spec.
 func fakeExponential*(factor, numerator, denominator: UInt256): UInt256 =
@@ -135,6 +123,33 @@ proc calcDataFee*(versionedHashesLen: int,
 func blobGasUsed(txs: openArray[Transaction]): uint64 =
   for tx in txs:
     result += tx.getTotalBlobGas
+
+# calcExcessBlobGas implements calc_excess_data_gas from EIP-4844
+proc calcExcessBlobGas*(com: CommonRef, parent: Header, fork: EVMFork): uint64 =
+  let
+    parentExcessBlobGas = parent.excessBlobGas.get(0'u64)
+    parentBlobGasUsed   = parent.blobGasUsed.get(0'u64)
+    excessBlobGas       = parentExcessBlobGas + parentBlobGasUsed
+    target              = com.getTargetBlobsPerBlock(fork)
+    maxBlobs            = com.getMaxBlobGasPerBlock(fork)
+    targetGas           = GAS_PER_BLOB * target
+
+  if excessBlobGas < targetGas:
+    return 0'u64
+
+  if fork < FkOsaka:
+    return excessBlobGas - targetGas
+
+  # https://eips.ethereum.org/EIPS/eip-7918
+  let
+    reservePrice = parent.baseFeePerGas.get(0.u256) * BLOB_BASE_COST.u256
+    blobPrice    = GAS_PER_BLOB.u256 * getBlobBaseFee(parentExcessBlobGas, com, fork)
+
+  if reservePrice > blobPrice:
+    let scaledExcess = parentBlobGasUsed * (maxBlobs - target) div maxBlobs
+    return parentExcessBlobGas + scaledExcess
+
+  return excessBlobGas - targetGas
 
 # https://eips.ethereum.org/EIPS/eip-4844
 func validateEip4844Header*(
