@@ -273,7 +273,7 @@ proc readValue(reader: var JsonReader[JGenesis], value: var GenesisAlloc)
       value[Address.fromHex(key)] = reader.readValue(GenesisAccount)
 
 const
-  BlobScheduleTable: array[Cancun..HardFork.high, string] = [
+  BlobScheduleTable*: array[Cancun..HardFork.high, string] = [
     "cancun",
     "prague",
     "osaka",
@@ -284,7 +284,7 @@ const
     "bpo5"
   ]
 
-func ofStmt(fork: HardFork, keyName: string, reader: NimNode, value: NimNode): NimNode =
+func ofStmt*(fork: HardFork, keyName: string, reader: NimNode, value: NimNode): NimNode =
   let branchStmt = quote do:
     `value`[`fork`] = reader.readValue(Opt[BlobSchedule])
 
@@ -293,7 +293,7 @@ func ofStmt(fork: HardFork, keyName: string, reader: NimNode, value: NimNode): N
     branchStmt
   )
 
-macro blobScheduleParser(reader, key, value: typed): untyped =
+macro blobScheduleParser*(reader, key, value: typed): untyped =
   # Automated blob schedule parser generator
   var caseStmt = nnkCaseStmt.newTree(
     quote do: `key`
@@ -308,7 +308,7 @@ macro blobScheduleParser(reader, key, value: typed): untyped =
   )
   result = caseStmt
 
-proc readValue(reader: var JsonReader[JGenesis], value: var array[Cancun..HardFork.high, Opt[BlobSchedule]])
+proc readValue*(reader: var JsonReader[JGenesis], value: var array[Cancun..HardFork.high, Opt[BlobSchedule]])
     {.gcsafe, raises: [SerializationError, IOError].} =
   wrapError:
     for key in reader.readObjectFields:

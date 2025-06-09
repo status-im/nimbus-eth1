@@ -153,7 +153,6 @@ proc parseCmdArg(T: type NetworkParams, p: string): T
 func completeCmdArg(T: type NetworkParams, val: string): seq[string] =
   return @[]
 
-
 proc getNetworkId(conf: NRpcConf): Opt[NetworkId] =
   if conf.network.len == 0:
     return Opt.none NetworkId
