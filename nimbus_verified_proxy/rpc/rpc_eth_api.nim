@@ -78,6 +78,12 @@ proc installEthApiHandlers*(vp: VerifiedRpcProxy) =
     (await vp.getBlock(blockHash, fullTransactions)).valueOr:
       raise newException(ValueError, error)
 
+  vp.proxy.rpc("eth_getBlockByNumber") do(
+    blockTag: BlockTag, fullTransactions: bool
+  ) -> BlockObject:
+    (await vp.getBlock(blockTag, fullTransactions)).valueOr:
+      raise newException(ValueError, error)
+
   vp.proxy.rpc("eth_getUncleCountByBlockNumber") do(blockTag: BlockTag) -> Quantity:
     let blk = (await vp.getBlock(blockTag, false)).valueOr:
       raise newException(ValueError, error)
