@@ -21,7 +21,7 @@ func headerGenerator(number: int): ForkedLightClientHeader =
     capellaData: capella.LightClientHeader(
       beacon: default(capella.BeaconBlockHeader),
       execution: capella.ExecutionPayloadHeader(
-        block_number: uint64(number), block_hash: Hash32(toBytesBE(u256(number)))
+        block_number: uint64(number), block_hash: toBytesBE(u256(number)).asEth2Digest
       ),
       execution_branch: default(capella.ExecutionBranch),
     ),
