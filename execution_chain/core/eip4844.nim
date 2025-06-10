@@ -127,29 +127,19 @@ func blobGasUsed(txs: openArray[Transaction]): uint64 =
 # calcExcessBlobGas implements calc_excess_data_gas from EIP-4844
 proc calcExcessBlobGas*(com: CommonRef, parent: Header, fork: EVMFork): uint64 =
   let
-    parentExcessBlobGas = parent.excessBlobGas.get(0'u64)
-    parentBlobGasUsed   = parent.blobGasUsed.get(0'u64)
-    excessBlobGas       = parentExcessBlobGas + parentBlobGasUsed
-    target              = com.getTargetBlobsPerBlock(fork)
-    maxBlobs            = com.getMaxBlobGasPerBlock(fork)
-    targetGas           = GAS_PER_BLOB * target
-
-  if excessBlobGas < targetGas:
+    excessBlobGas = parent.excessBlobGas.get(0'u64)
+    blobGasUsed = parent.blobGasUsed.get(0'u64)
+    targetBlobsPerBlock = com.getTargetBlobsPerBlock(fork)
+    maxBlobsPerBlock = com.getMaxBlobsPerBlock(fork)
+    targetBlobGasPerBlock = targetBlobsPerBlock * GAS_PER_BLOB
+  if excessBlobGas + blobGasUsed < targetBlobGasPerBlock:
     return 0'u64
 
-  if fork < FkOsaka:
-    return excessBlobGas - targetGas
-
   # https://eips.ethereum.org/EIPS/eip-7918
-  let
-    reservePrice = parent.baseFeePerGas.get(0.u256) * BLOB_BASE_COST.u256
-    blobPrice    = GAS_PER_BLOB.u256 * getBlobBaseFee(parentExcessBlobGas, com, fork)
+  if fork >= FkOsaka and (BLOB_BASE_COST.u256 * parent.baseFeePerGas.get(0.u256)) > GAS_PER_BLOB.u256 * getBlobBaseFee(excessBlobGas, com, fork):
+    return excessBlobGas + blobGasUsed * (maxBlobsPerBlock - targetBlobsPerBlock) div maxBlobsPerBlock
 
-  if reservePrice > blobPrice:
-    let scaledExcess = parentBlobGasUsed * (maxBlobs - target) div maxBlobs
-    return parentExcessBlobGas + scaledExcess
-
-  return excessBlobGas - targetGas
+  return excessBlobGas + blobGasUsed - targetBlobGasPerBlock
 
 # https://eips.ethereum.org/EIPS/eip-4844
 func validateEip4844Header*(
