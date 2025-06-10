@@ -204,21 +204,23 @@ proc newBlockThunk[PROTO](peer: Peer; data: Rlp) {.
     await newBlockUserHandler(peer, packet)
 
 
-proc newPooledTransactionHashesUserHandler(peer: Peer; packet: NewPooledTransactionHashesPacket) {.
+proc newPooledTransactionHashesUserHandler(peer: Peer;
+      wire: EthWireRef;
+      packet: NewPooledTransactionHashesPacket) {.
     async: (raises: [CancelledError, EthP2PError]).} =
 
   when trEthTraceGossipOk:
     trace trEthRecvReceived & "NewPooledTransactionHashes (0x08)", peer,
           txTypes = packet.txTypes.toHex, txSizes = packet.txSizes.toStr,
           hashes = packet.txHashes.len
-  let ctx = peer.networkState(eth68)
-  await ctx.handleTxHashesBroadcast(packet, peer)
+  await wire.handleTxHashesBroadcast(packet, peer)
 
 proc newPooledTransactionHashesThunk[PROTO](peer: Peer; data: Rlp) {.
     async: (raises: [CancelledError, EthP2PError]).} =
   PROTO.rlpxWithPacketHandler(NewPooledTransactionHashesPacket,
                               peer, data, [txTypes, txSizes, txHashes]):
-    await newPooledTransactionHashesUserHandler(peer, packet)
+    let wire = peer.networkState(PROTO)
+    await newPooledTransactionHashesUserHandler(peer, wire, packet)
 
 
 proc getPooledTransactionsUserHandler[PROTO](response: Responder;
@@ -300,9 +302,9 @@ proc blockRangeUpdateUserHandler(peer: Peer; packet: BlockRangeUpdatePacket) {.
   peer.state(eth69).latest = packet.latest
   peer.state(eth69).latestHash = packet.latestHash
 
-proc blockRangeUpdateThunk(peer: Peer; data: Rlp) {.
+proc blockRangeUpdateThunk[PROTO](peer: Peer; data: Rlp) {.
     async: (raises: [CancelledError, EthP2PError]).} =
-  eth68.rlpxWithPacketHandler(BlockRangeUpdatePacket,
+  PROTO.rlpxWithPacketHandler(BlockRangeUpdatePacket,
                               peer, data, [earliest, latest, latestHash]):
     await blockRangeUpdateUserHandler(peer, packet)
 
@@ -447,7 +449,7 @@ proc eth69Registration() =
               status69Thunk, Status69Packet)
   registerCommonThunk(protocol, eth69)
   registerMsg(protocol, BlockRangeUpdateMsg, "blockRangeUpdate",
-              blockRangeUpdateThunk, BlockRangeUpdatePacket)
+              blockRangeUpdateThunk[eth69], BlockRangeUpdatePacket)
   registerProtocol(protocol)
 
 eth68Registration()
