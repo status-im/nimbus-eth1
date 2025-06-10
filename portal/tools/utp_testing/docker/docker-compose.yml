@@ -26,6 +26,13 @@ services:
         ipv4_address: 193.167.100.2
         ipv6_address: fd00:cafe:cafe:100::2
 
+    healthcheck:
+      test: pgrep drop-rate
+      interval: 1m30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+
   server:
     # TODO add building of docker images based on variable
     # build: ./$SERVER
@@ -40,7 +47,8 @@ services:
       - ROLE=server
       - CLIENT_PARAMS=--udp-listen-address=193.167.100.100 --rpc-listen-address=0.0.0.0 --udp-port=9041 --rpc-port=9041
     depends_on:
-      - sim
+      sim:
+        condition: service_healthy
     cap_add:
       - NET_ADMIN
     ports:
@@ -68,7 +76,8 @@ services:
       - ROLE=client
       - CLIENT_PARAMS=--udp-listen-address=193.167.0.100 --rpc-listen-address=0.0.0.0 --udp-port=9042 --rpc-port=9042
     depends_on:
-      - sim
+      sim:
+        condition: service_healthy
     cap_add:
       - NET_ADMIN
     ports:

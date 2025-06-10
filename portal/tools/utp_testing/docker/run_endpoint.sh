@@ -6,4 +6,4 @@ set -e
 
 echo "Client params: $CLIENT_PARAMS"
 
-./bin/utp_test_app $CLIENT_PARAMS
+./bin/utp_test_app $CLIENT_PARAMS 2>&1 | tee /logs/service.log
