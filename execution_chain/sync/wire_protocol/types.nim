@@ -12,12 +12,58 @@
 
 import
   eth/common,
-  ../../core/[chain, tx_pool]
+  ../../core/[chain, tx_pool, pooled_txs],
+  ../../networking/p2p_types
 
 type
+  Status68Packet* = object
+    version*: uint64
+    networkId*: NetworkId
+    totalDifficulty*: DifficultyInt
+    bestHash*: Hash32
+    genesisHash*: Hash32
+    forkId*: ChainForkId
+
+  # https://github.com/ethereum/devp2p/blob/b0c213de97978053a0f62c3ea4d23c0a3d8784bc/caps/eth.md#status-0x00
+  Status69Packet* = object
+    version*: uint64
+    networkId*: NetworkId
+    genesisHash*: Hash32
+    forkId*: ChainForkId
+    earliest*: uint64 # earliest available full block
+    latest*: uint64 # latest available full block
+    latestHash*: Hash32 # hash of latest available full block
+
+  BlockHeadersPacket* = object
+    headers*: seq[Header]
+
+  BlockBodiesPacket* = object
+    bodies*: seq[BlockBody]
+
+  PooledTransactionsPacket* = object
+    transactions*: seq[PooledTransaction]
+
+  ReceiptsPacket* = object
+    receipts*: seq[seq[Receipt]]
+
+  NewBlockHashesPacket* = object
+    hashes*: seq[NewBlockHashesAnnounce]
+
+  NewBlockPacket* = object
+    blk*: EthBlock
+    totalDifficulty*: DifficultyInt
+
+  TransactionsPacket* = ref object
+    transactions*: seq[Transaction]
+
+  NewPooledTransactionHashesPacket* = ref object
+    txTypes*: seq[byte]
+    txSizes*: seq[uint64]
+    txHashes*: seq[Hash32]
+
   NewBlockHashesAnnounce* = object
     hash*: Hash32
-    number*: BlockNumber
+    number*: base.BlockNumber
 
   ChainForkId* = object
     forkHash*: array[4, byte] # The RLP encoding must be exactly 4 bytes.
@@ -49,14 +95,22 @@ type
     maxResults*, skip*: uint
     reverse*: bool
 
-  BlockBodiesRequest* =object
+  BlockBodiesRequest* = object
     blockHashes*: seq[Hash32]
 
-  PooledTransactionsRequest* =object
+  PooledTransactionsRequest* = object
     txHashes*: seq[Hash32]
 
-  ReceiptsRequest* =object
+  ReceiptsRequest* = object
     blockHashes*: seq[Hash32]
+
+  StoredReceiptsPacket* = object
+    receipts*: seq[seq[StoredReceipt]]
+
+  BlockRangeUpdatePacket* = object
+    earliest*: uint64
+    latest*: uint64
+    latestHash*: Hash32
 
   EthWireRef* = ref object of RootRef
     chain* : ForkedChainRef
