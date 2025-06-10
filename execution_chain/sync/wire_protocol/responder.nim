@@ -11,6 +11,8 @@ import
   stint,
   chronicles,
   stew/byteutils,
+  eth/common/transactions_rlp,
+  ./types,
   ./handler,
   ./requester,
   ./trace_config,
