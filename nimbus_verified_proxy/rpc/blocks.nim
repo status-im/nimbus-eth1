@@ -13,8 +13,8 @@ import
   chronicles,
   web3/[eth_api_types, eth_api],
   json_rpc/[rpcproxy, rpcserver, rpcclient],
-  eth/common/addresses,
   eth/common/eth_types_rlp,
+  eth/rlp,
   eth/trie/[ordered_trie, trie_defs],
   ../../execution_chain/beacon/web3_eth_conv,
   ../types,
@@ -99,7 +99,12 @@ proc walkBlocks(
           number = blk.number,
           remaining = distinctBase(blk.number) - targetNum
 
-        convHeader(blk)
+        let header = convHeader(blk)
+
+        if header.computeBlockHash != nextHash:
+          return err("Encountered an invalid block header while walking the chain")
+
+        header
 
     if nextHeader.parentHash == targetHash:
       return ok()
@@ -112,18 +117,19 @@ proc verifyHeader(
     vp: VerifiedRpcProxy, header: Header, hash: Hash32
 ): Future[Result[void, string]] {.async.} =
   # verify calculated hash with the requested hash
-  if header.rlpHash != hash:
+  if header.computeBlockHash != hash:
     return err("hashed block header doesn't match with blk.hash(downloaded)")
 
-  let latestHeader = vp.headerStore.latest.valueOr:
-    return err("syncing")
+  if not vp.headerStore.contains(hash):
+    let latestHeader = vp.headerStore.latest.valueOr:
+      return err("Couldn't get the latest header, syncing in progress")
 
-  # walk blocks backwards(time) from source to target
-  ?(
-    await vp.walkBlocks(
-      latestHeader.number, header.number, latestHeader.parentHash, hash
+    # walk blocks backwards(time) from source to target
+    ?(
+      await vp.walkBlocks(
+        latestHeader.number, header.number, latestHeader.parentHash, hash
+      )
     )
-  )
 
   ok()
 
@@ -139,9 +145,12 @@ proc verifyBlock(
     ?verifyTransactions(header.transactionsRoot, blk.transactions)
 
   # verify withdrawals
-  if blk.withdrawals.isSome():
-    if blk.withdrawalsRoot.get() != orderedTrieRoot(blk.withdrawals.get()):
-      return err("withdrawals within the block do not yield the same withdrawals root")
+  if blk.withdrawalsRoot.isSome():
+    if blk.withdrawalsRoot.get() != orderedTrieRoot(blk.withdrawals.get(@[])):
+      return err("Withdrawals within the block do not yield the same withdrawals root")
+  else:
+    if blk.withdrawals.isSome():
+      return err("Block contains withdrawals but no withdrawalsRoot")
 
   ok()
 
