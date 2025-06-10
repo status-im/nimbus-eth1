@@ -12,8 +12,7 @@ import
   stint/endians2,
   eth/common/headers_rlp,
   ../header_store,
-  beacon_chain/spec/forks,
-  beacon_chain/spec/helpers
+  beacon_chain/spec/[forks, digest, helpers]
 
 func headerGenerator(number: int): ForkedLightClientHeader =
   ForkedLightClientHeader(
@@ -21,7 +20,7 @@ func headerGenerator(number: int): ForkedLightClientHeader =
     capellaData: capella.LightClientHeader(
       beacon: default(capella.BeaconBlockHeader),
       execution: capella.ExecutionPayloadHeader(
-        block_number: uint64(number), block_hash: toBytesBE(u256(number)).asEth2Digest
+        block_number: uint64(number), block_hash: Eth2Digest(data: toBytesBE(u256(number)))
       ),
       execution_branch: default(capella.ExecutionBranch),
     ),
