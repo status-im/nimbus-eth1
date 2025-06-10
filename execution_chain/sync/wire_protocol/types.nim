@@ -11,7 +11,10 @@
 {.push raises: [].}
 
 import
+  std/[sets, tables, times],
   eth/common,
+  chronos,
+  chronos/ratelimit,
   ../../core/[chain, tx_pool, pooled_txs],
   ../../networking/p2p_types
 
@@ -112,6 +115,18 @@ type
     latest*: uint64
     latestHash*: Hash32
 
+  SeenObject* = ref object
+    lastSeen*: Time
+    peers*: HashSet[NodeId]
+
+  ActionHandler* = proc(): Future[void] {.async: (raises: [CancelledError]).}
+
   EthWireRef* = ref object of RootRef
     chain* : ForkedChainRef
     txPool*: TxPoolRef
+    node*  : EthereumNode
+    quota* : TokenBucket
+    seenTransactions*: Table[Hash32, SeenObject]
+    tickerHeartbeat*: Future[void].Raising([CancelledError])
+    actionHeartbeat*: Future[void].Raising([CancelledError])
+    actionQueue*: AsyncQueue[ActionHandler]

@@ -1,0 +1,262 @@
+# nimbus-execution-client
+# Copyright (c) 2025 Status Research & Development GmbH
+# Licensed under either of
+#  * Apache License, version 2.0, ([LICENSE-APACHE](LICENSE-APACHE))
+#  * MIT license ([LICENSE-MIT](LICENSE-MIT))
+# at your option.
+# This file may not be copied, modified, or distributed except according to
+# those terms.
+
+import
+  std/[tables, sets, times, sequtils, random],
+  chronos,
+  chronos/ratelimit,
+  chronicles,
+  eth/common/hashes,
+  eth/common/times,
+  results,
+  ./types,
+  ./requester,
+  ../../networking/p2p,
+  ../../core/tx_pool,
+  ../../core/pooled_txs,
+  ../../core/eip4844,
+  ../../core/eip7594,
+  ../../core/chain/forked_chain
+
+logScope:
+  topics = "tx-broadcast"
+
+const
+  maxOperationQuota = 1000000
+  fullReplenishTime = chronos.seconds(5)
+  POOLED_STORAGE_TIME_LIMIT = initDuration(minutes = 20)
+  cleanupTicker = chronos.minutes(5)
+  # https://github.com/ethereum/devp2p/blob/b0c213de97978053a0f62c3ea4d23c0a3d8784bc/caps/eth.md#blockrangeupdate-0x11
+  blockRangeUpdateTicker = chronos.minutes(2)
+  SOFT_RESPONSE_LIMIT* = 2 * 1024 * 1024
+
+template awaitQuota(bcParam: EthWireRef, costParam: float, protocolIdParam: string) =
+  let
+    wire = bcParam
+    cost = int(costParam)
+    protocolId = protocolIdParam
+
+  try:
+    if not wire.quota.tryConsume(cost):
+      debug "Awaiting broadcast quota", cost = cost, protocolId = protocolId
+      await wire.quota.consume(cost)
+  except CancelledError as exc:
+    raise exc
+  except CatchableError as exc:
+    debug "Error while waiting broadcast quota",
+      cost = cost, protocolId = protocolId, msg = exc.msg
+
+template reqisterAction(wire: EthWireRef, actionDesc: string, body) =
+  block:
+    proc actionHandler(): Future[void] {.async: (raises: [CancelledError]).} =
+      debug "Invoking broadcast action", desc=actionDesc
+      body
+
+    await wire.actionQueue.addLast(actionHandler)
+
+func allowedOpsPerSecondCost(n: int): float =
+  const replenishRate = (maxOperationQuota / fullReplenishTime.nanoseconds.float)
+  (replenishRate * 1000000000'f / n.float)
+
+const
+  txPoolProcessCost = allowedOpsPerSecondCost(1000)
+  hashLookupCost = allowedOpsPerSecondCost(2000)
+  blockRangeUpdateCost = allowedOpsPerSecondCost(20)
+
+iterator peers69OrLater(wire: EthWireRef, random: bool = false): Peer =
+  var peers = newSeqOfCap[Peer](wire.node.numPeers)
+  for peer in wire.node.peers:
+    if peer.isNil:
+      continue
+    if peer.supports(eth69):
+      peers.add peer
+  if random:
+    shuffle(peers)
+  for peer in peers:
+    if peer.connectionState != ConnectionState.Connected:
+      continue
+    yield peer
+
+proc syncerRunning(wire: EthWireRef): bool =
+  const
+    thresholdTime = 3 * 15
+
+  let
+    nowTime = EthTime.now()
+    headerTime = wire.chain.latestHeader.timestamp
+
+  (nowTime - headerTime) > thresholdTime
+
+proc handleTransactionsBroadcast*(wire: EthWireRef,
+                                  packet: TransactionsPacket,
+                                  peer: Peer) {.async: (raises: [CancelledError]).} =
+  if wire.syncerRunning:
+    return
+
+  if packet.transactions.len == 0:
+    return
+
+  debug "received new transactions",
+    number = packet.transactions.len
+
+  wire.reqisterAction("TxPool consume incoming transactions"):
+    for tx in packet.transactions:
+      if tx.txType == TxEip4844:
+        # Disallow blob transaction broadcast
+        debug "Protocol Breach: Peer broadcast blob transaction",
+          remote=peer.remote, clientId=peer.clientId
+        await peer.disconnect(BreachOfProtocol)
+        return
+
+      wire.txPool.addTx(tx).isOkOr:
+        continue
+
+      awaitQuota(wire, txPoolProcessCost, "adding into txpool")
+
+proc handleTxHashesBroadcast*(wire: EthWireRef,
+                              packet: NewPooledTransactionHashesPacket,
+                              peer: Peer) {.async: (raises: [CancelledError]).} =
+  if wire.syncerRunning:
+    return
+
+  if packet.txHashes.len == 0:
+    return
+
+  debug "received new pooled tx hashes",
+    hashes = packet.txHashes.len
+
+  if packet.txHashes.len != packet.txSizes.len or
+     packet.txHashes.len != packet.txTypes.len:
+    debug "Protocol Breach: new pooled tx hashes invalid params",
+      hashes = packet.txHashes.len,
+      sizes  = packet.txSizes.len,
+      types  = packet.txTypes.len
+    await peer.disconnect(BreachOfProtocol)
+    return
+
+  wire.reqisterAction("Handle broadcast transactions hashes"):
+    var
+      i = 0
+
+    while i < packet.txHashes.len:
+      var
+        msg: PooledTransactionsRequest
+        res: Opt[PooledTransactionsPacket]
+        size = 0'u64
+
+      while i < packet.txHashes.len:
+        if size + packet.txSizes[i] > SOFT_RESPONSE_LIMIT.uint64:
+          break
+
+        size += packet.txSizes[i]
+        let txHash = packet.txHashes[i]
+        if txHash notin wire.txPool:
+          msg.txHashes.add txHash
+        awaitQuota(wire, hashLookupCost, "check transaction exists in pool")
+        inc i
+
+      try:
+        res = await peer.getPooledTransactions(msg)
+      except EthP2PError as exc:
+        debug "request pooled transactions failed",
+          msg=exc.msg
+
+      if res.isNone:
+        debug "request pooled transactions get nothing"
+        return
+
+      let
+        ptx = res.get()
+
+      for i, tx in ptx.transactions:
+        # If we receive any blob transactions missing sidecars, or with
+        # sidecars that don't correspond to the versioned hashes reported
+        # in the header, disconnect from the sending peer.
+        if tx.tx.txType == TxEip4844:
+          if tx.blobsBundle.isNil:
+            debug "Protocol Breach: Received sidecar-less blob transaction",
+              remote=peer.remote, clientId=peer.clientId
+            await peer.disconnect(BreachOfProtocol)
+            return
+
+          if tx.blobsBundle.wrapperVersion == WrapperVersionEIP4844:
+            validateBlobTransactionWrapper4844(tx).isOkOr:
+              debug "Protocol Breach: Sidecar validation error", msg=error,
+                remote=peer.remote, clientId=peer.clientId
+              await peer.disconnect(BreachOfProtocol)
+              return
+
+          if tx.blobsBundle.wrapperVersion == WrapperVersionEIP7594:
+            validateBlobTransactionWrapper7594(tx).isOkOr:
+              debug "Protocol Breach: Sidecar validation error", msg=error,
+                remote=peer.remote, clientId=peer.clientId
+              await peer.disconnect(BreachOfProtocol)
+              return
+
+        wire.txPool.addTx(tx).isOkOr:
+          continue
+
+        awaitQuota(wire, txPoolProcessCost, "broadcast transactions hashes")
+
+proc tickerLoop*(wire: EthWireRef) {.async: (raises: [CancelledError]).} =
+  while true:
+    let
+      cleanup = sleepAsync(cleanupTicker)
+      update  = sleepAsync(blockRangeUpdateTicker)
+      res     = await one(cleanup, update)
+
+    if res == cleanup:
+      wire.reqisterAction("Periodical cleanup"):
+        var expireds: seq[Hash32]
+        for key, seen in wire.seenTransactions:
+          if getTime() - seen.lastSeen > POOLED_STORAGE_TIME_LIMIT:
+            expireds.add key
+          awaitQuota(wire, hashLookupCost, "broadcast transactions hashes")
+
+        for expire in expireds:
+          wire.seenTransactions.del(expire)
+          awaitQuota(wire, hashLookupCost, "broadcast transactions hashes")
+
+    if res == update:
+      wire.reqisterAction("Periodical blockRangeUpdate"):
+        let
+          packet = BlockRangeUpdatePacket(
+            earliest: 0,
+            latest: wire.chain.latestNumber,
+            latestHash: wire.chain.latestHash,
+          )
+
+        for peer in wire.peers69OrLater:
+          try:
+            await peer.blockRangeUpdate(packet)
+          except EthP2PError as exc:
+            debug "broadcast block range update failed",
+              msg=exc.msg
+          awaitQuota(wire, blockRangeUpdateCost, "broadcast blockRangeUpdate")
+
+proc setupTokenBucket*(): TokenBucket =
+  TokenBucket.new(maxOperationQuota.int, fullReplenishTime)
+
+proc actionLoop*(wire: EthWireRef) {.async: (raises: [CancelledError]).} =
+  while true:
+    let action = await wire.actionQueue.popFirst()
+    await action()
+
+proc stop*(wire: EthWireRef) {.async: (raises: [CancelledError]).} =
+  var waitedFutures = @[
+    wire.tickerHeartbeat.cancelAndWait(),
+    wire.actionHeartbeat.cancelAndWait(),
+  ]
+
+  let
+    timeout = chronos.seconds(5)
+    completed = await withTimeout(allFutures(waitedFutures), timeout)
+  if not completed:
+    trace "Broadcast.stop(): timeout reached", timeout,
+      futureErrors = waitedFutures.filterIt(it.error != nil).mapIt(it.error.msg)
