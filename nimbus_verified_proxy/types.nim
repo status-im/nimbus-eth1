@@ -54,5 +54,5 @@ proc new*(
     accountsCache: AccountsCache.init(ACCOUNTS_CACHE_SIZE),
     codeCache: CodeCache.init(CODE_CACHE_SIZE),
     storageCache: StorageCache.init(STORAGE_CACHE_SIZE),
-    chainId: chainId
-    )
+    chainId: chainId,
+  )

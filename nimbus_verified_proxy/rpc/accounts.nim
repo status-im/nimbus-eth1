@@ -75,7 +75,10 @@ proc getStorageFromProof(
     return err(proofResult.errorMsg)
 
 proc getStorageFromProof(
-    stateRoot: Hash32, requestedSlot: UInt256, proof: ProofResponse, storageProofIndex = 0
+    stateRoot: Hash32,
+    requestedSlot: UInt256,
+    proof: ProofResponse,
+    storageProofIndex = 0,
 ): Result[UInt256, string] =
   let account =
     ?getAccountFromProof(
@@ -107,7 +110,6 @@ proc getAccount*(
     blockNumber: base.BlockNumber,
     stateRoot: Root,
 ): Future[Result[Account, string]] {.async: (raises: []).} =
-
   let
     cacheKey = (stateRoot, address)
     cachedAcc = lcProxy.accountsCache.get(cacheKey)
@@ -205,7 +207,6 @@ proc populateCachesForAccountAndSlots(
     blockNumber: base.BlockNumber,
     stateRoot: Root,
 ): Future[Result[void, string]] {.async: (raises: []).} =
-
   var slotsToFetch: seq[UInt256]
   for s in slots:
     let storageCacheKey = (stateRoot, address, s)
@@ -218,7 +219,9 @@ proc populateCachesForAccountAndSlots(
     let
       proof =
         try:
-          await lcProxy.rpcClient.eth_getProof(address, slotsToFetch, blockId(blockNumber))
+          await lcProxy.rpcClient.eth_getProof(
+            address, slotsToFetch, blockId(blockNumber)
+          )
         except CatchableError as e:
           return err(e.msg)
       account = getAccountFromProof(
@@ -242,20 +245,20 @@ proc populateCachesUsingAccessList*(
     lcProxy: VerifiedRpcProxy,
     blockNumber: base.BlockNumber,
     stateRoot: Root,
-    tx: TransactionArgs
+    tx: TransactionArgs,
 ): Future[Result[void, string]] {.async: (raises: []).} =
-
-  let
-    accessListRes: AccessListResult =
-      try:
-        await lcProxy.rpcClient.eth_createAccessList(tx, blockId(blockNumber))
-      except CatchableError as e:
-        return err(e.msg)
+  let accessListRes: AccessListResult =
+    try:
+      await lcProxy.rpcClient.eth_createAccessList(tx, blockId(blockNumber))
+    except CatchableError as e:
+      return err(e.msg)
 
   var futs = newSeqOfCap[Future[Result[void, string]]](accessListRes.accessList.len())
   for accessPair in accessListRes.accessList:
     let slots = accessPair.storageKeys.mapIt(UInt256.fromBytesBE(it.data))
-    futs.add lcProxy.populateCachesForAccountAndSlots(accessPair.address, slots, blockNumber, stateRoot)
+    futs.add lcProxy.populateCachesForAccountAndSlots(
+      accessPair.address, slots, blockNumber, stateRoot
+    )
 
   try:
     await allFutures(futs)
