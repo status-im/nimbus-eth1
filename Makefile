@@ -339,17 +339,17 @@ portal_bridge: | build deps rocksdb
 # Nimbus Verified Proxy related targets
 
 # Builds the nimbus_verified_proxy
-nimbus_verified_proxy: | build deps rocksdb
+nimbus_verified_proxy: | build deps
 	echo -e $(BUILD_MSG) "build/$@" && \
 		$(ENV_SCRIPT) nim nimbus_verified_proxy $(NIM_PARAMS) nimbus.nims
 
 # builds and runs the nimbus_verified_proxy test suite
-nimbus-verified-proxy-test: | build deps rocksdb
+nimbus-verified-proxy-test: | build deps
 	$(ENV_SCRIPT) nim nimbus_verified_proxy_test $(NIM_PARAMS) nimbus.nims
 
 # Shared library for verified proxy
 
-libverifproxy: | build deps rocksdb
+libverifproxy: | build deps
 	+ echo -e $(BUILD_MSG) "build/$@" && \
 		$(ENV_SCRIPT) nim --version && \
 		$(ENV_SCRIPT) nim c --app:lib -d:"libp2p_pki_schemes=secp256k1" --noMain:on --threads:on --nimcache:nimcache/libverifproxy -o:$(VERIF_PROXY_OUT_PATH)/$@.$(SHAREDLIBEXT) $(NIM_PARAMS) nimbus_verified_proxy/libverifproxy/verifproxy.nim
