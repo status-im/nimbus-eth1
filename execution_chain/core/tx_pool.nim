@@ -159,9 +159,13 @@ proc assembleBlock*(
     blobsBundle = BlobsBundle(
       wrapperVersion: getWrapperVersion(com, blk.header.timestamp)
     )
+    currentRlpSize = rlp.getEncodedLength(blk.header) + rlp.getEncodedLength(blk.withdrawals)
 
   for item in pst.packedTxs:
     let tx = item.pooledTx
+    if currentRlpSize > MAX_RLP_BLOCK_SIZE:
+      break
+    currentRlpSize = currentRlpSize + rlp.getEncodedLength(tx.tx)
     blk.txs.add tx.tx
     if tx.blobsBundle != nil:
       doAssert(tx.blobsBundle.wrapperVersion == blobsBundle.wrapperVersion)
