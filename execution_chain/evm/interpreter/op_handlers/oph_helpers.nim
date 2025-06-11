@@ -60,12 +60,6 @@ proc delegateResolutionCost*(c: Computation, address: Address): GasInt =
     else:
       return WarmStorageReadCost
 
-proc gasEip7702CodeCheck*(c: Computation; address: Address): GasInt =
-  let delegateTo =
-    parseDelegationAddress(c.vmState.readOnlyLedger.getCode(address)).valueOr:
-      return 0
-  c.delegateResolutionCost(delegateTo)
-
 # ------------------------------------------------------------------------------
 # End
 # ------------------------------------------------------------------------------
