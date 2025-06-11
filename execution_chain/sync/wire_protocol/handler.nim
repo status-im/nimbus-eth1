@@ -46,6 +46,7 @@ proc new*(_: type EthWireRef,
   )
   wire.tickerHeartbeat = tickerLoop(wire)
   wire.actionHeartbeat = actionLoop(wire)
+  wire.gossipEnabled   = not syncerRunning(wire)
   wire
 
 # ------------------------------------------------------------------------------

@@ -130,3 +130,4 @@ type
     tickerHeartbeat*: Future[void].Raising([CancelledError])
     actionHeartbeat*: Future[void].Raising([CancelledError])
     actionQueue*: AsyncQueue[ActionHandler]
+    gossipEnabled*: bool

@@ -19,7 +19,7 @@ import
   ./requester,
   ../../networking/p2p,
   ../../core/tx_pool,
-  ../../core/pooled_txs,
+  ../../core/pooled_txs_rlp,
   ../../core/eip4844,
   ../../core/eip7594,
   ../../core/chain/forked_chain
@@ -83,7 +83,9 @@ iterator peers69OrLater(wire: EthWireRef, random: bool = false): Peer =
       continue
     yield peer
 
-proc syncerRunning(wire: EthWireRef): bool =
+proc syncerRunning*(wire: EthWireRef): bool =
+  # Disable transactions gossip and processing when 
+  # the syncer is still busy
   const
     thresholdTime = 3 * 15
 
@@ -91,7 +93,12 @@ proc syncerRunning(wire: EthWireRef): bool =
     nowTime = EthTime.now()
     headerTime = wire.chain.latestHeader.timestamp
 
-  (nowTime - headerTime) > thresholdTime
+  let running = (nowTime - headerTime) > thresholdTime
+  if running != not wire.gossipEnabled:    
+    wire.gossipEnabled = not running
+    notice "Transaction broadcast state changed", enabled = wire.gossipEnabled
+  
+  running
 
 proc handleTransactionsBroadcast*(wire: EthWireRef,
                                   packet: TransactionsPacket,
@@ -148,16 +155,22 @@ proc handleTxHashesBroadcast*(wire: EthWireRef,
       var
         msg: PooledTransactionsRequest
         res: Opt[PooledTransactionsPacket]
-        size = 0'u64
+        sizes: seq[uint64]
+        types: seq[byte]
+        sumSize = 0'u64
 
       while i < packet.txHashes.len:
-        if size + packet.txSizes[i] > SOFT_RESPONSE_LIMIT.uint64:
+        let size = packet.txSizes[i]
+        if sumSize + size > SOFT_RESPONSE_LIMIT.uint64:
           break
 
-        size += packet.txSizes[i]
         let txHash = packet.txHashes[i]
         if txHash notin wire.txPool:
           msg.txHashes.add txHash
+          sumSize += size
+          sizes.add size
+          types.add packet.txTypes[i]
+
         awaitQuota(wire, hashLookupCost, "check transaction exists in pool")
         inc i
 
@@ -178,6 +191,25 @@ proc handleTxHashesBroadcast*(wire: EthWireRef,
         # If we receive any blob transactions missing sidecars, or with
         # sidecars that don't correspond to the versioned hashes reported
         # in the header, disconnect from the sending peer.
+        if tx.tx.txType.byte != types[i]:
+          debug "Protocol Breach: Received transaction with type differ from announced",
+              remote=peer.remote, clientId=peer.clientId
+          await peer.disconnect(BreachOfProtocol)
+          return
+
+        let (size, hash) = getEncodedLengthAndHash(tx)
+        if size.uint64 != sizes[i]:
+          debug "Protocol Breach: Received transaction with size differ from announced",
+              remote=peer.remote, clientId=peer.clientId
+          await peer.disconnect(BreachOfProtocol)
+          return
+
+        if hash != msg.txHashes[i]:
+          debug "Protocol Breach: Received transaction with hash differ from announced",
+              remote=peer.remote, clientId=peer.clientId
+          await peer.disconnect(BreachOfProtocol)
+          return
+
         if tx.tx.txType == TxEip4844:
           if tx.blobsBundle.isNil:
             debug "Protocol Breach: Received sidecar-less blob transaction",
