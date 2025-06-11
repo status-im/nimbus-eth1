@@ -140,14 +140,25 @@ proc installPortalBeaconApiHandlers*(rpcServer: RpcServer, p: PortalProtocol) =
       # TODO: Do we need to convert the received offer to a value without proofs before storing?
       # TODO: validate and store content locally
       # storedLocally = p.storeContent(keyBytes, contentId, valueBytes)
-      peerCount = await p.neighborhoodGossip(
+      gossipMetadata = await p.neighborhoodGossip(
         Opt.none(NodeId),
         ContentKeysList(@[keyBytes]),
         @[offerValueBytes],
         enableNodeLookup = true,
       )
 
-    PutContentResult(storedLocally: false, peerCount: peerCount)
+    PutContentResult(
+      storedLocally: false,
+      peerCount: gossipMetadata.successCount,
+      acceptMetadata: AcceptMetadata(
+        acceptedCount: gossipMetadata.acceptedCount,
+        genericDeclineCount: gossipMetadata.genericDeclineCount,
+        alreadyStoredCount: gossipMetadata.alreadyStoredCount,
+        notWithinRadiusCount: gossipMetadata.notWithinRadiusCount,
+        rateLimitedCount: gossipMetadata.rateLimitedCount,
+        transferInProgressCount: gossipMetadata.transferInProgressCount,
+      ),
+    )
 
   rpcServer.rpc("portal_beaconRandomGossip") do(
     contentKey: string, contentValue: string
@@ -156,8 +167,8 @@ proc installPortalBeaconApiHandlers*(rpcServer: RpcServer, p: PortalProtocol) =
       keyBytes = ContentKeyByteList.init(hexToSeqByte(contentKey))
       offerValueBytes = hexToSeqByte(contentValue)
 
-      peerCount = await p.randomGossip(
+      gossipMetadata = await p.randomGossip(
         Opt.none(NodeId), ContentKeysList(@[keyBytes]), @[offerValueBytes]
       )
 
-    peerCount
+    gossipMetadata.successCount
