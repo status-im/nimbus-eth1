@@ -63,8 +63,7 @@ export
   tx,        # : Transaction
   pooledTx,  # : PooledTransaction
   id,        # : Hash32
-  sender,    # : Address
-  nextFork   # : EVMFork
+  sender     # : Address
 
 # ------------------------------------------------------------------------------
 # TxPoolRef constructor
@@ -95,6 +94,7 @@ export
 export
   addTx,
   getItem,
+  contains,
   removeTx,
   removeExpiredTxs,
   getBlobAndProofV1,
@@ -102,6 +102,7 @@ export
 
 # addTx(xp: TxPoolRef, ptx: PooledTransaction): Result[void, TxError]
 # addTx(xp: TxPoolRef, tx: Transaction): Result[void, TxError]
+# contains(xp: TxPoolRef, id: Hash32): bool
 # getItem(xp: TxPoolRef, id: Hash32): Result[TxItemRef, TxError]
 # removeTx(xp: TxPoolRef, id: Hash32)
 # removeExpiredTxs(xp: TxPoolRef, lifeTime: Duration)

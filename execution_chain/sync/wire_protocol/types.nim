@@ -127,6 +127,7 @@ type
     node*  : EthereumNode
     quota* : TokenBucket
     seenTransactions*: Table[Hash32, SeenObject]
-    cleanupHeartbeat*: Future[void].Raising([CancelledError])
-    actionQueue*: AsyncQueue[ActionHandler]
+    tickerHeartbeat*: Future[void].Raising([CancelledError])
     actionHeartbeat*: Future[void].Raising([CancelledError])
+    actionQueue*: AsyncQueue[ActionHandler]
+    gossipEnabled*: bool

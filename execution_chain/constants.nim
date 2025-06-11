@@ -45,6 +45,9 @@ const
   GAS_LIMIT_MAXIMUM* =                      int64.high.GasInt # Maximum the gas limit (2^63-1).
   DEFAULT_GAS_LIMIT* =                      36_000_000
 
+  # https://eips.ethereum.org/EIPS/eip-7825
+  TX_GAS_LIMIT* =                          30_000_000
+
   EMPTY_SHA3* =                             hash32"c5d2460186f7233c927e7db2dcc703c0e500b653ca82273b7bfad8045d85a470"
 
   GAS_MOD_EXP_QUADRATIC_DENOMINATOR* =      20.u256
@@ -88,6 +91,7 @@ const
   MIN_BLOB_GASPRICE* = 1'u64
   MAX_BLOB_GAS_PER_BLOCK* = 786432
   MAX_BLOBS_PER_BLOCK* = int(MAX_BLOB_GAS_PER_BLOCK div GAS_PER_BLOB)
+  BLOB_BASE_COST* = (1 shl 14).uint64 # 2^14
 
   # EIP-4788 addresses
   # BEACON_ROOTS_ADDRESS is the address where historical beacon roots are stored as per EIP-4788

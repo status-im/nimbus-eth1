@@ -162,9 +162,6 @@ func baseFee(xp: TxPoolRef): GasInt =
   else:
     0.GasInt
 
-func gasLimit(xp: TxPoolRef): GasInt =
-  xp.vmState.blockCtx.gasLimit
-
 func excessBlobGas(xp: TxPoolRef): GasInt =
   xp.vmState.blockCtx.excessBlobGas
 
@@ -176,10 +173,10 @@ proc getNonce(xp: TxPoolRef; account: Address): AccountNonce =
 
 proc classifyValid(xp: TxPoolRef; tx: Transaction, sender: Address): bool =
 
-  if tx.gasLimit > xp.gasLimit:
+  if tx.gasLimit > TX_GAS_LIMIT:
     debug "Invalid transaction: Gas limit too high",
       txGasLimit = tx.gasLimit,
-      gasLimit = xp.gasLimit
+      gasLimit = TX_GAS_LIMIT
     return false
 
   if tx.txType == TxEip4844:
@@ -312,6 +309,8 @@ proc updateVmState*(xp: TxPoolRef) =
 # ------------------------------------------------------------------------------
 # Public functions
 # ------------------------------------------------------------------------------
+proc contains*(xp: TxPoolRef, id: Hash32): bool =
+  xp.idTab.hasKey(id)
 
 proc getItem*(xp: TxPoolRef, id: Hash32): Result[TxItemRef, TxError] =
   let item = xp.idTab.getOrDefault(id)

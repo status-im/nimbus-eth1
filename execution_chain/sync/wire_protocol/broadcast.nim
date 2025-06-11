@@ -13,13 +13,13 @@ import
   chronos/ratelimit,
   chronicles,
   eth/common/hashes,
-  stew/assign2,
+  eth/common/times,
   results,
   ./types,
   ./requester,
   ../../networking/p2p,
   ../../core/tx_pool,
-  ../../core/pooled_txs,
+  ../../core/pooled_txs_rlp,
   ../../core/eip4844,
   ../../core/eip7594,
   ../../core/chain/forked_chain
@@ -35,6 +35,7 @@ const
   cleanupTicker = chronos.minutes(5)
   # https://github.com/ethereum/devp2p/blob/b0c213de97978053a0f62c3ea4d23c0a3d8784bc/caps/eth.md#blockrangeupdate-0x11
   blockRangeUpdateTicker = chronos.minutes(2)
+  SOFT_RESPONSE_LIMIT* = 2 * 1024 * 1024
 
 template awaitQuota(bcParam: EthWireRef, costParam: float, protocolIdParam: string) =
   let
@@ -209,9 +210,29 @@ proc broadcastTxHashes(wire: EthWireRef,
     debug "broadcast tx hashes failed",
       msg=exc.msg
 
+proc syncerRunning*(wire: EthWireRef): bool =
+  # Disable transactions gossip and processing when
+  # the syncer is still busy
+  const
+    thresholdTime = 3 * 15
+
+  let
+    nowTime = EthTime.now()
+    headerTime = wire.chain.latestHeader.timestamp
+
+  let running = (nowTime - headerTime) > thresholdTime
+  if running != not wire.gossipEnabled:
+    wire.gossipEnabled = not running
+    notice "Transaction broadcast state changed", enabled = wire.gossipEnabled
+
+  running
+
 proc handleTransactionsBroadcast*(wire: EthWireRef,
                                   packet: TransactionsPacket,
                                   peer: Peer) {.async: (raises: [CancelledError]).} =
+  if wire.syncerRunning:
+    return
+
   if packet.transactions.len == 0:
     return
 
@@ -258,6 +279,9 @@ proc handleTransactionsBroadcast*(wire: EthWireRef,
 proc handleTxHashesBroadcast*(wire: EthWireRef,
                               packet: NewPooledTransactionHashesPacket,
                               peer: Peer) {.async: (raises: [CancelledError]).} =
+  if wire.syncerRunning:
+    return
+
   if packet.txHashes.len == 0:
     return
 
@@ -266,80 +290,126 @@ proc handleTxHashesBroadcast*(wire: EthWireRef,
 
   if packet.txHashes.len != packet.txSizes.len or
      packet.txHashes.len != packet.txTypes.len:
-    debug "new pooled tx hashes invalid params",
+    debug "Protocol Breach: new pooled tx hashes invalid params",
       hashes = packet.txHashes.len,
       sizes  = packet.txSizes.len,
       types  = packet.txTypes.len
+    await peer.disconnect(BreachOfProtocol)
     return
 
-  wire.reqisterAction("Broadcast transactions hashes"):
+  wire.reqisterAction("Handle broadcast transactions hashes"):
     await wire.seenByPeer(packet, peer)
-    var
-      msg: PooledTransactionsRequest
-      res: Opt[PooledTransactionsPacket]
-
-    assign(msg.txHashes, packet.txHashes)
-
-    try:
-      res = await peer.getPooledTransactions(msg)
-    except EthP2PError as exc:
-      debug "request pooled transactions failed",
-        msg=exc.msg
-
-    if res.isNone:
-      debug "request pooled transactions get nothing"
-      return
 
     let
-      ptx = res.get()
-      len = ptx.transactions.len
+      len = packet.txHashes.len
 
-    var hashes = NewPooledTransactionHashesPacket(
-      txTypes : newSeqOfCap[byte](len),
-      txSizes : newSeqOfCap[uint64](len),
-      txHashes: newSeqOfCap[Hash32](len),
-    )
+    var
+      i = 0
+      hashes = NewPooledTransactionHashesPacket(
+        txTypes : newSeqOfCap[byte](len),
+        txSizes : newSeqOfCap[uint64](len),
+        txHashes: newSeqOfCap[Hash32](len),
+      )
 
-    for i, tx in ptx.transactions:
-      # If we receive any blob transactions missing sidecars, or with
-      # sidecars that don't correspond to the versioned hashes reported
-      # in the header, disconnect from the sending peer.
-      if tx.tx.txType == TxEip4844:
-        if tx.blobsBundle.isNil:
-          debug "Protocol Breach: Received sidecar-less blob transaction",
+    while i < packet.txHashes.len:
+      var
+        msg: PooledTransactionsRequest
+        res: Opt[PooledTransactionsPacket]
+        sizes: seq[uint64]
+        types: seq[byte]
+        sumSize = 0'u64
+
+      while i < packet.txHashes.len:
+        let size = packet.txSizes[i]
+        if sumSize + size > SOFT_RESPONSE_LIMIT.uint64:
+          break
+
+        let txHash = packet.txHashes[i]
+        if txHash notin wire.txPool:
+          msg.txHashes.add txHash
+          sumSize += size
+          sizes.add size
+          types.add packet.txTypes[i]
+
+        awaitQuota(wire, hashLookupCost, "check transaction exists in pool")
+        inc i
+
+      try:
+        res = await peer.getPooledTransactions(msg)
+      except EthP2PError as exc:
+        debug "request pooled transactions failed",
+          msg=exc.msg
+
+      if res.isNone:
+        debug "request pooled transactions get nothing"
+        return
+
+      let
+        ptx = res.get()
+
+      if ptx.transactions.len != msg.txHashes.len:
+        debug "Protocol Breach: Received number of transactions differ from requested",
             remote=peer.remote, clientId=peer.clientId
+        await peer.disconnect(BreachOfProtocol)
+        return
+
+      for k, tx in ptx.transactions:
+        # If we receive any blob transactions missing sidecars, or with
+        # sidecars that don't correspond to the versioned hashes reported
+        # in the header, disconnect from the sending peer.
+        if tx.tx.txType.byte != types[k]:
+          debug "Protocol Breach: Received transaction with type differ from announced",
+              remote=peer.remote, clientId=peer.clientId
           await peer.disconnect(BreachOfProtocol)
           return
 
-        if tx.blobsBundle.wrapperVersion == WrapperVersionEIP4844:
-          validateBlobTransactionWrapper4844(tx).isOkOr:
-            debug "Protocol Breach: Sidecar validation error", msg=error,
+        let (size, hash) = getEncodedLengthAndHash(tx)
+        if size.uint64 != sizes[k]:
+          debug "Protocol Breach: Received transaction with size differ from announced",
+              remote=peer.remote, clientId=peer.clientId
+          await peer.disconnect(BreachOfProtocol)
+          return
+
+        if hash != msg.txHashes[k]:
+          debug "Protocol Breach: Received transaction with hash differ from announced",
+              remote=peer.remote, clientId=peer.clientId
+          await peer.disconnect(BreachOfProtocol)
+          return
+
+        if tx.tx.txType == TxEip4844:
+          if tx.blobsBundle.isNil:
+            debug "Protocol Breach: Received sidecar-less blob transaction",
               remote=peer.remote, clientId=peer.clientId
             await peer.disconnect(BreachOfProtocol)
             return
 
-        if tx.blobsBundle.wrapperVersion == WrapperVersionEIP7594:
-          validateBlobTransactionWrapper7594(tx).isOkOr:
-            debug "Protocol Breach: Sidecar validation error", msg=error,
-              remote=peer.remote, clientId=peer.clientId
-            await peer.disconnect(BreachOfProtocol)
-            return
+          if tx.blobsBundle.wrapperVersion == WrapperVersionEIP4844:
+            validateBlobTransactionWrapper4844(tx).isOkOr:
+              debug "Protocol Breach: Sidecar validation error", msg=error,
+                remote=peer.remote, clientId=peer.clientId
+              await peer.disconnect(BreachOfProtocol)
+              return
 
-      wire.txPool.addTx(tx).isOkOr:
-        continue
+          if tx.blobsBundle.wrapperVersion == WrapperVersionEIP7594:
+            validateBlobTransactionWrapper7594(tx).isOkOr:
+              debug "Protocol Breach: Sidecar validation error", msg=error,
+                remote=peer.remote, clientId=peer.clientId
+              await peer.disconnect(BreachOfProtocol)
+              return
 
-      # TODO: What if peer give us scrambled order of transactions?
-      # maybe need some hash map?
-      hashes.txTypes.add packet.txTypes[i]
-      hashes.txSizes.add packet.txSizes[i]
-      hashes.txHashes.add packet.txHashes[i]
+        wire.txPool.addTx(tx).isOkOr:
+          continue
 
-      awaitQuota(wire, txPoolProcessCost, "broadcast transactions hashes")
+        hashes.txTypes.add packet.txTypes[i + k]
+        hashes.txSizes.add packet.txSizes[i + k]
+        hashes.txHashes.add packet.txHashes[i + k]
+
+        awaitQuota(wire, txPoolProcessCost, "broadcast transactions hashes")
 
     for peer in wire.peers:
       await wire.broadcastTxHashes(hashes, peer)
 
-proc setupCleanup*(wire: EthWireRef) {.async: (raises: [CancelledError]).} =
+proc tickerLoop*(wire: EthWireRef) {.async: (raises: [CancelledError]).} =
   while true:
     let
       cleanup = sleepAsync(cleanupTicker)
@@ -378,14 +448,14 @@ proc setupCleanup*(wire: EthWireRef) {.async: (raises: [CancelledError]).} =
 proc setupTokenBucket*(): TokenBucket =
   TokenBucket.new(maxOperationQuota.int, fullReplenishTime)
 
-proc setupAction*(wire: EthWireRef) {.async: (raises: [CancelledError]).} =
+proc actionLoop*(wire: EthWireRef) {.async: (raises: [CancelledError]).} =
   while true:
     let action = await wire.actionQueue.popFirst()
     await action()
 
 proc stop*(wire: EthWireRef) {.async: (raises: [CancelledError]).} =
   var waitedFutures = @[
-    wire.cleanupHeartbeat.cancelAndWait(),
+    wire.tickerHeartbeat.cancelAndWait(),
     wire.actionHeartbeat.cancelAndWait(),
   ]
 

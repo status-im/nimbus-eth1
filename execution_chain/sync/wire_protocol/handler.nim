@@ -28,7 +28,6 @@ const
   MAX_BODIES_SERVE    = 256
   # https://github.com/ethereum/devp2p/blob/master/caps/eth.md#getpooledtransactions-0x09
   MAX_TXS_SERVE       = 256
-  SOFT_RESPONSE_LIMIT = 2 * 1024 * 1024
   MAX_ACTION_HANDLER  = 128
 
 # ------------------------------------------------------------------------------
@@ -45,8 +44,9 @@ proc new*(_: type EthWireRef,
     quota : setupTokenBucket(),
     actionQueue : newAsyncQueue[ActionHandler](maxsize = MAX_ACTION_HANDLER),
   )
-  wire.cleanupHeartbeat = setupCleanup(wire)
-  wire.actionHeartbeat = setupAction(wire)
+  wire.tickerHeartbeat = tickerLoop(wire)
+  wire.actionHeartbeat = actionLoop(wire)
+  wire.gossipEnabled   = not syncerRunning(wire)
   wire
 
 # ------------------------------------------------------------------------------
