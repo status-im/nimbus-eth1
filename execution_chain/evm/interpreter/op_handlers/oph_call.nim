@@ -77,7 +77,7 @@ proc gasCallEIP7907(c: Computation, codeAddress: Address): GasInt =
         code = db.getCode(codeAddress)
         excessContractSize = max(0, code.len - CODE_SIZE_THRESHOLD)
         largeContractCost = (ceil32(excessContractSize) * 2) div 32
-      return largeContractCost
+      return GasInt(largeContractCost)
 
 proc updateStackAndParams(q: var LocalParams; c: Computation) =
   c.stack.lsTop(0)

@@ -46,10 +46,10 @@ proc init*(_: type AccessList): AccessList {.inline.} =
 # Public functions
 # ------------------------------------------------------------------------------
 
-func contains*(ac: accesslist, address: address): bool {.inline.} =
+func contains*(ac: AccessList, address: Address): bool {.inline.} =
   address in ac.slots
 
-func contains*(ac: accesslist, codeHash: Hash32): bool {.inline.} =
+func contains*(ac: AccessList, codeHash: Hash32): bool {.inline.} =
   codeHash in ac.codeHashes
 
 # returnValue: (addressPresent, slotPresent)
@@ -73,7 +73,7 @@ proc add*(ac: var AccessList, address: Address, slot: UInt256) =
     ac.slots[address] = toHashSet([slot])
 
 proc add*(ac: var AccessList, codeHash: Hash32) =
-  if codeHash not in ac.codeHashes:
+  if codeHash notin ac.codeHashes:
     ac.codeHashes.add(codeHash)
 
 proc clear*(ac: var AccessList) {.inline.} =
@@ -106,7 +106,7 @@ func equal*(ac: AccessList, other: var AccessList): bool =
       return false
 
   for codeHash in ac.codeHashes:
-    if codeHash not in other:
+    if codeHash notin other:
       return false
 
   true

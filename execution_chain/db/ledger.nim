@@ -830,7 +830,7 @@ proc accessList*(ac: LedgerRef, address: Address, slot: UInt256) =
   ac.savePoint.accessList.add(address, slot)
 
 proc accessList*(ac: LedgerRef, codeHash: Hash32) =
-  ac.savePoint.accessList.add(address, codeHash)
+  ac.savePoint.accessList.add(codeHash)
 
 func inAccessList*(ac: LedgerRef, address: Address): bool =
   var sp = ac.savePoint
@@ -844,6 +844,14 @@ func inAccessList*(ac: LedgerRef, address: Address, slot: UInt256): bool =
   var sp = ac.savePoint
   while sp != nil:
     result = sp.accessList.contains(address, slot)
+    if result:
+      return
+    sp = sp.parentSavepoint
+
+func inAccessList*(ac: LedgerRef, codeHash: Hash32): bool =
+  var sp = ac.savePoint
+  while sp != nil:
+    result = sp.accessList.contains(codeHash)
     if result:
       return
     sp = sp.parentSavepoint
