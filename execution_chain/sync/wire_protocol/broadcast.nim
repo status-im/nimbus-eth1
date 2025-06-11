@@ -97,7 +97,6 @@ iterator peers69OrLater(wire: EthWireRef, random: bool = false): Peer =
   for peer in wire.node.peers:
     if peer.isNil:
       continue
-
     if peer.supports(eth69):
       peers.add peer
 
@@ -107,7 +106,6 @@ iterator peers69OrLater(wire: EthWireRef, random: bool = false): Peer =
   for peer in peers:
     if peer.connectionState != ConnectionState.Connected:
       continue
-
     yield peer
 
 proc seenByPeer(wire: EthWireRef,
