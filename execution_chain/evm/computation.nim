@@ -206,9 +206,9 @@ proc writeContract*(c: Computation) =
     return
 
   # EIP-170 constraint (https://eips.ethereum.org/EIPS/eip-3541).
-  if fork >= FkSpurious and len > EIP170_MAX_CODE_SIZE:
-    withExtra trace, "New contract code exceeds EIP-170 limit",
-      codeSize=len, maxSize=EIP170_MAX_CODE_SIZE
+  if fork >= FkSpurious and len > EIP7907_MAX_CODE_SIZE:
+    withExtra trace, "New contract code exceeds EIP-7907 limit",
+      codeSize=len, maxSize=EIP7907_MAX_CODE_SIZE
     c.setError(StatusCode.OutOfGas, true)
     return
 

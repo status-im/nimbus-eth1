@@ -66,6 +66,19 @@ proc gasCallEIP2929(c: Computation, address: Address): GasInt =
       # the form of a constant `gasCall`
       return ColdAccountAccessCost - WarmStorageReadCost
 
+proc gasCallEIP7907(c: Computation, codeAddress: Address): GasInt =
+  c.vmState.mutateLedger:
+    let codeHash = db.getCodeHash(codeAddress)
+
+    if not db.inAccessList(codeHash):
+      db.accessList(codeHash)
+
+      let
+        code = db.getCode(codeAddress)
+        excessContractSize = max(0, code.len - CODE_SIZE_THRESHOLD)
+        largeContractCost = (ceil32(excessContractSize) * 2) div 32
+      return largeContractCost
+
 proc updateStackAndParams(q: var LocalParams; c: Computation) =
   c.stack.lsTop(0)
 
@@ -81,11 +94,15 @@ proc updateStackAndParams(q: var LocalParams; c: Computation) =
     q.memOffset = q.memOutPos
     q.memLength = q.memOutLen
 
+  # EIP7907
+  if FkOsaka <= c.fork:
+    q.gasCallEIPs = gasCallEIP7907(c, q.codeAddress)
+
   # EIP2929: This came before old gas calculator
   #           because it will affect `c.gasMeter.gasRemaining`
   #           and further `childGasLimit`
   if FkBerlin <= c.fork:
-    q.gasCallEIPs = gasCallEIP2929(c, q.codeAddress)
+    q.gasCallEIPs += gasCallEIP2929(c, q.codeAddress)
 
   if FkPrague <= c.fork:
     let delegateTo = parseDelegationAddress(c.getCode(q.codeAddress))

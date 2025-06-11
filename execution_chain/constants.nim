@@ -59,14 +59,15 @@ const
 
   ## Fork specific constants
 
-  # See EIP-170 (https://eips.ethereum.org/EIPS/eip-170).  Maximum code size
+  # See EIP-7907 (https://eips.ethereum.org/EIPS/eip-7907) Maximum code size
   # that can be stored for a new contract.  Init code when creating a new
   # contract is not subject to this limit.
-  EIP170_MAX_CODE_SIZE* =                   0x6000
+  CODE_SIZE_THRESHOLD* =                    0x6000
+  EIP7907_MAX_CODE_SIZE* =                  0x40000
 
-  # See EIP-3860 (https://eips.ethereum.org/EIPS/eip-3860). Maximum initcode
+  # See EIP-7907 (https://eips.ethereum.org/EIPS/eip-7907). Maximum initcode
   # size when creating a new contract.
-  EIP3860_MAX_INITCODE_SIZE* =              2 * EIP170_MAX_CODE_SIZE
+  EIP7907_MAX_INITCODE_SIZE* =              0x80000 # 2 * EIP7907_MAX_CODE_SIZE
 
   # EIP
   MaxPrecompilesAddr* =                     0xFFFF

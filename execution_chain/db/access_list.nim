@@ -21,6 +21,7 @@ type
 
   AccessList* = object
     slots: Table[Address, SlotSet]
+    codeHashes: seq[Hash32]
 
 # ------------------------------------------------------------------------------
 # Private helpers
@@ -36,6 +37,7 @@ func toStorageKeys(slots: SlotSet): seq[Bytes32] =
 
 proc init*(ac: var AccessList) =
   ac.slots = Table[Address, SlotSet]()
+  ac.codeHashes = newSeq[Hash32]()
 
 proc init*(_: type AccessList): AccessList {.inline.} =
   result.init()
@@ -44,8 +46,11 @@ proc init*(_: type AccessList): AccessList {.inline.} =
 # Public functions
 # ------------------------------------------------------------------------------
 
-func contains*(ac: AccessList, address: Address): bool {.inline.} =
+func contains*(ac: accesslist, address: address): bool {.inline.} =
   address in ac.slots
+
+func contains*(ac: accesslist, codeHash: Hash32): bool {.inline.} =
+  codeHash in ac.codeHashes
 
 # returnValue: (addressPresent, slotPresent)
 func contains*(ac: var AccessList, address: Address, slot: UInt256): bool =
@@ -55,6 +60,7 @@ func contains*(ac: var AccessList, address: Address, slot: UInt256): bool =
 proc mergeAndReset*(ac, other: var AccessList) =
   # move values in `other` to `ac`
   ac.slots.mergeAndReset(other.slots)
+  ac.codeHashes.mergeAndReset(other.codeHashes)
 
 proc add*(ac: var AccessList, address: Address) =
   if address notin ac.slots:
@@ -66,9 +72,17 @@ proc add*(ac: var AccessList, address: Address, slot: UInt256) =
   do:
     ac.slots[address] = toHashSet([slot])
 
+proc add*(ac: var AccessList, codeHash: Hash32) =
+  if codeHash not in ac.codeHashes:
+    ac.codeHashes.add(codeHash)
+
 proc clear*(ac: var AccessList) {.inline.} =
   ac.slots.clear()
+  ac.codeHashes.setLen(0)
 
+# TODO: accesses code is still not a part of the transaction access list
+# but when it does trickle down into the transaction we will have to add
+# it here
 func getAccessList*(ac: AccessList): transactions.AccessList =
   for address, slots in ac.slots:
     result.add transactions.AccessPair(
@@ -89,6 +103,10 @@ func equal*(ac: AccessList, other: var AccessList): bool =
         if slot notin otherSlots[]:
           return false
     do:
+      return false
+
+  for codeHash in ac.codeHashes:
+    if codeHash not in other:
       return false
 
   true

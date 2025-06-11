@@ -829,6 +829,9 @@ proc accessList*(ac: LedgerRef, address: Address) =
 proc accessList*(ac: LedgerRef, address: Address, slot: UInt256) =
   ac.savePoint.accessList.add(address, slot)
 
+proc accessList*(ac: LedgerRef, codeHash: Hash32) =
+  ac.savePoint.accessList.add(address, codeHash)
+
 func inAccessList*(ac: LedgerRef, address: Address): bool =
   var sp = ac.savePoint
   while sp != nil:
