@@ -754,10 +754,10 @@ proc pointEvaluation(c: Computation): EvmResultVoid =
   ok()
 
 proc p256verify(c: Computation): EvmResultVoid =
-  ? c.gasMeter.consumeGas(GasP256VerifyGas, reason="P256VERIFY Precompile")
-
   if c.msg.data.len != 160:
     return err(prcErr(PrcInvalidParam))
+
+  ? c.gasMeter.consumeGas(GasP256VerifyGas, reason="P256VERIFY Precompile")
 
   var inputPubKey: array[65, byte]
 
