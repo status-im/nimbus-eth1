@@ -24,6 +24,7 @@ import
   ./modexp,
   ./evm_errors,
   ./computation,
+  ./secp256r1verify,
   eth/common/[base, addresses]
 
 type
@@ -783,7 +784,7 @@ proc p256verify(c: Computation): EvmResultVoid =
     return err(prcErr(PrcInvalidParam))
 
   debugEcho pubkey.key.curve
-  let isValid = sig.verify(h, pubkey)
+  let isValid = sig.verifyRaw(h, pubkey)
 
   if isValid:
     c.output.setLen(32)
