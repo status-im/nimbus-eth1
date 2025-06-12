@@ -19,6 +19,7 @@ skipDirs      = @["tests", "examples"]
 requires "nim >= 1.6.0",
   "bncurve",
   "chronicles",
+  "constantine",
   "chronos",
   "eth",
   "json_rpc",
