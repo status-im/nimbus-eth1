@@ -770,20 +770,19 @@ proc p256verify(c: Computation): EvmResultVoid =
     qx = input[96 ..< 128]
     qy = input[128 ..< 160]
 
+  if qx.isInfinityByte() and qy.isInfinityByte():
+    # If the public key is infinity, the signature is invalid
+    return err(prcErr(PrcInvalidParam))
+
   # Check scalar and field bounds (r, s ∈ (0, n), qx, qy ∈ [0, p))
   var sig: EcSignature
-  debugEcho @(r & s)
   if not sig.initRaw(@(r & s)):
-    debugEcho "Failed"
     return err(prcErr(PrcInvalidParam))
 
   var pubkey: EcPublicKey
-  debugEcho @(0x04'u8 & qx & qy)
   if not pubkey.initRaw(@(0x04'u8 & qx & qy)):
-    debugEcho "Failed 2"
     return err(prcErr(PrcInvalidParam))
 
-  debugEcho pubkey.key.curve
   let isValid = sig.verifyRaw(h, pubkey)
 
   if isValid:
@@ -791,7 +790,7 @@ proc p256verify(c: Computation): EvmResultVoid =
     c.output[^1] = 1.byte  # return 0x...01
   else:
     c.output.setLen(0)
-  debugEcho c.output
+
   ok()
 
 # ------------------------------------------------------------------------------
