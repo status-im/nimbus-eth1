@@ -127,9 +127,6 @@ func getMaxPrecompile(fork: EVMFork): Precompiles =
   elif fork < FkOsaka: paBlsMapG2
   else: Precompiles.high
 
-# func validPrecompileAddr(addrByte, maxPrecompileAddr: byte): bool =
-#   (addrByte in PrecompileAddresses.low.byte .. maxPrecompileAddr)
-
 func getSignature(c: Computation): EvmResult[SigRes]  =
   # input is Hash, V, R, S
   template data: untyped = c.msg.data
@@ -759,31 +756,24 @@ proc pointEvaluation(c: Computation): EvmResultVoid =
 proc p256verify(c: Computation): EvmResultVoid =
   ? c.gasMeter.consumeGas(GasP256VerifyGas, reason="P256VERIFY Precompile")
 
-  let input = c.msg.data
-  if input.len != 160:
+  if c.msg.data.len != 160:
     return err(prcErr(PrcInvalidParam))
 
-  var
-    h  = input[0 ..< 32]
-    r  = input[32 ..< 64]
-    s  = input[64 ..< 96]
-    qx = input[96 ..< 128]
-    qy = input[128 ..< 160]
-
-  if qx.isInfinityByte() and qy.isInfinityByte():
-    # If the public key is infinity, the signature is invalid
-    return err(prcErr(PrcInvalidParam))
+  var inputPubKey: array[65, byte]
 
   # Check scalar and field bounds (r, s ∈ (0, n), qx, qy ∈ [0, p))
   var sig: EcSignature
-  if not sig.initRaw(@(r & s)):
+  if not sig.initRaw(c.msg.data.toOpenArray(32, 95)):
     return err(prcErr(PrcInvalidParam))
 
   var pubkey: EcPublicKey
-  if not pubkey.initRaw(@(0x04'u8 & qx & qy)):
+  inputPubKey[0] = 4.byte
+  assign(inputPubKey.toOpenArray(1, 64), c.msg.data.toOpenArray(96, 159))
+
+  if not pubkey.initRaw(inputPubKey):
     return err(prcErr(PrcInvalidParam))
 
-  let isValid = sig.verifyRaw(h, pubkey)
+  let isValid = sig.verifyRaw(c.msg.data.toOpenArray(0, 31), pubkey)
 
   if isValid:
     c.output.setLen(32)
@@ -798,7 +788,6 @@ proc p256verify(c: Computation): EvmResultVoid =
 # ------------------------------------------------------------------------------
 
 iterator activePrecompiles*(fork: EVMFork): Address =
-  var res: Address
   let maxPrecompile = getMaxPrecompile(fork)
   for c in Precompiles.low..maxPrecompile:
     yield precompileAddrs[c]
@@ -808,9 +797,10 @@ func activePrecompilesList*(fork: EVMFork): seq[Address] =
     result.add address
 
 proc getPrecompile*(fork: EVMFork, codeAddress: Address): Opt[Precompiles] =
-  for precompile, addr in precompileAddrs:
-    if addr == codeAddress:
-      return Opt.some(precompile)
+  let maxPrecompile = getMaxPrecompile(fork)
+  for c in Precompiles.low..maxPrecompile:
+    if precompileAddrs[c] == codeAddress:
+      return Opt.some(c)
 
   Opt.none(Precompiles)
 

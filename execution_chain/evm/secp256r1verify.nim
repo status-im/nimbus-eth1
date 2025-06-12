@@ -35,10 +35,3 @@ proc verifyRaw*[T: byte | char](
     )
     # Clear context with initial value
     result = (res == 1)
-
-proc isInfinityByte*(data: openArray[byte]): bool =
-  ## Check if all values in ``data`` are zero.
-  for b in data:
-    if b != 0:
-      return false
-  return true
