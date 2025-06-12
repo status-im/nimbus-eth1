@@ -189,6 +189,25 @@ proc extCodeCopyEIP2929Op(cpt: VmCpt): EvmResultVoid =
   cpt.memory.writePadded(code.bytes(), memPos, codePos, len)
   ok()
 
+proc extCodeCopyEIP7907Op(cpt: VmCpt): EvmResultVoid =
+  ## 0x3c, Copy an account's code to memory (EIP-2929).
+  ? cpt.stack.lsCheck(4)
+  let
+    address = cpt.stack.lsPeekAddress(^1)
+    memPos  = cpt.stack.lsPeekMemRef(^2)
+    codePos = cpt.stack.lsPeekMemRef(^3)
+    len     = cpt.stack.lsPeekMemRef(^4)
+    gasCost = cpt.gasCosts[ExtCodeCopy].m_handler(cpt.memory.len, memPos, len) +
+                cpt.gasEip2929AccountCheck(address) + cpt.gasCallEIP7907(addresss)
+
+  cpt.stack.lsShrink(4)
+  ? cpt.opcodeGasCost(ExtCodeCopy, gasCost, reason = "ExtCodeCopy EIP7907")
+
+  let code = cpt.getCode(address)
+  cpt.memory.writePadded(code.bytes(), memPos, codePos, len)
+  ok()
+
+
 # -----------
 
 func returnDataSizeOp(cpt: VmCpt): EvmResultVoid =
@@ -349,6 +368,13 @@ const
      name: "extCodeCopyEIP2929",
      info: "EIP2929: Copy an account's code to memory",
      exec: extCodeCopyEIP2929Op),
+
+    (opCode: ExtCodeCopy,    ## 0x3c, Account Code-copy for Berlin through Cancun
+     forks: VmOpOsakaAndLater,
+     name: "extCodeCopyEIP7907",
+     info: "EIP7907: Copy an account's code to memory",
+     exec: extCodeCopyEIP7907Op),
+
 
 
     (opCode: ReturnDataSize, ## 0x3d, Previous call output data size
