@@ -808,10 +808,6 @@ func activePrecompilesList*(fork: EVMFork): seq[Address] =
   for address in activePrecompiles(fork):
     result.add address
 
-# proc getPrecompile*(fork: EVMFork, b: byte): Opt[Precompiles] =
-#   let maxPrecompile = getMaxPrecompile(fork)
-#   Opt.some(maxPrecompile)
-
 proc getPrecompile*(fork: EVMFork, codeAddress: Address): Opt[Precompiles] =
   for precompile, addr in precompileAddrs:
     if addr == codeAddress:
