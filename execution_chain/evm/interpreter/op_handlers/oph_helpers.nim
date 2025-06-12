@@ -15,7 +15,6 @@
 {.push raises: [].}
 
 import
-  ../../../core/eip7702,
   ../../evm_errors,
   ../../types,
   ../gas_costs,
