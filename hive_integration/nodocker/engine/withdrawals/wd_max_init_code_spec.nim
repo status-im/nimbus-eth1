@@ -32,7 +32,7 @@ type
     overflowMaxInitcodeTxCountAfterFork *: uint64
 
 const
-  MAX_INITCODE_SIZE = EIP7907_MAX_INITCODE_SIZE
+  MAX_INITCODE_SIZE = EIP170_MAX_INITCODE_SIZE
 
 proc execute*(ws: MaxInitcodeSizeSpec, env: TestEnv): bool =
   testCond waitFor env.clMock.waitForTTD()

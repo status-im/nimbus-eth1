@@ -59,6 +59,25 @@ proc delegateResolutionCost*(c: Computation, address: Address): GasInt =
     else:
       return WarmStorageReadCost
 
+proc gasEip7702CodeCheck*(c: Computation; address: Address): GasInt =
+  let delegateTo =
+    parseDelegationAddress(c.vmState.readOnlyLedger.getCode(address)).valueOr:
+      return 0
+  c.delegateResolutionCost(delegateTo)
+
+proc gasCallEIP7907*(c: Computation, codeAddress: Address): GasInt =
+  c.vmState.mutateLedger:
+    let codeHash = db.getCodeHash(codeAddress)
+
+    if not db.inAccessList(codeHash):
+      db.accessList(codeHash)
+
+      let
+        code = db.getCode(codeAddress)
+        excessContractSize = max(0, code.len - CODE_SIZE_THRESHOLD)
+        largeContractCost = (ceil32(excessContractSize) * 2) div 32
+      return GasInt(largeContractCost)
+
 # ------------------------------------------------------------------------------
 # End
 # ------------------------------------------------------------------------------

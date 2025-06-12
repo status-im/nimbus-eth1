@@ -76,8 +76,11 @@ proc createOp(cpt: VmCpt): EvmResultVoid =
   cpt.stack.lsShrink(2)
   cpt.stack.lsTop(0)
 
-  # EIP-3860
-  if cpt.fork >= FkShanghai and memLen > EIP7907_MAX_INITCODE_SIZE:
+  # EIP-7907 and EIP-3860
+  if cpt.fork >= FkOsaka and memLen > EIP7907_MAX_INITCODE_SIZE:
+    trace "Initcode size exceeds maximum", initcodeSize = memLen
+    return err(opErr(InvalidInitCode))
+  elif cpt.fork >= FkShanghai and memLen > EIP3860_MAX_INITCODE_SIZE:
     trace "Initcode size exceeds maximum", initcodeSize = memLen
     return err(opErr(InvalidInitCode))
 
@@ -146,8 +149,11 @@ proc create2Op(cpt: VmCpt): EvmResultVoid =
   cpt.stack.lsShrink(3)
   cpt.stack.lsTop(0)
 
-  # EIP-3860
-  if cpt.fork >= FkShanghai and memLen > EIP7907_MAX_INITCODE_SIZE:
+  # EIP-7907 and EIP-3860
+  if cpt.fork >= FkOsaka and memLen > EIP7907_MAX_INITCODE_SIZE:
+    trace "Initcode size exceeds maximum", initcodeSize = memLen
+    return err(opErr(InvalidInitCode))
+  elif cpt.fork >= FkShanghai and memLen > EIP3860_MAX_INITCODE_SIZE:
     trace "Initcode size exceeds maximum", initcodeSize = memLen
     return err(opErr(InvalidInitCode))
 

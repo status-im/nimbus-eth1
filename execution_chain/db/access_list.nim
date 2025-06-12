@@ -21,7 +21,7 @@ type
 
   AccessList* = object
     slots: Table[Address, SlotSet]
-    codeHashes: seq[Hash32]
+    codeAddrs: seq[Address]
 
 # ------------------------------------------------------------------------------
 # Private helpers
@@ -37,7 +37,7 @@ func toStorageKeys(slots: SlotSet): seq[Bytes32] =
 
 proc init*(ac: var AccessList) =
   ac.slots = Table[Address, SlotSet]()
-  ac.codeHashes = newSeq[Hash32]()
+  ac.codeAddrs = newSeq[Address]()
 
 proc init*(_: type AccessList): AccessList {.inline.} =
   result.init()
@@ -49,8 +49,8 @@ proc init*(_: type AccessList): AccessList {.inline.} =
 func contains*(ac: AccessList, address: Address): bool {.inline.} =
   address in ac.slots
 
-func contains*(ac: AccessList, codeHash: Hash32): bool {.inline.} =
-  codeHash in ac.codeHashes
+func containsCode*(ac: AccessList, codeAddr: Address): bool {.inline.} =
+  codeAddr in ac.codeAddrs
 
 # returnValue: (addressPresent, slotPresent)
 func contains*(ac: var AccessList, address: Address, slot: UInt256): bool =
@@ -60,7 +60,7 @@ func contains*(ac: var AccessList, address: Address, slot: UInt256): bool =
 proc mergeAndReset*(ac, other: var AccessList) =
   # move values in `other` to `ac`
   ac.slots.mergeAndReset(other.slots)
-  ac.codeHashes.mergeAndReset(other.codeHashes)
+  ac.codeAddrs.mergeAndReset(other.codeAddrs)
 
 proc add*(ac: var AccessList, address: Address) =
   if address notin ac.slots:
@@ -72,13 +72,13 @@ proc add*(ac: var AccessList, address: Address, slot: UInt256) =
   do:
     ac.slots[address] = toHashSet([slot])
 
-proc add*(ac: var AccessList, codeHash: Hash32) =
-  if codeHash notin ac.codeHashes:
-    ac.codeHashes.add(codeHash)
+proc addCode*(ac: var AccessList, codeAddr: Address) =
+  if codeAddr notin ac.codeAddrs:
+    ac.codeAddrs.add(codeAddr)
 
 proc clear*(ac: var AccessList) {.inline.} =
   ac.slots.clear()
-  ac.codeHashes.setLen(0)
+  ac.codeAddrs.setLen(0)
 
 # TODO: accesses code is still not a part of the transaction access list
 # but when it does trickle down into the transaction we will have to add
@@ -105,8 +105,8 @@ func equal*(ac: AccessList, other: var AccessList): bool =
     do:
       return false
 
-  for codeHash in ac.codeHashes:
-    if codeHash notin other:
+  for codeAddr in ac.codeAddrs:
+    if codeAddr notin other:
       return false
 
   true
