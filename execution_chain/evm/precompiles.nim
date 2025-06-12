@@ -313,19 +313,15 @@ func bn256ecAdd(c: Computation, fork: EVMFork = FkByzantium): EvmResultVoid =
   let gasFee = if fork < FkIstanbul: GasECAdd else: GasECAddIstanbul
   ? c.gasMeter.consumeGas(gasFee, reason = "ecAdd Precompile")
 
-  var
-    input: array[128, byte]
-
   # Padding data
   let len = min(c.msg.data.len, 128) - 1
-  input[0..len] = c.msg.data[0..len]
   c.output.setLen(64)
 
-  let status = eth_evm_bn254_g1add(c.output, input)
+  let status = eth_evm_bn254_g1add(c.output,  c.msg.data.toOpenArray(0, len))
 
-  if status == cttEVM_PointNotOnCurve:
+  if status == CttEVMStatus.cttEVM_PointNotOnCurve:
     return err(EvmErrorObj(code: PrcInvalidPoint))
-  elif status != cttEVM_Success:
+  elif status != CttEVMStatus.cttEVM_Success:
     return err(EvmErrorObj(code: PrcInvalidParam))
 
   ok()
