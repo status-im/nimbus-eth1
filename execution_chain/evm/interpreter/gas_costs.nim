@@ -494,6 +494,7 @@ template gasCosts(fork: EVMFork, prefix, ResultGasCostsName: untyped) =
           # 0s: Stop and Arithmetic Operations
           Stop:            fixed GasZero,
           Add:             fixed GasVeryLow,
+          Clz:             fixed GasLow,
           Mul:             fixed GasLow,
           Sub:             fixed GasVeryLow,
           Div:             fixed GasLow,
