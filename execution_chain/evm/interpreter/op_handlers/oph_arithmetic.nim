@@ -277,6 +277,26 @@ proc sarOp(cpt: VmCpt): EvmResultVoid =
 
   cpt.stack.binaryWithTop(sar256)
 
+proc clzOp(cpt: VmCpt): EvmResultVoid =
+  ## 0x1e, Count Leading Zeros
+  template clz256(top, value) =
+    if value.isZero:
+      top = 256.u256
+    else:
+      var count = 0
+      for i in 0 ..< 32:
+        let b = (value shr ((31 - i) * 8)).truncate(byte)
+        if b != 0:
+          var mask = 0x80'u8
+          while (b and mask) == 0:
+            inc count
+            mask = mask shr 1
+          break
+        inc count, 8
+      top = count.u256
+
+  cpt.stack.unaryWithTop(clz256)
+
 # ------------------------------------------------------------------------------
 # Public, op exec table entries
 # ------------------------------------------------------------------------------
@@ -460,7 +480,13 @@ const
      forks: VmOpConstantinopleAndLater,
      name: "sarOp",
      info: "Arithmetic shift right",
-     exec: sarOp)]
+     exec: sarOp),
+
+    (opCode: Clz,     ## CLZ (Count Leading Zeros)
+     forks: VmOpOsakaAndLater, ## Or a newer fork gate, if appropriate
+     name: "clzOp",
+     info: "Count leading zero bits in a 256-bit word",
+     exec: clzOp)]
 
 # ------------------------------------------------------------------------------
 # End
