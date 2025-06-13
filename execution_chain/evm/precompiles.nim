@@ -757,14 +757,10 @@ proc p256verify(c: Computation): EvmResultVoid =
   if c.msg.data.len != 160:
     return err(prcErr(PrcInvalidParam))
 
-  ? c.gasMeter.consumeGas(GasP256VerifyGas, reason="P256VERIFY Precompile")
-
   var inputPubKey: array[65, byte]
 
   # Validations
   if isInfinityByte(c.msg.data.toOpenArray(96, 159)):
-    return err(prcErr(PrcInvalidPoint))
-  if checkScalar(c.msg.data.toOpenArray(32, 63), EcSupportedCurvesCint[0]) == 0'u32:
     return err(prcErr(PrcInvalidPoint))
 
   # Check scalar and field bounds (r, s ∈ (0, n), qx, qy ∈ [0, p))
@@ -778,6 +774,8 @@ proc p256verify(c: Computation): EvmResultVoid =
 
   if not pubkey.initRaw(inputPubKey):
     return err(prcErr(PrcInvalidPoint))
+
+  ? c.gasMeter.consumeGas(GasP256VerifyGas, reason="P256VERIFY Precompile")
 
   let isValid = sig.verifyRaw(c.msg.data.toOpenArray(0, 31), pubkey)
 
