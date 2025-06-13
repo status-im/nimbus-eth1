@@ -858,3 +858,4 @@ const
   Bls12381PairingPerPairGas* = GasInt 32600
   Bls12381MapG1Gas*          = GasInt 5500
   Bls12381MapG2Gas*          = GasInt 23800
+  GasP256VerifyGas*          = GasInt 3450
