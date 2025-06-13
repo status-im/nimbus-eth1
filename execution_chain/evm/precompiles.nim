@@ -761,17 +761,23 @@ proc p256verify(c: Computation): EvmResultVoid =
 
   var inputPubKey: array[65, byte]
 
+  # Validations
+  if isInfinityByte(c.msg.data.toOpenArray(96, 159)):
+    return err(prcErr(PrcInvalidPoint))
+  if checkScalar(c.msg.data.toOpenArray(32, 63), EcSupportedCurvesCint[0]) == 0'u32:
+    return err(prcErr(PrcInvalidPoint))
+
   # Check scalar and field bounds (r, s ∈ (0, n), qx, qy ∈ [0, p))
   var sig: EcSignature
   if not sig.initRaw(c.msg.data.toOpenArray(32, 95)):
-    return err(prcErr(PrcInvalidParam))
+    return err(prcErr(PrcInvalidPoint))
 
   var pubkey: EcPublicKey
   inputPubKey[0] = 4.byte
   assign(inputPubKey.toOpenArray(1, 64), c.msg.data.toOpenArray(96, 159))
 
   if not pubkey.initRaw(inputPubKey):
-    return err(prcErr(PrcInvalidParam))
+    return err(prcErr(PrcInvalidPoint))
 
   let isValid = sig.verifyRaw(c.msg.data.toOpenArray(0, 31), pubkey)
 
