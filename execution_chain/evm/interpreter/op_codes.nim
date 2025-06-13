@@ -58,6 +58,7 @@ type
     Shl =            0x1B, ## Shift left
     Shr =            0x1C, ## Logical shift right
     Sar =            0x1D, ## Arithmetic shift right
+    Clz =            0x1E, ## Count leading zeros
 
     Nop0x1E, Nop0x1F, ## ..
 
