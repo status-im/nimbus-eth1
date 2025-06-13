@@ -264,11 +264,11 @@ func modExpFee(c: Computation,
     result = result * result
 
   func mulComplexityEIP7883(maxLen: UInt256): UInt256 =
-    # gas = ceil(x div 8) ^ 2
-    result = maxLen + 7
-    result = result div 8
-    result = result * result
+    result = 16'u256
     if maxLen > 32.u256:
+      result = maxLen + 7
+      result = result div 8
+      result = result * result
       result = result * 2
 
   let adjExpLen = block:
