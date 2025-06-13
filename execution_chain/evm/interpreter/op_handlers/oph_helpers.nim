@@ -15,7 +15,6 @@
 {.push raises: [].}
 
 import
-  ../../../core/eip7702,
   ../../evm_errors,
   ../../types,
   ../gas_costs,
@@ -59,12 +58,6 @@ proc delegateResolutionCost*(c: Computation, address: Address): GasInt =
       return ColdAccountAccessCost
     else:
       return WarmStorageReadCost
-
-proc gasEip7702CodeCheck*(c: Computation; address: Address): GasInt =
-  let delegateTo =
-    parseDelegationAddress(c.vmState.readOnlyLedger.getCode(address)).valueOr:
-      return 0
-  c.delegateResolutionCost(delegateTo)
 
 # ------------------------------------------------------------------------------
 # End

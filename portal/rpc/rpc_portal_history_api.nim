@@ -157,11 +157,22 @@ proc installPortalHistoryApiHandlers*(rpcServer: RpcServer, p: PortalProtocol) =
       # validation should be done here anyhow.
       # As no validation is done here, the content is not stored locally.
       # TODO: Add default on validation by optional validation parameter.
-      peerCount = await p.neighborhoodGossip(
+      gossipMetadata = await p.neighborhoodGossip(
         Opt.none(NodeId),
         ContentKeysList(@[keyBytes]),
         @[offerValueBytes],
         enableNodeLookup = true,
       )
 
-    PutContentResult(storedLocally: false, peerCount: peerCount)
+    PutContentResult(
+      storedLocally: false,
+      peerCount: gossipMetadata.successCount,
+      acceptMetadata: AcceptMetadata(
+        acceptedCount: gossipMetadata.acceptedCount,
+        genericDeclineCount: gossipMetadata.genericDeclineCount,
+        alreadyStoredCount: gossipMetadata.alreadyStoredCount,
+        notWithinRadiusCount: gossipMetadata.notWithinRadiusCount,
+        rateLimitedCount: gossipMetadata.rateLimitedCount,
+        transferInProgressCount: gossipMetadata.transferInProgressCount,
+      ),
+    )

@@ -282,9 +282,17 @@ procSuite "Portal Wire Protocol Tests":
       contentKeys = ContentKeysList(@[ContentKeyByteList(@[byte 0x01, 0x02, 0x03])])
       content: seq[seq[byte]] = @[@[byte 0x04, 0x05, 0x06]]
 
-    let peerCount =
-      await proto1.neighborhoodGossip(Opt.none(NodeId), contentKeys, content)
-    check peerCount == 1
+    block:
+      let gossipMetadata =
+        await proto1.neighborhoodGossip(Opt.none(NodeId), contentKeys, content)
+      check:
+        gossipMetadata.successCount == 1
+        gossipMetadata.acceptedCount == 1
+        gossipMetadata.genericDeclineCount == 0
+        gossipMetadata.alreadyStoredCount == 0
+        gossipMetadata.notWithinRadiusCount == 0
+        gossipMetadata.rateLimitedCount == 0
+        gossipMetadata.transferInProgressCount == 0
 
     let (srcNodeId, keys, items) = await proto2.stream.contentQueue.popFirst()
     check:
@@ -293,6 +301,22 @@ procSuite "Portal Wire Protocol Tests":
       keys.len() == 1
       keys == contentKeys
       items == content
+
+    # Store the content
+    proto2.storeContent(keys[0], keys[0].toContentId().get(), items[0])
+
+    # Gossip the same content a second time
+    block:
+      let gossipMetadata =
+        await proto1.neighborhoodGossip(Opt.none(NodeId), contentKeys, content)
+      check:
+        gossipMetadata.successCount == 1
+        gossipMetadata.acceptedCount == 0
+        gossipMetadata.genericDeclineCount == 0
+        gossipMetadata.alreadyStoredCount == 1
+        gossipMetadata.notWithinRadiusCount == 0
+        gossipMetadata.rateLimitedCount == 0
+        gossipMetadata.transferInProgressCount == 0
 
     await proto1.stopPortalProtocol()
     await proto2.stopPortalProtocol()
@@ -308,8 +332,17 @@ procSuite "Portal Wire Protocol Tests":
       contentKeys = ContentKeysList(@[ContentKeyByteList(@[byte 0x01, 0x02, 0x03])])
       content: seq[seq[byte]] = @[@[byte 0x04, 0x05, 0x06]]
 
-    let peerCount = await proto1.randomGossip(Opt.none(NodeId), contentKeys, content)
-    check peerCount == 1
+    block:
+      let gossipMetadata =
+        await proto1.randomGossip(Opt.none(NodeId), contentKeys, content)
+      check:
+        gossipMetadata.successCount == 1
+        gossipMetadata.acceptedCount == 1
+        gossipMetadata.genericDeclineCount == 0
+        gossipMetadata.alreadyStoredCount == 0
+        gossipMetadata.notWithinRadiusCount == 0
+        gossipMetadata.rateLimitedCount == 0
+        gossipMetadata.transferInProgressCount == 0
 
     let (srcNodeId, keys, items) = await proto2.stream.contentQueue.popFirst()
     check:
@@ -318,6 +351,22 @@ procSuite "Portal Wire Protocol Tests":
       keys.len() == 1
       keys == contentKeys
       items == content
+
+    # Store the content
+    proto2.storeContent(keys[0], keys[0].toContentId().get(), items[0])
+
+    # Gossip the same content a second time
+    block:
+      let gossipMetadata =
+        await proto1.neighborhoodGossip(Opt.none(NodeId), contentKeys, content)
+      check:
+        gossipMetadata.successCount == 1
+        gossipMetadata.acceptedCount == 0
+        gossipMetadata.genericDeclineCount == 0
+        gossipMetadata.alreadyStoredCount == 1
+        gossipMetadata.notWithinRadiusCount == 0
+        gossipMetadata.rateLimitedCount == 0
+        gossipMetadata.transferInProgressCount == 0
 
     await proto1.stopPortalProtocol()
     await proto2.stopPortalProtocol()

@@ -182,11 +182,22 @@ proc installPortalStateApiHandlers*(rpcServer: RpcServer, p: PortalProtocol) =
         raise invalidValueErr()
 
       storedLocally = p.storeContent(keyBytes, contentId, valueBytes)
-      peerCount = await p.neighborhoodGossip(
+      gossipMetadata = await p.neighborhoodGossip(
         Opt.none(NodeId),
         ContentKeysList(@[keyBytes]),
         @[offerValueBytes],
         enableNodeLookup = true,
       )
 
-    PutContentResult(storedLocally: storedLocally, peerCount: peerCount)
+    PutContentResult(
+      storedLocally: storedLocally,
+      peerCount: gossipMetadata.successCount,
+      acceptMetadata: AcceptMetadata(
+        acceptedCount: gossipMetadata.acceptedCount,
+        genericDeclineCount: gossipMetadata.genericDeclineCount,
+        alreadyStoredCount: gossipMetadata.alreadyStoredCount,
+        notWithinRadiusCount: gossipMetadata.notWithinRadiusCount,
+        rateLimitedCount: gossipMetadata.rateLimitedCount,
+        transferInProgressCount: gossipMetadata.transferInProgressCount,
+      ),
+    )

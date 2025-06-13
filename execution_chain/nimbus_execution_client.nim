@@ -114,7 +114,7 @@ proc setupP2P(nimbus: NimbusNode, conf: NimbusConf,
     rng = nimbus.ctx.rng)
 
   # Add protocol capabilities
-  nimbus.ethNode.addEthHandlerCapability(nimbus.txPool)
+  nimbus.wire = nimbus.ethNode.addEthHandlerCapability(nimbus.txPool)
 
   # Always initialise beacon syncer
   nimbus.beaconSyncRef = BeaconSyncRef.init(

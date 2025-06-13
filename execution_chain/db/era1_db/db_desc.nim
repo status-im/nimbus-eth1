@@ -50,7 +50,7 @@ proc getEra1File*(db: Era1DbRef, era: Era1): Result[Era1File, string] =
   # TODO: The open call does not do full verification. It is assumed here that
   # trusted files are used. We might want to add a full validation option.
   let f = Era1File.open(path).valueOr:
-    return err(error)
+    return err(path & ": " & error)
 
   if db.files.len > 16: # TODO LRU
     close(db.files[0])
