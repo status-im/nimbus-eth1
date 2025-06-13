@@ -231,7 +231,8 @@ func validateTxBasic*(
   if tx.contractCreation:
     if fork >= FkOsaka and tx.payload.len > EIP7907_MAX_INITCODE_SIZE:
       return err("invalid tx: initcode size exceeds maximum")
-    elif fork >= FkShanghai and tx.payload.len > EIP3860_MAX_INITCODE_SIZE:
+
+    if fork < FkOsaka and fork >= FkShanghai and tx.payload.len > EIP3860_MAX_INITCODE_SIZE:
       return err("invalid tx: initcode size exceeds maximum")
 
 
