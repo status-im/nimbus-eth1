@@ -60,7 +60,7 @@ type
     Sar =            0x1D, ## Arithmetic shift right
     Clz =            0x1E, ## Count leading zeros
 
-    Nop0x1E, Nop0x1F, ## ..
+    Nop0x1F, ## ..
 
     # 20s: SHA3
     Sha3 =           0x20, ## Compute Keccak-256 hash.
