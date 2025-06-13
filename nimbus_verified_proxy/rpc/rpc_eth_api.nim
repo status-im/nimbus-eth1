@@ -11,6 +11,7 @@ import
   std/[strutils, algorithm],
   results,
   chronicles,
+  stew/byteutils,
   json_rpc/[rpcserver, rpcclient, rpcproxy],
   eth/common/accounts,
   eth/common/addresses,
@@ -199,18 +200,30 @@ proc installEthApiHandlers*(vp: VerifiedRpcProxy) =
     if tx.to.isNone():
       raise newException(ValueError, "to address is required")
 
-    if blockTag.kind == bidAlias:
-      raise newException(ValueError, "tag not yet implemented")
-
     let
       header = (await vp.getHeaderByTag(blockTag)).valueOr:
         raise newException(ValueError, error)
-
       optimisticStateFetch = optimisticStateFetch.valueOr:
         true
 
+    # Start fetching code to get it in the code cache
+    discard vp.getCode(tx.to.get(), header.number, header.stateRoot)
+
+    # As a performance optimisation we concurrently pre-fetch the state needed
+    # for the call by calling eth_createAccessList and then using the returned
+    # access list keys to fetch the required state using eth_getProof.
+    (await vp.populateCachesUsingAccessList(header.number, header.stateRoot, tx)).isOkOr:
+      raise newException(ValueError, error)
+
     let callResult = (await vp.evm.call(header, tx, optimisticStateFetch)).valueOr:
       raise newException(ValueError, error)
+
+    if callResult.error.len() > 0:
+      raise (ref ApplicationError)(
+        code: 3,
+        msg: callResult.error,
+        data: Opt.some(JsonString("\"" & callResult.output.to0xHex() & "\"")),
+      )
 
     return callResult.output
 
@@ -220,15 +233,20 @@ proc installEthApiHandlers*(vp: VerifiedRpcProxy) =
     if tx.to.isNone():
       raise newException(ValueError, "to address is required")
 
-    if blockTag.kind == bidAlias:
-      raise newException(ValueError, "tag not yet implemented")
-
     let
       header = (await vp.getHeaderByTag(blockTag)).valueOr:
         raise newException(ValueError, error)
-
       optimisticStateFetch = optimisticStateFetch.valueOr:
         true
+
+    # Start fetching code to get it in the code cache
+    discard vp.getCode(tx.to.get(), header.number, header.stateRoot)
+
+    # As a performance optimisation we concurrently pre-fetch the state needed
+    # for the call by calling eth_createAccessList and then using the returned
+    # access list keys to fetch the required state using eth_getProof.
+    (await vp.populateCachesUsingAccessList(header.number, header.stateRoot, tx)).isOkOr:
+      raise newException(ValueError, error)
 
     let (accessList, error, gasUsed) = (
       await vp.evm.createAccessList(header, tx, optimisticStateFetch)
@@ -238,27 +256,31 @@ proc installEthApiHandlers*(vp: VerifiedRpcProxy) =
     return
       AccessListResult(accessList: accessList, error: error, gasUsed: gasUsed.Quantity)
 
-  #  vp.proxy.rpc("eth_estimateGas") do(
-  #    tx: TransactionArgs, blockTag: BlockTag, optimisticStateFetch: Opt[bool]
-  #  ) -> Quantity:
-  #    if tx.to.isNone():
-  #      raise newException(ValueError, "to address is required")
-  #
-  #    if blockTag.kind == bidAlias:
-  #      raise newException(ValueError, "tag not yet implemented")
-  #
-  #    let
-  #      header = (await vp.getHeaderByTag(blockTag)).valueOr:
-  #        raise newException(ValueError, error)
-  #
-  #      optimisticStateFetch = optimisticStateFetch.valueOr:
-  #        true
-  #
-  #    let gasEstimate = (await vp.evm.estimateGas(header, tx, optimisticStateFetch)).valueOr:
-  #      raise newException(ValueError, error)
-  #
-  #    return gasEstimate.Quantity
-  #
+  # vp.proxy.rpc("eth_estimateGas") do(
+  #   tx: TransactionArgs, blockTag: BlockTag, optimisticStateFetch: Opt[bool]
+  # ) -> Quantity:
+  #   if tx.to.isNone():
+  #     raise newException(ValueError, "to address is required")
+
+  #   let
+  #     header = (await vp.getHeaderByTag(blockTag)).valueOr:
+  #       raise newException(ValueError, error)
+  #     optimisticStateFetch = optimisticStateFetch.valueOr:
+  #       true
+
+  #   # Start fetching code to get it in the code cache
+  #   discard vp.getCode(tx.to.get(), header.number, header.stateRoot)
+
+  #   # As a performance optimisation we concurrently pre-fetch the state needed
+  #   # for the call by calling eth_createAccessList and then using the returned
+  #   # access list keys to fetch the required state using eth_getProof.
+  #   (await vp.populateCachesUsingAccessList(header.number, header.stateRoot, tx)).isOkOr:
+  #     raise newException(ValueError, error)
+
+  #   let gasEstimate = (await vp.evm.estimateGas(header, tx, optimisticStateFetch)).valueOr:
+  #     raise newException(ValueError, error)
+
+  #   return gasEstimate.Quantity
 
   #  vp.proxy.rpc("eth_blobBaseFee") do() -> Quantity:
   #    let header = vp.headerStore.latest.valueOr:
