@@ -279,9 +279,9 @@ proc sarOp(cpt: VmCpt): EvmResultVoid =
 
 proc clzOp(cpt: VmCpt): EvmResultVoid =
   ## 0x1e, Count Leading Zeros
-  template clz256(top, value) =
+  template clz256(top, value, toStackElem) =
     if value.isZero:
-      top = 256.u256
+      toStackElem(256.u256, top)
     else:
       var count = 0
       for i in 0 ..< 32:
@@ -293,7 +293,7 @@ proc clzOp(cpt: VmCpt): EvmResultVoid =
             mask = mask shr 1
           break
         inc count, 8
-      top = count.u256
+      toStackElem(count.u256, top)
 
   cpt.stack.unaryWithTop(clz256)
 
