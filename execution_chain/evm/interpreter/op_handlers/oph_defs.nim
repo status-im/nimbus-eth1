@@ -82,8 +82,11 @@ const
   VmOpCancunAndLater* =
     VmOpShanghaiAndLater - {FkShanghai}
 
-  VmOpOsakaAndLater* =
+  VmOpPragueAndLater* =
     VmOpCancunAndLater - {FkCancun}
+
+  VmOpOsakaAndLater* =
+    VmOpPragueAndLater - {FkPrague}
 
 
 # ------------------------------------------------------------------------------

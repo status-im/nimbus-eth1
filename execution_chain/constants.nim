@@ -62,8 +62,8 @@ const
   # See EIP-170 (https://eips.ethereum.org/EIPS/eip-170) Maximum code size
   # that can be stored for a new contract.  Init code when creating a new
   # contract is not subject to this limit.
-  EIP170_SIZE_THRESHOLD* =                  0x6000
-  # See See EIP-170 (https://eips.ethereum.org/EIPS/eip-170). Update to limits
+  EIP170_MAX_CODE_SIZE* =                   0x6000
+  # See See EIP-7907 (https://eips.ethereum.org/EIPS/eip-7907). Update to limits
   CODE_SIZE_THRESHOLD* =                    0x6000
   EIP7907_MAX_CODE_SIZE* =                  0x40000
 

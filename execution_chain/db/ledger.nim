@@ -829,7 +829,7 @@ proc accessList*(ac: LedgerRef, address: Address) =
 proc accessList*(ac: LedgerRef, address: Address, slot: UInt256) =
   ac.savePoint.accessList.add(address, slot)
 
-proc accessList*(ac: LedgerRef, codeAddr: Address) =
+proc codeAccessList*(ac: LedgerRef, codeAddr: Address) =
   ac.savePoint.accessList.addCode(codeAddr)
 
 func inAccessList*(ac: LedgerRef, address: Address): bool =

@@ -198,7 +198,7 @@ proc extCodeCopyEIP7907Op(cpt: VmCpt): EvmResultVoid =
     codePos = cpt.stack.lsPeekMemRef(^3)
     len     = cpt.stack.lsPeekMemRef(^4)
     gasCost = cpt.gasCosts[ExtCodeCopy].m_handler(cpt.memory.len, memPos, len) +
-                cpt.gasEip2929AccountCheck(address) + cpt.gasCallEIP7907(addresss)
+                cpt.gasEip2929AccountCheck(address) + cpt.gasCallEIP7907(address)
 
   cpt.stack.lsShrink(4)
   ? cpt.opcodeGasCost(ExtCodeCopy, gasCost, reason = "ExtCodeCopy EIP7907")
@@ -206,7 +206,6 @@ proc extCodeCopyEIP7907Op(cpt: VmCpt): EvmResultVoid =
   let code = cpt.getCode(address)
   cpt.memory.writePadded(code.bytes(), memPos, codePos, len)
   ok()
-
 
 # -----------
 
@@ -364,7 +363,7 @@ const
 
 
     (opCode: ExtCodeCopy,    ## 0x3c, Account Code-copy for Berlin through Cancun
-     forks: VmOpBerlinAndLater,
+     forks: VmOpBerlinAndLater - VmOpOsakaAndLater,
      name: "extCodeCopyEIP2929",
      info: "EIP2929: Copy an account's code to memory",
      exec: extCodeCopyEIP2929Op),

@@ -117,6 +117,10 @@ proc createOp(cpt: VmCpt): EvmResultVoid =
     createMsgGas -= createMsgGas div 64
   ? cpt.gasMeter.consumeGas(createMsgGas, reason = "CREATE msg gas")
 
+  if cpt.fork >= FkOsaka:
+    cpt.vmState.mutateLedger:
+      db.codeAccessList(cpt.msg.contractAddress)
+
   var
     childMsg = Message(
       kind:   CallKind.Create,
@@ -186,6 +190,11 @@ proc create2Op(cpt: VmCpt): EvmResultVoid =
         required = endowment,
         balance = senderBalance
       return ok()
+
+  if cpt.fork >= FkOsaka:
+    cpt.vmState.mutateLedger:
+      db.codeAccessList(cpt.msg.contractAddress)
+
 
   var createMsgGas = cpt.gasMeter.gasRemaining
   if cpt.fork >= FkTangerine:

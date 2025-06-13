@@ -21,7 +21,7 @@ type
 
   AccessList* = object
     slots: Table[Address, SlotSet]
-    codeAddrs: seq[Address]
+    codeAddrs: HashSet[Address]
 
 # ------------------------------------------------------------------------------
 # Private helpers
@@ -37,7 +37,7 @@ func toStorageKeys(slots: SlotSet): seq[Bytes32] =
 
 proc init*(ac: var AccessList) =
   ac.slots = Table[Address, SlotSet]()
-  ac.codeAddrs = newSeq[Address]()
+  ac.codeAddrs = HashSet[Address]()
 
 proc init*(_: type AccessList): AccessList {.inline.} =
   result.init()
@@ -73,12 +73,11 @@ proc add*(ac: var AccessList, address: Address, slot: UInt256) =
     ac.slots[address] = toHashSet([slot])
 
 proc addCode*(ac: var AccessList, codeAddr: Address) =
-  if codeAddr notin ac.codeAddrs:
-    ac.codeAddrs.add(codeAddr)
+  ac.codeAddrs.incl codeAddr
 
 proc clear*(ac: var AccessList) {.inline.} =
   ac.slots.clear()
-  ac.codeAddrs.setLen(0)
+  ac.codeAddrs.clear()
 
 # TODO: accesses code is still not a part of the transaction access list
 # but when it does trickle down into the transaction we will have to add
