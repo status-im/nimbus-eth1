@@ -10,6 +10,7 @@
 import
   results,
   chronicles,
+  stew/byteutils,
   json_rpc/[rpcserver, rpcclient, rpcproxy],
   eth/common/accounts,
   web3/eth_api,
@@ -162,6 +163,13 @@ proc installEthApiHandlers*(vp: VerifiedRpcProxy) =
 
     let callResult = (await vp.evm.call(header, tx, optimisticStateFetch)).valueOr:
       raise newException(ValueError, error)
+
+    if callResult.error.len() > 0:
+      raise (ref ApplicationError)(
+        code: 3,
+        msg: callResult.error,
+        data: Opt.some(JsonString("\"" & callResult.output.to0xHex() & "\"")),
+      )
 
     return callResult.output
 
