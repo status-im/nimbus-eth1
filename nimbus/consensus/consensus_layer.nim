@@ -12,6 +12,7 @@ import
   chronos,
   chronicles,
   results,
+  confutils,
   ../conf,
   ../common/utils,
   ./wrapper_consensus,
@@ -21,13 +22,42 @@ import
 logScope:
   topics = "Consensus layer"
 
-proc startBeaconNode(configs: seq[string]) {.raises: [CatchableError].} =
-  proc commandLineParams(): seq[string] =
-    configs
+proc makeConfig*(
+    cmdCommandList: seq[string], ConfType: type
+): Result[ConfType, string] =
+  {.push warning[ProveInit]: off.}
+  let config =
+    try:
+      ConfType.load(
+        cmdLine = cmdCommandList,
+        secondarySources = proc(
+            config: ConfType, sources: auto
+        ) {.raises: [ConfigurationError], gcsafe.} =
+          if config.configFile.isSome:
+            sources.addConfigFile(Toml, config.configFile.get)
+        ,
+      )
+    except CatchableError as exc:
+      # We need to log to stderr here, because logging hasn't been configured yet
+      var msg = "Failure while loading the configuration:\p" & exc.msg & "\p"
+      if (exc[] of ConfigurationError) and not (isNil(exc.parent)) and
+          (exc.parent[] of TomlFieldReadingError):
+        let fieldName = ((ref TomlFieldReadingError)(exc.parent)).field
+        if fieldName in
+            [
+              "el", "web3-url", "bootstrap-node", "direct-peer",
+              "validator-monitor-pubkey",
+            ]:
+          msg &=
+            "Since the '" & fieldName & "' option is allowed to " &
+            "have more than one value, please make sure to supply " &
+            "a properly formatted TOML array\p"
+      return err(msg)
+  {.pop.}
+  ok(config)
 
-  var config = makeBannerAndConfig(
-    "clientId", "copyrights", "nimBanner", "SPEC_VERSION", [], BeaconNodeConf
-  ).valueOr:
+proc startBeaconNode(paramsList: seq[string]) {.raises: [CatchableError].} =
+  var config = makeConfig(paramsList, BeaconNodeConf).valueOr:
     error "Error starting consensus", err = error
     quit QuitFailure
 
