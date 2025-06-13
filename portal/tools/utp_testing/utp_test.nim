@@ -21,8 +21,8 @@ proc generateBytesHex(rng: var HmacDrbgContext, length: int): string =
 # Before running this test suite, there need to be two instances of the
 # utp_test_app running under the tested ports: 9042, 9041.
 # Those could be launched locally by running either
-# ./utp_test_app --udp-listen-address=127.0.0.1 --rpc-listen-address=0.0.0.0 --udp-port=9041 --rpc-port=9041
-# ./utp_test_app --udp-listen-address=127.0.0.1 --rpc-listen-address=0.0.0.0 --udp-port=9042 --rpc-port=9042
+# ./build/utp_test_app --udp-listen-address=127.0.0.1 --rpc-listen-address=0.0.0.0 --udp-port=9041 --rpc-port=9041
+# ./build/utp_test_app --udp-listen-address=127.0.0.1 --rpc-listen-address=0.0.0.0 --udp-port=9042 --rpc-port=9042
 # or
 # running from docker dir:
 # 1. docker build -t test-utp --no-cache --build-arg BRANCH_NAME=branch-name .
