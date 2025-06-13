@@ -163,7 +163,7 @@ proc assembleBlock*(
 
   for item in pst.packedTxs:
     let tx = item.pooledTx
-    if currentRlpSize > MAX_RLP_BLOCK_SIZE - 10:
+    if currentRlpSize > MAX_RLP_BLOCK_SIZE - 7:
       break
     currentRlpSize = currentRlpSize + rlp.getEncodedLength(tx.tx)
     blk.txs.add tx.tx
