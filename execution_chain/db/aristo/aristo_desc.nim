@@ -97,12 +97,10 @@ type
     ## Backend interface.
     getVtxFn*: GetVtxFn              ## Read vertex record
     getKeyFn*: GetKeyFn              ## Read Merkle hash/key
-    getTuvFn*: GetTuvFn              ## Read top used vertex ID
     getLstFn*: GetLstFn              ## Read saved state
 
     putBegFn*: PutBegFn              ## Start bulk store session
     putVtxFn*: PutVtxFn              ## Bulk store vertex records
-    putTuvFn*: PutTuvFn              ## Store top used vertex ID
     putLstFn*: PutLstFn              ## Store saved state
     putEndFn*: PutEndFn              ## Commit bulk store session
 
