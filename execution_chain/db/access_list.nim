@@ -1,5 +1,5 @@
 # Nimbus
-# Copyright (c) 2023-2024 Status Research & Development GmbH
+# Copyright (c) 2023-2025 Status Research & Development GmbH
 # Licensed under either of
 #  * Apache License, version 2.0, ([LICENSE-APACHE](LICENSE-APACHE) or
 #    http://www.apache.org/licenses/LICENSE-2.0)
@@ -21,6 +21,7 @@ type
 
   AccessList* = object
     slots: Table[Address, SlotSet]
+    codeAddrs: HashSet[Address]
 
 # ------------------------------------------------------------------------------
 # Private helpers
@@ -36,6 +37,7 @@ func toStorageKeys(slots: SlotSet): seq[Bytes32] =
 
 proc init*(ac: var AccessList) =
   ac.slots = Table[Address, SlotSet]()
+  ac.codeAddrs = HashSet[Address]()
 
 proc init*(_: type AccessList): AccessList {.inline.} =
   result.init()
@@ -47,6 +49,9 @@ proc init*(_: type AccessList): AccessList {.inline.} =
 func contains*(ac: AccessList, address: Address): bool {.inline.} =
   address in ac.slots
 
+func containsCode*(ac: AccessList, codeAddr: Address): bool {.inline.} =
+  codeAddr in ac.codeAddrs
+
 # returnValue: (addressPresent, slotPresent)
 func contains*(ac: var AccessList, address: Address, slot: UInt256): bool =
   ac.slots.withValue(address, val):
@@ -55,6 +60,7 @@ func contains*(ac: var AccessList, address: Address, slot: UInt256): bool =
 proc mergeAndReset*(ac, other: var AccessList) =
   # move values in `other` to `ac`
   ac.slots.mergeAndReset(other.slots)
+  ac.codeAddrs.mergeAndReset(other.codeAddrs)
 
 proc add*(ac: var AccessList, address: Address) =
   if address notin ac.slots:
@@ -66,9 +72,16 @@ proc add*(ac: var AccessList, address: Address, slot: UInt256) =
   do:
     ac.slots[address] = toHashSet([slot])
 
+proc addCode*(ac: var AccessList, codeAddr: Address) =
+  ac.codeAddrs.incl codeAddr
+
 proc clear*(ac: var AccessList) {.inline.} =
   ac.slots.clear()
+  ac.codeAddrs.clear()
 
+# TODO: accesses code is still not a part of the transaction access list
+# but when it does trickle down into the transaction we will have to add
+# it here
 func getAccessList*(ac: AccessList): transactions.AccessList =
   for address, slots in ac.slots:
     result.add transactions.AccessPair(
@@ -89,6 +102,10 @@ func equal*(ac: AccessList, other: var AccessList): bool =
         if slot notin otherSlots[]:
           return false
     do:
+      return false
+
+  for codeAddr in ac.codeAddrs:
+    if codeAddr notin other:
       return false
 
   true

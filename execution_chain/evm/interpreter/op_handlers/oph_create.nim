@@ -76,8 +76,12 @@ proc createOp(cpt: VmCpt): EvmResultVoid =
   cpt.stack.lsShrink(2)
   cpt.stack.lsTop(0)
 
-  # EIP-3860
-  if cpt.fork >= FkShanghai and memLen > EIP3860_MAX_INITCODE_SIZE:
+  # EIP-7907 and EIP-3860
+  if cpt.fork >= FkOsaka and memLen > EIP7907_MAX_INITCODE_SIZE:
+    trace "Initcode size exceeds maximum", initcodeSize = memLen
+    return err(opErr(InvalidInitCode))
+
+  if cpt.fork < FkOsaka and cpt.fork >= FkShanghai and memLen > EIP3860_MAX_INITCODE_SIZE:
     trace "Initcode size exceeds maximum", initcodeSize = memLen
     return err(opErr(InvalidInitCode))
 
@@ -114,6 +118,10 @@ proc createOp(cpt: VmCpt): EvmResultVoid =
     createMsgGas -= createMsgGas div 64
   ? cpt.gasMeter.consumeGas(createMsgGas, reason = "CREATE msg gas")
 
+  if cpt.fork >= FkOsaka:
+    cpt.vmState.mutateLedger:
+      db.codeAccessList(cpt.msg.contractAddress)
+
   var
     childMsg = Message(
       kind:   CallKind.Create,
@@ -146,8 +154,12 @@ proc create2Op(cpt: VmCpt): EvmResultVoid =
   cpt.stack.lsShrink(3)
   cpt.stack.lsTop(0)
 
-  # EIP-3860
-  if cpt.fork >= FkShanghai and memLen > EIP3860_MAX_INITCODE_SIZE:
+  # EIP-7907 and EIP-3860
+  if cpt.fork >= FkOsaka and memLen > EIP7907_MAX_INITCODE_SIZE:
+    trace "Initcode size exceeds maximum", initcodeSize = memLen
+    return err(opErr(InvalidInitCode))
+
+  if cpt.fork < FkOsaka and cpt.fork >= FkShanghai and memLen > EIP3860_MAX_INITCODE_SIZE:
     trace "Initcode size exceeds maximum", initcodeSize = memLen
     return err(opErr(InvalidInitCode))
 
@@ -180,6 +192,11 @@ proc create2Op(cpt: VmCpt): EvmResultVoid =
         required = endowment,
         balance = senderBalance
       return ok()
+
+  if cpt.fork >= FkOsaka:
+    cpt.vmState.mutateLedger:
+      db.codeAccessList(cpt.msg.contractAddress)
+
 
   var createMsgGas = cpt.gasMeter.gasRemaining
   if cpt.fork >= FkTangerine:
