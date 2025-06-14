@@ -17,56 +17,115 @@ import
   chronicles,
   nimcrypto/[ripemd, sha2, utils],
   bncurve/[fields, groups],
-  stew/assign2,
+  stew/[assign2, endians2, byteutils],
+  libp2p/crypto/ecnist,
   ../common/evmforks,
   ../core/eip4844,
   ./modexp,
   ./evm_errors,
   ./computation,
+  ./secp256r1verify,
   eth/common/[base, addresses]
 
 type
-  PrecompileAddresses* = enum
+  Precompiles* = enum
     # Frontier to Spurious Dragron
-    paEcRecover       = 0x01
-    paSha256          = 0x02
-    paRipeMd160       = 0x03
-    paIdentity        = 0x04
+    paEcRecover      
+    paSha256         
+    paRipeMd160      
+    paIdentity       
     # Byzantium and Constantinople
-    paModExp          = 0x05
-    paEcAdd           = 0x06
-    paEcMul           = 0x07
-    paPairing         = 0x08
+    paModExp         
+    paEcAdd          
+    paEcMul          
+    paPairing        
     # Istanbul
-    paBlake2bf        = 0x09
+    paBlake2bf       
     # Cancun
-    paPointEvaluation = 0x0a
+    paPointEvaluation
     # Prague (EIP-2537)
-    paBlsG1Add        = 0x0b
-    paBlsG1MultiExp   = 0x0c
-    paBlsG2Add        = 0x0d
-    paBlsG2MultiExp   = 0x0e
-    paBlsPairing      = 0x0f
-    paBlsMapG1        = 0x10
-    paBlsMapG2        = 0x11
+    paBlsG1Add       
+    paBlsG1MultiExp  
+    paBlsG2Add       
+    paBlsG2MultiExp  
+    paBlsPairing     
+    paBlsMapG1       
+    paBlsMapG2
+    # Osaka
+    paP256Verify       
 
   SigRes = object
     msgHash: array[32, byte]
     sig: Signature
 
+const
+  # Frontier to Spurious Dragron 
+  paEcRecoverAddress       = Address.fromHex("0x0000000000000000000000000000000000000001")
+  paSha256Address          = Address.fromHex("0x0000000000000000000000000000000000000002")
+  paRipeMd160Address       = Address.fromHex("0x0000000000000000000000000000000000000003")
+  paIdentityAddress        = Address.fromHex("0x0000000000000000000000000000000000000004")
+  # Byzantium and Constantinople
+  paModExpAddress          = Address.fromHex("0x0000000000000000000000000000000000000005")
+  paEcAddAddress           = Address.fromHex("0x0000000000000000000000000000000000000006")
+  paEcMulAddress           = Address.fromHex("0x0000000000000000000000000000000000000007")
+  paPairingAddress         = Address.fromHex("0x0000000000000000000000000000000000000008")
+  # Istanbul
+  paBlake2bfAddress        = Address.fromHex("0x0000000000000000000000000000000000000009")
+  # Cancun
+  paPointEvaluationAddress = Address.fromHex("0x000000000000000000000000000000000000000a")
+  # Prague (EIP-2537)
+  paBlsG1AddAddress        = Address.fromHex("0x000000000000000000000000000000000000000b")
+  paBlsG1MultiExpAddress   = Address.fromHex("0x000000000000000000000000000000000000000c")
+  paBlsG2AddAddress        = Address.fromHex("0x000000000000000000000000000000000000000d")
+  paBlsG2MultiExpAddress   = Address.fromHex("0x000000000000000000000000000000000000000e")
+  paBlsPairingAddress      = Address.fromHex("0x000000000000000000000000000000000000000f")
+  paBlsMapG1Address        = Address.fromHex("0x0000000000000000000000000000000000000010")
+  paBlsMapG2Address        = Address.fromHex("0x0000000000000000000000000000000000000011")
+  # Osaka
+  paP256VerifyAddress      = Address.fromHex("0x0000000000000000000000000000000000000100")
+
+  precompileAddrs*: array[Precompiles, Address] = [
+    # Frontier to Spurious Dragon
+    paEcRecoverAddress,        # paEcRecover
+    paSha256Address,           # paSha256
+    paRipeMd160Address,        # paRipeMd160
+    paIdentityAddress,         # paIdentity
+
+    # Byzantium and Constantinople
+    paModExpAddress,           # paModExp
+    paEcAddAddress,            # paEcAdd
+    paEcMulAddress,            # paEcMul
+    paPairingAddress,          # paPairing
+
+    # Istanbul
+    paBlake2bfAddress,         # paBlake2bf
+
+    # Cancun
+    paPointEvaluationAddress,  # paPointEvaluation
+
+    # Prague (EIP-2537)
+    paBlsG1AddAddress,         # paBlsG1Add
+    paBlsG1MultiExpAddress,    # paBlsG1MultiExp
+    paBlsG2AddAddress,         # paBlsG2Add
+    paBlsG2MultiExpAddress,    # paBlsG2MultiExp
+    paBlsPairingAddress,       # paBlsPairing
+    paBlsMapG1Address,         # paBlsMapG1
+    paBlsMapG2Address,         # paBlsMapG2
+    paP256VerifyAddress        # paP256Verify
+  ]
+
+
 # ------------------------------------------------------------------------------
 # Private functions
 # ------------------------------------------------------------------------------
 
-func getMaxPrecompileAddr(fork: EVMFork): PrecompileAddresses =
+func getMaxPrecompile(fork: EVMFork): Precompiles =
   if fork < FkByzantium: paIdentity
   elif fork < FkIstanbul: paPairing
   elif fork < FkCancun: paBlake2bf
   elif fork < FkPrague: paPointEvaluation
-  else: PrecompileAddresses.high
-
-func validPrecompileAddr(addrByte, maxPrecompileAddr: byte): bool =
-  (addrByte in PrecompileAddresses.low.byte .. maxPrecompileAddr)
+  elif fork < FkOsaka: paBlsMapG2
+  else: Precompiles.high
 
 func getSignature(c: Computation): EvmResult[SigRes]  =
   # input is Hash, V, R, S
@@ -694,36 +753,67 @@ proc pointEvaluation(c: Computation): EvmResultVoid =
   c.output = @PointEvaluationResult
   ok()
 
+proc p256verify(c: Computation): EvmResultVoid =
+
+  template failed() =
+    c.output.setLen(0)
+    return ok()
+
+  ? c.gasMeter.consumeGas(GasP256VerifyGas, reason="P256VERIFY Precompile")
+
+  if c.msg.data.len != 160:
+    failed()
+
+  var inputPubKey: array[65, byte]
+
+  # Validations
+  if isInfinityByte(c.msg.data.toOpenArray(96, 159)):
+    failed()
+
+  # Check scalar and field bounds (r, s ∈ (0, n), qx, qy ∈ [0, p))
+  var sig: EcSignature
+  if not sig.initRaw(c.msg.data.toOpenArray(32, 95)):
+    failed()
+
+  var pubkey: EcPublicKey
+  inputPubKey[0] = 4.byte
+  assign(inputPubKey.toOpenArray(1, 64), c.msg.data.toOpenArray(96, 159))
+
+  if not pubkey.initRaw(inputPubKey):
+    failed()
+
+  let isValid = sig.verifyRaw(c.msg.data.toOpenArray(0, 31), pubkey)
+
+  if isValid:
+    c.output.setLen(32)
+    c.output[^1] = 1.byte  # return 0x...01
+  else:
+    c.output.setLen(0)
+
+  ok()
+
 # ------------------------------------------------------------------------------
 # Public functions
 # ------------------------------------------------------------------------------
 
 iterator activePrecompiles*(fork: EVMFork): Address =
-  var res: Address
-  let maxPrecompileAddr = getMaxPrecompileAddr(fork)
-  for c in PrecompileAddresses.low..maxPrecompileAddr:
-    if validPrecompileAddr(c.byte, maxPrecompileAddr.byte):
-      res.data[^1] = c.byte
-      yield res
+  let maxPrecompile = getMaxPrecompile(fork)
+  for c in Precompiles.low..maxPrecompile:
+    yield precompileAddrs[c]
 
 func activePrecompilesList*(fork: EVMFork): seq[Address] =
   for address in activePrecompiles(fork):
     result.add address
 
-proc getPrecompile*(fork: EVMFork, b: byte): Opt[PrecompileAddresses] =
-  let maxPrecompileAddr = getMaxPrecompileAddr(fork)
-  if validPrecompileAddr(b, maxPrecompileAddr.byte):
-    Opt.some(PrecompileAddresses(b))
-  else:
-    Opt.none(PrecompileAddresses)
+proc getPrecompile*(fork: EVMFork, codeAddress: Address): Opt[Precompiles] =
+  let maxPrecompile = getMaxPrecompile(fork)
+  for c in Precompiles.low..maxPrecompile:
+    if precompileAddrs[c] == codeAddress:
+      return Opt.some(c)
 
-proc getPrecompile*(fork: EVMFork, codeAddress: Address): Opt[PrecompileAddresses] =
-  for i in 0..18:
-    if codeAddress.data[i] != 0:
-      return Opt.none(PrecompileAddresses)
-  getPrecompile(fork, codeAddress.data[19])
+  Opt.none(Precompiles)
 
-proc execPrecompile*(c: Computation, precompile: PrecompileAddresses) =
+proc execPrecompile*(c: Computation, precompile: Precompiles) =
   let fork = c.fork
   let res = case precompile
     of paEcRecover: ecRecover(c)
@@ -743,6 +833,7 @@ proc execPrecompile*(c: Computation, precompile: PrecompileAddresses) =
     of paBlsPairing: blsPairing(c)
     of paBlsMapG1: blsMapG1(c)
     of paBlsMapG2: blsMapG2(c)
+    of paP256Verify: p256verify(c)
 
   if res.isErr:
     if res.error.code == EvmErrorCode.OutOfGas:
