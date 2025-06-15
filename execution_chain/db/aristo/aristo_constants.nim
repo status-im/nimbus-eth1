@@ -44,8 +44,7 @@ const
         v += 1'u64 shl (i * 4)
       v
 
-  ACC_LRU_SIZE* = 1024 * 1024
-    ## LRU cache size for accounts that have storage, see `.accLeaves` and
-    ## `.stoLeaves` fields of the main descriptor.
+  STO_LRU_SIZE* = 1024 * 1024
+    ## LRU cache size for the storage leaf cache (see AristoDbRef.stoLeaves)
 
 # End
