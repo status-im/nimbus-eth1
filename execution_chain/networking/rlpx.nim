@@ -1002,6 +1002,10 @@ proc selectCapsByLatestVersion(peer: Peer): seq[ProtocolInfo] =
   # Avoid using multiple capability handshake when connecting to a peer.
   # Use only the latest capability version. e.g. choose eth/69 over eth/68.
   # But other capabilities with different name is okay. e.g. snap/1
+
+  # From the spec:
+  # https://github.com/ethereum/devp2p/blob/bc76b9809a30e6dc5c8dcda996273f0f9bcf7108/rlpx.md#message-id-based-multiplexing
+  # "...If multiple versions are shared of the same (equal name) capability, the numerically highest wins, others are ignored."
   var map: Table[string, ProtocolInfo]
   for proto in peer.dispatcher.activeProtocols:
     map.withValue(proto.capability.name, val) do:
