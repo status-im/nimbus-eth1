@@ -205,7 +205,7 @@ func modExpFee(c: Computation,
     result = result * result
 
   func mulComplexityEIP7883(maxLen: UInt256): UInt256 =
-    result = 16'u256
+    result = 16.u256
     if maxLen > 32.u256:
       result = maxLen + 7
       result = result div 8
