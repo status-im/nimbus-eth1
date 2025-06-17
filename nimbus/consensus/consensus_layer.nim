@@ -22,6 +22,9 @@ import
 logScope:
   topics = "Consensus layer"
 
+proc shutdownConsensus*() =
+  bnStatus = BeaconNodeStatus.Stopping
+
 proc makeConfig*(
     cmdCommandList: seq[string], ConfType: type
 ): Result[ConfType, string] =

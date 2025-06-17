@@ -81,15 +81,10 @@ proc startService(nimbus: var Nimbus, service: var NimbusService) =
 ## Gracefully exits all services
 proc monitorServices(nimbus: Nimbus) =
   for service in nimbus.serviceList:
-    if service.serviceHandler.running():
-      joinThread(service.serviceHandler)
-      info "Exited service ", service = service.name
+    joinThread(service.serviceHandler)
+    info "Exited service ", service = service.name
 
   notice "Exited all services"
-
-# ------------------------------------------------------------------------------
-# Public
-# ------------------------------------------------------------------------------
 
 # aux function to prepare arguments and options for eth1 and eth2
 func addArg(
@@ -109,6 +104,22 @@ func addArg(
     newArg = "=" & arg
 
   paramTable[newKey] = newArg
+
+proc controlCHandler() {.noconv.} =
+  when defined(windows):
+    # workaround for https://github.com/nim-lang/Nim/issues/4057
+    try:
+      setupForeignThreadGc()
+    except NimbusServiceError as exc:
+      raiseAssert exc.msg # shouldn't happen
+
+  notice "\tCtrl+C pressed. Shutting down services ..."
+  shutdownExecution()
+  shutdownConsensus()
+
+# ------------------------------------------------------------------------------
+# Public
+# ------------------------------------------------------------------------------
 
 # Setup services
 proc setup*(nimbus: var Nimbus) =
@@ -158,6 +169,10 @@ proc run*(nimbus: var Nimbus) =
     fatal "error starting service:", msg = e.msg
     quit QuitFailure
 
+  # handling Ctrl+C signal
+  # note: do not move. Both execution and consensus clients create these handlers.
+  setControlCHook(controlCHandler)
+
   ## wait for shutdown
   nimbus.monitorServices()
 
@@ -167,22 +182,7 @@ when isMainModule:
 
   setupFileLimits()
 
-  var nimbus: Nimbus = Nimbus.new
-
-  ## Graceful shutdown by handling of Ctrl+C signal
-  proc controlCHandler() {.noconv.} =
-    when defined(windows):
-      # workaround for https://github.com/nim-lang/Nim/issues/4057
-      try:
-        setupForeignThreadGc()
-      except NimbusServiceError as exc:
-        raiseAssert exc.msg # shouldn't happen
-
-    notice "\tCtrl+C pressed. Shutting down services ..."
-    quit 0
-
-  setControlCHook(controlCHandler)
-
+  var nimbus = Nimbus()
   nimbus.setup()
   nimbus.run()
 

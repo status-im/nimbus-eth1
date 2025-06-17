@@ -20,6 +20,11 @@ import
 logScope:
   topics = "Execution layer"
 
+var nimbusHandler = NimbusNode()
+
+proc shutdownExecution*() =
+  nimbusHandler.state = NimbusState.Stopping
+
 ## Execution Layer handler
 proc executionLayerHandler*(channel: ptr Channel[pointer]) =
   var p: pointer
@@ -38,7 +43,7 @@ proc executionLayerHandler*(channel: ptr Channel[pointer]) =
 
   try:
     {.gcsafe.}:
-      var nimbusHandler = NimbusNode(state: NimbusState.Starting, ctx: newEthContext())
+      nimbusHandler = NimbusNode(state: NimbusState.Starting, ctx: newEthContext())
       let conf = makeConfig(parametersList)
       nimbusHandler.run(conf)
   except [CatchableError, OSError, IOError, CancelledError, MetricsError]:
