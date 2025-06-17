@@ -131,3 +131,5 @@ type
     actionHeartbeat*: Future[void].Raising([CancelledError])
     actionQueue*: AsyncQueue[ActionHandler]
     gossipEnabled*: bool
+    cleanupTimer*: Future[void].Raising([CancelledError])
+    brUpdateTimer*: Future[void].Raising([CancelledError])

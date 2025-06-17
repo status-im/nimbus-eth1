@@ -296,28 +296,32 @@ proc handleTxHashesBroadcast*(wire: EthWireRef,
     return
 
   wire.reqisterAction("Handle broadcast transactions hashes"):
+    type
+      SizeType = object
+        size: uint64
+        txType: byte
+
     await wire.seenByPeer(packet, peer)
 
     let
-      len = packet.txHashes.len
+      numTx = packet.txHashes.len
 
     var
       i = 0
+      map: Table[Hash32, SizeType]
       hashes = NewPooledTransactionHashesPacket(
-        txTypes : newSeqOfCap[byte](len),
-        txSizes : newSeqOfCap[uint64](len),
-        txHashes: newSeqOfCap[Hash32](len),
+        txTypes : newSeqOfCap[byte](numTx),
+        txSizes : newSeqOfCap[uint64](numTx),
+        txHashes: newSeqOfCap[Hash32](numTx),
       )
 
-    while i < packet.txHashes.len:
+    while i < numTx:
       var
         msg: PooledTransactionsRequest
         res: Opt[PooledTransactionsPacket]
-        sizes: seq[uint64]
-        types: seq[byte]
         sumSize = 0'u64
 
-      while i < packet.txHashes.len:
+      while i < numTx:
         let size = packet.txSizes[i]
         if sumSize + size > SOFT_RESPONSE_LIMIT.uint64:
           break
@@ -326,8 +330,14 @@ proc handleTxHashesBroadcast*(wire: EthWireRef,
         if txHash notin wire.txPool:
           msg.txHashes.add txHash
           sumSize += size
-          sizes.add size
-          types.add packet.txTypes[i]
+          map[txHash] = SizeType(
+            size: size,
+            txType: packet.txTypes[i],
+          )
+        else:
+          hashes.txTypes.add packet.txTypes[i]
+          hashes.txSizes.add size
+          hashes.txHashes.add txHash
 
         awaitQuota(wire, hashLookupCost, "check transaction exists in pool")
         inc i
@@ -345,30 +355,24 @@ proc handleTxHashesBroadcast*(wire: EthWireRef,
       let
         ptx = res.get()
 
-      if ptx.transactions.len != msg.txHashes.len:
-        debug "Protocol Breach: Received number of transactions differ from requested",
-            remote=peer.remote, clientId=peer.clientId
-        await peer.disconnect(BreachOfProtocol)
-        return
-
-      for k, tx in ptx.transactions:
+      for tx in ptx.transactions:
         # If we receive any blob transactions missing sidecars, or with
         # sidecars that don't correspond to the versioned hashes reported
         # in the header, disconnect from the sending peer.
-        if tx.tx.txType.byte != types[k]:
-          debug "Protocol Breach: Received transaction with type differ from announced",
-              remote=peer.remote, clientId=peer.clientId
-          await peer.disconnect(BreachOfProtocol)
-          return
-
         let (size, hash) = getEncodedLengthAndHash(tx)
-        if size.uint64 != sizes[k]:
-          debug "Protocol Breach: Received transaction with size differ from announced",
+        map.withValue(hash, val) do:
+          if tx.tx.txType.byte != val.txType:
+            debug "Protocol Breach: Received transaction with type differ from announced",
               remote=peer.remote, clientId=peer.clientId
-          await peer.disconnect(BreachOfProtocol)
-          return
+            await peer.disconnect(BreachOfProtocol)
+            return
 
-        if hash != msg.txHashes[k]:
+          if size.uint64 != val.size:
+            debug "Protocol Breach: Received transaction with size differ from announced",
+              remote=peer.remote, clientId=peer.clientId
+            await peer.disconnect(BreachOfProtocol)
+            return
+        do:
           debug "Protocol Breach: Received transaction with hash differ from announced",
               remote=peer.remote, clientId=peer.clientId
           await peer.disconnect(BreachOfProtocol)
@@ -383,14 +387,14 @@ proc handleTxHashesBroadcast*(wire: EthWireRef,
 
           if tx.blobsBundle.wrapperVersion == WrapperVersionEIP4844:
             validateBlobTransactionWrapper4844(tx).isOkOr:
-              debug "Protocol Breach: Sidecar validation error", msg=error,
+              debug "Protocol Breach: EIP-4844 sidecar validation error", msg=error,
                 remote=peer.remote, clientId=peer.clientId
               await peer.disconnect(BreachOfProtocol)
               return
 
           if tx.blobsBundle.wrapperVersion == WrapperVersionEIP7594:
             validateBlobTransactionWrapper7594(tx).isOkOr:
-              debug "Protocol Breach: Sidecar validation error", msg=error,
+              debug "Protocol Breach: EIP-7594 sidecar validation error", msg=error,
                 remote=peer.remote, clientId=peer.clientId
               await peer.disconnect(BreachOfProtocol)
               return
@@ -398,9 +402,9 @@ proc handleTxHashesBroadcast*(wire: EthWireRef,
         wire.txPool.addTx(tx).isOkOr:
           continue
 
-        hashes.txTypes.add packet.txTypes[i + k]
-        hashes.txSizes.add packet.txSizes[i + k]
-        hashes.txHashes.add packet.txHashes[i + k]
+        hashes.txTypes.add tx.tx.txType.byte
+        hashes.txSizes.add size.uint64
+        hashes.txHashes.add hash
 
         awaitQuota(wire, txPoolProcessCost, "broadcast transactions hashes")
 
@@ -409,12 +413,17 @@ proc handleTxHashesBroadcast*(wire: EthWireRef,
 
 proc tickerLoop*(wire: EthWireRef) {.async: (raises: [CancelledError]).} =
   while true:
-    let
-      cleanup = sleepAsync(cleanupTicker)
-      update  = sleepAsync(blockRangeUpdateTicker)
-      res     = await one(cleanup, update)
+    # Create or replenish timer
+    if wire.cleanupTimer.isNil or wire.cleanupTimer.finished:
+      wire.cleanupTimer = sleepAsync(cleanupTicker)
 
-    if res == cleanup:
+    if wire.brUpdateTimer.isNil or wire.brUpdateTimer.finished:
+      wire.brUpdateTimer = sleepAsync(blockRangeUpdateTicker)
+
+    let
+      res = await one(wire.cleanupTimer, wire.brUpdateTimer)
+
+    if res == wire.cleanupTimer:
       wire.reqisterAction("Periodical cleanup"):
         var expireds: seq[Hash32]
         for key, seen in wire.seenTransactions:
@@ -426,7 +435,7 @@ proc tickerLoop*(wire: EthWireRef) {.async: (raises: [CancelledError]).} =
           wire.seenTransactions.del(expire)
           awaitQuota(wire, hashLookupCost, "broadcast transactions hashes")
 
-    if res == update:
+    if res == wire.brUpdateTimer:
       wire.reqisterAction("Periodical blockRangeUpdate"):
         let
           packet = BlockRangeUpdatePacket(
