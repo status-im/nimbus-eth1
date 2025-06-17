@@ -998,10 +998,29 @@ proc removePeer(network: EthereumNode, peer: Peer) =
           if observer.protocols.len == 0 or peer.supports(observer.protocols):
             observer.onPeerDisconnected(peer)
 
+proc selectCapsByLatestVersion(peer: Peer): seq[ProtocolInfo] =
+  # Avoid using multiple capability handshake when connecting to a peer.
+  # Use only the latest capability version. e.g. choose eth/69 over eth/68.
+  # But other capabilities with different name is okay. e.g. snap/1
+
+  # From the spec:
+  # https://github.com/ethereum/devp2p/blob/bc76b9809a30e6dc5c8dcda996273f0f9bcf7108/rlpx.md#message-id-based-multiplexing
+  # "...If multiple versions are shared of the same (equal name) capability, the numerically highest wins, others are ignored."
+  var map: Table[string, ProtocolInfo]
+  for proto in peer.dispatcher.activeProtocols:
+    map.withValue(proto.capability.name, val) do:
+      if proto.capability.version > val.capability.version:
+        val[] = proto
+    do:
+      map[proto.capability.name] = proto
+
+  for proto in map.values:
+    result.add proto
+
 proc callDisconnectHandlers(
     peer: Peer, reason: DisconnectionReason
 ): Future[void] {.async: (raises: []).} =
-  let futures = peer.dispatcher.activeProtocols
+  let futures = peer.selectCapsByLatestVersion()
     .filterIt(it.onPeerDisconnected != nil)
     .mapIt(it.onPeerDisconnected(peer, reason))
 
@@ -1102,7 +1121,7 @@ proc postHelloSteps(
   # the network and to yield on their `nextMsg` waits.
   #
 
-  let handshakes = peer.dispatcher.activeProtocols
+  let handshakes = peer.selectCapsByLatestVersion()
     .filterIt(it.onPeerConnected != nil)
     .mapIt(it.onPeerConnected(peer))
 

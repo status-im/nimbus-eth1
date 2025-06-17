@@ -59,13 +59,24 @@ proc revertOp(cpt: VmCpt): EvmResultVoid =
   cpt.stack.lsShrink(2)
 
   ? cpt.opcodeGasCost(Revert,
-    cpt.gasCosts[Revert].m_handler(cpt.memory.len, pos, len),
-    reason = "REVERT")
+      cpt.gasCosts[Revert].m_handler(cpt.memory.len, pos, len),
+      reason = "REVERT")
 
   cpt.memory.extend(pos, len)
   assign(cpt.output, cpt.memory.read(pos, len))
+
+  var revertReason: string
+  unpackRevertReason(cpt.output, revertReason)
+
+  let revertMsg =
+    if revertReason.len() > 0:
+      "execution reverted: " & revertReason
+    else:
+      "execution reverted"
+
   # setError(msg, false) will signal cheap revert
-  cpt.setError(StatusCode.Revert, "REVERT opcode executed", false)
+  cpt.setError(StatusCode.Revert, revertMsg, false)
+
   ok()
 
 func invalidOp(cpt: VmCpt): EvmResultVoid =

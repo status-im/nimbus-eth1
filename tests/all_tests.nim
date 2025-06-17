@@ -15,6 +15,7 @@ import
     test_difficulty,
     test_engine_api,
     test_evm_support,
+    test_evm_errors,
     test_filters,
     test_forked_chain,
     test_forkid,

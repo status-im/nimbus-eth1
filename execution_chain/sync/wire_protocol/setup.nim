@@ -27,6 +27,7 @@ proc addEthHandlerCapability*(
   let wire = EthWireRef.new(txPool, node)
   node.addCapability(eth68, wire)
   node.addCapability(eth69, wire)
+  wire
 
 # ------------------------------------------------------------------------------
 # End

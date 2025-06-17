@@ -311,10 +311,7 @@ proc call*(
     callResult =
       ?(await evm.callFetchingState(vmState, header, tx, optimisticStateFetch))
 
-  if callResult.error.len() > 0:
-    err("EVM execution failed: " & callResult.error)
-  else:
-    ok(callResult)
+  ok(callResult)
 
 proc createAccessList*(
     evm: AsyncEvm, header: Header, tx: TransactionArgs, optimisticStateFetch = true

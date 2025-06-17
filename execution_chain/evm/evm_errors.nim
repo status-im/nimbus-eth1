@@ -11,7 +11,12 @@
 {.push raises: [].}
 
 import
-  results
+  std/tables,
+  results,
+  stint,
+  stew/[assign2, byteutils],
+  eth/common/hashes,
+  web3/encoding
 
 export
   results
@@ -70,3 +75,46 @@ template evmErr*(errCode): auto =
   EvmErrorObj(
     code: EvmErrorCode.errCode,
   )
+
+
+# revertSelector is a special function selector for revert reason unpacking
+const revertSelector = keccak256(toBytes("Error(string)")).data[0..3]
+
+# panicSelector is a special function selector for panic reason unpacking
+const panicSelector = keccak256(toBytes("Panic(uint256)")).data[0..3]
+
+# panicReasons map is for readable panic codes
+# see this linkage for the details
+# https://docs.soliditylang.org/en/v0.8.21/control-structures.html#panic-via-assert-and-error-via-require
+# the reason string list is copied from Geth
+# https://github.com/ethers-io/ethers.js/blob/fa3a883ff7c88611ce766f58bdd4b8ac90814470/src.ts/abi/interface.ts#L207-L218
+const panicReasons = {
+  0x00: "generic panic",
+  0x01: "assert(false)",
+  0x11: "arithmetic underflow or overflow",
+  0x12: "division or modulo by zero",
+  0x21: "enum overflow",
+  0x22: "invalid encoded storage byte array accessed",
+  0x31: "out-of-bounds array access; popping on an empty array",
+  0x32: "out-of-bounds access of an array or bytesN",
+  0x41: "out of memory",
+  0x51: "uninitialized function",
+}.toTable
+
+# UnpackRevert resolves the abi-encoded revert reason. According to the solidity
+# spec https://solidity.readthedocs.io/en/latest/control-structures.html#revert,
+# the provided revert reason is abi-encoded as if it were a call to function
+# `Error(string)` or `Panic(uint256)`.
+proc unpackRevertReason*(data: openArray[byte], reason: var string) =
+  if data.len() < 4:
+    reason = ""
+    return
+
+  let selector = data[0..3]
+
+  if selector == revertSelector:
+    discard decode(data.toOpenArray(4, data.len() - 1), 0, 0, reason)
+  elif selector == panicSelector:
+    var reasonCode: UInt256
+    discard decode(data.toOpenArray(4, data.len() - 1), 0, 0, reasonCode)
+    assign(reason, panicReasons.getOrDefault(reasonCode.truncate(int)))

@@ -294,6 +294,8 @@ proc importBlocks*(conf: NimbusConf, com: CommonRef) =
 
     proc loadEraBlock(blockNumber: uint64): bool =
       db.getEthBlock(blockNumber, blk).isOkOr:
+        chronicles.error "Error when loading era block",
+          blockNumber, msg=error
         return false
       true
 
