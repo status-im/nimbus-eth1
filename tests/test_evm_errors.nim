@@ -24,3 +24,10 @@ suite "EVM errors tests":
     var revertReason: string
     unpackRevertReason(data.hexToSeqByte(), revertReason)
     check revertReason == "out-of-bounds access of an array or bytesN"
+
+  test "unpack malformed data":
+    let data = "0x4e487b71000000000000000000000000000000000000000000000000000000000000"
+
+    var revertReason: string
+    unpackRevertReason(data.hexToSeqByte(), revertReason)
+    check revertReason == ""

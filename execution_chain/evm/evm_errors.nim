@@ -110,11 +110,14 @@ proc unpackRevertReason*(data: openArray[byte], reason: var string) =
     reason = ""
     return
 
-  let selector = data[0..3]
+  try:
+    let selector = data[0..3]
 
-  if selector == revertSelector:
-    discard decode(data.toOpenArray(4, data.len() - 1), 0, 0, reason)
-  elif selector == panicSelector:
-    var reasonCode: UInt256
-    discard decode(data.toOpenArray(4, data.len() - 1), 0, 0, reasonCode)
-    assign(reason, panicReasons.getOrDefault(reasonCode.truncate(int)))
+    if selector == revertSelector:
+      discard decode(data.toOpenArray(4, data.len() - 1), 0, 0, reason)
+    elif selector == panicSelector:
+      var reasonCode: UInt256
+      discard decode(data.toOpenArray(4, data.len() - 1), 0, 0, reasonCode)
+      assign(reason, panicReasons.getOrDefault(reasonCode.truncate(int)))
+  except Exception:
+    reason = ""
