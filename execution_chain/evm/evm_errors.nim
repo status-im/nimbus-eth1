@@ -119,5 +119,10 @@ proc unpackRevertReason*(data: openArray[byte], reason: var string) =
       var reasonCode: UInt256
       discard decode(data.toOpenArray(4, data.len() - 1), 0, 0, reasonCode)
       assign(reason, panicReasons.getOrDefault(reasonCode.truncate(int)))
-  except Exception:
+  except Defect:
+    # The decode function here can throw Defect when the data is not valid abi.
+    # We need to catch this for now (even though this is not a best practice)
+    # to prevent crashing in this scenario which can occur if the code being
+    # executed doesn't follow the solidity revert reason encoding conventions.
+    # TODO: Improve the error handling in the nim-web3 abi decoder.
     reason = ""

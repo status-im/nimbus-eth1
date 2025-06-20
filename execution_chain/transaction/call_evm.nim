@@ -25,6 +25,14 @@ import
 export
   call_common
 
+
+proc appendRevertReasonToError(callResult: var CallResult) =
+  var revertReason: string
+  unpackRevertReason(callResult.output, revertReason)
+
+  if revertReason.len() > 0:
+    callResult.error = callResult.error & ": " & revertReason
+
 proc rpcCallEvm*(args: TransactionArgs,
                  header: Header,
                  headerHash: Hash32,
@@ -46,7 +54,11 @@ proc rpcCallEvm*(args: TransactionArgs,
   let vmState = BaseVMState.new(header, topHeader, com, txFrame)
   let params  = ? toCallParams(vmState, args, globalGasCap, header.baseFeePerGas)
 
-  ok(runComputation(params, CallResult))
+  var callResult = runComputation(params, CallResult)
+  if callResult.error.len() > 0:
+    appendRevertReasonToError(callResult)
+
+  ok(callResult)
 
 proc rpcCallEvm*(args: TransactionArgs,
                  header: Header,
@@ -54,7 +66,12 @@ proc rpcCallEvm*(args: TransactionArgs,
                  globalGasCap = 0.GasInt): EvmResult[CallResult] =
   # TODO: globalGasCap should configurable by user
   let params  = ? toCallParams(vmState, args, globalGasCap, header.baseFeePerGas)
-  ok(runComputation(params, CallResult))
+
+  var callResult = runComputation(params, CallResult)
+  if callResult.error.len() > 0:
+    appendRevertReasonToError(callResult)
+
+  ok(callResult)
 
 proc rpcEstimateGas*(args: TransactionArgs,
                      header: Header,
