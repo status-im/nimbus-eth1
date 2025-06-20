@@ -57,12 +57,6 @@ type
         ## Generic backend database bulk storage function, `VertexRef(nil)`
         ## values indicate that records should be deleted.
 
-  PutTuvFn* =
-    proc(hdl: PutHdlRef; vs: VertexID)
-      {.gcsafe, raises: [].}
-        ## Generic backend database ID generator storage function for the
-        ## top used vertex ID.
-
   PutLstFn* =
     proc(hdl: PutHdlRef; lst: SavedState)
       {.gcsafe, raises: [].}
