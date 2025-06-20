@@ -64,13 +64,12 @@ proc revertOp(cpt: VmCpt): EvmResultVoid =
 
   cpt.memory.extend(pos, len)
   assign(cpt.output, cpt.memory.read(pos, len))
-
-  var revertReason: string
-  unpackRevertReason(cpt.output, revertReason)
+  
+  let revertReason = unpackRevertReason(cpt.output)
 
   let revertMsg =
-    if revertReason.len() > 0:
-      "execution reverted: " & revertReason
+    if revertReason.isSome:
+      "execution reverted: " & revertReason.value
     else:
       "execution reverted"
 
