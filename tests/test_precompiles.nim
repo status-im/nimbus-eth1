@@ -25,7 +25,7 @@ import
 
 proc initAddress(i: byte): Address = result.data[19] = i
 
-template doTest(fixture: JsonNode; vmState: BaseVMState; address: PrecompileAddresses): untyped =
+template doTest(fixture: JsonNode; vmState: BaseVMState; precompile: Precompiles): untyped =
   for test in fixture:
     let
       expectedErr = test.hasKey("ExpectedError")
@@ -41,7 +41,7 @@ template doTest(fixture: JsonNode; vmState: BaseVMState; address: PrecompileAddr
       nonce: 0,
       gasPrice: 1.GasInt,
       gasLimit: 1_000_000_000.GasInt,
-      to: Opt.some initAddress(address.byte),
+      to: Opt.some precompileAddrs[precompile],
       value: 0.u256,
       chainId: 1.u256,
       payload: if dataStr.len > 0: dataStr.hexToSeqByte else: @[]
@@ -96,6 +96,7 @@ proc testFixture(fixtures: JsonNode, testStatusIMPL: var TestStatus) =
   of "blspairing": data.doTest(vmState, paBlsPairing)
   of "blsmapg1": data.doTest(vmState, paBlsMapG1)
   of "blsmapg2": data.doTest(vmState, paBlsMapG2)
+  of "p256verify": data.doTest(vmState, paP256Verify)
   else:
     echo "Unknown test vector '" & $label & "'"
     testStatusIMPL = SKIPPED
