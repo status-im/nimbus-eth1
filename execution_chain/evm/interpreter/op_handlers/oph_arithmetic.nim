@@ -283,16 +283,7 @@ proc clzOp(cpt: VmCpt): EvmResultVoid =
     if value.isZero:
       toStackElem(256.u256, top)
     else:
-      var count = 0
-      for i in 0 ..< 32:
-        let b = (value shr ((31 - i) * 8)).truncate(byte)
-        if b != 0:
-          var mask = 0x80'u8
-          while (b and mask) == 0:
-            inc count
-            mask = mask shr 1
-          break
-        inc count, 8
+      let count = value.leadingZeros()
       toStackElem(count.u256, top)
 
   cpt.stack.unaryWithTop(clz256)
