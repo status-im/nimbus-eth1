@@ -60,50 +60,46 @@ type
 
 const
   # Frontier to Spurious Dragron 
-  paEcRecoverAddress       = Address.fromHex("0x0000000000000000000000000000000000000001")
-  paSha256Address          = Address.fromHex("0x0000000000000000000000000000000000000002")
-  paRipeMd160Address       = Address.fromHex("0x0000000000000000000000000000000000000003")
-  paIdentityAddress        = Address.fromHex("0x0000000000000000000000000000000000000004")
+  paEcRecoverAddress       = address"0x0000000000000000000000000000000000000001"
+  paSha256Address          = address"0x0000000000000000000000000000000000000002"
+  paRipeMd160Address       = address"0x0000000000000000000000000000000000000003"
+  paIdentityAddress        = address"0x0000000000000000000000000000000000000004"
+
   # Byzantium and Constantinople
-  paModExpAddress          = Address.fromHex("0x0000000000000000000000000000000000000005")
-  paEcAddAddress           = Address.fromHex("0x0000000000000000000000000000000000000006")
-  paEcMulAddress           = Address.fromHex("0x0000000000000000000000000000000000000007")
-  paPairingAddress         = Address.fromHex("0x0000000000000000000000000000000000000008")
+  paModExpAddress          = address"0x0000000000000000000000000000000000000005"
+  paEcAddAddress           = address"0x0000000000000000000000000000000000000006"
+  paEcMulAddress           = address"0x0000000000000000000000000000000000000007"
+  paPairingAddress         = address"0x0000000000000000000000000000000000000008"
+
   # Istanbul
-  paBlake2bfAddress        = Address.fromHex("0x0000000000000000000000000000000000000009")
+  paBlake2bfAddress        = address"0x0000000000000000000000000000000000000009"
+
   # Cancun
-  paPointEvaluationAddress = Address.fromHex("0x000000000000000000000000000000000000000a")
+  paPointEvaluationAddress = address"0x000000000000000000000000000000000000000a"
+
   # Prague (EIP-2537)
-  paBlsG1AddAddress        = Address.fromHex("0x000000000000000000000000000000000000000b")
-  paBlsG1MultiExpAddress   = Address.fromHex("0x000000000000000000000000000000000000000c")
-  paBlsG2AddAddress        = Address.fromHex("0x000000000000000000000000000000000000000d")
-  paBlsG2MultiExpAddress   = Address.fromHex("0x000000000000000000000000000000000000000e")
-  paBlsPairingAddress      = Address.fromHex("0x000000000000000000000000000000000000000f")
-  paBlsMapG1Address        = Address.fromHex("0x0000000000000000000000000000000000000010")
-  paBlsMapG2Address        = Address.fromHex("0x0000000000000000000000000000000000000011")
+  paBlsG1AddAddress        = address"0x000000000000000000000000000000000000000b"
+  paBlsG1MultiExpAddress   = address"0x000000000000000000000000000000000000000c"
+  paBlsG2AddAddress        = address"0x000000000000000000000000000000000000000d"
+  paBlsG2MultiExpAddress   = address"0x000000000000000000000000000000000000000e"
+  paBlsPairingAddress      = address"0x000000000000000000000000000000000000000f"
+  paBlsMapG1Address        = address"0x0000000000000000000000000000000000000010"
+  paBlsMapG2Address        = address"0x0000000000000000000000000000000000000011"
+  
   # Osaka
-  paP256VerifyAddress      = Address.fromHex("0x0000000000000000000000000000000000000100")
+  paP256VerifyAddress      = address"0x0000000000000000000000000000000000000100"
 
   precompileAddrs*: array[Precompiles, Address] = [
-    # Frontier to Spurious Dragon
     paEcRecoverAddress,        # paEcRecover
     paSha256Address,           # paSha256
     paRipeMd160Address,        # paRipeMd160
     paIdentityAddress,         # paIdentity
-
-    # Byzantium and Constantinople
     paModExpAddress,           # paModExp
     paEcAddAddress,            # paEcAdd
     paEcMulAddress,            # paEcMul
     paPairingAddress,          # paPairing
-
-    # Istanbul
     paBlake2bfAddress,         # paBlake2bf
-
-    # Cancun
     paPointEvaluationAddress,  # paPointEvaluation
-
-    # Prague (EIP-2537)
     paBlsG1AddAddress,         # paBlsG1Add
     paBlsG1MultiExpAddress,    # paBlsG1MultiExp
     paBlsG2AddAddress,         # paBlsG2Add
@@ -264,11 +260,11 @@ func modExpFee(c: Computation,
     result = result * result
 
   func mulComplexityEIP7883(maxLen: UInt256): UInt256 =
-    # gas = ceil(x div 8) ^ 2
-    result = maxLen + 7
-    result = result div 8
-    result = result * result
+    result = 16.u256
     if maxLen > 32.u256:
+      result = maxLen + 7
+      result = result div 8
+      result = result * result
       result = result * 2
 
   let adjExpLen = block:

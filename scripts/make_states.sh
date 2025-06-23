@@ -29,6 +29,7 @@ mkdir -p "$DATA_DIR"
 
 while true;
 do
+  SECONDS=0
   "$SCRIPT_DIR/../build/nimbus_execution_client" import \
     --data-dir:"${DATA_DIR}" \
     --era1-dir:"${ERA_DIR}" \
@@ -37,4 +38,9 @@ do
     --max-blocks:${MAX_BLOCKS:-1000000} "$@"
   cp -ar "${DATA_DIR}" "${DATA_DIR}-$(printf "%04d" $counter)"
   counter=$((counter+1))
+
+  if (( $SECONDS < 10 )); then
+    echo "Done"
+    exit 0
+  fi
 done
