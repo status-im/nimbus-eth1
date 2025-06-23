@@ -14,9 +14,8 @@ import
   std/tables,
   results,
   stint,
-  stew/[assign2, byteutils],
-  eth/common/hashes,
-  web3/encoding
+  stew/byteutils,
+  eth/common/hashes
 
 export
   results
@@ -101,20 +100,42 @@ const panicReasons = {
   0x51: "uninitialized function",
 }.toTable
 
+func decodeU256(input: openArray[byte]): Opt[UInt256] =
+  if input.len < 32:
+    return Opt.none(UInt256)
+  Opt.some(UInt256.fromBytesBE(input.toOpenArray(0, 31)))
+
+func decodeString(input: openArray[byte]): Opt[string] =
+  let
+    offset256 = ?decodeU256(input)
+    offset = offset256.truncate(int)
+
+  if offset >= input.len:
+    return Opt.none(string)
+
+  let
+    len256 = ?decodeU256(input.toOpenArray(offset, input.len-1))
+    len = len256.truncate(int)
+    dataOffset = offset + 32
+
+  if dataOffset + len >= input.len:
+    return Opt.none(string)
+
+  ok(string.fromBytes(input.toOpenArray(dataOffset, dataOffset + len - 1)))
+
 # UnpackRevert resolves the abi-encoded revert reason. According to the solidity
 # spec https://solidity.readthedocs.io/en/latest/control-structures.html#revert,
 # the provided revert reason is abi-encoded as if it were a call to function
 # `Error(string)` or `Panic(uint256)`.
-proc unpackRevertReason*(data: openArray[byte], reason: var string) =
+proc unpackRevertReason*(data: openArray[byte]): Opt[string] =
   if data.len() < 4:
-    reason = ""
-    return
+    return Opt.none(string)
 
   let selector = data[0..3]
 
   if selector == revertSelector:
-    discard decode(data.toOpenArray(4, data.len() - 1), 0, 0, reason)
+    return decodeString(data.toOpenArray(4, data.len() - 1))
   elif selector == panicSelector:
-    var reasonCode: UInt256
-    discard decode(data.toOpenArray(4, data.len() - 1), 0, 0, reasonCode)
-    assign(reason, panicReasons.getOrDefault(reasonCode.truncate(int)))
+    let reasonCode = decodeU256(data.toOpenArray(4, data.len() - 1)).valueOr:
+      return Opt.none(string)
+    return ok(panicReasons.getOrDefault(reasonCode.truncate(int)))
