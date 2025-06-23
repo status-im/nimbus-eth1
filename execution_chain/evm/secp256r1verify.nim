@@ -1,5 +1,5 @@
 # Nimbus
-# Copyright (c) 2018-2025 Status Research & Development GmbH
+# Copyright (c) 2025 Status Research & Development GmbH
 # Licensed under either of
 #  * Apache License, version 2.0, ([LICENSE-APACHE](LICENSE-APACHE) or
 #    http://www.apache.org/licenses/LICENSE-2.0)
@@ -10,7 +10,7 @@
 
 import
   libp2p/crypto/ecnist,
-  bearssl/[ec, hash]
+  bearssl/ec
 
 proc isInfinityByte*(data: openArray[byte]): bool =
   ## Check if all values in ``data`` are zero.
@@ -28,9 +28,7 @@ proc verifyRaw*[T: byte | char](
   ## Return ``true`` if message verification succeeded, ``false`` if
   ## verification failed.
   doAssert((not isNil(sig)) and (not isNil(pubkey)))
-  var hc: HashCompatContext
-  var hash: array[32, byte]
-  var impl = ecGetDefault()
+  let impl = ecGetDefault()
   if pubkey.key.curve in EcSupportedCurvesCint:
     let res = ecdsaI31VrfyRaw(
       impl,
