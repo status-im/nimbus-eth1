@@ -15,9 +15,7 @@ import
   ../../../networking/p2p,
   ../../wire_protocol,
   ../worker_desc,
-  ./blocks_staged/staged_queue,
-  ./headers_staged/staged_queue,
-  ./[blocks_unproc, headers_unproc, update]
+  ./[blocks, headers, update]
 
 type
   SyncStateData = tuple
@@ -29,10 +27,10 @@ type
 
 proc querySyncProgress(ctx: BeaconCtxRef): SyncStateData =
   ## Syncer status query function (for call back closure)
-  if blocks <= ctx.pool.lastState:
+  if SyncState.blocks <= ctx.pool.lastState:
     return (ctx.hdrCache.antecedent.number, ctx.subState.top, ctx.subState.head)
 
-  if headers <= ctx.pool.lastState:
+  if SyncState.headers <= ctx.pool.lastState:
     let b = ctx.chain.baseNumber
     return (b, b, ctx.subState.head)
 
@@ -60,7 +58,7 @@ proc setupServices*(ctx: BeaconCtxRef; info: static[string]) =
   # Set up the notifier informing when a new syncer session has started.
   ctx.hdrCache.start proc() =
     # Activates the syncer. Work will be picked up by peers when available.
-    ctx.updateFromHibernateSetTarget info
+    ctx.updateActivateSyncer()
 
   # Manual first run?
   if 0 < ctx.pool.clReq.consHead.number:
