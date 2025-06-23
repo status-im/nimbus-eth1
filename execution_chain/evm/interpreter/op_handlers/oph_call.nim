@@ -81,11 +81,15 @@ proc updateStackAndParams(q: var LocalParams; c: Computation) =
     q.memOffset = q.memOutPos
     q.memLength = q.memOutLen
 
+  # EIP7907
+  if FkOsaka <= c.fork:
+    q.gasCallEIPs = gasCallEIP7907(c, q.codeAddress)
+
   # EIP2929: This came before old gas calculator
   #           because it will affect `c.gasMeter.gasRemaining`
   #           and further `childGasLimit`
   if FkBerlin <= c.fork:
-    q.gasCallEIPs = gasCallEIP2929(c, q.codeAddress)
+    q.gasCallEIPs += gasCallEIP2929(c, q.codeAddress)
 
   if FkPrague <= c.fork:
     let delegateTo = parseDelegationAddress(c.getCode(q.codeAddress))

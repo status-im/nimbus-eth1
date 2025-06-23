@@ -15,7 +15,9 @@
 {.push raises: [].}
 
 import
+  ../../../constants,
   ../../evm_errors,
+  ../../interpreter/utils/utils_numeric,
   ../../types,
   ../gas_costs,
   eth/common/[addresses, base],
@@ -58,6 +60,18 @@ proc delegateResolutionCost*(c: Computation, address: Address): GasInt =
       return ColdAccountAccessCost
     else:
       return WarmStorageReadCost
+
+proc gasCallEIP7907*(c: Computation, codeAddress: Address): GasInt =
+  c.vmState.mutateLedger:
+
+    if not db.inCodeAccessList(codeAddress):
+      db.codeAccessList(codeAddress)
+
+      let
+        code = db.getCode(codeAddress)
+        excessContractSize = max(0, code.len - CODE_SIZE_THRESHOLD)
+        largeContractCost = (ceil32(excessContractSize) * 2) div 32
+      return GasInt(largeContractCost)
 
 # ------------------------------------------------------------------------------
 # End
