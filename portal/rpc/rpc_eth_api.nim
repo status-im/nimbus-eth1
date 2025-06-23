@@ -9,6 +9,7 @@
 
 import
   std/sequtils,
+  stew/byteutils,
   json_rpc/rpcserver,
   chronicles,
   web3/[eth_api_types, conversions],
@@ -462,6 +463,13 @@ proc installEthApiHandlers*(
 
     let callResult = (await evm.call(header, tx, optimisticStateFetch)).valueOr:
       raise newException(ValueError, error)
+
+    if callResult.error.len() > 0:
+      raise (ref ApplicationError)(
+        code: 3,
+        msg: callResult.error,
+        data: Opt.some(JsonString("\"" & callResult.output.to0xHex() & "\"")),
+      )
 
     return callResult.output
 

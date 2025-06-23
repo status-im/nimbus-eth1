@@ -280,15 +280,21 @@ proc processBlock*(
     taskpool: Taskpool = nil,
 ): Result[void, string] =
   ## Generalised function to processes `blk` for any network.
-  ?vmState.procBlkPreamble(blk, skipValidation, skipReceipts, skipUncles, taskpool)
 
-  # EIP-3675: no reward for miner in POA/POS
-  if not vmState.com.proofOfStake(blk.header, vmState.ledger.txFrame):
-    vmState.calculateReward(blk.header, blk.uncles)
+  # Processing a block involves making lots and lots of small memory allocations
+  # meaning that GC overhead can make up for 15% of processing time in extreme
+  # cases - since each block is bounded in the amount of memory needed, we can
+  # run collection once per block instead.
+  deferGc:
+    ?vmState.procBlkPreamble(blk, skipValidation, skipReceipts, skipUncles, taskpool)
 
-  ?vmState.procBlkEpilogue(blk, skipValidation, skipReceipts, skipStateRootCheck)
+    # EIP-3675: no reward for miner in POA/POS
+    if not vmState.com.proofOfStake(blk.header, vmState.ledger.txFrame):
+      vmState.calculateReward(blk.header, blk.uncles)
 
-  ok()
+    ?vmState.procBlkEpilogue(blk, skipValidation, skipReceipts, skipStateRootCheck)
+
+    ok()
 
 # ------------------------------------------------------------------------------
 # End
