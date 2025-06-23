@@ -18,10 +18,13 @@ COPY ./ /nimbus-eth1
 
 WORKDIR /nimbus-eth1
 
-RUN  --mount=type=cache,target=/nimbus-eth1/build \
+RUN mv vendor vendor.orig
+
+RUN  --mount=type=cache,target=/nimbus-eth1/build --mount=type=cache,target=/nimbus-eth1/vendor \
+  mv vendor.orig vendor && \
   make -j${NPROC} NIMFLAGS="${NIMFLAGS_COMMON} --parallelBuild:${NPROC}" V=1 update
 
-RUN  --mount=type=cache,target=/nimbus-eth1/build \
+RUN  --mount=type=cache,target=/nimbus-eth1/build --mount=type=cache,target=/nimbus-eth1/vendor \
   make -j${NPROC} NIMFLAGS="${NIMFLAGS_COMMON} --parallelBuild:${NPROC}" nimbus_execution_client && \
   mv build/nimbus_execution_client /usr/local/bin/nimbus_execution_client
 
