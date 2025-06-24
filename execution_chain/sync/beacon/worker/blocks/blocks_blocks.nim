@@ -72,7 +72,7 @@ proc blocksFetchCheckImpl(
   request.blockHashes[^1] = blocks[^1].header.computeBlockHash
 
   # Fetch bodies
-  let bodies = (await buddy.fetchBodies request).valueOr:
+  let bodies = (await buddy.fetchBodies(request, info)).valueOr:
     return Opt.none(seq[EthBlock])
   if buddy.ctrl.stopped:
     return Opt.none(seq[EthBlock])
@@ -180,9 +180,8 @@ proc blocksImport*(
   block loop:
     for n in 0 ..< blocks.len:
       let nBn = blocks[n].header.number
-
-      (await ctx.importBlock(maybePeer, blocks[n], peerID)).isOkOr:
-        if not error.cancelled:
+      discard (await ctx.importBlock(maybePeer, blocks[n], peerID)).valueOr:
+        if error.excp != ECancelledError:
           isError = true
 
           # Mark peer that produced that unusable headers list as a zombie
