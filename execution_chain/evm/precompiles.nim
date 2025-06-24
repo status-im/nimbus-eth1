@@ -335,15 +335,14 @@ func bn256ecMul(c: Computation, fork: EVMFork = FkByzantium): EvmResultVoid =
 
   # Padding data
   let len = min(c.msg.data.len, 96) - 1
-  assign(input.toOpenArray(0, len), c.msg.data.toOpenArray(0, len))
-  var p1 = ? G1.getPoint(input.toOpenArray(0, 63))
-  var fr = ? getFR(input.toOpenArray(64, 95))
-  var apo = (p1 * fr).toAffine()
-
   c.output.setLen(64)
-  if isSome(apo):
-    # we can discard here because we supply buffer of proper size
-    discard apo.get().toBytes(c.output)
+  
+  let status = eth_evm_bn254_g1mul(c.output, c.msg.data.toOpenArray(0, len))
+
+  if status == CttEVMStatus.cttEVM_PointNotOnCurve:
+    return err(EvmErrorObj(code: PrcInvalidPoint))
+  elif status != CttEVMStatus.cttEVM_Success:
+    return err(EvmErrorObj(code: PrcInvalidParam))
 
   ok()
 
