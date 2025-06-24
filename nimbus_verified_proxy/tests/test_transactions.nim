@@ -18,7 +18,6 @@ import
 proc getBlockFromJson(filepath: string): BlockObject =
   var blkBytes = readAllBytes(filepath)
   let blk = JrpcConv.decode(blkBytes.get, BlockObject)
-  debugEcho blk.hash
   return blk
 
 let blk = getBlockFromJson("nimbus_verified_proxy/tests/block.json")
