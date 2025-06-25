@@ -114,6 +114,7 @@ proc controlCHandler() {.noconv.} =
       raiseAssert exc.msg # shouldn't happen
 
   notice "\tCtrl+C pressed. Shutting down services ..."
+
   shutdownExecution()
   shutdownConsensus()
 
@@ -173,8 +174,12 @@ proc run*(nimbus: var Nimbus) =
   # note: do not move. Both execution and consensus clients create these handlers.
   setControlCHook(controlCHandler)
 
-  ## wait for shutdown
+  # wait for shutdown
   nimbus.monitorServices()
+
+  # WA to shutdown (exceptions thrown)
+  # current shutdown procedure hangs on nat.nim from nim-eth
+  quit 0
 
 # ------
 when isMainModule:
