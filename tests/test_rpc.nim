@@ -7,7 +7,7 @@
 
 import
   chronicles,
-  std/[json, typetraits],
+  std/[json, typetraits, math],
   asynctest,
   web3/eth_api,
   stew/byteutils,
@@ -19,6 +19,9 @@ import
   ../execution_chain/db/[ledger, storage_types],
   ../execution_chain/sync/wire_protocol,
   ../execution_chain/core/[tx_pool, chain, pow/difficulty],
+  ../execution_chain/core/pooled_txs_rlp,
+  ../execution_chain/core/lazy_kzg as kzg,
+  ../execution_chain/core/eip4844,
   ../execution_chain/utils/utils,
   ../execution_chain/[common, rpc],
   ../execution_chain/rpc/rpc_types,
@@ -146,6 +149,43 @@ func makeTx(
 
   inc env.nonce
   signTransaction(tx, signerKey, eip155 = true)
+
+proc makeBlobTx(env: var TestEnv, nonce: int): PooledTransaction =
+  const
+    source    = address"0x0000000000000000000000000000000000000001"
+    storageKey= default(Bytes32)
+    accesses  = @[AccessPair(address: source, storageKeys: @[storageKey])]
+    blob      = default(kzg.KzgBlob)
+    blobs     = @[pooled_txs.KzgBlob(blob.bytes)]
+
+  let
+    ctx = env.ctx
+    acc = ctx.am.getAccount(signer).tryGet()
+    commitment = blobToKzgCommitment(blob).expect("good blob")
+    proof = computeBlobKzgProof(blob, commitment).expect("good commitment")
+    digest = kzgToVersionedHash(commitment.bytes)
+
+    utx = Transaction(
+      txType:              TxEip4844,
+      chainId:             env.chainId,
+      nonce:               AccountNonce(nonce),
+      gasPrice:            70000.GasInt,
+      gasLimit:            123457.GasInt,
+      to:                  Opt.some(zeroAddress),
+      maxPriorityFeePerGas:GasInt(10 ^ 9),
+      maxFeePerGas:        GasInt(10 ^ 9),
+      maxFeePerBlobGas:    1.u256,
+      accessList:          accesses,
+      versionedHashes:     @[digest])
+
+  let tx = signTransaction(utx, acc.privateKey, eip155 = true)
+
+  PooledTransaction(
+    tx: tx,
+    blobsBundle: BlobsBundle(
+      blobs: blobs,
+      commitments: @[pooled_txs.KzgCommitment(commitment.bytes)],
+      proofs: @[pooled_txs.KzgProof(proof.bytes)]))
 
 proc setupEnv(envFork: HardFork = MergeFork): TestEnv =
   doAssert(envFork >= MergeFork)
@@ -415,6 +455,13 @@ proc rpcMain*() =
       let txHash = await client.eth_sendRawTransaction(signedTxBytes)
       const expHash = hash32"0xeea79669dd904921d203fb720c7228f5c7854e5a768248f494f36fa68c83c191"
       check txHash == expHash
+
+      let
+        blobTx = env.makeBlobTx(4)
+        blobTxBytes = rlp.encode(blobTx)
+        blobTxHash = await client.eth_sendRawTransaction(blobTxBytes)
+        expected = computeRlpHash(blobTx.tx) # use inner tx hash
+      check expected == blobTxHash # should return inner tx hash
 
     test "eth_call":
       let ec = TransactionArgs(
