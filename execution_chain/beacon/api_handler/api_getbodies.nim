@@ -8,6 +8,7 @@
 # those terms.
 
 import
+  chronicles,
   std/[options, typetraits],
   eth/common/blocks,
   ../web3_eth_conv,
@@ -41,12 +42,17 @@ proc getPayloadBodiesByHash*(ben: BeaconEngineRef,
                                seq[Opt[ExecutionPayloadBodyV1]] =
   if hashes.len > maxBodyRequest:
     raise tooLargeRequest("request exceeds max allowed " & $maxBodyRequest)
-
+  
+  debug "getPayloadBodiesByHash requested bodies", number = hashes.len
+  var res: seq[Opt[ExecutionPayloadBodyV1]]
   for h in hashes:
     let blk = ben.chain.blockByHash(h).valueOr:
-      result.add Opt.none(ExecutionPayloadBodyV1)
+      res.add Opt.none(ExecutionPayloadBodyV1)
       continue
-    result.add Opt.some(toPayloadBody(blk))
+    res.add Opt.some(toPayloadBody(blk))
+
+  debug "getPayloadBodiesByHash returned bodies", number = res.len
+  return res
 
 proc getPayloadBodiesByRange*(ben: BeaconEngineRef,
                               start: uint64, count: uint64):
