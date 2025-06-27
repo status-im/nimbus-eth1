@@ -9,10 +9,11 @@
 
 import
   stint, json_rpc/server, json_rpc/errors,
-  ../networking/[p2p, discoveryv4/enode],
+  ../networking/[p2p, discoveryv4/enode, peer_pool, p2p_types],
   ../config,
   ../beacon/web3_eth_conv,
-  web3/conversions
+  web3/conversions,
+  json
 
 {.push raises: [].}
 
@@ -28,8 +29,25 @@ type
     ip    : string # address string
     ports : NodePorts
 
+  PeerNetworkInfo = object
+    inbound: bool         # Whether connection was initiated by remote peer
+    localAddress: string  # Local endpoint
+    remoteAddress: string # Remote endpoint
+    `static`: bool       # Whether peer is static
+    trusted: bool        # Whether peer is trusted
+
+  PeerInfo = object
+    caps: seq[string]     # Protocol capabilities
+    enode: string         # ENode string
+    id: string           # Node ID hex
+    name: string         # Client ID
+    network: PeerNetworkInfo
+    protocols: JsonNode   # Protocol-specific data
+
 NodePorts.useDefaultSerializationIn JrpcConv
 NodeInfo.useDefaultSerializationIn JrpcConv
+PeerNetworkInfo.useDefaultSerializationIn JrpcConv
+PeerInfo.useDefaultSerializationIn JrpcConv
 
 proc setupCommonRpc*(node: EthereumNode, conf: NimbusConf, server: RpcServer) =
   server.rpc("web3_clientVersion") do() -> string:
@@ -49,6 +67,7 @@ proc setupCommonRpc*(node: EthereumNode, conf: NimbusConf, server: RpcServer) =
     let peerCount = uint node.numPeers
     result = w3Qty(peerCount)
 
+proc setupAdminRpc*(node: EthereumNode, conf: NimbusConf, server: RpcServer) =
   server.rpc("admin_nodeInfo") do() -> NodeInfo:
     let
       enode = toENode(node)
@@ -72,3 +91,50 @@ proc setupCommonRpc*(node: EthereumNode, conf: NimbusConf, server: RpcServer) =
       asyncSpawn node.connectToNode(res.get())
       return true
     raise (ref InvalidRequest)(code: -32602, msg: "Invalid ENode")
+
+  server.rpc("admin_peers") do() -> seq[PeerInfo]:
+    var peers: seq[PeerInfo]
+    for peer in node.peerPool.peers:
+      if peer.connectionState == Connected:
+        let
+          nodeId = peer.remote.id
+          clientId = peer.clientId
+          enode = $peer.remote.node
+          remoteIp = $peer.remote.node.address.ip
+          remoteTcpPort = $peer.remote.node.address.tcpPort
+          localEnode = toENode(node)
+          localIp = $localEnode.address.ip
+          localTcpPort = $localEnode.address.tcpPort
+          
+        var caps: seq[string]
+        for capability in node.capabilities:
+          caps.add(capability.name & "/" & $capability.version)
+        
+        # Create protocols object with version info
+        var protocolsObj = newJObject()
+        for capability in node.capabilities:
+          protocolsObj[capability.name] = %*{"version": capability.version}
+        
+        let peerInfo = PeerInfo(
+          caps: caps,
+          enode: enode,
+          id: nodeId.toHex,
+          name: clientId,
+          network: PeerNetworkInfo(
+            inbound: peer.inbound,
+            localAddress: localIp & ":" & localTcpPort,
+            remoteAddress: remoteIp & ":" & remoteTcpPort,
+            `static`: false,  # TODO: implement static peer tracking
+            trusted: false # TODO: implement trusted peer tracking
+          ),
+          protocols: protocolsObj
+        )
+        peers.add(peerInfo)
+    
+    return peers
+
+proc setupAdminQuitRpc*(server: RpcServer, nimbus: auto) =
+  server.rpc("admin_quit") do() -> string:
+    {.gcsafe.}:
+      nimbus.state = NimbusState.Stopping
+    result = "EXITING"
