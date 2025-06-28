@@ -363,10 +363,6 @@ proc rpcMain*() =
           peer.name.len > 0
           peer.network.localAddress.len > 0
           peer.network.remoteAddress.len > 0
-          # inbound field should be boolean (either true or false)
-          peer.network.inbound in [true, false]
-          peer.network.`static` in [true, false]
-          peer.network.trusted in [true, false]
 
     test "eth_chainId":
       let res = await client.eth_chainId()

@@ -8,12 +8,13 @@
 # those terms.
 
 import
+  # Standard library imports are prefixed with `std/`
+  std/json,
   stint, json_rpc/server, json_rpc/errors,
   ../networking/[p2p, discoveryv4/enode, peer_pool, p2p_types],
   ../config,
   ../beacon/web3_eth_conv,
-  web3/conversions,
-  json
+  web3/conversions
 
 {.push raises: [].}
 
@@ -106,9 +107,7 @@ proc setupAdminRpc*(node: EthereumNode, conf: NimbusConf, server: RpcServer) =
           localIp = $localEnode.address.ip
           localTcpPort = $localEnode.address.tcpPort
           
-        var caps: seq[string]
-        for capability in node.capabilities:
-          caps.add(capability.name & "/" & $capability.version)
+        let caps = node.capabilities.mapIt(it.name & "/" & $it.version)
         
         # Create protocols object with version info
         var protocolsObj = newJObject()
