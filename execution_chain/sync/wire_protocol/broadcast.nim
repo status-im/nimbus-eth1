@@ -109,7 +109,7 @@ proc handleTransactionsBroadcast*(wire: EthWireRef,
   if packet.transactions.len == 0:
     return
 
-  debug "received new transactions",
+  debug "Received new transactions",
     number = packet.transactions.len
 
   wire.reqisterAction("TxPool consume incoming transactions"):
@@ -135,7 +135,7 @@ proc handleTxHashesBroadcast*(wire: EthWireRef,
   if packet.txHashes.len == 0:
     return
 
-  debug "received new pooled tx hashes",
+  debug "Received new pooled tx hashes",
     hashes = packet.txHashes.len
 
   if packet.txHashes.len != packet.txSizes.len or
@@ -186,11 +186,11 @@ proc handleTxHashesBroadcast*(wire: EthWireRef,
       try:
         res = await peer.getPooledTransactions(msg)
       except EthP2PError as exc:
-        debug "request pooled transactions failed",
+        debug "Request pooled transactions failed",
           msg=exc.msg
 
       if res.isNone:
-        debug "request pooled transactions get nothing"
+        debug "Request pooled transactions get nothing"
         return
 
       let
@@ -200,7 +200,9 @@ proc handleTxHashesBroadcast*(wire: EthWireRef,
         # If we receive any blob transactions missing sidecars, or with
         # sidecars that don't correspond to the versioned hashes reported
         # in the header, disconnect from the sending peer.
-        let (size, hash) = getEncodedLengthAndHash(tx)
+        let
+          size = getEncodedLength(tx) # Transaction + blobsBundle size
+          hash = computeRlpHash(tx.tx) # Only inner tx hash
         map.withValue(hash, val) do:
           if tx.tx.txType.byte != val.txType:
             debug "Protocol Breach: Received transaction with type differ from announced",
@@ -282,7 +284,7 @@ proc tickerLoop*(wire: EthWireRef) {.async: (raises: [CancelledError]).} =
           try:
             await peer.blockRangeUpdate(packet)
           except EthP2PError as exc:
-            debug "broadcast block range update failed",
+            debug "Broadcast block range update failed",
               msg=exc.msg
           awaitQuota(wire, blockRangeUpdateCost, "broadcast blockRangeUpdate")
 
