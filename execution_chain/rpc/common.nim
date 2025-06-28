@@ -106,8 +106,7 @@ proc setupAdminRpc*(node: EthereumNode, conf: NimbusConf, server: RpcServer) =
           localEnode = toENode(node)
           localIp = $localEnode.address.ip
           localTcpPort = $localEnode.address.tcpPort
-          
-        let caps = node.capabilities.mapIt(it.name & "/" & $it.version)
+          caps = node.capabilities.mapIt(it.name & "/" & $it.version)
         
         # Create protocols object with version info
         var protocolsObj = newJObject()
