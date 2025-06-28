@@ -201,7 +201,7 @@ proc handleTxHashesBroadcast*(wire: EthWireRef,
         # sidecars that don't correspond to the versioned hashes reported
         # in the header, disconnect from the sending peer.
         let
-          size = getEncodedLength(tx) # Transaction + blobsBundle size
+          size = getEncodedLength(tx)  # PooledTransacion: Transaction + blobsBundle size
           hash = computeRlpHash(tx.tx) # Only inner tx hash
         map.withValue(hash, val) do:
           if tx.tx.txType.byte != val.txType:
