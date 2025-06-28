@@ -1223,7 +1223,7 @@ proc rlpxConnect*(
   trace "Connecting to peer"
 
   let
-    peer = Peer(remote: remote, network: node)
+    peer = Peer(remote: remote, network: node, inbound: false)
     deadline = sleepAsync(connectionTimeout)
 
   var error = true
@@ -1320,7 +1320,7 @@ proc rlpxAccept*(
   initTracing(devp2pInfo, node.protocols)
 
   let
-    peer = Peer(network: node)
+    peer = Peer(network: node, inbound: true)
     deadline = sleepAsync(connectionTimeout)
 
   var error = true
