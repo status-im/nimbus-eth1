@@ -1,5 +1,5 @@
 # Nimbus
-# Copyright (c) 2023-2024 Status Research & Development GmbH
+# Copyright (c) 2023-2025 Status Research & Development GmbH
 # Licensed under either of
 #  * Apache License, version 2.0, ([LICENSE-APACHE](LICENSE-APACHE))
 #  * MIT license ([LICENSE-MIT](LICENSE-MIT))
@@ -8,7 +8,6 @@
 # those terms.
 
 import
-  chronicles,
   std/[options, typetraits],
   eth/common/blocks,
   ../web3_eth_conv,
@@ -42,17 +41,12 @@ proc getPayloadBodiesByHash*(ben: BeaconEngineRef,
                                seq[Opt[ExecutionPayloadBodyV1]] =
   if hashes.len > maxBodyRequest:
     raise tooLargeRequest("request exceeds max allowed " & $maxBodyRequest)
-  
-  debug "getPayloadBodiesByHash requested bodies", number = hashes.len
-  var res: seq[Opt[ExecutionPayloadBodyV1]]
+
   for h in hashes:
     let blk = ben.chain.blockByHash(h).valueOr:
-      res.add Opt.none(ExecutionPayloadBodyV1)
+      result.add Opt.none(ExecutionPayloadBodyV1)
       continue
-    res.add Opt.some(toPayloadBody(blk))
-
-  debug "getPayloadBodiesByHash returned bodies", number = res.len
-  return res
+    result.add Opt.some(toPayloadBody(blk))
 
 proc getPayloadBodiesByRange*(ben: BeaconEngineRef,
                               start: uint64, count: uint64):
