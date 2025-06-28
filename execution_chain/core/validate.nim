@@ -228,6 +228,9 @@ func validateTxBasic*(
     if tx.txType == TxEip7702 and fork < FkPrague:
       return err("invalid tx: Eip7702 Tx type detected before Prague")
 
+    if tx.txType == TxEip7873 and fork < FkOsaka:
+      return err("invalid tx: Eip7873 Tx type detected before Osaka")
+
   if fork >= FkShanghai and tx.contractCreation and tx.payload.len > EIP3860_MAX_INITCODE_SIZE:
     return err("invalid tx: initcode size exceeds maximum")
 
@@ -264,7 +267,7 @@ func validateTxBasic*(
 
   if tx.txType == TxEip4844:
     if tx.to.isNone:
-      return err("invalid tx: destination must be not empty")
+      return err("invalid tx: TxEip4844 destination must be not empty")
 
     if tx.versionedHashes.len == 0:
       return err("invalid tx: there must be at least one blob")
@@ -281,6 +284,23 @@ func validateTxBasic*(
   if tx.txType == TxEip7702:
     if tx.authorizationList.len == 0:
       return err("invalid tx: authorization list must not empty")
+
+  if tx.txType == TxEip7873:
+    if tx.initCodes.len > MAX_INITCODE_COUNT:
+      return err("invalid tx: initcodes len exceeds MAX_INIT_COUNT")
+    
+    if tx.initCodes.len == 0:
+      return err("invalid tx: initcodes len should not zero")
+      
+    for i in 0..<tx.initCodes.len:
+      if tx.initCodes[i].len > EIP3860_MAX_INITCODE_SIZE:
+        return err("invalid tx: length of initcodes entry exceeeds EIP3860_MAX_INITCODE_SIZE")
+      
+      if tx.initCodes[i].len == 0:
+        return err("invalid tx: length of initcodes entry should not zero")
+    
+    if tx.to.isNone:
+      return err("invalid tx: TxEip7873 destination must be not empty")
 
   ok()
 
