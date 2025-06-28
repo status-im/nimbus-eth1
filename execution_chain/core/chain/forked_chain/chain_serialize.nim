@@ -208,13 +208,13 @@ proc serialize*(fc: ForkedChainRef, txFrame: CoreDbTxRef): Result[void, CoreDbEr
     ?txFrame.put(branchIndexKey(i), rlp.encode(brc))
 
   info "Blocks DAG written to database",
-    base=fc.baseNumber,
-    baseHash=fc.baseHash.short,
-    latest=fc.latestNumber,
-    latestHash=fc.latestHash.short,
+    base=fc.baseBranch.tailNumber,
+    baseHash=fc.baseBranch.tailHash.short,
+    latest=fc.activeBranch.headNumber,
+    latestHash=fc.activeBranch.headHash.short,
     head=fc.fcuHead.number,
     headHash=fc.fcuHead.hash.short,
-    finalized=fc.resolvedFinNumber,
+    finalized=fc.latestFinalizedBlockNumber,
     finalizedHash=fc.pendingFCU.short,
     blocksInMemory=numBlocks
 
