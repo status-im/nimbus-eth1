@@ -109,10 +109,11 @@ iterator getBlockTransactionHashes*(
   for encodedTx in db.getBlockTransactionData(blockHeader.txRoot):
     yield keccak256(encodedTx)
 
-iterator getWithdrawals(
+iterator getWithdrawals*(
     db: CoreDbTxRef;
+    T: type;
     withdrawalsRoot: Hash32;
-      ): Withdrawal {.raises: [RlpError].} =
+      ): T {.raises: [RlpError].} =
   block body:
     if withdrawalsRoot == EMPTY_ROOT_HASH:
       break body
@@ -124,7 +125,7 @@ iterator getWithdrawals(
         break body
       if data.len == 0:
         break body
-      yield rlp.decode(data, Withdrawal)
+      yield rlp.decode(data, T)
 
 iterator getReceipts*(
     db: CoreDbTxRef;
@@ -383,10 +384,10 @@ proc getWithdrawals*(
     if res.isErr:
       if res.error.error != KvtNotFound:
         warn info, withdrawalsRoot, error=($$res.error)
-
-      # Fallback to old withdrawals format
-      for wd in db.getWithdrawals(withdrawalsRoot):
-        list.add(wd)
+      else:
+        # Fallback to old withdrawals format
+        for wd in db.getWithdrawals(Withdrawal, withdrawalsRoot):
+          list.add(wd)
     else:
       list = rlp.decode(res.value, seq[Withdrawal])
 

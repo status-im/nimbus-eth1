@@ -44,7 +44,7 @@ proc getExecutionPayloadBodyV1*(
       ): Result[ExecutionPayloadBodyV1, string] =
   const info = "getExecutionPayloadBodyV1()"
   var body: ExecutionPayloadBodyV1
-  
+
   for encodedTx in db.getBlockTransactionData(header.txRoot):
     body.transactions.add TypedTransaction(encodedTx)
 
@@ -54,13 +54,19 @@ proc getExecutionPayloadBodyV1*(
       var wds: seq[WithdrawalV1]
       body.withdrawals = Opt.some(wds)
       return ok(move(body))
-
-    let bytes = db.get(withdrawalsKey(withdrawalsRoot).toOpenArray).valueOr:
-      if error.error != KvtNotFound:
-        warn info, withdrawalsRoot, error=($$error)
-      return ok(move(body))
-
+      
     wrapRlpException info:
+      let bytes = db.get(withdrawalsKey(withdrawalsRoot).toOpenArray).valueOr:
+        if error.error != KvtNotFound:
+          warn info, withdrawalsRoot, error=($$error)
+        else:
+          # Fallback to old withdrawals format
+          var wds: seq[WithdrawalV1]
+          for wd in db.getWithdrawals(WithdrawalV1, withdrawalsRoot):
+            wds.add(wd)
+          body.withdrawals = Opt.some(wds)
+        return ok(move(body))
+    
       var list = rlp.decode(bytes, seq[WithdrawalV1])
       body.withdrawals = Opt.some(move(list))
 
@@ -81,4 +87,3 @@ func toPayloadBody*(blk: Block): ExecutionPayloadBodyV1 {.raises:[].}  =
                  else:
                    Opt.none(seq[WithdrawalV1])
   )
-  
