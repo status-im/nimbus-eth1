@@ -103,12 +103,32 @@ when defined(metrics):
 # Public functions
 # ------------------------------------------------------------------------------
 
+
 proc getAdm*(rdb: RdbInst, xid: AdminTabID): Result[seq[byte], (AristoError, string)] =
+  if isNil(rdb.admCol.handle()):
+    return ok(default(seq[byte]))
+
   var res: seq[byte]
   let onData = proc(data: openArray[byte]) =
     res = @data
 
   let gotData = rdb.admCol.get(xid.toOpenArray, onData).valueOr:
+    const errSym = RdbBeDriverGetAdmError
+    when extraTraceMessages:
+      trace logTxt "getAdm", xid, error = errSym, info = error
+    return err((errSym, error))
+
+  # Correct result if needed
+  if not gotData:
+    res = EmptyBlob
+  ok move(res)
+
+proc getAdm*(rdb: RdbInst): Result[seq[byte], (AristoError, string)] =
+  var res: seq[byte]
+  let onData = proc(data: openArray[byte]) =
+    res = @data
+
+  let gotData = rdb.vtxCol.get(AdmKey, onData).valueOr:
     const errSym = RdbBeDriverGetAdmError
     when extraTraceMessages:
       trace logTxt "getAdm", xid, error = errSym, info = error
