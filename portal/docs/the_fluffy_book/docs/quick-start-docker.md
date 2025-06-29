@@ -22,7 +22,7 @@ docker container run -p 8545:8545 statusim/nimbus-portal-client:amd64-master-lat
 
 ### Try requesting an execution layer block from the network
 
-Requesting history content on the Portal network can be easily tested by using the `eth_getBlockByHash` JSON-RPC from the [execution JSON-RPC API](https://ethereum.github.io/execution-apis/api-documentation/).
+Requesting history content on the Portal network can be easily tested by using the `eth_getBlockByHash` JSON-RPC from the [execution JSON-RPC API](https://ethereum.github.io/execution-apis/).
 
 ```bash
 # Get the hash of a block from your favorite block explorer, e.g.:
