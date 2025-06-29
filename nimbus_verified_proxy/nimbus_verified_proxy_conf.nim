@@ -141,6 +141,14 @@ type VerifiedProxyConf* = object # Config
     name: "max-peers"
   .}: int
 
+  maxBlockWalk* {.
+    hidden,
+    desc: "Maximum number of blocks that will be queried to serve a request",
+    defaultValue: 1000,
+    defaultValueDesc: "1000",
+    name: "debug-max-walk"
+  .}: uint64
+
   hardMaxPeers* {.
     desc: "The maximum number of peers to connect to. Defaults to maxPeers * 1.5",
     name: "hard-max-peers"
