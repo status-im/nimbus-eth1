@@ -987,8 +987,9 @@ func payloadBodyV1FromBaseTo*(c: ForkedChainRef,
     branch = branches[i]
     for y in 0..<branch.len:
       let bd = addr branch.blocks[y]
-      if bd.blk.header.number <= last:
-        list.add Opt.some(toPayloadBody(bd.blk))
+      if bd.blk.header.number > last:
+        return
+      list.add Opt.some(toPayloadBody(bd.blk))
 
 func equalOrAncestorOf*(c: ForkedChainRef, blockHash: Hash32, childHash: Hash32): bool =
   if blockHash == childHash:
