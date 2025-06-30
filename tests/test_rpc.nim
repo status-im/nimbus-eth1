@@ -27,6 +27,7 @@ import
   ../execution_chain/rpc/[rpc_types, common as rpc_common],
   ../execution_chain/beacon/web3_eth_conv,
   ../execution_chain/networking/p2p,
+  ../execution_chain/nimbus_desc,
    ./test_helpers,
    ./macro_assembler,
    ./test_block_fixture
@@ -232,6 +233,7 @@ proc setupEnv(envFork: HardFork = MergeFork): TestEnv =
     client = setupClient(server.localAddress[0].port)
     ctx    = newEthContext()
     node   = setupEthNode(conf, ctx, eth68, eth69)
+    nimbus = NimbusNode()
 
   ctx.am.loadKeystores(keyStore).isOkOr:
     debugEcho error
@@ -244,7 +246,7 @@ proc setupEnv(envFork: HardFork = MergeFork): TestEnv =
 
   setupServerAPI(serverApi, server, ctx)
   setupCommonRpc(node, conf, server)
-  setupAdminRpc(node, conf, server)
+  setupAdminRpc(nimbus, conf, server)
   server.start()
 
   TestEnv(
@@ -353,7 +355,7 @@ proc rpcMain*() =
     test "admin_peers":
       let peers = await client.admin_peers()
       check peers.len == node.peerPool.connectedNodes.len
-      
+
       # If there are peers, verify the structure matches Geth specification
       for peer in peers:
         check:

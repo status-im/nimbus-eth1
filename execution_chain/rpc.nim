@@ -54,7 +54,7 @@ func installRPC(server: RpcServer,
     setupServerAPI(serverApi, server, nimbus.ctx)
 
   if RpcFlag.Admin in flags:
-    setupAdminRpc(nimbus.ethNode, conf, server, nimbus)
+    setupAdminRpc(nimbus, conf, server)
 
   #  # Tracer is currently disabled
   # if RpcFlag.Debug in flags:
