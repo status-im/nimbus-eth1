@@ -9,7 +9,7 @@
 
 import
   # Standard library imports are prefixed with `std/`
-  std/json,
+  std/[json, sequtils],
   stint, json_rpc/server, json_rpc/errors,
   ../networking/[p2p, discoveryv4/enode, peer_pool, p2p_types],
   ../config,
@@ -91,7 +91,7 @@ proc setupAdminRpc*(node: EthereumNode, conf: NimbusConf, server: RpcServer, nim
     if res.isOk:
       asyncSpawn node.connectToNode(res.get())
       return true
-    raise (ref InvalidRequest)(code: -32602, msg: "Invalid ENode")
+    return false
 
   server.rpc("admin_peers") do() -> seq[PeerInfo]:
     var peers: seq[PeerInfo]
