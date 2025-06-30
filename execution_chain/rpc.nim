@@ -31,7 +31,7 @@ export
 
 {.push gcsafe, raises: [].}
 
-const DefaultChunkSize = 8192
+const DefaultChunkSize = 1024*1024
 
 func serverEnabled(conf: NimbusConf): bool =
   conf.httpServerEnabled or
