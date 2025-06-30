@@ -7,14 +7,9 @@
 
 {.push raises: [].}
 
-import
-  nimcrypto/[sha2, hash],
-  results,
-  stint,
-  ssz_serialization,
-  ../../../common/common_types
+import results, stint, ssz_serialization, ../../../common/common_types
 
-export ssz_serialization, common_types, results#, hash
+export ssz_serialization, common_types, results
 
 type
   ContentType* = enum
@@ -42,10 +37,14 @@ type
       receiptsKey*: BlockNumberKey
 
 func blockBodyContentKey*(blockNumber: uint64): ContentKey =
-  ContentKey(contentType: blockBody, blockBodyKey: BlockNumberKey(blockNumber: blockNumber))
+  ContentKey(
+    contentType: blockBody, blockBodyKey: BlockNumberKey(blockNumber: blockNumber)
+  )
 
 func receiptsContentKey*(blockNumber: uint64): ContentKey =
-  ContentKey(contentType: receipts, receiptsKey: BlockNumberKey(blockNumber: blockNumber))
+  ContentKey(
+    contentType: receipts, receiptsKey: BlockNumberKey(blockNumber: blockNumber)
+  )
 
 proc readSszBytes*(data: openArray[byte], val: var ContentKey) {.raises: [SszError].} =
   mixin readSszValue
@@ -64,14 +63,43 @@ func decode*(contentKey: ContentKeyByteList): Opt[ContentKey] =
   except SerializationError:
     return Opt.none(ContentKey)
 
-# TODO: change to correct content id derivation
-func toContentId*(contentKey: ContentKeyByteList): ContentId =
-  # TODO: Should we try to parse the content key here for invalid ones?
-  let idHash = sha2.sha256.digest(contentKey.asSeq())
-  readUintBE[256](idHash.data)
+func reverseBits(n: uint64, width: int): uint64 =
+  ## Reverse the lowest `width` bits of `n`
+  # TODO: can improve
+  var res: uint64 = 0
+  for i in 0 ..< width:
+    if ((n shr i) and 1) != 0:
+      res = res or (1'u64 shl (width - 1 - i))
+  res
+
+const
+  CYCLE_BITS = 16
+  OFFSET_BITS = 256 - CYCLE_BITS # 240
+  REVERSED_OFFSET_BITS = 64 - CYCLE_BITS # 48
+
+func toContentId*(blockNumber: uint64): UInt256 =
+  ## Returns the content id for a given block number
+  let
+    cycleBits = blockNumber mod (1'u64 shl CYCLE_BITS)
+    offsetBits = blockNumber div (1'u64 shl CYCLE_BITS)
+
+    reversedOffsetBits = reverseBits(offsetBits, REVERSED_OFFSET_BITS)
+
+  (cycleBits.stuint(256) shl OFFSET_BITS) or
+    (reversedOffsetBits.stuint(256) shl (OFFSET_BITS - REVERSED_OFFSET_BITS))
 
 func toContentId*(contentKey: ContentKey): ContentId =
-  toContentId(encode(contentKey))
+  case contentKey.contentType
+  of unused:
+    raiseAssert "ContentKey may not have unused value as content type"
+  of blockBody:
+    toContentId(contentKey.blockBodyKey.blockNumber)
+  of receipts:
+    toContentId(contentKey.receiptsKey.blockNumber)
+
+func toContentId*(bytes: ContentKeyByteList): Opt[ContentId] =
+  let contentKey = ?bytes.decode()
+  Opt.some(contentKey.toContentId())
 
 func `$`*(x: BlockNumberKey): string =
   "block_number: " & $x.blockNumber

@@ -27,19 +27,18 @@ logScope:
 
 const pingExtensionCapabilities = {CapabilitiesType, HistoryRadiusType}
 
-type
-  FinalizedHistoryNetwork* = ref object
-    portalProtocol*: PortalProtocol
-    contentDB*: ContentDB
-    contentQueue*: AsyncQueue[(Opt[NodeId], ContentKeysList, seq[seq[byte]])]
-    # cfg*: RuntimeConfig
-    processContentLoops: seq[Future[void]]
-    statusLogLoop: Future[void]
-    contentRequestRetries: int
-    contentQueueWorkers: int
+type FinalizedHistoryNetwork* = ref object
+  portalProtocol*: PortalProtocol
+  contentDB*: ContentDB
+  contentQueue*: AsyncQueue[(Opt[NodeId], ContentKeysList, seq[seq[byte]])]
+  # cfg*: RuntimeConfig
+  processContentLoops: seq[Future[void]]
+  statusLogLoop: Future[void]
+  contentRequestRetries: int
+  contentQueueWorkers: int
 
 func toContentIdHandler(contentKey: ContentKeyByteList): results.Opt[ContentId] =
-  ok(toContentId(contentKey))
+  toContentId(contentKey)
 
 proc new*(
     T: type FinalizedHistoryNetwork,
