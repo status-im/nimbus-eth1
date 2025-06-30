@@ -17,6 +17,7 @@ type
 
   # The Portal sub-protocols
   PortalSubnetwork* = enum
+    finalizedHistory
     state
     history
     beacon
