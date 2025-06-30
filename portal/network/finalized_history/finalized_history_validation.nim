@@ -12,16 +12,17 @@ import
   eth/common/[headers_rlp, blocks_rlp, receipts, hashes],
   ./finalized_history_content
 
-func validateBlockBody*(
-    body: BlockBody, header: Header
-): Result[void, string] =
+func validateBlockBody*(body: BlockBody, header: Header): Result[void, string] =
   ## Validate the block body against the txRoot, ommersHash and withdrawalsRoot
   ## from the header.
   ## TODO: could add block number vs empty ommersHash + existing withdrawalsRoot check
-  let calculatedOmmersHash = keccak256(rlp.encode(body.uncles)) # TODO: avoid having to re-encode the uncles
+  let calculatedOmmersHash = keccak256(rlp.encode(body.uncles))
+    # TODO: avoid having to re-encode the uncles
   if calculatedOmmersHash != header.ommersHash:
-    return err("Invalid ommers hash: expected " & $header.ommersHash & " - got " &
-      $calculatedOmmersHash)
+    return err(
+      "Invalid ommers hash: expected " & $header.ommersHash & " - got " &
+        $calculatedOmmersHash
+    )
 
   let calculatedTxsRoot = orderedTrieRoot(body.transactions)
   if calculatedTxsRoot != header.txRoot:
@@ -31,10 +32,8 @@ func validateBlockBody*(
     )
 
   if header.withdrawalsRoot.isSome() and body.withdrawals.isNone() or
-    header.withdrawalsRoot.isNone() and body.withdrawals.isSome():
-      return err(
-        "Invalid withdrawals"
-      )
+      header.withdrawalsRoot.isNone() and body.withdrawals.isSome():
+    return err("Invalid withdrawals")
 
   if header.withdrawalsRoot.isSome() and body.withdrawals.isSome():
     let
@@ -48,12 +47,12 @@ func validateBlockBody*(
 
   ok()
 
-func validateReceipts*(
-    receipts: Receipts, receiptsRoot: Hash32
-): Result[void, string] =
+func validateReceipts*(receipts: Receipts, receiptsRoot: Hash32): Result[void, string] =
   let calculatedReceiptsRoot = orderedTrieRoot(receipts)
   if calculatedReceiptsRoot != receiptsRoot:
-    err("Unexpected receipt root: expected " & $receiptsRoot &
-        " - got " & $calculatedReceiptsRoot)
+    err(
+      "Unexpected receipt root: expected " & $receiptsRoot & " - got " &
+        $calculatedReceiptsRoot
+    )
   else:
     ok()

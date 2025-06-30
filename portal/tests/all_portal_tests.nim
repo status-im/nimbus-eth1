@@ -11,6 +11,7 @@ import
   ./evm/all_evm_tests,
   ./test_content_db,
   ./wire_protocol_tests/all_wire_protocol_tests,
+  ./finalized_history_network_tests/all_finalized_history_network_tests,
   ./history_network_tests/all_history_network_tests,
   ./beacon_network_tests/all_beacon_network_tests,
   ./state_network_tests/all_state_network_tests,
