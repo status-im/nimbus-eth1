@@ -53,14 +53,13 @@ func installRPC(server: RpcServer,
   if RpcFlag.Eth in flags:
     setupServerAPI(serverApi, server, nimbus.ctx)
 
+  if RpcFlag.Admin in flags:
+    setupAdminRpc(nimbus.ethNode, conf, server, nimbus)
+
   #  # Tracer is currently disabled
   # if RpcFlag.Debug in flags:
   #   setupDebugRpc(com, nimbus.txPool, server)
 
-  server.rpc("admin_quit") do() -> string:
-    {.gcsafe.}:
-      nimbus.state = NimbusState.Stopping
-    result = "EXITING"
 
 proc newRpcWebsocketHandler(): RpcWebSocketHandler =
   let rng = HmacDrbgContext.new()
