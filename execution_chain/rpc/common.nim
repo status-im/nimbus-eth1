@@ -68,7 +68,7 @@ proc setupCommonRpc*(node: EthereumNode, conf: NimbusConf, server: RpcServer) =
     let peerCount = uint node.numPeers
     result = w3Qty(peerCount)
 
-proc setupAdminRpc*(node: EthereumNode, conf: NimbusConf, server: RpcServer) =
+proc setupAdminRpc*(node: EthereumNode, conf: NimbusConf, server: RpcServer, nimbus: auto) =
   server.rpc("admin_nodeInfo") do() -> NodeInfo:
     let
       enode = toENode(node)
@@ -131,7 +131,6 @@ proc setupAdminRpc*(node: EthereumNode, conf: NimbusConf, server: RpcServer) =
     
     return peers
 
-proc setupAdminQuitRpc*(server: RpcServer, nimbus: auto) =
   server.rpc("admin_quit") do() -> string:
     {.gcsafe.}:
       nimbus.state = NimbusState.Stopping
