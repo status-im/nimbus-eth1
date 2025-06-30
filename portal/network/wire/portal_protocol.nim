@@ -308,6 +308,8 @@ func getProtocolId*(
   case network
   of PortalNetwork.none, PortalNetwork.mainnet:
     case subnetwork
+    of PortalSubnetwork.finalizedHistory:
+      [portalPrefix, 0x00]
     of PortalSubnetwork.legacyHistory:
       [portalPrefix, 0x0B]
     of PortalSubnetwork.history:
@@ -320,6 +322,8 @@ func getProtocolId*(
       [portalPrefix, 0x0F]
   of PortalNetwork.angelfood:
     case subnetwork
+    of PortalSubnetwork.finalizedHistory:
+      [portalPrefix, 0x40]
     of PortalSubnetwork.legacyHistory:
       [portalPrefix, 0x4B]
     of PortalSubnetwork.history:

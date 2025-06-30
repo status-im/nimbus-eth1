@@ -61,7 +61,7 @@ proc new*(
 
     portalProtocol = PortalProtocol.new(
       baseProtocol,
-      [byte(0x50), 0x00], # TODO: Adapt getProtocolId
+      getProtocolId(portalNetwork, PortalSubnetwork.finalizedHistory),
       toContentIdHandler,
       createGetHandler(contentDB),
       createStoreHandler(contentDB, portalConfig.radiusConfig),

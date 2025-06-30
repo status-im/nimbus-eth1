@@ -17,6 +17,7 @@ import
   ../database/content_db,
   ./network_metadata,
   ./wire/[portal_stream, portal_protocol_config],
+  ./finalized_history/finalized_history_network,
   ./beacon/[beacon_init_loader, beacon_light_client],
   ./legacy_history/[history_network, history_content]
 
@@ -39,6 +40,7 @@ type
     discovery: protocol.Protocol
     contentDB: ContentDB
     streamManager: StreamManager
+    finalizedHistoryNetwork*: Opt[FinalizedHistoryNetwork]
     beaconNetwork*: Opt[BeaconNetwork]
     legacyHistoryNetwork*: Opt[LegacyHistoryNetwork]
     beaconLightClient*: Opt[LightClient]
@@ -102,6 +104,24 @@ proc new*(
       else:
         # Get it from binary file containing SSZ encoded accumulator
         loadAccumulator()
+
+    finalizedHistoryNetwork =
+      if PortalSubnetwork.finalizedHistory in subnetworks:
+        Opt.some(
+          FinalizedHistoryNetwork.new(
+            network,
+            discovery,
+            contentDB,
+            streamManager,
+            bootstrapRecords = bootstrapRecords,
+            portalConfig = config.portalConfig,
+            contentRequestRetries = config.contentRequestRetries,
+            contentQueueWorkers = config.contentQueueWorkers,
+            contentQueueSize = config.contentQueueSize,
+          )
+        )
+      else:
+        Opt.none(FinalizedHistoryNetwork)
 
     beaconNetwork =
       if PortalSubnetwork.beacon in subnetworks:
@@ -172,6 +192,7 @@ proc new*(
     discovery: discovery,
     contentDB: contentDB,
     streamManager: streamManager,
+    finalizedHistoryNetwork: finalizedHistoryNetwork,
     beaconNetwork: beaconNetwork,
     legacyHistoryNetwork: legacyHistoryNetwork,
     beaconLightClient: beaconLightClient,
@@ -204,6 +225,8 @@ proc start*(n: PortalNode) =
 
   n.discovery.start()
 
+  if n.finalizedHistoryNetwork.isSome():
+    n.finalizedHistoryNetwork.value.start()
   if n.beaconNetwork.isSome():
     n.beaconNetwork.value.start()
   if n.legacyHistoryNetwork.isSome():
@@ -218,6 +241,8 @@ proc stop*(n: PortalNode) {.async: (raises: []).} =
 
   var futures: seq[Future[void]]
 
+  if n.finalizedHistoryNetwork.isSome():
+    futures.add(n.finalizedHistoryNetwork.value.stop())
   if n.beaconNetwork.isSome():
     futures.add(n.beaconNetwork.value.stop())
   if n.legacyHistoryNetwork.isSome():
