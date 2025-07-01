@@ -118,7 +118,7 @@ proc persist*(
     return
 
   let lSst = SavedState(
-    key: emptyRoot, # placeholder for more
+    vTop: txFrame.vTop,
     serial: txFrame.blockNumber.expect("`checkpoint` before persisting frame"),
   )
 
@@ -203,7 +203,6 @@ with --debug-eager-state-root."""
     do:
       db.putVtxFn(batch, rvid, vtx, default(HashKey))
 
-  db.putTuvFn(batch, txFrame.vTop)
   db.putLstFn(batch, lSst)
 
   # TODO above, we only prepare the changes to the database but don't actually
