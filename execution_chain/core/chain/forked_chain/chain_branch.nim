@@ -16,180 +16,63 @@ import
   ../../../db/core_db
 
 type
-  BlockDesc* = object
+  BlockRef* = ref object
     blk*     : Block
     txFrame* : CoreDbTxRef
     receipts*: seq[StoredReceipt]
     hash*    : Hash32
+    parent*  : BlockRef
 
-  BlockPos* = object
-    branch*: BranchRef
-    index* : int
+    index*   : uint
+      # Alias to parent when serializing
+      # Also used for DAG node coloring
 
-  BranchRef* = ref object
-    blocks*: seq[BlockDesc]
-    parent*: BranchRef
-      # If parent.isNil: it is a base branch
+template header*(b: BlockRef): Header =
+  b.blk.header
 
-    index* : uint
-      # Used by serializer, a replacement for parent
-      #  0: nil
-      # >0: index-1 to branches list
-      #
-      # Also used as a flag when replaying state
-      # after deserialize.
+template number*(b: BlockRef): BlockNumber =
+  b.blk.header.number
 
-  TxFrameAndStateRoot* = object
-    txFrame*  : CoreDbTxRef
-    stateRoot*: Hash32
+func `==`*(a, b: BlockRef): bool =
+  a.hash == b.hash
 
-func tailBlock*(brc: BranchRef): Block =
-  brc.blocks[0].blk
+template isOk*(b: BlockRef): bool =
+  b.isNil.not
 
-func tailNumber*(brc: BranchRef): BlockNumber =
-  brc.blocks[0].blk.header.number
+template loopIt*(init: BlockRef, body: untyped) =
+  block:
+    var it{.inject.} = init
+    while it.isOk:
+      body
+      it = it.parent
 
-func headNumber*(brc: BranchRef): BlockNumber =
-  brc.blocks[^1].blk.header.number
+template stateRoot*(b: BlockRef): Hash32 =
+  b.blk.header.stateRoot
 
-func tailHash*(brc: BranchRef): Hash32 =
-  brc.blocks[0].hash
+const
+  DAG_NODE_COLORED = 1
+  DAG_NODE_CLEAR = 0
 
-func headHash*(brc: BranchRef): Hash32 =
-  brc.blocks[^1].hash
+template color*(b: BlockRef) =
+  b.index = DAG_NODE_COLORED
 
-func len*(brc: BranchRef): int =
-  brc.blocks.len
+template noColor*(b: BlockRef) =
+  b.index = DAG_NODE_CLEAR
 
-func headTxFrame*(brc: BranchRef): CoreDbTxRef =
-  brc.blocks[^1].txFrame
+template colored*(b: BlockRef): bool =
+  b.index == DAG_NODE_COLORED
 
-func tailHeader*(brc: BranchRef): Header =
-  brc.blocks[0].blk.header
-
-func headHeader*(brc: BranchRef): Header =
-  brc.blocks[^1].blk.header
-
-func append*(brc: BranchRef, blk: BlockDesc) =
-  brc.blocks.add(blk)
-
-func lastBlockPos*(brc: BranchRef): BlockPos =
-  BlockPos(
-    branch: brc,
-    index : brc.len - 1,
-  )
-
-func firstBlockPos*(brc: BranchRef): BlockPos =
-  BlockPos(
-    branch: brc,
-    index : 0,
-  )
-
-func `==`*(a, b: BranchRef): bool =
-  a.headHash == b.headHash
-
-func hasHashAndNumber*(brc: BranchRef, hash: Hash32, number: BlockNumber): bool =
-  for i in 0..<brc.len:
-    if brc.blocks[i].hash == hash and brc.blocks[i].blk.header.number == number:
-      return true
-
-func branch*(header: Header, hash: Hash32, txFrame: CoreDbTxRef): BranchRef =
-  BranchRef(
-    blocks: @[BlockDesc(
-      blk: Block(header: header),
-      txFrame: txFrame,
-      hash: hash,
-      )
-    ]
-  )
-
-func branch*(parent: BranchRef, blk: Block,
-             hash: Hash32, txFrame: CoreDbTxRef,
-             receipts: sink seq[StoredReceipt]): BranchRef =
-  BranchRef(
-    blocks: @[BlockDesc(
-      blk: blk,
-      txFrame: txFrame,
-      receipts: move(receipts),
-      hash: hash,
-      )
-    ],
-    parent: parent,
-  )
-
-func txFrame*(loc: BlockPos): CoreDbTxRef =
-  loc.branch.blocks[loc.index].txFrame
-
-func header*(loc: BlockPos): Header =
-  loc.branch.blocks[loc.index].blk.header
-
-func blk*(loc: BlockPos): Block =
-  loc.branch.blocks[loc.index].blk
-
-func receipts*(loc: BlockPos): seq[StoredReceipt] =
-  loc.branch.blocks[loc.index].receipts
-
-func number*(loc: BlockPos): BlockNumber =
-  loc.branch.blocks[loc.index].blk.header.number
-
-func hash*(loc: BlockPos): Hash32 =
-  loc.branch.blocks[loc.index].hash
-
-func parentHash*(loc: BlockPos): Hash32 =
-  loc.branch.blocks[loc.index].blk.header.parentHash
-
-func stateRoot*(loc: BlockPos): Hash32 =
-  loc.branch.blocks[loc.index].blk.header.stateRoot
-
-func tx*(loc: BlockPos, index: uint64): Transaction =
-  loc.branch.blocks[loc.index].blk.transactions[index]
-
-func isHead*(loc: BlockPos): bool =
-  loc.index == loc.branch.len - 1
-
-func lastBlockPos*(loc: BlockPos): BlockPos =
-  loc.branch.lastBlockPos
-
-func appendBlock*(loc: BlockPos,
-             blk: Block,
-             blkHash: Hash32,
-             txFrame: CoreDbTxRef,
-             receipts: sink seq[StoredReceipt]) =
-  loc.branch.append(BlockDesc(
-    blk     : blk,
-    txFrame : txFrame,
-    receipts: move(receipts),
-    hash    : blkHash,
-  ))
-
-iterator transactions*(loc: BlockPos): Transaction =
-  for tx in loc.branch.blocks[loc.index].blk.transactions:
-    yield tx
-
-iterator everyNthBlock*(loc: BlockPos, step: uint64): TxFrameAndStateRoot =
+iterator everyNthBlock*(base: BlockRef, step: uint64): BlockRef =
   var
-    branch = loc.branch
-    steps  = newSeqOfCap[TxFrameAndStateRoot](128)
-    number = loc.number
+    number = base.number - min(base.number, step)
+    steps  = newSeqOfCap[BlockRef](128)
 
-  steps.add TxFrameAndStateRoot(
-    txFrame  : loc.txFrame,
-    stateRoot: loc.stateRoot
-  )
+  steps.add base
 
-  # Don't add the above txFrame anymore
-  number -= min(number, step)
-
-  while not branch.isNil:
-    let tailNumber = branch.tailNumber
-    while tailNumber > step and number > tailNumber:
-      let bd = addr branch.blocks[number-tailNumber]
-      steps.add TxFrameAndStateRoot(
-        txFrame  : bd.txFrame,
-        stateRoot: bd.blk.header.stateRoot
-      )
+  loopIt(base):
+    if it.number == number:
+      steps.add it
       number -= min(number, step)
-    branch = branch.parent
 
   for i in countdown(steps.len-1, 0):
     yield steps[i]

@@ -84,3 +84,4 @@ proc processBlock*(c: ForkedChainRef,
   ?txFrame.persistHeader(blkHash, header, c.com.startOfHistory)
 
   ok(move(vmState.receipts))
+
