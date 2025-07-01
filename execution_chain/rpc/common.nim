@@ -18,8 +18,8 @@ import
 
 type
   NodePorts = object
-    discovery: string
-    listener : string
+    discovery: uint16
+    listener : uint16
 
   NodeInfo = object
     id    : string # UInt256 hex
@@ -59,8 +59,8 @@ proc setupCommonRpc*(node: EthereumNode, conf: NimbusConf, server: RpcServer) =
         enode: $enode,
         ip: $enode.address.ip,
         ports: NodePorts(
-          discovery: $enode.address.udpPort,
-          listener: $enode.address.tcpPort
+          discovery: uint16(enode.address.udpPort),
+          listener: uint16(enode.address.tcpPort)
         )
       )
 
