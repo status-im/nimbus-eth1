@@ -233,7 +233,9 @@ proc setupEnv(envFork: HardFork = MergeFork): TestEnv =
     client = setupClient(server.localAddress[0].port)
     ctx    = newEthContext()
     node   = setupEthNode(conf, ctx, eth68, eth69)
-    nimbus = NimbusNode()
+    nimbus = NimbusNode(
+      ethNode: node,
+    )
 
   ctx.am.loadKeystores(keyStore).isOkOr:
     debugEcho error
