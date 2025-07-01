@@ -64,7 +64,7 @@ template payloadTypeRequiredError*(): auto =
 template userSpecifiedPayloadBlockedByClientError*(): auto =
   UserSpecifiedPayloadBlockedByClientError.applicationError()
 
-template invalidRequest(error: (int, string)): auto =
+template invalidRequest*(error: (int, string)): auto =
   (ref errors.InvalidRequest)(code: error.code, msg: error.msg)
 
 template invalidKeyErr*(): auto =

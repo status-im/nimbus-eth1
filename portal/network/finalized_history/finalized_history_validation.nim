@@ -8,6 +8,7 @@
 {.push raises: [].}
 
 import
+  std/typetraits,
   eth/trie/ordered_trie,
   eth/common/[headers_rlp, blocks_rlp, receipts, hashes],
   ./finalized_history_content
@@ -47,12 +48,34 @@ func validateBlockBody*(body: BlockBody, header: Header): Result[void, string] =
 
   ok()
 
-func validateReceipts*(receipts: Receipts, receiptsRoot: Hash32): Result[void, string] =
+func validateReceipts*(receipts: Receipts, header: Header): Result[void, string] =
   let calculatedReceiptsRoot = orderedTrieRoot(receipts)
-  if calculatedReceiptsRoot != receiptsRoot:
+  if calculatedReceiptsRoot != header.receiptsRoot:
     err(
-      "Unexpected receipt root: expected " & $receiptsRoot & " - got " &
+      "Unexpected receipt root: expected " & $header.receiptsRoot & " - got " &
         $calculatedReceiptsRoot
     )
   else:
     ok()
+
+func validateContent*(
+    content: BlockBody | Receipts, header: Header
+): Result[void, string] =
+  type T = type(content)
+  when T is BlockBody:
+    validateBlockBody(content, header)
+  elif T is Receipts:
+    validateReceipts(content, header)
+
+func validateContent*(
+    key: ContentKey, contentBytes: seq[byte], header: Header
+): Result[void, string] =
+  case key.contentType
+  of unused:
+    raiseAssert("ContentKey contentType: unused")
+  of blockBody:
+    let content = ?decodeRlp(contentBytes, BlockBody)
+    validateBlockBody(content, header)
+  of receipts:
+    let content = ?decodeRlp(contentBytes, Receipts)
+    validateReceipts(content, header)
