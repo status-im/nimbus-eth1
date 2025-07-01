@@ -22,6 +22,8 @@ import
 
 from eth/common/accounts import EMPTY_ROOT_HASH
 
+export finalized_history_content, headers
+
 logScope:
   topics = "portal_fin_hist"
 
@@ -82,6 +84,60 @@ proc new*(
     contentQueueWorkers: contentQueueWorkers,
   )
 
+proc getContent*(
+    n: FinalizedHistoryNetwork,
+    contentKey: ContentKey,
+    V: type ContentValueType,
+    header: Header,
+): Future[Opt[V]] {.async: (raises: [CancelledError]).} =
+  let contentKeyBytes = encode(contentKey)
+
+  logScope:
+    contentKeyBytes
+
+  let contentId = contentKeyBytes.toContentId().valueOr:
+    warn "Received invalid content key", contentKeyBytes
+    return Opt.none(V)
+
+  # Check first locally
+  n.portalProtocol.getLocalContent(contentKeyBytes, contentId).isErrOr:
+    let contentValue = decodeRlp(value(), V).valueOr:
+      raiseAssert("Unable to decode history local content value")
+
+    debug "Fetched local content value"
+    return Opt.some(contentValue)
+
+  for i in 0 ..< (1 + n.contentRequestRetries):
+    let
+      lookupRes = (await n.portalProtocol.contentLookup(contentKeyBytes, contentId)).valueOr:
+        warn "Failed fetching content from the network"
+        return Opt.none(V)
+
+      contentValue = decodeRlp(lookupRes.content, V).valueOr:
+        warn "Unable to decode content value from content lookup"
+        continue
+
+    validateContent(contentValue, header).isOkOr:
+      n.portalProtocol.banNode(
+        lookupRes.receivedFrom.id, NodeBanDurationContentLookupFailedValidation
+      )
+      warn "Error validating retrieved content", error = error
+      continue
+
+    debug "Fetched valid content from the network"
+    n.portalProtocol.storeContent(
+      contentKeyBytes, contentId, lookupRes.content, cacheContent = true
+    )
+
+    asyncSpawn n.portalProtocol.triggerPoke(
+      lookupRes.nodesInterestedInContent, contentKeyBytes, lookupRes.content
+    )
+
+    return Opt.some(contentValue)
+
+  # Content was requested `1 + requestRetries` times and all failed on validation
+  Opt.none(V)
+
 proc validateContent(
     n: FinalizedHistoryNetwork, content: seq[byte], contentKeyBytes: ContentKeyByteList
 ): Future[Result[void, string]] {.async: (raises: [CancelledError]).} =
@@ -113,7 +169,7 @@ proc validateContent(
       header = Header()
       receipts = decodeRlp(content, seq[Receipt]).valueOr:
         return err("Error decoding receipts: " & error)
-    validateReceipts(receipts, header.receiptsRoot).isOkOr:
+    validateReceipts(receipts, header).isOkOr:
       return err("Failed validating receipts: " & error)
 
     ok()
