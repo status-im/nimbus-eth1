@@ -202,6 +202,30 @@ proc forkedChainMain*() =
       C6 = txFrame.makeBlk(6, C5)
       C7 = txFrame.makeBlk(7, C6)
     txFrame.dispose()
+
+    test "A-B-A chain switch":
+      const info = "A-B-A chain switch"
+      let com = env.newCom()
+      var chain = ForkedChainRef.init(com, baseDistance = 3)
+      checkImportBlock(chain, blk1)
+      checkImportBlock(chain, blk2)
+      checkImportBlock(chain, blk3)
+      let
+        txFrame = chain.latestTxFrame
+
+      let BB4 = txFrame.makeBlk(4, blk3, 1.byte)
+      let BB5 = txFrame.makeBlk(5, BB4)
+
+      let cm = env.newCom()
+      var cc = ForkedChainRef.init(cm, baseDistance = 3)
+      checkImportBlock(cc, blk1)
+      checkImportBlock(cc, blk2)
+      checkImportBlock(cc, blk3)
+
+      checkImportBlock(cc, BB4)
+      checkImportBlock(cc, blk4)
+      checkImportBlock(cc, BB5)
+
     test "newBase == oldBase":
       const info = "newBase == oldBase"
       let com = env.newCom()
