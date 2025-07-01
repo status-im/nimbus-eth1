@@ -351,8 +351,8 @@ proc rpcMain*() =
         res.name == env.conf.agentString
         res.enode.startsWith("enode://")
         res.ip.len > 0
-        res.ports.discovery.len > 0
-        res.ports.listener.len > 0
+        res.ports.discovery > 0
+        res.ports.listener > 0
 
     test "admin_peers":
       let peers = await client.admin_peers()
