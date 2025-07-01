@@ -808,12 +808,7 @@ proc headerByNumber*(c: ForkedChainRef, number: BlockNumber): Result[Header, str
     return err("Requested block number not exists: " & $number)
 
   if number < c.baseBranch.tailNumber:
-    let hdr = c.baseTxFrame.getBlockHeader(number).valueOr:
-      if c.isPortalActive:
-        return c.portal.getHeaderByNumber(number)
-      else:
-        return err("Portal inactive, block not found, number = " & $number)
-    return ok(hdr)
+    return c.baseTxFrame.getBlockHeader(number)
 
   var branch = c.activeBranch
   while not branch.isNil:
@@ -850,12 +845,8 @@ func safeBlock*(c: ForkedChainRef): Block =
 proc headerByHash*(c: ForkedChainRef, blockHash: Hash32): Result[Header, string] =
   c.hashToBlock.withValue(blockHash, loc):
     return ok(loc[].header)
-  let hdr = c.baseTxFrame.getBlockHeader(blockHash).valueOr:
-    if c.isPortalActive:
-      return c.portal.getHeaderByHash(blockHash)
-    else:
-      return err("Block header not found")
-  ok(hdr)
+
+  c.baseTxFrame.getBlockHeader(blockHash)
 
 proc txDetailsByTxHash*(c: ForkedChainRef, txHash: Hash32): Result[(Hash32, uint64), string] =
   if c.txRecords.hasKey(txHash):
