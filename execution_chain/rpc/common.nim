@@ -10,12 +10,15 @@
 import
   # Standard library imports are prefixed with `std/`
   std/[json, sequtils],
-  stint, json_rpc/server, json_rpc/errors,
+  stint, json_rpc/errors,
+  chronos,
   ../networking/[p2p, discoveryv4/enode, peer_pool, p2p_types],
   ../config,
   ../beacon/web3_eth_conv,
   ../nimbus_desc,
   web3/conversions
+
+from json_rpc/server import RpcServer, rpc
 
 {.push raises: [].}
 
@@ -94,7 +97,9 @@ proc setupAdminRpc*(nimbus: NimbusNode, conf: NimbusConf, server: RpcServer) =
     if res.isOk:
       asyncSpawn node.connectToNode(res.get())
       return true
-    return false
+    # Weird it is, but when addPeer fails, the calee expect
+    # invalid params `-32602`(kurtosis test)
+    raise (ref InvalidRequest)(code: -32602, msg: "Invalid ENode")
 
   server.rpc("admin_peers") do() -> seq[PeerInfo]:
     var peers: seq[PeerInfo]
