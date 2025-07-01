@@ -15,7 +15,7 @@ import
   stint,
   results,
   ssz_serialization,
-  beacon_chain/db_limits,
+  beacon_chain/db_utils,
   beacon_chain/spec/forks,
   beacon_chain/spec/forks_light_client,
   ./beacon_content,
