@@ -43,7 +43,7 @@ const
 
   GAS_LIMIT_MINIMUM* =                      5000
   GAS_LIMIT_MAXIMUM* =                      int64.high.GasInt # Maximum the gas limit (2^63-1).
-  DEFAULT_GAS_LIMIT* =                      36_000_000
+  DEFAULT_GAS_LIMIT* =                      45_000_000
 
   # https://eips.ethereum.org/EIPS/eip-7825
   TX_GAS_LIMIT* =                          30_000_000

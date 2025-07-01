@@ -202,8 +202,22 @@ proc serialize*(fc: ForkedChainRef, txFrame: CoreDbTxRef): Result[void, CoreDbEr
   for i, brc in fc.branches:
     brc.index = uint i
   ?txFrame.put(FcStateKey.toOpenArray, rlp.encode(fc))
+  var numBlocks = 0
   for i, brc in fc.branches:
+    numBlocks += brc.len
     ?txFrame.put(branchIndexKey(i), rlp.encode(brc))
+
+  info "Blocks DAG written to database",
+    base=fc.baseBranch.tailNumber,
+    baseHash=fc.baseBranch.tailHash.short,
+    latest=fc.activeBranch.headNumber,
+    latestHash=fc.activeBranch.headHash.short,
+    head=fc.fcuHead.number,
+    headHash=fc.fcuHead.hash.short,
+    finalized=fc.latestFinalizedBlockNumber,
+    finalizedHash=fc.pendingFCU.short,
+    blocksInMemory=numBlocks
+
   ok()
 
 proc deserialize*(fc: ForkedChainRef): Result[void, string] =
