@@ -53,8 +53,11 @@ func installRPC(server: RpcServer,
   if RpcFlag.Eth in flags:
     setupServerAPI(serverApi, server, nimbus.ctx)
 
-  if RpcFlag.Admin in flags:
-    setupAdminRpc(nimbus, conf, server)
+  # TODO: chicken and egg problem.
+  # Remove comment after this PR below merged.
+  # https://github.com/ethpandaops/ethereum-package/pull/1092
+  #if RpcFlag.Admin in flags:
+  setupAdminRpc(nimbus, conf, server)
 
   #  # Tracer is currently disabled
   # if RpcFlag.Debug in flags:
