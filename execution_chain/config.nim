@@ -679,7 +679,10 @@ proc getNetworkId(conf: NimbusConf): Option[NetworkId] =
 
 proc getRpcFlags(api: openArray[string]): set[RpcFlag] =
   if api.len == 0:
-    return {RpcFlag.Eth}
+    # TODO: chicken and egg problem, need to remove Admin flag
+    # from default rpc after this PR below merged.
+    # https://github.com/ethpandaops/ethereum-package/pull/1092
+    return {RpcFlag.Eth, RpcFlag.Admin}
 
   for item in repeatingList(api):
     case item.toLowerAscii()
