@@ -104,6 +104,14 @@ proc configurationMain*() =
       let cx = cc.getRpcFlags()
       check { RpcFlag.Eth, RpcFlag.Debug } == cx
 
+      let dd = makeConfig(@["--rpc-api:admin"])
+      let dx = dd.getRpcFlags()
+      check { RpcFlag.Admin } == dx
+
+      let ee = makeConfig(@["--rpc-api:eth,admin"])
+      let ex = ee.getRpcFlags()
+      check { RpcFlag.Eth, RpcFlag.Admin } == ex
+
     test "ws-api":
       let conf = makeTestConfig()
       let flags = conf.getWsFlags()
