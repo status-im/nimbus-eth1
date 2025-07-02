@@ -24,6 +24,8 @@ import
 
 export minilru, rocksdb_desc
 
+const AdmKey* = default(seq[byte])
+
 type
   RdbWriteEventCb* =
     proc(session: WriteBatchRef): bool {.gcsafe, raises: [].}
@@ -38,7 +40,7 @@ type
 
   RdbInst* = object
     baseDb*: RocksDbInstanceRef
-    admCol*: ColFamilyReadWrite        ## Admin column family handler
+    admCol*: ColFamilyReadWrite        ## Legacy column family for administrative data
     vtxCol*: ColFamilyReadWrite        ## Vertex column family handler
 
     # Note that the key type `VertexID` for LRU caches requires that there is
@@ -64,7 +66,7 @@ type
 
   AristoCFs* = enum
     ## Column family symbols/handles and names used on the database
-    AdmCF = "AriAdm"                   ## Admin column family name
+    AdmCF = "AriAdm"                   ## Admin column family name (deprecated)
     VtxCF = "AriVtx"                   ## Vertex column family name
 
   RdbLruCounter* = array[bool, Atomic[uint64]]

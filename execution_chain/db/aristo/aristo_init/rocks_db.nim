@@ -104,32 +104,49 @@ proc getKeyFn(db: RdbBackendRef): GetKeyFn =
 
       err(GetKeyNotFound)
 
-proc getTuvFn(db: RdbBackendRef): GetTuvFn =
-  result =
-    proc(): Result[VertexID,AristoError]=
+proc getTuv(db: RdbBackendRef): Result[VertexID,AristoError]=
+  # Fetch serialised data record.
+  let data = db.rdb.getAdm(AdmTabIdTuv).valueOr:
+    when extraTraceMessages:
+      trace logTxt "getTuvFn: failed", error=error[0], info=error[1]
+    return err(error[0])
 
-      # Fetch serialised data record.
-      let data = db.rdb.getAdm(AdmTabIdTuv).valueOr:
-        when extraTraceMessages:
-          trace logTxt "getTuvFn: failed", error=error[0], info=error[1]
-        return err(error[0])
+  # Decode data record
+  if data.len == 0:
+    return ok VertexID(0)
 
-      # Decode data record
-      if data.len == 0:
-        return ok VertexID(0)
+  # Decode data record
+  data.deblobify VertexID
 
-      # Decode data record
-      result = data.deblobify VertexID
+proc getLstV0(db: RdbBackendRef): Result[SavedStateV0,AristoError] =
+  let data = db.rdb.getAdm(AdmTabIdLst).valueOr:
+    when extraTraceMessages:
+      trace logTxt "getTuvFn: failed", error=error[0], info=error[1]
+    return err(error[0])
+
+  if data.len == 0:
+    return ok default(SavedStateV0)
+
+  # Decode data record
+  data.deblobify SavedStateV0
 
 proc getLstFn(db: RdbBackendRef): GetLstFn =
   result =
     proc(): Result[SavedState,AristoError]=
 
       # Fetch serialised data record.
-      let data = db.rdb.getAdm(AdmTabIdLst).valueOr:
+      let data = db.rdb.getAdm().valueOr:
         when extraTraceMessages:
           trace logTxt "getLstFn: failed", error=error[0], info=error[1]
         return err(error[0])
+
+      if data.len == 0:
+        # TODO legacy database support, remove before beta
+        let
+          lst = ?db.getLstV0()
+          vTop = ?db.getTuv()
+
+        return ok(SavedState(vTop: vTop, serial: lst.serial))
 
       # Decode data record
       data.deblobify SavedState
@@ -153,33 +170,18 @@ proc putVtxFn(db: RdbBackendRef): PutVtxFn =
             code: error[1],
             info: error[2])
 
-proc putTuvFn(db: RdbBackendRef): PutTuvFn =
-  result =
-    proc(hdl: PutHdlRef; vs: VertexID)  =
-      let hdl = hdl.getSession db
-      if hdl.error.isNil:
-        if vs.isValid:
-          db.rdb.putAdm(hdl.session, AdmTabIdTuv, vs.blobify.data()).isOkOr:
-            hdl.error = TypedPutHdlErrRef(
-              pfx:  AdmPfx,
-              aid:  AdmTabIdTuv,
-              code: error[1],
-              info: error[2])
-            return
-
-
 proc putLstFn(db: RdbBackendRef): PutLstFn =
   result =
     proc(hdl: PutHdlRef; lst: SavedState) =
       let hdl = hdl.getSession db
       if hdl.error.isNil:
         let data = lst.blobify
-        db.rdb.putAdm(hdl.session, AdmTabIdLst, data).isOkOr:
+        db.rdb.putAdm(hdl.session, data).isOkOr:
           hdl.error = TypedPutHdlErrRef(
             pfx:  AdmPfx,
             aid:  AdmTabIdLst,
-            code: error[1],
-            info: error[2])
+            code: error[0],
+            info: error[1])
 
 proc putEndFn(db: RdbBackendRef): PutEndFn =
   result =
@@ -226,12 +228,10 @@ proc rocksDbBackend*(
 
   db.getVtxFn = getVtxFn be
   db.getKeyFn = getKeyFn be
-  db.getTuvFn = getTuvFn be
   db.getLstFn = getLstFn be
 
   db.putBegFn = putBegFn be
   db.putVtxFn = putVtxFn be
-  db.putTuvFn = putTuvFn be
   db.putLstFn = putLstFn be
   db.putEndFn = putEndFn be
 

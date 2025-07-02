@@ -224,7 +224,7 @@ proc blobify*(vtx: VertexRef, key: HashKey): seq[byte] =
 
 proc blobifyTo*(lSst: SavedState; data: var seq[byte]) =
   ## Serialise a last saved state record
-  data.add lSst.key.data
+  data.add lSst.vTop.uint64.toBytesBE
   data.add lSst.serial.toBytesBE
   data.add @[0x7fu8]
 
@@ -340,8 +340,8 @@ proc deblobify*(record: openArray[byte], T: type HashKey): Opt[HashKey] =
 
 proc deblobify*(
     data: openArray[byte];
-    T: type SavedState;
-      ): Result[SavedState,AristoError] =
+    T: type SavedStateV0;
+      ): Result[SavedStateV0,AristoError] =
   ## De-serialise the last saved state data record previously encoded with
   ## `blobify()`.
   if data.len != 41:
@@ -349,9 +349,25 @@ proc deblobify*(
   if data[^1] != 0x7f:
     return err(DeblobWrongType)
 
-  ok(SavedState(
+  ok(SavedStateV0(
     key: Hash32(array[32, byte].initCopyFrom(data.toOpenArray(0, 31))),
     serial: uint64.fromBytesBE data.toOpenArray(32, 39)))
+
+proc deblobify*(
+    data: openArray[byte];
+    T: type SavedState;
+      ): Result[SavedState,AristoError] =
+  ## De-serialise the last saved state data record previously encoded with
+  ## `blobify()`.
+  if data.len != 17:
+    debugEcho "data ", data.len
+    return err(DeblobWrongSize)
+  if data[^1] != 0x7f:
+    return err(DeblobWrongType)
+
+  ok(SavedState(
+    vTop: VertexID(uint64.fromBytesBE data.toOpenArray(0, 7)),
+    serial: uint64.fromBytesBE data.toOpenArray(8, 15)))
 
 # ------------------------------------------------------------------------------
 # End

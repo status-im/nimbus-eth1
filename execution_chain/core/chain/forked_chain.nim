@@ -11,12 +11,12 @@
 {.push raises: [].}
 
 import
+  std/[tables, algorithm],
   chronicles,
   results,
   chronos,
-  std/[tables, algorithm],
   ../../common,
-  ../../db/[core_db, fcu_db],
+  ../../db/[core_db, fcu_db, payload_body_db],
   ../../evm/types,
   ../../evm/state,
   ../validate,
@@ -28,6 +28,7 @@ import
     block_quarantine]
 
 from std/sequtils import mapIt
+from web3/engine_api_types import ExecutionPayloadBodyV1
 
 logScope:
   topics = "forked chain"
@@ -892,6 +893,47 @@ proc blockByHash*(c: ForkedChainRef, blockHash: Hash32): Result[Block, string] =
       return c.portal.getBlockByHash(blockHash)
   blk
 
+proc payloadBodyV1ByHash*(c: ForkedChainRef, blockHash: Hash32): Result[ExecutionPayloadBodyV1, string] =
+  c.hashToBlock.withValue(blockHash, loc):
+    return ok(toPayloadBody(loc[].blk))
+
+  let header = ?c.baseTxFrame.getBlockHeader(blockHash)
+  var blk = c.baseTxFrame.getExecutionPayloadBodyV1(header)
+
+  # Serves portal data if block not found in db
+  if blk.isErr or (blk.get.transactions.len == 0 and header.transactionsRoot != zeroHash32):
+    if c.isPortalActive:
+      let blk = ?c.portal.getBlockByHash(blockHash)
+      return ok(toPayloadBody(blk))
+
+  move(blk)
+
+proc payloadBodyV1ByNumber*(c: ForkedChainRef, number: BlockNumber): Result[ExecutionPayloadBodyV1, string] =
+  if number > c.activeBranch.headNumber:
+    return err("Requested block number not exists: " & $number)
+
+  if number <= c.baseBranch.tailNumber:
+    let
+      header = ?c.baseTxFrame.getBlockHeader(number)
+      blk = c.baseTxFrame.getExecutionPayloadBodyV1(header)
+
+    # Txs not there in db - Happens during era1/era import, when we don't store txs and receipts
+    if blk.isErr or (blk.get.transactions.len == 0 and header.transactionsRoot != emptyRoot):
+      # Serves portal data if block not found in database
+      if c.isPortalActive:
+        let blk = ?c.portal.getBlockByNumber(number)
+        return ok(toPayloadBody(blk))
+
+    return blk
+
+  var branch = c.activeBranch
+  while not branch.isNil:
+    if number >= branch.tailNumber:
+      return ok(toPayloadBody(branch.blocks[number - branch.tailNumber].blk))
+    branch = branch.parent
+
+  err("Block not found, number = " & $number)
+
 proc blockByNumber*(c: ForkedChainRef, number: BlockNumber): Result[Block, string] =
   if number > c.activeBranch.headNumber:
     return err("Requested block number not exists: " & $number)
@@ -929,13 +971,25 @@ proc receiptsByBlockHash*(c: ForkedChainRef, blockHash: Hash32): Result[seq[Stor
 
   c.baseTxFrame.getReceipts(header.receiptsRoot)
 
-func blockFromBaseTo*(c: ForkedChainRef, number: BlockNumber): seq[Block] =
+func payloadBodyV1FromBaseTo*(c: ForkedChainRef,
+                              last: BlockNumber,
+                              list: var seq[Opt[ExecutionPayloadBodyV1]]) =
   # return block in reverse order
-  var branch = c.activeBranch
+  var
+    branch = c.activeBranch
+    branches = newSeqOfCap[BranchRef](c.branches.len)
+
   while not branch.isNil:
-    for i in countdown(branch.len-1, 0):
-      result.add(branch.blocks[i].blk)
+    branches.add(branch)
     branch = branch.parent
+
+  for i in countdown(branches.len-1, 0):
+    branch = branches[i]
+    for y in 0..<branch.len:
+      let bd = addr branch.blocks[y]
+      if bd.blk.header.number > last:
+        return
+      list.add Opt.some(toPayloadBody(bd.blk))
 
 func equalOrAncestorOf*(c: ForkedChainRef, blockHash: Hash32, childHash: Hash32): bool =
   if blockHash == childHash:
