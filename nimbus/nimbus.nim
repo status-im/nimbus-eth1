@@ -12,7 +12,7 @@ import
   consensus/consensus_layer,
   common/utils,
   conf,
-  confutils/[cli_parser, toml/defs],
+  confutils/cli_parser,
   beacon_chain/conf,
   ../execution_chain/config
 
@@ -115,6 +115,10 @@ proc controlCHandler() {.noconv.} =
 
   notice "\tCtrl+C pressed. Shutting down services ..."
 
+  # WA to shutdown client(exceptions thrown)
+  # issues related with nat.nim shutdown procedure (nim-eth
+  quit 0
+
   shutdownExecution()
   shutdownConsensus()
 
@@ -176,10 +180,6 @@ proc run*(nimbus: var Nimbus) =
 
   # wait for shutdown
   nimbus.monitorServices()
-
-  # WA to shutdown (exceptions thrown)
-  # current shutdown procedure hangs on nat.nim from nim-eth
-  quit 0
 
 # ------
 when isMainModule:
