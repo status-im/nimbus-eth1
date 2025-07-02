@@ -20,26 +20,31 @@ proc handlerMock(channel: ptr Channel[pointer]) =
 
 #handles data for a given service
 proc handlerService_1(channel: ptr Channel[pointer]) =
-  const expectedConfigTable = {"0": "zero", "1": "one", "2": "two"}.toTable
+  const expectedConfigList =
+    @["-config=a", "--singleconfig", "-abbrev", "-abbrevArg=arg"]
 
   let p = channel[].recv()
 
-  let configs = parseChannelData(p).valueOr:
+  let configs = deserializeConfigArgs(p).valueOr:
     quit(QuitFailure)
 
   isConfigRead.store(true)
-  checkResult[] = configs == expectedConfigTable
+
+  checkResult[] = configs == expectedConfigList
 
 #handles data for a given service
 proc handlerService_2(channel: ptr Channel[pointer]) =
-  const expectedConfigTable = {"4": "four", "5": "five", "6": ""}.toTable
+  const expectedConfigList =
+    @["--singleconfig2", "-config2=a2", "-abbrev2", "-abbrevArg2=arg2"]
+
   let p = channel[].recv()
 
-  let configs = parseChannelData(p).valueOr:
+  let configs = deserializeConfigArgs(p).valueOr:
     quit(QuitFailure)
 
   isConfigRead.store(true)
-  checkResult[] = configs == expectedConfigTable
+
+  checkResult[] = configs == expectedConfigList
 
 # ----------------------------------------------------------------------------
 # # Unit Tests
@@ -50,8 +55,11 @@ suite "Nimbus Service Management":
   setup:
     nimbus = Nimbus.new
 
-  const configTable_1 = {"0": "zero", "1": "one", "2": "two"}.toTable
-  const configTable_2 = {"4": "four", "5": "five", "6": ""}.toTable
+  const configTable_1 =
+    {"-config": "=a", "--singleconfig": "", "-abbrev": "", "-abbrevArg": "=arg"}.toTable
+  const configTable_2 = {
+    "-config2": "=a2", "--singleconfig2": "", "-abbrev2": "", "-abbrevArg2": "=arg2"
+  }.toTable
 
   # Test: Creating a new service successfully
   test "startService successfully adds a service":
