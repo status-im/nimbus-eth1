@@ -501,6 +501,15 @@ type
         defaultValueDesc: "\"jwt.hex\" in the data directory (see --data-dir)"
         name: "jwt-secret" .}: Option[InputFile]
 
+      statelessProviderEnabled* {.
+        separator: "\pSTATELESS PROVIDER OPTIONS:"
+        hidden
+        desc: "Enable the stateless provider. This turns on the features required" &
+          " by stateless clients such as generation and stored of block witnesses" &
+          " and serving these witnesses to peers over the p2p network."
+        defaultValue: false
+        name: "stateless-provider" }: bool
+
     of `import`:
       maxBlocks* {.
         desc: "Maximum number of blocks to import"
