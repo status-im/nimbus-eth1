@@ -23,9 +23,9 @@ from json_rpc/server import RpcServer, rpc
 {.push raises: [].}
 
 type
-  NodePorts* = object
-    discovery*: string
-    listener* : string
+  NodePorts = object
+    discovery: int
+    listener : int
 
   NodeInfo* = object
     id*    : string # UInt256 hex
@@ -85,8 +85,8 @@ proc setupAdminRpc*(nimbus: NimbusNode, conf: NimbusConf, server: RpcServer) =
         enode: $enode,
         ip: $enode.address.ip,
         ports: NodePorts(
-          discovery: $enode.address.udpPort,
-          listener: $enode.address.tcpPort
+          discovery: int(enode.address.udpPort),
+          listener: int(enode.address.tcpPort)
         )
       )
 
