@@ -646,20 +646,6 @@ proc runLedgerBasicOperationsTests() =
       check 2.u256 in vals
       check 3.u256 in vals
 
-    test "Code getCodeByHash":
-      var
-        ac = LedgerRef.init(memDB.baseTxFrame())
-        addr1 = initAddr(1)
-        code = @[0x01.byte, 0x02, 0x03]
-
-      ac.setCode(addr1, code)
-      ac.persist()
-
-      let codeHash = ac.getCode(addr1, returnHash = true)[0]
-      check:
-        ac.getCode(addr1) == code
-        ac.getCodeByHash(codeHash) == code
-
     when defined(stateless):
 
       test "Witness keys - Get account":

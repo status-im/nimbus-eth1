@@ -461,20 +461,6 @@ proc getNonce*(ac: LedgerRef, address: Address): AccountNonce =
   if acc.isNil: emptyEthAccount.nonce
   else: acc.statement.nonce
 
-proc getCodeByHash*(ac: LedgerRef, codeHash: Hash32): CodeBytesRef =
-  if codeHash == EMPTY_CODE_HASH:
-    return CodeBytesRef()
-
-  ac.code.get(codeHash).valueOr:
-    var rc = ac.txFrame.get(contractHashKey(codeHash).toOpenArray)
-    if rc.isErr:
-      warn logTxt "getCode()", codeHash, error=($$rc.error)
-      return CodeBytesRef()
-    else:
-      let newCode = CodeBytesRef.init(move(rc.value), persisted = true)
-      ac.code.put(codeHash, newCode)
-      newCode
-
 proc getCode*(ac: LedgerRef,
               address: Address,
               returnHash: static[bool] = false): auto =
@@ -495,7 +481,19 @@ proc getCode*(ac: LedgerRef,
       return CodeBytesRef()
 
   if acc.code == nil:
-    acc.code = ac.getCodeByHash(acc.statement.codeHash)
+    acc.code =
+      if acc.statement.codeHash != EMPTY_CODE_HASH:
+        ac.code.get(acc.statement.codeHash).valueOr:
+          var rc = ac.txFrame.get(contractHashKey(acc.statement.codeHash).toOpenArray)
+          if rc.isErr:
+            warn logTxt "getCode()", codeHash=acc.statement.codeHash, error=($$rc.error)
+            CodeBytesRef()
+          else:
+            let newCode = CodeBytesRef.init(move(rc.value), persisted = true)
+            ac.code.put(acc.statement.codeHash, newCode)
+            newCode
+      else:
+        CodeBytesRef()
 
   when returnHash:
     (acc.statement.codeHash, acc.code)
