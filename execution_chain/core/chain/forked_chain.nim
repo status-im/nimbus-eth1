@@ -102,7 +102,7 @@ func findFinalizedPos(
   ## Find header for argument `itHash` on argument `head` ancestor chain.
   ##
 
-  # OK, new base stays on the argument head branch.
+  # OK, new finalized stays on the argument head branch.
   # ::
   #         - B3 - B4 - B5 - B6
   #       /              ^    ^
@@ -131,8 +131,7 @@ func calculateNewBase(
     head: BlockRef;
       ): BlockRef =
   ## It is required that the `finalizedNumber` argument is on the `head` chain, i.e.
-  ## it ranges between `c.base.number` and
-  ## `head.number`.
+  ## it ranges between `c.base.number` and `head.number`.
   ##
   ## The function returns a BlockRef containing a new base position. It is
   ## calculated as follows.
@@ -234,52 +233,55 @@ proc updateFinalized(c: ForkedChainRef, finalized: BlockRef, fcuHead: BlockRef) 
         return it == fin
     false
 
-  c.uncolorAll()
-  loopIt(finalized):
-    it.color()
+  # There is no point running this expensive algorithm
+  # if the chain have no branches, just move it forward.
+  if c.heads.len > 1:
+    c.uncolorAll()
+    loopIt(finalized):
+      it.color()
 
-  var
-    i = 0
-    updateLatest = false
+    var
+      i = 0
+      updateLatest = false
 
-  while i < c.heads.len:
-    let head = c.heads[i]
+    while i < c.heads.len:
+      let head = c.heads[i]
 
-    # Any branches not reachable from finalized
-    # should be removed.
-    if not reachable(head, finalized):
-      loopIt(head):
-        if not it.colored and it.txFrame.isNil.not:
-          c.removeBlockFromCache(it)
-        else:
-          break
+      # Any branches not reachable from finalized
+      # should be removed.
+      if not reachable(head, finalized):
+        loopIt(head):
+          if not it.colored and it.txFrame.isNil.not:
+            c.removeBlockFromCache(it)
+          else:
+            break
 
-      if head == c.latest:
-        updateLatest = true
+        if head == c.latest:
+          updateLatest = true
 
-      c.heads.del(i)
-      # no need to increment i when we delete from c.heads.
-      continue
+        c.heads.del(i)
+        # no need to increment i when we delete from c.heads.
+        continue
 
-    inc i
+      inc i
 
-  if updateLatest:
-    # Previous `latest` is pruned, select a new latest
-    # based on longest chain reachable from fcuHead.
-    var candidate: BlockRef
-    for head in c.heads:
-      loopIt(head):
-        if it == fcuHead:
-          if candidate.isNil:
-            candidate = head
-          elif head.number > candidate.number:
-            candidate = head
-          break
-        if it.number < fcuHead.number:
-          break
+    if updateLatest:
+      # Previous `latest` is pruned, select a new latest
+      # based on longest chain reachable from fcuHead.
+      var candidate: BlockRef
+      for head in c.heads:
+        loopIt(head):
+          if it == fcuHead:
+            if candidate.isNil:
+              candidate = head
+            elif head.number > candidate.number:
+              candidate = head
+            break
+          if it.number < fcuHead.number:
+            break
 
-    doAssert(candidate.isNil.not)
-    c.latest = candidate
+      doAssert(candidate.isNil.not)
+      c.latest = candidate
 
   let txFrame = finalized.txFrame
   txFrame.fcuFinalized(finalized.hash, finalized.number).expect("fcuFinalized OK")
