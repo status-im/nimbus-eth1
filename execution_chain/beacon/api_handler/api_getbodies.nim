@@ -28,10 +28,10 @@ proc getPayloadBodiesByHash*(ben: BeaconEngineRef,
   var list = newSeqOfCap[Opt[ExecutionPayloadBodyV1]](hashes.len)
 
   for h in hashes:
-    var blk = ben.chain.payloadBodyV1ByHash(h).valueOr:
+    var body = ben.chain.payloadBodyV1ByHash(h).valueOr:
       list.add Opt.none(ExecutionPayloadBodyV1)
       continue
-    list.add Opt.some(move(blk))
+    list.add Opt.some(move(body))
 
   move(list)
 
@@ -51,7 +51,7 @@ proc getPayloadBodiesByRange*(ben: BeaconEngineRef,
     last = start+count-1
 
   if start > ben.chain.latestNumber:
-    # requested range beyond the latest known block
+    # requested range beyond the latest known block.
     return
 
   if last > ben.chain.latestNumber:
@@ -59,13 +59,14 @@ proc getPayloadBodiesByRange*(ben: BeaconEngineRef,
 
   var list = newSeqOfCap[Opt[ExecutionPayloadBodyV1]](last-start)
 
-  # get bodies from database
+  # get bodies from database.
   for bn in start..min(last, ben.chain.baseNumber):
-    var blk = ben.chain.payloadBodyV1ByNumber(bn).valueOr:
+    var body = ben.chain.payloadBodyV1ByNumber(bn).valueOr:
       list.add Opt.none(ExecutionPayloadBodyV1)
       continue
-    list.add Opt.some(move(blk))
+    list.add Opt.some(move(body))
 
+  # get bodies from cache in FC module.
   if last > ben.chain.baseNumber:
     ben.chain.payloadBodyV1FromBaseTo(last, list)
 

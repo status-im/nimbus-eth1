@@ -24,9 +24,10 @@ import
   ../execution_chain/core/eip4844,
   ../execution_chain/utils/utils,
   ../execution_chain/[common, rpc],
-  ../execution_chain/rpc/rpc_types,
+  ../execution_chain/rpc/[rpc_types, common as rpc_common],
   ../execution_chain/beacon/web3_eth_conv,
   ../execution_chain/networking/p2p,
+  ../execution_chain/nimbus_desc,
    ./test_helpers,
    ./macro_assembler,
    ./test_block_fixture
@@ -232,6 +233,9 @@ proc setupEnv(envFork: HardFork = MergeFork): TestEnv =
     client = setupClient(server.localAddress[0].port)
     ctx    = newEthContext()
     node   = setupEthNode(conf, ctx, eth68, eth69)
+    nimbus = NimbusNode(
+      ethNode: node,
+    )
 
   ctx.am.loadKeystores(keyStore).isOkOr:
     debugEcho error
@@ -244,6 +248,7 @@ proc setupEnv(envFork: HardFork = MergeFork): TestEnv =
 
   setupServerAPI(serverApi, server, ctx)
   setupCommonRpc(node, conf, server)
+  setupAdminRpc(nimbus, conf, server)
   server.start()
 
   TestEnv(
@@ -303,6 +308,8 @@ createRpcSigsFromNim(RpcClient):
   proc net_version(): string
   proc net_listening(): bool
   proc net_peerCount(): Quantity
+  proc admin_nodeInfo(): NodeInfo
+  proc admin_peers(): seq[PeerInfo]
 
 proc rpcMain*() =
   suite "Remote Procedure Calls":
@@ -336,6 +343,30 @@ proc rpcMain*() =
       let res = await client.net_peerCount()
       let peerCount = node.peerPool.connectedNodes.len
       check res == w3Qty(peerCount)
+
+    test "admin_nodeInfo":
+      let res = await client.admin_nodeInfo()
+      check:
+        res.id.len > 0
+        res.name == env.conf.agentString
+        res.enode.startsWith("enode://")
+        res.ip.len > 0
+        res.ports.discovery > 0
+        res.ports.listener > 0
+
+    test "admin_peers":
+      let peers = await client.admin_peers()
+      check peers.len == node.peerPool.connectedNodes.len
+
+      # If there are peers, verify the structure matches Geth specification
+      for peer in peers:
+        check:
+          peer.caps.len > 0
+          peer.enode.startsWith("enode://")
+          peer.id.len > 0
+          peer.name.len > 0
+          peer.network.localAddress.len > 0
+          peer.network.remoteAddress.len > 0
 
     test "eth_chainId":
       let res = await client.eth_chainId()
