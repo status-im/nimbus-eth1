@@ -8,12 +8,12 @@
 {.push raises: [].}
 
 import
-  std/[atomics, os],
+  std/[atomics],
   chronicles,
   results,
   ../conf,
   ../common/utils,
-  ./wrapper_execution,
+  ../../execution_chain/nimbus_execution_client,
   ../../execution_chain/config,
   ../../execution_chain/nimbus_desc
 

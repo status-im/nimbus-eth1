@@ -21,8 +21,7 @@ import
   beacon_chain/networking/[topic_params, network_metadata_downloads],
   beacon_chain/rpc/[rest_api, state_ttl_cache],
   beacon_chain/spec/datatypes/[altair, bellatrix, phase0],
-  beacon_chain/spec/
-    [deposit_snapshots, engine_authentication, weak_subjectivity, peerdas_helpers],
+  beacon_chain/spec/[engine_authentication, weak_subjectivity, peerdas_helpers],
   beacon_chain/sync/[sync_protocol, light_client_protocol, sync_overseer],
   beacon_chain/validators/[keystore_management, beacon_validators],
   beacon_chain/[
@@ -110,7 +109,6 @@ proc doRunTrustedNodeSync(
     trustedBlockRoot: Option[Eth2Digest],
     backfill: bool,
     reindex: bool,
-    downloadDepositSnapshot: bool,
     genesisState: ref ForkedHashedBeaconState,
 ) {.async.} =
   let syncTarget =
@@ -128,7 +126,7 @@ proc doRunTrustedNodeSync(
 
   await db.doTrustedNodeSync(
     metadata.cfg, databaseDir, eraDir, restUrl, syncTarget, backfill, reindex,
-    downloadDepositSnapshot, genesisState,
+    genesisState,
   )
 
 func getVanityLogs(stdoutKind: StdoutLogKind): VanityLogs =
@@ -141,6 +139,8 @@ func getVanityLogs(stdoutKind: StdoutLogKind): VanityLogs =
       onUpgradeToDeneb: denebColor,
       onUpgradeToElectra: electraColor,
       onKnownCompoundingChange: electraBlink,
+      onUpgradeToFulu: fuluColor,
+      onBlobParametersUpdate: fuluColor,
     )
   of StdoutLogKind.NoColors:
     VanityLogs(
@@ -148,6 +148,8 @@ func getVanityLogs(stdoutKind: StdoutLogKind): VanityLogs =
       onUpgradeToDeneb: denebMono,
       onUpgradeToElectra: electraMono,
       onKnownCompoundingChange: electraMono,
+      onUpgradeToFulu: fuluMono,
+      onBlobParametersUpdate: fuluMono,
     )
   of StdoutLogKind.Json, StdoutLogKind.None:
     VanityLogs(
@@ -167,11 +169,19 @@ func getVanityLogs(stdoutKind: StdoutLogKind): VanityLogs =
         proc() =
           notice "🦒 Compounding is activated 🦒"
       ),
+      onUpgradeToFulu: (
+        proc() =
+          notice "🐅 Blobs columnized 🐅"
+      ),
+      onBlobParametersUpdate: (
+        proc() =
+          notice "🐅 Blob parameters updated 🐅"
+      ),
     )
 
 func getVanityMascot(consensusFork: ConsensusFork): string =
   case consensusFork
-  of ConsensusFork.Fulu: "❓"
+  of ConsensusFork.Fulu: "🐅"
   of ConsensusFork.Electra: "🦒"
   of ConsensusFork.Deneb: "🐟"
   of ConsensusFork.Capella: "🦉"
@@ -368,11 +378,6 @@ proc initFullNode(
     static:
       doAssert (elManager is ref)
     return proc(dag: ChainDAGRef, data: FinalizationInfoObject) =
-      if elManager != nil:
-        let finalizedEpochRef = dag.getFinalizedEpochRef()
-        discard trackFinalizedState(
-          elManager, finalizedEpochRef.eth1_data, finalizedEpochRef.eth1_deposit_index
-        )
       node.updateLightClientFromDag()
       let eventData =
         if node.currentSlot().epoch() >= dag.cfg.BELLATRIX_FORK_EPOCH:
@@ -434,7 +439,9 @@ proc initFullNode(
         onElectraAttesterSlashingAdded,
       )
     )
-    blobQuarantine = newClone(BlobQuarantine.init(dag.cfg, onBlobSidecarAdded))
+    blobQuarantine = newClone(
+      BlobQuarantine.init(dag.cfg, dag.db.getQuarantineDB(), 10, onBlobSidecarAdded)
+    )
     dataColumnQuarantine = newClone(DataColumnQuarantine.init())
     supernode = node.config.peerdasSupernode
     localCustodyGroups =
@@ -457,6 +464,7 @@ proc initFullNode(
     blockProcessor = BlockProcessor.new(
       config.dumpEnabled, config.dumpDirInvalid, config.dumpDirIncoming, batchVerifier,
       consensusManager, node.validatorMonitor, blobQuarantine, getBeaconTime,
+      config.invalidBlockRoots,
     )
 
     blockVerifier = proc(
@@ -486,21 +494,18 @@ proc initFullNode(
     ): Future[Result[void, VerifierError]] {.async: (raises: [CancelledError]).} =
       withBlck(signedBlock):
         when consensusFork >= ConsensusFork.Deneb:
-          if not blobQuarantine[].hasBlobs(forkyBlck):
+          let bres = blobQuarantine[].popSidecars(forkyBlck.root, forkyBlck)
+          if bres.isSome():
+            await blockProcessor[].addBlock(
+              MsgSource.gossip, signedBlock, bres, maybeFinalized = maybeFinalized
+            )
+          else:
             # We don't have all the blobs for this block, so we have
             # to put it in blobless quarantine.
             if not quarantine[].addBlobless(dag.finalizedHead.slot, forkyBlck):
               err(VerifierError.UnviableFork)
             else:
               err(VerifierError.MissingParent)
-          else:
-            let blobs = blobQuarantine[].popBlobs(forkyBlck.root, forkyBlck)
-            await blockProcessor[].addBlock(
-              MsgSource.gossip,
-              signedBlock,
-              Opt.some(blobs),
-              maybeFinalized = maybeFinalized,
-            )
         else:
           await blockProcessor[].addBlock(
             MsgSource.gossip,
@@ -875,7 +880,6 @@ proc init*(
         trustedBlockRoot,
         backfill = false,
         reindex = false,
-        downloadDepositSnapshot = false,
         genesisState,
       )
 
@@ -907,24 +911,6 @@ proc init*(
       tmp
     else:
       nil
-
-  if config.finalizedDepositTreeSnapshot.isSome:
-    let
-      depositTreeSnapshotPath = config.finalizedDepositTreeSnapshot.get.string
-      snapshot =
-        try:
-          SSZ.loadFile(depositTreeSnapshotPath, DepositTreeSnapshot)
-        except SszError as err:
-          fatal "Deposit tree snapshot loading failed",
-            err = formatMsg(err, depositTreeSnapshotPath)
-          quit 1
-        except CatchableError as err:
-          fatal "Failed to read deposit tree snapshot file", err = err.msg
-          quit 1
-      depositContractSnapshot = DepositContractSnapshot.init(snapshot).valueOr:
-        fatal "Invalid deposit tree snapshot file"
-        quit 1
-    db.putDepositContractSnapshot(depositContractSnapshot)
 
   let engineApiUrls = config.engineApiUrls
 
@@ -1033,10 +1019,7 @@ proc init*(
       config.weakSubjectivityCheckpoint.get, beaconClock
     )
 
-  let elManager = ELManager.new(
-    cfg, metadata.depositContractBlock, metadata.depositContractBlockHash, db,
-    engineApiUrls, eth1Network,
-  )
+  let elManager = ELManager.new(engineApiUrls, eth1Network)
 
   if config.rpcEnabled.isSome:
     warn "Nimbus's JSON-RPC server has been removed. This includes the --rpc, --rpc-port, and --rpc-address configuration options. https://nimbus.guide/rest-api.html shows how to enable and configure the REST Beacon API server which replaces it."
@@ -1535,6 +1518,7 @@ proc maybeUpdateActionTrackerNextEpoch(
         shufflingRef = node.dag.getShufflingRef(node.dag.head, nextEpoch, false).valueOr:
           # epochRefFallback() won't work in this case either
           return
+        # using the separate method of proposer indices calculation in Fulu
         nextEpochProposers = get_beacon_proposer_indices(
           forkyState.data, shufflingRef.shuffled_active_validator_indices, nextEpoch
         )
@@ -1753,6 +1737,9 @@ proc onSlotEnd(node: BeaconNode, slot: Slot) {.async.} =
       node.attachedValidators[].slashingProtection
       # pruning is only done if the DB is set to pruning mode.
       .pruneAfterFinalization(node.dag.finalizedHead.slot.epoch())
+    node.processor.blobQuarantine[].pruneAfterFinalization(
+      node.dag.finalizedHead.slot.epoch()
+    )
 
   # Delay part of pruning until latency critical duties are done.
   # The other part of pruning, `pruneBlocksDAG`, is done eagerly.
@@ -1922,26 +1909,8 @@ func formatNextConsensusFork(node: BeaconNode, withVanityArt = false): Opt[strin
       $nextConsensusFork & ":" & $nextForkEpoch
   )
 
-func syncStatus(node: BeaconNode, wallSlot: Slot): string =
-  node.syncOverseer.statusMsg.valueOr:
-    let optimisticHead = not node.dag.head.executionValid
-    if node.syncManager.inProgress:
-      let
-        optimisticSuffix = if optimisticHead: "/opt" else: ""
-        lightClientSuffix =
-          if node.consensusManager[].shouldSyncOptimistically(wallSlot):
-            " - lc: " & $shortLog(node.consensusManager[].optimisticHead)
-          else:
-            ""
-      node.syncManager.syncStatus & optimisticSuffix & lightClientSuffix
-    elif node.untrustedManager.inProgress:
-      "untrusted: " & node.untrustedManager.syncStatus
-    elif node.backfiller.inProgress:
-      "backfill: " & node.backfiller.syncStatus
-    elif optimisticHead:
-      "synced/opt"
-    else:
-      "synced"
+proc syncStatus(node: BeaconNode, wallSlot: Slot): string =
+  node.syncOverseer.syncStatusMessage()
 
 when defined(windows):
   from winservice import establishWindowsService, reportServiceStatusSuccess
@@ -2120,7 +2089,7 @@ proc installMessageValidators(node: BeaconNode) =
             )
 
       # beacon_aggregate_and_proof
-      # https://github.com/ethereum/consensus-specs/blob/v1.4.0-beta.4/specs/phase0/p2p-interface.md#beacon_aggregate_and_proof
+      # https://github.com/ethereum/consensus-specs/blob/v1.6.0-alpha.0/specs/phase0/p2p-interface.md#beacon_aggregate_and_proof
       when consensusFork >= ConsensusFork.Electra:
         node.network.addAsyncValidator(
           getAggregateAndProofsTopic(digest),
@@ -2530,6 +2499,7 @@ proc doRunBeaconNode(
   ignoreDeprecatedOption optimistic
   ignoreDeprecatedOption validatorMonitorTotals
   ignoreDeprecatedOption web3ForcePolling
+  ignoreDeprecatedOption finalizedDepositTreeSnapshot
 
   createPidFile(config.dataDir.string / "beacon_node.pid")
 
@@ -2640,12 +2610,8 @@ proc doWeb3Cmd(
 ) {.raises: [CatchableError].} =
   case config.web3Cmd
   of Web3Cmd.test:
-    let metadata = config.loadEth2Network()
-
     waitFor testWeb3Provider(
-      config.web3TestUrl,
-      metadata.cfg.DEPOSIT_CONTRACT_ADDRESS,
-      rng.loadJwtSecret(config, allowCreate = true),
+      config.web3TestUrl, rng.loadJwtSecret(config, allowCreate = true)
     )
 
 proc doSlashingExport(conf: BeaconNodeConf) {.raises: [IOError].} =
@@ -2659,7 +2625,7 @@ proc doSlashingExport(conf: BeaconNodeConf) {.raises: [IOError].} =
   db.exportSlashingInterchange(interchange, conf.exportedValidators)
   echo "Export finished: '", dir / filetrunc & ".sqlite3", "' into '", interchange, "'"
 
-proc doSlashingImport(conf: BeaconNodeConf) {.raises: [SerializationError, IOError].} =
+proc doSlashingImport(conf: BeaconNodeConf) {.raises: [IOError].} =
   let
     dir = conf.validatorsDir()
     filetrunc = SlashingDbName
@@ -2730,7 +2696,7 @@ proc handleStartUpCmd*(config: var BeaconNodeConf) {.raises: [CatchableError].} 
     waitFor db.doRunTrustedNodeSync(
       metadata, config.databaseDir, config.eraDir, config.trustedNodeUrl,
       config.stateId, config.lcTrustedBlockRoot, config.backfillBlocks, config.reindex,
-      config.downloadDepositSnapshot, genesisState,
+      genesisState,
     )
     db.close()
 
