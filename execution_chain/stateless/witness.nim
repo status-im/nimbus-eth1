@@ -13,6 +13,7 @@ import
   results
 
 export
+  common,
   results
 
 {.push raises: [].}
@@ -26,11 +27,31 @@ type
       # Stores the parent block headers needed to verify that the state reads are correct with respect
       # to the pre-state root.
 
-func encode(witness: ExecutionWitness): seq[byte] =
+func init*(
+    T: type ExecutionWitness,
+    state = newSeq[seq[byte]](),
+    codes = newSeq[seq[byte]](),
+    keys = newSeq[seq[byte]](),
+    headers = newSeq[Header]()): T =
+  ExecutionWitness(state: state, codes: codes, keys: keys, headers: headers)
+
+template addState*(witness: var ExecutionWitness, trieNode: seq[byte]) =
+  witness.state.add(trieNode)
+
+template addCode*(witness: var ExecutionWitness, code: seq[byte]) =
+  witness.codes.add(code)
+
+template addKey*(witness: var ExecutionWitness, key: seq[byte]) =
+  witness.keys.add(key)
+
+template addHeader*(witness: var ExecutionWitness, header: Header) =
+  witness.headers.add(header)
+
+func encode*(witness: ExecutionWitness): seq[byte] =
   rlp.encode(witness)
 
-func decode(witnessBytes: openArray[byte]): Result[ExecutionWitness, string] =
+func decode*(T: type ExecutionWitness, witnessBytes: openArray[byte]): Result[T, string] =
   try:
-    ok(rlp.decode(witnessBytes, ExecutionWitness))
+    ok(rlp.decode(witnessBytes, T))
   except RlpError as e:
     err(e.msg)
