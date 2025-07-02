@@ -12,7 +12,7 @@
 
 import
   unittest2,
-  ../../execution_chain/stateless/witness
+  ../execution_chain/stateless/witness
 
 suite "Execution Witness Tests":
 
