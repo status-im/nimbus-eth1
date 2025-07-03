@@ -893,14 +893,15 @@ proc receiptsByBlockHash*(c: ForkedChainRef, blockHash: Hash32): Result[seq[Stor
 
   c.baseTxFrame.getReceipts(header.receiptsRoot)
 
-func payloadBodyV1FromBaseTo*(c: ForkedChainRef,
-                              last: BlockNumber,
-                              list: var seq[Opt[ExecutionPayloadBodyV1]]) =
+func payloadBodyV1InMemory*(c: ForkedChainRef,
+                            first: BlockNumber,
+                            last: BlockNumber,
+                            list: var seq[Opt[ExecutionPayloadBodyV1]]) =
   var
-    blocks = newSeqOfCap[BlockRef](last-c.base.number+1)
+    blocks = newSeqOfCap[BlockRef](last-first+1)
 
   loopIt(c.latest):
-    if it.number <= last:
+    if it.number >= first and it.number <= last:
       blocks.add(it)
 
   for i in countdown(blocks.len-1, 0):
