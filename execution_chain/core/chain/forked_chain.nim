@@ -396,7 +396,9 @@ proc validateBlock(c: ForkedChainRef,
       excessBlobGas: blk.header.excessBlobGas,
       parentBeaconBlockRoot: blk.header.parentBeaconBlockRoot,
       requestsHash: blk.header.requestsHash,
-    )
+    ),
+    parentTxFrame=cast[uint](parentFrame),
+    txFrame=cast[uint](txFrame)
 
   var receipts = c.processBlock(parent.header, txFrame, blk, blkHash, finalized).valueOr:
     txFrame.dispose()
