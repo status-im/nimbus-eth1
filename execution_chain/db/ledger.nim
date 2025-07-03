@@ -42,13 +42,13 @@ const
 
 when statelessEnabled:
   type
-    WitnessKey* = object
-      storageMode*: bool
-      address*: Address
-      codeTouched*: bool
-      storageSlot*: UInt256
+    WitnessKey* = tuple[
+      address: Address,
+      slot: Opt[UInt256]
+    ]
 
-    WitnessTable* = OrderedTable[(Address, Hash32), WitnessKey]
+    # Maps witness keys to the codeTouched flag
+    WitnessTable* = OrderedTable[WitnessKey, bool]
 
 type
   AccountFlag = enum
@@ -98,8 +98,7 @@ type
     when statelessEnabled:
       witnessKeys: WitnessTable
         ## Used to collect the keys of all read accounts, code and storage slots.
-        ## Maps a tuple of address and hash of the key (address or slot) to the
-        ## witness key which can be either a storage key or an account key
+        ## Maps a tuple of address and slot (optional) to the codeTouched flag.
 
 
   ReadOnlyLedger* = distinct LedgerRef
@@ -171,12 +170,9 @@ proc getAccount(
     shouldCreate = true;
       ): AccountRef =
   when statelessEnabled:
-    let lookupKey = (address, address.toAccountKey)
+    let lookupKey = (address, Opt.none(UInt256))
     if not ac.witnessKeys.contains(lookupKey):
-      ac.witnessKeys[lookupKey] = WitnessKey(
-        storageMode: false,
-        address: address,
-        codeTouched: false)
+      ac.witnessKeys[lookupKey] = false
 
   # search account from layers of cache
   var sp = ac.savePoint
@@ -465,13 +461,10 @@ proc getCode*(ac: LedgerRef,
               address: Address,
               returnHash: static[bool] = false): auto =
   when statelessEnabled:
-    let lookupKey = (address, address.toAccountKey)
+    let lookupKey = (address, Opt.none(UInt256))
     # We overwrite any existing record here so that codeTouched is always set to
     # true even if an account was previously accessed without touching the code
-    ac.witnessKeys[lookupKey] = WitnessKey(
-      storageMode: false,
-      address: address,
-      codeTouched: true)
+    ac.witnessKeys[lookupKey] = true
 
   let acc = ac.getAccount(address, false)
   if acc.isNil:
@@ -532,11 +525,9 @@ proc getCommittedStorage*(ac: LedgerRef, address: Address, slot: UInt256): UInt2
   let acc = ac.getAccount(address, false)
 
   when statelessEnabled:
-    let lookupKey = (address, slot.toSlotKey)
+    let lookupKey = (address, Opt.some(slot))
     if not ac.witnessKeys.contains(lookupKey):
-      ac.witnessKeys[lookupKey] = WitnessKey(
-        storageMode: true,
-        storageSlot: slot)
+      ac.witnessKeys[lookupKey] = false
 
   if acc.isNil:
     return
@@ -546,11 +537,9 @@ proc getStorage*(ac: LedgerRef, address: Address, slot: UInt256): UInt256 =
   let acc = ac.getAccount(address, false)
 
   when statelessEnabled:
-    let lookupKey = (address, slot.toSlotKey)
+    let lookupKey = (address, Opt.some(slot))
     if not ac.witnessKeys.contains(lookupKey):
-      ac.witnessKeys[lookupKey] = WitnessKey(
-        storageMode: true,
-        storageSlot: slot)
+      ac.witnessKeys[lookupKey] = false
 
   if acc.isNil:
     return
@@ -635,11 +624,9 @@ proc setStorage*(ac: LedgerRef, address: Address, slot, value: UInt256) =
   acc.flags.incl {Alive}
 
   when statelessEnabled:
-    let lookupKey = (address, slot.toSlotKey)
+    let lookupKey = (address, Opt.some(slot))
     if not ac.witnessKeys.contains(lookupKey):
-      ac.witnessKeys[lookupKey] = WitnessKey(
-        storageMode: true,
-        storageSlot: slot)
+      ac.witnessKeys[lookupKey] = false
 
   let oldValue = acc.storageValue(slot, ac)
   if oldValue != value:
