@@ -17,8 +17,8 @@ import
   ../../../../networking/p2p,
   ../../../wire_protocol/types,
   ../../worker_desc,
-  ../[blocks_unproc, update],
-  ./bodies_fetch
+  ../update,
+  ./[blocks_fetch, blocks_helpers, blocks_import, blocks_unproc]
 
 # ------------------------------------------------------------------------------
 # Private helpers
@@ -72,7 +72,7 @@ proc blocksFetchCheckImpl(
   request.blockHashes[^1] = blocks[^1].header.computeBlockHash
 
   # Fetch bodies
-  let bodies = (await buddy.bodiesFetch(request, info)).valueOr:
+  let bodies = (await buddy.fetchBodies request).valueOr:
     return Opt.none(seq[EthBlock])
   if buddy.ctrl.stopped:
     return Opt.none(seq[EthBlock])
@@ -93,8 +93,8 @@ proc blocksFetchCheckImpl(
             break checkTxLenOk
         # Oops, cut off the rest
         blocks.setLen(n)                                   # curb off junk
-        buddy.fetchRegisterError()
-        trace info & ": cut off junk blocks", peer, iv, n,
+        buddy.bdyFetchRegisterError()
+        trace info & ": Cut off junk blocks", peer, iv, n,
           nTxs=bodies[n].transactions.len, nBodies, bdyErrors=buddy.bdyErrors
         break loop
 
@@ -121,13 +121,6 @@ proc blocksFetchCheckImpl(
 # Public functions
 # ------------------------------------------------------------------------------
 
-func blocksModeStopped*(ctx: BeaconCtxRef): bool =
-  ## Helper, checks whether there is a general stop conditions based on
-  ## state settings (not on sync peer ctrl as `buddy.ctrl.running`.)
-  ctx.poolMode or
-  ctx.pool.lastState != blocks
-
-
 proc blocksFetch*(
     buddy: BeaconBuddyRef;
     num: uint;
@@ -153,7 +146,7 @@ proc blocksFetch*(
   # Job might have been cancelled or completed while downloading blocks.
   # If so, no more bookkeeping of blocks must take place. The *books*
   # might have been reset and prepared for the next stage.
-  if ctx.blocksModeStopped():
+  if ctx.blkSessionStopped():
     return Opt.none(seq[EthBlock])                  # stop, exit this function
 
   # Commit blocks received
@@ -167,7 +160,7 @@ proc blocksFetch*(
 
 proc blocksImport*(
     ctx: BeaconCtxRef;
-    maybePeer: Opt[Peer];
+    maybePeer: Opt[BeaconBuddyRef];
     blocks: seq[EthBlock];
     peerID: Hash;
     info: static[string];
@@ -179,7 +172,7 @@ proc blocksImport*(
   let iv = BnRange.new(blocks[0].header.number, blocks[^1].header.number)
   doAssert iv.len == blocks.len.uint64
 
-  trace info & ": Start importing blocks", peer=($maybePeer), iv,
+  trace info & ": Start importing blocks", peer=maybePeer.toStr, iv,
     nBlocks=iv.len, base=ctx.chain.baseNumber.bnStr,
     head=ctx.chain.latestNumber.bnStr
 
@@ -188,16 +181,8 @@ proc blocksImport*(
     for n in 0 ..< blocks.len:
       let nBn = blocks[n].header.number
 
-      if nBn <= ctx.chain.baseNumber:
-        trace info & ": ignoring block less eq. base", n, iv, nBlocks=iv.len,
-          nthBn=nBn.bnStr, nthHash=ctx.getNthHash(blocks, n).short,
-          B=ctx.chain.baseNumber.bnStr, L=ctx.chain.latestNumber.bnStr
-
-        ctx.subState.top = nBn                     # well, not really imported
-        continue
-
-      try:
-        (await ctx.chain.queueImportBlock blocks[n]).isOkOr:
+      (await ctx.importBlock(maybePeer, blocks[n], peerID)).isOkOr:
+        if not error.cancelled:
           isError = true
 
           # Mark peer that produced that unusable headers list as a zombie
@@ -231,11 +216,9 @@ proc blocksImport*(
               head=ctx.chain.latestNumber.bnStr,
               blkFailCount=ctx.subState.procFailCount, `error`=error
 
-          break loop                               # stop
-        # isOk => next instruction
-      except CancelledError:
-        break loop                                 # shutdown?
+        break loop
 
+      # isOk => next instruction
       ctx.subState.top = nBn                       # Block imported OK
 
       # Allow pseudo/async thread switch.

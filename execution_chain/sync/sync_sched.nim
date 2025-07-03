@@ -85,11 +85,9 @@
 
 import
   std/hashes,
-  chronos,
+  pkg/[chronos, stew/keyed_queue],
   ../networking/[p2p, peer_pool],
-  stew/keyed_queue,
-  ./sync_desc,
-  ./wire_protocol
+  ./[sync_desc, wire_protocol]
 
 type
   ActiveBuddies[S,W] = ##\
@@ -408,7 +406,6 @@ proc onPeerConnected[S,W](dsc: RunnerSyncRef[S,W]; peer: Peer) =
     dsc:      dsc,
     worker:   BuddyRef[S,W](
       ctx:    dsc.ctx,
-      ctrl:   BuddyCtrlRef(),
       peer:   peer,
       peerID: peer.key.hash))
   if not buddy.worker.runStart():

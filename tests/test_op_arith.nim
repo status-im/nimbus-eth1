@@ -463,4 +463,76 @@ proc opArithMain*() =
         Byte
       stack: "0x0000000000000000000000000000000000000000000000000000000000000000"
 
+    assembler:
+      title: "Clz_Zero"
+      code:
+        Push32 "0x0000000000000000000000000000000000000000000000000000000000000000"
+        Clz
+      stack: "0x0100"  # 256 in hex
+      fork: Osaka
+
+    assembler:
+      title: "Clz_One"
+      code:
+        Push32 "0x0000000000000000000000000000000000000000000000000000000000000001"
+        Clz
+      stack: "0x00FF"  # 255 in hex
+      fork: Osaka
+
+    assembler:
+      title: "Clz_MsbSet"
+      code:
+        Push32 "0x8000000000000000000000000000000000000000000000000000000000000000"
+        Clz
+      stack: "0x00"
+      fork: Osaka
+
+    assembler:
+      title: "Clz_OneBitBelowMsb"
+      code:
+        Push32 "0x4000000000000000000000000000000000000000000000000000000000000000"
+        Clz
+      stack: "0x01"
+      fork: Osaka
+
+    assembler:
+      title: "Clz_7Fs"
+      code:
+        Push32 "0x7fffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff"
+        Clz
+      stack: "0x01"
+      fork: Osaka
+
+    assembler:
+      title: "Clz_Full"
+      code:
+        Push32 "0xffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff"
+        Clz
+      stack: "0x00"
+      fork: Osaka
+
+    assembler:
+      title: "Clz_Zero_32Bytes"
+      fork: Osaka
+      code:
+        Push32 "0x0000000000000000000000000000000000000000000000000000000000000000"
+        Clz
+      stack: "0x100"
+
+    assembler:
+      title: "Clz_Zero_Push1"
+      fork: Osaka
+      code:
+        Push1 "0x00"
+        Clz
+      stack: "0x100"
+
+    assembler:
+      title: "Clz_Zero_PushN_FewZeroBytes"
+      fork: Osaka
+      code:
+        Push5 "0x0000000000"
+        Clz
+      stack: "0x100"
+
 opArithMain()

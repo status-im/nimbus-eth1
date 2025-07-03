@@ -21,7 +21,7 @@ import
   ../worker_const
 
 export
-  prettify, short
+  prettify, short, `$`
 
 func bnStr*(w: BlockNumber): string =
   "#" & $w
@@ -62,9 +62,6 @@ func toStr*(h: Hash32): string =
 
 func `$`*(w: Interval[BlockNumber,uint64]): string =
   w.bnStr
-
-func `$`*(w: Opt[Peer]): string =
-  if w.isSome: $w.value else: "n/a"
 
 func `$`*(w: (SyncState,HeaderChainMode,bool)): string =
   $w[0] & "." & $w[1] & (if w[2]: ":" & "poolMode" else: "")

@@ -54,6 +54,7 @@ type
     awaitedMessages*: seq[FutureBase] # per `msgId` table
     snappyEnabled*: bool
     clientId*: string
+    inbound*: bool  # true if connection was initiated by remote peer
 
   SeenNode* = object
     nodeId*: NodeId

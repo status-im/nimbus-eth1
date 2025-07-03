@@ -171,7 +171,7 @@ proc getBalance(xp: TxPoolRef; account: Address): UInt256 =
 proc getNonce(xp: TxPoolRef; account: Address): AccountNonce =
   xp.vmState.ledger.getNonce(account)
 
-proc classifyValid(xp: TxPoolRef; tx: Transaction, sender: Address): bool =
+proc classifyValid(xp: TxPoolRef; tx: Transaction, sender: Address, blobsBundle: BlobsBundle): bool =
 
   if tx.gasLimit > TX_GAS_LIMIT:
     debug "Invalid transaction: Gas limit too high",
@@ -232,12 +232,23 @@ proc classifyValid(xp: TxPoolRef; tx: Transaction, sender: Address): bool =
       debug "Invalid transaction: EIP-1559 transaction with maxFeePerGas lower than 1"
       return false
 
-  debug "Valid transaction",
-    txType = tx.txType,
-    sender = sender,
-    gasLimit = tx.gasLimit,
-    gasPrice = tx.gasPrice,
-    value = tx.value
+  if blobsBundle.isNil:
+    debug "Valid transaction",
+      txType = tx.txType,
+      sender = sender,
+      gasLimit = tx.gasLimit,
+      gasPrice = tx.gasPrice,
+      value = tx.value
+  else:
+    debug "Valid transaction",
+      txType = tx.txType,
+      sender = sender,
+      gasLimit = tx.gasLimit,
+      gasPrice = tx.gasPrice,
+      value = tx.value,
+      numBlobs = blobsBundle.blobs.len,
+      wrapperVersion = blobsBundle.wrapperVersion
+
   true
 
 proc validateBlobTransactionWrapper(tx: PooledTransaction, fork: EVMFork):
@@ -397,7 +408,7 @@ proc addTx*(xp: TxPoolRef, ptx: PooledTransaction): Result[void, TxError] =
       sender = sender
     return err(txErrorNonceTooSmall)
 
-  if not xp.classifyValid(ptx.tx, sender):
+  if not xp.classifyValid(ptx.tx, sender, ptx.blobsBundle):
     return err(txErrorTxInvalid)
 
   if xp.idTab.len >= MAX_POOL_SIZE:

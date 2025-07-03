@@ -317,7 +317,7 @@ proc setupServerAPI*(api: ServerAPIRef, server: RpcServer, ctx: EthContext) =
     ## Note: Use eth_getTransactionReceipt to get the contract address, after the transaction was mined, when you created a contract.
     let
       pooledTx = decodePooledTx(txBytes)
-      txHash = computeRlpHash(pooledTx)
+      txHash = computeRlpHash(pooledTx.tx)
       sender = pooledTx.tx.recoverSender().get()
 
     api.txPool.addTx(pooledTx).isOkOr:

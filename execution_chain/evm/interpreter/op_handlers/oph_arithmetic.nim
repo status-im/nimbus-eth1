@@ -1,5 +1,5 @@
 # Nimbus
-# Copyright (c) 2018-2024 Status Research & Development GmbH
+# Copyright (c) 2018-2025 Status Research & Development GmbH
 # Licensed under either of
 #  * Apache License, version 2.0, ([LICENSE-APACHE](LICENSE-APACHE) or
 #    http://www.apache.org/licenses/LICENSE-2.0)
@@ -277,6 +277,17 @@ proc sarOp(cpt: VmCpt): EvmResultVoid =
 
   cpt.stack.binaryWithTop(sar256)
 
+proc clzOp(cpt: VmCpt): EvmResultVoid =
+  ## 0x1e, Count Leading Zeros
+  template clz256(top, value, toStackElem) =
+    if value.isZero:
+      toStackElem(256.u256, top)
+    else:
+      let count = value.leadingZeros()
+      toStackElem(count.u256, top)
+
+  cpt.stack.unaryWithTop(clz256)
+
 # ------------------------------------------------------------------------------
 # Public, op exec table entries
 # ------------------------------------------------------------------------------
@@ -460,7 +471,13 @@ const
      forks: VmOpConstantinopleAndLater,
      name: "sarOp",
      info: "Arithmetic shift right",
-     exec: sarOp)]
+     exec: sarOp),
+
+    (opCode: Clz,     ## CLZ (Count Leading Zeros)
+     forks: VmOpOsakaAndLater, ## Or a newer fork gate, if appropriate
+     name: "clzOp",
+     info: "Count leading zero bits in a 256-bit word",
+     exec: clzOp)]
 
 # ------------------------------------------------------------------------------
 # End

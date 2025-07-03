@@ -17,7 +17,7 @@ import
   pkg/stew/[interval_set, sorted_set],
   ../../common,
   ./worker/update/[metrics, ticker],
-  ./worker/[blocks_staged, headers_staged, start_stop, update],
+  ./worker/[blocks, headers, start_stop, update],
   ./worker_desc
 
 # ------------------------------------------------------------------------------
@@ -29,8 +29,8 @@ proc napUnlessSomethingToCollect(
       ): Future[bool] {.async: (raises: []).} =
   ## When idle, save cpu cycles waiting for something to do.
   if buddy.ctx.hibernate or                      # not activated yet?
-     not (buddy.headersStagedCollectOk() or      # something on TODO list
-          buddy.blocksStagedCollectOk()):
+     not (buddy.headersCollectOk() or            # something on TODO list
+          buddy.blocksCollectOk()):
     try:
       await sleepAsync workerIdleWaitInterval
     except CancelledError:
@@ -75,8 +75,7 @@ proc start*(buddy: BeaconBuddyRef; info: static[string]): bool =
 proc stop*(buddy: BeaconBuddyRef; info: static[string]) =
   ## Clean up this peer
   if not buddy.ctx.hibernate: debug info & ": release peer", peer=buddy.peer,
-    nSyncPeers=(buddy.ctx.pool.nBuddies-1), syncState=($buddy.syncState),
-    nLaps=buddy.only.nMultiLoop, lastIdleGap=buddy.only.multiRunIdle.toStr
+    nSyncPeers=(buddy.ctx.pool.nBuddies-1), syncState=($buddy.syncState)
   buddy.stopBuddy()
 
 # --------------------
@@ -107,6 +106,7 @@ proc runTicker*(ctx: BeaconCtxRef; info: static[string]) =
   ctx.updateMetrics()
   ctx.updateTicker()
 
+
 proc runDaemon*(
     ctx: BeaconCtxRef;
     info: static[string];
@@ -124,10 +124,10 @@ proc runDaemon*(
     return
 
   # Execute staged block records.
-  if ctx.blocksStagedProcessOk():
+  if ctx.blocksUnstageOk():
 
     # Import bodies from the `staged` queue.
-    discard await ctx.blocksStagedProcess info
+    discard await ctx.blocksUnstage info
 
     if not ctx.daemon or   # Implied by external sync shutdown?
        ctx.poolMode:       # Oops, re-org needed?
@@ -170,48 +170,40 @@ proc runPeer*(
   ## This peer worker method is repeatedly invoked (exactly one per peer) while
   ## the `buddy.ctrl.poolMode` flag is set `false`.
   ##
-  if 0 < buddy.only.nMultiLoop:                 # statistics/debugging
-    buddy.only.multiRunIdle = Moment.now() - buddy.only.stoppedMultiRun
-  buddy.only.nMultiLoop.inc                     # statistics/debugging
-
   if not await buddy.napUnlessSomethingToCollect():
 
     # Download and process headers and blocks
-    while buddy.headersStagedCollectOk():
+    while buddy.headersCollectOk():
 
       # Collect headers and either stash them on the header chain cache
       # directly, or stage on the header queue to get them serialised and
       # stashed, later.
-      await buddy.headersStagedCollect info
+      await buddy.headersCollect info
 
       # Store serialised headers from the `staged` queue onto the header
       # chain cache.
-      if not buddy.headersStagedProcess info:
+      if not buddy.headersUnstage info:
         # Need to proceed with another peer (e.g. gap between queue and
         # header chain cache.)
         break
 
+      # End `while()`
+
     # Fetch bodies and combine them with headers to blocks to be staged. These
     # staged blocks are then excuted by the daemon process (no `peer` needed.)
-    while buddy.blocksStagedCollectOk():
+    while buddy.blocksCollectOk():
 
       # Collect bodies and either import them via `FC` module, or stage on
       # the blocks queue to get them serialised and imported, later.
-      await buddy.blocksStagedCollect info
+      await buddy.blocksCollect info
 
       # Import bodies from the `staged` queue.
-      if not await buddy.blocksStagedProcess info:
+      if not await buddy.blocksUnstage info:
         # Need to proceed with another peer (e.g. gap between top imported
         # block and blocks queue.)
         break
 
-    # Note that it is important **not** to leave this function to be
-    # re-invoked by the scheduler unless necessary. While the time gap
-    # until restarting is typically a few millisecs, there are always
-    # outliers which well exceed several seconds. This seems to let
-    # remote peers run into timeouts so they eventually get lost early.
-
-  buddy.only.stoppedMultiRun = Moment.now()     # statistics/debugging
+      # End `while()`
 
 # ------------------------------------------------------------------------------
 # End

@@ -173,3 +173,18 @@ func weiAmount*(w: Withdrawal): UInt256 =
 func isGenesis*(header: Header): bool =
   header.number == 0'u64 and
     header.parentHash == GENESIS_PARENT_HASH
+
+template deferGc*(body: untyped): untyped =
+  when declared(GC_disable):
+    GC_disable()
+
+  when declared(GC_enable):
+    defer:
+      GC_enable()
+      # Perform a small allocation which indirectly runs the garbage collector -
+      # unlike GC_fullCollect, this will use the usual nim heuristic for running
+      # the cycle colllector (which would be extremely expensive to run on each
+      # collection)
+      discard newSeq[int](1)
+
+  body

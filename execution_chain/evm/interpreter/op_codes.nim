@@ -1,5 +1,5 @@
 # Nimbus
-# Copyright (c) 2018-2024 Status Research & Development GmbH
+# Copyright (c) 2018-2025 Status Research & Development GmbH
 # Licensed under either of
 #  * Apache License, version 2.0, ([LICENSE-APACHE](LICENSE-APACHE) or
 #    http://www.apache.org/licenses/LICENSE-2.0)
@@ -58,8 +58,9 @@ type
     Shl =            0x1B, ## Shift left
     Shr =            0x1C, ## Logical shift right
     Sar =            0x1D, ## Arithmetic shift right
+    Clz =            0x1E, ## Count leading zeros
 
-    Nop0x1E, Nop0x1F, ## ..
+    Nop0x1F, ## ..
 
     # 20s: SHA3
     Sha3 =           0x20, ## Compute Keccak-256 hash.

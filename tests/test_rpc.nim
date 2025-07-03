@@ -7,7 +7,7 @@
 
 import
   chronicles,
-  std/[json, typetraits],
+  std/[json, typetraits, math],
   asynctest,
   web3/eth_api,
   stew/byteutils,
@@ -19,11 +19,15 @@ import
   ../execution_chain/db/[ledger, storage_types],
   ../execution_chain/sync/wire_protocol,
   ../execution_chain/core/[tx_pool, chain, pow/difficulty],
+  ../execution_chain/core/pooled_txs_rlp,
+  ../execution_chain/core/lazy_kzg as kzg,
+  ../execution_chain/core/eip4844,
   ../execution_chain/utils/utils,
   ../execution_chain/[common, rpc],
-  ../execution_chain/rpc/rpc_types,
+  ../execution_chain/rpc/[rpc_types, common as rpc_common],
   ../execution_chain/beacon/web3_eth_conv,
   ../execution_chain/networking/p2p,
+  ../execution_chain/nimbus_desc,
    ./test_helpers,
    ./macro_assembler,
    ./test_block_fixture
@@ -147,6 +151,43 @@ func makeTx(
   inc env.nonce
   signTransaction(tx, signerKey, eip155 = true)
 
+proc makeBlobTx(env: var TestEnv, nonce: int): PooledTransaction =
+  const
+    source    = address"0x0000000000000000000000000000000000000001"
+    storageKey= default(Bytes32)
+    accesses  = @[AccessPair(address: source, storageKeys: @[storageKey])]
+    blob      = default(kzg.KzgBlob)
+    blobs     = @[pooled_txs.KzgBlob(blob.bytes)]
+
+  let
+    ctx = env.ctx
+    acc = ctx.am.getAccount(signer).tryGet()
+    commitment = blobToKzgCommitment(blob).expect("good blob")
+    proof = computeBlobKzgProof(blob, commitment).expect("good commitment")
+    digest = kzgToVersionedHash(commitment.bytes)
+
+    utx = Transaction(
+      txType:              TxEip4844,
+      chainId:             env.chainId,
+      nonce:               AccountNonce(nonce),
+      gasPrice:            70000.GasInt,
+      gasLimit:            123457.GasInt,
+      to:                  Opt.some(zeroAddress),
+      maxPriorityFeePerGas:GasInt(10 ^ 9),
+      maxFeePerGas:        GasInt(10 ^ 9),
+      maxFeePerBlobGas:    1.u256,
+      accessList:          accesses,
+      versionedHashes:     @[digest])
+
+  let tx = signTransaction(utx, acc.privateKey, eip155 = true)
+
+  PooledTransaction(
+    tx: tx,
+    blobsBundle: BlobsBundle(
+      blobs: blobs,
+      commitments: @[pooled_txs.KzgCommitment(commitment.bytes)],
+      proofs: @[pooled_txs.KzgProof(proof.bytes)]))
+
 proc setupEnv(envFork: HardFork = MergeFork): TestEnv =
   doAssert(envFork >= MergeFork)
 
@@ -192,6 +233,9 @@ proc setupEnv(envFork: HardFork = MergeFork): TestEnv =
     client = setupClient(server.localAddress[0].port)
     ctx    = newEthContext()
     node   = setupEthNode(conf, ctx, eth68, eth69)
+    nimbus = NimbusNode(
+      ethNode: node,
+    )
 
   ctx.am.loadKeystores(keyStore).isOkOr:
     debugEcho error
@@ -204,6 +248,7 @@ proc setupEnv(envFork: HardFork = MergeFork): TestEnv =
 
   setupServerAPI(serverApi, server, ctx)
   setupCommonRpc(node, conf, server)
+  setupAdminRpc(nimbus, conf, server)
   server.start()
 
   TestEnv(
@@ -263,6 +308,8 @@ createRpcSigsFromNim(RpcClient):
   proc net_version(): string
   proc net_listening(): bool
   proc net_peerCount(): Quantity
+  proc admin_nodeInfo(): NodeInfo
+  proc admin_peers(): seq[PeerInfo]
 
 proc rpcMain*() =
   suite "Remote Procedure Calls":
@@ -296,6 +343,30 @@ proc rpcMain*() =
       let res = await client.net_peerCount()
       let peerCount = node.peerPool.connectedNodes.len
       check res == w3Qty(peerCount)
+
+    test "admin_nodeInfo":
+      let res = await client.admin_nodeInfo()
+      check:
+        res.id.len > 0
+        res.name == env.conf.agentString
+        res.enode.startsWith("enode://")
+        res.ip.len > 0
+        res.ports.discovery > 0
+        res.ports.listener > 0
+
+    test "admin_peers":
+      let peers = await client.admin_peers()
+      check peers.len == node.peerPool.connectedNodes.len
+
+      # If there are peers, verify the structure matches Geth specification
+      for peer in peers:
+        check:
+          peer.caps.len > 0
+          peer.enode.startsWith("enode://")
+          peer.id.len > 0
+          peer.name.len > 0
+          peer.network.localAddress.len > 0
+          peer.network.remoteAddress.len > 0
 
     test "eth_chainId":
       let res = await client.eth_chainId()
@@ -415,6 +486,13 @@ proc rpcMain*() =
       let txHash = await client.eth_sendRawTransaction(signedTxBytes)
       const expHash = hash32"0xeea79669dd904921d203fb720c7228f5c7854e5a768248f494f36fa68c83c191"
       check txHash == expHash
+
+      let
+        blobTx = env.makeBlobTx(4)
+        blobTxBytes = rlp.encode(blobTx)
+        blobTxHash = await client.eth_sendRawTransaction(blobTxBytes)
+        expected = computeRlpHash(blobTx.tx) # use inner tx hash
+      check expected == blobTxHash # should return inner tx hash
 
     test "eth_call":
       let ec = TransactionArgs(

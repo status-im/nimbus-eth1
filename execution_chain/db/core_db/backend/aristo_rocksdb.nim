@@ -152,9 +152,12 @@ proc newRocksDbCoreDbRef*(basePath: string, opts: DbOptions): CoreDbRef =
   # The same column family options are used for all column families meaning that
   # the options are a compromise between the various write and access patterns
   # of what's stored in there - there's room for improvement here!
+
+  # Legacy support: adm CF, if it exists
+
   let
     (dbOpts, cfOpts) = opts.toRocksDb()
-    cfDescs = (AristoCFs.items().toSeq().mapIt($it) & KvtCFs.items().toSeq().mapIt($it))
+    cfDescs = @[$AristoCFs.VtxCF] & KvtCFs.items().toSeq().mapIt($it)
     baseDb = RocksDbInstanceRef.open(basePath, dbOpts, cfOpts, cfDescs).expect(
         "Open database from " & basePath
       )

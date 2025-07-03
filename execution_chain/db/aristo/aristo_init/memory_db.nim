@@ -41,12 +41,10 @@ const
 type
   MemBackendRef* = ref object of TypedBackendRef
     sTab*: Table[RootedVertexID,seq[byte]] ## Structural vertex table making up a trie
-    tUvi*: Opt[VertexID]                   ## Top used vertex ID
     lSst*: Opt[SavedState]                 ## Last saved state
 
   MemPutHdlRef = ref object of TypedPutHdlRef
     sTab: Table[RootedVertexID,seq[byte]]
-    tUvi: Opt[VertexID]
     lSst: Opt[SavedState]
 
 when extraTraceMessages:
@@ -100,15 +98,10 @@ func getKeyFn(db: MemBackendRef): GetKeyFn =
         return ok((key, nil))
       err(GetKeyNotFound)
 
-func getTuvFn(db: MemBackendRef): GetTuvFn =
-  result =
-    proc(): Result[VertexID,AristoError]=
-      db.tUvi or ok(VertexID(0))
-
 func getLstFn(db: MemBackendRef): GetLstFn =
   result =
     proc(): Result[SavedState,AristoError]=
-      db.lSst or err(GetLstNotFound)
+      db.lSst or ok(default(SavedState))
 
 # -------------
 
@@ -127,13 +120,6 @@ func putVtxFn(db: MemBackendRef): PutVtxFn =
           hdl.sTab[rvid] = vtx.blobify(key)
         else:
           hdl.sTab[rvid] = EmptyBlob
-
-func putTuvFn(db: MemBackendRef): PutTuvFn =
-  result =
-    proc(hdl: PutHdlRef; vs: VertexID)  =
-      let hdl = hdl.getSession db
-      if hdl.error.isNil:
-        hdl.tUvi = Opt.some(vs)
 
 func putLstFn(db: MemBackendRef): PutLstFn =
   result =
@@ -163,10 +149,6 @@ func putEndFn(db: MemBackendRef): PutEndFn =
         else:
           db.sTab.del vid
 
-      let tuv = hdl.tUvi.get(otherwise = VertexID(0))
-      if tuv.isValid:
-        db.tUvi = Opt.some(tuv)
-
       if hdl.lSst.isSome:
         db.lSst = hdl.lSst
 
@@ -190,12 +172,10 @@ func memoryBackend*(): AristoDbRef =
 
   db.getVtxFn = getVtxFn be
   db.getKeyFn = getKeyFn be
-  db.getTuvFn = getTuvFn be
   db.getLstFn = getLstFn be
 
   db.putBegFn = putBegFn be
   db.putVtxFn = putVtxFn be
-  db.putTuvFn = putTuvFn be
   db.putLstFn = putLstFn be
   db.putEndFn = putEndFn be
 
