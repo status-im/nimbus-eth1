@@ -8,17 +8,28 @@
 # those terms.
 
 import
+  std/[tables, sets],
   eth/common,
   eth/rlp,
-  results
+  results,
+  ../db/ledger
 
 export
   common,
-  results
+  results,
+  ledger
 
 {.push raises: [].}
 
 type
+  WitnessKey* = object
+    storageMode*: bool
+    address*: Address
+    codeTouched*: bool
+    storageSlot*: UInt256
+
+  WitnessTable* = OrderedTable[(Address, Hash32), WitnessKey]
+
   ExecutionWitness* = object
     state*: seq[seq[byte]] # MPT trie nodes accessed while executing the block.
     codes*: seq[seq[byte]] # Contract bytecodes read while executing the block.
@@ -55,3 +66,45 @@ func decode*(T: type ExecutionWitness, witnessBytes: openArray[byte]): Result[T,
     ok(rlp.decode(witnessBytes, T))
   except RlpError as e:
     err(e.msg)
+
+func build*(
+    T: type ExecutionWitness,
+    ledger: LedgerRef,
+    witnessKeys: WitnessTable,
+    headers: openArray[Header]): T =
+  var
+    witness = ExecutionWitness.init()
+    addedStateHashes = initHashSet[Hash32]()
+    addedCodeHashes = initHashSet[Hash32]()
+
+  for key in witnessKeys.values():
+    if key.storageMode:
+      witness.addKey(key.storageSlot.toBytesBE())
+
+      let proofs = ledger.getStorageProof(key.address, @[key.storageSlot])
+      doAssert(proofs.len() == 1)
+      for trieNode in proofs[0]:
+        let nodeHash = keccak256(trieNode)
+        if nodeHash notin addedStateHashes:
+          witness.addState(trieNode)
+          addedStateHashes.incl(nodeHash)
+    else:
+      witness.addKey(key.address.toBytes())
+
+      let proof = ledger.getAccountProof(key.address)
+      for trieNode in proof:
+        let nodeHash = keccak256(trieNode)
+        if nodeHash notin addedStateHashes:
+          witness.addState(trieNode)
+          addedStateHashes.incl(nodeHash)
+
+    if key.codeTouched:
+      let (codeHash, code) = ledger.getCode(key.address, returnHash = true)
+      if codeHash != EMPTY_CODE_HASH and codeHash notin addedCodeHashes:
+        witness.addCode(code.bytes)
+        addedCodeHashes.incl(codeHash)
+
+  for h in headers:
+    witness.addHeader(h)
+
+  witness
