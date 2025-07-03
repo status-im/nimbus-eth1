@@ -119,9 +119,14 @@ func findFinalizedPos(
     if fin.number > head.number:
       return err("Invalid finalizedHash: block is newer than head block")
 
-    loopIt(head):
-      if it == fin:
-        return ok(fin)
+    # There is no point traversing the DAG if there is only one branch.
+    # Just return the node.
+    if c.heads.len > 1:
+      loopIt(head):
+        if it == fin:
+          return ok(fin)
+    else:
+      return ok(fin)
 
   err("Invalid finalizedHash: block not in argument head ancestor lineage")
 
@@ -892,15 +897,14 @@ func payloadBodyV1FromBaseTo*(c: ForkedChainRef,
                               last: BlockNumber,
                               list: var seq[Opt[ExecutionPayloadBodyV1]]) =
   var
-    blocks = newSeqOfCap[BlockRef](c.hashToBlock.len)
+    blocks = newSeqOfCap[BlockRef](last-c.base.number+1)
 
   loopIt(c.latest):
-    blocks.add(it)
+    if it.number <= last:
+      blocks.add(it)
 
   for i in countdown(blocks.len-1, 0):
     let y = blocks[i]
-    if y.number > last:
-      return
     list.add Opt.some(toPayloadBody(y.blk))
 
 func equalOrAncestorOf*(c: ForkedChainRef, blockHash: Hash32, headHash: Hash32): bool =
