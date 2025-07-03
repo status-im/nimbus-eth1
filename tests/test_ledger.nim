@@ -657,11 +657,11 @@ proc runLedgerBasicOperationsTests() =
 
         let
           witnessKeys = ac.getWitnessKeys()
-          keyData = witnessKeys.getOrDefault((addr1, addr1.toAccountKey))
+          key = (addr1, Opt.none(UInt256))
         check:
           witnessKeys.len() == 1
-          keyData.address == addr1
-          keyData.codeTouched == false
+          witnessKeys.contains(key)
+          witnessKeys.getOrDefault(key) == false
 
       test "Witness keys - Get code":
         var
@@ -672,11 +672,11 @@ proc runLedgerBasicOperationsTests() =
 
         let
           witnessKeys = ac.getWitnessKeys()
-          keyData = witnessKeys.getOrDefault((addr1, addr1.toAccountKey))
+          key = (addr1, Opt.none(UInt256))
         check:
           witnessKeys.len() == 1
-          keyData.address == addr1
-          keyData.codeTouched == true
+          witnessKeys.contains(key)
+          witnessKeys.getOrDefault(key) == true
 
       test "Witness keys - Get storage":
         var
@@ -688,10 +688,11 @@ proc runLedgerBasicOperationsTests() =
 
         let
           witnessKeys = ac.getWitnessKeys()
-          keyData = witnessKeys.getOrDefault((addr1, slot1.toSlotKey))
+          key = (addr1, Opt.some(slot1))
         check:
           witnessKeys.len() == 2
-          keyData.storageSlot == slot1
+          witnessKeys.contains(key)
+          witnessKeys.getOrDefault(key) == false
 
       test "Witness keys - Set storage":
         var
@@ -703,10 +704,11 @@ proc runLedgerBasicOperationsTests() =
 
         let
           witnessKeys = ac.getWitnessKeys()
-          keyData = witnessKeys.getOrDefault((addr1, slot1.toSlotKey))
+          key = (addr1, Opt.some(slot1))
         check:
           witnessKeys.len() == 2
-          keyData.storageSlot == slot1
+          witnessKeys.contains(key)
+          witnessKeys.getOrDefault(key) == false
 
       test "Witness keys - Get account, code and storage":
         var
@@ -728,31 +730,30 @@ proc runLedgerBasicOperationsTests() =
         let witnessKeys = ac.getWitnessKeys()
         check witnessKeys.len() == 5
 
-        var keysList = newSeq[(Address, WitnessKey)]()
+        var keysList = newSeq[(WitnessKey, bool)]()
         for k, v in witnessKeys:
-          let (adr, _) = k
-          keysList.add((adr, v))
+          keysList.add((k, v))
 
         check:
-          keysList[0][0] == addr1
-          keysList[0][1].address == addr1
-          keysList[0][1].codeTouched == true
+          keysList[0][0].address == addr1
+          keysList[0][0].slot == Opt.none(UInt256)
+          keysList[0][1] == true
 
-          keysList[1][0] == addr2
-          keysList[1][1].address == addr2
-          keysList[1][1].codeTouched == true
+          keysList[1][0].address == addr2
+          keysList[1][0].slot == Opt.none(UInt256)
+          keysList[1][1] == true
 
-          keysList[2][0] == addr2
-          keysList[2][1].storageSlot == slot1
+          keysList[2][0].address == addr2
+          keysList[2][0].slot == Opt.some(slot1)
+          keysList[2][1] == false
 
-          keysList[3][0] == addr1
-          keysList[3][1].storageSlot == slot1
+          keysList[3][0].address == addr1
+          keysList[3][0].slot == Opt.some(slot1)
+          keysList[3][1] == false
 
-          keysList[4][0] == addr3
-          keysList[4][1].address == addr3
-          keysList[4][1].codeTouched == false
-
-
+          keysList[4][0].address == addr3
+          keysList[4][0].slot == Opt.none(UInt256)
+          keysList[4][1] == false
 
 
 # ------------------------------------------------------------------------------
