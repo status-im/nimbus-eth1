@@ -16,7 +16,8 @@ import
   ../types,
   ../header_store,
   ./accounts,
-  ./blocks
+  ./blocks,
+  ./evm
 
 logScope:
   topics = "verified_proxy"
@@ -137,6 +138,65 @@ proc installEthApiHandlers*(vp: VerifiedRpcProxy) =
     doAssert x.kind == tohTx
 
     x.tx
+
+  vp.proxy.rpc("eth_call") do(
+    tx: TransactionArgs, blockTag: BlockTag, optimisticStateFetch: Opt[bool]
+  ) -> seq[byte]:
+    if tx.to.isNone():
+      raise newException(ValueError, "to address is required")
+
+    let
+      header = (await vp.getHeader(blockTag)).valueOr:
+        raise newException(ValueError, error)
+
+      optimisticStateFetch = optimisticStateFetch.valueOr:
+        true
+
+    let callResult = (await vp.evm.call(header, tx, optimisticStateFetch)).valueOr:
+      raise newException(ValueError, error)
+
+    return callResult.output
+
+  vp.proxy.rpc("eth_createAccessList") do(
+    tx: TransactionArgs, blockTag: BlockTag, optimisticStateFetch: Opt[bool]
+  ) -> AccessListResult:
+    if tx.to.isNone():
+      raise newException(ValueError, "to address is required")
+
+
+    let
+      header = (await vp.getHeader(blockTag)).valueOr:
+        raise newException(ValueError, error)
+
+      optimisticStateFetch = optimisticStateFetch.valueOr:
+        true
+
+    let (accessList, error, gasUsed) = (
+      await vp.evm.createAccessList(header, tx, optimisticStateFetch)
+    ).valueOr:
+      raise newException(ValueError, error)
+
+    return
+      AccessListResult(accessList: accessList, error: error, gasUsed: gasUsed.Quantity)
+
+  vp.proxy.rpc("eth_estimateGas") do(
+    tx: TransactionArgs, blockTag: BlockTag, optimisticStateFetch: Opt[bool]
+  ) -> Quantity:
+    if tx.to.isNone():
+      raise newException(ValueError, "to address is required")
+
+    let
+      header = (await vp.getHeader(blockTag)).valueOr:
+        raise newException(ValueError, error)
+
+      optimisticStateFetch = optimisticStateFetch.valueOr:
+        true
+
+    let gasEstimate = (await vp.evm.estimateGas(header, tx, optimisticStateFetch)).valueOr:
+      raise newException(ValueError, error)
+
+    return gasEstimate.Quantity
+
 
   # TODO:
   # Following methods are forwarded directly to the web3 provider and therefore
