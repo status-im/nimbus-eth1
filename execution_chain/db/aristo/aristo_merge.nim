@@ -65,7 +65,7 @@ proc mergePayloadImpl[LeafType, T](
       # VertexID!
       return ok (db.layersPutLeaf((root, cur), path, payload), nil, nil)
     vids: ArrayBuf[NibblesBuf.high + 1, VertexID]
-    vtxs: ArrayBuf[NibblesBuf.high + 1, VertexRef]
+    vtxs: ArrayBuf[NibblesBuf.high + 1, BranchRef]
 
   template resetKeys() =
     # Reset cached hashes of touched verticies
@@ -73,7 +73,6 @@ proc mergePayloadImpl[LeafType, T](
       db.layersResKey((root, vids[^i]), vtxs[^i])
 
   while pos < path.len:
-    # Clear existing merkle keys along the traversal path
     var psuffix = path.slice(pos)
     let n = psuffix.sharedPrefixLen(vtx.pfx)
     case vtx.vType
@@ -142,7 +141,7 @@ proc mergePayloadImpl[LeafType, T](
 
         if next.isValid:
           vids.add cur
-          vtxs.add vtx
+          vtxs.add BranchRef(vtx)
           cur = next
           psuffix = psuffix.slice(n + 1)
           pos += n + 1
@@ -268,7 +267,8 @@ proc mergeStorageData*(
 
       return err(error)
 
-  # Mark account path Merkle keys for update, except for the vtx we update below
+  # Mark account path Merkle keys for update - the leaf key is not stored so no
+  # need to mark it
   db.layersResKeys(accHike, skip = 1)
 
   # Update leaf cache both of the merged value and potentially the displaced
@@ -285,10 +285,6 @@ proc mergeStorageData*(
     let leaf = db.layersUpdate((STATE_ROOT_VID, accHike.legs[^1].wp.vid), accVtx) # Dup on modify
     leaf.stoID = useID
     db.layersPutAccLeaf(accPath, leaf)
-  else:
-    let leaf = db.layersResLeafKey((STATE_ROOT_VID, accHike.legs[^1].wp.vid), accVtx)
-    if leaf != nil:
-      db.layersPutAccLeaf(accPath, AccLeafRef(leaf))
 
   ok()
 

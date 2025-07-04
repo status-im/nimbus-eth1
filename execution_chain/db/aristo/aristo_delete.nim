@@ -185,7 +185,8 @@ proc deleteStorageData*(
 
   let
     wpAcc = accHike.legs[^1].wp
-    stoID = AccLeafRef(wpAcc.vtx).stoID
+    accVtx = AccLeafRef(wpAcc.vtx)
+    stoID = accVtx.stoID
 
   if not stoID.isValid:
     return ok() # Trying to delete something that doesn't exist is ok
@@ -197,7 +198,8 @@ proc deleteStorageData*(
       return ok()
     return err(error[1])
 
-  # Mark account path Merkle keys for update, except for the vtx we update below
+  # Mark account path Merkle keys for update - the leaf key is not stored so no
+  # need to mark it
   db.layersResKeys(accHike, skip = 1)
 
   let otherLeaf = ?db.deleteImpl(stoHike)
@@ -211,15 +213,9 @@ proc deleteStorageData*(
   # If there was only one item (that got deleted), update the account as well
   if stoHike.legs.len == 1:
     # De-register the deleted storage tree from the account record
-    let leaf = db.layersUpdate((accHike.root, wpAcc.vid), AccLeafRef(wpAcc.vtx)) # Dup on modify
+    let leaf = db.layersUpdate((accHike.root, wpAcc.vid), accVtx) # Dup on modify
     leaf.stoID.isValid = false
     db.layersPutAccLeaf(accPath, leaf)
-  else:
-    # Instances are not shared across layers, so we might have to update the
-    # leaf cache to make it consistent with the current layer
-    let leaf = db.layersResLeafKey((accHike.root, wpAcc.vid), wpAcc.vtx)
-    if leaf != nil:
-      db.layersPutAccLeaf(accPath, AccLeafRef(leaf))
 
   ok()
 
