@@ -5,10 +5,16 @@
 #   * Apache v2 license (license terms in the root directory or at https://www.apache.org/licenses/LICENSE-2.0).
 # at your option. This file may not be copied, modified, or distributed except according to those terms.
 
-import stint, json_rpc/[rpcclient, rpcproxy], web3/eth_api_types, ./header_store
+import
+  json_rpc/[rpcproxy, rpcclient],
+  stint,
+  ./header_store,
+  ../portal/evm/async_evm,
+  web3/eth_api_types
 
-type
+type 
   VerifiedRpcProxy* = ref object
+    evm*: AsyncEvm
     proxy*: RpcProxy
     headerStore*: HeaderStore
     chainId*: UInt256
@@ -26,6 +32,8 @@ proc init*(
     chainId: UInt256,
     maxBlockWalk: uint64,
 ): T =
-  VerifiedRpcProxy(
+  
+  var vp = VerifiedRpcProxy(
     proxy: proxy, headerStore: headerStore, chainId: chainId, maxBlockWalk: maxBlockWalk
   )
+
