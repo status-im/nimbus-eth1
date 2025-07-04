@@ -90,6 +90,11 @@ type
     taskpool*: Taskpool
       ## Shared task pool for offloading computation to other threads
 
+    statelessProviderEnabled*: bool
+      ## Enable the stateless provider. This turns on the features required
+      ## by stateless clients such as generation and stored of block witnesses
+      ## and serving these witnesses to peers over the p2p network.
+
 # ------------------------------------------------------------------------------
 # Private helper functions
 # ------------------------------------------------------------------------------
@@ -161,7 +166,8 @@ proc init(com         : CommonRef,
           networkId   : NetworkId,
           config      : ChainConfig,
           genesis     : Genesis,
-          initializeDb: bool) =
+          initializeDb: bool,
+          statelessProviderEnabled: bool) =
 
 
   config.daoCheck()
@@ -199,6 +205,8 @@ proc init(com         : CommonRef,
   if initializeDb:
     com.initializeDb()
 
+  com.statelessProviderEnabled = statelessProviderEnabled
+
 proc isBlockAfterTtd(com: CommonRef, header: Header, txFrame: CoreDbTxRef): bool =
   if com.config.terminalTotalDifficulty.isNone:
     return false
@@ -221,6 +229,7 @@ proc new*(
     networkId: NetworkId = MainNet;
     params = networkParams(MainNet);
     initializeDb = true;
+    statelessProviderEnabled = false
       ): CommonRef =
 
   ## If genesis data is present, the forkIds will be initialized
@@ -232,7 +241,8 @@ proc new*(
     networkId,
     params.config,
     params.genesis,
-    initializeDb)
+    initializeDb,
+    statelessProviderEnabled)
 
 proc new*(
     _: type CommonRef;
@@ -241,6 +251,7 @@ proc new*(
     config: ChainConfig;
     networkId: NetworkId = MainNet;
     initializeDb = true;
+    statelessProviderEnabled = false
       ): CommonRef =
 
   ## There is no genesis data present
@@ -252,7 +263,8 @@ proc new*(
     networkId,
     config,
     nil,
-    initializeDb)
+    initializeDb,
+    statelessProviderEnabled)
 
 func clone*(com: CommonRef, db: CoreDbRef): CommonRef =
   ## clone but replace the db
@@ -265,6 +277,7 @@ func clone*(com: CommonRef, db: CoreDbRef): CommonRef =
     genesisHash  : com.genesisHash,
     genesisHeader: com.genesisHeader,
     networkId    : com.networkId,
+    statelessProviderEnabled: com.statelessProviderEnabled
   )
 
 func clone*(com: CommonRef): CommonRef =
