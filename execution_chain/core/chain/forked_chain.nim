@@ -63,6 +63,8 @@ func appendBlock(c: ForkedChainRef,
     parent  : parent,
   )
 
+  # Only finalized segment have color
+  newBlock.noColor()
   c.hashToBlock[blkHash] = newBlock
   c.latest = newBlock
 
@@ -121,12 +123,12 @@ func findFinalizedPos(
 
     # There is no point traversing the DAG if there is only one branch.
     # Just return the node.
-    if c.heads.len > 1:
-      loopIt(head):
-        if it == fin:
-          return ok(fin)
-    else:
+    if c.heads.len == 1:
       return ok(fin)
+
+    loopIt(head):
+      if it == fin:
+        return ok(fin)
 
   err("Invalid finalizedHash: block not in argument head ancestor lineage")
 
@@ -215,10 +217,6 @@ proc updateHead(c: ForkedChainRef, head: BlockRef) =
     head.hash,
     head.number)
 
-func uncolorAll(c: ForkedChainRef) =
-  for node in values(c.hashToBlock):
-    node.noColor()
-
 proc updateFinalized(c: ForkedChainRef, finalized: BlockRef, fcuHead: BlockRef) =
   # Pruning
   # ::
@@ -232,64 +230,66 @@ proc updateFinalized(c: ForkedChainRef, finalized: BlockRef, fcuHead: BlockRef) 
   # 'B', 'D', and A5 onward will stay
   # 'C' will be removed
 
+  let txFrame = finalized.txFrame
+  txFrame.fcuFinalized(finalized.hash, finalized.number).expect("fcuFinalized OK")
+
+  # There is no point running this expensive algorithm
+  # if the chain have no branches, just move it forward.
+  if c.heads.len == 1:
+    return
+
   func reachable(head, fin: BlockRef): bool =
     loopIt(head):
       if it.colored:
         return it == fin
     false
 
-  # There is no point running this expensive algorithm
-  # if the chain have no branches, just move it forward.
-  if c.heads.len > 1:
-    c.uncolorAll()
-    loopIt(finalized):
-      it.color()
+  # Only finalized segment have color
+  loopIt(finalized):
+    it.color()
 
-    var
-      i = 0
-      updateLatest = false
+  var
+    i = 0
+    updateLatest = false
 
-    while i < c.heads.len:
-      let head = c.heads[i]
+  while i < c.heads.len:
+    let head = c.heads[i]
 
-      # Any branches not reachable from finalized
-      # should be removed.
-      if not reachable(head, finalized):
-        loopIt(head):
-          if not it.colored and it.txFrame.isNil.not:
-            c.removeBlockFromCache(it)
-          else:
-            break
+    # Any branches not reachable from finalized
+    # should be removed.
+    if not reachable(head, finalized):
+      loopIt(head):
+        if not it.colored and it.txFrame.isNil.not:
+          c.removeBlockFromCache(it)
+        else:
+          break
 
-        if head == c.latest:
-          updateLatest = true
+      if head == c.latest:
+        updateLatest = true
 
-        c.heads.del(i)
-        # no need to increment i when we delete from c.heads.
-        continue
+      c.heads.del(i)
+      # no need to increment i when we delete from c.heads.
+      continue
 
-      inc i
+    inc i
 
-    if updateLatest:
-      # Previous `latest` is pruned, select a new latest
-      # based on longest chain reachable from fcuHead.
-      var candidate: BlockRef
-      for head in c.heads:
-        loopIt(head):
-          if it == fcuHead:
-            if candidate.isNil:
-              candidate = head
-            elif head.number > candidate.number:
-              candidate = head
-            break
-          if it.number < fcuHead.number:
-            break
+  if updateLatest:
+    # Previous `latest` is pruned, select a new latest
+    # based on longest chain reachable from fcuHead.
+    var candidate: BlockRef
+    for head in c.heads:
+      loopIt(head):
+        if it == fcuHead:
+          if candidate.isNil:
+            candidate = head
+          elif head.number > candidate.number:
+            candidate = head
+          break
+        if it.number < fcuHead.number:
+          break
 
-      doAssert(candidate.isNil.not)
-      c.latest = candidate
-
-  let txFrame = finalized.txFrame
-  txFrame.fcuFinalized(finalized.hash, finalized.number).expect("fcuFinalized OK")
+    doAssert(candidate.isNil.not)
+    c.latest = candidate
 
 proc updateBase(c: ForkedChainRef, base: BlockRef):
   Future[void] {.async: (raises: [CancelledError]), gcsafe.} =
@@ -602,17 +602,12 @@ proc forkChoice*(c: ForkedChainRef,
 
   # Head maybe moved backward or moved to other branch.
   c.updateHead(head)
-
-  if finalizedHash == zeroHash32:
-    # skip updateBase and updateFinalized if finalizedHash is zero.
-    return ok()
-
   c.updateFinalized(finalized, head)
 
   let
     base = c.calculateNewBase(finalized.number, head)
 
-  if base == c.base:
+  if base.number == c.base.number:
     # The base is not updated, return.
     return ok()
 

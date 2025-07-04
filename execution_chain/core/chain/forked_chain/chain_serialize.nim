@@ -145,9 +145,10 @@ proc replayBranch(fc: ForkedChainRef;
 
   var blocks = newSeqOfCap[BlockRef](head.number - parent.number)
   loopIt(head):
-    it.color()
     if it.number > parent.number:
       blocks.add it
+    else:
+      break
 
   var parent = parent
   for i in countdown(blocks.len-1, 0):
@@ -158,17 +159,15 @@ proc replayBranch(fc: ForkedChainRef;
 
 proc replay(fc: ForkedChainRef): Result[void, string] =
   # Should have no parent
-  doAssert fc.base.index == 0
   doAssert fc.base.parent.isNil
 
   # Receipts for base block are loaded from database
   # see `receiptsByBlockHash`
   fc.base.txFrame = fc.baseTxFrame
-  fc.base.color()
 
   for head in fc.heads:
     loopIt(head):
-      if it.colored:
+      if it.txFrame.isNil.not:
         ?fc.replayBranch(it, head)
         break
 
@@ -217,7 +216,7 @@ proc serialize*(fc: ForkedChainRef, txFrame: CoreDbTxRef): Result[void, CoreDbEr
     headHash=fc.fcuHead.hash.short,
     finalized=fc.latestFinalizedBlockNumber,
     finalizedHash=fc.pendingFCU.short,
-    blocksInMemory=fc.hashToBlock.len,
+    blocksSerialized=fc.hashToBlock.len,
     heads=fc.heads.toString
 
   ok()
@@ -274,11 +273,14 @@ proc deserialize*(fc: ForkedChainRef): Result[void, string] =
     if b.index > 0:
       b.parent = blocks[b.index-1]
     fc.hashToBlock[b.hash] = b
-    b.noColor() # prepare for replay
 
   fc.replay().isOkOr:
     fc.reset(prevBase)
     return err(error)
+
+  # All blocks should have replayed
+  for b in blocks:
+    doAssert(b.txFrame.isNil.not, "deserialized node should have txFrame")
 
   fc.hashToBlock.withValue(fc.fcuHead.hash, val) do:
     let txFrame = val[].txFrame
