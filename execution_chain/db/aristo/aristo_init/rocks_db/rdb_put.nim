@@ -103,6 +103,8 @@ proc putVtx*(
       else:
         discard rdb.rdVtxLru.update(rvid.vid, vtx)
 
+    rdb.rdEmptyLru.del(rvid.vid)
+
     if key.isValid:
       if rdb.rdKeyLru.len < rdb.rdKeyLru.capacity:
         rdb.rdKeyLru.put(rvid.vid, key)
@@ -123,6 +125,9 @@ proc putVtx*(
     rdb.rdBranchLru.del rvid.vid
     rdb.rdVtxLru.del rvid.vid
     rdb.rdKeyLru.del rvid.vid
+
+    if rdb.rdEmptyLru.len < rdb.rdEmptyLru.capacity:
+      rdb.rdEmptyLru.put(rvid.vid, default(tuple[]))
 
   ok()
 

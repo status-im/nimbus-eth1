@@ -57,16 +57,11 @@ proc buildSnapshot(txFrame: AristoTxRef, minLevel: int) =
               tbl.del(k)
 
           txFrame.snapshot.vtx.delIfIt(it[2] < minLevel)
-          txFrame.snapshot.acc.delIfIt(it[1] < minLevel)
           txFrame.snapshot.sto.delIfIt(it[1] < minLevel)
 
       if frame.snapshot.level.isSome() and isKeyframe:
         txFrame.snapshot.vtx = initTable[RootedVertexID, VtxSnapshot](
           max(1024, max(frame.sTab.len, frame.snapshot.vtx.len))
-        )
-
-        txFrame.snapshot.acc = initTable[Hash32, (AccLeafRef, int)](
-          max(1024, max(frame.accLeaves.len, frame.snapshot.acc.len))
         )
 
         txFrame.snapshot.sto = initTable[Hash32, (StoLeafRef, int)](
@@ -76,10 +71,6 @@ proc buildSnapshot(txFrame: AristoTxRef, minLevel: int) =
         for k, v in frame.snapshot.vtx:
           if v[2] >= minLevel:
             txFrame.snapshot.vtx[k] = v
-
-        for k, v in frame.snapshot.acc:
-          if v[1] >= minLevel:
-            txFrame.snapshot.acc[k] = v
 
         for k, v in frame.snapshot.sto:
           if v[1] >= minLevel:
@@ -141,8 +132,7 @@ proc persist*(
         # which caters to the scenario where changes from multiple blocks
         # have already been written to sTab and the changes can moved into
         # the bottom.
-        if (bottom.snapshot.vtx.len + bottom.snapshot.acc.len + bottom.snapshot.sto.len) ==
-            0:
+        if (bottom.snapshot.vtx.len + bottom.snapshot.sto.len) == 0:
           bottom.snapshot.level.reset()
         else:
           # Incoming snapshots already have sTab baked in - make sure we don't
@@ -211,12 +201,6 @@ with --debug-eager-state-root."""
   #      in-memory and on-disk state)
 
   # Copy back updated payloads
-  for accPath, vtx in txFrame.accLeaves:
-    if vtx == nil:
-      db.accLeaves.del(accPath)
-    else:
-      discard db.accLeaves.update(accPath, vtx)
-
   for mixPath, vtx in txFrame.stoLeaves:
     if vtx == nil:
       db.stoLeaves.del(mixPath)
@@ -224,14 +208,12 @@ with --debug-eager-state-root."""
       discard db.stoLeaves.update(mixPath, vtx)
 
   txFrame.snapshot.vtx.clear()
-  txFrame.snapshot.acc.clear()
   txFrame.snapshot.sto.clear()
   # Since txFrame is now the base, it contains all changes and therefore acts
   # as a snapshot
   txFrame.snapshot.level = Opt.some(txFrame.level)
   txFrame.sTab.clear()
   txFrame.kMap.clear()
-  txFrame.accLeaves.clear()
   txFrame.stoLeaves.clear()
   txFrame.blockNumber.reset()
 
