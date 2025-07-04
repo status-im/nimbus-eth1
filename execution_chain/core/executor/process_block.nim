@@ -188,7 +188,6 @@ proc procBlkPreamble(
 proc procBlkEpilogue(
     vmState: BaseVMState,
     blk: Block,
-    prevStateRoot: Hash32,
     skipValidation: bool,
     skipReceipts: bool,
     skipStateRootCheck: bool,
@@ -225,7 +224,6 @@ proc procBlkEpilogue(
         parentHash = header.parentHash,
         expected = header.stateRoot,
         actual = stateRoot,
-        arrivedFrom = prevStateRoot,
         parentStateRoot = vmState.parent.stateRoot
       return
         err("stateRoot mismatch, expect: " & $header.stateRoot & ", got: " & $stateRoot)
@@ -292,16 +290,13 @@ proc processBlock*(
   # cases - since each block is bounded in the amount of memory needed, we can
   # run collection once per block instead.
   deferGc:
-    # When there is state root mismatch, we want to show where it arrived from
-    # using actual value stored in DB/txFrame beside showing parent.stateRoot.
-    let prevStateRoot = vmState.ledger.getStateRoot()
     ?vmState.procBlkPreamble(blk, skipValidation, skipReceipts, skipUncles, taskpool)
 
     # EIP-3675: no reward for miner in POA/POS
     if not vmState.com.proofOfStake(blk.header, vmState.ledger.txFrame):
       vmState.calculateReward(blk.header, blk.uncles)
 
-    ?vmState.procBlkEpilogue(blk, prevStateRoot, skipValidation, skipReceipts, skipStateRootCheck)
+    ?vmState.procBlkEpilogue(blk, skipValidation, skipReceipts, skipStateRootCheck)
 
     ok()
 

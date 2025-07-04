@@ -57,17 +57,21 @@ proc getPayloadBodiesByRange*(ben: BeaconEngineRef,
   if last > ben.chain.latestNumber:
     last = ben.chain.latestNumber
 
+  let base = ben.chain.baseNumber
   var list = newSeqOfCap[Opt[ExecutionPayloadBodyV1]](last-start)
 
-  # get bodies from database.
-  for bn in start..min(last, ben.chain.baseNumber):
-    var body = ben.chain.payloadBodyV1ByNumber(bn).valueOr:
-      list.add Opt.none(ExecutionPayloadBodyV1)
-      continue
-    list.add Opt.some(move(body))
+  if start < base:
+    # get bodies from database.
+    for bn in start..min(last, base):
+      var body = ben.chain.payloadBodyV1ByNumber(bn).valueOr:
+        list.add Opt.none(ExecutionPayloadBodyV1)
+        continue
+      list.add Opt.some(move(body))
 
-  # get bodies from cache in FC module.
-  if last > ben.chain.baseNumber:
-    ben.chain.payloadBodyV1FromBaseTo(last, list)
+    # get bodies from cache in FC module.
+    if last > base:
+      ben.chain.payloadBodyV1InMemory(base, last, list)
+  else:
+    ben.chain.payloadBodyV1InMemory(start, last, list)
 
   move(list)

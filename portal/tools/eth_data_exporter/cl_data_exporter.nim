@@ -31,8 +31,6 @@ import
   ./exporter_common,
   ./downloader
 
-from beacon_chain/el/el_manager import toBeaconBlockHeader
-
 export beacon_clock
 
 const

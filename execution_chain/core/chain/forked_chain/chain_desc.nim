@@ -28,16 +28,19 @@ type
 
   ForkedChainRef* = ref object
     com*: CommonRef
-    hashToBlock* : Table[Hash32, BlockPos]
-      # A map of block hash to a block position in a branch.
+    hashToBlock* : Table[Hash32, BlockRef]
+      # A map of block hash to a block.
 
-    branches*    : seq[BranchRef]
-    baseBranch*  : BranchRef
-      # A branch contain the base block
+    base*        : BlockRef
+      # The base block, the last block stored in database.
+      # Any blocks newer than base is kept in memory.
 
-    activeBranch*: BranchRef
-      # Every time a new block added to a branch,
-      # that branch automatically become the active branch.
+    latest*      : BlockRef
+      # Every time a new block added,
+      # that block automatically become the latest block.
+
+    heads*       : seq[BlockRef]
+      # Candidate heads of candidate chains
 
     quarantine*  : Quarantine
 

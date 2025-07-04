@@ -21,18 +21,12 @@ import
 # Public functions
 # ------------------------------------------------------------------------------
 
-proc getTuvBe*(
-    db: AristoDbRef;
-      ): Result[VertexID,AristoError] =
-  ## Get the ID generator state from the backened if available.
-  db.getTuvFn()
-  
 proc getLstBe*(
     db: AristoDbRef;
       ): Result[SavedState,AristoError] =
   ## Get the last saved state
   db.getLstFn()
-  
+
 proc getVtxBe*(
     db: AristoDbRef;
     rvid: RootedVertexID;
