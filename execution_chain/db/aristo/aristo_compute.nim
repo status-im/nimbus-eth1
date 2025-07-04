@@ -310,7 +310,7 @@ proc computeKeyImpl(
 
   if vtx.vType notin Leaves:
     ?db.putKeyAtLevel(rvid, vtx, key, level, batch)
-  return ok (key, level)
+  ok (key, level)
 
 proc computeKeyImpl(
     db: AristoTxRef, rvid: RootedVertexID, skipLayers: static bool
