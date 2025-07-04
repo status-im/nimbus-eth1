@@ -31,9 +31,10 @@ type
     blockNumber: uint64
 
   FcState = object
-    numBranches: uint
-    baseBranch: uint
-    activeBranch: uint
+    numBlocks: uint
+    base: uint
+    latest: uint
+    heads: seq[uint]
     pendingFCU: Hash32
     latestFinalizedBlockNumber: uint64
     txRecords: seq[TxRecord]
@@ -44,23 +45,25 @@ type
 # RLP serializer functions
 # ------------------------------------------------------------------------------
 
-proc append(w: var RlpWriter, bd: BlockDesc) =
-  w.startList(2)
-  w.append(bd.blk)
-  w.append(bd.hash)
-
-proc append(w: var RlpWriter, brc: BranchRef) =
-  w.startList(2)
-  let parentIndex = if brc.parent.isNil: 0'u
-                    else: brc.parent.index + 1'u
+proc append(w: var RlpWriter, b: BlockRef) =
+  w.startList(3)
+  w.append(b.blk)
+  w.append(b.hash)
+  let parentIndex = if b.parent.isNil: 0'u
+                    else: b.parent.index + 1'u
   w.append(parentIndex)
-  w.append(brc.blocks)
 
 proc append(w: var RlpWriter, fc: ForkedChainRef) =
-  w.startList(8)
-  w.append(fc.branches.len.uint)
-  w.append(fc.baseBranch.index)
-  w.append(fc.activeBranch.index)
+  w.startList(9)
+  w.append(fc.hashToBlock.len.uint)
+  w.append(fc.base.index)
+  w.append(fc.latest.index)
+
+  var heads = newSeqOfCap[uint](fc.heads.len)
+  for h in fc.heads:
+    heads.add h.index
+
+  w.append(heads)
   w.append(fc.pendingFCU)
   w.append(fc.latestFinalizedBlockNumber)
   w.startList(fc.txRecords.len)
@@ -73,23 +76,19 @@ proc append(w: var RlpWriter, fc: ForkedChainRef) =
   w.append(fc.fcuHead)
   w.append(fc.fcuSafe)
 
-proc read(rlp: var Rlp, T: type BlockDesc): T {.raises: [RlpError].} =
+proc read(rlp: var Rlp, T: type BlockRef): T {.raises: [RlpError].} =
   rlp.tryEnterList()
   result = T()
   rlp.read(result.blk)
   rlp.read(result.hash)
-
-proc read(rlp: var Rlp, T: type BranchRef): T {.raises: [RlpError].} =
-  rlp.tryEnterList()
-  result = T()
   rlp.read(result.index)
-  rlp.read(result.blocks)
 
 proc read(rlp: var Rlp, T: type FcState): T {.raises: [RlpError].} =
   rlp.tryEnterList()
-  rlp.read(result.numBranches)
-  rlp.read(result.baseBranch)
-  rlp.read(result.activeBranch)
+  rlp.read(result.numBlocks)
+  rlp.read(result.base)
+  rlp.read(result.latest)
+  rlp.read(result.heads)
   rlp.read(result.pendingFCU)
   rlp.read(result.latestFinalizedBlockNumber)
   rlp.read(result.txRecords)
@@ -104,7 +103,7 @@ const
   # The state always use 0 index
   FcStateKey = fcStateKey 0
 
-template branchIndexKey(i: SomeInteger): openArray[byte] =
+template blockIndexKey(i: SomeInteger): openArray[byte] =
   # We reuse the fcStateKey but +1
   fcStateKey((i+1).uint).toOpenArray
 
@@ -121,102 +120,105 @@ proc getState(db: CoreDbTxRef): Opt[FcState] =
   err()
 
 proc replayBlock(fc: ForkedChainRef;
-                 parent: BlockPos,
-                 bd: var BlockDesc): Result[void, string] =
+                 parent: BlockRef,
+                 blk: BlockRef): Result[void, string] =
   let
     parentFrame = parent.txFrame
     txFrame = parentFrame.txFrameBegin
 
-  var receipts = fc.processBlock(parent.header, txFrame, bd.blk, bd.hash, false).valueOr:
+  var receipts = fc.processBlock(parent.header, txFrame, blk.blk, blk.hash, false).valueOr:
     txFrame.dispose()
     return err(error)
 
-  fc.writeBaggage(bd.blk, bd.hash, txFrame, receipts)
-  fc.updateSnapshot(bd.blk, txFrame)
+  fc.writeBaggage(blk.blk, blk.hash, txFrame, receipts)
+  fc.updateSnapshot(blk.blk, txFrame)
 
-  bd.txFrame = txFrame
-  bd.receipts = move(receipts)
+  blk.txFrame = txFrame
+  blk.receipts = move(receipts)
 
   ok()
 
 proc replayBranch(fc: ForkedChainRef;
-    parent: BlockPos;
-    branch: BranchRef;
-    start: int;): Result[void, string] =
+    parent: BlockRef;
+    head: BlockRef;
+    ): Result[void, string] =
+
+  var blocks = newSeqOfCap[BlockRef](head.number - parent.number)
+  loopIt(head):
+    it.color()
+    if it.number > parent.number:
+      blocks.add it
 
   var parent = parent
-  for i in start..<branch.len:
-    ?fc.replayBlock(parent, branch.blocks[i])
-    parent.index = i
-
-  # Use the index as a flag, if index == 0,
-  # it means the branch already replayed.
-  branch.index = 0
-
-  for brc in fc.branches:
-    # Skip already replayed branch
-    if brc.index == 0:
-      continue
-
-    if brc.parent == branch:
-      doAssert(brc.tailNumber > branch.tailNumber)
-      doAssert((brc.tailNumber - branch.tailNumber) > 0)
-      parent.index = int(brc.tailNumber - branch.tailNumber - 1)
-      ?fc.replayBranch(parent, brc, 0)
+  for i in countdown(blocks.len-1, 0):
+    ?fc.replayBlock(parent, blocks[i])
+    parent = blocks[i]
 
   ok()
 
 proc replay(fc: ForkedChainRef): Result[void, string] =
   # Should have no parent
-  doAssert fc.baseBranch.index == 0
-  doAssert fc.baseBranch.parent.isNil
+  doAssert fc.base.index == 0
+  doAssert fc.base.parent.isNil
 
   # Receipts for base block are loaded from database
   # see `receiptsByBlockHash`
-  fc.baseBranch.blocks[0].txFrame = fc.baseTxFrame
+  fc.base.txFrame = fc.baseTxFrame
+  fc.base.color()
 
-  # Replay, exclude base block, start from 1
-  let parent = BlockPos(
-    branch: fc.baseBranch
-  )
-  fc.replayBranch(parent, fc.baseBranch, 1)
+  for head in fc.heads:
+    loopIt(head):
+      if it.colored:
+        ?fc.replayBranch(it, head)
+        break
 
-proc reset(fc: ForkedChainRef, branches: sink seq[BranchRef]) =
-  let baseBranch = branches[0]
+  ok()
 
-  fc.baseBranch   = baseBranch
-  fc.activeBranch = baseBranch
-  fc.branches     = move(branches)
-  fc.hashToBlock  = {baseBranch.tailHash: baseBranch.lastBlockPos}.toTable
-  fc.pendingFCU   = zeroHash32
+proc reset(fc: ForkedChainRef, base: BlockRef) =
+  fc.base        = base
+  fc.latest      = base
+  fc.heads       = @[base]
+  fc.hashToBlock = {base.hash: base}.toTable
+  fc.pendingFCU  = zeroHash32
   fc.latestFinalizedBlockNumber = 0'u64
   fc.txRecords.clear()
   fc.fcuHead.reset()
   fc.fcuSafe.reset()
+
+func toString(list: openArray[BlockRef]): string =
+  result.add '['
+  for i, b in list:
+    result.add $(b.number)
+    if i < list.len-1:
+      result.add ','
+  result.add ']'
 
 # ------------------------------------------------------------------------------
 # Public functions
 # ------------------------------------------------------------------------------
 
 proc serialize*(fc: ForkedChainRef, txFrame: CoreDbTxRef): Result[void, CoreDbError] =
-  for i, brc in fc.branches:
-    brc.index = uint i
+  var i = 0
+  for b in fc.hashToBlock.values:
+    b.index = uint i
+    inc i
+
   ?txFrame.put(FcStateKey.toOpenArray, rlp.encode(fc))
-  var numBlocks = 0
-  for i, brc in fc.branches:
-    numBlocks += brc.len
-    ?txFrame.put(branchIndexKey(i), rlp.encode(brc))
+
+  for b in fc.hashToBlock.values:
+    ?txFrame.put(blockIndexKey(b.index), rlp.encode(b))
 
   info "Blocks DAG written to database",
-    base=fc.baseBranch.tailNumber,
-    baseHash=fc.baseBranch.tailHash.short,
-    latest=fc.activeBranch.headNumber,
-    latestHash=fc.activeBranch.headHash.short,
+    base=fc.base.number,
+    baseHash=fc.base.hash.short,
+    latest=fc.latest.number,
+    latestHash=fc.latest.hash.short,
     head=fc.fcuHead.number,
     headHash=fc.fcuHead.hash.short,
     finalized=fc.latestFinalizedBlockNumber,
     finalizedHash=fc.pendingFCU.short,
-    blocksInMemory=numBlocks
+    blocksInMemory=fc.hashToBlock.len,
+    heads=fc.heads.toString
 
   ok()
 
@@ -224,63 +226,58 @@ proc deserialize*(fc: ForkedChainRef): Result[void, string] =
   let state = fc.baseTxFrame.getState().valueOr:
     return err("Cannot find previous FC state in database")
 
-  let prevBaseHash = fc.baseBranch.tailHash
-  var
-    branches = move(fc.branches)
-    numBlocksStored = 0
+  let prevBase = fc.base
+  var blocks = newSeq[BlockRef](state.numBlocks)
 
-  fc.branches.setLen(state.numBranches)
   try:
-    for i in 0..<state.numBranches:
+    for i in 0..<state.numBlocks:
       let
-        data = fc.baseTxFrame.get(branchIndexKey(i)).valueOr:
+        data = fc.baseTxFrame.get(blockIndexKey(i)).valueOr:
           return err("Cannot find branch data")
-        branch = rlp.decode(data, BranchRef)
-      fc.branches[i] = branch
-      numBlocksStored += branch.len
+        branch = rlp.decode(data, BlockRef)
+      blocks[i] = branch
   except RlpError as exc:
-    fc.branches = move(branches)
     return err(exc.msg)
 
-  fc.baseBranch = fc.branches[state.baseBranch]
-  fc.activeBranch = fc.branches[state.activeBranch]
+  fc.base = blocks[state.base]
+  fc.latest = blocks[state.latest]
+
+  fc.heads = newSeqOfCap[BlockRef](state.heads.len)
+  for h in state.heads:
+    fc.heads.add blocks[h]
+
   fc.pendingFCU = state.pendingFCU
   fc.latestFinalizedBlockNumber = state.latestFinalizedBlockNumber
   fc.fcuHead = state.fcuHead
   fc.fcuSafe = state.fcuSafe
 
   info "Loading block DAG from database",
-    base=fc.baseBranch.tailNumber,
+    base=fc.base.number,
     pendingFCU=fc.pendingFCU.short,
     resolvedFin=fc.latestFinalizedBlockNumber,
     canonicalHead=fc.fcuHead.number,
     safe=fc.fcuSafe.number,
-    numBranches=state.numBranches,
-    blocksStored=numBlocksStored,
-    latestBlock=fc.baseBranch.tailNumber+numBlocksStored.uint64
+    numBlocks=state.numBlocks,
+    heads=fc.heads.toString
 
-  if numBlocksStored > 64:
+  if state.numBlocks > 64:
     info "Please wait until DAG finish loading..."
 
-  if fc.baseBranch.tailHash != prevBaseHash:
-    fc.reset(branches)
+  if fc.base.hash != prevBase.hash:
+    fc.reset(prevBase)
     return err("loaded baseHash != baseHash")
 
   for tx in state.txRecords:
     fc.txRecords[tx.txHash] = (tx.blockHash, tx.blockNumber)
 
-  for brc in fc.branches:
-    if brc.index > 0:
-      brc.parent = fc.branches[brc.index-1]
-
-    for i in 0..<brc.len:
-      fc.hashToBlock[brc.blocks[i].hash] = BlockPos(
-        branch: brc,
-        index : i,
-      )
+  for b in blocks:
+    if b.index > 0:
+      b.parent = blocks[b.index-1]
+    fc.hashToBlock[b.hash] = b
+    b.noColor() # prepare for replay
 
   fc.replay().isOkOr:
-    fc.reset(branches)
+    fc.reset(prevBase)
     return err(error)
 
   fc.hashToBlock.withValue(fc.fcuHead.hash, val) do:

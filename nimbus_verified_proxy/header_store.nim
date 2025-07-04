@@ -116,6 +116,12 @@ func finalized*(self: HeaderStore): Opt[Header] =
 func finalizedHash*(self: HeaderStore): Opt[Hash32] =
   self.finalizedHash
 
+func contains*(self: HeaderStore, hash: Hash32): bool =
+  self.headers.contains(hash)
+
+func contains*(self: HeaderStore, number: base.BlockNumber): bool =
+  self.hashes.contains(number)
+
 proc updateFinalized*(
     self: HeaderStore, header: ForkedLightClientHeader
 ): Result[bool, string] =

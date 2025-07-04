@@ -12,6 +12,7 @@ type
     proxy*: RpcProxy
     headerStore*: HeaderStore
     chainId*: UInt256
+    maxBlockWalk*: uint64
 
   BlockTag* = eth_api_types.RtBlockIdentifier
 
@@ -23,5 +24,8 @@ proc init*(
     proxy: RpcProxy,
     headerStore: HeaderStore,
     chainId: UInt256,
+    maxBlockWalk: uint64,
 ): T =
-  VerifiedRpcProxy(proxy: proxy, headerStore: headerStore, chainId: chainId)
+  VerifiedRpcProxy(
+    proxy: proxy, headerStore: headerStore, chainId: chainId, maxBlockWalk: maxBlockWalk
+  )

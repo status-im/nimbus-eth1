@@ -38,19 +38,16 @@ const
     # in greater detail.
   slotsLruSize = 16 * 1024
 
-  statelessEnabled = defined(stateless)
-
-when statelessEnabled:
-  type
-    WitnessKey* = object
-      storageMode*: bool
-      address*: Address
-      codeTouched*: bool
-      storageSlot*: UInt256
-
-    WitnessTable* = OrderedTable[(Address, Hash32), WitnessKey]
 
 type
+  WitnessKey* = tuple[
+    address: Address,
+    slot: Opt[UInt256]
+  ]
+
+  # Maps witness keys to the codeTouched flag
+  WitnessTable* = OrderedTable[WitnessKey, bool]
+
   AccountFlag = enum
     Alive
     IsNew
@@ -95,11 +92,10 @@ type
       ## over and over again to the database to avoid the WAL and compation
       ## write amplification that ensues
 
-    when statelessEnabled:
-      witnessKeys: WitnessTable
-        ## Used to collect the keys of all read accounts, code and storage slots.
-        ## Maps a tuple of address and hash of the key (address or slot) to the
-        ## witness key which can be either a storage key or an account key
+    collectWitness: bool
+    witnessKeys: WitnessTable
+      ## Used to collect the keys of all read accounts, code and storage slots.
+      ## Maps a tuple of address and slot (optional) to the codeTouched flag.
 
 
   ReadOnlyLedger* = distinct LedgerRef
@@ -170,13 +166,10 @@ proc getAccount(
     address: Address;
     shouldCreate = true;
       ): AccountRef =
-  when statelessEnabled:
-    let lookupKey = (address, address.toAccountKey)
+  if ac.collectWitness:
+    let lookupKey = (address, Opt.none(UInt256))
     if not ac.witnessKeys.contains(lookupKey):
-      ac.witnessKeys[lookupKey] = WitnessKey(
-        storageMode: false,
-        address: address,
-        codeTouched: false)
+      ac.witnessKeys[lookupKey] = false
 
   # search account from layers of cache
   var sp = ac.savePoint
@@ -375,12 +368,13 @@ proc makeDirty(ac: LedgerRef, address: Address, cloneStorage = true): AccountRef
 # ------------------------------------------------------------------------------
 
 # The LedgerRef is modeled after TrieDatabase for it's transaction style
-proc init*(x: typedesc[LedgerRef], db: CoreDbTxRef, storeSlotHash: bool): LedgerRef =
+proc init*(x: typedesc[LedgerRef], db: CoreDbTxRef, storeSlotHash: bool, collectWitness = false): LedgerRef =
   new result
   result.txFrame = db
   result.storeSlotHash = storeSlotHash
   result.code = typeof(result.code).init(codeLruSize)
   result.slots = typeof(result.slots).init(slotsLruSize)
+  result.collectWitness = collectWitness
   discard result.beginSavepoint
 
 proc init*(x: typedesc[LedgerRef], db: CoreDbTxRef): LedgerRef =
@@ -464,14 +458,11 @@ proc getNonce*(ac: LedgerRef, address: Address): AccountNonce =
 proc getCode*(ac: LedgerRef,
               address: Address,
               returnHash: static[bool] = false): auto =
-  when statelessEnabled:
-    let lookupKey = (address, address.toAccountKey)
+  if ac.collectWitness:
+    let lookupKey = (address, Opt.none(UInt256))
     # We overwrite any existing record here so that codeTouched is always set to
     # true even if an account was previously accessed without touching the code
-    ac.witnessKeys[lookupKey] = WitnessKey(
-      storageMode: false,
-      address: address,
-      codeTouched: true)
+    ac.witnessKeys[lookupKey] = true
 
   let acc = ac.getAccount(address, false)
   if acc.isNil:
@@ -531,12 +522,10 @@ proc resolveCode*(ac: LedgerRef, address: Address): CodeBytesRef =
 proc getCommittedStorage*(ac: LedgerRef, address: Address, slot: UInt256): UInt256 =
   let acc = ac.getAccount(address, false)
 
-  when statelessEnabled:
-    let lookupKey = (address, slot.toSlotKey)
+  if ac.collectWitness:
+    let lookupKey = (address, Opt.some(slot))
     if not ac.witnessKeys.contains(lookupKey):
-      ac.witnessKeys[lookupKey] = WitnessKey(
-        storageMode: true,
-        storageSlot: slot)
+      ac.witnessKeys[lookupKey] = false
 
   if acc.isNil:
     return
@@ -545,12 +534,10 @@ proc getCommittedStorage*(ac: LedgerRef, address: Address, slot: UInt256): UInt2
 proc getStorage*(ac: LedgerRef, address: Address, slot: UInt256): UInt256 =
   let acc = ac.getAccount(address, false)
 
-  when statelessEnabled:
-    let lookupKey = (address, slot.toSlotKey)
+  if ac.collectWitness:
+    let lookupKey = (address, Opt.some(slot))
     if not ac.witnessKeys.contains(lookupKey):
-      ac.witnessKeys[lookupKey] = WitnessKey(
-        storageMode: true,
-        storageSlot: slot)
+      ac.witnessKeys[lookupKey] = false
 
   if acc.isNil:
     return
@@ -634,12 +621,10 @@ proc setStorage*(ac: LedgerRef, address: Address, slot, value: UInt256) =
   let acc = ac.getAccount(address)
   acc.flags.incl {Alive}
 
-  when statelessEnabled:
-    let lookupKey = (address, slot.toSlotKey)
+  if ac.collectWitness:
+    let lookupKey = (address, Opt.some(slot))
     if not ac.witnessKeys.contains(lookupKey):
-      ac.witnessKeys[lookupKey] = WitnessKey(
-        storageMode: true,
-        storageSlot: slot)
+      ac.witnessKeys[lookupKey] = false
 
   let oldValue = acc.storageValue(slot, ac)
   if oldValue != value:
@@ -893,12 +878,11 @@ proc getStorageProof*(ac: LedgerRef, address: Address, slots: openArray[UInt256]
 
   storageProof
 
-when statelessEnabled:
-  func getWitnessKeys*(ac: LedgerRef): WitnessTable =
-    ac.witnessKeys
+func getWitnessKeys*(ac: LedgerRef): WitnessTable =
+  ac.witnessKeys
 
-  proc clearWitnessKeys*(ac: LedgerRef) =
-    ac.witnessKeys.clear()
+proc clearWitnessKeys*(ac: LedgerRef) =
+  ac.witnessKeys.clear()
 
 # ------------------------------------------------------------------------------
 # Public virtual read-only methods
