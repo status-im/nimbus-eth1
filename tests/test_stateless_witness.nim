@@ -21,7 +21,6 @@ suite "Execution Witness Tests":
 
     let witnessBytes = witness.encode()
     check witnessBytes.len() > 0
-    echo witnessBytes
 
     let decodedWitness = ExecutionWitness.decode(witnessBytes)
     check:
@@ -37,7 +36,6 @@ suite "Execution Witness Tests":
 
     let witnessBytes = witness.encode()
     check witnessBytes.len() > 0
-    echo witnessBytes
 
     let decodedWitness = ExecutionWitness.decode(witnessBytes)
     check:

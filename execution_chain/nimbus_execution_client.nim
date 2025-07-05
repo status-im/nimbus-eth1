@@ -236,7 +236,8 @@ proc run(nimbus: NimbusNode, conf: NimbusConf) =
     db = coreDB,
     taskpool = taskpool,
     networkId = conf.networkId,
-    params = conf.networkParams)
+    params = conf.networkParams,
+    statelessProviderEnabled = conf.statelessProviderEnabled)
 
   if conf.extraData.len > 32:
     warn "ExtraData exceeds 32 bytes limit, truncate",

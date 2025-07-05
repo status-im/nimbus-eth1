@@ -104,6 +104,7 @@ proc init*(
     taskpool = nil,
     config = chainConfigForNetwork(networkId),
     initializeDb = false,
+    statelessProviderEnabled = true, # Enables collection of witness keys
   )
 
   AsyncEvm(com: com, backend: backend)
