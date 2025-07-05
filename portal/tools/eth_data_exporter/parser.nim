@@ -130,7 +130,7 @@ proc fromJson*(n: JsonNode, name: string, x: var seq[Authorization]) =
   let node = n[name]
   for v in node:
     x = newSeqOfCap[Authorization](node.len)
-    x.add parseAuth(node)
+    x.add parseAuth(v)
 
 proc parseBlockHeader*(n: JsonNode): Header =
   n.fromJson "parentHash", result.parentHash
