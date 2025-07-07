@@ -41,9 +41,8 @@ export
 
 const
   BaseDistance = 128'u64
-  PersistBatchQueue = 32'u64
   PersistBatchSize = 4'u64
-  MaxQueueSize = 12
+  MaxQueueSize = 128
 
 # ------------------------------------------------------------------------------
 # Private functions
@@ -165,7 +164,7 @@ func calculateNewBase(
   # with large enough step to accomodate for bulk
   # state root verification/bulk persist.
   let distance = target - c.base.number
-  if distance < c.persistBatchQueue:
+  if distance < c.persistBatchSize:
     # If the step is not large enough, do nothing.
     return c.base
 
@@ -352,7 +351,7 @@ proc processUpdateBase(c: ForkedChainRef) {.async: (raises: [CancelledError]).} 
     else:
       debug "Finalized blocks persisted",
         nBlocks = c.persistedCount,
-        target = base.hash.short,
+        target = c.base.hash.short,
         base = c.base.number,
         baseHash = c.base.hash.short,
         pendingFCU = c.pendingFCU.short,
@@ -368,12 +367,12 @@ proc processUpdateBase(c: ForkedChainRef) {.async: (raises: [CancelledError]).} 
       await c.processUpdateBase()
       ok()
     await c.queue.addLast(QueueItem(handler: asyncHandler))
-    
+
 proc queueUpdateBase(c: ForkedChainRef, base: BlockRef)
      {.async: (raises: [CancelledError]).} =
   var
     number = base.number - min(base.number, PersistBatchSize)
-    steps  = newSeqOfCap[BlockRef](c.persistBatchQueue div PersistBatchSize + 1)
+    steps  = newSeqOfCap[BlockRef](c.persistBatchSize div PersistBatchSize + 1)
 
   steps.add base
 
@@ -454,7 +453,7 @@ proc validateBlock(c: ForkedChainRef,
   # handled region(head - baseDistance)
   # e.g. live syncing with the tip very far from from our latest head
   if c.pendingFCU != zeroHash32 and
-     c.base.number < c.latestFinalizedBlockNumber - c.baseDistance - c.persistBatchQueue:
+     c.base.number < c.latestFinalizedBlockNumber - c.baseDistance - c.persistBatchSize:
     let
       base = c.calculateNewBase(c.latestFinalizedBlockNumber, c.latest)
       prevBase = c.base.number
@@ -524,7 +523,7 @@ proc init*(
     T: type ForkedChainRef;
     com: CommonRef;
     baseDistance = BaseDistance;
-    persistBatchQueue = PersistBatchQueue;
+    persistBatchSize = PersistBatchSize;
     eagerStateRoot = false;
     enableQueue = false;
       ): T =
@@ -563,7 +562,7 @@ proc init*(
       hashToBlock:     {baseHash: baseBlock}.toTable,
       baseTxFrame:     baseTxFrame,
       baseDistance:    baseDistance,
-      persistBatchQueue:persistBatchQueue,
+      persistBatchSize:persistBatchSize,
       quarantine:      Quarantine.init(),
       fcuHead:         fcuHead,
       fcuSafe:         fcuSafe,

@@ -81,7 +81,7 @@ type
       # latestFinalizedBlockNumber, we can move the base
       # forward when importing block
 
-    persistBatchQueue*: uint64
+    persistBatchSize*: uint64
       # When move forward, this is the minimum distance
       # to move the base. And the bulk writing can works
       # efficiently.
