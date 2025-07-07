@@ -239,10 +239,10 @@ proc updateFinalized(c: ForkedChainRef, finalized: BlockRef, fcuHead: BlockRef) 
     return
 
   func reachable(head, fin: BlockRef): bool =
-    loopIt(head):
-      if it.finalized:
-        return it == fin
-    false
+    var it = head
+    while not it.finalized:
+      it = it.parent
+    it == fin
 
   # Only finalized segment have finalized marker
   loopFinalized(finalized):
@@ -258,11 +258,11 @@ proc updateFinalized(c: ForkedChainRef, finalized: BlockRef, fcuHead: BlockRef) 
     # Any branches not reachable from finalized
     # should be removed.
     if not reachable(head, finalized):
-      loopIt(head):
-        if not it.finalized and it.txFrame.isNil.not:
-          c.removeBlockFromCache(it)
-        else:
+      loopFinalized(head):
+        if it.txFrame.isNil:
+          # Has been deleted by previous branch
           break
+        c.removeBlockFromCache(it)
 
       if head == c.latest:
         updateLatest = true
