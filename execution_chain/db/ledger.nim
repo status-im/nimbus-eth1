@@ -703,9 +703,16 @@ proc clearEmptyAccounts(ac: LedgerRef) =
     ac.deleteEmptyAccount(RIPEMD_ADDR)
     ac.ripemdSpecial = false
 
+template getWitnessKeys*(ac: LedgerRef): WitnessTable =
+  ac.witnessKeys
+
+template clearWitnessKeys*(ac: LedgerRef) =
+  ac.witnessKeys.clear()
+
 proc persist*(ac: LedgerRef,
               clearEmptyAccount: bool = false,
-              clearCache = false) =
+              clearCache = false,
+              clearWitness = false) =
   const info = "persist(): "
 
   # make sure all savepoint already committed
@@ -756,6 +763,9 @@ proc persist*(ac: LedgerRef,
   ac.savePoint.accessList.clear()
 
   ac.isDirty = false
+
+  if clearWitness:
+    ac.clearWitnessKeys()
 
 iterator addresses*(ac: LedgerRef): Address =
   # make sure all savepoint already committed
@@ -877,12 +887,6 @@ proc getStorageProof*(ac: LedgerRef, address: Address, slots: openArray[UInt256]
     storageProof.add(slotProof[0])
 
   storageProof
-
-func getWitnessKeys*(ac: LedgerRef): WitnessTable =
-  ac.witnessKeys
-
-proc clearWitnessKeys*(ac: LedgerRef) =
-  ac.witnessKeys.clear()
 
 # ------------------------------------------------------------------------------
 # Public virtual read-only methods

@@ -198,6 +198,7 @@ proc procBlkEpilogue(
     db.persist(
       clearEmptyAccount = vmState.com.isSpuriousOrLater(header.number),
       clearCache = true,
+      clearWitness = vmState.com.statelessProviderEnabled
     )
 
   var

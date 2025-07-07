@@ -754,6 +754,29 @@ proc runLedgerBasicOperationsTests() =
         keysList[4][0].slot == Opt.none(UInt256)
         keysList[4][1] == false
 
+    test "Witness keys - Clear cache":
+      var
+        ac = LedgerRef.init(memDB.baseTxFrame(), false, collectWitness = true)
+        addr1 = initAddr(1)
+        addr2 = initAddr(2)
+        addr3 = initAddr(3)
+        slot1 = 1.u256
+
+      discard ac.getAccount(addr1)
+      discard ac.getCode(addr2)
+      discard ac.getCode(addr1)
+      discard ac.getStorage(addr2, slot1)
+      discard ac.getStorage(addr1, slot1)
+      discard ac.getStorage(addr2, slot1)
+      discard ac.getAccount(addr3)
+
+      check ac.getWitnessKeys().len() == 5
+
+      ac.persist() # persist should not clear the witness keys by default
+      check ac.getWitnessKeys().len() == 5
+
+      ac.persist(clearWitness = true)
+      check ac.getWitnessKeys().len() == 0
 
 # ------------------------------------------------------------------------------
 # Main function(s)
