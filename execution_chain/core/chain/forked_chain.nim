@@ -335,32 +335,38 @@ proc processUpdateBase(c: ForkedChainRef) {.async: (raises: [CancelledError]).} 
     let base = c.baseQueue.popFirst()
     c.persistedCount += c.updateBase(base)
 
+  const
+    minLogInterval = 5
+  
   if c.baseQueue.len == 0:
-    # Log only if more than one block persisted
-    # This is to avoid log spamming, during normal operation
-    # of the client following the chain
-    # When multiple blocks are persisted together, it's mainly
-    # during `beacon sync` or `nrpc sync`
-    if c.persistedCount > 1:
-      notice "Finalized blocks persisted",
-        nBlocks = c.persistedCount,
-        base = c.base.number,
-        baseHash = c.base.hash.short,
-        pendingFCU = c.pendingFCU.short,
-        resolvedFin= c.latestFinalizedBlockNumber
-    else:
-      debug "Finalized blocks persisted",
-        nBlocks = c.persistedCount,
-        target = c.base.hash.short,
-        base = c.base.number,
-        baseHash = c.base.hash.short,
-        pendingFCU = c.pendingFCU.short,
-        resolvedFin= c.latestFinalizedBlockNumber
-    c.persistedCount = 0
+    let time = EthTime.now()
+    if time - c.lastBaseLogTime > minLogInterval:
+      # Log only if more than one block persisted
+      # This is to avoid log spamming, during normal operation
+      # of the client following the chain
+      # When multiple blocks are persisted together, it's mainly
+      # during `beacon sync` or `nrpc sync`
+      if c.persistedCount > 1:
+        notice "Finalized blocks persisted",
+          nBlocks = c.persistedCount,
+          base = c.base.number,
+          baseHash = c.base.hash.short,
+          pendingFCU = c.pendingFCU.short,
+          resolvedFin= c.latestFinalizedBlockNumber
+      else:
+        debug "Finalized blocks persisted",
+          nBlocks = c.persistedCount,
+          target = c.base.hash.short,
+          base = c.base.number,
+          baseHash = c.base.hash.short,
+          pendingFCU = c.pendingFCU.short,
+          resolvedFin= c.latestFinalizedBlockNumber
+      c.lastBaseLogTime = time
+      c.persistedCount = 0
     return
 
   if c.queue.isNil:
-    # This recursive mode only used in test env with finite set of blocks
+    # This recursive mode only used in test env with small set of blocks
     await c.processUpdateBase()
   else:
     proc asyncHandler(): Future[Result[void, string]] {.async: (raises: [CancelledError]).} =
@@ -370,6 +376,15 @@ proc processUpdateBase(c: ForkedChainRef) {.async: (raises: [CancelledError]).} 
 
 proc queueUpdateBase(c: ForkedChainRef, base: BlockRef)
      {.async: (raises: [CancelledError]).} =
+  let
+    prevQueuedBase = if c.baseQueue.len > 0:
+                       c.baseQueue.peekLast()
+                     else:
+                       c.base
+
+  if prevQueuedBase.number == base.number:
+    return
+
   var
     number = base.number - min(base.number, PersistBatchSize)
     steps  = newSeqOfCap[BlockRef]((base.number-c.base.number) div PersistBatchSize + 1)
@@ -377,6 +392,8 @@ proc queueUpdateBase(c: ForkedChainRef, base: BlockRef)
   steps.add base
 
   loopIt(base):
+    if it.number <= prevQueuedBase.number:
+      break
     if it.number == number:
       steps.add it
       number -= min(number, PersistBatchSize)
@@ -385,7 +402,7 @@ proc queueUpdateBase(c: ForkedChainRef, base: BlockRef)
     c.baseQueue.addLast(steps[i])
 
   if c.queue.isNil:
-    # This recursive mode only used in test env with finite set of blocks
+    # This recursive mode only used in test env with small set of blocks
     await c.processUpdateBase()
   else:
     proc asyncHandler(): Future[Result[void, string]] {.async: (raises: [CancelledError]).} =
@@ -470,7 +487,7 @@ proc validateBlock(c: ForkedChainRef,
 
 template queueOrphan(c: ForkedChainRef, parent: BlockRef, finalized = false): auto =
   if c.queue.isNil:
-    # This recursive mode only used in test env with finite set of blocks
+    # This recursive mode only used in test env with small set of blocks
     c.processOrphan(parent, finalized)
   else:
     proc asyncHandler(): Future[Result[void, string]] {.async: (raises: [CancelledError]).} =
@@ -567,6 +584,7 @@ proc init*(
       fcuHead:         fcuHead,
       fcuSafe:         fcuSafe,
       baseQueue:       initDeque[BlockRef](),
+      lastBaseLogTime: EthTime.now(),
     )
 
   # updateFinalized will stop ancestor lineage

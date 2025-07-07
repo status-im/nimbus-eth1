@@ -40,6 +40,8 @@ type
       # This queue will be filled by `importBlock` or `forkChoice`.
       # Then consumed by the `processQueue` async worker.
 
+    lastBaseLogTime*: EthTime
+
     persistedCount*: uint
       # Count how many blocks persisted when `baseQueue`
       # consumed.
