@@ -29,7 +29,6 @@ func toReceipt(rec: ReceiptObject): Receipt =
   let isHash = not rec.status.isSome()
 
   let status = rec.status.isSome() and rec.status.get() == 1.Quantity
-
   return Receipt(
     hash: rec.transactionHash,
     isHash: isHash,
@@ -51,7 +50,6 @@ proc getReceipts(
       await vp.rpcClient.eth_getBlockReceipts(blockTag)
     except CatchableError as e:
       return err(e.msg)
-
   if rxs.isSome():
     if orderedTrieRoot(toReceipts(rxs.get())) != header.receiptsRoot:
       return
