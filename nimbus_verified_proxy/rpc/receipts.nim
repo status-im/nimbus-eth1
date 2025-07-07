@@ -107,7 +107,6 @@ proc getLogs*(
         rxs = (await vp.getReceipts(lg.blockHash.get())).valueOr:
           return err(error)
         prevBlockHash = lg.blockHash.get()
-
       let
         txIdx = distinctBase(lg.transactionIndex.get())
         logIdx =
