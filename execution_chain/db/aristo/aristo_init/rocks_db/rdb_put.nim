@@ -46,7 +46,7 @@ proc rollback*(rdb: var RdbInst, session: SharedWriteBatchRef) =
 proc commit*(rdb: var RdbInst, session: SharedWriteBatchRef): Result[void,(AristoError,string)] =
   if not session.isClosed():
     defer: session.close()
-    rdb.baseDb.commit(session).isOkOr:
+    rdb.baseDb.commit(session, rdb.vtxCol).isOkOr:
       const errSym = RdbBeDriverWriteError
       when extraTraceMessages:
         trace logTxt "commit", error=errSym, info=error

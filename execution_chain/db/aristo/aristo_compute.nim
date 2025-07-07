@@ -64,7 +64,7 @@ func leave(batch: var WriteBatch, nibble: uint8) =
 proc putKeyAtLevel(
     db: AristoTxRef,
     rvid: RootedVertexID,
-    vtx: VertexRef,
+    vtx: BranchRef,
     key: HashKey,
     level: int,
     batch: var WriteBatch,
@@ -268,8 +268,8 @@ proc computeKeyImpl(
   # root key also changing while leaves that have never been hashed will see
   # their hash being saved directly to the backend.
 
-  if vtx.vType notin Leaves:
-    ?db.putKeyAtLevel(rvid, vtx, key, level, batch)
+  if vtx.vType in Branches:
+    ?db.putKeyAtLevel(rvid, BranchRef(vtx), key, level, batch)
   ok (key, level)
 
 proc computeKeyImpl(
