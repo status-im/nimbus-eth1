@@ -25,7 +25,7 @@ type
 
     index*   : uint
       # Alias to parent when serializing
-      # Also used for DAG node coloring
+      # Also used for DAG node finalized marker
 
 template header*(b: BlockRef): Header =
   b.blk.header
@@ -50,17 +50,24 @@ template stateRoot*(b: BlockRef): Hash32 =
   b.blk.header.stateRoot
 
 const
-  DAG_NODE_COLORED = 1
+  DAG_NODE_FINALIZED = 1
   DAG_NODE_CLEAR = 0
 
-template color*(b: BlockRef) =
-  b.index = DAG_NODE_COLORED
+template finalize*(b: BlockRef) =
+  b.index = DAG_NODE_FINALIZED
 
-template noColor*(b: BlockRef) =
+template notFinalized*(b: BlockRef) =
   b.index = DAG_NODE_CLEAR
 
-template colored*(b: BlockRef): bool =
-  b.index == DAG_NODE_COLORED
+template finalized*(b: BlockRef): bool =
+  b.index == DAG_NODE_FINALIZED
+
+template loopFinalized*(init: BlockRef, body: untyped) =
+  block:
+    var it{.inject.} = init
+    while not it.finalized:
+      body
+      it = it.parent
 
 iterator everyNthBlock*(base: BlockRef, step: uint64): BlockRef =
   var
