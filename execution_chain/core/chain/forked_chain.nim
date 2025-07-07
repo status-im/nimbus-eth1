@@ -372,7 +372,7 @@ proc queueUpdateBase(c: ForkedChainRef, base: BlockRef)
      {.async: (raises: [CancelledError]).} =
   var
     number = base.number - min(base.number, PersistBatchSize)
-    steps  = newSeqOfCap[BlockRef](c.persistBatchSize div PersistBatchSize + 1)
+    steps  = newSeqOfCap[BlockRef]((base.number-c.base.number) div PersistBatchSize + 1)
 
   steps.add base
 
