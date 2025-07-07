@@ -59,11 +59,11 @@ func getConfiguredChainId(networkMetadata: Eth2NetworkMetadata): UInt256 =
 func chainIdToNetworkId(chainId: UInt256): Result[UInt256, string] =
   if chainId == 1.u256:
     ok(1.u256)
-  elif chainId == 11155111.u256: 
+  elif chainId == 11155111.u256:
     ok(11155111.u256)
   elif chainId == 17000.u256:
     ok(17000.u256)
-  elif chainId == 560048.u256: 
+  elif chainId == 560048.u256:
     ok(560048.u256)
   else:
     return err("Unknown chainId")
@@ -103,7 +103,7 @@ proc run*(
 
   # instantiate evm
   let networkId = chainIdToNetworkId(chainId).valueOr:
-    raise newException(ValueError, error) 
+    raise newException(ValueError, error)
 
   verifiedProxy.evm = AsyncEvm.init(verifiedProxy.toAsyncEvmStateBackend(), networkId)
 

@@ -163,7 +163,6 @@ proc installEthApiHandlers*(vp: VerifiedRpcProxy) =
     if tx.to.isNone():
       raise newException(ValueError, "to address is required")
 
-
     let
       header = (await vp.getHeader(blockTag)).valueOr:
         raise newException(ValueError, error)
@@ -196,7 +195,6 @@ proc installEthApiHandlers*(vp: VerifiedRpcProxy) =
       raise newException(ValueError, error)
 
     return gasEstimate.Quantity
-
 
   # TODO:
   # Following methods are forwarded directly to the web3 provider and therefore

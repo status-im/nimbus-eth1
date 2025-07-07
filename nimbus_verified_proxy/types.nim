@@ -12,7 +12,7 @@ import
   ../portal/evm/async_evm,
   web3/eth_api_types
 
-type 
+type
   VerifiedRpcProxy* = ref object
     evm*: AsyncEvm
     proxy*: RpcProxy
@@ -32,8 +32,6 @@ proc init*(
     chainId: UInt256,
     maxBlockWalk: uint64,
 ): T =
-  
   var vp = VerifiedRpcProxy(
     proxy: proxy, headerStore: headerStore, chainId: chainId, maxBlockWalk: maxBlockWalk
   )
-

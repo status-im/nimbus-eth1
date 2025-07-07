@@ -10,8 +10,8 @@
 import
   chronicles,
   ../../portal/evm/async_evm_backend,
-  ../../portal/evm/async_evm, 
-  ./accounts, 
+  ../../portal/evm/async_evm,
+  ./accounts,
   ../types
 
 logScope:
@@ -24,7 +24,7 @@ proc toAsyncEvmStateBackend*(vp: VerifiedRpcProxy): AsyncEvmStateBackend =
     accProc = proc(
         header: Header, address: Address
     ): Future[Opt[Account]] {.async: (raises: [CancelledError]).} =
-      let account = 
+      let account =
         try:
           (await vp.getAccount(address, header.number, header.stateRoot))
         except CatchableError as e:
@@ -39,7 +39,7 @@ proc toAsyncEvmStateBackend*(vp: VerifiedRpcProxy): AsyncEvmStateBackend =
     storageProc = proc(
         header: Header, address: Address, slotKey: UInt256
     ): Future[Opt[UInt256]] {.async: (raises: [CancelledError]).} =
-      let storageSlot = 
+      let storageSlot =
         try:
           (await vp.getStorageAt(address, slotKey, header.number, header.stateRoot))
         except CatchableError as e:
@@ -54,7 +54,7 @@ proc toAsyncEvmStateBackend*(vp: VerifiedRpcProxy): AsyncEvmStateBackend =
     codeProc = proc(
         header: Header, address: Address
     ): Future[Opt[seq[byte]]] {.async: (raises: [CancelledError]).} =
-      let code = 
+      let code =
         try:
           (await vp.getCode(address, header.number, header.stateRoot))
         except CatchableError as e:
@@ -67,4 +67,3 @@ proc toAsyncEvmStateBackend*(vp: VerifiedRpcProxy): AsyncEvmStateBackend =
       Opt.none(seq[byte])
 
   AsyncEvmStateBackend.init(accProc, storageProc, codeProc)
-
