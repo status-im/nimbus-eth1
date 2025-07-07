@@ -366,11 +366,11 @@ proc validateBlock(c: ForkedChainRef,
             {.async: (raises: [CancelledError]).} =
   let
     blkHash = blk.header.computeBlockHash
-    existedBlock = c.hashToBlock.getOrDefault(blkHash)
+    existingBlock = c.hashToBlock.getOrDefault(blkHash)
 
   # Block exists, just return
-  if existedBlock.isOk:
-    return ok(existedBlock)
+  if existingBlock.isOk:
+    return ok(existingBlock)
 
   if blkHash == c.pendingFCU:
     # Resolve the hash into latestFinalizedBlockNumber
@@ -436,10 +436,14 @@ proc validateBlock(c: ForkedChainRef,
   ok(newBlock)
 
 template queueOrphan(c: ForkedChainRef, parent: BlockRef, finalized = false): auto =
-  proc asyncHandler(): Future[Result[void, string]] {.async: (raises: [CancelledError]).} =
-    await c.processOrphan(parent, finalized)
-    ok()
-  c.queue.addLast(QueueItem(handler: asyncHandler))
+  if c.queue.isNil:
+    # This recursive mode only used in test env with finite set of blocks
+    c.processOrphan(parent, finalized)
+  else:
+    proc asyncHandler(): Future[Result[void, string]] {.async: (raises: [CancelledError]).} =
+      await c.processOrphan(parent, finalized)
+      ok()
+    c.queue.addLast(QueueItem(handler: asyncHandler))
 
 proc processOrphan(c: ForkedChainRef, parent: BlockRef, finalized = false)
   {.async: (raises: [CancelledError]).} =
@@ -453,7 +457,7 @@ proc processOrphan(c: ForkedChainRef, parent: BlockRef, finalized = false)
       # but the quarantined blocks may not linked
       return
   await c.queueOrphan(parent, finalized)
-  
+
 proc processQueue(c: ForkedChainRef) {.async: (raises: [CancelledError]).} =
   while true:
     # Cooperative concurrency: one block per loop iteration - because
@@ -471,10 +475,10 @@ proc processQueue(c: ForkedChainRef) {.async: (raises: [CancelledError]).} =
     let
       item = await c.queue.popFirst()
       res = await item.handler()
-      
+
     if item.responseFut.isNil:
       continue
-      
+
     if not item.responseFut.finished:
       item.responseFut.complete res
 
