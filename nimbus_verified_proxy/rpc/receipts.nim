@@ -100,7 +100,7 @@ proc getLogs*(
       let lgBlkHash = lg.blockHash.get()
       # TODO: a cache will solve downloading the same block receipts for multiple logs
       var rxs = (await vp.getReceipts(lgBlkHash)).valueOr:
-          return err(error)
+        return err(error)
 
       if lg.transactionIndex.isNone():
         for rx in rxs:
@@ -116,7 +116,8 @@ proc getLogs*(
 
         # only add verified logs
         for rxLog in rx.logs:
-          if rxLog.address == lg.address and rxLog.data == lg.data and rxLog.topics == lg.topics:
+          if rxLog.address == lg.address and rxLog.data == lg.data and
+              rxLog.topics == lg.topics:
             res.add(lg)
 
   if res.len == 0:
