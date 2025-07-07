@@ -340,10 +340,10 @@ type
       desc: "Number of worker threads (\"0\" = use as many threads as there are CPU cores available)"
       name: "num-threads" .}: int
 
-    persistBatchSize* {.
+    persistBatchQueue* {.
       hidden
       defaultValue: 32'u64
-      name: "debug-persist-batch-size" .}: uint64
+      name: "debug-persist-batch-queue" .}: uint64
 
     beaconSyncTargetFile* {.
       hidden

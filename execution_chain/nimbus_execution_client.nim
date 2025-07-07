@@ -44,7 +44,7 @@ proc basicServices(nimbus: NimbusNode,
   # Setup the chain
   let fc = ForkedChainRef.init(com,
     eagerStateRoot = conf.eagerStateRootCheck,
-    persistBatchSize=conf.persistBatchSize,
+    persistBatchQueue=conf.persistBatchQueue,
     enableQueue = true)
   fc.deserialize().isOkOr:
     warn "Loading block DAG from database", msg=error
