@@ -435,6 +435,25 @@ proc validateBlock(c: ForkedChainRef,
 
   ok(newBlock)
 
+template queueOrphan(c: ForkedChainRef, parent: BlockRef, finalized = false): auto =
+  proc asyncHandler(): Future[Result[void, string]] {.async: (raises: [CancelledError]).} =
+    await c.processOrphan(parent, finalized)
+    ok()
+  c.queue.addLast(QueueItem(handler: asyncHandler))
+
+proc processOrphan(c: ForkedChainRef, parent: BlockRef, finalized = false)
+  {.async: (raises: [CancelledError]).} =
+  let
+    orphan = c.quarantine.popOrphan(parent.hash).valueOr:
+      # No more orphaned block
+      return
+    parent = (await c.validateBlock(parent, orphan, finalized)).valueOr:
+      # Silent?
+      # We don't return error here because the import is still ok()
+      # but the quarantined blocks may not linked
+      return
+  await c.queueOrphan(parent, finalized)
+  
 proc processQueue(c: ForkedChainRef) {.async: (raises: [CancelledError]).} =
   while true:
     # Cooperative concurrency: one block per loop iteration - because
@@ -452,6 +471,10 @@ proc processQueue(c: ForkedChainRef) {.async: (raises: [CancelledError]).} =
     let
       item = await c.queue.popFirst()
       res = await item.handler()
+      
+    if item.responseFut.isNil:
+      continue
+      
     if not item.responseFut.finished:
       item.responseFut.complete res
 
@@ -513,25 +536,6 @@ proc init*(
     fc.processingQueueLoop = fc.processQueue()
 
   fc
-
-template queueOrphan(c: ForkedChainRef, parent: BlockRef, finalized = false): auto =
-  proc asyncHandler(): Future[Result[void, string]] {.async: (raises: [CancelledError]).} =
-    await c.processOrphan(parent, finalized)
-    ok()
-  c.queue.addLast(QueueItem(handler: asyncHandler))
-
-proc processOrphan(c: ForkedChainRef, parent: BlockRef, finalized = false)
-  {.async: (raises: [CancelledError]).} =
-  let
-    orphan = c.quarantine.popOrphan(parent.hash).valueOr:
-      # No more orphaned block
-      return
-    parent = (await c.validateBlock(parent, orphan, finalized)).valueOr:
-      # Silent?
-      # We don't return error here because the import is still ok()
-      # but the quarantined blocks may not linked
-      return
-  await c.queueOrphan(parent, finalized)
 
 proc importBlock*(c: ForkedChainRef, blk: Block, finalized = false):
        Future[Result[void, string]] {.async: (raises: [CancelledError]).} =
