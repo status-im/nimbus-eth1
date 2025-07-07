@@ -42,7 +42,7 @@ export
 const
   BaseDistance = 128'u64
   PersistBatchSize = 32'u64
-  MaxQueueSize = 9
+  MaxQueueSize = 12
 
 # ------------------------------------------------------------------------------
 # Private functions
@@ -53,7 +53,7 @@ func appendBlock(c: ForkedChainRef,
          blk: Block,
          blkHash: Hash32,
          txFrame: CoreDbTxRef,
-         receipts: sink seq[StoredReceipt]) =
+         receipts: sink seq[StoredReceipt]): BlockRef =
 
   let newBlock = BlockRef(
     blk     : blk,
@@ -72,10 +72,11 @@ func appendBlock(c: ForkedChainRef,
     if head.hash == parent.hash:
       # update existing heads
       c.heads[i] = newBlock
-      return
+      return newBlock
 
   # It's a branch
   c.heads.add newBlock
+  newBlock
 
 proc fcuSetHead(c: ForkedChainRef,
                 txFrame: CoreDbTxRef,
@@ -361,13 +362,15 @@ proc updateBase(c: ForkedChainRef, base: BlockRef):
 
 proc validateBlock(c: ForkedChainRef,
           parent: BlockRef,
-          blk: Block, finalized: bool): Future[Result[Hash32, string]]
+          blk: Block, finalized: bool): Future[Result[BlockRef, string]]
             {.async: (raises: [CancelledError]).} =
-  let blkHash = blk.header.computeBlockHash
+  let
+    blkHash = blk.header.computeBlockHash
+    existingBlock = c.hashToBlock.getOrDefault(blkHash)
 
-  if c.hashToBlock.hasKey(blkHash):
-    # Block exists, just return
-    return ok(blkHash)
+  # Block exists, just return
+  if existingBlock.isOk:
+    return ok(existingBlock)
 
   if blkHash == c.pendingFCU:
     # Resolve the hash into latestFinalizedBlockNumber
@@ -408,7 +411,7 @@ proc validateBlock(c: ForkedChainRef,
 
   c.updateSnapshot(blk, txFrame)
 
-  c.appendBlock(parent, blk, blkHash, txFrame, move(receipts))
+  let newBlock = c.appendBlock(parent, blk, blkHash, txFrame, move(receipts))
 
   for i, tx in blk.transactions:
     c.txRecords[computeRlpHash(tx)] = (blkHash, uint64(i))
@@ -430,7 +433,30 @@ proc validateBlock(c: ForkedChainRef,
       if c.fcuHead.number < c.base.number:
         c.updateHead(c.base)
 
-  ok(blkHash)
+  ok(newBlock)
+
+template queueOrphan(c: ForkedChainRef, parent: BlockRef, finalized = false): auto =
+  if c.queue.isNil:
+    # This recursive mode only used in test env with finite set of blocks
+    c.processOrphan(parent, finalized)
+  else:
+    proc asyncHandler(): Future[Result[void, string]] {.async: (raises: [CancelledError]).} =
+      await c.processOrphan(parent, finalized)
+      ok()
+    c.queue.addLast(QueueItem(handler: asyncHandler))
+
+proc processOrphan(c: ForkedChainRef, parent: BlockRef, finalized = false)
+  {.async: (raises: [CancelledError]).} =
+  let
+    orphan = c.quarantine.popOrphan(parent.hash).valueOr:
+      # No more orphaned block
+      return
+    parent = (await c.validateBlock(parent, orphan, finalized)).valueOr:
+      # Silent?
+      # We don't return error here because the import is still ok()
+      # but the quarantined blocks may not linked
+      return
+  await c.queueOrphan(parent, finalized)
 
 proc processQueue(c: ForkedChainRef) {.async: (raises: [CancelledError]).} =
   while true:
@@ -449,6 +475,10 @@ proc processQueue(c: ForkedChainRef) {.async: (raises: [CancelledError]).} =
     let
       item = await c.queue.popFirst()
       res = await item.handler()
+
+    if item.responseFut.isNil:
+      continue
+
     if not item.responseFut.finished:
       item.responseFut.complete res
 
@@ -536,30 +566,10 @@ proc importBlock*(c: ForkedChainRef, blk: Block, finalized = false):
     # to a "staging area" or disk-backed memory but it must not afect `base`.
     # `base` is the point of no return, we only update it on finality.
 
-    var parentHash = ?(await c.validateBlock(parent, blk, finalized))
+    let parent = ?(await c.validateBlock(parent, blk, finalized))
+    if c.quarantine.hasOrphans():
+      await c.queueOrphan(parent, finalized)
 
-    while c.quarantine.hasOrphans():
-      const
-        # We cap waiting for an idle slot in case there's a lot of network traffic
-        # taking up all CPU - we don't want to _completely_ stop processing blocks
-        # in this case - doing so also allows us to benefit from more batching /
-        # larger network reads when under load.
-        idleTimeout = 10.milliseconds
-
-      discard await idleAsync().withTimeout(idleTimeout)
-
-      let orphan = c.quarantine.popOrphan(parentHash).valueOr:
-        break
-
-      let parent = c.hashToBlock.getOrDefault(parentHash)
-      if parent.isOk:
-        parentHash = (await c.validateBlock(parent, orphan, finalized)).valueOr:
-          # Silent?
-          # We don't return error here because the import is still ok()
-          # but the quarantined blocks may not linked
-          break
-      else:
-        break
   else:
     # If its parent is an invalid block
     # there is no hope the descendant is valid
