@@ -224,7 +224,6 @@ proc installEthApiHandlers*(vp: VerifiedRpcProxy) =
     (await vp.populateCachesUsingAccessList(header.number, header.stateRoot, tx)).isOkOr:
       raise newException(ValueError, error)
 
-
     let gasEstimate = (await vp.evm.estimateGas(header, tx, optimisticStateFetch)).valueOr:
       raise newException(ValueError, error)
 
