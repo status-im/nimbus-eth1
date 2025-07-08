@@ -445,7 +445,7 @@ suite "ForkedChainRef tests":
     checkHeadHash chain, blk7.blockHash
     check chain.latestHash == blk7.blockHash
     check chain.heads.len == 1
-    check chain.base.number == 0
+    check chain.base.number == 4
     check chain.validate info & " (9)"
 
   test "newBase on shorter canonical arc, discard arc with oldBase" &
@@ -726,7 +726,7 @@ suite "ForkedChainRef tests":
     checkForkChoice(chain, blk7, blk5)
     check chain.validate info & " (2)"
     checkHeadHash chain, blk7.blockHash
-    check chain.baseNumber == 0'u64
+    check chain.baseNumber == 4'u64
     check chain.latestHash == blk7.blockHash
     check chain.validate info & " (3)"
 

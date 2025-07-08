@@ -342,7 +342,7 @@ type
 
     persistBatchSize* {.
       hidden
-      defaultValue: 32'u64
+      defaultValue: 4'u64
       name: "debug-persist-batch-size" .}: uint64
 
     beaconSyncTargetFile* {.

@@ -41,8 +41,8 @@ export
 
 const
   BaseDistance = 128'u64
-  PersistBatchSize = 32'u64
-  MaxQueueSize = 12
+  PersistBatchSize = 4'u64
+  MaxQueueSize = 128
 
 # ------------------------------------------------------------------------------
 # Private functions
@@ -292,8 +292,7 @@ proc updateFinalized(c: ForkedChainRef, finalized: BlockRef, fcuHead: BlockRef) 
     doAssert(candidate.isNil.not)
     c.latest = candidate
 
-proc updateBase(c: ForkedChainRef, base: BlockRef):
-  Future[void] {.async: (raises: [CancelledError]), gcsafe.} =
+proc updateBase(c: ForkedChainRef, base: BlockRef): uint =
   ##
   ##     A1 - A2 - A3          D5 - D6
   ##    /                     /
@@ -312,53 +311,110 @@ proc updateBase(c: ForkedChainRef, base: BlockRef):
     # No update, return
     return
 
-  # Persist the new base block - this replaces the base tx in coredb!
-  for x in base.everyNthBlock(4):
-    const
-      # We cap waiting for an idle slot in case there's a lot of network traffic
-      # taking up all CPU - we don't want to _completely_ stop processing blocks
-      # in this case - doing so also allows us to benefit from more batching /
-      # larger network reads when under load.
-      idleTimeout = 10.milliseconds
+  c.com.db.persist(base.txFrame, Opt.some(base.stateRoot))
 
-    discard await idleAsync().withTimeout(idleTimeout)
-    c.com.db.persist(x.txFrame, Opt.some(x.stateRoot))
-
-    # Update baseTxFrame when we about to yield to the event loop
-    # and prevent other modules accessing expired baseTxFrame.
-    c.baseTxFrame = x.txFrame
+  # Update baseTxFrame when we about to yield to the event loop
+  # and prevent other modules accessing expired baseTxFrame.
+  c.baseTxFrame = base.txFrame
 
   # Cleanup in-memory blocks starting from base backward
   # e.g. B2 backward.
-  var count = 0
-  loopIt(base.parent):
+  var
+    count = 0'u
+    it = base.parent
+
+  while it.isOk:
     c.removeBlockFromCache(it)
     inc count
+    let b = it
+    it = it.parent
+    b.parent = nil
 
   # Update base branch
   c.base = base
   c.base.parent = nil
 
-  # Log only if more than one block persisted
-  # This is to avoid log spamming, during normal operation
-  # of the client following the chain
-  # When multiple blocks are persisted together, it's mainly
-  # during `beacon sync` or `nrpc sync`
-  if count > 1:
-    notice "Finalized blocks persisted",
-      nBlocks = count,
-      base = c.base.number,
-      baseHash = c.base.hash.short,
-      pendingFCU = c.pendingFCU.short,
-      resolvedFin= c.latestFinalizedBlockNumber
+  count
+
+proc processUpdateBase(c: ForkedChainRef) {.async: (raises: [CancelledError]).} =
+  if c.baseQueue.len > 0:
+    let base = c.baseQueue.popFirst()
+    c.persistedCount += c.updateBase(base)
+
+  const
+    minLogInterval = 5
+
+  if c.baseQueue.len == 0:
+    let time = EthTime.now()
+    if time - c.lastBaseLogTime > minLogInterval:
+      # Log only if more than one block persisted
+      # This is to avoid log spamming, during normal operation
+      # of the client following the chain
+      # When multiple blocks are persisted together, it's mainly
+      # during `beacon sync` or `nrpc sync`
+      if c.persistedCount > 1:
+        notice "Finalized blocks persisted",
+          nBlocks = c.persistedCount,
+          base = c.base.number,
+          baseHash = c.base.hash.short,
+          pendingFCU = c.pendingFCU.short,
+          resolvedFin= c.latestFinalizedBlockNumber
+      else:
+        debug "Finalized blocks persisted",
+          nBlocks = c.persistedCount,
+          target = c.base.hash.short,
+          base = c.base.number,
+          baseHash = c.base.hash.short,
+          pendingFCU = c.pendingFCU.short,
+          resolvedFin= c.latestFinalizedBlockNumber
+      c.lastBaseLogTime = time
+      c.persistedCount = 0
+    return
+
+  if c.queue.isNil:
+    # This recursive mode only used in test env with small set of blocks
+    await c.processUpdateBase()
   else:
-    debug "Finalized blocks persisted",
-      nBlocks = count,
-      target = base.hash.short,
-      base = c.base.number,
-      baseHash = c.base.hash.short,
-      pendingFCU = c.pendingFCU.short,
-      resolvedFin= c.latestFinalizedBlockNumber
+    proc asyncHandler(): Future[Result[void, string]] {.async: (raises: [CancelledError]).} =
+      await c.processUpdateBase()
+      ok()
+    await c.queue.addLast(QueueItem(handler: asyncHandler))
+
+proc queueUpdateBase(c: ForkedChainRef, base: BlockRef)
+     {.async: (raises: [CancelledError]).} =
+  let
+    prevQueuedBase = if c.baseQueue.len > 0:
+                       c.baseQueue.peekLast()
+                     else:
+                       c.base
+
+  if prevQueuedBase.number == base.number:
+    return
+
+  var
+    number = base.number - min(base.number, PersistBatchSize)
+    steps  = newSeqOfCap[BlockRef]((base.number-c.base.number) div PersistBatchSize + 1)
+    it = prevQueuedBase
+
+  steps.add base
+
+  while it.number > prevQueuedBase.number:
+    if it.number == number:
+      steps.add it
+      number -= min(number, PersistBatchSize)
+    it = it.parent
+
+  for i in countdown(steps.len-1, 0):
+    c.baseQueue.addLast(steps[i])
+
+  if c.queue.isNil:
+    # This recursive mode only used in test env with small set of blocks
+    await c.processUpdateBase()
+  else:
+    proc asyncHandler(): Future[Result[void, string]] {.async: (raises: [CancelledError]).} =
+      await c.processUpdateBase()
+      ok()
+    await c.queue.addLast(QueueItem(handler: asyncHandler))
 
 proc validateBlock(c: ForkedChainRef,
           parent: BlockRef,
@@ -426,7 +482,7 @@ proc validateBlock(c: ForkedChainRef,
       prevBase = c.base.number
 
     c.updateFinalized(base, base)
-    await c.updateBase(base)
+    await c.queueUpdateBase(base)
 
     # If on disk head behind base, move it to base too.
     if c.base.number > prevBase:
@@ -437,7 +493,7 @@ proc validateBlock(c: ForkedChainRef,
 
 template queueOrphan(c: ForkedChainRef, parent: BlockRef, finalized = false): auto =
   if c.queue.isNil:
-    # This recursive mode only used in test env with finite set of blocks
+    # This recursive mode only used in test env with small set of blocks
     c.processOrphan(parent, finalized)
   else:
     proc asyncHandler(): Future[Result[void, string]] {.async: (raises: [CancelledError]).} =
@@ -533,6 +589,8 @@ proc init*(
       quarantine:      Quarantine.init(),
       fcuHead:         fcuHead,
       fcuSafe:         fcuSafe,
+      baseQueue:       initDeque[BlockRef](),
+      lastBaseLogTime: EthTime.now(),
     )
 
   # updateFinalized will stop ancestor lineage
@@ -630,7 +688,7 @@ proc forkChoice*(c: ForkedChainRef,
   # and possibly switched to other chain beside the one with head.
   doAssert(finalized.number <= head.number)
   doAssert(base.number <= finalized.number)
-  await c.updateBase(base)
+  await c.queueUpdateBase(base)
 
   ok()
 

@@ -68,18 +68,3 @@ template loopFinalized*(init: BlockRef, body: untyped) =
     while not it.finalized:
       body
       it = it.parent
-
-iterator everyNthBlock*(base: BlockRef, step: uint64): BlockRef =
-  var
-    number = base.number - min(base.number, step)
-    steps  = newSeqOfCap[BlockRef](128)
-
-  steps.add base
-
-  loopIt(base):
-    if it.number == number:
-      steps.add it
-      number -= min(number, step)
-
-  for i in countdown(steps.len-1, 0):
-    yield steps[i]
