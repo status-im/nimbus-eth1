@@ -319,10 +319,16 @@ proc updateBase(c: ForkedChainRef, base: BlockRef): uint =
 
   # Cleanup in-memory blocks starting from base backward
   # e.g. B2 backward.
-  var count = 0'u
-  loopIt(base.parent):
+  var
+    count = 0'u
+    it = base.parent
+
+  while it.isOk:
     c.removeBlockFromCache(it)
     inc count
+    let b = it
+    it = it.parent
+    b.parent = nil
 
   # Update base branch
   c.base = base
@@ -337,7 +343,7 @@ proc processUpdateBase(c: ForkedChainRef) {.async: (raises: [CancelledError]).} 
 
   const
     minLogInterval = 5
-  
+
   if c.baseQueue.len == 0:
     let time = EthTime.now()
     if time - c.lastBaseLogTime > minLogInterval:
@@ -388,15 +394,15 @@ proc queueUpdateBase(c: ForkedChainRef, base: BlockRef)
   var
     number = base.number - min(base.number, PersistBatchSize)
     steps  = newSeqOfCap[BlockRef]((base.number-c.base.number) div PersistBatchSize + 1)
+    it = prevQueuedBase
 
   steps.add base
 
-  loopIt(base):
-    if it.number <= prevQueuedBase.number:
-      break
+  while it.number > prevQueuedBase.number:
     if it.number == number:
       steps.add it
       number -= min(number, PersistBatchSize)
+    it = it.parent
 
   for i in countdown(steps.len-1, 0):
     c.baseQueue.addLast(steps[i])
