@@ -84,14 +84,17 @@ proc getReceipts*(
 
   await vp.getReceipts(header, numberTag)
 
-proc getLogs*(
-    vp: VerifiedRpcProxy, filterOptions: FilterOptions
+proc verifyLogs*(
+    vp: VerifiedRpcProxy, logObjs: seq[LogObject]
 ): Future[Result[seq[LogObject], string]] {.async.} =
-  let logObjs =
-    try:
-      await vp.rpcClient.eth_getLogs(filterOptions)
-    except CatchableError as e:
-      return err(e.msg)
+  let
+    fromBlock = filter.fromBlock.get(BlockTag(kind:BlockIdentifierKind.bidAlias, alias: "latest"))
+    toBlock = filter.toBlock.get(BlockTag(kind:BlockIdentifierKind.bidAlias, alias: "latest"))
+
+    bottom = if fromBlock.kind == BlockIdentifierKind.bidNumber: fromBlock.number
+           else: return err("Cannot verify boundaries for block tags in 'fromBlock' field")
+    top = if toBlock.kind == BlockIdentifierKind.bidNumber: toBlock.number
+         else: return err("Cannot verify boundaries for block tags in 'toBlock' field")
 
   # store block hashes contains the logs so that we can batch receipt requests
   var
@@ -100,7 +103,7 @@ proc getLogs*(
 
   for lg in logObjs:
     # none only for pending logs before block is built
-    if lg.blockHash.isSome() and lg.transactionIndex.isSome() and lg.logIndex.isSome():
+    if lg.blockNumber.isSome() and lg.blockHash.isSome() and lg.transactionIndex.isSome() and lg.logIndex.isSome():
       # exploit sequentiality of logs 
       if prevBlockHash != lg.blockHash.get():
         # TODO: a cache will solve downloading the same block receipts for multiple logs
@@ -116,7 +119,7 @@ proc getLogs*(
 
       if rxLog.address != lg.address or rxLog.data != lg.data or
           rxLog.topics != lg.topics or
-          (not match(toLog(lg), filterOptions.address, filterOptions.topics)):
+          (not match(toLog(lg), filterOptions.address, filterOptions.topics)) or lg.blockNumber.get < bottom or lg.blockNumber.get > top:
         return err("one of the returned logs is invalid")
 
   return ok(logObjs)
