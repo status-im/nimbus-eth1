@@ -165,6 +165,9 @@ proc replay(fc: ForkedChainRef): Result[void, string] =
   # see `receiptsByBlockHash`
   fc.base.txFrame = fc.baseTxFrame
 
+  # Base block always have finalized marker
+  fc.base.finalize()
+
   for head in fc.heads:
     loopIt(head):
       if it.txFrame.isNil.not:

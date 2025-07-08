@@ -334,6 +334,9 @@ proc updateBase(c: ForkedChainRef, base: BlockRef): uint =
   c.base = base
   c.base.parent = nil
 
+  # Base block always have finalized marker
+  c.base.finalize()
+
   count
 
 proc processUpdateBase(c: ForkedChainRef) {.async: (raises: [CancelledError]).} =

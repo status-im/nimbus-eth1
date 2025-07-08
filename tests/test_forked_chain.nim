@@ -189,6 +189,7 @@ suite "ForkedChainRef tests":
     blk5 = dbTx.makeBlk(5, blk4)
     blk6 = dbTx.makeBlk(6, blk5)
     blk7 = dbTx.makeBlk(7, blk6)
+    blk8 = dbTx.makeBlk(8, blk7)
   dbTx.dispose()
   let
     B4 = txFrame.makeBlk(4, blk3, 1.byte)
@@ -703,6 +704,33 @@ suite "ForkedChainRef tests":
     check chain.latestHash == blk7.blockHash
 
     check chain.baseNumber == 0'u64
+    check chain.heads.len == 1
+    check chain.validate info & " (2)"
+
+  test "newBase move forward, auto mode, base finalized marker needed":
+    const info = "newBase move forward, auto mode, base finalized marker needed"
+    let com = env.newCom()
+    var chain = ForkedChainRef.init(com, baseDistance = 2, persistBatchSize = 1)
+    check (waitFor chain.forkChoice(blk8.blockHash, blk8.blockHash)).isErr
+    check chain.tryUpdatePendingFCU(blk8.blockHash, blk8.header.number)
+    checkImportBlock(chain, blk1)
+    checkImportBlock(chain, blk2)
+    checkImportBlock(chain, blk3)
+    checkImportBlock(chain, B4)
+    checkImportBlock(chain, blk4)
+    checkImportBlock(chain, B5)
+    checkImportBlock(chain, C5)
+    checkImportBlock(chain, blk5)
+    checkImportBlock(chain, blk6)
+    checkImportBlock(chain, blk7)
+    checkImportBlock(chain, blk8)
+
+    check chain.validate info & " (1)"
+
+    checkHeadHash chain, blk5.blockHash
+    check chain.latestHash == blk8.blockHash
+
+    check chain.baseNumber == 5'u64
     check chain.heads.len == 1
     check chain.validate info & " (2)"
 
