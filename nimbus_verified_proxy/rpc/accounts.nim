@@ -68,7 +68,7 @@ proc getStorageFromProof(
   of InvalidProof:
     return err(proofResult.errorMsg)
 
-proc getStorageFromProof(
+proc getStorageFromProof*(
     stateRoot: Hash32,
     requestedSlot: UInt256,
     proof: ProofResponse,
