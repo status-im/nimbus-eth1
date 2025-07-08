@@ -237,6 +237,7 @@ proc installEthApiHandlers*(vp: VerifiedRpcProxy) =
         await vp.rpcClient.eth_getTransactionByHash(txHash)
       except CatchableError as e:
         raise newException(ValueError, e.msg)
+
     if tx.hash != txHash:
       raise newException(
         ValueError,
@@ -271,10 +272,93 @@ proc installEthApiHandlers*(vp: VerifiedRpcProxy) =
     raise newException(ValueError, "receipt couldn't be verified")
 
   vp.proxy.rpc("eth_getLogs") do(filterOptions: FilterOptions) -> seq[LogObject]:
-    (await vp.getLogs(filterOptions)).valueOr:
+    let 
+      logObjs = 
+        try:
+          await vp.rpcClient.eth_getLogs(filterOptions)
+        except CatchableError as e:
+          raise newException(ValueError, e.msg)
+
+      boundsCheck = verifyFilterBoundaries(filterOptions, logObjs).valueOr:
+        raise newException(ValueError, error)
+
+    if not boundsCheck:
+      raise newException(ValueError, "Logs out of filter block range")
+
+    let verifiedLogs = (await vp.verifyLogs(logObjs)).valueOr:
       raise newException(ValueError, error)
 
-  # TODO:
+    return verifiedLogs
+
+  vp.proxy.rpc("eth_newFilter") do(filterOptions: FilterOptions) -> int:
+    let 
+      hexId = 
+        try:
+          await vp.rpcClient.eth_newFilter(filterOptions)
+        except CatchableError as e:
+          raise newException(ValueError, e.msg)
+      id = fromHex[int](hexId)
+
+    vp.filterStore[id] = filterOptions
+    return id
+
+  vp.proxy.rpc("eth_uninstallFilter") do(filterId: int) -> bool:
+    let status = 
+      try:
+        await vp.rpcClient.eth_uninstallFilter("0x" & toHex(filterId))
+      except CatchableError as e:
+        raise newException(ValueError, e.msg)
+
+    if status and filterId in vp.filterStore:
+      vp.filterStore.del(filterId)
+
+    return status
+
+  vp.proxy.rpc("eth_getFilterLogs") do(filterId: int) -> seq[LogObject]:
+    if filterId notin vp.filterStore:
+      raise newException(ValueError, "Filter doesn't exist")
+
+    let 
+      logObjs = 
+        try:
+          # use locally stored filter and get logs
+          await vp.rpcClient.eth_getLogs(vp.filterStore[filterId])
+        except CatchableError as e:
+          raise newException(ValueError, e.msg)
+
+      boundsCheck = verifyFilterBoundaries(vp.filterStore[filterId], logObjs).valueOr:
+        raise newException(ValueError, error)
+
+    if not boundsCheck:
+      raise newException(ValueError, "Logs out of filter block range")
+
+    let verifiedLogs = (await vp.verifyLogs(logObjs)).valueOr:
+      raise newException(ValueError, error)
+
+    return verifiedLogs
+
+  vp.proxy.rpc("eth_getFilterChanges") do(filterId: int) -> seq[LogObject]:
+    if filterId notin vp.filterStore:
+      raise newException(ValueError, "Filter doesn't exist")
+
+    let 
+      logObjs = 
+        try:
+          await vp.rpcClient.eth_getFilterChanges("0x" & toHex(filterId))
+        except CatchableError as e:
+          raise newException(ValueError, e.msg)
+
+      boundsCheck = verifyFilterBoundaries(vp.filterStore[filterId], logObjs).valueOr:
+        raise newException(ValueError, error)
+
+    if not boundsCheck:
+      raise newException(ValueError, "Logs out of filter block range")
+
+    let verifiedLogs = (await vp.verifyLogs(logObjs)).valueOr:
+      raise newException(ValueError, error)
+
+    return verifiedLogs
+
   # Following methods are forwarded directly to the web3 provider and therefore
   # are not validated in any way.
   vp.proxy.registerProxyMethod("net_version")

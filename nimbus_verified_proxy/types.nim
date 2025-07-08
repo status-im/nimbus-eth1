@@ -6,6 +6,7 @@
 # at your option. This file may not be copied, modified, or distributed except according to those terms.
 
 import
+  std/tables,
   json_rpc/[rpcproxy, rpcclient],
   web3/[eth_api, eth_api_types],
   stint,
@@ -72,6 +73,7 @@ type
 
     # TODO: when the list grows big add a config object instead
     # config parameters
+    filterStore*: Table[int, FilterOptions]
     chainId*: UInt256
     maxBlockWalk*: uint64
 
@@ -88,6 +90,7 @@ proc init*(
     accountsCache: AccountsCache.init(ACCOUNTS_CACHE_SIZE),
     codeCache: CodeCache.init(CODE_CACHE_SIZE),
     storageCache: StorageCache.init(STORAGE_CACHE_SIZE),
+    filterStore: initTable[int, FilterOptions](),
     chainId: chainId,
-    maxBlockWalk: maxBlockWalk,
+    maxBlockWalk: maxBlockWalk
   )
