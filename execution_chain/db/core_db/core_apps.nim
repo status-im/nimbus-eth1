@@ -20,7 +20,7 @@ import
   stew/byteutils,
   results,
   "../.."/[constants],
-  ../../stateless/witness,
+  "../.."/stateless/witness_types,
   ".."/[aristo, storage_types],
   "."/base
 

@@ -36,7 +36,7 @@ import
     test_txpool,
     test_networking,
     test_pooled_tx,
-    test_stateless_witness,
+    test_stateless_witness_types,
     # These two suites are much slower than all the rest, so run them last
     test_blockchain_json,
     test_generalstate_json,

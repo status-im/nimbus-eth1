@@ -8,47 +8,65 @@
 # those terms.
 
 import
-  std/tables,
+  std/[tables, sets],
+  eth/common,
   eth/rlp,
-  results
+  results,
+  ../db/ledger,
+  ./witness
 
 export
-  results
+  common,
+  results,
+  ledger
 
 {.push raises: [].}
 
-type
-  Witness* = object
-    state*: seq[seq[byte]] # MPT trie nodes accessed while executing the block.
-    keys*: seq[seq[byte]] # Ordered list of access keys (address bytes or storage slots bytes).
-
-func init*(
+func build*(
     T: type Witness,
-    state = newSeq[seq[byte]](),
-    keys = newSeq[seq[byte]]()): T =
-  Witness(state: state, keys: keys)
+    ledger: LedgerRef,
+    codes: var openArray[byte]): T =
+  var
+    witness = Witness.init()
+    addedStateHashes = initHashSet[Hash32]()
+    addedCodeHashes = initHashSet[Hash32]()
 
-template addState*(witness: var Witness, trieNode: seq[byte]) =
-  witness.state.add(trieNode)
+  for key in ledger.getWitnessKeys().values():
+    if key.storageMode:
+      witness.addKey(key.storageSlot.toBytesBE())
 
-template addKey*(witness: var Witness, key: seq[byte]) =
-  witness.keys.add(key)
+      let proofs = ledger.getStorageProof(key.address, @[key.storageSlot])
+      doAssert(proofs.len() == 1)
+      for trieNode in proofs[0]:
+        let nodeHash = keccak256(trieNode)
+        if nodeHash notin addedStateHashes:
+          witness.addState(trieNode)
+          addedStateHashes.incl(nodeHash)
+    else:
+      witness.addKey(key.address.toBytes())
 
-func encode*(witness: Witness): seq[byte] =
-  rlp.encode(witness)
+      let proof = ledger.getAccountProof(key.address)
+      for trieNode in proof:
+        let nodeHash = keccak256(trieNode)
+        if nodeHash notin addedStateHashes:
+          witness.addState(trieNode)
+          addedStateHashes.incl(nodeHash)
 
-func decode*(T: type Witness, witnessBytes: openArray[byte]): Result[T, string] =
-  try:
-    ok(rlp.decode(witnessBytes, T))
-  except RlpError as e:
-    err(e.msg)
+    if key.codeTouched:
+      let (codeHash, code) = ledger.getCode(key.address, returnHash = true)
+      if codeHash != EMPTY_CODE_HASH and codeHash notin addedCodeHashes:
+        codes.add(code.bytes)
+        witness.addCodeHash(codeHash)
+        addedCodeHashes.incl(codeHash)
+
+  witness
 
 # func build*(
-#     T: type Witness,
+#     T: type ExecutionWitness,
 #     ledger: LedgerRef,
 #     headers: openArray[Header]): T =
 #   var
-#     witness = Witness.init()
+#     witness = ExecutionWitness.init()
 #     addedStateHashes = initHashSet[Hash32]()
 #     addedCodeHashes = initHashSet[Hash32]()
 

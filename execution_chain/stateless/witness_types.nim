@@ -8,20 +8,23 @@
 # those terms.
 
 import
-  std/[tables, sets],
   eth/common,
   eth/rlp,
-  results,
-  ../db/ledger
+  results
 
 export
   common,
-  results,
-  ledger
+  results
 
 {.push raises: [].}
 
 type
+  Witness* = object
+    state*: seq[seq[byte]] # MPT trie nodes accessed while executing the block.
+    keys*: seq[seq[byte]] # Ordered list of access keys (address bytes or storage slots bytes).
+    codeHashes*: seq[Hash32] # Code hashes of the bytecode required by the witness.
+    headerHashes*: seq[Hash32] # Hashes of block headers which are required by the witness.
+
   ExecutionWitness* = object
     state*: seq[seq[byte]] # MPT trie nodes accessed while executing the block.
     keys*: seq[seq[byte]] # Ordered list of access keys (address bytes or storage slots bytes).
@@ -29,6 +32,35 @@ type
     headers*: seq[Header] # Block headers required for proving correctness of stateless execution.
       # Stores the parent block headers needed to verify that the state reads are correct with respect
       # to the pre-state root.
+
+func init*(
+    T: type Witness,
+    state = newSeq[seq[byte]](),
+    keys = newSeq[seq[byte]](),
+    codeHashes = newSeq[Hash32](),
+    headerHashes = newSeq[Hash32]()): T =
+  Witness(state: state, keys: keys, headerHashes: headerHashes)
+
+template addState*(witness: var Witness, trieNode: seq[byte]) =
+  witness.state.add(trieNode)
+
+template addKey*(witness: var Witness, key: seq[byte]) =
+  witness.keys.add(key)
+
+template addCodeHash*(witness: var Witness, codeHash: Hash32) =
+  witness.codeHashes.add(codeHash)
+
+template addHeaderHash*(witness: var Witness, headerHash: Hash32) =
+  witness.headerHashes.add(headerHash)
+
+func encode*(witness: Witness): seq[byte] =
+  rlp.encode(witness)
+
+func decode*(T: type Witness, witnessBytes: openArray[byte]): Result[T, string] =
+  try:
+    ok(rlp.decode(witnessBytes, T))
+  except RlpError as e:
+    err(e.msg)
 
 func init*(
     T: type ExecutionWitness,
@@ -58,44 +90,3 @@ func decode*(T: type ExecutionWitness, witnessBytes: openArray[byte]): Result[T,
     ok(rlp.decode(witnessBytes, T))
   except RlpError as e:
     err(e.msg)
-
-func build*(
-    T: type ExecutionWitness,
-    ledger: LedgerRef,
-    headers: openArray[Header]): T =
-  var
-    witness = ExecutionWitness.init()
-    addedStateHashes = initHashSet[Hash32]()
-    addedCodeHashes = initHashSet[Hash32]()
-
-  for key in ledger.getWitnessKeys().values():
-    if key.storageMode:
-      witness.addKey(key.storageSlot.toBytesBE())
-
-      let proofs = ledger.getStorageProof(key.address, @[key.storageSlot])
-      doAssert(proofs.len() == 1)
-      for trieNode in proofs[0]:
-        let nodeHash = keccak256(trieNode)
-        if nodeHash notin addedStateHashes:
-          witness.addState(trieNode)
-          addedStateHashes.incl(nodeHash)
-    else:
-      witness.addKey(key.address.toBytes())
-
-      let proof = ledger.getAccountProof(key.address)
-      for trieNode in proof:
-        let nodeHash = keccak256(trieNode)
-        if nodeHash notin addedStateHashes:
-          witness.addState(trieNode)
-          addedStateHashes.incl(nodeHash)
-
-    if key.codeTouched:
-      let (codeHash, code) = ledger.getCode(key.address, returnHash = true)
-      if codeHash != EMPTY_CODE_HASH and codeHash notin addedCodeHashes:
-        witness.addCode(code.bytes)
-        addedCodeHashes.incl(codeHash)
-
-  for h in headers:
-    witness.addHeader(h)
-
-  witness
