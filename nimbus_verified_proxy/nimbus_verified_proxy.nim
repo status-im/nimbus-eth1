@@ -97,13 +97,13 @@ proc run*(
     # header cache contains headers downloaded from p2p
     headerStore = HeaderStore.new(config.cacheLen)
 
-  # TODO: add config object to verified proxy for future config options
-  var verifiedProxy =
-    VerifiedRpcProxy.init(rpcProxy, headerStore, chainId, config.maxBlockWalk)
+    # TODO: add config object to verified proxy for future config options
+    verifiedProxy =
+      VerifiedRpcProxy.init(rpcProxy, headerStore, chainId, config.maxBlockWalk)
 
-  # instantiate evm
-  let networkId = chainIdToNetworkId(chainId).valueOr:
-    raise newException(ValueError, error)
+    # instantiate evm
+    networkId = chainIdToNetworkId(chainId).valueOr:
+      raise newException(ValueError, error)
 
   verifiedProxy.evm = AsyncEvm.init(verifiedProxy.toAsyncEvmStateBackend(), networkId)
 

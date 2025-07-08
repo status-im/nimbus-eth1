@@ -32,6 +32,6 @@ proc init*(
     chainId: UInt256,
     maxBlockWalk: uint64,
 ): T =
-  var vp = VerifiedRpcProxy(
+  VerifiedRpcProxy(
     proxy: proxy, headerStore: headerStore, chainId: chainId, maxBlockWalk: maxBlockWalk
   )
