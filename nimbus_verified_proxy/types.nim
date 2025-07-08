@@ -6,6 +6,7 @@
 # at your option. This file may not be copied, modified, or distributed except according to those terms.
 
 import
+  std/tables,
   json_rpc/[rpcproxy, rpcclient],
   stint,
   ./header_store,
@@ -17,6 +18,7 @@ type
     evm*: AsyncEvm
     proxy*: RpcProxy
     headerStore*: HeaderStore
+    filterStore*: Table[int, FilterOptions]
     chainId*: UInt256
     maxBlockWalk*: uint64
 
@@ -33,5 +35,9 @@ proc init*(
     maxBlockWalk: uint64,
 ): T =
   VerifiedRpcProxy(
-    proxy: proxy, headerStore: headerStore, chainId: chainId, maxBlockWalk: maxBlockWalk
+    proxy: proxy,
+    headerStore: headerStore,
+    filterStore: initTable[int, FilterOptions](),
+    chainId: chainId,
+    maxBlockWalk: maxBlockWalk
   )

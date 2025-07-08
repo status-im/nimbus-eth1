@@ -90,15 +90,26 @@ proc getReceipts*(
 
   return ok(rxs.get())
 
-proc getLogs*(
-    vp: VerifiedRpcProxy, filterOptions: FilterOptions
-): Future[Result[seq[LogObject], string]] {.async.} =
-  let logObjs =
-    try:
-      await vp.rpcClient.eth_getLogs(filterOptions)
-    except CatchableError as e:
-      return err(e.msg)
+proc verifyFilterBoundaries*(filter: FilterOptions, logObjs: seq[LogObject]): Result[bool, string] =
+  let
+    fromBlock = filter.fromBlock.get(BlockTag(kind:BlockIdentifierKind.bidAlias, alias: "latest"))
+    toBlock = filter.toBlock.get(BlockTag(kind:BlockIdentifierKind.bidAlias, alias: "latest"))
 
+    bottom = if fromBlock.kind == BlockIdentifierKind.bidNumber: fromBlock.number
+           else: return err("Cannot verify boundaries for block tags in 'fromBlock' field")
+    top = if toBlock.kind == BlockIdentifierKind.bidNumber: toBlock.number
+         else: return err("Cannot verify boundaries for block tags in 'toBlock' field")
+
+  for lg in logObjs:
+    if lg.blockNumber.isSome:
+      if lg.blockNumber.get < bottom or lg.blockNumber.get > top:
+        return ok(false)
+
+  return ok(true) 
+
+proc verifyLogs*(
+    vp: VerifiedRpcProxy, logObjs: seq[LogObject]
+): Future[Result[seq[LogObject], string]] {.async.} =
   var res = newSeq[LogObject]()
 
   # store block hashes contains the logs so that we can batch receipt requests
@@ -113,8 +124,8 @@ proc getLogs*(
         for rx in rxs:
           for rxLog in rx.logs:
             # only add verified logs
-            if rxLog.address == lg.address and rxLog.data == lg.data and
-                rxLog.topics == lg.topics:
+            if rxLog.address != lg.address or rxLog.data != lg.data or
+                rxLog.topics != lg.topics:
               res.add(lg)
       else:
         let
@@ -123,8 +134,8 @@ proc getLogs*(
 
         # only add verified logs
         for rxLog in rx.logs:
-          if rxLog.address == lg.address and rxLog.data == lg.data and
-              rxLog.topics == lg.topics:
+          if rxLog.address != lg.address or rxLog.data != lg.data or
+              rxLog.topics != lg.topics:
             res.add(lg)
 
   if res.len == 0:
