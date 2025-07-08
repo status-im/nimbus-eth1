@@ -44,8 +44,8 @@ func init*(
 template addState*(witness: var Witness, trieNode: seq[byte]) =
   witness.state.add(trieNode)
 
-template addKey*(witness: var Witness, key: seq[byte]) =
-  witness.keys.add(key)
+template addKey*(witness: var Witness, key: openArray[byte]) =
+  witness.keys.add(@key)
 
 template addCodeHash*(witness: var Witness, codeHash: Hash32) =
   witness.codeHashes.add(codeHash)
