@@ -24,6 +24,7 @@ import
   ../execution_chain/rpc/cors,
   ../execution_chain/common/common,
   ./types,
+  ./rpc/evm,
   ./rpc/rpc_eth_api,
   ./nimbus_verified_proxy_conf,
   ./header_store
@@ -55,6 +56,18 @@ func getConfiguredChainId(networkMetadata: Eth2NetworkMetadata): UInt256 =
   else:
     return networkMetadata.cfg.DEPOSIT_CHAIN_ID.u256
 
+func chainIdToNetworkId(chainId: UInt256): Result[UInt256, string] =
+  if chainId == 1.u256:
+    ok(1.u256)
+  elif chainId == 11155111.u256:
+    ok(11155111.u256)
+  elif chainId == 17000.u256:
+    ok(17000.u256)
+  elif chainId == 560048.u256:
+    ok(560048.u256)
+  else:
+    return err("Unknown chainId")
+
 proc run*(
     config: VerifiedProxyConf, ctx: ptr Context
 ) {.raises: [CatchableError], gcsafe.} =
@@ -84,9 +97,15 @@ proc run*(
     # header cache contains headers downloaded from p2p
     headerStore = HeaderStore.new(config.cacheLen)
 
-  # TODO: add config object to verified proxy for future config options
-  let verifiedProxy =
-    VerifiedRpcProxy.init(rpcProxy, headerStore, chainId, config.maxBlockWalk)
+    # TODO: add config object to verified proxy for future config options
+    verifiedProxy =
+      VerifiedRpcProxy.init(rpcProxy, headerStore, chainId, config.maxBlockWalk)
+
+    # instantiate evm
+    networkId = chainIdToNetworkId(chainId).valueOr:
+      raise newException(ValueError, error)
+
+  verifiedProxy.evm = AsyncEvm.init(verifiedProxy.toAsyncEvmStateBackend(), networkId)
 
   # add handlers that verify RPC calls /rpc/rpc_eth_api.nim
   verifiedProxy.installEthApiHandlers()
