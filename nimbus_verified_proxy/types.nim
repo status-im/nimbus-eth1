@@ -8,15 +8,35 @@
 import
   json_rpc/[rpcproxy, rpcclient],
   stint,
+  minilru,
   ./header_store,
   ../portal/evm/async_evm,
   web3/eth_api_types
 
+export minilru
+
+const
+  ACCOUNTS_CACHE_SIZE = 128
+  CODE_CACHE_SIZE = 64
+  STORAGE_CACHE_SIZE = 256
+
 type
+  AccountsCacheKey* = (Root, Address)
+  AccountsCache* = LruCache[AccountsCacheKey, Account]
+
+  CodeCacheKey* = (Root, Address)
+  CodeCache* = LruCache[CodeCacheKey, seq[byte]]
+
+  StorageCacheKey* = (Root, Address, UInt256)
+  StorageCache* = LruCache[StorageCacheKey, UInt256]
+
   VerifiedRpcProxy* = ref object
     evm*: AsyncEvm
     proxy*: RpcProxy
     headerStore*: HeaderStore
+    accountsCache*: AccountsCache
+    codeCache*: CodeCache
+    storageCache*: StorageCache
     chainId*: UInt256
     maxBlockWalk*: uint64
 
@@ -33,5 +53,11 @@ proc init*(
     maxBlockWalk: uint64,
 ): T =
   VerifiedRpcProxy(
-    proxy: proxy, headerStore: headerStore, chainId: chainId, maxBlockWalk: maxBlockWalk
+    proxy: proxy,
+    headerStore: headerStore,
+    accountsCache: AccountsCache.init(ACCOUNTS_CACHE_SIZE),
+    codeCache: CodeCache.init(CODE_CACHE_SIZE),
+    storageCache: StorageCache.init(STORAGE_CACHE_SIZE),
+    chainId: chainId,
+    maxBlockWalk: maxBlockWalk,
   )
