@@ -14,6 +14,7 @@ import
   std/[math, times, strutils],
   eth/[common/eth_types_rlp, trie/ordered_trie],
   stew/byteutils,
+  stew/assign2,
   nimcrypto/sha2,
   ../constants
 
@@ -128,8 +129,7 @@ proc crc32*(crc: uint32, buf: openArray[byte]): uint32 =
 
 proc short*(h: Hash32): string =
   var bytes: array[6, byte]
-  bytes[0..2] = h.data[0..2]
-  bytes[^3..^1] = h.data[^3..^1]
+  assign(bytes, h.data.toOpenArray(0, 5))
   bytes.toHex
 
 proc short*(h: Bytes32): string =
