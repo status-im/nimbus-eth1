@@ -11,7 +11,8 @@ import
   minilru,
   ./header_store,
   ../portal/evm/async_evm,
-  web3/eth_api_types
+  web3/eth_api_types,
+  ./mock_eth_api
 
 export minilru
 
@@ -37,13 +38,20 @@ type
     accountsCache*: AccountsCache
     codeCache*: CodeCache
     storageCache*: StorageCache
+    mockEthApi*: Opt[MockEthApi]
+
+    # TODO: when the list grows big add a config object instead
+    # config parameters 
     chainId*: UInt256
     maxBlockWalk*: uint64
 
   BlockTag* = eth_api_types.RtBlockIdentifier
 
-template rpcClient*(vp: VerifiedRpcProxy): RpcClient =
-  vp.proxy.getClient()
+template rpcClient*(vp: VerifiedRpcProxy) =
+  if vp.mockEthApi.isSome():
+    vp.mockEthApi.get()
+  else:
+    vp.proxy.getClient()
 
 proc init*(
     T: type VerifiedRpcProxy,
@@ -51,13 +59,27 @@ proc init*(
     headerStore: HeaderStore,
     chainId: UInt256,
     maxBlockWalk: uint64,
+    mockEthApi: bool = false,
 ): T =
-  VerifiedRpcProxy(
-    proxy: proxy,
-    headerStore: headerStore,
-    accountsCache: AccountsCache.init(ACCOUNTS_CACHE_SIZE),
-    codeCache: CodeCache.init(CODE_CACHE_SIZE),
-    storageCache: StorageCache.init(STORAGE_CACHE_SIZE),
-    chainId: chainId,
-    maxBlockWalk: maxBlockWalk,
-  )
+  if mockEthApi:
+    return VerifiedRpcProxy(
+      proxy: proxy,
+      headerStore: headerStore,
+      accountsCache: AccountsCache.init(ACCOUNTS_CACHE_SIZE),
+      codeCache: CodeCache.init(CODE_CACHE_SIZE),
+      storageCache: StorageCache.init(STORAGE_CACHE_SIZE),
+      chainId: chainId,
+      maxBlockWalk: maxBlockWalk,
+      mockEthApi: MockEthApi.init(),
+    )
+  else:
+    return VerifiedRpcProxy(
+      proxy: proxy,
+      headerStore: headerStore,
+      accountsCache: AccountsCache.init(ACCOUNTS_CACHE_SIZE),
+      codeCache: CodeCache.init(CODE_CACHE_SIZE),
+      storageCache: StorageCache.init(STORAGE_CACHE_SIZE),
+      chainId: chainId,
+      maxBlockWalk: maxBlockWalk,
+      mockEthApi: Opt.none(MockEthApi),
+    )
