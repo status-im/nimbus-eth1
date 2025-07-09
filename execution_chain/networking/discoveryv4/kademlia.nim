@@ -20,7 +20,7 @@ declareGauge discv4_routing_table_nodes,
   "Discovery v4 routing table nodes"
 
 logScope:
-  topics = "p2p-kademlia"
+  topics = "p2p kademlia"
 
 type
   # 32 bytes NodeId | 16 bytes ip | 1 byte mode

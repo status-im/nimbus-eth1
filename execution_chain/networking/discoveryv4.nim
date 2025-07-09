@@ -28,7 +28,7 @@ export
   enode
 
 logScope:
-  topics = "p2p-discovery"
+  topics = "p2p discovery"
 
 const
   # UDP packet constants.
