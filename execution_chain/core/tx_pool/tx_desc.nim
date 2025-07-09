@@ -171,7 +171,7 @@ proc getBalance(xp: TxPoolRef; account: Address): UInt256 =
 proc getNonce(xp: TxPoolRef; account: Address): AccountNonce =
   xp.vmState.ledger.getNonce(account)
 
-proc classifyValid(xp: TxPoolRef; tx: Transaction, sender: Address, blobsBundle: BlobsBundle): bool =
+proc classifyValid(xp: TxPoolRef; tx: Transaction, sender: Address): bool =
 
   if tx.gasLimit > TX_GAS_LIMIT:
     debug "Invalid transaction: Gas limit too high",
@@ -231,23 +231,6 @@ proc classifyValid(xp: TxPoolRef; tx: Transaction, sender: Address, blobsBundle:
     if tx.maxFeePerGas < 1.GasInt:
       debug "Invalid transaction: EIP-1559 transaction with maxFeePerGas lower than 1"
       return false
-
-  if blobsBundle.isNil:
-    debug "Valid transaction",
-      txType = tx.txType,
-      sender = sender,
-      gasLimit = tx.gasLimit,
-      gasPrice = tx.gasPrice,
-      value = tx.value
-  else:
-    debug "Valid transaction",
-      txType = tx.txType,
-      sender = sender,
-      gasLimit = tx.gasLimit,
-      gasPrice = tx.gasPrice,
-      value = tx.value,
-      numBlobs = blobsBundle.blobs.len,
-      wrapperVersion = blobsBundle.wrapperVersion
 
   true
 
@@ -408,7 +391,7 @@ proc addTx*(xp: TxPoolRef, ptx: PooledTransaction): Result[void, TxError] =
       sender = sender
     return err(txErrorNonceTooSmall)
 
-  if not xp.classifyValid(ptx.tx, sender, ptx.blobsBundle):
+  if not xp.classifyValid(ptx.tx, sender):
     return err(txErrorTxInvalid)
 
   if xp.idTab.len >= MAX_POOL_SIZE:
@@ -426,11 +409,17 @@ proc addTx*(xp: TxPoolRef, ptx: PooledTransaction): Result[void, TxError] =
   debug "Transaction added to txpool",
     txHash = id,
     sender = sender,
+    txType = ptx.tx.txType,
     recipient = ptx.tx.getRecipient(sender),
     nonce = ptx.tx.nonce,
+    gasLimit = ptx.tx.gasLimit,
     gasPrice = ptx.tx.gasPrice,
-    value = ptx.tx.value
-
+    value = ptx.tx.value,
+    numBlobs = if ptx.blobsBundle.isNil: 0
+               else: ptx.blobsBundle.blobs.len,
+    wrapperVersion = if ptx.blobsBundle.isNil: "none"
+                     else: $blobsBundle.wrapperVersion
+      
   ok()
 
 proc addTx*(xp: TxPoolRef, tx: Transaction): Result[void, TxError] =

@@ -18,6 +18,9 @@ import
   ./blocks/blocks_unproc,
   ./headers
 
+logScope:
+  topics = "beacon sync"
+
 # ------------------------------------------------------------------------------
 # Private functions, state handler helpers
 # ------------------------------------------------------------------------------

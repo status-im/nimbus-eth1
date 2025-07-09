@@ -73,7 +73,7 @@ declarePublicCounter rlpx_accept_failure,
   "Number of rlpx accept attempts that failed", labels = ["reason"]
 
 logScope:
-  topics = "eth p2p rlpx"
+  topics = "p2p-rlpx"
 
 type
   ResponderWithId*[MsgType] = object
