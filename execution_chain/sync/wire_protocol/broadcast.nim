@@ -188,6 +188,7 @@ proc handleTxHashesBroadcast*(wire: EthWireRef,
       except EthP2PError as exc:
         debug "Request pooled transactions failed",
           msg=exc.msg
+        return
 
       if res.isNone:
         debug "Request pooled transactions get nothing"
