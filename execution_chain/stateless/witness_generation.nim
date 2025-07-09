@@ -7,6 +7,8 @@
 # This file may not be copied, modified, or distributed except according to
 # those terms.
 
+{.push raises: [].}
+
 import
   std/[tables, sets],
   eth/common,
@@ -17,8 +19,6 @@ export
   common,
   ledger,
   witness_types
-
-{.push raises: [].}
 
 proc build*(
     T: type Witness,

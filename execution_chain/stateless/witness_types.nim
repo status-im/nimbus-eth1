@@ -7,6 +7,8 @@
 # This file may not be copied, modified, or distributed except according to
 # those terms.
 
+{.push raises: [].}
+
 import
   eth/common,
   eth/rlp,
@@ -15,8 +17,6 @@ import
 export
   common,
   results
-
-{.push raises: [].}
 
 type
   Witness* = object
