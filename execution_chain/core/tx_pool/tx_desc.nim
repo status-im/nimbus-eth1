@@ -418,8 +418,8 @@ proc addTx*(xp: TxPoolRef, ptx: PooledTransaction): Result[void, TxError] =
     numBlobs = if ptx.blobsBundle.isNil: 0
                else: ptx.blobsBundle.blobs.len,
     wrapperVersion = if ptx.blobsBundle.isNil: "none"
-                     else: $blobsBundle.wrapperVersion
-      
+                     else: $ptx.blobsBundle.wrapperVersion
+
   ok()
 
 proc addTx*(xp: TxPoolRef, tx: Transaction): Result[void, TxError] =
