@@ -20,7 +20,7 @@ import
 logScope:
   topics = "Execution layer"
 
-var nimbusHandler = NimbusNode()
+var nimbusHandler: NimbusNode
 
 proc shutdownExecution*() =
   nimbusHandler.state = NimbusState.Stopping

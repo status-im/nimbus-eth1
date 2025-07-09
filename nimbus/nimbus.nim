@@ -5,20 +5,36 @@
 #   * Apache v2 license (license terms in the root directory or at https://www.apache.org/licenses/LICENSE-2.0).
 # at your option. This file may not be copied, modified, or distributed except according to those terms.
 
+{.push raises: [].}
+
 import
-  std/[concurrency/atomics, os],
+  std/[concurrency/atomics, os, exitprocs],
   chronicles,
   execution/execution_layer,
-  consensus/consensus_layer,
+  consensus/[consensus_layer, wrapper_consensus],
   common/utils,
   conf,
   confutils/cli_parser,
+  stew/io2,
   beacon_chain/conf,
   ../execution_chain/config
 
 # ------------------------------------------------------------------------------
 # Private
 # ------------------------------------------------------------------------------
+
+#beacon node db lock
+var beaconNodeLock {.global.}: string
+
+proc createBeaconNodeFileLock(filename: string) {.raises: [IOError].} =
+  shouldCreatePid.store(false)
+
+  writeFile filename, $os.getCurrentProcessId()
+  beaconNodeLock = filename
+
+  addExitProc proc() {.noconv.} =
+    if beaconNodeLock.len > 0:
+      discard io2.removeFile(beaconNodeLock)
 
 ## create and configure service
 proc startService(nimbus: var Nimbus, service: var NimbusService) =
@@ -32,7 +48,10 @@ proc startService(nimbus: var Nimbus, service: var NimbusService) =
   isConfigRead.store(false)
 
   #start thread
-  createThread(service.serviceHandler, service.serviceFunc, serviceChannel)
+  try:
+    createThread(service.serviceHandler, service.serviceFunc, serviceChannel)
+  except Exception as e:
+    fatal "error creating thread", err = e.msg
 
   let optionsTable = block:
     case service.layerConfig.kind
@@ -64,7 +83,10 @@ proc startService(nimbus: var Nimbus, service: var NimbusService) =
     writeConfigString(writeOffset, opt)
     writeConfigString(writeOffset, arg)
 
-  serviceChannel[].send(byteArray)
+  try:
+    serviceChannel[].send(byteArray)
+  except Exception as e:
+    fatal "channel error: ", err = e.msg
 
   #wait for service read ack
   while not isConfigRead.load():
@@ -115,10 +137,6 @@ proc controlCHandler() {.noconv.} =
 
   notice "\tCtrl+C pressed. Shutting down services ..."
 
-  # WA to shutdown client(exceptions thrown)
-  # issues related with nat.nim shutdown procedure (nim-eth
-  quit 0
-
   shutdownExecution()
   shutdownConsensus()
 
@@ -126,8 +144,8 @@ proc controlCHandler() {.noconv.} =
 # Public
 # ------------------------------------------------------------------------------
 
-# Setup services
-proc setup*(nimbus: var Nimbus) =
+# Setup nimbus and services
+proc setup(nimbus: var Nimbus) {.raises: [CatchableError].} =
   let
     executionConfigNames = extractFieldNames(NimbusConf)
     consensusConfigNames = extractFieldNames(BeaconNodeConf)
@@ -164,6 +182,9 @@ proc setup*(nimbus: var Nimbus) =
   nimbus.serviceList.add(executionService)
   nimbus.serviceList.add(consensusService)
 
+  # todo: replace path with config,datadir when creating Nimbus config
+  createBeaconNodeFileLock(".beacon_node.pid")
+
 ## start nimbus client
 proc run*(nimbus: var Nimbus) =
   try:
@@ -181,11 +202,16 @@ proc run*(nimbus: var Nimbus) =
   # wait for shutdown
   nimbus.monitorServices()
 
-# ------
+{.pop.}
+# -----
+
 when isMainModule:
   notice "Starting Nimbus"
 
   setupFileLimits()
+
+  # todo: replace path with config after creating Nimbus config
+  # setupLogging(config.logLevel, config.logStdout, config.logFile)
 
   var nimbus = Nimbus()
   nimbus.setup()

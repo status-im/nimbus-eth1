@@ -8,7 +8,7 @@
 {.push raises: [].}
 
 import
-  std/[os, random, terminal, times, exitprocs],
+  std/[os, random, terminal, times, exitprocs, atomics],
   chronos,
   chronicles,
   metrics,
@@ -2295,12 +2295,17 @@ proc run(node: BeaconNode) {.raises: [CatchableError].} =
   # time to say goodbye
   node.stop()
 
+# db lock
+var shouldCreatePid*: Atomic[bool]
+shouldCreatePid.store(true)
+
 var gPidFile: string
 proc createPidFile(filename: string) {.raises: [IOError].} =
-  writeFile filename, $os.getCurrentProcessId()
-  gPidFile = filename
-  addExitProc proc() {.noconv.} =
-    discard io2.removeFile(gPidFile)
+  if shouldCreatePid.load():
+    writeFile filename, $os.getCurrentProcessId()
+    gPidFile = filename
+    addExitProc proc() {.noconv.} =
+      discard io2.removeFile(gPidFile)
 
 proc initializeNetworking(node: BeaconNode) {.async.} =
   node.installMessageValidators()
