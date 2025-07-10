@@ -192,7 +192,7 @@ proc preventLoadingDataDirForTheWrongNetwork(db: CoreDbRef; conf: NimbusConf) =
       expected=calculatedId
     quit(QuitFailure)
 
-proc run(nimbus: NimbusNode, conf: NimbusConf) =
+proc run*(nimbus: NimbusNode, conf: NimbusConf) =
   info "Launching execution client",
       version = FullVersionStr,
       conf
