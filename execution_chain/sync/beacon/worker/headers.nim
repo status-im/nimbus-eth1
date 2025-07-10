@@ -20,6 +20,9 @@ import
 export
   headers_queue, headers_unproc
 
+import
+  ./headers/headers_debug
+
 # ------------------------------------------------------------------------------
 # Public functions
 # ------------------------------------------------------------------------------
@@ -48,6 +51,9 @@ proc headersCollect*(
 
   if ctx.headersUnprocIsEmpty() or
      ctx.hdrCache.state != collecting:
+    trace info & ": nothing to do", peer,
+      unprocEmpty=ctx.headersUnprocIsEmpty(), nStagedQ=ctx.hdr.staged.len,
+      syncState=($buddy.syncState), nSyncPeers=ctx.pool.nBuddies
     return                                           # no action
 
   var
@@ -97,6 +103,8 @@ proc headersCollect*(
       if dangling < top:
         discard ctx.headersUnprocFetch(top - dangling).expect("iv")
 
+      trace info & ": fetch to disk ***", peer
+
       let
         # Get parent hash from the most senior stored header
         parent = ctx.hdrCache.antecedent.parentHash
@@ -104,7 +112,10 @@ proc headersCollect*(
         # Fetch some headers
         rev = (await buddy.headersFetch(
                              parent, nFetchHeadersRequest, info)).valueOr:
+          trace info & ": fetch to disk error ***", peer
           break fetchHeadersBody                     # error => exit block
+
+      trace info & ": fetch to disk ok ***", peer
 
       ctx.pool.seenData = true                       # header data exist
 
@@ -127,12 +138,17 @@ proc headersCollect*(
     # Continue opportunistically fetching by block number rather than hash. The
     # fetched headers need to be staged and checked/serialised later.
     if ctx.hdr.staged.len + ctx.hdr.reserveStaged < headersStagedQueueLengthMax:
+      doAssert ctx.hdr.verify()
+
+      trace info & ": fetch and cache ***", peer
 
       # Fetch headers
       ctx.hdr.reserveStaged.inc                      # Book a slot on `staged`
       let rc = await buddy.headersFetch(
                              EMPTY_ROOT_HASH, nFetchHeadersRequest, info)
       ctx.hdr.reserveStaged.dec                      # Free that slot again
+
+      trace info & ": fetch and cache result ***", peer, ok=rc.isErr
 
       if rc.isErr:
         break fetchHeadersBody                       # done, exit this block
@@ -151,6 +167,8 @@ proc headersCollect*(
 
     # End block: `fetchHeadersBody`
 
+  doAssert ctx.hdr.verify()
+
   if nStored == 0 and nQueued == 0:
     if not ctx.pool.seenData and
        buddy.peerID notin ctx.pool.failedPeers and
@@ -168,7 +186,7 @@ proc headersCollect*(
     unprocTop=(if ctx.hdrSessionStopped(): "n/a"
                else: ctx.headersUnprocAvailTop.bnStr),
     nQueued, nStored, nStagedQ=ctx.hdr.staged.len,
-    nSyncPeers=ctx.pool.nBuddies
+    nSyncPeers=ctx.pool.nBuddies, hdr=(ctx.hdr.bnStr)
 
 # --------------
 
@@ -203,7 +221,8 @@ proc headersUnstage*(buddy: BeaconBuddyRef; info: static[string]): bool =
     if maxNum + 1 < dangling:
       trace info & ": gap, serialisation postponed", peer,
         qItem=qItem.data.revHdrs.bnStr, D=dangling.bnStr, nStored,
-        nStagedQ=ctx.hdr.staged.len, nSyncPeers=ctx.pool.nBuddies
+        nStagedQ=ctx.hdr.staged.len, nSyncPeers=ctx.pool.nBuddies,
+        hdr=(ctx.hdr.bnStr)
       switchPeer = true # there is a gap -- come back later
       break
 
@@ -224,12 +243,12 @@ proc headersUnstage*(buddy: BeaconBuddyRef; info: static[string]): bool =
   if 0 < nStored:
     info "Headers serialised and stored", D=ctx.hdrCache.antecedent.bnStr,
       nStored, nStagedQ=ctx.hdr.staged.len, nSyncPeers=ctx.pool.nBuddies,
-      switchPeer
+      switchPeer, hdr=(ctx.hdr.bnStr)
 
   elif 0 < ctx.hdr.staged.len and not switchPeer:
     trace info & ": no headers processed", peer,
       D=ctx.hdrCache.antecedent.bnStr, nStagedQ=ctx.hdr.staged.len,
-      nSyncPeers=ctx.pool.nBuddies
+      nSyncPeers=ctx.pool.nBuddies, hdr=(ctx.hdr.bnStr)
 
   not switchPeer
 

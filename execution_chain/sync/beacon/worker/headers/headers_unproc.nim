@@ -50,8 +50,11 @@ proc headersUnprocFetch*(
   doAssert ctx.hdr.borrowed.merge(iv) == iv.len
   ok(iv)
 
+import pkg/chronicles, ./headers_debug
 proc headersUnprocCommit*(ctx: BeaconCtxRef; iv: BnRange) =
   ## Commit back all processed range, i.e. remove it from the borrowed set.
+  if ctx.hdr.borrowed.covered(iv) != iv.len:
+    trace "Oops", iv, hdr=ctx.hdr.bnStr
   doAssert ctx.hdr.borrowed.reduce(iv) == iv.len
 
 proc headersUnprocCommit*(ctx: BeaconCtxRef; iv, unproc: BnRange) =

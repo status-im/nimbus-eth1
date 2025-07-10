@@ -19,6 +19,9 @@ import
   ../../worker_desc,
   ./[blocks_fetch, blocks_helpers, blocks_unproc]
 
+import
+  ./blocks_debug
+
 # ------------------------------------------------------------------------------
 # Private helpers
 # ------------------------------------------------------------------------------
@@ -170,10 +173,11 @@ proc blocksImport*(
   ##
   let iv = BnRange.new(blocks[0].header.number, blocks[^1].header.number)
   doAssert iv.len == blocks.len.uint64
+  doAssert ctx.blk.verify()
 
   trace info & ": Start importing blocks", peer=maybePeer.toStr, iv,
     nBlocks=iv.len, base=ctx.chain.baseNumber.bnStr,
-    head=ctx.chain.latestNumber.bnStr
+    head=ctx.chain.latestNumber.bnStr, blk=ctx.blk.bnStr
 
   var isError = false
   block loop:
@@ -228,7 +232,8 @@ proc blocksImport*(
     nBlocks=(ctx.subState.top - iv.minPt + 1),
     nFailed=(iv.maxPt - ctx.subState.top),
     base=ctx.chain.baseNumber.bnStr, head=ctx.chain.latestNumber.bnStr,
-    target=ctx.subState.head.bnStr, targetHash=ctx.subState.headHash.short
+    target=ctx.subState.head.bnStr, targetHash=ctx.subState.headHash.short,
+    blk=ctx.blk.bnStr
 
 # ------------------------------------------------------------------------------
 # End

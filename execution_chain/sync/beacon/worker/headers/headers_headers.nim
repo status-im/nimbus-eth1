@@ -18,6 +18,9 @@ import
   ../../worker_desc,
   ./[headers_fetch, headers_helpers, headers_unproc]
 
+import
+  ./headers_debug
+
 # ------------------------------------------------------------------------------
 # Public helper functions
 # ------------------------------------------------------------------------------
@@ -127,7 +130,8 @@ proc headersStashOnDisk*(
               elif revHdrs[^1].number <= dBottom: (dBottom - revHdrs[^1].number)
               else: revHdrs.len.uint64),
     base=ctx.chain.baseNumber.bnStr, head=ctx.chain.latestNumber.bnStr,
-    target=ctx.subState.head.bnStr, targetHash=ctx.subState.headHash.short
+    target=ctx.subState.head.bnStr, targetHash=ctx.subState.headHash.short,
+    hdr=ctx.hdr.bnStr
 
   ctx.resetHdrProcErrors peerID                  # reset error count
   true
