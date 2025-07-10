@@ -7,11 +7,11 @@
 
 import
   json_rpc/[rpcproxy, rpcclient],
+  web3/[eth_api, eth_api_types],
   stint,
   minilru,
   ./header_store,
-  ../portal/evm/async_evm,
-  web3/eth_api_types
+  ../portal/evm/async_evm
 
 export minilru
 
@@ -30,13 +30,22 @@ type
   StorageCacheKey* = (Root, Address, UInt256)
   StorageCache* = LruCache[StorageCacheKey, UInt256]
 
-  GetBlockByHashProc* = proc(blkHash: Hash32, fullTransactions: bool): Future[BlockObject] {.async.}
-  GetBlockByNumberProc* = proc(blkHash: Hash32, fullTransactions: bool): Future[BlockObject] {.async.}
-  GetProofProc* = proc(address: Address, slots: seq[UInt256], blockId: RtBlockIdentifier): Future[ProofResponse] {.async.}
-  CreateAccessListProc* = proc(args: TransactionArgs, blockId: RtBlockIdentifier): Future[AccessListResult] {.async.}
-  GetCodeProc* = proc(address: Address, blockId: RtBlockIdentifier): Future[seq[byte]] {.async.}
+  BlockTag* = eth_api_types.RtBlockIdentifier
+
+  ChainIdProc = proc(): Future[UInt256] {.async.}
+  GetBlockByHashProc* =
+    proc(blkHash: Hash32, fullTransactions: bool): Future[BlockObject] {.async.}
+  GetBlockByNumberProc* =
+    proc(blkNum: BlockTag, fullTransactions: bool): Future[BlockObject] {.async.}
+  GetProofProc* = proc(
+    address: Address, slots: seq[UInt256], blockId: BlockTag
+  ): Future[ProofResponse] {.async.}
+  CreateAccessListProc* =
+    proc(args: TransactionArgs, blockId: BlockTag): Future[AccessListResult] {.async.}
+  GetCodeProc* = proc(address: Address, blockId: BlockTag): Future[seq[byte]] {.async.}
 
   EthApiBackend* = object
+    eth_chainId*: ChainIdProc
     eth_getBlockByHash*: GetBlockByHashProc
     eth_getBlockByNumber*: GetBlockByNumberProc
     eth_getProof*: GetProofProc
@@ -50,26 +59,53 @@ type
     accountsCache*: AccountsCache
     codeCache*: CodeCache
     storageCache*: StorageCache
-    client*: EthApiBackend
+    rpcClient*: EthApiBackend
 
     # TODO: when the list grows big add a config object instead
     # config parameters 
     chainId*: UInt256
     maxBlockWalk*: uint64
 
-  BlockTag* = eth_api_types.RtBlockIdentifier
+proc initNetworkApiBackend*(vp: VerifiedRpcProxy): EthApiBackend =
+  let
+    ethChainIdProc = proc(): Future[UInt256] {.async.} =
+      await vp.proxy.getClient.eth_chainId()
 
-proc initNetworkApiBackend*(): EthApiBackend =
+    getBlockByHashProc = proc(
+        blkHash: Hash32, fullTransactions: bool
+    ): Future[BlockObject] {.async.} =
+      await vp.proxy.getClient.eth_getBlockByHash(blkHash, fullTransactions)
+
+    getBlockByNumberProc = proc(
+        blkNum: BlockTag, fullTransactions: bool
+    ): Future[BlockObject] {.async.} =
+      await vp.proxy.getClient.eth_getBlockByNumber(blkNum, fullTransactions)
+
+    getProofProc = proc(
+        address: Address, slots: seq[UInt256], blockId: BlockTag
+    ): Future[ProofResponse] {.async.} =
+      await vp.proxy.getClient.eth_getProof(address, slots, blockId)
+
+    createAccessListProc = proc(
+        args: TransactionArgs, blockId: BlockTag
+    ): Future[AccessListResult] {.async.} =
+      await vp.proxy.getClient.eth_createAccessList(args, blockId)
+
+    getCodeProc = proc(
+        address: Address, blockId: BlockTag
+    ): Future[seq[byte]] {.async.} =
+      await vp.proxy.getClient.eth_getCode(address, blockId)
+
   EthApiBackend(
-    eth_getBlockByHash: vp.proxy.getClient.eth_getBlockByHash,
-    eth_getBlockByNumbe: vp.proxy.getClient.eth_getBlockByNumber,
-    eth_getProof: vp.proxy.getClient.eth_getProof,
-    eth_createAccessList: vp.proxy.getClient.eth_createAccessList,
-    eth_getCode: vp.proxy.getClient.eth_getCode,
+    eth_getBlockByHash: getBlockByHashProc,
+    eth_getBlockByNumber: getBlockByNumberProc,
+    eth_getProof: getProofProc,
+    eth_createAccessList: createAccessListProc,
+    eth_getCode: getCodeProc,
   )
 
-template initMockApiBackend*(): EthApiBackend =
-  initNetworkApiBackend()
+template initMockApiBackend*(vp: VerifiedRpcProxy): EthApiBackend =
+  vp.initNetworkApiBackend()
 
 proc init*(
     T: type VerifiedRpcProxy,
@@ -79,7 +115,7 @@ proc init*(
     maxBlockWalk: uint64,
     mockEthApi: bool = false,
 ): T =
-  VerifiedRpcProxy(
+  var vp = VerifiedRpcProxy(
     proxy: proxy,
     headerStore: headerStore,
     accountsCache: AccountsCache.init(ACCOUNTS_CACHE_SIZE),
@@ -87,6 +123,12 @@ proc init*(
     storageCache: StorageCache.init(STORAGE_CACHE_SIZE),
     chainId: chainId,
     maxBlockWalk: maxBlockWalk,
-    client: if mockEthApi: initMockApiBackend() else: initNetworkApiBackend(),
   )
- 
+
+  vp.rpcClient =
+    if mockEthApi:
+      vp.initMockApiBackend()
+    else:
+      vp.initNetworkApiBackend()
+
+  return vp

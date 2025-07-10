@@ -12,7 +12,7 @@ import
   results,
   chronicles,
   web3/[eth_api_types, eth_api],
-  json_rpc/[rpcproxy, rpcserver, rpcclient],
+  json_rpc/[rpcserver, rpcclient],
   eth/common/eth_types_rlp,
   eth/rlp,
   eth/trie/[ordered_trie, trie_defs],
