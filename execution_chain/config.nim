@@ -365,6 +365,12 @@ type
             "(i.e. from activation to suspension)"
       name: "debug-beacon-sync-trace-sessions" .}: int
 
+    beaconSyncReplayFile* {.
+      hidden
+      desc: "Enable reply of an argument trace file. This will render some " &
+            "other options ineffective."
+      name: "debug-beacon-sync-replay-file" .}: Option[InputFile]
+
     rocksdbMaxOpenFiles {.
       hidden
       defaultValue: defaultMaxOpenFiles

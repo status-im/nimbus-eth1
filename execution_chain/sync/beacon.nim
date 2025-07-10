@@ -19,7 +19,7 @@ import
   ./beacon/worker/blocks/blocks_import as blocks,
   ./beacon/worker/headers/headers_fetch as headers,
   ./beacon/worker/update,
-  ./beacon/[trace, worker, worker_desc],
+  ./beacon/[trace, replay, worker, worker_desc],
   ./[sync_desc, sync_sched, wire_protocol]
 
 logScope:
@@ -117,6 +117,12 @@ proc tracerInit*(desc: BeaconSyncRef; outFile: string, nSessions: int) =
     fatal "Cannot set up trace handlers -- STOP", fileName=outFile, nSessions
     quit(QuitFailure)
 
+proc replayInit*(desc: BeaconSyncRef; inFile: string) =
+  ## Set up replay (not be called when trace is enabled)
+  if not desc.ctx.replaySetup(inFile):
+    fatal "Cannot set up replay handlers -- STOP", fileName=inFile
+    quit(QuitFailure)
+
 proc targetInit*(desc: BeaconSyncRef; rlpFile: string) =
   ## Set up inital sprint (intended for debugging)
   doAssert desc.ctx.handler.version == 0
@@ -126,12 +132,15 @@ proc targetInit*(desc: BeaconSyncRef; rlpFile: string) =
 proc start*(desc: BeaconSyncRef): bool =
   if desc.startSync():
     desc.ctx.traceStart()
+    desc.ctx.replayStart()
     return true
   # false
 
 proc stop*(desc: BeaconSyncRef) {.async.} =
   desc.ctx.traceStop()
   desc.ctx.traceRelease()
+  desc.ctx.replayStop()
+  desc.ctx.replayRelease()
   await desc.stopSync()
 
 # ------------------------------------------------------------------------------

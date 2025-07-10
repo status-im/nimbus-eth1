@@ -30,7 +30,7 @@ type
     ## Control and state settings
     runState: BuddyRunState     ## Access with getters
 
-  BuddyRef*[S,W] = ref object
+  BuddyRef*[S,W] = ref object of RootRef
     ## Worker peer state descriptor.
     ctx*: CtxRef[S]             ## Shared data descriptor back reference
     peer*: Peer                 ## Reference to eth `p2p` protocol entry

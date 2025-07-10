@@ -120,14 +120,20 @@ proc setupP2P(nimbus: NimbusNode, conf: NimbusConf,
   nimbus.beaconSyncRef = BeaconSyncRef.init(
     nimbus.ethNode, nimbus.fc, conf.maxPeers)
 
-  # Optional tracer
-  if conf.beaconSyncTraceFile.isSome():
-    nimbus.beaconSyncRef.tracerInit(
-      conf.beaconSyncTraceFile.unsafeGet.string, conf.beaconSyncTraceSessions)
+  # Optional replay
+  if conf.beaconSyncReplayFile.isSome():
+    nimbus.beaconSyncRef.replayInit(
+      conf.beaconSyncReplayFile.unsafeGet.string)
 
-  # Optional for pre-setting the sync target (i.e. debugging)
-  if conf.beaconSyncTargetFile.isSome():
-    nimbus.beaconSyncRef.targetInit conf.beaconSyncTargetFile.unsafeGet.string
+  else:
+    # Optional tracer
+    if conf.beaconSyncTraceFile.isSome():
+      nimbus.beaconSyncRef.tracerInit(
+        conf.beaconSyncTraceFile.unsafeGet.string, conf.beaconSyncTraceSessions)
+
+    # Optional for pre-setting the sync target (i.e. debugging)
+    if conf.beaconSyncTargetFile.isSome():
+      nimbus.beaconSyncRef.targetInit conf.beaconSyncTargetFile.unsafeGet.string
 
   # Connect directly to the static nodes
   let staticPeers = conf.getStaticPeers()
@@ -280,7 +286,8 @@ proc run(nimbus: NimbusNode, conf: NimbusConf) =
     setupP2P(nimbus, conf, com)
     setupRpc(nimbus, conf, com)
 
-    if conf.maxPeers > 0 and conf.engineApiServerEnabled():
+    if (conf.maxPeers > 0 and conf.engineApiServerEnabled()) or
+       conf.beaconSyncReplayFile.isSome():
       # Not starting syncer if there is definitely no way to run it. This
       # avoids polling (i.e. waiting for instructions) and some logging.
       if not nimbus.beaconSyncRef.start():
