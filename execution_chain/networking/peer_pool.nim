@@ -18,7 +18,7 @@ import
   ./[discoveryv4, rlpx, p2p_types]
 
 logScope:
-  topics = "eth p2p peer_pool"
+  topics = "p2p peer_pool"
 
 
 const
