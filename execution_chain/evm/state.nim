@@ -91,7 +91,7 @@ proc new*(
   ## with the `parent` block header.
   new result
   result.init(
-    ac       = LedgerRef.init(txFrame, storeSlotHash),
+    ac       = LedgerRef.init(txFrame, storeSlotHash, com.statelessProviderEnabled),
     parent   = parent,
     blockCtx = blockCtx,
     com      = com,
@@ -158,7 +158,7 @@ proc init*(
   ## It requires the `header` argument properly initalised so that for PoA
   ## networks, the miner address is retrievable via `ecRecover()`.
   self.init(
-    ac       = LedgerRef.init(txFrame, storeSlotHash),
+    ac       = LedgerRef.init(txFrame, storeSlotHash, com.statelessProviderEnabled),
     parent   = parent,
     blockCtx = blockCtx(header),
     com      = com,

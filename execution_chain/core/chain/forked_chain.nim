@@ -41,8 +41,8 @@ export
 
 const
   BaseDistance = 128'u64
-  PersistBatchSize = 32'u64
-  MaxQueueSize = 9
+  PersistBatchSize = 4'u64
+  MaxQueueSize = 128
 
 # ------------------------------------------------------------------------------
 # Private functions
@@ -53,7 +53,7 @@ func appendBlock(c: ForkedChainRef,
          blk: Block,
          blkHash: Hash32,
          txFrame: CoreDbTxRef,
-         receipts: sink seq[StoredReceipt]) =
+         receipts: sink seq[StoredReceipt]): BlockRef =
 
   let newBlock = BlockRef(
     blk     : blk,
@@ -63,6 +63,8 @@ func appendBlock(c: ForkedChainRef,
     parent  : parent,
   )
 
+  # Only finalized segment have finalized marker
+  newBlock.notFinalized()
   c.hashToBlock[blkHash] = newBlock
   c.latest = newBlock
 
@@ -70,10 +72,11 @@ func appendBlock(c: ForkedChainRef,
     if head.hash == parent.hash:
       # update existing heads
       c.heads[i] = newBlock
-      return
+      return newBlock
 
   # It's a branch
   c.heads.add newBlock
+  newBlock
 
 proc fcuSetHead(c: ForkedChainRef,
                 txFrame: CoreDbTxRef,
@@ -121,12 +124,12 @@ func findFinalizedPos(
 
     # There is no point traversing the DAG if there is only one branch.
     # Just return the node.
-    if c.heads.len > 1:
-      loopIt(head):
-        if it == fin:
-          return ok(fin)
-    else:
+    if c.heads.len == 1:
       return ok(fin)
+
+    loopIt(head):
+      if it == fin:
+        return ok(fin)
 
   err("Invalid finalizedHash: block not in argument head ancestor lineage")
 
@@ -215,10 +218,6 @@ proc updateHead(c: ForkedChainRef, head: BlockRef) =
     head.hash,
     head.number)
 
-func uncolorAll(c: ForkedChainRef) =
-  for node in values(c.hashToBlock):
-    node.noColor()
-
 proc updateFinalized(c: ForkedChainRef, finalized: BlockRef, fcuHead: BlockRef) =
   # Pruning
   # ::
@@ -232,67 +231,68 @@ proc updateFinalized(c: ForkedChainRef, finalized: BlockRef, fcuHead: BlockRef) 
   # 'B', 'D', and A5 onward will stay
   # 'C' will be removed
 
-  func reachable(head, fin: BlockRef): bool =
-    loopIt(head):
-      if it.colored:
-        return it == fin
-    false
-
-  # There is no point running this expensive algorithm
-  # if the chain have no branches, just move it forward.
-  if c.heads.len > 1:
-    c.uncolorAll()
-    loopIt(finalized):
-      it.color()
-
-    var
-      i = 0
-      updateLatest = false
-
-    while i < c.heads.len:
-      let head = c.heads[i]
-
-      # Any branches not reachable from finalized
-      # should be removed.
-      if not reachable(head, finalized):
-        loopIt(head):
-          if not it.colored and it.txFrame.isNil.not:
-            c.removeBlockFromCache(it)
-          else:
-            break
-
-        if head == c.latest:
-          updateLatest = true
-
-        c.heads.del(i)
-        # no need to increment i when we delete from c.heads.
-        continue
-
-      inc i
-
-    if updateLatest:
-      # Previous `latest` is pruned, select a new latest
-      # based on longest chain reachable from fcuHead.
-      var candidate: BlockRef
-      for head in c.heads:
-        loopIt(head):
-          if it == fcuHead:
-            if candidate.isNil:
-              candidate = head
-            elif head.number > candidate.number:
-              candidate = head
-            break
-          if it.number < fcuHead.number:
-            break
-
-      doAssert(candidate.isNil.not)
-      c.latest = candidate
-
   let txFrame = finalized.txFrame
   txFrame.fcuFinalized(finalized.hash, finalized.number).expect("fcuFinalized OK")
 
-proc updateBase(c: ForkedChainRef, base: BlockRef):
-  Future[void] {.async: (raises: [CancelledError]), gcsafe.} =
+  # There is no point running this expensive algorithm
+  # if the chain have no branches, just move it forward.
+  if c.heads.len == 1:
+    return
+
+  func reachable(head, fin: BlockRef): bool =
+    var it = head
+    while not it.finalized:
+      it = it.parent
+    it == fin
+
+  # Only finalized segment have finalized marker
+  loopFinalized(finalized):
+    it.finalize()
+
+  var
+    i = 0
+    updateLatest = false
+
+  while i < c.heads.len:
+    let head = c.heads[i]
+
+    # Any branches not reachable from finalized
+    # should be removed.
+    if not reachable(head, finalized):
+      loopFinalized(head):
+        if it.txFrame.isNil:
+          # Has been deleted by previous branch
+          break
+        c.removeBlockFromCache(it)
+
+      if head == c.latest:
+        updateLatest = true
+
+      c.heads.del(i)
+      # no need to increment i when we delete from c.heads.
+      continue
+
+    inc i
+
+  if updateLatest:
+    # Previous `latest` is pruned, select a new latest
+    # based on longest chain reachable from fcuHead.
+    var candidate: BlockRef
+    for head in c.heads:
+      loopIt(head):
+        if it == fcuHead:
+          if candidate.isNil:
+            candidate = head
+          elif head.number > candidate.number:
+            candidate = head
+          break
+        if it.number < fcuHead.number:
+          break
+
+    doAssert(candidate.isNil.not)
+    c.latest = candidate
+
+proc updateBase(c: ForkedChainRef, base: BlockRef): uint =
   ##
   ##     A1 - A2 - A3          D5 - D6
   ##    /                     /
@@ -311,63 +311,125 @@ proc updateBase(c: ForkedChainRef, base: BlockRef):
     # No update, return
     return
 
-  # Persist the new base block - this replaces the base tx in coredb!
-  for x in base.everyNthBlock(4):
-    const
-      # We cap waiting for an idle slot in case there's a lot of network traffic
-      # taking up all CPU - we don't want to _completely_ stop processing blocks
-      # in this case - doing so also allows us to benefit from more batching /
-      # larger network reads when under load.
-      idleTimeout = 10.milliseconds
+  c.com.db.persist(base.txFrame, Opt.some(base.stateRoot))
 
-    discard await idleAsync().withTimeout(idleTimeout)
-    c.com.db.persist(x.txFrame, Opt.some(x.stateRoot))
-
-    # Update baseTxFrame when we about to yield to the event loop
-    # and prevent other modules accessing expired baseTxFrame.
-    c.baseTxFrame = x.txFrame
+  # Update baseTxFrame when we about to yield to the event loop
+  # and prevent other modules accessing expired baseTxFrame.
+  c.baseTxFrame = base.txFrame
 
   # Cleanup in-memory blocks starting from base backward
   # e.g. B2 backward.
-  var count = 0
-  loopIt(base.parent):
+  var
+    count = 0'u
+    it = base.parent
+
+  while it.isOk:
     c.removeBlockFromCache(it)
     inc count
+    let b = it
+    it = it.parent
+    b.parent = nil
 
   # Update base branch
   c.base = base
   c.base.parent = nil
 
-  # Log only if more than one block persisted
-  # This is to avoid log spamming, during normal operation
-  # of the client following the chain
-  # When multiple blocks are persisted together, it's mainly
-  # during `beacon sync` or `nrpc sync`
-  if count > 1:
-    notice "Finalized blocks persisted",
-      nBlocks = count,
-      base = c.base.number,
-      baseHash = c.base.hash.short,
-      pendingFCU = c.pendingFCU.short,
-      resolvedFin= c.latestFinalizedBlockNumber
+  # Base block always have finalized marker
+  c.base.finalize()
+
+  count
+
+proc processUpdateBase(c: ForkedChainRef) {.async: (raises: [CancelledError]).} =
+  if c.baseQueue.len > 0:
+    let base = c.baseQueue.popFirst()
+    c.persistedCount += c.updateBase(base)
+
+  const
+    minLogInterval = 5
+
+  if c.baseQueue.len == 0:
+    let time = EthTime.now()
+    if time - c.lastBaseLogTime > minLogInterval:
+      # Log only if more than one block persisted
+      # This is to avoid log spamming, during normal operation
+      # of the client following the chain
+      # When multiple blocks are persisted together, it's mainly
+      # during `beacon sync` or `nrpc sync`
+      if c.persistedCount > 1:
+        notice "Finalized blocks persisted",
+          nBlocks = c.persistedCount,
+          base = c.base.number,
+          baseHash = c.base.hash.short,
+          pendingFCU = c.pendingFCU.short,
+          resolvedFin= c.latestFinalizedBlockNumber
+      else:
+        debug "Finalized blocks persisted",
+          nBlocks = c.persistedCount,
+          target = c.base.hash.short,
+          base = c.base.number,
+          baseHash = c.base.hash.short,
+          pendingFCU = c.pendingFCU.short,
+          resolvedFin= c.latestFinalizedBlockNumber
+      c.lastBaseLogTime = time
+      c.persistedCount = 0
+    return
+
+  if c.queue.isNil:
+    # This recursive mode only used in test env with small set of blocks
+    await c.processUpdateBase()
   else:
-    debug "Finalized blocks persisted",
-      nBlocks = count,
-      target = base.hash.short,
-      base = c.base.number,
-      baseHash = c.base.hash.short,
-      pendingFCU = c.pendingFCU.short,
-      resolvedFin= c.latestFinalizedBlockNumber
+    proc asyncHandler(): Future[Result[void, string]] {.async: (raises: [CancelledError]).} =
+      await c.processUpdateBase()
+      ok()
+    await c.queue.addLast(QueueItem(handler: asyncHandler))
+
+proc queueUpdateBase(c: ForkedChainRef, base: BlockRef)
+     {.async: (raises: [CancelledError]).} =
+  let
+    prevQueuedBase = if c.baseQueue.len > 0:
+                       c.baseQueue.peekLast()
+                     else:
+                       c.base
+
+  if prevQueuedBase.number == base.number:
+    return
+
+  var
+    number = base.number - min(base.number, PersistBatchSize)
+    steps  = newSeqOfCap[BlockRef]((base.number-c.base.number) div PersistBatchSize + 1)
+    it = prevQueuedBase
+
+  steps.add base
+
+  while it.number > prevQueuedBase.number:
+    if it.number == number:
+      steps.add it
+      number -= min(number, PersistBatchSize)
+    it = it.parent
+
+  for i in countdown(steps.len-1, 0):
+    c.baseQueue.addLast(steps[i])
+
+  if c.queue.isNil:
+    # This recursive mode only used in test env with small set of blocks
+    await c.processUpdateBase()
+  else:
+    proc asyncHandler(): Future[Result[void, string]] {.async: (raises: [CancelledError]).} =
+      await c.processUpdateBase()
+      ok()
+    await c.queue.addLast(QueueItem(handler: asyncHandler))
 
 proc validateBlock(c: ForkedChainRef,
           parent: BlockRef,
-          blk: Block, finalized: bool): Future[Result[Hash32, string]]
+          blk: Block, finalized: bool): Future[Result[BlockRef, string]]
             {.async: (raises: [CancelledError]).} =
-  let blkHash = blk.header.computeBlockHash
+  let
+    blkHash = blk.header.computeBlockHash
+    existingBlock = c.hashToBlock.getOrDefault(blkHash)
 
-  if c.hashToBlock.hasKey(blkHash):
-    # Block exists, just return
-    return ok(blkHash)
+  # Block exists, just return
+  if existingBlock.isOk:
+    return ok(existingBlock)
 
   if blkHash == c.pendingFCU:
     # Resolve the hash into latestFinalizedBlockNumber
@@ -396,7 +458,9 @@ proc validateBlock(c: ForkedChainRef,
       excessBlobGas: blk.header.excessBlobGas,
       parentBeaconBlockRoot: blk.header.parentBeaconBlockRoot,
       requestsHash: blk.header.requestsHash,
-    )
+    ),
+    parentTxFrame=cast[uint](parentFrame),
+    txFrame=cast[uint](txFrame)
 
   var receipts = c.processBlock(parent.header, txFrame, blk, blkHash, finalized).valueOr:
     txFrame.dispose()
@@ -406,7 +470,7 @@ proc validateBlock(c: ForkedChainRef,
 
   c.updateSnapshot(blk, txFrame)
 
-  c.appendBlock(parent, blk, blkHash, txFrame, move(receipts))
+  let newBlock = c.appendBlock(parent, blk, blkHash, txFrame, move(receipts))
 
   for i, tx in blk.transactions:
     c.txRecords[computeRlpHash(tx)] = (blkHash, uint64(i))
@@ -421,14 +485,37 @@ proc validateBlock(c: ForkedChainRef,
       prevBase = c.base.number
 
     c.updateFinalized(base, base)
-    await c.updateBase(base)
+    await c.queueUpdateBase(base)
 
     # If on disk head behind base, move it to base too.
     if c.base.number > prevBase:
       if c.fcuHead.number < c.base.number:
         c.updateHead(c.base)
 
-  ok(blkHash)
+  ok(newBlock)
+
+template queueOrphan(c: ForkedChainRef, parent: BlockRef, finalized = false): auto =
+  if c.queue.isNil:
+    # This recursive mode only used in test env with small set of blocks
+    c.processOrphan(parent, finalized)
+  else:
+    proc asyncHandler(): Future[Result[void, string]] {.async: (raises: [CancelledError]).} =
+      await c.processOrphan(parent, finalized)
+      ok()
+    c.queue.addLast(QueueItem(handler: asyncHandler))
+
+proc processOrphan(c: ForkedChainRef, parent: BlockRef, finalized = false)
+  {.async: (raises: [CancelledError]).} =
+  let
+    orphan = c.quarantine.popOrphan(parent.hash).valueOr:
+      # No more orphaned block
+      return
+    parent = (await c.validateBlock(parent, orphan, finalized)).valueOr:
+      # Silent?
+      # We don't return error here because the import is still ok()
+      # but the quarantined blocks may not linked
+      return
+  await c.queueOrphan(parent, finalized)
 
 proc processQueue(c: ForkedChainRef) {.async: (raises: [CancelledError]).} =
   while true:
@@ -447,6 +534,10 @@ proc processQueue(c: ForkedChainRef) {.async: (raises: [CancelledError]).} =
     let
       item = await c.queue.popFirst()
       res = await item.handler()
+
+    if item.responseFut.isNil:
+      continue
+
     if not item.responseFut.finished:
       item.responseFut.complete res
 
@@ -501,7 +592,13 @@ proc init*(
       quarantine:      Quarantine.init(),
       fcuHead:         fcuHead,
       fcuSafe:         fcuSafe,
+      baseQueue:       initDeque[BlockRef](),
+      lastBaseLogTime: EthTime.now(),
     )
+
+  # updateFinalized will stop ancestor lineage
+  # traversal if parent have finalized marker.
+  baseBlock.finalize()
 
   if enableQueue:
     fc.queue = newAsyncQueue[QueueItem](maxsize = MaxQueueSize)
@@ -530,30 +627,10 @@ proc importBlock*(c: ForkedChainRef, blk: Block, finalized = false):
     # to a "staging area" or disk-backed memory but it must not afect `base`.
     # `base` is the point of no return, we only update it on finality.
 
-    var parentHash = ?(await c.validateBlock(parent, blk, finalized))
+    let parent = ?(await c.validateBlock(parent, blk, finalized))
+    if c.quarantine.hasOrphans():
+      await c.queueOrphan(parent, finalized)
 
-    while c.quarantine.hasOrphans():
-      const
-        # We cap waiting for an idle slot in case there's a lot of network traffic
-        # taking up all CPU - we don't want to _completely_ stop processing blocks
-        # in this case - doing so also allows us to benefit from more batching /
-        # larger network reads when under load.
-        idleTimeout = 10.milliseconds
-
-      discard await idleAsync().withTimeout(idleTimeout)
-
-      let orphan = c.quarantine.popOrphan(parentHash).valueOr:
-        break
-
-      let parent = c.hashToBlock.getOrDefault(parentHash)
-      if parent.isOk:
-        parentHash = (await c.validateBlock(parent, orphan, finalized)).valueOr:
-          # Silent?
-          # We don't return error here because the import is still ok()
-          # but the quarantined blocks may not linked
-          break
-      else:
-        break
   else:
     # If its parent is an invalid block
     # there is no hope the descendant is valid
@@ -600,17 +677,12 @@ proc forkChoice*(c: ForkedChainRef,
 
   # Head maybe moved backward or moved to other branch.
   c.updateHead(head)
-
-  if finalizedHash == zeroHash32:
-    # skip updateBase and updateFinalized if finalizedHash is zero.
-    return ok()
-
   c.updateFinalized(finalized, head)
 
   let
     base = c.calculateNewBase(finalized.number, head)
 
-  if base == c.base:
+  if base.number == c.base.number:
     # The base is not updated, return.
     return ok()
 
@@ -619,7 +691,7 @@ proc forkChoice*(c: ForkedChainRef,
   # and possibly switched to other chain beside the one with head.
   doAssert(finalized.number <= head.number)
   doAssert(base.number <= finalized.number)
-  await c.updateBase(base)
+  await c.queueUpdateBase(base)
 
   ok()
 
@@ -893,14 +965,15 @@ proc receiptsByBlockHash*(c: ForkedChainRef, blockHash: Hash32): Result[seq[Stor
 
   c.baseTxFrame.getReceipts(header.receiptsRoot)
 
-func payloadBodyV1FromBaseTo*(c: ForkedChainRef,
-                              last: BlockNumber,
-                              list: var seq[Opt[ExecutionPayloadBodyV1]]) =
+func payloadBodyV1InMemory*(c: ForkedChainRef,
+                            first: BlockNumber,
+                            last: BlockNumber,
+                            list: var seq[Opt[ExecutionPayloadBodyV1]]) =
   var
-    blocks = newSeqOfCap[BlockRef](last-c.base.number+1)
+    blocks = newSeqOfCap[BlockRef](last-first+1)
 
   loopIt(c.latest):
-    if it.number <= last:
+    if it.number >= first and it.number <= last:
       blocks.add(it)
 
   for i in countdown(blocks.len-1, 0):

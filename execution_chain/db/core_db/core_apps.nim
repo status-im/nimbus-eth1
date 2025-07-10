@@ -20,6 +20,7 @@ import
   stew/byteutils,
   results,
   "../.."/[constants],
+  "../.."/stateless/witness_types,
   ".."/[aristo, storage_types],
   "."/base
 
@@ -621,6 +622,17 @@ proc persistUncles*(db: CoreDbTxRef, uncles: openArray[Header]): Hash32 =
   db.put(genericHashKey(result).toOpenArray, enc).isOkOr:
     warn "persistUncles()", unclesHash=result, error=($$error)
     return EMPTY_ROOT_HASH
+
+proc persistWitness*(db: CoreDbTxRef, blockHash: Hash32, witness: Witness): Result[void, string] =
+  db.put(blockHashToWitnessKey(blockHash).toOpenArray, witness.encode()).isOkOr:
+    return err("persistWitness: " & $$error)
+  ok()
+
+proc getWitness*(db: CoreDbTxRef, blockHash: Hash32): Result[Witness, string] =
+  let witnessBytes = db.get(blockHashToWitnessKey(blockHash).toOpenArray).valueOr:
+    return err("getWitness: " & $$error)
+
+  Witness.decode(witnessBytes)
 
 # ------------------------------------------------------------------------------
 # End

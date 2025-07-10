@@ -646,114 +646,137 @@ proc runLedgerBasicOperationsTests() =
       check 2.u256 in vals
       check 3.u256 in vals
 
-    when defined(stateless):
 
-      test "Witness keys - Get account":
-        var
-          ac = LedgerRef.init(memDB.baseTxFrame())
-          addr1 = initAddr(1)
+    test "Witness keys - Get account":
+      var
+        ac = LedgerRef.init(memDB.baseTxFrame(), false, collectWitness = true)
+        addr1 = initAddr(1)
 
-        discard ac.getAccount(addr1)
+      discard ac.getAccount(addr1)
 
-        let
-          witnessKeys = ac.getWitnessKeys()
-          keyData = witnessKeys.getOrDefault((addr1, addr1.toAccountKey))
-        check:
-          witnessKeys.len() == 1
-          keyData.address == addr1
-          keyData.codeTouched == false
+      let
+        witnessKeys = ac.getWitnessKeys()
+        key = (addr1, Opt.none(UInt256))
+      check:
+        witnessKeys.len() == 1
+        witnessKeys.contains(key)
+        witnessKeys.getOrDefault(key) == false
 
-      test "Witness keys - Get code":
-        var
-          ac = LedgerRef.init(memDB.baseTxFrame())
-          addr1 = initAddr(1)
+    test "Witness keys - Get code":
+      var
+        ac = LedgerRef.init(memDB.baseTxFrame(), false, collectWitness = true)
+        addr1 = initAddr(1)
 
-        discard ac.getCode(addr1)
+      discard ac.getCode(addr1)
 
-        let
-          witnessKeys = ac.getWitnessKeys()
-          keyData = witnessKeys.getOrDefault((addr1, addr1.toAccountKey))
-        check:
-          witnessKeys.len() == 1
-          keyData.address == addr1
-          keyData.codeTouched == true
+      let
+        witnessKeys = ac.getWitnessKeys()
+        key = (addr1, Opt.none(UInt256))
+      check:
+        witnessKeys.len() == 1
+        witnessKeys.contains(key)
+        witnessKeys.getOrDefault(key) == true
 
-      test "Witness keys - Get storage":
-        var
-          ac = LedgerRef.init(memDB.baseTxFrame())
-          addr1 = initAddr(1)
-          slot1 = 1.u256
+    test "Witness keys - Get storage":
+      var
+        ac = LedgerRef.init(memDB.baseTxFrame(), false, collectWitness = true)
+        addr1 = initAddr(1)
+        slot1 = 1.u256
 
-        discard ac.getStorage(addr1, slot1)
+      discard ac.getStorage(addr1, slot1)
 
-        let
-          witnessKeys = ac.getWitnessKeys()
-          keyData = witnessKeys.getOrDefault((addr1, slot1.toSlotKey))
-        check:
-          witnessKeys.len() == 2
-          keyData.storageSlot == slot1
+      let
+        witnessKeys = ac.getWitnessKeys()
+        key = (addr1, Opt.some(slot1))
+      check:
+        witnessKeys.len() == 2
+        witnessKeys.contains(key)
+        witnessKeys.getOrDefault(key) == false
 
-      test "Witness keys - Set storage":
-        var
-          ac = LedgerRef.init(memDB.baseTxFrame())
-          addr1 = initAddr(1)
-          slot1 = 1.u256
+    test "Witness keys - Set storage":
+      var
+        ac = LedgerRef.init(memDB.baseTxFrame(), false, collectWitness = true)
+        addr1 = initAddr(1)
+        slot1 = 1.u256
 
-        ac.setStorage(addr1, slot1, slot1)
+      ac.setStorage(addr1, slot1, slot1)
 
-        let
-          witnessKeys = ac.getWitnessKeys()
-          keyData = witnessKeys.getOrDefault((addr1, slot1.toSlotKey))
-        check:
-          witnessKeys.len() == 2
-          keyData.storageSlot == slot1
+      let
+        witnessKeys = ac.getWitnessKeys()
+        key = (addr1, Opt.some(slot1))
+      check:
+        witnessKeys.len() == 2
+        witnessKeys.contains(key)
+        witnessKeys.getOrDefault(key) == false
 
-      test "Witness keys - Get account, code and storage":
-        var
-          ac = LedgerRef.init(memDB.baseTxFrame())
-          addr1 = initAddr(1)
-          addr2 = initAddr(2)
-          addr3 = initAddr(3)
-          slot1 = 1.u256
-
-
-        discard ac.getAccount(addr1)
-        discard ac.getCode(addr2)
-        discard ac.getCode(addr1)
-        discard ac.getStorage(addr2, slot1)
-        discard ac.getStorage(addr1, slot1)
-        discard ac.getStorage(addr2, slot1)
-        discard ac.getAccount(addr3)
-
-        let witnessKeys = ac.getWitnessKeys()
-        check witnessKeys.len() == 5
-
-        var keysList = newSeq[(Address, WitnessKey)]()
-        for k, v in witnessKeys:
-          let (adr, _) = k
-          keysList.add((adr, v))
-
-        check:
-          keysList[0][0] == addr1
-          keysList[0][1].address == addr1
-          keysList[0][1].codeTouched == true
-
-          keysList[1][0] == addr2
-          keysList[1][1].address == addr2
-          keysList[1][1].codeTouched == true
-
-          keysList[2][0] == addr2
-          keysList[2][1].storageSlot == slot1
-
-          keysList[3][0] == addr1
-          keysList[3][1].storageSlot == slot1
-
-          keysList[4][0] == addr3
-          keysList[4][1].address == addr3
-          keysList[4][1].codeTouched == false
+    test "Witness keys - Get account, code and storage":
+      var
+        ac = LedgerRef.init(memDB.baseTxFrame(), false, collectWitness = true)
+        addr1 = initAddr(1)
+        addr2 = initAddr(2)
+        addr3 = initAddr(3)
+        slot1 = 1.u256
 
 
+      discard ac.getAccount(addr1)
+      discard ac.getCode(addr2)
+      discard ac.getCode(addr1)
+      discard ac.getStorage(addr2, slot1)
+      discard ac.getStorage(addr1, slot1)
+      discard ac.getStorage(addr2, slot1)
+      discard ac.getAccount(addr3)
 
+      let witnessKeys = ac.getWitnessKeys()
+      check witnessKeys.len() == 5
+
+      var keysList = newSeq[(WitnessKey, bool)]()
+      for k, v in witnessKeys:
+        keysList.add((k, v))
+
+      check:
+        keysList[0][0].address == addr1
+        keysList[0][0].slot == Opt.none(UInt256)
+        keysList[0][1] == true
+
+        keysList[1][0].address == addr2
+        keysList[1][0].slot == Opt.none(UInt256)
+        keysList[1][1] == true
+
+        keysList[2][0].address == addr2
+        keysList[2][0].slot == Opt.some(slot1)
+        keysList[2][1] == false
+
+        keysList[3][0].address == addr1
+        keysList[3][0].slot == Opt.some(slot1)
+        keysList[3][1] == false
+
+        keysList[4][0].address == addr3
+        keysList[4][0].slot == Opt.none(UInt256)
+        keysList[4][1] == false
+
+    test "Witness keys - Clear cache":
+      var
+        ac = LedgerRef.init(memDB.baseTxFrame(), false, collectWitness = true)
+        addr1 = initAddr(1)
+        addr2 = initAddr(2)
+        addr3 = initAddr(3)
+        slot1 = 1.u256
+
+      discard ac.getAccount(addr1)
+      discard ac.getCode(addr2)
+      discard ac.getCode(addr1)
+      discard ac.getStorage(addr2, slot1)
+      discard ac.getStorage(addr1, slot1)
+      discard ac.getStorage(addr2, slot1)
+      discard ac.getAccount(addr3)
+
+      check ac.getWitnessKeys().len() == 5
+
+      ac.persist() # persist should not clear the witness keys by default
+      check ac.getWitnessKeys().len() == 5
+
+      ac.persist(clearWitness = true)
+      check ac.getWitnessKeys().len() == 0
 
 # ------------------------------------------------------------------------------
 # Main function(s)

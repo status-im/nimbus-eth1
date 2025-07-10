@@ -91,12 +91,38 @@ func layersPutVtx*(
     rvid: RootedVertexID;
     vtx: VertexRef;
       ) =
-  ## Store a (potentally empty) vertex on the top layer
+  ## Store a fresh instance (or nil) of a vertex on the top layer
   db.sTab[rvid] = vtx
   db.kMap.del(rvid)
 
   if db.snapshot.level.isSome():
     db.snapshot.vtx[rvid] = (vtx, VOID_HASH_KEY, db.level)
+
+func layersPrepareUpdate[T: VertexRef](db: AristoTxRef, rvid: RootedVertexID, vtx: T): T =
+  if rvid in db.sTab:
+    vtx
+  else:
+    let dup = vtx.dup()
+    db.sTab[rvid] = dup
+    dup
+
+func layersUpdate*[T: BranchRef | LeafRef](
+    db: AristoTxRef;
+    rvid: RootedVertexID;
+    vtx: T;
+      ): T =
+  ## Prepare the given vertex for updates, allocating a new one or updating the
+  ## existing one depending whether it belongs to this layer already or resides
+  ## in a different layer and therefore should not be mutated.
+  let vtx = db.layersPrepareUpdate(rvid, vtx)
+
+  when T is BranchRef:
+    # Only branches have keys stored and we're not changing vertex type
+    db.kMap.del(rvid)
+
+  if db.snapshot.level.isSome():
+    db.snapshot.vtx[rvid] = (VertexRef(vtx), VOID_HASH_KEY, db.level)
+  vtx
 
 func layersResVtx*(
     db: AristoTxRef;
@@ -109,25 +135,28 @@ func layersResVtx*(
 func layersPutKey*(
     db: AristoTxRef;
     rvid: RootedVertexID;
-    vtx: VertexRef,
+    vtx: BranchRef,
     key: HashKey;
       ) =
-  ## Store a (potentally void) hash key on the top layer
-  db.sTab[rvid] = vtx
+  ## Store a (potentally void) hash key on the top layer - we don't store keys
+  ## for leaves since these are trivial to compute
+  let vtx = db.layersPrepareUpdate(rvid, vtx)
+
   db.kMap[rvid] = key
 
   if db.snapshot.level.isSome():
-    db.snapshot.vtx[rvid] = (vtx, key, db.level)
+    db.snapshot.vtx[rvid] = (VertexRef(vtx), key, db.level)
 
-func layersResKey*(db: AristoTxRef; rvid: RootedVertexID, vtx: VertexRef) =
-  ## Shortcut for `db.layersPutKey(vid, VOID_HASH_KEY)`. It is sort of the
-  ## equivalent of a delete function.
-  db.layersPutVtx(rvid, vtx)
+func layersResKey*(db: AristoTxRef; rvid: RootedVertexID, vtx: BranchRef) =
+  ## Shortcut for `db.layersPutKey(vid, VOID_HASH_KEY)` which resets the hash
+  ## key cache for the given rvid / vtx
+  discard db.layersUpdate(rvid, vtx)
 
 func layersResKeys*(db: AristoTxRef; hike: Hike, skip: int) =
   ## Reset all cached keys along the given hike
   for i in (skip + 1)..hike.legs.len:
-    db.layersResKey((hike.root, hike.legs[^i].wp.vid), hike.legs[^i].wp.vtx)
+    if hike.legs[^i].wp.vtx.vType in Branches:
+      db.layersResKey((hike.root, hike.legs[^i].wp.vid), BranchRef(hike.legs[^i].wp.vtx))
 
 func layersPutAccLeaf*(db: AristoTxRef; accPath: Hash32; leafVtx: AccLeafRef) =
   db.accLeaves[accPath] = leafVtx

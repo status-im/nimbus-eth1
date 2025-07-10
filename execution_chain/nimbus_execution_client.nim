@@ -44,7 +44,7 @@ proc basicServices(nimbus: NimbusNode,
   # Setup the chain
   let fc = ForkedChainRef.init(com,
     eagerStateRoot = conf.eagerStateRootCheck,
-    persistBatchSize=conf.persistBatchSize,
+    persistBatchSize = conf.persistBatchSize,
     enableQueue = true)
   fc.deserialize().isOkOr:
     warn "Loading block DAG from database", msg=error
@@ -236,7 +236,8 @@ proc run(nimbus: NimbusNode, conf: NimbusConf) =
     db = coreDB,
     taskpool = taskpool,
     networkId = conf.networkId,
-    params = conf.networkParams)
+    params = conf.networkParams,
+    statelessProviderEnabled = conf.statelessProviderEnabled)
 
   if conf.extraData.len > 32:
     warn "ExtraData exceeds 32 bytes limit, truncate",

@@ -10,80 +10,232 @@
 import
   results,
   chronicles,
+  stew/byteutils,
   json_rpc/[rpcserver, rpcclient, rpcproxy],
   eth/common/accounts,
   web3/eth_api,
   ../types,
   ../header_store,
   ./accounts,
-  ./blocks
+  ./blocks,
+  ./evm
 
 logScope:
   topics = "verified_proxy"
 
-proc installEthApiHandlers*(lcProxy: VerifiedRpcProxy) =
-  lcProxy.proxy.rpc("eth_chainId") do() -> UInt256:
-    lcProxy.chainId
+proc installEthApiHandlers*(vp: VerifiedRpcProxy) =
+  vp.proxy.rpc("eth_chainId") do() -> UInt256:
+    vp.chainId
 
-  lcProxy.proxy.rpc("eth_blockNumber") do() -> uint64:
+  vp.proxy.rpc("eth_blockNumber") do() -> uint64:
     ## Returns the number of the most recent block.
-    let latest = lcProxy.headerStore.latest.valueOr:
+    let latest = vp.headerStore.latest.valueOr:
       raise newException(ValueError, "Syncing")
 
     latest.number.uint64
 
-  lcProxy.proxy.rpc("eth_getBalance") do(
-    address: Address, quantityTag: BlockTag
-  ) -> UInt256:
+  vp.proxy.rpc("eth_getBalance") do(address: Address, quantityTag: BlockTag) -> UInt256:
     let
-      header = lcProxy.getHeaderByTagOrThrow(quantityTag)
-
-      account = (await lcProxy.getAccount(address, header.number, header.stateRoot)).valueOr:
+      header = (await vp.getHeader(quantityTag)).valueOr:
+        raise newException(ValueError, error)
+      account = (await vp.getAccount(address, header.number, header.stateRoot)).valueOr:
         raise newException(ValueError, error)
 
     account.balance
 
-  lcProxy.proxy.rpc("eth_getStorageAt") do(
+  vp.proxy.rpc("eth_getStorageAt") do(
     address: Address, slot: UInt256, quantityTag: BlockTag
   ) -> UInt256:
     let
-      header = lcProxy.getHeaderByTagOrThrow(quantityTag)
-      storage = (
-        await lcProxy.getStorageAt(address, slot, header.number, header.stateRoot)
-      ).valueOr:
+      header = (await vp.getHeader(quantityTag)).valueOr:
+        raise newException(ValueError, error)
+      storage = (await vp.getStorageAt(address, slot, header.number, header.stateRoot)).valueOr:
         raise newException(ValueError, error)
 
     storage
 
-  lcProxy.proxy.rpc("eth_getTransactionCount") do(
+  vp.proxy.rpc("eth_getTransactionCount") do(
     address: Address, quantityTag: BlockTag
   ) -> Quantity:
     let
-      header = lcProxy.getHeaderByTagOrThrow(quantityTag)
-      account = (await lcProxy.getAccount(address, header.number, header.stateRoot)).valueOr:
+      header = (await vp.getHeader(quantityTag)).valueOr:
+        raise newException(ValueError, error)
+      account = (await vp.getAccount(address, header.number, header.stateRoot)).valueOr:
         raise newException(ValueError, error)
 
     Quantity(account.nonce)
 
-  lcProxy.proxy.rpc("eth_getCode") do(
-    address: Address, quantityTag: BlockTag
-  ) -> seq[byte]:
+  vp.proxy.rpc("eth_getCode") do(address: Address, quantityTag: BlockTag) -> seq[byte]:
     let
-      header = lcProxy.getHeaderByTagOrThrow(quantityTag)
-      code = (await lcProxy.getCode(address, header.number, header.stateRoot)).valueOr:
+      header = (await vp.getHeader(quantityTag)).valueOr:
+        raise newException(ValueError, error)
+      code = (await vp.getCode(address, header.number, header.stateRoot)).valueOr:
         raise newException(ValueError, error)
 
     code
 
+  vp.proxy.rpc("eth_getBlockByHash") do(
+    blockHash: Hash32, fullTransactions: bool
+  ) -> BlockObject:
+    (await vp.getBlock(blockHash, fullTransactions)).valueOr:
+      raise newException(ValueError, error)
+
+  vp.proxy.rpc("eth_getBlockByNumber") do(
+    blockTag: BlockTag, fullTransactions: bool
+  ) -> BlockObject:
+    (await vp.getBlock(blockTag, fullTransactions)).valueOr:
+      raise newException(ValueError, error)
+
+  vp.proxy.rpc("eth_getUncleCountByBlockNumber") do(blockTag: BlockTag) -> Quantity:
+    let blk = (await vp.getBlock(blockTag, false)).valueOr:
+      raise newException(ValueError, error)
+
+    Quantity(blk.uncles.len())
+
+  vp.proxy.rpc("eth_getUncleCountByBlockHash") do(blockHash: Hash32) -> Quantity:
+    let blk = (await vp.getBlock(blockHash, false)).valueOr:
+      raise newException(ValueError, error)
+
+    Quantity(blk.uncles.len())
+
+  vp.proxy.rpc("eth_getBlockTransactionCountByNumber") do(
+    blockTag: BlockTag
+  ) -> Quantity:
+    let blk = (await vp.getBlock(blockTag, true)).valueOr:
+      raise newException(ValueError, error)
+
+    Quantity(blk.transactions.len)
+
+  vp.proxy.rpc("eth_getBlockTransactionCountByHash") do(blockHash: Hash32) -> Quantity:
+    let blk = (await vp.getBlock(blockHash, true)).valueOr:
+      raise newException(ValueError, error)
+
+    Quantity(blk.transactions.len)
+
+  vp.proxy.rpc("eth_getTransactionByBlockNumberAndIndex") do(
+    blockTag: BlockTag, index: Quantity
+  ) -> TransactionObject:
+    let blk = (await vp.getBlock(blockTag, true)).valueOr:
+      raise newException(ValueError, error)
+
+    if distinctBase(index) >= uint64(blk.transactions.len):
+      raise newException(ValueError, "provided transaction index is outside bounds")
+    let x = blk.transactions[distinctBase(index)]
+
+    doAssert x.kind == tohTx
+
+    x.tx
+
+  vp.proxy.rpc("eth_getTransactionByBlockHashAndIndex") do(
+    blockHash: Hash32, index: Quantity
+  ) -> TransactionObject:
+    let blk = (await vp.getBlock(blockHash, true)).valueOr:
+      raise newException(ValueError, error)
+
+    if distinctBase(index) >= uint64(blk.transactions.len):
+      raise newException(ValueError, "provided transaction index is outside bounds")
+    let x = blk.transactions[distinctBase(index)]
+
+    doAssert x.kind == tohTx
+
+    x.tx
+
+  vp.proxy.rpc("eth_call") do(
+    tx: TransactionArgs, blockTag: BlockTag, optimisticStateFetch: Opt[bool]
+  ) -> seq[byte]:
+    if tx.to.isNone():
+      raise newException(ValueError, "to address is required")
+
+    let
+      header = (await vp.getHeader(blockTag)).valueOr:
+        raise newException(ValueError, error)
+      optimisticStateFetch = optimisticStateFetch.valueOr:
+        true
+
+    # Start fetching code to get it in the code cache
+    discard vp.getCode(tx.to.get(), header.number, header.stateRoot)
+
+    # As a performance optimisation we concurrently pre-fetch the state needed
+    # for the call by calling eth_createAccessList and then using the returned
+    # access list keys to fetch the required state using eth_getProof.
+    (await vp.populateCachesUsingAccessList(header.number, header.stateRoot, tx)).isOkOr:
+      raise newException(ValueError, error)
+
+    let callResult = (await vp.evm.call(header, tx, optimisticStateFetch)).valueOr:
+      raise newException(ValueError, error)
+
+    if callResult.error.len() > 0:
+      raise (ref ApplicationError)(
+        code: 3,
+        msg: callResult.error,
+        data: Opt.some(JsonString("\"" & callResult.output.to0xHex() & "\"")),
+      )
+
+    return callResult.output
+
+  vp.proxy.rpc("eth_createAccessList") do(
+    tx: TransactionArgs, blockTag: BlockTag, optimisticStateFetch: Opt[bool]
+  ) -> AccessListResult:
+    if tx.to.isNone():
+      raise newException(ValueError, "to address is required")
+
+    let
+      header = (await vp.getHeader(blockTag)).valueOr:
+        raise newException(ValueError, error)
+      optimisticStateFetch = optimisticStateFetch.valueOr:
+        true
+
+    # Start fetching code to get it in the code cache
+    discard vp.getCode(tx.to.get(), header.number, header.stateRoot)
+
+    # As a performance optimisation we concurrently pre-fetch the state needed
+    # for the call by calling eth_createAccessList and then using the returned
+    # access list keys to fetch the required state using eth_getProof.
+    (await vp.populateCachesUsingAccessList(header.number, header.stateRoot, tx)).isOkOr:
+      raise newException(ValueError, error)
+
+    let (accessList, error, gasUsed) = (
+      await vp.evm.createAccessList(header, tx, optimisticStateFetch)
+    ).valueOr:
+      raise newException(ValueError, error)
+
+    return
+      AccessListResult(accessList: accessList, error: error, gasUsed: gasUsed.Quantity)
+
+  vp.proxy.rpc("eth_estimateGas") do(
+    tx: TransactionArgs, blockTag: BlockTag, optimisticStateFetch: Opt[bool]
+  ) -> Quantity:
+    if tx.to.isNone():
+      raise newException(ValueError, "to address is required")
+
+    let
+      header = (await vp.getHeader(blockTag)).valueOr:
+        raise newException(ValueError, error)
+
+      optimisticStateFetch = optimisticStateFetch.valueOr:
+        true
+
+    # Start fetching code to get it in the code cache
+    discard vp.getCode(tx.to.get(), header.number, header.stateRoot)
+
+    # As a performance optimisation we concurrently pre-fetch the state needed
+    # for the call by calling eth_createAccessList and then using the returned
+    # access list keys to fetch the required state using eth_getProof.
+    (await vp.populateCachesUsingAccessList(header.number, header.stateRoot, tx)).isOkOr:
+      raise newException(ValueError, error)
+
+    let gasEstimate = (await vp.evm.estimateGas(header, tx, optimisticStateFetch)).valueOr:
+      raise newException(ValueError, error)
+
+    return gasEstimate.Quantity
+
   # TODO:
   # Following methods are forwarded directly to the web3 provider and therefore
   # are not validated in any way.
-  lcProxy.proxy.registerProxyMethod("net_version")
-  lcProxy.proxy.registerProxyMethod("eth_call")
-  lcProxy.proxy.registerProxyMethod("eth_sendRawTransaction")
-  lcProxy.proxy.registerProxyMethod("eth_getTransactionReceipt")
-  lcProxy.proxy.registerProxyMethod("eth_getBlockByNumber")
-  lcProxy.proxy.registerProxyMethod("eth_getBlockByHash")
+  vp.proxy.registerProxyMethod("net_version")
+  vp.proxy.registerProxyMethod("eth_call")
+  vp.proxy.registerProxyMethod("eth_sendRawTransaction")
+  vp.proxy.registerProxyMethod("eth_getTransactionReceipt")
 
 # Used to be in eth1_monitor.nim; not sure why it was deleted,
 # so I copied it here. --Adam

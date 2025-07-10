@@ -195,16 +195,6 @@ proc hikeUp*[LeafType](
 
   ok()
 
-# proc hikeUp*[LeafType](
-#     path: openArray[byte];
-#     root: VertexID;
-#     db: AristoTxRef;
-#     leaf: Opt[LeafType];
-#     hike: var Hike
-#       ): Result[void,(VertexID,AristoError)] =
-#   ## Variant of `hike()`
-#   NibblesBuf.fromBytes(path).hikeUp(root, db, leaf, hike)
-
 proc hikeUp*[LeafType](
     path: Hash32;
     root: VertexID;

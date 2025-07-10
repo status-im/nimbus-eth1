@@ -20,7 +20,7 @@ export
   p2p_types, rlpx, enode, kademlia
 
 logScope:
-  topics = "eth p2p"
+  topics = "p2p"
 
 proc addCapability*(node: EthereumNode,
                     p: ProtocolInfo,

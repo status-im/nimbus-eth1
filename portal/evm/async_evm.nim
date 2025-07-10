@@ -104,6 +104,7 @@ proc init*(
     taskpool = nil,
     config = chainConfigForNetwork(networkId),
     initializeDb = false,
+    statelessProviderEnabled = true, # Enables collection of witness keys
   )
 
   AsyncEvm(com: com, backend: backend)
@@ -180,23 +181,21 @@ proc callFetchingState(
       # state queries are still issued in the background just incase the state is
       # needed in the next iteration.
       var stateFetchDone = false
-      for k, v in witnessKeys:
-        let (adr, _) = k
+      for k, codeTouched in witnessKeys:
+        let (adr, maybeSlot) = k
         if adr == default(Address):
           continue
 
-        if v.storageMode:
-          let slotIdx = (adr, v.storageSlot)
-          if slotIdx notin fetchedStorage:
-            debug "Fetching storage slot", address = adr, slotKey = v.storageSlot
-            let storageFut = evm.backend.getStorage(header, adr, v.storageSlot)
+        if maybeSlot.isSome():
+          let slot = maybeSlot.get()
+          if (adr, slot) notin fetchedStorage:
+            debug "Fetching storage slot", address = adr, slot
+            let storageFut = evm.backend.getStorage(header, adr, slot)
             if not stateFetchDone:
-              storageQueries.add(StorageQuery.init(adr, v.storageSlot, storageFut))
+              storageQueries.add(StorageQuery.init(adr, slot, storageFut))
               if not optimisticStateFetch:
                 stateFetchDone = true
         else:
-          doAssert(adr == v.address)
-
           if adr notin fetchedAccounts:
             debug "Fetching account", address = adr
             let accFut = evm.backend.getAccount(header, adr)
@@ -205,7 +204,7 @@ proc callFetchingState(
               if not optimisticStateFetch:
                 stateFetchDone = true
 
-          if v.codeTouched and adr notin fetchedCode:
+          if codeTouched and adr notin fetchedCode:
             debug "Fetching code", address = adr
             let codeFut = evm.backend.getCode(header, adr)
             if not stateFetchDone:
@@ -336,13 +335,13 @@ proc createAccessList*(
   # returned in the callResult.
 
   var al = access_list.AccessList.init()
-  for lookupKey, witnessKey in witnessKeys:
-    let (adr, _) = lookupKey
+  for k, codeTouched in witnessKeys:
+    let (adr, maybeSlot) = k
     if adr == fromAdr:
       continue
 
-    if witnessKey.storageMode:
-      al.add(adr, witnessKey.storageSlot)
+    if maybeSlot.isSome():
+      al.add(adr, maybeSlot.get())
     else:
       al.add(adr)
 

@@ -11,7 +11,7 @@
 {.push raises: [].}
 
 import
-  std/tables,
+  std/[tables, deques],
   chronos,
   ../../../common,
   ../../../db/[core_db, fcu_db],
@@ -34,6 +34,17 @@ type
     base*        : BlockRef
       # The base block, the last block stored in database.
       # Any blocks newer than base is kept in memory.
+
+    baseQueue*   : Deque[BlockRef]
+      # Queue of blocks that will become base.
+      # This queue will be filled by `importBlock` or `forkChoice`.
+      # Then consumed by the `processQueue` async worker.
+
+    lastBaseLogTime*: EthTime
+
+    persistedCount*: uint
+      # Count how many blocks persisted when `baseQueue`
+      # consumed.
 
     latest*      : BlockRef
       # Every time a new block added,
