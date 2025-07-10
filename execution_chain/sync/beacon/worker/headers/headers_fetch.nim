@@ -19,14 +19,45 @@ import
   ./headers_helpers
 
 # ------------------------------------------------------------------------------
-# Public functions
+# Private helpers
+# ------------------------------------------------------------------------------
+
+proc getBlockHeaders(
+    buddy: BeaconBuddyRef;
+    req: BlockHeadersRequest;
+      ): Future[Result[FetchHeadersData,BeaconError]]
+      {.async: (raises: []).} =
+  ## Wrapper around `getBlockHeaders()`
+  let start = Moment.now()
+  var resp: BlockHeadersPacket
+
+  try:
+    resp = (await buddy.peer.getBlockHeaders(req)).valueOr:
+      return err((ENoException,"","",Moment.now()-start))
+  except PeerDisconnected as e:
+    return err((EPeerDisconnected,$e.name,$e.msg,Moment.now()-start))
+  except CancelledError as e:
+    return err((ECancelledError,$e.name,$e.msg,Moment.now()-start))
+  except CatchableError as e:
+    return err((ECatchableError,$e.name,$e.msg,Moment.now()-start))
+
+  # There is no obvious way to set an individual timeout for this call. The
+  # eth/xx driver sets a global response timeout to `10s`. By how it is
+  # implemented, the `Future` returned by `peer.getBlockHeaders(req)` cannot
+  # reliably be used in a `withTimeout()` directive. It would rather crash
+  # in `rplx` with a violated `req.timeoutAt <= Moment.now()` assertion.
+  return ok((move resp, Moment.now()-start))
+
+# ------------------------------------------------------------------------------
+# Public function
 # ------------------------------------------------------------------------------
 
 proc fetchHeadersReversed*(
     buddy: BeaconBuddyRef;
     ivReq: BnRange;
     topHash: Hash32;
-      ): Future[Result[seq[Header],void]]
+    info: static[string];
+      ): Future[Opt[seq[Header]]]
       {.async: (raises: []).} =
   ## From the ethXX argument peer implied by `buddy` fetch a list of headers
   ## in reversed order.
@@ -49,54 +80,41 @@ proc fetchHeadersReversed*(
           startBlock: BlockHashOrNumber(
             isHash:   false,
             number:   ivReq.maxPt))
-    start = Moment.now()
 
   trace trEthSendSendingGetBlockHeaders & " reverse", peer, ivReq,
     nReq=req.maxResults, hash=topHash.toStr, hdrErrors=buddy.hdrErrors
 
-  # Fetch headers from peer
-  var resp: Opt[BlockHeadersPacket]
-  try:
-    # There is no obvious way to set an individual timeout for this call. The
-    # eth/xx driver sets a global response timeout to `10s`. By how it is
-    # implemented, the `Future` returned by `peer.getBlockHeaders(req)` cannot
-    # reliably be used in a `withTimeout()` directive. It would rather crash
-    # in `rplx` with a violated `req.timeoutAt <= Moment.now()` assertion.
-    resp = await peer.getBlockHeaders(req)
-  except PeerDisconnected as e:
-    buddy.only.nRespErrors.hdr.inc
-    buddy.ctrl.zombie = true
-    info trEthRecvReceivedBlockHeaders & ": error", peer, ivReq,
-      nReq=req.maxResults, hash=topHash.toStr,
-      elapsed=(Moment.now() - start).toStr,
-      error=($e.name), msg=e.msg, hdrErrors=buddy.hdrErrors
-    return err()
-  except CatchableError as e:
-    buddy.hdrFetchRegisterError()
-    info trEthRecvReceivedBlockHeaders & ": error", peer, ivReq,
-      nReq=req.maxResults, hash=topHash.toStr,
-      elapsed=(Moment.now() - start).toStr,
-      error=($e.name), msg=e.msg, hdrErrors=buddy.hdrErrors
-    return err()
+  let rc = await buddy.getBlockHeaders(req)
+  var elapsed: Duration
+  if rc.isOk:
+    elapsed = rc.value.elapsed
+  else:
+    elapsed = rc.error.elapsed
+    block evalError:
+      case rc.error.excp:
+      of ENoException:
+        break evalError
+      of EPeerDisconnected, ECancelledError:
+        buddy.only.nRespErrors.hdr.inc
+        buddy.ctrl.zombie = true
+      of ECatchableError:
+        buddy.hdrFetchRegisterError()
 
-  # This round trip time `elapsed` is the real time, not necessarily the
-  # time relevant for network timeout which would throw an exception when
-  # the maximum response time has exceeded (typically set to 10s.)
-  #
-  # If the real round trip time `elapsed` is to long, the error score is
-  # inceased. Not until the error score will pass a certian threshold (for
-  # being too slow in consecutive conversations), the peer will be abandoned.
-  let elapsed = Moment.now() - start
+      info trEthRecvReceivedBlockHeaders & ": error", peer, ivReq,
+        nReq=req.maxResults, hash=topHash.toStr, elapsed=rc.error.elapsed.toStr,
+        syncState=($buddy.syncState), error=rc.error.name, msg=rc.error.msg,
+        hdrErrors=buddy.hdrErrors
+      return err()
 
   # Evaluate result
-  if resp.isNone or buddy.ctrl.stopped:
+  if rc.isErr or buddy.ctrl.stopped:
     buddy.hdrFetchRegisterError()
     trace trEthRecvReceivedBlockHeaders, peer, nReq=req.maxResults,
       hash=topHash.toStr, nResp=0, elapsed=elapsed.toStr,
       syncState=($buddy.syncState), hdrErrors=buddy.hdrErrors
     return err()
 
-  let h: seq[Header] = resp.get.headers
+  let h = rc.value.packet.headers
   if h.len == 0 or ivReq.len < h.len.uint64:
     buddy.hdrFetchRegisterError()
     trace trEthRecvReceivedBlockHeaders, peer, nReq=req.maxResults,

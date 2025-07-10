@@ -315,6 +315,15 @@ proc workerLoop[S,W](buddy: RunnerBuddyRef[S,W]) {.async: (raises: []).} =
           #            last invocation this round with `true` argument
           var delayed = BuddyRef[S,W](nil)
           for w in dsc.buddies.nextValues:
+            # Ignore non-running (e.g. zombified) entries. They might not be
+            # updated yet. Aso, zombies need to be kept in table to prevent
+            # from re-connect for while.
+            if not w.isRunning:
+              # Don't log dead entries (needed to block from reconnect)
+              if not w.worker.isNil:
+                trace "Ignoring peer for pool mode", peer=w.worker.peer,
+                  state=w.worker.ctrl.state
+              continue
             # Execute previous (aka delayed) item (unless first)
             if delayed.isNil or not delayed.runPool(last=false, laps=count):
               delayed = w.worker
@@ -371,8 +380,8 @@ proc workerLoop[S,W](buddy: RunnerBuddyRef[S,W]) {.async: (raises: []).} =
       # End while
 
   # Note that `runStart()` was dispatched in `onPeerConnected()`
-  worker.runStop()
-  buddy.isRunning = false
+  worker.runStop()                # tell worker that this peer is done with
+  buddy.isRunning = false         # mark it terminated for the scheduler
 
 
 proc onPeerConnected[S,W](dsc: RunnerSyncRef[S,W]; peer: Peer) =
@@ -460,10 +469,10 @@ proc onPeerDisconnected[S,W](dsc: RunnerSyncRef[S,W], peer: Peer) =
     if dsc.ctx.noisyLog: trace "Ignore zombie", peer,
       nPeers, nCachedWorkers, maxCachedWorkers
   elif rc.value.worker.ctrl.zombie:
-    # Don't disconnect, leave them fall out of the LRU cache. The effect is,
-    # that reconnecting might be blocked, for a while. For few peers cases,
-    # the start of zombification is registered so that a zombie can eventually
-    # be let die and buried.
+    # Don't remove them from table. Rather let them fall off the LRU cache.
+    # The effect is, that reconnecting might be blocked, for a while. For few
+    # peers cases, the start of zombification is registered so that a zombie
+    # can eventually be let die and buried.
     rc.value.worker = nil
     rc.value.dsc = nil
     rc.value.zombified = Moment.now()
