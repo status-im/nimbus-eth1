@@ -17,6 +17,10 @@ import
   ../worker_desc,
   ./[blocks, headers]
 
+import
+  ./blocks/[blocks_debug, blocks_queue],
+  ./headers/[headers_debug, headers_queue]
+
 logScope:
   topics = "beacon sync"
 
@@ -46,6 +50,28 @@ proc commitCollectHeaders(ctx: BeaconCtxRef; info: static[string]): bool =
 proc setupProcessingBlocks(ctx: BeaconCtxRef; info: static[string]) =
   ## Prepare for blocks processing
   ##
+  if not ctx.blocksUnprocIsEmpty() or
+     not ctx.blocksStagedQueueIsEmpty() or
+     not ctx.headersUnprocIsEmpty() or
+     not ctx.headersStagedQueueIsEmpty() or
+     ctx.subState.top != 0 or
+     ctx.subState.head != 0 or
+     ctx.subState.cancelRequest:
+    error "updateSuspendCB: Oops", blk=ctx.blk.bnStr, hdr=ctx.hdr.bnStr,
+      syncState=($ctx.syncState)
+  doAssert ctx.blocksUnprocIsEmpty()
+  doAssert ctx.blocksStagedQueueIsEmpty()
+  doAssert ctx.headersUnprocIsEmpty()
+  doAssert ctx.headersStagedQueueIsEmpty()
+  doAssert ctx.subState.top == 0
+  doAssert ctx.subState.head == 0
+  doAssert not ctx.subState.cancelRequest
+
+  #ctx.headersUnprocClear()
+  #ctx.blocksUnprocClear()
+  #ctx.headersStagedQueueClear()
+  #ctx.blocksStagedQueueClear()
+
   # Reset for useles block download detection (to avoid deadlock)
   ctx.pool.failedPeers.clear()
   ctx.pool.seenData = false

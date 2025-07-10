@@ -18,6 +18,9 @@ import
   ../../worker_desc,
   ./headers_helpers
 
+import
+  ./headers_debug
+
 logScope:
   topics = "beacon sync"
 
@@ -105,7 +108,8 @@ template fetchHeadersReversed*(
               number:   ivReq.maxPt))
 
     trace trEthSendSendingGetBlockHeaders & " reverse", peer, req=ivReq,
-      nReq=req.maxResults, hash=topHash.toStr, hdrErrors=buddy.hdrErrors
+      nReq=req.maxResults, hash=topHash.toStr, hdrErrors=buddy.hdrErrors,
+      hdr=(buddy.ctx.hdr.bnStr)
 
     let rc = buddy.getBlockHeaders(req)
     var elapsed: Duration
@@ -126,7 +130,8 @@ template fetchHeadersReversed*(
         chronicles.info trEthRecvReceivedBlockHeaders & ": error", peer,
           req=ivReq, nReq=req.maxResults, hash=topHash.toStr,
           elapsed=rc.error.elapsed.toStr, syncState=($buddy.syncState),
-          error=rc.error.name, msg=rc.error.msg, hdrErrors=buddy.hdrErrors
+          error=rc.error.name, msg=rc.error.msg, hdrErrors=buddy.hdrErrors,
+          hdr=(buddy.ctx.hdr.bnStr)
         break body                                 # return err()
 
     # Evaluate result
@@ -134,7 +139,8 @@ template fetchHeadersReversed*(
       buddy.hdrFetchRegisterError()
       trace trEthRecvReceivedBlockHeaders, peer, nReq=req.maxResults,
         hash=topHash.toStr, nResp=0, elapsed=elapsed.toStr,
-        syncState=($buddy.syncState), hdrErrors=buddy.hdrErrors
+        syncState=($buddy.syncState), hdrErrors=buddy.hdrErrors,
+        hdr=(buddy.ctx.hdr.bnStr)
       break body                                   # return err()
 
     let h = rc.value.packet.headers
@@ -142,7 +148,8 @@ template fetchHeadersReversed*(
       buddy.hdrFetchRegisterError()
       trace trEthRecvReceivedBlockHeaders, peer, nReq=req.maxResults,
         hash=topHash.toStr, nResp=h.len, elapsed=elapsed.toStr,
-        syncState=($buddy.syncState), hdrErrors=buddy.hdrErrors
+        syncState=($buddy.syncState), hdrErrors=buddy.hdrErrors,
+        hdr=(buddy.ctx.hdr.bnStr)
       break body                                   # return err()
 
     # Verify that first block number matches
@@ -151,7 +158,8 @@ template fetchHeadersReversed*(
       trace trEthRecvReceivedBlockHeaders, peer, nReq=req.maxResults,
         hash=topHash.toStr, reqMinPt=ivReq.minPt.bnStr,
         respMinPt=h[^1].bnStr, nResp=h.len, elapsed=elapsed.toStr,
-        syncState=($buddy.syncState), hdrErrors=buddy.hdrErrors
+        syncState=($buddy.syncState), hdrErrors=buddy.hdrErrors,
+        hdr=(buddy.ctx.hdr.bnStr)
       break body
 
     # Ban an overly slow peer for a while when seen in a row. Also there is a
@@ -166,7 +174,7 @@ template fetchHeadersReversed*(
     trace trEthRecvReceivedBlockHeaders, peer, nReq=req.maxResults,
       hash=topHash.toStr, ivResp=BnRange.new(h[^1].number,h[0].number),
       nResp=h.len, elapsed=elapsed.toStr, syncState=($buddy.syncState),
-      hdrErrors=buddy.hdrErrors
+      hdrErrors=buddy.hdrErrors, hdr=(buddy.ctx.hdr.bnStr)
 
     bodyRc = Opt[seq[Header]].ok(h)
 

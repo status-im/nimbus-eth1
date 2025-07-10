@@ -137,6 +137,12 @@ const
 # Private debugging and print functions
 # ------------------------------------------------------------------------------
 
+import pkg/stew/byteutils
+
+type ClMesg {.used.} = object
+  head: Header
+  fin: Hash32
+
 func bnStr(w: BlockNumber): string =
   "#" & $w
 
@@ -238,7 +244,9 @@ proc persistInfo(hc: HeaderChainRef) =
 
 proc persistClear(hc: HeaderChainRef) =
   ## Clear persistent database
-  let w = hc.kvt.getInfo.valueOr: return
+  let w = hc.kvt.getInfo.valueOr:
+    trace "HeaderChain.persistClear", nHeaders="n/a", hc=hc.toStr
+    return
   for bn in w.least .. w.last:
     hc.kvt.delHeader(bn)
     # Occasionally flush the current data
@@ -246,6 +254,8 @@ proc persistClear(hc: HeaderChainRef) =
       hc.kvt.persist()
   hc.kvt.delInfo()
   hc.kvt.persist()
+  trace "HeaderChain.persistClear", least=w.least.bnStr, last=w.last.bnStr,
+    nHeaders=(w.last - w.least + 1), hc=hc.toStr
 
 # ------------------------------------------------------------------------------
 # Private functions
@@ -283,6 +293,7 @@ proc tryFcParent(hc: HeaderChainRef; hdr: Header): HeaderChainMode =
   if baseNum + 1 < hdr.number:
     return collecting                          # inconclusive
 
+  trace "HeaderChain.tryFcParent: orhpaned", base=baseNum.bnStr, hc=hc.toStr
   return orphan                                # maybe on the wrong branch
 
 # ------------------------------------------------------------------------------
@@ -327,6 +338,13 @@ proc headUpdateFromCL(hc: HeaderChainRef; h: Header; f: Hash32) =
       # Inform client app about that a new session has started.
       hc.chain.pendingFCU = f
       hc.notify()
+
+      when false:
+        # vvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvv
+        trace "fcUpdateFromCL: Replay target", base=hc.chain.baseNumber.bnStr,
+          latest=hc.chain.latestNumber.bnStr, trg=h.bnStr, fin=f.short,
+          scrum=encodePayload(ClMesg(head: h, fin: f)).toHex
+        # ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
     # For logging and metrics
     hc.session.consHeadNum = h.number
@@ -551,6 +569,9 @@ proc put*(
     # Set new antecedent `ante` and save to disk (if any)
     hc.session.ante = rev[revTopInx]
     metrics.set(nec_sync_dangling, hc.session.ante.number.int64)
+
+    trace "HeaderChain.put: saved headers", offset, revTopInx,
+      base=hc.chain.baseNumber.bnStr, hc=hc.toStr
 
     # Save updates. persist to DB
     hc.persistInfo()
