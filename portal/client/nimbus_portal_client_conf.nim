@@ -106,7 +106,10 @@ type
 
     portalSubnetworks* {.
       desc: "Select which networks (Portal sub-protocols) to enable",
-      defaultValue: {PortalSubnetwork.history, PortalSubnetwork.beacon},
+      defaultValue: {
+        PortalSubnetwork.finalizedHistory, PortalSubnetwork.history,
+        PortalSubnetwork.beacon,
+      },
       name: "portal-subnetworks"
     .}: set[PortalSubnetwork]
 
