@@ -51,7 +51,7 @@
 
 # Overview
 
-Nimbus aims to be a [sharding](https://github.com/ethereum/wiki/wiki/Sharding-FAQ) client implementation for the Ethereum Blockchain Application Platform. Because the largest deployment of Ethereum will potentially be on embedded systems, Nimbus will be designed to perform well on IoT and personal mobile devices, including older smartphones with resource-restricted hardware. The extensible, configurable, and modular design of Nimbus will make it production ready for Web 3.0 and will ensure that it can be supported and maintained across all goals of Ethereum 2.0.
+Nimbus aims to be a [sharding](https://github.com/ethereum/eth-wiki/blob/master/sharding/Sharding-FAQs.md) client implementation for the Ethereum Blockchain Application Platform. Because the largest deployment of Ethereum will potentially be on embedded systems, Nimbus will be designed to perform well on IoT and personal mobile devices, including older smartphones with resource-restricted hardware. The extensible, configurable, and modular design of Nimbus will make it production ready for Web 3.0 and will ensure that it can be supported and maintained across all goals of Ethereum 2.0.
 
 # Goals
 
@@ -75,7 +75,7 @@ Nimbus aims to be a [sharding](https://github.com/ethereum/wiki/wiki/Sharding-FA
 
 5. Implement permissive licensing.
 
-6. Focus on production-ready [Web 3.0](https://medium.com/@matteozago/why-the-web-3-0-matters-and-you-should-know-about-it-a5851d63c949) Stack ([Whisper](https://github.com/ethereum/wiki/wiki/Whisper), [PSS](https://github.com/nolash/psstalk/blob/master/README.md), and [Swarm](https://swarm-guide.readthedocs.io/en/latest/introduction.html)) and its ongoing research and development.
+6. Focus on production-ready [Web 3.0](https://medium.com/@matteozago/why-the-web-3-0-matters-and-you-should-know-about-it-a5851d63c949) Stack ([Whisper](https://github.com/ethereum/eth-wiki/tree/master/concepts/whisper), [PSS](https://github.com/nolash/psstalk/blob/master/README.md), and [Swarm](https://swarm-guide.readthedocs.io/en/latest/introduction.html)) and its ongoing research and development.
 
 7. Focus on marketing and promotion to address community concerns on scalability and to bolster Ethereum’s dominant mindshare.
 
@@ -201,7 +201,7 @@ However, before starting the implementation in Nim, we will develop an understan
 
 The code will consist of independently reusable libraries that have the same permissive license as that of Nimbus itself:
 
-1. [RLP](https://github.com/ethereum/wiki/wiki/RLP) encoding and decoding
+1. [RLP](https://github.com/ethereum/eth-wiki/blob/master/fundamentals/rlp.md) encoding and decoding
 
 2. [Handling of the state database and users’ key files](https://github.com/status-im/nim-eth-keyfile/blob/master/README.md)
 
@@ -211,7 +211,7 @@ The code will consist of independently reusable libraries that have the same per
 
 5. [RLPx](https://github.com/ethereum/devp2p/blob/master/rlpx.md#introduction) sub-protocols
 
-6. Ethereum [Ethash](https://github.com/ethereum/wiki/wiki/Ethash) function
+6. Ethereum [Ethash](https://github.com/ethereum/eth-wiki/tree/master/concepts/ethash) function
 
 7. Implementation of EVM
 
@@ -265,7 +265,7 @@ We will set and advertise the bounties as soon as the P2P layer gets implemented
 
 ### July - November 2018
 
-We will optimize the architecture of Nimbus for implementing the [LES protocol](https://github.com/ethereum/wiki/wiki/Light-client-protocol). We will also optimize all internal state-handling operations such that they work efficiently and asynchronously. This will enable on-demand fetching of data from the network. This will also ensure that Nimbus runs with a high degree of concurrency and that the client UI is responsive.
+We will optimize the architecture of Nimbus for implementing the [LES protocol](https://github.com/ethereum/eth-wiki/blob/master/concepts/light-client-protocol.md). We will also optimize all internal state-handling operations such that they work efficiently and asynchronously. This will enable on-demand fetching of data from the network. This will also ensure that Nimbus runs with a high degree of concurrency and that the client UI is responsive.
 
 ### Goals:
 
@@ -348,8 +348,8 @@ A reference to:
 
 1. Create [devp2p](https://github.com/ethereum/wiki/wiki/%C3%90%CE%9EVp2p-Wire-Protocol) and an abstraction to allow for
    [libp2p](https://git.agorise.net/agorise/c-libp2p), [Node
-   Discovery](https://github.com/ethereum/wiki/wiki/Node-discovery-protocol),
-   [RLP encoding](https://github.com/ethereum/wiki/wiki/RLP), [Modified Patricia Merkle Tree](https://easythereentropy.wordpress.com/2014/06/04/understanding-the-ethereum-trie/), [bigint’s](https://github.com/def-/nim-bigints), [keccak256](https://github.com/ethereum/eth-hash), and
+   Discovery](https://github.com/ethereum/eth-wiki/blob/master/research/node-discovery-protocol.md),
+   [RLP encoding](https://github.com/ethereum/eth-wiki/blob/master/fundamentals/rlp.md), [Modified Patricia Merkle Tree](https://easythereentropy.wordpress.com/2014/06/04/understanding-the-ethereum-trie/), [bigint’s](https://github.com/def-/nim-bigints), [keccak256](https://github.com/ethereum/eth-hash), and
    [secp256k1](https://en.bitcoin.it/wiki/Secp256k1).
 
 2. Create an abstraction that would allow sub-protocols: ETH,
@@ -364,7 +364,7 @@ A reference to:
 
 
 5. IPC/RPC abstraction, [external API
-   methods](https://github.com/ethereum/wiki/wiki/JSON-RPC) that can be consumed by application bindings: react-native module, IPC, RPC HTTP
+   methods](https://github.com/ethereum/eth-wiki/tree/master/json-rpc) that can be consumed by application bindings: react-native module, IPC, RPC HTTP
    server, or web sockets
 
 6. Encryption library is a little unclear. [Libgcrypt](https://www.gnupg.org/software/libgcrypt/index.html) has everything we need but might be problematic from the standpoint of LGPL licensing. If we have an abstraction for Libgcrypt, we could use it now and swap it out later for something more permissive.
@@ -372,7 +372,7 @@ A reference to:
      Alternatively, we could roll out our own library. However, implementing our own encryption would not be a great idea, and our version would have to be audited and tested. Suggestions are welcome.
 
 7. Monitor
-   [ethereum/py-evm](https://github.com/ethereum/py-evm/tree/sharding). Connect with Chang-Wu Chen, Hsiao-Wei Wang, and anyone else working on sharding.
+   [ethereum/py-evm](https://github.com/ethereum/eth-wiki/tree/master/sharding). Connect with Chang-Wu Chen, Hsiao-Wei Wang, and anyone else working on sharding.
 
 # Resources
 1. [Awesome Ethereum Virtual Machine](https://github.com/pirapira/awesome-ethereum-virtual-machine)
