@@ -27,7 +27,8 @@ import
   ./rpc/evm,
   ./rpc/rpc_eth_api,
   ./nimbus_verified_proxy_conf,
-  ./header_store
+  ./header_store,
+  ./web3_backend
 
 from beacon_chain/gossip_processing/eth2_processor import toValidationResult
 
@@ -101,11 +102,15 @@ proc run*(
     verifiedProxy =
       VerifiedRpcProxy.init(rpcProxy, headerStore, chainId, config.maxBlockWalk)
 
-    # instantiate evm
+    # get network id
     networkId = chainIdToNetworkId(chainId).valueOr:
       raise newException(ValueError, error)
 
+  # set async evm backend
   verifiedProxy.evm = AsyncEvm.init(verifiedProxy.toAsyncEvmStateBackend(), networkId)
+
+  # set rpc backend
+  verifiedProxy.rpcClient = verifiedProxy.initNetworkApiBackend()
 
   # add handlers that verify RPC calls /rpc/rpc_eth_api.nim
   verifiedProxy.installEthApiHandlers()
