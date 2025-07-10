@@ -59,14 +59,19 @@ const
 
   ## Fork specific constants
 
-  # See EIP-170 (https://eips.ethereum.org/EIPS/eip-170).  Maximum code size
+  # See EIP-170 (https://eips.ethereum.org/EIPS/eip-170) Maximum code size
   # that can be stored for a new contract.  Init code when creating a new
   # contract is not subject to this limit.
   EIP170_MAX_CODE_SIZE* =                   0x6000
+  # See See EIP-7907 (https://eips.ethereum.org/EIPS/eip-7907). Update to limits
+  CODE_SIZE_THRESHOLD* =                    0x6000
+  EIP7907_MAX_CODE_SIZE* =                  0x40000
 
   # See EIP-3860 (https://eips.ethereum.org/EIPS/eip-3860). Maximum initcode
   # size when creating a new contract.
   EIP3860_MAX_INITCODE_SIZE* =              2 * EIP170_MAX_CODE_SIZE
+  # See EIP-7907 (https://eips.ethereum.org/EIPS/eip-7907).
+  EIP7907_MAX_INITCODE_SIZE* =              2 * EIP7907_MAX_CODE_SIZE
 
   # EIP
   MaxPrecompilesAddr* =                     0xFFFF
@@ -107,4 +112,8 @@ const
   HISTORY_STORAGE_ADDRESS* = address"0x0000F90827F1C53a10cb7A02335B175320002935"
   WITHDRAWAL_REQUEST_PREDEPLOY_ADDRESS* = address"0x00000961Ef480Eb55e80D19ad83579A64c007002"
   CONSOLIDATION_REQUEST_PREDEPLOY_ADDRESS* = address"0x0000BBdDc7CE488642fb579F8B00f3a590007251"
+
+  MAX_BLOCK_SIZE* = 10_485_760  # 10 MiB
+  SAFETY_MARGIN* = 2_097_152  # 2 MiB
+  MAX_RLP_BLOCK_SIZE* = MAX_BLOCK_SIZE - SAFETY_MARGIN
 # End
