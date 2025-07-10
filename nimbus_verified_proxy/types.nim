@@ -11,8 +11,7 @@ import
   minilru,
   ./header_store,
   ../portal/evm/async_evm,
-  web3/eth_api_types,
-  ./mock_eth_api
+  web3/eth_api_types
 
 export minilru
 
@@ -31,6 +30,19 @@ type
   StorageCacheKey* = (Root, Address, UInt256)
   StorageCache* = LruCache[StorageCacheKey, UInt256]
 
+  GetBlockByHashProc* = proc(blkHash: Hash32, fullTransactions: bool): Future[BlockObject] {.async.}
+  GetBlockByNumberProc* = proc(blkHash: Hash32, fullTransactions: bool): Future[BlockObject] {.async.}
+  GetProofProc* = proc(address: Address, slots: seq[UInt256], blockId: RtBlockIdentifier): Future[ProofResponse] {.async.}
+  CreateAccessListProc* = proc(args: TransactionArgs, blockId: RtBlockIdentifier): Future[AccessListResult] {.async.}
+  GetCodeProc* = proc(address: Address, blockId: RtBlockIdentifier): Future[seq[byte]] {.async.}
+
+  EthApiBackend* = object
+    eth_getBlockByHash*: GetBlockByHashProc
+    eth_getBlockByNumber*: GetBlockByNumberProc
+    eth_getProof*: GetProofProc
+    eth_createAccessList*: CreateAccessListProc
+    eth_getCode*: GetCodeProc
+
   VerifiedRpcProxy* = ref object
     evm*: AsyncEvm
     proxy*: RpcProxy
@@ -38,7 +50,7 @@ type
     accountsCache*: AccountsCache
     codeCache*: CodeCache
     storageCache*: StorageCache
-    mockEthApi*: Opt[MockEthApi]
+    client*: EthApiBackend
 
     # TODO: when the list grows big add a config object instead
     # config parameters 
@@ -47,11 +59,17 @@ type
 
   BlockTag* = eth_api_types.RtBlockIdentifier
 
-template rpcClient*(vp: VerifiedRpcProxy) =
-  if vp.mockEthApi.isSome():
-    vp.mockEthApi.get()
-  else:
-    vp.proxy.getClient()
+proc initNetworkApiBackend*(): EthApiBackend =
+  EthApiBackend(
+    eth_getBlockByHash: vp.proxy.getClient.eth_getBlockByHash,
+    eth_getBlockByNumbe: vp.proxy.getClient.eth_getBlockByNumber,
+    eth_getProof: vp.proxy.getClient.eth_getProof,
+    eth_createAccessList: vp.proxy.getClient.eth_createAccessList,
+    eth_getCode: vp.proxy.getClient.eth_getCode,
+  )
+
+template initMockApiBackend*(): EthApiBackend =
+  initNetworkApiBackend()
 
 proc init*(
     T: type VerifiedRpcProxy,
@@ -61,25 +79,14 @@ proc init*(
     maxBlockWalk: uint64,
     mockEthApi: bool = false,
 ): T =
-  if mockEthApi:
-    return VerifiedRpcProxy(
-      proxy: proxy,
-      headerStore: headerStore,
-      accountsCache: AccountsCache.init(ACCOUNTS_CACHE_SIZE),
-      codeCache: CodeCache.init(CODE_CACHE_SIZE),
-      storageCache: StorageCache.init(STORAGE_CACHE_SIZE),
-      chainId: chainId,
-      maxBlockWalk: maxBlockWalk,
-      mockEthApi: MockEthApi.init(),
-    )
-  else:
-    return VerifiedRpcProxy(
-      proxy: proxy,
-      headerStore: headerStore,
-      accountsCache: AccountsCache.init(ACCOUNTS_CACHE_SIZE),
-      codeCache: CodeCache.init(CODE_CACHE_SIZE),
-      storageCache: StorageCache.init(STORAGE_CACHE_SIZE),
-      chainId: chainId,
-      maxBlockWalk: maxBlockWalk,
-      mockEthApi: Opt.none(MockEthApi),
-    )
+  VerifiedRpcProxy(
+    proxy: proxy,
+    headerStore: headerStore,
+    accountsCache: AccountsCache.init(ACCOUNTS_CACHE_SIZE),
+    codeCache: CodeCache.init(CODE_CACHE_SIZE),
+    storageCache: StorageCache.init(STORAGE_CACHE_SIZE),
+    chainId: chainId,
+    maxBlockWalk: maxBlockWalk,
+    client: if mockEthApi: initMockApiBackend() else: initNetworkApiBackend(),
+  )
+ 
