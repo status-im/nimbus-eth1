@@ -32,7 +32,7 @@ type
 
   BlockTag* = eth_api_types.RtBlockIdentifier
 
-  ChainIdProc = proc(): Future[UInt256] {.async.}
+  ChainIdProc* = proc(): Future[UInt256] {.async.}
   GetBlockByHashProc* =
     proc(blkHash: Hash32, fullTransactions: bool): Future[BlockObject] {.async.}
   GetBlockByNumberProc* =
@@ -66,56 +66,14 @@ type
     chainId*: UInt256
     maxBlockWalk*: uint64
 
-proc initNetworkApiBackend*(vp: VerifiedRpcProxy): EthApiBackend =
-  let
-    ethChainIdProc = proc(): Future[UInt256] {.async.} =
-      await vp.proxy.getClient.eth_chainId()
-
-    getBlockByHashProc = proc(
-        blkHash: Hash32, fullTransactions: bool
-    ): Future[BlockObject] {.async.} =
-      await vp.proxy.getClient.eth_getBlockByHash(blkHash, fullTransactions)
-
-    getBlockByNumberProc = proc(
-        blkNum: BlockTag, fullTransactions: bool
-    ): Future[BlockObject] {.async.} =
-      await vp.proxy.getClient.eth_getBlockByNumber(blkNum, fullTransactions)
-
-    getProofProc = proc(
-        address: Address, slots: seq[UInt256], blockId: BlockTag
-    ): Future[ProofResponse] {.async.} =
-      await vp.proxy.getClient.eth_getProof(address, slots, blockId)
-
-    createAccessListProc = proc(
-        args: TransactionArgs, blockId: BlockTag
-    ): Future[AccessListResult] {.async.} =
-      await vp.proxy.getClient.eth_createAccessList(args, blockId)
-
-    getCodeProc = proc(
-        address: Address, blockId: BlockTag
-    ): Future[seq[byte]] {.async.} =
-      await vp.proxy.getClient.eth_getCode(address, blockId)
-
-  EthApiBackend(
-    eth_getBlockByHash: getBlockByHashProc,
-    eth_getBlockByNumber: getBlockByNumberProc,
-    eth_getProof: getProofProc,
-    eth_createAccessList: createAccessListProc,
-    eth_getCode: getCodeProc,
-  )
-
-template initMockApiBackend*(vp: VerifiedRpcProxy): EthApiBackend =
-  vp.initNetworkApiBackend()
-
 proc init*(
     T: type VerifiedRpcProxy,
     proxy: RpcProxy,
     headerStore: HeaderStore,
     chainId: UInt256,
     maxBlockWalk: uint64,
-    mockEthApi: bool = false,
 ): T =
-  var vp = VerifiedRpcProxy(
+  VerifiedRpcProxy(
     proxy: proxy,
     headerStore: headerStore,
     accountsCache: AccountsCache.init(ACCOUNTS_CACHE_SIZE),
@@ -124,11 +82,3 @@ proc init*(
     chainId: chainId,
     maxBlockWalk: maxBlockWalk,
   )
-
-  vp.rpcClient =
-    if mockEthApi:
-      vp.initMockApiBackend()
-    else:
-      vp.initNetworkApiBackend()
-
-  return vp
