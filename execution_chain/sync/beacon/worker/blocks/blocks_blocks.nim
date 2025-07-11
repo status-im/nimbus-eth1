@@ -17,7 +17,6 @@ import
   ../../../../networking/p2p,
   ../../../wire_protocol/types,
   ../../worker_desc,
-  ../update,
   ./[blocks_fetch, blocks_helpers, blocks_import, blocks_unproc]
 
 # ------------------------------------------------------------------------------
@@ -219,10 +218,6 @@ proc blocksImport*(
 
       # isOk => next instruction
       ctx.subState.top = nBn                       # Block imported OK
-
-      # Allow pseudo/async thread switch.
-      (await ctx.updateAsyncTasks()).isOkOr:
-        break loop
 
   if not isError:
     ctx.resetBlkProcErrors peerID
