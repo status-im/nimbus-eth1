@@ -15,6 +15,8 @@ import
   results,
   ../../evm/[state, types],
   ../../common,
+  ../../db/ledger,
+  ../../stateless/witness_generation,
   ../[executor, validate],
   chronicles,
   stint
@@ -170,6 +172,16 @@ proc persistBlock*(p: var Persister, blk: Block): Result[void, string] =
       header.withdrawalsRoot.expect("WithdrawalsRoot should be verified before"),
       blk.withdrawals.get,
     )
+
+  if vmState.com.statelessProviderEnabled:
+    let witnessKeys = vmState.ledger.getWitnessKeys()
+
+    # Get the pre-state from before executing the block of transactions
+    let initialState = ?p.getVmState(header, storeSlotHash = NoPersistSlotHashes notin p.flags)
+
+    let witness = Witness.build(witnessKeys, initialState.readOnlyLedger)
+    ?vmState.ledger.txFrame.persistWitness(header.computeBlockHash(), witness)
+    vmState.ledger.clearWitnessKeys()
 
   p.stats.blocks += 1
   p.stats.txs += blk.transactions.len

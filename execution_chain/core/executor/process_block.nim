@@ -197,8 +197,7 @@ proc procBlkEpilogue(
     # large ranges of blocks, implicitly limiting its size using the gas limit
     db.persist(
       clearEmptyAccount = vmState.com.isSpuriousOrLater(header.number),
-      clearCache = true,
-      clearWitness = vmState.com.statelessProviderEnabled
+      clearCache = true
     )
 
   var
