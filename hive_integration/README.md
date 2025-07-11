@@ -118,7 +118,7 @@ in a markdown file with the same name with the simulator.
 
 * Problem:<br>
   _hive_ bails out with error when compiling docker compile because
-  it cannot resolve some domain name like _github.com_. It occured with
+  it cannot resolve some domain name like _github.com_. It occurred with
   a locally running DNS resolver (as opposed to a proxy type resolver.)
 
 * Solution:<br>
