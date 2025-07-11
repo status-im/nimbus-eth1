@@ -219,27 +219,6 @@ proc updateSyncState*(ctx: BeaconCtxRef; info: static[string]) =
     ctx.updateSuspendSyncer()
 
 
-proc updateAsyncTasks*(
-    ctx: BeaconCtxRef;
-      ): Future[Opt[void]] {.async: (raises: []).} =
-  ## Allow task switch by issuing a short sleep request. The `due` argument
-  ## allows to maintain a minimum time gap when invoking this function.
-  ##
-  let start = Moment.now()
-  if ctx.pool.nextAsyncNanoSleep < start:
-
-    try: await sleepAsync asyncThreadSwitchTimeSlot
-    except CancelledError: discard
-
-    if ctx.daemon:
-      ctx.pool.nextAsyncNanoSleep = Moment.now() + asyncThreadSwitchGap
-      return ok()
-    # Shutdown?
-    return err()
-
-  return ok()
-
-
 proc updateActivateSyncer*(ctx: BeaconCtxRef) =
   ## If in hibernate mode, accept a cache session and activate syncer
   ##
