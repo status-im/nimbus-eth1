@@ -24,21 +24,13 @@ import
 # Private functions
 # ------------------------------------------------------------------------------
 
-proc napUnlessSomethingToCollect(
-    buddy: BeaconBuddyRef;
-      ): Future[bool] {.async: (raises: []).} =
-  ## When idle, save cpu cycles waiting for something to do.
-  if buddy.ctx.hibernate or                      # not activated yet?
-     not (buddy.headersCollectOk() or            # something on TODO list
-          buddy.blocksCollectOk()):
-    try:
-      await sleepAsync workerIdleWaitInterval
-    except CancelledError:
-      buddy.ctrl.stopped = true
-    return true
-  else:
-    # Returning `false` => no need to check for shutdown
+proc somethingToCollect(buddy: BeaconBuddyRef): bool =
+  if buddy.ctx.hibernate:                        # not activated yet?
     return false
+  if buddy.headersCollectOk() or                 # something on TODO list
+     buddy.blocksCollectOk():
+    return true
+  false
 
 # ------------------------------------------------------------------------------
 # Public start/stop and admin functions
@@ -170,7 +162,7 @@ proc runPeer*(
   ## This peer worker method is repeatedly invoked (exactly one per peer) while
   ## the `buddy.ctrl.poolMode` flag is set `false`.
   ##
-  if not await buddy.napUnlessSomethingToCollect():
+  if buddy.somethingToCollect():
 
     # Download and process headers and blocks
     while buddy.headersCollectOk():
@@ -204,6 +196,11 @@ proc runPeer*(
         break
 
       # End `while()`
+
+  # Idle sleep unless there is something to do
+  if not buddy.somethingToCollect():
+    try: await sleepAsync workerIdleWaitInterval
+    except CancelledError: discard
 
 # ------------------------------------------------------------------------------
 # End
