@@ -182,12 +182,12 @@ proc persistBlock*(p: var Persister, blk: Block): Result[void, string] =
       blockHash = header.computeBlockHash()
 
     var witness = Witness.build(witnessKeys, preState.readOnlyLedger)
-    witness.addHeaderHash(parentHash)
+    witness.addHeaderHash(header.parentHash)
     witness.addHeaderHash(blockHash)
 
     ?vmState.ledger.txFrame.persistWitness(blockHash, witness)
     vmState.ledger.clearWitnessKeys()
-    
+
 
   p.stats.blocks += 1
   p.stats.txs += blk.transactions.len
