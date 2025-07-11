@@ -17,6 +17,7 @@ import
   ../../common,
   ../../db/ledger,
   ../../stateless/witness_generation,
+  ../../db/storage_types,
   ../[executor, validate],
   chronicles,
   stint
@@ -174,14 +175,19 @@ proc persistBlock*(p: var Persister, blk: Block): Result[void, string] =
     )
 
   if vmState.com.statelessProviderEnabled:
-    let witnessKeys = vmState.ledger.getWitnessKeys()
+    let
+      witnessKeys = vmState.ledger.getWitnessKeys()
+      # Get the pre-state from before executing the block of transactions
+      preState = ?p.getVmState(header, storeSlotHash = NoPersistSlotHashes notin p.flags)
+      blockHash = header.computeBlockHash()
 
-    # Get the pre-state from before executing the block of transactions
-    let initialState = ?p.getVmState(header, storeSlotHash = NoPersistSlotHashes notin p.flags)
+    var witness = Witness.build(witnessKeys, preState.readOnlyLedger)
+    witness.addHeaderHash(parentHash)
+    witness.addHeaderHash(blockHash)
 
-    let witness = Witness.build(witnessKeys, initialState.readOnlyLedger)
-    ?vmState.ledger.txFrame.persistWitness(header.computeBlockHash(), witness)
+    ?vmState.ledger.txFrame.persistWitness(blockHash, witness)
     vmState.ledger.clearWitnessKeys()
+    
 
   p.stats.blocks += 1
   p.stats.txs += blk.transactions.len
