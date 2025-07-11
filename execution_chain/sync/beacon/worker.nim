@@ -24,21 +24,13 @@ import
 # Private functions
 # ------------------------------------------------------------------------------
 
-proc napUnlessSomethingToCollect(
-    buddy: BeaconBuddyRef;
-      ): Future[bool] {.async: (raises: []).} =
-  ## When idle, save cpu cycles waiting for something to do.
-  if buddy.ctx.hibernate or                      # not activated yet?
-     not (buddy.headersCollectOk() or            # something on TODO list
-          buddy.blocksCollectOk()):
-    try:
-      await sleepAsync workerIdleWaitInterval
-    except CancelledError:
-      buddy.ctrl.stopped = true
-    return true
-  else:
-    # Returning `false` => no need to check for shutdown
+proc somethingToCollect(buddy: BeaconBuddyRef): bool =
+  if buddy.ctx.hibernate:                        # not activated yet?
     return false
+  if buddy.headersCollectOk() or                 # something on TODO list
+     buddy.blocksCollectOk():
+    return true
+  false
 
 # ------------------------------------------------------------------------------
 # Public start/stop and admin functions
@@ -110,7 +102,8 @@ proc runTicker*(ctx: BeaconCtxRef; info: static[string]) =
 proc runDaemon*(
     ctx: BeaconCtxRef;
     info: static[string];
-      ) {.async: (raises: []).} =
+      ): Future[Duration]
+      {.async: (raises: []).} =
   ## Global background job that will be re-started as long as the variable
   ## `ctx.daemon` is set `true` which corresponds to `ctx.hibernating` set
   ## to false.
@@ -118,10 +111,12 @@ proc runDaemon*(
   ## On a fresh start, the flag `ctx.daemon` will not be set `true` before the
   ## first usable request from the CL (via RPC) stumbles in.
   ##
+  ## The function returns a suggested idle time for after this task.
+  ##
   # Check for a possible header layout and body request changes
   ctx.updateSyncState info
   if ctx.hibernate:
-    return
+    return chronos.nanoseconds(0)
 
   # Execute staged block records.
   if ctx.blocksUnstageOk():
@@ -131,11 +126,10 @@ proc runDaemon*(
 
     if not ctx.daemon or   # Implied by external sync shutdown?
        ctx.poolMode:       # Oops, re-org needed?
-      return
+      return chronos.nanoseconds(0)
 
   # At the end of the cycle, leave time to trigger refill headers/blocks
-  try: await sleepAsync daemonWaitInterval
-  except CancelledError: discard
+  return daemonWaitInterval
 
 
 proc runPool*(
@@ -166,11 +160,14 @@ proc runPool*(
 proc runPeer*(
     buddy: BeaconBuddyRef;
     info: static[string];
-      ) {.async: (raises: []).} =
+      ): Future[Duration]
+      {.async: (raises: []).} =
   ## This peer worker method is repeatedly invoked (exactly one per peer) while
   ## the `buddy.ctrl.poolMode` flag is set `false`.
   ##
-  if not await buddy.napUnlessSomethingToCollect():
+  ## The function returns a suggested idle time for after this task.
+  ##
+  if buddy.somethingToCollect():
 
     # Download and process headers and blocks
     while buddy.headersCollectOk():
@@ -204,6 +201,12 @@ proc runPeer*(
         break
 
       # End `while()`
+
+  # Idle sleep unless there is something to do
+  if not buddy.somethingToCollect():
+    return workerIdleWaitInterval
+
+  return chronos.nanoseconds(0)
 
 # ------------------------------------------------------------------------------
 # End

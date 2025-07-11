@@ -27,6 +27,8 @@
 ##   Global background job that will be re-started as long as the variable
 ##   `ctx.daemon` is set `true`.
 ##
+##   The function returns a suggested idle time to wait for the next invocation.
+##
 ## *runTicker(ctx: CtxRef[S])*
 ##   Global background job that is started every few seconds. It is to be
 ##   intended for updating metrics, debug logging etc.
@@ -59,9 +61,10 @@
 ##
 ## *runPeer(buddy: BuddyRef[S,W]) {.async: (raises: []).}*
 ##   This peer worker method is repeatedly invoked (exactly one per peer) while
-##   the `buddy.ctrl.poolMode` flag is set `false`.
+##   the `buddy.ctrl.poolMode` flag is set `false`. All workers run
+##   concurrently in `async` mode.
 ##
-##   These peer worker methods run concurrently in `async` mode.
+##   The function returns a suggested idle time to wait for the next invocation.
 ##
 ##
 ## These are the control variables that can be set from within the above
@@ -218,9 +221,9 @@ proc daemonLoop[S,W](dsc: RunnerSyncRef[S,W]) {.async: (raises: []).} =
     # Continue until stopped
     while true:
       # Enforce minimum time spend on this loop
-      let startMoment = Moment.now()
-
-      await dsc.ctx.runDaemon()
+      let
+        startMoment = Moment.now()
+        idleTime = await dsc.ctx.runDaemon()
 
       if not dsc.ctx.daemon:
         break
@@ -232,7 +235,7 @@ proc daemonLoop[S,W](dsc: RunnerSyncRef[S,W]) {.async: (raises: []).} =
         suspend = if execLoopTimeElapsedMin <= elapsed: execLoopTaskSwitcher
                   else: execLoopTimeElapsedMin - elapsed
       try:
-        await sleepAsync suspend
+        await sleepAsync max(suspend, idleTime)
       except CancelledError:
         # Stop on error (must not end up in busy-loop). If the activation flag
         # `dsc.ctx.daemon` remains `true`, the deamon will be re-started from
@@ -288,6 +291,7 @@ proc workerLoop[S,W](buddy: RunnerBuddyRef[S,W]) {.async: (raises: []).} =
     while isActive():
       # Enforce minimum time spend on this loop
       let startMoment = Moment.now()
+      var idleTime: Duration # suggested by `runPeer()`
 
       if dsc.monitorLock:
         discard # suspend some time at the end of loop body
@@ -349,7 +353,7 @@ proc workerLoop[S,W](buddy: RunnerBuddyRef[S,W]) {.async: (raises: []).} =
         # Peer worker in async mode
         dsc.activeMulti.inc
         # Continue doing something, work a bit
-        await worker.runPeer()
+        idleTime = await worker.runPeer()
         dsc.activeMulti.dec
 
       # Check for shutdown
@@ -372,7 +376,7 @@ proc workerLoop[S,W](buddy: RunnerBuddyRef[S,W]) {.async: (raises: []).} =
         suspend = if execLoopTimeElapsedMin <= elapsed: execLoopTaskSwitcher
                   else: execLoopTimeElapsedMin - elapsed
       try:
-        await sleepAsync suspend
+        await sleepAsync max(suspend, idleTime)
       except CancelledError:
         trace "Peer loop sleep was cancelled", peer,
           nCachedWorkers=dsc.buddies.len
