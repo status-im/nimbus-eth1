@@ -24,7 +24,7 @@ python block-import-stats.py
 * Pass the two CSV files to the script
 
 By default, the script will skip block numbers below 500k since these are mostly
-unintersting.
+uninteresting.
 
 See `-h` for help text on running the script.
 
