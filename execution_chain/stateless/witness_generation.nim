@@ -22,14 +22,14 @@ export
 
 proc build*(
     T: type Witness,
-    ledger: LedgerRef,
-    codes: var seq[seq[byte]]): T =
+    witnessKeys: WitnessTable,
+    ledger: ReadOnlyLedger): T =
   var
     witness = Witness.init()
     addedStateHashes = initHashSet[Hash32]()
     addedCodeHashes = initHashSet[Hash32]()
 
-  for key, codeTouched in ledger.getWitnessKeys():
+  for key, codeTouched in witnessKeys:
     let (adr, maybeSlot) = key
     if maybeSlot.isSome():
       let slot = maybeSlot.get()
@@ -53,9 +53,8 @@ proc build*(
           addedStateHashes.incl(nodeHash)
 
     if codeTouched:
-      let (codeHash, code) = ledger.getCode(key.address, returnHash = true)
+      let codeHash = ledger.getCodeHash(key.address)
       if codeHash != EMPTY_CODE_HASH and codeHash notin addedCodeHashes:
-        codes.add(code.bytes)
         witness.addCodeHash(codeHash)
         addedCodeHashes.incl(codeHash)
 
