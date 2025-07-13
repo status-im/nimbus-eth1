@@ -36,7 +36,7 @@ proc resolveBlockTag*(
   else:
     ok(base.BlockNumber(distinctBase(blockTag.number)))
 
-func convHeader(blk: eth_api_types.BlockObject): Header =
+func convHeader*(blk: eth_api_types.BlockObject): Header =
   let nonce = blk.nonce.valueOr:
     default(Bytes8)
 
