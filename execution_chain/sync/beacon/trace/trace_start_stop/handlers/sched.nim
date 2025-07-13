@@ -47,7 +47,8 @@ proc schedDaemonTrace*(ctx: BeaconCtxRef) {.async: (raises: []).} =
   tBeg.init ctx
   ctx.traceWrite tBeg
 
-  trace "+Daemon", envID=tBeg.envID.idStr, syncState=tBeg.syncState
+  trace "+Daemon", serial=tBeg.serial, envID=tBeg.envID.idStr,
+    syncState=tBeg.syncState
 
   await ctx.trace.backup.schedDaemon ctx
 
@@ -55,7 +56,8 @@ proc schedDaemonTrace*(ctx: BeaconCtxRef) {.async: (raises: []).} =
   tEnd.init(ctx, tBeg.envID) # envID refers back to `tBeg` capture
   ctx.traceWrite tEnd
 
-  trace "-Daemon", envID=tEnd.envID.idStr, syncState=tBeg.syncState
+  trace "-Daemon", serial=tEnd.serial, envID=tEnd.envID.idStr,
+    syncState=tBeg.syncState
 
 
 proc schedStartTrace*(buddy: BeaconBuddyRef): bool =
@@ -74,7 +76,7 @@ proc schedStartTrace*(buddy: BeaconBuddyRef): bool =
     buddy.traceWrite tRec
 
     trace "=StartPeer", peer=($buddy.peer), peerID=buddy.peerID.short,
-      envID=tRec.envID.idStr
+      serial=tRec.serial, envID=tRec.envID.idStr
 
   acceptOk
 
@@ -94,7 +96,7 @@ proc schedStopTrace*(buddy: BeaconBuddyRef) =
     buddy.traceWrite tRec
 
     trace "=StopPeer", peer=($buddy.peer), peerID=buddy.peerID.short,
-      envID=tRec.envID.idStr
+      serial=tRec.serial, envID=tRec.envID.idStr
 
 
 proc schedPoolTrace*(buddy: BeaconBuddyRef; last: bool; laps: int): bool =
@@ -112,7 +114,7 @@ proc schedPoolTrace*(buddy: BeaconBuddyRef; last: bool; laps: int): bool =
   buddy.traceWrite tRec
 
   trace "=Pool", peer=($buddy.peer), peerID=buddy.peerID.short,
-    envID=tRec.envID.idStr
+    serial=tRec.serial, envID=tRec.envID.idStr
 
   stopOk
 
@@ -132,7 +134,7 @@ proc schedPeerTrace*(buddy: BeaconBuddyRef) {.async: (raises: []).} =
     buddy.traceWrite tBeg
 
     trace "+Peer", peer=($buddy.peer), peerID=buddy.peerID.short,
-      envID=tBeg.envID.idStr, syncState=tBeg.syncState
+      serial=tBeg.serial, envID=tBeg.envID.idStr, syncState=tBeg.syncState
 
   await ctx.trace.backup.schedPeer(buddy)
 
@@ -142,7 +144,7 @@ proc schedPeerTrace*(buddy: BeaconBuddyRef) {.async: (raises: []).} =
     buddy.traceWrite tEnd
 
     trace "-Peer", peer=($buddy.peer), peerID=buddy.peerID.short,
-      envID=tEnd.envID.idStr, syncState=tBeg.syncState
+      serial=tEnd.serial, envID=tEnd.envID.idStr, syncState=tBeg.syncState
 
 # ------------------------------------------------------------------------------
 # End

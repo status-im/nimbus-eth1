@@ -33,10 +33,10 @@ proc addX(
   ## Output header
   q.add base.time.ageStr()
   q.add info
-  if 0 < lnr:
-    q.add $lnr
+  if 0 < lnr and base.serial != lnr.uint:
+    q.add $base.serial & "!" & $lnr
   else:
-    q.add "*"
+    q.add $base.serial
 
   q.add base.envID.idStr
   q.add $base.nPeers
@@ -238,7 +238,7 @@ proc recLogPrint*(fh: File): ReplayRecLogPrintFn =
 
         # at least 9 fields
         fh.write "" &
-          &"{w[0]:>18} {w[1]:<13} {w[2]:>7} " &
+          &"{w[0]:>18} {w[1]:<13} {w[2]:>6} " &
           &"{w[3]:>5} {w[4]:>2} {w[5]:<13} " &
           &"{w[6]:<10} {w[7]:>10} {w[8]:>10}"
 

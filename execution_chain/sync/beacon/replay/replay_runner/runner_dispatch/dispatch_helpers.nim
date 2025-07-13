@@ -38,23 +38,22 @@ proc waitForConditionImpl(
   ## Wait until the condition `cond()` becomes`true`. If a `stopRunner` flag
   ## is becomes `true`, this wait function function returns `err(..)`, and
   ## `ok()` otherwise.
-  let n = run.instrNumber
   var count = 0
 
   while true:
     if run.stopRunner:
-      trace info & "runner stopped", n, count
-      return err((ENoException,"",info & "runner stopped"))
+      trace info & "runner stopped", count
+      return err((ENoException, "", info & "runner stopped"))
 
     if cond():
       return ok()
 
     count.inc
-    #trace info & "polling continue", n, count
+    #trace info & "polling continue", count
 
     try: await sleepAsync replayWaitForCompletion
     except CancelledError as e:
-      error info & "cancelled while waiting -- STOP", n
+      error info & "cancelled while waiting -- STOP"
       run.stopRunner = false
       return err((ECancelledError,$e.name,e.msg))
   # notreached
@@ -68,8 +67,8 @@ proc newPeerImpl(
   ## Register a new peer.
   ##
   run.peers.withValue(instr.peerID, val):
-    warn info & "peer exists already", n=run.instrNumber, peer=($val.peer),
-      nStaged=val.stage.len
+    warn info & "peer exists already", serial=instr.serial, peer=($val.peer),
+      nStaged=val.stage.len, envID=instr.envID.idStr
     val.isNew = false
     return val[]
 
@@ -111,30 +110,30 @@ proc baseStatesDifferImpl(
     let (run, peer) = (desc.run, desc.peer)
 
   let
-    n = run.instrNumber
     ctx = run.ctx
-    envID = instr.envID.Hash.short
+    serial = instr.serial
+    envID = instr.envID.idStr
   var
     statesDiffer = false
 
   if ctx.pool.lastState != instr.syncState:
     statesDiffer = true
-    info info & "sync states differ", n, peer, envID,
+    info info & "sync states differ", serial, peer, envID,
       state=ctx.pool.lastState, expected=instr.syncState
 
   if ctx.hdrCache.state != instr.chainMode:
     statesDiffer = true
-    info info & "header chain modes differ", n, peer, envID,
+    info info & "header chain modes differ", serial, peer, envID,
       chainMode=ctx.hdrCache.state, expected=instr.chainMode
 
   if ctx.pool.nBuddies != instr.nPeers:
     statesDiffer = true
-    info info & "number of active peers differs", n, peer, envID,
+    info info & "number of active peers differs", serial, peer, envID,
       nBuddies=ctx.pool.nBuddies, expected=instr.nPeers
 
   if ctx.poolMode != instr.poolMode:
     statesDiffer = true
-    info info & "pool modes/reorgs differ", n, peer, envID,
+    info info & "pool modes/reorgs differ", serial, peer, envID,
       poolMode=ctx.poolMode, expected=instr.poolMode
 
   statesDiffer
@@ -153,50 +152,50 @@ proc unprocListsDifferImpl(
     let (run, peer) = (desc.run, desc.peer)
 
   let
-    n = run.instrNumber
     ctx = run.ctx
-    envID = instr.envID.Hash.short
+    serial = instr.serial
+    envID = instr.envID.idStr
   var
     statesDiffer = false
 
   # Unprocessed block numbers for header
   if instr.hdrUnprChunks != ctx.hdr.unprocessed.chunks().uint:
     statesDiffer = true
-    info info & "unproc headers lists differ", n, peer, envID,
+    info info & "unproc headers lists differ", serial, peer, envID,
       listChunks=ctx.hdr.unprocessed.chunks(), expected=instr.hdrUnprChunks
   elif 0 < instr.hdrUnprChunks:
     if instr.hdrUnprLen != ctx.hdr.unprocessed.total():
       statesDiffer = true
-      info info & "unproc headers lists differ", n, peer, envID,
+      info info & "unproc headers lists differ", serial, peer, envID,
         listLen=ctx.hdr.unprocessed.total(), expected=instr.hdrUnprLen
     let iv = ctx.hdr.unprocessed.le().expect "valid iv"
     if instr.hdrUnprLastLen != iv.len:
       statesDiffer = true
-      info info & "unproc headers lists differ", n, peer, envID,
+      info info & "unproc headers lists differ", serial, peer, envID,
         lastIvLen=iv.len, expected=instr.hdrUnprLastLen
     if instr.hdrUnprLast != iv.maxPt:
       statesDiffer = true
-      info info & "unproc headers lists differ", n, peer, envID,
+      info info & "unproc headers lists differ", serial, peer, envID,
         lastIvMax=iv.maxPt, expected=instr.hdrUnprLast
 
   # Unprocessed block numbers for blocks
   if instr.blkUnprChunks != ctx.blk.unprocessed.chunks().uint:
     statesDiffer = true
-    info info & "unproc blocks lists differ", n, peer, envID,
+    info info & "unproc blocks lists differ", serial, peer, envID,
       listChunks=ctx.blk.unprocessed.chunks(), expected=instr.blkUnprChunks
   elif 0 < instr.blkUnprChunks:
     if instr.blkUnprLen != ctx.blk.unprocessed.total():
       statesDiffer = true
-      info info & "unproc blocks lists differ", n, peer, envID,
+      info info & "unproc blocks lists differ", serial, peer, envID,
         listLen=ctx.blk.unprocessed.total(), expected=instr.blkUnprLen
     let iv = ctx.blk.unprocessed.ge().expect "valid iv"
     if instr.blkUnprLeastLen != iv.len:
       statesDiffer = true
-      info info & "unproc blocks lists differ", n, peer, envID,
+      info info & "unproc blocks lists differ", serial, peer, envID,
         lastIvLen=iv.len, expected=instr.blkUnprLeastLen
     if instr.blkUnprLeast != iv.minPt:
       statesDiffer = true
-      info info & "unproc blocks lists differ", n, peer, envID,
+      info info & "unproc blocks lists differ", serial, peer, envID,
         lastIvMax=iv.maxPt, expected=instr.blkUnprLeast
 
   statesDiffer
@@ -208,25 +207,25 @@ proc peerStatesDifferImpl(
     info: static[string];
       ): bool =
   let
-    n = desc.run.instrNumber
     peer = desc.peer
-    envID = instr.envID.Hash.short
+    serial = instr.serial
+    envID = instr.envID.idStr
   var
     statesDiffer = false
 
   if desc.ctrl.state != instr.peerCtrl:
     statesDiffer = true
-    info info & "peer ctrl states differ", n, peer, envID,
+    info info & "peer ctrl states differ", serial, peer, envID,
       ctrl=desc.ctrl.state, expected=instr.peerCtrl
 
   if instr.nHdrErrors != desc.only.nRespErrors.hdr:
     statesDiffer = true
-    info info & "peer header errors differ", n, peer, envID,
+    info info & "peer header errors differ", serial, peer, envID,
       nHdrErrors=desc.only.nRespErrors.hdr, expected=instr.nHdrErrors
 
   if instr.nBlkErrors != desc.only.nRespErrors.blk:
     statesDiffer = true
-    info info & "peer body errors differ", n, peer, envID,
+    info info & "peer body errors differ", serial, peer, envID,
       nBlkErrors=desc.only.nRespErrors.blk, expected=instr.nBlkErrors
 
   statesDiffer
@@ -259,12 +258,20 @@ proc toStr*(w: BlockHashOrNumber): string =
 
 # -----------------
 
-proc stopError*(run: ReplayRunnerRef; info: static[string]) =
-  error info & " -- STOP", n=run.instrNumber
+proc stopError*(
+    run: ReplayRunnerRef;
+    instr: TraceRecBase;
+    info: static[string];
+      ) =
+  error info & " -- STOP", serial=instr.serial, envID=instr.envID.idStr
   run.stopRunner = false
 
-proc stopOk*(run: ReplayRunnerRef; info: static[string]) =
-  info info & " -- STOP", n=run.instrNumber
+proc stopOk*(
+    run: ReplayRunnerRef;
+    instr: TraceRecBase;
+    info: static[string];
+      ) =
+  info info & " -- STOP", serial=instr.serial, envID=instr.envID.idStr
   run.stopRunner = false
 
 # -----------------
@@ -301,21 +308,21 @@ proc getPeer*(
     info: static[string];
       ): Opt[ReplayBuddyRef] =
   ## Get peer from peers table (if any)
-  let n = run.instrNumber
+  let serial = instr.serial
   run.peers.withValue(instr.peerID, buddy):
     let peer = buddy.peer
     if buddy.stage.len == 0:
-      warn info & "ctx stack is empty", n, peer, peerID=buddy.peerID.short
+      warn info & "ctx stack is empty", serial, peer, peerID=buddy.peerID.short
       return err()
     elif buddy.stage[0].recType != TrtSchedPeerBegin:
-      warn info & "wrong ctx frame type", n, peer, peerID=buddy.peerID.short,
+      warn info & "wrong ctx frame type", serial, peer, peerID=buddy.peerID.short,
         frameType=buddy.stage[0].recType, expected=TrtSchedPeerBegin,
         stackSize=buddy.stage.len
       return err()
     else:
       return ok(buddy[])
 
-  trace info & "missing peer ignored", n, peerID=instr.peerID.short
+  trace info & "missing peer ignored", serial, peerID=instr.peerID.short
   err()
 
 
@@ -341,7 +348,7 @@ proc getOrNewPeerFrame*(
     val.isNew = false
     buddy = val[]
     if 0 < buddy.stage.len:
-      error info & "frame unexpected", n=run.instrNumber,
+      error info & "frame unexpected", serial=instr.serial,
         frameID=ReplayFrameRef(buddy.stage[0]).frameID,
         frameType=buddy.stage[0].recType,
         nStaged=buddy.stage.len
@@ -365,6 +372,7 @@ proc getOrNewPeerFrame*(
 
 proc delPeer*(
     buddy: ReplayBuddyRef;
+    instr: TraceRecBase;
     info: static[string];
       ) =
   ## Delete peer ID from registry and return the environment for the
@@ -373,25 +381,26 @@ proc delPeer*(
   if buddy.run.peers.hasKey(buddy.peerID):
     buddy.run.peers.del buddy.peerID
   else:
-    trace info & "stale peer ignored", n=buddy.run.instrNumber,
+    trace info & "stale peer ignored", serial=instr.serial,
       peer=($buddy.peer), peerID=buddy.peerID.short
 
 # -----------------
 
 proc getDaemon*(
     run: ReplayRunnerRef;
+    instr: TraceRecBase;
     info: static[string];
       ): Opt[ReplayDaemonRef] =
   ## Similar to `getPeer()` for daemon
-  let n = run.instrNumber
+  let serial = instr.serial
   if run.daemon.isNil:
-    trace info & "missing daemon ignored", n
+    trace info & "missing daemon ignored", serial
     err()
   elif run.daemon.stage.len == 0:
-    warn info & "ctx stack is empty", n
+    warn info & "ctx stack is empty", serial
     err()
   elif run.daemon.stage[0].recType != TrtSchedDaemonBegin:
-    warn info & "wrong frame type on stack", n,
+    warn info & "wrong frame type on stack", serial,
       frameType=run.daemon.stage[0].recType, expected=TrtSchedDaemonBegin,
       nStaged=run.daemon.stage.len
     err()
@@ -413,18 +422,19 @@ proc newDaemonFrame*(
     run.daemon = daemon
     return ok(move daemon)
 
-  warn info & "daemon already registered", n=run.instrNumber,
+  warn info & "daemon already registered", serial=instr.serial,
     nStaged=run.daemon.stage.len
   err()
 
 
 proc delDaemon*(
     daemon: ReplayDaemonRef;
+    instr: TraceRecBase;
     info: static[string];
       ) =
   ## Similar to `delPeer()` for daemon
   if daemon.run.daemon.isNil:
-    trace info & "stale daemon ignored", n=daemon.run.instrNumber
+    trace info & "stale daemon ignored", serial=instr.serial
   else:
     daemon.run.daemon = ReplayDaemonRef(nil)
 
@@ -454,10 +464,10 @@ proc waitForSyncedEnv*(
     let peer {.used.} = desc.peer               # for logging/debugging only
   else:                                         # for logging/debugging only
     let peer {.used.} = "n/a"                   # for logging/debugging only
-  let n {.used.} = desc.run.instrNumber         # for logging/debugging only
-  let envID {.used.} = instr.envID.Hash.short   # for logging/debugging only
+  let serial {.used.} = instr.serial            # for logging/debugging only
+  let envID {.used.} = instr.envID.idStr        # for logging/debugging only
   var count = 0                                 # for logging/debugging only
-  #trace info & "process to be synced", n, peer, envID=instr.envID
+  #trace info & "process to be synced", serial, peer, envID=instr.envID
 
   (await desc.run.waitForConditionImpl(
     cond = proc(): bool =
@@ -471,7 +481,7 @@ proc waitForSyncedEnv*(
         else:                                   # for logging/debugging only
           if (count mod 1111) != 0:             # for logging/debugging only
             break noiseCtrl                     # for logging/debugging only
-        trace info & "polling for sync", n, peer, envID, count
+        trace info & "polling for sync", serial, peer, envID, count
         discard desc.unprocListsDifferImpl(instr, info)
 
       if instr.hdrUnprChunks != ctx.hdr.unprocessed.chunks().uint:
@@ -496,7 +506,7 @@ proc waitForSyncedEnv*(
       return true,
 
     info)).isOkOr:
-      trace info & "process sync error", n, peer, envID=instr.envID,
+      trace info & "process sync error", serial, peer, envID=instr.envID,
         name=error.name, msg=error.msg
       return err(error)
 
@@ -511,7 +521,7 @@ proc waitForSyncedEnv*(
 
   discard desc.unprocListsDifferImpl(instr, info)
 
-  #trace info & "process synced", n, peer, envID=instr.envID
+  #trace info & "process synced", serial, peer, envID=instr.envID
   return ok()
 
 # ------------------
@@ -541,7 +551,7 @@ proc processFinished*(
     let peer {.used.} = desc.peer               # for logging/debugging only
   else:                                         # for logging/debugging only
     let peer {.used.} = "n/a"                   # for logging/debugging only
-  let envID {.used.} = instr.envID.Hash.short   # for logging/debugging only
+  let envID {.used.} = instr.envID.idStr        # for logging/debugging only
   trace info & "process terminated", peer, envID, recType
 
 
@@ -562,8 +572,8 @@ proc waitForProcessFinished*(
     let peer {.used.} = desc.peer               # for logging/debugging only
   else:                                         # for logging/debugging only
     let peer {.used.} = "n/a"                   # for logging/debugging only
-  let n {.used.} = desc.run.instrNumber         # for logging/debugging only
-  let envID {.used.} = instr.envID.Hash.short   # for logging/debugging only
+  let serial {.used.} = instr.serial            # for logging/debugging only
+  let envID {.used.} = instr.envID.idStr        # for logging/debugging only
 
   doAssert 0 < desc.stage.len
   doAssert desc.stage[0].recType == recType
@@ -574,7 +584,7 @@ proc waitForProcessFinished*(
       return ReplayFrameRef(desc.stage[0]).done,
     info)).isOkOr:
       return err(error)
-  trace info & "process ackn", n, peer, envID, recType
+  trace info & "process ackn", serial, peer, envID, recType
 
   # Pop frame data from stack
   desc.stage.setLen(0)
@@ -583,7 +593,7 @@ proc waitForProcessFinished*(
   (await desc.waitForSyncedEnv(instr, info)).isOkOr:
     return err(error)
 
-  trace info & "process finished", n, peer, envID, recType
+  trace info & "process finished", serial, peer, envID, recType
   return ok()
 
 # ------------------
@@ -621,10 +631,10 @@ proc provideSessionData*(
     let peer {.used.} = desc.peer               # for logging/debugging only
   else:                                         # for logging/debugging only
     let peer {.used.} = "n/a"                   # for logging/debugging only
-  let n {.used.} = desc.run.instrNumber         # for logging/debugging only
-  let envID {.used.} = instr.envID.Hash.short   # for logging/debugging only
+  let serial {.used.} = instr.serial            # for logging/debugging only
+  let envID {.used.} = instr.envID.idStr        # for logging/debugging only
   var count = 0                                 # for logging/debugging only
-  trace info & "wait for data request", n, peer, envID, dataType
+  trace info & "wait for data request", serial, peer, envID, dataType
 
   # Wait for the `recType` type flag to appear on `desc.stage[0]`.
   (await desc.run.waitForConditionImpl(
@@ -639,7 +649,7 @@ proc provideSessionData*(
         else:                                   # for logging/debugging only
           if (count mod 1111) != 0:             # for logging/debugging only
             break noiseCtrl                     # for logging/debugging only
-        trace info & "polling for request", n, peer, envID, dataType, count
+        trace info & "polling for request", serial, peer, envID, dataType, count
       return ReplayFrameRef(desc.stage[0]).subSync == dataType,
     info)).isOkOr:
       return err(error)
@@ -664,7 +674,7 @@ proc provideSessionData*(
         else:                                   # for logging/debugging only
           if (count mod 1111) != 0:             # for logging/debugging only
             break noiseCtrl                     # for logging/debugging only
-        trace info & "polling for ackn", n, peer, envID, dataType, count
+        trace info & "polling for ackn", serial, peer, envID, dataType, count
       return ReplayFrameRef(desc.stage[0]).subSync != dataType,
     info)).isOkOr:
       return err(error)
@@ -672,7 +682,7 @@ proc provideSessionData*(
   # Pop session data from stack
   desc.stage.setLen(1)
 
-  trace info & "done", n, peer, envID, dataType
+  trace info & "done", serial, peer, envID, dataType
   return ok()
 
 
@@ -713,7 +723,7 @@ proc getSessionData*[T: TraceBeginHeaders    |
   when desc is ReplayDaemonRef:                 # for logging/debugging only
     let peer {.used.} = "n/a"                   # for logging/debugging only
   var count = 0                                 # for logging/debugging only
-  trace info & "request session data", n="n/a", peer, dataType
+  trace info & "request session data", serial="n/a", peer, dataType
 
   # Verify that the stage is based on a proper environment
   doAssert desc.stage.len == 1
@@ -734,7 +744,7 @@ proc getSessionData*[T: TraceBeginHeaders    |
         else:                                   # for logging/debugging only
           if (count mod 1111) != 0:             # for logging/debugging only
             break noiseCtrl                     # for logging/debugging only
-        trace info & "polling for data", n="n/a", peer, dataType, count
+        trace info & "polling for data", serial="n/a", peer, dataType, count
       return 1 < desc.stage.len and
              desc.stage[1].recType == dataType,
     info)).isOkOr:
@@ -747,8 +757,8 @@ proc getSessionData*[T: TraceBeginHeaders    |
   # Capture session data `instr` to be returned later.
   let instr = C(desc.stage[1]).instr
 
-  let envID {.used.} = instr.envID.Hash.short   # for logging/debugging only
-  let n {.used.} = desc.run.instrNumber         # for logging/debugging only
+  let envID {.used.} = instr.envID.idStr        # for logging/debugging only
+  let serial {.used.} = instr.serial            # for logging/debugging only
   count = 0                                     # for logging/debugging only
 
   # Reset flag and wait for staged data to disappear from stack
@@ -765,12 +775,12 @@ proc getSessionData*[T: TraceBeginHeaders    |
         else:                                   # for logging/debugging only
           if (count mod 1111) != 0:             # for logging/debugging only
             break noiseCtrl                     # for logging/debugging only
-        trace info & "polling for release", n, peer, envID, dataType, count
+        trace info & "polling for release", serial, peer, envID, dataType, count
       return desc.stage.len < 2 or
              desc.stage[1].recType != dataType,
     info)).isOkOr:
       return err(error)
-  trace info & "released session data", n, peer, envID, dataType
+  trace info & "released session data", serial, peer, envID, dataType
 
   # Wait for the environment to get synchronised.
   (await desc.waitForSyncedEnv(instr, info)).isOkOr:
@@ -780,7 +790,7 @@ proc getSessionData*[T: TraceBeginHeaders    |
   # The `unproc` list were already checked with `waitForSyncedEnv()`.
   discard desc.baseOrPeerStatesDifferImpl(instr, info)
 
-  trace info & "done with session data", n, peer, envID, dataType
+  trace info & "done with session data", serial, peer, envID, dataType
   return ok(instr)
 
 # ------------------------------------------------------------------------------

@@ -27,6 +27,7 @@ logScope:
 # ------------------------------------------------------------------------------
 
 const minLineNr = 210
+var n = 0
 
 proc dispatch*(
     run: ReplayRunnerRef;
@@ -34,15 +35,15 @@ proc dispatch*(
       ) {.async: (raises: []).} =
   ## Execure next instruction
   ##
-  run.instrNumber.inc
+  n.inc
 
-  if minLineNr <= run.instrNumber:
-    trace "dispatch(): begin", n=run.instrNumber, recType=pyl.recType,
+  if minLineNr <= n:
+    trace "dispatch(): begin", n, recType=pyl.recType,
       nBuddies=run.peers.len, nDaemons=(if run.daemon.isNil: 0 else: 1)
 
   case pyl.recType:
   of TrtOops:
-    warn "dispatch(): Oops, unexpected void record", n=run.instrNumber
+    warn "dispatch(): Oops, unexpected void record", n
 
   of TrtVersionInfo:
     run.versionInfoWorker(
@@ -103,8 +104,8 @@ proc dispatch*(
     run.schedPoolWorker(
       pyl.ReplaySchedPool.data, "=Pool: ")
 
-  if minLineNr <= run.instrNumber:
-    trace "dispatch(): end", n=run.instrNumber, recType=pyl.recType,
+  if minLineNr <= n:
+    trace "dispatch(): end", n, recType=pyl.recType,
       nBuddies=run.peers.len, nDaemons=(if run.daemon.isNil: 0 else: 1)
 
 
@@ -112,8 +113,8 @@ proc dispatchEnd*(
     run: ReplayRunnerRef;
       ) {.async: (raises: []).} =
   # Finish
-  run.instrNumber.inc
-  info "End replay", n=run.instrNumber
+  n.inc
+  info "End replay", n
 
 # ------------------------------------------------------------------------------
 # End

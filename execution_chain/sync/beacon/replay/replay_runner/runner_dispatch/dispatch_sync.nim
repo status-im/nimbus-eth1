@@ -30,7 +30,7 @@ proc syncActvFailedWorker*(
     instr: TraceSyncActvFailed;
     info: static[string];
       ) =
-  trace info, n=run.instrNumber
+  trace info, serial=instr.serial
 
 
 proc syncActivateWorker*(
@@ -38,16 +38,17 @@ proc syncActivateWorker*(
     instr: TraceSyncActivated;
     info: static[string]) =
   let
-    n = run.instrNumber
+    serial = instr.serial
+    envID = instr.envID.idStr
     ctx = run.ctx
 
   if not ctx.hibernate:
-    warn info & ": already activated", n
+    warn info & ": already activated", serial
     return
 
   var activationOK = true
   if ctx.chain.baseNumber != instr.baseNum:
-    error info & ": cannot activate (bases must match)", n,
+    error info & ": cannot activate (bases must match)", serial, envID,
       base=ctx.chain.baseNumber.bnStr, expected=instr.baseNum.bnStr
     activationOK = false
 
@@ -59,12 +60,12 @@ proc syncActivateWorker*(
   run.checkSyncerState(instr, info)
 
   if ctx.hibernate or not activationOK:
-    trace "=ActvFailed", envID=instr.envID.idStr
-    run.stopError(info & ": activation failed")
+    trace "=ActvFailed", serial, envID
+    run.stopError(instr, info & ": activation failed")
   else:
     # No need for scheduler noise (e.g. disconnect messages.)
     ctx.noisyLog = false
-    trace "=Activated", envID=instr.envID.idStr
+    trace "=Activated", serial, envID
 
 
 proc syncSuspendWorker*(
@@ -74,17 +75,17 @@ proc syncSuspendWorker*(
       ) =
   let ctx = run.ctx
   if ctx.hibernate:
-    run.stopError(info & ": suspend failed")
+    run.stopError(instr, info & ": suspend failed")
     return
 
   run.checkSyncerState(instr, info)
-  trace "=Suspended", envID=instr.envID.idStr
+  trace "=Suspended", serial=instr.serial, envID=instr.envID.idStr
 
   # Shutdown if there are no remaining sessions left
   if 1 < run.nSessions:
     run.nSessions.dec
   else:
-    run.stopOk(info & ": session(s) terminated")
+    run.stopOk(instr, info & ": session(s) terminated")
 
 # ------------------------------------------------------------------------------
 # End

@@ -84,8 +84,8 @@ proc importBlockHandlerImpl(
     instr = (await getSessionData[TraceImportBlock](desc, info)).valueOr:
       return err(error.getBeaconError()) # Shutdown?
 
-    n = desc.run.instrNumber                 # for logging
-    envID = instr.envID.Hash.short           # for logging
+    serial = instr.serial                    # for logging
+    envID = instr.envID.idStr                # for logging
 
   when desc is ReplayBuddyRef:
     let peer = desc.peer
@@ -96,7 +96,8 @@ proc importBlockHandlerImpl(
 
   if effPeerID != instr.peerID or
      ethBlock != instr.ethBlock:
-    raiseAssert info & "arguments differ, n=" & $n & ", peer=" & $peer &
+    raiseAssert info & "arguments differ, serial=" & $serial &
+      ", peer=" & $peer &
       ", envID=" & envID &
       # -----
       ", effPeerID=" & effPeerID.short &
@@ -105,7 +106,7 @@ proc importBlockHandlerImpl(
       ", ethBlock=%" & ethBlock.computeRlpHash.short &
       ", expected=%" & instr.ethBlock.computeRlpHash.short
 
-  trace info & "done", n, peer, peerID, envID
+  trace info & "done", serial, peer, peerID, envID
   return instr.getResponse()
 
 
@@ -130,8 +131,7 @@ proc beginBlocksHandler*(
   let
     buddy = ReplayBuddyRef(buddy)
     peer = buddy.peer
-    n = buddy.run.instrNumber
-  trace info & "ignored", n, peer, peerID=buddy.peerID.short
+  trace info & "ignored", peer, peerID=buddy.peerID.short
 
 
 proc fetchBodiesHandler*(
@@ -146,12 +146,13 @@ proc fetchBodiesHandler*(
     instr = (await getSessionData[TraceGetBlockBodies](buddy, info)).valueOr:
       return err(error.getBeaconError()) # Shutdown?
 
-    n = buddy.run.instrNumber                # for logging
-    envID = instr.envID.Hash.short           # for logging
+    serial = instr.serial                    # for logging
+    envID = instr.envID.idStr                # for logging
     peer = buddy.peer                        # for logging
 
   if req != instr.req:
-    raiseAssert info & "arguments differ, n=" & $n & ", peer=" & $peer &
+    raiseAssert info & "arguments differ, serial=" & $serial &
+      ", peer=" & $peer &
       ", envID=" & envID &
       # -----
       ", nBlockHashes=" & $req.blockHashes.len &
@@ -160,7 +161,7 @@ proc fetchBodiesHandler*(
       ", blockHashes=" & req.blockHashes.bnStr(buddy, info)  &
       ", expected=" & instr.ivReq.bnStr
 
-  trace info & "done", n, peer, peerID=buddy.peerID.short, envID
+  trace info & "done", serial, peer, peerID=buddy.peerID.short, envID
   return instr.getResponse()
 
 
@@ -183,7 +184,7 @@ proc importBlockHandler*(
     run = ctx.replay.runner
     daemon = run.daemon
   if daemon.isNil:
-    raiseAssert info & "system error (no daemon), n=" & $run.instrNumber &
+    raiseAssert info & "system error (no daemon), serial=" &
       ", peer=n/a" & ", effPeerID=" & effPeerID.short
 
   return await daemon.importBlockHandlerImpl(ethBlock, effPeerID, info)
@@ -228,7 +229,7 @@ proc importBlockFeed*(
 
   # Verify that the daemon is properly initialised
   elif run.daemon.isNil:
-    raiseAssert info & "system error (no daemon), n=" & $run.instrNumber &
+    raiseAssert info & "system error (no daemon), serial=" & $instr.serial &
       ", peer=n/a" & ", envID=" & $instr.envID &
       ", effPeerID=" & instr.effPeerID.short
 
@@ -236,7 +237,7 @@ proc importBlockFeed*(
     await run.daemon.importBlockFeedImpl(instr, info)
 
   # ---------------------------------------------------
-  # trace info & "done this time -- STOP", n=run.instrNumber
+  # trace info & "done this time -- STOP", serial=instr.serial
   # quit(QuitSuccess) # ********** DEBUG *************
   # ---------------------------------------------------
 

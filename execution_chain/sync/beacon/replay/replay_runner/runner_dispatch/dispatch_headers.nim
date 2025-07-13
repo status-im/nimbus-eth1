@@ -63,11 +63,12 @@ proc beginHeadersHandler*(
     instr = (await getSessionData[TraceBeginHeaders](buddy, info)).valueOr:
       return # Shutdown?
 
-    n = buddy.run.instrNumber                # for logging
-    envID = instr.envID.Hash.short           # for logging
+    serial = instr.serial                    # for logging
+    envID = instr.envID.idStr                # for logging
     peer = buddy.peer                        # for logging
+    peerID=buddy.peerID.short                # for logging
 
-  trace info & "done", n, peer, peerID=buddy.peerID.short, envID
+  trace info & "done", serial, peer, peerID, envID
 
 
 proc fetchHeadersHandler*(
@@ -83,12 +84,14 @@ proc fetchHeadersHandler*(
     instr = (await getSessionData[TraceGetBlockHeaders](buddy, info)).valueOr:
       return err(error.getBeaconError()) # Shutdown?
 
-    n = buddy.run.instrNumber                # for logging
-    envID = instr.envID.Hash.short           # for logging
+    serial = instr.serial                    # for logging
+    envID = instr.envID.idStr                # for logging
     peer = buddy.peer                        # for logging
+    peerID = buddy.peerID.short              # for logging
 
   if req != instr.req:
-    raiseAssert info & "arguments differ, n=" & $n & ", peer=" & $peer &
+    raiseAssert info & "arguments differ, serial=" & $serial &
+      ", peer=" & $peer &
       ", envID=" & envID &
       # -----
       ", reverse=" & $req.reverse &
@@ -100,7 +103,7 @@ proc fetchHeadersHandler*(
       ", reqLen=" & $req.maxResults &
       ", expected=" & $instr.req.maxResults
 
-  trace info & "done", n, peer, peerID=buddy.peerID.short, envID
+  trace info & "done", serial, peer, peerID, envID
   return instr.getResponse()
 
 # ------------------------------------------------------------------------------

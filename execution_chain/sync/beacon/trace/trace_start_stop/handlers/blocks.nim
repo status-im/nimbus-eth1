@@ -61,8 +61,8 @@ proc beginBlocksTrace*(
   tRec.init buddy
   buddy.traceWrite tRec
 
-  trace "=BlocksBegin", peer=($buddy.peer),
-    peerID=buddy.peerID.short, envID=tRec.envID.idStr
+  trace "=BlocksBegin", peer=($buddy.peer), peerID=buddy.peerID.short,
+    serial=tRec.serial, envID=tRec.envID.idStr
 
 
 proc fetchBodiesTrace*(
@@ -89,8 +89,8 @@ proc fetchBodiesTrace*(
     tRec.error = data.error
   buddy.traceWrite tRec
 
-  trace "=BodiesFetch", peer=($buddy.peer),
-    peerID=buddy.peerID.short, envID=tRec.envID.idStr, ivReq=ivReq.bnStr
+  trace "=BodiesFetch", peer=($buddy.peer), peerID=buddy.peerID.short,
+    serial=tRec.serial, envID=tRec.envID.idStr, ivReq=ivReq.bnStr
   return data
 
 
@@ -120,7 +120,7 @@ proc importBlockTrace*(
   ctx.traceWrite tRec
 
   trace "=BlocksImport", peer=maybePeer.toPeerStr, peerID=maybePeer.toPeerIdStr,
-    effPeerID=tRec.peerID.short, envID=tRec.envID.idStr
+    effPeerID=tRec.peerID.short,serial=tRec.serial,  envID=tRec.envID.idStr
   return data
 
 # ------------------------------------------------------------------------------

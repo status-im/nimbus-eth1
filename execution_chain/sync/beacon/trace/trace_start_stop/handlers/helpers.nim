@@ -28,6 +28,7 @@ proc init*(tb: var TraceRecBase; ctx: BeaconCtxRef; envID = 0u64) =
   ## there is no active trace.
   let trc = ctx.trace
   if not trc.isNil:
+    tb.serial =    trc.newSerial
     tb.envID =     (if envID == 0: trc.newEnvId else: envID)
     tb.time =      Moment.now() - trc.started
     tb.syncState = ctx.pool.lastState

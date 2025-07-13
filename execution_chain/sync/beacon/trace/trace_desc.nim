@@ -50,7 +50,8 @@ type
     sessions*: int                    ## Initial number of sessions
     remaining*: int                   ## Number of sessions left to run
     stopIfEos*: StopIfEosHdl          ## Auto-disable trace when needed
-    idGen: uint64                     ## Unique ids for `TraceEnv`
+    serial: uint                      ## Unique record ID
+    idGen: uint                       ## Unique begin/end ids
 
   # -------------
 
@@ -80,7 +81,8 @@ type
   TraceRecBase* = object of RootObj
     ## Trace context applicable with and without known peer
     time*: Duration                   ## Relative to `TraceRef.started`
-    envID*: uint64                    ## Derived from `TraceRef.idGen`
+    serial*: uint                     ## Increasing serial number
+    envID*: uint                      ## Derived from `TraceRef.idGen`
     nPeers*: int
     syncState*: SyncState
     chainMode*: HeaderChainMode
@@ -202,6 +204,12 @@ func newEnvId*(trc: TraceRef): uint64 =
   if trc.idGen == 0:
     trc.idGen.inc
   trc.idGen
+
+func newSerial*(trc: TraceRef): uint64 =
+  trc.serial.inc
+  if trc.serial == 0:
+    trc.serial.inc
+  trc.serial
 
 # ------------------------------------------------------------------------------
 # End

@@ -111,7 +111,4 @@ type
     peers*: Table[Hash,ReplayBuddyRef] ## Begin/End for base frames
     nPeers*: uint                      ## Track active peer instances
 
-    # Instruction handling
-    instrNumber*: int                  ## Instruction counter
-
 # End

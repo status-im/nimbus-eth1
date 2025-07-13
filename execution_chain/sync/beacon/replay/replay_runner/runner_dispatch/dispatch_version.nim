@@ -31,13 +31,13 @@ proc versionInfoWorker*(
     info: static[string];
       ) =
   let
-    n = run.instrNumber
+    serial = instr.serial
     ctx = run.ctx
   var
     versionOK = true
 
-  if run.instrNumber != 1:
-    error info & ": not the first record", n, expected=1
+  if serial != 1:
+    error info & ": not the first record", serial, expected=1
     versionOK = false
 
   if instr.version != TraceVersionID:
@@ -51,19 +51,19 @@ proc versionInfoWorker*(
     versionOK = false
 
   if ctx.chain.baseNumber < instr.baseNum:
-    error info & ": cannot start (base too low)", n,
+    error info & ": cannot start (base too low)", serial,
       base=ctx.chain.baseNumber.bnStr, replayBase=instr.baseNum.bnStr
     versionOK = false
 
   if not ctx.hibernate:
-    error info & ": syncer must not be activated, yet", n
+    error info & ": syncer must not be activated, yet", serial
     versionOK = false
 
   if not versionOK:
-    run.stopError(info & ": version match failed")
+    run.stopError(instr, info & ": version match failed")
     return
 
-  trace "=Version", TraceVersionID, envID=instr.envID
+  trace "=Version", TraceVersionID, serial, envID=instr.envID
   run.checkSyncerState(instr, info)
 
 # ------------------------------------------------------------------------------

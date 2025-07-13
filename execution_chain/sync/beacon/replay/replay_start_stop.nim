@@ -31,7 +31,7 @@ const
 # ------------------------------------------------------------------------------
 
 proc destroy(rpl: ReplayRef; info: static[string]) =
-  info info & "Terminating ..", n=rpl.runner.instrNumber
+  info info & "Terminating .."
   rpl.reader.destroy()
   rpl.runner.destroy()
 

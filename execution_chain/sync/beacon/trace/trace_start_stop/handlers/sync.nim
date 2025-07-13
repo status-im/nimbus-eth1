@@ -36,7 +36,7 @@ proc activateTrace*(ctx: BeaconCtxRef) =
     tRec.init ctx
     ctx.traceWrite tRec
 
-    trace "=ActvFailed", envID=tRec.envID.idStr
+    trace "=ActvFailed", serial=tRec.serial, envID=tRec.envID.idStr
 
   else:
     let chn = ctx.chain
@@ -46,7 +46,7 @@ proc activateTrace*(ctx: BeaconCtxRef) =
     tRec.finHash = chn.finHash
     ctx.traceWrite tRec
 
-    trace "=Activated", envID=tRec.envID.idStr
+    trace "=Activated", serial=tRec.serial, envID=tRec.envID.idStr
 
 
 proc suspendTrace*(ctx: BeaconCtxRef) =
@@ -60,7 +60,7 @@ proc suspendTrace*(ctx: BeaconCtxRef) =
   tRec.init ctx
   ctx.traceWrite tRec
 
-  trace "=Suspended", envID=tRec.envID.idStr
+  trace "=Suspended", serial=tRec.serial, envID=tRec.envID.idStr
 
   let trc = ctx.trace
   if not trc.isNil:
