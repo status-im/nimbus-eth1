@@ -74,13 +74,6 @@ declarePublicCounter rlpx_accept_failure,
 logScope:
   topics = "p2p rlpx"
 
-type
-  ResponderWithId*[MsgType] = object
-    peer*: Peer
-    reqId*: uint64
-
-  ResponderWithoutId*[MsgType] = distinct Peer
-
 const
   protocolCounter = CacheCounter"protocolCounter"
 
@@ -95,12 +88,6 @@ when tracingEnabled:
     init,
     writeValue,
     getOutput
-
-proc init*[MsgName](T: type ResponderWithId[MsgName], peer: Peer, reqId: uint64): T =
-  T(peer: peer, reqId: reqId)
-
-proc init*[MsgName](T: type ResponderWithoutId[MsgName], peer: Peer): T =
-  T(peer)
 
 chronicles.formatIt(Peer):
   $(it.remote)
@@ -642,8 +629,11 @@ proc `$`*(r: Responder): string =
   $r.peer & ": " & $r.reqId
 
 template msgIdImpl(PROTO: type; peer: Peer, methId: uint64): uint64 =
-  mixin protocolInfo
-  perPeerMsgIdImpl(peer, PROTO.protocolInfo, methId)
+  mixin protocolInfo, isSubProtocol
+  when PROTO.isSubProtocol:
+    perPeerMsgIdImpl(peer, PROTO.protocolInfo, methId)
+  else:
+    methId
 
 macro countArgs(args: untyped): untyped =
   var count = 0
@@ -851,7 +841,8 @@ template defineProtocol*(PROTO: untyped,
                          version: static[int],
                          rlpxName: static[string],
                          peerState: distinct type = void,
-                         networkState: distinct type = void) =
+                         networkState: distinct type = void,
+                         subProtocol: static[bool] = true) =
   type
     PROTO* = object
 
@@ -870,6 +861,9 @@ template defineProtocol*(PROTO: untyped,
   template protocolVersion*(_: type PROTO): int =
     version
 
+  template isSubProtocol*(_: type PROTO): bool =
+    subProtocol
+
   func initProtocol*(_: type PROTO): auto =
     initProtocol(rlpxName,
       version,
@@ -882,7 +876,8 @@ template defineProtocol*(PROTO: untyped,
 
 defineProtocol(PROTO = DevP2P,
                version = devp2pSnappyVersion,
-               rlpxName = "p2p")
+               rlpxName = "p2p",
+               subProtocol = false)
 
 type
   # We need these two types in rlpx/devp2p as no parameters or single parameters
@@ -1007,7 +1002,7 @@ proc sendDisconnectMsgThunk(peer: Peer; data: Rlp) {.
 
 proc pingThunk(peer: Peer; data: Rlp) {.async: (raises: [CancelledError, EthP2PError]).} =
   DevP2P.rlpxWithPacketHandler(PingPacket, peer, data, [list]):
-    await peer.pong()
+    discard peer.pong()
 
 proc pongThunk(peer: Peer; data: Rlp) {.async: (raises: [CancelledError, EthP2PError]).} =
   DevP2P.rlpxWithPacketHandler(PongPacket, peer, data, [list]):
