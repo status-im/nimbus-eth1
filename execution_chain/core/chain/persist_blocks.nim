@@ -177,14 +177,13 @@ proc persistBlock*(p: var Persister, blk: Block): Result[void, string] =
   if vmState.com.statelessProviderEnabled:
     let
       witnessKeys = vmState.ledger.getWitnessKeys()
-      txFrame = p.com.db.baseTxFrame.txFrameBegin()
-    defer:
-      txFrame.dispose()
-
-    # Get the pre-state from before executing the block of transactions
-    let
-      preStateLedger = LedgerRef.init(txFrame)
       blockHash = header.computeBlockHash()
+      # Get the pre-state from before executing the block of transactions
+      parentTxFrame = CoreDbTxRef(
+        aTx: vmState.ledger.txFrame.aTx.parent,
+        kTx: vmState.ledger.txFrame.kTx.parent
+      )
+      preStateLedger = LedgerRef.init(parentTxFrame)
 
     var witness = Witness.build(witnessKeys, preStateLedger.ReadOnlyLedger)
     witness.addHeaderHash(header.parentHash)
