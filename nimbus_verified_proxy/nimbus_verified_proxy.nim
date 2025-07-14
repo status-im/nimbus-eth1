@@ -28,7 +28,7 @@ import
   ./rpc/rpc_eth_api,
   ./nimbus_verified_proxy_conf,
   ./header_store,
-  ./web3_backend
+  ./rpc_api_backend
 
 from beacon_chain/gossip_processing/eth2_processor import toValidationResult
 
