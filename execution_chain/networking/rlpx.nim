@@ -373,9 +373,10 @@ proc invokeThunk*(
 
     try:
       msgInfo.nextMsgResolver(msgData, awaited)
-    except rlp.RlpError:
+    except rlp.RlpError as exc:
       await peer.disconnectAndRaise(
-        BreachOfProtocol, "Could not decode rlp for " & $msgId
+        BreachOfProtocol, "Could not decode rlp id: " & $msgId &
+        ", name: " & msgInfo.name & ", msg: " & exc.msg
       )
   else:
     await msgInfo.thunk(peer, msgData)
@@ -660,8 +661,16 @@ macro appendArgs(writer: untyped, args: untyped): untyped =
       result.add quote do:
         append(`writer`, `arg`)
 
+template constOrLet(PROTO: type, id: untyped, body: untyped) =
+  mixin isSubProtocol
+  when PROTO.isSubProtocol:
+    let `id` {.inject.} = body
+  else:
+    const `id` {.inject.} = body
+
 template rlpxSendMessage*(PROTO: type, peer: Peer, msgId: static[uint64], params: varargs[untyped]): auto =
-  let perPeerMsgId = msgIdImpl(PROTO, peer, msgId)
+  PROTO.constOrLet(perPeerMsgId):
+    msgIdImpl(PROTO, peer, msgId)
   var writer = initRlpWriter()
   const paramsLen = countArgs([params])
   when paramsLen > 1:
@@ -671,7 +680,8 @@ template rlpxSendMessage*(PROTO: type, peer: Peer, msgId: static[uint64], params
   sendMsg(peer, perPeerMsgId, msgBytes)
 
 template rlpxSendMessage*(PROTO: type, responder: Responder, msgId: static[uint64], params: varargs[untyped]): auto =
-  let perPeerMsgId = msgIdImpl(PROTO, responder.peer, msgId)
+  PROTO.constOrLet(perPeerMsgId):
+    msgIdImpl(PROTO, responder.peer, msgId)
   var writer = initRlpWriter()
   const paramsLen = countArgs([params])
   when paramsLen > 0:
@@ -682,7 +692,8 @@ template rlpxSendMessage*(PROTO: type, responder: Responder, msgId: static[uint6
   sendMsg(responder.peer, perPeerMsgId, msgBytes)
 
 template rlpxSendRequest*(PROTO: type, peer: Peer, msgId: static[uint64], params: varargs[untyped]) =
-  let perPeerMsgId = msgIdImpl(PROTO, peer, msgId)
+  PROTO.constOrLet(perPeerMsgId):
+    msgIdImpl(PROTO, peer, msgId)
   var writer = initRlpWriter()
   const paramsLen = countArgs([params])
   if paramsLen > 0:
@@ -766,9 +777,9 @@ template rlpxWithFutureHandler*(PROTO: distinct type;
       packet = MSGTYPE()
 
     tryEnterList(rlp)
-    let
-      reqId = read(rlp, uint64)
-      perPeerMsgId = msgIdImpl(PROTO, peer, msgId)
+    let reqId = read(rlp, uint64)
+    PROTO.constOrLet(perPeerMsgId):
+      msgIdImpl(PROTO, peer, msgId)
     checkedRlpFields(peer, rlp, packet, fields)
     resolveResponseFuture(peer,
       perPeerMsgId, addr(packet), reqId)
@@ -786,9 +797,9 @@ template rlpxWithFutureHandler*(PROTO: distinct type;
       packet: MSGTYPE
 
     tryEnterList(rlp)
-    let
-      reqId = read(rlp, uint64)
-      perPeerMsgId = msgIdImpl(PROTO, peer, msgId)
+    let reqId = read(rlp, uint64)
+    PROTO.constOrLet(perPeerMsgId):
+      msgIdImpl(PROTO, peer, msgId)
     checkedRlpFields(peer, rlp, packet, fields)
     var proType = packet.to(PROTYPE)
     resolveResponseFuture(peer,
@@ -803,7 +814,10 @@ proc nextMsg*(PROTO: distinct type,
   ## Any messages received while waiting will be dispatched to their
   ## respective handlers. The designated message handler will also run
   ## to completion before the future returned by `nextMsg` is resolved.
-  let wantedId = msgIdImpl(PROTO, peer, msgId)
+  when PROTO.isSubProtocol:
+    let wantedId = msgIdImpl(PROTO, peer, msgId)
+  else:
+    const wantedId = msgIdImpl(PROTO, peer, msgId)
   let f = peer.awaitedMessages[wantedId]
   if not f.isNil:
     return Future[MsgType].Raising([CancelledError, EthP2PError])(f)
