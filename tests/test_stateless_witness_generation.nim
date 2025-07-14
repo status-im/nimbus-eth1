@@ -37,14 +37,12 @@ suite "Stateless: Witness Generation":
     let witnessKeys = ledger.getWitnessKeys()
     check witnessKeys.len() == 1
 
-    var codes: seq[seq[byte]]
-    let witness = Witness.build(ledger, codes)
+    let witness = Witness.build(witnessKeys, ledger.ReadOnlyLedger)
 
     check:
       witness.state.len() > 0
       witness.keys.len() == 1
       witness.codeHashes.len() == 0
-      codes.len() == 0
       witnessKeys.contains((Address.copyFrom(witness.keys[0]), Opt.none(UInt256)))
 
   test "Get code":
@@ -56,14 +54,12 @@ suite "Stateless: Witness Generation":
     let witnessKeys = ledger.getWitnessKeys()
     check witnessKeys.len() == 1
 
-    var codes: seq[seq[byte]]
-    let witness = Witness.build(ledger, codes)
+    let witness = Witness.build(witnessKeys, ledger.ReadOnlyLedger)
 
     check:
       witness.state.len() > 0
       witness.keys.len() == 1
       witness.codeHashes.len() == 1
-      codes.len() == 1
       witnessKeys.contains((Address.copyFrom(witness.keys[0]), Opt.none(UInt256)))
 
   test "Set storage":
@@ -73,14 +69,12 @@ suite "Stateless: Witness Generation":
     let witnessKeys = ledger.getWitnessKeys()
     check witnessKeys.len() == 2
 
-    var codes: seq[seq[byte]]
-    let witness = Witness.build(ledger, codes)
+    let witness = Witness.build(witnessKeys, ledger.ReadOnlyLedger)
 
     check:
       witness.state.len() > 0
       witness.keys.len() == 2
       witness.codeHashes.len() == 0
-      codes.len() == 0
       witnessKeys.contains((Address.copyFrom(witness.keys[0]), Opt.none(UInt256)))
       witnessKeys.contains((Address.copyFrom(witness.keys[0]), Opt.some(slot1)))
 
@@ -93,14 +87,12 @@ suite "Stateless: Witness Generation":
     let witnessKeys = ledger.getWitnessKeys()
     check witnessKeys.len() == 2
 
-    var codes: seq[seq[byte]]
-    let witness = Witness.build(ledger, codes)
+    let witness = Witness.build(witnessKeys, ledger.ReadOnlyLedger)
 
     check:
       witness.state.len() > 0
       witness.keys.len() == 2
       witness.codeHashes.len() == 0
-      codes.len() == 0
       witnessKeys.contains((Address.copyFrom(witness.keys[0]), Opt.none(UInt256)))
       witnessKeys.contains((Address.copyFrom(witness.keys[0]), Opt.some(slot1)))
 
@@ -113,14 +105,12 @@ suite "Stateless: Witness Generation":
     let witnessKeys = ledger.getWitnessKeys()
     check witnessKeys.len() == 2
 
-    var codes: seq[seq[byte]]
-    let witness = Witness.build(ledger, codes)
+    let witness = Witness.build(witnessKeys, ledger.ReadOnlyLedger)
 
     check:
       witness.state.len() > 0
       witness.keys.len() == 2
       witness.codeHashes.len() == 0
-      codes.len() == 0
       witnessKeys.contains((Address.copyFrom(witness.keys[0]), Opt.none(UInt256)))
       witnessKeys.contains((Address.copyFrom(witness.keys[0]), Opt.some(slot1)))
 
@@ -139,14 +129,12 @@ suite "Stateless: Witness Generation":
     let witnessKeys = ledger.getWitnessKeys()
     check witnessKeys.len() == 4
 
-    var codes: seq[seq[byte]]
-    let witness = Witness.build(ledger, codes)
+    let witness = Witness.build(witnessKeys, ledger.ReadOnlyLedger)
 
     check:
       witness.state.len() > 0
       witness.keys.len() == 4
       witness.codeHashes.len() == 1
-      codes.len() == 1
       witnessKeys.contains((Address.copyFrom(witness.keys[0]), Opt.none(UInt256)))
       witnessKeys.contains((Address.copyFrom(witness.keys[0]), Opt.some(slot1)))
       witnessKeys.contains((Address.copyFrom(witness.keys[0]), Opt.some(slot2)))
