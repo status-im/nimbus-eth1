@@ -72,7 +72,7 @@ func defaultRpcHttpServerParams(): RpcHttpServerParams =
     httpHeadersTimeout: 10.seconds,
     maxHeadersSize: 64 * 1024,
     # Needs to accomodate a large block and all its blobs, with json overhead
-    maxRequestBodySize: 16 * 1024 * 1024,
+    maxRequestBodySize: 26 * 1024 * 1024,
   )
 
 proc resolvedAddress(address: string): Result[TransportAddress, string] =
