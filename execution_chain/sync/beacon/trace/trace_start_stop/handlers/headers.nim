@@ -35,7 +35,7 @@ proc beginHeadersTrace*(
   buddy.traceWrite tRec
 
   trace "=HeadersBegin", peer=($buddy.peer), peerID=buddy.peerID.short,
-    serial=tRec.serial, envID=tRec.envID.idStr
+    serial=tRec.serial
 
 
 proc fetchHeadersTrace*(
@@ -60,7 +60,7 @@ proc fetchHeadersTrace*(
   buddy.traceWrite tRec
 
   trace "=HeadersFetch", peer=($buddy.peer), peerID=buddy.peerID.short,
-    serial=tRec.serial, envID=tRec.envID.idStr
+    serial=tRec.serial
   return data
 
 # ------------------------------------------------------------------------------

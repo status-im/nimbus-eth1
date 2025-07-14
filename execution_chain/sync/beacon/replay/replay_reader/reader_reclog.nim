@@ -38,7 +38,10 @@ proc addX(
   else:
     q.add $base.serial
 
-  q.add base.envID.idStr
+  if 0 < base.frameID:
+    q.add base.frameID.idStr
+  else:
+    q.add "*"
   q.add $base.nPeers
   q.add ($base.syncState).toUpperFirst()
   q.add ($base.chainMode).toUpperFirst()

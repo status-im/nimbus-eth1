@@ -68,7 +68,7 @@ proc writeVersion(ctx: BeaconCtxRef) =
   tRec.version = TraceVersionID
   tRec.networkId = ctx.chain.com.networkId
   ctx.traceWrite tRec
-  trace "=Version", TraceVersionID, envID=tRec.envID
+  trace "=Version", TraceVersionID, serial=tRec.serial
 
 # ------------------------------------------------------------------------------
 # Public constructor/destructor

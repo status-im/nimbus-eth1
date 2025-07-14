@@ -26,7 +26,7 @@ export
   worker_desc
 
 const
-  TraceVersionID* = 20250713
+  TraceVersionID* = 20250714
 
   TraceBaseHandlersID* = 1
   TraceOverlayHandlersID* = 10
@@ -51,7 +51,6 @@ type
     remaining*: int                   ## Number of sessions left to run
     stopIfEos*: StopIfEosHdl          ## Auto-disable trace when needed
     serial: uint                      ## Unique record ID
-    idGen: uint                       ## Unique begin/end ids
 
   # -------------
 
@@ -82,7 +81,7 @@ type
     ## Trace context applicable with and without known peer
     time*: Duration                   ## Relative to `TraceRef.started`
     serial*: uint                     ## Increasing serial number
-    envID*: uint                      ## Derived from `TraceRef.idGen`
+    frameID*: uint                    ## Begin/end frame
     nPeers*: int
     syncState*: SyncState
     chainMode*: HeaderChainMode
@@ -198,12 +197,6 @@ func trace*(ctx: BeaconCtxRef): TraceRef =
   ## Getter, get trace descriptor (if any)
   if ctx.handler.version == TraceOverlayHandlersID:
     return ctx.handler.TraceRef
-
-func newEnvId*(trc: TraceRef): uint64 =
-  trc.idGen.inc
-  if trc.idGen == 0:
-    trc.idGen.inc
-  trc.idGen
 
 func newSerial*(trc: TraceRef): uint64 =
   trc.serial.inc

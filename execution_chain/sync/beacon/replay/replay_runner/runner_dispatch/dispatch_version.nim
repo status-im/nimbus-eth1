@@ -40,13 +40,17 @@ proc versionInfoWorker*(
     error info & ": not the first record", serial, expected=1
     versionOK = false
 
+  if run.instrNumber != 1:
+    error info & ": record count mismatch", n=run.instrNumber, expected=1
+    versionOK = false
+
   if instr.version != TraceVersionID:
-    error info & ": wrong version", n,
+    error info & ": wrong version", serial,
       traceLayoutVersion=instr.version, expected=TraceVersionID
     versionOK = false
 
   if instr.networkId != ctx.chain.com.networkId:
-    error info & ": wrong network", n,
+    error info & ": wrong network", serial,
       networkId=instr.networkId, expected=ctx.chain.com.networkId
     versionOK = false
 
@@ -60,10 +64,10 @@ proc versionInfoWorker*(
     versionOK = false
 
   if not versionOK:
-    run.stopError(instr, info & ": version match failed")
+    run.stopError(info & ": version match failed")
     return
 
-  trace "=Version", TraceVersionID, serial, envID=instr.envID
+  trace "=Version", TraceVersionID, serial
   run.checkSyncerState(instr, info)
 
 # ------------------------------------------------------------------------------

@@ -39,7 +39,6 @@ proc syncActivateWorker*(
     info: static[string]) =
   let
     serial = instr.serial
-    envID = instr.envID.idStr
     ctx = run.ctx
 
   if not ctx.hibernate:
@@ -48,7 +47,7 @@ proc syncActivateWorker*(
 
   var activationOK = true
   if ctx.chain.baseNumber != instr.baseNum:
-    error info & ": cannot activate (bases must match)", serial, envID,
+    error info & ": cannot activate (bases must match)", serial,
       base=ctx.chain.baseNumber.bnStr, expected=instr.baseNum.bnStr
     activationOK = false
 
@@ -60,12 +59,12 @@ proc syncActivateWorker*(
   run.checkSyncerState(instr, info)
 
   if ctx.hibernate or not activationOK:
-    trace "=ActvFailed", serial, envID
-    run.stopError(instr, info & ": activation failed")
+    trace "=ActvFailed", serial
+    run.stopError(info & ": activation failed")
   else:
     # No need for scheduler noise (e.g. disconnect messages.)
     ctx.noisyLog = false
-    trace "=Activated", serial, envID
+    trace "=Activated", serial
 
 
 proc syncSuspendWorker*(
@@ -75,17 +74,17 @@ proc syncSuspendWorker*(
       ) =
   let ctx = run.ctx
   if ctx.hibernate:
-    run.stopError(instr, info & ": suspend failed")
+    run.stopError(info & ": suspend failed")
     return
 
   run.checkSyncerState(instr, info)
-  trace "=Suspended", serial=instr.serial, envID=instr.envID.idStr
+  trace "=Suspended", serial=instr.serial
 
   # Shutdown if there are no remaining sessions left
   if 1 < run.nSessions:
     run.nSessions.dec
   else:
-    run.stopOk(instr, info & ": session(s) terminated")
+    run.stopOk(info & ": session(s) terminated")
 
 # ------------------------------------------------------------------------------
 # End

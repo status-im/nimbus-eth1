@@ -34,8 +34,7 @@ proc schedDaemonProcess*(
   ## process (using `asyncSpawn`.)
   ##
   let daemon = run.newDaemonFrame(instr, info).valueOr: return
-  info info & "begin", serial=instr.serial, envID=instr.envID.idStr,
-    syncState=instr.syncState
+  info info & "begin", serial=instr.serial, syncState=instr.syncState
 
   # Synchronise against captured environment
   (await daemon.waitForSyncedEnv(instr, info)).isOkOr: return
@@ -51,16 +50,15 @@ proc schedDaemonCleanUp*(
       ) {.async: (raises: []).} =
   ## Clean up (in foreground) after `schedDaemon()` process has terminated.
   ##
-  let daemon = run.getDaemon(instr, info).valueOr: return
+  let daemon = run.getDaemon(info).valueOr: return
 
   # Wait for daemon to terminate
   (await daemon.waitForProcessFinished(instr, info)).isOkOr: return
 
   # Clean up
-  daemon.delDaemon(instr, info)
+  daemon.delDaemon(info)
 
-  info info & "done", serial=instr.serial, envID=instr.envID.idStr,
-    syncState=instr.syncState
+  info info & "done", serial=instr.serial, syncState=instr.syncState
 
 
 proc schedStartWorker*(
@@ -76,17 +74,16 @@ proc schedStartWorker*(
 
   if accept != instr.accept:
     warn info & "result argument differs", serial=instr.serial,
-      peer=buddy.peer, envID=instr.envID.idStr, expected=instr.accept,
-      result=accept
+      peer=buddy.peer, expected=instr.accept, result=accept
 
   # Syncer state was captured when leaving the `schedStart()` handler.
   buddy.checkSyncerState(instr, info)
 
   if not accept:
-    buddy.delPeer(instr, info) # Clean up
+    buddy.delPeer(info) # Clean up
 
   info info & "done", serial=instr.serial, peer=($buddy.peer),
-    peerID=buddy.peerID.short, envID=instr.envID.idStr
+    peerID=buddy.peerID.short
 
 
 proc schedStopWorker*(
@@ -108,10 +105,10 @@ proc schedStopWorker*(
     buddy.checkSyncerState(instr, info)
 
   # Clean up
-  buddy.delPeer(instr, info)
+  buddy.delPeer(info)
   
   info info & "done", serial=instr.serial, peer=($buddy.peer),
-    peerID=buddy.peerID.short, envID=instr.envID.idStr
+    peerID=buddy.peerID.short
 
 
 proc schedPoolWorker*(
@@ -140,7 +137,7 @@ proc schedPoolWorker*(
   buddy.stage.setLen(0)
 
   info info & "done", serial=instr.serial, peer=($buddy.peer),
-    peerID=buddy.peerID.short, envID=instr.envID.idStr
+    peerID=buddy.peerID.short
 
 
 proc schedPeerProcess*(
@@ -153,8 +150,7 @@ proc schedPeerProcess*(
   ##
   let buddy = run.getOrNewPeerFrame(instr, info)
   info info & "begin", serial=instr.serial, peer=($buddy.peer),
-    peerID=buddy.peerID.short, envID=instr.envID.idStr,
-    syncState=instr.syncState
+    peerID=buddy.peerID.short, syncState=instr.syncState
 
   # Synchronise against captured environment
   (await buddy.waitForSyncedEnv(instr, info)).isOkOr: return
@@ -183,8 +179,7 @@ proc schedPeerCleanUp*(
   (await buddy.waitForProcessFinished(instr, info)).isOkOr: return
   
   info info & "done", serial=instr.serial, peer=($buddy.peer),
-    peerID=buddy.peerID.short, envID=instr.envID.idStr,
-    syncState=instr.syncState
+    peerID=buddy.peerID.short, syncState=instr.syncState
 
 # ------------------------------------------------------------------------------
 # End

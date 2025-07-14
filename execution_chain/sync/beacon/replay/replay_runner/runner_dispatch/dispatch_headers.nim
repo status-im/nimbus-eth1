@@ -64,11 +64,10 @@ proc beginHeadersHandler*(
       return # Shutdown?
 
     serial = instr.serial                    # for logging
-    envID = instr.envID.idStr                # for logging
     peer = buddy.peer                        # for logging
     peerID=buddy.peerID.short                # for logging
 
-  trace info & "done", serial, peer, peerID, envID
+  trace info & "done", serial, peer, peerID
 
 
 proc fetchHeadersHandler*(
@@ -85,14 +84,12 @@ proc fetchHeadersHandler*(
       return err(error.getBeaconError()) # Shutdown?
 
     serial = instr.serial                    # for logging
-    envID = instr.envID.idStr                # for logging
     peer = buddy.peer                        # for logging
     peerID = buddy.peerID.short              # for logging
 
   if req != instr.req:
     raiseAssert info & "arguments differ, serial=" & $serial &
       ", peer=" & $peer &
-      ", envID=" & envID &
       # -----
       ", reverse=" & $req.reverse &
       ", expected=" & $instr.req.reverse &
@@ -103,7 +100,7 @@ proc fetchHeadersHandler*(
       ", reqLen=" & $req.maxResults &
       ", expected=" & $instr.req.maxResults
 
-  trace info & "done", serial, peer, peerID, envID
+  trace info & "done", serial, peer, peerID
   return instr.getResponse()
 
 # ------------------------------------------------------------------------------

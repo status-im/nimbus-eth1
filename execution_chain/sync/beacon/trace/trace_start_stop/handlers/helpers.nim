@@ -11,7 +11,7 @@
 {.push raises:[].}
 
 import
-  std/[strformat, strutils],
+  std/strutils,
   pkg/[chronos, stew/interval_set],
   ../../../worker/helpers as worker_helpers,
   ../../trace_desc
@@ -23,13 +23,12 @@ export
 # Public context capture initialisation
 # ------------------------------------------------------------------------------
 
-proc init*(tb: var TraceRecBase; ctx: BeaconCtxRef; envID = 0u64) =
+proc init*(tb: var TraceRecBase; ctx: BeaconCtxRef) =
   ## Initialise new trace descriptor. This fuction does nothing if
   ## there is no active trace.
   let trc = ctx.trace
   if not trc.isNil:
     tb.serial =    trc.newSerial
-    tb.envID =     (if envID == 0: trc.newEnvId else: envID)
     tb.time =      Moment.now() - trc.started
     tb.syncState = ctx.pool.lastState
     tb.nPeers =    ctx.pool.nBuddies
@@ -58,13 +57,13 @@ proc init*(tb: var TraceRecBase; ctx: BeaconCtxRef; envID = 0u64) =
     else:
       tb.stateAvail = 0
 
-proc init*(tb: var TraceRecBase; buddy: BeaconBuddyRef; envID = 0u64) =
+proc init*(tb: var TraceRecBase; buddy: BeaconBuddyRef) =
   ## Variant of `init()` for `buddy` rather than `ctx`
   let
     ctx = buddy.ctx
     trc = ctx.trace
   if not trc.isNil:
-    tb.init(ctx, envID)
+    tb.init ctx
     tb.stateAvail += 15
     tb.peerCtrl = buddy.ctrl.state
     tb.peerID = buddy.peerID
@@ -75,23 +74,19 @@ proc init*(
     tb: var TraceRecBase;
     ctx: BeaconCtxRef;
     maybePeer: Opt[BeaconBuddyRef];
-    envID = 0u64;
       ) =
   ## Variant of `init()`
   let trc = ctx.trace
   if not trc.isNil:
     if maybePeer.isSome:
-      tb.init(maybePeer.value, envID)
+      tb.init maybePeer.value
     else:
-      tb.init(ctx, envID)
+      tb.init ctx
 
 # --------------
 
 func short*(w: Hash): string =
   w.toHex(8).toLowerAscii # strips leading 8 bytes
-
-func idStr*(w: uint64): string =
-  &"{w:x}"
 
 # ------------------------------------------------------------------------------
 # End

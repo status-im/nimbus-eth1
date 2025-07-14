@@ -85,7 +85,6 @@ proc importBlockHandlerImpl(
       return err(error.getBeaconError()) # Shutdown?
 
     serial = instr.serial                    # for logging
-    envID = instr.envID.idStr                # for logging
 
   when desc is ReplayBuddyRef:
     let peer = desc.peer
@@ -98,7 +97,6 @@ proc importBlockHandlerImpl(
      ethBlock != instr.ethBlock:
     raiseAssert info & "arguments differ, serial=" & $serial &
       ", peer=" & $peer &
-      ", envID=" & envID &
       # -----
       ", effPeerID=" & effPeerID.short &
       ", expected=" & instr.effPeerID.short &
@@ -106,7 +104,7 @@ proc importBlockHandlerImpl(
       ", ethBlock=%" & ethBlock.computeRlpHash.short &
       ", expected=%" & instr.ethBlock.computeRlpHash.short
 
-  trace info & "done", serial, peer, peerID, envID
+  trace info & "done", serial, peer, peerID
   return instr.getResponse()
 
 
@@ -147,13 +145,11 @@ proc fetchBodiesHandler*(
       return err(error.getBeaconError()) # Shutdown?
 
     serial = instr.serial                    # for logging
-    envID = instr.envID.idStr                # for logging
     peer = buddy.peer                        # for logging
 
   if req != instr.req:
     raiseAssert info & "arguments differ, serial=" & $serial &
       ", peer=" & $peer &
-      ", envID=" & envID &
       # -----
       ", nBlockHashes=" & $req.blockHashes.len &
       ", expected=" & $instr.ivReq.len &
@@ -161,7 +157,7 @@ proc fetchBodiesHandler*(
       ", blockHashes=" & req.blockHashes.bnStr(buddy, info)  &
       ", expected=" & instr.ivReq.bnStr
 
-  trace info & "done", serial, peer, peerID=buddy.peerID.short, envID
+  trace info & "done", serial, peer, peerID=buddy.peerID.short
   return instr.getResponse()
 
 
@@ -230,8 +226,7 @@ proc importBlockFeed*(
   # Verify that the daemon is properly initialised
   elif run.daemon.isNil:
     raiseAssert info & "system error (no daemon), serial=" & $instr.serial &
-      ", peer=n/a" & ", envID=" & $instr.envID &
-      ", effPeerID=" & instr.effPeerID.short
+      ", peer=n/a" & ", effPeerID=" & instr.effPeerID.short
 
   else:
     await run.daemon.importBlockFeedImpl(instr, info)
