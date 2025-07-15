@@ -187,7 +187,6 @@ proc persistBlock*(p: var Persister, blk: Block): Result[void, string] =
 
     var witness = Witness.build(witnessKeys, preStateLedger.ReadOnlyLedger)
     witness.addHeaderHash(header.parentHash)
-    witness.addHeaderHash(blockHash)
 
     ?vmState.ledger.txFrame.persistWitness(blockHash, witness)
     vmState.ledger.clearWitnessKeys()
