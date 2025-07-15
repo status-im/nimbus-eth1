@@ -1,5 +1,5 @@
 # Nimbus
-# Copyright (c) 2018-2023 Status Research & Development GmbH
+# Copyright (c) 2018-2025 Status Research & Development GmbH
 # Licensed under either of
 #  * Apache License, version 2.0, ([LICENSE-APACHE](LICENSE-APACHE) or
 #    http://www.apache.org/licenses/LICENSE-2.0)
@@ -16,7 +16,7 @@
 # it once, upload it to Docker Hub and make sure it's being pulled regularly so
 # it's not deleted after 6 months of inactivity.
 
-FROM ubuntu:20.04
+FROM ubuntu:22.04
 
 SHELL ["/bin/bash", "-c"]
 
