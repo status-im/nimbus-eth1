@@ -73,7 +73,6 @@ type
     Responder ## `Handshake` owner is connection responder
 
   AuthError* = enum
-    EcdhError = "auth: ECDH shared secret could not be calculated"
     BufferOverrun = "auth: buffer overrun"
     SignatureError = "auth: signature could not be obtained"
     EciesError = "auth: ECIES encryption/decryption error"
@@ -242,7 +241,7 @@ func decodeAckMsgLen*(h: Handshake, input: openArray[byte]): AuthResult[int] =
     return err(AuthError.IncompleteError)
   ok(len)
 
-proc decodeAuthMessage*(h: var Handshake, m: openArray[byte]): AuthResult[void] =
+func decodeAuthMessage*(h: var Handshake, m: openArray[byte]): AuthResult[void] =
   ## Decodes EIP-8 AuthMessage.
   let
     expectedLength = ?h.decodeAuthMsgLen(m)
@@ -298,7 +297,7 @@ proc decodeAuthMessage*(h: var Handshake, m: openArray[byte]): AuthResult[void] 
   except RlpError:
     err(AuthError.RlpError)
 
-proc decodeAckMessage*(h: var Handshake, m: openArray[byte]): AuthResult[void] =
+func decodeAckMessage*(h: var Handshake, m: openArray[byte]): AuthResult[void] =
   ## Decodes EIP-8 AckMessage.
   let
     expectedLength = ?h.decodeAckMsgLen(m)
@@ -337,7 +336,7 @@ proc decodeAckMessage*(h: var Handshake, m: openArray[byte]): AuthResult[void] =
   except RlpError:
     err(AuthError.RlpError)
 
-proc getSecrets*(
+func getSecrets*(
     h: Handshake, authmsg: openArray[byte], ackmsg: openArray[byte]
 ): ConnectionSecret =
   ## Derive secrets from handshake `h` using encrypted AuthMessage `authmsg` and

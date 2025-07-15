@@ -13,7 +13,7 @@ import
   unittest2,
   nimcrypto/[utils, sha2, hmac],
   eth/common/keys,
-  ../../execution_chain/networking/rlpx/ecies
+  ../../execution_chain/networking/rlpx/ecies {.all.}
 
 proc compare[A, B](x: openArray[A], y: openArray[B], s: int = 0): bool =
   result = true

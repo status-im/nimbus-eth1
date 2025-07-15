@@ -13,7 +13,8 @@ import
   unittest2,
   nimcrypto/[utils, keccak, sysrand],
   eth/common/keys,
-  ../../execution_chain/networking/rlpx/[auth, rlpxcrypt]
+  ../../execution_chain/networking/rlpx/auth,
+  ../../execution_chain/networking/rlpx/rlpxcrypt {.all.}
 
 # EIP-8 test case
 # https://github.com/ethereum/EIPs/blob/master/EIPS/eip-8.md#rlpx-handshake
@@ -158,11 +159,11 @@ suite "Ethereum RLPx encryption/decryption test suite":
 
     var csecInitiator = initiator.getSecrets(m0, m1)
     var csecResponder = responder.getSecrets(m0, m1)
-    var stateInitiator: SecretState
-    var stateResponder: SecretState
+    var stateInitiator: RlpxCrypt
+    var stateResponder: RlpxCrypt
     var iheader: array[16, byte]
-    initSecretState(csecInitiator, stateInitiator)
-    initSecretState(csecResponder, stateResponder)
+    initRlpxCrypt(csecInitiator, stateInitiator)
+    initRlpxCrypt(csecResponder, stateResponder)
     for i in 1..1000:
       # initiator -> responder
       block:

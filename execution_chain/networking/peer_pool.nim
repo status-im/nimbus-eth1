@@ -139,11 +139,9 @@ proc connect(p: PeerPool, remote: Node): Future[Peer] {.async.} =
       p.addSeen(remote.id, SeenTableTimeUselessPeer)
     of TransportConnectError:
       p.addSeen(remote.id, SeenTableTimeDeadPeer)
-    of RlpxHandshakeError, ProtocolError, InvalidIdentityError:
+    of RlpxHandshakeError, ProtocolError:
       p.addSeen(remote.id, SeenTableTimeProtocolError)
-    of RlpxHandshakeTransportError,
-        P2PHandshakeError,
-        P2PTransportError,
+    of P2PHandshakeError,
         PeerDisconnectedError,
         TooManyPeersError:
       p.addSeen(remote.id, SeenTableTimeReconnect)

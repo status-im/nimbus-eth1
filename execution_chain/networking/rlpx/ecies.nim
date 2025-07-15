@@ -24,7 +24,7 @@ const
   ivLen = aes128.sizeBlock
   tagLen = sha256.sizeDigest
 
-  eciesOverheadLength* =
+  eciesOverheadLength =
     # Data overhead size for ECIES encrypted message
     # pubkey + IV + MAC = 65 + 16 + 32 = 113
     1 + sizeof(PublicKey) + ivLen + tagLen
@@ -80,7 +80,7 @@ template enckey(material: openArray[byte]): untyped =
 template mackey(material: openArray[byte]): untyped =
   sha256.digest(material.toOpenArray(aes128.sizeKey, material.len - 1))
 
-func kdf*(data: openArray[byte]): array[KeyLength, byte] {.noinit.} =
+func kdf(data: openArray[byte]): array[KeyLength, byte] {.noinit.} =
   ## NIST SP 800-56a Concatenation Key Derivation Function (see section 5.8.1)
   var
     ctx: sha256
@@ -131,20 +131,20 @@ proc eciesEncrypt*(
 
   output.version() = 0x04
 
-  block: # pubkey
+  block pubkey:
     assign(output.pubkey, ephemeral.pubkey.toRaw())
     ephemeral.clear()
 
-  block: # iv
+  block iv:
     rng.generate(output.iv())
 
-  block: # ciphertext
+  block ciphertext:
     var cipher: CTR[aes128]
     cipher.init(material.enckey(), output.iv())
     cipher.encrypt(input, output.data(input.len))
     cipher.clear()
 
-  block: # mac
+  block mac:
     var mackey = material.mackey()
     burnMem(material)
 
@@ -190,7 +190,7 @@ func eciesDecrypt*(
 
   secret.clear()
 
-  block: # mac
+  block mac:
     var mackey = material.mackey()
 
     var ctx: HMAC[sha256]
@@ -207,7 +207,7 @@ func eciesDecrypt*(
       burnMem(material)
       return err(IncorrectTag)
 
-  block: # ciphertext
+  block ciphertext:
     var cipher: CTR[aes128]
     cipher.init(material.enckey(), input.iv())
     burnMem(material)

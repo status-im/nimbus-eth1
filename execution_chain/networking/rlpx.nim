@@ -387,6 +387,16 @@ template compressMsg(peer: Peer, data: seq[byte]): seq[byte] =
   else:
     data
 
+func p2pCode(e: RlpxError): DisconnectionReason =
+  case e.code
+  of TransportConnectError: TcpError
+  of RlpxHandshakeError: BreachOfProtocol
+  of ProtocolError: BreachOfProtocol
+  of P2PHandshakeError: BreachOfProtocol
+  of UselessRlpxPeerError: UselessPeer
+  of PeerDisconnectedError: DisconnectRequested
+  of TooManyPeersError: TooManyPeers
+
 proc recvMsg(
     peer: Peer
 ): Future[tuple[msgId: uint64, msgRlp: Rlp]] {.
@@ -394,7 +404,9 @@ proc recvMsg(
 .} =
   var msgBody: seq[byte]
   try:
-    msgBody = await peer.transport.recvMsg()
+    msgBody = (await peer.transport.recvMsg()).valueOr:
+      await peer.disconnectAndRaise(error.p2pCode, error.msg)
+      return
 
     trace "Received message",
       remote = peer.remote,
@@ -427,10 +439,6 @@ proc recvMsg(
         tmp = rlpFromBytes(decoded)
 
     return (msgId, tmp)
-  except TransportError as exc:
-    await peer.disconnectAndRaise(TcpError, exc.msg)
-  except RlpxTransportError as exc:
-    await peer.disconnectAndRaise(BreachOfProtocol, exc.msg)
   except RlpError as exc:
     # TODO remove this warning before using in production
     warn "TODO: RLP decoding failed for msgId",
@@ -444,27 +452,24 @@ proc recvMsg(
 proc sendMsg(
     peer: Peer, msgId: uint64, payload: seq[byte]
 ): Future[void] {.async: (raises: [CancelledError, EthP2PError]).} =
-  try:
-    let
-      msgIdBytes = rlp.encodeInt(msgId)
-      payloadBytes = peer.compressMsg(payload)
 
-    var msg = newSeqOfCap[byte](msgIdBytes.data.len + payloadBytes.len)
-    msg.add msgIdBytes.data()
-    msg.add payloadBytes
+  let
+    msgIdBytes = rlp.encodeInt(msgId)
+    payloadBytes = peer.compressMsg(payload)
 
-    trace "Sending message",
-      remote = peer.remote,
-      clientId = peer.clientId,
-      msgId,
-      data = toHex(msg.toOpenArray(0, min(255, msg.high))),
-      payload = toHex(payload.toOpenArray(0, min(255, payload.high)))
+  var msg = newSeqOfCap[byte](msgIdBytes.data.len + payloadBytes.len)
+  msg.add msgIdBytes.data()
+  msg.add payloadBytes
 
-    await peer.transport.sendMsg(msg)
-  except TransportError as exc:
-    await peer.disconnectAndRaise(TcpError, exc.msg)
-  except RlpxTransportError as exc:
-    await peer.disconnectAndRaise(BreachOfProtocol, exc.msg)
+  trace "Sending message",
+    remote = peer.remote,
+    clientId = peer.clientId,
+    msgId,
+    data = toHex(msg.toOpenArray(0, min(255, msg.high))),
+    payload = toHex(payload.toOpenArray(0, min(255, payload.high)))
+
+  (await peer.transport.sendMsg(msg)).isOkOr:
+    await peer.disconnectAndRaise(error.p2pCode, error.msg)
 
 proc registerRequest(
     peer: Peer, timeout: Duration, responseFuture: FutureBase, responseMsgId: uint64
@@ -1216,18 +1221,6 @@ proc postHelloSteps(
 template setSnappySupport(peer: Peer, hello: HelloPacket) =
   peer.snappyEnabled = hello.version >= devp2pSnappyVersion.uint64
 
-type RlpxError* = enum
-  TransportConnectError
-  RlpxHandshakeTransportError
-  RlpxHandshakeError
-  ProtocolError
-  P2PHandshakeError
-  P2PTransportError
-  InvalidIdentityError
-  UselessRlpxPeerError
-  PeerDisconnectedError
-  TooManyPeersError
-
 proc helloHandshake(
     node: EthereumNode, peer: Peer
 ): Future[HelloPacket] {.async: (raises: [CancelledError, EthP2PError]).} =
@@ -1276,7 +1269,7 @@ proc helloHandshake(
 
 proc rlpxConnect*(
     node: EthereumNode, remote: Node
-): Future[Result[Peer, RlpxError]] {.async: (raises: [CancelledError]).} =
+): Future[Result[Peer, RlpxErrorCode]] {.async: (raises: [CancelledError]).} =
   # TODO move logging elsewhere - the aim is to have exactly _one_ debug log per
   #      connection attempt (success or failure) to not spam the logs
   initTracing(devp2pInfo, node.protocols)
@@ -1297,20 +1290,16 @@ proc rlpxConnect*(
       if peer.transport != nil:
         peer.transport.close()
 
+
   peer.transport =
     try:
       let ta = initTAddress(remote.node.address.ip, remote.node.address.tcpPort)
-      await RlpxTransport.connect(node.rng, node.keys, ta, remote.node.pubkey).wait(
-        deadline
-      )
+      (await RlpxTransport.connect(node.rng, node.keys, ta, remote.node.pubkey).
+        wait(deadline)).valueOr:
+          debug "Connect RlpxTransport error", err = error.msg
+          return err(error.code)
     except AsyncTimeoutError:
       debug "Connect timeout"
-      return err(TransportConnectError)
-    except RlpxTransportError as exc:
-      debug "Connect RlpxTransport error", err = exc.msg
-      return err(ProtocolError)
-    except TransportError as exc:
-      debug "Connect transport error", err = exc.msg
       return err(TransportConnectError)
 
   logConnectedPeer peer
@@ -1403,18 +1392,13 @@ proc rlpxAccept*(
 
   peer.transport =
     try:
-      await RlpxTransport.accept(node.rng, node.keys, stream).wait(deadline)
+      (await RlpxTransport.accept(node.rng, node.keys, stream).wait(deadline)).valueOr:
+        debug "Accept RlpxTransport error", remoteAddress = $remoteAddress, err = error.msg
+        rlpx_accept_failure.inc(labelValues = [$error.p2pCode])
+        return nil
     except AsyncTimeoutError:
       debug "Accept timeout", remoteAddress = $remoteAddress
       rlpx_accept_failure.inc(labelValues = ["timeout"])
-      return nil
-    except RlpxTransportError as exc:
-      debug "Accept RlpxTransport error", remoteAddress = $remoteAddress, err = exc.msg
-      rlpx_accept_failure.inc(labelValues = [$BreachOfProtocol])
-      return nil
-    except TransportError as exc:
-      debug "Accept transport error", remoteAddress = $remoteAddress, err = exc.msg
-      rlpx_accept_failure.inc(labelValues = [$TcpError])
       return nil
 
   let
