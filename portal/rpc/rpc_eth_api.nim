@@ -15,7 +15,7 @@ import
   web3/[eth_api_types, conversions],
   eth/common/transaction_utils,
   beacon_chain/spec/forks,
-  ../network/history/[history_network, history_content],
+  ../network/legacy_history/[history_network, history_content],
   ../network/state/[state_network, state_content, state_endpoints],
   ../network/beacon/beacon_light_client,
   ../evm/async_evm,
@@ -112,7 +112,7 @@ func init*(
 
   blockObject
 
-template getOrRaise(historyNetwork: Opt[HistoryNetwork]): HistoryNetwork =
+template getOrRaise(historyNetwork: Opt[LegacyHistoryNetwork]): LegacyHistoryNetwork =
   let hn = historyNetwork.valueOr:
     raise newException(ValueError, "history sub-network not enabled")
   hn
@@ -135,7 +135,7 @@ template getOrRaise(asyncEvm: Opt[AsyncEvm]): AsyncEvm =
 
 proc installEthApiHandlers*(
     rpcServer: RpcServer,
-    historyNetwork: Opt[HistoryNetwork],
+    historyNetwork: Opt[LegacyHistoryNetwork],
     beaconLightClient: Opt[LightClient],
     stateNetwork: Opt[StateNetwork],
     asyncEvm: Opt[AsyncEvm],

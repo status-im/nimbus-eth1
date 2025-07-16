@@ -19,6 +19,7 @@ type
   PortalSubnetwork* = enum
     state
     history
+    legacyHistory
     beacon
     transactionIndex
     verkleState

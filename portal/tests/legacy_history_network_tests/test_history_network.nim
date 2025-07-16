@@ -12,7 +12,7 @@ import
   eth/p2p/discoveryv5/routing_table,
   eth/common/[hashes, headers_rlp, blocks],
   ../../network/wire/[portal_protocol, portal_stream, portal_protocol_config],
-  ../../network/history/[
+  ../../network/legacy_history/[
     history_network,
     history_content,
     validation/block_proof_historical_hashes_accumulator,
@@ -24,7 +24,7 @@ import
 
 type HistoryNode = ref object
   discoveryProtocol*: discv5_protocol.Protocol
-  historyNetwork*: HistoryNetwork
+  historyNetwork*: LegacyHistoryNetwork
 
 proc newHistoryNode(
     rng: ref HmacDrbgContext,
@@ -39,8 +39,9 @@ proc newHistoryNode(
     streamManager = StreamManager.new(node)
     networkData = loadNetworkData("mainnet")
     cfg = networkData.metadata.cfg
-    historyNetwork =
-      HistoryNetwork.new(PortalNetwork.none, node, db, streamManager, cfg, accumulator)
+    historyNetwork = LegacyHistoryNetwork.new(
+      PortalNetwork.none, node, db, streamManager, cfg, accumulator
+    )
 
   return HistoryNode(discoveryProtocol: node, historyNetwork: historyNetwork)
 

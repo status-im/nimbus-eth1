@@ -16,7 +16,7 @@ import
   beacon_chain /../ tests/testblockutil,
   # Mock helpers
   beacon_chain /../ tests/mocking/mock_genesis,
-  ../../network/history/validation/block_proof_historical_roots
+  ../../network/legacy_history/validation/block_proof_historical_roots
 
 # Test suite for the proofs:
 # - HistoricalRootsProof

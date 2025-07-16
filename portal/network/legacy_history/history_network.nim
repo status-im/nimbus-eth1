@@ -33,7 +33,7 @@ export blocks_rlp, presets
 const pingExtensionCapabilities = {CapabilitiesType, HistoryRadiusType}
 
 type
-  HistoryNetwork* = ref object
+  LegacyHistoryNetwork* = ref object
     portalProtocol*: PortalProtocol
     contentDB*: ContentDB
     contentQueue*: AsyncQueue[(Opt[NodeId], ContentKeysList, seq[seq[byte]])]
@@ -52,7 +52,7 @@ func toContentIdHandler(contentKey: ContentKeyByteList): results.Opt[ContentId] 
 ## Get local content calls
 
 proc getLocalContent(
-    n: HistoryNetwork,
+    n: LegacyHistoryNetwork,
     T: type Header,
     contentKey: ContentKeyByteList,
     contentId: ContentId,
@@ -68,7 +68,7 @@ proc getLocalContent(
   Opt.some(header)
 
 proc getLocalContent(
-    n: HistoryNetwork,
+    n: LegacyHistoryNetwork,
     T: type BlockBody,
     contentKey: ContentKeyByteList,
     contentId: ContentId,
@@ -96,7 +96,7 @@ proc getLocalContent(
   Opt.some(body)
 
 proc getLocalContent(
-    n: HistoryNetwork,
+    n: LegacyHistoryNetwork,
     T: type seq[Receipt],
     contentKey: ContentKeyByteList,
     contentId: ContentId,
@@ -124,7 +124,7 @@ proc getLocalContent(
 # however that response is not yet validated at that moment.
 
 proc getVerifiedBlockHeader*(
-    n: HistoryNetwork, id: Hash32 | uint64
+    n: LegacyHistoryNetwork, id: Hash32 | uint64
 ): Future[Opt[Header]] {.async: (raises: [CancelledError]).} =
   let
     contentKey = blockHeaderContentKey(id).encode()
@@ -173,7 +173,7 @@ proc getVerifiedBlockHeader*(
   Opt.none(Header)
 
 proc getBlockBody*(
-    n: HistoryNetwork, blockHash: Hash32, header: Header
+    n: LegacyHistoryNetwork, blockHash: Hash32, header: Header
 ): Future[Opt[BlockBody]] {.async: (raises: [CancelledError]).} =
   if header.txRoot == EMPTY_ROOT_HASH and header.ommersHash == EMPTY_UNCLE_HASH:
     # Short path for empty body indicated by txRoot and ommersHash
@@ -221,7 +221,7 @@ proc getBlockBody*(
   Opt.none(BlockBody)
 
 proc getBlock*(
-    n: HistoryNetwork, id: Hash32 | uint64
+    n: LegacyHistoryNetwork, id: Hash32 | uint64
 ): Future[Opt[Block]] {.async: (raises: [CancelledError]).} =
   debug "Trying to retrieve block", id
 
@@ -244,7 +244,7 @@ proc getBlock*(
   Opt.some((header, body))
 
 proc getBlockHashByNumber*(
-    n: HistoryNetwork, blockNumber: uint64
+    n: LegacyHistoryNetwork, blockNumber: uint64
 ): Future[Result[Hash32, string]] {.async: (raises: [CancelledError]).} =
   let header = (await n.getVerifiedBlockHeader(blockNumber)).valueOr:
     return err("Cannot retrieve block header for given block number")
@@ -252,7 +252,7 @@ proc getBlockHashByNumber*(
   ok(header.computeRlpHash())
 
 proc getReceipts*(
-    n: HistoryNetwork, blockHash: Hash32, header: Header
+    n: LegacyHistoryNetwork, blockHash: Hash32, header: Header
 ): Future[Opt[seq[Receipt]]] {.async: (raises: [CancelledError]).} =
   if header.receiptsRoot == EMPTY_ROOT_HASH:
     # Short path for empty receipts indicated by receipts root
@@ -300,7 +300,7 @@ proc getReceipts*(
   Opt.none(seq[Receipt])
 
 proc validateContent(
-    n: HistoryNetwork, content: seq[byte], contentKeyBytes: ContentKeyByteList
+    n: LegacyHistoryNetwork, content: seq[byte], contentKeyBytes: ContentKeyByteList
 ): Future[Result[void, string]] {.async: (raises: [CancelledError]).} =
   let contentKey = contentKeyBytes.decode().valueOr:
     return err("Error decoding content key")
@@ -342,7 +342,7 @@ proc validateContent(
     err("Ephemeral block headers are not yet supported")
 
 proc new*(
-    T: type HistoryNetwork,
+    T: type LegacyHistoryNetwork,
     portalNetwork: PortalNetwork,
     baseProtocol: protocol.Protocol,
     contentDB: ContentDB,
@@ -365,7 +365,7 @@ proc new*(
 
     portalProtocol = PortalProtocol.new(
       baseProtocol,
-      getProtocolId(portalNetwork, PortalSubnetwork.history),
+      getProtocolId(portalNetwork, PortalSubnetwork.legacyHistory),
       toContentIdHandler,
       createGetHandler(contentDB),
       createStoreHandler(contentDB, portalConfig.radiusConfig),
@@ -377,7 +377,7 @@ proc new*(
       pingExtensionCapabilities = pingExtensionCapabilities,
     )
 
-  HistoryNetwork(
+  LegacyHistoryNetwork(
     portalProtocol: portalProtocol,
     contentDB: contentDB,
     contentQueue: contentQueue,
@@ -392,7 +392,7 @@ proc new*(
   )
 
 proc validateContent(
-    n: HistoryNetwork,
+    n: LegacyHistoryNetwork,
     srcNodeId: Opt[NodeId],
     contentKeys: ContentKeysList,
     contentItems: seq[seq[byte]],
@@ -421,7 +421,7 @@ proc validateContent(
 
   return true
 
-proc contentQueueWorker(n: HistoryNetwork) {.async: (raises: []).} =
+proc contentQueueWorker(n: LegacyHistoryNetwork) {.async: (raises: []).} =
   try:
     while true:
       let (srcNodeId, contentKeys, contentItems) = await n.contentQueue.popFirst()
@@ -443,7 +443,7 @@ proc contentQueueWorker(n: HistoryNetwork) {.async: (raises: []).} =
   except CancelledError:
     trace "contentQueueWorker canceled"
 
-proc statusLogLoop(n: HistoryNetwork) {.async: (raises: []).} =
+proc statusLogLoop(n: LegacyHistoryNetwork) {.async: (raises: []).} =
   try:
     while true:
       await sleepAsync(60.seconds)
@@ -453,7 +453,7 @@ proc statusLogLoop(n: HistoryNetwork) {.async: (raises: []).} =
   except CancelledError:
     trace "statusLogLoop canceled"
 
-proc start*(n: HistoryNetwork) =
+proc start*(n: LegacyHistoryNetwork) =
   info "Starting Portal execution history network",
     protocolId = n.portalProtocol.protocolId,
     historicalHashesAccumulatorRoot = hash_tree_root(n.verifier.historicalHashes),
@@ -466,7 +466,7 @@ proc start*(n: HistoryNetwork) =
 
   n.statusLogLoop = statusLogLoop(n)
 
-proc stop*(n: HistoryNetwork) {.async: (raises: []).} =
+proc stop*(n: LegacyHistoryNetwork) {.async: (raises: []).} =
   info "Stopping Portal execution history network"
 
   var futures: seq[Future[void]]

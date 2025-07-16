@@ -15,7 +15,7 @@ import
   yaml,
   beacon_chain/spec/datatypes/bellatrix,
   ../../network/network_metadata,
-  ../../network/history/validation/block_proof_historical_roots,
+  ../../network/legacy_history/validation/block_proof_historical_roots,
   ../../eth_data/[yaml_utils, yaml_eth_types]
 
 suite "History Block Proofs - Historical Roots - Test Vectors":

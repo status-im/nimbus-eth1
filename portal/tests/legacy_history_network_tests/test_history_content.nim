@@ -16,7 +16,8 @@ import
   ../../network/network_metadata,
   ../../network/beacon/beacon_init_loader,
   ../../eth_data/[history_data_json_store, history_data_ssz_e2s],
-  ../../network/history/[history_content, history_type_conversions, history_validation],
+  ../../network/legacy_history/
+    [history_content, history_type_conversions, history_validation],
   ../../eth_data/yaml_utils,
   ./test_history_util
 

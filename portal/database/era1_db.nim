@@ -12,7 +12,7 @@ import
   stew/io2,
   results,
   eth/common/blocks,
-  ../network/history/validation/historical_hashes_accumulator,
+  ../network/legacy_history/validation/historical_hashes_accumulator,
   ../eth_data/era1
 
 type Era1DB* = ref object

@@ -16,7 +16,7 @@ import
   yaml,
   ssz_serialization,
   beacon_chain/spec/datatypes/capella,
-  ../../network/history/validation/block_proof_historical_summaries,
+  ../../network/legacy_history/validation/block_proof_historical_summaries,
   ../../network/beacon/beacon_init_loader,
   ../../eth_data/[yaml_utils, yaml_eth_types],
   ./test_history_util

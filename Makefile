@@ -291,7 +291,7 @@ portal-test-reproducibility:
 # Portal tests
 all_history_network_custom_chain_tests: | build deps
 	echo -e $(BUILD_MSG) "build/$@" && \
-	$(ENV_SCRIPT) nim c -r $(NIM_PARAMS) -d:chronicles_log_level=ERROR -d:mergeBlockNumber:38130 -o:build/$@ "portal/tests/history_network_tests/$@.nim"
+	$(ENV_SCRIPT) nim c -r $(NIM_PARAMS) -d:chronicles_log_level=ERROR -d:mergeBlockNumber:38130 -o:build/$@ "portal/tests/legacy_history_network_tests/$@.nim"
 
 all_portal_tests: | build deps
 	echo -e $(BUILD_MSG) "build/$@" && \

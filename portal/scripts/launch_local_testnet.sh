@@ -58,7 +58,7 @@ TRUSTED_BLOCK_ROOT=""
 # REST_URL="http://127.0.0.1:5052"
 REST_URL="http://testing.mainnet.beacon-api.nimbus.team"
 SKIP_BUILD="0"
-PORTAL_SUBNETWORKS="beacon,history,state"
+PORTAL_SUBNETWORKS="beacon,legacy_history,state"
 DISABLE_STATE_ROOT_VALIDATION="0"
 
 print_help() {
