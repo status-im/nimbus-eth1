@@ -13,7 +13,8 @@ import
   unittest2,
   chronos/unittest2/asynctests,
   eth/common/keys,
-  ../../execution_chain/networking/rlpx/rlpxtransport
+  ../../execution_chain/networking/rlpx/rlpxtransport,
+  ../../execution_chain/networking/rlpx/rlpxerror
 
 suite "RLPx transport":
   setup:
@@ -30,8 +31,9 @@ suite "RLPx transport":
     const msg = @[byte 0, 1, 2, 3]
     proc serveClient(server: StreamServer) {.async.} =
       let transp = await server.accept()
-      let a = await RlpxTransport.accept(rng, keys1, transp)
-      await a.sendMsg(msg)
+      let a = (await RlpxTransport.accept(rng, keys1, transp)).expect("no error")
+      (await a.sendMsg(msg)).expect("no error")
+
       await a.closeWait()
 
     let serverFut = server.serveClient()
@@ -39,11 +41,11 @@ suite "RLPx transport":
       await serverFut.wait(1.seconds)
 
     let client =
-      await RlpxTransport.connect(rng, keys2, server.localAddress(), keys1.pubkey)
+      (await RlpxTransport.connect(rng, keys2, server.localAddress(), keys1.pubkey)).expect("no error")
 
     defer:
       await client.closeWait()
-    let rmsg = await client.recvMsg().wait(1.seconds)
+    let rmsg = (await client.recvMsg().wait(1.seconds)).expect("no error")
 
     check:
       msg == rmsg
@@ -53,17 +55,19 @@ suite "RLPx transport":
   asyncTest "Detect invalid pubkey":
     proc serveClient(server: StreamServer) {.async.} =
       let transp = await server.accept()
-      discard await RlpxTransport.accept(rng, keys1, transp)
+      discard (await RlpxTransport.accept(rng, keys1, transp)).valueOr:
+        raise newException(TransportError, error.msg)
       raiseAssert "should fail to accept due to pubkey error"
 
     let serverFut = server.serveClient()
     defer:
-      expect(RlpxTransportError):
+      expect(TransportError):
         await serverFut.wait(1.seconds)
 
     let keys3 = KeyPair.random(rng[])
 
     # accept side should close connections
-    expect(TransportError):
-      discard
-        await RlpxTransport.connect(rng, keys2, server.localAddress(), keys3.pubkey)
+    let res = await RlpxTransport.connect(rng, keys2, server.localAddress(), keys3.pubkey)
+    check:
+      res.isErr
+      res.error.code == TransportConnectError
