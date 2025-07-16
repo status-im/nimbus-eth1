@@ -84,7 +84,6 @@ proc run*(
   # load constants and metadata for the selected chain
   let metadata = loadEth2Network(config.eth2Network)
 
-  # initialize verified proxy
   let
     chainId = getConfiguredChainId(metadata)
     authHooks = @[httpCors(@[])] # TODO: for now we serve all cross origin requests
@@ -102,14 +101,10 @@ proc run*(
     verifiedProxy =
       VerifiedRpcProxy.init(rpcProxy, headerStore, chainId, config.maxBlockWalk)
 
-    # get network id
     networkId = chainIdToNetworkId(chainId).valueOr:
       raise newException(ValueError, error)
 
-  # set async evm backend
   verifiedProxy.evm = AsyncEvm.init(verifiedProxy.toAsyncEvmStateBackend(), networkId)
-
-  # set rpc backend
   verifiedProxy.rpcClient = verifiedProxy.initNetworkApiBackend()
 
   # add handlers that verify RPC calls /rpc/rpc_eth_api.nim
