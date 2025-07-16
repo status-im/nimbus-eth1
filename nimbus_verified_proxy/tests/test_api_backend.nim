@@ -39,7 +39,7 @@ func init*(T: type TestApiState, chainId: UInt256): T =
     codes: initTable[CodeQuery, seq[byte]](),
   )
 
-proc clear*(t: var TestApiState) =
+func clear*(t: TestApiState) =
   t.fullBlocks.clear()
   t.blocks.clear()
   t.nums.clear()
@@ -92,7 +92,7 @@ template loadCode*(
 ) =
   t.codes[(address, hash(blockId))] = code
 
-proc hash*(x: BlockTag): Hash =
+func hash*(x: BlockTag): Hash =
   if x.kind == BlockIdentifierKind.bidAlias:
     return hash(x.alias)
   else:

@@ -14,28 +14,28 @@ proc initNetworkApiBackend*(vp: VerifiedRpcProxy): EthApiBackend =
 
     getBlockByHashProc = proc(
         blkHash: Hash32, fullTransactions: bool
-    ): Future[BlockObject] {.async.} =
-      await vp.proxy.getClient.eth_getBlockByHash(blkHash, fullTransactions)
+    ): Future[BlockObject] {.async: (raises: [], raw: true).} =
+      vp.proxy.getClient.eth_getBlockByHash(blkHash, fullTransactions)
 
     getBlockByNumberProc = proc(
         blkNum: BlockTag, fullTransactions: bool
-    ): Future[BlockObject] {.async.} =
-      await vp.proxy.getClient.eth_getBlockByNumber(blkNum, fullTransactions)
+    ): Future[BlockObject] {.async: (raises: [], raw: true).} =
+      vp.proxy.getClient.eth_getBlockByNumber(blkNum, fullTransactions)
 
     getProofProc = proc(
         address: Address, slots: seq[UInt256], blockId: BlockTag
-    ): Future[ProofResponse] {.async.} =
-      await vp.proxy.getClient.eth_getProof(address, slots, blockId)
+    ): Future[ProofResponse] {.async: (raises: [], raw: true).} =
+      vp.proxy.getClient.eth_getProof(address, slots, blockId)
 
     createAccessListProc = proc(
         args: TransactionArgs, blockId: BlockTag
-    ): Future[AccessListResult] {.async.} =
-      await vp.proxy.getClient.eth_createAccessList(args, blockId)
+    ): Future[AccessListResult] {.async: (raises: [], raw: true).} =
+      vp.proxy.getClient.eth_createAccessList(args, blockId)
 
     getCodeProc = proc(
         address: Address, blockId: BlockTag
-    ): Future[seq[byte]] {.async.} =
-      await vp.proxy.getClient.eth_getCode(address, blockId)
+    ): Future[seq[byte]] {.async: (raises: [], raw: true).} =
+      vp.proxy.getClient.eth_getCode(address, blockId)
 
   EthApiBackend(
     eth_chainId: ethChainIdProc,
