@@ -29,15 +29,29 @@ logScope:
 
 const pingExtensionCapabilities = {CapabilitiesType, HistoryRadiusType}
 
-type FinalizedHistoryNetwork* = ref object
-  portalProtocol*: PortalProtocol
-  contentDB*: ContentDB
-  contentQueue*: AsyncQueue[(Opt[NodeId], ContentKeysList, seq[seq[byte]])]
-  # cfg*: RuntimeConfig
-  processContentLoops: seq[Future[void]]
-  statusLogLoop: Future[void]
-  contentRequestRetries: int
-  contentQueueWorkers: int
+type
+  GetHeaderCallback* = proc(blockNumber: uint64): Future[Result[Header, string]] {.
+    async: (raises: [CancelledError]), gcsafe
+  .}
+
+  FinalizedHistoryNetwork* = ref object
+    portalProtocol*: PortalProtocol
+    contentDB*: ContentDB
+    contentQueue*: AsyncQueue[(Opt[NodeId], ContentKeysList, seq[seq[byte]])]
+    getHeader*: GetHeaderCallback
+    # cfg*: RuntimeConfig
+    processContentLoops: seq[Future[void]]
+    statusLogLoop: Future[void]
+    contentRequestRetries: int
+    contentQueueWorkers: int
+
+proc defaultNoGetHeader(
+    blockNumber: uint64
+): Future[Result[Header, string]] {.async: (raises: [CancelledError]), gcsafe.} =
+  err(
+    "No getHeader callback set for PortalNode, cannot verify offered content for block: " &
+      $blockNumber
+  )
 
 func toContentIdHandler(contentKey: ContentKeyByteList): results.Opt[ContentId] =
   toContentId(contentKey)
@@ -48,6 +62,7 @@ proc new*(
     baseProtocol: protocol.Protocol,
     contentDB: ContentDB,
     streamManager: StreamManager,
+    getHeaderCallback: GetHeaderCallback = defaultNoGetHeader,
     # cfg: RuntimeConfig,
     bootstrapRecords: openArray[Record] = [],
     portalConfig: PortalProtocolConfig = defaultPortalProtocolConfig,
@@ -79,6 +94,7 @@ proc new*(
     portalProtocol: portalProtocol,
     contentDB: contentDB,
     contentQueue: contentQueue,
+    getHeader: getHeaderCallback,
     # cfg: cfg,
     contentRequestRetries: contentRequestRetries,
     contentQueueWorkers: contentQueueWorkers,
@@ -90,6 +106,12 @@ proc getContent*(
     V: type ContentValueType,
     header: Header,
 ): Future[Opt[V]] {.async: (raises: [CancelledError]).} =
+  ## Get the decoded content for the given content key.
+  ##
+  ## When the content is found locally, no validation is performed.
+  ## Else, the content is fetched from the network and validated with the provided header.
+  ## If content validation fails, the node is banned for a certain period of time and
+  ## content request is retried `contentRequestRetries` times.
   let contentKeyBytes = encode(contentKey)
 
   logScope:
@@ -146,29 +168,21 @@ proc validateContent(
   let contentKey = finalized_history_content.decode(contentKeyBytes).valueOr:
     return err("Error decoding content key")
 
+  let header = ?(await n.getHeader(contentKey.blockNumber()))
+
   case contentKey.contentType
   of unused:
     raiseAssert("ContentKey contentType: unused")
   of blockBody:
-    let
-      # TODO: Need to get the header (or just tx root/uncle root/withdrawals root) from the EL client via
-      # JSON-RPC.
-      # OR if directly integrated the EL client, we can just pass the header here.
-      header = Header()
-      blockBody = decodeRlp(content, BlockBody).valueOr:
-        return err("Error decoding block body: " & error)
+    let blockBody = decodeRlp(content, BlockBody).valueOr:
+      return err("Error decoding block body: " & error)
     validateBlockBody(blockBody, header).isOkOr:
       return err("Failed validating block body: " & error)
 
     ok()
   of receipts:
-    let
-      # TODO: Need to get the header (or just tx root/uncle root/withdrawals root) from the EL client via
-      # JSON-RPC.
-      # OR if directly integrated the EL client, we can just pass the header here.
-      header = Header()
-      receipts = decodeRlp(content, seq[Receipt]).valueOr:
-        return err("Error decoding receipts: " & error)
+    let receipts = decodeRlp(content, seq[Receipt]).valueOr:
+      return err("Error decoding receipts: " & error)
     validateReceipts(receipts, header).isOkOr:
       return err("Failed validating receipts: " & error)
 
