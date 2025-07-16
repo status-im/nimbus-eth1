@@ -6,7 +6,7 @@
 # at your option. This file may not be copied, modified, or distributed except according to those terms.
 
 import
-  stint,
+  std/sequtils,
   results,
   eth/common/eth_types_rlp,
   eth/trie/[ordered_trie, trie_defs],
@@ -20,17 +20,13 @@ template toLog(lg: LogObject): Log =
   Log(address: lg.address, topics: lg.topics, data: lg.data)
 
 func toLogs(logs: openArray[LogObject]): seq[Log] =
-  result = newSeqOfCap[Log](logs.len)
-  for lg in logs:
-    result.add(toLog(lg))
+  logs.mapIt(it.toLog)
 
 func toReceipt(rec: ReceiptObject): Receipt =
   let isHash = not rec.status.isSome()
 
-  var status = false
-  if rec.status.isSome:
-    if rec.status.get() == 1.Quantity:
-  let status = rec.status.isSome() and rec.status.get() == 1.Quantity:
+  let status =
+    if rec.status.isSome() and rec.status.get() == 1.Quantity: true else: false
 
   return Receipt(
     hash: rec.transactionHash,
@@ -43,20 +39,16 @@ func toReceipt(rec: ReceiptObject): Receipt =
   )
 
 func toReceipts(recs: openArray[ReceiptObject]): seq[Receipt] =
-  for r in recs:
-    result.add(toReceipt(r))
+  recs.mapIt(it.toReceipt)
 
-proc getReceipts*(
-    vp: VerifiedRpcProxy, blockTag: BlockTag
+proc getReceipts(
+    vp: VerifiedRpcProxy, header: Header, blockTag: BlockTag
 ): Future[Result[seq[ReceiptObject], string]] {.async.} =
-  let
-    header = (await vp.getHeader(blockTag)).valueOr:
-      return err(error)
-    rxs =
-      try:
-        await vp.rpcClient.eth_getBlockReceipts(blockTag)
-      except CatchableError as e:
-        return err(e.msg)
+  let rxs =
+    try:
+      await vp.rpcClient.eth_getBlockReceipts(blockTag)
+    except CatchableError as e:
+      return err(e.msg)
 
   if rxs.isSome():
     if orderedTrieRoot(toReceipts(rxs.get())) != header.receiptsRoot:
@@ -66,6 +58,14 @@ proc getReceipts*(
     return err("error downloading the receipts")
 
   return ok(rxs.get())
+
+proc getReceipts*(
+    vp: VerifiedRpcProxy, blockTag: BlockTag
+): Future[Result[seq[ReceiptObject], string]] {.async.} =
+  let header = (await vp.getHeader(blockTag)).valueOr:
+    return err(error)
+
+  await vp.getReceipts(header, blockTag)
 
 proc getReceipts*(
     vp: VerifiedRpcProxy, blockHash: Hash32
@@ -74,21 +74,9 @@ proc getReceipts*(
     header = (await vp.getHeader(blockHash)).valueOr:
       return err(error)
     blockTag =
-      BlockTag(RtBlockIdentifier(kind: bidNumber, number: Quantity(header.number)))
-    rxs =
-      try:
-        await vp.rpcClient.eth_getBlockReceipts(blockTag)
-      except CatchableError as e:
-        return err(e.msg)
+      BlockTag(kind: BlockIdentifierKind.bidNumber, number: Quantity(header.number))
 
-  if rxs.isSome():
-    if orderedTrieRoot(toReceipts(rxs.get())) != header.receiptsRoot:
-      return
-        err("downloaded receipts do not evaluate to the receipts root of the block")
-  else:
-    return err("error downloading the receipts")
-
-  return ok(rxs.get())
+  await vp.getReceipts(header, blockTag)
 
 proc getLogs*(
     vp: VerifiedRpcProxy, filterOptions: FilterOptions
@@ -99,7 +87,10 @@ proc getLogs*(
     except CatchableError as e:
       return err(e.msg)
 
-  var res = newSeq[LogObject]()
+  if logObjs.len == 0:
+    return ok(newSeq[LogObject]())
+
+  var res: seq[LogObject]
 
   # store block hashes contains the logs so that we can batch receipt requests
   for lg in logObjs:
