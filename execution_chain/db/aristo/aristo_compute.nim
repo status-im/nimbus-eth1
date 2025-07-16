@@ -309,7 +309,7 @@ proc computeKeyImpl(
   # their hash being saved directly to the backend.
 
   if vtx.vType notin Leaves:
-    ?db.putKeyAtLevel(rvid, vtx, key, level, batch)
+    ?db.putKeyAtLevel(rvid, BranchRef(vtx), key, level, batch)
   ok (key, level)
 
 proc computeKeyImpl(
