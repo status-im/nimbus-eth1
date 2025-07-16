@@ -7,11 +7,11 @@
 
 import
   json_rpc/[rpcproxy, rpcclient],
+  web3/[eth_api, eth_api_types],
   stint,
   minilru,
   ./header_store,
-  ../portal/evm/async_evm,
-  web3/eth_api_types
+  ../portal/evm/async_evm
 
 export minilru
 
@@ -30,6 +30,28 @@ type
   StorageCacheKey* = (Root, Address, UInt256)
   StorageCache* = LruCache[StorageCacheKey, UInt256]
 
+  BlockTag* = eth_api_types.RtBlockIdentifier
+
+  ChainIdProc* = proc(): Future[UInt256] {.async.}
+  GetBlockByHashProc* =
+    proc(blkHash: Hash32, fullTransactions: bool): Future[BlockObject] {.async.}
+  GetBlockByNumberProc* =
+    proc(blkNum: BlockTag, fullTransactions: bool): Future[BlockObject] {.async.}
+  GetProofProc* = proc(
+    address: Address, slots: seq[UInt256], blockId: BlockTag
+  ): Future[ProofResponse] {.async.}
+  CreateAccessListProc* =
+    proc(args: TransactionArgs, blockId: BlockTag): Future[AccessListResult] {.async.}
+  GetCodeProc* = proc(address: Address, blockId: BlockTag): Future[seq[byte]] {.async.}
+
+  EthApiBackend* = object
+    eth_chainId*: ChainIdProc
+    eth_getBlockByHash*: GetBlockByHashProc
+    eth_getBlockByNumber*: GetBlockByNumberProc
+    eth_getProof*: GetProofProc
+    eth_createAccessList*: CreateAccessListProc
+    eth_getCode*: GetCodeProc
+
   VerifiedRpcProxy* = ref object
     evm*: AsyncEvm
     proxy*: RpcProxy
@@ -37,13 +59,12 @@ type
     accountsCache*: AccountsCache
     codeCache*: CodeCache
     storageCache*: StorageCache
+    rpcClient*: EthApiBackend
+
+    # TODO: when the list grows big add a config object instead
+    # config parameters 
     chainId*: UInt256
     maxBlockWalk*: uint64
-
-  BlockTag* = eth_api_types.RtBlockIdentifier
-
-template rpcClient*(vp: VerifiedRpcProxy): RpcClient =
-  vp.proxy.getClient()
 
 proc init*(
     T: type VerifiedRpcProxy,

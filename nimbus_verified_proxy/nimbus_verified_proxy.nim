@@ -27,7 +27,8 @@ import
   ./rpc/evm,
   ./rpc/rpc_eth_api,
   ./nimbus_verified_proxy_conf,
-  ./header_store
+  ./header_store,
+  ./rpc_api_backend
 
 from beacon_chain/gossip_processing/eth2_processor import toValidationResult
 
@@ -83,7 +84,6 @@ proc run*(
   # load constants and metadata for the selected chain
   let metadata = loadEth2Network(config.eth2Network)
 
-  # initialize verified proxy
   let
     chainId = getConfiguredChainId(metadata)
     authHooks = @[httpCors(@[])] # TODO: for now we serve all cross origin requests
@@ -101,11 +101,11 @@ proc run*(
     verifiedProxy =
       VerifiedRpcProxy.init(rpcProxy, headerStore, chainId, config.maxBlockWalk)
 
-    # instantiate evm
     networkId = chainIdToNetworkId(chainId).valueOr:
       raise newException(ValueError, error)
 
   verifiedProxy.evm = AsyncEvm.init(verifiedProxy.toAsyncEvmStateBackend(), networkId)
+  verifiedProxy.rpcClient = verifiedProxy.initNetworkApiBackend()
 
   # add handlers that verify RPC calls /rpc/rpc_eth_api.nim
   verifiedProxy.installEthApiHandlers()
