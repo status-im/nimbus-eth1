@@ -16,7 +16,7 @@ import
   eth/p2p/discoveryv5/routing_table,
   ../../network/wire/[portal_protocol, portal_stream, portal_protocol_config],
   ../../../execution_chain/common/chain_config,
-  ../../network/history/[history_content, history_network, history_validation],
+  ../../network/legacy_history/[history_content, history_network, history_validation],
   ../../network/state/[state_content, state_utils, state_network],
   ../../eth_data/yaml_utils,
   ../../database/content_db,
@@ -120,7 +120,7 @@ proc newStateNode*(
       "", uint32.high, RadiusConfig(kind: Dynamic), node.localNode.id, inMemory = true
     )
     sm = StreamManager.new(node)
-    hn = HistoryNetwork.new(
+    hn = LegacyHistoryNetwork.new(
       PortalNetwork.none,
       node,
       db,

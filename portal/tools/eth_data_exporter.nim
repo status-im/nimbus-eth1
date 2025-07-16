@@ -50,14 +50,14 @@ import
   json_rpc/rpcclient,
   snappy,
   ncli/e2store,
-  ../network/history/
+  ../network/legacy_history/
     [history_content, validation/block_proof_historical_hashes_accumulator],
   ../eth_data/[history_data_json_store, history_data_ssz_e2s, era1],
   eth_data_exporter/[exporter_conf, exporter_common, cl_data_exporter],
   eth_data_exporter/[downloader, parser]
 
 # Need to be selective due to the `Block` type conflict from downloader
-from ../network/history/history_network import encode
+from ../network/legacy_history/history_network import encode
 
 chronicles.formatIt(IoErrorCode):
   $it

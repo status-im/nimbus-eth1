@@ -1,5 +1,5 @@
 # Nimbus
-# Copyright (c) 2025 Status Research & Development GmbH
+# Copyright (c) 2022-2025 Status Research & Development GmbH
 # Licensed and distributed under either of
 #   * MIT license (license terms in the root directory or at https://opensource.org/licenses/MIT).
 #   * Apache v2 license (license terms in the root directory or at https://www.apache.org/licenses/LICENSE-2.0).
@@ -12,26 +12,45 @@
 import
   unittest2,
   beacon_chain/spec/forks,
-  beacon_chain/spec/datatypes/deneb,
+  beacon_chain/spec/datatypes/capella,
   beacon_chain /../ tests/testblockutil,
   # Mock helpers
   beacon_chain /../ tests/mocking/mock_genesis,
-  ../../network/history/validation/block_proof_historical_summaries
+  ../../network/legacy_history/validation/block_proof_historical_summaries
 
-suite "History Block Proofs - Historical Summaries - Deneb":
+# Test suite for the proofs:
+# - historicalSummariesProof
+# - BeaconBlockProof
+# and as last
+# - the chain of proofs, BeaconChainBlockProof:
+# BlockHash
+# -> BeaconBlockProof
+# -> historicalSummariesProof
+# historical_summaries
+#
+# Note: The last test makes the others redundant, but keeping them all around
+# for now as it might be sufficient to go with just historicalSummariesProof
+# (and perhaps BeaconBlockHeaderProof), see comments in beacon_chain_proofs.nim.
+#
+# TODO:
+# - Add more blocks to reach 1+ historical summaries, to make sure that
+# indexing is properly tested.
+# - Adjust tests to test usage of historical_summaries and historical_roots
+# together.
+
+suite "History Block Proofs - Historical Summaries":
   let
     cfg = block:
       var res = defaultRuntimeConfig
       res.ALTAIR_FORK_EPOCH = GENESIS_EPOCH
       res.BELLATRIX_FORK_EPOCH = GENESIS_EPOCH
-      res.CAPELLA_FORK_EPOCH = GENESIS_EPOCH
-      res.DENEB_FORK_EPOCH = GENESIS_EPOCH
+      # res.CAPELLA_FORK_EPOCH = GENESIS_EPOCH
+      res.CAPELLA_FORK_EPOCH = Epoch(256)
       res
     state = newClone(initGenesisState(cfg = cfg))
   var cache = StateCache()
 
-  var blocks: seq[deneb.SignedBeaconBlock]
-
+  var blocks: seq[capella.SignedBeaconBlock]
   # Note:
   # Adding 8192*2 blocks. First block is genesis block and not one of these.
   # Then one extra block is needed to get the historical roots, block
@@ -42,7 +61,11 @@ suite "History Block Proofs - Historical Summaries - Deneb":
 
   # genesis + 8191 slots, next one will be capella fork
   for i in 0 ..< SLOTS_PER_HISTORICAL_ROOT - 1:
-    blocks.add(addTestBlock(state[], cache, cfg = cfg).denebData)
+    discard addTestBlock(state[], cache, cfg = cfg)
+
+  # slot 8192 -> 16383
+  for i in 0 ..< SLOTS_PER_HISTORICAL_ROOT:
+    blocks.add(addTestBlock(state[], cache, cfg = cfg).capellaData)
 
   # One more slot to hit second SLOTS_PER_HISTORICAL_ROOT, hitting first
   # historical_summary.

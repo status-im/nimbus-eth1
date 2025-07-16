@@ -17,7 +17,7 @@ import
   eth/common/headers_rlp,
   ../../common/common_types,
   ../../eth_data/history_data_json_store,
-  ../../network/history/[history_type_conversions, history_validation]
+  ../../network/legacy_history/[history_type_conversions, history_validation]
 
 const
   dataFile = "./portal/tests/blocks/mainnet_blocks_selected.json"

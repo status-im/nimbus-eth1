@@ -29,7 +29,7 @@ TraceObject.useDefaultSerializationIn JrpcConv
 NodeMetadata.useDefaultSerializationIn JrpcConv
 TraceResponse.useDefaultSerializationIn JrpcConv
 
-proc installPortalHistoryApiHandlers*(rpcServer: RpcServer, p: PortalProtocol) =
+proc installPortalLegacyHistoryApiHandlers*(rpcServer: RpcServer, p: PortalProtocol) =
   rpcServer.rpc("portal_historyFindContent") do(
     enr: Record, contentKey: string
   ) -> JsonString:

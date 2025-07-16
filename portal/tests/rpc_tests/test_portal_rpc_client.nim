@@ -18,15 +18,15 @@ import
   eth/common/[headers_rlp, blocks_rlp, receipts_rlp],
   eth/p2p/discoveryv5/protocol as discv5_protocol,
   ../../network/wire/[portal_protocol, portal_stream, portal_protocol_config],
-  ../../network/history/
+  ../../network/legacy_history/
     [history_network, history_content, history_type_conversions, history_validation],
   ../../database/content_db,
-  ../../rpc/[portal_rpc_client, rpc_portal_history_api],
+  ../../rpc/[portal_rpc_client, rpc_portal_legacy_history_api],
   ../test_helpers
 
 type HistoryNode = ref object
   discoveryProtocol*: discv5_protocol.Protocol
-  historyNetwork*: HistoryNetwork
+  historyNetwork*: LegacyHistoryNetwork
 
 proc newHistoryNode(rng: ref HmacDrbgContext, port: int): HistoryNode =
   let
@@ -35,7 +35,7 @@ proc newHistoryNode(rng: ref HmacDrbgContext, port: int): HistoryNode =
       "", uint32.high, RadiusConfig(kind: Dynamic), node.localNode.id, inMemory = true
     )
     streamManager = StreamManager.new(node)
-    historyNetwork = HistoryNetwork.new(
+    historyNetwork = LegacyHistoryNetwork.new(
       PortalNetwork.none,
       node,
       db,
@@ -114,7 +114,7 @@ proc setupTest(rng: ref HmacDrbgContext): Future[TestCase] {.async.} =
 
   let rpcHttpServer = RpcHttpServer.new()
   rpcHttpServer.addHttpServer(ta, maxRequestBodySize = 16 * 1024 * 1024)
-  rpcHttpServer.installPortalHistoryApiHandlers(
+  rpcHttpServer.installPortalLegacyHistoryApiHandlers(
     historyNode1.historyNetwork.portalProtocol
   )
   rpcHttpServer.start()

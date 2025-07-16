@@ -11,8 +11,8 @@ import
   results,
   stew/io2,
   eth/common/headers,
-  ../../network/history/history_content,
-  ../../network/history/validation/
+  ../../network/legacy_history/history_content,
+  ../../network/legacy_history/validation/
     [block_proof_historical_summaries, block_proof_historical_hashes_accumulator]
 
 from eth/rlp import computeRlpHash
