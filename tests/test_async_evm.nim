@@ -10,6 +10,8 @@
 import
   std/[tables, sets],
   stew/byteutils,
+  chronos,
+  chronos/unittest2/asynctests,
   unittest2,
   ../execution_chain/evm/async_evm,
   ./async_evm_test_backend
@@ -136,7 +138,7 @@ proc setupTestEvmState(testCase: TestCase): TestEvmState =
   return testState
 
 suite "Async EVM":
-  test "Call contract - optimistic state fetch enabled":
+  asyncTest "Call contract - optimistic state fetch enabled":
     for testCase in testCases:
       let
         testState = setupTestEvmState(testCase)
@@ -151,10 +153,10 @@ suite "Async EVM":
         )
 
       let callResult =
-        (waitFor evm.call(header, tx, optimisticStateFetch = true)).expect("success")
+        (await evm.call(header, tx, optimisticStateFetch = true)).expect("success")
       check callResult.output == testCase.expected.output.hexToSeqByte()
 
-  test "Call contract - optimistic state fetch disabled":
+  asyncTest "Call contract - optimistic state fetch disabled":
     for testCase in testCases:
       let
         testState = setupTestEvmState(testCase)
@@ -169,10 +171,10 @@ suite "Async EVM":
         )
 
       let callResult =
-        (waitFor evm.call(header, tx, optimisticStateFetch = false)).expect("success")
+        (await evm.call(header, tx, optimisticStateFetch = false)).expect("success")
       check callResult.output == testCase.expected.output.hexToSeqByte()
 
-  test "Create access list - optimistic state fetch enabled":
+  asyncTest "Create access list - optimistic state fetch enabled":
     for testCase in testCases:
       let
         testState = setupTestEvmState(testCase)
@@ -187,7 +189,7 @@ suite "Async EVM":
         )
 
       let (accessList, error, gasUsed) = (
-        waitFor evm.createAccessList(header, tx, optimisticStateFetch = true)
+        await evm.createAccessList(header, tx, optimisticStateFetch = true)
       ).expect("success")
 
       check:
@@ -207,7 +209,7 @@ suite "Async EVM":
         for k in accessPair.storageKeys:
           check storageKeys.contains(k.to0xHex())
 
-  test "Create access list - optimistic state fetch disabled":
+  asyncTest "Create access list - optimistic state fetch disabled":
     for testCase in testCases:
       let
         testState = setupTestEvmState(testCase)
@@ -222,7 +224,7 @@ suite "Async EVM":
         )
 
       let (accessList, error, gasUsed) = (
-        waitFor evm.createAccessList(header, tx, optimisticStateFetch = false)
+        await evm.createAccessList(header, tx, optimisticStateFetch = false)
       ).expect("success")
 
       check:
@@ -242,7 +244,26 @@ suite "Async EVM":
         for k in accessPair.storageKeys:
           check storageKeys.contains(k.to0xHex())
 
-  test "Estimate Gas - optimistic state fetch enabled":
+  asyncTest "Estimate Gas - optimistic state fetch enabled":
+    for testCase in testCases:
+      let
+        testState = setupTestEvmState(testCase)
+        evm = AsyncEvm.init(testState.toAsyncEvmStateBackend())
+        header = Header(
+          number: testCase.blockNumber.hexToUInt256().truncate(uint64),
+          gasLimit: EVM_CALL_GAS_CAP,
+        )
+        tx = TransactionArgs(
+          to: Opt.some(Address.fromHex(testCase.txArgs.to)),
+          input: Opt.some(testCase.txArgs.input.hexToSeqByte()),
+        )
+
+      let gasEstimate = (await evm.estimateGas(header, tx, optimisticStateFetch = true)).expect(
+        "success"
+      )
+      check gasEstimate > 0
+
+  asyncTest "Estimate Gas - optimistic state fetch disabled":
     for testCase in testCases:
       let
         testState = setupTestEvmState(testCase)
@@ -257,30 +278,11 @@ suite "Async EVM":
         )
 
       let gasEstimate = (
-        waitFor evm.estimateGas(header, tx, optimisticStateFetch = true)
+        await evm.estimateGas(header, tx, optimisticStateFetch = false)
       ).expect("success")
       check gasEstimate > 0
 
-  test "Estimate Gas - optimistic state fetch disabled":
-    for testCase in testCases:
-      let
-        testState = setupTestEvmState(testCase)
-        evm = AsyncEvm.init(testState.toAsyncEvmStateBackend())
-        header = Header(
-          number: testCase.blockNumber.hexToUInt256().truncate(uint64),
-          gasLimit: EVM_CALL_GAS_CAP,
-        )
-        tx = TransactionArgs(
-          to: Opt.some(Address.fromHex(testCase.txArgs.to)),
-          input: Opt.some(testCase.txArgs.input.hexToSeqByte()),
-        )
-
-      let gasEstimate = (
-        waitFor evm.estimateGas(header, tx, optimisticStateFetch = false)
-      ).expect("success")
-      check gasEstimate > 0
-
-  test "Call contract - concurrent":
+  asyncTest "Call contract - concurrent":
     var futs = newSeq[Future[Result[CallResult, string]]]()
 
     for testCase in testCases:
@@ -300,4 +302,4 @@ suite "Async EVM":
       futs.add(evm.call(header, tx, optimisticStateFetch = false))
 
     for f in futs:
-      check (waitFor f).isOk()
+      check (await f).isOk()
