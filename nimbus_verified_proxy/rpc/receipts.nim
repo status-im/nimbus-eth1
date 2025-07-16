@@ -25,12 +25,12 @@ func toLogs(logs: openArray[LogObject]): seq[Log] =
     result.add(toLog(lg))
 
 func toReceipt(rec: ReceiptObject): Receipt =
-  let isHash = if rec.status.isSome: false else: true
+  let isHash = not rec.status.isSome()
 
   var status = false
   if rec.status.isSome:
     if rec.status.get() == 1.Quantity:
-      status = true
+  let status = rec.status.isSome() and rec.status.get() == 1.Quantity:
 
   return Receipt(
     hash: rec.transactionHash,
