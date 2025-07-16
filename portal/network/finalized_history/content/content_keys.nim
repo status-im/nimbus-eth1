@@ -46,6 +46,16 @@ func receiptsContentKey*(blockNumber: uint64): ContentKey =
     contentType: receipts, receiptsKey: BlockNumberKey(blockNumber: blockNumber)
   )
 
+template blockNumber*(contentKey: ContentKey): uint64 =
+  ## Returns the block number for the given content key
+  case contentKey.contentType
+  of unused:
+    raiseAssert "ContentKey may not have unused value as content type"
+  of blockBody:
+    contentKey.blockBodyKey.blockNumber
+  of receipts:
+    contentKey.receiptsKey.blockNumber
+
 proc readSszBytes*(data: openArray[byte], val: var ContentKey) {.raises: [SszError].} =
   mixin readSszValue
   if data.len() > 0 and data[0] == ord(unused):

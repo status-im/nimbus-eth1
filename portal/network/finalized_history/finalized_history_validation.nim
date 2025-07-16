@@ -8,7 +8,6 @@
 {.push raises: [].}
 
 import
-  std/typetraits,
   eth/trie/ordered_trie,
   eth/common/[headers_rlp, blocks_rlp, receipts, hashes],
   ./finalized_history_content
@@ -49,6 +48,7 @@ func validateBlockBody*(body: BlockBody, header: Header): Result[void, string] =
   ok()
 
 func validateReceipts*(receipts: Receipts, header: Header): Result[void, string] =
+  ## Validate the receipts against the receiptsRoot from the header.
   let calculatedReceiptsRoot = orderedTrieRoot(receipts)
   if calculatedReceiptsRoot != header.receiptsRoot:
     err(
@@ -70,6 +70,7 @@ func validateContent*(
 func validateContent*(
     key: ContentKey, contentBytes: seq[byte], header: Header
 ): Result[void, string] =
+  ## Validate the encoded content against the header.
   case key.contentType
   of unused:
     raiseAssert("ContentKey contentType: unused")
