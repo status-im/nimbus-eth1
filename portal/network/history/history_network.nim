@@ -18,11 +18,11 @@ import
   ../../database/content_db,
   # ../network_metadata,
   ../wire/[portal_protocol, portal_stream, portal_protocol_config, ping_extensions],
-  "."/[finalized_history_content, finalized_history_validation]
+  "."/[history_content, history_validation]
 
 from eth/common/accounts import EMPTY_ROOT_HASH
 
-export finalized_history_content, headers
+export history_content, headers
 
 logScope:
   topics = "portal_fin_hist"
@@ -34,7 +34,7 @@ type
     async: (raises: [CancelledError]), gcsafe
   .}
 
-  FinalizedHistoryNetwork* = ref object
+  HistoryNetwork* = ref object
     portalProtocol*: PortalProtocol
     contentDB*: ContentDB
     contentQueue*: AsyncQueue[(Opt[NodeId], ContentKeysList, seq[seq[byte]])]
@@ -57,7 +57,7 @@ func toContentIdHandler(contentKey: ContentKeyByteList): results.Opt[ContentId] 
   toContentId(contentKey)
 
 proc new*(
-    T: type FinalizedHistoryNetwork,
+    T: type HistoryNetwork,
     portalNetwork: PortalNetwork,
     baseProtocol: protocol.Protocol,
     contentDB: ContentDB,
@@ -78,7 +78,7 @@ proc new*(
 
     portalProtocol = PortalProtocol.new(
       baseProtocol,
-      getProtocolId(portalNetwork, PortalSubnetwork.finalizedHistory),
+      getProtocolId(portalNetwork, PortalSubnetwork.history),
       toContentIdHandler,
       createGetHandler(contentDB),
       createStoreHandler(contentDB, portalConfig.radiusConfig),
@@ -90,7 +90,7 @@ proc new*(
       pingExtensionCapabilities = pingExtensionCapabilities,
     )
 
-  FinalizedHistoryNetwork(
+  HistoryNetwork(
     portalProtocol: portalProtocol,
     contentDB: contentDB,
     contentQueue: contentQueue,
@@ -101,10 +101,7 @@ proc new*(
   )
 
 proc getContent*(
-    n: FinalizedHistoryNetwork,
-    contentKey: ContentKey,
-    V: type ContentValueType,
-    header: Header,
+    n: HistoryNetwork, contentKey: ContentKey, V: type ContentValueType, header: Header
 ): Future[Opt[V]] {.async: (raises: [CancelledError]).} =
   ## Get the decoded content for the given content key.
   ##
@@ -161,11 +158,11 @@ proc getContent*(
   Opt.none(V)
 
 proc validateContent(
-    n: FinalizedHistoryNetwork, content: seq[byte], contentKeyBytes: ContentKeyByteList
+    n: HistoryNetwork, content: seq[byte], contentKeyBytes: ContentKeyByteList
 ): Future[Result[void, string]] {.async: (raises: [CancelledError]).} =
   # TODO: specs might turn out to just disable offers. Although I think for for getting initial data in the network
   # this might be an issue. Unless history expiry gets deployed together with Portal.
-  let contentKey = finalized_history_content.decode(contentKeyBytes).valueOr:
+  let contentKey = history_content.decode(contentKeyBytes).valueOr:
     return err("Error decoding content key")
 
   let header = ?(await n.getHeader(contentKey.blockNumber()))
@@ -189,7 +186,7 @@ proc validateContent(
     ok()
 
 proc validateContent(
-    n: FinalizedHistoryNetwork,
+    n: HistoryNetwork,
     srcNodeId: Opt[NodeId],
     contentKeys: ContentKeysList,
     contentItems: seq[seq[byte]],
@@ -218,7 +215,7 @@ proc validateContent(
 
   return true
 
-proc contentQueueWorker(n: FinalizedHistoryNetwork) {.async: (raises: []).} =
+proc contentQueueWorker(n: HistoryNetwork) {.async: (raises: []).} =
   try:
     while true:
       let (srcNodeId, contentKeys, contentItems) = await n.contentQueue.popFirst()
@@ -236,7 +233,7 @@ proc contentQueueWorker(n: FinalizedHistoryNetwork) {.async: (raises: []).} =
   except CancelledError:
     trace "contentQueueWorker canceled"
 
-proc statusLogLoop(n: FinalizedHistoryNetwork) {.async: (raises: []).} =
+proc statusLogLoop(n: HistoryNetwork) {.async: (raises: []).} =
   try:
     while true:
       await sleepAsync(60.seconds)
@@ -246,9 +243,8 @@ proc statusLogLoop(n: FinalizedHistoryNetwork) {.async: (raises: []).} =
   except CancelledError:
     trace "statusLogLoop canceled"
 
-proc start*(n: FinalizedHistoryNetwork) =
-  info "Starting Portal finalized chain history network",
-    protocolId = n.portalProtocol.protocolId
+proc start*(n: HistoryNetwork) =
+  info "Starting Portal chain history network", protocolId = n.portalProtocol.protocolId
 
   n.portalProtocol.start()
 
@@ -257,8 +253,8 @@ proc start*(n: FinalizedHistoryNetwork) =
 
   n.statusLogLoop = statusLogLoop(n)
 
-proc stop*(n: FinalizedHistoryNetwork) {.async: (raises: []).} =
-  info "Stopping Portal finalized chain history network"
+proc stop*(n: HistoryNetwork) {.async: (raises: []).} =
+  info "Stopping Portal chain history network"
 
   var futures: seq[Future[void]]
   futures.add(n.portalProtocol.stop())

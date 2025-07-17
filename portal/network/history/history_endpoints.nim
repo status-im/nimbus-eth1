@@ -7,16 +7,16 @@
 
 {.push raises: [].}
 
-import results, chronicles, chronos, ./finalized_history_network
+import results, chronicles, chronos, ./history_network
 
-export results, finalized_history_network
+export results, history_network
 
 proc getBlockBody*(
-    n: FinalizedHistoryNetwork, header: Header
+    n: HistoryNetwork, header: Header
 ): Future[Opt[BlockBody]] {.async: (raises: [CancelledError], raw: true).} =
   n.getContent(blockBodyContentKey(header.number), BlockBody, header)
 
 proc getReceipts*(
-    n: FinalizedHistoryNetwork, header: Header
+    n: HistoryNetwork, header: Header
 ): Future[Opt[BlockBody]] {.async: (raises: [CancelledError], raw: true).} =
   n.getContent(blockBodyContentKey(header.number), BlockBody, header)

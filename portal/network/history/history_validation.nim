@@ -10,7 +10,7 @@
 import
   eth/trie/ordered_trie,
   eth/common/[headers_rlp, blocks_rlp, receipts, hashes],
-  ./finalized_history_content
+  ./history_content
 
 func validateBlockBody*(body: BlockBody, header: Header): Result[void, string] =
   ## Validate the block body against the txRoot, ommersHash and withdrawalsRoot

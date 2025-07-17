@@ -7,10 +7,9 @@
 
 {.push raises: [].}
 
-import
-  unittest2, stew/byteutils, ../../network/finalized_history/finalized_history_content
+import unittest2, stew/byteutils, ../../network/history/history_content
 
-suite "Finalized History Content Keys":
+suite "History Content Keys":
   test "toContentId":
     # Input
     const blockNumbers = [

@@ -7,4 +7,4 @@
 
 {.warning[UnusedImport]: off.}
 
-import ./test_finalized_history_content_keys
+import ./test_history_content_keys
