@@ -11,7 +11,7 @@ import
   std/[concurrency/atomics, os, exitprocs],
   chronicles,
   execution/execution_layer,
-  consensus/[consensus_layer, wrapper_consensus],
+  consensus/consensus_layer,
   common/utils,
   conf,
   confutils/cli_parser,
@@ -27,7 +27,8 @@ import
 var beaconNodeLock {.global.}: string
 
 proc createBeaconNodeFileLock(filename: string) {.raises: [IOError].} =
-  shouldCreatePid.store(false)
+  var shouldCreatePidFile: Atomic[bool] # REMOVE THIS
+  shouldCreatePidFile.store(false)
 
   writeFile filename, $os.getCurrentProcessId()
   beaconNodeLock = filename

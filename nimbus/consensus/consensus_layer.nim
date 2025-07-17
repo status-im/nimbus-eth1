@@ -15,7 +15,7 @@ import
   confutils,
   ../conf,
   ../common/utils,
-  ./wrapper_consensus,
+  beacon_chain/nimbus_beacon_node,
   beacon_chain/validators/keystore_management,
   beacon_chain/[beacon_node_status, nimbus_binary_common]
 
