@@ -22,8 +22,7 @@ import
 
 from eth/p2p/discoveryv5/routing_table import logDistance
 
-export
-  beacon_light_client, history_network, portal_protocol_config, forks
+export beacon_light_client, history_network, portal_protocol_config, forks
 
 type
   PortalNodeConfig* = object
