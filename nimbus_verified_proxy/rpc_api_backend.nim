@@ -49,7 +49,7 @@ proc initNetworkApiBackend*(vp: VerifiedRpcProxy): EthApiBackend =
 
     getBlockReceiptsProc = proc(
         blockId: BlockTag
-    ): Future[seq[ReceiptObject]] {.async: (raw: true).} =
+    ): Future[Opt[seq[ReceiptObject]]] {.async: (raw: true).} =
       vp.proxy.getClient.eth_getBlockReceipts(blockId)
 
     getLogsProc = proc(

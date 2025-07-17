@@ -10,7 +10,7 @@ import
   results,
   eth/common/eth_types_rlp,
   eth/trie/[ordered_trie, trie_defs],
-  json_rpc/[rpcproxy, rpcserver, rpcclient],
+  json_rpc/[rpcserver, rpcclient],
   web3/[eth_api_types, eth_api],
   ../../execution_chain/beacon/web3_eth_conv,
   ../types,
