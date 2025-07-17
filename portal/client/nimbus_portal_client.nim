@@ -26,8 +26,8 @@ import
   ../common/common_deprecation,
   ../rpc/[
     rpc_eth_api, rpc_discovery_api, rpc_portal_common_api,
-    rpc_portal_legacy_history_api, rpc_portal_beacon_api,
-    rpc_portal_nimbus_beacon_api, rpc_portal_debug_history_api,
+    rpc_portal_legacy_history_api, rpc_portal_beacon_api, rpc_portal_nimbus_beacon_api,
+    rpc_portal_debug_history_api,
   ],
   ../database/content_db,
   ../network/wire/portal_protocol_version,

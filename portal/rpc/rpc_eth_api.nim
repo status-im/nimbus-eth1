@@ -122,7 +122,7 @@ template getOrRaise(beaconLightClient: Opt[LightClient]): LightClient =
 proc installEthApiHandlers*(
     rpcServer: RpcServer,
     historyNetwork: Opt[LegacyHistoryNetwork],
-    beaconLightClient: Opt[LightClient]
+    beaconLightClient: Opt[LightClient],
 ) =
   rpcServer.rpc("web3_clientVersion") do() -> string:
     return clientVersion
