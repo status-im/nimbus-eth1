@@ -43,7 +43,8 @@ type
   CreateAccessListProc* =
     proc(args: TransactionArgs, blockId: BlockTag): Future[AccessListResult] {.async.}
   GetCodeProc* = proc(address: Address, blockId: BlockTag): Future[seq[byte]] {.async.}
-  GetBlockReceiptsProc = proc(blockId: BlockTag): Future[seq[ReceiptObject]] {.async.}
+  GetBlockReceiptsProc =
+    proc(blockId: BlockTag): Future[Opt[seq[ReceiptObject]]] {.async.}
   GetTransactionReceiptProc = proc(txHash: Hash32): Future[ReceiptObject] {.async.}
   GetTransactionByHashProc = proc(txHash: Hash32): Future[TransactionObject] {.async.}
   GetLogsProc = proc(filterOptions: FilterOptions): Future[seq[LogObject]] {.async.}

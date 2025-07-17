@@ -178,8 +178,8 @@ proc initTestApiBackend*(t: TestApiState): EthApiBackend =
 
     getBlockReceiptsProc = proc(
         blockId: BlockTag
-    ): Future[seq[ReceiptObject]] {.async.} =
-      t.blockReceipts[hash(blockId)]
+    ): Future[Opt[seq[ReceiptObject]]] {.async.} =
+      Opt.some(t.blockReceipts[hash(blockId)])
 
     getLogsProc = proc(filterOptions: FilterOptions): Future[seq[LogObject]] {.async.} =
       t.logs[filterOptions]
