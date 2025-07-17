@@ -12,7 +12,7 @@ import
   websock/websock,
   json_rpc/rpcserver,
   ./rpc/common,
-  #./rpc/debug,
+  ./rpc/debug,
   ./rpc/engine_api,
   ./rpc/jwt_auth,
   ./rpc/cors,
@@ -56,9 +56,8 @@ func installRPC(server: RpcServer,
   if RpcFlag.Admin in flags:
     setupAdminRpc(nimbus, conf, server)
 
-  #  # Tracer is currently disabled
-  # if RpcFlag.Debug in flags:
-  #   setupDebugRpc(com, nimbus.txPool, server)
+  if RpcFlag.Debug in flags:
+    setupDebugRpc(com, nimbus.txPool, server)
 
 
 proc newRpcWebsocketHandler(): RpcWebSocketHandler =

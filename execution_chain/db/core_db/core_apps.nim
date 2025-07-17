@@ -634,6 +634,12 @@ proc getWitness*(db: CoreDbTxRef, blockHash: Hash32): Result[Witness, string] =
 
   Witness.decode(witnessBytes)
 
+proc getCodeByHash*(db: CoreDbTxRef, codeHash: Hash32): Result[seq[byte], string] =
+  let code = db.get(contractHashKey(codeHash).toOpenArray).valueOr:
+    return err("getCodeByHash: " & $$error)
+
+  ok(code)
+
 # ------------------------------------------------------------------------------
 # End
 # ------------------------------------------------------------------------------
