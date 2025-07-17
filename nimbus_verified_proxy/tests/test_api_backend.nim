@@ -22,14 +22,14 @@ type
     fullBlocks: Table[Hash32, BlockObject]
     blocks: Table[Hash32, BlockObject]
     nums: Table[Quantity, Hash32]
-    tags: Table[string, Hash32]
+    tags: Table[Hash, Hash32]
     proofs: Table[ProofQuery, ProofResponse]
     accessLists: Table[AccessListQuery, AccessListResult]
     codes: Table[CodeQuery, seq[byte]]
     blockReceipts: Table[Hash, seq[ReceiptObject]]
     receipts: Table[Hash32, ReceiptObject]
     transactions: Table[Hash32, TransactionObject]
-    logs: Table[FilterOptions, seq[LogObject]]
+    logs: Table[Hash, seq[LogObject]]
 
 func init*(T: type TestApiState, chainId: UInt256): T =
   TestApiState(
@@ -43,7 +43,7 @@ func init*(T: type TestApiState, chainId: UInt256): T =
     blockReceipts: initTable[Hash, seq[ReceiptObject]](),
     receipts: initTable[Hash32, ReceiptObject](),
     transactions: initTable[Hash32, TransactionObject](),
-    logs: initTable[FilterOptions, seq[LogObject]](),
+    logs: initTable[Hash, seq[LogObject]](),
   )
 
 func clear*(t: TestApiState) =
@@ -108,13 +108,41 @@ template loadBlockReceipts*(
 template loadLogs*(
     t: TestApiState, filterOptions: FilterOptions, logs: seq[LogObject]
 ) =
-  t.logs[filterOptions] = logs
+  t.logs[hash(filterOptions)] = logs
 
 func hash*(x: BlockTag): Hash =
   if x.kind == BlockIdentifierKind.bidAlias:
     return hash(x.alias)
   else:
     return hash(x.number)
+
+func hash*[T](x: SingleOrList[T]): Hash =
+  if x.kind == SingleOrListKind.slkSingle:
+    return hash(x.single)
+  elif x.kind == SingleOrListKind.slkList:
+    return hash(x.list)
+
+func hash*(x: FilterOptions): Hash =
+  let
+    fromHash =
+      if x.fromBlock.isSome():
+        hash(x.fromBlock.get)
+      else:
+        hash(0)
+    toHash =
+      if x.toBlock.isSome():
+        hash(x.toBlock.get)
+      else:
+        hash(0)
+    addrHash = hash(x.address)
+    topicsHash = hash(x.topics)
+    blockHashHash =
+      if x.blockHash.isSome():
+        hash(x.blockHash.get)
+      else:
+        hash(0)
+
+  return hash(fromHash + toHash + addrHash + topicsHash + blockHashHash)
 
 proc initTestApiBackend*(t: TestApiState): EthApiBackend =
   let
@@ -160,7 +188,7 @@ proc initTestApiBackend*(t: TestApiState): EthApiBackend =
       Opt.some(t.blockReceipts[hash(blockId)])
 
     getLogsProc = proc(filterOptions: FilterOptions): Future[seq[LogObject]] {.async.} =
-      t.logs[filterOptions]
+      t.logs[hash(filterOptions)]
 
     getTransactionByHashProc = proc(
         txHash: Hash32
@@ -177,4 +205,8 @@ proc initTestApiBackend*(t: TestApiState): EthApiBackend =
     eth_getProof: getProofProc,
     eth_createAccessList: createAccessListProc,
     eth_getCode: getCodeProc,
+    eth_getTransactionByHash: getTransactionByHashProc,
+    eth_getTransactionReceipt: getTransactionReceiptProc,
+    eth_getLogs: getLogsProc,
+    eth_getBlockReceipts: getBlockReceiptsProc,
   )
