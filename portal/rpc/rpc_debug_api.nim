@@ -12,7 +12,7 @@ import
   chronicles,
   web3/[eth_api_types, conversions],
   ../network/state/state_endpoints,
-  ../evm/async_evm
+  ../../execution_chain/evm/async_evm
 
 template getOrRaise(stateNetwork: Opt[StateNetwork]): StateNetwork =
   let sn = stateNetwork.valueOr:

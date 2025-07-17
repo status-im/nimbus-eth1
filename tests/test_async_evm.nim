@@ -11,7 +11,7 @@ import
   std/[tables, sets],
   stew/byteutils,
   unittest2,
-  ../../evm/async_evm,
+  ../execution_chain/evm/async_evm,
   ./async_evm_test_backend
 
 func hexToUInt256(s: string): UInt256 =

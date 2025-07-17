@@ -11,7 +11,7 @@ import
   stint,
   minilru,
   ./header_store,
-  ../portal/evm/async_evm
+  ../execution_chain/evm/async_evm
 
 export minilru
 
@@ -62,7 +62,7 @@ type
     rpcClient*: EthApiBackend
 
     # TODO: when the list grows big add a config object instead
-    # config parameters 
+    # config parameters
     chainId*: UInt256
     maxBlockWalk*: uint64
 

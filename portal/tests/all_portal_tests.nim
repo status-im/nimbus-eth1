@@ -8,7 +8,6 @@
 {.warning[UnusedImport]: off.}
 
 import
-  ./evm/all_evm_tests,
   ./test_content_db,
   ./wire_protocol_tests/all_wire_protocol_tests,
   ./legacy_history_network_tests/all_history_network_tests,

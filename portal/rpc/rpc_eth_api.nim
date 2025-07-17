@@ -18,7 +18,7 @@ import
   ../network/legacy_history/[history_network, history_content],
   ../network/state/[state_network, state_content, state_endpoints],
   ../network/beacon/beacon_light_client,
-  ../evm/async_evm,
+  ../../execution_chain/evm/async_evm,
   ../version
 
 from ../../execution_chain/errors import ValidationError
