@@ -13,13 +13,13 @@ import
   stew/byteutils,
   ../common/common_types,
   ../network/wire/portal_protocol,
-  ../network/finalized_history/finalized_history_content,
-  ../network/finalized_history/finalized_history_validation,
+  ../network/history/history_content,
+  ../network/history/history_validation,
   ./rpc_types
 
 export tables
 
-# Portal Finalized History Network JSON-RPC API
+# Portal History Network JSON-RPC API
 # Note:
 # - This API is not part of the Portal Network specification yet.
 # - Lower level API calls are not implemented as they are typically only used for (Hive)
@@ -40,7 +40,7 @@ TraceResponse.useDefaultSerializationIn JrpcConv
 proc installPortalFinalizedHistoryApiHandlers*(
     rpcServer: RpcServer, p: PortalProtocol
 ) =
-  rpcServer.rpc("portal_finalizedHistoryGetContent") do(
+  rpcServer.rpc("portal_historyGetContent") do(
     contentKeyBytes: string, headerBytes: string
   ) -> ContentInfo:
     let
@@ -73,7 +73,7 @@ proc installPortalFinalizedHistoryApiHandlers*(
       utpTransfer: contentLookupResult.utpTransfer,
     )
 
-  rpcServer.rpc("portal_finalizedHistoryTraceGetContent") do(
+  rpcServer.rpc("portal_historyTraceGetContent") do(
     contentKeyBytes: string, headerBytes: string
   ) -> TraceContentLookupResult:
     let
@@ -114,7 +114,7 @@ proc installPortalFinalizedHistoryApiHandlers*(
 
     res
 
-  rpcServer.rpc("portal_finalizedHistoryPutContent") do(
+  rpcServer.rpc("portal_historyPutContent") do(
     contentKeyBytes: string, contentValueBytes: string
   ) -> PutContentResult:
     let

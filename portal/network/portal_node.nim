@@ -17,7 +17,7 @@ import
   ../database/content_db,
   ./network_metadata,
   ./wire/[portal_stream, portal_protocol_config],
-  ./finalized_history/finalized_history_network,
+  ./history/history_network,
   ./beacon/[beacon_init_loader, beacon_light_client],
   ./legacy_history/[history_network, history_content],
   ./state/[state_network, state_content]
@@ -43,7 +43,7 @@ type
     discovery: protocol.Protocol
     contentDB: ContentDB
     streamManager: StreamManager
-    finalizedHistoryNetwork*: Opt[FinalizedHistoryNetwork]
+    historyNetwork*: Opt[HistoryNetwork]
     beaconNetwork*: Opt[BeaconNetwork]
     legacyHistoryNetwork*: Opt[LegacyHistoryNetwork]
     stateNetwork*: Opt[StateNetwork]
@@ -109,10 +109,10 @@ proc new*(
         # Get it from binary file containing SSZ encoded accumulator
         loadAccumulator()
 
-    finalizedHistoryNetwork =
-      if PortalSubnetwork.finalizedHistory in subnetworks:
+    historyNetwork =
+      if PortalSubnetwork.history in subnetworks:
         Opt.some(
-          FinalizedHistoryNetwork.new(
+          HistoryNetwork.new(
             network,
             discovery,
             contentDB,
@@ -125,7 +125,7 @@ proc new*(
           )
         )
       else:
-        Opt.none(FinalizedHistoryNetwork)
+        Opt.none(HistoryNetwork)
 
     beaconNetwork =
       if PortalSubnetwork.beacon in subnetworks:
@@ -216,7 +216,7 @@ proc new*(
     discovery: discovery,
     contentDB: contentDB,
     streamManager: streamManager,
-    finalizedHistoryNetwork: finalizedHistoryNetwork,
+    historyNetwork: historyNetwork,
     beaconNetwork: beaconNetwork,
     legacyHistoryNetwork: legacyHistoryNetwork,
     stateNetwork: stateNetwork,
@@ -250,8 +250,8 @@ proc start*(n: PortalNode) =
 
   n.discovery.start()
 
-  if n.finalizedHistoryNetwork.isSome():
-    n.finalizedHistoryNetwork.value.start()
+  if n.historyNetwork.isSome():
+    n.historyNetwork.value.start()
   if n.beaconNetwork.isSome():
     n.beaconNetwork.value.start()
   if n.legacyHistoryNetwork.isSome():
@@ -269,8 +269,8 @@ proc stop*(n: PortalNode) {.async: (raises: []).} =
 
   var futures: seq[Future[void]]
 
-  if n.finalizedHistoryNetwork.isSome():
-    futures.add(n.finalizedHistoryNetwork.value.stop())
+  if n.historyNetwork.isSome():
+    futures.add(n.historyNetwork.value.stop())
   if n.beaconNetwork.isSome():
     futures.add(n.beaconNetwork.value.stop())
   if n.legacyHistoryNetwork.isSome():
