@@ -308,8 +308,6 @@ func getProtocolId*(
   case network
   of PortalNetwork.none, PortalNetwork.mainnet:
     case subnetwork
-    of PortalSubnetwork.state:
-      [portalPrefix, 0x0A]
     of PortalSubnetwork.legacyHistory:
       [portalPrefix, 0x0B]
     of PortalSubnetwork.history:
@@ -318,14 +316,10 @@ func getProtocolId*(
       [portalPrefix, 0x0C]
     of PortalSubnetwork.transactionIndex:
       [portalPrefix, 0x0D]
-    of PortalSubnetwork.verkleState:
-      [portalPrefix, 0x0E]
     of PortalSubnetwork.transactionGossip:
       [portalPrefix, 0x0F]
   of PortalNetwork.angelfood:
     case subnetwork
-    of PortalSubnetwork.state:
-      [portalPrefix, 0x4A]
     of PortalSubnetwork.legacyHistory:
       [portalPrefix, 0x4B]
     of PortalSubnetwork.history:
@@ -334,8 +328,6 @@ func getProtocolId*(
       [portalPrefix, 0x4C]
     of PortalSubnetwork.transactionIndex:
       [portalPrefix, 0x4D]
-    of PortalSubnetwork.verkleState:
-      [portalPrefix, 0x4E]
     of PortalSubnetwork.transactionGossip:
       [portalPrefix, 0x4F]
 
@@ -956,7 +948,6 @@ proc findNodes*(
   let response = ?(await p.findNodesImpl(dst, List[uint16, 256](distances)))
 
   let records = ?recordsFromBytes(response.enrs)
-  # TODO: distance function is wrong here for state, fix + tests
   ok(
     verifyNodesRecords(records, dst, enrsResultLimit, distances).filterIt(
       not p.isBanned(it.id)

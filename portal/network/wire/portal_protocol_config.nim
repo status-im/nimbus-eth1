@@ -17,12 +17,10 @@ type
 
   # The Portal sub-protocols
   PortalSubnetwork* = enum
-    state
     history
     legacyHistory
     beacon
     transactionIndex
-    verkleState
     transactionGossip
 
   RadiusConfigKind* = enum

@@ -18,18 +18,16 @@ import
   ./network_metadata,
   ./wire/[portal_stream, portal_protocol_config],
   ./beacon/[beacon_init_loader, beacon_light_client],
-  ./legacy_history/[history_network, history_content],
-  ./state/[state_network, state_content]
+  ./legacy_history/[history_network, history_content]
 
 from eth/p2p/discoveryv5/routing_table import logDistance
 
 export
-  beacon_light_client, history_network, state_network, portal_protocol_config, forks
+  beacon_light_client, history_network, portal_protocol_config, forks
 
 type
   PortalNodeConfig* = object
     accumulatorFile*: Opt[string]
-    disableStateRootValidation*: bool
     trustedBlockRoot*: Opt[Digest]
     portalConfig*: PortalProtocolConfig
     dataDir*: string
@@ -44,7 +42,6 @@ type
     streamManager: StreamManager
     beaconNetwork*: Opt[BeaconNetwork]
     legacyHistoryNetwork*: Opt[LegacyHistoryNetwork]
-    stateNetwork*: Opt[StateNetwork]
     beaconLightClient*: Opt[LightClient]
     statusLogLoop: Future[void]
 
@@ -154,26 +151,6 @@ proc new*(
       else:
         Opt.none(LegacyHistoryNetwork)
 
-    stateNetwork =
-      if PortalSubnetwork.state in subnetworks:
-        Opt.some(
-          StateNetwork.new(
-            network,
-            discovery,
-            contentDB,
-            streamManager,
-            bootstrapRecords = bootstrapRecords,
-            portalConfig = config.portalConfig,
-            historyNetwork = legacyHistoryNetwork,
-            not config.disableStateRootValidation,
-            contentRequestRetries = config.contentRequestRetries,
-            contentQueueWorkers = config.contentQueueWorkers,
-            contentQueueSize = config.contentQueueSize,
-          )
-        )
-      else:
-        Opt.none(StateNetwork)
-
     beaconLightClient =
       if beaconNetwork.isSome():
         let beaconLightClient = LightClient.new(
@@ -198,7 +175,6 @@ proc new*(
     streamManager: streamManager,
     beaconNetwork: beaconNetwork,
     legacyHistoryNetwork: legacyHistoryNetwork,
-    stateNetwork: stateNetwork,
     beaconLightClient: beaconLightClient,
   )
 
@@ -233,9 +209,6 @@ proc start*(n: PortalNode) =
     n.beaconNetwork.value.start()
   if n.legacyHistoryNetwork.isSome():
     n.legacyHistoryNetwork.value.start()
-  if n.stateNetwork.isSome():
-    n.stateNetwork.value.start()
-
   if n.beaconLightClient.isSome():
     n.beaconLightClient.value.start()
 
@@ -250,8 +223,6 @@ proc stop*(n: PortalNode) {.async: (raises: []).} =
     futures.add(n.beaconNetwork.value.stop())
   if n.legacyHistoryNetwork.isSome():
     futures.add(n.legacyHistoryNetwork.value.stop())
-  if n.stateNetwork.isSome():
-    futures.add(n.stateNetwork.value.stop())
   if n.beaconLightClient.isSome():
     futures.add(n.beaconLightClient.value.stop())
   if not n.statusLogLoop.isNil():

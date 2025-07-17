@@ -38,10 +38,6 @@
 #
 # Backfilling is not yet implemented. Backfilling will make use of Era1 files.
 #
-# State network:
-#
-# To be implemented
-#
 
 {.push raises: [].}
 
@@ -53,7 +49,6 @@ import
   ../logging,
   ./beacon/portal_beacon_bridge,
   ./history/portal_history_bridge,
-  ./state/portal_state_bridge,
   ./nimbus_portal_bridge_conf
 
 type PortalBridgeStatus = enum
@@ -104,8 +99,3 @@ when isMainModule:
 
     pollWhileRunning(bridgeStatus)
     # TODO: Implement stop/cleanup for history bridge
-  of PortalBridgeCmd.state:
-    let bridge = waitFor runState(config)
-
-    pollWhileRunning(bridgeStatus)
-    waitFor bridge.stop()

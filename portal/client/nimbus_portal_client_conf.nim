@@ -399,13 +399,6 @@ type
       name: "disable-poke"
     .}: bool
 
-    disableStateRootValidation* {.
-      hidden,
-      desc: "Disables state root validation for content received by the state network.",
-      defaultValue: false,
-      name: "disable-state-root-validation"
-    .}: bool
-
     disableBanNodes* {.
       hidden,
       desc:
