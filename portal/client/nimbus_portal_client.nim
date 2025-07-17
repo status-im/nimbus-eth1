@@ -24,7 +24,8 @@ import
   eth/p2p/discoveryv5/protocol as discv5_protocol,
   ../common/common_utils,
   ../common/common_deprecation,
-  ../evm/[async_evm, async_evm_portal_backend],
+  ../evm/async_evm_portal_backend,
+  ../../execution_chain/evm/async_evm,
   ../rpc/[
     rpc_eth_api, rpc_debug_api, rpc_discovery_api, rpc_portal_common_api,
     rpc_portal_legacy_history_api, rpc_portal_beacon_api, rpc_portal_state_api,
