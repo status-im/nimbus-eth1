@@ -37,6 +37,26 @@ proc initNetworkApiBackend*(vp: VerifiedRpcProxy): EthApiBackend =
     ): Future[seq[byte]] {.async: (raw: true).} =
       vp.proxy.getClient.eth_getCode(address, blockId)
 
+    getTransactionByHashProc = proc(
+        txHash: Hash32
+    ): Future[TransactionObject] {.async: (raw: true).} =
+      vp.proxy.getClient.eth_getTransactionByHash(txHash)
+
+    getTransactionReceiptProc = proc(
+        txHash: Hash32
+    ): Future[ReceiptObject] {.async: (raw: true).} =
+      vp.proxy.getClient.eth_getTransactionReceipt(txHash)
+
+    getBlockReceiptsProc = proc(
+        blockId: BlockTag
+    ): Future[seq[ReceiptObject]] {.async: (raw: true).} =
+      vp.proxy.getClient.eth_getBlockReceipts(blockId)
+
+    getLogsProc = proc(
+        filterOptions: FilterOptions
+    ): Future[seq[LogObject]] {.async: (raw: true).} =
+      vp.proxy.getClient.eth_getLogs(filterOptions)
+
   EthApiBackend(
     eth_chainId: ethChainIdProc,
     eth_getBlockByHash: getBlockByHashProc,
@@ -44,4 +64,8 @@ proc initNetworkApiBackend*(vp: VerifiedRpcProxy): EthApiBackend =
     eth_getProof: getProofProc,
     eth_createAccessList: createAccessListProc,
     eth_getCode: getCodeProc,
+    eth_getBlockReceipts: getBlockReceiptsProc,
+    eth_getLogs: getLogsProc,
+    eth_getTransactionByHash: getTransactionByHashProc,
+    eth_getTransactionReceipt: getTransactionReceiptProc,
   )
