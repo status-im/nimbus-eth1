@@ -23,7 +23,7 @@ The Portal Network is a project still in research phase. This client is thus sti
 
 The development of this client is on par with the latest Portal specifications and will continue to evolve according to the Portal specifications.
 
-The Portal history, beacon and state sub-networks are already operational on the public Portal mainnet.
+The Portal history and beacon sub-networks are already operational on the public Portal mainnet.
 
 The Nimbus Portal client is default ran on the [Portal mainnet](https://github.com/ethereum/portal-network-specs/blob/master/bootnodes.md#bootnodes-mainnet) but can also be run on a (local) testnet.
 
@@ -31,8 +31,6 @@ The Nimbus Portal client is default ran on the [Portal mainnet](https://github.c
 
 - [History network](https://github.com/ethereum/portal-network-specs/blob/e8e428c55f34893becfe936fe323608e9937956e/history/history-network.md): headers, blocks, and receipts.
     - Note: Canonical verification is currently only enabled for pre-merge blocks.
-- [State network](https://github.com/ethereum/portal-network-specs/blob/e8e428c55f34893becfe936fe323608e9937956e/state/state-network.md): accounts and contract storage.
-    - Note: The Portal mainnet does not yet hold all states, nor the recent state.
 - [Beacon network](https://github.com/ethereum/portal-network-specs/blob/e8e428c55f34893becfe936fe323608e9937956e/beacon-chain/beacon-network.md): consensus light client data and historical summaries.
 
 ### Supported functionality
@@ -47,14 +45,6 @@ The Nimbus Portal client is default ran on the [Portal mainnet](https://github.c
     - eth_getBlockByNumber
     - eth_getBlockTransactionCountByHash
     - eth_getLogs (partial support: queries by blockhash)
-    - eth_getBalance
-    - eth_getTransactionCount
-    - eth_getStorageAt
-    - eth_getCode
-    - eth_getProof
-    - eth_call
-    - eth_createAccessList
-    - eth_estimateGas
 
 ## Get in touch
 

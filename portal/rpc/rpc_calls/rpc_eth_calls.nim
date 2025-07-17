@@ -36,21 +36,3 @@ createRpcSigsFromNim(RpcClient):
   proc eth_getBlockReceipts(blockId: string): Opt[seq[ReceiptObject]]
   proc eth_getBlockReceipts(blockId: Quantity): Opt[seq[ReceiptObject]]
   proc eth_getBlockReceipts(blockId: RtBlockIdentifier): Opt[seq[ReceiptObject]]
-
-  proc eth_getBalance(data: Address, blockId: BlockIdentifier): UInt256
-  proc eth_getTransactionCount(data: Address, blockId: BlockIdentifier): Quantity
-  proc eth_getStorageAt(
-    data: Address, slot: UInt256, blockId: BlockIdentifier
-  ): FixedBytes[32]
-
-  proc eth_getCode(data: Address, blockId: BlockIdentifier): seq[byte]
-  proc eth_getProof(
-    address: Address, slots: seq[UInt256], blockId: BlockIdentifier
-  ): ProofResponse
-
-  proc eth_call(tx: TransactionArgs, blockId: BlockIdentifier): seq[byte]
-  proc eth_createAccessList(
-    tx: TransactionArgs, blockId: BlockIdentifier
-  ): AccessListResult
-
-  proc eth_estimateGas(tx: TransactionArgs, blockId: BlockIdentifier): Quantity
