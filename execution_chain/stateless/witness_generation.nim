@@ -30,7 +30,7 @@ proc build*(
     addedCodeHashes = initHashSet[Hash32]()
 
   for key, codeTouched in witnessKeys:
-    let (adr, maybeSlot) = key
+    let (_, maybeSlot) = key
     if maybeSlot.isSome():
       let slot = maybeSlot.get()
       witness.addKey(slot.toBytesBE())

@@ -108,7 +108,7 @@ proc toState*(
   (accountTrie, storageStates)
 
 type StateNode* = ref object
-  discoveryProtocol*: discv5_protocol.Protocol
+  discv5*: discv5_protocol.Protocol
   stateNetwork*: StateNetwork
 
 proc newStateNode*(
@@ -131,20 +131,20 @@ proc newStateNode*(
     sn =
       StateNetwork.new(PortalNetwork.none, node, db, sm, historyNetwork = Opt.some(hn))
 
-  return StateNode(discoveryProtocol: node, stateNetwork: sn)
+  return StateNode(discv5: node, stateNetwork: sn)
 
 proc portalProtocol*(sn: StateNode): PortalProtocol =
   sn.stateNetwork.portalProtocol
 
 proc localNode*(sn: StateNode): Node =
-  sn.discoveryProtocol.localNode
+  sn.discv5.localNode
 
 proc start*(sn: StateNode) =
   sn.stateNetwork.start()
 
 proc stop*(sn: StateNode) {.async.} =
   discard sn.stateNetwork.stop()
-  await sn.discoveryProtocol.closeWait()
+  await sn.discv5.closeWait()
 
 proc containsId*(sn: StateNode, contentId: ContentId): bool {.inline.} =
   # The contentKey parameter isn't used but is required for compatibility with

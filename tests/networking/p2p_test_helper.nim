@@ -57,7 +57,6 @@ proc setupTestNode(rng: ref HmacDrbgContext): EthereumNode {.gcsafe.} =
   var node = newEthereumNode(
     keys1, localAddress(nextPort),
     networkId = 1.u256,
-    addAllCapabilities = false,
     bindUdpPort = Port(nextPort),
     bindTcpPort = Port(nextPort),
     rng = rng)

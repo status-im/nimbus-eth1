@@ -25,22 +25,20 @@
 {.push raises: [].}
 
 import
-  std/[algorithm, deques, os, sequtils, strutils, typetraits, macrocache],
+  std/[deques, os, sequtils, strutils, typetraits],
   stew/byteutils,
-  stew/shims/macros,
   chronicles,
   chronos,
-  metrics,
-  snappy,
   eth/rlp,
-  ./p2p_types,
+  snappy,
+  ./protocol_dsl,
+  ./peer_pool,
+  ./devp2p_wire,
+  ./p2p_metrics,
   ./rlpx/[auth, rlpxcrypt],
   ./discoveryv4/[kademlia, enode]
 
 const
-  devp2pSnappyVersion* = 5
-    ## EIP-706 version of devp2p, with snappy compression - no support offered
-    ## for earlier versions
   maxMsgSize = 1024 * 1024 * 16
     ## The maximum message size is normally limited by the 24-bit length field in
     ## the message header but in the case of snappy, we need to protect against
@@ -49,33 +47,13 @@ const
 
   connectionTimeout = 10.seconds
 
-  msgIdHello = byte 0
-  msgIdDisconnect = byte 1
-  msgIdPing = byte 2
-  msgIdPong = byte 3
-
 # TODO: chronicles re-export here is added for the error
 # "undeclared identifier: 'activeChroniclesStream'", when the code using p2p
 # does not import chronicles. Need to resolve this properly.
-export options, rlp, chronicles, metrics
-
-declarePublicGauge rlpx_connected_peers, "Number of connected peers in the pool"
-
-declarePublicCounter rlpx_connect_success, "Number of successfull rlpx connects"
-
-declarePublicCounter rlpx_connect_failure,
-  "Number of rlpx connects that failed", labels = ["reason"]
-
-declarePublicCounter rlpx_accept_success, "Number of successful rlpx accepted peers"
-
-declarePublicCounter rlpx_accept_failure,
-  "Number of rlpx accept attempts that failed", labels = ["reason"]
+export options, rlp, chronicles, protocol_dsl
 
 logScope:
   topics = "p2p rlpx"
-
-const
-  protocolCounter = CacheCounter"protocolCounter"
 
 include p2p_tracing
 
@@ -94,75 +72,57 @@ chronicles.formatIt(Peer):
 chronicles.formatIt(Opt[uint64]):
   (if it.isSome(): $it.value else: "-1")
 
-include p2p_backends_helpers
-
-proc requestResolver[MsgType](msg: pointer, future: FutureBase) {.gcsafe.} =
-  var f = Future[Opt[MsgType]](future)
-  if not f.finished:
-    if msg != nil:
-      f.complete Opt.some(cast[ptr MsgType](msg)[])
-    else:
-      f.complete Opt.none(MsgType)
-
-proc linkSendFailureToReqFuture[S, R](sendFut: Future[S], resFut: Future[R]) =
-  sendFut.addCallback do(arg: pointer):
-    # Avoiding potentially double future completions
-    if not resFut.finished:
-      if sendFut.failed:
-        resFut.fail(sendFut.error)
-
-proc initFuture[T](loc: var Future[T]) =
-  loc = newFuture[T]()
-
-func getProtocolIndex*(): int {.compileTime.} =
-  let protocolIndex = protocolCounter.value
-  protocolCounter.inc
-  protocolIndex
-
-proc createPeerState*[Peer, ProtocolState](peer: Peer): RootRef =
-  when ProtocolState is void:
-    RootRef(nil)
-  else:
-    var res = new ProtocolState
-    mixin initProtocolState
-    initProtocolState(res, peer)
-    return cast[RootRef](res)
-
-proc createNetworkState*[NetworkNode, NetworkState](network: NetworkNode): RootRef {.gcsafe.} =
-  when NetworkState is void:
-    RootRef(nil)
-  else:
-    var res = new NetworkState
-    mixin initProtocolState
-    initProtocolState(res, network)
-    return cast[RootRef](res)
-
-proc messagePrinter[MsgType](msg: pointer): string {.gcsafe.} =
-  result = ""
-  # TODO: uncommenting the line below increases the compile-time
-  # tremendously (for reasons not yet known)
-  # result = $(cast[ptr MsgType](msg)[])
-
 proc disconnect*(
-  peer: Peer, reason: DisconnectionReason, notifyOtherPeer = false
+    peer: Peer, reason: DisconnectionReason, notifyRemote = false
 ) {.async: (raises: []).}
 
-# TODO Rework the disconnect-and-raise flow to not do both raising
-#      and disconnection - this results in convoluted control flow and redundant
-#      disconnect calls
-template raisePeerDisconnected(msg: string, r: DisconnectionReason) =
-  var e = newException(PeerDisconnected, msg)
-  e.reason = r
-  raise e
+# Dispatcher
+#
 
-proc disconnectAndRaise(
-    peer: Peer, reason: DisconnectionReason, msg: string
-) {.async: (raises: [PeerDisconnected]).} =
-  if reason == BreachOfProtocol:
-    warn "TODO Raising protocol breach",
-      remote = peer.remote, clientId = peer.clientId, msg
-  await peer.disconnect(reason)
-  raisePeerDisconnected(msg, reason)
+proc getDispatcher(
+    node: EthereumNode, otherPeerCapabilities: openArray[Capability]
+): Opt[Dispatcher] =
+  template copyTo(src, dest; index: int) =
+    for i in 0 ..< src.len:
+      dest[index + i] = src[i]
+
+  func addOrReplace(dispatcher: Dispatcher, localProtocol: ProtocolInfo) =
+    for i, proto in dispatcher.activeProtocols:
+      if proto.capability.name == localProtocol.capability.name:
+        if localProtocol.capability.version > proto.capability.version:
+          dispatcher.activeProtocols[i] = localProtocol
+          return
+
+    dispatcher.activeProtocols.add localProtocol
+    localProtocol.messages.copyTo(
+      dispatcher.messages, dispatcher.protocolOffsets[localProtocol.index].value.int
+    )
+
+  let dispatcher = Dispatcher()
+  var nextUserMsgId = 0x10u64
+
+  for localProtocol in node.protocols:
+    let idx = localProtocol.index
+    block findMatchingProtocol:
+      for remoteCapability in otherPeerCapabilities:
+        if localProtocol.capability == remoteCapability:
+          dispatcher.protocolOffsets[idx] = Opt.some(nextUserMsgId)
+          nextUserMsgId += localProtocol.messages.len.uint64
+          break findMatchingProtocol
+
+  dispatcher.messages = newSeq[MessageInfo](nextUserMsgId)
+  devp2pInfo.messages.copyTo(dispatcher.messages, 0)
+
+  for localProtocol in node.protocols:
+    let idx = localProtocol.index
+    if dispatcher.protocolOffsets[idx].isSome:
+      dispatcher.addOrReplace(localProtocol)
+
+  if dispatcher.numProtocols == 0:
+    Opt.none(Dispatcher)
+  else:
+    Opt.some(dispatcher)
+
 
 proc handshakeImpl*[T](
     peer: Peer,
@@ -186,53 +146,6 @@ proc handshakeImpl*[T](
     # probably by seperating the actual disconnect call to begin with.
     await disconnectAndRaise(peer, TcpError, T.name() & " was not received in time.")
 
-# Dispatcher
-#
-
-proc describeProtocols(d: Dispatcher): string =
-  d.activeProtocols.mapIt($it.capability).join(",")
-
-proc numProtocols(d: Dispatcher): int =
-  d.activeProtocols.len
-
-proc getDispatcher(
-    node: EthereumNode, otherPeerCapabilities: openArray[Capability]
-): Opt[Dispatcher] =
-  let dispatcher = Dispatcher()
-  newSeq(dispatcher.protocolOffsets, protocolCount())
-  dispatcher.protocolOffsets.fill Opt.none(uint64)
-
-  var nextUserMsgId = 0x10u64
-
-  for localProtocol in node.protocols:
-    let idx = localProtocol.index
-    block findMatchingProtocol:
-      for remoteCapability in otherPeerCapabilities:
-        if localProtocol.capability == remoteCapability:
-          dispatcher.protocolOffsets[idx] = Opt.some(nextUserMsgId)
-          nextUserMsgId += localProtocol.messages.len.uint64
-          break findMatchingProtocol
-
-  template copyTo(src, dest; index: int) =
-    for i in 0 ..< src.len:
-      dest[index + i] = src[i]
-
-  dispatcher.messages = newSeq[MessageInfo](nextUserMsgId)
-  devp2pInfo.messages.copyTo(dispatcher.messages, 0)
-
-  for localProtocol in node.protocols:
-    let idx = localProtocol.index
-    if dispatcher.protocolOffsets[idx].isSome:
-      dispatcher.activeProtocols.add localProtocol
-      localProtocol.messages.copyTo(
-        dispatcher.messages, dispatcher.protocolOffsets[idx].value.int
-      )
-
-  if dispatcher.numProtocols == 0:
-    Opt.none(Dispatcher)
-  else:
-    Opt.some(dispatcher)
-
 proc getMsgName*(peer: Peer, msgId: uint64): string =
   if not peer.dispatcher.isNil and msgId < peer.dispatcher.messages.len.uint64 and
       not peer.dispatcher.messages[msgId].isNil:
@@ -251,30 +164,6 @@ proc getMsgName*(peer: Peer, msgId: uint64): string =
       else:
         $msgId
 
-# Protocol info objects
-#
-
-proc initProtocol*(
-    name: string,
-    version: uint64,
-    peerInit: PeerStateInitializer,
-    networkInit: NetworkStateInitializer,
-): ProtocolInfo =
-  ProtocolInfo(
-    capability: Capability(name: name, version: version),
-    messages: @[],
-    peerStateInitializer: peerInit,
-    networkStateInitializer: networkInit,
-  )
-
-proc setEventHandlers*(
-    p: ProtocolInfo,
-    onPeerConnected: OnPeerConnectedHandler,
-    onPeerDisconnected: OnPeerDisconnectedHandler,
-) =
-  p.onPeerConnected = onPeerConnected
-  p.onPeerDisconnected = onPeerDisconnected
-
 proc cmp*(lhs, rhs: ProtocolInfo): int =
   let c = cmp(lhs.capability.name, rhs.capability.name)
   if c == 0:
@@ -282,71 +171,6 @@ proc cmp*(lhs, rhs: ProtocolInfo): int =
     -cmp(lhs.capability.version, rhs.capability.version)
   else:
     c
-
-proc nextMsgResolver[MsgType](
-    msgData: Rlp, future: FutureBase
-) {.gcsafe, raises: [RlpError].} =
-  var reader = msgData
-  when MsgType is ref:
-    # TODO: rlp support ref types
-    type T = typeof(MsgType()[])
-    var msg = MsgType()
-    msg[] = reader.readRecordType(
-      T, T.rlpFieldsCount > 1
-    )
-    Future[MsgType](future).complete msg
-  else:
-    Future[MsgType](future).complete reader.readRecordType(
-      MsgType, MsgType.rlpFieldsCount > 1
-    )
-
-proc failResolver[MsgType](reason: DisconnectionReason, future: FutureBase) =
-  Future[MsgType](future).fail(
-    (ref PeerDisconnected)(msg: "Peer disconnected during handshake", reason: reason),
-    warn = false,
-  )
-
-proc registerMsg(
-    protocol: ProtocolInfo,
-    msgId: uint64,
-    name: string,
-    thunk: ThunkProc,
-    printer: MessageContentPrinter,
-    requestResolver: RequestResolver,
-    nextMsgResolver: NextMsgResolver,
-    failResolver: FailResolver,
-) =
-  if protocol.messages.len.uint64 <= msgId:
-    protocol.messages.setLen(msgId + 1)
-  protocol.messages[msgId] = MessageInfo(
-    id: msgId,
-    name: name,
-    thunk: thunk,
-    printer: printer,
-    requestResolver: requestResolver,
-    nextMsgResolver: nextMsgResolver,
-    failResolver: failResolver,
-  )
-
-# Message composition and encryption
-#
-
-proc perPeerMsgIdImpl*(peer: Peer, proto: ProtocolInfo, msgId: uint64): uint64 =
-  result = msgId
-  if not peer.dispatcher.isNil:
-    result += peer.dispatcher.protocolOffsets[proto.index].value
-
-proc supports*(peer: Peer, proto: ProtocolInfo): bool =
-  peer.dispatcher.protocolOffsets[proto.index].isSome
-
-proc supports*(peer: Peer, Protocol: type): bool =
-  ## Checks whether a Peer supports a particular protocol
-  peer.supports(Protocol.protocolInfo)
-
-proc supports*(peer: Peer, protos: openArray[ProtocolInfo]): bool =
-  for proto in protos:
-    if peer.supports(proto):
-      return true
 
 proc invokeThunk*(
     peer: Peer, msgId: uint64, msgData: Rlp
@@ -363,13 +187,13 @@ proc invokeThunk*(
     invalidIdError()
   let msgInfo = peer.dispatcher.messages[msgId]
 
-  doAssert peer.dispatcher.messages.len == peer.awaitedMessages.len,
+  doAssert peer.dispatcher.messages.len == peer.perMsgId.len,
     "Should have been set up in peer constructor"
 
   # Check if the peer is "expecting" this message as part of a handshake
-  if peer.awaitedMessages[msgId] != nil:
-    let awaited = move(peer.awaitedMessages[msgId])
-    peer.awaitedMessages[msgId] = nil
+  if peer.perMsgId[msgId].awaitedMessage != nil:
+    let awaited = move(peer.perMsgId[msgId].awaitedMessage)
+    peer.perMsgId[msgId].awaitedMessage = nil
 
     try:
       msgInfo.nextMsgResolver(msgData, awaited)
@@ -380,12 +204,6 @@ proc invokeThunk*(
       )
   else:
     await msgInfo.thunk(peer, msgData)
-
-template compressMsg(peer: Peer, data: seq[byte]): seq[byte] =
-  if peer.snappyEnabled:
-    snappy.encode(data)
-  else:
-    data
 
 proc recvMsg(
     peer: Peer
@@ -441,169 +259,7 @@ proc recvMsg(
 
     await peer.disconnectAndRaise(BreachOfProtocol, "Could not decode msgId")
 
-proc sendMsg(
-    peer: Peer, msgId: uint64, payload: seq[byte]
-): Future[void] {.async: (raises: [CancelledError, EthP2PError]).} =
-  try:
-    let
-      msgIdBytes = rlp.encodeInt(msgId)
-      payloadBytes = peer.compressMsg(payload)
-
-    var msg = newSeqOfCap[byte](msgIdBytes.data.len + payloadBytes.len)
-    msg.add msgIdBytes.data()
-    msg.add payloadBytes
-
-    trace "Sending message",
-      remote = peer.remote,
-      clientId = peer.clientId,
-      msgId,
-      data = toHex(msg.toOpenArray(0, min(255, msg.high))),
-      payload = toHex(payload.toOpenArray(0, min(255, payload.high)))
-
-    await peer.transport.sendMsg(msg)
-  except TransportError as exc:
-    await peer.disconnectAndRaise(TcpError, exc.msg)
-  except RlpxTransportError as exc:
-    await peer.disconnectAndRaise(BreachOfProtocol, exc.msg)
-
-proc registerRequest(
-    peer: Peer, timeout: Duration, responseFuture: FutureBase, responseMsgId: uint64
-): uint64 =
-  result =
-    if peer.lastReqId.isNone:
-      0u64
-    else:
-      peer.lastReqId.value + 1u64
-  peer.lastReqId = Opt.some(result)
-
-  let timeoutAt = Moment.fromNow(timeout)
-  let req = OutstandingRequest(id: result, future: responseFuture)
-  peer.outstandingRequests[responseMsgId].addLast req
-
-  doAssert(not peer.dispatcher.isNil)
-  let requestResolver = peer.dispatcher.messages[responseMsgId].requestResolver
-  proc timeoutExpired(udata: pointer) {.gcsafe.} =
-    requestResolver(nil, responseFuture)
-
-  discard setTimer(timeoutAt, timeoutExpired, nil)
-
-proc resolveResponseFuture(peer: Peer, msgId: uint64, msg: pointer) =
-  ## This function is a split off from the previously combined version with
-  ## the same name using optional request ID arguments. This here is the
-  ## version without a request ID (there is the other part below.).
-  ##
-  ## Optional arguments for macro helpers seem easier to handle with
-  ## polymorphic functions (than a `Opt[]` prototype argument.)
-  ##
-  let msgInfo = peer.dispatcher.messages[msgId]
-
-  logScope:
-    msg = msgInfo.name
-    msgContents = msgInfo.printer(msg)
-    receivedReqId = -1
-    remotePeer = peer.remote
-
-  template outstandingReqs(): auto =
-    peer.outstandingRequests[msgId]
-
-  block: # no request ID
-    # XXX: This is a response from an ETH-like protocol that doesn't feature
-    # request IDs. Handling the response is quite tricky here because this may
-    # be a late response to an already timed out request or a valid response
-    # from a more recent one.
-    #
-    # We can increase the robustness by recording enough features of the
-    # request so we can recognize the matching response, but this is not very
-    # easy to do because our peers are allowed to send partial responses.
-    #
-    # A more generally robust approach is to maintain a set of the wanted
-    # data items and then to periodically look for items that have been
-    # requested long time ago, but are still missing. New requests can be
-    # issues for such items potentially from another random peer.
-    var expiredRequests = 0
-    for req in outstandingReqs:
-      if not req.future.finished:
-        break
-      inc expiredRequests
-    outstandingReqs.shrink(fromFirst = expiredRequests)
-    if outstandingReqs.len > 0:
-      let oldestReq = outstandingReqs.popFirst
-      msgInfo.requestResolver(msg, oldestReq.future)
-    else:
-      trace "late or dup RPLx reply ignored", msgId
-
-proc resolveResponseFuture(peer: Peer, msgId: uint64, msg: pointer, reqId: uint64) =
-  ## Variant of `resolveResponseFuture()` for request ID argument.
-  let msgInfo = peer.dispatcher.messages[msgId]
-  logScope:
-    msg = msgInfo.name
-    msgContents = msgInfo.printer(msg)
-    receivedReqId = reqId
-    remotePeer = peer.remote
-
-  template outstandingReqs(): auto =
-    peer.outstandingRequests[msgId]
-
-  block: # have request ID
-    # TODO: This is not completely sound because we are still using a global
-    # `reqId` sequence (the problem is that we might get a response ID that
-    # matches a request ID for a different type of request). To make the code
-    # correct, we can use a separate sequence per response type, but we have
-    # to first verify that the other Ethereum clients are supporting this
-    # correctly (because then, we'll be reusing the same reqIds for different
-    # types of requests). Alternatively, we can assign a separate interval in
-    # the `reqId` space for each type of response.
-    if peer.lastReqId.isNone or reqId > peer.lastReqId.value:
-      debug "RLPx response without matching request", msgId, reqId
-      return
-
-    var idx = 0
-    while idx < outstandingReqs.len:
-      template req(): auto =
-        outstandingReqs()[idx]
-
-      if req.future.finished:
-        # Here we'll remove the expired request by swapping
-        # it with the last one in the deque (if necessary):
-        if idx != outstandingReqs.len - 1:
-          req = outstandingReqs.popLast
-          continue
-        else:
-          outstandingReqs.shrink(fromLast = 1)
-          # This was the last item, so we don't have any
-          # more work to do:
-          return
-
-      if req.id == reqId:
-        msgInfo.requestResolver msg, req.future
-        # Here we'll remove the found request by swapping
-        # it with the last one in the deque (if necessary):
-        if idx != outstandingReqs.len - 1:
-          req = outstandingReqs.popLast
-        else:
-          outstandingReqs.shrink(fromLast = 1)
-        return
-
-      inc idx
-
-    trace "late or dup RPLx reply ignored"
-
-proc checkedRlpRead(
-    peer: Peer, r: var Rlp, MsgType: type
-): auto {.raises: [RlpError].} =
-  when defined(release):
-    return r.read(MsgType)
-  else:
-    try:
-      return r.read(MsgType)
-    except rlp.RlpError as e:
-      debug "Failed rlp.read",
-        peer = peer, dataType = MsgType.name, err = e.msg, errName = e.name
-        #, rlpData = r.inspect -- don't use (might crash)
-
-      raise e
-
-proc dispatchMessages*(peer: Peer) {.async: (raises: []).} =
+proc dispatchMessages(peer: Peer) {.async: (raises: []).} =
   try:
     while peer.connectionState notin {Disconnecting, Disconnected}:
       var (msgId, msgData) = await peer.recvMsg()
@@ -616,427 +272,6 @@ proc dispatchMessages*(peer: Peer) {.async: (raises: []).} =
     await peer.disconnect(ClientQuitting)
   except CancelledError:
     await peer.disconnect(ClientQuitting)
-
-#------------------------------------------------------------------------------
-# Mini Protocol DSL
-#------------------------------------------------------------------------------
-
-type
-  Responder* = object
-    peer*: Peer
-    reqId*: uint64
-
-proc `$`*(r: Responder): string =
-  $r.peer & ": " & $r.reqId
-
-template msgIdImpl(PROTO: type; peer: Peer, methId: uint64): uint64 =
-  mixin protocolInfo, isSubProtocol
-  when PROTO.isSubProtocol:
-    perPeerMsgIdImpl(peer, PROTO.protocolInfo, methId)
-  else:
-    methId
-
-macro countArgs(args: untyped): untyped =
-  var count = 0
-  for arg in args:
-    let arg = if arg.kind == nnkHiddenStdConv: arg[1]
-              else: arg
-    if arg.kind == nnkArgList:
-      for _ in arg:
-        inc count
-    else:
-      inc count
-  result = newLit(count)
-
-macro appendArgs(writer: untyped, args: untyped): untyped =
-  result = newStmtList()
-  for arg in args:
-    let arg = if arg.kind == nnkHiddenStdConv: arg[1]
-              else: arg
-    if arg.kind == nnkArgList:
-      for subarg in arg:
-        result.add quote do:
-          append(`writer`, `subarg`)
-    else:
-      result.add quote do:
-        append(`writer`, `arg`)
-
-template constOrLet(PROTO: type, id: untyped, body: untyped) =
-  mixin isSubProtocol
-  when PROTO.isSubProtocol:
-    let `id` {.inject.} = body
-  else:
-    const `id` {.inject.} = body
-
-template rlpxSendMessage*(PROTO: type, peer: Peer, msgId: static[uint64], params: varargs[untyped]): auto =
-  PROTO.constOrLet(perPeerMsgId):
-    msgIdImpl(PROTO, peer, msgId)
-  var writer = initRlpWriter()
-  const paramsLen = countArgs([params])
-  when paramsLen > 1:
-    startList(writer, paramsLen)
-  appendArgs(writer, [params])
-  let msgBytes = finish(writer)
-  sendMsg(peer, perPeerMsgId, msgBytes)
-
-template rlpxSendMessage*(PROTO: type, responder: Responder, msgId: static[uint64], params: varargs[untyped]): auto =
-  PROTO.constOrLet(perPeerMsgId):
-    msgIdImpl(PROTO, responder.peer, msgId)
-  var writer = initRlpWriter()
-  const paramsLen = countArgs([params])
-  when paramsLen > 0:
-    startList(writer, paramsLen + 1)
-  append(writer, responder.reqId)
-  appendArgs(writer, [params])
-  let msgBytes = finish(writer)
-  sendMsg(responder.peer, perPeerMsgId, msgBytes)
-
-template rlpxSendRequest*(PROTO: type, peer: Peer, msgId: static[uint64], params: varargs[untyped]) =
-  PROTO.constOrLet(perPeerMsgId):
-    msgIdImpl(PROTO, peer, msgId)
-  var writer = initRlpWriter()
-  const paramsLen = countArgs([params])
-  if paramsLen > 0:
-    startList(writer, paramsLen + 1)
-  initFuture result
-  let reqId = registerRequest(peer, timeout, result, perPeerMsgId + 1)
-  append(writer, reqId)
-  appendArgs(writer, [params])
-  let msgBytes = finish(writer)
-  linkSendFailureToReqFuture(sendMsg(peer, perPeerMsgId, msgBytes), result)
-
-macro checkedRlpFields(peer; rlp; packet; fields): untyped =
-  result = newStmtList()
-  for field in fields:
-    result.add quote do:
-      `packet`.`field` = checkedRlpRead(`peer`, `rlp`, typeof(`packet`.`field`))
-
-macro countFields(fields): untyped =
-  var count = 0
-  for _ in fields:
-    inc count
-  result = newLit(count)
-
-template wrapRlpxWithPacketException(MSGTYPE: type, peer: Peer, body): untyped =
-  const
-    msgName = astToStr(MSGTYPE)
-
-  try:
-    body
-  except rlp.RlpError as exc:
-    discard
-    warn "TODO: RLP decoding failed for incoming message",
-         msg = msgName, remote = peer.remote,
-         clientId = peer.clientId, err = exc.msg
-    await peer.disconnectAndRaise(BreachOfProtocol,
-      "Invalid RLP in parameter list for " & msgName)
-
-template rlpxWithPacketHandler*(PROTO: distinct type;
-                        MSGTYPE: distinct type;
-                        peer: Peer;
-                        data: Rlp,
-                        fields: untyped;
-                        body): untyped =
-  const
-    numFields = countFields(fields)
-
-  wrapRlpxWithPacketException(MSGTYPE, peer):
-    var
-      rlp = data
-      packet {.inject.} = MSGTYPE()
-
-    when numFields > 1:
-      tryEnterList(rlp)
-
-    checkedRlpFields(peer, rlp, packet, fields)
-    body
-
-template rlpxWithPacketResponder*(PROTO: distinct type;
-                        MSGTYPE: distinct type;
-                        peer: Peer;
-                        data: Rlp,
-                        body): untyped =
-  wrapRlpxWithPacketException(MSGTYPE, peer):
-    var rlp = data
-    tryEnterList(rlp)
-    let reqId = read(rlp, uint64)
-    var
-      response {.inject.} = initResponder(peer, reqId)
-      packet {.inject.} = checkedRlpRead(peer, rlp, MSGTYPE)
-    body
-
-template rlpxWithFutureHandler*(PROTO: distinct type;
-                        MSGTYPE: distinct type;
-                        msgId: static[uint64];
-                        peer: Peer;
-                        data: Rlp,
-                        fields: untyped): untyped =
-  wrapRlpxWithPacketException(MSGTYPE, peer):
-    var
-      rlp = data
-      packet = MSGTYPE()
-
-    tryEnterList(rlp)
-    let reqId = read(rlp, uint64)
-    PROTO.constOrLet(perPeerMsgId):
-      msgIdImpl(PROTO, peer, msgId)
-    checkedRlpFields(peer, rlp, packet, fields)
-    resolveResponseFuture(peer,
-      perPeerMsgId, addr(packet), reqId)
-
-template rlpxWithFutureHandler*(PROTO: distinct type;
-                        MSGTYPE: distinct type;
-                        PROTYPE: distinct type;
-                        msgId: static[uint64];
-                        peer: Peer;
-                        data: Rlp,
-                        fields: untyped): untyped =
-  wrapRlpxWithPacketException(MSGTYPE, peer):
-    var
-      rlp = data
-      packet: MSGTYPE
-
-    tryEnterList(rlp)
-    let reqId = read(rlp, uint64)
-    PROTO.constOrLet(perPeerMsgId):
-      msgIdImpl(PROTO, peer, msgId)
-    checkedRlpFields(peer, rlp, packet, fields)
-    var proType = packet.to(PROTYPE)
-    resolveResponseFuture(peer,
-      perPeerMsgId, addr(proType), reqId)
-
-proc nextMsg*(PROTO: distinct type,
-              peer: Peer,
-              MsgType: distinct type,
-              msgId: static[uint64]): Future[MsgType]
-              {.async: (raises: [CancelledError, EthP2PError], raw: true).} =
-  ## This procs awaits a specific RLPx message.
-  ## Any messages received while waiting will be dispatched to their
-  ## respective handlers. The designated message handler will also run
-  ## to completion before the future returned by `nextMsg` is resolved.
-  when PROTO.isSubProtocol:
-    let wantedId = msgIdImpl(PROTO, peer, msgId)
-  else:
-    const wantedId = msgIdImpl(PROTO, peer, msgId)
-  let f = peer.awaitedMessages[wantedId]
-  if not f.isNil:
-    return Future[MsgType].Raising([CancelledError, EthP2PError])(f)
-
-  initFuture result
-  peer.awaitedMessages[wantedId] = result
-
-template registerMsg*(protocol: ProtocolInfo,
-                     msgId: static[uint64],
-                     msgName: static[string],
-                     msgThunk: untyped,
-                     MsgType: type) =
-  registerMsg(protocol,
-    msgId,
-    msgName,
-    msgThunk,
-    messagePrinter[MsgType],
-    requestResolver[MsgType],
-    nextMsgResolver[MsgType],
-    failResolver[MsgType])
-
-func initResponder*(peer: Peer, reqId: uint64): Responder =
-  Responder(peer: peer, reqId: reqId)
-
-template state*(response: Responder, PROTO: type): auto =
-  state(response.peer, PROTO)
-
-template supports*(response: Responder, Protocol: type): bool =
-  response.peer.supports(Protocol.protocolInfo)
-
-template networkState*(response: Responder, PROTO: type): auto =
-  networkState(response.peer, PROTO)
-
-template defineProtocol*(PROTO: untyped,
-                         version: static[int],
-                         rlpxName: static[string],
-                         peerState: distinct type = void,
-                         networkState: distinct type = void,
-                         subProtocol: static[bool] = true) =
-  type
-    PROTO* = object
-
-  const
-    PROTOIndex = getProtocolIndex()
-
-  template protocolInfo*(_: type PROTO): auto =
-    getProtocol(PROTOIndex)
-
-  template State*(_: type PROTO): type =
-    peerState
-
-  template NetworkState*(_: type PROTO): type =
-    networkState
-
-  template protocolVersion*(_: type PROTO): int =
-    version
-
-  template isSubProtocol*(_: type PROTO): bool =
-    subProtocol
-
-  func initProtocol*(_: type PROTO): auto =
-    initProtocol(rlpxName,
-      version,
-      createPeerState[Peer, peerState],
-      createNetworkState[EthereumNode, networkState])
-
-#------------------------------------------------------------------------------
-# DevP2P Protocol
-#------------------------------------------------------------------------------
-
-defineProtocol(PROTO = DevP2P,
-               version = devp2pSnappyVersion,
-               rlpxName = "p2p",
-               subProtocol = false)
-
-type
-  # We need these two types in rlpx/devp2p as no parameters or single parameters
-  # are not getting encoded in an rlp list.
-  # TODO: we could generalize this in the protocol dsl but it would need an
-  # `alwaysList` flag as not every protocol expects lists in these cases.
-  EmptyList = object
-
-  DisconnectionReasonList = object
-    value: DisconnectionReason
-
-  HelloPacket = object
-    version: uint64
-    clientId: string
-    capabilities: seq[Capability]
-    listenPort: uint
-    nodeId: array[RawPublicKeySize, byte]
-
-  SendDisconnectPacket = object
-    reason: DisconnectionReasonList
-
-  PingPacket = object
-    list: EmptyList
-
-  PongPacket = object
-    list: EmptyList
-
-proc read(
-    rlp: var Rlp, T: type DisconnectionReasonList
-): T {.gcsafe, raises: [RlpError].} =
-  ## Rlp mixin: `DisconnectionReasonList` parser
-
-  if rlp.isList:
-    # Be strict here: The expression `rlp.read(DisconnectionReasonList)`
-    # accepts lists with at least one item. The array expression wants
-    # exactly one item.
-    if rlp.rawData.len < 3:
-      # avoids looping through all items when parsing for an overlarge array
-      return DisconnectionReasonList(value: rlp.read(array[1, DisconnectionReason])[0])
-
-  # Also accepted: a single byte reason code. Is is typically used
-  # by variants of the reference implementation `Geth`
-  elif rlp.blobLen <= 1:
-    return DisconnectionReasonList(value: rlp.read(DisconnectionReason))
-
-  # Also accepted: a blob of a list (aka object) of reason code. It is
-  # used by `bor`, a `geth` fork
-  elif rlp.blobLen < 4:
-    var subList = rlp.toBytes.rlpFromBytes
-    if subList.isList:
-      # Ditto, see above.
-      return
-        DisconnectionReasonList(value: subList.read(array[1, DisconnectionReason])[0])
-
-  raise newException(RlpTypeMismatch, "Single entry list expected")
-
-proc hello(peer: Peer;
-           packet: HelloPacket;):
-            Future[void] {.async: (raises: [CancelledError, EthP2PError], raw: true).} =
-  DevP2P.rlpxSendMessage(peer, msgIdHello,
-                    packet.version,
-                    packet.clientId,
-                    packet.capabilities,
-                    packet.listenPort,
-                    packet.nodeId)
-
-proc sendDisconnectMsg(peer: Peer;
-                       reason: DisconnectionReasonList):
-                         Future[void] {.async: (raises: [CancelledError, EthP2PError], raw: true).} =
-  DevP2P.rlpxSendMessage(peer, msgIdDisconnect, reason)
-
-proc ping(peer: Peer): Future[void] {.async: (raises: [CancelledError, EthP2PError], raw: true).} =
-  # Adding an empty RLP list as the spec defines.
-  # The parity client specifically checks if there is rlp data.
-  const emptyList = EmptyList()
-  DevP2P.rlpxSendMessage(peer, msgIdPing, emptyList)
-
-proc pong(peer: Peer): Future[void] {.async: (raises: [CancelledError, EthP2PError], raw: true).} =
-  const emptyList = EmptyList()
-  DevP2P.rlpxSendMessage(peer, msgIdPong, emptyList)
-
-proc helloUserHandler(peer: Peer; packet: HelloPacket) {.
-    async: (raises: [CancelledError, EthP2PError]).} =
-  # The first hello message gets processed during the initial handshake - this
-  # version is used for any subsequent messages
-
-  # TODO investigate and turn warning into protocol breach
-  warn "TODO Multiple hello messages received", remote = peer.remote,
-    clientId = packet.clientId
-
-  # await peer.disconnectAndRaise(BreachOfProtocol, "Multiple hello messages")
-
-proc helloThunk(peer: Peer; data: Rlp) {.
-    async: (raises: [CancelledError, EthP2PError]).} =
-  DevP2P.rlpxWithPacketHandler(HelloPacket, peer, data,
-                               [version, clientId,
-                                capabilities, listenPort,
-                                nodeId]):
-    await helloUserHandler(peer, packet)
-
-proc sendDisconnectMsgUserHandler(peer: Peer; reason: DisconnectionReasonList) {.
-    async: (raises: [CancelledError, EthP2PError]).} =
-  ## Notify other peer that we're about to disconnect them for the given
-  ## reason
-  if reason.value == BreachOfProtocol:
-    # TODO This is a temporary log message at warning level to aid in
-    #      debugging in pre-release versions - it should be removed before
-    #      release
-    # TODO Nethermind sends BreachOfProtocol on network id mismatch:
-    #      https://github.com/NethermindEth/nethermind/issues/7727
-    if not peer.clientId.startsWith("Nethermind"):
-      warn "TODO Peer sent BreachOfProtocol error!",
-        remote = peer.remote, clientId = peer.clientId
-  else:
-    trace "disconnect message received", reason = reason.value, peer
-  await peer.disconnect(reason.value, false)
-
-proc sendDisconnectMsgThunk(peer: Peer; data: Rlp) {.
-    async: (raises: [CancelledError, EthP2PError]).} =
-  DevP2P.rlpxWithPacketHandler(SendDisconnectPacket, peer, data, [reason]):
-    await sendDisconnectMsgUserHandler(peer, packet.reason)
-
-proc pingThunk(peer: Peer; data: Rlp) {.async: (raises: [CancelledError, EthP2PError]).} =
-  DevP2P.rlpxWithPacketHandler(PingPacket, peer, data, [list]):
-    discard peer.pong()
-
-proc pongThunk(peer: Peer; data: Rlp) {.async: (raises: [CancelledError, EthP2PError]).} =
-  DevP2P.rlpxWithPacketHandler(PongPacket, peer, data, [list]):
-    discard
-
-proc DevP2PRegistration() =
-  let
-    protocol = DevP2P.initProtocol()
-
-  setEventHandlers(protocol, nil, nil)
-  registerMsg(protocol, msgIdHello, "hello", helloThunk, HelloPacket)
-  registerMsg(protocol, msgIdDisconnect, "sendDisconnectMsg",
-              sendDisconnectMsgThunk, SendDisconnectPacket)
-  registerMsg(protocol, msgIdPing, "ping",
-              pingThunk, PingPacket)
-  registerMsg(protocol, msgIdPong, "pong",
-              pongThunk, PongPacket)
-  registerProtocol(protocol)
-
-DevP2PRegistration()
 
 #------------------------------------------------------------------------------
 # Rlpx Implementation
@@ -1060,36 +295,8 @@ proc removePeer(network: EthereumNode, peer: Peer) =
           if observer.protocols.len == 0 or peer.supports(observer.protocols):
             observer.onPeerDisconnected(peer)
 
-proc selectCapsByLatestVersion(peer: Peer): seq[ProtocolInfo] =
-  # Avoid using multiple capability handshake when connecting to a peer.
-  # Use only the latest capability version. e.g. choose eth/69 over eth/68.
-  # But other capabilities with different name is okay. e.g. snap/1
-
-  # From the spec:
-  # https://github.com/ethereum/devp2p/blob/bc76b9809a30e6dc5c8dcda996273f0f9bcf7108/rlpx.md#message-id-based-multiplexing
-  # "...If multiple versions are shared of the same (equal name) capability, the numerically highest wins, others are ignored."
-  var map: Table[string, ProtocolInfo]
-  for proto in peer.dispatcher.activeProtocols:
-    map.withValue(proto.capability.name, val) do:
-      if proto.capability.version > val.capability.version:
-        val[] = proto
-    do:
-      map[proto.capability.name] = proto
-
-  for proto in map.values:
-    result.add proto
-
-proc callDisconnectHandlers(
-    peer: Peer, reason: DisconnectionReason
-): Future[void] {.async: (raises: []).} =
-  let futures = peer.selectCapsByLatestVersion()
-    .filterIt(it.onPeerDisconnected != nil)
-    .mapIt(it.onPeerDisconnected(peer, reason))
-
-  await noCancel allFutures(futures)
-
 proc disconnect*(
-    peer: Peer, reason: DisconnectionReason, notifyOtherPeer = false
+    peer: Peer, reason: DisconnectionReason, notifyRemote = false
 ) {.async: (raises: []).} =
   if reason == BreachOfProtocol:
     # TODO remove warning after all protocol breaches have been investigated
@@ -1109,15 +316,14 @@ proc disconnect*(
     # before this node closes transport to remote peer
     if not peer.dispatcher.isNil:
       # Notify all pending handshake handlers that a disconnection happened
-      for msgId, fut in peer.awaitedMessages.mpairs:
-        if fut != nil:
-          var tmp = fut
-          fut = nil
+      for msgId, x in peer.perMsgId.mpairs:
+        if x.awaitedMessage.isNil.not:
+          var tmp = x.awaitedMessage
+          x.awaitedMessage = nil
           peer.dispatcher.messages[msgId].failResolver(reason, tmp)
 
-      for msgId, reqs in peer.outstandingRequests.mpairs():
-        while reqs.len > 0:
-          let req = reqs.popFirst()
+        while x.outstandingRequest.len > 0:
+          let req = x.outstandingRequest.popFirst()
           # Same as when they timeout
           peer.dispatcher.messages[msgId].requestResolver(nil, req.future)
 
@@ -1126,7 +332,7 @@ proc disconnect*(
       # In case of `Defect` in any of the handlers, program will quit.
       await callDisconnectHandlers(peer, reason)
 
-    if notifyOtherPeer and not peer.transport.closed:
+    if notifyRemote and not peer.transport.closed:
       proc waitAndClose(
           transport: RlpxTransport, time: Duration
       ) {.async: (raises: []).} =
@@ -1148,33 +354,34 @@ proc disconnect*(
     peer.connectionState = Disconnected
     removePeer(peer.network, peer)
 
-proc initPeerState*(
-    peer: Peer, capabilities: openArray[Capability]
+proc initPeerState(
+    peer: Peer, h: HelloPacket
 ) {.raises: [UselessPeerError].} =
-  peer.dispatcher = getDispatcher(peer.network, capabilities).valueOr:
+  peer.clientId = h.clientId
+  peer.dispatcher = getDispatcher(peer.network, h.capabilities).valueOr:
     raise (ref UselessPeerError)(
-      msg: "No capabilities in common: " & capabilities.mapIt($it).join(",")
+      msg: "No capabilities in common: " & h.capabilities.mapIt($it).join(",")
     )
 
   # The dispatcher has determined our message ID sequence.
   # For each message ID, we allocate a potential slot for
   # tracking responses to requests.
   # (yes, some of the slots won't be used).
-  peer.outstandingRequests.newSeq(peer.dispatcher.messages.len)
-  for d in mitems(peer.outstandingRequests):
-    d = initDeque[OutstandingRequest]()
-
+  #
   # Similarly, we need a bit of book-keeping data to keep track
   # of the potentially concurrent calls to `nextMsg`.
-  peer.awaitedMessages.newSeq(peer.dispatcher.messages.len)
+  peer.perMsgId.newSeq(peer.dispatcher.messages.len)
+  for d in mitems(peer.perMsgId):
+    d.outstandingRequest = initDeque[OutstandingRequest]()
+
   peer.lastReqId = Opt.some(0u64)
-  peer.initProtocolStates peer.dispatcher.activeProtocols
+  peer.initPeerStates peer.dispatcher.activeProtocols
 
 proc postHelloSteps(
     peer: Peer, h: HelloPacket
 ) {.async: (raises: [CancelledError, EthP2PError]).} =
-  peer.clientId = h.clientId
-  initPeerState(peer, h.capabilities)
+
+  initPeerState(peer, h)
 
   # Please note that the ordering of operations here is important!
   #
@@ -1183,7 +390,7 @@ proc postHelloSteps(
   # the network and to yield on their `nextMsg` waits.
   #
 
-  let handshakes = peer.selectCapsByLatestVersion()
+  let handshakes = peer.dispatcher.activeProtocols
     .filterIt(it.onPeerConnected != nil)
     .mapIt(it.onPeerConnected(peer))
 
@@ -1285,7 +492,7 @@ proc rlpxConnect*(
   trace "Connecting to peer"
 
   let
-    peer = Peer(remote: remote, network: node, inbound: false)
+    peer = Peer(remote: remote, network: node, disconnectPeer: disconnect, inbound: false)
     deadline = sleepAsync(connectionTimeout)
 
   var error = true
@@ -1338,7 +545,7 @@ proc rlpxConnect*(
       return err(PeerDisconnectedError)
 
   if response.version < devp2pSnappyVersion:
-    await peer.disconnect(IncompatibleProtocolVersion, notifyOtherPeer = true)
+    await peer.disconnect(IncompatibleProtocolVersion, notifyRemote = true)
     debug "Peer using obsolete devp2p version",
       version = response.version, clientId = response.clientId
     return err(UselessRlpxPeerError)
@@ -1382,7 +589,7 @@ proc rlpxAccept*(
   initTracing(devp2pInfo, node.protocols)
 
   let
-    peer = Peer(network: node, inbound: true)
+    peer = Peer(network: node, disconnectPeer: disconnect, inbound: true)
     deadline = sleepAsync(connectionTimeout)
 
   var error = true
@@ -1452,7 +659,7 @@ proc rlpxAccept*(
       return nil
 
   if response.version < devp2pSnappyVersion:
-    await peer.disconnect(IncompatibleProtocolVersion, notifyOtherPeer = true)
+    await peer.disconnect(IncompatibleProtocolVersion, notifyRemote = true)
     debug "Peer using obsolete devp2p version",
       version = response.version, clientId = response.clientId
     rlpx_accept_failure.inc(labelValues = [$IncompatibleProtocolVersion])
