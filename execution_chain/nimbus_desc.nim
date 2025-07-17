@@ -61,9 +61,9 @@ proc stop*(nimbus: NimbusNode, conf: NimbusConf) {.async, gcsafe.} =
   trace "Graceful shutdown"
   var waitedFutures: seq[Future[void]]
   if nimbus.httpServer.isNil.not:
-    waitedFutures.add nimbus.httpServer.stop()
+    discard nimbus.httpServer.stop()
   if nimbus.engineApiServer.isNil.not:
-    waitedFutures.add nimbus.engineApiServer.stop()
+    discard nimbus.engineApiServer.stop()
   if conf.maxPeers > 0:
     waitedFutures.add nimbus.networkLoop.cancelAndWait()
   if nimbus.peerManager.isNil.not:
@@ -71,7 +71,7 @@ proc stop*(nimbus: NimbusNode, conf: NimbusConf) {.async, gcsafe.} =
   if nimbus.beaconSyncRef.isNil.not:
     waitedFutures.add nimbus.beaconSyncRef.stop()
   if nimbus.metricsServer.isNil.not:
-    waitedFutures.add nimbus.metricsServer.stop()
+    discard nimbus.metricsServer.stop()
   if nimbus.wire.isNil.not:
     waitedFutures.add nimbus.wire.stop()
 
