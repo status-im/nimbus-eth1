@@ -24,6 +24,10 @@ type
     proofs: Table[ProofQuery, ProofResponse]
     accessLists: Table[AccessListQuery, AccessListResult]
     codes: Table[CodeQuery, seq[byte]]
+    blockReceipts: Table[Hash, seq[ReceiptObject]]
+    receipts: Table[Hash32, ReceiptObject]
+    transactions: Table[Hash32, TransactionObject]
+    logs: Table[FilterOptions, seq[LogObject]]
 
 func init*(T: type TestApiState, chainId: UInt256): T =
   TestApiState(
@@ -33,6 +37,10 @@ func init*(T: type TestApiState, chainId: UInt256): T =
     proofs: initTable[ProofQuery, ProofResponse](),
     accessLists: initTable[AccessListQuery, AccessListResult](),
     codes: initTable[CodeQuery, seq[byte]](),
+    blockReceipts: initTable[Hash, seq[ReceiptObject]](),
+    receipts: initTable[Hash32, ReceiptObject](),
+    transactions: initTable[Hash32, TransactionObject](),
+    logs: initTable[FilterOptions, seq[LogObject]](),
   )
 
 func clear*(t: TestApiState) =
@@ -41,6 +49,10 @@ func clear*(t: TestApiState) =
   t.proofs.clear()
   t.accessLists.clear()
   t.codes.clear()
+  t.blockReceipts.clear()
+  t.receipts.clear()
+  t.transactions.clear()
+  t.logs.clear()
 
 template loadBlock*(t: TestApiState, blk: BlockObject) =
   t.nums[blk.number] = blk.hash
@@ -67,6 +79,22 @@ template loadCode*(
     t: TestApiState, address: Address, blockId: BlockTag, code: seq[byte]
 ) =
   t.codes[(address, hash(blockId))] = code
+
+template loadTransactions*(t: TestApiState, txHash: Hash32, tx: TransactionObject) =
+  t.transactions[txHash] = tx
+
+template loadReceipts*(t: TestApiState, txHash: Hash32, rx: ReceiptObject) =
+  t.receipts[txHash] = rx
+
+template loadBlockReceipts*(
+    t: TestApiState, blockId: BlockTag, receipts: seq[ReceiptObject]
+) =
+  t.blockReceipts[hash(blockId)] = receipts
+
+template loadLogs*(
+    t: TestApiState, filterOptions: FilterOptions, logs: seq[LogObject]
+) =
+  t.logs[filterOptions] = logs
 
 func hash*(x: BlockTag): Hash =
   if x.kind == BlockIdentifierKind.bidAlias:
@@ -147,6 +175,22 @@ proc initTestApiBackend*(t: TestApiState): EthApiBackend =
         address: Address, blockId: BlockTag
     ): Future[seq[byte]] {.async.} =
       t.codes[(address, hash(blockId))]
+
+    getBlockReceiptsProc = proc(
+        blockId: BlockTag
+    ): Future[seq[ReceiptObject]] {.async.} =
+      t.blockReceipts[hash(blockId)]
+
+    getLogsProc = proc(filterOptions: FilterOptions): Future[seq[LogObject]] {.async.} =
+      t.logs[filterOptions]
+
+    getTransactionByHashProc = proc(
+        txHash: Hash32
+    ): Future[TransactionObject] {.async.} =
+      t.transactions[txHash]
+
+    getTransactionReceiptProc = proc(txHash: Hash32): Future[ReceiptObject] {.async.} =
+      t.receipts[txHash]
 
   EthApiBackend(
     eth_chainId: ethChainIdProc,
