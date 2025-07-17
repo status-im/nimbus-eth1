@@ -12,25 +12,6 @@ import std/json, json_rpc/rpcclient, ../rpc_types
 export rpc_types
 
 createRpcSigsFromNim(RpcClient):
-  ## Portal State Network json-rpc calls
-  proc portal_stateNodeInfo(): NodeInfo
-  proc portal_stateRoutingTableInfo(): RoutingTableInfo
-  proc portal_stateAddEnr(enr: Record): bool
-  proc portal_stateAddEnrs(enrs: seq[Record]): bool
-  proc portal_stateGetEnr(nodeId: NodeId): Record
-  proc portal_stateDeleteEnr(nodeId: NodeId): bool
-  proc portal_stateLookupEnr(nodeId: NodeId): Record
-  proc portal_statePing(enr: Record): PingResult
-  proc portal_stateFindNodes(enr: Record): seq[Record]
-  proc portal_stateFindContent(enr: Record, contentKey: string): JsonNode
-  proc portal_stateOffer(enr: Record, contentKey: string, contentValue: string): string
-  proc portal_stateRecursiveFindNodes(nodeId: NodeId): seq[Record]
-  proc portal_stateGetContent(contentKey: string): ContentInfo
-  proc portal_stateStore(contentKey: string, contentValue: string): bool
-  proc portal_stateLocalContent(contentKey: string): string
-  proc portal_statePutContent(
-    contentKey: string, contentValue: string
-  ): PutContentResult
 
   ## Portal History Network json-rpc calls
   proc portal_historyNodeInfo(): NodeInfo

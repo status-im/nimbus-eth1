@@ -24,11 +24,9 @@ import
   eth/p2p/discoveryv5/protocol as discv5_protocol,
   ../common/common_utils,
   ../common/common_deprecation,
-  ../evm/async_evm_portal_backend,
-  ../../execution_chain/evm/async_evm,
   ../rpc/[
-    rpc_eth_api, rpc_debug_api, rpc_discovery_api, rpc_portal_common_api,
-    rpc_portal_legacy_history_api, rpc_portal_beacon_api, rpc_portal_state_api,
+    rpc_eth_api, rpc_discovery_api, rpc_portal_common_api,
+    rpc_portal_legacy_history_api, rpc_portal_beacon_api,
     rpc_portal_nimbus_beacon_api, rpc_portal_debug_history_api,
   ],
   ../database/content_db,
@@ -243,7 +241,6 @@ proc run(portalClient: PortalClient, config: PortalConf) {.raises: [CatchableErr
           proc(v: InputFile): string =
             $v
         ),
-      disableStateRootValidation: config.disableStateRootValidation,
       trustedBlockRoot: config.trustedBlockRoot.optionToOpt(),
       portalConfig: portalProtocolConfig,
       dataDir: dataDir,
@@ -294,14 +291,6 @@ proc run(portalClient: PortalClient, config: PortalConf) {.raises: [CatchableErr
   ## Start the Portal node.
   node.start()
 
-  # For now the async EVM is only used by the RPC servers so we create the
-  # instance here and share it between all the RPC handlers that need it
-  let asyncEvm =
-    if node.stateNetwork.isSome():
-      Opt.some(AsyncEvm.init(node.stateNetwork.get().toAsyncEvmStateBackend()))
-    else:
-      Opt.none(AsyncEvm)
-
   ## Start the JSON-RPC APIs
 
   proc setupRpcServer(
@@ -311,10 +300,10 @@ proc run(portalClient: PortalClient, config: PortalConf) {.raises: [CatchableErr
       case flag
       of RpcFlag.eth:
         rpcServer.installEthApiHandlers(
-          node.legacyHistoryNetwork, node.beaconLightClient, node.stateNetwork, asyncEvm
+          node.legacyHistoryNetwork, node.beaconLightClient
         )
       of RpcFlag.debug:
-        rpcServer.installDebugApiHandlers(node.stateNetwork, asyncEvm)
+        discard
       of RpcFlag.portal:
         if node.legacyHistoryNetwork.isSome():
           rpcServer.installPortalCommonApiHandlers(
@@ -332,13 +321,6 @@ proc run(portalClient: PortalClient, config: PortalConf) {.raises: [CatchableErr
           )
         if node.beaconLightClient.isSome():
           rpcServer.installPortalNimbusBeaconApiHandlers(node.beaconLightClient.value)
-        if node.stateNetwork.isSome():
-          rpcServer.installPortalCommonApiHandlers(
-            node.stateNetwork.value.portalProtocol, PortalSubnetwork.state
-          )
-          rpcServer.installPortalStateApiHandlers(
-            node.stateNetwork.value.portalProtocol
-          )
       of RpcFlag.portal_debug:
         if node.legacyHistoryNetwork.isSome():
           rpcServer.installPortalDebugHistoryApiHandlers(
