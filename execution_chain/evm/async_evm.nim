@@ -15,10 +15,10 @@ import
   stint,
   results,
   eth/common/[base, addresses, accounts, headers, transactions],
-  ../../execution_chain/db/[ledger, access_list],
-  ../../execution_chain/common/common,
-  ../../execution_chain/transaction/call_evm,
-  ../../execution_chain/evm/[types, state, evm_errors],
+  ../db/[ledger, access_list],
+  ../common/common,
+  ../transaction/call_evm,
+  ../evm/[types, state, evm_errors],
   ./async_evm_backend
 
 from web3/eth_api_types import TransactionArgs, Quantity

@@ -7,7 +7,7 @@
 
 {.used.}
 
-import std/tables, ../../evm/async_evm_backend
+import std/tables, ../execution_chain/evm/async_evm_backend
 
 type TestEvmState* = ref object
   accounts: Table[Address, Account]
