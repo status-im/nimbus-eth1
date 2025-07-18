@@ -132,6 +132,7 @@ if not defined(windows):
 --mm:refc
 
 switch("define", "withoutPCRE")
+switch("import", "testutils/moduletests")
 
 when not defined(disable_libbacktrace):
   --define:nimStackTraceOverride
