@@ -45,10 +45,8 @@ type
   Persister* = object
     com: CommonRef
     flags: PersistBlockFlags
-
     vmState: BaseVMState
     stats*: PersistStats
-
     parent: Header
 
   PersistStats* = tuple[blocks: int, txs: int, gas: GasInt]
@@ -148,15 +146,41 @@ proc persistBlock*(p: var Persister, blk: Block): Result[void, string] =
   if not skipValidation:
     ?com.validateHeaderAndKinship(blk, vmState.parent, txFrame)
 
-  # Generate receipts for storage or validation but skip them otherwise
-  ?vmState.processBlock(
-    blk,
-    skipValidation,
-    skipReceipts = skipValidation and NoPersistReceipts in p.flags,
-    skipUncles = NoPersistUncles in p.flags,
-    skipStateRootCheck = skipValidation,
-    taskpool = com.taskpool,
-  )
+  template processBlock(): auto =
+    # Generate receipts for storage or validation but skip them otherwise
+    ?vmState.processBlock(
+      blk,
+      skipValidation,
+      skipReceipts = skipValidation and NoPersistReceipts in p.flags,
+      skipUncles = NoPersistUncles in p.flags,
+      skipStateRootCheck = skipValidation,
+      taskpool = com.taskpool,
+    )
+
+  if vmState.com.statelessProviderEnabled:
+    # When the stateless provider is enabled we need to have access to the
+    # parent txFrame so that we can build the witness using the block pre state.
+    let parentTxFrame = vmState.ledger.txFrame
+    vmState.ledger.txFrame = parentTxFrame.txFrameBegin()
+
+    processBlock()
+
+    let
+      witnessKeys = vmState.ledger.getWitnessKeys()
+      blockHash = header.computeBlockHash()
+      preStateLedger = LedgerRef.init(parentTxFrame)
+
+    if p.parent.stateRoot != default(Hash32):
+      doAssert preStateLedger.getStateRoot() == p.parent.stateRoot
+
+    var witness = Witness.build(witnessKeys, preStateLedger.ReadOnlyLedger)
+    witness.addHeaderHash(header.parentHash)
+
+    ?vmState.ledger.txFrame.persistWitness(blockHash, witness)
+    vmState.ledger.clearWitnessKeys()
+
+  else:
+    processBlock()
 
   if NoPersistHeader notin p.flags:
     let blockHash = header.computeBlockHash()
@@ -173,24 +197,6 @@ proc persistBlock*(p: var Persister, blk: Block): Result[void, string] =
       header.withdrawalsRoot.expect("WithdrawalsRoot should be verified before"),
       blk.withdrawals.get,
     )
-
-  if vmState.com.statelessProviderEnabled:
-    let
-      witnessKeys = vmState.ledger.getWitnessKeys()
-      blockHash = header.computeBlockHash()
-      # Get the pre-state from before executing the block of transactions
-      parentTxFrame = CoreDbTxRef(
-        aTx: vmState.ledger.txFrame.aTx.parent,
-        kTx: vmState.ledger.txFrame.kTx.parent
-      )
-      preStateLedger = LedgerRef.init(parentTxFrame)
-
-    var witness = Witness.build(witnessKeys, preStateLedger.ReadOnlyLedger)
-    witness.addHeaderHash(header.parentHash)
-
-    ?vmState.ledger.txFrame.persistWitness(blockHash, witness)
-    vmState.ledger.clearWitnessKeys()
-
 
   p.stats.blocks += 1
   p.stats.txs += blk.transactions.len
