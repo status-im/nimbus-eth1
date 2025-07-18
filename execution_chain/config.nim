@@ -353,6 +353,24 @@ type
             "is accepted"
       name: "debug-beacon-sync-target-file" .}: Option[InputFile]
 
+    beaconSyncTraceFile* {.
+      hidden
+      desc: "Enable tracer and write the trace records to the argument file"
+      name: "debug-beacon-sync-trace-file" .}: Option[OutFile]
+
+    beaconSyncTraceSessions* {.
+      hidden
+      defaultValue: 1
+      desc: "If enabled, run a trace for this many sessions, " &
+            "(i.e. from activation to suspension)"
+      name: "debug-beacon-sync-trace-sessions" .}: int
+
+    beaconSyncReplayFile* {.
+      hidden
+      desc: "Enable reply of an argument trace file. This will render some " &
+            "other options ineffective."
+      name: "debug-beacon-sync-replay-file" .}: Option[InputFile]
+
     rocksdbMaxOpenFiles {.
       hidden
       defaultValue: defaultMaxOpenFiles

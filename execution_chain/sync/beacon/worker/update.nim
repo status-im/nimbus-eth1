@@ -15,30 +15,18 @@ import
   pkg/[chronicles, chronos],
   pkg/eth/common,
   ../worker_desc,
-  ./blocks/blocks_unproc,
-  ./headers
+  ./[blocks, headers]
 
 logScope:
   topics = "beacon sync"
 
+import
+  ./blocks/[blocks_debug, blocks_queue],
+  ./headers/[headers_debug, headers_queue]
+
 # ------------------------------------------------------------------------------
 # Private functions, state handler helpers
 # ------------------------------------------------------------------------------
-
-proc updateSuspendSyncer(ctx: BeaconCtxRef) =
-  ## Clean up sync target buckets, stop syncer activity, and and get ready
-  ## for awaiting a new request from the `CL`.
-  ##
-  ctx.hdrCache.clear()
-
-  ctx.pool.clReq.reset
-  ctx.pool.failedPeers.clear()
-  ctx.pool.seenData = false
-
-  ctx.hibernate = true
-
-  info "Suspending syncer", base=ctx.chain.baseNumber.bnStr,
-    head=ctx.chain.latestNumber.bnStr, nSyncPeers=ctx.pool.nBuddies
 
 proc commitCollectHeaders(ctx: BeaconCtxRef; info: static[string]): bool =
   ## Link header chain into `FC` module. Gets ready for block import.
@@ -56,6 +44,28 @@ proc commitCollectHeaders(ctx: BeaconCtxRef; info: static[string]): bool =
 proc setupProcessingBlocks(ctx: BeaconCtxRef; info: static[string]) =
   ## Prepare for blocks processing
   ##
+  if not ctx.blocksUnprocIsEmpty() or
+     not ctx.blocksStagedQueueIsEmpty() or
+     not ctx.headersUnprocIsEmpty() or
+     not ctx.headersStagedQueueIsEmpty() or
+     ctx.subState.top != 0 or
+     ctx.subState.head != 0 or
+     ctx.subState.cancelRequest:
+    error "updateSuspendCB: Oops", blk=ctx.blk.bnStr, hdr=ctx.hdr.bnStr,
+      syncState=($ctx.syncState)
+  doAssert ctx.blocksUnprocIsEmpty()
+  doAssert ctx.blocksStagedQueueIsEmpty()
+  doAssert ctx.headersUnprocIsEmpty()
+  doAssert ctx.headersStagedQueueIsEmpty()
+  doAssert ctx.subState.top == 0
+  doAssert ctx.subState.head == 0
+  doAssert not ctx.subState.cancelRequest
+
+  #ctx.headersUnprocClear()
+  #ctx.blocksUnprocClear()
+  #ctx.headersStagedQueueClear()
+  #ctx.blocksStagedQueueClear()
+
   # Reset for useles block download detection (to avoid deadlock)
   ctx.pool.failedPeers.clear()
   ctx.pool.seenData = false
@@ -216,31 +226,13 @@ proc updateSyncState*(ctx: BeaconCtxRef; info: static[string]) =
 
   # Final sync scrum layout reached or inconsistent/impossible state
   if newState == idle:
-    ctx.updateSuspendSyncer()
+    ctx.handler.suspend(ctx)
 
+# ------------------------------------------------------------------------------
+# Public functions, call-back handler ready
+# ------------------------------------------------------------------------------
 
-proc updateAsyncTasks*(
-    ctx: BeaconCtxRef;
-      ): Future[Opt[void]] {.async: (raises: []).} =
-  ## Allow task switch by issuing a short sleep request. The `due` argument
-  ## allows to maintain a minimum time gap when invoking this function.
-  ##
-  let start = Moment.now()
-  if ctx.pool.nextAsyncNanoSleep < start:
-
-    try: await sleepAsync asyncThreadSwitchTimeSlot
-    except CancelledError: discard
-
-    if ctx.daemon:
-      ctx.pool.nextAsyncNanoSleep = Moment.now() + asyncThreadSwitchGap
-      return ok()
-    # Shutdown?
-    return err()
-
-  return ok()
-
-
-proc updateActivateSyncer*(ctx: BeaconCtxRef) =
+proc updateActivateCB*(ctx: BeaconCtxRef) =
   ## If in hibernate mode, accept a cache session and activate syncer
   ##
   if ctx.hibernate:
@@ -266,6 +258,22 @@ proc updateActivateSyncer*(ctx: BeaconCtxRef) =
 
   debug "Syncer activation rejected", base=ctx.chain.baseNumber.bnStr,
     head=ctx.chain.latestNumber.bnStr, state=ctx.hdrCache.state
+
+
+proc updateSuspendCB*(ctx: BeaconCtxRef) =
+  ## Clean up sync target buckets, stop syncer activity, and and get ready
+  ## for a new sync request from the `CL`.
+  ##
+  ctx.hdrCache.clear()
+
+  ctx.pool.clReq.reset
+  ctx.pool.failedPeers.clear()
+  ctx.pool.seenData = false
+
+  ctx.hibernate = true
+
+  info "Suspending syncer", base=ctx.chain.baseNumber.bnStr,
+    head=ctx.chain.latestNumber.bnStr, nSyncPeers=ctx.pool.nBuddies
 
 # ------------------------------------------------------------------------------
 # End

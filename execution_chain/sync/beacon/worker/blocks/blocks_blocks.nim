@@ -17,8 +17,10 @@ import
   ../../../../networking/p2p,
   ../../../wire_protocol/types,
   ../../worker_desc,
-  ../update,
-  ./[blocks_fetch, blocks_helpers, blocks_import, blocks_unproc]
+  ./[blocks_fetch, blocks_helpers, blocks_unproc]
+
+import
+  ./blocks_debug
 
 # ------------------------------------------------------------------------------
 # Private helpers
@@ -171,16 +173,18 @@ proc blocksImport*(
   ##
   let iv = BnRange.new(blocks[0].header.number, blocks[^1].header.number)
   doAssert iv.len == blocks.len.uint64
+  doAssert ctx.blk.verify()
 
   trace info & ": Start importing blocks", peer=maybePeer.toStr, iv,
     nBlocks=iv.len, base=ctx.chain.baseNumber.bnStr,
-    head=ctx.chain.latestNumber.bnStr
+    head=ctx.chain.latestNumber.bnStr, blk=ctx.blk.bnStr
 
   var isError = false
   block loop:
     for n in 0 ..< blocks.len:
       let nBn = blocks[n].header.number
-      discard (await ctx.importBlock(maybePeer, blocks[n], peerID)).valueOr:
+      discard (await ctx.handler.importBlock(
+                 ctx, maybePeer, blocks[n], peerID)).valueOr:
         if error.excp != ECancelledError:
           isError = true
 
@@ -220,10 +224,6 @@ proc blocksImport*(
       # isOk => next instruction
       ctx.subState.top = nBn                       # Block imported OK
 
-      # Allow pseudo/async thread switch.
-      (await ctx.updateAsyncTasks()).isOkOr:
-        break loop
-
   if not isError:
     ctx.resetBlkProcErrors peerID
 
@@ -232,7 +232,8 @@ proc blocksImport*(
     nBlocks=(ctx.subState.top - iv.minPt + 1),
     nFailed=(iv.maxPt - ctx.subState.top),
     base=ctx.chain.baseNumber.bnStr, head=ctx.chain.latestNumber.bnStr,
-    target=ctx.subState.head.bnStr, targetHash=ctx.subState.headHash.short
+    target=ctx.subState.head.bnStr, targetHash=ctx.subState.headHash.short,
+    blk=ctx.blk.bnStr
 
 # ------------------------------------------------------------------------------
 # End

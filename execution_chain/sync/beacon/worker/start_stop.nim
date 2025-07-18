@@ -15,7 +15,7 @@ import
   ../../../networking/p2p,
   ../../wire_protocol,
   ../worker_desc,
-  ./[blocks, headers, update]
+  ./[blocks, headers]
 
 type
   SyncStateData = tuple
@@ -57,8 +57,8 @@ proc setupServices*(ctx: BeaconCtxRef; info: static[string]) =
 
   # Set up the notifier informing when a new syncer session has started.
   ctx.hdrCache.start proc() =
-    # Activates the syncer. Work will be picked up by peers when available.
-    ctx.updateActivateSyncer()
+    # This directive captures `ctx` for calling the activation handler.
+    ctx.handler.activate(ctx)
 
   # Manual first run?
   if 0 < ctx.pool.clReq.consHead.number:

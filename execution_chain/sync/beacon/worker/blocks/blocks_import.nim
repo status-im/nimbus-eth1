@@ -17,11 +17,14 @@ import
   ../../worker_desc,
   ./blocks_helpers
 
+logScope:
+  topics = "beacon sync"
+
 # ------------------------------------------------------------------------------
-# Public function
+# Public handler
 # ------------------------------------------------------------------------------
 
-proc importBlock*(
+proc importCB*(
     ctx: BeaconCtxRef;
     maybePeer: Opt[BeaconBuddyRef];
     blk: EthBlock;
@@ -40,6 +43,20 @@ proc importBlock*(
         return err((ENoException,"",error,Moment.now()-start))
     except CancelledError as e:
       return err((ECancelledError,$e.name,e.msg,Moment.now()-start))
+
+  # Allow thread switch by issuing a short wait request. A minimum time
+  # distance to the last task switch sleep request is maintained (see
+  # `asyncThreadSwitchGap`.)
+  if ctx.pool.nextAsyncNanoSleep < Moment.now():
+    try:
+      await sleepAsync asyncThreadSwitchTimeSlot
+    except CancelledError as e:
+      return err((ECancelledError,$e.name,e.msg,Moment.now()-start))
+
+    if not ctx.daemon: # Daemon will be up unless shutdown
+      return err((ENoException,"","syncer shutdown",Moment.now()-start))
+
+    ctx.pool.nextAsyncNanoSleep = Moment.now() + asyncThreadSwitchGap
 
   return ok(Moment.now()-start)
 
