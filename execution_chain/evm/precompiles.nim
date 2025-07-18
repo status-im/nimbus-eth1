@@ -294,14 +294,14 @@ func modExpFee(c: Computation,
     ) div divisor
 
   # EIP2565: modExp gas cost
-  let gasFee = if fork >= FkOsaka: gasCalc(mulComplexityEIP7883, GasQuadDivisorEIP2565)
+  let gasFee = if fork >= FkCancun: gasCalc(mulComplexityEIP7883, GasQuadDivisorEIP2565)
                elif fork >= FkBerlin: gasCalc(mulComplexityEIP2565, GasQuadDivisorEIP2565)
                else: gasCalc(mulComplexity, GasQuadDivisor)
 
   if gasFee > high(GasInt).u256:
     return err(gasErr(OutOfGas))
 
-  let minPrice = if fork >= FkOsaka: 500.GasInt
+  let minPrice = if fork >= FkCancun: 500.GasInt
                  else: 200.GasInt
 
   var res = gasFee.truncate(GasInt)
