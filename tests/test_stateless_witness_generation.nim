@@ -24,14 +24,21 @@ suite "Stateless: Witness Generation":
       ledger = LedgerRef.init(memDB.baseTxFrame(), false, collectWitness = true)
       code = hexToSeqByte("0x0f572e5295c57f15886f9b263e2f6d2d6c7b5ec6")
       addr1 = address"0x0f572e5295c57f15886f9b263e2f6d2d6c7b5ec6"
+      addr2 = address"0x0f572e5295c57f15886f9b263e2f6d2d6c7b5ec7"
       slot1 = 1.u256
       slot2 = 2.u256
       slot3 = 3.u256
 
-  test "Get account":
     ledger.setBalance(addr1, 10.u256)
+    ledger.setCode(addr1, code)
+    ledger.setBalance(addr2, 20.u256)
+    ledger.setStorage(addr1, slot1, 100.u256)
+    ledger.setStorage(addr1, slot2, 200.u256)
+    ledger.setStorage(addr1, slot3, 300.u256)
     ledger.persist(clearWitness = true)
 
+
+  test "Get account":
     discard ledger.getBalance(addr1)
 
     let witnessKeys = ledger.getWitnessKeys()
@@ -46,9 +53,6 @@ suite "Stateless: Witness Generation":
       witnessKeys.contains((Address.copyFrom(witness.keys[0]), Opt.none(UInt256)))
 
   test "Get code":
-    ledger.setCode(addr1, code)
-    ledger.persist(clearWitness = true)
-
     discard ledger.getCode(addr1)
 
     let witnessKeys = ledger.getWitnessKeys()
@@ -79,9 +83,6 @@ suite "Stateless: Witness Generation":
       witnessKeys.contains((Address.copyFrom(witness.keys[0]), Opt.some(slot1)))
 
   test "Get storage":
-    ledger.setStorage(addr1, slot1, 20.u256)
-    ledger.persist(clearWitness = true)
-
     discard ledger.getStorage(addr1, slot1)
 
     let witnessKeys = ledger.getWitnessKeys()
@@ -97,9 +98,6 @@ suite "Stateless: Witness Generation":
       witnessKeys.contains((Address.copyFrom(witness.keys[0]), Opt.some(slot1)))
 
   test "Get committed storage":
-    ledger.setStorage(addr1, slot1, 20.u256)
-    ledger.persist(clearWitness = true)
-
     discard ledger.getCommittedStorage(addr1, slot1)
 
     let witnessKeys = ledger.getWitnessKeys()
@@ -115,12 +113,6 @@ suite "Stateless: Witness Generation":
       witnessKeys.contains((Address.copyFrom(witness.keys[0]), Opt.some(slot1)))
 
   test "Get code and storage slots":
-    ledger.setCode(addr1, code)
-    ledger.setStorage(addr1, slot1, 100.u256)
-    ledger.setStorage(addr1, slot2, 200.u256)
-    ledger.setStorage(addr1, slot3, 300.u256)
-    ledger.persist(clearWitness = true)
-
     discard ledger.getCode(addr1)
     discard ledger.getStorage(addr1, slot1)
     discard ledger.getStorage(addr1, slot2)
@@ -139,3 +131,22 @@ suite "Stateless: Witness Generation":
       witnessKeys.contains((Address.copyFrom(witness.keys[0]), Opt.some(slot1)))
       witnessKeys.contains((Address.copyFrom(witness.keys[0]), Opt.some(slot2)))
       witnessKeys.contains((Address.copyFrom(witness.keys[0]), Opt.some(slot3)))
+
+  test "Order of keys":
+    var witnessKeys: WitnessTable
+    witnessKeys[(addr1, Opt.none(UInt256))] = true
+    witnessKeys[(addr1, Opt.some(slot1))] = false
+    witnessKeys[(addr2, Opt.none(UInt256))] = false
+    witnessKeys[(addr1, Opt.some(slot2))] = false
+    witnessKeys[(addr1, Opt.some(slot3))] = false
+    check witnessKeys.len() == 5
+
+    let witness = Witness.build(witnessKeys, ledger.ReadOnlyLedger)
+
+    check:
+      witness.keys.len() == 5
+      witness.keys[0] == addr1.data()
+      witness.keys[1] == slot1.toBytesBE()
+      witness.keys[2] == slot2.toBytesBE()
+      witness.keys[3] == slot3.toBytesBE()
+      witness.keys[4] == addr2.data()

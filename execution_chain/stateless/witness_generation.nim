@@ -30,19 +30,7 @@ proc build*(
     addedCodeHashes = initHashSet[Hash32]()
 
   for key, codeTouched in witnessKeys:
-    let (_, maybeSlot) = key
-    if maybeSlot.isSome():
-      let slot = maybeSlot.get()
-      witness.addKey(slot.toBytesBE())
-
-      let proofs = ledger.getStorageProof(key.address, @[slot])
-      doAssert(proofs.len() == 1)
-      for trieNode in proofs[0]:
-        let nodeHash = keccak256(trieNode)
-        if nodeHash notin addedStateHashes:
-          witness.addState(trieNode)
-          addedStateHashes.incl(nodeHash)
-    else:
+    if key.slot.isNone(): # Is an account key
       witness.addKey(key.address.data())
 
       let proof = ledger.getAccountProof(key.address)
@@ -52,10 +40,24 @@ proc build*(
           witness.addState(trieNode)
           addedStateHashes.incl(nodeHash)
 
-    if codeTouched:
-      let codeHash = ledger.getCodeHash(key.address)
-      if codeHash != EMPTY_CODE_HASH and codeHash notin addedCodeHashes:
-        witness.addCodeHash(codeHash)
-        addedCodeHashes.incl(codeHash)
+      if codeTouched:
+        let codeHash = ledger.getCodeHash(key.address)
+        if codeHash != EMPTY_CODE_HASH and codeHash notin addedCodeHashes:
+          witness.addCodeHash(codeHash)
+          addedCodeHashes.incl(codeHash)
+
+      # Add the storage slots for this account
+      for key2, codeTouched2 in witnessKeys:
+        if key2.address == key.address and key2.slot.isSome():
+          let slot = key2.slot.get()
+          witness.addKey(slot.toBytesBE())
+
+          let proofs = ledger.getStorageProof(key.address, @[slot])
+          doAssert(proofs.len() == 1)
+          for trieNode in proofs[0]:
+            let nodeHash = keccak256(trieNode)
+            if nodeHash notin addedStateHashes:
+              witness.addState(trieNode)
+              addedStateHashes.incl(nodeHash)
 
   witness
