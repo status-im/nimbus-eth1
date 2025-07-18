@@ -7,7 +7,7 @@
 # This file may not be copied, modified, or distributed except according to
 # those terms.
 
-# PeerPool attempts to keep connections to at least min_peers
+# PeerPoolRef attempts to keep connections to at least min_peers
 # on the given network.
 
 {.push raises: [].}
@@ -15,11 +15,34 @@
 import
   std/[os, tables, times, random, options],
   chronos, chronicles,
-  ./[discoveryv4, rlpx, p2p_types]
+  ./p2p_metrics,
+  ./[discoveryv4, p2p_peers]
 
 logScope:
   topics = "p2p peer_pool"
 
+type
+  SeenNode = object
+    nodeId: NodeId
+    stamp: chronos.Moment
+
+  # Usually Network generic param is instantiated with EthereumNode
+  PeerPoolRef*[Network] = ref object
+    network: Network
+    minPeers: int
+    lastLookupTime: float
+    connQueue: AsyncQueue[Node]
+    seenTable: Table[NodeId, SeenNode]
+    running: bool
+    discv4*: DiscoveryV4
+    connectingNodes*: HashSet[Node]
+    connectedNodes*: Table[Node, PeerRef[Network]]
+    observers*: Table[int, PeerObserverRef[Network]]
+
+  PeerObserverRef*[Network] = object
+    onPeerConnected*: proc(p: PeerRef[Network]) {.gcsafe, raises: [].}
+    onPeerDisconnected*: proc(p: PeerRef[Network]) {.gcsafe, raises: [].}
+    protocols*: seq[ProtocolInfoRef[PeerRef[Network], Network]]
 
 const
   lookupInterval = 5
@@ -37,7 +60,8 @@ const
   ## Period of time for peers with general disconnections / transport errors.
   SeenTableTimeReconnect = chronos.minutes(5)
 
-proc isSeen(p: PeerPool, nodeId: NodeId): bool =
+
+proc isSeen(p: PeerPoolRef, nodeId: NodeId): bool =
   ## Returns ``true`` if ``nodeId`` present in SeenTable and time period is not
   ## yet expired.
   let currentTime = now(chronos.Moment)
@@ -54,7 +78,7 @@ proc isSeen(p: PeerPool, nodeId: NodeId): bool =
       true
 
 proc addSeen(
-    p: PeerPool, nodeId: NodeId, period: chronos.Duration) =
+    p: PeerPoolRef, nodeId: NodeId, period: chronos.Duration) =
   ## Adds peer with NodeId ``nodeId`` to SeenTable and timeout ``period``.
   let item = SeenNode(nodeId: nodeId, stamp: now(chronos.Moment) + period)
   withValue(p.seenTable, nodeId, entry) do:
@@ -63,26 +87,24 @@ proc addSeen(
   do:
     p.seenTable[nodeId] = item
 
-func newPeerPool*(
-    network: EthereumNode, networkId: NetworkId, keyPair: KeyPair,
-    discovery: DiscoveryProtocol, clientId: string, minPeers = 10): PeerPool =
+func newPeerPool*[Network](
+    network: Network,
+    discv4: DiscoveryV4, minPeers = 10): PeerPoolRef[Network] =
   new result
   result.network = network
-  result.keyPair = keyPair
   result.minPeers = minPeers
-  result.networkId = networkId
-  result.discovery = discovery
+  result.discv4 = discv4
   result.connQueue = newAsyncQueue[Node](maxConcurrentConnectionRequests)
-  result.connectedNodes = initTable[Node, Peer]()
+  result.connectedNodes = initTable[Node, PeerRef[Network]]()
   result.connectingNodes = initHashSet[Node]()
-  result.observers = initTable[int, PeerObserver]()
+  result.observers = initTable[int, PeerObserverRef[Network]]()
 
-iterator nodesToConnect(p: PeerPool): Node =
-  for node in p.discovery.randomNodes(p.minPeers):
-    if node notin p.discovery.bootstrapNodes:
+iterator nodesToConnect(p: PeerPoolRef): Node =
+  for node in p.discv4.randomNodes(p.minPeers):
+    if node notin p.discv4.bootstrapNodes:
       yield node
 
-proc addObserver*(p: PeerPool, observerId: int, observer: PeerObserver) =
+proc addObserver*(p: PeerPoolRef, observerId: int, observer: PeerObserverRef) =
   doAssert(observerId notin p.observers)
   p.observers[observerId] = observer
   if not observer.onPeerConnected.isNil:
@@ -90,25 +112,48 @@ proc addObserver*(p: PeerPool, observerId: int, observer: PeerObserver) =
       if observer.protocols.len == 0 or peer.supports(observer.protocols):
         observer.onPeerConnected(peer)
 
-func delObserver*(p: PeerPool, observerId: int) =
+func delObserver*(p: PeerPoolRef, observerId: int) =
   p.observers.del(observerId)
 
-proc addObserver*(p: PeerPool, observerId: ref, observer: PeerObserver) =
+proc addObserver*(p: PeerPoolRef, observerId: ref, observer: PeerObserverRef) =
   p.addObserver(cast[int](observerId), observer)
 
-func delObserver*(p: PeerPool, observerId: ref) =
+func delObserver*(p: PeerPoolRef, observerId: ref) =
   p.delObserver(cast[int](observerId))
 
-template addProtocol*(observer: PeerObserver, Protocol: type) =
+template addProtocol*(observer: PeerObserverRef, Protocol: type) =
   observer.protocols.add Protocol.protocolInfo
 
-proc stopAllPeers(p: PeerPool) {.async.} =
-  debug "Stopping all peers ..."
-  # TODO: ...
-  # await asyncio.gather(
-  #   *[peer.stop() for peer in self.connected_nodes.values()])
+func len*(p: PeerPoolRef): int = p.connectedNodes.len
 
-proc connect(p: PeerPool, remote: Node): Future[Peer] {.async.} =
+iterator peers*[Network](p: PeerPoolRef[Network]): PeerRef[Network] =
+  for remote, peer in p.connectedNodes:
+    yield peer
+
+iterator peers*[Network](p: PeerPoolRef[Network], Protocol: type): PeerRef[Network] =
+  for peer in p.peers:
+    if peer.supports(Protocol):
+      yield peer
+
+func numPeers*(p: PeerPoolRef): int =
+  p.connectedNodes.len
+
+func contains*(p: PeerPoolRef, n: ENode): bool =
+  for remote, _ in p.connectedNodes:
+    if remote.node == n:
+      return true
+
+func contains*(p: PeerPoolRef, n: Node): bool =
+  n in p.connectedNodes
+
+func contains*(p: PeerPoolRef, n: PeerRef): bool =
+  n.remote in p.connectedNodes
+
+proc stopAllPeers(p: PeerPoolRef) {.async.} =
+  debug "Stopping all peers ..."
+
+
+proc connect[Network](p: PeerPoolRef[Network], remote: Node): Future[PeerRef[Network]] {.async.} =
   ## Connect to the given remote and return a Peer instance when successful.
   ## Returns nil if the remote is unreachable, times out or is useless.
   if remote in p.connectedNodes:
@@ -150,15 +195,15 @@ proc connect(p: PeerPool, remote: Node): Future[Peer] {.async.} =
 
     return nil
 
-proc lookupRandomNode(p: PeerPool) {.async.} =
-  discard await p.discovery.lookupRandom()
+proc lookupRandomNode(p: PeerPoolRef) {.async.} =
+  discard await p.discv4.lookupRandom()
   p.lastLookupTime = epochTime()
 
-proc getRandomBootnode(p: PeerPool): Option[Node] =
-  if p.discovery.bootstrapNodes.len != 0:
-    result = option(p.discovery.bootstrapNodes.sample())
+proc getRandomBootnode(p: PeerPoolRef): Option[Node] =
+  if p.discv4.bootstrapNodes.len != 0:
+    result = option(p.discv4.bootstrapNodes.sample())
 
-proc addPeer*(pool: PeerPool, peer: Peer) {.gcsafe.} =
+proc addPeer*(pool: PeerPoolRef, peer: PeerRef) {.gcsafe.} =
   doAssert(peer.remote notin pool.connectedNodes)
   pool.connectedNodes[peer.remote] = peer
   rlpx_connected_peers.inc()
@@ -167,19 +212,19 @@ proc addPeer*(pool: PeerPool, peer: Peer) {.gcsafe.} =
       if observer.protocols.len == 0 or peer.supports(observer.protocols):
         observer.onPeerConnected(peer)
 
-proc connectToNode*(p: PeerPool, n: Node) {.async.} =
+proc connectToNode*(p: PeerPoolRef, n: Node) {.async.} =
   let peer = await p.connect(n)
   if not peer.isNil:
     trace "Connection established (outgoing)", peer
     p.addPeer(peer)
 
-proc connectToNode*(p: PeerPool, n: ENode) {.async.} =
+proc connectToNode*(p: PeerPoolRef, n: ENode) {.async.} =
   await p.connectToNode(newNode(n))
 
 
 # This code is loosely based on code from nimbus-eth2;
 # see eth2_network.nim and search for connQueue.
-proc createConnectionWorker(p: PeerPool, workerId: int): Future[void] {.async.} =
+proc createConnectionWorker(p: PeerPoolRef, workerId: int): Future[void] {.async.} =
   trace "Connection worker started", workerId = workerId
   while true:
     let n = await p.connQueue.popFirst()
@@ -200,11 +245,11 @@ proc createConnectionWorker(p: PeerPool, workerId: int): Future[void] {.async.} 
     #   if p.connectedNodes.len >= p.minPeers:
     #     return
 
-proc startConnectionWorkerPool(p: PeerPool, workerCount: int) =
+proc startConnectionWorkerPool(p: PeerPoolRef, workerCount: int) =
   for i in 0 ..< workerCount:
     asyncSpawn createConnectionWorker(p, i)
 
-proc maybeConnectToMorePeers(p: PeerPool) {.async.} =
+proc maybeConnectToMorePeers(p: PeerPoolRef) {.async.} =
   ## Connect to more peers if we're not yet connected to at least self.minPeers.
   if p.connectedNodes.len >= p.minPeers:
     # debug "pool already connected to enough peers (sleeping)", count = p.connectedNodes
@@ -241,8 +286,8 @@ proc maybeConnectToMorePeers(p: PeerPool) {.async.} =
   if p.connectedNodes.len == 0 and (let n = p.getRandomBootnode(); n.isSome):
     await p.connectToNode(n.get())
 
-proc run(p: PeerPool) {.async.} =
-  trace "Running PeerPool..."
+proc run(p: PeerPoolRef) {.async.} =
+  trace "Running PeerPoolRef..."
   p.running = true
   p.startConnectionWorkerPool(maxConcurrentConnectionRequests)
   while p.running:
@@ -254,7 +299,7 @@ proc run(p: PeerPool) {.async.} =
     except CatchableError as e:
       # Most unexpected errors should be transient, so we log and restart from
       # scratch.
-      error "Unexpected PeerPool error, restarting",
+      error "Unexpected PeerPoolRef error, restarting",
         err = e.msg, stackTrace = e.getStackTrace()
       dropConnections = true
 
@@ -263,31 +308,6 @@ proc run(p: PeerPool) {.async.} =
 
     await sleepAsync(connectLoopSleep)
 
-proc start*(p: PeerPool) =
+proc start*(p: PeerPoolRef) =
   if not p.running:
     asyncSpawn p.run()
-
-func len*(p: PeerPool): int = p.connectedNodes.len
-
-iterator peers*(p: PeerPool): Peer =
-  for remote, peer in p.connectedNodes:
-    yield peer
-
-iterator peers*(p: PeerPool, Protocol: type): Peer =
-  for peer in p.peers:
-    if peer.supports(Protocol):
-      yield peer
-
-func numPeers*(p: PeerPool): int =
-  p.connectedNodes.len
-
-func contains*(p: PeerPool, n: ENode): bool =
-  for remote, _ in p.connectedNodes:
-    if remote.node == n:
-      return true
-
-func contains*(p: PeerPool, n: Node): bool =
-  n in p.connectedNodes
-
-func contains*(p: PeerPool, n: Peer): bool =
-  n.remote in p.connectedNodes

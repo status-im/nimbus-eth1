@@ -12,27 +12,25 @@ import
   eth/common,
   ./types,
   ../../core/pooled_txs_rlp,
-  ../../networking/rlpx,
-  ../../networking/p2p_types
+  ../../networking/rlpx
 
 export
   common,
   chronos,
   types,
-  rlpx,
-  p2p_types
+  rlpx
 
 defineProtocol(PROTO = eth68,
                version = 68,
                rlpxName = "eth",
-               peerState = EthPeerState,
-               networkState = EthWireRef)
+               PeerStateType = EthPeerState,
+               NetworkStateType = EthWireRef)
 
 defineProtocol(PROTO = eth69,
                version = 69,
                rlpxName = "eth",
-               peerState = Eth69PeerState,
-               networkState = EthWireRef)
+               PeerStateType = Eth69PeerState,
+               NetworkStateType = EthWireRef)
 
 const
   StatusMsg*                     =  0'u64
@@ -98,9 +96,9 @@ proc getBlockHeaders*(peer: Peer; request: BlockHeadersRequest;
     Opt[BlockHeadersPacket]] {.async: (raises: [CancelledError, EthP2PError],
                                        raw: true).} =
   if peer.supports(eth69):
-    eth69.rlpxSendRequest(peer, GetBlockHeadersMsg, request)
+    eth69.rlpxSendRequest(peer, timeout, GetBlockHeadersMsg, request)
   else:
-    eth68.rlpxSendRequest(peer, GetBlockHeadersMsg, request)
+    eth68.rlpxSendRequest(peer, timeout, GetBlockHeadersMsg, request)
 
 proc blockHeaders*(responder: Responder;
                    headers: openArray[Header]): Future[void] {.
@@ -115,9 +113,9 @@ proc getBlockBodies*(peer: Peer; packet: BlockBodiesRequest;
     Opt[BlockBodiesPacket]] {.async: (raises: [CancelledError, EthP2PError],
                                       raw: true).} =
   if peer.supports(eth69):
-    eth69.rlpxSendRequest(peer, GetBlockBodiesMsg, packet.blockHashes)
+    eth69.rlpxSendRequest(peer, timeout, GetBlockBodiesMsg, packet.blockHashes)
   else:
-    eth68.rlpxSendRequest(peer, GetBlockBodiesMsg, packet.blockHashes)
+    eth68.rlpxSendRequest(peer, timeout, GetBlockBodiesMsg, packet.blockHashes)
 
 proc blockBodies*(responder: Responder;
                   bodies: openArray[BlockBody]): Future[void] {.
@@ -143,9 +141,9 @@ proc getPooledTransactions*(peer: Peer; packet: PooledTransactionsRequest;
     Opt[PooledTransactionsPacket]] {.async: (
     raises: [CancelledError, EthP2PError], raw: true).} =
   if peer.supports(eth69):
-    eth69.rlpxSendRequest(peer, GetPooledTransactionsMsg, packet.txHashes)
+    eth69.rlpxSendRequest(peer, timeout, GetPooledTransactionsMsg, packet.txHashes)
   else:
-    eth68.rlpxSendRequest(peer, GetPooledTransactionsMsg, packet.txHashes)
+    eth68.rlpxSendRequest(peer, timeout, GetPooledTransactionsMsg, packet.txHashes)
 
 proc pooledTransactions*(responder: Responder;
                          transactions: openArray[PooledTransaction]): Future[
@@ -160,9 +158,9 @@ proc getReceipts*(peer: Peer; packet: ReceiptsRequest;
     Opt[ReceiptsPacket]] {.async: (raises: [CancelledError, EthP2PError],
                                    raw: true).} =
   if peer.supports(eth69):
-    eth69.rlpxSendRequest(peer, GetReceiptsMsg, packet.blockHashes)
+    eth69.rlpxSendRequest(peer, timeout, GetReceiptsMsg, packet.blockHashes)
   else:
-    eth68.rlpxSendRequest(peer, GetReceiptsMsg, packet.blockHashes)
+    eth68.rlpxSendRequest(peer, timeout, GetReceiptsMsg, packet.blockHashes)
 
 proc receipts*(responder: Responder;
                receipts: openArray[seq[Receipt]]): Future[void] {.

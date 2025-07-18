@@ -39,12 +39,12 @@ const
   PROTO_VERSION = 4
 
 type
-  DiscoveryProtocol* = ref object
+  DiscoveryV4* = ref object
     privKey: PrivateKey
     address: Address
     bootstrapNodes*: seq[Node]
     localNode*: Node
-    kademlia*: KademliaProtocol[DiscoveryProtocol]
+    kademlia*: KademliaProtocol[DiscoveryV4]
     transp: DatagramTransport
     bindIp: IpAddress
     bindPort: Port
@@ -118,7 +118,7 @@ proc expiration(): uint64 =
 
 # Wire protocol
 
-proc send(d: DiscoveryProtocol, n: Node, data: seq[byte]) =
+proc send(d: DiscoveryV4, n: Node, data: seq[byte]) =
   let ta = initTAddress(n.node.address.ip, n.node.address.udpPort)
   let f = d.transp.sendTo(ta, data)
   let cb = proc(data: pointer) {.gcsafe.} =
@@ -133,7 +133,7 @@ proc send(d: DiscoveryProtocol, n: Node, data: seq[byte]) =
 
   f.addCallback cb
 
-proc sendPing*(d: DiscoveryProtocol, n: Node): seq[byte] =
+proc sendPing*(d: DiscoveryV4, n: Node): seq[byte] =
   let payload =
     rlp.encode((PROTO_VERSION.uint, d.address, n.node.address, expiration()))
   let msg = pack(cmdPing, payload, d.privKey)
@@ -141,13 +141,13 @@ proc sendPing*(d: DiscoveryProtocol, n: Node): seq[byte] =
   trace ">>> ping ", n
   d.send(n, msg)
 
-proc sendPong*(d: DiscoveryProtocol, n: Node, token: MDigest[256]) =
+proc sendPong*(d: DiscoveryV4, n: Node, token: MDigest[256]) =
   let payload = rlp.encode((n.node.address, token, expiration()))
   let msg = pack(cmdPong, payload, d.privKey)
   trace ">>> pong ", n
   d.send(n, msg)
 
-proc sendFindNode*(d: DiscoveryProtocol, n: Node, targetNodeId: NodeId) =
+proc sendFindNode*(d: DiscoveryV4, n: Node, targetNodeId: NodeId) =
   var data: array[64, byte]
   data[32 .. ^1] = targetNodeId.toBytesBE()
   let payload = rlp.encode((data, expiration()))
@@ -155,7 +155,7 @@ proc sendFindNode*(d: DiscoveryProtocol, n: Node, targetNodeId: NodeId) =
   trace ">>> find_node to ", n #, ": ", msg.toHex()
   d.send(n, msg)
 
-proc sendNeighbours*(d: DiscoveryProtocol, node: Node, neighbours: seq[Node]) =
+proc sendNeighbours*(d: DiscoveryV4, node: Node, neighbours: seq[Node]) =
   const MAX_NEIGHBOURS_PER_PACKET = 12 # TODO: Implement a smarter way to compute it
   type Neighbour = tuple[ip: IpAddress, udpPort, tcpPort: Port, pk: PublicKey]
   var nodes = newSeqOfCap[Neighbour](MAX_NEIGHBOURS_PER_PACKET)
@@ -178,17 +178,17 @@ proc sendNeighbours*(d: DiscoveryProtocol, node: Node, neighbours: seq[Node]) =
   if nodes.len != 0:
     flush()
 
-proc newDiscoveryProtocol*(
+proc newDiscoveryV4*(
     privKey: PrivateKey,
     address: Address,
     bootstrapNodes: openArray[ENode],
     bindPort: Port,
     bindIp = IPv6_any(),
     rng = newRng(),
-): DiscoveryProtocol =
+): DiscoveryV4 =
   let
     localNode = newNode(privKey.toPublicKey(), address)
-    discovery = DiscoveryProtocol(
+    discovery = DiscoveryV4(
       privKey: privKey,
       address: address,
       localNode: localNode,
@@ -205,19 +205,19 @@ proc newDiscoveryProtocol*(
   discovery
 
 proc recvPing(
-    d: DiscoveryProtocol, node: Node, msgHash: MDigest[256]
+    d: DiscoveryV4, node: Node, msgHash: MDigest[256]
 ) {.raises: [ValueError].} =
   d.kademlia.recvPing(node, msgHash)
 
 proc recvPong(
-    d: DiscoveryProtocol, node: Node, payload: seq[byte]
+    d: DiscoveryV4, node: Node, payload: seq[byte]
 ) {.raises: [RlpError].} =
   let rlp = rlpFromBytes(payload)
   let tok = rlp.listElem(1).toBytes()
   d.kademlia.recvPong(node, tok)
 
 proc recvNeighbours(
-    d: DiscoveryProtocol, node: Node, payload: seq[byte]
+    d: DiscoveryV4, node: Node, payload: seq[byte]
 ) {.raises: [RlpError].} =
   let rlp = rlpFromBytes(payload)
   let neighboursList = rlp.listElem(0)
@@ -248,7 +248,7 @@ proc recvNeighbours(
   d.kademlia.recvNeighbours(node, neighbours)
 
 proc recvFindNode(
-    d: DiscoveryProtocol, node: Node, payload: openArray[byte]
+    d: DiscoveryV4, node: Node, payload: openArray[byte]
 ) {.raises: [RlpError, ValueError].} =
   let rlp = rlpFromBytes(payload)
   trace "<<< find_node from ", node
@@ -278,7 +278,7 @@ proc expirationValid(
     raise newException(DiscProtocolError, "Invalid RLP list for this packet id")
 
 proc receive*(
-    d: DiscoveryProtocol, a: Address, msg: openArray[byte]
+    d: DiscoveryV4, a: Address, msg: openArray[byte]
 ) {.raises: [DiscProtocolError, RlpError, ValueError].} =
   # Note: export only needed for testing
   let msgHash = validateMsgHash(msg)
@@ -311,7 +311,7 @@ proc receive*(
 proc processClient(
     transp: DatagramTransport, raddr: TransportAddress
 ): Future[void] {.async: (raises: []).} =
-  var proto = getUserData[DiscoveryProtocol](transp)
+  var proto = getUserData[DiscoveryV4](transp)
   let buf =
     try:
       transp.getMessage()
@@ -332,28 +332,28 @@ proc processClient(
   except ValueError as e:
     debug "Receive failed", exc = e.name, err = e.msg
 
-proc open*(d: DiscoveryProtocol) {.raises: [CatchableError].} =
+proc open*(d: DiscoveryV4) {.raises: [CatchableError].} =
   # TODO: allow binding to both IPv4 and IPv6
   let ta = initTAddress(d.bindIp, d.bindPort)
   d.transp = newDatagramTransport(processClient, udata = d, local = ta)
 
-proc lookupRandom*(d: DiscoveryProtocol): Future[seq[Node]] =
+proc lookupRandom*(d: DiscoveryV4): Future[seq[Node]] =
   d.kademlia.lookupRandom()
 
-proc run(d: DiscoveryProtocol) {.async.} =
+proc run(d: DiscoveryV4) {.async.} =
   while true:
     discard await d.lookupRandom()
     await sleepAsync(chronos.seconds(3))
     trace "Discovered nodes", nodes = d.kademlia.nodesDiscovered
 
-proc bootstrap*(d: DiscoveryProtocol) {.async.} =
+proc bootstrap*(d: DiscoveryV4) {.async.} =
   await d.kademlia.bootstrap(d.bootstrapNodes)
   discard d.run()
 
-proc resolve*(d: DiscoveryProtocol, n: NodeId): Future[Node] =
+proc resolve*(d: DiscoveryV4, n: NodeId): Future[Node] =
   d.kademlia.resolve(n)
 
-proc randomNodes*(d: DiscoveryProtocol, count: int): seq[Node] =
+proc randomNodes*(d: DiscoveryV4, count: int): seq[Node] =
   d.kademlia.randomNodes(count)
 
 when isMainModule:
@@ -397,7 +397,7 @@ when isMainModule:
   let listenPort = Port(30310)
   var address = Address(udpPort: listenPort, tcpPort: listenPort)
   address.ip.family = IpAddressFamily.IPv4
-  let discovery = newDiscoveryProtocol(privKey, address, nodes, bindPort = listenPort)
+  let discovery = newDiscoveryV4(privKey, address, nodes, bindPort = listenPort)
 
   echo discovery.localNode.node.pubkey
   echo "this_node.id: ", discovery.localNode.id.toHex()

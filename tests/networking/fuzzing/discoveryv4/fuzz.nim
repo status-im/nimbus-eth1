@@ -15,7 +15,7 @@ import
   ../../p2p_test_helper
 
 const DefaultListeningPort = 30303
-var targetNode: DiscoveryProtocol
+var targetNode: DiscoveryV4
 
 proc packData(payload: openArray[byte], pk: PrivateKey): seq[byte] =
   let
@@ -29,7 +29,7 @@ init:
   var
     targetNodeKey = PrivateKey.fromHex("a2b50376a79b1a8c8a3296485572bdfbf54708bb46d3c25d73d2723aaaf6a617")[]
     targetNodeAddr = localAddress(DefaultListeningPort)
-  targetNode = newDiscoveryProtocol(
+  targetNode = newDiscoveryV4(
     targetNodeKey, targetNodeAddr, @[], Port(DefaultListeningPort))
   # Create the transport as else replies on the messages send will fail.
   targetNode.open()

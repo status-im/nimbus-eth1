@@ -22,65 +22,11 @@ export
 logScope:
   topics = "p2p"
 
-proc addCapability*(node: EthereumNode,
-                    p: ProtocolInfo,
-                    networkState: RootRef = nil) =
-  doAssert node.connectionState == ConnectionState.None
-
-  let pos = lowerBound(node.protocols, p, rlpx.cmp)
-  node.protocols.insert(p, pos)
-  node.capabilities.insert(p.capability, pos)
-
-  if p.networkStateInitializer != nil and networkState.isNil:
-    node.protocolStates[p.index] = p.networkStateInitializer(node)
-
-  if networkState.isNil.not:
-    node.protocolStates[p.index] = networkState
-
-template addCapability*(node: EthereumNode, Protocol: type) =
-  addCapability(node, Protocol.protocolInfo)
-
-template addCapability*(node: EthereumNode,
-                        Protocol: type,
-                        networkState: untyped) =
-  mixin NetworkState
-  type
-    ParamType = type(networkState)
-
-  when ParamType isnot Protocol.NetworkState:
-    const errMsg = "`$1` is not compatible with `$2`" % [
-      name(ParamType), name(Protocol.NetworkState)]
-    {. error: errMsg .}
-
-  addCapability(node, Protocol.protocolInfo,
-    cast[RootRef](networkState))
-
-proc replaceNetworkState*(node: EthereumNode,
-                          p: ProtocolInfo,
-                          networkState: RootRef) =
-  node.protocolStates[p.index] = networkState
-
-template replaceNetworkState*(node: EthereumNode,
-                              Protocol: type,
-                              networkState: untyped) =
-  mixin NetworkState
-  type
-    ParamType = type(networkState)
-
-  when ParamType isnot Protocol.NetworkState:
-    const errMsg = "`$1` is not compatible with `$2`" % [
-      name(ParamType), name(Protocol.NetworkState)]
-    {. error: errMsg .}
-
-  replaceNetworkState(node, Protocol.protocolInfo,
-    cast[RootRef](networkState))
-
 proc newEthereumNode*(
     keys: KeyPair,
     address: Address,
     networkId: NetworkId,
     clientId = "nim-eth-p2p",
-    addAllCapabilities = true,
     minPeers = 10,
     bootstrapNodes: seq[ENode] = @[],
     bindUdpPort: Port,
@@ -89,7 +35,7 @@ proc newEthereumNode*(
     rng = newRng()): EthereumNode =
 
   if rng == nil: # newRng could fail
-    raise (ref Defect)(msg: "Cannot initialize RNG")
+    raiseAssert "Cannot initialize RNG"
 
   new result
   result.keys = keys
@@ -101,21 +47,13 @@ proc newEthereumNode*(
   result.connectionState = ConnectionState.None
   result.bindIp = bindIp
   result.bindPort = bindTcpPort
+  result.rng = rng
 
-  result.discovery = newDiscoveryProtocol(
+  let discv4 = newDiscoveryV4(
     keys.seckey, address, bootstrapNodes, bindUdpPort, bindIp, rng)
 
-  result.rng = rng
-  result.protocolStates.newSeq protocolCount()
-
-  result.peerPool = newPeerPool(
-    result, networkId, keys, nil, clientId, minPeers = minPeers)
-
-  result.peerPool.discovery = result.discovery
-
-  if addAllCapabilities:
-    for cap in protocols():
-      result.addCapability(cap)
+  result.peerPool = newPeerPool[EthereumNode](
+    result, discv4, minPeers = minPeers)
 
 proc processIncoming(server: StreamServer,
                      remote: StreamTransport): Future[void] {.async: (raises: []).} =
@@ -154,8 +92,8 @@ proc connectToNetwork*(
     p2p.startListening(node)
 
   if enableDiscovery:
-    node.discovery.open()
-    await node.discovery.bootstrap()
+    node.peerPool.discv4.open()
+    await node.peerPool.discv4.bootstrap()
     node.peerPool.start()
   else:
     info "Discovery disabled"
@@ -175,57 +113,6 @@ iterator peers*(node: EthereumNode, Protocol: type): Peer =
   for peer in node.peerPool.peers(Protocol):
     yield peer
 
-iterator protocolPeers*(node: EthereumNode, Protocol: type): auto =
-  mixin state
-  for peer in node.peerPool.peers(Protocol):
-    yield peer.state(Protocol)
-
-iterator randomPeers*(node: EthereumNode, maxPeers: int): Peer =
-  # TODO: this can be implemented more efficiently
-
-  # XXX: this doesn't compile, why?
-  # var peer = toSeq node.peers
-  var peers = newSeqOfCap[Peer](node.peerPool.connectedNodes.len)
-  for peer in node.peers: peers.add(peer)
-
-  shuffle(peers)
-  for i in 0 ..< min(maxPeers, peers.len):
-    yield peers[i]
-
-proc randomPeer*(node: EthereumNode): Peer =
-  let peerIdx = rand(node.peerPool.connectedNodes.len)
-  var i = 0
-  for peer in node.peers:
-    if i == peerIdx: return peer
-    inc i
-
-iterator randomPeers*(node: EthereumNode, maxPeers: int, Protocol: type): Peer =
-  var peers = newSeqOfCap[Peer](node.peerPool.connectedNodes.len)
-  for peer in node.peers(Protocol):
-    peers.add(peer)
-  shuffle(peers)
-  if peers.len > maxPeers: peers.setLen(maxPeers)
-  for p in peers: yield p
-
-proc randomPeerWith*(node: EthereumNode, Protocol: type): Peer =
-  var candidates = newSeq[Peer]()
-  for p in node.peers(Protocol):
-    candidates.add(p)
-  if candidates.len > 0:
-    return candidates.rand()
-
-iterator randomPeersWith*(node: EthereumNode, Protocol: type): Peer =
-  var peers = newSeqOfCap[Peer](node.peerPool.connectedNodes.len)
-  for peer in node.peers(Protocol):
-    peers.add(peer)
-  shuffle(peers)
-  for p in peers: yield p
-
-proc getPeer*(node: EthereumNode, peerId: NodeId, Protocol: type): Opt[Peer] =
-  for peer in node.peers(Protocol):
-    if peer.remote.id == peerId:
-      return some(peer)
-
 proc connectToNode*(node: EthereumNode, n: Node) {.async.} =
   await node.peerPool.connectToNode(n)
 
@@ -235,15 +122,36 @@ proc connectToNode*(node: EthereumNode, n: ENode) {.async.} =
 func numPeers*(node: EthereumNode): int =
   node.peerPool.numPeers
 
-func hasPeer*(node: EthereumNode, n: ENode): bool =
-  n in node.peerPool
-
-func hasPeer*(node: EthereumNode, n: Node): bool =
-  n in node.peerPool
-
-func hasPeer*(node: EthereumNode, n: Peer): bool =
-  n in node.peerPool
-
 proc closeWait*(node: EthereumNode) {.async.} =
   node.stopListening()
   await node.listeningServer.closeWait()
+
+proc addCapability*(node: EthereumNode,
+                    p: ProtocolInfo,
+                    networkState: RootRef = nil) =
+  doAssert node.connectionState == ConnectionState.None
+
+  let pos = lowerBound(node.protocols, p, rlpx.cmp)
+  node.protocols.insert(p, pos)
+  node.capabilities.insert(p.capability, pos)
+
+  if p.networkStateInitializer != nil and networkState.isNil:
+    node.networkStates[p.index] = p.networkStateInitializer(node)
+
+  if networkState.isNil.not:
+    node.networkStates[p.index] = networkState
+
+template addCapability*(node: EthereumNode,
+                        Protocol: type,
+                        networkState: untyped) =
+  mixin NetworkState
+  type
+    ParamType = type(networkState)
+
+  when ParamType isnot Protocol.NetworkState:
+    const errMsg = "`$1` is not compatible with `$2`" % [
+      name(ParamType), name(Protocol.NetworkState)]
+    {. error: errMsg .}
+
+  addCapability(node, Protocol.protocolInfo,
+    cast[RootRef](networkState))

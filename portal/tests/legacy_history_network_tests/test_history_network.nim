@@ -23,7 +23,7 @@ import
   ./test_history_util
 
 type HistoryNode = ref object
-  discoveryProtocol*: discv5_protocol.Protocol
+  discv5*: discv5_protocol.Protocol
   historyNetwork*: LegacyHistoryNetwork
 
 proc newHistoryNode(
@@ -43,20 +43,20 @@ proc newHistoryNode(
       PortalNetwork.none, node, db, streamManager, cfg, accumulator
     )
 
-  return HistoryNode(discoveryProtocol: node, historyNetwork: historyNetwork)
+  return HistoryNode(discv5: node, historyNetwork: historyNetwork)
 
 proc portalProtocol(hn: HistoryNode): PortalProtocol =
   hn.historyNetwork.portalProtocol
 
 proc localNode(hn: HistoryNode): Node =
-  hn.discoveryProtocol.localNode
+  hn.discv5.localNode
 
 proc start(hn: HistoryNode) =
   hn.historyNetwork.start()
 
 proc stop(hn: HistoryNode) {.async.} =
   discard hn.historyNetwork.stop()
-  await hn.discoveryProtocol.closeWait()
+  await hn.discv5.closeWait()
 
 proc containsId(hn: HistoryNode, contentId: ContentId): bool =
   hn.historyNetwork.contentDB.contains(contentId)

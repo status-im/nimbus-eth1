@@ -27,8 +27,8 @@ proc localAddress(port: int): Address =
 
 proc initDiscoveryNode(
     privKey: PrivateKey, address: Address,
-    bootnodes: seq[ENode]): DiscoveryProtocol =
-  let node = newDiscoveryProtocol(privKey, address, bootnodes, address.udpPort)
+    bootnodes: seq[ENode]): DiscoveryV4 =
+  let node = newDiscoveryV4(privKey, address, bootnodes, address.udpPort)
   node.open()
 
   return node
@@ -63,7 +63,7 @@ procSuite "Discovery Tests":
         "a2b50376a79b1a8c8a3296485572bdfbf54708bb46d3c25d73d2723aaaf6a620")[]
     ]
 
-    var nodes: seq[DiscoveryProtocol]
+    var nodes: seq[DiscoveryV4]
     for i in 0..<nodeKeys.len:
       let node = initDiscoveryNode(nodeKeys[i], localAddress(20302 + i),
         @[bootENode])
