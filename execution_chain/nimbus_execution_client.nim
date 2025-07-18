@@ -137,10 +137,11 @@ proc setupP2P(nimbus: NimbusNode, conf: NimbusConf,
 
   # Start Eth node
   if conf.maxPeers > 0:
-    nimbus.networkLoop = nimbus.ethNode.connectToNetwork(
-      enableDiscovery = conf.discovery != DiscoveryType.None,
-      waitForPeers = true)
-
+    let discovery = conf.getDiscoveryFlags()
+    nimbus.ethNode.connectToNetwork(
+      enableDiscV4 = DiscoveryType.V4 in discovery,
+      enableDiscV5 = DiscoveryType.V5 in discovery,
+    )
 
 proc setupMetrics(nimbus: NimbusNode, conf: NimbusConf)
     {.raises: [CancelledError, MetricsError].} =
@@ -294,7 +295,7 @@ proc run(nimbus: NimbusNode, conf: NimbusConf) =
         discard e # silence warning when chronicles not activated
 
     # Stop loop
-    waitFor nimbus.stop(conf)
+    waitFor nimbus.closeWait()
 
 when isMainModule:
   var nimbus = NimbusNode(state: NimbusState.Starting, ctx: newEthContext())
