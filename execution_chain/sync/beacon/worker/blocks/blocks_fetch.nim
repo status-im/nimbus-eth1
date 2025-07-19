@@ -55,73 +55,78 @@ proc getBlockBodiesCB*(
 # Public functions
 # ------------------------------------------------------------------------------
 
-proc fetchBodies*(
+template fetchBodies*(
     buddy: BeaconBuddyRef;
     request: BlockBodiesRequest;
     info: static[string];
-      ): Future[Result[seq[BlockBody],void]]
-      {.async: (raises: []).} =
+      ): Opt[seq[BlockBody]] =
+  ## Async/template
+  ##
   ## Fetch bodies from the network.
+  ##
   let
     peer = buddy.peer
     nReq = request.blockHashes.len
 
-  trace trEthSendSendingGetBlockBodies,
-    peer, nReq, bdyErrors=buddy.bdyErrors
+  var bodyRc = Opt[seq[BlockBody]].err()
+  block body:
+    trace trEthSendSendingGetBlockBodies,
+      peer, nReq, bdyErrors=buddy.bdyErrors
 
-  let rc = await buddy.ctx.handler.getBlockBodies(buddy, request)
-  var elapsed: Duration
-  if rc.isOk:
-    elapsed = rc.value.elapsed
-  else:
-    elapsed = rc.error.elapsed
-    block evalError:
-      case rc.error.excp:
-      of ENoException:
-        break evalError
-      of EPeerDisconnected, ECancelledError:
-        buddy.only.nRespErrors.blk.inc
-        buddy.ctrl.zombie = true
-      of ECatchableError:
-        buddy.bdyFetchRegisterError()
+    let rc = await buddy.ctx.handler.getBlockBodies(buddy, request)
+    var elapsed: Duration
+    if rc.isOk:
+      elapsed = rc.value.elapsed
+    else:
+      elapsed = rc.error.elapsed
+      block evalError:
+        case rc.error.excp:
+        of ENoException:
+          break evalError
+        of EPeerDisconnected, ECancelledError:
+          buddy.only.nRespErrors.blk.inc
+          buddy.ctrl.zombie = true
+        of ECatchableError:
+          buddy.bdyFetchRegisterError()
 
-      info trEthRecvReceivedBlockBodies & " error", peer, nReq,
-        elapsed=rc.error.elapsed.toStr, syncState=($buddy.syncState),
-        error=rc.error.name, msg=rc.error.msg, bdyErrors=buddy.bdyErrors
-      return err()
+        chronicles.info trEthRecvReceivedBlockBodies & " error", peer, nReq,
+          elapsed=rc.error.elapsed.toStr, syncState=($buddy.syncState),
+          error=rc.error.name, msg=rc.error.msg, bdyErrors=buddy.bdyErrors
+        break body                                  # return err()
 
-  # Evaluate result
-  if rc.isErr or buddy.ctrl.stopped:
-    buddy.bdyFetchRegisterError()
-    trace trEthRecvReceivedBlockBodies, peer, nReq, nResp=0,
-      elapsed=elapsed.toStr, syncState=($buddy.syncState),
-      bdyErrors=buddy.bdyErrors
-    return err()
+    # Evaluate result
+    if rc.isErr or buddy.ctrl.stopped:
+      buddy.bdyFetchRegisterError()
+      trace trEthRecvReceivedBlockBodies, peer, nReq, nResp=0,
+        elapsed=elapsed.toStr, syncState=($buddy.syncState),
+        bdyErrors=buddy.bdyErrors
+      break body                                    # return err()
 
-  let b = rc.value.packet.bodies
-  if b.len == 0 or nReq < b.len:
-    buddy.bdyFetchRegisterError()
+    let b = rc.value.packet.bodies
+    if b.len == 0 or nReq < b.len:
+      buddy.bdyFetchRegisterError()
+      trace trEthRecvReceivedBlockBodies, peer, nReq, nResp=b.len,
+        elapsed=elapsed.toStr, syncState=($buddy.syncState),
+        nRespErrors=buddy.only.nRespErrors.blk
+      break body                                    # return err()
+
+    # Ban an overly slow peer for a while when seen in a row. Also there is a
+    # mimimum share of the number of requested headers expected, typically 10%.
+    if fetchBodiesErrTimeout < elapsed or
+       b.len.uint64 * 100 < nReq.uint64 * fetchBodiesMinResponsePC:
+      buddy.bdyFetchRegisterError(slowPeer=true)
+    else:
+      buddy.only.nRespErrors.blk = 0                # reset error count
+      buddy.ctx.pool.lastSlowPeer = Opt.none(Hash)  # not last one or not error
+
     trace trEthRecvReceivedBlockBodies, peer, nReq, nResp=b.len,
       elapsed=elapsed.toStr, syncState=($buddy.syncState),
-      nRespErrors=buddy.only.nRespErrors.blk
-    return err()
+      bdyErrors=buddy.bdyErrors
 
-  # Ban an overly slow peer for a while when seen in a row. Also there is a
-  # mimimum share of the number of requested headers expected, typically 10%.
-  if fetchBodiesErrTimeout < elapsed or
-     b.len.uint64 * 100 < nReq.uint64 * fetchBodiesMinResponsePC:
-    buddy.bdyFetchRegisterError(slowPeer=true)
-  else:
-    buddy.only.nRespErrors.blk = 0                  # reset error count
-    buddy.ctx.pool.lastSlowPeer = Opt.none(Hash)    # not last one or not error
+    bodyRc = Opt[seq[BlockBody]].ok(b)
 
-  trace trEthRecvReceivedBlockBodies, peer, nReq, nResp=b.len,
-    elapsed=elapsed.toStr, syncState=($buddy.syncState),
-    bdyErrors=buddy.bdyErrors
-
-  return ok(b)
+  bodyRc # return
 
 # ------------------------------------------------------------------------------
 # End
 # ------------------------------------------------------------------------------
-

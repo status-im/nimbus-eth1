@@ -452,6 +452,7 @@ proc waitForSyncedEnv*(
   ## ..
   ##
   let
+    ctx = desc.run.ctx
     run = desc.run
     serial = instr.serial
 
@@ -475,9 +476,32 @@ proc waitForSyncedEnv*(
           if (count mod 1111) != 0:             # for logging/debugging only
             break noiseCtrl                     # for logging/debugging only
           trace info & "polling for sync", n=run.instrNumber, serial, peer, count
-        desc.checkSyncerState(instr, info)
+          desc.checkSyncerState(instr, info)
 
-      return serial == run.instrNumber,
+      if serial != run.instrNumber:
+        return false
+
+      if instr.hdrUnprChunks != ctx.hdr.unprocessed.chunks().uint:
+        return false
+      if 0 < instr.hdrUnprChunks:
+        if instr.hdrUnprLen != ctx.hdr.unprocessed.total():
+          return false
+        let iv = ctx.hdr.unprocessed.le().expect "valid iv"
+        if instr.hdrUnprLast != iv.maxPt or
+           instr.hdrUnprLastLen != iv.len:
+          return false
+
+      if instr.blkUnprChunks != ctx.blk.unprocessed.chunks().uint:
+        return false
+      if 0 < instr.blkUnprChunks:
+        if instr.blkUnprLen != ctx.blk.unprocessed.total():
+          return false
+        let iv = ctx.blk.unprocessed.ge().expect "valid iv"
+        if instr.blkUnprLeast != iv.minPt or
+           instr.blkUnprLeastLen != iv.len:
+          return false
+
+      return true,
 
     info)).isOkOr:
       trace info & "process sync error", n=run.instrNumber, serial, peer,

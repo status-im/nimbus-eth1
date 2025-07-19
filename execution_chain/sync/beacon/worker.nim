@@ -119,7 +119,7 @@ proc runDaemon*(
   if ctx.blocksUnstageOk():
 
     # Import bodies from the `staged` queue.
-    discard await ctx.blocksUnstage info
+    discard ctx.blocksUnstage info # async/template
 
     if not ctx.daemon or   # Implied by external sync shutdown?
        ctx.poolMode:       # Oops, re-org needed?
@@ -170,7 +170,7 @@ proc runPeer*(
       # Collect headers and either stash them on the header chain cache
       # directly, or stage on the header queue to get them serialised and
       # stashed, later.
-      await buddy.headersCollect info
+      buddy.headersCollect info # async/template
 
       # Store serialised headers from the `staged` queue onto the header
       # chain cache.
@@ -187,10 +187,10 @@ proc runPeer*(
 
       # Collect bodies and either import them via `FC` module, or stage on
       # the blocks queue to get them serialised and imported, later.
-      await buddy.blocksCollect info
+      buddy.blocksCollect info # async/template
 
       # Import bodies from the `staged` queue.
-      if not await buddy.blocksUnstage info:
+      if not buddy.blocksUnstage info: # async/template
         # Need to proceed with another peer (e.g. gap between top imported
         # block and blocks queue.)
         break

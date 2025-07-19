@@ -15,9 +15,11 @@
 import
   std/[strformat, strutils],
   pkg/[chronos, eth/common],
+  ../trace/trace_start_stop/handlers/helpers as trace_helpers,
   ../worker/helpers as worker_helpers
 
 export
+  trace_helpers.short,
   worker_helpers
 
 # ------------------------------------------------------------------------------
@@ -67,9 +69,6 @@ func toUpperFirst*(w: string): string =
     $w[0].toUpperAscii & w.substr(1)
   else:
     w
-
-func short*(w: Hash): string =
-  &"{w:x}"
 
 # ------------------------------------------------------------------------------
 # End
