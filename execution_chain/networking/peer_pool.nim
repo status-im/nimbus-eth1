@@ -13,10 +13,10 @@
 {.push raises: [].}
 
 import
-  std/[os, tables, times, random, options],
+  std/[os, tables, times, sets],
   chronos, chronicles,
   ./p2p_metrics,
-  ./[discoveryv4, p2p_peers]
+  ./[eth1_discovery, p2p_peers]
 
 logScope:
   topics = "p2p peer_pool"
@@ -26,6 +26,8 @@ type
     nodeId: NodeId
     stamp: chronos.Moment
 
+  WorkerFuture = Future[void].Raising([CancelledError])
+
   # Usually Network generic param is instantiated with EthereumNode
   PeerPoolRef*[Network] = ref object
     network: Network
@@ -34,7 +36,8 @@ type
     connQueue: AsyncQueue[Node]
     seenTable: Table[NodeId, SeenNode]
     running: bool
-    discv4*: DiscoveryV4
+    discovery: Eth1Discovery
+    workers: seq[WorkerFuture]
     connectingNodes*: HashSet[Node]
     connectedNodes*: Table[Node, PeerRef[Network]]
     observers*: Table[int, PeerObserverRef[Network]]
@@ -60,6 +63,9 @@ const
   ## Period of time for peers with general disconnections / transport errors.
   SeenTableTimeReconnect = chronos.minutes(5)
 
+#------------------------------------------------------------------------------
+# Private functions
+#------------------------------------------------------------------------------
 
 proc isSeen(p: PeerPoolRef, nodeId: NodeId): bool =
   ## Returns ``true`` if ``nodeId`` present in SeenTable and time period is not
@@ -87,22 +93,124 @@ proc addSeen(
   do:
     p.seenTable[nodeId] = item
 
+proc connect[Network](p: PeerPoolRef[Network], remote: Node): Future[PeerRef[Network]] {.async: (raises: [CancelledError]).} =
+  ## Connect to the given remote and return a Peer instance when successful.
+  ## Returns nil if the remote is unreachable, times out or is useless.
+  if remote in p.connectedNodes:
+    trace "skipping_connection_to_already_connected_peer", remote
+    return nil
+
+  if remote in p.connectingNodes:
+    # debug "skipping connection"
+    return nil
+
+  if p.isSeen(remote.id):
+    return nil
+
+  trace "Connecting to node", remote
+  p.connectingNodes.incl(remote)
+  let res = await p.network.rlpxConnect(remote)
+  p.connectingNodes.excl(remote)
+
+  # TODO: Probably should move all this logic to rlpx.nim
+  if res.isOk():
+    rlpx_connect_success.inc()
+    return res.get()
+  else:
+    rlpx_connect_failure.inc()
+    rlpx_connect_failure.inc(labelValues = [$res.error])
+    case res.error():
+    of UselessRlpxPeerError:
+      p.addSeen(remote.id, SeenTableTimeUselessPeer)
+    of TransportConnectError:
+      p.addSeen(remote.id, SeenTableTimeDeadPeer)
+    of RlpxHandshakeError, ProtocolError, InvalidIdentityError:
+      p.addSeen(remote.id, SeenTableTimeProtocolError)
+    of RlpxHandshakeTransportError,
+        P2PHandshakeError,
+        P2PTransportError,
+        PeerDisconnectedError,
+        TooManyPeersError:
+      p.addSeen(remote.id, SeenTableTimeReconnect)
+
+    return nil
+
+proc connectToNode*(p: PeerPoolRef, n: Node) {.async: (raises: [CancelledError]).}
+
+# This code is loosely based on code from nimbus-eth2;
+# see eth2_network.nim and search for connQueue.
+proc createConnectionWorker(p: PeerPoolRef, workerId: int): Future[void] {.async: (raises: [CancelledError]).} =
+  trace "Connection worker started", workerId = workerId
+  while true:
+    let n = await p.connQueue.popFirst()
+    await connectToNode(p, n)
+
+proc maybeConnectToMorePeers(p: PeerPoolRef) {.async: (raises: [CancelledError]).} =
+  ## Connect to more peers if we're not yet connected to at least self.minPeers.
+  if p.connectedNodes.len >= p.minPeers:
+    # debug "pool already connected to enough peers (sleeping)", count = p.connectedNodes
+    return
+
+  if p.lastLookupTime + lookupInterval < epochTime():
+    # Add nodes to connQueue from discovery protocol,
+    # to be later processed by connection worker
+    await p.discovery.lookupRandomNode(p.connQueue)
+    p.lastLookupTime = epochTime()
+
+  let debugEnode = getEnv("ETH_DEBUG_ENODE")
+  if debugEnode.len != 0:
+    await p.connectToNode(newNode(debugEnode))
+
+  # The old version of the code (which did all the connection
+  # attempts in serial, not parallel) actually *awaited* all
+  # the connection attempts before reaching the code at the
+  # end of this proc that tries a random bootnode. Should
+  # that still be what happens? I don't think so; one of the
+  # reasons we're doing the connection attempts concurrently
+  # is because sometimes the attempt takes a long time. Still,
+  # it seems like we should give the many connection attempts
+  # a *chance* to complete before moving on to trying a random
+  # bootnode. So let's try just waiting a few seconds. (I am
+  # really not sure this makes sense.)
+  #
+  # --Adam, Dec. 2022
+  await sleepAsync(sleepBeforeTryingARandomBootnode)
+
+  # In some cases (e.g ROPSTEN or private testnets), the discovery table might
+  # be full of bad peers, so if we can't connect to any peers we try a random
+  # bootstrap node as well.
+  if p.connectedNodes.len > 0:
+    return
+
+  let n = p.discovery.getRandomBootnode().valueOr:
+    return
+  await p.connectToNode(n)
+
+proc run(p: PeerPoolRef) {.async: (raises: [CancelledError]).} =
+  trace "Running PeerPool..."
+
+  await p.discovery.start()
+  p.running = true
+  while p.running:
+    debug "Amount of peers", amount = p.connectedNodes.len()
+    await p.maybeConnectToMorePeers()
+    await sleepAsync(connectLoopSleep)
+
+#------------------------------------------------------------------------------
+# Private functions
+#------------------------------------------------------------------------------
+
 func newPeerPool*[Network](
     network: Network,
-    discv4: DiscoveryV4, minPeers = 10): PeerPoolRef[Network] =
+    discovery: Eth1Discovery, minPeers = 10): PeerPoolRef[Network] =
   new result
   result.network = network
   result.minPeers = minPeers
-  result.discv4 = discv4
+  result.discovery = discovery
   result.connQueue = newAsyncQueue[Node](maxConcurrentConnectionRequests)
   result.connectedNodes = initTable[Node, PeerRef[Network]]()
   result.connectingNodes = initHashSet[Node]()
   result.observers = initTable[int, PeerObserverRef[Network]]()
-
-iterator nodesToConnect(p: PeerPoolRef): Node =
-  for node in p.discv4.randomNodes(p.minPeers):
-    if node notin p.discv4.bootstrapNodes:
-      yield node
 
 proc addObserver*(p: PeerPoolRef, observerId: int, observer: PeerObserverRef) =
   doAssert(observerId notin p.observers)
@@ -149,60 +257,6 @@ func contains*(p: PeerPoolRef, n: Node): bool =
 func contains*(p: PeerPoolRef, n: PeerRef): bool =
   n.remote in p.connectedNodes
 
-proc stopAllPeers(p: PeerPoolRef) {.async.} =
-  debug "Stopping all peers ..."
-
-
-proc connect[Network](p: PeerPoolRef[Network], remote: Node): Future[PeerRef[Network]] {.async.} =
-  ## Connect to the given remote and return a Peer instance when successful.
-  ## Returns nil if the remote is unreachable, times out or is useless.
-  if remote in p.connectedNodes:
-    trace "skipping_connection_to_already_connected_peer", remote
-    return nil
-
-  if remote in p.connectingNodes:
-    # debug "skipping connection"
-    return nil
-
-  if p.isSeen(remote.id):
-    return nil
-
-  trace "Connecting to node", remote
-  p.connectingNodes.incl(remote)
-  let res = await p.network.rlpxConnect(remote)
-  p.connectingNodes.excl(remote)
-
-  # TODO: Probably should move all this logic to rlpx.nim
-  if res.isOk():
-    rlpx_connect_success.inc()
-    return res.get()
-  else:
-    rlpx_connect_failure.inc()
-    rlpx_connect_failure.inc(labelValues = [$res.error])
-    case res.error():
-    of UselessRlpxPeerError:
-      p.addSeen(remote.id, SeenTableTimeUselessPeer)
-    of TransportConnectError:
-      p.addSeen(remote.id, SeenTableTimeDeadPeer)
-    of RlpxHandshakeError, ProtocolError, InvalidIdentityError:
-      p.addSeen(remote.id, SeenTableTimeProtocolError)
-    of RlpxHandshakeTransportError,
-        P2PHandshakeError,
-        P2PTransportError,
-        PeerDisconnectedError,
-        TooManyPeersError:
-      p.addSeen(remote.id, SeenTableTimeReconnect)
-
-    return nil
-
-proc lookupRandomNode(p: PeerPoolRef) {.async.} =
-  discard await p.discv4.lookupRandom()
-  p.lastLookupTime = epochTime()
-
-proc getRandomBootnode(p: PeerPoolRef): Option[Node] =
-  if p.discv4.bootstrapNodes.len != 0:
-    result = option(p.discv4.bootstrapNodes.sample())
-
 proc addPeer*(pool: PeerPoolRef, peer: PeerRef) {.gcsafe.} =
   doAssert(peer.remote notin pool.connectedNodes)
   pool.connectedNodes[peer.remote] = peer
@@ -212,102 +266,38 @@ proc addPeer*(pool: PeerPoolRef, peer: PeerRef) {.gcsafe.} =
       if observer.protocols.len == 0 or peer.supports(observer.protocols):
         observer.onPeerConnected(peer)
 
-proc connectToNode*(p: PeerPoolRef, n: Node) {.async.} =
+proc connectToNode*(p: PeerPoolRef, n: Node) {.async: (raises: [CancelledError]).} =
   let peer = await p.connect(n)
   if not peer.isNil:
     trace "Connection established (outgoing)", peer
     p.addPeer(peer)
 
-proc connectToNode*(p: PeerPoolRef, n: ENode) {.async.} =
+proc connectToNode*(p: PeerPoolRef, n: ENode) {.async: (raises: [CancelledError]).} =
   await p.connectToNode(newNode(n))
 
-
-# This code is loosely based on code from nimbus-eth2;
-# see eth2_network.nim and search for connQueue.
-proc createConnectionWorker(p: PeerPoolRef, workerId: int): Future[void] {.async.} =
-  trace "Connection worker started", workerId = workerId
-  while true:
-    let n = await p.connQueue.popFirst()
-    await connectToNode(p, n)
-
-    # # TODO: Consider changing connect() to raise an exception instead of
-    # # returning None, as discussed in
-    # # https://github.com/ethereum/py-evm/pull/139#discussion_r152067425
-    # echo "Connecting to node: ", node
-    # let peer = await p.connect(node)
-    # if not peer.isNil:
-    #   info "Successfully connected to ", peer
-    #   ensureFuture peer.run(p)
-
-    #   p.connectedNodes[peer.remote] = peer
-    #   # for subscriber in self._subscribers:
-    #   #   subscriber.register_peer(peer)
-    #   if p.connectedNodes.len >= p.minPeers:
-    #     return
-
-proc startConnectionWorkerPool(p: PeerPoolRef, workerCount: int) =
-  for i in 0 ..< workerCount:
-    asyncSpawn createConnectionWorker(p, i)
-
-proc maybeConnectToMorePeers(p: PeerPoolRef) {.async.} =
-  ## Connect to more peers if we're not yet connected to at least self.minPeers.
-  if p.connectedNodes.len >= p.minPeers:
-    # debug "pool already connected to enough peers (sleeping)", count = p.connectedNodes
+proc start*(p: PeerPoolRef, enableDiscV4: bool, enableDiscV5: bool) =
+  if p.running:
     return
 
-  if p.lastLookupTime + lookupInterval < epochTime():
-    asyncSpawn p.lookupRandomNode()
+  try:
+    p.discovery.open(enableDiscV4, enableDiscV5)
+  except TransportOsError as exc:
+    error "Cannot start discovery protocol", msg=exc.msg
+    return
 
-  let debugEnode = getEnv("ETH_DEBUG_ENODE")
-  if debugEnode.len != 0:
-    await p.connectToNode(newNode(debugEnode))
-  else:
-    for n in p.nodesToConnect():
-      await p.connQueue.addLast(n)
+  var workers = newSeqOfCap[WorkerFuture](maxConcurrentConnectionRequests+1)
+  for i in 0 ..< maxConcurrentConnectionRequests:
+    workers.add createConnectionWorker(p, i)
 
-    # The old version of the code (which did all the connection
-    # attempts in serial, not parallel) actually *awaited* all
-    # the connection attempts before reaching the code at the
-    # end of this proc that tries a random bootnode. Should
-    # that still be what happens? I don't think so; one of the
-    # reasons we're doing the connection attempts concurrently
-    # is because sometimes the attempt takes a long time. Still,
-    # it seems like we should give the many connection attempts
-    # a *chance* to complete before moving on to trying a random
-    # bootnode. So let's try just waiting a few seconds. (I am
-    # really not sure this makes sense.)
-    #
-    # --Adam, Dec. 2022
-    await sleepAsync(sleepBeforeTryingARandomBootnode)
+  workers.add p.run()
+  p.workers = move(workers)
 
-  # In some cases (e.g ROPSTEN or private testnets), the discovery table might
-  # be full of bad peers, so if we can't connect to any peers we try a random
-  # bootstrap node as well.
-  if p.connectedNodes.len == 0 and (let n = p.getRandomBootnode(); n.isSome):
-    await p.connectToNode(n.get())
-
-proc run(p: PeerPoolRef) {.async.} =
-  trace "Running PeerPoolRef..."
-  p.running = true
-  p.startConnectionWorkerPool(maxConcurrentConnectionRequests)
-  while p.running:
-
-    debug "Amount of peers", amount = p.connectedNodes.len()
-    var dropConnections = false
-    try:
-      await p.maybeConnectToMorePeers()
-    except CatchableError as e:
-      # Most unexpected errors should be transient, so we log and restart from
-      # scratch.
-      error "Unexpected PeerPoolRef error, restarting",
-        err = e.msg, stackTrace = e.getStackTrace()
-      dropConnections = true
-
-    if dropConnections:
-      await p.stopAllPeers()
-
-    await sleepAsync(connectLoopSleep)
-
-proc start*(p: PeerPoolRef) =
+proc closeWait*(p: PeerPoolRef) {.async: (raises: []).} =
   if not p.running:
-    asyncSpawn p.run()
+    return
+  p.running = false
+  var futures = newSeqOfCap[Future[void]](p.workers.len)
+  for worker in p.workers:
+    futures.add worker.cancelAndWait()
+  await noCancel(allFutures(futures))
+  await p.discovery.closeWait()

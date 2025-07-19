@@ -12,7 +12,6 @@
 import
   chronos,
   eth/common/[base, keys],
-  ./discoveryv4,
   ./rlpx/rlpxtransport,
   ./discoveryv4/[enode, kademlia],
   ./p2p_peers,

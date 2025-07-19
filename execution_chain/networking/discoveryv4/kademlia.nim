@@ -354,21 +354,21 @@ proc newKademliaProtocol*[Wire](
   result.routing.init(thisNode)
   result.rng = rng
 
-proc bond(k: KademliaProtocol, n: Node): Future[bool] {.async.}
-proc bondDiscard(k: KademliaProtocol, n: Node) {.async.}
+proc bond(k: KademliaProtocol, n: Node): Future[bool] {.async: (raises: [ValueError, CancelledError]).}
+proc bondDiscard(k: KademliaProtocol, n: Node) {.async: (raises: [ValueError, CancelledError]).}
 
 proc updateRoutingTable(k: KademliaProtocol, n: Node)
     {.raises: [ValueError], gcsafe.} =
   ## Update the routing table entry for the given node.
   let evictionCandidate = k.routing.addNode(n)
   if not evictionCandidate.isNil:
-      # This means we couldn't add the node because its bucket is full, so schedule a bond()
-      # with the least recently seen node on that bucket. If the bonding fails the node will
-      # be removed from the bucket and a new one will be picked from the bucket's
-      # replacement cache.
-      asyncSpawn k.bondDiscard(evictionCandidate)
+    # This means we couldn't add the node because its bucket is full, so schedule a bond()
+    # with the least recently seen node on that bucket. If the bonding fails the node will
+    # be removed from the bucket and a new one will be picked from the bucket's
+    # replacement cache.
+    asyncSpawn k.bondDiscard(evictionCandidate)
 
-proc doSleep(p: proc() {.gcsafe, raises: [].}) {.async.} =
+proc doSleep(p: proc() {.gcsafe, raises: [].}) {.async: (raises: [CancelledError]).} =
   await sleepAsync(REQUEST_TIMEOUT)
   p()
 
@@ -379,9 +379,12 @@ template onTimeout(b: untyped) =
 proc pingId(n: Node, token: seq[byte]): seq[byte] =
   result = token & @(n.node.pubkey.toRaw)
 
-proc waitPong(k: KademliaProtocol, n: Node, pingid: seq[byte]): Future[bool] =
+proc initFuture[T](loc: var Future[T], name: static[string]) =
+  loc = newFuture[T](name)
+
+proc waitPong(k: KademliaProtocol, n: Node, pingid: seq[byte]): Future[bool].Raising([CancelledError]) =
   doAssert(pingid notin k.pongFutures, "Already waiting for pong from " & $n)
-  result = newFuture[bool]("waitPong")
+  result.initFuture("waitPong")
   let fut = result
   k.pongFutures[pingid] = result
   onTimeout:
@@ -393,8 +396,8 @@ proc ping(k: KademliaProtocol, n: Node): seq[byte] =
   doAssert(n != k.thisNode)
   result = k.wire.sendPing(n)
 
-proc waitPing(k: KademliaProtocol, n: Node): Future[bool] =
-  result = newFuture[bool]("waitPing")
+proc waitPing(k: KademliaProtocol, n: Node): Future[bool].Raising([CancelledError]) =
+  result.initFuture("waitPing")
   doAssert(n notin k.pingFutures)
   k.pingFutures[n] = result
   let fut = result
@@ -403,9 +406,9 @@ proc waitPing(k: KademliaProtocol, n: Node): Future[bool] =
       k.pingFutures.del(n)
       fut.complete(false)
 
-proc waitNeighbours(k: KademliaProtocol, remote: Node): Future[seq[Node]] =
+proc waitNeighbours(k: KademliaProtocol, remote: Node): Future[seq[Node]].Raising([CancelledError]) =
   doAssert(remote notin k.neighboursCallbacks)
-  result = newFuture[seq[Node]]("waitNeighbours")
+  result.initFuture("waitNeighbours")
   let fut = result
   var neighbours = newSeqOfCap[Node](BUCKET_SIZE)
   k.neighboursCallbacks[remote] = proc(n: seq[Node]) {.gcsafe, raises: [].} =
@@ -428,7 +431,7 @@ proc waitNeighbours(k: KademliaProtocol, remote: Node): Future[seq[Node]] =
 
 # Exported for test.
 proc findNode*(k: KademliaProtocol, nodesSeen: ref HashSet[Node],
-               nodeId: NodeId, remote: Node): Future[seq[Node]] {.async.} =
+               nodeId: NodeId, remote: Node): Future[seq[Node]] {.async: (raises: [ValueError, CancelledError]).} =
   if remote in k.neighboursCallbacks:
     # Sometimes findNode is called while another findNode is already in flight.
     # It's a bug when this happens, and the logic should probably be fixed
@@ -450,20 +453,23 @@ proc findNode*(k: KademliaProtocol, nodesSeen: ref HashSet[Node],
     candidates.keepItIf(not nodesSeen[].containsOrIncl(it))
     trace "Got new candidates", count = candidates.len
 
-    var bondedNodes: seq[Future[bool]] = @[]
+    var bondedNodes: seq[Future[bool].Raising([ValueError, CancelledError])] = @[]
     for node in candidates:
       if node != k.thisNode:
         bondedNodes.add(k.bond(node))
 
     await allFutures(bondedNodes)
 
-    for i in 0..<bondedNodes.len:
-      let b = bondedNodes[i]
-      # `bond` will not raise so there should be no failures,
-      # and for cancellation this should be fine to raise for now.
-      doAssert(b.finished() and not(b.failed()))
-      let bonded = b.read()
-      if not bonded: candidates[i] = nil
+    try:
+      for i in 0..<bondedNodes.len:
+        let b = bondedNodes[i]
+        # `bond` will not raise so there should be no failures,
+        # and for cancellation this should be fine to raise for now.
+        doAssert(b.finished() and not(b.failed()))
+        let bonded = b.read()
+        if not bonded: candidates[i] = nil
+    except FuturePendingError:
+      raiseAssert "Future should be finished"
 
     candidates.keepItIf(not it.isNil)
     trace "Bonded with candidates", count = candidates.len
@@ -478,7 +484,7 @@ proc populateNotFullBuckets(k: KademliaProtocol) =
     for node in bucket.replacementCache:
       asyncSpawn k.bondDiscard(node)
 
-proc bond(k: KademliaProtocol, n: Node): Future[bool] {.async.} =
+proc bond(k: KademliaProtocol, n: Node): Future[bool] {.async: (raises: [ValueError, CancelledError]).} =
   ## Bond with the given node.
   ##
   ## Bonding consists of pinging the node, waiting for a pong and maybe a ping as well.
@@ -514,7 +520,7 @@ proc bond(k: KademliaProtocol, n: Node): Future[bool] {.async.} =
   k.updateRoutingTable(n)
   return true
 
-proc bondDiscard(k: KademliaProtocol, n: Node) {.async.} =
+proc bondDiscard(k: KademliaProtocol, n: Node) {.async: (raises: [ValueError, CancelledError]).} =
   discard (await k.bond(n))
 
 proc sortByDistance(nodes: var seq[Node], nodeId: NodeId, maxResults = 0) =
@@ -522,7 +528,7 @@ proc sortByDistance(nodes: var seq[Node], nodeId: NodeId, maxResults = 0) =
   if maxResults != 0 and nodes.len > maxResults:
     nodes.setLen(maxResults)
 
-proc lookup*(k: KademliaProtocol, nodeId: NodeId): Future[seq[Node]] {.async.} =
+proc lookup*(k: KademliaProtocol, nodeId: NodeId): Future[seq[Node]] {.async: (raises: [ValueError, CancelledError]).} =
   ## Lookup performs a network search for nodes close to the given target.
 
   ## It approaches the target by querying nodes that are closer to it on each iteration.  The
@@ -537,44 +543,52 @@ proc lookup*(k: KademliaProtocol, nodeId: NodeId): Future[seq[Node]] {.async.} =
   var closest = k.routing.neighbours(nodeId)
   trace "Starting lookup; initial neighbours: ", closest
   var nodesToAsk = excludeIfAsked(closest)
-  while nodesToAsk.len != 0:
-    trace "Node lookup; querying ", nodesToAsk
-    nodesAsked.incl(nodesToAsk.toHashSet())
+  try:
+    while nodesToAsk.len != 0:
+      trace "Node lookup; querying ", nodesToAsk
+      nodesAsked.incl(nodesToAsk.toHashSet())
 
-    var findNodeRequests: seq[Future[seq[Node]]] = @[]
-    for node in nodesToAsk:
-      findNodeRequests.add(k.findNode(nodesSeen, nodeId, node))
+      var findNodeRequests: seq[Future[seq[Node]].Raising([ValueError, CancelledError])] = @[]
+      for node in nodesToAsk:
+        findNodeRequests.add(k.findNode(nodesSeen, nodeId, node))
 
-    await allFutures(findNodeRequests)
+      await allFutures(findNodeRequests)
 
-    for candidates in findNodeRequests:
-      # `findNode` will not raise so there should be no failures,
-      # and for cancellation this should be fine to raise for now.
-      doAssert(candidates.finished() and not(candidates.failed()))
-      closest.add(candidates.read())
+      for candidates in findNodeRequests:
+        # `findNode` will not raise so there should be no failures,
+        # and for cancellation this should be fine to raise for now.
+        doAssert(candidates.finished() and not(candidates.failed()))
+        closest.add(candidates.read())
 
-    sortByDistance(closest, nodeId, BUCKET_SIZE)
-    nodesToAsk = excludeIfAsked(closest)
+      sortByDistance(closest, nodeId, BUCKET_SIZE)
+      nodesToAsk = excludeIfAsked(closest)
+  except FuturePendingError:
+    raiseAssert "Future should be finished"
 
   trace "Kademlia lookup finished", target = nodeId.toHex, closest
   result = closest
 
-proc lookupRandom*(k: KademliaProtocol): Future[seq[Node]] =
-  k.lookup(k.rng[].generate(NodeId))
+proc lookupRandom*(k: KademliaProtocol): Future[seq[Node]] {.async: (raises: [ValueError, CancelledError]).} =
+  await k.lookup(k.rng[].generate(NodeId))
 
-proc resolve*(k: KademliaProtocol, id: NodeId): Future[Node] {.async.} =
+proc resolve*(k: KademliaProtocol, id: NodeId): Future[Node] {.async: (raises: [ValueError, CancelledError]).} =
   let closest = await k.lookup(id)
   for n in closest:
     if n.id == id: return n
 
-proc bootstrap*(k: KademliaProtocol, bootstrapNodes: seq[Node], retries = 0) {.async.} =
+proc bootstrap*(k: KademliaProtocol, bootstrapNodes: seq[Node], retries = 0) {.async: (raises: [ValueError, CancelledError]).} =
   ## Bond with bootstrap nodes and do initial lookup. Retry `retries` times
   ## in case of failure, or indefinitely if `retries` is 0.
+  if bootstrapNodes.len == 0:
+    info "Skipping discovery bootstrap, no bootnodes provided"
+    return
+
   var retryInterval = chronos.milliseconds(2)
   var numTries = 0
-  if bootstrapNodes.len != 0:
+
+  try:
     while true:
-      var bondedNodes: seq[Future[bool]] = @[]
+      var bondedNodes: seq[Future[bool].Raising([ValueError, CancelledError])] = @[]
       for node in bootstrapNodes:
         bondedNodes.add(k.bond(node))
       await allFutures(bondedNodes)
@@ -594,9 +608,9 @@ proc bootstrap*(k: KademliaProtocol, bootstrapNodes: seq[Node], retries = 0) {.a
           return
       else:
         break
-    discard await k.lookupRandom() # Prepopulate the routing table
-  else:
-    info "Skipping discovery bootstrap, no bootnodes provided"
+      discard await k.lookupRandom() # Prepopulate the routing table
+  except FuturePendingError:
+    raiseAssert "Future should be finished"
 
 proc recvPong*(k: KademliaProtocol, n: Node, token: seq[byte]) =
   trace "<<< pong from ", n

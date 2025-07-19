@@ -23,8 +23,8 @@ import
     confutils/defs,
     confutils/std/net
   ],
-  eth/[common, net/utils, net/nat, p2p/discoveryv5/enr],
-  ./networking/[bootnodes, discoveryv4/enode],
+  eth/[common, net/nat],
+  ./networking/[bootnodes, eth1_enr as enr],
   ./[constants, compile_info, version],
   ./common/chain_config,
   ./db/opts
@@ -99,7 +99,6 @@ type
     Admin                         ## enable admin_ set of RPC API
 
   DiscoveryType* {.pure.} = enum
-    None
     V4
     V5
 
@@ -313,11 +312,12 @@ type
       desc: "Specify method to find suitable peer in an Ethereum network (None, V4, V5)"
       longDesc:
         "- None: Disables the peer discovery mechanism (manual peer addition)\n" &
-        "- V4  : Node Discovery Protocol v4(default)\n" &
-        "- V5  : Node Discovery Protocol v5"
-      defaultValue: DiscoveryType.V4
-      defaultValueDesc: $DiscoveryType.V4
-      name: "discovery" .}: DiscoveryType
+        "- V4  : Node Discovery Protocol v4\n" &
+        "- V5  : Node Discovery Protocol v5\n" &
+        "- Both: V4, V5"
+      defaultValue: @["V4", "V5"]
+      defaultValueDesc: "V4, V5"
+      name: "discovery" .}: seq[string]
 
     netKey* {.
       desc: "P2P ethereum node (secp256k1) private key (random, path, hex)"
@@ -705,29 +705,22 @@ proc getRpcFlags*(conf: NimbusConf): set[RpcFlag] =
 proc getWsFlags*(conf: NimbusConf): set[RpcFlag] =
   getRpcFlags(conf.wsApi)
 
-func fromEnr*(T: type ENode, r: enr.Record): ENodeResult[ENode] =
-  let
-    # TODO: there must always be a public key, else no signature verification
-    # could have been done and no Record would exist here.
-    # TypedRecord should be reworked not to have public key as an option.
-    pk = r.get(PublicKey).get()
-    tr = TypedRecord.fromRecord(r)#.expect("id in valid record")
+proc getDiscoveryFlags(api: openArray[string]): set[DiscoveryType] =
+  if api.len == 0:
+    return {DiscoveryType.V4, DiscoveryType.V5}
 
-  if tr.ip.isNone():
-    return err(IncorrectIP)
-  if tr.udp.isNone():
-    return err(IncorrectDiscPort)
-  if tr.tcp.isNone():
-    return err(IncorrectPort)
+  for item in repeatingList(api):
+    case item.toLowerAscii()
+    of "none": result = {}
+    of "v4": result.incl DiscoveryType.V4
+    of "v5": result.incl DiscoveryType.V5
+    of "both": result = {DiscoveryType.V4, DiscoveryType.V5}
+    else:
+      error "Unknown discovery type: ", name=item
+      quit QuitFailure
 
-  ok(ENode(
-    pubkey: pk,
-    address: enode.Address(
-      ip: utils.ipv4(tr.ip.get()),
-      udpPort: Port(tr.udp.get()),
-      tcpPort: Port(tr.tcp.get())
-    )
-  ))
+proc getDiscoveryFlags*(conf: NimbusConf): set[DiscoveryType] =
+  getDiscoveryFlags(conf.discovery)
 
 proc getBootNodes*(conf: NimbusConf): seq[ENode] =
   var bootstrapNodes: seq[ENode]
