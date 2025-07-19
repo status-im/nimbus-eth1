@@ -16,7 +16,6 @@ import
   nimcrypto/keccak,
   testutils/unittests,
   eth/common/keys,
-  eth/rlp,
   ./stubloglevel,
   ../../execution_chain/networking/discoveryv4
 
@@ -101,7 +100,7 @@ procSuite "Discovery Tests":
 
     for data in validProtocolData:
       # none of these may raise
-      bootNode.receive(address, packData(hexToSeqByte(data), nodeKey))
+      check bootNode.receive(address, packData(hexToSeqByte(data), nodeKey)) == Result[void, cstring].ok()
 
   test "Invalid protocol data":
     let invalidProtocolData = [
@@ -134,16 +133,15 @@ procSuite "Discovery Tests":
         "a2b50376a79b1a8c8a3296485572bdfbf54708bb46d3c25d73d2723aaaf6a618")[]
 
     for data in invalidProtocolData:
-      expect DiscProtocolError:
-        bootNode.receive(address, packData(hexToSeqByte(data), nodeKey))
+      check bootNode.receive(address, packData(hexToSeqByte(data), nodeKey)).isErr
 
     for data in invalidRlpData:
-      expect RlpError:
-        bootNode.receive(address, packData(hexToSeqByte(data), nodeKey))
+      check bootNode.receive(address, packData(hexToSeqByte(data), nodeKey)).isErr
 
     # empty msg id and payload, doesn't raise, just fails and prints wrong
     # msg mac
-    bootNode.receive(address, packData(@[], nodeKey))
+    check bootNode.receive(address, packData(@[], nodeKey)) == Result[void, cstring].ok()
+
 
   asyncTest "Two findNode calls for the same peer in rapid succession":
     let targetKey = PrivateKey.fromHex(
