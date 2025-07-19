@@ -314,7 +314,7 @@ type
         "- None: Disables the peer discovery mechanism (manual peer addition)\n" &
         "- V4  : Node Discovery Protocol v4\n" &
         "- V5  : Node Discovery Protocol v5\n" &
-        "- Both: V4, V5"
+        "- All : V4, V5"
       defaultValue: @["V4", "V5"]
       defaultValueDesc: "V4, V5"
       name: "discovery" .}: seq[string]
@@ -714,7 +714,7 @@ proc getDiscoveryFlags(api: openArray[string]): set[DiscoveryType] =
     of "none": result = {}
     of "v4": result.incl DiscoveryType.V4
     of "v5": result.incl DiscoveryType.V5
-    of "both": result = {DiscoveryType.V4, DiscoveryType.V5}
+    of "all": result = {DiscoveryType.V4, DiscoveryType.V5}
     else:
       error "Unknown discovery type: ", name=item
       quit QuitFailure

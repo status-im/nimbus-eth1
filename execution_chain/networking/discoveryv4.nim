@@ -373,7 +373,7 @@ proc randomNodes*(d: DiscoveryV4, count: int): seq[Node] =
   d.kademlia.randomNodes(count)
 
 when isMainModule:
-  import stew/byteutils, ../bootnodes
+  import stew/byteutils, ./bootnodes
 
   block:
     let m =
