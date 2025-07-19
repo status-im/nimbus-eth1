@@ -87,7 +87,7 @@ const
   OFFSET_BITS = 256 - CYCLE_BITS # 240
   REVERSED_OFFSET_BITS = 64 - CYCLE_BITS # 48
 
-func toContentId*(blockNumber: uint64): UInt256 =
+func toContentId*(blockNumber: uint64, contentType: ContentType): UInt256 =
   ## Returns the content id for a given block number
   let
     cycleBits = blockNumber mod (1'u64 shl CYCLE_BITS)
@@ -96,16 +96,17 @@ func toContentId*(blockNumber: uint64): UInt256 =
     reversedOffsetBits = reverseBits(offsetBits, REVERSED_OFFSET_BITS)
 
   (cycleBits.stuint(256) shl OFFSET_BITS) or
-    (reversedOffsetBits.stuint(256) shl (OFFSET_BITS - REVERSED_OFFSET_BITS))
+    (reversedOffsetBits.stuint(256) shl (OFFSET_BITS - REVERSED_OFFSET_BITS)) or
+    ord(contentType).stuint(256)
 
 func toContentId*(contentKey: ContentKey): ContentId =
   case contentKey.contentType
   of unused:
     raiseAssert "ContentKey may not have unused value as content type"
   of blockBody:
-    toContentId(contentKey.blockBodyKey.blockNumber)
+    toContentId(contentKey.blockBodyKey.blockNumber, contentKey.contentType)
   of receipts:
-    toContentId(contentKey.receiptsKey.blockNumber)
+    toContentId(contentKey.receiptsKey.blockNumber, contentKey.contentType)
 
 func toContentId*(bytes: ContentKeyByteList): Opt[ContentId] =
   let contentKey = ?bytes.decode()
