@@ -13,24 +13,14 @@ export ssz_serialization, common_types, results
 
 type
   ContentType* = enum
-    # Note: Need to add this unused value as a case object with an enum without
-    # a 0 valueis not allowed: "low(contentType) must be 0 for discriminant".
-    # For prefix values that are in the enum gap, the deserialization will fail
-    # at runtime as is wanted.
-    # In the future it might be possible that this will fail at compile time for
-    # the SSZ Union type, but currently it is allowed in the implementation, and
-    # the SSZ spec is not explicit about disallowing this.
-    unused = 0x00
-    blockBody = 0x09
-    receipts = 0x0A
+    blockBody = 0x00
+    receipts = 0x01
 
   BlockNumberKey* = object
     blockNumber*: uint64
 
   ContentKey* = object
     case contentType*: ContentType
-    of unused:
-      discard
     of blockBody:
       blockBodyKey*: BlockNumberKey
     of receipts:
@@ -49,22 +39,15 @@ func receiptsContentKey*(blockNumber: uint64): ContentKey =
 template blockNumber*(contentKey: ContentKey): uint64 =
   ## Returns the block number for the given content key
   case contentKey.contentType
-  of unused:
-    raiseAssert "ContentKey may not have unused value as content type"
-  of blockBody:
-    contentKey.blockBodyKey.blockNumber
-  of receipts:
-    contentKey.receiptsKey.blockNumber
+  of blockBody: contentKey.blockBodyKey.blockNumber
+  of receipts: contentKey.receiptsKey.blockNumber
 
 proc readSszBytes*(data: openArray[byte], val: var ContentKey) {.raises: [SszError].} =
   mixin readSszValue
-  if data.len() > 0 and data[0] == ord(unused):
-    raise newException(MalformedSszError, "SSZ selector is unused value")
 
   readSszValue(data, val)
 
 func encode*(contentKey: ContentKey): ContentKeyByteList =
-  doAssert(contentKey.contentType != unused)
   ContentKeyByteList.init(SSZ.encode(contentKey))
 
 func decode*(contentKey: ContentKeyByteList): Opt[ContentKey] =
@@ -101,8 +84,6 @@ func toContentId*(blockNumber: uint64, contentType: ContentType): UInt256 =
 
 func toContentId*(contentKey: ContentKey): ContentId =
   case contentKey.contentType
-  of unused:
-    raiseAssert "ContentKey may not have unused value as content type"
   of blockBody:
     toContentId(contentKey.blockBodyKey.blockNumber, contentKey.contentType)
   of receipts:
@@ -119,8 +100,6 @@ func `$`*(x: ContentKey): string =
   var res = "(type: " & $x.contentType & ", "
 
   case x.contentType
-  of unused:
-    raiseAssert "ContentKey may not have unused value as content type"
   of blockBody:
     res.add($x.blockBodyKey)
   of receipts:

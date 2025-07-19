@@ -168,8 +168,6 @@ proc validateContent(
   let header = ?(await n.getHeader(contentKey.blockNumber()))
 
   case contentKey.contentType
-  of unused:
-    raiseAssert("ContentKey contentType: unused")
   of blockBody:
     let blockBody = decodeRlp(content, BlockBody).valueOr:
       return err("Error decoding block body: " & error)

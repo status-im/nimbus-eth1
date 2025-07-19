@@ -72,8 +72,6 @@ func validateContent*(
 ): Result[void, string] =
   ## Validate the encoded content against the header.
   case key.contentType
-  of unused:
-    raiseAssert("ContentKey contentType: unused")
   of blockBody:
     let content = ?decodeRlp(contentBytes, BlockBody)
     validateBlockBody(content, header)
