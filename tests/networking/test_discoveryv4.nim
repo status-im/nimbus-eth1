@@ -138,9 +138,8 @@ procSuite "Discovery Tests":
     for data in invalidRlpData:
       check bootNode.receive(address, packData(hexToSeqByte(data), nodeKey)).isErr
 
-    # empty msg id and payload, doesn't raise, just fails and prints wrong
-    # msg mac
-    check bootNode.receive(address, packData(@[], nodeKey)) == Result[void, cstring].ok()
+    # empty msg id and payload, wrong msg mac
+    check bootNode.receive(address, packData(@[], nodeKey)).isErr
 
 
   asyncTest "Two findNode calls for the same peer in rapid succession":
