@@ -132,8 +132,11 @@ proc open*(
   privateAccess(DiscV4)
   privateAccess(DiscV5)
 
-  info "Starting discovery node", node = proto.discv4.localNode,
-    bindAddress = proto.discv4.address
+  info "Starting discovery node",
+    node = proto.discv4.localNode,
+    bindAddress = proto.discv4.address,
+    discV4 = enableDiscV4,
+    discV5 = enableDiscV5
 
   if enableDiscV4 and not enableDiscV5:
     proto.discv4.open()
