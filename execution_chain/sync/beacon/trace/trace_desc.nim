@@ -26,7 +26,7 @@ export
   worker_desc
 
 const
-  TraceVersionID* = 20250714
+  TraceVersionID* = 20250720
 
   TraceBaseHandlersID* = 1
   TraceOverlayHandlersID* = 10
@@ -70,10 +70,7 @@ type
     TrtSchedPeerBegin
     TrtSchedPeerEnd
 
-    TrtNotUsed1
     TrtGetBlockHeaders
-
-    TrtNotUsed2   
     TrtGetBlockBodies
     TrtImportBlock
 
@@ -89,6 +86,7 @@ type
 
     baseNum*: BlockNumber             ## Max finalised number from `FC` module
     latestNum*: BlockNumber           ## Number of latest branch head
+    antecedent*: BlockNumber          ## Lower end of header chain cache
 
     hdrUnprLen*: uint64               ## # unprocessed header entries
     hdrUnprChunks*: uint              ## # unprocessed header iv segments

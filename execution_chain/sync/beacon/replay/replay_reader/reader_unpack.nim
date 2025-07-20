@@ -95,7 +95,7 @@ proc unpack*(line: string): ReplayPayloadRef =
 
   let data = line.substr(2, line.len-1)
   case recType:
-  of TrtOops, TrtNotUsed1, TrtNotUsed2:
+  of TrtOops:
     return ReplayPayloadRef(
       recType: TrtOops)
 

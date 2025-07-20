@@ -28,14 +28,15 @@ proc init*(tb: var TraceRecBase; ctx: BeaconCtxRef) =
   ## there is no active trace.
   let trc = ctx.trace
   if not trc.isNil:
-    tb.serial =    trc.newSerial
-    tb.time =      Moment.now() - trc.started
-    tb.syncState = ctx.pool.lastState
-    tb.nPeers =    ctx.pool.nBuddies
-    tb.chainMode = ctx.hdrCache.state
-    tb.poolMode =  ctx.poolMode
-    tb.baseNum =   ctx.chain.baseNumber
-    tb.latestNum = ctx.chain.latestNumber
+    tb.serial =     trc.newSerial
+    tb.time =       Moment.now() - trc.started
+    tb.syncState =  ctx.pool.lastState
+    tb.nPeers =     ctx.pool.nBuddies
+    tb.chainMode =  ctx.hdrCache.state
+    tb.poolMode =   ctx.poolMode
+    tb.baseNum =    ctx.chain.baseNumber
+    tb.latestNum =  ctx.chain.latestNumber
+    tb.antecedent = ctx.hdrCache.antecedent.number
 
     tb.hdrUnprChunks = ctx.hdr.unprocessed.chunks().uint
     if 0 < tb.hdrUnprChunks:

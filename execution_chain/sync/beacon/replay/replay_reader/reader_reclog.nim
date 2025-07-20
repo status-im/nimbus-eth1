@@ -265,7 +265,7 @@ func recLogToStrEnd*(n: int): seq[string] =
 
 proc recLogToStrList*(pyl: ReplayPayloadRef; lnr = 0): seq[string] =
   case pyl.recType:
-  of TrtOops, TrtNotUsed1, TrtNotUsed2:
+  of TrtOops:
     lnr.toStrOops()
 
   of TrtVersionInfo:
