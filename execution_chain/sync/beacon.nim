@@ -47,9 +47,6 @@ proc schedPoolCB(buddy: BeaconBuddyRef; last: bool; laps: int): bool =
 proc schedPeerCB(buddy: BeaconBuddyRef) {.async: (raises: []).} =
   await worker.runPeer(buddy, "RunPeer")
 
-proc muteBeginCB(buddy: BeaconBuddyRef) {.async: (raises: []).} =
-  discard
-
 # ------------------------------------------------------------------------------
 # Virtual methods/interface, `mixin` functions
 # ------------------------------------------------------------------------------
@@ -103,9 +100,7 @@ proc init*(
     schedStop:       schedStopCB,
     schedPool:       schedPoolCB,
     schedPeer:       schedPeerCB,
-    beginHeaders:    muteBeginCB,
     getBlockHeaders: getBlockHeadersCB,
-    beginBlocks:     muteBeginCB,
     getBlockBodies:  getBlockBodiesCB,
     importBlock:     blocks.importCB)
 

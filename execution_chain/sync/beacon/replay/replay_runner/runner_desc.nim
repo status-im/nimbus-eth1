@@ -60,17 +60,9 @@ type
   ReplaySubCtxRef* = ref object of ReplayCtxRef
     ## Sub task context                ## Identifies captured environment
 
-  ReplayHdrBeginSubCtxRef* = ref object of ReplaySubCtxRef
-    ## Headers begin sync point data
-    instr*: TraceBeginHeaders           ## Full context/environment
-
   ReplayHeadersSubCtxRef* = ref object of ReplaySubCtxRef
     ## Staged headers fetch data
     instr*: TraceGetBlockHeaders        ## Full context/environment
-
-  ReplayBlkBeginSubCtxRef* = ref object of ReplaySubCtxRef
-    ## Blocks begin sync point data
-    instr*: TraceBeginBlocks            ## Full context/environment
 
   ReplayBodiesSubCtxRef* = ref object of ReplaySubCtxRef
     ## Bodies fetch task indicator

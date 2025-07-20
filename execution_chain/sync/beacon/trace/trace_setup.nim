@@ -87,9 +87,7 @@ proc traceSetup*(
     schedStop:       ctx.handler.schedStop,
     schedPool:       ctx.handler.schedPool,
     schedPeer:       ctx.handler.schedPeer,
-    beginHeaders:    ctx.handler.beginHeaders,
     getBlockHeaders: ctx.handler.getBlockHeaders,
-    beginBlocks:     ctx.handler.beginBlocks,
     getBlockBodies:  ctx.handler.getBlockBodies,
     importBlock:     ctx.handler.importBlock)
 

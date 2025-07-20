@@ -441,9 +441,7 @@ proc waitForSyncedEnv*(
            TraceSchedDaemonEnd   |
            TraceSchedPeerBegin   |
            TraceSchedPeerEnd     |
-           TraceBeginHeaders     |
            TraceGetBlockHeaders  |
-           TraceBeginBlocks      |
            TraceGetBlockBodies   |
            TraceImportBlock      ;
     info: static[string];
@@ -595,9 +593,7 @@ proc waitForProcessFinished*(
 
 proc provideSessionData*(
     desc: ReplayDaemonRef|ReplayBuddyRef;
-    instr: TraceBeginHeaders    |
-           TraceGetBlockHeaders |
-           TraceBeginBlocks     |
+    instr: TraceGetBlockHeaders |
            TraceGetBlockBodies  |
            TraceImportBlock     ;
     info: static[string];
@@ -606,15 +602,9 @@ proc provideSessionData*(
   ## Stage session data on `desc.stage[0]`. Then wait for the background
   ## process to consume the session datea. And then clean up when done.
   ##
-  when instr is TraceBeginHeaders:
-    type T = ReplayHdrBeginSubCtxRef
-    const dataType = TrtBeginHeaders
   when instr is TraceGetBlockHeaders:
     type T = ReplayHeadersSubCtxRef
     const dataType = TrtGetBlockHeaders
-  when instr is TraceBeginBlocks:
-    type T = ReplayBlkBeginSubCtxRef
-    const dataType = TrtBeginBlocks
   when instr is TraceGetBlockBodies:
     type T = ReplayBodiesSubCtxRef
     const dataType = TrtGetBlockBodies
@@ -680,9 +670,7 @@ proc provideSessionData*(
   return ok()
 
 
-proc getSessionData*[T: TraceBeginHeaders    |
-                        TraceGetBlockHeaders |
-                        TraceBeginBlocks     |
+proc getSessionData*[T: TraceGetBlockHeaders |
                         TraceGetBlockBodies  |
                         TraceImportBlock     ](
     desc: ReplayDaemonRef|ReplayBuddyRef;
@@ -696,15 +684,9 @@ proc getSessionData*[T: TraceBeginHeaders    |
   when desc is ReplayDaemonRef:
     const frameType = TrtSchedDaemonBegin
 
-  when T is TraceBeginHeaders:
-    type C = ReplayHdrBeginSubCtxRef
-    const dataType = TrtBeginHeaders
   when T is TraceGetBlockHeaders:
     type C = ReplayHeadersSubCtxRef
     const dataType = TrtGetBlockHeaders
-  when T is TraceBeginBlocks:
-    type C = ReplayBlkBeginSubCtxRef
-    const dataType = TrtBeginBlocks
   when T is TraceGetBlockBodies:
     type C = ReplayBodiesSubCtxRef
     const dataType = TrtGetBlockBodies

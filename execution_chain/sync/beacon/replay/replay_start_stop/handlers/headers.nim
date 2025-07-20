@@ -22,13 +22,6 @@ import
 # Public functions
 # ------------------------------------------------------------------------------
 
-proc beginHeadersReplay*(
-    buddy: BeaconBuddyRef;
-      ) {.async: (raises: []).} =
-  ## ..
-  await buddy.beginHeadersHandler()
-
-
 proc fetchHeadersReplay*(
     buddy: BeaconBuddyRef;
     req: BlockHeadersRequest;

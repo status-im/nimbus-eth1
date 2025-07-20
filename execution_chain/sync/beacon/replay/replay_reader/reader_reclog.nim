@@ -155,11 +155,6 @@ func toStrSeq(n: int; w: TraceSchedPeerEnd): seq[string] =
 
 # -----------
 
-func toStrSeq(n: int; w: TraceBeginHeaders): seq[string] =
-  var res = newSeqOfCap[string](20)
-  res.addX("=BeginHeaders", n, w)
-  res
-
 func toStrSeq(n: int; w: TraceGetBlockHeaders): seq[string] =
   var res = newSeqOfCap[string](20)
   res.addX("=HeadersFetch", n, w)
@@ -183,12 +178,6 @@ func toStrSeq(n: int; w: TraceGetBlockHeaders): seq[string] =
     if w.error.msg.len != 0:
        res.add "error=" & w.error.name & "(" & w.error.msg & ")"
     res.add "ela=" & w.error.elapsed.toStr
-  res
-
-
-func toStrSeq(n: int; w: TraceBeginBlocks): seq[string] =
-  var res = newSeqOfCap[string](20)
-  res.addX("=BeginBlocks", n, w)
   res
 
 func toStrSeq(n: int; w: TraceGetBlockBodies): seq[string] =
@@ -276,7 +265,7 @@ func recLogToStrEnd*(n: int): seq[string] =
 
 proc recLogToStrList*(pyl: ReplayPayloadRef; lnr = 0): seq[string] =
   case pyl.recType:
-  of TrtOops:
+  of TrtOops, TrtNotUsed1, TrtNotUsed2:
     lnr.toStrOops()
 
   of TrtVersionInfo:
@@ -304,13 +293,8 @@ proc recLogToStrList*(pyl: ReplayPayloadRef; lnr = 0): seq[string] =
   of TrtSchedPeerEnd:
     lnr.toStrSeq(pyl.ReplaySchedPeerEnd.data)
 
-  of TrtBeginHeaders:
-    lnr.toStrSeq(pyl.ReplayBeginHeaders.data)
   of TrtGetBlockHeaders:
     lnr.toStrSeq(pyl.ReplayGetBlockHeaders.data)
-
-  of TrtBeginBlocks:
-    lnr.toStrSeq(pyl.ReplayBeginBlocks.data)
   of TrtGetBlockBodies:
     lnr.toStrSeq(pyl.ReplayGetBlockBodies.data)
   of TrtImportBlock:

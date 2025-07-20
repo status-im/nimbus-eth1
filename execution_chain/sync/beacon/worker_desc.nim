@@ -83,19 +83,11 @@ type
     proc(buddy: BeaconBuddyRef) {.async: (raises: []).}
       ## See `runPeer()` described in `sync_sched.nim`
 
-  BeginHeadersHdl =
-    proc(buddy: BeaconBuddyRef) {.async: (raises: []).}
-      ## Optional sync point for controlling the task for fetching headers.
-
   GetBlockHeadersHdl* =
     proc(buddy: BeaconBuddyRef; req: BlockHeadersRequest):
       Future[Result[FetchHeadersData,BeaconError]] {.async: (raises: []).}
         ## From the ethXX argument peer implied by `buddy` fetch a list of
         ## headers.
-
-  BeginBlocksHdl =
-    proc(buddy: BeaconBuddyRef) {.async: (raises: []).}
-      ## Optional sync point for controlling the task for fetching bodies.
 
   GetBlockBodiesHdl* =
     proc(buddy: BeaconBuddyRef; request: BlockBodiesRequest):
@@ -194,9 +186,7 @@ type
     schedStop*: SchedStopHdl
     schedPool*: SchedPoolHdl
     schedPeer*: SchedPeerHdl
-    beginHeaders*: BeginHeadersHdl
     getBlockHeaders*: GetBlockHeadersHdl
-    beginBlocks*: BeginBlocksHdl
     getBlockBodies*: GetBlockBodiesHdl
     importBlock*: ImportBlockHdl
 

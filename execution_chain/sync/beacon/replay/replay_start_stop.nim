@@ -88,9 +88,7 @@ proc replayStart*(ctx: BeaconCtxRef; strm: Stream) =
       schedStop:       schedStopMuted,
       schedPool:       schedPoolMuted,
       schedPeer:       schedPeerMuted,
-      beginHeaders:    beginHeadersReplay,
       getBlockHeaders: fetchHeadersReplay,
-      beginBlocks:     beginBlocksReplay,
       getBlockBodies:  fetchBodiesReplay,
       importBlock:     importBlockReplay)
 

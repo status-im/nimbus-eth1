@@ -26,18 +26,6 @@ logScope:
 # Public functions
 # ------------------------------------------------------------------------------
 
-proc beginHeadersTrace*(
-    buddy: BeaconBuddyRef;
-      ) {.async: (raises: []).} =
-  ## Replacement for `beginHeadersFetch()` sync handler which only writes data.
-  var tRec: TraceBeginHeaders
-  tRec.init buddy
-  buddy.traceWrite tRec
-
-  trace "=HeadersBegin", peer=($buddy.peer), peerID=buddy.peerID.short,
-    serial=tRec.serial
-
-
 proc fetchHeadersTrace*(
     buddy: BeaconBuddyRef;
     req: BlockHeadersRequest;

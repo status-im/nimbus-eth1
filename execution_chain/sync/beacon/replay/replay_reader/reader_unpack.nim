@@ -95,7 +95,7 @@ proc unpack*(line: string): ReplayPayloadRef =
 
   let data = line.substr(2, line.len-1)
   case recType:
-  of TrtOops:
+  of TrtOops, TrtNotUsed1, TrtNotUsed2:
     return ReplayPayloadRef(
       recType: TrtOops)
 
@@ -149,17 +149,9 @@ proc unpack*(line: string): ReplayPayloadRef =
 
   # ------------------
 
-  of TrtBeginHeaders:
-    return ReplayBeginHeaders.init(
-      data, TrtBeginHeaders, TraceBeginHeaders)
-
   of TrtGetBlockHeaders:
     return ReplayGetBlockHeaders.init(
       data, TrtGetBlockHeaders, TraceGetBlockHeaders)
-
-  of TrtBeginBlocks:
-    return ReplayBeginBlocks.init(
-      data, TrtBeginBlocks, TraceBeginBlocks)
 
   of TrtGetBlockBodies:
     return ReplayGetBlockBodies.init(

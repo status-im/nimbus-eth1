@@ -103,9 +103,7 @@ proc traceStart*(ctx: BeaconCtxRef; strm: Stream; nSessions: int) =
       schedStop:       schedStopTrace,
       schedPool:       schedPoolTrace,
       schedPeer:       schedPeerTrace,
-      beginHeaders:    beginHeadersTrace,
       getBlockHeaders: fetchHeadersTrace,
-      beginBlocks:     beginBlocksTrace,
       getBlockBodies:  fetchBodiesTrace,
       importBlock:     importBlockTrace)
 

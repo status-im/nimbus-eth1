@@ -41,7 +41,7 @@ proc dispatch*(
       nBuddies=run.peers.len, nDaemons=(if run.daemon.isNil: 0 else: 1)
 
   case pyl.recType:
-  of TrtOops:
+  of TrtOops, TrtNotUsed1, TrtNotUsed2:
     warn "dispatch(): Oops, unexpected void record", n=run.instrNumber
 
   of TrtVersionInfo:
@@ -75,16 +75,9 @@ proc dispatch*(
       pyl.ReplaySchedPeerEnd.data, "-Peer: ")
 
   # Provide input data to background tasks `runDaemon()` and/or `runPeer()`
-  of TrtBeginHeaders:
-    await run.beginHeadersFeed(
-      pyl.ReplayBeginHeaders.data, "=BeginHeaders: ")
   of TrtGetBlockHeaders:
     await run.fetchHeadersFeed(
       pyl.ReplayGetBlockHeaders.data, "=HeadersFetch: ")
-
-  of TrtBeginBlocks:
-    await run.beginBlocksFeed(
-      pyl.ReplayBeginBlocks.data, "=BeginBlocks: ")
   of TrtGetBlockBodies:
     await run.fetchBodiesFeed(
       pyl.ReplayGetBlockBodies.data, "=FetchBodies: ")
@@ -98,7 +91,7 @@ proc dispatch*(
       pyl.ReplaySchedStart.data, "=StartPeer: ")
   of TrtSchedStop:
     run.schedStopWorker(
-      pyl.ReplaySchedStop.data, "StopPeer: ")
+      pyl.ReplaySchedStop.data, "=StopPeer: ")
   of TrtSchedPool:
     run.schedPoolWorker(
       pyl.ReplaySchedPool.data, "=Pool: ")

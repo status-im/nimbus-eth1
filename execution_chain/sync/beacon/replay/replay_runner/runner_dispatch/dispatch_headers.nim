@@ -52,24 +52,6 @@ func getBeaconError(e: ReplayWaitError): BeaconError =
 # Public dispatcher handlers
 # ------------------------------------------------------------------------------
 
-proc beginHeadersHandler*(
-    buddy: BeaconBuddyRef;
-      ) {.async: (raises: []).} =
-  ## ..
-  const
-    info = "&beginHeaders: "
-  let
-    buddy = ReplayBuddyRef(buddy)
-    instr = (await getSessionData[TraceBeginHeaders](buddy, info)).valueOr:
-      return # Shutdown?
-
-    serial = instr.serial                    # for logging
-    peer = buddy.peer                        # for logging
-    peerID=buddy.peerID.short                # for logging
-
-  trace info & "done", serial, peer, peerID
-
-
 proc fetchHeadersHandler*(
     buddy: BeaconBuddyRef;
     req: BlockHeadersRequest;
@@ -106,18 +88,6 @@ proc fetchHeadersHandler*(
 # ------------------------------------------------------------------------------
 # Public functions, data feed
 # ------------------------------------------------------------------------------
-
-proc beginHeadersFeed*(
-    run: ReplayRunnerRef;
-    instr: TraceBeginHeaders;
-    info: static[string];
-      ) {.async: (raises: []).} =
-  ## Stage headers sync data
-  let buddy = run.getPeer(instr, info).expect "valid sync peer"
-  (await buddy.provideSessionData(instr, info)).isOkOr:
-    # some smart logging
-    return
-
 
 proc fetchHeadersFeed*(
     run: ReplayRunnerRef;

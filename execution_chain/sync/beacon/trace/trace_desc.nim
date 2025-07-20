@@ -70,10 +70,10 @@ type
     TrtSchedPeerBegin
     TrtSchedPeerEnd
 
-    TrtBeginHeaders
+    TrtNotUsed1
     TrtGetBlockHeaders
 
-    TrtBeginBlocks
+    TrtNotUsed2   
     TrtGetBlockBodies
     TrtImportBlock
 
@@ -159,19 +159,12 @@ type
 
   # -------------
 
-  TraceBeginHeaders* = object of TraceRecBase
-    ## Sync point, no other action than environment capture
-
   TraceGetBlockHeaders* = object of TraceRecBase
     ## Environment is captured after the `getBlockHeaders()` handler is run.
     req*: BlockHeadersRequest         ## Fetch request
     fieldAvail*: uint                 ## Bitmask: 1=fetched, 2=error
     fetched*: FetchHeadersData        ## If dowloaded successfully
     error*: BeaconError
-
-
-  TraceBeginBlocks* = object of TraceRecBase
-    ## Sync point, no other action than environment capture
 
   TraceGetBlockBodies* = object of TraceRecBase
     ## Environment is captured after the `getBlockBodies()` handler is run.

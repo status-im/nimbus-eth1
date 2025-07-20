@@ -126,15 +126,8 @@ proc traceWrite*(buddy: BeaconBuddyRef; w: TraceSchedPeerEnd) =
 
 # -------------
 
-proc traceWrite*(buddy: BeaconBuddyRef; w: TraceBeginHeaders) =
-  buddy.toStream(TrtBeginHeaders, rlp.encode w)
-
 proc traceWrite*(buddy: BeaconBuddyRef; w: TraceGetBlockHeaders) =
   buddy.toStream(TrtGetBlockHeaders, rlp.encode w)
-
-
-proc traceWrite*(buddy: BeaconBuddyRef; w: TraceBeginBlocks) =
-  buddy.toStream(TrtBeginBlocks, rlp.encode w)
 
 proc traceWrite*(buddy: BeaconBuddyRef; w: TraceGetBlockBodies) =
   buddy.toStream(TrtGetBlockBodies, rlp.encode w)

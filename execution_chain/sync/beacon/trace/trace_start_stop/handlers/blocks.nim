@@ -53,18 +53,6 @@ proc toPeerIdStr(maybePeer: Opt[BeaconBuddyRef]): string =
 # Public functions
 # ------------------------------------------------------------------------------
 
-proc beginBlocksTrace*(
-    buddy: BeaconBuddyRef;
-      ) {.async: (raises: []).} =
-  ## Replacement for `beginBlocksFetch()` sync handler which only writes data.
-  var tRec: TraceBeginBlocks
-  tRec.init buddy
-  buddy.traceWrite tRec
-
-  trace "=BlocksBegin", peer=($buddy.peer), peerID=buddy.peerID.short,
-    serial=tRec.serial
-
-
 proc fetchBodiesTrace*(
     buddy: BeaconBuddyRef;
     req: BlockBodiesRequest;

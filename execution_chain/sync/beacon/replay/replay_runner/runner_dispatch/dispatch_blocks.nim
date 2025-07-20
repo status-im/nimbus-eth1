@@ -121,17 +121,6 @@ proc importBlockFeedImpl(
 # Public dispatcher handlers
 # ------------------------------------------------------------------------------
 
-proc beginBlocksHandler*(
-    buddy: BeaconBuddyRef;
-      ) {.async: (raises: []).} =
-  ## ..
-  const info = "&beginBlocks: "
-  let
-    buddy = ReplayBuddyRef(buddy)
-    peer = buddy.peer
-  trace info & "ignored", peer, peerID=buddy.peerID.short
-
-
 proc fetchBodiesHandler*(
     buddy: BeaconBuddyRef;
     req: BlockBodiesRequest;
@@ -188,15 +177,6 @@ proc importBlockHandler*(
 # ------------------------------------------------------------------------------
 # Public functions, data feed
 # ------------------------------------------------------------------------------
-
-proc beginBlocksFeed*(
-    run: ReplayRunnerRef;
-    instr: TraceBeginBlocks;
-    info: static[string];
-      ) {.async: (raises: []).} =
-  ## ..
-  discard
-
 
 proc fetchBodiesFeed*(
     run: ReplayRunnerRef;

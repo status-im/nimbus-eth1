@@ -90,15 +90,8 @@ type
 
   # -------------
 
-  ReplayBeginHeaders* = ref object of ReplayPayloadRef
-    data*: TraceBeginHeaders
-
   ReplayGetBlockHeaders* = ref object of ReplayPayloadRef
     data*: TraceGetBlockHeaders
-
-
-  ReplayBeginBlocks* = ref object of ReplayPayloadRef
-    data*: TraceBeginBlocks
 
   ReplayGetBlockBodies* = ref object of ReplayPayloadRef
     data*: TraceGetBlockBodies

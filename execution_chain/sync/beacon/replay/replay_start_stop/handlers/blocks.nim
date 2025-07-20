@@ -22,13 +22,6 @@ import
 # Public functions
 # ------------------------------------------------------------------------------
 
-proc beginBlocksReplay*(
-    buddy: BeaconBuddyRef;
-      ) {.async: (raises: []).} =
-  ## ..
-  await buddy.beginBlocksHandler()
-
- 
 proc fetchBodiesReplay*(
    buddy: BeaconBuddyRef;
    req: BlockBodiesRequest;
