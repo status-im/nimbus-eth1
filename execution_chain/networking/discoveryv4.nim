@@ -348,16 +348,9 @@ proc lookupRandom*(d: DiscoveryV4): Future[seq[Node]] {.async: (raises: [Cancell
     debug "DiscoveryV4 lookup random error", msg=exc.msg
     return
 
-proc run(d: DiscoveryV4): Future[void] {.async: (raises: [CancelledError]).} =
-  while true:
-    discard await d.lookupRandom()
-    await sleepAsync(chronos.seconds(3))
-    notice "Discovered nodes", nodes = d.kademlia.nodesDiscovered
-
 proc bootstrap*(d: DiscoveryV4): Future[void] {.async: (raises: [CancelledError]).} =
   try:
     await d.kademlia.bootstrap(d.bootstrapNodes)
-    #await d.run()
     discard await d.kademlia.lookupRandom()
   except ValueError as exc:
     debug "DiscoveryV4 bootstrap error", msg=exc.msg
