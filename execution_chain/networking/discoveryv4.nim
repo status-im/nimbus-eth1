@@ -210,59 +210,72 @@ proc newDiscoveryV4*(
 
 proc recvPing(
     d: DiscoveryV4, node: Node, msgHash: MDigest[256]
-) {.raises: [ValueError].} =
+): DiscResult[void] =
   d.kademlia.recvPing(node, msgHash)
 
 proc recvPong(
     d: DiscoveryV4, node: Node, payload: seq[byte]
-) {.raises: [RlpError].} =
-  let rlp = rlpFromBytes(payload)
-  let tok = rlp.listElem(1).toBytes()
-  d.kademlia.recvPong(node, tok)
+): DiscResult[void] =
+  try:
+    let rlp = rlpFromBytes(payload)
+    let tok = rlp.listElem(1).toBytes()
+    d.kademlia.recvPong(node, tok)
+  except RlpError:
+    return err("discv4: recvPong rlp error")
+  ok()
 
 proc recvNeighbours(
     d: DiscoveryV4, node: Node, payload: seq[byte]
-) {.raises: [RlpError].} =
-  let rlp = rlpFromBytes(payload)
-  let neighboursList = rlp.listElem(0)
-  let sz = neighboursList.listLen()
+): DiscResult[void] =
+  try:
+    let rlp = rlpFromBytes(payload)
+    let neighboursList = rlp.listElem(0)
+    let sz = neighboursList.listLen()
 
-  var neighbours = newSeqOfCap[Node](16)
-  for i in 0 ..< sz:
-    let n = neighboursList.listElem(i)
-    if n.listLen() != 4:
-      raise newException(RlpError, "Invalid nodes list")
+    var neighbours = newSeqOfCap[Node](16)
+    for i in 0 ..< sz:
+      let n = neighboursList.listElem(i)
+      if n.listLen() != 4:
+        raise newException(RlpError, "Invalid nodes list")
 
-    let ipBlob = n.listElem(0).toBytes
-    var ip: IpAddress
-    case ipBlob.len
-    of 4:
-      ip = IpAddress(family: IpAddressFamily.IPv4, address_v4: toArray(4, ipBlob))
-    of 16:
-      ip = IpAddress(family: IpAddressFamily.IPv6, address_v6: toArray(16, ipBlob))
-    else:
-      raise newException(RlpError, "Invalid RLP byte string length for IP address")
+      let ipBlob = n.listElem(0).toBytes
+      var ip: IpAddress
+      case ipBlob.len
+      of 4:
+        ip = IpAddress(family: IpAddressFamily.IPv4, address_v4: toArray(4, ipBlob))
+      of 16:
+        ip = IpAddress(family: IpAddressFamily.IPv6, address_v6: toArray(16, ipBlob))
+      else:
+        raise newException(RlpError, "Invalid RLP byte string length for IP address")
 
-    let udpPort = n.listElem(1).toInt(uint16).Port
-    let tcpPort = n.listElem(2).toInt(uint16).Port
-    let pk = PublicKey.fromRaw(n.listElem(3).toBytes).valueOr:
-      raise newException(RlpError, "Invalid RLP byte string for node id")
+      let udpPort = n.listElem(1).toInt(uint16).Port
+      let tcpPort = n.listElem(2).toInt(uint16).Port
+      let pk = PublicKey.fromRaw(n.listElem(3).toBytes).valueOr:
+        raise newException(RlpError, "Invalid RLP byte string for node id")
 
-    neighbours.add(newNode(pk, Address(ip: ip, udpPort: udpPort, tcpPort: tcpPort)))
-  d.kademlia.recvNeighbours(node, neighbours)
+      neighbours.add(newNode(pk, Address(ip: ip, udpPort: udpPort, tcpPort: tcpPort)))
+    d.kademlia.recvNeighbours(node, neighbours)
+  except RlpError:
+    return err("discv4: recvNeighbours rlp error")
+  ok()
 
 proc recvFindNode(
     d: DiscoveryV4, node: Node, payload: openArray[byte]
-) {.raises: [RlpError, ValueError].} =
+): DiscResult[void] =
   let rlp = rlpFromBytes(payload)
   trace "<<< find_node from ", node
-  let rng = rlp.listElem(0).toBytes
+
+  let rng = try: rlp.listElem(0).toBytes
+            except RlpError:
+              return err("Invalid target public key received")
+
   # Check for pubkey len
   if rng.len == 64:
     let nodeId = UInt256.fromBytesBE(rng.toOpenArray(32, 63))
-    d.kademlia.recvFindNode(node, nodeId)
+    ?d.kademlia.recvFindNode(node, nodeId)
   else:
     trace "Invalid target public key received"
+  ok()
 
 proc expirationValid(
   msg: UnpackedMsg
@@ -296,24 +309,19 @@ proc receive*(
   if not valid:
     return err("Received msg already expired")
 
-  try:
-    let node = newNode(remotePubkey, a)
-    case unpacked.cmdId
-    of cmdPing:
-      d.recvPing(node, msgHash)
-    of cmdPong:
-      d.recvPong(node, unpacked.payload)
-    of cmdNeighbours:
-      d.recvNeighbours(node, unpacked.payload)
-    of cmdFindNode:
-      d.recvFindNode(node, unpacked.payload)
-    of cmdENRRequest, cmdENRResponse:
-      # TODO: Implement EIP-868
-      discard
-  except ValueError:
-    return err("discv4: Received msg value error")
-  except RlpError:
-    return err("discv4: Received msg RLP error")
+  let node = newNode(remotePubkey, a)
+  case unpacked.cmdId
+  of cmdPing:
+    ?d.recvPing(node, msgHash)
+  of cmdPong:
+    ?d.recvPong(node, unpacked.payload)
+  of cmdNeighbours:
+    ?d.recvNeighbours(node, unpacked.payload)
+  of cmdFindNode:
+    ?d.recvFindNode(node, unpacked.payload)
+  of cmdENRRequest, cmdENRResponse:
+    # TODO: Implement EIP-868
+    discard
 
   ok()
 
@@ -341,27 +349,15 @@ proc open*(d: DiscoveryV4) {.raises: [TransportOsError].} =
   let ta = initTAddress(d.bindIp, d.bindPort)
   d.transp = newDatagramTransport(processClient, udata = d, local = ta)
 
-proc lookupRandom*(d: DiscoveryV4): Future[seq[Node]] {.async: (raises: [CancelledError]).} =
-  try:
-    await d.kademlia.lookupRandom()
-  except ValueError as exc:
-    debug "DiscoveryV4 lookup random error", msg=exc.msg
-    return
+proc lookupRandom*(d: DiscoveryV4): Future[seq[Node]] {.async: (raw: true, raises: [CancelledError]).} =
+  d.kademlia.lookupRandom()
 
 proc bootstrap*(d: DiscoveryV4): Future[void] {.async: (raises: [CancelledError]).} =
-  try:
-    await d.kademlia.bootstrap(d.bootstrapNodes)
-    discard await d.kademlia.lookupRandom()
-  except ValueError as exc:
-    debug "DiscoveryV4 bootstrap error", msg=exc.msg
-    return
+  await d.kademlia.bootstrap(d.bootstrapNodes)
+  discard (await d.kademlia.lookupRandom())
 
-proc resolve*(d: DiscoveryV4, n: NodeId): Future[Opt[Node]] {.async: (raises: [CancelledError]).} =
-  try:
-    Opt.some(await d.kademlia.resolve(n))
-  except ValueError as exc:
-    debug "DiscoveryV4 bootstrap error", msg=exc.msg
-    Opt.none(Node)
+proc resolve*(d: DiscoveryV4, n: NodeId): Future[Node] {.async: (raw: true, raises: [CancelledError]).} =
+  d.kademlia.resolve(n)
 
 proc randomNodes*(d: DiscoveryV4, count: int): seq[Node] =
   d.kademlia.randomNodes(count)

@@ -127,7 +127,8 @@ proc open*(
 ) {.raises: [TransportOsError].} =
   # TODO: allow binding to both IPv4 and IPv6
 
-  doAssert(enableDiscV4 or enableDiscV5, "must enable of Discovery V4 or V5")
+  if not (enableDiscV4 or enableDiscV5):
+    return
 
   privateAccess(DiscV4)
   privateAccess(DiscV5)
@@ -198,5 +199,5 @@ proc closeWait*(proto: Eth1Discovery) {.async: (raises: []).} =
   # Because UDP transport is shared between DiscV4 and DiscV5,
   # no need for DiscV4 to close it anymore if both enabled.
   # It will be closed by DiscV5.
-  doAssert(proto.discv5.isNil.not)
-  await proto.discv5.closeWait()
+  if proto.discv5.isNil.not:
+    await proto.discv5.closeWait()

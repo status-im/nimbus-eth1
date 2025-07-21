@@ -66,13 +66,15 @@ proc processIncoming(server: StreamServer,
       if node.peerPool != nil:
         node.peerPool.connectingNodes.excl(peer.remote)
         node.peerPool.addPeer(peer)
-  except CatchableError as exc:
+  except EthP2PError as exc:
     error "processIncoming", msg=exc.msg
+  except CancelledError:
+    discard
 
 proc listeningAddress*(node: EthereumNode): ENode =
   node.toENode()
 
-proc startListening*(node: EthereumNode) {.raises: [CatchableError].} =
+proc startListening*(node: EthereumNode) {.raises: [TransportOsError].} =
   # TODO: allow binding to both IPv4 & IPv6
   let ta = initTAddress(node.bindIp, node.bindPort)
   if node.listeningServer == nil:
@@ -94,7 +96,7 @@ proc connectToNetwork*(
   if startListening:
     try:
       p2p.startListening(node)
-    except CatchableError as exc:
+    except TransportOsError as exc:
       error "Cannot start listening server", msg=exc.msg
 
   if enableDiscV4 or enableDiscV5:
@@ -106,7 +108,7 @@ proc stopListening*(node: EthereumNode) =
   try:
     node.listeningServer.stop()
   except TransportOsError as exc:
-    error "Cannot stop listening server", msg=exc.msg
+    error "Failure when try to stop stop listening server", msg=exc.msg
 
 iterator peers*(node: EthereumNode): Peer =
   for peer in node.peerPool.peers:
