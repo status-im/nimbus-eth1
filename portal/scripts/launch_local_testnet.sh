@@ -34,7 +34,7 @@ if [ ${PIPESTATUS[0]} != 4 ]; then
 fi
 
 OPTS="h:n:d"
-LONGOPTS="help,nodes:,data-dir:,run-tests,log-level:,base-port:,base-rpc-port:,ws,trusted-block-root:,portal-bridge,base-metrics-port:,reuse-existing-data-dir,timeout:,kill-old-processes,skip-build,portal-subnetworks:,disable-state-root-validation,radius:"
+LONGOPTS="help,nodes:,data-dir:,run-tests,log-level:,base-port:,base-rpc-port:,ws,trusted-block-root:,portal-bridge,base-metrics-port:,reuse-existing-data-dir,timeout:,kill-old-processes,skip-build,portal-subnetworks:,radius:"
 
 # default values
 
@@ -58,8 +58,7 @@ TRUSTED_BLOCK_ROOT=""
 # REST_URL="http://127.0.0.1:5052"
 REST_URL="http://testing.mainnet.beacon-api.nimbus.team"
 SKIP_BUILD="0"
-PORTAL_SUBNETWORKS="beacon,legacy_history,state"
-DISABLE_STATE_ROOT_VALIDATION="0"
+PORTAL_SUBNETWORKS="beacon,legacy_history"
 
 print_help() {
   cat <<EOF
@@ -83,7 +82,6 @@ E.g.: $(basename "$0") --nodes ${NUM_NODES} --data-dir "${DATA_DIR}" # defaults
   --kill-old-processes              if any process is found listening on a port we use, kill it (default: disabled)
   --skip-build                      skip building the binaries (default: disabled)
   --portal-subnetworks              comma separated list of subnetworks to enable (default: ${PORTAL_SUBNETWORKS})
-  --disable-state-root-validation   disable state root validation for the state subnetwork (default: disabled)
   --radius                          set the radius to be used by the nodes (default: ${RADIUS})
 EOF
 }
@@ -161,10 +159,6 @@ while true; do
     --portal-subnetworks)
       PORTAL_SUBNETWORKS="$2"
       shift 2
-      ;;
-    --disable-state-root-validation)
-      DISABLE_STATE_ROOT_VALIDATION="1"
-      shift
       ;;
     --radius)
       RADIUS="$2"
@@ -361,7 +355,6 @@ for NUM_NODE in $(seq 0 $(( NUM_NODES - 1 ))); do
     --bits-per-hop=1 \
     --debug-max-gossip-nodes=4 \
     --portal-subnetworks="${PORTAL_SUBNETWORKS}" \
-    --disable-state-root-validation="${DISABLE_STATE_ROOT_VALIDATION}" \
     ${TRUSTED_BLOCK_ROOT_ARG} \
     ${RADIUS_ARG} \
     ${EXTRA_ARGS} \
