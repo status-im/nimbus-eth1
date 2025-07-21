@@ -116,6 +116,12 @@ func finalized*(self: HeaderStore): Opt[Header] =
 func finalizedHash*(self: HeaderStore): Opt[Hash32] =
   self.finalizedHash
 
+func contains*(self: HeaderStore, hash: Hash32): bool =
+  self.headers.contains(hash)
+
+func contains*(self: HeaderStore, number: base.BlockNumber): bool =
+  self.hashes.contains(number)
+
 proc updateFinalized*(
     self: HeaderStore, header: ForkedLightClientHeader
 ): Result[bool, string] =
@@ -139,6 +145,21 @@ proc updateFinalized*(
         self.earliestHash = Opt.some(execHash)
 
   return ok(true)
+
+proc add*(self: HeaderStore, header: Header, hHash: Hash32): Result[bool, string] =
+  let latestHeader = self.latest
+
+  # check the ordering of headers. This allows for gaps but always maintains an incremental order
+  if latestHeader.isSome():
+    if header.number <= latestHeader.get().number:
+      return err("block is older than the latest one")
+
+  # Only add if it didn't exist before - the implementation of `latest` relies
+  # on this..
+  if hHash notin self.headers:
+    self.headers.put(hHash, header)
+    self.hashes.put(header.number, hHash)
+  ok(true)
 
 proc add*(self: HeaderStore, header: ForkedLightClientHeader): Result[bool, string] =
   let

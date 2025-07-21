@@ -15,7 +15,7 @@ import
   chronicles,
   eth/common/eth_types_rlp,
   eth/trie/[hexary_proof_verification],
-  json_rpc/[rpcproxy, rpcserver, rpcclient],
+  json_rpc/[rpcserver, rpcclient],
   web3/[primitives, eth_api_types, eth_api],
   ../../execution_chain/beacon/web3_eth_conv,
   ../types
@@ -69,7 +69,10 @@ proc getStorageFromProof(
     return err(proofResult.errorMsg)
 
 proc getStorageFromProof*(
-    stateRoot: Hash32, requestedSlot: UInt256, proof: ProofResponse
+    stateRoot: Hash32,
+    requestedSlot: UInt256,
+    proof: ProofResponse,
+    storageProofIndex = 0,
 ): Result[UInt256, string] =
   let account =
     ?getAccountFromProof(
@@ -82,10 +85,10 @@ proc getStorageFromProof*(
     # return 0 value
     return ok(u256(0))
 
-  if len(proof.storageProof) != 1:
+  if proof.storageProof.len() <= storageProofIndex:
     return err("no storage proof for requested slot")
 
-  let storageProof = proof.storageProof[0]
+  let storageProof = proof.storageProof[storageProofIndex]
 
   if len(storageProof.proof) == 0:
     return err("empty mpt proof for account with not empty storage")
@@ -100,7 +103,13 @@ proc getAccount*(
     address: Address,
     blockNumber: base.BlockNumber,
     stateRoot: Root,
-): Future[Result[Account, string]] {.async.} =
+): Future[Result[Account, string]] {.async: (raises: []).} =
+  let
+    cacheKey = (stateRoot, address)
+    cachedAcc = lcProxy.accountsCache.get(cacheKey)
+  if cachedAcc.isSome():
+    return ok(cachedAcc.get())
+
   info "Forwarding eth_getAccount", blockNumber
 
   let
@@ -114,6 +123,9 @@ proc getAccount*(
       stateRoot, proof.address, proof.balance, proof.nonce, proof.codeHash,
       proof.storageHash, proof.accountProof,
     )
+
+  if account.isOk():
+    lcProxy.accountsCache.put(cacheKey, account.get())
 
   return account
 
@@ -131,6 +143,12 @@ proc getCode*(
   if account.codeHash == EMPTY_CODE_HASH:
     return ok(newSeq[byte]())
 
+  let
+    cacheKey = (stateRoot, address)
+    cachedCode = lcProxy.codeCache.get(cacheKey)
+  if cachedCode.isSome():
+    return ok(cachedCode.get())
+
   info "Forwarding eth_getCode", blockNumber
 
   let code =
@@ -142,6 +160,7 @@ proc getCode*(
   # verify the byte code. since we verified the account against
   # the state root we just need to verify the code hash
   if account.codeHash == keccak256(code):
+    lcProxy.codeCache.put(cacheKey, code)
     return ok(code)
   else:
     return err("received code doesn't match the account code hash")
@@ -152,7 +171,13 @@ proc getStorageAt*(
     slot: UInt256,
     blockNumber: base.BlockNumber,
     stateRoot: Root,
-): Future[Result[UInt256, string]] {.async.} =
+): Future[Result[UInt256, string]] {.async: (raises: []).} =
+  let
+    cacheKey = (stateRoot, address, slot)
+    cachedSlotValue = lcProxy.storageCache.get(cacheKey)
+  if cachedSlotValue.isSome():
+    return ok(cachedSlotValue.get())
+
   info "Forwarding eth_getStorageAt", blockNumber
 
   let
@@ -164,4 +189,74 @@ proc getStorageAt*(
 
     slotValue = getStorageFromProof(stateRoot, slot, proof)
 
+  if slotValue.isOk():
+    lcProxy.storageCache.put(cacheKey, slotValue.get())
+
   return slotValue
+
+proc populateCachesForAccountAndSlots(
+    lcProxy: VerifiedRpcProxy,
+    address: Address,
+    slots: seq[UInt256],
+    blockNumber: base.BlockNumber,
+    stateRoot: Root,
+): Future[Result[void, string]] {.async: (raises: []).} =
+  var slotsToFetch: seq[UInt256]
+  for s in slots:
+    let storageCacheKey = (stateRoot, address, s)
+    if lcProxy.storageCache.get(storageCacheKey).isNone():
+      slotsToFetch.add(s)
+
+  let accountCacheKey = (stateRoot, address)
+
+  if lcProxy.accountsCache.get(accountCacheKey).isNone() or slotsToFetch.len() > 0:
+    let
+      proof =
+        try:
+          await lcProxy.rpcClient.eth_getProof(
+            address, slotsToFetch, blockId(blockNumber)
+          )
+        except CatchableError as e:
+          return err(e.msg)
+      account = getAccountFromProof(
+        stateRoot, proof.address, proof.balance, proof.nonce, proof.codeHash,
+        proof.storageHash, proof.accountProof,
+      )
+
+    if account.isOk():
+      lcProxy.accountsCache.put(accountCacheKey, account.get())
+
+    for i, s in slotsToFetch:
+      let slotValue = getStorageFromProof(stateRoot, s, proof, i)
+
+      if slotValue.isOk():
+        let storageCacheKey = (stateRoot, address, s)
+        lcProxy.storageCache.put(storageCacheKey, slotValue.get())
+
+  ok()
+
+proc populateCachesUsingAccessList*(
+    lcProxy: VerifiedRpcProxy,
+    blockNumber: base.BlockNumber,
+    stateRoot: Root,
+    tx: TransactionArgs,
+): Future[Result[void, string]] {.async: (raises: []).} =
+  let accessListRes: AccessListResult =
+    try:
+      await lcProxy.rpcClient.eth_createAccessList(tx, blockId(blockNumber))
+    except CatchableError as e:
+      return err(e.msg)
+
+  var futs = newSeqOfCap[Future[Result[void, string]]](accessListRes.accessList.len())
+  for accessPair in accessListRes.accessList:
+    let slots = accessPair.storageKeys.mapIt(UInt256.fromBytesBE(it.data))
+    futs.add lcProxy.populateCachesForAccountAndSlots(
+      accessPair.address, slots, blockNumber, stateRoot
+    )
+
+  try:
+    await allFutures(futs)
+  except CatchableError as e:
+    return err(e.msg)
+
+  ok()

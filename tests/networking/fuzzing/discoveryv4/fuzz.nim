@@ -10,12 +10,13 @@
 import
   std/net,
   testutils/fuzzing, chronicles, nimcrypto/keccak,
-  eth/[common/keys, rlp],
+  eth/[common/keys],
+  results,
   ../../../../execution_chain/networking/discoveryv4,
   ../../p2p_test_helper
 
 const DefaultListeningPort = 30303
-var targetNode: DiscoveryProtocol
+var targetNode: DiscoveryV4
 
 proc packData(payload: openArray[byte], pk: PrivateKey): seq[byte] =
   let
@@ -29,7 +30,7 @@ init:
   var
     targetNodeKey = PrivateKey.fromHex("a2b50376a79b1a8c8a3296485572bdfbf54708bb46d3c25d73d2723aaaf6a617")[]
     targetNodeAddr = localAddress(DefaultListeningPort)
-  targetNode = newDiscoveryProtocol(
+  targetNode = newDiscoveryV4(
     targetNodeKey, targetNodeAddr, @[], Port(DefaultListeningPort))
   # Create the transport as else replies on the messages send will fail.
   targetNode.open()
@@ -46,11 +47,5 @@ test:
   msg = packData(payload, nodeKey)
   address = localAddress(DefaultListeningPort + 1)
 
-  try:
-    targetNode.receive(address, msg)
-  # These errors are also caught in `processClient` in discovery.nim
-  # TODO: move them a layer down in discovery so we can do a cleaner test there?
-  except RlpError as e:
-    debug "Receive failed", err = e.msg
-  except DiscProtocolError as e:
-    debug "Receive failed", err = e.msg
+  targetNode.receive(address, msg).isOkOr:
+    debug "Receive failed", msg=error

@@ -12,7 +12,7 @@ import
   websock/websock,
   json_rpc/rpcserver,
   ./rpc/common,
-  #./rpc/debug,
+  ./rpc/debug,
   ./rpc/engine_api,
   ./rpc/jwt_auth,
   ./rpc/cors,
@@ -31,7 +31,7 @@ export
 
 {.push gcsafe, raises: [].}
 
-const DefaultChunkSize = 8192
+const DefaultChunkSize = 1024*1024
 
 func serverEnabled(conf: NimbusConf): bool =
   conf.httpServerEnabled or
@@ -53,14 +53,12 @@ func installRPC(server: RpcServer,
   if RpcFlag.Eth in flags:
     setupServerAPI(serverApi, server, nimbus.ctx)
 
-  #  # Tracer is currently disabled
-  # if RpcFlag.Debug in flags:
-  #   setupDebugRpc(com, nimbus.txPool, server)
+  if RpcFlag.Admin in flags:
+    setupAdminRpc(nimbus, conf, server)
 
-  server.rpc("admin_quit") do() -> string:
-    {.gcsafe.}:
-      nimbus.state = NimbusState.Stopping
-    result = "EXITING"
+  if RpcFlag.Debug in flags:
+    setupDebugRpc(com, nimbus.txPool, server)
+
 
 proc newRpcWebsocketHandler(): RpcWebSocketHandler =
   let rng = HmacDrbgContext.new()

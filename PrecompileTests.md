@@ -2,6 +2,7 @@ PrecompileTests
 ===
 ## PrecompileTests
 ```diff
++ P256Verify.json                                                 OK
 + blake2F.json                                                    OK
 + blsG1Add.json                                                   OK
 + blsG1MultiExp.json                                              OK
@@ -24,7 +25,7 @@ PrecompileTests
 + ripemd160.json                                                  OK
 + sha256.json                                                     OK
 ```
-OK: 21/21 Fail: 0/21 Skip: 0/21
+OK: 22/22 Fail: 0/22 Skip: 0/22
 ## eest
 ```diff
 + add_G1_bls.json                                                 OK
@@ -49,4 +50,4 @@ OK: 21/21 Fail: 0/21 Skip: 0/21
 OK: 18/18 Fail: 0/18 Skip: 0/18
 
 ---TOTAL---
-OK: 39/39 Fail: 0/39 Skip: 0/39
+OK: 40/40 Fail: 0/40 Skip: 0/40

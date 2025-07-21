@@ -11,9 +11,7 @@
 {.push raises:[].}
 
 import
-  pkg/eth/common,
-  pkg/results,
-  pkg/stew/interval_set,
+  pkg/[eth/common, stew/interval_set],
   ../../worker_desc
 
 # ------------------------------------------------------------------------------

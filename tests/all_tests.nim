@@ -16,6 +16,7 @@ import
     test_engine_api,
     test_evm_support,
     test_evm_errors,
+    test_async_evm,
     test_filters,
     test_forked_chain,
     test_forkid,
@@ -36,6 +37,8 @@ import
     test_txpool,
     test_networking,
     test_pooled_tx,
+    test_stateless_witness_types,
+    test_stateless_witness_generation,
     # These two suites are much slower than all the rest, so run them last
     test_blockchain_json,
     test_generalstate_json,

@@ -23,15 +23,13 @@ import
   beacon_chain/beacon_clock,
   ../../network/beacon/beacon_content,
   ../../network/beacon/beacon_init_loader,
-  ../../network/history/history_content,
-  ../../network/history/validation/block_proof_historical_roots,
-  ../../network/history/validation/block_proof_historical_summaries,
+  ../../network/legacy_history/history_content,
+  ../../network/legacy_history/validation/block_proof_historical_roots,
+  ../../network/legacy_history/validation/block_proof_historical_summaries,
   ../../network/network_metadata,
   ../../eth_data/[yaml_utils, yaml_eth_types],
   ./exporter_common,
   ./downloader
-
-from beacon_chain/el/el_manager import toBeaconBlockHeader
 
 export beacon_clock
 

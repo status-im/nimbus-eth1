@@ -1,5 +1,5 @@
 # Nimbus
-# Copyright (c) 2024 Status Research & Development GmbH
+# Copyright (c) 2025 Status Research & Development GmbH
 # Licensed and distributed under either of
 #   * MIT license (license terms in the root directory or at
 #     https://opensource.org/licenses/MIT).
@@ -11,7 +11,7 @@
 
 # Docker container spec for building the master branch of nimbus.
 
-FROM debian:buster-slim AS build
+FROM debian:bullseye-slim AS build
 
 RUN apt-get update \
  && apt-get install -y --fix-missing build-essential make git libpcre3-dev librocksdb-dev \
@@ -32,7 +32,7 @@ RUN cd nimbus-eth1 && \
 # --------------------------------- #
 # Starting new image to reduce size #
 # --------------------------------- #
-FROM debian:buster-slim AS deploy
+FROM debian:bullseye-slim AS deploy
 
 RUN apt-get update \
  && apt-get install -y librocksdb-dev bash curl jq\

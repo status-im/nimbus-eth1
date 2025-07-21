@@ -202,7 +202,7 @@ proc procBlkEpilogue(
     # large ranges of blocks, implicitly limiting its size using the gas limit
     db.persist(
       clearEmptyAccount = vmState.com.isSpuriousOrLater(header.number),
-      clearCache = true,
+      clearCache = true
     )
 
   var
@@ -225,7 +225,7 @@ proc procBlkEpilogue(
         parentHash = header.parentHash,
         expected = header.stateRoot,
         actual = stateRoot,
-        arrivedFrom = vmState.parent.stateRoot
+        parentStateRoot = vmState.parent.stateRoot
       return
         err("stateRoot mismatch, expect: " & $header.stateRoot & ", got: " & $stateRoot)
 
@@ -285,21 +285,15 @@ proc processBlock*(
     taskpool: Taskpool = nil,
 ): Result[void, string] =
   ## Generalised function to processes `blk` for any network.
+  ?vmState.procBlkPreamble(blk, skipValidation, skipReceipts, skipUncles, taskpool)
 
-  # Processing a block involves making lots and lots of small memory allocations
-  # meaning that GC overhead can make up for 15% of processing time in extreme
-  # cases - since each block is bounded in the amount of memory needed, we can
-  # run collection once per block instead.
-  deferGc:
-    ?vmState.procBlkPreamble(blk, skipValidation, skipReceipts, skipUncles, taskpool)
+  # EIP-3675: no reward for miner in POA/POS
+  if not vmState.com.proofOfStake(blk.header, vmState.ledger.txFrame):
+    vmState.calculateReward(blk.header, blk.uncles)
 
-    # EIP-3675: no reward for miner in POA/POS
-    if not vmState.com.proofOfStake(blk.header, vmState.ledger.txFrame):
-      vmState.calculateReward(blk.header, blk.uncles)
+  ?vmState.procBlkEpilogue(blk, skipValidation, skipReceipts, skipStateRootCheck)
 
-    ?vmState.procBlkEpilogue(blk, skipValidation, skipReceipts, skipStateRootCheck)
-
-    ok()
+  ok()
 
 # ------------------------------------------------------------------------------
 # End

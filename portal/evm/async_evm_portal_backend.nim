@@ -7,7 +7,7 @@
 
 {.push raises: [].}
 
-import ../network/state/state_endpoints, ./async_evm_backend
+import ../network/state/state_endpoints, ../../execution_chain/evm/async_evm_backend
 
 proc toAsyncEvmStateBackend*(stateNetwork: StateNetwork): AsyncEvmStateBackend =
   let

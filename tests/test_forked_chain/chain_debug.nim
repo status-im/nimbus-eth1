@@ -13,7 +13,7 @@
 {.push raises: [].}
 
 import
-  std/[sequtils, tables],
+  std/[tables, sets],
   pkg/chronicles,
   pkg/stew/interval_set,
   ../../execution_chain/common,
@@ -32,15 +32,10 @@ func header(h: Hash32; c: ForkedChainRef): Header =
     return loc[].header
 
 func baseChains(c: ForkedChainRef): seq[seq[Hash32]] =
-  for brc in c.branches:
+  for head in c.heads:
     var hs: seq[Hash32]
-    var branch = brc
-    while not branch.isNil:
-      var hss: seq[Hash32]
-      for blk in branch.blocks:
-        hss.add blk.hash
-      hs = hss.concat(hs)
-      branch = branch.parent
+    loopIt(head):
+      hs.add it.hash
     result.add move(hs)
 
 # ----------------
@@ -60,8 +55,8 @@ func pp*(n: BlockNumber): string = n.bnStr
 func pp*(h: Header): string = h.bnStr
 func pp*(b: Block): string = b.bnStr
 func pp*(h: Hash32): string = h.short
-func pp*(d: BlockDesc): string = d.blk.header.pp
-func pp*(d: ptr BlockDesc): string = d[].pp
+func pp*(d: BlockRef): string = d.blk.header.pp
+func pp*(d: ptr BlockRef): string = d[].pp
 func pp*(rc: Result[Header,string]): string =
   if rc.isOk: rc.value.pp else: "err(" &  rc.error & ")"
 
@@ -69,16 +64,16 @@ func pp*(rc: Result[Header,string]): string =
 # Public object validators
 # ------------------------------------------------------------------------------
 func headNumber(c: ForkedChainRef): BlockNumber =
-  c.activeBranch.headNumber
+  c.latest.number
 
 func headHash(c: ForkedChainRef): Hash32 =
-  c.activeBranch.headHash
+  c.latest.hash
 
 func baseNumber(c: ForkedChainRef): BlockNumber =
-  c.baseBranch.tailNumber
+  c.base.number
 
 func baseHash(c: ForkedChainRef): Hash32 =
-  c.baseBranch.tailHash
+  c.base.hash
 
 func validate*(c: ForkedChainRef): Result[void,string] =
   if c.headNumber < c.baseNumber:
@@ -86,8 +81,8 @@ func validate*(c: ForkedChainRef): Result[void,string] =
 
   # Empty descriptor (mainly used with unit tests)
   if c.headHash == c.baseHash and
-     c.branches.len == 1 and
-     c.hashToBlock.len == 0:
+     c.heads.len == 1 and
+     c.hashToBlock.len == 1:
     return ok()
 
   # `head` and `base` must be in the `c.hashToBlock[]`
@@ -96,30 +91,28 @@ func validate*(c: ForkedChainRef): Result[void,string] =
   if not c.hashToBlock.hasKey(c.baseHash):
     return err("base must be in hashToBlock[] table: " & $c.baseNumber)
 
+  if not c.base.finalized:
+    return err("base must have finalized marker")
+
   # Base chains must range inside `(base,head]`, rooted on `base`
   for chain in c.baseChains:
-    if chain[0] != c.baseHash:
+    if chain[^1] != c.baseHash:
       return err("unbased chain: " & chain.cnStr(c))
 
-  var numBlocksInBranches = 0
+  var blocks = initHashSet[Hash32]()
   # Cursor heads must refer to items of `c.blocks[]`
-  for brc in c.branches:
-    numBlocksInBranches += brc.len
+  for head in c.heads:
+    loopIt(head):
+      if not c.hashToBlock.hasKey(it.hash):
+        return err("stray block: " & pp(it))
 
-    for bd in brc.blocks:
-      if not c.hashToBlock.hasKey(bd.hash):
-        return err("stray block: " & pp(bd))
+      if it.number < c.baseNumber:
+        return err("branch junction too small: " & $it.number)
 
-    if brc.tailNumber < c.baseNumber:
-      return err("branch junction too small: " & $brc.tailNumber)
+      blocks.incl it.hash
 
-    let parent = brc.parent
-    if not parent.isNil:
-      if brc.tailNumber < parent.tailNumber:
-        return err("branch junction too small: " & $brc.tailNumber)
-
-  if numBlocksInBranches != c.hashToBlock.len:
-    return err("inconsistent number of blocks in branches: " & $numBlocksInBranches &
+  if blocks.len != c.hashToBlock.len:
+    return err("inconsistent number of blocks in branches: " & $blocks.len &
       " vs number of block hashes " & $c.hashToBlock.len)
 
   ok()

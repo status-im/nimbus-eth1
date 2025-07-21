@@ -17,7 +17,6 @@ import
   rocksdb,
   results,
   ../../[aristo_blobify, aristo_desc],
-  ../init_common,
   ./rdb_desc
 
 const
@@ -47,7 +46,7 @@ proc rollback*(rdb: var RdbInst, session: SharedWriteBatchRef) =
 proc commit*(rdb: var RdbInst, session: SharedWriteBatchRef): Result[void,(AristoError,string)] =
   if not session.isClosed():
     defer: session.close()
-    rdb.baseDb.commit(session).isOkOr:
+    rdb.baseDb.commit(session, rdb.vtxCol).isOkOr:
       const errSym = RdbBeDriverWriteError
       when extraTraceMessages:
         trace logTxt "commit", error=errSym, info=error
@@ -56,22 +55,21 @@ proc commit*(rdb: var RdbInst, session: SharedWriteBatchRef): Result[void,(Arist
 
 proc putAdm*(
     rdb: var RdbInst; session: SharedWriteBatchRef,
-    xid: AdminTabID;
     data: openArray[byte];
-      ): Result[void,(AdminTabID,AristoError,string)] =
+      ): Result[void,(AristoError,string)] =
   let dsc = session.batch
   if data.len == 0:
-    dsc.delete(xid.toOpenArray, rdb.admCol.handle()).isOkOr:
+    dsc.delete(AdmKey, rdb.vtxCol.handle()).isOkOr:
       const errSym = RdbBeDriverDelAdmError
       when extraTraceMessages:
         trace logTxt "putAdm()", xid, error=errSym, info=error
-      return err((xid,errSym,error))
+      return err((errSym,error))
   else:
-    dsc.put(xid.toOpenArray, data, rdb.admCol.handle()).isOkOr:
+    dsc.put(AdmKey, data, rdb.vtxCol.handle()).isOkOr:
       const errSym = RdbBeDriverPutAdmError
       when extraTraceMessages:
         trace logTxt "putAdm()", xid, error=errSym, info=error
-      return err((xid,errSym,error))
+      return err((errSym,error))
   ok()
 
 proc putVtx*(

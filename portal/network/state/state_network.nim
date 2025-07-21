@@ -15,7 +15,7 @@ import
   eth/common/hashes,
   eth/p2p/discoveryv5/[protocol, enr],
   ../../database/content_db,
-  ../history/history_network,
+  ../legacy_history/history_network,
   ../wire/[portal_protocol, portal_stream, portal_protocol_config, ping_extensions],
   ./state_content,
   ./state_validation,
@@ -33,7 +33,7 @@ type StateNetwork* = ref object
   contentQueue*: AsyncQueue[(Opt[NodeId], ContentKeysList, seq[seq[byte]])]
   processContentLoops: seq[Future[void]]
   statusLogLoop: Future[void]
-  historyNetwork: Opt[HistoryNetwork]
+  historyNetwork: Opt[LegacyHistoryNetwork]
   validateStateIsCanonical: bool
   contentRequestRetries: int
   contentQueueWorkers: int
@@ -49,7 +49,7 @@ proc new*(
     streamManager: StreamManager,
     bootstrapRecords: openArray[Record] = [],
     portalConfig: PortalProtocolConfig = defaultPortalProtocolConfig,
-    historyNetwork = Opt.none(HistoryNetwork),
+    historyNetwork = Opt.none(LegacyHistoryNetwork),
     validateStateIsCanonical = true,
     contentRequestRetries = 1,
     contentQueueWorkers = 50,

@@ -44,7 +44,7 @@ proc basicServices(nimbus: NimbusNode,
   # Setup the chain
   let fc = ForkedChainRef.init(com,
     eagerStateRoot = conf.eagerStateRootCheck,
-    persistBatchSize=conf.persistBatchSize,
+    persistBatchSize = conf.persistBatchSize,
     enableQueue = true)
   fc.deserialize().isOkOr:
     warn "Loading block DAG from database", msg=error
@@ -107,7 +107,7 @@ proc setupP2P(nimbus: NimbusNode, conf: NimbusConf,
 
   nimbus.ethNode = newEthereumNode(
     keypair, address, conf.networkId, conf.agentString,
-    addAllCapabilities = false, minPeers = conf.maxPeers,
+    minPeers = conf.maxPeers,
     bootstrapNodes = bootstrapNodes,
     bindUdpPort = conf.udpPort, bindTcpPort = conf.tcpPort,
     bindIp = conf.listenAddress,
@@ -137,10 +137,11 @@ proc setupP2P(nimbus: NimbusNode, conf: NimbusConf,
 
   # Start Eth node
   if conf.maxPeers > 0:
-    nimbus.networkLoop = nimbus.ethNode.connectToNetwork(
-      enableDiscovery = conf.discovery != DiscoveryType.None,
-      waitForPeers = true)
-
+    let discovery = conf.getDiscoveryFlags()
+    nimbus.ethNode.connectToNetwork(
+      enableDiscV4 = DiscoveryType.V4 in discovery,
+      enableDiscV5 = DiscoveryType.V5 in discovery,
+    )
 
 proc setupMetrics(nimbus: NimbusNode, conf: NimbusConf)
     {.raises: [CancelledError, MetricsError].} =
@@ -236,7 +237,8 @@ proc run(nimbus: NimbusNode, conf: NimbusConf) =
     db = coreDB,
     taskpool = taskpool,
     networkId = conf.networkId,
-    params = conf.networkParams)
+    params = conf.networkParams,
+    statelessProviderEnabled = conf.statelessProviderEnabled)
 
   if conf.extraData.len > 32:
     warn "ExtraData exceeds 32 bytes limit, truncate",
@@ -293,7 +295,7 @@ proc run(nimbus: NimbusNode, conf: NimbusConf) =
         discard e # silence warning when chronicles not activated
 
     # Stop loop
-    waitFor nimbus.stop(conf)
+    waitFor nimbus.closeWait()
 
 when isMainModule:
   var nimbus = NimbusNode(state: NimbusState.Starting, ctx: newEthContext())

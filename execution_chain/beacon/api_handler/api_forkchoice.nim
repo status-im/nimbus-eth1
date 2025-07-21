@@ -112,8 +112,8 @@ proc forkchoiceUpdated*(ben: BeaconEngineRef,
       number = header.number,
       hash   = headHash.short,
       base   = chain.baseNumber,
-      finHash= update.finalizedBlockHash,
-      safe   = update.safeBlockHash,
+      finHash= update.finalizedBlockHash.short,
+      safe   = update.safeBlockHash.short,
       pendingFCU = chain.finHash.short,
       resolvedFin= chain.resolvedFinNumber
 
@@ -219,9 +219,11 @@ proc forkchoiceUpdated*(ben: BeaconEngineRef,
 
   info "Fork choice updated",
     requested = header.number,
-    hash = headHash.short,
     head = chain.latestNumber,
+    headHash = headHash.short,
     base = chain.baseNumber,
-    baseHash = chain.baseHash.short
+    baseHash = chain.baseHash.short,
+    finalizedHash = finalizedBlockHash.short,
+    resolvedFin = chain.resolvedFinNumber
 
   return validFCU(Opt.none(Bytes8), headHash)

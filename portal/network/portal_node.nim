@@ -18,7 +18,7 @@ import
   ./network_metadata,
   ./wire/[portal_stream, portal_protocol_config],
   ./beacon/[beacon_init_loader, beacon_light_client],
-  ./history/[history_network, history_content],
+  ./legacy_history/[history_network, history_content],
   ./state/[state_network, state_content]
 
 from eth/p2p/discoveryv5/routing_table import logDistance
@@ -43,7 +43,7 @@ type
     contentDB: ContentDB
     streamManager: StreamManager
     beaconNetwork*: Opt[BeaconNetwork]
-    historyNetwork*: Opt[HistoryNetwork]
+    legacyHistoryNetwork*: Opt[LegacyHistoryNetwork]
     stateNetwork*: Opt[StateNetwork]
     beaconLightClient*: Opt[LightClient]
     statusLogLoop: Future[void]
@@ -129,10 +129,10 @@ proc new*(
       else:
         Opt.none(BeaconNetwork)
 
-    historyNetwork =
-      if PortalSubnetwork.history in subnetworks:
+    legacyHistoryNetwork =
+      if PortalSubnetwork.legacyHistory in subnetworks:
         Opt.some(
-          HistoryNetwork.new(
+          LegacyHistoryNetwork.new(
             network,
             discovery,
             contentDB,
@@ -152,7 +152,7 @@ proc new*(
           )
         )
       else:
-        Opt.none(HistoryNetwork)
+        Opt.none(LegacyHistoryNetwork)
 
     stateNetwork =
       if PortalSubnetwork.state in subnetworks:
@@ -164,7 +164,7 @@ proc new*(
             streamManager,
             bootstrapRecords = bootstrapRecords,
             portalConfig = config.portalConfig,
-            historyNetwork = historyNetwork,
+            historyNetwork = legacyHistoryNetwork,
             not config.disableStateRootValidation,
             contentRequestRetries = config.contentRequestRetries,
             contentQueueWorkers = config.contentQueueWorkers,
@@ -197,7 +197,7 @@ proc new*(
     contentDB: contentDB,
     streamManager: streamManager,
     beaconNetwork: beaconNetwork,
-    historyNetwork: historyNetwork,
+    legacyHistoryNetwork: legacyHistoryNetwork,
     stateNetwork: stateNetwork,
     beaconLightClient: beaconLightClient,
   )
@@ -231,8 +231,8 @@ proc start*(n: PortalNode) =
 
   if n.beaconNetwork.isSome():
     n.beaconNetwork.value.start()
-  if n.historyNetwork.isSome():
-    n.historyNetwork.value.start()
+  if n.legacyHistoryNetwork.isSome():
+    n.legacyHistoryNetwork.value.start()
   if n.stateNetwork.isSome():
     n.stateNetwork.value.start()
 
@@ -248,8 +248,8 @@ proc stop*(n: PortalNode) {.async: (raises: []).} =
 
   if n.beaconNetwork.isSome():
     futures.add(n.beaconNetwork.value.stop())
-  if n.historyNetwork.isSome():
-    futures.add(n.historyNetwork.value.stop())
+  if n.legacyHistoryNetwork.isSome():
+    futures.add(n.legacyHistoryNetwork.value.stop())
   if n.stateNetwork.isSome():
     futures.add(n.stateNetwork.value.stop())
   if n.beaconLightClient.isSome():

@@ -310,8 +310,10 @@ func getProtocolId*(
     case subnetwork
     of PortalSubnetwork.state:
       [portalPrefix, 0x0A]
-    of PortalSubnetwork.history:
+    of PortalSubnetwork.legacyHistory:
       [portalPrefix, 0x0B]
+    of PortalSubnetwork.history:
+      raiseAssert "Not yet supported"
     of PortalSubnetwork.beacon:
       [portalPrefix, 0x0C]
     of PortalSubnetwork.transactionIndex:
@@ -324,8 +326,10 @@ func getProtocolId*(
     case subnetwork
     of PortalSubnetwork.state:
       [portalPrefix, 0x4A]
-    of PortalSubnetwork.history:
+    of PortalSubnetwork.legacyHistory:
       [portalPrefix, 0x4B]
+    of PortalSubnetwork.history:
+      raiseAssert "Not yet supported"
     of PortalSubnetwork.beacon:
       [portalPrefix, 0x4C]
     of PortalSubnetwork.transactionIndex:

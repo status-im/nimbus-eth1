@@ -27,6 +27,8 @@ type
     fcuNumAndHash = 8
     fcState = 9
     beaconHeader = 10
+    wdKey = 11
+    witness = 12
 
   DbKey* = object
     # The first byte stores the key type. The rest are key-specific values
@@ -97,6 +99,16 @@ func beaconHeaderKey*(u: BlockNumber): DbKey =
 
 func fcStateKey*(u: uint64): DbKey {.inline.} =
   uint64KeyImpl(fcState)
+
+func withdrawalsKey*(h: Hash32): DbKey {.inline.} =
+  result.data[0] = byte ord(wdKey)
+  result.data[1 .. 32] = h.data
+  result.dataEndPos = uint8 32
+
+func blockHashToWitnessKey*(h: Hash32): DbKey {.inline.} =
+  result.data[0] = byte ord(witness)
+  result.data[1 .. 32] = h.data
+  result.dataEndPos = uint8 32
 
 template toOpenArray*(k: DbKey): openArray[byte] =
   k.data.toOpenArray(0, int(k.dataEndPos))

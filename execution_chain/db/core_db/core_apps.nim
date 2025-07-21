@@ -20,6 +20,7 @@ import
   stew/byteutils,
   results,
   "../.."/[constants],
+  "../.."/stateless/witness_types,
   ".."/[aristo, storage_types],
   "."/base
 
@@ -111,8 +112,9 @@ iterator getBlockTransactionHashes*(
 
 iterator getWithdrawals*(
     db: CoreDbTxRef;
+    T: type;
     withdrawalsRoot: Hash32;
-      ): Withdrawal {.raises: [RlpError].} =
+      ): T {.raises: [RlpError].} =
   block body:
     if withdrawalsRoot == EMPTY_ROOT_HASH:
       break body
@@ -124,7 +126,7 @@ iterator getWithdrawals*(
         break body
       if data.len == 0:
         break body
-      yield rlp.decode(data, Withdrawal)
+      yield rlp.decode(data, T)
 
 iterator getReceipts*(
     db: CoreDbTxRef;
@@ -355,21 +357,42 @@ proc persistWithdrawals*(
   const info = "persistWithdrawals()"
   if withdrawals.len == 0:
     return
-  for idx, wd in withdrawals:
-    let key = hashIndexKey(withdrawalsRoot, idx.uint16)
-    db.put(key, rlp.encode(wd)).isOkOr:
-      warn info, idx, error=($$error)
+
+  db.put(withdrawalsKey(withdrawalsRoot).toOpenArray,
+    rlp.encode(withdrawals)).isOkOr:
+      warn info, error=($$error)
       return
+
+  when false:
+    # Ol withdrawals format
+    # Obsolete. Keep it for reference
+    for idx, wd in withdrawals:
+      let key = hashIndexKey(withdrawalsRoot, idx.uint16)
+      db.put(key, rlp.encode(wd)).isOkOr:
+        warn info, idx, error=($$error)
+        return
 
 proc getWithdrawals*(
     db: CoreDbTxRef;
     withdrawalsRoot: Hash32
       ): Result[seq[Withdrawal], string] =
+  const info = "getWithdrawals()"
+
   wrapRlpException "getWithdrawals":
-    var res: seq[Withdrawal]
-    for wd in db.getWithdrawals(withdrawalsRoot):
-      res.add(wd)
-    return ok(res)
+    var list: seq[Withdrawal]
+    let res = db.get(withdrawalsKey(withdrawalsRoot).toOpenArray)
+
+    if res.isErr:
+      if res.error.error != KvtNotFound:
+        warn info, withdrawalsRoot, error=($$res.error)
+      else:
+        # Fallback to old withdrawals format
+        for wd in db.getWithdrawals(Withdrawal, withdrawalsRoot):
+          list.add(wd)
+    else:
+      list = rlp.decode(res.value, seq[Withdrawal])
+
+    return ok(move(list))
 
 proc getTransactions*(
     db: CoreDbTxRef;
@@ -379,7 +402,7 @@ proc getTransactions*(
     var res: seq[Transaction]
     for encodedTx in db.getBlockTransactionData(txRoot):
       res.add(rlp.decode(encodedTx, Transaction))
-    return ok(res)
+    return ok(move(res))
 
 proc getBlockBody*(
     db: CoreDbTxRef;
@@ -393,7 +416,7 @@ proc getBlockBody*(
     if header.withdrawalsRoot.isSome:
       let wds = ?db.getWithdrawals(header.withdrawalsRoot.get)
       body.withdrawals = Opt.some(wds)
-    return ok(body)
+    return ok(move(body))
 
 proc getBlockBody*(
     db: CoreDbTxRef;
@@ -417,8 +440,7 @@ proc getEthBlock*(
       ): Result[EthBlock, string] =
   var
     header = ?db.getBlockHeader(blockNumber)
-    headerHash = header.computeBlockHash
-    blockBody = ?db.getBlockBody(headerHash)
+    blockBody = ?db.getBlockBody(header)
   ok(EthBlock.init(move(header), move(blockBody)))
 
 
@@ -600,6 +622,23 @@ proc persistUncles*(db: CoreDbTxRef, uncles: openArray[Header]): Hash32 =
   db.put(genericHashKey(result).toOpenArray, enc).isOkOr:
     warn "persistUncles()", unclesHash=result, error=($$error)
     return EMPTY_ROOT_HASH
+
+proc persistWitness*(db: CoreDbTxRef, blockHash: Hash32, witness: Witness): Result[void, string] =
+  db.put(blockHashToWitnessKey(blockHash).toOpenArray, witness.encode()).isOkOr:
+    return err("persistWitness: " & $$error)
+  ok()
+
+proc getWitness*(db: CoreDbTxRef, blockHash: Hash32): Result[Witness, string] =
+  let witnessBytes = db.get(blockHashToWitnessKey(blockHash).toOpenArray).valueOr:
+    return err("getWitness: " & $$error)
+
+  Witness.decode(witnessBytes)
+
+proc getCodeByHash*(db: CoreDbTxRef, codeHash: Hash32): Result[seq[byte], string] =
+  let code = db.get(contractHashKey(codeHash).toOpenArray).valueOr:
+    return err("getCodeByHash: " & $$error)
+
+  ok(code)
 
 # ------------------------------------------------------------------------------
 # End

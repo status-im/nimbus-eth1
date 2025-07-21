@@ -73,17 +73,22 @@ proc toRocksDb*(
   if opts.writeBufferSize > 0:
     cfOpts.writeBufferSize = opts.writeBufferSize
 
-  # When data is written to rocksdb, it is first put in an in-memory table
-  # whose index is a skip list. Since the mem table holds the most recent data,
-  # all reads must go through this skiplist which results in slow lookups for
-  # already-written data.
-  # We enable a bloom filter on the mem table to avoid this lookup in the cases
-  # where the data is actually on disk already (ie wasn't updated recently).
-  # TODO there's also a hashskiplist that has both a hash index and a skip list
-  #      which maybe could be used - uses more memory, requires a key prefix
-  #      extractor
-  cfOpts.memtableWholeKeyFiltering = true
-  cfOpts.memtablePrefixBloomSizeRatio = 0.1
+  # When data is written to rocksdb, it is first put in an in-memory table. The
+  # default implementation is a skip list whose overhead is quite significant
+  # both when inserting and during lookups - up to 10% CPU time has been
+  # observed in it.
+  # Instead of using a skip list, we'll bulk-load changes into a vector which
+  # immediately is flushed to L0/1 thus avoiding memtables completely (our own
+  # in-memory caches perform a similar task with less serialization).
+  # A downside of this approach is that the memtable *has* to be flushed in the
+  # main thread instead of this operation happening in the background - however,
+  # the time it takes to flush is less than it takes to build the skip list, so
+  # this ends up being a net win regardless.
+  cfOpts.setMemtableVectorRep()
+
+  # L0 files may overlap, so we want to push them down to L1 quickly so as to
+  # not have to read/examine too many files to find data
+  cfOpts.level0FileNumCompactionTrigger = 2
 
   # ZSTD seems to cut database size to 2/3 roughly, at the time of writing
   # Using it for the bottom-most level means it applies to 90% of data but
@@ -96,20 +101,17 @@ proc toRocksDb*(
   # https://github.com/facebook/rocksdb/wiki/Dictionary-Compression
   cfOpts.bottommostCompression = Compression.zstdCompression
 
-  # TODO In the AriVtx table, we don't do lookups that are expected to result
-  #      in misses thus we could avoid the filter cost - this does not apply to
-  #      other tables since their API admit queries that might result in
-  #      not-found - specially the KVT which is exposed to external queries and
-  #      the `HashKey` cache (AriKey)
-  # https://github.com/EighteenZi/rocksdb_wiki/blob/master/Memory-usage-in-RocksDB.md#indexes-and-filter-blocks
-  # https://github.com/facebook/rocksdb/blob/af50823069818fc127438e39fef91d2486d6e76c/include/rocksdb/advanced_options.h#L696
-  # cfOpts.optimizeFiltersForHits = true
-
-  cfOpts.maxBytesForLevelBase = cfOpts.writeBufferSize
+  # With the default options, we end up with 512MB at the base level - a
+  # multiplier of 16 means that we can fit 128GB in the next two levels - the
+  # more levels, the greater the read amplification at an expense of write
+  # amplification - given that we _mostly_ read, this feels like a reasonable
+  # tradeoff.
+  cfOpts.maxBytesForLevelBase = cfOpts.writeBufferSize * 8
+  cfOpts.maxBytesForLevelMultiplier = 16
 
   # Reduce number of files when the database grows
   cfOpts.targetFileSizeBase = cfOpts.writeBufferSize
-  cfOpts.targetFileSizeMultiplier = 6
+  cfOpts.targetFileSizeMultiplier = 4
 
   # We certainly don't want to re-compact historical data over and over
   cfOpts.ttl = 0
@@ -117,6 +119,9 @@ proc toRocksDb*(
 
   let dbOpts = defaultDbOptions(autoClose = true)
   dbOpts.maxOpenFiles = opts.maxOpenFiles
+
+  # Needed for vector memtable
+  dbOpts.allowConcurrentMemtableWrite = false
 
   if opts.rowCacheSize > 0:
     # Good for GET queries, which is what we do most of the time - however,
@@ -126,19 +131,11 @@ proc toRocksDb*(
     # https://github.com/facebook/rocksdb/blob/af50823069818fc127438e39fef91d2486d6e76c/include/rocksdb/options.h#L1276
     dbOpts.rowCache = cacheCreateLRU(opts.rowCacheSize, autoClose = true)
 
-  # Without this option, WAL files might never get removed since a small column
-  # family (like the admin CF) with only tiny writes might keep it open - this
-  # negatively affects startup times since the WAL is replayed on every startup.
-  # https://github.com/facebook/rocksdb/blob/af50823069818fc127438e39fef91d2486d6e76c/include/rocksdb/options.h#L719
-  # Flushing the oldest
-  let writeBufferSize =
-    if opts.writeBufferSize > 0: opts.writeBufferSize else: cfOpts.writeBufferSize
-
-  # The larger the value, the fewer files will be created but the longer the
-  # startup time (because this much data must be replayed)
-  dbOpts.maxTotalWalSize = 3 * writeBufferSize + 1024 * 1024
-
   dbOpts.keepLogFileNum = 16 # No point keeping 1000 log files around...
+
+  # Parallelize L0 -> Ln compaction
+  # https://github.com/facebook/rocksdb/wiki/Subcompaction
+  dbOpts.maxSubcompactions = dbOpts.maxBackgroundJobs
 
   (dbOpts, cfOpts)
 
@@ -152,9 +149,12 @@ proc newRocksDbCoreDbRef*(basePath: string, opts: DbOptions): CoreDbRef =
   # The same column family options are used for all column families meaning that
   # the options are a compromise between the various write and access patterns
   # of what's stored in there - there's room for improvement here!
+
+  # Legacy support: adm CF, if it exists
+
   let
     (dbOpts, cfOpts) = opts.toRocksDb()
-    cfDescs = (AristoCFs.items().toSeq().mapIt($it) & KvtCFs.items().toSeq().mapIt($it))
+    cfDescs = @[$AristoCFs.VtxCF] & KvtCFs.items().toSeq().mapIt($it)
     baseDb = RocksDbInstanceRef.open(basePath, dbOpts, cfOpts, cfDescs).expect(
         "Open database from " & basePath
       )

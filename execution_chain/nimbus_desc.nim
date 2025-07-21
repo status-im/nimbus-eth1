@@ -36,6 +36,8 @@ export
   common,
   config
 
+{.push raises: [].}
+
 type
   NimbusState* = enum
     Starting, Running, Stopping
@@ -48,24 +50,21 @@ type
     ctx*: EthContext
     fc*: ForkedChainRef
     txPool*: TxPoolRef
-    networkLoop*: Future[void]
     peerManager*: PeerManagerRef
     beaconSyncRef*: BeaconSyncRef
     beaconEngine*: BeaconEngineRef
     metricsServer*: MetricsHttpServerRef
     wire*: EthWireRef
 
-{.push gcsafe, raises: [].}
-
-proc stop*(nimbus: NimbusNode, conf: NimbusConf) {.async, gcsafe.} =
+proc closeWait*(nimbus: NimbusNode) {.async.} =
   trace "Graceful shutdown"
   var waitedFutures: seq[Future[void]]
   if nimbus.httpServer.isNil.not:
     waitedFutures.add nimbus.httpServer.stop()
   if nimbus.engineApiServer.isNil.not:
     waitedFutures.add nimbus.engineApiServer.stop()
-  if conf.maxPeers > 0:
-    waitedFutures.add nimbus.networkLoop.cancelAndWait()
+  if nimbus.ethNode.isNil.not:
+    waitedFutures.add nimbus.ethNode.closeWait()
   if nimbus.peerManager.isNil.not:
     waitedFutures.add nimbus.peerManager.stop()
   if nimbus.beaconSyncRef.isNil.not:

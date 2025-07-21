@@ -19,9 +19,9 @@ import
   ../rpc/portal_rpc_client,
   ../rpc/eth_rpc_client,
   ../eth_data/[history_data_seeding, history_data_json_store, history_data_ssz_e2s],
-  ../network/history/
+  ../network/legacy_history/
     [history_content, validation/block_proof_historical_hashes_accumulator],
-  ../tests/history_network_tests/test_history_util
+  ../tests/legacy_history_network_tests/test_history_util
 
 type
   FutureCallback[A] = proc(): Future[A] {.gcsafe, raises: [].}

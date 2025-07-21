@@ -26,22 +26,22 @@ proc importBlock*(
     maybePeer: Opt[BeaconBuddyRef];
     blk: EthBlock;
     effPeerID: Hash;
-      ): Future[Result[void,ImportBlockError]]
+      ): Future[Result[Duration,BeaconError]]
       {.async: (raises: []).} =
   ## Wrapper around blocks importer
+  let start = Moment.now()
 
   if blk.header.number <= ctx.chain.baseNumber:
     trace "Ignoring block less eq. base", peer=maybePeer.toStr, blk=blk.bnStr,
       B=ctx.chain.baseNumber.bnStr, L=ctx.chain.latestNumber.bnStr
-    return ok()
+  else:
+    try:
+      (await ctx.chain.queueImportBlock blk).isOkOr:
+        return err((ENoException,"",error,Moment.now()-start))
+    except CancelledError as e:
+      return err((ECancelledError,$e.name,e.msg,Moment.now()-start))
 
-  try:
-    (await ctx.chain.queueImportBlock blk).isOkOr:
-      return err((error,false))
-  except CancelledError as e:
-    return err(($e.name & ": " & e.msg, true))
-
-  return ok()
+  return ok(Moment.now()-start)
 
 # ------------------------------------------------------------------------------
 # End

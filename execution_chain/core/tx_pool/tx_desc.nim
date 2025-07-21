@@ -232,12 +232,6 @@ proc classifyValid(xp: TxPoolRef; tx: Transaction, sender: Address): bool =
       debug "Invalid transaction: EIP-1559 transaction with maxFeePerGas lower than 1"
       return false
 
-  debug "Valid transaction",
-    txType = tx.txType,
-    sender = sender,
-    gasLimit = tx.gasLimit,
-    gasPrice = tx.gasPrice,
-    value = tx.value
   true
 
 proc validateBlobTransactionWrapper(tx: PooledTransaction, fork: EVMFork):
@@ -415,10 +409,16 @@ proc addTx*(xp: TxPoolRef, ptx: PooledTransaction): Result[void, TxError] =
   debug "Transaction added to txpool",
     txHash = id,
     sender = sender,
+    txType = ptx.tx.txType,
     recipient = ptx.tx.getRecipient(sender),
     nonce = ptx.tx.nonce,
+    gasLimit = ptx.tx.gasLimit,
     gasPrice = ptx.tx.gasPrice,
-    value = ptx.tx.value
+    value = ptx.tx.value,
+    numBlobs = if ptx.blobsBundle.isNil: 0
+               else: ptx.blobsBundle.blobs.len,
+    wrapperVersion = if ptx.blobsBundle.isNil: "none"
+                     else: $ptx.blobsBundle.wrapperVersion
 
   ok()
 
