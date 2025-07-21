@@ -166,48 +166,6 @@ procSuite "Portal testnet tests":
       check enr == randomNodeInfo.enr
       await client.close()
 
-  asyncTest "Portal State - Random node lookup from each node":
-    let clients = await connectToRpcServers(config)
-
-    var nodeInfos: seq[NodeInfo]
-
-    for client in clients:
-      let nodeInfo = await client.portal_stateNodeInfo()
-      await client.close()
-      nodeInfos.add(nodeInfo)
-
-    for client in clients:
-      discard await client.portal_stateAddEnrs(
-        nodeInfos.map(
-          proc(x: NodeInfo): Record =
-            x.enr
-        )
-      )
-      await client.close()
-
-    for client in clients:
-      let routingTableInfo = await client.portal_stateRoutingTableInfo()
-      await client.close()
-      var start: seq[NodeId]
-      let nodes = foldl(routingTableInfo.buckets, a & b, start)
-      check nodes.len >= (min(config.nodeCount - 1, 16))
-
-    # grab a random node its `NodeInfo` and lookup that node from all nodes.
-    let randomNodeInfo = sample(rng[], nodeInfos)
-    for client in clients:
-      var enr: Record
-      try:
-        enr = await client.portal_stateLookupEnr(randomNodeInfo.nodeId)
-      except CatchableError as e:
-        echo e.msg
-      # TODO: For state network this occasionally fails. It might be because the
-      # distance function is not used in all locations, or perhaps it just
-      # doesn't converge to the target always with this distance function. To be
-      # further investigated.
-      skip()
-      # check enr == randomNodeInfo.enr
-      await client.close()
-
   asyncTest "Portal History - Random node lookup from each node":
     let clients = await connectToRpcServers(config)
 

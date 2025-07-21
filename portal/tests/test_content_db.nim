@@ -10,7 +10,7 @@
 import
   unittest2,
   stint,
-  ../network/state/state_content,
+  ../network/beacon/beacon_content,
   ../database/content_db,
   ./test_helpers
 
