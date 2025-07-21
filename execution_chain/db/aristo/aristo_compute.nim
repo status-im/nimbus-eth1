@@ -286,8 +286,8 @@ proc computeKeyImpl(
               skipLayers = skipLayers,
             )
           batch.leave(n)
-
-      template writeBranch(): HashKey =
+      
+      template writeBranch(vtx: BranchRef): HashKey =
         encodeBranch(vtx):
           if subvid.isValid:
             level = max(level, keyvtxs[n][1])
@@ -295,11 +295,10 @@ proc computeKeyImpl(
           else:
             VOID_HASH_KEY
 
-      if vtx.pfx.len > 0: # Extension node
+      if vtx.vType == ExtBranch:
+        let vtx = ExtBranchRef(vtx)
         encodeExt(vtx.pfx):
-          writeBranch()
-      else:
-        writeBranch()
+          writeBranch(vtx)
 
   # Cache the hash into the same storage layer as the the top-most value that it
   # depends on (recursively) - this could be an ephemeral in-memory layer or the
@@ -308,7 +307,7 @@ proc computeKeyImpl(
   # root key also changing while leaves that have never been hashed will see
   # their hash being saved directly to the backend.
 
-  if vtx.vType notin Leaves:
+  if vtx.vType in Branches:
     ?db.putKeyAtLevel(rvid, BranchRef(vtx), key, level, batch)
   ok (key, level)
 
