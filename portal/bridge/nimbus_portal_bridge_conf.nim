@@ -43,10 +43,6 @@ proc defaultPortalBridgeDir*(): string =
 
   getHomeDir() / relativeDataDir
 
-proc defaultPortalBridgeStateDir*(): string =
-  let stateDir = when defined(windows) or defined(macosx): "State" else: "state"
-  defaultPortalBridgeDir() / stateDir
-
 const defaultEndEra* = uint64(era(network_metadata.mergeBlockNumber - 1))
 
 type
@@ -63,7 +59,6 @@ type
   PortalBridgeCmd* = enum
     beacon = "Run a Portal bridge for the beacon network"
     history = "Run a Portal bridge for the history network"
-    state = "Run a Portal bridge for the state network"
 
   PortalBridgeConf* = object # Logging
     logLevel* {.desc: "Sets the log level", defaultValue: "INFO", name: "log-level".}:
@@ -157,80 +152,6 @@ type
         defaultValue: 50,
         name: "gossip-concurrency"
       .}: int
-    of PortalBridgeCmd.state:
-      web3RpcUrl* {.desc: "Execution layer JSON-RPC API URL", name: "web3-url".}:
-        JsonRpcUrl
-
-      portalRpcEndpoints* {.
-        desc:
-          "The number of portal clients to use for gossipping content into the network. " &
-          "Portal clients must be started and running before running the state bridge. " &
-          "The bridge assumes the portal clients are running on the same host using contiguous " &
-          "port numbers in the range starting from the port of the portal-rpc-url",
-        defaultValue: 1,
-        name: "portal-endpoints"
-      .}: uint
-
-      stateDir* {.
-        desc: "The directory where the state data is stored",
-        defaultValue: defaultPortalBridgeStateDir(),
-        defaultValueDesc: "",
-        name: "state-dir"
-      .}: InputDir
-
-      startBlockNumber* {.
-        desc: "The block number to start from", defaultValue: 1, name: "start-block"
-      .}: uint64
-
-      verifyStateProofs* {.
-        desc:
-          "Verify state proofs before gossiping them into the portal network (Slow: Only used for testing).",
-        defaultValue: false,
-        name: "verify-state-proofs"
-      .}: bool
-
-      enableGossip* {.
-        desc:
-          "Enable gossipping the state into the portal network. Disable to only build the state without gossiping it.",
-        defaultValue: true,
-        name: "enable-gossip"
-      .}: bool
-
-      gossipGenesis* {.
-        desc:
-          "Enable gossip of the genesis state into the portal network when starting from block 1",
-        defaultValue: true,
-        name: "gossip-genesis"
-      .}: bool
-
-      verifyGossip* {.
-        desc:
-          "Enable verifying that the state was successfully gossipped by fetching it from the network",
-        defaultValue: false,
-        name: "verify-gossip"
-      .}: bool
-
-      skipGossipForExisting* {.
-        desc:
-          "Enable skipping gossip of each content value which is successfully fetched from the network",
-        defaultValue: true,
-        name: "skip-gossip-for-existing"
-      .}: bool
-
-      gossipWorkers* {.
-        desc:
-          "The number of concurrent workers to use for gossiping the state into the portal network",
-        defaultValue: 2,
-        name: "gossip-workers"
-      .}: uint
-
-      minGossipPeers* {.
-        desc:
-          "The minimum number of peers to which we gossip each piece of content. " &
-          "The gossip is retried until this target number of peers is reached.",
-        defaultValue: 1,
-        name: "min-gossip-peers"
-      .}: uint
 
 func parseCmdArg*(T: type TrustedDigest, input: string): T {.raises: [ValueError].} =
   TrustedDigest.fromHex(input)
