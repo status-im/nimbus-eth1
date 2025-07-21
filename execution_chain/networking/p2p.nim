@@ -10,14 +10,16 @@
 {.push raises: [].}
 
 import
-  std/[tables, algorithm, random, typetraits, strutils, net],
+  std/[tables, algorithm, typetraits, strutils, net],
   chronos, chronos/timer, chronicles,
   eth/common/keys,
   results,
-  ./[discoveryv4, peer_pool, rlpx, p2p_types]
+  ./[peer_pool, rlpx, p2p_types],
+  ./discoveryv4/enode,
+  ./eth1_discovery
 
 export
-  p2p_types, rlpx, enode, kademlia
+  p2p_types, rlpx, enode
 
 logScope:
   topics = "p2p"
@@ -37,23 +39,22 @@ proc newEthereumNode*(
   if rng == nil: # newRng could fail
     raiseAssert "Cannot initialize RNG"
 
-  new result
-  result.keys = keys
-  result.networkId = networkId
-  result.clientId = clientId
-  result.protocols.newSeq 0
-  result.capabilities.newSeq 0
-  result.address = address
-  result.connectionState = ConnectionState.None
-  result.bindIp = bindIp
-  result.bindPort = bindTcpPort
-  result.rng = rng
-
-  let discv4 = newDiscoveryV4(
-    keys.seckey, address, bootstrapNodes, bindUdpPort, bindIp, rng)
-
-  result.peerPool = newPeerPool[EthereumNode](
-    result, discv4, minPeers = minPeers)
+  let
+    discovery = Eth1Discovery.new(
+      keys.seckey, address, bootstrapNodes, bindUdpPort, bindIp, rng)
+    node = EthereumNode(
+      keys: keys,
+      networkId: networkId,
+      clientId: clientId,
+      address: address,
+      connectionState: ConnectionState.None,
+      bindIp: bindIp,
+      bindPort: bindTcpPort,
+      rng: rng,
+    )
+  node.peerPool = newPeerPool[EthereumNode](
+    node, discovery, minPeers = minPeers)
+  node
 
 proc processIncoming(server: StreamServer,
                      remote: StreamTransport): Future[void] {.async: (raises: []).} =
@@ -65,13 +66,15 @@ proc processIncoming(server: StreamServer,
       if node.peerPool != nil:
         node.peerPool.connectingNodes.excl(peer.remote)
         node.peerPool.addPeer(peer)
-  except CatchableError as exc:
+  except EthP2PError as exc:
     error "processIncoming", msg=exc.msg
+  except CancelledError:
+    discard
 
 proc listeningAddress*(node: EthereumNode): ENode =
   node.toENode()
 
-proc startListening*(node: EthereumNode) {.raises: [CatchableError].} =
+proc startListening*(node: EthereumNode) {.raises: [TransportOsError].} =
   # TODO: allow binding to both IPv4 & IPv6
   let ta = initTAddress(node.bindIp, node.bindPort)
   if node.listeningServer == nil:
@@ -82,28 +85,30 @@ proc startListening*(node: EthereumNode) {.raises: [CatchableError].} =
   info "RLPx listener up", self = node.listeningAddress
 
 proc connectToNetwork*(
-    node: EthereumNode, startListening = true,
-    enableDiscovery = true, waitForPeers = true) {.async.} =
+    node: EthereumNode,
+    startListening = true,
+    enableDiscV4 = true,
+    enableDiscV5 = true) =
   doAssert node.connectionState == ConnectionState.None
 
   node.connectionState = Connecting
 
   if startListening:
-    p2p.startListening(node)
+    try:
+      p2p.startListening(node)
+    except TransportOsError as exc:
+      error "Cannot start listening server", msg=exc.msg
 
-  if enableDiscovery:
-    node.peerPool.discv4.open()
-    await node.peerPool.discv4.bootstrap()
-    node.peerPool.start()
+  if enableDiscV4 or enableDiscV5:
+    node.peerPool.start(enableDiscV4, enableDiscV5)
   else:
     info "Discovery disabled"
 
-  while node.peerPool.connectedNodes.len == 0 and waitForPeers:
-    trace "Waiting for more peers", peers = node.peerPool.connectedNodes.len
-    await sleepAsync(500.milliseconds)
-
-proc stopListening*(node: EthereumNode) {.raises: [CatchableError].} =
-  node.listeningServer.stop()
+proc stopListening*(node: EthereumNode) =
+  try:
+    node.listeningServer.stop()
+  except TransportOsError as exc:
+    error "Failure when try to stop stop listening server", msg=exc.msg
 
 iterator peers*(node: EthereumNode): Peer =
   for peer in node.peerPool.peers:
@@ -113,18 +118,19 @@ iterator peers*(node: EthereumNode, Protocol: type): Peer =
   for peer in node.peerPool.peers(Protocol):
     yield peer
 
-proc connectToNode*(node: EthereumNode, n: Node) {.async.} =
+proc connectToNode*(node: EthereumNode, n: Node) {.async: (raises: [CancelledError]).} =
   await node.peerPool.connectToNode(n)
 
-proc connectToNode*(node: EthereumNode, n: ENode) {.async.} =
+proc connectToNode*(node: EthereumNode, n: ENode) {.async: (raises: [CancelledError]).} =
   await node.peerPool.connectToNode(n)
 
 func numPeers*(node: EthereumNode): int =
   node.peerPool.numPeers
 
-proc closeWait*(node: EthereumNode) {.async.} =
+proc closeWait*(node: EthereumNode) {.async: (raises: []).} =
   node.stopListening()
   await node.listeningServer.closeWait()
+  await node.peerPool.closeWait()
 
 proc addCapability*(node: EthereumNode,
                     p: ProtocolInfo,

@@ -10,7 +10,8 @@
 import
   std/net,
   testutils/fuzzing, chronicles, nimcrypto/keccak,
-  eth/[common/keys, rlp],
+  eth/[common/keys],
+  results,
   ../../../../execution_chain/networking/discoveryv4,
   ../../p2p_test_helper
 
@@ -46,11 +47,5 @@ test:
   msg = packData(payload, nodeKey)
   address = localAddress(DefaultListeningPort + 1)
 
-  try:
-    targetNode.receive(address, msg)
-  # These errors are also caught in `processClient` in discovery.nim
-  # TODO: move them a layer down in discovery so we can do a cleaner test there?
-  except RlpError as e:
-    debug "Receive failed", err = e.msg
-  except DiscProtocolError as e:
-    debug "Receive failed", err = e.msg
+  targetNode.receive(address, msg).isOkOr:
+    debug "Receive failed", msg=error
