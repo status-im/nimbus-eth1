@@ -15,9 +15,11 @@ import
   common/utils,
   conf,
   confutils/cli_parser,
-  stew/io2,
-  beacon_chain/conf,
-  ../execution_chain/config
+  stew/io2
+
+from beacon_chain/conf import BeaconNodeConf
+from ../execution_chain/config import NimbusConf
+from beacon_chain/nimbus_binary_common import setupFileLimits, shouldCreatePidFile
 
 # ------------------------------------------------------------------------------
 # Private
@@ -27,7 +29,6 @@ import
 var beaconNodeLock {.global.}: string
 
 proc createBeaconNodeFileLock(filename: string) {.raises: [IOError].} =
-  var shouldCreatePidFile: Atomic[bool] # REMOVE THIS
   shouldCreatePidFile.store(false)
 
   writeFile filename, $os.getCurrentProcessId()
@@ -39,16 +40,13 @@ proc createBeaconNodeFileLock(filename: string) {.raises: [IOError].} =
 
 ## create and configure service
 proc startService(nimbus: var Nimbus, service: var NimbusService) =
-  #channel creation (shared memory)
   var serviceChannel =
     cast[ptr Channel[pointer]](allocShared0(sizeof(Channel[pointer])))
 
   serviceChannel[].open()
 
-  #thread read ack
   isConfigRead.store(false)
 
-  #start thread
   try:
     createThread(service.serviceHandler, service.serviceFunc, serviceChannel)
   except Exception as e:
@@ -73,10 +71,7 @@ proc startService(nimbus: var Nimbus, service: var NimbusService) =
     fatal "Memory allocation failed"
     quit QuitFailure
 
-  # Writing to shared memory
   var writeOffset = cast[uint](byteArray)
-
-  #write total size of array
   copyMem(cast[pointer](writeOffset), addr totalSize, sizeof(uint))
   writeOffset += uint(sizeof(uint))
 
@@ -94,9 +89,7 @@ proc startService(nimbus: var Nimbus, service: var NimbusService) =
     sleep(cThreadTimeAck)
   isConfigRead.store(true)
 
-  #close channel
   serviceChannel[].close()
-
   #dealloc shared data
   deallocShared(byteArray)
   deallocShared(serviceChannel)
@@ -109,7 +102,7 @@ proc monitorServices(nimbus: Nimbus) =
 
   notice "Exited all services"
 
-# aux function to prepare arguments and options for eth1 and eth2
+## Auxiliary function to prepare arguments and options for eth1 and eth2
 func addArg(
     paramTable: var NimbusConfigTable, cmdKind: CmdLineKind, key: string, arg: string
 ) =

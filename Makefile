@@ -386,7 +386,7 @@ ifneq ($(USE_LIBBACKTRACE), 0)
 endif
 
 # Nimbus
-NIM_PARAMS := -d:release --parallelBuild:1-d:libp2p_agents_metrics -d:KnownLibP2PAgents=nimbus,lighthouse,lodestar,prysm,teku,grandine $(NIM_PARAMS)
+NIM_PARAMS := -d:release --parallelBuild:1 -d:libp2p_agents_metrics -d:KnownLibP2PAgents=nimbus,lighthouse,lodestar,prysm,teku,grandine $(NIM_PARAMS)
 nimbus: | build deps rocksdb
 	echo -e $(BUILD_MSG) "build/nimbus_client" && \
 	$(ENV_SCRIPT) nim c $(NIM_PARAMS) --threads:on -d:disable_libbacktrace -d:libp2p_pki_schemes=secp256k1 -o:build//nimbus_client "nimbus/nimbus.nim"

@@ -9,11 +9,8 @@
 
 import
   std/[atomics, tables],
-  chronicles,
-  #eth2
-  beacon_chain/nimbus_binary_common
+  chronicles
 
-export setupFileLimits
 
 ## log
 logScope:

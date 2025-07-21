@@ -7,21 +7,19 @@
 
 {.push raises: [].}
 
-import
-  std/[atomics],
-  chronicles,
-  results,
-  ../conf,
-  ../common/utils,
-  ../../execution_chain/nimbus_execution_client,
-  ../../execution_chain/config,
-  ../../execution_chain/nimbus_desc
+import std/[atomics], chronos, chronicles, results, ../conf, ../common/utils
+
+from metrics/chronos_httpserver import MetricsError
+from ../../execution_chain/nimbus_execution_client import run
+from ../../execution_chain/nimbus_desc import NimbusNode, NimbusState
+from ../../execution_chain/config import makeConfig
+from ../../execution_chain/common import newEthContext
 
 logScope:
   topics = "Execution layer"
 
+## Request to shutdown execution layer
 var nimbusHandler: NimbusNode
-
 proc shutdownExecution*() =
   nimbusHandler.state = NimbusState.Stopping
 

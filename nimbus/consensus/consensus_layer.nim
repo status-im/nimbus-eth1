@@ -9,25 +9,27 @@
 
 import
   std/[atomics, os],
-  chronos,
   chronicles,
   results,
   confutils,
   ../conf,
   ../common/utils,
-  beacon_chain/nimbus_beacon_node,
   beacon_chain/validators/keystore_management,
   beacon_chain/[beacon_node_status, nimbus_binary_common]
+
+from beacon_chain/nimbus_beacon_node import handleStartUpCmd
+from beacon_chain/conf import
+  BeaconNodeConf, SlashingDbKind, BNStartUpCmd, defaultDataDir
 
 logScope:
   topics = "Consensus layer"
 
+## Request to shutdown Consensus layer
 proc shutdownConsensus*() =
   bnStatus = BeaconNodeStatus.Stopping
 
-proc makeConfig*(
-    cmdCommandList: seq[string], ConfType: type
-): Result[ConfType, string] =
+## Creates required beacon node configuration and possibility of additional sources
+proc makeConfig(cmdCommandList: seq[string], ConfType: type): Result[ConfType, string] =
   {.push warning[ProveInit]: off.}
   let config =
     try:
@@ -59,6 +61,7 @@ proc makeConfig*(
   {.pop.}
   ok(config)
 
+## starts beacon node
 proc startBeaconNode(paramsList: seq[string]) {.raises: [CatchableError].} =
   var config = makeConfig(paramsList, BeaconNodeConf).valueOr:
     error "Error starting consensus", err = error
