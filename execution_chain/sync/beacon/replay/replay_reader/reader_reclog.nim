@@ -49,6 +49,11 @@ proc addX(
   q.add base.baseNum.bnStr()
   q.add base.latestNum.bnStr()
 
+  if base.chainMode in {collecting,ready,orphan}:
+    q.add base.antecedent.bnStr()
+  else:
+    q.add "*"
+
   q.add (if (base.stateAvail and 1) != 0: $base.peerCtrl else: "*")
   q.add (if (base.stateAvail and 2) != 0: "peerID=" & base.peerID.short()
          else: "*")
@@ -224,7 +229,7 @@ proc recLogPrint*(fh: File): ReplayRecLogPrintFn =
   return proc(w: seq[string]) =
     try:
       block doFields:
-        if w.len <= 8:
+        if w.len <= 9:
           fh.write w.join(" ")
           break doFields
 
@@ -232,26 +237,27 @@ proc recLogPrint*(fh: File): ReplayRecLogPrintFn =
         fh.write "" &
           &"{w[0]:>18} {w[1]:<13} {w[2]:>6} " &
           &"{w[3]:>5} {w[4]:>2} {w[5]:<13} " &
-          &"{w[6]:<10} {w[7]:>10} {w[8]:>10}"
+          &"{w[6]:<10} {w[7]:>10} {w[8]:>10} " &
+          &"{w[9]:>10}"
 
-        if w.len <= 10:
-          if w.len == 10:
-            fh.write " "
-            fh.write w[9]
-          break doFields
-
-        # at least 11 fields
         if w.len <= 11:
-          fh.write &" {w[9]:<10} "
-          fh.write w[10]
+          if w.len == 11:
+            fh.write " "
+            fh.write w[10]
           break doFields
-
-        # more than 11 fields
-        fh.write &" {w[9]:<10} {w[10]:<15}"
 
         # at least 12 fields
+        if w.len <= 12:
+          fh.write &" {w[10]:<10} "
+          fh.write w[11]
+          break doFields
+
+        # more than 12 fields
+        fh.write &" {w[10]:<10} {w[11]:<15}"
+
+        # at least 13 fields
         fh.write " "
-        fh.write w[11 ..< w.len].join(" ")
+        fh.write w[12 ..< w.len].join(" ")
 
       fh.write "\n"
     except IOError as e:

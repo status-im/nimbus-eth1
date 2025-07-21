@@ -58,18 +58,16 @@ proc dispatch*(
     run.syncSuspendWorker(
       pyl.ReplaySyncHibernated.data, "=Suspended")
 
-  # Both `runDaemon()` and `runPeer()` tasks are run in the background
   of TrtSchedDaemonBegin:
-    asyncSpawn run.schedDaemonProcess(
+    await run.schedDaemonProcess(
       pyl.ReplaySchedDaemonBegin.data, "+Daemon: ")
-  of TrtSchedPeerBegin:
-    asyncSpawn run.schedPeerProcess(
-      pyl.ReplaySchedPeerBegin.data, "+Peer: ")
-
-  # Wait for `runDaemon()` or `runPeer()` to terminate
   of TrtSchedDaemonEnd:
     await run.schedDaemonCleanUp(
       pyl.ReplaySchedDaemonEnd.data, "-Daemon: ")
+
+  of TrtSchedPeerBegin:
+    await run.schedPeerProcess(
+      pyl.ReplaySchedPeerBegin.data, "+Peer: ")
   of TrtSchedPeerEnd:
     await run.schedPeerCleanUp(
       pyl.ReplaySchedPeerEnd.data, "-Peer: ")

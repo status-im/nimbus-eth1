@@ -116,10 +116,10 @@ proc baseStatesDifferImpl(
   var
     statesDiffer = false
 
-  if serial != run.instrNumber:
-    statesDiffer = true
-    info info & "serial numbers differ", peer,
-      serial, expected=run.instrNumber
+  #if serial != run.instrNumber:
+  #  statesDiffer = true
+  #  info info & "serial numbers differ", peer,
+  #    serial, expected=run.instrNumber
 
   if ctx.pool.lastState != instr.syncState:
     statesDiffer = true
@@ -130,6 +130,11 @@ proc baseStatesDifferImpl(
     statesDiffer = true
     info info & "header chain modes differ", serial, peer,
       chainMode=ctx.hdrCache.state, expected=instr.chainMode
+  elif instr.chainMode in {collecting,ready,orphan} and
+       instr.antecedent != ctx.hdrCache.antecedent.number:
+    statesDiffer = true
+    info info & "header chain antecedents differ", serial, peer,
+      antecedent=ctx.hdrCache.antecedent.bnStr, expected=instr.antecedent.bnStr
 
   if ctx.pool.nBuddies != instr.nPeers:
     statesDiffer = true
@@ -167,7 +172,7 @@ proc unprocListsDifferImpl(
     statesDiffer = true
     info info & "unproc headers lists differ", serial, peer,
       listChunks=ctx.hdr.unprocessed.chunks(), expected=instr.hdrUnprChunks
-  elif 0 < instr.hdrUnprChunks:
+  if 0 < instr.hdrUnprChunks:
     if instr.hdrUnprLen != ctx.hdr.unprocessed.total():
       statesDiffer = true
       info info & "unproc headers lists differ", serial, peer,
@@ -187,7 +192,7 @@ proc unprocListsDifferImpl(
     statesDiffer = true
     info info & "unproc blocks lists differ", serial, peer,
       listChunks=ctx.blk.unprocessed.chunks(), expected=instr.blkUnprChunks
-  elif 0 < instr.blkUnprChunks:
+  if 0 < instr.blkUnprChunks:
     if instr.blkUnprLen != ctx.blk.unprocessed.total():
       statesDiffer = true
       info info & "unproc blocks lists differ", serial, peer,
@@ -454,12 +459,20 @@ proc waitForSyncedEnv*(
     run = desc.run
     serial = instr.serial
 
+  when desc is ReplayBuddyRef:
+    # The scheduler (see `sync_sched.nim`)  might have disconnected the peer
+    # already as is captured in the instruction environment. This does not
+    # apply to `zombie` settings which will be done by the application.
+    if instr.peerCtrl == Stopped and not desc.ctrl.stopped:
+      desc.ctrl.stopped = true
+
   when desc is ReplayBuddyRef:                  # for logging/debugging only
     let peer {.used.} = desc.peer               # for logging/debugging only
   else:                                         # for logging/debugging only
     let peer {.used.} = "n/a"                   # for logging/debugging only
   var count = 0                                 # for logging/debugging only
-  #trace info & "process to be synced", n=run.instrNumber, serial, peer
+  trace info & "process to be synced", n=run.instrNumber, serial, peer
+  desc.checkSyncerState(instr, info)            # for logging/debugging only
 
   (await desc.run.waitForConditionImpl(
     cond = proc(): bool =
@@ -473,11 +486,11 @@ proc waitForSyncedEnv*(
         else:                                   # for logging/debugging only
           if (count mod 1111) != 0:             # for logging/debugging only
             break noiseCtrl                     # for logging/debugging only
-          trace info & "polling for sync", n=run.instrNumber, serial, peer, count
-          desc.checkSyncerState(instr, info)
+        trace info & "polling for sync", n=run.instrNumber, serial, peer, count
+        desc.checkSyncerState(instr, info)
 
-      if serial != run.instrNumber:
-        return false
+      #if serial != run.instrNumber:
+      #  return false
 
       if instr.hdrUnprChunks != ctx.hdr.unprocessed.chunks().uint:
         return false
@@ -487,6 +500,8 @@ proc waitForSyncedEnv*(
         let iv = ctx.hdr.unprocessed.le().expect "valid iv"
         if instr.hdrUnprLast != iv.maxPt or
            instr.hdrUnprLastLen != iv.len:
+          return false
+        if instr.antecedent != ctx.hdrCache.antecedent.number:
           return false
 
       if instr.blkUnprChunks != ctx.blk.unprocessed.chunks().uint:
@@ -506,17 +521,9 @@ proc waitForSyncedEnv*(
         name=error.name, msg=error.msg
       return err(error)
 
-  when desc is ReplayBuddyRef:
-    # At this point, the scheduler (see `sync_sched.nim`)  might have
-    # disconnected the peer already as is captured in the instruction
-    # environment. This does not apply to `zombie` settings which will be
-    # done by the application.
-    if instr.peerCtrl == Stopped and not desc.ctrl.stopped:
-      desc.ctrl.stopped = true
+  trace info & "process synced ok", n=run.instrNumber, serial, peer, count
 
   desc.checkSyncerState(instr, info)
-
-  #trace info & "process synced", serial, peer
   return ok()
 
 # ------------------

@@ -26,7 +26,7 @@ export
   worker_desc
 
 const
-  TraceVersionID* = 20250720
+  TraceVersionID* = 20250721
 
   TraceBaseHandlersID* = 1
   TraceOverlayHandlersID* = 10

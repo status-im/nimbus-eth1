@@ -69,7 +69,6 @@ template fetchHeadersReversed*(
   var bodyRc = Opt[seq[Header]].err()
   block body:
     let
-      ivReq {.inject,used.} = ivReq
       peer {.inject,used.} = buddy.peer
       req = block:
         if topHash != emptyRoot:
@@ -89,7 +88,7 @@ template fetchHeadersReversed*(
               isHash:   false,
               number:   ivReq.maxPt))
 
-    trace trEthSendSendingGetBlockHeaders & " reverse", peer, ivReq,
+    trace trEthSendSendingGetBlockHeaders & " reverse", peer, req=ivReq,
       nReq=req.maxResults, hash=topHash.toStr, hdrErrors=buddy.hdrErrors
 
     let rc = await buddy.ctx.handler.getBlockHeaders(buddy, req)
@@ -108,8 +107,8 @@ template fetchHeadersReversed*(
         of ECatchableError:
           buddy.hdrFetchRegisterError()
 
-        chronicles.info trEthRecvReceivedBlockHeaders & ": error", peer, ivReq,
-          nReq=req.maxResults, hash=topHash.toStr,
+        chronicles.info trEthRecvReceivedBlockHeaders & ": error", peer,
+          req=ivReq, nReq=req.maxResults, hash=topHash.toStr,
           elapsed=rc.error.elapsed.toStr, syncState=($buddy.syncState),
           error=rc.error.name, msg=rc.error.msg, hdrErrors=buddy.hdrErrors
         break body                                 # return err()
@@ -134,8 +133,8 @@ template fetchHeadersReversed*(
     if h[^1].number != ivReq.minPt:
       buddy.hdrFetchRegisterError()
       trace trEthRecvReceivedBlockHeaders, peer, nReq=req.maxResults,
-        hash=topHash.toStr, ivReqMinPt=ivReq.minPt.bnStr,
-        ivRespMinPt=h[^1].bnStr, nResp=h.len, elapsed=elapsed.toStr,
+        hash=topHash.toStr, reqMinPt=ivReq.minPt.bnStr,
+        respMinPt=h[^1].bnStr, nResp=h.len, elapsed=elapsed.toStr,
         syncState=($buddy.syncState), hdrErrors=buddy.hdrErrors
       break body
 

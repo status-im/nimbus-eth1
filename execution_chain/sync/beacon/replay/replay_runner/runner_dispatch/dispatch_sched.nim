@@ -22,6 +22,33 @@ logScope:
   topics = "replay runner"
 
 # ------------------------------------------------------------------------------
+# Private helper
+# ------------------------------------------------------------------------------
+
+proc schedDaemonProcessImpl(
+    daemon: ReplayDaemonRef;
+    instr: TraceSchedDaemonBegin;
+    info: static[string];
+      ) {.async: (raises: []).} =
+  ## Run the task `schedDaemon()`. This function has to be run background
+  ## process (using `asyncSpawn`.)
+  ##
+  let run = daemon.run
+  await run.worker.schedDaemon(run.ctx)
+  daemon.processFinished(instr, info)
+
+proc schedPeerProcessImpl(
+    buddy: ReplayBuddyRef;
+    instr: TraceSchedPeerBegin;
+    info: static[string];
+      ) {.async: (raises: []).} =
+  ## Run the task `schedPeer()`. This function has to be run background
+  ## process (using `asyncSpawn`.)
+  ##
+  await buddy.run.worker.schedPeer(buddy)
+  buddy.processFinished(instr, info)
+
+# ------------------------------------------------------------------------------
 # Public dispatcher handlers
 # ------------------------------------------------------------------------------
 
@@ -30,17 +57,15 @@ proc schedDaemonProcess*(
     instr: TraceSchedDaemonBegin;
     info: static[string];
       ) {.async: (raises: []).} =
-  ## Run the task `schedDaemon()`. This function has to be run background
-  ## process (using `asyncSpawn`.)
+  ## Run the `schedDaemon()` task.
   ##
   let daemon = run.newDaemonFrame(instr, info).valueOr: return
-  info info & "begin", serial=instr.serial, syncState=instr.syncState
+  info info & "begin", serial=instr.serial, frameID=instr.frameID.idStr,
+    syncState=instr.syncState
 
-  # Synchronise against captured environment
+  # Synchronise against captured environment and start process
   (await daemon.waitForSyncedEnv(instr, info)).isOkOr: return
-
-  await run.worker.schedDaemon(run.ctx)
-  daemon.processFinished(instr, info)
+  asyncSpawn daemon.schedDaemonProcessImpl(instr, info)
 
 
 proc schedDaemonCleanUp*(
@@ -58,7 +83,8 @@ proc schedDaemonCleanUp*(
   # Clean up
   daemon.delDaemon(info)
 
-  info info & "done", serial=instr.serial, syncState=instr.syncState
+  info info & "done", serial=instr.serial, frameID=instr.frameID.idStr,
+    syncState=instr.syncState
 
 
 proc schedStartWorker*(
@@ -82,8 +108,8 @@ proc schedStartWorker*(
   if not accept:
     buddy.delPeer(info) # Clean up
 
-  info info & "done", serial=instr.serial, peer=($buddy.peer),
-    peerID=buddy.peerID.short
+  info info & "done", serial=instr.serial, frameID=instr.frameID.idStr,
+    peer=($buddy.peer), peerID=buddy.peerID.short
 
 
 proc schedStopWorker*(
@@ -107,8 +133,8 @@ proc schedStopWorker*(
   # Clean up
   buddy.delPeer(info)
   
-  info info & "done", serial=instr.serial, peer=($buddy.peer),
-    peerID=buddy.peerID.short
+  info info & "done", serial=instr.serial, frameID=instr.frameID.idStr,
+    peer=($buddy.peer), peerID=buddy.peerID.short
 
 
 proc schedPoolWorker*(
@@ -136,8 +162,8 @@ proc schedPoolWorker*(
   # Pop frame data from `stage[]` stack
   buddy.stage.setLen(0)
 
-  info info & "done", serial=instr.serial, peer=($buddy.peer),
-    peerID=buddy.peerID.short
+  info info & "done", serial=instr.serial, frameID=instr.frameID.idStr,
+    peer=($buddy.peer), peerID=buddy.peerID.short
 
 
 proc schedPeerProcess*(
@@ -145,22 +171,18 @@ proc schedPeerProcess*(
     instr: TraceSchedPeerBegin;
     info: static[string];
       ) {.async: (raises: []).} =
-  ## Run the task `schedPeer()`. This function has to be run background
-  ## process (using `asyncSpawn`.)
+  ## Run the `schedPeer()` task.
   ##
   let buddy = run.getOrNewPeerFrame(instr, info)
-  info info & "begin", serial=instr.serial, peer=($buddy.peer),
-    peerID=buddy.peerID.short, syncState=instr.syncState
-
-  # Synchronise against captured environment
-  (await buddy.waitForSyncedEnv(instr, info)).isOkOr: return
+  info info & "begin", serial=instr.serial, frameID=instr.frameID.idStr,
+    peer=($buddy.peer), peerID=buddy.peerID.short, syncState=instr.syncState
 
   # Activate peer
   buddy.run.nPeers.inc
-  await run.worker.schedPeer(buddy)
 
-  # This peer job has completed
-  buddy.processFinished(instr, info)
+  # Synchronise against captured environment and start process
+  (await buddy.waitForSyncedEnv(instr, info)).isOkOr: return
+  asyncSpawn buddy.schedPeerProcessImpl(instr, info)
 
 
 proc schedPeerCleanUp*(
@@ -178,8 +200,8 @@ proc schedPeerCleanUp*(
   # Wait for peer to terminate
   (await buddy.waitForProcessFinished(instr, info)).isOkOr: return
   
-  info info & "done", serial=instr.serial, peer=($buddy.peer),
-    peerID=buddy.peerID.short, syncState=instr.syncState
+  info info & "done", serial=instr.serial, frameID=instr.frameID.idStr,
+    peer=($buddy.peer), peerID=buddy.peerID.short, syncState=instr.syncState
 
 # ------------------------------------------------------------------------------
 # End
