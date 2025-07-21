@@ -676,7 +676,7 @@ proc recvFindNode*(k: KademliaProtocol, remote: Node, nodeId: NodeId): Result[vo
     # and thus removed from self.routing, but once it's back online we should accept
     # find_nodes from them.
     trace "Ignoring find_node request from unknown node ", remote
-    return
+    return ok()
   ?k.updateRoutingTable(remote)
   var found = k.routing.neighbours(nodeId)
   found.sort() do(x, y: Node) -> int: cmp(x.id, y.id)
