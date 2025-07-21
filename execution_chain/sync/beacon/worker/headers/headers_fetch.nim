@@ -66,28 +66,29 @@ template fetchHeadersReversed*(
   ## From the ethXX argument peer implied by `buddy` fetch a list of headers
   ## in reversed order.
   ##
-  let
-    peer = buddy.peer
-    req = block:
-      if topHash != emptyRoot:
-        BlockHeadersRequest(
-          maxResults: ivReq.len.uint,
-          skip:       0,
-          reverse:    true,
-          startBlock: BlockHashOrNumber(
-            isHash:   true,
-            hash:     topHash))
-      else:
-        BlockHeadersRequest(
-          maxResults: ivReq.len.uint,
-          skip:       0,
-          reverse:    true,
-          startBlock: BlockHashOrNumber(
-            isHash:   false,
-            number:   ivReq.maxPt))
-
   var bodyRc = Opt[seq[Header]].err()
   block body:
+    let
+      ivReq {.inject,used.} = ivReq
+      peer {.inject,used.} = buddy.peer
+      req = block:
+        if topHash != emptyRoot:
+          BlockHeadersRequest(
+            maxResults: ivReq.len.uint,
+            skip:       0,
+            reverse:    true,
+            startBlock: BlockHashOrNumber(
+              isHash:   true,
+              hash:     topHash))
+        else:
+          BlockHeadersRequest(
+            maxResults: ivReq.len.uint,
+            skip:       0,
+            reverse:    true,
+            startBlock: BlockHashOrNumber(
+              isHash:   false,
+              number:   ivReq.maxPt))
+
     trace trEthSendSendingGetBlockHeaders & " reverse", peer, ivReq,
       nReq=req.maxResults, hash=topHash.toStr, hdrErrors=buddy.hdrErrors
 

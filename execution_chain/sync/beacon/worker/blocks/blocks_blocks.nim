@@ -47,12 +47,13 @@ template blocksFetchCheckImpl(
   ## The block bodies are heuristically verified, the headers are taken from
   ## the header chain cache.
   ##
-  let
-    ctx = buddy.ctx
-    peer = buddy.peer
-
   var bodyRc = Opt[seq[EthBlock]].err()
   block body:
+    let
+      ctx = buddy.ctx
+      iv {.inject,used.} = iv
+      peer {.inject,used.} = buddy.peer
+
     # Preset/append headers to be completed with bodies. Also collect block
     # hashes for fetching missing blocks.
     var
@@ -99,7 +100,7 @@ template blocksFetchCheckImpl(
           # Oops, cut off the rest
           blocks.setLen(n)                                 # curb off junk
           buddy.bdyFetchRegisterError()
-          trace info & ": Cut off junk blocks", peer, iv, n,
+          trace info & ": Cut off junk blocks", peer, iv, n=n,
             nTxs=bodies[n].transactions.len, nBodies, bdyErrors=buddy.bdyErrors
           break loop
 
@@ -185,70 +186,74 @@ template blocksImport*(
   ## block number of the last executed block which might preceed the least block
   ## number from the argument list in case of an error.
   ##
-  let iv = BnRange.new(blocks[0].header.number, blocks[^1].header.number)
-  doAssert iv.len == blocks.len.uint64
-  doAssert ctx.blk.verify()
+  block body:
+    let iv {.inject.} =
+      BnRange.new(blocks[0].header.number, blocks[^1].header.number)
+    doAssert iv.len == blocks.len.uint64
+    doAssert ctx.blk.verify()
 
-  trace info & ": Start importing blocks", peer=maybePeer.toStr, iv,
-    nBlocks=iv.len, base=ctx.chain.baseNumber.bnStr,
-    head=ctx.chain.latestNumber.bnStr, blk=ctx.blk.bnStr
+    var isError = false
+    block loop:
+      trace info & ": Start importing blocks", peer=maybePeer.toStr, iv,
+        nBlocks=iv.len, base=ctx.chain.baseNumber.bnStr,
+        head=ctx.chain.latestNumber.bnStr, blk=ctx.blk.bnStr
 
-  var isError = false
-  block loop:
-    for n in 0 ..< blocks.len:
-      let nBn = blocks[n].header.number
-      discard (await ctx.handler.importBlock(
-                 ctx, maybePeer, blocks[n], peerID)).valueOr:
-        if error.excp != ECancelledError:
-          isError = true
+      for n in 0 ..< blocks.len:
+        let nBn = blocks[n].header.number
+        discard (await ctx.handler.importBlock(
+                   ctx, maybePeer, blocks[n], peerID)).valueOr:
+          if error.excp != ECancelledError:
+            isError = true
 
-          # Mark peer that produced that unusable headers list as a zombie
-          ctx.setBlkProcFail peerID
+            # Mark peer that produced that unusable headers list as a zombie
+            ctx.setBlkProcFail peerID
 
-          # Check whether it is enough to skip the current blocks list, only
-          if ctx.subState.procFailNum != nBn:
-            ctx.subState.procFailNum = nBn         # OK, this is a new block
-            ctx.subState.procFailCount = 1
+            # Check whether it is enough to skip the current blocks list, only
+            if ctx.subState.procFailNum != nBn:
+              ctx.subState.procFailNum = nBn       # OK, this is a new block
+              ctx.subState.procFailCount = 1
 
-          else:
-            ctx.subState.procFailCount.inc         # block num was seen, already
+            else:
+              ctx.subState.procFailCount.inc       # block num was seen, already
 
-            # Cancel the whole download if needed
-            if nImportBlocksErrThreshold < ctx.subState.procFailCount:
-              ctx.subState.cancelRequest = true    # So require queue reset
+              # Cancel the whole download if needed
+              if nImportBlocksErrThreshold < ctx.subState.procFailCount:
+                ctx.subState.cancelRequest = true  # So require queue reset
 
-          # Proper logging ..
-          if ctx.subState.cancelRequest:
-            warn "Import error (cancel this session)", n, iv,
-              nBlocks=iv.len, nthBn=nBn.bnStr,
-              nthHash=ctx.getNthHash(blocks, n).short,
-              base=ctx.chain.baseNumber.bnStr,
-              head=ctx.chain.latestNumber.bnStr,
-              blkFailCount=ctx.subState.procFailCount, `error`=error
-          else:
-            chronicles.info "Import error (skip remaining)", n, iv,
-              nBlocks=iv.len, nthBn=nBn.bnStr,
-              nthHash=ctx.getNthHash(blocks, n).short,
-              base=ctx.chain.baseNumber.bnStr,
-              head=ctx.chain.latestNumber.bnStr,
-              blkFailCount=ctx.subState.procFailCount, `error`=error
+            # Proper logging ..
+            if ctx.subState.cancelRequest:
+              warn "Import error (cancel this session)", n=n, iv,
+                nBlocks=iv.len, nthBn=nBn.bnStr,
+                nthHash=ctx.getNthHash(blocks, n).short,
+                base=ctx.chain.baseNumber.bnStr,
+                head=ctx.chain.latestNumber.bnStr,
+                blkFailCount=ctx.subState.procFailCount, `error`=error
+            else:
+              chronicles.info "Import error (skip remaining)", n=n, iv,
+                nBlocks=iv.len, nthBn=nBn.bnStr,
+                nthHash=ctx.getNthHash(blocks, n).short,
+                base=ctx.chain.baseNumber.bnStr,
+                head=ctx.chain.latestNumber.bnStr,
+                blkFailCount=ctx.subState.procFailCount, `error`=error
 
-        break loop
+          break loop
 
-      # isOk => next instruction
-      ctx.subState.top = nBn                       # Block imported OK
+        # isOk => next instruction
+        ctx.subState.top = nBn                     # Block imported OK
 
-  if not isError:
-    ctx.resetBlkProcErrors peerID
+    if not isError:
+      ctx.resetBlkProcErrors peerID
 
-  chronicles.info "Imported blocks", iv=(if iv.minPt <= ctx.subState.top:
-    (iv.minPt, ctx.subState.top).bnStr else: "n/a"),
-    nBlocks=(ctx.subState.top - iv.minPt + 1),
-    nFailed=(iv.maxPt - ctx.subState.top),
-    base=ctx.chain.baseNumber.bnStr, head=ctx.chain.latestNumber.bnStr,
-    target=ctx.subState.head.bnStr, targetHash=ctx.subState.headHash.short,
-    blk=ctx.blk.bnStr
+    chronicles.info "Imported blocks", iv=(if iv.minPt <= ctx.subState.top:
+      (iv.minPt, ctx.subState.top).bnStr else: "n/a"),
+      nBlocks=(ctx.subState.top - iv.minPt + 1),
+      nFailed=(iv.maxPt - ctx.subState.top),
+      base=ctx.chain.baseNumber.bnStr, head=ctx.chain.latestNumber.bnStr,
+      target=ctx.subState.head.bnStr, targetHash=ctx.subState.headHash.short,
+      blk=ctx.blk.bnStr
 
+  discard
+      
 # ------------------------------------------------------------------------------
 # End
 # ------------------------------------------------------------------------------

@@ -46,11 +46,11 @@ template headersCollect*(buddy: BeaconBuddyRef; info: static[string]) =
   ## header queue serialisation is needed in case of several peers fetching
   ## and processing headers concurrently.
   ##
-  let
-    ctx = buddy.ctx
-    peer = buddy.peer
-
   block body:
+    let
+      ctx = buddy.ctx
+      peer {.inject,used.} = buddy.peer
+
     if ctx.headersUnprocIsEmpty() or
        ctx.hdrCache.state != collecting:
       trace info & ": nothing to do", peer,
@@ -59,8 +59,8 @@ template headersCollect*(buddy: BeaconBuddyRef; info: static[string]) =
       break body                                     # no action, return
 
     var
-      nStored = 0u64                                 # statistics, to be updated
-      nQueued = 0                                    # ditto
+      nStored {.inject.} = 0u64                      # statistics, to be updated
+      nQueued {.inject.} = 0                         # ditto
 
     block fetchHeadersBody:
       #

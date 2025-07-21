@@ -64,12 +64,12 @@ template fetchBodies*(
   ##
   ## Fetch bodies from the network.
   ##
-  let
-    peer = buddy.peer
-    nReq = request.blockHashes.len
-
   var bodyRc = Opt[seq[BlockBody]].err()
   block body:
+    let
+      peer {.inject,used.} = buddy.peer
+      nReq {.inject,used.} = request.blockHashes.len
+
     trace trEthSendSendingGetBlockBodies,
       peer, nReq, bdyErrors=buddy.bdyErrors
 

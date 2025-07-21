@@ -33,7 +33,7 @@ type
 # ------------------------------------------------------------------------------
 
 proc schedDaemonCB(ctx: BeaconCtxRef) {.async: (raises: []).} =
-  await worker.runDaemon(ctx, "RunDaemon")
+  worker.runDaemon(ctx, "RunDaemon") # async/template
 
 proc schedStartCB(buddy: BeaconBuddyRef): bool =
   worker.start(buddy, "RunStart")
@@ -45,7 +45,7 @@ proc schedPoolCB(buddy: BeaconBuddyRef; last: bool; laps: int): bool =
   worker.runPool(buddy, last, laps, "RunPool")
 
 proc schedPeerCB(buddy: BeaconBuddyRef) {.async: (raises: []).} =
-  await worker.runPeer(buddy, "RunPeer")
+  worker.runPeer(buddy, "RunPeer") # async/template
 
 # ------------------------------------------------------------------------------
 # Virtual methods/interface, `mixin` functions

@@ -44,8 +44,8 @@ template blocksStagedProcessImpl(
       break body                                   # return false => switch peer
 
     var
-      nImported = 0u64                             # statistics
-      switchPeer = false                           # for return code
+      nImported {.inject.} = 0u64                  # statistics
+      switchPeer {.inject.} = false                # for return code
 
     while ctx.pool.lastState == SyncState.blocks:
 
@@ -53,8 +53,9 @@ template blocksStagedProcessImpl(
       let qItem = ctx.blk.staged.ge(0).valueOr:
         break                                      # all done
 
-      # Make sure that the lowest block is available, already. Or the other way
-      # round: no unprocessed block number range precedes the least staged block.
+      # Make sure that the lowest block is available, already. Or the other
+      # way round: no unprocessed block number range precedes the least staged
+      # block.
       let minNum = qItem.data.blocks[0].header.number
       if ctx.subState.top + 1 < minNum:
         trace info & ": block queue not ready yet", peer=maybePeer.toStr,
@@ -123,8 +124,8 @@ template blocksCollect*(
       break body                                     # no action
 
     var
-      nImported = 0u64                               # statistics, to be updated
-      nQueued = 0                                    # ditto
+      nImported {.inject.} = 0u64                    # statistics, to be updated
+      nQueued {.inject.} = 0                         # ditto
 
     block fetchBlocksBody:
       #

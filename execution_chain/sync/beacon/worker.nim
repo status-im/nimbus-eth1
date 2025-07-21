@@ -99,10 +99,9 @@ proc runTicker*(ctx: BeaconCtxRef; info: static[string]) =
   ctx.updateTicker()
 
 
-proc runDaemon*(
-    ctx: BeaconCtxRef;
-    info: static[string];
-      ) {.async: (raises: []).} =
+template runDaemon*(ctx: BeaconCtxRef; info: static[string]) =
+  ## Async/template
+  ##
   ## Global background job that will be re-started as long as the variable
   ## `ctx.daemon` is set `true` which corresponds to `ctx.hibernating` set
   ## to false.
@@ -110,24 +109,27 @@ proc runDaemon*(
   ## On a fresh start, the flag `ctx.daemon` will not be set `true` before the
   ## first usable request from the CL (via RPC) stumbles in.
   ##
-  # Check for a possible header layout and body request changes
-  ctx.updateSyncState info
-  if ctx.hibernate:
-    return
+  block body:
+    # Check for a possible header layout and body request changes
+    ctx.updateSyncState info
+    if ctx.hibernate:
+      break body             # return
 
-  # Execute staged block records.
-  if ctx.blocksUnstageOk():
+    # Execute staged block records.
+    if ctx.blocksUnstageOk():
 
-    # Import bodies from the `staged` queue.
-    discard ctx.blocksUnstage info # async/template
+      # Import bodies from the `staged` queue.
+      discard ctx.blocksUnstage info # async/template
 
-    if not ctx.daemon or   # Implied by external sync shutdown?
-       ctx.poolMode:       # Oops, re-org needed?
-      return
+      if not ctx.daemon or   # Implied by external sync shutdown?
+         ctx.poolMode:       # Oops, re-org needed?
+        break body           # return
 
-  # At the end of the cycle, leave time to trigger refill headers/blocks
-  try: await sleepAsync daemonWaitInterval
-  except CancelledError: discard
+    # At the end of the cycle, leave time to trigger refill headers/blocks
+    try: await sleepAsync daemonWaitInterval
+    except CancelledError: discard
+
+  discard
 
 
 proc runPool*(
@@ -155,10 +157,9 @@ proc runPool*(
   true # stop
 
 
-proc runPeer*(
-    buddy: BeaconBuddyRef;
-    info: static[string];
-      ) {.async: (raises: []).} =
+template runPeer*(buddy: BeaconBuddyRef; info: static[string]) =
+  ## Async/template
+  ##
   ## This peer worker method is repeatedly invoked (exactly one per peer) while
   ## the `buddy.ctrl.poolMode` flag is set `false`.
   ##
