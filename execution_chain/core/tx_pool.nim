@@ -160,7 +160,10 @@ proc assembleBlock*(
     blobsBundle = BlobsBundle(
       wrapperVersion: getWrapperVersion(com, blk.header.timestamp)
     )
-    currentRlpSize = rlp.getEncodedLength(blk.header) + rlp.getEncodedLength(blk.withdrawals)
+    currentRlpSize = rlp.getEncodedLength(blk.header)
+  
+  if blk.withdrawals.isSome:
+    currentRlpSize = currentRlpSize + rlp.getEncodedLength(blk.withdrawals.get())
 
   for item in pst.packedTxs:
     let tx = item.pooledTx
