@@ -94,7 +94,7 @@ proc processClient(
 proc new*(
     _: type Eth1Discovery,
     privKey: PrivateKey,
-    address: discoveryv4.Address,
+    address: AddressV4,
     bootstrapNodes: openArray[ENode],
     bindPort: Port,
     bindIp = IPv6_any(),
@@ -102,7 +102,7 @@ proc new*(
 ): Eth1Discovery =
   let bootnodes = bootstrapNodes.to(enr.Record)
   Eth1Discovery(
-    discv4: newDiscoveryV4(
+    discv4: discoveryv4.newDiscoveryV4(
       privKey = privKey,
       address = address,
       bootstrapNodes = bootstrapNodes,
@@ -110,7 +110,7 @@ proc new*(
       bindIp = bindIp,
       rng = rng
     ),
-    discv5: newProtocol(
+    discv5: discoveryv5.newProtocol(
       privKey = privKey,
       enrIp = Opt.some(address.ip),
       enrTcpPort = Opt.some(address.tcpPort),
@@ -118,6 +118,7 @@ proc new*(
       bootstrapRecords = bootnodes,
       bindPort = bindPort,
       bindIp = bindIp,
+      enrAutoUpdate = true,
       rng = rng
     )
   )
