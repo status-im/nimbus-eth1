@@ -26,7 +26,7 @@ RUN cd /root/nimbus-eth1 \
 # --------------------------------- #
 # Starting new image to reduce size #
 # --------------------------------- #
-FROM debian:testing-slim as deploy
+FROM debian:testing-slim AS deploy
 
 SHELL ["/bin/bash", "-c"]
 RUN apt-get clean && apt update \
