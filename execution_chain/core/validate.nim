@@ -16,7 +16,7 @@ import
   ../db/ledger,
   ../common/common,
   ../transaction/call_types,
-  ../transaction,
+  ../[transaction, constants],
   ../utils/utils,
   "."/[dao, eip4844, eip7702, eip7691, gaslimit, withdrawals],
   ./pow/difficulty,
@@ -268,10 +268,13 @@ func validateTxBasic*(
 
     if tx.versionedHashes.len == 0:
       return err("invalid tx: there must be at least one blob")
+    
+    var maxBlobsPerTx = getMaxBlobsPerBlock(com, fork)
+    if fork >= FkOsaka:
+      maxBlobsPerTx = MAX_BLOBS_PER_TX # Blobs per transaction is capped at 6 in Osaka
 
-    let maxBlobsPerBlock = getMaxBlobsPerBlock(com, fork)
-    if tx.versionedHashes.len.uint64 > maxBlobsPerBlock:
-      return err(&"invalid tx: versioned hashes len exceeds MAX_BLOBS_PER_BLOCK={maxBlobsPerBlock}, get={tx.versionedHashes.len}")
+    if tx.versionedHashes.len.uint64 > maxBlobsPerTx:
+      return err(&"invalid tx: versioned hashes len exceeds MAX_BLOBS_PER_TX={maxBlobsPerTx}, get={tx.versionedHashes.len}")
 
     for i, bv in tx.versionedHashes:
       if bv.data[0] != VERSIONED_HASH_VERSION_KZG:
