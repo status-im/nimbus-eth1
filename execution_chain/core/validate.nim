@@ -269,10 +269,16 @@ func validateTxBasic*(
     if tx.versionedHashes.len == 0:
       return err("invalid tx: there must be at least one blob")
     
-    var maxBlobsPerTx = getMaxBlobsPerBlock(com, fork)
-    if fork >= FkOsaka:
-      maxBlobsPerTx = MAX_BLOBS_PER_TX # Blobs per transaction is capped at 6 in Osaka
+    # Before Osaka the maxBlobsPerBlock is also the limit for blobs per transaction.
+    # After Osaka the blob counts per block is increased with BPO, but 
+    # the blobs per transaction is capped at MAX_BLOBS_PER_TX=6.
+    let maxBlobsPerTx = 
+      if fork >= FkOsaka:
+        MAX_BLOBS_PER_TX
+      else:
+        getMaxBlobsPerBlock(com, fork)
 
+    # Checking of the blobs per transaction
     if tx.versionedHashes.len.uint64 > maxBlobsPerTx:
       return err(&"invalid tx: versioned hashes len exceeds MAX_BLOBS_PER_TX={maxBlobsPerTx}, get={tx.versionedHashes.len}")
 
