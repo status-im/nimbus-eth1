@@ -99,7 +99,7 @@ proc fromJson(T: type Authorization, n: JsonNode): Authorization =
     chainId: required(ChainId, "chainId"),
     address: required(Address, "address"),
     nonce: required(AccountNonce, "nonce"),
-    v: required(uint64, "v"),
+    yParity: required(uint64, "yParity"),
     r: required(UInt256, "r"),
     s: required(UInt256, "s"),
   )
