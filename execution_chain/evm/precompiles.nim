@@ -30,36 +30,36 @@ import
 type
   Precompiles* = enum
     # Frontier to Spurious Dragron
-    paEcRecover      
-    paSha256         
-    paRipeMd160      
-    paIdentity       
+    paEcRecover
+    paSha256
+    paRipeMd160
+    paIdentity
     # Byzantium and Constantinople
-    paModExp         
-    paEcAdd          
-    paEcMul          
-    paPairing        
+    paModExp
+    paEcAdd
+    paEcMul
+    paPairing
     # Istanbul
-    paBlake2bf       
+    paBlake2bf
     # Cancun
     paPointEvaluation
     # Prague (EIP-2537)
-    paBlsG1Add       
-    paBlsG1MultiExp  
-    paBlsG2Add       
-    paBlsG2MultiExp  
-    paBlsPairing     
-    paBlsMapG1       
+    paBlsG1Add
+    paBlsG1MultiExp
+    paBlsG2Add
+    paBlsG2MultiExp
+    paBlsPairing
+    paBlsMapG1
     paBlsMapG2
     # Osaka
-    paP256Verify       
+    paP256Verify
 
   SigRes = object
     msgHash: array[32, byte]
     sig: Signature
 
 const
-  # Frontier to Spurious Dragron 
+  # Frontier to Spurious Dragron
   paEcRecoverAddress       = address"0x0000000000000000000000000000000000000001"
   paSha256Address          = address"0x0000000000000000000000000000000000000002"
   paRipeMd160Address       = address"0x0000000000000000000000000000000000000003"
@@ -85,7 +85,7 @@ const
   paBlsPairingAddress      = address"0x000000000000000000000000000000000000000f"
   paBlsMapG1Address        = address"0x0000000000000000000000000000000000000010"
   paBlsMapG2Address        = address"0x0000000000000000000000000000000000000011"
-  
+
   # Osaka
   paP256VerifyAddress      = address"0x0000000000000000000000000000000000000100"
 
@@ -293,8 +293,12 @@ func modExpFee(c: Computation,
       max(adjExpLen, 1.u256)
     ) div divisor
 
+  template gasCalc7883(comp): untyped =
+    # multiplication_complexity * iteration_count
+    max(modLen, baseLen).comp * max(adjExpLen, 1.u256)
+
   # EIP2565: modExp gas cost
-  let gasFee = if fork >= FkOsaka: gasCalc(mulComplexityEIP7883, GasQuadDivisorEIP2565)
+  let gasFee = if fork >= FkOsaka: gasCalc7883(mulComplexityEIP7883)
                elif fork >= FkBerlin: gasCalc(mulComplexityEIP2565, GasQuadDivisorEIP2565)
                else: gasCalc(mulComplexity, GasQuadDivisor)
 
