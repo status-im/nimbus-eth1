@@ -63,7 +63,7 @@ const
   # the included blobs. Since blob transactions are pulled instead of pushed,
   # and only a small metadata is kept in ram, there is no critical limit that
   # should be enforced. Still, capping it to some sane limit can never hurt.
-  BLOB_TX_MAX_SIZE* = 1024 * 1024
+  BLOB_TX_MAX_SIZE* = 1024 * 1024 * 2
 
 # ------------------------------------------------------------------------------
 # Private functions
