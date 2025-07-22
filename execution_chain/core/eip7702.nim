@@ -30,7 +30,7 @@ const
 func authority*(auth: Authorization): Opt[Address] =
   const SECP256K1halfN = SECPK1_N div 2
 
-  if auth.yParity > 1'u64:
+  if auth.yParity > 1'u8:
     # auth.yParity must be 0 or 1
     return Opt.none(Address)
 
