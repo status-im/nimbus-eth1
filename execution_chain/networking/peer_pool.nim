@@ -282,8 +282,8 @@ proc start*(p: PeerPoolRef, enableDiscV4: bool, enableDiscV5: bool) =
   try:
     p.discovery.open(enableDiscV4, enableDiscV5)
   except TransportOsError as exc:
-    error "Cannot start discovery protocol", msg=exc.msg
-    return
+    fatal "Cannot start discovery protocol", msg=exc.msg
+    quit(QuitFailure)
 
   var workers = newSeqOfCap[WorkerFuture](maxConcurrentConnectionRequests+1)
   for i in 0 ..< maxConcurrentConnectionRequests:
