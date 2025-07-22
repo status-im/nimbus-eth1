@@ -31,7 +31,6 @@ type
 
 const
   defaultDataDirDesc* = defaultDataDir()
-  defaultBlockFileName* = "eth-block-data"
   defaultAccumulatorFileName* = "mainnet-historical-hashes-accumulator.ssz"
   defaultWeb3Url* = Web3Url(kind: HttpUrl, url: "http://127.0.0.1:8545")
 
@@ -43,8 +42,7 @@ type
   HistoryCmd* = enum
     # TODO: Multiline strings doesn't work here anymore with 1.6, and concat of
     # several lines gives the error: Error: Invalid node kind nnkInfix for macros.`$`
-    exportBlockData =
-      "Export block data (headers, bodies and receipts) to a json format or a database. Some of this functionality is likely to get deprecated"
+    exportBlockData = "Export block data (headers, bodies and receipts) to a yaml file"
     exportEpochHeaders =
       "Export block headers from an Ethereum JSON RPC Execution endpoint to *.e2s files arranged per epoch (8192 blocks)"
     verifyEpochHeaders =
@@ -92,27 +90,11 @@ type
       .}: Web3Url
       case historyCmd* {.command.}: HistoryCmd
       of exportBlockData:
-        startBlock* {.
-          desc: "Number of the first block to be exported",
+        blockNumber* {.
+          desc: "Number of the block to be exported",
           defaultValue: 0,
-          name: "start-block"
+          name: "blocknumber"
         .}: uint64
-        endBlock* {.
-          desc: "Number of the last block to be exported",
-          defaultValue: 0,
-          name: "end-block"
-        .}: uint64
-        fileName* {.
-          desc: "File name (minus extension) where block data will be exported to",
-          defaultValue: defaultBlockFileName,
-          defaultValueDesc: $defaultBlockFileName,
-          name: "file-name"
-        .}: string
-        headersOnly* {.
-          desc: "Only export the headers instead of full blocks and receipts",
-          defaultValue: false,
-          name: "headers-only"
-        .}: bool
       of exportEpochHeaders:
         startEpoch* {.
           desc: "Number of the first epoch which should be downloaded",
