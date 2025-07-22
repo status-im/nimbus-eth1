@@ -30,8 +30,8 @@ const
 func authority*(auth: Authorization): Opt[Address] =
   const SECP256K1halfN = SECPK1_N div 2
 
-  if auth.v > 1'u64:
-    # auth.v must be 0 or 1
+  if auth.yParity > 1'u64:
+    # auth.yParity must be 0 or 1
     return Opt.none(Address)
 
   if auth.s > SECP256K1halfN:
@@ -43,7 +43,7 @@ func authority*(auth: Authorization): Opt[Address] =
   var bytes: array[65, byte]
   assign(bytes.toOpenArray(0, 31), auth.r.toBytesBE())
   assign(bytes.toOpenArray(32, 63), auth.s.toBytesBE())
-  bytes[64] = auth.v.byte
+  bytes[64] = auth.yParity.byte
 
   let sig = Signature.fromRaw(bytes).valueOr:
     return Opt.none(Address)
