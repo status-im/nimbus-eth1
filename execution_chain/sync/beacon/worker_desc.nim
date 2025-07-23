@@ -188,7 +188,7 @@ type
     nRespErrors*: BuddyError         ## Number of errors/slow responses in a row
 
 
-  BeaconHandlersRef* = ref object
+  BeaconHandlersRef* = ref object of RootRef
     ## Selected handlers that can be replaced for tracing. The version number
     ## allows to identify overlays.
     version*: int                    ## Overlay version unless 0 (i.e. base=0)
