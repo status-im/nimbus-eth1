@@ -286,7 +286,7 @@ proc computeKeyImpl(
               skipLayers = skipLayers,
             )
           batch.leave(n)
-      
+ 
       template writeBranch(vtx: BranchRef): HashKey =
         encodeBranch(vtx):
           if subvid.isValid:
@@ -295,10 +295,15 @@ proc computeKeyImpl(
           else:
             VOID_HASH_KEY
 
+      var encoding: HashKey
       if vtx.vType == ExtBranch:
         let vtx = ExtBranchRef(vtx)
-        encodeExt(vtx.pfx):
+        encoding = encodeExt(vtx.pfx):
           writeBranch(vtx)
+      else:
+        encoding = writeBranch(vtx)
+
+      encoding
 
   # Cache the hash into the same storage layer as the the top-most value that it
   # depends on (recursively) - this could be an ephemeral in-memory layer or the
