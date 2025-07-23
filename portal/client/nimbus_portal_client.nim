@@ -12,7 +12,6 @@ import
   confutils,
   confutils/std/net,
   chronicles,
-  chronicles/topics_registry,
   chronos,
   metrics,
   metrics/chronos_httpserver,

@@ -14,7 +14,6 @@ import
   std/strutils,
   confutils,
   chronicles,
-  chronicles/topics_registry,
   stew/byteutils,
   web3/primitives,
   ../rpc/eth_rpc_client
