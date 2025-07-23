@@ -9,69 +9,49 @@
 
 import
   unittest2,
-  stint,
-  web3/[eth_api_types, eth_api],
   stew/io2,
-  json_rpc/[rpcclient, rpcproxy, rpcserver, jsonmarshal],
-  eth/common/eth_types_rlp,
-  ../../execution_chain/rpc/cors,
-  ../../execution_chain/common/common,
-  ../types,
-  ../rpc/evm,
-  ../rpc/rpc_eth_api,
-  ../rpc/blocks,
-  ../nimbus_verified_proxy_conf,
+  json_rpc/[rpcclient, rpcserver, rpcproxy, jsonmarshal],
+  web3/[eth_api_types, eth_api],
   ../header_store,
+  ../rpc/blocks,
+  ../types,
+  ./test_setup,
   ./test_api_backend
-
-proc startVerifiedProxy(
-    testState: TestApiState, headerCacheLen: int, maxBlockWalk: uint64
-): VerifiedRpcProxy =
-  let
-    chainId = 1.u256
-    networkId = 1.u256
-    authHooks = @[httpCors(@[])] # TODO: for now we serve all cross origin requests
-    web3Url = Web3Url(kind: Web3UrlKind.HttpUrl, web3Url: "http://127.0.0.1:8545")
-    clientConfig = web3Url.asClientConfig()
-    rpcProxy = RpcProxy.new([initTAddress("127.0.0.1", 8545)], clientConfig, authHooks)
-    headerStore = HeaderStore.new(headerCacheLen)
-
-    verifiedProxy = VerifiedRpcProxy.init(rpcProxy, headerStore, chainId, maxBlockWalk)
-
-  verifiedProxy.evm = AsyncEvm.init(verifiedProxy.toAsyncEvmStateBackend(), networkId)
-  verifiedProxy.rpcClient = initTestApiBackend(testState)
-  verifiedProxy.installEthApiHandlers()
-
-  waitFor rpcProxy.start()
-  waitFor verifiedProxy.verifyChaindId()
-  return verifiedProxy
-
-proc stopVerifiedProxy(vp: VerifiedRpcProxy) =
-  waitFor vp.proxy.stop()
 
 proc getBlockFromJson(filepath: string): BlockObject =
   var blkBytes = readAllBytes(filepath)
   let blk = JrpcConv.decode(blkBytes.get, BlockObject)
   return blk
 
-suite "rpc blocks":
-  test "get block by hash - correct block - completeness check":
+proc checkCompleteness(vp: VerifiedRpcProxy, ts: TestApiState, blockName: string) =
+  let blk = getBlockFromJson("nimbus_verified_proxy/tests/data/" & blockName & ".json")
+
+  ts.loadFullBlock(blk.hash, blk)
+  let status = vp.headerStore.add(convHeader(blk), blk.hash).valueOr:
+    raise newException(ValueError, error)
+
+  # reuse verified proxy's internal client. Conveniently it is looped back to the proxy server
+  let verifiedBlk = waitFor vp.proxy.getClient().eth_getBlockByHash(blk.hash, true)
+
+  let
+    blkStr = JrpcConv.encode(blk).JsonString
+    verifiedBlkStr = JrpcConv.encode(verifiedBlk).JsonString
+
+  check blkStr == verifiedBlkStr
+
+suite "test verified blocks":
+  test "completeness check for every fork":
     let
-      testState = TestApiState.init(1.u256)
-      vp = startVerifiedProxy(testState, 1, 1)
-      blk = getBlockFromJson("nimbus_verified_proxy/tests/block.json")
+      ts = TestApiState.init(1.u256)
+      vp = startTestSetup(ts, 1, 1)
+      forkBlockNames = [
+        "Frontier", "Homestead", "DAO", "TangerineWhistle", "SpuriousDragon",
+        "Byzantium", "Constantinople", "Istanbul", "MuirGlacier", "StakingDeposit",
+        "Berlin", "London", "ArrowGlacier", "GrayGlacier", "Paris", "Shanghai",
+        "Cancun", "Prague",
+      ]
 
-    testState.loadFullBlock(blk.hash, blk)
-    let status = vp.headerStore.add(convHeader(blk), blk.hash).valueOr:
-      raise newException(ValueError, error)
-
-    # reuse verified proxy's internal client. Conveniently it is looped back to the proxy server
-    let verifiedBlk = waitFor vp.proxy.getClient().eth_getBlockByHash(blk.hash, true)
-
-    vp.stopVerifiedProxy()
-
-    let
-      blkStr = JrpcConv.encode(blk).JsonString
-      verifiedBlkStr = JrpcConv.encode(verifiedBlk).JsonString
-
-    check blkStr == verifiedBlkStr
+    for blockName in forkBlockNames:
+      checkCompleteness(vp, ts, blockName)
+      ts.clear()
+      vp.headerStore.clear()
