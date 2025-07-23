@@ -36,7 +36,7 @@ proc runRelease(ctx: BeaconCtxRef) =
   worker.release(ctx, "RunRelease")
 
 proc runDaemon(ctx: BeaconCtxRef): Future[Duration] {.async: (raises: []).} =
-  return await worker.runDaemon(ctx, "RunDaemon")
+  return worker.runDaemon(ctx, "RunDaemon")
 
 proc runTicker(ctx: BeaconCtxRef) =
   worker.runTicker(ctx, "RunTicker")
@@ -51,7 +51,7 @@ proc runPool(buddy: BeaconBuddyRef; last: bool; laps: int): bool =
   worker.runPool(buddy, last, laps, "RunPool")
 
 proc runPeer(buddy: BeaconBuddyRef): Future[Duration] {.async: (raises: []).} =
-  return await worker.runPeer(buddy, "RunPeer")
+  return worker.runPeer(buddy, "RunPeer")
 
 # ------------------------------------------------------------------------------
 # Public functions

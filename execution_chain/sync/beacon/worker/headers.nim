@@ -11,6 +11,7 @@
 {.push raises:[].}
 
 import
+  std/sets,
   pkg/[chronicles, chronos],
   pkg/eth/common,
   pkg/stew/[interval_set, sorted_set],
@@ -33,139 +34,141 @@ func headersCollectOk*(buddy: BeaconBuddyRef): bool =
       return true
   false
 
-proc headersCollect*(
-    buddy: BeaconBuddyRef;
-    info: static[string];
-      ) {.async: (raises: []).} =
+
+template headersCollect*(buddy: BeaconBuddyRef; info: static[string]) =
+  ## Async/template
+  ##
   ## Collect headers and either stash them on the header chain cache directly,
   ## or stage then on the header queue to get them serialised, later. The
   ## header queue serialisation is needed in case of several peers fetching
   ## and processing headers concurrently.
   ##
-  let
-    ctx = buddy.ctx
-    peer = buddy.peer
+  block body:
+    let
+      ctx = buddy.ctx
+      peer {.inject,used.} = buddy.peer
 
-  if ctx.headersUnprocIsEmpty() or
-     ctx.hdrCache.state != collecting:
-    return                                           # no action
+    if ctx.headersUnprocIsEmpty() or
+       ctx.hdrCache.state != collecting:
+      break body                                     # no action, return
 
-  var
-    nStored = 0u64                                   # statistics, to be updated
-    nQueued = 0                                      # ditto
+    var
+      nStored {.inject.} = 0u64                      # statistics, to be updated
+      nQueued {.inject.} = 0                         # ditto
 
-  block fetchHeadersBody:
-    #
-    # Start deterministically. Explicitely fetch/append by parent hash.
-    #
-    # Exactly one peer can fetch deterministically (i.e. hash based) and
-    # store headers directly on the header chain cache. All other peers fetch
-    # opportunistcally (i.e. block number based) and queue the headers for
-    # later serialisation.
-    while true:
-      let top = ctx.headersUnprocAvailTop() + 1
+    block fetchHeadersBody:
       #
-      # A deterministic fetch can directly append to the lower end `dangling`
-      # of header chain cache. So this criteria is unique at a given time
-      # and when an interval is taken out of the `unproc` pool:
-      # ::
-      #    ------------------|                 unproc pool
-      #              |-------|                 block interval to fetch next
-      #                       |----------      already stored headers on cache
-      #                      top
-      #                    dangling
+      # Start deterministically. Explicitely fetch/append by parent hash.
       #
-      # After claiming the block interval that will be processed next for the
-      # deterministic fetch, the situation for the new `top` would look like
-      # ::
-      #    ---------|                          unproc pool
-      #              |-------|                 block interval to fetch next
-      #                       |----------      already stored headers on cache
-      #             top     dangling
-      #
-      # so any other peer arriving here will see a gap between `top` and
-      # `dangling` which will lead them to fetch opportunistcally.
-      #
-      let dangling = ctx.hdrCache.antecedent.number
-      if top < dangling:
-        break
+      # Exactly one peer can fetch deterministically (i.e. hash based) and
+      # store headers directly on the header chain cache. All other peers fetch
+      # opportunistcally (i.e. block number based) and queue the headers for
+      # later serialisation.
+      while true:
+        let top = ctx.headersUnprocAvailTop() + 1
+        #
+        # A deterministic fetch can directly append to the lower end `dangling`
+        # of header chain cache. So this criteria is unique at a given time
+        # and when an interval is taken out of the `unproc` pool:
+        # ::
+        #    ------------------|               unproc pool
+        #              |-------|               block interval to fetch next
+        #                       |----------    already stored headers on cache
+        #                      top
+        #                    dangling
+        #
+        # After claiming the block interval that will be processed next for the
+        # deterministic fetch, the situation for the new `top` would look like
+        # ::
+        #    ---------|                        unproc pool
+        #              |-------|               block interval to fetch next
+        #                       |----------    already stored headers on cache
+        #             top     dangling
+        #
+        # so any other peer arriving here will see a gap between `top` and
+        # `dangling` which will lead them to fetch opportunistcally.
+        #
+        let dangling = ctx.hdrCache.antecedent.number
+        if top < dangling:
+          break # continue with opportunistic fetching & stashing
 
-      # Throw away overlap (should not happen anyway)
-      if dangling < top:
-        discard ctx.headersUnprocFetch(top - dangling).expect("iv")
+        # Throw away overlap (should not happen anyway)
+        if dangling < top:
+          discard ctx.headersUnprocFetch(top - dangling).expect("iv")
 
-      let
-        # Get parent hash from the most senior stored header
-        parent = ctx.hdrCache.antecedent.parentHash
+        let
+          # Get parent hash from the most senior stored header
+          parent = ctx.hdrCache.antecedent.parentHash
 
-        # Fetch some headers
-        rev = (await buddy.headersFetch(
-                             parent, nFetchHeadersRequest, info)).valueOr:
+          # Fetch some headers
+          rev = buddy.headersFetch(parent, nFetchHeadersRequest, info).valueOr:
+            trace info & ": fetch to disk error ***", peer
+            break fetchHeadersBody                   # error => exit block
+
+        ctx.pool.seenData = true                     # header data exist
+
+        # Store it on the header chain cache
+        let dTop = ctx.hdrCache.antecedent.number    # current antecedent
+        if not buddy.headersStashOnDisk(rev, buddy.peerID, info):
           break fetchHeadersBody                     # error => exit block
 
-      ctx.pool.seenData = true                       # header data exist
+        let dBottom = ctx.hdrCache.antecedent.number # update new antecedent
+        nStored += (dTop - dBottom)                  # statistics
 
-      # Store it on the header chain cache
-      let dTop = ctx.hdrCache.antecedent.number      # current antecedent
-      if not buddy.headersStashOnDisk(rev, buddy.peerID, info):
-        break fetchHeadersBody                       # error => exit block
+        if dBottom == dTop:
+          break fetchHeadersBody                     # nothing achieved
 
-      let dBottom = ctx.hdrCache.antecedent.number   # update new antecedent
-      nStored += (dTop - dBottom)                    # statistics
+        if buddy.ctrl.stopped:                       # peer was cancelled
+          break fetchHeadersBody                     # done, exit this block
 
-      if dBottom == dTop:
-        break fetchHeadersBody                       # nothing achieved
+        # End while: `collectAndStashOnDiskCache()`
 
-      if buddy.ctrl.stopped:                         # peer was cancelled
-        break fetchHeadersBody                       # done, exit this block
+      # Continue opportunistically fetching by block number rather than hash.
+      # The fetched headers need to be staged and checked/serialised later.
+      if ctx.hdr.staged.len+ctx.hdr.reserveStaged < headersStagedQueueLengthMax:
 
-      # End while: `collectAndStashOnDiskCache()`
+        # Fetch headers
+        ctx.hdr.reserveStaged.inc                    # Book a slot on `staged`
+        let rc = buddy.headersFetch(EMPTY_ROOT_HASH, nFetchHeadersRequest, info)
+        ctx.hdr.reserveStaged.dec                    # Free that slot again
 
-    # Continue opportunistically fetching by block number rather than hash. The
-    # fetched headers need to be staged and checked/serialised later.
-    if ctx.hdr.staged.len + ctx.hdr.reserveStaged < headersStagedQueueLengthMax:
+        if rc.isErr:
+          break fetchHeadersBody                     # done, exit this block
 
-      # Fetch headers
-      ctx.hdr.reserveStaged.inc                      # Book a slot on `staged`
-      let rc = await buddy.headersFetch(
-                             EMPTY_ROOT_HASH, nFetchHeadersRequest, info)
-      ctx.hdr.reserveStaged.dec                      # Free that slot again
+        let
+          # Insert headers list on the `staged` queue
+          key = rc.value[0].number
+          qItem = ctx.hdr.staged.insert(key).valueOr:
+            raiseAssert info & ": duplicate key on staged queue" &
+              " iv=" & (rc.value[^1].number,key).bnStr
+        qItem.data.revHdrs = rc.value
+        qItem.data.peerID = buddy.peerID
 
-      if rc.isErr:
-        break fetchHeadersBody                       # done, exit this block
+        nQueued = rc.value.len                       # statistics
+        # End if
 
-      let
-        # Insert headers list on the `staged` queue
-        key = rc.value[0].number
-        qItem = ctx.hdr.staged.insert(key).valueOr:
-          raiseAssert info & ": duplicate key on staged queue" &
-            " iv=" & (rc.value[^1].number,key).bnStr
-      qItem.data.revHdrs = rc.value
-      qItem.data.peerID = buddy.peerID
+      # End block: `fetchHeadersBody`
 
-      nQueued = rc.value.len                         # statistics
-      # End if
+    if nStored == 0 and nQueued == 0:
+      if not ctx.pool.seenData and
+         buddy.peerID notin ctx.pool.failedPeers and
+         buddy.ctrl.stopped:
+        # Collect peer for detecting cul-de-sac syncing (i.e. non-existing
+        # block chain or similar.)
+        ctx.pool.failedPeers.incl buddy.peerID
 
-    # End block: `fetchHeadersBody`
+        debug info & ": no headers yet (failed peer)", peer,
+          failedPeers=ctx.pool.failedPeers.len,
+          syncState=($buddy.syncState), hdrErrors=buddy.hdrErrors
+      break body                                     # return
 
-  if nStored == 0 and nQueued == 0:
-    if not ctx.pool.seenData and
-       buddy.peerID notin ctx.pool.failedPeers and
-       buddy.ctrl.stopped:
-      # Collect peer for detecting cul-de-sac syncing (i.e. non-existing
-      # block chain or similar.)
-      ctx.pool.failedPeers.incl buddy.peerID
+    chronicles.info "Queued/staged or DB/stored headers",
+      unprocTop=(if ctx.hdrSessionStopped(): "n/a"
+                 else: ctx.headersUnprocAvailTop.bnStr),
+      nQueued, nStored, nStagedQ=ctx.hdr.staged.len,
+      nSyncPeers=ctx.pool.nBuddies
 
-      debug info & ": no headers yet (failed peer)", peer,
-        failedPeers=ctx.pool.failedPeers.len,
-        syncState=($buddy.syncState), hdrErrors=buddy.hdrErrors
-    return
-
-  info "Queued/staged or DB/stored headers",
-    unprocTop=(if ctx.hdrSessionStopped(): "n/a"
-               else: ctx.headersUnprocAvailTop.bnStr),
-    nQueued, nStored, nStagedQ=ctx.hdr.staged.len,
-    nSyncPeers=ctx.pool.nBuddies
+  discard
 
 # --------------
 
