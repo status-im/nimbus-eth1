@@ -520,7 +520,7 @@ template gasCosts(fork: EVMFork, prefix, ResultGasCostsName: untyped) =
           Shl:             fixed GasVeryLow,
           Shr:             fixed GasVeryLow,
           Sar:             fixed GasVeryLow,
-          Clz:             fixed GasVeryLow,
+          Clz:             fixed GasLow,
 
           # 20s: SHA3
           Sha3:            memExpansion `prefix gasSha3`,
