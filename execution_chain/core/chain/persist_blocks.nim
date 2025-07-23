@@ -157,39 +157,28 @@ proc persistBlock*(p: var Persister, blk: Block): Result[void, string] =
       taskpool = com.taskpool,
     )
 
-  if vmState.com.statelessProviderEnabled:
+  if not vmState.com.statelessProviderEnabled:
+    processBlock()
+  else:
     # When the stateless provider is enabled we need to have access to the
     # parent txFrame so that we can build the witness using the block pre state.
     let parentTxFrame = vmState.ledger.txFrame
     vmState.ledger.txFrame = parentTxFrame.txFrameBegin()
 
+    # Clear the caches before executing the block to ensure we collect the correct
+    # witness keys and block hashes when processing the block as these will be used
+    # when building the witness.
+    vmState.ledger.clearWitnessKeys()
+    vmState.ledger.clearBlockHashesCache()
+
     processBlock()
 
     let
-      witnessKeys = vmState.ledger.getWitnessKeys()
       blockHash = header.computeBlockHash()
       preStateLedger = LedgerRef.init(parentTxFrame)
-
-    if p.parent.stateRoot != default(Hash32):
-      doAssert preStateLedger.getStateRoot() == p.parent.stateRoot
-
-    var witness = Witness.build(witnessKeys, preStateLedger.ReadOnlyLedger)
-    witness.addHeaderHash(header.parentHash)
-
-    let earliestBlockNumber = vmState.getEarliestCachedBlockNumber()
-    if earliestBlockNumber.isSome():
-      var n = p.parent.number - 1
-      while n >= earliestBlockNumber.get():
-        let blockHash = vmState.getAncestorHash(BlockNumber(n))
-        doAssert(blockHash != default(Hash32))
-        witness.addHeaderHash(blockHash)
-        dec n
+      witness = Witness.build(preStateLedger, vmState.ledger, p.parent, header)
 
     ?vmState.ledger.txFrame.persistWitness(blockHash, witness)
-    vmState.ledger.clearWitnessKeys()
-
-  else:
-    processBlock()
 
   if NoPersistHeader notin p.flags:
     let blockHash = header.computeBlockHash()

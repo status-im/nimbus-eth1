@@ -97,6 +97,10 @@ type
       ## Used to collect the keys of all read accounts, code and storage slots.
       ## Maps a tuple of address and slot (optional) to the codeTouched flag.
 
+    blockHashes: LruCache[BlockNumber, Hash32]
+      ## Caches the block hashes fetched by the BLOCKHASH opcode in the EVM.
+      ## Also used when building the execution witness to determine the earliest
+      ## block number fetched by the BLOCKHASH opcode for any given block.
 
   ReadOnlyLedger* = distinct LedgerRef
 
@@ -375,6 +379,7 @@ proc init*(x: typedesc[LedgerRef], db: CoreDbTxRef, storeSlotHash: bool, collect
   result.code = typeof(result.code).init(codeLruSize)
   result.slots = typeof(result.slots).init(slotsLruSize)
   result.collectWitness = collectWitness
+  result.blockHashes = typeof(result.blockHashes).init(MAX_PREV_HEADER_DEPTH.int)
   discard result.beginSavepoint
 
 proc init*(x: typedesc[LedgerRef], db: CoreDbTxRef): LedgerRef =
@@ -887,6 +892,32 @@ proc getStorageProof*(ac: LedgerRef, address: Address, slots: openArray[UInt256]
     storageProof.add(slotProof[0])
 
   storageProof
+
+proc getBlockHash*(
+    ac: LedgerRef, blockNumber: BlockNumber): Hash32 =
+  if ac.blockHashes.contains(blockNumber):
+    return ac.blockHashes.get(blockNumber).get()
+
+  let blockHash = ac.txFrame.getBlockHash(blockNumber).valueOr:
+    return default(Hash32)
+
+  ac.blockHashes.put(blockNumber, blockHash)
+
+  blockHash
+
+proc getEarliestCachedBlockNumber*(ac: LedgerRef): Opt[BlockNumber] =
+  if ac.blockHashes.len() == 0:
+    return Opt.none(BlockNumber)
+
+  var earliestBlockNumber = high(BlockNumber)
+  for blockNumber in ac.blockHashes.keys():
+    if blockNumber < earliestBlockNumber:
+      earliestBlockNumber = blockNumber
+
+  Opt.some(earliestBlockNumber)
+
+proc clearBlockHashesCache*(ac: LedgerRef) =
+  ac.blockHashes = LruCache[BlockNumber, Hash32].init(MAX_PREV_HEADER_DEPTH.int)
 
 # ------------------------------------------------------------------------------
 # Public virtual read-only methods

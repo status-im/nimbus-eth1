@@ -107,9 +107,6 @@ proc procBlkPreamble(
     skipValidation, skipReceipts, skipUncles: bool,
     taskpool: Taskpool,
 ): Result[void, string] =
-
-  vmState.clearBlockHashesCache()
-
   template header(): Header =
     blk.header
 
