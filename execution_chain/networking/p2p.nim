@@ -97,7 +97,8 @@ proc connectToNetwork*(
     try:
       p2p.startListening(node)
     except TransportOsError as exc:
-      error "Cannot start listening server", msg=exc.msg
+      fatal "Cannot start listening server", msg=exc.msg
+      quit(QuitFailure)
 
   if enableDiscV4 or enableDiscV5:
     node.peerPool.start(enableDiscV4, enableDiscV5)
