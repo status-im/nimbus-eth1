@@ -46,7 +46,7 @@ const
   DEFAULT_GAS_LIMIT* =                      45_000_000
 
   # https://eips.ethereum.org/EIPS/eip-7825
-  TX_GAS_LIMIT* =                          30_000_000
+  TX_GAS_LIMIT* =                           1 shl 24 # 2^24
 
   EMPTY_SHA3* =                             hash32"c5d2460186f7233c927e7db2dcc703c0e500b653ca82273b7bfad8045d85a470"
 
