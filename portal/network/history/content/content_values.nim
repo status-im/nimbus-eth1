@@ -12,5 +12,5 @@ import eth/common/blocks_rlp, eth/common/receipts_rlp
 export blocks_rlp, receipts_rlp
 
 type
-  Receipts* = seq[Receipt]
-  ContentValueType* = BlockBody | Receipts
+  StoredReceipts* = seq[StoredReceipt]
+  ContentValueType* = BlockBody | StoredReceipts

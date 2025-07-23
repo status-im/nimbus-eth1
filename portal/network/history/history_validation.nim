@@ -12,6 +12,8 @@ import
   eth/common/[headers_rlp, blocks_rlp, receipts, hashes],
   ./history_content
 
+export history_content
+
 func validateBlockBody*(body: BlockBody, header: Header): Result[void, string] =
   ## Validate the block body against the txRoot, ommersHash and withdrawalsRoot
   ## from the header.
@@ -47,7 +49,11 @@ func validateBlockBody*(body: BlockBody, header: Header): Result[void, string] =
 
   ok()
 
-func validateReceipts*(receipts: Receipts, header: Header): Result[void, string] =
+func validateReceipts*(
+    storedReceipts: StoredReceipts, header: Header
+): Result[void, string] =
+  let receipts = storedReceipts.to(seq[Receipt])
+
   ## Validate the receipts against the receiptsRoot from the header.
   let calculatedReceiptsRoot = orderedTrieRoot(receipts)
   if calculatedReceiptsRoot != header.receiptsRoot:
@@ -59,12 +65,12 @@ func validateReceipts*(receipts: Receipts, header: Header): Result[void, string]
     ok()
 
 func validateContent*(
-    content: BlockBody | Receipts, header: Header
+    content: BlockBody | StoredReceipts, header: Header
 ): Result[void, string] =
   type T = type(content)
   when T is BlockBody:
     validateBlockBody(content, header)
-  elif T is Receipts:
+  elif T is StoredReceipts:
     validateReceipts(content, header)
 
 func validateContent*(
@@ -76,5 +82,5 @@ func validateContent*(
     let content = ?decodeRlp(contentBytes, BlockBody)
     validateBlockBody(content, header)
   of receipts:
-    let content = ?decodeRlp(contentBytes, Receipts)
+    let content = ?decodeRlp(contentBytes, StoredReceipts)
     validateReceipts(content, header)

@@ -18,5 +18,5 @@ proc getBlockBody*(
 
 proc getReceipts*(
     n: HistoryNetwork, header: Header
-): Future[Opt[BlockBody]] {.async: (raises: [CancelledError], raw: true).} =
-  n.getContent(blockBodyContentKey(header.number), BlockBody, header)
+): Future[Opt[StoredReceipts]] {.async: (raises: [CancelledError], raw: true).} =
+  n.getContent(receiptsContentKey(header.number), StoredReceipts, header)

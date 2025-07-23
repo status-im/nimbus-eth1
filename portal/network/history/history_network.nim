@@ -176,7 +176,7 @@ proc validateContent(
 
     ok()
   of receipts:
-    let receipts = decodeRlp(content, seq[Receipt]).valueOr:
+    let receipts = decodeRlp(content, StoredReceipts).valueOr:
       return err("Error decoding receipts: " & error)
     validateReceipts(receipts, header).isOkOr:
       return err("Failed validating receipts: " & error)
