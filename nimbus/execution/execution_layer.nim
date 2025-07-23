@@ -15,6 +15,10 @@ from ../../execution_chain/nimbus_desc import NimbusNode, NimbusState
 from ../../execution_chain/config import makeConfig
 from ../../execution_chain/common import newEthContext
 
+# Workaround for https://github.com/nim-lang/Nim/issues/24844
+from web3 import Quantity
+discard newFuture[Quantity]()
+
 logScope:
   topics = "Execution layer"
 
