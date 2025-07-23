@@ -91,7 +91,7 @@ const
   MIN_BLOB_GASPRICE* = 1'u64
   MAX_BLOB_GAS_PER_BLOCK* = 786432
   MAX_BLOBS_PER_BLOCK* = int(MAX_BLOB_GAS_PER_BLOCK div GAS_PER_BLOB)
-  BLOB_BASE_COST* = (1 shl 14).uint64 # 2^14
+  BLOB_BASE_COST* = (1 shl 13).uint64 # 2^14
   MAX_BLOBS_PER_TX* = 6.uint64 # Maximum number of blobs per transaction
 
   # EIP-4788 addresses
