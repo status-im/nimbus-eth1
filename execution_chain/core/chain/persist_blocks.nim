@@ -176,6 +176,15 @@ proc persistBlock*(p: var Persister, blk: Block): Result[void, string] =
     var witness = Witness.build(witnessKeys, preStateLedger.ReadOnlyLedger)
     witness.addHeaderHash(header.parentHash)
 
+    let earliestBlockNumber = vmState.getEarliestCachedBlockNumber()
+    if earliestBlockNumber.isSome():
+      var n = p.parent.number - 1
+      while n >= earliestBlockNumber.get():
+        let blockHash = vmState.getAncestorHash(BlockNumber(n))
+        doAssert(blockHash != default(Hash32))
+        witness.addHeaderHash(blockHash)
+        dec n
+
     ?vmState.ledger.txFrame.persistWitness(blockHash, witness)
     vmState.ledger.clearWitnessKeys()
 
