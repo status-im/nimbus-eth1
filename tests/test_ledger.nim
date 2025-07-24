@@ -778,6 +778,42 @@ proc runLedgerBasicOperationsTests() =
       ac.persist(clearWitness = true)
       check ac.getWitnessKeys().len() == 0
 
+    test "Get block hash":
+      let
+        db = memDB.baseTxFrame().txFrameBegin()
+        header = Header(number: 1)
+        blockHash = header.computeBlockHash()
+      db.persistHeader(blockHash, header).expect("success")
+
+      let ac = LedgerRef.init(db, false)
+      check:
+        ac.getBlockHash(BlockNumber(1)) == blockHash
+        ac.getBlockHash(BlockNumber(2)) == default(Hash32)
+
+    test "Get earliest cached block number":
+      let
+        db = memDB.baseTxFrame().txFrameBegin()
+        header1 = Header(number: 1)
+        header2 = Header(number: 2)
+        header3 = Header(number: 3)
+      db.persistHeader(header1.computeBlockHash(), header1).expect("success")
+      db.persistHeader(header2.computeBlockHash(), header2).expect("success")
+      db.persistHeader(header3.computeBlockHash(), header3).expect("success")
+
+      let ac = LedgerRef.init(db, false)
+      check ac.getEarliestCachedBlockNumber().isNone()
+
+      discard ac.getBlockHash(header3.number)
+      discard ac.getBlockHash(header1.number)
+
+      check:
+        ac.getEarliestCachedBlockNumber().isSome()
+        ac.getEarliestCachedBlockNumber().get() == header1.number
+
+      ac.clearBlockHashesCache()
+      check ac.getEarliestCachedBlockNumber().isNone()
+
+
 # ------------------------------------------------------------------------------
 # Main function(s)
 # ------------------------------------------------------------------------------

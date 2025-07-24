@@ -917,7 +917,8 @@ proc getEarliestCachedBlockNumber*(ac: LedgerRef): Opt[BlockNumber] =
   Opt.some(earliestBlockNumber)
 
 proc clearBlockHashesCache*(ac: LedgerRef) =
-  ac.blockHashes = LruCache[BlockNumber, Hash32].init(MAX_PREV_HEADER_DEPTH.int)
+  if ac.blockHashes.len() > 0:
+    ac.blockHashes = LruCache[BlockNumber, Hash32].init(MAX_PREV_HEADER_DEPTH.int)
 
 # ------------------------------------------------------------------------------
 # Public virtual read-only methods
