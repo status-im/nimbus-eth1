@@ -45,7 +45,7 @@ type
     contentRequestRetries: int
     contentQueueWorkers: int
 
-proc defaultNoGetHeader(
+proc defaultNoGetHeader*(
     blockNumber: uint64
 ): Future[Result[Header, string]] {.async: (raises: [CancelledError]), gcsafe.} =
   err(
@@ -99,6 +99,9 @@ proc new*(
     contentRequestRetries: contentRequestRetries,
     contentQueueWorkers: contentQueueWorkers,
   )
+
+func localNode*(n: HistoryNetwork): Node =
+  n.portalProtocol.localNode()
 
 proc getContent*(
     n: HistoryNetwork, contentKey: ContentKey, V: type ContentValueType, header: Header

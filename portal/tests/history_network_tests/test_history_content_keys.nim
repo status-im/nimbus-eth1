@@ -9,7 +9,7 @@
 
 import unittest2, stew/byteutils, ../../network/history/history_content
 
-suite "History Content Keys":
+suite "History Network Content Keys":
   test "toContentId":
     # Input
     const blockNumbers = [
