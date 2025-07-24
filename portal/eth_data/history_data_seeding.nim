@@ -12,7 +12,7 @@ import
   chronos,
   chronicles,
   ../network/wire/portal_protocol,
-  ../network/history/[
+  ../network/legacy_history/[
     history_content,
     history_network,
     validation/block_proof_historical_hashes_accumulator,

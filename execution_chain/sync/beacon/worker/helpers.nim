@@ -13,7 +13,7 @@
 ## Extracted helpers from `worker_desc` (avoids circular import)
 
 import
-  pkg/[chronos, eth/common, results, stew/interval_set],
+  pkg/[chronos, eth/common, stew/interval_set],
   ../../../core/chain,
   ../../../networking/p2p,
   ../../../utils/[prettify, utils],

@@ -58,7 +58,7 @@ suite "Stateless: Witness Types":
     witness.addState(@[0x1.byte, 0x2, 0x3])
     witness.addKey(@[0x7.byte, 0x8, 0x9])
     witness.addCode(@[0x4.byte, 0x5, 0x6])
-    witness.addHeader(Header())
+    witness.addHeader(@[0x10.byte, 0x11, 0x12])
 
     let witnessBytes = witness.encode()
     check witnessBytes.len() > 0

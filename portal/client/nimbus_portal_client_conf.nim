@@ -106,7 +106,7 @@ type
 
     portalSubnetworks* {.
       desc: "Select which networks (Portal sub-protocols) to enable",
-      defaultValue: {PortalSubnetwork.history, PortalSubnetwork.beacon},
+      defaultValue: {PortalSubnetwork.legacyHistory},
       name: "portal-subnetworks"
     .}: set[PortalSubnetwork]
 
@@ -397,13 +397,6 @@ type
       defaultValue: defaultDisablePoke,
       defaultValueDesc: $defaultDisablePoke,
       name: "disable-poke"
-    .}: bool
-
-    disableStateRootValidation* {.
-      hidden,
-      desc: "Disables state root validation for content received by the state network.",
-      defaultValue: false,
-      name: "disable-state-root-validation"
     .}: bool
 
     disableBanNodes* {.

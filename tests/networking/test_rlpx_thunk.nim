@@ -15,17 +15,14 @@ import
   chronos, stew/byteutils,
   ../../execution_chain/networking/p2p,
   ./stubloglevel,
-  ./p2p_test_helper,
-  ./eth_protocol
-
-let rng = newRng()
+  ./p2p_test_helper
 
 var
-  node1 = setupTestNode(rng, eth)
-  node2 = setupTestNode(rng, eth)
+  env1 = newTestEnv()
+  env2 = newTestEnv()
 
-node2.startListening()
-let res = waitFor node1.rlpxConnect(newNode(node2.toENode()))
+env2.node.startListening()
+let res = waitFor env1.node.rlpxConnect(newNode(env2.node.toENode()))
 check res.isOk()
 
 let peer = res.get()
@@ -64,5 +61,8 @@ proc testPayloads(filename: string) =
             except CatchableError as e:
               check: e.name == error.str
               raise e
+
+    env1.close()
+    env2.close()
 
 testPayloads(sourceDir / "test_rlpx_thunk.json")

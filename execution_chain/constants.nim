@@ -46,7 +46,7 @@ const
   DEFAULT_GAS_LIMIT* =                      45_000_000
 
   # https://eips.ethereum.org/EIPS/eip-7825
-  TX_GAS_LIMIT* =                          30_000_000
+  TX_GAS_LIMIT* =                           1 shl 24 # 2^24
 
   EMPTY_SHA3* =                             hash32"c5d2460186f7233c927e7db2dcc703c0e500b653ca82273b7bfad8045d85a470"
 
@@ -91,7 +91,8 @@ const
   MIN_BLOB_GASPRICE* = 1'u64
   MAX_BLOB_GAS_PER_BLOCK* = 786432
   MAX_BLOBS_PER_BLOCK* = int(MAX_BLOB_GAS_PER_BLOCK div GAS_PER_BLOB)
-  BLOB_BASE_COST* = (1 shl 14).uint64 # 2^14
+  BLOB_BASE_COST* = (1 shl 13).uint64 # 2^14
+  MAX_BLOBS_PER_TX* = 6.uint64 # Maximum number of blobs per transaction
 
   # EIP-4788 addresses
   # BEACON_ROOTS_ADDRESS is the address where historical beacon roots are stored as per EIP-4788
@@ -107,4 +108,8 @@ const
   HISTORY_STORAGE_ADDRESS* = address"0x0000F90827F1C53a10cb7A02335B175320002935"
   WITHDRAWAL_REQUEST_PREDEPLOY_ADDRESS* = address"0x00000961Ef480Eb55e80D19ad83579A64c007002"
   CONSOLIDATION_REQUEST_PREDEPLOY_ADDRESS* = address"0x0000BBdDc7CE488642fb579F8B00f3a590007251"
+
+  MAX_BLOCK_SIZE* = 10_485_760  # 10 MiB
+  SAFETY_MARGIN* = 2_097_152  # 2 MiB
+  MAX_RLP_BLOCK_SIZE* = MAX_BLOCK_SIZE - SAFETY_MARGIN
 # End

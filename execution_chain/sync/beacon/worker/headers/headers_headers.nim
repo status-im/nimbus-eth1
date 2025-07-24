@@ -48,7 +48,7 @@ proc headersFetch*(
       return Opt.none(seq[Header])                  # stop, exit function
 
     # Fetch headers for this range of block numbers
-    rc = await buddy.fetchHeadersReversed(iv, parent)
+    rc = await buddy.fetchHeadersReversed(iv, parent, info)
 
   # Job might have been cancelled or completed while downloading headers.
   # If so, no more bookkeeping of headers must take place. The *books*

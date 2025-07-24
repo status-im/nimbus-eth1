@@ -15,7 +15,7 @@ import
   pkg/[chronos, eth/common, results],
   pkg/stew/[interval_set, sorted_set],
   ../../core/chain,
-  ../sync_desc,
+  ../[sync_desc, wire_protocol],
   ./worker/helpers,
   ./worker_const
 
@@ -31,9 +31,29 @@ type
 
   # -------------------
 
-  ImportBlockError* = tuple
-    info: string
-    cancelled: bool
+  BeaconErrorType* = enum
+    ## For `FetchError` return code object/tuple
+    ENoException = 0
+    EPeerDisconnected                ## Exception
+    ECatchableError                  ## Exception
+    ECancelledError                  ## Exception
+
+  BeaconError* = tuple
+    ## Capture exception context for heders/bodies fetcher logging
+    excp: BeaconErrorType
+    name: string
+    msg: string
+    elapsed: Duration
+
+  FetchHeadersData* = tuple
+    packet: BlockHeadersPacket
+    elapsed: Duration
+
+  FetchBodiesData* = tuple
+    packet: BlockBodiesPacket
+    elapsed: Duration
+
+  # -------------------
 
   BnRangeSet* = IntervalSetRef[BlockNumber,uint64]
     ## Disjunct sets of block number intervals

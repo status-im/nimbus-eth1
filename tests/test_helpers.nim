@@ -156,8 +156,8 @@ proc setupEthNode*(
     keypair, srvAddress,
     conf.networkId,
     conf.agentString,
-    addAllCapabilities = false,
-    bindUdpPort = conf.udpPort, bindTcpPort = conf.tcpPort)
+    bindUdpPort = conf.udpPort,
+    bindTcpPort = conf.tcpPort)
 
   for capability in capabilities:
     node.addCapability capability

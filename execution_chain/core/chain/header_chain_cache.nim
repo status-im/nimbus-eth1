@@ -419,6 +419,14 @@ proc get*(hc: HeaderChainRef; bn: BlockNumber): Opt[Header] =
     return err()
   ok(move hdr)
 
+proc get*(hc: HeaderChainRef; hash: Hash32): Opt[Header] =
+  ## Retrieve some stashed header.
+  var hdr = hc.kvt.getHeader(hash).valueOr:
+    if hash == hc.session.headHash:
+      return ok(hc.session.head)
+    return err()
+  ok(move hdr)
+
 proc put*(
     hc: HeaderChainRef;
     rev: openArray[Header];

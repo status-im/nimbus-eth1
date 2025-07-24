@@ -9,8 +9,8 @@
 
 import
   chronicles,
-  ../../portal/evm/async_evm_backend,
-  ../../portal/evm/async_evm,
+  ../../execution_chain/evm/async_evm_backend,
+  ../../execution_chain/evm/async_evm,
   ./accounts,
   ../types
 

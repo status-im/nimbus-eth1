@@ -10,12 +10,11 @@
 import
   testutils/fuzzing, chronos,
   ../../../../execution_chain/networking/[p2p, rlpx, p2p_types],
-  ../../eth_protocol,
   ../../p2p_test_helper
 
 var
-  node1: EthereumNode
-  node2: EthereumNode
+  env1: TestEnv
+  env2: TestEnv
   peer: Peer
 
 let rng = newRng()
@@ -23,11 +22,11 @@ let rng = newRng()
 # to mock more to get rid of anything sockets, async, etc.
 # However, it can and has provided reasonably quick results anyhow.
 init:
-  node1 = setupTestNode(rng, eth)
-  node2 = setupTestNode(rng, eth)
+  env1 = newTestEnv()
+  env2 = newTestEnv()
 
-  node2.startListening()
-  let res = waitFor node1.rlpxConnect(newNode(node2.toENode()))
+  env2.node.startListening()
+  let res = waitFor env1.node.rlpxConnect(newNode(env2.node.toENode()))
   if res.isErr():
     quit 1
   else:

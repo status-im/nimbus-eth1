@@ -12,6 +12,7 @@
 
 import
   ../../common/common,
+  ../../constants,
   ../../utils/utils,
   ../../constants,
   ../../db/ledger,
@@ -118,6 +119,10 @@ proc procBlkPreamble(
     if blk.transactions.calcTxRoot != header.txRoot:
       return err("Mismatched txRoot")
 
+  if com.isOsakaOrLater(header.timestamp):
+    if rlp.getEncodedLength(blk) > MAX_RLP_BLOCK_SIZE:
+      return err("Post-Osaka block exceeded MAX_RLP_BLOCK_SIZE")
+
   if com.isPragueOrLater(header.timestamp):
     if header.requestsHash.isNone:
       return err("Post-Prague block header must have requestsHash")
@@ -197,8 +202,7 @@ proc procBlkEpilogue(
     # large ranges of blocks, implicitly limiting its size using the gas limit
     db.persist(
       clearEmptyAccount = vmState.com.isSpuriousOrLater(header.number),
-      clearCache = true,
-      clearWitness = vmState.com.statelessProviderEnabled
+      clearCache = true
     )
 
   var

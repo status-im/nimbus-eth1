@@ -17,7 +17,7 @@ import
   beacon_chain/spec/beacon_time,
   ssz_serialization,
   ncli/e2store,
-  ../network/history/validation/historical_hashes_accumulator
+  ../network/legacy_history/validation/historical_hashes_accumulator
 
 from eth/common/eth_types_rlp import computeRlpHash
 from nimcrypto/hash import fromHex

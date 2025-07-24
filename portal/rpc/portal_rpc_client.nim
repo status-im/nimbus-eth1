@@ -13,7 +13,8 @@ import
   eth/common/[headers_rlp, blocks_rlp, receipts_rlp],
   json_rpc/rpcclient,
   ../common/common_types,
-  ../network/history/[history_content, history_type_conversions, history_validation],
+  ../network/legacy_history/
+    [history_content, history_type_conversions, history_validation],
   ./rpc_calls/[rpc_discovery_calls, rpc_portal_calls, rpc_portal_debug_calls]
 
 export rpcclient, rpc_discovery_calls, rpc_portal_calls, rpc_portal_debug_calls, results

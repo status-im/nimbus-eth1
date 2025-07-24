@@ -5,7 +5,7 @@
 #   * Apache v2 license (license terms in the root directory or at https://www.apache.org/licenses/LICENSE-2.0).
 # at your option. This file may not be copied, modified, or distributed except according to those terms.
 
-FROM debian:buster-slim AS build
+FROM debian:bullseye-slim AS build
 
 RUN apt-get update \
  && apt-get install -y --fix-missing build-essential make git \
@@ -30,7 +30,7 @@ RUN cd nimbus-eth1 && \
 # --------------------------------- #
 # Starting new image to reduce size #
 # --------------------------------- #
-FROM debian:buster-slim AS deploy
+FROM debian:bullseye-slim AS deploy
 
 COPY --from=build /usr/bin/nimbus_portal_client /usr/bin/nimbus_portal_client
 

@@ -695,9 +695,12 @@ proc forkChoice*(c: ForkedChainRef,
 
   ok()
 
-proc stopProcessingQueue*(c: ForkedChainRef) {.async: (raises: [CancelledError]).} =
+proc stopProcessingQueue*(c: ForkedChainRef) {.async: (raises: []).} =
   doAssert(c.processingQueueLoop.isNil.not, "Please set enableQueue=true when constructing FC")
-  await c.processingQueueLoop.cancelAndWait()
+  # noCancel operation prevents race condition between processingQueue
+  # and FC.serialize, e.g. the queue is not empty and processingQueue loop still running, and
+  # at the same time FC.serialize modify the state, crash can happen.
+  await noCancel c.processingQueueLoop.cancelAndWait()
 
 template queueImportBlock*(c: ForkedChainRef, blk: Block, finalized = false): auto =
   proc asyncHandler(): Future[Result[void, string]] {.async: (raises: [CancelledError]).} =
