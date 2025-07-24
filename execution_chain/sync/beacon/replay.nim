@@ -14,11 +14,13 @@
 
 import
   ./replay/replay_reader/reader_init,
-  ./replay/[replay_desc, replay_reader]
+  ./replay/[replay_desc, replay_reader, replay_setup, replay_start_stop]
 
 export
   ReplayReaderRef,
   captureLog,
-  init
+  init,
+  replay_setup,
+  replay_start_stop
 
 # End
