@@ -18,6 +18,8 @@ import
   ./p2p_metrics,
   ./[eth1_discovery, p2p_peers]
 
+export sets, tables
+
 logScope:
   topics = "p2p peer_pool"
 
