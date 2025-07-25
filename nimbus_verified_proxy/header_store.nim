@@ -135,6 +135,23 @@ func contains*(self: HeaderStore, number: base.BlockNumber): bool =
   self.hashes.contains(number)
 
 proc updateFinalized*(
+    self: HeaderStore, header: Header, hHash: Hash32
+): Result[bool, string] =
+  if self.finalized.isSome():
+    if self.finalized.get().number < header.number:
+      self.finalized = Opt.some(header)
+      self.finalizedHash = Opt.some(hHash)
+    else:
+      return err("finalized update header is older")
+  else:
+    self.finalized = Opt.some(header)
+    self.finalizedHash = Opt.some(hHash)
+    self.earliest = Opt.some(header)
+    self.earliestHash = Opt.some(hHash)
+
+  return ok(true)
+
+proc updateFinalized*(
     self: HeaderStore, header: ForkedLightClientHeader
 ): Result[bool, string] =
   let execHeader = convLCHeader(header).valueOr:
