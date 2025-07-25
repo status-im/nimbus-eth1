@@ -40,12 +40,10 @@ type PortalHistoryBridge = ref object
 ## Conversion functions for Block and Receipts
 
 func asEthBlock(blockObject: BlockObject): EthBlock =
-  let
-    header = blockObject.toBlockHeader()
-    transactions = toTransactions(blockObject.transactions)
-
   EthBlock(
-    header: header, transactions: transactions, withdrawals: blockObject.withdrawals
+    header: blockObject.toBlockHeader(),
+    transactions: blockObject.transactions.toTransactions(),
+    withdrawals: blockObject.withdrawals,
   )
 
 func asPortalBlockBody(ethBlock: EthBlock): PortalBlockBodyShanghai =
@@ -110,7 +108,7 @@ func asReceipt(receiptObject: ReceiptObject): Result[Receipt, string] =
   else:
     err("No root nor status field in the JSON receipt object")
 
-func asReceipts(receiptObjects: seq[ReceiptObject]): Result[seq[Receipt], string] =
+func asReceipts*(receiptObjects: seq[ReceiptObject]): Result[seq[Receipt], string] =
   var receipts: seq[Receipt]
   for receiptObject in receiptObjects:
     let receipt = asReceipt(receiptObject).valueOr:

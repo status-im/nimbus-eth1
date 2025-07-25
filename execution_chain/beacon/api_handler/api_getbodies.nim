@@ -58,7 +58,7 @@ proc getPayloadBodiesByRange*(ben: BeaconEngineRef,
     last = ben.chain.latestNumber
 
   let base = ben.chain.baseNumber
-  var list = newSeqOfCap[Opt[ExecutionPayloadBodyV1]](last-start)
+  var list = newSeqOfCap[Opt[ExecutionPayloadBodyV1]](last-start+1)
 
   if start < base:
     # get bodies from database.
