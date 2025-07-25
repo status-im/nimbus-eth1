@@ -12,6 +12,7 @@ import
   std/[strformat, strutils, importutils],
   eth/common/[keys, transaction_utils],
   stew/[byteutils, endians2],
+  minilru,
   results,
   chronos,
   ../execution_chain/config,
@@ -801,18 +802,17 @@ proc runLedgerBasicOperationsTests() =
       db.persistHeader(header3.computeBlockHash(), header3).expect("success")
 
       let ac = LedgerRef.init(db, false)
-      check ac.getEarliestCachedBlockNumber().isNone()
+      check ac.getBlockHashesCache().len() == 0
 
       discard ac.getBlockHash(header3.number)
       discard ac.getBlockHash(header1.number)
 
       check:
-        ac.getEarliestCachedBlockNumber().isSome()
-        ac.getEarliestCachedBlockNumber().get() == header1.number
+        ac.getBlockHashesCache().len() > 0
+        ac.getBlockHashesCache().get(header1.number).isSome()
 
       ac.clearBlockHashesCache()
-      check ac.getEarliestCachedBlockNumber().isNone()
-
+      check ac.getBlockHashesCache().len() == 0
 
 # ------------------------------------------------------------------------------
 # Main function(s)

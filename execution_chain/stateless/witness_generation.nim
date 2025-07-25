@@ -11,6 +11,7 @@
 
 import
   std/[tables, sets],
+  minilru,
   eth/common,
   ../db/ledger,
   ./witness_types
@@ -62,6 +63,17 @@ proc build*(
 
   witness
 
+proc getEarliestCachedBlockNumber(blockHashes: BlockHashesCache): Opt[BlockNumber] =
+  if blockHashes.len() == 0:
+    return Opt.none(BlockNumber)
+
+  var earliestBlockNumber = high(BlockNumber)
+  for blockNumber in blockHashes.keys():
+    if blockNumber < earliestBlockNumber:
+      earliestBlockNumber = blockNumber
+
+  Opt.some(earliestBlockNumber)
+
 proc build*(
     T: type Witness,
     preStateLedger: LedgerRef,
@@ -75,7 +87,9 @@ proc build*(
   var witness = Witness.build(ledger.getWitnessKeys(), preStateLedger)
   witness.addHeaderHash(header.parentHash)
 
-  let earliestBlockNumber = ledger.getEarliestCachedBlockNumber()
+  let
+    blockHashes = ledger.getBlockHashesCache()
+    earliestBlockNumber = getEarliestCachedBlockNumber(blockHashes)
   if earliestBlockNumber.isSome():
     var n = parent.number - 1
     while n >= earliestBlockNumber.get():

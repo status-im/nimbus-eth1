@@ -48,6 +48,8 @@ type
   # Maps witness keys to the codeTouched flag
   WitnessTable* = OrderedTable[WitnessKey, bool]
 
+  BlockHashesCache* = LruCache[BlockNumber, Hash32]
+
   AccountFlag = enum
     Alive
     IsNew
@@ -97,10 +99,10 @@ type
       ## Used to collect the keys of all read accounts, code and storage slots.
       ## Maps a tuple of address and slot (optional) to the codeTouched flag.
 
-    blockHashes: LruCache[BlockNumber, Hash32]
+    blockHashes: BlockHashesCache
       ## Caches the block hashes fetched by the BLOCKHASH opcode in the EVM.
-      ## Also used when building the execution witness to determine the earliest
-      ## block number fetched by the BLOCKHASH opcode for any given block.
+      ## Also used when building the execution witness to determine the
+      ## block numbers fetched by the BLOCKHASH opcode for any given block.
 
   ReadOnlyLedger* = distinct LedgerRef
 
@@ -714,6 +716,21 @@ template getWitnessKeys*(ac: LedgerRef): WitnessTable =
 template clearWitnessKeys*(ac: LedgerRef) =
   ac.witnessKeys.clear()
 
+proc getBlockHash*(ac: LedgerRef, blockNumber: BlockNumber): Hash32 =
+  ac.blockHashes.get(blockNumber).valueOr:
+    let blockHash = ac.txFrame.getBlockHash(blockNumber).valueOr:
+      return default(Hash32)
+
+    ac.blockHashes.put(blockNumber, blockHash)
+    blockHash
+
+template getBlockHashesCache*(ac: LedgerRef): BlockHashesCache =
+  ac.blockHashes
+
+proc clearBlockHashesCache*(ac: LedgerRef) =
+  if ac.blockHashes.len() > 0:
+    ac.blockHashes = BlockHashesCache.init(MAX_PREV_HEADER_DEPTH.int)
+
 proc persist*(ac: LedgerRef,
               clearEmptyAccount: bool = false,
               clearCache = false,
@@ -771,6 +788,7 @@ proc persist*(ac: LedgerRef,
 
   if clearWitness:
     ac.clearWitnessKeys()
+    ac.clearBlockHashesCache()
 
 iterator addresses*(ac: LedgerRef): Address =
   # make sure all savepoint already committed
@@ -892,33 +910,6 @@ proc getStorageProof*(ac: LedgerRef, address: Address, slots: openArray[UInt256]
     storageProof.add(slotProof[0])
 
   storageProof
-
-proc getBlockHash*(
-    ac: LedgerRef, blockNumber: BlockNumber): Hash32 =
-  if ac.blockHashes.contains(blockNumber):
-    return ac.blockHashes.get(blockNumber).get()
-
-  let blockHash = ac.txFrame.getBlockHash(blockNumber).valueOr:
-    return default(Hash32)
-
-  ac.blockHashes.put(blockNumber, blockHash)
-
-  blockHash
-
-proc getEarliestCachedBlockNumber*(ac: LedgerRef): Opt[BlockNumber] =
-  if ac.blockHashes.len() == 0:
-    return Opt.none(BlockNumber)
-
-  var earliestBlockNumber = high(BlockNumber)
-  for blockNumber in ac.blockHashes.keys():
-    if blockNumber < earliestBlockNumber:
-      earliestBlockNumber = blockNumber
-
-  Opt.some(earliestBlockNumber)
-
-proc clearBlockHashesCache*(ac: LedgerRef) =
-  if ac.blockHashes.len() > 0:
-    ac.blockHashes = LruCache[BlockNumber, Hash32].init(MAX_PREV_HEADER_DEPTH.int)
 
 # ------------------------------------------------------------------------------
 # Public virtual read-only methods
