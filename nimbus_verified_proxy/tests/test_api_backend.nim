@@ -19,10 +19,8 @@ type
 
   TestApiState* = ref object
     chainId: UInt256
-    fullBlocks: Table[Hash32, BlockObject]
-    blocks: Table[Hash32, BlockObject]
+    blocks*: Table[Hash32, BlockObject]
     nums: Table[Quantity, Hash32]
-    tags: Table[string, Hash32]
     proofs: Table[ProofQuery, ProofResponse]
     accessLists: Table[AccessListQuery, AccessListResult]
     codes: Table[CodeQuery, seq[byte]]
@@ -30,45 +28,23 @@ type
 func init*(T: type TestApiState, chainId: UInt256): T =
   TestApiState(
     chainId: chainId,
-    fullBlocks: initTable[Hash32, BlockObject](),
     blocks: initTable[Hash32, BlockObject](),
     nums: initTable[Quantity, Hash32](),
-    tags: initTable[string, Hash32](),
     proofs: initTable[ProofQuery, ProofResponse](),
     accessLists: initTable[AccessListQuery, AccessListResult](),
     codes: initTable[CodeQuery, seq[byte]](),
   )
 
 func clear*(t: TestApiState) =
-  t.fullBlocks.clear()
   t.blocks.clear()
   t.nums.clear()
-  t.tags.clear()
   t.proofs.clear()
   t.accessLists.clear()
   t.codes.clear()
 
-template loadFullBlock*(t: TestApiState, blkHash: Hash32, blk: BlockObject) =
-  t.fullBlocks[blkHash] = blk
-
-template loadFullBlock*(t: TestApiState, blkNum: BlockTag, blk: BlockObject) =
-  if blkNum.kind == BlockIdentifierKind.bidNumber:
-    t.nums[blkNum.number] = blk.hash
-    t.fullBlocks[blk.hash] = blk
-  else:
-    t.tags[alias] = blk.hash
-    t.fullBlocks[blk.hash] = blk
-
-template loadBlock*(t: TestApiState, blkHash: Hash32, blk: BlockObject) =
-  t.blocks[blkHash] = blk
-
-template loadBlock*(t: TestApiState, blkNum: BlockTag, blk: BlockObject) =
-  if blkNum.kind == BlockIdentifierKind.bidNumber:
-    t.nums[blkNum.number] = blk.hash
-    t.blocks[blk.hash] = blk
-  else:
-    t.tags[alias] = blk.hash
-    t.blocks[blk.hash] = blk
+template loadBlock*(t: TestApiState, blk: BlockObject) =
+  t.nums[blk.number] = blk.hash
+  t.blocks[blk.hash] = blk
 
 template loadProof*(
     t: TestApiState,
@@ -98,6 +74,42 @@ func hash*(x: BlockTag): Hash =
   else:
     return hash(x.number)
 
+func convToPartialBlock(blk: BlockObject): BlockObject =
+  var txHashes: seq[TxOrHash]
+  for tx in blk.transactions:
+    if tx.kind == tohTx:
+      txHashes.add(TxOrHash(kind: tohHash, hash: tx.tx.hash))
+
+  return BlockObject(
+    number: blk.number,
+    hash: blk.hash,
+    parentHash: blk.parentHash,
+    sha3Uncles: blk.sha3Uncles,
+    logsBloom: blk.logsBloom,
+    transactionsRoot: blk.transactionsRoot,
+    stateRoot: blk.stateRoot,
+    receiptsRoot: blk.receiptsRoot,
+    miner: blk.miner,
+    difficulty: blk.difficulty,
+    extraData: blk.extraData,
+    gasLimit: blk.gasLimit,
+    gasUsed: blk.gasUsed,
+    timestamp: blk.timestamp,
+    nonce: blk.nonce,
+    mixHash: blk.mixHash,
+    size: blk.size,
+    totalDifficulty: blk.totalDifficulty,
+    transactions: txHashes,
+    uncles: @[],
+    baseFeePerGas: blk.baseFeePerGas,
+    withdrawals: Opt.none(seq[Withdrawal]),
+    withdrawalsRoot: blk.withdrawalsRoot,
+    blobGasUsed: blk.blobGasUsed,
+    excessBlobGas: blk.excessBlobGas,
+    parentBeaconBlockRoot: blk.parentBeaconBlockRoot,
+    requestsHash: blk.requestsHash,
+  )
+
 proc initTestApiBackend*(t: TestApiState): EthApiBackend =
   let
     ethChainIdProc = proc(): Future[UInt256] {.async.} =
@@ -107,23 +119,19 @@ proc initTestApiBackend*(t: TestApiState): EthApiBackend =
         blkHash: Hash32, fullTransactions: bool
     ): Future[BlockObject] {.async.} =
       if fullTransactions:
-        return t.fullBlocks[blkHash]
-      else:
         return t.blocks[blkHash]
+      else:
+        return convToPartialBlock(t.blocks[blkHash])
 
     getBlockByNumberProc = proc(
         blkNum: BlockTag, fullTransactions: bool
     ): Future[BlockObject] {.async.} =
-      let blkHash =
-        if blkNum.kind == BlockIdentifierKind.bidNumber:
-          t.nums[blkNum.number]
-        else:
-          t.tags[blkNum.alias]
+      let blkHash = t.nums[blkNum.number]
 
       if fullTransactions:
-        return t.fullBlocks[blkHash]
-      else:
         return t.blocks[blkHash]
+      else:
+        return convToPartialBlock(t.blocks[blkHash])
 
     getProofProc = proc(
         address: Address, slots: seq[UInt256], blockId: BlockTag
