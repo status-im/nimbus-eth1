@@ -536,4 +536,4 @@ proc makeAuth*(sender: TxSender, acc: TestAccount, nonce: AccountNonce): Authori
 
   auth.r = UInt256.fromBytesBE(raw.toOpenArray(0, 31))
   auth.s = UInt256.fromBytesBE(raw.toOpenArray(32, 63))
-  auth.v = raw[64].uint64
+  auth.yParity = raw[64].uint8

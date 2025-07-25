@@ -91,14 +91,14 @@ proc readValue*(r: var JsonReader[T8Conv], val: var UInt256)
   wrapValueError:
     val = parseHexOrInt[UInt256](r.parseString())
 
-proc readValue*(r: var JsonReader[T8Conv], val: var uint64)
+proc readValue*(r: var JsonReader[T8Conv], val: var (uint8 | uint64))
        {.raises: [IOError, JsonReaderError].} =
   let tok = r.tokKind
   if tok == JsonValueKind.Number:
-    val = r.parseInt(uint64)
+    val = r.parseInt(typeof(val))
   else:
     wrapValueError:
-      val = parseHexOrInt[uint64](r.parseString())
+      val = parseHexOrInt[typeof(val)](r.parseString())
 
 proc readValue*(r: var JsonReader[T8Conv], val: var EthTime)
        {.raises: [IOError, JsonReaderError].} =

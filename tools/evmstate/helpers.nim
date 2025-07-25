@@ -45,6 +45,9 @@ proc fromJson(T: type seq[byte], n: JsonNode): T =
 template fromJson(T: type uint64, n: JsonNode): uint64 =
   fromHex[AccountNonce](n.getStr)
 
+template fromJson(T: type uint8, n: JsonNode): uint8 =
+  fromHex[uint8](n.getStr)
+
 template fromJson(T: type EthTime, n: JsonNode): EthTime =
   EthTime(fromHex[uint64](n.getStr))
 
@@ -99,7 +102,7 @@ proc fromJson(T: type Authorization, n: JsonNode): Authorization =
     chainId: required(ChainId, "chainId"),
     address: required(Address, "address"),
     nonce: required(AccountNonce, "nonce"),
-    v: required(uint64, "v"),
+    yParity: required(uint8, "yParity"),
     r: required(UInt256, "r"),
     s: required(UInt256, "s"),
   )
