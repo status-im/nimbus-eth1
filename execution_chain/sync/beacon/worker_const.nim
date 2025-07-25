@@ -48,7 +48,7 @@ const
 
   # ----------------------
 
-  nFetchHeadersFailedInitialPeersThreshold* = 30
+  nFetchHeadersFailedInitialPeersThreshold* = 15
     ## If there are more failing peers than this threshold right at the
     ## begining of a header chain download scrum (before any data received),
     ## then this session (scrum or sprint) is discarded and the suncer is
