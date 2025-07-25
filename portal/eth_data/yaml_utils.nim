@@ -57,6 +57,7 @@ proc dumpToYaml*[T](value: T, file: string): Result[void, string] =
   dumper.serialization.handles = @[]
   dumper.serialization.tagStyle = tsNone
   dumper.presentation.outputVersion = ovNone
+  dumper.presentation.maxLineLength = some(1042 * 1024 * 1024)
 
   try:
     {.gcsafe.}:

@@ -29,7 +29,7 @@ import
   ../../network/network_metadata,
   ../../eth_data/[yaml_utils, yaml_eth_types],
   ./exporter_common,
-  ./downloader
+  ./el_data_exporter
 
 export beacon_clock
 
@@ -553,7 +553,7 @@ proc exportBlockProof*(dataDir: string, eraDir: string, slotNumber: uint64) =
 
 proc exportHeaderWithProof*(
     client: RpcClient, dataDir: string, eraDir: string, slotNumber: uint64
-) =
+) {.async: (raises: [CancelledError]).} =
   let
     networkData = loadNetworkData("mainnet")
     cfg = networkData.metadata.cfg
@@ -562,7 +562,9 @@ proc exportHeaderWithProof*(
   if slot.epoch() >= cfg.DENEB_FORK_EPOCH:
     let
       (proof, blockNumber, blockHash) = getBlockProofDeneb(dataDir, eraDir, slotNumber)
-      header = client.downloadHeader(blockNumber)
+      header = (await client.getHeaderByNumber(blockNumber)).valueOr:
+        fatal "Failed to get header for block number", blockNumber, error
+        quit QuitFailure
 
       blockHeaderWithProof = BlockHeaderWithProof(
         header: ByteList[MAX_HEADER_LENGTH].init(rlp.encode(header)),
@@ -580,7 +582,9 @@ proc exportHeaderWithProof*(
     let
       (proof, blockNumber, blockHash) =
         getBlockProofCapella(dataDir, eraDir, slotNumber)
-      header = client.downloadHeader(blockNumber)
+      header = (await client.getHeaderByNumber(blockNumber)).valueOr:
+        fatal "Failed to get header for block number", blockNumber, error
+        quit QuitFailure
 
       blockHeaderWithProof = BlockHeaderWithProof(
         header: ByteList[MAX_HEADER_LENGTH].init(rlp.encode(header)),
@@ -598,7 +602,9 @@ proc exportHeaderWithProof*(
     let
       (proof, blockNumber, blockHash) =
         getBlockProofBellatrix(dataDir, eraDir, slotNumber)
-      header = client.downloadHeader(blockNumber)
+      header = (await client.getHeaderByNumber(blockNumber)).valueOr:
+        fatal "Failed to get header for block number", blockNumber, error
+        quit QuitFailure
 
       blockHeaderWithProof = BlockHeaderWithProof(
         header: ByteList[MAX_HEADER_LENGTH].init(rlp.encode(header)),

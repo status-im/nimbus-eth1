@@ -163,7 +163,7 @@ proc vmExecGrabItem(pst: var TxPacker; item: TxItemRef, xp: TxPoolRef): bool =
   # EIP-4844
   if item.tx.txType == TxEip4844:
     # EIP-7594
-    if item.tx.versionedHashes.len.uint64 > MAX_BLOBS_PER_TX:
+    if vmState.fork >= FkOsaka and item.tx.versionedHashes.len.uint64 > MAX_BLOBS_PER_TX:
       return ContinueWithNextAccount
 
     let maxBlobsPerBlock = getMaxBlobsPerBlock(vmState.com, vmState.fork)
