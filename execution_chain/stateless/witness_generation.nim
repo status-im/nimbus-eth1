@@ -81,7 +81,7 @@ proc build*(
     parent: Header,
     header: Header): T =
 
-  if parent.stateRoot != default(Hash32):
+  if parent.number > 0:
     doAssert preStateLedger.getStateRoot() == parent.stateRoot
 
   var witness = Witness.build(ledger.getWitnessKeys(), preStateLedger)

@@ -719,7 +719,7 @@ template clearWitnessKeys*(ac: LedgerRef) =
 proc getBlockHash*(ac: LedgerRef, blockNumber: BlockNumber): Hash32 =
   ac.blockHashes.get(blockNumber).valueOr:
     let blockHash = ac.txFrame.getBlockHash(blockNumber).valueOr:
-      return default(Hash32)
+      default(Hash32)
 
     ac.blockHashes.put(blockNumber, blockHash)
     blockHash
