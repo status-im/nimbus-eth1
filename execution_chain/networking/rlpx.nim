@@ -574,7 +574,7 @@ proc rlpxConnect*(
     debug "P2P error finishing hello", err = exc.msg
     return err(ProtocolError)
 
-  notice "Peer connected", capabilities = response.capabilities, peer=peer.clientId
+  debug "Peer connected", capabilities = response.capabilities, peer=peer.clientId
 
   error = false
 
@@ -698,7 +698,7 @@ proc rlpxAccept*(
     rlpx_accept_failure.inc(labelValues = [$exc.name])
     return nil
 
-  notice "Peer accepted", capabilities = response.capabilities, peer=peer.clientId
+  debug "Peer accepted", capabilities = response.capabilities, peer=peer.clientId
 
   error = false
   rlpx_accept_success.inc()
