@@ -48,7 +48,7 @@ func convLCHeader*(lcHeader: ForkedLightClientHeader): Result[Header, string] =
         parentBeaconBlockRoot = Opt.none(Hash32)
 
     when lcDataFork >= LightClientDataFork.Electra:
-      # INFO: there is no visibility of the execution requests hash in light client header 
+      # INFO: there is no visibility of the execution requests hash in light client header
       let requestsHash = Opt.none(Hash32)
     else:
       const requestsHash = Opt.none(Hash32)
@@ -188,6 +188,9 @@ func latestHash*(self: HeaderStore): Opt[Hash32] =
     return Opt.some(hash)
 
   Opt.none(Hash32)
+
+func getHash*(self: HeaderStore, number: base.BlockNumber): Opt[Hash32] =
+  self.hashes.peek(number)
 
 func get*(self: HeaderStore, number: base.BlockNumber): Opt[Header] =
   let hash = self.hashes.peek(number).valueOr:
