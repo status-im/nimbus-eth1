@@ -233,7 +233,6 @@ proc installEthApiHandlers*(vp: VerifiedRpcProxy) =
   # Following methods are forwarded directly to the web3 provider and therefore
   # are not validated in any way.
   vp.proxy.registerProxyMethod("net_version")
-  vp.proxy.registerProxyMethod("eth_call")
   vp.proxy.registerProxyMethod("eth_sendRawTransaction")
   vp.proxy.registerProxyMethod("eth_getTransactionReceipt")
 

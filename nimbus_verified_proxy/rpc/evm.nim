@@ -12,6 +12,7 @@ import
   ../../execution_chain/evm/async_evm_backend,
   ../../execution_chain/evm/async_evm,
   ./accounts,
+  ../header_store,
   ../types
 
 logScope:
@@ -66,4 +67,9 @@ proc toAsyncEvmStateBackend*(vp: VerifiedRpcProxy): AsyncEvmStateBackend =
 
       Opt.none(seq[byte])
 
-  AsyncEvmStateBackend.init(accProc, storageProc, codeProc)
+    blockHashProc = proc(
+        header: Header, number: BlockNumber
+    ): Future[Opt[Hash32]] {.async: (raises: [CancelledError]).} =
+      vp.headerStore.getHash(number)
+
+  AsyncEvmStateBackend.init(accProc, storageProc, codeProc, blockHashProc)

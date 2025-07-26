@@ -14,6 +14,7 @@ import
   chronicles,
   stint,
   results,
+  minilru,
   eth/common/[base, addresses, accounts, headers, transactions],
   ../db/[ledger, access_list],
   ../common/common,
@@ -56,12 +57,6 @@ logScope:
 #   default approach where the state lookups are wired directly into the EVM gives
 #   the worst case performance because all state accesses inside the EVM are
 #   completely sequential.
-#
-# Note: The BLOCKHASH opt code is not yet supported by this implementation and so
-# transactions which use this opt code will simply get the empty/default hash
-# for any requested block. After the Pectra hard fork this opt code will be
-# implemented using a system contract with the data stored in the Ethereum state
-# trie/s and at that point it should just work without changes to the async evm here.
 
 const
   EVM_CALL_LIMIT = 10_000
@@ -81,6 +76,10 @@ type
     address: Address
     codeFut: Future[Opt[seq[byte]]]
 
+  BlockHashQuery = object
+    number: BlockNumber
+    blockHashFut: Future[Opt[Hash32]]
+
   AsyncEvm* = ref object
     com: CommonRef
     backend: AsyncEvmStateBackend
@@ -95,6 +94,9 @@ func init(
 
 func init(T: type CodeQuery, adr: Address, fut: Future[Opt[seq[byte]]]): T =
   T(address: adr, codeFut: fut)
+
+func init(T: type BlockHashQuery, number: BlockNumber, fut: Future[Opt[Hash32]]): T =
+  T(number: number, blockHashFut: fut)
 
 proc init*(
     T: type AsyncEvm, backend: AsyncEvmStateBackend, networkId: NetworkId = MainNet
@@ -138,6 +140,7 @@ proc callFetchingState(
     fetchedAccounts = initHashSet[Address]()
     fetchedStorage = initHashSet[(Address, UInt256)]()
     fetchedCode = initHashSet[Address]()
+    fetchedBlockHashes = initHashSet[BlockNumber]()
 
   # Set code of the 'to' address in the EVM so that we can execute the transaction
   let code = (await evm.backend.getCode(header, to)).valueOr:
@@ -158,6 +161,8 @@ proc callFetchingState(
     debug "Starting AsyncEvm execution", evmCallCount
 
     vmState.ledger.clearWitnessKeys()
+    vmState.ledger.clearBlockHashesCache()
+
     let sp = vmState.ledger.beginSavepoint()
     evmResult = rpcCallEvm(tx, header, vmState, EVM_CALL_GAS_CAP)
     inc evmCallCount
@@ -172,6 +177,7 @@ proc callFetchingState(
         accountQueries = newSeq[AccountQuery]()
         storageQueries = newSeq[StorageQuery]()
         codeQueries = newSeq[CodeQuery]()
+        blockHashQueries = newSeq[BlockHashQuery]()
 
       # Loop through the collected keys and fetch the state concurrently.
       # If optimisticStateFetch is enabled then we fetch state for all the witness
@@ -212,6 +218,13 @@ proc callFetchingState(
               if not optimisticStateFetch:
                 stateFetchDone = true
 
+      for number, blockHash in vmState.ledger.getBlockHashesCache():
+        if number notin fetchedBlockHashes:
+          debug "Fetching block hash", blockNumber = number
+          let blockHashFut = evm.backend.getBlockHash(header, number)
+          blockHashQueries.add(BlockHashQuery.init(number, blockHashFut))
+
+
       if optimisticStateFetch:
         # If the witness keys did not change after the last execution then we can
         # stop the execution loop because we have already executed the transaction
@@ -245,6 +258,13 @@ proc callFetchingState(
           return err("Unable to get code")
         vmState.ledger.setCode(q.address, code)
         fetchedCode.incl(q.address)
+
+      for q in blockHashQueries:
+        let blockHash = (await q.blockHashFut).valueOr:
+          return err("Unable to get block hash")
+        vmState.ledger.txFrame.addBlockNumberToHashLookup(q.number, blockHash)
+        fetchedBlockHashes.incl(q.number)
+        
     except CancelledError as e:
       raise e
     except CatchableError as e:
