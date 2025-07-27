@@ -27,6 +27,9 @@ proc getBlockFromJson(filepath: string): BlockObject =
 template checkEqual(blk1: BlockObject, blk2: BlockObject): bool =
   JrpcConv.encode(blk1).JsonString == JrpcConv.encode(blk2).JsonString
 
+template checkEqual(tx1: TransactionObject, tx2: TransactionObject): bool =
+  JrpcConv.encode(tx1).JsonString == JrpcConv.encode(tx2).JsonString
+
 suite "test verified blocks":
   let
     ts = TestApiState.init(1.u256)
@@ -112,7 +115,6 @@ suite "test verified blocks":
         waitFor vp.proxy.getClient().eth_getBlockByNumber(unreachableTargetTag, true)
       check(false)
     except CatchableError as e:
-      echo e.msg
       check(true)
 
     # TODO: catch the exact error by comparing error strings 
@@ -121,7 +123,6 @@ suite "test verified blocks":
         waitFor vp.proxy.getClient().eth_getBlockByNumber(reachableTargetTag, true)
       check(true)
     except CatchableError as e:
-      echo e.msg
       check(false)
 
   test "check block related API methods":
@@ -158,5 +159,5 @@ suite "test verified blocks":
 
     doAssert blk.transactions[0].kind == tohTx
 
-    check blk.transactions[0].tx == txByHash
-    check txByHash == txByNum
+    check checkEqual(txByHash, blk.transactions[0].tx)
+    check checkEqual(txByHash, txByNum)
