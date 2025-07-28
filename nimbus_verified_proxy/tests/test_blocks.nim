@@ -23,7 +23,6 @@ proc getBlockFromJson(filepath: string): BlockObject =
   let blk = JrpcConv.decode(blkBytes.get, BlockObject)
   return blk
 
-# TODO: define the == operator instead
 template checkEqual(blk1: BlockObject, blk2: BlockObject): bool =
   JrpcConv.encode(blk1).JsonString == JrpcConv.encode(blk2).JsonString
 
@@ -109,7 +108,7 @@ suite "test verified blocks":
         kind: BlockIdentifierKind.bidNumber, number: Quantity(targetBlockNum + 1)
       )
 
-    # TODO: catch the exact error by comparing error strings 
+    # TODO: catch the exact error 
     try:
       let verifiedBlk =
         waitFor vp.proxy.getClient().eth_getBlockByNumber(unreachableTargetTag, true)
@@ -117,7 +116,7 @@ suite "test verified blocks":
     except CatchableError as e:
       check(true)
 
-    # TODO: catch the exact error by comparing error strings 
+    # TODO: catch the exact error 
     try:
       let verifiedBlk =
         waitFor vp.proxy.getClient().eth_getBlockByNumber(reachableTargetTag, true)
