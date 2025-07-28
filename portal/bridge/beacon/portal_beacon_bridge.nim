@@ -11,7 +11,6 @@ import
   std/os,
   chronos,
   chronicles,
-  chronicles/topics_registry,
   stew/byteutils,
   eth/async_utils,
   json_rpc/clients/httpclient,
