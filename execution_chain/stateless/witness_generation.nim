@@ -11,6 +11,7 @@
 
 import
   std/[tables, sets],
+  minilru,
   eth/common,
   ../db/ledger,
   ./witness_types
@@ -23,7 +24,7 @@ export
 proc build*(
     T: type Witness,
     witnessKeys: WitnessTable,
-    ledger: ReadOnlyLedger): T =
+    preStateLedger: LedgerRef): T =
   var
     witness = Witness.init()
     addedStateHashes = initHashSet[Hash32]()
@@ -33,7 +34,7 @@ proc build*(
     if key.slot.isNone(): # Is an account key
       witness.addKey(key.address.data())
 
-      let proof = ledger.getAccountProof(key.address)
+      let proof = preStateLedger.getAccountProof(key.address)
       for trieNode in proof:
         let nodeHash = keccak256(trieNode)
         if nodeHash notin addedStateHashes:
@@ -41,7 +42,7 @@ proc build*(
           addedStateHashes.incl(nodeHash)
 
       if codeTouched:
-        let codeHash = ledger.getCodeHash(key.address)
+        let codeHash = preStateLedger.getCodeHash(key.address)
         if codeHash != EMPTY_CODE_HASH and codeHash notin addedCodeHashes:
           witness.addCodeHash(codeHash)
           addedCodeHashes.incl(codeHash)
@@ -52,7 +53,7 @@ proc build*(
           let slot = key2.slot.get()
           witness.addKey(slot.toBytesBE())
 
-          let proofs = ledger.getStorageProof(key.address, @[slot])
+          let proofs = preStateLedger.getStorageProof(key.address, @[slot])
           doAssert(proofs.len() == 1)
           for trieNode in proofs[0]:
             let nodeHash = keccak256(trieNode)
@@ -61,3 +62,38 @@ proc build*(
               addedStateHashes.incl(nodeHash)
 
   witness
+
+proc getEarliestCachedBlockNumber(blockHashes: BlockHashesCache): Opt[BlockNumber] =
+  if blockHashes.len() == 0:
+    return Opt.none(BlockNumber)
+
+  var earliestBlockNumber = high(BlockNumber)
+  for blockNumber in blockHashes.keys():
+    if blockNumber < earliestBlockNumber:
+      earliestBlockNumber = blockNumber
+
+  Opt.some(earliestBlockNumber)
+
+proc build*(
+    T: type Witness,
+    preStateLedger: LedgerRef,
+    ledger: LedgerRef,
+    parent: Header,
+    header: Header): T =
+
+  if parent.number > 0:
+    doAssert preStateLedger.getStateRoot() == parent.stateRoot
+
+  var witness = Witness.build(ledger.getWitnessKeys(), preStateLedger)
+  witness.addHeaderHash(header.parentHash)
+
+  let
+    blockHashes = ledger.getBlockHashesCache()
+    earliestBlockNumber = getEarliestCachedBlockNumber(blockHashes)
+  if earliestBlockNumber.isSome():
+    var n = parent.number - 1
+    while n >= earliestBlockNumber.get():
+      let blockHash = ledger.getBlockHash(BlockNumber(n))
+      doAssert(blockHash != default(Hash32))
+      witness.addHeaderHash(blockHash)
+      dec n
