@@ -158,9 +158,12 @@ proc importBlocks*(conf: NimbusConf, com: CommonRef) =
     let (blocks, txs, gas) = persister.stats
 
     if not force and blocks.uint64 mod conf.chunkSize != 0:
+      persister.checkpoint(persist = false).isOkOr:
+        fatal "Could not create checkpoint", error
+        quit(QuitFailure)
       return
 
-    persister.checkpoint().isOkOr:
+    persister.checkpoint(persist = true).isOkOr:
       fatal "Could not write database checkpoint", error
       quit(QuitFailure)
 

@@ -85,7 +85,7 @@ proc dispose*(p: var Persister) =
 proc init*(T: type Persister, com: CommonRef, flags: PersistBlockFlags): T =
   T(com: com, flags: flags)
 
-proc checkpoint*(p: var Persister): Result[void, string] =
+proc checkpoint*(p: var Persister, persist = true): Result[void, string] =
   if NoValidation notin p.flags:
     let stateRoot = p.vmState.ledger.txFrame.getStateRoot().valueOr:
       return err($$error)
@@ -102,12 +102,16 @@ proc checkpoint*(p: var Persister): Result[void, string] =
         "stateRoot mismatch, expect: " & $p.parent.stateRoot & ", got: " & $stateRoot
       )
 
-  # Move in-memory state to disk
-  p.vmState.ledger.txFrame.checkpoint(p.parent.number, skipSnapshot = true)
-  p.com.db.persist(p.vmState.ledger.txFrame, Opt.none(Hash32))
+  if persist:
+    # Move in-memory state to disk
+    p.vmState.ledger.txFrame.checkpoint(p.parent.number, skipSnapshot = true)
+    p.com.db.persist(p.vmState.ledger.txFrame, Opt.none(Hash32))
 
-  # Get a new frame since the DB assumes ownership
-  p.vmState.ledger.txFrame = p.com.db.baseTxFrame().txFrameBegin()
+    # Get a new frame since the DB assumes ownership
+    p.vmState.ledger.txFrame = p.com.db.baseTxFrame().txFrameBegin()
+  else:
+    p.vmState.ledger.txFrame.checkpoint(p.parent.number, skipSnapshot = false)
+    p.vmState.ledger.txFrame = p.vmState.ledger.txFrame.txFrameBegin()
 
   ok()
 
@@ -172,6 +176,7 @@ proc persistBlock*(p: var Persister, blk: Block): Result[void, string] =
     vmState.ledger.clearBlockHashesCache()
 
     processBlock()
+
 
     let
       blockHash = header.computeBlockHash()
