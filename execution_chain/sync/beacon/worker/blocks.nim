@@ -66,6 +66,7 @@ template blocksStagedProcessImpl(
 
       # Remove from queue
       discard ctx.blk.staged.delete qItem.key
+      ctx.blocksStagedQueueMetricsUpdate()         # metrics
 
       # Import blocks list, async/template
       ctx.blocksImport(maybePeer, qItem.data.blocks, qItem.data.peerID, info)
@@ -208,6 +209,7 @@ template blocksCollect*(
         qItem.data.blocks = rc.value                # store `blocks[]` list
         qItem.data.peerID = buddy.peerID
 
+        ctx.blocksStagedQueueMetricsUpdate()        # metrics
         nQueued += rc.value.len                     # statistics
         # End if
 

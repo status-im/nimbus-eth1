@@ -17,6 +17,7 @@ import
   ../../../../networking/p2p,
   ../../../wire_protocol/types,
   ../../worker_desc,
+  ../update,
   ./[blocks_fetch, blocks_helpers, blocks_import, blocks_unproc]
 
 # ------------------------------------------------------------------------------
@@ -234,7 +235,7 @@ template blocksImport*(
           break loop
 
         # isOk => next instruction
-        ctx.subState.top = nBn                     # Block imported OK
+        ctx.updateLastBlockImported nBn            # Block imported OK
 
     if not isError:
       ctx.resetBlkProcErrors peerID

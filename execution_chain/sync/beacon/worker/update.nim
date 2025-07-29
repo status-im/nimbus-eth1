@@ -12,7 +12,7 @@
 
 import
   std/sets,
-  pkg/[chronicles, chronos],
+  pkg/[chronicles, chronos, metrics],
   pkg/eth/common,
   ../worker_desc,
   ./blocks/blocks_unproc,
@@ -20,6 +20,12 @@ import
 
 logScope:
   topics = "beacon sync"
+
+declareGauge nec_sync_last_block_imported, "" &
+  "last block successfully imported/executed by FC module"
+
+declareGauge nec_sync_head, "" &
+  "Current sync target block number (if any)"
 
 # ------------------------------------------------------------------------------
 # Private functions, state handler helpers
@@ -36,6 +42,9 @@ proc updateSuspendSyncer(ctx: BeaconCtxRef) =
   ctx.pool.seenData = false
 
   ctx.hibernate = true
+
+  metrics.set(nec_sync_last_block_imported, 0)
+  metrics.set(nec_sync_head, 0)
 
   info "Suspending syncer", base=ctx.chain.baseNumber.bnStr,
     head=ctx.chain.latestNumber.bnStr, nSyncPeers=ctx.pool.nBuddies
@@ -64,6 +73,9 @@ proc setupProcessingBlocks(ctx: BeaconCtxRef; info: static[string]) =
   ctx.subState.top = ctx.hdrCache.antecedent.number - 1
   ctx.subState.head = ctx.hdrCache.head.number
   ctx.subState.headHash = ctx.hdrCache.headHash
+
+  metrics.set(nec_sync_last_block_imported, ctx.subState.top.int64)
+  metrics.set(nec_sync_head, ctx.subState.head.int64)
 
   # Update list of block numbers to process
   ctx.blocksUnprocSet(ctx.subState.top + 1, ctx.subState.head)
@@ -219,6 +231,14 @@ proc updateSyncState*(ctx: BeaconCtxRef; info: static[string]) =
     ctx.updateSuspendSyncer()
 
 
+proc updateLastBlockImported*(ctx: BeaconCtxRef; bn: BlockNumber) =
+  ctx.subState.top = bn
+  metrics.set(nec_sync_last_block_imported, bn.int64)
+
+# ------------------------------------------------------------------------------
+# Public functions, call-back handler ready
+# ------------------------------------------------------------------------------
+
 proc updateActivateSyncer*(ctx: BeaconCtxRef) =
   ## If in hibernate mode, accept a cache session and activate syncer
   ##
@@ -234,6 +254,8 @@ proc updateActivateSyncer*(ctx: BeaconCtxRef) =
       ctx.headersUnprocSet(b+1, t-1)
       ctx.subState.head = t
       ctx.subState.headHash = ctx.hdrCache.headHash
+
+      metrics.set(nec_sync_head, ctx.subState.head.int64)
 
       info "Activating syncer", base=b.bnStr, head=ctx.chain.latestNumber.bnStr,
         target=t.bnStr, targetHash=ctx.subState.headHash.short,

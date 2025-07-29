@@ -144,6 +144,7 @@ template headersCollect*(buddy: BeaconBuddyRef; info: static[string]) =
         qItem.data.revHdrs = rc.value
         qItem.data.peerID = buddy.peerID
 
+        ctx.headersStagedQueueMetricsUpdate()        # metrics
         nQueued = rc.value.len                       # statistics
         # End if
 
@@ -209,6 +210,7 @@ proc headersUnstage*(buddy: BeaconBuddyRef; info: static[string]): bool =
 
     # Remove from queue
     discard ctx.hdr.staged.delete(qItem.key)
+    ctx.headersStagedQueueMetricsUpdate()                    # metrics
 
     # Store headers on database
     if not buddy.headersStashOnDisk(
