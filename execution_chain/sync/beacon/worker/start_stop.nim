@@ -11,7 +11,7 @@
 {.push raises:[].}
 
 import
-  pkg/[chronicles, eth/common, results],
+  pkg/[chronicles, eth/common, metrics],
   ../../../networking/p2p,
   ../../wire_protocol,
   ../worker_desc,
@@ -20,6 +20,9 @@ import
 type
   SyncStateData = tuple
     start, current, target: BlockNumber
+
+declareGauge nec_sync_peers, "" &
+  "Number of currently active worker instances"
 
 # ------------------------------------------------------------------------------
 # Private functions
@@ -92,6 +95,7 @@ proc startBuddy*(buddy: BeaconBuddyRef): bool =
   if acceptProto(eth69) or
      acceptProto(eth68):
     ctx.pool.nBuddies.inc
+    metrics.set(nec_sync_peers, buddy.ctx.pool.nBuddies)
     ctx.pool.lastSlowPeer = Opt.none(Hash)
     buddy.initProcErrors()
     return true
@@ -99,6 +103,7 @@ proc startBuddy*(buddy: BeaconBuddyRef): bool =
 
 proc stopBuddy*(buddy: BeaconBuddyRef) =
   buddy.ctx.pool.nBuddies.dec
+  metrics.set(nec_sync_peers, buddy.ctx.pool.nBuddies)
   buddy.clearProcErrors()
 
 # ------------------------------------------------------------------------------
