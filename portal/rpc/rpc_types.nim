@@ -119,6 +119,12 @@ ContentInfo.useDefaultSerializationIn JrpcConv
 AcceptMetadata.useDefaultSerializationIn JrpcConv
 PutContentResult.useDefaultSerializationIn JrpcConv
 
+JrpcConv.automaticSerialization(int, true)
+JrpcConv.automaticSerialization(int64, true)
+JrpcConv.automaticSerialization(uint64, true)
+JrpcConv.automaticSerialization(uint16, true)
+JrpcConv.automaticSerialization(seq, true)
+
 func getNodeInfo*(r: RoutingTable): NodeInfo =
   NodeInfo(enr: r.localNode.record, nodeId: r.localNode.id)
 

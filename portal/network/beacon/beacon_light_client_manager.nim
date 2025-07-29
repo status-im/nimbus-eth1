@@ -19,7 +19,8 @@ import
   beacon_chain/sync/light_client_sync_helpers,
   "."/[beacon_network, beacon_content, beacon_db]
 
-from beacon_chain/consensus_object_pools/block_pools_types import VerifierError
+from beacon_chain/consensus_object_pools/block_pools_types import
+  LightClientVerifierError
 
 logScope:
   topics = "beacon_lc_man"
@@ -37,7 +38,7 @@ type
   FinalityUpdate = Endpoint[Slot, ForkedLightClientFinalityUpdate]
   OptimisticUpdate = Endpoint[Slot, ForkedLightClientOptimisticUpdate]
 
-  ValueVerifier[V] = proc(v: V): Future[Result[void, VerifierError]] {.
+  ValueVerifier[V] = proc(v: V): Future[Result[void, LightClientVerifierError]] {.
     async: (raises: [CancelledError], raw: true)
   .}
   BootstrapVerifier* = ValueVerifier[ForkedLightClientBootstrap]
@@ -182,16 +183,16 @@ proc workerTask[E](
         let res = await self.valueVerifier(E)(val)
         if res.isErr:
           case res.error
-          of VerifierError.MissingParent:
+          of LightClientVerifierError.MissingParent:
             # Stop, requires different request to progress
             return didProgress
-          of VerifierError.Duplicate:
+          of LightClientVerifierError.Duplicate:
             # Ignore, a concurrent request may have already fulfilled this
             when E.V is ForkedLightClientBootstrap:
               didProgress = true
             else:
               discard
-          of VerifierError.UnviableFork:
+          of LightClientVerifierError.UnviableFork:
             withForkyObject(val):
               when lcDataFork > LightClientDataFork.None:
                 notice "Received value from an unviable fork",
@@ -199,7 +200,7 @@ proc workerTask[E](
               else:
                 notice "Received value from an unviable fork", endpoint = E.name
             return didProgress
-          of VerifierError.Invalid:
+          of LightClientVerifierError.Invalid:
             withForkyObject(val):
               when lcDataFork > LightClientDataFork.None:
                 warn "Received invalid value",
