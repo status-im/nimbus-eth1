@@ -29,13 +29,13 @@ logScope:
 
 type
   DiscV4 = discoveryv4.DiscoveryV4
-  DiscV5 = discoveryv5.Protocol
+  DiscV5 = discoveryv5.DiscoveryV5
 
   NodeV4 = discoveryv4.Node
-  NodeV5 = discoveryv5.Node
+  NodeV5 = discoveryv5.NodeV5
 
   AddressV4 = discoveryv4.Address
-  AddressV5 = discoveryv5.Address
+  AddressV5 = discoveryv5.AddressV5
 
   Eth1Discovery* = ref object
     discv4: DiscV4
@@ -110,7 +110,7 @@ proc new*(
       bindIp = bindIp,
       rng = rng
     ),
-    discv5: discoveryv5.newProtocol(
+    discv5: discoveryv5.newDiscoveryV5(
       privKey = privKey,
       enrIp = Opt.some(address.ip),
       enrTcpPort = Opt.some(address.tcpPort),
