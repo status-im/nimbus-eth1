@@ -13,47 +13,47 @@ BUILD_SYSTEM_DIR := vendor/nimbus-build-system
 LINK_PCRE := 0
 
 EXCLUDED_NIM_PACKAGES := 	\
-	vendor/nimbus-eth2/vendor/nim-bearssl 					\
-	vendor/nimbus-eth2/vendor/nim-blscurve 					\
-	vendor/nimbus-eth2/vendor/nim-bearssl 					\
-	vendor/nimbus-eth2/vendor/nim-blscurve					\
-	vendor/nimbus-eth2/vendor/nimbus-build-system		\
-	vendor/nimbus-eth2/vendor/nim-chronicles				\
-	vendor/nimbus-eth2/vendor/nim-chronos						\
-	vendor/nimbus-eth2/vendor/nim-confutils					\
-	vendor/nimbus-eth2/vendor/nimcrypto							\
-	vendor/nimbus-eth2/vendor/nim-eth								\
-	vendor/nimbus-eth2/vendor/nim-faststreams				\
-	vendor/nimbus-eth2/vendor/nim-http-utils				\
-	vendor/nimbus-eth2/vendor/nim-json-rpc					\
-	vendor/nimbus-eth2/vendor/nim-json-serialization\
-	vendor/nimbus-eth2/vendor/nim-libbacktrace			\
-	vendor/nimbus-eth2/vendor/nim-metrics						\
-	vendor/nimbus-eth2/vendor/nim-nat-traversal			\
-  vendor/nimbus-eth2/vendor/nim-results     			\
-	vendor/nimbus-eth2/vendor/nim-secp256k1					\
-	vendor/nimbus-eth2/vendor/nim-serialization			\
-	vendor/nimbus-eth2/vendor/nim-snappy						\
-	vendor/nimbus-eth2/vendor/nim-sqlite3-abi				\
-	vendor/nimbus-eth2/vendor/nim-ssz-serialization	\
-	vendor/nimbus-eth2/vendor/nim-stew							\
-	vendor/nimbus-eth2/vendor/nim-stint							\
-	vendor/nimbus-eth2/vendor/nim-testutils					\
-	vendor/nimbus-eth2/vendor/nim-toml-serialization\
-	vendor/nimbus-eth2/vendor/nim-unittest2					\
-	vendor/nimbus-eth2/vendor/nim-web3							\
-	vendor/nimbus-eth2/vendor/nim-websock						\
-	vendor/nimbus-eth2/vendor/nim-zlib							\
-	vendor/nimbus-eth2/vendor/nim-taskpools					\
-	vendor/nimbus-eth2/vendor/nim-normalize					\
-	vendor/nimbus-eth2/vendor/nim-unicodedb					\
-	vendor/nimbus-eth2/vendor/nim-libp2p						\
-	vendor/nimbus-eth2/vendor/nim-presto						\
-	vendor/nimbus-eth2/vendor/nim-zxcvbn						\
-  vendor/nimbus-eth2/vendor/nim-kzg4844						\
-  vendor/nimbus-eth2/vendor/nim-minilru						\
-	vendor/nimbus-eth2/vendor/nimbus-security-resources \
-	vendor/nimbus-eth2/vendor/NimYAML
+  vendor/nimbus-eth2/vendor/nim-bearssl               \
+  vendor/nimbus-eth2/vendor/nim-blscurve              \
+  vendor/nimbus-eth2/vendor/nim-bearssl               \
+  vendor/nimbus-eth2/vendor/nim-blscurve              \
+  vendor/nimbus-eth2/vendor/nimbus-build-system       \
+  vendor/nimbus-eth2/vendor/nim-chronicles            \
+  vendor/nimbus-eth2/vendor/nim-chronos               \
+  vendor/nimbus-eth2/vendor/nim-confutils             \
+  vendor/nimbus-eth2/vendor/nimcrypto                 \
+  vendor/nimbus-eth2/vendor/nim-eth                   \
+  vendor/nimbus-eth2/vendor/nim-faststreams           \
+  vendor/nimbus-eth2/vendor/nim-http-utils            \
+  vendor/nimbus-eth2/vendor/nim-json-rpc              \
+  vendor/nimbus-eth2/vendor/nim-json-serialization    \
+  vendor/nimbus-eth2/vendor/nim-libbacktrace          \
+  vendor/nimbus-eth2/vendor/nim-metrics               \
+  vendor/nimbus-eth2/vendor/nim-nat-traversal         \
+  vendor/nimbus-eth2/vendor/nim-results               \
+  vendor/nimbus-eth2/vendor/nim-secp256k1             \
+  vendor/nimbus-eth2/vendor/nim-serialization         \
+  vendor/nimbus-eth2/vendor/nim-snappy                \
+  vendor/nimbus-eth2/vendor/nim-sqlite3-abi           \
+  vendor/nimbus-eth2/vendor/nim-ssz-serialization     \
+  vendor/nimbus-eth2/vendor/nim-stew                  \
+  vendor/nimbus-eth2/vendor/nim-stint                 \
+  vendor/nimbus-eth2/vendor/nim-testutils             \
+  vendor/nimbus-eth2/vendor/nim-toml-serialization    \
+  vendor/nimbus-eth2/vendor/nim-unittest2             \
+  vendor/nimbus-eth2/vendor/nim-web3                  \
+  vendor/nimbus-eth2/vendor/nim-websock               \
+  vendor/nimbus-eth2/vendor/nim-zlib                  \
+  vendor/nimbus-eth2/vendor/nim-taskpools             \
+  vendor/nimbus-eth2/vendor/nim-normalize             \
+  vendor/nimbus-eth2/vendor/nim-unicodedb             \
+  vendor/nimbus-eth2/vendor/nim-libp2p                \
+  vendor/nimbus-eth2/vendor/nim-presto                \
+  vendor/nimbus-eth2/vendor/nim-zxcvbn                \
+  vendor/nimbus-eth2/vendor/nim-kzg4844               \
+  vendor/nimbus-eth2/vendor/nim-minilru               \
+  vendor/nimbus-eth2/vendor/nimbus-security-resources \
+  vendor/nimbus-eth2/vendor/NimYAML
 
 # we don't want an error here, so we can handle things later, in the ".DEFAULT" target
 -include $(BUILD_SYSTEM_DIR)/makefiles/variables.mk
@@ -133,7 +133,7 @@ ifeq ($(NIM_PARAMS),)
 
 # We don't need these `vendor/holesky` files but fetching them
 # may trigger 'This repository is over its data quota' from GitHub
-GIT_SUBMODULE_CONFIG := -c lfs.fetchexclude=/public-keys/all.txt,/custom_config_data/genesis.ssz
+GIT_SUBMODULE_CONFIG := -c lfs.fetchexclude=/public-keys/all.txt,/metadata/genesis.ssz,/parsed/parsedConsensusGenesis.json
 
 GIT_SUBMODULE_UPDATE := git -c submodule."vendor/nimbus-eth2".update=none submodule update --init --recursive; \
   git $(GIT_SUBMODULE_CONFIG) submodule update vendor/nimbus-eth2; \
