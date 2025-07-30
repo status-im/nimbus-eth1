@@ -30,6 +30,8 @@ type
   DiscoveryV5* = protocol.Protocol
   NodeV5* = node.Node
   AddressV5* = node.Address
+  
+  DiscResult*[T] = Result[T, cstring]
 
 proc newDiscoveryV5*(
     privKey: PrivateKey,
@@ -55,10 +57,14 @@ proc newDiscoveryV5*(
     rng = rng
   )
 
-proc receiveV5*(d: Protocol, a: Address, packet: openArray[byte]): Result[void, cstring] =
+proc receiveV5*(d: Protocol, a: Address, packet: openArray[byte]): DiscResult[void] =
   discv5_network_bytes.inc(packet.len.int64, labelValues = [$Direction.In])
 
-  let packet = ?d.codec.decodePacket(a, packet)
+  let decoded = d.codec.decodePacket(a, packet)
+  if decoded.isErr():
+    return err("discv5: Failed to decode packet")
+
+  let packet = decoded[]
 
   case packet.flag
   of OrdinaryMessage:

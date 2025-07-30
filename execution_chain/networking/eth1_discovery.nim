@@ -84,8 +84,9 @@ proc processClient(
   if discv4.isErr:
     # unhandled buf will be handled by discv5
     let addrv5 = raddr.to(AddressV5)
-    proto.discv5.receiveV5(addrv5, buf).isOkOr:
-      debug "Discovery receive error", discv4=discv4.error, discv5=error
+    let discv5 = proto.discv5.receiveV5(addrv5, buf)
+    if discv5.isErr:
+      debug "Discovery receive error", discv4=discv4.error, discv5=discv5.error
 
 #------------------------------------------------------------------------------
 # Public functions
