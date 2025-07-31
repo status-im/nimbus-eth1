@@ -24,21 +24,13 @@ import
 # Private functions
 # ------------------------------------------------------------------------------
 
-proc napUnlessSomethingToCollect(
-    buddy: BeaconBuddyRef;
-      ): Future[bool] {.async: (raises: []).} =
-  ## When idle, save cpu cycles waiting for something to do.
-  if buddy.ctx.hibernate or                      # not activated yet?
-     not (buddy.headersCollectOk() or            # something on TODO list
-          buddy.blocksCollectOk()):
-    try:
-      await sleepAsync workerIdleWaitInterval
-    except CancelledError:
-      buddy.ctrl.stopped = true
-    return true
-  else:
-    # Returning `false` => no need to check for shutdown
+proc somethingToCollect(buddy: BeaconBuddyRef): bool =
+  if buddy.ctx.hibernate:                        # not activated yet?
     return false
+  if buddy.headersCollectOk() or                 # something on TODO list
+     buddy.blocksCollectOk():
+    return true
+  false
 
 # ------------------------------------------------------------------------------
 # Public start/stop and admin functions
@@ -107,10 +99,9 @@ proc runTicker*(ctx: BeaconCtxRef; info: static[string]) =
   ctx.updateTicker()
 
 
-proc runDaemon*(
-    ctx: BeaconCtxRef;
-    info: static[string];
-      ) {.async: (raises: []).} =
+template runDaemon*(ctx: BeaconCtxRef; info: static[string]): Duration =
+  ## Async/template
+  ##
   ## Global background job that will be re-started as long as the variable
   ## `ctx.daemon` is set `true` which corresponds to `ctx.hibernating` set
   ## to false.
@@ -118,24 +109,29 @@ proc runDaemon*(
   ## On a fresh start, the flag `ctx.daemon` will not be set `true` before the
   ## first usable request from the CL (via RPC) stumbles in.
   ##
-  # Check for a possible header layout and body request changes
-  ctx.updateSyncState info
-  if ctx.hibernate:
-    return
+  ## The template returns a suggested idle time for after this task.
+  ##
+  var bodyRc = chronos.nanoseconds(0)
+  block body:
+    # Check for a possible header layout and body request changes
+    ctx.updateSyncState info
+    if ctx.hibernate:
+      break body             # return
 
-  # Execute staged block records.
-  if ctx.blocksUnstageOk():
+    # Execute staged block records.
+    if ctx.blocksUnstageOk():
 
-    # Import bodies from the `staged` queue.
-    discard await ctx.blocksUnstage info
+      # Import bodies from the `staged` queue.
+      discard ctx.blocksUnstage info # async/template
 
-    if not ctx.daemon or   # Implied by external sync shutdown?
-       ctx.poolMode:       # Oops, re-org needed?
-      return
+      if not ctx.daemon or   # Implied by external sync shutdown?
+         ctx.poolMode:       # Oops, re-org needed?
+        break body           # return
 
-  # At the end of the cycle, leave time to trigger refill headers/blocks
-  try: await sleepAsync daemonWaitInterval
-  except CancelledError: discard
+    # # At the end of the cycle, leave time to trigger refill headers/blocks
+    bodyRc = daemonWaitInterval
+
+  bodyRc
 
 
 proc runPool*(
@@ -163,47 +159,59 @@ proc runPool*(
   true # stop
 
 
-proc runPeer*(
-    buddy: BeaconBuddyRef;
-    info: static[string];
-      ) {.async: (raises: []).} =
+template runPeer*(buddy: BeaconBuddyRef; info: static[string]): Duration =
+  ## Async/template
+  ##
   ## This peer worker method is repeatedly invoked (exactly one per peer) while
   ## the `buddy.ctrl.poolMode` flag is set `false`.
   ##
-  if not await buddy.napUnlessSomethingToCollect():
+  ## The template returns a suggested idle time for after this task.
+  ##
+  var bodyRc = chronos.nanoseconds(0)
+  block body:
+    if buddy.somethingToCollect():
 
-    # Download and process headers and blocks
-    while buddy.headersCollectOk():
+      # Download and process headers and blocks
+      while buddy.headersCollectOk():
 
-      # Collect headers and either stash them on the header chain cache
-      # directly, or stage on the header queue to get them serialised and
-      # stashed, later.
-      await buddy.headersCollect info
+        # Collect headers and either stash them on the header chain cache
+        # directly, or stage on the header queue to get them serialised and
+        # stashed, later.
+        buddy.headersCollect info # async/template
 
-      # Store serialised headers from the `staged` queue onto the header
-      # chain cache.
-      if not buddy.headersUnstage info:
-        # Need to proceed with another peer (e.g. gap between queue and
-        # header chain cache.)
-        break
+        # Store serialised headers from the `staged` queue onto the header
+        # chain cache.
+        if not buddy.headersUnstage info:
+          # Need to proceed with another peer (e.g. gap between queue and
+          # header chain cache.)
+          bodyRc = workerIdleWaitInterval
+          break body
 
-      # End `while()`
+        # End `while()`
 
-    # Fetch bodies and combine them with headers to blocks to be staged. These
-    # staged blocks are then excuted by the daemon process (no `peer` needed.)
-    while buddy.blocksCollectOk():
+      # Fetch bodies and combine them with headers to blocks to be staged.
+      # These staged blocks are then excuted by the daemon process (no `peer`
+      # needed.)
+      while buddy.blocksCollectOk():
 
-      # Collect bodies and either import them via `FC` module, or stage on
-      # the blocks queue to get them serialised and imported, later.
-      await buddy.blocksCollect info
+        # Collect bodies and either import them via `FC` module, or stage on
+        # the blocks queue to get them serialised and imported, later.
+        buddy.blocksCollect info # async/template
 
-      # Import bodies from the `staged` queue.
-      if not await buddy.blocksUnstage info:
-        # Need to proceed with another peer (e.g. gap between top imported
-        # block and blocks queue.)
-        break
+        # Import bodies from the `staged` queue.
+        if not buddy.blocksUnstage info: # async/template
+          # Need to proceed with another peer (e.g. gap between top imported
+          # block and blocks queue.)
+          bodyRc = workerIdleWaitInterval
+          break body
 
-      # End `while()`
+        # End `while()`
+
+  # Idle sleep unless there is something to do
+  if not buddy.somethingToCollect():
+    bodyRc = workerIdleWaitInterval
+
+  bodyRc
 
 # ------------------------------------------------------------------------------
 # End

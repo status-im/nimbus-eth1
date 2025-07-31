@@ -11,8 +11,29 @@
 {.push raises:[].}
 
 import
-  pkg/[eth/common, stew/interval_set],
+  pkg/[eth/common, metrics, stew/interval_set],
   ../../worker_desc
+
+declareGauge nec_sync_headers_unprocessed, "" &
+  "Number of block numbers ready to fetch and stage headers"
+
+declareGauge nec_sync_coupler, "" &
+  "Lower limit block number for header chain to fetch"
+
+
+func headersUnprocTotal*(ctx: BeaconCtxRef): uint64
+func headersUnprocTotalBottom*(ctx: BeaconCtxRef): uint64
+
+# ------------------------------------------------------------------------------
+# Private helper
+# ------------------------------------------------------------------------------
+
+func coupler4metrics(ctx: BeaconCtxRef): int64 =
+  var coupler = ctx.headersUnprocTotalBottom()
+  if high(int64).uint64 <= coupler:
+    0
+  else:
+    coupler.int64
 
 # ------------------------------------------------------------------------------
 # Public functions
@@ -53,12 +74,16 @@ proc headersUnprocFetch*(
 proc headersUnprocCommit*(ctx: BeaconCtxRef; iv: BnRange) =
   ## Commit back all processed range, i.e. remove it from the borrowed set.
   doAssert ctx.hdr.borrowed.reduce(iv) == iv.len
+  metrics.set(nec_sync_headers_unprocessed, ctx.headersUnprocTotal().int64)
+  metrics.set(nec_sync_coupler, ctx.coupler4metrics)
 
 proc headersUnprocCommit*(ctx: BeaconCtxRef; iv, unproc: BnRange) =
   ## Variant of `headersUnprocCommit()` which merges back some unprocessed
   ## range `unproc`.
   doAssert ctx.hdr.borrowed.reduce(iv) == iv.len
   doAssert ctx.hdr.unprocessed.merge(unproc) == unproc.len
+  metrics.set(nec_sync_headers_unprocessed, ctx.headersUnprocTotal().int64)
+  metrics.set(nec_sync_coupler, ctx.coupler4metrics)
 
 proc headersUnprocCommit*(
     ctx: BeaconCtxRef;
@@ -71,6 +96,8 @@ proc headersUnprocCommit*(
   if uMinPt <= uMaxPt:
     # Otherwise `maxPt` would be internally adjusted to `max(minPt,maxPt)`
     doAssert ctx.hdr.unprocessed.merge(uMinPt, uMaxPt) == uMaxPt - uMinPt + 1
+  metrics.set(nec_sync_headers_unprocessed, ctx.headersUnprocTotal().int64)
+  metrics.set(nec_sync_coupler, ctx.coupler4metrics)
 
 
 proc headersUnprocAppend*(ctx: BeaconCtxRef; minPt, maxPt: uint64) =
@@ -87,26 +114,30 @@ proc headersUnprocAppend*(ctx: BeaconCtxRef; minPt, maxPt: uint64) =
           discard ctx.hdr.unprocessed.merge(pt, pt)
     else:
       discard ctx.hdr.unprocessed.merge(minPt, maxPt)
+    metrics.set(nec_sync_headers_unprocessed, ctx.headersUnprocTotal().int64)
+    metrics.set(nec_sync_coupler, ctx.coupler4metrics)
 
 proc headersUnprocAppend*(ctx: BeaconCtxRef; iv: BnRange) =
   ## Variant of `headersUnprocAppend()`
   ctx.headersUnprocAppend(iv.minPt, iv.maxPt)
+  metrics.set(nec_sync_headers_unprocessed, ctx.headersUnprocTotal().int64)
+  metrics.set(nec_sync_coupler, ctx.coupler4metrics)
 
 
-proc headersUnprocAvail*(ctx: BeaconCtxRef): uint64 =
+func headersUnprocAvail*(ctx: BeaconCtxRef): uint64 =
   ## Returns the number of headers that can be fetched
   ctx.hdr.unprocessed.total()
 
-proc headersUnprocAvailTop*(ctx: BeaconCtxRef): uint64 =
+func headersUnprocAvailTop*(ctx: BeaconCtxRef): uint64 =
   let iv = ctx.hdr.unprocessed.le().valueOr:
     return 0u64
   iv.maxPt
 
 
-proc headersUnprocTotal*(ctx: BeaconCtxRef): uint64 =
+func headersUnprocTotal*(ctx: BeaconCtxRef): uint64 =
   ctx.hdr.unprocessed.total() + ctx.hdr.borrowed.total()
 
-proc headersUnprocTotalTop*(ctx: BeaconCtxRef): uint64 =
+func headersUnprocTotalTop*(ctx: BeaconCtxRef): uint64 =
   ## Returns the higest number item from `borrowed` and `unprocessed` ranges.
   ## It will  default to `0` if both range sets are empty.
   let
@@ -124,7 +155,8 @@ proc headersUnprocTotalTop*(ctx: BeaconCtxRef): uint64 =
         0
   max(uMax, bMax)
 
-proc headersUnprocTotalBottom*(ctx: BeaconCtxRef): uint64 =
+
+func headersUnprocTotalBottom*(ctx: BeaconCtxRef): uint64 =
   ## Similar to `headersUnprocTotalTop()` dor the least block number
   let
     uMin = block:
@@ -142,11 +174,11 @@ proc headersUnprocTotalBottom*(ctx: BeaconCtxRef): uint64 =
   min(uMin, bMin)
 
 
-proc headersUnprocIsEmpty*(ctx: BeaconCtxRef): bool =
+func headersUnprocIsEmpty*(ctx: BeaconCtxRef): bool =
   ctx.hdr.unprocessed.chunks() == 0 and
   ctx.hdr.borrowed.chunks() == 0
 
-proc headersBorrowedIsEmpty*(ctx: BeaconCtxRef): bool =
+func headersBorrowedIsEmpty*(ctx: BeaconCtxRef): bool =
   ctx.hdr.borrowed.chunks() == 0
 
 # ------------
@@ -155,11 +187,15 @@ proc headersUnprocInit*(ctx: BeaconCtxRef) =
   ## Constructor
   ctx.hdr.unprocessed = BnRangeSet.init()
   ctx.hdr.borrowed = BnRangeSet.init()
+  metrics.set(nec_sync_headers_unprocessed, 0)
+  metrics.set(nec_sync_coupler, 0)
 
 proc headersUnprocClear*(ctx: BeaconCtxRef) =
   ## Clear
   ctx.hdr.unprocessed.clear()
   ctx.hdr.borrowed.clear()
+  metrics.set(nec_sync_headers_unprocessed, 0)
+  metrics.set(nec_sync_coupler, 0)
 
 proc headersUnprocSet*(ctx: BeaconCtxRef; minPt, maxPt: uint64) =
   ## Set up new unprocessed range
@@ -167,6 +203,8 @@ proc headersUnprocSet*(ctx: BeaconCtxRef; minPt, maxPt: uint64) =
   if minPt <= maxPt:
     # Otherwise `maxPt` would be internally adjusted to `max(minPt,maxPt)`
     discard ctx.hdr.unprocessed.merge(minPt, maxPt)
+    metrics.set(nec_sync_headers_unprocessed, ctx.headersUnprocTotal().int64)
+    metrics.set(nec_sync_coupler, ctx.coupler4metrics)
 
 # ------------------------------------------------------------------------------
 # End

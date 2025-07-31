@@ -18,5 +18,5 @@ if not defined(windows):
 
 switch("define", "chronicles_line_numbers")
 switch("define", "chronicles_sinks=textlines")
-switch("define", "chronicles_disable_thread_id")
+switch("define", "chronicles_thread_ids=no")
 switch("define", "chronicles_runtime_filtering=on")

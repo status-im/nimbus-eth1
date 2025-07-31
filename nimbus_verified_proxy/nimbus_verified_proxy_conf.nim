@@ -65,11 +65,13 @@ type VerifiedProxyConf* = object # Config
   .}: OutDir
 
   # In-Memory Cache Size
+  # In order to support the BLOCKHASH opcode for eth_call we need at least
+  # MAX_PREV_HEADER_DEPTH headers in the header cache.
   cacheLen* {.
     hidden,
     desc: "Length of the header cache maintained in memory",
-    defaultValue: 64,
-    defaultValueDesc: "64",
+    defaultValue: MAX_PREV_HEADER_DEPTH,
+    defaultValueDesc: "256",
     name: "debug-cache-len"
   .}: int
 

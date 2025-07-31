@@ -10,9 +10,9 @@
 
 {.push raises: [].}
 
-import std/[os, sequtils, sets], rocksdb, chronicles
+import std/[os, sequtils], rocksdb, chronicles
 
-export rocksdb, sets
+export rocksdb
 
 const
   BaseFolder = "nimbus"
@@ -57,7 +57,6 @@ proc close*(session: SharedWriteBatchRef) =
     session.commits = 0
     session.closes = 0
 
-
 proc commit*(
     rdb: RocksDbInstanceRef, session: SharedWriteBatchRef, cf: ColFamilyReadWrite
 ): Result[void, string] =
@@ -79,8 +78,7 @@ proc open*(
     T: type RocksDbInstanceRef,
     baseDir: string,
     dbOpts: DbOptionsRef,
-    cfOpts: ColFamilyOptionsRef,
-    cfs: openArray[string],
+    cfs: openArray[(string, ColFamilyOptionsRef)],
 ): Result[RocksDbInstanceRef, string] =
   let dataDir = baseDir.dataDir
 
@@ -89,21 +87,20 @@ proc open*(
   except CatchableError as exc:
     return err("Cannot create database directory " & dataDir & ": " & exc.msg)
 
-  # Column familiy names to allocate when opening the database. This list
-  # might be extended below.
-  var cfs = cfs.toHashSet()
+  var
+    descs = cfs.mapIt(it[0].initColFamilyDescriptor(it[1]))
+    cfNames = cfs.mapIt(it[0])
 
-  # If the database exists already, check for missing column families and
-  # allocate them for opening. Otherwise rocksdb might reject the peristent
-  # database.
+  # Must include all column families or openRocksDb will fail
   if (dataDir / "CURRENT").fileExists:
     let hdCFs = dataDir.listColumnFamilies.valueOr:
       raiseAssert "Cannot read existing CFs: " & error
-    # Update list of column families for opener.
-    cfs.incl hdCFs.toHashSet
 
-  # Finalise list of column families
-  let descs = cfs.toSeq.mapIt(it.initColFamilyDescriptor(cfOpts))
+    for name in hdCFs:
+      if name notin cfNames:
+        descs.add (
+          name.initColFamilyDescriptor(defaultColFamilyOptions(autoClose = true))
+        )
 
   ok RocksDbInstanceRef(
     db: ?openRocksDb(dataDir, dbOpts, columnFamilies = descs), baseDir: baseDir

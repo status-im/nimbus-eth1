@@ -86,7 +86,14 @@ proc getReceiptsByNumber*(
 
   receiptsObjects.value().asReceipts()
 
-proc toBlockData(header: Header, body: BlockBody, receipts: seq[Receipt]): BlockData =
+proc getStoredReceiptsByNumber*(
+    client: RpcClient, blockNumber: uint64
+): Future[Result[seq[StoredReceipt], string]] {.async: (raises: [CancelledError]).} =
+  ok((?(await client.getReceiptsByNumber(blockNumber))).to(seq[StoredReceipt]))
+
+proc toBlockData(
+    header: Header, body: BlockBody, receipts: seq[StoredReceipt]
+): BlockData =
   BlockData(
     header: rlp.encode(header).to0xHex(),
     body: rlp.encode(body).to0xHex(),
@@ -98,6 +105,6 @@ proc exportBlock*(
 ): Future[Result[void, string]] {.async: (raises: [CancelledError]).} =
   let
     (header, body, _) = ?(await client.getBlockByNumber(blockNumber))
-    receipts = ?(await client.getReceiptsByNumber(blockNumber))
+    receipts = ?(await client.getStoredReceiptsByNumber(blockNumber))
 
   toBlockData(header, body, receipts).dumpToYaml(fileName)

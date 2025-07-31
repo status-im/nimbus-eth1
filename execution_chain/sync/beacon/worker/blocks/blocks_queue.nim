@@ -11,9 +11,14 @@
 {.push raises:[].}
 
 import
-  pkg/eth/common,
+  pkg/[eth/common, metrics],
   pkg/stew/[interval_set, sorted_set],
   ../../worker_desc
+
+declareGauge nec_sync_block_lists_staged, "" &
+  "Number of block list records staged for importing"
+
+# ---------------
 
 func blocksStagedQueueBottomKey*(ctx: BeaconCtxRef): BlockNumber =
   ## Retrieve to staged block number
@@ -29,14 +34,17 @@ func blocksStagedQueueIsEmpty*(ctx: BeaconCtxRef): bool =
   ## `true` iff no data are on the queue.
   ctx.blk.staged.len == 0
 
+proc blocksStagedQueueMetricsUpdate*(ctx: BeaconCtxRef) =
+  metrics.set(nec_sync_block_lists_staged, ctx.blk.staged.len)
+
 # ----------------
 
-func blocksStagedQueueClear*(ctx: BeaconCtxRef) =
+proc blocksStagedQueueClear*(ctx: BeaconCtxRef) =
   ## Clear queue
   ctx.blk.staged.clear()
   ctx.blk.reserveStaged = 0
 
-func blocksStagedQueueInit*(ctx: BeaconCtxRef) =
+proc blocksStagedQueueInit*(ctx: BeaconCtxRef) =
   ## Constructor
   ctx.blk.staged = StagedBlocksQueue.init()
 

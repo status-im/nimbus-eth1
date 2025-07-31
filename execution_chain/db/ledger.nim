@@ -48,6 +48,8 @@ type
   # Maps witness keys to the codeTouched flag
   WitnessTable* = OrderedTable[WitnessKey, bool]
 
+  BlockHashesCache* = LruCache[BlockNumber, Hash32]
+
   AccountFlag = enum
     Alive
     IsNew
@@ -97,6 +99,10 @@ type
       ## Used to collect the keys of all read accounts, code and storage slots.
       ## Maps a tuple of address and slot (optional) to the codeTouched flag.
 
+    blockHashes: BlockHashesCache
+      ## Caches the block hashes fetched by the BLOCKHASH opcode in the EVM.
+      ## Also used when building the execution witness to determine the
+      ## block numbers fetched by the BLOCKHASH opcode for any given block.
 
   ReadOnlyLedger* = distinct LedgerRef
 
@@ -375,6 +381,7 @@ proc init*(x: typedesc[LedgerRef], db: CoreDbTxRef, storeSlotHash: bool, collect
   result.code = typeof(result.code).init(codeLruSize)
   result.slots = typeof(result.slots).init(slotsLruSize)
   result.collectWitness = collectWitness
+  result.blockHashes = typeof(result.blockHashes).init(MAX_PREV_HEADER_DEPTH.int)
   discard result.beginSavepoint
 
 proc init*(x: typedesc[LedgerRef], db: CoreDbTxRef): LedgerRef =
@@ -709,6 +716,21 @@ template getWitnessKeys*(ac: LedgerRef): WitnessTable =
 template clearWitnessKeys*(ac: LedgerRef) =
   ac.witnessKeys.clear()
 
+proc getBlockHash*(ac: LedgerRef, blockNumber: BlockNumber): Hash32 =
+  ac.blockHashes.get(blockNumber).valueOr:
+    let blockHash = ac.txFrame.getBlockHash(blockNumber).valueOr:
+      default(Hash32)
+
+    ac.blockHashes.put(blockNumber, blockHash)
+    blockHash
+
+template getBlockHashesCache*(ac: LedgerRef): BlockHashesCache =
+  ac.blockHashes
+
+proc clearBlockHashesCache*(ac: LedgerRef) =
+  if ac.blockHashes.len() > 0:
+    ac.blockHashes = BlockHashesCache.init(MAX_PREV_HEADER_DEPTH.int)
+
 proc persist*(ac: LedgerRef,
               clearEmptyAccount: bool = false,
               clearCache = false,
@@ -766,6 +788,7 @@ proc persist*(ac: LedgerRef,
 
   if clearWitness:
     ac.clearWitnessKeys()
+    ac.clearBlockHashesCache()
 
 iterator addresses*(ac: LedgerRef): Address =
   # make sure all savepoint already committed

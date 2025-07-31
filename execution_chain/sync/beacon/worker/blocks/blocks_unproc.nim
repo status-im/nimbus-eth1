@@ -11,8 +11,13 @@
 {.push raises:[].}
 
 import
-  pkg/[eth/common, stew/interval_set],
+  pkg/[eth/common, metrics, stew/interval_set],
   ../../worker_desc
+
+declareGauge nec_sync_blocks_unprocessed, "" &
+  "Number of block numbers ready to fetch and stage block data"
+
+func blocksUnprocTotal*(ctx: BeaconCtxRef): uint64
 
 # ------------------------------------------------------------------------------
 # Public functions
@@ -54,12 +59,14 @@ proc blocksUnprocFetch*(
 proc blocksUnprocCommit*(ctx: BeaconCtxRef; iv: BnRange) =
   ## Commit back all processed range, i.e. remove it from the borrowed set.
   doAssert ctx.blk.borrowed.reduce(iv) == iv.len
+  metrics.set(nec_sync_blocks_unprocessed, ctx.blocksUnprocTotal().int64)
 
 proc blocksUnprocCommit*(ctx: BeaconCtxRef; iv, unproc: BnRange) =
   ## Variant of `blocksUnprocCommit()` which merges back some unprocessed
   ## range `unproc`.
   doAssert ctx.blk.borrowed.reduce(iv) == iv.len
   doAssert ctx.blk.unprocessed.merge(unproc) == unproc.len
+  metrics.set(nec_sync_blocks_unprocessed, ctx.blocksUnprocTotal().int64)
 
 proc blocksUnprocCommit*(
     ctx: BeaconCtxRef;
@@ -73,6 +80,7 @@ proc blocksUnprocCommit*(
   if uMinPt <= uMaxPt:
     # Otherwise `maxPt` would be internally adjusted to `max(minPt,maxPt)`
     doAssert ctx.blk.unprocessed.merge(uMinPt, uMaxPt) == uMaxPt - uMinPt + 1
+  metrics.set(nec_sync_blocks_unprocessed, ctx.blocksUnprocTotal().int64)
 
 
 proc blocksUnprocAppend*(ctx: BeaconCtxRef; minPt, maxPt: uint64) =
@@ -89,13 +97,14 @@ proc blocksUnprocAppend*(ctx: BeaconCtxRef; minPt, maxPt: uint64) =
           discard ctx.blk.unprocessed.merge(pt, pt)
     else:
       discard ctx.blk.unprocessed.merge(minPt, maxPt)
+    metrics.set(nec_sync_blocks_unprocessed, ctx.blocksUnprocTotal().int64)
 
 
-proc blocksUnprocAvail*(ctx: BeaconCtxRef): uint64 =
+func blocksUnprocAvail*(ctx: BeaconCtxRef): uint64 =
   ## Returns the number of blocks that can be fetched
   ctx.blk.unprocessed.total()
 
-proc blocksUnprocAvailBottom*(ctx: BeaconCtxRef): uint64 =
+func blocksUnprocAvailBottom*(ctx: BeaconCtxRef): uint64 =
   ## Returns the least number from the `unprocessed` ranges set. It
   ## will default to `high(uint64)` if the range set is empty.
   let iv = ctx.blk.unprocessed.ge().valueOr:
@@ -103,11 +112,11 @@ proc blocksUnprocAvailBottom*(ctx: BeaconCtxRef): uint64 =
   iv.minPt
 
 
-proc blocksUnprocTotal*(ctx: BeaconCtxRef): uint64 =
+func blocksUnprocTotal*(ctx: BeaconCtxRef): uint64 =
   ## Returns the sum of `borrowed` and `unprocessed` ranges.
   ctx.blk.unprocessed.total() + ctx.blk.borrowed.total()
 
-proc blocksUnprocTotalBottom*(ctx: BeaconCtxRef): uint64 =
+func blocksUnprocTotalBottom*(ctx: BeaconCtxRef): uint64 =
   ## Returns the number item from `borrowed` and `unprocessed` ranges. It
   ## will return `high(uint64)` if both range sets are empty.
   let
@@ -126,12 +135,12 @@ proc blocksUnprocTotalBottom*(ctx: BeaconCtxRef): uint64 =
   min(uMin, bMin)
 
 
-proc blocksUnprocIsEmpty*(ctx: BeaconCtxRef): bool =
+func blocksUnprocIsEmpty*(ctx: BeaconCtxRef): bool =
   ## True iff there are neither `borrowed` or `unprocessed` entries.
   ctx.blk.unprocessed.chunks() == 0 and
   ctx.blk.borrowed.chunks() == 0
 
-proc blocksBorrowedIsEmpty*(ctx: BeaconCtxRef): bool =
+func blocksBorrowedIsEmpty*(ctx: BeaconCtxRef): bool =
   ctx.blk.borrowed.chunks() == 0
 
 # ------------------
@@ -140,11 +149,13 @@ proc blocksUnprocInit*(ctx: BeaconCtxRef) =
   ## Constructor
   ctx.blk.unprocessed = BnRangeSet.init()
   ctx.blk.borrowed = BnRangeSet.init()
+  metrics.set(nec_sync_blocks_unprocessed, 0)
 
 proc blocksUnprocClear*(ctx: BeaconCtxRef) =
   ## Clear
   ctx.blk.unprocessed.clear()
   ctx.blk.borrowed.clear()
+  metrics.set(nec_sync_blocks_unprocessed, 0)
 
 proc blocksUnprocSet*(ctx: BeaconCtxRef; minPt, maxPt: uint64) =
   ## Set up new unprocessed range
@@ -152,6 +163,7 @@ proc blocksUnprocSet*(ctx: BeaconCtxRef; minPt, maxPt: uint64) =
   if minPt <= maxPt:
     # Otherwise `maxPt` would be internally adjusted to `max(minPt,maxPt)`
     discard ctx.blk.unprocessed.merge(minPt, maxPt)
+    metrics.set(nec_sync_blocks_unprocessed, ctx.blocksUnprocTotal().int64)
 
 # ------------------------------------------------------------------------------
 # End

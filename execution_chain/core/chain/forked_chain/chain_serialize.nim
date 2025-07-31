@@ -284,6 +284,7 @@ proc deserialize*(fc: ForkedChainRef): Result[void, string] =
   # All blocks should have replayed
   for b in blocks:
     if b.txFrame.isNil:
+      fc.reset(prevBase)
       return err("corrupted FC serialization: deserialized node should have txFrame")
 
   fc.hashToBlock.withValue(fc.fcuHead.hash, val) do:
