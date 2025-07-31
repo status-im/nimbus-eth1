@@ -1,5 +1,5 @@
 # Nimbus
-# Copyright (c) 2020-2024 Status Research & Development GmbH
+# Copyright (c) 2020-2025 Status Research & Development GmbH
 # Licensed under either of
 #  * Apache License, version 2.0, ([LICENSE-APACHE](LICENSE-APACHE) or
 #    http://www.apache.org/licenses/LICENSE-2.0)
@@ -31,26 +31,26 @@ jobs:
           cd dist
           ARCHIVE=$(echo *.tar.gz)
           tar -xzf ${ARCHIVE}
-          NEW_ARCHIVE_DIR="nimbus-eth1_Linux_amd64_$(date +%Y%m%d)_$(git rev-parse --short=8 HEAD)"
+          NEW_ARCHIVE_DIR="nimbus-eth1-linux-amd64_${{ github.#refs/heads/ }}_$(git rev-parse --short=8 HEAD)"
           mv ${ARCHIVE%.tar.gz} ${NEW_ARCHIVE_DIR}
           tar -czf ${NEW_ARCHIVE_DIR}.tar.gz ${NEW_ARCHIVE_DIR}
-          cp ${NEW_ARCHIVE_DIR}.tar.gz nimbus-eth1_Linux_amd64_nightly_latest.tar.gz
+          cp ${NEW_ARCHIVE_DIR}.tar.gz nimbus-eth1-linux-amd64-nightly-latest.tar.gz
           echo "archive=${NEW_ARCHIVE_DIR}.tar.gz" >> $GITHUB_OUTPUT
           echo "archive_dir=${NEW_ARCHIVE_DIR}" >> $GITHUB_OUTPUT
 
       - name: Upload archive artefact
         uses: actions/upload-artifact@v4
         with:
-          name: Linux_amd64_archive
+          name: linux-amd64-archive
           path: |
             ./dist/${{ steps.make_dist.outputs.archive }}
-            ./dist/nimbus-eth1_Linux_amd64_nightly_latest.tar.gz
+            ./dist/nimbus-eth1-linux-amd64-nightly-latest.tar.gz
           retention-days: 2
 
       - name: Upload checksum artefact
         uses: actions/upload-artifact@v4
         with:
-          name: Linux_amd64_checksum
+          name: linux-amd64-checksum
           path: ./dist/${{ steps.make_dist.outputs.archive_dir }}/build/nimbus_execution_client.sha512sum
           retention-days: 2
 
@@ -78,26 +78,26 @@ jobs:
           cd dist
           ARCHIVE=$(echo *.tar.gz)
           tar -xzf ${ARCHIVE}
-          NEW_ARCHIVE_DIR="nimbus-eth1_Linux_arm64v8_$(date +%Y%m%d)_$(git rev-parse --short=8 HEAD)"
+          NEW_ARCHIVE_DIR="nimbus-eth1-linux-arm64_${{ github.#refs/heads/ }}_$(git rev-parse --short=8 HEAD)"
           mv ${ARCHIVE%.tar.gz} ${NEW_ARCHIVE_DIR}
           tar -czf ${NEW_ARCHIVE_DIR}.tar.gz ${NEW_ARCHIVE_DIR}
-          cp ${NEW_ARCHIVE_DIR}.tar.gz nimbus-eth1_Linux_arm64_nightly_latest.tar.gz
+          cp ${NEW_ARCHIVE_DIR}.tar.gz nimbus-eth1-linux-arm64-nightly-latest.tar.gz
           echo "archive=${NEW_ARCHIVE_DIR}.tar.gz" >> $GITHUB_OUTPUT
           echo "archive_dir=${NEW_ARCHIVE_DIR}" >> $GITHUB_OUTPUT
 
       - name: Upload archive artefact
         uses: actions/upload-artifact@v4
         with:
-          name: Linux_arm64_archive
+          name: linux-arm64-archive
           path: |
             ./dist/${{ steps.make_dist.outputs.archive }}
-            ./dist/nimbus-eth1_Linux_arm64_nightly_latest.tar.gz
+            ./dist/nimbus-eth1-linux-arm64-nightly-latest.tar.gz
           retention-days: 2
 
       - name: Upload checksum artefact
         uses: actions/upload-artifact@v4
         with:
-          name: Linux_arm64_checksum
+          name: linux-arm64-checksum
           path: ./dist/${{ steps.make_dist.outputs.archive_dir }}/build/nimbus_execution_client.sha512sum
           retention-days: 2
 
@@ -117,26 +117,26 @@ jobs:
           cd dist
           ARCHIVE=$(echo *.tar.gz)
           tar -xzf ${ARCHIVE}
-          NEW_ARCHIVE_DIR="nimbus-eth1_Windows_amd64_$(date +%Y%m%d)_$(git rev-parse --short=8 HEAD)"
+          NEW_ARCHIVE_DIR="nimbus-eth1-windows-amd64_${{ github.#refs/heads/ }}_$(git rev-parse --short=8 HEAD)"
           mv ${ARCHIVE%.tar.gz} ${NEW_ARCHIVE_DIR}
           tar -czf ${NEW_ARCHIVE_DIR}.tar.gz ${NEW_ARCHIVE_DIR}
-          cp ${NEW_ARCHIVE_DIR}.tar.gz nimbus-eth1_Windows_amd64_nightly_latest.tar.gz
+          cp ${NEW_ARCHIVE_DIR}.tar.gz nimbus-eth1-windows-amd64-nightly-latest.tar.gz
           echo "archive=${NEW_ARCHIVE_DIR}.tar.gz" >> $GITHUB_OUTPUT
           echo "archive_dir=${NEW_ARCHIVE_DIR}" >> $GITHUB_OUTPUT
 
       - name: Upload archive artefact
         uses: actions/upload-artifact@v4
         with:
-          name: Windows_amd64_archive
+          name: windows-amd64-archive
           path: |
             ./dist/${{ steps.make_dist.outputs.archive }}
-            ./dist/nimbus-eth1_Windows_amd64_nightly_latest.tar.gz
+            ./dist/nimbus-eth1-windows-amd64-nightly-latest.tar.gz
           retention-days: 2
 
       - name: Upload checksum artefact
         uses: actions/upload-artifact@v4
         with:
-          name: Windows_amd64_checksum
+          name: windows-amd64-checksum
           path: ./dist/${{ steps.make_dist.outputs.archive_dir }}/build/nimbus_execution_client.sha512sum
           retention-days: 2
 
@@ -156,26 +156,26 @@ jobs:
           cd dist
           ARCHIVE=$(echo *.tar.gz)
           tar -xzf ${ARCHIVE}
-          NEW_ARCHIVE_DIR="nimbus-eth1_macOS_arm64_$(date +%Y%m%d)_$(git rev-parse --short=8 HEAD)"
+          NEW_ARCHIVE_DIR="nimbus-eth1-macos-arm64_${{ github.#refs/heads/ }}_$(git rev-parse --short=8 HEAD)"
           mv ${ARCHIVE%.tar.gz} ${NEW_ARCHIVE_DIR}
           tar -czf ${NEW_ARCHIVE_DIR}.tar.gz ${NEW_ARCHIVE_DIR}
-          cp ${NEW_ARCHIVE_DIR}.tar.gz nimbus-eth1_macOS_arm64_nightly_latest.tar.gz
+          cp ${NEW_ARCHIVE_DIR}.tar.gz nimbus-eth1-macos-arm64-nightly-latest.tar.gz
           echo "archive=${NEW_ARCHIVE_DIR}.tar.gz" >> $GITHUB_OUTPUT
           echo "archive_dir=${NEW_ARCHIVE_DIR}" >> $GITHUB_OUTPUT
 
       - name: Upload archive artefact
         uses: actions/upload-artifact@v4
         with:
-          name: macOS_arm64_archive
+          name: macos-arm64-archive
           path: |
             ./dist/${{ steps.make_dist.outputs.archive }}
-            ./dist/nimbus-eth1_macOS_arm64_nightly_latest.tar.gz
+            ./dist/nimbus-eth1-macos-arm64-nightly-latest.tar.gz
           retention-days: 2
 
       - name: Upload checksum artefact
         uses: actions/upload-artifact@v4
         with:
-          name: macOS_arm64_checksum
+          name: macos-arm64-checksum
           path: ./dist/${{ steps.make_dist.outputs.archive_dir }}/build/nimbus_execution_client.sha512sum
           retention-days: 2
 
@@ -200,13 +200,13 @@ jobs:
           \`\`\`text
           EOF
           echo '# Linux AMD64' >> release_notes.md
-          cat Linux_amd64_checksum/* >> release_notes.md
+          cat linux-amd64-checksum/* >> release_notes.md
           echo '# Linux ARM64' >> release_notes.md
-          cat Linux_arm64_checksum/* >> release_notes.md
+          cat linux-arm64-checksum/* >> release_notes.md
           echo '# Windows AMD64' >> release_notes.md
-          cat Windows_amd64_checksum/* >> release_notes.md
+          cat windows-amd64-checksum/* >> release_notes.md
           echo '# macOS ARM64' >> release_notes.md
-          cat macOS_arm64_checksum/* >> release_notes.md
+          cat macos-arm64-checksum/* >> release_notes.md
           echo '```' >> release_notes.md
 
       - name: Update Nightly Release
@@ -219,22 +219,22 @@ jobs:
           prerelease: true
           body_path: release_notes.md
           files: |
-            Linux_amd64_archive/*
-            Linux_arm64_archive/*
-            Windows_amd64_archive/*
-            macOS_arm64_archive/*
+            linux-amd64-archive/*
+            linux-arm64-archive/*
+            windows-amd64-archive/*
+            macos-arm64-archive/*
 
       - name: Delete artefacts
         uses: geekyeggo/delete-artifact@v2
         with:
           failOnError: false
           name: |
-            Linux_amd64_archive
-            Linux_amd64_checksum
-            Linux_arm64_archive
-            Linux_arm64_checksum
-            Windows_amd64_archive
-            Windows_amd64_checksum
-            macOS_arm64_archive
-            macOS_arm64_checksum
+            linux-amd64-archive
+            linux-amd64-checksum
+            linux-arm64-archive
+            linux-arm64-checksum
+            windows-amd64-archive
+            windows-amd64-checksum
+            macos-arm64-archive
+            macos-arm64-checksum
 

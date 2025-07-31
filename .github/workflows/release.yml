@@ -27,20 +27,20 @@ jobs:
         run: |
           make dist-amd64
           cd dist
-          ARCHIVE=$(echo nimbus-eth1_Linux_amd64_*.tar.gz)
+          ARCHIVE=$(echo nimbus-eth1_linux_amd64_*.tar.gz)
           echo "archive=${ARCHIVE}" >> $GITHUB_OUTPUT
           echo "archive_dir=${ARCHIVE%.tar.gz}" >> $GITHUB_OUTPUT
           tar -xzf ${ARCHIVE} ${ARCHIVE%.tar.gz}/build/nimbus_execution_client.sha512sum
       - name: Upload archive artefact
         uses: actions/upload-artifact@v4
         with:
-          name: Linux_amd64_archive
+          name: linux_amd64_archive
           path: ./dist/${{ steps.make_dist.outputs.archive }}
           retention-days: 2
       - name: Upload checksum artefact
         uses: actions/upload-artifact@v4
         with:
-          name: Linux_amd64_checksum
+          name: linux_amd64_checksum
           path: ./dist/${{ steps.make_dist.outputs.archive_dir }}/build/nimbus_execution_client.sha512sum
           retention-days: 2
       - name: Login to Docker Hub
@@ -77,20 +77,20 @@ jobs:
         run: |
           make dist-arm64
           cd dist
-          ARCHIVE=$(echo nimbus-eth1_Linux_arm64v8_*.tar.gz)
+          ARCHIVE=$(echo nimbus-eth1_linux_arm64v8_*.tar.gz)
           echo "archive=${ARCHIVE}" >> $GITHUB_OUTPUT
           echo "archive_dir=${ARCHIVE%.tar.gz}" >> $GITHUB_OUTPUT
           tar -xzf ${ARCHIVE} ${ARCHIVE%.tar.gz}/build/nimbus_execution_client.sha512sum
       - name: Upload archive artefact
         uses: actions/upload-artifact@v4
         with:
-          name: Linux_arm64_archive
+          name: linux_arm64_archive
           path: ./dist/${{ steps.make_dist.outputs.archive }}
           retention-days: 2
       - name: Upload checksum artefact
         uses: actions/upload-artifact@v4
         with:
-          name: Linux_arm64_checksum
+          name: linux_arm64_checksum
           path: ./dist/${{ steps.make_dist.outputs.archive_dir }}/build/nimbus_execution_client.sha512sum
           retention-days: 2
       - name: Login to Docker Hub
@@ -121,24 +121,24 @@ jobs:
         run: |
           make dist-win64
           cd dist
-          ARCHIVE=$(echo nimbus-eth1_Windows_amd64_*.tar.gz)
+          ARCHIVE=$(echo nimbus-eth1_windows_amd64_*.tar.gz)
           echo "archive=${ARCHIVE}" >> $GITHUB_OUTPUT
           echo "archive_dir=${ARCHIVE%.tar.gz}" >> $GITHUB_OUTPUT
           tar -xzf ${ARCHIVE} ${ARCHIVE%.tar.gz}/build/nimbus_execution_client.sha512sum
       - name: Upload archive artefact
         uses: actions/upload-artifact@v4
         with:
-          name: Windows_amd64_archive
+          name: windows_amd64_archive
           path: ./dist/${{ steps.make_dist.outputs.archive }}
           retention-days: 2
       - name: Upload checksum artefact
         uses: actions/upload-artifact@v4
         with:
-          name: Windows_amd64_checksum
+          name: windows_amd64_checksum
           path: ./dist/${{ steps.make_dist.outputs.archive_dir }}/build/nimbus_execution_client.sha512sum
           retention-days: 2
   build-macos-arm64:
-    name: macOS ARM64 release asset
+    name: macos ARM64 release asset
     runs-on: ubuntu-latest
     steps:
       - name: Checkout code
@@ -181,12 +181,12 @@ jobs:
           \`\`\`text
           EOF
           echo '# Linux AMD64' >> release_notes.md
-          cat Linux_amd64_checksum/* >> release_notes.md
+          cat linux_amd64_checksum/* >> release_notes.md
           echo '# Linux ARM64' >> release_notes.md
-          cat Linux_arm64_checksum/* >> release_notes.md
+          cat linux_arm64_checksum/* >> release_notes.md
           echo '# Windows AMD64' >> release_notes.md
-          cat Windows_amd64_checksum/* >> release_notes.md
-          echo '# macOS ARM64' >> release_notes.md
+          cat windows_amd64_checksum/* >> release_notes.md
+          echo '# macos ARM64' >> release_notes.md
           cat macOS_arm64_checksum/* >> release_notes.md
           echo '```' >> release_notes.md
       - name: Create release
@@ -199,21 +199,21 @@ jobs:
           prerelease: false
           body_path: release_notes.md
           files: |
-            Linux_amd64_archive/*
-            Linux_arm64_archive/*
-            Windows_amd64_archive/*
+            linux_amd64_archive/*
+            linux_arm64_archive/*
+            windows_amd64_archive/*
             macOS_arm64_archive/*
       - name: Delete artefacts
         uses: geekyeggo/delete-artifact@v1
         with:
           failOnError: false
           name: |
-            Linux_amd64_archive
-            Linux_amd64_checksum
-            Linux_arm64_archive
-            Linux_arm64_checksum
-            Windows_amd64_archive
-            Windows_amd64_checksum
+            linux_amd64_archive
+            linux_amd64_checksum
+            linux_arm64_archive
+            linux_arm64_checksum
+            windows_amd64_archive
+            windows_amd64_checksum
             macOS_arm64_archive
             macOS_arm64_checksum
 
