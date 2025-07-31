@@ -138,7 +138,6 @@ GIT_SUBMODULE_CONFIG := -c lfs.fetchexclude=/public-keys/all.txt,/metadata/genes
 GIT_SUBMODULE_UPDATE := git -c submodule."vendor/nimbus-eth2".update=none submodule update --init --recursive; \
   git $(GIT_SUBMODULE_CONFIG) submodule update vendor/nimbus-eth2; \
   cd vendor/nimbus-eth2; \
-  git $(GIT_SUBMODULE_CONFIG) submodule update --init vendor/eth2-networks; \
   git $(GIT_SUBMODULE_CONFIG) submodule update --init vendor/holesky; \
   git $(GIT_SUBMODULE_CONFIG) submodule update --init vendor/sepolia; \
   git $(GIT_SUBMODULE_CONFIG) submodule update --init vendor/hoodi; \
@@ -195,11 +194,7 @@ endif
 NIM_PARAMS := $(NIM_PARAMS) $(NIM_ETH_PARAMS)
 
 #- deletes and recreates "nimbus.nims" which on Windows is a copy instead of a proper symlink
-update: | update-common
-	rm -rf nimbus.nims && \
-		$(MAKE) nimbus.nims $(HANDLE_OUTPUT)
-
-update-from-ci: | sanity-checks update-test
+update: | sanity-checks update-test
 	rm -rf nimbus.nims && \
 		$(MAKE) nimbus.nims $(HANDLE_OUTPUT)
 	+ "$(MAKE)" --no-print-directory deps-common
