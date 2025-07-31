@@ -17,6 +17,7 @@ import
   ../execution_chain/common/common
 
 suite "Stateroot Mismatch Checks":
+
   setup:
     let
       memDB = DefaultDbMemory.newCoreDbRef()
@@ -27,7 +28,6 @@ suite "Stateroot Mismatch Checks":
       slot1 = 1.u256
       slot2 = 2.u256
       slot3 = 3.u256
-
 
   test "Stateroot check - Accounts":
 
@@ -97,7 +97,9 @@ suite "Stateroot Mismatch Checks":
     let txFrame0 = memDB.baseTxFrame().txFrameBegin()
     block:
       let ac0 = LedgerRef.init(txFrame0, false)
-      ac0.setStorage(addr3, slot3, 300.u256)
+      ac0.setBalance(addr1, 0.u256)
+      ac0.setCode(addr1, code)
+      ac0.setStorage(addr1, slot3, 300.u256)
       ac0.persist(clearCache = true)
       txFrame0.checkpoint(1.BlockNumber, skipSnapshot = false)
       memDB.persist(txFrame0, Opt.none(Hash32))
@@ -124,7 +126,7 @@ suite "Stateroot Mismatch Checks":
         ac2 = LedgerRef.init(txFrame2, false)
         preStateRoot = ac2.getStateRoot()
 
-      ac2.setStorage(addr2, slot2, 200.u256)
+      ac2.setStorage(addr1, slot2, 200.u256)
       ac2.persist(clearCache = true)
       txFrame2.checkpoint(3.BlockNumber, skipSnapshot = false)
       memDB.persist(txFrame2, Opt.none(Hash32))
@@ -149,7 +151,7 @@ suite "Stateroot Mismatch Checks":
       let postStateRoot = ac3.getStateRoot()
       check:
         preStateRoot != postStateRoot
-        # Check balances
+        # Check slots
         ac3.getStorage(addr1, slot1) == 100.u256
-        ac3.getStorage(addr2, slot2) == 200.u256
-        ac3.getStorage(addr3, slot3) == 300.u256
+        ac3.getStorage(addr1, slot2) == 200.u256
+        ac3.getStorage(addr1, slot3) == 300.u256
