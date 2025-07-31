@@ -248,7 +248,7 @@ jobs:
         run: |
           # use CC to make sure Nim compiler and subsequent test
           # using the same glibc version.
-          env CC=gcc make -j${ncpu} ARCH_OVERRIDE=${PLATFORM} CI_CACHE=NimBinaries update-from-ci
+          env CC=gcc make -j${ncpu} ARCH_OVERRIDE=${PLATFORM} CI_CACHE=NimBinaries update
 
       - name: Run Nimbus Portal tests (Windows)
         if: runner.os == 'Windows'
