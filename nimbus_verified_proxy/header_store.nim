@@ -93,12 +93,8 @@ func new*(T: type HeaderStore, max: int): T =
   )
 
 func clear*(self: HeaderStore) =
-  for key in self.headers.keys():
-    self.headers.del(key)
-
-  for key in self.hashes.keys():
-    self.hashes.del(key)
-
+  self.headers = LruCache[Hash32, Header].init(self.headers.capacity)
+  self.hashes = LruCache[base.BlockNumber, Hash32].init(self.headers.capacity)
   self.finalized = Opt.none(Header)
   self.finalizedHash = Opt.none(Hash32)
   self.earliest = Opt.none(Header)
