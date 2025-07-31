@@ -91,6 +91,7 @@ type
     noCommand
     `import`
     `import-rlp`
+    `capture-log`
 
   RpcFlag* {.pure.} = enum
     ## RPC flags
@@ -576,6 +577,12 @@ type
         argument
         desc: "One or more RLP encoded block(s) files"
         name: "blocks-file" }: seq[InputFile]
+
+    of `capture-log`:
+      beaconSyncCaptureFile* {.
+        argument
+        desc: "Read from capture file"
+        name: "beacon-sync-capture-file" .}: Option[InputFile]
 
 func parseHexOrDec256(p: string): UInt256 {.raises: [ValueError].} =
   if startsWith(p, "0x"):

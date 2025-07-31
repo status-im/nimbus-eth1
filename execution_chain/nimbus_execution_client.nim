@@ -11,7 +11,7 @@ import
   ../execution_chain/compile_info
 
 import
-  std/[os, osproc, strutils, net, options],
+  std/[os, osproc, net, options, streams],
   chronicles,
   eth/net/nat,
   metrics,
@@ -28,6 +28,7 @@ import
   ./db/core_db/persistent,
   ./db/storage_types,
   ./sync/wire_protocol,
+  ./sync/beacon/replay,
   ./common/chain_config_hash,
   ./portal/portal
 
@@ -202,6 +203,18 @@ proc run(nimbus: NimbusNode, conf: NimbusConf) =
   info "Launching execution client",
       version = FullVersionStr,
       conf
+
+  case conf.cmd
+  of NimbusCmd.`capture-log`:
+    if conf.beaconSyncCaptureFile.isNone():
+      fatal "Capture file is required, use --beacon-sync-capture-file"
+      quit(QuitFailure)
+    let st = conf.beaconSyncCaptureFile.unsafeGet.string.newFileStream fmRead
+    ReplayReaderRef.init(st).captureLog(proc(): bool =
+      nimbus.state == NimbusState.Stopping)
+    return
+  else:
+    discard
 
   # Trusted setup is needed for processing Cancun+ blocks
   # If user not specify the trusted setup, baked in
