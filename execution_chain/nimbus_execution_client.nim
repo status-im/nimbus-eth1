@@ -126,6 +126,19 @@ proc setupP2P(nimbus: NimbusNode, conf: NimbusConf,
     nimbus.beaconSyncRef.tracerInit(
       conf.beaconSyncTraceFile.unsafeGet.string, conf.beaconSyncTraceSessions)
 
+  # Optional replay
+  if conf.beaconSyncReplayFile.isSome():
+    if conf.beaconSyncTraceFile.isSome():
+      fatal "Cannot have both "&
+        "--beacon-sync-trace-file and --beacon-sync-replay-file"
+    if conf.beaconSyncTargetFile.isSome():
+      fatal "Cannot have both "&
+        "--beacon-sync-target-file and --beacon-sync-replay-file"
+    nimbus.beaconSyncRef.replayInit(
+      conf.beaconSyncReplayFile.unsafeGet.string,
+      conf.beaconSyncReplayNoisyFrom.get(high uint),
+      conf.beaconSyncReplayFakeImport)
+
   # Optional for pre-setting the sync target (i.e. debugging)
   if conf.beaconSyncTargetFile.isSome():
     nimbus.beaconSyncRef.targetInit conf.beaconSyncTargetFile.unsafeGet.string
@@ -294,7 +307,8 @@ proc run(nimbus: NimbusNode, conf: NimbusConf) =
     setupP2P(nimbus, conf, com)
     setupRpc(nimbus, conf, com)
 
-    if conf.maxPeers > 0 and conf.engineApiServerEnabled():
+    if (conf.maxPeers > 0 and conf.engineApiServerEnabled()) or
+       conf.beaconSyncReplayFile.isSome():
       # Not starting syncer if there is definitely no way to run it. This
       # avoids polling (i.e. waiting for instructions) and some logging.
       if not nimbus.beaconSyncRef.start():

@@ -514,6 +514,19 @@ type
               "(i.e. from activation to suspension)"
         name: "beacon-sync-trace-sessions" .}: int
 
+      beaconSyncReplayFile* {.
+        desc: "Read from trace capture file for full replay"
+        name: "beacon-sync-replay-file" .}: Option[InputFile]
+
+      beaconSyncReplayNoisyFrom* {.
+        desc: "Extra replay logging starting with argument record number"
+        name: "beacon-sync-replay-noisy-from" .}: Option[uint]
+
+      beaconSyncReplayFakeImport* {.
+        desc: "Suppress block import (for test runs)"
+        defaultValue: false
+        name: "beacon-sync-replay-fake-import" .}: bool
+
       beaconSyncTargetFile* {.
         hidden
         desc: "Load a file containg an rlp-encoded object " &
@@ -581,7 +594,7 @@ type
     of `capture-log`:
       beaconSyncCaptureFile* {.
         argument
-        desc: "Read from capture file"
+        desc: "Read from capture file for log output"
         name: "beacon-sync-capture-file" .}: Option[InputFile]
 
 func parseHexOrDec256(p: string): UInt256 {.raises: [ValueError].} =
