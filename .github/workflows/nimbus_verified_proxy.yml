@@ -177,7 +177,7 @@ jobs:
 
       - name: Build Nim and Nimbus-eth1 dependencies
         run: |
-          make V=1 -j${ncpu} ARCH_OVERRIDE=${PLATFORM} CI_CACHE=NimBinCache update-from-ci
+          make V=1 -j${ncpu} ARCH_OVERRIDE=${PLATFORM} CI_CACHE=NimBinCache update
 
       - name: Run verified proxy tests (Windows)
         if: runner.os == 'Windows'
