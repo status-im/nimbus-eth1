@@ -54,6 +54,8 @@ NodeInfo.useDefaultSerializationIn JrpcConv
 PeerNetworkInfo.useDefaultSerializationIn JrpcConv
 PeerInfo.useDefaultSerializationIn JrpcConv
 
+JrpcConv.automaticSerialization(int, true)
+
 proc setupCommonRpc*(node: EthereumNode, conf: NimbusConf, server: RpcServer) =
   server.rpc("web3_clientVersion") do() -> string:
     result = conf.agentString

@@ -660,7 +660,7 @@ suite "TxPool test suite":
 
     # invalid auth
     var invauth = auth
-    invauth.v = 3.uint64
+    invauth.yParity = 3.uint8
     let
       ctx = CustomTx(auth: Opt.some(invauth))
       tx  = mx.customizeTransaction(acc, ptx.tx, ctx)
