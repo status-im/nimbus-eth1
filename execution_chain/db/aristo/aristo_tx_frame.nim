@@ -40,11 +40,9 @@ proc buildSnapshot(txFrame: AristoTxRef, minLevel: int) =
         # Copy cached values that are not present in the newer txFrame.
         # These are needed to update the main caches in the CoreDbRef instance.
         for k, v in frame.accLeaves:
-          if k notin txFrame.accLeaves:
-            txFrame.accLeaves[k] = v
+          discard txFrame.accLeaves.hasKeyOrPut(k, v)
         for k, v in frame.stoLeaves:
-          if k notin txFrame.stoLeaves:
-            txFrame.stoLeaves[k] = v
+          discard txFrame.stoLeaves.hasKeyOrPut(k, v)
 
         # Verify that https://github.com/nim-lang/Nim/issues/23759 is not present
         assert frame.snapshot.vtx.len == 0 and frame.snapshot.level.isNone()
