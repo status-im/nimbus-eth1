@@ -38,7 +38,7 @@ proc buildSnapshot(txFrame: AristoTxRef, minLevel: int) =
         txFrame.snapshot = move(frame.snapshot)
 
         # Copy cached values that are not present in the newer txFrame.
-        # These are needed to update the main caches in the CoreDbRef instance.
+        # These are needed to update the main caches in the AristoDbRef instance.
         for k, v in frame.accLeaves:
           discard txFrame.accLeaves.hasKeyOrPut(k, v)
         for k, v in frame.stoLeaves:
