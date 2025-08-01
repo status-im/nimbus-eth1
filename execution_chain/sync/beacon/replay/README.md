@@ -4,7 +4,7 @@ Inspection of Capture Data And Replay
 Inspection
 ----------
 
-Given a (probably gzipped) data dump file **(capture)** file as a result of
+Given a (probably gzipped) capture file **(capture)** as a result of
 tracing, its content can be visualised via
 
        nimbus_execution_client \
@@ -19,7 +19,7 @@ say. Then start a capture run on the original data base as
 
        nimbus_execution_client \
           --datadir=(database) \
-          --debug-beacon-sync-trace-file=(capture) \
+          --beacon-sync-trace-file=(capture) \
           ...
 
 where **(capture)** will contain all the data for the replay. This file can
@@ -36,7 +36,7 @@ Now, the captured run can be replayed on the secured database copy
 
        nimbus_execution_client \
           --datadir=(dbcopy)   \
-          --debug-beacon-sync-replay-file=(capture) \
+          --beacon-sync-replay-file=(capture) \
           ...
 
 where ihe additional arguments **...** of either command above need not be
