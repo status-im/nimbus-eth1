@@ -24,7 +24,7 @@ type
     proofs: Table[ProofQuery, ProofResponse]
     accessLists: Table[AccessListQuery, AccessListResult]
     codes: Table[CodeQuery, seq[byte]]
-    blockReceipts: Table[Hash, seq[ReceiptObject]]
+    blockReceipts: Table[Hash32, seq[ReceiptObject]]
     receipts: Table[Hash32, ReceiptObject]
     transactions: Table[Hash32, TransactionObject]
     logs: Table[Hash, seq[LogObject]]
@@ -37,7 +37,7 @@ func init*(T: type TestApiState, chainId: UInt256): T =
     proofs: initTable[ProofQuery, ProofResponse](),
     accessLists: initTable[AccessListQuery, AccessListResult](),
     codes: initTable[CodeQuery, seq[byte]](),
-    blockReceipts: initTable[Hash, seq[ReceiptObject]](),
+    blockReceipts: initTable[Hash32, seq[ReceiptObject]](),
     receipts: initTable[Hash32, ReceiptObject](),
     transactions: initTable[Hash32, TransactionObject](),
     logs: initTable[Hash, seq[LogObject]](),
@@ -80,16 +80,23 @@ template loadCode*(
 ) =
   t.codes[(address, hash(blockId))] = code
 
-template loadTransactions*(t: TestApiState, txHash: Hash32, tx: TransactionObject) =
+template loadTransaction*(t: TestApiState, txHash: Hash32, tx: TransactionObject) =
   t.transactions[txHash] = tx
 
-template loadReceipts*(t: TestApiState, txHash: Hash32, rx: ReceiptObject) =
+template loadReceipt*(t: TestApiState, txHash: Hash32, rx: ReceiptObject) =
   t.receipts[txHash] = rx
 
 template loadBlockReceipts*(
-    t: TestApiState, blockId: BlockTag, receipts: seq[ReceiptObject]
+    t: TestApiState, blk: BlockObject, receipts: seq[ReceiptObject]
 ) =
-  t.blockReceipts[hash(blockId)] = receipts
+  t.blockReceipts[blk.hash] = receipts
+  t.loadBlock(blk)
+
+template loadBlockReceipts*(
+    t: TestApiState, blkHash: Hash32, blkNum: Quantity, receipts: seq[ReceiptObject]
+) =
+  t.blockReceipts[blkHash] = receipts
+  t.nums[blkNum] = blkHash
 
 template loadLogs*(
     t: TestApiState, filterOptions: FilterOptions, logs: seq[LogObject]
@@ -101,6 +108,36 @@ func hash*(x: BlockTag): Hash =
     return hash(x.alias)
   else:
     return hash(x.number)
+
+func hash*[T](x: SingleOrList[T]): Hash =
+  if x.kind == SingleOrListKind.slkSingle:
+    return hash(x.single)
+  elif x.kind == SingleOrListKind.slkList:
+    return hash(x.list)
+  else:
+    return hash(0)
+
+func hash*(x: FilterOptions): Hash =
+  let
+    fromHash =
+      if x.fromBlock.isSome():
+        uint64(hash(x.fromBlock.get))
+      else:
+        uint64(hash(0))
+    toHash =
+      if x.toBlock.isSome():
+        uint64(hash(x.toBlock.get))
+      else:
+        uint64(hash(0))
+    addrHash = uint64(hash(x.address))
+    topicsHash = uint64(hash(x.topics))
+    blockHashHash =
+      if x.blockHash.isSome():
+        uint64(hash(x.blockHash.get))
+      else:
+        uint64(hash(0))
+
+  return hash(fromHash + toHash + addrHash + topicsHash + blockHashHash)
 
 func convToPartialBlock(blk: BlockObject): BlockObject =
   var txHashes: seq[TxOrHash]
@@ -137,34 +174,6 @@ func convToPartialBlock(blk: BlockObject): BlockObject =
     parentBeaconBlockRoot: blk.parentBeaconBlockRoot,
     requestsHash: blk.requestsHash,
   )
-
-func hash*[T](x: SingleOrList[T]): Hash =
-  if x.kind == SingleOrListKind.slkSingle:
-    return hash(x.single)
-  elif x.kind == SingleOrListKind.slkList:
-    return hash(x.list)
-
-func hash*(x: FilterOptions): Hash =
-  let
-    fromHash =
-      if x.fromBlock.isSome():
-        hash(x.fromBlock.get)
-      else:
-        hash(0)
-    toHash =
-      if x.toBlock.isSome():
-        hash(x.toBlock.get)
-      else:
-        hash(0)
-    addrHash = hash(x.address)
-    topicsHash = hash(x.topics)
-    blockHashHash =
-      if x.blockHash.isSome():
-        hash(x.blockHash.get)
-      else:
-        hash(0)
-
-  return hash(fromHash + toHash + addrHash + topicsHash + blockHashHash)
 
 proc initTestApiBackend*(t: TestApiState): EthApiBackend =
   let
@@ -207,7 +216,8 @@ proc initTestApiBackend*(t: TestApiState): EthApiBackend =
     getBlockReceiptsProc = proc(
         blockId: BlockTag
     ): Future[Opt[seq[ReceiptObject]]] {.async.} =
-      Opt.some(t.blockReceipts[hash(blockId)])
+      let blkHash = t.nums[blockId.number]
+      Opt.some(t.blockReceipts[blkHash])
 
     getLogsProc = proc(filterOptions: FilterOptions): Future[seq[LogObject]] {.async.} =
       t.logs[hash(filterOptions)]
