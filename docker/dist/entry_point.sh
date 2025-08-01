@@ -76,7 +76,7 @@ echo "ROCKSDBVER=${ROCKSDBVER}"
 make clean
 NIMFLAGS_COMMON="-d:disableMarchNative --gcc.options.debug:'-g1' --clang.options.debug:'-gline-tables-only' --dynlibOverride:rocksdb --passL:'-lrocksdb -L/home/user/nimbus-eth1/build/rocksdb-${ROCKSDBVER}'"
 
-if [[ "${PLATFORM}" == "Windows_amd64" ]]; then
+if [[ "${PLATFORM}" == "windows_amd64" ]]; then
   # Cross-compilation using the MXE distribution of Mingw-w64
   export PATH="/opt/mxe/usr/bin:${PATH}"
   CC=x86_64-w64-mingw32.static-gcc
@@ -126,28 +126,7 @@ if [[ "${PLATFORM}" == "Windows_amd64" ]]; then
     LOG_LEVEL="TRACE" \
     NIMFLAGS="${NIMFLAGS_COMMON} --os:windows --gcc.exe=${CC} --gcc.linkerexe=${CXX} --passL:'-static -lshlwapi -lrpcrt4' -d:BLSTuseSSSE3=1" \
     ${BINARIES}
-elif [[ "${PLATFORM}" == "Linux_arm32v7" ]]; then
-  CC="arm-linux-gnueabihf-gcc"
-  CXX="arm-linux-gnueabihf-g++"
-  ${CXX} --version
-
-  build_rocksdb TARGET_ARCHITECTURE=arm CXX="${CXX}"
-
-  make -j$(nproc) update-from-ci
-
-  env CFLAGS="" make \
-    -j$(nproc) \
-    USE_LIBBACKTRACE=0 \
-    QUICK_AND_DIRTY_COMPILER=1 \
-    deps-common
-    #deps-common build/generate_makefile
-  make \
-    -j$(nproc) \
-    LOG_LEVEL="TRACE" \
-    CC="${CC}" \
-    NIMFLAGS="${NIMFLAGS_COMMON} --cpu:arm --gcc.exe=${CC} --gcc.linkerexe=${CXX} --passL:'-static'" \
-    ${BINARIES}
-elif [[ "${PLATFORM}" == "Linux_arm64v8" ]]; then
+elif [[ "${PLATFORM}" == "linux_arm64v8" ]]; then
   CC="aarch64-linux-gnu-gcc"
   CXX="aarch64-linux-gnu-g++"
   ${CXX} --version
@@ -168,48 +147,6 @@ elif [[ "${PLATFORM}" == "Linux_arm64v8" ]]; then
     CC="${CC}" \
     NIMFLAGS="${NIMFLAGS_COMMON} --cpu:arm64 --gcc.exe=${CC} --gcc.linkerexe=${CXX} --passL:'-static-libstdc++'" \
     PARTIAL_STATIC_LINKING=1 \
-    ${BINARIES}
-elif [[ "${PLATFORM}" == "macOS_amd64" ]]; then
-  export PATH="/opt/osxcross/bin:${PATH}"
-  export OSXCROSS_MP_INC=1 # sets up include and library paths
-  export ZERO_AR_DATE=1 # avoid timestamps in binaries
-  DARWIN_VER="20.4"
-  CC="o64-clang"
-  CXX="o64-clang++"
-  AR="x86_64-apple-darwin${DARWIN_VER}-ar"
-  RANLIB="x86_64-apple-darwin${DARWIN_VER}-ranlib"
-  DSYMUTIL="x86_64-apple-darwin${DARWIN_VER}-dsymutil"
-  ${CXX} --version
-
-  build_rocksdb TARGET_OS=Darwin CXX="${CXX}" AR="${AR}"
-
-  make -j$(nproc) update-from-ci
-
-  make \
-    -j$(nproc) \
-    USE_LIBBACKTRACE=0 \
-    QUICK_AND_DIRTY_COMPILER=1 \
-    deps-common
-    #deps-common build/generate_makefile
-  make \
-    -j$(nproc) \
-    CC="${CC}" \
-    LIBTOOL="x86_64-apple-darwin${DARWIN_VER}-libtool" \
-    OS="darwin" \
-    NIMFLAGS="${NIMFLAGS_COMMON} --os:macosx --clang.exe=${CC}" \
-    nat-libs
-  make \
-    -j$(nproc) \
-    LOG_LEVEL="TRACE" \
-    CC="${CC}" \
-    AR="${AR}" \
-    RANLIB="${RANLIB}" \
-    CMAKE="x86_64-apple-darwin${DARWIN_VER}-cmake" \
-    CMAKE_ARGS="-DCMAKE_TOOLCHAIN_FILE=/opt/osxcross/toolchain.cmake" \
-    DSYMUTIL="${DSYMUTIL}" \
-    FORCE_DSYMUTIL=1 \
-    USE_VENDORED_LIBUNWIND=1 \
-    NIMFLAGS="${NIMFLAGS_COMMON} --os:macosx --clang.exe=${CC} --clang.linkerexe=${CXX} --passL:'-static-libstdc++ -mmacosx-version-min=10.14'" \
     ${BINARIES}
 elif [[ "${PLATFORM}" == "macOS_arm64" ]]; then
   export PATH="/opt/osxcross/bin:${PATH}"
@@ -287,7 +224,7 @@ mkdir "${DIST_PATH}/build"
 
 # copy and checksum binaries, copy docs
 EXT=""
-if [[ "${PLATFORM}" == "Windows_amd64" ]]; then
+if [[ "${PLATFORM}" == "windows_amd64" ]]; then
   EXT=".exe"
 fi
 for BINARY in ${BINARIES}; do
@@ -311,17 +248,13 @@ for BINARY in ${BINARIES}; do
 done
 sed -e "s/GIT_COMMIT/${GIT_COMMIT}/" docker/dist/README.md.tpl > "${DIST_PATH}/README.md"
 
-if [[ "${PLATFORM}" == "Linux_amd64" ]]; then
+if [[ "${PLATFORM}" == "linux_amd64" ]]; then
   sed -i -e 's/^make dist$/make dist-amd64/' "${DIST_PATH}/README.md"
-elif [[ "${PLATFORM}" == "Linux_arm32v7" ]]; then
-  sed -i -e 's/^make dist$/make dist-arm/' "${DIST_PATH}/README.md"
-elif [[ "${PLATFORM}" == "Linux_arm64v8" ]]; then
+elif [[ "${PLATFORM}" == "linux_arm64v8" ]]; then
   sed -i -e 's/^make dist$/make dist-arm64/' "${DIST_PATH}/README.md"
-elif [[ "${PLATFORM}" == "Windows_amd64" ]]; then
+elif [[ "${PLATFORM}" == "windows_amd64" ]]; then
   sed -i -e 's/^make dist$/make dist-win64/' "${DIST_PATH}/README.md"
   cp -a docker/dist/README-Windows.md.tpl "${DIST_PATH}/README-Windows.md"
-elif [[ "${PLATFORM}" == "macOS_amd64" ]]; then
-  sed -i -e 's/^make dist$/make dist-macos/' "${DIST_PATH}/README.md"
 elif [[ "${PLATFORM}" == "macOS_arm64" ]]; then
   sed -i -e 's/^make dist$/make dist-macos-arm64/' "${DIST_PATH}/README.md"
 fi

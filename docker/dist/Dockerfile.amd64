@@ -1,5 +1,5 @@
 # Nimbus
-# Copyright (c) 2018-2023 Status Research & Development GmbH
+# Copyright (c) 2018-2025 Status Research & Development GmbH
 # Licensed under either of
 #  * Apache License, version 2.0, ([LICENSE-APACHE](LICENSE-APACHE) or
 #    http://www.apache.org/licenses/LICENSE-2.0)
@@ -9,7 +9,7 @@
 # according to those terms.
 
 # The build is reproducible only if this base image stays the same.
-FROM statusteam/nimbus-eth1:dist_base_eth1_20220326074403@sha256:5c1d2e982d404c08f6bba1f0cc1a678bffae3f6cee80a679edaa0b5e985dc05d
+FROM statusim/nimbus-eth1:dist_base_eth1_v2_amd64@sha256:0c6cb90cda19e6d5250b2a8675b555b700d2ec637afb622789804d156e449d4a
 
 SHELL ["/bin/bash", "-c"]
 
@@ -24,5 +24,5 @@ USER user
 STOPSIGNAL SIGINT
 
 COPY "entry_point.sh" "/home/user/"
-ENTRYPOINT ["/home/user/entry_point.sh", "Linux_amd64"]
+ENTRYPOINT ["/home/user/entry_point.sh", "linux_amd64"]
 

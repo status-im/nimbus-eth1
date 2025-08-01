@@ -21,10 +21,23 @@ on:
       - '.github/workflows/portal*.yml'
       - 'nimbus_verified_proxy/**'
       - '.github/workflows/nimbus_verified_proxy.yml'
+      - '.github/workflows/build_base_image.yml'
+      - 'docker/**'
 
-  # Disable `pull_request`.  Experimenting with using only `push` for PRs.
-  #pull_request:
-  #  paths-ignore: ['doc/**', 'docs/**', '**/*.md', 'hive_integration/**']
+  pull_request:
+    paths-ignore:
+      - 'doc/**'
+      - 'docs/**'
+      - '**/*.md'
+      - '**/*.yml'
+      - 'hive_integration/**'
+      - 'portal/**'
+      - '.github/workflows/portal*.yml'
+      - 'nimbus_verified_proxy/**'
+      - '.github/workflows/nimbus_verified_proxy.yml'
+      - '.github/workflows/build_base_image.yml'
+      - 'docker/**'
+
   workflow_dispatch:
 
 jobs:
