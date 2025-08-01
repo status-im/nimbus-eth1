@@ -306,6 +306,10 @@ func toEVMFork*(com: CommonRef, forkDeterminer: ForkDeterminationInfo): EVMFork 
   let fork = com.toHardFork(forkDeterminer)
   ToEVMFork[fork]
 
+func activationTime*(com: CommonRef, fork: HardFork): Opt[EthTime] =
+  ## Returns the activation time of the given hard fork
+  com.forkTransitionTable.timeThresholds[fork]
+
 func toEVMFork*(com: CommonRef, header: Header): EVMFork =
   com.toEVMFork(forkDeterminationInfo(header))
 

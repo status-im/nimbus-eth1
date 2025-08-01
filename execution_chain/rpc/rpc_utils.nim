@@ -308,3 +308,25 @@ proc createAccessList*(header: Header,
       )
 
     prevTracer = tracer
+
+proc getEthConfigObject*(com: CommonRef, chain: ForkedChainRef): EthConfigObject =
+  ## Returns the EthConfigObject for the given chain.
+  ##
+  ## This is used to return the `eth_config` object in the JSON-RPC API.
+  var
+    current: ConfigObject
+    res: EthConfigObject
+  
+  
+
+  current.activationTime                      = Quantity com.activationTime(fork).get(EthTime(0))
+  current.chainId                             = com.chainId
+  current.blobSchedule.max                    = Quantity com.maxBlobsPerBlock(fork)
+  current.blobSchedule.target                 = Quantity com.targetBlobsPerBlock(fork)
+  current.blobSchedule.baseFeeUpdateFraction  = Quantity com.baseFeeUpdateFraction(fork)
+
+  res.current = current
+  res.next = Opt.none(ConfigObject)
+  res.last = Opt.none(ConfigObject)
+  return res
+
