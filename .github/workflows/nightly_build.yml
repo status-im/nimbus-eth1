@@ -24,6 +24,10 @@ jobs:
         with:
           ref: ${{ github.ref }}
 
+      - name: Extract branch name
+        id: extract_branch
+        run: echo "branch_name=${GITHUB_REF#refs/heads/}" >> $GITHUB_OUTPUT
+
       - name: Build project
         id: make_dist
         run: |
@@ -31,7 +35,7 @@ jobs:
           cd dist
           ARCHIVE=$(echo *.tar.gz)
           tar -xzf ${ARCHIVE}
-          NEW_ARCHIVE_DIR="nimbus-eth1-linux-amd64_${{ github.#refs/heads/ }}_$(git rev-parse --short=8 HEAD)"
+          NEW_ARCHIVE_DIR="nimbus-eth1-linux-amd64_${{ steps.extract_branch.outputs.branch_name }}_$(git rev-parse --short=8 HEAD)"
           mv ${ARCHIVE%.tar.gz} ${NEW_ARCHIVE_DIR}
           tar -czf ${NEW_ARCHIVE_DIR}.tar.gz ${NEW_ARCHIVE_DIR}
           cp ${NEW_ARCHIVE_DIR}.tar.gz nimbus-eth1-linux-amd64-nightly-latest.tar.gz
@@ -78,7 +82,7 @@ jobs:
           cd dist
           ARCHIVE=$(echo *.tar.gz)
           tar -xzf ${ARCHIVE}
-          NEW_ARCHIVE_DIR="nimbus-eth1-linux-arm64_${{ github.#refs/heads/ }}_$(git rev-parse --short=8 HEAD)"
+          NEW_ARCHIVE_DIR="nimbus-eth1-linux-arm64_${{ steps.extract_branch.outputs.branch_name }}_$(git rev-parse --short=8 HEAD)"
           mv ${ARCHIVE%.tar.gz} ${NEW_ARCHIVE_DIR}
           tar -czf ${NEW_ARCHIVE_DIR}.tar.gz ${NEW_ARCHIVE_DIR}
           cp ${NEW_ARCHIVE_DIR}.tar.gz nimbus-eth1-linux-arm64-nightly-latest.tar.gz
@@ -117,7 +121,7 @@ jobs:
           cd dist
           ARCHIVE=$(echo *.tar.gz)
           tar -xzf ${ARCHIVE}
-          NEW_ARCHIVE_DIR="nimbus-eth1-windows-amd64_${{ github.#refs/heads/ }}_$(git rev-parse --short=8 HEAD)"
+          NEW_ARCHIVE_DIR="nimbus-eth1-windows-amd64_${{ steps.extract_branch.outputs.branch_name }}_$(git rev-parse --short=8 HEAD)"
           mv ${ARCHIVE%.tar.gz} ${NEW_ARCHIVE_DIR}
           tar -czf ${NEW_ARCHIVE_DIR}.tar.gz ${NEW_ARCHIVE_DIR}
           cp ${NEW_ARCHIVE_DIR}.tar.gz nimbus-eth1-windows-amd64-nightly-latest.tar.gz
@@ -156,7 +160,7 @@ jobs:
           cd dist
           ARCHIVE=$(echo *.tar.gz)
           tar -xzf ${ARCHIVE}
-          NEW_ARCHIVE_DIR="nimbus-eth1-macos-arm64_${{ github.#refs/heads/ }}_$(git rev-parse --short=8 HEAD)"
+          NEW_ARCHIVE_DIR="nimbus-eth1-macos-arm64_${{ steps.extract_branch.outputs.branch_name }}_$(git rev-parse --short=8 HEAD)"
           mv ${ARCHIVE%.tar.gz} ${NEW_ARCHIVE_DIR}
           tar -czf ${NEW_ARCHIVE_DIR}.tar.gz ${NEW_ARCHIVE_DIR}
           cp ${NEW_ARCHIVE_DIR}.tar.gz nimbus-eth1-macos-arm64-nightly-latest.tar.gz
