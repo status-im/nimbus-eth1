@@ -14,7 +14,6 @@ import
   ../../common/common,
   ../../constants,
   ../../utils/utils,
-  ../../constants,
   ../../db/ledger,
   ../../transaction,
   ../../evm/state,

@@ -20,7 +20,7 @@ proc getBlockFromJson(filepath: string): BlockObject =
   let blk = JrpcConv.decode(blkBytes.get, BlockObject)
   return blk
 
-let blk = getBlockFromJson("nimbus_verified_proxy/tests/block.json")
+let blk = getBlockFromJson("nimbus_verified_proxy/tests/data/Istanbul.json")
 
 suite "test transaction hashing":
   test "check tx hash":

@@ -9,69 +9,154 @@
 
 import
   unittest2,
-  stint,
-  web3/[eth_api_types, eth_api],
   stew/io2,
-  json_rpc/[rpcclient, rpcproxy, rpcserver, jsonmarshal],
-  eth/common/eth_types_rlp,
-  ../../execution_chain/rpc/cors,
-  ../../execution_chain/common/common,
-  ../types,
-  ../rpc/evm,
-  ../rpc/rpc_eth_api,
-  ../rpc/blocks,
-  ../nimbus_verified_proxy_conf,
+  json_rpc/[rpcclient, rpcserver, rpcproxy, jsonmarshal],
+  web3/[eth_api_types, eth_api],
   ../header_store,
+  ../rpc/blocks,
+  ../types,
+  ./test_setup,
   ./test_api_backend
-
-proc startVerifiedProxy(
-    testState: TestApiState, headerCacheLen: int, maxBlockWalk: uint64
-): VerifiedRpcProxy =
-  let
-    chainId = 1.u256
-    networkId = 1.u256
-    authHooks = @[httpCors(@[])] # TODO: for now we serve all cross origin requests
-    web3Url = Web3Url(kind: Web3UrlKind.HttpUrl, web3Url: "http://127.0.0.1:8545")
-    clientConfig = web3Url.asClientConfig()
-    rpcProxy = RpcProxy.new([initTAddress("127.0.0.1", 8545)], clientConfig, authHooks)
-    headerStore = HeaderStore.new(headerCacheLen)
-
-    verifiedProxy = VerifiedRpcProxy.init(rpcProxy, headerStore, chainId, maxBlockWalk)
-
-  verifiedProxy.evm = AsyncEvm.init(verifiedProxy.toAsyncEvmStateBackend(), networkId)
-  verifiedProxy.rpcClient = initTestApiBackend(testState)
-  verifiedProxy.installEthApiHandlers()
-
-  waitFor rpcProxy.start()
-  waitFor verifiedProxy.verifyChaindId()
-  return verifiedProxy
-
-proc stopVerifiedProxy(vp: VerifiedRpcProxy) =
-  waitFor vp.proxy.stop()
 
 proc getBlockFromJson(filepath: string): BlockObject =
   var blkBytes = readAllBytes(filepath)
   let blk = JrpcConv.decode(blkBytes.get, BlockObject)
   return blk
 
-suite "rpc blocks":
-  test "get block by hash - correct block - completeness check":
+template checkEqual(blk1: BlockObject, blk2: BlockObject): bool =
+  JrpcConv.encode(blk1).JsonString == JrpcConv.encode(blk2).JsonString
+
+template checkEqual(tx1: TransactionObject, tx2: TransactionObject): bool =
+  JrpcConv.encode(tx1).JsonString == JrpcConv.encode(tx2).JsonString
+
+suite "test verified blocks":
+  let
+    ts = TestApiState.init(1.u256)
+    vp = startTestSetup(ts, 1, 9) # header store holds 1 and maxBlockWalk is 9
+
+  test "check fetching blocks on every fork":
+    let forkBlockNames = [
+      "Frontier", "Homestead", "DAO", "TangerineWhistle", "SpuriousDragon", "Byzantium",
+      "Constantinople", "Istanbul", "MuirGlacier", "StakingDeposit", "Berlin", "London",
+      "ArrowGlacier", "GrayGlacier", "Paris", "Shanghai", "Cancun", "Prague",
+    ]
+
+    for blockName in forkBlockNames:
+      let blk =
+        getBlockFromJson("nimbus_verified_proxy/tests/data/" & blockName & ".json")
+
+      ts.loadBlock(blk)
+      discard vp.headerStore.add(convHeader(blk), blk.hash)
+
+      # reuse verified proxy's internal client. Conveniently it is looped back to the proxy server
+      let verifiedBlk = waitFor vp.proxy.getClient().eth_getBlockByHash(blk.hash, true)
+
+      check checkEqual(blk, verifiedBlk)
+
+      ts.clear()
+      vp.headerStore.clear()
+
+  test "check fetching blocks by number and tags":
     let
-      testState = TestApiState.init(1.u256)
-      vp = startVerifiedProxy(testState, 1, 1)
-      blk = getBlockFromJson("nimbus_verified_proxy/tests/block.json")
+      blk = getBlockFromJson("nimbus_verified_proxy/tests/data/Paris.json")
+      numberTag = BlockTag(kind: BlockIdentifierKind.bidNumber, number: blk.number)
+      finalTag = BlockTag(kind: BlockIdentifierKind.bidAlias, alias: "finalized")
+      earliestTag = BlockTag(kind: BlockIdentifierKind.bidAlias, alias: "earliest")
+      latestTag = BlockTag(kind: BlockIdentifierKind.bidAlias, alias: "latest")
+      hash = blk.hash
 
-    testState.loadFullBlock(blk.hash, blk)
-    let status = vp.headerStore.add(convHeader(blk), blk.hash).valueOr:
-      raise newException(ValueError, error)
+    ts.clear()
+    vp.headerStore.clear()
 
-    # reuse verified proxy's internal client. Conveniently it is looped back to the proxy server
-    let verifiedBlk = waitFor vp.proxy.getClient().eth_getBlockByHash(blk.hash, true)
+    ts.loadBlock(blk)
+    discard vp.headerStore.add(convHeader(blk), blk.hash)
+    discard vp.headerStore.updateFinalized(convHeader(blk), blk.hash)
 
-    vp.stopVerifiedProxy()
+    var verifiedBlk = waitFor vp.proxy.getClient().eth_getBlockByNumber(numberTag, true)
+    check checkEqual(blk, verifiedBlk)
+
+    verifiedBlk = waitFor vp.proxy.getClient().eth_getBlockByNumber(finalTag, true)
+    check checkEqual(blk, verifiedBlk)
+
+    verifiedBlk = waitFor vp.proxy.getClient().eth_getBlockByNumber(earliestTag, true)
+    check checkEqual(blk, verifiedBlk)
+
+    verifiedBlk = waitFor vp.proxy.getClient().eth_getBlockByNumber(latestTag, true)
+    check checkEqual(blk, verifiedBlk)
+
+  test "check block walk":
+    ts.clear()
+    vp.headerStore.clear()
 
     let
-      blkStr = JrpcConv.encode(blk).JsonString
-      verifiedBlkStr = JrpcConv.encode(verifiedBlk).JsonString
+      targetBlockNum = 22431080
+      sourceBlockNum = 22431090
 
-    check blkStr == verifiedBlkStr
+    for i in targetBlockNum .. sourceBlockNum:
+      let
+        filename = "nimbus_verified_proxy/tests/data/" & $i & ".json"
+        blk = getBlockFromJson(filename)
+
+      ts.loadBlock(blk)
+      if i == sourceBlockNum:
+        discard vp.headerStore.add(convHeader(blk), blk.hash)
+
+    let
+      unreachableTargetTag =
+        BlockTag(kind: BlockIdentifierKind.bidNumber, number: Quantity(targetBlockNum))
+      reachableTargetTag = BlockTag(
+        kind: BlockIdentifierKind.bidNumber, number: Quantity(targetBlockNum + 1)
+      )
+
+    # TODO: catch the exact error 
+    try:
+      let verifiedBlk =
+        waitFor vp.proxy.getClient().eth_getBlockByNumber(unreachableTargetTag, true)
+      check(false)
+    except CatchableError as e:
+      check(true)
+
+    # TODO: catch the exact error 
+    try:
+      let verifiedBlk =
+        waitFor vp.proxy.getClient().eth_getBlockByNumber(reachableTargetTag, true)
+      check(true)
+    except CatchableError as e:
+      check(false)
+
+  test "check block related API methods":
+    ts.clear()
+    vp.headerStore.clear()
+
+    let
+      blk = getBlockFromJson("nimbus_verified_proxy/tests/data/Paris.json")
+      numberTag = BlockTag(kind: BlockIdentifierKind.bidNumber, number: blk.number)
+      hash = blk.hash
+
+    ts.loadBlock(blk)
+    discard vp.headerStore.add(convHeader(blk), blk.hash)
+
+    let
+      uncleCountByHash = waitFor vp.proxy.getClient().eth_getUncleCountByBlockHash(hash)
+      uncleCountByNum =
+        waitFor vp.proxy.getClient().eth_getUncleCountByBlockNumber(numberTag)
+      txCountByHash =
+        waitFor vp.proxy.getClient().eth_getBlockTransactionCountByHash(hash)
+      txCountByNum =
+        waitFor vp.proxy.getClient().eth_getBlockTransactionCountByNumber(numberTag)
+      txByHash = waitFor vp.proxy.getClient().eth_getTransactionByBlockHashAndIndex(
+        hash, Quantity(0)
+      )
+      txByNum = waitFor vp.proxy.getClient().eth_getTransactionByBlockNumberAndIndex(
+        numberTag, Quantity(0)
+      )
+
+    check Quantity(blk.uncles.len()) == uncleCountByHash
+    check uncleCountByHash == uncleCountByNum
+    check Quantity(blk.transactions.len()) == txCountByHash
+    check txCountByHash == txCountByNum
+
+    doAssert blk.transactions[0].kind == tohTx
+
+    check checkEqual(txByHash, blk.transactions[0].tx)
+    check checkEqual(txByHash, txByNum)
