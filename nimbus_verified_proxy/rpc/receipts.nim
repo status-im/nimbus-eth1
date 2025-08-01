@@ -13,6 +13,7 @@ import
   json_rpc/[rpcserver, rpcclient],
   web3/[eth_api_types, eth_api],
   ../../execution_chain/beacon/web3_eth_conv,
+  ../../execution_chain/rpc/filters,
   ../types,
   ./blocks
 
@@ -42,7 +43,7 @@ func toReceipts(recs: openArray[ReceiptObject]): seq[Receipt] =
   recs.mapIt(it.toReceipt)
 
 proc getReceipts(
-    vp: VerifiedRpcProxy, header: Header, blockTag: BlockTag
+    vp: VerifiedRpcProxy, header: Header, blockTag: types.BlockTag
 ): Future[Result[seq[ReceiptObject], string]] {.async.} =
   let rxs =
     try:
@@ -60,12 +61,17 @@ proc getReceipts(
   return ok(rxs.get())
 
 proc getReceipts*(
-    vp: VerifiedRpcProxy, blockTag: BlockTag
+    vp: VerifiedRpcProxy, blockTag: types.BlockTag
 ): Future[Result[seq[ReceiptObject], string]] {.async.} =
-  let header = (await vp.getHeader(blockTag)).valueOr:
-    return err(error)
+  let
+    header = (await vp.getHeader(blockTag)).valueOr:
+      return err(error)
+    # all other tags are automatically resolved while getting the header
+    numberTag = types.BlockTag(
+      kind: BlockIdentifierKind.bidNumber, number: Quantity(header.number)
+    )
 
-  await vp.getReceipts(header, blockTag)
+  await vp.getReceipts(header, numberTag)
 
 proc getReceipts*(
     vp: VerifiedRpcProxy, blockHash: Hash32
@@ -73,10 +79,11 @@ proc getReceipts*(
   let
     header = (await vp.getHeader(blockHash)).valueOr:
       return err(error)
-    blockTag =
-      BlockTag(kind: BlockIdentifierKind.bidNumber, number: Quantity(header.number))
+    numberTag = types.BlockTag(
+      kind: BlockIdentifierKind.bidNumber, number: Quantity(header.number)
+    )
 
-  await vp.getReceipts(header, blockTag)
+  await vp.getReceipts(header, numberTag)
 
 proc getLogs*(
     vp: VerifiedRpcProxy, filterOptions: FilterOptions
@@ -93,30 +100,33 @@ proc getLogs*(
   var res: seq[LogObject]
 
   # store block hashes contains the logs so that we can batch receipt requests
+  var
+    prevBlockHash: Hash32
+    logIndexDiff: int
+    prevTxIdx: int
+    rxs: seq[ReceiptObject]
+
   for lg in logObjs:
-    if lg.blockHash.isSome():
-      let lgBlkHash = lg.blockHash.get()
-      # TODO: a cache will solve downloading the same block receipts for multiple logs
-      var rxs = (await vp.getReceipts(lgBlkHash)).valueOr:
-        return err(error)
+    # none only for pending logs, we omit those logs
+    if lg.blockHash.isSome() and lg.transactionIndex.isSome() and lg.logIndex.isSome():
+      # exploit sequentiality of logs 
+      if prevBlockHash != lg.blockHash.get():
+        # TODO: a cache will solve downloading the same block receipts for multiple logs
+        rxs = (await vp.getReceipts(lg.blockHash.get())).valueOr:
+          return err(error)
+        prevBlockHash = lg.blockHash.get()
 
-      if lg.transactionIndex.isNone():
-        for rx in rxs:
-          for rxLog in rx.logs:
-            # only add verified logs
-            if rxLog.address == lg.address and rxLog.data == lg.data and
-                rxLog.topics == lg.topics:
-              res.add(lg)
-      else:
-        let
-          txIdx = lg.transactionIndex.get()
-          rx = rxs[distinctBase(txIdx)]
+      let
+        txIdx = int(distinctBase(lg.transactionIndex.get()))
+        logIdx =
+          int(distinctBase(lg.logIndex.get())) -
+          int(distinctBase(rxs[txIdx].logs[0].logIndex.get()))
+        rxLog = rxs[txIdx].logs[logIdx]
 
-        # only add verified logs
-        for rxLog in rx.logs:
-          if rxLog.address == lg.address and rxLog.data == lg.data and
-              rxLog.topics == lg.topics:
-            res.add(lg)
+      if rxLog.address == lg.address and rxLog.data == lg.data and
+          rxLog.topics == lg.topics and
+          match(toLog(lg), filterOptions.address, filterOptions.topics):
+        res.add(lg)
 
   if res.len == 0:
     return err("no logs could be verified")

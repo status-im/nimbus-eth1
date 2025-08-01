@@ -21,15 +21,15 @@ import
   ./test_api_backend
 
 proc startTestSetup*(
-    testState: TestApiState, headerCacheLen: int, maxBlockWalk: uint64
+    testState: TestApiState, headerCacheLen: int, maxBlockWalk: uint64, port: int = 8545
 ): VerifiedRpcProxy =
   let
     chainId = 1.u256
     networkId = 1.u256
     authHooks = @[httpCors(@[])] # TODO: for now we serve all cross origin requests
-    web3Url = Web3Url(kind: Web3UrlKind.HttpUrl, web3Url: "http://127.0.0.1:8545")
+    web3Url = Web3Url(kind: Web3UrlKind.HttpUrl, web3Url: "http://127.0.0.1:" & $port)
     clientConfig = web3Url.asClientConfig()
-    rpcProxy = RpcProxy.new([initTAddress("127.0.0.1", 8545)], clientConfig, authHooks)
+    rpcProxy = RpcProxy.new([initTAddress("127.0.0.1", port)], clientConfig, authHooks)
     headerStore = HeaderStore.new(headerCacheLen)
 
     vp = VerifiedRpcProxy.init(rpcProxy, headerStore, chainId, maxBlockWalk)
