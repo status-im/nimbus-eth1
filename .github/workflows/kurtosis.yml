@@ -23,6 +23,9 @@ on:
       - '.github/workflows/portal*.yml'
       - 'nimbus_verified_proxy/**'
       - '.github/workflows/nimbus_verified_proxy.yml'
+      - '.github/workflows/build_base_image.yml'
+      - 'docker/**'
+
   pull_request:
     branches:
       - master
@@ -35,6 +38,8 @@ on:
       - '.github/workflows/portal*.yml'
       - 'nimbus_verified_proxy/**'
       - '.github/workflows/nimbus_verified_proxy.yml'
+      - '.github/workflows/build_base_image.yml'
+      - 'docker/**'
 
 jobs:
   build:
