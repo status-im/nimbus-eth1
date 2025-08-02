@@ -354,10 +354,8 @@ proc populateConfigObject*(com: CommonRef, fork: HardFork, latestHeader: Header)
     evmFork = ToEVMFork[fork]
     lastPrecompile = getMaxPrecompile(evmFork)
 
-  configObject.precompiles = newSeq[PrecompilePair](ord(lastPrecompile) + 1)
-
   for i in Precompiles.low..lastPrecompile:
-    configObject.precompiles[ord(i)] = PrecompilePair(
+    configObject.precompiles.add PrecompilePair(
       address: precompileAddrs[i],
       name: precompileNames[i],
     )

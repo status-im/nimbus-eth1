@@ -30,6 +30,9 @@ export
   taskpools,
   logging
 
+logScope:
+  topics = "common"
+
 type
   HeaderChainUpdateCB* = proc(hdr: Header; fin: Hash32) {.gcsafe, raises: [].}
     ## Inform `CL` sub-module `header_chain_cache` about new head.
@@ -292,7 +295,7 @@ func toHardFork*(
   toHardFork(com.forkTransitionTable, forkDeterminer)
 
 func toHardFork*(com: CommonRef, timestamp: EthTime): HardFork =
-  for fork in countdown(com.forkTransitionTable.timeThresholds.high, Shanghai):
+  for fork in countdown(HardFork.high, Shanghai):
     if com.forkTransitionTable.timeThresholds[fork].isSome and timestamp >= com.forkTransitionTable.timeThresholds[fork].get:
       return fork
 
@@ -309,14 +312,16 @@ func toEVMFork*(com: CommonRef, forkDeterminer: ForkDeterminationInfo): EVMFork 
 func nextFork*(com: CommonRef, currentFork: HardFork): Opt[HardFork] =
   ## Returns the next hard fork after the given one
   ## The next fork can also be the last fork
-  for fork in currentFork ..< com.forkTransitionTable.timeThresholds.high:
+  if currentFork < Shanghai:
+    return Opt.none(HardFork) 
+  for fork in currentFork .. HardFork.high:
     if fork > currentFork and com.forkTransitionTable.timeThresholds[fork].isSome:
       return Opt.some(fork)
   return Opt.none(HardFork)
 
 func lastFork*(com: CommonRef, currentFork: HardFork): Opt[HardFork] =
   ## Returns the last hard fork before the given one
-  for fork in countdown(com.forkTransitionTable.timeThresholds.high, currentFork):
+  for fork in countdown(HardFork.high, currentFork):
     if com.forkTransitionTable.timeThresholds[fork].isSome:
       return Opt.some(HardFork(fork))
   return Opt.none(HardFork)

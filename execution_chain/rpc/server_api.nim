@@ -717,12 +717,13 @@ proc setupServerAPI*(api: ServerAPIRef, server: RpcServer, ctx: EthContext) =
 
   server.rpc("eth_config") do() -> EthConfigObject:
     ## Returns the current, next and last configuration
-    let 
-      currentFork = api.com.toHardFork(api.chain.latestNumber.forkDeterminationInfo)
-      nextFork = api.com.nextFork(currentFork)
-      lastFork = api.com.lastFork(currentFork)
+    let currentFork = api.com.toHardFork(api.chain.latestNumber.forkDeterminationInfo)
 
     if currentFork < Shanghai:
       return nil
 
+    let
+      nextFork = api.com.nextFork(currentFork)
+      lastFork = api.com.lastFork(currentFork)
+    
     return api.com.getEthConfigObject(api.chain, currentFork, nextFork, lastFork)
