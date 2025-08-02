@@ -273,14 +273,14 @@ jobs:
         if: runner.os == 'Windows'
         run: |
           gcc --version
-          DEFAULT_MAKE_FLAGS="-j1 ROCKSDB_CI_CACHE=RocksBinCache"
+          DEFAULT_MAKE_FLAGS="-j${ncpu} ROCKSDB_CI_CACHE=RocksBinCache"
           mingw32-make ${DEFAULT_MAKE_FLAGS} nimbus_portal_client
           build/nimbus_portal_client.exe --help
           # find . -type d -name ".git" -exec rm -rf {} +
           find . -type d -name "nimcache" -exec rm -rf {} +
           mingw32-make ${DEFAULT_MAKE_FLAGS} portal-tools
           find . -type d -name "nimcache" -exec rm -rf {} +
-          mingw32-make portal-test
+          mingw32-make ${DEFAULT_MAKE_FLAGS} portal-test
           find . -type d -name "nimcache" -exec rm -rf {} +
 
       - name: Run Nimbus Portal tests (Linux)
@@ -295,7 +295,7 @@ jobs:
           build/nimbus_portal_client --help
           env CC=gcc make ${DEFAULT_MAKE_FLAGS} portal-tools
           # CC is needed to select correct compiler 32/64 bit
-          env CC=gcc CXX=g++ make portal-test
+          env CC=gcc CXX=g++ make ${DEFAULT_MAKE_FLAGS} portal-test
 
       - name: Run Nimbus Portal tests (Macos)
         if: runner.os == 'Macos'
@@ -305,7 +305,7 @@ jobs:
           build/nimbus_portal_client --help
           make ${DEFAULT_MAKE_FLAGS} portal-tools
           # "-static" option will not work for osx unless static system libraries are provided
-          make portal-test
+          make ${DEFAULT_MAKE_FLAGS} portal-test
 
       - name: Run Portal testnet
         run: |
