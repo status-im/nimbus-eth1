@@ -309,24 +309,51 @@ proc createAccessList*(header: Header,
 
     prevTracer = tracer
 
-proc getEthConfigObject*(com: CommonRef, chain: ForkedChainRef): EthConfigObject =
+proc populateConfigObject*(com: CommonRef, fork: HardFork): ConfigObject =
+  var configObject: ConfigObject
+
+  configObject.activationTime = Quantity com.activationTime(fork).get(EthTime(0))
+  configObject.chainId = com.chainId
+  configObject.blobSchedule.max = Quantity com.maxBlobsPerBlock(fork)
+  configObject.blobSchedule.target = Quantity com.targetBlobsPerBlock(fork)
+  configObject.blobSchedule.baseFeeUpdateFraction = Quantity com.baseFeeUpdateFraction(fork)
+
+  # Precompiles
+  let 
+    evmFork = ToEVMFork[fork]
+    lastPrecompile = getMaxPrecompile(evmFork)
+
+  configObject.precompiles = newSeq[PrecompilePair](ord(lastPrecompile) + 1)
+
+  for i in Precompiles.low..lastPrecompile:
+    configObject.precompiles[ord(i)] = PrecompilePair(
+      address: precompileAddrs[i],
+      name: precompileNames[i],
+    )
+
+  return configObject
+
+proc getEthConfigObject*(com: CommonRef, 
+                         chain: ForkedChainRef,
+                         fork: HardFork,
+                         nextFork, lastFork: Opt[HardFork]): EthConfigObject =
   ## Returns the EthConfigObject for the given chain.
-  ##
   ## This is used to return the `eth_config` object in the JSON-RPC API.
+
   var
-    current: ConfigObject
     res: EthConfigObject
-  
-  
 
-  current.activationTime                      = Quantity com.activationTime(fork).get(EthTime(0))
-  current.chainId                             = com.chainId
-  current.blobSchedule.max                    = Quantity com.maxBlobsPerBlock(fork)
-  current.blobSchedule.target                 = Quantity com.targetBlobsPerBlock(fork)
-  current.blobSchedule.baseFeeUpdateFraction  = Quantity com.baseFeeUpdateFraction(fork)
+  res.current = com.populateConfigObject(fork)
 
-  res.current = current
-  res.next = Opt.none(ConfigObject)
-  res.last = Opt.none(ConfigObject)
+  if nextFork.isSome:
+    res.next = Opt.some(com.populateConfigObject(nextFork.get))
+  else:
+    res.next = Opt.none(ConfigObject)
+
+  if lastFork.isSome:
+    res.last = Opt.some(com.populateConfigObject(lastFork.get))
+  else:
+    res.last = Opt.none(ConfigObject)
+
   return res
 

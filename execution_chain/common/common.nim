@@ -306,6 +306,21 @@ func toEVMFork*(com: CommonRef, forkDeterminer: ForkDeterminationInfo): EVMFork 
   let fork = com.toHardFork(forkDeterminer)
   ToEVMFork[fork]
 
+func nextFork*(com: CommonRef, currentFork: HardFork): Opt[HardFork] =
+  ## Returns the next hard fork after the given one
+  ## The next fork can also be the last fork
+  for fork in currentFork ..< com.forkTransitionTable.timeThresholds.high:
+    if fork > currentFork and com.forkTransitionTable.timeThresholds[fork].isSome:
+      return Opt.some(fork)
+  return Opt.none(HardFork)
+
+func lastFork*(com: CommonRef, currentFork: HardFork): Opt[HardFork] =
+  ## Returns the last hard fork before the given one
+  for fork in countdown(com.forkTransitionTable.timeThresholds.high, currentFork):
+    if com.forkTransitionTable.timeThresholds[fork].isSome:
+      return Opt.some(HardFork(fork))
+  return Opt.none(HardFork)
+
 func activationTime*(com: CommonRef, fork: HardFork): Opt[EthTime] =
   ## Returns the activation time of the given hard fork
   com.forkTransitionTable.timeThresholds[fork]
