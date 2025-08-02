@@ -24,6 +24,10 @@ type
     proofs: Table[ProofQuery, ProofResponse]
     accessLists: Table[AccessListQuery, AccessListResult]
     codes: Table[CodeQuery, seq[byte]]
+    blockReceipts: Table[Hash32, seq[ReceiptObject]]
+    receipts: Table[Hash32, ReceiptObject]
+    transactions: Table[Hash32, TransactionObject]
+    logs: Table[Hash, seq[LogObject]]
 
 func init*(T: type TestApiState, chainId: UInt256): T =
   TestApiState(
@@ -33,6 +37,10 @@ func init*(T: type TestApiState, chainId: UInt256): T =
     proofs: initTable[ProofQuery, ProofResponse](),
     accessLists: initTable[AccessListQuery, AccessListResult](),
     codes: initTable[CodeQuery, seq[byte]](),
+    blockReceipts: initTable[Hash32, seq[ReceiptObject]](),
+    receipts: initTable[Hash32, ReceiptObject](),
+    transactions: initTable[Hash32, TransactionObject](),
+    logs: initTable[Hash, seq[LogObject]](),
   )
 
 func clear*(t: TestApiState) =
@@ -41,6 +49,10 @@ func clear*(t: TestApiState) =
   t.proofs.clear()
   t.accessLists.clear()
   t.codes.clear()
+  t.blockReceipts.clear()
+  t.receipts.clear()
+  t.transactions.clear()
+  t.logs.clear()
 
 template loadBlock*(t: TestApiState, blk: BlockObject) =
   t.nums[blk.number] = blk.hash
@@ -68,11 +80,64 @@ template loadCode*(
 ) =
   t.codes[(address, hash(blockId))] = code
 
+template loadTransaction*(t: TestApiState, txHash: Hash32, tx: TransactionObject) =
+  t.transactions[txHash] = tx
+
+template loadReceipt*(t: TestApiState, txHash: Hash32, rx: ReceiptObject) =
+  t.receipts[txHash] = rx
+
+template loadBlockReceipts*(
+    t: TestApiState, blk: BlockObject, receipts: seq[ReceiptObject]
+) =
+  t.blockReceipts[blk.hash] = receipts
+  t.loadBlock(blk)
+
+template loadBlockReceipts*(
+    t: TestApiState, blkHash: Hash32, blkNum: Quantity, receipts: seq[ReceiptObject]
+) =
+  t.blockReceipts[blkHash] = receipts
+  t.nums[blkNum] = blkHash
+
+template loadLogs*(
+    t: TestApiState, filterOptions: FilterOptions, logs: seq[LogObject]
+) =
+  t.logs[hash(filterOptions)] = logs
+
 func hash*(x: BlockTag): Hash =
   if x.kind == BlockIdentifierKind.bidAlias:
     return hash(x.alias)
   else:
     return hash(x.number)
+
+func hash*[T](x: SingleOrList[T]): Hash =
+  if x.kind == SingleOrListKind.slkSingle:
+    return hash(x.single)
+  elif x.kind == SingleOrListKind.slkList:
+    return hash(x.list)
+  else:
+    return hash(0)
+
+func hash*(x: FilterOptions): Hash =
+  let
+    fromHash =
+      if x.fromBlock.isSome():
+        uint64(hash(x.fromBlock.get))
+      else:
+        uint64(hash(0))
+    toHash =
+      if x.toBlock.isSome():
+        uint64(hash(x.toBlock.get))
+      else:
+        uint64(hash(0))
+    addrHash = uint64(hash(x.address))
+    topicsHash = uint64(hash(x.topics))
+    blockHashHash =
+      if x.blockHash.isSome():
+        uint64(hash(x.blockHash.get))
+      else:
+        uint64(hash(0))
+
+  return hash(fromHash + toHash + addrHash + topicsHash + blockHashHash)
 
 func convToPartialBlock(blk: BlockObject): BlockObject =
   var txHashes: seq[TxOrHash]
@@ -148,6 +213,23 @@ proc initTestApiBackend*(t: TestApiState): EthApiBackend =
     ): Future[seq[byte]] {.async.} =
       t.codes[(address, hash(blockId))]
 
+    getBlockReceiptsProc = proc(
+        blockId: BlockTag
+    ): Future[Opt[seq[ReceiptObject]]] {.async.} =
+      let blkHash = t.nums[blockId.number]
+      Opt.some(t.blockReceipts[blkHash])
+
+    getLogsProc = proc(filterOptions: FilterOptions): Future[seq[LogObject]] {.async.} =
+      t.logs[hash(filterOptions)]
+
+    getTransactionByHashProc = proc(
+        txHash: Hash32
+    ): Future[TransactionObject] {.async.} =
+      t.transactions[txHash]
+
+    getTransactionReceiptProc = proc(txHash: Hash32): Future[ReceiptObject] {.async.} =
+      t.receipts[txHash]
+
   EthApiBackend(
     eth_chainId: ethChainIdProc,
     eth_getBlockByHash: getBlockByHashProc,
@@ -155,4 +237,8 @@ proc initTestApiBackend*(t: TestApiState): EthApiBackend =
     eth_getProof: getProofProc,
     eth_createAccessList: createAccessListProc,
     eth_getCode: getCodeProc,
+    eth_getTransactionByHash: getTransactionByHashProc,
+    eth_getTransactionReceipt: getTransactionReceiptProc,
+    eth_getLogs: getLogsProc,
+    eth_getBlockReceipts: getBlockReceiptsProc,
   )
