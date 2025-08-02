@@ -120,10 +120,8 @@ VERIF_PROXY_OUT_PATH ?= build/libverifproxy/
 	rocksdb \
 	dist-amd64 \
 	dist-arm64 \
-	dist-arm \
 	dist-win64 \
 	dist-macos \
-	dist-macos-arm64 \
 	dist
 
 ifeq ($(NIM_PARAMS),)
@@ -194,7 +192,11 @@ endif
 NIM_PARAMS := $(NIM_PARAMS) $(NIM_ETH_PARAMS)
 
 #- deletes and recreates "nimbus.nims" which on Windows is a copy instead of a proper symlink
-update: | sanity-checks update-test
+update: | update-common
+	rm -rf nimbus.nims && \
+		$(MAKE) nimbus.nims $(HANDLE_OUTPUT)
+
+init: | sanity-checks update-test
 	rm -rf nimbus.nims && \
 		$(MAKE) nimbus.nims $(HANDLE_OUTPUT)
 	+ "$(MAKE)" --no-print-directory deps-common
