@@ -11,7 +11,7 @@ import
   ../execution_chain/compile_info
 
 import
-  std/[os, osproc, strutils, net, options],
+  std/[os, osproc, net, options, streams],
   chronicles,
   eth/net/nat,
   metrics,
@@ -28,6 +28,7 @@ import
   ./db/core_db/persistent,
   ./db/storage_types,
   ./sync/wire_protocol,
+  ./sync/beacon/replay,
   ./common/chain_config_hash,
   ./portal/portal
 
@@ -120,6 +121,24 @@ proc setupP2P(nimbus: NimbusNode, conf: NimbusConf,
   nimbus.beaconSyncRef = BeaconSyncRef.init(
     nimbus.ethNode, nimbus.fc, conf.maxPeers)
 
+  # Optional tracer
+  if conf.beaconSyncTraceFile.isSome():
+    nimbus.beaconSyncRef.tracerInit(
+      conf.beaconSyncTraceFile.unsafeGet.string, conf.beaconSyncTraceSessions)
+
+  # Optional replay
+  if conf.beaconSyncReplayFile.isSome():
+    if conf.beaconSyncTraceFile.isSome():
+      fatal "Cannot have both "&
+        "--beacon-sync-trace-file and --beacon-sync-replay-file"
+    if conf.beaconSyncTargetFile.isSome():
+      fatal "Cannot have both "&
+        "--beacon-sync-target-file and --beacon-sync-replay-file"
+    nimbus.beaconSyncRef.replayInit(
+      conf.beaconSyncReplayFile.unsafeGet.string,
+      conf.beaconSyncReplayNoisyFrom.get(high uint),
+      conf.beaconSyncReplayFakeImport)
+
   # Optional for pre-setting the sync target (i.e. debugging)
   if conf.beaconSyncTargetFile.isSome():
     nimbus.beaconSyncRef.targetInit conf.beaconSyncTargetFile.unsafeGet.string
@@ -197,6 +216,18 @@ proc run(nimbus: NimbusNode, conf: NimbusConf) =
   info "Launching execution client",
       version = FullVersionStr,
       conf
+
+  case conf.cmd
+  of NimbusCmd.`capture-log`:
+    if conf.beaconSyncCaptureFile.isNone():
+      fatal "Capture file is required, use --beacon-sync-capture-file"
+      quit(QuitFailure)
+    let st = conf.beaconSyncCaptureFile.unsafeGet.string.newFileStream fmRead
+    ReplayReaderRef.init(st).captureLog(proc(): bool =
+      nimbus.state == NimbusState.Stopping)
+    return
+  else:
+    discard
 
   # Trusted setup is needed for processing Cancun+ blocks
   # If user not specify the trusted setup, baked in
@@ -276,7 +307,8 @@ proc run(nimbus: NimbusNode, conf: NimbusConf) =
     setupP2P(nimbus, conf, com)
     setupRpc(nimbus, conf, com)
 
-    if conf.maxPeers > 0 and conf.engineApiServerEnabled():
+    if (conf.maxPeers > 0 and conf.engineApiServerEnabled()) or
+       conf.beaconSyncReplayFile.isSome():
       # Not starting syncer if there is definitely no way to run it. This
       # avoids polling (i.e. waiting for instructions) and some logging.
       if not nimbus.beaconSyncRef.start():

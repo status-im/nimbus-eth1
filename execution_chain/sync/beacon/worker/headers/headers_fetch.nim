@@ -18,11 +18,30 @@ import
   ../../worker_desc,
   ./headers_helpers
 
+logScope:
+  topics = "beacon sync"
+
 # ------------------------------------------------------------------------------
 # Private helpers
+# -----------------------------------------------------------------------------
+
+template getBlockHeaders(
+    buddy: BeaconBuddyRef;
+    req: BlockHeadersRequest;
+       ): Result[FetchHeadersData,BeaconError] =
+  ## Async/template
+  ##
+  ## Wrapper around `getBlockHeaders()` handler
+  ##
+  let rc = await buddy.ctx.handler.getBlockHeaders(buddy, req)
+  buddy.ctx.handler.syncBlockHeaders(buddy) # debugging, sync, replay
+  rc
+
+# ------------------------------------------------------------------------------
+# Public handler
 # ------------------------------------------------------------------------------
 
-proc getBlockHeaders(
+proc getBlockHeadersCB*(
     buddy: BeaconBuddyRef;
     req: BlockHeadersRequest;
       ): Future[Result[FetchHeadersData,BeaconError]]
@@ -88,7 +107,7 @@ template fetchHeadersReversed*(
     trace trEthSendSendingGetBlockHeaders & " reverse", peer, req=ivReq,
       nReq=req.maxResults, hash=topHash.toStr, hdrErrors=buddy.hdrErrors
 
-    let rc = await buddy.getBlockHeaders(req)
+    let rc = buddy.getBlockHeaders(req)
     var elapsed: Duration
     if rc.isOk:
       elapsed = rc.value.elapsed
