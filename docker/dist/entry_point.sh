@@ -85,7 +85,7 @@ if [[ "${PLATFORM}" == "windows_amd64" ]]; then
 
   build_rocksdb TARGET_OS=MINGW CXX="${CXX}"
 
-  make -j$(nproc) update-from-ci
+  make -j$(nproc) init
 
   make \
     -j$(nproc) \
@@ -126,14 +126,14 @@ if [[ "${PLATFORM}" == "windows_amd64" ]]; then
     LOG_LEVEL="TRACE" \
     NIMFLAGS="${NIMFLAGS_COMMON} --os:windows --gcc.exe=${CC} --gcc.linkerexe=${CXX} --passL:'-static -lshlwapi -lrpcrt4' -d:BLSTuseSSSE3=1" \
     ${BINARIES}
-elif [[ "${PLATFORM}" == "linux_arm64v8" ]]; then
+elif [[ "${PLATFORM}" == "linux_arm64" ]]; then
   CC="aarch64-linux-gnu-gcc"
   CXX="aarch64-linux-gnu-g++"
   ${CXX} --version
 
   build_rocksdb TARGET_ARCHITECTURE=arm64 CXX="${CXX}"
 
-  make -j$(nproc) update-from-ci
+  make -j$(nproc) init
 
   make \
     -j$(nproc) \
@@ -162,7 +162,7 @@ elif [[ "${PLATFORM}" == "macOS_arm64" ]]; then
 
   build_rocksdb TARGET_OS=Darwin TARGET_ARCHITECTURE=arm64 CXX="${CXX}" AR="${AR}"
 
-  make -j$(nproc) update-from-ci
+  make -j$(nproc) init
 
   make \
     -j$(nproc) \
@@ -196,7 +196,7 @@ else
 
   build_rocksdb
 
-  make -j$(nproc) update-from-ci
+  make -j$(nproc) init
 
   make \
     -j$(nproc) \

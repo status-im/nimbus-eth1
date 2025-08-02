@@ -42,7 +42,7 @@ jobs:
       - name: Build Nim and deps
         run: |
           ncpu=$(nproc)
-          make -j${ncpu} ARCH_OVERRIDE=x64 CI_CACHE=NimBinaries update
+          make -j${ncpu} ARCH_OVERRIDE=x64 CI_CACHE=NimBinaries init
           make -j${ncpu} deps rocksdb
 
       - name: Run Simulators
@@ -83,7 +83,7 @@ jobs:
       - name: Build Nim and deps
         run: |
           ncpu=$(sysctl -n hw.ncpu)
-          make -j${ncpu} ARCH_OVERRIDE=x64 CI_CACHE=NimBinaries update
+          make -j${ncpu} ARCH_OVERRIDE=x64 CI_CACHE=NimBinaries init
           make -j${ncpu} deps rocksdb
 
       - name: Run Simulators
@@ -148,7 +148,7 @@ jobs:
       - name: Build Nim and deps
         run: |
           ncpu=${NUMBER_OF_PROCESSORS}
-          mingw32-make -j${ncpu} ARCH_OVERRIDE=x64 CI_CACHE=NimBinaries update
+          mingw32-make -j${ncpu} ARCH_OVERRIDE=x64 CI_CACHE=NimBinaries init
           mingw32-make -j${ncpu} deps
 
       - name: Run Simulators
