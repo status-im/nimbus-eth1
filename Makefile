@@ -223,16 +223,12 @@ libbacktrace:
 	+ $(MAKE) -C vendor/nim-libbacktrace --no-print-directory BUILD_CXX_LIB=0
 
 # nim-rocksdb
+ROCKSDB_CI_CACHE :=
 
 ifneq ($(USE_SYSTEM_ROCKSDB), 0)
-ifeq ($(OS), Windows_NT)
 rocksdb:
-	+ vendor/nim-rocksdb/scripts/build_dlls_windows.bat && \
-	cp -a vendor/nim-rocksdb/build/librocksdb.dll build
-else
-rocksdb:
-	+ vendor/nim-rocksdb/scripts/build_static_deps.sh
-endif
+	+ MAKE="$(MAKE)" \
+		scripts/rocksdb_ci_cache.sh $(ROCKSDB_CI_CACHE)
 else
 rocksdb:
 endif
