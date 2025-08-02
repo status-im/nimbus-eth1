@@ -94,11 +94,6 @@ proc getLogs*(
     except CatchableError as e:
       return err(e.msg)
 
-  if logObjs.len == 0:
-    return ok(newSeq[LogObject]())
-
-  var res: seq[LogObject]
-
   # store block hashes contains the logs so that we can batch receipt requests
   var
     prevBlockHash: Hash32
@@ -107,7 +102,7 @@ proc getLogs*(
     rxs: seq[ReceiptObject]
 
   for lg in logObjs:
-    # none only for pending logs, we omit those logs
+    # none only for pending logs before block is built
     if lg.blockHash.isSome() and lg.transactionIndex.isSome() and lg.logIndex.isSome():
       # exploit sequentiality of logs 
       if prevBlockHash != lg.blockHash.get():
@@ -123,12 +118,8 @@ proc getLogs*(
           int(distinctBase(rxs[txIdx].logs[0].logIndex.get()))
         rxLog = rxs[txIdx].logs[logIdx]
 
-      if rxLog.address == lg.address and rxLog.data == lg.data and
-          rxLog.topics == lg.topics and
-          match(toLog(lg), filterOptions.address, filterOptions.topics):
-        res.add(lg)
+      if rxLog.address != lg.address or rxLog.data != lg.data or
+          rxLog.topics != lg.topics or (not match(toLog(lg), filterOptions.address, filterOptions.topics)):
+        return err("one of the returned logs is invalid")
 
-  if res.len == 0:
-    return err("no logs could be verified")
-
-  return ok(res)
+  return ok(logObjs)
