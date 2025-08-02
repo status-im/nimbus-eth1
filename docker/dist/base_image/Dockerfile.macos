@@ -16,19 +16,67 @@
 # it once, upload it to Docker Hub and make sure it's being pulled regularly so
 # it's not deleted after 6 months of inactivity.
 
-FROM ubuntu:22.04
+# syntax=docker/dockerfile:1
 
-SHELL ["/bin/bash", "-c"]
+ARG BASE_VARIANT="ubuntu"
+ARG UBUNTU_VERSION="24.04"
+ARG ALPINE_VERSION="3.22"
 
-ENV DEBIAN_FRONTEND=noninteractive TZ="Etc/UTC"
-RUN apt-get -qq update \
- && apt-get -qq -y install build-essential git clang-11 llvm-11-dev cmake curl libssl-dev lzma-dev libxml2-dev &>/dev/null \
- && update-alternatives --install /usr/bin/clang clang /usr/bin/clang-11 100 \
- && update-alternatives --install /usr/bin/clang++ clang++ /usr/bin/clang++-11 100 \
- && apt-get -qq clean \
- && rm -rf /var/lib/apt/lists/* /tmp/* /var/tmp/*
+ARG OSX_SDK="MacOSX15.5.sdk"
+ARG OSX_SDK_URL="https://github.com/joseluisq/macosx-sdks/releases/download/15.5/${OSX_SDK}.tar.xz"
+ARG OSX_CROSS_COMMIT="3d6a91c14a65b170aa50ecc3fda19dd6414e23a9"
 
-COPY "build_osxcross.sh" "/root/"
-RUN cd /root \
- && ./build_osxcross.sh
+FROM --platform=$BUILDPLATFORM alpine:${ALPINE_VERSION} AS sdk
+RUN apk --update --no-cache add ca-certificates curl tar xz
+ARG OSX_SDK
+ARG OSX_SDK_URL
+RUN curl -sSL "$OSX_SDK_URL" -o "/$OSX_SDK.tar.xz"
+RUN mkdir /osxsdk && tar -xf "/$OSX_SDK.tar.xz" -C "/osxsdk"
 
+FROM --platform=$BUILDPLATFORM alpine:${ALPINE_VERSION} AS osxcross-src
+RUN apk --update --no-cache add patch
+WORKDIR /osxcross
+ARG OSX_CROSS_COMMIT
+ADD "https://github.com/tpoechtrager/osxcross.git#${OSX_CROSS_COMMIT}" .
+COPY patches/lcxx.patch .
+RUN patch -p1 < lcxx.patch
+
+FROM ubuntu:${UBUNTU_VERSION} AS base-ubuntu
+RUN export DEBIAN_FRONTEND="noninteractive" \
+  && apt-get update \
+  && apt-get install --no-install-recommends -y \
+    bash \
+    binutils-multiarch-dev \
+    build-essential \
+    ca-certificates \
+    clang \
+    cmake \
+    git \
+    libbz2-dev \
+    libmpc-dev \
+    libmpfr-dev \
+    libgmp-dev \
+    liblzma-dev \
+    libpsi3-dev \
+    libssl-dev \
+    libxml2-dev \
+    libz-dev \
+    llvm-dev \
+    lzma-dev \
+    make \
+    patch \
+    python3 \
+    uuid-dev \
+    wget \
+    xz-utils \
+    zlib1g-dev
+
+FROM base-${BASE_VARIANT} AS build
+ARG OSX_SDK
+WORKDIR /tmp/osxcross
+COPY --link --from=osxcross-src /osxcross .
+COPY --link --from=sdk /$OSX_SDK.tar.xz ./tarballs/$OSX_SDK.tar.xz
+RUN OSX_VERSION_MIN=10.13 UNATTENDED=1 ENABLE_COMPILER_RT_INSTALL=1 TARGET_DIR=/out/osxcross ./build.sh
+
+FROM scratch
+COPY --link --from=build /out /

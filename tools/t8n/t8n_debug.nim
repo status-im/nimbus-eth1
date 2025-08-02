@@ -92,6 +92,8 @@ BCTResult.useDefaultReaderIn BCTConv
 BCTEnv.useDefaultWriterIn BCTConv
 BCTInput.useDefaultWriterIn BCTConv
 
+BCTConv.automaticSerialization(seq[BCTBlock], true)
+
 proc readValue*(r: var JsonReader[BCTConv], val: var BCTFile)
        {.gcsafe, raises: [IOError, SerializationError].} =
   r.parseObject(key):

@@ -21,10 +21,23 @@ on:
       - '.github/workflows/portal*.yml'
       - 'nimbus_verified_proxy/**'
       - '.github/workflows/nimbus_verified_proxy.yml'
+      - '.github/workflows/build_base_image.yml'
+      - 'docker/**'
 
-  # Disable `pull_request`.  Experimenting with using only `push` for PRs.
-  #pull_request:
-  #  paths-ignore: ['doc/**', 'docs/**', '**/*.md', 'hive_integration/**']
+  pull_request:
+    paths-ignore:
+      - 'doc/**'
+      - 'docs/**'
+      - '**/*.md'
+      - '**/*.yml'
+      - 'hive_integration/**'
+      - 'portal/**'
+      - '.github/workflows/portal*.yml'
+      - 'nimbus_verified_proxy/**'
+      - '.github/workflows/nimbus_verified_proxy.yml'
+      - '.github/workflows/build_base_image.yml'
+      - 'docker/**'
+
   workflow_dispatch:
 
 jobs:
@@ -160,7 +173,7 @@ jobs:
 
       - name: Build Nim and Nimbus-eth1 dependencies
         run: |
-          make -j${ncpu} ARCH_OVERRIDE=${PLATFORM} CI_CACHE=NimBinCache update
+          make -j${ncpu} ARCH_OVERRIDE=${PLATFORM} CI_CACHE=NimBinCache init
 
       - name: Run nimbus-eth1 tests (Windows)
         if: runner.os == 'Windows'

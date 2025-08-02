@@ -92,6 +92,14 @@ func new*(T: type HeaderStore, max: int): T =
     earliestHash: Opt.none(Hash32),
   )
 
+func clear*(self: HeaderStore) =
+  self.headers = LruCache[Hash32, Header].init(self.headers.capacity)
+  self.hashes = LruCache[base.BlockNumber, Hash32].init(self.headers.capacity)
+  self.finalized = Opt.none(Header)
+  self.finalizedHash = Opt.none(Hash32)
+  self.earliest = Opt.none(Header)
+  self.earliestHash = Opt.none(Hash32)
+
 func len*(self: HeaderStore): int =
   len(self.headers)
 
@@ -121,6 +129,23 @@ func contains*(self: HeaderStore, hash: Hash32): bool =
 
 func contains*(self: HeaderStore, number: base.BlockNumber): bool =
   self.hashes.contains(number)
+
+proc updateFinalized*(
+    self: HeaderStore, header: Header, hHash: Hash32
+): Result[bool, string] =
+  if self.finalized.isSome():
+    if self.finalized.get().number < header.number:
+      self.finalized = Opt.some(header)
+      self.finalizedHash = Opt.some(hHash)
+    else:
+      return err("finalized update header is older")
+  else:
+    self.finalized = Opt.some(header)
+    self.finalizedHash = Opt.some(hHash)
+    self.earliest = Opt.some(header)
+    self.earliestHash = Opt.some(hHash)
+
+  return ok(true)
 
 proc updateFinalized*(
     self: HeaderStore, header: ForkedLightClientHeader

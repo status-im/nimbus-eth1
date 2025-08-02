@@ -25,7 +25,7 @@
 {.push raises: [].}
 
 import
-  std/[deques, os, sequtils, strutils, typetraits],
+  std/[deques, os, sequtils, strutils, typetraits, tables],
   stew/byteutils,
   chronicles,
   chronos,
