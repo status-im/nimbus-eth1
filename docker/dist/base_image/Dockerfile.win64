@@ -57,3 +57,6 @@ RUN git clone --depth 1 https://github.com/mxe/mxe.git /opt/mxe
 WORKDIR "/opt/mxe"
 RUN make -j $(nproc) MXE_TARGETS='x86_64-w64-mingw32.static' MXE_USE_CCACHE='' DONT_CHECK_REQUIREMENTS=1 cc
 RUN rm -rf .log pkg
+
+# Copy prebuilt rocksdb binary from host (CI: build_base_image.yml)
+COPY rocksdb/ /usr/rocksdb/
