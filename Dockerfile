@@ -20,7 +20,7 @@ RUN ldd --version
 ADD . /root/nimbus-eth1
 
 RUN cd /root/nimbus-eth1 \
- && make -j$(nproc) update \
+ && make -j$(nproc) init \
  && make -j$(nproc) DISABLE_MARCH_NATIVE=1 V=1 nimbus_execution_client
 
 # --------------------------------- #
