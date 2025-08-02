@@ -714,3 +714,15 @@ proc setupServerAPI*(api: ServerAPIRef, server: RpcServer, ctx: EthContext) =
     return populateBlockObject(
       uncleHash, uncle, api.getTotalDifficulty(uncleHash), false, true
     )
+
+  server.rpc("eth_config") do() -> EthConfigObject:
+    ## Returns the current, next and last configuration
+    let 
+      currentFork = api.com.toHardFork(api.chain.latestNumber.forkDeterminationInfo)
+      nextFork = api.com.nextFork(currentFork)
+      lastFork = api.com.lastFork(currentFork)
+
+    if currentFork < Shanghai:
+      return nil
+
+    return api.com.getEthConfigObject(api.chain, currentFork, nextFork, lastFork)

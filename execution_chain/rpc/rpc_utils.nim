@@ -10,6 +10,7 @@
 {.push raises: [].}
 
 import
+  stew/endians2,
   std/[sequtils, algorithm],
   ./rpc_types,
   ./params,
@@ -308,3 +309,90 @@ proc createAccessList*(header: Header,
       )
 
     prevTracer = tracer
+
+
+proc populateConfigObject*(com: CommonRef, fork: HardFork, latestHeader: Header): ConfigObject =
+  let
+    cancunSystemContracts: seq[SystemContractPair] = @[
+      SystemContractPair(
+        address: BEACON_ROOTS_ADDRESS,
+        name: "BEACON_ROOTS_ADDRESS"
+      )
+    ]
+    pragueSystemContracts: seq[SystemContractPair] = @[
+      SystemContractPair(
+        address: SYSTEM_ADDRESS,
+        name: "CONSOLIDATION_REQUEST_PREDEPLOY_ADDRESS"
+      ),
+      SystemContractPair(
+        address: com.depositContractAddress(),
+        name: "DEPOSIT_CONTRACT_ADDRESS"
+      ),
+      SystemContractPair(
+        address: HISTORY_STORAGE_ADDRESS,
+        name: "HISTORY_STORAGE_ADDRESS"
+      ),
+      SystemContractPair(
+        address: WITHDRAWAL_REQUEST_PREDEPLOY_ADDRESS,
+        name: "WITHDRAWAL_REQUEST_PREDEPLOY_ADDRESS"
+      )
+    ]
+
+  var configObject: ConfigObject
+
+  configObject.activationTime = Quantity com.activationTime(fork).get(EthTime(0))
+  configObject.chainId = com.chainId
+  configObject.forkId = FixedBytes[4] com.forkId(
+    uint64(latestHeader.timestamp), uint64(com.activationTime(fork).get(EthTime(0)))
+  ).crc.toBytesBE
+  configObject.blobSchedule.max = Quantity com.maxBlobsPerBlock(fork)
+  configObject.blobSchedule.target = Quantity com.targetBlobsPerBlock(fork)
+  configObject.blobSchedule.baseFeeUpdateFraction = Quantity com.baseFeeUpdateFraction(fork)
+
+  # Precompiles
+  let 
+    evmFork = ToEVMFork[fork]
+    lastPrecompile = getMaxPrecompile(evmFork)
+
+  configObject.precompiles = newSeq[PrecompilePair](ord(lastPrecompile) + 1)
+
+  for i in Precompiles.low..lastPrecompile:
+    configObject.precompiles[ord(i)] = PrecompilePair(
+      address: precompileAddrs[i],
+      name: precompileNames[i],
+    )
+
+  if fork >= Cancun:
+    configObject.systemContracts = cancunSystemContracts
+  elif fork >= Prague:
+    configObject.systemContracts = cancunSystemContracts & pragueSystemContracts
+  else:
+    configObject.systemContracts = @[]
+
+  return configObject
+
+proc getEthConfigObject*(com: CommonRef, 
+                         chain: ForkedChainRef,
+                         fork: HardFork,
+                         nextFork, lastFork: Opt[HardFork]): EthConfigObject =
+  ## Returns the EthConfigObject for the given chain.
+  ## This is used to return the `eth_config` object in the JSON-RPC API.
+
+  var
+    res: EthConfigObject
+
+  res.current = com.populateConfigObject(fork, chain.latestHeader)
+
+
+  if nextFork.isSome:
+    res.next = Opt.some(com.populateConfigObject(nextFork.get, chain.latestHeader))
+  else:
+    res.next = Opt.none(ConfigObject)
+
+  if lastFork.isSome:
+    res.last = Opt.some(com.populateConfigObject(lastFork.get, chain.latestHeader))
+  else:
+    res.last = Opt.none(ConfigObject)
+
+  return res
+
