@@ -340,7 +340,7 @@ proc populateConfigObject*(com: CommonRef, fork: HardFork, latestHeader: Header)
 
   var configObject = ConfigObject()
 
-  configObject.activationTime = Quantity com.activationTime(fork).get(EthTime(0))
+  configObject.activationTime = Timestamp com.activationTime(fork).get(EthTime(0))
   configObject.chainId = com.chainId
   configObject.forkId = FixedBytes[4] com.forkId(
     uint64(latestHeader.timestamp), uint64(com.activationTime(fork).get(EthTime(0)))
