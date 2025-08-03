@@ -361,7 +361,7 @@ proc populateConfigObject*(com: CommonRef, fork: HardFork, latestHeader: Header)
     )
 
   # System Contracts
-  if fork >= Cancun:
+  if fork == Cancun:
     configObject.systemContracts = cancunSystemContracts
   elif fork >= Prague:
     configObject.systemContracts = cancunSystemContracts & pragueSystemContracts
