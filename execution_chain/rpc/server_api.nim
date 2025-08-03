@@ -726,5 +726,9 @@ proc setupServerAPI*(api: ServerAPIRef, server: RpcServer, ctx: EthContext) =
     let
       nextFork = api.com.nextFork(currentFork)
       lastFork = api.com.lastFork(currentFork)
+
+    debugEcho "forks loaded"
+    let obj = api.com.getEthConfigObject(api.chain, currentFork, nextFork, lastFork)
+    debugEcho "eth_config object created: "
     
-    return api.com.getEthConfigObject(api.chain, currentFork, nextFork, lastFork)
+    return obj
