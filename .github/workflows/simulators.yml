@@ -54,15 +54,6 @@ jobs:
         run: |
           sudo apt-get -q update
 
-      - name: Get latest nimbus-build-system commit hash
-        id: versions
-        run: |
-          getHash() {
-            git ls-remote "https://github.com/$1" "${2:-HEAD}" | cut -f 1
-          }
-          nbsHash=$(getHash status-im/nimbus-build-system)
-          echo "nimbus_build_system=$nbsHash" >> $GITHUB_OUTPUT
-
       - name: Restore llvm-mingw from cache
         if: runner.os == 'windows'
         id: windows-mingw-cache
@@ -89,11 +80,36 @@ jobs:
         run: |
           echo '${{ github.workspace }}'"/external/mingw-amd64/bin" >> $GITHUB_PATH
 
+      - name: Get latest nimbus-build-system commit hash
+        id: versions
+        run: |
+          getHash() {
+            git ls-remote "https://github.com/$1" "${2:-HEAD}" | cut -f 1
+          }
+          nbsHash=$(getHash status-im/nimbus-build-system)
+          echo "nimbus_build_system=$nbsHash" >> $GITHUB_OUTPUT
+
       - name: Restore prebuilt Nim from cache
         uses: actions/cache@v4
         with:
           path: NimBinaries
           key: 'nim-${{ matrix.target.os }}-${{ matrix.target.cpu }}-${{ steps.versions.outputs.nimbus_build_system }}-sim'
+
+      - name: Get latest nim-rocksdb commit hash
+        id: rocksdb-versions
+        run: |
+          getHash() {
+            git ls-remote "https://github.com/$1" "${2:-HEAD}" | cut -f 1
+          }
+          rocksHash=$(getHash status-im/nim-rocksdb)
+          echo "nim_rocksdb=$rocksHash" >> $GITHUB_OUTPUT
+
+      - name: Restore prebuilt rocksdb from cache
+        id: rocksdb-cache
+        uses: actions/cache@v4
+        with:
+          path: RocksBinCache
+          key: 'rocks-${{ matrix.target.os }}-${{ matrix.target.cpu }}-${{ steps.rocksdb-versions.outputs.nim_rocksdb }}'
 
       - name: Build Nim and deps
         run: |
@@ -105,7 +121,7 @@ jobs:
             ncpu=$(nproc)
           fi
           make -j${ncpu} ARCH_OVERRIDE=x64 CI_CACHE=NimBinaries init
-          make -j${ncpu} deps rocksdb
+          make -j${ncpu} ROCKSDB_CI_CACHE=RocksBinCache deps rocksdb
 
       - name: Run Simulators
         run: |
@@ -139,11 +155,10 @@ jobs:
           cat windows_amd64_stat/* >> stat_notes.md
 
       - name: Delete tag
-        uses: dev-drprasad/delete-tag-and-release@v1.0.1
-        with:
-          delete_release: true
-          tag_name: sim-stat
-          github_token: ${{ secrets.GITHUB_TOKEN }}
+        run: gh release delete $TAG --cleanup-tag
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          TAG: sim-stat
 
       - name: Simulators results
         uses: ncipollo/release-action@v1
@@ -156,7 +171,7 @@ jobs:
           bodyFile: "stat_notes.md"
 
       - name: Delete artefacts
-        uses: geekyeggo/delete-artifact@v2
+        uses: geekyeggo/delete-artifact@v5
         with:
           failOnError: false
           name: |
