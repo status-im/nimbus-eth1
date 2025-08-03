@@ -718,7 +718,6 @@ proc setupServerAPI*(api: ServerAPIRef, server: RpcServer, ctx: EthContext) =
   server.rpc("eth_config") do() -> EthConfigObject:
     ## Returns the current, next and last configuration
     let currentFork = api.com.toHardFork(api.chain.latestHeader.forkDeterminationInfo)
-    debugEcho "eth_config" & $ord(currentFork)
 
     if currentFork < Shanghai:
       return nil
@@ -727,10 +726,4 @@ proc setupServerAPI*(api: ServerAPIRef, server: RpcServer, ctx: EthContext) =
       nextFork = api.com.nextFork(currentFork)
       lastFork = api.com.lastFork(currentFork)
 
-    debugEcho "nextFork: " & $nextFork
-    debugEcho "lastFork: " & $lastFork
-    debugEcho "forks loaded"
-    let obj = api.com.getEthConfigObject(api.chain, currentFork, nextFork, lastFork)
-    debugEcho "eth_config object created: "
-    
-    return obj
+    return api.com.getEthConfigObject(api.chain, currentFork, nextFork, lastFork)

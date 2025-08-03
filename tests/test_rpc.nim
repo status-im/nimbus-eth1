@@ -374,7 +374,7 @@ proc rpcMain*() =
 
     test "eth_config":
       let res = await client.eth_config()
-
+      # TODO: debugEcho res.toJson()
 
     test "eth_syncing":
       let res = await client.eth_syncing()

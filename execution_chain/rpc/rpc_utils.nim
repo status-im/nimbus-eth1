@@ -312,7 +312,6 @@ proc createAccessList*(header: Header,
 
 
 proc populateConfigObject*(com: CommonRef, fork: HardFork, latestHeader: Header): ConfigObject =
-  debugEcho "populateConfigObject "
   let
     cancunSystemContracts: seq[SystemContractPair] = @[
       SystemContractPair(
@@ -339,17 +338,13 @@ proc populateConfigObject*(com: CommonRef, fork: HardFork, latestHeader: Header)
       )
     ]
 
-  var configObject: ConfigObject
+  var configObject = ConfigObject()
 
-  debugEcho "populateConfigObject " & "activationTime" & $fork
   configObject.activationTime = Quantity com.activationTime(fork).get(EthTime(0))
-  debugEcho "populateConfigObject " & "chainId" & $fork
   configObject.chainId = com.chainId
-  debugEcho "populateConfigObject " & "forkId" & $fork
   configObject.forkId = FixedBytes[4] com.forkId(
     uint64(latestHeader.timestamp), uint64(com.activationTime(fork).get(EthTime(0)))
   ).crc.toBytesBE
-  debugEcho "populateConfigObject " & "blobSchedule" & $fork
   configObject.blobSchedule.max = Quantity com.maxBlobsPerBlock(fork)
   configObject.blobSchedule.target = Quantity com.targetBlobsPerBlock(fork)
   configObject.blobSchedule.baseFeeUpdateFraction = Quantity com.baseFeeUpdateFraction(fork)
@@ -359,14 +354,13 @@ proc populateConfigObject*(com: CommonRef, fork: HardFork, latestHeader: Header)
     evmFork = ToEVMFork[fork]
     lastPrecompile = getMaxPrecompile(evmFork)
 
-  debugEcho "populateConfigObject " & "precompiles" & $fork & " (0x" & $lastPrecompile & ")"
   for i in Precompiles.low..lastPrecompile:
     configObject.precompiles.add PrecompilePair(
       address: precompileAddrs[i],
       name: precompileNames[i],
     )
 
-  debugEcho "populateConfigObject " & "systemContracts" & $fork
+  # System Contracts
   if fork >= Cancun:
     configObject.systemContracts = cancunSystemContracts
   elif fork >= Prague:
@@ -383,25 +377,18 @@ proc getEthConfigObject*(com: CommonRef,
                          lastFork: Opt[HardFork]): EthConfigObject =
   ## Returns the EthConfigObject for the given chain.
   ## This is used to return the `eth_config` object in the JSON-RPC API.
-  debugEcho "getEthConfigObject " & "start for " & $fork
-
   var res = EthConfigObject()
-
   res.current = com.populateConfigObject(fork, chain.latestHeader)
-  debugEcho "getEthConfigObject " & "populated current config for " & $fork
+
   if nextFork.isSome:
     res.next = Opt.some(com.populateConfigObject(nextFork.get, chain.latestHeader))
   else:
     res.next = Opt.none(ConfigObject)
 
-  debugEcho "getEthConfigObject " & "populated next config for " & $nextFork.get
-
   if lastFork.isSome:
     res.last = Opt.some(com.populateConfigObject(lastFork.get, chain.latestHeader))
   else:
     res.last = Opt.none(ConfigObject)
-
-  debugEcho "getEthConfigObject " & "populated last config for " & $lastFork.get
 
   return res
 
