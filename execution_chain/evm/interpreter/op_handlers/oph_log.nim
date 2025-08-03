@@ -16,7 +16,8 @@
 
 import
   std/sequtils,
-  stew/assign2,
+  stew/byteutils,
+  ssz_serialization,
   ../../../constants,
   ../../evm_errors,
   ../../computation,
@@ -64,11 +65,11 @@ proc logImpl(c: Computation, opcode: Op, topicCount: static int): EvmResultVoid 
   c.memory.extend(memPos, len)
 
   var log: Log
-  log.topics = newSeqOfCap[Topic](topicCount)
+  # log.topics = newSeqOfCap[Topic](topicCount)
   for i in 0 ..< topicCount:
-    log.topics.add c.stack.lsPeekTopic(^(i+3))
+    discard log.topics.add c.stack.lsPeekTopic(^(i+3))
 
-  assign(log.data, c.memory.read(memPos, len))
+  log.data = cast[seq[byte]](c.memory.read(memPos, len)).toOpenArray()
   log.address = c.msg.contractAddress
   c.addLogEntry(log)
 
