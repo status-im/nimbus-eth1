@@ -380,8 +380,6 @@ proc getEthConfigObject*(com: CommonRef,
     res: EthConfigObject
 
   res.current = com.populateConfigObject(fork, chain.latestHeader)
-
-
   if nextFork.isSome:
     res.next = Opt.some(com.populateConfigObject(nextFork.get, chain.latestHeader))
   else:

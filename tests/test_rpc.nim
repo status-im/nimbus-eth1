@@ -313,7 +313,7 @@ createRpcSigsFromNim(RpcClient):
 
 proc rpcMain*() =
   suite "Remote Procedure Calls":
-    var env = setupEnv()
+    var env = setupEnv(Shanghai)
     env.generateBlock()
     let
       client = env.client
@@ -374,7 +374,6 @@ proc rpcMain*() =
 
     # test "eth_config":
     #   let res = await client.eth_config()
-    #   debugEcho res.toJson()
 
     test "eth_syncing":
       let res = await client.eth_syncing()
