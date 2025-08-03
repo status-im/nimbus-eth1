@@ -372,8 +372,8 @@ proc rpcMain*() =
       let res = await client.eth_chainId()
       check res == com.chainId
 
-    # test "eth_config":
-    #   let res = await client.eth_config()
+    test "eth_config":
+      let res = await client.eth_config()
 
 
     test "eth_syncing":
