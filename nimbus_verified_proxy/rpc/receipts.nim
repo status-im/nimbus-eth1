@@ -26,8 +26,7 @@ func toLogs(logs: openArray[LogObject]): seq[Log] =
 func toReceipt(rec: ReceiptObject): Receipt =
   let isHash = not rec.status.isSome()
 
-  let status =
-    if rec.status.isSome() and rec.status.get() == 1.Quantity: true else: false
+  let status = rec.status.isSome() and rec.status.get() == 1.Quantity
 
   return Receipt(
     hash: rec.transactionHash,
@@ -112,14 +111,15 @@ proc getLogs*(
         prevBlockHash = lg.blockHash.get()
 
       let
-        txIdx = int(distinctBase(lg.transactionIndex.get()))
+        txIdx = distinctBase(lg.transactionIndex.get())
         logIdx =
-          int(distinctBase(lg.logIndex.get())) -
-          int(distinctBase(rxs[txIdx].logs[0].logIndex.get()))
+          distinctBase(lg.logIndex.get()) -
+          distinctBase(rxs[txIdx].logs[0].logIndex.get())
         rxLog = rxs[txIdx].logs[logIdx]
 
       if rxLog.address != lg.address or rxLog.data != lg.data or
-          rxLog.topics != lg.topics or (not match(toLog(lg), filterOptions.address, filterOptions.topics)):
+          rxLog.topics != lg.topics or
+          (not match(toLog(lg), filterOptions.address, filterOptions.topics)):
         return err("one of the returned logs is invalid")
 
   return ok(logObjs)
