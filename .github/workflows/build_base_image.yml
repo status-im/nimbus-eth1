@@ -17,19 +17,126 @@ jobs:
       fail-fast: false
       max-parallel: 20
       matrix:
+        target:
+          - os: linux
+            cpu: amd64
+          - os: linux
+            cpu: arm64
+          - os: windows
+            cpu: amd64
+          - os: macos
+            cpu: arm64
+        include:
+          - target:
+              os: linux
+              cpu: amd64
+            builder: ubuntu-22.04
+          - target:
+              os: linux
+              cpu: arm64
+            builder: ubuntu-22.04-arm
+          - target:
+              os: macos
+            builder: macos-14
+          - target:
+              os: windows
+            builder: windows-latest
+
+    defaults:
+      run:
+        shell: bash
+
+    name: '${{ matrix.target.os }}-${{ matrix.target.cpu }}'
+    runs-on: ${{ matrix.builder }}
+    steps:
+      - name: Checkout nimbus-eth1
+        uses: actions/checkout@v4
+
+      - name: Get latest nim-rocksdb commit hash
+        id: rocksdb-versions
+        run: |
+          getHash() {
+            git ls-remote "https://github.com/$1" "${2:-HEAD}" | cut -f 1
+          }
+          rocksHash=$(getHash status-im/nim-rocksdb)
+          echo "nim_rocksdb=$rocksHash" >> $GITHUB_OUTPUT
+
+      - name: Restore prebuilt rocksdb from cache
+        id: rocksdb-cache
+        uses: actions/cache@v4
+        with:
+          path: RocksBinCache
+          key: 'rocks-${{ matrix.target.os }}-${{ matrix.target.cpu }}-${{ steps.rocksdb-versions.outputs.nim_rocksdb }}'
+
+      - name: Build rocksdb
+        run: |
+          if [[ '${{ matrix.target.os }}' == 'windows' ]]; then
+            ncpu=${NUMBER_OF_PROCESSORS}
+          elif [[ '${{ matrix.target.os }}' == 'macos' ]]; then
+            ncpu=$(sysctl -n hw.ncpu)
+          else
+            ncpu=$(nproc)
+          fi
+          make -j${ncpu} ROCKSDB_CI_CACHE=RocksBinCache USE_SYSTEM_NIM=1 init rocksdb
+
+      - name: Upload artefact
+        uses: actions/upload-artifact@v4
+        with:
+          name: '${{ matrix.target.os }}_${{ matrix.target.cpu }}_rocksdb'
+          path: vendor/nim-rocksdb/build/
+          retention-days: 1
+
+
+  publish-images:
+    strategy:
+      fail-fast: false
+      max-parallel: 20
+      matrix:
         target: [amd64, arm64, win64, macos]
 
+    needs: build
     name: 'Docker build for ${{ matrix.target }}'
     runs-on: ubuntu-latest
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
+
+      - name: Calculate artifact name
+        id: artefact
+        run: |
+          if [[ '${{ matrix.target }}' == 'amd64' ]]; then
+            artefact_name=linux_amd64
+          elif [[ '${{ matrix.target }}' == 'arm64' ]]; then
+            artefact_name=linux_arm64
+          elif [[ '${{ matrix.target }}' == 'win64' ]]; then
+            artefact_name=windows_amd64
+          else
+            artefact_name=macos_arm64
+          fi
+          echo "name=$artefact_name" >> $GITHUB_OUTPUT
+
+      - name: Download artefacts
+        uses: actions/download-artifact@v4
+        with:
+          name: '${{ steps.artefact.outputs.name }}_rocksdb'
+          path: docker/dist/base_image/rocksdb
+
+      - name: Display structure of artefacts
+        run: ls -R docker/dist/base_image/rocksdb
+
       - name: Login to Docker Hub
         uses: docker/login-action@v3
         with:
           username: ${{ secrets.DOCKERHUB_USERNAME }}
           password: ${{ secrets.DOCKERHUB_TOKEN }}
+
       - name: Build and push a base Docker image
         run: |
           cd docker/dist/base_image
           make 'push-${{ matrix.target }}'
+
+      - name: Delete artefacts
+        uses: geekyeggo/delete-artifact@v5
+        with:
+          failOnError: false
+          name: '${{ steps.artefact.outputs.name }}_rocksdb'

@@ -80,3 +80,6 @@ RUN OSX_VERSION_MIN=10.13 UNATTENDED=1 ENABLE_COMPILER_RT_INSTALL=1 TARGET_DIR=/
 
 FROM scratch
 COPY --link --from=build /out /
+
+# Copy prebuilt rocksdb binary from host (CI: build_base_image.yml)
+COPY rocksdb/ /usr/rocksdb/
