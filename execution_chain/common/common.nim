@@ -347,6 +347,10 @@ func forkId*(com: CommonRef, head, time: uint64): ForkID {.gcsafe.} =
   ## EIP 2364/2124
   com.forkIdCalculator.newID(head, time)
 
+func forkId*(com: CommonRef, forkActivationTime: EthTime): ForkID {.gcsafe.} =
+  # Only works for timestamp based forks
+  com.forkIdCalculator.newID(0'u64, forkActivationTime.uint64)
+
 func forkId*(com: CommonRef, head: BlockNumber, time: EthTime): ForkID {.gcsafe.} =
   ## EIP 2364/2124
   com.forkIdCalculator.newID(head, time.uint64)

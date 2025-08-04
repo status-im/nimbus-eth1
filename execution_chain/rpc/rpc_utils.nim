@@ -311,7 +311,7 @@ proc createAccessList*(header: Header,
     prevTracer = tracer
 
 
-proc populateConfigObject*(com: CommonRef, fork: HardFork, latestHeader: Header): ConfigObject =
+proc populateConfigObject*(com: CommonRef, fork: HardFork): ConfigObject =
   let
     cancunSystemContracts: seq[SystemContractPair] = @[
       SystemContractPair(
@@ -343,7 +343,7 @@ proc populateConfigObject*(com: CommonRef, fork: HardFork, latestHeader: Header)
   configObject.activationTime = Number com.activationTime(fork).get(EthTime(0))
   configObject.chainId = com.chainId
   configObject.forkId = FixedBytes[4] com.forkId(
-    uint64(latestHeader.timestamp), uint64(com.activationTime(fork).get(EthTime(0)))
+    com.activationTime(fork).get(EthTime(0))
   ).crc.toBytesBE
   configObject.blobSchedule.max = Number com.maxBlobsPerBlock(fork)
   configObject.blobSchedule.target = Number com.targetBlobsPerBlock(fork)
@@ -378,15 +378,15 @@ proc getEthConfigObject*(com: CommonRef,
   ## Returns the EthConfigObject for the given chain.
   ## This is used to return the `eth_config` object in the JSON-RPC API.
   var res = EthConfigObject()
-  res.current = com.populateConfigObject(fork, chain.latestHeader)
+  res.current = com.populateConfigObject(fork)
 
   if nextFork.isSome:
-    res.next = Opt.some(com.populateConfigObject(nextFork.get, chain.latestHeader))
+    res.next = Opt.some(com.populateConfigObject(nextFork.get))
   else:
     res.next = Opt.none(ConfigObject)
 
   if lastFork.isSome:
-    res.last = Opt.some(com.populateConfigObject(lastFork.get, chain.latestHeader))
+    res.last = Opt.some(com.populateConfigObject(lastFork.get))
   else:
     res.last = Opt.none(ConfigObject)
 
