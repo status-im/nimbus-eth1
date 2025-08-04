@@ -69,7 +69,7 @@ proc logImpl(c: Computation, opcode: Op, topicCount: static int): EvmResultVoid 
   for i in 0 ..< topicCount:
     discard log.topics.add c.stack.lsPeekTopic(^(i+3))
 
-  log.data = cast[seq[byte]](c.memory.read(memPos, len)).toOpenArray()
+  log.data = typeof(log.data).init(@(c.memory.read(memPos, len)))
   log.address = c.msg.contractAddress
   c.addLogEntry(log)
 

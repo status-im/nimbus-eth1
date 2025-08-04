@@ -11,6 +11,7 @@
 
 import
   std/[sequtils, algorithm],
+  ssz_serialization,
   ./rpc_types,
   ./params,
   ../db/ledger,
@@ -203,8 +204,8 @@ proc populateReceipt*(rec: StoredReceipt, gasUsed: GasInt, tx: Transaction,
   for log in receipt.logs:
     # TODO: Work everywhere with either `Hash32` as topic or `array[32, byte]`
     var topics: seq[Bytes32]
-    for topic in log.topics:
-      topics.add (topic)
+    for topic in log.topics.asSeq():
+      topics.add topic
 
     let logObject = FilterLog(
       removed: false,
@@ -219,7 +220,7 @@ proc populateReceipt*(rec: StoredReceipt, gasUsed: GasInt, tx: Transaction,
       blockNumber: Opt.some(res.blockNumber),
       # The actual fields
       address: log.address,
-      data: log.data,
+      data: log.data.asSeq(),
       topics: topics
     )
     res.logs.add(logObject)
