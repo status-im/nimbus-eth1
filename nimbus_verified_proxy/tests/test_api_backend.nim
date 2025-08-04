@@ -27,7 +27,7 @@ type
     blockReceipts: Table[Hash32, seq[ReceiptObject]]
     receipts: Table[Hash32, ReceiptObject]
     transactions: Table[Hash32, TransactionObject]
-    logs: Table[Hash, seq[LogObject]]
+    logs: Table[FilterOptions, seq[LogObject]]
 
 func init*(T: type TestApiState, chainId: UInt256): T =
   TestApiState(
