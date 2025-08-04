@@ -13,7 +13,7 @@ import
   stew/byteutils, ./compile_info
 
 const
-  sourcePath  = currentSourcePath.rsplit({DirSep, AltSep}, 1)[0]
+  sourcePath = currentSourcePath.rsplit({DirSep, AltSep}, 1)[0]
   nimbusRevision {.strdefine.} = "00000000"
 
 static:

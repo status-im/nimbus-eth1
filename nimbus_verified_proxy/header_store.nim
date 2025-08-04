@@ -28,32 +28,32 @@ type HeaderStore* = ref object
 
 func convLCHeader*(lcHeader: ForkedLightClientHeader): Result[Header, string] =
   withForkyHeader(lcHeader):
-    template p(): auto =
-      forkyHeader.execution
-
-    when lcDataFork >= LightClientDataFork.Capella:
-      let withdrawalsRoot = Opt.some(p.withdrawals_root.asBlockHash)
-    else:
-      const withdrawalsRoot = Opt.none(Hash32)
-
-    when lcDataFork >= LightClientDataFork.Deneb:
-      let
-        blobGasUsed = Opt.some(p.blob_gas_used)
-        excessBlobGas = Opt.some(p.excess_blob_gas)
-        parentBeaconBlockRoot = Opt.some(forkyHeader.beacon.parent_root.asBlockHash)
-    else:
-      const
-        blobGasUsed = Opt.none(uint64)
-        excessBlobGas = Opt.none(uint64)
-        parentBeaconBlockRoot = Opt.none(Hash32)
-
-    when lcDataFork >= LightClientDataFork.Electra:
-      # INFO: there is no visibility of the execution requests hash in light client header
-      let requestsHash = Opt.none(Hash32)
-    else:
-      const requestsHash = Opt.none(Hash32)
-
     when lcDataFork > LightClientDataFork.Altair:
+      template p(): auto =
+        forkyHeader.execution
+
+      when lcDataFork >= LightClientDataFork.Capella:
+        let withdrawalsRoot = Opt.some(p.withdrawals_root.asBlockHash)
+      else:
+        const withdrawalsRoot = Opt.none(Hash32)
+
+      when lcDataFork >= LightClientDataFork.Deneb:
+        let
+          blobGasUsed = Opt.some(p.blob_gas_used)
+          excessBlobGas = Opt.some(p.excess_blob_gas)
+          parentBeaconBlockRoot = Opt.some(forkyHeader.beacon.parent_root.asBlockHash)
+      else:
+        const
+          blobGasUsed = Opt.none(uint64)
+          excessBlobGas = Opt.none(uint64)
+          parentBeaconBlockRoot = Opt.none(Hash32)
+
+      when lcDataFork >= LightClientDataFork.Electra:
+        # INFO: there is no visibility of the execution requests hash in light client header
+        let requestsHash = Opt.none(Hash32)
+      else:
+        const requestsHash = Opt.none(Hash32)
+
       let h = Header(
         parentHash: p.parent_hash.asBlockHash,
         ommersHash: EMPTY_UNCLE_HASH,
@@ -77,6 +77,7 @@ func convLCHeader*(lcHeader: ForkedLightClientHeader): Result[Header, string] =
         parentBeaconBlockRoot: parentBeaconBlockRoot,
         requestsHash: requestsHash,
       )
+
       return ok(h)
     else:
       # running verified  proxy for altair doesn't make sense
