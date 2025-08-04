@@ -27,7 +27,8 @@ type
     blockReceipts: Table[Hash32, seq[ReceiptObject]]
     receipts: Table[Hash32, ReceiptObject]
     transactions: Table[Hash32, TransactionObject]
-    logs: Table[FilterOptions, seq[LogObject]]
+    # TODO: the key type should be FilterOptions. Change once this issue is resolved https://github.com/status-im/nimbus-eth1/issues/3537
+    logs: Table[Hash, seq[LogObject]]
 
 func init*(T: type TestApiState, chainId: UInt256): T =
   TestApiState(chainId: chainId)
@@ -90,7 +91,7 @@ template loadBlockReceipts*(
 template loadLogs*(
     t: TestApiState, filterOptions: FilterOptions, logs: seq[LogObject]
 ) =
-  t.logs[filterOptions] = logs
+  t.logs[hash(filterOptions)] = logs
 
 func hash*(x: BlockTag): Hash =
   if x.kind == BlockIdentifierKind.bidAlias:
@@ -211,7 +212,7 @@ proc initTestApiBackend*(t: TestApiState): EthApiBackend =
       Opt.some(t.blockReceipts[blkHash])
 
     getLogsProc = proc(filterOptions: FilterOptions): Future[seq[LogObject]] {.async.} =
-      t.logs[filterOptions]
+      t.logs[hash(filterOptions)]
 
     getTransactionByHashProc = proc(
         txHash: Hash32
