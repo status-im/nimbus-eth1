@@ -8,8 +8,10 @@
 # at your option. This file may not be copied, modified, or distributed except
 # according to those terms.
 
+# syntax=docker/dockerfile:1
+
 # The build is reproducible only if this base image stays the same.
-FROM statusim/nimbus-eth1:dist_base_eth1_v2_win64@sha256:35f44554ebaac06d58b45d2ef339d7589591221c2eac202b891a20748c39f830
+FROM statusim/nimbus-eth1:dist_base_eth1_v2_win64
 
 SHELL ["/bin/bash", "-c"]
 

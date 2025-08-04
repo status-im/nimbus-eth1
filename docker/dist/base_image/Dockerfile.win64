@@ -18,45 +18,22 @@
 
 FROM ubuntu:22.04
 
+ARG LLVM_VERSION="20250730"
+ENV MINGW_BASE="https://github.com/mstorsjo/llvm-mingw/releases/download/${LLVM_VERSION}"
+ENV MINGW_URL="${MINGW_BASE}/llvm-mingw-${LLVM_VERSION}-ucrt-ubuntu-22.04-x86_64.tar.xz"
+
 SHELL ["/bin/bash", "-c"]
 
 ENV DEBIAN_FRONTEND=noninteractive TZ="Etc/UTC"
-RUN apt-get -qq update
-RUN apt-get -qq -y install git gnupg software-properties-common lsb curl cmake &>/dev/null
-RUN apt-get -qq -y install autoconf
-RUN apt-get -qq -y install automake
-RUN apt-get -qq -y install autopoint
-RUN apt-get -qq -y install bison
-RUN apt-get -qq -y install bzip2
-RUN apt-get -qq -y install flex
-RUN apt-get -qq -y install g++
-RUN apt-get -qq -y install g++-multilib
-RUN apt-get -qq -y install gettext
-RUN apt-get -qq -y install gperf
-RUN apt-get -qq -y install intltool
-RUN apt-get -qq -y install libc6-dev-i386
-RUN apt-get -qq -y install libltdl-dev
-RUN apt-get -qq -y install libssl-dev
-RUN apt-get -qq -y install libtool-bin
-RUN apt-get -qq -y install lzip
-RUN apt-get -qq -y install make
-RUN apt-get -qq -y install openssl
-RUN apt-get -qq -y install p7zip-full
-RUN apt-get -qq -y install patch
-RUN apt-get -qq -y install perl
-RUN apt-get -qq -y install python-is-python3
-RUN apt-get -qq -y install ruby
-RUN apt-get -qq -y install sed
-RUN apt-get -qq -y install unzip
-RUN apt-get -qq -y install wget
-RUN apt-get -qq -y install xz-utils
-
-RUN apt-get -qq clean
-RUN rm -rf /var/lib/apt/lists/* /tmp/* /var/tmp/*
-RUN git clone --depth 1 https://github.com/mxe/mxe.git /opt/mxe
-WORKDIR "/opt/mxe"
-RUN make -j $(nproc) MXE_TARGETS='x86_64-w64-mingw32.static' MXE_USE_CCACHE='' DONT_CHECK_REQUIREMENTS=1 cc
-RUN rm -rf .log pkg
+RUN apt-get -qq update \
+  && apt-get -qq -y install build-essential git curl &>/dev/null \
+  && apt-get -qq clean \
+  && rm -rf /var/lib/at/lists/* /tmp/* /var/tmp/* \
+  && mkdir -p opt/llvm-mingw-ucrt \
+  && cd opt/llvm-mingw-ucrt \
+  && curl -L "${MINGW_URL}" -o "mingw.tar.xz" \
+  && tar -xf mingw.tar.xz --strip-components=1 \
+  && rm -rf mingw.tar.xz
 
 # Copy prebuilt rocksdb binary from host (CI: build_base_image.yml)
 COPY rocksdb/ /usr/rocksdb/
