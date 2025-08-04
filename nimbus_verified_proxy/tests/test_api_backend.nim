@@ -27,8 +27,7 @@ type
     blockReceipts: Table[Hash32, seq[ReceiptObject]]
     receipts: Table[Hash32, ReceiptObject]
     transactions: Table[Hash32, TransactionObject]
-    # TODO: the key type should be FilterOptions. Change once this issue is resolved https://github.com/status-im/nimbus-eth1/issues/3537
-    logs: Table[Hash, seq[LogObject]]
+    logs: Table[FilterOptions, seq[LogObject]]
 
 func init*(T: type TestApiState, chainId: UInt256): T =
   TestApiState(chainId: chainId)
@@ -91,13 +90,18 @@ template loadBlockReceipts*(
 template loadLogs*(
     t: TestApiState, filterOptions: FilterOptions, logs: seq[LogObject]
 ) =
-  t.logs[hash(filterOptions)] = logs
+  t.logs[filterOptions] = logs
 
 func hash*(x: BlockTag): Hash =
   if x.kind == BlockIdentifierKind.bidAlias:
     return hash(x.alias)
   else:
     return hash(x.number)
+
+# TODO: remove template below after this is resolved
+# https://github.com/nim-lang/Nim/issues/25087
+template `==`*(x: BlockTag, y: BlockTag): bool =
+  hash(x) == hash(y)
 
 func hash*[T](x: SingleOrList[T]): Hash =
   if x.kind == SingleOrListKind.slkSingle:
@@ -106,6 +110,11 @@ func hash*[T](x: SingleOrList[T]): Hash =
     return hash(x.list)
   else:
     return hash(0)
+
+# TODO: remove template below after this is resolved
+# https://github.com/nim-lang/Nim/issues/25087
+template `==`*[T](x: SingleOrList[T], y: SingleOrList[T]): bool =
+  hash(x) == hash(y)
 
 func hash*(x: FilterOptions): Hash =
   let
@@ -128,6 +137,11 @@ func hash*(x: FilterOptions): Hash =
         hash(0)
 
   (fromHash xor toHash xor addrHash xor topicsHash xor blockHashHash)
+
+# TODO: remove template below after this is resolved
+# https://github.com/nim-lang/Nim/issues/25087
+template `==`*(x: FilterOptions, y: FilterOptions): bool =
+  hash(x) == hash(y)
 
 func convToPartialBlock(blk: BlockObject): BlockObject =
   var txHashes: seq[TxOrHash]
@@ -212,7 +226,7 @@ proc initTestApiBackend*(t: TestApiState): EthApiBackend =
       Opt.some(t.blockReceipts[blkHash])
 
     getLogsProc = proc(filterOptions: FilterOptions): Future[seq[LogObject]] {.async.} =
-      t.logs[hash(filterOptions)]
+      t.logs[filterOptions]
 
     getTransactionByHashProc = proc(
         txHash: Hash32
