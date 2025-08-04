@@ -340,14 +340,14 @@ proc populateConfigObject*(com: CommonRef, fork: HardFork, latestHeader: Header)
 
   var configObject = ConfigObject()
 
-  configObject.activationTime = Timestamp com.activationTime(fork).get(EthTime(0))
+  configObject.activationTime = Number com.activationTime(fork).get(EthTime(0))
   configObject.chainId = com.chainId
   configObject.forkId = FixedBytes[4] com.forkId(
     uint64(latestHeader.timestamp), uint64(com.activationTime(fork).get(EthTime(0)))
   ).crc.toBytesBE
-  configObject.blobSchedule.max = Quantity com.maxBlobsPerBlock(fork)
-  configObject.blobSchedule.target = Quantity com.targetBlobsPerBlock(fork)
-  configObject.blobSchedule.baseFeeUpdateFraction = Quantity com.baseFeeUpdateFraction(fork)
+  configObject.blobSchedule.max = Number com.maxBlobsPerBlock(fork)
+  configObject.blobSchedule.target = Number com.targetBlobsPerBlock(fork)
+  configObject.blobSchedule.baseFeeUpdateFraction = Number com.baseFeeUpdateFraction(fork)
 
   # Precompiles
   let 
