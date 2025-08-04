@@ -60,8 +60,7 @@ proc init(
   T.init(com, header.stateRoot)
 
 # -------------------
-
-proc `%`(x: addresses.Address|Bytes32|Bytes256|Hash32): JsonNode =
+proc `%`(x: addresses.Address | Bytes32 | Bytes256 | Hash32): JsonNode =
   result = %toHex(x)
 
 proc toJson(receipt: Receipt): JsonNode =
