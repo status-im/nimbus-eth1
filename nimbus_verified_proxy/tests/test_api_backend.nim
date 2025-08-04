@@ -40,7 +40,7 @@ func init*(T: type TestApiState, chainId: UInt256): T =
     blockReceipts: initTable[Hash32, seq[ReceiptObject]](),
     receipts: initTable[Hash32, ReceiptObject](),
     transactions: initTable[Hash32, TransactionObject](),
-    logs: initTable[Hash, seq[LogObject]](),
+    logs: initTable[FilterOptions, seq[LogObject]](),
   )
 
 func clear*(t: TestApiState) =
@@ -101,7 +101,7 @@ template loadBlockReceipts*(
 template loadLogs*(
     t: TestApiState, filterOptions: FilterOptions, logs: seq[LogObject]
 ) =
-  t.logs[hash(filterOptions)] = logs
+  t.logs[filterOptions] = logs
 
 func hash*(x: BlockTag): Hash =
   if x.kind == BlockIdentifierKind.bidAlias:
@@ -121,23 +121,23 @@ func hash*(x: FilterOptions): Hash =
   let
     fromHash =
       if x.fromBlock.isSome():
-        uint64(hash(x.fromBlock.get))
+        hash(x.fromBlock.get)
       else:
-        uint64(hash(0))
+        hash(0)
     toHash =
       if x.toBlock.isSome():
-        uint64(hash(x.toBlock.get))
+        hash(x.toBlock.get)
       else:
-        uint64(hash(0))
-    addrHash = uint64(hash(x.address))
-    topicsHash = uint64(hash(x.topics))
+        hash(0)
+    addrHash = hash(x.address)
+    topicsHash = hash(x.topics)
     blockHashHash =
       if x.blockHash.isSome():
-        uint64(hash(x.blockHash.get))
+        hash(x.blockHash.get)
       else:
-        uint64(hash(0))
+        hash(0)
 
-  return hash(fromHash + toHash + addrHash + topicsHash + blockHashHash)
+  return (fromHash xor toHash xor addrHash xor topicsHash xor blockHashHash)
 
 func convToPartialBlock(blk: BlockObject): BlockObject =
   var txHashes: seq[TxOrHash]
@@ -191,6 +191,7 @@ proc initTestApiBackend*(t: TestApiState): EthApiBackend =
     getBlockByNumberProc = proc(
         blkNum: BlockTag, fullTransactions: bool
     ): Future[BlockObject] {.async.} =
+      # we directly use number here because the verified proxy should never use aliases
       let blkHash = t.nums[blkNum.number]
 
       if fullTransactions:
@@ -216,11 +217,12 @@ proc initTestApiBackend*(t: TestApiState): EthApiBackend =
     getBlockReceiptsProc = proc(
         blockId: BlockTag
     ): Future[Opt[seq[ReceiptObject]]] {.async.} =
+      # we directly use number here because the verified proxy should never use aliases
       let blkHash = t.nums[blockId.number]
       Opt.some(t.blockReceipts[blkHash])
 
     getLogsProc = proc(filterOptions: FilterOptions): Future[seq[LogObject]] {.async.} =
-      t.logs[hash(filterOptions)]
+      t.logs[filterOptions]
 
     getTransactionByHashProc = proc(
         txHash: Hash32
