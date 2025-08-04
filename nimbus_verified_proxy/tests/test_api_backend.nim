@@ -30,18 +30,7 @@ type
     logs: Table[FilterOptions, seq[LogObject]]
 
 func init*(T: type TestApiState, chainId: UInt256): T =
-  TestApiState(
-    chainId: chainId,
-    blocks: initTable[Hash32, BlockObject](),
-    nums: initTable[Quantity, Hash32](),
-    proofs: initTable[ProofQuery, ProofResponse](),
-    accessLists: initTable[AccessListQuery, AccessListResult](),
-    codes: initTable[CodeQuery, seq[byte]](),
-    blockReceipts: initTable[Hash32, seq[ReceiptObject]](),
-    receipts: initTable[Hash32, ReceiptObject](),
-    transactions: initTable[Hash32, TransactionObject](),
-    logs: initTable[FilterOptions, seq[LogObject]](),
-  )
+  TestApiState(chainId: chainId)
 
 func clear*(t: TestApiState) =
   t.blocks.clear()
@@ -137,7 +126,7 @@ func hash*(x: FilterOptions): Hash =
       else:
         hash(0)
 
-  return (fromHash xor toHash xor addrHash xor topicsHash xor blockHashHash)
+  (fromHash xor toHash xor addrHash xor topicsHash xor blockHashHash)
 
 func convToPartialBlock(blk: BlockObject): BlockObject =
   var txHashes: seq[TxOrHash]

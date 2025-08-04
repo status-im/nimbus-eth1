@@ -96,8 +96,6 @@ proc getLogs*(
   # store block hashes contains the logs so that we can batch receipt requests
   var
     prevBlockHash: Hash32
-    logIndexDiff: int
-    prevTxIdx: int
     rxs: seq[ReceiptObject]
 
   for lg in logObjs:
