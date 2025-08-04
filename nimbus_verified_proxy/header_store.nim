@@ -29,6 +29,9 @@ type HeaderStore* = ref object
 func convLCHeader*(lcHeader: ForkedLightClientHeader): Result[Header, string] =
   withForkyHeader(lcHeader):
     when lcDataFork > LightClientDataFork.Altair:
+      template p(): auto =
+        forkyHeader.execution
+
       when lcDataFork >= LightClientDataFork.Capella:
         let withdrawalsRoot = Opt.some(p.withdrawals_root.asBlockHash)
       else:
@@ -50,9 +53,6 @@ func convLCHeader*(lcHeader: ForkedLightClientHeader): Result[Header, string] =
         let requestsHash = Opt.none(Hash32)
       else:
         const requestsHash = Opt.none(Hash32)
-
-      template p(): auto =
-        forkyHeader.execution
 
       let h = Header(
         parentHash: p.parent_hash.asBlockHash,
