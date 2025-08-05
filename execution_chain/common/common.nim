@@ -30,9 +30,6 @@ export
   taskpools,
   logging
 
-logScope:
-  topics = "common"
-
 type
   HeaderChainUpdateCB* = proc(hdr: Header; fin: Hash32) {.gcsafe, raises: [].}
     ## Inform `CL` sub-module `header_chain_cache` about new head.
