@@ -37,13 +37,6 @@ proc buildSnapshot(txFrame: AristoTxRef, minLevel: int) =
         # `frame` has a snapshot only in the first iteration of the for loop
         txFrame.snapshot = move(frame.snapshot)
 
-        # Copy cached values that are not present in the newer txFrame.
-        # These are needed to update the main caches in the AristoDbRef instance.
-        for k, v in frame.accLeaves:
-          discard txFrame.accLeaves.hasKeyOrPut(k, v)
-        for k, v in frame.stoLeaves:
-          discard txFrame.stoLeaves.hasKeyOrPut(k, v)
-
         # Verify that https://github.com/nim-lang/Nim/issues/23759 is not present
         assert frame.snapshot.vtx.len == 0 and frame.snapshot.level.isNone()
 
@@ -217,7 +210,22 @@ with --debug-eager-state-root."""
   #      really run after things have been written (to maintain sync betweeen
   #      in-memory and on-disk state)
 
-  # Copy back updated payloads
+  # Copy back updated payloads into the shared database LRU caches.
+
+  # Copy cached values from the snapshot
+  for accPath, v in txFrame.snapshot.acc:
+    if v[0] == nil:
+      db.accLeaves.del(accPath)
+    else:
+      discard db.accLeaves.update(accPath, v[0])
+
+  for mixPath, v in txFrame.snapshot.sto:
+    if v[0] == nil:
+      db.stoLeaves.del(mixPath)
+    else:
+      discard db.stoLeaves.update(mixPath, v[0])
+
+  # Copy cached values from the txFrame
   for accPath, vtx in txFrame.accLeaves:
     if vtx == nil:
       db.accLeaves.del(accPath)
