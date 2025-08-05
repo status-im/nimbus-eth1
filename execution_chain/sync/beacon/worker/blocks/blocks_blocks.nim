@@ -17,12 +17,25 @@ import
   ../../../../networking/p2p,
   ../../../wire_protocol/types,
   ../../worker_desc,
-  ../update,
-  ./[blocks_fetch, blocks_helpers, blocks_import, blocks_unproc]
+  ./[blocks_fetch, blocks_helpers, blocks_unproc]
 
 # ------------------------------------------------------------------------------
 # Private helpers
 # ------------------------------------------------------------------------------
+
+template importBlock(
+     ctx: BeaconCtxRef;
+     maybePeer: Opt[BeaconBuddyRef];
+     blk: EthBlock;
+     effPeerID: Hash;
+       ): Result[Duration,BeaconError] =
+  ## Async/template
+  ##
+  ## Wrapper around `importBlock()` handler
+  ##
+  let rc = await ctx.handler.importBlock(ctx, maybePeer, blk, effPeerID)
+  ctx.handler.syncImportBlock(ctx, maybePeer) # debugging, trace, replay
+  rc
 
 proc getNthHash(ctx: BeaconCtxRef; blocks: seq[EthBlock]; n: int): Hash32 =
   ctx.hdrCache.getHash(blocks[n].header.number).valueOr:
@@ -197,7 +210,7 @@ template blocksImport*(
 
       for n in 0 ..< blocks.len:
         let nBn = blocks[n].header.number
-        discard (await ctx.importBlock(maybePeer, blocks[n], peerID)).valueOr:
+        ctx.importBlock(maybePeer, blocks[n], peerID).isOkOr:
           if error.excp != ECancelledError:
             isError = true
 
