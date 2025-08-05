@@ -11,9 +11,22 @@
 import
   std/[tables],
   eth/common/[blocks as ethblocks, receipts, hashes, addresses],
-  nimcrypto/sha2
+  nimcrypto/sha2,
+  ssz_serialization,
+  stew/bitops2
 
 export hashes, receipts
+# ---------------------------------------------------------------------------
+# Constants
+# ---------------------------------------------------------------------------
+
+const
+  MAX_EPOCH_HISTORY* = 1
+  MAP_WIDTH* = 16
+  MAPS_PER_EPOCH* = 8
+  MAX_BASE_ROW_LENGTH* = 4096
+
+
 
 # ---------------------------------------------------------------------------
 # Types
@@ -23,6 +36,9 @@ when not declared(ExecutionAddress):
   type ExecutionAddress* = Address
 
 type
+  FilterRow* =
+    ByteList[MAX_BASE_ROW_LENGTH * log2trunc(MAP_WIDTH) // 8 * MAPS_PER_EPOCH]
+
   Block* = object
     ## Simplified block representation carrying header and receipts
     header*: ethblocks.Header
@@ -49,7 +65,7 @@ type
 
   LogRecordKind* = enum
     lrkDelimiter,        ## Entry is a delimiter marking a new block
-    lrkLog               ## Entry contains an actual log
+    lrkLog   
 
   LogRecord* = object
     case kind*: LogRecordKind
@@ -58,11 +74,26 @@ type
     of lrkLog:
       entry*: LogEntry
 
-  LogIndex* = object
-    ## Container holding log entries and index bookkeeping data
-    next_index*: uint64
+  LogIndexEpoch* = object
+    ## Per-epoch log index data
     records*: Table[uint64, LogRecord]
     log_index_root*: Hash32
+
+  LogIndex* = object
+    ## Container holding log entries and index bookkeeping data
+    epochs*: Vector[LogIndexEpoch, MAX_EPOCH_HISTORY]
+    next_index*: uint64
+    ## Debugging helpers tracking latest operations
+    latest_block_delimiter_index*: uint64
+    latest_block_delimiter_root*: Hash32
+    latest_log_entry_index*: uint64
+    latest_log_entry_root*: Hash32
+    latest_value_index*: uint64
+    latest_layer_index*: uint64
+    latest_row_index*: uint64
+    latest_column_index*: uint64
+    latest_log_value*: Hash32
+    latest_row_root*: Hash32
 
 # ---------------------------------------------------------------------------
 # Helpers
@@ -78,6 +109,8 @@ proc topic_value*(topic: Hash32): Hash32 =
 proc add_log_value*(log_index: var LogIndex, value_hash: Hash32) =
   ## Stub: assign index to hashed address/topic and increment counter
   discard value_hash
+  log_index.latest_value_index = log_index.next_index
+  log_index.latest_log_value = value_hash
   log_index.next_index.inc
 
 proc hash_tree_root*(li: LogIndex): Hash32 =
@@ -97,11 +130,37 @@ proc add_block_logs*(log_index: var LogIndex, block: Block) =
   ## metadata describing its position. `add_log_value` is invoked for the log
   ## address and each topic which in this stub only advances the global index.
   ## Finally `log_index_root` is updated with a hash of the structure.
+log_index.latest_value_index = log_index.next_index
+  log_index.latest_log_value = value_hash
+  log_index.next_index.inc
+
+proc hash_tree_root*(li: LogIndex): Hash32 =
+  ## Minimal stand-in for SSZ hash tree root.
+  ## Uses sha256 over the textual representation of the current index.
+  sha256.digest($li.next_index).to(Hash32)
+
+# ---------------------------------------------------------------------------
+# Public API
+# ---------------------------------------------------------------------------
+
+proc add_block_logs*(log_index: var LogIndex, block: Block) =
+  ## Add all logs from `block` to `log_index`.
+  ##
+  ## For blocks after genesis, a `BlockDelimiterEntry` is inserted prior to
+  ## processing logs. Each receipt log is converted into a `LogEntry` with
+  ## metadata describing its position. `add_log_value` is invoked for the log
+  ## address and each topic which in this stub only advances the global index.
+  ## Finally `log_index_root` is updated with a hash of the structure.
+  if log_index.epochs[0].records.isNil:
+    log_index.epochs[0].records = initTable[uint64, LogRecord]()
+
   if block.header.number > 0:
     let delimiter = BlockDelimiterEntry(blockNumber: block.header.number)
-    log_index.records[log_index.next_index] =
+    log_index.epochs[0].records[log_index.next_index] =
       LogRecord(kind: lrkDelimiter, block: delimiter)
+    log_index.latest_block_delimiter_index = log_index.next_index
     log_index.next_index.inc
+    log_index.latest_block_delimiter_root = hash_tree_root(log_index)
 
   for txPos, receipt in block.receipts:
     for logPos, log in receipt.logs:
@@ -111,13 +170,20 @@ proc add_block_logs*(log_index: var LogIndex, block: Block) =
         logIndex: uint32(logPos)
       )
       let entry = LogEntry(log: log, meta: meta)
-      log_index.records[log_index.next_index] =
+      log_index.epochs[0].records[log_index.next_index] =
         LogRecord(kind: lrkLog, entry: entry)
+
+      log_index.latest_log_entry_index = log_index.next_index
+      log_index.latest_log_entry_root = hash_tree_root(log_index)
 
       add_log_value(log_index, address_value(log.address))
       for topic in log.topics:
         add_log_value(log_index, topic_value(topic.data.to(Hash32)))
 
-  log_index.log_index_root = hash_tree_root(log_index)
+  log_index.epochs[0].log_index_root = hash_tree_root(log_index)
+  log_index.latest_row_root = log_index.epochs[0].log_index_root
+  log_index.latest_layer_index = 0
+  log_index.latest_row_index = 0
+  log_index.latest_column_index = 0
 
 {.pop.}
