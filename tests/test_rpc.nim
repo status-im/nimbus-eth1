@@ -184,6 +184,7 @@ proc makeBlobTx(env: var TestEnv, nonce: int): PooledTransaction =
   PooledTransaction(
     tx: tx,
     blobsBundle: BlobsBundle(
+      wrapperVersion: WrapperVersionEIP4844,
       blobs: blobs,
       commitments: @[pooled_txs.KzgCommitment(commitment.bytes)],
       proofs: @[pooled_txs.KzgProof(proof.bytes)]))
@@ -221,6 +222,9 @@ proc setupEnv(envFork: HardFork = MergeFork): TestEnv =
 
   if envFork >= Prague:
     conf.networkParams.config.pragueTime = Opt.some(0.EthTime)
+    conf.networkParams.config.osakaTime = Opt.some(3805601325.EthTime)
+    conf.networkParams.config.bpo1Time = Opt.some(3805701325.EthTime)
+    conf.networkParams.config.bpo2Time = Opt.some(3805801325.EthTime)
 
   let
     com   = setupCom(conf)
@@ -313,7 +317,7 @@ createRpcSigsFromNim(RpcClient):
 
 proc rpcMain*() =
   suite "Remote Procedure Calls":
-    var env = setupEnv(Shanghai)
+    var env = setupEnv(Prague)
     env.generateBlock()
     let
       client = env.client
@@ -374,7 +378,16 @@ proc rpcMain*() =
 
     test "eth_config":
       let res = await client.eth_config()
-      # TODO: debugEcho res.toJson()
+      check res.current.chainId == com.chainId
+      check res.current.activationTime.uint64 == 0'u64
+
+      check res.next.isSome() and res.last.isSome()
+
+      check res.next.get().chainId == com.chainId
+      check res.next.get().activationTime.uint64 == 3805601325'u64
+
+      check res.last.get().chainId == com.chainId
+      check res.last.get().activationTime.uint64 == 3805801325'u64
 
     test "eth_syncing":
       let res = await client.eth_syncing()
