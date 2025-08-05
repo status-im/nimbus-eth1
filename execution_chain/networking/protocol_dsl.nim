@@ -10,6 +10,7 @@
 {.push raises: [].}
 
 import
+  std/typetraits,
   stew/shims/macros,
   stew/byteutils,
   chronos,
@@ -356,7 +357,7 @@ proc checkedRlpRead(
       return r.read(MsgType)
     except rlp.RlpError as e:
       debug "Failed rlp.read",
-        peer = peer, dataType = MsgType.name, err = e.msg, errName = e.name
+        peer = peer, dataType = typetraits.name(MsgType), err = e.msg, errName = e.name
         #, rlpData = r.inspect -- don't use (might crash)
 
       raise e

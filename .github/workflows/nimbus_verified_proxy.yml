@@ -141,12 +141,13 @@ jobs:
           runner.os == 'Windows'
         run: |
           mkdir -p external
-          MINGW_BASE="https://github.com/mstorsjo/llvm-mingw/releases/download/20230905"
+          LLVM_VERSION="20250730"
+          MINGW_BASE="https://github.com/mstorsjo/llvm-mingw/releases/download/$LLVM_VERSION"
           if [[ '${{ matrix.target.cpu }}' == 'amd64' ]]; then
-            MINGW_URL="$MINGW_BASE/llvm-mingw-20230905-ucrt-x86_64.zip"
+            MINGW_URL="$MINGW_BASE/llvm-mingw-$LLVM_VERSION-ucrt-x86_64.zip"
             ARCH=64
           else
-            MINGW_URL="$MINGW_BASE/llvm-mingw-20230905-ucrt-i686.zip"
+            MINGW_URL="$MINGW_BASE/llvm-mingw-$LLVM_VERSION-ucrt-i686.zip"
             ARCH=32
           fi
           curl -L "$MINGW_URL" -o "external/mingw-${{ matrix.target.cpu }}.zip"
@@ -177,7 +178,7 @@ jobs:
 
       - name: Build Nim and Nimbus-eth1 dependencies
         run: |
-          make V=1 -j${ncpu} ARCH_OVERRIDE=${PLATFORM} CI_CACHE=NimBinCache update-from-ci
+          make V=1 -j${ncpu} ARCH_OVERRIDE=${PLATFORM} CI_CACHE=NimBinCache init
 
       - name: Run verified proxy tests (Windows)
         if: runner.os == 'Windows'

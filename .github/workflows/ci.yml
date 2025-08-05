@@ -21,10 +21,23 @@ on:
       - '.github/workflows/portal*.yml'
       - 'nimbus_verified_proxy/**'
       - '.github/workflows/nimbus_verified_proxy.yml'
+      - '.github/workflows/build_base_image.yml'
+      - 'docker/**'
 
-  # Disable `pull_request`.  Experimenting with using only `push` for PRs.
-  #pull_request:
-  #  paths-ignore: ['doc/**', 'docs/**', '**/*.md', 'hive_integration/**']
+  pull_request:
+    paths-ignore:
+      - 'doc/**'
+      - 'docs/**'
+      - '**/*.md'
+      - '**/*.yml'
+      - 'hive_integration/**'
+      - 'portal/**'
+      - '.github/workflows/portal*.yml'
+      - 'nimbus_verified_proxy/**'
+      - '.github/workflows/nimbus_verified_proxy.yml'
+      - '.github/workflows/build_base_image.yml'
+      - 'docker/**'
+
   workflow_dispatch:
 
 jobs:
@@ -124,12 +137,13 @@ jobs:
           runner.os == 'Windows'
         run: |
           mkdir -p external
-          MINGW_BASE="https://github.com/mstorsjo/llvm-mingw/releases/download/20230905"
+          LLVM_VERSION="20250730"
+          MINGW_BASE="https://github.com/mstorsjo/llvm-mingw/releases/download/$LLVM_VERSION"
           if [[ '${{ matrix.target.cpu }}' == 'amd64' ]]; then
-            MINGW_URL="$MINGW_BASE/llvm-mingw-20230905-ucrt-x86_64.zip"
+            MINGW_URL="$MINGW_BASE/llvm-mingw-$LLVM_VERSION-ucrt-x86_64.zip"
             ARCH=64
           else
-            MINGW_URL="$MINGW_BASE/llvm-mingw-20230905-ucrt-i686.zip"
+            MINGW_URL="$MINGW_BASE/llvm-mingw-$LLVM_VERSION-ucrt-i686.zip"
             ARCH=32
           fi
           curl -L "$MINGW_URL" -o "external/mingw-${{ matrix.target.cpu }}.zip"
@@ -158,15 +172,31 @@ jobs:
           path: NimBinCache
           key: 'nim-${{ matrix.target.os }}-${{ matrix.target.cpu }}-${{ steps.versions.outputs.nimbus_build_system }}'
 
+      - name: Get latest nim-rocksdb commit hash
+        id: rocksdb-versions
+        run: |
+          getHash() {
+            git ls-remote "https://github.com/$1" "${2:-HEAD}" | cut -f 1
+          }
+          rocksHash=$(getHash status-im/nim-rocksdb)
+          echo "nim_rocksdb=$rocksHash" >> $GITHUB_OUTPUT
+
+      - name: Restore prebuilt rocksdb from cache
+        id: rocksdb-cache
+        uses: actions/cache@v4
+        with:
+          path: RocksBinCache
+          key: 'rocks-${{ matrix.target.os }}-${{ matrix.target.cpu }}-${{ steps.rocksdb-versions.outputs.nim_rocksdb }}'
+
       - name: Build Nim and Nimbus-eth1 dependencies
         run: |
-          make -j${ncpu} ARCH_OVERRIDE=${PLATFORM} CI_CACHE=NimBinCache update-from-ci
+          make -j${ncpu} ARCH_OVERRIDE=${PLATFORM} CI_CACHE=NimBinCache init
 
       - name: Run nimbus-eth1 tests (Windows)
         if: runner.os == 'Windows'
         run: |
           gcc --version
-          DEFAULT_MAKE_FLAGS="-j${ncpu} ENABLE_VMLOWMEM=${ENABLE_VMLOWMEM}"
+          DEFAULT_MAKE_FLAGS="-j${ncpu} ENABLE_VMLOWMEM=${ENABLE_VMLOWMEM} ROCKSDB_CI_CACHE=RocksBinCache"
           mingw32-make ${DEFAULT_MAKE_FLAGS} all test_import build_fuzzers
           build/nimbus_execution_client.exe --help
           # give us more space
@@ -178,7 +208,7 @@ jobs:
         if: runner.os == 'Linux'
         run: |
           export LD_LIBRARY_PATH="${LD_LIBRARY_PATH}:/usr/local/lib"
-          DEFAULT_MAKE_FLAGS="-j${ncpu}"
+          DEFAULT_MAKE_FLAGS="-j${ncpu} ROCKSDB_CI_CACHE=RocksBinCache"
           env CC=gcc make ${DEFAULT_MAKE_FLAGS} all test_import build_fuzzers
           build/nimbus_execution_client --help
           # CC, GOARCH, and CGO_ENABLED are needed to select correct compiler 32/64 bit
@@ -193,7 +223,7 @@ jobs:
         if: runner.os == 'Macos'
         run: |
           export ZERO_AR_DATE=1 # avoid timestamps in binaries
-          DEFAULT_MAKE_FLAGS="-j${ncpu}"
+          DEFAULT_MAKE_FLAGS="-j${ncpu} ROCKSDB_CI_CACHE=RocksBinCache"
           make ${DEFAULT_MAKE_FLAGS} all test_import build_fuzzers
           build/nimbus_execution_client --help
           # "-static" option will not work for osx unless static system libraries are provided

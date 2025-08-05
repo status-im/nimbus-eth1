@@ -13,6 +13,7 @@ type TestEvmState* = ref object
   accounts: Table[Address, Account]
   storage: Table[Address, Table[UInt256, UInt256]]
   code: Table[Address, seq[byte]]
+  blockHashes: Table[BlockNumber, Hash32]
 
 proc init*(T: type TestEvmState): T =
   TestEvmState()
@@ -30,6 +31,9 @@ proc setStorage*(
 proc setCode*(backend: TestEvmState, address: Address, code: seq[byte]) =
   backend.code[address] = code
 
+proc setBlockHash*(backend: TestEvmState, number: BlockNumber, blockHash: Hash32) =
+  backend.blockHashes[number] = blockHash
+
 proc getAccount*(backend: TestEvmState, address: Address): Account =
   backend.accounts.getOrDefault(address)
 
@@ -39,8 +43,11 @@ proc getStorage*(backend: TestEvmState, address: Address, slotKey: UInt256): UIn
 proc getCode*(backend: TestEvmState, address: Address): seq[byte] =
   backend.code.getOrDefault(address)
 
+proc getBlockHash*(backend: TestEvmState, number: BlockNumber): Hash32 =
+  backend.blockHashes.getOrDefault(number)
+
 proc toAsyncEvmStateBackend*(testState: TestEvmState): AsyncEvmStateBackend =
-  # State root is ignored because TestEvmState only stores a single state
+  # header is ignored because TestEvmState only stores a single state
   let
     accProc = proc(
         header: Header, address: Address
@@ -54,5 +61,9 @@ proc toAsyncEvmStateBackend*(testState: TestEvmState): AsyncEvmStateBackend =
         header: Header, address: Address
     ): Future[Opt[seq[byte]]] {.async: (raises: [CancelledError]).} =
       Opt.some(testState.getCode(address))
+    blockHashProc = proc(
+        header: Header, number: BlockNumber
+    ): Future[Opt[Hash32]] {.async: (raises: [CancelledError]).} =
+      Opt.some(testState.getBlockHash(number))
 
-  AsyncEvmStateBackend.init(accProc, storageProc, codeProc)
+  AsyncEvmStateBackend.init(accProc, storageProc, codeProc, blockHashProc)

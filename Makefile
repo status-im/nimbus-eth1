@@ -13,47 +13,47 @@ BUILD_SYSTEM_DIR := vendor/nimbus-build-system
 LINK_PCRE := 0
 
 EXCLUDED_NIM_PACKAGES := 	\
-	vendor/nimbus-eth2/vendor/nim-bearssl 					\
-	vendor/nimbus-eth2/vendor/nim-blscurve 					\
-	vendor/nimbus-eth2/vendor/nim-bearssl 					\
-	vendor/nimbus-eth2/vendor/nim-blscurve					\
-	vendor/nimbus-eth2/vendor/nimbus-build-system		\
-	vendor/nimbus-eth2/vendor/nim-chronicles				\
-	vendor/nimbus-eth2/vendor/nim-chronos						\
-	vendor/nimbus-eth2/vendor/nim-confutils					\
-	vendor/nimbus-eth2/vendor/nimcrypto							\
-	vendor/nimbus-eth2/vendor/nim-eth								\
-	vendor/nimbus-eth2/vendor/nim-faststreams				\
-	vendor/nimbus-eth2/vendor/nim-http-utils				\
-	vendor/nimbus-eth2/vendor/nim-json-rpc					\
-	vendor/nimbus-eth2/vendor/nim-json-serialization\
-	vendor/nimbus-eth2/vendor/nim-libbacktrace			\
-	vendor/nimbus-eth2/vendor/nim-metrics						\
-	vendor/nimbus-eth2/vendor/nim-nat-traversal			\
-  vendor/nimbus-eth2/vendor/nim-results     			\
-	vendor/nimbus-eth2/vendor/nim-secp256k1					\
-	vendor/nimbus-eth2/vendor/nim-serialization			\
-	vendor/nimbus-eth2/vendor/nim-snappy						\
-	vendor/nimbus-eth2/vendor/nim-sqlite3-abi				\
-	vendor/nimbus-eth2/vendor/nim-ssz-serialization	\
-	vendor/nimbus-eth2/vendor/nim-stew							\
-	vendor/nimbus-eth2/vendor/nim-stint							\
-	vendor/nimbus-eth2/vendor/nim-testutils					\
-	vendor/nimbus-eth2/vendor/nim-toml-serialization\
-	vendor/nimbus-eth2/vendor/nim-unittest2					\
-	vendor/nimbus-eth2/vendor/nim-web3							\
-	vendor/nimbus-eth2/vendor/nim-websock						\
-	vendor/nimbus-eth2/vendor/nim-zlib							\
-	vendor/nimbus-eth2/vendor/nim-taskpools					\
-	vendor/nimbus-eth2/vendor/nim-normalize					\
-	vendor/nimbus-eth2/vendor/nim-unicodedb					\
-	vendor/nimbus-eth2/vendor/nim-libp2p						\
-	vendor/nimbus-eth2/vendor/nim-presto						\
-	vendor/nimbus-eth2/vendor/nim-zxcvbn						\
-  vendor/nimbus-eth2/vendor/nim-kzg4844						\
-  vendor/nimbus-eth2/vendor/nim-minilru						\
-	vendor/nimbus-eth2/vendor/nimbus-security-resources \
-	vendor/nimbus-eth2/vendor/NimYAML
+  vendor/nimbus-eth2/vendor/nim-bearssl               \
+  vendor/nimbus-eth2/vendor/nim-blscurve              \
+  vendor/nimbus-eth2/vendor/nim-bearssl               \
+  vendor/nimbus-eth2/vendor/nim-blscurve              \
+  vendor/nimbus-eth2/vendor/nimbus-build-system       \
+  vendor/nimbus-eth2/vendor/nim-chronicles            \
+  vendor/nimbus-eth2/vendor/nim-chronos               \
+  vendor/nimbus-eth2/vendor/nim-confutils             \
+  vendor/nimbus-eth2/vendor/nimcrypto                 \
+  vendor/nimbus-eth2/vendor/nim-eth                   \
+  vendor/nimbus-eth2/vendor/nim-faststreams           \
+  vendor/nimbus-eth2/vendor/nim-http-utils            \
+  vendor/nimbus-eth2/vendor/nim-json-rpc              \
+  vendor/nimbus-eth2/vendor/nim-json-serialization    \
+  vendor/nimbus-eth2/vendor/nim-libbacktrace          \
+  vendor/nimbus-eth2/vendor/nim-metrics               \
+  vendor/nimbus-eth2/vendor/nim-nat-traversal         \
+  vendor/nimbus-eth2/vendor/nim-results               \
+  vendor/nimbus-eth2/vendor/nim-secp256k1             \
+  vendor/nimbus-eth2/vendor/nim-serialization         \
+  vendor/nimbus-eth2/vendor/nim-snappy                \
+  vendor/nimbus-eth2/vendor/nim-sqlite3-abi           \
+  vendor/nimbus-eth2/vendor/nim-ssz-serialization     \
+  vendor/nimbus-eth2/vendor/nim-stew                  \
+  vendor/nimbus-eth2/vendor/nim-stint                 \
+  vendor/nimbus-eth2/vendor/nim-testutils             \
+  vendor/nimbus-eth2/vendor/nim-toml-serialization    \
+  vendor/nimbus-eth2/vendor/nim-unittest2             \
+  vendor/nimbus-eth2/vendor/nim-web3                  \
+  vendor/nimbus-eth2/vendor/nim-websock               \
+  vendor/nimbus-eth2/vendor/nim-zlib                  \
+  vendor/nimbus-eth2/vendor/nim-taskpools             \
+  vendor/nimbus-eth2/vendor/nim-normalize             \
+  vendor/nimbus-eth2/vendor/nim-unicodedb             \
+  vendor/nimbus-eth2/vendor/nim-libp2p                \
+  vendor/nimbus-eth2/vendor/nim-presto                \
+  vendor/nimbus-eth2/vendor/nim-zxcvbn                \
+  vendor/nimbus-eth2/vendor/nim-kzg4844               \
+  vendor/nimbus-eth2/vendor/nim-minilru               \
+  vendor/nimbus-eth2/vendor/nimbus-security-resources \
+  vendor/nimbus-eth2/vendor/NimYAML
 
 # we don't want an error here, so we can handle things later, in the ".DEFAULT" target
 -include $(BUILD_SYSTEM_DIR)/makefiles/variables.mk
@@ -120,10 +120,8 @@ VERIF_PROXY_OUT_PATH ?= build/libverifproxy/
 	rocksdb \
 	dist-amd64 \
 	dist-arm64 \
-	dist-arm \
 	dist-win64 \
 	dist-macos \
-	dist-macos-arm64 \
 	dist
 
 ifeq ($(NIM_PARAMS),)
@@ -133,12 +131,11 @@ ifeq ($(NIM_PARAMS),)
 
 # We don't need these `vendor/holesky` files but fetching them
 # may trigger 'This repository is over its data quota' from GitHub
-GIT_SUBMODULE_CONFIG := -c lfs.fetchexclude=/public-keys/all.txt,/custom_config_data/genesis.ssz
+GIT_SUBMODULE_CONFIG := -c lfs.fetchexclude=/public-keys/all.txt,/metadata/genesis.ssz,/parsed/parsedConsensusGenesis.json
 
 GIT_SUBMODULE_UPDATE := git -c submodule."vendor/nimbus-eth2".update=none submodule update --init --recursive; \
   git $(GIT_SUBMODULE_CONFIG) submodule update vendor/nimbus-eth2; \
   cd vendor/nimbus-eth2; \
-  git $(GIT_SUBMODULE_CONFIG) submodule update --init vendor/eth2-networks; \
   git $(GIT_SUBMODULE_CONFIG) submodule update --init vendor/holesky; \
   git $(GIT_SUBMODULE_CONFIG) submodule update --init vendor/sepolia; \
   git $(GIT_SUBMODULE_CONFIG) submodule update --init vendor/hoodi; \
@@ -199,7 +196,7 @@ update: | update-common
 	rm -rf nimbus.nims && \
 		$(MAKE) nimbus.nims $(HANDLE_OUTPUT)
 
-update-from-ci: | sanity-checks update-test
+init: | sanity-checks update-test
 	rm -rf nimbus.nims && \
 		$(MAKE) nimbus.nims $(HANDLE_OUTPUT)
 	+ "$(MAKE)" --no-print-directory deps-common
@@ -226,16 +223,12 @@ libbacktrace:
 	+ $(MAKE) -C vendor/nim-libbacktrace --no-print-directory BUILD_CXX_LIB=0
 
 # nim-rocksdb
+ROCKSDB_CI_CACHE :=
 
 ifneq ($(USE_SYSTEM_ROCKSDB), 0)
-ifeq ($(OS), Windows_NT)
 rocksdb:
-	+ vendor/nim-rocksdb/scripts/build_dlls_windows.bat && \
-	cp -a vendor/nim-rocksdb/build/librocksdb.dll build
-else
-rocksdb:
-	+ vendor/nim-rocksdb/scripts/build_static_deps.sh
-endif
+	+ MAKE="$(MAKE)" \
+		scripts/rocksdb_ci_cache.sh $(ROCKSDB_CI_CACHE)
 else
 rocksdb:
 endif
@@ -404,12 +397,6 @@ dist-arm64:
 	+ MAKE="$(MAKE)" \
 		scripts/make_dist.sh arm64
 
-# We get an ICE on RocksDB-7.0.2 with "arm-linux-gnueabihf-g++ (Ubuntu 9.4.0-1ubuntu1~20.04.1) 9.4.0"
-# and with "arm-linux-gnueabihf-g++ (Ubuntu 10.3.0-1ubuntu1) 10.3.0".
-#dist-arm:
-	#+ MAKE="$(MAKE)" \
-		#scripts/make_dist.sh arm
-
 dist-win64:
 	+ MAKE="$(MAKE)" \
 		scripts/make_dist.sh win64
@@ -418,16 +405,10 @@ dist-macos:
 	+ MAKE="$(MAKE)" \
 		scripts/make_dist.sh macos
 
-dist-macos-arm64:
-	+ MAKE="$(MAKE)" \
-		scripts/make_dist.sh macos-arm64
-
 dist:
 	+ $(MAKE) --no-print-directory dist-amd64
 	+ $(MAKE) --no-print-directory dist-arm64
-	#+ $(MAKE) --no-print-directory dist-arm
 	+ $(MAKE) --no-print-directory dist-win64
 	+ $(MAKE) --no-print-directory dist-macos
-	+ $(MAKE) --no-print-directory dist-macos-arm64
 
 endif # "variables.mk" was not included

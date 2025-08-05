@@ -11,7 +11,7 @@ import
   ../execution_chain/compile_info
 
 import
-  std/[os, osproc, strutils, net, options],
+  std/[os, osproc, net, options],
   chronicles,
   eth/net/nat,
   metrics,
