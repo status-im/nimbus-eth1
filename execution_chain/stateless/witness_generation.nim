@@ -27,7 +27,7 @@ proc build*(
     preStateLedger: LedgerRef): T =
   var
     witness = Witness.init()
-    addedStateHashes = initHashSet[Hash32]()
+    addedState = initHashSet[seq[byte]]()
     addedCodeHashes = initHashSet[Hash32]()
 
   for key, codeTouched in witnessKeys:
@@ -36,10 +36,7 @@ proc build*(
 
       let proof = preStateLedger.getAccountProof(key.address)
       for trieNode in proof:
-        let nodeHash = keccak256(trieNode)
-        if nodeHash notin addedStateHashes:
-          witness.addState(trieNode)
-          addedStateHashes.incl(nodeHash)
+        addedState.incl(trieNode)
 
       if codeTouched:
         let codeHash = preStateLedger.getCodeHash(key.address)
@@ -48,18 +45,22 @@ proc build*(
           addedCodeHashes.incl(codeHash)
 
       # Add the storage slots for this account
+      var slots: seq[UInt256]
       for key2, codeTouched2 in witnessKeys:
         if key2.address == key.address and key2.slot.isSome():
           let slot = key2.slot.get()
+          slots.add(slot)
           witness.addKey(slot.toBytesBE())
 
-          let proofs = preStateLedger.getStorageProof(key.address, @[slot])
-          doAssert(proofs.len() == 1)
-          for trieNode in proofs[0]:
-            let nodeHash = keccak256(trieNode)
-            if nodeHash notin addedStateHashes:
-              witness.addState(trieNode)
-              addedStateHashes.incl(nodeHash)
+      if slots.len() > 0:
+        let proofs = preStateLedger.getStorageProof(key.address, slots)
+        doAssert(proofs.len() == slots.len())
+        for proof in proofs:
+          for trieNode in proof:
+            addedState.incl(trieNode)
+
+  for s in addedState.items():
+    witness.addState(s)
 
   witness
 
