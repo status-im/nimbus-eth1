@@ -18,14 +18,22 @@
 
 FROM ubuntu:22.04
 
+ARG AARCH64_VERSION="14.3"
+ENV AARCH64_BASE="https://developer.arm.com/-/media/Files/downloads/gnu/${AARCH64_VERSION}.rel1/binrel/"
+ENV AARCH64_URL="${AARCH64_BASE}/arm-gnu-toolchain-${AARCH64_VERSION}.rel1-x86_64-aarch64-none-linux-gnu.tar.xz"
+ENV ARCHIVE=aarch64
+
 SHELL ["/bin/bash", "-c"]
 
 ENV DEBIAN_FRONTEND=noninteractive TZ="Etc/UTC"
 RUN apt-get -qq update \
- && apt-get -qq -y install build-essential git curl \
-  binutils-aarch64-linux-gnu gcc-aarch64-linux-gnu g++-aarch64-linux-gnu &>/dev/null \
+ && apt-get -qq -y install build-essential git curl &>/dev/null \
  && apt-get -qq clean \
- && rm -rf /var/lib/apt/lists/* /tmp/* /var/tmp/*
+ && rm -rf /var/lib/apt/lists/* /tmp/* /var/tmp/* \
+ && curl -L "${AARCH64_URL}" -o "${ARCHIVE}.tar.xz" \
+ && mkdir -p /opt/${ARCHIVE} \
+ && tar -xf ${ARCHIVE}.tar.xz -C /opt/${ARCHIVE} --strip-components=1 \
+ && rm -rf ${ARCHIVE}.tar.xz
 
 # Copy prebuilt rocksdb binary from host (CI: build_base_image.yml)
 COPY rocksdb/ /usr/rocksdb/

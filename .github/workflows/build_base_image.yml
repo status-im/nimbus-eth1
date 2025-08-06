@@ -19,6 +19,7 @@ jobs:
     needs: matrix_config
 
     strategy:
+      fail-fast: false
       matrix: ${{ fromJSON(needs.matrix_config.outputs.matrix) }}
 
     defaults:
@@ -69,37 +70,22 @@ jobs:
           retention-days: 1
 
   publish-images:
+    needs: [matrix_config, build]
+
     strategy:
       fail-fast: false
-      max-parallel: 20
-      matrix:
-        target: [amd64, arm64, win64, macos]
+      matrix: ${{ fromJSON(needs.matrix_config.outputs.matrix) }}
 
-    needs: build
-    name: 'Docker build for ${{ matrix.target }}'
+    name: 'Docker build for ${{ matrix.os }}-${{ matrix.cpu }}'
     runs-on: ubuntu-latest
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
 
-      - name: Calculate artifact name
-        id: artefact
-        run: |
-          if [[ '${{ matrix.target }}' == 'amd64' ]]; then
-            artefact_name=linux_amd64
-          elif [[ '${{ matrix.target }}' == 'arm64' ]]; then
-            artefact_name=linux_arm64
-          elif [[ '${{ matrix.target }}' == 'win64' ]]; then
-            artefact_name=windows_amd64
-          else
-            artefact_name=macos_arm64
-          fi
-          echo "name=$artefact_name" >> $GITHUB_OUTPUT
-
       - name: Download artefacts
         uses: actions/download-artifact@v4
         with:
-          name: '${{ steps.artefact.outputs.name }}_rocksdb'
+          name: '${{ matrix.os }}_${{ matrix.cpu }}_rocksdb'
           path: docker/dist/base_image/rocksdb
 
       - name: Display structure of artefacts
@@ -114,10 +100,10 @@ jobs:
       - name: Build and push a base Docker image
         run: |
           cd docker/dist/base_image
-          make 'push-${{ matrix.target }}'
+          make 'push-${{ matrix.os }}-${{ matrix.cpu }}'
 
       - name: Delete artefacts
         uses: geekyeggo/delete-artifact@v5
         with:
           failOnError: false
-          name: '${{ steps.artefact.outputs.name }}_rocksdb'
+          name: '${{ matrix.os }}_${{ matrix.cpu }}_rocksdb'

@@ -24,7 +24,8 @@ ROCKSDB_DIR=/usr/rocksdb
 echo -e "\nPLATFORM=${PLATFORM}"
 
 copy_rocksdb() {
-  cp /usr/rocksdb/* vendor/nim-rocksdb/build
+  mkdir -p vendor/nim-rocksdb/build
+  cp ${ROCKSDB_DIR}/* vendor/nim-rocksdb/build
   ROCKSDBVER=$(cat "${ROCKSDB_DIR}/version.txt")
   echo "ROCKSDBVER=${ROCKSDBVER}"
 }
@@ -80,7 +81,7 @@ if [[ "${PLATFORM}" == "windows_amd64" ]]; then
   #
   # nim-blscurve's Windows SSSE3 detection doesn't work when cross-compiling,
   # so we enable it here.
-  
+
   # -d:PREFER_HASHTREE_SHA256:false, does not works with llvm mingw compiler
   make \
     -j$(nproc) \
@@ -95,8 +96,9 @@ if [[ "${PLATFORM}" == "windows_amd64" ]]; then
     ${BINARIES}
 
 elif [[ "${PLATFORM}" == "linux_arm64" ]]; then
-  CC="aarch64-linux-gnu-gcc"
-  CXX="aarch64-linux-gnu-g++"
+  export PATH="/opt/aarch64/bin:${PATH}"
+  CC="aarch64-none-linux-gnu-gcc"
+  CXX="aarch64-none-linux-gnu-g++"
   ${CXX} --version
 
   copy_rocksdb
@@ -114,7 +116,8 @@ elif [[ "${PLATFORM}" == "linux_arm64" ]]; then
     -j$(nproc) \
     LOG_LEVEL="TRACE" \
     CC="${CC}" \
-    NIMFLAGS="${NIMFLAGS_COMMON} --cpu:arm64 --gcc.exe=${CC} --gcc.linkerexe=${CXX} --passL:'-static-libstdc++'" \
+    CXX="${CXX}" \
+    NIMFLAGS="${NIMFLAGS_COMMON} --cpu:arm64 --arm64.linux.gcc.exe=${CC} --arm64.linux.gcc.linkerexe=${CXX} --gcc.exe=${CC} --gcc.linkerexe=${CXX} --passL:'-static-libstdc++'" \
     PARTIAL_STATIC_LINKING=1 \
     USE_SYSTEM_ROCKSDB=0 \
     ${BINARIES}
@@ -135,14 +138,14 @@ elif [[ "${PLATFORM}" == "macos_arm64" ]]; then
   copy_rocksdb
 
   make -j$(nproc) init
-  
+
   make \
     -j$(nproc) \
     USE_LIBBACKTRACE=0 \
     QUICK_AND_DIRTY_COMPILER=1 \
     USE_SYSTEM_ROCKSDB=0 \
     deps-common
-  
+
   make \
     -j$(nproc) \
     CC="${CC}" \
@@ -151,7 +154,7 @@ elif [[ "${PLATFORM}" == "macos_arm64" ]]; then
     NIMFLAGS="${NIMFLAGS_COMMON} --os:macosx --cpu:arm64 --passC:'-mcpu=apple-a14' --clang.exe=${CC}" \
     USE_SYSTEM_ROCKSDB=0 \
     nat-libs
-  
+
   make \
     -j$(nproc) \
     LOG_LEVEL="TRACE" \
