@@ -7,7 +7,7 @@
 
 {.used.}
 
-{.push raises: [].}
+{.push gcsafe, raises: [].}
 
 import unittest2, stint, stew/byteutils, web3, ../rpc/accounts
 
