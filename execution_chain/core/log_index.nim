@@ -37,7 +37,7 @@ when not declared(ExecutionAddress):
 
 type
   FilterRow* =
-    ByteList[MAX_BASE_ROW_LENGTH * log2trunc(MAP_WIDTH) // 8 * MAPS_PER_EPOCH]
+    ByteList[MAX_BASE_ROW_LENGTH * log2trunc(MAP_WIDTH) # 8 * MAPS_PER_EPOCH]
 
   Block* = object
     ## Simplified block representation carrying header and receipts
@@ -105,17 +105,30 @@ proc address_value*(address: ExecutionAddress): Hash32 =
 proc topic_value*(topic: Hash32): Hash32 =
   sha256.digest(topic.data).to(Hash32)
 
-# Stub implementation - later patches will expand this with proper mapping
-proc add_log_value*(log_index: var LogIndex, value_hash: Hash32) =
+proc add_log_value*(log_index: var LogIndex,
+                    layer, row, column: uint64,
+                    value_hash: Hash32) =
   ## Stub: assign index to hashed address/topic and increment counter
-  discard value_hash
+  log_index.latest_value_index = log_index.next_index
+  log_index.latest_layer_index = layer
+  log_index.latest_row_index = row
+  log_index.latest_column_index = column
+  log_index.latest_log_value = value_hash
+  log_index.next_index.inc
+
+proc hash_tree_root*(li: LogIndex): Hash32 =
+  sha256.digest($li.next_index).to(Hash32)
+
+# ---------------------------------------------------------------------------
+# Public API
+# ---------------------------------------------------------------------------
+
+proc add_block_logs*(log_index: var LogIndex, block: Block) =
   log_index.latest_value_index = log_index.next_index
   log_index.latest_log_value = value_hash
   log_index.next_index.inc
 
 proc hash_tree_root*(li: LogIndex): Hash32 =
-  ## Minimal stand-in for SSZ hash tree root.
-  ## Uses sha256 over the textual representation of the current index.
   sha256.digest($li.next_index).to(Hash32)
 
 # ---------------------------------------------------------------------------
@@ -123,34 +136,10 @@ proc hash_tree_root*(li: LogIndex): Hash32 =
 # ---------------------------------------------------------------------------
 
 proc add_block_logs*(log_index: var LogIndex, block: Block) =
-  ## Add all logs from `block` to `log_index`.
-  ##
-  ## For blocks after genesis, a `BlockDelimiterEntry` is inserted prior to
-  ## processing logs. Each receipt log is converted into a `LogEntry` with
-  ## metadata describing its position. `add_log_value` is invoked for the log
-  ## address and each topic which in this stub only advances the global index.
-  ## Finally `log_index_root` is updated with a hash of the structure.
-log_index.latest_value_index = log_index.next_index
-  log_index.latest_log_value = value_hash
-  log_index.next_index.inc
+  if log_index.epochs[0].records.isNil:
+    log_index.epochs[0].records = initTable[uint64, LogRecord]()
 
-proc hash_tree_root*(li: LogIndex): Hash32 =
-  ## Minimal stand-in for SSZ hash tree root.
-  ## Uses sha256 over the textual representation of the current index.
-  sha256.digest($li.next_index).to(Hash32)
-
-# ---------------------------------------------------------------------------
-# Public API
-# ---------------------------------------------------------------------------
-
-proc add_block_logs*(log_index: var LogIndex, block: Block) =
-  ## Add all logs from `block` to `log_index`.
-  ##
-  ## For blocks after genesis, a `BlockDelimiterEntry` is inserted prior to
-  ## processing logs. Each receipt log is converted into a `LogEntry` with
-  ## metadata describing its position. `add_log_value` is invoked for the log
-  ## address and each topic which in this stub only advances the global index.
-  ## Finally `log_index_root` is updated with a hash of the structure.
+  if block.header.number > 0:
   if log_index.epochs[0].records.isNil:
     log_index.epochs[0].records = initTable[uint64, LogRecord]()
 
@@ -159,8 +148,8 @@ proc add_block_logs*(log_index: var LogIndex, block: Block) =
     log_index.epochs[0].records[log_index.next_index] =
       LogRecord(kind: lrkDelimiter, block: delimiter)
     log_index.latest_block_delimiter_index = log_index.next_index
-    log_index.next_index.inc
     log_index.latest_block_delimiter_root = hash_tree_root(log_index)
+    log_index.next_index.inc
 
   for txPos, receipt in block.receipts:
     for logPos, log in receipt.logs:
@@ -175,10 +164,11 @@ proc add_block_logs*(log_index: var LogIndex, block: Block) =
 
       log_index.latest_log_entry_index = log_index.next_index
       log_index.latest_log_entry_root = hash_tree_root(log_index)
+      log_index.next_index.inc
 
-      add_log_value(log_index, address_value(log.address))
+      add_log_value(log_index, 0, 0, 0, address_value(log.address))
       for topic in log.topics:
-        add_log_value(log_index, topic_value(topic.data.to(Hash32)))
+        add_log_value(log_index, 0, 0, 0, topic_value(topic.data.to(Hash32)))
 
   log_index.epochs[0].log_index_root = hash_tree_root(log_index)
   log_index.latest_row_root = log_index.epochs[0].log_index_root
