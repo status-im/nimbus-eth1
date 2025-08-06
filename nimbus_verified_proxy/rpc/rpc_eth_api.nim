@@ -18,7 +18,9 @@ import
   ../header_store,
   ./accounts,
   ./blocks,
-  ./evm
+  ./evm,
+  ./transactions,
+  ./receipts
 
 logScope:
   topics = "verified_proxy"
@@ -229,12 +231,54 @@ proc installEthApiHandlers*(vp: VerifiedRpcProxy) =
 
     return gasEstimate.Quantity
 
+  vp.proxy.rpc("eth_getTransactionByHash") do(txHash: Hash32) -> TransactionObject:
+    let tx =
+      try:
+        await vp.rpcClient.eth_getTransactionByHash(txHash)
+      except CatchableError as e:
+        raise newException(ValueError, e.msg)
+    if tx.hash != txHash:
+      raise newException(
+        ValueError,
+        "the downloaded transaction hash doesn't match the requested transaction hash",
+      )
+
+    if not checkTxHash(tx, txHash):
+      raise
+        newException(ValueError, "the transaction doesn't hash to the provided hash")
+
+    return tx
+
+  vp.proxy.rpc("eth_getBlockReceipts") do(blockTag: BlockTag) -> Opt[seq[ReceiptObject]]:
+    let rxs = (await vp.getReceipts(blockTag)).valueOr:
+      raise newException(ValueError, error)
+    return Opt.some(rxs)
+
+  vp.proxy.rpc("eth_getTransactionReceipt") do(txHash: Hash32) -> ReceiptObject:
+    let
+      rx =
+        try:
+          await vp.rpcClient.eth_getTransactionReceipt(txHash)
+        except CatchableError as e:
+          raise newException(ValueError, e.msg)
+      rxs = (await vp.getReceipts(rx.blockHash)).valueOr:
+        raise newException(ValueError, error)
+
+    for r in rxs:
+      if r.transactionHash == txHash:
+        return r
+
+    raise newException(ValueError, "receipt couldn't be verified")
+
+  vp.proxy.rpc("eth_getLogs") do(filterOptions: FilterOptions) -> seq[LogObject]:
+    (await vp.getLogs(filterOptions)).valueOr:
+      raise newException(ValueError, error)
+
   # TODO:
   # Following methods are forwarded directly to the web3 provider and therefore
   # are not validated in any way.
   vp.proxy.registerProxyMethod("net_version")
   vp.proxy.registerProxyMethod("eth_sendRawTransaction")
-  vp.proxy.registerProxyMethod("eth_getTransactionReceipt")
 
 # Used to be in eth1_monitor.nim; not sure why it was deleted,
 # so I copied it here. --Adam
