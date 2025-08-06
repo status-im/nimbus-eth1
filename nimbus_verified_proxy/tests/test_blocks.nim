@@ -160,3 +160,5 @@ suite "test verified blocks":
 
     check checkEqual(txByHash, blk.transactions[0].tx)
     check checkEqual(txByHash, txByNum)
+
+    vp.stopTestSetup()

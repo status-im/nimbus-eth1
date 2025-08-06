@@ -1,0 +1,37 @@
+# nimbus-execution-client
+# Copyright (c) 2025 Status Research & Development GmbH
+# Licensed under either of
+#  * Apache License, version 2.0, ([LICENSE-APACHE](LICENSE-APACHE))
+#  * MIT license ([LICENSE-MIT](LICENSE-MIT))
+# at your option.
+# This file may not be copied, modified, or distributed except according to
+# those terms.
+
+name: Matrix configuration
+
+on:
+  workflow_call:
+    outputs:
+      matrix:
+        description: "The matrix configuration from a JSON file"
+        value: ${{ jobs.generate_matrix_json.outputs.matrix }}
+
+jobs:
+  generate_matrix_json:
+    name: Generate matrix JSON
+    runs-on: ubuntu-latest
+
+    outputs:
+      matrix: ${{ steps.prepare.outputs.json }}
+
+    steps:
+      - name: Checkout matrix configuration
+        uses: actions/checkout@v4
+        with:
+          sparse-checkout: |
+            .github/workflows/matrix_config.json
+
+      - name: Prepare matrix JSON object
+        id: prepare
+        run: |
+          echo "json=$(jq -c . < .github/workflows/matrix_config.json)" >> $GITHUB_OUTPUT
