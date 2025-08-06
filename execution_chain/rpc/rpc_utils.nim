@@ -310,7 +310,6 @@ proc createAccessList*(header: Header,
 
     prevTracer = tracer
 
-
 proc populateConfigObject*(com: CommonRef, fork: HardFork): ConfigObject =
   let
     cancunSystemContracts: seq[SystemContractPair] = @[
