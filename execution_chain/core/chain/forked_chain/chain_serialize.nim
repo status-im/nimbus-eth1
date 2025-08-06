@@ -126,7 +126,7 @@ proc replayBlock(fc: ForkedChainRef;
     parentFrame = parent.txFrame
     txFrame = parentFrame.txFrameBegin
 
-  var receipts = fc.processBlock(parent.header, txFrame, blk.blk, blk.hash, false).valueOr:
+  var receipts = fc.processBlock(parent, txFrame, blk.blk, blk.hash, false).valueOr:
     txFrame.dispose()
     return err(error)
 

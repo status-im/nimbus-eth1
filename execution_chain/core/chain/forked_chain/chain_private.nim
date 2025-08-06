@@ -16,7 +16,9 @@ import
   ../../../common,
   ../../../db/core_db,
   ../../../evm/types,
-  ../../../evm/state
+  ../../../evm/state,
+  ../../../stateless/witness_generation,
+  ./chain_branch
 
 proc writeBaggage*(c: ForkedChainRef,
         blk: Block, blkHash: Hash32,
@@ -54,7 +56,7 @@ template updateSnapshot*(c: ForkedChainRef,
   c.lastSnapshots[pos] = txFrame
 
 proc processBlock*(c: ForkedChainRef,
-                  parent: Header,
+                  parentBlk: BlockRef,
                   txFrame: CoreDbTxRef,
                   blk: Block,
                   blkHash: Hash32,
@@ -63,9 +65,16 @@ proc processBlock*(c: ForkedChainRef,
     blk.header
 
   let vmState = BaseVMState()
-  vmState.init(parent, header, c.com, txFrame)
+  vmState.init(parentBlk.header, header, c.com, txFrame)
 
   ?c.com.validateHeaderAndKinship(blk, vmState.parent, txFrame)
+
+  if vmState.com.statelessProviderEnabled:
+    # Clear the caches before executing the block to ensure we collect the correct
+    # witness keys and block hashes when processing the block as these will be used
+    # when building the witness.
+    vmState.ledger.clearWitnessKeys()
+    vmState.ledger.clearBlockHashesCache()
 
   # When processing a finalized block, we optimistically assume that the state
   # root will check out and delay such validation for when it's time to persist
@@ -82,5 +91,13 @@ proc processBlock*(c: ForkedChainRef,
   # We still need to write header to database
   # because validateUncles still need it
   ?txFrame.persistHeader(blkHash, header, c.com.startOfHistory)
+
+  if vmState.com.statelessProviderEnabled:
+    let
+      preStateLedger = LedgerRef.init(parentBlk.txFrame)
+      witness = Witness.build(preStateLedger, vmState.ledger, parentBlk.header, header)
+
+    ?vmState.ledger.txFrame.persistWitness(blkHash, witness)
+
 
   ok(move(vmState.receipts))
