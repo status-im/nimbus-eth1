@@ -21,6 +21,7 @@ FROM ubuntu:22.04
 ARG LLVM_VERSION="20250730"
 ENV MINGW_BASE="https://github.com/mstorsjo/llvm-mingw/releases/download/${LLVM_VERSION}"
 ENV MINGW_URL="${MINGW_BASE}/llvm-mingw-${LLVM_VERSION}-ucrt-ubuntu-22.04-x86_64.tar.xz"
+ENV ARCHIVE=llvm-mingw-ucrt
 
 SHELL ["/bin/bash", "-c"]
 
@@ -29,11 +30,10 @@ RUN apt-get -qq update \
   && apt-get -qq -y install build-essential git curl &>/dev/null \
   && apt-get -qq clean \
   && rm -rf /var/lib/at/lists/* /tmp/* /var/tmp/* \
-  && mkdir -p opt/llvm-mingw-ucrt \
-  && cd opt/llvm-mingw-ucrt \
-  && curl -L "${MINGW_URL}" -o "mingw.tar.xz" \
-  && tar -xf mingw.tar.xz --strip-components=1 \
-  && rm -rf mingw.tar.xz
+  && curl -L "${MINGW_URL}" -o "${ARCHIVE}.tar.xz" \
+  && mkdir -p /opt/${ARCHIVE} \
+  && tar -xf ${ARCHIVE}.tar.xz -C /opt/${ARCHIVE} --strip-components=1 \
+  && rm -rf ${ARCHIVE}.tar.xz
 
 # Copy prebuilt rocksdb binary from host (CI: build_base_image.yml)
 COPY rocksdb/ /usr/rocksdb/

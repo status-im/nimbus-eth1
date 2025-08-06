@@ -8,8 +8,10 @@
 # at your option. This file may not be copied, modified, or distributed except
 # according to those terms.
 
+# syntax=docker/dockerfile:1
+
 # The build is reproducible only if this base image stays the same.
-FROM statusim/nimbus-eth1:dist_base_eth1_v2_arm64
+FROM statusim/nimbus-eth1:dist_base_eth1_v2_windows_amd64
 
 SHELL ["/bin/bash", "-c"]
 
@@ -24,5 +26,5 @@ USER user
 STOPSIGNAL SIGINT
 
 COPY "entry_point.sh" "/home/user/"
-ENTRYPOINT ["/home/user/entry_point.sh", "linux_arm64"]
+ENTRYPOINT ["/home/user/entry_point.sh", "windows_amd64"]
 
