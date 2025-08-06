@@ -12,42 +12,22 @@ on:
   workflow_dispatch:
 
 jobs:
+  matrix_config:
+    uses: ./.github/workflows/matrix_config.yml
+
   build:
+    needs: matrix_config
+
     strategy:
-      fail-fast: false
-      max-parallel: 20
-      matrix:
-        target:
-          - os: linux
-            cpu: amd64
-          - os: linux
-            cpu: arm64
-          - os: windows
-            cpu: amd64
-          - os: macos
-            cpu: arm64
-        include:
-          - target:
-              os: linux
-              cpu: amd64
-            builder: ubuntu-22.04
-          - target:
-              os: linux
-              cpu: arm64
-            builder: ubuntu-22.04-arm
-          - target:
-              os: macos
-            builder: macos-14
-          - target:
-              os: windows
-            builder: windows-latest
+      matrix: ${{ fromJSON(needs.matrix_config.outputs.matrix) }}
 
     defaults:
       run:
         shell: bash
 
-    name: '${{ matrix.target.os }}-${{ matrix.target.cpu }}'
+    name: '${{ matrix.os }}-${{ matrix.cpu }}'
     runs-on: ${{ matrix.builder }}
+
     steps:
       - name: Checkout nimbus-eth1
         uses: actions/checkout@v4
@@ -66,26 +46,27 @@ jobs:
         uses: actions/cache@v4
         with:
           path: RocksBinCache
-          key: 'rocks-${{ matrix.target.os }}-${{ matrix.target.cpu }}-${{ steps.rocksdb-versions.outputs.nim_rocksdb }}'
+          key: 'rocks-${{ matrix.os }}-${{ matrix.cpu }}-${{ steps.rocksdb-versions.outputs.nim_rocksdb }}'
 
       - name: Build rocksdb
         run: |
-          if [[ '${{ matrix.target.os }}' == 'windows' ]]; then
+          if [[ '${{ matrix.os }}' == 'windows' ]]; then
             ncpu=${NUMBER_OF_PROCESSORS}
-          elif [[ '${{ matrix.target.os }}' == 'macos' ]]; then
+          elif [[ '${{ matrix.os }}' == 'macos' ]]; then
             ncpu=$(sysctl -n hw.ncpu)
           else
             ncpu=$(nproc)
           fi
-          make -j${ncpu} ROCKSDB_CI_CACHE=RocksBinCache USE_SYSTEM_NIM=1 init rocksdb
+          # Don't wasting time cloning and download not used submodules.
+          git submodule update --init --recursive vendor/nim-rocksdb
+          scripts/rocksdb_ci_cache.sh RocksBinCache
 
       - name: Upload artefact
         uses: actions/upload-artifact@v4
         with:
-          name: '${{ matrix.target.os }}_${{ matrix.target.cpu }}_rocksdb'
+          name: '${{ matrix.os }}_${{ matrix.cpu }}_rocksdb'
           path: vendor/nim-rocksdb/build/
           retention-days: 1
-
 
   publish-images:
     strategy:

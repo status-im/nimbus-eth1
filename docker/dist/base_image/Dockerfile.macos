@@ -42,8 +42,8 @@ COPY patches/lcxx.patch .
 RUN patch -p1 < lcxx.patch
 
 FROM ubuntu:${UBUNTU_VERSION} AS base-ubuntu
-RUN export DEBIAN_FRONTEND="noninteractive" \
-  && apt-get update \
+ENV DEBIAN_FRONTEND=noninteractive TZ="Etc/UTC"
+RUN apt-get update \
   && apt-get install --no-install-recommends -y \
     bash \
     binutils-multiarch-dev \
@@ -69,7 +69,9 @@ RUN export DEBIAN_FRONTEND="noninteractive" \
     uuid-dev \
     wget \
     xz-utils \
-    zlib1g-dev
+    zlib1g-dev \
+  && apt-get -qq clean \
+  && rm -rf /var/lib/apt/lists/* /tmp/* /var/tmp/*
 
 FROM base-${BASE_VARIANT} AS build
 ARG OSX_SDK
@@ -83,3 +85,4 @@ COPY --link --from=build /out /
 
 # Copy prebuilt rocksdb binary from host (CI: build_base_image.yml)
 COPY rocksdb/ /usr/rocksdb/
+

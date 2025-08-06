@@ -11,7 +11,7 @@ set -e
 
 # script arguments
 [[ $# -ne 1 ]] && { echo "Usage: $0 rocksdb_cache_dir"; }
-ROCKSDB_CACHE="$1"
+ROCKSDB_CI_CACHE="$1"
 
 cd "$(dirname "${BASH_SOURCE[0]}")"/..
 
