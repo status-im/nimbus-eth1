@@ -179,11 +179,10 @@ proc persistBlock*(p: var Persister, blk: Block): Result[void, string] =
     processBlock()
 
     let
-      blockHash = header.computeBlockHash()
       preStateLedger = LedgerRef.init(parentTxFrame)
       witness = Witness.build(preStateLedger, vmState.ledger, p.parent, header)
 
-    ?vmState.ledger.txFrame.persistWitness(blockHash, witness)
+    ?vmState.ledger.txFrame.persistWitness(header.computeBlockHash(), witness)
 
   if NoPersistHeader notin p.flags:
     let blockHash = header.computeBlockHash()
