@@ -11,20 +11,11 @@
 import
   unittest2,
   web3/[eth_api, eth_api_types],
-  stew/io2,
-  json_rpc/[rpcclient, rpcserver, rpcproxy, jsonmarshal],
+  json_rpc/[rpcclient, rpcserver, rpcproxy],
   eth/common/eth_types_rlp,
   ../rpc/transactions,
-  ./test_setup,
+  ./test_utils,
   ./test_api_backend
-
-proc getBlockFromJson(filepath: string): BlockObject =
-  var blkBytes = readAllBytes(filepath)
-  let blk = JrpcConv.decode(blkBytes.get, BlockObject)
-  return blk
-
-template checkEqual(tx1: TransactionObject, tx2: TransactionObject): bool =
-  JrpcConv.encode(tx1).JsonString == JrpcConv.encode(tx2).JsonString
 
 suite "test transaction verification":
   test "check tx hash":
@@ -52,7 +43,7 @@ suite "test transaction verification":
         ts.loadTransaction(tx.tx.hash, tx.tx)
         let verifiedTx =
           waitFor vp.proxy.getClient().eth_getTransactionByHash(tx.tx.hash)
-        check checkEqual(verifiedTx, tx.tx)
+        check verifiedTx == tx.tx
         ts.clear()
 
     vp.stopTestSetup()

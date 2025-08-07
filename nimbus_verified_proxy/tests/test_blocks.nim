@@ -6,29 +6,17 @@
 # at your option. This file may not be copied, modified, or distributed except according to those terms.
 
 {.used.}
-{.push gcsafe, raises: [].}
+{.push raises: [].}
 
 import
   unittest2,
-  stew/io2,
-  json_rpc/[rpcclient, rpcserver, rpcproxy, jsonmarshal],
+  json_rpc/[rpcclient, rpcserver, rpcproxy],
   web3/[eth_api_types, eth_api],
   ../header_store,
   ../rpc/blocks,
   ../types,
-  ./test_setup,
+  ./test_utils,
   ./test_api_backend
-
-proc getBlockFromJson(filepath: string): BlockObject =
-  var blkBytes = readAllBytes(filepath)
-  let blk = JrpcConv.decode(blkBytes.get, BlockObject)
-  return blk
-
-template checkEqual(blk1: BlockObject, blk2: BlockObject): bool =
-  JrpcConv.encode(blk1).JsonString == JrpcConv.encode(blk2).JsonString
-
-template checkEqual(tx1: TransactionObject, tx2: TransactionObject): bool =
-  JrpcConv.encode(tx1).JsonString == JrpcConv.encode(tx2).JsonString
 
 suite "test verified blocks":
   let
@@ -52,7 +40,7 @@ suite "test verified blocks":
       # reuse verified proxy's internal client. Conveniently it is looped back to the proxy server
       let verifiedBlk = waitFor vp.proxy.getClient().eth_getBlockByHash(blk.hash, true)
 
-      check checkEqual(blk, verifiedBlk)
+      check blk == verifiedBlk
 
       ts.clear()
       vp.headerStore.clear()
@@ -74,16 +62,16 @@ suite "test verified blocks":
     discard vp.headerStore.updateFinalized(convHeader(blk), blk.hash)
 
     var verifiedBlk = waitFor vp.proxy.getClient().eth_getBlockByNumber(numberTag, true)
-    check checkEqual(blk, verifiedBlk)
+    check blk == verifiedBlk
 
     verifiedBlk = waitFor vp.proxy.getClient().eth_getBlockByNumber(finalTag, true)
-    check checkEqual(blk, verifiedBlk)
+    check blk == verifiedBlk
 
     verifiedBlk = waitFor vp.proxy.getClient().eth_getBlockByNumber(earliestTag, true)
-    check checkEqual(blk, verifiedBlk)
+    check blk == verifiedBlk
 
     verifiedBlk = waitFor vp.proxy.getClient().eth_getBlockByNumber(latestTag, true)
-    check checkEqual(blk, verifiedBlk)
+    check blk == verifiedBlk
 
   test "check block walk":
     ts.clear()
@@ -159,7 +147,7 @@ suite "test verified blocks":
 
     doAssert blk.transactions[0].kind == tohTx
 
-    check checkEqual(txByHash, blk.transactions[0].tx)
-    check checkEqual(txByHash, txByNum)
+    check txByHash == blk.transactions[0].tx
+    check txByHash == txByNum
 
     vp.stopTestSetup()

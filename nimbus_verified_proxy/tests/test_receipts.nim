@@ -6,43 +6,18 @@
 # at your option. This file may not be copied, modified, or distributed except according to those terms.
 
 {.used.}
-{.push gcsafe, raises: [].}
+{.push raises: [].}
 
 import
   unittest2,
   web3/[eth_api, eth_api_types],
-  stew/io2,
-  json_rpc/[rpcclient, rpcserver, rpcproxy, jsonmarshal],
+  json_rpc/[rpcclient, rpcserver, rpcproxy],
   eth/common/eth_types_rlp,
   ../rpc/blocks,
   ../types,
   ../header_store,
-  ./test_setup,
+  ./test_utils,
   ./test_api_backend
-
-proc getBlockFromJson(filepath: string): BlockObject =
-  var blkBytes = readAllBytes(filepath)
-  let blk = JrpcConv.decode(blkBytes.get, BlockObject)
-  return blk
-
-proc getReceiptsFromJson(filepath: string): seq[ReceiptObject] =
-  var rxBytes = readAllBytes(filepath)
-  let rxs = JrpcConv.decode(rxBytes.get, seq[ReceiptObject])
-  return rxs
-
-proc getLogsFromJson(filepath: string): seq[LogObject] =
-  var logBytes = readAllBytes(filepath)
-  let logs = JrpcConv.decode(logBytes.get, seq[LogObject])
-  return logs
-
-template checkEqual(rx1: ReceiptObject, rx2: ReceiptObject): bool =
-  JrpcConv.encode(rx1).JsonString == JrpcConv.encode(rx2).JsonString
-
-template checkEqual(rxs1: seq[ReceiptObject], rxs2: seq[ReceiptObject]): bool =
-  JrpcConv.encode(rxs1).JsonString == JrpcConv.encode(rxs2).JsonString
-
-template checkEqual(logs1: seq[LogObject], logs2: seq[LogObject]): bool =
-  JrpcConv.encode(logs1).JsonString == JrpcConv.encode(logs2).JsonString
 
 suite "test receipts verification":
   let
@@ -64,20 +39,20 @@ suite "test receipts verification":
     discard vp.headerStore.updateFinalized(convHeader(blk), blk.hash)
 
     var verified = waitFor vp.proxy.getClient().eth_getBlockReceipts(numberTag)
-    check checkEqual(rxs, verified.get())
+    check rxs == verified.get()
 
     verified = waitFor vp.proxy.getClient().eth_getBlockReceipts(finalTag)
-    check checkEqual(rxs, verified.get())
+    check rxs == verified.get()
 
     verified = waitFor vp.proxy.getClient().eth_getBlockReceipts(earliestTag)
-    check checkEqual(rxs, verified.get())
+    check rxs == verified.get()
 
     verified = waitFor vp.proxy.getClient().eth_getBlockReceipts(latestTag)
-    check checkEqual(rxs, verified.get())
+    check rxs == verified.get()
 
     let verifiedReceipt =
       waitFor vp.proxy.getClient().eth_getTransactionReceipt(rxs[0].transactionHash)
-    check checkEqual(rxs[0], verifiedReceipt)
+    check rxs[0] == verifiedReceipt
 
     ts.clear()
     vp.headerStore.clear()
