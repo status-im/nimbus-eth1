@@ -210,33 +210,18 @@ with --debug-eager-state-root."""
   #      really run after things have been written (to maintain sync betweeen
   #      in-memory and on-disk state)
 
-  # Copy back updated payloads into the shared database LRU caches.
+  # Updated values in the txFrame caches are now stale so remove them from the
+  # shared database LRU caches.
 
-  # Copy cached values from the snapshot
   for accPath, v in txFrame.snapshot.acc:
-    # if v[0] == nil:
     db.accLeaves.del(accPath)
-    # else:
-    #   discard db.accLeaves.update(accPath, v[0])
-
   for mixPath, v in txFrame.snapshot.sto:
-    # if v[0] == nil:
     db.stoLeaves.del(mixPath)
-    # else:
-    #   discard db.stoLeaves.update(mixPath, v[0])
 
-  # Copy cached values from the txFrame
   for accPath, vtx in txFrame.accLeaves:
-    # if vtx == nil:
     db.accLeaves.del(accPath)
-    # else:
-    #   discard db.accLeaves.update(accPath, vtx)
-
   for mixPath, vtx in txFrame.stoLeaves:
-    # if vtx == nil:
     db.stoLeaves.del(mixPath)
-    # else:
-    #   discard db.stoLeaves.update(mixPath, vtx)
 
   txFrame.snapshot.vtx.clear()
   txFrame.snapshot.acc.clear()
