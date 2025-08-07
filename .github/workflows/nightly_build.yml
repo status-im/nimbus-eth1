@@ -106,14 +106,19 @@ jobs:
           cat macos-arm64-checksum/* >> release_notes.md
           echo '```' >> release_notes.md
 
+      - name: Delete tag
+        run: gh release delete $TAG --cleanup-tag
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          TAG: nightly
+
       - name: Update Nightly Release
-        uses: andelf/nightly-release@main
+        uses: softprops/action-gh-release@v2
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         with:
           tag_name: nightly
           name: 'Nightly build ("${{ steps.extract_branch.outputs.branch_name }}" branch)'
-          prerelease: true
           body_path: release_notes.md
           files: |
             linux-amd64-archive/*
