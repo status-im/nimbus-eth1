@@ -223,7 +223,7 @@ libbacktrace:
 	+ $(MAKE) -C vendor/nim-libbacktrace --no-print-directory BUILD_CXX_LIB=0
 
 # nim-rocksdb
-ROCKSDB_CI_CACHE := build
+ROCKSDB_CI_CACHE := build/rocksdb
 
 ifneq ($(USE_SYSTEM_ROCKSDB), 0)
 rocksdb:
