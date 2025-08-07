@@ -21,6 +21,7 @@ import
   ../../evm/types,
   ../dao,
   ../eip6110,
+  ../log_index,
   ./calculate_reward,
   ./executor_helpers,
   ./process_transaction,
