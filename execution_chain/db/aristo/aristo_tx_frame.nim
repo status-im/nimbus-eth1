@@ -214,29 +214,29 @@ with --debug-eager-state-root."""
 
   # Copy cached values from the snapshot
   for accPath, v in txFrame.snapshot.acc:
-    if v[0] == nil:
-      db.accLeaves.del(accPath)
-    else:
-      discard db.accLeaves.update(accPath, v[0])
+    # if v[0] == nil:
+    db.accLeaves.del(accPath)
+    # else:
+    #   discard db.accLeaves.update(accPath, v[0])
 
   for mixPath, v in txFrame.snapshot.sto:
-    if v[0] == nil:
-      db.stoLeaves.del(mixPath)
-    else:
-      discard db.stoLeaves.update(mixPath, v[0])
+    # if v[0] == nil:
+    db.stoLeaves.del(mixPath)
+    # else:
+    #   discard db.stoLeaves.update(mixPath, v[0])
 
   # Copy cached values from the txFrame
   for accPath, vtx in txFrame.accLeaves:
-    if vtx == nil:
-      db.accLeaves.del(accPath)
-    else:
-      discard db.accLeaves.update(accPath, vtx)
+    # if vtx == nil:
+    db.accLeaves.del(accPath)
+    # else:
+    #   discard db.accLeaves.update(accPath, vtx)
 
   for mixPath, vtx in txFrame.stoLeaves:
-    if vtx == nil:
-      db.stoLeaves.del(mixPath)
-    else:
-      discard db.stoLeaves.update(mixPath, vtx)
+    # if vtx == nil:
+    db.stoLeaves.del(mixPath)
+    # else:
+    #   discard db.stoLeaves.update(mixPath, vtx)
 
   txFrame.snapshot.vtx.clear()
   txFrame.snapshot.acc.clear()
