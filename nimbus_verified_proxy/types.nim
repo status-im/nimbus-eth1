@@ -94,5 +94,5 @@ proc init*(
     storageCache: StorageCache.init(STORAGE_CACHE_SIZE),
     filterStore: initTable[int, FilterOptions](),
     chainId: chainId,
-    maxBlockWalk: maxBlockWalk
+    maxBlockWalk: maxBlockWalk,
   )

@@ -84,17 +84,38 @@ proc getReceipts*(
 
   await vp.getReceipts(header, numberTag)
 
+proc verifyFilterBoundaries*(
+    filter: FilterOptions, logObjs: seq[LogObject]
+): Result[bool, string] =
+  let
+    fromBlock = filter.fromBlock.get(
+      BlockTag(kind: BlockIdentifierKind.bidAlias, alias: "latest")
+    )
+    toBlock =
+      filter.toBlock.get(BlockTag(kind: BlockIdentifierKind.bidAlias, alias: "latest"))
+
+    bottom =
+      if fromBlock.kind == BlockIdentifierKind.bidNumber:
+        fromBlock.number
+      else:
+        return err("Cannot verify boundaries for block tags in 'fromBlock' field")
+    top =
+      if toBlock.kind == BlockIdentifierKind.bidNumber:
+        toBlock.number
+      else:
+        return err("Cannot verify boundaries for block tags in 'toBlock' field")
+
+  for lg in logObjs:
+    if lg.blockNumber.isSome:
+      if lg.blockNumber.get < bottom or lg.blockNumber.get > top:
+        return ok(false)
+
+  return ok(true)
+
 proc verifyLogs*(
     vp: VerifiedRpcProxy, logObjs: seq[LogObject]
 ): Future[Result[seq[LogObject], string]] {.async.} =
-  let
-    fromBlock = filter.fromBlock.get(BlockTag(kind:BlockIdentifierKind.bidAlias, alias: "latest"))
-    toBlock = filter.toBlock.get(BlockTag(kind:BlockIdentifierKind.bidAlias, alias: "latest"))
-
-    bottom = if fromBlock.kind == BlockIdentifierKind.bidNumber: fromBlock.number
-           else: return err("Cannot verify boundaries for block tags in 'fromBlock' field")
-    top = if toBlock.kind == BlockIdentifierKind.bidNumber: toBlock.number
-         else: return err("Cannot verify boundaries for block tags in 'toBlock' field")
+  var res = newSeq[LogObject]()
 
   # store block hashes contains the logs so that we can batch receipt requests
   var
@@ -103,7 +124,7 @@ proc verifyLogs*(
 
   for lg in logObjs:
     # none only for pending logs before block is built
-    if lg.blockNumber.isSome() and lg.blockHash.isSome() and lg.transactionIndex.isSome() and lg.logIndex.isSome():
+    if lg.blockHash.isSome() and lg.transactionIndex.isSome() and lg.logIndex.isSome():
       # exploit sequentiality of logs 
       if prevBlockHash != lg.blockHash.get():
         # TODO: a cache will solve downloading the same block receipts for multiple logs
@@ -119,7 +140,7 @@ proc verifyLogs*(
 
       if rxLog.address != lg.address or rxLog.data != lg.data or
           rxLog.topics != lg.topics or
-          (not match(toLog(lg), filterOptions.address, filterOptions.topics)) or lg.blockNumber.get < bottom or lg.blockNumber.get > top:
+          (not match(toLog(lg), filterOptions.address, filterOptions.topics)):
         return err("one of the returned logs is invalid")
 
   return ok(logObjs)
