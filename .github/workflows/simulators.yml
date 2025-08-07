@@ -16,43 +16,25 @@ on:
   workflow_dispatch:
 
 jobs:
+  matrix_config:
+    uses: ./.github/workflows/matrix_config.yml
+
   build:
+    needs: matrix_config
+
     strategy:
       fail-fast: false
-      max-parallel: 20
-      matrix:
-        target:
-          - os: linux
-            cpu: amd64
-          - os: windows
-            cpu: amd64
-          - os: macos
-            cpu: arm64
-        include:
-          - target:
-              os: linux
-            builder: ubuntu-22.04
-          - target:
-              os: macos
-            builder: macos-13
-          - target:
-              os: windows
-            builder: windows-latest
+      matrix: ${{ fromJSON(needs.matrix_config.outputs.matrix) }}
 
     defaults:
       run:
         shell: bash
 
-    name: '${{ matrix.target.os }}-${{ matrix.target.cpu }}'
+    name: '${{ matrix.os }}-${{ matrix.cpu }}'
     runs-on: ${{ matrix.builder }}
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
-
-      - name: Initialize
-        if: runner.os == 'linux'
-        run: |
-          sudo apt-get -q update
 
       - name: Restore llvm-mingw from cache
         if: runner.os == 'windows'
@@ -93,7 +75,7 @@ jobs:
         uses: actions/cache@v4
         with:
           path: NimBinaries
-          key: 'nim-${{ matrix.target.os }}-${{ matrix.target.cpu }}-${{ steps.versions.outputs.nimbus_build_system }}-sim'
+          key: 'nim-${{ matrix.os }}-${{ matrix.cpu }}-${{ steps.versions.outputs.nimbus_build_system }}-sim'
 
       - name: Get latest nim-rocksdb commit hash
         id: rocksdb-versions
@@ -109,13 +91,13 @@ jobs:
         uses: actions/cache@v4
         with:
           path: RocksBinCache
-          key: 'rocks-${{ matrix.target.os }}-${{ matrix.target.cpu }}-${{ steps.rocksdb-versions.outputs.nim_rocksdb }}'
+          key: 'rocks-${{ matrix.os }}-${{ matrix.cpu }}-${{ steps.rocksdb-versions.outputs.nim_rocksdb }}'
 
       - name: Build Nim and deps
         run: |
-          if [[ '${{ matrix.target.os }}' == 'windows' ]]; then
+          if [[ '${{ matrix.os }}' == 'windows' ]]; then
             ncpu=${NUMBER_OF_PROCESSORS}
-          elif [[ '${{ matrix.target.os }}' == 'macos' ]]; then
+          elif [[ '${{ matrix.os }}' == 'macos' ]]; then
             ncpu=$(sysctl -n hw.ncpu)
           else
             ncpu=$(nproc)
@@ -126,12 +108,12 @@ jobs:
       - name: Run Simulators
         run: |
           SIM_SCRIPT="hive_integration/nodocker/build_sims.sh"
-          bash ${SIM_SCRIPT} "${{ matrix.target.os }}-${{ matrix.target.cpu }}"
+          bash ${SIM_SCRIPT} "${{ matrix.os }}-${{ matrix.cpu }}"
 
       - name: Upload artefact
         uses: actions/upload-artifact@v4
         with:
-          name: '${{ matrix.target.os }}_${{ matrix.target.cpu }}_stat'
+          name: '${{ matrix.os }}_${{ matrix.cpu }}_stat'
           path: ./simulators.md
           retention-days: 2
 

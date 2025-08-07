@@ -33,36 +33,21 @@ on:
       - 'nimbus.nimble'
 
 jobs:
+  matrix_config:
+    uses: ./.github/workflows/matrix_config.yml
+
   build:
+    needs: matrix_config
+
     strategy:
       fail-fast: false
-      max-parallel: 20
-      matrix:
-        target:
-          - os: linux
-            cpu: amd64
-          # - os: linux
-          #   cpu: i386
-          - os: macos
-            cpu: arm64
-          - os: windows
-            cpu: amd64
-        include:
-          - target:
-              os: linux
-            builder: ubuntu-22.04
-          - target:
-              os: macos
-            builder: macos-13
-          - target:
-              os: windows
-            builder: windows-latest
+      matrix: ${{ fromJSON(needs.matrix_config.outputs.matrix) }}
 
     defaults:
       run:
         shell: bash
 
-    name: '${{ matrix.target.os }}-${{ matrix.target.cpu }}'
+    name: '${{ matrix.os }}-${{ matrix.cpu }}'
     runs-on: ${{ matrix.builder }}
     steps:
       - name: Checkout nimbus-eth1
@@ -70,9 +55,9 @@ jobs:
 
       - name: Derive environment variables
         run: |
-          if [[ '${{ matrix.target.cpu }}' == 'amd64' ]]; then
+          if [[ '${{ matrix.cpu }}' == 'amd64' ]]; then
             PLATFORM=x64
-          elif [[ '${{ matrix.target.cpu }}' == 'arm64' ]]; then
+          elif [[ '${{ matrix.cpu }}' == 'arm64' ]]; then
             PLATFORM=arm64
           else
             PLATFORM=x86
@@ -80,7 +65,7 @@ jobs:
           echo "PLATFORM=${PLATFORM}" >> $GITHUB_ENV
 
           # libminiupnp / natpmp
-          if [[ '${{ runner.os }}' == 'Linux' && '${{ matrix.target.cpu }}' == 'i386' ]]; then
+          if [[ '${{ runner.os }}' == 'Linux' && '${{ matrix.cpu }}' == 'i386' ]]; then
             export CFLAGS="${CFLAGS} -m32 -mno-adx"
             echo "CFLAGS=${CFLAGS}" >> $GITHUB_ENV
           fi
@@ -100,26 +85,6 @@ jobs:
           [[ -z "$ncpu" || $ncpu -le 0 ]] && ncpu=1
           echo "ncpu=${ncpu}" >> $GITHUB_ENV
 
-      - name: Install build dependencies (Linux i386)
-        if: runner.os == 'Linux' && matrix.target.cpu == 'i386'
-        run: |
-          sudo dpkg --add-architecture i386
-          sudo apt-get update -qq
-          sudo DEBIAN_FRONTEND='noninteractive' apt-get install \
-            --no-install-recommends -yq gcc-multilib g++-multilib \
-            libz-dev:i386 libbz2-dev:i386 libssl-dev:i386 libpcre3-dev:i386
-          mkdir -p external/bin
-          cat << EOF > external/bin/gcc
-          #!/bin/bash
-          exec $(which gcc) -m32 "\$@"
-          EOF
-          cat << EOF > external/bin/g++
-          #!/bin/bash
-          exec $(which g++) -m32 "\$@"
-          EOF
-          chmod 755 external/bin/gcc external/bin/g++
-          echo '${{ github.workspace }}/external/bin' >> $GITHUB_PATH
-
       - name: Install build dependencies (Macos)
         # Some home brew modules were reported missing
         if: runner.os == 'Macos'
@@ -132,8 +97,8 @@ jobs:
         id: windows-mingw-cache
         uses: actions/cache@v4
         with:
-          path: external/mingw-${{ matrix.target.cpu }}
-          key: 'mingw-llvm-17-${{ matrix.target.cpu }}'
+          path: external/mingw-${{ matrix.cpu }}
+          key: 'mingw-llvm-17-${{ matrix.cpu }}'
 
       - name: Install llvm-mingw dependency (Windows)
         if: >
@@ -143,22 +108,22 @@ jobs:
           mkdir -p external
           LLVM_VERSION="20250730"
           MINGW_BASE="https://github.com/mstorsjo/llvm-mingw/releases/download/$LLVM_VERSION"
-          if [[ '${{ matrix.target.cpu }}' == 'amd64' ]]; then
+          if [[ '${{ matrix.cpu }}' == 'amd64' ]]; then
             MINGW_URL="$MINGW_BASE/llvm-mingw-$LLVM_VERSION-ucrt-x86_64.zip"
             ARCH=64
           else
             MINGW_URL="$MINGW_BASE/llvm-mingw-$LLVM_VERSION-ucrt-i686.zip"
             ARCH=32
           fi
-          curl -L "$MINGW_URL" -o "external/mingw-${{ matrix.target.cpu }}.zip"
-          7z x -y "external/mingw-${{ matrix.target.cpu }}.zip" -oexternal/mingw-${{ matrix.target.cpu }}/
-          mv external/mingw-${{ matrix.target.cpu }}/**/* ./external/mingw-${{ matrix.target.cpu }}
+          curl -L "$MINGW_URL" -o "external/mingw-${{ matrix.cpu }}.zip"
+          7z x -y "external/mingw-${{ matrix.cpu }}.zip" -oexternal/mingw-${{ matrix.cpu }}/
+          mv external/mingw-${{ matrix.cpu }}/**/* ./external/mingw-${{ matrix.cpu }}
 
       - name: Path to cached dependencies (Windows)
         if: >
           runner.os == 'Windows'
         run: |
-          echo '${{ github.workspace }}'"/external/mingw-${{ matrix.target.cpu }}/bin" >> $GITHUB_PATH
+          echo '${{ github.workspace }}'"/external/mingw-${{ matrix.cpu }}/bin" >> $GITHUB_PATH
 
       - name: Get latest nimbus-build-system commit hash
         id: versions
@@ -174,7 +139,7 @@ jobs:
         uses: actions/cache@v4
         with:
           path: NimBinCache
-          key: 'nim-${{ matrix.target.os }}-${{ matrix.target.cpu }}-${{ steps.versions.outputs.nimbus_build_system }}-verified-proxy'
+          key: 'nim-${{ matrix.os }}-${{ matrix.cpu }}-${{ steps.versions.outputs.nimbus_build_system }}-verified-proxy'
 
       - name: Build Nim and Nimbus-eth1 dependencies
         run: |
