@@ -80,9 +80,10 @@ proc build*(
     preStateLedger: LedgerRef,
     ledger: LedgerRef,
     parent: Header,
-    header: Header): T =
+    header: Header,
+    validateStateRoot = false): T =
 
-  if parent.number > 0:
+  if validateStateRoot and parent.number > 0:
     doAssert preStateLedger.getStateRoot() == parent.stateRoot
 
   var witness = Witness.build(ledger.getWitnessKeys(), preStateLedger)
