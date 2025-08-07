@@ -272,8 +272,8 @@ proc installEthApiHandlers*(vp: VerifiedRpcProxy) =
     raise newException(ValueError, "receipt couldn't be verified")
 
   vp.proxy.rpc("eth_getLogs") do(filterOptions: FilterOptions) -> seq[LogObject]:
-    let 
-      logObjs = 
+    let
+      logObjs =
         try:
           await vp.rpcClient.eth_getLogs(filterOptions)
         except CatchableError as e:
@@ -291,8 +291,8 @@ proc installEthApiHandlers*(vp: VerifiedRpcProxy) =
     return verifiedLogs
 
   vp.proxy.rpc("eth_newFilter") do(filterOptions: FilterOptions) -> int:
-    let 
-      hexId = 
+    let
+      hexId =
         try:
           await vp.rpcClient.eth_newFilter(filterOptions)
         except CatchableError as e:
@@ -303,7 +303,7 @@ proc installEthApiHandlers*(vp: VerifiedRpcProxy) =
     return id
 
   vp.proxy.rpc("eth_uninstallFilter") do(filterId: int) -> bool:
-    let status = 
+    let status =
       try:
         await vp.rpcClient.eth_uninstallFilter("0x" & toHex(filterId))
       except CatchableError as e:
@@ -318,8 +318,8 @@ proc installEthApiHandlers*(vp: VerifiedRpcProxy) =
     if filterId notin vp.filterStore:
       raise newException(ValueError, "Filter doesn't exist")
 
-    let 
-      logObjs = 
+    let
+      logObjs =
         try:
           # use locally stored filter and get logs
           await vp.rpcClient.eth_getLogs(vp.filterStore[filterId])
@@ -341,8 +341,8 @@ proc installEthApiHandlers*(vp: VerifiedRpcProxy) =
     if filterId notin vp.filterStore:
       raise newException(ValueError, "Filter doesn't exist")
 
-    let 
-      logObjs = 
+    let
+      logObjs =
         try:
           await vp.rpcClient.eth_getFilterChanges("0x" & toHex(filterId))
         except CatchableError as e:
