@@ -27,7 +27,7 @@ proc toRlpBytes*(acc: AristoAccount, key: HashKey): seq[byte] =
     codeHash: acc.codeHash,
   )
 
-proc appendRlpBytesTo*(node: NodeRef, chain: var seq[seq[byte]]) =
+proc to*(node: NodeRef, T: type seq[seq[byte]]): T =
   ## Convert the argument pait `w` to a single or a double item list item of
   ## `<rlp-encoded-node>` type entries. Only in case of a combined extension
   ## and branch vertex argument, there will be a double item list result.
@@ -51,11 +51,11 @@ proc appendRlpBytesTo*(node: NodeRef, chain: var seq[seq[byte]]) =
       wrx.append node.vtx.pfx.toHexPrefix(isleaf = false).data()
       wrx.append brHash
 
-      chain.add wrx.finish()
-      chain.add brData
+      result.add wrx.finish()
+      result.add brData
     else:
       # Do for pure branch node
-      chain.add brData
+      result.add brData
   of AccLeaf:
     let vtx = AccLeafRef(node.vtx)
     var wr = initRlpWriter()
@@ -63,7 +63,7 @@ proc appendRlpBytesTo*(node: NodeRef, chain: var seq[seq[byte]]) =
     wr.append vtx.pfx.toHexPrefix(isleaf = true).data()
     wr.append vtx.account.toRlpBytes(node.key[0])
 
-    chain.add (wr.finish())
+    result.add (wr.finish())
   of StoLeaf:
     let vtx = StoLeafRef(node.vtx)
     var wr = initRlpWriter()
@@ -71,7 +71,7 @@ proc appendRlpBytesTo*(node: NodeRef, chain: var seq[seq[byte]]) =
     wr.append vtx.pfx.toHexPrefix(isleaf = true).data()
     wr.append rlp.encode vtx.stoData
 
-    chain.add (wr.finish())
+    result.add (wr.finish())
 
 proc digestTo*(node: NodeRef; T: type HashKey): T =
   ## Convert the argument `node` to the corresponding Merkle hash key. Note
