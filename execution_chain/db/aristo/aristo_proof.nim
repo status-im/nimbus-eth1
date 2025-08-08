@@ -35,8 +35,13 @@ const
     ## node does not exist.
 
 type
-  NodesCache = Table[RootedVertexID, seq[seq[byte]]]
+  NodesCache = Table[RootedVertexID, array[2, seq[byte]]]
     ## Caches up to two rlp encoded trie nodes in each value
+
+template appendNodes(chain: var seq[seq[byte]], nodePair: array[2, seq[byte]]) =
+  chain.add(nodePair[0])
+  if nodePair[1].len() > 0:
+    chain.add(nodePair[1])
 
 proc chainRlpNodes(
     db: AristoTxRef,
@@ -48,15 +53,15 @@ proc chainRlpNodes(
   let (vtx, _) = ?db.getVtxRc(rvid)
 
   nodesCache.withValue(rvid, value):
-    chain &= value[]
+    chain.appendNodes(value[])
   do:
     let node = vtx.toNode(rvid.root, db).valueOr:
       return err(PartChnNodeConvError)
 
     # Save rpl encoded node(s)
-    let rlpNodes = node.to(seq[seq[byte]])
+    let rlpNodes = node.to(array[2, seq[byte]])
     nodesCache[rvid] = rlpNodes
-    chain &= rlpNodes
+    chain.appendNodes(rlpNodes)
 
   # Follow up child node
   case vtx.vType:
