@@ -46,7 +46,7 @@ proc chainRlpNodes(
       return err(PartChnNodeConvError)
 
   # Save rpl encoded node(s)
-  chain &= node.to(seq[seq[byte]])
+  node.appendRlpBytesTo(chain)
 
   # Follow up child node
   case vtx.vType:
