@@ -309,11 +309,11 @@ proc getStateRoot*(acc: CoreDbTxRef): CoreDbRc[Hash32] =
 
 # ------------ storage ---------------
 
-proc slotProof*(
+proc slotProofs*(
     acc: CoreDbTxRef;
     accPath: Hash32;
-    stoPath: Hash32;
-      ): CoreDbRc[(seq[seq[byte]],bool)] =
+    stoPaths: openArray[Hash32];
+      ): CoreDbRc[seq[seq[seq[byte]]]] =
   ## On the storage MPT related to the argument account `acPath`, collect the
   ## nodes along the `stoPath` interpreted as path. Return these path nodes as
   ## a chain of rlp-encoded blobs followed by a bool value which is `true` if
@@ -324,7 +324,7 @@ proc slotProof*(
   ## Note that the function always returns an error unless the `accPath` is
   ## valid.
   ##
-  let rc = acc.aTx.makeStorageProof(accPath, stoPath).valueOr:
+  let rc = acc.aTx.makeStorageProofs(accPath, stoPaths).valueOr:
     return err(error.toError("", ProofCreate))
 
   ok(rc)

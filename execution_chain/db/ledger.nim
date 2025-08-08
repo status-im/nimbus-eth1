@@ -886,30 +886,23 @@ proc getAccountProof*(ac: LedgerRef, address: Address): seq[seq[byte]] =
   accProof[0]
 
 proc getStorageProof*(ac: LedgerRef, address: Address, slots: openArray[UInt256]): seq[seq[seq[byte]]] =
-  var storageProof = newSeqOfCap[seq[seq[byte]]](slots.len)
-
   let
     addressHash = address.toAccountKey
     accountExists = ac.txFrame.hasPath(addressHash).valueOr:
       raiseAssert "Call to hasPath failed: " & $$error
 
+  if not accountExists:
+    let emptyProofs = newSeq[seq[seq[byte]]](slots.len)
+    return emptyProofs
+
+  var slotKeys: seq[Hash32]
   for slot in slots:
-    if not accountExists:
-      storageProof.add(@[])
-      continue
+    let slotKey = ac.slots.get(slot).valueOr:
+      slot.toBytesBE().keccak256()
+    slotKeys.add(slotKey)
 
-    let
-      slotKey = ac.slots.get(slot).valueOr:
-        slot.toBytesBE.keccak256
-      slotProof = ac.txFrame.slotProof(addressHash, slotKey).valueOr:
-        if error.aErr == FetchPathNotFound:
-          storageProof.add(@[])
-          continue
-        else:
-          raiseAssert "Failed to get slot proof: " & $$error
-    storageProof.add(slotProof[0])
-
-  storageProof
+  ac.txFrame.slotProofs(addressHash, slotKeys).valueOr:
+    raiseAssert "Failed to get slot proof: " & $$error
 
 # ------------------------------------------------------------------------------
 # Public virtual read-only methods
