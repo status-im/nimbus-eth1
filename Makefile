@@ -118,10 +118,10 @@ VERIF_PROXY_OUT_PATH ?= build/libverifproxy/
 	libnimbus.a \
 	libbacktrace \
 	rocksdb \
-	dist-amd64 \
-	dist-arm64 \
-	dist-win64 \
-	dist-macos \
+	dist-linux-amd64 \
+	dist-linux-arm64 \
+	dist-windows-amd64 \
+	dist-macos-arm64 \
 	dist
 
 ifeq ($(NIM_PARAMS),)
@@ -223,7 +223,7 @@ libbacktrace:
 	+ $(MAKE) -C vendor/nim-libbacktrace --no-print-directory BUILD_CXX_LIB=0
 
 # nim-rocksdb
-ROCKSDB_CI_CACHE := /usr/rocksdb
+ROCKSDB_CI_CACHE := build/rocksdb
 
 ifneq ($(USE_SYSTEM_ROCKSDB), 0)
 rocksdb:
@@ -389,26 +389,26 @@ endif
 # can be found in Git history.  Look for the `nimbus-eth1` commit that adds
 # this comment and removes `wrappers/*`.
 
-dist-amd64:
+dist-linux-amd64:
 	+ MAKE="$(MAKE)" \
-		scripts/make_dist.sh amd64
+		scripts/make_dist.sh linux-amd64
 
-dist-arm64:
+dist-linux-arm64:
 	+ MAKE="$(MAKE)" \
-		scripts/make_dist.sh arm64
+		scripts/make_dist.sh linux-arm64
 
-dist-win64:
+dist-windows-amd64:
 	+ MAKE="$(MAKE)" \
-		scripts/make_dist.sh win64
+		scripts/make_dist.sh windows-amd64
 
-dist-macos:
+dist-macos-arm64:
 	+ MAKE="$(MAKE)" \
-		scripts/make_dist.sh macos
+		scripts/make_dist.sh macos-arm64
 
 dist:
-	+ $(MAKE) --no-print-directory dist-amd64
-	+ $(MAKE) --no-print-directory dist-arm64
-	+ $(MAKE) --no-print-directory dist-win64
-	+ $(MAKE) --no-print-directory dist-macos
+	+ $(MAKE) --no-print-directory dist-linux-amd64
+	+ $(MAKE) --no-print-directory dist-linux-arm64
+	+ $(MAKE) --no-print-directory dist-windows-amd64
+	+ $(MAKE) --no-print-directory dist-macos-arm64
 
 endif # "variables.mk" was not included

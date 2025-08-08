@@ -8,21 +8,20 @@
 # at your option. This file may not be copied, modified, or distributed except
 # according to those terms.
 
-# The build is reproducible only if this base image stays the same.
-FROM statusim/nimbus-eth1:dist_base_eth1_v2_arm64
+FROM debian:bullseye-slim
 
 SHELL ["/bin/bash", "-c"]
 
-ARG USER_ID
-ARG GROUP_ID
-
-RUN addgroup --gid ${GROUP_ID} user; \
-	adduser --disabled-password --gecos '' --uid ${USER_ID} --gid ${GROUP_ID} user;
+# Likely to match the first regular user:group created on the host.
+RUN addgroup --gid 1000 user; \
+	adduser --disabled-password --gecos '' --uid 1000 --gid 1000 user;
 
 USER user
 
 STOPSIGNAL SIGINT
 
-COPY "entry_point.sh" "/home/user/"
-ENTRYPOINT ["/home/user/entry_point.sh", "linux_arm64"]
+# Docker refuses to copy the source directory here, so read it as "nimbus-eth1/*"
+COPY "nimbus-eth1" "/home/user/nimbus-eth1/"
+WORKDIR "/home/user/nimbus-eth1/"
+ENTRYPOINT ["/home/user/nimbus-eth1/build/nimbus_execution_client"]
 

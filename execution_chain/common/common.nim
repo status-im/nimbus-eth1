@@ -292,7 +292,7 @@ func toHardFork*(
   toHardFork(com.forkTransitionTable, forkDeterminer)
 
 func toHardFork*(com: CommonRef, timestamp: EthTime): HardFork =
-  for fork in countdown(com.forkTransitionTable.timeThresholds.high, Shanghai):
+  for fork in countdown(HardFork.high, Shanghai):
     if com.forkTransitionTable.timeThresholds[fork].isSome and timestamp >= com.forkTransitionTable.timeThresholds[fork].get:
       return fork
 
@@ -305,6 +305,27 @@ func toEVMFork*(com: CommonRef, forkDeterminer: ForkDeterminationInfo): EVMFork 
   ## similar to toFork, but produce EVMFork
   let fork = com.toHardFork(forkDeterminer)
   ToEVMFork[fork]
+
+func nextFork*(com: CommonRef, currentFork: HardFork): Opt[HardFork] =
+  ## Returns the next hard fork after the given one
+  ## The next fork can also be the last fork
+  if currentFork < Shanghai:
+    return Opt.none(HardFork) 
+  for fork in currentFork .. HardFork.high:
+    if fork > currentFork and com.forkTransitionTable.timeThresholds[fork].isSome:
+      return Opt.some(fork)
+  return Opt.none(HardFork)
+
+func lastFork*(com: CommonRef, currentFork: HardFork): Opt[HardFork] =
+  ## Returns the last hard fork before the given one
+  for fork in countdown(HardFork.high, currentFork):
+    if fork > currentFork and com.forkTransitionTable.timeThresholds[fork].isSome:
+      return Opt.some(HardFork(fork))
+  return Opt.none(HardFork)
+
+func activationTime*(com: CommonRef, fork: HardFork): Opt[EthTime] =
+  ## Returns the activation time of the given hard fork
+  com.forkTransitionTable.timeThresholds[fork]
 
 func toEVMFork*(com: CommonRef, header: Header): EVMFork =
   com.toEVMFork(forkDeterminationInfo(header))
@@ -322,6 +343,10 @@ func isLondonOrLater*(com: CommonRef, number: BlockNumber): bool =
 func forkId*(com: CommonRef, head, time: uint64): ForkID {.gcsafe.} =
   ## EIP 2364/2124
   com.forkIdCalculator.newID(head, time)
+
+func forkId*(com: CommonRef, forkActivationTime: EthTime): ForkID {.gcsafe.} =
+  # Only works for timestamp based forks
+  com.forkIdCalculator.newID(0'u64, forkActivationTime.uint64)
 
 func forkId*(com: CommonRef, head: BlockNumber, time: EthTime): ForkID {.gcsafe.} =
   ## EIP 2364/2124
