@@ -69,35 +69,38 @@ proc processBlock*(c: ForkedChainRef,
 
   ?c.com.validateHeaderAndKinship(blk, vmState.parent, txFrame)
 
-  if vmState.com.statelessProviderEnabled:
+  template processBlock(): auto =
+    # When processing a finalized block, we optimistically assume that the state
+    # root will check out and delay such validation for when it's time to persist
+    # changes to disk
+    ?vmState.processBlock(
+      blk,
+      skipValidation = false,
+      skipReceipts = false,
+      skipUncles = true,
+      skipStateRootCheck = finalized and not c.eagerStateRoot,
+      taskpool = c.com.taskpool,
+    )
+
+  if not vmState.com.statelessProviderEnabled:
+    processBlock()
+  else:
     # Clear the caches before executing the block to ensure we collect the correct
     # witness keys and block hashes when processing the block as these will be used
     # when building the witness.
     vmState.ledger.clearWitnessKeys()
     vmState.ledger.clearBlockHashesCache()
 
-  # When processing a finalized block, we optimistically assume that the state
-  # root will check out and delay such validation for when it's time to persist
-  # changes to disk
-  ?vmState.processBlock(
-    blk,
-    skipValidation = false,
-    skipReceipts = false,
-    skipUncles = true,
-    skipStateRootCheck = finalized and not c.eagerStateRoot,
-    taskpool = c.com.taskpool,
-  )
+    processBlock()
+
+    let
+      preStateLedger = LedgerRef.init(parentBlk.txFrame)
+      witness = Witness.build(preStateLedger, vmState.ledger, parentBlk.header, header)
+      
+    ?vmState.ledger.txFrame.persistWitness(blkHash, witness)
 
   # We still need to write header to database
   # because validateUncles still need it
   ?txFrame.persistHeader(blkHash, header, c.com.startOfHistory)
-
-  if vmState.com.statelessProviderEnabled:
-    let
-      preStateLedger = LedgerRef.init(parentBlk.txFrame)
-      witness = Witness.build(preStateLedger, vmState.ledger, parentBlk.header, header)
-
-    ?vmState.ledger.txFrame.persistWitness(blkHash, witness)
-
 
   ok(move(vmState.receipts))
