@@ -27,7 +27,8 @@ proc gitFolderExists(path: string): bool {.compileTime.} =
     if dirExists(currPath & "/.git"):
       return true
     let parts = splitPath(currPath)
-    if parts.tail.len == 0: break
+    if parts.tail.len == 0:
+      break
     currPath = parts.head
   false
 
