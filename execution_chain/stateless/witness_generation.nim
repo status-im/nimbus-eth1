@@ -27,16 +27,13 @@ proc build*(
     preStateLedger: LedgerRef): T =
   var
     witness = Witness.init()
-    addedState = initHashSet[seq[byte]]()
-    addedCodeHashes = initHashSet[Hash32]()
+    addedCodeHashes: HashSet[Hash32]
+    proofPaths: Table[Hash32, seq[Hash32]]
 
   for key, codeTouched in witnessKeys:
     if key.slot.isNone(): # Is an account key
-      witness.addKey(key.address.data())
-
-      let proof = preStateLedger.getAccountProof(key.address)
-      for trieNode in proof:
-        addedState.incl(trieNode)
+      let addressBytes = key.address.data()
+      witness.addKey(addressBytes)
 
       if codeTouched:
         let codeHash = preStateLedger.getCodeHash(key.address)
@@ -44,23 +41,18 @@ proc build*(
           witness.addCodeHash(codeHash)
           addedCodeHashes.incl(codeHash)
 
-      # Add the storage slots for this account
-      var slots: seq[UInt256]
+      # Add the storage paths for this account
+      var storagePaths: seq[Hash32]
       for key2, codeTouched2 in witnessKeys:
         if key2.address == key.address and key2.slot.isSome():
-          let slot = key2.slot.get()
-          slots.add(slot)
-          witness.addKey(slot.toBytesBE())
+          let slotBytes = key2.slot.get().toBytesBE()
+          witness.addKey(slotBytes)
+          storagePaths.add(keccak256(slotBytes))
 
-      if slots.len() > 0:
-        let proofs = preStateLedger.getStorageProof(key.address, slots)
-        doAssert(proofs.len() == slots.len())
-        for proof in proofs:
-          for trieNode in proof:
-            addedState.incl(trieNode)
+      proofPaths[keccak256(addressBytes)] = storagePaths
 
-  for s in addedState.items():
-    witness.addState(s)
+  witness.state = preStateLedger.txFrame.multiProof(proofPaths).valueOr:
+    raiseAssert "Failed to get multiproof: " & $$error
 
   witness
 

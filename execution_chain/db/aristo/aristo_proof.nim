@@ -15,14 +15,10 @@
 {.push raises: [].}
 
 import
+  std/[tables, sets, sequtils],
   eth/common/hashes,
   results,
   ./[aristo_desc, aristo_fetch, aristo_get, aristo_serialise, aristo_utils]
-
-# ------------------------------------------------------------------------------
-# Public functions
-# ------------------------------------------------------------------------------
-
 
 const
   ChainRlpNodesNoEntry* = {
@@ -133,10 +129,6 @@ proc trackRlpNodes(
     return err(PartTrkLinkExpected)
   chain.toOpenArray(1,chain.len-1).trackRlpNodes(nextKey, path.slice nChewOff)
 
-# ------------------------------------------------------------------------------
-# Public functions
-# ------------------------------------------------------------------------------
-
 proc makeProof(
     db: AristoTxRef;
     root: VertexID;
@@ -180,10 +172,11 @@ proc makeStorageProof*(
   var nodesCache: NodesCache
   db.makeProof(vid, NibblesBuf.fromBytes stoPath.data, nodesCache)
 
-proc makeStorageProofs*(
+proc makeStorageProofs(
     db: AristoTxRef;
     accPath: Hash32;
     stoPaths: openArray[Hash32];
+    nodesCache: var NodesCache;
       ): Result[seq[seq[seq[byte]]], AristoError] =
   ## Note that the function returns an error unless
   ## the argument `accPath` is valid.
@@ -193,17 +186,41 @@ proc makeStorageProofs*(
       return ok(emptyProofs)
     return err(error)
 
-  var
-    nodesCache: NodesCache
-    proofs = newSeqOfCap[seq[seq[byte]]](stoPaths.len())
-
+  var proofs = newSeqOfCap[seq[seq[byte]]](stoPaths.len())
   for stoPath in stoPaths:
     let (proof, _) = ?db.makeProof(vid, NibblesBuf.fromBytes stoPath.data, nodesCache)
     proofs.add(proof)
 
   ok(proofs)
 
-# ----------
+proc makeStorageProofs*(
+    db: AristoTxRef;
+    accPath: Hash32;
+    stoPaths: openArray[Hash32];
+      ): Result[seq[seq[seq[byte]]], AristoError] =
+  var nodesCache: NodesCache
+  makeStorageProofs(db, accPath, stoPaths, nodesCache)
+
+proc makeMultiProof*(
+    db: AristoTxRef;
+    paths: Table[Hash32, seq[Hash32]] # maps each account path to a list of storage paths
+      ): Result[seq[seq[byte]], AristoError] =
+  var
+    nodesCache: NodesCache
+    multiProof: HashSet[seq[byte]]
+
+  for accPath, stoPaths in paths:
+    let (accProof, _) = ?db.makeProof(STATE_ROOT_VID, NibblesBuf.fromBytes accPath.data, nodesCache)
+
+    for node in accProof:
+      multiProof.incl(node)
+
+    let storageProofs = ?db.makeStorageProofs(accPath, stoPaths, nodesCache)
+    for storageProof in storageProofs:
+      for node in storageProof:
+        multiProof.incl(node)
+
+  ok(multiProof.toSeq())
 
 proc verifyProof*(
     chain: openArray[seq[byte]];
@@ -222,7 +239,3 @@ proc verifyProof*(
     return err(rc.error)
   except RlpError:
     return err(PartTrkRlpError)
-
-# ------------------------------------------------------------------------------
-# End
-# ------------------------------------------------------------------------------
