@@ -210,15 +210,15 @@ proc makeMultiProof*(
     multiProof: HashSet[seq[byte]]
 
   for accPath, stoPaths in paths:
-    let (accProof, _) = ?db.makeProof(STATE_ROOT_VID, NibblesBuf.fromBytes accPath.data, nodesCache)
-
+    let (accProof, exists) = ?db.makeProof(STATE_ROOT_VID, NibblesBuf.fromBytes accPath.data, nodesCache)
     for node in accProof:
       multiProof.incl(node)
 
-    let storageProofs = ?db.makeStorageProofs(accPath, stoPaths, nodesCache)
-    for storageProof in storageProofs:
-      for node in storageProof:
-        multiProof.incl(node)
+    if exists:
+      let storageProofs = ?db.makeStorageProofs(accPath, stoPaths, nodesCache)
+      for storageProof in storageProofs:
+        for node in storageProof:
+          multiProof.incl(node)
 
   ok(multiProof.toSeq())
 
