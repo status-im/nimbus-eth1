@@ -22,9 +22,22 @@ fi
 ARCH="${1}"
 DOCKER_TAG="${2}"
 
+ROCKSDB_DIR=rocksdb
+
+if [[ ! -d "$ROCKSDB_DIR" ]]; then
+  # rocksdb folder not exists
+  mkdir -p ${ROCKSDB_DIR}
+  ROCKSDB_DIR_CREATED=1
+fi
+
 DOCKER_BUILDKIT=1 \
   docker build \
   -t ${DOCKER_TAG} \
   --progress=plain \
   -f Dockerfile.${ARCH} .
 
+if [[ -n "$ROCKSDB_DIR_CREATED" ]]; then
+  # ROCKSDB_DIR created by this script, remove it.
+  # but keep it if it's not created by this script.
+  rm -rf ${ROCKSDB_DIR}
+fi

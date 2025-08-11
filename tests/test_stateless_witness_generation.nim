@@ -12,7 +12,6 @@
 
 import
   stew/byteutils,
-  chronicles,
   unittest2,
   ../execution_chain/common/common,
   ../execution_chain/stateless/witness_generation

@@ -28,7 +28,7 @@ proc toAsyncEvmStateBackend*(vp: VerifiedRpcProxy): AsyncEvmStateBackend =
       let account =
         try:
           (await vp.getAccount(address, header.number, header.stateRoot))
-        except CatchableError as e:
+        except CatchableError:
           error "error getting account"
           return Opt.none(Account)
 
@@ -43,7 +43,7 @@ proc toAsyncEvmStateBackend*(vp: VerifiedRpcProxy): AsyncEvmStateBackend =
       let storageSlot =
         try:
           (await vp.getStorageAt(address, slotKey, header.number, header.stateRoot))
-        except CatchableError as e:
+        except CatchableError:
           error "error getting storage"
           return Opt.none(UInt256)
 
@@ -58,7 +58,7 @@ proc toAsyncEvmStateBackend*(vp: VerifiedRpcProxy): AsyncEvmStateBackend =
       let code =
         try:
           (await vp.getCode(address, header.number, header.stateRoot))
-        except CatchableError as e:
+        except CatchableError:
           error "error getting code"
           return Opt.none(seq[byte])
 

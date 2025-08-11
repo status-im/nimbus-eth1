@@ -16,100 +16,28 @@ on:
   workflow_dispatch:
 
 jobs:
-  build-linux-amd64:
-    name: Linux-amd64
-    runs-on: ubuntu-latest
-    steps:
-      - name: Checkout code
-        uses: actions/checkout@v4
+  matrix_config:
+    uses: ./.github/workflows/matrix_config.yml
 
-      - name: Get latest nimbus-build-system commit hash
-        id: versions
-        run: |
-          sudo apt-get -q update
-          getHash() {
-            git ls-remote "https://github.com/$1" "${2:-HEAD}" | cut -f 1
-          }
-          nbsHash=$(getHash status-im/nimbus-build-system)
-          echo "nimbus_build_system=$nbsHash" >> $GITHUB_OUTPUT
+  build:
+    needs: matrix_config
 
-      - name: Restore prebuilt Nim from cache
-        uses: actions/cache@v4
-        with:
-          path: NimBinaries
-          key: 'nim-linux-amd64-${{ steps.versions.outputs.nimbus_build_system }}-sim'
+    strategy:
+      fail-fast: false
+      matrix: ${{ fromJSON(needs.matrix_config.outputs.matrix) }}
 
-      - name: Build Nim and deps
-        run: |
-          ncpu=$(nproc)
-          make -j${ncpu} ARCH_OVERRIDE=x64 CI_CACHE=NimBinaries init
-          make -j${ncpu} deps rocksdb
-
-      - name: Run Simulators
-        run: |
-          SIM_SCRIPT="hive_integration/nodocker/build_sims.sh"
-          chmod +x ${SIM_SCRIPT}
-          ${SIM_SCRIPT} "Linux-amd64"
-
-      - name: Upload artefact
-        uses: actions/upload-artifact@v4
-        with:
-          name: linux_amd64_stat
-          path: ./simulators.md
-          retention-days: 2
-
-  build-macos-amd64:
-    name: Macos-amd64
-    runs-on: macos-13
-    steps:
-      - name: Checkout code
-        uses: actions/checkout@v4
-
-      - name: Get latest nimbus-build-system commit hash
-        id: versions
-        run: |
-          getHash() {
-            git ls-remote "https://github.com/$1" "${2:-HEAD}" | cut -f 1
-          }
-          nbsHash=$(getHash status-im/nimbus-build-system)
-          echo "nimbus_build_system=$nbsHash" >> $GITHUB_OUTPUT
-
-      - name: Restore prebuilt Nim from cache
-        uses: actions/cache@v4
-        with:
-          path: NimBinaries
-          key: 'nim-macos-amd64-${{ steps.versions.outputs.nimbus_build_system }}-sim'
-
-      - name: Build Nim and deps
-        run: |
-          ncpu=$(sysctl -n hw.ncpu)
-          make -j${ncpu} ARCH_OVERRIDE=x64 CI_CACHE=NimBinaries init
-          make -j${ncpu} deps rocksdb
-
-      - name: Run Simulators
-        run: |
-          SIM_SCRIPT="hive_integration/nodocker/build_sims.sh"
-          chmod +x ${SIM_SCRIPT}
-          ${SIM_SCRIPT} "MacOS-amd64"
-
-      - name: Upload artefact
-        uses: actions/upload-artifact@v4
-        with:
-          name: macos_amd64_stat
-          path: ./simulators.md
-          retention-days: 2
-
-  build-windows-amd64:
-    name: Windows-amd64
-    runs-on: windows-latest
     defaults:
       run:
         shell: bash
+
+    name: '${{ matrix.os }}-${{ matrix.cpu }}'
+    runs-on: ${{ matrix.builder }}
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
 
       - name: Restore llvm-mingw from cache
+        if: runner.os == 'windows'
         id: windows-mingw-cache
         uses: actions/cache@v4
         with:
@@ -117,16 +45,20 @@ jobs:
           key: 'mingw-llvm-17-sim'
 
       - name: Install llvm-mingw dependency
-        if: steps.windows-mingw-cache.outputs.cache-hit != 'true'
+        if: >
+          steps.windows-mingw-cache.outputs.cache-hit != 'true' &&
+          runner.os == 'windows'
         run: |
           mkdir -p external
-          MINGW_BASE="https://github.com/mstorsjo/llvm-mingw/releases/download/20230905"
-          MINGW_URL="$MINGW_BASE/llvm-mingw-20230905-ucrt-x86_64.zip"
+          LLVM_VERSION="20250730"
+          MINGW_BASE="https://github.com/mstorsjo/llvm-mingw/releases/download/$LLVM_VERSION"
+          MINGW_URL="$MINGW_BASE/llvm-mingw-$LLVM_VERSION-ucrt-x86_64.zip"
           curl -L "$MINGW_URL" -o "external/mingw-amd64.zip"
           7z x -y "external/mingw-amd64.zip" -oexternal/mingw-amd64/
           mv external/mingw-amd64/**/* ./external/mingw-amd64
 
       - name: Path to cached dependencies
+        if: runner.os == 'windows'
         run: |
           echo '${{ github.workspace }}'"/external/mingw-amd64/bin" >> $GITHUB_PATH
 
@@ -143,29 +75,51 @@ jobs:
         uses: actions/cache@v4
         with:
           path: NimBinaries
-          key: 'nim-windows-amd64-${{ steps.versions.outputs.nimbus_build_system }}-sim'
+          key: 'nim-${{ matrix.os }}-${{ matrix.cpu }}-${{ steps.versions.outputs.nimbus_build_system }}-sim'
+
+      - name: Get latest nim-rocksdb commit hash
+        id: rocksdb-versions
+        run: |
+          getHash() {
+            git ls-remote "https://github.com/$1" "${2:-HEAD}" | cut -f 1
+          }
+          rocksHash=$(getHash status-im/nim-rocksdb)
+          echo "nim_rocksdb=$rocksHash" >> $GITHUB_OUTPUT
+
+      - name: Restore prebuilt rocksdb from cache
+        id: rocksdb-cache
+        uses: actions/cache@v4
+        with:
+          path: RocksBinCache
+          key: 'rocks-${{ matrix.os }}-${{ matrix.cpu }}-${{ steps.rocksdb-versions.outputs.nim_rocksdb }}'
 
       - name: Build Nim and deps
         run: |
-          ncpu=${NUMBER_OF_PROCESSORS}
-          mingw32-make -j${ncpu} ARCH_OVERRIDE=x64 CI_CACHE=NimBinaries init
-          mingw32-make -j${ncpu} deps
+          if [[ '${{ matrix.os }}' == 'windows' ]]; then
+            ncpu=${NUMBER_OF_PROCESSORS}
+          elif [[ '${{ matrix.os }}' == 'macos' ]]; then
+            ncpu=$(sysctl -n hw.ncpu)
+          else
+            ncpu=$(nproc)
+          fi
+          make -j${ncpu} ARCH_OVERRIDE=x64 CI_CACHE=NimBinaries init
+          make -j${ncpu} ROCKSDB_CI_CACHE=RocksBinCache deps rocksdb
 
       - name: Run Simulators
         run: |
           SIM_SCRIPT="hive_integration/nodocker/build_sims.sh"
-          ${SIM_SCRIPT} "Windows-amd64"
+          bash ${SIM_SCRIPT} "${{ matrix.os }}-${{ matrix.cpu }}"
 
       - name: Upload artefact
         uses: actions/upload-artifact@v4
         with:
-          name: windows_amd64_stat
+          name: '${{ matrix.os }}_${{ matrix.cpu }}_stat'
           path: ./simulators.md
           retention-days: 2
 
   prepare-stat:
     name: Test results
-    needs: [build-linux-amd64, build-macos-amd64, build-windows-amd64]
+    needs: build
     runs-on: ubuntu-latest
     steps:
       - name: Checkout code
@@ -179,15 +133,14 @@ jobs:
       - name: Create statistics notes
         run: |
           cat linux_amd64_stat/* > stat_notes.md
-          cat macos_amd64_stat/* >> stat_notes.md
+          cat macos_arm64_stat/* >> stat_notes.md
           cat windows_amd64_stat/* >> stat_notes.md
 
       - name: Delete tag
-        uses: dev-drprasad/delete-tag-and-release@v1.0.1
-        with:
-          delete_release: true
-          tag_name: sim-stat
-          github_token: ${{ secrets.GITHUB_TOKEN }}
+        run: gh release delete $TAG --cleanup-tag
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          TAG: sim-stat
 
       - name: Simulators results
         uses: ncipollo/release-action@v1
@@ -200,10 +153,10 @@ jobs:
           bodyFile: "stat_notes.md"
 
       - name: Delete artefacts
-        uses: geekyeggo/delete-artifact@v2
+        uses: geekyeggo/delete-artifact@v5
         with:
           failOnError: false
           name: |
             linux_amd64_stat
-            macos_amd64_stat
+            macos_arm64_stat
             windows_amd64_stat
