@@ -124,6 +124,7 @@ JrpcConv.automaticSerialization(int64, true)
 JrpcConv.automaticSerialization(uint64, true)
 JrpcConv.automaticSerialization(uint16, true)
 JrpcConv.automaticSerialization(seq, true)
+JrpcConv.automaticSerialization(Opt[string], true)
 
 func getNodeInfo*(r: RoutingTable): NodeInfo =
   NodeInfo(enr: r.localNode.record, nodeId: r.localNode.id)
