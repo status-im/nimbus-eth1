@@ -23,26 +23,26 @@ import
 
 proc resolveBlockTag*(
     vp: VerifiedRpcProxy, blockTag: BlockTag
-): Result[base.BlockNumber, string] =
+): Result[BlockTag, string] =
   if blockTag.kind == bidAlias:
     let tag = blockTag.alias.toLowerAscii()
     case tag
     of "latest":
       let hLatest = vp.headerStore.latest.valueOr:
         return err("Couldn't get the latest block number from header store")
-      ok(hLatest.number)
+      ok(BlockTag(kind: bidNumber, number: hLatest.number))
     of "finalized":
       let hFinalized = vp.headerStore.finalized.valueOr:
         return err("Couldn't get the latest block number from header store")
-      ok(hFinalized.number)
+      ok(BlockTag(kind: bidNumber, number: hFinalized.number))
     of "earliest":
       let hEarliest = vp.headerStore.earliest.valueOr:
         return err("Couldn't get the latest block number from header store")
-      ok(hEarliest.number)
+      ok(BlockTag(kind: bidNumber, number: hEarliest.number))
     else:
       err("No support for block tag " & $blockTag)
   else:
-    ok(base.BlockNumber(distinctBase(blockTag.number)))
+    ok(blockTag)
 
 func convHeader*(blk: eth_api_types.BlockObject): Header =
   let nonce = blk.nonce.valueOr:
@@ -184,10 +184,8 @@ proc getBlock*(
 proc getBlock*(
     vp: VerifiedRpcProxy, blockTag: BlockTag, fullTransactions: bool
 ): Future[Result[BlockObject, string]] {.async.} =
-  let
-    n = vp.resolveBlockTag(blockTag).valueOr:
-      return err(error)
-    numberTag = BlockTag(kind: BlockIdentifierKind.bidNumber, number: Quantity(n))
+  let numberTag = vp.resolveBlockTag(blockTag).valueOr:
+    return err(error)
 
   # get the target block
   let blk =
@@ -196,7 +194,7 @@ proc getBlock*(
     except CatchableError as e:
       return err(e.msg)
 
-  if n != distinctBase(blk.number):
+  if numberTag.number != blk.number:
     return
       err("the downloaded block number doesn't match with the requested block number")
 
@@ -235,9 +233,9 @@ proc getHeader*(
     vp: VerifiedRpcProxy, blockTag: BlockTag
 ): Future[Result[Header, string]] {.async.} =
   let
-    n = vp.resolveBlockTag(blockTag).valueOr:
+    numberTag = vp.resolveBlockTag(blockTag).valueOr:
       return err(error)
-    numberTag = BlockTag(kind: BlockIdentifierKind.bidNumber, number: Quantity(n))
+    n = distinctBase(numberTag.number)
     cachedHeader = vp.headerStore.get(n)
 
   if cachedHeader.isNone():
