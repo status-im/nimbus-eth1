@@ -462,7 +462,7 @@ proc validateBlock(c: ForkedChainRef,
     parentTxFrame=cast[uint](parentFrame),
     txFrame=cast[uint](txFrame)
 
-  var receipts = c.processBlock(parent.header, txFrame, blk, blkHash, finalized).valueOr:
+  var receipts = c.processBlock(parent, txFrame, blk, blkHash, finalized).valueOr:
     txFrame.dispose()
     return err(error)
 
