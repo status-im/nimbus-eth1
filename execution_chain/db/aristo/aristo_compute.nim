@@ -89,11 +89,32 @@ proc putKeyAtLevel(
 
   ok()
 
-template encodeLeaf(w: var RlpWriter, pfx: NibblesBuf, leafData: untyped): HashKey =
+template appendLeaf(w: var RlpWriter, pfx: NibblesBuf, leafData: untyped) =
   w.startList(2)
   w.append(pfx.toHexPrefix(isLeaf = true).data())
+  w.wrapEncoding(1)
   w.append(leafData)
-  w.finish().digestTo(HashKey)
+
+template encodeLeaf(pfx: NibblesBuf, leafData: untyped): HashKey =
+  debugEcho "calling encode Leaf"
+  debugEcho pfx
+  debugEcho leafData
+  var tracker = DynamicRlpLengthTracker()
+  tracker.initLengthTracker()
+  tracker.appendLeaf(pfx, leafData)
+
+  if tracker.totalLength < 32:
+    var writer = initTwoPassWriter(tracker)
+    writer.appendLeaf(pfx, leafData)
+    let buf = HashKey.fromBytes(writer.finish)
+    debugEcho(buf)
+    buf.value
+  else:
+    var writer = initHashWriter(tracker)
+    writer.appendLeaf(pfx, leafData)
+    let buf = writer.finish()
+    debugEcho(buf)
+    buf.to(HashKey)
 
 template encodeBranch(w: var RlpWriter, vtx: VertexRef, subKeyForN: untyped): HashKey =
   w.startList(17)
@@ -146,37 +167,36 @@ proc computeKeyImpl(
   # Top-most level of all the verticies this hash computation depends on
   var level = level
 
-  # TODO this is the same code as when serializing NodeRef, without the NodeRef
   var writer = initRlpWriter()
 
   let key =
     case vtx.vType
     of AccLeaf:
-      let vtx = AccLeafRef(vtx)
-      writer.encodeLeaf(vtx.pfx):
-        let
-          stoID = vtx.stoID
-          skey =
-            if stoID.isValid:
-              let
-                keyvtxl = ?db.getKey((stoID.vid, stoID.vid), skipLayers)
-                (skey, sl) =
-                  if keyvtxl[0][0].isValid:
-                    (keyvtxl[0][0], keyvtxl[1])
-                  else:
-                    ?db.computeKeyImpl(
-                      (stoID.vid, stoID.vid),
-                      batch,
-                      keyvtxl[0][1],
-                      keyvtxl[1],
-                      skipLayers = skipLayers,
-                    )
-              level = max(level, sl)
-              skey
-            else:
-              VOID_HASH_KEY
+      let
+        vtx = AccLeafRef(vtx)
+        stoID = vtx.stoID
+        skey =
+          if stoID.isValid:
+            let
+              keyvtxl = ?db.getKey((stoID.vid, stoID.vid), skipLayers)
+              (skey, sl) =
+                if keyvtxl[0][0].isValid:
+                  (keyvtxl[0][0], keyvtxl[1])
+                else:
+                  ?db.computeKeyImpl(
+                    (stoID.vid, stoID.vid),
+                    batch,
+                    keyvtxl[0][1],
+                    keyvtxl[1],
+                    skipLayers = skipLayers,
+                  )
+            level = max(level, sl)
+            skey
+          else:
+            VOID_HASH_KEY
 
-        rlp.encode Account(
+      encodeLeaf(vtx.pfx):
+        Account(
           nonce: vtx.account.nonce,
           balance: vtx.account.balance,
           storageRoot: skey.to(Hash32),
@@ -184,9 +204,8 @@ proc computeKeyImpl(
         )
     of StoLeaf:
       let vtx = StoLeafRef(vtx)
-      writer.encodeLeaf(vtx.pfx):
-        # TODO avoid memory allocation when encoding storage data
-        rlp.encode(vtx.stoData)
+      encodeLeaf(vtx.pfx):
+        vtx.stoData
     of Branches:
       # For branches, we need to load the vertices before recursing into them
       # to exploit their on-disk order
