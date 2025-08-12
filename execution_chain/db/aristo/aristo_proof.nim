@@ -11,6 +11,7 @@
 ## Aristo DB -- Create and verify MPT proofs
 ## ===========================================================
 ##
+
 {.push raises: [].}
 
 import
@@ -33,20 +34,34 @@ const
     ## This is the opposite of `ChainRlpNodesNoEntry` when verifying that a
     ## node does not exist.
 
+type
+  NodesCache = Table[RootedVertexID, array[2, seq[byte]]]
+    ## Caches up to two rlp encoded trie nodes in each value
+
+template appendNodes(chain: var seq[seq[byte]], nodePair: array[2, seq[byte]]) =
+  chain.add(nodePair[0])
+  if nodePair[1].len() > 0:
+    chain.add(nodePair[1])
+
 proc chainRlpNodes(
-    db: AristoTxRef;
-    rvid: RootedVertexID;
+    db: AristoTxRef,
+    rvid: RootedVertexID,
     path: NibblesBuf,
-    chain: var seq[seq[byte]];
-      ): Result[void,AristoError] =
+    chain: var seq[seq[byte]],
+    nodesCache: var NodesCache): Result[void, AristoError] =
   ## Inspired by the `getBranchAux()` function from `hexary.nim`
-  let
-    (vtx,_) = ? db.getVtxRc rvid
-    node = vtx.toNode(rvid.root, db).valueOr:
+  let (vtx, _) = ?db.getVtxRc(rvid)
+
+  nodesCache.withValue(rvid, value):
+    chain.appendNodes(value[])
+  do:
+    let node = vtx.toNode(rvid.root, db).valueOr:
       return err(PartChnNodeConvError)
 
-  # Save rpl encoded node(s)
-  chain &= node.to(seq[seq[byte]])
+    # Save rpl encoded node(s)
+    let rlpNodes = node.to(array[2, seq[byte]])
+    nodesCache[rvid] = rlpNodes
+    chain.appendNodes(rlpNodes)
 
   # Follow up child node
   case vtx.vType:
@@ -70,7 +85,7 @@ proc chainRlpNodes(
       if not vtx.bVid(nibble).isValid:
         return err(PartChnBranchVoidEdge)
       # Recursion!
-      db.chainRlpNodes((rvid.root,vtx.bVid(nibble)), rest, chain)
+      db.chainRlpNodes((rvid.root,vtx.bVid(nibble)), rest, chain, nodesCache)
 
 
 proc trackRlpNodes(
@@ -78,7 +93,7 @@ proc trackRlpNodes(
     topKey: HashKey;
     path: NibblesBuf;
     start = false;
-     ): Result[seq[byte],AristoError]
+     ): Result[seq[byte], AristoError]
      {.gcsafe, raises: [RlpError]} =
   ## Verify rlp-encoded node chain created by `chainRlpNodes()`.
   if path.len == 0:
@@ -126,7 +141,8 @@ proc makeProof(
     db: AristoTxRef;
     root: VertexID;
     path: NibblesBuf;
-      ): Result[(seq[seq[byte]],bool), AristoError] =
+    nodesCache: var NodesCache;
+      ): Result[(seq[seq[byte]], bool), AristoError] =
   ## This function returns a chain of rlp-encoded nodes along the argument
   ## path `(root,path)` followed by a `true` value if the `path` argument
   ## exists in the database. If the argument `path` is not on the database,
@@ -135,7 +151,7 @@ proc makeProof(
   ## Errors will only be returned for invalid paths.
   ##
   var chain: seq[seq[byte]]
-  let rc = db.chainRlpNodes((root,root), path, chain)
+  let rc = db.chainRlpNodes((root,root), path, chain, nodesCache)
   if rc.isOk:
     ok((chain, true))
   elif rc.error in ChainRlpNodesNoEntry:
@@ -146,21 +162,46 @@ proc makeProof(
 proc makeAccountProof*(
     db: AristoTxRef;
     accPath: Hash32;
-      ): Result[(seq[seq[byte]],bool), AristoError] =
-  db.makeProof(STATE_ROOT_VID, NibblesBuf.fromBytes accPath.data)
+      ): Result[(seq[seq[byte]], bool), AristoError] =
+  var nodesCache: NodesCache
+  db.makeProof(STATE_ROOT_VID, NibblesBuf.fromBytes accPath.data, nodesCache)
 
 proc makeStorageProof*(
     db: AristoTxRef;
     accPath: Hash32;
     stoPath: Hash32;
-      ): Result[(seq[seq[byte]],bool), AristoError] =
+      ): Result[(seq[seq[byte]], bool), AristoError] =
   ## Note that the function returns an error unless
   ## the argument `accPath` is valid.
   let vid = db.fetchStorageID(accPath).valueOr:
     if error == FetchPathStoRootMissing:
       return ok((@[],false))
     return err(error)
-  db.makeProof(vid, NibblesBuf.fromBytes stoPath.data)
+  var nodesCache: NodesCache
+  db.makeProof(vid, NibblesBuf.fromBytes stoPath.data, nodesCache)
+
+proc makeStorageProofs*(
+    db: AristoTxRef;
+    accPath: Hash32;
+    stoPaths: openArray[Hash32];
+      ): Result[seq[seq[seq[byte]]], AristoError] =
+  ## Note that the function returns an error unless
+  ## the argument `accPath` is valid.
+  let vid = db.fetchStorageID(accPath).valueOr:
+    if error == FetchPathStoRootMissing:
+      let emptyProofs = newSeq[seq[seq[byte]]](stoPaths.len())
+      return ok(emptyProofs)
+    return err(error)
+
+  var
+    nodesCache: NodesCache
+    proofs = newSeqOfCap[seq[seq[byte]]](stoPaths.len())
+
+  for stoPath in stoPaths:
+    let (proof, _) = ?db.makeProof(vid, NibblesBuf.fromBytes stoPath.data, nodesCache)
+    proofs.add(proof)
+
+  ok(proofs)
 
 # ----------
 
@@ -168,7 +209,7 @@ proc verifyProof*(
     chain: openArray[seq[byte]];
     root: Hash32;
     path: Hash32;
-      ): Result[Opt[seq[byte]],AristoError] =
+      ): Result[Opt[seq[byte]], AristoError] =
   ## Variant of `partUntwigGeneric()`.
   try:
     let
