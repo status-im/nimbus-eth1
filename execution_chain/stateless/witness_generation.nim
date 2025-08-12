@@ -26,30 +26,43 @@ proc build*(
     witnessKeys: WitnessTable,
     preStateLedger: LedgerRef): T =
   var
-    witness = Witness.init()
-    addedCodeHashes: HashSet[Hash32]
     proofPaths: Table[Hash32, seq[Hash32]]
+    addedCodeHashes: HashSet[Hash32]
+    witness = Witness.init()
 
   for key, codeTouched in witnessKeys:
-    if key.slot.isNone(): # Is an account key
-      let addressBytes = key.address.data()
-      witness.addKey(addressBytes)
+    let
+      addressBytes = key.address.data()
+      accPath = keccak256(addressBytes)
 
+    if key.slot.isNone(): # Is an account key
+      witness.addKey(key.address.data())
+
+      proofPaths.withValue(accPath, v):
+        discard
+      do:
+        proofPaths[accPath] = @[]
+
+      # codeTouched is only set for account keys
       if codeTouched:
         let codeHash = preStateLedger.getCodeHash(key.address)
         if codeHash != EMPTY_CODE_HASH and codeHash notin addedCodeHashes:
           witness.addCodeHash(codeHash)
           addedCodeHashes.incl(codeHash)
 
-      # Add the storage paths for this account
-      var storagePaths: seq[Hash32]
-      for key2, codeTouched2 in witnessKeys:
-        if key2.address == key.address and key2.slot.isSome():
-          let slotBytes = key2.slot.get().toBytesBE()
-          witness.addKey(slotBytes)
-          storagePaths.add(keccak256(slotBytes))
+    else: # Is a slot key
+      let
+        slotBytes = key.slot.get().toBytesBE()
+        slotPath = keccak256(slotBytes)
 
-      proofPaths[keccak256(addressBytes)] = storagePaths
+      witness.addKey(slotBytes)
+
+      proofPaths.withValue(accPath, v):
+        v[].add(slotPath)
+      do:
+        var paths: seq[Hash32]
+        paths.add(slotPath)
+        proofPaths[accPath] = paths
 
   witness.state = preStateLedger.txFrame.multiProof(proofPaths).valueOr:
     raiseAssert "Failed to get multiproof: " & $$error
