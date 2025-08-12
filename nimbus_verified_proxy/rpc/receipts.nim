@@ -84,37 +84,28 @@ proc getReceipts*(
 
   await vp.getReceipts(header, numberTag)
 
-proc verifyFilterBoundaries*(
-    filter: FilterOptions, logObjs: seq[LogObject]
-): Result[bool, string] =
+proc resolveFilterTags*(filter: FilterOptions): Result[FilterOptions, string] =
   let
-    fromBlock = filter.fromBlock.get(
-      BlockTag(kind: BlockIdentifierKind.bidAlias, alias: "latest")
+    fromBlock = filter.fromBlock.get(types.BlockTag(kind: bidAlias, alias: "latest"))
+    toBlock = filter.toBlock.get(types.BlockTag(kind: bidAlias, alias: "latest"))
+    fromBlockNumberTag = resolveBlockTag(fromBlock).valueOr:
+      return err(error)
+    toBlockNumberTag = resolveBlockTag(toBlock).valueOr:
+      return err(error)
+
+  return ok(
+    FilterOptions(
+      fromBlock: Opt.some(fromBlockNumberTag),
+      toBlock: Opt.some(toBlockNumberTag),
+      address: filter.address,
+      topics: filter.topics,
+      blockHash: filter.blockHash,
     )
-    toBlock =
-      filter.toBlock.get(BlockTag(kind: BlockIdentifierKind.bidAlias, alias: "latest"))
-
-    bottom =
-      if fromBlock.kind == BlockIdentifierKind.bidNumber:
-        fromBlock.number
-      else:
-        return err("Cannot verify boundaries for block tags in 'fromBlock' field")
-    top =
-      if toBlock.kind == BlockIdentifierKind.bidNumber:
-        toBlock.number
-      else:
-        return err("Cannot verify boundaries for block tags in 'toBlock' field")
-
-  for lg in logObjs:
-    if lg.blockNumber.isSome:
-      if lg.blockNumber.get < bottom or lg.blockNumber.get > top:
-        return ok(false)
-
-  return ok(true)
+  )
 
 proc verifyLogs*(
-    vp: VerifiedRpcProxy, logObjs: seq[LogObject]
-): Future[Result[seq[LogObject], string]] {.async.} =
+    vp: VerifiedRpcProxy, filterOptions: FilterOptions, logObjs: seq[LogObject]
+): Future[Result[bool, string]] {.async.} =
   var res = newSeq[LogObject]()
 
   # store block hashes contains the logs so that we can batch receipt requests
@@ -140,7 +131,9 @@ proc verifyLogs*(
 
       if rxLog.address != lg.address or rxLog.data != lg.data or
           rxLog.topics != lg.topics or
+          lg.blockNumber.get() < filter.fromBlock.get().number or
+          lg.blockNumber.get() > filter.toBlock.get().number or
           (not match(toLog(lg), filterOptions.address, filterOptions.topics)):
         return err("one of the returned logs is invalid")
 
-  return ok(logObjs)
+  return ok()
