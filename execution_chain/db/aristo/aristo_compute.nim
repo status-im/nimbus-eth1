@@ -92,8 +92,7 @@ proc putKeyAtLevel(
 template appendLeaf(w: var RlpWriter, pfx: NibblesBuf, leafData: untyped) =
   w.startList(2)
   w.append(pfx.toHexPrefix(isLeaf = true).data())
-  w.wrapEncoding(1)
-  w.append(leafData)
+  w.append(rlp.encode(leafData))
 
 template encodeLeaf(pfx: NibblesBuf, leafData: untyped): HashKey =
   debugEcho "calling encode Leaf"
