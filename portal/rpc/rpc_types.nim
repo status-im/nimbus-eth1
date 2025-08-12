@@ -12,9 +12,10 @@ import
   json_rpc/[jsonmarshal, errors],
   stew/byteutils,
   results,
-  eth/p2p/discoveryv5/[routing_table, enr, node]
+  eth/p2p/discoveryv5/[routing_table, enr, node],
+  json_serialization/pkg/results
 
-export jsonmarshal, routing_table, enr, node
+export jsonmarshal, routing_table, enr, node, results
 
 # Portal Network JSON-RPC errors
 
@@ -124,6 +125,7 @@ JrpcConv.automaticSerialization(int64, true)
 JrpcConv.automaticSerialization(uint64, true)
 JrpcConv.automaticSerialization(uint16, true)
 JrpcConv.automaticSerialization(seq, true)
+JrpcConv.automaticSerialization(string, true)
 
 func getNodeInfo*(r: RoutingTable): NodeInfo =
   NodeInfo(enr: r.localNode.record, nodeId: r.localNode.id)
