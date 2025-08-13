@@ -28,16 +28,16 @@ proc build*(
   var
     proofPaths: Table[Hash32, seq[Hash32]]
     addedCodeHashes: HashSet[Hash32]
+    pathToKeys: Table[Hash32, seq[byte]]
     witness = Witness.init()
 
   for key, codeTouched in witnessKeys:
     let
       addressBytes = key.address.data()
       accPath = keccak256(addressBytes)
+    pathToKeys[accPath] = @addressBytes
 
     if key.slot.isNone(): # Is an account key
-      witness.addKey(key.address.data())
-
       proofPaths.withValue(accPath, v):
         discard
       do:
@@ -54,8 +54,7 @@ proc build*(
       let
         slotBytes = key.slot.get().toBytesBE()
         slotPath = keccak256(slotBytes)
-
-      witness.addKey(slotBytes)
+      pathToKeys[slotPath] = @slotBytes
 
       proofPaths.withValue(accPath, v):
         v[].add(slotPath)
@@ -68,7 +67,14 @@ proc build*(
   preStateLedger.txFrame.multiProof(proofPaths, multiProof).isOkOr:
     raiseAssert "Failed to get multiproof: " & $$error
 
+  var keys: seq[seq[byte]]
+  for accPath, stoPaths in proofPaths:
+    keys.add(pathToKeys.getOrDefault(accPath))
+    for stoPath in stoPaths:
+      keys.add(pathToKeys.getOrDefault(stoPath))
+
   witness.state = move(multiProof)
+  witness.keys = move(keys)
   witness
 
 proc getEarliestCachedBlockNumber(blockHashes: BlockHashesCache): Opt[BlockNumber] =

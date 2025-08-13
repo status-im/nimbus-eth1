@@ -144,8 +144,8 @@ suite "Stateless: Witness Generation":
 
     check:
       witness.keys.len() == 5
-      witness.keys[0] == addr1.data()
-      witness.keys[1] == slot1.toBytesBE()
-      witness.keys[2] == slot2.toBytesBE()
-      witness.keys[3] == slot3.toBytesBE()
-      witness.keys[4] == addr2.data()
+      witness.keys[0] == addr2.data()
+      witness.keys[1] == addr1.data()
+      witness.keys[2] == slot1.toBytesBE()
+      witness.keys[3] == slot2.toBytesBE()
+      witness.keys[4] == slot3.toBytesBE()
