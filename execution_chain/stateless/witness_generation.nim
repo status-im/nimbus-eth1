@@ -64,9 +64,11 @@ proc build*(
         paths.add(slotPath)
         proofPaths[accPath] = paths
 
-  witness.state = preStateLedger.txFrame.multiProof(proofPaths).valueOr:
+  var multiProof: seq[seq[byte]]
+  preStateLedger.txFrame.multiProof(proofPaths, multiProof).isOkOr:
     raiseAssert "Failed to get multiproof: " & $$error
 
+  witness.state = move(multiProof)
   witness
 
 proc getEarliestCachedBlockNumber(blockHashes: BlockHashesCache): Opt[BlockNumber] =

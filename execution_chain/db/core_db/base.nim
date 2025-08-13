@@ -310,15 +310,16 @@ proc getStateRoot*(acc: CoreDbTxRef): CoreDbRc[Hash32] =
 proc multiProof*(
     acc: CoreDbTxRef;
     paths: Table[Hash32, seq[Hash32]];
-      ): CoreDbRc[seq[seq[byte]]] =
+    multiProof: var seq[seq[byte]]
+      ): CoreDbRc[void] =
   ## Returns a multiproof for every account and storage path specified
   ## in the paths table. All rlp-encoded trie nodes from all account
   ## and storage proofs are returned in a single list.
 
-  let rc = acc.aTx.makeMultiProof(paths).valueOr:
+  acc.aTx.makeMultiProof(paths, multiProof).isOkOr:
     return err(error.toError("", ProofCreate))
 
-  ok(rc)
+  ok()
 
 # ------------ storage ---------------
 
