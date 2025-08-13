@@ -25,17 +25,19 @@ proc build*(
     T: type Witness,
     witnessKeys: WitnessTable,
     preStateLedger: LedgerRef): T =
+
   var
     proofPaths: Table[Hash32, seq[Hash32]]
     addedCodeHashes: HashSet[Hash32]
-    pathToKeys: Table[Hash32, seq[byte]]
+    accPreimages: Table[Hash32, array[20, byte]]
+    stoPreimages: Table[Hash32, array[32, byte]]
     witness = Witness.init()
 
   for key, codeTouched in witnessKeys:
     let
       addressBytes = key.address.data()
       accPath = keccak256(addressBytes)
-    pathToKeys[accPath] = @addressBytes
+    accPreimages[accPath] = addressBytes
 
     if key.slot.isNone(): # Is an account key
       proofPaths.withValue(accPath, v):
@@ -54,7 +56,7 @@ proc build*(
       let
         slotBytes = key.slot.get().toBytesBE()
         slotPath = keccak256(slotBytes)
-      pathToKeys[slotPath] = @slotBytes
+      stoPreimages[slotPath] = slotBytes
 
       proofPaths.withValue(accPath, v):
         v[].add(slotPath)
@@ -66,15 +68,13 @@ proc build*(
   var multiProof: seq[seq[byte]]
   preStateLedger.txFrame.multiProof(proofPaths, multiProof).isOkOr:
     raiseAssert "Failed to get multiproof: " & $$error
-
-  var keys: seq[seq[byte]]
-  for accPath, stoPaths in proofPaths:
-    keys.add(pathToKeys.getOrDefault(accPath))
-    for stoPath in stoPaths:
-      keys.add(pathToKeys.getOrDefault(stoPath))
-
   witness.state = move(multiProof)
-  witness.keys = move(keys)
+
+  for accPath, stoPaths in proofPaths:
+    witness.addKey(accPreimages.getOrDefault(accPath))
+    for stoPath in stoPaths:
+      witness.addKey(stoPreimages.getOrDefault(stoPath))
+
   witness
 
 proc getEarliestCachedBlockNumber(blockHashes: BlockHashesCache): Opt[BlockNumber] =
