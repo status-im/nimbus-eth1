@@ -15,14 +15,10 @@
 {.push raises: [].}
 
 import
+  std/[tables, sets, sequtils],
   eth/common/hashes,
   results,
   ./[aristo_desc, aristo_fetch, aristo_get, aristo_serialise, aristo_utils]
-
-# ------------------------------------------------------------------------------
-# Public functions
-# ------------------------------------------------------------------------------
-
 
 const
   ChainRlpNodesNoEntry* = {
@@ -133,16 +129,13 @@ proc trackRlpNodes(
     return err(PartTrkLinkExpected)
   chain.toOpenArray(1,chain.len-1).trackRlpNodes(nextKey, path.slice nChewOff)
 
-# ------------------------------------------------------------------------------
-# Public functions
-# ------------------------------------------------------------------------------
-
 proc makeProof(
     db: AristoTxRef;
     root: VertexID;
     path: NibblesBuf;
     nodesCache: var NodesCache;
-      ): Result[(seq[seq[byte]], bool), AristoError] =
+    chain: var seq[seq[byte]];
+      ): Result[bool, AristoError] =
   ## This function returns a chain of rlp-encoded nodes along the argument
   ## path `(root,path)` followed by a `true` value if the `path` argument
   ## exists in the database. If the argument `path` is not on the database,
@@ -150,12 +143,11 @@ proc makeProof(
   ##
   ## Errors will only be returned for invalid paths.
   ##
-  var chain: seq[seq[byte]]
   let rc = db.chainRlpNodes((root,root), path, chain, nodesCache)
   if rc.isOk:
-    ok((chain, true))
+    ok(true)
   elif rc.error in ChainRlpNodesNoEntry:
-    ok((chain, false))
+    ok(false)
   else:
     err(rc.error)
 
@@ -163,8 +155,11 @@ proc makeAccountProof*(
     db: AristoTxRef;
     accPath: Hash32;
       ): Result[(seq[seq[byte]], bool), AristoError] =
-  var nodesCache: NodesCache
-  db.makeProof(STATE_ROOT_VID, NibblesBuf.fromBytes accPath.data, nodesCache)
+  var
+    nodesCache: NodesCache
+    proof: seq[seq[byte]]
+  let exists = ?db.makeProof(STATE_ROOT_VID, NibblesBuf.fromBytes accPath.data, nodesCache, proof)
+  ok((proof, exists))
 
 proc makeStorageProof*(
     db: AristoTxRef;
@@ -177,8 +172,11 @@ proc makeStorageProof*(
     if error == FetchPathStoRootMissing:
       return ok((@[],false))
     return err(error)
-  var nodesCache: NodesCache
-  db.makeProof(vid, NibblesBuf.fromBytes stoPath.data, nodesCache)
+  var
+    nodesCache: NodesCache
+    proof: seq[seq[byte]]
+  let exists = ?db.makeProof(vid, NibblesBuf.fromBytes stoPath.data, nodesCache, proof)
+  ok((proof, exists))
 
 proc makeStorageProofs*(
     db: AristoTxRef;
@@ -196,14 +194,56 @@ proc makeStorageProofs*(
   var
     nodesCache: NodesCache
     proofs = newSeqOfCap[seq[seq[byte]]](stoPaths.len())
-
   for stoPath in stoPaths:
-    let (proof, _) = ?db.makeProof(vid, NibblesBuf.fromBytes stoPath.data, nodesCache)
+    var proof: seq[seq[byte]]
+    discard ?db.makeProof(vid, NibblesBuf.fromBytes stoPath.data, nodesCache, proof)
     proofs.add(proof)
 
   ok(proofs)
 
-# ----------
+proc makeStorageMultiProof(
+    db: AristoTxRef;
+    accPath: Hash32;
+    stoPaths: openArray[Hash32];
+    nodesCache: var NodesCache;
+    multiProof: var HashSet[seq[byte]]
+      ): Result[void, AristoError] =
+  ## Note that the function returns an error unless
+  ## the argument `accPath` is valid.
+  let vid = db.fetchStorageID(accPath).valueOr:
+    if error == FetchPathStoRootMissing:
+      return ok()
+    return err(error)
+
+  for stoPath in stoPaths:
+    var proof: seq[seq[byte]]
+    discard ?db.makeProof(vid, NibblesBuf.fromBytes stoPath.data, nodesCache, proof)
+    for node in proof:
+      multiProof.incl(node)
+
+  ok()
+
+proc makeMultiProof*(
+    db: AristoTxRef;
+    paths: Table[Hash32, seq[Hash32]], # maps each account path to a list of storage paths
+    multiProof: var seq[seq[byte]]
+      ): Result[void, AristoError] =
+  var
+    nodesCache: NodesCache
+    proofNodes: HashSet[seq[byte]]
+
+  for accPath, stoPaths in paths:
+    var accProof: seq[seq[byte]]
+    let exists = ?db.makeProof(STATE_ROOT_VID, NibblesBuf.fromBytes accPath.data, nodesCache, accProof)
+    for node in accProof:
+      proofNodes.incl(node)
+
+    if exists:
+      ?db.makeStorageMultiProof(accPath, stoPaths, nodesCache, proofNodes)
+
+  multiProof = proofNodes.toSeq()
+
+  ok()
 
 proc verifyProof*(
     chain: openArray[seq[byte]];
@@ -222,7 +262,3 @@ proc verifyProof*(
     return err(rc.error)
   except RlpError:
     return err(PartTrkRlpError)
-
-# ------------------------------------------------------------------------------
-# End
-# ------------------------------------------------------------------------------

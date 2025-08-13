@@ -25,42 +25,55 @@ proc build*(
     T: type Witness,
     witnessKeys: WitnessTable,
     preStateLedger: LedgerRef): T =
+
   var
+    proofPaths: Table[Hash32, seq[Hash32]]
+    addedCodeHashes: HashSet[Hash32]
+    accPreimages: Table[Hash32, array[20, byte]]
+    stoPreimages: Table[Hash32, array[32, byte]]
     witness = Witness.init()
-    addedState = initHashSet[seq[byte]]()
-    addedCodeHashes = initHashSet[Hash32]()
 
   for key, codeTouched in witnessKeys:
+    let
+      addressBytes = key.address.data()
+      accPath = keccak256(addressBytes)
+    accPreimages[accPath] = addressBytes
+
     if key.slot.isNone(): # Is an account key
-      witness.addKey(key.address.data())
+      proofPaths.withValue(accPath, v):
+        discard
+      do:
+        proofPaths[accPath] = @[]
 
-      let proof = preStateLedger.getAccountProof(key.address)
-      for trieNode in proof:
-        addedState.incl(trieNode)
-
+      # codeTouched is only set for account keys
       if codeTouched:
         let codeHash = preStateLedger.getCodeHash(key.address)
         if codeHash != EMPTY_CODE_HASH and codeHash notin addedCodeHashes:
           witness.addCodeHash(codeHash)
           addedCodeHashes.incl(codeHash)
 
-      # Add the storage slots for this account
-      var slots: seq[UInt256]
-      for key2, codeTouched2 in witnessKeys:
-        if key2.address == key.address and key2.slot.isSome():
-          let slot = key2.slot.get()
-          slots.add(slot)
-          witness.addKey(slot.toBytesBE())
+    else: # Is a slot key
+      let
+        slotBytes = key.slot.get().toBytesBE()
+        slotPath = keccak256(slotBytes)
+      stoPreimages[slotPath] = slotBytes
 
-      if slots.len() > 0:
-        let proofs = preStateLedger.getStorageProof(key.address, slots)
-        doAssert(proofs.len() == slots.len())
-        for proof in proofs:
-          for trieNode in proof:
-            addedState.incl(trieNode)
+      proofPaths.withValue(accPath, v):
+        v[].add(slotPath)
+      do:
+        var paths: seq[Hash32]
+        paths.add(slotPath)
+        proofPaths[accPath] = paths
 
-  for s in addedState.items():
-    witness.addState(s)
+  var multiProof: seq[seq[byte]]
+  preStateLedger.txFrame.multiProof(proofPaths, multiProof).isOkOr:
+    raiseAssert "Failed to get multiproof: " & $$error
+  witness.state = move(multiProof)
+
+  for accPath, stoPaths in proofPaths:
+    witness.addKey(accPreimages.getOrDefault(accPath))
+    for stoPath in stoPaths:
+      witness.addKey(stoPreimages.getOrDefault(stoPath))
 
   witness
 
@@ -92,10 +105,11 @@ proc build*(
   let
     blockHashes = ledger.getBlockHashesCache()
     earliestBlockNumber = getEarliestCachedBlockNumber(blockHashes)
+
   if earliestBlockNumber.isSome():
-    var n = parent.number - 1
+    var n = parent.number
     while n >= earliestBlockNumber.get():
+      dec n
       let blockHash = ledger.getBlockHash(BlockNumber(n))
       doAssert(blockHash != default(Hash32))
       witness.addHeaderHash(blockHash)
-      dec n
