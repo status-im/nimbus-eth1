@@ -268,11 +268,11 @@ func validateTxBasic*(
 
     if tx.versionedHashes.len == 0:
       return err("invalid tx: there must be at least one blob")
-    
+
     # Before Osaka the maxBlobsPerBlock is also the limit for blobs per transaction.
-    # After Osaka the blob counts per block is increased with BPO, but 
+    # After Osaka the blob counts per block is increased with BPO, but
     # the blobs per transaction is capped at MAX_BLOBS_PER_TX=6.
-    let maxBlobsPerTx = 
+    let maxBlobsPerTx =
       if fork >= FkOsaka:
         MAX_BLOBS_PER_TX
       else:
@@ -314,12 +314,10 @@ proc validateTransaction*(
   # see `https://eips.ethereum.org/EIPS/eip-1559#specification`_
   #
   # Rather this check is needed for surviving the post-London unit test
-  # eth_tests/GeneralStateTests/stEIP1559/lowGasLimit.json which seems to
-  # be sourced and generated from
-  # eth_tests/src/GeneralStateTestsFiller/stEIP1559/lowGasLimitFiller.yml
+  # eest/state_tests/stEIP1559/lowGasLimit.json
   #
   # Interestingly, the hive tests do not use this particular test but rather
-  # eth_tests/BlockchainTests/GeneralStateTests/stEIP1559/lowGasLimit.json
+  # eest/blockchain_tests/stEIP1559/lowGasLimit.json
   # from a parallel tests series which look like somehow expanded versions.
   #
   # The parallel lowGasLimit.json test never triggers the case checked below

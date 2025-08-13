@@ -29,7 +29,7 @@ type
   Tests = Table[string, Tester]
 
 const
-  inputPath = "tests" / "fixtures" / "eth_tests" / "DifficultyTests"
+  inputPath = "tests" / "fixtures" / "DifficultyTests"
 
 proc hexOrInt64(data: JsonNode, key: string, hex: static[bool]): int64 =
   when hex:

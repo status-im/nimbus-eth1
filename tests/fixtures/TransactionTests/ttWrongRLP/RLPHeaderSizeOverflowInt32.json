@@ -1,0 +1,73 @@
+{
+    "RLPHeaderSizeOverflowInt32" : {
+        "_info" : {
+            "comment" : "",
+            "filling-rpc-server" : "evm version 1.15.3-unstable-dab746b3-20250218",
+            "filling-tool-version" : "retesteth-0.3.2-legacy+commit.e0777df7.Linux.g++",
+            "generatedTestHash" : "fe37fabd3699430b47b4e5d6bb4a4b12c6337157e44c4e1f45bc0b4a2830f643",
+            "lllcversion" : "Version: 0.5.14-develop.2024.11.5+commit.b2b86751.mod.Linux.g++",
+            "solidity" : "Version: 0.8.24+commit.e11b9ed9.Linux.g++",
+            "source" : "src/TransactionTestsFiller/ttWrongRLP/RLPHeaderSizeOverflowInt32Copier.json",
+            "sourceHash" : "18f24654738c7090e8ea7605fb632bd114267d91b0ee052297db3b6365edb8a9"
+        },
+        "result" : {
+            "Berlin" : {
+                "exception" : "TransactionException.RLP_ERROR_SIZE",
+                "intrinsicGas" : "0x00"
+            },
+            "Byzantium" : {
+                "exception" : "TransactionException.RLP_ERROR_SIZE",
+                "intrinsicGas" : "0x00"
+            },
+            "Cancun" : {
+                "exception" : "TransactionException.RLP_ERROR_SIZE",
+                "intrinsicGas" : "0x00"
+            },
+            "Constantinople" : {
+                "exception" : "TransactionException.RLP_ERROR_SIZE",
+                "intrinsicGas" : "0x00"
+            },
+            "ConstantinopleFix" : {
+                "exception" : "TransactionException.RLP_ERROR_SIZE",
+                "intrinsicGas" : "0x00"
+            },
+            "EIP150" : {
+                "exception" : "TransactionException.RLP_ERROR_SIZE",
+                "intrinsicGas" : "0x00"
+            },
+            "EIP158" : {
+                "exception" : "TransactionException.RLP_ERROR_SIZE",
+                "intrinsicGas" : "0x00"
+            },
+            "Frontier" : {
+                "exception" : "TransactionException.RLP_ERROR_SIZE",
+                "intrinsicGas" : "0x00"
+            },
+            "Homestead" : {
+                "exception" : "TransactionException.RLP_ERROR_SIZE",
+                "intrinsicGas" : "0x00"
+            },
+            "Istanbul" : {
+                "exception" : "TransactionException.RLP_ERROR_SIZE",
+                "intrinsicGas" : "0x00"
+            },
+            "London" : {
+                "exception" : "TransactionException.RLP_ERROR_SIZE",
+                "intrinsicGas" : "0x00"
+            },
+            "Paris" : {
+                "exception" : "TransactionException.RLP_ERROR_SIZE",
+                "intrinsicGas" : "0x00"
+            },
+            "Prague" : {
+                "exception" : "TransactionException.RLP_ERROR_SIZE",
+                "intrinsicGas" : "0x00"
+            },
+            "Shanghai" : {
+                "exception" : "TransactionException.RLP_ERROR_SIZE",
+                "intrinsicGas" : "0x00"
+            }
+        },
+        "txbytes" : "0xff0f0000000000005f030182520894b94f5374fce5edbc8e2a8697c15331677e6ebf0b0a801ca098ff921201554726367d2be8c804a7ff89ccf285ebc57dff8ae4c44b9c19ac4aa08887321be575c8095f789dd4c743dfe42c1820f9231f98a962b210e3ac2452a3"
+    }
+}

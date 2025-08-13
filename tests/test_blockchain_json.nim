@@ -121,15 +121,10 @@ proc executeFile(node: JsonNode, testStatusIMPL: var TestStatus) =
 
 proc blockchainJsonMain*() =
   const
-    legacyFolder = "eth_tests/LegacyTests/Constantinople/BlockchainTests"
-    newFolder = "eth_tests/BlockchainTests"
+    newFolder = "eest/blockchain_tests"
 
-  if false:
-    suite "block chain json tests":
-      jsonTest(legacyFolder, "LegacyBlockchainTests", executeFile, skipBCTests)
-  else:
-    suite "new block chain json tests":
-      jsonTest(newFolder, "BlockchainTests", executeFile, skipNewBCTests)
+  suite "new block chain json tests":
+    jsonTest(newFolder, "BlockchainTests", executeFile, skipNewBCTests)
 
 when debugMode:
   proc executeFile(name: string) =
@@ -139,6 +134,6 @@ when debugMode:
     if testStatusIMPL == FAILED:
       quit(QuitFailure)
 
-  executeFile("tests/fixtures/eth_tests/BlockchainTests/ValidBlocks/bcWalletTest/walletReorganizeOwners.json")
+  executeFile("tests/fixtures/eest/blockchain_tests/stBugs/staticcall_createfails.json")
 else:
   blockchainJsonMain()

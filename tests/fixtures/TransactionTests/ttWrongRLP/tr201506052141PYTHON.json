@@ -1,0 +1,73 @@
+{
+    "tr201506052141PYTHON" : {
+        "_info" : {
+            "comment" : "",
+            "filling-rpc-server" : "evm version 1.15.3-unstable-dab746b3-20250218",
+            "filling-tool-version" : "retesteth-0.3.2-legacy+commit.e0777df7.Linux.g++",
+            "generatedTestHash" : "ce4f08bdffe2abea685e9d75c7c29e14cc288be40a675d40a35bb58eebe10e14",
+            "lllcversion" : "Version: 0.5.14-develop.2024.11.5+commit.b2b86751.mod.Linux.g++",
+            "solidity" : "Version: 0.8.24+commit.e11b9ed9.Linux.g++",
+            "source" : "src/TransactionTestsFiller/ttWrongRLP/tr201506052141PYTHONCopier.json",
+            "sourceHash" : "cc5bd0994873e7a201120b8906f98b65018b0d654d4f887addd87701bdb9e237"
+        },
+        "result" : {
+            "Berlin" : {
+                "exception" : "TransactionException.INVALID_CHAINID",
+                "intrinsicGas" : "0x00"
+            },
+            "Byzantium" : {
+                "exception" : "TransactionException.INVALID_CHAINID",
+                "intrinsicGas" : "0x00"
+            },
+            "Cancun" : {
+                "exception" : "TransactionException.INVALID_CHAINID",
+                "intrinsicGas" : "0x00"
+            },
+            "Constantinople" : {
+                "exception" : "TransactionException.INVALID_CHAINID",
+                "intrinsicGas" : "0x00"
+            },
+            "ConstantinopleFix" : {
+                "exception" : "TransactionException.INVALID_CHAINID",
+                "intrinsicGas" : "0x00"
+            },
+            "EIP150" : {
+                "exception" : "TransactionException.INVALID_SIGNATURE_VRS",
+                "intrinsicGas" : "0x00"
+            },
+            "EIP158" : {
+                "exception" : "TransactionException.INVALID_CHAINID",
+                "intrinsicGas" : "0x00"
+            },
+            "Frontier" : {
+                "exception" : "TransactionException.INVALID_SIGNATURE_VRS",
+                "intrinsicGas" : "0x00"
+            },
+            "Homestead" : {
+                "exception" : "TransactionException.INVALID_SIGNATURE_VRS",
+                "intrinsicGas" : "0x00"
+            },
+            "Istanbul" : {
+                "exception" : "TransactionException.INVALID_CHAINID",
+                "intrinsicGas" : "0x00"
+            },
+            "London" : {
+                "exception" : "TransactionException.INVALID_CHAINID",
+                "intrinsicGas" : "0x00"
+            },
+            "Paris" : {
+                "exception" : "TransactionException.INVALID_CHAINID",
+                "intrinsicGas" : "0x00"
+            },
+            "Prague" : {
+                "exception" : "TransactionException.INVALID_CHAINID",
+                "intrinsicGas" : "0x00"
+            },
+            "Shanghai" : {
+                "exception" : "TransactionException.INVALID_CHAINID",
+                "intrinsicGas" : "0x00"
+            }
+        },
+        "txbytes" : "0xf8718439a6c38b88446cf2b7cba3be25847c4af09494a41e36344e8524318a21a527743b169f3a437b8684153aa6b4808189a0f5e5d736775026020ad30508a301eea73d2b096171e6ba17ac3d170f6863b55c9f5fe34e0580ce02b39acae5844a9da787ac7d1a4d97d6bfc53546ba2bc47880"
+    }
+}

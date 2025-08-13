@@ -21,8 +21,7 @@ type
     dispName: string
 
 const
-  inputFolder = "tests/fixtures/eth_tests/GeneralStateTests"
-  #inputFolder = "tests/fixtures/eth_tests/EIPTests/StateTests"
+  inputFolder = "tests/fixtures/eest/state_tests"
   testData = "tools/evmstate/testdata"
 
 proc runTest(filename: string): bool =

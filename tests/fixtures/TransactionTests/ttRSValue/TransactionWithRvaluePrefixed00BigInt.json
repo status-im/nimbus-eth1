@@ -1,0 +1,73 @@
+{
+    "TransactionWithRvaluePrefixed00BigInt" : {
+        "_info" : {
+            "comment" : "",
+            "filling-rpc-server" : "evm version 1.15.3-unstable-dab746b3-20250218",
+            "filling-tool-version" : "retesteth-0.3.2-legacy+commit.e0777df7.Linux.g++",
+            "generatedTestHash" : "81df06dfd577595f6c3b39e36e4549d92813e9ee40be3b7d8c5087f57f09644e",
+            "lllcversion" : "Version: 0.5.14-develop.2024.11.5+commit.b2b86751.mod.Linux.g++",
+            "solidity" : "Version: 0.8.24+commit.e11b9ed9.Linux.g++",
+            "source" : "src/TransactionTestsFiller/ttRSValue/TransactionWithRvaluePrefixed00BigIntFiller.json",
+            "sourceHash" : "1c7f844f010b5beb471f1445d2972e5ab5ea8b6e100c875a084e5afdcb204f4f"
+        },
+        "result" : {
+            "Berlin" : {
+                "exception" : "TransactionException.RLP_LEADING_ZEROS_R",
+                "intrinsicGas" : "0x00"
+            },
+            "Byzantium" : {
+                "exception" : "TransactionException.RLP_LEADING_ZEROS_R",
+                "intrinsicGas" : "0x00"
+            },
+            "Cancun" : {
+                "exception" : "TransactionException.RLP_LEADING_ZEROS_R",
+                "intrinsicGas" : "0x00"
+            },
+            "Constantinople" : {
+                "exception" : "TransactionException.RLP_LEADING_ZEROS_R",
+                "intrinsicGas" : "0x00"
+            },
+            "ConstantinopleFix" : {
+                "exception" : "TransactionException.RLP_LEADING_ZEROS_R",
+                "intrinsicGas" : "0x00"
+            },
+            "EIP150" : {
+                "exception" : "TransactionException.RLP_LEADING_ZEROS_R",
+                "intrinsicGas" : "0x00"
+            },
+            "EIP158" : {
+                "exception" : "TransactionException.RLP_LEADING_ZEROS_R",
+                "intrinsicGas" : "0x00"
+            },
+            "Frontier" : {
+                "exception" : "TransactionException.RLP_LEADING_ZEROS_R",
+                "intrinsicGas" : "0x00"
+            },
+            "Homestead" : {
+                "exception" : "TransactionException.RLP_LEADING_ZEROS_R",
+                "intrinsicGas" : "0x00"
+            },
+            "Istanbul" : {
+                "exception" : "TransactionException.RLP_LEADING_ZEROS_R",
+                "intrinsicGas" : "0x00"
+            },
+            "London" : {
+                "exception" : "TransactionException.RLP_LEADING_ZEROS_R",
+                "intrinsicGas" : "0x00"
+            },
+            "Paris" : {
+                "exception" : "TransactionException.RLP_LEADING_ZEROS_R",
+                "intrinsicGas" : "0x00"
+            },
+            "Prague" : {
+                "exception" : "TransactionException.RLP_LEADING_ZEROS_R",
+                "intrinsicGas" : "0x00"
+            },
+            "Shanghai" : {
+                "exception" : "TransactionException.RLP_LEADING_ZEROS_R",
+                "intrinsicGas" : "0x00"
+            }
+        },
+        "txbytes" : "0xf85f800182520894095e7baea6a6c7c4c2dfeb977efac326af552d870b801ba00000000000000000000000000000000ebaaedce6af48a03bbfd25e8cd0364141a01fffd310ac743f371de3b9f7f9cb56c0b28ad43601b4ab949f53faa07bd2c804"
+    }
+}
