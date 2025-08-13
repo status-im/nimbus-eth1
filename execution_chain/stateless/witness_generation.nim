@@ -105,10 +105,11 @@ proc build*(
   let
     blockHashes = ledger.getBlockHashesCache()
     earliestBlockNumber = getEarliestCachedBlockNumber(blockHashes)
+
   if earliestBlockNumber.isSome():
-    var n = parent.number - 1
+    var n = parent.number
     while n >= earliestBlockNumber.get():
+      dec n
       let blockHash = ledger.getBlockHash(BlockNumber(n))
       doAssert(blockHash != default(Hash32))
       witness.addHeaderHash(blockHash)
-      dec n
