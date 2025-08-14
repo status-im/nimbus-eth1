@@ -47,7 +47,6 @@ type
 const
   emptyStorage = default(TestStorage)
   emptyStorageKeys = default(TestStorageKeys)
-  emptyAccessList = default(TestAccessList)
   emptyBlockHashes = default(TestBlockHashes)
 
 const testCases: seq[TestCase] =
