@@ -5,7 +5,7 @@
 #   * Apache v2 license (license terms in the root directory or at https://www.apache.org/licenses/LICENSE-2.0).
 # at your option. This file may not be copied, modified, or distributed except according to those terms.
 
-{.push raises: [].}
+{.push raises: [], gcsafe.}
 
 import
   std/os,
@@ -65,11 +65,13 @@ type VerifiedProxyConf* = object # Config
   .}: OutDir
 
   # In-Memory Cache Size
+  # In order to support the BLOCKHASH opcode for eth_call we need at least
+  # MAX_PREV_HEADER_DEPTH headers in the header cache.
   cacheLen* {.
     hidden,
     desc: "Length of the header cache maintained in memory",
-    defaultValue: 64,
-    defaultValueDesc: "64",
+    defaultValue: MAX_PREV_HEADER_DEPTH,
+    defaultValueDesc: "256",
     name: "debug-cache-len"
   .}: int
 

@@ -60,10 +60,8 @@
 {.push raises:[].}
 
 import
+  pkg/[chronicles, metrics, stew/endians2],
   pkg/eth/[common, rlp],
-  pkg/results,
-  pkg/chronicles,
-  pkg/stew/endians2,
   "../.."/[common, db/core_db, db/storage_types],
   ../../db/[kvt, kvt_cf],
   ../../db/kvt/[kvt_utils, kvt_tx_frame],
@@ -72,6 +70,12 @@ import
 
 logScope:
   topics = "hc-cache"
+
+declareGauge nec_sync_dangling, "" &
+  "Least block number for header chain already fetched"
+
+declareGauge nec_sync_consensus_head, "" &
+  "Block number of latest consensus head"
 
 type
   HccDbInfo = object
@@ -318,6 +322,7 @@ proc headUpdateFromCL(hc: HeaderChainRef; h: Header; f: Hash32) =
         headHash: h.computeBlockHash())
 
       hc.kvt.putHeader(h)
+      metrics.set(nec_sync_dangling, h.number.int64)
 
       # Inform client app about that a new session has started.
       hc.notify()
@@ -325,6 +330,7 @@ proc headUpdateFromCL(hc: HeaderChainRef; h: Header; f: Hash32) =
 
     # For logging and metrics
     hc.session.consHeadNum = h.number
+    metrics.set(nec_sync_consensus_head, h.number.int64)
 
 # ------------------------------------------------------------------------------
 # Public constructor/destructor et al.
@@ -349,9 +355,10 @@ proc clear*(hc: HeaderChainRef) =
   ## accepted session (via `accept()`) or a mere notified session (via `notify`
   ## call back argument from `start()`.)
   ##
-  hc.session.reset                   # clear session state object
-  hc.persistClear()                  # clear database
-
+  hc.session.reset                        # clear session state object
+  hc.persistClear()                       # clear database
+  metrics.set(nec_sync_consensus_head, 0) # clear metrics register
+  metrics.set(nec_sync_dangling, 0)       # ditto
 
 proc stop*(hc: HeaderChainRef) =
   ## Stop updating the client cache. Will automatically be called by the
@@ -543,6 +550,7 @@ proc put*(
 
     # Set new antecedent `ante` and save to disk (if any)
     hc.session.ante = rev[revTopInx]
+    metrics.set(nec_sync_dangling, hc.session.ante.number.int64)
 
     # Save updates. persist to DB
     hc.persistInfo()
@@ -582,6 +590,7 @@ proc commit*(hc: HeaderChainRef): Result[void,string] =
       if hc.chain.hashToBlock.hasKey(hc.chain.pendingFCU):
         hc.session.ante = fin
         hc.session.mode = locked                      # update internal state
+        metrics.set(nec_sync_dangling, fin.number.int64)
         return ok()
 
       # Impossible situation!

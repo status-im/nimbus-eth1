@@ -70,7 +70,7 @@ type
     ## Combined record for a *traditional* ``Merkle Patricia Tree` node merged
     ## with a structural `VertexRef` type object.
     vtx*: VertexRef
-    key*: array[16,HashKey]          ## Merkle hash/es for vertices
+    key*: array[16, HashKey]          ## Merkle hash/es for vertices
 
   # ----------------------
 

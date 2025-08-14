@@ -214,10 +214,7 @@ func baseFeePerGas*(vmState: BaseVMState): UInt256 =
 
 method getAncestorHash*(
     vmState: BaseVMState, blockNumber: BlockNumber): Hash32 {.gcsafe, base.} =
-  let db = vmState.ledger.txFrame
-  let blockHash = db.getBlockHash(blockNumber).valueOr:
-    return default(Hash32)
-  blockHash
+  vmState.ledger.getBlockHash(blockNumber)
 
 proc readOnlyLedger*(vmState: BaseVMState): ReadOnlyLedger {.inline.} =
   ReadOnlyLedger(vmState.ledger)

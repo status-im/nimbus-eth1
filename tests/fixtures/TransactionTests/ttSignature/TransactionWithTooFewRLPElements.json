@@ -1,0 +1,69 @@
+{
+    "TransactionWithTooFewRLPElements" : {
+        "_info" : {
+            "comment" : "",
+            "filling-rpc-server" : "evm version 1.15.3-unstable-dab746b3-20250218",
+            "filling-tool-version" : "retesteth-0.3.2-legacy+commit.e0777df7.Linux.g++",
+            "generatedTestHash" : "b21d817a6b74745326520d948cdc3dda19fba6cd1dd5510f483b1c5ed5dce772",
+            "lllcversion" : "Version: 0.5.14-develop.2024.11.5+commit.b2b86751.mod.Linux.g++",
+            "solidity" : "Version: 0.8.24+commit.e11b9ed9.Linux.g++",
+            "source" : "src/TransactionTestsFiller/ttSignature/TransactionWithTooFewRLPElementsCopier.json",
+            "sourceHash" : "aba0f0ed375168fb61cc10305ac211fb3f033c8203ab47420fe7756197c7242f"
+        },
+        "result" : {
+            "Berlin" : {
+                "exception" : "TransactionException.RLP_TOO_FEW_ELEMENTS",
+                "intrinsicGas" : "0x00"
+            },
+            "Byzantium" : {
+                "exception" : "TransactionException.RLP_TOO_FEW_ELEMENTS",
+                "intrinsicGas" : "0x00"
+            },
+            "Cancun" : {
+                "exception" : "TransactionException.RLP_TOO_FEW_ELEMENTS",
+                "intrinsicGas" : "0x00"
+            },
+            "Constantinople" : {
+                "exception" : "TransactionException.RLP_TOO_FEW_ELEMENTS",
+                "intrinsicGas" : "0x00"
+            },
+            "ConstantinopleFix" : {
+                "exception" : "TransactionException.RLP_TOO_FEW_ELEMENTS",
+                "intrinsicGas" : "0x00"
+            },
+            "EIP150" : {
+                "exception" : "TransactionException.RLP_TOO_FEW_ELEMENTS",
+                "intrinsicGas" : "0x00"
+            },
+            "EIP158" : {
+                "exception" : "TransactionException.RLP_TOO_FEW_ELEMENTS",
+                "intrinsicGas" : "0x00"
+            },
+            "Frontier" : {
+                "exception" : "TransactionException.RLP_TOO_FEW_ELEMENTS",
+                "intrinsicGas" : "0x00"
+            },
+            "Homestead" : {
+                "exception" : "TransactionException.RLP_TOO_FEW_ELEMENTS",
+                "intrinsicGas" : "0x00"
+            },
+            "Istanbul" : {
+                "exception" : "TransactionException.RLP_TOO_FEW_ELEMENTS",
+                "intrinsicGas" : "0x00"
+            },
+            "London" : {
+                "exception" : "TransactionException.RLP_TOO_FEW_ELEMENTS",
+                "intrinsicGas" : "0x00"
+            },
+            "Paris" : {
+                "exception" : "TransactionException.RLP_TOO_FEW_ELEMENTS",
+                "intrinsicGas" : "0x00"
+            },
+            "Prague" : {
+                "exception" : "TransactionException.RLP_TOO_FEW_ELEMENTS",
+                "intrinsicGas" : "0x00"
+            }
+        },
+        "txbytes" : "0xf85e800182520894095e7baea6a6c7c4c2dfeb977efac326af552d870a1ba048b55bfa915ac795c431978d8a6a992b628d557da5ff759b307d495a36649353a0efffd310ac743f371de3b9f7f9cb56c0b28ad43601b4ab949f53faa07bd2c804"
+    }
+}

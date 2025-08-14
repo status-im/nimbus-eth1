@@ -12,7 +12,6 @@
 
 import
   stew/byteutils,
-  chronicles,
   unittest2,
   ../execution_chain/common/common,
   ../execution_chain/stateless/witness_generation
@@ -44,7 +43,7 @@ suite "Stateless: Witness Generation":
     let witnessKeys = ledger.getWitnessKeys()
     check witnessKeys.len() == 1
 
-    let witness = Witness.build(witnessKeys, ledger.ReadOnlyLedger)
+    let witness = Witness.build(witnessKeys, ledger)
 
     check:
       witness.state.len() > 0
@@ -58,7 +57,7 @@ suite "Stateless: Witness Generation":
     let witnessKeys = ledger.getWitnessKeys()
     check witnessKeys.len() == 1
 
-    let witness = Witness.build(witnessKeys, ledger.ReadOnlyLedger)
+    let witness = Witness.build(witnessKeys, ledger)
 
     check:
       witness.state.len() > 0
@@ -73,7 +72,7 @@ suite "Stateless: Witness Generation":
     let witnessKeys = ledger.getWitnessKeys()
     check witnessKeys.len() == 2
 
-    let witness = Witness.build(witnessKeys, ledger.ReadOnlyLedger)
+    let witness = Witness.build(witnessKeys, ledger)
 
     check:
       witness.state.len() > 0
@@ -88,7 +87,7 @@ suite "Stateless: Witness Generation":
     let witnessKeys = ledger.getWitnessKeys()
     check witnessKeys.len() == 2
 
-    let witness = Witness.build(witnessKeys, ledger.ReadOnlyLedger)
+    let witness = Witness.build(witnessKeys, ledger)
 
     check:
       witness.state.len() > 0
@@ -103,7 +102,7 @@ suite "Stateless: Witness Generation":
     let witnessKeys = ledger.getWitnessKeys()
     check witnessKeys.len() == 2
 
-    let witness = Witness.build(witnessKeys, ledger.ReadOnlyLedger)
+    let witness = Witness.build(witnessKeys, ledger)
 
     check:
       witness.state.len() > 0
@@ -121,7 +120,7 @@ suite "Stateless: Witness Generation":
     let witnessKeys = ledger.getWitnessKeys()
     check witnessKeys.len() == 4
 
-    let witness = Witness.build(witnessKeys, ledger.ReadOnlyLedger)
+    let witness = Witness.build(witnessKeys, ledger)
 
     check:
       witness.state.len() > 0
@@ -141,12 +140,12 @@ suite "Stateless: Witness Generation":
     witnessKeys[(addr1, Opt.some(slot3))] = false
     check witnessKeys.len() == 5
 
-    let witness = Witness.build(witnessKeys, ledger.ReadOnlyLedger)
+    let witness = Witness.build(witnessKeys, ledger)
 
     check:
       witness.keys.len() == 5
-      witness.keys[0] == addr1.data()
-      witness.keys[1] == slot1.toBytesBE()
-      witness.keys[2] == slot2.toBytesBE()
-      witness.keys[3] == slot3.toBytesBE()
-      witness.keys[4] == addr2.data()
+      witness.keys[0] == addr2.data()
+      witness.keys[1] == addr1.data()
+      witness.keys[2] == slot1.toBytesBE()
+      witness.keys[3] == slot2.toBytesBE()
+      witness.keys[4] == slot3.toBytesBE()

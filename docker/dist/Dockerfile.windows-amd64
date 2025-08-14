@@ -1,0 +1,30 @@
+# Nimbus
+# Copyright (c) 2018-2025 Status Research & Development GmbH
+# Licensed under either of
+#  * Apache License, version 2.0, ([LICENSE-APACHE](LICENSE-APACHE) or
+#    http://www.apache.org/licenses/LICENSE-2.0)
+#  * MIT license ([LICENSE-MIT](LICENSE-MIT) or
+#    http://opensource.org/licenses/MIT)
+# at your option. This file may not be copied, modified, or distributed except
+# according to those terms.
+
+# syntax=docker/dockerfile:1
+
+# The build is reproducible only if this base image stays the same.
+FROM statusim/nimbus-eth1:dist_base_eth1_v2_windows_amd64@sha256:aece618bb06002bf28ccc5937c7472de0482e0f329bcac2775be3934d7cdc592
+
+SHELL ["/bin/bash", "-c"]
+
+ARG USER_ID
+ARG GROUP_ID
+
+RUN addgroup --gid ${GROUP_ID} user; \
+	adduser --disabled-password --gecos '' --uid ${USER_ID} --gid ${GROUP_ID} user;
+
+USER user
+
+STOPSIGNAL SIGINT
+
+COPY "entry_point.sh" "/home/user/"
+ENTRYPOINT ["/home/user/entry_point.sh", "windows_amd64"]
+

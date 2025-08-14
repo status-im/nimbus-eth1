@@ -11,9 +11,14 @@
 {.push raises:[].}
 
 import
-  pkg/eth/common,
+  pkg/[eth/common, metrics],
   pkg/stew/[interval_set, sorted_set],
   ../../worker_desc
+
+declareGauge nec_sync_header_lists_staged, "" &
+  "Number of header list records staged for serialised processing"
+
+# ----------------
 
 func headersStagedQueueTopKey*(ctx: BeaconCtxRef): BlockNumber =
   ## Retrieve to staged block number
@@ -29,15 +34,20 @@ func headersStagedQueueIsEmpty*(ctx: BeaconCtxRef): bool =
   ## `true` iff no data are on the queue.
   ctx.hdr.staged.len == 0
 
+proc headersStagedQueueMetricsUpdate*(ctx: BeaconCtxRef) =
+  metrics.set(nec_sync_header_lists_staged, ctx.hdr.staged.len)
+
 # ----------------
 
-func headersStagedQueueClear*(ctx: BeaconCtxRef) =
+proc headersStagedQueueClear*(ctx: BeaconCtxRef) =
   ## Clear queue
   ctx.hdr.staged.clear()
   ctx.hdr.reserveStaged = 0
+  metrics.set(nec_sync_header_lists_staged, 0)
 
-func headersStagedQueueInit*(ctx: BeaconCtxRef) =
+proc headersStagedQueueInit*(ctx: BeaconCtxRef) =
   ## Constructor
   ctx.hdr.staged = StagedHeaderQueue.init()
+  metrics.set(nec_sync_header_lists_staged, 0)
 
 # End

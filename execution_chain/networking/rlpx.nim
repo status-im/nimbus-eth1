@@ -25,7 +25,7 @@
 {.push raises: [].}
 
 import
-  std/[deques, os, sequtils, strutils, typetraits],
+  std/[deques, os, sequtils, strutils, typetraits, tables],
   stew/byteutils,
   chronicles,
   chronos,
@@ -91,7 +91,7 @@ proc getDispatcher(
       if proto.capability.name == localProtocol.capability.name:
         if localProtocol.capability.version > proto.capability.version:
           dispatcher.activeProtocols[i] = localProtocol
-          return
+        return
 
     dispatcher.activeProtocols.add localProtocol
     localProtocol.messages.copyTo(
@@ -574,7 +574,7 @@ proc rlpxConnect*(
     debug "P2P error finishing hello", err = exc.msg
     return err(ProtocolError)
 
-  debug "Peer connected", capabilities = response.capabilities
+  debug "Peer connected", capabilities = response.capabilities, peer=peer.clientId
 
   error = false
 
@@ -698,7 +698,7 @@ proc rlpxAccept*(
     rlpx_accept_failure.inc(labelValues = [$exc.name])
     return nil
 
-  debug "Peer accepted", capabilities = response.capabilities
+  debug "Peer accepted", capabilities = response.capabilities, peer=peer.clientId
 
   error = false
   rlpx_accept_success.inc()

@@ -66,7 +66,7 @@ const unsupportedTests = [
   ]
 
 proc main() =
-  const basePath = "tests/fixtures/eth_tests/BlockchainTests"
+  const basePath = "tests/fixtures/eest/blockchain_tests"
   var stat: SimStat
   let taskPool = Taskpool.new()
   let start = getTime()

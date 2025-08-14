@@ -251,10 +251,12 @@ proc new*(
 
 proc lightClientVerifier(
     processor: ref LightClientProcessor, obj: SomeForkedLightClientObject
-): Future[Result[void, VerifierError]] {.async: (raises: [CancelledError], raw: true).} =
-  let resfut = Future[Result[void, VerifierError]].Raising([CancelledError]).init(
-      "lightClientVerifier"
-    )
+): Future[Result[void, LightClientVerifierError]] {.
+    async: (raises: [CancelledError], raw: true)
+.} =
+  let resfut = Future[Result[void, LightClientVerifierError]]
+    .Raising([CancelledError])
+    .init("lightClientVerifier")
   processor[].addObject(MsgSource.gossip, obj, resfut)
   resfut
 

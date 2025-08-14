@@ -12,9 +12,10 @@ import
   json_rpc/[jsonmarshal, errors],
   stew/byteutils,
   results,
-  eth/p2p/discoveryv5/[routing_table, enr, node]
+  eth/p2p/discoveryv5/[routing_table, enr, node],
+  json_serialization/pkg/results
 
-export jsonmarshal, routing_table, enr, node
+export jsonmarshal, routing_table, enr, node, results
 
 # Portal Network JSON-RPC errors
 
@@ -64,7 +65,7 @@ template payloadTypeRequiredError*(): auto =
 template userSpecifiedPayloadBlockedByClientError*(): auto =
   UserSpecifiedPayloadBlockedByClientError.applicationError()
 
-template invalidRequest(error: (int, string)): auto =
+template invalidRequest*(error: (int, string)): auto =
   (ref errors.InvalidRequest)(code: error.code, msg: error.msg)
 
 template invalidKeyErr*(): auto =
@@ -118,6 +119,13 @@ PingResult.useDefaultSerializationIn JrpcConv
 ContentInfo.useDefaultSerializationIn JrpcConv
 AcceptMetadata.useDefaultSerializationIn JrpcConv
 PutContentResult.useDefaultSerializationIn JrpcConv
+
+JrpcConv.automaticSerialization(int, true)
+JrpcConv.automaticSerialization(int64, true)
+JrpcConv.automaticSerialization(uint64, true)
+JrpcConv.automaticSerialization(uint16, true)
+JrpcConv.automaticSerialization(seq, true)
+JrpcConv.automaticSerialization(string, true)
 
 func getNodeInfo*(r: RoutingTable): NodeInfo =
   NodeInfo(enr: r.localNode.record, nodeId: r.localNode.id)

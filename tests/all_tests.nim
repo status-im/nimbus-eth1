@@ -25,6 +25,7 @@ import
     test_jwt_auth,
     test_kvt,
     test_ledger,
+    test_stateroot_mismatch,
     test_op_arith,
     test_op_bit,
     test_op_custom,

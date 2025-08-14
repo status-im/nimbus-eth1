@@ -11,7 +11,8 @@ import
   json_rpc/rpcserver,
   ../network/wire/portal_protocol,
   ../eth_data/history_data_seeding,
-  ../database/content_db
+  ../database/content_db,
+  ./rpc_types
 
 export rpcserver
 

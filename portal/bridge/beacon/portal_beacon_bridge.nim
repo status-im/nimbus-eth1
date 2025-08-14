@@ -11,7 +11,6 @@ import
   std/os,
   chronos,
   chronicles,
-  chronicles/topics_registry,
   stew/byteutils,
   eth/async_utils,
   json_rpc/clients/httpclient,
@@ -32,7 +31,7 @@ proc gossipLCBootstrapUpdate(
     restClient: RestClientRef,
     portalRpcClient: RpcClient,
     trustedBlockRoot: Eth2Digest,
-    cfg: RuntimeConfig,
+    cfg: presets.RuntimeConfig,
     forkDigests: ref ForkDigests,
 ): Future[Result[void, string]] {.async.} =
   var bootstrap =
@@ -79,7 +78,7 @@ proc gossipLCUpdates(
     portalRpcClient: RpcClient,
     startPeriod: uint64,
     count: uint64,
-    cfg: RuntimeConfig,
+    cfg: presets.RuntimeConfig,
     forkDigests: ref ForkDigests,
 ): Future[Result[void, string]] {.async.} =
   var updates =
@@ -133,7 +132,7 @@ proc gossipLCUpdates(
 proc gossipLCFinalityUpdate(
     restClient: RestClientRef,
     portalRpcClient: RpcClient,
-    cfg: RuntimeConfig,
+    cfg: presets.RuntimeConfig,
     forkDigests: ref ForkDigests,
 ): Future[Result[(Slot, Eth2Digest), string]] {.async.} =
   var update =
@@ -181,7 +180,7 @@ proc gossipLCFinalityUpdate(
 proc gossipLCOptimisticUpdate(
     restClient: RestClientRef,
     portalRpcClient: RpcClient,
-    cfg: RuntimeConfig,
+    cfg: presets.RuntimeConfig,
     forkDigests: ref ForkDigests,
 ): Future[Result[Slot, string]] {.async.} =
   var update =
@@ -229,7 +228,7 @@ proc gossipLCOptimisticUpdate(
 proc gossipHistoricalSummaries(
     restClient: RestClientRef,
     portalRpcClient: RpcClient,
-    cfg: RuntimeConfig,
+    cfg: presets.RuntimeConfig,
     forkDigests: ref ForkDigests,
 ): Future[Result[void, string]] {.async: (raises: [CancelledError]).} =
   let summariesOpt =

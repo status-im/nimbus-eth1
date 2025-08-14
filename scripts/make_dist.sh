@@ -15,7 +15,7 @@ set -e
 cd "$(dirname "${BASH_SOURCE[0]}")"/..
 REPO_DIR="${PWD}"
 
-ARCH="${1:-amd64}"
+ARCH="${1:-linux-amd64}"
 DOCKER_TAG="nimbus-eth1-dist-${ARCH}"
 
 docker rm ${DOCKER_TAG} &>/dev/null || true

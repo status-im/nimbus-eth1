@@ -1,0 +1,73 @@
+{
+    "DataTestNotEnoughGAS" : {
+        "_info" : {
+            "comment" : "",
+            "filling-rpc-server" : "evm version 1.15.3-unstable-dab746b3-20250218",
+            "filling-tool-version" : "retesteth-0.3.2-legacy+commit.e0777df7.Linux.g++",
+            "generatedTestHash" : "e1698bbb7b128cda21011a538f12c901eee4e67a0a248c71cdc2de6d7ce49af4",
+            "lllcversion" : "Version: 0.5.14-develop.2024.11.5+commit.b2b86751.mod.Linux.g++",
+            "solidity" : "Version: 0.8.24+commit.e11b9ed9.Linux.g++",
+            "source" : "src/TransactionTestsFiller/ttData/DataTestNotEnoughGASFiller.json",
+            "sourceHash" : "0b880cb298bc4bcd139d8724a644eebf2ce8d565ead8280f5fb74cfd5d8edf10"
+        },
+        "result" : {
+            "Berlin" : {
+                "exception" : "TransactionException.INTRINSIC_GAS_TOO_LOW",
+                "intrinsicGas" : "0x52e8"
+            },
+            "Byzantium" : {
+                "exception" : "TransactionException.INTRINSIC_GAS_TOO_LOW",
+                "intrinsicGas" : "0x55c0"
+            },
+            "Cancun" : {
+                "exception" : "TransactionException.INTRINSIC_GAS_TOO_LOW",
+                "intrinsicGas" : "0x52e8"
+            },
+            "Constantinople" : {
+                "exception" : "TransactionException.INTRINSIC_GAS_TOO_LOW",
+                "intrinsicGas" : "0x55c0"
+            },
+            "ConstantinopleFix" : {
+                "exception" : "TransactionException.INTRINSIC_GAS_TOO_LOW",
+                "intrinsicGas" : "0x55c0"
+            },
+            "EIP150" : {
+                "exception" : "TransactionException.INTRINSIC_GAS_TOO_LOW",
+                "intrinsicGas" : "0x55c0"
+            },
+            "EIP158" : {
+                "exception" : "TransactionException.INTRINSIC_GAS_TOO_LOW",
+                "intrinsicGas" : "0x55c0"
+            },
+            "Frontier" : {
+                "exception" : "TransactionException.INTRINSIC_GAS_TOO_LOW",
+                "intrinsicGas" : "0x55c0"
+            },
+            "Homestead" : {
+                "exception" : "TransactionException.INTRINSIC_GAS_TOO_LOW",
+                "intrinsicGas" : "0x55c0"
+            },
+            "Istanbul" : {
+                "exception" : "TransactionException.INTRINSIC_GAS_TOO_LOW",
+                "intrinsicGas" : "0x52e8"
+            },
+            "London" : {
+                "exception" : "TransactionException.INTRINSIC_GAS_TOO_LOW",
+                "intrinsicGas" : "0x52e8"
+            },
+            "Paris" : {
+                "exception" : "TransactionException.INTRINSIC_GAS_TOO_LOW",
+                "intrinsicGas" : "0x52e8"
+            },
+            "Prague" : {
+                "exception" : "TransactionException.INTRINSIC_GAS_TOO_LOW",
+                "intrinsicGas" : "0x52e8"
+            },
+            "Shanghai" : {
+                "exception" : "TransactionException.INTRINSIC_GAS_TOO_LOW",
+                "intrinsicGas" : "0x52e8"
+            }
+        },
+        "txbytes" : "0xf86d800182521c94095e7baea6a6c7c4c2dfeb977efac326af552d870a8e0358ac39584bc98a7c979f984b031ca048b55bfa915ac795c431978d8a6a992b628d557da5ff759b307d495a36649353a010002cef538bc0c8e21c46080634a93f4d752bc9fe4b546b60ac055e842d342b"
+    }
+}

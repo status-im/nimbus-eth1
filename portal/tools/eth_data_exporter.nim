@@ -70,11 +70,11 @@ proc cmdExportEra1(config: ExporterConf) =
     let connectRes = waitFor client.connectRpcClient(config.web3Url)
     if connectRes.isErr():
       fatal "Failed connecting to JSON-RPC client", error = connectRes.error
-      quit 1
+      quit QuitFailure
   except CatchableError as e:
     # TODO: Add async raises to get rid of this.
     fatal "Failed connecting to JSON-RPC client", error = e.msg
-    quit 1
+    quit QuitFailure
 
   var era = Era1(config.era)
   while config.eraCount == 0 or era < Era1(config.era) + config.eraCount:
@@ -158,13 +158,13 @@ proc cmdExportEra1(config: ExporterConf) =
 proc cmdVerifyEra1(config: ExporterConf) =
   let f = Era1File.open(config.era1FileName).valueOr:
     warn "Failed to open era file", error = error
-    quit 1
+    quit QuitFailure
   defer:
     close(f)
 
   let root = f.verify.valueOr:
     warn "Verification of era file failed", error = error
-    quit 1
+    quit QuitFailure
 
   notice "Era1 file succesfully verified",
     accumulatorRoot = root.data.to0xHex(), file = config.era1FileName
@@ -182,7 +182,7 @@ when isMainModule:
     if res.isErr():
       fatal "Error occurred while creating data directory",
         dir = dataDir, error = ioErrorMsg(res.error)
-      quit 1
+      quit QuitFailure
 
   case config.cmd
   of ExporterCmd.history:
@@ -192,23 +192,24 @@ when isMainModule:
       let connectRes = waitFor client.connectRpcClient(config.web3Url)
       if connectRes.isErr():
         fatal "Failed connecting to JSON-RPC client", error = connectRes.error
-        quit 1
+        quit QuitFailure
 
-      let fileName = dataDir / "mainnet-block-data-" & $config.blockNumber & ".yaml"
+      defer:
+        waitFor client.close()
 
+      let fileName = dataDir / "block-data-" & $config.blockNumber & ".yaml"
       (waitFor client.exportBlock(config.blockNumber, fileName)).isOkOr:
         fatal "Failed exporting block data",
           blockNumber = config.blockNumber, error = error
+        quit QuitFailure
 
       info "Block data exported successfully", fileName = fileName
-
-      waitFor client.close()
     of HistoryCmd.exportEpochHeaders:
       let client = newRpcClient(config.web3Url)
       let connectRes = waitFor client.connectRpcClient(config.web3Url)
       if connectRes.isErr():
         fatal "Failed connecting to JSON-RPC client", error = connectRes.error
-        quit 1
+        quit QuitFailure
 
       proc exportEpochHeaders(file: string, epoch: uint64): Result[void, string] =
         # Downloading headers from JSON RPC endpoint
@@ -289,7 +290,7 @@ when isMainModule:
       if isFile(accumulatorFile):
         notice "Not building HistoricalHashesAccumulator, file already exists",
           file = accumulatorFile
-        quit 1
+        quit QuitFailure
 
       # Lets verify if the necessary files exists before starting to build the
       # accumulator.
@@ -297,7 +298,7 @@ when isMainModule:
         let file = dataDir / &"mainnet-headers-epoch-{i.uint64:05}.e2s"
         if not isFile(file):
           fatal "Required epoch headers file does not exist", file
-          quit 1
+          quit QuitFailure
 
       proc buildAccumulator(
           dataDir: string, writeEpochRecords = false
@@ -333,7 +334,7 @@ when isMainModule:
                   file = file,
                   blockNumber = blockHeader.number,
                   expectedBlockNumber = i * EPOCH_SIZE + count
-                quit 1
+                quit QuitFailure
 
               updateAccumulator(accumulator, blockHeader)
 
@@ -372,14 +373,14 @@ when isMainModule:
       if accumulatorRes.isErr():
         fatal "Could not build HistoricalHashesAccumulator",
           error = accumulatorRes.error
-        quit 1
+        quit QuitFailure
       let accumulator = accumulatorRes.get()
 
       let res = io2.writeFile(accumulatorFile, SSZ.encode(accumulator))
       if res.isErr():
         error "Failed writing HistoricalHashesAccumulator to file",
           file = accumulatorFile, error = res.error
-        quit 1
+        quit QuitFailure
       else:
         notice "Succesfully wrote HistoricalHashesAccumulator to file",
           file = accumulatorFile
@@ -390,7 +391,7 @@ when isMainModule:
       if res.isErr():
         fatal "Failed reading HistoricalHashesAccumulator from file",
           error = res.error, file
-        quit 1
+        quit QuitFailure
 
       let
         accumulator = res.get()
@@ -412,7 +413,7 @@ when isMainModule:
       let connectRes = waitFor client.connectRpcClient(config.web3Url)
       if connectRes.isErr():
         fatal "Failed connecting to JSON-RPC client", error = connectRes.error
-        quit 1
+        quit QuitFailure
 
       let
         startBlockNumber = config.startBlockNumber
@@ -421,7 +422,7 @@ when isMainModule:
       if (endBlockNumber < startBlockNumber):
         fatal "Start block number should be smaller than end block number",
           startBlockNumber, endBlockNumber
-        quit 1
+        quit QuitFailure
 
       proc exportHeaders(
           file: string, startBlockNumber, endBlockNumber: uint64
@@ -455,7 +456,7 @@ when isMainModule:
       let res = exportHeaders(file, startBlockNumber, endBlockNumber)
       if res.isErr():
         fatal "Failed exporting headers", error = res.error
-        quit 1
+        quit QuitFailure
     of HistoryCmd.exportHeadersWithProof:
       let
         startBlockNumber = config.startBlockNumber2
@@ -464,7 +465,7 @@ when isMainModule:
       if (endBlockNumber < startBlockNumber):
         fatal "Start block number should be smaller than end block number",
           startBlockNumber, endBlockNumber
-        quit 1
+        quit QuitFailure
 
       let file =
         &"mainnet-headersWithProof-{startBlockNumber:05}-{endBlockNumber:05}.json"
@@ -480,14 +481,14 @@ when isMainModule:
         let res = readBlockHeaders(epochHeadersFile)
         if res.isErr():
           error "Could not read headers epoch file", error = res.error
-          quit 1
+          quit QuitFailure
 
         let blockHeaders = res.get()
 
         let epochRecordRes = readEpochRecordCached(epochRecordFile)
         if epochRecordRes.isErr():
           error "Could not read epoch record file", error = epochRecordRes.error
-          quit 1
+          quit QuitFailure
 
         let epochRecord = epochRecordRes.get()
 
@@ -497,7 +498,7 @@ when isMainModule:
           let headerWithProof = buildHeaderWithProof(header, epochRecord)
           if headerWithProof.isErr:
             error "Error building proof", error = headerWithProof.error
-            quit 1
+            quit QuitFailure
 
           let
             content = headerWithProof.get()
@@ -517,7 +518,7 @@ when isMainModule:
         else:
           # TODO: Deal with writing post merge headers
           error "Not a pre merge header"
-          quit 1
+          quit QuitFailure
 
       writePortalContentToJson(fh, contentTable)
 
@@ -525,7 +526,7 @@ when isMainModule:
         fh.close()
       except IOError as e:
         fatal "Error occured while closing file", error = e.msg
-        quit 1
+        quit QuitFailure
     of HistoryCmd.exportEra1:
       cmdExportEra1(config)
     of HistoryCmd.verifyEra1:

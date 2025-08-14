@@ -11,6 +11,7 @@
 
 import
   std/[tables, sets],
+  minilru,
   eth/common,
   ../db/ledger,
   ./witness_types
@@ -23,41 +24,92 @@ export
 proc build*(
     T: type Witness,
     witnessKeys: WitnessTable,
-    ledger: ReadOnlyLedger): T =
+    preStateLedger: LedgerRef): T =
+
   var
+    proofPaths: Table[Hash32, seq[Hash32]]
+    addedCodeHashes: HashSet[Hash32]
+    accPreimages: Table[Hash32, array[20, byte]]
+    stoPreimages: Table[Hash32, array[32, byte]]
     witness = Witness.init()
-    addedStateHashes = initHashSet[Hash32]()
-    addedCodeHashes = initHashSet[Hash32]()
 
   for key, codeTouched in witnessKeys:
+    let
+      addressBytes = key.address.data()
+      accPath = keccak256(addressBytes)
+    accPreimages[accPath] = addressBytes
+
     if key.slot.isNone(): # Is an account key
-      witness.addKey(key.address.data())
+      proofPaths.withValue(accPath, v):
+        discard
+      do:
+        proofPaths[accPath] = @[]
 
-      let proof = ledger.getAccountProof(key.address)
-      for trieNode in proof:
-        let nodeHash = keccak256(trieNode)
-        if nodeHash notin addedStateHashes:
-          witness.addState(trieNode)
-          addedStateHashes.incl(nodeHash)
-
+      # codeTouched is only set for account keys
       if codeTouched:
-        let codeHash = ledger.getCodeHash(key.address)
+        let codeHash = preStateLedger.getCodeHash(key.address)
         if codeHash != EMPTY_CODE_HASH and codeHash notin addedCodeHashes:
           witness.addCodeHash(codeHash)
           addedCodeHashes.incl(codeHash)
 
-      # Add the storage slots for this account
-      for key2, codeTouched2 in witnessKeys:
-        if key2.address == key.address and key2.slot.isSome():
-          let slot = key2.slot.get()
-          witness.addKey(slot.toBytesBE())
+    else: # Is a slot key
+      let
+        slotBytes = key.slot.get().toBytesBE()
+        slotPath = keccak256(slotBytes)
+      stoPreimages[slotPath] = slotBytes
 
-          let proofs = ledger.getStorageProof(key.address, @[slot])
-          doAssert(proofs.len() == 1)
-          for trieNode in proofs[0]:
-            let nodeHash = keccak256(trieNode)
-            if nodeHash notin addedStateHashes:
-              witness.addState(trieNode)
-              addedStateHashes.incl(nodeHash)
+      proofPaths.withValue(accPath, v):
+        v[].add(slotPath)
+      do:
+        var paths: seq[Hash32]
+        paths.add(slotPath)
+        proofPaths[accPath] = paths
+
+  var multiProof: seq[seq[byte]]
+  preStateLedger.txFrame.multiProof(proofPaths, multiProof).isOkOr:
+    raiseAssert "Failed to get multiproof: " & $$error
+  witness.state = move(multiProof)
+
+  for accPath, stoPaths in proofPaths:
+    witness.addKey(accPreimages.getOrDefault(accPath))
+    for stoPath in stoPaths:
+      witness.addKey(stoPreimages.getOrDefault(stoPath))
 
   witness
+
+proc getEarliestCachedBlockNumber(blockHashes: BlockHashesCache): Opt[BlockNumber] =
+  if blockHashes.len() == 0:
+    return Opt.none(BlockNumber)
+
+  var earliestBlockNumber = high(BlockNumber)
+  for blockNumber in blockHashes.keys():
+    if blockNumber < earliestBlockNumber:
+      earliestBlockNumber = blockNumber
+
+  Opt.some(earliestBlockNumber)
+
+proc build*(
+    T: type Witness,
+    preStateLedger: LedgerRef,
+    ledger: LedgerRef,
+    parent: Header,
+    header: Header,
+    validateStateRoot = false): T =
+
+  if validateStateRoot and parent.number > 0:
+    doAssert preStateLedger.getStateRoot() == parent.stateRoot
+
+  var witness = Witness.build(ledger.getWitnessKeys(), preStateLedger)
+  witness.addHeaderHash(header.parentHash)
+
+  let
+    blockHashes = ledger.getBlockHashesCache()
+    earliestBlockNumber = getEarliestCachedBlockNumber(blockHashes)
+
+  if earliestBlockNumber.isSome():
+    var n = parent.number
+    while n >= earliestBlockNumber.get():
+      dec n
+      let blockHash = ledger.getBlockHash(BlockNumber(n))
+      doAssert(blockHash != default(Hash32))
+      witness.addHeaderHash(blockHash)

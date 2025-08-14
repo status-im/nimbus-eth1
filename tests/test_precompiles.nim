@@ -23,7 +23,6 @@ import
 
   ./test_helpers
 
-proc initAddress(i: byte): Address = result.data[19] = i
 
 template doTest(fixture: JsonNode; vmState: BaseVMState; precompile: Precompiles): untyped =
   for test in fixture:

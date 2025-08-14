@@ -587,9 +587,9 @@ func putLatestHistoricalSummaries(db: BeaconDb, summaries: seq[byte]) =
     # Store in cache in its decoded form
     db.beaconDbCache.historicalSummariesCache = Opt.some(summariesWithProof)
     # Store in db
-    db.putHistoricalSummaries(summaries, Epoch(summariesWithProof.epoch))
+    db.putHistoricalSummaries(summaries, summariesWithProof.epoch)
     # Delete old summaries
-    db.keepHistoricalSummariesFrom(Epoch(summariesWithProof.epoch))
+    db.keepHistoricalSummariesFrom(summariesWithProof.epoch)
 
 proc getHandlerImpl(
     db: BeaconDb, contentKey: ContentKeyByteList, contentId: ContentId

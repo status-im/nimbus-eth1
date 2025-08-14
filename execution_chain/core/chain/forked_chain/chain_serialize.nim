@@ -126,7 +126,7 @@ proc replayBlock(fc: ForkedChainRef;
     parentFrame = parent.txFrame
     txFrame = parentFrame.txFrameBegin
 
-  var receipts = fc.processBlock(parent.header, txFrame, blk.blk, blk.hash, false).valueOr:
+  var receipts = fc.processBlock(parent, txFrame, blk.blk, blk.hash, false).valueOr:
     txFrame.dispose()
     return err(error)
 
@@ -284,6 +284,7 @@ proc deserialize*(fc: ForkedChainRef): Result[void, string] =
   # All blocks should have replayed
   for b in blocks:
     if b.txFrame.isNil:
+      fc.reset(prevBase)
       return err("corrupted FC serialization: deserialized node should have txFrame")
 
   fc.hashToBlock.withValue(fc.fcuHead.hash, val) do:

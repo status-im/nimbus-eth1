@@ -11,6 +11,7 @@ import
   std/[tables, sets],
   stew/byteutils,
   unittest2,
+  eth/common/times,
   ../execution_chain/evm/async_evm,
   ./async_evm_test_backend
 
@@ -25,24 +26,63 @@ type
   TestAccount =
     tuple[balance: string, nonce: string, code: string, storage: TestStorage]
 
+  TestBlockNumber = string
+  TestBlockHash = string
+  TestBlockHashes = Table[TestBlockNumber, TestBlockHash]
+
   TestTxArgs = tuple[to: string, input: string]
 
-  TestResult = tuple[output: string, accessList: Table[TestAddress, TestStorageKeys]]
+  TestAccessList = Table[TestAddress, TestStorageKeys]
+  TestResult = tuple[output: string, accessList: TestAccessList]
 
   TestCase =
     tuple[
       preState: Table[TestAddress, TestAccount],
+      blockHashes: TestBlockHashes,
       blockNumber: string,
       txArgs: TestTxArgs,
       expected: TestResult,
     ]
 
 const
-  emptyStorage = default(Table[string, string])
-  emptyStorageKeys = default(HashSet[string])
+  emptyStorage = default(TestStorage)
+  emptyStorageKeys = default(TestStorageKeys)
+  emptyAccessList = default(TestAccessList)
+  emptyBlockHashes = default(TestBlockHashes)
 
 const testCases: seq[TestCase] =
   @[
+    # Block hash test which executes bytecode compiled from the following solidity:
+    #
+    # pragma solidity >=0.8.30 <0.9.0;
+    #
+    # contract BlockHashContract {
+    #   function  getBlockHash() public view returns(bytes32)  {
+    #     return blockhash(block.number - 10);
+    #   }
+    # }
+    (
+      preState: {
+        "0x358aa13c52544eccef6b0add0f801012adad5ee3": (
+          balance: "0x",
+          nonce: "0x",
+          code:
+            "0x6080604052348015600e575f5ffd5b50600436106026575f3560e01c80639663f88f14602a575b5f5ffd5b60306044565b604051603b9190606c565b60405180910390f35b5f600a436050919060b9565b40905090565b5f819050919050565b6066816056565b82525050565b5f602082019050607d5f830184605f565b92915050565b5f819050919050565b7f4e487b71000000000000000000000000000000000000000000000000000000005f52601160045260245ffd5b5f60c1826083565b915060ca836083565b925082820390508181111560df5760de608c565b5b9291505056fea26469706673582212205d02238b0582fce570b72434d696e873371bf590e00d5deed50555a523df0e8764736f6c634300081e0033",
+          storage: emptyStorage,
+        ),
+      }.toTable,
+      blockHashes: {
+        "0x015EE5A0": "0x536174697366792056616c756573207468726f75676820467269656e64736869",
+      }.toTable,
+      blockNumber: "0x015EE5A9",
+      txArgs: (to: "0x358aa13c52544eccef6b0add0f801012adad5ee3", input: "0x9663f88f"),
+      expected: (
+        output: "0x536174697366792056616c756573207468726f75676820467269656e64736869",
+        accessList: {
+          "0x358aa13c52544eccef6b0add0f801012adad5ee3": emptyStorageKeys,
+        }.toTable,
+      )
+    ),
     # Test state from mainnet contract 0x1a875Da9e86506999A2931400475C34c27185Dd1 at block 700_000
     (
       preState: {
@@ -61,6 +101,7 @@ const testCases: seq[TestCase] =
           storage: emptyStorage,
         ),
       }.toTable,
+      blockHashes: emptyBlockHashes,
       blockNumber: "0x0AAE60",
       txArgs: (to: "0x1a875da9e86506999a2931400475c34c27185dd1", input: "0x"),
       expected: (
@@ -95,6 +136,7 @@ const testCases: seq[TestCase] =
           }.toTable,
         )
       }.toTable,
+      blockHashes: emptyBlockHashes,
       blockNumber: "0x0F4240",
       txArgs: (
         to: "0x6e38a457c722c6011b2dfa06d49240e797844d66",
@@ -133,6 +175,9 @@ proc setupTestEvmState(testCase: TestCase): TestEvmState =
     for k, v in acc.storage:
       testState.setStorage(address, k.hexToUInt256(), v.hexToUInt256())
 
+  for number, blockHash in testCase.blockHashes:
+    testState.setBlockHash(number.hexToUInt256().truncate(BlockNumber), Hash32.fromHex(blockHash))
+
   return testState
 
 suite "Async EVM":
@@ -143,6 +188,7 @@ suite "Async EVM":
         evm = AsyncEvm.init(testState.toAsyncEvmStateBackend())
         header = Header(
           number: testCase.blockNumber.hexToUInt256().truncate(uint64),
+          timestamp: 1_746_612_312.EthTime, # pragueTime: Opt.some(1_746_612_311.EthTime)
           gasLimit: EVM_CALL_GAS_CAP,
         )
         tx = TransactionArgs(
@@ -161,6 +207,7 @@ suite "Async EVM":
         evm = AsyncEvm.init(testState.toAsyncEvmStateBackend())
         header = Header(
           number: testCase.blockNumber.hexToUInt256().truncate(uint64),
+          timestamp: 1_746_612_312.EthTime, # pragueTime: Opt.some(1_746_612_311.EthTime)
           gasLimit: EVM_CALL_GAS_CAP,
         )
         tx = TransactionArgs(
@@ -179,6 +226,7 @@ suite "Async EVM":
         evm = AsyncEvm.init(testState.toAsyncEvmStateBackend())
         header = Header(
           number: testCase.blockNumber.hexToUInt256().truncate(uint64),
+          timestamp: 1_746_612_312.EthTime, # pragueTime: Opt.some(1_746_612_311.EthTime)
           gasLimit: EVM_CALL_GAS_CAP,
         )
         tx = TransactionArgs(
@@ -214,6 +262,7 @@ suite "Async EVM":
         evm = AsyncEvm.init(testState.toAsyncEvmStateBackend())
         header = Header(
           number: testCase.blockNumber.hexToUInt256().truncate(uint64),
+          timestamp: 1_746_612_312.EthTime, # pragueTime: Opt.some(1_746_612_311.EthTime)
           gasLimit: EVM_CALL_GAS_CAP,
         )
         tx = TransactionArgs(
@@ -249,6 +298,7 @@ suite "Async EVM":
         evm = AsyncEvm.init(testState.toAsyncEvmStateBackend())
         header = Header(
           number: testCase.blockNumber.hexToUInt256().truncate(uint64),
+          timestamp: 1_746_612_312.EthTime, # pragueTime: Opt.some(1_746_612_311.EthTime)
           gasLimit: EVM_CALL_GAS_CAP,
         )
         tx = TransactionArgs(
@@ -268,6 +318,7 @@ suite "Async EVM":
         evm = AsyncEvm.init(testState.toAsyncEvmStateBackend())
         header = Header(
           number: testCase.blockNumber.hexToUInt256().truncate(uint64),
+          timestamp: 1_746_612_312.EthTime, # pragueTime: Opt.some(1_746_612_311.EthTime)
           gasLimit: EVM_CALL_GAS_CAP,
         )
         tx = TransactionArgs(
@@ -289,6 +340,7 @@ suite "Async EVM":
         evm = AsyncEvm.init(testState.toAsyncEvmStateBackend())
         header = Header(
           number: testCase.blockNumber.hexToUInt256().truncate(uint64),
+          timestamp: 1_746_612_312.EthTime, # pragueTime: Opt.some(1_746_612_311.EthTime)
           gasLimit: EVM_CALL_GAS_CAP,
         )
         tx = TransactionArgs(

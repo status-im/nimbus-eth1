@@ -13,7 +13,7 @@ import
   stew/byteutils, ./compile_info
 
 const
-  sourcePath  = currentSourcePath.rsplit({DirSep, AltSep}, 1)[0]
+  sourcePath = currentSourcePath.rsplit({DirSep, AltSep}, 1)[0]
   nimbusRevision {.strdefine.} = "00000000"
 
 static:
@@ -27,7 +27,8 @@ proc gitFolderExists(path: string): bool {.compileTime.} =
     if dirExists(currPath & "/.git"):
       return true
     let parts = splitPath(currPath)
-    if parts.tail.len == 0: break
+    if parts.tail.len == 0:
+      break
     currPath = parts.head
   false
 

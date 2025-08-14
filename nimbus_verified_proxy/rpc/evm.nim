@@ -5,13 +5,14 @@
 #   * Apache v2 license (license terms in the root directory or at https://www.apache.org/licenses/LICENSE-2.0).
 # at your option. This file may not be copied, modified, or distributed except according to those terms.
 
-{.push raises: [].}
+{.push raises: [], gcsafe.}
 
 import
   chronicles,
   ../../execution_chain/evm/async_evm_backend,
   ../../execution_chain/evm/async_evm,
   ./accounts,
+  ../header_store,
   ../types
 
 logScope:
@@ -27,7 +28,7 @@ proc toAsyncEvmStateBackend*(vp: VerifiedRpcProxy): AsyncEvmStateBackend =
       let account =
         try:
           (await vp.getAccount(address, header.number, header.stateRoot))
-        except CatchableError as e:
+        except CatchableError:
           error "error getting account"
           return Opt.none(Account)
 
@@ -42,7 +43,7 @@ proc toAsyncEvmStateBackend*(vp: VerifiedRpcProxy): AsyncEvmStateBackend =
       let storageSlot =
         try:
           (await vp.getStorageAt(address, slotKey, header.number, header.stateRoot))
-        except CatchableError as e:
+        except CatchableError:
           error "error getting storage"
           return Opt.none(UInt256)
 
@@ -57,7 +58,7 @@ proc toAsyncEvmStateBackend*(vp: VerifiedRpcProxy): AsyncEvmStateBackend =
       let code =
         try:
           (await vp.getCode(address, header.number, header.stateRoot))
-        except CatchableError as e:
+        except CatchableError:
           error "error getting code"
           return Opt.none(seq[byte])
 
@@ -66,4 +67,9 @@ proc toAsyncEvmStateBackend*(vp: VerifiedRpcProxy): AsyncEvmStateBackend =
 
       Opt.none(seq[byte])
 
-  AsyncEvmStateBackend.init(accProc, storageProc, codeProc)
+    blockHashProc = proc(
+        header: Header, number: BlockNumber
+    ): Future[Opt[Hash32]] {.async: (raises: [CancelledError]).} =
+      vp.headerStore.getHash(number)
+
+  AsyncEvmStateBackend.init(accProc, storageProc, codeProc, blockHashProc)

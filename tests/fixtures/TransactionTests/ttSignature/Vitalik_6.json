@@ -1,0 +1,84 @@
+{
+    "Vitalik_6" : {
+        "_info" : {
+            "comment" : "",
+            "filling-rpc-server" : "evm version 1.15.3-unstable-dab746b3-20250218",
+            "filling-tool-version" : "retesteth-0.3.2-legacy+commit.e0777df7.Linux.g++",
+            "generatedTestHash" : "b9c001275607e519927a2fc5bbeda806bf1559428c0be4553ec76a5d08493db6",
+            "lllcversion" : "Version: 0.5.14-develop.2024.11.5+commit.b2b86751.mod.Linux.g++",
+            "solidity" : "Version: 0.8.24+commit.e11b9ed9.Linux.g++",
+            "source" : "src/TransactionTestsFiller/ttSignature/Vitalik_6Filler.json",
+            "sourceHash" : "866c8410a4da4b681fcc9c6b9d9e4c28d7131346d07e15b7e5e83239ce508d38"
+        },
+        "result" : {
+            "Berlin" : {
+                "hash" : "0x99a214f26aaf2804d84367ac8f33ff74b3a94e68baf820668f3641819ced1216",
+                "intrinsicGas" : "0x5208",
+                "sender" : "0xa8f7aba377317440bc5b26198a363ad22af1f3a4"
+            },
+            "Byzantium" : {
+                "hash" : "0x99a214f26aaf2804d84367ac8f33ff74b3a94e68baf820668f3641819ced1216",
+                "intrinsicGas" : "0x5208",
+                "sender" : "0xa8f7aba377317440bc5b26198a363ad22af1f3a4"
+            },
+            "Cancun" : {
+                "hash" : "0x99a214f26aaf2804d84367ac8f33ff74b3a94e68baf820668f3641819ced1216",
+                "intrinsicGas" : "0x5208",
+                "sender" : "0xa8f7aba377317440bc5b26198a363ad22af1f3a4"
+            },
+            "Constantinople" : {
+                "hash" : "0x99a214f26aaf2804d84367ac8f33ff74b3a94e68baf820668f3641819ced1216",
+                "intrinsicGas" : "0x5208",
+                "sender" : "0xa8f7aba377317440bc5b26198a363ad22af1f3a4"
+            },
+            "ConstantinopleFix" : {
+                "hash" : "0x99a214f26aaf2804d84367ac8f33ff74b3a94e68baf820668f3641819ced1216",
+                "intrinsicGas" : "0x5208",
+                "sender" : "0xa8f7aba377317440bc5b26198a363ad22af1f3a4"
+            },
+            "EIP150" : {
+                "exception" : "TransactionException.INVALID_SIGNATURE_VRS",
+                "intrinsicGas" : "0x00"
+            },
+            "EIP158" : {
+                "hash" : "0x99a214f26aaf2804d84367ac8f33ff74b3a94e68baf820668f3641819ced1216",
+                "intrinsicGas" : "0x5208",
+                "sender" : "0xa8f7aba377317440bc5b26198a363ad22af1f3a4"
+            },
+            "Frontier" : {
+                "exception" : "TransactionException.INVALID_SIGNATURE_VRS",
+                "intrinsicGas" : "0x00"
+            },
+            "Homestead" : {
+                "exception" : "TransactionException.INVALID_SIGNATURE_VRS",
+                "intrinsicGas" : "0x00"
+            },
+            "Istanbul" : {
+                "hash" : "0x99a214f26aaf2804d84367ac8f33ff74b3a94e68baf820668f3641819ced1216",
+                "intrinsicGas" : "0x5208",
+                "sender" : "0xa8f7aba377317440bc5b26198a363ad22af1f3a4"
+            },
+            "London" : {
+                "hash" : "0x99a214f26aaf2804d84367ac8f33ff74b3a94e68baf820668f3641819ced1216",
+                "intrinsicGas" : "0x5208",
+                "sender" : "0xa8f7aba377317440bc5b26198a363ad22af1f3a4"
+            },
+            "Paris" : {
+                "hash" : "0x99a214f26aaf2804d84367ac8f33ff74b3a94e68baf820668f3641819ced1216",
+                "intrinsicGas" : "0x5208",
+                "sender" : "0xa8f7aba377317440bc5b26198a363ad22af1f3a4"
+            },
+            "Prague" : {
+                "hash" : "0x99a214f26aaf2804d84367ac8f33ff74b3a94e68baf820668f3641819ced1216",
+                "intrinsicGas" : "0x5208",
+                "sender" : "0xa8f7aba377317440bc5b26198a363ad22af1f3a4"
+            },
+            "Shanghai" : {
+                "hash" : "0x99a214f26aaf2804d84367ac8f33ff74b3a94e68baf820668f3641819ced1216",
+                "intrinsicGas" : "0x5208",
+                "sender" : "0xa8f7aba377317440bc5b26198a363ad22af1f3a4"
+            }
+        },
+        "txbytes" : "0xf865058504a817c8058301ec309435353535353535353535353535353535353535357d8025a04eebf77a833b30520287ddd9478ff51abbdffa30aa90a8d655dba0e8a79ce0c1a04eebf77a833b30520287ddd9478ff51abbdffa30aa90a8d655dba0e8a79ce0c1"
+    }
+}

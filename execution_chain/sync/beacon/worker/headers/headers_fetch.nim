@@ -52,100 +52,106 @@ proc getBlockHeaders(
 # Public function
 # ------------------------------------------------------------------------------
 
-proc fetchHeadersReversed*(
+template fetchHeadersReversed*(
     buddy: BeaconBuddyRef;
     ivReq: BnRange;
     topHash: Hash32;
     info: static[string];
-      ): Future[Opt[seq[Header]]]
-      {.async: (raises: []).} =
+      ): Opt[seq[Header]] =
+  ## Async/template
+  ##
   ## From the ethXX argument peer implied by `buddy` fetch a list of headers
   ## in reversed order.
-  let
-    peer = buddy.peer
-    req = block:
-      if topHash != emptyRoot:
-        BlockHeadersRequest(
-          maxResults: ivReq.len.uint,
-          skip:       0,
-          reverse:    true,
-          startBlock: BlockHashOrNumber(
-            isHash:   true,
-            hash:     topHash))
-      else:
-        BlockHeadersRequest(
-          maxResults: ivReq.len.uint,
-          skip:       0,
-          reverse:    true,
-          startBlock: BlockHashOrNumber(
-            isHash:   false,
-            number:   ivReq.maxPt))
+  ##
+  var bodyRc = Opt[seq[Header]].err()
+  block body:
+    let
+      peer {.inject,used.} = buddy.peer
+      req = block:
+        if topHash != emptyRoot:
+          BlockHeadersRequest(
+            maxResults: ivReq.len.uint,
+            skip:       0,
+            reverse:    true,
+            startBlock: BlockHashOrNumber(
+              isHash:   true,
+              hash:     topHash))
+        else:
+          BlockHeadersRequest(
+            maxResults: ivReq.len.uint,
+            skip:       0,
+            reverse:    true,
+            startBlock: BlockHashOrNumber(
+              isHash:   false,
+              number:   ivReq.maxPt))
 
-  trace trEthSendSendingGetBlockHeaders & " reverse", peer, ivReq,
-    nReq=req.maxResults, hash=topHash.toStr, hdrErrors=buddy.hdrErrors
+    trace trEthSendSendingGetBlockHeaders & " reverse", peer, req=ivReq,
+      nReq=req.maxResults, hash=topHash.toStr, hdrErrors=buddy.hdrErrors
 
-  let rc = await buddy.getBlockHeaders(req)
-  var elapsed: Duration
-  if rc.isOk:
-    elapsed = rc.value.elapsed
-  else:
-    elapsed = rc.error.elapsed
-    block evalError:
-      case rc.error.excp:
-      of ENoException:
-        break evalError
-      of EPeerDisconnected, ECancelledError:
-        buddy.only.nRespErrors.hdr.inc
-        buddy.ctrl.zombie = true
-      of ECatchableError:
-        buddy.hdrFetchRegisterError()
+    let rc = await buddy.getBlockHeaders(req)
+    var elapsed: Duration
+    if rc.isOk:
+      elapsed = rc.value.elapsed
+    else:
+      elapsed = rc.error.elapsed
+      block evalError:
+        case rc.error.excp:
+        of ENoException:
+          break evalError
+        of EPeerDisconnected, ECancelledError:
+          buddy.only.nRespErrors.hdr.inc
+          buddy.ctrl.zombie = true
+        of ECatchableError:
+          buddy.hdrFetchRegisterError()
 
-      info trEthRecvReceivedBlockHeaders & ": error", peer, ivReq,
-        nReq=req.maxResults, hash=topHash.toStr, elapsed=rc.error.elapsed.toStr,
-        syncState=($buddy.syncState), error=rc.error.name, msg=rc.error.msg,
-        hdrErrors=buddy.hdrErrors
-      return err()
+        chronicles.info trEthRecvReceivedBlockHeaders & ": error", peer,
+          req=ivReq, nReq=req.maxResults, hash=topHash.toStr,
+          elapsed=rc.error.elapsed.toStr, syncState=($buddy.syncState),
+          error=rc.error.name, msg=rc.error.msg, hdrErrors=buddy.hdrErrors
+        break body                                 # return err()
 
-  # Evaluate result
-  if rc.isErr or buddy.ctrl.stopped:
-    buddy.hdrFetchRegisterError()
+    # Evaluate result
+    if rc.isErr or buddy.ctrl.stopped:
+      buddy.hdrFetchRegisterError()
+      trace trEthRecvReceivedBlockHeaders, peer, nReq=req.maxResults,
+        hash=topHash.toStr, nResp=0, elapsed=elapsed.toStr,
+        syncState=($buddy.syncState), hdrErrors=buddy.hdrErrors
+      break body                                   # return err()
+
+    let h = rc.value.packet.headers
+    if h.len == 0 or ivReq.len < h.len.uint64:
+      buddy.hdrFetchRegisterError()
+      trace trEthRecvReceivedBlockHeaders, peer, nReq=req.maxResults,
+        hash=topHash.toStr, nResp=h.len, elapsed=elapsed.toStr,
+        syncState=($buddy.syncState), hdrErrors=buddy.hdrErrors
+      break body                                   # return err()
+
+    # Verify that first block number matches
+    if h[^1].number != ivReq.minPt:
+      buddy.hdrFetchRegisterError()
+      trace trEthRecvReceivedBlockHeaders, peer, nReq=req.maxResults,
+        hash=topHash.toStr, reqMinPt=ivReq.minPt.bnStr,
+        respMinPt=h[^1].bnStr, nResp=h.len, elapsed=elapsed.toStr,
+        syncState=($buddy.syncState), hdrErrors=buddy.hdrErrors
+      break body
+
+    # Ban an overly slow peer for a while when seen in a row. Also there is a
+    # mimimum share of the number of requested headers expected, typically 10%.
+    if fetchHeadersErrTimeout < elapsed or
+       h.len.uint64 * 100 < req.maxResults * fetchHeadersMinResponsePC:
+      buddy.hdrFetchRegisterError(slowPeer=true)
+    else:
+      buddy.only.nRespErrors.hdr = 0               # reset error count
+      buddy.ctx.pool.lastSlowPeer = Opt.none(Hash) # not last one or not error
+
     trace trEthRecvReceivedBlockHeaders, peer, nReq=req.maxResults,
-      hash=topHash.toStr, nResp=0, elapsed=elapsed.toStr,
-      syncState=($buddy.syncState), hdrErrors=buddy.hdrErrors
-    return err()
+      hash=topHash.toStr, ivResp=BnRange.new(h[^1].number,h[0].number),
+      nResp=h.len, elapsed=elapsed.toStr, syncState=($buddy.syncState),
+      hdrErrors=buddy.hdrErrors
 
-  let h = rc.value.packet.headers
-  if h.len == 0 or ivReq.len < h.len.uint64:
-    buddy.hdrFetchRegisterError()
-    trace trEthRecvReceivedBlockHeaders, peer, nReq=req.maxResults,
-      hash=topHash.toStr, nResp=h.len, elapsed=elapsed.toStr,
-      syncState=($buddy.syncState), hdrErrors=buddy.hdrErrors
-    return err()
+    bodyRc = Opt[seq[Header]].ok(h)
 
-  # Verify that first block number matches
-  if h[^1].number != ivReq.minPt:
-    buddy.hdrFetchRegisterError()
-    trace trEthRecvReceivedBlockHeaders, peer, nReq=req.maxResults,
-      hash=topHash.toStr, ivReqMinPt=ivReq.minPt.bnStr, ivRespMinPt=h[^1].bnStr,
-      nResp=h.len, elapsed=elapsed.toStr,
-      syncState=($buddy.syncState), hdrErrors=buddy.hdrErrors
-    return err()
-
-  # Ban an overly slow peer for a while when seen in a row. Also there is a
-  # mimimum share of the number of requested headers expected, typically 10%.
-  if fetchHeadersErrTimeout < elapsed or
-     h.len.uint64 * 100 < req.maxResults * fetchHeadersMinResponsePC:
-    buddy.hdrFetchRegisterError(slowPeer=true)
-  else:
-    buddy.only.nRespErrors.hdr = 0                 # reset error count
-    buddy.ctx.pool.lastSlowPeer = Opt.none(Hash)   # not last one or not error
-
-  trace trEthRecvReceivedBlockHeaders, peer, nReq=req.maxResults,
-    hash=topHash.toStr, ivResp=BnRange.new(h[^1].number,h[0].number),
-    nResp=h.len, elapsed=elapsed.toStr, syncState=($buddy.syncState),
-    hdrErrors=buddy.hdrErrors
-
-  return ok(h)
+  bodyRc # return
 
 # ------------------------------------------------------------------------------
 # End

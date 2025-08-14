@@ -1,0 +1,88 @@
+# Nimbus
+# Copyright (c) 2018-2025 Status Research & Development GmbH
+# Licensed under either of
+#  * Apache License, version 2.0, ([LICENSE-APACHE](LICENSE-APACHE) or
+#    http://www.apache.org/licenses/LICENSE-2.0)
+#  * MIT license ([LICENSE-MIT](LICENSE-MIT) or
+#    http://opensource.org/licenses/MIT)
+# at your option. This file may not be copied, modified, or distributed except
+# according to those terms.
+
+# This Docker image can change from one build to another, because the upstream
+# Debian/Ubuntu package index is continuously updated and we have to run
+# `apt-get update` in here.
+#
+# The only way to make this a part of our reproducible build system is to build
+# it once, upload it to Docker Hub and make sure it's being pulled regularly so
+# it's not deleted after 6 months of inactivity.
+
+# syntax=docker/dockerfile:1
+
+ARG BASE_VARIANT="ubuntu"
+ARG UBUNTU_VERSION="24.04"
+ARG ALPINE_VERSION="3.22"
+
+ARG OSX_SDK="MacOSX15.5.sdk"
+ARG OSX_SDK_URL="https://github.com/joseluisq/macosx-sdks/releases/download/15.5/${OSX_SDK}.tar.xz"
+ARG OSX_CROSS_COMMIT="3d6a91c14a65b170aa50ecc3fda19dd6414e23a9"
+
+FROM --platform=$BUILDPLATFORM alpine:${ALPINE_VERSION} AS sdk
+RUN apk --update --no-cache add ca-certificates curl tar xz
+ARG OSX_SDK
+ARG OSX_SDK_URL
+RUN curl -sSL "$OSX_SDK_URL" -o "/$OSX_SDK.tar.xz"
+RUN mkdir /osxsdk && tar -xf "/$OSX_SDK.tar.xz" -C "/osxsdk"
+
+FROM --platform=$BUILDPLATFORM alpine:${ALPINE_VERSION} AS osxcross-src
+RUN apk --update --no-cache add patch
+WORKDIR /osxcross
+ARG OSX_CROSS_COMMIT
+ADD "https://github.com/tpoechtrager/osxcross.git#${OSX_CROSS_COMMIT}" .
+COPY patches/lcxx.patch .
+RUN patch -p1 < lcxx.patch
+
+FROM ubuntu:${UBUNTU_VERSION} AS base-ubuntu
+ENV DEBIAN_FRONTEND=noninteractive TZ="Etc/UTC"
+RUN apt-get update \
+  && apt-get install --no-install-recommends -y \
+    bash \
+    binutils-multiarch-dev \
+    build-essential \
+    ca-certificates \
+    clang \
+    cmake \
+    git \
+    libbz2-dev \
+    libmpc-dev \
+    libmpfr-dev \
+    libgmp-dev \
+    liblzma-dev \
+    libpsi3-dev \
+    libssl-dev \
+    libxml2-dev \
+    libz-dev \
+    llvm-dev \
+    lzma-dev \
+    make \
+    patch \
+    python3 \
+    uuid-dev \
+    wget \
+    xz-utils \
+    zlib1g-dev \
+  && apt-get -qq clean \
+  && rm -rf /var/lib/apt/lists/* /tmp/* /var/tmp/*
+
+FROM base-${BASE_VARIANT} AS build
+ARG OSX_SDK
+WORKDIR /tmp/osxcross
+COPY --link --from=osxcross-src /osxcross .
+COPY --link --from=sdk /$OSX_SDK.tar.xz ./tarballs/$OSX_SDK.tar.xz
+RUN OSX_VERSION_MIN=10.13 UNATTENDED=1 ENABLE_COMPILER_RT_INSTALL=1 TARGET_DIR=/out/osxcross ./build.sh
+
+FROM scratch
+COPY --link --from=build /out /
+
+# Copy prebuilt rocksdb binary from host (CI: build_base_image.yml)
+COPY rocksdb/ /usr/rocksdb/
+

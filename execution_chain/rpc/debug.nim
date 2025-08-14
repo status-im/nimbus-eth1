@@ -10,7 +10,7 @@
 {.push raises: [].}
 
 import
-  std/json,
+  # std/json,
   json_rpc/rpcserver,
   # ./rpc_utils,
   ./rpc_types,

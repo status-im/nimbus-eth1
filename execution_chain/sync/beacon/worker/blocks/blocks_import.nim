@@ -41,6 +41,20 @@ proc importBlock*(
     except CancelledError as e:
       return err((ECancelledError,$e.name,e.msg,Moment.now()-start))
 
+  # Allow thread switch by issuing a short wait request. A minimum time
+  # distance to the last task switch sleep request is maintained (see
+  # `asyncThreadSwitchGap`.)
+  if ctx.pool.nextAsyncNanoSleep < Moment.now():
+    try:
+      await sleepAsync asyncThreadSwitchTimeSlot
+    except CancelledError as e:
+      return err((ECancelledError,$e.name,e.msg,Moment.now()-start))
+
+    if not ctx.daemon: # Daemon will be up unless shutdown
+      return err((ENoException,"","syncer shutdown",Moment.now()-start))
+
+    ctx.pool.nextAsyncNanoSleep = Moment.now() + asyncThreadSwitchGap
+
   return ok(Moment.now()-start)
 
 # ------------------------------------------------------------------------------

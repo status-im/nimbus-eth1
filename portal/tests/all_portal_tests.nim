@@ -11,5 +11,6 @@ import
   ./test_content_db,
   ./wire_protocol_tests/all_wire_protocol_tests,
   ./legacy_history_network_tests/all_history_network_tests,
+  ./history_network_tests/all_history_network_tests,
   ./beacon_network_tests/all_beacon_network_tests,
   ./rpc_tests/all_rpc_tests

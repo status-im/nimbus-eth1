@@ -24,15 +24,25 @@ type
     async: (raises: [CancelledError])
   .}
 
+  GetBlockHashProc* = proc(header: Header, number: BlockNumber): Future[Opt[Hash32]] {.
+    async: (raises: [CancelledError])
+  .}
+
   AsyncEvmStateBackend* = ref object
     getAccount*: GetAccountProc
     getStorage*: GetStorageProc
     getCode*: GetCodeProc
+    getBlockHash*: GetBlockHashProc
 
 proc init*(
     T: type AsyncEvmStateBackend,
     accProc: GetAccountProc,
     storageProc: GetStorageProc,
     codeProc: GetCodeProc,
+    blockHashProc: GetBlockHashProc,
 ): T =
-  AsyncEvmStateBackend(getAccount: accProc, getStorage: storageProc, getCode: codeProc)
+  AsyncEvmStateBackend(
+    getAccount: accProc,
+    getStorage: storageProc,
+    getCode: codeProc,
+    getBlockHash: blockHashProc)

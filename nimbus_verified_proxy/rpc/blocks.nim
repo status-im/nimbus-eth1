@@ -5,7 +5,7 @@
 #   * Apache v2 license (license terms in the root directory or at https://www.apache.org/licenses/LICENSE-2.0).
 # at your option. This file may not be copied, modified, or distributed except according to those terms.
 
-{.push raises: [].}
+{.push raises: [], gcsafe.}
 
 import
   std/strutils,
@@ -31,6 +31,14 @@ proc resolveBlockTag*(
       let hLatest = vp.headerStore.latest.valueOr:
         return err("Couldn't get the latest block number from header store")
       ok(hLatest.number)
+    of "finalized":
+      let hFinalized = vp.headerStore.finalized.valueOr:
+        return err("Couldn't get the latest block number from header store")
+      ok(hFinalized.number)
+    of "earliest":
+      let hEarliest = vp.headerStore.earliest.valueOr:
+        return err("Couldn't get the latest block number from header store")
+      ok(hEarliest.number)
     else:
       err("No support for block tag " & $blockTag)
   else:
@@ -176,13 +184,15 @@ proc getBlock*(
 proc getBlock*(
     vp: VerifiedRpcProxy, blockTag: BlockTag, fullTransactions: bool
 ): Future[Result[BlockObject, string]] {.async.} =
-  let n = vp.resolveBlockTag(blockTag).valueOr:
-    return err(error)
+  let
+    n = vp.resolveBlockTag(blockTag).valueOr:
+      return err(error)
+    numberTag = BlockTag(kind: BlockIdentifierKind.bidNumber, number: Quantity(n))
 
   # get the target block
   let blk =
     try:
-      await vp.rpcClient.eth_getBlockByNumber(blockTag, fullTransactions)
+      await vp.rpcClient.eth_getBlockByNumber(numberTag, fullTransactions)
     except CatchableError as e:
       return err(e.msg)
 
@@ -227,6 +237,7 @@ proc getHeader*(
   let
     n = vp.resolveBlockTag(blockTag).valueOr:
       return err(error)
+    numberTag = BlockTag(kind: BlockIdentifierKind.bidNumber, number: Quantity(n))
     cachedHeader = vp.headerStore.get(n)
 
   if cachedHeader.isNone():
@@ -237,7 +248,7 @@ proc getHeader*(
   # get the target block
   let blk =
     try:
-      await vp.rpcClient.eth_getBlockByNumber(blockTag, false)
+      await vp.rpcClient.eth_getBlockByNumber(numberTag, false)
     except CatchableError as e:
       return err(e.msg)
 

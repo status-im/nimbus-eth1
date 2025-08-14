@@ -143,6 +143,9 @@ proc runTest(node: JsonNode, taskPool: Taskpool, network: string): TestStatus =
 
     latestVersion = payload.payload.version
 
+    if payload.payload.versionedHashes.isNone and latestVersion >= Version.V3:
+      return TestStatus.Skipped
+
     let res = env.rpcClient.newPayload(latestVersion, payload.payload)
     if res.isErr:
       result = TestStatus.Failed
@@ -186,8 +189,8 @@ const
     "nothing skipped",
   ]
 
-  caseFolderCancun   = "tests/fixtures/eth_tests/BlockchainTests/Pyspecs"
-  caseFolderShanghai = baseFolder & "/testcases"
+  caseFolderCancun   = "tests/fixtures/eest/blockchain_tests/Cancun"
+  caseFolderShanghai = "tests/fixtures/eest/blockchain_tests/Shanghai"
 
 proc collectTestVectors(): seq[string] =
   for fileName in walkDirRec(caseFolderCancun):

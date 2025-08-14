@@ -1,5 +1,5 @@
 # Nimbus
-# Copyright (c) 2018-2023 Status Research & Development GmbH
+# Copyright (c) 2018-2025 Status Research & Development GmbH
 # Licensed under either of
 #  * Apache License, version 2.0, ([LICENSE-APACHE](LICENSE-APACHE) or
 #    http://www.apache.org/licenses/LICENSE-2.0)
@@ -8,21 +8,38 @@
 # at your option. This file may not be copied, modified, or distributed except
 # according to those terms.
 
+# syntax=docker/dockerfile:1
+
 # The build is reproducible only if this base image stays the same.
-FROM statusteam/nimbus-eth1:dist_base_eth1_20220326081110_macos@sha256:229eb12e0c1ce94fde18916c4620bb83ef906d24443d1dc02ce86f2a55af4eb8
+FROM statusim/nimbus-eth1:dist_base_eth1_v2_macos_arm64@sha256:1277b1967b5ef3b0001f9c1bfea551025662b9b70e64b1d45eda79551cc5a34f AS osx-cross
+
+FROM ubuntu:24.04
 
 SHELL ["/bin/bash", "-c"]
+
+ENV DEBIAN_FRONTEND=noninteractive TZ="Etc/UTC"
+RUN apt-get -qq update \
+  && apt-get -qq -y install build-essential git curl \
+    clang lld libc6-dev &>/dev/null \
+  && apt-get -qq clean \
+  && rm -rf /var/lib/apt/lists/* /tmp/* /var/tmp/*
 
 ARG USER_ID
 ARG GROUP_ID
 
+# docker ubuntu 24.04 image add default `ubuntu` user, so we remove it here.
+RUN touch /var/mail/ubuntu && chown ubuntu /var/mail/ubuntu && userdel -r ubuntu
+
 RUN addgroup --gid ${GROUP_ID} user; \
-	adduser --disabled-password --gecos '' --uid ${USER_ID} --gid ${GROUP_ID} user;
+  adduser --disabled-password --gecos '' --uid ${USER_ID} --gid ${GROUP_ID} user;
 
 USER user
 
 STOPSIGNAL SIGINT
 
+COPY --link --from=osx-cross /osxcross /osxcross
+COPY --link --from=osx-cross /usr/rocksdb /usr/rocksdb
+
 COPY "entry_point.sh" "/home/user/"
-ENTRYPOINT ["/home/user/entry_point.sh", "macOS_arm64"]
+ENTRYPOINT ["/home/user/entry_point.sh", "macos_arm64"]
 

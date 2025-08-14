@@ -22,59 +22,65 @@ import
 # Public helper functions
 # ------------------------------------------------------------------------------
 
-proc headersFetch*(
+template headersFetch*(
     buddy: BeaconBuddyRef;
     parent: Hash32;
     num: uint;
     info: static[string];
-      ): Future[Opt[seq[Header]]]
-      {.async: (raises: []).} =
+      ): Opt[seq[Header]] =
+  ## Async/template
+  ##
   ## From the p2p/ethXX network fetch as many headers as given as argument
   ## `num`. The returned list will be in reverse order, i.e. the first header
   ## is the most recent and the last one the most senior.
+  ##
   let
     ctx = buddy.ctx
     peer = buddy.peer
 
-  # Make share that this sync peer is not banned from header processing,
-  # already
-  if nStashHeadersErrThreshold < buddy.nHdrProcErrors():
-    buddy.ctrl.zombie = true
-    return Opt.none(seq[Header])
+  var bodyRc = Opt[seq[Header]].err()
+  block body:
+    # Make sure that this sync peer is not banned from header processing,
+    # already
+    if nStashHeadersErrThreshold < buddy.nHdrProcErrors():
+      buddy.ctrl.zombie = true
+      break body
 
-  let
-    # Fetch next available interval
-    iv = ctx.headersUnprocFetch(num).valueOr:
-      return Opt.none(seq[Header])                  # stop, exit function
+    let
+      # Fetch next available interval
+      iv = ctx.headersUnprocFetch(num).valueOr:
+        break body                                  # stop, exit function
 
-    # Fetch headers for this range of block numbers
-    rc = await buddy.fetchHeadersReversed(iv, parent, info)
+      # Fetch headers for this range of block numbers
+      rc = buddy.fetchHeadersReversed(iv, parent, info)
 
-  # Job might have been cancelled or completed while downloading headers.
-  # If so, no more bookkeeping of headers must take place. The *books*
-  # might have been reset and prepared for the next stage.
-  if ctx.hdrSessionStopped():
-    return Opt.none(seq[Header])                    # stop, exit function
+    # Job might have been cancelled or completed while downloading headers.
+    # If so, no more bookkeeping of headers must take place. The *books*
+    # might have been reset and prepared for the next stage.
+    if ctx.hdrSessionStopped():
+      break body                                    # stop, exit function
 
-  if rc.isErr:
-    ctx.headersUnprocCommit(iv, iv)                 # clean up, revert `iv`
-    return Opt.none(seq[Header])                    # stop, exit function
+    if rc.isErr:
+      ctx.headersUnprocCommit(iv, iv)               # clean up, revert `iv`
+      break body                                    # stop, exit function
 
-  # Boundary check for header block numbers
-  let
-    nHeaders = rc.value.len.uint64
-    ivBottom = iv.maxPt - nHeaders + 1
-  if rc.value[0].number != iv.maxPt or rc.value[^1].number != ivBottom:
-    buddy.hdrProcRegisterError()
-    ctx.headersUnprocCommit(iv, iv)                 # clean up, revert `iv`
-    debug info & ": Garbled header list", peer, iv, headers=rc.value.bnStr,
-      expected=(ivBottom,iv.maxPt).bnStr, syncState=($buddy.syncState),
-      hdrErrors=buddy.hdrErrors
-    return Opt.none(seq[Header])                    # stop, exit function
+    # Boundary check for header block numbers
+    let
+      nHeaders = rc.value.len.uint64
+      ivBottom = iv.maxPt - nHeaders + 1
+    if rc.value[0].number != iv.maxPt or rc.value[^1].number != ivBottom:
+      buddy.hdrProcRegisterError()
+      ctx.headersUnprocCommit(iv, iv)               # clean up, revert `iv`
+      debug info & ": Garbled header list", peer, iv, headers=rc.value.bnStr,
+        expected=(ivBottom,iv.maxPt).bnStr, syncState=($buddy.syncState),
+        hdrErrors=buddy.hdrErrors
+      break body                                   # stop, exit function
 
-  # Commit blocks received (and revert lower unused block numbers)
-  ctx.headersUnprocCommit(iv, iv.minPt, iv.maxPt - nHeaders)
-  return rc
+    # Commit blocks received (and revert lower unused block numbers)
+    ctx.headersUnprocCommit(iv, iv.minPt, iv.maxPt - nHeaders)
+    bodyRc = rc
+
+  bodyRc # return
 
 
 proc headersStashOnDisk*(

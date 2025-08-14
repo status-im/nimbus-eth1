@@ -69,6 +69,7 @@ proc getVmState(
     doAssert txFrame.getSavedStateBlockNumber() == parent.number
     vmState.init(parent, header, p.com, txFrame, storeSlotHash = storeSlotHash)
     p.vmState = vmState
+    assign(p.parent, parent)
   else:
     if header.number != p.parent.number + 1:
       return err("Only linear histories supported by Persister")
@@ -157,30 +158,32 @@ proc persistBlock*(p: var Persister, blk: Block): Result[void, string] =
       taskpool = com.taskpool,
     )
 
-  if vmState.com.statelessProviderEnabled:
+  if not vmState.com.statelessProviderEnabled:
+    processBlock()
+  else:
     # When the stateless provider is enabled we need to have access to the
     # parent txFrame so that we can build the witness using the block pre state.
     let parentTxFrame = vmState.ledger.txFrame
     vmState.ledger.txFrame = parentTxFrame.txFrameBegin()
 
+    # Creating a snapshot here significantly improves the performance of building
+    # the witness from the prestate, especially when the import batch size is
+    # set to a larger value.
+    parentTxFrame.checkpoint(p.parent.number, skipSnapshot = false)
+
+    # Clear the caches before executing the block to ensure we collect the correct
+    # witness keys and block hashes when processing the block as these will be used
+    # when building the witness.
+    vmState.ledger.clearWitnessKeys()
+    vmState.ledger.clearBlockHashesCache()
+
     processBlock()
 
     let
-      witnessKeys = vmState.ledger.getWitnessKeys()
-      blockHash = header.computeBlockHash()
       preStateLedger = LedgerRef.init(parentTxFrame)
+      witness = Witness.build(preStateLedger, vmState.ledger, p.parent, header)
 
-    if p.parent.stateRoot != default(Hash32):
-      doAssert preStateLedger.getStateRoot() == p.parent.stateRoot
-
-    var witness = Witness.build(witnessKeys, preStateLedger.ReadOnlyLedger)
-    witness.addHeaderHash(header.parentHash)
-
-    ?vmState.ledger.txFrame.persistWitness(blockHash, witness)
-    vmState.ledger.clearWitnessKeys()
-
-  else:
-    processBlock()
+    ?vmState.ledger.txFrame.persistWitness(header.computeBlockHash(), witness)
 
   if NoPersistHeader notin p.flags:
     let blockHash = header.computeBlockHash()

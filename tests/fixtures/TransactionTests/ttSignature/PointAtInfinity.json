@@ -1,0 +1,73 @@
+{
+    "PointAtInfinity" : {
+        "_info" : {
+            "comment" : "",
+            "filling-rpc-server" : "evm version 1.15.3-unstable-dab746b3-20250218",
+            "filling-tool-version" : "retesteth-0.3.2-legacy+commit.e0777df7.Linux.g++",
+            "generatedTestHash" : "04c1c1228f85215c566bf60e8c38a9d32fe6c139e3753100e5979151e666699a",
+            "lllcversion" : "Version: 0.5.14-develop.2024.11.5+commit.b2b86751.mod.Linux.g++",
+            "solidity" : "Version: 0.8.24+commit.e11b9ed9.Linux.g++",
+            "source" : "src/TransactionTestsFiller/ttSignature/PointAtInfinityFiller.json",
+            "sourceHash" : "afbc0469a0522ffedf0422548b07b515a1daab4c468e6488a850bcc34e10682b"
+        },
+        "result" : {
+            "Berlin" : {
+                "exception" : "TransactionException.EC_RECOVERY_FAIL",
+                "intrinsicGas" : "0x00"
+            },
+            "Byzantium" : {
+                "exception" : "TransactionException.EC_RECOVERY_FAIL",
+                "intrinsicGas" : "0x00"
+            },
+            "Cancun" : {
+                "exception" : "TransactionException.EC_RECOVERY_FAIL",
+                "intrinsicGas" : "0x00"
+            },
+            "Constantinople" : {
+                "exception" : "TransactionException.EC_RECOVERY_FAIL",
+                "intrinsicGas" : "0x00"
+            },
+            "ConstantinopleFix" : {
+                "exception" : "TransactionException.EC_RECOVERY_FAIL",
+                "intrinsicGas" : "0x00"
+            },
+            "EIP150" : {
+                "exception" : "TransactionException.EC_RECOVERY_FAIL",
+                "intrinsicGas" : "0x00"
+            },
+            "EIP158" : {
+                "exception" : "TransactionException.EC_RECOVERY_FAIL",
+                "intrinsicGas" : "0x00"
+            },
+            "Frontier" : {
+                "exception" : "TransactionException.EC_RECOVERY_FAIL",
+                "intrinsicGas" : "0x00"
+            },
+            "Homestead" : {
+                "exception" : "TransactionException.EC_RECOVERY_FAIL",
+                "intrinsicGas" : "0x00"
+            },
+            "Istanbul" : {
+                "exception" : "TransactionException.EC_RECOVERY_FAIL",
+                "intrinsicGas" : "0x00"
+            },
+            "London" : {
+                "exception" : "TransactionException.EC_RECOVERY_FAIL",
+                "intrinsicGas" : "0x00"
+            },
+            "Paris" : {
+                "exception" : "TransactionException.EC_RECOVERY_FAIL",
+                "intrinsicGas" : "0x00"
+            },
+            "Prague" : {
+                "exception" : "TransactionException.EC_RECOVERY_FAIL",
+                "intrinsicGas" : "0x00"
+            },
+            "Shanghai" : {
+                "exception" : "TransactionException.EC_RECOVERY_FAIL",
+                "intrinsicGas" : "0x00"
+            }
+        },
+        "txbytes" : "0xf85f011082520894f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f001801ca06f0010ff4c31c2a6d0526c0d414e6cd01ad5d22e15bfff98af23867366b94d87a05413392d556119132da7056f8fb56a9138a36446a8a4ad7159c9d892d9f32284"
+    }
+}
