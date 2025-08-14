@@ -179,6 +179,14 @@ jobs:
         run: |
           make -j${ncpu} ARCH_OVERRIDE=${PLATFORM} CI_CACHE=NimBinCache init
 
+      - name: Restore EEST test vectors from cache
+        uses: actions/cache@v4
+        with:
+          path: tests/fixtures/eest
+          # EEST release version contained in eest_ci_cache.sh.
+          # Each time we bump EEST version, it should invalidate the cache too.
+          key: eest-${{ hashFiles('scripts/eest_ci_cache.sh') }}
+          
       - name: Run nimbus-eth1 tests (Windows)
         if: runner.os == 'Windows'
         run: |

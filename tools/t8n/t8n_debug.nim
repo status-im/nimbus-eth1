@@ -17,10 +17,7 @@ import
   ../../execution_chain/beacon/web3_eth_conv
 
 const
-  testFile = "tests/fixtures/eth_tests/BlockchainTests/GeneralStateTests/Pyspecs/cancun/eip4844_blobs/fork_transition_excess_blob_gas.json"
-  #testFile = "tests/fixtures/eth_tests/BlockchainTests/ValidBlocks/bcRandomBlockhashTest/randomStatetest224BC.json"
-  #testFile = "tests/fixtures/eth_tests/BlockchainTests/ValidBlocks/bcRandomBlockhashTest/randomStatetest631BC.json"
-  #testFile = "tests/fixtures/eth_tests/BlockchainTests/ValidBlocks/bcStateTests/blockhashTests.json"
+  testFile = "tests/fixtures/eest/blockchain_tests/stChainId/chainId.json"
 
 type
   BCTConv* = JrpcConv

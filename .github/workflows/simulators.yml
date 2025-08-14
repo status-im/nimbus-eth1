@@ -103,7 +103,15 @@ jobs:
             ncpu=$(nproc)
           fi
           make -j${ncpu} ARCH_OVERRIDE=x64 CI_CACHE=NimBinaries init
-          make -j${ncpu} ROCKSDB_CI_CACHE=RocksBinCache deps rocksdb
+          make -j${ncpu} ROCKSDB_CI_CACHE=RocksBinCache deps rocksdb eest
+
+      - name: Restore EEST test vectors from cache
+        uses: actions/cache@v4
+        with:
+          path: tests/fixtures/eest
+          # EEST release version contained in eest_ci_cache.sh.
+          # Each time we bump EEST version, it should invalidate the cache too.
+          key: eest-${{ hashFiles('scripts/eest_ci_cache.sh') }}
 
       - name: Run Simulators
         run: |
