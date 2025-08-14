@@ -127,7 +127,11 @@ proc trackRlpNodes(
 
   let nextKey = HashKey.fromBytes(link).valueOr:
     return err(PartTrkLinkExpected)
-  chain.toOpenArray(1,chain.len-1).trackRlpNodes(nextKey, path.slice nChewOff)
+
+  if chain.len() > 1:
+    chain.toOpenArray(1, chain.len() - 1).trackRlpNodes(nextKey, path.slice nChewOff)
+  else:
+    err(PartTrkLinkExpected)
 
 proc makeProof(
     db: AristoTxRef;

@@ -130,7 +130,7 @@ proc stateBlockNumber*(db: CoreDbTxRef): BlockNumber =
 
   rc.BlockNumber
 
-proc verify*(
+proc verifyProof*(
     db: CoreDbRef;
     proof: openArray[seq[byte]];
     root: Hash32;
@@ -221,21 +221,6 @@ proc hasKey*(kvt: CoreDbTxRef; key: openArray[byte]): bool =
 
 # ----------- accounts ---------------
 
-proc proof*(
-    acc: CoreDbTxRef;
-    accPath: Hash32;
-      ): CoreDbRc[(seq[seq[byte]],bool)] =
-  ## On the accounts MPT, collect the nodes along the `accPath` interpreted as
-  ## path. Return these path nodes as a chain of rlp-encoded blobs followed
-  ## by a bool value which is `true` if the `key` path exists in the database,
-  ## and `false` otherwise. In the latter case, the chain of rlp-encoded blobs
-  ## are the nodes proving that the `key` path does not exist.
-  ##
-  let rc = acc.aTx.makeAccountProof(accPath).valueOr:
-    return err(error.toError("", ProofCreate))
-
-  ok(rc)
-
 proc fetch*(
     acc: CoreDbTxRef;
     accPath: Hash32;
@@ -304,6 +289,21 @@ proc getStateRoot*(acc: CoreDbTxRef): CoreDbRc[Hash32] =
   ## column (if available.)
   let rc = acc.aTx.fetchStateRoot().valueOr:
     return err(error.toError(""))
+
+  ok(rc)
+
+proc proof*(
+    acc: CoreDbTxRef;
+    accPath: Hash32;
+      ): CoreDbRc[(seq[seq[byte]],bool)] =
+  ## On the accounts MPT, collect the nodes along the `accPath` interpreted as
+  ## path. Return these path nodes as a chain of rlp-encoded blobs followed
+  ## by a bool value which is `true` if the `key` path exists in the database,
+  ## and `false` otherwise. In the latter case, the chain of rlp-encoded blobs
+  ## are the nodes proving that the `key` path does not exist.
+  ##
+  let rc = acc.aTx.makeAccountProof(accPath).valueOr:
+    return err(error.toError("", ProofCreate))
 
   ok(rc)
 
