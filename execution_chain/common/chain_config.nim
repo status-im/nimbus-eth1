@@ -286,7 +286,7 @@ const
 
 func ofStmt(fork: HardFork, keyName: string, reader: NimNode, value: NimNode): NimNode =
   let branchStmt = quote do:
-    `value`[`fork`] = reader.readValue(Opt[BlobSchedule])
+    `value`[`fork`] = `reader`.readValue(Opt[BlobSchedule])
 
   nnkOfBranch.newTree(
     newLit(keyName),
@@ -296,7 +296,7 @@ func ofStmt(fork: HardFork, keyName: string, reader: NimNode, value: NimNode): N
 macro blobScheduleParser(reader, key, value: typed): untyped =
   # Automated blob schedule parser generator
   var caseStmt = nnkCaseStmt.newTree(
-    quote do: `key`
+    quote do: toLowerAscii(`key`)
   )
 
   for fork in Cancun..HardFork.high:

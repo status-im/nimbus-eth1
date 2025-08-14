@@ -352,6 +352,12 @@ libverifproxy: | build deps
 	cp nimbus_verified_proxy/libverifproxy/verifproxy.h $(VERIF_PROXY_OUT_PATH)/
 	echo -e $(BUILD_END_MSG) "build/$@"
 
+eest_engine: | build deps
+	$(ENV_SCRIPT) nim c -d:release -d:chronicles_enabled:off "tests/eest_engine/$@.nim"
+
+eest_engine_test: | build deps eest_engine
+	$(ENV_SCRIPT) nim c -r -d:release -d:chronicles_enabled:off "tests/eest_engine/$@.nim"
+
 # builds transition tool
 t8n: | build deps
 	$(ENV_SCRIPT) nim c $(NIM_PARAMS) $(T8N_PARAMS) "tools/t8n/$@.nim"
