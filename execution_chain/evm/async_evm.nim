@@ -264,7 +264,7 @@ proc callFetchingState(
           return err("Unable to get block hash")
         vmState.ledger.txFrame.addBlockNumberToHashLookup(q.number, blockHash)
         fetchedBlockHashes.incl(q.number)
-        
+
     except CancelledError as e:
       raise e
     except CatchableError as e:
@@ -345,7 +345,7 @@ proc createAccessList*(
 
   let
     vmState = evm.setupVmState(txFrame, header)
-    callResult =
+    _ =
       ?(await evm.callFetchingState(vmState, header, tx, optimisticStateFetch))
     witnessKeys = vmState.ledger.getWitnessKeys()
     fromAdr = tx.`from`.get(default(Address))

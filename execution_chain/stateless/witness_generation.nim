@@ -41,7 +41,7 @@ proc build*(
 
     if key.slot.isNone(): # Is an account key
       proofPaths.withValue(accPath, v):
-        discard
+        discard v
       do:
         proofPaths[accPath] = @[]
 
