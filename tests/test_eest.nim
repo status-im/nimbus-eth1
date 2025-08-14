@@ -24,3 +24,14 @@ import
   stew/byteutils,
   results
 
+const
+  path = "/Users/advaitasaha/Downloads/fixtures-test-dev3/state_tests/osaka/eip7939_count_leading_zeros/count_leading_zeros"
+
+proc eestTest() =
+  let config = getConfiguration()
+  let n = json.parseFile(path / "clz_code_copy_operation.json")
+  var testStatusIMPL: TestStatus
+  testFixture(n, testStatusIMPL, config.trace, true)
+
+when isMainModule:
+  eestTest()
