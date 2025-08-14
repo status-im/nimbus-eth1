@@ -36,85 +36,17 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v4
 
-      - name: Restore llvm-mingw from cache
-        if: runner.os == 'windows'
-        id: windows-mingw-cache
-        uses: actions/cache@v4
+      - id: shared-action
+        uses: ./.github/actions/shared
         with:
-          path: external/mingw-amd64
-          key: 'mingw-llvm-17-sim'
-
-      - name: Install llvm-mingw dependency
-        if: >
-          steps.windows-mingw-cache.outputs.cache-hit != 'true' &&
-          runner.os == 'windows'
-        run: |
-          mkdir -p external
-          LLVM_VERSION="20250730"
-          MINGW_BASE="https://github.com/mstorsjo/llvm-mingw/releases/download/$LLVM_VERSION"
-          MINGW_URL="$MINGW_BASE/llvm-mingw-$LLVM_VERSION-ucrt-x86_64.zip"
-          curl -L "$MINGW_URL" -o "external/mingw-amd64.zip"
-          7z x -y "external/mingw-amd64.zip" -oexternal/mingw-amd64/
-          mv external/mingw-amd64/**/* ./external/mingw-amd64
-
-      - name: Path to cached dependencies
-        if: runner.os == 'windows'
-        run: |
-          echo '${{ github.workspace }}'"/external/mingw-amd64/bin" >> $GITHUB_PATH
-
-      - name: Get latest nimbus-build-system commit hash
-        id: versions
-        run: |
-          getHash() {
-            git ls-remote "https://github.com/$1" "${2:-HEAD}" | cut -f 1
-          }
-          nbsHash=$(getHash status-im/nimbus-build-system)
-          echo "nimbus_build_system=$nbsHash" >> $GITHUB_OUTPUT
-
-      - name: Restore prebuilt Nim from cache
-        uses: actions/cache@v4
-        with:
-          path: NimBinaries
-          key: 'nim-${{ matrix.os }}-${{ matrix.cpu }}-${{ steps.versions.outputs.nimbus_build_system }}-sim'
-
-      - name: Get latest nim-rocksdb commit hash
-        id: rocksdb-versions
-        run: |
-          getHash() {
-            git ls-remote "https://github.com/$1" "${2:-HEAD}" | cut -f 1
-          }
-          rocksHash=$(getHash status-im/nim-rocksdb)
-          echo "nim_rocksdb=$rocksHash" >> $GITHUB_OUTPUT
-
-      - name: Restore prebuilt rocksdb from cache
-        id: rocksdb-cache
-        uses: actions/cache@v4
-        with:
-          path: RocksBinCache
-          key: 'rocks-${{ matrix.os }}-${{ matrix.cpu }}-${{ steps.rocksdb-versions.outputs.nim_rocksdb }}'
-
-      - name: Build Nim and deps
-        run: |
-          if [[ '${{ matrix.os }}' == 'windows' ]]; then
-            ncpu=${NUMBER_OF_PROCESSORS}
-          elif [[ '${{ matrix.os }}' == 'macos' ]]; then
-            ncpu=$(sysctl -n hw.ncpu)
-          else
-            ncpu=$(nproc)
-          fi
-          make -j${ncpu} ARCH_OVERRIDE=x64 CI_CACHE=NimBinaries init
-          make -j${ncpu} ROCKSDB_CI_CACHE=RocksBinCache deps rocksdb eest
-
-      - name: Restore EEST test vectors from cache
-        uses: actions/cache@v4
-        with:
-          path: tests/fixtures/eest
-          # EEST release version contained in eest_ci_cache.sh.
-          # Each time we bump EEST version, it should invalidate the cache too.
-          key: eest-${{ hashFiles('scripts/eest_ci_cache.sh') }}
+          llvm-mingw: true
+          nim-cache: true
+          rocksdb-cache: true
+          eest-cache: true
 
       - name: Run Simulators
         run: |
+          make -j${ncpu} ROCKSDB_CI_CACHE=RocksBinCache deps rocksdb eest
           SIM_SCRIPT="hive_integration/nodocker/build_sims.sh"
           bash ${SIM_SCRIPT} "${{ matrix.os }}-${{ matrix.cpu }}"
 
