@@ -15,9 +15,11 @@ import
   stew/assign2,
   ../db/ledger,
   ../common/[common, evmforks],
+  ../core/log_index,
   ./interpreter/[op_codes, gas_costs],
   ./types,
   ./evm_errors
+
 
 func forkDeterminationInfoForVMState(vmState: BaseVMState): ForkDeterminationInfo =
   forkDeterminationInfo(vmState.parent.number + 1, vmState.blockCtx.timestamp)
@@ -48,9 +50,9 @@ proc init(
   self.receipts.setLen(0)
   self.cumulativeGasUsed = 0
   self.gasCosts = self.fork.forkToSchedule
-  self.blobGasUsed = 0'u64
   self.allLogs.setLen(0)
   self.gasRefunded = 0
+  self.logIndex = default(LogIndex)
 
 func blockCtx(header: Header): BlockContext =
   BlockContext(

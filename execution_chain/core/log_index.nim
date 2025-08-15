@@ -73,6 +73,23 @@ type
     records*: Table[uint64, LogRecord]
     log_index_root*: Hash32
 
+type
+  LogIndexSummary* = object
+    ## Summary structure that goes into block header (256 bytes total)
+    root*: Hash32                      # 0x00 - log_index.hash_tree_root()
+    epochs_root*: Hash32                # 0x20 - log_index.epochs.hash_tree_root()
+    epoch_0_filter_maps_root*: Hash32  # 0x40 - log_index.epochs[0].filter_maps.hash_tree_root()
+    latest_block_delimiter_index*: uint64  # 0x60
+    latest_block_delimiter_root*: Hash32   # 0x68
+    latest_log_entry_index*: uint64        # 0x88
+    latest_log_entry_root*: Hash32         # 0x90
+    latest_value_index*: uint32            # 0xb0
+    latest_layer_index*: uint32            # 0xb4
+    latest_row_index*: uint32              # 0xb8
+    latest_column_index*: uint32           # 0xbc
+    latest_log_value*: Hash32              # 0xc0
+    latest_row_root*: Hash32               # 0xe0
+
   LogIndex* = object
     ## Container holding log entries and index bookkeeping data
     epochs*: seq[LogIndexEpoch]
@@ -90,9 +107,9 @@ type
     latest_row_root*: Hash32
 
   LogIndexDigest* = object
-    ## Lightweight summary based on epoch roots and position
-    epochRoots*: seq[Hash32]
-    next_index*: uint64
+    root*: Hash32
+    epochs_root*: Hash32
+    epoch_0_filter_maps_root*: Hash32
 
 # ---------------------------------------------------------------------------
 # Helper Functions
@@ -228,11 +245,34 @@ proc add_log_value*(log_index: var LogIndex,
 # ---------------------------------------------------------------------------
 # Public API
 # ---------------------------------------------------------------------------
+proc encodeLogIndexSummary*(summary: LogIndexSummary): seq[byte] =
+  ## Manually encode LogIndexSummary to ensure exactly 256 bytes
+  result = newSeq[byte](256)
+  
+  # Helper to copy bytes
+  template copyBytes(dest: var seq[byte], offset: int, src: pointer, size: int) =
+    if size > 0:
+      copyMem(addr dest[offset], src, size)
+  
+  # Encode each field at the correct offset
+  copyBytes(result, 0x00, unsafeAddr summary.root, 32)
+  copyBytes(result, 0x20, unsafeAddr summary.epochs_root, 32)
+  copyBytes(result, 0x40, unsafeAddr summary.epoch_0_filter_maps_root, 32)
+  copyBytes(result, 0x60, unsafeAddr summary.latest_block_delimiter_index, 8)
+  copyBytes(result, 0x68, unsafeAddr summary.latest_block_delimiter_root, 32)
+  copyBytes(result, 0x88, unsafeAddr summary.latest_log_entry_index, 8)
+  copyBytes(result, 0x90, unsafeAddr summary.latest_log_entry_root, 32)
+  copyBytes(result, 0xb0, unsafeAddr summary.latest_value_index, 4)
+  copyBytes(result, 0xb4, unsafeAddr summary.latest_layer_index, 4)
+  copyBytes(result, 0xb8, unsafeAddr summary.latest_row_index, 4)
+  copyBytes(result, 0xbc, unsafeAddr summary.latest_column_index, 4)
+  copyBytes(result, 0xc0, unsafeAddr summary.latest_log_value, 32)
+  copyBytes(result, 0xe0, unsafeAddr summary.latest_row_root, 32)
 
-proc add_block_logs*(log_index: var LogIndex, 
-                    header: ethblocks.Header, 
-                    receipts: seq[Receipt]) =
-  ## Add all logs from a block to the log index
+proc add_block_logs*[T](log_index: var LogIndex, 
+                        header: ethblocks.Header, 
+                        receipts: seq[T]) =
+  
   # Initialize epochs if needed
   if log_index.epochs.len == 0:
     log_index.epochs.add(initLogIndexEpoch())
@@ -248,45 +288,72 @@ proc add_block_logs*(log_index: var LogIndex,
 
   # Process all logs in all receipts
   for txPos, receipt in receipts:
-    for logPos, log in receipt.logs:
-      # Create log entry with metadata
-      let meta = LogMeta(
-        blockNumber: header.number,
-        txIndex: uint32(txPos),
-        logIndex: uint32(logPos)
-      )
-      let entry = LogEntry(log: log, meta: meta)
-      
-      # Store log entry
-      log_index.epochs[0].records[log_index.next_index] =
-        LogRecord(kind: lrkLog, entry: entry)
+    when compiles(receipt.logs):  # Check if receipt has logs field
+      for logPos, log in receipt.logs:
+        # Create log entry with metadata
+        let meta = LogMeta(
+          blockNumber: header.number,
+          txIndex: uint32(txPos),
+          logIndex: uint32(logPos)
+        )
+        let entry = LogEntry(log: log, meta: meta)
+        
+        # Store log entry
+        log_index.epochs[0].records[log_index.next_index] =
+          LogRecord(kind: lrkLog, entry: entry)
 
-      log_index.latest_log_entry_index = log_index.next_index
-      log_index.latest_log_entry_root = hash_tree_root(log_index)
-      log_index.next_index.inc
+        log_index.latest_log_entry_index = log_index.next_index
+        log_index.latest_log_entry_root = hash_tree_root(log_index)
+        log_index.next_index.inc
 
-      # Process log values (address + topics)
-      let addr_hash = address_value(log.address)
-      let column = get_column_index(log_index.next_index - 1, addr_hash)
-      let row = get_row_index(0, addr_hash, 0)
-      add_log_value(log_index, 0, row, column, addr_hash)
-      
-      # Process each topic
-      for topic in log.topics:
-        let topic_hash = topic_value(Hash32(topic))
-        let topic_column = get_column_index(log_index.next_index - 1, topic_hash)
-        let topic_row = get_row_index(0, topic_hash, 0)
-        add_log_value(log_index, 0, topic_row, topic_column, topic_hash)
+        # Process log values (address + topics)
+        let addr_hash = address_value(log.address)
+        let column = get_column_index(log_index.next_index - 1, addr_hash)
+        let row = get_row_index(0, addr_hash, 0)
+        add_log_value(log_index, 0, row, column, addr_hash)
+        
+        # Process each topic
+        for topic in log.topics:
+          let topic_hash = topic_value(Hash32(topic))
+          let topic_column = get_column_index(log_index.next_index - 1, topic_hash)
+          let topic_row = get_row_index(0, topic_hash, 0)
+          add_log_value(log_index, 0, topic_row, topic_column, topic_hash)
 
   # Update epoch root
   log_index.epochs[0].log_index_root = hash_tree_root(log_index)
   log_index.latest_row_root = log_index.epochs[0].log_index_root
 
-proc digest*(li: LogIndex): LogIndexDigest =
-  ## Produce a lightweight summary containing epoch roots and position
-  result.next_index = li.next_index
-  for epoch in li.epochs:
-    result.epochRoots.add epoch.log_index_root
+proc getLogIndexDigest*(li: LogIndex): LogIndexDigest =
+  ## Produce digest for LogIndexSummary generation
+  result.root = hash_tree_root(li)
+  
+  # Generate epochs root (simplified for M0)
+  if li.epochs.len > 0:
+    result.epochs_root = li.epochs[0].log_index_root
+  else:
+    result.epochs_root = zeroHash32()
+  
+  # For M0, we use a simplified filter maps root
+  result.epoch_0_filter_maps_root = result.epochs_root  # Simplified for M0
+
+proc createLogIndexSummary*(li: LogIndex): LogIndexSummary =
+  ## Create LogIndexSummary for block header
+  let digest = li.getLogIndexDigest()
+  
+  result.root = digest.root
+  result.epochs_root = digest.epochs_root
+  result.epoch_0_filter_maps_root = digest.epoch_0_filter_maps_root
+  result.latest_block_delimiter_index = li.latest_block_delimiter_index
+  result.latest_block_delimiter_root = li.latest_block_delimiter_root
+  result.latest_log_entry_index = li.latest_log_entry_index
+  result.latest_log_entry_root = li.latest_log_entry_root
+  result.latest_value_index = uint32(li.latest_value_index)
+  result.latest_layer_index = uint32(li.latest_layer_index)
+  result.latest_row_index = uint32(li.latest_row_index)
+  result.latest_column_index = uint32(li.latest_column_index)
+  result.latest_log_value = li.latest_log_value
+  result.latest_row_root = li.latest_row_root
+
 
 # ---------------------------------------------------------------------------
 # Reorg Handling (Basic Implementation)
