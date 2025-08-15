@@ -22,6 +22,7 @@ import
     test_forkid,
     test_genesis,
     test_getproof_json,
+    test_aristo_proof,
     test_jwt_auth,
     test_kvt,
     test_ledger,

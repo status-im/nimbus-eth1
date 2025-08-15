@@ -94,6 +94,8 @@ proc trackRlpNodes(
   ## Verify rlp-encoded node chain created by `chainRlpNodes()`.
   if path.len == 0:
     return err(PartTrkEmptyPath)
+  if chain.len() == 0:
+    return err(PartTrkEmptyProof)
 
   # Verify key against rlp-node
   let digest = chain[0].digestTo(HashKey)
