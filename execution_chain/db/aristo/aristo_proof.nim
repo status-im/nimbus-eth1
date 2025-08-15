@@ -94,6 +94,8 @@ proc trackRlpNodes(
   ## Verify rlp-encoded node chain created by `chainRlpNodes()`.
   if path.len == 0:
     return err(PartTrkEmptyPath)
+  if chain.len() == 0:
+    return err(PartTrkEmptyProof)
 
   # Verify key against rlp-node
   let digest = chain[0].digestTo(HashKey)
@@ -127,7 +129,11 @@ proc trackRlpNodes(
 
   let nextKey = HashKey.fromBytes(link).valueOr:
     return err(PartTrkLinkExpected)
-  chain.toOpenArray(1,chain.len-1).trackRlpNodes(nextKey, path.slice nChewOff)
+
+  if chain.len() > 1:
+    chain.toOpenArray(1, chain.len() - 1).trackRlpNodes(nextKey, path.slice nChewOff)
+  else:
+    err(PartTrkLinkExpected)
 
 proc makeProof(
     db: AristoTxRef;
