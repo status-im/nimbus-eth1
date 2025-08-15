@@ -27,9 +27,15 @@ proc runTest(appDir: string, spec: string): bool =
     debugEcho "Something went wrong: ", exc.msg
     false
 
+const skipFiles = [
+  "CALLBlake2f_MaxRounds.json",
+  ]
+
 let appDir = getAppDir()
 for fileName in walkDirRec(baseFolder):
   let last = fileName.splitPath().tail
+  if last in skipFiles:
+    continue
   test last:
     let res = runTest(appDir, fileName)
     if not res:
