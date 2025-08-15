@@ -48,3 +48,4 @@ nimbus-build-system.paths
 
 # EEST test vectors
 tests/fixtures/eest
+tests/fixtures/eest_develop
