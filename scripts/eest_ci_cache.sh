@@ -1,11 +1,10 @@
 #!/usr/bin/env bash
 
-# Copyright (c) 2025 Status Research & Development GmbH. Licensed under
-# either of:
+# Copyright (c) 2025 Status Research & Development GmbH.
+# Licensed under either of:
 # - Apache License, version 2.0
 # - MIT license
-# at your option. This file may not be copied, modified, or distributed except
-# according to those terms.
+# at your option.
 
 set -e
 
@@ -13,45 +12,65 @@ cd "$(dirname "${BASH_SOURCE[0]}")"/..
 
 REPO_DIR="${PWD}"
 FIXTURES_DIR="${REPO_DIR}/tests/fixtures"
-EEST_DIR="${FIXTURES_DIR}/eest"
+
+# --- Current Release ---
+EEST_NAME="Mainnet"
 EEST_VERSION="v4.5.0"
+EEST_DIR="${FIXTURES_DIR}/eest"
 EEST_ARCHIVE="fixtures_static.tar.gz"
-EEST_ARCHIVE_FILE="${FIXTURES_DIR}/${EEST_ARCHIVE}"
 EEST_URL="https://github.com/ethereum/execution-spec-tests/releases/download/${EEST_VERSION}/${EEST_ARCHIVE}"
 
-if [[ ! -d "$EEST_DIR" ]]; then
-  mkdir -p ${EEST_DIR}
-fi
+# --- Develop/Devnet Release ---
+EEST_DEVELOP_NAME="fusaka-devnet-3"
+EEST_DEVELOP_VERSION="v1.0.0"
+EEST_DEVELOP_DIR="${FIXTURES_DIR}/eest_develop"
+EEST_DEVELOP_ARCHIVE="fixtures_fusaka-devnet-3.tar.gz"
+EEST_DEVELOP_URL="https://github.com/ethereum/execution-spec-tests/releases/download/${EEST_DEVELOP_NAME}%40${EEST_DEVELOP_VERSION}/${EEST_DEVELOP_ARCHIVE}"
 
-if [[ -f "${EEST_DIR}/version.txt" ]]; then
-  EEST_VERSION_BEFORE=$(cat "${EEST_DIR}/version.txt")
+download_and_extract() {
+  local url="$1"
+  local dest_dir="$2"
+  local name="$3"
+  local version="$4"
 
-  if [[ ${EEST_VERSION_BEFORE} == ${EEST_VERSION} ]]; then
-    echo "EEST fixtures already downloaded. Skipping download."
-    exit 0
+  if [[ ! -d "$dest_dir" ]]; then
+    mkdir -p "$dest_dir"
   fi
 
-fi
+  if [[ -f "${dest_dir}/version.txt" ]]; then
+    local existing_version
+    existing_version=$(cat "${dest_dir}/version.txt")
 
-echo "Downloading and extracting EEST test vectors"
+    if [[ ${existing_version} == "${version}" ]]; then
+      echo "EEST fixtures for ${name} ${version} already downloaded in ${dest_dir}. Skipping."
+      return
+    fi
+  fi
 
-cd "${FIXTURES_DIR}"
-curl -L "${EEST_URL}" -o "${EEST_ARCHIVE}"
-tar -xzf ${EEST_ARCHIVE} -C eest --strip-components=1
+  echo "Downloading and extracting EEST test vectors for ${name} ${version}"
 
-rm -rf eest/.meta
-mv eest/blockchain_tests/static/state_tests/* eest/blockchain_tests
-rm -rf eest/blockchain_tests/static
+  cd "${FIXTURES_DIR}"
+  curl -L "${url}" -o "${EEST_ARCHIVE}"
+  tar -xzf "${EEST_ARCHIVE}" -C "${dest_dir}" --strip-components=1
 
-mkdir -p eest/engine_tests
-mv eest/blockchain_tests_engine/static/state_tests/* eest/engine_tests
-rm -rf eest/blockchain_tests_engine
+  rm -rf "${dest_dir}/.meta"
+  mv "${dest_dir}/blockchain_tests/static/state_tests/"* "${dest_dir}/blockchain_tests" 2>/dev/null || true
+  rm -rf "${dest_dir}/blockchain_tests/static"
 
-mv eest/state_tests/static/state_tests/* eest/state_tests
-rm -rf eest/state_tests/static
+  mkdir -p "${dest_dir}/engine_tests"
+  mv "${dest_dir}/blockchain_tests_engine/static/state_tests/"* "${dest_dir}/engine_tests" 2>/dev/null || true
+  rm -rf "${dest_dir}/blockchain_tests_engine"
 
-rm -f "${EEST_ARCHIVE}"
+  mv "${dest_dir}/state_tests/static/state_tests/"* "${dest_dir}/state_tests" 2>/dev/null || true
+  rm -rf "${dest_dir}/state_tests/static"
 
-echo "${EEST_VERSION}" > eest/version.txt
+  rm -f "${EEST_ARCHIVE}"
 
-cd "${REPO_DIR}"
+  echo "${version}" > "${dest_dir}/version.txt"
+
+  cd "${REPO_DIR}"
+}
+
+# Download stable and develop versions
+download_and_extract "${EEST_URL}" "${EEST_DIR}" "${EEST_NAME}" "${EEST_VERSION}"
+download_and_extract "${EEST_DEVELOP_URL}" "${EEST_DEVELOP_DIR}" "${EEST_DEVELOP_NAME}" "${EEST_DEVELOP_VERSION}"
