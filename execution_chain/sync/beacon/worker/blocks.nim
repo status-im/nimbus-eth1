@@ -246,12 +246,6 @@ proc blocksUnstageOk*(ctx: BeaconCtxRef): bool =
   0 < ctx.blk.staged.len
 
 template blocksUnstage*(
-    ctx: BeaconCtxRef;
-    info: static[string];
-      ): auto =
-  ctx.blocksStagedProcessImpl(Opt.none(BeaconBuddyRef), info)
-
-template blocksUnstage*(
     buddy: BeaconBuddyRef;
     info: static[string];
       ): auto =
