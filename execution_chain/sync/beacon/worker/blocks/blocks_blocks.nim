@@ -172,8 +172,7 @@ template blocksFetch*(
 
 
 template blocksImport*(
-    ctx: BeaconCtxRef;
-    maybePeer: Opt[BeaconBuddyRef];
+    buddy: BeaconBuddyRef;
     blocks: seq[EthBlock];
     peerID: Hash;
     info: static[string];
@@ -185,19 +184,22 @@ template blocksImport*(
   ## number from the argument list in case of an error.
   ##
   block body:
-    let iv {.inject.} =
-      BnRange.new(blocks[0].header.number, blocks[^1].header.number)
+    let
+      ctx = buddy.ctx
+      peer = buddy.peer
+      iv {.inject.} =
+        BnRange.new(blocks[0].header.number, blocks[^1].header.number)
     doAssert iv.len == blocks.len.uint64
 
     var isError = false
     block loop:
-      trace info & ": Start importing blocks", peer=maybePeer.toStr, iv,
+      trace info & ": Start importing blocks", peer, iv,
         nBlocks=iv.len, base=ctx.chain.baseNumber.bnStr,
         head=ctx.chain.latestNumber.bnStr
 
       for n in 0 ..< blocks.len:
         let nBn = blocks[n].header.number
-        discard (await ctx.importBlock(maybePeer, blocks[n], peerID)).valueOr:
+        discard (await buddy.importBlock(blocks[n], peerID)).valueOr:
           if error.excp != ECancelledError:
             isError = true
 
