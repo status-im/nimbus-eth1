@@ -22,9 +22,9 @@ import
 template getBytes(i: int): seq[byte] =
   @(u256(i).toBytesBE())
 
-func branchToNodesTable(branch: openArray[seq[byte]]): Table[Hash32, seq[byte]] =
+func toNodesTable(proofNodes: openArray[seq[byte]]): Table[Hash32, seq[byte]] =
   var nodes: Table[Hash32, seq[byte]]
-  for n in branch:
+  for n in proofNodes:
     nodes[keccak256(n)] = n
   nodes
 
@@ -58,10 +58,44 @@ suite "Aristo proof verification":
           leafValue.get() == value
 
       block:
-        let leafValue = verifyProof(branchToNodesTable(proof), root, key).expect("valid proof")
+        let leafValue = verifyProof(toNodesTable(proof), root, key).expect("valid proof")
         check:
           leafValue.isSome()
           leafValue.get() == value
+
+  test "Validate proof for existing value using nodes table":
+    for i in 1..numValues:
+      let
+        indexBytes = getBytes(i)
+        key = keccak256(indexBytes)
+        value = indexBytes
+      trie.put(key.data, value)
+
+    let root = trie.rootHash()
+
+    var proofNodes: seq[seq[byte]]
+    for i in 1..numValues:
+      let
+        key = keccak256(getBytes(i))
+        proof = trie.getBranch(key.data)
+
+      # Put all proof nodes into a shared list
+      for n in proof:
+        proofNodes.add(n)
+
+    # Build the nodes table
+    let nodes = toNodesTable(proofNodes)
+
+    for i in 1..numValues:
+      let
+        indexBytes = getBytes(i)
+        key = keccak256(indexBytes)
+        value = indexBytes
+
+      let leafValue = verifyProof(nodes, root, key).expect("valid proof")
+      check:
+        leafValue.isSome()
+        leafValue.get() == value
 
   test "Validate proof for non-existing value":
     for i in 1..numValues:
@@ -82,9 +116,40 @@ suite "Aristo proof verification":
         leafValue.isNone()
 
     block:
-      let leafValue = verifyProof(branchToNodesTable(proof), root, nonExistingKey).expect("valid proof")
+      let leafValue = verifyProof(toNodesTable(proof), root, nonExistingKey).expect("valid proof")
       check:
         leafValue.isNone()
+
+  test "Validate proof for non-existing value using nodes table":
+    for i in 1..numValues:
+      let
+        indexBytes = getBytes(i)
+        key = keccak256(indexBytes)
+        value = indexBytes
+      trie.put(key.data, value)
+
+    let root = trie.rootHash()
+
+    var proofNodes: seq[seq[byte]]
+    for i in 1..numValues:
+      let
+        key = keccak256(getBytes(i))
+        proof = trie.getBranch(key.data)
+
+      # Put all proof nodes into a shared list
+      for n in proof:
+        proofNodes.add(n)
+
+    # Build the nodes table
+    let nodes = toNodesTable(proofNodes)
+
+    let
+      nonExistingKey = toSeq(toBytesBE(u256(numValues + 1))).keccak256()
+      proof = trie.getBranch(nonExistingKey.data)
+
+    let leafValue = verifyProof(nodes, root, nonExistingKey).expect("valid proof")
+    check:
+      leafValue.isNone()
 
   # The following test cases were copied from the Rust hexary trie implementation.
   # See here: https://github.com/citahub/cita_trie/blob/master/src/tests/mod.rs#L554
@@ -102,7 +167,7 @@ suite "Aristo proof verification":
       check verifyRes.isErr()
 
     block:
-      let verifyRes = verifyProof(branchToNodesTable(proof), root, key)
+      let verifyRes = verifyProof(toNodesTable(proof), root, key)
       check verifyRes.isErr()
 
   test "Validate proof for one element trie":
@@ -123,7 +188,7 @@ suite "Aristo proof verification":
         leafValue.get() == value
 
     block:
-      let leafValue = verifyProof(branchToNodesTable(proof), root, key).expect("valid proof")
+      let leafValue = verifyProof(toNodesTable(proof), root, key).expect("valid proof")
       check:
         leafValue.isSome()
         leafValue.get() == value
@@ -148,7 +213,7 @@ suite "Aristo proof verification":
       let
         proof = trie.getBranch(key1.data)
         leafValue1 = verifyProof(proof, root, key1).expect("valid proof")
-        leafValue2 = verifyProof(branchToNodesTable(proof), root, key1).expect("valid proof")
+        leafValue2 = verifyProof(toNodesTable(proof), root, key1).expect("valid proof")
       check:
         leafValue1.isSome()
         leafValue1.get() == value1
@@ -160,7 +225,7 @@ suite "Aristo proof verification":
         key = keccak256("dogg".toBytes)
         proof = trie.getBranch(key.data)
         leafValue1 = verifyProof(proof, root, key).expect("valid proof")
-        leafValue2 = verifyProof(branchToNodesTable(proof), root, key).expect("valid proof")
+        leafValue2 = verifyProof(toNodesTable(proof), root, key).expect("valid proof")
       check leafValue1.isNone()
       check leafValue2.isNone()
 
@@ -168,7 +233,7 @@ suite "Aristo proof verification":
       let
         proof = newSeq[seq[byte]]()
         verifyRes1 = verifyProof(proof, root, key1)
-        verifyRes2 = verifyProof(branchToNodesTable(proof), root, key1)
+        verifyRes2 = verifyProof(toNodesTable(proof), root, key1)
       check:
         verifyRes1.isErr()
         verifyRes2.isErr()
@@ -177,9 +242,7 @@ suite "Aristo proof verification":
       let
         proof = @["aaa".toBytes, "ccc".toBytes]
         verifyRes1 = verifyProof(proof, root, key1)
-        verifyRes2 = verifyProof(branchToNodesTable(proof), root, key1)
-      echo verifyRes1
-      echo verifyRes2
+        verifyRes2 = verifyProof(toNodesTable(proof), root, key1)
       check:
         verifyRes1.isErr()
         verifyRes2.isErr()
