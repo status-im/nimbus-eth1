@@ -133,6 +133,8 @@ func getChainConfig*(network: string, c: ChainConfig) =
     c.assignTime(HardFork.Prague, EthTime(15000))
   of $TestFork.Osaka:
     c.assignTime(HardFork.Osaka, TimeZero)
+  of $TestFork.PragueToOsakaAtTime15k:
+    c.assignTime(HardFork.Osaka, EthTime(15000))
   else:
     raise newException(ValueError, "unsupported network " & network)
 

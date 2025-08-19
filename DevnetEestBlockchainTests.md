@@ -35,7 +35,7 @@ OK: 1/1 Fail: 0/1 Skip: 0/1
 ## count_leading_zeros
 ```diff
 + clz_code_copy_operation.json                                    OK
-- clz_fork_transition.json                                        Fail
++ clz_fork_transition.json                                        OK
 + clz_gas_cost.json                                               OK
 + clz_gas_cost_boundary.json                                      OK
 + clz_jump_operation.json                                         OK
@@ -43,7 +43,7 @@ OK: 1/1 Fail: 0/1 Skip: 0/1
 + clz_stack_underflow.json                                        OK
 + clz_with_memory_operation.json                                  OK
 ```
-OK: 7/8 Fail: 1/8 Skip: 0/8
+OK: 8/8 Fail: 0/8 Skip: 0/8
 ## initcode
 ```diff
 + contract_creating_tx.json                                       OK
@@ -54,10 +54,10 @@ OK: 3/3 Fail: 0/3 Skip: 0/3
 ## max_blob_per_tx
 ```diff
 + invalid_max_blobs_per_tx.json                                   OK
-- max_blobs_per_tx_fork_transition.json                           Fail
++ max_blobs_per_tx_fork_transition.json                           OK
 + valid_max_blobs_per_tx.json                                     OK
 ```
-OK: 2/3 Fail: 1/3 Skip: 0/3
+OK: 3/3 Fail: 0/3 Skip: 0/3
 ## max_block_rlp_size
 ```diff
 + block_at_rlp_limit_with_logs.json                               OK
@@ -91,9 +91,9 @@ OK: 1/1 Fail: 0/1 Skip: 0/1
 OK: 5/5 Fail: 0/5 Skip: 0/5
 ## p256verify_before_fork
 ```diff
-- precompile_before_fork.json                                     Fail
++ precompile_before_fork.json                                     OK
 ```
-OK: 0/1 Fail: 1/1 Skip: 0/1
+OK: 1/1 Fail: 0/1 Skip: 0/1
 ## precompiles
 ```diff
 + precompiles.json                                                OK
@@ -107,9 +107,9 @@ OK: 1/1 Fail: 0/1 Skip: 0/1
 ## tx_gas_limit
 ```diff
 + transaction_gas_limit_cap.json                                  OK
-- transaction_gas_limit_cap_at_transition.json                    Fail
++ transaction_gas_limit_cap_at_transition.json                    OK
 ```
-OK: 1/2 Fail: 1/2 Skip: 0/2
+OK: 2/2 Fail: 0/2 Skip: 0/2
 ## with_eof
 ```diff
 + legacy_create_edge_code_size.json                               OK
@@ -117,4 +117,4 @@ OK: 1/2 Fail: 1/2 Skip: 0/2
 OK: 1/1 Fail: 0/1 Skip: 0/1
 
 ---TOTAL---
-OK: 36/51 Fail: 15/51 Skip: 0/51
+OK: 40/51 Fail: 11/51 Skip: 0/51
