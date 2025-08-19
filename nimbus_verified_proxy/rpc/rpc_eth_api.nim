@@ -272,36 +272,25 @@ proc installEthApiHandlers*(vp: VerifiedRpcProxy) =
     raise newException(ValueError, "receipt couldn't be verified")
 
   vp.proxy.rpc("eth_getLogs") do(filterOptions: FilterOptions) -> seq[LogObject]:
+   (await vp.getLogs(filterOptions)).valueOr:
+      raise newException(ValueError, error)
+
+  vp.proxy.rpc("eth_newFilter") do(filterOptions: FilterOptions) -> string:
     let
-      filter = resolveFilterTags(filterOptions).valueOr:
-        raise newException(ValueError, error)
-      logObjs =
-        try:
-          await vp.rpcClient.eth_getLogs(filter)
-        except CatchableError as e:
-          raise newException(ValueError, e.msg)
-
-    ?(await vp.verifyLogs(filter, logObjs))
-
-    return logObjs
-
-  vp.proxy.rpc("eth_newFilter") do(filterOptions: FilterOptions) -> int:
-    let
-      hexId =
+      id =
         try:
           # filter is not resolved when storing only while fetching
           await vp.rpcClient.eth_newFilter(filterOptions)
         except CatchableError as e:
           raise newException(ValueError, e.msg)
-      id = fromHex[int](hexId)
 
     vp.filterStore[id] = filterOptions
     return id
 
-  vp.proxy.rpc("eth_uninstallFilter") do(filterId: int) -> bool:
+  vp.proxy.rpc("eth_uninstallFilter") do(filterId: string) -> bool:
     let status =
       try:
-        await vp.rpcClient.eth_uninstallFilter("0x" & toHex(filterId))
+        await vp.rpcClient.eth_uninstallFilter(filterId)
       except CatchableError as e:
         raise newException(ValueError, e.msg)
 
@@ -310,40 +299,33 @@ proc installEthApiHandlers*(vp: VerifiedRpcProxy) =
 
     return status
 
-  vp.proxy.rpc("eth_getFilterLogs") do(filterId: int) -> seq[LogObject]:
+  vp.proxy.rpc("eth_getFilterLogs") do(filterId: string) -> seq[LogObject]:
+    if filterId notin vp.filterStore:
+      raise newException(ValueError, "Filter doesn't exist")
+
+    (await vp.getLogs(vp.filterStore[filterId])).valueOr:
+      raise newException(ValueError, error)
+
+  vp.proxy.rpc("eth_getFilterChanges") do(filterId: string) -> seq[LogObject]:
     if filterId notin vp.filterStore:
       raise newException(ValueError, "Filter doesn't exist")
 
     let
-      filter = resolveFilterTags(vp.filterStore[filterId]).valueOr:
+      filter = vp.resolveFilterTags(vp.filterStore[filterId]).valueOr:
         raise newException(ValueError, error)
       logObjs =
         try:
-          # use locally stored filter and get logs
-          await vp.rpcClient.eth_getLogs(filter)
+          await vp.rpcClient.eth_getFilterChanges(filterId)
         except CatchableError as e:
           raise newException(ValueError, e.msg)
 
-    ?(await vp.verifyLogs(filter, logObjs))
+      unmarshalledLogs = logObjs.to(seq[LogObject])
+      verified = (await vp.verifyLogs(filter, unmarshalledLogs))
 
-    return logObjs
+    if verified.isErr():
+      raise newException(ValueError, verified.error)
 
-  vp.proxy.rpc("eth_getFilterChanges") do(filterId: int) -> seq[LogObject]:
-    if filterId notin vp.filterStore:
-      raise newException(ValueError, "Filter doesn't exist")
-
-    let
-      filter = resolveFilterTags(vp.filterStore[filterId]).valueOr:
-        raise newException(ValueError, error)
-      logObjs =
-        try:
-          await vp.rpcClient.eth_getFilterChanges("0x" & toHex(filterId))
-        except CatchableError as e:
-          raise newException(ValueError, e.msg)
-
-    ?(await vp.verifyLogs(filter, logObjs))
-
-    return logObjs
+    return unmarshalledLogs
 
   # Following methods are forwarded directly to the web3 provider and therefore
   # are not validated in any way.
