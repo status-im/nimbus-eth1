@@ -272,17 +272,16 @@ proc installEthApiHandlers*(vp: VerifiedRpcProxy) =
     raise newException(ValueError, "receipt couldn't be verified")
 
   vp.proxy.rpc("eth_getLogs") do(filterOptions: FilterOptions) -> seq[LogObject]:
-   (await vp.getLogs(filterOptions)).valueOr:
+    (await vp.getLogs(filterOptions)).valueOr:
       raise newException(ValueError, error)
 
   vp.proxy.rpc("eth_newFilter") do(filterOptions: FilterOptions) -> string:
-    let
-      id =
-        try:
-          # filter is not resolved when storing only while fetching
-          await vp.rpcClient.eth_newFilter(filterOptions)
-        except CatchableError as e:
-          raise newException(ValueError, e.msg)
+    let id =
+      try:
+        # filter is not resolved when storing only while fetching
+        await vp.rpcClient.eth_newFilter(filterOptions)
+      except CatchableError as e:
+        raise newException(ValueError, e.msg)
 
     vp.filterStore[id] = filterOptions
     return id

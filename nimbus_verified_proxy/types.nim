@@ -56,7 +56,6 @@ type
   UninstallFilterProc = proc(filterId: string): Future[bool] {.async.}
   GetFilterChangesProc = proc(filterid: string): Future[JsonNode] {.async.}
 
-
   EthApiBackend* = object
     eth_chainId*: ChainIdProc
     eth_getBlockByHash*: GetBlockByHashProc
