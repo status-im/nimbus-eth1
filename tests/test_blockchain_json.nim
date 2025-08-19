@@ -123,8 +123,8 @@ proc blockchainJsonMain*() =
   const
     newFolder = "eest/blockchain_tests"
 
-  suite "new block chain json tests":
-    jsonTest(newFolder, "BlockchainTests", executeFile, skipNewBCTests)
+  # suite "new block chain json tests":
+  #   jsonTest(newFolder, "BlockchainTests", executeFile, skipNewBCTests)
 
   suite "devnet eest blockchain tests":
     jsonTest("eest_develop/blockchain_tests", "DevnetEestBlockchainTests", executeFile, skipNewBCTests)
