@@ -84,7 +84,9 @@ proc getReceipts*(
 
   await vp.getReceipts(header, numberTag)
 
-proc resolveFilterTags*(vp: VerifiedRpcProxy, filter: FilterOptions): Result[FilterOptions, string] =
+proc resolveFilterTags*(
+    vp: VerifiedRpcProxy, filter: FilterOptions
+): Result[FilterOptions, string] =
   if filter.blockHash.isSome():
     return ok(filter)
   let
@@ -106,9 +108,8 @@ proc resolveFilterTags*(vp: VerifiedRpcProxy, filter: FilterOptions): Result[Fil
   )
 
 proc verifyLogs*(
-   vp: VerifiedRpcProxy, filter: FilterOptions, logObjs: seq[LogObject]
+    vp: VerifiedRpcProxy, filter: FilterOptions, logObjs: seq[LogObject]
 ): Future[Result[void, string]] {.async.} =
-
   # store block hashes contains the logs so that we can batch receipt requests
   var
     prevBlockHash: Hash32
@@ -139,7 +140,9 @@ proc verifyLogs*(
 
   ok()
 
-proc getLogs*(vp: VerifiedRpcProxy, filter: FilterOptions): Future[Result[seq[LogObject], string]] {.async.} =
+proc getLogs*(
+    vp: VerifiedRpcProxy, filter: FilterOptions
+): Future[Result[seq[LogObject], string]] {.async.} =
   let
     resolvedFilter = vp.resolveFilterTags(filter).valueOr:
       return err(error)

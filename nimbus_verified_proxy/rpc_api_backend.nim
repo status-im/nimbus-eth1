@@ -7,7 +7,12 @@
 
 {.push raises: [], gcsafe.}
 
-import json_rpc/[rpcproxy, rpcclient], web3/[eth_api, eth_api_types], stint, std/json, ./types
+import
+  json_rpc/[rpcproxy, rpcclient],
+  web3/[eth_api, eth_api_types],
+  stint,
+  std/json,
+  ./types
 
 proc initNetworkApiBackend*(vp: VerifiedRpcProxy): EthApiBackend =
   let
@@ -64,9 +69,7 @@ proc initNetworkApiBackend*(vp: VerifiedRpcProxy): EthApiBackend =
     ): Future[string] {.async: (raw: true).} =
       vp.proxy.getClient.eth_newFilter(filterOptions)
 
-    uninstallFilterProc = proc(
-        filterId: string
-    ): Future[bool] {.async: (raw: true).} =
+    uninstallFilterProc = proc(filterId: string): Future[bool] {.async: (raw: true).} =
       vp.proxy.getClient.eth_uninstallFilter(filterId)
 
     getFilterChangesProc = proc(
@@ -87,5 +90,5 @@ proc initNetworkApiBackend*(vp: VerifiedRpcProxy): EthApiBackend =
     eth_getTransactionReceipt: getTransactionReceiptProc,
     eth_newFilter: newFilterProc,
     eth_uninstallFilter: uninstallFilterProc,
-    eth_getFilterChanges: getFilterChangesProc
+    eth_getFilterChanges: getFilterChangesProc,
   )
