@@ -172,7 +172,7 @@ template blocksCollect*(
       break body                                    # return
 
     # This message might run in addition to the `chronicles.info` part
-    trace info & "queued/staged or imported blocks",
+    trace info & ": queued/staged or imported blocks",
       topImported=ctx.subState.top.bnStr,
       unprocBottom=ctx.blocksUnprocAvailBottom.bnStrIfAvail(ctx),
       nQueued, nImported, nStagedQ=ctx.blk.staged.len,
@@ -203,14 +203,12 @@ template blocksUnstage*(
   ##
   var bodyRc = false
   block body:
-    let
-      ctx = buddy.ctx
-      peer = buddy.peer
-
+    let ctx = buddy.ctx
     if ctx.blk.staged.len == 0:
       break body                                   # return false => switch peer
 
     var
+      peer {.inject.} = buddy.peer
       nImported {.inject.} = 0u64                  # statistics
       switchPeer {.inject.} = false                # for return code
 
@@ -253,7 +251,7 @@ template blocksUnstage*(
         nSyncPeers=ctx.pool.nBuddies
 
     elif switchPeer or 0 < ctx.blk.staged.len:
-      debug info & ": no blocks unqueued", peer,
+      trace info & ": no blocks unqueued", peer,
         topImported=ctx.subState.top.bnStr, nStagedQ=ctx.blk.staged.len,
         nSyncPeers=ctx.pool.nBuddies, switchPeer
 

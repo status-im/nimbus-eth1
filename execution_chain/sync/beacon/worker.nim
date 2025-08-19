@@ -11,7 +11,6 @@
 {.push raises:[].}
 
 import
-  std/[strutils, syncio],
   pkg/[chronicles, chronos],
   pkg/eth/common,
   pkg/stew/[interval_set, sorted_set],
@@ -70,24 +69,6 @@ proc stop*(buddy: BeaconBuddyRef; info: static[string]) =
   if not buddy.ctx.hibernate: debug info & ": release peer", peer=buddy.peer,
     nSyncPeers=(buddy.ctx.pool.nBuddies-1), syncState=($buddy.syncState)
   buddy.stopBuddy()
-
-# --------------------
-
-proc initalTargetFromFile*(
-    ctx: BeaconCtxRef;
-    file: string;
-    info: static[string];
-      ): Result[void,string] =
-  ## Set up inital sprint from argument file (itended for debugging)
-  try:
-    var f = file.open(fmRead)
-    defer: f.close()
-    var rlp = rlpFromHex(f.readAll().splitWhitespace.join)
-    ctx.pool.clReq = rlp.read(SyncClMesg)
-  except CatchableError as e:
-    return err("Error decoding file: \"" & file & "\"" &
-      " (" & $e.name & ": " & e.msg & ")")
-  ok()
 
 # ------------------------------------------------------------------------------
 # Public functions

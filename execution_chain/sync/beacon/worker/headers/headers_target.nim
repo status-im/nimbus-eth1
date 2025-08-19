@@ -86,11 +86,10 @@ template headersTargetActivate*(
 
         # Abandon *manual* syncer target if there are too many errors
         if nFetchTargetFailedPeersThreshold < ctx.pool.failedPeers.len:
-          ctx.pool.failedPeers.clear()
-
           warn "No such syncer target, abandoning it", peer,
             targetHash=h.short, failedPeers=ctx.pool.failedPeers.len,
             nSyncPeers=ctx.pool.nBuddies, hdrErrors=buddy.hdrErrors
+          ctx.pool.failedPeers.clear()
           # not restoring target
 
         else:
@@ -115,7 +114,7 @@ template headersTargetActivate*(
       break body                                           # return
     
     # Start syncer
-    trace info & ": activating manually", peer, target=hdr.bnStr,
+    debug info & ": activating manually", peer, target=hdr.bnStr,
       targetHash=h.short, nSyncPeers=ctx.pool.nBuddies
 
     ctx.hdrCache.headTargetUpdate(hdr, ctx.chain.baseHash)

@@ -38,7 +38,6 @@ proc updateSuspendSyncer(ctx: BeaconCtxRef) =
   ##
   ctx.hdrCache.clear()
 
-  ctx.pool.clReq.reset
   ctx.pool.failedPeers.clear()
   ctx.pool.seenData = false
 
