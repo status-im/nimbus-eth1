@@ -171,6 +171,7 @@ type
       abbr: "i"
       name: "network" }: seq[string]
 
+    # TODO: disable --custom-network if both hive and kurtosis not using this anymore.
     customNetwork {.
       hidden
       desc: "Use custom genesis block for private Ethereum Network (as /path/to/genesis.json)"
