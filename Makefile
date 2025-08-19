@@ -353,10 +353,10 @@ libverifproxy: | build deps
 	echo -e $(BUILD_END_MSG) "build/$@"
 
 eest_engine: | build deps
-	$(ENV_SCRIPT) nim c $(NIM_PARAMS) -d:chronicles_enabled:off "tests/eest_engine/$@.nim"
+	$(ENV_SCRIPT) nim c $(NIM_PARAMS) -d:chronicles_enabled:off "tests/eest/$@.nim"
 
 eest_engine_test: | build deps eest_engine
-	$(ENV_SCRIPT) nim c -r $(NIM_PARAMS) -d:chronicles_enabled:off "tests/eest_engine/$@.nim"
+	$(ENV_SCRIPT) nim c -r $(NIM_PARAMS) -d:chronicles_enabled:off "tests/eest/$@.nim"
 
 # builds transition tool
 t8n: | build deps
