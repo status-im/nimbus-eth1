@@ -12,6 +12,7 @@ import
   json_rpc/[rpcproxy, rpcclient],
   web3/[eth_api, eth_api_types],
   stint,
+  std/json,
   minilru,
   ./header_store,
   ../execution_chain/evm/async_evm
@@ -51,6 +52,10 @@ type
   GetTransactionReceiptProc = proc(txHash: Hash32): Future[ReceiptObject] {.async.}
   GetTransactionByHashProc = proc(txHash: Hash32): Future[TransactionObject] {.async.}
   GetLogsProc = proc(filterOptions: FilterOptions): Future[seq[LogObject]] {.async.}
+  NewFilterProc = proc(filterOptions: FilterOptions): Future[string] {.async.}
+  UninstallFilterProc = proc(filterId: string): Future[bool] {.async.}
+  GetFilterChangesProc = proc(filterid: string): Future[JsonNode] {.async.}
+
 
   EthApiBackend* = object
     eth_chainId*: ChainIdProc
@@ -63,6 +68,9 @@ type
     eth_getTransactionReceipt*: GetTransactionReceiptProc
     eth_getTransactionByHash*: GetTransactionByHashProc
     eth_getLogs*: GetLogsProc
+    eth_newFilter*: NewFilterProc
+    eth_uninstallFilter*: UninstallFilterProc
+    eth_getFilterChanges*: GetFilterChangesProc
 
   VerifiedRpcProxy* = ref object
     evm*: AsyncEvm
@@ -75,7 +83,7 @@ type
 
     # TODO: when the list grows big add a config object instead
     # config parameters
-    filterStore*: Table[int, FilterOptions]
+    filterStore*: Table[string, FilterOptions]
     chainId*: UInt256
     maxBlockWalk*: uint64
 
@@ -92,7 +100,6 @@ proc init*(
     accountsCache: AccountsCache.init(ACCOUNTS_CACHE_SIZE),
     codeCache: CodeCache.init(CODE_CACHE_SIZE),
     storageCache: StorageCache.init(STORAGE_CACHE_SIZE),
-    filterStore: initTable[int, FilterOptions](),
     chainId: chainId,
     maxBlockWalk: maxBlockWalk,
   )

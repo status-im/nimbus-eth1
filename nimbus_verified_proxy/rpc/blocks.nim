@@ -30,15 +30,15 @@ proc resolveBlockTag*(
     of "latest":
       let hLatest = vp.headerStore.latest.valueOr:
         return err("Couldn't get the latest block number from header store")
-      ok(BlockTag(kind: bidNumber, number: hLatest.number))
+      ok(BlockTag(kind: bidNumber, number: Quantity(hLatest.number)))
     of "finalized":
       let hFinalized = vp.headerStore.finalized.valueOr:
         return err("Couldn't get the latest block number from header store")
-      ok(BlockTag(kind: bidNumber, number: hFinalized.number))
+      ok(BlockTag(kind: bidNumber, number: Quantity(hFinalized.number)))
     of "earliest":
       let hEarliest = vp.headerStore.earliest.valueOr:
         return err("Couldn't get the latest block number from header store")
-      ok(BlockTag(kind: bidNumber, number: hEarliest.number))
+      ok(BlockTag(kind: bidNumber, number: Quantity(hEarliest.number)))
     else:
       err("No support for block tag " & $blockTag)
   else:

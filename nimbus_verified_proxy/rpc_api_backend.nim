@@ -7,7 +7,7 @@
 
 {.push raises: [], gcsafe.}
 
-import json_rpc/[rpcproxy, rpcclient], web3/[eth_api, eth_api_types], stint, ./types
+import json_rpc/[rpcproxy, rpcclient], web3/[eth_api, eth_api_types], stint, std/json, ./types
 
 proc initNetworkApiBackend*(vp: VerifiedRpcProxy): EthApiBackend =
   let
@@ -59,6 +59,21 @@ proc initNetworkApiBackend*(vp: VerifiedRpcProxy): EthApiBackend =
     ): Future[seq[LogObject]] {.async: (raw: true).} =
       vp.proxy.getClient.eth_getLogs(filterOptions)
 
+    newFilterProc = proc(
+        filterOptions: FilterOptions
+    ): Future[string] {.async: (raw: true).} =
+      vp.proxy.getClient.eth_newFilter(filterOptions)
+
+    uninstallFilterProc = proc(
+        filterId: string
+    ): Future[bool] {.async: (raw: true).} =
+      vp.proxy.getClient.eth_uninstallFilter(filterId)
+
+    getFilterChangesProc = proc(
+        filterId: string
+    ): Future[JsonNode] {.async: (raw: true).} =
+      vp.proxy.getClient.eth_getFilterChanges(filterId)
+
   EthApiBackend(
     eth_chainId: ethChainIdProc,
     eth_getBlockByHash: getBlockByHashProc,
@@ -70,4 +85,7 @@ proc initNetworkApiBackend*(vp: VerifiedRpcProxy): EthApiBackend =
     eth_getLogs: getLogsProc,
     eth_getTransactionByHash: getTransactionByHashProc,
     eth_getTransactionReceipt: getTransactionReceiptProc,
+    eth_newFilter: newFilterProc,
+    eth_uninstallFilter: uninstallFilterProc,
+    eth_getFilterChanges: getFilterChangesProc
   )
