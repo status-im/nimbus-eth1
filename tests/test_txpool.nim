@@ -369,7 +369,7 @@ suite "TxPool test suite":
       gasLimit: 75000
     )
 
-    const MAX_TXS_GENERATED = 100
+    const MAX_TXS_GENERATED = 500
     for i in 0..MAX_TXS_GENERATED-2:
       let ptx = mx.makeTx(tc, acc, i.AccountNonce)
       xp.checkAddTx(ptx)

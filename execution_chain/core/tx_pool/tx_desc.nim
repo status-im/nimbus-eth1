@@ -55,15 +55,15 @@ type
     blobTab  : BlobLookupTab
 
 const
-  MAX_POOL_SIZE = 5000
-  MAX_TXS_PER_ACCOUNT = 100
-  TX_ITEM_LIFETIME = initDuration(minutes = 60)
+  MAX_POOL_SIZE = 8000
+  MAX_TXS_PER_ACCOUNT = 500
+  TX_ITEM_LIFETIME = initDuration(minutes = 10)
   TX_MAX_SIZE* = 128 * 1024
   # BLOB_TX_MAX_SIZE is the maximum size a single transaction can have, outside
   # the included blobs. Since blob transactions are pulled instead of pushed,
   # and only a small metadata is kept in ram, there is no critical limit that
   # should be enforced. Still, capping it to some sane limit can never hurt.
-  BLOB_TX_MAX_SIZE* = 1024 * 1024
+  BLOB_TX_MAX_SIZE* = 1024 * 1024 * 2
 
 # ------------------------------------------------------------------------------
 # Private functions
