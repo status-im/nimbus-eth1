@@ -81,7 +81,7 @@ proc persistFixtureBlock(chainDB: CoreDbTxRef) =
 
 proc setupConfig(): NimbusConf =
   makeConfig(@[
-    "--custom-network:" & genesisFile
+    "--network:" & genesisFile
   ])
 
 proc setupCom(conf: NimbusConf): CommonRef =

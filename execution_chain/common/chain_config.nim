@@ -664,10 +664,16 @@ func genesisBlockForNetwork*(id: NetworkId): Genesis
   else:
     Genesis()
 
-func networkParams*(id: NetworkId): NetworkParams
-    {.gcsafe, raises: [ValueError, RlpError].} =
-  result.genesis = genesisBlockForNetwork(id)
-  result.config  = chainConfigForNetwork(id)
+func networkParams*(id: NetworkId): NetworkParams =
+  try:
+    NetworkParams(
+      genesis: genesisBlockForNetwork(id),
+      config : chainConfigForNetwork(id)
+    )
+  except ValueError as exc:
+    raiseAssert exc.msg
+  except RlpError as exc:
+    raiseAssert exc.msg
 
 func `==`*(a, b: Genesis): bool =
   if a.isNil and b.isNil: return true

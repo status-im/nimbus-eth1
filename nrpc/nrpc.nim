@@ -94,10 +94,7 @@ template loadNetworkConfig(conf: NRpcConf): (RuntimeConfig, uint64, uint64) =
     (getMetadataForNetwork("hoodi").cfg, 0'u64, 0'u64)
   else:
     notice "Loading custom network, assuming post-merge"
-    if conf.customNetworkFolder.len == 0:
-      error "Custom network file not provided"
-      quit(QuitFailure)
-    let (cfg, unloaded) = readRuntimeConfig(conf.customNetworkFolder.joinPath("config.yaml"))
+    let (cfg, unloaded) = readRuntimeConfig(conf.network.joinPath("config.yaml"))
     debug "Fields unknown", unloaded = unloaded
     (cfg, 0'u64, 0'u64)
 
@@ -210,7 +207,7 @@ proc syncToEngineApi(conf: NRpcConf) {.async.} =
     progressTrackedHead = currentBlockNumber
 
   template estimateProgressForSync() =
-    let 
+    let
       blocks = int(currentBlockNumber - progressTrackedHead)
       curTime = Moment.now()
       diff = curTime - time
