@@ -58,7 +58,7 @@ type
 
 proc initConf(envFork: HardFork): NimbusConf =
   var conf = makeConfig(
-    @["--custom-network:" & genesisFile]
+    @["--network:" & genesisFile]
   )
 
   doAssert envFork >= MergeFork
