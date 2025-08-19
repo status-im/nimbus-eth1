@@ -102,8 +102,13 @@ proc startBuddy*(buddy: BeaconBuddyRef): bool =
 
 
 proc stopBuddy*(buddy: BeaconBuddyRef) =
-  buddy.ctx.pool.nBuddies.dec
-  metrics.set(nec_sync_peers, buddy.ctx.pool.nBuddies)
+  let ctx = buddy.ctx
+  if 1 < ctx.pool.nBuddies:
+    ctx.pool.nBuddies.dec
+  else:
+    ctx.pool.nBuddies = 0
+    ctx.pool.lastSlowPeer = Opt.none(Hash)
+  metrics.set(nec_sync_peers, ctx.pool.nBuddies)
   buddy.clearProcErrors()
 
 # ------------------------------------------------------------------------------

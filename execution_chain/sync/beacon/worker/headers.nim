@@ -22,6 +22,17 @@ export
   headers_queue, headers_unproc
 
 # ------------------------------------------------------------------------------
+# Private helpers
+# ------------------------------------------------------------------------------
+
+proc bnStrIfAvail(bn: BlockNumber; ctx: BeaconCtxRef): string =
+   if ctx.hdrSessionStopped(): "n/a" else: bn.bnStr
+
+proc nUnprocStr(ctx: BeaconCtxRef): string =
+  if ctx.hdrSessionStopped() or ctx.headersUnprocTotalBottom() == 0: "n/a"
+  else: $(ctx.hdrCache.antecedent.number.uint64 - ctx.headersUnprocTotalBottom)
+
+# ------------------------------------------------------------------------------
 # Public functions
 # ------------------------------------------------------------------------------
 
@@ -53,7 +64,7 @@ template headersCollect*(buddy: BeaconBuddyRef; info: static[string]) =
       break body                                     # no action, return
 
     var
-      nStored {.inject.} = 0u64                      # statistics, to be updated
+      nStashed {.inject.} = 0u64                     # statistics, to be updated
       nQueued {.inject.} = 0                         # ditto
 
     block fetchHeadersBody:
@@ -86,7 +97,7 @@ template headersCollect*(buddy: BeaconBuddyRef; info: static[string]) =
         #             top     dangling
         #
         # so any other peer arriving here will see a gap between `top` and
-        # `dangling` which will lead them to fetch opportunistcally.
+        # `dangling` which will lead this peer to fetch opportunistcally.
         #
         let dangling = ctx.hdrCache.antecedent.number
         if top < dangling:
@@ -108,15 +119,13 @@ template headersCollect*(buddy: BeaconBuddyRef; info: static[string]) =
         ctx.pool.seenData = true                     # header data exist
 
         # Store it on the header chain cache
-        let dTop = ctx.hdrCache.antecedent.number    # current antecedent
-        if not buddy.headersStashOnDisk(rev, buddy.peerID, info):
+        let nHdrs = buddy.headersStashOnDisk(rev, buddy.peerID, info).valueOr:
           break fetchHeadersBody                     # error => exit block
 
-        let dBottom = ctx.hdrCache.antecedent.number # update new antecedent
-        nStored += (dTop - dBottom)                  # statistics
-
-        if dBottom == dTop:
+        if nHdrs == 0:
           break fetchHeadersBody                     # nothing achieved
+
+        nStashed += nHdrs                            # statistics
 
         if buddy.ctrl.stopped:                       # peer was cancelled
           break fetchHeadersBody                     # done, exit this block
@@ -150,24 +159,32 @@ template headersCollect*(buddy: BeaconBuddyRef; info: static[string]) =
 
       # End block: `fetchHeadersBody`
 
-    if nStored == 0 and nQueued == 0:
-      if not ctx.pool.seenData and
+    if 0 < nStashed:
+      chronicles.info "Headers stashed", nStashed, nUnpoc=ctx.nUnprocStr(),
+        nStagedQ=ctx.hdr.staged.len,
+        base=ctx.chain.baseNumber.bnStr, head=ctx.chain.latestNumber.bnStr,
+        target=ctx.hdrCache.latestConsHeadNumber.bnStrIfAvail(ctx),
+        nSyncPeers=ctx.pool.nBuddies
+
+    elif nQueued == 0 and
+         not ctx.pool.seenData and
          buddy.peerID notin ctx.pool.failedPeers and
          buddy.ctrl.stopped:
-        # Collect peer for detecting cul-de-sac syncing (i.e. non-existing
-        # block chain or similar.)
-        ctx.pool.failedPeers.incl buddy.peerID
+      # Collect peer for detecting cul-de-sac syncing (i.e. non-existing
+      # block chain or similar.)
+      ctx.pool.failedPeers.incl buddy.peerID
 
-        debug info & ": no headers yet (failed peer)", peer,
-          failedPeers=ctx.pool.failedPeers.len,
-          syncState=($buddy.syncState), hdrErrors=buddy.hdrErrors
-      break body                                     # return
+      debug info & ": no headers yet (failed peer)", peer,
+        failedPeers=ctx.pool.failedPeers.len, nSyncPeers=ctx.pool.nBuddies,
+        syncState=($buddy.syncState), hdrErrors=buddy.hdrErrors
+      break body
 
-    chronicles.info "Queued/staged or DB/stored headers",
-      unprocTop=(if ctx.hdrSessionStopped(): "n/a"
-                 else: ctx.headersUnprocAvailTop.bnStr),
-      nQueued, nStored, nStagedQ=ctx.hdr.staged.len,
+    # This message might run in addition to the `chronicles.info` part
+    trace info & ": queued/staged or DB/stored headers", peer,
+      unprocTop=ctx.headersUnprocAvailTop.bnStrIfAvail(ctx),
+      nQueued, nStashed, nStagedQ=ctx.hdr.staged.len,
       nSyncPeers=ctx.pool.nBuddies
+    # End block: `body`
 
   discard
 
@@ -185,10 +202,10 @@ proc headersUnstage*(buddy: BeaconBuddyRef; info: static[string]): bool =
     peer = buddy.peer
 
   if ctx.hdr.staged.len == 0:
-    return false                                            # switch peer
+    return false                                             # switch peer
 
   var
-    nStored = 0u64                                           # statistics
+    nStashed = 0u64                                          # statistics
     switchPeer = false                                       # for return code
 
   while ctx.hdrCache.state == collecting:
@@ -203,7 +220,7 @@ proc headersUnstage*(buddy: BeaconBuddyRef; info: static[string]): bool =
       dangling = ctx.hdrCache.antecedent.number
     if maxNum + 1 < dangling:
       trace info & ": gap, serialisation postponed", peer,
-        qItem=qItem.data.revHdrs.bnStr, D=dangling.bnStr, nStored,
+        qItem=qItem.data.revHdrs.bnStr, D=dangling.bnStr, nStashed,
         nStagedQ=ctx.hdr.staged.len, nSyncPeers=ctx.pool.nBuddies
       switchPeer = true # there is a gap -- come back later
       break
@@ -213,25 +230,27 @@ proc headersUnstage*(buddy: BeaconBuddyRef; info: static[string]): bool =
     ctx.headersStagedQueueMetricsUpdate()                    # metrics
 
     # Store headers on database
-    if not buddy.headersStashOnDisk(
-                   qItem.data.revHdrs, qItem.data.peerID, info):
+    let nHdrs = buddy.headersStashOnDisk(
+                  qItem.data.revHdrs, qItem.data.peerID, info).valueOr:
       ctx.headersUnprocAppend(minNum, maxNum)
       switchPeer = true
       break
 
-    # Antecedent of the header cache might not be at `revHdrs[^1]`.
-    nStored += (maxNum - ctx.hdrCache.antecedent.number + 1) # count headers
+    nStashed += nHdrs
     # End while loop
 
-  if 0 < nStored:
-    info "Headers serialised and stored", D=ctx.hdrCache.antecedent.bnStr,
-      nStored, nStagedQ=ctx.hdr.staged.len, nSyncPeers=ctx.pool.nBuddies,
-      switchPeer
-
-  elif 0 < ctx.hdr.staged.len and not switchPeer:
-    trace info & ": no headers processed", peer,
-      D=ctx.hdrCache.antecedent.bnStr, nStagedQ=ctx.hdr.staged.len,
+  if 0 < nStashed:
+    chronicles.info "Headers stashed", nStashed, nUnpoc=ctx.nUnprocStr(),
+      nStagedQ=ctx.hdr.staged.len,
+      base=ctx.chain.baseNumber.bnStr, head=ctx.chain.latestNumber.bnStr,
+      target=ctx.hdrCache.latestConsHeadNumber.bnStrIfAvail(ctx),
       nSyncPeers=ctx.pool.nBuddies
+
+  elif switchPeer or 0 < ctx.hdr.staged.len:
+    debug info & ": no headers processed", peer,
+      D=ctx.hdrCache.antecedent.bnStr,
+      nStashed, nStagedQ=ctx.hdr.staged.len, nSyncPeers=ctx.pool.nBuddies,
+      switchPeer
 
   not switchPeer
 
