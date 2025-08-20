@@ -16,6 +16,7 @@ import
   pkg/eth/common,
   pkg/stew/[interval_set, sorted_set],
   ../../common,
+  ./worker/headers/headers_target,
   ./worker/update/[metrics, ticker],
   ./worker/[blocks, headers, start_stop, update],
   ./worker_desc
@@ -195,6 +196,12 @@ template runPeer*(buddy: BeaconBuddyRef; info: static[string]): Duration =
           break body
 
         # End `while()`
+
+    else:
+      # Potential manual target set up
+      buddy.headersTargetActivate info
+
+    # End block: `body`
 
   # Idle sleep unless there is something to do
   if not buddy.somethingToCollect():
