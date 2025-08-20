@@ -14,7 +14,7 @@ import
   std/strformat,
   chronicles,
   eth/rlp,
-  eth/common/[accounts_rlp, base_rlp, hashes_rlp],
+  eth/common,
   results,
   "."/[aristo_desc, aristo_get, aristo_layers],
   ./aristo_desc/desc_backend
@@ -112,7 +112,6 @@ template appendLeaf(w: var RlpWriter, pfx: NibblesBuf, leafData: untyped) =
   w.append(pfx.toHexPrefix(isLeaf = true).data())
   w.wrapEncoding(1)
   w.append(leafData)
-  discard rlp.encode(leafData)
 
 template encodeLeaf(w: var AristoTrieWriter, pfx: NibblesBuf, leafData: untyped): HashKey =
   w.clear()
