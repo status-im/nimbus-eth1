@@ -10,7 +10,7 @@
 {.push raises: [].}
 
 import
-  std/[json, strutils, cmdline],
+  std/[json, strutils],
   eth/common/headers_rlp,
   web3/eth_api_types,
   web3/engine_api_types,
@@ -38,7 +38,7 @@ type
     parentHash: Hash32
     uncleHash: Hash32
     coinbase: Address
-    stateRoot: Hash32
+    stateRoot*: Hash32
     transactionsTrie: Hash32
     receiptTrie: Hash32
     bloom: Bytes256
@@ -57,6 +57,10 @@ type
     parentBeaconBlockRoot: Opt[Hash32]
     requestsHash: Opt[Hash32]
     hash*: Hash32
+
+  BlockDesc* = object
+    blk*: EthBlock
+    badBlock*: bool
 
   Numero* = distinct uint64
 
@@ -84,6 +88,23 @@ type
     lastblockhash*: Hash32
     config*: EnvConfig
 
+  TestEnv* = ref object
+    chain*: ForkedChainRef
+    server*: Opt[RpcHttpServer]
+    client*: Opt[RpcHttpClient]
+
+  ## Blockchain Test Types
+  BlockchainUnitEnv* = object of UnitEnv
+    blocks*: JsonNode
+  
+  BlockchainUnitDesc* = object
+    name*: string
+    unit*: BlockchainUnitEnv
+
+  BlockchainFixture* = object
+    units*: seq[BlockchainUnitDesc]
+
+  ## Engine Test Types
   EngineUnitEnv* = object of UnitEnv
     engineNewPayloads*: seq[PayloadItem]
 
@@ -94,14 +115,10 @@ type
   EngineFixture* = object
     units*: seq[EngineUnitDesc]
 
-  TestEnv* = ref object
-    chain*: ForkedChainRef
-    server*: Opt[RpcHttpServer]
-    client*: Opt[RpcHttpClient]
-
 GenesisHeader.useDefaultReaderIn JrpcConv
 PayloadItem.useDefaultReaderIn JrpcConv
 EngineUnitEnv.useDefaultReaderIn JrpcConv
+BlockchainUnitEnv.useDefaultReaderIn JrpcConv
 EnvConfig.useDefaultReaderIn JrpcConv
 BlobSchedule.useDefaultReaderIn JrpcConv
 
@@ -141,6 +158,15 @@ proc readValue*(r: var JsonReader[JrpcConv], val: var EngineFixture)
       val.units.add EngineUnitDesc(
         name: key,
         unit: r.readValue(EngineUnitEnv)
+      )
+
+proc readValue*(r: var JsonReader[JrpcConv], val: var BlockchainFixture)
+       {.gcsafe, raises: [IOError, SerializationError].} =
+  wrapValueError:
+    parseObject(r, key):
+      val.units.add BlockchainUnitDesc(
+        name: key,
+        unit: r.readValue(BlockchainUnitEnv)
       )
 
 func to*(x: Opt[Quantity], _: type Opt[uint64]): Opt[uint64] =
@@ -204,7 +230,7 @@ proc prepareEnv*(unit: UnitEnv, genesis: Header, rpcEnabled: bool = false): Test
 
     let
       com    = CommonRef.new(memDB, nil, config)
-      chain  = ForkedChainRef.init(com, enableQueue = true)
+      chain  = ForkedChainRef.init(com, enableQueue = true, persistBatchSize = 0)
 
     testEnv.chain = chain
     testEnv.client = Opt.none(RpcHttpClient)
@@ -247,9 +273,9 @@ proc close*(env: TestEnv) =
     debugEcho "Close error: ", exc.msg
     quit(QuitFailure)
 
-proc parseFixture*(fileName: string): EngineFixture =
+template parseAnyFixture(fileName: string, T: typedesc) =
   try:
-    result = JrpcConv.loadFile(fileName, EngineFixture)
+    result = JrpcConv.loadFile(fileName, T)
   except JsonReaderError as exc:
     debugEcho exc.formatMsg(fileName)
     quit(QuitFailure)
@@ -259,3 +285,9 @@ proc parseFixture*(fileName: string): EngineFixture =
   except SerializationError as exc:
     debugEcho "Serialization error: ", exc.msg
     quit(QuitFailure)
+
+proc parseFixture*(fileName: string, _: type EngineFixture): EngineFixture =
+  parseAnyFixture(fileName, EngineFixture)
+
+proc parseFixture*(fileName: string, _: type BlockchainFixture): BlockchainFixture =
+  parseAnyFixture(fileName, BlockchainFixture)

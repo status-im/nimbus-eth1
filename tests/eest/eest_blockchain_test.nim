@@ -7,19 +7,24 @@
 # This file may not be copied, modified, or distributed except according to
 # those terms.
 
-{.push raises: [].}
-
 import
   std/[os, osproc],
   unittest2
 
 const
-  baseFolder = "tests/fixtures/eest/engine_tests"
+  baseFolder = "tests/fixtures"
+  eestType = "blockchain_tests"
+  eestReleases = [
+    "eest_develop",
+    # baseFolder / "eest_static" / eestType,
+    "eest_stable",
+    "eest_devnet"
+  ]
 
 proc runTest(appDir: string, spec: string): bool =
   try:
     let
-      cmd  = appDir / "eest_engine " & spec
+      cmd  = appDir / "eest_blockchain " & spec
       exitCode = execCmd(cmd)
 
     exitCode == QuitSuccess
@@ -28,17 +33,18 @@ proc runTest(appDir: string, spec: string): bool =
     false
 
 const skipFiles = [
-  "CALLBlake2f_MaxRounds.json",
-  ]
-
+    ""
+]
 
 let appDir = getAppDir()
-for fileName in walkDirRec(baseFolder):
-  let last = fileName.splitPath().tail
-  if last in skipFiles:
-    continue
-  test last:
-    let res = runTest(appDir, fileName)
-    if not res:
-      debugEcho fileName.splitPath().tail
-    check res
+for eest in eestReleases:
+  suite eest:
+    for fileName in walkDirRec(baseFolder / eest / eestType):
+      let last = fileName.splitPath().tail
+      if last in skipFiles:
+        continue
+      test last:
+        let res = runTest(appDir, fileName)
+        if not res:
+          debugEcho fileName.splitPath().tail
+        check res

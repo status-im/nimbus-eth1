@@ -353,10 +353,20 @@ libverifproxy: | build deps
 	echo -e $(BUILD_END_MSG) "build/$@"
 
 eest_engine: | build deps
-	$(ENV_SCRIPT) nim c $(NIM_PARAMS) -d:chronicles_enabled:off "tests/eest/$@.nim"
+	$(ENV_SCRIPT) nim c $(NIM_PARAMS) -d:chronicles_enabled:off -o:build/$@ "tests/eest/$@.nim"
 
 eest_engine_test: | build deps eest_engine
-	$(ENV_SCRIPT) nim c -r $(NIM_PARAMS) -d:chronicles_enabled:off "tests/eest/$@.nim"
+	$(ENV_SCRIPT) nim c -r $(NIM_PARAMS) -d:chronicles_enabled:off -o:build/$@ "tests/eest/$@.nim"
+
+eest_blockchain: | build deps
+	$(ENV_SCRIPT) nim c $(NIM_PARAMS) -d:chronicles_enabled:off -o:build/$@ "tests/eest/$@.nim"
+
+eest_blockchain_test: | build deps eest_blockchain
+	$(ENV_SCRIPT) nim c -r $(NIM_PARAMS) -d:chronicles_enabled:off -o:build/$@ "tests/eest/$@.nim"
+
+eest_full_test: | build deps eest_blockchain eest_engine
+	$(ENV_SCRIPT) nim c -r $(NIM_PARAMS) -d:chronicles_enabled:off -o:build/$@ "tests/eest/eest_blockchain_test.nim"
+	$(ENV_SCRIPT) nim c -r $(NIM_PARAMS) -d:chronicles_enabled:off -o:build/$@ "tests/eest/eest_engine_test.nim"
 
 # builds transition tool
 t8n: | build deps

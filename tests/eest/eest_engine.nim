@@ -10,7 +10,7 @@
 {.push raises: [].}
 
 import
-  std/[json, strutils, cmdline],
+  std/cmdline,
   eth/common/headers_rlp,
   web3/eth_api_types,
   web3/engine_api_types,
@@ -19,9 +19,6 @@ import
   web3/execution_types,
   json_rpc/rpcclient,
   json_rpc/rpcserver,
-  ./chain_config_wrapper,
-  ../../execution_chain/rpc,
-  ../../execution_chain/common/hardforks,
   ../../execution_chain/db/ledger,
   ../../execution_chain/core/chain/forked_chain,
   ../../execution_chain/core/tx_pool,
@@ -62,7 +59,7 @@ proc sendFCU(env: TestEnv, version: uint64, param: PayloadParam): Result[Forkcho
 proc runTest(env: TestEnv, unit: EngineUnitEnv): Result[void, string] =
   if not env.client.isSome:
     return err("Client is not initialized")
-  
+
   for enp in unit.engineNewPayloads:
     var status = env.sendNewPayload(enp.newPayloadVersion.uint64, enp.params).valueOr:
       return err(error)
@@ -94,14 +91,14 @@ proc runTest(env: TestEnv, unit: EngineUnitEnv): Result[void, string] =
 
 proc processFile(fileName: string) =
   let
-    fixture = parseFixture(fileName)
+    fixture = parseFixture(fileName, EngineFixture)
 
   for unit in fixture.units:
     let header = unit.unit.genesisBlockHeader.to(Header)
     doAssert(unit.unit.genesisBlockHeader.hash == header.computeRlpHash)
-    let env = prepareEnv(unit.unit, header)
+    let env = prepareEnv(unit.unit, header, true)
     env.runTest(unit.unit).isOkOr:
-      debugEcho "RunTest error: ", error
+      debugEcho "TestName: ", unit.name, "RunTest error: ", error
       quit(QuitFailure)
     env.close()
 
