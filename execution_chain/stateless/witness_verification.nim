@@ -83,14 +83,6 @@ func validateKeys*(witness: Witness, expectedKeys: WitnessTable): Result[void, s
 
   ok()
 
-
-# func verify(headers: openArray[Header])
-
-  # ExecutionWitness* = object
-  #   state*: seq[seq[byte]] # MPT trie nodes accessed while executing the block.
-  #   codes*: seq[seq[byte]] # Contract bytecodes read while executing the block.
-  #   keys*: seq[seq[byte]] # Ordered list of access keys (address bytes or storage slots bytes).
-  #   headers*: seq[seq[byte]] # Block headers required for proving correctness of stateless execution.
 func verify*(witness: ExecutionWitness, preStateRoot: Hash32): Result[void, string] =
 
   var keysTable: Table[Address, HashSet[UInt256]]
@@ -99,8 +91,7 @@ func verify*(witness: ExecutionWitness, preStateRoot: Hash32): Result[void, stri
   var stateTable: Table[Hash32, seq[byte]]
   stateTable.putAll(witness.state)
 
-
-  # validate state against keys
+  # Verify state against keys in witness
   var codeHashes: HashSet[Hash32]
   for address, slots in keysTable:
     let
@@ -125,12 +116,12 @@ func verify*(witness: ExecutionWitness, preStateRoot: Hash32): Result[void, stri
       discard verifyProof(stateTable, account.storageRoot, slotPath).valueOr:
         return err("Slot proof verification failed against pre-stateroot")
 
-    for code in witness.codes:
-      if keccak256(code) notin codeHashes:
-        return err("Invalid code found in witess")
+  # Verify codes in witness against codeHashes in the state
+  for code in witness.codes:
+    if keccak256(code) notin codeHashes:
+      return err("Hash of code not found in witness state")
 
-
-  # validate witness headers
+  # Verify witness headers
   if witness.headers.len() > 256:
     return err("Too many headers in witness")
 
@@ -141,7 +132,8 @@ func verify*(witness: ExecutionWitness, preStateRoot: Hash32): Result[void, stri
     except RlpError as e:
       return err("Failed to decode header in witness")
 
-  proc compareByNumber(a, b: Header): int = (a.number - b.number).int
+  proc compareByNumber(a, b: Header): int =
+    (a.number - b.number).int
   headers.sort(compareByNumber)
 
   if headers[headers.high].stateRoot != preStateRoot:

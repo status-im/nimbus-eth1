@@ -114,11 +114,22 @@ proc build*(
       doAssert(blockHash != default(Hash32))
       witness.addHeaderHash(blockHash)
 
-proc getHeaders*(witness: Witness, preStateLedger: LedgerRef): seq[Header] =
+
+proc build*(T: type ExecutionWitness, witness: Witness, ledger: LedgerRef) =
+  var codes: seq[seq[byte]]
+  for codeHash in witness.codeHashes:
+    let code = ledger.txFrame.getCodeByHash(codeHash).valueOr:
+      raiseAssert "Code not found"
+    codes.add(code)
+
   var headers: seq[Header]
   for headerHash in witness.headerHashes:
-    let header = preStateLedger.txFrame.getBlockHeader(headerHash).valueOr:
+    let header = ledger.txFrame.getBlockHeader(headerHash).valueOr:
       raiseAssert "Header not found"
     headers.add(header)
 
-  headers
+  ExecutionWitness.init(
+    state = move(witness.state),
+    codes = move(codes),
+    keys = move(witness.keys),
+    headers = move(headers))
