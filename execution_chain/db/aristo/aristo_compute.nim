@@ -13,12 +13,19 @@
 import
   std/strformat,
   chronicles,
+  eth/rlp,
   eth/common/[accounts_rlp, base_rlp, hashes_rlp],
   results,
   "."/[aristo_desc, aristo_get, aristo_layers],
   ./aristo_desc/desc_backend
 
-type WriteBatch = tuple[writer: PutHdlRef, count: int, depth: int, prefix: uint64]
+type 
+  WriteBatch = tuple[writer: PutHdlRef, count: int, depth: int, prefix: uint64]
+
+  AristoTrieWriter = object
+    tracker: DynamicRlpLengthTracker
+    twoPassWriter: RlpTwoPassWriter
+    hashWriter: RlpHashWriter
 
 # Keep write batch size _around_ 1mb, give or take some overhead - this is a
 # tradeoff between efficiency and memory usage with diminishing returns the
@@ -89,88 +96,79 @@ proc putKeyAtLevel(
 
   ok()
 
+func init(T: type AristoTrieWriter): T =
+  result.tracker = DynamicRlpLengthTracker()
+  result.tracker.initLengthTracker()
+  result.twoPassWriter = initTwoPassWriter(result.tracker)
+  result.hashWriter = initHashWriter(result.tracker)
+
+func clear(self: var AristoTrieWriter) =
+  self.tracker.clear()
+  self.twoPassWriter.clear()
+  self.hashWriter.clear()
+
 template appendLeaf(w: var RlpWriter, pfx: NibblesBuf, leafData: untyped) =
   w.startList(2)
   w.append(pfx.toHexPrefix(isLeaf = true).data())
   w.wrapEncoding(1)
   w.append(leafData)
+  discard rlp.encode(leafData)
 
-template encodeLeaf(pfx: NibblesBuf, leafData: untyped): HashKey =
-  debugEcho "calling encode Leaf"
-  debugEcho pfx
-  debugEcho leafData
-  var tracker = DynamicRlpLengthTracker()
-  tracker.initLengthTracker()
-  tracker.appendLeaf(pfx, leafData)
+template encodeLeaf(w: var AristoTrieWriter, pfx: NibblesBuf, leafData: untyped): HashKey =
+  w.clear()
+  w.tracker.appendLeaf(pfx, leafData)
 
-  if tracker.totalLength < 32:
-    var writer = initTwoPassWriter(tracker)
-    writer.appendLeaf(pfx, leafData)
-    let buf = HashKey.fromBytes(writer.finish)
-    debugEcho(buf)
+  if w.tracker.totalLength < 32:
+    w.twoPassWriter.reInit(w.tracker)
+    w.twoPassWriter.appendLeaf(pfx, leafData)
+    let buf = HashKey.fromBytes(w.twoPassWriter.finish)
     buf.value
   else:
-    var writer = initHashWriter(tracker)
-    writer.appendLeaf(pfx, leafData)
-    let buf = writer.finish()
-    debugEcho(buf)
+    w.hashWriter.reInit(w.tracker)
+    w.hashWriter.appendLeaf(pfx, leafData)
+    let buf = w.hashWriter.finish()
     buf.to(HashKey)
 
-template encodeBranch(w: var RlpWriter, vtx: VertexRef, subKeyForN: untyped): HashKey =
+template appendBranch(w: var RlpWriter, vtx: VertexRef, subKeyForN: untyped) =
   w.startList(17)
   for (n {.inject.}, subvid {.inject.}) in vtx.allPairs():
     w.append(subKeyForN)
   w.append EmptyBlob
-  w.finish().digestTo(HashKey)
 
-template encodeExt(w: var RlpWriter, pfx: NibblesBuf, branchKey: HashKey): HashKey =
+template encodeBranch(w: var AristoTrieWriter, rvtx: VertexRef, subKeyForN: untyped): HashKey =
+  w.clear()
+  w.tracker.appendBranch(vtx, subKeyForN)
+
+  if w.tracker.totalLength < 32:
+    w.twoPassWriter.reInit(w.tracker)
+    w.twoPassWriter.appendBranch(vtx, subKeyForN)
+    let buf = HashKey.fromBytes(w.twoPassWriter.finish)
+    buf.value
+  else:
+    w.hashWriter.reInit(w.tracker)
+    w.hashWriter.appendBranch(vtx, subKeyForN)
+    let buf = w.hashWriter.finish()
+    buf.to(HashKey)
+
+template appendExt(w: var RlpWriter, pfx: NibblesBuf, branchKey: HashKey) =
   w.startList(2)
   w.append(pfx.toHexPrefix(isLeaf = false).data())
   w.append(branchKey)
-  w.finish().digestTo(HashKey)
 
-# template appendBranch(w: var RlpWriter, vtx: VertexRef, subKeyForN: untyped) =
-#   w.startList(17)
-#   for (n {.inject.}, subvid {.inject.}) in vtx.allPairs():
-#     w.append(subKeyForN)
-#   w.append EmptyBlob
-# 
-# template encodeBranch(vtx: VertexRef, subKeyForN: untyped): HashKey =
-#   var tracker: DynamicRlpLengthTracker
-#   tracker.initLengthTracker()
-#   tracker.appendBranch(vtx, subKeyForN)
-# 
-#   if tracker.totalLength < 32:
-#     var writer = initTwoPassWriter(tracker)
-#     writer.appendBranch(vtx, subKeyForN)
-#     let buf = HashKey.fromBytes(writer.finish)
-#     buf.value
-#   else:
-#     var writer = initHashWriter(tracker)
-#     writer.appendBranch(vtx, subKeyForN)
-#     let buf = writer.finish()
-#     buf.to(HashKey)
-# 
-# template appendExt(w: var RlpWriter, pfx: NibblesBuf, branchKey: HashKey) =
-#   w.startList(2)
-#   w.append(pfx.toHexPrefix(isLeaf = false).data())
-#   w.append(branchKey)
-# 
-# template encodeExt(pfx: NibblesBuf, branchKey: untyped): HashKey =
-#   var tracker: DynamicRlpLengthTracker
-#   tracker.initLengthTracker()
-#   tracker.appendExt(pfx, branchKey)
-# 
-#   if tracker.totalLength < 32:
-#     var writer = initTwoPassWriter(tracker)
-#     writer.appendExt(pfx, branchKey)
-#     let buf = HashKey.fromBytes(writer.finish)
-#     buf.value
-#   else:
-#     var writer = initHashWriter(tracker)
-#     writer.appendExt(pfx, branchKey)
-#     let buf = writer.finish()
-#     buf.to(HashKey)
+template encodeExt(w: var AristoTrieWriter, pfx: NibblesBuf, branchKey: untyped): HashKey =
+  w.clear()
+  w.tracker.appendExt(pfx, branchKey)
+
+  if w.tracker.totalLength < 32:
+    w.twoPassWriter.reInit(w.tracker)
+    w.twoPassWriter.appendExt(pfx, branchKey)
+    let buf = HashKey.fromBytes(w.twoPassWriter.finish)
+    buf.value
+  else:
+    w.hashWriter.reInit(w.tracker)
+    w.hashWriter.appendExt(pfx, branchKey)
+    let buf = w.hashWriter.finish()
+    buf.to(HashKey)
 
 proc getKey(
     db: AristoTxRef, rvid: RootedVertexID, skipLayers: static bool
@@ -210,7 +208,7 @@ proc computeKeyImpl(
   # Top-most level of all the verticies this hash computation depends on
   var level = level
 
-  var writer = initRlpWriter()
+  var writer = AristoTrieWriter.init()
 
   let key =
     case vtx.vType
@@ -238,7 +236,7 @@ proc computeKeyImpl(
           else:
             VOID_HASH_KEY
 
-      encodeLeaf(vtx.pfx):
+      writer.encodeLeaf(vtx.pfx):
         Account(
           nonce: vtx.account.nonce,
           balance: vtx.account.balance,
@@ -247,7 +245,7 @@ proc computeKeyImpl(
         )
     of StoLeaf:
       let vtx = StoLeafRef(vtx)
-      encodeLeaf(vtx.pfx):
+      writer.encodeLeaf(vtx.pfx):
         vtx.stoData
     of Branches:
       # For branches, we need to load the vertices before recursing into them
@@ -307,7 +305,7 @@ proc computeKeyImpl(
             )
           batch.leave(n)
 
-      template writeBranch(w: var RlpWriter, vtx: BranchRef): HashKey =
+      template writeBranch(w: var AristoTrieWriter, vtx: BranchRef): HashKey =
         w.encodeBranch(vtx):
           if subvid.isValid:
             level = max(level, keyvtxs[n][1])
@@ -318,7 +316,7 @@ proc computeKeyImpl(
       if vtx.vType == ExtBranch:
         let vtx = ExtBranchRef(vtx)
         writer.encodeExt(vtx.pfx):
-          var bwriter = initRlpWriter()
+          var bwriter = AristoTrieWriter.init()
           bwriter.writeBranch(vtx)
       else:
         writer.writeBranch(vtx)
