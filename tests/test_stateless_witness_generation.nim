@@ -14,7 +14,7 @@ import
   stew/byteutils,
   unittest2,
   ../execution_chain/common/common,
-  ../execution_chain/stateless/[witness_generation, witness_validation]
+  ../execution_chain/stateless/[witness_generation, witness_verification]
 
 suite "Stateless: Witness Generation":
   setup:

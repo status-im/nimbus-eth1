@@ -13,7 +13,7 @@ import
   std/[tables, sets],
   minilru,
   eth/common,
-  ../db/ledger,
+  ../db/[ledger, core_db],
   ./witness_types
 
 export
@@ -48,7 +48,7 @@ proc build*(
       # codeTouched is only set for account keys
       if codeTouched:
         let codeHash = preStateLedger.getCodeHash(key.address)
-        if codeHash != EMPTY_CODE_HASH and codeHash notin addedCodeHashes:
+        if codeHash notin addedCodeHashes:
           witness.addCodeHash(codeHash)
           addedCodeHashes.incl(codeHash)
 
@@ -113,3 +113,12 @@ proc build*(
       let blockHash = ledger.getBlockHash(BlockNumber(n))
       doAssert(blockHash != default(Hash32))
       witness.addHeaderHash(blockHash)
+
+proc getHeaders*(witness: Witness, preStateLedger: LedgerRef): seq[Header] =
+  var headers: seq[Header]
+  for headerHash in witness.headerHashes:
+    let header = preStateLedger.txFrame.getBlockHeader(headerHash).valueOr:
+      raiseAssert "Header not found"
+    headers.add(header)
+
+  headers
