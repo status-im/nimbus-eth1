@@ -11,6 +11,7 @@
 
 import
   std/cmdline,
+  unittest2,
   eth/common/headers_rlp,
   web3/eth_api_types,
   web3/engine_api_types,
@@ -89,21 +90,25 @@ proc runTest(env: TestEnv, unit: EngineUnitEnv): Result[void, string] =
 
   ok()
 
-proc processFile(fileName: string) =
+proc processFile*(fileName: string): bool =
   let
     fixture = parseFixture(fileName, EngineFixture)
 
+  var testPass = true
   for unit in fixture.units:
     let header = unit.unit.genesisBlockHeader.to(Header)
     doAssert(unit.unit.genesisBlockHeader.hash == header.computeRlpHash)
     let env = prepareEnv(unit.unit, header, true)
     env.runTest(unit.unit).isOkOr:
       debugEcho "TestName: ", unit.name, "RunTest error: ", error
-      quit(QuitFailure)
+      testPass = false
     env.close()
 
-if paramCount() == 0:
-  debugEcho "Usage: eest_engine vector.json"
-  quit(QuitFailure)
+  return testPass
 
-processFile(paramStr(1))
+when isMainModule:
+  if paramCount() == 0:
+    debugEcho "Usage: eest_engine vector.json"
+    quit(QuitFailure)
+  
+  check processFile(paramStr(1))

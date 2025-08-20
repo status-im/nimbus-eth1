@@ -78,7 +78,7 @@ type
   EnvConfig* = object
     network*: string
     chainid*: UInt256
-    blobSchedule*: array[HardFork.Cancun..HardFork.high, Opt[BlobSchedule]]
+    blobSchedule*: array[HardFork.Cancun .. HardFork.high, Opt[BlobSchedule]]
 
   UnitEnv* = object of RootObj
     network*: string
@@ -96,7 +96,7 @@ type
   ## Blockchain Test Types
   BlockchainUnitEnv* = object of UnitEnv
     blocks*: JsonNode
-  
+
   BlockchainUnitDesc* = object
     name*: string
     unit*: BlockchainUnitEnv
@@ -128,46 +128,50 @@ template wrapValueError(body: untyped) =
   except ValueError as exc:
     r.raiseUnexpectedValue(exc.msg)
 
-proc readValue*(r: var JsonReader[JrpcConv], val: var Numero)
-       {.gcsafe, raises: [IOError, SerializationError].} =
+proc readValue*(
+    r: var JsonReader[JrpcConv], val: var Numero
+) {.gcsafe, raises: [IOError, SerializationError].} =
   wrapValueError:
     val = fromHex[uint64](r.readValue(string)).Numero
 
-proc readValue*(r: var JsonReader[JrpcConv], value: var array[HardFork.Cancun..HardFork.high, Opt[BlobSchedule]])
-    {.gcsafe, raises: [SerializationError, IOError].} =
+proc readValue*(
+    r: var JsonReader[JrpcConv],
+    value: var array[HardFork.Cancun .. HardFork.high, Opt[BlobSchedule]],
+) {.gcsafe, raises: [SerializationError, IOError].} =
   wrapValueError:
     for key in r.readObjectFields:
       blobScheduleParser(r, key, value)
 
-proc readValue*(r: var JsonReader[JrpcConv], val: var PayloadParam)
-       {.gcsafe, raises: [IOError, SerializationError].} =
+proc readValue*(
+    r: var JsonReader[JrpcConv], val: var PayloadParam
+) {.gcsafe, raises: [IOError, SerializationError].} =
   wrapValueError:
     r.parseArray(i):
       case i
-      of 0: r.readValue(val.payload)
-      of 1: r.readValue(val.versionedHashes)
-      of 2: r.readValue(val.parentBeaconBlockRoot)
-      of 3: r.readValue(val.excutionRequests)
+      of 0:
+        r.readValue(val.payload)
+      of 1:
+        r.readValue(val.versionedHashes)
+      of 2:
+        r.readValue(val.parentBeaconBlockRoot)
+      of 3:
+        r.readValue(val.excutionRequests)
       else:
         r.raiseUnexpectedValue("Unexpected element")
 
-proc readValue*(r: var JsonReader[JrpcConv], val: var EngineFixture)
-       {.gcsafe, raises: [IOError, SerializationError].} =
+proc readValue*(
+    r: var JsonReader[JrpcConv], val: var EngineFixture
+) {.gcsafe, raises: [IOError, SerializationError].} =
   wrapValueError:
     parseObject(r, key):
-      val.units.add EngineUnitDesc(
-        name: key,
-        unit: r.readValue(EngineUnitEnv)
-      )
+      val.units.add EngineUnitDesc(name: key, unit: r.readValue(EngineUnitEnv))
 
-proc readValue*(r: var JsonReader[JrpcConv], val: var BlockchainFixture)
-       {.gcsafe, raises: [IOError, SerializationError].} =
+proc readValue*(
+    r: var JsonReader[JrpcConv], val: var BlockchainFixture
+) {.gcsafe, raises: [IOError, SerializationError].} =
   wrapValueError:
     parseObject(r, key):
-      val.units.add BlockchainUnitDesc(
-        name: key,
-        unit: r.readValue(BlockchainUnitEnv)
-      )
+      val.units.add BlockchainUnitDesc(name: key, unit: r.readValue(BlockchainUnitEnv))
 
 func to*(x: Opt[Quantity], _: type Opt[uint64]): Opt[uint64] =
   if x.isSome:
@@ -197,7 +201,7 @@ func to*(g: GenesisHeader, _: type Header): Header =
     blobGasUsed: g.blobGasUsed.to(Opt[uint64]),
     excessBlobGas: g.excessBlobGas.to(Opt[uint64]),
     parentBeaconBlockRoot: g.parentBeaconBlockRoot,
-    requestsHash: g.requestsHash
+    requestsHash: g.requestsHash,
   )
 
 proc setupClient*(port: Port): RpcHttpClient =
@@ -212,7 +216,7 @@ proc setupClient*(port: Port): RpcHttpClient =
 proc prepareEnv*(unit: UnitEnv, genesis: Header, rpcEnabled: bool = false): TestEnv =
   try:
     let
-      memDB  = newCoreDbRef DefaultDbMemory
+      memDB = newCoreDbRef DefaultDbMemory
       ledger = LedgerRef.init(memDB.baseTxFrame())
       config = getChainConfig(unit.network)
 
@@ -229,8 +233,8 @@ proc prepareEnv*(unit: UnitEnv, genesis: Header, rpcEnabled: bool = false): Test
     var testEnv = TestEnv()
 
     let
-      com    = CommonRef.new(memDB, nil, config)
-      chain  = ForkedChainRef.init(com, enableQueue = true, persistBatchSize = 0)
+      com = CommonRef.new(memDB, nil, config)
+      chain = ForkedChainRef.init(com, enableQueue = true, persistBatchSize = 0)
 
     testEnv.chain = chain
     testEnv.client = Opt.none(RpcHttpClient)
@@ -250,14 +254,12 @@ proc prepareEnv*(unit: UnitEnv, genesis: Header, rpcEnabled: bool = false): Test
 
       server.start()
 
-      let
-        client = setupClient(server.localAddress[0].port)
+      let client = setupClient(server.localAddress[0].port)
 
       testEnv.client = Opt.some(client)
       testEnv.server = Opt.some(server)
 
     return testEnv
-
   except ValueError as exc:
     debugEcho "Prepare env error: ", exc.msg
     quit(QuitFailure)
@@ -291,3 +293,21 @@ proc parseFixture*(fileName: string, _: type EngineFixture): EngineFixture =
 
 proc parseFixture*(fileName: string, _: type BlockchainFixture): BlockchainFixture =
   parseAnyFixture(fileName, BlockchainFixture)
+
+template runEESTSuite*(
+    eestReleases: openArray[string],
+    skipFiles: openArray[string],
+    baseFolder: string,
+    eestType: string,
+) =
+  for eest in eestReleases:
+    suite eest & ": " & eestType:
+      for fileName in walkDirRec(baseFolder / eest / eestType):
+        let last = fileName.splitPath().tail
+        if last in skipFiles:
+          continue
+        test last:
+          let res = processFile(fileName)
+          if not res:
+            debugEcho fileName.splitPath().tail
+          check res

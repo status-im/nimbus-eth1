@@ -11,34 +11,27 @@
 
 import
   std/[os, osproc],
-  unittest2
+  unittest2,
+  ./eest_helpers,
+  ./eest_engine
 
 const
-  baseFolder = "tests/fixtures/eest/engine_tests"
-
-proc runTest(appDir: string, spec: string): bool =
-  try:
-    let
-      cmd  = appDir / "eest_engine " & spec
-      exitCode = execCmd(cmd)
-
-    exitCode == QuitSuccess
-  except OSError as exc:
-    debugEcho "Something went wrong: ", exc.msg
-    false
-
-const skipFiles = [
-  "CALLBlake2f_MaxRounds.json",
+  baseFolder = "tests/fixtures"
+  eestType = "engine_tests"
+  eestReleases = [
+    "eest_develop",
+    "eest_static",
+    # "eest_stable",
+    # "eest_devnet"
   ]
 
+const skipFiles = [
+  "CALLBlake2f_MaxRounds.json", # Doesn't work in github CI
+]
 
-let appDir = getAppDir()
-for fileName in walkDirRec(baseFolder):
-  let last = fileName.splitPath().tail
-  if last in skipFiles:
-    continue
-  test last:
-    let res = runTest(appDir, fileName)
-    if not res:
-      debugEcho fileName.splitPath().tail
-    check res
+runEESTSuite(
+  eestReleases,
+  skipFiles,
+  baseFolder,
+  eestType
+)
