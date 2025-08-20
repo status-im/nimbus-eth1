@@ -115,21 +115,21 @@ proc build*(
       witness.addHeaderHash(blockHash)
 
 
-proc build*(T: type ExecutionWitness, witness: Witness, ledger: LedgerRef) =
+proc build*(T: type ExecutionWitness, witness: Witness, ledger: LedgerRef): ExecutionWitness =
   var codes: seq[seq[byte]]
   for codeHash in witness.codeHashes:
     let code = ledger.txFrame.getCodeByHash(codeHash).valueOr:
       raiseAssert "Code not found"
     codes.add(code)
 
-  var headers: seq[Header]
+  var headers: seq[seq[byte]]
   for headerHash in witness.headerHashes:
     let header = ledger.txFrame.getBlockHeader(headerHash).valueOr:
       raiseAssert "Header not found"
-    headers.add(header)
+    headers.add(rlp.encode(header))
 
   ExecutionWitness.init(
-    state = move(witness.state),
+    state = witness.state,
     codes = move(codes),
-    keys = move(witness.keys),
+    keys = witness.keys,
     headers = move(headers))

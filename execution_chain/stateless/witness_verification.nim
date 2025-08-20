@@ -132,8 +132,13 @@ func verify*(witness: ExecutionWitness, preStateRoot: Hash32): Result[void, stri
     except RlpError as e:
       return err("Failed to decode header in witness")
 
-  proc compareByNumber(a, b: Header): int =
-    (a.number - b.number).int
+  func compareByNumber(a, b: Header): int =
+    if a.number == b.number:
+      0
+    elif a.number > b.number:
+      1
+    else: # a.number < b.number
+      -1
   headers.sort(compareByNumber)
 
   if headers[headers.high].stateRoot != preStateRoot:
