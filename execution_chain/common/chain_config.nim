@@ -286,7 +286,7 @@ const
 
 func ofStmt(fork: HardFork, keyName: string, reader: NimNode, value: NimNode): NimNode =
   let branchStmt = quote do:
-    `value`[`fork`] = reader.readValue(Opt[BlobSchedule])
+    `value`[`fork`] = `reader`.readValue(Opt[BlobSchedule])
 
   nnkOfBranch.newTree(
     newLit(keyName),
@@ -296,7 +296,7 @@ func ofStmt(fork: HardFork, keyName: string, reader: NimNode, value: NimNode): N
 macro blobScheduleParser(reader, key, value: typed): untyped =
   # Automated blob schedule parser generator
   var caseStmt = nnkCaseStmt.newTree(
-    quote do: `key`
+    quote do: toLowerAscii(`key`)
   )
 
   for fork in Cancun..HardFork.high:
@@ -664,10 +664,16 @@ func genesisBlockForNetwork*(id: NetworkId): Genesis
   else:
     Genesis()
 
-func networkParams*(id: NetworkId): NetworkParams
-    {.gcsafe, raises: [ValueError, RlpError].} =
-  result.genesis = genesisBlockForNetwork(id)
-  result.config  = chainConfigForNetwork(id)
+func networkParams*(id: NetworkId): NetworkParams =
+  try:
+    NetworkParams(
+      genesis: genesisBlockForNetwork(id),
+      config : chainConfigForNetwork(id)
+    )
+  except ValueError as exc:
+    raiseAssert exc.msg
+  except RlpError as exc:
+    raiseAssert exc.msg
 
 func `==`*(a, b: Genesis): bool =
   if a.isNil and b.isNil: return true

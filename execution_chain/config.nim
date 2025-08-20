@@ -21,7 +21,8 @@ import
     chronicles,
     confutils,
     confutils/defs,
-    confutils/std/net
+    confutils/std/net,
+    results
   ],
   eth/[common, net/nat],
   ./networking/[bootnodes, eth1_enr as enr],
@@ -163,13 +164,16 @@ type
         "- sepolia/11155111: Test network (proof-of-work)\n" &
         "- holesky/17000   : The holesovice post-merge testnet\n" &
         "- hoodi/560048    : The second long-standing, merged-from-genesis, public Ethereum testnet\n" &
-        "- other           : Custom"
-      defaultValue: "" # the default value is set in makeConfig
+        "- path            : /path/to/genesis-or-network-configuration.json\n" &
+        "Both --network: name/path --network:id can be set at the same time to override network id number"
+      defaultValue: @[] # the default value is set in makeConfig
       defaultValueDesc: "mainnet(1)"
       abbr: "i"
-      name: "network" }: string
+      name: "network" }: seq[string]
 
+    # TODO: disable --custom-network if both hive and kurtosis not using this anymore.
     customNetwork {.
+      hidden
       desc: "Use custom genesis block for private Ethereum Network (as /path/to/genesis.json)"
       defaultValueDesc: ""
       abbr: "c"
@@ -669,22 +673,86 @@ proc loadBootstrapFile(fileName: string, output: var seq[ENode]) =
 proc loadStaticPeersFile(fileName: string, output: var seq[ENode]) =
   fileName.loadEnodeFile(output, "static peers")
 
-proc getNetworkId(conf: NimbusConf): Option[NetworkId] =
-  if conf.network.len == 0:
-    return none NetworkId
+func decOrHex(s: string): bool =
+  const allowedDigits = Digits + HexDigits + {'x', 'X'}
+  for c in s:
+    if c notin allowedDigits:
+      return false
+  true
 
-  let network = toLowerAscii(conf.network)
-  case network
-  of "mainnet": return some MainNet
-  of "sepolia": return some SepoliaNet
-  of "holesky": return some HoleskyNet
-  of "hoodi": return some HoodiNet
+proc parseNetworkId(network: string): NetworkId =
+  try:
+    return parseHexOrDec256(network)
+  except CatchableError:
+    error "Failed to parse network id", id=network
+    quit QuitFailure
+
+proc parseNetworkParams(network: string): (NetworkParams, bool) =
+  case toLowerAscii(network)
+  of "mainnet": (networkParams(MainNet), false)
+  of "sepolia": (networkParams(SepoliaNet), false)
+  of "holesky": (networkParams(HoleskyNet), false)
+  of "hoodi"  : (networkParams(HoodiNet), false)
   else:
-    try:
-      some parseHexOrDec256(network)
-    except CatchableError:
-      error "Failed to parse network name or id", network
+    var params: NetworkParams
+    if not loadNetworkParams(network, params):
+      # `loadNetworkParams` have it's own error log
       quit QuitFailure
+    (params, true)
+
+proc processNetworkParamsAndNetworkId(conf: var NimbusConf) =
+  if conf.network.len == 0 and conf.customNetwork.isNone:
+    # Default value if none is set
+    conf.networkId = MainNet
+    conf.networkParams = networkParams(MainNet)
+    return
+
+  var
+    params: Opt[NetworkParams]
+    id: Opt[NetworkId]
+    simulatedCustomNetwork = false
+
+  for network in conf.network:
+    if decOrHex(network):
+      if id.isSome:
+        warn "Network ID already set, ignore new value", id=network
+        continue
+      id = Opt.some parseNetworkId(network)
+    else:
+      if params.isSome:
+        warn "Network configuration already set, ignore new value", network
+        continue
+      let (parsedParams, custom) = parseNetworkParams(network)
+      params = Opt.some parsedParams
+      # Simulate --custom-network while it is still not disabled.
+      if custom:
+        conf.customNetwork = some parsedParams
+        simulatedCustomNetwork = true
+
+  if conf.customNetwork.isSome:
+    if params.isNone:
+      warn "`--custom-network` is deprecated, please use `--network`"
+    elif not simulatedCustomNetwork:
+      warn "Network configuration already set by `--network`, `--custom-network` override it"
+    params = if conf.customNetwork.isSome: Opt.some conf.customNetwork.get
+             else: Opt.none(NetworkParams)
+    if id.isNone:
+      # WARNING: networkId and chainId are two distinct things
+      # their usage should not be mixed in other places.
+      # We only set networkId to chainId if networkId not set in cli and
+      # --custom-network is set.
+      # If chainId is not defined in config file, it's ok because
+      # zero means CustomNet
+      id = Opt.some NetworkId(params.value.config.chainId)
+
+  if id.isNone and params.isSome:
+    id = Opt.some NetworkId(params.value.config.chainId)
+
+  if conf.customNetwork.isNone and params.isNone:
+    params = Opt.some networkParams(id.value)
+
+  conf.networkParams = params.expect("Network params exists")
+  conf.networkId = id.expect("Network ID exists")
 
 proc getRpcFlags(api: openArray[string]): set[RpcFlag] =
   if api.len == 0:
@@ -830,27 +898,7 @@ proc makeConfig*(cmdLine = commandLineParams()): NimbusConf
 
   setupLogging(result.logLevel, result.logStdout, none(OutFile))
 
-  var networkId = result.getNetworkId()
-
-  if result.customNetwork.isSome:
-    result.networkParams = result.customNetwork.get()
-    if networkId.isNone:
-      # WARNING: networkId and chainId are two distinct things
-      # they usage should not be mixed in other places.
-      # We only set networkId to chainId if networkId not set in cli and
-      # --custom-network is set.
-      # If chainId is not defined in config file, it's ok because
-      # zero means CustomNet
-      networkId = some(NetworkId(result.networkParams.config.chainId))
-
-  if networkId.isNone:
-    # bootnodes is set via getBootNodes
-    networkId = some MainNet
-
-  result.networkId = networkId.get()
-
-  if result.customNetwork.isNone:
-    result.networkParams = networkParams(result.networkId)
+  processNetworkParamsAndNetworkId(result)
 
   if result.cmd == noCommand:
     if result.udpPort == Port(0):

@@ -54,7 +54,7 @@ const
 
 proc setupConfig(genesisFile: string): NimbusConf =
   makeConfig(@[
-    "--custom-network:" & genesisFile,
+    "--network:" & genesisFile,
     "--listen-address: 127.0.0.1",
   ])
 

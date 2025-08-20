@@ -47,14 +47,14 @@ proc configurationMain*() =
       check bb.cmd == NimbusCmd.`import-rlp`
       check bb.blocksFile[0].string == genesisFile
 
-    test "custom-network loading config file with no genesis data":
+    test "network loading config file with no genesis data":
       # no genesis will fallback to geth compatibility mode
-      let conf = makeConfig(@["--custom-network:" & noGenesis])
+      let conf = makeConfig(@["--network:" & noGenesis])
       check conf.networkParams.genesis.isNil.not
 
-    test "custom-network loading config file with no 'config'":
+    test "network loading config file with no 'config'":
       # no config will result in empty config, CommonRef keep working
-      let conf = makeConfig(@["--custom-network:" & noConfig])
+      let conf = makeConfig(@["--network:" & noConfig])
       check conf.networkParams.config.isNil == false
 
     test "network-id":
@@ -62,21 +62,21 @@ proc configurationMain*() =
       check aa.networkId == MainNet
       check aa.networkParams != NetworkParams()
 
-      let conf = makeConfig(@["--custom-network:" & genesisFile, "--network:345"])
+      let conf = makeConfig(@["--network:" & genesisFile, "--network:345"])
       check conf.networkId == 345.u256
 
-    test "network-id first, custom-network next":
-      let conf = makeConfig(@["--network:678", "--custom-network:" & genesisFile])
+    test "network-id first, network next":
+      let conf = makeConfig(@["--network:678", "--network:" & genesisFile])
       check conf.networkId == 678.u256
 
-    test "network-id set, no custom-network":
+    test "network-id set, no network":
       let conf = makeConfig(@["--network:678"])
       check conf.networkId == 678.u256
       check conf.networkParams.genesis == Genesis()
       check conf.networkParams.config == ChainConfig()
 
     test "network-id not set, copy from chainId of custom network":
-      let conf = makeConfig(@["--custom-network:" & genesisFile])
+      let conf = makeConfig(@["--network:" & genesisFile])
       check conf.networkId == 123.u256
 
     test "network-id not set, sepolia set":
@@ -165,11 +165,11 @@ proc configurationMain*() =
       let cc = makeConfig(@["--static-peers:" & bootNode, "--static-peers:" & bootNode])
       check cc.getStaticPeers().len == 2
 
-    test "chainId of custom-network is oneof std network":
+    test "chainId of network is oneof std network":
       const
         chainid1 = "tests" / "customgenesis" / "chainid1.json"
 
-      let conf = makeConfig(@["--custom-network:" & chainid1])
+      let conf = makeConfig(@["--network:" & chainid1])
       check conf.networkId == 1.u256
       check conf.networkParams.config.londonBlock.get() == 1337
       check conf.getBootNodes().len == 0

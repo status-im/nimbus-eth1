@@ -88,9 +88,10 @@ proc headersStashOnDisk*(
   revHdrs: seq[Header];
   peerID: Hash;
   info: static[string];
-    ): bool =
+    ): Opt[uint64] =
   ## Convenience wrapper, makes it easy to produce comparable messages
-  ## whenever it is called similar to `blocksImport()`.
+  ## whenever it is called, similar to `blocksImport()`. Unless complete
+  ## failure, this function returns the number of headers stored.
   let
     ctx = buddy.ctx
     peer = buddy.peer
@@ -119,14 +120,15 @@ proc headersStashOnDisk*(
         syncState=($buddy.syncState), hdrErrors=buddy.hdrErrors,
         hdrFailCount=ctx.subState.procFailCount, error=rc.error
     else:
-      info "Header stash error (skip remaining)", iv=revHdrs.bnStr,
+      debug info & ": Header stash error (skip remaining)", peer,
+        iv=revHdrs.bnStr,
         syncState=($buddy.syncState), hdrErrors=buddy.hdrErrors,
         hdrFailCount=ctx.subState.procFailCount, error=rc.error
 
-    return false                                 # stop
+    return err()                                 # stop
 
   let dBottom = ctx.hdrCache.antecedent.number   # new antecedent
-  trace info & ": Serialised headers stashed", peer,
+  debug info & ": Serialised headers stashed", peer,
     iv=(if dBottom < dTop: (dBottom,dTop-1).bnStr else: "n/a"),
     nHeaders=(dTop - dBottom),
     nSkipped=(if rc.isErr: 0u64
@@ -136,7 +138,7 @@ proc headersStashOnDisk*(
     target=ctx.subState.head.bnStr, targetHash=ctx.subState.headHash.short
 
   ctx.resetHdrProcErrors peerID                  # reset error count
-  true
+  ok(dTop - dBottom)
 
 # ------------------------------------------------------------------------------
 # End

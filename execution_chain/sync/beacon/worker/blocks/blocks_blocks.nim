@@ -172,32 +172,37 @@ template blocksFetch*(
 
 
 template blocksImport*(
-    ctx: BeaconCtxRef;
-    maybePeer: Opt[BeaconBuddyRef];
+    buddy: BeaconBuddyRef;
     blocks: seq[EthBlock];
     peerID: Hash;
     info: static[string];
-      ) =
+      ): uint64 =
   ## Async/template
   ##
   ## Import/execute a list of argument blocks. The function sets the global
   ## block number of the last executed block which might preceed the least block
   ## number from the argument list in case of an error.
   ##
+  ## The template returns the number of blocks imported.
+  ##
+  var nBlocks = 0u64
   block body:
-    let iv {.inject.} =
-      BnRange.new(blocks[0].header.number, blocks[^1].header.number)
+    let
+      ctx = buddy.ctx
+      peer = buddy.peer
+      iv {.inject.} =
+        BnRange.new(blocks[0].header.number, blocks[^1].header.number)
     doAssert iv.len == blocks.len.uint64
 
     var isError = false
     block loop:
-      trace info & ": Start importing blocks", peer=maybePeer.toStr, iv,
+      trace info & ": Start importing blocks", peer, iv,
         nBlocks=iv.len, base=ctx.chain.baseNumber.bnStr,
         head=ctx.chain.latestNumber.bnStr
 
       for n in 0 ..< blocks.len:
         let nBn = blocks[n].header.number
-        discard (await ctx.importBlock(maybePeer, blocks[n], peerID)).valueOr:
+        discard (await buddy.importBlock(blocks[n], peerID)).valueOr:
           if error.excp != ECancelledError:
             isError = true
 
@@ -218,36 +223,40 @@ template blocksImport*(
 
             # Proper logging ..
             if ctx.subState.cancelRequest:
-              warn "Import error (cancel this session)", n=n, iv,
+              warn "Blocks import error (cancel this session)", n=n, iv,
                 nBlocks=iv.len, nthBn=nBn.bnStr,
                 nthHash=ctx.getNthHash(blocks, n).short,
                 base=ctx.chain.baseNumber.bnStr,
                 head=ctx.chain.latestNumber.bnStr,
                 blkFailCount=ctx.subState.procFailCount, error=error
             else:
-              chronicles.info "Import error (skip remaining)", n=n, iv,
+              chronicles.info "Blocks import error (skip remaining)", n=n, iv,
                 nBlocks=iv.len, nthBn=nBn.bnStr,
                 nthHash=ctx.getNthHash(blocks, n).short,
                 base=ctx.chain.baseNumber.bnStr,
                 head=ctx.chain.latestNumber.bnStr,
                 blkFailCount=ctx.subState.procFailCount, error=error
 
-          break loop
+          break loop                               # stop
+          # End `importBlock(..).valueOr`
 
         # isOk => next instruction
-        ctx.updateLastBlockImported nBn            # Block imported OK
+        ctx.updateLastBlockImported nBn            # block imported OK
+        # End block: `loop`
 
     if not isError:
       ctx.resetBlkProcErrors peerID
 
-    chronicles.info "Imported blocks", iv=(if iv.minPt <= ctx.subState.top:
-      (iv.minPt, ctx.subState.top).bnStr else: "n/a"),
-      nBlocks=(ctx.subState.top - iv.minPt + 1),
+    nBlocks = ctx.subState.top - iv.minPt + 1      # number of blocks imported
+
+    trace info & ": blocks imported", iv=(if iv.minPt <= ctx.subState.top:
+      (iv.minPt, ctx.subState.top).bnStr else: "n/a"), nBlocks=nBlocks,
       nFailed=(iv.maxPt - ctx.subState.top),
       base=ctx.chain.baseNumber.bnStr, head=ctx.chain.latestNumber.bnStr,
       target=ctx.subState.head.bnStr, targetHash=ctx.subState.headHash.short
+    # End block: `body`
 
-  discard
+  nBlocks                                          # return value
 
 # ------------------------------------------------------------------------------
 # End
