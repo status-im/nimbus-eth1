@@ -113,6 +113,9 @@ template appendLeaf(w: var RlpWriter, pfx: NibblesBuf, leafData: untyped) =
   w.wrapEncoding(1)
   w.append(leafData)
 
+  # magical line 
+  discard rlp.encode(leafData)
+
 template encodeLeaf(w: var AristoTrieWriter, pfx: NibblesBuf, leafData: untyped): HashKey =
   w.clear()
   w.tracker.appendLeaf(pfx, leafData)
