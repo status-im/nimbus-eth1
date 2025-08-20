@@ -121,8 +121,11 @@ proc setupP2P(nimbus: NimbusNode, conf: NimbusConf,
     nimbus.ethNode, nimbus.fc, conf.maxPeers)
 
   # Optional for pre-setting the sync target (i.e. debugging)
-  if conf.beaconSyncTargetFile.isSome():
-    nimbus.beaconSyncRef.targetInit conf.beaconSyncTargetFile.unsafeGet.string
+  if conf.beaconSyncTarget.isSome():
+    let hex = conf.beaconSyncTarget.unsafeGet
+    if not nimbus.beaconSyncRef.targetInit hex:
+      fatal "Error parsing --beacon-sync-target hash32 argument", hash32=hex
+      quit QuitFailure
 
   # Connect directly to the static nodes
   let staticPeers = conf.getStaticPeers()
