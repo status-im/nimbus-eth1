@@ -187,6 +187,7 @@ proc persistBlock*(p: var Persister, blk: Block): Result[void, string] =
 
     # Convert the witness to ExecutionWitness format and verify against the pre-stateroot.
     if vmState.com.statelessWitnessValidation:
+      doAssert witness.validateKeys(vmState.ledger.getWitnessKeys()).isOk()
       let executionWitness = ExecutionWitness.build(witness, vmState.ledger)
       ?executionWitness.verify(preStateLedger.getStateRoot())
 
