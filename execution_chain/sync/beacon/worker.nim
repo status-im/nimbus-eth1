@@ -11,11 +11,11 @@
 {.push raises:[].}
 
 import
-  std/[strutils, syncio],
   pkg/[chronicles, chronos],
   pkg/eth/common,
   pkg/stew/[interval_set, sorted_set],
   ../../common,
+  ./worker/headers/headers_target,
   ./worker/update/[metrics, ticker],
   ./worker/[blocks, headers, start_stop, update],
   ./worker_desc
@@ -69,24 +69,6 @@ proc stop*(buddy: BeaconBuddyRef; info: static[string]) =
   if not buddy.ctx.hibernate: debug info & ": release peer", peer=buddy.peer,
     nSyncPeers=(buddy.ctx.pool.nBuddies-1), syncState=($buddy.syncState)
   buddy.stopBuddy()
-
-# --------------------
-
-proc initalTargetFromFile*(
-    ctx: BeaconCtxRef;
-    file: string;
-    info: static[string];
-      ): Result[void,string] =
-  ## Set up inital sprint from argument file (itended for debugging)
-  try:
-    var f = file.open(fmRead)
-    defer: f.close()
-    var rlp = rlpFromHex(f.readAll().splitWhitespace.join)
-    ctx.pool.clReq = rlp.read(SyncClMesg)
-  except CatchableError as e:
-    return err("Error decoding file: \"" & file & "\"" &
-      " (" & $e.name & ": " & e.msg & ")")
-  ok()
 
 # ------------------------------------------------------------------------------
 # Public functions
@@ -195,6 +177,12 @@ template runPeer*(buddy: BeaconBuddyRef; info: static[string]): Duration =
           break body
 
         # End `while()`
+
+    else:
+      # Potential manual target set up
+      buddy.headersTargetActivate info
+
+    # End block: `body`
 
   # Idle sleep unless there is something to do
   if not buddy.somethingToCollect():

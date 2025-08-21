@@ -204,36 +204,13 @@ command line without need to be requested by the consensus layer. In fact,
 this allows for single run synchronisation tests without the need of a
 consensus layer. The command line option needed here is
 
-       --debug-beacon-sync-target-file=<file>
+       --beacon-sync-target=<hash32>
 
-where *&lt;file&gt;* contains the hexadecimal ASCII representation of an
-*RLP* encoded object
-
-       (block-header, finalised-hash)
-
-as would be sent by the consensus layer to request a new synchronisation
-target. On mainnet, the following data example as *&lt;file&gt;* contents
-
-       f90287f90263a058391384fde62f9de477a57625cd4b1fdece5a45a06d9d5cd30bf02ee317e339a0
-       1dcc4de8dec75d7aab85b567b6ccd41ad312451b948a7413f0a142fd40d49347944838b106fce964
-       7bdf1e7877bf73ce8b0bad5f97a0c3c83afe8ea7e07985b6bddd449d48f39896d0e9dcd1ccdbde52
-       09266210f2cca0c0570c838716bb0fc00e8ee4acb50cf11931dc6e45b2bfd8499d05a7c8bf0168a0
-       81867c86c8b06e1b8818983fdfa60723d7f22d9e2a193deab314391d79c073fbb90100fdfbb6e6dd
-       daf8cefecdf5fdc5fbb825a3d73438ff7fd68db79f7f6dbc5a6d66c3ff7fafa9fdb0b4fcdbf7b5f3
-       f739c927f14dfbfe0beeaea6f167adfeaf7ecbfee6b1fff88bcbffcbdfb10b55d9de7a5a8bfef3ff
-       df6de5fdffde96dffbfffb37ff3f3fbbe674f7fdfc9fdfb74e29a160b7caffbfbeedd6defd77be77
-       7ebbdfd3bddb5bb7cfbf6b29fc116ffdbed56ed4fbae71cfefedbbf9ebf9fe1fbe50e69ef32ffa65
-       9ffd7ff67e3feef943df7deeffbcfee7f77757ffeb2edaae2ecbdcb85ef5fffeeaaf7ef7fd96be47
-       2b6af765af3c6bffe77a3ddf2d676745de72ffb6faef6f27a1e5f7ffddb2fbff3f7b5a577a476dfb
-       eb61d085e5fdfcefcd3fe5808401517663840225510083ee2a9f8467e1291798546974616e202874
-       6974616e6275696c6465722e78797a29a04990a571fa4d7089fb9524e4fecfaccf9d04e94ea715c6
-       330e11491233d3709b8800000000000000008418f4bb9ea0484b6897179f3ee33b0f59fec8d7ff56
-       c5c191a088a237f71e4721e56139b199830c0000830a0000a0ae687f92ab829e434b6371031e89fd
-       3ed8958c620c86486ba564a67a6e77c730a0aca1b7eeb3c34a7a8929713b6d5823c893d20a864c60
-       8413e68b5f4b5a16b799
-
-will initalise the syncer on *mainnet* to start syncing up to block number
-*#22115939* (with finalised hash for *#22106390*).
+where *&lt;hash32&gt;* is a hexadecimal ASCII representation of a block
+header. The hashes for particular blocks can be looked up at *etherscan.io*.
+This works well for short sync sprints (i.e. number of blocks to import.)
+For longer sync sprints the consensus layer should be availale as it reduces
+the memory footprint (by updating the finalised block.)
 
 ### Syncing on a low memory machine
 

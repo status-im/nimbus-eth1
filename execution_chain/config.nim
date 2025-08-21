@@ -349,14 +349,6 @@ type
       defaultValue: 4'u64
       name: "debug-persist-batch-size" .}: uint64
 
-    beaconSyncTargetFile* {.
-      hidden
-      desc: "Load a file containg an rlp-encoded object \"(Header,Hash32)\" " &
-            "to be used " &
-            "as the first target before any other request from the CL " &
-            "is accepted"
-      name: "debug-beacon-sync-target-file" .}: Option[InputFile]
-
     rocksdbMaxOpenFiles {.
       hidden
       defaultValue: defaultMaxOpenFiles
@@ -513,6 +505,14 @@ type
           " is auto-generated."
         defaultValueDesc: "\"jwt.hex\" in the data directory (see --data-dir)"
         name: "jwt-secret" .}: Option[InputFile]
+
+      beaconSyncTarget* {.
+        separator: "\pBEACON SYNC OPTIONS:"
+        desc: "Set the initial sync target specified by its 32 byte block" &
+              " hash (e.g. as found on etherscan.io) represented by a" &
+              " hex string. With this option, it is advisable to run this EL" &
+              " against a CL which will result in a smaller memory footprint"
+        name: "beacon-sync-target" .}: Option[string]
 
     of `import`:
       maxBlocks* {.

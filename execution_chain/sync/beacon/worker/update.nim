@@ -16,6 +16,7 @@ import
   pkg/eth/common,
   ../worker_desc,
   ./blocks/blocks_unproc,
+  ./headers/headers_target,
   ./headers
 
 logScope:
@@ -37,7 +38,6 @@ proc updateSuspendSyncer(ctx: BeaconCtxRef) =
   ##
   ctx.hdrCache.clear()
 
-  ctx.pool.clReq.reset
   ctx.pool.failedPeers.clear()
   ctx.pool.seenData = false
 
@@ -242,7 +242,8 @@ proc updateLastBlockImported*(ctx: BeaconCtxRef; bn: BlockNumber) =
 proc updateActivateSyncer*(ctx: BeaconCtxRef) =
   ## If in hibernate mode, accept a cache session and activate syncer
   ##
-  if ctx.hibernate:
+  if ctx.hibernate and                          # only in idle mode
+     ctx.pool.initTarget.isNone():              # otherwise manual setup
     let (b, t) = (ctx.chain.baseNumber, ctx.hdrCache.head.number)
 
     # Exclude the case of a single header chain which would be `T` only
@@ -262,11 +263,12 @@ proc updateActivateSyncer*(ctx: BeaconCtxRef) =
         nSyncPeers=ctx.pool.nBuddies
       return
 
-    # Failed somewhere on the way
-    ctx.hdrCache.clear()
+  # Failed somewhere on the way
+  ctx.hdrCache.clear()
 
   debug "Syncer activation rejected", base=ctx.chain.baseNumber.bnStr,
-    head=ctx.chain.latestNumber.bnStr, state=ctx.hdrCache.state
+    head=ctx.chain.latestNumber.bnStr, state=ctx.hdrCache.state,
+    initTarget=ctx.pool.initTarget.isSome()
 
 # ------------------------------------------------------------------------------
 # End

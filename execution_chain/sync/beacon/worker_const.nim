@@ -48,6 +48,12 @@ const
 
   # ----------------------
 
+  nFetchTargetFailedPeersThreshold* = 7
+    ## Similar to `nFetchHeadersFailedInitialPeersThreshold` below for
+    ## fetching the first syncer target by means of a given hash.
+
+  # ----------------------
+
   nFetchHeadersFailedInitialPeersThreshold* = 30
     ## If there are more failing peers than this threshold right at the
     ## begining of a header chain download scrum (before any data received),
