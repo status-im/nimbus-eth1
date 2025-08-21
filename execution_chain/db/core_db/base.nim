@@ -130,7 +130,7 @@ proc stateBlockNumber*(db: CoreDbTxRef): BlockNumber =
 
   rc.BlockNumber
 
-proc verify*(
+proc verifyProof*(
     db: CoreDbRef;
     proof: openArray[seq[byte]];
     root: Hash32;
@@ -221,21 +221,6 @@ proc hasKey*(kvt: CoreDbTxRef; key: openArray[byte]): bool =
 
 # ----------- accounts ---------------
 
-proc proof*(
-    acc: CoreDbTxRef;
-    accPath: Hash32;
-      ): CoreDbRc[(seq[seq[byte]],bool)] =
-  ## On the accounts MPT, collect the nodes along the `accPath` interpreted as
-  ## path. Return these path nodes as a chain of rlp-encoded blobs followed
-  ## by a bool value which is `true` if the `key` path exists in the database,
-  ## and `false` otherwise. In the latter case, the chain of rlp-encoded blobs
-  ## are the nodes proving that the `key` path does not exist.
-  ##
-  let rc = acc.aTx.makeAccountProof(accPath).valueOr:
-    return err(error.toError("", ProofCreate))
-
-  ok(rc)
-
 proc fetch*(
     acc: CoreDbTxRef;
     accPath: Hash32;
@@ -307,13 +292,42 @@ proc getStateRoot*(acc: CoreDbTxRef): CoreDbRc[Hash32] =
 
   ok(rc)
 
-# ------------ storage ---------------
-
-proc slotProof*(
+proc proof*(
     acc: CoreDbTxRef;
     accPath: Hash32;
-    stoPath: Hash32;
       ): CoreDbRc[(seq[seq[byte]],bool)] =
+  ## On the accounts MPT, collect the nodes along the `accPath` interpreted as
+  ## path. Return these path nodes as a chain of rlp-encoded blobs followed
+  ## by a bool value which is `true` if the `key` path exists in the database,
+  ## and `false` otherwise. In the latter case, the chain of rlp-encoded blobs
+  ## are the nodes proving that the `key` path does not exist.
+  ##
+  let rc = acc.aTx.makeAccountProof(accPath).valueOr:
+    return err(error.toError("", ProofCreate))
+
+  ok(rc)
+
+proc multiProof*(
+    acc: CoreDbTxRef;
+    paths: Table[Hash32, seq[Hash32]];
+    multiProof: var seq[seq[byte]]
+      ): CoreDbRc[void] =
+  ## Returns a multiproof for every account and storage path specified
+  ## in the paths table. All rlp-encoded trie nodes from all account
+  ## and storage proofs are returned in a single list.
+
+  acc.aTx.makeMultiProof(paths, multiProof).isOkOr:
+    return err(error.toError("", ProofCreate))
+
+  ok()
+
+# ------------ storage ---------------
+
+proc slotProofs*(
+    acc: CoreDbTxRef;
+    accPath: Hash32;
+    stoPaths: openArray[Hash32];
+      ): CoreDbRc[seq[seq[seq[byte]]]] =
   ## On the storage MPT related to the argument account `acPath`, collect the
   ## nodes along the `stoPath` interpreted as path. Return these path nodes as
   ## a chain of rlp-encoded blobs followed by a bool value which is `true` if
@@ -324,7 +338,7 @@ proc slotProof*(
   ## Note that the function always returns an error unless the `accPath` is
   ## valid.
   ##
-  let rc = acc.aTx.makeStorageProof(accPath, stoPath).valueOr:
+  let rc = acc.aTx.makeStorageProofs(accPath, stoPaths).valueOr:
     return err(error.toError("", ProofCreate))
 
   ok(rc)

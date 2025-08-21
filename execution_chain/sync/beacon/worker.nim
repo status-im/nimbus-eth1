@@ -113,23 +113,12 @@ template runDaemon*(ctx: BeaconCtxRef; info: static[string]): Duration =
   ##
   var bodyRc = chronos.nanoseconds(0)
   block body:
-    # Check for a possible header layout and body request changes
+    # Update syncer state.
     ctx.updateSyncState info
-    if ctx.hibernate:
-      break body             # return
 
-    # Execute staged block records.
-    if ctx.blocksUnstageOk():
-
-      # Import bodies from the `staged` queue.
-      discard ctx.blocksUnstage info # async/template
-
-      if not ctx.daemon or   # Implied by external sync shutdown?
-         ctx.poolMode:       # Oops, re-org needed?
-        break body           # return
-
-    # # At the end of the cycle, leave time to trigger refill headers/blocks
-    bodyRc = daemonWaitInterval
+    # Extra waiting time unless immediate change expected.
+    if ctx.pool.lastState in {headers,blocks}:
+      bodyRc = daemonWaitInterval
 
   bodyRc
 

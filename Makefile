@@ -122,7 +122,8 @@ VERIF_PROXY_OUT_PATH ?= build/libverifproxy/
 	dist-linux-arm64 \
 	dist-windows-amd64 \
 	dist-macos-arm64 \
-	dist
+	dist \
+	eest
 
 ifeq ($(NIM_PARAMS),)
 # "variables.mk" was not included, so we update the submodules.
@@ -223,7 +224,7 @@ libbacktrace:
 	+ $(MAKE) -C vendor/nim-libbacktrace --no-print-directory BUILD_CXX_LIB=0
 
 # nim-rocksdb
-ROCKSDB_CI_CACHE := build
+ROCKSDB_CI_CACHE := build/rocksdb
 
 ifneq ($(USE_SYSTEM_ROCKSDB), 0)
 rocksdb:
@@ -233,8 +234,11 @@ else
 rocksdb:
 endif
 
+eest:
+	scripts/eest_ci_cache.sh
+
 # builds and runs the nimbus test suite
-test: | build deps rocksdb
+test: | build deps rocksdb eest
 	$(ENV_SCRIPT) nim test $(NIM_PARAMS) nimbus.nims
 
 test_import: nimbus_execution_client
@@ -348,6 +352,12 @@ libverifproxy: | build deps
 	cp nimbus_verified_proxy/libverifproxy/verifproxy.h $(VERIF_PROXY_OUT_PATH)/
 	echo -e $(BUILD_END_MSG) "build/$@"
 
+eest_engine: | build deps
+	$(ENV_SCRIPT) nim c $(NIM_PARAMS) -d:chronicles_enabled:off "tests/eest_engine/$@.nim"
+
+eest_engine_test: | build deps eest_engine
+	$(ENV_SCRIPT) nim c -r $(NIM_PARAMS) -d:chronicles_enabled:off "tests/eest_engine/$@.nim"
+
 # builds transition tool
 t8n: | build deps
 	$(ENV_SCRIPT) nim c $(NIM_PARAMS) $(T8N_PARAMS) "tools/t8n/$@.nim"
@@ -373,6 +383,7 @@ clean: | clean-common
 	rm -rf build/{nimbus,nimbus_execution_client,nimbus_portal_client,fluffy,portal_bridge,libverifproxy,nimbus_verified_proxy,$(TOOLS_CSV),$(PORTAL_TOOLS_CSV),all_tests,test_kvstore_rocksdb,test_rpc,all_portal_tests,all_history_network_custom_chain_tests,test_portal_testnet,utp_test_app,utp_test,*.dSYM}
 	rm -rf tools/t8n/{t8n,t8n_test}
 	rm -rf tools/evmstate/{evmstate,evmstate_test}
+	rm -rf tests/fixtures/eest
 ifneq ($(USE_LIBBACKTRACE), 0)
 	+ $(MAKE) -C vendor/nim-libbacktrace clean $(HANDLE_OUTPUT)
 endif

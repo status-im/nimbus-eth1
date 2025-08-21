@@ -69,6 +69,7 @@ proc getVmState(
     doAssert txFrame.getSavedStateBlockNumber() == parent.number
     vmState.init(parent, header, p.com, txFrame, storeSlotHash = storeSlotHash)
     p.vmState = vmState
+    assign(p.parent, parent)
   else:
     if header.number != p.parent.number + 1:
       return err("Only linear histories supported by Persister")

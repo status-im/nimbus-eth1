@@ -22,76 +22,15 @@ export
   blocks_queue, blocks_unproc
 
 # ------------------------------------------------------------------------------
-# Private function(s)
+# Private helpers
 # ------------------------------------------------------------------------------
 
-template blocksStagedProcessImpl(
-    ctx: BeaconCtxRef;
-    maybePeer: Opt[BeaconBuddyRef];
-    info: static[string];
-      ): bool =
-  ## Async/template
-  ##
-  ## Import/execute blocks record from staged queue.
-  ##
-  ## The template returns `false` if the caller should make sure to allow
-  ## to switch to another sync peer, e.g. for directly filling the gap
-  ## between the top of the `topImported` and the least queue block number.
-  ##
-  var bodyRc = false
-  block body:
-    if ctx.blk.staged.len == 0:
-      break body                                   # return false => switch peer
+proc nUnprocStr(ctx: BeaconCtxRef): string =
+  if ctx.blkSessionStopped() or ctx.blocksUnprocIsEmpty(): "n/a"
+  else: $(ctx.hdrCache.head.number.uint64 - ctx.subState.top)
 
-    var
-      nImported {.inject.} = 0u64                  # statistics
-      switchPeer {.inject.} = false                # for return code
-
-    while ctx.pool.lastState == SyncState.blocks:
-
-      # Fetch list with the least block numbers
-      let qItem = ctx.blk.staged.ge(0).valueOr:
-        break                                      # all done
-
-      # Make sure that the lowest block is available, already. Or the other
-      # way round: no unprocessed block number range precedes the least staged
-      # block.
-      let minNum = qItem.data.blocks[0].header.number
-      if ctx.subState.top + 1 < minNum:
-        trace info & ": block queue not ready yet", peer=maybePeer.toStr,
-          topImported=ctx.subState.top.bnStr, qItem=qItem.data.blocks.bnStr,
-          nStagedQ=ctx.blk.staged.len, nSyncPeers=ctx.pool.nBuddies
-        switchPeer = true # there is a gap -- come back later
-        break
-
-      # Remove from queue
-      discard ctx.blk.staged.delete qItem.key
-      ctx.blocksStagedQueueMetricsUpdate()         # metrics
-
-      # Import blocks list, async/template
-      ctx.blocksImport(maybePeer, qItem.data.blocks, qItem.data.peerID, info)
-
-      # Import probably incomplete, so a partial roll back may be needed
-      let lastBn = qItem.data.blocks[^1].header.number
-      if ctx.subState.top < lastBn:
-        ctx.blocksUnprocAppend(ctx.subState.top + 1, lastBn)
-
-      nImported += ctx.subState.top - minNum + 1
-      # End while loop
-
-    if 0 < nImported:
-      chronicles.info "Blocks serialised and imported",
-        topImported=ctx.subState.top.bnStr, nImported,
-        nStagedQ=ctx.blk.staged.len, nSyncPeers=ctx.pool.nBuddies, switchPeer
-
-    elif 0 < ctx.blk.staged.len and not switchPeer:
-      trace info & ": no blocks unqueued", peer=maybePeer.toStr,
-        topImported=ctx.subState.top.bnStr, nStagedQ=ctx.blk.staged.len,
-        nSyncPeers=ctx.pool.nBuddies
-
-    bodyRc = not switchPeer
-
-  bodyRc # return
+proc bnStrIfAvail(bn: BlockNumber; ctx: BeaconCtxRef): string =
+  if ctx.blkSessionStopped(): "n/a" else: bn.bnStr
 
 # ------------------------------------------------------------------------------
 # Public functions
@@ -172,15 +111,12 @@ template blocksCollect*(
         ctx.pool.seenData = true                     # blocks data exist
 
         # Import blocks (no staging), async/template
-        ctx.blocksImport(Opt.some(buddy), blocks, buddy.peerID, info)
+        nImported += buddy.blocksImport(blocks, buddy.peerID, info)
 
         # Import may be incomplete, so a partial roll back may be needed
         let lastBn = blocks[^1].header.number
         if ctx.subState.top < lastBn:
           ctx.blocksUnprocAppend(ctx.subState.top + 1, lastBn)
-
-        # statistics
-        nImported += ctx.subState.top - blocks[0].header.number + 1
 
         # Buddy might have been cancelled while importing blocks.
         if buddy.ctrl.stopped or ctx.poolMode:
@@ -215,23 +151,30 @@ template blocksCollect*(
 
       # End block: `fetchBlocksBody`
 
-    if nImported == 0 and nQueued == 0:
-      if not ctx.pool.seenData and
+    if 0 < nImported:
+      chronicles.info "Imported blocks", nImported, nUnproc=ctx.nUnprocStr(),
+        nStagedQ=ctx.blk.staged.len,
+        base=ctx.chain.baseNumber.bnStr, head=ctx.chain.latestNumber.bnStr,
+        target=ctx.subState.head.bnStr, targetHash=ctx.subState.headHash.short,
+        nSyncPeers=ctx.pool.nBuddies
+
+    elif nQueued == 0 and
+         not ctx.pool.seenData and
          buddy.peerID notin ctx.pool.failedPeers and
          buddy.ctrl.stopped:
-        # Collect peer for detecting cul-de-sac syncing (i.e. non-existing
-        # block chain or similar.)
-        ctx.pool.failedPeers.incl buddy.peerID
+      # Collect peer for detecting cul-de-sac syncing (i.e. non-existing
+      # block chain or similar.)
+      ctx.pool.failedPeers.incl buddy.peerID
 
-        debug info & ": no blocks yet (failed peer)", peer,
-          failedPeers=ctx.pool.failedPeers.len,
-          syncState=($buddy.syncState), bdyErrors=buddy.bdyErrors
+      debug info & ": no blocks yet (failed peer)", peer,
+        failedPeers=ctx.pool.failedPeers.len,
+        syncState=($buddy.syncState), bdyErrors=buddy.bdyErrors
       break body                                    # return
 
-    chronicles.info "Queued/staged or imported blocks",
+    # This message might run in addition to the `chronicles.info` part
+    trace info & "queued/staged or imported blocks",
       topImported=ctx.subState.top.bnStr,
-      unprocBottom=(if ctx.blkSessionStopped(): "n/a"
-                    else: ctx.blocksUnprocAvailBottom.bnStr),
+      unprocBottom=ctx.blocksUnprocAvailBottom.bnStrIfAvail(ctx),
       nQueued, nImported, nStagedQ=ctx.blk.staged.len,
       nSyncPeers=ctx.pool.nBuddies
 
@@ -245,17 +188,78 @@ proc blocksUnstageOk*(ctx: BeaconCtxRef): bool =
   not ctx.poolMode and
   0 < ctx.blk.staged.len
 
-template blocksUnstage*(
-    ctx: BeaconCtxRef;
-    info: static[string];
-      ): auto =
-  ctx.blocksStagedProcessImpl(Opt.none(BeaconBuddyRef), info)
 
 template blocksUnstage*(
     buddy: BeaconBuddyRef;
     info: static[string];
-      ): auto =
-  buddy.ctx.blocksStagedProcessImpl(Opt.some(buddy), info)
+      ): bool =
+  ## Async/template
+  ##
+  ## Import/execute blocks record from staged queue.
+  ##
+  ## The template returns `false` if the caller should make sure to allow
+  ## to switch to another sync peer, e.g. for directly filling the gap
+  ## between the top of the `topImported` and the least queue block number.
+  ##
+  var bodyRc = false
+  block body:
+    let
+      ctx = buddy.ctx
+      peer = buddy.peer
+
+    if ctx.blk.staged.len == 0:
+      break body                                   # return false => switch peer
+
+    var
+      nImported {.inject.} = 0u64                  # statistics
+      switchPeer {.inject.} = false                # for return code
+
+    while ctx.pool.lastState == SyncState.blocks:
+
+      # Fetch list with the least block numbers
+      let qItem = ctx.blk.staged.ge(0).valueOr:
+        break                                      # all done
+
+      # Make sure that the lowest block is available, already. Or the other
+      # way round: no unprocessed block number range precedes the least staged
+      # block.
+      let minNum = qItem.data.blocks[0].header.number
+      if ctx.subState.top + 1 < minNum:
+        trace info & ": block queue not ready yet", peer,
+          topImported=ctx.subState.top.bnStr, qItem=qItem.data.blocks.bnStr,
+          nStagedQ=ctx.blk.staged.len, nSyncPeers=ctx.pool.nBuddies
+        switchPeer = true # there is a gap -- come back later
+        break
+
+      # Remove from queue
+      discard ctx.blk.staged.delete qItem.key
+      ctx.blocksStagedQueueMetricsUpdate()         # metrics
+
+      # Import blocks list, async/template
+      nImported += buddy.blocksImport(qItem.data.blocks,qItem.data.peerID, info)
+
+      # Import probably incomplete, so a partial roll back may be needed
+      let lastBn = qItem.data.blocks[^1].header.number
+      if ctx.subState.top < lastBn:
+        ctx.blocksUnprocAppend(ctx.subState.top + 1, lastBn)
+
+      # End while loop
+
+    if 0 < nImported:
+      chronicles.info "Imported blocks", nImported, nUnproc=ctx.nUnprocStr(),
+        nStagedQ=ctx.blk.staged.len,
+        base=ctx.chain.baseNumber.bnStr, head=ctx.chain.latestNumber.bnStr,
+        target=ctx.subState.head.bnStr, targetHash=ctx.subState.headHash.short,
+        nSyncPeers=ctx.pool.nBuddies
+
+    elif switchPeer or 0 < ctx.blk.staged.len:
+      debug info & ": no blocks unqueued", peer,
+        topImported=ctx.subState.top.bnStr, nStagedQ=ctx.blk.staged.len,
+        nSyncPeers=ctx.pool.nBuddies, switchPeer
+
+    bodyRc = not switchPeer
+
+  bodyRc # return
 
 # --------------
 

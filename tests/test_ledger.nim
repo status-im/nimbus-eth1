@@ -93,7 +93,7 @@ proc privKey(keyHex: string): PrivateKey =
 proc initEnv(): TestEnv =
   let
     conf = makeConfig(@[
-      "--custom-network:" & genesisFile
+      "--network:" & genesisFile
     ])
 
   let

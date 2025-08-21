@@ -1,0 +1,31 @@
+# Nimbus
+# Copyright (c) 2018-2025 Status Research & Development GmbH
+# Licensed under either of
+#  * Apache License, version 2.0, ([LICENSE-APACHE](LICENSE-APACHE) or
+#    http://www.apache.org/licenses/LICENSE-2.0)
+#  * MIT license ([LICENSE-MIT](LICENSE-MIT) or
+#    http://opensource.org/licenses/MIT)
+# at your option. This file may not be copied, modified, or distributed except
+# according to those terms.
+
+FROM arm64v8/debian:bullseye-slim
+
+SHELL ["/bin/bash", "-c"]
+
+# We need the host's registered binfmt_misc "interpreter" inside the container,
+# for that transparent virtualisation to work.
+COPY "qemu-aarch64-static" "/usr/bin/"
+
+# Likely to match the first regular user:group created on the host.
+RUN addgroup --gid 1000 user; \
+	adduser --disabled-password --gecos '' --uid 1000 --gid 1000 user;
+
+USER user
+
+STOPSIGNAL SIGINT
+
+# Docker refuses to copy the source directory here, so read it as "nimbus-eth1/*"
+COPY "nimbus-eth1" "/home/user/nimbus-eth1/"
+WORKDIR "/home/user/nimbus-eth1/"
+ENTRYPOINT ["/home/user/nimbus-eth1/build/nimbus_execution_client"]
+

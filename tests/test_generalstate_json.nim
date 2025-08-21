@@ -197,26 +197,20 @@ proc testFixture(fixtures: JsonNode, testStatusIMPL: var TestStatus,
 
 proc generalStateJsonMain*(debugMode = false) =
   const
-    legacyFolder = "eth_tests/LegacyTests/Constantinople/GeneralStateTests"
-    newFolder = "eth_tests/GeneralStateTests"
+    newFolder = "eest/state_tests"
 
   let config = getConfiguration()
   if config.testSubject == "" or not debugMode:
     # run all test fixtures
-    if config.legacy:
-      suite "generalstate json tests":
-        jsonTest(legacyFolder, "LegacyGeneralStateTests", testFixture, skipGSTTests)
-    else:
-      suite "new generalstate json tests":
-        jsonTest(newFolder, "GeneralStateTests", testFixture, skipNewGSTTests)
+    suite "new generalstate json tests":
+      jsonTest(newFolder, "GeneralStateTests", testFixture, skipNewGSTTests)
   else:
     # execute single test in debug mode
     if config.testSubject.len == 0:
       echo "missing test subject"
       quit(QuitFailure)
-
-    let folder = if config.legacy: legacyFolder else: newFolder
-    let path = "tests" / "fixtures" / folder
+    
+    let path = "tests" / "fixtures" / newFolder
     let n = json.parseFile(path / config.testSubject)
     var testStatusIMPL: TestStatus
     testFixture(n, testStatusIMPL, config.trace, true)

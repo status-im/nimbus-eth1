@@ -66,10 +66,11 @@ proc say(noisy = false; pfx = "***"; args: varargs[string, `$`]) =
     else:
       echo pfx, args.toSeq.join
 
-proc setErrorLevel =
-  discard
-  when defined(chronicles_runtime_filtering) and loggingEnabled:
-    setLogLevel(LogLevel.ERROR)
+when isMainModule:
+  proc setErrorLevel =
+    discard
+    when defined(chronicles_runtime_filtering) and loggingEnabled:
+      setLogLevel(LogLevel.ERROR)
 
 # ------------------------------------------------------------------------------
 # Private Functions
@@ -94,19 +95,8 @@ func getSignedToken(key: openArray[byte], payload: string): string =
   let sData = "eyJ0eXAiOiJKV1QiLCJhbGciOiJIUzI1NiJ9." & base64urlEncode(payload)
   sData & "." & sha256.hmac(key, sData).data.base64urlEncode
 
-func getSignedToken2(key: openArray[byte], payload: string): string =
-  ## Variant of `getSignedToken()`: different algorithm encoding
-  let
-    jNode = %* {"alg": "HS256", "typ": "JWT" }
-    sData = base64urlEncode($jNode) & "." & base64urlEncode(payload)
-  sData & "." & sha256.hmac(key, sData).data.base64urlEncode
-
 func getHttpAuthReqHeader(secret: JwtSharedKey; time: uint64): HttpTable =
   let bearer = secret.UnGuardedKey.getSignedToken($getIatToken(time))
-  result.add("aUtHoRiZaTiOn", "Bearer " & bearer)
-
-func getHttpAuthReqHeader2(secret: JwtSharedKey; time: uint64): HttpTable =
-  let bearer = secret.UnGuardedKey.getSignedToken2($getIatToken(time))
   result.add("aUtHoRiZaTiOn", "Bearer " & bearer)
 
 # ------------------------------------------------------------------------------

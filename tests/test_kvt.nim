@@ -23,9 +23,6 @@ suite "Kvt TxFrame":
     let
       tx0 = db.txFrameBegin(db.baseTxFrame())
       tx1 = db.txFrameBegin(tx0)
-      tx2 = db.txFrameBegin(tx1)
-      tx2b = db.txFrameBegin(tx1)
-      tx2c = db.txFrameBegin(tx1)
 
     check:
       tx0.put([byte 0, 1, 2], [byte 0, 1, 2]).isOk()

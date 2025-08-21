@@ -61,17 +61,17 @@ type
     ## `sTab[]` tables must correspond to a hash entry held on the `kMap[]`
     ## tables. So a corresponding zero value or missing entry produces an
     ## inconsistent state that must be resolved.
-    db*: AristoDbRef                       ## Database descriptor
-    parent*: AristoTxRef                   ## Previous transaction
+    db*: AristoDbRef                        ## Database descriptor
+    parent*: AristoTxRef                    ## Previous transaction
 
-    sTab*: Table[RootedVertexID,VertexRef] ## Structural vertex table
-    kMap*: Table[RootedVertexID,HashKey]   ## Merkle hash key mapping
-    vTop*: VertexID                        ## Last used vertex ID
+    sTab*: Table[RootedVertexID, VertexRef] ## Structural vertex table
+    kMap*: Table[RootedVertexID, HashKey]   ## Merkle hash key mapping
+    vTop*: VertexID                         ## Last used vertex ID
 
-    accLeaves*: Table[Hash32, AccLeafRef]  ## Account path -> VertexRef
-    stoLeaves*: Table[Hash32, StoLeafRef]  ## Storage path -> VertexRef
+    accLeaves*: Table[Hash32, AccLeafRef]   ## Account path -> VertexRef
+    stoLeaves*: Table[Hash32, StoLeafRef]   ## Storage path -> VertexRef
 
-    blockNumber*: Opt[uint64]              ## Block number set when checkpointing the frame
+    blockNumber*: Opt[uint64]               ## Block number set when checkpointing the frame
 
     snapshot*: Snapshot
       ## Optional snapshot containing the cumulative changes from ancestors and

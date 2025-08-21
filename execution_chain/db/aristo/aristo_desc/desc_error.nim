@@ -87,6 +87,7 @@ type
     PartChnLeafPathMismatch
     PartChnNodeConvError
     PartTrkEmptyPath
+    PartTrkEmptyProof
     PartTrkFollowUpKeyMismatch
     PartTrkGarbledNode
     PartTrkLeafPfxMismatch
