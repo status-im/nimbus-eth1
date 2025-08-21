@@ -8,7 +8,7 @@
 # those terms.
 
 import
-  std/[json, cmdline],
+  std/[json, cmdline, os],
   unittest2,
   eth/common/headers_rlp,
   web3/eth_api_types,
@@ -87,7 +87,7 @@ proc processFile*(fileName: string): bool =
     doAssert(unit.unit.genesisBlockHeader.hash == header.computeRlpHash)
     let env = prepareEnv(unit.unit, header)
     (waitFor env.runTest(unit.unit)).isOkOr:
-      debugEcho "TestName: ", unit.name, "RunTest error: ", error
+      echo "TestName: ", unit.name, "RunTest error: ", error
       testPass = false
     env.close()
 
@@ -95,7 +95,8 @@ proc processFile*(fileName: string): bool =
 
 when isMainModule:
   if paramCount() == 0:
-    debugEcho "Usage: eest_engine vector.json"
+    let testFile = getAppFilename().splitPath().tail
+    echo "Usage: " & testFile & " vector.json"
     quit(QuitFailure)
   
   check processFile(paramStr(1))
