@@ -34,7 +34,7 @@ EEST_DEVELOP_DIR="${FIXTURES_DIR}/eest_develop"
 EEST_DEVELOP_ARCHIVE="fixtures_develop.tar.gz"
 EEST_DEVELOP_URL="https://github.com/ethereum/execution-spec-tests/releases/download/${EEST_DEVELOP_VERSION}/${EEST_DEVELOP_ARCHIVE}"
 
-# --- Develop/Devnet Release ---
+# --- Devnet Release ---
 EEST_DEVNET_NAME="fusaka-devnet-3"
 EEST_DEVNET_VERSION="v1.0.0"
 EEST_DEVNET_DIR="${FIXTURES_DIR}/eest_devnet"
