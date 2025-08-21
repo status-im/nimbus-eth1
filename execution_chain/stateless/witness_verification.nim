@@ -99,10 +99,7 @@ func verify*(witness: ExecutionWitness, preStateRoot: Hash32): Result[void, stri
       maybeAccLeaf = verifyProof(stateTable, preStateRoot, accPath).valueOr:
         return err("Account proof verification failed against pre-stateroot")
       accLeaf = maybeAccLeaf.valueOr:
-        if slots.len() > 0:
-          return err("Slot keys provided but account doesn't exist")
-        else:
-          continue
+        continue
 
     let account =
       try:
