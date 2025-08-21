@@ -120,6 +120,10 @@ type
     ## Local descriptor data extension
     nRespErrors*: BuddyError         ## Number of errors/slow responses in a row
 
+  InitTarget* = tuple
+    hash: Hash32                     ## Some block hash to sync towards to
+    isFinal: bool                    ## The `hash` belongs to a finalised block
+
   BeaconCtxData* = object
     ## Globally shared data extension
     nBuddies*: int                   ## Number of active workers
@@ -138,7 +142,7 @@ type
     lastSlowPeer*: Opt[Hash]         ## Register slow peer when the last one
     failedPeers*: HashSet[Hash]      ## Detect dead end sync by collecting peers
     seenData*: bool                  ## Set `true` if data were fetched, already
-    initTarget*: Opt[Hash32]         ## Optionally set up first target
+    initTarget*: Opt[InitTarget]     ## Optionally set up first target
 
     when enableTicker:
       ticker*: RootRef               ## Logger ticker

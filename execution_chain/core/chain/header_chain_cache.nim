@@ -324,8 +324,12 @@ proc headUpdateFromCL(hc: HeaderChainRef; h: Header; f: Hash32) =
       hc.kvt.putHeader(h)
       metrics.set(nec_sync_dangling, h.number.int64)
 
-      # Inform client app about that a new session has started.
+      # Update `FC` module
       hc.chain.pendingFCU = f
+      if f == hc.session.headHash:
+        discard hc.chain.tryUpdatePendingFCU(f, h.number)
+
+      # Inform client app about that a new session has started.
       hc.notify()
 
     # For logging and metrics

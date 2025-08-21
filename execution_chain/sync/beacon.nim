@@ -69,10 +69,10 @@ proc init*(
   desc.ctx.pool.chain = chain
   desc
 
-proc targetInit*(desc: BeaconSyncRef; hex: string): bool =
+proc targetInit*(desc: BeaconSyncRef; hex: string; isFinal: bool): bool =
   ## Set up inital target sprint (if any, mainly for debugging)
   try:
-    desc.ctx.headersTargetRequest(Hash32.fromHex(hex), "init")
+    desc.ctx.headersTargetRequest(Hash32.fromHex(hex), isFinal, "init")
     return true
   except ValueError:
     discard
