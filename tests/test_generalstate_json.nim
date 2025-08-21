@@ -202,8 +202,17 @@ proc generalStateJsonMain*(debugMode = false) =
   let config = getConfiguration()
   if config.testSubject == "" or not debugMode:
     # run all test fixtures
-    suite "new generalstate json tests":
+    suite "new generalstate json tests: eest_static":
       jsonTest(newFolder, "GeneralStateTests", testFixture, skipNewGSTTests)
+
+    suite "new generalstate json tests: eest_stable":
+      jsonTest("eest_stable/state_tests", "GeneralStateTests", testFixture, skipNewGSTTests)
+
+    suite "new generalstate json tests: eest_develop":
+      jsonTest("eest_develop/state_tests", "GeneralStateTests", testFixture, skipNewGSTTests)
+
+    suite "new generalstate json tests: eest_devnet":
+      jsonTest("eest_devnet/state_tests", "GeneralStateTests", testFixture, skipNewGSTTests)
 
   else:
     # execute single test in debug mode
