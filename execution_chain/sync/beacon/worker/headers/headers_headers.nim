@@ -128,7 +128,7 @@ proc headersStashOnDisk*(
     return err()                                 # stop
 
   let dBottom = ctx.hdrCache.antecedent.number   # new antecedent
-  debug info & ": Serialised headers stashed", peer,
+  trace info & ": Serialised headers stashed", peer,
     iv=(if dBottom < dTop: (dBottom,dTop-1).bnStr else: "n/a"),
     nHeaders=(dTop - dBottom),
     nSkipped=(if rc.isErr: 0u64
