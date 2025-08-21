@@ -170,7 +170,7 @@ template headersCollect*(buddy: BeaconBuddyRef; info: static[string]) =
          not ctx.pool.seenData and
          buddy.peerID notin ctx.pool.failedPeers and
          buddy.ctrl.stopped:
-      # Collect peer for detecting cul-de-sac syncing (i.e. non-existing
+      # Collect peers for detecting cul-de-sac syncing (i.e. non-existing
       # block chain or similar.)
       ctx.pool.failedPeers.incl buddy.peerID
 
@@ -247,7 +247,7 @@ proc headersUnstage*(buddy: BeaconBuddyRef; info: static[string]): bool =
       nSyncPeers=ctx.pool.nBuddies
 
   elif switchPeer or 0 < ctx.hdr.staged.len:
-    debug info & ": no headers processed", peer,
+    trace info & ": no headers processed", peer,
       D=ctx.hdrCache.antecedent.bnStr,
       nStashed, nStagedQ=ctx.hdr.staged.len, nSyncPeers=ctx.pool.nBuddies,
       switchPeer

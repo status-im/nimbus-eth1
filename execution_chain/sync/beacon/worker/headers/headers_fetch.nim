@@ -127,7 +127,7 @@ template fetchHeadersReversed*(
       break body                                   # return err()
 
     # Verify that first block number matches
-    if h[^1].number != ivReq.minPt:
+    if h[^1].number != ivReq.minPt and ivReq.minPt != 0:
       buddy.hdrFetchRegisterError()
       trace trEthRecvReceivedBlockHeaders, peer, nReq=req.maxResults,
         hash=topHash.toStr, reqMinPt=ivReq.minPt.bnStr,

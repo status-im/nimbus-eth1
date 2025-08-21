@@ -15,6 +15,7 @@ import
   pkg/stew/[interval_set, sorted_set],
   ../core/chain,
   ../networking/p2p,
+  ./beacon/worker/headers/headers_target,
   ./beacon/[worker, worker_desc],
   ./[sync_desc, sync_sched, wire_protocol]
 
@@ -68,10 +69,14 @@ proc init*(
   desc.ctx.pool.chain = chain
   desc
 
-proc targetInit*(desc: BeaconSyncRef; rlpFile: string) =
-  ## Set up inital sprint (intended for debugging)
-  desc.ctx.initalTargetFromFile(rlpFile, "targetInit").isOkOr:
-    raiseAssert error
+proc targetInit*(desc: BeaconSyncRef; hex: string): bool =
+  ## Set up inital target sprint (if any, mainly for debugging)
+  try:
+    desc.ctx.headersTargetRequest(Hash32.fromHex(hex), "init")
+    return true
+  except ValueError:
+    discard
+  # false
 
 proc start*(desc: BeaconSyncRef): bool =
   desc.startSync()

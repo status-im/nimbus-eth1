@@ -63,13 +63,6 @@ proc setupServices*(ctx: BeaconCtxRef; info: static[string]) =
     # Activates the syncer. Work will be picked up by peers when available.
     ctx.updateActivateSyncer()
 
-  # Manual first run?
-  if 0 < ctx.pool.clReq.consHead.number:
-    debug info & ": pre-set target", consHead=ctx.pool.clReq.consHead.bnStr,
-      finalHash=ctx.pool.clReq.finalHash.short
-    ctx.hdrCache.headTargetUpdate(
-      ctx.pool.clReq.consHead, ctx.pool.clReq.finalHash)
-
   # Provide progress info call back handler
   ctx.pool.chain.com.beaconSyncerProgress = proc(): SyncStateData =
     ctx.querySyncProgress()

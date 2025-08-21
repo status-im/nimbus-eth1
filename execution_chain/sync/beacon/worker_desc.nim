@@ -87,13 +87,6 @@ type
 
   # -------------------
 
-  SyncClMesg* = object
-    ## Beacon state message used for manual first target set up
-    consHead*: Header                ## Consensus head
-    finalHash*: Hash32               ## Finalised hash
-
-  # -------------------
-
   SyncSubState* = object
     ## Bundelled state variables, easy to clear all with one `reset`.
     top*: BlockNumber                ## For locally syncronising block import
@@ -145,9 +138,7 @@ type
     lastSlowPeer*: Opt[Hash]         ## Register slow peer when the last one
     failedPeers*: HashSet[Hash]      ## Detect dead end sync by collecting peers
     seenData*: bool                  ## Set `true` if data were fetched, already
-
-    # Debugging stuff
-    clReq*: SyncClMesg               ## Manual first target set up
+    initTarget*: Opt[Hash32]         ## Optionally set up first target
 
     when enableTicker:
       ticker*: RootRef               ## Logger ticker
