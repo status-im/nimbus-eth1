@@ -179,17 +179,17 @@ proc persistBlock*(p: var Persister, blk: Block): Result[void, string] =
 
     processBlock()
 
-    # Build and persist the witness in the database.
     let
       preStateLedger = LedgerRef.init(parentTxFrame)
       witness = Witness.build(preStateLedger, vmState.ledger, p.parent, header)
-    ?vmState.ledger.txFrame.persistWitness(header.computeBlockHash(), witness)
 
     # Convert the witness to ExecutionWitness format and verify against the pre-stateroot.
     if vmState.com.statelessWitnessValidation:
       doAssert witness.validateKeys(vmState.ledger.getWitnessKeys()).isOk()
       let executionWitness = ExecutionWitness.build(witness, vmState.ledger)
       ?executionWitness.verify(preStateLedger.getStateRoot())
+
+    ?vmState.ledger.txFrame.persistWitness(header.computeBlockHash(), witness)
 
 
   if NoPersistHeader notin p.flags:
