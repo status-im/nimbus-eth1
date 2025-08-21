@@ -231,6 +231,10 @@ proc deserialize*(fc: ForkedChainRef): Result[void, string] =
   let prevBase = fc.base
   var blocks = newSeq[BlockRef](state.numBlocks)
 
+  if state.latest > state.numBlocks:
+    fc.reset(prevBase)
+    return err("Invalid state: latest block is greater than number of blocks")
+
   try:
     for i in 0..<state.numBlocks:
       let
