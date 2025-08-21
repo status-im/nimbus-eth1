@@ -48,7 +48,7 @@ proc build*(
       # codeTouched is only set for account keys
       if codeTouched:
         let codeHash = preStateLedger.getCodeHash(key.address)
-        if codeHash notin addedCodeHashes:
+        if codeHash != EMPTY_CODE_HASH and codeHash notin addedCodeHashes:
           witness.addCodeHash(codeHash)
           addedCodeHashes.incl(codeHash)
 
@@ -113,6 +113,8 @@ proc build*(
       let blockHash = ledger.getBlockHash(BlockNumber(n))
       doAssert(blockHash != default(Hash32))
       witness.addHeaderHash(blockHash)
+
+  witness
 
 
 proc build*(T: type ExecutionWitness, witness: Witness, ledger: LedgerRef): ExecutionWitness =

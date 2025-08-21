@@ -125,6 +125,8 @@ func verify*(witness: ExecutionWitness, preStateRoot: Hash32): Result[void, stri
       return err("Hash of code not found in witness state")
 
   # Verify witness headers
+  if witness.headers.len() < 1:
+    return err("At least one header (the parent) is required in the witness")
   if witness.headers.len() > 256:
     return err("Too many headers in witness")
 
