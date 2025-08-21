@@ -236,7 +236,8 @@ proc deserialize*(fc: ForkedChainRef): Result[void, string] =
      state.base > state.numBlocks: 
     fc.reset(prevBase)
     return err("Invalid state: latest block is greater than number of blocks")
-
+  
+  # Sanity Checks for all the heads in FC state
   for head in state.heads:
     if head > state.numBlocks:
       fc.reset(prevBase)
