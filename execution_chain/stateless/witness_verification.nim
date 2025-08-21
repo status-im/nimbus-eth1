@@ -111,10 +111,13 @@ func verify*(witness: ExecutionWitness, preStateRoot: Hash32): Result[void, stri
         return err("Failed to decode account leaf from witness state")
     codeHashes.incl(account.codeHash)
 
-    for slot in slots:
-      let slotPath = slot.toSlotKey()
-      discard verifyProof(stateTable, account.storageRoot, slotPath).valueOr:
-        return err("Slot proof verification failed against pre-stateroot")
+    # No point in verifying slot proofs against an empty root hash
+    # because the verification will always return an error in this case.
+    if account.storageRoot != EMPTY_ROOT_HASH:
+      for slot in slots:
+        let slotPath = slot.toSlotKey()
+        discard verifyProof(stateTable, account.storageRoot, slotPath).valueOr:
+          return err("Slot proof verification failed against pre-stateroot")
 
   # Verify codes in witness against codeHashes in the state
   for code in witness.codes:

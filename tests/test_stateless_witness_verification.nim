@@ -53,10 +53,13 @@ suite "Stateless: Witness Verification":
     discard ledger.getStorage(addr1, slot1)
     discard ledger.getStorage(addr1, slot2)
     discard ledger.getStorage(addr1, slot3)
+    discard ledger.getStorage(addr1, 4.u256) # doesn't exist in the state
     discard ledger.getBalance(addr2)
+    discard ledger.getStorage(addr2, 1.u256) # doesn't exist in the state
+    discard ledger.getBalance(address"0x0f572e5295c57f15886f9b263e2f6d2d6c7b5ec8") # doesn't exist in the state
 
     let witnessKeys = ledger.getWitnessKeys()
-    check witnessKeys.len() == 5
+    check witnessKeys.len() == 8
 
     var witness = Witness.build(witnessKeys, ledger)
     witness.addHeaderHash(header1.computeRlpHash())
@@ -64,5 +67,7 @@ suite "Stateless: Witness Verification":
     witness.addHeaderHash(header3.computeRlpHash())
     check witness.validateKeys(witnessKeys).isOk()
 
-    let executionWitness = ExecutionWitness.build(witness, ledger)
-    check executionWitness.verify(stateRoot).isOk()
+    let
+      executionWitness = ExecutionWitness.build(witness, ledger)
+      verificationResult = executionWitness.verify(stateRoot)
+    check verificationResult.isOk()
