@@ -17,7 +17,7 @@ import
   ../../../db/core_db,
   ../../../evm/types,
   ../../../evm/state,
-  ../../../stateless/witness_generation,
+  ../../../stateless/[witness_generation, witness_verification],
   ./chain_branch
 
 proc writeBaggage*(c: ForkedChainRef,
@@ -93,11 +93,17 @@ proc processBlock*(c: ForkedChainRef,
 
     processBlock()
 
+    # Build and persist the witness in the database.
     let
       preStateLedger = LedgerRef.init(parentBlk.txFrame)
       witness = Witness.build(preStateLedger, vmState.ledger, parentBlk.header, header)
-      
     ?vmState.ledger.txFrame.persistWitness(blkHash, witness)
+
+    # Convert the witness to ExecutionWitness format and verify against the pre-stateroot.
+    if vmState.com.statelessWitnessValidation:
+      let executionWitness = ExecutionWitness.build(witness, vmState.ledger)
+      ?executionWitness.verify(preStateLedger.getStateRoot())
+
 
   # We still need to write header to database
   # because validateUncles still need it
