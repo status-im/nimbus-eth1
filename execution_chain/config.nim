@@ -507,19 +507,20 @@ type
         name: "jwt-secret" .}: Option[InputFile]
 
       beaconSyncTarget* {.
-        separator: "\pBEACON SYNC OPTIONS:"
+        hidden
         desc: "Manually set the initial sync target specified by its 32 byte" &
               " block hash (e.g. as found on etherscan.io) represented by a" &
               " hex string"
-        name: "beacon-sync-target" .}: Option[string]
+        name: "debug-beacon-sync-target" .}: Option[string]
 
       beaconSyncTargetIsFinal* {.
+        hidden
         defaultValue: false
         desc: "If the sync taget is finalised (e.g. as stated on" &
               " etherscan.io) this can be set here. For a non-finalised" &
               " manual sync target it is advisable to run this EL against a" &
               " CL which will result in a smaller memory footprint"
-        name: "beacon-sync-target-is-final".}: bool
+        name: "debug-beacon-sync-target-is-final".}: bool
 
     of `import`:
       maxBlocks* {.
