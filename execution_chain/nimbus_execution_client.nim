@@ -29,7 +29,8 @@ import
   ./db/storage_types,
   ./sync/wire_protocol,
   ./common/chain_config_hash,
-  ./portal/portal
+  ./portal/portal,
+  beacon_chain/process_state
 
 from beacon_chain/nimbus_binary_common import setupFileLimits
 
@@ -288,36 +289,24 @@ proc run(nimbus: NimbusNode, conf: NimbusConf) =
       if not nimbus.beaconSyncRef.start():
         nimbus.beaconSyncRef = BeaconSyncRef(nil)
 
-    if nimbus.state == NimbusState.Starting:
-      # it might have been set to "Stopping" with Ctrl+C
-      nimbus.state = NimbusState.Running
+    # Be graceful about ctrl-c during init
+    if ProcessState.stopping.isNone:
+      ProcessState.notifyRunning()
 
-    # Main event loop
-    while nimbus.state == NimbusState.Running:
-      try:
+      while not ProcessState.stopIt(notice("Shutting down", reason = it)):
         poll()
-      except CatchableError as e:
-        debug "Exception in poll()", exc = e.name, err = e.msg
-        discard e # silence warning when chronicles not activated
 
     # Stop loop
     waitFor nimbus.closeWait()
 
 when isMainModule:
-  var nimbus = NimbusNode(state: NimbusState.Starting, ctx: newEthContext())
+  ProcessState.setupStopHandlers()
+
+  var nimbus = NimbusNode(ctx: newEthContext())
 
   ## Processing command line arguments
   let conf = makeConfig()
 
   setupFileLimits()
-
-  ## Ctrl+C handling
-  proc controlCHandler() {.noconv.} =
-    when defined(windows):
-      # workaround for https://github.com/nim-lang/Nim/issues/4057
-      setupForeignThreadGc()
-    nimbus.state = NimbusState.Stopping
-    notice "\nCtrl+C pressed. Waiting for a graceful shutdown."
-  setControlCHook(controlCHandler)
 
   nimbus.run(conf)

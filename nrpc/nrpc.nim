@@ -20,6 +20,7 @@ import
   ../execution_chain/utils/era_helpers,
     web3,
   web3/[engine_api, primitives, conversions],
+  beacon_chain/process_state,
   beacon_chain/spec/digest,
   beacon_chain/el/el_conf,
   beacon_chain/el/el_manager,
@@ -29,8 +30,6 @@ import
   beacon_chain/spec/eth2_apis/[rest_types, rest_beacon_calls],
   beacon_chain/networking/network_metadata,
   eth/async_utils
-
-var running* {.volatile.} = true
 
 func f(value: float): string =
   if value >= 1000:
@@ -115,7 +114,8 @@ template findSlot(
   notice "Finding slot number corresponding to block", importedSlot = importedSlot
 
   var clNum = 0'u64
-  while running and clNum < currentBlockNumber:
+  while not ProcessState.stopIt(notice("Shutting down", reason = it)) and
+      clNum < currentBlockNumber:
     let (blk, stat) =
       client.getELBlockFromBeaconChain(BlockIdent.init(Slot(importedSlot)), clConfig)
     if not stat:
@@ -260,7 +260,9 @@ proc syncToEngineApi(conf: NRpcConf) {.async.} =
 
     estimateProgressForSync()
 
-  while running and currentBlockNumber < headBlck.header.number:
+  while not ProcessState.stopIt(notice("Shutting down", reason = it)) and
+      currentBlockNumber < headBlck.header.number:
+
     var isAvailable = false
     (curBlck, isAvailable) =
       client.getCLBlockFromBeaconChain(BlockIdent.init(Slot(importedSlot)), clConfig)
@@ -404,14 +406,7 @@ proc syncToEngineApi(conf: NRpcConf) {.async.} =
   sendFCU(curBlck)
 
 when isMainModule:
-  ## Ctrl+C handling
-  proc controlCHandler() {.noconv.} =
-    when defined(windows):
-      # workaround for https://github.com/nim-lang/Nim/issues/4057
-      setupForeignThreadGc()
-    running = false
-
-  setControlCHook(controlCHandler)
+  ProcessState.setupStopHandlers()
 
   ## Show logs on stdout until we get the user's logging choice
   discard defaultChroniclesStream.output.open(stdout)
