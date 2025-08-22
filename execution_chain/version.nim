@@ -18,7 +18,10 @@ const
 
 static:
   doAssert(nimbusRevision.len == 8, "nimbusRevision must consist of 8 characters")
-  doAssert(nimbusRevision.allIt(it in HexDigits), "nimbusRevision should contains only hex chars")
+  doAssert(
+    nimbusRevision.allIt(it in HexDigits),
+    "nimbusRevision should contains only hex chars",
+  )
 
 proc gitFolderExists(path: string): bool {.compileTime.} =
   # walk up parent folder to find `.git` folder
