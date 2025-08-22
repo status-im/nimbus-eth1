@@ -30,14 +30,7 @@ import
   ./sync/wire_protocol,
   ./common/chain_config_hash,
   ./portal/portal,
-  beacon_chain/process_state
-
-from beacon_chain/nimbus_binary_common import setupFileLimits
-
-## TODO:
-## * No IPv6 support
-## * No multiple bind addresses support
-## * No database support
+  beacon_chain/[nimbus_binary_common, process_state]
 
 proc basicServices(nimbus: NimbusNode,
                    conf: NimbusConf,
@@ -60,8 +53,8 @@ proc basicServices(nimbus: NimbusNode,
   nimbus.beaconEngine = BeaconEngineRef.new(nimbus.txPool)
 
 proc manageAccounts(nimbus: NimbusNode, conf: NimbusConf) =
-  if string(conf.keyStore).len > 0:
-    let res = nimbus.ctx.am.loadKeystores(string conf.keyStore)
+  if string(conf.keyStoreDir).len > 0:
+    let res = nimbus.ctx.am.loadKeystores(string conf.keyStoreDir)
     if res.isErr:
       fatal "Load keystore error", msg = res.error()
       quit(QuitFailure)
@@ -75,34 +68,22 @@ proc manageAccounts(nimbus: NimbusNode, conf: NimbusConf) =
 proc setupP2P(nimbus: NimbusNode, conf: NimbusConf,
               com: CommonRef) {.raises: [OSError].} =
   ## Creating P2P Server
-  let kpres = nimbus.ctx.getNetKeys(conf.netKey, conf.dataDir.string)
+  let kpres = nimbus.ctx.getNetKeys(conf.netKey)
   if kpres.isErr:
     fatal "Get network keys error", msg = kpres.error
     quit(QuitFailure)
 
   let keypair = kpres.get()
-  var address = enode.Address(
-    ip: conf.listenAddress,
-    tcpPort: conf.tcpPort,
-    udpPort: conf.udpPort
-  )
 
-  if conf.nat.hasExtIp:
-    # any required port redirection is assumed to be done by hand
-    address.ip = conf.nat.extIp
-  else:
-    # automated NAT traversal
-    let extIP = getExternalIP(conf.nat.nat)
-    # This external IP only appears in the logs, so don't worry about dynamic
-    # IPs. Don't remove it either, because the above call does initialisation
-    # and discovery for NAT-related objects.
-    if extIP.isSome:
-      address.ip = extIP.get()
-      let extPorts = redirectPorts(tcpPort = address.tcpPort,
-                                   udpPort = address.udpPort,
-                                   description = NimbusName & " " & NimbusVersion)
-      if extPorts.isSome:
-        (address.tcpPort, address.udpPort) = extPorts.get()
+  let (extIp, extTcpPort, extUdpPort) =
+    setupAddress(conf.nat, conf.listenAddress, conf.tcpPort,
+                 conf.udpPort, NimbusName & " " & NimbusVersion)
+
+  var address = enode.Address(
+    ip: extIp.valueOr(conf.listenAddress),
+    tcpPort: extTcpPort.valueOr(conf.tcpPort),
+    udpPort: extUdpPort.valueOr(conf.udpPort),
+  )
 
   let bootstrapNodes = conf.getBootNodes()
 
@@ -213,7 +194,6 @@ proc run(nimbus: NimbusNode, conf: NimbusConf) =
       fatal "Cannot load Kzg trusted setup from file", msg=res.error
       quit(QuitFailure)
 
-  createDir(string conf.dataDir)
   let coreDB =
     # Resolve statically for database type
     AristoDbRocks.newCoreDbRef(
@@ -308,5 +288,6 @@ when isMainModule:
   let conf = makeConfig()
 
   setupFileLimits()
+  createDir(string conf.dataDir)
 
   nimbus.run(conf)

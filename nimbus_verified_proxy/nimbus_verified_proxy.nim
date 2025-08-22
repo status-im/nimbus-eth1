@@ -14,13 +14,11 @@ import
   confutils,
   eth/common/[keys, eth_types_rlp],
   json_rpc/rpcproxy,
-  beacon_chain/el/[el_manager],
   beacon_chain/gossip_processing/optimistic_processor,
   beacon_chain/networking/network_metadata,
   beacon_chain/networking/topic_params,
   beacon_chain/spec/beaconstate,
-  beacon_chain/spec/datatypes/[phase0, altair, bellatrix],
-  beacon_chain/[light_client, nimbus_binary_common, version],
+  beacon_chain/[beacon_clock, light_client, nimbus_binary_common, version],
   ../execution_chain/rpc/cors,
   ../execution_chain/common/common,
   ./types,
@@ -29,8 +27,6 @@ import
   ./nimbus_verified_proxy_conf,
   ./header_store,
   ./rpc_api_backend
-
-from beacon_chain/gossip_processing/eth2_processor import toValidationResult
 
 type OnHeaderCallback* = proc(s: cstring, t: int) {.cdecl, raises: [], gcsafe.}
 type Context* = object

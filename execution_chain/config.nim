@@ -21,8 +21,11 @@ import
     chronicles,
     confutils,
     confutils/defs,
-    confutils/std/net,
-    results
+    confutils/std/net as confnet,
+    json_serialization/std/net as jsnet,
+    results,
+    beacon_chain/buildinfo,
+    beacon_chain/nimbus_binary_common,
   ],
   eth/[common, net/nat],
   ./networking/[bootnodes, eth1_enr as enr],
@@ -30,39 +33,21 @@ import
   ./common/chain_config,
   ./db/opts
 
-from beacon_chain/nimbus_binary_common import setupLogging, StdoutLogKind
-
-export net, defs, StdoutLogKind
-
+export net, defs, jsnet, nimbus_binary_common
 const
-  # e.g.: Copyright (c) 2018-2025 Status Research & Development GmbH
-  NimbusCopyright* = "Copyright (c) 2018-" &
-    CompileDate.split('-')[0] &
-    " Status Research & Development GmbH"
 
   # e.g.:
   # nimbus_execution_client/v0.1.0-abcdef/os-cpu/nim-a.b.c/emvc
   # Copyright (c) 2018-2025 Status Research & Development GmbH
   NimbusBuild* = "$#\p$#" % [
     ClientId,
-    NimbusCopyright,
+    copyrights,
   ]
 
   NimbusHeader* = "$#\p\pNim version $#" % [
     NimbusBuild,
-    NimVersion
+    nimBanner()
   ]
-
-func defaultDataDir*(): string =
-  when defined(windows):
-    getHomeDir() / "AppData" / "Roaming" / "Nimbus"
-  elif defined(macosx):
-    getHomeDir() / "Library" / "Application Support" / "Nimbus"
-  else:
-    getHomeDir() / ".cache" / "nimbus"
-
-func defaultKeystoreDir*(): string =
-  defaultDataDir() / "keystore"
 
 func getLogLevels(): string =
   var logLevels: seq[string]
@@ -73,7 +58,6 @@ func getLogLevels(): string =
   join(logLevels, ", ")
 
 const
-  defaultDataDirDesc = defaultDataDir()
   defaultPort              = 30303
   defaultMetricsServerPort = 9093
   defaultHttpPort          = 8545
@@ -106,30 +90,28 @@ type
   NimbusConf* = object of RootObj
     ## Main Nimbus configuration object
 
-    dataDir* {.
+    dataDirFlag* {.
       separator: "ETHEREUM OPTIONS:"
       desc: "The directory where nimbus will store all blockchain data"
-      defaultValue: defaultDataDir()
-      defaultValueDesc: $defaultDataDirDesc
+      defaultValueDesc: defaultDataDir("", "<network>")
       abbr: "d"
-      name: "data-dir" }: OutDir
+      name: "data-dir" }: Option[OutDir]
 
-    era1DirOpt* {.
+    era1DirFlag* {.
       desc: "Directory where era1 (pre-merge) archive can be found"
       defaultValueDesc: "<data-dir>/era1"
       name: "era1-dir" }: Option[OutDir]
 
-    eraDirOpt* {.
+    eraDirFlag* {.
       desc: "Directory where era (post-merge) archive can be found"
       defaultValueDesc: "<data-dir>/era"
       name: "era-dir" }: Option[OutDir]
 
-    keyStore* {.
+    keyStoreDirFlag* {.
       desc: "Load one or more keystore files from this directory"
-      defaultValue: defaultKeystoreDir()
       defaultValueDesc: "inside datadir"
       abbr: "k"
-      name: "key-store" }: OutDir
+      name: "key-store" }: Option[OutDir]
 
     importKey* {.
       desc: "Import unencrypted 32 bytes hex private key from a file"
@@ -528,7 +510,7 @@ type
               " CL which will result in a smaller memory footprint"
         name: "debug-beacon-sync-target-is-final".}: bool
 
-    of `import`:
+    of NimbusCmd.`import`:
       maxBlocks* {.
         desc: "Maximum number of blocks to import"
         defaultValue: uint64.high()
@@ -579,7 +561,7 @@ type
         defaultValue: false
         name: "debug-store-slot-hashes".}: bool
 
-    of `import-rlp`:
+    of NimbusCmd.`import-rlp`:
       blocksFile* {.
         argument
         desc: "One or more RLP encoded block(s) files"
@@ -590,6 +572,13 @@ func parseHexOrDec256(p: string): UInt256 {.raises: [ValueError].} =
     parse(p, UInt256, 16)
   else:
     parse(p, UInt256, 10)
+
+proc dataDir*(config: NimbusConf): string =
+  # TODO load network name from directory, when using custom network?
+  string config.dataDirFlag.get(OutDir defaultDataDir("", config.networkId.name()))
+
+proc keyStoreDir*(config: NimbusConf): string =
+  string config.keyStoreDirFlag.get(OutDir config.dataDir() / "keystore")
 
 func parseCmdArg(T: type NetworkId, p: string): T
     {.gcsafe, raises: [ValueError].} =
@@ -867,11 +856,11 @@ func shareServerWithEngineApi*(conf: NimbusConf): bool =
 func httpServerEnabled*(conf: NimbusConf): bool =
   conf.wsEnabled or conf.rpcEnabled
 
-func era1Dir*(conf: NimbusConf): OutDir =
-  conf.era1DirOpt.get(OutDir(conf.dataDir.string & "/era1"))
+proc era1Dir*(conf: NimbusConf): string =
+  string conf.era1DirFlag.get(OutDir conf.dataDir / "era1")
 
-func eraDir*(conf: NimbusConf): OutDir =
-  conf.eraDirOpt.get(OutDir(conf.dataDir.string & "/era"))
+proc eraDir*(conf: NimbusConf): string =
+  string conf.eraDirFlag.get(OutDir conf.dataDir / "era")
 
 func dbOptions*(conf: NimbusConf, noKeyCache = false): DbOptions =
   DbOptions.init(
@@ -918,11 +907,6 @@ proc makeConfig*(cmdLine = commandLineParams()): NimbusConf
     if result.udpPort == Port(0):
       # if udpPort not set in cli, then
       result.udpPort = result.tcpPort
-
-  # see issue #1346
-  if result.keyStore.string == defaultKeystoreDir() and
-     result.dataDir.string != defaultDataDir():
-    result.keyStore = OutDir(result.dataDir.string / "keystore")
 
 when isMainModule:
   # for testing purpose

@@ -275,13 +275,13 @@ proc importBlocks*(conf: NimbusConf, com: CommonRef) =
           "sepolia"
         else:
           raiseAssert "Other networks are unsupported or do not have an era1"
-      db = Era1DbRef.init(conf.era1Dir.string, era1Name).valueOr:
+      db = Era1DbRef.init(conf.era1Dir, era1Name).valueOr:
         fatal "Could not open era1 database",
           era1Dir = conf.era1Dir, era1Name = era1Name, error = error
         quit(QuitFailure)
 
     notice "Importing era1 archive",
-      start, dataDir = conf.dataDir.string, era1Dir = conf.era1Dir.string
+      start, dataDir = conf.dataDir, era1Dir = conf.era1Dir
 
     defer:
       db.dispose()
@@ -302,26 +302,26 @@ proc importBlocks*(conf: NimbusConf, com: CommonRef) =
 
   block era1Import:
     if blockNumber > lastEra1Block:
-      if not isDir(conf.eraDir.string):
+      if not isDir(conf.eraDir):
         if blockNumber == 0:
           fatal "`era` directory not found, cannot start import",
-            blockNumber, eraDir = conf.eraDir.string
+            blockNumber, eraDir = conf.eraDir
           quit(QuitFailure)
         else:
           notice "`era` directory not found, stopping import at merge boundary",
-            blockNumber, eraDir = conf.eraDir.string
+            blockNumber, eraDir = conf.eraDir
           break era1Import
 
       notice "Importing era archive",
-        blockNumber, dataDir = conf.dataDir.string, eraDir = conf.eraDir.string
+        blockNumber, dataDir = conf.dataDir, eraDir = conf.eraDir
 
       let
-        eraDB = EraDB.new(cfg, conf.eraDir.string, genesis_validators_root)
+        eraDB = EraDB.new(cfg, conf.eraDir, genesis_validators_root)
         (historical_roots, historical_summaries, endSlot) = loadHistoricalRootsFromEra(
-          conf.eraDir.string, cfg
+          conf.eraDir, cfg
         ).valueOr:
           fatal "Could not load historical summaries",
-            eraDir = conf.eraDir.string, error
+            eraDir = conf.eraDir, error
           quit(QuitFailure)
 
       # Load the last slot number

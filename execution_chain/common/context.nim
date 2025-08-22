@@ -1,5 +1,5 @@
 # Nimbus
-# Copyright (c) 2021-2024 Status Research & Development GmbH
+# Copyright (c) 2021-2025 Status Research & Development GmbH
 # Licensed under either of
 #  * Apache License, version 2.0, ([LICENSE-APACHE](LICENSE-APACHE))
 #  * MIT license ([LICENSE-MIT](LICENSE-MIT))
@@ -43,7 +43,7 @@ proc containsOnlyHexDigits(hex: string): bool =
       return false
   true
 
-proc getNetKeys*(ctx: EthContext, netKey, dataDir: string): Result[KeyPair, string]
+proc getNetKeys*(ctx: EthContext, netKey: string): Result[KeyPair, string]
     {.gcsafe, raises: [OSError]} =
   if netKey.len == 0 or netKey == "random":
     let privateKey = ctx.randomPrivateKey()

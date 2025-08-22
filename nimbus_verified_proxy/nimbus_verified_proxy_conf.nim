@@ -12,22 +12,9 @@ import
   json_rpc/rpcproxy, # must be early (compilation annoyance)
   json_serialization/std/net,
   beacon_chain/conf_light_client,
-  beacon_chain/conf
+  beacon_chain/nimbus_binary_common
 
-export net, conf
-
-proc defaultVerifiedProxyDataDir*(): string =
-  let dataDir =
-    when defined(windows):
-      "AppData" / "Roaming" / "NimbusVerifiedProxy"
-    elif defined(macosx):
-      "Library" / "Application Support" / "NimbusVerifiedProxy"
-    else:
-      ".cache" / "nimbus-verified-proxy"
-
-  getHomeDir() / dataDir
-
-const defaultDataVerifiedProxyDirDesc* = defaultVerifiedProxyDataDir()
+export net
 
 type
   Web3UrlKind* = enum
@@ -38,31 +25,38 @@ type
     kind*: Web3UrlKind
     web3Url*: string
 
-type VerifiedProxyConf* = object # Config
-  configFile* {.desc: "Loads the configuration from a TOML file", name: "config-file".}:
-    Option[InputFile]
+#!fmt: off
+type VerifiedProxyConf* = object
+  # Config
+  configFile* {.
+    desc: "Loads the configuration from a TOML file"
+    name: "config-file" .}: Option[InputFile]
 
   # Logging
-  logLevel* {.desc: "Sets the log level", defaultValue: "INFO", name: "log-level".}:
-    string
+  logLevel* {.
+    desc: "Sets the log level"
+    defaultValue: "INFO"
+    name: "log-level" .}: string
 
   logStdout* {.
-    hidden,
-    desc:
-      "Specifies what kind of logs should be written to stdout (auto, colors, nocolors, json)",
-    defaultValueDesc: "auto",
-    defaultValue: StdoutLogKind.Auto,
-    name: "log-format"
-  .}: StdoutLogKind
+    hidden
+    desc: "Specifies what kind of logs should be written to stdout (auto, colors, nocolors, json)"
+    defaultValueDesc: "auto"
+    defaultValue: StdoutLogKind.Auto
+    name: "log-format" .}: StdoutLogKind
 
   # Storage
-  dataDir* {.
-    desc: "The directory where nimbus_verified_proxy will store all data",
-    defaultValue: defaultVerifiedProxyDataDir(),
-    defaultValueDesc: $defaultDataVerifiedProxyDirDesc,
-    abbr: "d",
-    name: "data-dir"
-  .}: OutDir
+  dataDirFlag* {.
+    desc: "The directory where nimbus will store all blockchain data"
+    defaultValueDesc: defaultDataDir("", "<network>")
+    abbr: "d"
+    name: "data-dir" .}: Option[OutDir]
+
+  # Network
+  eth2Network* {.
+    desc: "The Eth2 network to join"
+    defaultValueDesc: "mainnet"
+    name: "network" .}: Option[string]
 
   # In-Memory Cache Size
   # In order to support the BLOCKHASH opcode for eth_call we need at least
@@ -75,18 +69,11 @@ type VerifiedProxyConf* = object # Config
     name: "debug-cache-len"
   .}: int
 
-  # Network
-  eth2Network* {.
-    desc: "The Eth2 network to join", defaultValueDesc: "mainnet", name: "network"
-  .}: Option[string]
-
   # Consensus light sync
   # No default - Needs to be provided by the user
   trustedBlockRoot* {.
-    desc:
-      "Recent trusted finalized block root to initialize the consensus light client from",
-    name: "trusted-block-root"
-  .}: Eth2Digest
+    desc: "Recent trusted finalized block root to initialize light client from"
+    name: "trusted-block-root" .}: Eth2Digest
 
   # (Untrusted) web3 provider
   # No default - Needs to be provided by the user
@@ -106,35 +93,30 @@ type VerifiedProxyConf* = object # Config
 
   # Libp2p
   bootstrapNodes* {.
-    desc: "Specifies one or more bootstrap nodes to use when connecting to the network",
-    abbr: "b",
-    name: "bootstrap-node"
-  .}: seq[string]
+    desc: "Specifies one or more bootstrap nodes to use when connecting to the network"
+    abbr: "b"
+    name: "bootstrap-node" .}: seq[string]
 
   bootstrapNodesFile* {.
-    desc: "Specifies a line-delimited file of bootstrap Ethereum network addresses",
-    defaultValue: "",
-    name: "bootstrap-file"
-  .}: InputFile
+    desc: "Specifies a line-delimited file of bootstrap Ethereum network addresses"
+    defaultValue: ""
+    name: "bootstrap-file" .}: InputFile
 
   listenAddress* {.
-    desc: "Listening address for the Ethereum LibP2P and Discovery v5 traffic",
-    name: "listen-address"
-  .}: Option[IpAddress]
+    desc: "Listening address for the Ethereum LibP2P and Discovery v5 traffic"
+    name: "listen-address" .}: Option[IpAddress]
 
   tcpPort* {.
-    desc: "Listening TCP port for Ethereum LibP2P traffic",
-    defaultValue: defaultEth2TcpPort,
-    defaultValueDesc: $defaultEth2TcpPortDesc,
-    name: "tcp-port"
-  .}: Port
+    desc: "Listening TCP port for Ethereum LibP2P traffic"
+    defaultValue: defaultEth2TcpPort
+    defaultValueDesc: $defaultEth2TcpPortDesc
+    name: "tcp-port" .}: Port
 
   udpPort* {.
-    desc: "Listening UDP port for node discovery",
-    defaultValue: defaultEth2TcpPort,
-    defaultValueDesc: $defaultEth2TcpPortDesc,
-    name: "udp-port"
-  .}: Port
+    desc: "Listening UDP port for node discovery"
+    defaultValue: defaultEth2TcpPort
+    defaultValueDesc: $defaultEth2TcpPortDesc
+    name: "udp-port" .}: Port
 
   # TODO: Select a lower amount of peers.
   maxPeers* {.
@@ -152,27 +134,22 @@ type VerifiedProxyConf* = object # Config
   .}: uint64
 
   hardMaxPeers* {.
-    desc: "The maximum number of peers to connect to. Defaults to maxPeers * 1.5",
-    name: "hard-max-peers"
-  .}: Option[int]
+    desc: "The maximum number of peers to connect to. Defaults to maxPeers * 1.5"
+    name: "hard-max-peers" .}: Option[int]
 
   nat* {.
-    desc:
-      "Specify method to use for determining public address. " &
-      "Must be one of: any, none, upnp, pmp, extip:<IP>",
-    defaultValue: NatConfig(hasExtIp: false, nat: NatAny),
-    defaultValueDesc: "any",
-    name: "nat"
-  .}: NatConfig
+    desc: "Specify method to use for determining public address. " &
+          "Must be one of: any, none, upnp, pmp, extip:<IP>"
+    defaultValue: NatConfig(hasExtIp: false, nat: NatAny)
+    defaultValueDesc: "any"
+    name: "nat" .}: NatConfig
 
   enrAutoUpdate* {.
-    desc:
-      "Discovery can automatically update its ENR with the IP address " &
-      "and UDP port as seen by other nodes it communicates with. " &
-      "This option allows to enable/disable this functionality",
-    defaultValue: false,
-    name: "enr-auto-update"
-  .}: bool
+    desc: "Discovery can automatically update its ENR with the IP address " &
+          "and UDP port as seen by other nodes it communicates with. " &
+          "This option allows to enable/disable this functionality"
+    defaultValue: false
+    name: "enr-auto-update" .}: bool
 
   agentString* {.
     defaultValue: "nimbus",
@@ -184,14 +161,10 @@ type VerifiedProxyConf* = object # Config
     bool
 
   directPeers* {.
-    desc:
-      "The list of priviledged, secure and known peers to connect and" &
-      "maintain the connection to, this requires a not random netkey-file." &
-      "In the complete multiaddress format like:" &
-      "/ip4/<address>/tcp/<port>/p2p/<peerId-public-key>." &
-      "Peering agreements are established out of band and must be reciprocal",
-    name: "direct-peer"
-  .}: seq[string]
+    desc: "The list of priviledged, secure and known peers to connect and maintain the connection to, this requires a not random netkey-file. In the complete multiaddress format like: /ip4/<address>/tcp/<port>/p2p/<peerId-public-key>. Peering agreements are established out of band and must be reciprocal."
+    name: "direct-peer" .}: seq[string]
+
+#!fmt: on
 
 proc parseCmdArg*(T: type Web3Url, p: string): T {.raises: [ValueError].} =
   let
@@ -216,7 +189,7 @@ func asLightClientConf*(pc: VerifiedProxyConf): LightClientConf =
     logLevel: pc.logLevel,
     logStdout: pc.logStdout,
     logFile: none(OutFile),
-    dataDir: pc.dataDir,
+    dataDirFlag: pc.dataDirFlag,
     eth2Network: pc.eth2Network,
     bootstrapNodes: pc.bootstrapNodes,
     bootstrapNodesFile: pc.bootstrapNodesFile,
