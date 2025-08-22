@@ -123,7 +123,7 @@ proc setupP2P(nimbus: NimbusNode, conf: NimbusConf,
   # Optional for pre-setting the sync target (i.e. debugging)
   if conf.beaconSyncTarget.isSome():
     let hex = conf.beaconSyncTarget.unsafeGet
-    if not nimbus.beaconSyncRef.targetInit hex:
+    if not nimbus.beaconSyncRef.targetInit(hex, conf.beaconSyncTargetIsFinal):
       fatal "Error parsing --beacon-sync-target hash32 argument", hash32=hex
       quit QuitFailure
 

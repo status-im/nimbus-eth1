@@ -204,13 +204,17 @@ command line without need to be requested by the consensus layer. In fact,
 this allows for single run synchronisation tests without the need of a
 consensus layer. The command line option needed here is
 
-       --beacon-sync-target=<hash32>
+       --debug-beacon-sync-target=<hash32>
 
 where *&lt;hash32&gt;* is a hexadecimal ASCII representation of a block
 header. The hashes for particular blocks can be looked up at *etherscan.io*.
-This works well for short sync sprints (i.e. number of blocks to import.)
-For longer sync sprints the consensus layer should be availale as it reduces
-the memory footprint (by updating the finalised block.)
+For testing, only finalised hblock headers should be referred to in which
+case the option
+
+       --debug-beacon-sync-target-is-final
+
+should be set. This reduces the potential memory footprint when running
+without a CL.
 
 ### Syncing on a low memory machine
 

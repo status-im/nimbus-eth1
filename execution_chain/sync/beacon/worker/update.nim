@@ -16,7 +16,6 @@ import
   pkg/eth/common,
   ../worker_desc,
   ./blocks/blocks_unproc,
-  ./headers/headers_target,
   ./headers
 
 logScope:
