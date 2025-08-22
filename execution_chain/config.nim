@@ -21,8 +21,10 @@ import
     chronicles,
     confutils,
     confutils/defs,
-    confutils/std/net,
-    results
+    confutils/std/net as confnet,
+    confutils/json/defs as jsdefs,
+    json_serialization/std/net as jsnet,
+    results,
   ],
   eth/[common, net/nat],
   ./networking/[bootnodes, eth1_enr as enr],
@@ -32,7 +34,7 @@ import
 
 from beacon_chain/nimbus_binary_common import setupLogging, StdoutLogKind
 
-export net, defs, StdoutLogKind
+export net, defs, jsdefs, jsnet, StdoutLogKind
 
 const
   # e.g.: Copyright (c) 2018-2025 Status Research & Development GmbH
@@ -506,6 +508,12 @@ type
         defaultValueDesc: "\"jwt.hex\" in the data directory (see --data-dir)"
         name: "jwt-secret" .}: Option[InputFile]
 
+      jwtSecretValue* {.
+        hidden
+        desc: "Hex string with jwt secret"
+        defaultValueDesc: "\"jwt.hex\" in the data directory (see --data-dir)"
+        name: "debug-jwt-secret-value" .}: Option[string]
+
       beaconSyncTarget* {.
         hidden
         desc: "Manually set the initial sync target specified by its 32 byte" &
@@ -884,27 +892,15 @@ func dbOptions*(conf: NimbusConf, noKeyCache = false): DbOptions =
     rdbPrintStats = conf.rdbPrintStats,
   )
 
-# KLUDGE: The `load()` template does currently not work within any exception
-#         annotated environment.
-{.pop.}
-
-proc makeConfig*(cmdLine = commandLineParams()): NimbusConf
-    {.raises: [CatchableError].} =
+proc makeConfig*(cmdLine = commandLineParams()): NimbusConf {.raises: [CatchableError].} =
   ## Note: this function is not gc-safe
 
   # The try/catch clause can go away when `load()` is clean
-  try:
-    {.push warning[ProveInit]: off.}
-    result = NimbusConf.load(
+  result = NimbusConf.load(
       cmdLine,
       version = NimbusBuild,
       copyrightBanner = NimbusHeader
     )
-    {.pop.}
-  except CatchableError as e:
-    raise e
-
-  setupLogging(result.logLevel, result.logStdout, none(OutFile))
 
   processNetworkParamsAndNetworkId(result)
 

@@ -8,30 +8,12 @@
 # those terms.
 
 {.used.}
+{.deprecated.}
 
 import
-  std/[typetraits, net],
-  json_serialization,
-  web3/primitives,
-  confutils/defs,
-  eth/common/eth_types_json_serialization
+  json_serialization/std/net as jsnet,
+  json_serialization/pkg/chronos as jschronos,
+  eth/common/eth_types_json_serialization,
+  web3/conversions
 
-# nim-eth
-proc writeValue*(
-    w: var JsonWriter, v: EthTime
-) {.inline, raises: [IOError].} =
-  w.writeValue distinctBase(v)
-
-# nim-web3
-proc writeValue*(w: var JsonWriter, v: Quantity) {.inline, raises: [IOError].} =
-  w.writeValue distinctBase(v)
-
-# nim-confutils
-proc writeValue*(
-    w: var JsonWriter, v: InputFile | OutDir | OutFile | RestOfCmdLine | OutPath
-) {.inline, raises: [IOError].} =
-  w.writeValue distinctBase(v)
-
-# build-system
-proc writeValue*(w: var JsonWriter, v: Port) {.inline, raises: [IOError].} =
-  w.writeValue distinctBase(v)
+export jsnet, jschronos, conversions, eth_types_json_serialization

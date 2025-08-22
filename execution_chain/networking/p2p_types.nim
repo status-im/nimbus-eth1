@@ -15,11 +15,12 @@ import
   ./rlpx/rlpxtransport,
   ./discoveryv4/[enode, kademlia],
   ./p2p_peers,
-  ./peer_pool
+  ./peer_pool,
+  json_serialization/std/net as jsnet
 
 export
   base.NetworkId, rlpxtransport, kademlia,
-  p2p_peers
+  p2p_peers, jsnet
 
 type
   Peer* = PeerRef[EthereumNode]

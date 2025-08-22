@@ -12,7 +12,8 @@
 import
   std/[uri, strutils, net],
   pkg/chronicles,
-  eth/common/keys
+  eth/common/keys,
+  json_serialization
 
 export keys
 
@@ -35,6 +36,7 @@ type
 
   ENode* = object
     ## ENode object
+    ## https://ethereum.org/en/developers/docs/networking-layer/network-addresses/#enode
     pubkey*: PublicKey    ## Node public key
     address*: Address     ## Node address
 
@@ -136,3 +138,19 @@ proc `$`*(a: Address): string =
 
 chronicles.formatIt(Address): $it
 chronicles.formatIt(ENode): $it
+
+proc writeValue*(w: var JsonWriter, value: Address) {.raises: [IOError].} =
+  w.writeValue($value)
+
+proc readValue*(
+  r: var JsonReader, value: var Address
+) {.raises: [IOError, SerializationError], error: "No parser defined for Address".}
+
+proc writeValue*(w: var JsonWriter, value: ENode) {.raises: [IOError].} =
+  w.writeValue($value)
+
+proc readValue*(
+    r: var JsonReader, value: var ENode
+) {.raises: [IOError, SerializationError].} =
+  ENode.fromString(r.readValue(string)).valueOr:
+    r.raiseUnexpectedValue($error)

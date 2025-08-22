@@ -356,9 +356,10 @@ proc checkedRlpRead(
     try:
       return r.read(MsgType)
     except rlp.RlpError as e:
-      debug "Failed rlp.read",
-        peer = peer, dataType = typetraits.name(MsgType), err = e.msg, errName = e.name
-        #, rlpData = r.inspect -- don't use (might crash)
+      # TODO compile error logging peer
+      # debug "Failed rlp.read",
+      #   peer = peer, dataType = typetraits.name(MsgType), err = e.msg, errName = e.name
+      #   #, rlpData = r.inspect -- don't use (might crash)
 
       raise e
 

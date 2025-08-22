@@ -7,11 +7,13 @@
 # This file may not be copied, modified, or distributed except according to
 # those terms.
 
+{.push raises: [].}
+
 import
   ../execution_chain/compile_info
 
 import
-  std/[os, osproc, net, options],
+  std/[os, net, options],
   chronicles,
   eth/net/nat,
   metrics,
@@ -29,18 +31,12 @@ import
   ./db/storage_types,
   ./sync/wire_protocol,
   ./common/chain_config_hash,
-  ./portal/portal
-
-from beacon_chain/nimbus_binary_common import setupFileLimits
-
-## TODO:
-## * No IPv6 support
-## * No multiple bind addresses support
-## * No database support
+  ./portal/portal,
+  beacon_chain/[nimbus_binary_common, process_state]
 
 proc basicServices(nimbus: NimbusNode,
                    conf: NimbusConf,
-                   com: CommonRef) =
+                   com: CommonRef) {.raises: [CatchableError].} =
   # Setup the chain
   let fc = ForkedChainRef.init(com,
     eagerStateRoot = conf.eagerStateRootCheck,
@@ -80,28 +76,16 @@ proc setupP2P(nimbus: NimbusNode, conf: NimbusConf,
     quit(QuitFailure)
 
   let keypair = kpres.get()
-  var address = enode.Address(
-    ip: conf.listenAddress,
-    tcpPort: conf.tcpPort,
-    udpPort: conf.udpPort
-  )
 
-  if conf.nat.hasExtIp:
-    # any required port redirection is assumed to be done by hand
-    address.ip = conf.nat.extIp
-  else:
-    # automated NAT traversal
-    let extIP = getExternalIP(conf.nat.nat)
-    # This external IP only appears in the logs, so don't worry about dynamic
-    # IPs. Don't remove it either, because the above call does initialisation
-    # and discovery for NAT-related objects.
-    if extIP.isSome:
-      address.ip = extIP.get()
-      let extPorts = redirectPorts(tcpPort = address.tcpPort,
-                                   udpPort = address.udpPort,
-                                   description = NimbusName & " " & NimbusVersion)
-      if extPorts.isSome:
-        (address.tcpPort, address.udpPort) = extPorts.get()
+  let (extIp, extTcpPort, extUdpPort) =
+    setupAddress(conf.nat, conf.listenAddress, conf.tcpPort,
+                 conf.udpPort, NimbusName & " " & NimbusVersion)
+
+  var address = enode.Address(
+    ip: extIp.valueOr(conf.listenAddress),
+    tcpPort: extTcpPort.valueOr(conf.tcpPort),
+    udpPort: extUdpPort.valueOr(conf.udpPort),
+  )
 
   let bootstrapNodes = conf.getBootNodes()
 
@@ -197,7 +181,12 @@ proc preventLoadingDataDirForTheWrongNetwork(db: CoreDbRef; conf: NimbusConf) =
       expected=calculatedId
     quit(QuitFailure)
 
-proc run(nimbus: NimbusNode, conf: NimbusConf) =
+proc run*(
+    nimbus: NimbusNode,
+    conf: NimbusConf,
+    stopper: Future[void].Raising([CancelledError]),
+    taskpool: Taskpool,
+) {.raises: [CatchableError].} =
   info "Launching execution client",
       version = FullVersionStr,
       conf
@@ -212,7 +201,6 @@ proc run(nimbus: NimbusNode, conf: NimbusConf) =
       fatal "Cannot load Kzg trusted setup from file", msg=res.error
       quit(QuitFailure)
 
-  createDir(string conf.dataDir)
   let coreDB =
     # Resolve statically for database type
     AristoDbRocks.newCoreDbRef(
@@ -221,21 +209,6 @@ proc run(nimbus: NimbusNode, conf: NimbusConf) =
 
   preventLoadingDataDirForTheWrongNetwork(coreDB, conf)
   setupMetrics(nimbus, conf)
-
-  let taskpool =
-    try:
-      if conf.numThreads < 0:
-        fatal "The number of threads --num-threads cannot be negative."
-        quit QuitFailure
-      elif conf.numThreads == 0:
-        Taskpool.new(numThreads = min(countProcessors(), 16))
-      else:
-        Taskpool.new(numThreads = conf.numThreads)
-    except CatchableError as e:
-      fatal "Cannot start taskpool", err = e.msg
-      quit QuitFailure
-
-  info "Threadpool started", numThreads = taskpool.numThreads
 
   let com = CommonRef.new(
     db = coreDB,
@@ -287,36 +260,31 @@ proc run(nimbus: NimbusNode, conf: NimbusConf) =
       if not nimbus.beaconSyncRef.start():
         nimbus.beaconSyncRef = BeaconSyncRef(nil)
 
-    if nimbus.state == NimbusState.Starting:
-      # it might have been set to "Stopping" with Ctrl+C
-      nimbus.state = NimbusState.Running
-
-    # Main event loop
-    while nimbus.state == NimbusState.Running:
-      try:
-        poll()
-      except CatchableError as e:
-        debug "Exception in poll()", exc = e.name, err = e.msg
-        discard e # silence warning when chronicles not activated
+    # Be graceful about ctrl-c during init
+    if not ProcessState.stopping:
+      ProcessState.notifyRunning()
+      waitFor stopper
 
     # Stop loop
     waitFor nimbus.closeWait()
 
-when isMainModule:
-  var nimbus = NimbusNode(state: NimbusState.Starting, ctx: newEthContext())
+# noinline to keep it in stack traces
+proc main*() {.noinline, raises: [CatchableError].} =
+  ProcessState.setupStopHandlers()
 
-  ## Processing command line arguments
+  # Processing command line arguments
   let conf = makeConfig()
 
+  setupLogging(conf.logLevel, conf.logStdout, none(OutFile))
+
   setupFileLimits()
+  createDir(string conf.dataDir)
 
-  ## Ctrl+C handling
-  proc controlCHandler() {.noconv.} =
-    when defined(windows):
-      # workaround for https://github.com/nim-lang/Nim/issues/4057
-      setupForeignThreadGc()
-    nimbus.state = NimbusState.Stopping
-    notice "\nCtrl+C pressed. Waiting for a graceful shutdown."
-  setControlCHook(controlCHandler)
+  let
+    nimbus = NimbusNode(ctx: newEthContext())
+    taskpool = setupTaskpool(conf.numThreads)
 
-  nimbus.run(conf)
+  nimbus.run(conf, ProcessState.waitStopSignals(), taskpool)
+
+when isMainModule:
+  main()
