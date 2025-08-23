@@ -234,12 +234,14 @@ proc deserialize*(fc: ForkedChainRef): Result[void, string] =
   # Sanity Checks for the FC state
   if state.latest > state.numBlocks or
      state.base > state.numBlocks: 
+    warn "TODO: Inconsistent state found"
     fc.reset(prevBase)
     return err("Invalid state: latest block is greater than number of blocks")
   
   # Sanity Checks for all the heads in FC state
   for head in state.heads:
     if head > state.numBlocks:
+      warn "TODO: Inconsistent state found"
       fc.reset(prevBase)
       return err("Invalid state: heads greater than number of blocks")
 
