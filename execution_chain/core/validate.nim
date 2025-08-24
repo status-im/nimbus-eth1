@@ -288,6 +288,9 @@ func validateTxBasic*(
           &"get={bv.data[0].int}, expect={VERSIONED_HASH_VERSION_KZG.int}")
 
   if tx.txType == TxEip7702:
+    if tx.to.isNone:
+      return err("invalid tx: destination must be not empty")
+
     if tx.authorizationList.len == 0:
       return err("invalid tx: authorization list must not empty")
 
