@@ -203,23 +203,23 @@ proc generalStateJsonMain*(debugMode = false) =
   if config.testSubject == "" or not debugMode:
     # run all test fixtures
     suite "new generalstate json tests: eest_static":
-      jsonTest(newFolder, "GeneralStateTests", testFixture, skipNewGSTTests)
+      jsonTest(newFolder, "GeneralStateTests", testFixture, slowGSTTests)
 
     suite "new generalstate json tests: eest_stable":
-      jsonTest("eest_stable/state_tests", "GeneralStateTests", testFixture, skipNewGSTTests)
+      jsonTest("eest_stable/state_tests", "GeneralStateTests", testFixture)
 
     suite "new generalstate json tests: eest_develop":
-      jsonTest("eest_develop/state_tests", "GeneralStateTests", testFixture, skipNewGSTTests)
+      jsonTest("eest_develop/state_tests", "GeneralStateTests", testFixture)
 
     suite "new generalstate json tests: eest_devnet":
-      jsonTest("eest_devnet/state_tests", "GeneralStateTests", testFixture, skipNewGSTTests)
+      jsonTest("eest_devnet/state_tests", "GeneralStateTests", testFixture)
 
   else:
     # execute single test in debug mode
     if config.testSubject.len == 0:
       echo "missing test subject"
       quit(QuitFailure)
-    
+
     let path = "tests" / "fixtures" / newFolder
     let n = json.parseFile(path / config.testSubject)
     var testStatusIMPL: TestStatus
