@@ -12,7 +12,5 @@
 # table once, but notion's that it should shrink reasonable quickly and disappear,
 # being mostly used for short-term regression prevention.
 
-import strutils
-
 func slowGSTTests*(folder: string, name: string): bool =
   result = folder == "stTimeConsuming"
