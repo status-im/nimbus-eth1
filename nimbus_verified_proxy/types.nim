@@ -8,6 +8,7 @@
 {.push raises: [], gcsafe.}
 
 import
+  std/tables,
   json_rpc/[rpcproxy, rpcclient],
   web3/[eth_api, eth_api_types],
   stint,
@@ -63,6 +64,10 @@ type
     eth_getTransactionByHash*: GetTransactionByHashProc
     eth_getLogs*: GetLogsProc
 
+  FilterStoreItem* = object
+    filter*: FilterOptions
+    blockMarker*: Opt[Quantity]
+
   VerifiedRpcProxy* = ref object
     evm*: AsyncEvm
     proxy*: RpcProxy
@@ -74,6 +79,7 @@ type
 
     # TODO: when the list grows big add a config object instead
     # config parameters
+    filterStore*: Table[string, FilterStoreItem]
     chainId*: UInt256
     maxBlockWalk*: uint64
 
