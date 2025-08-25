@@ -25,15 +25,20 @@ logScope:
 # Public functions
 # ------------------------------------------------------------------------------
 
-proc headersTargetRequest*(ctx: BeaconCtxRef; h: Hash32; info: static[string]) =
+proc headersTargetRequest*(
+    ctx: BeaconCtxRef;
+    h: Hash32;
+    isFinal: bool;
+    info: static[string];
+      ) =
   ## Request *manual* syncer target. It has to be activated by the
   ## `headersTargetActivate()` function below.
-  ctx.pool.initTarget = Opt.some(h)
-  trace info & ": request syncer target", targetHash=h.short
+  ctx.pool.initTarget = Opt.some((h,isFinal))
+  trace info & ": request syncer target", targetHash=h.short, isFinal
 
 proc headersTargetReset*(ctx: BeaconCtxRef) =
   ## Reset *manual* syncer target.
-  ctx.pool.initTarget = Opt.none(Hash32)
+  ctx.pool.initTarget = Opt.none(InitTarget)
 
 
 template headersTargetActivate*(
@@ -53,14 +58,14 @@ template headersTargetActivate*(
 
     let
       peer {.inject.} = buddy.peer
-      h = ctx.pool.initTarget.unsafeGet                    # load hash
+      trg = ctx.pool.initTarget.unsafeGet
 
     # Can be used only before first activation
     if ctx.pool.lastState != SyncState.idle:
       debug info & ": cannot setup target while syncer is activated", peer,
-        targetHash=h.short, syncState=($buddy.syncState),
-        nSyncPeers=ctx.pool.nBuddies
-      ctx.pool.initTarget = Opt.none(Hash32)
+        targetHash=trg.hash.short, isFinal=trg.isFinal,
+        syncState=($buddy.syncState), nSyncPeers=ctx.pool.nBuddies
+      ctx.pool.initTarget = Opt.none(InitTarget)
       break body                                           # return
 
     # Ignore failed peers
@@ -68,17 +73,17 @@ template headersTargetActivate*(
       break body                                           # return
 
     # Grab header, so no other peer will interfere
-    ctx.pool.initTarget = Opt.none(Hash32)
+    ctx.pool.initTarget = Opt.none(InitTarget)
 
     # Fetch header or return
     const iv = BnRange.new(0u,0u) # dummy interval
-    let hdrs = buddy.fetchHeadersReversed(iv, h, info).valueOr:
+    let hdrs = buddy.fetchHeadersReversed(iv, trg.hash, info).valueOr:
       if buddy.ctrl.running:
         trace info & ": peer failed on syncer target", peer,
-          targetHash=h.short, failedPeers=ctx.pool.failedPeers.len,
-          nSyncPeers=ctx.pool.nBuddies, hdrErrors=buddy.hdrErrors,
-          syncState=($buddy.syncState)
-        ctx.pool.initTarget = Opt.some(h)                  # restore target
+          targetHash=trg.hash.short, isFinal=trg.isFinal,
+          failedPeers=ctx.pool.failedPeers.len, nSyncPeers=ctx.pool.nBuddies,
+          hdrErrors=buddy.hdrErrors, syncState=($buddy.syncState)
+        ctx.pool.initTarget = Opt.some(trg)                # restore target
 
       else:
         # Collect problematic peers for detecting cul-de-sac syncing
@@ -87,17 +92,18 @@ template headersTargetActivate*(
         # Abandon *manual* syncer target if there are too many errors
         if nFetchTargetFailedPeersThreshold < ctx.pool.failedPeers.len:
           warn "No such syncer target, abandoning it", peer,
-            targetHash=h.short, failedPeers=ctx.pool.failedPeers.len,
-            nSyncPeers=ctx.pool.nBuddies, hdrErrors=buddy.hdrErrors
+            targetHash=trg.hash.short, isFinal=trg.isFinal,
+            failedPeers=ctx.pool.failedPeers.len, nSyncPeers=ctx.pool.nBuddies,
+            hdrErrors=buddy.hdrErrors
           ctx.pool.failedPeers.clear()
           # not restoring target
 
         else:
           trace info & ": peer repeatedly failed", peer,
-            targetHash=h.short, failedPeers=ctx.pool.failedPeers.len,
-            nSyncPeers=ctx.pool.nBuddies, hdrErrors=buddy.hdrErrors,
-            syncState=($buddy.syncState)
-          ctx.pool.initTarget = Opt.some(h)                # restore target
+            targetHash=trg.hash.short, isFinal=trg.isFinal,
+            failedPeers=ctx.pool.failedPeers.len, nSyncPeers=ctx.pool.nBuddies,
+            hdrErrors=buddy.hdrErrors, syncState=($buddy.syncState)
+          ctx.pool.initTarget = Opt.some(trg)              # restore target
 
       break body                                           # return
       # End `fetchHeadersReversed(..).valueOr`
@@ -109,15 +115,18 @@ template headersTargetActivate*(
     let hdr = hdrs[0]
     if hdr.number <= ctx.chain.baseNumber:
       warn "Unusable syncer target, abandoning it", peer, target=hdr.bnStr,
-        targetHash=h.short, base=ctx.chain.baseNumber.bnStr,
-        head=ctx.chain.latestNumber.bnStr, nSyncPeers=ctx.pool.nBuddies
+        targetHash=trg.hash.short, isFinal=trg.isFinal,
+        base=ctx.chain.baseNumber.bnStr, head=ctx.chain.latestNumber.bnStr,
+        nSyncPeers=ctx.pool.nBuddies
       break body                                           # return
     
     # Start syncer
     debug info & ": activating manually", peer, target=hdr.bnStr,
-      targetHash=h.short, nSyncPeers=ctx.pool.nBuddies
+      targetHash=trg.hash.short, isFinal=trg.isFinal,
+      nSyncPeers=ctx.pool.nBuddies
 
-    ctx.hdrCache.headTargetUpdate(hdr, ctx.chain.baseHash)
+    let finalised = if trg.isFinal: trg.hash else: ctx.chain.baseHash
+    ctx.hdrCache.headTargetUpdate(hdr, finalised)
     # End block: `body`
 
   discard                                                  # visual alignment
