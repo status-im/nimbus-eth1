@@ -178,7 +178,11 @@ runs:
       if: inputs.eest-cache == 'true'
       uses: actions/cache@v4
       with:
-        path: tests/fixtures/eest
+        path: |
+          tests/fixtures/eest_static
+          tests/fixtures/eest_stable
+          tests/fixtures/eest_develop
+          tests/fixtures/eest_devnet
         # EEST release version contained in eest_ci_cache.sh.
         # Each time we bump EEST version, it should invalidate the cache too.
         key: eest-${{ hashFiles('scripts/eest_ci_cache.sh') }}
