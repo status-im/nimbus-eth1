@@ -100,7 +100,7 @@ proc processFile*(fileName: string): bool =
     doAssert(unit.unit.genesisBlockHeader.hash == header.computeRlpHash)
     let env = prepareEnv(unit.unit, header, true)
     env.runTest(unit.unit).isOkOr:
-      echo "TestName: ", unit.name, "RunTest error: ", error
+      echo "\nTestName: ", unit.name, " RunTest error: ", error, "\n"
       testPass = false
     env.close()
 
