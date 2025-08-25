@@ -317,7 +317,7 @@ func nextFork*(com: CommonRef, currentFork: HardFork): Opt[HardFork] =
   return Opt.none(HardFork)
 
 func lastFork*(com: CommonRef, currentFork: HardFork): Opt[HardFork] =
-  ## Returns the last hard fork before the given one
+  ## Returns the last hard fork after the current one
   for fork in countdown(HardFork.high, currentFork):
     if fork > currentFork and com.forkTransitionTable.timeThresholds[fork].isSome:
       return Opt.some(HardFork(fork))
