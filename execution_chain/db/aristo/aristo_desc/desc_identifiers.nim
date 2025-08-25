@@ -218,7 +218,7 @@ func hash*(a: HashKey): Hash =
 
 func append*(w: var RlpWriter; key: HashKey) =
   if 1 < key.len and key.len < 32:
-    w.appendRawBytes key.data
+    w.writeBlob key.data
   else:
     w.append key.data
 
