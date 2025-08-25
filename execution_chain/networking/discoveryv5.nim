@@ -9,13 +9,62 @@
 
 {.push raises: [].}
 
-include
-  eth/p2p/discoveryv5/protocol
+import
+  std/[options],
+  chronos,
+  chronicles,
+  results,
+  metrics,
+  eth/common/keys,
+  eth/p2p/discoveryv5/[protocol, encoding, messages_encoding, enr, node, sessions]
 
-proc receiveV5*(d: Protocol, a: Address, packet: openArray[byte]): Result[void, cstring] =
+export
+  # Core types only
+  protocol.Protocol,
+  node.Node,
+  node.Address,
+  enr.Record
+
+# Type aliases for cleaner API
+type
+  DiscoveryV5* = protocol.Protocol
+  NodeV5* = node.Node
+  AddressV5* = node.Address
+  
+  DiscResult*[T] = Result[T, cstring]
+
+proc newDiscoveryV5*(
+    privKey: PrivateKey,
+    enrIp: Opt[IpAddress],
+    enrTcpPort: Opt[Port],
+    enrUdpPort: Opt[Port],
+    bootstrapRecords: openArray[enr.Record] = [],
+    bindPort: Port,
+    bindIp = IPv6_any(),
+    enrAutoUpdate = true,
+    rng = newRng(),
+): DiscoveryV5 =
+  ## Create a new Discovery v5 protocol instance
+  protocol.newProtocol(
+    privKey = privKey,
+    enrIp = enrIp,
+    enrTcpPort = enrTcpPort,
+    enrUdpPort = enrUdpPort,
+    bootstrapRecords = bootstrapRecords,
+    bindPort = bindPort,
+    bindIp = bindIp,
+    enrAutoUpdate = enrAutoUpdate,
+    rng = rng
+  )
+
+proc receiveV5*(d: Protocol, a: Address, packet: openArray[byte]): DiscResult[void] =
   discv5_network_bytes.inc(packet.len.int64, labelValues = [$Direction.In])
 
-  let packet = ?d.codec.decodePacket(a, packet)
+  let decoded = d.codec.decodePacket(a, packet)
+  if decoded.isErr():
+    return err("discv5: Failed to decode packet")
+
+  let packet = decoded[]
 
   case packet.flag
   of OrdinaryMessage:
