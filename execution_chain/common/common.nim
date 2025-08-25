@@ -95,6 +95,9 @@ type
       ## by stateless clients such as generation and storage of block witnesses
       ## and serving these witnesses to peers over the p2p network.
 
+    statelessWitnessValidation*: bool
+      ## Enable full validation of execution witnesses.
+
 # ------------------------------------------------------------------------------
 # Private helper functions
 # ------------------------------------------------------------------------------
@@ -167,7 +170,8 @@ proc init(com         : CommonRef,
           config      : ChainConfig,
           genesis     : Genesis,
           initializeDb: bool,
-          statelessProviderEnabled: bool) =
+          statelessProviderEnabled: bool,
+          statelessWitnessValidation: bool) =
 
 
   config.daoCheck()
@@ -206,6 +210,7 @@ proc init(com         : CommonRef,
     com.initializeDb()
 
   com.statelessProviderEnabled = statelessProviderEnabled
+  com.statelessWitnessValidation = statelessWitnessValidation
 
 proc isBlockAfterTtd(com: CommonRef, header: Header, txFrame: CoreDbTxRef): bool =
   if com.config.terminalTotalDifficulty.isNone:
@@ -229,7 +234,8 @@ proc new*(
     networkId: NetworkId = MainNet;
     params = networkParams(MainNet);
     initializeDb = true;
-    statelessProviderEnabled = false
+    statelessProviderEnabled = false;
+    statelessWitnessValidation = false;
       ): CommonRef =
 
   ## If genesis data is present, the forkIds will be initialized
@@ -242,7 +248,8 @@ proc new*(
     params.config,
     params.genesis,
     initializeDb,
-    statelessProviderEnabled)
+    statelessProviderEnabled,
+    statelessWitnessValidation)
 
 proc new*(
     _: type CommonRef;
@@ -251,7 +258,8 @@ proc new*(
     config: ChainConfig;
     networkId: NetworkId = MainNet;
     initializeDb = true;
-    statelessProviderEnabled = false
+    statelessProviderEnabled = false;
+    statelessWitnessValidation = false
       ): CommonRef =
 
   ## There is no genesis data present
@@ -264,7 +272,8 @@ proc new*(
     config,
     nil,
     initializeDb,
-    statelessProviderEnabled)
+    statelessProviderEnabled,
+    statelessWitnessValidation)
 
 func clone*(com: CommonRef, db: CoreDbRef): CommonRef =
   ## clone but replace the db
@@ -277,7 +286,8 @@ func clone*(com: CommonRef, db: CoreDbRef): CommonRef =
     genesisHash  : com.genesisHash,
     genesisHeader: com.genesisHeader,
     networkId    : com.networkId,
-    statelessProviderEnabled: com.statelessProviderEnabled
+    statelessProviderEnabled: com.statelessProviderEnabled,
+    statelessWitnessValidation: com.statelessWitnessValidation
   )
 
 func clone*(com: CommonRef): CommonRef =
@@ -310,7 +320,7 @@ func nextFork*(com: CommonRef, currentFork: HardFork): Opt[HardFork] =
   ## Returns the next hard fork after the given one
   ## The next fork can also be the last fork
   if currentFork < Shanghai:
-    return Opt.none(HardFork) 
+    return Opt.none(HardFork)
   for fork in currentFork .. HardFork.high:
     if fork > currentFork and com.forkTransitionTable.timeThresholds[fork].isSome:
       return Opt.some(fork)

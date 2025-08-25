@@ -410,10 +410,16 @@ type
       separator: "\pSTATELESS PROVIDER OPTIONS:"
       hidden
       desc: "Enable the stateless provider. This turns on the features required" &
-        " by stateless clients such as generation and stored of block witnesses" &
+        " by stateless clients such as generation and storage of block witnesses" &
         " and serving these witnesses to peers over the p2p network."
       defaultValue: false
       name: "stateless-provider" }: bool
+
+    statelessWitnessValidation* {.
+      hidden
+      desc: "Enable full validation of execution witnesses."
+      defaultValue: false
+      name: "stateless-witness-validation" }: bool
 
     case cmd* {.
       command
