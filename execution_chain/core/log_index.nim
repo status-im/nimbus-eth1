@@ -313,7 +313,8 @@ proc add_block_logs*[T](log_index: var LogIndex,
         add_log_value(log_index, 0, row, column, addr_hash)
         
         # Process each topic
-        for topic in log.topics:
+        for i in 0..<log.topics.len:
+          let topic = log.topics[i]
           let topic_hash = topic_value(Hash32(topic))
           let topic_column = get_column_index(log_index.next_index - 1, topic_hash)
           let topic_row = get_row_index(0, topic_hash, 0)
