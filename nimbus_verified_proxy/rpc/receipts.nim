@@ -122,7 +122,7 @@ proc verifyLogs*(
       if prevBlockHash != lg.blockHash.get():
         # TODO: a cache will solve downloading the same block receipts for multiple logs
         rxs = (await vp.getReceipts(lg.blockHash.get())).valueOr:
-          return err("Couldn't get block receipt to verify logs")
+          return err(error)
         prevBlockHash = lg.blockHash.get()
       let
         txIdx = distinctBase(lg.transactionIndex.get())
