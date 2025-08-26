@@ -11,7 +11,7 @@
 import
   stint,
   json_rpc/[rpcclient, rpcproxy, rpcserver, jsonmarshal],
-  stew/io2,
+  stew/[io2, byteutils],
   web3/eth_api_types,
   eth/common/eth_types_rlp,
   ../../execution_chain/rpc/cors,
@@ -41,6 +41,27 @@ proc getLogsFromJson*(
   var logBytes = readAllBytes(filepath)
   let logs = JrpcConv.decode(logBytes.get, seq[LogObject])
   return logs
+
+proc getProofFromJson*(
+    filepath: string
+): ProofResponse {.raises: [SerializationError].} =
+  var proofBytes = readAllBytes(filepath)
+  let proof = JrpcConv.decode(proofBytes.get, ProofResponse)
+  return proof
+
+proc getAccessListFromJson*(
+    filepath: string
+): AccessListResult {.raises: [SerializationError].} =
+  var filebytes = readAllBytes(filepath)
+  let accessList = JrpcConv.decode(filebytes.get, AccessListResult)
+  return accessList
+
+proc CodeFromJson*(
+    filepath: string
+): seq[byte] {.raises: [SerializationError, ValueError].} =
+  var filebytes = readAllBytes(filepath)
+  let codeString = JrpcConv.decode(filebytes.get, string)
+  return codeString.hexToSeqByte()
 
 template `==`*(b1: BlockObject, b2: BlockObject): bool =
   JrpcConv.encode(b1).JsonString == JrpcConv.encode(b2).JsonString
