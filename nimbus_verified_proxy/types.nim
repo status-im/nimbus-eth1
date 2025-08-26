@@ -22,6 +22,8 @@ const
   ACCOUNTS_CACHE_SIZE = 128
   CODE_CACHE_SIZE = 64
   STORAGE_CACHE_SIZE = 256
+  MAX_ID_TRIES* = 10
+  MAX_FILTERS* = 256
 
 type
   AccountsCacheKey* = (Root, Address)

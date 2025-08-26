@@ -277,12 +277,27 @@ proc installEthApiHandlers*(vp: VerifiedRpcProxy) =
       raise newException(ValueError, error)
 
   vp.proxy.rpc("eth_newFilter") do(filterOptions: FilterOptions) -> string:
-    var id: array[8, byte] # 64bits
+    if vp.filterStore.len >= MAX_FILTERS:
+      raise newException(ValueError, "FilterStore already full")
 
-    if randomBytes(id) != len(id):
-      raise newException(ValueError, "Couldn't assign a identifier for the filter")
+    var
+      id: array[8, byte] # 64bits
+      strId: string
 
-    let strId = toHex(id)
+    for i in 0 .. (MAX_ID_TRIES + 1):
+      if randomBytes(id) != len(id):
+        raise newException(
+          ValueError, "Couldn't generate a random identifier for the filter"
+        )
+
+      strId = toHex(id)
+
+      if not vp.filterStore.contains(strId):
+        break
+
+      if i >= MAX_ID_TRIES:
+        raise
+          newException(ValueError, "Couldn't create a unique identifier for the filter")
 
     vp.filterStore[strId] =
       FilterStoreItem(filter: filterOptions, blockMarker: Opt.none(Quantity))
