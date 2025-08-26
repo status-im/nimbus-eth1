@@ -23,7 +23,7 @@ import
 suite "test state verification":
   let
     ts = TestApiState.init(1.u256)
-    vp = startTestSetup(ts, 1, 1, 8887)
+    vp = startTestSetup(ts, 1, 1, 8897)
 
   test "test EVM based methods":
     let
@@ -34,7 +34,7 @@ suite "test state verification":
       contractCode = getCodeFromJson("nimbus_verified_proxy/tests/data/code.json")
 
       address = address"0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2"
-      slot = u256("4de9be9d9a5197eea999984bec8d41aac923403f95449eaf16641fbc3a942711")
+      slot = UInt256.fromHex("0x4de9be9d9a5197eea999984bec8d41aac923403f95449eaf16641fbc3a942711")
 
       tx = TransactionArgs(
         to: Opt.some(address),
@@ -66,11 +66,11 @@ suite "test state verification":
         waitFor vp.proxy.getClient().eth_createAccessList(tx, latestTag)
       verifiedEstimate = waitFor vp.proxy.getClient().eth_estimateGas(tx)
 
-    check verifiedBalance == u256("1d663f6a4afc5b01abb5d")
+    check verifiedBalance == UInt256.fromHex("0x1d663f6a4afc5b01abb5d")
     check verifiedNonce == Quantity(1)
     check verifiedCode == contractCode
     check verifiedSlot.to(UInt256) ==
-      u256("000000000000000000000000000000000000000000000000288a82d13c3d1600")
+      UInt256.fromHex("0x000000000000000000000000000000000000000000000000288a82d13c3d1600")
     check verifiedCall ==
       "000000000000000000000000000000000000000000000000288a82d13c3d1600".hexToSeqByte()
     check verifiedEstimate == Quantity(24304)
