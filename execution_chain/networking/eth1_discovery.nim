@@ -29,13 +29,13 @@ logScope:
 
 type
   DiscV4 = discoveryv4.DiscoveryV4
-  DiscV5 = discoveryv5.Protocol
+  DiscV5 = discoveryv5.DiscoveryV5
 
   NodeV4 = discoveryv4.Node
-  NodeV5 = discoveryv5.Node
+  NodeV5 = discoveryv5.NodeV5
 
   AddressV4 = discoveryv4.Address
-  AddressV5 = discoveryv5.Address
+  AddressV5 = discoveryv5.AddressV5
 
   Eth1Discovery* = ref object
     discv4: DiscV4
@@ -84,8 +84,9 @@ proc processClient(
   if discv4.isErr:
     # unhandled buf will be handled by discv5
     let addrv5 = raddr.to(AddressV5)
-    proto.discv5.receiveV5(addrv5, buf).isOkOr:
-      debug "Discovery receive error", discv4=discv4.error, discv5=error
+    let discv5 = proto.discv5.receiveV5(addrv5, buf)
+    if discv5.isErr:
+      debug "Discovery receive error", discv4=discv4.error, discv5=discv5.error
 
 #------------------------------------------------------------------------------
 # Public functions
@@ -110,7 +111,7 @@ proc new*(
       bindIp = bindIp,
       rng = rng
     ),
-    discv5: discoveryv5.newProtocol(
+    discv5: discoveryv5.newDiscoveryV5(
       privKey = privKey,
       enrIp = Opt.some(address.ip),
       enrTcpPort = Opt.some(address.tcpPort),
