@@ -8,7 +8,7 @@
 # those terms.
 
 import
-  std/[os, osproc],
+  std/os,
   unittest2,
   ./eest_helpers,
   ./eest_blockchain

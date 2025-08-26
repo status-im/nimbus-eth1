@@ -8,8 +8,7 @@
 # those terms.
 
 import
-  std/[json, cmdline, os],
-  unittest2,
+  std/json,
   eth/common/headers_rlp,
   web3/eth_api_types,
   web3/engine_api_types,
@@ -98,6 +97,6 @@ when isMainModule:
     let testFile = getAppFilename().splitPath().tail
     echo "Usage: " & testFile & " vector.json"
     quit(QuitFailure)
-  
+
   check processFile(paramStr(1))
 
