@@ -11,6 +11,7 @@
 import
   std/[macros],
   results,
+  constantine/ethereum_evm_precompiles,
   "."/[types, blake2b_f, blscurve],
   ./interpreter/[gas_meter, gas_costs, utils/utils_numeric],
   eth/common/keys,
@@ -217,13 +218,14 @@ func ecRecover(c: Computation): EvmResultVoid =
     GasECRecover,
     reason="ECRecover Precompile")
 
-  let
-    sig = ? c.getSignature()
-    pubkey = recover(sig.sig, SkMessage(sig.msgHash)).valueOr:
-      return err(prcErr(PrcInvalidSig))
+  var pubkey: array[32, byte]
+  let res = pubkey.eth_evm_ecrecover(c.msg.data)
+
+  if res != cttEVM_Success:
+    return err(prcErr(PrcInvalidParam))
 
   c.output.setLen(32)
-  assign(c.output.toOpenArray(12, 31), pubkey.toCanonicalAddress().data)
+  assign(c.output, pubkey)
   ok()
 
 func sha256(c: Computation): EvmResultVoid =
