@@ -92,3 +92,73 @@ suite "test receipts verification":
       ts.loadLogs(filterOptions, logs)
       let verifiedLogs = waitFor vp.proxy.getClient().eth_getLogs(filterOptions)
       check verifiedLogs.len == logs.len
+
+  test "create filters and uninstall filters":
+    # filter options without any tags would test resolving default "latest"
+    let filterOptions = FilterOptions(
+      topics:
+        @[
+          TopicOrList(
+            kind: SingleOrListKind.slkSingle,
+            single:
+              bytes32"0xddf252ad1be2c89b69c2b068fc378daa952ba7f163c4a11628f55a4df523b3ef",
+          )
+        ],
+      blockHash: Opt.none(Hash32),
+    )
+
+    let
+      # create a filter
+      newFilter = waitFor vp.proxy.getClient().eth_newFilter(filterOptions)
+      # deleting will prove if the filter was created
+      delStatus = waitFor vp.proxy.getClient().eth_uninstallFilter(newFilter)
+
+    check delStatus
+
+    let
+      unknownFilterId = "thisisacorrectfilterid"
+      delStatus2 = waitFor vp.proxy.getClient().eth_uninstallFilter(newFilter)
+
+    check not delStatus2
+
+  test "get logs using filter changes":
+    let
+      blk = getBlockFromJson("nimbus_verified_proxy/tests/data/Paris.json")
+      rxs = getReceiptsFromJson("nimbus_verified_proxy/tests/data/receipts.json")
+      logs = getLogsFromJson("nimbus_verified_proxy/tests/data/logs.json")
+
+    # update block tags because getLogs (uses)-> getReceipts (uses)-> getHeader
+    ts.loadBlockReceipts(blk, rxs)
+    discard vp.headerStore.add(convHeader(blk), blk.hash)
+    discard vp.headerStore.updateFinalized(convHeader(blk), blk.hash)
+
+    # filter options without any tags would test resolving default "latest"
+    let filterOptions = FilterOptions(
+      topics:
+        @[
+          TopicOrList(
+            kind: SingleOrListKind.slkSingle,
+            single:
+              bytes32"0xddf252ad1be2c89b69c2b068fc378daa952ba7f163c4a11628f55a4df523b3ef",
+          )
+        ],
+      blockHash: Opt.none(Hash32),
+    )
+
+    ts.loadLogs(filterOptions, logs)
+
+    let
+      # create a filter
+      newFilter = waitFor vp.proxy.getClient().eth_newFilter(filterOptions)
+      filterLogs = waitFor vp.proxy.getClient().eth_getFilterLogs(newFilter)
+      filterChanges = waitFor vp.proxy.getClient().eth_getFilterChanges(newFilter)
+
+    check filterLogs.len == logs.len
+    check filterChanges.len == logs.len
+
+    try:
+      let againFilterChanges =
+        waitFor vp.proxy.getClient().eth_getFilterChanges(newFilter)
+      check false
+    except CatchableError as e:
+      check true
