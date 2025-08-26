@@ -242,11 +242,13 @@ proc updateActivateSyncer*(ctx: BeaconCtxRef) =
   ## If in hibernate mode, accept a cache session and activate syncer
   ##
   if ctx.hibernate and                          # only in idle mode
+     ctx.pool.minInitBuddies <= ctx.pool.nBuddies and
      ctx.pool.initTarget.isNone():              # otherwise manual setup
     let (b, t) = (ctx.chain.baseNumber, ctx.hdrCache.head.number)
 
     # Exclude the case of a single header chain which would be `T` only
     if b+1 < t:
+      ctx.pool.minInitBuddies = 0               # reset
       ctx.pool.lastState = SyncState.headers    # state transition
       ctx.hibernate = false                     # wake up
 
@@ -265,9 +267,15 @@ proc updateActivateSyncer*(ctx: BeaconCtxRef) =
   # Failed somewhere on the way
   ctx.hdrCache.clear()
 
-  debug "Syncer activation rejected", base=ctx.chain.baseNumber.bnStr,
-    head=ctx.chain.latestNumber.bnStr, state=ctx.hdrCache.state,
-    initTarget=ctx.pool.initTarget.isSome()
+  if ctx.pool.minInitBuddies <= ctx.pool.nBuddies and
+     ctx.pool.initTarget.isNone():
+    debug "Syncer activation rejected", base=ctx.chain.baseNumber.bnStr,
+      head=ctx.chain.latestNumber.bnStr, state=ctx.hdrCache.state,
+      initTarget=ctx.pool.initTarget.isSome(), nSyncPeers=ctx.pool.nBuddies
+  else:
+    trace "Syncer activation rejected", base=ctx.chain.baseNumber.bnStr,
+      head=ctx.chain.latestNumber.bnStr, state=ctx.hdrCache.state,
+      initTarget=ctx.pool.initTarget.isSome(), nSyncPeers=ctx.pool.nBuddies
 
 # ------------------------------------------------------------------------------
 # End

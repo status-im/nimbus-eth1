@@ -60,6 +60,13 @@ template headersTargetActivate*(
       peer {.inject.} = buddy.peer
       trg = ctx.pool.initTarget.unsafeGet
 
+    # Require minimum of sync peers
+    if ctx.pool.nBuddies < ctx.pool.minInitBuddies:
+      trace info & ": not enough buddies required to start sync", peer,
+        targetHash=trg.hash.short, isFinal=trg.isFinal,
+        syncState=($buddy.syncState), nSyncPeers=ctx.pool.nBuddies
+      break body                                           # return
+
     # Can be used only before first activation
     if ctx.pool.lastState != SyncState.idle:
       debug info & ": cannot setup target while syncer is activated", peer,

@@ -142,6 +142,7 @@ type
     lastSlowPeer*: Opt[Hash]         ## Register slow peer when the last one
     failedPeers*: HashSet[Hash]      ## Detect dead end sync by collecting peers
     seenData*: bool                  ## Set `true` if data were fetched, already
+    minInitBuddies*: int             ## Min # peers needed for acivating syncer
     initTarget*: Opt[InitTarget]     ## Optionally set up first target
 
     when enableTicker:

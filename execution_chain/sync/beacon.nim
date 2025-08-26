@@ -69,6 +69,11 @@ proc init*(
   desc.ctx.pool.chain = chain
   desc
 
+proc peersMinInit*(desc: BeaconSyncRef; nBuddies: int) =
+  ## Set the minimum number of active peers to start with for the first
+  ## syncer activation.
+  desc.ctx.pool.minInitBuddies = nBuddies
+
 proc targetInit*(desc: BeaconSyncRef; hex: string; isFinal: bool): bool =
   ## Set up inital target sprint (if any, mainly for debugging)
   try:
