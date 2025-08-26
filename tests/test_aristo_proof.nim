@@ -14,13 +14,14 @@ import
   unittest2,
   stint,
   results,
+  eth/rlp,
   stew/byteutils,
   eth/common/hashes,
   eth/trie/[hexary, db, trie_defs],
   ../execution_chain/db/aristo/aristo_proof
 
 template getBytes(i: int): seq[byte] =
-  @(u256(i).toBytesBE())
+  rlp.encode(u256(i))
 
 func toNodesTable(proofNodes: openArray[seq[byte]]): Table[Hash32, seq[byte]] =
   var nodes: Table[Hash32, seq[byte]]
@@ -29,7 +30,7 @@ func toNodesTable(proofNodes: openArray[seq[byte]]): Table[Hash32, seq[byte]] =
   nodes
 
 suite "Aristo proof verification":
-  const numValues = 1000
+  const numValues = 10000
 
   setup:
     let db = newMemoryDB()
@@ -150,6 +151,41 @@ suite "Aristo proof verification":
     let leafValue = verifyProof(nodes, root, nonExistingKey).expect("valid proof")
     check:
       leafValue.isNone()
+
+  # By using a small value (1 in this case) and storing a large number of keys
+  # this test reproduces the scenario where leaf trie nodes get embedded into
+  # the parent node because the len of the rlp encoded node is less than 32.
+  test "Validate proof for existing value - embedded leafs":
+    const
+      iterations = 100000
+      leaf = getBytes(1)
+
+    for i in 1..iterations:
+      let
+        indexBytes = getBytes(i)
+        key = keccak256(indexBytes)
+        value = indexBytes
+      trie.put(key.data, leaf)
+
+    for i in 1..iterations:
+      let
+        indexBytes = getBytes(i)
+        key = keccak256(indexBytes)
+        value = indexBytes
+        root = trie.rootHash()
+        proof = trie.getBranch(key.data)
+
+      block:
+        let leafValue = verifyProof(proof, root, key).expect("valid proof")
+        check:
+          leafValue.isSome()
+          leafValue.get() == leaf
+
+      block:
+        let leafValue = verifyProof(toNodesTable(proof), root, key).expect("valid proof")
+        check:
+          leafValue.isSome()
+          leafValue.get() == leaf
 
   # The following test cases were copied from the Rust hexary trie implementation.
   # See here: https://github.com/citahub/cita_trie/blob/master/src/tests/mod.rs#L554
