@@ -50,9 +50,23 @@ jobs:
       failed_test_status: ${{ steps.test_result.outputs.failed_test_status }}
     runs-on: ubuntu-latest
 
+    env:
+      EXTERNAL_CONTRIBUTOR: ${{ secrets.DOCKERHUB_USERNAME != '' && secrets.DOCKERHUB_TOKEN != '' }}
+
     steps:
     - name: Checkout repository
       uses: actions/checkout@v4
+
+    # Without docker login we get rate limited when multiple PRs are coming in
+    # Leading to a cascade of failure for the PRs after that
+    # But since external contributor PRs are rare, the default rate limit
+    # 200 PRs/6 hours seems adequate.
+    - name: Login to Docker Hub
+      if: ${{ env.EXTERNAL_CONTRIBUTOR != 'true' }}
+      uses: docker/login-action@v3
+      with:
+        username: ${{ secrets.DOCKERHUB_USERNAME }}
+        password: ${{ secrets.DOCKERHUB_TOKEN }}
 
     - name: Build Docker image
       shell: bash

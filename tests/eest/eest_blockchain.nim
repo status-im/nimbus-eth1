@@ -24,10 +24,7 @@ import
   ../../hive_integration/nodocker/engine/engine_client,
   ./eest_helpers,
   stew/byteutils,
-  chronos,
-  ../../execution_chain/db/ledger,
-  ../../execution_chain/core/chain/forked_chain,
-  ../../execution_chain/common/common
+  chronos
 
 proc parseBlocks*(node: JsonNode): seq[BlockDesc] =
   for x in node:
@@ -93,6 +90,10 @@ proc processFile*(fileName: string): bool =
   return testPass
 
 when isMainModule:
+  import
+    os,
+    unittest2
+
   if paramCount() == 0:
     let testFile = getAppFilename().splitPath().tail
     echo "Usage: " & testFile & " vector.json"
