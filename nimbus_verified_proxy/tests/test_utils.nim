@@ -56,7 +56,7 @@ proc getAccessListFromJson*(
   let accessList = JrpcConv.decode(filebytes.get, AccessListResult)
   return accessList
 
-proc CodeFromJson*(
+proc getCodeFromJson*(
     filepath: string
 ): seq[byte] {.raises: [SerializationError, ValueError].} =
   var filebytes = readAllBytes(filepath)
