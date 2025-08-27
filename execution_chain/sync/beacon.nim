@@ -15,15 +15,15 @@ import
   pkg/stew/[interval_set, sorted_set],
   ../core/chain,
   ../networking/p2p,
-  ./beacon/worker/[headers/headers_target, worker_desc],
-  ./beacon/worker,
-  ./[sync_desc, sync_sched, wire_protocol]
+  ./beacon/worker/headers/headers_target,
+  ./beacon/[beacon_desc, worker],
+  ./[sync_sched, wire_protocol]
+
+export
+  beacon_desc
 
 logScope:
   topics = "beacon sync"
-
-type
-  BeaconSyncRef* = RunnerSyncRef[BeaconCtxData,BeaconBuddyData]
 
 # ------------------------------------------------------------------------------
 # Virtual methods/interface, `mixin` functions
