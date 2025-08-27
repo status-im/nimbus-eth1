@@ -31,19 +31,9 @@ inputs:
     required: false
     default: false
 
-outputs:
-  random-number:
-    description: "Random number"
-    value: ${{ steps.random-number-generator.outputs.random-number }}
-
 runs:
   using: "composite"
   steps:
-    - name: Random Number Generator
-      id: random-number-generator
-      run: echo "random-number=$(echo $RANDOM)" >> $GITHUB_OUTPUT
-      shell: bash
-
     - name: Derive environment variables
       shell: bash
       run: |
