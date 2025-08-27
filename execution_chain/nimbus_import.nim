@@ -93,7 +93,7 @@ template boolFlag(flags, b): PersistBlockFlags =
   else:
     {}
 
-template running(): bool =
+proc running(): bool =
   not ProcessState.stopIt(notice("Shutting down", reason = it))
 
 proc importBlocks*(conf: NimbusConf, com: CommonRef) =
@@ -292,7 +292,7 @@ proc importBlocks*(conf: NimbusConf, com: CommonRef) =
         return false
       true
 
-    while running and persister.stats.blocks.uint64 < conf.maxBlocks and
+    while running() and persister.stats.blocks.uint64 < conf.maxBlocks and
         blockNumber <= lastEra1Block:
       if not loadEraBlock(blockNumber):
         notice "No more `era1` blocks to import", blockNumber, slot
@@ -349,7 +349,7 @@ proc importBlocks*(conf: NimbusConf, com: CommonRef) =
 
         true
 
-      while running and moreEraAvailable and
+      while running() and moreEraAvailable and
           persister.stats.blocks.uint64 < conf.maxBlocks and slot < endSlot:
         if not loadEra1Block():
           slot += 1
