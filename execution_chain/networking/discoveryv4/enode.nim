@@ -12,9 +12,10 @@
 import
   std/[uri, strutils, net],
   pkg/chronicles,
-  eth/common/keys
+  eth/common/keys,
+  json_serialization/writer
 
-export keys
+export keys, writeValue
 
 type
   ENodeError* = enum
@@ -34,7 +35,10 @@ type
     tcpPort*: Port        ## TCP port number
 
   ENode* = object
-    ## ENode object
+    ## ENode is a legacy URL-style identifier for Ethereum node that supports
+    ## a pubkey, IP address/port and an optional discovery port - it has mostly
+    ## been superseded by ENR.
+    ## https://ethereum.org/en/developers/docs/networking-layer/network-addresses/#enode
     pubkey*: PublicKey    ## Node public key
     address*: Address     ## Node address
 
@@ -134,5 +138,8 @@ proc `$`*(a: Address): string =
   result.add(":" & $a.udpPort)
   result.add(":" & $a.tcpPort)
 
-chronicles.formatIt(Address): $it
-chronicles.formatIt(ENode): $it
+proc writeValue*(w: var JsonWriter, a: Address) {.raises: [IOError].} =
+  w.writeValue $a
+
+proc writeValue*(w: var JsonWriter, a: ENode) {.raises: [IOError].} =
+  w.writeValue $a

@@ -11,7 +11,7 @@
 
 import
   chronicles,
-  logging,
+  eth/common/eth_types_json_serialization,
   ../db/[core_db, ledger, storage_types, fcu_db],
   ../utils/[utils],
   ".."/[constants, errors, version_info],
@@ -23,12 +23,12 @@ export
   core_db,
   constants,
   errors,
+  eth_types_json_serialization,
   evmforks,
-  hardforks,
   genesis,
-  utils,
+  hardforks,
   taskpools,
-  logging
+  utils
 
 type
   HeaderChainUpdateCB* = proc(hdr: Header; fin: Hash32) {.gcsafe, raises: [].}
