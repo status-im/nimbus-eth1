@@ -400,20 +400,14 @@ func bn256ecMul(c: Computation, fork: EVMFork = FkByzantium): EvmResultVoid =
   let gasFee = if fork < FkIstanbul: GasECMul else: GasECMulIstanbul
   ? c.gasMeter.consumeGas(gasFee, reason="ecMul Precompile")
 
-  var
-    input: array[96, byte]
+  var output: array[64, byte]
+  let res = output.eth_evm_bn254_g1mul(c.msg.data)
 
-  # Padding data
-  let len = min(c.msg.data.len, 96) - 1
-  assign(input.toOpenArray(0, len), c.msg.data.toOpenArray(0, len))
-  var p1 = ? G1.getPoint(input.toOpenArray(0, 63))
-  var fr = ? getFR(input.toOpenArray(64, 95))
-  var apo = (p1 * fr).toAffine()
+  if res != cttEVM_Success:
+    return err(prcErr(PrcInvalidParam))
 
   c.output.setLen(64)
-  if isSome(apo):
-    # we can discard here because we supply buffer of proper size
-    discard apo.get().toBytes(c.output)
+  assign(c.output, output)
 
   ok()
 
