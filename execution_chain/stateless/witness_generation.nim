@@ -7,13 +7,13 @@
 # This file may not be copied, modified, or distributed except according to
 # those terms.
 
-{.push raises: [].}
+{.push raises: [], gcsafe.}
 
 import
   std/[tables, sets],
   minilru,
   eth/common,
-  ../db/ledger,
+  ../db/[ledger, core_db],
   ./witness_types
 
 export
@@ -113,3 +113,25 @@ proc build*(
       let blockHash = ledger.getBlockHash(BlockNumber(n))
       doAssert(blockHash != default(Hash32))
       witness.addHeaderHash(blockHash)
+
+  witness
+
+
+proc build*(T: type ExecutionWitness, witness: Witness, ledger: LedgerRef): ExecutionWitness =
+  var codes: seq[seq[byte]]
+  for codeHash in witness.codeHashes:
+    let code = ledger.txFrame.getCodeByHash(codeHash).valueOr:
+      raiseAssert "Code not found"
+    codes.add(code)
+
+  var headers: seq[seq[byte]]
+  for headerHash in witness.headerHashes:
+    let header = ledger.txFrame.getBlockHeader(headerHash).valueOr:
+      raiseAssert "Header not found"
+    headers.add(rlp.encode(header))
+
+  ExecutionWitness.init(
+    state = witness.state,
+    codes = move(codes),
+    keys = witness.keys,
+    headers = move(headers))
