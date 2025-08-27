@@ -17,8 +17,7 @@ import
   ../../common,
   ./worker/headers/headers_target,
   ./worker/update/[metrics, ticker],
-  ./worker/[blocks, headers, start_stop, update],
-  ./worker_desc
+  ./worker/[blocks, headers, start_stop, update, worker_desc]
 
 # ------------------------------------------------------------------------------
 # Private functions

@@ -14,10 +14,9 @@ import
   std/sets,
   pkg/[chronos, eth/common, results],
   pkg/stew/[interval_set, sorted_set],
-  ../../core/chain,
-  ../[sync_desc, wire_protocol],
-  ./worker/helpers,
-  ./worker_const
+  ../../../core/chain,
+  ../../[sync_desc, wire_protocol],
+  ./[helpers, worker_const]
 
 export
   helpers, sync_desc, worker_const, chain

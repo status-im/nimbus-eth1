@@ -14,9 +14,8 @@ import
   std/sets,
   pkg/[chronicles, chronos, metrics],
   pkg/eth/common,
-  ../worker_desc,
   ./blocks/blocks_unproc,
-  ./headers
+  ./[headers, worker_desc]
 
 logScope:
   topics = "beacon sync"

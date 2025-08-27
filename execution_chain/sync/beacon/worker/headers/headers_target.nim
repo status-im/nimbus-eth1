@@ -15,7 +15,7 @@ import
   pkg/eth/common,
   pkg/stew/interval_set,
   ../../../../networking/p2p,
-  ../../worker_desc,
+  ../worker_desc,
   ./[headers_fetch, headers_helpers]
 
 logScope:

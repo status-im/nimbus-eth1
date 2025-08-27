@@ -14,8 +14,7 @@ import
   pkg/[chronicles, eth/common, metrics],
   ../../../networking/p2p,
   ../../wire_protocol,
-  ../worker_desc,
-  ./[blocks, headers, update]
+  ./[blocks, headers, update, worker_desc]
 
 type
   SyncStateData = tuple

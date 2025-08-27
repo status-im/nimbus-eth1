@@ -13,7 +13,7 @@
 
 import
   pkg/[chronos, chronicles, eth/common],
-  ../../worker_desc
+  ../worker_desc
 
 when enableTicker:
   import

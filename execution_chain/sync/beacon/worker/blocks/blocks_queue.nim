@@ -13,7 +13,7 @@
 import
   pkg/[eth/common, metrics],
   pkg/stew/[interval_set, sorted_set],
-  ../../worker_desc
+  ../worker_desc
 
 declareGauge nec_sync_block_lists_staged, "" &
   "Number of block list records staged for importing"

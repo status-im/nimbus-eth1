@@ -15,10 +15,9 @@ import
   pkg/stew/[interval_set, sorted_set],
   ../core/chain,
   ../networking/p2p,
-  ./beacon/worker/headers/headers_target,
-  ./beacon/[worker, worker_desc],
+  ./beacon/worker/[headers/headers_target, worker_desc],
+  ./beacon/worker,
   ./[sync_desc, sync_sched, wire_protocol]
-
 
 logScope:
   topics = "beacon sync"

@@ -15,8 +15,8 @@ import
   pkg/[chronicles, chronos],
   pkg/eth/common,
   pkg/stew/[interval_set, sorted_set],
-  ../worker_desc,
-  ./headers/[headers_headers, headers_helpers, headers_queue, headers_unproc]
+  ./headers/[headers_headers, headers_helpers, headers_queue, headers_unproc],
+  ./worker_desc
 
 export
   headers_queue, headers_unproc
