@@ -11,6 +11,7 @@ import
   results,
   chronicles,
   stew/byteutils,
+  nimcrypto/sysrand,
   json_rpc/[rpcserver, rpcclient, rpcproxy],
   eth/common/accounts,
   web3/eth_api,
@@ -237,6 +238,7 @@ proc installEthApiHandlers*(vp: VerifiedRpcProxy) =
         await vp.rpcClient.eth_getTransactionByHash(txHash)
       except CatchableError as e:
         raise newException(ValueError, e.msg)
+
     if tx.hash != txHash:
       raise newException(
         ValueError,
@@ -274,7 +276,86 @@ proc installEthApiHandlers*(vp: VerifiedRpcProxy) =
     (await vp.getLogs(filterOptions)).valueOr:
       raise newException(ValueError, error)
 
-  # TODO:
+  vp.proxy.rpc("eth_newFilter") do(filterOptions: FilterOptions) -> string:
+    if vp.filterStore.len >= MAX_FILTERS:
+      raise newException(ValueError, "FilterStore already full")
+
+    var
+      id: array[8, byte] # 64bits
+      strId: string
+
+    for i in 0 .. (MAX_ID_TRIES + 1):
+      if randomBytes(id) != len(id):
+        raise newException(
+          ValueError, "Couldn't generate a random identifier for the filter"
+        )
+
+      strId = toHex(id)
+
+      if not vp.filterStore.contains(strId):
+        break
+
+      if i >= MAX_ID_TRIES:
+        raise
+          newException(ValueError, "Couldn't create a unique identifier for the filter")
+
+    vp.filterStore[strId] =
+      FilterStoreItem(filter: filterOptions, blockMarker: Opt.none(Quantity))
+
+    return strId
+
+  vp.proxy.rpc("eth_uninstallFilter") do(filterId: string) -> bool:
+    if filterId in vp.filterStore:
+      vp.filterStore.del(filterId)
+      return true
+
+    return false
+
+  vp.proxy.rpc("eth_getFilterLogs") do(filterId: string) -> seq[LogObject]:
+    if filterId notin vp.filterStore:
+      raise newException(ValueError, "Filter doesn't exist")
+
+    (await vp.getLogs(vp.filterStore[filterId].filter)).valueOr:
+      raise newException(ValueError, error)
+
+  vp.proxy.rpc("eth_getFilterChanges") do(filterId: string) -> seq[LogObject]:
+    if filterId notin vp.filterStore:
+      raise newException(ValueError, "Filter doesn't exist")
+
+    let
+      filterItem = vp.filterStore[filterId]
+      filter = vp.resolveFilterTags(filterItem.filter).valueOr:
+        raise newException(ValueError, error)
+      # after resolving toBlock is always some and a number tag
+      toBlock = filter.toBlock.get().number
+
+    if filterItem.blockMarker.isSome() and toBlock <= filterItem.blockMarker.get():
+      raise newException(ValueError, "No changes for the filter since the last query")
+
+    let
+      fromBlock =
+        if filterItem.blockMarker.isSome():
+          Opt.some(
+            types.BlockTag(kind: bidNumber, number: filterItem.blockMarker.get())
+          )
+        else:
+          filter.fromBlock
+
+      changesFilter = FilterOptions(
+        fromBlock: fromBlock,
+        toBlock: filter.toBlock,
+        address: filter.address,
+        topics: filter.topics,
+        blockHash: filter.blockHash,
+      )
+      logObjs = (await vp.getLogs(changesFilter)).valueOr:
+        raise newException(ValueError, error)
+
+    # all logs verified so we can update blockMarker
+    vp.filterStore[filterId].blockMarker = Opt.some(toBlock)
+
+    return logObjs
+
   # Following methods are forwarded directly to the web3 provider and therefore
   # are not validated in any way.
   vp.proxy.registerProxyMethod("net_version")

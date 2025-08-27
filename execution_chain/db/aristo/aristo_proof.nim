@@ -199,6 +199,12 @@ proc makeMultiProof*(
 
   ok()
 
+template rlpNodeToBytes(node: Rlp): seq[byte] =
+  if node.isList():
+    node.rawData.toSeq()
+  else:
+    node.toBytes()
+
 proc trackRlpNodes(
     chain: openArray[seq[byte]];
     nextIndex: int;
@@ -233,14 +239,14 @@ proc trackRlpNodes(
   of 2:
     let (isLeaf, segm) = NibblesBuf.fromHexPrefix rlpNode.listElem(0).toBytes
     nChewOff = sharedPrefixLen(path, segm)
-    link = rlpNode.listElem(1).toBytes # link or payload
+    link = rlpNode.listElem(1).rlpNodeToBytes() # link or payload
     if isLeaf:
       if nChewOff == path.len:
         return ok(link)
       return err(PartTrkLeafPfxMismatch)
   of 17:
     nChewOff = 1
-    link = rlpNode.listElem(path[0].int).toBytes
+    link = rlpNode.listElem(path[0].int).rlpNodeToBytes()
   else:
     return err(PartTrkGarbledNode)
 
@@ -292,14 +298,14 @@ proc trackRlpNodes(
   of 2:
     let (isLeaf, segm) = NibblesBuf.fromHexPrefix rlpNode.listElem(0).toBytes
     nChewOff = sharedPrefixLen(path, segm)
-    link = rlpNode.listElem(1).toBytes # link or payload
+    link = rlpNode.listElem(1).rlpNodeToBytes() # link or payload
     if isLeaf:
       if nChewOff == path.len:
         return ok(link)
       return err(PartTrkLeafPfxMismatch)
   of 17:
     nChewOff = 1
-    link = rlpNode.listElem(path[0].int).toBytes
+    link = rlpNode.listElem(path[0].int).rlpNodeToBytes()
   else:
     return err(PartTrkGarbledNode)
 

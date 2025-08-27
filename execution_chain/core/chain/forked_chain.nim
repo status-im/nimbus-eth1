@@ -506,6 +506,13 @@ template queueOrphan(c: ForkedChainRef, parent: BlockRef, finalized = false): au
 
 proc processOrphan(c: ForkedChainRef, parent: BlockRef, finalized = false)
   {.async: (raises: [CancelledError]).} =
+  if parent.txFrame.isNil:
+    # This can happen if `processUpdateBase` put `updateBase`
+    # before `processOrphan` and the `updateBase` remove orphan's parent.txFrame
+    # But because of async nature, very hard to replicate or to make a test case.
+    # https://github.com/status-im/nimbus-eth1/issues/3526
+    return
+
   let
     orphan = c.quarantine.popOrphan(parent.hash).valueOr:
       # No more orphaned block
