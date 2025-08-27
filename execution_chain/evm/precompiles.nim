@@ -243,7 +243,10 @@ func ripemd160(c: Computation): EvmResultVoid =
 
   ? c.gasMeter.consumeGas(gasFee, reason="RIPEMD160 Precompile")
   c.output.setLen(32)
-  assign(c.output.toOpenArray(12, 31), ripemd.ripemd160.digest(c.msg.data).data)
+  let res =c.output.eth_evm_ripemd160(c.msg.data)
+
+  if res != cttEVM_Success:
+    return err(prcErr(PrcInvalidParam))
   ok()
 
 func identity(c: Computation): EvmResultVoid =
