@@ -7,7 +7,8 @@
 
 import
   std/[atomics, json, strutils, net],
-  beacon_chain/spec/digest,
+  eth/net/nat,
+  beacon_chain/spec/[digest, network],
   beacon_chain/nimbus_binary_common,
   ../nimbus_verified_proxy,
   ../nimbus_verified_proxy_conf
