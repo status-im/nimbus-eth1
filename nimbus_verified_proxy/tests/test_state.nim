@@ -34,7 +34,9 @@ suite "test state verification":
       contractCode = getCodeFromJson("nimbus_verified_proxy/tests/data/code.json")
 
       address = address"0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2"
-      slot = UInt256.fromHex("0x4de9be9d9a5197eea999984bec8d41aac923403f95449eaf16641fbc3a942711")
+      slot = UInt256.fromHex(
+        "0x4de9be9d9a5197eea999984bec8d41aac923403f95449eaf16641fbc3a942711"
+      )
 
       tx = TransactionArgs(
         to: Opt.some(address),
@@ -45,11 +47,13 @@ suite "test state verification":
 
       latestTag = BlockTag(kind: BlockIdentifierKind.bidAlias, alias: "latest")
 
-    ts.loadBlock(blk)
-    ts.loadProof(address, @[slot], latestTag, proof)
-    ts.loadCode(address, latestTag, contractCode)
+    # load proof also loads the block
+    ts.loadProof(address, @[slot], blk, proof)
+    # upload the same proof to resolve for accounts
+    ts.loadProof(address, @[], blk, proof)
+    ts.loadCode(address, blk, contractCode)
     # this is for optimistic state fetch
-    ts.loadAccessList(tx, latestTag, accessList)
+    ts.loadAccessList(tx, blk, accessList)
 
     discard vp.headerStore.add(convHeader(blk), blk.hash)
     discard vp.headerStore.updateFinalized(convHeader(blk), blk.hash)
@@ -70,7 +74,9 @@ suite "test state verification":
     check verifiedNonce == Quantity(1)
     check verifiedCode == contractCode
     check verifiedSlot.to(UInt256) ==
-      UInt256.fromHex("0x000000000000000000000000000000000000000000000000288a82d13c3d1600")
+      UInt256.fromHex(
+        "0x000000000000000000000000000000000000000000000000288a82d13c3d1600"
+      )
     check verifiedCall ==
       "000000000000000000000000000000000000000000000000288a82d13c3d1600".hexToSeqByte()
     check verifiedEstimate == Quantity(24304)
