@@ -22,6 +22,7 @@ import
     confutils,
     confutils/defs,
     confutils/std/net as confnet,
+    confutils/json/defs as jsdefs,
     json_serialization/std/net as jsnet,
     results,
     beacon_chain/buildinfo,
@@ -33,7 +34,8 @@ import
   ./common/chain_config,
   ./db/opts
 
-export net, defs, jsnet, nimbus_binary_common
+export net, defs, jsdefs, jsnet, nimbus_binary_common
+
 const
 
   # e.g.:
@@ -58,7 +60,7 @@ func getLogLevels(): string =
   join(logLevels, ", ")
 
 const
-  defaultPort              = 30303
+  defaultExecutionPort*    = 30303
   defaultMetricsServerPort = 9093
   defaultHttpPort          = 8545
   # https://github.com/ethereum/execution-apis/blob/v1.0.0-beta.4/src/engine/authentication.md#jwt-specifications
@@ -89,7 +91,6 @@ type
 
   NimbusConf* = object of RootObj
     ## Main Nimbus configuration object
-
     dataDirFlag* {.
       separator: "ETHEREUM OPTIONS:"
       desc: "The directory where nimbus will store all blockchain data"
@@ -271,8 +272,8 @@ type
 
     tcpPort* {.
       desc: "Ethereum P2P network listening TCP port"
-      defaultValue: defaultPort
-      defaultValueDesc: $defaultPort
+      defaultValue: defaultExecutionPort
+      defaultValueDesc: $defaultExecutionPort
       name: "tcp-port" }: Port
 
     udpPort* {.
@@ -492,6 +493,12 @@ type
           " is auto-generated."
         defaultValueDesc: "\"jwt.hex\" in the data directory (see --data-dir)"
         name: "jwt-secret" .}: Option[InputFile]
+
+      jwtSecretValue* {.
+        hidden
+        desc: "Hex string with jwt secret"
+        defaultValueDesc: "\"jwt.hex\" in the data directory (see --data-dir)"
+        name: "debug-jwt-secret-value" .}: Option[string]
 
       beaconSyncTarget* {.
         hidden
@@ -878,17 +885,14 @@ func dbOptions*(conf: NimbusConf, noKeyCache = false): DbOptions =
     rdbPrintStats = conf.rdbPrintStats,
   )
 
-# KLUDGE: The `load()` template does currently not work within any exception
-#         annotated environment.
-{.pop.}
-
-proc makeConfig*(cmdLine = commandLineParams()): NimbusConf
-    {.raises: [CatchableError].} =
+proc makeConfig*(cmdLine = commandLineParams()): NimbusConf {.raises: [CatchableError].} =
   ## Note: this function is not gc-safe
+  # TODO toml support
   result = NimbusConf.load(
     cmdLine,
     version = NimbusBuild,
-    copyrightBanner = NimbusHeader
+    copyrightBanner = NimbusHeader,
+    ignoreUnknown = true,
   )
 
   processNetworkParamsAndNetworkId(result)

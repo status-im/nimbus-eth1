@@ -35,6 +35,7 @@ type
 
   ENode* = object
     ## ENode object
+    ## https://ethereum.org/en/developers/docs/networking-layer/network-addresses/#enode
     pubkey*: PublicKey    ## Node public key
     address*: Address     ## Node address
 
