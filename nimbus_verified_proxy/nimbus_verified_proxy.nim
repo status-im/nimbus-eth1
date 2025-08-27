@@ -261,7 +261,7 @@ proc run*(
       let forkDigest = forkDigests[].atEpoch(gossipEpoch, cfg)
       network.unsubscribe(getBeaconBlocksTopic(forkDigest))
 
-    for gossipEpoch in oldGossipEpochs:
+    for gossipEpoch in newGossipEpochs:
       let forkDigest = forkDigests[].atEpoch(gossipEpoch, cfg)
       network.subscribe(
         getBeaconBlocksTopic(forkDigest),
