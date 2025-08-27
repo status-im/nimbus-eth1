@@ -12,6 +12,7 @@
 import
   std/sequtils,
   chronos,
+  chronicles/formats as chronicles,
   results,
   ./p2p_enums,
   ./p2p_protocols,
@@ -79,6 +80,9 @@ func id*(peer: PeerRef): NodeId =
 
 func `$`*(peer: PeerRef): string =
   $peer.remote
+
+chronicles.formatIt(PeerRef):
+  $it
 
 func `$`*(x: DisconnectPeer): string =
   if x.isNil: "DisconnectPeer(nil)"

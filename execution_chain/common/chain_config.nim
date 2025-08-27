@@ -16,6 +16,7 @@ import
   stint, stew/[byteutils],
   json_serialization, chronicles,
   json_serialization/stew/results,
+  json_serialization/std/tables,
   json_serialization/lexer,
   ./[genesis_alloc, hardforks]
 

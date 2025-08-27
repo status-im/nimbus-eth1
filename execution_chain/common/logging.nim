@@ -8,6 +8,7 @@
 # those terms.
 
 {.used.}
+{.deprecated.}
 
 import
   std/typetraits,
