@@ -218,14 +218,13 @@ func ecRecover(c: Computation): EvmResultVoid =
     GasECRecover,
     reason="ECRecover Precompile")
 
-  var pubkey: array[32, byte]
-  let res = pubkey.eth_evm_ecrecover(c.msg.data)
-
-  if res != cttEVM_Success:
-    return err(prcErr(PrcInvalidParam))
+  let
+    sig = ? c.getSignature()
+    pubkey = recover(sig.sig, SkMessage(sig.msgHash)).valueOr:
+      return err(prcErr(PrcInvalidSig))
 
   c.output.setLen(32)
-  assign(c.output, pubkey)
+  assign(c.output.toOpenArray(12, 31), pubkey.toCanonicalAddress().data)
   ok()
 
 func sha256(c: Computation): EvmResultVoid =
@@ -386,19 +385,14 @@ func bn256ecAdd(c: Computation, fork: EVMFork = FkByzantium): EvmResultVoid =
   let gasFee = if fork < FkIstanbul: GasECAdd else: GasECAddIstanbul
   ? c.gasMeter.consumeGas(gasFee, reason = "ecAdd Precompile")
 
-  var
-    input: array[128, byte]
-  # Padding data
-  let len = min(c.msg.data.len, 128) - 1
-  input[0..len] = c.msg.data[0..len]
-  var p1 = ? G1.getPoint(input.toOpenArray(0, 63))
-  var p2 = ? G1.getPoint(input.toOpenArray(64, 127))
-  var apo = (p1 + p2).toAffine()
+  var output: array[64, byte]
+  let res = output.eth_evm_bn254_g1add(c.msg.data)
+
+  if res != cttEVM_Success:
+    return err(prcErr(PrcInvalidParam))
 
   c.output.setLen(64)
-  if isSome(apo):
-    # we can discard here because we supply proper buffer
-    discard apo.get().toBytes(c.output)
+  assign(c.output, output)
 
   ok()
 
