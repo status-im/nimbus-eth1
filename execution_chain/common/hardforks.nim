@@ -343,6 +343,7 @@ type
     byBlock: seq[uint64]
     byTime: seq[uint64]
     genesisCRC: uint32
+    cache: seq[ForkID]
 
 func newID*(calc: ForkIdCalculator, head, time: uint64): ForkID =
   var hash = calc.genesisCRC
@@ -361,6 +362,24 @@ func newID*(calc: ForkIdCalculator, head, time: uint64): ForkID =
     return (hash, fork)
 
   (hash, 0'u64)
+
+func compatible*(calc: var ForkIdCalculator, forkId: ForkID): bool =
+  if calc.cache.len == 0:
+    calc.cache = newSeqOfCap[ForkID](calc.byBlock.len + calc.byTime.len)
+    var hash = calc.genesisCRC
+    for fork in calc.byBlock:
+      hash = crc32(hash, fork.toBytesBE)
+      calc.cache.add( (hash, fork) )
+
+    for fork in calc.byTime:
+      hash = crc32(hash, fork.toBytesBE)
+      calc.cache.add( (hash, fork) )
+
+  for id in calc.cache:
+    if id == forkId:
+      return true
+
+  false
 
 func initForkIdCalculator*(map: ForkTransitionTable,
                            genesisCRC: uint32,

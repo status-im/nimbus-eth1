@@ -18,7 +18,9 @@ import
   ./p2p_metrics,
   ./[eth1_discovery, p2p_peers]
 
-export sets, tables
+from eth/common/base import ForkID
+
+export sets, tables, UpdaterHook
 
 logScope:
   topics = "p2p peer_pool"
@@ -40,6 +42,10 @@ type
     running: bool
     discovery: Eth1Discovery
     workers: seq[WorkerFuture]
+    hook: UpdaterHook
+    lastForkId: ForkID
+    connectTimer: Future[void].Raising([CancelledError])
+    updateTimer: Future[void].Raising([CancelledError])
     connectingNodes*: HashSet[Node]
     connectedNodes*: Table[Node, PeerRef[Network]]
     observers*: Table[int, PeerObserverRef[Network]]
@@ -52,6 +58,7 @@ type
 const
   lookupInterval = 5
   connectLoopSleep = chronos.milliseconds(2000)
+  updateLoopSleep = chronos.seconds(15)
   maxConcurrentConnectionRequests = 40
   sleepBeforeTryingARandomBootnode = chronos.milliseconds(3000)
 
@@ -188,15 +195,44 @@ proc maybeConnectToMorePeers(p: PeerPoolRef) {.async: (raises: [CancelledError])
     return
   await p.connectToNode(n)
 
+func updateForkID(p: PeerPoolRef) =
+  if p.hook.forkId.isNil:
+    return
+
+  let forkId = p.hook.forkId()
+  if p.lastForkId == forkId:
+    return
+
+  p.discovery.updateForkID(forkId)
+  p.lastForkId = forkId
+
 proc run(p: PeerPoolRef) {.async: (raises: [CancelledError]).} =
   trace "Running PeerPool..."
 
+  # initial cycle
+  p.updateForkID()
   await p.discovery.start()
+  await p.maybeConnectToMorePeers()
+
   p.running = true
   while p.running:
     debug "Amount of peers", amount = p.connectedNodes.len()
-    await p.maybeConnectToMorePeers()
-    await sleepAsync(connectLoopSleep)
+
+    # Create or replenish timer
+    if p.connectTimer.isNil or p.connectTimer.finished:
+      p.connectTimer = sleepAsync(connectLoopSleep)
+
+    if p.updateTimer.isNil or p.updateTimer.finished:
+      p.updateTimer = sleepAsync(updateLoopSleep)
+
+    let
+      res = await one(p.connectTimer, p.updateTimer)
+
+    if res == p.connectTimer:
+      await p.maybeConnectToMorePeers()
+
+    if res == p.updateTimer:
+      p.updateForkID()
 
 #------------------------------------------------------------------------------
 # Private functions
@@ -204,7 +240,10 @@ proc run(p: PeerPoolRef) {.async: (raises: [CancelledError]).} =
 
 func newPeerPool*[Network](
     network: Network,
-    discovery: Eth1Discovery, minPeers = 10): PeerPoolRef[Network] =
+    discovery: Eth1Discovery,
+    minPeers = 10,
+    hook = UpdaterHook(),
+    ): PeerPoolRef[Network] =
   new result
   result.network = network
   result.minPeers = minPeers
@@ -213,6 +252,7 @@ func newPeerPool*[Network](
   result.connectedNodes = initTable[Node, PeerRef[Network]]()
   result.connectingNodes = initHashSet[Node]()
   result.observers = initTable[int, PeerObserverRef[Network]]()
+  result.hook = hook
 
 proc addObserver*(p: PeerPoolRef, observerId: int, observer: PeerObserverRef) =
   doAssert(observerId notin p.observers)

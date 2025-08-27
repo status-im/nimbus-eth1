@@ -362,6 +362,9 @@ func forkId*(com: CommonRef, head: BlockNumber, time: EthTime): ForkID {.gcsafe.
   ## EIP 2364/2124
   com.forkIdCalculator.newID(head, time.uint64)
 
+func compatibleForkId*(com: CommonRef, id: ForkID): bool =
+  com.forkIdCalculator.compatible(id)
+
 func isEIP155*(com: CommonRef, number: BlockNumber): bool =
   com.config.eip155Block.isSome and number >= com.config.eip155Block.value
 
