@@ -198,7 +198,7 @@ suite "Beacon Content Keys and Values":
     capella: ForkDigest([0'u8, 0, 0, 4]),
     deneb: ForkDigest([0'u8, 0, 0, 5]),
     electra: ForkDigest([0'u8, 0, 0, 6]),
-    fulu: ForkDigest([0'u8, 0, 0, 7]),
+    # TODO fulu: ForkDigest([0'u8, 0, 0, 7]),
   )
 
   test "LightClientBootstrap":

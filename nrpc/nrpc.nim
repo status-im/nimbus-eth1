@@ -31,6 +31,9 @@ import
   beacon_chain/networking/network_metadata,
   eth/async_utils
 
+template running(): bool =
+  not ProcessState.stopIt(notice("Shutting down", reason = it))
+
 func f(value: float): string =
   if value >= 1000:
     &"{int(value)}"
@@ -114,8 +117,7 @@ template findSlot(
   notice "Finding slot number corresponding to block", importedSlot = importedSlot
 
   var clNum = 0'u64
-  while not ProcessState.stopIt(notice("Shutting down", reason = it)) and
-      clNum < currentBlockNumber:
+  while running and clNum < currentBlockNumber:
     let (blk, stat) =
       client.getELBlockFromBeaconChain(BlockIdent.init(Slot(importedSlot)), clConfig)
     if not stat:
@@ -260,9 +262,7 @@ proc syncToEngineApi(conf: NRpcConf) {.async.} =
 
     estimateProgressForSync()
 
-  while not ProcessState.stopIt(notice("Shutting down", reason = it)) and
-      currentBlockNumber < headBlck.header.number:
-
+  while running and currentBlockNumber < headBlck.header.number:
     var isAvailable = false
     (curBlck, isAvailable) =
       client.getCLBlockFromBeaconChain(BlockIdent.init(Slot(importedSlot)), clConfig)
