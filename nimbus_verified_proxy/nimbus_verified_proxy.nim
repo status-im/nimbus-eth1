@@ -232,16 +232,12 @@ proc run*(
       else:
         false
 
-  var blocksGossipState: GossipState = {}
+  var blocksGossipState: GossipState
   proc updateBlocksGossipStatus(slot: Slot) =
     let
       isBehind = not shouldSyncOptimistically(slot)
 
-      targetGossipState = getTargetGossipState(
-        slot.epoch, cfg.ALTAIR_FORK_EPOCH, cfg.BELLATRIX_FORK_EPOCH,
-        cfg.CAPELLA_FORK_EPOCH, cfg.DENEB_FORK_EPOCH, cfg.ELECTRA_FORK_EPOCH,
-        cfg.FULU_FORK_EPOCH, isBehind,
-      )
+      targetGossipState = getTargetGossipState(slot.epoch, cfg, isBehind)
 
     template currentGossipState(): auto =
       blocksGossipState
@@ -258,15 +254,15 @@ proc run*(
       discard
 
     let
-      newGossipForks = targetGossipState - currentGossipState
-      oldGossipForks = currentGossipState - targetGossipState
+      newGossipEpochs = targetGossipState - currentGossipState
+      oldGossipEpochs = currentGossipState - targetGossipState
 
-    for gossipFork in oldGossipForks:
-      let forkDigest = forkDigests[].atConsensusFork(gossipFork)
+    for gossipEpoch in oldGossipEpochs:
+      let forkDigest = forkDigests[].atEpoch(gossipEpoch, cfg)
       network.unsubscribe(getBeaconBlocksTopic(forkDigest))
 
-    for gossipFork in newGossipForks:
-      let forkDigest = forkDigests[].atConsensusFork(gossipFork)
+    for gossipEpoch in oldGossipEpochs:
+      let forkDigest = forkDigests[].atEpoch(gossipEpoch, cfg)
       network.subscribe(
         getBeaconBlocksTopic(forkDigest),
         getBlockTopicParams(),
