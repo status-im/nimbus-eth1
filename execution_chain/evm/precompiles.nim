@@ -233,7 +233,11 @@ func sha256(c: Computation): EvmResultVoid =
     gasFee = GasSHA256 + wordCount.GasInt * GasSHA256Word
 
   ? c.gasMeter.consumeGas(gasFee, reason="SHA256 Precompile")
-  assign(c.output, sha2.sha256.digest(c.msg.data).data)
+  c.output.setLen(32)
+  let res = c.output.eth_evm_sha256(c.msg.data)
+
+  if res != cttEVM_Success:
+    return err(prcErr(PrcInvalidParam))
   ok()
 
 func ripemd160(c: Computation): EvmResultVoid =
