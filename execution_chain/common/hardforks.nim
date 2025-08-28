@@ -346,34 +346,34 @@ type
     cache: seq[ForkID]
 
 func newID*(calc: ForkIdCalculator, head, time: uint64): ForkID =
-  var hash = calc.genesisCRC
+  var crc = calc.genesisCRC
   for fork in calc.byBlock:
     if fork <= head:
-      # Fork already passed, checksum the previous hash and the fork number
-      hash = crc32(hash, fork.toBytesBE)
+      # Fork already passed, checksum the previous crc and the fork number
+      crc = crc32(crc, fork.toBytesBE)
       continue
-    return (hash, fork)
+    return (crc, fork)
 
   for fork in calc.byTime:
     if fork <= time:
-      # Fork already passed, checksum the previous hash and fork timestamp
-      hash = crc32(hash, fork.toBytesBE)
+      # Fork already passed, checksum the previous crc and fork timestamp
+      crc = crc32(crc, fork.toBytesBE)
       continue
-    return (hash, fork)
+    return (crc, fork)
 
-  (hash, 0'u64)
+  (crc, 0'u64)
 
 func compatible*(calc: var ForkIdCalculator, forkId: ForkID): bool =
   if calc.cache.len == 0:
     calc.cache = newSeqOfCap[ForkID](calc.byBlock.len + calc.byTime.len)
-    var hash = calc.genesisCRC
+    var crc = calc.genesisCRC
     for fork in calc.byBlock:
-      hash = crc32(hash, fork.toBytesBE)
-      calc.cache.add( (hash, fork) )
+      crc = crc32(crc, fork.toBytesBE)
+      calc.cache.add( (crc, fork) )
 
     for fork in calc.byTime:
-      hash = crc32(hash, fork.toBytesBE)
-      calc.cache.add( (hash, fork) )
+      crc = crc32(crc, fork.toBytesBE)
+      calc.cache.add( (crc, fork) )
 
   for id in calc.cache:
     if id == forkId:
