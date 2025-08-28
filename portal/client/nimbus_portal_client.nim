@@ -33,6 +33,7 @@ import
   ../network/[portal_node, network_metadata],
   ../version,
   ../logging,
+  beacon_chain/process_state,
   ./nimbus_portal_client_conf
 
 const
@@ -49,21 +50,14 @@ func optionToOpt[T](o: Option[T]): Opt[T] =
   else:
     Opt.none(T)
 
-type
-  PortalClientStatus = enum
-    Starting
-    Running
-    Stopping
-
-  PortalClient = ref object
-    status: PortalClientStatus
-    portalNode: PortalNode
-    metricsServer: Opt[MetricsHttpServerRef]
-    rpcHttpServer: Opt[RpcHttpServer]
-    rpcWsServer: Opt[RpcWebSocketServer]
+type PortalClient = ref object
+  portalNode: PortalNode
+  metricsServer: Opt[MetricsHttpServerRef]
+  rpcHttpServer: Opt[RpcHttpServer]
+  rpcWsServer: Opt[RpcWebSocketServer]
 
 proc init(T: type PortalClient): T =
-  PortalClient(status: PortalClientStatus.Starting)
+  PortalClient()
 
 proc run(portalClient: PortalClient, config: PortalConf) {.raises: [CatchableError].} =
   setupLogging(config.logLevel, config.logStdout, none(OutFile))
@@ -358,7 +352,8 @@ proc run(portalClient: PortalClient, config: PortalConf) {.raises: [CatchableErr
       else:
         Opt.none(RpcWebSocketServer)
 
-  portalClient.status = PortalClientStatus.Running
+  ProcessState.notifyRunning()
+
   portalClient.portalNode = node
   portalClient.metricsServer = metricsServer
   portalClient.rpcHttpServer = rpcHttpServer
@@ -392,6 +387,8 @@ proc stop(f: PortalClient) {.async: (raises: []).} =
   await f.portalNode.stop()
 
 when isMainModule:
+  ProcessState.setupStopHandlers()
+
   {.pop.}
   let config = PortalConf.load(
     version = clientName & " " & fullVersionStr & "\p\p" & nimBanner,
@@ -404,27 +401,7 @@ when isMainModule:
   of PortalCmd.noCommand:
     portalClient.run(config)
 
-  # Ctrl+C handling
-  proc controlCHandler() {.noconv.} =
-    when defined(windows):
-      # workaround for https://github.com/nim-lang/Nim/issues/4057
-      try:
-        setupForeignThreadGc()
-      except Exception as exc:
-        raiseAssert exc.msg # shouldn't happen
-
-    notice "Shutting down after having received SIGINT"
-    portalClient.status = PortalClientStatus.Stopping
-
-  try:
-    setControlCHook(controlCHandler)
-  except Exception as exc: # TODO Exception
-    warn "Cannot set ctrl-c handler", msg = exc.msg
-
-  while portalClient.status == PortalClientStatus.Running:
-    try:
-      poll()
-    except CatchableError as e:
-      warn "Exception in poll()", exc = e.name, err = e.msg
+  while not ProcessState.stopIt(notice("Shutting down", reason = it)):
+    poll()
 
   waitFor portalClient.stop()
