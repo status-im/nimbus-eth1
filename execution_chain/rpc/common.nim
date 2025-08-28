@@ -16,7 +16,8 @@ import
   ../config,
   ../beacon/web3_eth_conv,
   ../nimbus_desc,
-  web3/conversions
+  web3/conversions,
+  beacon_chain/process_state
 
 from json_rpc/server import RpcServer, rpc
 
@@ -142,6 +143,5 @@ proc setupAdminRpc*(nimbus: NimbusNode, conf: NimbusConf, server: RpcServer) =
     return peers
 
   server.rpc("admin_quit") do() -> string:
-    {.gcsafe.}:
-      nimbus.state = NimbusState.Stopping
+    ProcessState.scheduleStop("admin_quit")
     result = "EXITING"

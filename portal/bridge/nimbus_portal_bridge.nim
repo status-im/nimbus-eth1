@@ -49,53 +49,28 @@ import
   ../logging,
   ./beacon/portal_beacon_bridge,
   ./history/portal_history_bridge,
-  ./nimbus_portal_bridge_conf
+  ./nimbus_portal_bridge_conf,
+  beacon_chain/process_state
 
-type PortalBridgeStatus = enum
-  Running
-  Stopping
-
-template pollWhileRunning(status: PortalBridgeStatus) =
-  while status == PortalBridgeStatus.Running:
-    try:
-      poll()
-    except CatchableError as e:
-      warn "Exception in poll()", exc = e.name, err = e.msg
+template pollWhileRunning() =
+  while not ProcessState.stopIt(notice("Shutting down", reason = it)):
+    poll()
 
 when isMainModule:
-  {.pop.}
+  ProcessState.setupStopHandlers()
+
   let config = PortalBridgeConf.load()
-  {.push raises: [].}
 
   setupLogging(config.logLevel, config.logStdout, none(OutFile))
-
-  var bridgeStatus = PortalBridgeStatus.Running
-
-  # Ctrl+C handling
-  proc controlCHandler() {.noconv.} =
-    when defined(windows):
-      # workaround for https://github.com/nim-lang/Nim/issues/4057
-      try:
-        setupForeignThreadGc()
-      except Exception as e:
-        raiseAssert e.msg # shouldn't happen
-
-    notice "Shutting down after having received SIGINT"
-    bridgeStatus = PortalBridgeStatus.Stopping
-
-  try:
-    setControlCHook(controlCHandler)
-  except Exception as e: # TODO Exception
-    warn "Cannot set ctrl-c handler", msg = e.msg
 
   case config.cmd
   of PortalBridgeCmd.beacon:
     runBeacon(config)
 
-    pollWhileRunning(bridgeStatus)
+    pollWhileRunning()
     # TODO: Implement stop/cleanup for beacon bridge
   of PortalBridgeCmd.history:
     runHistory(config)
 
-    pollWhileRunning(bridgeStatus)
+    pollWhileRunning()
     # TODO: Implement stop/cleanup for history bridge

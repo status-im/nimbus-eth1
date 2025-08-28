@@ -9,31 +9,8 @@
 {.push raises: [].}
 
 import
-  std/[strformat, strutils, os, sequtils],
-  stew/byteutils, ./compile_info
-
-const
-  sourcePath = currentSourcePath.rsplit({DirSep, AltSep}, 1)[0]
-  nimbusRevision {.strdefine.} = "00000000"
-
-static:
-  doAssert(nimbusRevision.len == 8, "nimbusRevision must consist of 8 characters")
-  doAssert(
-    nimbusRevision.allIt(it in HexDigits),
-    "nimbusRevision should contains only hex chars",
-  )
-
-proc gitFolderExists(path: string): bool {.compileTime.} =
-  # walk up parent folder to find `.git` folder
-  var currPath = sourcePath
-  while true:
-    if dirExists(currPath & "/.git"):
-      return true
-    let parts = splitPath(currPath)
-    if parts.tail.len == 0:
-      break
-    currPath = parts.head
-  false
+  std/[strformat],
+  stew/byteutils, ./compile_info, beacon_chain/buildinfo
 
 const
   NimbusName* = "nimbus-eth1"
@@ -51,18 +28,6 @@ const
   NimbusVersion* = $NimbusMajor & "." & $NimbusMinor & "." & $NimbusPatch
   ## is the version of Nimbus as a string.
 
-  # strip: remove spaces
-  # --short=8: ensure we get 8 chars of commit hash
-  # -C sourcePath: get the correct git hash no matter where the current dir is.
-  GitRevision* = if gitFolderExists(sourcePath):
-                   # only using git if the parent dir is a git repo.
-                   strip(staticExec("git -C " & strutils.escape(sourcePath) &
-                     " rev-parse --short=8 HEAD"))
-                 else:
-                   # otherwise we use revision number given by build system.
-                   # e.g. user download from release tarball, or Github zip download.
-                   nimbusRevision
-
   GitRevisionBytes* = hexToByteArray[4](GitRevision)
 
   FullVersionStr* = "v" & NimbusVersion & "-" & GitRevision
@@ -70,4 +35,3 @@ const
   ClientId* = &"{NimbusName}/{FullVersionStr}/{hostOS}-{hostCPU}/Nim-{NimVersion}"
 
   ShortClientId* = NimbusName & "/" & FullVersionStr
-

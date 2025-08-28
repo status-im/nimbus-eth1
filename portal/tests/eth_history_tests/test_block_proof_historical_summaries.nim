@@ -16,7 +16,7 @@ import
   beacon_chain /../ tests/testblockutil,
   # Mock helpers
   beacon_chain /../ tests/mocking/mock_genesis,
-  ../../network/legacy_history/validation/block_proof_historical_summaries
+  ../../eth_history/block_proofs/block_proof_historical_summaries
 
 # Test suite for the proofs:
 # - historicalSummariesProof

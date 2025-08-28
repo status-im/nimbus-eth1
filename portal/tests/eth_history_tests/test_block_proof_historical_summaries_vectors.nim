@@ -16,10 +16,10 @@ import
   yaml,
   ssz_serialization,
   beacon_chain/spec/datatypes/capella,
-  ../../network/legacy_history/validation/block_proof_historical_summaries,
+  ../../eth_history/block_proofs/block_proof_historical_summaries,
   ../../network/beacon/beacon_init_loader,
-  ../../eth_data/[yaml_utils, yaml_eth_types],
-  ./test_history_util
+  ../../eth_history/[yaml_utils, yaml_eth_types],
+  ../legacy_history_network_tests/test_history_util
 
 suite "History Block Proofs - Historical Summaries - Test Vectors":
   test "BlockProofHistoricalSummaries for Execution BlockHeader":

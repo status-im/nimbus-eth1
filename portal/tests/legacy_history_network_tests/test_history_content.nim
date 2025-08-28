@@ -15,10 +15,10 @@ import
   eth/common/headers_rlp,
   ../../network/network_metadata,
   ../../network/beacon/beacon_init_loader,
-  ../../eth_data/[history_data_json_store, history_data_ssz_e2s],
+  ../../eth_history/[history_data_json_store, history_data_ssz_e2s],
   ../../network/legacy_history/
     [history_content, history_type_conversions, history_validation],
-  ../../eth_data/yaml_utils,
+  ../../eth_history/yaml_utils,
   ./test_history_util
 
 from std/os import walkDir, splitFile, PathComponent

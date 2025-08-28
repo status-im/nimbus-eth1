@@ -11,8 +11,8 @@ import
   eth/common/[headers_rlp],
   ssz_serialization,
   ssz_serialization/[proofs, merkleization],
-  ../../../common/common_types,
-  ../history_content,
+  ../../common/common_types,
+  ../../network/legacy_history/history_content,
   ./historical_hashes_accumulator
 
 export

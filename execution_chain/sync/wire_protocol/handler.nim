@@ -77,10 +77,7 @@ proc getStatus69*(ctx: EthWireRef): Eth69State =
 
   Eth69State(
     genesisHash: com.genesisHash,
-    forkId: ChainForkId(
-      forkHash: forkId.crc.toBytesBE,
-      forkNext: forkId.nextFork
-    ),
+    forkId: forkId.to(ChainForkId),
     earliest: 0,
     latest: bestBlock.number,
     latestHash: ctx.chain.latestHash,

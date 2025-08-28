@@ -15,7 +15,7 @@ import
   chronos/timer,
   std/[strformat, strutils],
   stew/io2,
-  beacon_chain/era_db,
+  beacon_chain/[era_db, process_state],
   beacon_chain/networking/network_metadata,
   ./config,
   ./common/common,
@@ -30,8 +30,6 @@ declareCounter nec_imported_blocks, "Blocks processed during import"
 declareCounter nec_imported_transactions, "Transactions processed during import"
 
 declareCounter nec_imported_gas, "Gas processed during import"
-
-var running {.volatile.} = true
 
 proc openCsv(name: string): File =
   try:
@@ -95,15 +93,10 @@ template boolFlag(flags, b): PersistBlockFlags =
   else:
     {}
 
+proc running(): bool =
+  not ProcessState.stopIt(notice("Shutting down", reason = it))
+
 proc importBlocks*(conf: NimbusConf, com: CommonRef) =
-  proc controlCHandler() {.noconv.} =
-    when defined(windows):
-      # workaround for https://github.com/nim-lang/Nim/issues/4057
-      setupForeignThreadGc()
-    running = false
-
-  setControlCHook(controlCHandler)
-
   let
     start = com.db.baseTxFrame().getSavedStateBlockNumber() + 1
     (cfg, genesis_validators_root, lastEra1Block, firstSlotAfterMerge) =
@@ -282,24 +275,24 @@ proc importBlocks*(conf: NimbusConf, com: CommonRef) =
           "sepolia"
         else:
           raiseAssert "Other networks are unsupported or do not have an era1"
-      db = Era1DbRef.init(conf.era1Dir.string, era1Name).valueOr:
-        fatal "Could not open era1 database", era1Dir=conf.era1Dir, era1Name=era1Name, error=error
+      db = Era1DbRef.init(conf.era1Dir, era1Name).valueOr:
+        fatal "Could not open era1 database",
+          era1Dir = conf.era1Dir, era1Name = era1Name, error = error
         quit(QuitFailure)
 
     notice "Importing era1 archive",
-      start, dataDir = conf.dataDir.string, era1Dir = conf.era1Dir.string
+      start, dataDir = conf.dataDir, era1Dir = conf.era1Dir
 
     defer:
       db.dispose()
 
     proc loadEraBlock(blockNumber: uint64): bool =
       db.getEthBlock(blockNumber, blk).isOkOr:
-        chronicles.error "Error when loading era block",
-          blockNumber, msg=error
+        chronicles.error "Error when loading era block", blockNumber, msg = error
         return false
       true
 
-    while running and persister.stats.blocks.uint64 < conf.maxBlocks and
+    while running() and persister.stats.blocks.uint64 < conf.maxBlocks and
         blockNumber <= lastEra1Block:
       if not loadEraBlock(blockNumber):
         notice "No more `era1` blocks to import", blockNumber, slot
@@ -309,26 +302,26 @@ proc importBlocks*(conf: NimbusConf, com: CommonRef) =
 
   block era1Import:
     if blockNumber > lastEra1Block:
-      if not isDir(conf.eraDir.string):
+      if not isDir(conf.eraDir):
         if blockNumber == 0:
           fatal "`era` directory not found, cannot start import",
-            blockNumber, eraDir = conf.eraDir.string
+            blockNumber, eraDir = conf.eraDir
           quit(QuitFailure)
         else:
           notice "`era` directory not found, stopping import at merge boundary",
-            blockNumber, eraDir = conf.eraDir.string
+            blockNumber, eraDir = conf.eraDir
           break era1Import
 
       notice "Importing era archive",
-        blockNumber, dataDir = conf.dataDir.string, eraDir = conf.eraDir.string
+        blockNumber, dataDir = conf.dataDir, eraDir = conf.eraDir
 
       let
-        eraDB = EraDB.new(cfg, conf.eraDir.string, genesis_validators_root)
+        eraDB = EraDB.new(cfg, conf.eraDir, genesis_validators_root)
         (historical_roots, historical_summaries, endSlot) = loadHistoricalRootsFromEra(
-          conf.eraDir.string, cfg
+          conf.eraDir, cfg
         ).valueOr:
           fatal "Could not load historical summaries",
-            eraDir = conf.eraDir.string, error
+            eraDir = conf.eraDir, error
           quit(QuitFailure)
 
       # Load the last slot number
@@ -356,7 +349,7 @@ proc importBlocks*(conf: NimbusConf, com: CommonRef) =
 
         true
 
-      while running and moreEraAvailable and
+      while running() and moreEraAvailable and
           persister.stats.blocks.uint64 < conf.maxBlocks and slot < endSlot:
         if not loadEra1Block():
           slot += 1

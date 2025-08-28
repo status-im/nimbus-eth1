@@ -28,16 +28,16 @@ proc configurationMain*() =
 
     test "data-dir and key-store":
       let conf = makeTestConfig()
-      check conf.dataDir.string == defaultDataDir()
-      check conf.keyStore.string == defaultKeystoreDir()
+      check conf.dataDir() == defaultDataDir("", "mainnet")
+      check conf.keyStoreDir == defaultDataDir("", "mainnet") / "keystore"
 
       let cc = makeConfig(@["-d:apple\\bin", "-k:banana/bin"])
-      check cc.dataDir.string == "apple\\bin"
-      check cc.keyStore.string == "banana/bin"
+      check cc.dataDir() == "apple\\bin"
+      check cc.keyStoreDir == "banana/bin"
 
       let dd = makeConfig(@["--data-dir:apple\\bin", "--key-store:banana/bin"])
-      check dd.dataDir.string == "apple\\bin"
-      check dd.keyStore.string == "banana/bin"
+      check dd.dataDir() == "apple\\bin"
+      check dd.keyStoreDir == "banana/bin"
 
     test "import-rlp":
       let aa = makeTestConfig()
@@ -233,13 +233,13 @@ proc configurationMain*() =
     test "net-key random":
       let conf = makeConfig(@["--net-key:random"])
       check conf.netKey == "random"
-      let rc = ctx.getNetKeys(conf.netKey, conf.dataDir.string)
+      let rc = ctx.getNetKeys(conf.netKey)
       check rc.isOk
 
     test "net-key hex without 0x prefix":
       let conf = makeConfig(@["--net-key:9c647b8b7c4e7c3490668fb6c11473619db80c93704c70893d3813af4090c39c"])
       check conf.netKey == "9c647b8b7c4e7c3490668fb6c11473619db80c93704c70893d3813af4090c39c"
-      let rc = ctx.getNetKeys(conf.netKey, conf.dataDir.string)
+      let rc = ctx.getNetKeys(conf.netKey)
       check rc.isOk
       let pkhex = rc.get.seckey.toRaw.to0xHex
       check pkhex == "0x9c647b8b7c4e7c3490668fb6c11473619db80c93704c70893d3813af4090c39c"
@@ -247,7 +247,7 @@ proc configurationMain*() =
     test "net-key hex with 0x prefix":
       let conf = makeConfig(@["--net-key:0x9c647b8b7c4e7c3490668fb6c11473619db80c93704c70893d3813af4090c39c"])
       check conf.netKey == "0x9c647b8b7c4e7c3490668fb6c11473619db80c93704c70893d3813af4090c39c"
-      let rc = ctx.getNetKeys(conf.netKey, conf.dataDir.string)
+      let rc = ctx.getNetKeys(conf.netKey)
       check rc.isOk
       let pkhex = rc.get.seckey.toRaw.to0xHex
       check pkhex == "0x9c647b8b7c4e7c3490668fb6c11473619db80c93704c70893d3813af4090c39c"
@@ -255,32 +255,32 @@ proc configurationMain*() =
     test "net-key path":
       let conf = makeConfig(@["--net-key:nimcache/key.txt"])
       check conf.netKey == "nimcache/key.txt"
-      let rc1 = ctx.getNetKeys(conf.netKey, conf.dataDir.string)
+      let rc1 = ctx.getNetKeys(conf.netKey)
       check rc1.isOk
       let pkhex1 = rc1.get.seckey.toRaw.to0xHex
-      let rc2 = ctx.getNetKeys(conf.netKey, conf.dataDir.string)
+      let rc2 = ctx.getNetKeys(conf.netKey)
       check rc2.isOk
       let pkhex2 = rc2.get.seckey.toRaw.to0xHex
       check pkhex1 == pkhex2
 
     test "default key-store and default data-dir":
       let conf = makeTestConfig()
-      check conf.keyStore.string == conf.dataDir.string / "keystore"
+      check conf.keyStoreDir() == conf.dataDir() / "keystore"
 
     test "custom key-store and custom data-dir":
       let conf = makeConfig(@["--key-store:banana", "--data-dir:apple"])
-      check conf.keyStore.string == "banana"
-      check conf.dataDir.string == "apple"
+      check conf.keyStoreDir() == "banana"
+      check conf.dataDir() == "apple"
 
     test "default key-store and custom data-dir":
       let conf = makeConfig(@["--data-dir:apple"])
-      check conf.dataDir.string == "apple"
-      check conf.keyStore.string == "apple" / "keystore"
+      check conf.dataDir() == "apple"
+      check conf.keyStoreDir() == "apple" / "keystore"
 
     test "custom key-store and default data-dir":
       let conf = makeConfig(@["--key-store:banana"])
-      check conf.dataDir.string == defaultDataDir()
-      check conf.keyStore.string == "banana"
+      check conf.dataDir() == defaultDataDir("", "mainnet")
+      check conf.keyStoreDir() == "banana"
 
     test "loadKeystores missing address":
       var am = AccountsManager.init()

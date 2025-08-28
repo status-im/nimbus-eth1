@@ -14,9 +14,8 @@ import
   stint,
   stew/byteutils,
   eth/common/headers,
-  ../../eth_data/history_data_json_store,
-  ../../network/legacy_history/
-    [history_content, validation/historical_hashes_accumulator]
+  ../../eth_history/history_data_json_store,
+  ../../eth_history/block_proofs/historical_hashes_accumulator
 
 suite "Historical Hashes Accumulator Root":
   test "Header Accumulator Update":

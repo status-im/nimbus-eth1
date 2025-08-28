@@ -10,28 +10,16 @@
 {.used.}
 
 import
-  std/[typetraits, net],
-  json_serialization,
-  web3/primitives,
+  std/typetraits,
+  json_serialization/std/net as jsnet,
+  web3/conversions,
   confutils/defs,
   eth/common/eth_types_json_serialization
 
-# nim-eth
-proc writeValue*(
-    w: var JsonWriter, v: EthTime
-) {.inline, raises: [IOError].} =
-  w.writeValue distinctBase(v)
-
-# nim-web3
-proc writeValue*(w: var JsonWriter, v: Quantity) {.inline, raises: [IOError].} =
-  w.writeValue distinctBase(v)
+export conversions.writeValue, jsnet.writeValue, eth_types_json_serialization.writeValue
 
 # nim-confutils
 proc writeValue*(
     w: var JsonWriter, v: InputFile | OutDir | OutFile | RestOfCmdLine | OutPath
 ) {.inline, raises: [IOError].} =
-  w.writeValue distinctBase(v)
-
-# build-system
-proc writeValue*(w: var JsonWriter, v: Port) {.inline, raises: [IOError].} =
   w.writeValue distinctBase(v)

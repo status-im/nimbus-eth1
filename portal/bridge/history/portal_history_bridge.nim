@@ -23,7 +23,7 @@ import
   ../../network/legacy_history/
     [history_content, history_type_conversions, history_validation],
   ../../network/network_metadata,
-  ../../eth_data/[era1, history_data_ssz_e2s, history_data_seeding],
+  ../../eth_history/[era1, history_data_ssz_e2s, history_data_seeding],
   ../../database/era1_db,
   ../common/rpc_helpers,
   ../nimbus_portal_bridge_conf
