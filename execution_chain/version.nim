@@ -1,4 +1,4 @@
-# Copyright (c) 2025 Status Research & Development GmbH
+# Copyright (c) 2018-2025 Status Research & Development GmbH
 # Licensed under either of
 #  * Apache License, version 2.0, ([LICENSE-APACHE](LICENSE-APACHE))
 #  * MIT license ([LICENSE-MIT](LICENSE-MIT))
@@ -17,13 +17,13 @@
 #------------------------------------------------------------------------------
 
 const
-  NimbusMajor* = 0
+  NimbusMajor*: int = 0
   ## is the major number of Nimbus' version.
 
-  NimbusMinor* = 1
+  NimbusMinor*: int = 1
   ## is the minor number of Nimbus' version.
 
-  NimbusPatch* = 0
+  NimbusPatch*: int = 0
   ## is the patch number of Nimbus' version.
 
   NimbusVersion* = $NimbusMajor & "." & $NimbusMinor & "." & $NimbusPatch

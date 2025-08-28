@@ -80,7 +80,6 @@ suite "test state verification":
     check verifiedCall ==
       "000000000000000000000000000000000000000000000000288a82d13c3d1600".hexToSeqByte()
     check verifiedAccessList == accessList
-    # TODO: reverify this number (eth.blockrazor.xyz reports 24304)
     check verifiedEstimate == Quantity(22080)
 
     ts.clear()

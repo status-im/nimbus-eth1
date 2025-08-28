@@ -218,12 +218,14 @@ proc initTestApiBackend*(t: TestApiState): EthApiBackend =
     createAccessListProc = proc(
         args: TransactionArgs, blkNum: BlockTag
     ): Future[AccessListResult] {.async.} =
+      # we directly use number here because the verified proxy should never use aliases
       let blkHash = t.nums[blkNum.number]
       t.accessLists[(args, blkHash)]
 
     getCodeProc = proc(
         address: Address, blkNum: BlockTag
     ): Future[seq[byte]] {.async.} =
+      # we directly use number here because the verified proxy should never use aliases
       let blkHash = t.nums[blkNum.number]
       t.codes[(address, blkHash)]
 
