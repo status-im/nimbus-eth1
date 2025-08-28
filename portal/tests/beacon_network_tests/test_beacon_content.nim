@@ -17,7 +17,7 @@ import
   beacon_chain/spec/forks,
   ../../network/beacon/beacon_content,
   ../../network/beacon/beacon_init_loader,
-  ../../eth_data/yaml_utils,
+  ../../eth_history/yaml_utils,
   "."/light_client_test_data
 
 suite "Beacon Content Keys and Values - Test Vectors":

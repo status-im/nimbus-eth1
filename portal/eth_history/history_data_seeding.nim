@@ -12,12 +12,9 @@ import
   chronos,
   chronicles,
   ../network/wire/portal_protocol,
-  ../network/legacy_history/[
-    history_content,
-    history_network,
-    validation/block_proof_historical_hashes_accumulator,
-  ],
-  "."/[era1, history_data_ssz_e2s]
+  ../network/legacy_history/[history_content, history_network],
+  ./[era1, history_data_ssz_e2s],
+  ./block_proofs/block_proof_historical_hashes_accumulator
 
 from eth/rlp import computeRlpHash
 

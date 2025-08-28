@@ -11,8 +11,7 @@ import
   eth/common/[headers_rlp],
   ssz_serialization,
   ssz_serialization/[proofs, merkleization],
-  ../../../common/common_types,
-  ../history_content
+  ../../common/common_types
 
 from eth/common/eth_types_rlp import rlpHash
 
@@ -20,6 +19,8 @@ export ssz_serialization, merkleization, proofs, common_types
 
 # HistoricalHashesAccumulator, as per specification:
 # https://github.com/ethereum/portal-network-specs/blob/31bc7e58e2e8acfba895d5a12a9ae3472894d398/history/history-network.md#the-historical-hashes-accumulator
+# EIP-7643::
+# https://github.com/ethereum/EIPs/blob/b2bce97a0a6898faf5a37c5948b7bc58a1cd1bc5/EIPS/eip-7643.md
 
 const
   EPOCH_SIZE* = 8192 # block roots per epoch record

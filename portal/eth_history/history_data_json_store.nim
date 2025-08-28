@@ -15,7 +15,8 @@ import
   chronicles,
   eth/common/[hashes, blocks, receipts, headers_rlp],
   ../../execution_chain/common/[chain_config, genesis],
-  ../network/legacy_history/[history_content, validation/historical_hashes_accumulator]
+  ../network/legacy_history/history_content,
+  ./block_proofs/historical_hashes_accumulator
 
 export results, tables
 

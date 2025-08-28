@@ -15,7 +15,7 @@ import
   json_rpc/rpcclient,
   web3/[eth_api_types, eth_api],
   eth/common/[headers_rlp, blocks_rlp, receipts_rlp],
-  ../../eth_data/yaml_utils
+  ../../eth_history/yaml_utils
 
 from ../../../hive_integration/nodocker/engine/engine_client import
   toBlockHeader, toTransactions
