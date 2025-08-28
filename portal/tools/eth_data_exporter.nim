@@ -23,9 +23,9 @@ import
   json_rpc/rpcclient,
   snappy,
   ncli/e2store,
-  ../network/legacy_history/
-    [history_content, validation/block_proof_historical_hashes_accumulator],
-  ../eth_data/[history_data_json_store, history_data_ssz_e2s, era1],
+  ../network/legacy_history/history_content,
+  ../eth_history/[history_data_json_store, history_data_ssz_e2s, era1],
+  ../eth_history/block_proofs/block_proof_historical_hashes_accumulator,
   eth_data_exporter/[exporter_conf, exporter_common, cl_data_exporter, el_data_exporter]
 
 # Need to be selective due to the `Block` type conflict from downloader

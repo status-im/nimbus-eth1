@@ -12,8 +12,8 @@ import
   stew/io2,
   results,
   eth/common/blocks,
-  ../network/legacy_history/validation/historical_hashes_accumulator,
-  ../eth_data/era1
+  ../eth_history/block_proofs/historical_hashes_accumulator,
+  ../eth_history/era1
 
 type Era1DB* = ref object
   ## The Era1 database manages a collection of era files that together make up

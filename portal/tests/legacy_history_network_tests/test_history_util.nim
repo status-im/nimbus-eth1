@@ -12,7 +12,7 @@ import
   stew/io2,
   eth/common/headers,
   ../../network/legacy_history/history_content,
-  ../../network/legacy_history/validation/
+  ../../eth_history/block_proofs/
     [block_proof_historical_summaries, block_proof_historical_hashes_accumulator]
 
 from eth/rlp import computeRlpHash

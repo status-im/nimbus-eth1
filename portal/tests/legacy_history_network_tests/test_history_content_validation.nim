@@ -1,5 +1,5 @@
 # Nimbus - Portal Network
-# Copyright (c) 2022-2024 Status Research & Development GmbH
+# Copyright (c) 2022-2025 Status Research & Development GmbH
 # Licensed and distributed under either of
 #   * MIT license (license terms in the root directory or at https://opensource.org/licenses/MIT).
 #   * Apache v2 license (license terms in the root directory or at https://www.apache.org/licenses/LICENSE-2.0).
@@ -16,7 +16,7 @@ import
   results,
   eth/common/headers_rlp,
   ../../common/common_types,
-  ../../eth_data/history_data_json_store,
+  ../../eth_history/history_data_json_store,
   ../../network/legacy_history/[history_type_conversions, history_validation]
 
 const

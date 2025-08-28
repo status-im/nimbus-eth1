@@ -14,7 +14,7 @@ import
   ../network_metadata,
   ../beacon/beacon_db,
   ./history_type_conversions,
-  ./validation/[
+  ../../eth_history/block_proofs/[
     block_proof_historical_hashes_accumulator, block_proof_historical_roots,
     block_proof_historical_summaries,
   ]
