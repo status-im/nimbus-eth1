@@ -19,10 +19,15 @@ import
   ./eth1_discovery
 
 export
-  p2p_types, rlpx, enode
+  p2p_types, rlpx, enode, ForkIdProc, CompatibleForkIdProc
 
 logScope:
   topics = "p2p"
+
+type
+  ForkIdProcs* = object
+    forkId*: ForkIdProc
+    compatibleForkId*: CompatibleForkIdProc
 
 proc newEthereumNode*(
     keys: KeyPair,
@@ -34,14 +39,15 @@ proc newEthereumNode*(
     bindUdpPort: Port,
     bindTcpPort: Port,
     bindIp = IPv6_any(),
-    rng = newRng()): EthereumNode =
+    rng = newRng(),
+    forkIdProcs = ForkIdProcs()): EthereumNode =
 
   if rng == nil: # newRng could fail
     raiseAssert "Cannot initialize RNG"
 
   let
     discovery = Eth1Discovery.new(
-      keys.seckey, address, bootstrapNodes, bindUdpPort, bindIp, rng)
+      keys.seckey, address, bootstrapNodes, bindUdpPort, bindIp, rng, forkIdProcs.compatibleForkId)
     node = EthereumNode(
       keys: keys,
       networkId: networkId,
@@ -53,7 +59,7 @@ proc newEthereumNode*(
       rng: rng,
     )
   node.peerPool = newPeerPool[EthereumNode](
-    node, discovery, minPeers = minPeers)
+    node, discovery, minPeers = minPeers, forkId = forkIdProcs.forkId)
   node
 
 proc processIncoming(server: StreamServer,

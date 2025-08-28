@@ -19,8 +19,9 @@ import
   eth/p2p/discoveryv5/protocol {.all.}
 
 export
-  Protocol, Node, Address, enr, newProtocol, open, close, seedTable, start, queryRandom, closeWait
-  
+  Protocol, Node, Address, enr, newProtocol, open, close, seedTable, start, queryRandom, closeWait,
+  updateRecord
+
 proc receiveV5*(d: Protocol, a: Address, packet: openArray[byte]): Result[void, cstring] =
   privateAccess(Protocol)
   privateAccess(PendingRequest)
