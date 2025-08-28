@@ -38,14 +38,12 @@ type
   AddressV4 = discoveryv4.Address
   AddressV5 = discoveryv5.Address
 
-  UpdaterHook* = object
-    forkId*: proc(): ForkID {.noSideEffect, raises: [].}
-    compatibleForkId*: proc(id: ForkID): bool {.noSideEffect, raises: [].}
+  CompatibleForkIdProc* = proc(id: ForkID): bool {.noSideEffect, raises: [].}
 
   Eth1Discovery* = ref object
     discv4: DiscV4
     discv5: DiscV5
-    hook: UpdaterHook
+    compatibleForkId: CompatibleForkIdProc
 
 #------------------------------------------------------------------------------
 # Private functions
@@ -99,7 +97,7 @@ func eligibleNode(proto: Eth1Discovery, rec: Record): bool =
     bytes = rec.tryGet("eth", seq[byte]).valueOr:
       return false
 
-  if proto.hook.compatibleForkId.isNil:
+  if proto.compatibleForkId.isNil:
     # Allow all `eth` node to pass if there is no filter
     return true
 
@@ -108,7 +106,7 @@ func eligibleNode(proto: Eth1Discovery, rec: Record): bool =
               except RlpError: return false
     forkId = forkIds[0]
 
-  proto.hook.compatibleForkId(forkId)
+  proto.compatibleForkId(forkId)
 
 #------------------------------------------------------------------------------
 # Public functions
@@ -122,7 +120,7 @@ proc new*(
     bindPort: Port,
     bindIp = IPv6_any(),
     rng = newRng(),
-    hook = UpdaterHook()
+    compatibleForkId = CompatibleForkIdProc(nil)
 ): Eth1Discovery =
   let bootnodes = bootstrapNodes.to(enr.Record)
   Eth1Discovery(
@@ -145,7 +143,7 @@ proc new*(
       enrAutoUpdate = true,
       rng = rng
     ),
-    hook: hook,
+    compatibleForkId: compatibleForkId,
   )
 
 proc open*(

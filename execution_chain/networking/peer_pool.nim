@@ -20,7 +20,7 @@ import
 
 from eth/common/base import ForkID
 
-export sets, tables, UpdaterHook
+export sets, tables, CompatibleForkIdProc
 
 logScope:
   topics = "p2p peer_pool"
@@ -32,6 +32,8 @@ type
 
   WorkerFuture = Future[void].Raising([CancelledError])
 
+  ForkIdProc* = proc(): ForkID {.noSideEffect, raises: [].}
+
   # Usually Network generic param is instantiated with EthereumNode
   PeerPoolRef*[Network] = ref object
     network: Network
@@ -42,7 +44,7 @@ type
     running: bool
     discovery: Eth1Discovery
     workers: seq[WorkerFuture]
-    hook: UpdaterHook
+    forkId: ForkIdProc
     lastForkId: ForkID
     connectTimer: Future[void].Raising([CancelledError])
     updateTimer: Future[void].Raising([CancelledError])
@@ -196,10 +198,10 @@ proc maybeConnectToMorePeers(p: PeerPoolRef) {.async: (raises: [CancelledError])
   await p.connectToNode(n)
 
 func updateForkID(p: PeerPoolRef) =
-  if p.hook.forkId.isNil:
+  if p.forkId.isNil:
     return
 
-  let forkId = p.hook.forkId()
+  let forkId = p.forkId()
   if p.lastForkId == forkId:
     return
 
@@ -242,7 +244,7 @@ func newPeerPool*[Network](
     network: Network,
     discovery: Eth1Discovery,
     minPeers = 10,
-    hook = UpdaterHook(),
+    forkId = ForkIdProc(nil),
     ): PeerPoolRef[Network] =
   new result
   result.network = network
@@ -252,7 +254,7 @@ func newPeerPool*[Network](
   result.connectedNodes = initTable[Node, PeerRef[Network]]()
   result.connectingNodes = initHashSet[Node]()
   result.observers = initTable[int, PeerObserverRef[Network]]()
-  result.hook = hook
+  result.forkId = forkId
 
 proc addObserver*(p: PeerPoolRef, observerId: int, observer: PeerObserverRef) =
   doAssert(observerId notin p.observers)

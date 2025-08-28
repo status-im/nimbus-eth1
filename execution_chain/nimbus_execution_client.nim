@@ -107,16 +107,16 @@ proc setupP2P(nimbus: NimbusNode, conf: NimbusConf,
     bootstrapNodes = conf.getBootNodes()
     fc = nimbus.fc
 
-  func forkIdHook(): ForkID {.raises: [].} =
+  func forkIdProc(): ForkID {.raises: [].} =
     let header = fc.latestHeader()
     com.forkId(header.number, header.timestamp)
 
-  func compatibleForkIdHook(id: ForkID): bool {.raises: [].} =
+  func compatibleForkIdProc(id: ForkID): bool {.raises: [].} =
     com.compatibleForkId(id)
     
-  let hook = UpdaterHook(
-    forkId: forkIdHook,
-    compatibleForkId: compatibleForkIdHook,
+  let forkIdProcs = ForkIdProcs(
+    forkId: forkIdProc,
+    compatibleForkId: compatibleForkIdProc,
   )
 
   nimbus.ethNode = newEthereumNode(
@@ -126,7 +126,7 @@ proc setupP2P(nimbus: NimbusNode, conf: NimbusConf,
     bindUdpPort = conf.udpPort, bindTcpPort = conf.tcpPort,
     bindIp = conf.listenAddress,
     rng = nimbus.ctx.rng,
-    hook = hook)
+    forkIdProcs = forkIdProcs)
 
   # Add protocol capabilities
   nimbus.wire = nimbus.ethNode.addEthHandlerCapability(nimbus.txPool)
