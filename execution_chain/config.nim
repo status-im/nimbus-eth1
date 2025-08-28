@@ -885,20 +885,11 @@ func dbOptions*(conf: NimbusConf, noKeyCache = false): DbOptions =
 proc makeConfig*(cmdLine = commandLineParams()): NimbusConf
     {.raises: [CatchableError].} =
   ## Note: this function is not gc-safe
-
-  # The try/catch clause can go away when `load()` is clean
-  try:
-    {.push warning[ProveInit]: off.}
-    result = NimbusConf.load(
-      cmdLine,
-      version = NimbusBuild,
-      copyrightBanner = NimbusHeader
-    )
-    {.pop.}
-  except CatchableError as e:
-    raise e
-
-  setupLogging(result.logLevel, result.logStdout, none(OutFile))
+  result = NimbusConf.load(
+    cmdLine,
+    version = NimbusBuild,
+    copyrightBanner = NimbusHeader
+  )
 
   processNetworkParamsAndNetworkId(result)
 

@@ -11,7 +11,7 @@ import
   ../execution_chain/compile_info
 
 import
-  std/[os, osproc, net, options],
+  std/[osproc, net, options],
   chronicles,
   eth/net/nat,
   metrics,
@@ -30,7 +30,8 @@ import
   ./sync/wire_protocol,
   ./common/chain_config_hash,
   ./portal/portal,
-  beacon_chain/[nimbus_binary_common, process_state]
+  beacon_chain/[nimbus_binary_common, process_state],
+  beacon_chain/validators/keystore_management
 
 proc basicServices(nimbus: NimbusNode,
                    conf: NimbusConf,
@@ -189,7 +190,7 @@ proc run(nimbus: NimbusNode, conf: NimbusConf) =
   # trusted setup will be loaded, lazily.
   if conf.trustedSetupFile.isSome:
     let fileName = conf.trustedSetupFile.get()
-    let res = loadTrustedSetup(fileName, 0)
+    let res = lazy_kzg.loadTrustedSetup(fileName, 0)
     if res.isErr:
       fatal "Cannot load Kzg trusted setup from file", msg=res.error
       quit(QuitFailure)
@@ -197,7 +198,7 @@ proc run(nimbus: NimbusNode, conf: NimbusConf) =
   let coreDB =
     # Resolve statically for database type
     AristoDbRocks.newCoreDbRef(
-      string conf.dataDir,
+      conf.dataDir,
       conf.dbOptions(noKeyCache = conf.cmd == NimbusCmd.`import`))
 
   preventLoadingDataDirForTheWrongNetwork(coreDB, conf)
@@ -282,12 +283,19 @@ proc run(nimbus: NimbusNode, conf: NimbusConf) =
 when isMainModule:
   ProcessState.setupStopHandlers()
 
-  var nimbus = NimbusNode(ctx: newEthContext())
-
-  ## Processing command line arguments
+  # Processing command line arguments
   let conf = makeConfig()
 
+  # Set up logging before everything else
+  setupLogging(conf.logLevel, conf.logStdout, none(OutFile))
   setupFileLimits()
-  createDir(string conf.dataDir)
+
+  # TODO provide option for fixing / ignoring permission errors
+  if not checkAndCreateDataDir(conf.dataDir):
+    # We are unable to access/create data folder or data folder's
+    # permissions are insecure.
+    quit QuitFailure
+
+  var nimbus = NimbusNode(ctx: newEthContext())
 
   nimbus.run(conf)
