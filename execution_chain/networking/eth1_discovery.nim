@@ -18,7 +18,8 @@ import
   eth/common/base_rlp,
   ./discoveryv5,
   ./discoveryv4,
-  ./eth1_enr
+  ./eth1_enr,
+  ./chain_forkid
 
 export
   discoveryv4.NodeId,
@@ -102,11 +103,11 @@ func eligibleNode(proto: Eth1Discovery, rec: Record): bool =
     return true
 
   let
-    forkIds = try: rlp.decode(bytes, array[1, ForkID])
+    chainForkIds = try: rlp.decode(bytes, array[1, ChainForkId])
               except RlpError: return false
-    forkId = forkIds[0]
+    chainForkId  = chainForkIds[0]
 
-  proto.compatibleForkId(forkId)
+  proto.compatibleForkId(chainForkId.to(ForkID))
 
 #------------------------------------------------------------------------------
 # Public functions
@@ -215,11 +216,11 @@ proc getRandomBootnode*(proto: Eth1Discovery): Opt[NodeV4] =
           return Opt.none(NodeV4)
       return Opt.some(newNode(enode))
 
-func updateForkID*(proto: Eth1Discovery, id: ForkID) =
+func updateForkID*(proto: Eth1Discovery, forkId: ForkID) =
   # https://github.com/ethereum/devp2p/blob/bc76b9809a30e6dc5c8dcda996273f0f9bcf7108/enr-entries/eth.md
   if proto.discv5.isNil.not:
     let
-      list = [id]
+      list = [forkId.to(ChainForkId)]
       bytes = rlp.encode(list)
       kv = ("eth", bytes)
     proto.discv5.updateRecord([kv]).isOkOr:
