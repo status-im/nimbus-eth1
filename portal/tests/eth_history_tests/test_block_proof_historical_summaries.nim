@@ -12,112 +12,57 @@
 import
   unittest2,
   beacon_chain/spec/forks,
-  beacon_chain/spec/datatypes/capella,
-  beacon_chain /../ tests/testblockutil,
   # Mock helpers
+  beacon_chain /../ tests/testblockutil,
   beacon_chain /../ tests/mocking/mock_genesis,
   ../../eth_history/block_proofs/block_proof_historical_summaries
 
-# Test suite for the proofs:
-# - historicalSummariesProof
-# - BeaconBlockProof
-# and as last
-# - the chain of proofs, BeaconChainBlockProof:
-# BlockHash
-# -> BeaconBlockProof
-# -> historicalSummariesProof
-# historical_summaries
+# Test suite for the chain of proofs BlockProofHistoricalSummaries:
+# -> BeaconBlockProofHistoricalSummaries
+# -> ExecutionBlockProof
 #
-# Note: The last test makes the others redundant, but keeping them all around
-# for now as it might be sufficient to go with just historicalSummariesProof
-# (and perhaps BeaconBlockHeaderProof), see comments in beacon_chain_proofs.nim.
-#
-# TODO:
-# - Add more blocks to reach 1+ historical summaries, to make sure that
-# indexing is properly tested.
-# - Adjust tests to test usage of historical_summaries and historical_roots
-# together.
+# Note: Only the full chain of proofs is tested here. The setup takes a lot of time
+# and testing the individual proofs is redundant.
 
 suite "History Block Proofs - Historical Summaries":
-  let
-    cfg = block:
-      var res = defaultRuntimeConfig
-      res.ALTAIR_FORK_EPOCH = GENESIS_EPOCH
-      res.BELLATRIX_FORK_EPOCH = GENESIS_EPOCH
-      # res.CAPELLA_FORK_EPOCH = GENESIS_EPOCH
-      res.CAPELLA_FORK_EPOCH = Epoch(256)
-      res
-    state = newClone(initGenesisState(cfg = cfg))
-  var cache = StateCache()
+  setup:
+    let
+      cfg = block:
+        var res = defaultRuntimeConfig
+        res.ALTAIR_FORK_EPOCH = GENESIS_EPOCH
+        res.BELLATRIX_FORK_EPOCH = GENESIS_EPOCH
+        res.CAPELLA_FORK_EPOCH = GENESIS_EPOCH
+        res
+      state = newClone(initGenesisState(cfg = cfg))
+    var cache = StateCache()
 
-  var blocks: seq[capella.SignedBeaconBlock]
-  # Note:
-  # Adding 8192*2 blocks. First block is genesis block and not one of these.
-  # Then one extra block is needed to get the historical roots, block
-  # roots and state roots processed.
-  # index i = 0 is second block.
-  # index i = 8190 is 8192th block and last one that is part of the first
-  # historical root
+    var blocks: seq[capella.SignedBeaconBlock]
+    # Note:
+    # Adding 8192 blocks. First block is genesis block and not one of these.
+    # Then one extra block is needed to get the historical roots, block
+    # roots and state roots processed.
+    # index i = 0 is second block.
+    # index i = 8190 is 8192th block and last one that is part of the first
+    # historical summaries root
 
-  # genesis + 8191 slots, next one will be capella fork
-  for i in 0 ..< SLOTS_PER_HISTORICAL_ROOT - 1:
+    # genesis + 8191 slots
+    for i in 0 ..< SLOTS_PER_HISTORICAL_ROOT - 1:
+      blocks.add(addTestBlock(state[], cache, cfg = cfg).capellaData)
+
+    # One more slot to hit second SLOTS_PER_HISTORICAL_ROOT, hitting first
+    # historical_summary root.
     discard addTestBlock(state[], cache, cfg = cfg)
 
-  # slot 8192 -> 16383
-  for i in 0 ..< SLOTS_PER_HISTORICAL_ROOT:
-    blocks.add(addTestBlock(state[], cache, cfg = cfg).capellaData)
-
-  # One more slot to hit second SLOTS_PER_HISTORICAL_ROOT, hitting first
-  # historical_summary.
-  discard addTestBlock(state[], cache, cfg = cfg)
-
-  # Starts from the block after genesis.
-  const blocksToTest = [
-    0'u64,
-    1,
-    2,
-    3,
-    SLOTS_PER_HISTORICAL_ROOT div 2,
-    SLOTS_PER_HISTORICAL_ROOT - 3,
-    SLOTS_PER_HISTORICAL_ROOT - 2,
-  ]
-
-  test "BeaconBlockProofHistoricalSummaries for BeaconBlock":
-    let blockRoots = getStateField(state[], block_roots).data
-
-    withState(state[]):
-      when consensusFork >= ConsensusFork.Capella:
-        let historical_summaries = forkyState.data.historical_summaries
-
-        # for i in 0..<(SLOTS_PER_HISTORICAL_ROOT - 1): # Test all blocks
-        for i in blocksToTest:
-          let
-            beaconBlock = blocks[i].message
-            historicalRootsIndex = getHistoricalSummariesIndex(beaconBlock.slot, cfg)
-            blockRootIndex = getBlockRootsIndex(beaconBlock.slot)
-
-          let res = buildProof(blockRoots, blockRootIndex)
-          check res.isOk()
-          let proof = res.get()
-
-          check verifyProof(
-            blocks[i].root,
-            proof,
-            historical_summaries[historicalRootsIndex].block_summary_root,
-            blockRootIndex,
-          )
-
-  test "ExecutionBlockProof for Execution BlockHeader":
-    # for i in 0..<(SLOTS_PER_HISTORICAL_ROOT - 1): # Test all blocks
-    for i in blocksToTest:
-      let beaconBlock = blocks[i].message
-
-      let res = block_proof_historical_summaries.buildProof(beaconBlock)
-      check res.isOk()
-      let proof = res.get()
-
-      let leave = beaconBlock.body.execution_payload.block_hash
-      check verifyProof(leave, proof, blocks[i].root)
+    # Starts from the block after genesis.
+    const blocksToTest = [
+      0'u64,
+      1,
+      2,
+      3,
+      SLOTS_PER_HISTORICAL_ROOT div 2,
+      SLOTS_PER_HISTORICAL_ROOT - 3,
+      SLOTS_PER_HISTORICAL_ROOT - 2,
+    ]
 
   test "BlockProofHistoricalSummaries for Execution BlockHeader":
     let blockRoots = getStateField(state[], block_roots).data
