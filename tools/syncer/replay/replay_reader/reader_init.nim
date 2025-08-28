@@ -35,7 +35,6 @@ const
 # Private helpers
 # ------------------------------------------------------------------------------
 
-
 template onException(
     info: static[string];
     quitCode: static[int];

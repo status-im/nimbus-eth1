@@ -389,7 +389,7 @@ txparse: | build deps
 
 # build syncer debugging and analysis tools
 SYNCER_TOOLS_DIR := tools/syncer
-SYNCER_TOOLS :=  $(foreach name,trace,syncer_test_client_$(name))
+SYNCER_TOOLS :=  $(foreach name,trace inspect,syncer_test_client_$(name))
 .PHONY: syncer-tools syncer-tools-clean $(SYNCER_TOOLS)
 syncer-tools: $(SYNCER_TOOLS)
 syncer-tools-clean:

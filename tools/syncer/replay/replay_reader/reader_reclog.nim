@@ -92,7 +92,10 @@ func toStrOops(n: int): seq[string] =
 func toStrSeq(n: int; w: TraceVersionInfo): seq[string] =
   var res = newSeqOfCap[string](15)
   res.addX("=Version", n, w)
-  res.add "version=" & $w.version
+  let moan = if w.version < TraceVersionID: "(<" & $TraceVersionID & ")"
+             elif TraceVersionID < w.version: "(>" & $TraceVersionID & ")"
+             else: ""
+  res.add "version=" & $w.version & moan
   res.add "network=" & $w.networkId
   res.add "base=" & w.baseNum.bnStr
   res.add "latest=" & w.latestNum.bnStr
