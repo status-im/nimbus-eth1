@@ -214,14 +214,14 @@ with --debug-eager-state-root."""
   # shared database LRU caches.
 
   for accPath, v in txFrame.snapshot.acc:
-    db.accLeaves.del(accPath)
+    discard db.accLeaves.refresh(accPath, v[0])
   for mixPath, v in txFrame.snapshot.sto:
-    db.stoLeaves.del(mixPath)
+    discard db.stoLeaves.refresh(mixPath, v[0])
 
   for accPath, vtx in txFrame.accLeaves:
-    db.accLeaves.del(accPath)
+    discard db.accLeaves.refresh(accPath, vtx)
   for mixPath, vtx in txFrame.stoLeaves:
-    db.stoLeaves.del(mixPath)
+    discard db.stoLeaves.refresh(mixPath, vtx)
 
   txFrame.snapshot.vtx.clear()
   txFrame.snapshot.acc.clear()
