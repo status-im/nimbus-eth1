@@ -414,12 +414,8 @@ proc parseGenesis*(data: string): Genesis
      {.gcsafe.} =
   try:
     result = JGenesis.decode(data, Genesis, allowUnknownFields = true)
-  except JsonReaderError as e:
+  except SerializationError as e:
     error "Invalid genesis config file format", msg=e.formatMsg("")
-    return nil
-  except CatchableError as e:
-    error "Error loading genesis data",
-      exception = e.name, msg = e.msg
     return nil
 
 proc parseGenesisFile*(fileName: string): Genesis
@@ -429,12 +425,8 @@ proc parseGenesisFile*(fileName: string): Genesis
   except IOError as e:
     error "Genesis I/O error", fileName, msg=e.msg
     return nil
-  except JsonReaderError as e:
+  except SerializationError as e:
     error "Invalid genesis config file format", msg=e.formatMsg("")
-    return nil
-  except CatchableError as e:
-    error "Error loading genesis file",
-      fileName, exception = e.name, msg = e.msg
     return nil
 
 proc validateNetworkParams(params: var NetworkParams, input: string, inputIsFile: bool): bool =
@@ -460,12 +452,8 @@ proc loadNetworkParams*(fileName: string, params: var NetworkParams):
   except IOError as e:
     error "Network params I/O error", fileName, msg=e.msg
     return false
-  except JsonReaderError as e:
+  except SerializationError as e:
     error "Invalid network params file format", fileName, msg=e.formatMsg("")
-    return false
-  except CatchableError as e:
-    error "Error loading network params file",
-      fileName, exception = e.name, msg = e.msg
     return false
 
   validateNetworkParams(params, fileName, true)
@@ -473,25 +461,11 @@ proc loadNetworkParams*(fileName: string, params: var NetworkParams):
 proc decodeNetworkParams*(jsonString: string, params: var NetworkParams): bool =
   try:
     params = JGenesis.decode(jsonString, NetworkParams, allowUnknownFields = true)
-  except JsonReaderError as e:
+  except SerializationError as e:
     error "Invalid network params format", msg=e.formatMsg("")
-    return false
-  except CatchableError:
-    var msg = getCurrentExceptionMsg()
-    error "Error decoding network params", msg
     return false
 
   validateNetworkParams(params, jsonString, false)
-
-proc parseGenesisAlloc*(data: string, ga: var GenesisAlloc): bool
-    {.gcsafe, raises: [CatchableError].} =
-  try:
-    ga = JGenesis.decode(data, GenesisAlloc, allowUnknownFields = true)
-  except JsonReaderError as e:
-    error "Invalid genesis config file format", msg=e.formatMsg("")
-    return false
-
-  return true
 
 func defaultBlobSchedule*(): array[Cancun..HardFork.high, Opt[BlobSchedule]] =
   [
@@ -663,6 +637,18 @@ func genesisBlockForNetwork*(id: NetworkId): Genesis
     )
   else:
     Genesis()
+
+func name*(id: NetworkId): string =
+  if id == MainNet:
+    "mainnet"
+  elif id == SepoliaNet:
+    "sepolia"
+  elif id == HoleskyNet:
+    "holesky"
+  elif id == HoodiNet:
+    "hoodi"
+  else:
+    $id
 
 func networkParams*(id: NetworkId): NetworkParams =
   try:
