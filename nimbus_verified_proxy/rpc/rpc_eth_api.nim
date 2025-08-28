@@ -211,24 +211,30 @@ proc installEthApiHandlers*(vp: VerifiedRpcProxy) =
     if tx.to.isNone():
       raise newException(ValueError, "to address is required")
 
+    debugEcho "checkpoint"
+
     let
       header = (await vp.getHeader(blockTag)).valueOr:
         raise newException(ValueError, error)
 
       optimisticStateFetch = optimisticStateFetch.valueOr:
         true
+    debugEcho "checkpoint"
 
     # Start fetching code to get it in the code cache
     discard vp.getCode(tx.to.get(), header.number, header.stateRoot)
+    debugEcho "checkpoint"
 
     # As a performance optimisation we concurrently pre-fetch the state needed
     # for the call by calling eth_createAccessList and then using the returned
     # access list keys to fetch the required state using eth_getProof.
     (await vp.populateCachesUsingAccessList(header.number, header.stateRoot, tx)).isOkOr:
       raise newException(ValueError, error)
+    debugEcho "checkpoint"
 
     let gasEstimate = (await vp.evm.estimateGas(header, tx, optimisticStateFetch)).valueOr:
       raise newException(ValueError, error)
+    debugEcho "checkpoint"
 
     return gasEstimate.Quantity
 

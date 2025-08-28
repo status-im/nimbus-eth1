@@ -101,3 +101,6 @@ proc init*(
     chainId: chainId,
     maxBlockWalk: maxBlockWalk,
   )
+
+createRpcSigsFromNim(RpcClient):
+  proc eth_estimateGas(args: TransactionArgs, blockTag: BlockTag): Quantity
