@@ -269,27 +269,45 @@ proc encodeLogIndexSummary*(summary: LogIndexSummary): seq[byte] =
   copyBytes(result, 0xc0, unsafeAddr summary.latest_log_value, 32)
   copyBytes(result, 0xe0, unsafeAddr summary.latest_row_root, 32)
 
-proc add_block_logs*[T](log_index: var LogIndex, 
-                        header: ethblocks.Header, 
-                        receipts: seq[T]) =
+proc add_block_logs*(log_index: var LogIndex, 
+                     header: ethblocks.Header, 
+                     receipts: seq[StoredReceipt]) =
+  
+  echo "=== add_block_logs called ==="
+  echo "  Block number: ", header.number
+  echo "  Receipts count: ", receipts.len
+  echo "  Starting next_index: ", log_index.next_index
   
   # Initialize epochs if needed
   if log_index.epochs.len == 0:
     log_index.epochs.add(initLogIndexEpoch())
+    echo "  Initialized epochs"
+
+  # Count total logs first
+  var totalLogs = 0
+  for receipt in receipts:
+    when compiles(receipt.logs):
+      totalLogs += receipt.logs.len
+  echo "  Total logs to process: ", totalLogs
 
   # Add block delimiter for non-genesis blocks
   if header.number > 0:
+    echo "  Adding block delimiter at index ", log_index.next_index
     let delimiter = BlockDelimiterEntry(blockNumber: header.number)
     log_index.epochs[0].records[log_index.next_index] =
       LogRecord(kind: lrkDelimiter, delimiter: delimiter)
     log_index.latest_block_delimiter_index = log_index.next_index
     log_index.latest_block_delimiter_root = hash_tree_root(log_index)
     log_index.next_index.inc
+    echo "  Block delimiter added, next_index now: ", log_index.next_index
 
   # Process all logs in all receipts
   for txPos, receipt in receipts:
     when compiles(receipt.logs):  # Check if receipt has logs field
+      echo "  Processing receipt ", txPos, " with ", receipt.logs.len, " logs"
       for logPos, log in receipt.logs:
+        echo "    Adding log ", logPos, " at index ", log_index.next_index
+        
         # Create log entry with metadata
         let meta = LogMeta(
           blockNumber: header.number,
@@ -305,24 +323,33 @@ proc add_block_logs*[T](log_index: var LogIndex,
         log_index.latest_log_entry_index = log_index.next_index
         log_index.latest_log_entry_root = hash_tree_root(log_index)
         log_index.next_index.inc
+        echo "    Log stored, next_index incremented to: ", log_index.next_index
 
         # Process log values (address + topics)
         let addr_hash = address_value(log.address)
         let column = get_column_index(log_index.next_index - 1, addr_hash)
         let row = get_row_index(0, addr_hash, 0)
-        add_log_value(log_index, 0, row, column, addr_hash)
+        echo "    Calling add_log_value for address at row=", row, ", column=", column
+       # add_log_value(log_index, 0, row, column, addr_hash)
+        echo "    After add_log_value, next_index is: ", log_index.next_index
         
         # Process each topic
+        echo "    Processing ", log.topics.len, " topics"
         for i in 0..<log.topics.len:
           let topic = log.topics[i]
           let topic_hash = topic_value(Hash32(topic))
           let topic_column = get_column_index(log_index.next_index - 1, topic_hash)
           let topic_row = get_row_index(0, topic_hash, 0)
+          echo "      Topic ", i, ": calling add_log_value at row=", topic_row, ", column=", topic_column
           add_log_value(log_index, 0, topic_row, topic_column, topic_hash)
+          echo "      After topic add_log_value, next_index is: ", log_index.next_index
 
   # Update epoch root
   log_index.epochs[0].log_index_root = hash_tree_root(log_index)
   log_index.latest_row_root = log_index.epochs[0].log_index_root
+  
+  echo "  Final next_index: ", log_index.next_index
+  echo "=== add_block_logs done ===\n"
 
 proc getLogIndexDigest*(li: LogIndex): LogIndexDigest =
   ## Produce digest for LogIndexSummary generation
