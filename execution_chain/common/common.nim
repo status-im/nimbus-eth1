@@ -380,6 +380,9 @@ func isPragueOrLater*(com: CommonRef, t: EthTime): bool =
 func isOsakaOrLater*(com: CommonRef, t: EthTime): bool =
   com.config.osakaTime.isSome and t >= com.config.osakaTime.value
 
+func isAmsterdamOrLater*(com: CommonRef, t: EthTime): bool =
+  com.config.amsterdamTime.isSome and t >= com.config.amsterdamTime.value
+
 proc proofOfStake*(com: CommonRef, header: Header, txFrame: CoreDbTxRef): bool =
   if com.config.posBlock.isSome:
     # see comments of posBlock in common/hardforks.nim
