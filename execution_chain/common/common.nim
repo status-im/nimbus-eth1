@@ -14,7 +14,7 @@ import
   logging,
   ../db/[core_db, ledger, storage_types, fcu_db],
   ../utils/[utils],
-  ".."/[constants, errors, version],
+  ".."/[constants, errors, version_info],
   "."/[chain_config, evmforks, genesis, hardforks],
   taskpools
 

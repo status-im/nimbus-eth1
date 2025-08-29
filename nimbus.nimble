@@ -7,8 +7,11 @@
 
 mode = ScriptMode.Verbose
 
+# Get the version from one location
+include ./execution_chain/version
+
 packageName   = "nimbus"
-version       = "0.1.0"
+version       = NimbusVersion
 author        = "Status Research & Development GmbH"
 description   = "An Ethereum 2.0 Sharding Client for Resource-Restricted Devices"
 license       = "Apache License 2.0"

@@ -29,7 +29,7 @@ import
   ],
   eth/[common, net/nat],
   ./networking/[bootnodes, eth1_enr as enr],
-  ./[constants, compile_info, version],
+  ./[constants, compile_info, version_info],
   ./common/chain_config,
   ./db/opts
 

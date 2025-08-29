@@ -18,7 +18,7 @@ import
   metrics/chronicles_support,
   stew/byteutils,
   ./rpc,
-  ./version,
+  ./version_info,
   ./constants,
   ./nimbus_desc,
   ./nimbus_import,
@@ -96,7 +96,7 @@ proc setupP2P(nimbus: NimbusNode, conf: NimbusConf,
 
   func compatibleForkIdProc(id: ForkID): bool {.raises: [].} =
     com.compatibleForkId(id)
-    
+
   let forkIdProcs = ForkIdProcs(
     forkId: forkIdProc,
     compatibleForkId: compatibleForkIdProc,
