@@ -12,7 +12,7 @@ import
   stint,
   json_rpc/[rpcclient, rpcproxy, rpcserver, jsonmarshal],
   stew/[io2, byteutils],
-  web3/eth_api_types,
+  web3/[eth_api_types, conversions],
   eth/common/eth_types_rlp,
   ../../execution_chain/rpc/cors,
   ../../execution_chain/common/common,
