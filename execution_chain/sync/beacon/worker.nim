@@ -15,6 +15,7 @@ import
   pkg/eth/common,
   pkg/stew/[interval_set, sorted_set],
   ../../common,
+  ../../networking/p2p,
   ./worker/headers/headers_target,
   ./worker/update/[metrics, ticker],
   ./worker/[blocks, headers, start_stop, update, worker_desc]
@@ -76,8 +77,18 @@ proc stop*(buddy: BeaconBuddyRef; info: static[string]) =
 proc runTicker*(ctx: BeaconCtxRef; info: static[string]) =
   ## Global background job that is started every few seconds. It is to be
   ## intended for updating metrics, debug logging etc.
+  ##
   ctx.updateMetrics()
   ctx.updateTicker()
+
+  # Inform if there are no peers active while syncing
+  if not ctx.hibernate and ctx.pool.nBuddies < 1:
+    let now = Moment.now()
+    if ctx.pool.lastNoPeersLog + noPeersLogWaitInterval < now:
+      ctx.pool.lastNoPeersLog = now
+      debug info & ": no sync peers yet",
+        elapsed=(now - ctx.pool.lastPeerSeen).toStr,
+        nOtherPeers=ctx.node.peerPool.connectedNodes.len
 
 
 template runDaemon*(ctx: BeaconCtxRef; info: static[string]): Duration =

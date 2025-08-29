@@ -143,6 +143,8 @@ type
     seenData*: bool                  ## Set `true` if data were fetched, already
     minInitBuddies*: int             ## Min # peers needed for acivating syncer
     initTarget*: Opt[InitTarget]     ## Optionally set up first target
+    lastPeerSeen*: chronos.Moment    ## Time when the last peer was abandoned
+    lastNoPeersLog*: chronos.Moment  ## Some sparse messages about missing peers
 
     when enableTicker:
       ticker*: RootRef               ## Logger ticker

@@ -11,7 +11,7 @@
 {.push raises:[].}
 
 import
-  pkg/[chronicles, eth/common, metrics],
+  pkg/[chronicles, chronos, eth/common, metrics],
   ../../../networking/p2p,
   ../../wire_protocol,
   ./[blocks, headers, update, worker_desc]
@@ -100,6 +100,8 @@ proc stopBuddy*(buddy: BeaconBuddyRef) =
   else:
     ctx.pool.nBuddies = 0
     ctx.pool.lastSlowPeer = Opt.none(Hash)
+    ctx.pool.lastPeerSeen = Moment.now()
+    ctx.pool.lastNoPeersLog = ctx.pool.lastPeerSeen
   metrics.set(nec_sync_peers, ctx.pool.nBuddies)
   buddy.clearProcErrors()
 
