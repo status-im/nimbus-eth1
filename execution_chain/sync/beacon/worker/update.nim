@@ -214,6 +214,7 @@ proc updateSyncState*(ctx: BeaconCtxRef; info: static[string]) =
       nSyncPeers=ctx.pool.nBuddies
 
   of SyncState.headers, SyncState.blocks:
+    ctx.pool.lastSyncUpdLog = Moment.now() # reset logging control
     info "State changed", prevState, newState,
       base=ctx.chain.baseNumber.bnStr, head=ctx.chain.latestNumber.bnStr,
       target=ctx.subState.head.bnStr, targetHash=ctx.subState.headHash.short

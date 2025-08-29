@@ -38,6 +38,9 @@ const
   noPeersLogWaitInterval* = chronos.seconds(50)
     ## Control missing peers messages issued from time to time (if any.)
 
+  syncUpdateLogWaitInterval* = chronos.seconds(30)
+    ## Control log chatter for update messages
+
   workerIdleWaitInterval* = chronos.seconds(1)
     ## Sleep some time in multi-mode if there is nothing to do
 
