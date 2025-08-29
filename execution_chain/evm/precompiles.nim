@@ -11,6 +11,7 @@
 import
   std/[macros],
   results,
+  constantine/ethereum_evm_precompiles,
   "."/[types, blake2b_f, blscurve],
   ./interpreter/[gas_meter, gas_costs, utils/utils_numeric],
   eth/common/keys,
@@ -232,7 +233,11 @@ func sha256(c: Computation): EvmResultVoid =
     gasFee = GasSHA256 + wordCount.GasInt * GasSHA256Word
 
   ? c.gasMeter.consumeGas(gasFee, reason="SHA256 Precompile")
-  assign(c.output, sha2.sha256.digest(c.msg.data).data)
+  c.output.setLen(32)
+  let res = c.output.eth_evm_sha256(c.msg.data)
+
+  if res != cttEVM_Success:
+    return err(prcErr(PrcInvalidParam))
   ok()
 
 func ripemd160(c: Computation): EvmResultVoid =
@@ -242,7 +247,10 @@ func ripemd160(c: Computation): EvmResultVoid =
 
   ? c.gasMeter.consumeGas(gasFee, reason="RIPEMD160 Precompile")
   c.output.setLen(32)
-  assign(c.output.toOpenArray(12, 31), ripemd.ripemd160.digest(c.msg.data).data)
+  let res =c.output.eth_evm_ripemd160(c.msg.data)
+
+  if res != cttEVM_Success:
+    return err(prcErr(PrcInvalidParam))
   ok()
 
 func identity(c: Computation): EvmResultVoid =
@@ -384,19 +392,14 @@ func bn256ecAdd(c: Computation, fork: EVMFork = FkByzantium): EvmResultVoid =
   let gasFee = if fork < FkIstanbul: GasECAdd else: GasECAddIstanbul
   ? c.gasMeter.consumeGas(gasFee, reason = "ecAdd Precompile")
 
-  var
-    input: array[128, byte]
-  # Padding data
-  let len = min(c.msg.data.len, 128) - 1
-  input[0..len] = c.msg.data[0..len]
-  var p1 = ? G1.getPoint(input.toOpenArray(0, 63))
-  var p2 = ? G1.getPoint(input.toOpenArray(64, 127))
-  var apo = (p1 + p2).toAffine()
+  var output: array[64, byte]
+  let res = output.eth_evm_bn254_g1add(c.msg.data)
+
+  if res != cttEVM_Success:
+    return err(prcErr(PrcInvalidParam))
 
   c.output.setLen(64)
-  if isSome(apo):
-    # we can discard here because we supply proper buffer
-    discard apo.get().toBytes(c.output)
+  assign(c.output, output)
 
   ok()
 
@@ -404,20 +407,14 @@ func bn256ecMul(c: Computation, fork: EVMFork = FkByzantium): EvmResultVoid =
   let gasFee = if fork < FkIstanbul: GasECMul else: GasECMulIstanbul
   ? c.gasMeter.consumeGas(gasFee, reason="ecMul Precompile")
 
-  var
-    input: array[96, byte]
+  var output: array[64, byte]
+  let res = output.eth_evm_bn254_g1mul(c.msg.data)
 
-  # Padding data
-  let len = min(c.msg.data.len, 96) - 1
-  assign(input.toOpenArray(0, len), c.msg.data.toOpenArray(0, len))
-  var p1 = ? G1.getPoint(input.toOpenArray(0, 63))
-  var fr = ? getFR(input.toOpenArray(64, 95))
-  var apo = (p1 * fr).toAffine()
+  if res != cttEVM_Success:
+    return err(prcErr(PrcInvalidParam))
 
   c.output.setLen(64)
-  if isSome(apo):
-    # we can discard here because we supply buffer of proper size
-    discard apo.get().toBytes(c.output)
+  assign(c.output, output)
 
   ok()
 
@@ -484,18 +481,15 @@ func blsG1Add(c: Computation): EvmResultVoid =
 
   ? c.gasMeter.consumeGas(Bls12381G1AddGas, reason="blsG1Add Precompile")
 
-  var a, b: BLS_G1
-  if not a.decodePoint(input.toOpenArray(0, 127)):
-    return err(prcErr(PrcInvalidPoint))
+  var output: array[128, byte]
+  let res = output.eth_evm_bls12381_g1add(c.msg.data)
 
-  if not b.decodePoint(input.toOpenArray(128, 255)):
-    return err(prcErr(PrcInvalidPoint))
-
-  a.add b
+  if res != cttEVM_Success:
+    return err(prcErr(PrcInvalidParam))
 
   c.output.setLen(128)
-  if not encodePoint(a, c.output):
-    return err(prcErr(PrcInvalidPoint))
+  assign(c.output, output)
+
   ok()
 
 const
