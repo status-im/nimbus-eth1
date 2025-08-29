@@ -70,6 +70,10 @@ type
     filter*: FilterOptions
     blockMarker*: Opt[Quantity]
 
+  # TODO: Differentiate errors
+  VerifiedProxyError = enum
+    ValidationError
+
   VerifiedRpcProxy* = ref object
     evm*: AsyncEvm
     proxy*: RpcProxy
