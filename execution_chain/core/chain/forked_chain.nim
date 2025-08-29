@@ -441,7 +441,7 @@ proc validateBlock(c: ForkedChainRef,
     # parent txFrame to the new txFrame unless the block number is one
     # greater than a block which is expected to be persisted based on the
     # persistBatchSize
-    moveParentHashKeys = (blk.header.number mod c.persistBatchSize) != 1
+    moveParentHashKeys = c.persistBatchSize > 1 and (blk.header.number mod c.persistBatchSize) != 1
     parentFrame = parent.txFrame
     txFrame = parentFrame.txFrameBegin(moveParentHashKeys)
 
