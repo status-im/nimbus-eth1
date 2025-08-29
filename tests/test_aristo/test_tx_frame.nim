@@ -108,3 +108,25 @@ suite "Aristo TxFrame":
       check:
         tx.fetchAccountRecord(acc1[0]).isOk()
         tx.fetchAccountRecord(acc2[0]).isErr() # Doesn't exist in tx2
+
+  test "Frames using moveParentHashKeys parameter":
+    let
+      tx0 = db.txFrameBegin(db.baseTxFrame())
+      tx1 = db.txFrameBegin(tx0)
+
+    check:
+      tx0.mergeAccountRecord(acc1[0], acc1[1]).isOk()
+      tx1.mergeAccountRecord(acc2[0], acc2[1]).isOk()
+      tx0.fetchStateRoot() != tx1.fetchStateRoot()
+      tx0.kMap.len() == 0
+      tx1.kMap.len() == 1
+
+    let tx2 = db.txFrameBegin(tx1, moveParentHashKeys = true)
+    check:
+      tx1.kMap.len() == 0
+      tx2.kMap.len() == 1
+
+    let tx3 = db.txFrameBegin(tx2, moveParentHashKeys = false)
+    check:
+      tx2.kMap.len() == 1
+      tx3.kMap.len() == 0
