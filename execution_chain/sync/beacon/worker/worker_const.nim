@@ -35,6 +35,12 @@ const
     ## Some waiting time at the end of the daemon task which always lingers
     ## in the background.
 
+  noPeersLogWaitInterval* = chronos.seconds(50)
+    ## Control missing peers messages issued from time to time (if any.)
+
+  syncUpdateLogWaitInterval* = chronos.seconds(30)
+    ## Control log chatter for update messages
+
   workerIdleWaitInterval* = chronos.seconds(1)
     ## Sleep some time in multi-mode if there is nothing to do
 
@@ -57,7 +63,7 @@ const
   nFetchHeadersFailedInitialPeersThreshold* = 30
     ## If there are more failing peers than this threshold right at the
     ## begining of a header chain download scrum (before any data received),
-    ## then this session (scrum or sprint) is discarded and the suncer is
+    ## then this session (scrum or sprint) is discarded and the syncer is
     ## reset and suspened (waiting for the next activation to restart a new
     ## session.)
 

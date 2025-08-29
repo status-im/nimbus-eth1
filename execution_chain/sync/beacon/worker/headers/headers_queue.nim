@@ -13,7 +13,7 @@
 import
   pkg/[eth/common, metrics],
   pkg/stew/[interval_set, sorted_set],
-  ../../worker_desc
+  ../worker_desc
 
 declareGauge nec_sync_header_lists_staged, "" &
   "Number of header list records staged for serialised processing"

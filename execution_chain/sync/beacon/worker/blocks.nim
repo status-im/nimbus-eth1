@@ -15,8 +15,8 @@ import
   pkg/eth/common,
   pkg/stew/[interval_set, sorted_set],
   ../../../networking/p2p,
-  ../worker_desc,
-  ./blocks/[blocks_blocks, blocks_helpers, blocks_queue, blocks_unproc]
+  ./blocks/[blocks_blocks, blocks_helpers, blocks_queue, blocks_unproc],
+  ./worker_desc
 
 export
   blocks_queue, blocks_unproc
@@ -64,6 +64,7 @@ template blocksCollect*(
       break body                                     # no action
 
     var
+      importedOK = false                             # imported some blocks
       nImported {.inject.} = 0u64                    # statistics, to be updated
       nQueued {.inject.} = 0                         # ditto
 
@@ -113,6 +114,21 @@ template blocksCollect*(
         # Import blocks (no staging), async/template
         nImported += buddy.blocksImport(blocks, buddy.peerID, info)
 
+        # Sync status logging
+        if 0 < nImported:
+          importedOK = true
+          if ctx.pool.lastSyncUpdLog + syncUpdateLogWaitInterval < Moment.now():
+            chronicles.info "Imported blocks", nImported,
+              nUnproc=ctx.nUnprocStr(),
+              nStagedQ=ctx.blk.staged.len,
+              base=ctx.chain.baseNumber.bnStr,
+              head=ctx.chain.latestNumber.bnStr,
+              target=ctx.subState.head.bnStr,
+              targetHash=ctx.subState.headHash.short,
+              nSyncPeers=ctx.pool.nBuddies
+            ctx.pool.lastSyncUpdLog = Moment.now()
+            nImported = 0
+
         # Import may be incomplete, so a partial roll back may be needed
         let lastBn = blocks[^1].header.number
         if ctx.subState.top < lastBn:
@@ -151,12 +167,19 @@ template blocksCollect*(
 
       # End block: `fetchBlocksBody`
 
-    if 0 < nImported:
-      chronicles.info "Imported blocks", nImported, nUnproc=ctx.nUnprocStr(),
-        nStagedQ=ctx.blk.staged.len,
-        base=ctx.chain.baseNumber.bnStr, head=ctx.chain.latestNumber.bnStr,
-        target=ctx.subState.head.bnStr, targetHash=ctx.subState.headHash.short,
-        nSyncPeers=ctx.pool.nBuddies
+    if importedOK:
+      # Sync status logging.
+      if 0 < nImported:
+        # Note that `nImported` might have been reset above.
+        chronicles.info "Imported blocks", nImported,
+          nUnproc=ctx.nUnprocStr(),
+          nStagedQ=ctx.blk.staged.len,
+          base=ctx.chain.baseNumber.bnStr,
+          head=ctx.chain.latestNumber.bnStr,
+          target=ctx.subState.head.bnStr,
+          targetHash=ctx.subState.headHash.short,
+          nSyncPeers=ctx.pool.nBuddies
+        ctx.pool.lastSyncUpdLog = Moment.now()
 
     elif nQueued == 0 and
          not ctx.pool.seenData and
@@ -210,6 +233,7 @@ template blocksUnstage*(
     var
       peer {.inject.} = buddy.peer
       nImported {.inject.} = 0u64                  # statistics
+      importedOK = false                           # imported some blocks
       switchPeer {.inject.} = false                # for return code
 
     while ctx.pool.lastState == SyncState.blocks:
@@ -236,6 +260,21 @@ template blocksUnstage*(
       # Import blocks list, async/template
       nImported += buddy.blocksImport(qItem.data.blocks,qItem.data.peerID, info)
 
+      # Sync status logging
+      if 0 < nImported:
+        importedOK = true
+        if ctx.pool.lastSyncUpdLog + syncUpdateLogWaitInterval < Moment.now():
+          chronicles.info "Imported blocks", nImported,
+            nUnproc=ctx.nUnprocStr(),
+            nStagedQ=ctx.blk.staged.len,
+            base=ctx.chain.baseNumber.bnStr,
+            head=ctx.chain.latestNumber.bnStr,
+            target=ctx.subState.head.bnStr,
+            targetHash=ctx.subState.headHash.short,
+            nSyncPeers=ctx.pool.nBuddies
+          ctx.pool.lastSyncUpdLog = Moment.now()
+          nImported = 0
+
       # Import probably incomplete, so a partial roll back may be needed
       let lastBn = qItem.data.blocks[^1].header.number
       if ctx.subState.top < lastBn:
@@ -243,12 +282,19 @@ template blocksUnstage*(
 
       # End while loop
 
-    if 0 < nImported:
-      chronicles.info "Imported blocks", nImported, nUnproc=ctx.nUnprocStr(),
-        nStagedQ=ctx.blk.staged.len,
-        base=ctx.chain.baseNumber.bnStr, head=ctx.chain.latestNumber.bnStr,
-        target=ctx.subState.head.bnStr, targetHash=ctx.subState.headHash.short,
-        nSyncPeers=ctx.pool.nBuddies
+    if importedOK:
+      # Sync status logging
+      if 0 < nImported:
+        # Note that `nImported` might have been reset above.
+        chronicles.info "Imported blocks", nImported,
+          nUnproc=ctx.nUnprocStr(),
+          nStagedQ=ctx.blk.staged.len,
+          base=ctx.chain.baseNumber.bnStr,
+          head=ctx.chain.latestNumber.bnStr,
+          target=ctx.subState.head.bnStr,
+          targetHash=ctx.subState.headHash.short,
+          nSyncPeers=ctx.pool.nBuddies
+        ctx.pool.lastSyncUpdLog = Moment.now()
 
     elif switchPeer or 0 < ctx.blk.staged.len:
       trace info & ": no blocks unqueued", peer,

@@ -15,7 +15,7 @@ import
   pkg/eth/common,
   pkg/stew/interval_set,
   ../../../../networking/p2p,
-  ../../worker_desc,
+  ../worker_desc,
   ./[headers_fetch, headers_helpers]
 
 logScope:
@@ -59,6 +59,13 @@ template headersTargetActivate*(
     let
       peer {.inject.} = buddy.peer
       trg = ctx.pool.initTarget.unsafeGet
+
+    # Require minimum of sync peers
+    if ctx.pool.nBuddies < ctx.pool.minInitBuddies:
+      trace info & ": not enough buddies required to start sync", peer,
+        targetHash=trg.hash.short, isFinal=trg.isFinal,
+        syncState=($buddy.syncState), nSyncPeers=ctx.pool.nBuddies
+      break body                                           # return
 
     # Can be used only before first activation
     if ctx.pool.lastState != SyncState.idle:

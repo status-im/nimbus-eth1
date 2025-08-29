@@ -14,7 +14,7 @@ import
   pkg/[chronicles, chronos, results],
   pkg/eth/common,
   ../../../wire_protocol,
-  ../../worker_desc
+  ../worker_desc
 
 # ------------------------------------------------------------------------------
 # Public function
