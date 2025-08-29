@@ -8,7 +8,7 @@
 mode = ScriptMode.Verbose
 
 # Get the version from one location
-include ./execution_chain/version
+import ./execution_chain/version
 
 packageName   = "nimbus"
 version       = NimbusVersion
