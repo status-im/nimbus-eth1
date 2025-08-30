@@ -396,8 +396,8 @@ proc queueUpdateBase(c: ForkedChainRef, base: BlockRef)
 
   var
     number = base.number - min(base.number, PersistBatchSize)
-    steps  = newSeqOfCap[BlockRef]((base.number-c.base.number) div PersistBatchSize + 1)
-    it = prevQueuedBase
+    steps  = newSeqOfCap[BlockRef]((base.number - prevQueuedBase.number) div PersistBatchSize + 1)
+    it = base
 
   steps.add base
 
