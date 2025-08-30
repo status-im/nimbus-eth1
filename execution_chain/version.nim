@@ -14,7 +14,6 @@
 # break some scripts. Users of this file:
 # - ./version_info.nim > used by compiled binaries.
 # - ../scripts/print_version.nims > used by docker files.
-# - ../nimbus.nimble > nimble file package version.
 #------------------------------------------------------------------------------
 
 const
