@@ -8,9 +8,7 @@
 
 {.push raises: [].}
 
-import
-  std/[strformat],
-  stew/byteutils, ./compile_info, beacon_chain/buildinfo
+import std/strformat, stew/byteutils, ./compile_info, beacon_chain/buildinfo
 
 const
   NimbusName* = "nimbus-eth1"
