@@ -21,7 +21,7 @@ const
   ## project name string
 
   # Please keep it 4 bytes long, used in `engine_ClientVersionV1`
-  # https://github.com/ethereum/execution-apis/blob/main/src/engine/identification.md#clientversionv1
+  # https://github.com/ethereum/execution-apis/blob/v1.0.0-beta.4/src/engine/identification.md#clientversionv1
   GitRevisionBytes* = hexToByteArray[4](GitRevision)
 
   FullVersionStr* = "v" & NimbusVersion & "-" & GitRevision
