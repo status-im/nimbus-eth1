@@ -124,3 +124,4 @@ jobs:
         if: ${{ !cancelled() }} && github.event_name == 'pull_request'
         run: |
           bash scripts/check_copyright_year.sh
+          bash scripts/check_version.sh
