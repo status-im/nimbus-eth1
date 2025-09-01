@@ -24,12 +24,13 @@ import
     confutils/std/net as confnet,
     confutils/toml/defs as tomldefs,
     json_serialization/std/net as jsnet,
+    toml_serialization/std/net as tomlnet,
     results,
     beacon_chain/buildinfo,
     beacon_chain/nimbus_binary_common,
   ],
   toml_serialization,
-  eth/[common, net/nat],
+  eth/[common, net/nat, net/nat_toml, p2p/discoveryv5/enr_toml],
   ./networking/[bootnodes, eth1_enr as enr],
   ./[constants, compile_info, version],
   ./common/chain_config,
@@ -898,27 +899,6 @@ proc readValue*(r: var TomlReader, val: var NetworkParams)
        {.gcsafe, raises: [IOError, SerializationError].} =
   # Not actually parse it, only to silence compiler
   discard r.parseAsString()
-
-proc readValue*(r: var TomlReader, val: var Port)
-       {.gcsafe, raises: [IOError, SerializationError].} =
-  val = r.parseInt(int64).Port
-
-proc readValue*(r: var TomlReader, val: var IpAddress)
-       {.gcsafe, raises: [IOError, SerializationError].} =
-  try: val = parseIpAddress(r.parseAsString())
-  except ValueError as exc:
-    raise newException(SerializationError, exc.msg)
-
-proc readValue*(r: var TomlReader, val: var enr.Record)
-       {.gcsafe, raises: [IOError, SerializationError].} =
-  val = fromURI(enr.Record, r.parseAsString()).valueOr:
-    raise newException(SerializationError, $error)
-
-proc readValue*(r: var TomlReader, val: var NatConfig)
-       {.gcsafe, raises: [IOError, SerializationError].} =
-  try: val = NatConfig.parseCmdArg(r.parseAsString())
-  except ValueError as exc:
-    raise newException(SerializationError, exc.msg)
 
 #-------------------------------------------------------------------
 # Constructor
