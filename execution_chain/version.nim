@@ -17,13 +17,13 @@
 #------------------------------------------------------------------------------
 
 const
-  NimbusMajor*: int = 0
+  NimbusMajor* = 0
   ## is the major number of Nimbus' version.
 
-  NimbusMinor*: int = 1
+  NimbusMinor* = 1
   ## is the minor number of Nimbus' version.
 
-  NimbusPatch*: int = 0
+  NimbusPatch* = 0
   ## is the patch number of Nimbus' version.
 
   NimbusVersion* = $NimbusMajor & "." & $NimbusMinor & "." & $NimbusPatch
