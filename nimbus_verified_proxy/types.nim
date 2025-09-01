@@ -104,3 +104,4 @@ proc init*(
 
 createRpcSigsFromNim(RpcClient):
   proc eth_estimateGas(args: TransactionArgs, blockTag: BlockTag): Quantity
+  proc eth_maxPriorityFeePerGas(): Quantity

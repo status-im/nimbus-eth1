@@ -12,7 +12,7 @@ import
   chronos,
   eth/common/eth_types_rlp,
   web3/[eth_api_types, eth_api],
-  std/[sequtils, algorithm],
+  std/algorithm,
   ../../execution_chain/beacon/web3_eth_conv,
   ../types,
   ./blocks,
