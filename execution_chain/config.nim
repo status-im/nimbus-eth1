@@ -936,20 +936,29 @@ proc readValue*(r: var TomlReader, val: var NatConfig)
 #         annotated environment.
 {.pop.}
 
-proc makeConfig*(cmdLine = commandLineParams()): NimbusConf
-    {.raises: [CatchableError].} =
-  ## Note: this function is not gc-safe
-  result = NimbusConf.load(
-    cmdLine,
-    version = NimbusBuild,
-    copyrightBanner = NimbusHeader,
-    secondarySources = proc (
-      conf: NimbusConf, sources: ref SecondarySources
-    ) {.raises: [ConfigurationError].} =
-      if conf.configFile.isSome:
-        sources.addConfigFile(Toml, conf.configFile.get)
-  )
-
+proc makeConfig*(cmdLine = commandLineParams()): NimbusConf =
+  ## Note: this function is not gc-safe  
+  try:
+    result = NimbusConf.load(
+      cmdLine,
+      version = NimbusBuild,
+      copyrightBanner = NimbusHeader,
+      secondarySources = proc (
+        conf: NimbusConf, sources: ref SecondarySources
+      ) {.raises: [ConfigurationError].} =
+        if conf.configFile.isSome:
+          sources.addConfigFile(Toml, conf.configFile.get)
+    )
+  except CatchableError as err:
+    if err[] of ConfigurationError and
+       err.parent != nil and
+       err.parent[] of TomlReaderError:
+      type TT = ref TomlReaderError
+      echo TT(err).formatMsg("")
+    else:
+      echo "Error when parsing command line params: ", err.msg
+    quit QuitFailure
+        
   processNetworkParamsAndNetworkId(result)
 
   if result.cmd == noCommand:
