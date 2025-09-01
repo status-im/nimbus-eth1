@@ -9,13 +9,22 @@
 # according to those terms.
 
 import
-  std/[os, strutils],
+  std/[os, strutils, importutils],
   pkg/[unittest2],
   eth/common/[base, keys],
+  eth/net/nat,
+  eth/p2p/discoveryv5/enr,
   stew/byteutils,
   ../execution_chain/config,
   ../execution_chain/common/[chain_config, context, manager],
   ./test_helpers
+
+func `==`*(a, b: OutDir): bool =
+  a.string == b.string
+
+func `==`*(a, b: NatConfig): bool =
+  let size = max(sizeof(a), sizeof(b))
+  cmpMem(a.unsafeAddr, b.unsafeAddr, size) == 0
 
 proc configurationMain*() =
   suite "configuration test suite":
@@ -293,5 +302,83 @@ proc configurationMain*() =
       let res = am.loadKeystores("tests/invalid_keystore/notobject")
       check res.isErr
       check res.error.find("expect json object of keystore data:") == 0
+
+    test "TOML config file":
+      let conf = makeConfig(@["--config-file:tests/config_file/basic.toml"])
+      check conf.dataDir == "basic/data/dir"
+      check conf.era1DirFlag == some OutDir "basic/era1/dir"
+      check conf.eraDirFlag == some OutDir "basic/era/dir"
+      check conf.keyStoreDir == "basic/keystore"
+      check conf.importKey.string == "basic_import_key"
+      check conf.trustedSetupFile == some "basic_trusted_setup_file"
+      check conf.extraData == "basic_extra_data"
+      check conf.gasLimit == 5678
+      check conf.networkId == 777.u256
+      check conf.networkParams.config.isNil.not
+
+      check conf.logLevel == "DEBUG"
+      check conf.logStdout == StdoutLogKind.Json
+      check conf.logMetricsEnabled == true
+      check conf.logMetricsInterval == 15
+
+      check conf.metricsEnabled == true
+      check conf.metricsPort == 127.Port
+      check conf.metricsAddress == parseIpAddress("111.222.33.203")
+
+      privateAccess(NimbusConf)
+      check conf.bootstrapNodes == ["enode://d860a01f9722d78051619d1e2351aba3f43f943f6f00718d1b9baa4101932a1f5011f16bb2b1bb35db20d6fe28fa0bf09636d26a87d31de9ec6203eeedb1f666@18.138.108.67:30303"]
+      check conf.bootstrapFile.string == "basic_bootstrap_file"
+      check conf.bootstrapEnrs.len == 1
+      check conf.bootstrapEnrs[0].toURI == "enr:-IS4QHCYrYZbAKWCBRlAy5zzaDZXJBGkcnh4MHcBFZntXNFrdvJjX04jRzjzCBOonrkTfj499SZuOh8R33Ls8RRcy5wBgmlkgnY0gmlwhH8AAAGJc2VjcDI1NmsxoQPKY0yuDUmstAHYpMa2_oxVtw0RW_QAdpzBQA8yWM0xOIN1ZHCCdl8"
+
+      check conf.staticPeers == ["enode://d860a01f9722d78051619d1e2351aba3f43f943f6f00718d1b9baa4101932a1f5011f16bb2b1bb35db20d6fe28fa0bf09636d26a87d31de9ec6203eeedb1f666@18.138.108.67:30303"]
+      check conf.staticPeersFile.string == "basic_static_peers_file"
+      check conf.staticPeersEnrs.len == 1
+      check conf.staticPeersEnrs[0].toURI == "enr:-IS4QHCYrYZbAKWCBRlAy5zzaDZXJBGkcnh4MHcBFZntXNFrdvJjX04jRzjzCBOonrkTfj499SZuOh8R33Ls8RRcy5wBgmlkgnY0gmlwhH8AAAGJc2VjcDI1NmsxoQPKY0yuDUmstAHYpMa2_oxVtw0RW_QAdpzBQA8yWM0xOIN1ZHCCdl8"
+
+      check conf.reconnectMaxRetry == 10
+      check conf.reconnectInterval == 11
+
+      check conf.listenAddress == parseIpAddress("123.124.125.34")
+      check conf.tcpPort == 5567.Port
+      check conf.udpPort == 8899.Port
+      check conf.maxPeers == 45
+      check conf.nat == NatConfig(hasExtIp: false, nat: NatAny)
+      check conf.discovery == ["V5"]
+      check conf.netKey == "random"
+      check conf.agentString == "basic_agent_string"
+
+      check conf.numThreads == 12
+      check conf.persistBatchSize == 32
+      check conf.rocksdbMaxOpenFiles == 33
+      check conf.rocksdbWriteBufferSize == 34
+      check conf.rocksdbRowCacheSize == 35
+      check conf.rocksdbBlockCacheSize == 36
+      check conf.rdbVtxCacheSize == 37
+      check conf.rdbKeyCacheSize == 38
+      check conf.rdbBranchCacheSize == 39
+      check conf.rdbPrintStats == true
+      check conf.rewriteDatadirId == true
+      check conf.eagerStateRootCheck ==  false
+
+      check conf.statelessProviderEnabled == true
+      check conf.statelessWitnessValidation == true
+
+      check conf.httpPort == 12788.Port
+      check conf.httpAddress == parseIpAddress("123.124.125.36")
+      check conf.rpcEnabled == true
+      check conf.rpcApi == ["eth", "admin"]
+      check conf.wsEnabled == true
+      check conf.wsApi  == ["eth", "admin"]
+      check conf.historyExpiry == false
+      check conf.historyExpiryLimit == some 1111'u64
+      check conf.portalUrl == "uri://what.org"
+
+      check conf.engineApiEnabled == true
+      check conf.engineApiPort == 12799.Port
+      check conf.engineApiAddress == parseIpAddress("123.124.125.37")
+      check conf.engineApiWsEnabled == true
+      check conf.allowedOrigins == ["*"]
+      check conf.jwtSecret.get.string == "basic_jwt_secret_file"
 
 configurationMain()

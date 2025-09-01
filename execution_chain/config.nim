@@ -90,9 +90,12 @@ type
 
   NimbusConf* = object of RootObj
     ## Main Nimbus configuration object
+    configFile {.
+      separator: "ETHEREUM OPTIONS:"
+      desc: "Loads the configuration from a TOML file"
+      name: "config-file" .}: Option[InputFile]
 
     dataDirFlag* {.
-      separator: "ETHEREUM OPTIONS:"
       desc: "The directory where nimbus will store all blockchain data"
       abbr: "d"
       name: "data-dir" }: Option[OutDir]
@@ -112,10 +115,6 @@ type
       defaultValueDesc: "inside datadir"
       abbr: "k"
       name: "key-store" }: Option[OutDir]
-
-    configFile {.
-      desc: "Loads the configuration from a TOML file"
-      name: "config-file" .}: Option[InputFile]
 
     importKey* {.
       desc: "Import unencrypted 32 bytes hex private key from a file"
@@ -937,7 +936,7 @@ proc readValue*(r: var TomlReader, val: var NatConfig)
 {.pop.}
 
 proc makeConfig*(cmdLine = commandLineParams()): NimbusConf =
-  ## Note: this function is not gc-safe  
+  ## Note: this function is not gc-safe
   try:
     result = NimbusConf.load(
       cmdLine,
@@ -950,15 +949,19 @@ proc makeConfig*(cmdLine = commandLineParams()): NimbusConf =
           sources.addConfigFile(Toml, conf.configFile.get)
     )
   except CatchableError as err:
-    if err[] of ConfigurationError and
-       err.parent != nil and
-       err.parent[] of TomlReaderError:
-      type TT = ref TomlReaderError
-      echo TT(err).formatMsg("")
+    if err[] of ConfigurationError and err.parent != nil:
+      if err.parent[] of TomlFieldReadingError:
+        let fieldName = ((ref TomlFieldReadingError)(err.parent)).field
+        echo "Error when parsing ", fieldName, ": ", err.msg
+      elif err.parent[] of TomlReaderError:
+        type TT = ref TomlReaderError
+        echo TT(err).formatMsg("")
+      else:
+        echo "Error when parsing config file: ", err.msg
     else:
       echo "Error when parsing command line params: ", err.msg
     quit QuitFailure
-        
+
   processNetworkParamsAndNetworkId(result)
 
   if result.cmd == noCommand:
