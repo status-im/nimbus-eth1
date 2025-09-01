@@ -27,6 +27,7 @@ import
     beacon_chain/buildinfo,
     beacon_chain/nimbus_binary_common,
   ],
+  toml_serialization,
   eth/[common, net/nat],
   ./networking/[bootnodes, eth1_enr as enr],
   ./[constants, compile_info, version],
@@ -111,6 +112,10 @@ type
       defaultValueDesc: "inside datadir"
       abbr: "k"
       name: "key-store" }: Option[OutDir]
+
+    configFile {.
+      desc: "Loads the configuration from a TOML file"
+      name: "config-file" .}: Option[InputFile]
 
     importKey* {.
       desc: "Import unencrypted 32 bytes hex private key from a file"
@@ -885,6 +890,48 @@ func dbOptions*(conf: NimbusConf, noKeyCache = false): DbOptions =
     rdbPrintStats = conf.rdbPrintStats,
   )
 
+#-------------------------------------------------------------------
+# TOML serializer overloads of SecondarySources
+#-------------------------------------------------------------------
+
+proc readValue*(r: var TomlReader, val: var OutDir)
+       {.gcsafe, raises: [IOError, SerializationError].} =
+  discard r.parseString(string(val))
+
+proc readValue*(r: var TomlReader, val: var InputFile)
+       {.gcsafe, raises: [IOError, SerializationError].} =
+  discard r.parseString(string(val))
+
+proc readValue*(r: var TomlReader, val: var NetworkParams)
+       {.gcsafe, raises: [IOError, SerializationError].} =
+  # Not actually parse it, only to silence compiler
+  discard r.parseAsString()
+
+proc readValue*(r: var TomlReader, val: var Port)
+       {.gcsafe, raises: [IOError, SerializationError].} =
+  val = r.parseInt(int64).Port
+
+proc readValue*(r: var TomlReader, val: var IpAddress)
+       {.gcsafe, raises: [IOError, SerializationError].} =
+  try: val = parseIpAddress(r.parseAsString())
+  except ValueError as exc:
+    raise newException(SerializationError, exc.msg)
+
+proc readValue*(r: var TomlReader, val: var enr.Record)
+       {.gcsafe, raises: [IOError, SerializationError].} =
+  val = fromURI(enr.Record, r.parseAsString()).valueOr:
+    raise newException(SerializationError, $error)
+
+proc readValue*(r: var TomlReader, val: var NatConfig)
+       {.gcsafe, raises: [IOError, SerializationError].} =
+  try: val = NatConfig.parseCmdArg(r.parseAsString())
+  except ValueError as exc:
+    raise newException(SerializationError, exc.msg)
+
+#-------------------------------------------------------------------
+# Constructor
+#-------------------------------------------------------------------
+
 # KLUDGE: The `load()` template does currently not work within any exception
 #         annotated environment.
 {.pop.}
@@ -895,7 +942,12 @@ proc makeConfig*(cmdLine = commandLineParams()): NimbusConf
   result = NimbusConf.load(
     cmdLine,
     version = NimbusBuild,
-    copyrightBanner = NimbusHeader
+    copyrightBanner = NimbusHeader,
+    secondarySources = proc (
+      conf: NimbusConf, sources: ref SecondarySources
+    ) {.raises: [ConfigurationError].} =
+      if conf.configFile.isSome:
+        sources.addConfigFile(Toml, conf.configFile.get)
   )
 
   processNetworkParamsAndNetworkId(result)
