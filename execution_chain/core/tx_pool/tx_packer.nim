@@ -30,9 +30,13 @@ import
   ../eip4844,
   ../eip6110,
   ../eip7691,
+  ../log_index,
+  ../executor/executor_helpers,
   ./tx_desc,
   ./tx_item,
-  ./tx_tabs
+  ./tx_tabs,
+  eth/common/[blocks as ethblocks],
+  chronicles
 
 type
   TxPacker = ref object
@@ -238,7 +242,34 @@ proc vmExecCommit(pst: var TxPacker, xp: TxPoolRef): Result[void, string] =
   vmState.receipts.setLen(pst.packedTxs.len)
 
   pst.receiptsRoot = vmState.receipts.calcReceiptsRoot
-  pst.logsBloom = vmState.receipts.createBloom
+
+  # ALWAYS populate LogIndex from genesis
+  let tempHeader = ethblocks.Header(
+    number: vmState.blockNumber,
+    # Other fields can be default/zero for LogIndex purposes
+  )
+  vmState.logIndex.add_block_logs(tempHeader, vmState.receipts)
+
+  # Choose between LogIndex and traditional bloom based on activation block
+  if shouldUseLogIndex(vmState.blockNumber):
+    # Use LogIndexSummary for EIP-7745 blocks
+    let summary = createLogIndexSummary(vmState.logIndex)
+    let encoded = encodeLogIndexSummary(summary)
+    var bloomData: array[256, byte]
+    for i in 0..<256:
+      bloomData[i] = encoded[i]
+    pst.logsBloom = BloomFilter(bloomData)
+    debug "LogIndexSummary created in tx_packer",
+      blockNumber = vmState.blockNumber,
+      receiptsCount = vmState.receipts.len,
+      logIndexEntries = vmState.logIndex.next_index,
+      summarySize = encoded.len
+  else:
+    # Use traditional bloom filter for pre-EIP-7745 blocks
+    pst.logsBloom = vmState.receipts.createBloom()
+    debug "Traditional bloom created in tx_packer",
+      blockNumber = vmState.blockNumber,
+      receiptsCount = vmState.receipts.len
   pst.stateRoot = vmState.ledger.getStateRoot()
   ok()
 

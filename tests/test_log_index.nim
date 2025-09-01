@@ -3,6 +3,8 @@ import
   chronicles,
   stew/byteutils,
   eth/common,
+  eth/common/receipts,
+  ssz_serialization,
   ../execution_chain/core/log_index,
   ../execution_chain/core/executor/process_block,
   ../execution_chain/common
@@ -236,3 +238,81 @@ suite "Filter Coordinate Tracking":
     else:
       echo "filter_coordinates field not available"
       skip()
+
+suite "EIP-7745 Activation Testing":
+  
+  test "Traditional bloom validation for pre-activation blocks":
+    # Test blocks below activation threshold use traditional bloom
+    let preActivationBlock = EIP7745_ACTIVATION_BLOCK - 1'u64
+    check not shouldUseLogIndex(preActivationBlock)
+    echo "Block ", preActivationBlock, " uses traditional bloom: ", not shouldUseLogIndex(preActivationBlock)
+    
+    # Test some low block numbers
+    for blockNum in [0'u64, 1'u64, 100'u64, 1000'u64]:
+      if blockNum < EIP7745_ACTIVATION_BLOCK:
+        check not shouldUseLogIndex(blockNum)
+        echo "Block ", blockNum, " uses traditional bloom (correct)"
+  
+  test "LogIndex validation for post-activation blocks":
+    # Test blocks at and above activation threshold use LogIndex
+    check shouldUseLogIndex(EIP7745_ACTIVATION_BLOCK)
+    check shouldUseLogIndex(EIP7745_ACTIVATION_BLOCK + 1)
+    check shouldUseLogIndex(EIP7745_ACTIVATION_BLOCK + 1000)
+    echo "Activation block ", EIP7745_ACTIVATION_BLOCK, " and above use LogIndex"
+  
+  test "Test LogIndex functionality with high block numbers":
+    # Create LogIndex with blocks that would use LogIndex validation
+    var logIndex = LogIndex()
+    let activationBlock = EIP7745_ACTIVATION_BLOCK
+    
+    # Add a log at activation block
+    var receipt = StoredReceipt()
+    let topicBytes = Bytes32.fromHex("0x1234567890abcdef1234567890abcdef1234567890abcdef1234567890abcdef")
+    var log = Log(
+      address: Address.fromHex("0x742d35Cc6634C0532925a3b844Bc9e7595f0bEb0"),
+      topics: List[Topic, MAX_TOPICS_PER_LOG].init(@[Topic(topicBytes)])
+    )
+    receipt.logs.add(log)
+    
+    let header = BlockHeader(number: activationBlock.uint64)
+    logIndex.add_block_logs(header, @[receipt])
+    
+    # Test that LogIndex was populated
+    check logIndex.next_index >= 1
+    echo "LogIndex populated for activation block ", activationBlock, ", entries: ", logIndex.next_index
+    
+    # Test LogIndexSummary creation
+    let summary = createLogIndexSummary(logIndex)
+    check summary.latest_value_index > 0 or summary.latest_log_entry_index > 0
+    
+    let encoded = encodeLogIndexSummary(summary)
+    check encoded.len == 256
+    echo "LogIndexSummary created and encoded successfully for activation block"
+
+suite "Mixed Block Type Processing":
+  
+  test "Process both pre and post activation blocks":
+    var logIndex = LogIndex()
+    
+    # Process a pre-activation block (should use traditional bloom)
+    let preBlock = min(1000'u64, EIP7745_ACTIVATION_BLOCK - 1)
+    if preBlock < EIP7745_ACTIVATION_BLOCK:
+      var receipt1 = StoredReceipt()
+      receipt1.logs.add(Log(address: Address.fromHex("0x1111111111111111111111111111111111111111")))
+      
+      let header1 = BlockHeader(number: preBlock)
+      logIndex.add_block_logs(header1, @[receipt1])
+      check not shouldUseLogIndex(preBlock)
+      echo "Pre-activation block ", preBlock, " processed (traditional bloom)"
+    
+    # Process a post-activation block (should use LogIndex)
+    let postBlock = EIP7745_ACTIVATION_BLOCK + 1
+    var receipt2 = StoredReceipt()
+    receipt2.logs.add(Log(address: Address.fromHex("0x2222222222222222222222222222222222222222")))
+    
+    let header2 = BlockHeader(number: postBlock.uint64)
+    logIndex.add_block_logs(header2, @[receipt2])
+    check shouldUseLogIndex(postBlock.uint64)
+    echo "Post-activation block ", postBlock, " processed (LogIndex)"
+    
+    echo "Mixed block processing completed, total entries: ", logIndex.next_index

@@ -248,41 +248,58 @@ proc procBlkEpilogue(
         receiptsCount = vmState.receipts.len,
         currentIndex = vmState.logIndex.next_index
       
-      # Update LogIndex with all logs from this block
-      vmState.logIndex.add_block_logs(header, vmState.receipts)
-      
-      # Create LogIndexSummary
-      let summary = createLogIndexSummary(vmState.logIndex)
-      
-      # Encode to 256 bytes
-      # Try SSZ first, fall back to manual if needed
-      var encoded: seq[byte]
-      when compiles(SSZ.encode(summary)):
-        encoded = SSZ.encode(summary)
+      # ALWAYS populate LogIndex from genesis
+      if vmState.logIndex.next_index == 0:
+        # Only populate if not already done
+        vmState.logIndex.add_block_logs(header, vmState.receipts)
+        debug "LogIndex populated in process_block"
       else:
-        encoded = encodeLogIndexSummary(summary)
+        debug "LogIndex already populated, skipping",
+          existingEntries = vmState.logIndex.next_index
       
-      # Verify the encoded size
-      if encoded.len != 256:
-        return err("LogIndexSummary encoding size mismatch: got " & 
-                  $encoded.len & " bytes, expected 256")
-      
-      # Convert encoded bytes to BloomFilter
-      var bloomData: array[256, byte]
-      for i in 0..<256:
-        bloomData[i] = encoded[i]
-      let bloom = BloomFilter(bloomData)
-      
-      # if header.logsBloom != bloom:
-      #   debug "wrong logsBloom (LogIndexSummary) in block"
-      #   return err("logsBloom (LogIndexSummary) mismatch")
+      # Choose validation method based on activation block
+      if shouldUseLogIndex(header.number):
+        # Validate using LogIndexSummary for EIP-7745 blocks
+        let summary = createLogIndexSummary(vmState.logIndex)
+        
+        # Encode to 256 bytes using manual encoding
+        # SSZ encoding causes stack overflow with complex LogIndexSummary
+        var encoded = encodeLogIndexSummary(summary)
+        
+        # Verify the encoded size
+        if encoded.len != 256:
+          return err("LogIndexSummary encoding size mismatch: got " & 
+                    $encoded.len & " bytes, expected 256")
+        
+        # Convert encoded bytes to BloomFilter
+        var bloomData: array[256, byte]
+        for i in 0..<256:
+          bloomData[i] = encoded[i]
+        let bloom = BloomFilter(bloomData)
+        
+        if header.logsBloom != bloom:
+          debug "wrong logsBloom (LogIndexSummary) in block",
+            expected = header.logsBloom,
+            calculated = bloom
+          return err("logsBloom (LogIndexSummary) mismatch")
 
-      # Instead, just log what's happening:
-      debug "LogIndexSummary generated successfully",
-        blockNumber = header.number,
-        summarySize = encoded.len,
-        receiptsCount = vmState.receipts.len,
-        nextIndex = vmState.logIndex.next_index
+        debug "LogIndexSummary validated successfully",
+          blockNumber = header.number,
+          summarySize = encoded.len,
+          receiptsCount = vmState.receipts.len,
+          nextIndex = vmState.logIndex.next_index
+      else:
+        # Validate using traditional bloom filter for pre-EIP-7745 blocks
+        let bloom = vmState.receipts.createBloom()
+        if header.logsBloom != bloom:
+          debug "wrong logsBloom (traditional) in block",
+            expected = header.logsBloom,
+            calculated = bloom
+          return err("traditional bloom mismatch")
+        
+        debug "Traditional bloom validated successfully",
+          blockNumber = header.number,
+          receiptsCount = vmState.receipts.len
       
       let receiptsRoot = calcReceiptsRoot(vmState.receipts)
       if header.receiptsRoot != receiptsRoot:
