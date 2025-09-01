@@ -22,6 +22,7 @@ import
     confutils,
     confutils/defs,
     confutils/std/net as confnet,
+    confutils/toml/defs as tomldefs,
     json_serialization/std/net as jsnet,
     results,
     beacon_chain/buildinfo,
@@ -892,14 +893,6 @@ func dbOptions*(conf: NimbusConf, noKeyCache = false): DbOptions =
 #-------------------------------------------------------------------
 # TOML serializer overloads of SecondarySources
 #-------------------------------------------------------------------
-
-proc readValue*(r: var TomlReader, val: var OutDir)
-       {.gcsafe, raises: [IOError, SerializationError].} =
-  discard r.parseString(string(val))
-
-proc readValue*(r: var TomlReader, val: var InputFile)
-       {.gcsafe, raises: [IOError, SerializationError].} =
-  discard r.parseString(string(val))
 
 proc readValue*(r: var TomlReader, val: var NetworkParams)
        {.gcsafe, raises: [IOError, SerializationError].} =
