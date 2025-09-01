@@ -36,7 +36,7 @@ proc toTransaction(tx: TransactionObject): Transaction =
     authorizationList: tx.authorizationList.get(@[]),
   )
 
-proc toTransactions(txs: openArray[TxOrHash]): Result[seq[Transaction], string] =
+proc toTransactions*(txs: openArray[TxOrHash]): Result[seq[Transaction], string] =
   var convertedTxs = newSeqOfCap[Transaction](txs.len)
   for x in txs:
     if x.kind == tohTx:
