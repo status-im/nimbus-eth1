@@ -25,7 +25,7 @@ suite "test state verification":
     ts = TestApiState.init(1.u256)
     vp = startTestSetup(ts, 1, 1, 8897)
 
-  test "test EVM based methods":
+  test "test EVM-based methods":
     let
       blk = getBlockFromJson("nimbus_verified_proxy/tests/data/proof_block.json")
       proof = getProofFromJson("nimbus_verified_proxy/tests/data/storage_proof.json")
