@@ -16,6 +16,7 @@ import
   eth/common/accounts,
   web3/[eth_api, eth_api_types],
   ../../execution_chain/core/eip4844,
+  ../../execution_chain/common/common,
   ../types,
   ../header_store,
   ./accounts,
@@ -375,22 +376,23 @@ proc installEthApiHandlers*(vp: VerifiedRpcProxy) =
     if header.excessBlobGas.isNone():
       raise newException(ValueError, "excessBlobGas missing from latest header")
     let blobBaseFee =
-      getBlobBaseFee(header.excessBlobGas.get, com, com.toEVMFork(header)) * header.blobGasUsed.get.u256
+      getBlobBaseFee(header.excessBlobGas.get, com, com.toEVMFork(header)) *
+      header.blobGasUsed.get.u256
     if blobBaseFee > high(uint64).u256:
       raise newException(ValueError, "blobBaseFee is bigger than uint64.max")
-    return w3Qty blobBaseFee.truncate(uint64)
+    return Quantity(blobBaseFee.truncate(uint64))
 
   vp.proxy.rpc("eth_gasPrice") do() -> Quantity:
     let suggestedPrice = (await vp.suggestGasPrice()).valueOr:
       raise newException(ValueError, error)
 
-    w3Qty suggestedPrice.uint64
+    Quantity(suggestedPrice.uint64)
 
   vp.proxy.rpc("eth_maxPriorityFeePerGas") do() -> Quantity:
     let suggestedPrice = (await vp.suggestMaxPriorityGasPrice()).valueOr:
       raise newException(ValueError, error)
 
-    w3Qty suggestedPrice.uint64
+    Quantity(suggestedPrice.uint64)
 
   # Following methods are forwarded directly to the web3 provider and therefore
   # are not validated in any way.

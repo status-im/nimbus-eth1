@@ -47,18 +47,19 @@ proc suggestGasPrice*(vp: VerifiedRpcProxy): Future[Result[GasInt, string]] {.as
 
   ok(max(minGasPrice, median(prices)))
 
-proc suggestMaxPriorityGasPrice*(vp: VerifiedRpcProxy): Future[Result[GasInt, string]] {.async.} =
+proc suggestMaxPriorityGasPrice*(
+    vp: VerifiedRpcProxy
+): Future[Result[GasInt, string]] {.async.} =
   let
     blk = (await vp.getBlock(blockId("latest"), true)).valueOr:
       return err(error)
     txs = blk.transactions.toTransactions().valueOr:
       return err(error)
 
-  var prices  = newSeqOfCap[GasInt](64)
+  var prices = newSeqOfCap[GasInt](64)
 
   for tx in txs:
     if tx.maxPriorityFeePerGas > GasInt(0):
       prices.add(tx.maxPriorityFeePerGas)
 
   ok(median(prices))
-
