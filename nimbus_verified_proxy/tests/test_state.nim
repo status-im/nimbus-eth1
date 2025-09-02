@@ -55,8 +55,13 @@ suite "test state verification":
     # this is for optimistic state fetch
     ts.loadAccessList(tx, blk, accessList)
 
-    discard vp.headerStore.add(convHeader(blk), blk.hash)
-    discard vp.headerStore.updateFinalized(convHeader(blk), blk.hash)
+    let 
+      addStatus = vp.headerStore.add(convHeader(blk), blk.hash)
+      finalizeStatus = vp.headerStore.updateFinalized(convHeader(blk), blk.hash)
+
+    check:
+      addStatus.isOk()
+      finalizeStatus.isOk()
 
     let
       verifiedBalance = waitFor vp.proxy.getClient().eth_getBalance(address, latestTag)
@@ -70,17 +75,18 @@ suite "test state verification":
         waitFor vp.proxy.getClient().eth_createAccessList(tx, latestTag)
       verifiedEstimate = waitFor vp.proxy.getClient().eth_estimateGas(tx, latestTag)
 
-    check verifiedBalance == UInt256.fromHex("0x1d663f6a4afc5b01abb5d")
-    check verifiedNonce == Quantity(1)
-    check verifiedCode == contractCode
-    check verifiedSlot.to(UInt256) ==
-      UInt256.fromHex(
-        "0x000000000000000000000000000000000000000000000000288a82d13c3d1600"
-      )
-    check verifiedCall ==
-      "000000000000000000000000000000000000000000000000288a82d13c3d1600".hexToSeqByte()
-    check verifiedAccessList == accessList
-    check verifiedEstimate == Quantity(22080)
+    check:
+      verifiedBalance == UInt256.fromHex("0x1d663f6a4afc5b01abb5d")
+      verifiedNonce == Quantity(1)
+      verifiedCode == contractCode
+      verifiedSlot.to(UInt256) ==
+        UInt256.fromHex(
+          "0x000000000000000000000000000000000000000000000000288a82d13c3d1600"
+        )
+      verifiedCall ==
+        "000000000000000000000000000000000000000000000000288a82d13c3d1600".hexToSeqByte()
+      verifiedAccessList == accessList
+      verifiedEstimate == Quantity(22080)
 
     ts.clear()
     vp.headerStore.clear()
