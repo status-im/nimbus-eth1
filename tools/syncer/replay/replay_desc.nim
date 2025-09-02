@@ -13,11 +13,15 @@
 {.push raises:[].}
 
 import
+  std/streams,
+  pkg/chronos,
   ../trace/trace_desc,
-  ./replay_reader/reader_desc
+  ./replay_reader/reader_desc,
+  ./replay_runner/runner_desc
 
 export
   reader_desc,
+  runner_desc,
   trace_desc
 
 const
@@ -25,6 +29,23 @@ const
   ReplayRunnerID* = 20                  ## Phase 2 layout ID, full execution
 
 type
+  ReplayStopIfFn* = proc(): bool {.gcsafe, raises: [].}
+    ## Loop control directive for runner/dispatcher
+
+  ReplayEndUpFn* = proc() {.gcsafe, raises: [].}
+    ## Terminator control directive for runner/dispatcher
+
+  ReplayRef* = ref object of BeaconHandlersSyncRef
+    ## Overlay handlers extended by descriptor data for caching replay state
+    ctx*: BeaconCtxRef                  ## Parent context
+    captStrm*: Stream                   ## Input stream, capture file
+    fakeImport*: bool                   ## No database import if `true`
+    stopQuit*: bool                     ## Quit after replay
+    backup*: BeaconHandlersRef          ## Can restore previous handlers
+    reader*: ReplayReaderRef            ## Input records
+    runner*: ReplayRunnerRef            ## Replay descriptor
+
+
   ReplayPayloadRef* = ref object of RootRef
     ## Decoded payload base record
     recType*: TraceRecType
@@ -87,6 +108,15 @@ type
 
   ReplaySyncBlock* = ref object of ReplayPayloadRef
     data*: TraceSyncBlock
+
+# ------------------------------------------------------------------------------
+# Public helpers
+# ------------------------------------------------------------------------------
+
+func replay*(ctx: BeaconCtxRef): ReplayRef =
+  ## Getter, get replay descriptor (if any)
+  if ctx.handler.version == ReplayRunnerID:
+    return ctx.handler.ReplayRef
 
 # ------------------------------------------------------------------------------
 # End
