@@ -623,40 +623,15 @@ func blsPairing(c: Computation): EvmResultVoid =
 
   ? c.gasMeter.consumeGas(gas, reason="blsG2Pairing Precompile")
 
-  var
-    g1: BLS_G1P
-    g2: BLS_G2P
-    acc: BLS_ACC
+  var output: array[32, byte]
+  let res = output.eth_evm_bls12381_pairingcheck(input)
 
-  # Decode pairs
-  for i in 0..<K:
-    let off = L * i
-
-    # Decode G1 point
-    if not g1.decodePoint(input.toOpenArray(off, off+127)):
-      return err(prcErr(PrcInvalidPoint))
-
-    # Decode G2 point
-    if not g2.decodePoint(input.toOpenArray(off+128, off+383)):
-      return err(prcErr(PrcInvalidPoint))
-
-    # 'point is on curve' check already done,
-    # Here we need to apply subgroup checks.
-    if not g1.subgroupCheck:
-      return err(prcErr(PrcInvalidPoint))
-
-    if not g2.subgroupCheck:
-      return err(prcErr(PrcInvalidPoint))
-
-    # Update pairing engine with G1 and G2 points
-    if i == 0:
-      acc = millerLoop(g1, g2)
-    else:
-      acc.mul(millerLoop(g1, g2))
+  if res != cttEVM_Success:
+    return err(prcErr(PrcInvalidParam))
 
   c.output.setLen(32)
-  if acc.check():
-    c.output[^1] = 1.byte
+  assign(c.output, output)
+
   ok()
 
 func blsMapG1(c: Computation): EvmResultVoid =
