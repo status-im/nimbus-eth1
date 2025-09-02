@@ -95,6 +95,9 @@ suite "test receipts verification":
       let verifiedLogs = waitFor vp.proxy.getClient().eth_getLogs(filterOptions)
       check verifiedLogs.len == logs.len
 
+    ts.clear()
+    vp.headerStore.clear()
+
   test "create filters and uninstall filters":
     # filter options without any tags would test resolving default "latest"
     let filterOptions = FilterOptions(
@@ -166,3 +169,6 @@ suite "test receipts verification":
       check false
     except CatchableError as e:
       check true
+
+    ts.clear()
+    vp.headerStore.clear()
