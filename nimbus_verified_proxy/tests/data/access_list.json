@@ -1,0 +1,11 @@
+{
+  "accessList": [
+    {
+      "address": "0xc02aaa39b223fe8d0a0e5c4f27ead9083c756cc2",
+      "storageKeys": [
+        "0x4de9be9d9a5197eea999984bec8d41aac923403f95449eaf16641fbc3a942711"
+      ]
+    }
+  ],
+  "gasUsed": "0x669a"
+}

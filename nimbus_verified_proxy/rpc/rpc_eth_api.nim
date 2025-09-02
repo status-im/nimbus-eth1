@@ -48,14 +48,14 @@ proc installEthApiHandlers*(vp: VerifiedRpcProxy) =
 
   vp.proxy.rpc("eth_getStorageAt") do(
     address: Address, slot: UInt256, quantityTag: BlockTag
-  ) -> UInt256:
+  ) -> FixedBytes[32]:
     let
       header = (await vp.getHeader(quantityTag)).valueOr:
         raise newException(ValueError, error)
       storage = (await vp.getStorageAt(address, slot, header.number, header.stateRoot)).valueOr:
         raise newException(ValueError, error)
 
-    storage
+    storage.to(Bytes32)
 
   vp.proxy.rpc("eth_getTransactionCount") do(
     address: Address, quantityTag: BlockTag

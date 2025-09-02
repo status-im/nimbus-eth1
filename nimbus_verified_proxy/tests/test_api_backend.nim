@@ -15,9 +15,9 @@ import
   json_rpc/[rpcserver, rpcclient]
 
 type
-  ProofQuery = (Address, seq[UInt256], Hash)
-  AccessListQuery = (TransactionArgs, Hash)
-  CodeQuery = (Address, Hash)
+  ProofQuery = (Address, seq[UInt256], Hash32)
+  AccessListQuery = (TransactionArgs, Hash32)
+  CodeQuery = (Address, Hash32)
 
   TestApiState* = ref object
     chainId: UInt256
@@ -53,23 +53,26 @@ template loadProof*(
     t: TestApiState,
     address: Address,
     slots: seq[UInt256],
-    blockId: BlockTag,
+    blk: BlockObject,
     proof: ProofResponse,
 ) =
-  t.proofs[(address, slots, hash(blockId))] = proof
+  t.loadBlock(blk)
+  t.proofs[(address, slots, blk.hash)] = proof
 
 template loadAccessList*(
     t: TestApiState,
     args: TransactionArgs,
-    blockId: BlockTag,
+    blk: BlockObject,
     listResult: AccessListResult,
 ) =
-  t.accessLists[(args, hash(blockId))] = listResult
+  t.loadBlock(blk)
+  t.accessLists[(args, blk.hash)] = listResult
 
 template loadCode*(
-    t: TestApiState, address: Address, blockId: BlockTag, code: seq[byte]
+    t: TestApiState, address: Address, blk: BlockObject, code: seq[byte]
 ) =
-  t.codes[(address, hash(blockId))] = code
+  t.loadBlock(blk)
+  t.codes[(address, blk.hash)] = code
 
 template loadTransaction*(t: TestApiState, txHash: Hash32, tx: TransactionObject) =
   t.transactions[txHash] = tx
@@ -206,19 +209,25 @@ proc initTestApiBackend*(t: TestApiState): EthApiBackend =
         return convToPartialBlock(t.blocks[blkHash])
 
     getProofProc = proc(
-        address: Address, slots: seq[UInt256], blockId: BlockTag
+        address: Address, slots: seq[UInt256], blkNum: BlockTag
     ): Future[ProofResponse] {.async.} =
-      t.proofs[(address, slots, hash(blockId))]
+      # we directly use number here because the verified proxy should never use aliases
+      let blkHash = t.nums[blkNum.number]
+      t.proofs[(address, slots, blkHash)]
 
     createAccessListProc = proc(
-        args: TransactionArgs, blockId: BlockTag
+        args: TransactionArgs, blkNum: BlockTag
     ): Future[AccessListResult] {.async.} =
-      t.accessLists[(args, hash(blockId))]
+      # we directly use number here because the verified proxy should never use aliases
+      let blkHash = t.nums[blkNum.number]
+      t.accessLists[(args, blkHash)]
 
     getCodeProc = proc(
-        address: Address, blockId: BlockTag
+        address: Address, blkNum: BlockTag
     ): Future[seq[byte]] {.async.} =
-      t.codes[(address, hash(blockId))]
+      # we directly use number here because the verified proxy should never use aliases
+      let blkHash = t.nums[blkNum.number]
+      t.codes[(address, blkHash)]
 
     getBlockReceiptsProc = proc(
         blockId: BlockTag
