@@ -8,6 +8,7 @@
 {.push raises: [], gcsafe.}
 
 import
+  std/tables,
   json_rpc/[rpcproxy, rpcclient],
   web3/[eth_api, eth_api_types],
   stint,
@@ -21,6 +22,8 @@ const
   ACCOUNTS_CACHE_SIZE = 128
   CODE_CACHE_SIZE = 64
   STORAGE_CACHE_SIZE = 256
+  MAX_ID_TRIES* = 10
+  MAX_FILTERS* = 256
 
 type
   AccountsCacheKey* = (Root, Address)
@@ -63,6 +66,10 @@ type
     eth_getTransactionByHash*: GetTransactionByHashProc
     eth_getLogs*: GetLogsProc
 
+  FilterStoreItem* = object
+    filter*: FilterOptions
+    blockMarker*: Opt[Quantity]
+
   VerifiedRpcProxy* = ref object
     evm*: AsyncEvm
     proxy*: RpcProxy
@@ -74,6 +81,7 @@ type
 
     # TODO: when the list grows big add a config object instead
     # config parameters
+    filterStore*: Table[string, FilterStoreItem]
     chainId*: UInt256
     maxBlockWalk*: uint64
 
@@ -93,3 +101,6 @@ proc init*(
     chainId: chainId,
     maxBlockWalk: maxBlockWalk,
   )
+
+createRpcSigsFromNim(RpcClient):
+  proc eth_estimateGas(args: TransactionArgs, blockTag: BlockTag): Quantity

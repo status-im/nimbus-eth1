@@ -18,9 +18,9 @@ import
   ../common/common_types,
   ../rpc/portal_rpc_client,
   ../rpc/eth_rpc_client,
-  ../eth_data/[history_data_seeding, history_data_json_store, history_data_ssz_e2s],
-  ../network/legacy_history/
-    [history_content, validation/block_proof_historical_hashes_accumulator],
+  ../eth_history/[history_data_seeding, history_data_json_store, history_data_ssz_e2s],
+  ../eth_history/block_proofs/block_proof_historical_hashes_accumulator,
+  ../network/legacy_history/history_content,
   ../tests/legacy_history_network_tests/test_history_util
 
 type

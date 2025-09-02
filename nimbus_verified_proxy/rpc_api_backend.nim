@@ -7,7 +7,12 @@
 
 {.push raises: [], gcsafe.}
 
-import json_rpc/[rpcproxy, rpcclient], web3/[eth_api, eth_api_types], stint, ./types
+import
+  json_rpc/[rpcproxy, rpcclient],
+  web3/[eth_api, eth_api_types],
+  stint,
+  std/json,
+  ./types
 
 proc initNetworkApiBackend*(vp: VerifiedRpcProxy): EthApiBackend =
   let

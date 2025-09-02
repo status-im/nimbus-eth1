@@ -14,10 +14,9 @@ import
   std/sets,
   pkg/[chronos, eth/common, results],
   pkg/stew/[interval_set, sorted_set],
-  ../../core/chain,
-  ../[sync_desc, wire_protocol],
-  ./worker/helpers,
-  ./worker_const
+  ../../../core/chain,
+  ../../[sync_desc, wire_protocol],
+  ./[helpers, worker_const]
 
 export
   helpers, sync_desc, worker_const, chain
@@ -142,7 +141,11 @@ type
     lastSlowPeer*: Opt[Hash]         ## Register slow peer when the last one
     failedPeers*: HashSet[Hash]      ## Detect dead end sync by collecting peers
     seenData*: bool                  ## Set `true` if data were fetched, already
+    minInitBuddies*: int             ## Min # peers needed for acivating syncer
     initTarget*: Opt[InitTarget]     ## Optionally set up first target
+    lastPeerSeen*: chronos.Moment    ## Time when the last peer was abandoned
+    lastNoPeersLog*: chronos.Moment  ## Control messages about missing peers
+    lastSyncUpdLog*: chronos.Moment  ## Control update messages
 
     when enableTicker:
       ticker*: RootRef               ## Logger ticker

@@ -15,8 +15,8 @@ import
   pkg/[chronicles, chronos],
   pkg/eth/common,
   pkg/stew/[interval_set, sorted_set],
-  ../worker_desc,
-  ./headers/[headers_headers, headers_helpers, headers_queue, headers_unproc]
+  ./headers/[headers_headers, headers_helpers, headers_queue, headers_unproc],
+  ./worker_desc
 
 export
   headers_queue, headers_unproc
@@ -64,6 +64,7 @@ template headersCollect*(buddy: BeaconBuddyRef; info: static[string]) =
       break body                                     # no action, return
 
     var
+      stashedOK = false                              # imported some blocks
       nStashed {.inject.} = 0u64                     # statistics, to be updated
       nQueued {.inject.} = 0                         # ditto
 
@@ -127,6 +128,20 @@ template headersCollect*(buddy: BeaconBuddyRef; info: static[string]) =
 
         nStashed += nHdrs                            # statistics
 
+        # Sync status logging
+        if 0 < nStashed:
+          stashedOK = true
+          if ctx.pool.lastSyncUpdLog + syncUpdateLogWaitInterval < Moment.now():
+            chronicles.info "Headers stashed", nStashed,
+              nUnpoc=ctx.nUnprocStr(),
+              nStagedQ=ctx.hdr.staged.len,
+              base=ctx.chain.baseNumber.bnStr,
+              head=ctx.chain.latestNumber.bnStr,
+              target=ctx.hdrCache.latestConsHeadNumber.bnStrIfAvail(ctx),
+              nSyncPeers=ctx.pool.nBuddies
+            ctx.pool.lastSyncUpdLog = Moment.now()
+            nStashed = 0
+
         if buddy.ctrl.stopped:                       # peer was cancelled
           break fetchHeadersBody                     # done, exit this block
 
@@ -159,12 +174,18 @@ template headersCollect*(buddy: BeaconBuddyRef; info: static[string]) =
 
       # End block: `fetchHeadersBody`
 
-    if 0 < nStashed:
-      chronicles.info "Headers stashed", nStashed, nUnpoc=ctx.nUnprocStr(),
-        nStagedQ=ctx.hdr.staged.len,
-        base=ctx.chain.baseNumber.bnStr, head=ctx.chain.latestNumber.bnStr,
-        target=ctx.hdrCache.latestConsHeadNumber.bnStrIfAvail(ctx),
-        nSyncPeers=ctx.pool.nBuddies
+    if stashedOK:
+      # Sync status logging.
+      if 0 < nStashed:
+        # Note that `nStashed` might have been reset above.
+        chronicles.info "Headers stashed", nStashed,
+          nUnpoc=ctx.nUnprocStr(),
+          nStagedQ=ctx.hdr.staged.len,
+          base=ctx.chain.baseNumber.bnStr,
+          head=ctx.chain.latestNumber.bnStr,
+          target=ctx.hdrCache.latestConsHeadNumber.bnStrIfAvail(ctx),
+          nSyncPeers=ctx.pool.nBuddies
+        ctx.pool.lastSyncUpdLog = Moment.now()
 
     elif nQueued == 0 and
          not ctx.pool.seenData and

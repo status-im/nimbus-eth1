@@ -29,7 +29,6 @@ func toReceipt(rec: ReceiptObject): Receipt =
   let isHash = not rec.status.isSome()
 
   let status = rec.status.isSome() and rec.status.get() == 1.Quantity
-
   return Receipt(
     hash: rec.transactionHash,
     isHash: isHash,
@@ -51,7 +50,6 @@ proc getReceipts(
       await vp.rpcClient.eth_getBlockReceipts(blockTag)
     except CatchableError as e:
       return err(e.msg)
-
   if rxs.isSome():
     if orderedTrieRoot(toReceipts(rxs.get())) != header.receiptsRoot:
       return
@@ -86,15 +84,32 @@ proc getReceipts*(
 
   await vp.getReceipts(header, numberTag)
 
-proc getLogs*(
-    vp: VerifiedRpcProxy, filterOptions: FilterOptions
-): Future[Result[seq[LogObject], string]] {.async.} =
-  let logObjs =
-    try:
-      await vp.rpcClient.eth_getLogs(filterOptions)
-    except CatchableError as e:
-      return err(e.msg)
+proc resolveFilterTags*(
+    vp: VerifiedRpcProxy, filter: FilterOptions
+): Result[FilterOptions, string] =
+  if filter.blockHash.isSome():
+    return ok(filter)
+  let
+    fromBlock = filter.fromBlock.get(types.BlockTag(kind: bidAlias, alias: "latest"))
+    toBlock = filter.toBlock.get(types.BlockTag(kind: bidAlias, alias: "latest"))
+    fromBlockNumberTag = vp.resolveBlockTag(fromBlock).valueOr:
+      return err(error)
+    toBlockNumberTag = vp.resolveBlockTag(toBlock).valueOr:
+      return err(error)
 
+  return ok(
+    FilterOptions(
+      fromBlock: Opt.some(fromBlockNumberTag),
+      toBlock: Opt.some(toBlockNumberTag),
+      address: filter.address,
+      topics: filter.topics,
+      blockHash: filter.blockHash,
+    )
+  )
+
+proc verifyLogs*(
+    vp: VerifiedRpcProxy, filter: FilterOptions, logObjs: seq[LogObject]
+): Future[Result[void, string]] {.async.} =
   # store block hashes contains the logs so that we can batch receipt requests
   var
     prevBlockHash: Hash32
@@ -109,7 +124,6 @@ proc getLogs*(
         rxs = (await vp.getReceipts(lg.blockHash.get())).valueOr:
           return err(error)
         prevBlockHash = lg.blockHash.get()
-
       let
         txIdx = distinctBase(lg.transactionIndex.get())
         logIdx =
@@ -119,7 +133,25 @@ proc getLogs*(
 
       if rxLog.address != lg.address or rxLog.data != lg.data or
           rxLog.topics != lg.topics or
-          (not match(toLog(lg), filterOptions.address, filterOptions.topics)):
+          lg.blockNumber.get() < filter.fromBlock.get().number or
+          lg.blockNumber.get() > filter.toBlock.get().number or
+          (not match(toLog(lg), filter.address, filter.topics)):
         return err("one of the returned logs is invalid")
+
+  ok()
+
+proc getLogs*(
+    vp: VerifiedRpcProxy, filter: FilterOptions
+): Future[Result[seq[LogObject], string]] {.async.} =
+  let
+    resolvedFilter = vp.resolveFilterTags(filter).valueOr:
+      return err(error)
+    logObjs =
+      try:
+        await vp.rpcClient.eth_getLogs(resolvedFilter)
+      except CatchableError as e:
+        return err(e.msg)
+
+  ?(await vp.verifyLogs(resolvedFilter, logObjs))
 
   return ok(logObjs)

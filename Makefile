@@ -289,12 +289,16 @@ all_history_network_custom_chain_tests: | build deps
 	echo -e $(BUILD_MSG) "build/$@" && \
 	$(ENV_SCRIPT) nim c -r $(NIM_PARAMS) -d:chronicles_log_level=ERROR -d:mergeBlockNumber:38130 -o:build/$@ "portal/tests/legacy_history_network_tests/$@.nim"
 
+all_eth_history_custom_chain_tests: | build deps
+	echo -e $(BUILD_MSG) "build/$@" && \
+	$(ENV_SCRIPT) nim c -r $(NIM_PARAMS) -d:chronicles_log_level=ERROR -d:mergeBlockNumber:38130 -o:build/$@ "portal/tests/eth_history_tests/$@.nim"
+
 all_portal_tests: | build deps
 	echo -e $(BUILD_MSG) "build/$@" && \
 	$(ENV_SCRIPT) nim c -r $(NIM_PARAMS) -d:chronicles_log_level=ERROR -o:build/$@ "portal/tests/$@.nim"
 
 # builds and runs the Portal test suite
-portal-test: | all_portal_tests all_history_network_custom_chain_tests
+portal-test: | all_portal_tests all_history_network_custom_chain_tests all_eth_history_custom_chain_tests
 
 # builds the Portal tools, wherever they are
 $(PORTAL_TOOLS): | build deps rocksdb

@@ -24,10 +24,10 @@ import
   ../../network/beacon/beacon_content,
   ../../network/beacon/beacon_init_loader,
   ../../network/legacy_history/history_content,
-  ../../network/legacy_history/validation/block_proof_historical_roots,
-  ../../network/legacy_history/validation/block_proof_historical_summaries,
+  ../../eth_history/block_proofs/block_proof_historical_roots,
+  ../../eth_history/block_proofs/block_proof_historical_summaries,
+  ../../eth_history/[yaml_utils, yaml_eth_types],
   ../../network/network_metadata,
-  ../../eth_data/[yaml_utils, yaml_eth_types],
   ./exporter_common,
   ./el_data_exporter
 

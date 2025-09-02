@@ -58,19 +58,27 @@ proc close*(session: SharedWriteBatchRef) =
     session.closes = 0
 
 proc commit*(
-    rdb: RocksDbInstanceRef, session: SharedWriteBatchRef, cf: ColFamilyReadWrite
+    rdb: RocksDbInstanceRef,
+    session: SharedWriteBatchRef,
+    cf: ColFamilyReadWrite,
+    flush: bool,
 ): Result[void, string] =
   session.commits += 1
-  session.families.add cf
+
+  if flush:
+    session.families.add cf
+
   if session.commits == session.refs:
     # Write to disk if everyone that opened a session also committed it
     ?rdb.db.write(session.batch)
-    # This flush forces memtables to be written to disk, which is necessary given
-    # the use of vector memtables which have very bad lookup performance.
-    rdb.db.flush(session.families.mapIt(it.handle())).isOkOr:
-      # Not sure what to do here - the commit above worked so it would be strange
-      # to have an error here
-      warn "Could not flush database", error
+
+    if session.families.len > 0:
+      # This flush forces memtables to be written to disk, which is necessary given
+      # the use of vector memtables which have very bad lookup performance.
+      rdb.db.flush(session.families.mapIt(it.handle())).isOkOr:
+        # Not sure what to do here - the commit above worked so it would be strange
+        # to have an error here
+        warn "Could not flush database", error
 
   ok()
 
@@ -80,7 +88,6 @@ proc open*(
     dbOpts: DbOptionsRef,
     cfs: openArray[(string, ColFamilyOptionsRef)],
 ): Result[RocksDbInstanceRef, string] =
-
   let ecdbDir = baseDir.ecdbDir
 
   if not dirExists(ecdbDir):

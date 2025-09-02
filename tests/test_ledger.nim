@@ -814,6 +814,31 @@ proc runLedgerBasicOperationsTests() =
       ac.clearBlockHashesCache()
       check ac.getBlockHashesCache().len() == 0
 
+  test "Verify stateRoot and storageRoot for large storage trie":
+    # We use a small slot value and a large number of iterations so that
+    # the test also covers the scenario when the HashKey type contains
+    # an embedded trie node (when the data length is less than 32 bytes) which,
+    # when rlp encoded impacts the stateRoot and storageRoot calculation.
+    const
+      iterations = 110000
+      address = Address.fromHex("0x123456cf1046e68e36E1aA2E0E07105eDDD1f08E")
+      slotValue = u256(1)
+
+    let
+      coreDb = newCoreDbRef(DefaultDbMemory)
+      ledger = LedgerRef.init(coreDb.baseTxFrame())
+
+    for i in 1..iterations:
+      ledger.setStorage(address, u256(i), slotValue)
+    ledger.persist()
+
+    let
+      stateRoot = ledger.getStateRoot()
+      storageRoot = ledger.getStorageRoot(address)
+    check:
+      stateRoot == Hash32.fromHex("0xc70266a02ed1531d8e2c47c7ead2a6e8b1f01bf7dbee3b36f8d5dc543ad09658")
+      storageRoot == Hash32.fromHex("0x619034bd7de60f9f8a08cdf277dc55da1984aae08c79e190faeafba27bc3c9d2")
+
 # ------------------------------------------------------------------------------
 # Main function(s)
 # ------------------------------------------------------------------------------

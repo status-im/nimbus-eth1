@@ -13,7 +13,8 @@ import
   results,
   eth/common/headers_rlp,
   ncli/e2store,
-  ../network/legacy_history/[history_content, validation/historical_hashes_accumulator]
+  ../network/legacy_history/history_content,
+  ./block_proofs/historical_hashes_accumulator
 
 export results
 

@@ -29,14 +29,6 @@ import
 
 export net, defs
 
-func defaultDataDir*(): string =
-  when defined(windows):
-    getHomeDir() / "AppData" / "Roaming" / "Nimbus"
-  elif defined(macosx):
-    getHomeDir() / "Library" / "Application Support" / "Nimbus"
-  else:
-    getHomeDir() / ".cache" / "nimbus"
-
 func getLogLevels(): string =
   var logLevels: seq[string]
   for level in LogLevel:

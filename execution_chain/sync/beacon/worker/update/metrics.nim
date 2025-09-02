@@ -13,7 +13,7 @@
 import
   pkg/[chronos,  metrics],
   ../../../../networking/p2p,
-  ../../worker_desc
+  ../worker_desc
 
 declareGauge nec_base, "" &
   "Max block number of imported finalised blocks"

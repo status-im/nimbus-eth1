@@ -12,7 +12,7 @@ import
   results,
   stew/byteutils,
   ../../common/common_types,
-  ../../eth_data/yaml_utils,
+  ../../eth_history/yaml_utils,
   ../../tools/eth_data_exporter/el_data_exporter,
   ../../network/history/history_validation
 

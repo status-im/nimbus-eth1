@@ -1,4 +1,4 @@
-# Copyright (c) 2018-2025 Status Research & Development GmbH
+# Copyright (c) 2022-2025 Status Research & Development GmbH
 # Licensed under either of
 #  * Apache License, version 2.0, ([LICENSE-APACHE](LICENSE-APACHE))
 #  * MIT license ([LICENSE-MIT](LICENSE-MIT))
@@ -8,63 +8,23 @@
 
 {.push raises: [].}
 
-import
-  std/[strformat, strutils, os, sequtils],
-  stew/byteutils, ./compile_info
+#------------------------------------------------------------------------------
+# The only place where NimbusVersion is declared.
+# Please do not put nim vm unfriendly stuff in this file, otherwise it will
+# break some scripts. Users of this file:
+# - ./version_info.nim > used by compiled binaries.
+# - ../scripts/print_version.nims > used by docker files.
+#------------------------------------------------------------------------------
 
 const
-  sourcePath = currentSourcePath.rsplit({DirSep, AltSep}, 1)[0]
-  nimbusRevision {.strdefine.} = "00000000"
-
-static:
-  doAssert(nimbusRevision.len == 8, "nimbusRevision must consist of 8 characters")
-  doAssert(nimbusRevision.allIt(it in HexDigits), "nimbusRevision should contains only hex chars")
-
-proc gitFolderExists(path: string): bool {.compileTime.} =
-  # walk up parent folder to find `.git` folder
-  var currPath = sourcePath
-  while true:
-    if dirExists(currPath & "/.git"):
-      return true
-    let parts = splitPath(currPath)
-    if parts.tail.len == 0:
-      break
-    currPath = parts.head
-  false
-
-const
-  NimbusName* = "nimbus-eth1"
-  ## project name string
-
-  NimbusMajor*: int = 0
+  NimbusMajor* = 0
   ## is the major number of Nimbus' version.
 
-  NimbusMinor*: int = 1
+  NimbusMinor* = 1
   ## is the minor number of Nimbus' version.
 
-  NimbusPatch*: int = 0
+  NimbusPatch* = 0
   ## is the patch number of Nimbus' version.
 
   NimbusVersion* = $NimbusMajor & "." & $NimbusMinor & "." & $NimbusPatch
   ## is the version of Nimbus as a string.
-
-  # strip: remove spaces
-  # --short=8: ensure we get 8 chars of commit hash
-  # -C sourcePath: get the correct git hash no matter where the current dir is.
-  GitRevision* = if gitFolderExists(sourcePath):
-                   # only using git if the parent dir is a git repo.
-                   strip(staticExec("git -C " & strutils.escape(sourcePath) &
-                     " rev-parse --short=8 HEAD"))
-                 else:
-                   # otherwise we use revision number given by build system.
-                   # e.g. user download from release tarball, or Github zip download.
-                   nimbusRevision
-
-  GitRevisionBytes* = hexToByteArray[4](GitRevision)
-
-  FullVersionStr* = "v" & NimbusVersion & "-" & GitRevision
-
-  ClientId* = &"{NimbusName}/{FullVersionStr}/{hostOS}-{hostCPU}/Nim-{NimVersion}"
-
-  ShortClientId* = NimbusName & "/" & FullVersionStr
-

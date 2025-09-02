@@ -36,7 +36,7 @@ func putAll(
   for key in keysToAdd:
     if key.isAddress():
       currentAddress = Address.copyFrom(key)
-      keys.withValue(currentAddress, v):
+      keys.withValue(currentAddress, _):
         discard
       do:
         keys[currentAddress] = default(HashSet[UInt256])
@@ -105,7 +105,7 @@ func verify*(witness: ExecutionWitness, preStateRoot: Hash32): Result[void, stri
       try:
         rlp.decode(accLeaf, Account)
       except RlpError as e:
-        return err("Failed to decode account leaf from witness state")
+        return err("Failed to decode account leaf from witness state: " & e.msg)
     codeHashes.incl(account.codeHash)
 
     # No point in verifying slot proofs against an empty root hash
@@ -132,7 +132,7 @@ func verify*(witness: ExecutionWitness, preStateRoot: Hash32): Result[void, stri
     try:
       headers.add(rlp.decode(header, Header))
     except RlpError as e:
-      return err("Failed to decode header in witness")
+      return err("Failed to decode header in witness: " & e.msg)
 
   func compareByNumber(a, b: Header): int =
     if a.number == b.number:

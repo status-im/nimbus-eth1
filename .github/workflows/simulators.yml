@@ -73,6 +73,7 @@ jobs:
       - name: Create statistics notes
         run: |
           cat linux_amd64_stat/* > stat_notes.md
+          cat linux_arm64_stat/* > stat_notes.md
           cat macos_arm64_stat/* >> stat_notes.md
           cat windows_amd64_stat/* >> stat_notes.md
 
@@ -97,6 +98,7 @@ jobs:
         with:
           failOnError: false
           name: |
+            linux_arm64_stat
             linux_amd64_stat
             macos_arm64_stat
             windows_amd64_stat

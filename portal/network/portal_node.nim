@@ -13,7 +13,7 @@ import
   eth/p2p/discoveryv5/protocol,
   beacon_chain/spec/forks,
   stew/byteutils,
-  ../eth_data/history_data_ssz_e2s,
+  ../eth_history/history_data_ssz_e2s,
   ../database/content_db,
   ./network_metadata,
   ./wire/[portal_stream, portal_protocol_config],
