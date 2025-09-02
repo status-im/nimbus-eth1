@@ -18,7 +18,7 @@ import
   std/[tables, sets, sequtils],
   eth/common/hashes,
   results,
-  ./[aristo_desc, aristo_fetch, aristo_get, aristo_serialise, aristo_utils]
+  ./[aristo_desc, aristo_fetch, aristo_get, aristo_serialise, aristo_utils, aristo_vid, aristo_layers]
 
 const
   ChainRlpNodesNoEntry* = {
@@ -354,3 +354,28 @@ proc verifyProof*(
     return err(rc.error)
   except RlpError:
     return err(PartTrkRlpError)
+
+proc putAccTrieNode(
+    db: AristoTxRef,
+    node: NodeRef): Result[Opt[VertexID], AristoError] =
+
+  let
+    vid = db.vidFetch(16)
+    rvid = (STATE_ROOT_VID, vid) # pass in state root?
+
+  db.layersPutVtx(rvid, node.vtx)
+
+  case node.vtx.vType:
+    of AccLeaf:
+      let
+        accVtx = AccLeafRef(node.vtx)
+        stoID = accVtx.stoID
+        useID =
+          if stoID.isValid: stoID                     # Use as is
+          elif stoID.vid.isValid: (true, stoID.vid)   # Re-use previous vid
+          else: (true, db.vidFetch())                 # Create new vid
+    of StoLeaf:
+      raiseAssert("Unsupported vType")
+    of Branch, ExtBranch:
+      for n, subvid in node.vtx.pairs():
+        db.layersPutKey((STATE_ROOT_VID, subvid), BranchRef(node.vtx), node.key[n])
