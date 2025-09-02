@@ -575,18 +575,15 @@ func blsG2Add(c: Computation): EvmResultVoid =
 
   ? c.gasMeter.consumeGas(Bls12381G2AddGas, reason="blsG2Add Precompile")
 
-  var a, b: BLS_G2
-  if not a.decodePoint(input.toOpenArray(0, 255)):
-    return err(prcErr(PrcInvalidPoint))
+  var output: array[256, byte]
+  let res = output.eth_evm_bls12381_g2add(c.msg.data)
 
-  if not b.decodePoint(input.toOpenArray(256, 511)):
-    return err(prcErr(PrcInvalidPoint))
-
-  a.add b
+  if res != cttEVM_Success:
+    return err(prcErr(PrcInvalidParam))
 
   c.output.setLen(256)
-  if not encodePoint(a, c.output):
-    return err(prcErr(PrcInvalidPoint))
+  assign(c.output, output)
+
   ok()
 
 func blsG2MultiExp(c: Computation): EvmResultVoid =
