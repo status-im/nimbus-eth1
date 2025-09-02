@@ -120,10 +120,6 @@ proc setupP2P(nimbus: NimbusNode, conf: NimbusConf,
     nimbus.ethNode, nimbus.fc, conf.maxPeers,
     conf.engineApiServerEnabled())
 
-  # Min peers (if set)
-  if 0 < conf.beaconSyncInitPeersMin:
-    nimbus.beaconSyncRef.peersMinInit conf.beaconSyncInitPeersMin
-
   # Optional for pre-setting the sync target (e.g. for debugging)
   if conf.beaconSyncTarget.isSome():
     let hex = conf.beaconSyncTarget.unsafeGet
