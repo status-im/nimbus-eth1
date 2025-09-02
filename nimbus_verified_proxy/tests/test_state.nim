@@ -55,7 +55,7 @@ suite "test state verification":
     # this is for optimistic state fetch
     ts.loadAccessList(tx, blk, accessList)
 
-    let 
+    let
       addStatus = vp.headerStore.add(convHeader(blk), blk.hash)
       finalizeStatus = vp.headerStore.updateFinalized(convHeader(blk), blk.hash)
 
