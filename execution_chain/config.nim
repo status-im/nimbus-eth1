@@ -158,9 +158,8 @@ type
       abbr: "i"
       name: "network" }: seq[string]
 
-    # TODO: disable --custom-network if both hive and kurtosis not using this anymore.
     customNetwork {.
-      hidden
+      ignore
       desc: "Use custom genesis block for private Ethereum Network (as /path/to/genesis.json)"
       defaultValueDesc: ""
       abbr: "c"
@@ -890,15 +889,6 @@ func dbOptions*(conf: NimbusConf, noKeyCache = false): DbOptions =
 
     rdbPrintStats = conf.rdbPrintStats,
   )
-
-#-------------------------------------------------------------------
-# TOML serializer overloads of SecondarySources
-#-------------------------------------------------------------------
-
-proc readValue*(r: var TomlReader, val: var NetworkParams)
-       {.gcsafe, raises: [IOError, SerializationError].} =
-  # Not actually parse it, only to silence compiler
-  discard r.parseAsString()
 
 #-------------------------------------------------------------------
 # Constructor
