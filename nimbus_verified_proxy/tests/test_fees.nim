@@ -19,7 +19,7 @@ import
   ./test_utils,
   ./test_api_backend
 
-suite "test transaction verification":
+suite "test fees verification":
   test "check api methods":
     let
       ts = TestApiState.init(1.u256)
@@ -51,12 +51,13 @@ suite "test transaction verification":
 
     let blk2 = getBlockFromJson("nimbus_verified_proxy/tests/data/Prague.json")
 
-    ts.loadBlock(blk)
-    check vp.headerStore.add(convHeader(blk), blk.hash).isOk()
+    ts.loadBlock(blk2)
+    check vp.headerStore.add(convHeader(blk2), blk2.hash).isOk()
 
     let blobFeePrague = waitFor vp.proxy.getClient().eth_blobBaseFee()
 
     check:
       blobFeePrague > Quantity(0)
 
-    vp.stopTestSetup()
+    ts.clear()
+    vp.headerStore.clear()
