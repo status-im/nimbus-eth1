@@ -23,7 +23,7 @@ func `==`*(a, b: OutDir): bool =
   a.string == b.string
 
 func `==`*(a, b: NatConfig): bool =
-  let size = max(sizeof(a), sizeof(b))
+  let size = min(sizeof(a), sizeof(b))
   cmpMem(a.unsafeAddr, b.unsafeAddr, size) == 0
 
 proc configurationMain*() =
