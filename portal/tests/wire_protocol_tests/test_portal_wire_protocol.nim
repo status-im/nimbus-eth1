@@ -257,8 +257,7 @@ procSuite "Portal Wire Protocol Tests":
 
     check res.isOk()
 
-    let (srcNodeId, contentKeys, contentItems) =
-      await proto2.stream.contentQueue.popFirst()
+    let (_, contentKeys, contentItems) = await proto2.stream.contentQueue.popFirst()
 
     check contentItems.len() == content.len()
 

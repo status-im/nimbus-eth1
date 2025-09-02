@@ -15,11 +15,9 @@ import
   stew/byteutils,
   ../eth_history/history_data_ssz_e2s,
   ../database/content_db,
-  ./network_metadata,
   ./wire/[portal_stream, portal_protocol_config],
   ./history/history_network,
-  ./beacon/[beacon_init_loader, beacon_light_client],
-  ./legacy_history/[history_network, history_content]
+  ./beacon/[beacon_init_loader, beacon_light_client]
 
 from eth/p2p/discoveryv5/routing_table import logDistance
 
@@ -27,7 +25,6 @@ export beacon_light_client, history_network, portal_protocol_config, forks
 
 type
   PortalNodeConfig* = object
-    accumulatorFile*: Opt[string]
     trustedBlockRoot*: Opt[Digest]
     portalConfig*: PortalProtocolConfig
     dataDir*: string
@@ -42,7 +39,6 @@ type
     streamManager: StreamManager
     historyNetwork*: Opt[HistoryNetwork]
     beaconNetwork*: Opt[BeaconNetwork]
-    legacyHistoryNetwork*: Opt[LegacyHistoryNetwork]
     beaconLightClient*: Opt[LightClient]
     statusLogLoop: Future[void]
 
@@ -91,19 +87,6 @@ proc new*(
     # TODO: Portal works only over mainnet data currently
     networkData = loadNetworkData("mainnet")
     streamManager = StreamManager.new(discovery)
-    accumulator =
-      # Building an accumulator from header epoch files takes > 2m30s and is
-      # thus not really a viable option at start-up.
-      # Options are:
-      # - Start with baked-in accumulator
-      # - Start with file containing SSZ encoded accumulator
-      if config.accumulatorFile.isSome:
-        readAccumulator(config.accumulatorFile.value).expect(
-          "Need a file with a valid SSZ encoded accumulator"
-        )
-      else:
-        # Get it from binary file containing SSZ encoded accumulator
-        loadAccumulator()
 
     historyNetwork =
       if PortalSubnetwork.history in subnetworks:
@@ -145,31 +128,6 @@ proc new*(
       else:
         Opt.none(BeaconNetwork)
 
-    legacyHistoryNetwork =
-      if PortalSubnetwork.legacyHistory in subnetworks:
-        Opt.some(
-          LegacyHistoryNetwork.new(
-            network,
-            discovery,
-            contentDB,
-            streamManager,
-            networkData.metadata.cfg,
-            accumulator,
-            beaconDbCache =
-              if beaconNetwork.isSome():
-                beaconNetwork.value().beaconDb.beaconDbCache
-              else:
-                BeaconDbCache(),
-            bootstrapRecords = bootstrapRecords,
-            portalConfig = config.portalConfig,
-            contentRequestRetries = config.contentRequestRetries,
-            contentQueueWorkers = config.contentQueueWorkers,
-            contentQueueSize = config.contentQueueSize,
-          )
-        )
-      else:
-        Opt.none(LegacyHistoryNetwork)
-
     beaconLightClient =
       if beaconNetwork.isSome():
         let beaconLightClient = LightClient.new(
@@ -194,7 +152,6 @@ proc new*(
     streamManager: streamManager,
     historyNetwork: historyNetwork,
     beaconNetwork: beaconNetwork,
-    legacyHistoryNetwork: legacyHistoryNetwork,
     beaconLightClient: beaconLightClient,
   )
 
@@ -229,8 +186,6 @@ proc start*(n: PortalNode) =
     n.historyNetwork.value.start()
   if n.beaconNetwork.isSome():
     n.beaconNetwork.value.start()
-  if n.legacyHistoryNetwork.isSome():
-    n.legacyHistoryNetwork.value.start()
   if n.beaconLightClient.isSome():
     n.beaconLightClient.value.start()
 
@@ -245,8 +200,6 @@ proc stop*(n: PortalNode) {.async: (raises: []).} =
     futures.add(n.historyNetwork.value.stop())
   if n.beaconNetwork.isSome():
     futures.add(n.beaconNetwork.value.stop())
-  if n.legacyHistoryNetwork.isSome():
-    futures.add(n.legacyHistoryNetwork.value.stop())
   if n.beaconLightClient.isSome():
     futures.add(n.beaconLightClient.value.stop())
   if not n.statusLogLoop.isNil():

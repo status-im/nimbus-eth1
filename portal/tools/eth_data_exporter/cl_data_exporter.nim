@@ -9,7 +9,6 @@
 
 import
   std/os,
-  std/strformat,
   chronicles,
   chronos,
   stew/[byteutils, io2],
@@ -23,13 +22,11 @@ import
   beacon_chain/beacon_clock,
   ../../network/beacon/beacon_content,
   ../../network/beacon/beacon_init_loader,
-  ../../network/legacy_history/history_content,
   ../../eth_history/block_proofs/block_proof_historical_roots,
   ../../eth_history/block_proofs/block_proof_historical_summaries,
   ../../eth_history/[yaml_utils, yaml_eth_types],
   ../../network/network_metadata,
-  ./exporter_common,
-  ./el_data_exporter
+  ./exporter_common
 
 export beacon_clock
 
@@ -547,77 +544,6 @@ proc exportBlockProof*(dataDir: string, eraDir: string, slotNumber: uint64) =
 
     let file = dataDir / "beacon_block_proof-" & $blockNumber & ".yaml"
     yamlTestProof.writeDataToYaml(file)
-  else:
-    error "Slot number is before Bellatrix fork", slotNumber
-    quit QuitFailure
-
-proc exportHeaderWithProof*(
-    client: RpcClient, dataDir: string, eraDir: string, slotNumber: uint64
-) {.async: (raises: [CancelledError]).} =
-  let
-    networkData = loadNetworkData("mainnet")
-    cfg = networkData.metadata.cfg
-    slot = Slot(slotNumber)
-
-  if slot.epoch() >= cfg.DENEB_FORK_EPOCH:
-    let
-      (proof, blockNumber, blockHash) = getBlockProofDeneb(dataDir, eraDir, slotNumber)
-      header = (await client.getHeaderByNumber(blockNumber)).valueOr:
-        fatal "Failed to get header for block number", blockNumber, error
-        quit QuitFailure
-
-      blockHeaderWithProof = BlockHeaderWithProof(
-        header: ByteList[MAX_HEADER_LENGTH].init(rlp.encode(header)),
-        proof: ByteList[MAX_HEADER_PROOF_LENGTH].init(SSZ.encode(proof)),
-      )
-
-      file = dataDir / &"{blockNumber:08}.yaml"
-
-    writePortalContentToYaml(
-      file,
-      SSZ.encode(blockHeaderContentKey(blockHash)).to0xHex(),
-      SSZ.encode(blockHeaderWithProof).to0xHex(),
-    )
-  elif slot.epoch() >= cfg.CAPELLA_FORK_EPOCH:
-    let
-      (proof, blockNumber, blockHash) =
-        getBlockProofCapella(dataDir, eraDir, slotNumber)
-      header = (await client.getHeaderByNumber(blockNumber)).valueOr:
-        fatal "Failed to get header for block number", blockNumber, error
-        quit QuitFailure
-
-      blockHeaderWithProof = BlockHeaderWithProof(
-        header: ByteList[MAX_HEADER_LENGTH].init(rlp.encode(header)),
-        proof: ByteList[MAX_HEADER_PROOF_LENGTH].init(SSZ.encode(proof)),
-      )
-
-      file = dataDir / &"{blockNumber:08}.yaml"
-
-    writePortalContentToYaml(
-      file,
-      SSZ.encode(blockHeaderContentKey(blockHash)).to0xHex(),
-      SSZ.encode(blockHeaderWithProof).to0xHex(),
-    )
-  elif slot.epoch() >= cfg.BELLATRIX_FORK_EPOCH:
-    let
-      (proof, blockNumber, blockHash) =
-        getBlockProofBellatrix(dataDir, eraDir, slotNumber)
-      header = (await client.getHeaderByNumber(blockNumber)).valueOr:
-        fatal "Failed to get header for block number", blockNumber, error
-        quit QuitFailure
-
-      blockHeaderWithProof = BlockHeaderWithProof(
-        header: ByteList[MAX_HEADER_LENGTH].init(rlp.encode(header)),
-        proof: ByteList[MAX_HEADER_PROOF_LENGTH].init(SSZ.encode(proof)),
-      )
-
-      file = dataDir / &"{blockNumber:08}.yaml"
-
-    writePortalContentToYaml(
-      file,
-      SSZ.encode(blockHeaderContentKey(blockHash)).to0xHex(),
-      SSZ.encode(blockHeaderWithProof).to0xHex(),
-    )
   else:
     error "Slot number is before Bellatrix fork", slotNumber
     quit QuitFailure

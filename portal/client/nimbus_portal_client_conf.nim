@@ -53,15 +53,12 @@ const
   defaultBitsPerHopDesc* = $defaultPortalProtocolConfig.bitsPerHop
   defaultAlphaDesc* = $defaultPortalProtocolConfig.alpha
   defaultMaxGossipNodesDesc* = $defaultPortalProtocolConfig.maxGossipNodes
-  defaultRpcApis* = @["eth", "portal"]
-  defaultRpcApisDesc* = "eth,portal"
+  defaultRpcApis* = @["portal"]
+  defaultRpcApisDesc* = "portal"
 
 type
   RpcFlag* {.pure.} = enum
-    eth
-    debug
     portal
-    portal_debug
     discovery
 
   TrustedDigest* = MDigest[32 * 8]
@@ -106,7 +103,7 @@ type
 
     portalSubnetworks* {.
       desc: "Select which networks (Portal sub-protocols) to enable",
-      defaultValue: {PortalSubnetwork.legacyHistory},
+      defaultValue: {PortalSubnetwork.history},
       name: "portal-subnetworks"
     .}: set[PortalSubnetwork]
 
@@ -178,15 +175,6 @@ type
       name: "debug-netkey-nodeid-prefix-unsafe"
     .}: Option[string]
 
-    accumulatorFile* {.
-      desc:
-        "Get the master accumulator snapshot from a file containing an " &
-        "pre-build SSZ encoded master accumulator.",
-      defaultValue: none(InputFile),
-      defaultValueDesc: "none",
-      name: "accumulator-file"
-    .}: Option[InputFile]
-
     metricsEnabled* {.
       defaultValue: false, desc: "Enable the metrics server", name: "metrics"
     .}: bool
@@ -221,7 +209,7 @@ type
 
     rpcApi* {.
       desc:
-        "Enable specific set of JSON-RPC APIs over HTTP (available: eth, debug, portal, portal_debug, discovery)",
+        "Enable specific set of JSON-RPC APIs over HTTP (available: portal, discovery)",
       defaultValue: defaultRpcApis,
       defaultValueDesc: $defaultRpcApisDesc,
       name: "rpc-api"
@@ -246,7 +234,7 @@ type
 
     wsApi* {.
       desc:
-        "Enable specific set of JSON-RPC APIs over WebSocket (available: eth, debug, portal, portal_debug, discovery)",
+        "Enable specific set of JSON-RPC APIs over WebSocket (available: portal, discovery)",
       defaultValue: defaultRpcApis,
       defaultValueDesc: $defaultRpcApisDesc,
       name: "ws-api"
@@ -520,14 +508,8 @@ proc getRpcFlags*(rpcApis: openArray[string]): set[RpcFlag] =
   var rpcFlags: set[RpcFlag]
   for apiStr in rpcApis.repeatingList():
     case apiStr.toLowerAscii()
-    of "eth":
-      rpcFlags.incl RpcFlag.eth
-    of "debug":
-      rpcFlags.incl RpcFlag.debug
     of "portal":
       rpcFlags.incl RpcFlag.portal
-    of "portal_debug":
-      rpcFlags.incl RpcFlag.portal_debug
     of "discovery":
       rpcFlags.incl RpcFlag.discovery
     else:

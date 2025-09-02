@@ -310,26 +310,8 @@ func getProtocolId*(
     case subnetwork
     of PortalSubnetwork.history:
       [portalPrefix, 0x00]
-    of PortalSubnetwork.legacyHistory:
-      [portalPrefix, 0x0B]
     of PortalSubnetwork.beacon:
       [portalPrefix, 0x0C]
-    of PortalSubnetwork.transactionIndex:
-      [portalPrefix, 0x0D]
-    of PortalSubnetwork.transactionGossip:
-      [portalPrefix, 0x0F]
-  of PortalNetwork.angelfood:
-    case subnetwork
-    of PortalSubnetwork.history:
-      [portalPrefix, 0x40]
-    of PortalSubnetwork.legacyHistory:
-      [portalPrefix, 0x4B]
-    of PortalSubnetwork.beacon:
-      [portalPrefix, 0x4C]
-    of PortalSubnetwork.transactionIndex:
-      [portalPrefix, 0x4D]
-    of PortalSubnetwork.transactionGossip:
-      [portalPrefix, 0x4F]
 
 proc banNode*(p: PortalProtocol, nodeId: NodeId, period: chronos.Duration) =
   if not p.config.disableBanNodes:
