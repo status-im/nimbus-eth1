@@ -600,35 +600,15 @@ func blsG2MultiExp(c: Computation): EvmResultVoid =
 
   ? c.gasMeter.consumeGas(gas, reason="blsG2MultiExp Precompile")
 
-  var
-    p: BLS_G2
-    s: BLS_SCALAR
-    acc: BLS_G2
+  var output: array[256, byte]
+  let res = output.eth_evm_bls12381_g2msm(input)
 
-  # Decode point scalar pairs
-  for i in 0..<K:
-    let off = L * i
-
-    # Decode G1 point
-    if not p.decodePoint(input.toOpenArray(off, off+255)):
-      return err(prcErr(PrcInvalidPoint))
-
-    if not p.subgroupCheck:
-      return err(prcErr(PrcInvalidPoint))
-
-    # Decode scalar value
-    if not s.fromBytes(input.toOpenArray(off+256, off+287)):
-      return err(prcErr(PrcInvalidParam))
-
-    p.mul(s)
-    if i == 0:
-      acc = p
-    else:
-      acc.add(p)
+  if res != cttEVM_Success:
+    return err(prcErr(PrcInvalidParam))
 
   c.output.setLen(256)
-  if not encodePoint(acc, c.output):
-    return err(prcErr(PrcInvalidPoint))
+  assign(c.output, output)
+  
   ok()
 
 func blsPairing(c: Computation): EvmResultVoid =
