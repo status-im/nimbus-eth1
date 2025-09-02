@@ -22,10 +22,6 @@ import
 func `==`*(a, b: OutDir): bool =
   a.string == b.string
 
-func `==`*(a, b: NatConfig): bool =
-  let size = min(sizeof(a), sizeof(b))
-  cmpMem(a.unsafeAddr, b.unsafeAddr, size) == 0
-
 proc configurationMain*() =
   suite "configuration test suite":
     const
