@@ -9,12 +9,9 @@
 {.push raises: [].}
 
 import
-  std/[strformat],
-  stew/byteutils, ./compile_info, beacon_chain/buildinfo,
-  ./version
+  std/[strformat], stew/byteutils, ./compile_info, beacon_chain/buildinfo, ./version
 
-export
-  version
+export version
 
 const
   NimbusName* = "nimbus-eth1"
