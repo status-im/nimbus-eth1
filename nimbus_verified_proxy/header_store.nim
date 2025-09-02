@@ -172,7 +172,7 @@ proc updateFinalized*(
 
   return ok(true)
 
-proc add*(self: HeaderStore, header: Header, hHash: Hash32): Result[bool, string] =
+proc add*(self: HeaderStore, header: Header, hHash: Hash32): Result[void, string] =
   let latestHeader = self.latest
 
   # check the ordering of headers. This allows for gaps but always maintains an incremental order
@@ -185,9 +185,9 @@ proc add*(self: HeaderStore, header: Header, hHash: Hash32): Result[bool, string
   if hHash notin self.headers:
     self.headers.put(hHash, header)
     self.hashes.put(header.number, hHash)
-  ok(true)
+  ok()
 
-proc add*(self: HeaderStore, header: ForkedLightClientHeader): Result[bool, string] =
+proc add*(self: HeaderStore, header: ForkedLightClientHeader): Result[void, string] =
   let
     execHeader = convLCHeader(header).valueOr:
       return err(error)
@@ -207,7 +207,7 @@ proc add*(self: HeaderStore, header: ForkedLightClientHeader): Result[bool, stri
       if execHash notin self.headers:
         self.headers.put(execHash, execHeader)
         self.hashes.put(execHeader.number, execHash)
-  ok(true)
+  ok()
 
 func latestHash*(self: HeaderStore): Opt[Hash32] =
   for hash in self.headers.keys:
