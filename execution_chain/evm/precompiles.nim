@@ -8,6 +8,8 @@
 # at your option. This file may not be copied, modified, or distributed except
 # according to those terms.
 
+{.localPassC: "-fno-lto".}
+
 import
   std/[macros],
   results,
@@ -553,35 +555,15 @@ func blsG1MultiExp(c: Computation): EvmResultVoid =
 
   ? c.gasMeter.consumeGas(gas, reason="blsG1MultiExp Precompile")
 
-  var
-    p: BLS_G1
-    s: BLS_SCALAR
-    acc: BLS_G1
+  var output: array[128, byte]
+  let res = output.eth_evm_bls12381_g1msm(input)
 
-  # Decode point scalar pairs
-  for i in 0..<K:
-    let off = L * i
-
-    # Decode G1 point
-    if not p.decodePoint(input.toOpenArray(off, off+127)):
-      return err(prcErr(PrcInvalidPoint))
-
-    if not p.subgroupCheck:
-      return err(prcErr(PrcInvalidPoint))
-
-    # Decode scalar value
-    if not s.fromBytes(input.toOpenArray(off+128, off+159)):
-      return err(prcErr(PrcInvalidParam))
-
-    p.mul(s)
-    if i == 0:
-      acc = p
-    else:
-      acc.add(p)
+  if res != cttEVM_Success:
+    return err(prcErr(PrcInvalidParam))
 
   c.output.setLen(128)
-  if not encodePoint(acc, c.output):
-    return err(prcErr(PrcInvalidPoint))
+  assign(c.output, output)
+
   ok()
 
 func blsG2Add(c: Computation): EvmResultVoid =
