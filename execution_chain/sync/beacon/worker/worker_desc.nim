@@ -52,6 +52,10 @@ type
     packet: BlockBodiesPacket
     elapsed: Duration
 
+  BackgroundTicker* =
+    proc(ctx: BeaconCtxRef) {.gcsafe, raises: [].}
+      ## Some function that is invoked regularly
+
   # -------------------
 
   BnRangeSet* = IntervalSetRef[BlockNumber,uint64]
@@ -146,9 +150,7 @@ type
     lastPeerSeen*: chronos.Moment    ## Time when the last peer was abandoned
     lastNoPeersLog*: chronos.Moment  ## Control messages about missing peers
     lastSyncUpdLog*: chronos.Moment  ## Control update messages
-
-    when enableTicker:
-      ticker*: RootRef               ## Logger ticker
+    ticker*: BackgroundTicker        ## Ticker function to run in background
 
 # ------------------------------------------------------------------------------
 # Public helpers
