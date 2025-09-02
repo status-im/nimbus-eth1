@@ -13,7 +13,9 @@ import
   web3/[eth_api, eth_api_types],
   json_rpc/[rpcclient, rpcserver, rpcproxy],
   eth/common/eth_types_rlp,
-  ../rpc/transactions,
+  ../rpc/blocks,
+  ../types,
+  ../header_store,
   ./test_utils,
   ./test_api_backend
 
@@ -25,17 +27,36 @@ suite "test transaction verification":
       blk = getBlockFromJson("nimbus_verified_proxy/tests/data/Paris.json")
 
     ts.loadBlock(blk)
-    discard vp.headerStore.add(convHeader(blk), blk.hash)
+    check vp.headerStore.add(convHeader(blk), blk.hash).isOk()
 
     let
       gasPrice = waitFor vp.proxy.getClient().eth_gasPrice()
       priorityFee = waitFor vp.proxy.getClient().eth_maxPriorityFeePerGas()
-      blobFee = waitFor vp.proxy.getClient().eth_blobBaseFee()
 
     # we are only checking the API interface atm
     check:
       gasPrice > Quantity(0)
       priorityFee > Quantity(0)
-      blobFee > Quantity(0)
+
+    try:
+      let blobFee = waitFor vp.proxy.getClient().eth_blobBaseFee()
+      # blobs weren't enables on paris
+      check false
+    except CatchableError:
+      # TODO: change this to an appropriate error whenever refactoring is done
+      check true
+
+    ts.clear()
+    vp.headerStore.clear()
+
+    let blk2 = getBlockFromJson("nimbus_verified_proxy/tests/data/Prague.json")
+
+    ts.loadBlock(blk)
+    check vp.headerStore.add(convHeader(blk), blk.hash).isOk()
+
+    let blobFeePrague = waitFor vp.proxy.getClient().eth_blobBaseFee()
+
+    check:
+      blobFeePrague > Quantity(0)
 
     vp.stopTestSetup()

@@ -16,7 +16,7 @@ import
   ../../execution_chain/beacon/web3_eth_conv,
   ../types,
   ./blocks,
-  ./transactions.nim
+  ./transactions
 
 func median(prices: var openArray[GasInt]): GasInt =
   if prices.len > 0:
