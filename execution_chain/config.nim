@@ -22,12 +22,15 @@ import
     confutils,
     confutils/defs,
     confutils/std/net as confnet,
+    confutils/toml/defs as tomldefs,
     json_serialization/std/net as jsnet,
+    toml_serialization/std/net as tomlnet,
     results,
     beacon_chain/buildinfo,
     beacon_chain/nimbus_binary_common,
   ],
-  eth/[common, net/nat],
+  toml_serialization,
+  eth/[common, net/nat, net/nat_toml, p2p/discoveryv5/enr_toml],
   ./networking/[bootnodes, eth1_enr as enr],
   ./[constants, compile_info, version_info],
   ./common/chain_config,
@@ -89,9 +92,12 @@ type
 
   NimbusConf* = object of RootObj
     ## Main Nimbus configuration object
+    configFile {.
+      separator: "ETHEREUM OPTIONS:"
+      desc: "Loads the configuration from a TOML file"
+      name: "config-file" .}: Option[InputFile]
 
     dataDirFlag* {.
-      separator: "ETHEREUM OPTIONS:"
       desc: "The directory where nimbus will store all blockchain data"
       abbr: "d"
       name: "data-dir" }: Option[OutDir]
@@ -152,9 +158,8 @@ type
       abbr: "i"
       name: "network" }: seq[string]
 
-    # TODO: disable --custom-network if both hive and kurtosis not using this anymore.
     customNetwork {.
-      hidden
+      ignore
       desc: "Use custom genesis block for private Ethereum Network (as /path/to/genesis.json)"
       defaultValueDesc: ""
       abbr: "c"
@@ -885,18 +890,40 @@ func dbOptions*(conf: NimbusConf, noKeyCache = false): DbOptions =
     rdbPrintStats = conf.rdbPrintStats,
   )
 
+#-------------------------------------------------------------------
+# Constructor
+#-------------------------------------------------------------------
+
 # KLUDGE: The `load()` template does currently not work within any exception
 #         annotated environment.
 {.pop.}
 
-proc makeConfig*(cmdLine = commandLineParams()): NimbusConf
-    {.raises: [CatchableError].} =
+proc makeConfig*(cmdLine = commandLineParams()): NimbusConf =
   ## Note: this function is not gc-safe
-  result = NimbusConf.load(
-    cmdLine,
-    version = NimbusBuild,
-    copyrightBanner = NimbusHeader
-  )
+  try:
+    result = NimbusConf.load(
+      cmdLine,
+      version = NimbusBuild,
+      copyrightBanner = NimbusHeader,
+      secondarySources = proc (
+        conf: NimbusConf, sources: ref SecondarySources
+      ) {.raises: [ConfigurationError].} =
+        if conf.configFile.isSome:
+          sources.addConfigFile(Toml, conf.configFile.get)
+    )
+  except CatchableError as err:
+    if err[] of ConfigurationError and err.parent != nil:
+      if err.parent[] of TomlFieldReadingError:
+        let fieldName = ((ref TomlFieldReadingError)(err.parent)).field
+        echo "Error when parsing ", fieldName, ": ", err.msg
+      elif err.parent[] of TomlReaderError:
+        type TT = ref TomlReaderError
+        echo TT(err).formatMsg("")
+      else:
+        echo "Error when parsing config file: ", err.msg
+    else:
+      echo "Error when parsing command line params: ", err.msg
+    quit QuitFailure
 
   processNetworkParamsAndNetworkId(result)
 
