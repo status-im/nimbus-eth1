@@ -390,4 +390,3 @@ proc getEthConfigObject*(com: CommonRef,
     res.last = Opt.none(ConfigObject)
 
   return res
-
