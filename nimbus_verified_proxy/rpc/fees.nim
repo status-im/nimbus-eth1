@@ -18,14 +18,16 @@ import
   ./blocks,
   ./transactions
 
+func avgWoOverflow(a: uint64, b: uint64): uint64 =
+  return a div 2 + b div 2 + ((a mod 2 + b mod 2) div 2)
+
 func median(prices: var openArray[GasInt]): GasInt =
   if prices.len > 0:
     sort(prices)
     let middle = prices.len div 2
     if prices.len mod 2 == 0:
       # prevent overflow
-      let addedAmt = prices[middle].uint64 + prices[middle - 1].uint64
-      return (addedAmt div 2).GasInt
+      return avgWoOverflow(prices[middle], prices[middle - 1]).GasInt
     else:
       return prices[middle]
 
