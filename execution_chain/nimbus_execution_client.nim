@@ -54,8 +54,8 @@ proc basicServices(nimbus: NimbusNode,
   nimbus.beaconEngine = BeaconEngineRef.new(nimbus.txPool)
 
 proc manageAccounts(nimbus: NimbusNode, conf: NimbusConf) =
-  if string(conf.keyStoreDir).len > 0:
-    let res = nimbus.ctx.am.loadKeystores(string conf.keyStoreDir)
+  if conf.keyStoreDir.len > 0:
+    let res = nimbus.ctx.am.loadKeystores(conf.keyStoreDir)
     if res.isErr:
       fatal "Load keystore error", msg = res.error()
       quit(QuitFailure)
