@@ -363,6 +363,66 @@ proc verifyProof*(
   var visitedNodes: HashSet[Hash32]
   verifyProof(nodes, root, path, visitedNodes)
 
+proc fromAccTrieNode(T: type NodeRef, trieNode: openArray[byte]): Result[T, AristoError] =
+  # Precondition: trieNode has already been validated using verifyProof
+
+  # VertexRef* {.inheritable, pure.} = ref object
+  #   ## Vertex for building a hexary Patricia or Merkle Patricia Trie
+  #   vType*: VertexType
+
+  # BranchRef* = ref object of VertexRef
+  #   used*: uint16
+  #   startVid*: VertexID
+
+  # ExtBranchRef* = ref object of BranchRef
+  #   pfx*: NibblesBuf
+
+  # LeafRef* = ref object of VertexRef
+  #   pfx*: NibblesBuf
+
+  # AccLeafRef* = ref object of LeafRef
+  #   account*: AristoAccount
+  #   stoID*: StorageID              ## Storage vertex ID (if any)
+
+  # StoLeafRef* = ref object of LeafRef
+  #   stoData*: UInt256
+
+  # construct hash keys
+  # construct VertexRef
+  var
+    rlpNode = rlpFromBytes trieNode
+    node = NodeRef() #vtx: VertexRef, key: array[16, HashKey])
+
+
+  case rlpNode.listLen
+  of 2:
+    let 
+      (isLeaf, segm) = NibblesBuf.fromHexPrefix rlpNode.listElem(0).toBytes
+      link = rlpNode.listElem(1).rlpNodeToBytes() # link or payload
+    if isLeaf:
+      #node.key[0] = storageRoot
+    else: # extension node
+      node.key[0] = HashKey.fromBytes(link).valueOr:
+        return err(PartTrkLinkExpected)
+      
+  of 17:
+    # branch node
+    var hashCount = 0
+    for i in 0..15:
+      let link = rlpNode.listElem(i).rlpNodeToBytes()
+      if link.len() > 0:
+        inc hashCount
+      node.key[i] = HashKey.fromBytes(link).valueOr:
+        return err(PartTrkLinkExpected)
+
+  else:
+    return err(PartTrkGarbledNode)
+
+  # let nextKey = HashKey.fromBytes(link).valueOr:
+  #   return err(PartTrkLinkExpected)
+
+
+
 # proc putAccTrieNode(
 #     db: AristoTxRef,
 #     node: NodeRef): Result[Opt[VertexID], AristoError] =
