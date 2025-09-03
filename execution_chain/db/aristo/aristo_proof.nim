@@ -338,12 +338,12 @@ proc verifyProof*(
     nodes: Table[Hash32, seq[byte]];
     root: Hash32;
     path: Hash32;
+    visitedNodes: var HashSet[Hash32]
       ): Result[Opt[seq[byte]], AristoError] =
   if nodes.len() == 0:
     return err(PartTrkEmptyProof)
 
   try:
-    var visitedNodes: HashSet[Hash32]
     let
       nibbles = NibblesBuf.fromBytes path.data
       rc = trackRlpNodes(nodes, visitedNodes, root.to(HashKey), nibbles, start=true)
@@ -355,27 +355,35 @@ proc verifyProof*(
   except RlpError:
     return err(PartTrkRlpError)
 
-proc putAccTrieNode(
-    db: AristoTxRef,
-    node: NodeRef): Result[Opt[VertexID], AristoError] =
+proc verifyProof*(
+    nodes: Table[Hash32, seq[byte]];
+    root: Hash32;
+    path: Hash32;
+      ): Result[Opt[seq[byte]], AristoError] = 
+  var visitedNodes: HashSet[Hash32]
+  verifyProof(nodes, root, path, visitedNodes)
 
-  let
-    vid = db.vidFetch(16)
-    rvid = (STATE_ROOT_VID, vid) # pass in state root?
+# proc putAccTrieNode(
+#     db: AristoTxRef,
+#     node: NodeRef): Result[Opt[VertexID], AristoError] =
 
-  db.layersPutVtx(rvid, node.vtx)
+#   let
+#     vid = db.vidFetch(16)
+#     rvid = (STATE_ROOT_VID, vid) # pass in state root?
 
-  case node.vtx.vType:
-    of AccLeaf:
-      let
-        accVtx = AccLeafRef(node.vtx)
-        stoID = accVtx.stoID
-        useID =
-          if stoID.isValid: stoID                     # Use as is
-          elif stoID.vid.isValid: (true, stoID.vid)   # Re-use previous vid
-          else: (true, db.vidFetch())                 # Create new vid
-    of StoLeaf:
-      raiseAssert("Unsupported vType")
-    of Branch, ExtBranch:
-      for n, subvid in node.vtx.pairs():
-        db.layersPutKey((STATE_ROOT_VID, subvid), BranchRef(node.vtx), node.key[n])
+#   db.layersPutVtx(rvid, node.vtx)
+
+#   case node.vtx.vType:
+#     of AccLeaf:
+#       let
+#         accVtx = AccLeafRef(node.vtx)
+#         stoID = accVtx.stoID
+#         useID =
+#           if stoID.isValid: stoID                     # Use as is
+#           elif stoID.vid.isValid: (true, stoID.vid)   # Re-use previous vid
+#           else: (true, db.vidFetch())                 # Create new vid
+#     of StoLeaf:
+#       raiseAssert("Unsupported vType")
+#     of Branch, ExtBranch:
+#       for n, subvid in node.vtx.pairs():
+#         db.layersPutKey((STATE_ROOT_VID, subvid), BranchRef(node.vtx), node.key[n])
