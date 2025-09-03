@@ -55,13 +55,9 @@ suite "test state verification":
     # this is for optimistic state fetch
     ts.loadAccessList(tx, blk, accessList)
 
-    let
-      addStatus = vp.headerStore.add(convHeader(blk), blk.hash)
-      finalizeStatus = vp.headerStore.updateFinalized(convHeader(blk), blk.hash)
-
     check:
-      addStatus.isOk()
-      finalizeStatus.isOk()
+      vp.headerStore.add(convHeader(blk), blk.hash).isOk()
+      vp.headerStore.updateFinalized(convHeader(blk), blk.hash).isOk()
 
     let
       verifiedBalance = waitFor vp.proxy.getClient().eth_getBalance(address, latestTag)

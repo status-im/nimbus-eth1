@@ -35,8 +35,9 @@ suite "test receipts verification":
 
     ts.loadBlockReceipts(blk, rxs)
     ts.loadReceipt(rxs[0].transactionHash, rxs[0])
-    discard vp.headerStore.add(convHeader(blk), blk.hash)
-    discard vp.headerStore.updateFinalized(convHeader(blk), blk.hash)
+    check:
+      vp.headerStore.add(convHeader(blk), blk.hash).isOk()
+      vp.headerStore.updateFinalized(convHeader(blk), blk.hash).isOk()
 
     var verified = waitFor vp.proxy.getClient().eth_getBlockReceipts(numberTag)
     check rxs == verified.get()
@@ -70,8 +71,9 @@ suite "test receipts verification":
 
     # update block tags because getLogs (uses)-> getReceipts (uses)-> getHeader
     ts.loadBlockReceipts(blk, rxs)
-    discard vp.headerStore.add(convHeader(blk), blk.hash)
-    discard vp.headerStore.updateFinalized(convHeader(blk), blk.hash)
+    check:
+      vp.headerStore.add(convHeader(blk), blk.hash).isOk()
+      vp.headerStore.updateFinalized(convHeader(blk), blk.hash).isOk()
 
     for tag in tags:
       let filterOptions = FilterOptions(
@@ -92,6 +94,9 @@ suite "test receipts verification":
       ts.loadLogs(filterOptions, logs)
       let verifiedLogs = waitFor vp.proxy.getClient().eth_getLogs(filterOptions)
       check verifiedLogs.len == logs.len
+
+    ts.clear()
+    vp.headerStore.clear()
 
   test "create filters and uninstall filters":
     # filter options without any tags would test resolving default "latest"
@@ -129,8 +134,10 @@ suite "test receipts verification":
 
     # update block tags because getLogs (uses)-> getReceipts (uses)-> getHeader
     ts.loadBlockReceipts(blk, rxs)
-    discard vp.headerStore.add(convHeader(blk), blk.hash)
-    discard vp.headerStore.updateFinalized(convHeader(blk), blk.hash)
+
+    check:
+      vp.headerStore.add(convHeader(blk), blk.hash).isOk()
+      vp.headerStore.updateFinalized(convHeader(blk), blk.hash).isOk()
 
     # filter options without any tags would test resolving default "latest"
     let filterOptions = FilterOptions(
@@ -162,3 +169,6 @@ suite "test receipts verification":
       check false
     except CatchableError as e:
       check true
+
+    ts.clear()
+    vp.headerStore.clear()

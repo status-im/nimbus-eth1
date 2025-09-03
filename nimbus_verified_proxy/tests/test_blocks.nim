@@ -35,7 +35,7 @@ suite "test verified blocks":
         getBlockFromJson("nimbus_verified_proxy/tests/data/" & blockName & ".json")
 
       ts.loadBlock(blk)
-      discard vp.headerStore.add(convHeader(blk), blk.hash)
+      check vp.headerStore.add(convHeader(blk), blk.hash).isOk()
 
       # reuse verified proxy's internal client. Conveniently it is looped back to the proxy server
       let verifiedBlk = waitFor vp.proxy.getClient().eth_getBlockByHash(blk.hash, true)
@@ -58,8 +58,9 @@ suite "test verified blocks":
     vp.headerStore.clear()
 
     ts.loadBlock(blk)
-    discard vp.headerStore.add(convHeader(blk), blk.hash)
-    discard vp.headerStore.updateFinalized(convHeader(blk), blk.hash)
+    check:
+      vp.headerStore.add(convHeader(blk), blk.hash).isOk()
+      vp.headerStore.updateFinalized(convHeader(blk), blk.hash).isOk()
 
     var verifiedBlk = waitFor vp.proxy.getClient().eth_getBlockByNumber(numberTag, true)
     check blk == verifiedBlk
@@ -88,7 +89,7 @@ suite "test verified blocks":
 
       ts.loadBlock(blk)
       if i == sourceBlockNum:
-        discard vp.headerStore.add(convHeader(blk), blk.hash)
+        check vp.headerStore.add(convHeader(blk), blk.hash).isOk()
 
     let
       unreachableTargetTag =
@@ -123,7 +124,7 @@ suite "test verified blocks":
       hash = blk.hash
 
     ts.loadBlock(blk)
-    discard vp.headerStore.add(convHeader(blk), blk.hash)
+    check vp.headerStore.add(convHeader(blk), blk.hash).isOk()
 
     let
       uncleCountByHash = waitFor vp.proxy.getClient().eth_getUncleCountByBlockHash(hash)

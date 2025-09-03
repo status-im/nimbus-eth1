@@ -129,7 +129,7 @@ const
     "BLS12_PAIRING_CHECK",
     "BLS12_MAP_FP_TO_G1",
     "BLS12_MAP_FP2_TO_G2",
-    "P256_VERIFY"
+    "P256VERIFY"
   ]
 
 
