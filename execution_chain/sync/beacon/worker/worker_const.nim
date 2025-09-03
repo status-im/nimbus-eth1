@@ -23,11 +23,6 @@ type SyncState* = enum
   blocksFinish                     ## get ready for `idle`
 
 const
-  enableTicker* = false
-    ## Log regular status updates similar to metrics. Great for debugging.
-
-  # ----------------------
-
   metricsUpdateInterval* = chronos.seconds(10)
     ## Wait at least this time before next update
 

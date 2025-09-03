@@ -498,13 +498,6 @@ type
         defaultValueDesc: "\"jwt.hex\" in the data directory (see --data-dir)"
         name: "jwt-secret" .}: Option[InputFile]
 
-      beaconSyncInitPeersMin* {.
-        hidden
-        defaultValue: 0
-        desc: "Minimal number of peers needed for activating the first" &
-              " syncer session"
-        name: "debug-beacon-sync-init-peers-min" .}: int
-
       beaconSyncTarget* {.
         hidden
         desc: "Manually set the initial sync target specified by its 32 byte" &

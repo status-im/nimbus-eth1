@@ -17,7 +17,7 @@ import
   ../../common,
   ../../networking/p2p,
   ./worker/headers/headers_target,
-  ./worker/update/[metrics, ticker],
+  ./worker/update/metrics,
   ./worker/[blocks, headers, start_stop, update, worker_desc]
 
 # ------------------------------------------------------------------------------
@@ -79,7 +79,7 @@ proc runTicker*(ctx: BeaconCtxRef; info: static[string]) =
   ## intended for updating metrics, debug logging etc.
   ##
   ctx.updateMetrics()
-  ctx.updateTicker()
+  ctx.pool.ticker(ctx)
 
   # Inform if there are no peers active while syncing
   if not ctx.hibernate and ctx.pool.nBuddies < 1:
