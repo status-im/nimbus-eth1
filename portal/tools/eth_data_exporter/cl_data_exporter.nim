@@ -133,10 +133,6 @@ proc exportLCUpdates*(
         let
           period = forkyObject.attested_header.beacon.slot.sync_committee_period
           contentKey = encode(updateContentKey(period.uint64, count))
-          forkDigest = forkDigestAtEpoch(
-            forkDigests[], epoch(forkyObject.attested_header.beacon.slot), cfg
-          )
-
           content = encodeLightClientUpdatesForked(
             ForkedLightClientUpdateList.init(updates), forkDigests[], cfg
           )
