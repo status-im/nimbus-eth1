@@ -643,15 +643,15 @@ func blsMapG1(c: Computation): EvmResultVoid =
 
   ? c.gasMeter.consumeGas(Bls12381MapG1Gas, reason="blsMapG1 Precompile")
 
-  var fe: BLS_FE
-  if not fe.decodeFE(input):
-    return err(prcErr(PrcInvalidPoint))
+  var output: array[128, byte]
+  let res = output.eth_evm_bls12381_map_fp_to_g1(input)
 
-  let p = fe.mapFPToG1()
+  if res != cttEVM_Success:
+    return err(prcErr(PrcInvalidParam))
 
   c.output.setLen(128)
-  if not encodePoint(p, c.output):
-    return err(prcErr(PrcInvalidPoint))
+  assign(c.output, output)
+
   ok()
 
 func blsMapG2(c: Computation): EvmResultVoid =
@@ -663,15 +663,15 @@ func blsMapG2(c: Computation): EvmResultVoid =
 
   ? c.gasMeter.consumeGas(Bls12381MapG2Gas, reason="blsMapG2 Precompile")
 
-  var fe: BLS_FE2
-  if not fe.decodeFE(input):
-    return err(prcErr(PrcInvalidPoint))
+  var output: array[256, byte]
+  let res = output.eth_evm_bls12381_map_fp2_to_g2(input)
 
-  let p = fe.mapFPToG2()
+  if res != cttEVM_Success:
+    return err(prcErr(PrcInvalidParam))
 
   c.output.setLen(256)
-  if not encodePoint(p, c.output):
-    return err(prcErr(PrcInvalidPoint))
+  assign(c.output, output)
+
   ok()
 
 proc pointEvaluation(c: Computation): EvmResultVoid =
