@@ -9,7 +9,7 @@
 {.push raises: [].}
 
 import
-  std/[tables, sequtils],
+  std/[tables, sequtils, algorithm],
   eth/common/[blocks as ethblocks, receipts, hashes, addresses],
   nimcrypto/[hash, sha2],
   ssz_serialization,
@@ -22,13 +22,14 @@ export hashes, receipts
 # ---------------------------------------------------------------------------
 
 const
+  # M0 specification constants from EIP-7745 guide
   MAX_EPOCH_HISTORY* = 1
-  MAP_WIDTH* = 16
-  MAP_WIDTH_LOG2* = 4  # log2(16) = 4
-  MAP_HEIGHT* = 256          
-  MAPS_PER_EPOCH* = 8
-  VALUES_PER_MAP* = 1024     
-  MAX_BASE_ROW_LENGTH* = 4096
+  MAP_WIDTH* = 1 shl 24              # 2^24 = 16,777,216
+  MAP_WIDTH_LOG2* = 24               # log2(2^24) = 24
+  MAP_HEIGHT* = 1 shl 16             # 2^16 = 65,536          
+  MAPS_PER_EPOCH* = 1 shl 10         # 2^10 = 1,024
+  VALUES_PER_MAP* = 1 shl 16         # 2^16 = 65,536     
+  MAX_BASE_ROW_LENGTH* = 1 shl 3     # 2^3 = 8
   LAYER_COMMON_RATIO* = 2
   EIP7745_ACTIVATION_BLOCK* = 999999999  # Very high block number for testing
 
@@ -43,11 +44,21 @@ type
   FilterRow* =
     ByteList[MAX_BASE_ROW_LENGTH * MAP_WIDTH_LOG2 * MAPS_PER_EPOCH]
 
+  FilterMap* = object
+    ## 2D sparse bitmap for M0 - stores only set coordinates
+    ## Full 2^24 x 2^16 bitmap would be 128GB, so use sparse representation
+    rows*: Table[uint64, seq[uint64]]  # row_index -> [column_indices]
+    
+  FilterMaps* = object
+    ## Collection of MAPS_PER_EPOCH filter maps for an epoch
+    maps*: array[MAPS_PER_EPOCH, FilterMap]
+
   LogMeta* = object
     ## Metadata describing the location of a log
     blockNumber*: uint64
-    txIndex*: uint32
-    logIndex*: uint32
+    transaction_hash*: Hash32
+    transaction_index*: uint64
+    log_in_tx_index*: uint64
 
   LogEntry* = object
     ## Stored log together with metadata
@@ -73,6 +84,7 @@ type
     ## Per-epoch log index data
     records*: Table[uint64, LogRecord]
     log_index_root*: Hash32
+    filter_maps*: FilterMaps
 
 type
   LogIndexSummary* = object
@@ -127,10 +139,20 @@ proc zeroHash32(): Hash32 =
 # Constructor Functions
 # ---------------------------------------------------------------------------
 
+proc initFilterMap*(): FilterMap =
+  ## Initialize empty FilterMap
+  result.rows = initTable[uint64, seq[uint64]]()
+
+proc initFilterMaps*(): FilterMaps =
+  ## Initialize FilterMaps with empty maps
+  for i in 0..<MAPS_PER_EPOCH:
+    result.maps[i] = initFilterMap()
+
 proc initLogIndexEpoch*(): LogIndexEpoch =
   ## Initialize a new LogIndexEpoch with empty table
   result.records = initTable[uint64, LogRecord]()
   result.log_index_root = zeroHash32()
+  result.filter_maps = initFilterMaps()
 
 proc initLogIndex*(): LogIndex =
   ## Initialize a new LogIndex with default values
@@ -198,11 +220,47 @@ proc topic_value*(topic: Hash32): Hash32 =
   ## Hash topic for log value indexing  
   log_value_hash(cast[array[32, byte]](topic))
 
+proc hash_tree_root*(filter_maps: FilterMaps): Hash32 =
+  ## Compute hash of FilterMaps (simplified for M0)
+  var ctx: sha256
+  ctx.init()
+  
+  # Hash all filter maps
+  for i in 0..<MAPS_PER_EPOCH:
+    let filter_map = filter_maps.maps[i]
+    # Hash the number of rows with set bits
+    ctx.update(toBinary64(uint64(filter_map.rows.len)))
+    
+    # For each row, hash the row index and column indices
+    for row_index, columns in filter_map.rows.pairs:
+      ctx.update(toBinary64(row_index))
+      ctx.update(toBinary64(uint64(columns.len)))
+      for col in columns:
+        ctx.update(toBinary64(col))
+  
+  let digest = ctx.finish()
+  result = Hash32(digest.data)
+
+proc hash_tree_root*(epoch: LogIndexEpoch): Hash32 =
+  ## Compute hash of LogIndexEpoch 
+  var ctx: sha256
+  ctx.init()
+  ctx.update(toBinary64(uint64(epoch.records.len)))
+  ctx.update(cast[array[32, byte]](hash_tree_root(epoch.filter_maps)))
+  let digest = ctx.finish()
+  result = Hash32(digest.data)
+
 proc hash_tree_root*(li: LogIndex): Hash32 =
   ## Compute SSZ hash tree root of LogIndex (simplified for M0)
   var ctx: sha256
   ctx.init()
   ctx.update(toBinary64(li.next_index))
+  
+  # Include epochs in the hash
+  ctx.update(toBinary64(uint64(li.epochs.len)))
+  for epoch in li.epochs:
+    ctx.update(cast[array[32, byte]](hash_tree_root(epoch)))
+    
   let digest = ctx.finish()
   result = Hash32(digest.data)
 
@@ -217,7 +275,7 @@ proc get_column_index*(log_value_index: uint64, log_value: Hash32): uint64 =
   hash_input.add(cast[array[32, byte]](log_value))
   
   let column_hash = fnv1a_hash(hash_input)
-  result = column_hash mod uint64(MAP_WIDTH)
+  result = column_hash mod MAP_WIDTH
 
 proc get_row_index*(map_index: uint64, log_value: Hash32, layer_index: uint64): uint64 =
   ## Simplified row index calculation for M0
@@ -227,7 +285,27 @@ proc get_row_index*(map_index: uint64, log_value: Hash32, layer_index: uint64): 
   hash_input.add(toBinary64(layer_index))
   
   let column_hash = fnv1a_hash(hash_input)
-  result = column_hash mod uint64(MAP_HEIGHT)
+  result = column_hash mod MAP_HEIGHT
+
+proc set_filter_bit*(filter_maps: var FilterMaps, map_index: uint64, row: uint64, column: uint64) {.raises: [].} =
+  ## Set a bit in the filter map at the specified coordinates
+  if map_index >= MAPS_PER_EPOCH:
+    return  # Skip invalid map index
+    
+  try:
+    var filter_map = addr filter_maps.maps[map_index]
+    
+    # Initialize row if it doesn't exist
+    if row notin filter_map.rows:
+      filter_map.rows[row] = @[]
+    
+    # Add column if not already present - use safe access
+    var row_columns = filter_map.rows.getOrDefault(row, @[])
+    if column notin row_columns:
+      filter_map.rows[row].add(column)
+      filter_map.rows[row].sort()  # Keep columns sorted for efficiency
+  except:
+    discard  # Skip errors in M0 implementation
 
 proc add_log_value*(log_index: var LogIndex,
                     layer, row, column: uint64,
@@ -240,8 +318,11 @@ proc add_log_value*(log_index: var LogIndex,
   log_index.latest_column_index = column
   log_index.latest_log_value = value_hash
   
-  # TODO: Implement actual filter map insertion logic for full EIP-7745
-  # For M0, we just track the coordinates
+  # Set bit in filter map (M0 implementation)
+  if log_index.epochs.len > 0:
+    # For M0, use map_index = 0 (simplified)
+    let map_index = layer mod MAPS_PER_EPOCH
+    set_filter_bit(log_index.epochs[0].filter_maps, map_index, row, column)
   
   log_index.next_index.inc
 
@@ -314,8 +395,9 @@ proc add_block_logs*(log_index: var LogIndex,
         # Create log entry with metadata
         let meta = LogMeta(
           blockNumber: header.number,
-          txIndex: uint32(txPos),
-          logIndex: uint32(logPos)
+          transaction_hash: receipt.hash,
+          transaction_index: uint64(txPos),
+          log_in_tx_index: uint64(logPos)
         )
         let entry = LogEntry(log: log, meta: meta)
         
@@ -333,7 +415,7 @@ proc add_block_logs*(log_index: var LogIndex,
         let column = get_column_index(log_index.next_index - 1, addr_hash)
         let row = get_row_index(0, addr_hash, 0)
         # echo "    Calling add_log_value for address at row=", row, ", column=", column
-       # add_log_value(log_index, 0, row, column, addr_hash)
+        add_log_value(log_index, 0, row, column, addr_hash)
         # echo "    After add_log_value, next_index is: ", log_index.next_index
         
         # Process each topic
@@ -347,25 +429,54 @@ proc add_block_logs*(log_index: var LogIndex,
           add_log_value(log_index, 0, topic_row, topic_column, topic_hash)
           # echo "      After topic add_log_value, next_index is: ", log_index.next_index
 
-  # Update epoch root
-  log_index.epochs[0].log_index_root = hash_tree_root(log_index)
+  # Update epoch root - use epoch-specific hash, not full log_index hash
+  log_index.epochs[0].log_index_root = hash_tree_root(log_index.epochs[0])
   log_index.latest_row_root = log_index.epochs[0].log_index_root
   
   # echo "  Final next_index: ", log_index.next_index
   # echo "=== add_block_logs done ===\n"
 
+proc hash_epochs_root*(epochs: seq[LogIndexEpoch]): Hash32 =
+  ## Calculate proper epochs root hash
+  var ctx: sha256
+  ctx.init()
+  
+  # Hash number of epochs
+  ctx.update(toBinary64(uint64(epochs.len)))
+  
+  # Hash each epoch's root
+  for epoch in epochs:
+    ctx.update(cast[array[32, byte]](epoch.log_index_root))
+  
+  let digest = ctx.finish()
+  result = Hash32(digest.data)
+
 proc getLogIndexDigest*(li: LogIndex): LogIndexDigest =
   ## Produce digest for LogIndexSummary generation
   result.root = hash_tree_root(li)
   
-  # Generate epochs root (simplified for M0)
-  if li.epochs.len > 0:
-    result.epochs_root = li.epochs[0].log_index_root
-  else:
-    result.epochs_root = zeroHash32()
+  # Generate proper epochs root
+  result.epochs_root = hash_epochs_root(li.epochs)
   
-  # For M0, we use a simplified filter maps root
-  result.epoch_0_filter_maps_root = result.epochs_root  # Simplified for M0
+  # Calculate epoch 0 filter maps root
+  if li.epochs.len > 0:
+    # Hash the FilterMaps structure
+    var ctx: sha256
+    ctx.init()
+    let maps = li.epochs[0].filter_maps
+    
+    # Hash number of maps
+    ctx.update(toBinary64(uint64(MAPS_PER_EPOCH)))
+    
+    # Hash each map's content
+    for i in 0..<MAPS_PER_EPOCH:
+      let filter_map = maps.maps[i]
+      ctx.update(toBinary64(uint64(filter_map.rows.len)))
+    
+    let digest = ctx.finish()
+    result.epoch_0_filter_maps_root = Hash32(digest.data)
+  else:
+    result.epoch_0_filter_maps_root = zeroHash32()
 
 proc createLogIndexSummary*(li: LogIndex): LogIndexSummary =
   ## Create LogIndexSummary for block header
