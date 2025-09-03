@@ -11,30 +11,13 @@ import
   results,
   stew/io2,
   eth/common/headers,
-  ../../network/legacy_history/history_content,
+  ../../network/history/history_content,
   ../../eth_history/block_proofs/
     [block_proof_historical_summaries, block_proof_historical_hashes_accumulator]
 
 from eth/rlp import computeRlpHash
 
 export results, block_proof_historical_hashes_accumulator, history_content
-
-proc buildHeadersWithProof*(
-    blockHeaders: seq[Header], epochRecord: EpochRecordCached
-): Result[seq[(seq[byte], seq[byte])], string] =
-  var blockHeadersWithProof: seq[(seq[byte], seq[byte])]
-  for header in blockHeaders:
-    if header.isPreMerge():
-      let
-        content = ?buildHeaderWithProof(header, epochRecord)
-        contentKey = ContentKey(
-          contentType: blockHeader,
-          blockHeaderKey: BlockKey(blockHash: header.computeRlpHash()),
-        )
-
-      blockHeadersWithProof.add((encode(contentKey).asSeq(), SSZ.encode(content)))
-
-  ok(blockHeadersWithProof)
 
 func buildAccumulator*(
     headers: seq[Header]
@@ -74,29 +57,6 @@ func buildProof*(
   let epochRecord = epochRecords[epochIndex]
 
   buildProof(header, epochRecord)
-
-func buildHeaderWithProof*(
-    header: Header, epochRecords: seq[EpochRecord]
-): Result[BlockHeaderWithProof, string] =
-  ## Construct the accumulator proof for a specific header.
-  ## Returns the block header with the proof
-  if header.isPreMerge():
-    let epochIndex = getEpochIndex(header)
-    doAssert(epochIndex < uint64(epochRecords.len()))
-    let epochRecord = epochRecords[epochIndex]
-
-    buildHeaderWithProof(header, epochRecord)
-  else:
-    err("Cannot build accumulator proof for post merge header")
-
-func buildHeadersWithProof*(
-    headers: seq[Header], epochRecords: seq[EpochRecord]
-): Result[seq[BlockHeaderWithProof], string] =
-  var headersWithProof: seq[BlockHeaderWithProof]
-  for header in headers:
-    headersWithProof.add(?buildHeaderWithProof(header, epochRecords))
-
-  ok(headersWithProof)
 
 proc toString(v: IoErrorCode): string =
   try:

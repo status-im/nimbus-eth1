@@ -24,9 +24,8 @@ import
   ../common/common_utils,
   ../common/common_deprecation,
   ../rpc/[
-    rpc_eth_api, rpc_discovery_api, rpc_portal_common_api,
-    rpc_portal_legacy_history_api, rpc_portal_beacon_api, rpc_portal_nimbus_beacon_api,
-    rpc_portal_debug_history_api,
+    rpc_discovery_api, rpc_portal_common_api, rpc_portal_history_api,
+    rpc_portal_beacon_api, rpc_portal_nimbus_beacon_api,
   ],
   ../database/content_db,
   ../network/wire/portal_protocol_version,
@@ -142,11 +141,6 @@ proc run(portalClient: PortalClient, config: PortalConf) {.raises: [CatchableErr
       let res = enr.Record.fromURI(enrURI)
       if res.isOk():
         bootstrapRecords.add(res.value)
-  of PortalNetwork.angelfood:
-    for enrURI in angelfoodBootstrapNodes:
-      let res = enr.Record.fromURI(enrURI)
-      if res.isOk():
-        bootstrapRecords.add(res.value)
 
   ## Discovery v5 protocol setup
   let
@@ -230,10 +224,6 @@ proc run(portalClient: PortalClient, config: PortalConf) {.raises: [CatchableErr
     )
 
     portalNodeConfig = PortalNodeConfig(
-      accumulatorFile: config.accumulatorFile.optionToOpt().map(
-          proc(v: InputFile): string =
-            $v
-        ),
       trustedBlockRoot: config.trustedBlockRoot.optionToOpt(),
       portalConfig: portalProtocolConfig,
       dataDir: dataDir,
@@ -291,19 +281,13 @@ proc run(portalClient: PortalClient, config: PortalConf) {.raises: [CatchableErr
   ) {.raises: [CatchableError].} =
     for flag in flags:
       case flag
-      of RpcFlag.eth:
-        rpcServer.installEthApiHandlers(
-          node.legacyHistoryNetwork, node.beaconLightClient
-        )
-      of RpcFlag.debug:
-        discard
       of RpcFlag.portal:
-        if node.legacyHistoryNetwork.isSome():
+        if node.historyNetwork.isSome():
           rpcServer.installPortalCommonApiHandlers(
-            node.legacyHistoryNetwork.value.portalProtocol, PortalSubnetwork.history
+            node.historyNetwork.value.portalProtocol, PortalSubnetwork.history
           )
-          rpcServer.installPortalLegacyHistoryApiHandlers(
-            node.legacyHistoryNetwork.value.portalProtocol
+          rpcServer.installPortalHistoryApiHandlers(
+            node.historyNetwork.value.portalProtocol
           )
         if node.beaconNetwork.isSome():
           rpcServer.installPortalCommonApiHandlers(
@@ -314,11 +298,6 @@ proc run(portalClient: PortalClient, config: PortalConf) {.raises: [CatchableErr
           )
         if node.beaconLightClient.isSome():
           rpcServer.installPortalNimbusBeaconApiHandlers(node.beaconLightClient.value)
-      of RpcFlag.portal_debug:
-        if node.legacyHistoryNetwork.isSome():
-          rpcServer.installPortalDebugHistoryApiHandlers(
-            node.legacyHistoryNetwork.value.portalProtocol
-          )
       of RpcFlag.discovery:
         rpcServer.installDiscoveryApiHandlers(d)
 
