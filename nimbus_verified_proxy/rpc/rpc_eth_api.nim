@@ -14,14 +14,17 @@ import
   nimcrypto/sysrand,
   json_rpc/[rpcserver, rpcclient, rpcproxy],
   eth/common/accounts,
-  web3/eth_api,
+  web3/[eth_api, eth_api_types],
+  ../../execution_chain/core/eip4844,
+  ../../execution_chain/common/common,
   ../types,
   ../header_store,
   ./accounts,
   ./blocks,
   ./evm,
   ./transactions,
-  ./receipts
+  ./receipts,
+  ./fees
 
 logScope:
   topics = "verified_proxy"
@@ -355,6 +358,41 @@ proc installEthApiHandlers*(vp: VerifiedRpcProxy) =
     vp.filterStore[filterId].blockMarker = Opt.some(toBlock)
 
     return logObjs
+
+  vp.proxy.rpc("eth_blobBaseFee") do() -> Quantity:
+    let com = CommonRef.new(
+      DefaultDbMemory.newCoreDbRef(),
+      taskpool = nil,
+      config = chainConfigForNetwork(vp.chainId),
+      initializeDb = false,
+      statelessProviderEnabled = true, # Enables collection of witness keys
+    )
+
+    let header = (await vp.getHeader(blockId("latest"))).valueOr:
+      raise newException(ValueError, error)
+
+    if header.blobGasUsed.isNone():
+      raise newException(ValueError, "blobGasUsed missing from latest header")
+    if header.excessBlobGas.isNone():
+      raise newException(ValueError, "excessBlobGas missing from latest header")
+    let blobBaseFee =
+      getBlobBaseFee(header.excessBlobGas.get, com, com.toEVMFork(header)) *
+      header.blobGasUsed.get.u256
+    if blobBaseFee > high(uint64).u256:
+      raise newException(ValueError, "blobBaseFee is bigger than uint64.max")
+    return Quantity(blobBaseFee.truncate(uint64))
+
+  vp.proxy.rpc("eth_gasPrice") do() -> Quantity:
+    let suggestedPrice = (await vp.suggestGasPrice()).valueOr:
+      raise newException(ValueError, error)
+
+    Quantity(suggestedPrice.uint64)
+
+  vp.proxy.rpc("eth_maxPriorityFeePerGas") do() -> Quantity:
+    let suggestedPrice = (await vp.suggestMaxPriorityGasPrice()).valueOr:
+      raise newException(ValueError, error)
+
+    Quantity(suggestedPrice.uint64)
 
   # Following methods are forwarded directly to the web3 provider and therefore
   # are not validated in any way.
