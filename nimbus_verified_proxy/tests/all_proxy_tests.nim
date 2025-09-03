@@ -11,4 +11,5 @@ import
   ./test_transactions,
   ./test_blocks,
   ./test_receipts,
-  ./test_state
+  ./test_state,
+  ./test_fees
