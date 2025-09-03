@@ -32,17 +32,6 @@ proc defaultEthDataDir*(): string =
 proc defaultEra1DataDir*(): string =
   defaultEthDataDir() / "era1"
 
-proc defaultPortalBridgeDir*(): string =
-  let relativeDataDir =
-    when defined(windows):
-      "AppData" / "Roaming" / "Nimbus" / "PortalBridge"
-    elif defined(macosx):
-      "Library" / "Application Support" / "Nimbus" / "PortalBridge"
-    else:
-      ".cache" / "nimbus" / "portal-bridge"
-
-  getHomeDir() / relativeDataDir
-
 const defaultEndEra* = uint64(era(network_metadata.mergeBlockNumber - 1))
 
 type

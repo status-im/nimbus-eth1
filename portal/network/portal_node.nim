@@ -64,6 +64,8 @@ proc getDbDirectory*(network: PortalNetwork): string =
   else:
     "db_" & network.symbolName()
 
+const dbDir = "portaldb"
+
 proc new*(
     T: type PortalNode,
     network: PortalNetwork,
@@ -78,7 +80,7 @@ proc new*(
     # This is done because the content in the db is dependant on the `NodeId` and
     # the selected `Radius`.
     contentDB = ContentDB.new(
-      config.dataDir / network.getDbDirectory() / "contentdb_" &
+      config.dataDir / dbDir / "contentdb_" &
         discovery.localNode.id.toBytesBE().toOpenArray(0, 8).toHex(),
       storageCapacity = config.storageCapacity,
       radiusConfig = config.portalConfig.radiusConfig,
@@ -109,7 +111,7 @@ proc new*(
     beaconNetwork =
       if PortalSubnetwork.beacon in subnetworks:
         let
-          beaconDb = BeaconDb.new(networkData, config.dataDir / "db" / "beacon_db")
+          beaconDb = BeaconDb.new(networkData, config.dataDir / dbDir / "beacondb")
           beaconNetwork = BeaconNetwork.new(
             network,
             discovery,
