@@ -16,7 +16,7 @@
 
 import
   std/[tables, sets, sequtils],
-  eth/common/hashes,
+  eth/common/[hashes, accounts_rlp],
   results,
   ./[aristo_desc, aristo_fetch, aristo_get, aristo_serialise, aristo_utils, aristo_vid, aristo_layers]
 
@@ -335,47 +335,40 @@ proc verifyProof*(
   verifyProof(nodes, root, path, visitedNodes)
 
 proc convertLeaf(
-    T: type Account,
     link: openArray[byte],
-    segm: NibblesBuf): Result[NodeRef, AristoError] {.gcsafe, raises: [RlpError]} =
-  let
-    acc = rlp.decode(link, T)
-    aristoAcc = AristoAccount(nonce: acc.nonce, balance: acc.balance, codeHash: acc.codeHash)
-    stoID = (acc.storageRoot != EMPTY_ROOT_HASH, default(VertexID))
-    node = NodeRef(vtx: AccLeafRef.init(segm, aristoAcc, stoID))
+    segm: NibblesBuf,
+    isStorage: bool): Result[NodeRef, AristoError] {.gcsafe, raises: [RlpError]} =
 
-  node.key[0] = HashKey.fromBytes(acc.storageRoot).valueOr:
-    return err(PartTrkLinkExpected)
+  let node =
+    if isStorage:
+      let slotValue = rlp.decode(link, UInt256)
+      NodeRef(vtx: StoLeafRef.init(segm, slotValue))
+    else: # account leaf
+      let
+        acc = rlp.decode(link, Account)
+        aristoAcc = AristoAccount(nonce: acc.nonce, balance: acc.balance, codeHash: acc.codeHash)
+        stoID = (acc.storageRoot != EMPTY_ROOT_HASH, default(VertexID))
+        node = NodeRef(vtx: AccLeafRef.init(segm, aristoAcc, stoID))
+
+      node.key[0] = HashKey.fromBytes(acc.storageRoot.data).valueOr:
+        return err(PartTrkLinkExpected)
+      node
 
   ok(node)
-
-proc convertLeaf(
-    T: type UInt256,
-    link: openArray[byte],
-    segm: NibblesBuf): Result[NodeRef, AristoError] {.gcsafe, raises: [RlpError]} =
-  let
-    slotValue = rlp.decode(link, T)
-    node = NodeRef(vtx: StoLeafRef.init(segm, slotValue))
-
-  ok(node)
-
-type Subtrie = Account | UInt256
 
 proc convertSubtrie(
-    T: type Subtrie,
     key: Hash32,
     src: Table[Hash32, seq[byte]],
-    dst: var Table[HashKey, NodeRef]): Result[void, AristoError] {.gcsafe, raises: [RlpError]} =
+    dst: var Table[HashKey, NodeRef],
+    isStorage: static bool): Result[void, AristoError] {.gcsafe, raises: [RlpError]} =
   # Precondition: trieNodes have already been validated using verifyProof
   # Does not allocate any vertex ids when creating the VertexRef types.
   if key notin src:
     # Since we are processing a subtrie some nodes are expected to be missing
     return ok()
 
-  let trieNode = src.getOrDefault(key)
-
   var
-    rlpNode = rlpFromBytes(trieNode)
+    rlpNode = rlpFromBytes(src.getOrDefault(key))
     node = NodeRef()
   case rlpNode.listLen()
   of 2:
@@ -383,15 +376,15 @@ proc convertSubtrie(
       (isLeaf, segm) = NibblesBuf.fromHexPrefix(rlpNode.listElem(0).toBytes())
       link = rlpNode.listElem(1).rlpNodeToBytes() # link or payload
     if isLeaf:
-      node = ?T.convertLeaf(link, segm)
+      node = ?convertLeaf(link, segm, isStorage)
       if node.vtx is AccLeafRef:
         let accLeaf = AccLeafRef(node.vtx)
         if accLeaf.stoID.isValid:
-          ?UInt256.convertSubtrie(node.key[0].to(Hash32), src, dst)
+          ?convertSubtrie(node.key[0].to(Hash32), src, dst, isStorage = true)
     else: # extension node
       let k = HashKey.fromBytes(link).valueOr:
         return err(PartTrkLinkExpected)
-      ?T.convertSubtrie(k.to(Hash32), src, dst)
+      ?convertSubtrie(k.to(Hash32), src, dst, isStorage)
       node.key[0] = k
       node.vtx = ExtBranchRef.init(segm, default(VertexID), 1)
   of 17:
@@ -404,7 +397,7 @@ proc convertSubtrie(
           return err(PartTrkLinkExpected)
       if link.len() > 0:
         inc hashCount
-        ?T.convertSubtrie(k.to(Hash32), src, dst)
+        ?convertSubtrie(k.to(Hash32), src, dst, isStorage)
       node.key[i] = k
     node.vtx = BranchRef.init(default(VertexID), hashCount)
   else:
@@ -459,7 +452,6 @@ proc layersPutSubtrie(
 
   ok()
 
-
 proc putSubTrie*(
     db: AristoTxRef,
     rootHash: Hash32,
@@ -472,7 +464,7 @@ proc putSubTrie*(
 
   try:
     var convertedNodes: Table[HashKey, NodeRef]
-    ?Account.convertSubtrie(rootHash, nodes, convertedNodes)
+    ?convertSubtrie(rootHash, nodes, convertedNodes, isStorage = false)
     ?db.layersPutSubtrie(key, convertedNodes)
   except RlpError:
     return err(PartTrkRlpError)
