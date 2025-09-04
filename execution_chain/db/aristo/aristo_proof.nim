@@ -454,17 +454,17 @@ proc layersPutSubtrie(
 
 proc putSubTrie*(
     db: AristoTxRef,
-    rootHash: Hash32,
+    stateRoot: Hash32,
     nodes: Table[Hash32, seq[byte]]): Result[void, AristoError] =
   if nodes.len() == 0:
     return err(PartTrkEmptyProof)
 
-  let key = HashKey.fromBytes(rootHash.data).valueOr:
+  let key = HashKey.fromBytes(stateRoot.data).valueOr:
     return err(PartTrkLinkExpected)
 
   try:
     var convertedNodes: Table[HashKey, NodeRef]
-    ?convertSubtrie(rootHash, nodes, convertedNodes, isStorage = false)
+    ?convertSubtrie(stateRoot, nodes, convertedNodes, isStorage = false)
     ?db.layersPutSubtrie(key, convertedNodes)
   except RlpError:
     return err(PartTrkRlpError)
