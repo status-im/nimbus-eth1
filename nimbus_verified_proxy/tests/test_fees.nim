@@ -57,7 +57,7 @@ suite "test fees verification":
     let blobFeePrague = waitFor vp.proxy.getClient().eth_blobBaseFee()
 
     check:
-      blobFeePrague > Quantity(0)
+      blobFeePrague > u256(0)
 
     ts.clear()
     vp.headerStore.clear()
