@@ -1842,7 +1842,7 @@ proc neighborhoodGossip*(
   else: # use looked up nodes for gossip
     portal_gossip_with_lookup.inc(labelValues = [$p.protocolId])
 
-    let closestNodes = await p.lookup(NodeId(contentId))
+    let closestNodes = await p.lookup(contentId)
 
     for node in closestNodes:
       if p.radiusCache.get(node.id).isNone():
