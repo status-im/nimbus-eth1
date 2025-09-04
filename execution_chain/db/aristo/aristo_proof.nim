@@ -334,87 +334,153 @@ proc verifyProof*(
   var visitedNodes: HashSet[Hash32]
   verifyProof(nodes, root, path, visitedNodes)
 
+
+proc convertStorageSubtrie(
+    key: Hash32,
+    src: Table[Hash32, seq[byte]],
+    dst: var Table[HashKey, NodeRef]): Result[void, AristoError] {.gcsafe, raises: [RlpError]} =
+  # Precondition: trieNodes have already been validated using verifyProof
+  # Does not allocate any vertex ids when creating the VertexRef types.
+  if key notin src:
+    # Since we are processing a subtrie some nodes are expected to be missing
+    return ok()
+
+  let trieNode = src.getOrDefault(key)
+
+  var
+    rlpNode = rlpFromBytes(trieNode)
+    node = NodeRef()
+
+  case rlpNode.listLen()
+  of 2:
+    let
+      (isLeaf, segm) = NibblesBuf.fromHexPrefix(rlpNode.listElem(0).toBytes())
+      link = rlpNode.listElem(1).rlpNodeToBytes() # link or payload
+    if isLeaf:
+      let slotValue = rlp.decode(link, UInt256)
+      node.vtx = StoLeafRef.init(segm, slotValue)
+    else: # extension node
+      let k = HashKey.fromBytes(link).valueOr:
+        return err(PartTrkLinkExpected)
+      ?convertStorageSubtrie(k.to(Hash32), src, dst)
+      node.key[0] = k
+      node.vtx = ExtBranchRef.init(segm, default(VertexID), 1)
+  of 17:
+    # branch node
+    var hashCount: uint16 = 0
+    for i in 0 ..< 16:
+      let
+        link = rlpNode.listElem(i).rlpNodeToBytes()
+        k = HashKey.fromBytes(link).valueOr:
+          return err(PartTrkLinkExpected)
+      if link.len() > 0:
+        inc hashCount
+        ?convertStorageSubtrie(k.to(Hash32), src, dst)
+      node.key[i] = k
+    node.vtx = BranchRef.init(default(VertexID), hashCount)
+  else:
+    return err(PartTrkGarbledNode)
+
+  let hashKey = HashKey.fromBytes(key.data).valueOr:
+    return err(PartTrkLinkExpected)
+  dst[hashKey] = node
+
+  ok()
+
+# TODO: refactor the below functions to reduce code duplication
 # proc fromAccTrieNode(T: type NodeRef, trieNode: openArray[byte]): Result[T, AristoError] =
-  # Precondition: trieNode has already been validated using verifyProof
+#   # Precondition: trieNode has already been validated using verifyProof
+#   # Does not allocate any vertex ids when creating the VertexRef types.
+#   var
+#     rlpNode = rlpFromBytes(trieNode)
+#     node = NodeRef()
 
-  # VertexRef* {.inheritable, pure.} = ref object
-  #   ## Vertex for building a hexary Patricia or Merkle Patricia Trie
-  #   vType*: VertexType
-
-  # BranchRef* = ref object of VertexRef
-  #   used*: uint16
-  #   startVid*: VertexID
-
-  # ExtBranchRef* = ref object of BranchRef
-  #   pfx*: NibblesBuf
-
-  # LeafRef* = ref object of VertexRef
-  #   pfx*: NibblesBuf
-
-  # AccLeafRef* = ref object of LeafRef
-  #   account*: AristoAccount
-  #   stoID*: StorageID              ## Storage vertex ID (if any)
-
-  # StoLeafRef* = ref object of LeafRef
-  #   stoData*: UInt256
-
-  # construct hash keys
-  # construct VertexRef
-  # var
-  #   rlpNode = rlpFromBytes trieNode
-  #   node = NodeRef() #vtx: VertexRef, key: array[16, HashKey])
-
-
-  # case rlpNode.listLen
-  # of 2:
-  #   let
-  #     (isLeaf, segm) = NibblesBuf.fromHexPrefix rlpNode.listElem(0).toBytes
-  #     link = rlpNode.listElem(1).rlpNodeToBytes() # link or payload
-  #   if isLeaf:
-  #     #node.key[0] = storageRoot
-  #   else: # extension node
-  #     node.key[0] = HashKey.fromBytes(link).valueOr:
-  #       return err(PartTrkLinkExpected)
-
-  # of 17:
-  #   # branch node
-  #   var hashCount = 0
-  #   for i in 0..15:
-  #     let link = rlpNode.listElem(i).rlpNodeToBytes()
-  #     if link.len() > 0:
-  #       inc hashCount
-  #     node.key[i] = HashKey.fromBytes(link).valueOr:
-  #       return err(PartTrkLinkExpected)
-
-  # else:
-  #   return err(PartTrkGarbledNode)
-
-  # let nextKey = HashKey.fromBytes(link).valueOr:
-  #   return err(PartTrkLinkExpected)
-
-
-
-# proc putAccTrieNode(
-#     db: AristoTxRef,
-#     node: NodeRef): Result[Opt[VertexID], AristoError] =
-
-#   let
-#     vid = db.vidFetch(16)
-#     rvid = (STATE_ROOT_VID, vid) # pass in state root?
-
-#   db.layersPutVtx(rvid, node.vtx)
-
-#   case node.vtx.vType:
-#     of AccLeaf:
+#   case rlpNode.listLen()
+#   of 2:
+#     let
+#       (isLeaf, segm) = NibblesBuf.fromHexPrefix(rlpNode.listElem(0).toBytes())
+#       link = rlpNode.listElem(1).rlpNodeToBytes() # link or payload
+#     if isLeaf:
 #       let
-#         accVtx = AccLeafRef(node.vtx)
-#         stoID = accVtx.stoID
-#         useID =
-#           if stoID.isValid: stoID                     # Use as is
-#           elif stoID.vid.isValid: (true, stoID.vid)   # Re-use previous vid
-#           else: (true, db.vidFetch())                 # Create new vid
-#     of StoLeaf:
-#       raiseAssert("Unsupported vType")
-#     of Branch, ExtBranch:
-#       for n, subvid in node.vtx.pairs():
-#         db.layersPutKey((STATE_ROOT_VID, subvid), BranchRef(node.vtx), node.key[n])
+#         acc = rlp.decode(link, Account)
+#         aristoAcc = AristoAccount(nonce: acc.nonce, balance: acc.balance, codeHash: acc.codeHash)
+#         stoID = (acc.storageRoot != EMPTY_ROOT_HASH, default(VertexID))
+#       node.key[0] = HashKey.fromBytes(acc.storageRoot).valueOr:
+#         return err(PartTrkLinkExpected)
+#       node.vtx = AccLeafRef.init(segm, aristoAcc, stoID)
+#     else: # extension node
+#       node.key[0] = HashKey.fromBytes(link).valueOr:
+#         return err(PartTrkLinkExpected)
+#       node.vtx = ExtBranchRef.init(segm, default(VertexID), 1)
+#   of 17:
+#     # branch node
+#     var hashCount = 0
+#     for i in 0 ..< 16:
+#       let link = rlpNode.listElem(i).rlpNodeToBytes()
+#       if link.len() > 0:
+#         inc hashCount
+#       node.key[i] = HashKey.fromBytes(link).valueOr:
+#         return err(PartTrkLinkExpected)
+#     node.vtx = BranchRef.init(default(VertexID), hashCount)
+#   else:
+#     return err(PartTrkGarbledNode)
+
+#   ok(node)
+
+
+
+
+proc layersPutSubtrie(
+    db: AristoTxRef,
+    key: HashKey,
+    nodes: Table[HashKey, NodeRef],
+    rvid: RootedVertexID = (STATE_ROOT_VID, STATE_ROOT_VID)): Result[void, AristoError] =
+  if key notin nodes:
+    return err(PartTrkFollowUpKeyMismatch)
+
+  let node = nodes.getOrDefault(key)
+  case node.vtx.vType:
+    of AccLeaf:
+      let accVtx = AccLeafRef(node.vtx)
+      if accVtx.stoID.isValid:
+        let stoVid = db.vidFetch()
+        accVtx.stoID = (true, stoVid)
+
+        let k = node.key[0]
+        if nodes.contains(k):
+          # Write the storage subtrie
+          ?db.layersPutSubtrie(k, nodes, (stoVid, db.vidFetch(16)))
+        else:
+          # Write the known hash key setting the vtx to nil
+          db.layersPutKey((rvid.root, stoVid), BranchRef(nil), k)
+    of StoLeaf:
+      discard
+    of Branch, ExtBranch:
+      let bvtx = BranchRef(node.vtx)
+      bvtx.startVid = rvid.vid
+
+      for n, subvid in node.vtx.pairs():
+        let k = node.key[n]
+        if nodes.contains(k):
+          ?db.layersPutSubtrie(k, nodes, (rvid.root, db.vidFetch(16)))
+        else:
+          # Write the known hash key setting the vtx to nil
+          db.layersPutKey((rvid.root, subvid), BranchRef(nil), k)
+
+      #db.layersPutKey(rvid, bvtx, key) # maybe don't need this
+
+  db.layersPutVtx(rvid, node.vtx)
+
+  ok()
+
+
+# proc convertAccNode(
+#     db: AristoTxRef,
+#     key: Hash32,
+#     src: Table[Hash32, seq[byte]],
+#     dst: var Table[HashKey, NodeRef]): Result[void, AristoError] =
+#   if key notin src:
+#     return err(PartTrkFollowUpKeyMismatch)
+
+#   let trieNode = src.getOrDefault(key)
+#   let node = NodeRef.fromAccTrieNode(trieNode)
