@@ -8,30 +8,24 @@
 name: Nimbus Portal CI
 on:
   push:
-    paths:
-      - '.github/workflows/portal.yml'
-      - 'portal/**'
-      - '!portal/**.md'
-      - '!portal/docs/**'
-      - 'execution_chain/rpc/hexstrings.nim'
-      - 'execution_chain/rpc/rpc_*.nim'
-      - 'execution_chain/db/**'
-      - 'vendor/**'
-      - 'Makefile'
-      - 'nimbus.nimble'
+    paths-ignore:
+      - 'doc/**'
+      - 'portal/docs/**'
+      - '**/*.md'
+      - 'nimbus_verified_proxy/**'
+      - '.github/workflows/nimbus_verified_proxy.yml'
+      - '.github/workflows/build_base_image.yml'
+      - 'docker/**'
 
   pull_request:
-    paths:
-      - '.github/workflows/portal.yml'
-      - 'portal/**'
-      - '!portal/**.md'
-      - '!portal/docs/**'
-      - 'execution_chain/rpc/hexstrings.nim'
-      - 'execution_chain/rpc/rpc_*.nim'
-      - 'execution_chain/db/**'
-      - 'vendor/**'
-      - 'Makefile'
-      - 'nimbus.nimble'
+    paths-ignore:
+      - 'doc/**'
+      - 'portal/docs/**'
+      - '**/*.md'
+      - 'nimbus_verified_proxy/**'
+      - '.github/workflows/nimbus_verified_proxy.yml'
+      - '.github/workflows/build_base_image.yml'
+      - 'docker/**'
 
   workflow_dispatch:
 
