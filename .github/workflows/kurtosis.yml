@@ -16,11 +16,9 @@ on:
       - master
     paths-ignore:
       - 'doc/**'
-      - 'docs/**'
+      - 'portal/docs/**'
       - '**/*.md'
       - 'hive_integration/**'
-      - 'portal/**'
-      - '.github/workflows/portal*.yml'
       - 'nimbus_verified_proxy/**'
       - '.github/workflows/nimbus_verified_proxy.yml'
       - '.github/workflows/build_base_image.yml'
@@ -31,11 +29,9 @@ on:
       - master
     paths-ignore:
       - 'doc/**'
-      - 'docs/**'
+      - 'portal/docs/**'
       - '**/*.md'
       - 'hive_integration/**'
-      - 'portal/**'
-      - '.github/workflows/portal*.yml'
       - 'nimbus_verified_proxy/**'
       - '.github/workflows/nimbus_verified_proxy.yml'
       - '.github/workflows/build_base_image.yml'
