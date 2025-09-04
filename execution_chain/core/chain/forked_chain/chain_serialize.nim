@@ -131,7 +131,7 @@ proc replayBlock(fc: ForkedChainRef;
     return err(error)
 
   fc.writeBaggage(blk.blk, blk.hash, txFrame, receipts)
-  fc.updateSnapshot(blk.blk, txFrame)
+  fc.updateSnapshot(blk.blk.header.number, txFrame)
 
   blk.txFrame = txFrame
   blk.receipts = move(receipts)
