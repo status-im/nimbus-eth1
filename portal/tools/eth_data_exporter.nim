@@ -23,13 +23,11 @@ import
   json_rpc/rpcclient,
   snappy,
   ncli/e2store,
-  ../network/legacy_history/history_content,
+  web3/eth_api_types,
   ../eth_history/[history_data_json_store, history_data_ssz_e2s, era1],
   ../eth_history/block_proofs/block_proof_historical_hashes_accumulator,
+  ../bridge/common/rpc_helpers,
   eth_data_exporter/[exporter_conf, exporter_common, cl_data_exporter, el_data_exporter]
-
-# Need to be selective due to the `Block` type conflict from downloader
-from ../network/legacy_history/history_network import encode
 
 chronicles.formatIt(IoErrorCode):
   $it
@@ -110,12 +108,14 @@ proc cmdExportEra1(config: ExporterConf) =
       for blockNumber in startNumber .. endNumber:
         let
           (header, body, totalDifficulty) = (
-            waitFor noCancel(client.getBlockByNumber(blockNumber))
+            waitFor noCancel(client.getBlockByNumber(blockId(blockNumber)))
           ).valueOr:
             error "Failed retrieving block, skip creation of era1 file",
               blockNumber, error
             break writeFileBlock
-          receipts = (waitFor noCancel(client.getReceiptsByNumber(blockNumber))).valueOr:
+          receipts = (
+            waitFor noCancel(client.getReceiptsByNumber(blockId(blockNumber)))
+          ).valueOr:
             error "Failed retrieving receipts, skip creation of era1 file",
               blockNumber, error
             break writeFileBlock
@@ -218,7 +218,7 @@ when isMainModule:
         for j in 0 ..< EPOCH_SIZE.uint64:
           info "Requesting block", number = j
           let header = (
-            waitFor noCancel(client.getHeaderByNumber(epoch * EPOCH_SIZE + j))
+            waitFor noCancel(client.getHeaderByNumber(blockId(epoch * EPOCH_SIZE + j)))
           ).valueOr:
             fatal "Failed retrieving block header",
               blockNumber = epoch * EPOCH_SIZE + j, error
@@ -432,7 +432,7 @@ when isMainModule:
         var headers: seq[headers.Header]
         for j in startBlockNumber .. endBlockNumber:
           debug "Requesting block", number = j
-          let header = (waitFor noCancel(client.getHeaderByNumber(j))).valueOr:
+          let header = (waitFor noCancel(client.getHeaderByNumber(blockId(j)))).valueOr:
             fatal "Failed retrieving block header", blockNumber = j, error
             quit QuitFailure
           headers.add(header)
@@ -456,76 +456,6 @@ when isMainModule:
       let res = exportHeaders(file, startBlockNumber, endBlockNumber)
       if res.isErr():
         fatal "Failed exporting headers", error = res.error
-        quit QuitFailure
-    of HistoryCmd.exportHeadersWithProof:
-      let
-        startBlockNumber = config.startBlockNumber2
-        endBlockNumber = config.endBlockNumber2
-
-      if (endBlockNumber < startBlockNumber):
-        fatal "Start block number should be smaller than end block number",
-          startBlockNumber, endBlockNumber
-        quit QuitFailure
-
-      let file =
-        &"mainnet-headersWithProof-{startBlockNumber:05}-{endBlockNumber:05}.json"
-      let fh = createAndOpenFile(string config.dataDir, file)
-
-      var contentTable: JsonPortalContentTable
-      for blockNumber in startBlockNumber .. endBlockNumber:
-        let
-          epochIndex = getEpochIndex(blockNumber)
-          epochHeadersFile = dataDir / &"mainnet-headers-epoch-{epochIndex:05}.e2s"
-          epochRecordFile = dataDir / &"mainnet-epoch-record-{epochIndex:05}.ssz"
-
-        let res = readBlockHeaders(epochHeadersFile)
-        if res.isErr():
-          error "Could not read headers epoch file", error = res.error
-          quit QuitFailure
-
-        let blockHeaders = res.get()
-
-        let epochRecordRes = readEpochRecordCached(epochRecordFile)
-        if epochRecordRes.isErr():
-          error "Could not read epoch record file", error = epochRecordRes.error
-          quit QuitFailure
-
-        let epochRecord = epochRecordRes.get()
-
-        let headerIndex = getHeaderRecordIndex(blockNumber, epochIndex)
-        let header = blockHeaders[headerIndex]
-        if header.isPreMerge():
-          let headerWithProof = buildHeaderWithProof(header, epochRecord)
-          if headerWithProof.isErr:
-            error "Error building proof", error = headerWithProof.error
-            quit QuitFailure
-
-          let
-            content = headerWithProof.get()
-            contentKey = ContentKey(
-              contentType: blockHeader,
-              blockHeaderKey: BlockKey(blockHash: header.computeRlpHash()),
-            )
-            encodedContentKey = history_content.encode(contentKey)
-            encodedContent = SSZ.encode(content)
-
-          let portalContent = JsonPortalContent(
-            content_key: encodedContentKey.asSeq().to0xHex(),
-            content_value: encodedContent.to0xHex(),
-          )
-
-          contentTable[$blockNumber] = portalContent
-        else:
-          # TODO: Deal with writing post merge headers
-          error "Not a pre merge header"
-          quit QuitFailure
-
-      writePortalContentToJson(fh, contentTable)
-
-      try:
-        fh.close()
-      except IOError as e:
-        fatal "Error occured while closing file", error = e.msg
         quit QuitFailure
     of HistoryCmd.exportEra1:
       cmdExportEra1(config)
@@ -562,13 +492,3 @@ when isMainModule:
       )
     of BeaconCmd.exportBlockProof:
       exportBlockProof(string config.dataDir, string config.eraDir, config.slotNumber)
-    of BeaconCmd.exportHeaderWithProof:
-      let client = newRpcClient(config.web3Url1)
-      let connectRes = waitFor client.connectRpcClient(config.web3Url1)
-      if connectRes.isErr():
-        fatal "Failed connecting to JSON-RPC client", error = connectRes.error
-        quit QuitFailure
-
-      waitFor exportHeaderWithProof(
-        client, string config.dataDir, string config.eraDir1, config.slotNumber1
-      )

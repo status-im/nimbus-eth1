@@ -205,23 +205,8 @@ template rlpNodeToBytes(node: Rlp): seq[byte] =
   else:
     node.toBytes()
 
-proc trackRlpNodes(
-    chain: openArray[seq[byte]];
-    nextIndex: int;
-    topKey: HashKey;
-    path: NibblesBuf;
-    start = false;
-     ): Result[seq[byte], AristoError]
-     {.gcsafe, raises: [RlpError]} =
-  ## Verify rlp-encoded node chain created by `chainRlpNodes()`.
-
-  if nextIndex > chain.high:
-    return err(PartTrkLinkExpected)
-  if path.len == 0:
-    return err(PartTrkEmptyPath)
-
-  # Verify key against rlp-node
-  let digest = chain[nextIndex].digestTo(HashKey)
+template verifyAgainstKey(node: openArray[byte], topKey: HashKey, start: bool): auto =
+  let digest = node.digestTo(HashKey)
   if start:
     if topKey.to(Hash32) != digest.to(Hash32):
       return err(PartTrkFollowUpKeyMismatch)
@@ -229,15 +214,16 @@ proc trackRlpNodes(
     if topKey != digest:
       return err(PartTrkFollowUpKeyMismatch)
 
+template verifyRlp(node: openArray[byte]): (HashKey, NibblesBuf) =
   var
-    rlpNode = rlpFromBytes chain[nextIndex]
+    rlpNode = rlpFromBytes(node)
     nChewOff = 0
     link: seq[byte]
 
   # Decode rlp-node and prepare for recursion
-  case rlpNode.listLen
+  case rlpNode.listLen()
   of 2:
-    let (isLeaf, segm) = NibblesBuf.fromHexPrefix rlpNode.listElem(0).toBytes
+    let (isLeaf, segm) = NibblesBuf.fromHexPrefix(rlpNode.listElem(0).toBytes())
     nChewOff = sharedPrefixLen(path, segm)
     link = rlpNode.listElem(1).rlpNodeToBytes() # link or payload
     if isLeaf:
@@ -253,7 +239,28 @@ proc trackRlpNodes(
   let nextKey = HashKey.fromBytes(link).valueOr:
     return err(PartTrkLinkExpected)
 
-  trackRlpNodes(chain, nextIndex + 1, nextKey, path.slice nChewOff)
+  (nextKey, path.slice(nChewOff))
+
+proc trackRlpNodes(
+    chain: openArray[seq[byte]];
+    nextIndex: int;
+    topKey: HashKey;
+    path: NibblesBuf;
+    start = false;
+     ): Result[seq[byte], AristoError]
+     {.gcsafe, raises: [RlpError]} =
+  ## Verify rlp-encoded node chain created by `chainRlpNodes()`.
+  if nextIndex > chain.high:
+    return err(PartTrkLinkExpected)
+  if path.len == 0:
+    return err(PartTrkEmptyPath)
+
+  # Verify key against rlp-node
+  let nextNode = chain[nextIndex]
+  nextNode.verifyAgainstKey(topKey, start)
+
+  let (nextKey, path) = nextNode.verifyRlp()
+  trackRlpNodes(chain, nextIndex + 1, nextKey, path)
 
 proc trackRlpNodes(
     nodes: Table[Hash32, seq[byte]];
@@ -264,8 +271,8 @@ proc trackRlpNodes(
      ): Result[seq[byte], AristoError]
      {.gcsafe, raises: [RlpError]} =
   ## Verify rlp-encoded node chain created by `chainRlpNodes()`.
-
   let nodeHash = topKey.to(Hash32)
+
   if visitedNodes.contains(nodeHash):
     return err(PartTrkFollowUpKeyMismatch)
   if nodeHash notin nodes:
@@ -275,64 +282,36 @@ proc trackRlpNodes(
       return err(PartTrkLinkExpected)
   if path.len == 0:
     return err(PartTrkEmptyPath)
-
-  let node = nodes.getOrDefault(nodeHash)
   visitedNodes.incl(nodeHash)
 
   # Verify key against rlp-node
-  let digest = node.digestTo(HashKey)
-  if start:
-    if topKey.to(Hash32) != digest.to(Hash32):
-      return err(PartTrkFollowUpKeyMismatch)
-  else:
-    if topKey != digest:
-      return err(PartTrkFollowUpKeyMismatch)
+  let nextNode = nodes.getOrDefault(nodeHash)
+  nextNode.verifyAgainstKey(topKey, start)
 
-  var
-    rlpNode = rlpFromBytes node
-    nChewOff = 0
-    link: seq[byte]
+  let (nextKey, path) = nextNode.verifyRlp()
+  trackRlpNodes(nodes, visitedNodes, nextKey, path)
 
-  # Decode rlp-node and prepare for recursion
-  case rlpNode.listLen
-  of 2:
-    let (isLeaf, segm) = NibblesBuf.fromHexPrefix rlpNode.listElem(0).toBytes
-    nChewOff = sharedPrefixLen(path, segm)
-    link = rlpNode.listElem(1).rlpNodeToBytes() # link or payload
-    if isLeaf:
-      if nChewOff == path.len:
-        return ok(link)
-      return err(PartTrkLeafPfxMismatch)
-  of 17:
-    nChewOff = 1
-    link = rlpNode.listElem(path[0].int).rlpNodeToBytes()
-  else:
-    return err(PartTrkGarbledNode)
-
-  let nextKey = HashKey.fromBytes(link).valueOr:
-    return err(PartTrkLinkExpected)
-
-  trackRlpNodes(nodes, visitedNodes, nextKey, path.slice nChewOff)
+template handleTrackRlpNodesResult(blk: untyped): auto =
+  try:
+    let rc = blk
+    if rc.isOk():
+      return ok(Opt.some rc.value)
+    if rc.error() in TrackRlpNodesNoEntry:
+      return ok(Opt.none seq[byte])
+    return err(rc.error())
+  except RlpError:
+    return err(PartTrkRlpError)
 
 proc verifyProof*(
     chain: openArray[seq[byte]];
     root: Hash32;
-    path: Hash32;
-      ): Result[Opt[seq[byte]], AristoError] =
+    path: Hash32): Result[Opt[seq[byte]], AristoError] =
   if chain.len() == 0:
     return err(PartTrkEmptyProof)
 
-  try:
-    let
-      nibbles = NibblesBuf.fromBytes path.data
-      rc = trackRlpNodes(chain, 0, root.to(HashKey), nibbles, start=true)
-    if rc.isOk:
-      return ok(Opt.some rc.value)
-    if rc.error in TrackRlpNodesNoEntry:
-      return ok(Opt.none seq[byte])
-    return err(rc.error)
-  except RlpError:
-    return err(PartTrkRlpError)
+  handleTrackRlpNodesResult():
+    let nibbles = NibblesBuf.fromBytes(path.data)
+    trackRlpNodes(chain, 0, root.to(HashKey), nibbles, start = true)
 
 proc verifyProof*(
     nodes: Table[Hash32, seq[byte]];
@@ -343,27 +322,19 @@ proc verifyProof*(
   if nodes.len() == 0:
     return err(PartTrkEmptyProof)
 
-  try:
-    let
-      nibbles = NibblesBuf.fromBytes path.data
-      rc = trackRlpNodes(nodes, visitedNodes, root.to(HashKey), nibbles, start=true)
-    if rc.isOk:
-      return ok(Opt.some rc.value)
-    if rc.error in TrackRlpNodesNoEntry:
-      return ok(Opt.none seq[byte])
-    return err(rc.error)
-  except RlpError:
-    return err(PartTrkRlpError)
+  handleTrackRlpNodesResult():
+    let nibbles = NibblesBuf.fromBytes(path.data)
+    trackRlpNodes(nodes, visitedNodes, root.to(HashKey), nibbles, start = true)
 
 proc verifyProof*(
     nodes: Table[Hash32, seq[byte]];
     root: Hash32;
     path: Hash32;
-      ): Result[Opt[seq[byte]], AristoError] = 
+      ): Result[Opt[seq[byte]], AristoError] =
   var visitedNodes: HashSet[Hash32]
   verifyProof(nodes, root, path, visitedNodes)
 
-proc fromAccTrieNode(T: type NodeRef, trieNode: openArray[byte]): Result[T, AristoError] =
+# proc fromAccTrieNode(T: type NodeRef, trieNode: openArray[byte]): Result[T, AristoError] =
   # Precondition: trieNode has already been validated using verifyProof
 
   # VertexRef* {.inheritable, pure.} = ref object
@@ -389,34 +360,34 @@ proc fromAccTrieNode(T: type NodeRef, trieNode: openArray[byte]): Result[T, Aris
 
   # construct hash keys
   # construct VertexRef
-  var
-    rlpNode = rlpFromBytes trieNode
-    node = NodeRef() #vtx: VertexRef, key: array[16, HashKey])
+  # var
+  #   rlpNode = rlpFromBytes trieNode
+  #   node = NodeRef() #vtx: VertexRef, key: array[16, HashKey])
 
 
-  case rlpNode.listLen
-  of 2:
-    let 
-      (isLeaf, segm) = NibblesBuf.fromHexPrefix rlpNode.listElem(0).toBytes
-      link = rlpNode.listElem(1).rlpNodeToBytes() # link or payload
-    if isLeaf:
-      #node.key[0] = storageRoot
-    else: # extension node
-      node.key[0] = HashKey.fromBytes(link).valueOr:
-        return err(PartTrkLinkExpected)
-      
-  of 17:
-    # branch node
-    var hashCount = 0
-    for i in 0..15:
-      let link = rlpNode.listElem(i).rlpNodeToBytes()
-      if link.len() > 0:
-        inc hashCount
-      node.key[i] = HashKey.fromBytes(link).valueOr:
-        return err(PartTrkLinkExpected)
+  # case rlpNode.listLen
+  # of 2:
+  #   let
+  #     (isLeaf, segm) = NibblesBuf.fromHexPrefix rlpNode.listElem(0).toBytes
+  #     link = rlpNode.listElem(1).rlpNodeToBytes() # link or payload
+  #   if isLeaf:
+  #     #node.key[0] = storageRoot
+  #   else: # extension node
+  #     node.key[0] = HashKey.fromBytes(link).valueOr:
+  #       return err(PartTrkLinkExpected)
 
-  else:
-    return err(PartTrkGarbledNode)
+  # of 17:
+  #   # branch node
+  #   var hashCount = 0
+  #   for i in 0..15:
+  #     let link = rlpNode.listElem(i).rlpNodeToBytes()
+  #     if link.len() > 0:
+  #       inc hashCount
+  #     node.key[i] = HashKey.fromBytes(link).valueOr:
+  #       return err(PartTrkLinkExpected)
+
+  # else:
+  #   return err(PartTrkGarbledNode)
 
   # let nextKey = HashKey.fromBytes(link).valueOr:
   #   return err(PartTrkLinkExpected)

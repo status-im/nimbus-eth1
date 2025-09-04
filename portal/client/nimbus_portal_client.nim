@@ -22,11 +22,9 @@ import
   eth/net/nat,
   eth/p2p/discoveryv5/protocol as discv5_protocol,
   ../common/common_utils,
-  ../common/common_deprecation,
   ../rpc/[
-    rpc_eth_api, rpc_discovery_api, rpc_portal_common_api,
-    rpc_portal_legacy_history_api, rpc_portal_beacon_api, rpc_portal_nimbus_beacon_api,
-    rpc_portal_debug_history_api,
+    rpc_discovery_api, rpc_portal_common_api, rpc_portal_history_api,
+    rpc_portal_beacon_api, rpc_portal_nimbus_beacon_api,
   ],
   ../database/content_db,
   ../network/wire/portal_protocol_version,
@@ -66,7 +64,7 @@ proc run(portalClient: PortalClient, config: PortalConf) {.raises: [CatchableErr
     version = fullVersionStr, cmdParams = commandLineParams()
 
   let rng = newRng()
-  let dataDir = config.dataDir.string
+  let dataDir = config.dataDir
 
   # Make sure dataDir exists
   let pathExists = createPath(dataDir)
@@ -96,11 +94,6 @@ proc run(portalClient: PortalClient, config: PortalConf) {.raises: [CatchableErr
       discard unlockFile(lockFileIoHandle)
       discard closeFile(lockFileIoHandle.handle)
   )
-
-  # Check for legacy files and move them to the new naming in case they exist
-  # TODO: Remove this at some point in the future
-  moveFileIfExists(dataDir / legacyEnrFileName, dataDir / enrFileName)
-  moveFileIfExists(dataDir / legacyLockFileName, dataDir / lockFileName)
 
   ## Network configuration
   let
@@ -139,11 +132,6 @@ proc run(portalClient: PortalClient, config: PortalConf) {.raises: [CatchableErr
     discard # don't connect to any network bootstrap nodes
   of PortalNetwork.mainnet:
     for enrURI in mainnetBootstrapNodes:
-      let res = enr.Record.fromURI(enrURI)
-      if res.isOk():
-        bootstrapRecords.add(res.value)
-  of PortalNetwork.angelfood:
-    for enrURI in angelfoodBootstrapNodes:
       let res = enr.Record.fromURI(enrURI)
       if res.isOk():
         bootstrapRecords.add(res.value)
@@ -206,18 +194,6 @@ proc run(portalClient: PortalClient, config: PortalConf) {.raises: [CatchableErr
   let dbPath =
     dataDir / config.network.getDbDirectory() / "contentdb_" &
     d.localNode.id.toBytesBE().toOpenArray(0, 8).toHex()
-  moveFileIfExists(
-    dbPath / legacyContentDbFileName & ".sqlite3",
-    dbPath / contentDbFileName & ".sqlite3",
-  )
-  moveFileIfExists(
-    dbPath / legacyContentDbFileName & ".sqlite3-shm",
-    dbPath / contentDbFileName & ".sqlite3-shm",
-  )
-  moveFileIfExists(
-    dbPath / legacyContentDbFileName & ".sqlite3-wal",
-    dbPath / contentDbFileName & ".sqlite3-wal",
-  )
 
   ## Portal node setup
   let
@@ -230,10 +206,6 @@ proc run(portalClient: PortalClient, config: PortalConf) {.raises: [CatchableErr
     )
 
     portalNodeConfig = PortalNodeConfig(
-      accumulatorFile: config.accumulatorFile.optionToOpt().map(
-          proc(v: InputFile): string =
-            $v
-        ),
       trustedBlockRoot: config.trustedBlockRoot.optionToOpt(),
       portalConfig: portalProtocolConfig,
       dataDir: dataDir,
@@ -291,19 +263,13 @@ proc run(portalClient: PortalClient, config: PortalConf) {.raises: [CatchableErr
   ) {.raises: [CatchableError].} =
     for flag in flags:
       case flag
-      of RpcFlag.eth:
-        rpcServer.installEthApiHandlers(
-          node.legacyHistoryNetwork, node.beaconLightClient
-        )
-      of RpcFlag.debug:
-        discard
       of RpcFlag.portal:
-        if node.legacyHistoryNetwork.isSome():
+        if node.historyNetwork.isSome():
           rpcServer.installPortalCommonApiHandlers(
-            node.legacyHistoryNetwork.value.portalProtocol, PortalSubnetwork.history
+            node.historyNetwork.value.portalProtocol, PortalSubnetwork.history
           )
-          rpcServer.installPortalLegacyHistoryApiHandlers(
-            node.legacyHistoryNetwork.value.portalProtocol
+          rpcServer.installPortalHistoryApiHandlers(
+            node.historyNetwork.value.portalProtocol
           )
         if node.beaconNetwork.isSome():
           rpcServer.installPortalCommonApiHandlers(
@@ -314,11 +280,6 @@ proc run(portalClient: PortalClient, config: PortalConf) {.raises: [CatchableErr
           )
         if node.beaconLightClient.isSome():
           rpcServer.installPortalNimbusBeaconApiHandlers(node.beaconLightClient.value)
-      of RpcFlag.portal_debug:
-        if node.legacyHistoryNetwork.isSome():
-          rpcServer.installPortalDebugHistoryApiHandlers(
-            node.legacyHistoryNetwork.value.portalProtocol
-          )
       of RpcFlag.discovery:
         rpcServer.installDiscoveryApiHandlers(d)
 
@@ -389,12 +350,13 @@ proc stop(f: PortalClient) {.async: (raises: []).} =
 when isMainModule:
   ProcessState.setupStopHandlers()
 
-  {.pop.}
-  let config = PortalConf.load(
-    version = clientName & " " & fullVersionStr & "\p\p" & nimBanner,
-    copyrightBanner = copyrightBanner,
-  )
-  {.push raises: [].}
+  const
+    portalBuild = clientVersion & "\p\p" & nimBanner()
+    banner = portalBuild & "\p\p" & copyrightBanner
+
+  # {.pop.}
+  let config = PortalConf.load(version = portalBuild, copyrightBanner = banner)
+  # {.push raises: [].}
 
   let portalClient = PortalClient.init()
   case config.cmd

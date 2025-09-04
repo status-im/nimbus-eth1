@@ -15,81 +15,13 @@ import
   json_rpc/rpcclient,
   web3/[eth_api_types, eth_api],
   eth/common/[headers_rlp, blocks_rlp, receipts_rlp],
-  ../../eth_history/yaml_utils
-
-from ../../../hive_integration/nodocker/engine/engine_client import
-  toBlockHeader, toTransactions
-from ../../bridge/history/portal_history_bridge import asReceipts
+  ../../eth_history/yaml_utils,
+  ../../bridge/common/rpc_helpers
 
 type BlockData* = object
   header*: string
   body*: string
   receipts*: string
-
-proc getHeaderByNumber*(
-    client: RpcClient, blockNumber: uint64
-): Future[Result[Header, string]] {.async: (raises: [CancelledError]).} =
-  let blockObject =
-    try:
-      await client.eth_getBlockByNumber(blockId(blockNumber), fullTransactions = false)
-    except CatchableError as e:
-      return err(e.msg)
-
-  ok(blockObject.toBlockHeader())
-
-proc getBlockByNumber*(
-    client: RpcClient, blockNumber: uint64
-): Future[Result[(Header, BlockBody, UInt256), string]] {.
-    async: (raises: [CancelledError])
-.} =
-  let blockObject =
-    try:
-      await client.eth_getBlockByNumber(blockId(blockNumber), fullTransactions = true)
-    except CatchableError as e:
-      return err(e.msg)
-
-  var uncles: seq[Header]
-  for i in 0 ..< blockObject.uncles.len:
-    let uncleBlockObject =
-      try:
-        await client.eth_getUncleByBlockNumberAndIndex(
-          blockId(blockNumber), Quantity(i)
-        )
-      except CatchableError as e:
-        return err(e.msg)
-
-    uncles.add(uncleBlockObject.toBlockHeader())
-
-  ok(
-    (
-      blockObject.toBlockHeader(),
-      BlockBody(
-        transactions: blockObject.transactions.toTransactions(),
-        uncles: uncles,
-        withdrawals: blockObject.withdrawals,
-      ),
-      blockObject.totalDifficulty,
-    )
-  )
-
-proc getReceiptsByNumber*(
-    client: RpcClient, blockNumber: uint64
-): Future[Result[seq[Receipt], string]] {.async: (raises: [CancelledError]).} =
-  let receiptsObjects =
-    try:
-      await client.eth_getBlockReceipts(blockId(blockNumber))
-    except CatchableError as e:
-      return err(e.msg)
-
-  if receiptsObjects.isNone():
-    return err("No receipts found for block number " & $blockNumber)
-
-  receiptsObjects.value().asReceipts()
-
-proc getStoredReceiptsByNumber*(
-    client: RpcClient, blockNumber: uint64
-): Future[Result[seq[StoredReceipt], string]] {.async: (raises: [CancelledError]).} =
-  ok((?(await client.getReceiptsByNumber(blockNumber))).to(seq[StoredReceipt]))
 
 proc toBlockData(
     header: Header, body: BlockBody, receipts: seq[StoredReceipt]
@@ -104,7 +36,8 @@ proc exportBlock*(
     client: RpcClient, blockNumber: uint64, fileName: string
 ): Future[Result[void, string]] {.async: (raises: [CancelledError]).} =
   let
-    (header, body, _) = ?(await client.getBlockByNumber(blockNumber))
-    receipts = ?(await client.getStoredReceiptsByNumber(blockNumber))
+    blockId = blockId(blockNumber)
+    (header, body, _) = ?(await client.getBlockByNumber(blockId))
+    receipts = ?(await client.getStoredReceiptsByNumber(blockId))
 
   toBlockData(header, body, receipts).dumpToYaml(fileName)

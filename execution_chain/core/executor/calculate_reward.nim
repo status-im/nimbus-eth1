@@ -51,7 +51,8 @@ const
     eth0, # Bpo2
     eth0, # Bpo3
     eth0, # Bpo4
-    eth0  # Bpo5
+    eth0, # Bpo5
+    eth0, # Amsterdam
   ]
 
 proc calculateReward*(vmState: BaseVMState; account: Address;

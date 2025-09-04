@@ -66,6 +66,10 @@ proc setupServices*(ctx: BeaconCtxRef; info: static[string]) =
   ctx.pool.chain.com.beaconSyncerProgress = proc(): SyncStateData =
     ctx.querySyncProgress()
 
+  # Set up ticker, disabled by default
+  if ctx.pool.ticker.isNil:
+    ctx.pool.ticker = proc(ctx: BeaconCtxRef) = discard
+
 
 proc destroyServices*(ctx: BeaconCtxRef) =
   ## Helper for `release()`

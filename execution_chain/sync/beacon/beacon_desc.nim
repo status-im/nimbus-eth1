@@ -20,4 +20,7 @@ export
 type
   BeaconSyncRef* = RunnerSyncRef[BeaconCtxData,BeaconBuddyData]
 
+  BeaconSyncConfigHook* = proc(desc: BeaconSyncRef) {.gcsafe, raises: [].}
+    ## Conditional configuration request hook
+
 # End

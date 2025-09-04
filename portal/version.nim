@@ -7,23 +7,20 @@
 
 {.push raises: [].}
 
-import std/strutils, stew/byteutils, metrics
+import stew/byteutils, metrics, beacon_chain/buildinfo
+
+export buildinfo
 
 const
   versionMajor* = 0
   versionMinor* = 1
   versionBuild* = 0
 
-  gitRevision* = strip(staticExec("git rev-parse --short HEAD"))[0 .. 5]
-
   versionAsStr* = $versionMajor & "." & $versionMinor & "." & $versionBuild
 
-  fullVersionStr* = "v" & versionAsStr & "-" & gitRevision
+  fullVersionStr* = "v" & versionAsStr & "-" & GitRevision
 
   clientName* = "nimbus_portal_client"
-
-  nimFullBanner = staticExec("nim --version")
-  nimBanner* = staticExec("nim --version | grep Version")
 
   # The web3_clientVersion
   clientVersion* =
@@ -37,28 +34,8 @@ const
   # Short debugging identifier to be placed in the ENR
   enrClientInfoShort* = toBytes("f")
 
-func getNimGitHash*(): string =
-  const gitPrefix = "git hash: "
-  let tmp = splitLines(nimFullBanner)
-  if tmp.len == 0:
-    return
-  for line in tmp:
-    if line.startsWith(gitPrefix) and line.len > 8 + gitPrefix.len:
-      result = line[gitPrefix.len ..< gitPrefix.len + 8]
-
-# TODO: Currently prefixing these metric names as the non prefixed names give
-# a collector already registered conflict at runtime. This is due to the same
-# names in nimbus-eth2 nimbus_binary_common.nim even though there are no direct
-# imports of that file.
-
 declareGauge versionGauge,
   "nimbus_portal_client version info (as metric labels)",
   ["version", "commit"],
   name = "nimbus_portal_client_version"
-versionGauge.set(1, labelValues = [fullVersionStr, gitRevision])
-
-declareGauge nimVersionGauge,
-  "Nim version info",
-  ["version", "nim_commit"],
-  name = "nimbus_portal_client_nim_version"
-nimVersionGauge.set(1, labelValues = [NimVersion, getNimGitHash()])
+versionGauge.set(1, labelValues = [fullVersionStr, GitRevision])
