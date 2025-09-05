@@ -93,16 +93,15 @@ import
   ./[sync_desc, wire_protocol]
 
 type
-  ActiveBuddies[S,W] = ##\
+  ActiveBuddies[S,W] = KeyedQueue[ENode,RunnerBuddyRef[S,W]]
     ## List of active workers, using `Hash(Peer)` rather than `Peer`
-    KeyedQueue[ENode,RunnerBuddyRef[S,W]]
 
   RunCtrl = enum
     terminated = 0
     shutdown
     running
 
-  RunnerSyncRef*[S,W] = ref object
+  RunnerSyncRef*[S,W] = ref object of RootRef
     ## Module descriptor
     ctx*: CtxRef[S]             ## Shared data
     pool: PeerPool              ## For starting the system

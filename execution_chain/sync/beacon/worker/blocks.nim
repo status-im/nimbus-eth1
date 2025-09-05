@@ -154,14 +154,12 @@ template blocksCollect*(
         let
           # Insert blocks list on the `staged` queue
           key = rc.value[0].header.number
-          qItem = ctx.blk.staged.insert(key).valueOr:
+          qItem = ctx.blocksStagedQueueInsert(key).valueOr:
             raiseAssert info & ": duplicate key on staged queue iv=" &
               (key, rc.value[^1].header.number).bnStr
 
         qItem.data.blocks = rc.value                # store `blocks[]` list
         qItem.data.peerID = buddy.peerID
-
-        ctx.blocksStagedQueueMetricsUpdate()        # metrics
         nQueued += rc.value.len                     # statistics
         # End if
 
@@ -254,8 +252,7 @@ template blocksUnstage*(
         break
 
       # Remove from queue
-      discard ctx.blk.staged.delete qItem.key
-      ctx.blocksStagedQueueMetricsUpdate()         # metrics
+      ctx.blocksStagedQueueDelete qItem.key
 
       # Import blocks list, async/template
       nImported += buddy.blocksImport(qItem.data.blocks,qItem.data.peerID, info)

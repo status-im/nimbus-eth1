@@ -162,13 +162,11 @@ template headersCollect*(buddy: BeaconBuddyRef; info: static[string]) =
         let
           # Insert headers list on the `staged` queue
           key = rc.value[0].number
-          qItem = ctx.hdr.staged.insert(key).valueOr:
+          qItem = ctx.headersStagedQueueInsert(key).valueOr:
             raiseAssert info & ": duplicate key on staged queue" &
               " iv=" & (rc.value[^1].number,key).bnStr
         qItem.data.revHdrs = rc.value
         qItem.data.peerID = buddy.peerID
-
-        ctx.headersStagedQueueMetricsUpdate()        # metrics
         nQueued = rc.value.len                       # statistics
         # End if
 
@@ -247,8 +245,7 @@ proc headersUnstage*(buddy: BeaconBuddyRef; info: static[string]): bool =
       break
 
     # Remove from queue
-    discard ctx.hdr.staged.delete(qItem.key)
-    ctx.headersStagedQueueMetricsUpdate()                    # metrics
+    ctx.headersStagedQueueDelete(qItem.key)
 
     # Store headers on database
     let nHdrs = buddy.headersStashOnDisk(
@@ -285,7 +282,7 @@ proc headersStagedReorg*(ctx: BeaconCtxRef; info: static[string]) =
       nUnproc=ctx.headersUnprocTotal(), nStagedQ=ctx.hdr.staged.len
 
     ctx.headersUnprocClear() # clears `unprocessed` and `borrowed` list
-    ctx.hdr.staged.clear()
+    ctx.headersStagedQueueClear()
     ctx.subState.reset
 
 # ------------------------------------------------------------------------------
