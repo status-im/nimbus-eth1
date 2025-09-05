@@ -8,7 +8,7 @@
 # at your option. This file may not be copied, modified, or distributed except
 # according to those terms.
 
-{.push raises: [].}
+{.push raises: [], gcsafe.}
 
 import
   chronicles,
@@ -97,7 +97,7 @@ proc loadHistoricalRootsFromEra*(
         )
       )
 
-proc getTxs*(txs: seq[bellatrix.Transaction]): seq[tx_types.Transaction] =
+func getTxs*(txs: seq[bellatrix.Transaction]): seq[tx_types.Transaction] =
   var transactions = newSeqOfCap[tx_types.Transaction](txs.len)
   for tx in txs:
     try:
@@ -106,7 +106,7 @@ proc getTxs*(txs: seq[bellatrix.Transaction]): seq[tx_types.Transaction] =
       return @[]
   return transactions
 
-proc getWithdrawals*(x: seq[capella.Withdrawal]): seq[blocks.Withdrawal] =
+func getWithdrawals*(x: seq[capella.Withdrawal]): seq[blocks.Withdrawal] =
   var withdrawals = newSeqOfCap[blocks.Withdrawal](x.len)
   for w in x:
     withdrawals.add(
@@ -119,10 +119,11 @@ proc getWithdrawals*(x: seq[capella.Withdrawal]): seq[blocks.Withdrawal] =
     )
   return withdrawals
 
-proc getEthBlock*(blck: ForkyTrustedBeaconBlock, res: var EthBlock): bool =
+func getEthBlock*(blck: ForkyTrustedBeaconBlock, res: var EthBlock): bool =
   ## Convert a beacon block to an eth1 block.
   const consensusFork = typeof(blck).kind
-  when consensusFork >= ConsensusFork.Bellatrix:
+  when consensusFork >= ConsensusFork.Bellatrix and
+       consensusFork != ConsensusFork.Gloas:
     var
       payload = blck.body.execution_payload
       txs = getTxs(payload.transactions.asSeq())
