@@ -116,7 +116,9 @@ proc setupP2P(nimbus: NimbusNode, conf: NimbusConf,
 
   # Always initialise beacon syncer. It might turn out that it will not
   # be started if there will be no point in doing so.
-  nimbus.beaconSyncRef = BeaconSyncRef.init(
+  if nimbus.beaconSyncRef.isNil:
+    nimbus.beaconSyncRef = BeaconSyncRef.init()
+  nimbus.beaconSyncRef.config(
     nimbus.ethNode, nimbus.fc, conf.maxPeers,
     conf.engineApiServerEnabled())
 
