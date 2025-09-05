@@ -349,7 +349,6 @@ proc convertLeaf(
         aristoAcc = AristoAccount(nonce: acc.nonce, balance: acc.balance, codeHash: acc.codeHash)
         stoID = (acc.storageRoot != EMPTY_ROOT_HASH, default(VertexID))
         node = NodeRef(vtx: AccLeafRef.init(segm, aristoAcc, stoID))
-
       node.key[0] = HashKey.fromBytes(acc.storageRoot.data).valueOr:
         return err(PartTrkLinkExpected)
       node
@@ -377,10 +376,10 @@ proc convertSubtrie(
       link = rlpNode.listElem(1).rlpNodeToBytes() # link or payload
     if isLeaf:
       node = ?convertLeaf(link, segm, isStorage)
-      if node.vtx is AccLeafRef:
+      if not isStorage:
         let accLeaf = AccLeafRef(node.vtx)
         if accLeaf.stoID.isValid:
-          ?convertSubtrie(node.key[0].to(Hash32), src, dst, isStorage = true)
+          ?convertSubtrie(node.key[0].to(Hash32), src, dst, true)
     else: # extension node
       let k = HashKey.fromBytes(link).valueOr:
         return err(PartTrkLinkExpected)
@@ -396,11 +395,10 @@ proc convertSubtrie(
       node.key = childNode.key
       node.vtx = ExtBranchRef.init(segm, childBranch.startVid, childBranch.used)
 
-      # Remove the childNode because it's branch is now embedded in this node
+      # Remove the childNode because it's branch was copied into this node
       dst.del(k)
 
   of 17: # branch node
-
     let branch = BranchRef.init(default(VertexID), 0)
     for i in 0 ..< 16:
       let
@@ -430,6 +428,7 @@ proc putSubtrie(
     return err(PartTrkFollowUpKeyMismatch)
 
   let node = nodes.getOrDefault(key)
+
   case node.vtx.vType:
     of AccLeaf:
       let accVtx = AccLeafRef(node.vtx)
@@ -446,10 +445,11 @@ proc putSubtrie(
         else:
           # Write the known hash key setting the vtx to nil
           db.layersPutKey(r, BranchRef(nil), k)
+
     of StoLeaf:
       discard
-    of Branch, ExtBranch:
 
+    of Branch, ExtBranch:
       let bvtx = BranchRef(node.vtx)
       bvtx.startVid = db.vidFetch(16)
 
