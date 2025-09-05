@@ -52,7 +52,9 @@ jobs:
 
       - name: Extract branch name
         id: extract_branch
-        run: echo "branch_name=${GITHUB_REF#refs/heads/}" >> $GITHUB_OUTPUT
+        run: | 
+          ref_name=$(echo "$GITHUB_REF" | sed -e 's#^refs/heads/##' -e 's#^refs/tags/##')
+          echo "branch_name=$ref_name" >> $GITHUB_OUTPUT
 
       - name: Build project
         id: make_dist
