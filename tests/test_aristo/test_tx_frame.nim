@@ -121,12 +121,83 @@ suite "Aristo TxFrame":
       tx0.kMap.len() == 0
       tx1.kMap.len() == 1
 
+    # Check that the kMap hashkeys are moved correctly
+    # and that the stateroot is correct before and after each move.
     let tx2 = db.txFrameBegin(tx1, moveParentHashKeys = true)
     check:
       tx1.kMap.len() == 0
+      tx2.kMap.len() == 1
+      tx1.fetchStateRoot() == tx2.fetchStateRoot()
+      # keys are recomputed when fetching state root even after moving
+      tx1.kMap.len() == 1
       tx2.kMap.len() == 1
 
     let tx3 = db.txFrameBegin(tx2, moveParentHashKeys = false)
     check:
       tx2.kMap.len() == 1
       tx3.kMap.len() == 0
+      tx2.fetchStateRoot() == tx3.fetchStateRoot()
+
+  test "Frames using moveParentHashKeys parameter - moved from persist":
+    let
+      tx0 = db.txFrameBegin(db.baseTxFrame())
+      tx1 = db.txFrameBegin(tx0)
+
+    check:
+      tx0.mergeAccountRecord(acc1[0], acc1[1]).isOk()
+      tx1.mergeAccountRecord(acc2[0], acc2[1]).isOk()
+      tx0.fetchStateRoot() != tx1.fetchStateRoot()
+      tx0.kMap.len() == 0
+      tx1.kMap.len() == 1
+
+    let
+      tx2 = db.txFrameBegin(tx1, moveParentHashKeys = true)
+      stateRoot = tx1.fetchStateRoot().get()
+
+    # Check that we can still persist the moved from txFrame
+    tx1.checkpoint(1, skipSnapshot = true)
+    let batch = db.putBegFn().expect("working batch")
+    db.persist(batch, tx1, Opt.some(stateRoot))
+    check:
+      db.putEndFn(batch).isOk()
+
+    db.finish()
+
+    # Load the data
+    db.initInstance().expect("working backend")
+    let tx = db.baseTxFrame()
+    check:
+      tx.fetchAccountRecord(acc1[0]).isOk()
+      tx.fetchAccountRecord(acc2[0]).isOk()
+
+  test "Frames using moveParentHashKeys parameter - moved to persist":
+    let
+      tx0 = db.txFrameBegin(db.baseTxFrame())
+      tx1 = db.txFrameBegin(tx0)
+
+    check:
+      tx0.mergeAccountRecord(acc1[0], acc1[1]).isOk()
+      tx1.mergeAccountRecord(acc2[0], acc2[1]).isOk()
+      tx0.fetchStateRoot() != tx1.fetchStateRoot()
+      tx0.kMap.len() == 0
+      tx1.kMap.len() == 1
+
+    let
+      tx2 = db.txFrameBegin(tx1, moveParentHashKeys = true)
+      stateRoot = tx1.fetchStateRoot().get()
+
+    # Check that we can still persist the moved to txFrame
+    tx2.checkpoint(2, skipSnapshot = true)
+    let batch = db.putBegFn().expect("working batch")
+    db.persist(batch, tx2, Opt.some(stateRoot))
+    check:
+      db.putEndFn(batch).isOk()
+
+    db.finish()
+
+    # Load the data
+    db.initInstance().expect("working backend")
+    let tx = db.baseTxFrame()
+    check:
+      tx.fetchAccountRecord(acc1[0]).isOk()
+      tx.fetchAccountRecord(acc2[0]).isOk()
