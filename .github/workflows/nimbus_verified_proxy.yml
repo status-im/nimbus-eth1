@@ -96,7 +96,7 @@ jobs:
         if: success() && startsWith(github.ref, 'refs/tags/')
         uses: actions/upload-artifact@v4
         with:
-          name: nimbus-verified-proxy-${{ matrix.os }}-${{ matrix.cpu }}
+          name: proxy-${{ matrix.os }}-${{ matrix.cpu }}
           path: |
             build/nimbus_verified_proxy*
           if-no-files-found: warn
@@ -105,7 +105,7 @@ jobs:
         if: success() && startsWith(github.ref, 'refs/tags/')
         uses: actions/upload-artifact@v4
         with:
-          name: nimbus-verified-proxy-${{ matrix.os }}-${{ matrix.cpu }}
+          name: proxy-${{ matrix.os }}-${{ matrix.cpu }}-checksum
           path: |
             build/nimbus_verified_proxy.sha512sum
           if-no-files-found: warn

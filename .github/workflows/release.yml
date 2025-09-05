@@ -123,7 +123,7 @@ jobs:
           cat > release_notes.md <<EOF
           ## Notes
 
-          ## SHA512 checksums
+          ## Execution Client SHA512 checksums
 
           \`\`\`text
           EOF
@@ -133,8 +133,21 @@ jobs:
           cat linux-arm64-checksum/* >> release_notes.md
           echo '# Windows AMD64' >> release_notes.md
           cat windows-amd64-checksum/* >> release_notes.md
-          echo '# macos ARM64' >> release_notes.md
+          echo '# MacOS ARM64' >> release_notes.md
           cat macos-arm64-checksum/* >> release_notes.md
+          echo '```' >> release_notes.md
+          echo '' >> release_notes.md
+          echo '## Verified Proxy SHA512 checksums' >> release_notes.md
+          echo '' >> release_notes.md
+          echo '```' >> release_notes.md
+          echo '# Linux AMD64' >> release_notes.md
+          cat proxy-linux-amd64-checksum/* >> release_notes.md
+          echo '# Linux ARM64' >> release_notes.md
+          cat proxy-linux-arm64-checksum/* >> release_notes.md
+          echo '# Windows AMD64' >> release_notes.md
+          cat proxy-windows-amd64-checksum/* >> release_notes.md
+          echo '# MacOS ARM64' >> release_notes.md
+          cat proxy-macos-arm64-checksum/* >> release_notes.md
           echo '```' >> release_notes.md
 
       - name: Create release
@@ -152,6 +165,10 @@ jobs:
             linux-arm64-archive/*
             windows-amd64-archive/*
             macos-arm64-archive/*
+            proxy-linux-amd64/*
+            proxy-linux-arm64/*
+            proxy-windows-amd64/*
+            proxy-macos-arm64/*
 
       - name: Delete artefacts
         uses: geekyeggo/delete-artifact@v5
@@ -166,7 +183,14 @@ jobs:
             windows-amd64-checksum
             macos-arm64-archive
             macos-arm64-checksum
-
+            proxy-linux-amd64
+            proxy-linux-amd64-checksum
+            proxy-linux-arm64
+            proxy-linux-arm64-checksum
+            proxy-windows-amd64
+            proxy-windows-amd64-checksum
+            proxy-macos-arm64
+            proxy-macos-arm64-checksum
       #- name: Login to Docker Hub
       #  uses: docker/login-action@v1
       #  with:
