@@ -387,19 +387,18 @@ proc convertSubtrie(
       ?convertSubtrie(k.to(Hash32), src, dst, isStorage)
       node.key[0] = k
       node.vtx = ExtBranchRef.init(segm, default(VertexID), 1)
-  of 17:
-    # branch node
-    var hashCount: uint16 = 0
+  of 17: # branch node
+    let branch = BranchRef.init(default(VertexID), 0)
     for i in 0 ..< 16:
       let
         link = rlpNode.listElem(i).rlpNodeToBytes()
         k = HashKey.fromBytes(link).valueOr:
           return err(PartTrkLinkExpected)
-      if link.len() > 0:
-        inc hashCount
+      if k.len() == 32:
+        discard branch.setUsed(i.uint8, true)
         ?convertSubtrie(k.to(Hash32), src, dst, isStorage)
       node.key[i] = k
-    node.vtx = BranchRef.init(default(VertexID), hashCount)
+    node.vtx = branch
   else:
     return err(PartTrkGarbledNode)
 
@@ -409,7 +408,7 @@ proc convertSubtrie(
 
   ok()
 
-proc layersPutSubtrie(
+proc putSubtrie(
     db: AristoTxRef,
     key: HashKey,
     nodes: Table[HashKey, NodeRef],
@@ -425,28 +424,30 @@ proc layersPutSubtrie(
         let stoVid = db.vidFetch()
         accVtx.stoID = (true, stoVid)
 
-        let k = node.key[0]
+        let
+          k = node.key[0]
+          r = (stoVid, stoVid)
         if nodes.contains(k):
           # Write the storage subtrie
-          ?db.layersPutSubtrie(k, nodes, (stoVid, db.vidFetch(16)))
+          ?db.putSubtrie(k, nodes, r)
         else:
           # Write the known hash key setting the vtx to nil
-          db.layersPutKey((rvid.root, stoVid), BranchRef(nil), k)
+          db.layersPutKey(r, BranchRef(nil), k)
     of StoLeaf:
       discard
     of Branch, ExtBranch:
       let bvtx = BranchRef(node.vtx)
-      bvtx.startVid = rvid.vid
+      bvtx.startVid = db.vidFetch(16)
 
       for n, subvid in node.vtx.pairs():
-        let k = node.key[n]
+        let
+          k = node.key[n]
+          r = (rvid.root, subvid)
         if nodes.contains(k):
-          ?db.layersPutSubtrie(k, nodes, (rvid.root, db.vidFetch(16)))
+          ?db.putSubtrie(k, nodes, r)
         else:
           # Write the known hash key setting the vtx to nil
-          db.layersPutKey((rvid.root, subvid), BranchRef(nil), k)
-
-      #db.layersPutKey(rvid, bvtx, key) # maybe don't need this
+          db.layersPutKey(r, BranchRef(nil), k)
 
   db.layersPutVtx(rvid, node.vtx)
 
@@ -465,7 +466,7 @@ proc putSubTrie*(
   try:
     var convertedNodes: Table[HashKey, NodeRef]
     ?convertSubtrie(stateRoot, nodes, convertedNodes, isStorage = false)
-    ?db.layersPutSubtrie(key, convertedNodes)
+    ?db.putSubtrie(key, convertedNodes)
   except RlpError:
     return err(PartTrkRlpError)
 
