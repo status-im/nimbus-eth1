@@ -384,10 +384,23 @@ proc convertSubtrie(
     else: # extension node
       let k = HashKey.fromBytes(link).valueOr:
         return err(PartTrkLinkExpected)
+      # TODO: how to handle embedded nodes
+
+      # Convert the child branch node which will be merged with this extension node
       ?convertSubtrie(k.to(Hash32), src, dst, isStorage)
-      node.key[0] = k
-      node.vtx = ExtBranchRef.init(segm, default(VertexID), 1)
+      doAssert(dst.contains(k))
+
+      let
+        childNode = dst.getOrDefault(k)
+        childBranch = BranchRef(childNode.vtx)
+      node.key = childNode.key
+      node.vtx = ExtBranchRef.init(segm, childBranch.startVid, childBranch.used)
+
+      # Remove the childNode because it's branch is now embedded in this node
+      dst.del(k)
+
   of 17: # branch node
+
     let branch = BranchRef.init(default(VertexID), 0)
     for i in 0 ..< 16:
       let
@@ -436,6 +449,7 @@ proc putSubtrie(
     of StoLeaf:
       discard
     of Branch, ExtBranch:
+
       let bvtx = BranchRef(node.vtx)
       bvtx.startVid = db.vidFetch(16)
 
