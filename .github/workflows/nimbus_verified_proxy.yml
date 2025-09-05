@@ -69,7 +69,7 @@ jobs:
           mingw32-make ${DEFAULT_MAKE_FLAGS} nimbus_verified_proxy libverifproxy
           build/nimbus_verified_proxy.exe --help
           mingw32-make ${DEFAULT_MAKE_FLAGS} nimbus-verified-proxy-test
-          sha512sum "nimbus_verified_proxy.exe" > "nimbus_verified_proxy.sha512sum"
+          sha512sum "build/nimbus_verified_proxy.exe" > "nimbus_verified_proxy.sha512sum"
 
       - name: Run verified proxy tests (Linux)
         if: runner.os == 'Linux'
@@ -80,7 +80,7 @@ jobs:
           build/nimbus_verified_proxy --help
           # CC is needed to select correct compiler 32/64 bit
           env CC=gcc CXX=g++ make ${DEFAULT_MAKE_FLAGS} nimbus-verified-proxy-test
-          sha512sum "nimbus_verified_proxy" > "nimbus_verified_proxy.sha512sum"
+          sha512sum "build/nimbus_verified_proxy" > "nimbus_verified_proxy.sha512sum"
 
       - name: Run verified proxy tests (Macos)
         if: runner.os == 'Macos'
@@ -90,7 +90,7 @@ jobs:
           build/nimbus_verified_proxy --help
           # "-static" option will not work for osx unless static system libraries are provided
           make ${DEFAULT_MAKE_FLAGS} nimbus-verified-proxy-test
-          sha512sum "nimbus_verified_proxy" > "nimbus_verified_proxy.sha512sum"
+          sha512sum "build/nimbus_verified_proxy" > "nimbus_verified_proxy.sha512sum"
 
       - name: Upload release binary artifacts
         if: success() && startsWith(github.ref, 'refs/tags/')
