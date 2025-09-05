@@ -1,5 +1,5 @@
 # Nimbus
-# Copyright (c) 2024-2025 Status Research & Development GmbH
+# Copyright (c) 2025 Status Research & Development GmbH
 # Licensed and distributed under either of
 #   * MIT license (license terms in the root directory or at https://opensource.org/licenses/MIT).
 #   * Apache v2 license (license terms in the root directory or at https://www.apache.org/licenses/LICENSE-2.0).
@@ -43,15 +43,15 @@ func toNodesTable(proofNodes: openArray[seq[byte]]): Table[Hash32, seq[byte]] =
 suite "Aristo subtries json tests":
 
   let genesisFiles = [
-    # "berlin2000.json",
-    "chainid1.json" #,
-    # "chainid7.json",
-    # "merge.json",
-    # "devnet4.json",
-    # "devnet5.json",
-    # "holesky.json",
-    # "prague.json",
-    # "mekong.json"
+    "berlin2000.json",
+    "chainid1.json",
+    "chainid7.json",
+    "merge.json",
+    "devnet4.json",
+    "devnet5.json",
+    "holesky.json",
+    "prague.json",
+    "mekong.json"
   ]
 
   test "Single account proof subtries and check stateRoot":
@@ -86,102 +86,103 @@ suite "Aristo subtries json tests":
 
         # Update values in the subtrie and check that the state root matches the full trie
         fullTrieLedger.addBalance(address, 1.u256)
-        fullTrieLedger.addBalance(address"0xd4fe7bc31cedb7bfb8a345f31e668033056b2728", 2.u256)
         fullTrieLedger.persist()
         subTrieLedger.addBalance(address, 1.u256)
-        subTrieLedger.addBalance(address"0xd4fe7bc31cedb7bfb8a345f31e668033056b2728", 2.u256)
         subTrieLedger.persist()
 
         check:
           fullTrieLedger.getStateRoot() != stateRoot
           fullTrieLedger.getStateRoot() == subTrieLedger.getStateRoot()
 
-  # test "Single account proof with storage proofs subtries and check stateRoot":
-  #   for file in genesisFiles:
+  test "Single account proof with storage proofs subtries and check stateRoot":
+    for file in genesisFiles:
 
-  #     let
-  #       accounts = getGenesisAlloc("tests" / "customgenesis" / file)
-  #       coreDb = newCoreDbRef(DefaultDbMemory)
-  #       txFrame = coreDb.baseTxFrame().txFrameBegin()
-  #       ledger = LedgerRef.init(txFrame)
-  #       stateRoot = setupLedger(accounts, ledger)
+      let
+        accounts = getGenesisAlloc("tests" / "customgenesis" / file)
+        coreDb = newCoreDbRef(DefaultDbMemory)
+        txFrame = coreDb.baseTxFrame().txFrameBegin()
+        ledger = LedgerRef.init(txFrame)
+        stateRoot = setupLedger(accounts, ledger)
 
-  #     for address, account in accounts:
-  #       let
-  #         subtrieDb = newCoreDbRef(DefaultDbMemory)
-  #         subtrieTxFrame = subtrieDb.baseTxFrame().txFrameBegin()
+      for address, account in accounts:
+        let
+          subtrieDb = newCoreDbRef(DefaultDbMemory)
+          subtrieTxFrame = subtrieDb.baseTxFrame().txFrameBegin()
 
-  #       var
-  #         proofNodes = ledger.getAccountProof(address)
-  #         slots: seq[UInt256]
-  #       for k in account.storage.keys():
-  #         slots.add(k)
+        var
+          proofNodes = ledger.getAccountProof(address)
+          slots: seq[UInt256]
+        for k in account.storage.keys():
+          slots.add(k)
 
-  #       let storageProof = ledger.getStorageProof(address, slots)
-  #       for slotProof in storageProof:
-  #         proofNodes &= slotProof
-  #       let nodes = toNodesTable(proofNodes)
+        let storageProof = ledger.getStorageProof(address, slots)
+        for slotProof in storageProof:
+          proofNodes &= slotProof
+        let nodes = toNodesTable(proofNodes)
 
-  #       # Check the state root of the subtrie
-  #       check:
-  #         subtrieTxFrame.putSubTrie(stateRoot, nodes).isOk()
-  #         subtrieTxFrame.getStateRoot().get() == stateRoot
+        # Check the state root of the subtrie
+        check:
+          subtrieTxFrame.putSubTrie(stateRoot, nodes).isOk()
+          subtrieTxFrame.getStateRoot().get() == stateRoot
 
-  #       # Get the values from the subtrie
-  #       let
-  #         fullTrieLedger = LedgerRef.init(txFrame.txFrameBegin())
-  #         subTrieLedger = LedgerRef.init(subtrieTxFrame.txFrameBegin())
-  #       check:
-  #         fullTrieLedger.getStateRoot() == stateRoot
-  #         subTrieLedger.getBalance(address) == account.balance
-  #       for k, v in account.storage.pairs():
-  #         check subTrieLedger.getStorage(address, k) == v
+        # Get the values from the subtrie
+        let
+          fullTrieLedger = LedgerRef.init(txFrame.txFrameBegin())
+          subTrieLedger = LedgerRef.init(subtrieTxFrame.txFrameBegin())
+        check:
+          fullTrieLedger.getStateRoot() == stateRoot
+          subTrieLedger.getBalance(address) == account.balance
+        for k, v in account.storage.pairs():
+          check subTrieLedger.getStorage(address, k) == v
 
-  #       # Update values in the subtrie and check that the state root matches the full trie
-  #       fullTrieLedger.addBalance(address, 1.u256)
-  #       fullTrieLedger.addBalance(address"0xd4fe7bc31cedb7bfb8a345f31e668033056b2728", 2.u256)
-  #       fullTrieLedger.persist()
-  #       subTrieLedger.addBalance(address, 1.u256)
-  #       subTrieLedger.addBalance(address"0xd4fe7bc31cedb7bfb8a345f31e668033056b2728", 2.u256)
-  #       subTrieLedger.persist()
+        # Update values in the subtrie and check that the state root matches the full trie
+        fullTrieLedger.addBalance(address, 1.u256)
+        for k, v in account.storage.pairs():
+          fullTrieLedger.setStorage(address, k, v + 1.u256)
+        fullTrieLedger.persist()
 
-  #       check:
-  #         fullTrieLedger.getStateRoot() != stateRoot
-  #         fullTrieLedger.getStateRoot() == subTrieLedger.getStateRoot()
+        subTrieLedger.addBalance(address, 1.u256)
+        for k, v in account.storage.pairs():
+          subTrieLedger.setStorage(address, k, v + 1.u256)
+        subTrieLedger.persist()
 
-  # test "Single account and storage multiproof subtries and check stateRoot":
-  #   for file in genesisFiles:
+        check:
+          fullTrieLedger.getStateRoot() != stateRoot
+          fullTrieLedger.getStateRoot() == subTrieLedger.getStateRoot()
 
-  #     let
-  #       accounts = getGenesisAlloc("tests" / "customgenesis" / file)
-  #       coreDb = newCoreDbRef(DefaultDbMemory)
-  #       ledger = LedgerRef.init(coreDb.baseTxFrame())
-  #       stateRoot = setupLedger(accounts, ledger)
+  test "Single account and storage multiproof subtries and check stateRoot":
+    for file in genesisFiles:
 
-  #     for address, account in accounts:
-  #       let
-  #         coreDb2 = newCoreDbRef(DefaultDbMemory)
-  #         txFrame = coreDb2.baseTxFrame().txFrameBegin()
+      let
+        accounts = getGenesisAlloc("tests" / "customgenesis" / file)
+        coreDb = newCoreDbRef(DefaultDbMemory)
+        ledger = LedgerRef.init(coreDb.baseTxFrame())
+        stateRoot = setupLedger(accounts, ledger)
 
-  #       var slots: seq[Hash32]
-  #       for k in account.storage.keys():
-  #         slots.add(keccak256(k.toBytesBE()))
+      for address, account in accounts:
+        let
+          coreDb2 = newCoreDbRef(DefaultDbMemory)
+          txFrame = coreDb2.baseTxFrame().txFrameBegin()
 
-  #       var paths: Table[Hash32, seq[Hash32]]
-  #       paths[keccak256(address.data())] = slots
+        var slots: seq[Hash32]
+        for k in account.storage.keys():
+          slots.add(keccak256(k.toBytesBE()))
 
-  #       var proofNodes: seq[seq[byte]]
-  #       ledger.txFrame.multiProof(paths, proofNodes).expect("ok")
-  #       let nodes = toNodesTable(proofNodes)
+        var paths: Table[Hash32, seq[Hash32]]
+        paths[keccak256(address.data())] = slots
 
-  #       check:
-  #         paths.len() == 1
-  #         proofNodes.len() > 0
-  #         nodes.len() > 0
-  #         txFrame.putSubTrie(stateRoot, nodes).isOk()
-  #         txFrame.getStateRoot().get() == stateRoot
+        var proofNodes: seq[seq[byte]]
+        ledger.txFrame.multiProof(paths, proofNodes).expect("ok")
+        let nodes = toNodesTable(proofNodes)
 
-  # test "All accounts and storage multiproof subtries and check stateRoot":
+        check:
+          paths.len() == 1
+          proofNodes.len() > 0
+          nodes.len() > 0
+          txFrame.putSubTrie(stateRoot, nodes).isOk()
+          txFrame.getStateRoot().get() == stateRoot
+
+  test "All accounts and storage multiproof subtries and check stateRoot":
     for file in genesisFiles:
 
       let
