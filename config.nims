@@ -83,15 +83,8 @@ if defined(windows):
 #
 if defined(disableMarchNative):
   if defined(i386) or defined(amd64):
-    if defined(macosx):
-      # https://support.apple.com/en-us/105113
-      # "macOS Sonoma is compatible with these computers" lists current oldest
-      # supported x86 models, all of which have Kaby Lake or newer CPUs.
-      switch("passC", "-march=skylake -mtune=generic")
-      switch("passL", "-march=skylake -mtune=generic")
-    else:
-      switch("passC", "-mssse3")
-      switch("passL", "-mssse3")
+    switch("passC", "-mssse3")
+    switch("passL", "-mssse3")
 elif defined(macosx) and defined(arm64):
   # Apple's Clang can't handle "-march=native" on M1: https://github.com/status-im/nimbus-eth2/issues/2758
   switch("passC", "-mcpu=apple-m1")
@@ -165,6 +158,8 @@ if canEnableDebuggingSymbols:
 --define:nimOldCaseObjects # https://github.com/status-im/nim-confutils/issues/9
 
 switch("warningAsError", "BareExcept:on")
+switch("hintAsError", "ConvFromXtoItselfNotNeeded:on")
+switch("hintAsError", "DuplicateModuleImport:on")
 
 # `switch("warning[CaseTransition]", "off")` fails with "Error: invalid command line option: '--warning[CaseTransition]'"
 switch("warning", "CaseTransition:off")
