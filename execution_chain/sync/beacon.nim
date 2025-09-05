@@ -73,7 +73,6 @@ proc config*(
     ethNode: EthereumNode;
     chain: ForkedChainRef;
     maxPeers: int;
-    haveEngine: bool;
       ) =
   ## Complete `BeaconSyncRef` descriptor initialisation.
   ##
@@ -83,23 +82,16 @@ proc config*(
   doAssert desc.ctx.isNil # This can only run once
   desc.initSync(ethNode, maxPeers)
   desc.ctx.pool.chain = chain
-  desc.ctx.shouldRun = (0 < maxPeers and haveEngine)
 
   if not desc.lazyConfigHook.isNil:
     desc.lazyConfigHook(desc)
     desc.lazyConfigHook = nil
-    desc.ctx.shouldRun = true
 
-proc shouldRun*(desc: BeaconSyncRef): bool =
-  ## Getter
-  desc.ctx.shouldRun
-
-proc targetInit*(desc: BeaconSyncRef; hex: string; isFinal: bool): bool =
+proc configTarget*(desc: BeaconSyncRef; hex: string; isFinal: bool): bool =
   ## Set up inital target sprint (if any, mainly for debugging)
   doAssert not desc.ctx.isNil
   try:
     desc.ctx.headersTargetRequest(Hash32.fromHex(hex), isFinal, "init")
-    desc.ctx.shouldRun = true
     return true
   except ValueError:
     discard
