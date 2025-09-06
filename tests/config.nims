@@ -13,8 +13,8 @@ if not defined(windows):
   # available on some GCC versions but not all - run with `-d:limitStackUsage`
   # and look for .su files in "./build/", "./nimcache/" or $TMPDIR that list the
   # stack size of each function.
-  switch("passC", "-fstack-usage -Wstack-usage=1048576")
-  switch("passL", "-fstack-usage -Wstack-usage=1048576")
+  switch("passC", "-fstack-usage -Werror=stack-usage=1048576")
+  switch("passL", "-fstack-usage -Werror=stack-usage=1048576")
 
 switch("define", "chronicles_line_numbers")
 switch("define", "chronicles_sinks=textlines")
