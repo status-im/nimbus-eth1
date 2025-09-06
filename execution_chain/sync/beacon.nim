@@ -59,22 +59,37 @@ proc runPeer(buddy: BeaconBuddyRef): Future[Duration] {.async: (raises: []).} =
 
 proc init*(
     T: type BeaconSyncRef;
+    configCB = BeaconSyncConfigHook(nil);
+      ): T =
+  ## Constructor
+  ##
+  ## The `configCB` allows to specify a final configuration task to be run at
+  ## the end of the `config()` function.
+  ##
+  T(lazyConfigHook: configCB)
+
+proc config*(
+    desc: BeaconSyncRef;
     ethNode: EthereumNode;
     chain: ForkedChainRef;
     maxPeers: int;
-      ): T =
-  var desc = T()
+      ) =
+  ## Complete `BeaconSyncRef` descriptor initialisation.
+  ##
+  ## Note that the `init()` constructor might have specified a configuration
+  ## task to be run at the end of the `config()` function.
+  ##
+  doAssert desc.ctx.isNil # This can only run once
   desc.initSync(ethNode, maxPeers)
   desc.ctx.pool.chain = chain
-  desc
 
-proc peersMinInit*(desc: BeaconSyncRef; nBuddies: int) =
-  ## Set the minimum number of active peers to start with for the first
-  ## syncer activation.
-  desc.ctx.pool.minInitBuddies = nBuddies
+  if not desc.lazyConfigHook.isNil:
+    desc.lazyConfigHook(desc)
+    desc.lazyConfigHook = nil
 
-proc targetInit*(desc: BeaconSyncRef; hex: string; isFinal: bool): bool =
+proc configTarget*(desc: BeaconSyncRef; hex: string; isFinal: bool): bool =
   ## Set up inital target sprint (if any, mainly for debugging)
+  doAssert not desc.ctx.isNil
   try:
     desc.ctx.headersTargetRequest(Hash32.fromHex(hex), isFinal, "init")
     return true
@@ -83,9 +98,11 @@ proc targetInit*(desc: BeaconSyncRef; hex: string; isFinal: bool): bool =
   # false
 
 proc start*(desc: BeaconSyncRef): bool =
+  doAssert not desc.ctx.isNil
   desc.startSync()
 
 proc stop*(desc: BeaconSyncRef) {.async.} =
+  doAssert not desc.ctx.isNil
   await desc.stopSync()
 
 # ------------------------------------------------------------------------------

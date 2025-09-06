@@ -18,6 +18,8 @@ import
   minilru,
   results
 
+from eth/common/blocks import EMPTY_UNCLE_HASH
+
 type HeaderStore* = ref object
   headers: LruCache[Hash32, Header]
   hashes: LruCache[base.BlockNumber, Hash32]
@@ -131,7 +133,7 @@ func contains*(self: HeaderStore, hash: Hash32): bool =
 func contains*(self: HeaderStore, number: base.BlockNumber): bool =
   self.hashes.contains(number)
 
-proc updateFinalized*(
+func updateFinalized*(
     self: HeaderStore, header: Header, hHash: Hash32
 ): Result[bool, string] =
   if self.finalized.isSome():
@@ -148,7 +150,7 @@ proc updateFinalized*(
 
   return ok(true)
 
-proc updateFinalized*(
+func updateFinalized*(
     self: HeaderStore, header: ForkedLightClientHeader
 ): Result[bool, string] =
   let execHeader = convLCHeader(header).valueOr:
@@ -172,7 +174,7 @@ proc updateFinalized*(
 
   return ok(true)
 
-proc add*(self: HeaderStore, header: Header, hHash: Hash32): Result[void, string] =
+func add*(self: HeaderStore, header: Header, hHash: Hash32): Result[void, string] =
   let latestHeader = self.latest
 
   # check the ordering of headers. This allows for gaps but always maintains an incremental order
@@ -187,7 +189,7 @@ proc add*(self: HeaderStore, header: Header, hHash: Hash32): Result[void, string
     self.hashes.put(header.number, hHash)
   ok()
 
-proc add*(self: HeaderStore, header: ForkedLightClientHeader): Result[void, string] =
+func add*(self: HeaderStore, header: ForkedLightClientHeader): Result[void, string] =
   let
     execHeader = convLCHeader(header).valueOr:
       return err(error)

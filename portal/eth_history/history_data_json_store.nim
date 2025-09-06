@@ -15,7 +15,7 @@ import
   chronicles,
   eth/common/[hashes, blocks, receipts, headers_rlp],
   ../../execution_chain/common/[chain_config, genesis],
-  ../network/legacy_history/history_content,
+  ../network/history/history_content,
   ./block_proofs/historical_hashes_accumulator
 
 export results, tables
@@ -37,68 +37,6 @@ type
 
   BlockDataTable* = Table[string, BlockData]
 
-iterator blockHashes*(blockData: BlockDataTable): Hash32 =
-  for k, v in blockData:
-    var blockHash: Hash32
-    try:
-      blockHash.data = hexToByteArray[sizeof(Hash32)](k)
-    except ValueError as e:
-      error "Invalid hex for block hash", error = e.msg, number = v.number
-      continue
-
-    yield blockHash
-
-func readBlockData*(
-    hash: string, blockData: BlockData, verify = false
-): Result[seq[(ContentKey, seq[byte])], string] =
-  var res: seq[(ContentKey, seq[byte])]
-
-  var blockHash: Hash32
-  try:
-    blockHash.data = hexToByteArray[sizeof(Hash32)](hash)
-  except ValueError as e:
-    return err("Invalid hex for blockhash, number " & $blockData.number & ": " & e.msg)
-
-  let contentKeyType = BlockKey(blockHash: blockHash)
-
-  try:
-    # If wanted the hash for the corresponding header can be verified
-    if verify:
-      if keccak256(blockData.header.hexToSeqByte()) != blockHash:
-        return err("Data is not matching hash, number " & $blockData.number)
-
-    block:
-      let contentKey =
-        ContentKey(contentType: blockHeader, blockHeaderKey: contentKeyType)
-
-      res.add((contentKey, blockData.header.hexToSeqByte()))
-
-    block:
-      let contentKey = ContentKey(contentType: blockBody, blockBodyKey: contentKeyType)
-
-      res.add((contentKey, blockData.body.hexToSeqByte()))
-
-    block:
-      let contentKey =
-        ContentKey(contentType: ContentType.receipts, receiptsKey: contentKeyType)
-
-      res.add((contentKey, blockData.receipts.hexToSeqByte()))
-  except ValueError as e:
-    return err("Invalid hex data, number " & $blockData.number & ": " & e.msg)
-
-  ok(res)
-
-iterator blocks*(
-    blockData: BlockDataTable, verify = false
-): seq[(ContentKey, seq[byte])] =
-  for k, v in blockData:
-    let res = readBlockData(k, v, verify)
-
-    if res.isOk():
-      yield res.get()
-    else:
-      error "Failed reading block from block data", error = res.error
-
 func readBlockHeader*(blockData: BlockData): Result[Header, string] =
   var rlp =
     try:
@@ -112,40 +50,6 @@ func readBlockHeader*(blockData: BlockData): Result[Header, string] =
     return ok(rlp.read(Header))
   except RlpError as e:
     return err("Invalid header, number " & $blockData.number & ": " & e.msg)
-
-func readHeaderData*(
-    hash: string, blockData: BlockData, verify = false
-): Result[(ContentKey, seq[byte]), string] =
-  var blockHash: Hash32
-  try:
-    blockHash.data = hexToByteArray[sizeof(Hash32)](hash)
-  except ValueError as e:
-    return err("Invalid hex for blockhash, number " & $blockData.number & ": " & e.msg)
-
-  let contentKeyType = BlockKey(blockHash: blockHash)
-
-  try:
-    # If wanted the hash for the corresponding header can be verified
-    if verify:
-      if keccak256(blockData.header.hexToSeqByte()) != blockHash:
-        return err("Data is not matching hash, number " & $blockData.number)
-
-    let contentKey =
-      ContentKey(contentType: blockHeader, blockHeaderKey: contentKeyType)
-
-    let res = (contentKey, blockData.header.hexToSeqByte())
-    return ok(res)
-  except ValueError as e:
-    return err("Invalid hex data, number " & $blockData.number & ": " & e.msg)
-
-iterator headers*(blockData: BlockDataTable, verify = false): (ContentKey, seq[byte]) =
-  for k, v in blockData:
-    let res = readHeaderData(k, v, verify)
-
-    if res.isOk():
-      yield res.get()
-    else:
-      error "Failed reading header from block data", error = res.error
 
 proc getGenesisHeader*(id: NetworkId = MainNet): Header =
   let params =

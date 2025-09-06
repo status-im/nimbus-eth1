@@ -12,7 +12,6 @@ import
   ssz_serialization,
   ssz_serialization/[proofs, merkleization],
   ../../common/common_types,
-  ../../network/legacy_history/history_content,
   ./historical_hashes_accumulator
 
 export
@@ -110,15 +109,3 @@ func buildProof*(
   ?epochRecord.build_proof(gIndex, proof)
 
   ok(proof)
-
-func buildHeaderWithProof*(
-    header: Header, epochRecord: EpochRecord | EpochRecordCached
-): Result[BlockHeaderWithProof, string] =
-  let proof = ?buildProof(header, epochRecord)
-
-  ok(
-    BlockHeaderWithProof(
-      header: ByteList[MAX_HEADER_LENGTH].init(rlp.encode(header)),
-      proof: ByteList[MAX_HEADER_PROOF_LENGTH].init(SSZ.encode(proof)),
-    )
-  )

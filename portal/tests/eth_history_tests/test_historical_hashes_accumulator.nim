@@ -15,7 +15,7 @@ import
   eth/common/headers,
   ../../eth_history/history_data_json_store,
   ../../eth_history/block_proofs/block_proof_historical_hashes_accumulator,
-  ../legacy_history_network_tests/test_history_util
+  ./test_history_util
 
 suite "Historical Hashes Accumulator":
   test "Historical Hashes Accumulator Canonical Verification":

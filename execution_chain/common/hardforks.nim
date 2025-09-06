@@ -43,6 +43,7 @@ type
     Bpo3
     Bpo4
     Bpo5
+    Amsterdam
 
 const lastPurelyBlockNumberBasedFork* = GrayGlacier
 # MergeFork is special because of TTD.
@@ -184,6 +185,7 @@ type
     bpo3Time*           : Opt[EthTime]
     bpo4Time*           : Opt[EthTime]
     bpo5Time*           : Opt[EthTime]
+    amsterdamTime*      : Opt[EthTime]
 
     terminalTotalDifficulty*: Opt[UInt256]
     depositContractAddress*: Opt[Address]
@@ -273,6 +275,7 @@ func toForkTransitionTable*(conf: ChainConfig): ForkTransitionTable =
   result.timeThresholds[Bpo3] = conf.bpo3Time
   result.timeThresholds[Bpo4] = conf.bpo4Time
   result.timeThresholds[Bpo5] = conf.bpo5Time
+  result.timeThresholds[Amsterdam] = conf.amsterdamTime
 
 func populateFromForkTransitionTable*(conf: ChainConfig, t: ForkTransitionTable) =
   conf.homesteadBlock      = t.blockNumberThresholds[HardFork.Homestead]
@@ -302,6 +305,7 @@ func populateFromForkTransitionTable*(conf: ChainConfig, t: ForkTransitionTable)
   conf.bpo3Time            = t.timeThresholds[HardFork.Bpo3]
   conf.bpo4Time            = t.timeThresholds[HardFork.Bpo4]
   conf.bpo5Time            = t.timeThresholds[HardFork.Bpo5]
+  conf.amsterdamTime       = t.timeThresholds[HardFork.Amsterdam]
 
 # ------------------------------------------------------------------------------
 # Map HardFork to EVM Fork
@@ -333,6 +337,7 @@ const
     FkBpo3,          # Bpo3
     FkBpo4,          # Bpo4
     FkBpo5,          # Bpo5
+    FkAmsterdam,     # Amsterdam
   ]
 
 # ------------------------------------------------------------------------------

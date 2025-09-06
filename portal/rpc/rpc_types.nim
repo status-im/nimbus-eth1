@@ -34,7 +34,7 @@ const
 
   # These errors are used by Nimbus Portal but are not yet in the spec
   InvalidContentKeyError* = (code: -32602, msg: "Invalid content key")
-  InvalidContentValueError* = (code: -32602, msg: "Invalid content value")
+  InvalidContentValueError* = (code: -32603, msg: "Invalid content value")
 
 template applicationError(error: (int, string)): auto =
   (ref ApplicationError)(code: error.code, msg: error.msg)
@@ -126,6 +126,7 @@ JrpcConv.automaticSerialization(uint64, true)
 JrpcConv.automaticSerialization(uint16, true)
 JrpcConv.automaticSerialization(seq, true)
 JrpcConv.automaticSerialization(string, true)
+JrpcConv.automaticSerialization(bool, true)
 
 func getNodeInfo*(r: RoutingTable): NodeInfo =
   NodeInfo(enr: r.localNode.record, nodeId: r.localNode.id)

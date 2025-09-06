@@ -431,7 +431,7 @@ proc getEthBlock*(
       ): Result[EthBlock, string] =
   var
     header = ?db.getBlockHeader(hash)
-    blockBody = ?db.getBlockBody(hash)
+    blockBody = ?db.getBlockBody(header)
   ok(EthBlock.init(move(header), move(blockBody)))
 
 proc getEthBlock*(

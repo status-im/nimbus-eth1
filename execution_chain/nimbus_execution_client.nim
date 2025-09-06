@@ -54,8 +54,8 @@ proc basicServices(nimbus: NimbusNode,
   nimbus.beaconEngine = BeaconEngineRef.new(nimbus.txPool)
 
 proc manageAccounts(nimbus: NimbusNode, conf: NimbusConf) =
-  if string(conf.keyStoreDir).len > 0:
-    let res = nimbus.ctx.am.loadKeystores(string conf.keyStoreDir)
+  if conf.keyStoreDir.len > 0:
+    let res = nimbus.ctx.am.loadKeystores(conf.keyStoreDir)
     if res.isErr:
       fatal "Load keystore error", msg = res.error()
       quit(QuitFailure)
@@ -114,22 +114,6 @@ proc setupP2P(nimbus: NimbusNode, conf: NimbusConf,
   # Add protocol capabilities
   nimbus.wire = nimbus.ethNode.addEthHandlerCapability(nimbus.txPool)
 
-  # Always initialise beacon syncer
-  nimbus.beaconSyncRef = BeaconSyncRef.init(
-    nimbus.ethNode, nimbus.fc, conf.maxPeers)
-
-  # Min peers (if set)
-  if 0 < conf.beaconSyncInitPeersMin:
-    nimbus.beaconSyncRef.peersMinInit conf.beaconSyncInitPeersMin
-
-  # Optional for pre-setting the sync target (i.e. debugging)
-  if conf.beaconSyncTarget.isSome():
-    let hex = conf.beaconSyncTarget.unsafeGet
-    if not nimbus.beaconSyncRef.targetInit(hex, conf.beaconSyncTargetIsFinal):
-      fatal "Error parsing --debug-beacon-sync-target hash32 argument",
-        hash32=hex
-      quit QuitFailure
-
   # Connect directly to the static nodes
   let staticPeers = conf.getStaticPeers()
   if staticPeers.len > 0:
@@ -148,6 +132,34 @@ proc setupP2P(nimbus: NimbusNode, conf: NimbusConf,
       enableDiscV4 = DiscoveryType.V4 in discovery,
       enableDiscV5 = DiscoveryType.V5 in discovery,
     )
+
+  # Initalise beacon sync descriptor.
+  var syncerShouldRun = (conf.maxPeers > 0 or staticPeers.len > 0) and
+                        conf.engineApiServerEnabled()
+
+  # The beacon sync descriptor might have been pre-allocated with additional
+  # features. So do not override.
+  if nimbus.beaconSyncRef.isNil:
+    nimbus.beaconSyncRef = BeaconSyncRef.init()
+  else:
+    syncerShouldRun = true
+
+  # Configure beacon syncer.
+  nimbus.beaconSyncRef.config(nimbus.ethNode, nimbus.fc, conf.maxPeers)
+
+  # Optional for pre-setting the sync target (e.g. for debugging)
+  if conf.beaconSyncTarget.isSome():
+    syncerShouldRun = true
+    let hex = conf.beaconSyncTarget.unsafeGet
+    if not nimbus.beaconSyncRef.configTarget(hex, conf.beaconSyncTargetIsFinal):
+      fatal "Error parsing hash32 argument for --debug-beacon-sync-target",
+        hash32=hex
+      quit QuitFailure
+
+  # Deactivating syncer if there is definitely no need to run it. This
+  # avoids polling (i.e. waiting for instructions) and some logging.
+  if not syncerShouldRun:
+    nimbus.beaconSyncRef = BeaconSyncRef(nil)
 
 proc setupMetrics(nimbus: NimbusNode, conf: NimbusConf)
     {.raises: [CancelledError, MetricsError].} =
@@ -282,12 +294,11 @@ proc run(nimbus: NimbusNode, conf: NimbusConf) =
     setupP2P(nimbus, conf, com)
     setupRpc(nimbus, conf, com)
 
-    if (conf.maxPeers > 0 and conf.engineApiServerEnabled()) or
-       conf.beaconSyncTarget.isSome():
-      # Not starting syncer if there is definitely no way to run it. This
-      # avoids polling (i.e. waiting for instructions) and some logging.
-      if not nimbus.beaconSyncRef.start():
-        nimbus.beaconSyncRef = BeaconSyncRef(nil)
+    # Not starting syncer if there is definitely no way to run it. This
+    # avoids polling (i.e. waiting for instructions) and some logging.
+    if not nimbus.beaconSyncRef.isNil and
+       not nimbus.beaconSyncRef.start():
+      nimbus.beaconSyncRef = BeaconSyncRef(nil)
 
     # Be graceful about ctrl-c during init
     if ProcessState.stopping.isNone:
