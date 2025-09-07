@@ -31,7 +31,7 @@ proc initLib() =
     nimGC_setStackBottom(locals)
 
 proc runContext(ctx: ptr Context) {.thread.} =
-  const defaultListenAddress = (static parseIpAddress("0.0.0.0"))
+  const defaultListenAddress = (static parseIpAddress("127.0.0.1"))
   let str = $ctx.configJson
   try:
     let jsonNode = parseJson(str)
