@@ -15,7 +15,8 @@ import
   eth/common/eth_types_rlp,
   stint, stew/[byteutils],
   json_serialization, chronicles,
-  json_serialization/stew/results,
+  json_serialization/pkg/results,
+  json_serialization/std/tables,
   json_serialization/lexer,
   ./[genesis_alloc, hardforks]
 
@@ -674,3 +675,29 @@ func `==`*(a, b: ChainConfig): bool =
   if a.isNil and not b.isNil: return false
   if not a.isNil and b.isNil: return false
   a[] == b[]
+
+template toLog(it: Genesis): auto =
+  # Avoid logging entire genesis allocation table
+  (
+    nonce: it.nonce,
+    timestamp: it.timestamp,
+    extraData: it.extraData,
+    gasLimit: it.gasLimit,
+    difficulty: it.difficulty,
+    mixHash: it.mixHash,
+    coinbase: it.coinbase,
+    alloc: it.alloc.len,
+    number: it.number,
+    gasUser: it.gasUser,
+    parentHash: it.parentHash,
+    baseFeePerGas: it.baseFeePerGas,
+    blobGasUsed: it.blobGasUsed,
+    excessBlobGas: it.excessBlobGas,
+    parentBeaconBlockRoot: it.parentBeaconBlockRoot,
+  )
+
+# TODO formatIt doesn't work for nested Json objects
+chronicles.formatIt(Genesis):
+  toLog(it)
+proc writeValue*(w: var JsonWriter, value: Genesis) {.raises: [IOError].} =
+  w.writeValue(toLog(value))

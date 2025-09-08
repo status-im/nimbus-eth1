@@ -14,7 +14,7 @@ import
   eth/common/keys, eth/p2p/discoveryv5/random2,
   ./enode
 
-export sets # TODO: This should not be needed, but compilation fails otherwise
+export enode, sets
 
 declareGauge discv4_routing_table_nodes,
   "Discovery v4 routing table nodes"
