@@ -1,5 +1,12 @@
-# This file may not be copied, modified, or distributed except according to
-# those terms.
+# Nimbus
+# Copyright (c) 2025 Status Research & Development GmbH
+# Licensed under either of
+#  * Apache License, version 2.0, ([LICENSE-APACHE](LICENSE-APACHE) or
+#    http://www.apache.org/licenses/LICENSE-2.0)
+#  * MIT license ([LICENSE-MIT](LICENSE-MIT) or
+#    http://opensource.org/licenses/MIT)
+# at your option. This file may not be copied, modified, or distributed
+# except according to those terms.
 
 ## Wrapper to expose `run()` from `nimbus_execution_client.nim` without
 ## marking is exportable.
