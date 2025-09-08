@@ -8,7 +8,7 @@
 # those terms.
 
 import
-  eth/common/[eth_types_rlp],
+  eth/common/[eth_types_rlp, receipts],
   eth/rlp,
   chronos, stint,
   json_rpc/[rpcclient],
@@ -16,7 +16,8 @@ import
   ../../../execution_chain/utils/utils,
   ../../../execution_chain/beacon/web3_eth_conv,
   ../../../execution_chain/core/pooled_txs_rlp,
-  web3/eth_api
+  web3/eth_api,
+  ssz_serialization
 
 export eth_api
 
@@ -47,10 +48,14 @@ proc nonceAt*(client: RpcClient, address: Address): Future[AccountNonce] {.async
 func toLogs(list: openArray[LogObject]): seq[Log] =
   result = newSeqOfCap[Log](list.len)
   for x in list:
+    var topicsList: seq[receipts.Topic]
+    for topic in x.topics:
+      topicsList.add(receipts.Topic(topic))
+    
     result.add Log(
       address: x.address,
-      data: x.data,
-      topics: x.topics
+      data: ByteList[MAX_LOG_DATA_SIZE](x.data),
+      topics: List[receipts.Topic, MAX_TOPICS_PER_LOG](topicsList)
     )
 
 proc txReceipt*(client: RpcClient, txHash: eth_types.Hash32): Future[Option[Receipt]] {.async.} =
