@@ -51,7 +51,7 @@ Era/era1 file parallel downloader, with total progress tracking and download res
 - Standard Unix tools: `bash`, `awk`, `find`, `grep`, `curl`
 ### Example Usage
 ```bash
-chmod +x download_era.sh
-./download_era.sh https://sepolia.era1.nimbus.team ~/Downloads/sepolia
+chmod +x era_downloader.sh
+./era_downloader.sh https://sepolia.era1.nimbus.team ~/Downloads/sepolia
 ```
 For further details please refer https://hackmd.io/@advaita/BkMvD9Qllg
