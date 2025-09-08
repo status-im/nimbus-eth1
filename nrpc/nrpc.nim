@@ -18,7 +18,7 @@ import
   ../execution_chain/core/lazy_kzg,
   ./config,
   ../execution_chain/utils/era_helpers,
-    web3,
+  web3,
   web3/[engine_api, primitives, conversions],
   beacon_chain/process_state,
   beacon_chain/spec/digest,
@@ -99,7 +99,6 @@ template loadNetworkConfig(conf: NRpcConf): (RuntimeConfig, uint64, uint64) =
     let (cfg, unloaded) = readRuntimeConfig(conf.network.joinPath("config.yaml"))
     debug "Fields unknown", unloaded = unloaded
     (cfg, 0'u64, 0'u64)
-
 
 # Slot Finding Mechanism
 # First it sets the initial lower bound to `firstSlotAfterMerge` + number of blocks after Era1
@@ -216,7 +215,7 @@ proc syncToEngineApi(conf: NRpcConf) {.async.} =
       diffSecs = diff.nanoseconds().float / 1000000000
       targetBlkNum = headBlck.header.number
       distance = targetBlkNum - currentBlockNumber
-      estimatedTime = (diff*int(distance)).div(blocks)
+      estimatedTime = (diff * int(distance)).div(blocks)
 
     notice "Estimated Progress",
       remainingBlocks = distance,
@@ -280,90 +279,64 @@ proc syncToEngineApi(conf: NRpcConf) {.async.} =
           forkyBlck.message.body.execution_payload.asEngineExecutionPayload()
         var payloadResponse: engine_api.PayloadStatusV1
 
-        # Make the newPayload call based on the consensus fork
-        # Before Deneb calls are made without versioned hashes
-        # Thus calls will be same for Bellatrix and Capella forks
-        # And for Deneb, we will pass the versioned hashes
-        when consensusFork <= ConsensusFork.Capella:
-          payloadResponse = await rpcClient.newPayload(payload)
-          debug "Payload status", response = payloadResponse, payload = payload
-        elif consensusFork == ConsensusFork.Deneb:
-          # Calculate the versioned hashes from the kzg commitments
-          let versioned_hashes = mapIt(
-            forkyBlck.message.body.blob_kzg_commitments,
-            engine_api.VersionedHash(kzg_commitment_to_versioned_hash(it)),
-          )
-          payloadResponse = await rpcClient.newPayload(
-            payload, versioned_hashes, forkyBlck.message.parent_root.to(Hash32)
-          )
-          debug "Payload status",
-            response = payloadResponse,
-            payload = payload,
-            versionedHashes = versioned_hashes
-        elif consensusFork == ConsensusFork.Electra or
-            consensusFork == ConsensusFork.Fulu:
-          let
-            # Calculate the versioned hashes from the kzg commitments
-            versioned_hashes = mapIt(
-              forkyBlck.message.body.blob_kzg_commitments,
-              engine_api.VersionedHash(kzg_commitment_to_versioned_hash(it)),
+          # Make the newPayload call based on the consensus fork
+          # Before Deneb calls are made without versioned hashes
+          # Thus calls will be same for Bellatrix and Capella forks
+          # And for Deneb, we will pass the versioned hashes
+          when consensusFork <= ConsensusFork.Capella:
+            await rpcClient.newPayload(payload)
+          elif consensusFork == ConsensusFork.Deneb:
+            let versioned_hashes =
+              forkyBlck.message.body.blob_kzg_commitments.asEngineVersionedHashes()
+            await rpcClient.newPayload(
+              payload, versioned_hashes, forkyBlck.message.parent_root.to(Hash32)
             )
-            # Execution Requests for Electra
-            execution_requests = block:
-              var requests: seq[seq[byte]]
-              for request_type, request_data in [
-                SSZ.encode(forkyBlck.message.body.execution_requests.deposits),
-                SSZ.encode(forkyBlck.message.body.execution_requests.withdrawals),
-                SSZ.encode(forkyBlck.message.body.execution_requests.consolidations),
-              ]:
-                if request_data.len > 0:
-                  requests.add @[request_type.byte] & request_data
-              requests
+          elif consensusFork == ConsensusFork.Electra or
+              consensusFork == ConsensusFork.Fulu:
+            let
+              versioned_hashes =
+                forkyBlck.message.body.blob_kzg_commitments.asEngineVersionedHashes()
+              execution_requests =
+                forkyBlck.message.body.execution_requests.asEngineExecutionRequests()
 
-          payloadResponse = await rpcClient.engine_newPayloadV4(
-            payload,
-            versioned_hashes,
-            forkyBlck.message.parent_root.to(Hash32),
-            execution_requests,
-          )
-          debug "Payload status",
-            response = payloadResponse,
-            payload = payload,
-            versionedHashes = versioned_hashes,
-            executionRequests = execution_requests
-        else:
-          static:
-            doAssert(false, "Unsupported consensus fork")
+            await rpcClient.engine_newPayloadV4(
+              payload,
+              versioned_hashes,
+              forkyBlck.message.parent_root.to(Hash32),
+              execution_requests,
+            )
+          else:
+            raiseAssert "Checked earlier"
 
-        info "newPayload Request sent",
-          blockNumber = int(payload.blockNumber), response = payloadResponse.status
+          info "newPayload Request sent",
+            blockNumber = int(payload.blockNumber), response = payloadResponse.status
 
-        if payloadResponse.status == PayloadExecutionStatus.invalid or
-            payloadResponse.status == PayloadExecutionStatus.invalid_block_hash:
-          error "Payload not validated",
-            blockNumber = int(payload.blockNumber), status = payloadResponse.status
-          quit(QuitFailure)
+          if payloadResponse.status == PayloadExecutionStatus.invalid or
+              payloadResponse.status == PayloadExecutionStatus.invalid_block_hash:
+            error "Payload not validated",
+              blockNumber = int(payload.blockNumber), status = payloadResponse.status
+            quit(QuitFailure)
 
-        # Load the head hash from the execution payload, for forkchoice
-        headHash = forkyBlck.message.body.execution_payload.block_hash
+          # Load the head hash from the execution payload, for forkchoice
+          headHash = forkyBlck.message.body.execution_payload.block_hash
 
-        # Update the finalized hash
-        # This is updated after the fcu call is made
-        # So that head - head mod 32 is maintained
-        # i.e finalized have to be mod slots per epoch == 0
-        let blknum = forkyBlck.message.body.execution_payload.block_number
-        if blknum < finalizedBlck.header.number and blknum mod 32 == 0:
-          finalizedHash = headHash
-          # Make the forkchoicestate based on the the last
-          # `new_payload` call and the state received from the EL JSON-RPC API
-          # And generate the PayloadAttributes based on the consensus fork
-          sendFCU(curBlck)
-        elif blknum >= finalizedBlck.header.number:
-          # If the real finalized block is crossed, then upate the finalized hash to the real one
-          (finalizedBlck, _) = client.getELBlockFromBeaconChain(
-            BlockIdent.init(BlockIdentType.Finalized), clConfig
-          )
-          finalizedHash = finalizedBlck.header.computeBlockHash.asEth2Digest
+          # Update the finalized hash
+          # This is updated after the fcu call is made
+          # So that head - head mod 32 is maintained
+          # i.e finalized have to be mod slots per epoch == 0
+          let blknum = forkyBlck.message.body.execution_payload.block_number
+          if blknum < finalizedBlck.header.number and blknum mod 32 == 0:
+            finalizedHash = headHash
+            # Make the forkchoicestate based on the the last
+            # `new_payload` call and the state received from the EL JSON-RPC API
+            # And generate the PayloadAttributes based on the consensus fork
+            sendFCU(curBlck)
+          elif blknum >= finalizedBlck.header.number:
+            # If the real finalized block is crossed, then upate the finalized hash to the real one
+            (finalizedBlck, _) = client.getELBlockFromBeaconChain(
+              BlockIdent.init(BlockIdentType.Finalized), clConfig
+            )
+            finalizedHash = finalizedBlck.header.computeBlockHash.asEth2Digest
 
     # Update the current block number from EL rest api
     # Shows that the fcu call has succeeded
