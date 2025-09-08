@@ -402,6 +402,11 @@ proc getTransactions*(
     var res: seq[Transaction]
     for encodedTx in db.getBlockTransactionData(txRoot):
       res.add(rlp.decode(encodedTx, Transaction))
+
+    # Txs not there in db - Happens during era1/era import, when we don't store txs and receipts
+    if (res.len == 0 and txRoot != zeroHash32):
+      return err("No transactions found in db for txRoot " & $txRoot)
+
     return ok(move(res))
 
 proc getBlockBody*(
