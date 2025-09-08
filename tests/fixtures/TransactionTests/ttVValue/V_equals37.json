@@ -1,0 +1,84 @@
+{
+    "V_equals37" : {
+        "_info" : {
+            "comment" : "",
+            "filling-rpc-server" : "evm version 1.15.3-unstable-dab746b3-20250218",
+            "filling-tool-version" : "retesteth-0.3.2-legacy+commit.e0777df7.Linux.g++",
+            "generatedTestHash" : "9f6495c949a97758fbd48c26357db7bf3e0c39ea03e796147f4f2ed4e415852d",
+            "lllcversion" : "Version: 0.5.14-develop.2024.11.5+commit.b2b86751.mod.Linux.g++",
+            "solidity" : "Version: 0.8.24+commit.e11b9ed9.Linux.g++",
+            "source" : "src/TransactionTestsFiller/ttVValue/V_equals37Filler.json",
+            "sourceHash" : "908b7a4b9b36ede97e55f01baa625ab7c1a15068a9bb084fec8c0c0c891a43aa"
+        },
+        "result" : {
+            "Berlin" : {
+                "hash" : "0x4782cb5edcaeda1f0aef204b161214f124cefade9e146245183abbb9ca01bca5",
+                "intrinsicGas" : "0x5208",
+                "sender" : "0x2ea991808ba979ba103147edfd72304ebd95c028"
+            },
+            "Byzantium" : {
+                "hash" : "0x4782cb5edcaeda1f0aef204b161214f124cefade9e146245183abbb9ca01bca5",
+                "intrinsicGas" : "0x5208",
+                "sender" : "0x2ea991808ba979ba103147edfd72304ebd95c028"
+            },
+            "Cancun" : {
+                "hash" : "0x4782cb5edcaeda1f0aef204b161214f124cefade9e146245183abbb9ca01bca5",
+                "intrinsicGas" : "0x5208",
+                "sender" : "0x2ea991808ba979ba103147edfd72304ebd95c028"
+            },
+            "Constantinople" : {
+                "hash" : "0x4782cb5edcaeda1f0aef204b161214f124cefade9e146245183abbb9ca01bca5",
+                "intrinsicGas" : "0x5208",
+                "sender" : "0x2ea991808ba979ba103147edfd72304ebd95c028"
+            },
+            "ConstantinopleFix" : {
+                "hash" : "0x4782cb5edcaeda1f0aef204b161214f124cefade9e146245183abbb9ca01bca5",
+                "intrinsicGas" : "0x5208",
+                "sender" : "0x2ea991808ba979ba103147edfd72304ebd95c028"
+            },
+            "EIP150" : {
+                "exception" : "TransactionException.INVALID_SIGNATURE_VRS",
+                "intrinsicGas" : "0x00"
+            },
+            "EIP158" : {
+                "hash" : "0x4782cb5edcaeda1f0aef204b161214f124cefade9e146245183abbb9ca01bca5",
+                "intrinsicGas" : "0x5208",
+                "sender" : "0x2ea991808ba979ba103147edfd72304ebd95c028"
+            },
+            "Frontier" : {
+                "exception" : "TransactionException.INVALID_SIGNATURE_VRS",
+                "intrinsicGas" : "0x00"
+            },
+            "Homestead" : {
+                "exception" : "TransactionException.INVALID_SIGNATURE_VRS",
+                "intrinsicGas" : "0x00"
+            },
+            "Istanbul" : {
+                "hash" : "0x4782cb5edcaeda1f0aef204b161214f124cefade9e146245183abbb9ca01bca5",
+                "intrinsicGas" : "0x5208",
+                "sender" : "0x2ea991808ba979ba103147edfd72304ebd95c028"
+            },
+            "London" : {
+                "hash" : "0x4782cb5edcaeda1f0aef204b161214f124cefade9e146245183abbb9ca01bca5",
+                "intrinsicGas" : "0x5208",
+                "sender" : "0x2ea991808ba979ba103147edfd72304ebd95c028"
+            },
+            "Paris" : {
+                "hash" : "0x4782cb5edcaeda1f0aef204b161214f124cefade9e146245183abbb9ca01bca5",
+                "intrinsicGas" : "0x5208",
+                "sender" : "0x2ea991808ba979ba103147edfd72304ebd95c028"
+            },
+            "Prague" : {
+                "hash" : "0x4782cb5edcaeda1f0aef204b161214f124cefade9e146245183abbb9ca01bca5",
+                "intrinsicGas" : "0x5208",
+                "sender" : "0x2ea991808ba979ba103147edfd72304ebd95c028"
+            },
+            "Shanghai" : {
+                "hash" : "0x4782cb5edcaeda1f0aef204b161214f124cefade9e146245183abbb9ca01bca5",
+                "intrinsicGas" : "0x5208",
+                "sender" : "0x2ea991808ba979ba103147edfd72304ebd95c028"
+            }
+        },
+        "txbytes" : "0xf865808698852840a46f82d6d894095e7baea6a6c7c4c2dfeb977efac326af552d87808025a098ff921201554726367d2be8c804a7ff89ccf285ebc57dff8ae4c44b9c19ac4aa01887321be575c8095f789dd4c743dfe42c1820f9231f98a962b210e3ac2452a3"
+    }
+}

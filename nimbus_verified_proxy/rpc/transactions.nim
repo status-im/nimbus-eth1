@@ -5,6 +5,8 @@
 #   * Apache v2 license (license terms in the root directory or at https://www.apache.org/licenses/LICENSE-2.0).
 # at your option. This file may not be copied, modified, or distributed except according to those terms.
 
+{.push raises: [], gcsafe.}
+
 import
   stint,
   results,
@@ -34,7 +36,7 @@ proc toTransaction(tx: TransactionObject): Transaction =
     authorizationList: tx.authorizationList.get(@[]),
   )
 
-proc toTransactions(txs: openArray[TxOrHash]): Result[seq[Transaction], string] =
+proc toTransactions*(txs: openArray[TxOrHash]): Result[seq[Transaction], string] =
   var convertedTxs = newSeqOfCap[Transaction](txs.len)
   for x in txs:
     if x.kind == tohTx:

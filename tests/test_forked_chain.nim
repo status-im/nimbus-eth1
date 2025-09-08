@@ -37,7 +37,7 @@ type
 proc setupEnv(): TestEnv =
   let
     conf = makeConfig(@[
-      "--custom-network:" & genesisFile
+      "--network:" & genesisFile
     ])
 
   TestEnv(conf: conf)

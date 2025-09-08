@@ -5,7 +5,7 @@
 #   * Apache v2 license (license terms in the root directory or at https://www.apache.org/licenses/LICENSE-2.0).
 # at your option. This file may not be copied, modified, or distributed except according to those terms.
 
-{.push raises: [].}
+{.push raises: [], gcsafe.}
 
 import
   std/[os, strutils],
@@ -14,13 +14,11 @@ import
   confutils,
   eth/common/[keys, eth_types_rlp],
   json_rpc/rpcproxy,
-  beacon_chain/el/[el_manager],
   beacon_chain/gossip_processing/optimistic_processor,
   beacon_chain/networking/network_metadata,
   beacon_chain/networking/topic_params,
   beacon_chain/spec/beaconstate,
-  beacon_chain/spec/datatypes/[phase0, altair, bellatrix],
-  beacon_chain/[light_client, nimbus_binary_common, version],
+  beacon_chain/[beacon_clock, light_client, nimbus_binary_common, version],
   ../execution_chain/rpc/cors,
   ../execution_chain/common/common,
   ./types,
@@ -29,8 +27,6 @@ import
   ./nimbus_verified_proxy_conf,
   ./header_store,
   ./rpc_api_backend
-
-from beacon_chain/gossip_processing/eth2_processor import toValidationResult
 
 type OnHeaderCallback* = proc(s: cstring, t: int) {.cdecl, raises: [], gcsafe.}
 type Context* = object
@@ -232,16 +228,12 @@ proc run*(
       else:
         false
 
-  var blocksGossipState: GossipState = {}
+  var blocksGossipState: GossipState
   proc updateBlocksGossipStatus(slot: Slot) =
     let
       isBehind = not shouldSyncOptimistically(slot)
 
-      targetGossipState = getTargetGossipState(
-        slot.epoch, cfg.ALTAIR_FORK_EPOCH, cfg.BELLATRIX_FORK_EPOCH,
-        cfg.CAPELLA_FORK_EPOCH, cfg.DENEB_FORK_EPOCH, cfg.ELECTRA_FORK_EPOCH,
-        cfg.FULU_FORK_EPOCH, isBehind,
-      )
+      targetGossipState = getTargetGossipState(slot.epoch, cfg, isBehind)
 
     template currentGossipState(): auto =
       blocksGossipState
@@ -258,15 +250,15 @@ proc run*(
       discard
 
     let
-      newGossipForks = targetGossipState - currentGossipState
-      oldGossipForks = currentGossipState - targetGossipState
+      newGossipEpochs = targetGossipState - currentGossipState
+      oldGossipEpochs = currentGossipState - targetGossipState
 
-    for gossipFork in oldGossipForks:
-      let forkDigest = forkDigests[].atConsensusFork(gossipFork)
+    for gossipEpoch in oldGossipEpochs:
+      let forkDigest = forkDigests[].atEpoch(gossipEpoch, cfg)
       network.unsubscribe(getBeaconBlocksTopic(forkDigest))
 
-    for gossipFork in newGossipForks:
-      let forkDigest = forkDigests[].atConsensusFork(gossipFork)
+    for gossipEpoch in newGossipEpochs:
+      let forkDigest = forkDigests[].atEpoch(gossipEpoch, cfg)
       network.subscribe(
         getBeaconBlocksTopic(forkDigest),
         getBlockTopicParams(),

@@ -29,14 +29,6 @@ import
 
 export net, defs
 
-func defaultDataDir*(): string =
-  when defined(windows):
-    getHomeDir() / "AppData" / "Roaming" / "Nimbus"
-  elif defined(macosx):
-    getHomeDir() / "Library" / "Application Support" / "Nimbus"
-  else:
-    getHomeDir() / ".cache" / "nimbus"
-
 func getLogLevels(): string =
   var logLevels: seq[string]
   for level in LogLevel:
@@ -60,27 +52,21 @@ type
       defaultValue: ""
       name: "beacon-api" .}: string
 
-    network {.
+    network* {.
       desc: "Name or id number of Ethereum network"
       longDesc:
         "- mainnet/1       : Ethereum main network\n" &
         "- sepolia/11155111: Test network (proof-of-work)\n" &
         "- holesky/17000   : The holesovice post-merge testnet\n" &
         "- hoodi/560048    : The second long-standing, merged-from-genesis, public Ethereum testnet\n" &
-        "- other           : Custom"
+        "- path            : Custom config for private Ethereum Network (as /path/to/metadata)\n" &
+        "                    Path to a folder containing custom network configuration files\n" &
+        "                    such as genesis.json, config.yaml, etc.\n" &
+        "                    config.yaml is the configuration file for the CL client"
       defaultValue: "" # the default value is set in makeConfig
       defaultValueDesc: "mainnet(1)"
       abbr: "i"
       name: "network" }: string
-
-    customNetworkFolder* {.
-        desc: "Use custom config for private Ethereum Network (as /path/to/metadata)"
-        longDesc:
-          "Path to a folder containing custom network configuration files\n" &
-          "such as genesis.json, config.yaml, etc.\n" &
-          "config.yaml is the configuration file for the CL client"
-        defaultValue: ""
-        name: "custom-network" .}: string
 
     networkId* {.
       ignore # this field is not processed by confutils
@@ -153,22 +139,33 @@ proc parseCmdArg(T: type NetworkParams, p: string): T
 func completeCmdArg(T: type NetworkParams, val: string): seq[string] =
   return @[]
 
+func decOrHex(s: string): bool =
+  const allowedDigits = Digits + HexDigits + {'x', 'X'}
+  for c in s:
+    if c notin allowedDigits:
+      return false
+  true
+
+proc parseNetworkId(network: string): Opt[NetworkId] =
+  try:
+    Opt.some parseHexOrDec256(network)
+  except CatchableError:
+    error "Failed to parse network id", id=network
+    Opt.none NetworkId
 
 proc getNetworkId(conf: NRpcConf): Opt[NetworkId] =
   if conf.network.len == 0:
-    return Opt.none NetworkId
+    return Opt.some MainNet
 
   let network = toLowerAscii(conf.network)
   case network
   of "mainnet": return Opt.some MainNet
   of "sepolia": return Opt.some SepoliaNet
   of "holesky": return Opt.some HoleskyNet
+  of "hoodi"  : return Opt.some HoodiNet
   else:
-    try:
-      Opt.some parseHexOrDec256(network)
-    except CatchableError:
-      error "Failed to parse network name or id", network
-      quit QuitFailure
+    if decOrHex(network):
+      return parseNetworkId(network)
 
 # KLUDGE: The `load()` template does currently not work within any exception
 #         annotated environment.
@@ -188,12 +185,15 @@ proc makeConfig*(cmdLine = commandLineParams()): NRpcConf
   except CatchableError as e:
     raise e
 
-  var networkId = result.getNetworkId()
+  var
+    networkId = result.getNetworkId()
+    customNetwork = false
 
-  if result.customNetworkFolder.len > 0:
+  if result.network.len > 0 and networkId.isNone:
+    customNetwork = true
     var networkParams = NetworkParams()
-    if not loadNetworkParams(result.customNetworkFolder.joinPath("genesis.json"), networkParams):
-      error "Failed to load customNetwork", path=result.customNetworkFolder
+    if not loadNetworkParams(result.network.joinPath("genesis.json"), networkParams):
+      error "Failed to load customNetwork", path=result.network
       quit QuitFailure
     result.networkParams = networkParams
     if networkId.isNone:
@@ -205,13 +205,9 @@ proc makeConfig*(cmdLine = commandLineParams()): NRpcConf
       # zero means CustomNet
       networkId = Opt.some(NetworkId(result.networkParams.config.chainId))
 
-  if networkId.isNone:
-    # bootnodes is set via getBootNodes
-    networkId = Opt.some MainNet
+  result.networkId = networkId.expect("Network ID exists")
 
-  result.networkId = networkId.get()
-
-  if result.customNetworkFolder.len == 0:
+  if not customNetwork:
     result.networkParams = networkParams(result.networkId)
 
 

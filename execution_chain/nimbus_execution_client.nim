@@ -11,14 +11,14 @@ import
   ../execution_chain/compile_info
 
 import
-  std/[os, osproc, strutils, net, options],
+  std/[osproc, net, options],
   chronicles,
   eth/net/nat,
   metrics,
   metrics/chronicles_support,
   stew/byteutils,
   ./rpc,
-  ./version,
+  ./version_info,
   ./constants,
   ./nimbus_desc,
   ./nimbus_import,
@@ -29,14 +29,9 @@ import
   ./db/storage_types,
   ./sync/wire_protocol,
   ./common/chain_config_hash,
-  ./portal/portal
-
-from beacon_chain/nimbus_binary_common import setupFileLimits
-
-## TODO:
-## * No IPv6 support
-## * No multiple bind addresses support
-## * No database support
+  ./portal/portal,
+  beacon_chain/[nimbus_binary_common, process_state],
+  beacon_chain/validators/keystore_management
 
 proc basicServices(nimbus: NimbusNode,
                    conf: NimbusConf,
@@ -59,8 +54,8 @@ proc basicServices(nimbus: NimbusNode,
   nimbus.beaconEngine = BeaconEngineRef.new(nimbus.txPool)
 
 proc manageAccounts(nimbus: NimbusNode, conf: NimbusConf) =
-  if string(conf.keyStore).len > 0:
-    let res = nimbus.ctx.am.loadKeystores(string conf.keyStore)
+  if conf.keyStoreDir.len > 0:
+    let res = nimbus.ctx.am.loadKeystores(conf.keyStoreDir)
     if res.isErr:
       fatal "Load keystore error", msg = res.error()
       quit(QuitFailure)
@@ -74,36 +69,38 @@ proc manageAccounts(nimbus: NimbusNode, conf: NimbusConf) =
 proc setupP2P(nimbus: NimbusNode, conf: NimbusConf,
               com: CommonRef) {.raises: [OSError].} =
   ## Creating P2P Server
-  let kpres = nimbus.ctx.getNetKeys(conf.netKey, conf.dataDir.string)
+  let kpres = nimbus.ctx.getNetKeys(conf.netKey)
   if kpres.isErr:
     fatal "Get network keys error", msg = kpres.error
     quit(QuitFailure)
 
   let keypair = kpres.get()
+
+  let (extIp, extTcpPort, extUdpPort) =
+    setupAddress(conf.nat, conf.listenAddress, conf.tcpPort,
+                 conf.udpPort, NimbusName & " " & NimbusVersion)
+
   var address = enode.Address(
-    ip: conf.listenAddress,
-    tcpPort: conf.tcpPort,
-    udpPort: conf.udpPort
+    ip: extIp.valueOr(conf.listenAddress),
+    tcpPort: extTcpPort.valueOr(conf.tcpPort),
+    udpPort: extUdpPort.valueOr(conf.udpPort),
   )
 
-  if conf.nat.hasExtIp:
-    # any required port redirection is assumed to be done by hand
-    address.ip = conf.nat.extIp
-  else:
-    # automated NAT traversal
-    let extIP = getExternalIP(conf.nat.nat)
-    # This external IP only appears in the logs, so don't worry about dynamic
-    # IPs. Don't remove it either, because the above call does initialisation
-    # and discovery for NAT-related objects.
-    if extIP.isSome:
-      address.ip = extIP.get()
-      let extPorts = redirectPorts(tcpPort = address.tcpPort,
-                                   udpPort = address.udpPort,
-                                   description = NimbusName & " " & NimbusVersion)
-      if extPorts.isSome:
-        (address.tcpPort, address.udpPort) = extPorts.get()
+  let
+    bootstrapNodes = conf.getBootNodes()
+    fc = nimbus.fc
 
-  let bootstrapNodes = conf.getBootNodes()
+  func forkIdProc(): ForkID {.raises: [].} =
+    let header = fc.latestHeader()
+    com.forkId(header.number, header.timestamp)
+
+  func compatibleForkIdProc(id: ForkID): bool {.raises: [].} =
+    com.compatibleForkId(id)
+
+  let forkIdProcs = ForkIdProcs(
+    forkId: forkIdProc,
+    compatibleForkId: compatibleForkIdProc,
+  )
 
   nimbus.ethNode = newEthereumNode(
     keypair, address, conf.networkId, conf.agentString,
@@ -111,18 +108,11 @@ proc setupP2P(nimbus: NimbusNode, conf: NimbusConf,
     bootstrapNodes = bootstrapNodes,
     bindUdpPort = conf.udpPort, bindTcpPort = conf.tcpPort,
     bindIp = conf.listenAddress,
-    rng = nimbus.ctx.rng)
+    rng = nimbus.ctx.rng,
+    forkIdProcs = forkIdProcs)
 
   # Add protocol capabilities
   nimbus.wire = nimbus.ethNode.addEthHandlerCapability(nimbus.txPool)
-
-  # Always initialise beacon syncer
-  nimbus.beaconSyncRef = BeaconSyncRef.init(
-    nimbus.ethNode, nimbus.fc, conf.maxPeers)
-
-  # Optional for pre-setting the sync target (i.e. debugging)
-  if conf.beaconSyncTargetFile.isSome():
-    nimbus.beaconSyncRef.targetInit conf.beaconSyncTargetFile.unsafeGet.string
 
   # Connect directly to the static nodes
   let staticPeers = conf.getStaticPeers()
@@ -142,6 +132,34 @@ proc setupP2P(nimbus: NimbusNode, conf: NimbusConf,
       enableDiscV4 = DiscoveryType.V4 in discovery,
       enableDiscV5 = DiscoveryType.V5 in discovery,
     )
+
+  # Initalise beacon sync descriptor.
+  var syncerShouldRun = (conf.maxPeers > 0 or staticPeers.len > 0) and
+                        conf.engineApiServerEnabled()
+
+  # The beacon sync descriptor might have been pre-allocated with additional
+  # features. So do not override.
+  if nimbus.beaconSyncRef.isNil:
+    nimbus.beaconSyncRef = BeaconSyncRef.init()
+  else:
+    syncerShouldRun = true
+
+  # Configure beacon syncer.
+  nimbus.beaconSyncRef.config(nimbus.ethNode, nimbus.fc, conf.maxPeers)
+
+  # Optional for pre-setting the sync target (e.g. for debugging)
+  if conf.beaconSyncTarget.isSome():
+    syncerShouldRun = true
+    let hex = conf.beaconSyncTarget.unsafeGet
+    if not nimbus.beaconSyncRef.configTarget(hex, conf.beaconSyncTargetIsFinal):
+      fatal "Error parsing hash32 argument for --debug-beacon-sync-target",
+        hash32=hex
+      quit QuitFailure
+
+  # Deactivating syncer if there is definitely no need to run it. This
+  # avoids polling (i.e. waiting for instructions) and some logging.
+  if not syncerShouldRun:
+    nimbus.beaconSyncRef = BeaconSyncRef(nil)
 
 proc setupMetrics(nimbus: NimbusNode, conf: NimbusConf)
     {.raises: [CancelledError, MetricsError].} =
@@ -203,16 +221,15 @@ proc run(nimbus: NimbusNode, conf: NimbusConf) =
   # trusted setup will be loaded, lazily.
   if conf.trustedSetupFile.isSome:
     let fileName = conf.trustedSetupFile.get()
-    let res = loadTrustedSetup(fileName, 0)
+    let res = lazy_kzg.loadTrustedSetup(fileName, 0)
     if res.isErr:
       fatal "Cannot load Kzg trusted setup from file", msg=res.error
       quit(QuitFailure)
 
-  createDir(string conf.dataDir)
   let coreDB =
     # Resolve statically for database type
     AristoDbRocks.newCoreDbRef(
-      string conf.dataDir,
+      conf.dataDir,
       conf.dbOptions(noKeyCache = conf.cmd == NimbusCmd.`import`))
 
   preventLoadingDataDirForTheWrongNetwork(coreDB, conf)
@@ -238,7 +255,8 @@ proc run(nimbus: NimbusNode, conf: NimbusConf) =
     taskpool = taskpool,
     networkId = conf.networkId,
     params = conf.networkParams,
-    statelessProviderEnabled = conf.statelessProviderEnabled)
+    statelessProviderEnabled = conf.statelessProviderEnabled,
+    statelessWitnessValidation = conf.statelessWitnessValidation)
 
   if conf.extraData.len > 32:
     warn "ExtraData exceeds 32 bytes limit, truncate",
@@ -276,42 +294,38 @@ proc run(nimbus: NimbusNode, conf: NimbusConf) =
     setupP2P(nimbus, conf, com)
     setupRpc(nimbus, conf, com)
 
-    if conf.maxPeers > 0 and conf.engineApiServerEnabled():
-      # Not starting syncer if there is definitely no way to run it. This
-      # avoids polling (i.e. waiting for instructions) and some logging.
-      if not nimbus.beaconSyncRef.start():
-        nimbus.beaconSyncRef = BeaconSyncRef(nil)
+    # Not starting syncer if there is definitely no way to run it. This
+    # avoids polling (i.e. waiting for instructions) and some logging.
+    if not nimbus.beaconSyncRef.isNil and
+       not nimbus.beaconSyncRef.start():
+      nimbus.beaconSyncRef = BeaconSyncRef(nil)
 
-    if nimbus.state == NimbusState.Starting:
-      # it might have been set to "Stopping" with Ctrl+C
-      nimbus.state = NimbusState.Running
+    # Be graceful about ctrl-c during init
+    if ProcessState.stopping.isNone:
+      ProcessState.notifyRunning()
 
-    # Main event loop
-    while nimbus.state == NimbusState.Running:
-      try:
+      while not ProcessState.stopIt(notice("Shutting down", reason = it)):
         poll()
-      except CatchableError as e:
-        debug "Exception in poll()", exc = e.name, err = e.msg
-        discard e # silence warning when chronicles not activated
 
     # Stop loop
     waitFor nimbus.closeWait()
 
 when isMainModule:
-  var nimbus = NimbusNode(state: NimbusState.Starting, ctx: newEthContext())
+  ProcessState.setupStopHandlers()
 
-  ## Processing command line arguments
+  # Processing command line arguments
   let conf = makeConfig()
 
+  # Set up logging before everything else
+  setupLogging(conf.logLevel, conf.logStdout, none(OutFile))
   setupFileLimits()
 
-  ## Ctrl+C handling
-  proc controlCHandler() {.noconv.} =
-    when defined(windows):
-      # workaround for https://github.com/nim-lang/Nim/issues/4057
-      setupForeignThreadGc()
-    nimbus.state = NimbusState.Stopping
-    notice "\nCtrl+C pressed. Waiting for a graceful shutdown."
-  setControlCHook(controlCHandler)
+  # TODO provide option for fixing / ignoring permission errors
+  if not checkAndCreateDataDir(conf.dataDir):
+    # We are unable to access/create data folder or data folder's
+    # permissions are insecure.
+    quit QuitFailure
+
+  var nimbus = NimbusNode(ctx: newEthContext())
 
   nimbus.run(conf)

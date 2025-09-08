@@ -21,47 +21,36 @@ import
     chronicles,
     confutils,
     confutils/defs,
-    confutils/std/net
+    confutils/std/net as confnet,
+    confutils/toml/defs as tomldefs,
+    json_serialization/std/net as jsnet,
+    toml_serialization/std/net as tomlnet,
+    results,
+    beacon_chain/buildinfo,
+    beacon_chain/nimbus_binary_common,
   ],
-  eth/[common, net/nat],
+  toml_serialization,
+  eth/[common, net/nat, net/nat_toml, p2p/discoveryv5/enr_toml],
   ./networking/[bootnodes, eth1_enr as enr],
-  ./[constants, compile_info, version],
+  ./[constants, compile_info, version_info],
   ./common/chain_config,
   ./db/opts
 
-from beacon_chain/nimbus_binary_common import setupLogging, StdoutLogKind
-
-export net, defs, StdoutLogKind
-
+export net, defs, jsnet, nimbus_binary_common
 const
-  # e.g.: Copyright (c) 2018-2025 Status Research & Development GmbH
-  NimbusCopyright* = "Copyright (c) 2018-" &
-    CompileDate.split('-')[0] &
-    " Status Research & Development GmbH"
 
   # e.g.:
   # nimbus_execution_client/v0.1.0-abcdef/os-cpu/nim-a.b.c/emvc
   # Copyright (c) 2018-2025 Status Research & Development GmbH
   NimbusBuild* = "$#\p$#" % [
     ClientId,
-    NimbusCopyright,
+    copyrights,
   ]
 
   NimbusHeader* = "$#\p\pNim version $#" % [
     NimbusBuild,
-    NimVersion
+    nimBanner()
   ]
-
-func defaultDataDir*(): string =
-  when defined(windows):
-    getHomeDir() / "AppData" / "Roaming" / "Nimbus"
-  elif defined(macosx):
-    getHomeDir() / "Library" / "Application Support" / "Nimbus"
-  else:
-    getHomeDir() / ".cache" / "nimbus"
-
-func defaultKeystoreDir*(): string =
-  defaultDataDir() / "keystore"
 
 func getLogLevels(): string =
   var logLevels: seq[string]
@@ -72,7 +61,6 @@ func getLogLevels(): string =
   join(logLevels, ", ")
 
 const
-  defaultDataDirDesc = defaultDataDir()
   defaultPort              = 30303
   defaultMetricsServerPort = 9093
   defaultHttpPort          = 8545
@@ -104,31 +92,31 @@ type
 
   NimbusConf* = object of RootObj
     ## Main Nimbus configuration object
-
-    dataDir* {.
+    configFile {.
       separator: "ETHEREUM OPTIONS:"
-      desc: "The directory where nimbus will store all blockchain data"
-      defaultValue: defaultDataDir()
-      defaultValueDesc: $defaultDataDirDesc
-      abbr: "d"
-      name: "data-dir" }: OutDir
+      desc: "Loads the configuration from a TOML file"
+      name: "config-file" .}: Option[InputFile]
 
-    era1DirOpt* {.
+    dataDirFlag* {.
+      desc: "The directory where nimbus will store all blockchain data"
+      abbr: "d"
+      name: "data-dir" }: Option[OutDir]
+
+    era1DirFlag* {.
       desc: "Directory where era1 (pre-merge) archive can be found"
       defaultValueDesc: "<data-dir>/era1"
       name: "era1-dir" }: Option[OutDir]
 
-    eraDirOpt* {.
+    eraDirFlag* {.
       desc: "Directory where era (post-merge) archive can be found"
       defaultValueDesc: "<data-dir>/era"
       name: "era-dir" }: Option[OutDir]
 
-    keyStore* {.
+    keyStoreDirFlag* {.
       desc: "Load one or more keystore files from this directory"
-      defaultValue: defaultKeystoreDir()
       defaultValueDesc: "inside datadir"
       abbr: "k"
-      name: "key-store" }: OutDir
+      name: "key-store" }: Option[OutDir]
 
     importKey* {.
       desc: "Import unencrypted 32 bytes hex private key from a file"
@@ -163,13 +151,15 @@ type
         "- sepolia/11155111: Test network (proof-of-work)\n" &
         "- holesky/17000   : The holesovice post-merge testnet\n" &
         "- hoodi/560048    : The second long-standing, merged-from-genesis, public Ethereum testnet\n" &
-        "- other           : Custom"
-      defaultValue: "" # the default value is set in makeConfig
+        "- path            : /path/to/genesis-or-network-configuration.json\n" &
+        "Both --network: name/path --network:id can be set at the same time to override network id number"
+      defaultValue: @[] # the default value is set in makeConfig
       defaultValueDesc: "mainnet(1)"
       abbr: "i"
-      name: "network" }: string
+      name: "network" }: seq[string]
 
     customNetwork {.
+      ignore
       desc: "Use custom genesis block for private Ethereum Network (as /path/to/genesis.json)"
       defaultValueDesc: ""
       abbr: "c"
@@ -345,14 +335,6 @@ type
       defaultValue: 4'u64
       name: "debug-persist-batch-size" .}: uint64
 
-    beaconSyncTargetFile* {.
-      hidden
-      desc: "Load a file containg an rlp-encoded object \"(Header,Hash32)\" " &
-            "to be used " &
-            "as the first target before any other request from the CL " &
-            "is accepted"
-      name: "debug-beacon-sync-target-file" .}: Option[InputFile]
-
     rocksdbMaxOpenFiles {.
       hidden
       defaultValue: defaultMaxOpenFiles
@@ -414,10 +396,16 @@ type
       separator: "\pSTATELESS PROVIDER OPTIONS:"
       hidden
       desc: "Enable the stateless provider. This turns on the features required" &
-        " by stateless clients such as generation and stored of block witnesses" &
+        " by stateless clients such as generation and storage of block witnesses" &
         " and serving these witnesses to peers over the p2p network."
       defaultValue: false
       name: "stateless-provider" }: bool
+
+    statelessWitnessValidation* {.
+      hidden
+      desc: "Enable full validation of execution witnesses."
+      defaultValue: false
+      name: "stateless-witness-validation" }: bool
 
     case cmd* {.
       command
@@ -510,7 +498,23 @@ type
         defaultValueDesc: "\"jwt.hex\" in the data directory (see --data-dir)"
         name: "jwt-secret" .}: Option[InputFile]
 
-    of `import`:
+      beaconSyncTarget* {.
+        hidden
+        desc: "Manually set the initial sync target specified by its 32 byte" &
+              " block hash (e.g. as found on etherscan.io) represented by a" &
+              " hex string"
+        name: "debug-beacon-sync-target" .}: Option[string]
+
+      beaconSyncTargetIsFinal* {.
+        hidden
+        defaultValue: false
+        desc: "If the sync taget is finalised (e.g. as stated on" &
+              " etherscan.io) this can be set here. For a non-finalised" &
+              " manual sync target it is advisable to run this EL against a" &
+              " CL which will result in a smaller memory footprint"
+        name: "debug-beacon-sync-target-is-final".}: bool
+
+    of NimbusCmd.`import`:
       maxBlocks* {.
         desc: "Maximum number of blocks to import"
         defaultValue: uint64.high()
@@ -561,7 +565,7 @@ type
         defaultValue: false
         name: "debug-store-slot-hashes".}: bool
 
-    of `import-rlp`:
+    of NimbusCmd.`import-rlp`:
       blocksFile* {.
         argument
         desc: "One or more RLP encoded block(s) files"
@@ -572,6 +576,13 @@ func parseHexOrDec256(p: string): UInt256 {.raises: [ValueError].} =
     parse(p, UInt256, 16)
   else:
     parse(p, UInt256, 10)
+
+proc dataDir*(config: NimbusConf): string =
+  # TODO load network name from directory, when using custom network?
+  string config.dataDirFlag.get(OutDir defaultDataDir("", config.networkId.name()))
+
+proc keyStoreDir*(config: NimbusConf): string =
+  string config.keyStoreDirFlag.get(OutDir config.dataDir() / "keystore")
 
 func parseCmdArg(T: type NetworkId, p: string): T
     {.gcsafe, raises: [ValueError].} =
@@ -669,22 +680,86 @@ proc loadBootstrapFile(fileName: string, output: var seq[ENode]) =
 proc loadStaticPeersFile(fileName: string, output: var seq[ENode]) =
   fileName.loadEnodeFile(output, "static peers")
 
-proc getNetworkId(conf: NimbusConf): Option[NetworkId] =
-  if conf.network.len == 0:
-    return none NetworkId
+func decOrHex(s: string): bool =
+  const allowedDigits = Digits + HexDigits + {'x', 'X'}
+  for c in s:
+    if c notin allowedDigits:
+      return false
+  true
 
-  let network = toLowerAscii(conf.network)
-  case network
-  of "mainnet": return some MainNet
-  of "sepolia": return some SepoliaNet
-  of "holesky": return some HoleskyNet
-  of "hoodi": return some HoodiNet
+proc parseNetworkId(network: string): NetworkId =
+  try:
+    return parseHexOrDec256(network)
+  except CatchableError:
+    error "Failed to parse network id", id=network
+    quit QuitFailure
+
+proc parseNetworkParams(network: string): (NetworkParams, bool) =
+  case toLowerAscii(network)
+  of "mainnet": (networkParams(MainNet), false)
+  of "sepolia": (networkParams(SepoliaNet), false)
+  of "holesky": (networkParams(HoleskyNet), false)
+  of "hoodi"  : (networkParams(HoodiNet), false)
   else:
-    try:
-      some parseHexOrDec256(network)
-    except CatchableError:
-      error "Failed to parse network name or id", network
+    var params: NetworkParams
+    if not loadNetworkParams(network, params):
+      # `loadNetworkParams` have it's own error log
       quit QuitFailure
+    (params, true)
+
+proc processNetworkParamsAndNetworkId(conf: var NimbusConf) =
+  if conf.network.len == 0 and conf.customNetwork.isNone:
+    # Default value if none is set
+    conf.networkId = MainNet
+    conf.networkParams = networkParams(MainNet)
+    return
+
+  var
+    params: Opt[NetworkParams]
+    id: Opt[NetworkId]
+    simulatedCustomNetwork = false
+
+  for network in conf.network:
+    if decOrHex(network):
+      if id.isSome:
+        warn "Network ID already set, ignore new value", id=network
+        continue
+      id = Opt.some parseNetworkId(network)
+    else:
+      if params.isSome:
+        warn "Network configuration already set, ignore new value", network
+        continue
+      let (parsedParams, custom) = parseNetworkParams(network)
+      params = Opt.some parsedParams
+      # Simulate --custom-network while it is still not disabled.
+      if custom:
+        conf.customNetwork = some parsedParams
+        simulatedCustomNetwork = true
+
+  if conf.customNetwork.isSome:
+    if params.isNone:
+      warn "`--custom-network` is deprecated, please use `--network`"
+    elif not simulatedCustomNetwork:
+      warn "Network configuration already set by `--network`, `--custom-network` override it"
+    params = if conf.customNetwork.isSome: Opt.some conf.customNetwork.get
+             else: Opt.none(NetworkParams)
+    if id.isNone:
+      # WARNING: networkId and chainId are two distinct things
+      # their usage should not be mixed in other places.
+      # We only set networkId to chainId if networkId not set in cli and
+      # --custom-network is set.
+      # If chainId is not defined in config file, it's ok because
+      # zero means CustomNet
+      id = Opt.some NetworkId(params.value.config.chainId)
+
+  if id.isNone and params.isSome:
+    id = Opt.some NetworkId(params.value.config.chainId)
+
+  if conf.customNetwork.isNone and params.isNone:
+    params = Opt.some networkParams(id.value)
+
+  conf.networkParams = params.expect("Network params exists")
+  conf.networkId = id.expect("Network ID exists")
 
 proc getRpcFlags(api: openArray[string]): set[RpcFlag] =
   if api.len == 0:
@@ -785,11 +860,11 @@ func shareServerWithEngineApi*(conf: NimbusConf): bool =
 func httpServerEnabled*(conf: NimbusConf): bool =
   conf.wsEnabled or conf.rpcEnabled
 
-func era1Dir*(conf: NimbusConf): OutDir =
-  conf.era1DirOpt.get(OutDir(conf.dataDir.string & "/era1"))
+proc era1Dir*(conf: NimbusConf): string =
+  string conf.era1DirFlag.get(OutDir conf.dataDir / "era1")
 
-func eraDir*(conf: NimbusConf): OutDir =
-  conf.eraDirOpt.get(OutDir(conf.dataDir.string & "/era"))
+proc eraDir*(conf: NimbusConf): string =
+  string conf.eraDirFlag.get(OutDir conf.dataDir / "era")
 
 func dbOptions*(conf: NimbusConf, noKeyCache = false): DbOptions =
   DbOptions.init(
@@ -808,59 +883,47 @@ func dbOptions*(conf: NimbusConf, noKeyCache = false): DbOptions =
     rdbPrintStats = conf.rdbPrintStats,
   )
 
+#-------------------------------------------------------------------
+# Constructor
+#-------------------------------------------------------------------
+
 # KLUDGE: The `load()` template does currently not work within any exception
 #         annotated environment.
 {.pop.}
 
-proc makeConfig*(cmdLine = commandLineParams()): NimbusConf
-    {.raises: [CatchableError].} =
+proc makeConfig*(cmdLine = commandLineParams()): NimbusConf =
   ## Note: this function is not gc-safe
-
-  # The try/catch clause can go away when `load()` is clean
   try:
-    {.push warning[ProveInit]: off.}
     result = NimbusConf.load(
       cmdLine,
       version = NimbusBuild,
-      copyrightBanner = NimbusHeader
+      copyrightBanner = NimbusHeader,
+      secondarySources = proc (
+        conf: NimbusConf, sources: ref SecondarySources
+      ) {.raises: [ConfigurationError].} =
+        if conf.configFile.isSome:
+          sources.addConfigFile(Toml, conf.configFile.get)
     )
-    {.pop.}
-  except CatchableError as e:
-    raise e
+  except CatchableError as err:
+    if err[] of ConfigurationError and err.parent != nil:
+      if err.parent[] of TomlFieldReadingError:
+        let fieldName = ((ref TomlFieldReadingError)(err.parent)).field
+        echo "Error when parsing ", fieldName, ": ", err.msg
+      elif err.parent[] of TomlReaderError:
+        type TT = ref TomlReaderError
+        echo TT(err).formatMsg("")
+      else:
+        echo "Error when parsing config file: ", err.msg
+    else:
+      echo "Error when parsing command line params: ", err.msg
+    quit QuitFailure
 
-  setupLogging(result.logLevel, result.logStdout, none(OutFile))
-
-  var networkId = result.getNetworkId()
-
-  if result.customNetwork.isSome:
-    result.networkParams = result.customNetwork.get()
-    if networkId.isNone:
-      # WARNING: networkId and chainId are two distinct things
-      # they usage should not be mixed in other places.
-      # We only set networkId to chainId if networkId not set in cli and
-      # --custom-network is set.
-      # If chainId is not defined in config file, it's ok because
-      # zero means CustomNet
-      networkId = some(NetworkId(result.networkParams.config.chainId))
-
-  if networkId.isNone:
-    # bootnodes is set via getBootNodes
-    networkId = some MainNet
-
-  result.networkId = networkId.get()
-
-  if result.customNetwork.isNone:
-    result.networkParams = networkParams(result.networkId)
+  processNetworkParamsAndNetworkId(result)
 
   if result.cmd == noCommand:
     if result.udpPort == Port(0):
       # if udpPort not set in cli, then
       result.udpPort = result.tcpPort
-
-  # see issue #1346
-  if result.keyStore.string == defaultKeystoreDir() and
-     result.dataDir.string != defaultDataDir():
-    result.keyStore = OutDir(result.dataDir.string / "keystore")
 
 when isMainModule:
   # for testing purpose

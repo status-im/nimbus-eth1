@@ -81,6 +81,7 @@ proc cmdGenerate(conf: DbConf) =
 
   for i in 0 ..< conf.contentAmount:
     let key = rng[].generateRandomU256()
+    db.put(key, bytes)
 
   db.close()
 

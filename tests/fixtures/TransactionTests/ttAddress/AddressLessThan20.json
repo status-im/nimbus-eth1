@@ -1,0 +1,73 @@
+{
+    "AddressLessThan20" : {
+        "_info" : {
+            "comment" : "",
+            "filling-rpc-server" : "evm version 1.15.3-unstable-dab746b3-20250218",
+            "filling-tool-version" : "retesteth-0.3.2-legacy+commit.e0777df7.Linux.g++",
+            "generatedTestHash" : "82ff3c7bc1a96851a3e30caec919a600f9086725b183c9ad39afc530e51900ea",
+            "lllcversion" : "Version: 0.5.14-develop.2024.11.5+commit.b2b86751.mod.Linux.g++",
+            "solidity" : "Version: 0.8.24+commit.e11b9ed9.Linux.g++",
+            "source" : "src/TransactionTestsFiller/ttAddress/AddressLessThan20Filler.json",
+            "sourceHash" : "8e5967a4b4dd70c7b78da0794ad09179e3b4e05cb08d2080f9525280f0e60d1e"
+        },
+        "result" : {
+            "Berlin" : {
+                "exception" : "TransactionException.ADDRESS_TOO_SHORT",
+                "intrinsicGas" : "0x00"
+            },
+            "Byzantium" : {
+                "exception" : "TransactionException.ADDRESS_TOO_SHORT",
+                "intrinsicGas" : "0x00"
+            },
+            "Cancun" : {
+                "exception" : "TransactionException.ADDRESS_TOO_SHORT",
+                "intrinsicGas" : "0x00"
+            },
+            "Constantinople" : {
+                "exception" : "TransactionException.ADDRESS_TOO_SHORT",
+                "intrinsicGas" : "0x00"
+            },
+            "ConstantinopleFix" : {
+                "exception" : "TransactionException.ADDRESS_TOO_SHORT",
+                "intrinsicGas" : "0x00"
+            },
+            "EIP150" : {
+                "exception" : "TransactionException.ADDRESS_TOO_SHORT",
+                "intrinsicGas" : "0x00"
+            },
+            "EIP158" : {
+                "exception" : "TransactionException.ADDRESS_TOO_SHORT",
+                "intrinsicGas" : "0x00"
+            },
+            "Frontier" : {
+                "exception" : "TransactionException.ADDRESS_TOO_SHORT",
+                "intrinsicGas" : "0x00"
+            },
+            "Homestead" : {
+                "exception" : "TransactionException.ADDRESS_TOO_SHORT",
+                "intrinsicGas" : "0x00"
+            },
+            "Istanbul" : {
+                "exception" : "TransactionException.ADDRESS_TOO_SHORT",
+                "intrinsicGas" : "0x00"
+            },
+            "London" : {
+                "exception" : "TransactionException.ADDRESS_TOO_SHORT",
+                "intrinsicGas" : "0x00"
+            },
+            "Paris" : {
+                "exception" : "TransactionException.ADDRESS_TOO_SHORT",
+                "intrinsicGas" : "0x00"
+            },
+            "Prague" : {
+                "exception" : "TransactionException.ADDRESS_TOO_SHORT",
+                "intrinsicGas" : "0x00"
+            },
+            "Shanghai" : {
+                "exception" : "TransactionException.ADDRESS_TOO_SHORT",
+                "intrinsicGas" : "0x00"
+            }
+        },
+        "txbytes" : "0xf8528001825208870b9331677e6ebf0a801ca098ff921201554726367d2be8c804a7ff89ccf285ebc57dff8ae4c44b9c19ac4aa03887321be575c8095f789dd4c743dfe42c1820f9231f98a962b210e3ac2452a3"
+    }
+}

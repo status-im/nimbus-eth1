@@ -12,10 +12,10 @@ import
   web3/eth_api,
   stew/byteutils,
   json_rpc/[rpcserver, rpcclient],
-  eth/[rlp, trie/hexary_proof_verification],
+  eth/rlp,
   eth/common/[transaction_utils, addresses],
   ../hive_integration/nodocker/engine/engine_client,
-  ../execution_chain/[constants, transaction, config, version],
+  ../execution_chain/[constants, transaction, config, version_info],
   ../execution_chain/db/[ledger, storage_types],
   ../execution_chain/sync/wire_protocol,
   ../execution_chain/core/[tx_pool, chain, pow/difficulty],
@@ -30,7 +30,8 @@ import
   ../execution_chain/nimbus_desc,
    ./test_helpers,
    ./macro_assembler,
-   ./test_block_fixture
+   ./test_block_fixture,
+   ./proof_helpers
 
 type
   TestEnv = object
@@ -70,32 +71,6 @@ const
   prevRandao = Bytes32 EMPTY_UNCLE_HASH # it can be any valid hash
   oneETH = 1.u256 * 1_000_000_000.u256 * 1_000_000_000.u256
 
-proc verifyAccountProof(trustedStateRoot: Hash32, res: ProofResponse): MptProofVerificationResult =
-  let
-    key = keccak256(res.address.data).data
-    value = rlp.encode(Account(
-        nonce: res.nonce.uint64,
-        balance: res.balance,
-        storageRoot: res.storageHash,
-        codeHash: res.codeHash))
-
-  verifyMptProof(
-    seq[seq[byte]](res.accountProof),
-    trustedStateRoot,
-    key,
-    value)
-
-proc verifySlotProof(trustedStorageRoot: Hash32, slot: StorageProof): MptProofVerificationResult =
-  let
-    key = keccak256(toBytesBE(slot.key)).data
-    value = rlp.encode(slot.value)
-
-  verifyMptProof(
-    seq[seq[byte]](slot.proof),
-    trustedStorageRoot,
-    key,
-    value)
-
 proc persistFixtureBlock(chainDB: CoreDbTxRef) =
   let header = getBlockHeader4514995()
   # Manually inserting header to avoid any parent checks
@@ -106,7 +81,7 @@ proc persistFixtureBlock(chainDB: CoreDbTxRef) =
 
 proc setupConfig(): NimbusConf =
   makeConfig(@[
-    "--custom-network:" & genesisFile
+    "--network:" & genesisFile
   ])
 
 proc setupCom(conf: NimbusConf): CommonRef =
@@ -184,6 +159,7 @@ proc makeBlobTx(env: var TestEnv, nonce: int): PooledTransaction =
   PooledTransaction(
     tx: tx,
     blobsBundle: BlobsBundle(
+      wrapperVersion: WrapperVersionEIP4844,
       blobs: blobs,
       commitments: @[pooled_txs.KzgCommitment(commitment.bytes)],
       proofs: @[pooled_txs.KzgProof(proof.bytes)]))
@@ -221,6 +197,9 @@ proc setupEnv(envFork: HardFork = MergeFork): TestEnv =
 
   if envFork >= Prague:
     conf.networkParams.config.pragueTime = Opt.some(0.EthTime)
+    conf.networkParams.config.osakaTime = Opt.some(3805601325.EthTime)
+    conf.networkParams.config.bpo1Time = Opt.some(3805701325.EthTime)
+    conf.networkParams.config.bpo2Time = Opt.some(3805801325.EthTime)
 
   let
     com   = setupCom(conf)
@@ -313,7 +292,7 @@ createRpcSigsFromNim(RpcClient):
 
 proc rpcMain*() =
   suite "Remote Procedure Calls":
-    var env = setupEnv()
+    var env = setupEnv(Prague)
     env.generateBlock()
     let
       client = env.client
@@ -371,6 +350,19 @@ proc rpcMain*() =
     test "eth_chainId":
       let res = await client.eth_chainId()
       check res == com.chainId
+
+    test "eth_config":
+      let res = await client.eth_config()
+      check res.current.chainId == com.chainId
+      check res.current.activationTime.uint64 == 0'u64
+
+      check res.next.isSome() and res.last.isSome()
+
+      check res.next.get().chainId == com.chainId
+      check res.next.get().activationTime.uint64 == 3805601325'u64
+
+      check res.last.get().chainId == com.chainId
+      check res.last.get().activationTime.uint64 == 3805801325'u64
 
     test "eth_syncing":
       let res = await client.eth_syncing()
@@ -671,7 +663,7 @@ proc rpcMain*() =
 
         check:
           proofResponse.address == address
-          verifyAccountProof(blockData.stateRoot, proofResponse).isMissing()
+          verifyAccountLeafMissing(blockData.stateRoot, proofResponse)
           proofResponse.balance == 0.u256
           proofResponse.codeHash == zeroHash
           proofResponse.nonce == w3Qty(0.uint64)
@@ -689,7 +681,7 @@ proc rpcMain*() =
 
         check:
           proofResponse.address == address
-          verifyAccountProof(blockData.stateRoot, proofResponse).isValid()
+          verifyAccountLeafExists(blockData.stateRoot, proofResponse)
           proofResponse.balance == 2_000_000_000.u256
           proofResponse.codeHash == emptyCodeHash
           proofResponse.nonce == w3Qty(1.uint64)
@@ -712,7 +704,7 @@ proc rpcMain*() =
 
         check:
           proofResponse.address == address
-          verifyAccountProof(blockData.stateRoot, proofResponse).isValid()
+          verifyAccountLeafExists(blockData.stateRoot, proofResponse)
           proofResponse.balance == 0.u256
           proofResponse.codeHash == hash32"0x09044b55d7aba83cb8ac3d2c9c8d8bcadbfc33f06f1be65e8cc1e4ddab5f3074"
           proofResponse.nonce == w3Qty(0.uint64)
@@ -737,7 +729,7 @@ proc rpcMain*() =
 
         check:
           proofResponse.address == address
-          verifyAccountProof(blockData.stateRoot, proofResponse).isValid()
+          verifyAccountLeafExists(blockData.stateRoot, proofResponse)
           proofResponse.balance == 1_000_000_000.u256
           proofResponse.codeHash == hash32"0x09044b55d7aba83cb8ac3d2c9c8d8bcadbfc33f06f1be65e8cc1e4ddab5f3074"
           proofResponse.nonce == w3Qty(2.uint64)
@@ -752,9 +744,9 @@ proc rpcMain*() =
           storageProof[2].key == slot3Key
           storageProof[2].proof.len() > 0
           storageProof[2].value == 0.u256
-          verifySlotProof(proofResponse.storageHash, storageProof[0]).isValid()
-          verifySlotProof(proofResponse.storageHash, storageProof[1]).isValid()
-          verifySlotProof(proofResponse.storageHash, storageProof[2]).isMissing()
+          verifySlotLeafExists(proofResponse.storageHash, storageProof[0])
+          verifySlotLeafExists(proofResponse.storageHash, storageProof[1])
+          verifySlotLeafMissing(proofResponse.storageHash, storageProof[2])
 
       block:
         # externally owned account
@@ -765,7 +757,7 @@ proc rpcMain*() =
 
         check:
           proofResponse.address == address
-          verifyAccountProof(blockData.stateRoot, proofResponse).isValid()
+          verifyAccountLeafExists(blockData.stateRoot, proofResponse)
           proofResponse.balance == 2_000_000_000.u256
           proofResponse.codeHash == emptyCodeHash
           proofResponse.nonce == w3Qty(1.uint64)
@@ -785,13 +777,13 @@ proc rpcMain*() =
 
         check:
           proofResponse.address == address
-          verifyAccountProof(blockData.stateRoot, proofResponse).isValid()
+          verifyAccountLeafExists(blockData.stateRoot, proofResponse)
           proofResponse.balance == 1_000_000_000.u256
           proofResponse.codeHash == hash32"0x09044b55d7aba83cb8ac3d2c9c8d8bcadbfc33f06f1be65e8cc1e4ddab5f3074"
           proofResponse.nonce == w3Qty(2.uint64)
           proofResponse.storageHash == hash32"0x2ed06ec37dad4cd8c8fc1a1172d633a8973987fa6995b14a7c0a50c0e8d1a9c3"
           storageProof.len() == 1
-          verifySlotProof(proofResponse.storageHash, storageProof[0]).isValid()
+          verifySlotLeafExists(proofResponse.storageHash, storageProof[0])
 
     env.close()
 

@@ -45,3 +45,9 @@ nimbus-build-system.paths
 
 # vscode generated files for path mapping into vendor
 .vscode
+
+# EEST test vectors
+tests/fixtures/eest_static
+tests/fixtures/eest_stable
+tests/fixtures/eest_develop
+tests/fixtures/eest_devnet

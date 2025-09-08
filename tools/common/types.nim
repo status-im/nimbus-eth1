@@ -40,6 +40,18 @@ type
     Prague
     CancunToPragueAtTime15k
     Osaka
+    PragueToOsakaAtTime15k
+    BPO1
+    OsakaToBPO1AtTime15k
+    BPO2
+    BPO1ToBPO2AtTime15k
+    BPO3
+    BPO2ToBPO3AtTime15k
+    BPO4
+    BPO3ToBPO4AtTime15k
+    BPO5
+    BPO4ToBPO5AtTime15k
+    Amsterdam
 
   LogLevel* = enum
     Silent

@@ -5,7 +5,10 @@
 #   * Apache v2 license (license terms in the root directory or at https://www.apache.org/licenses/LICENSE-2.0).
 # at your option. This file may not be copied, modified, or distributed except according to those terms.
 
+{.push raises: [], gcsafe.}
+
 import
+  std/tables,
   json_rpc/[rpcproxy, rpcclient],
   web3/[eth_api, eth_api_types],
   stint,
@@ -19,6 +22,8 @@ const
   ACCOUNTS_CACHE_SIZE = 128
   CODE_CACHE_SIZE = 64
   STORAGE_CACHE_SIZE = 256
+  MAX_ID_TRIES* = 10
+  MAX_FILTERS* = 256
 
 type
   AccountsCacheKey* = (Root, Address)
@@ -43,6 +48,11 @@ type
   CreateAccessListProc* =
     proc(args: TransactionArgs, blockId: BlockTag): Future[AccessListResult] {.async.}
   GetCodeProc* = proc(address: Address, blockId: BlockTag): Future[seq[byte]] {.async.}
+  GetBlockReceiptsProc =
+    proc(blockId: BlockTag): Future[Opt[seq[ReceiptObject]]] {.async.}
+  GetTransactionReceiptProc = proc(txHash: Hash32): Future[ReceiptObject] {.async.}
+  GetTransactionByHashProc = proc(txHash: Hash32): Future[TransactionObject] {.async.}
+  GetLogsProc = proc(filterOptions: FilterOptions): Future[seq[LogObject]] {.async.}
 
   EthApiBackend* = object
     eth_chainId*: ChainIdProc
@@ -51,6 +61,14 @@ type
     eth_getProof*: GetProofProc
     eth_createAccessList*: CreateAccessListProc
     eth_getCode*: GetCodeProc
+    eth_getBlockReceipts*: GetBlockReceiptsProc
+    eth_getTransactionReceipt*: GetTransactionReceiptProc
+    eth_getTransactionByHash*: GetTransactionByHashProc
+    eth_getLogs*: GetLogsProc
+
+  FilterStoreItem* = object
+    filter*: FilterOptions
+    blockMarker*: Opt[Quantity]
 
   VerifiedRpcProxy* = ref object
     evm*: AsyncEvm
@@ -63,6 +81,7 @@ type
 
     # TODO: when the list grows big add a config object instead
     # config parameters
+    filterStore*: Table[string, FilterStoreItem]
     chainId*: UInt256
     maxBlockWalk*: uint64
 
@@ -82,3 +101,7 @@ proc init*(
     chainId: chainId,
     maxBlockWalk: maxBlockWalk,
   )
+
+createRpcSigsFromNim(RpcClient):
+  proc eth_estimateGas(args: TransactionArgs, blockTag: BlockTag): Quantity
+  proc eth_maxPriorityFeePerGas(): Quantity

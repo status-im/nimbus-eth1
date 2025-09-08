@@ -122,7 +122,7 @@ proc putKvpFn(db: RdbBackendRef, cf: static[KvtCFs]): PutKvpFn =
           return
 
 
-proc putEndFn(db: RdbBackendRef): PutEndFn =
+proc putEndFn(db: RdbBackendRef, cf: static[KvtCFs]): PutEndFn =
   result =
     proc(hdl: PutHdlRef): Result[void,KvtError] =
       let hdl = hdl.endSession db
@@ -133,7 +133,7 @@ proc putEndFn(db: RdbBackendRef): PutEndFn =
         return err(hdl.error)
 
       # Commit session
-      db.rdb.commit(hdl.session).isOkOr:
+      db.rdb.commit(hdl.session, cf).isOkOr:
         when extraTraceMessages:
           trace "putEndFn: failed", error=($error[0]), info=error[1]
           return err(error[0])
@@ -170,7 +170,7 @@ proc rocksDbKvtBackend*(baseDb: RocksDbInstanceRef, cf: static[KvtCFs]): KvtDbRe
 
   db.putBegFn = putBegFn be
   db.putKvpFn = putKvpFn(be, cf)
-  db.putEndFn = putEndFn be
+  db.putEndFn = putEndFn(be, cf)
 
   db.closeFn = closeFn be
   db.getBackendFn = getBackendFn be

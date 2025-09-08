@@ -8,7 +8,7 @@
 # those terms.
 
 import
-  std/[tables, sets, times, sequtils, random],
+  std/[tables, sets, times, random],
   chronos,
   chronos/ratelimit,
   chronicles,
@@ -306,5 +306,4 @@ proc stop*(wire: EthWireRef) {.async: (raises: [CancelledError]).} =
     timeout = chronos.seconds(5)
     completed = await withTimeout(allFutures(waitedFutures), timeout)
   if not completed:
-    trace "Broadcast.stop(): timeout reached", timeout,
-      futureErrors = waitedFutures.filterIt(it.error != nil).mapIt(it.error.msg)
+    trace "Broadcast.stop(): timeout reached", timeout

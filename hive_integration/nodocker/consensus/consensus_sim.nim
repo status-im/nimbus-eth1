@@ -9,7 +9,6 @@
 
 import
   std/[os, json, strutils, times],
-  results,
   chronicles,
   ../../../execution_chain/core/chain,
   ../../../execution_chain/core/block_import,
@@ -66,7 +65,7 @@ const unsupportedTests = [
   ]
 
 proc main() =
-  const basePath = "tests/fixtures/eth_tests/BlockchainTests"
+  const basePath = "tests/fixtures/eest/blockchain_tests"
   var stat: SimStat
   let taskPool = Taskpool.new()
   let start = getTime()

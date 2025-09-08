@@ -12,7 +12,7 @@
 
 import
   pkg/[eth/common, metrics, stew/interval_set],
-  ../../worker_desc
+  ../worker_desc
 
 declareGauge nec_sync_headers_unprocessed, "" &
   "Number of block numbers ready to fetch and stage headers"

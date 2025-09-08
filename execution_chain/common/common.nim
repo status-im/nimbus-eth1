@@ -14,7 +14,7 @@ import
   logging,
   ../db/[core_db, ledger, storage_types, fcu_db],
   ../utils/[utils],
-  ".."/[constants, errors, version],
+  ".."/[constants, errors, version_info],
   "."/[chain_config, evmforks, genesis, hardforks],
   taskpools
 
@@ -95,6 +95,9 @@ type
       ## by stateless clients such as generation and storage of block witnesses
       ## and serving these witnesses to peers over the p2p network.
 
+    statelessWitnessValidation*: bool
+      ## Enable full validation of execution witnesses.
+
 # ------------------------------------------------------------------------------
 # Private helper functions
 # ------------------------------------------------------------------------------
@@ -167,7 +170,8 @@ proc init(com         : CommonRef,
           config      : ChainConfig,
           genesis     : Genesis,
           initializeDb: bool,
-          statelessProviderEnabled: bool) =
+          statelessProviderEnabled: bool,
+          statelessWitnessValidation: bool) =
 
 
   config.daoCheck()
@@ -206,6 +210,7 @@ proc init(com         : CommonRef,
     com.initializeDb()
 
   com.statelessProviderEnabled = statelessProviderEnabled
+  com.statelessWitnessValidation = statelessWitnessValidation
 
 proc isBlockAfterTtd(com: CommonRef, header: Header, txFrame: CoreDbTxRef): bool =
   if com.config.terminalTotalDifficulty.isNone:
@@ -229,7 +234,8 @@ proc new*(
     networkId: NetworkId = MainNet;
     params = networkParams(MainNet);
     initializeDb = true;
-    statelessProviderEnabled = false
+    statelessProviderEnabled = false;
+    statelessWitnessValidation = false;
       ): CommonRef =
 
   ## If genesis data is present, the forkIds will be initialized
@@ -242,7 +248,8 @@ proc new*(
     params.config,
     params.genesis,
     initializeDb,
-    statelessProviderEnabled)
+    statelessProviderEnabled,
+    statelessWitnessValidation)
 
 proc new*(
     _: type CommonRef;
@@ -251,7 +258,8 @@ proc new*(
     config: ChainConfig;
     networkId: NetworkId = MainNet;
     initializeDb = true;
-    statelessProviderEnabled = false
+    statelessProviderEnabled = false;
+    statelessWitnessValidation = false
       ): CommonRef =
 
   ## There is no genesis data present
@@ -264,7 +272,8 @@ proc new*(
     config,
     nil,
     initializeDb,
-    statelessProviderEnabled)
+    statelessProviderEnabled,
+    statelessWitnessValidation)
 
 func clone*(com: CommonRef, db: CoreDbRef): CommonRef =
   ## clone but replace the db
@@ -277,7 +286,8 @@ func clone*(com: CommonRef, db: CoreDbRef): CommonRef =
     genesisHash  : com.genesisHash,
     genesisHeader: com.genesisHeader,
     networkId    : com.networkId,
-    statelessProviderEnabled: com.statelessProviderEnabled
+    statelessProviderEnabled: com.statelessProviderEnabled,
+    statelessWitnessValidation: com.statelessWitnessValidation
   )
 
 func clone*(com: CommonRef): CommonRef =
@@ -292,7 +302,7 @@ func toHardFork*(
   toHardFork(com.forkTransitionTable, forkDeterminer)
 
 func toHardFork*(com: CommonRef, timestamp: EthTime): HardFork =
-  for fork in countdown(com.forkTransitionTable.timeThresholds.high, Shanghai):
+  for fork in countdown(HardFork.high, Shanghai):
     if com.forkTransitionTable.timeThresholds[fork].isSome and timestamp >= com.forkTransitionTable.timeThresholds[fork].get:
       return fork
 
@@ -305,6 +315,27 @@ func toEVMFork*(com: CommonRef, forkDeterminer: ForkDeterminationInfo): EVMFork 
   ## similar to toFork, but produce EVMFork
   let fork = com.toHardFork(forkDeterminer)
   ToEVMFork[fork]
+
+func nextFork*(com: CommonRef, currentFork: HardFork): Opt[HardFork] =
+  ## Returns the next hard fork after the given one
+  ## The next fork can also be the last fork
+  if currentFork < Shanghai:
+    return Opt.none(HardFork)
+  for fork in currentFork .. HardFork.high:
+    if fork > currentFork and com.forkTransitionTable.timeThresholds[fork].isSome:
+      return Opt.some(fork)
+  return Opt.none(HardFork)
+
+func lastFork*(com: CommonRef, currentFork: HardFork): Opt[HardFork] =
+  ## Returns the last hard fork after the current one
+  for fork in countdown(HardFork.high, currentFork):
+    if fork > currentFork and com.forkTransitionTable.timeThresholds[fork].isSome:
+      return Opt.some(HardFork(fork))
+  return Opt.none(HardFork)
+
+func activationTime*(com: CommonRef, fork: HardFork): Opt[EthTime] =
+  ## Returns the activation time of the given hard fork
+  com.forkTransitionTable.timeThresholds[fork]
 
 func toEVMFork*(com: CommonRef, header: Header): EVMFork =
   com.toEVMFork(forkDeterminationInfo(header))
@@ -323,9 +354,16 @@ func forkId*(com: CommonRef, head, time: uint64): ForkID {.gcsafe.} =
   ## EIP 2364/2124
   com.forkIdCalculator.newID(head, time)
 
+func forkId*(com: CommonRef, forkActivationTime: EthTime): ForkID {.gcsafe.} =
+  # Only works for timestamp based forks
+  com.forkIdCalculator.newID(0'u64, forkActivationTime.uint64)
+
 func forkId*(com: CommonRef, head: BlockNumber, time: EthTime): ForkID {.gcsafe.} =
   ## EIP 2364/2124
   com.forkIdCalculator.newID(head, time.uint64)
+
+func compatibleForkId*(com: CommonRef, id: ForkID): bool =
+  com.forkIdCalculator.compatible(id)
 
 func isEIP155*(com: CommonRef, number: BlockNumber): bool =
   com.config.eip155Block.isSome and number >= com.config.eip155Block.value
@@ -341,6 +379,9 @@ func isPragueOrLater*(com: CommonRef, t: EthTime): bool =
 
 func isOsakaOrLater*(com: CommonRef, t: EthTime): bool =
   com.config.osakaTime.isSome and t >= com.config.osakaTime.value
+
+func isAmsterdamOrLater*(com: CommonRef, t: EthTime): bool =
+  com.config.amsterdamTime.isSome and t >= com.config.amsterdamTime.value
 
 proc proofOfStake*(com: CommonRef, header: Header, txFrame: CoreDbTxRef): bool =
   if com.config.posBlock.isSome:

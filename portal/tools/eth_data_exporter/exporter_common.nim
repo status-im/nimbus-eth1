@@ -14,8 +14,8 @@ import
   faststreams,
   json_serialization,
   json_serialization/std/tables,
-  ../../eth_data/history_data_json_store,
-  ../../eth_data/yaml_utils
+  ../../eth_history/history_data_json_store,
+  ../../eth_history/yaml_utils
 
 export history_data_json_store
 

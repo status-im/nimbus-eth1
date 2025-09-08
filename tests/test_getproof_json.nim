@@ -8,47 +8,15 @@
 import
   std/os,
   unittest2,
-  stew/byteutils,
   web3/eth_api,
-  nimcrypto/[keccak, hash],
-  eth/common/[keys, eth_types_rlp],
-  eth/[rlp, trie/hexary_proof_verification],
   ../execution_chain/db/[ledger, core_db],
   ../execution_chain/common/chain_config,
-  ../execution_chain/rpc/server_api
+  ../execution_chain/rpc/server_api,
+  ./proof_helpers
 
 type
   Hash32 = eth_types.Hash32
   Address = primitives.Address
-
-template toHash32(hash: untyped): Hash32 =
-  fromHex(Hash32, hash.toHex())
-
-proc verifyAccountProof(trustedStateRoot: Hash32, res: ProofResponse): MptProofVerificationResult =
-  let
-    key = keccak256(res.address.data)
-    value = rlp.encode(Account(
-        nonce: res.nonce.uint64,
-        balance: res.balance,
-        storageRoot: res.storageHash.toHash32(),
-        codeHash: res.codeHash.toHash32()))
-
-  verifyMptProof(
-    seq[seq[byte]](res.accountProof),
-    trustedStateRoot,
-    key.data,
-    value)
-
-proc verifySlotProof(trustedStorageRoot: Hash32, slot: StorageProof): MptProofVerificationResult =
-  let
-    key = keccak256(toBytesBE(slot.key))
-    value = rlp.encode(slot.value)
-
-  verifyMptProof(
-    seq[seq[byte]](slot.proof),
-    trustedStorageRoot,
-    key.data,
-    value)
 
 proc getGenesisAlloc(filePath: string): GenesisAlloc =
   var cn: NetworkParams
@@ -89,14 +57,14 @@ proc checkProofsForExistingLeafs(
       proofResponse.balance == account.balance
       proofResponse.codeHash.toHash32() == accDB.getCodeHash(address)
       proofResponse.storageHash.toHash32() == accDB.getStorageRoot(address)
-      verifyAccountProof(stateRoot, proofResponse).isValid()
+      verifyAccountLeafExists(stateRoot, proofResponse)
       slotProofs.len() == account.storage.len()
 
     for i, slotProof in slotProofs:
       check:
         slotProof.key == slots[i]
         slotProof.value == account.storage[slotProof.key]
-        verifySlotProof(proofResponse.storageHash.toHash32(), slotProof).isValid()
+        verifySlotLeafExists(proofResponse.storageHash.toHash32(), slotProof)
 
 proc checkProofsForMissingLeafs(
     genAccounts: GenesisAlloc,
@@ -106,7 +74,7 @@ proc checkProofsForMissingLeafs(
   let
     missingAddress = Address.fromHex("0x999999cf1046e68e36E1aA2E0E07105eDDD1f08E")
     proofResponse = getProof(accDB, missingAddress, @[])
-  check verifyAccountProof(stateRoot, proofResponse).isMissing()
+  check verifyAccountLeafMissing(stateRoot, proofResponse)
 
   for address, account in genAccounts:
     let
@@ -116,12 +84,19 @@ proc checkProofsForMissingLeafs(
 
     check slotProofs.len() == 1
     if account.storage.len() > 0:
-      check verifySlotProof(proofResponse2.storageHash.toHash32(), slotProofs[0]).isMissing()
-
+      check verifySlotLeafMissing(proofResponse2.storageHash.toHash32(), slotProofs[0])
 
 suite "Get proof json tests":
 
-  let genesisFiles = ["berlin2000.json", "chainid1.json", "chainid7.json", "merge.json", "devnet4.json", "devnet5.json", "holesky.json"]
+  let genesisFiles = [
+    "berlin2000.json",
+    "chainid1.json",
+    "chainid7.json",
+    "merge.json",
+    "devnet4.json",
+    "devnet5.json",
+    "holesky.json"
+  ]
 
   test "Get proofs for existing leafs":
     for file in genesisFiles:

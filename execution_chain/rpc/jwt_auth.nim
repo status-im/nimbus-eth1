@@ -209,7 +209,7 @@ proc jwtSharedSecret*(
   # startup, or show error and continue without exposing the authenticated
   # port.
   #
-  var jwtSecretPath = config.dataDir.string / jwtSecretFile # default path
+  var jwtSecretPath = config.dataDir / jwtSecretFile # default path
   let jwtDoesNotExist = not fileExists(jwtSecretPath)
   if config.jwtSecret.isNone and jwtDoesNotExist:
     # If such a parameter is not given, the client SHOULD generate such a

@@ -40,7 +40,8 @@ const
     "Bpo2",                 # FkBpo2
     "Bpo3",                 # FkBpo3
     "Bpo4",                 # FkBpo4
-    "Bpo5"                  # FkBpo5
+    "Bpo5",                 # FkBpo5
+    "Amsterdam",            # FkAmsterdam
   ]
 
   nameToFork* = ForkToName.revTable
@@ -148,7 +149,7 @@ proc verifyLedger*(wantedState: JsonNode, ledger: ReadOnlyLedger) =
 proc setupEthNode*(
     conf: NimbusConf, ctx: EthContext,
     capabilities: varargs[ProtocolInfo, `protocolInfo`]): EthereumNode =
-  let keypair = ctx.getNetKeys(conf.netKey, conf.dataDir.string).tryGet()
+  let keypair = ctx.getNetKeys(conf.netKey).tryGet()
   let srvAddress = enode.Address(
     ip: conf.listenAddress, tcpPort: conf.tcpPort, udpPort: conf.udpPort)
 

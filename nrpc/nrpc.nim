@@ -7,7 +7,7 @@
 # This file may not be copied, modified, or distributed except according to
 # those terms.
 
-{.push raises: [].}
+{.push raises: [], gcsafe.}
 
 import
   std/[sequtils, os, strformat],
@@ -20,6 +20,7 @@ import
   ../execution_chain/utils/era_helpers,
     web3,
   web3/[engine_api, primitives, conversions],
+  beacon_chain/process_state,
   beacon_chain/spec/digest,
   beacon_chain/el/el_conf,
   beacon_chain/el/el_manager,
@@ -30,7 +31,8 @@ import
   beacon_chain/networking/network_metadata,
   eth/async_utils
 
-var running* {.volatile.} = true
+proc running(): bool =
+  not ProcessState.stopIt(notice("Shutting down", reason = it))
 
 func f(value: float): string =
   if value >= 1000:
@@ -94,10 +96,7 @@ template loadNetworkConfig(conf: NRpcConf): (RuntimeConfig, uint64, uint64) =
     (getMetadataForNetwork("hoodi").cfg, 0'u64, 0'u64)
   else:
     notice "Loading custom network, assuming post-merge"
-    if conf.customNetworkFolder.len == 0:
-      error "Custom network file not provided"
-      quit(QuitFailure)
-    let (cfg, unloaded) = readRuntimeConfig(conf.customNetworkFolder.joinPath("config.yaml"))
+    let (cfg, unloaded) = readRuntimeConfig(conf.network.joinPath("config.yaml"))
     debug "Fields unknown", unloaded = unloaded
     (cfg, 0'u64, 0'u64)
 
@@ -118,7 +117,7 @@ template findSlot(
   notice "Finding slot number corresponding to block", importedSlot = importedSlot
 
   var clNum = 0'u64
-  while running and clNum < currentBlockNumber:
+  while running() and clNum < currentBlockNumber:
     let (blk, stat) =
       client.getELBlockFromBeaconChain(BlockIdent.init(Slot(importedSlot)), clConfig)
     if not stat:
@@ -210,7 +209,7 @@ proc syncToEngineApi(conf: NRpcConf) {.async.} =
     progressTrackedHead = currentBlockNumber
 
   template estimateProgressForSync() =
-    let 
+    let
       blocks = int(currentBlockNumber - progressTrackedHead)
       curTime = Moment.now()
       diff = curTime - time
@@ -242,8 +241,7 @@ proc syncToEngineApi(conf: NRpcConf) {.async.} =
             Opt.none(PayloadAttributesV1)
           elif consensusFork == ConsensusFork.Capella:
             Opt.none(PayloadAttributesV2)
-          elif consensusFork == ConsensusFork.Deneb or
-            consensusFork == ConsensusFork.Electra or consensusFork == ConsensusFork.Fulu:
+          elif consensusFork in ConsensusFork.Deneb .. ConsensusFork.Gloas:
             Opt.none(PayloadAttributesV3)
           else:
             static:
@@ -263,7 +261,7 @@ proc syncToEngineApi(conf: NRpcConf) {.async.} =
 
     estimateProgressForSync()
 
-  while running and currentBlockNumber < headBlck.header.number:
+  while running() and currentBlockNumber < headBlck.header.number:
     var isAvailable = false
     (curBlck, isAvailable) =
       client.getCLBlockFromBeaconChain(BlockIdent.init(Slot(importedSlot)), clConfig)
@@ -275,9 +273,11 @@ proc syncToEngineApi(conf: NRpcConf) {.async.} =
     importedSlot += 1
     withBlck(curBlck):
       # Don't include blocks before bellatrix, as it doesn't have payload
-      when consensusFork >= ConsensusFork.Bellatrix:
+      when consensusFork >= ConsensusFork.Bellatrix and
+           consensusFork != ConsensusFork.Gloas:
         # Load the execution payload for all blocks after the bellatrix upgrade
-        let payload = forkyBlck.message.body.asEngineExecutionPayload()
+        let payload =
+          forkyBlck.message.body.execution_payload.asEngineExecutionPayload()
         var payloadResponse: engine_api.PayloadStatusV1
 
         # Make the newPayload call based on the consensus fork
@@ -385,7 +385,8 @@ proc syncToEngineApi(conf: NRpcConf) {.async.} =
       # move back the importedSlot to the finalized block
       if isAvailable:
         withBlck(headClBlck.asTrusted()):
-          when consensusFork >= ConsensusFork.Bellatrix:
+          when consensusFork >= ConsensusFork.Bellatrix and
+               consensusFork != ConsensusFork.Gloas:
             importedSlot = forkyBlck.message.slot.uint64 + 1
             currentBlockNumber = forkyBlck.message.body.execution_payload.block_number
 
@@ -407,14 +408,7 @@ proc syncToEngineApi(conf: NRpcConf) {.async.} =
   sendFCU(curBlck)
 
 when isMainModule:
-  ## Ctrl+C handling
-  proc controlCHandler() {.noconv.} =
-    when defined(windows):
-      # workaround for https://github.com/nim-lang/Nim/issues/4057
-      setupForeignThreadGc()
-    running = false
-
-  setControlCHook(controlCHandler)
+  ProcessState.setupStopHandlers()
 
   ## Show logs on stdout until we get the user's logging choice
   discard defaultChroniclesStream.output.open(stdout)

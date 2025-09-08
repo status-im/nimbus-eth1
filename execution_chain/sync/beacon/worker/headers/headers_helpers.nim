@@ -11,7 +11,7 @@
 {.push raises:[].}
 
 import
-  ../../worker_desc
+  ../worker_desc
 
 # ------------------------------------------------------------------------------
 # Private helpers

@@ -10,7 +10,7 @@
 {.push raises: [].}
 
 import
-  std/json,
+  # std/json,
   json_rpc/rpcserver,
   # ./rpc_utils,
   ./rpc_types,
@@ -62,8 +62,8 @@ proc headerFromTag(chain: ForkedChainRef, blockTag: BlockTag): Result[Header, st
     let blockNum = base.BlockNumber blockTag.number
     return chain.headerByNumber(blockNum)
 
-proc getExecutionWitness*(db: CoreDbRef, blockHash: Hash32): Result[ExecutionWitness, string] =
-  let txFrame = db.baseTxFrame.txFrameBegin()
+proc getExecutionWitness*(chain: ForkedChainRef, blockHash: Hash32): Result[ExecutionWitness, string] =
+  let txFrame = chain.txFrame(blockHash).txFrameBegin()
   defer:
     txFrame.dispose()
 
@@ -85,7 +85,7 @@ proc getExecutionWitness*(db: CoreDbRef, blockHash: Hash32): Result[ExecutionWit
 
 proc setupDebugRpc*(com: CommonRef, txPool: TxPoolRef, server: RpcServer) =
   let
-    chainDB = com.db
+    # chainDB = com.db
     chain = txPool.chain
 
   # server.rpc("debug_traceTransaction") do(data: Hash32, options: Opt[TraceOptions]) -> JsonNode:
@@ -215,10 +215,10 @@ proc setupDebugRpc*(com: CommonRef, txPool: TxPoolRef, server: RpcServer) =
     let header = chain.headerFromTag(quantityTag).valueOr:
       raise newException(ValueError, "Header not found")
 
-    chainDB.getExecutionWitness(header.computeBlockHash()).valueOr:
+    chain.getExecutionWitness(header.computeBlockHash()).valueOr:
       raise newException(ValueError, error)
 
   server.rpc("debug_executionWitnessByBlockHash") do(blockHash: Hash32) -> ExecutionWitness:
     ## Returns an execution witness for the given block hash.
-    chainDB.getExecutionWitness(blockHash).valueOr:
+    chain.getExecutionWitness(blockHash).valueOr:
       raise newException(ValueError, error)

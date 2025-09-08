@@ -6,6 +6,7 @@
 # at your option. This file may not be copied, modified, or distributed except according to those terms.
 
 {.used.}
+{.push raises: [], gcsafe.}
 
 import
   unittest2,
@@ -117,7 +118,7 @@ suite "test proxy header store":
       kind: LightClientDataFork.Electra,
       electraData: electra.LightClientHeader(
         beacon: default(electra.BeaconBlockHeader),
-        execution: electra.ExecutionPayloadHeader(block_number: uint64(232)),
+        execution: deneb.ExecutionPayloadHeader(block_number: uint64(232)),
         execution_branch: default(capella.ExecutionBranch),
       ),
     )

@@ -5,7 +5,14 @@
 #   * Apache v2 license (license terms in the root directory or at https://www.apache.org/licenses/LICENSE-2.0).
 # at your option. This file may not be copied, modified, or distributed except according to those terms.
 
-import json_rpc/[rpcproxy, rpcclient], web3/[eth_api, eth_api_types], stint, ./types
+{.push raises: [], gcsafe.}
+
+import
+  json_rpc/[rpcproxy, rpcclient],
+  web3/[eth_api, eth_api_types],
+  stint,
+  std/json,
+  ./types
 
 proc initNetworkApiBackend*(vp: VerifiedRpcProxy): EthApiBackend =
   let
@@ -37,6 +44,26 @@ proc initNetworkApiBackend*(vp: VerifiedRpcProxy): EthApiBackend =
     ): Future[seq[byte]] {.async: (raw: true).} =
       vp.proxy.getClient.eth_getCode(address, blockId)
 
+    getTransactionByHashProc = proc(
+        txHash: Hash32
+    ): Future[TransactionObject] {.async: (raw: true).} =
+      vp.proxy.getClient.eth_getTransactionByHash(txHash)
+
+    getTransactionReceiptProc = proc(
+        txHash: Hash32
+    ): Future[ReceiptObject] {.async: (raw: true).} =
+      vp.proxy.getClient.eth_getTransactionReceipt(txHash)
+
+    getBlockReceiptsProc = proc(
+        blockId: BlockTag
+    ): Future[Opt[seq[ReceiptObject]]] {.async: (raw: true).} =
+      vp.proxy.getClient.eth_getBlockReceipts(blockId)
+
+    getLogsProc = proc(
+        filterOptions: FilterOptions
+    ): Future[seq[LogObject]] {.async: (raw: true).} =
+      vp.proxy.getClient.eth_getLogs(filterOptions)
+
   EthApiBackend(
     eth_chainId: ethChainIdProc,
     eth_getBlockByHash: getBlockByHashProc,
@@ -44,4 +71,8 @@ proc initNetworkApiBackend*(vp: VerifiedRpcProxy): EthApiBackend =
     eth_getProof: getProofProc,
     eth_createAccessList: createAccessListProc,
     eth_getCode: getCodeProc,
+    eth_getBlockReceipts: getBlockReceiptsProc,
+    eth_getLogs: getLogsProc,
+    eth_getTransactionByHash: getTransactionByHashProc,
+    eth_getTransactionReceipt: getTransactionReceiptProc,
   )

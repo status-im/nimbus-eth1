@@ -5,7 +5,7 @@
 #   * Apache v2 license (license terms in the root directory or at https://www.apache.org/licenses/LICENSE-2.0).
 # at your option. This file may not be copied, modified, or distributed except according to those terms.
 
-{.push raises: [].}
+{.push raises: [], gcsafe.}
 
 import
   std/strutils,
@@ -23,18 +23,26 @@ import
 
 proc resolveBlockTag*(
     vp: VerifiedRpcProxy, blockTag: BlockTag
-): Result[base.BlockNumber, string] =
+): Result[BlockTag, string] =
   if blockTag.kind == bidAlias:
     let tag = blockTag.alias.toLowerAscii()
     case tag
     of "latest":
       let hLatest = vp.headerStore.latest.valueOr:
         return err("Couldn't get the latest block number from header store")
-      ok(hLatest.number)
+      ok(BlockTag(kind: bidNumber, number: Quantity(hLatest.number)))
+    of "finalized":
+      let hFinalized = vp.headerStore.finalized.valueOr:
+        return err("Couldn't get the latest block number from header store")
+      ok(BlockTag(kind: bidNumber, number: Quantity(hFinalized.number)))
+    of "earliest":
+      let hEarliest = vp.headerStore.earliest.valueOr:
+        return err("Couldn't get the latest block number from header store")
+      ok(BlockTag(kind: bidNumber, number: Quantity(hEarliest.number)))
     else:
       err("No support for block tag " & $blockTag)
   else:
-    ok(base.BlockNumber(distinctBase(blockTag.number)))
+    ok(blockTag)
 
 func convHeader*(blk: eth_api_types.BlockObject): Header =
   let nonce = blk.nonce.valueOr:
@@ -176,17 +184,17 @@ proc getBlock*(
 proc getBlock*(
     vp: VerifiedRpcProxy, blockTag: BlockTag, fullTransactions: bool
 ): Future[Result[BlockObject, string]] {.async.} =
-  let n = vp.resolveBlockTag(blockTag).valueOr:
+  let numberTag = vp.resolveBlockTag(blockTag).valueOr:
     return err(error)
 
   # get the target block
   let blk =
     try:
-      await vp.rpcClient.eth_getBlockByNumber(blockTag, fullTransactions)
+      await vp.rpcClient.eth_getBlockByNumber(numberTag, fullTransactions)
     except CatchableError as e:
       return err(e.msg)
 
-  if n != distinctBase(blk.number):
+  if numberTag.number != blk.number:
     return
       err("the downloaded block number doesn't match with the requested block number")
 
@@ -225,8 +233,9 @@ proc getHeader*(
     vp: VerifiedRpcProxy, blockTag: BlockTag
 ): Future[Result[Header, string]] {.async.} =
   let
-    n = vp.resolveBlockTag(blockTag).valueOr:
+    numberTag = vp.resolveBlockTag(blockTag).valueOr:
       return err(error)
+    n = distinctBase(numberTag.number)
     cachedHeader = vp.headerStore.get(n)
 
   if cachedHeader.isNone():
@@ -237,7 +246,7 @@ proc getHeader*(
   # get the target block
   let blk =
     try:
-      await vp.rpcClient.eth_getBlockByNumber(blockTag, false)
+      await vp.rpcClient.eth_getBlockByNumber(numberTag, false)
     except CatchableError as e:
       return err(e.msg)
 

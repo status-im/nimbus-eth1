@@ -5,7 +5,7 @@
 #   * Apache v2 license (license terms in the root directory or at https://www.apache.org/licenses/LICENSE-2.0).
 # at your option. This file may not be copied, modified, or distributed except according to those terms.
 
-{.push raises: [].}
+{.push raises: [], gcsafe.}
 
 import
   eth/common/[hashes, headers],
@@ -18,6 +18,8 @@ import
   minilru,
   results
 
+from eth/common/blocks import EMPTY_UNCLE_HASH
+
 type HeaderStore* = ref object
   headers: LruCache[Hash32, Header]
   hashes: LruCache[base.BlockNumber, Hash32]
@@ -28,32 +30,32 @@ type HeaderStore* = ref object
 
 func convLCHeader*(lcHeader: ForkedLightClientHeader): Result[Header, string] =
   withForkyHeader(lcHeader):
-    template p(): auto =
-      forkyHeader.execution
-
-    when lcDataFork >= LightClientDataFork.Capella:
-      let withdrawalsRoot = Opt.some(p.withdrawals_root.asBlockHash)
-    else:
-      const withdrawalsRoot = Opt.none(Hash32)
-
-    when lcDataFork >= LightClientDataFork.Deneb:
-      let
-        blobGasUsed = Opt.some(p.blob_gas_used)
-        excessBlobGas = Opt.some(p.excess_blob_gas)
-        parentBeaconBlockRoot = Opt.some(forkyHeader.beacon.parent_root.asBlockHash)
-    else:
-      const
-        blobGasUsed = Opt.none(uint64)
-        excessBlobGas = Opt.none(uint64)
-        parentBeaconBlockRoot = Opt.none(Hash32)
-
-    when lcDataFork >= LightClientDataFork.Electra:
-      # INFO: there is no visibility of the execution requests hash in light client header
-      let requestsHash = Opt.none(Hash32)
-    else:
-      const requestsHash = Opt.none(Hash32)
-
     when lcDataFork > LightClientDataFork.Altair:
+      template p(): auto =
+        forkyHeader.execution
+
+      when lcDataFork >= LightClientDataFork.Capella:
+        let withdrawalsRoot = Opt.some(p.withdrawals_root.asBlockHash)
+      else:
+        const withdrawalsRoot = Opt.none(Hash32)
+
+      when lcDataFork >= LightClientDataFork.Deneb:
+        let
+          blobGasUsed = Opt.some(p.blob_gas_used)
+          excessBlobGas = Opt.some(p.excess_blob_gas)
+          parentBeaconBlockRoot = Opt.some(forkyHeader.beacon.parent_root.asBlockHash)
+      else:
+        const
+          blobGasUsed = Opt.none(uint64)
+          excessBlobGas = Opt.none(uint64)
+          parentBeaconBlockRoot = Opt.none(Hash32)
+
+      when lcDataFork >= LightClientDataFork.Electra:
+        # INFO: there is no visibility of the execution requests hash in light client header
+        let requestsHash = Opt.none(Hash32)
+      else:
+        const requestsHash = Opt.none(Hash32)
+
       let h = Header(
         parentHash: p.parent_hash.asBlockHash,
         ommersHash: EMPTY_UNCLE_HASH,
@@ -77,6 +79,7 @@ func convLCHeader*(lcHeader: ForkedLightClientHeader): Result[Header, string] =
         parentBeaconBlockRoot: parentBeaconBlockRoot,
         requestsHash: requestsHash,
       )
+
       return ok(h)
     else:
       # running verified  proxy for altair doesn't make sense
@@ -91,6 +94,14 @@ func new*(T: type HeaderStore, max: int): T =
     earliest: Opt.none(Header),
     earliestHash: Opt.none(Hash32),
   )
+
+func clear*(self: HeaderStore) =
+  self.headers = LruCache[Hash32, Header].init(self.headers.capacity)
+  self.hashes = LruCache[base.BlockNumber, Hash32].init(self.headers.capacity)
+  self.finalized = Opt.none(Header)
+  self.finalizedHash = Opt.none(Hash32)
+  self.earliest = Opt.none(Header)
+  self.earliestHash = Opt.none(Hash32)
 
 func len*(self: HeaderStore): int =
   len(self.headers)
@@ -122,7 +133,24 @@ func contains*(self: HeaderStore, hash: Hash32): bool =
 func contains*(self: HeaderStore, number: base.BlockNumber): bool =
   self.hashes.contains(number)
 
-proc updateFinalized*(
+func updateFinalized*(
+    self: HeaderStore, header: Header, hHash: Hash32
+): Result[bool, string] =
+  if self.finalized.isSome():
+    if self.finalized.get().number < header.number:
+      self.finalized = Opt.some(header)
+      self.finalizedHash = Opt.some(hHash)
+    else:
+      return err("finalized update header is older")
+  else:
+    self.finalized = Opt.some(header)
+    self.finalizedHash = Opt.some(hHash)
+    self.earliest = Opt.some(header)
+    self.earliestHash = Opt.some(hHash)
+
+  return ok(true)
+
+func updateFinalized*(
     self: HeaderStore, header: ForkedLightClientHeader
 ): Result[bool, string] =
   let execHeader = convLCHeader(header).valueOr:
@@ -146,7 +174,7 @@ proc updateFinalized*(
 
   return ok(true)
 
-proc add*(self: HeaderStore, header: Header, hHash: Hash32): Result[bool, string] =
+func add*(self: HeaderStore, header: Header, hHash: Hash32): Result[void, string] =
   let latestHeader = self.latest
 
   # check the ordering of headers. This allows for gaps but always maintains an incremental order
@@ -159,9 +187,9 @@ proc add*(self: HeaderStore, header: Header, hHash: Hash32): Result[bool, string
   if hHash notin self.headers:
     self.headers.put(hHash, header)
     self.hashes.put(header.number, hHash)
-  ok(true)
+  ok()
 
-proc add*(self: HeaderStore, header: ForkedLightClientHeader): Result[bool, string] =
+func add*(self: HeaderStore, header: ForkedLightClientHeader): Result[void, string] =
   let
     execHeader = convLCHeader(header).valueOr:
       return err(error)
@@ -181,7 +209,7 @@ proc add*(self: HeaderStore, header: ForkedLightClientHeader): Result[bool, stri
       if execHash notin self.headers:
         self.headers.put(execHash, execHeader)
         self.hashes.put(execHeader.number, execHash)
-  ok(true)
+  ok()
 
 func latestHash*(self: HeaderStore): Opt[Hash32] =
   for hash in self.headers.keys:

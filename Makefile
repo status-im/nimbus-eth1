@@ -72,7 +72,6 @@ TOOLS_CSV := $(subst $(SPACE),$(COMMA),$(TOOLS))
 PORTAL_TOOLS := \
 	nimbus_portal_bridge \
 	eth_data_exporter \
-	blockwalk \
 	portalcli \
 	fcli_db
 PORTAL_TOOLS_DIRS := \
@@ -118,13 +117,12 @@ VERIF_PROXY_OUT_PATH ?= build/libverifproxy/
 	libnimbus.a \
 	libbacktrace \
 	rocksdb \
-	dist-amd64 \
-	dist-arm64 \
-	dist-arm \
-	dist-win64 \
-	dist-macos \
+	dist-linux-amd64 \
+	dist-linux-arm64 \
+	dist-windows-amd64 \
 	dist-macos-arm64 \
-	dist
+	dist \
+	eest
 
 ifeq ($(NIM_PARAMS),)
 # "variables.mk" was not included, so we update the submodules.
@@ -194,7 +192,11 @@ endif
 NIM_PARAMS := $(NIM_PARAMS) $(NIM_ETH_PARAMS)
 
 #- deletes and recreates "nimbus.nims" which on Windows is a copy instead of a proper symlink
-update: | sanity-checks update-test
+update: | update-common
+	rm -rf nimbus.nims && \
+		$(MAKE) nimbus.nims $(HANDLE_OUTPUT)
+
+init: | sanity-checks update-test
 	rm -rf nimbus.nims && \
 		$(MAKE) nimbus.nims $(HANDLE_OUTPUT)
 	+ "$(MAKE)" --no-print-directory deps-common
@@ -221,22 +223,21 @@ libbacktrace:
 	+ $(MAKE) -C vendor/nim-libbacktrace --no-print-directory BUILD_CXX_LIB=0
 
 # nim-rocksdb
+ROCKSDB_CI_CACHE := build/rocksdb
 
 ifneq ($(USE_SYSTEM_ROCKSDB), 0)
-ifeq ($(OS), Windows_NT)
 rocksdb:
-	+ vendor/nim-rocksdb/scripts/build_dlls_windows.bat && \
-	cp -a vendor/nim-rocksdb/build/librocksdb.dll build
-else
-rocksdb:
-	+ vendor/nim-rocksdb/scripts/build_static_deps.sh
-endif
+	+ MAKE="$(MAKE)" \
+		scripts/rocksdb_ci_cache.sh $(ROCKSDB_CI_CACHE)
 else
 rocksdb:
 endif
 
+eest:
+	scripts/eest_ci_cache.sh
+
 # builds and runs the nimbus test suite
-test: | build deps rocksdb
+test: | build deps rocksdb eest
 	$(ENV_SCRIPT) nim test $(NIM_PARAMS) nimbus.nims
 
 test_import: nimbus_execution_client
@@ -283,16 +284,16 @@ portal-test-reproducibility:
 			{ echo -e "\e[91mFailure: the binary changed between builds.\e[39m"; exit 1; }
 
 # Portal tests
-all_history_network_custom_chain_tests: | build deps
+all_eth_history_custom_chain_tests: | build deps
 	echo -e $(BUILD_MSG) "build/$@" && \
-	$(ENV_SCRIPT) nim c -r $(NIM_PARAMS) -d:chronicles_log_level=ERROR -d:mergeBlockNumber:38130 -o:build/$@ "portal/tests/legacy_history_network_tests/$@.nim"
+	$(ENV_SCRIPT) nim c -r $(NIM_PARAMS) -d:chronicles_log_level=ERROR -d:mergeBlockNumber:38130 -o:build/$@ "portal/tests/eth_history_tests/$@.nim"
 
 all_portal_tests: | build deps
 	echo -e $(BUILD_MSG) "build/$@" && \
 	$(ENV_SCRIPT) nim c -r $(NIM_PARAMS) -d:chronicles_log_level=ERROR -o:build/$@ "portal/tests/$@.nim"
 
 # builds and runs the Portal test suite
-portal-test: | all_portal_tests all_history_network_custom_chain_tests
+portal-test: | all_portal_tests all_eth_history_custom_chain_tests
 
 # builds the Portal tools, wherever they are
 $(PORTAL_TOOLS): | build deps rocksdb
@@ -350,6 +351,22 @@ libverifproxy: | build deps
 	cp nimbus_verified_proxy/libverifproxy/verifproxy.h $(VERIF_PROXY_OUT_PATH)/
 	echo -e $(BUILD_END_MSG) "build/$@"
 
+eest_engine: | build deps
+	$(ENV_SCRIPT) nim c $(NIM_PARAMS) -d:chronicles_enabled:off -o:build/$@ "tests/eest/$@.nim"
+
+eest_engine_test: | build deps eest_engine
+	$(ENV_SCRIPT) nim c -r $(NIM_PARAMS) -d:chronicles_enabled:off -o:build/$@ "tests/eest/$@.nim"
+
+eest_blockchain: | build deps
+	$(ENV_SCRIPT) nim c $(NIM_PARAMS) -d:chronicles_enabled:off -o:build/$@ "tests/eest/$@.nim"
+
+eest_blockchain_test: | build deps eest_blockchain
+	$(ENV_SCRIPT) nim c -r $(NIM_PARAMS) -d:chronicles_enabled:off -o:build/$@ "tests/eest/$@.nim"
+
+eest_full_test: | build deps eest_blockchain eest_engine
+	$(ENV_SCRIPT) nim c -r $(NIM_PARAMS) -d:chronicles_enabled:off -o:build/$@ "tests/eest/eest_blockchain_test.nim"
+	$(ENV_SCRIPT) nim c -r $(NIM_PARAMS) -d:chronicles_enabled:off -o:build/$@ "tests/eest/eest_engine_test.nim"
+
 # builds transition tool
 t8n: | build deps
 	$(ENV_SCRIPT) nim c $(NIM_PARAMS) $(T8N_PARAMS) "tools/t8n/$@.nim"
@@ -375,6 +392,7 @@ clean: | clean-common
 	rm -rf build/{nimbus,nimbus_execution_client,nimbus_portal_client,fluffy,portal_bridge,libverifproxy,nimbus_verified_proxy,$(TOOLS_CSV),$(PORTAL_TOOLS_CSV),all_tests,test_kvstore_rocksdb,test_rpc,all_portal_tests,all_history_network_custom_chain_tests,test_portal_testnet,utp_test_app,utp_test,*.dSYM}
 	rm -rf tools/t8n/{t8n,t8n_test}
 	rm -rf tools/evmstate/{evmstate,evmstate_test}
+	rm -rf tests/fixtures/eest
 ifneq ($(USE_LIBBACKTRACE), 0)
 	+ $(MAKE) -C vendor/nim-libbacktrace clean $(HANDLE_OUTPUT)
 endif
@@ -391,38 +409,26 @@ endif
 # can be found in Git history.  Look for the `nimbus-eth1` commit that adds
 # this comment and removes `wrappers/*`.
 
-dist-amd64:
+dist-linux-amd64:
 	+ MAKE="$(MAKE)" \
-		scripts/make_dist.sh amd64
+		scripts/make_dist.sh linux-amd64
 
-dist-arm64:
+dist-linux-arm64:
 	+ MAKE="$(MAKE)" \
-		scripts/make_dist.sh arm64
+		scripts/make_dist.sh linux-arm64
 
-# We get an ICE on RocksDB-7.0.2 with "arm-linux-gnueabihf-g++ (Ubuntu 9.4.0-1ubuntu1~20.04.1) 9.4.0"
-# and with "arm-linux-gnueabihf-g++ (Ubuntu 10.3.0-1ubuntu1) 10.3.0".
-#dist-arm:
-	#+ MAKE="$(MAKE)" \
-		#scripts/make_dist.sh arm
-
-dist-win64:
+dist-windows-amd64:
 	+ MAKE="$(MAKE)" \
-		scripts/make_dist.sh win64
-
-dist-macos:
-	+ MAKE="$(MAKE)" \
-		scripts/make_dist.sh macos
+		scripts/make_dist.sh windows-amd64
 
 dist-macos-arm64:
 	+ MAKE="$(MAKE)" \
 		scripts/make_dist.sh macos-arm64
 
 dist:
-	+ $(MAKE) --no-print-directory dist-amd64
-	+ $(MAKE) --no-print-directory dist-arm64
-	#+ $(MAKE) --no-print-directory dist-arm
-	+ $(MAKE) --no-print-directory dist-win64
-	+ $(MAKE) --no-print-directory dist-macos
+	+ $(MAKE) --no-print-directory dist-linux-amd64
+	+ $(MAKE) --no-print-directory dist-linux-arm64
+	+ $(MAKE) --no-print-directory dist-windows-amd64
 	+ $(MAKE) --no-print-directory dist-macos-arm64
 
 endif # "variables.mk" was not included

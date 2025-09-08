@@ -110,18 +110,31 @@ const
     paP256VerifyAddress        # paP256Verify
   ]
 
+  precompileNames*: array[Precompiles, string] = [
+    "ECREC",
+    "SHA256",
+    "RIPEMD160",
+    "ID",
+    "MODEXP",
+    "BN254_ADD",
+    "BN254_MUL",
+    "BN254_PAIRING",
+    "BLAKE2F",
+    "KZG_POINT_EVALUATION",
+    "BLS12_G1ADD",
+    "BLS12_G1MSM",
+    "BLS12_G2ADD",
+    "BLS12_G2MSM",
+    "BLS12_PAIRING_CHECK",
+    "BLS12_MAP_FP_TO_G1",
+    "BLS12_MAP_FP2_TO_G2",
+    "P256VERIFY"
+  ]
+
 
 # ------------------------------------------------------------------------------
 # Private functions
 # ------------------------------------------------------------------------------
-
-func getMaxPrecompile(fork: EVMFork): Precompiles =
-  if fork < FkByzantium: paIdentity
-  elif fork < FkIstanbul: paPairing
-  elif fork < FkCancun: paBlake2bf
-  elif fork < FkPrague: paPointEvaluation
-  elif fork < FkOsaka: paBlsMapG2
-  else: Precompiles.high
 
 func getSignature(c: Computation): EvmResult[SigRes]  =
   # input is Hash, V, R, S
@@ -795,6 +808,14 @@ proc p256verify(c: Computation): EvmResultVoid =
 # ------------------------------------------------------------------------------
 # Public functions
 # ------------------------------------------------------------------------------
+
+func getMaxPrecompile*(fork: EVMFork): Precompiles =
+  if fork < FkByzantium: paIdentity
+  elif fork < FkIstanbul: paPairing
+  elif fork < FkCancun: paBlake2bf
+  elif fork < FkPrague: paPointEvaluation
+  elif fork < FkOsaka: paBlsMapG2
+  else: Precompiles.high
 
 iterator activePrecompiles*(fork: EVMFork): Address =
   let maxPrecompile = getMaxPrecompile(fork)

@@ -16,7 +16,9 @@ import
   ../../../common,
   ../../../db/core_db,
   ../../../evm/types,
-  ../../../evm/state
+  ../../../evm/state,
+  ../../../stateless/[witness_generation, witness_verification],
+  ./chain_branch
 
 proc writeBaggage*(c: ForkedChainRef,
         blk: Block, blkHash: Hash32,
@@ -54,7 +56,7 @@ template updateSnapshot*(c: ForkedChainRef,
   c.lastSnapshots[pos] = txFrame
 
 proc processBlock*(c: ForkedChainRef,
-                  parent: Header,
+                  parentBlk: BlockRef,
                   txFrame: CoreDbTxRef,
                   blk: Block,
                   blkHash: Hash32,
@@ -63,21 +65,44 @@ proc processBlock*(c: ForkedChainRef,
     blk.header
 
   let vmState = BaseVMState()
-  vmState.init(parent, header, c.com, txFrame)
+  vmState.init(parentBlk.header, header, c.com, txFrame)
 
   ?c.com.validateHeaderAndKinship(blk, vmState.parent, txFrame)
 
-  # When processing a finalized block, we optimistically assume that the state
-  # root will check out and delay such validation for when it's time to persist
-  # changes to disk
-  ?vmState.processBlock(
-    blk,
-    skipValidation = false,
-    skipReceipts = false,
-    skipUncles = true,
-    skipStateRootCheck = finalized and not c.eagerStateRoot,
-    taskpool = c.com.taskpool,
-  )
+  template processBlock(): auto =
+    # When processing a finalized block, we optimistically assume that the state
+    # root will check out and delay such validation for when it's time to persist
+    # changes to disk
+    ?vmState.processBlock(
+      blk,
+      skipValidation = false,
+      skipReceipts = false,
+      skipUncles = true,
+      skipStateRootCheck = finalized and not c.eagerStateRoot,
+      taskpool = c.com.taskpool,
+    )
+
+  if not vmState.com.statelessProviderEnabled:
+    processBlock()
+  else:
+    # Clear the caches before executing the block to ensure we collect the correct
+    # witness keys and block hashes when processing the block as these will be used
+    # when building the witness.
+    vmState.ledger.clearWitnessKeys()
+    vmState.ledger.clearBlockHashesCache()
+
+    processBlock()
+
+    let
+      preStateLedger = LedgerRef.init(parentBlk.txFrame)
+      witness = Witness.build(preStateLedger, vmState.ledger, parentBlk.header, header)
+
+    # Convert the witness to ExecutionWitness format and verify against the pre-stateroot.
+    if vmState.com.statelessWitnessValidation:
+      let executionWitness = ExecutionWitness.build(witness, vmState.ledger)
+      ?executionWitness.verify(preStateLedger.getStateRoot())
+
+    ?vmState.ledger.txFrame.persistWitness(blkHash, witness)
 
   # We still need to write header to database
   # because validateUncles still need it

@@ -11,9 +11,9 @@
 {.push raises:[].}
 
 import
-  pkg/[eth/common, metrics],
+  pkg/[eth/common, metrics, results],
   pkg/stew/[interval_set, sorted_set],
-  ../../worker_desc
+  ../worker_desc
 
 declareGauge nec_sync_block_lists_staged, "" &
   "Number of block list records staged for importing"
@@ -34,7 +34,20 @@ func blocksStagedQueueIsEmpty*(ctx: BeaconCtxRef): bool =
   ## `true` iff no data are on the queue.
   ctx.blk.staged.len == 0
 
-proc blocksStagedQueueMetricsUpdate*(ctx: BeaconCtxRef) =
+proc blocksStagedQueueInsert*(
+    ctx: BeaconCtxRef;
+    key: BlockNumber;
+      ): Opt[SortedSetItemRef[BlockNumber,BlocksForImport]] =
+  let qItem = ctx.blk.staged.insert(key).valueOr:
+    return err()
+  metrics.set(nec_sync_block_lists_staged, ctx.blk.staged.len)
+  ok(qItem)
+
+proc blocksStagedQueueDelete*(
+    ctx: BeaconCtxRef;
+    key: BlockNumber;
+     ) =
+  discard ctx.blk.staged.delete(key)
   metrics.set(nec_sync_block_lists_staged, ctx.blk.staged.len)
 
 # ----------------
@@ -43,6 +56,7 @@ proc blocksStagedQueueClear*(ctx: BeaconCtxRef) =
   ## Clear queue
   ctx.blk.staged.clear()
   ctx.blk.reserveStaged = 0
+  metrics.set(nec_sync_block_lists_staged, 0)
 
 proc blocksStagedQueueInit*(ctx: BeaconCtxRef) =
   ## Constructor

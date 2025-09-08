@@ -16,7 +16,7 @@ import
   ../../evm/[state, types],
   ../../common,
   ../../db/ledger,
-  ../../stateless/witness_generation,
+  ../../stateless/[witness_generation, witness_verification],
   ../../db/storage_types,
   ../[executor, validate],
   chronicles,
@@ -69,6 +69,7 @@ proc getVmState(
     doAssert txFrame.getSavedStateBlockNumber() == parent.number
     vmState.init(parent, header, p.com, txFrame, storeSlotHash = storeSlotHash)
     p.vmState = vmState
+    assign(p.parent, parent)
   else:
     if header.number != p.parent.number + 1:
       return err("Only linear histories supported by Persister")
@@ -165,6 +166,11 @@ proc persistBlock*(p: var Persister, blk: Block): Result[void, string] =
     let parentTxFrame = vmState.ledger.txFrame
     vmState.ledger.txFrame = parentTxFrame.txFrameBegin()
 
+    # Creating a snapshot here significantly improves the performance of building
+    # the witness from the prestate, especially when the import batch size is
+    # set to a larger value.
+    parentTxFrame.checkpoint(p.parent.number, skipSnapshot = false)
+
     # Clear the caches before executing the block to ensure we collect the correct
     # witness keys and block hashes when processing the block as these will be used
     # when building the witness.
@@ -174,11 +180,17 @@ proc persistBlock*(p: var Persister, blk: Block): Result[void, string] =
     processBlock()
 
     let
-      blockHash = header.computeBlockHash()
       preStateLedger = LedgerRef.init(parentTxFrame)
       witness = Witness.build(preStateLedger, vmState.ledger, p.parent, header)
 
-    ?vmState.ledger.txFrame.persistWitness(blockHash, witness)
+    # Convert the witness to ExecutionWitness format and verify against the pre-stateroot.
+    if vmState.com.statelessWitnessValidation:
+      doAssert witness.validateKeys(vmState.ledger.getWitnessKeys()).isOk()
+      let executionWitness = ExecutionWitness.build(witness, vmState.ledger)
+      ?executionWitness.verify(preStateLedger.getStateRoot())
+
+    ?vmState.ledger.txFrame.persistWitness(header.computeBlockHash(), witness)
+
 
   if NoPersistHeader notin p.flags:
     let blockHash = header.computeBlockHash()

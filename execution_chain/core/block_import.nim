@@ -16,7 +16,8 @@ import
   chronos,
   ./chain,
   ../config,
-  ../utils/utils
+  ../utils/utils,
+  beacon_chain/process_state
 
 proc importRlpBlocks*(blocksRlp:seq[byte],
                       chain: ForkedChainRef,
@@ -29,7 +30,7 @@ proc importRlpBlocks*(blocksRlp:seq[byte],
     printBanner = false
     firstSkip = Opt.none(uint64)
 
-  while rlp.hasData:
+  while not ProcessState.stopIt(notice("Shutting down", reason = it)) and rlp.hasData:
     blk = try:
       rlp.read(Block)
     except RlpError as e:

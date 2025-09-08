@@ -80,6 +80,10 @@ func id*(peer: PeerRef): NodeId =
 func `$`*(peer: PeerRef): string =
   $peer.remote
 
+func `$`*(x: DisconnectPeer): string =
+  if x.isNil: "DisconnectPeer(nil)"
+  else: "DisconnectPeer(cb)"
+
 func perPeerMsgIdImpl*(peer: PeerRef, proto: ProtocolInfoRef, msgId: uint64): uint64 =
   result = msgId
   if not peer.dispatcher.isNil:

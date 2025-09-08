@@ -16,95 +16,59 @@ if [[ -z "${1}" ]]; then
   echo "Usage: $(basename ${0}) PLATFORM"
   exit 1
 fi
+
 PLATFORM="${1}"
-BINARIES="nimbus"
-# RocksDB can be upgraded for new nimbus-eth1 versions, since it's built
-# on-the-fly, as long as our fixes still apply (or are accepted upstream).
-ROCKSDBVER="7.0.3"
-
-build_rocksdb() {
-  echo -e "\nBuilding: RocksDB"
-  ROCKSDB_ARCHIVE="rocksdb-v${ROCKSDBVER}.tar.gz"
-  ROCKSDB_DIR="rocksdb-${ROCKSDBVER}"
-
-  mkdir -p build
-  pushd build >/dev/null
-  rm -rf "${ROCKSDB_DIR}"
-  if [[ ! -e "${ROCKSDB_ARCHIVE}" ]]; then
-    curl -L -s -S https://github.com/facebook/rocksdb/archive/v${ROCKSDBVER}.tar.gz -o "${ROCKSDB_ARCHIVE}"
-  fi
-  tar -xzf "${ROCKSDB_ARCHIVE}"
-
-  pushd "${ROCKSDB_DIR}" >/dev/null
-
-  # MINGW & cross-compilation support: https://github.com/facebook/rocksdb/pull/9752
-  patch -p1 -i ../../docker/dist/0001-Makefile-support-Mingw-more-cross-compilation.patch
-  # ARM support: https://github.com/facebook/rocksdb/issues/8609#issuecomment-1009572506
-  #patch -p1 -i ../../docker/dist/rocksdb-7.0.2-arm.patch
-
-  # This seems the best way to get rid of those huge debugging symbols.
-  sed -i \
-    -e '/ -g$/d' \
-    Makefile
-
-  # Avoid random symbol names for global vars.
-  sed -i \
-    -e 's/$(CXXFLAGS) -c $</$(CXXFLAGS) -frandom-seed=$< -c $</g' \
-    Makefile
-
-  make -j$(nproc) \
-    DISABLE_WARNING_AS_ERROR=1 \
-    FORCE_GIT_SHA="12345678" \
-    git_tag="v${ROCKSDBVER}" \
-    build_date="2001-01-01 12:34:56" \
-    git_date="2001-01-01 12:34:56" \
-    PORTABLE=1 \
-    CROSS_COMPILE=true \
-    V=1 \
-    "$@" \
-    static_lib &>build_log.txt
-
-  popd >/dev/null
-  popd >/dev/null
-}
+BINARIES="nimbus_execution_client"
+ROCKSDB_DIR=/usr/rocksdb
 
 echo -e "\nPLATFORM=${PLATFORM}"
-echo "ROCKSDBVER=${ROCKSDBVER}"
+
+copy_rocksdb() {
+  mkdir -p vendor/nim-rocksdb/build
+  cp ${ROCKSDB_DIR}/* vendor/nim-rocksdb/build
+  ROCKSDBVER=$(cat "${ROCKSDB_DIR}/version.txt")
+  echo "ROCKSDBVER=${ROCKSDBVER}"
+}
 
 #- we need to build everything against libraries available inside this container, including the Nim compiler
 #- "librocksdb.a" is a C++ library so we need to link it with the C++ profile
 make clean
-NIMFLAGS_COMMON="-d:disableMarchNative --gcc.options.debug:'-g1' --clang.options.debug:'-gline-tables-only' --dynlibOverride:rocksdb --passL:'-lrocksdb -L/home/user/nimbus-eth1/build/rocksdb-${ROCKSDBVER}'"
+NIMFLAGS_COMMON="-d:disableMarchNative --gcc.options.debug:'-g1' --clang.options.debug:'-gline-tables-only'"
 
-if [[ "${PLATFORM}" == "Windows_amd64" ]]; then
-  # Cross-compilation using the MXE distribution of Mingw-w64
-  export PATH="/opt/mxe/usr/bin:${PATH}"
-  CC=x86_64-w64-mingw32.static-gcc
-  CXX=x86_64-w64-mingw32.static-g++
+if [[ "${PLATFORM}" == "windows_amd64" ]]; then
+  # Cross-compilation using the llvm distribution of Mingw-w64
+  export PATH="/opt/llvm-mingw-ucrt/bin:${PATH}"
+  CC=x86_64-w64-mingw32-gcc
+  CXX=x86_64-w64-mingw32-g++
   ${CXX} --version
 
-  build_rocksdb TARGET_OS=MINGW CXX="${CXX}"
+  copy_rocksdb
 
-  make -j$(nproc) update-from-ci
+  make -j$(nproc) init
 
   make \
     -j$(nproc) \
     USE_LIBBACKTRACE=0 \
     QUICK_AND_DIRTY_COMPILER=1 \
+    USE_SYSTEM_ROCKSDB=0 \
     deps-common
-    #deps-common build/generate_makefile
+
   make \
     -j$(nproc) \
     -C vendor/nim-nat-traversal/vendor/miniupnp/miniupnpc \
     -f Makefile.mingw \
     CC="${CC}" \
+    OS=mingw \
     libminiupnpc.a &>/dev/null
+
   make \
     -j$(nproc) \
     -C vendor/nim-nat-traversal/vendor/libnatpmp-upstream \
     CC="${CC}" \
     CFLAGS="-Wall -Os -DWIN32 -DNATPMP_STATICLIB -DENABLE_STRNATPMPERR -DNATPMP_MAX_RETRIES=4 ${CFLAGS}" \
+    OS=mingw \
     libnatpmp.a &>/dev/null
+
   # We set CXX and add CXXFLAGS for libunwind's C++ code, even though we don't
   # use those C++ objects. I don't see an easy way of disabling the C++ parts in
   # libunwind itself.
@@ -117,149 +81,101 @@ if [[ "${PLATFORM}" == "Windows_amd64" ]]; then
   #
   # nim-blscurve's Windows SSSE3 detection doesn't work when cross-compiling,
   # so we enable it here.
+
+  # -d:PREFER_HASHTREE_SHA256:false, does not works with llvm mingw compiler
   make \
     -j$(nproc) \
     CC="${CC}" \
     CXX="${CXX}" \
+    OS=Windows_NT \
     CXXFLAGS="${CXXFLAGS} -D__STDC_FORMAT_MACROS -D_WIN32_WINNT=0x0600" \
     USE_VENDORED_LIBUNWIND=1 \
     LOG_LEVEL="TRACE" \
-    NIMFLAGS="${NIMFLAGS_COMMON} --os:windows --gcc.exe=${CC} --gcc.linkerexe=${CXX} --passL:'-static -lshlwapi -lrpcrt4' -d:BLSTuseSSSE3=1" \
+    USE_SYSTEM_ROCKSDB=0 \
+    NIMFLAGS="${NIMFLAGS_COMMON} -d:PREFER_HASHTREE_SHA256:false --os:windows --gcc.exe=${CC} --gcc.linkerexe=${CXX} --passL:'-static -lshlwapi -lrpcrt4' -d:BLSTuseSSSE3=1" \
     ${BINARIES}
-elif [[ "${PLATFORM}" == "Linux_arm32v7" ]]; then
-  CC="arm-linux-gnueabihf-gcc"
-  CXX="arm-linux-gnueabihf-g++"
+
+elif [[ "${PLATFORM}" == "linux_arm64" ]]; then
+  export PATH="/opt/aarch64/bin:${PATH}"
+  CC="aarch64-none-linux-gnu-gcc"
+  CXX="aarch64-none-linux-gnu-g++"
   ${CXX} --version
 
-  build_rocksdb TARGET_ARCHITECTURE=arm CXX="${CXX}"
+  copy_rocksdb
 
-  make -j$(nproc) update-from-ci
-
-  env CFLAGS="" make \
-    -j$(nproc) \
-    USE_LIBBACKTRACE=0 \
-    QUICK_AND_DIRTY_COMPILER=1 \
-    deps-common
-    #deps-common build/generate_makefile
-  make \
-    -j$(nproc) \
-    LOG_LEVEL="TRACE" \
-    CC="${CC}" \
-    NIMFLAGS="${NIMFLAGS_COMMON} --cpu:arm --gcc.exe=${CC} --gcc.linkerexe=${CXX} --passL:'-static'" \
-    ${BINARIES}
-elif [[ "${PLATFORM}" == "Linux_arm64v8" ]]; then
-  CC="aarch64-linux-gnu-gcc"
-  CXX="aarch64-linux-gnu-g++"
-  ${CXX} --version
-
-  build_rocksdb TARGET_ARCHITECTURE=arm64 CXX="${CXX}"
-
-  make -j$(nproc) update-from-ci
+  make -j$(nproc) init
 
   make \
     -j$(nproc) \
     USE_LIBBACKTRACE=0 \
     QUICK_AND_DIRTY_COMPILER=1 \
+    USE_SYSTEM_ROCKSDB=0 \
     deps-common
-    #deps-common build/generate_makefile
+
   make \
     -j$(nproc) \
     LOG_LEVEL="TRACE" \
     CC="${CC}" \
-    NIMFLAGS="${NIMFLAGS_COMMON} --cpu:arm64 --gcc.exe=${CC} --gcc.linkerexe=${CXX} --passL:'-static-libstdc++'" \
+    CXX="${CXX}" \
+    NIMFLAGS="${NIMFLAGS_COMMON} --cpu:arm64 --arm64.linux.gcc.exe=${CC} --arm64.linux.gcc.linkerexe=${CXX} --gcc.exe=${CC} --gcc.linkerexe=${CXX} --passL:'-static-libstdc++'" \
     PARTIAL_STATIC_LINKING=1 \
+    USE_SYSTEM_ROCKSDB=0 \
     ${BINARIES}
-elif [[ "${PLATFORM}" == "macOS_amd64" ]]; then
-  export PATH="/opt/osxcross/bin:${PATH}"
+
+elif [[ "${PLATFORM}" == "macos_arm64" ]]; then
+  export PATH="/osxcross/bin:${PATH}"
+  export LD_LIBRARY_PATH="/osxcross/lib:$LD_LIBRARY_PATH"
   export OSXCROSS_MP_INC=1 # sets up include and library paths
   export ZERO_AR_DATE=1 # avoid timestamps in binaries
-  DARWIN_VER="20.4"
-  CC="o64-clang"
-  CXX="o64-clang++"
-  AR="x86_64-apple-darwin${DARWIN_VER}-ar"
-  RANLIB="x86_64-apple-darwin${DARWIN_VER}-ranlib"
-  DSYMUTIL="x86_64-apple-darwin${DARWIN_VER}-dsymutil"
+  DARWIN_VER="24.5"
+  CC="aarch64-apple-darwin${DARWIN_VER}-clang"
+  CXX="aarch64-apple-darwin${DARWIN_VER}-clang++"
+  AR="aarch64-apple-darwin${DARWIN_VER}-ar"
+  RANLIB="aarch64-apple-darwin${DARWIN_VER}-ranlib"
+  DSYMUTIL="aarch64-apple-darwin${DARWIN_VER}-dsymutil"
   ${CXX} --version
 
-  build_rocksdb TARGET_OS=Darwin CXX="${CXX}" AR="${AR}"
+  copy_rocksdb
 
-  make -j$(nproc) update-from-ci
+  make -j$(nproc) init
 
   make \
     -j$(nproc) \
     USE_LIBBACKTRACE=0 \
     QUICK_AND_DIRTY_COMPILER=1 \
+    USE_SYSTEM_ROCKSDB=0 \
     deps-common
-    #deps-common build/generate_makefile
-  make \
-    -j$(nproc) \
-    CC="${CC}" \
-    LIBTOOL="x86_64-apple-darwin${DARWIN_VER}-libtool" \
-    OS="darwin" \
-    NIMFLAGS="${NIMFLAGS_COMMON} --os:macosx --clang.exe=${CC}" \
-    nat-libs
-  make \
-    -j$(nproc) \
-    LOG_LEVEL="TRACE" \
-    CC="${CC}" \
-    AR="${AR}" \
-    RANLIB="${RANLIB}" \
-    CMAKE="x86_64-apple-darwin${DARWIN_VER}-cmake" \
-    CMAKE_ARGS="-DCMAKE_TOOLCHAIN_FILE=/opt/osxcross/toolchain.cmake" \
-    DSYMUTIL="${DSYMUTIL}" \
-    FORCE_DSYMUTIL=1 \
-    USE_VENDORED_LIBUNWIND=1 \
-    NIMFLAGS="${NIMFLAGS_COMMON} --os:macosx --clang.exe=${CC} --clang.linkerexe=${CXX} --passL:'-static-libstdc++ -mmacosx-version-min=10.14'" \
-    ${BINARIES}
-elif [[ "${PLATFORM}" == "macOS_arm64" ]]; then
-  export PATH="/opt/osxcross/bin:${PATH}"
-  export OSXCROSS_MP_INC=1 # sets up include and library paths
-  export ZERO_AR_DATE=1 # avoid timestamps in binaries
-  DARWIN_VER="20.4"
-  CC="oa64-clang"
-  CXX="oa64-clang++"
-  AR="arm64-apple-darwin${DARWIN_VER}-ar"
-  RANLIB="arm64-apple-darwin${DARWIN_VER}-ranlib"
-  DSYMUTIL="arm64-apple-darwin${DARWIN_VER}-dsymutil"
-  ${CXX} --version
-
-  build_rocksdb TARGET_OS=Darwin TARGET_ARCHITECTURE=arm64 CXX="${CXX}" AR="${AR}"
-
-  make -j$(nproc) update-from-ci
 
   make \
     -j$(nproc) \
-    USE_LIBBACKTRACE=0 \
-    QUICK_AND_DIRTY_COMPILER=1 \
-    deps-common
-    #deps-common build/generate_makefile
-  make \
-    -j$(nproc) \
     CC="${CC}" \
-    LIBTOOL="arm64-apple-darwin${DARWIN_VER}-libtool" \
+    LIBTOOL="aarch64-apple-darwin${DARWIN_VER}-libtool" \
     OS="darwin" \
     NIMFLAGS="${NIMFLAGS_COMMON} --os:macosx --cpu:arm64 --passC:'-mcpu=apple-a14' --clang.exe=${CC}" \
+    USE_SYSTEM_ROCKSDB=0 \
     nat-libs
+
   make \
     -j$(nproc) \
     LOG_LEVEL="TRACE" \
     CC="${CC}" \
     AR="${AR}" \
     RANLIB="${RANLIB}" \
-    CMAKE="arm64-apple-darwin${DARWIN_VER}-cmake" \
-    CMAKE_ARGS="-DCMAKE_TOOLCHAIN_FILE=/opt/osxcross/toolchain.cmake" \
+    CMAKE="aarch64-apple-darwin${DARWIN_VER}-cmake" \
+    CMAKE_ARGS="-DCMAKE_TOOLCHAIN_FILE=/osxcross/toolchain.cmake" \
     DSYMUTIL="${DSYMUTIL}" \
     FORCE_DSYMUTIL=1 \
     USE_VENDORED_LIBUNWIND=1 \
-    NIMFLAGS="${NIMFLAGS_COMMON} --os:macosx --cpu:arm64 --passC:'-mcpu=apple-a13' --passL:'-mcpu=apple-a14 -static-libstdc++' --clang.exe=${CC} --clang.linkerexe=${CXX}" \
+    USE_SYSTEM_ROCKSDB=0 \
+    NIMFLAGS="${NIMFLAGS_COMMON} --os:macosx --cpu:arm64 --passC:'-mcpu=apple-a14' --passL:'-mcpu=apple-a14 -static-libstdc++' --clang.exe=${CC} --clang.linkerexe=${CXX}" \
     ${BINARIES}
-else
-  # Linux AMD64
+
+else # linux_amd64
   g++ --version
 
-  build_rocksdb
+  copy_rocksdb
 
-  make -j$(nproc) update-from-ci
+  make -j$(nproc) init
 
   make \
     -j$(nproc) \
@@ -267,6 +183,7 @@ else
     NIMFLAGS="${NIMFLAGS_COMMON} --gcc.linkerexe=g++ --passL:'-static-libstdc++'" \
     PARTIAL_STATIC_LINKING=1 \
     QUICK_AND_DIRTY_COMPILER=1 \
+    USE_SYSTEM_ROCKSDB=0 \
     ${BINARIES}
 fi
 
@@ -287,9 +204,10 @@ mkdir "${DIST_PATH}/build"
 
 # copy and checksum binaries, copy docs
 EXT=""
-if [[ "${PLATFORM}" == "Windows_amd64" ]]; then
+if [[ "${PLATFORM}" == "windows_amd64" ]]; then
   EXT=".exe"
 fi
+
 for BINARY in ${BINARIES}; do
   cp -a "./build/${BINARY}${EXT}" "${DIST_PATH}/build/"
   if [[ "${PLATFORM}" =~ macOS ]]; then
@@ -311,17 +229,13 @@ for BINARY in ${BINARIES}; do
 done
 sed -e "s/GIT_COMMIT/${GIT_COMMIT}/" docker/dist/README.md.tpl > "${DIST_PATH}/README.md"
 
-if [[ "${PLATFORM}" == "Linux_amd64" ]]; then
+if [[ "${PLATFORM}" == "linux_amd64" ]]; then
   sed -i -e 's/^make dist$/make dist-amd64/' "${DIST_PATH}/README.md"
-elif [[ "${PLATFORM}" == "Linux_arm32v7" ]]; then
-  sed -i -e 's/^make dist$/make dist-arm/' "${DIST_PATH}/README.md"
-elif [[ "${PLATFORM}" == "Linux_arm64v8" ]]; then
+elif [[ "${PLATFORM}" == "linux_arm64v8" ]]; then
   sed -i -e 's/^make dist$/make dist-arm64/' "${DIST_PATH}/README.md"
-elif [[ "${PLATFORM}" == "Windows_amd64" ]]; then
+elif [[ "${PLATFORM}" == "windows_amd64" ]]; then
   sed -i -e 's/^make dist$/make dist-win64/' "${DIST_PATH}/README.md"
   cp -a docker/dist/README-Windows.md.tpl "${DIST_PATH}/README-Windows.md"
-elif [[ "${PLATFORM}" == "macOS_amd64" ]]; then
-  sed -i -e 's/^make dist$/make dist-macos/' "${DIST_PATH}/README.md"
 elif [[ "${PLATFORM}" == "macOS_arm64" ]]; then
   sed -i -e 's/^make dist$/make dist-macos-arm64/' "${DIST_PATH}/README.md"
 fi

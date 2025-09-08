@@ -126,7 +126,7 @@ proc replayBlock(fc: ForkedChainRef;
     parentFrame = parent.txFrame
     txFrame = parentFrame.txFrameBegin
 
-  var receipts = fc.processBlock(parent.header, txFrame, blk.blk, blk.hash, false).valueOr:
+  var receipts = fc.processBlock(parent, txFrame, blk.blk, blk.hash, false).valueOr:
     txFrame.dispose()
     return err(error)
 
@@ -230,6 +230,20 @@ proc deserialize*(fc: ForkedChainRef): Result[void, string] =
 
   let prevBase = fc.base
   var blocks = newSeq[BlockRef](state.numBlocks)
+
+  # Sanity Checks for the FC state
+  if state.latest > state.numBlocks or
+     state.base > state.numBlocks: 
+    warn "TODO: Inconsistent state found"
+    fc.reset(prevBase)
+    return err("Invalid state: latest block is greater than number of blocks")
+  
+  # Sanity Checks for all the heads in FC state
+  for head in state.heads:
+    if head > state.numBlocks:
+      warn "TODO: Inconsistent state found"
+      fc.reset(prevBase)
+      return err("Invalid state: heads greater than number of blocks")
 
   try:
     for i in 0..<state.numBlocks:

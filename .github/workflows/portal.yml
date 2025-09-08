@@ -8,30 +8,26 @@
 name: Nimbus Portal CI
 on:
   push:
-    paths:
-      - '.github/workflows/portal.yml'
-      - 'portal/**'
-      - '!portal/**.md'
-      - '!portal/docs/**'
-      - 'execution_chain/rpc/hexstrings.nim'
-      - 'execution_chain/rpc/rpc_*.nim'
-      - 'execution_chain/db/**'
-      - 'vendor/**'
-      - 'Makefile'
-      - 'nimbus.nimble'
+    paths-ignore:
+      - 'doc/**'
+      - 'portal/docs/**'
+      - '**/*.md'
+      - 'nimbus_verified_proxy/**'
+      - '.github/workflows/nimbus_verified_proxy.yml'
+      - '.github/workflows/build_base_image.yml'
+      - 'docker/**'
 
   pull_request:
-    paths:
-      - '.github/workflows/portal.yml'
-      - 'portal/**'
-      - '!portal/**.md'
-      - '!portal/docs/**'
-      - 'execution_chain/rpc/hexstrings.nim'
-      - 'execution_chain/rpc/rpc_*.nim'
-      - 'execution_chain/db/**'
-      - 'vendor/**'
-      - 'Makefile'
-      - 'nimbus.nimble'
+    paths-ignore:
+      - 'doc/**'
+      - 'portal/docs/**'
+      - '**/*.md'
+      - 'nimbus_verified_proxy/**'
+      - '.github/workflows/nimbus_verified_proxy.yml'
+      - '.github/workflows/build_base_image.yml'
+      - 'docker/**'
+
+  workflow_dispatch:
 
 jobs:
   # separate job so it can run concurrently with other tests
@@ -73,7 +69,7 @@ jobs:
 
       - name: Build Nim and Nimbus-eth1 dependencies
         run: |
-          make -j${ncpu} ARCH_OVERRIDE=${PLATFORM} CI_CACHE=NimBinaries update
+          make -j${ncpu} ARCH_OVERRIDE=${PLATFORM} CI_CACHE=NimBinaries init
 
       - name: build uTP test app container
         run: |
@@ -105,164 +101,47 @@ jobs:
           PATH=$PATH$(find /usr/libexec/docker -name docker-compose -printf ":%h")
           docker-compose -f portal/tools/utp_testing/docker/docker-compose.yml down
 
+  matrix_config:
+    uses: ./.github/workflows/matrix_config.yml
+
   build:
+    needs: matrix_config
+
     strategy:
       fail-fast: false
-      max-parallel: 20
-      matrix:
-        target:
-          - os: linux
-            cpu: amd64
-          - os: macos
-            cpu: arm64
-          - os: windows
-            cpu: amd64
-        include:
-          - target:
-              os: linux
-            builder: ubuntu-22.04
-          - target:
-              os: macos
-            builder: macos-13
-          - target:
-              os: windows
-            builder: windows-latest
+      matrix: ${{ fromJSON(needs.matrix_config.outputs.matrix) }}
 
     defaults:
       run:
         shell: bash
 
-    name: '${{ matrix.target.os }}-${{ matrix.target.cpu }}'
+    name: '${{ matrix.os }}-${{ matrix.cpu }}'
     runs-on: ${{ matrix.builder }}
     steps:
       - name: Checkout nimbus-eth1
         uses: actions/checkout@v4
 
-      - name: Derive environment variables
-        run: |
-          if [[ '${{ matrix.target.cpu }}' == 'amd64' ]]; then
-            PLATFORM=x64
-          elif [[ '${{ matrix.target.cpu }}' == 'arm64' ]]; then
-            PLATFORM=arm64
-          else
-            PLATFORM=x86
-          fi
-          echo "PLATFORM=${PLATFORM}" >> $GITHUB_ENV
-
-          # libminiupnp / natpmp
-          if [[ '${{ runner.os }}' == 'Linux' && '${{ matrix.target.cpu }}' == 'i386' ]]; then
-            export CFLAGS="${CFLAGS} -m32 -mno-adx"
-            echo "CFLAGS=${CFLAGS}" >> $GITHUB_ENV
-          fi
-
-          ncpu=''
-          case '${{ runner.os }}' in
-          'Linux')
-            ncpu=$(nproc)
-            ;;
-          'macOS')
-            ncpu=$(sysctl -n hw.ncpu)
-            ;;
-          'Windows')
-            ncpu=${NUMBER_OF_PROCESSORS}
-            ;;
-          esac
-          [[ -z "$ncpu" || $ncpu -le 0 ]] && ncpu=1
-          echo "ncpu=${ncpu}" >> $GITHUB_ENV
-
-      - name: Install build dependencies (Linux i386)
-        if: runner.os == 'Linux' && matrix.target.cpu == 'i386'
-        run: |
-          sudo dpkg --add-architecture i386
-          sudo apt-fast update -qq
-          sudo DEBIAN_FRONTEND='noninteractive' apt-fast install \
-            --no-install-recommends -yq gcc-multilib g++-multilib
-          mkdir -p external/bin
-          cat << EOF > external/bin/gcc
-          #!/bin/bash
-          exec $(which gcc) -m32 -mno-adx "\$@"
-          EOF
-          cat << EOF > external/bin/g++
-          #!/bin/bash
-          exec $(which g++) -m32 -mno-adx "\$@"
-          EOF
-          chmod 755 external/bin/gcc external/bin/g++
-          echo "${{ github.workspace }}/external/bin" >> $GITHUB_PATH
-
-      # Required for running the local testnet script
-      - name: Install build dependencies (MacOS)
-        if: runner.os == 'macOS'
-        run: |
-          brew install gnu-getopt
-          brew link --force gnu-getopt
-
-      - name: Restore llvm-mingw (Windows) from cache
-        if: runner.os == 'Windows'
-        id: windows-mingw-cache
-        uses: actions/cache@v4
+      - id: shared-action
+        uses: ./.github/actions/shared
         with:
-          path: external/mingw-${{ matrix.target.cpu }}
-          key: 'mingw-llvm-17-${{ matrix.target.cpu }}'
-
-      - name: Install llvm-mingw dependency (Windows)
-        if: >
-          steps.windows-mingw-cache.outputs.cache-hit != 'true' &&
-          runner.os == 'Windows'
-        run: |
-          mkdir -p external
-          MINGW_BASE="https://github.com/mstorsjo/llvm-mingw/releases/download/20230905"
-          if [[ '${{ matrix.target.cpu }}' == 'amd64' ]]; then
-            MINGW_URL="$MINGW_BASE/llvm-mingw-20230905-ucrt-x86_64.zip"
-            ARCH=64
-          else
-            MINGW_URL="$MINGW_BASE/llvm-mingw-20230905-ucrt-x86_64.zip"
-            ARCH=32
-          fi
-          curl -L "$MINGW_URL" -o "external/mingw-${{ matrix.target.cpu }}.zip"
-          7z x -y "external/mingw-${{ matrix.target.cpu }}.zip" -oexternal/mingw-${{ matrix.target.cpu }}/
-          mv external/mingw-${{ matrix.target.cpu }}/**/* ./external/mingw-${{ matrix.target.cpu }}
-
-      - name: Path to cached dependencies (Windows)
-        if: >
-          runner.os == 'Windows'
-        run: |
-          echo '${{ github.workspace }}'"/external/mingw-${{ matrix.target.cpu }}/bin" >> $GITHUB_PATH
-
-      - name: Get latest nimbus-build-system commit hash
-        id: versions
-        run: |
-          getHash() {
-            git ls-remote "https://github.com/$1" "${2:-HEAD}" | cut -f 1
-          }
-          nbsHash=$(getHash status-im/nimbus-build-system)
-          echo "nimbus_build_system=$nbsHash" >> $GITHUB_OUTPUT
-
-      - name: Restore prebuilt Nim binaries from cache
-        id: nim-cache
-        uses: actions/cache@v4
-        with:
-          path: NimBinaries
-          key: 'nim-${{ matrix.target.os }}-${{ matrix.target.cpu }}-${{ steps.versions.outputs.nimbus_build_system }}-portal'
-
-      - name: Build Nim and Nimbus-eth1 dependencies
-        run: |
-          # use CC to make sure Nim compiler and subsequent test
-          # using the same glibc version.
-          env CC=gcc make -j${ncpu} ARCH_OVERRIDE=${PLATFORM} CI_CACHE=NimBinaries update
+          llvm-mingw: true
+          nim-cache: true
+          rocksdb-cache: true
+          eest-cache: false
 
       - name: Run Nimbus Portal tests (Windows)
         if: runner.os == 'Windows'
         run: |
           gcc --version
-          DEFAULT_MAKE_FLAGS="-j1"
+          DEFAULT_MAKE_FLAGS="-j${ncpu} ROCKSDB_CI_CACHE=RocksBinCache"
           mingw32-make ${DEFAULT_MAKE_FLAGS} nimbus_portal_client
           build/nimbus_portal_client.exe --help
-          find . -type d -name ".git" -exec rm -rf {} +
-          rm -rf nimcache
+          # find . -type d -name ".git" -exec rm -rf {} +
+          find . -type d -name "nimcache" -exec rm -rf {} +
           mingw32-make ${DEFAULT_MAKE_FLAGS} portal-tools
-          rm -rf nimcache
-          mingw32-make portal-test
-          rm -rf nimcache
+          find . -type d -name "nimcache" -exec rm -rf {} +
+          mingw32-make ${DEFAULT_MAKE_FLAGS} portal-test
+          find . -type d -name "nimcache" -exec rm -rf {} +
 
       - name: Run Nimbus Portal tests (Linux)
         if: runner.os == 'Linux'
@@ -271,22 +150,22 @@ jobs:
           ./env.sh nim -v
           ldd --version
           export LD_LIBRARY_PATH="${LD_LIBRARY_PATH}:/usr/local/lib"
-          DEFAULT_MAKE_FLAGS="-j${ncpu}"
+          DEFAULT_MAKE_FLAGS="-j${ncpu} ROCKSDB_CI_CACHE=RocksBinCache"
           env CC=gcc make ${DEFAULT_MAKE_FLAGS} nimbus_portal_client
           build/nimbus_portal_client --help
           env CC=gcc make ${DEFAULT_MAKE_FLAGS} portal-tools
           # CC is needed to select correct compiler 32/64 bit
-          env CC=gcc CXX=g++ make portal-test
+          env CC=gcc CXX=g++ make ${DEFAULT_MAKE_FLAGS} portal-test
 
       - name: Run Nimbus Portal tests (Macos)
         if: runner.os == 'Macos'
         run: |
-          DEFAULT_MAKE_FLAGS="-j${ncpu}"
+          DEFAULT_MAKE_FLAGS="-j${ncpu} ROCKSDB_CI_CACHE=RocksBinCache"
           make ${DEFAULT_MAKE_FLAGS} nimbus_portal_client
           build/nimbus_portal_client --help
           make ${DEFAULT_MAKE_FLAGS} portal-tools
           # "-static" option will not work for osx unless static system libraries are provided
-          make portal-test
+          make ${DEFAULT_MAKE_FLAGS} portal-test
 
       - name: Run Portal testnet
         run: |

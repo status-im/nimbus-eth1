@@ -5,20 +5,26 @@
 #   * Apache v2 license (license terms in the root directory or at https://www.apache.org/licenses/LICENSE-2.0).
 # at your option. This file may not be copied, modified, or distributed except according to those terms.
 
-{.push raises: [].}
+{.push raises: [], gcsafe.}
 
 import
   results,
   chronicles,
   stew/byteutils,
+  nimcrypto/sysrand,
   json_rpc/[rpcserver, rpcclient, rpcproxy],
   eth/common/accounts,
-  web3/eth_api,
+  web3/[eth_api, eth_api_types],
+  ../../execution_chain/core/eip4844,
+  ../../execution_chain/common/common,
   ../types,
   ../header_store,
   ./accounts,
   ./blocks,
-  ./evm
+  ./evm,
+  ./transactions,
+  ./receipts,
+  ./fees
 
 logScope:
   topics = "verified_proxy"
@@ -45,14 +51,14 @@ proc installEthApiHandlers*(vp: VerifiedRpcProxy) =
 
   vp.proxy.rpc("eth_getStorageAt") do(
     address: Address, slot: UInt256, quantityTag: BlockTag
-  ) -> UInt256:
+  ) -> FixedBytes[32]:
     let
       header = (await vp.getHeader(quantityTag)).valueOr:
         raise newException(ValueError, error)
       storage = (await vp.getStorageAt(address, slot, header.number, header.stateRoot)).valueOr:
         raise newException(ValueError, error)
 
-    storage
+    storage.to(Bytes32)
 
   vp.proxy.rpc("eth_getTransactionCount") do(
     address: Address, quantityTag: BlockTag
@@ -229,12 +235,167 @@ proc installEthApiHandlers*(vp: VerifiedRpcProxy) =
 
     return gasEstimate.Quantity
 
-  # TODO:
+  vp.proxy.rpc("eth_getTransactionByHash") do(txHash: Hash32) -> TransactionObject:
+    let tx =
+      try:
+        await vp.rpcClient.eth_getTransactionByHash(txHash)
+      except CatchableError as e:
+        raise newException(ValueError, e.msg)
+
+    if tx.hash != txHash:
+      raise newException(
+        ValueError,
+        "the downloaded transaction hash doesn't match the requested transaction hash",
+      )
+
+    if not checkTxHash(tx, txHash):
+      raise
+        newException(ValueError, "the transaction doesn't hash to the provided hash")
+
+    return tx
+
+  vp.proxy.rpc("eth_getBlockReceipts") do(blockTag: BlockTag) -> Opt[seq[ReceiptObject]]:
+    let rxs = (await vp.getReceipts(blockTag)).valueOr:
+      raise newException(ValueError, error)
+    return Opt.some(rxs)
+
+  vp.proxy.rpc("eth_getTransactionReceipt") do(txHash: Hash32) -> ReceiptObject:
+    let
+      rx =
+        try:
+          await vp.rpcClient.eth_getTransactionReceipt(txHash)
+        except CatchableError as e:
+          raise newException(ValueError, e.msg)
+      rxs = (await vp.getReceipts(rx.blockHash)).valueOr:
+        raise newException(ValueError, error)
+
+    for r in rxs:
+      if r.transactionHash == txHash:
+        return r
+
+    raise newException(ValueError, "receipt couldn't be verified")
+
+  vp.proxy.rpc("eth_getLogs") do(filterOptions: FilterOptions) -> seq[LogObject]:
+    (await vp.getLogs(filterOptions)).valueOr:
+      raise newException(ValueError, error)
+
+  vp.proxy.rpc("eth_newFilter") do(filterOptions: FilterOptions) -> string:
+    if vp.filterStore.len >= MAX_FILTERS:
+      raise newException(ValueError, "FilterStore already full")
+
+    var
+      id: array[8, byte] # 64bits
+      strId: string
+
+    for i in 0 .. (MAX_ID_TRIES + 1):
+      if randomBytes(id) != len(id):
+        raise newException(
+          ValueError, "Couldn't generate a random identifier for the filter"
+        )
+
+      strId = toHex(id)
+
+      if not vp.filterStore.contains(strId):
+        break
+
+      if i >= MAX_ID_TRIES:
+        raise
+          newException(ValueError, "Couldn't create a unique identifier for the filter")
+
+    vp.filterStore[strId] =
+      FilterStoreItem(filter: filterOptions, blockMarker: Opt.none(Quantity))
+
+    return strId
+
+  vp.proxy.rpc("eth_uninstallFilter") do(filterId: string) -> bool:
+    if filterId in vp.filterStore:
+      vp.filterStore.del(filterId)
+      return true
+
+    return false
+
+  vp.proxy.rpc("eth_getFilterLogs") do(filterId: string) -> seq[LogObject]:
+    if filterId notin vp.filterStore:
+      raise newException(ValueError, "Filter doesn't exist")
+
+    (await vp.getLogs(vp.filterStore[filterId].filter)).valueOr:
+      raise newException(ValueError, error)
+
+  vp.proxy.rpc("eth_getFilterChanges") do(filterId: string) -> seq[LogObject]:
+    if filterId notin vp.filterStore:
+      raise newException(ValueError, "Filter doesn't exist")
+
+    let
+      filterItem = vp.filterStore[filterId]
+      filter = vp.resolveFilterTags(filterItem.filter).valueOr:
+        raise newException(ValueError, error)
+      # after resolving toBlock is always some and a number tag
+      toBlock = filter.toBlock.get().number
+
+    if filterItem.blockMarker.isSome() and toBlock <= filterItem.blockMarker.get():
+      raise newException(ValueError, "No changes for the filter since the last query")
+
+    let
+      fromBlock =
+        if filterItem.blockMarker.isSome():
+          Opt.some(
+            types.BlockTag(kind: bidNumber, number: filterItem.blockMarker.get())
+          )
+        else:
+          filter.fromBlock
+
+      changesFilter = FilterOptions(
+        fromBlock: fromBlock,
+        toBlock: filter.toBlock,
+        address: filter.address,
+        topics: filter.topics,
+        blockHash: filter.blockHash,
+      )
+      logObjs = (await vp.getLogs(changesFilter)).valueOr:
+        raise newException(ValueError, error)
+
+    # all logs verified so we can update blockMarker
+    vp.filterStore[filterId].blockMarker = Opt.some(toBlock)
+
+    return logObjs
+
+  vp.proxy.rpc("eth_blobBaseFee") do() -> UInt256:
+    let com = CommonRef.new(
+      DefaultDbMemory.newCoreDbRef(),
+      taskpool = nil,
+      config = chainConfigForNetwork(vp.chainId),
+      initializeDb = false,
+      statelessProviderEnabled = true, # Enables collection of witness keys
+    )
+
+    let header = (await vp.getHeader(blockId("latest"))).valueOr:
+      raise newException(ValueError, error)
+
+    if header.blobGasUsed.isNone():
+      raise newException(ValueError, "blobGasUsed missing from latest header")
+    if header.excessBlobGas.isNone():
+      raise newException(ValueError, "excessBlobGas missing from latest header")
+    let blobBaseFee =
+      getBlobBaseFee(header.excessBlobGas.get, com, com.toEVMFork(header)) *
+      header.blobGasUsed.get.u256
+    return blobBaseFee
+
+  vp.proxy.rpc("eth_gasPrice") do() -> Quantity:
+    let suggestedPrice = (await vp.suggestGasPrice()).valueOr:
+      raise newException(ValueError, error)
+
+    Quantity(suggestedPrice.uint64)
+
+  vp.proxy.rpc("eth_maxPriorityFeePerGas") do() -> Quantity:
+    let suggestedPrice = (await vp.suggestMaxPriorityGasPrice()).valueOr:
+      raise newException(ValueError, error)
+
+    Quantity(suggestedPrice.uint64)
+
   # Following methods are forwarded directly to the web3 provider and therefore
   # are not validated in any way.
   vp.proxy.registerProxyMethod("net_version")
   vp.proxy.registerProxyMethod("eth_sendRawTransaction")
-  vp.proxy.registerProxyMethod("eth_getTransactionReceipt")
 
 # Used to be in eth1_monitor.nim; not sure why it was deleted,
 # so I copied it here. --Adam

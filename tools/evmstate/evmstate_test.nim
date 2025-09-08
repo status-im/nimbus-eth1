@@ -1,5 +1,5 @@
 # Nimbus
-# Copyright (c) 2022-2024 Status Research & Development GmbH
+# Copyright (c) 2022-2025 Status Research & Development GmbH
 # Licensed under either of
 #  * Apache License, version 2.0, ([LICENSE-APACHE](LICENSE-APACHE) or
 #    http://www.apache.org/licenses/LICENSE-2.0)
@@ -21,8 +21,7 @@ type
     dispName: string
 
 const
-  inputFolder = "tests/fixtures/eth_tests/GeneralStateTests"
-  #inputFolder = "tests/fixtures/eth_tests/EIPTests/StateTests"
+  inputFolder = "tests/fixtures/eest/state_tests"
   testData = "tools/evmstate/testdata"
 
 proc runTest(filename: string): bool =
@@ -36,7 +35,7 @@ proc runTest(filename: string): bool =
   true
 
 template skipTest(folder, name: untyped): bool =
-  skipNewGSTTests(folder, name)
+  slowGSTTests(folder, name)
 
 proc collectFileNames(inputPath: string, map: var StatusMap, fileNames: var seq[TestFile]) =
   for fileName in walkDirRec(inputPath):

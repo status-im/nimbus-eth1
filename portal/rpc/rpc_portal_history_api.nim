@@ -37,9 +37,7 @@ TraceResponse.useDefaultSerializationIn JrpcConv
 # TODO: It would be cleaner to use the existing getContent/getBlockBody/getReceipts calls for
 # less code duplication + automatic retries, but the specific error messages + extra content
 # info would need to be added to the existing calls.
-proc installPortalFinalizedHistoryApiHandlers*(
-    rpcServer: RpcServer, p: PortalProtocol
-) =
+proc installPortalHistoryApiHandlers*(rpcServer: RpcServer, p: PortalProtocol) =
   rpcServer.rpc("portal_historyGetContent") do(
     contentKeyBytes: string, headerBytes: string
   ) -> ContentInfo:

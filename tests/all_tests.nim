@@ -22,9 +22,11 @@ import
     test_forkid,
     test_genesis,
     test_getproof_json,
+    test_aristo_proof,
     test_jwt_auth,
     test_kvt,
     test_ledger,
+    test_stateroot_mismatch,
     test_op_arith,
     test_op_bit,
     test_op_custom,
@@ -40,7 +42,7 @@ import
     test_stateless_witness_types,
     test_stateless_witness_generation,
     test_log_index,
+    test_stateless_witness_verification,
     # These two suites are much slower than all the rest, so run them last
-    test_blockchain_json,
     test_generalstate_json,
 ]
