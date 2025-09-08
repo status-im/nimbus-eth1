@@ -8,7 +8,7 @@
 # at your option. This file may not be copied, modified, or distributed except
 # according to those terms.
 
-FROM debian:bullseye-slim
+FROM --platform=linux/amd64 debian:trixie-slim
 
 SHELL ["/bin/bash", "-c"]
 
