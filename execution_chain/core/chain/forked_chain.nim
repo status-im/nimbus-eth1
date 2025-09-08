@@ -914,8 +914,10 @@ proc blockByHash*(c: ForkedChainRef, blockHash: Hash32): Result[Block, string] =
     if c.isPortalActive:
       var blockBodyPortal = ?c.portal.getBlockBodyByHeader(header)
       return ok(EthBlock.init(move(header), move(blockBodyPortal)))
-    else:
+    elif blockBody.isErr:
       return err(blockBody.error)
+    else:
+      return err("missing txroot")
 
   ok(EthBlock.init(move(header), move(blockBody.get())))
 
