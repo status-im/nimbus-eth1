@@ -335,23 +335,27 @@ proc verifyProof*(
   verifyProof(nodes, root, path, visitedNodes)
 
 proc convertLeaf(
-    link: openArray[byte],
+    leafNode: openArray[byte],
     segm: NibblesBuf,
     isStorage: bool): Result[NodeRef, AristoError] {.gcsafe, raises: [RlpError]} =
 
   let node =
     if isStorage:
-      let slotValue = rlp.decode(link, UInt256)
+      let slotValue = rlp.decode(leafNode, UInt256)
       NodeRef(vtx: StoLeafRef.init(segm, slotValue))
-    else: # account leaf
+    else: # Account leaf
       let
-        acc = rlp.decode(link, Account)
-        aristoAcc = AristoAccount(nonce: acc.nonce, balance: acc.balance, codeHash: acc.codeHash)
+        acc = rlp.decode(leafNode, Account)
+        aristoAcc = AristoAccount(
+          nonce: acc.nonce,
+          balance: acc.balance,
+          codeHash: acc.codeHash)
         stoID = (acc.storageRoot != EMPTY_ROOT_HASH, default(VertexID))
-        node = NodeRef(vtx: AccLeafRef.init(segm, aristoAcc, stoID))
-      node.key[0] = HashKey.fromBytes(acc.storageRoot.data).valueOr:
+        n = NodeRef(vtx: AccLeafRef.init(segm, aristoAcc, stoID))
+
+      n.key[0] = HashKey.fromBytes(acc.storageRoot.data).valueOr:
         return err(PartTrkLinkExpected)
-      node
+      n
 
   ok(node)
 
@@ -366,52 +370,55 @@ proc convertSubtrie(
     # Since we are processing a subtrie some nodes are expected to be missing
     return ok()
 
-  var
-    rlpNode = rlpFromBytes(src.getOrDefault(key))
-    node = NodeRef()
-  case rlpNode.listLen()
-  of 2:
-    let
-      (isLeaf, segm) = NibblesBuf.fromHexPrefix(rlpNode.listElem(0).toBytes())
-      link = rlpNode.listElem(1).rlpNodeToBytes() # link or payload
-    if isLeaf:
-      node = ?convertLeaf(link, segm, isStorage)
-      if not isStorage:
-        let accLeaf = AccLeafRef(node.vtx)
-        if accLeaf.stoID.isValid:
-          ?convertSubtrie(node.key[0].to(Hash32), src, dst, true)
-    else: # extension node
-      let k = HashKey.fromBytes(link).valueOr:
-        return err(PartTrkLinkExpected)
-      # TODO: how to handle embedded nodes
+  var rlpNode = rlpFromBytes(src.getOrDefault(key))
 
-      # Convert the child branch node which will be merged with this extension node
-      ?convertSubtrie(k.to(Hash32), src, dst, isStorage)
-      doAssert(dst.contains(k))
-
+  let node =
+    case rlpNode.listLen()
+    of 2:
       let
-        childNode = dst.getOrDefault(k)
-        childBranch = BranchRef(childNode.vtx)
-      node.key = childNode.key
-      node.vtx = ExtBranchRef.init(segm, childBranch.startVid, childBranch.used)
-
-      # Remove the childNode because it's branch was copied into this node
-      dst.del(k)
-
-  of 17: # branch node
-    let branch = BranchRef.init(default(VertexID), 0)
-    for i in 0 ..< 16:
-      let
-        link = rlpNode.listElem(i).rlpNodeToBytes()
-        k = HashKey.fromBytes(link).valueOr:
+        (isLeaf, segm) = NibblesBuf.fromHexPrefix(rlpNode.listElem(0).toBytes())
+        link = rlpNode.listElem(1).rlpNodeToBytes() # link or payload
+      if isLeaf:
+        let n = ?convertLeaf(link, segm, isStorage)
+        if not isStorage and AccLeafRef(n.vtx).stoID.isValid:
+          # Convert the storage subtrie
+          ?convertSubtrie(n.key[0].to(Hash32), src, dst, isStorage = true)
+        n
+      else: # Extension node
+        let k = HashKey.fromBytes(link).valueOr:
           return err(PartTrkLinkExpected)
-      if k.len() == 32:
-        discard branch.setUsed(i.uint8, true)
+
+        # Convert the child branch node which will be merged with this extension node
         ?convertSubtrie(k.to(Hash32), src, dst, isStorage)
-      node.key[i] = k
-    node.vtx = branch
-  else:
-    return err(PartTrkGarbledNode)
+        doAssert(dst.contains(k))
+
+        let
+          childNode = dst.getOrDefault(k)
+          childBranch = BranchRef(childNode.vtx)
+
+        # Remove the childNode because it's branch was copied into this node
+        dst.del(k)
+
+        NodeRef(
+          key: childNode.key,
+          vtx: ExtBranchRef.init(segm, childBranch.startVid, childBranch.used))
+
+    of 17: # Branch node
+      var key: array[16, HashKey]
+      let branch = BranchRef.init(default(VertexID), 0)
+      for i in 0 ..< 16:
+        let
+          link = rlpNode.listElem(i).rlpNodeToBytes()
+          k = HashKey.fromBytes(link).valueOr:
+            return err(PartTrkLinkExpected)
+        if k.len() > 0:
+          discard branch.setUsed(i.uint8, true)
+          ?convertSubtrie(k.to(Hash32), src, dst, isStorage)
+        key[i] = k
+      NodeRef(key: key, vtx: branch)
+
+    else:
+      return err(PartTrkGarbledNode)
 
   let hashKey = HashKey.fromBytes(key.data).valueOr:
     return err(PartTrkLinkExpected)
@@ -428,7 +435,6 @@ proc putSubtrie(
     return err(PartTrkFollowUpKeyMismatch)
 
   let node = nodes.getOrDefault(key)
-
   case node.vtx.vType:
     of AccLeaf:
       let accVtx = AccLeafRef(node.vtx)
@@ -455,8 +461,14 @@ proc putSubtrie(
 
       for n, subvid in node.vtx.pairs():
         let
-          k = node.key[n]
           r = (rvid.root, subvid)
+          k = if node.key[n].len() < 32:
+                # Embedded nodes are stored in the nodes map indexed by
+                # a HashKey containing a hash of the node data rather than
+                # a HashKey containing the embedded node itself
+                node.key[n].to(Hash32).to(HashKey)
+              else:
+                node.key[n]
         if nodes.contains(k):
           ?db.putSubtrie(k, nodes, r)
         else:
@@ -467,7 +479,7 @@ proc putSubtrie(
 
   ok()
 
-proc putSubTrie*(
+proc putSubtrie*(
     db: AristoTxRef,
     stateRoot: Hash32,
     nodes: Table[Hash32, seq[byte]]): Result[void, AristoError] =

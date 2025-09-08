@@ -446,7 +446,7 @@ proc recast*(
     codeHash:    accRec.codeHash,
     storageRoot: rc)
 
-proc putSubTrie*(
+proc putSubtrie*(
     acc: CoreDbTxRef;
     stateRoot: Hash32,
     nodes: Table[Hash32, seq[byte]]): CoreDbRc[void] =
@@ -455,7 +455,7 @@ proc putSubTrie*(
   ## the account trie starting from the state root and then eventually
   ## walking down each storage trie.
 
-  acc.aTx.putSubTrie(stateRoot, nodes).isOkOr:
+  acc.aTx.putSubtrie(stateRoot, nodes).isOkOr:
     return err(error.toError(""))
 
   ok()

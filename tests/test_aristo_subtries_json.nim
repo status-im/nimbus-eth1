@@ -73,26 +73,26 @@ suite "Aristo subtries json tests":
 
         # Check the state root of the subtrie
         check:
-          subtrieTxFrame.putSubTrie(stateRoot, nodes).isOk()
+          subtrieTxFrame.putSubtrie(stateRoot, nodes).isOk()
           subtrieTxFrame.getStateRoot().get() == stateRoot
 
         # Get the values from the subtrie
         let
           fullTrieLedger = LedgerRef.init(txFrame.txFrameBegin())
-          subTrieLedger = LedgerRef.init(subtrieTxFrame.txFrameBegin())
+          subtrieLedger = LedgerRef.init(subtrieTxFrame.txFrameBegin())
         check:
           fullTrieLedger.getStateRoot() == stateRoot
-          subTrieLedger.getBalance(address) == account.balance
+          subtrieLedger.getBalance(address) == account.balance
 
         # Update values in the subtrie and check that the state root matches the full trie
         fullTrieLedger.addBalance(address, 1.u256)
         fullTrieLedger.persist()
-        subTrieLedger.addBalance(address, 1.u256)
-        subTrieLedger.persist()
+        subtrieLedger.addBalance(address, 1.u256)
+        subtrieLedger.persist()
 
         check:
           fullTrieLedger.getStateRoot() != stateRoot
-          fullTrieLedger.getStateRoot() == subTrieLedger.getStateRoot()
+          fullTrieLedger.getStateRoot() == subtrieLedger.getStateRoot()
 
   test "Single account proof with storage proofs subtries and check stateRoot":
     for file in genesisFiles:
@@ -122,18 +122,18 @@ suite "Aristo subtries json tests":
 
         # Check the state root of the subtrie
         check:
-          subtrieTxFrame.putSubTrie(stateRoot, nodes).isOk()
+          subtrieTxFrame.putSubtrie(stateRoot, nodes).isOk()
           subtrieTxFrame.getStateRoot().get() == stateRoot
 
         # Get the values from the subtrie
         let
           fullTrieLedger = LedgerRef.init(txFrame.txFrameBegin())
-          subTrieLedger = LedgerRef.init(subtrieTxFrame.txFrameBegin())
+          subtrieLedger = LedgerRef.init(subtrieTxFrame.txFrameBegin())
         check:
           fullTrieLedger.getStateRoot() == stateRoot
-          subTrieLedger.getBalance(address) == account.balance
+          subtrieLedger.getBalance(address) == account.balance
         for k, v in account.storage.pairs():
-          check subTrieLedger.getStorage(address, k) == v
+          check subtrieLedger.getStorage(address, k) == v
 
         # Update values in the subtrie and check that the state root matches the full trie
         fullTrieLedger.addBalance(address, 1.u256)
@@ -141,14 +141,14 @@ suite "Aristo subtries json tests":
           fullTrieLedger.setStorage(address, k, v + 1.u256)
         fullTrieLedger.persist()
 
-        subTrieLedger.addBalance(address, 1.u256)
+        subtrieLedger.addBalance(address, 1.u256)
         for k, v in account.storage.pairs():
-          subTrieLedger.setStorage(address, k, v + 1.u256)
-        subTrieLedger.persist()
+          subtrieLedger.setStorage(address, k, v + 1.u256)
+        subtrieLedger.persist()
 
         check:
           fullTrieLedger.getStateRoot() != stateRoot
-          fullTrieLedger.getStateRoot() == subTrieLedger.getStateRoot()
+          fullTrieLedger.getStateRoot() == subtrieLedger.getStateRoot()
 
   test "Single account and storage multiproof subtries and check stateRoot":
     for file in genesisFiles:
@@ -179,7 +179,7 @@ suite "Aristo subtries json tests":
           paths.len() == 1
           proofNodes.len() > 0
           nodes.len() > 0
-          txFrame.putSubTrie(stateRoot, nodes).isOk()
+          txFrame.putSubtrie(stateRoot, nodes).isOk()
           txFrame.getStateRoot().get() == stateRoot
 
   test "All accounts and storage multiproof subtries and check stateRoot":
@@ -212,5 +212,69 @@ suite "Aristo subtries json tests":
         paths.len() == accounts.len()
         proofNodes.len() > 0
         nodes.len() > 0
-        txFrame.putSubTrie(stateRoot, nodes).isOk()
+        txFrame.putSubtrie(stateRoot, nodes).isOk()
         txFrame.getStateRoot().get() == stateRoot
+
+  # By using a small value (1 in this case) and storing a large number of keys
+  # this test reproduces the scenario where leaf trie nodes get embedded into
+  # the parent node because the len of the rlp encoded node is less than 32.
+  test "Embedded storage leafs and check stateRoot":
+    const iterations = 110_000
+
+    let
+      coreDb = newCoreDbRef(DefaultDbMemory)
+      txFrame = coreDb.baseTxFrame().txFrameBegin()
+      ledger = LedgerRef.init(txFrame)
+      address = address"0xa94f5374fce5edbc8e2a8697c15331677e6ebf0b"
+      slotValue = 1.u256
+
+    ledger.setBalance(address, 10.u256)
+
+    var slotPaths: seq[Hash32]
+    for i in 0 ..< iterations:
+      let slot = i.u256
+      ledger.setStorage(address, slot, slotValue)
+      slotPaths.add(keccak256(slot.toBytesBE()))
+    ledger.persist()
+
+    let stateRoot = ledger.getStateRoot()
+
+    var paths: Table[Hash32, seq[Hash32]]
+    paths[keccak256(address.data())] = slotPaths
+
+    var proofNodes: seq[seq[byte]]
+    ledger.txFrame.multiProof(paths, proofNodes).expect("ok")
+    let nodes = toNodesTable(proofNodes)
+
+    let
+      subtrieDb = newCoreDbRef(DefaultDbMemory)
+      subtrieTxFrame = subtrieDb.baseTxFrame().txFrameBegin()
+
+    check:
+      paths.len() == 1
+      proofNodes.len() > 0
+      nodes.len() > 0
+      subtrieTxFrame.putSubtrie(stateRoot, nodes).isOk()
+      subtrieTxFrame.getStateRoot().get() == stateRoot
+
+    # Get the values from the subtrie
+    let
+      fullTrieLedger = LedgerRef.init(txFrame.txFrameBegin())
+      subtrieLedger = LedgerRef.init(subtrieTxFrame.txFrameBegin())
+    check:
+      fullTrieLedger.getStateRoot() == stateRoot
+      subtrieLedger.getBalance(address) == 10.u256
+    for i in 0 ..< iterations:
+      check subtrieLedger.getStorage(address, i.u256) == slotValue
+
+    # Update values in the subtrie and check that the state root matches the full trie
+    fullTrieLedger.addBalance(address, 1000.u256)
+    fullTrieLedger.setStorage(address, 0.u256, 100.u256)
+    fullTrieLedger.persist()
+    subtrieLedger.addBalance(address, 1000.u256)
+    subtrieLedger.setStorage(address, 0.u256, 100.u256)
+    subtrieLedger.persist()
+
+    check:
+      fullTrieLedger.getStateRoot() != stateRoot
+      subtrieLedger.getStateRoot() == fullTrieLedger.getStateRoot()
