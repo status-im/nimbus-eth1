@@ -235,7 +235,7 @@ proc classifyValid(xp: TxPoolRef; tx: Transaction, sender: Address): bool =
   true
 
 proc validateBlobTransactionWrapper(tx: PooledTransaction, fork: EVMFork):
-                                     Result[void, string] {.raises: [].} =
+                                     Result[void, string] =
   if tx.blobsBundle.isNil:
     return err("tx wrapper is none")
 

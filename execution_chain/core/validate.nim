@@ -102,8 +102,7 @@ proc validateHeader(
   ok()
 
 proc validateUncles(com: CommonRef; header: Header; txFrame: CoreDbTxRef,
-                    uncles: openArray[Header]): Result[void,string]
-                      {.gcsafe, raises: [].} =
+                    uncles: openArray[Header]): Result[void,string] =
   let hasUncles = uncles.len > 0
   let shouldHaveUncles = header.ommersHash != EMPTY_UNCLE_HASH
 
@@ -376,8 +375,7 @@ proc validateHeaderAndKinship*(
     blk: Block;
     parent: Header;
     txFrame: CoreDbTxRef
-      ): Result[void, string]
-      {.gcsafe, raises: [].} =
+      ): Result[void, string] =
   template header: Header = blk.header
 
   if header.isGenesis:

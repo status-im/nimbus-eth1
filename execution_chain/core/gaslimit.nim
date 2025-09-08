@@ -54,8 +54,7 @@ proc calcEip1599BaseFee*(com: CommonRef; parent: Header): UInt256 =
 
 # consensus/misc/eip1559.go(32): func VerifyEip1559Header(config [..]
 proc verifyEip1559Header(com: CommonRef;
-                         parent, header: Header): Result[void, string]
-                        {.raises: [].} =
+                         parent, header: Header): Result[void, string] =
   ## Verify that the gas limit remains within allowed bounds
   let limit = if com.isLondonOrLater(parent.number):
                 parent.gasLimit
