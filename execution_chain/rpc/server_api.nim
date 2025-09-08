@@ -717,6 +717,8 @@ proc setupServerAPI*(api: ServerAPIRef, server: RpcServer, ctx: EthContext) =
 
   server.rpc("eth_config") do() -> EthConfigObject:
     ## Returns the current, next and last configuration
+    ## Doesn't work pre-shangai
+    ## https://eips.ethereum.org/EIPS/eip-7910
     let currentFork = api.com.toHardFork(api.chain.latestHeader.forkDeterminationInfo)
 
     if currentFork < Shanghai:
