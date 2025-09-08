@@ -437,8 +437,13 @@ proc validateBlock(c: ForkedChainRef,
       c.latestFinalizedBlockNumber)
 
   let
+    # As a memory optimization we move the HashKeys (kMap) stored in the
+    # parent txFrame to the new txFrame unless the block number is one
+    # greater than a block which is expected to be persisted based on the
+    # persistBatchSize
+    moveParentHashKeys = c.persistBatchSize > 1 and (blk.header.number mod c.persistBatchSize) != 1
     parentFrame = parent.txFrame
-    txFrame = parentFrame.txFrameBegin
+    txFrame = parentFrame.txFrameBegin(moveParentHashKeys)
 
   # TODO shortLog-equivalent for eth types
   debug "Validating block",
@@ -894,25 +899,31 @@ proc blockByHash*(c: ForkedChainRef, blockHash: Hash32): Result[Block, string] =
   # 4. Client software MAY NOT respond to requests for finalized blocks by hash.
   c.hashToBlock.withValue(blockHash, loc):
     return ok(loc[].blk)
-  let blk = c.baseTxFrame.getEthBlock(blockHash)
+  var header = ?c.baseTxFrame.getBlockHeader(blockHash)
+  var blockBody = c.baseTxFrame.getBlockBody(header)
   # Serves portal data if block not found in db
-  if blk.isErr or (blk.get.transactions.len == 0 and blk.get.header.transactionsRoot != zeroHash32):
+  if blockBody.isErr or (blockBody.get.transactions.len == 0 and header.transactionsRoot != zeroHash32):
     if c.isPortalActive:
-      return c.portal.getBlockByHash(blockHash)
-  blk
+      var blockBodyPortal = ?c.portal.getBlockBodyByHeader(header)
+      return ok(EthBlock.init(move(header), move(blockBodyPortal)))
+    else:
+      return err(blockBody.error)
+
+  ok(EthBlock.init(move(header), move(blockBody.get())))
 
 proc payloadBodyV1ByHash*(c: ForkedChainRef, blockHash: Hash32): Result[ExecutionPayloadBodyV1, string] =
   c.hashToBlock.withValue(blockHash, loc):
     return ok(toPayloadBody(loc[].blk))
 
-  let header = ?c.baseTxFrame.getBlockHeader(blockHash)
+  var header = ?c.baseTxFrame.getBlockHeader(blockHash)
   var blk = c.baseTxFrame.getExecutionPayloadBodyV1(header)
 
   # Serves portal data if block not found in db
   if blk.isErr or (blk.get.transactions.len == 0 and header.transactionsRoot != zeroHash32):
     if c.isPortalActive:
-      let blk = ?c.portal.getBlockByHash(blockHash)
-      return ok(toPayloadBody(blk))
+      var blockBodyPortal = ?c.portal.getBlockBodyByHeader(header)
+      # Same as above
+      return ok(toPayloadBody(EthBlock.init(move(header), move(blockBodyPortal))))
 
   move(blk)
 
@@ -921,16 +932,16 @@ proc payloadBodyV1ByNumber*(c: ForkedChainRef, number: BlockNumber): Result[Exec
     return err("Requested block number not exists: " & $number)
 
   if number <= c.base.number:
-    let
-      header = ?c.baseTxFrame.getBlockHeader(number)
-      blk = c.baseTxFrame.getExecutionPayloadBodyV1(header)
+    var header = ?c.baseTxFrame.getBlockHeader(number)
+    let blk = c.baseTxFrame.getExecutionPayloadBodyV1(header)
 
     # Txs not there in db - Happens during era1/era import, when we don't store txs and receipts
     if blk.isErr or (blk.get.transactions.len == 0 and header.transactionsRoot != emptyRoot):
       # Serves portal data if block not found in database
       if c.isPortalActive:
-        let blk = ?c.portal.getBlockByNumber(number)
-        return ok(toPayloadBody(blk))
+        var blockBodyPortal = ?c.portal.getBlockBodyByHeader(header)
+        # same as above
+        return ok(toPayloadBody(EthBlock.init(move(header), move(blockBodyPortal))))
 
     return blk
 
@@ -945,14 +956,18 @@ proc blockByNumber*(c: ForkedChainRef, number: BlockNumber): Result[Block, strin
     return err("Requested block number not exists: " & $number)
 
   if number <= c.base.number:
-    let blk = c.baseTxFrame.getEthBlock(number)
+    var header = ?c.baseTxFrame.getBlockHeader(number)
+    var blockBody = c.baseTxFrame.getBlockBody(header)
     # Txs not there in db - Happens during era1/era import, when we don't store txs and receipts
-    if blk.isErr or (blk.get.transactions.len == 0 and blk.get.header.transactionsRoot != emptyRoot):
+    if blockBody.isErr or (blockBody.get.transactions.len == 0 and header.transactionsRoot != emptyRoot):
       # Serves portal data if block not found in database
       if c.isPortalActive:
-        return c.portal.getBlockByNumber(number)
+        var blockBodyPortal = ?c.portal.getBlockBodyByHeader(header)
+        return ok(EthBlock.init(move(header), move(blockBodyPortal)))
+      else:
+        return err(blockBody.error)
     else:
-      return blk
+      return ok(EthBlock.init(move(header), move(blockBody.get())))
 
   loopIt(c.latest):
     if number >= it.number:

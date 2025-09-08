@@ -61,7 +61,7 @@ proc updateTotal(t: AristoDbProfListRef; fnInx: uint) =
 
 # ---------------------
 
-func ppUs(elapsed: Duration): string {.gcsafe, raises: [].} =
+func ppUs(elapsed: Duration): string =
   result = $elapsed.inMicroseconds
   let ns = elapsed.inNanoseconds mod 1_000 # fraction of a micro second
   if ns != 0:
@@ -70,7 +70,7 @@ func ppUs(elapsed: Duration): string {.gcsafe, raises: [].} =
     result &= &".{du:02}"
   result &= "us"
 
-func ppMs(elapsed: Duration): string {.gcsafe, raises: [].} =
+func ppMs(elapsed: Duration): string =
   result = $elapsed.inMilliseconds
   let ns = elapsed.inNanoseconds mod 1_000_000 # fraction of a milli second
   if ns != 0:
@@ -79,7 +79,7 @@ func ppMs(elapsed: Duration): string {.gcsafe, raises: [].} =
     result &= &".{dm:02}"
   result &= "ms"
 
-func ppSecs(elapsed: Duration): string {.gcsafe, raises: [].} =
+func ppSecs(elapsed: Duration): string =
   result = $elapsed.inSeconds
   let ns = elapsed.inNanoseconds mod 1_000_000_000 # fraction of a second
   if ns != 0:
@@ -88,7 +88,7 @@ func ppSecs(elapsed: Duration): string {.gcsafe, raises: [].} =
     result &= &".{ds:02}"
   result &= "s"
 
-func ppMins(elapsed: Duration): string {.gcsafe, raises: [].} =
+func ppMins(elapsed: Duration): string =
   result = $elapsed.inMinutes
   let ns = elapsed.inNanoseconds mod 60_000_000_000 # fraction of a minute
   if ns != 0:

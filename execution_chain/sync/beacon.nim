@@ -25,10 +25,6 @@ export
 logScope:
   topics = "beacon sync"
 
-var beaconSyncConfigHook = BeaconSyncConfigHook(nil)
-  ## Optional configuration request hook. This must be initialised before
-  ## the `BeaconSyncRef.init()` constructor is called to be effective.
-
 # ------------------------------------------------------------------------------
 # Virtual methods/interface, `mixin` functions
 # ------------------------------------------------------------------------------
@@ -61,55 +57,52 @@ proc runPeer(buddy: BeaconBuddyRef): Future[Duration] {.async: (raises: []).} =
 # Public functions
 # ------------------------------------------------------------------------------
 
-proc config*(
-    _: type BeaconSyncRef;
-    configCB: BeaconSyncConfigHook;
-      ): BeaconSyncConfigHook =
-  ## Set config hook to be run by the `BeaconSyncRef.init()` constructor
-  ## request. If activated, it will alse make `shouldRun()` return `true`.
-  ## The function returns the previous hook if there was any, or `nil`.
-  ##
-  var oldHook = beaconSyncConfigHook
-  beaconSyncConfigHook = configCB
-  move oldHook
-
 proc init*(
     T: type BeaconSyncRef;
+    configCB = BeaconSyncConfigHook(nil);
+      ): T =
+  ## Constructor
+  ##
+  ## The `configCB` allows to specify a final configuration task to be run at
+  ## the end of the `config()` function.
+  ##
+  T(lazyConfigHook: configCB)
+
+proc config*(
+    desc: BeaconSyncRef;
     ethNode: EthereumNode;
     chain: ForkedChainRef;
     maxPeers: int;
-    haveEngine: bool;
-      ): T =
-  var desc = T()
+      ) =
+  ## Complete `BeaconSyncRef` descriptor initialisation.
+  ##
+  ## Note that the `init()` constructor might have specified a configuration
+  ## task to be run at the end of the `config()` function.
+  ##
+  doAssert desc.ctx.isNil # This can only run once
   desc.initSync(ethNode, maxPeers)
   desc.ctx.pool.chain = chain
-  desc.ctx.shouldRun = (0 < maxPeers and haveEngine)
 
-  if not beaconSyncConfigHook.isNil:
-    beaconSyncConfigHook(desc)
-    beaconSyncConfigHook = nil
-    desc.ctx.shouldRun = true
+  if not desc.lazyConfigHook.isNil:
+    desc.lazyConfigHook(desc)
+    desc.lazyConfigHook = nil
 
-  desc
-
-proc shouldRun*(desc: BeaconSyncRef): bool =
-  ## Getter
-  desc.ctx.shouldRun
-
-proc targetInit*(desc: BeaconSyncRef; hex: string; isFinal: bool): bool =
+proc configTarget*(desc: BeaconSyncRef; hex: string; isFinal: bool): bool =
   ## Set up inital target sprint (if any, mainly for debugging)
+  doAssert not desc.ctx.isNil
   try:
     desc.ctx.headersTargetRequest(Hash32.fromHex(hex), isFinal, "init")
-    desc.ctx.shouldRun = true
     return true
   except ValueError:
     discard
   # false
 
 proc start*(desc: BeaconSyncRef): bool =
+  doAssert not desc.ctx.isNil
   desc.startSync()
 
 proc stop*(desc: BeaconSyncRef) {.async.} =
+  doAssert not desc.ctx.isNil
   await desc.stopSync()
 
 # ------------------------------------------------------------------------------

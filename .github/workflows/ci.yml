@@ -13,12 +13,9 @@ on:
   push:
     paths-ignore:
       - 'doc/**'
-      - 'docs/**'
+      - 'portal/docs/**'
       - '**/*.md'
-      - '**/*.yml'
       - 'hive_integration/**'
-      - 'portal/**'
-      - '.github/workflows/portal*.yml'
       - 'nimbus_verified_proxy/**'
       - '.github/workflows/nimbus_verified_proxy.yml'
       - '.github/workflows/build_base_image.yml'
@@ -27,12 +24,9 @@ on:
   pull_request:
     paths-ignore:
       - 'doc/**'
-      - 'docs/**'
+      - 'portal/docs/**'
       - '**/*.md'
-      - '**/*.yml'
       - 'hive_integration/**'
-      - 'portal/**'
-      - '.github/workflows/portal*.yml'
       - 'nimbus_verified_proxy/**'
       - '.github/workflows/nimbus_verified_proxy.yml'
       - '.github/workflows/build_base_image.yml'

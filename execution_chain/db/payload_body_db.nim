@@ -54,7 +54,7 @@ proc getExecutionPayloadBodyV1*(
       var wds: seq[WithdrawalV1]
       body.withdrawals = Opt.some(wds)
       return ok(move(body))
-      
+
     wrapRlpException info:
       let bytes = db.get(withdrawalsKey(withdrawalsRoot).toOpenArray).valueOr:
         if error.error != KvtNotFound:
@@ -66,13 +66,13 @@ proc getExecutionPayloadBodyV1*(
             wds.add(wd)
           body.withdrawals = Opt.some(wds)
         return ok(move(body))
-    
+
       var list = rlp.decode(bytes, seq[WithdrawalV1])
       body.withdrawals = Opt.some(move(list))
 
   ok(move(body))
 
-func toPayloadBody*(blk: Block): ExecutionPayloadBodyV1 {.raises:[].}  =
+func toPayloadBody*(blk: Block): ExecutionPayloadBodyV1 =
   var wds: seq[WithdrawalV1]
   if blk.withdrawals.isSome:
     for w in blk.withdrawals.get:

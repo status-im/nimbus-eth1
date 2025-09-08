@@ -23,6 +23,7 @@ import
     confutils/defs,
     confutils/std/net as confnet,
     confutils/toml/defs as tomldefs,
+    confutils/json/defs as jsdefs,
     json_serialization/std/net as jsnet,
     toml_serialization/std/net as tomlnet,
     results,
@@ -36,7 +37,8 @@ import
   ./common/chain_config,
   ./db/opts
 
-export net, defs, jsnet, nimbus_binary_common
+export net, defs, jsdefs, jsnet, nimbus_binary_common
+
 const
 
   # e.g.:

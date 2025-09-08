@@ -37,7 +37,6 @@ import
 const
   enrFileName = "portal_node.enr"
   lockFileName = "portal_node.lock"
-  contentDbFileName = "contentdb"
 
 chronicles.formatIt(IoErrorCode):
   $it
@@ -188,12 +187,6 @@ proc run(portalClient: PortalClient, config: PortalConf) {.raises: [CatchableErr
     # decide whether or not to force prune, instead of this flag.
     db.forcePrune(d.localNode.id, radius)
     db.close()
-
-  # Check for legacy db naming and move to the new naming in case it exist
-  # TODO: Remove this at some point in the future
-  let dbPath =
-    dataDir / config.network.getDbDirectory() / "contentdb_" &
-    d.localNode.id.toBytesBE().toOpenArray(0, 8).toHex()
 
   ## Portal node setup
   let

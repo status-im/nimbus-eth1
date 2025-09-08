@@ -15,7 +15,7 @@ import
   stew/byteutils,
   stint,
   json_serialization,
-  json_serialization/stew/results,
+  json_serialization/pkg/results,
   eth/common/eth_types_rlp,
   eth/common/keys,
   eth/common/blocks,

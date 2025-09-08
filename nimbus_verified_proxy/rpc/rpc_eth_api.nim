@@ -359,7 +359,7 @@ proc installEthApiHandlers*(vp: VerifiedRpcProxy) =
 
     return logObjs
 
-  vp.proxy.rpc("eth_blobBaseFee") do() -> Quantity:
+  vp.proxy.rpc("eth_blobBaseFee") do() -> UInt256:
     let com = CommonRef.new(
       DefaultDbMemory.newCoreDbRef(),
       taskpool = nil,
@@ -378,9 +378,7 @@ proc installEthApiHandlers*(vp: VerifiedRpcProxy) =
     let blobBaseFee =
       getBlobBaseFee(header.excessBlobGas.get, com, com.toEVMFork(header)) *
       header.blobGasUsed.get.u256
-    if blobBaseFee > high(uint64).u256:
-      raise newException(ValueError, "blobBaseFee is bigger than uint64.max")
-    return Quantity(blobBaseFee.truncate(uint64))
+    return blobBaseFee
 
   vp.proxy.rpc("eth_gasPrice") do() -> Quantity:
     let suggestedPrice = (await vp.suggestGasPrice()).valueOr:
