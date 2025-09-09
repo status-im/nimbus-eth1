@@ -97,10 +97,14 @@ proc putKeyAtLevel(
   ok()
 
 func init(T: type AristoTrieWriter): T =
-  result.tracker = DynamicRlpLengthTracker()
-  result.tracker.initLengthTracker()
-  result.twoPassWriter = initTwoPassWriter(result.tracker)
-  result.hashWriter = initHashWriter(result.tracker)
+  var trk = DynamicRlpLengthTracker()
+  trk.initLengthTracker()
+
+  AristoTrieWriter(
+    tracker: trk,
+    twoPassWriter: initTwoPassWriter(trk),
+    hashWriter: initHashWriter(trk)
+  )
 
 func clear(self: var AristoTrieWriter) =
   self.tracker.clear()
