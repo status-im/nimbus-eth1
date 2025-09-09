@@ -8,17 +8,19 @@
 # at your option. This file may not be copied, modified, or distributed except
 # according to those terms.
 
+# Bring in the static QEMU binary (works when cross-building)
+FROM --platform=$BUILDPLATFORM multiarch/qemu-user-static:latest AS qemu
+
 FROM --platform=linux/arm64/v8 debian:trixie-slim
 
 SHELL ["/bin/bash", "-c"]
 
-# We need the host's registered binfmt_misc "interpreter" inside the container,
-# for that transparent virtualisation to work.
-COPY "qemu-aarch64-static" "/usr/bin/"
+# Only needed when cross-building, but harmless otherwise
+COPY --from=qemu /usr/bin/qemu-aarch64-static /usr/bin/
 
 # Likely to match the first regular user:group created on the host.
-RUN addgroup --gid 1000 user; \
-	adduser --disabled-password --gecos '' --uid 1000 --gid 1000 user;
+RUN groupadd -g 1000 user && \
+    useradd -u 1000 -g 1000 -c "" -m -s /bin/bash -p '*' user
 
 USER user
 
@@ -28,4 +30,3 @@ STOPSIGNAL SIGINT
 COPY "nimbus-eth1" "/home/user/nimbus-eth1/"
 WORKDIR "/home/user/nimbus-eth1/"
 ENTRYPOINT ["/home/user/nimbus-eth1/build/nimbus_execution_client"]
-
