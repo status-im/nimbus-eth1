@@ -212,7 +212,12 @@ proc preventLoadingDataDirForTheWrongNetwork(db: CoreDbRef; conf: NimbusConf) =
       expected=calculatedId
     quit(QuitFailure)
 
-proc run(nimbus: NimbusNode, conf: NimbusConf) =
+# ------------
+
+proc runExeClient*(nimbus: NimbusNode, conf: NimbusConf) =
+  ## Launches and runs the execution client for pre-configured `nimbus` and
+  ## `conf` argument descriptors.
+  ##
   info "Launching execution client",
       version = FullVersionStr,
       conf
@@ -311,11 +316,13 @@ proc run(nimbus: NimbusNode, conf: NimbusConf) =
     # Stop loop
     waitFor nimbus.closeWait()
 
-when isMainModule:
+proc setupExeClientNode*(conf: NimbusConf): NimbusNode =
+  ## Prepare for running `runExeClient()`.
+  ##
+  ## This function returns the node config of type `NimbusNode` which might
+  ## be further amended before passing it to the runner `runExeClient()`.
+  ##
   ProcessState.setupStopHandlers()
-
-  # Processing command line arguments
-  let conf = makeConfig()
 
   # Set up logging before everything else
   setupLogging(conf.logLevel, conf.logStdout, none(OutFile))
@@ -327,6 +334,12 @@ when isMainModule:
     # permissions are insecure.
     quit QuitFailure
 
-  var nimbus = NimbusNode(ctx: newEthContext())
+  NimbusNode(ctx: newEthContext())
 
-  nimbus.run(conf)
+
+when isMainModule:
+  let
+    optsConf = makeConfig()
+    nodeConf = optsConf.setupExeClientNode()
+
+  nodeConf.runExeClient(optsConf)
