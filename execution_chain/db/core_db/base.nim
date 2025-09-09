@@ -446,6 +446,21 @@ proc recast*(
     codeHash:    accRec.codeHash,
     storageRoot: rc)
 
+proc putSubtrie*(
+    acc: CoreDbTxRef;
+    stateRoot: Hash32,
+    nodes: Table[Hash32, seq[byte]]): CoreDbRc[void] =
+  ## Loads a subtrie of trie nodes into the database (both account and linked
+  ## storage subtries). It does this by walking down the account trie starting
+  ## from the state root and then eventually walking down each storage trie.
+  ## The implementation doesn't handle merging with any existing trie/s in the
+  ## database so this should only be used on an empty database.
+
+  acc.aTx.putSubtrie(stateRoot, nodes).isOkOr:
+    return err(error.toError(""))
+
+  ok()
+
 # ------------------------------------------------------------------------------
 # Public transaction related methods
 # ------------------------------------------------------------------------------
