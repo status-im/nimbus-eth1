@@ -60,13 +60,10 @@ jobs:
           make dist-${{ matrix.os }}-${{ matrix.cpu }}
           cd dist
           ARCHIVE=$(echo *.tar.gz)
+          ARCHIVE_DIR=$(basename -s .tar.gz -- *.tar.gz)
           tar -xzf ${ARCHIVE}
-          NEW_ARCHIVE_DIR="nimbus-eth1-${{ matrix.os }}-${{ matrix.cpu }}-${{ steps.extract_branch.outputs.tag_name }}-$(git rev-parse --short=8 HEAD)"
-          mv ${ARCHIVE%.tar.gz} ${NEW_ARCHIVE_DIR}
-          tar -czf ${NEW_ARCHIVE_DIR}.tar.gz ${NEW_ARCHIVE_DIR}
-          cp ${NEW_ARCHIVE_DIR}.tar.gz nimbus-eth1-${{ matrix.os }}-${{ matrix.cpu }}.tar.gz
-          echo "archive=${NEW_ARCHIVE_DIR}.tar.gz" >> $GITHUB_OUTPUT
-          echo "archive_dir=${NEW_ARCHIVE_DIR}" >> $GITHUB_OUTPUT
+          echo "archive=${ARCHIVE}" >> $GITHUB_OUTPUT
+          echo "archive_dir=${ARCHIVE_DIR}" >> $GITHUB_OUTPUT
 
       - name: Upload archive artefact
         uses: actions/upload-artifact@v4
@@ -74,7 +71,6 @@ jobs:
           name: ${{ matrix.os }}-${{ matrix.cpu }}-archive
           path: |
             ./dist/${{ steps.make_dist.outputs.archive }}
-            ./dist/nimbus-eth1-${{ matrix.os }}-${{ matrix.cpu }}.tar.gz
           retention-days: 2
 
       - name: Upload checksum artefact
