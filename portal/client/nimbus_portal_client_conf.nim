@@ -8,43 +8,27 @@
 {.push raises: [].}
 
 import
-  std/[os, strutils],
+  std/[os, strutils, sequtils],
   uri,
   confutils,
   confutils/std/net,
   chronicles,
   eth/common/keys,
+  eth/net/nat,
   eth/p2p/discoveryv5/[enr, node, routing_table],
   nimcrypto/hash,
   stew/byteutils,
   stew/io2,
-  eth/net/nat, # must be late (compilation annoyance)
+  beacon_chain/nimbus_binary_common,
   ../logging,
-  ../network/wire/portal_protocol_config,
-  ../common/common_deprecation
-
-proc defaultDataDir*(): string =
-  # Backwards compatibility for the old default data directory
-  let legacyDir = legacyDataDir()
-  if fileAccessible(legacyDir, {AccessFlags.Find}):
-    return legacyDir
-
-  let relativeDataDir =
-    when defined(windows):
-      "AppData" / "Roaming" / "Nimbus" / "PortalClient"
-    elif defined(macosx):
-      "Library" / "Application Support" / "Nimbus" / "PortalClient"
-    else:
-      ".cache" / "nimbus" / "portal-client"
-
-  getHomeDir() / relativeDataDir
+  ../network/wire/portal_protocol_config
 
 const
   defaultListenAddress* = (static parseIpAddress("0.0.0.0"))
   defaultAdminListenAddress* = (static parseIpAddress("127.0.0.1"))
-
   defaultListenAddressDesc = $defaultListenAddress
   defaultAdminListenAddressDesc = $defaultAdminListenAddress
+
   defaultStorageCapacity* = 2000'u32 # 2 GB default
   defaultStorageCapacityDesc* = $defaultStorageCapacity
 
@@ -53,15 +37,20 @@ const
   defaultBitsPerHopDesc* = $defaultPortalProtocolConfig.bitsPerHop
   defaultAlphaDesc* = $defaultPortalProtocolConfig.alpha
   defaultMaxGossipNodesDesc* = $defaultPortalProtocolConfig.maxGossipNodes
-  defaultRpcApis* = @["eth", "portal"]
-  defaultRpcApisDesc* = "eth,portal"
+
+  defaultRpcApis* = @["portal"]
+  defaultRpcApisDesc* = "portal"
+
+  defaultNetwork* = PortalNetwork.mainnet
+  defaultNetworkDesc* = $defaultNetwork
+  defaultSubnetworks* = {PortalSubnetwork.history}
+  defaultSubnetworksDesc* = defaultSubnetworks.toSeq().join(",")
+
+  netKeyFileName = "portal_node_netkey"
 
 type
   RpcFlag* {.pure.} = enum
-    eth
-    debug
     portal
-    portal_debug
     discovery
 
   TrustedDigest* = MDigest[32 * 8]
@@ -98,15 +87,17 @@ type
 
     network* {.
       desc:
-        "Select which Portal network to join. This will set the " &
-        "Portal network specific bootstrap nodes automatically",
-      defaultValue: PortalNetwork.mainnet,
+        "Select which network to join. This will set the " &
+        "network specific Portal bootstrap nodes automatically",
+      defaultValue: defaultNetwork,
+      defaultValueDesc: $defaultNetworkDesc,
       name: "network"
     .}: PortalNetwork
 
     portalSubnetworks* {.
-      desc: "Select which networks (Portal sub-protocols) to enable",
-      defaultValue: {PortalSubnetwork.legacyHistory},
+      desc: "Select which Portal subnetworks (sub-protocols) to enable",
+      defaultValue: defaultSubnetworks,
+      defaultValueDesc: $defaultSubnetworksDesc,
       name: "portal-subnetworks"
     .}: set[PortalSubnetwork]
 
@@ -144,18 +135,17 @@ type
       name: "enr-auto-update"
     .}: bool
 
-    dataDir* {.
-      desc: "The directory where application data will be stored",
-      defaultValue: defaultDataDir(),
-      defaultValueDesc: "",
+    dataDirFlag* {.
+      desc: "The directory where nimbus will store all blockchain data",
+      abbr: "d",
       name: "data-dir"
-    .}: OutDir
+    .}: Option[OutDir]
 
-    networkKeyFile* {.
+    networkKeyFileFlag* {.
       desc: "Source of network (secp256k1) private key file",
-      defaultValue: config.dataDir / "netkey",
+      defaultValueDesc: "<data-dir>/" & netKeyFileName,
       name: "netkey-file"
-    .}: string
+    .}: Option[OutDir]
 
     networkKey* {.
       hidden,
@@ -177,15 +167,6 @@ type
       defaultValueDesc: "none",
       name: "debug-netkey-nodeid-prefix-unsafe"
     .}: Option[string]
-
-    accumulatorFile* {.
-      desc:
-        "Get the master accumulator snapshot from a file containing an " &
-        "pre-build SSZ encoded master accumulator.",
-      defaultValue: none(InputFile),
-      defaultValueDesc: "none",
-      name: "accumulator-file"
-    .}: Option[InputFile]
 
     metricsEnabled* {.
       defaultValue: false, desc: "Enable the metrics server", name: "metrics"
@@ -221,7 +202,7 @@ type
 
     rpcApi* {.
       desc:
-        "Enable specific set of JSON-RPC APIs over HTTP (available: eth, debug, portal, portal_debug, discovery)",
+        "Enable specific set of JSON-RPC APIs over HTTP (available: portal, discovery)",
       defaultValue: defaultRpcApis,
       defaultValueDesc: $defaultRpcApisDesc,
       name: "rpc-api"
@@ -246,7 +227,7 @@ type
 
     wsApi* {.
       desc:
-        "Enable specific set of JSON-RPC APIs over WebSocket (available: eth, debug, portal, portal_debug, discovery)",
+        "Enable specific set of JSON-RPC APIs over WebSocket (available: portal, discovery)",
       defaultValue: defaultRpcApis,
       defaultValueDesc: $defaultRpcApisDesc,
       name: "ws-api"
@@ -434,6 +415,12 @@ type
     of noCommand:
       discard
 
+proc dataDir*(config: PortalConf): string =
+  string config.dataDirFlag.get(OutDir defaultDataDir("", $config.network))
+
+proc networkKeyFile*(config: PortalConf): string =
+  string config.networkKeyFileFlag.get(OutDir config.dataDir() / netKeyFileName)
+
 func parseCmdArg*(T: type TrustedDigest, input: string): T {.raises: [ValueError].} =
   TrustedDigest.fromHex(input)
 
@@ -520,14 +507,8 @@ proc getRpcFlags*(rpcApis: openArray[string]): set[RpcFlag] =
   var rpcFlags: set[RpcFlag]
   for apiStr in rpcApis.repeatingList():
     case apiStr.toLowerAscii()
-    of "eth":
-      rpcFlags.incl RpcFlag.eth
-    of "debug":
-      rpcFlags.incl RpcFlag.debug
     of "portal":
       rpcFlags.incl RpcFlag.portal
-    of "portal_debug":
-      rpcFlags.incl RpcFlag.portal_debug
     of "discovery":
       rpcFlags.incl RpcFlag.discovery
     else:

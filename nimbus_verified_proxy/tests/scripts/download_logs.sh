@@ -1,0 +1,5 @@
+#!/bin/bash
+
+DOWNLOAD_FOLDER="../data"
+
+curl https://eth.llamarpc.com -X POST -H "Content-Type: application/json" -d '{"jsonrpc": "2.0", "method": "eth_getLogs", "params": [{"fromBlock": "0xed14f2", "toBlock": "0xed14f2", "topics":["0xddf252ad1be2c89b69c2b068fc378daa952ba7f163c4a11628f55a4df523b3ef"]}], "id": 1}' | jq '.result' > $DOWNLOAD_FOLDER/logs.json

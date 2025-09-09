@@ -197,19 +197,23 @@ proc testFixture(fixtures: JsonNode, testStatusIMPL: var TestStatus,
 
 proc generalStateJsonMain*(debugMode = false) =
   const
-    newFolder = "eest/state_tests"
+    newFolder = "eest_develop/state_tests"
 
   let config = getConfiguration()
   if config.testSubject == "" or not debugMode:
     # run all test fixtures
-    suite "new generalstate json tests":
-      jsonTest(newFolder, "GeneralStateTests", testFixture, skipNewGSTTests)
+    suite "new generalstate json tests: eest_develop":
+      jsonTest(newFolder, "GeneralStateTestsStatic", testFixture, slowGSTTests)
+
+    suite "new generalstate json tests: eest_devnet":
+      jsonTest("eest_devnet/state_tests", "GeneralStateTestsDevnet", testFixture)
+
   else:
     # execute single test in debug mode
     if config.testSubject.len == 0:
       echo "missing test subject"
       quit(QuitFailure)
-    
+
     let path = "tests" / "fixtures" / newFolder
     let n = json.parseFile(path / config.testSubject)
     var testStatusIMPL: TestStatus

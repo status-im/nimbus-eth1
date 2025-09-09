@@ -16,7 +16,11 @@ import
   chronos,
   chronos/ratelimit,
   ../../core/[chain, tx_pool, pooled_txs],
-  ../../networking/p2p_types
+  ../../networking/p2p_types,
+  ../../networking/chain_forkid
+
+export
+  chain_forkid
 
 type
   Status68Packet* = object
@@ -67,10 +71,6 @@ type
   NewBlockHashesAnnounce* = object
     hash*: Hash32
     number*: base.BlockNumber
-
-  ChainForkId* = object
-    forkHash*: array[4, byte] # The RLP encoding must be exactly 4 bytes.
-    forkNext*: uint64         # The RLP encoding must be variable-length
 
   Eth68State* = object
     totalDifficulty*: DifficultyInt

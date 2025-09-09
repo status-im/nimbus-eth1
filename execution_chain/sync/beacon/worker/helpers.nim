@@ -18,7 +18,7 @@ import
   ../../../networking/p2p,
   ../../../utils/[prettify, utils],
   ../../sync_desc,
-  ../worker_const
+  ./worker_const
 
 export
   prettify, short, `$`

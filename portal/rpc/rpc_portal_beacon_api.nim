@@ -133,7 +133,7 @@ proc installPortalBeaconApiHandlers*(rpcServer: RpcServer, p: PortalProtocol) =
   ) -> PutContentResult:
     let
       keyBytes = ContentKeyByteList.init(hexToSeqByte(contentKey))
-      contentId = p.toContentId(keyBytes).valueOr:
+      _ = p.toContentId(keyBytes).valueOr:
         raise invalidKeyErr()
       offerValueBytes = hexToSeqByte(contentValue)
 

@@ -133,6 +133,30 @@ func getChainConfig*(network: string, c: ChainConfig) =
     c.assignTime(HardFork.Prague, EthTime(15000))
   of $TestFork.Osaka:
     c.assignTime(HardFork.Osaka, TimeZero)
+  of $TestFork.PragueToOsakaAtTime15k:
+    c.assignTime(HardFork.Osaka, EthTime(15000))
+  of $TestFork.BPO1:
+    c.assignTime(HardFork.Bpo1, TimeZero)
+  of $TestFork.OsakaToBPO1AtTime15k:
+    c.assignTime(HardFork.Bpo1, EthTime(15000))
+  of $TestFork.BPO2:
+    c.assignTime(HardFork.Bpo2, TimeZero)
+  of $TestFork.BPO1ToBPO2AtTime15k:
+    c.assignTime(HardFork.Bpo2, EthTime(15000))
+  of $TestFork.BPO3:
+    c.assignTime(HardFork.Bpo3, TimeZero)
+  of $TestFork.BPO2ToBPO3AtTime15k:
+    c.assignTime(HardFork.Bpo3, EthTime(15000))
+  of $TestFork.BPO4:
+    c.assignTime(HardFork.Bpo4, TimeZero)
+  of $TestFork.BPO3ToBPO4AtTime15k:
+    c.assignTime(HardFork.Bpo4, EthTime(15000))
+  of $TestFork.BPO5:
+    c.assignTime(HardFork.Bpo5, TimeZero)
+  of $TestFork.BPO4ToBPO5AtTime15k:
+    c.assignTime(HardFork.Bpo5, EthTime(15000))
+  of $TestFork.Amsterdam:
+    c.assignTime(HardFork.Amsterdam, TimeZero)
   else:
     raise newException(ValueError, "unsupported network " & network)
 

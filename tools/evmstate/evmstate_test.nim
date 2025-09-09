@@ -35,7 +35,7 @@ proc runTest(filename: string): bool =
   true
 
 template skipTest(folder, name: untyped): bool =
-  skipNewGSTTests(folder, name)
+  slowGSTTests(folder, name)
 
 proc collectFileNames(inputPath: string, map: var StatusMap, fileNames: var seq[TestFile]) =
   for fileName in walkDirRec(inputPath):

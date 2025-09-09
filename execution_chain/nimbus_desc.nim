@@ -39,14 +39,10 @@ export
 {.push raises: [].}
 
 type
-  NimbusState* = enum
-    Starting, Running, Stopping
-
   NimbusNode* = ref object
     httpServer*: NimbusHttpServerRef
     engineApiServer*: NimbusHttpServerRef
     ethNode*: EthereumNode
-    state*: NimbusState
     ctx*: EthContext
     fc*: ForkedChainRef
     txPool*: TxPoolRef

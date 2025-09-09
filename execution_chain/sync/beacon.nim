@@ -15,15 +15,15 @@ import
   pkg/stew/[interval_set, sorted_set],
   ../core/chain,
   ../networking/p2p,
-  ./beacon/[worker, worker_desc],
-  ./[sync_desc, sync_sched, wire_protocol]
+  ./beacon/worker/headers/headers_target,
+  ./beacon/[beacon_desc, worker],
+  ./[sync_sched, wire_protocol]
 
+export
+  beacon_desc
 
 logScope:
   topics = "beacon sync"
-
-type
-  BeaconSyncRef* = RunnerSyncRef[BeaconCtxData,BeaconBuddyData]
 
 # ------------------------------------------------------------------------------
 # Virtual methods/interface, `mixin` functions
@@ -59,24 +59,50 @@ proc runPeer(buddy: BeaconBuddyRef): Future[Duration] {.async: (raises: []).} =
 
 proc init*(
     T: type BeaconSyncRef;
+    configCB = BeaconSyncConfigHook(nil);
+      ): T =
+  ## Constructor
+  ##
+  ## The `configCB` allows to specify a final configuration task to be run at
+  ## the end of the `config()` function.
+  ##
+  T(lazyConfigHook: configCB)
+
+proc config*(
+    desc: BeaconSyncRef;
     ethNode: EthereumNode;
     chain: ForkedChainRef;
     maxPeers: int;
-      ): T =
-  var desc = T()
+      ) =
+  ## Complete `BeaconSyncRef` descriptor initialisation.
+  ##
+  ## Note that the `init()` constructor might have specified a configuration
+  ## task to be run at the end of the `config()` function.
+  ##
+  doAssert desc.ctx.isNil # This can only run once
   desc.initSync(ethNode, maxPeers)
   desc.ctx.pool.chain = chain
-  desc
 
-proc targetInit*(desc: BeaconSyncRef; rlpFile: string) =
-  ## Set up inital sprint (intended for debugging)
-  desc.ctx.initalTargetFromFile(rlpFile, "targetInit").isOkOr:
-    raiseAssert error
+  if not desc.lazyConfigHook.isNil:
+    desc.lazyConfigHook(desc)
+    desc.lazyConfigHook = nil
+
+proc configTarget*(desc: BeaconSyncRef; hex: string; isFinal: bool): bool =
+  ## Set up inital target sprint (if any, mainly for debugging)
+  doAssert not desc.ctx.isNil
+  try:
+    desc.ctx.headersTargetRequest(Hash32.fromHex(hex), isFinal, "init")
+    return true
+  except ValueError:
+    discard
+  # false
 
 proc start*(desc: BeaconSyncRef): bool =
+  doAssert not desc.ctx.isNil
   desc.startSync()
 
 proc stop*(desc: BeaconSyncRef) {.async.} =
+  doAssert not desc.ctx.isNil
   await desc.stopSync()
 
 # ------------------------------------------------------------------------------

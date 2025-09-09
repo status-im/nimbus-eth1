@@ -10,26 +10,27 @@
 
 type
   EVMFork* = enum
-    FkFrontier       
-    FkHomestead      
-    FkTangerine      
-    FkSpurious       
-    FkByzantium      
-    FkConstantinople 
-    FkPetersburg     
-    FkIstanbul       
-    FkBerlin         
-    FkLondon         
-    FkParis          
-    FkShanghai       
-    FkCancun         
-    FkPrague         
+    FkFrontier
+    FkHomestead
+    FkTangerine
+    FkSpurious
+    FkByzantium
+    FkConstantinople
+    FkPetersburg
+    FkIstanbul
+    FkBerlin
+    FkLondon
+    FkParis
+    FkShanghai
+    FkCancun
+    FkPrague
     FkOsaka
     FkBpo1
     FkBpo2
     FkBpo3
     FkBpo4
-    FkBpo5       
-    
+    FkBpo5
+    FkAmsterdam
+
 const
   FkLatest* = EVMFork.high

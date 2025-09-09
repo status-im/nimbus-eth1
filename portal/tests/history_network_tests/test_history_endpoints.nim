@@ -11,7 +11,7 @@ import
   unittest2,
   stew/byteutils,
   chronos/unittest2/asynctests,
-  ../../eth_data/yaml_utils,
+  ../../eth_history/yaml_utils,
   ../../tools/eth_data_exporter/el_data_exporter,
   ../../network/wire/portal_protocol,
   ../../network/history/history_endpoints,

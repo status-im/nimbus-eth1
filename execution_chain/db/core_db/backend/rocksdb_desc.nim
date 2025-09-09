@@ -15,8 +15,8 @@ import std/[os, sequtils], rocksdb, chronicles
 export rocksdb
 
 const
-  BaseFolder = "nimbus"
-  DataFolder = "aristo"
+  LegacyFolder = "nimbus" / "aristo" # pre-alpha
+  DbFolder = "ecdb" # execution client db - must not collide with consensus
 
 type
   RocksDbInstanceRef* = ref object ## Shared handle to a single rocksdb instance
@@ -32,11 +32,11 @@ type
     closes*: int
     families*: seq[ColFamilyReadWrite]
 
-func dataDir*(baseDir: string): string =
-  baseDir / BaseFolder / DataFolder
+func ecdbDir(baseDir: string): string =
+  baseDir / DbFolder
 
-func dataDir*(rdb: RocksDbInstanceRef): string =
-  rdb.baseDir.dataDir
+func ecdbDir(rdb: RocksDbInstanceRef): string =
+  rdb.baseDir.ecdbDir
 
 proc isClosed*(session: SharedWriteBatchRef): bool =
   session == nil or session.batch.isClosed()
@@ -58,19 +58,27 @@ proc close*(session: SharedWriteBatchRef) =
     session.closes = 0
 
 proc commit*(
-    rdb: RocksDbInstanceRef, session: SharedWriteBatchRef, cf: ColFamilyReadWrite
+    rdb: RocksDbInstanceRef,
+    session: SharedWriteBatchRef,
+    cf: ColFamilyReadWrite,
+    flush: bool,
 ): Result[void, string] =
   session.commits += 1
-  session.families.add cf
+
+  if flush:
+    session.families.add cf
+
   if session.commits == session.refs:
     # Write to disk if everyone that opened a session also committed it
     ?rdb.db.write(session.batch)
-    # This flush forces memtables to be written to disk, which is necessary given
-    # the use of vector memtables which have very bad lookup performance.
-    rdb.db.flush(session.families.mapIt(it.handle())).isOkOr:
-      # Not sure what to do here - the commit above worked so it would be strange
-      # to have an error here
-      warn "Could not flush database", error
+
+    if session.families.len > 0:
+      # This flush forces memtables to be written to disk, which is necessary given
+      # the use of vector memtables which have very bad lookup performance.
+      rdb.db.flush(session.families.mapIt(it.handle())).isOkOr:
+        # Not sure what to do here - the commit above worked so it would be strange
+        # to have an error here
+        warn "Could not flush database", error
 
   ok()
 
@@ -80,20 +88,28 @@ proc open*(
     dbOpts: DbOptionsRef,
     cfs: openArray[(string, ColFamilyOptionsRef)],
 ): Result[RocksDbInstanceRef, string] =
-  let dataDir = baseDir.dataDir
+  let ecdbDir = baseDir.ecdbDir
+
+  if not dirExists(ecdbDir):
+    let legacyDir = baseDir / LegacyFolder
+    if dirExists(legacyDir):
+      try:
+        moveDir(legacyDir, ecdbDir)
+      except CatchableError as exc:
+        return err ("Found legacy database directory but cannot move it: " & exc.msg)
 
   try:
-    dataDir.createDir
+    ecdbDir.createDir
   except CatchableError as exc:
-    return err("Cannot create database directory " & dataDir & ": " & exc.msg)
+    return err("Cannot create database directory " & ecdbDir & ": " & exc.msg)
 
   var
     descs = cfs.mapIt(it[0].initColFamilyDescriptor(it[1]))
     cfNames = cfs.mapIt(it[0])
 
   # Must include all column families or openRocksDb will fail
-  if (dataDir / "CURRENT").fileExists:
-    let hdCFs = dataDir.listColumnFamilies.valueOr:
+  if (ecdbDir / "CURRENT").fileExists:
+    let hdCFs = ecdbDir.listColumnFamilies.valueOr:
       raiseAssert "Cannot read existing CFs: " & error
 
     for name in hdCFs:
@@ -103,7 +119,7 @@ proc open*(
         )
 
   ok RocksDbInstanceRef(
-    db: ?openRocksDb(dataDir, dbOpts, columnFamilies = descs), baseDir: baseDir
+    db: ?openRocksDb(ecdbDir, dbOpts, columnFamilies = descs), baseDir: baseDir
   )
 
 proc close*(rdb: RocksDbInstanceRef, eradicate = false) =
@@ -113,7 +129,7 @@ proc close*(rdb: RocksDbInstanceRef, eradicate = false) =
 
   if eradicate:
     try:
-      rdb.dataDir.removeDir
+      rdb.ecdbDir.removeDir
 
       # Remove the base folder if it is empty
       block done:

@@ -14,7 +14,7 @@ import
   stew/byteutils,
   unittest2,
   ../execution_chain/common/common,
-  ../execution_chain/stateless/witness_generation
+  ../execution_chain/stateless/[witness_generation, witness_verification]
 
 suite "Stateless: Witness Generation":
   setup:
@@ -50,6 +50,7 @@ suite "Stateless: Witness Generation":
       witness.keys.len() == 1
       witness.codeHashes.len() == 0
       witnessKeys.contains((Address.copyFrom(witness.keys[0]), Opt.none(UInt256)))
+      witness.validateKeys(witnessKeys).isOk()
 
   test "Get code":
     discard ledger.getCode(addr1)
@@ -64,6 +65,7 @@ suite "Stateless: Witness Generation":
       witness.keys.len() == 1
       witness.codeHashes.len() == 1
       witnessKeys.contains((Address.copyFrom(witness.keys[0]), Opt.none(UInt256)))
+      witness.validateKeys(witnessKeys).isOk()
 
   test "Set storage":
     ledger.setStorage(addr1, slot1, 20.u256)
@@ -80,6 +82,7 @@ suite "Stateless: Witness Generation":
       witness.codeHashes.len() == 0
       witnessKeys.contains((Address.copyFrom(witness.keys[0]), Opt.none(UInt256)))
       witnessKeys.contains((Address.copyFrom(witness.keys[0]), Opt.some(slot1)))
+      witness.validateKeys(witnessKeys).isOk()
 
   test "Get storage":
     discard ledger.getStorage(addr1, slot1)
@@ -95,6 +98,7 @@ suite "Stateless: Witness Generation":
       witness.codeHashes.len() == 0
       witnessKeys.contains((Address.copyFrom(witness.keys[0]), Opt.none(UInt256)))
       witnessKeys.contains((Address.copyFrom(witness.keys[0]), Opt.some(slot1)))
+      witness.validateKeys(witnessKeys).isOk()
 
   test "Get committed storage":
     discard ledger.getCommittedStorage(addr1, slot1)
@@ -110,6 +114,7 @@ suite "Stateless: Witness Generation":
       witness.codeHashes.len() == 0
       witnessKeys.contains((Address.copyFrom(witness.keys[0]), Opt.none(UInt256)))
       witnessKeys.contains((Address.copyFrom(witness.keys[0]), Opt.some(slot1)))
+      witness.validateKeys(witnessKeys).isOk()
 
   test "Get code and storage slots":
     discard ledger.getCode(addr1)
@@ -130,6 +135,7 @@ suite "Stateless: Witness Generation":
       witnessKeys.contains((Address.copyFrom(witness.keys[0]), Opt.some(slot1)))
       witnessKeys.contains((Address.copyFrom(witness.keys[0]), Opt.some(slot2)))
       witnessKeys.contains((Address.copyFrom(witness.keys[0]), Opt.some(slot3)))
+      witness.validateKeys(witnessKeys).isOk()
 
   test "Order of keys":
     var witnessKeys: WitnessTable
@@ -149,3 +155,4 @@ suite "Stateless: Witness Generation":
       witness.keys[2] == slot1.toBytesBE()
       witness.keys[3] == slot2.toBytesBE()
       witness.keys[4] == slot3.toBytesBE()
+      witness.validateKeys(witnessKeys).isOk()

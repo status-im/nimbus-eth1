@@ -58,7 +58,7 @@ TRUSTED_BLOCK_ROOT=""
 # REST_URL="http://127.0.0.1:5052"
 REST_URL="http://testing.mainnet.beacon-api.nimbus.team"
 SKIP_BUILD="0"
-PORTAL_SUBNETWORKS="beacon,legacy_history"
+PORTAL_SUBNETWORKS="beacon,history"
 
 print_help() {
   cat <<EOF
@@ -346,7 +346,7 @@ for NUM_NODE in $(seq 0 $(( NUM_NODES - 1 ))); do
     --${RPC} \
     --${RPC}-address="127.0.0.1" \
     --${RPC}-port="$(( BASE_RPC_PORT + NUM_NODE ))" \
-    --${RPC}-api=eth,debug,portal,portal_debug,discovery \
+    --${RPC}-api=portal,discovery \
     --metrics \
     --metrics-address="127.0.0.1" \
     --metrics-port="$(( BASE_METRICS_PORT + NUM_NODE ))" \

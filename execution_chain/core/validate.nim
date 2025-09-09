@@ -102,8 +102,7 @@ proc validateHeader(
   ok()
 
 proc validateUncles(com: CommonRef; header: Header; txFrame: CoreDbTxRef,
-                    uncles: openArray[Header]): Result[void,string]
-                      {.gcsafe, raises: [].} =
+                    uncles: openArray[Header]): Result[void,string] =
   let hasUncles = uncles.len > 0
   let shouldHaveUncles = header.ommersHash != EMPTY_UNCLE_HASH
 
@@ -288,6 +287,9 @@ func validateTxBasic*(
           &"get={bv.data[0].int}, expect={VERSIONED_HASH_VERSION_KZG.int}")
 
   if tx.txType == TxEip7702:
+    if tx.to.isNone:
+      return err("invalid tx: destination must be not empty")
+
     if tx.authorizationList.len == 0:
       return err("invalid tx: authorization list must not empty")
 
@@ -373,8 +375,7 @@ proc validateHeaderAndKinship*(
     blk: Block;
     parent: Header;
     txFrame: CoreDbTxRef
-      ): Result[void, string]
-      {.gcsafe, raises: [].} =
+      ): Result[void, string] =
   template header: Header = blk.header
 
   if header.isGenesis:

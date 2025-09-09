@@ -11,8 +11,11 @@ import
   chronicles,
   json_rpc/rpcclient,
   web3/[eth_api, eth_api_types],
-  ../../rpc/rpc_calls/rpc_trace_calls,
   ../nimbus_portal_bridge_conf
+
+from stew/objects import checkedEnumAssign
+from ../../../hive_integration/nodocker/engine/engine_client import
+  toBlockHeader, toTransactions
 
 export rpcclient
 
@@ -49,32 +52,122 @@ proc tryReconnect*(client: RpcClient, url: JsonRpcUrl) {.async: (raises: []).} =
       except CatchableError as e:
         warn "Failed to reconnect to JSON-RPC server", error = $e.msg, url = url.value
 
+func asTxType(quantity: Opt[Quantity]): Result[TxType, string] =
+  let value = quantity.get(0.Quantity).uint8
+  var txType: TxType
+  if not checkedEnumAssign(txType, value):
+    err("Invalid data for TxType: " & $value)
+  else:
+    ok(txType)
+
+func asReceipt(receiptObject: ReceiptObject): Result[Receipt, string] =
+  let receiptType = asTxType(receiptObject.`type`).valueOr:
+    return err("Failed conversion to TxType" & error)
+
+  var logs: seq[Log]
+  if receiptObject.logs.len > 0:
+    for log in receiptObject.logs:
+      var topics: seq[receipts.Topic]
+      for topic in log.topics:
+        topics.add(topic)
+
+      logs.add(Log(address: log.address, data: log.data, topics: topics))
+
+  let cumulativeGasUsed = receiptObject.cumulativeGasUsed.GasInt
+  if receiptObject.status.isSome():
+    let status = receiptObject.status.get().int
+    ok(
+      Receipt(
+        receiptType: receiptType,
+        isHash: false,
+        status: status == 1,
+        cumulativeGasUsed: cumulativeGasUsed,
+        logsBloom: Bloom(receiptObject.logsBloom),
+        logs: logs,
+      )
+    )
+  elif receiptObject.root.isSome():
+    ok(
+      Receipt(
+        receiptType: receiptType,
+        isHash: true,
+        hash: receiptObject.root.get(),
+        cumulativeGasUsed: cumulativeGasUsed,
+        logsBloom: Bloom(receiptObject.logsBloom),
+        logs: logs,
+      )
+    )
+  else:
+    err("No root nor status field in the JSON receipt object")
+
+func asReceipts*(receiptObjects: seq[ReceiptObject]): Result[seq[Receipt], string] =
+  var receipts: seq[Receipt]
+  for receiptObject in receiptObjects:
+    let receipt = asReceipt(receiptObject).valueOr:
+      return err(error)
+    receipts.add(receipt)
+
+  ok(receipts)
+
+proc getHeaderByNumber*(
+    client: RpcClient, blockId: BlockIdentifier
+): Future[Result[Header, string]] {.async: (raises: [CancelledError]).} =
+  let blockObject =
+    try:
+      await client.eth_getBlockByNumber(blockId, fullTransactions = false)
+    except CatchableError as e:
+      return err(e.msg)
+
+  ok(blockObject.toBlockHeader())
+
 proc getBlockByNumber*(
-    client: RpcClient, blockId: BlockIdentifier, fullTransactions: bool = true
-): Future[Result[BlockObject, string]] {.async: (raises: []).} =
-  let blck =
+    client: RpcClient, blockId: BlockIdentifier
+): Future[Result[(Header, BlockBody, UInt256), string]] {.
+    async: (raises: [CancelledError])
+.} =
+  let blockObject =
     try:
-      let res = await client.eth_getBlockByNumber(blockId, fullTransactions)
-      if res.isNil:
-        return err("EL failed to provide requested block")
-
-      res
+      await client.eth_getBlockByNumber(blockId, fullTransactions = true)
     except CatchableError as e:
-      return err("EL JSON-RPC eth_getBlockByNumber failed: " & e.msg)
+      return err(e.msg)
 
-  return ok(blck)
+  var uncles: seq[Header]
+  for i in 0 ..< blockObject.uncles.len:
+    let uncleBlockObject =
+      try:
+        await client.eth_getUncleByBlockNumberAndIndex(blockId, Quantity(i))
+      except CatchableError as e:
+        return err(e.msg)
 
-proc getUncleByBlockNumberAndIndex*(
-    client: RpcClient, blockId: BlockIdentifier, index: Quantity
-): Future[Result[BlockObject, string]] {.async: (raises: []).} =
-  let blck =
+    uncles.add(uncleBlockObject.toBlockHeader())
+
+  ok(
+    (
+      blockObject.toBlockHeader(),
+      BlockBody(
+        transactions: blockObject.transactions.toTransactions(),
+        uncles: uncles,
+        withdrawals: blockObject.withdrawals,
+      ),
+      blockObject.totalDifficulty,
+    )
+  )
+
+proc getReceiptsByNumber*(
+    client: RpcClient, blockId: BlockIdentifier
+): Future[Result[seq[Receipt], string]] {.async: (raises: [CancelledError]).} =
+  let receiptsObjects =
     try:
-      let res = await client.eth_getUncleByBlockNumberAndIndex(blockId, index)
-      if res.isNil:
-        return err("EL failed to provide requested uncle block")
-
-      res
+      await client.eth_getBlockReceipts(blockId)
     except CatchableError as e:
-      return err("EL JSON-RPC eth_getUncleByBlockNumberAndIndex failed: " & e.msg)
+      return err(e.msg)
 
-  return ok(blck)
+  if receiptsObjects.isNone():
+    return err("No receipts found for block number " & $blockId)
+
+  receiptsObjects.value().asReceipts()
+
+proc getStoredReceiptsByNumber*(
+    client: RpcClient, blockId: BlockIdentifier
+): Future[Result[seq[StoredReceipt], string]] {.async: (raises: [CancelledError]).} =
+  ok((?(await client.getReceiptsByNumber(blockId))).to(seq[StoredReceipt]))

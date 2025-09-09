@@ -14,7 +14,7 @@ import
   beacon_chain/networking/network_metadata,
   beacon_chain/spec/forks,
   ../../network/beacon/[beacon_chain_historical_summaries, beacon_content],
-  ../../eth_data/yaml_utils
+  ../../eth_history/yaml_utils
 
 from stew/bitops2 import log2trunc
 

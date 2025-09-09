@@ -9,10 +9,22 @@
 
 {.push raises: [].}
 
-include
-  eth/p2p/discoveryv5/protocol
+import
+  std/[importutils, tables],
+  metrics,
+  chronicles,
+  eth/p2p/discoveryv5/enr,
+  eth/p2p/discoveryv5/encoding,
+  eth/p2p/discoveryv5/sessions,
+  eth/p2p/discoveryv5/protocol {.all.}
+
+export
+  Protocol, Node, Address, enr, newProtocol, open, close, seedTable, start, queryRandom, closeWait,
+  updateRecord
 
 proc receiveV5*(d: Protocol, a: Address, packet: openArray[byte]): Result[void, cstring] =
+  privateAccess(Protocol)
+  privateAccess(PendingRequest)
   discv5_network_bytes.inc(packet.len.int64, labelValues = [$Direction.In])
 
   let packet = ?d.codec.decodePacket(a, packet)

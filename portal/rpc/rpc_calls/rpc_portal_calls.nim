@@ -27,10 +27,7 @@ createRpcSigsFromNim(RpcClient):
     enr: Record, contentKey: string, contentValue: string
   ): string
 
-  proc portal_historyRecursiveFindNodes(nodeId: NodeId): seq[Record]
-  proc portal_historyGetContent(contentKey: string): ContentInfo
-  proc portal_historyStore(contentKey: string, contentValue: string): bool
-  proc portal_historyLocalContent(contentKey: string): string
+  proc portal_historyGetContent(contentKey: string, headerBytes: string): ContentInfo
   proc portal_historyPutContent(
     contentKey: string, contentValue: string
   ): PutContentResult

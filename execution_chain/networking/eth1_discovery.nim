@@ -15,9 +15,11 @@ import
   chronicles,
   results,
   metrics,
+  eth/common/base_rlp,
   ./discoveryv5,
   ./discoveryv4,
-  ./eth1_enr
+  ./eth1_enr,
+  ./chain_forkid
 
 export
   discoveryv4.NodeId,
@@ -37,9 +39,12 @@ type
   AddressV4 = discoveryv4.Address
   AddressV5 = discoveryv5.Address
 
+  CompatibleForkIdProc* = proc(id: ForkID): bool {.noSideEffect, raises: [].}
+
   Eth1Discovery* = ref object
     discv4: DiscV4
     discv5: DiscV5
+    compatibleForkId: CompatibleForkIdProc
 
 #------------------------------------------------------------------------------
 # Private functions
@@ -87,6 +92,23 @@ proc processClient(
     proto.discv5.receiveV5(addrv5, buf).isOkOr:
       debug "Discovery receive error", discv4=discv4.error, discv5=error
 
+func eligibleNode(proto: Eth1Discovery, rec: Record): bool =
+  # Filter out non `eth` node
+  let
+    bytes = rec.tryGet("eth", seq[byte]).valueOr:
+      return false
+
+  if proto.compatibleForkId.isNil:
+    # Allow all `eth` node to pass if there is no filter
+    return true
+
+  let
+    chainForkIds = try: rlp.decode(bytes, array[1, ChainForkId])
+              except RlpError: return false
+    chainForkId  = chainForkIds[0]
+
+  proto.compatibleForkId(chainForkId.to(ForkID))
+
 #------------------------------------------------------------------------------
 # Public functions
 #------------------------------------------------------------------------------
@@ -98,7 +120,8 @@ proc new*(
     bootstrapNodes: openArray[ENode],
     bindPort: Port,
     bindIp = IPv6_any(),
-    rng = newRng()
+    rng = newRng(),
+    compatibleForkId = CompatibleForkIdProc(nil)
 ): Eth1Discovery =
   let bootnodes = bootstrapNodes.to(enr.Record)
   Eth1Discovery(
@@ -120,7 +143,8 @@ proc new*(
       bindIp = bindIp,
       enrAutoUpdate = true,
       rng = rng
-    )
+    ),
+    compatibleForkId: compatibleForkId,
   )
 
 proc open*(
@@ -173,6 +197,8 @@ proc lookupRandomNode*(proto: Eth1Discovery, queue: AsyncQueue[NodeV4]) {.async:
   if proto.discv5.isNil.not:
     let nodes = await proto.discv5.queryRandom()
     for node in nodes:
+      if not proto.eligibleNode(node.record):
+        continue
       let v4 = node.to(NodeV4).valueOr:
         continue
       await queue.addLast(v4)
@@ -189,6 +215,16 @@ proc getRandomBootnode*(proto: Eth1Discovery): Opt[NodeV4] =
         enode = ENode.fromEnr(rec).valueOr:
           return Opt.none(NodeV4)
       return Opt.some(newNode(enode))
+
+func updateForkID*(proto: Eth1Discovery, forkId: ForkID) =
+  # https://github.com/ethereum/devp2p/blob/bc76b9809a30e6dc5c8dcda996273f0f9bcf7108/enr-entries/eth.md
+  if proto.discv5.isNil.not:
+    let
+      list = [forkId.to(ChainForkId)]
+      bytes = rlp.encode(list)
+      kv = ("eth", bytes)
+    proto.discv5.updateRecord([kv]).isOkOr:
+      return
 
 proc closeWait*(proto: Eth1Discovery) {.async: (raises: []).} =
   privateAccess(DiscV4)

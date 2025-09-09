@@ -13,15 +13,11 @@ type
   PortalNetwork* = enum
     none
     mainnet
-    angelfood
 
   # The Portal sub-protocols
   PortalSubnetwork* = enum
     history
-    legacyHistory
     beacon
-    transactionIndex
-    transactionGossip
 
   RadiusConfigKind* = enum
     Static

@@ -38,7 +38,7 @@ import
 # ------------------------------------------------------------------------------
 
 proc execSubCreate(c: Computation; childMsg: Message;
-                   code: CodeBytesRef) {.raises: [].} =
+                   code: CodeBytesRef) =
   ## Create new VM -- helper for `Create`-like operations
 
   # need to provide explicit <c> and <child> for capturing in chainTo proc()

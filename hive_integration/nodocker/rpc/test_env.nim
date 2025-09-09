@@ -67,7 +67,7 @@ proc setupEnv*(taskPool: Taskpool): TestEnv =
     # "--nat:extip:0.0.0.0",
     "--network:7",
     "--import-key:" & initPath / "private-key",
-    "--custom-network:" & initPath / "genesis.json",
+    "--network:" & initPath / "genesis.json",
     "--rpc",
     "--rpc-api:eth,debug",
     # "--http-address:0.0.0.0",

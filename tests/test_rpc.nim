@@ -15,7 +15,7 @@ import
   eth/rlp,
   eth/common/[transaction_utils, addresses],
   ../hive_integration/nodocker/engine/engine_client,
-  ../execution_chain/[constants, transaction, config, version],
+  ../execution_chain/[constants, transaction, config, version_info],
   ../execution_chain/db/[ledger, storage_types],
   ../execution_chain/sync/wire_protocol,
   ../execution_chain/core/[tx_pool, chain, pow/difficulty],
@@ -81,7 +81,7 @@ proc persistFixtureBlock(chainDB: CoreDbTxRef) =
 
 proc setupConfig(): NimbusConf =
   makeConfig(@[
-    "--custom-network:" & genesisFile
+    "--network:" & genesisFile
   ])
 
 proc setupCom(conf: NimbusConf): CommonRef =

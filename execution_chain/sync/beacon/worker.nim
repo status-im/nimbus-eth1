@@ -11,14 +11,14 @@
 {.push raises:[].}
 
 import
-  std/[strutils, syncio],
   pkg/[chronicles, chronos],
   pkg/eth/common,
   pkg/stew/[interval_set, sorted_set],
   ../../common,
-  ./worker/update/[metrics, ticker],
-  ./worker/[blocks, headers, start_stop, update],
-  ./worker_desc
+  ../../networking/p2p,
+  ./worker/headers/headers_target,
+  ./worker/update/metrics,
+  ./worker/[blocks, headers, start_stop, update, worker_desc]
 
 # ------------------------------------------------------------------------------
 # Private functions
@@ -70,24 +70,6 @@ proc stop*(buddy: BeaconBuddyRef; info: static[string]) =
     nSyncPeers=(buddy.ctx.pool.nBuddies-1), syncState=($buddy.syncState)
   buddy.stopBuddy()
 
-# --------------------
-
-proc initalTargetFromFile*(
-    ctx: BeaconCtxRef;
-    file: string;
-    info: static[string];
-      ): Result[void,string] =
-  ## Set up inital sprint from argument file (itended for debugging)
-  try:
-    var f = file.open(fmRead)
-    defer: f.close()
-    var rlp = rlpFromHex(f.readAll().splitWhitespace.join)
-    ctx.pool.clReq = rlp.read(SyncClMesg)
-  except CatchableError as e:
-    return err("Error decoding file: \"" & file & "\"" &
-      " (" & $e.name & ": " & e.msg & ")")
-  ok()
-
 # ------------------------------------------------------------------------------
 # Public functions
 # ------------------------------------------------------------------------------
@@ -95,8 +77,18 @@ proc initalTargetFromFile*(
 proc runTicker*(ctx: BeaconCtxRef; info: static[string]) =
   ## Global background job that is started every few seconds. It is to be
   ## intended for updating metrics, debug logging etc.
+  ##
   ctx.updateMetrics()
-  ctx.updateTicker()
+  ctx.pool.ticker(ctx)
+
+  # Inform if there are no peers active while syncing
+  if not ctx.hibernate and ctx.pool.nBuddies < 1:
+    let now = Moment.now()
+    if ctx.pool.lastNoPeersLog + noPeersLogWaitInterval < now:
+      ctx.pool.lastNoPeersLog = now
+      debug info & ": no sync peers yet",
+        elapsed=(now - ctx.pool.lastPeerSeen).toStr,
+        nOtherPeers=ctx.node.peerPool.connectedNodes.len
 
 
 template runDaemon*(ctx: BeaconCtxRef; info: static[string]): Duration =
@@ -113,23 +105,12 @@ template runDaemon*(ctx: BeaconCtxRef; info: static[string]): Duration =
   ##
   var bodyRc = chronos.nanoseconds(0)
   block body:
-    # Check for a possible header layout and body request changes
+    # Update syncer state.
     ctx.updateSyncState info
-    if ctx.hibernate:
-      break body             # return
 
-    # Execute staged block records.
-    if ctx.blocksUnstageOk():
-
-      # Import bodies from the `staged` queue.
-      discard ctx.blocksUnstage info # async/template
-
-      if not ctx.daemon or   # Implied by external sync shutdown?
-         ctx.poolMode:       # Oops, re-org needed?
-        break body           # return
-
-    # # At the end of the cycle, leave time to trigger refill headers/blocks
-    bodyRc = daemonWaitInterval
+    # Extra waiting time unless immediate change expected.
+    if ctx.pool.lastState in {headers,blocks}:
+      bodyRc = daemonWaitInterval
 
   bodyRc
 
@@ -206,6 +187,12 @@ template runPeer*(buddy: BeaconBuddyRef; info: static[string]): Duration =
           break body
 
         # End `while()`
+
+    else:
+      # Potential manual target set up
+      buddy.headersTargetActivate info
+
+    # End block: `body`
 
   # Idle sleep unless there is something to do
   if not buddy.somethingToCollect():

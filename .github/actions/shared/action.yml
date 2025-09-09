@@ -31,19 +31,9 @@ inputs:
     required: false
     default: false
 
-outputs:
-  random-number:
-    description: "Random number"
-    value: ${{ steps.random-number-generator.outputs.random-number }}
-
 runs:
   using: "composite"
   steps:
-    - name: Random Number Generator
-      id: random-number-generator
-      run: echo "random-number=$(echo $RANDOM)" >> $GITHUB_OUTPUT
-      shell: bash
-
     - name: Derive environment variables
       shell: bash
       run: |
@@ -178,7 +168,11 @@ runs:
       if: inputs.eest-cache == 'true'
       uses: actions/cache@v4
       with:
-        path: tests/fixtures/eest
+        path: |
+          tests/fixtures/eest_static
+          tests/fixtures/eest_stable
+          tests/fixtures/eest_develop
+          tests/fixtures/eest_devnet
         # EEST release version contained in eest_ci_cache.sh.
         # Each time we bump EEST version, it should invalidate the cache too.
         key: eest-${{ hashFiles('scripts/eest_ci_cache.sh') }}

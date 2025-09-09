@@ -17,7 +17,7 @@ import
   beacon_chain/spec/forks,
   ../../network/beacon/beacon_content,
   ../../network/beacon/beacon_init_loader,
-  ../../eth_data/yaml_utils,
+  ../../eth_history/yaml_utils,
   "."/light_client_test_data
 
 suite "Beacon Content Keys and Values - Test Vectors":
@@ -197,8 +197,7 @@ suite "Beacon Content Keys and Values":
     bellatrix: ForkDigest([0'u8, 0, 0, 3]),
     capella: ForkDigest([0'u8, 0, 0, 4]),
     deneb: ForkDigest([0'u8, 0, 0, 5]),
-    electra: ForkDigest([0'u8, 0, 0, 6]),
-    fulu: ForkDigest([0'u8, 0, 0, 7]),
+    electra: ForkDigest([0'u8, 0, 0, 6]), # TODO fulu: ForkDigest([0'u8, 0, 0, 7]),
   )
 
   test "LightClientBootstrap":

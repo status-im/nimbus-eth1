@@ -165,7 +165,7 @@ func `<`*(a, b: HashKey): bool =
 # Public helpers: Reversible conversions between`HashKey`, etc.
 # ------------------------------------------------------------------------------
 func to*(lid: HashKey; T: type Hash32): T =
-  ## Returns the `Hash236` key if available, otherwise the Keccak hash of
+  ## Returns the `Hash32` key if available, otherwise the Keccak hash of
   ## the `seq[byte]` version.
   if lid.len == 32:
     Hash32(lid.buf)

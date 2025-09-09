@@ -22,7 +22,7 @@ import
   ../common/common_utils,
   ../database/content_db,
   ../network/wire/[portal_protocol, portal_stream, portal_protocol_config],
-  ../network/legacy_history/[history_content, history_network]
+  ../network/history/[history_content, history_network]
 
 const
   defaultListenAddress* = (static parseIpAddress("0.0.0.0"))
@@ -118,7 +118,7 @@ type
     .}: Port
 
     protocolId* {.
-      defaultValue: getProtocolId(PortalNetwork.mainnet, PortalSubnetwork.legacyHistory),
+      defaultValue: getProtocolId(PortalNetwork.mainnet, PortalSubnetwork.history),
       desc: "Portal wire protocol id for the network to connect to",
       name: "protocol-id"
     .}: PortalProtocolId

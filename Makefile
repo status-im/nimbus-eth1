@@ -72,7 +72,6 @@ TOOLS_CSV := $(subst $(SPACE),$(COMMA),$(TOOLS))
 PORTAL_TOOLS := \
 	nimbus_portal_bridge \
 	eth_data_exporter \
-	blockwalk \
 	portalcli \
 	fcli_db
 PORTAL_TOOLS_DIRS := \
@@ -285,16 +284,16 @@ portal-test-reproducibility:
 			{ echo -e "\e[91mFailure: the binary changed between builds.\e[39m"; exit 1; }
 
 # Portal tests
-all_history_network_custom_chain_tests: | build deps
+all_eth_history_custom_chain_tests: | build deps
 	echo -e $(BUILD_MSG) "build/$@" && \
-	$(ENV_SCRIPT) nim c -r $(NIM_PARAMS) -d:chronicles_log_level=ERROR -d:mergeBlockNumber:38130 -o:build/$@ "portal/tests/legacy_history_network_tests/$@.nim"
+	$(ENV_SCRIPT) nim c -r $(NIM_PARAMS) -d:chronicles_log_level=ERROR -d:mergeBlockNumber:38130 -o:build/$@ "portal/tests/eth_history_tests/$@.nim"
 
 all_portal_tests: | build deps
 	echo -e $(BUILD_MSG) "build/$@" && \
 	$(ENV_SCRIPT) nim c -r $(NIM_PARAMS) -d:chronicles_log_level=ERROR -o:build/$@ "portal/tests/$@.nim"
 
 # builds and runs the Portal test suite
-portal-test: | all_portal_tests all_history_network_custom_chain_tests
+portal-test: | all_portal_tests all_eth_history_custom_chain_tests
 
 # builds the Portal tools, wherever they are
 $(PORTAL_TOOLS): | build deps rocksdb
@@ -351,6 +350,22 @@ libverifproxy: | build deps
 		$(ENV_SCRIPT) nim c --app:lib -d:"libp2p_pki_schemes=secp256k1" --noMain:on --threads:on --nimcache:nimcache/libverifproxy -o:$(VERIF_PROXY_OUT_PATH)/$@.$(SHAREDLIBEXT) $(NIM_PARAMS) nimbus_verified_proxy/libverifproxy/verifproxy.nim
 	cp nimbus_verified_proxy/libverifproxy/verifproxy.h $(VERIF_PROXY_OUT_PATH)/
 	echo -e $(BUILD_END_MSG) "build/$@"
+
+eest_engine: | build deps
+	$(ENV_SCRIPT) nim c $(NIM_PARAMS) -d:chronicles_enabled:off -o:build/$@ "tests/eest/$@.nim"
+
+eest_engine_test: | build deps eest eest_engine
+	$(ENV_SCRIPT) nim c -r $(NIM_PARAMS) -d:chronicles_enabled:off -o:build/$@ "tests/eest/$@.nim"
+
+eest_blockchain: | build deps
+	$(ENV_SCRIPT) nim c $(NIM_PARAMS) -d:chronicles_enabled:off -o:build/$@ "tests/eest/$@.nim"
+
+eest_blockchain_test: | build deps eest eest_blockchain
+	$(ENV_SCRIPT) nim c -r $(NIM_PARAMS) -d:chronicles_enabled:off -o:build/$@ "tests/eest/$@.nim"
+
+eest_full_test: | build deps eest_blockchain eest_engine
+	$(ENV_SCRIPT) nim c -r $(NIM_PARAMS) -d:chronicles_enabled:off -o:build/$@ "tests/eest/eest_blockchain_test.nim"
+	$(ENV_SCRIPT) nim c -r $(NIM_PARAMS) -d:chronicles_enabled:off -o:build/$@ "tests/eest/eest_engine_test.nim"
 
 # builds transition tool
 t8n: | build deps

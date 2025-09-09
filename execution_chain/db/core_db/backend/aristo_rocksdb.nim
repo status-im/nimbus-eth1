@@ -42,6 +42,17 @@ proc toDbOpts*(opts: DbOptions): DbOptionsRef =
     # https://github.com/facebook/rocksdb/blob/af50823069818fc127438e39fef91d2486d6e76c/include/rocksdb/options.h#L1276
     dbOpts.rowCache = cacheCreateLRU(opts.rowCacheSize, autoClose = true)
 
+  # The WAL is shared between column families and a single small unflushed CF
+  # (like the sync cache) can keep the WAL growing for a long time - this both
+  # causes poor startup times and results in an ever-growing number of WAL files.
+  # The default value is very large, specially given that each manual flush
+  # of the aristo table creates a new log file.
+  # https://github.com/facebook/rocksdb/blob/af50823069818fc127438e39fef91d2486d6e76c/include/rocksdb/options.h#L719
+  let writeBufferSize =
+    if opts.writeBufferSize > 0: opts.writeBufferSize else: defaultWriteBufferSize
+
+  dbOpts.maxTotalWalSize = 3 * writeBufferSize + 1024 * 1024
+
   dbOpts.keepLogFileNum = 16 # No point keeping 1000 log files around...
 
   # Parallelize L0 -> Ln compaction

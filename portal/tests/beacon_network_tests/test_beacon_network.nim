@@ -87,7 +87,6 @@ procSuite "Beacon Network":
         kind: LightClientDataFork.Altair, altairData: finalityUpdateData
       )
       finalizedHeaderSlot = finalityUpdateData.finalized_header.beacon.slot
-      finalizedOptimisticHeaderSlot = finalityUpdateData.attested_header.beacon.slot
 
       optimisticUpdateData =
         SSZ.decode(lightClientOptimisticUpdateBytes, altair.LightClientOptimisticUpdate)

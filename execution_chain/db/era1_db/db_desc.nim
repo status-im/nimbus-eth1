@@ -15,7 +15,7 @@ import
   std/[os, parseutils, strutils, tables],
   results,
   eth/common/blocks,
-  ../../../portal/eth_data/era1
+  ../../../portal/eth_history/era1
 
 export results, blocks
 

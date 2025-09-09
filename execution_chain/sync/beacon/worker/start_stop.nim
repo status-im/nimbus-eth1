@@ -11,11 +11,10 @@
 {.push raises:[].}
 
 import
-  pkg/[chronicles, eth/common, metrics],
+  pkg/[chronicles, chronos, eth/common, metrics],
   ../../../networking/p2p,
   ../../wire_protocol,
-  ../worker_desc,
-  ./[blocks, headers, update]
+  ./[blocks, headers, update, worker_desc]
 
 type
   SyncStateData = tuple
@@ -63,16 +62,13 @@ proc setupServices*(ctx: BeaconCtxRef; info: static[string]) =
     # Activates the syncer. Work will be picked up by peers when available.
     ctx.updateActivateSyncer()
 
-  # Manual first run?
-  if 0 < ctx.pool.clReq.consHead.number:
-    debug info & ": pre-set target", consHead=ctx.pool.clReq.consHead.bnStr,
-      finalHash=ctx.pool.clReq.finalHash.short
-    ctx.hdrCache.headTargetUpdate(
-      ctx.pool.clReq.consHead, ctx.pool.clReq.finalHash)
-
   # Provide progress info call back handler
   ctx.pool.chain.com.beaconSyncerProgress = proc(): SyncStateData =
     ctx.querySyncProgress()
+
+  # Set up ticker, disabled by default
+  if ctx.pool.ticker.isNil:
+    ctx.pool.ticker = proc(ctx: BeaconCtxRef) = discard
 
 
 proc destroyServices*(ctx: BeaconCtxRef) =
@@ -102,8 +98,15 @@ proc startBuddy*(buddy: BeaconBuddyRef): bool =
 
 
 proc stopBuddy*(buddy: BeaconBuddyRef) =
-  buddy.ctx.pool.nBuddies.dec
-  metrics.set(nec_sync_peers, buddy.ctx.pool.nBuddies)
+  let ctx = buddy.ctx
+  if 1 < ctx.pool.nBuddies:
+    ctx.pool.nBuddies.dec
+  else:
+    ctx.pool.nBuddies = 0
+    ctx.pool.lastSlowPeer = Opt.none(Hash)
+    ctx.pool.lastPeerSeen = Moment.now()
+    ctx.pool.lastNoPeersLog = ctx.pool.lastPeerSeen
+  metrics.set(nec_sync_peers, ctx.pool.nBuddies)
   buddy.clearProcErrors()
 
 # ------------------------------------------------------------------------------

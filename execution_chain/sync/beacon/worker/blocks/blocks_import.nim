@@ -14,25 +14,26 @@ import
   pkg/[chronicles, chronos, results],
   pkg/eth/common,
   ../../../wire_protocol,
-  ../../worker_desc,
-  ./blocks_helpers
+  ../worker_desc
 
 # ------------------------------------------------------------------------------
 # Public function
 # ------------------------------------------------------------------------------
 
 proc importBlock*(
-    ctx: BeaconCtxRef;
-    maybePeer: Opt[BeaconBuddyRef];
+    buddy: BeaconBuddyRef;
     blk: EthBlock;
     effPeerID: Hash;
       ): Future[Result[Duration,BeaconError]]
       {.async: (raises: []).} =
   ## Wrapper around blocks importer
-  let start = Moment.now()
+  let
+    start = Moment.now()
+    ctx = buddy.ctx
+    peer = buddy.peer
 
   if blk.header.number <= ctx.chain.baseNumber:
-    trace "Ignoring block less eq. base", peer=maybePeer.toStr, blk=blk.bnStr,
+    trace "Ignoring block less eq. base", peer, blk=blk.bnStr,
       B=ctx.chain.baseNumber.bnStr, L=ctx.chain.latestNumber.bnStr
   else:
     try:

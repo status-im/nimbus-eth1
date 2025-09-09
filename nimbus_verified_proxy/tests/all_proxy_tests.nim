@@ -10,4 +10,6 @@ import
   ./test_header_store,
   ./test_transactions,
   ./test_blocks,
-  ./test_receipts
+  ./test_receipts,
+  ./test_state,
+  ./test_fees

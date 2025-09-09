@@ -320,7 +320,7 @@ proc populateConfigObject*(com: CommonRef, fork: HardFork): ConfigObject =
     ]
     pragueSystemContracts: seq[SystemContractPair] = @[
       SystemContractPair(
-        address: SYSTEM_ADDRESS,
+        address: CONSOLIDATION_REQUEST_PREDEPLOY_ADDRESS,
         name: "CONSOLIDATION_REQUEST_PREDEPLOY_ADDRESS"
       ),
       SystemContractPair(
@@ -390,4 +390,3 @@ proc getEthConfigObject*(com: CommonRef,
     res.last = Opt.none(ConfigObject)
 
   return res
-

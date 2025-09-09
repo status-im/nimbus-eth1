@@ -49,10 +49,12 @@ proc rollback*(rdb: var RdbInst, session: SharedWriteBatchRef) =
   if not session.isClosed():
     session.close()
 
-proc commit*(rdb: var RdbInst, session: SharedWriteBatchRef): Result[void,(KvtError,string)] =
+proc commit*(
+    rdb: var RdbInst, session: SharedWriteBatchRef, cf: static[KvtCFs]
+): Result[void, (KvtError, string)] =
   if not session.isClosed():
     defer: session.close()
-    rdb.baseDb.commit(session, rdb.store[KvtGeneric]).isOkOr:
+    rdb.baseDb.commit(session, rdb.store[cf], false).isOkOr:
       const errSym = RdbBeDriverWriteError
       when extraTraceMessages:
         trace logTxt "commit", error=errSym, info=error

@@ -118,7 +118,7 @@ suite "test proxy header store":
       kind: LightClientDataFork.Electra,
       electraData: electra.LightClientHeader(
         beacon: default(electra.BeaconBlockHeader),
-        execution: electra.ExecutionPayloadHeader(block_number: uint64(232)),
+        execution: deneb.ExecutionPayloadHeader(block_number: uint64(232)),
         execution_branch: default(capella.ExecutionBranch),
       ),
     )

@@ -233,7 +233,7 @@ proc setupServerAPI*(api: ServerAPIRef, server: RpcServer, ctx: EthContext) =
 
   proc getLogsForBlock(
       chain: ForkedChainRef, header: Header, opts: FilterOptions
-  ): Opt[seq[FilterLog]] {.gcsafe, raises: [].} =
+  ): Opt[seq[FilterLog]] =
     if headerBloomFilter(header, opts.address, opts.topics):
       let
         blkHash = header.computeBlockHash
@@ -261,7 +261,7 @@ proc setupServerAPI*(api: ServerAPIRef, server: RpcServer, ctx: EthContext) =
       start: base.BlockNumber,
       finish: base.BlockNumber,
       opts: FilterOptions,
-  ): seq[FilterLog] {.gcsafe, raises: [].} =
+  ): seq[FilterLog] =
     var
       logs = newSeq[FilterLog]()
       blockNum = start
@@ -717,6 +717,8 @@ proc setupServerAPI*(api: ServerAPIRef, server: RpcServer, ctx: EthContext) =
 
   server.rpc("eth_config") do() -> EthConfigObject:
     ## Returns the current, next and last configuration
+    ## Doesn't work pre-shangai
+    ## https://eips.ethereum.org/EIPS/eip-7910
     let currentFork = api.com.toHardFork(api.chain.latestHeader.forkDeterminationInfo)
 
     if currentFork < Shanghai:
