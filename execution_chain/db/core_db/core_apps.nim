@@ -404,7 +404,7 @@ proc getTransactions*(
       res.add(rlp.decode(encodedTx, Transaction))
 
     # Txs not there in db - Happens during era1/era import, when we don't store txs and receipts
-    if (res.len == 0 and txRoot != zeroHash32):
+    if (res.len == 0 and txRoot != emptyRoot):
       return err("No transactions found in db for txRoot " & $txRoot)
 
     return ok(move(res))

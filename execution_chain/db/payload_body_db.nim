@@ -49,7 +49,7 @@ proc getExecutionPayloadBodyV1*(
     body.transactions.add TypedTransaction(encodedTx)
 
   # Txs not there in db - Happens during era1/era import, when we don't store txs and receipts
-  if (body.transactions.len == 0 and header.txRoot != zeroHash32):
+  if (body.transactions.len == 0 and header.txRoot != emptyRoot):
     return err("No transactions found in db for txRoot " & $header.txRoot)
 
   if header.withdrawalsRoot.isSome:
