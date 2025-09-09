@@ -455,8 +455,10 @@ proc getUncleHashes*(
       ): Result[seq[Hash32], string] =
   var res: seq[Hash32]
   for blockHash in blockHashes:
-    let body = ?db.getBlockBody(blockHash)
-    res &= body.uncles.mapIt(it.computeRlpHash)
+    let header = ?db.getBlockHeader(blockHash)
+    let uncles = ?db.getUncles(header.ommersHash)
+
+    res &= uncles.mapIt(it.computeRlpHash)
   ok(res)
 
 proc getUncleHashes*(
