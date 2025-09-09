@@ -19,7 +19,7 @@ import
   "."/[aristo_desc, aristo_get, aristo_layers],
   ./aristo_desc/desc_backend
 
-type 
+type
   WriteBatch = tuple[writer: PutHdlRef, count: int, depth: int, prefix: uint64]
 
   AristoTrieWriter = object
@@ -112,9 +112,6 @@ template appendLeaf(w: var RlpWriter, pfx: NibblesBuf, leafData: untyped) =
   w.append(pfx.toHexPrefix(isLeaf = true).data())
   w.wrapEncoding(1)
   w.append(leafData)
-
-  # magical line 
-  discard rlp.encode(leafData)
 
 template encodeLeaf(w: var AristoTrieWriter, pfx: NibblesBuf, leafData: untyped): HashKey =
   w.clear()
