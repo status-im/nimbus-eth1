@@ -107,13 +107,13 @@ func clear(self: var AristoTrieWriter) =
   self.twoPassWriter.clear()
   self.hashWriter.clear()
 
-template appendLeaf(w: var RlpWriter, pfx: NibblesBuf, leafData: untyped) =
+template appendLeaf(w: var RlpWriter, pfx: NibblesBuf, leafData: auto) =
   w.startList(2)
   w.append(pfx.toHexPrefix(isLeaf = true).data())
   w.wrapEncoding(1)
   w.append(leafData)
 
-template encodeLeaf(w: var AristoTrieWriter, pfx: NibblesBuf, leafData: untyped): HashKey =
+template encodeLeaf(w: var AristoTrieWriter, pfx: NibblesBuf, leafData: auto): HashKey =
   w.clear()
   w.tracker.appendLeaf(pfx, leafData)
 
@@ -154,7 +154,7 @@ template appendExt(w: var RlpWriter, pfx: NibblesBuf, branchKey: HashKey) =
   w.append(pfx.toHexPrefix(isLeaf = false).data())
   w.append(branchKey)
 
-template encodeExt(w: var AristoTrieWriter, pfx: NibblesBuf, branchKey: untyped): HashKey =
+func encodeExt(w: var AristoTrieWriter, pfx: NibblesBuf, branchKey: HashKey): HashKey =
   w.clear()
   w.tracker.appendExt(pfx, branchKey)
 
@@ -205,9 +205,9 @@ proc computeKeyImpl(
   # empty state
 
   # Top-most level of all the verticies this hash computation depends on
-  var level = level
-
-  var writer = AristoTrieWriter.init()
+  var
+    level = level
+    writer = AristoTrieWriter.init()
 
   let key =
     case vtx.vType
@@ -235,17 +235,17 @@ proc computeKeyImpl(
           else:
             VOID_HASH_KEY
 
-      writer.encodeLeaf(vtx.pfx):
+      writer.encodeLeaf(vtx.pfx,
         Account(
           nonce: vtx.account.nonce,
           balance: vtx.account.balance,
           storageRoot: skey.to(Hash32),
           codeHash: vtx.account.codeHash,
         )
+      )
     of StoLeaf:
       let vtx = StoLeafRef(vtx)
-      writer.encodeLeaf(vtx.pfx):
-        vtx.stoData
+      writer.encodeLeaf(vtx.pfx, vtx.stoData)
     of Branches:
       # For branches, we need to load the vertices before recursing into them
       # to exploit their on-disk order
@@ -314,9 +314,8 @@ proc computeKeyImpl(
 
       if vtx.vType == ExtBranch:
         let vtx = ExtBranchRef(vtx)
-        writer.encodeExt(vtx.pfx):
-          var bwriter = AristoTrieWriter.init()
-          bwriter.writeBranch(vtx)
+        var bwriter = AristoTrieWriter.init()
+        writer.encodeExt(vtx.pfx, bwriter.writeBranch(vtx))
       else:
         writer.writeBranch(vtx)
 
