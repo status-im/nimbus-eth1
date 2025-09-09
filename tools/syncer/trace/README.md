@@ -5,7 +5,7 @@ For the *nimbus_execution_client* binary, data from a syncer sessions can
 be captured into a file **(capture)** along with system state information
 via
 
-       ./build/syncer_test_client_trace ... -- (capture)
+       ./build/syncer_test_client_trace ... -- --capture-file=(capture)
 
 where **...** stands for all other options that might be useful for running
 an execution layer session.

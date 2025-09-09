@@ -7,7 +7,7 @@ Inspection
 Given a (probably gzipped) capture file **(capture)** as a result of
 tracing, its content can be visualised via
 
-       ./build/syncer_test_client_inspect (capture)
+       ./build/syncer_test_client_inspect --capture-file=(capture)
 
 Replay
 ------
@@ -16,7 +16,7 @@ Copy and secure the current database directory **(database)** as **(dbcopy)**,
 say. Then start a capture run on the original data base as
 
        ./build/syncer_test_client_replay \
-          --datadir=(database) ...  -- (capture)
+          --datadir=(database) ...  -- --capture-file=(capture)
 
 where **(capture)** will contain all the data for the replay. This file can
 bebome quite big (e.g. 30GiB for the last 120k blocks synchronised on
@@ -31,7 +31,7 @@ Now, the captured run can be replayed on the secured database copy
 **(dbcopy)** with the (probably gzipped) **(capture)** file via
 
        ./build/syncer_test_client_replay \
-          --datadir=(dbcopy) ... -- (capture)
+          --datadir=(dbcopy) ... -- --capture-file=(capture)
 
 where ihe additional arguments **...** of either command above need not be
 the same.

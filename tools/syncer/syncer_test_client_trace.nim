@@ -8,134 +8,78 @@
 # those terms.
 
 import
-  std/[cmdline, os, strutils],
-  pkg/[chronicles, results],
-  ../../execution_chain/config,
+  std/[cmdline, os, strutils, terminal],
+  pkg/[chronicles, confutils, results],
+  ../../execution_chain/[config, nimbus_desc, nimbus_execution_client],
   ../../execution_chain/sync/beacon,
-  ./helpers/[nimbus_el_wrapper, sync_ticker],
+  ./helpers/sync_ticker,
   ./trace/trace_setup
 
+const
+  fgSection = fgYellow
+  fgOption = fgBlue
+
 type
-  ArgsDigest = tuple
-    elArgs: seq[string] # split command line: left to "--" marker
-    fileName: string    # capture file name
-    nSessions: int      # capture modifier argument
-    nPeersMin: int      # ditto
-    syncTicker: bool    # ..
+  ToolConfig* = object of RootObj
+    captureFile {.
+      separator: "TRACE TOOL OPTIONS:"
+      desc: "Store captured states in the <capture-file> argument. If this " &
+            "option is missing, no capture file is written"
+      name: "capture-file" .}: Option[OutFile]
 
-let
-  cmdName = getAppFilename().extractFilename()
+    nSessions {.
+      desc: "Run a trace for this many sessions (i.e. from activation to " &
+            "suspension)"
+      defaultValue: 1
+      name: "num-trace-sessions" .}: uint
 
-# ------------------------------------------------------------------------------
-# Private helpers, command line parsing tools
-# ------------------------------------------------------------------------------
+    nPeersMin {.
+      desc: "Minimal number of peers needed for activating the first syncer " &
+             "session"
+      defaultValue: 0
+      name: "num-peers-min" .}: uint
 
-proc argsCheck(q: seq[string]): seq[string] =
-  if q.len == 0 or
-     q[0] == "-h" or
-     q[0] == "--help":
-    echo "",
-      "Usage: ", cmdName,
-      " [<execution-layer-args>.. --] <capture-file> [<attributes>..]\n",
-      "       Capture file:\n",
-      "           Run a trace session and store captured states in the\n",
-      "           <capture-file> argument.\n",
-      "       Attributes:\n",
-      "           nSessions=[0-9]+  Run a trace for this many sessions (i.e. from\n",
-      "                             activation to suspension). If set to 0, the\n",
-      "                             <capture-file> is ignored and will not be written.\n",
-      "                             However, other modifiers still have effcet.\n",
-      "           nPeersMin=[0-9]+  Minimal number of peers needed for activating\n",
-      "                             the first syncer session.\n",
-      "           syncTicker        Log sync state regularly.\n"
-    quit(QuitFailure)
-  return q
+    noSyncTicker {.
+      desc: "Disable logging sync status regularly"
+      defaultValue: false
+      name: "disable-sync-ticker" .}: bool
 
-proc argsError(s: string) =
-  echo "*** ", cmdName, ": ", s, "\n"
-  discard argsCheck(@["-h"]) # usage & quit
-
-# -------------
-
-proc parseCmdLine(): ArgsDigest =
-  ## Parse command line:
-  ## ::
-  ##    [<el-args>.. --] <filename> [nSessions=[0-9]+] ..
-  ##
-  var exArgs: seq[string]
-
-  # Split command line by "--" into `exArgs[]` and `elArgs[]`
-  let args = commandLineParams().argsCheck()
-  for n in 0 ..< args.len:
-    if args[n] == "--":
-      if 0 < n:
-        result.elArgs = args[0 .. n-1]
-      if n < args.len:
-        exArgs = args[n+1 .. ^1].argsCheck()
-      break
-
-  # Case: no <el-options> delimiter "--" given
-  if exArgs.len == 0 and result.elArgs.len == 0:
-    exArgs = args
-
-  result.fileName = exArgs[0]
-  result.nSessions = -1
-  result.nPeersMin = -1
-  for n in 1 ..< exArgs.len:
-    let w = exArgs[n].split('=',2)
-
-    block:
-      # nSessions=[0-9]+
-      const token = "nSessions"
-      if toLowerAscii(w[0]) == toLowerAscii(token):
-        if w.len < 2:
-          argsError("Sub-argument incomplete: " & token & "=[0-9]+")
-        try:
-          result.nSessions = int(w[1].parseBiggestUInt)
-        except ValueError as e:
-          argsError("Sub-argument value error: " & token & "=[0-9]+" &
-                    ", error=" & e.msg)
-        continue
-
-    block:
-      # nPeersMin=[0-9]+
-      const token = "nPeersMin"
-      if toLowerAscii(w[0]) == toLowerAscii(token):
-        if w.len < 2:
-          argsError("Sub-argument incomplete: " & token & "=[0-9]+")
-        try:
-          result.nPeersMin = int(w[1].parseBiggestUInt)
-        except ValueError as e:
-          argsError("Sub-argument value error: " & token & "=[0-9]+" &
-                    ", error=" & e.msg)
-        continue
-
-    block:
-      # syncTicker
-      const token = "syncTicker"
-      if toLowerAscii(w[0]) == toLowerAscii(token):
-        if 1 < w.len:
-          argsError("Sub-argument has no value: " & token)
-        result.syncTicker = true
-        continue
-
-    argsError("Sub-argument unknown: " & exArgs[n])
+  SplitCmdLine = tuple
+    leftArgs: seq[string]  # split command line: left to "--" marker (nimbus)
+    rightArgs: seq[string] # split command line: right to "--" marker (tool)
 
 # ------------------------------------------------------------------------------
 # Private functions
 # ------------------------------------------------------------------------------
 
-proc beaconSyncConfig(args: ArgsDigest): BeaconSyncConfigHook =
+proc splitCmdLine(): SplitCmdLine =
+  ## Split commans line options
+  ## ::
+  ##   [<nimbus-options> --] [<tool-options]
+  ##
+  let args = commandLineParams()
+  for n in 0 ..< args.len:
+    if args[n] == "--":
+      if 0 < n:
+        result.leftArgs = args[0 .. n-1]
+      if n < args.len:
+        result.rightArgs = args[n+1 .. ^1]
+      return
+  result.rightArgs = args
+
+
+proc beaconSyncConfig(conf: ToolConfig): BeaconSyncConfigHook =
   return proc(desc: BeaconSyncRef) =
-    if args.syncTicker:
+    if not conf.noSyncTicker:
       desc.ctx.pool.ticker = syncTicker()
-    if 1 < args.nPeersMin:
-      desc.ctx.pool.minInitBuddies = args.nPeersMin
-    if args.nSessions == 0:
+    if 1 < conf.nPeersMin:
+      desc.ctx.pool.minInitBuddies = conf.nPeersMin.int
+    if conf.nSessions == 0 or
+       conf.captureFile.isNone:
       return
     desc.ctx.traceSetup(
-               fileName = args.fileName,
-               nSessions = max(0, args.nSessions)).isOkOr:
+               fileName = conf.captureFile.unsafeGet.string,
+               nSessions = conf.nSessions.int).isOkOr:
       fatal "Cannot set up trace handlers", error
       quit(QuitFailure)
 
@@ -143,18 +87,26 @@ proc beaconSyncConfig(args: ArgsDigest): BeaconSyncConfigHook =
 # Main
 # ------------------------------------------------------------------------------
 
-# Pre-parse command line
-let argsDigest = parseCmdLine()
+let
+  (leftOpts, rightOpts) = splitCmdLine()
 
-# Early plausibility check
-if argsDigest.fileName.fileExists:
-  argsError("Must not overwrite file: \"" & argsDigest.fileName & "\"")
+  rightConf = ToolConfig.load(
+    cmdLine = rightOpts,
+    copyrightBanner = ansiForegroundColorCode(fgSection) &
+      "\pNimbus execution layer with trace extension.\p" &
+      "Extended command line options:\p" &
+      ansiForegroundColorCode(fgOption) &
+      "  [<nimbus-options> --] [<tool-options>]")
 
-# Processing left part command line arguments
-let conf = makeConfig(cmdLine = argsDigest.elArgs)
+  leftConf = makeConfig(cmdLine = leftOpts)
+
+  nodeConf = leftConf.setupExeClientNode()
+
+# Update node config for lazy beacon sync update
+nodeConf.beaconSyncRef = BeaconSyncRef.init rightConf.beaconSyncConfig
 
 # Run execution client
-conf.runNimbusExeClient(argsDigest.beaconSyncConfig)
+nodeConf.runExeClient(leftConf)
 
 # ------------------------------------------------------------------------------
 # End

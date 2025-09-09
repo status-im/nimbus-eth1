@@ -8,53 +8,35 @@
 # those terms.
 
 import
-  std/[cmdline, os, streams, strutils],
-  pkg/chronicles,
+  std/[cmdline, os, streams, strutils, terminal],
+  pkg/[chronicles, confutils],
   pkg/beacon_chain/process_state,
   ./replay/replay_reader
 
-let cmdName = getAppFilename().extractFilename()
+const
+  fgSection = fgYellow
 
-# ------------------------------------------------------------------------------
-# Private helpers, command line parsing tools
-# ------------------------------------------------------------------------------
-
-proc argsCheck(q: seq[string]): seq[string] =
-  if q.len == 0 or
-     q[0] == "-h" or
-     q[0] == "--help":
-    echo "",
-      "Usage: ", cmdName, " [--] <capture-file>\n",
-      "       Capture file:\n",
-      "           Read from <capture-file> argument and print its contents."
-    quit(QuitFailure)
-  q
-
-proc argsError(s: string) =
-  echo "*** ", cmdName, ": ", s, "\n"
-  discard argsCheck(@["-h"]) # usage & quit
-
-# -------------
-
-proc parseCmdLine(): string =
-  var args = commandLineParams().argsCheck
-  if args[0] == "--":
-    if args.len == 1:
-      argsError("Missing capture file argument")
-    args = args[1 .. ^1]
-  if args.len == 0:
-    argsError("Missing capture file argiment")
-  if 1 < args.len:
-    argsError("Extra arguments: " & args[1 .. ^1].join(" ") & ".")
-  return args[0]
+type
+  ToolConfig* = object of RootObj
+    captureFile {.
+      separator: "INSPECT TOOL OPTIONS:"
+      desc: "Read from <capture-file> argument and print its contents"
+      name: "capture-file" .}: InputFile
 
 # ------------------------------------------------------------------------------
 # Main
 # ------------------------------------------------------------------------------
 
-let name = parseCmdLine()
+let
+  config = ToolConfig.load(
+    cmdLine = commandLineParams(),
+    copyrightBanner = ansiForegroundColorCode(fgSection) &
+      "\pNimbus capture file inspection tool.\p")
+  name = config.captureFile.string
+
 if not name.fileExists:
-  argsError("No such capture file: \"" & name & "\"")
+  fatal "No such capture file", name
+  quit(QuitFailure)
 
 ProcessState.setupStopHandlers()
 ProcessState.notifyRunning()
