@@ -14,8 +14,7 @@
 
 import
   std/[net, os, streams, strutils],
-  pkg/[chronicles, chronos, eth/common, stew/base64, stew/byteutils],
-  ./reader_gunzip,
+  pkg/[chronicles, chronos, eth/common, stew/base64, stew/byteutils, zlib],
   ../replay_desc
 
 logScope:

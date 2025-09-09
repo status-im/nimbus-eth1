@@ -14,8 +14,7 @@
 
 import
   std/streams,
-  pkg/results,
-  ./reader_gunzip
+  pkg/[results, zlib]
 
 type
   ReplayRecLogPrintFn* = proc(s: seq[string]) {.gcsafe, raises: [].}

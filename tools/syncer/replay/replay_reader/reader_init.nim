@@ -14,9 +14,8 @@
 
 import
   std/[endians, os, streams, strutils],
-  pkg/[chronicles, eth/common],
-  ../replay_desc,
-  ./reader_gunzip
+  pkg/[chronicles, eth/common, zlib],
+  ../replay_desc
 
 logScope:
   topics = "replay reader"
@@ -72,27 +71,29 @@ proc getFileSignature(strm: Stream): (FileSignature,uint16) =
 # ------------------------------------------------------------------------------
 
 proc plainReadLine(rp: ReplayReaderRef): Opt[string] =
-  const info = "plainReadLine(ReplayRef): "
+  const info = "plainReadLine(): "
   info.onException(DontQuit):
     if not rp.inStream.atEnd():
       return ok(rp.inStream.readLine)
   err()
 
 proc plainAtEnd(rp: ReplayReaderRef): bool =
-  const info = "plainAtEnd(ReplayRef): "
+  const info = "plainAtEnd(): "
   info.onException(DontQuit):
     return rp.inStream.atEnd()
   true
 
 proc gUnzipReadLine(rp: ReplayReaderRef): Opt[string] =
-  const info = "gzipReadLine(ReplayRef): "
-  var ln = rp.gzFilter.nextLine().valueOr:
+  const info = "gUnzipReadLine(): "
+  var rc = Result[string,GUnzipStatus].err((Z_STREAM_ERROR,""))
+  info.onException(DontQuit):
+    rc = rp.gzFilter.nextLine()
+  if rc.isErr():
     if not rp.gzFilter.lineStatusOk():
       let err = rp.gzFilter.lineStatus()
       info info & "GUnzip filter error", zError=err.zError, info=err.info
-      discard
     return err()
-  ok(move ln)
+  ok(rc.value)
 
 proc gUnzipAtEnd(rp: ReplayReaderRef): bool =
   rp.gzFilter.atEnd()
@@ -102,7 +103,7 @@ proc gUnzipAtEnd(rp: ReplayReaderRef): bool =
 # ------------------------------------------------------------------------------
 
 proc init*(T: type ReplayReaderRef; strm: Stream): T =
-  const info = "ReplayRef.init(): "
+  const info = "ReplayReaderRef.init(): "
 
   if strm.isNil:
     fatal info & "Cannot use nil stream for reading -- STOP"
@@ -118,9 +119,13 @@ proc init*(T: type ReplayReaderRef; strm: Stream): T =
     rp.readLine = plainReadLine
     rp.atEnd = plainAtEnd
   of Gzip:
-    rp.gzFilter = GUnzipRef.init(strm).valueOr:
+    var rc = Result[GUnzipRef,GUnzipStatus].err((Z_STREAM_ERROR,""))
+    info.onException(DontQuit):
+      rc = GUnzipRef.init(strm)
+    if rc.isErr:
       fatal info & "Cannot assign gunzip reader -- STOP"
       quit(QuitFailure)
+    rp.gzFilter = rc.value
     rp.readLine = gUnzipReadLine
     rp.atEnd = gUnzipAtEnd
   of Unknown:
@@ -132,7 +137,7 @@ proc init*(T: type ReplayReaderRef; strm: Stream): T =
 
 
 proc destroy*(rp: ReplayReaderRef) =
-  const info = "destroy(ReplayRef): "
+  const info = "destroy(ReplayReaderRef): "
   info.onException(DontQuit):
     rp.inStream.flush()
 
