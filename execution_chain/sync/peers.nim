@@ -13,7 +13,7 @@ import
   std/[hashes, tables],
   chronicles,
   chronos,
-  ../networking/[p2p, peer_pool],
+  ../networking/[p2p, peer_pool, bootnodes, eth1_enr],
   ./wire_protocol
 
 # Currently, this module only handles static peers
@@ -79,7 +79,7 @@ proc runReconnectLoop(pm: PeerManagerRef) {.async, gcsafe.} =
       break
     await sleepAsync(pm.retryInterval.seconds)
 
-proc setupManager(pm: PeerManagerRef, enodes: openArray[ENode]) =
+proc setupManager(pm: PeerManagerRef, boot: Bootnodes) =
   var po: PeerObserver
   po.onPeerConnected = proc(peer: Peer) {.gcsafe.} =
     trace "Peer connected", remote=peer.remote.node
@@ -96,7 +96,17 @@ proc setupManager(pm: PeerManagerRef, enodes: openArray[ENode]) =
   po.addProtocol eth69
   pm.pool.addObserver(pm, po)
 
-  for enode in enodes:
+  for enode in boot.enodes:
+    let state = ReconnectState(
+      node: newNode(enode),
+      retryCount: 0,
+      connected: false
+    )
+    pm.reconnectStates[state.node] = state
+
+  for rec in boot.enrs:
+    let enode = ENode.fromEnr(rec).valueOr:
+      continue
     let state = ReconnectState(
       node: newNode(enode),
       retryCount: 0,
@@ -108,14 +118,14 @@ proc new*(_: type PeerManagerRef,
           pool: PeerPool,
           retryInterval: int,
           maxRetryCount: int,
-          enodes: openArray[ENode]): PeerManagerRef =
+          nodes: Bootnodes): PeerManagerRef =
   result = PeerManagerRef(
     pool: pool,
     state: Starting,
     maxRetryCount: max(0, maxRetryCount),
     retryInterval: max(5, retryInterval)
   )
-  result.setupManager(enodes)
+  result.setupManager(nodes)
 
 proc start*(pm: PeerManagerRef) =
   if pm.state notin {Stopped, Running} and pm.needReconnect:

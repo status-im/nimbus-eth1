@@ -134,41 +134,42 @@ proc configurationMain*() =
       let cx = cc.getWsFlags()
       check { RpcFlag.Eth, RpcFlag.Debug } == cx
 
-    test "bootstrap-node and bootstrap-file":
+    test "bootstrap-node":
       let conf = makeTestConfig()
       let bootnodes = conf.getBootNodes()
-      let bootNodeLen = bootnodes.len
+      let bootNodeLen = bootnodes.enodes.len
       check bootNodeLen > 0 # mainnet bootnodes
 
       let aa = makeConfig(@["--bootstrap-node:" & bootNode])
       let ax = aa.getBootNodes()
-      check ax.len == bootNodeLen + 1
+      check ax.enodes.len == bootNodeLen + 1
+
+      let bb = makeConfig(@["--bootstrap-node:" & bootNode & "," & bootNode])
+      check bb.getBootNodes().enodes.len == bootNodeLen + 2
+
+      let cc = makeConfig(@["--bootstrap-node:" & bootNode, "--bootstrap-node:" & bootNode])
+      check cc.getBootNodes().enodes.len == bootNodeLen + 2
 
       const
         bootFilePath = "tests" / "bootstrap"
         bootFileAppend = bootFilePath / "append_bootnodes.txt"
-        bootFileOverride = bootFilePath / "override_bootnodes.txt"
 
-      let bb = makeConfig(@["--bootstrap-file:" & bootFileAppend])
-      let bx = bb.getBootNodes()
-      check bx.len == bootNodeLen + 3
-
-      let cc = makeConfig(@["--bootstrap-file:" & bootFileOverride])
-      let cx = cc.getBootNodes()
-      check cx.len == 3
+      let dd = makeConfig(@["--bootstrap-node:" & bootFileAppend])
+      let dx = dd.getBootNodes()
+      check dx.enodes.len == bootNodeLen + 3
 
     test "static-peers":
       let conf = makeTestConfig()
-      check conf.getStaticPeers().len == 0
+      check conf.getStaticPeers().enodes.len == 0
 
       let aa = makeConfig(@["--static-peers:" & bootNode])
-      check aa.getStaticPeers().len == 1
+      check aa.getStaticPeers().enodes.len == 1
 
       let bb = makeConfig(@["--static-peers:" & bootNode & "," & bootNode])
-      check bb.getStaticPeers().len == 2
+      check bb.getStaticPeers().enodes.len == 2
 
       let cc = makeConfig(@["--static-peers:" & bootNode, "--static-peers:" & bootNode])
-      check cc.getStaticPeers().len == 2
+      check cc.getStaticPeers().enodes.len == 2
 
     test "chainId of network is oneof std network":
       const
@@ -177,7 +178,7 @@ proc configurationMain*() =
       let conf = makeConfig(@["--network:" & chainid1])
       check conf.networkId == 1.u256
       check conf.networkParams.config.londonBlock.get() == 1337
-      check conf.getBootNodes().len == 0
+      check conf.getBootNodes().enodes.len == 0
 
     test "json-rpc enabled when json-engine api enabled and share same port":
       let conf = makeConfig(@["--engine-api", "--engine-api-port:8545", "--http-port:8545"])
@@ -322,15 +323,15 @@ proc configurationMain*() =
       check conf.metricsAddress == parseIpAddress("111.222.33.203")
 
       privateAccess(NimbusConf)
-      check conf.bootstrapNodes == ["enode://d860a01f9722d78051619d1e2351aba3f43f943f6f00718d1b9baa4101932a1f5011f16bb2b1bb35db20d6fe28fa0bf09636d26a87d31de9ec6203eeedb1f666@18.138.108.67:30303"]
-      check conf.bootstrapFile.string == "basic_bootstrap_file"
-      check conf.bootstrapEnrs.len == 1
-      check conf.bootstrapEnrs[0].toURI == "enr:-IS4QHCYrYZbAKWCBRlAy5zzaDZXJBGkcnh4MHcBFZntXNFrdvJjX04jRzjzCBOonrkTfj499SZuOh8R33Ls8RRcy5wBgmlkgnY0gmlwhH8AAAGJc2VjcDI1NmsxoQPKY0yuDUmstAHYpMa2_oxVtw0RW_QAdpzBQA8yWM0xOIN1ZHCCdl8"
+      check conf.bootstrapNodes.len == 3
+      check conf.bootstrapNodes[0] == "enode://d860a01f9722d78051619d1e2351aba3f43f943f6f00718d1b9baa4101932a1f5011f16bb2b1bb35db20d6fe28fa0bf09636d26a87d31de9ec6203eeedb1f666@18.138.108.67:30303"
+      check conf.bootstrapNodes[1] == "basic_bootstrap_file"
+      check conf.bootstrapNodes[2] == "enr:-IS4QHCYrYZbAKWCBRlAy5zzaDZXJBGkcnh4MHcBFZntXNFrdvJjX04jRzjzCBOonrkTfj499SZuOh8R33Ls8RRcy5wBgmlkgnY0gmlwhH8AAAGJc2VjcDI1NmsxoQPKY0yuDUmstAHYpMa2_oxVtw0RW_QAdpzBQA8yWM0xOIN1ZHCCdl8"
 
-      check conf.staticPeers == ["enode://d860a01f9722d78051619d1e2351aba3f43f943f6f00718d1b9baa4101932a1f5011f16bb2b1bb35db20d6fe28fa0bf09636d26a87d31de9ec6203eeedb1f666@18.138.108.67:30303"]
-      check conf.staticPeersFile.string == "basic_static_peers_file"
-      check conf.staticPeersEnrs.len == 1
-      check conf.staticPeersEnrs[0].toURI == "enr:-IS4QHCYrYZbAKWCBRlAy5zzaDZXJBGkcnh4MHcBFZntXNFrdvJjX04jRzjzCBOonrkTfj499SZuOh8R33Ls8RRcy5wBgmlkgnY0gmlwhH8AAAGJc2VjcDI1NmsxoQPKY0yuDUmstAHYpMa2_oxVtw0RW_QAdpzBQA8yWM0xOIN1ZHCCdl8"
+      check conf.staticPeers.len == 3
+      check conf.staticPeers[0] == "enode://d860a01f9722d78051619d1e2351aba3f43f943f6f00718d1b9baa4101932a1f5011f16bb2b1bb35db20d6fe28fa0bf09636d26a87d31de9ec6203eeedb1f666@18.138.108.67:30303"
+      check conf.staticPeers[1] == "basic_static_peers_file"
+      check conf.staticPeers[2] == "enr:-IS4QHCYrYZbAKWCBRlAy5zzaDZXJBGkcnh4MHcBFZntXNFrdvJjX04jRzjzCBOonrkTfj499SZuOh8R33Ls8RRcy5wBgmlkgnY0gmlwhH8AAAGJc2VjcDI1NmsxoQPKY0yuDUmstAHYpMa2_oxVtw0RW_QAdpzBQA8yWM0xOIN1ZHCCdl8"
 
       check conf.reconnectMaxRetry == 10
       check conf.reconnectInterval == 11

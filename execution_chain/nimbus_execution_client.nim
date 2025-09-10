@@ -30,6 +30,7 @@ import
   ./sync/wire_protocol,
   ./common/chain_config_hash,
   ./portal/portal,
+  ./networking/bootnodes,
   beacon_chain/[nimbus_binary_common, process_state],
   beacon_chain/validators/keystore_management
 

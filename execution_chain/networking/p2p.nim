@@ -14,7 +14,7 @@ import
   chronos, chronos/timer, chronicles,
   eth/common/keys,
   results,
-  ./[peer_pool, rlpx, p2p_types],
+  ./[peer_pool, rlpx, p2p_types, bootnodes],
   ./discoveryv4/enode,
   ./eth1_discovery
 
@@ -35,7 +35,7 @@ proc newEthereumNode*(
     networkId: NetworkId,
     clientId = "nim-eth-p2p",
     minPeers = 10,
-    bootstrapNodes: seq[ENode] = @[],
+    bootstrapNodes = Bootnodes(),
     bindUdpPort: Port,
     bindTcpPort: Port,
     bindIp = IPv6_any(),

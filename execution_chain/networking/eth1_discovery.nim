@@ -19,7 +19,8 @@ import
   ./discoveryv5,
   ./discoveryv4,
   ./eth1_enr,
-  ./chain_forkid
+  ./chain_forkid,
+  ./bootnodes
 
 export
   discoveryv4.NodeId,
@@ -117,18 +118,17 @@ proc new*(
     _: type Eth1Discovery,
     privKey: PrivateKey,
     address: AddressV4,
-    bootstrapNodes: openArray[ENode],
+    bootstrapNodes: Bootnodes,
     bindPort: Port,
     bindIp = IPv6_any(),
     rng = newRng(),
     compatibleForkId = CompatibleForkIdProc(nil)
 ): Eth1Discovery =
-  let bootnodes = bootstrapNodes.to(enr.Record)
   Eth1Discovery(
     discv4: discoveryv4.newDiscoveryV4(
       privKey = privKey,
       address = address,
-      bootstrapNodes = bootstrapNodes,
+      bootstrapNodes = bootstrapNodes.enodes,
       bindPort = bindPort,
       bindIp = bindIp,
       rng = rng
@@ -138,7 +138,7 @@ proc new*(
       enrIp = Opt.some(address.ip),
       enrTcpPort = Opt.some(address.tcpPort),
       enrUdpPort = Opt.some(address.udpPort),
-      bootstrapRecords = bootnodes,
+      bootstrapRecords = bootstrapNodes.enrs,
       bindPort = bindPort,
       bindIp = bindIp,
       enrAutoUpdate = true,
