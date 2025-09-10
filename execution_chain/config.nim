@@ -225,7 +225,7 @@ type
       longDesc: "Accepts the following formats or combination:\n" &
         "- enr\n" &
         "- enode\n" &
-        "- Path to file contains enr or enode"
+        "- Path to file contains enr(s) or enode(s)(plain list or EF yaml format)"
       defaultValue: @[]
       defaultValueDesc: ""
       abbr: "b"
@@ -236,7 +236,7 @@ type
       longDesc: "Accepts the following formats or combination:\n" &
         "- enr\n" &
         "- enode\n" &
-        "- Path to file contains enr or enode"
+        "- Path to file contains enr(s) or enode(s)(plain list or EF yaml format)"
       defaultValue: @[]
       defaultValueDesc: ""
       name: "static-peers" }: seq[string]
