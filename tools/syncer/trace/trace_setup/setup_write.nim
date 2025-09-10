@@ -11,140 +11,55 @@
 {.push raises:[].}
 
 import
-  std/[net, streams, typetraits],
-  pkg/[chronicles, chronos, eth/common, stew/base64],
+  std/streams,
+  pkg/[chronicles, chronos, json_serialization],
+  pkg/json_serialization/pkg/results as json_results,
+  pkg/eth/common/eth_types_json_serialization as json_eth_types,
   ../trace_desc
+
+export
+  json_eth_types,
+  json_results,
+  json_serialization
 
 logScope:
   topics = "beacon trace"
 
 # ------------------------------------------------------------------------------
-# Private mixin helpers for RLP encoder
-# ------------------------------------------------------------------------------
-
-proc append(w: var RlpWriter, h: Hash) =
-  when sizeof(h) != sizeof(uint):
-    # `castToUnsigned()` is defined in `std/private/bitops_utils` and
-    # included by `std/bitops` but not exported (as of nim 2.2.4)
-    {.error: "Expected that Hash is based on int".}
-  w.append(cast[uint](h).uint64)
-
-proc append(w: var RlpWriter, d: chronos.Duration) =
-  w.append(cast[uint64](d.nanoseconds))
-
-proc append(w: var RlpWriter, p: Port) =
-  w.append(distinctBase p)
-
-# ------------------------------------------------------------------------------
 # Private helpers
 # ------------------------------------------------------------------------------
 
-proc toTypeInx(w: TraceRecType): string =
-  if w.ord < 10:
-    $w.ord
-  else:
-    $chr(w.ord + 'A'.ord - 10)
-
-
-proc toStream(
-    buddy: BeaconBuddyRef;
-    trp: TraceRecType;
-    blob: seq[byte];
-    flush = false;
-      ) =
-  ## Write tracet data to output stream
-  let trc = buddy.ctx.trace
-  if trc.isNil:
-    debug "Trace output stopped while collecting",
-      peer=($buddy.peer), recType=trp
-  else:
-    try:
-      trc.outStream.writeLine trp.toTypeInx & " " & Base64.encode(blob)
-      trc.outStream.flush()
-    except CatchableError as e:
-      warn "Error writing trace data", peer=($buddy.peer), recType=trp,
-        recSize=blob.len, error=($e.name), msg=e.msg
-
-proc toStream(
-    ctx: BeaconCtxRef;
-    trp: TraceRecType;
-    blob: seq[byte];
-    flush = false;
-      ) =
-  ## Variant of `toStream()` for `ctx` rather than `buddy`
+proc toStream(ctx: BeaconCtxRef; trp: TraceRecType; data: string) =
+  ## Write tracer data to output stream
   let trc = ctx.trace
   if trc.isNil:
     debug "Trace output stopped while collecting", recType=trp
   else:
     try:
-      trc.outStream.writeLine trp.toTypeInx & " " & Base64.encode(blob)
+      trc.outStream.writeLine data
       trc.outStream.flush()
     except CatchableError as e:
       warn "Error writing trace data", recType=trp,
-        recSize=blob.len, error=($e.name), msg=e.msg
+        recSize=data.len, error=($e.name), msg=e.msg
 
 # ------------------------------------------------------------------------------
 # Public functions
 # ------------------------------------------------------------------------------
 
-proc traceWrite*(ctx: BeaconCtxRef; w: TraceVersionInfo) =
-  ctx.toStream(TrtVersionInfo, rlp.encode w)
+proc writeValue*(
+    w: var JsonWriter;
+    v: chronos.Duration;
+      ) {.raises: [IOError].} =
+  ## Json writer mixin avoiding `{"value": NNN}` encapsulation
+  w.writeValue(cast[uint64](v.nanoseconds))
 
-# -------------
-
-proc traceWrite*(ctx: BeaconCtxRef; w: TraceSyncActvFailed) =
-  ctx.toStream(TrtSyncActvFailed, rlp.encode w)
-
-proc traceWrite*(ctx: BeaconCtxRef; w: TraceSyncActivated) =
-  ctx.toStream(TrtSyncActivated, rlp.encode w)
-
-proc traceWrite*(ctx: BeaconCtxRef; w: TraceSyncHibernated) =
-  ctx.toStream(TrtSyncHibernated, rlp.encode w)
-
-# -------------
-
-proc traceWrite*(ctx: BeaconCtxRef; w: TraceSchedDaemonBegin) =
-  ctx.toStream(TrtSchedDaemonBegin, rlp.encode w)
-
-proc traceWrite*(ctx: BeaconCtxRef; w: TraceSchedDaemonEnd) =
-  ctx.toStream(TrtSchedDaemonEnd, rlp.encode w)
-
-proc traceWrite*(buddy: BeaconBuddyRef; w: TraceSchedStart) =
-  buddy.toStream(TrtSchedStart, rlp.encode w)
-
-proc traceWrite*(buddy: BeaconBuddyRef; w: TraceSchedStop) =
-  buddy.toStream(TrtSchedStop, rlp.encode w)
-
-proc traceWrite*(buddy: BeaconBuddyRef; w: TraceSchedPool) =
-  buddy.toStream(TrtSchedPool, rlp.encode w)
-
-proc traceWrite*(buddy: BeaconBuddyRef; w: TraceSchedPeerBegin) =
-  buddy.toStream(TrtSchedPeerBegin, rlp.encode w)
-
-proc traceWrite*(buddy: BeaconBuddyRef; w: TraceSchedPeerEnd) =
-  buddy.toStream(TrtSchedPeerEnd, rlp.encode w)
-
-# -------------
-
-proc traceWrite*(buddy: BeaconBuddyRef; w: TraceFetchHeaders) =
-  buddy.toStream(TrtFetchHeaders, rlp.encode w)
-
-proc traceWrite*(buddy: BeaconBuddyRef; w: TraceSyncHeaders) =
-  buddy.toStream(TrtSyncHeaders, rlp.encode w)
-
-
-proc traceWrite*(buddy: BeaconBuddyRef; w: TraceFetchBodies) =
-  buddy.toStream(TrtFetchBodies, rlp.encode w)
-
-proc traceWrite*(buddy: BeaconBuddyRef; w: TraceSyncBodies) =
-  buddy.toStream(TrtSyncBodies, rlp.encode w)
-
-
-proc traceWrite*(buddy: BeaconBuddyRef; w: TraceImportBlock) =
-  buddy.toStream(TrtImportBlock, rlp.encode w)
-
-proc traceWrite*(buddy: BeaconBuddyRef; w: TraceSyncBlock) =
-  buddy.toStream(TrtSyncBlock, rlp.encode w)
+template traceWrite*(dsc: BeaconCtxRef|BeaconBuddyRef; capt: untyped) =
+  type T = typeof capt
+  const trp = T.toTraceRecType
+  when dsc is BeaconCtxRef:
+    dsc.toStream(trp, Json.encode(JTraceRecord[T](kind: trp, bag: capt)))
+  else:
+    dsc.ctx.toStream(trp, Json.encode(JTraceRecord[T](kind: trp, bag: capt)))
 
 # ------------------------------------------------------------------------------
 # End

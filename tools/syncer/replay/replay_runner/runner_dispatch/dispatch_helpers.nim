@@ -34,13 +34,11 @@ type
 
   ReplayInstance = ReplayDaemonRef | ReplayBuddyRef
 
-  SubInstrType = TraceFetchHeaders | TraceSyncHeaders |
-                 TraceFetchBodies  | TraceSyncBodies  |
-                 TraceImportBlock  | TraceSyncBlock
-
-  InstrType = TraceSchedDaemonBegin  | TraceSchedDaemonEnd  |
-              TraceSchedPeerBegin    | TraceSchedPeerEnd    |
-              SubInstrType
+  InstrType = TraceSchedDaemonBegin | TraceSchedDaemonEnd  |
+              TraceSchedPeerBegin   | TraceSchedPeerEnd    |
+              TraceFetchHeaders     | TraceSyncHeaders |
+              TraceFetchBodies      | TraceSyncBodies  |
+              TraceImportBlock      | TraceSyncBlock
 
 # ------------------------------------------------------------------------------
 # Private helper(s)
@@ -111,15 +109,12 @@ template waitForConditionImpl(
 
 func syncedEnvCondImpl(
     desc: ReplayInstance;
-    instr: InstrType;
+    instr: TraceRecBase;
     info: static[string];
       ): bool =
   ## Condition function for `waitForConditionImpl()` for synchronising state.
   ##
   let ctx = desc.run.ctx
-
-  #if serial != run.instrNumber:
-  #  return false
 
   if instr.hdrUnprChunks != ctx.hdr.unprocessed.chunks().uint:
     return false
@@ -633,7 +628,7 @@ template whenProcessFinished*(
 
 template pushInstr*(
     desc: ReplayInstance;
-    instr: SubInstrType;
+    instr: untyped;
     info: static[string];
       ): ReplayWaitResult =
   ## Async/template
@@ -643,26 +638,8 @@ template pushInstr*(
   ##
   var bodyRc = ReplayWaitResult.ok()
   block:
-    when instr is TraceFetchHeaders:
-      type T = ReplayFetchHeadersMsgRef
-      const dataType {.inject.} = TrtFetchHeaders
-    elif instr is TraceSyncHeaders:
-      type T = ReplaySyncHeadersMsgRef
-      const dataType {.inject.} = TrtSyncHeaders
-
-    elif instr is TraceFetchBodies:
-      type T = ReplayFetchBodiesMsgRef
-      const dataType {.inject.} = TrtFetchBodies
-    elif instr is TraceSyncBodies:
-      type T = ReplaySyncBodiesMsgRef
-      const dataType {.inject.} = TrtSyncBodies
-
-    elif instr is TraceImportBlock:
-      type T = ReplayImportBlockMsgRef
-      const dataType {.inject.} = TrtImportBlock
-    elif instr is TraceSyncBlock:
-      type T = ReplaySyncBlockMsgRef
-      const dataType {.inject.} = TrtSyncBlock
+    const dataType {.inject.} = (typeof instr).toTraceRecType
+    type M = (typeof instr).toReplayMsgType
 
     # Verify that the stage is based on a proper environment
     doAssert desc.frameID != 0 # this is not `instr.frameID`
@@ -676,7 +653,7 @@ template pushInstr*(
     doAssert desc.message.isNil
 
     # Stage/push session data
-    desc.message = T(
+    desc.message = M(
       recType: dataType,
       instr:   instr)
 
@@ -713,7 +690,7 @@ template pushInstr*(
 
 template withInstr*(
     desc: ReplayInstance;
-    I: type SubInstrType;
+    I: type; # `instr` type
     info: static[string];
     code: untyped;
       ) =
@@ -725,31 +702,14 @@ template withInstr*(
   ## * `iError` -- error data, initialised if `instr.isAvailable()` is `false`
   ##
   block:
-    when I is TraceFetchHeaders:
-      const dataType {.inject.} = TrtFetchHeaders
-      type M = ReplayFetchHeadersMsgRef
-      const ignLatestNum = false
-    elif I is TraceSyncHeaders:
-      const dataType {.inject.} = TrtSyncHeaders
-      type M = ReplaySyncHeadersMsgRef
-      const ignLatestNum = false
+    const dataType {.inject.} = I.toTraceRecType
+    type M = I.toReplayMsgType
 
-    elif I is TraceFetchBodies:
-      const dataType {.inject.} = TrtFetchBodies
-      type M = ReplayFetchBodiesMsgRef
+    when I is TraceFetchBodies or
+         I is TraceSyncBodies or
+         I is TraceImportBlock:
       const ignLatestNum = true # relax, de-noise
-    elif I is TraceSyncBodies:
-      const dataType {.inject.} = TrtSyncBodies
-      type M = ReplaySyncBodiesMsgRef
-      const ignLatestNum = true # relax, de-noise
-
-    elif I is TraceImportBlock:
-      const dataType {.inject.} = TrtImportBlock
-      type M = ReplayImportBlockMsgRef
-      const ignLatestNum = true # relax, de-noise
-    elif I is TraceSyncBlock:
-      const dataType {.inject.} = TrtSyncBlock
-      type M = ReplaySyncBlockMsgRef
+    else:
       const ignLatestNum = false
 
     let

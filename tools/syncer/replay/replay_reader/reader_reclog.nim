@@ -303,8 +303,11 @@ func recLogToStrEnd*(n: int): seq[string] =
   @[".", $n]
 
 proc recLogToStrList*(pyl: ReplayPayloadRef; lnr = 0): seq[string] =
+  ## Convert the internal capture object argument `pyl` to a list of
+  ## printable strings.
+  ##
   case pyl.recType:
-  of TrtOops:
+  of TraceRecType(0):
     lnr.toStrOops()
 
   of TrtVersionInfo:
@@ -341,7 +344,6 @@ proc recLogToStrList*(pyl: ReplayPayloadRef; lnr = 0): seq[string] =
     lnr.toStrSeq(pyl.ReplayFetchBodies.data)
   of TrtSyncBodies:
     lnr.toStrSeq(pyl.ReplaySyncBodies.data)
-
   of TrtImportBlock:
     lnr.toStrSeq(pyl.ReplayImportBlock.data)
   of TrtSyncBlock:

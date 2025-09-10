@@ -30,7 +30,7 @@ proc dispatch*(
     run: ReplayRunnerRef;
     pyl: ReplayPayloadRef;
       ) {.async: (raises: []).} =
-  ## Execure next instruction
+  ## Execute the internal capture object argument `pyl` as an instruction.
   ##
   run.instrNumber.inc
 
@@ -38,7 +38,7 @@ proc dispatch*(
     nBuddies=run.peers.len, nDaemons=(if run.daemon.isNil: 0 else: 1)
 
   case pyl.recType:
-  of TrtOops:
+  of TraceRecType(0):
     warn "dispatch(): Oops, unexpected void record", n=run.instrNumber
 
   of TrtVersionInfo:

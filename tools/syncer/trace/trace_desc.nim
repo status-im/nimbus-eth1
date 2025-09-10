@@ -28,7 +28,7 @@ export
   worker_desc
 
 const
-  TraceVersionID* = 20250828
+  TraceVersionID* = 20250915
 
   TraceSetupID* = 1                   ## Phase 1 layout ID, prepare
   TraceRunnerID* = 10                 ## Phase 2 layout ID, full execution
@@ -51,7 +51,7 @@ type
   # -------------
 
   TraceRecType* = enum
-    TrtOops = 0
+    TrtRecBase = 0
     TrtVersionInfo = 1
 
     TrtSyncActvFailed
@@ -105,7 +105,6 @@ type
     nHdrErrors*: uint8                ##  4) # header comm. errors
     nBlkErrors*: uint8                ##  8) # body comm. errors
     slowPeer*: Hash                   ## 16) Registered slow peer
-
 
   TraceVersionInfo* = object of TraceRecBase
     version*: uint
@@ -195,6 +194,13 @@ type
   TraceSyncBlock* = object of TraceRecBase
     ## Environment is captured after the `syncImportBlock()` handler is run.
 
+  # -------------
+
+  JTraceRecord*[T] = object
+    ## Json writer record format
+    kind*: TraceRecType
+    bag*: T
+
 # ------------------------------------------------------------------------------
 # Public helpers
 # ------------------------------------------------------------------------------
@@ -209,6 +215,45 @@ func newSerial*(trc: TraceRef): uint64 =
   if trc.serial == 0:
     trc.serial.inc
   trc.serial
+
+func toTraceRecType*(T: type): TraceRecType =
+  ## Derive capture type from record layout
+  when T is TraceVersionInfo:
+    TrtVersionInfo
+  elif T is TraceSyncActvFailed:
+    TrtSyncActvFailed
+  elif T is TraceSyncActivated:
+    TrtSyncActivated
+  elif T is TraceSyncHibernated:
+    TrtSyncHibernated
+  elif T is TraceSchedDaemonBegin:
+    TrtSchedDaemonBegin
+  elif T is TraceSchedDaemonEnd:
+    TrtSchedDaemonEnd
+  elif T is TraceSchedStart:
+    TrtSchedStart
+  elif T is TraceSchedStop:
+    TrtSchedStop
+  elif T is TraceSchedPool:
+    TrtSchedPool
+  elif T is TraceSchedPeerBegin:
+    TrtSchedPeerBegin
+  elif T is TraceSchedPeerEnd:
+    TrtSchedPeerEnd
+  elif T is TraceFetchHeaders:
+    TrtFetchHeaders
+  elif T is TraceSyncHeaders:
+    TrtSyncHeaders
+  elif T is TraceFetchBodies:
+    TrtFetchBodies
+  elif T is TraceSyncBodies:
+    TrtSyncBodies
+  elif T is TraceImportBlock:
+    TrtImportBlock
+  elif T is TraceSyncBlock:
+    TrtSyncBlock
+  else:
+    {.error: "Unsupported trace capture record type".}
 
 # ------------------------------------------------------------------------------
 # End

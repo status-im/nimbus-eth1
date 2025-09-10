@@ -113,4 +113,27 @@ type
     instrNumber*: uint                 ## Instruction counter
     fakeImport*: bool                  ## No database import if `true`
 
+# ------------------------------------------------------------------------------
+# Public helpers
+# ------------------------------------------------------------------------------
+
+template toReplayMsgType*(trc: type): untyped =
+  ## Derive replay record type from trace capture record type
+  when trc is TraceFetchHeaders:
+    ReplayFetchHeadersMsgRef
+  elif trc is TraceSyncHeaders:
+    ReplaySyncHeadersMsgRef
+  elif trc is TraceFetchBodies:
+    ReplayFetchBodiesMsgRef
+  elif trc is TraceSyncBodies:
+    ReplaySyncBodiesMsgRef
+  elif trc is TraceImportBlock:
+    ReplayImportBlockMsgRef
+  elif trc is TraceSyncBlock:
+    ReplaySyncBlockMsgRef
+  else:
+    {.error: "Unsupported trace record type".}
+
+# ------------------------------------------------------------------------------
 # End
+# ------------------------------------------------------------------------------

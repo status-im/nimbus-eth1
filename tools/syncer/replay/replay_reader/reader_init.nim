@@ -59,9 +59,11 @@ proc getFileSignature(strm: Stream): (FileSignature,uint16) =
   if u16 == 0x1f8b'u16:
     return (Gzip,u16)
 
-  # Ascii signature: /[0-9A-Z] /
+  # Ascii signature: /{"/ or /#[0-9a-zA-Z ]/
   let (c0, c1) = (char(u16 shr 8), char(u16.uint8))
-  if (c0.isDigit or c0.isUpperAscii or c0 == '#') and (c1 in {' ','\r','\n'}):
+  if c0 == '{' and c1 == '"':
+    return (Plain,u16)
+  if c0 == '#' and (c1.isAlphaNumeric or c1.isSpaceAscii):
     return (Plain,u16)
 
   (Unknown,u16)

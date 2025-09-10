@@ -20,7 +20,7 @@ export
   worker_helpers
 
 # ------------------------------------------------------------------------------
-# Public context capture initialisation
+# Public initialisers
 # ------------------------------------------------------------------------------
 
 proc init*(tb: var TraceRecBase; ctx: BeaconCtxRef) =
@@ -71,7 +71,9 @@ proc init*(tb: var TraceRecBase; buddy: BeaconBuddyRef) =
     tb.nHdrErrors = buddy.only.nRespErrors.hdr
     tb.nBlkErrors = buddy.only.nRespErrors.blk
 
-# --------------
+# ------------------------------------------------------------------------------
+# Public helpers
+# ------------------------------------------------------------------------------
 
 func short*(w: Hash): string =
   w.toHex(8).toLowerAscii # strips leading 8 bytes
