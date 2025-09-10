@@ -106,7 +106,6 @@ func appendBootnode(line: string, boot: var Bootnodes): Result[bool, string] =
 
   if line.startsWith("- enr:"):
     var rec = fromURI(enr.Record, line.removeCommentAndSpaces(2)).valueOr:
-      debugEcho line.removeCommentAndSpaces(2).len
       return err(line & ": " & $error)
     boot.enrs.add move(rec)
     return ok(true)

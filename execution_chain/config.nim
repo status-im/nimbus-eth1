@@ -222,10 +222,10 @@ type
     bootstrapNodes {.
       separator: "\pNETWORKING OPTIONS:"
       desc: "Specifies one or more bootstrap nodes to use when connecting to the network"
-      longDesc: "Accepts the following formats or combination:\n" &
+      longDesc: "Accepts the following formats or combination\n" &
         "- enr\n" &
         "- enode\n" &
-        "- Path to file contains enr(s) or enode(s)(plain list or EF yaml format)"
+        "- Path to file contains enr or enode(plain list or yaml format)"
       defaultValue: @[]
       defaultValueDesc: ""
       abbr: "b"
@@ -233,10 +233,10 @@ type
 
     staticPeers {.
       desc: "Connect to one or more trusted peers"
-      longDesc: "Accepts the following formats or combination:\n" &
+      longDesc: "Accepts the following formats or combination\n" &
         "- enr\n" &
         "- enode\n" &
-        "- Path to file contains enr(s) or enode(s)(plain list or EF yaml format)"
+        "- Path to file contains enr or enode(plain list or yaml format)"
       defaultValue: @[]
       defaultValueDesc: ""
       name: "static-peers" }: seq[string]
