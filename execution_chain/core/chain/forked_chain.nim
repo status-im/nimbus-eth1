@@ -437,8 +437,13 @@ proc validateBlock(c: ForkedChainRef,
       c.latestFinalizedBlockNumber)
 
   let
+    # As a memory optimization we move the HashKeys (kMap) stored in the
+    # parent txFrame to the new txFrame unless the block number is one
+    # greater than a block which is expected to be persisted based on the
+    # persistBatchSize
+    moveParentHashKeys = c.persistBatchSize > 1 and (blk.header.number mod c.persistBatchSize) != 1
     parentFrame = parent.txFrame
-    txFrame = parentFrame.txFrameBegin
+    txFrame = parentFrame.txFrameBegin(moveParentHashKeys)
 
   # TODO shortLog-equivalent for eth types
   debug "Validating block",
@@ -895,16 +900,15 @@ proc blockByHash*(c: ForkedChainRef, blockHash: Hash32): Result[Block, string] =
   c.hashToBlock.withValue(blockHash, loc):
     return ok(loc[].blk)
   var header = ?c.baseTxFrame.getBlockHeader(blockHash)
-  var blockBody = c.baseTxFrame.getBlockBody(header)
-  # Serves portal data if block not found in db
-  if blockBody.isErr or (blockBody.get.transactions.len == 0 and header.transactionsRoot != zeroHash32):
+  var blockBody = c.baseTxFrame.getBlockBody(header).valueOr:
+    # Serve portal data if block not found in db
     if c.isPortalActive:
       var blockBodyPortal = ?c.portal.getBlockBodyByHeader(header)
       return ok(EthBlock.init(move(header), move(blockBodyPortal)))
     else:
-      return err(blockBody.error)
+      return err(error)
 
-  ok(EthBlock.init(move(header), move(blockBody.get())))
+  ok(EthBlock.init(move(header), move(blockBody)))
 
 proc payloadBodyV1ByHash*(c: ForkedChainRef, blockHash: Hash32): Result[ExecutionPayloadBodyV1, string] =
   c.hashToBlock.withValue(blockHash, loc):
@@ -913,8 +917,8 @@ proc payloadBodyV1ByHash*(c: ForkedChainRef, blockHash: Hash32): Result[Executio
   var header = ?c.baseTxFrame.getBlockHeader(blockHash)
   var blk = c.baseTxFrame.getExecutionPayloadBodyV1(header)
 
-  # Serves portal data if block not found in db
-  if blk.isErr or (blk.get.transactions.len == 0 and header.transactionsRoot != zeroHash32):
+  if blk.isErr:
+    # Serve portal data if block not found in db
     if c.isPortalActive:
       var blockBodyPortal = ?c.portal.getBlockBodyByHeader(header)
       # Same as above
@@ -930,9 +934,8 @@ proc payloadBodyV1ByNumber*(c: ForkedChainRef, number: BlockNumber): Result[Exec
     var header = ?c.baseTxFrame.getBlockHeader(number)
     let blk = c.baseTxFrame.getExecutionPayloadBodyV1(header)
 
-    # Txs not there in db - Happens during era1/era import, when we don't store txs and receipts
-    if blk.isErr or (blk.get.transactions.len == 0 and header.transactionsRoot != emptyRoot):
-      # Serves portal data if block not found in database
+    if blk.isErr:
+      # Serve portal data if block not found in db
       if c.isPortalActive:
         var blockBodyPortal = ?c.portal.getBlockBodyByHeader(header)
         # same as above
@@ -952,17 +955,15 @@ proc blockByNumber*(c: ForkedChainRef, number: BlockNumber): Result[Block, strin
 
   if number <= c.base.number:
     var header = ?c.baseTxFrame.getBlockHeader(number)
-    var blockBody = c.baseTxFrame.getBlockBody(header)
-    # Txs not there in db - Happens during era1/era import, when we don't store txs and receipts
-    if blockBody.isErr or (blockBody.get.transactions.len == 0 and header.transactionsRoot != emptyRoot):
-      # Serves portal data if block not found in database
+    var blockBody = c.baseTxFrame.getBlockBody(header).valueOr:
+      # Serve portal data if block not found in db
       if c.isPortalActive:
         var blockBodyPortal = ?c.portal.getBlockBodyByHeader(header)
         return ok(EthBlock.init(move(header), move(blockBodyPortal)))
       else:
-        return err(blockBody.error)
-    else:
-      return ok(EthBlock.init(move(header), move(blockBody.get())))
+        return err(error)
+
+    return ok(EthBlock.init(move(header), move(blockBody)))
 
   loopIt(c.latest):
     if number >= it.number:

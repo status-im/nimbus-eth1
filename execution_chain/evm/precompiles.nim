@@ -111,6 +111,7 @@ const
     paP256VerifyAddress        # paP256Verify
   ]
 
+  # These names are in accordance to EIP mentioned ABIs
   precompileNames*: array[Precompiles, string] = [
     "ECREC",
     "SHA256",
