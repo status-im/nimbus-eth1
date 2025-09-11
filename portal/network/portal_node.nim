@@ -72,6 +72,7 @@ proc new*(
     config: PortalNodeConfig,
     discovery: protocol.Protocol,
     subnetworks: set[PortalSubnetwork],
+    headerCallback: GetHeaderCallback = defaultNoGetHeader,
     bootstrapRecords: openArray[Record] = [],
     rng = newRng(),
 ): T =
@@ -98,6 +99,7 @@ proc new*(
             discovery,
             contentDB,
             streamManager,
+            headerCallback,
             bootstrapRecords = bootstrapRecords,
             portalConfig = config.portalConfig,
             contentRequestRetries = config.contentRequestRetries,
