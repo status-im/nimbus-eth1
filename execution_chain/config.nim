@@ -221,25 +221,29 @@ type
 
     bootstrapNodes {.
       separator: "\pNETWORKING OPTIONS:"
-      desc: "Specifies one or more bootstrap nodes to use when connecting to the network"
-      longDesc: "Accepts the following formats or combination\n" &
-        "- enr\n" &
-        "- enode\n" &
-        "- Path to file contains enr or enode(plain list or yaml format)"
+      desc: "Specifies one or more bootstrap nodes(as enode/enr URL) to use when connecting to the network"
       defaultValue: @[]
       defaultValueDesc: ""
       abbr: "b"
       name: "bootstrap-node" }: seq[string]
 
+    bootstrapFile {.
+      desc: "Specifies a file of bootstrap Ethereum network addresses(enode/enr URL). " &
+            "Both line delimited or yaml format are supported"
+      defaultValue: ""
+      name: "bootstrap-file" }: InputFile
+
     staticPeers {.
-      desc: "Connect to one or more trusted peers"
-      longDesc: "Accepts the following formats or combination\n" &
-        "- enr\n" &
-        "- enode\n" &
-        "- Path to file contains enr or enode(plain list or yaml format)"
+      desc: "Connect to one or more trusted peers(as enode/enr URL)"
       defaultValue: @[]
       defaultValueDesc: ""
       name: "static-peers" }: seq[string]
+
+    staticPeersFile {.
+      desc: "Specifies a line-delimited file of trusted peers addresses(enode/enr URL)" &
+            "Both line delimited or yaml format are supported"
+      defaultValue: ""
+      name: "static-peers-file" }: InputFile
 
     reconnectMaxRetry* {.
       desc: "Specifies max number of retries if static peers disconnected/not connected. " &
@@ -738,10 +742,16 @@ proc getBootstrapNodes*(conf: NimbusConf): BootstrapNodes =
   parseBootstrapNodes(list, result).isOkOr:
     warn "Error when parsing bootstrap nodes", msg=error
 
+  loadBootstrapNodes(conf.bootstrapFile, result).isOkOr:
+    warn "Error when parsing bootstrap nodes from file", msg=error, file=conf.bootstrapFile
+
 proc getStaticPeers*(conf: NimbusConf): BootstrapNodes =
   let list = breakRepeatingList(conf.staticPeers)
   parseBootstrapNodes(list, result).isOkOr:
     warn "Error when parsing static peers", msg=error
+
+  loadBootstrapNodes(conf.staticPeersFile, result).isOkOr:
+    warn "Error when parsing static peers from file", msg=error, file=conf.staticPeersFile
 
 func getAllowedOrigins*(conf: NimbusConf): seq[Uri] =
   for item in repeatingList(conf.allowedOrigins):

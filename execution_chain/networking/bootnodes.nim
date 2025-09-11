@@ -149,16 +149,7 @@ proc loadBootstrapNodes*(fileName: string, boot: var BootstrapNodes): Result[voi
 proc parseBootstrapNodes*(list: openArray[string], boot: var BootstrapNodes): Result[void, string] =
   ## Parse bootnodes from CLI
   for line in list:
-    let parsed = ? appendBootstrapNode(line, boot)
-    if parsed:
-      continue
-    if line.startsWith('#'):
-      continue
-    if line.len == 0:
-      continue
-    if not fileExists(line):
-      return err("Cannot parse " & line & " into bootnode")
-    ? loadBootstrapNodes(line, boot)
+    discard ? appendBootstrapNode(line, boot)
 
   ok()
 
