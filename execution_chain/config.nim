@@ -742,16 +742,18 @@ proc getBootstrapNodes*(conf: NimbusConf): BootstrapNodes =
   parseBootstrapNodes(list, result).isOkOr:
     warn "Error when parsing bootstrap nodes", msg=error
 
-  loadBootstrapNodes(conf.bootstrapFile.string, result).isOkOr:
-    warn "Error when parsing bootstrap nodes from file", msg=error, file=conf.bootstrapFile.string
+  if conf.bootstrapFile.string.len > 0:
+    loadBootstrapNodes(conf.bootstrapFile.string, result).isOkOr:
+      warn "Error when parsing bootstrap nodes from file", msg=error, file=conf.bootstrapFile.string
 
 proc getStaticPeers*(conf: NimbusConf): BootstrapNodes =
   let list = breakRepeatingList(conf.staticPeers)
   parseBootstrapNodes(list, result).isOkOr:
     warn "Error when parsing static peers", msg=error
 
-  loadBootstrapNodes(conf.staticPeersFile.string, result).isOkOr:
-    warn "Error when parsing static peers from file", msg=error, file=conf.staticPeersFile.string
+  if conf.staticPeersFile.string.len > 0:
+    loadBootstrapNodes(conf.staticPeersFile.string, result).isOkOr:
+      warn "Error when parsing static peers from file", msg=error, file=conf.staticPeersFile.string
 
 func getAllowedOrigins*(conf: NimbusConf): seq[Uri] =
   for item in repeatingList(conf.allowedOrigins):

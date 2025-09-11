@@ -134,28 +134,28 @@ proc configurationMain*() =
       let cx = cc.getWsFlags()
       check { RpcFlag.Eth, RpcFlag.Debug } == cx
 
-    test "bootstrap-node":
+    test "--bootstrap-node and --bootstrap-file":
       let conf = makeTestConfig()
-      let bootnodes = conf.getBootNodes()
+      let bootnodes = conf.getBootstrapNodes()
       let bootNodeLen = bootnodes.enodes.len
       check bootNodeLen > 0 # mainnet bootnodes
 
       let aa = makeConfig(@["--bootstrap-node:" & bootNode])
-      let ax = aa.getBootNodes()
+      let ax = aa.getBootstrapNodes()
       check ax.enodes.len == bootNodeLen + 1
 
       let bb = makeConfig(@["--bootstrap-node:" & bootNode & "," & bootNode])
-      check bb.getBootNodes().enodes.len == bootNodeLen + 2
+      check bb.getBootstrapNodes().enodes.len == bootNodeLen + 2
 
       let cc = makeConfig(@["--bootstrap-node:" & bootNode, "--bootstrap-node:" & bootNode])
-      check cc.getBootNodes().enodes.len == bootNodeLen + 2
+      check cc.getBootstrapNodes().enodes.len == bootNodeLen + 2
 
       const
         bootFilePath = "tests" / "bootstrap"
         bootFileAppend = bootFilePath / "append_bootnodes.txt"
 
-      let dd = makeConfig(@["--bootstrap-node:" & bootFileAppend])
-      let dx = dd.getBootNodes()
+      let dd = makeConfig(@["--bootstrap-file:" & bootFileAppend])
+      let dx = dd.getBootstrapNodes()
       check dx.enodes.len == bootNodeLen + 3
 
     test "static-peers":
@@ -178,7 +178,7 @@ proc configurationMain*() =
       let conf = makeConfig(@["--network:" & chainid1])
       check conf.networkId == 1.u256
       check conf.networkParams.config.londonBlock.get() == 1337
-      check conf.getBootNodes().enodes.len == 0
+      check conf.getBootstrapNodes().enodes.len == 0
 
     test "json-rpc enabled when json-engine api enabled and share same port":
       let conf = makeConfig(@["--engine-api", "--engine-api-port:8545", "--http-port:8545"])
