@@ -470,16 +470,19 @@ proc txFrameBegin*(db: CoreDbRef): CoreDbTxRef =
   ##
   let
     kTx = db.kvt.txFrameBegin(nil)
-    aTx = db.mpt.txFrameBegin(nil)
+    aTx = db.mpt.txFrameBegin(nil, false)
 
   CoreDbTxRef(kTx: kTx, aTx: aTx)
 
-proc txFrameBegin*(parent: CoreDbTxRef): CoreDbTxRef =
+proc txFrameBegin*(
+    parent: CoreDbTxRef,
+    moveParentHashKeys = false
+  ): CoreDbTxRef =
   ## Constructor
   ##
   let
     kTx = parent.kTx.db.txFrameBegin(parent.kTx)
-    aTx = parent.aTx.db.txFrameBegin(parent.aTx)
+    aTx = parent.aTx.db.txFrameBegin(parent.aTx, moveParentHashKeys)
 
   CoreDbTxRef(kTx: kTx, aTx: aTx)
 
