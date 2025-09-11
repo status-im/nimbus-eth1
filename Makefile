@@ -122,7 +122,9 @@ VERIF_PROXY_OUT_PATH ?= build/libverifproxy/
 	dist-windows-amd64 \
 	dist-macos-arm64 \
 	dist \
-	eest
+	eest \
+	t8n \
+	t8n_test
 
 ifeq ($(NIM_PARAMS),)
 # "variables.mk" was not included, so we update the submodules.
