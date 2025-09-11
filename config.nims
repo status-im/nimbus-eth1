@@ -57,6 +57,9 @@ if defined(release) and not defined(disableLTO):
 switch("passC", "-fvisibility=hidden")
 
 if defined(windows):
+  # Constantine
+  switch("passC", "-fomit-frame-pointer")
+  switch("passL", "-fomit-frame-pointer")
   # disable timestamps in Windows PE headers - https://wiki.debian.org/ReproducibleBuilds/TimestampsInPEBinaries
   switch("passL", "-Wl,--no-insert-timestamp")
   # increase stack size, unless something else is setting the stack size
