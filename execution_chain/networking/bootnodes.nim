@@ -1,5 +1,5 @@
 # nimbus-execution-client
-# Copyright (c) 2025 Status Research & Development GmbH
+# Copyright (c) 2018-2025 Status Research & Development GmbH
 # Licensed under either of
 #  * Apache License, version 2.0, ([LICENSE-APACHE](LICENSE-APACHE))
 #  * MIT license ([LICENSE-MIT](LICENSE-MIT))
@@ -16,12 +16,12 @@ import
   ./discoveryv4/enode
 
 type
-  Bootnodes* = object
+  BootstrapNodes* = object
     enrs*: seq[enr.Record]
     enodes*: seq[ENode]
 
 #------------------------------------------------------------------------------
-# Bootnodes constants
+# BootstrapNodes constants
 #------------------------------------------------------------------------------
 
 func removeCommentAndSpaces(line: string, start = 0): string =
@@ -73,7 +73,7 @@ func bootData(numLines: static[int], text: string): array[numLines, string] {.co
       result[i] = line
       inc i
 
-template loadBootNodes(name: static[string]): auto =
+template loadBootstrapNodes(name: static[string]): auto =
   block one:
     const
       (enrs, enodes) = bootNodeFile(name)
@@ -82,16 +82,16 @@ template loadBootNodes(name: static[string]): auto =
     bootData(numLines, text)
 
 const
-  mainnet = loadBootNodes("mainnet")
-  holesky = loadBootNodes("holesky")
-  sepolia = loadBootNodes("sepolia")
-  hoodi = loadBootNodes("hoodi")
+  mainnet = loadBootstrapNodes("mainnet")
+  holesky = loadBootstrapNodes("holesky")
+  sepolia = loadBootstrapNodes("sepolia")
+  hoodi = loadBootstrapNodes("hoodi")
 
 #------------------------------------------------------------------------------
 # Private helpers
 #------------------------------------------------------------------------------
 
-func appendBootnode(line: string, boot: var Bootnodes): Result[bool, string] =
+func appendBootstrapNode(line: string, boot: var BootstrapNodes): Result[bool, string] =
   if line.startsWith("enr:"):
     var rec = fromURI(enr.Record, line.removeCommentAndSpaces).valueOr:
       return err(line & ": " & $error)
@@ -118,9 +118,9 @@ func appendBootnode(line: string, boot: var Bootnodes): Result[bool, string] =
 
   ok(false)
 
-func appendBootnodes(list: openArray[string], boot: var Bootnodes): Result[void, string] =
+func appendBootstrapNodes(list: openArray[string], boot: var BootstrapNodes): Result[void, string] =
   for line in list:
-    discard ? appendBootnode(line, boot)
+    discard ? appendBootstrapNode(line, boot)
 
   ok()
 
@@ -128,28 +128,28 @@ func appendBootnodes(list: openArray[string], boot: var Bootnodes): Result[void,
 # Public functions
 #------------------------------------------------------------------------------
 
-func getBootnodes*(name: string, boot: var Bootnodes): Result[void, string] =
+func getBootstrapNodes*(name: string, boot: var BootstrapNodes): Result[void, string] =
   case name:
-  of "mainnet": appendBootnodes(mainnet, boot)
-  of "holesky": appendBootnodes(holesky, boot)
-  of "sepolia": appendBootnodes(sepolia, boot)
-  of "hoodi":   appendBootnodes(hoodi, boot)
+  of "mainnet": appendBootstrapNodes(mainnet, boot)
+  of "holesky": appendBootstrapNodes(holesky, boot)
+  of "sepolia": appendBootstrapNodes(sepolia, boot)
+  of "hoodi":   appendBootstrapNodes(hoodi, boot)
   else: err("network not supported: " & name)
 
-proc loadBootnodes*(fileName: string, boot: var Bootnodes): Result[void, string] =
+proc loadBootstrapNodes*(fileName: string, boot: var BootstrapNodes): Result[void, string] =
   ## Load bootnodes from file
   let text = io2.readAllChars(fileName).valueOr:
     return err($error)
 
   for line in splitLines(text):
-    discard ? appendBootnode(line, boot)
+    discard ? appendBootstrapNode(line, boot)
 
   ok()
 
-proc parseBootnodes*(list: openArray[string], boot: var Bootnodes): Result[void, string] =
+proc parseBootstrapNodes*(list: openArray[string], boot: var BootstrapNodes): Result[void, string] =
   ## Parse bootnodes from CLI
   for line in list:
-    let parsed = ? appendBootnode(line, boot)
+    let parsed = ? appendBootstrapNode(line, boot)
     if parsed:
       continue
     if line.startsWith('#'):
@@ -158,9 +158,9 @@ proc parseBootnodes*(list: openArray[string], boot: var Bootnodes): Result[void,
       continue
     if not fileExists(line):
       return err("Cannot parse " & line & " into bootnode")
-    ? loadBootnodes(line, boot)
+    ? loadBootstrapNodes(line, boot)
 
   ok()
 
-func len*(boot: Bootnodes): int =
+func len*(boot: BootstrapNodes): int =
   boot.enrs.len + boot.enodes.len

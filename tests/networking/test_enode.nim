@@ -94,21 +94,21 @@ suite "ENode":
         res.isOk
 
   test "Bootnodes test":
-    var boot: Bootnodes
-    check getBootnodes("mainnet", boot) == Result[void, string].ok()
-    check getBootnodes("holesky", boot) == Result[void, string].ok()
-    check getBootnodes("sepolia", boot) == Result[void, string].ok()
-    check getBootnodes("hoodi", boot) == Result[void, string].ok()
+    var boot: BootstrapNodes
+    check getBootstrapNodes("mainnet", boot) == Result[void, string].ok()
+    check getBootstrapNodes("holesky", boot) == Result[void, string].ok()
+    check getBootstrapNodes("sepolia", boot) == Result[void, string].ok()
+    check getBootstrapNodes("hoodi", boot) == Result[void, string].ok()
 
-    var boot1: Bootnodes
-    check loadBootnodes("tests/networking/bootnodes.yaml", boot1) == Result[void, string].ok()
+    var boot1: BootstrapNodes
+    check loadBootstrapNodes("tests/networking/bootnodes.yaml", boot1) == Result[void, string].ok()
 
     let bn = [
       "enode://ac906289e4b7f12df423d654c5a962b6ebe5b3a74cc9e06292a85221f9a64a6f1cfdd6b714ed6dacef51578f92b34c60ee91e9ede9c7f8fadc4d347326d95e2b@146.190.13.128:30303",
       "enr:-KG4QC9Wm32mtzB5Fbj2ri2TEKglHmIWgvwTQCvNHBopuwpNAi1X6qOsBg_Z1-Bee-kfSrhzUQZSgDUyfH5outUprtoBgmlkgnY0gmlwhHEel3eDaXA2kP6AAAAAAAAAAlBW__4Srr-Jc2VjcDI1NmsxoQO7KE63Z4eSI55S1Yn7q9_xFkJ1Wt-a3LgiXuKGs19s0YN1ZHCCIyiEdWRwNoIjKA",
       "tests/networking/bootnodes.yaml"
     ]
-    var boot2: Bootnodes
-    check parseBootnodes(bn, boot2) == Result[void, string].ok()
+    var boot2: BootstrapNodes
+    check parseBootstrapNodes(bn, boot2) == Result[void, string].ok()
     check boot2.enrs.len == boot1.enrs.len + 1
     check boot2.enodes.len == boot1.enodes.len + 1

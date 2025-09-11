@@ -722,25 +722,25 @@ proc getDiscoveryFlags(api: openArray[string]): set[DiscoveryType] =
 proc getDiscoveryFlags*(conf: NimbusConf): set[DiscoveryType] =
   getDiscoveryFlags(conf.discovery)
 
-proc getBootNodes*(conf: NimbusConf): Bootnodes =
+proc getBootstrapNodes*(conf: NimbusConf): BootstrapNodes =
   # Ignore standard bootnodes if customNetwork is loaded
   if conf.customNetwork.isNone:
     if conf.networkId == MainNet:
-      getBootnodes("mainnet", result).expect("no error")
+      getBootstrapNodes("mainnet", result).expect("no error")
     elif conf.networkId == SepoliaNet:
-      getBootnodes("sepolia", result).expect("no error")
+      getBootstrapNodes("sepolia", result).expect("no error")
     elif conf.networkId == HoleskyNet:
-      getBootnodes("holesky", result).expect("no error")
+      getBootstrapNodes("holesky", result).expect("no error")
     elif conf.networkId == HoodiNet:
-      getBootnodes("hoodi", result).expect("no error")
+      getBootstrapNodes("hoodi", result).expect("no error")
 
   let list = breakRepeatingList(conf.bootstrapNodes)
-  parseBootnodes(list, result).isOkOr:
-    warn "Error when parsing bootnodes", msg=error
+  parseBootstrapNodes(list, result).isOkOr:
+    warn "Error when parsing bootstrap nodes", msg=error
 
-proc getStaticPeers*(conf: NimbusConf): Bootnodes =
+proc getStaticPeers*(conf: NimbusConf): BootstrapNodes =
   let list = breakRepeatingList(conf.staticPeers)
-  parseBootnodes(list, result).isOkOr:
+  parseBootstrapNodes(list, result).isOkOr:
     warn "Error when parsing static peers", msg=error
 
 func getAllowedOrigins*(conf: NimbusConf): seq[Uri] =

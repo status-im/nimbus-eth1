@@ -35,7 +35,7 @@ proc newEthereumNode*(
     networkId: NetworkId,
     clientId = "nim-eth-p2p",
     minPeers = 10,
-    bootstrapNodes = Bootnodes(),
+    bootstrapNodes = BootstrapNodes(),
     bindUdpPort: Port,
     bindTcpPort: Port,
     bindIp = IPv6_any(),

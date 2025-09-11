@@ -79,7 +79,7 @@ proc runReconnectLoop(pm: PeerManagerRef) {.async, gcsafe.} =
       break
     await sleepAsync(pm.retryInterval.seconds)
 
-proc setupManager(pm: PeerManagerRef, boot: Bootnodes) =
+proc setupManager(pm: PeerManagerRef, boot: BootstrapNodes) =
   var po: PeerObserver
   po.onPeerConnected = proc(peer: Peer) {.gcsafe.} =
     trace "Peer connected", remote=peer.remote.node
@@ -118,7 +118,7 @@ proc new*(_: type PeerManagerRef,
           pool: PeerPool,
           retryInterval: int,
           maxRetryCount: int,
-          nodes: Bootnodes): PeerManagerRef =
+          nodes: BootstrapNodes): PeerManagerRef =
   result = PeerManagerRef(
     pool: pool,
     state: Starting,

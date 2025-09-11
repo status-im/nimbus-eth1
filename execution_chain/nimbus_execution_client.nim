@@ -88,7 +88,7 @@ proc setupP2P(nimbus: NimbusNode, conf: NimbusConf,
   )
 
   let
-    bootstrapNodes = conf.getBootNodes()
+    bootstrapNodes = conf.getBootstrapNodes()
     fc = nimbus.fc
 
   func forkIdProc(): ForkID {.raises: [].} =

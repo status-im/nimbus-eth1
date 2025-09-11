@@ -118,7 +118,7 @@ proc new*(
     _: type Eth1Discovery,
     privKey: PrivateKey,
     address: AddressV4,
-    bootstrapNodes: Bootnodes,
+    bootstrapNodes: BootstrapNodes,
     bindPort: Port,
     bindIp = IPv6_any(),
     rng = newRng(),
