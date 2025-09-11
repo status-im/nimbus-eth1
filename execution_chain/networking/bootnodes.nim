@@ -52,24 +52,34 @@ func bootNodeFile(network: string): (string, string) {.compileTime.} =
 
   (vendorPath & network & bootNodeYaml, vendorPath & network & enodesYaml)
 
-func countLines(text: string): int {.compileTime.} =
-  for line in splitLines(text):
+func countLines(enrsText, enodesText: string): int {.compileTime.} =
+  for line in splitLines(enrsText):
     if line.startsWith("- enr:") or
-       line.startsWith("- enode:") or
-       line.startsWith("enr:") or
+       line.startsWith("enr:"):
+      inc result
+
+  for line in splitLines(enodesText):
+    if line.startsWith("- enode:") or
        line.startsWith("enode:"):
       inc result
 
-func bootData(numLines: static[int], text: string): array[numLines, string] {.compileTime.} =
+func bootData(numLines: static[int], enrsText, enodesText: string): array[numLines, string] {.compileTime.} =
   var i = 0
-  for line in splitLines(text):
-    if line.startsWith("- enr:") or
-       line.startsWith("- enode:"):
+  for line in splitLines(enrsText):
+    if line.startsWith("- enr:"):
       result[i] = line.substr(2)
       inc i
 
-    if line.startsWith("enr:") or
-       line.startsWith("enode:"):
+    if line.startsWith("enr:"): 
+      result[i] = line
+      inc i
+  
+  for line in splitLines(enodesText):
+    if line.startsWith("- enode:"):
+      result[i] = line.substr(2)
+      inc i
+
+    if line.startsWith("enode:"):
       result[i] = line
       inc i
 
@@ -77,9 +87,10 @@ template loadBootstrapNodes(name: static[string]): auto =
   block one:
     const
       (enrs, enodes) = bootNodeFile(name)
-      text = staticRead(enrs) & "\n" & staticRead(enodes)
-      numLines = countLines(text)
-    bootData(numLines, text)
+      enrsText = staticRead(enrs) 
+      enodesText = staticRead(enodes)
+      numLines = countLines(enrsText, enodesText)
+    bootData(numLines, enrsText, enodesText)
 
 const
   mainnet = loadBootstrapNodes("mainnet")
