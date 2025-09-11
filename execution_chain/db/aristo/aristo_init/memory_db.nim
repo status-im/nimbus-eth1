@@ -57,13 +57,13 @@ when extraTraceMessages:
 # Private helpers
 # ------------------------------------------------------------------------------
 
-func newSession(db: MemBackendRef): MemPutHdlRef =
-  new result
+template newSession(db: MemBackendRef): MemPutHdlRef =
+  MemPutHdlRef()
 
-func getSession(hdl: PutHdlRef; db: MemBackendRef): MemPutHdlRef =
+template getSession(hdl: PutHdlRef; db: MemBackendRef): MemPutHdlRef =
   hdl.MemPutHdlRef
 
-func endSession(hdl: PutHdlRef; db: MemBackendRef): MemPutHdlRef =
+template endSession(hdl: PutHdlRef; db: MemBackendRef): MemPutHdlRef =
   hdl.MemPutHdlRef
 
 # ------------------------------------------------------------------------------
