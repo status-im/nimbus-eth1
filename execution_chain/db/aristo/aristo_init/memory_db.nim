@@ -59,14 +59,11 @@ when extraTraceMessages:
 
 func newSession(db: MemBackendRef): MemPutHdlRef =
   new result
-  result.TypedPutHdlRef.beginSession db
 
 func getSession(hdl: PutHdlRef; db: MemBackendRef): MemPutHdlRef =
-  hdl.TypedPutHdlRef.verifySession db
   hdl.MemPutHdlRef
 
 func endSession(hdl: PutHdlRef; db: MemBackendRef): MemPutHdlRef =
-  hdl.TypedPutHdlRef.finishSession db
   hdl.MemPutHdlRef
 
 # ------------------------------------------------------------------------------
@@ -166,7 +163,7 @@ func closeFn(db: MemBackendRef): CloseFn =
 # ------------------------------------------------------------------------------
 
 func memoryBackend*(): AristoDbRef =
-  let 
+  let
     be = MemBackendRef(beKind: BackendMemory)
     db = AristoDbRef()
 

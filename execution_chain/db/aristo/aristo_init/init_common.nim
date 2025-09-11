@@ -13,10 +13,6 @@ import
   ../aristo_desc,
   ../aristo_desc/desc_backend
 
-const
-  verifyIxId = true # and false
-    ## Enforce session tracking
-
 type
   BackendType* = enum
     BackendMemory
@@ -32,12 +28,8 @@ type
     ## Access keys for admin table records. When exposed (e.g. when itereating
     ## over the tables), this data type is to be used.
 
-  TypedBackendRef* = ref TypedBackendObj
-  TypedBackendObj* = object of RootObj
+  TypedBackendRef* = ref object of RootObj
     beKind*: BackendType             ## Backend type identifier
-    when verifyIxId:
-      txGen: uint                    ## Transaction ID generator (for debugging)
-      txId: uint                     ## Active transaction ID (for debugging)
 
   TypedPutHdlErrRef* = ref object of RootRef
     case pfx*: StorageType           ## Error sub-table
@@ -52,8 +44,6 @@ type
 
   TypedPutHdlRef* = ref object of PutHdlRef
     error*: TypedPutHdlErrRef        ## Track error while collecting transaction
-    when verifyIxId:
-      txId: uint                     ## Transaction ID (for debugging)
 
 const
   AdmTabIdTuv* = AdminTabID(0)       ## Access key for vertex ID generator state
@@ -62,24 +52,6 @@ const
 # ------------------------------------------------------------------------------
 # Public helpers
 # ------------------------------------------------------------------------------
-
-proc beginSession*(hdl: TypedPutHdlRef; db: TypedBackendRef) =
-  when verifyIxId:
-    doAssert db.txId == 0
-    if db.txGen == 0:
-      db.txGen = 1
-    db.txId = db.txGen
-    hdl.txId = db.txGen
-    db.txGen.inc
-
-proc verifySession*(hdl: TypedPutHdlRef; db: TypedBackendRef) =
-  when verifyIxId:
-    doAssert db.txId == hdl.txId
-
-proc finishSession*(hdl: TypedPutHdlRef; db: TypedBackendRef) =
-  when verifyIxId:
-    doAssert db.txId == hdl.txId
-    db.txId = 0
 
 proc initInstance*(db: AristoDbRef): Result[void, AristoError] =
   let vTop = (?db.getLstFn()).vTop

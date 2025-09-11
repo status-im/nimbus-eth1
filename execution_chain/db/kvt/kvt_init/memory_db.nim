@@ -50,14 +50,11 @@ template logTxt(info: static[string]): static[string] =
 
 proc newSession(db: MemBackendRef): MemPutHdlRef =
   new result
-  result.TypedPutHdlRef.beginSession db
 
 proc getSession(hdl: PutHdlRef; db: MemBackendRef): MemPutHdlRef =
-  hdl.TypedPutHdlRef.verifySession db
   hdl.MemPutHdlRef
 
 proc endSession(hdl: PutHdlRef; db: MemBackendRef): MemPutHdlRef =
-  hdl.TypedPutHdlRef.finishSession db
   hdl.MemPutHdlRef
 
 # ------------------------------------------------------------------------------
@@ -128,7 +125,7 @@ proc getBackendFn(db: MemBackendRef): GetBackendFn =
   result =
     proc(): TypedBackendRef =
       db
-      
+
 # ------------------------------------------------------------------------------
 # Public functions
 # ------------------------------------------------------------------------------

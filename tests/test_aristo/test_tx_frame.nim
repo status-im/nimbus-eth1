@@ -111,7 +111,7 @@ suite "Aristo TxFrame":
 
   # This test case reproduces a bug which triggers an:
   # `db.txId == 0`  [AssertionDefect]
-  # This occurs when the txId inside the database is (incorrect) expected to always
+  # This occurs when the txId inside the database is (incorrectly) expected to always
   # be equal to zero when starting a batch.
   # See the related issue here: https://github.com/status-im/nimbus-eth1/issues/3659
   # and the related file here: https://github.com/status-im/nimbus-eth1/blob/master/execution_chain/db/aristo/aristo_init/init_common.nim
@@ -121,14 +121,15 @@ suite "Aristo TxFrame":
   test "After snapshots can persist checking state root":
     let tx1 = db.txFrameBegin(db.baseTxFrame())
 
-    for i in 1..100:
+    for i in 1..<10:
       let acc = makeAccount(i.uint64)
       check tx1.mergeAccountRecord(acc[0], acc[1]).isOk()
     tx1.checkpoint(1, skipSnapshot = false)
 
     let tx2 = db.txFrameBegin(tx1)
-    check:
-      tx2.mergeAccountRecord(acc3[0], acc3[1]).isOk()
+    for i in 1..<10:
+      let acc = makeAccount(i.uint64)
+      check tx2.mergeAccountRecord(acc[0], acc[1]).isOk()
     tx2.checkpoint(2, skipSnapshot = false)
 
     let batch = db.putBegFn().expect("working batch")

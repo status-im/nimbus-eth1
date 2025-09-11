@@ -55,14 +55,11 @@ logScope:
 
 proc newSession(db: RdbBackendRef, session: SharedWriteBatchRef): RdbPutHdlRef =
   result = RdbPutHdlRef(session: session)
-  result.TypedPutHdlRef.beginSession db
 
 proc getSession(hdl: PutHdlRef; db: RdbBackendRef): RdbPutHdlRef =
-  hdl.TypedPutHdlRef.verifySession db
   hdl.RdbPutHdlRef
 
 proc endSession(hdl: PutHdlRef; db: RdbBackendRef): RdbPutHdlRef =
-  hdl.TypedPutHdlRef.finishSession db
   hdl.RdbPutHdlRef
 
 # ------------------------------------------------------------------------------

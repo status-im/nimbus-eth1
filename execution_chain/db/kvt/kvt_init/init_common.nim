@@ -22,12 +22,8 @@ type
     BackendMemory                    ## Same as Aristo
     BackendRocksDB                   ## Same as Aristo
 
-  TypedBackendRef* = ref TypedBackendObj
-  TypedBackendObj* = object of RootObj
+  TypedBackendRef* = ref object of RootObj
     beKind*: BackendType             ## Backend type identifier
-    when verifyIxId:
-      txGen: uint                    ## Transaction ID generator (for debugging)
-      txId: uint                     ## Active transaction ID (for debugging)
 
   PutHdlRef* = ref object of RootRef
     ## Persistent database transaction frame handle. This handle is used to
@@ -38,30 +34,6 @@ type
   TypedPutHdlRef* = ref object of PutHdlRef
     error*: KvtError                 ## Track error while collecting transaction
     info*: string                    ##  Error description (if any)
-    when verifyIxId:
-      txId: uint                     ## Transaction ID (for debugging)
-
-# ------------------------------------------------------------------------------
-# Public helpers
-# ------------------------------------------------------------------------------
-
-proc beginSession*(hdl: TypedPutHdlRef; db: TypedBackendRef) =
-  when verifyIxId:
-    doAssert db.txId == 0
-    if db.txGen == 0:
-      db.txGen = 1
-    db.txId = db.txGen
-    hdl.txId = db.txGen
-    db.txGen.inc
-
-proc verifySession*(hdl: TypedPutHdlRef; db: TypedBackendRef) =
-  when verifyIxId:
-    doAssert db.txId == hdl.txId
-
-proc finishSession*(hdl: TypedPutHdlRef; db: TypedBackendRef) =
-  when verifyIxId:
-    doAssert db.txId == hdl.txId
-    db.txId = 0
 
 # ------------------------------------------------------------------------------
 # End
