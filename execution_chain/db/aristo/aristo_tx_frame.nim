@@ -13,7 +13,7 @@
 ##
 {.push raises: [].}
 
-import std/strformat, results, ./[aristo_desc, aristo_fetch, aristo_layers]
+import results, ./[aristo_desc, aristo_layers]
 
 # ------------------------------------------------------------------------------
 # Public functions
