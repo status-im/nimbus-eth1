@@ -105,7 +105,7 @@ proc checkpoint*(p: var Persister): Result[void, string] =
 
   # Move in-memory state to disk
   p.vmState.ledger.txFrame.checkpoint(p.parent.number, skipSnapshot = true)
-  p.com.db.persist(p.vmState.ledger.txFrame, Opt.none(Hash32))
+  p.com.db.persist(p.vmState.ledger.txFrame)
 
   # Get a new frame since the DB assumes ownership
   p.vmState.ledger.txFrame = p.com.db.baseTxFrame().txFrameBegin()

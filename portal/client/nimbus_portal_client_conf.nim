@@ -20,6 +20,7 @@ import
   stew/byteutils,
   stew/io2,
   beacon_chain/nimbus_binary_common,
+  ../bridge/common/rpc_helpers,
   ../logging,
   ../network/wire/portal_protocol_config
 
@@ -238,6 +239,12 @@ type
       defaultValue: false,
       name: "ws-compression"
     .}: bool
+
+    web3Url* {.
+      desc:
+        "Execution layer JSON-RPC API URL. Required for requesting block headers for content validation",
+      name: "web3-url"
+    .}: Option[JsonRpcUrl]
 
     tableIpLimit* {.
       hidden,

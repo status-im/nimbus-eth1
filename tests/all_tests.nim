@@ -23,6 +23,7 @@ import
     test_genesis,
     test_getproof_json,
     test_aristo_proof,
+    test_aristo_subtries_json,
     test_jwt_auth,
     test_kvt,
     test_ledger,

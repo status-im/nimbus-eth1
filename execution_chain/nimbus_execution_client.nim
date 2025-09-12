@@ -7,11 +7,13 @@
 # This file may not be copied, modified, or distributed except according to
 # those terms.
 
+{.push raises: [].}
+
 import
   ../execution_chain/compile_info
 
 import
-  std/[osproc, net, options],
+  std/[net, options],
   chronicles,
   eth/net/nat,
   metrics,
@@ -35,7 +37,7 @@ import
 
 proc basicServices(nimbus: NimbusNode,
                    conf: NimbusConf,
-                   com: CommonRef) =
+                   com: CommonRef) {.raises: [CatchableError].} =
   # Setup the chain
   let fc = ForkedChainRef.init(com,
     eagerStateRoot = conf.eagerStateRootCheck,
@@ -191,7 +193,7 @@ proc preventLoadingDataDirForTheWrongNetwork(db: CoreDbRef; conf: NimbusConf) =
     kvt.put(dataDirIdKey().toOpenArray, calculatedId.data).isOkOr:
       fatal "Cannot write data dir ID", ID=calculatedId
       quit(QuitFailure)
-    db.persist(kvt, Opt.none(Hash32))
+    db.persist(kvt)
 
   let
     kvt = db.baseTxFrame()
@@ -211,7 +213,12 @@ proc preventLoadingDataDirForTheWrongNetwork(db: CoreDbRef; conf: NimbusConf) =
       expected=calculatedId
     quit(QuitFailure)
 
-proc run(nimbus: NimbusNode, conf: NimbusConf) =
+proc run*(
+    nimbus: NimbusNode,
+    conf: NimbusConf,
+    stopper: Future[void].Raising([CancelledError]),
+    taskpool: Taskpool,
+) {.raises: [CatchableError].} =
   info "Launching execution client",
       version = FullVersionStr,
       conf
@@ -234,21 +241,6 @@ proc run(nimbus: NimbusNode, conf: NimbusConf) =
 
   preventLoadingDataDirForTheWrongNetwork(coreDB, conf)
   setupMetrics(nimbus, conf)
-
-  let taskpool =
-    try:
-      if conf.numThreads < 0:
-        fatal "The number of threads --num-threads cannot be negative."
-        quit QuitFailure
-      elif conf.numThreads == 0:
-        Taskpool.new(numThreads = min(countProcessors(), 16))
-      else:
-        Taskpool.new(numThreads = conf.numThreads)
-    except CatchableError as e:
-      fatal "Cannot start taskpool", err = e.msg
-      quit QuitFailure
-
-  info "Threadpool started", numThreads = taskpool.numThreads
 
   let com = CommonRef.new(
     db = coreDB,
@@ -280,7 +272,7 @@ proc run(nimbus: NimbusNode, conf: NimbusConf) =
         txFrame = fc.baseTxFrame
       fc.serialize(txFrame).isOkOr:
         error "FC.serialize error: ", msg=error
-      com.db.persist(txFrame, Opt.none(Hash32))
+      com.db.persist(txFrame)
     com.db.finish()
 
   case conf.cmd
@@ -310,7 +302,8 @@ proc run(nimbus: NimbusNode, conf: NimbusConf) =
     # Stop loop
     waitFor nimbus.closeWait()
 
-when isMainModule:
+# noinline to keep it in stack traces
+proc main*() {.noinline, raises: [CatchableError].} =
   ProcessState.setupStopHandlers()
 
   # Processing command line arguments
@@ -326,6 +319,11 @@ when isMainModule:
     # permissions are insecure.
     quit QuitFailure
 
-  var nimbus = NimbusNode(ctx: newEthContext())
+  let
+    nimbus = NimbusNode(ctx: newEthContext())
+    taskpool = setupTaskpool(conf.numThreads)
 
-  nimbus.run(conf)
+  nimbus.run(conf, nil, taskpool)
+
+when isMainModule:
+  main()
