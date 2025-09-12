@@ -213,7 +213,7 @@ nimbus_execution_client: | build deps rocksdb
 	echo -e $(BUILD_MSG) "build/nimbus_execution_client" && \
 		$(ENV_SCRIPT) nim c $(NIM_PARAMS) -d:chronicles_log_level=TRACE -o:build/nimbus_execution_client "execution_chain/nimbus_execution_client.nim"
 
-check_revision: | nimbus_execution_client
+check_revision: nimbus_execution_client
 	scripts/check_revision.sh
 
 nimbus: nimbus_execution_client
