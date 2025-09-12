@@ -13,7 +13,7 @@ set -e
 cd "$(dirname "${BASH_SOURCE[0]}")"/..
 
 REPO_DIR="${PWD}"
-EL=execution_chain/nimbus_execution_client
+EL=build/nimbus_execution_client
 
 $EL --help
 REPO_REVISION=$(git -C $REPO_DIR rev-parse --short=8 HEAD)
