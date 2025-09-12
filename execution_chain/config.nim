@@ -221,26 +221,26 @@ type
 
     bootstrapNodes {.
       separator: "\pNETWORKING OPTIONS:"
-      desc: "Specifies one or more bootstrap nodes(as enode/enr URL) to use when connecting to the network"
+      desc: "Specifies one or more bootstrap nodes(as enode URL or ENR) to use when connecting to the network"
       defaultValue: @[]
       defaultValueDesc: ""
       abbr: "b"
       name: "bootstrap-node" }: seq[string]
 
     bootstrapFile {.
-      desc: "Specifies a file of bootstrap Ethereum network addresses(enode/enr URL). " &
+      desc: "Specifies a file of bootstrap Ethereum network addresses(enode URL or ENR). " &
             "Both line delimited or yaml format are supported"
       defaultValue: ""
       name: "bootstrap-file" }: InputFile
 
     staticPeers {.
-      desc: "Connect to one or more trusted peers(as enode/enr URL)"
+      desc: "Connect to one or more trusted peers(as enode URL or ENR)"
       defaultValue: @[]
       defaultValueDesc: ""
       name: "static-peers" }: seq[string]
 
     staticPeersFile {.
-      desc: "Specifies a line-delimited file of trusted peers addresses(enode/enr URL)" &
+      desc: "Specifies a line-delimited file of trusted peers addresses(enode URL or ENR)." &
             "Both line delimited or yaml format are supported"
       defaultValue: ""
       name: "static-peers-file" }: InputFile
