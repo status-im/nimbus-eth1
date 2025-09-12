@@ -68,8 +68,7 @@ func blockCtx(header: Header): BlockContext =
 
 # --------------
 
-proc `$`*(vmState: BaseVMState): string
-    {.gcsafe, raises: [].} =
+proc `$`*(vmState: BaseVMState): string =
   if vmState.isNil:
     result = "nil"
   else:

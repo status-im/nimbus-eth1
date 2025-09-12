@@ -122,7 +122,9 @@ VERIF_PROXY_OUT_PATH ?= build/libverifproxy/
 	dist-windows-amd64 \
 	dist-macos-arm64 \
 	dist \
-	eest
+	eest \
+	t8n \
+	t8n_test
 
 ifeq ($(NIM_PARAMS),)
 # "variables.mk" was not included, so we update the submodules.
@@ -354,13 +356,13 @@ libverifproxy: | build deps
 eest_engine: | build deps
 	$(ENV_SCRIPT) nim c $(NIM_PARAMS) -d:chronicles_enabled:off -o:build/$@ "tests/eest/$@.nim"
 
-eest_engine_test: | build deps eest_engine
+eest_engine_test: | build deps eest eest_engine
 	$(ENV_SCRIPT) nim c -r $(NIM_PARAMS) -d:chronicles_enabled:off -o:build/$@ "tests/eest/$@.nim"
 
 eest_blockchain: | build deps
 	$(ENV_SCRIPT) nim c $(NIM_PARAMS) -d:chronicles_enabled:off -o:build/$@ "tests/eest/$@.nim"
 
-eest_blockchain_test: | build deps eest_blockchain
+eest_blockchain_test: | build deps eest eest_blockchain
 	$(ENV_SCRIPT) nim c -r $(NIM_PARAMS) -d:chronicles_enabled:off -o:build/$@ "tests/eest/$@.nim"
 
 eest_full_test: | build deps eest_blockchain eest_engine
