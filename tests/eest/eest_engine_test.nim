@@ -20,8 +20,6 @@ const
   eestType = "engine_tests"
   eestReleases = [
     "eest_develop",
-    "eest_static",
-    "eest_stable",
     "eest_devnet"
   ]
 

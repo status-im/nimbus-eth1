@@ -11,6 +11,7 @@
 
 import
   # std/json,
+  stew/byteutils,
   json_rpc/rpcserver,
   # ./rpc_utils,
   ./rpc_types,
@@ -222,3 +223,10 @@ proc setupDebugRpc*(com: CommonRef, txPool: TxPoolRef, server: RpcServer) =
     ## Returns an execution witness for the given block hash.
     chain.getExecutionWitness(blockHash).valueOr:
       raise newException(ValueError, error)
+
+  server.rpc("debug_getBlockHeader") do(blockNumber: uint64) -> string:
+    ## Returns the rlp encoded block header in hex for the given block number.
+    let header = chain.baseTxFrame.getBlockHeader(blockNumber).valueOr:
+      raise newException(ValueError, error)
+
+    rlp.encode(header).to0xHex()

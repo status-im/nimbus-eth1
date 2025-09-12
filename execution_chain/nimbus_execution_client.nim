@@ -193,7 +193,7 @@ proc preventLoadingDataDirForTheWrongNetwork(db: CoreDbRef; conf: NimbusConf) =
     kvt.put(dataDirIdKey().toOpenArray, calculatedId.data).isOkOr:
       fatal "Cannot write data dir ID", ID=calculatedId
       quit(QuitFailure)
-    db.persist(kvt, Opt.none(Hash32))
+    db.persist(kvt)
 
   let
     kvt = db.baseTxFrame()
@@ -272,7 +272,7 @@ proc run*(
         txFrame = fc.baseTxFrame
       fc.serialize(txFrame).isOkOr:
         error "FC.serialize error: ", msg=error
-      com.db.persist(txFrame, Opt.none(Hash32))
+      com.db.persist(txFrame)
     com.db.finish()
 
   case conf.cmd

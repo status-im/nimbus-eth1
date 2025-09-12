@@ -16,9 +16,9 @@
 
 import
   std/[tables, sets, sequtils],
-  eth/common/hashes,
+  eth/common/[hashes, accounts_rlp],
   results,
-  ./[aristo_desc, aristo_fetch, aristo_get, aristo_serialise, aristo_utils]
+  ./[aristo_desc, aristo_fetch, aristo_get, aristo_serialise, aristo_utils, aristo_vid, aristo_layers]
 
 const
   ChainRlpNodesNoEntry* = {
@@ -316,11 +316,184 @@ proc verifyProof*(
 proc verifyProof*(
     nodes: Table[Hash32, seq[byte]];
     root: Hash32;
-    path: Hash32): Result[Opt[seq[byte]], AristoError] =
+    path: Hash32;
+    visitedNodes: var HashSet[Hash32]
+      ): Result[Opt[seq[byte]], AristoError] =
   if nodes.len() == 0:
     return err(PartTrkEmptyProof)
 
   handleTrackRlpNodesResult():
-    var visitedNodes: HashSet[Hash32]
     let nibbles = NibblesBuf.fromBytes(path.data)
     trackRlpNodes(nodes, visitedNodes, root.to(HashKey), nibbles, start = true)
+
+proc verifyProof*(
+    nodes: Table[Hash32, seq[byte]];
+    root: Hash32;
+    path: Hash32;
+      ): Result[Opt[seq[byte]], AristoError] =
+  var visitedNodes: HashSet[Hash32]
+  verifyProof(nodes, root, path, visitedNodes)
+
+proc convertLeaf(
+    leafNode: openArray[byte],
+    segm: NibblesBuf,
+    isStorage: bool): Result[NodeRef, AristoError] {.gcsafe, raises: [RlpError]} =
+
+  let node =
+    if isStorage:
+      let slotValue = rlp.decode(leafNode, UInt256)
+      NodeRef(vtx: StoLeafRef.init(segm, slotValue))
+    else: # Account leaf
+      let
+        acc = rlp.decode(leafNode, Account)
+        aristoAcc = AristoAccount(
+          nonce: acc.nonce,
+          balance: acc.balance,
+          codeHash: acc.codeHash)
+        stoID = (acc.storageRoot != EMPTY_ROOT_HASH, default(VertexID))
+        n = NodeRef(vtx: AccLeafRef.init(segm, aristoAcc, stoID))
+
+      n.key[0] = HashKey.fromBytes(acc.storageRoot.data).valueOr:
+        return err(PartTrkLinkExpected)
+      n
+
+  ok(node)
+
+proc convertSubtrie(
+    key: Hash32,
+    src: Table[Hash32, seq[byte]],
+    dst: var Table[HashKey, NodeRef],
+    isStorage: static bool): Result[void, AristoError] {.gcsafe, raises: [RlpError]} =
+  # Precondition: trieNodes have already been validated using verifyProof
+  # Does not allocate any vertex ids when creating the VertexRef types.
+  if key notin src:
+    # Since we are processing a subtrie some nodes are expected to be missing
+    return ok()
+
+  var rlpNode = rlpFromBytes(src.getOrDefault(key))
+
+  let node =
+    case rlpNode.listLen()
+    of 2:
+      let
+        (isLeaf, segm) = NibblesBuf.fromHexPrefix(rlpNode.listElem(0).toBytes())
+        link = rlpNode.listElem(1).rlpNodeToBytes() # link or payload
+      if isLeaf:
+        let n = ?convertLeaf(link, segm, isStorage)
+        if not isStorage and AccLeafRef(n.vtx).stoID.isValid:
+          # Convert the storage subtrie
+          ?convertSubtrie(n.key[0].to(Hash32), src, dst, isStorage = true)
+        n
+      else: # Extension node
+        let k = HashKey.fromBytes(link).valueOr:
+          return err(PartTrkLinkExpected)
+
+        # Convert the child branch node which will be merged with this extension node
+        ?convertSubtrie(k.to(Hash32), src, dst, isStorage)
+        doAssert(dst.contains(k))
+
+        let
+          childNode = dst.getOrDefault(k)
+          childBranch = BranchRef(childNode.vtx)
+
+        # Remove the childNode because it's branch was copied into this node
+        dst.del(k)
+
+        NodeRef(
+          key: childNode.key,
+          vtx: ExtBranchRef.init(segm, childBranch.startVid, childBranch.used))
+
+    of 17: # Branch node
+      var key: array[16, HashKey]
+      let branch = BranchRef.init(default(VertexID), 0)
+      for i in 0 ..< 16:
+        let
+          link = rlpNode.listElem(i).rlpNodeToBytes()
+          k = HashKey.fromBytes(link).valueOr:
+            return err(PartTrkLinkExpected)
+        if k.len() > 0:
+          discard branch.setUsed(i.uint8, true)
+          ?convertSubtrie(k.to(Hash32), src, dst, isStorage)
+        key[i] = k
+      NodeRef(key: key, vtx: branch)
+
+    else:
+      return err(PartTrkGarbledNode)
+
+  let hashKey = HashKey.fromBytes(key.data).valueOr:
+    return err(PartTrkLinkExpected)
+  dst[hashKey] = node
+
+  ok()
+
+proc putSubtrie(
+    db: AristoTxRef,
+    key: HashKey,
+    nodes: Table[HashKey, NodeRef],
+    rvid: RootedVertexID = (STATE_ROOT_VID, STATE_ROOT_VID)): Result[void, AristoError] =
+  if key notin nodes:
+    return err(PartTrkFollowUpKeyMismatch)
+
+  let node = nodes.getOrDefault(key)
+  case node.vtx.vType:
+    of AccLeaf:
+      let accVtx = AccLeafRef(node.vtx)
+      if accVtx.stoID.isValid:
+        let stoVid = db.vidFetch()
+        accVtx.stoID = (true, stoVid)
+
+        let
+          k = node.key[0]
+          r = (stoVid, stoVid)
+        if nodes.contains(k):
+          # Write the storage subtrie
+          ?db.putSubtrie(k, nodes, r)
+        else:
+          # Write the known hash key setting the vtx to nil
+          db.layersPutKey(r, BranchRef(nil), k)
+
+    of StoLeaf:
+      discard
+
+    of Branch, ExtBranch:
+      let bvtx = BranchRef(node.vtx)
+      bvtx.startVid = db.vidFetch(16)
+
+      for n, subvid in node.vtx.pairs():
+        let
+          r = (rvid.root, subvid)
+          k = if node.key[n].len() < 32:
+                # Embedded nodes are stored in the nodes map indexed by
+                # a HashKey containing a hash of the node data rather than
+                # a HashKey containing the embedded node itself
+                node.key[n].to(Hash32).to(HashKey)
+              else:
+                node.key[n]
+        if nodes.contains(k):
+          ?db.putSubtrie(k, nodes, r)
+        else:
+          # Write the known hash key setting the vtx to nil
+          db.layersPutKey(r, BranchRef(nil), k)
+
+  db.layersPutVtx(rvid, node.vtx)
+
+  ok()
+
+proc putSubtrie*(
+    db: AristoTxRef,
+    stateRoot: Hash32,
+    nodes: Table[Hash32, seq[byte]]): Result[void, AristoError] =
+  if nodes.len() == 0:
+    return err(PartTrkEmptyProof)
+
+  let key = HashKey.fromBytes(stateRoot.data).valueOr:
+    return err(PartTrkLinkExpected)
+
+  try:
+    var convertedNodes: Table[HashKey, NodeRef]
+    ?convertSubtrie(stateRoot, nodes, convertedNodes, isStorage = false)
+    ?db.putSubtrie(key, convertedNodes)
+  except RlpError:
+    return err(PartTrkRlpError)
+
+  ok()

@@ -20,7 +20,7 @@ const
   NimbusMajor* = 0
   ## is the major number of Nimbus' version.
 
-  NimbusMinor* = 1
+  NimbusMinor* = 2
   ## is the minor number of Nimbus' version.
 
   NimbusPatch* = 0

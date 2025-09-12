@@ -8,16 +8,40 @@
 {.push raises: [].}
 
 import
-  chronicles,
-  json_rpc/rpcclient,
-  web3/[eth_api, eth_api_types],
-  ../nimbus_portal_bridge_conf
+  std/[uri, strutils], chronicles, json_rpc/rpcclient, web3/[eth_api, eth_api_types]
 
 from stew/objects import checkedEnumAssign
 from ../../../hive_integration/nodocker/engine/engine_client import
   toBlockHeader, toTransactions
 
 export rpcclient
+
+type
+  JsonRpcUrlKind* = enum
+    HttpUrl
+    WsUrl
+
+  JsonRpcUrl* = object
+    kind*: JsonRpcUrlKind
+    value*: string
+
+proc parseCmdArg*(T: type JsonRpcUrl, p: string): T {.raises: [ValueError].} =
+  let
+    url = parseUri(p)
+    normalizedScheme = url.scheme.toLowerAscii()
+
+  if (normalizedScheme == "http" or normalizedScheme == "https"):
+    JsonRpcUrl(kind: HttpUrl, value: p)
+  elif (normalizedScheme == "ws" or normalizedScheme == "wss"):
+    JsonRpcUrl(kind: WsUrl, value: p)
+  else:
+    raise newException(
+      ValueError,
+      "The Web3 URL must specify one of following protocols: http/https/ws/wss",
+    )
+
+proc completeCmdArg*(T: type JsonRpcUrl, val: string): seq[string] =
+  return @[]
 
 proc newRpcClientConnect*(url: JsonRpcUrl): RpcClient =
   ## Instantiate a new JSON-RPC client and try to connect. Will quit on failure.

@@ -13,30 +13,16 @@ cd "$(dirname "${BASH_SOURCE[0]}")"/..
 REPO_DIR="${PWD}"
 FIXTURES_DIR="${REPO_DIR}/tests/fixtures"
 
-# --- Current Release Static ---
-EEST_STATIC_NAME="Mainnet Static"
-EEST_STATIC_VERSION="v4.5.0"
-EEST_STATIC_DIR="${FIXTURES_DIR}/eest_static"
-EEST_STATIC_ARCHIVE="fixtures_static.tar.gz"
-EEST_STATIC_URL="https://github.com/ethereum/execution-spec-tests/releases/download/${EEST_STATIC_VERSION}/${EEST_STATIC_ARCHIVE}"
-
-# --- Current Release Stable ---
-EEST_STABLE_NAME="Mainnet Stable"
-EEST_STABLE_VERSION="v4.5.0"
-EEST_STABLE_DIR="${FIXTURES_DIR}/eest_stable"
-EEST_STABLE_ARCHIVE="fixtures_stable.tar.gz"
-EEST_STABLE_URL="https://github.com/ethereum/execution-spec-tests/releases/download/${EEST_STABLE_VERSION}/${EEST_STABLE_ARCHIVE}"
-
 # --- Current Release Develop ---
 EEST_DEVELOP_NAME="Mainnet Develop"
-EEST_DEVELOP_VERSION="v4.5.0"
+EEST_DEVELOP_VERSION="v5.0.0"
 EEST_DEVELOP_DIR="${FIXTURES_DIR}/eest_develop"
 EEST_DEVELOP_ARCHIVE="fixtures_develop.tar.gz"
 EEST_DEVELOP_URL="https://github.com/ethereum/execution-spec-tests/releases/download/${EEST_DEVELOP_VERSION}/${EEST_DEVELOP_ARCHIVE}"
 
 # --- Devnet Release ---
 EEST_DEVNET_NAME="fusaka-devnet-5"
-EEST_DEVNET_VERSION="v1.1.0"
+EEST_DEVNET_VERSION="v2.0.0"
 EEST_DEVNET_DIR="${FIXTURES_DIR}/eest_devnet"
 EEST_DEVNET_ARCHIVE="fixtures_fusaka-devnet-5.tar.gz"
 EEST_DEVNET_URL="https://github.com/ethereum/execution-spec-tests/releases/download/${EEST_DEVNET_NAME}%40${EEST_DEVNET_VERSION}/${EEST_DEVNET_ARCHIVE}"
@@ -87,7 +73,5 @@ download_and_extract() {
 }
 
 # Download stable and develop versions
-download_and_extract "${EEST_STATIC_URL}" "${EEST_STATIC_DIR}" "${EEST_STATIC_NAME}" "${EEST_STATIC_VERSION}" "${EEST_STATIC_ARCHIVE}"
-download_and_extract "${EEST_STABLE_URL}" "${EEST_STABLE_DIR}" "${EEST_STABLE_NAME}" "${EEST_STABLE_VERSION}" "${EEST_STABLE_ARCHIVE}"
 download_and_extract "${EEST_DEVELOP_URL}" "${EEST_DEVELOP_DIR}" "${EEST_DEVELOP_NAME}" "${EEST_DEVELOP_VERSION}" "${EEST_DEVELOP_ARCHIVE}"
 download_and_extract "${EEST_DEVNET_URL}" "${EEST_DEVNET_DIR}" "${EEST_DEVNET_NAME}" "${EEST_DEVNET_VERSION}" "${EEST_DEVNET_ARCHIVE}"
