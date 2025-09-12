@@ -29,7 +29,7 @@ logScope:
 
 proc addX(
     q: var seq[string];
-    info: static[string];
+    info: string;
     lnr: int;
     base: TraceRecBase;
       ) =
@@ -91,7 +91,7 @@ func toStrOops(n: int): seq[string] =
 
 func toStrSeq(n: int; w: TraceVersionInfo): seq[string] =
   var res = newSeqOfCap[string](15)
-  res.addX("=Version", n, w)
+  res.addX(w.replayLabel, n, w)
   let moan = if w.version < TraceVersionID: "(<" & $TraceVersionID & ")"
              elif TraceVersionID < w.version: "(>" & $TraceVersionID & ")"
              else: ""
@@ -105,14 +105,14 @@ func toStrSeq(n: int; w: TraceVersionInfo): seq[string] =
 
 func toStrSeq(n: int; w: TraceSyncActvFailed): seq[string] =
   var res = newSeqOfCap[string](15)
-  res.addX("=ActvFailed", n, w)
+  res.addX(w.replayLabel, n, w)
   res.add "base=" & w.baseNum.bnStr
   res.add "latest=" & w.latestNum.bnStr
   res
 
 func toStrSeq(n: int; w: TraceSyncActivated): seq[string] =
   var res = newSeqOfCap[string](20)
-  res.addX("=Activated", n, w)
+  res.addX(w.replayLabel, n, w)
   res.add "head=" & w.head.bnStr
   res.add "finHash=" & w.finHash.short
   res.add "base=" & w.baseNum.bnStr
@@ -121,7 +121,7 @@ func toStrSeq(n: int; w: TraceSyncActivated): seq[string] =
 
 func toStrSeq(n: int; w: TraceSyncHibernated): seq[string] =
   var res = newSeqOfCap[string](15)
-  res.addX("=Suspended", n, w)
+  res.addX(w.replayLabel, n, w)
   res.add "base=" & w.baseNum.bnStr
   res.add "latest=" & w.latestNum.bnStr
   res
@@ -130,17 +130,17 @@ func toStrSeq(n: int; w: TraceSyncHibernated): seq[string] =
 
 func toStrSeq(n: int; w: TraceSchedDaemonBegin): seq[string] =
   var res = newSeqOfCap[string](15)
-  res.addX("+Daemon", n, w)
+  res.addX(w.replayLabel, n, w)
   res
 
 func toStrSeq(n: int; w: TraceSchedDaemonEnd): seq[string] =
   var res = newSeqOfCap[string](15)
-  res.addX("-Daemon", n, w)
+  res.addX(w.replayLabel, n, w)
   res
 
 func toStrSeq(n: int; w: TraceSchedStart): seq[string] =
   var res = newSeqOfCap[string](20)
-  res.addX("=StartPeer", n, w)
+  res.addX(w.replayLabel, n, w)
   res.add "peer=" & $w.peerIP & ":" & $w.peerPort
   if not w.accept:
     res.add "rejected"
@@ -148,13 +148,13 @@ func toStrSeq(n: int; w: TraceSchedStart): seq[string] =
 
 func toStrSeq(n: int; w: TraceSchedStop): seq[string] =
   var res = newSeqOfCap[string](20)
-  res.addX("=StopPeer", n, w)
+  res.addX(w.replayLabel, n, w)
   res.add "peer=" & $w.peerIP & ":" & $w.peerPort
   res
 
 func toStrSeq(n: int; w: TraceSchedPool): seq[string] =
   var res = newSeqOfCap[string](20)
-  res.addX("=Pool", n, w)
+  res.addX(w.replayLabel, n, w)
   res.add "peer=" & $w.peerIP & ":" & $w.peerPort
   res.add "last=" & $w.last
   res.add "laps=" & $w.laps
@@ -163,20 +163,20 @@ func toStrSeq(n: int; w: TraceSchedPool): seq[string] =
 
 func toStrSeq(n: int; w: TraceSchedPeerBegin): seq[string] =
   var res = newSeqOfCap[string](20)
-  res.addX("+Peer", n, w)
+  res.addX(w.replayLabel, n, w)
   res.add "peer=" & $w.peerIP & ":" & $w.peerPort
   res
 
 func toStrSeq(n: int; w: TraceSchedPeerEnd): seq[string] =
   var res = newSeqOfCap[string](15)
-  res.addX("-Peer", n, w)
+  res.addX(w.replayLabel, n, w)
   res
 
 # -----------
 
 func toStrSeq(n: int; w: TraceFetchHeaders): seq[string] =
   var res = newSeqOfCap[string](20)
-  res.addX("=HeadersFetch", n, w)
+  res.addX(w.replayLabel, n, w)
   let
     rLen = w.req.maxResults
     rRev = if w.req.reverse: "rev" else: ""
@@ -201,13 +201,13 @@ func toStrSeq(n: int; w: TraceFetchHeaders): seq[string] =
 
 func toStrSeq(n: int; w: TraceSyncHeaders): seq[string] =
   var res = newSeqOfCap[string](20)
-  res.addX("=HeadersSync", n, w)
+  res.addX(w.replayLabel, n, w)
   res
 
 
 func toStrSeq(n: int; w: TraceFetchBodies): seq[string] =
   var res = newSeqOfCap[string](20)
-  res.addX("=BodiesFetch", n, w)
+  res.addX(w.replayLabel, n, w)
   res.add "req=" & w.ivReq.bnStr & "[" & $w.req.blockHashes.len & "]"
   if (w.fieldAvail and 1) != 0:
     res.add "res=[" & $w.fetched.packet.bodies.len & "]"
@@ -225,13 +225,13 @@ func toStrSeq(n: int; w: TraceFetchBodies): seq[string] =
 
 func toStrSeq(n: int; w: TraceSyncBodies): seq[string] =
   var res = newSeqOfCap[string](20)
-  res.addX("=BodiesSync", n, w)
+  res.addX(w.replayLabel, n, w)
   res
 
 
 func toStrSeq(n: int; w: TraceImportBlock): seq[string] =
   var res = newSeqOfCap[string](20)
-  res.addX("=BlockImport", n, w)
+  res.addX(w.replayLabel, n, w)
   res.add "block=" & w.ethBlock.bnStr
   res.add "size=" & w.ethBlock.getEncodedLength.uint64.toSI
   res.add "effPeerID=" & w.effPeerID.short
@@ -249,7 +249,7 @@ func toStrSeq(n: int; w: TraceImportBlock): seq[string] =
 
 func toStrSeq(n: int; w: TraceSyncBlock): seq[string] =
   var res = newSeqOfCap[string](20)
-  res.addX("=BlockSync", n, w)
+  res.addX(w.replayLabel, n, w)
   res
 
 # ------------------------------------------------------------------------------
@@ -306,48 +306,13 @@ proc recLogToStrList*(pyl: ReplayPayloadRef; lnr = 0): seq[string] =
   ## Convert the internal capture object argument `pyl` to a list of
   ## printable strings.
   ##
-  case pyl.recType:
-  of TraceRecType(0):
-    lnr.toStrOops()
+  template replayTypeExpr(t: TraceRecType, T: type): untyped =
+    when t == TraceRecType(0):
+      lnr.toStrOops()
+    else:
+      lnr.toStrSeq(pyl.T.data)
 
-  of TrtVersionInfo:
-    lnr.toStrSeq(pyl.ReplayVersionInfo.data)
-
-  of TrtSyncActvFailed:
-    lnr.toStrSeq(pyl.ReplaySyncActvFailed.data)
-  of TrtSyncActivated:
-    lnr.toStrSeq(pyl.ReplaySyncActivated.data)
-  of TrtSyncHibernated:
-    lnr.toStrSeq(pyl.ReplaySyncHibernated.data)
-
-  of TrtSchedDaemonBegin:
-    lnr.toStrSeq(pyl.ReplaySchedDaemonBegin.data)
-  of TrtSchedDaemonEnd:
-    lnr.toStrSeq(pyl.ReplaySchedDaemonEnd.data)
-  of TrtSchedStart:
-    lnr.toStrSeq(pyl.ReplaySchedStart.data)
-  of TrtSchedStop:
-    lnr.toStrSeq(pyl.ReplaySchedStop.data)
-  of TrtSchedPool:
-    lnr.toStrSeq(pyl.ReplaySchedPool.data)
-  of TrtSchedPeerBegin:
-    lnr.toStrSeq(pyl.ReplaySchedPeerBegin.data)
-  of TrtSchedPeerEnd:
-    lnr.toStrSeq(pyl.ReplaySchedPeerEnd.data)
-
-  of TrtFetchHeaders:
-    lnr.toStrSeq(pyl.ReplayFetchHeaders.data)
-  of TrtSyncHeaders:
-    lnr.toStrSeq(pyl.ReplaySyncHeaders.data)
-
-  of TrtFetchBodies:
-    lnr.toStrSeq(pyl.ReplayFetchBodies.data)
-  of TrtSyncBodies:
-    lnr.toStrSeq(pyl.ReplaySyncBodies.data)
-  of TrtImportBlock:
-    lnr.toStrSeq(pyl.ReplayImportBlock.data)
-  of TrtSyncBlock:
-    lnr.toStrSeq(pyl.ReplaySyncBlock.data)
+  pyl.recType.withReplayTypeExpr()
 
 # ------------------------------------------------------------------------------
 # End

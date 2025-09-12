@@ -41,50 +41,50 @@ proc dispatch*(
   of TraceRecType(0):
     warn "dispatch(): Oops, unexpected void record", n=run.instrNumber
 
-  of TrtVersionInfo:
-    run.versionInfoWorker(pyl.ReplayVersionInfo.data, "=Version")
+  of VersionInfo:
+    run.versionInfoWorker(pyl.ReplayVersionInfo.data)
     
-  of TrtSyncActvFailed:
-    run.syncActvFailedWorker(pyl.ReplaySyncActvFailed.data, "=ActvFailed")
-  of TrtSyncActivated:
-    run.syncActivateWorker(pyl.ReplaySyncActivated.data, "=Activated")
-  of TrtSyncHibernated:
-    run.syncSuspendWorker(pyl.ReplaySyncHibernated.data, "=Suspended")
+  of SyncActvFailed:
+    run.syncActvFailedWorker(pyl.ReplaySyncActvFailed.data)
+  of SyncActivated:
+    run.syncActivateWorker(pyl.ReplaySyncActivated.data)
+  of SyncHibernated:
+    run.syncSuspendWorker(pyl.ReplaySyncHibernated.data)
 
   # Simple scheduler single run (no begin/end) functions
-  of TrtSchedStart:
-    run.schedStartWorker(pyl.ReplaySchedStart.data, "=StartPeer")
-  of TrtSchedStop:
-    run.schedStopWorker(pyl.ReplaySchedStop.data, "=StopPeer")
-  of TrtSchedPool:
-    run.schedPoolWorker(pyl.ReplaySchedPool.data, "=Pool")
+  of SchedStart:
+    run.schedStartWorker(pyl.ReplaySchedStart.data)
+  of SchedStop:
+    run.schedStopWorker(pyl.ReplaySchedStop.data)
+  of SchedPool:
+    run.schedPoolWorker(pyl.ReplaySchedPool.data)
 
   # Workers, complex run in background
-  of TrtSchedDaemonBegin:
-    await run.schedDaemonBegin(pyl.ReplaySchedDaemonBegin.data, "+Daemon")
-  of TrtSchedDaemonEnd:
-    await run.schedDaemonEnd(pyl.ReplaySchedDaemonEnd.data, "-Daemon")
-  of TrtSchedPeerBegin:
-    await run.schedPeerBegin(pyl.ReplaySchedPeerBegin.data, "+Peer")
-  of TrtSchedPeerEnd:
-    await run.schedPeerEnd(pyl.ReplaySchedPeerEnd.data, "-Peer")
+  of SchedDaemonBegin:
+    await run.schedDaemonBegin(pyl.ReplaySchedDaemonBegin.data)
+  of SchedDaemonEnd:
+    await run.schedDaemonEnd(pyl.ReplaySchedDaemonEnd.data)
+  of SchedPeerBegin:
+    await run.schedPeerBegin(pyl.ReplaySchedPeerBegin.data)
+  of SchedPeerEnd:
+    await run.schedPeerEnd(pyl.ReplaySchedPeerEnd.data)
 
   # Leaf handlers providing input data to background tasks `runDaemon()`
   # and/or `runPeer()`.
-  of TrtFetchHeaders:
-    await run.sendHeaders(pyl.ReplayFetchHeaders.data, "=HeadersFetch")
-  of TrtSyncHeaders:
-    await run.sendHeaders(pyl.ReplaySyncHeaders.data, "=HeadersSync")
+  of FetchHeaders:
+    await run.sendHeaders(pyl.ReplayFetchHeaders.data)
+  of SyncHeaders:
+    await run.sendHeaders(pyl.ReplaySyncHeaders.data)
 
-  of TrtFetchBodies:
-    await run.sendBodies(pyl.ReplayFetchBodies.data, "=BodiesFetch")
-  of TrtSyncBodies:
-    await run.sendBodies(pyl.ReplaySyncBodies.data, "=BodiesSync")
+  of FetchBodies:
+    await run.sendBodies(pyl.ReplayFetchBodies.data)
+  of SyncBodies:
+    await run.sendBodies(pyl.ReplaySyncBodies.data)
 
-  of TrtImportBlock:
-    await run.sendBlock(pyl.ReplayImportBlock.data, "=BlockImport")
-  of TrtSyncBlock:
-    await run.sendBlock(pyl.ReplaySyncBlock.data, "=BlockSync")
+  of ImportBlock:
+    await run.sendBlock(pyl.ReplayImportBlock.data)
+  of SyncBlock:
+    await run.sendBlock(pyl.ReplaySyncBlock.data)
 
   trace "-dispatch()", n=run.instrNumber, recType=pyl.recType,
     nBuddies=run.peers.len, nDaemons=(if run.daemon.isNil: 0 else: 1)

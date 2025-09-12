@@ -96,9 +96,9 @@ proc fetchHeadersHandler*(
 proc sendHeaders*(
     run: ReplayRunnerRef;
     instr: TraceFetchHeaders|TraceSyncHeaders;
-    info: static[string];
       ) {.async: (raises: []).} =
   ## Stage headers request/response data
+  const info = instr.replayLabel()
   let buddy = run.getPeer(instr, info).valueOr:
     raiseAssert info & ": getPeer() failed" &
       ", n=" & $run.iNum &

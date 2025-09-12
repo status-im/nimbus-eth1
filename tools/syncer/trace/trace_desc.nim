@@ -51,29 +51,29 @@ type
   # -------------
 
   TraceRecType* = enum
-    TrtRecBase = 0
-    TrtVersionInfo = 1
+    RecBase = 0
+    VersionInfo = 1
 
-    TrtSyncActvFailed
-    TrtSyncActivated
-    TrtSyncHibernated
+    SyncActvFailed
+    SyncActivated
+    SyncHibernated
 
-    TrtSchedDaemonBegin
-    TrtSchedDaemonEnd
-    TrtSchedStart
-    TrtSchedStop
-    TrtSchedPool
-    TrtSchedPeerBegin
-    TrtSchedPeerEnd
+    SchedDaemonBegin
+    SchedDaemonEnd
+    SchedStart
+    SchedStop
+    SchedPool
+    SchedPeerBegin
+    SchedPeerEnd
 
-    TrtFetchHeaders
-    TrtSyncHeaders
+    FetchHeaders
+    SyncHeaders
 
-    TrtFetchBodies
-    TrtSyncBodies
+    FetchBodies
+    SyncBodies
 
-    TrtImportBlock
-    TrtSyncBlock
+    ImportBlock
+    SyncBlock
 
   TraceRecBase* = object of RootObj
     ## Trace context applicable with and without known peer
@@ -219,39 +219,39 @@ func newSerial*(trc: TraceRef): uint64 =
 func toTraceRecType*(T: type): TraceRecType =
   ## Derive capture type from record layout
   when T is TraceVersionInfo:
-    TrtVersionInfo
+    VersionInfo
   elif T is TraceSyncActvFailed:
-    TrtSyncActvFailed
+    SyncActvFailed
   elif T is TraceSyncActivated:
-    TrtSyncActivated
+    SyncActivated
   elif T is TraceSyncHibernated:
-    TrtSyncHibernated
+    SyncHibernated
   elif T is TraceSchedDaemonBegin:
-    TrtSchedDaemonBegin
+    SchedDaemonBegin
   elif T is TraceSchedDaemonEnd:
-    TrtSchedDaemonEnd
+    SchedDaemonEnd
   elif T is TraceSchedStart:
-    TrtSchedStart
+    SchedStart
   elif T is TraceSchedStop:
-    TrtSchedStop
+    SchedStop
   elif T is TraceSchedPool:
-    TrtSchedPool
+    SchedPool
   elif T is TraceSchedPeerBegin:
-    TrtSchedPeerBegin
+    SchedPeerBegin
   elif T is TraceSchedPeerEnd:
-    TrtSchedPeerEnd
+    SchedPeerEnd
   elif T is TraceFetchHeaders:
-    TrtFetchHeaders
+    FetchHeaders
   elif T is TraceSyncHeaders:
-    TrtSyncHeaders
+    SyncHeaders
   elif T is TraceFetchBodies:
-    TrtFetchBodies
+    FetchBodies
   elif T is TraceSyncBodies:
-    TrtSyncBodies
+    SyncBodies
   elif T is TraceImportBlock:
-    TrtImportBlock
+    ImportBlock
   elif T is TraceSyncBlock:
-    TrtSyncBlock
+    SyncBlock
   else:
     {.error: "Unsupported trace capture record type".}
 

@@ -74,11 +74,11 @@ proc schedPeerProcessImpl(
 proc schedDaemonBegin*(
     run: ReplayRunnerRef;
     instr: TraceSchedDaemonBegin;
-    info: static[string];
       ) {.async: (raises: []).} =
   ## Run the `schedDaemon()` task.
   ##
   # Synchronise against captured environment and start process
+  const info = instr.replayLabel()
   let daemon = run.newDaemonFrame(instr, info).valueOr: return
   discard await daemon.waitForSyncedEnv(instr, info)
   asyncSpawn daemon.schedDaemonProcessImpl(instr, info)
@@ -87,10 +87,10 @@ proc schedDaemonBegin*(
 proc schedDaemonEnd*(
     run: ReplayRunnerRef;
     instr: TraceSchedDaemonEnd;
-    info: static[string];
       ) {.async: (raises: []).} =
   ## Clean up (in foreground) after `schedDaemon()` process has terminated.
   ##
+  const info = instr.replayLabel()
   let daemon = run.getDaemon(info).valueOr: return
   daemon.whenProcessFinished(instr, info).isErrOr:
     daemon.delDaemon(info) # Clean up
@@ -99,10 +99,11 @@ proc schedDaemonEnd*(
 proc schedStartWorker*(
     run: ReplayRunnerRef;
     instr: TraceSchedStart;
-    info: static[string];
       ) =
   ## Runs `schedStart()` in the foreground.
   ##
+  const
+    info = instr.replayLabel()
   let
     buddy = run.newPeer(instr, info)
     accept = run.worker.schedStart(buddy)
@@ -127,10 +128,10 @@ proc schedStartWorker*(
 proc schedStopWorker*(
     run: ReplayRunnerRef;
     instr: TraceSchedStop;
-    info: static[string];
       ) =
   ## Runs `schedStop()` in the foreground.
   ##
+  const info = instr.replayLabel()
   let buddy = run.getOrNewPeerFrame(instr, info)
   run.worker.schedStop(buddy)
 
@@ -154,10 +155,10 @@ proc schedStopWorker*(
 proc schedPoolWorker*(
     run: ReplayRunnerRef;
     instr: TraceSchedPool;
-    info: static[string];
       ) =
   ## Runs `schedPool()` in the foreground.
   ##
+  const info = instr.replayLabel()
   let buddy = run.getOrNewPeerFrame(instr, info)
 
   if 0 < run.nPeers:
@@ -183,11 +184,11 @@ proc schedPoolWorker*(
 proc schedPeerBegin*(
     run: ReplayRunnerRef;
     instr: TraceSchedPeerBegin;
-    info: static[string];
       ) {.async: (raises: []).} =
   ## Run the `schedPeer()` task.
   ##
   # Synchronise against captured environment and start process
+  const info = instr.replayLabel()
   let buddy = run.getOrNewPeerFrame(instr, info)
   discard await buddy.waitForSyncedEnv(instr, info)
   asyncSpawn buddy.schedPeerProcessImpl(instr, info)
@@ -196,10 +197,10 @@ proc schedPeerBegin*(
 proc schedPeerEnd*(
     run: ReplayRunnerRef;
     instr: TraceSchedPeerEnd;
-    info: static[string];
       ) {.async: (raises: []).} =
   ## Clean up (in foreground) after `schedPeer()` process has terminated.
   ##
+  const info = instr.replayLabel()
   let buddy = run.getPeer(instr, info).valueOr: return
   buddy.whenProcessFinished(instr, info).isErrOr:
     buddy.run.nPeers.dec # peer is not active, anymore

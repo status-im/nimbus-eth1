@@ -28,6 +28,30 @@ const
   ReplaySetupID* = 2                    ## Phase 1 layout ID, prepare
   ReplayRunnerID* = 20                  ## Phase 2 layout ID, full execution
 
+  ReplayTypeLabel* = block:
+    var a: array[TraceRecType,string]
+    a[TraceRecType(0)] =  "=Oops"
+    a[VersionInfo] =      "=Version"
+    a[SyncActvFailed] =   "=ActvFailed"
+    a[SyncActivated] =    "=Activated"
+    a[SyncHibernated] =   "=Suspended"
+    a[SchedStart] =       "=StartPeer"
+    a[SchedStop] =        "=StopPeer"
+    a[SchedPool] =        "=Pool"
+    a[SchedDaemonBegin] = "+Daemon"
+    a[SchedDaemonEnd] =   "-Daemon"
+    a[SchedPeerBegin] =   "+Peer"
+    a[SchedPeerEnd] =     "-Peer"
+    a[FetchHeaders] =     "=HeadersFetch"
+    a[SyncHeaders] =      "=HeadersSync"
+    a[FetchBodies] =      "=BodiesFetch"
+    a[SyncBodies] =       "=BodiesSync"
+    a[ImportBlock] =      "=BlockImport"
+    a[SyncBlock] =        "=BlockSync"
+    for w in a:
+      doAssert 0 < w.len
+    a
+
 type
   ReplayStopIfFn* = proc(): bool {.gcsafe, raises: [].}
     ## Loop control directive for runner/dispatcher
@@ -117,6 +141,10 @@ func replay*(ctx: BeaconCtxRef): ReplayRef =
   ## Getter, get replay descriptor (if any)
   if ctx.handler.version == ReplayRunnerID:
     return ctx.handler.ReplayRef
+
+template replayLabel*(w: untyped): string =
+  ## Static getter, retrieve replay type label
+  ReplayTypeLabel[(typeof w).toTraceRecType]
 
 # ------------------------------------------------------------------------------
 # End

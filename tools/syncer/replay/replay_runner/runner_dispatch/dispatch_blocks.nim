@@ -190,9 +190,9 @@ proc importBlockHandler*(
 proc sendBodies*(
     run: ReplayRunnerRef;
     instr: TraceFetchBodies|TraceSyncBodies;
-    info: static[string];
       ) {.async: (raises: []).} =
   ## Stage bodies request/response data
+  const info = instr.replayLabel()
   let buddy = run.getPeer(instr, info).valueOr:
     raiseAssert info & ": getPeer() failed" &
       ", n=" & $run.iNum &
@@ -203,9 +203,9 @@ proc sendBodies*(
 proc sendBlock*(
     run: ReplayRunnerRef;
     instr: TraceImportBlock|TraceSyncBlock;
-    info: static[string];
       ) {.async: (raises: []).} =
   ## Stage block request/response data
+  const info = instr.replayLabel()
   if (instr.stateAvail and 2) != 0:
     # So it was captured run from a sync peer
     let buddy = run.getPeer(instr, info).valueOr:

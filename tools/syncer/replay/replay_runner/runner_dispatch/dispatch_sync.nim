@@ -28,15 +28,17 @@ logScope:
 proc syncActvFailedWorker*(
     run: ReplayRunnerRef;
     instr: TraceSyncActvFailed;
-    info: static[string];
       ) =
+  const info = instr.replayLabel()
   trace info, n=run.iNum, serial=instr.serial
 
 
 proc syncActivateWorker*(
     run: ReplayRunnerRef;
     instr: TraceSyncActivated;
-    info: static[string]) =
+      ) =
+  const
+    info = instr.replayLabel()
   let
     serial = instr.serial
     ctx = run.ctx
@@ -71,8 +73,8 @@ proc syncActivateWorker*(
 proc syncSuspendWorker*(
     run: ReplayRunnerRef;
     instr: TraceSyncHibernated;
-    info: static[string];
       ) =
+  const info = instr.replayLabel()
   if not run.ctx.hibernate:
     run.stopError(info & ": suspend failed")
     return

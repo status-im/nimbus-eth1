@@ -16,7 +16,8 @@ import
   std/strutils,
   pkg/[chronos, eth/common],
   ../../trace/trace_setup/setup_helpers as trace_helpers,
-  ../../../../execution_chain/sync/beacon/worker/helpers as worker_helpers
+  ../../../../execution_chain/sync/beacon/worker/helpers as worker_helpers,
+  ../replay_desc
 
 export
   trace_helpers.idStr,
@@ -67,6 +68,56 @@ func toUpperFirst*(w: string): string =
     $w[0].toUpperAscii & w.substr(1)
   else:
     w
+
+# ----------------
+
+template withReplayTypeExpr*(recType: TraceRecType): untyped =
+  ## Big switch for allocating `TraceRecType` type dependent replay code
+  ## using the replay record layouts.
+  ##
+  mixin replayTypeExpr
+
+  case recType:
+  of TraceRecType(0):
+    replayTypeExpr(TraceRecType(0), ReplayPayloadRef)
+  of VersionInfo:
+    replayTypeExpr(VersionInfo, ReplayVersionInfo)
+
+  of SyncActvFailed:
+    replayTypeExpr(SyncActvFailed,ReplaySyncActvFailed)
+  of SyncActivated:
+    replayTypeExpr(SyncActivated, ReplaySyncActivated)
+  of SyncHibernated:
+    replayTypeExpr(SyncHibernated, ReplaySyncHibernated)
+
+  of SchedDaemonBegin:
+    replayTypeExpr(SchedDaemonBegin, ReplaySchedDaemonBegin)
+  of SchedDaemonEnd:
+    replayTypeExpr(SchedDaemonEnd, ReplaySchedDaemonEnd)
+  of SchedStart:
+    replayTypeExpr(SchedStart, ReplaySchedStart)
+  of SchedStop:
+    replayTypeExpr(SchedStop, ReplaySchedStop)
+  of SchedPool:
+    replayTypeExpr(SchedPool, ReplaySchedPool)
+  of SchedPeerBegin:
+    replayTypeExpr(SchedPeerBegin, ReplaySchedPeerBegin)
+  of SchedPeerEnd:
+    replayTypeExpr(SchedPeerEnd, ReplaySchedPeerEnd)
+
+  of FetchHeaders:
+    replayTypeExpr(FetchHeaders, ReplayFetchHeaders)
+  of SyncHeaders:
+    replayTypeExpr(SyncHeaders, ReplaySyncHeaders)
+
+  of FetchBodies:
+    replayTypeExpr(FetchBodies, ReplayFetchBodies)
+  of SyncBodies:
+    replayTypeExpr(SyncBodies, ReplaySyncBodies)
+  of ImportBlock:
+    replayTypeExpr(ImportBlock, ReplayImportBlock)
+  of SyncBlock:
+    replayTypeExpr(SyncBlock, ReplaySyncBlock)
 
 # ------------------------------------------------------------------------------
 # End

@@ -17,7 +17,8 @@ import
   pkg/[chronicles, chronos, eth/common, results, stew/interval_set],
   pkg/json_serialization/pkg/results,
   pkg/eth/common/eth_types_json_serialization,
-  ../replay_desc
+  ../replay_desc,
+  ./reader_helpers
 
 logScope:
   topics = "replay reader"
@@ -253,47 +254,15 @@ proc unpack*(line: string): ReplayPayloadRef =
   ##
   const info = "unpack"
 
-  case line.getRecType(info):
-  of TraceRecType(0):
-    return ReplayPayloadRef(recType: TraceRecType(0))
-  of TrtVersionInfo:
-    return ReplayVersionInfo.init(line, info)
+  template replayTypeExpr(t: TraceRecType, T: type): untyped =
+    ## Mixin for `withReplayTypeExpr()`
+    when t == TraceRecType(0):
+      return T(recType: TraceRecType(0))
+    else:
+      return T.init(line, info)
 
-  of TrtSyncActvFailed:
-    return ReplaySyncActvFailed.init(line, info)
-  of TrtSyncActivated:
-    return ReplaySyncActivated.init(line, info)
-  of TrtSyncHibernated:
-    return ReplaySyncHibernated.init(line, info)
-
-  of TrtSchedDaemonBegin:
-    return ReplaySchedDaemonBegin.init(line, info)
-  of TrtSchedDaemonEnd:
-    return ReplaySchedDaemonEnd.init(line, info)
-  of TrtSchedStart:
-    return ReplaySchedStart.init(line, info)
-  of TrtSchedStop:
-    return ReplaySchedStop.init(line, info)
-  of TrtSchedPool:
-    return ReplaySchedPool.init(line, info)
-  of TrtSchedPeerBegin:
-    return ReplaySchedPeerBegin.init(line, info)
-  of TrtSchedPeerEnd:
-    return ReplaySchedPeerEnd.init(line, info)
-
-  of TrtFetchHeaders:
-    return ReplayFetchHeaders.init(line, info)
-  of TrtSyncHeaders:
-    return ReplaySyncHeaders.init(line, info)
-
-  of TrtFetchBodies:
-    return ReplayFetchBodies.init(line, info)
-  of TrtSyncBodies:
-    return ReplaySyncBodies.init(line, info)
-  of TrtImportBlock:
-    return ReplayImportBlock.init(line, info)
-  of TrtSyncBlock:
-    return ReplaySyncBlock.init(line, info)
+  # Big switch for allocating different JSON parsers depending on record type.
+  line.getRecType(info).withReplayTypeExpr()
 
 # ------------------------------------------------------------------------------
 # End

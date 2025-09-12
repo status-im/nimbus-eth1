@@ -28,8 +28,9 @@ logScope:
 proc versionInfoWorker*(
     run: ReplayRunnerRef;
     instr: TraceVersionInfo;
-    info: static[string];
       ) =
+  const
+    info = instr.replayLabel()
   let
     serial = instr.serial
     ctx = run.ctx
