@@ -32,3 +32,5 @@ if [[ $REPO_REVISION -ne $BINARY_REVISION ]]; then
   echo "Binary revision differ from repository revision. Expect $REPO_REVISION, get $BINARY_REVISION."
   exit 1 # Exit the script with an error code
 fi
+
+# TODO: check copyright year start from 2018, the current 2019 is from nimbus-eth2
