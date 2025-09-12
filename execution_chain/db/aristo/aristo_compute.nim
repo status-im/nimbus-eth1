@@ -14,7 +14,7 @@ import
   std/strformat,
   chronicles,
   eth/rlp,
-  eth/common,
+  eth/common/[accounts_rlp, base_rlp, hashes_rlp],
   results,
   "."/[aristo_desc, aristo_get, aristo_layers],
   ./aristo_desc/desc_backend
