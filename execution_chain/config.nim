@@ -40,13 +40,16 @@ import
 export net, defs, jsdefs, jsnet, nimbus_binary_common
 
 const
-
+  # e.g.: Copyright (c) 2018-2025 Status Research & Development GmbH
+  NimbusCopyright* = "Copyright (c) 2018-" &
+    CompileDate.split('-')[0] &
+    " Status Research & Development GmbH"
   # e.g.:
   # nimbus_execution_client/v0.1.0-abcdef/os-cpu/nim-a.b.c/emvc
   # Copyright (c) 2018-2025 Status Research & Development GmbH
   NimbusBuild* = "$#\p$#" % [
     ClientId,
-    copyrights,
+    NimbusCopyright,
   ]
 
   NimbusHeader* = "$#\p\pNim version $#" % [
