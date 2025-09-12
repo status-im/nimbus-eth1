@@ -111,13 +111,13 @@ func clear(self: var AristoTrieWriter) =
   self.twoPassWriter.clear()
   self.hashWriter.clear()
 
-template appendLeaf(w: var RlpWriter, pfx: NibblesBuf, leafData: auto) =
+template appendLeaf(w: var RlpWriter, pfx: NibblesBuf, leafData: Account | UInt256) =
   w.startList(2)
   w.append(pfx.toHexPrefix(isLeaf = true).data())
   w.wrapEncoding(1)
   w.append(leafData)
 
-template encodeLeaf(w: var AristoTrieWriter, pfx: NibblesBuf, leafData: auto): HashKey =
+template encodeLeaf(w: var AristoTrieWriter, pfx: NibblesBuf, leafData: Account | UInt256): HashKey =
   w.clear()
   w.tracker.appendLeaf(pfx, leafData)
 
