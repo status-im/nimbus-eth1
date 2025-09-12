@@ -111,8 +111,7 @@ proc clearSnapshot*(txFrame: AristoTxRef) =
     txFrame.snapshot.reset()
 
 proc persist*(
-    db: AristoDbRef, batch: PutHdlRef, txFrame: AristoTxRef, stateRoot: Opt[Hash32]
-) =
+    db: AristoDbRef, batch: PutHdlRef, txFrame: AristoTxRef) =
   if txFrame == db.txRef and txFrame.isEmpty():
     # No changes in frame - no `checkpoint` requirement - nothing to do here
     return
@@ -175,23 +174,6 @@ proc persist*(
   # Store structural single trie entries
   assert txFrame.snapshot.vtx.len == 0 or txFrame.sTab.len == 0,
     "Either snapshot or sTab should have been cleared as part of merging"
-
-  # Check / update the state root, now that we've flattened the state
-  if stateRoot.isSome():
-    # State root sanity check is performed to verify, before writing to disk,
-    # that optimistically checked blocks indeed end up being stored with a
-    # consistent state root.
-    # TODO State root checking cost is amortized by performing it only at the
-    #      end of a batch of blocks - is there something better the client can
-    #      do than shutting down? Either it's a bug or consensus finalized an
-    #      invalid block, both of which require attention.
-    let frameRoot = txFrame.fetchStateRoot().expect("State root to be readable")
-    if frameRoot != stateRoot[]:
-      raiseAssert &"""State root sanity check failed, bug?
-Expected: {stateRoot[]}, got: {frameRoot}
-Either the consensus client gave invalid information about finalized blocks or
-something else needs attention! Shutting down to preserve the database - restart
-with --debug-eager-state-root."""
 
   for rvid, item in txFrame.snapshot.vtx:
     if item[2] >= oldLevel:
