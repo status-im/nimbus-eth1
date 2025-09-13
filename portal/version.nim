@@ -42,5 +42,3 @@ declareGauge versionGauge,
   ["version", "commit"],
   name = "nimbus_portal_client_version"
 versionGauge.set(1, labelValues = [fullVersionStr, GitRevision])
-
-echo fullVersionStr
