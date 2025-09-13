@@ -11,6 +11,8 @@
 name: Nimbus CI
 on:
   push:
+    branches:
+      - master
     paths-ignore:
       - 'doc/**'
       - 'portal/docs/**'
@@ -33,6 +35,10 @@ on:
       - 'docker/**'
 
   workflow_dispatch:
+
+concurrency: # Cancel stale PR builds (but not push builds)
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.sha }}
+  cancel-in-progress: true
 
 jobs:
   matrix_config:
@@ -68,10 +74,7 @@ jobs:
         run: |
           gcc --version
           DEFAULT_MAKE_FLAGS="-j${ncpu} ENABLE_VMLOWMEM=${ENABLE_VMLOWMEM} ROCKSDB_CI_CACHE=RocksBinCache"
-          mingw32-make ${DEFAULT_MAKE_FLAGS} all test_import build_fuzzers
-          build/nimbus_execution_client.exe --help
-          # give us more space
-          # find . -type d -name ".git" -exec rm -rf {} +
+          mingw32-make ${DEFAULT_MAKE_FLAGS} all test_import build_fuzzers check_revision
           find . -type d -name "nimcache" -exec rm -rf {} +
           mingw32-make ${DEFAULT_MAKE_FLAGS} test t8n_test eest_full_test
 
@@ -80,14 +83,9 @@ jobs:
         run: |
           export LD_LIBRARY_PATH="${LD_LIBRARY_PATH}:/usr/local/lib"
           DEFAULT_MAKE_FLAGS="-j${ncpu} ROCKSDB_CI_CACHE=RocksBinCache"
-          env CC=gcc make ${DEFAULT_MAKE_FLAGS} all test_import build_fuzzers
+          env CC=gcc make ${DEFAULT_MAKE_FLAGS} all test_import build_fuzzers check_revision
           build/nimbus_execution_client --help
           # CC, GOARCH, and CGO_ENABLED are needed to select correct compiler 32/64 bit
-          # pushd vendor/nimbus-eth2
-          # env NIMBUSEL_BINARY=../../build/nimbus_execution_client NIMBUSEL_GENESIS=scripts/nimbusel_genesis.json \
-          # ./scripts/launch_local_testnet.sh --nodes=3 --stop-at-epoch=7 \
-          # --disable-htop --reuse-binaries --run-nimbus-el --dl-eth2 --verbose --kill-old-processes
-          # popd
           env CC=gcc GOARCH=${GOARCH} CXX=g++ CGO_ENABLED=1 make ${DEFAULT_MAKE_FLAGS} test t8n_test eest_full_test
 
       - name: Run nimbus-eth1 tests (Macos)
@@ -95,14 +93,8 @@ jobs:
         run: |
           export ZERO_AR_DATE=1 # avoid timestamps in binaries
           DEFAULT_MAKE_FLAGS="-j${ncpu} ROCKSDB_CI_CACHE=RocksBinCache"
-          make ${DEFAULT_MAKE_FLAGS} all test_import build_fuzzers
-          build/nimbus_execution_client --help
+          make ${DEFAULT_MAKE_FLAGS} all test_import build_fuzzers check_revision
           # "-static" option will not work for osx unless static system libraries are provided
-          # pushd vendor/nimbus-eth2
-          # env NIMBUSEL_BINARY=../../build/nimbus_execution_client NIMBUSEL_GENESIS=scripts/nimbusel_genesis.json \
-          # ./scripts/launch_local_testnet.sh --nodes=3 --stop-at-epoch=7 \
-          # --disable-htop --reuse-binaries --run-nimbus-el --dl-eth2 --verbose --kill-old-processes
-          # popd
           make ${DEFAULT_MAKE_FLAGS} test t8n_test eest_full_test
 
   lint:

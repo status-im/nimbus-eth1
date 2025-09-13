@@ -11,7 +11,7 @@
 {.push raises: [].}
 
 import
-  std/[tables, algorithm],
+  std/[tables, algorithm, strformat],
   chronicles,
   results,
   chronos,
@@ -311,7 +311,22 @@ proc updateBase(c: ForkedChainRef, base: BlockRef): uint =
     # No update, return
     return
 
-  c.com.db.persist(base.txFrame, Opt.some(base.stateRoot))
+  # State root sanity check is performed to verify, before writing to disk,
+  # that optimistically checked blocks indeed end up being stored with a
+  # consistent state root.
+  # TODO State root checking cost is amortized by performing it only at the
+  #      end of a batch of blocks - is there something better the client can
+  #      do than shutting down? Either it's a bug or consensus finalized an
+  #      invalid block, both of which require attention.
+  let frameRoot = base.txFrame.getStateRoot().expect("State root to be readable")
+  if frameRoot != base.stateRoot:
+    raiseAssert &"""State root sanity check failed, bug?
+Expected: {base.stateRoot}, got: {frameRoot}
+Either the consensus client gave invalid information about finalized blocks or
+something else needs attention! Shutting down to preserve the database - restart
+with --debug-eager-state-root."""
+
+  c.com.db.persist(base.txFrame)
 
   # Update baseTxFrame when we about to yield to the event loop
   # and prevent other modules accessing expired baseTxFrame.
