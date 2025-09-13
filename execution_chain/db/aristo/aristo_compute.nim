@@ -117,7 +117,7 @@ template appendLeaf(w: var RlpWriter, pfx: NibblesBuf, leafData: Account | UInt2
   w.wrapEncoding(1)
   w.append(leafData)
 
-template encodeLeaf(w: var AristoTrieWriter, pfx: NibblesBuf, leafData: Account | UInt256): HashKey =
+func encodeLeaf(w: var AristoTrieWriter, pfx: NibblesBuf, leafData: Account | UInt256): HashKey =
   w.clear()
   w.tracker.appendLeaf(pfx, leafData)
 
@@ -132,24 +132,28 @@ template encodeLeaf(w: var AristoTrieWriter, pfx: NibblesBuf, leafData: Account 
     let buf = w.hashWriter.finish()
     buf.to(HashKey)
 
-template appendBranch(w: var RlpWriter, vtx: VertexRef, subKeyForN: untyped) =
+template appendBranch(w: var RlpWriter, vtx: VertexRef, hashKeys: array[16, HashKey]) =
   w.startList(17)
-  for (n {.inject.}, subvid {.inject.}) in vtx.allPairs():
-    w.append(subKeyForN)
+  for key in hashKeys:
+    w.append(key)
   w.append EmptyBlob
 
 template encodeBranch(w: var AristoTrieWriter, rvtx: VertexRef, subKeyForN: untyped): HashKey =
+  var hashKeys: array[16, HashKey]
+  for (n {.inject.}, subvid {.inject.}) in vtx.allPairs():
+    hashKeys[n] = subKeyForN
+
   w.clear()
-  w.tracker.appendBranch(vtx, subKeyForN)
+  w.tracker.appendBranch(vtx, hashKeys)
 
   if w.tracker.totalLength < 32:
     w.twoPassWriter.reInit(w.tracker)
-    w.twoPassWriter.appendBranch(vtx, subKeyForN)
+    w.twoPassWriter.appendBranch(vtx, hashKeys)
     let buf = HashKey.fromBytes(w.twoPassWriter.finish)
     buf.value
   else:
     w.hashWriter.reInit(w.tracker)
-    w.hashWriter.appendBranch(vtx, subKeyForN)
+    w.hashWriter.appendBranch(vtx, hashKeys)
     let buf = w.hashWriter.finish()
     buf.to(HashKey)
 
