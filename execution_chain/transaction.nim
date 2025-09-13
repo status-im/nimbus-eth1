@@ -12,7 +12,9 @@ import
 
 export addresses, keys, transactions
 
-proc signTransaction*(tx: Transaction, privateKey: PrivateKey, eip155 = true): Transaction =
+proc signTransaction*(
+    tx: Transaction, privateKey: PrivateKey, eip155 = true
+): Transaction =
   result = tx
   result.signature = result.sign(privateKey, eip155)
 
@@ -30,27 +32,19 @@ func validateChainId*(tx: Transaction, chainId: ChainId): bool =
     chainId == tx.chainId
 
 func maxPriorityFeePerGasNorm*(tx: Transaction): GasInt =
-  if tx.txType < TxEip1559:
-    tx.gasPrice
-  else:
-    tx.maxPriorityFeePerGas
+  if tx.txType < TxEip1559: tx.gasPrice else: tx.maxPriorityFeePerGas
 
 func maxFeePerGasNorm*(tx: Transaction): GasInt =
-  if tx.txType < TxEip1559:
-    tx.gasPrice
-  else:
-    tx.maxFeePerGas
+  if tx.txType < TxEip1559: tx.gasPrice else: tx.maxFeePerGas
 
 func effectiveGasPrice*(tx: Transaction, baseFeePerGas: GasInt): GasInt =
   if tx.txType < TxEip1559:
     tx.gasPrice
   else:
-    baseFeePerGas +
-      min(tx.maxPriorityFeePerGas, tx.maxFeePerGas - baseFeePerGas)
+    baseFeePerGas + min(tx.maxPriorityFeePerGas, tx.maxFeePerGas - baseFeePerGas)
 
-func effectiveGasTip*(tx: Transaction; baseFeePerGas: Opt[UInt256]): GasInt =
-  let
-    baseFeePerGas = baseFeePerGas.get(0.u256).truncate(GasInt)
+func effectiveGasTip*(tx: Transaction, baseFeePerGas: Opt[UInt256]): GasInt =
+  let baseFeePerGas = baseFeePerGas.get(0.u256).truncate(GasInt)
 
   min(tx.maxPriorityFeePerGasNorm(), tx.maxFeePerGasNorm() - baseFeePerGas)
 
