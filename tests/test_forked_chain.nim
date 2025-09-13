@@ -763,7 +763,7 @@ suite "ForkedChainRef tests":
     if src.isErr:
       echo "FAILED TO SERIALIZE: ", src.error
     check src.isOk
-    com.db.persist(txFrame, Opt.none(Hash32))
+    com.db.persist(txFrame)
 
     var fc = ForkedChainRef.init(com, baseDistance = 3)
     let rc = fc.deserialize()
