@@ -35,5 +35,3 @@ const
   ClientId* = &"{NimbusName}/{FullVersionStr}/{hostOS}-{hostCPU}/Nim-{NimVersion}"
 
   ShortClientId* = NimbusName & "/" & FullVersionStr
-
-echo ClientId
