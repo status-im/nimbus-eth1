@@ -10,37 +10,12 @@
 {.push raises: [].}
 
 import
-  std/importutils,
   ./discoveryv4/enode,
   eth/net/utils,
   eth/p2p/discoveryv5/enr {.all.}
 
 export
   enr.Record, enr.fromURI, enode
-
-func to*(enode: ENode, _: type enr.Record): enr.Record =
-  privateAccess(enr.Field)
-
-  var record = enr.Record(
-    seqNum: 1'u64,
-    publicKey: enode.pubkey,
-  )
-
-  record.pairs.insert(("id", Field(kind: kString, str: "v4")))
-  record.pairs.insert(("secp256k1",
-    Field(kind: kBytes, bytes: @(enode.pubkey.toRawCompressed()))))
-  record.pairs.insertAddress(
-    ip = Opt.some(enode.address.ip),
-    tcpPort = Opt.some(enode.address.tcpPort),
-    udpPort = Opt.some(enode.address.udpPort)
-  )
-
-  record
-
-func to*(enodes: openArray[ENode], _: type enr.Record): seq[enr.Record] =
-  result = newSeqOfCap[enr.Record](enodes.len)
-  for enode in enodes:
-    result.add enode.to(enr.Record)
 
 func fromEnr*(T: type ENode, r: enr.Record): ENodeResult[ENode] =
   let
@@ -65,3 +40,4 @@ func fromEnr*(T: type ENode, r: enr.Record): ENodeResult[ENode] =
       tcpPort: Port(tr.tcp.get())
     )
   ))
+

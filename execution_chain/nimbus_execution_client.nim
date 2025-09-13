@@ -30,6 +30,7 @@ import
   ./sync/wire_protocol,
   ./common/chain_config_hash,
   ./portal/portal,
+  ./networking/bootnodes,
   beacon_chain/[nimbus_binary_common, process_state],
   beacon_chain/validators/keystore_management
 
@@ -87,7 +88,7 @@ proc setupP2P(nimbus: NimbusNode, conf: NimbusConf,
   )
 
   let
-    bootstrapNodes = conf.getBootNodes()
+    bootstrapNodes = conf.getBootstrapNodes()
     fc = nimbus.fc
 
   func forkIdProc(): ForkID {.raises: [].} =
