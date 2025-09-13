@@ -155,7 +155,7 @@ proc run(portalClient: PortalClient, config: PortalConf) {.raises: [CatchableErr
       # measure to easily identify & debug the clients used in the testnet.
       # Might make this into a, default off, cli option.
       localEnrFields =
-        {"c": enrClientInfoShort, portalVersionKey: SSZ.encode(localSupportedVersions)},
+        {"c": enrClientInfoShort, portalEnrKey: rlp.encode(localPortalEnrField)},
       bootstrapRecords = bootstrapRecords,
       previousRecord = previousEnr,
       bindIp = bindIp,

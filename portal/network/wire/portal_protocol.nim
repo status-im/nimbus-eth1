@@ -335,7 +335,7 @@ func fromNodeStatus(T: type NodeAddResult, status: NodeStatus): T =
   of NodeStatus.Banned: T.Banned
 
 proc addNode*(p: PortalProtocol, node: Node): NodeAddResult =
-  if node.highestCommonPortalVersion(localSupportedVersions).isOk():
+  if node.highestCommonPortalVersionAndChain(localPortalEnrField).isOk():
     let status = p.routingTable.addNode(node)
     trace "Adding node to routing table", status, node
     NodeAddResult.fromNodeStatus(status)
@@ -672,8 +672,8 @@ proc messageHandler(
     warn "No ENR found for node", srcId, srcUdpAddress
     return @[]
 
-  let _ = enr.highestCommonPortalVersion(localSupportedVersions).valueOr:
-    debug "No compatible protocol version found", error, srcId, srcUdpAddress
+  let _ = enr.highestCommonPortalVersionAndChain(localPortalEnrField).valueOr:
+    debug "Incompatible protocols", error, srcId, srcUdpAddress
     return @[]
 
   let decoded = decodeMessage(request)
@@ -884,7 +884,7 @@ proc ping*(
     async: (raises: [CancelledError])
 .} =
   # Fail if no common portal version is found
-  let _ = ?dst.highestCommonPortalVersion(localSupportedVersions)
+  let _ = ?dst.highestCommonPortalVersionAndChain(localPortalEnrField)
 
   if p.isBanned(dst.id):
     return err("destination node is banned")
@@ -910,7 +910,7 @@ proc findNodes*(
     p: PortalProtocol, dst: Node, distances: seq[uint16]
 ): Future[PortalResult[seq[Node]]] {.async: (raises: [CancelledError]).} =
   # Fail if no common portal version is found
-  let _ = ?dst.highestCommonPortalVersion(localSupportedVersions)
+  let _ = ?dst.highestCommonPortalVersionAndChain(localPortalEnrField)
 
   if p.isBanned(dst.id):
     return err("destination node is banned")
@@ -928,7 +928,7 @@ proc findContent*(
     p: PortalProtocol, dst: Node, contentKey: ContentKeyByteList
 ): Future[PortalResult[FoundContent]] {.async: (raises: [CancelledError]).} =
   # Fail if no common portal version is found
-  let _ = ?dst.highestCommonPortalVersion(localSupportedVersions)
+  let _ = ?dst.highestCommonPortalVersionAndChain(localPortalEnrField)
 
   logScope:
     node = dst
@@ -1053,7 +1053,7 @@ proc offer(
   ## guarantee content transfer.
 
   # Fail if no common portal version is found
-  let _ = ?o.dst.highestCommonPortalVersion(localSupportedVersions)
+  let _ = ?o.dst.highestCommonPortalVersionAndChain(localPortalEnrField)
 
   let contentKeys = getContentKeys(o)
 

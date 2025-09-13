@@ -8,41 +8,69 @@
 {.push raises: [].}
 
 import
-  std/sequtils,
-  ssz_serialization,
+  eth/rlp,
   eth/p2p/discoveryv5/[enr, node],
+  eth/common/base_rlp,
   ../../common/common_types
 
-export ssz_serialization
+export base_rlp
 
-type PortalVersionValue* = List[uint8, 8]
+type PortalEnrField* = object
+  pvMin: uint8
+  pvMax: uint8
+  chainId: ChainId
 
 const
-  portalVersionKey* = "pv"
-  localSupportedVersions* = PortalVersionValue(@[1'u8])
+  portalEnrKey* = "p"
+  localSupportedVersionMin* = 2'u8
+  localSupportedVersionMax* = 2'u8
+  localChainId* = 1.chainId() # Mainnet by default, TODO: runtime configuration
+  localPortalEnrField* = PortalEnrField(
+    pvMin: localSupportedVersionMin,
+    pvMax: localSupportedVersionMax,
+    chainId: localChainId,
+  )
 
-func getPortalVersions(record: Record): Result[PortalVersionValue, string] =
-  let valueBytes = record.get(portalVersionKey, seq[byte]).valueOr:
-    return ok(PortalVersionValue(@[0'u8]))
+func init*(T: type PortalEnrField, pvMin: uint8, pvMax: uint8, chainId: ChainId): T =
+  T(pvMin: pvMin, pvMax: pvMax, chainId: chainId)
 
-  decodeSsz(valueBytes, PortalVersionValue)
+func getPortalEnrField(record: Record): Result[PortalEnrField, string] =
+  let valueBytes = record.get(portalEnrKey, seq[byte]).valueOr:
+    # When no field, default to version 0 and mainnet chainId
+    return ok(PortalEnrField(pvMin: 0'u8, pvMax: 0'u8, chainId: 1.chainId()))
 
-func highestCommonPortalVersion(
-    versions: PortalVersionValue, supportedVersions: PortalVersionValue
+  let portalField = decodeRlp(valueBytes, PortalEnrField).valueOr:
+    return err("Failed to decode Portal field: " & error)
+
+  if portalField.pvMin > portalField.pvMax:
+    return err("Invalid Portal ENR field: minimum version > maximum version")
+
+  ok(portalField)
+
+func highestCommonPortalVersionAndChain(
+    a: PortalEnrField, b: PortalEnrField
 ): Result[uint8, string] =
-  let commonVersions = versions.filterIt(supportedVersions.contains(it))
-  if commonVersions.len == 0:
-    return err("No common protocol versions found")
+  if a.chainId != b.chainId:
+    return err("ChainId mismatch: remote=" & $a.chainId & ", local=" & $b.chainId)
 
-  ok(max(commonVersions))
+  let
+    commonMin = max(a.pvMin, b.pvMin)
+    commonMax = min(a.pvMax, b.pvMax)
 
-func highestCommonPortalVersion*(
-    record: Record, supportedVersions: PortalVersionValue
+  if commonMin > commonMax:
+    return err("No common Portal wire protocol version found")
+
+  ok(commonMax)
+
+func highestCommonPortalVersionAndChain*(
+    record: Record, supportedPortalField: PortalEnrField
 ): Result[uint8, string] =
-  let versions = ?record.getPortalVersions()
-  versions.highestCommonPortalVersion(supportedVersions)
+  ## Return highest common portal protocol version of both ENRs, but only if chainIds match
+  let portalField = ?record.getPortalEnrField()
+  portalField.highestCommonPortalVersionAndChain(supportedPortalField)
 
-func highestCommonPortalVersion*(
-    node: Node, supportedVersions: PortalVersionValue
+func highestCommonPortalVersionAndChain*(
+    node: Node, supportedPortalField: PortalEnrField
 ): Result[uint8, string] =
-  node.record.highestCommonPortalVersion(supportedVersions)
+  ## Return highest common portal protocol version of both nodes, but only if chainIds match
+  node.record.highestCommonPortalVersionAndChain(supportedPortalField)
