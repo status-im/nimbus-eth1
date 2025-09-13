@@ -452,8 +452,13 @@ proc validateBlock(c: ForkedChainRef,
       c.latestFinalizedBlockNumber)
 
   let
+    # As a memory optimization we move the HashKeys (kMap) stored in the
+    # parent txFrame to the new txFrame unless the block number is one
+    # greater than a block which is expected to be persisted based on the
+    # persistBatchSize
+    moveParentHashKeys = c.persistBatchSize > 1 and (blk.header.number mod c.persistBatchSize) != 1
     parentFrame = parent.txFrame
-    txFrame = parentFrame.txFrameBegin
+    txFrame = parentFrame.txFrameBegin(moveParentHashKeys)
 
   # TODO shortLog-equivalent for eth types
   debug "Validating block",
