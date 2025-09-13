@@ -191,9 +191,8 @@ suite "Beacon Content Keys and Values":
   # TODO: These tests are less useful now and should instead be altered to
   # use the consensus test vectors to simply test if encoding / decoding works
   # fine for the different forks.
-  let forkDigests = ForkDigests.init(
-    getMetadataForNetwork("mainnet").cfg, default(Eth2Digest)
-  )
+  let forkDigests =
+    ForkDigests.init(getMetadataForNetwork("mainnet").cfg, default(Eth2Digest))
 
   test "LightClientBootstrap":
     let
