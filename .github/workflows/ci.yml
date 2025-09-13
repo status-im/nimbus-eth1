@@ -11,6 +11,8 @@
 name: Nimbus CI
 on:
   push:
+    branches:
+      - master
     paths-ignore:
       - 'doc/**'
       - 'portal/docs/**'
@@ -33,6 +35,10 @@ on:
       - 'docker/**'
 
   workflow_dispatch:
+
+concurrency: # Cancel stale PR builds (but not push builds)
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.sha }}
+  cancel-in-progress: true
 
 jobs:
   matrix_config:
