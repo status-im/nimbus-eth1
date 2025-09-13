@@ -95,7 +95,7 @@ suite "Aristo TxFrame":
       ) == 1
 
     let batch = db.putBegFn().expect("working batch")
-    db.persist(batch, tx2, Opt.none(Hash32))
+    db.persist(batch, tx2)
     check:
       db.putEndFn(batch).isOk()
 
@@ -150,14 +150,12 @@ suite "Aristo TxFrame":
       tx0.kMap.len() == 0
       tx1.kMap.len() == 1
 
-    let
-      tx2 = db.txFrameBegin(tx1, moveParentHashKeys = true)
-      stateRoot = tx1.fetchStateRoot().get()
+    let tx2 = db.txFrameBegin(tx1, moveParentHashKeys = true)
 
     # Check that we can still persist the moved from txFrame
     tx1.checkpoint(1, skipSnapshot = true)
     let batch = db.putBegFn().expect("working batch")
-    db.persist(batch, tx1, Opt.some(stateRoot))
+    db.persist(batch, tx1)
     check:
       db.putEndFn(batch).isOk()
 
@@ -182,14 +180,12 @@ suite "Aristo TxFrame":
       tx0.kMap.len() == 0
       tx1.kMap.len() == 1
 
-    let
-      tx2 = db.txFrameBegin(tx1, moveParentHashKeys = true)
-      stateRoot = tx1.fetchStateRoot().get()
+    let tx2 = db.txFrameBegin(tx1, moveParentHashKeys = true)
 
     # Check that we can still persist the moved to txFrame
     tx2.checkpoint(2, skipSnapshot = true)
     let batch = db.putBegFn().expect("working batch")
-    db.persist(batch, tx2, Opt.some(stateRoot))
+    db.persist(batch, tx2)
     check:
       db.putEndFn(batch).isOk()
 
@@ -201,3 +197,33 @@ suite "Aristo TxFrame":
     check:
       tx.fetchAccountRecord(acc1[0]).isOk()
       tx.fetchAccountRecord(acc2[0]).isOk()
+
+  # This test case reproduces a bug which triggers an:
+  # `db.txId == 0`  [AssertionDefect]
+  # This occurs when the txId inside the database is (incorrectly) expected to always
+  # be equal to zero when starting a batch.
+  # See the related issue here: https://github.com/status-im/nimbus-eth1/issues/3659
+  # and the related file here: https://github.com/status-im/nimbus-eth1/blob/master/execution_chain/db/aristo/aristo_init/init_common.nim
+  # When passing in a stateroot to the persist call it is possible
+  # for a nested batch to be created withing the call to compute the stateroot
+  # and at this point the db.txId will be non zero.
+  test "After snapshots can persist checking state root":
+    let tx1 = db.txFrameBegin(db.baseTxFrame())
+
+    for i in 1..<10:
+      let acc = makeAccount(i.uint64)
+      check tx1.mergeAccountRecord(acc[0], acc[1]).isOk()
+    tx1.checkpoint(1, skipSnapshot = false)
+
+    let tx2 = db.txFrameBegin(tx1)
+    for i in 1..<10:
+      let acc = makeAccount(i.uint64)
+      check tx2.mergeAccountRecord(acc[0], acc[1]).isOk()
+    tx2.checkpoint(2, skipSnapshot = false)
+
+    discard tx2.fetchStateRoot().get()
+
+    let batch = db.putBegFn().expect("working batch")
+    db.persist(batch, tx2)
+    check:
+      db.putEndFn(batch).isOk()

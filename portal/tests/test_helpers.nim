@@ -11,7 +11,8 @@ import
   std/net,
   eth/common/keys,
   eth/p2p/discoveryv5/[enr, node, routing_table],
-  eth/p2p/discoveryv5/protocol as discv5_protocol
+  eth/p2p/discoveryv5/protocol as discv5_protocol,
+  ../network/wire/portal_protocol_version
 
 proc localAddress*(port: int): Address {.raises: [ValueError].} =
   Address(ip: parseIpAddress("127.0.0.1"), port: Port(port))
@@ -27,6 +28,12 @@ proc initDiscoveryNode*(
   # set bucketIpLimit to allow bucket split
   let config = DiscoveryConfig.init(1000, 24, 5)
 
+  var enrFields: seq[(string, seq[byte])]
+  enrFields.add(localEnrFields)
+  # Always inject the portal wire version field into the ENR
+  # When no field, it would mean v0 only support
+  enrFields.add((portalVersionKey, SSZ.encode(localSupportedVersions)))
+
   result = newProtocol(
     privKey,
     Opt.some(address.ip),
@@ -34,7 +41,7 @@ proc initDiscoveryNode*(
     Opt.some(address.port),
     bindPort = address.port,
     bootstrapRecords = bootstrapRecords,
-    localEnrFields = localEnrFields,
+    localEnrFields = enrFields,
     previousRecord = previousRecord,
     config = config,
     rng = rng,

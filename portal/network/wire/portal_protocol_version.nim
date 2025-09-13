@@ -19,7 +19,7 @@ type PortalVersionValue* = List[uint8, 8]
 
 const
   portalVersionKey* = "pv"
-  localSupportedVersions* = PortalVersionValue(@[0'u8, 1'u8])
+  localSupportedVersions* = PortalVersionValue(@[1'u8])
 
 func getPortalVersions(record: Record): Result[PortalVersionValue, string] =
   let valueBytes = record.get(portalVersionKey, seq[byte]).valueOr:

@@ -65,27 +65,23 @@ proc finish*(db: CoreDbRef; eradicate = false) =
   ## Otherwise the destructor is allowed to remove the database. This feature
   ## depends on the backend database. Currently, only the `AristoDbRocks` type
   ## backend removes the database on `true`.
-  ##
+
   db.kvt.finish(eradicate)
   db.mpt.finish(eradicate)
 
 proc `$$`*(e: CoreDbError): string =
   ## Pretty print error symbol
-  ##
+
   result = $e.error & "("
   result &= (if e.isAristo: "Aristo" else: "Kvt")
   result &= ", ctx=" & $e.ctx & ", error="
   result &= (if e.isAristo: $e.aErr else: $e.kErr)
   result &= ")"
 
-proc persist*(
-    db: CoreDbRef;
-    txFrame: CoreDbTxRef;
-    stateRoot: Opt[Hash32];
-      ) =
+proc persist*(db: CoreDbRef, txFrame: CoreDbTxRef) =
   ## This function persists changes up to and including the given frame to the
   ## database.
-  ##
+
   let
     kvtBatch = db.kvt.putBegFn()
     mptBatch = db.mpt.putBegFn()
@@ -103,7 +99,7 @@ proc persist*(
     let kvtTick = Moment.now()
     db.kvt.persist(kvtBatch[], txFrame.kTx)
     let mptTick = Moment.now()
-    db.mpt.persist(mptBatch[], txFrame.aTx, stateRoot)
+    db.mpt.persist(mptBatch[], txFrame.aTx)
 
     let endTick = Moment.now()
     db.kvt.putEndFn(kvtBatch[]).isOkOr:
@@ -115,8 +111,7 @@ proc persist*(
     debug "Core DB persisted",
       kvtDur = mptTick - kvtTick,
       mptDur = endTick - mptTick,
-      endDur = Moment.now() - endTick,
-      stateRoot
+      endDur = Moment.now() - endTick
   else:
     discard kvtBatch.expect("should always be able to create batch")
     discard mptBatch.expect("should always be able to create batch")

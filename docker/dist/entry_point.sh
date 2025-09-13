@@ -205,6 +205,7 @@ mkdir "${DIST_PATH}/build"
 # copy and checksum binaries, copy docs
 EXT=""
 if [[ "${PLATFORM}" == "windows_amd64" ]]; then
+  cp -a vendor/nim-rocksdb/build/librocksdb.dll "${DIST_PATH}/build/"
   EXT=".exe"
 fi
 
@@ -230,13 +231,13 @@ done
 sed -e "s/GIT_COMMIT/${GIT_COMMIT}/" docker/dist/README.md.tpl > "${DIST_PATH}/README.md"
 
 if [[ "${PLATFORM}" == "linux_amd64" ]]; then
-  sed -i -e 's/^make dist$/make dist-amd64/' "${DIST_PATH}/README.md"
-elif [[ "${PLATFORM}" == "linux_arm64v8" ]]; then
-  sed -i -e 's/^make dist$/make dist-arm64/' "${DIST_PATH}/README.md"
+  sed -i -e 's/^make dist$/make dist-linux-amd64/' "${DIST_PATH}/README.md"
+elif [[ "${PLATFORM}" == "linux_arm64" ]]; then
+  sed -i -e 's/^make dist$/make dist-linux-arm64/' "${DIST_PATH}/README.md"
 elif [[ "${PLATFORM}" == "windows_amd64" ]]; then
-  sed -i -e 's/^make dist$/make dist-win64/' "${DIST_PATH}/README.md"
+  sed -i -e 's/^make dist$/make dist-windows-amd64/' "${DIST_PATH}/README.md"
   cp -a docker/dist/README-Windows.md.tpl "${DIST_PATH}/README-Windows.md"
-elif [[ "${PLATFORM}" == "macOS_arm64" ]]; then
+elif [[ "${PLATFORM}" == "macos_arm64" ]]; then
   sed -i -e 's/^make dist$/make dist-macos-arm64/' "${DIST_PATH}/README.md"
 fi
 
