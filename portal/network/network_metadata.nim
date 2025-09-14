@@ -44,8 +44,6 @@ const
   # rlp.rawData() in the enr code.
   mainnetBootstrapNodes* =
     loadCompileTimeBootstrapNodes(portalConfigDir / "bootstrap_nodes.txt")
-  angelfoodBootstrapNodes* =
-    loadCompileTimeBootstrapNodes(portalConfigDir / "bootstrap_nodes_angelfood.txt")
 
   historicalHashesAccumulatorSSZ* =
     slurp(portalConfigDir / "historical_hashes_accumulator.ssz")
