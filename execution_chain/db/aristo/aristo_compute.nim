@@ -139,7 +139,7 @@ template appendBranch(w: var RlpWriter, vtx: VertexRef, hashKeys: array[16, Hash
   w.append EmptyBlob
 
 template encodeBranch(w: var AristoTrieWriter, rvtx: VertexRef, subKeyForN: untyped): HashKey =
-  var hashKeys: array[16, HashKey]
+  var hashKeys {.noinit.}: array[16, HashKey]
   for (n {.inject.}, subvid {.inject.}) in vtx.allPairs():
     hashKeys[n] = subKeyForN
 
