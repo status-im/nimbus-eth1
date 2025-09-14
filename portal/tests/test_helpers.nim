@@ -32,7 +32,7 @@ proc initDiscoveryNode*(
   enrFields.add(localEnrFields)
   # Always inject the portal wire version field into the ENR
   # When no field, it would mean v0 only support
-  enrFields.add((portalVersionKey, SSZ.encode(localSupportedVersions)))
+  enrFields.add((portalEnrKey, rlp.encode(localPortalEnrField)))
 
   result = newProtocol(
     privKey,
