@@ -29,7 +29,7 @@ jobs:
       run:
         shell: bash
 
-    name: '${{ matrix.os }}-${{ matrix.cpu }}'
+    name: 'build-${{ matrix.os }}-${{ matrix.cpu }}'
     runs-on: ubuntu-latest
 
     steps:
@@ -83,7 +83,7 @@ jobs:
       run:
         shell: bash
 
-    name: '${{ matrix.os }}-${{ matrix.cpu }}'
+    name: 'run-binary-${{ matrix.os }}-${{ matrix.cpu }}'
     runs-on: ${{ matrix.builder }}
 
     steps:
