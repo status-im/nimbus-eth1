@@ -25,65 +25,77 @@ suite "Portal Wire Protocol Version":
 
   test "ENR with no Portal version field":
     let
-      localSupportedVersions = PortalVersionValue(@[0'u8, 1'u8])
+      localPortalEnrField = PortalEnrField.init(0'u8, 1'u8, 1.chainId())
       enr = Record.init(1, pk, ip, port, port, []).expect("Valid ENR init")
 
-    let version = enr.highestCommonPortalVersion(localSupportedVersions)
+    let version = enr.highestCommonPortalVersionAndChain(localPortalEnrField)
     check:
       version.isOk()
       version.get() == 0'u8
 
-  test "ENR with empty Portal version list":
+  test "ENR with empty Portal ENR field list":
     let
-      localSupportedVersions = PortalVersionValue(@[0'u8, 1'u8])
-      portalVersions = PortalVersionValue(@[])
-      customEnrFields = [toFieldPair(portalVersionKey, SSZ.encode(portalVersions))]
+      localPortalEnrField = PortalEnrField.init(0'u8, 1'u8, 1.chainId())
+      portalEnrField = @[byte 0xc0] # Empty rlp list
+      customEnrFields = [toFieldPair(portalEnrKey, portalEnrField)]
       enr = Record.init(1, pk, ip, port, port, customEnrFields).expect("Valid ENR init")
 
-    let version = enr.highestCommonPortalVersion(localSupportedVersions)
+    let version = enr.highestCommonPortalVersionAndChain(localPortalEnrField)
     check version.isErr()
 
   test "ENR with unsupported Portal versions":
     let
-      localSupportedVersions = PortalVersionValue(@[0'u8, 1'u8])
-      portalVersions = PortalVersionValue(@[255'u8, 100'u8, 2'u8])
-      customEnrFields = [toFieldPair(portalVersionKey, SSZ.encode(portalVersions))]
+      localPortalEnrField = PortalEnrField.init(0'u8, 1'u8, 1.chainId())
+      portalEnrField = PortalEnrField.init(2'u8, 255'u8, 2.chainId())
+
+      customEnrFields = [toFieldPair(portalEnrKey, rlp.encode(portalEnrField))]
       enr = Record.init(1, pk, ip, port, port, customEnrFields).expect("Valid ENR init")
 
-    let version = enr.highestCommonPortalVersion(localSupportedVersions)
+    let version = enr.highestCommonPortalVersionAndChain(localPortalEnrField)
     check version.isErr()
 
   test "ENR with supported Portal version":
     let
-      localSupportedVersions = PortalVersionValue(@[0'u8, 1'u8])
-      portalVersions = PortalVersionValue(@[3'u8, 2'u8, 1'u8])
-      customEnrFields = [toFieldPair(portalVersionKey, SSZ.encode(portalVersions))]
+      localPortalEnrField = PortalEnrField.init(0'u8, 1'u8, 1.chainId())
+      portalEnrField = PortalEnrField.init(1'u8, 3'u8, 1.chainId())
+
+      customEnrFields = [toFieldPair(portalEnrKey, rlp.encode(portalEnrField))]
       enr = Record.init(1, pk, ip, port, port, customEnrFields).expect("Valid ENR init")
 
-    let version = enr.highestCommonPortalVersion(localSupportedVersions)
+    let version = enr.highestCommonPortalVersionAndChain(localPortalEnrField)
     check:
       version.isOk()
       version.get() == 1'u8
 
   test "ENR with multiple supported Portal versions":
     let
-      localSupportedVersions = PortalVersionValue(@[0'u8, 1'u8, 2'u8])
-      portalVersions = PortalVersionValue(@[0'u8, 2'u8, 2'u8, 3'u8])
-      customEnrFields = [toFieldPair(portalVersionKey, SSZ.encode(portalVersions))]
+      localPortalEnrField = PortalEnrField.init(0'u8, 2'u8, 1.chainId())
+      portalEnrField = PortalEnrField.init(0'u8, 3'u8, 1.chainId())
+      customEnrFields = [toFieldPair(portalEnrKey, rlp.encode(portalEnrField))]
       enr = Record.init(1, pk, ip, port, port, customEnrFields).expect("Valid ENR init")
 
-    let version = enr.highestCommonPortalVersion(localSupportedVersions)
+    let version = enr.highestCommonPortalVersionAndChain(localPortalEnrField)
     check:
       version.isOk()
       version.get() == 2'u8
 
-  test "ENR with too many Portal versions":
+  test "ENR with invalid Portal version range (min > max)":
     let
-      localSupportedVersions = PortalVersionValue(@[0'u8, 1'u8, 2'u8])
-      portalVersions =
-        PortalVersionValue(@[0'u8, 1'u8, 2'u8, 3'u8, 4'u8, 5'u8, 6'u8, 7'u8, 8'u8])
-      customEnrFields = [toFieldPair(portalVersionKey, SSZ.encode(portalVersions))]
+      localPortalEnrField = PortalEnrField.init(0'u8, 1'u8, 1.chainId())
+      portalEnrField = PortalEnrField.init(2'u8, 1'u8, 1.chainId())
+      customEnrFields = [toFieldPair(portalEnrKey, rlp.encode(portalEnrField))]
       enr = Record.init(1, pk, ip, port, port, customEnrFields).expect("Valid ENR init")
 
-    let version = enr.highestCommonPortalVersion(localSupportedVersions)
+    let version = enr.highestCommonPortalVersionAndChain(localPortalEnrField)
+    check version.isErr()
+
+  test "ENR with supported Portal version but different chain id":
+    let
+      localPortalEnrField = PortalEnrField.init(0'u8, 1'u8, 1.chainId())
+      portalEnrField = PortalEnrField.init(1'u8, 3'u8, 2.chainId())
+
+      customEnrFields = [toFieldPair(portalEnrKey, rlp.encode(portalEnrField))]
+      enr = Record.init(1, pk, ip, port, port, customEnrFields).expect("Valid ENR init")
+
+    let version = enr.highestCommonPortalVersionAndChain(localPortalEnrField)
     check version.isErr()

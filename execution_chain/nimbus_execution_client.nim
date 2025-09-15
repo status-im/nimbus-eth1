@@ -30,6 +30,7 @@ import
   ./sync/wire_protocol,
   ./common/chain_config_hash,
   ./portal/portal,
+  ./networking/bootnodes,
   beacon_chain/[nimbus_binary_common, process_state],
   beacon_chain/validators/keystore_management
 
@@ -87,7 +88,7 @@ proc setupP2P(nimbus: NimbusNode, conf: NimbusConf,
   )
 
   let
-    bootstrapNodes = conf.getBootNodes()
+    bootstrapNodes = conf.getBootstrapNodes()
     fc = nimbus.fc
 
   func forkIdProc(): ForkID {.raises: [].} =
@@ -191,7 +192,7 @@ proc preventLoadingDataDirForTheWrongNetwork(db: CoreDbRef; conf: NimbusConf) =
     kvt.put(dataDirIdKey().toOpenArray, calculatedId.data).isOkOr:
       fatal "Cannot write data dir ID", ID=calculatedId
       quit(QuitFailure)
-    db.persist(kvt, Opt.none(Hash32))
+    db.persist(kvt)
 
   let
     kvt = db.baseTxFrame()
@@ -280,7 +281,7 @@ proc run(nimbus: NimbusNode, conf: NimbusConf) =
         txFrame = fc.baseTxFrame
       fc.serialize(txFrame).isOkOr:
         error "FC.serialize error: ", msg=error
-      com.db.persist(txFrame, Opt.none(Hash32))
+      com.db.persist(txFrame)
     com.db.finish()
 
   case conf.cmd

@@ -95,7 +95,7 @@ suite "Aristo TxFrame":
       ) == 1
 
     let batch = db.putBegFn().expect("working batch")
-    db.persist(batch, tx2, Opt.none(Hash32))
+    db.persist(batch, tx2)
     check:
       db.putEndFn(batch).isOk()
 
@@ -108,3 +108,122 @@ suite "Aristo TxFrame":
       check:
         tx.fetchAccountRecord(acc1[0]).isOk()
         tx.fetchAccountRecord(acc2[0]).isErr() # Doesn't exist in tx2
+
+  test "Frames using moveParentHashKeys parameter":
+    let
+      tx0 = db.txFrameBegin(db.baseTxFrame())
+      tx1 = db.txFrameBegin(tx0)
+
+    check:
+      tx0.mergeAccountRecord(acc1[0], acc1[1]).isOk()
+      tx1.mergeAccountRecord(acc2[0], acc2[1]).isOk()
+      tx0.fetchStateRoot() != tx1.fetchStateRoot()
+      tx0.kMap.len() == 0
+      tx1.kMap.len() == 1
+
+    # Check that the kMap hashkeys are moved correctly
+    # and that the stateroot is correct before and after each move.
+    let tx2 = db.txFrameBegin(tx1, moveParentHashKeys = true)
+    check:
+      tx1.kMap.len() == 0
+      tx2.kMap.len() == 1
+      tx1.fetchStateRoot() == tx2.fetchStateRoot()
+      # keys are recomputed when fetching state root even after moving
+      tx1.kMap.len() == 1
+      tx2.kMap.len() == 1
+
+    let tx3 = db.txFrameBegin(tx2, moveParentHashKeys = false)
+    check:
+      tx2.kMap.len() == 1
+      tx3.kMap.len() == 0
+      tx2.fetchStateRoot() == tx3.fetchStateRoot()
+
+  test "Frames using moveParentHashKeys parameter - moved from persist":
+    let
+      tx0 = db.txFrameBegin(db.baseTxFrame())
+      tx1 = db.txFrameBegin(tx0)
+
+    check:
+      tx0.mergeAccountRecord(acc1[0], acc1[1]).isOk()
+      tx1.mergeAccountRecord(acc2[0], acc2[1]).isOk()
+      tx0.fetchStateRoot() != tx1.fetchStateRoot()
+      tx0.kMap.len() == 0
+      tx1.kMap.len() == 1
+
+    let tx2 = db.txFrameBegin(tx1, moveParentHashKeys = true)
+
+    # Check that we can still persist the moved from txFrame
+    tx1.checkpoint(1, skipSnapshot = true)
+    let batch = db.putBegFn().expect("working batch")
+    db.persist(batch, tx1)
+    check:
+      db.putEndFn(batch).isOk()
+
+    db.finish()
+
+    # Load the data
+    db.initInstance().expect("working backend")
+    let tx = db.baseTxFrame()
+    check:
+      tx.fetchAccountRecord(acc1[0]).isOk()
+      tx.fetchAccountRecord(acc2[0]).isOk()
+
+  test "Frames using moveParentHashKeys parameter - moved to persist":
+    let
+      tx0 = db.txFrameBegin(db.baseTxFrame())
+      tx1 = db.txFrameBegin(tx0)
+
+    check:
+      tx0.mergeAccountRecord(acc1[0], acc1[1]).isOk()
+      tx1.mergeAccountRecord(acc2[0], acc2[1]).isOk()
+      tx0.fetchStateRoot() != tx1.fetchStateRoot()
+      tx0.kMap.len() == 0
+      tx1.kMap.len() == 1
+
+    let tx2 = db.txFrameBegin(tx1, moveParentHashKeys = true)
+
+    # Check that we can still persist the moved to txFrame
+    tx2.checkpoint(2, skipSnapshot = true)
+    let batch = db.putBegFn().expect("working batch")
+    db.persist(batch, tx2)
+    check:
+      db.putEndFn(batch).isOk()
+
+    db.finish()
+
+    # Load the data
+    db.initInstance().expect("working backend")
+    let tx = db.baseTxFrame()
+    check:
+      tx.fetchAccountRecord(acc1[0]).isOk()
+      tx.fetchAccountRecord(acc2[0]).isOk()
+
+  # This test case reproduces a bug which triggers an:
+  # `db.txId == 0`  [AssertionDefect]
+  # This occurs when the txId inside the database is (incorrectly) expected to always
+  # be equal to zero when starting a batch.
+  # See the related issue here: https://github.com/status-im/nimbus-eth1/issues/3659
+  # and the related file here: https://github.com/status-im/nimbus-eth1/blob/master/execution_chain/db/aristo/aristo_init/init_common.nim
+  # When passing in a stateroot to the persist call it is possible
+  # for a nested batch to be created withing the call to compute the stateroot
+  # and at this point the db.txId will be non zero.
+  test "After snapshots can persist checking state root":
+    let tx1 = db.txFrameBegin(db.baseTxFrame())
+
+    for i in 1..<10:
+      let acc = makeAccount(i.uint64)
+      check tx1.mergeAccountRecord(acc[0], acc[1]).isOk()
+    tx1.checkpoint(1, skipSnapshot = false)
+
+    let tx2 = db.txFrameBegin(tx1)
+    for i in 1..<10:
+      let acc = makeAccount(i.uint64)
+      check tx2.mergeAccountRecord(acc[0], acc[1]).isOk()
+    tx2.checkpoint(2, skipSnapshot = false)
+
+    discard tx2.fetchStateRoot().get()
+
+    let batch = db.putBegFn().expect("working batch")
+    db.persist(batch, tx2)
+    check:
+      db.putEndFn(batch).isOk()
