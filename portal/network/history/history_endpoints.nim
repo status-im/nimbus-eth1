@@ -13,10 +13,12 @@ export results, history_network
 
 proc getBlockBody*(
     n: HistoryNetwork, header: Header
-): Future[Opt[BlockBody]] {.async: (raises: [CancelledError], raw: true).} =
+): Future[Result[BlockBody, string]] {.async: (raises: [CancelledError], raw: true).} =
   n.getContent(blockBodyContentKey(header.number), BlockBody, header)
 
 proc getReceipts*(
     n: HistoryNetwork, header: Header
-): Future[Opt[StoredReceipts]] {.async: (raises: [CancelledError], raw: true).} =
+): Future[Result[StoredReceipts, string]] {.
+    async: (raises: [CancelledError], raw: true)
+.} =
   n.getContent(receiptsContentKey(header.number), StoredReceipts, header)

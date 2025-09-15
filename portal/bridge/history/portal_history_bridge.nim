@@ -164,38 +164,32 @@ proc runBackfillLoopAuditMode(
 
     # body
     block bodyBlock:
-      let
-        contentKey = blockBodyContentKey(blockNumber)
-        _ =
-          try:
-            (
-              await bridge.portalClient.portal_historyGetContent(
-                contentKey.encode.asSeq().toHex(),
-                rlp.encode(blockTuple.header).to0xHex(),
-              )
-            ).content
-          except CatchableError as e:
-            error "Failed to find block body content", error = e.msg
-            break bodyBlock
+      let _ =
+        try:
+          (
+            await bridge.portalClient.portal_historyGetBlockBody(
+              rlp.encode(blockTuple.header).to0xHex()
+            )
+          )
+        except CatchableError as e:
+          error "Failed to find block body content", error = e.msg
+          break bodyBlock
 
       info "Retrieved block body from Portal network"
       bodySuccess = true
 
     # receipts
     block receiptsBlock:
-      let
-        contentKey = receiptsContentKey(blockNumber)
-        _ =
-          try:
-            (
-              await bridge.portalClient.portal_historyGetContent(
-                contentKey.encode.asSeq().toHex(),
-                rlp.encode(blockTuple.header).to0xHex(),
-              )
-            ).content
-          except CatchableError as e:
-            error "Failed to find block receipts content", error = e.msg
-            break receiptsBlock
+      let _ =
+        try:
+          (
+            await bridge.portalClient.portal_historyGetReceipts(
+              rlp.encode(blockTuple.header).to0xHex()
+            )
+          )
+        except CatchableError as e:
+          error "Failed to find block receipts content", error = e.msg
+          break receiptsBlock
 
       info "Retrieved block receipts from Portal network"
       receiptsSuccess = true

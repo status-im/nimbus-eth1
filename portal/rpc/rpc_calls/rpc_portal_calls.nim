@@ -27,10 +27,13 @@ createRpcSigsFromNim(RpcClient):
     enr: Record, contentKey: string, contentValue: string
   ): string
 
-  proc portal_historyGetContent(contentKey: string, headerBytes: string): ContentInfo
+  proc portal_historyGetContent(contentKey: string): ContentInfo
   proc portal_historyPutContent(
     contentKey: string, contentValue: string
   ): PutContentResult
+
+  proc portal_historyGetBlockBody(headerBytes: string): string
+  proc portal_historyGetReceipts(headerBytes: string): string
 
   ## Portal Beacon Light Client Network json-rpc calls
   proc portal_beaconNodeInfo(): NodeInfo
