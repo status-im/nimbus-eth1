@@ -178,7 +178,7 @@ proc newPayload*(ben: BeaconEngineRef,
   # If we already have the block locally, ignore the entire execution and just
   # return a fake success.
   if chain.haveBlockAndState(blockHash):
-    notice "Ignoring already known beacon payload",
+    debug "Ignoring already known beacon payload",
       number = header.number, hash = blockHash.short
     return validStatus(blockHash)
 

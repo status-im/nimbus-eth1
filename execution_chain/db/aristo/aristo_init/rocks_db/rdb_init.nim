@@ -108,10 +108,13 @@ proc init*(rdb: var RdbInst, opts: DbOptions, baseDb: RocksDbInstanceRef) =
     # TODO instead of dumping at exit, these stats could be logged or written
     #      to a file for better tracking over time - that said, this is mainly
     #      a debug utility at this point
-    addExitProc(
-      proc() =
-        dumpCacheStats(ks, vs, bs)
-    )
+    # TODO hack to make this work in single-nimbus-executable - it's not gcsafe
+    #      at all!
+    {.gcsafe.}:
+      addExitProc(
+        proc() =
+          dumpCacheStats(ks, vs, bs)
+      )
 
   # Initialise column handlers (this stores implicitely `baseDb`)
   rdb.admCol = baseDb.db.getColFamily($AdmCF).valueOr(default(ColFamilyReadWrite))
