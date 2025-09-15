@@ -7,7 +7,7 @@
 
 {.push raises: [].}
 
-import stew/byteutils, metrics, beacon_chain/buildinfo
+import std/[os, strutils], stew/byteutils, metrics, beacon_chain/buildinfo
 
 export buildinfo
 
@@ -17,6 +17,9 @@ const
   versionBuild* = 0
 
   versionAsStr* = $versionMajor & "." & $versionMinor & "." & $versionBuild
+
+  sourcePath = currentSourcePath.rsplit({DirSep, AltSep}, 1)[0]
+  GitRevision = generateGitRevision(sourcePath)
 
   fullVersionStr* = "v" & versionAsStr & "-" & GitRevision
 

@@ -103,7 +103,7 @@ proc setBlock*(com: CommonRef; blk: Block): Result[void, string] =
   # the parent state of the first block (as registered in `headers[0]`) was
   # the canonical state before updating. So this state will be saved with
   # `persistent()` together with the respective block number.
-  com.db.persist(txFrame, Opt.none(Hash32))
+  com.db.persist(txFrame)
 
   ok()
 

@@ -45,7 +45,6 @@ type
     contentId: ContentId
     content: seq[byte]
     timeout: Moment
-    version: uint8
 
   ContentOffer = object
     nodeId: NodeId
@@ -208,11 +207,7 @@ proc addContentOffer*(
   return connectionId
 
 proc addContentRequest*(
-    stream: PortalStream,
-    nodeId: NodeId,
-    contentId: ContentId,
-    content: seq[byte],
-    version: uint8,
+    stream: PortalStream, nodeId: NodeId, contentId: ContentId, content: seq[byte]
 ): Bytes2 =
   # TODO: Should we check if `NodeId` & `connectionId` combo already exists?
   # What happens if we get duplicates?
@@ -232,7 +227,6 @@ proc addContentRequest*(
     contentId: contentId,
     content: content,
     timeout: Moment.now() + stream.connectionTimeout,
-    version: version,
   )
   stream.contentRequests[id] = contentRequest
 
@@ -262,16 +256,7 @@ proc connectTo*(
 template lenu32*(x: untyped): untyped =
   uint32(len(x))
 
-proc writeContentRequestV0(
-    socket: UtpSocket[NodeAddress], stream: PortalStream, request: ContentRequest
-) {.async: (raises: [CancelledError]).} =
-  let dataWritten = await socket.write(request.content)
-  if dataWritten.isErr():
-    debug "Error writing requested data", error = dataWritten.error
-
-  await socket.closeWait()
-
-proc writeContentRequestV1(
+proc writeContentRequest(
     socket: UtpSocket[NodeAddress], stream: PortalStream, request: ContentRequest
 ) {.async: (raises: [CancelledError]).} =
   var output = memoryOutput()
@@ -441,11 +426,7 @@ proc handleIncomingConnection(
     if stream.contentRequests.contains(socket.connectionId):
       let request = stream.contentRequests.getOrDefault(socket.connectionId)
       if request.nodeId == socket.remoteAddress.nodeId:
-        let fut =
-          if request.version >= 1:
-            socket.writeContentRequestV1(stream, request)
-          else:
-            socket.writeContentRequestV0(stream, request)
+        let fut = socket.writeContentRequest(stream, request)
 
         stream.removePendingTransfer(request.nodeId, request.contentId)
         stream.contentRequests.del(socket.connectionId)

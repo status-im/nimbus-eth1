@@ -11,6 +11,8 @@
 name: Nimbus verified proxy CI
 on:
   push:
+    branches:
+      - master
     paths:
       - '.github/workflows/nimbus_verified_proxy.yml'
       - 'nimbus_verified_proxy/**'
@@ -31,6 +33,10 @@ on:
       - 'vendor/**'
       - 'Makefile'
       - 'nimbus.nimble'
+
+concurrency: # Cancel stale PR builds (but not push builds)
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.sha }}
+  cancel-in-progress: true
 
 jobs:
   matrix_config:

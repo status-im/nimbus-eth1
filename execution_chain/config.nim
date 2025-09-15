@@ -31,7 +31,7 @@ import
     beacon_chain/nimbus_binary_common,
   ],
   toml_serialization,
-  eth/[common, net/nat, net/nat_toml, p2p/discoveryv5/enr_toml],
+  eth/[common, net/nat, net/nat_toml],
   ./networking/[bootnodes, eth1_enr as enr],
   ./[constants, compile_info, version_info],
   ./common/chain_config,
@@ -40,13 +40,16 @@ import
 export net, defs, jsdefs, jsnet, nimbus_binary_common
 
 const
-
+  # e.g.: Copyright (c) 2018-2025 Status Research & Development GmbH
+  NimbusCopyright* = "Copyright (c) 2018-" &
+    CompileDate.split('-')[0] &
+    " Status Research & Development GmbH"
   # e.g.:
   # nimbus_execution_client/v0.1.0-abcdef/os-cpu/nim-a.b.c/emvc
   # Copyright (c) 2018-2025 Status Research & Development GmbH
   NimbusBuild* = "$#\p$#" % [
     ClientId,
-    copyrights,
+    NimbusCopyright,
   ]
 
   NimbusHeader* = "$#\p\pNim version $#" % [
@@ -221,43 +224,29 @@ type
 
     bootstrapNodes {.
       separator: "\pNETWORKING OPTIONS:"
-      desc: "Specifies one or more bootstrap nodes(as enode URL) to use when connecting to the network"
+      desc: "Specifies one or more bootstrap nodes(ENR or enode URL) to use when connecting to the network"
       defaultValue: @[]
       defaultValueDesc: ""
       abbr: "b"
       name: "bootstrap-node" }: seq[string]
 
     bootstrapFile {.
-      desc: "Specifies a line-delimited file of bootstrap Ethereum network addresses(enode URL). " &
-            "By default, addresses will be added to bootstrap node list. " &
-            "But if the first line equals to `override` word, it will override built-in list"
+      desc: "Specifies a file of bootstrap Ethereum network addresses(ENR or enode URL). " &
+            "Both line delimited or YAML format are supported"
       defaultValue: ""
       name: "bootstrap-file" }: InputFile
 
-    bootstrapEnrs {.
-      desc: "ENR URI of node to bootstrap discovery from. Argument may be repeated"
-      defaultValue: @[]
-      defaultValueDesc: ""
-      name: "bootstrap-enr" }: seq[enr.Record]
-
     staticPeers {.
-      desc: "Connect to one or more trusted peers(as enode URL)"
+      desc: "Connect to one or more trusted peers(ENR or enode URL)"
       defaultValue: @[]
       defaultValueDesc: ""
       name: "static-peers" }: seq[string]
 
     staticPeersFile {.
-      desc: "Specifies a line-delimited file of trusted peers addresses(enode URL)" &
-            "to be added to the --static-peers list. If the first line equals to the word `override`, "&
-            "the file contents will replace the --static-peers list"
+      desc: "Specifies a file of trusted peers addresses(ENR or enode URL). " &
+            "Both line delimited or YAML format are supported"
       defaultValue: ""
       name: "static-peers-file" }: InputFile
-
-    staticPeersEnrs {.
-      desc: "ENR URI of node to connect to as trusted peer. Argument may be repeated"
-      defaultValue: @[]
-      defaultValueDesc: ""
-      name: "static-peer-enr" }: seq[enr.Record]
 
     reconnectMaxRetry* {.
       desc: "Specifies max number of retries if static peers disconnected/not connected. " &
@@ -593,13 +582,6 @@ func parseCmdArg(T: type NetworkId, p: string): T
 func completeCmdArg(T: type NetworkId, val: string): seq[string] =
   return @[]
 
-func parseCmdArg*(T: type enr.Record, p: string): T {.raises: [ValueError].} =
-  result = fromURI(enr.Record, p).valueOr:
-    raise newException(ValueError, "Invalid ENR")
-
-func completeCmdArg*(T: type enr.Record, val: string): seq[string] =
-  return @[]
-
 func processList(v: string, o: var seq[string])
     =
   ## Process comma-separated list of strings.
@@ -619,68 +601,16 @@ proc parseCmdArg(T: type NetworkParams, p: string): T
 func completeCmdArg(T: type NetworkParams, val: string): seq[string] =
   return @[]
 
-func setBootnodes(output: var seq[ENode], nodeUris: openArray[string]) =
-  output = newSeqOfCap[ENode](nodeUris.len)
-  for item in nodeUris:
-    output.add(ENode.fromString(item).expect("valid hardcoded ENode"))
-
-iterator repeatingList(listOfList: openArray[string]): string
-    =
+iterator repeatingList(listOfList: openArray[string]): string =
   for strList in listOfList:
     var list = newSeq[string]()
     processList(strList, list)
     for item in list:
       yield item
 
-proc append(output: var seq[ENode], nodeUris: openArray[string])
-    =
-  for item in repeatingList(nodeUris):
-    let res = ENode.fromString(item)
-    if res.isErr:
-      warn "Ignoring invalid bootstrap address", address=item
-      continue
-    output.add res.get()
-
-iterator strippedLines(filename: string): (int, string)
-    {.gcsafe, raises: [IOError].} =
-  var i = 0
-  for line in lines(filename):
-    let stripped = strip(line)
-    if stripped.startsWith('#'): # Comments
-      continue
-
-    if stripped.len > 0:
-      yield (i, stripped)
-      inc i
-
-proc loadEnodeFile(fileName: string; output: var seq[ENode]; info: string)
-    =
-  if fileName.len == 0:
-    return
-
-  try:
-    for i, ln in strippedLines(fileName):
-      if cmpIgnoreCase(ln, "override") == 0 and i == 0:
-        # override built-in list if the first line is 'override'
-        output = newSeq[ENode]()
-        continue
-
-      let res = ENode.fromString(ln)
-      if res.isErr:
-        warn "Ignoring invalid address", address=ln, line=i, file=fileName, purpose=info
-        continue
-
-      output.add res.get()
-
-  except IOError as e:
-    error "Could not read file", msg = e.msg, purpose = info
-    quit 1
-
-proc loadBootstrapFile(fileName: string, output: var seq[ENode]) =
-  fileName.loadEnodeFile(output, "bootstrap")
-
-proc loadStaticPeersFile(fileName: string, output: var seq[ENode]) =
-  fileName.loadEnodeFile(output, "static peers")
+func breakRepeatingList(listOfList: openArray[string]): seq[string] =
+  for strList in listOfList:
+    processList(strList, result)
 
 func decOrHex(s: string): bool =
   const allowedDigits = Digits + HexDigits + {'x', 'X'}
@@ -799,54 +729,34 @@ proc getDiscoveryFlags(api: openArray[string]): set[DiscoveryType] =
 proc getDiscoveryFlags*(conf: NimbusConf): set[DiscoveryType] =
   getDiscoveryFlags(conf.discovery)
 
-proc getBootNodes*(conf: NimbusConf): seq[ENode] =
-  var bootstrapNodes: seq[ENode]
+proc getBootstrapNodes*(conf: NimbusConf): BootstrapNodes =
   # Ignore standard bootnodes if customNetwork is loaded
   if conf.customNetwork.isNone:
     if conf.networkId == MainNet:
-      bootstrapNodes.setBootnodes(MainnetBootnodes)
+      getBootstrapNodes("mainnet", result).expect("no error")
     elif conf.networkId == SepoliaNet:
-      bootstrapNodes.setBootnodes(SepoliaBootnodes)
+      getBootstrapNodes("sepolia", result).expect("no error")
     elif conf.networkId == HoleskyNet:
-      bootstrapNodes.setBootnodes(HoleskyBootnodes)
+      getBootstrapNodes("holesky", result).expect("no error")
     elif conf.networkId == HoodiNet:
-      bootstrapNodes.setBootnodes(HoodiBootnodes)
-    else:
-      # custom network id
-      discard
+      getBootstrapNodes("hoodi", result).expect("no error")
 
-  # always allow bootstrap nodes provided by the user
-  if conf.bootstrapNodes.len > 0:
-    bootstrapNodes.append(conf.bootstrapNodes)
+  let list = breakRepeatingList(conf.bootstrapNodes)
+  parseBootstrapNodes(list, result).isOkOr:
+    warn "Error when parsing bootstrap nodes", msg=error
 
-  # bootstrap nodes loaded from file might append or
-  # override built-in bootnodes
-  loadBootstrapFile(string conf.bootstrapFile, bootstrapNodes)
+  if conf.bootstrapFile.string.len > 0:
+    loadBootstrapNodes(conf.bootstrapFile.string, result).isOkOr:
+      warn "Error when parsing bootstrap nodes from file", msg=error, file=conf.bootstrapFile.string
 
-  # Bootstrap nodes provided as ENRs
-  for enr in conf.bootstrapEnrs:
-    let enode = ENode.fromEnr(enr).valueOr:
-      fatal "Invalid bootstrap ENR provided", error
-      quit 1
+proc getStaticPeers*(conf: NimbusConf): BootstrapNodes =
+  let list = breakRepeatingList(conf.staticPeers)
+  parseBootstrapNodes(list, result).isOkOr:
+    warn "Error when parsing static peers", msg=error
 
-    bootstrapNodes.add(enode)
-
-  bootstrapNodes
-
-proc getStaticPeers*(conf: NimbusConf): seq[ENode] =
-  var staticPeers: seq[ENode]
-  staticPeers.append(conf.staticPeers)
-  loadStaticPeersFile(string conf.staticPeersFile, staticPeers)
-
-  # Static peers provided as ENRs
-  for enr in conf.staticPeersEnrs:
-    let enode = ENode.fromEnr(enr).valueOr:
-      fatal "Invalid static peer ENR provided", error
-      quit 1
-
-    staticPeers.add(enode)
-
-  staticPeers
+  if conf.staticPeersFile.string.len > 0:
+    loadBootstrapNodes(conf.staticPeersFile.string, result).isOkOr:
+      warn "Error when parsing static peers from file", msg=error, file=conf.staticPeersFile.string
 
 func getAllowedOrigins*(conf: NimbusConf): seq[Uri] =
   for item in repeatingList(conf.allowedOrigins):

@@ -8,15 +8,16 @@
 {.push raises: [].}
 
 import
-  std/[strutils, os, uri],
+  std/[strutils, os],
   confutils,
   confutils/std/net,
   nimcrypto/hash,
   ../network/network_metadata,
   ../eth_history/era1,
-  ../logging
+  ../logging,
+  ./common/rpc_helpers
 
-export net
+export net, rpc_helpers
 
 proc defaultEthDataDir*(): string =
   let dataDir =
@@ -36,14 +37,6 @@ const defaultEndEra* = uint64(era(network_metadata.mergeBlockNumber - 1))
 
 type
   TrustedDigest* = MDigest[32 * 8]
-
-  JsonRpcUrlKind* = enum
-    HttpUrl
-    WsUrl
-
-  JsonRpcUrl* = object
-    kind*: JsonRpcUrlKind
-    value*: string
 
   PortalBridgeCmd* = enum
     beacon = "Run a Portal bridge for the beacon network"
@@ -146,22 +139,4 @@ func parseCmdArg*(T: type TrustedDigest, input: string): T {.raises: [ValueError
   TrustedDigest.fromHex(input)
 
 func completeCmdArg*(T: type TrustedDigest, input: string): seq[string] =
-  return @[]
-
-proc parseCmdArg*(T: type JsonRpcUrl, p: string): T {.raises: [ValueError].} =
-  let
-    url = parseUri(p)
-    normalizedScheme = url.scheme.toLowerAscii()
-
-  if (normalizedScheme == "http" or normalizedScheme == "https"):
-    JsonRpcUrl(kind: HttpUrl, value: p)
-  elif (normalizedScheme == "ws" or normalizedScheme == "wss"):
-    JsonRpcUrl(kind: WsUrl, value: p)
-  else:
-    raise newException(
-      ValueError,
-      "The Web3 URL must specify one of following protocols: http/https/ws/wss",
-    )
-
-proc completeCmdArg*(T: type JsonRpcUrl, val: string): seq[string] =
   return @[]

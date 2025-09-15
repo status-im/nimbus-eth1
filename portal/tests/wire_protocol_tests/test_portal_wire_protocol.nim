@@ -42,13 +42,7 @@ proc initPortalProtocol(
     bootstrapRecords: openArray[Record] = [],
 ): PortalProtocol =
   let
-    d = initDiscoveryNode(
-      rng,
-      privKey,
-      address,
-      bootstrapRecords,
-      localEnrFields = {portalVersionKey: SSZ.encode(localSupportedVersions)},
-    )
+    d = initDiscoveryNode(rng, privKey, address, bootstrapRecords)
     db = ContentDB.new(
       "", uint32.high, RadiusConfig(kind: Dynamic), d.localNode.id, inMemory = true
     )

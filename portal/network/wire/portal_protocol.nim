@@ -335,7 +335,7 @@ func fromNodeStatus(T: type NodeAddResult, status: NodeStatus): T =
   of NodeStatus.Banned: T.Banned
 
 proc addNode*(p: PortalProtocol, node: Node): NodeAddResult =
-  if node.highestCommonPortalVersion(localSupportedVersions).isOk():
+  if node.highestCommonPortalVersionAndChain(localPortalEnrField).isOk():
     let status = p.routingTable.addNode(node)
     trace "Adding node to routing table", status, node
     NodeAddResult.fromNodeStatus(status)
@@ -512,7 +512,7 @@ proc handleFindNodes(p: PortalProtocol, fn: FindNodesMessage): seq[byte] =
       encodeMessage(NodesMessage(total: 1, enrs: enrs))
 
 proc handleFindContent(
-    p: PortalProtocol, fc: FindContentMessage, srcId: NodeId, version: uint8
+    p: PortalProtocol, fc: FindContentMessage, srcId: NodeId
 ): seq[byte] =
   const
     contentOverhead = 1 + 1 # msg id + SSZ Union selector
@@ -546,8 +546,7 @@ proc handleFindContent(
         )
       else:
         p.stream.addPendingTransfer(srcId, contentId)
-        let connectionId =
-          p.stream.addContentRequest(srcId, contentId, content, version)
+        let connectionId = p.stream.addContentRequest(srcId, contentId, content)
 
         return encodeMessage(
           ContentMessage(
@@ -576,9 +575,7 @@ proc containsContent(
     portal_offer_cache_misses.inc(labelValues = [$p.protocolId])
     p.dbContains(contentKey, contentId)
 
-proc handleOffer(
-    p: PortalProtocol, o: OfferMessage, srcId: NodeId
-): Result[AcceptMessage, string] =
+proc handleOffer(p: PortalProtocol, o: OfferMessage, srcId: NodeId): seq[byte] =
   # Early return when our contentQueue is full. This means there is a backlog
   # of content to process and potentially gossip around. Don't accept more
   # data in this case.
@@ -586,7 +583,7 @@ proc handleOffer(
     portal_handle_offer_accept_codes.inc(
       o.contentKeys.len, labelValues = [$p.protocolId, $DeclinedRateLimited]
     )
-    return ok(
+    return encodeMessage(
       AcceptMessage(
         connectionId: Bytes2([byte 0x00, 0x00]),
         contentKeys:
@@ -635,7 +632,7 @@ proc handleOffer(
       )
     else:
       # Return empty response when content key validation fails
-      return err("Invalid content key")
+      return @[]
 
   let connectionId =
     if contentAccepted:
@@ -646,18 +643,9 @@ proc handleOffer(
       # Note: What to do in this scenario is not defined in the Portal spec.
       Bytes2([byte 0x00, 0x00])
 
-  ok(AcceptMessage(connectionId: connectionId, contentKeys: contentKeysAcceptList))
-
-proc handleOffer(
-    p: PortalProtocol, o: OfferMessage, srcId: NodeId, version: uint8
-): seq[byte] =
-  let response = p.handleOffer(o, srcId).valueOr:
-    return @[]
-
-  if version >= 1:
-    encodeMessage(response)
-  else:
-    encodeMessage(AcceptMessageV0.fromAcceptMessage(response))
+  encodeMessage(
+    AcceptMessage(connectionId: connectionId, contentKeys: contentKeysAcceptList)
+  )
 
 proc messageHandler(
     protocol: TalkProtocol,
@@ -684,11 +672,11 @@ proc messageHandler(
     warn "No ENR found for node", srcId, srcUdpAddress
     return @[]
 
-  let version = enr.highestCommonPortalVersion(localSupportedVersions).valueOr:
-    debug "No compatible protocol version found", error, srcId, srcUdpAddress
+  let _ = enr.highestCommonPortalVersionAndChain(localPortalEnrField).valueOr:
+    debug "Incompatible protocols", error, srcId, srcUdpAddress
     return @[]
 
-  let decoded = decodeMessage(request, version)
+  let decoded = decodeMessage(request)
   if decoded.isOk():
     let message = decoded.get()
     trace "Received message request", srcId, srcUdpAddress, kind = message.kind
@@ -719,9 +707,9 @@ proc messageHandler(
     of MessageKind.findNodes:
       p.handleFindNodes(message.findNodes)
     of MessageKind.findContent:
-      p.handleFindContent(message.findContent, srcId, version)
+      p.handleFindContent(message.findContent, srcId)
     of MessageKind.offer:
-      p.handleOffer(message.offer, srcId, version)
+      p.handleOffer(message.offer, srcId)
     else:
       # This would mean a that Portal wire response message is being send over a
       # discv5 talkreq message.
@@ -784,7 +772,7 @@ proc new*(
 # Sends the discv5 talkreq message with provided Portal message, awaits and
 # validates the proper response, and updates the Portal Network routing table.
 proc reqResponse[Request: SomeMessage, Response: SomeMessage](
-    p: PortalProtocol, dst: Node, request: Request, version: uint8 = 1'u8
+    p: PortalProtocol, dst: Node, request: Request
 ): Future[PortalResult[Response]] {.async: (raises: [CancelledError]).} =
   logScope:
     protocolId = p.protocolId
@@ -809,7 +797,7 @@ proc reqResponse[Request: SomeMessage, Response: SomeMessage](
     )
     .flatMap(
       proc(x: seq[byte]): Result[Message, string] =
-        decodeMessage(x, version)
+        decodeMessage(x)
     )
     .flatMap(
       proc(m: Message): Result[Response, string] =
@@ -872,11 +860,11 @@ proc findContentImpl*(
   return await reqResponse[FindContentMessage, ContentMessage](p, dst, fc)
 
 proc offerImpl*(
-    p: PortalProtocol, dst: Node, contentKeys: ContentKeysList, version: uint8 = 1'u8
+    p: PortalProtocol, dst: Node, contentKeys: ContentKeysList
 ): Future[PortalResult[AcceptMessage]] {.async: (raises: [CancelledError]).} =
   let offer = OfferMessage(contentKeys: contentKeys)
 
-  return await reqResponse[OfferMessage, AcceptMessage](p, dst, offer, version)
+  return await reqResponse[OfferMessage, AcceptMessage](p, dst, offer)
 
 proc recordsFromBytes(rawRecords: List[ByteList[2048], 32]): PortalResult[seq[Record]] =
   var records: seq[Record]
@@ -896,7 +884,7 @@ proc ping*(
     async: (raises: [CancelledError])
 .} =
   # Fail if no common portal version is found
-  let _ = ?dst.highestCommonPortalVersion(localSupportedVersions)
+  let _ = ?dst.highestCommonPortalVersionAndChain(localPortalEnrField)
 
   if p.isBanned(dst.id):
     return err("destination node is banned")
@@ -922,7 +910,7 @@ proc findNodes*(
     p: PortalProtocol, dst: Node, distances: seq[uint16]
 ): Future[PortalResult[seq[Node]]] {.async: (raises: [CancelledError]).} =
   # Fail if no common portal version is found
-  let _ = ?dst.highestCommonPortalVersion(localSupportedVersions)
+  let _ = ?dst.highestCommonPortalVersionAndChain(localPortalEnrField)
 
   if p.isBanned(dst.id):
     return err("destination node is banned")
@@ -940,12 +928,11 @@ proc findContent*(
     p: PortalProtocol, dst: Node, contentKey: ContentKeyByteList
 ): Future[PortalResult[FoundContent]] {.async: (raises: [CancelledError]).} =
   # Fail if no common portal version is found
-  let version = ?dst.highestCommonPortalVersion(localSupportedVersions)
+  let _ = ?dst.highestCommonPortalVersionAndChain(localPortalEnrField)
 
   logScope:
     node = dst
     contentKey
-    version
 
   if p.isBanned(dst.id):
     return err("destination node is banned")
@@ -967,21 +954,9 @@ proc findContent*(
         )
       )
 
-    proc readContentValueVersioned(
-        socket: UtpSocket[NodeAddress]
-    ): Future[Result[seq[byte], string]] {.async: (raises: [CancelledError]).} =
-      if version >= 1:
-        await socket.readContentValue()
-      else:
-        let bytes = await socket.read()
-        if bytes.len() == 0:
-          err("No bytes read")
-        else:
-          ok(bytes)
-
     try:
       # Read one content item from the socket, fails on invalid length prefix
-      let readFut = socket.readContentValueVersioned()
+      let readFut = socket.readContentValue()
 
       readFut.cancelCallback = proc(udate: pointer) {.gcsafe.} =
         debug "Socket read cancelled", socketKey = socket.socketKey
@@ -1078,14 +1053,13 @@ proc offer(
   ## guarantee content transfer.
 
   # Fail if no common portal version is found
-  let version = ?o.dst.highestCommonPortalVersion(localSupportedVersions)
+  let _ = ?o.dst.highestCommonPortalVersionAndChain(localPortalEnrField)
 
   let contentKeys = getContentKeys(o)
 
   logScope:
     node = o.dst
     contentKeys
-    version
 
   trace "Offering content"
 
@@ -1096,7 +1070,7 @@ proc offer(
   if p.isBanned(o.dst.id):
     return err("destination node is banned")
 
-  let response = ?(await p.offerImpl(o.dst, contentKeys, version))
+  let response = ?(await p.offerImpl(o.dst, contentKeys))
 
   let contentKeysLen =
     case o.kind

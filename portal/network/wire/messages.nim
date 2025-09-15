@@ -109,41 +109,12 @@ type
     of accept:
       accept*: AcceptMessage
 
-  SomeMessageV1* =
+  SomeMessage* =
     PingMessage or PongMessage or FindNodesMessage or NodesMessage or FindContentMessage or
     ContentMessage or OfferMessage or AcceptMessage
 
   # Portal wire v0 protocol messages
   ContentKeysBitList* = BitList[contentKeysLimit]
-
-  AcceptMessageV0* = object
-    connectionId*: Bytes2
-    contentKeys*: ContentKeysBitList
-
-  MessageV0* = object
-    case kind*: MessageKind
-    of ping:
-      ping*: PingMessage
-    of pong:
-      pong*: PongMessage
-    of findNodes:
-      findNodes*: FindNodesMessage
-    of nodes:
-      nodes*: NodesMessage
-    of findContent:
-      findContent*: FindContentMessage
-    of content:
-      content*: ContentMessage
-    of offer:
-      offer*: OfferMessage
-    of accept:
-      accept*: AcceptMessageV0
-
-  SomeMessageV0* =
-    PingMessage or PongMessage or FindNodesMessage or NodesMessage or FindContentMessage or
-    ContentMessage or OfferMessage or AcceptMessageV0
-
-  SomeMessage* = SomeMessageV0 or SomeMessageV1
 
 template messageKind*(T: typedesc[SomeMessage]): MessageKind =
   when T is PingMessage:
@@ -185,50 +156,6 @@ func fromBitList*(T: type ContentKeysAcceptList, bitList: ContentKeysBitList): T
 
   contentKeysAcceptList
 
-# To convert from portal wire accept v0 to accept v1
-func fromAcceptMessageV0(T: type AcceptMessage, accept: AcceptMessageV0): T =
-  AcceptMessage(
-    connectionId: accept.connectionId,
-    contentKeys: ContentKeysAcceptList.fromBitList(accept.contentKeys),
-  )
-
-# To convert from portal wire v0 message to v1 message
-func fromMessageV0(T: type Message, message: MessageV0): Message =
-  if message.kind == ping:
-    Message(kind: ping, ping: message.ping)
-  elif message.kind == pong:
-    Message(kind: pong, pong: message.pong)
-  elif message.kind == findNodes:
-    Message(kind: findNodes, findNodes: message.findNodes)
-  elif message.kind == nodes:
-    Message(kind: nodes, nodes: message.nodes)
-  elif message.kind == findContent:
-    Message(kind: findContent, findContent: message.findContent)
-  elif message.kind == content:
-    Message(kind: content, content: message.content)
-  elif message.kind == offer:
-    Message(kind: offer, offer: message.offer)
-  elif message.kind == accept:
-    Message(kind: accept, accept: AcceptMessage.fromAcceptMessageV0(message.accept))
-  else:
-    raiseAssert("Invalid message kind")
-
-# To convert from portal wire v1 ByteList to v0 BitList
-func fromByteList*(T: type ContentKeysBitList, byteList: ContentKeysAcceptList): T =
-  var contentKeysBitList = ContentKeysBitList.init(byteList.len)
-  for i, b in byteList:
-    if b == Accepted:
-      contentKeysBitList.setBit(i)
-
-  contentKeysBitList
-
-# To convert from portal wire accept v1 to accept v0
-func fromAcceptMessage*(T: type AcceptMessageV0, accept: AcceptMessage): T =
-  AcceptMessageV0(
-    connectionId: accept.connectionId,
-    contentKeys: ContentKeysBitList.fromByteList(accept.contentKeys),
-  )
-
 func encodeMessage*[T: SomeMessage](m: T): seq[byte] =
   when T is PingMessage:
     SSZ.encode(Message(kind: ping, ping: m))
@@ -246,22 +173,13 @@ func encodeMessage*[T: SomeMessage](m: T): seq[byte] =
     SSZ.encode(Message(kind: offer, offer: m))
   elif T is AcceptMessage:
     SSZ.encode(Message(kind: accept, accept: m))
-  elif T is AcceptMessageV0:
-    SSZ.encode(MessageV0(kind: accept, accept: m))
 
-func decodeMessage*(
-    body: openArray[byte], version: uint8 = 1'u8
-): Result[Message, string] =
+func decodeMessage*(body: openArray[byte]): Result[Message, string] =
   try:
     if body.len < 1: # TODO: This check should probably move a layer down
       return err("No message data, peer might not support this talk protocol")
-    if version >= 1'u8:
-      ok(SSZ.decode(body, Message))
-    else:
-      let message = SSZ.decode(body, MessageV0)
-      # convert to V1 message so that the rest of the code base can work with
-      # the same type.
-      ok(Message.fromMessageV0(message))
+
+    ok(SSZ.decode(body, Message))
   except SerializationError as e:
     err("Invalid message encoding: " & e.msg)
 

@@ -122,8 +122,7 @@ func getWithdrawals*(x: seq[capella.Withdrawal]): seq[blocks.Withdrawal] =
 func getEthBlock*(blck: ForkyTrustedBeaconBlock, res: var EthBlock): bool =
   ## Convert a beacon block to an eth1 block.
   const consensusFork = typeof(blck).kind
-  when consensusFork >= ConsensusFork.Bellatrix and
-       consensusFork != ConsensusFork.Gloas:
+  when consensusFork >= ConsensusFork.Bellatrix and consensusFork != ConsensusFork.Gloas:
     var
       payload = blck.body.execution_payload
       txs = getTxs(payload.transactions.asSeq())

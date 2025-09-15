@@ -121,7 +121,7 @@ suite "Aristo compute":
     txFrame.checkpoint(1, skipSnapshot = true)
 
     let batch = db.putBegFn()[]
-    db.persist(batch, txFrame, Opt.none(Hash32))
+    db.persist(batch, txFrame)
     check db.putEndFn(batch).isOk()
 
     check txFrame.computeKeys(root).isOk()

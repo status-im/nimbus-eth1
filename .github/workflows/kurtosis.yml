@@ -25,8 +25,6 @@ on:
       - 'docker/**'
 
   pull_request:
-    branches:
-      - master
     paths-ignore:
       - 'doc/**'
       - 'portal/docs/**'
@@ -36,6 +34,10 @@ on:
       - '.github/workflows/nimbus_verified_proxy.yml'
       - '.github/workflows/build_base_image.yml'
       - 'docker/**'
+
+concurrency: # Cancel stale PR builds (but not push builds)
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.sha }}
+  cancel-in-progress: true
 
 jobs:
   build:

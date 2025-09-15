@@ -16,6 +16,7 @@ import
   metrics,
   metrics/chronos_httpserver,
   json_rpc/clients/httpclient,
+  json_rpc/rpcclient,
   results,
   stew/[byteutils, io2],
   eth/common/keys,
@@ -31,6 +32,7 @@ import
   ../network/[portal_node, network_metadata],
   ../version,
   ../logging,
+  ../bridge/common/rpc_helpers,
   beacon_chain/process_state,
   ./nimbus_portal_client_conf
 
@@ -40,6 +42,10 @@ const
 
 chronicles.formatIt(IoErrorCode):
   $it
+
+createRpcSigsFromNim(RpcClient):
+  # EL debug call to get header for validation
+  proc debug_getBlockHeader(blockNumber: uint64): string
 
 func optionToOpt[T](o: Option[T]): Opt[T] =
   if o.isSome():
@@ -149,7 +155,7 @@ proc run(portalClient: PortalClient, config: PortalConf) {.raises: [CatchableErr
       # measure to easily identify & debug the clients used in the testnet.
       # Might make this into a, default off, cli option.
       localEnrFields =
-        {"c": enrClientInfoShort, portalVersionKey: SSZ.encode(localSupportedVersions)},
+        {"c": enrClientInfoShort, portalEnrKey: rlp.encode(localPortalEnrField)},
       bootstrapRecords = bootstrapRecords,
       previousRecord = previousEnr,
       bindIp = bindIp,
@@ -188,6 +194,21 @@ proc run(portalClient: PortalClient, config: PortalConf) {.raises: [CatchableErr
     db.forcePrune(d.localNode.id, radius)
     db.close()
 
+  ## Get block header callback setup
+  let rpcGetHeader =
+    if config.web3Url.isSome():
+      let rpcClient = newRpcClientConnect(config.web3Url.get())
+      proc(
+          blockNumber: uint64
+      ): Future[Result[Header, string]] {.async: (raises: [CancelledError]), gcsafe.} =
+        try:
+          let header = await rpcClient.debug_getBlockHeader(blockNumber)
+          decodeRlp(header.hexToSeqByte(), Header)
+        except CatchableError as e:
+          err(e.msg)
+    else:
+      defaultNoGetHeader
+
   ## Portal node setup
   let
     portalProtocolConfig = PortalProtocolConfig.init(
@@ -213,6 +234,7 @@ proc run(portalClient: PortalClient, config: PortalConf) {.raises: [CatchableErr
       portalNodeConfig,
       d,
       config.portalSubnetworks,
+      rpcGetHeader,
       bootstrapRecords = bootstrapRecords,
       rng = rng,
     )

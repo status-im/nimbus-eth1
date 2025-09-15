@@ -63,7 +63,7 @@ suite "Stateroot Mismatch Checks":
       ac0.setBalance(addr3, 300.u256)
       ac0.persist(clearCache = true)
       txFrame0.checkpoint(1.BlockNumber, skipSnapshot = false)
-      memDB.persist(txFrame0, Opt.none(Hash32))
+      memDB.persist(txFrame0)
 
 
     # Persist second update to database - changes from two checkpoints
@@ -89,7 +89,7 @@ suite "Stateroot Mismatch Checks":
       ac2.addBalance(addr2, 200.u256)
       ac2.persist(clearCache = true)
       txFrame2.checkpoint(3.BlockNumber, skipSnapshot = false)
-      memDB.persist(txFrame2, Opt.none(Hash32))
+      memDB.persist(txFrame2)
 
       let postStateRoot = ac2.getStateRoot()
       check preStateRoot != postStateRoot
@@ -112,7 +112,7 @@ suite "Stateroot Mismatch Checks":
         ac3.getBalance(addr3) == 300.u256
 
       txFrame3.checkpoint(4.BlockNumber, skipSnapshot = false)
-      memDB.persist(txFrame3, Opt.none(Hash32))
+      memDB.persist(txFrame3)
 
       let postStateRoot = ac3.getStateRoot()
       check:
@@ -134,7 +134,7 @@ suite "Stateroot Mismatch Checks":
       ac0.setStorage(addr1, slot3, 300.u256)
       ac0.persist(clearCache = true)
       txFrame0.checkpoint(1.BlockNumber, skipSnapshot = false)
-      memDB.persist(txFrame0, Opt.none(Hash32))
+      memDB.persist(txFrame0)
 
 
     # Persist second update to database - changes from two checkpoints
@@ -161,7 +161,7 @@ suite "Stateroot Mismatch Checks":
       ac2.setStorage(addr1, slot2, 200.u256)
       ac2.persist(clearCache = true)
       txFrame2.checkpoint(3.BlockNumber, skipSnapshot = false)
-      memDB.persist(txFrame2, Opt.none(Hash32))
+      memDB.persist(txFrame2)
 
       let postStateRoot = ac2.getStateRoot()
       check preStateRoot != postStateRoot
@@ -185,7 +185,7 @@ suite "Stateroot Mismatch Checks":
         ac3.getStorage(addr1, slot3) == 300.u256
 
       txFrame3.checkpoint(4.BlockNumber, skipSnapshot = false)
-      memDB.persist(txFrame3, Opt.none(Hash32))
+      memDB.persist(txFrame3)
 
       let postStateRoot = ac3.getStateRoot()
       check:
