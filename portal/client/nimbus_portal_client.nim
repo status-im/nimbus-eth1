@@ -25,7 +25,7 @@ import
   ../common/common_utils,
   ../rpc/[
     rpc_discovery_api, rpc_portal_common_api, rpc_portal_history_api,
-    rpc_portal_beacon_api, rpc_portal_nimbus_beacon_api,
+    rpc_portal_beacon_api, rpc_portal_nimbus_beacon_api, rpc_web3_api,
   ],
   ../database/content_db,
   ../network/wire/portal_protocol_version,
@@ -272,10 +272,12 @@ proc run(portalClient: PortalClient, config: PortalConf) {.raises: [CatchableErr
   node.start()
 
   ## Start the JSON-RPC APIs
-
   proc setupRpcServer(
       rpcServer: RpcHttpServer | RpcWebSocketServer, flags: set[RpcFlag]
   ) {.raises: [CatchableError].} =
+    # Always install web3 handlers as it just provides web3_clientVersion
+    rpcServer.installWeb3ApiHandlers()
+
     for flag in flags:
       case flag
       of RpcFlag.portal:
@@ -283,9 +285,7 @@ proc run(portalClient: PortalClient, config: PortalConf) {.raises: [CatchableErr
           rpcServer.installPortalCommonApiHandlers(
             node.historyNetwork.value.portalProtocol, PortalSubnetwork.history
           )
-          rpcServer.installPortalHistoryApiHandlers(
-            node.historyNetwork.value.portalProtocol
-          )
+          rpcServer.installPortalHistoryApiHandlers(node.historyNetwork.value)
         if node.beaconNetwork.isSome():
           rpcServer.installPortalCommonApiHandlers(
             node.beaconNetwork.value.portalProtocol, PortalSubnetwork.beacon

@@ -124,7 +124,9 @@ VERIF_PROXY_OUT_PATH ?= build/libverifproxy/
 	dist \
 	eest \
 	t8n \
-	t8n_test
+	t8n_test \
+	evmstate \
+	evmstate_test
 
 ifeq ($(NIM_PARAMS),)
 # "variables.mk" was not included, so we update the submodules.
