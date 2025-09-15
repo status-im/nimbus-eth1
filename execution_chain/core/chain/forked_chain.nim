@@ -64,7 +64,7 @@ func appendBlock(c: ForkedChainRef,
   )
 
   # Only finalized segment have finalized marker
-  newBlock.notFinalized()
+  newBlock.unFinalize()
   c.hashToBlock[blkHash] = newBlock
   c.latest = newBlock
 
@@ -205,6 +205,8 @@ proc removeBlockFromCache(c: ForkedChainRef, b: BlockRef) =
     if v == b.txFrame:
       v = nil
 
+  b.blk.reset
+  b.receipts.reset
   b.txFrame.dispose()
 
   # Mark it as deleted, don't delete it twice
@@ -241,7 +243,7 @@ proc updateFinalized(c: ForkedChainRef, finalized: BlockRef, fcuHead: BlockRef) 
 
   func reachable(head, fin: BlockRef): bool =
     var it = head
-    while not it.finalized:
+    while it.isOk and it.notFinalized:
       it = it.parent
     it == fin
 
@@ -259,7 +261,7 @@ proc updateFinalized(c: ForkedChainRef, finalized: BlockRef, fcuHead: BlockRef) 
     # Any branches not reachable from finalized
     # should be removed.
     if not reachable(head, finalized):
-      loopFinalized(head):
+      loopFinalizedAndClearParent(head):
         if it.txFrame.isNil:
           # Has been deleted by previous branch
           break
@@ -336,14 +338,10 @@ with --debug-eager-state-root."""
   # e.g. B2 backward.
   var
     count = 0'u
-    it = base.parent
 
-  while it.isOk:
+  loopItAndClearParent(base.parent):
     c.removeBlockFromCache(it)
     inc count
-    let b = it
-    it = it.parent
-    b.parent = nil
 
   # Update base branch
   c.base = base
@@ -411,8 +409,8 @@ proc queueUpdateBase(c: ForkedChainRef, base: BlockRef)
 
   var
     number = base.number - min(base.number, PersistBatchSize)
-    steps  = newSeqOfCap[BlockRef]((base.number-c.base.number) div PersistBatchSize + 1)
-    it = prevQueuedBase
+    steps  = newSeqOfCap[BlockRef]((base.number-prevQueuedBase.number) div PersistBatchSize + 1)
+    it = base
 
   steps.add base
 

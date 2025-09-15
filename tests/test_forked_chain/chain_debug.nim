@@ -91,7 +91,7 @@ func validate*(c: ForkedChainRef): Result[void,string] =
   if not c.hashToBlock.hasKey(c.baseHash):
     return err("base must be in hashToBlock[] table: " & $c.baseNumber)
 
-  if not c.base.finalized:
+  if c.base.notFinalized:
     return err("base must have finalized marker")
 
   # Base chains must range inside `(base,head]`, rooted on `base`
