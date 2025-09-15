@@ -319,7 +319,7 @@ type
       separator: "\pPERFORMANCE OPTIONS",
       defaultValue: 0,
       desc: "Number of worker threads (\"0\" = use as many threads as there are CPU cores available)"
-      name: "num-threads" .}: int
+      name: "num-threads" .}: uint
 
     persistBatchSize* {.
       hidden

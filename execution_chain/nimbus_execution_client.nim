@@ -7,6 +7,8 @@
 # This file may not be copied, modified, or distributed except according to
 # those terms.
 
+{.push raises: [].}
+
 import
   ../execution_chain/compile_info
 
@@ -34,9 +36,45 @@ import
   beacon_chain/[nimbus_binary_common, process_state],
   beacon_chain/validators/keystore_management
 
-proc basicServices(nimbus: NimbusNode,
-                   conf: NimbusConf,
-                   com: CommonRef) =
+const
+  DontQuit = low(int)
+    ## To be used with `onException()` or `onCancelledException()`
+
+# ------------------------------------------------------------------------------
+# Private helpers
+# ------------------------------------------------------------------------------
+
+template onCancelledException(
+    quitCode: static[int];
+    info: static[string];
+    code: untyped) =
+  try:
+    code
+  except CancelledError as e:
+    when quitCode == DontQuit:
+      error info, error=($e.name), msg=e.msg
+    else:
+      fatal info, error=($e.name), msg=e.msg
+      quit(quitCode)
+
+template onException(
+    quitCode: static[int];
+    info: static[string];
+    code: untyped) =
+  try:
+    code
+  except CatchableError as e:
+    when quitCode == DontQuit:
+      error info, error=($e.name), msg=e.msg
+    else:
+      fatal info, error=($e.name), msg=e.msg
+      quit(quitCode)
+
+# ------------------------------------------------------------------------------
+# Private functions
+# ------------------------------------------------------------------------------
+
+proc basicServices(nimbus: NimbusNode, conf: NimbusConf, com: CommonRef) =
   # Setup the chain
   let fc = ForkedChainRef.init(com,
     eagerStateRoot = conf.eagerStateRootCheck,
@@ -47,7 +85,10 @@ proc basicServices(nimbus: NimbusNode,
 
   nimbus.fc = fc
   # Setup history expiry and portal
-  nimbus.fc.portal = HistoryExpiryRef.init(conf, com)
+
+  QuitFailure.onException("Cannot initialise RPC client history"):
+    nimbus.fc.portal = HistoryExpiryRef.init(conf, com)
+
   # txPool must be informed of active head
   # so it can know the latest account state
   # e.g. sender nonce, etc
@@ -67,8 +108,7 @@ proc manageAccounts(nimbus: NimbusNode, conf: NimbusConf) =
       fatal "Import private key error", msg = res.error()
       quit(QuitFailure)
 
-proc setupP2P(nimbus: NimbusNode, conf: NimbusConf,
-              com: CommonRef) {.raises: [OSError].} =
+proc setupP2P(nimbus: NimbusNode, conf: NimbusConf, com: CommonRef) =
   ## Creating P2P Server
   let kpres = nimbus.ctx.getNetKeys(conf.netKey)
   if kpres.isErr:
@@ -91,11 +131,11 @@ proc setupP2P(nimbus: NimbusNode, conf: NimbusConf,
     bootstrapNodes = conf.getBootstrapNodes()
     fc = nimbus.fc
 
-  func forkIdProc(): ForkID {.raises: [].} =
+  func forkIdProc(): ForkID =
     let header = fc.latestHeader()
     com.forkId(header.number, header.timestamp)
 
-  func compatibleForkIdProc(id: ForkID): bool {.raises: [].} =
+  func compatibleForkIdProc(id: ForkID): bool =
     com.compatibleForkId(id)
 
   let forkIdProcs = ForkIdProcs(
@@ -162,18 +202,22 @@ proc setupP2P(nimbus: NimbusNode, conf: NimbusConf,
   if not syncerShouldRun:
     nimbus.beaconSyncRef = BeaconSyncRef(nil)
 
-proc setupMetrics(nimbus: NimbusNode, conf: NimbusConf)
-    {.raises: [CancelledError, MetricsError].} =
+proc setupMetrics(nimbus: NimbusNode, conf: NimbusConf) =
   # metrics logging
   if conf.logMetricsEnabled:
-    # https://github.com/nim-lang/Nim/issues/17369
-    var logMetrics: proc(udata: pointer) {.gcsafe, raises: [].}
-    logMetrics = proc(udata: pointer) =
+    let tmo = conf.logMetricsInterval.seconds
+    proc setLogMetrics(udata: pointer) {.gcsafe.}
+    proc runLogMetrics(udata: pointer) {.gcsafe.} =
       {.gcsafe.}:
         let registry = defaultRegistry
       info "metrics", registry
-      discard setTimer(Moment.fromNow(conf.logMetricsInterval.seconds), logMetrics)
-    discard setTimer(Moment.fromNow(conf.logMetricsInterval.seconds), logMetrics)
+      udata.setLogMetrics()
+    # Store the `runLogMetrics()` in a closure to avoid some garbage
+    # collection memory corruption issues that might occur otherwise.
+    proc setLogMetrics(udata: pointer) =
+      discard setTimer(Moment.fromNow(tmo), runLogMetrics)
+    # Start the logger
+    discard setTimer(Moment.fromNow(tmo), runLogMetrics)
 
   # metrics server
   if conf.metricsEnabled:
@@ -184,7 +228,8 @@ proc setupMetrics(nimbus: NimbusNode, conf: NimbusConf)
       quit(QuitFailure)
 
     nimbus.metricsServer = res.get
-    waitFor nimbus.metricsServer.start()
+    QuitFailure.onException("Cannot start metrics services"):
+      waitFor nimbus.metricsServer.start()
 
 proc preventLoadingDataDirForTheWrongNetwork(db: CoreDbRef; conf: NimbusConf) =
   proc writeDataDirId(kvt: CoreDbTxRef, calculatedId: Hash32) =
@@ -212,9 +257,11 @@ proc preventLoadingDataDirForTheWrongNetwork(db: CoreDbRef; conf: NimbusConf) =
       expected=calculatedId
     quit(QuitFailure)
 
-# ------------
+# ------------------------------------------------------------------------------
+# Public functions, `main()` API
+# ------------------------------------------------------------------------------
 
-proc runExeClient*(nimbus: NimbusNode, conf: NimbusConf) =
+proc runExeClient*(nimbus: NimbusNode, conf: NimbusConf) {.gcsafe.} =
   ## Launches and runs the execution client for pre-configured `nimbus` and
   ## `conf` argument descriptors.
   ##
@@ -232,28 +279,24 @@ proc runExeClient*(nimbus: NimbusNode, conf: NimbusConf) =
       fatal "Cannot load Kzg trusted setup from file", msg=res.error
       quit(QuitFailure)
 
-  let coreDB =
-    # Resolve statically for database type
-    AristoDbRocks.newCoreDbRef(
+  # The constructor `newCoreDbRef()` calls `addExitProc()` which in turn
+  # accesses a global variable holding a call back function. This function
+  # `addExitProc()` is synchronised against an internal tread lock and is
+  # considered safe, here.
+  {.gcsafe.}:
+    let coreDB = AristoDbRocks.newCoreDbRef(
       conf.dataDir,
       conf.dbOptions(noKeyCache = conf.cmd == NimbusCmd.`import`))
 
   preventLoadingDataDirForTheWrongNetwork(coreDB, conf)
   setupMetrics(nimbus, conf)
 
-  let taskpool =
-    try:
-      if conf.numThreads < 0:
-        fatal "The number of threads --num-threads cannot be negative."
-        quit QuitFailure
-      elif conf.numThreads == 0:
-        Taskpool.new(numThreads = min(countProcessors(), 16))
-      else:
-        Taskpool.new(numThreads = conf.numThreads)
-    except CatchableError as e:
-      fatal "Cannot start taskpool", err = e.msg
-      quit QuitFailure
-
+  var taskpool: Taskpool
+  QuitFailure.onException("Cannot start task pool"):
+    if 0 < conf.numThreads:
+      taskpool = Taskpool.new(numThreads = conf.numThreads.int)
+    else:
+      taskpool = Taskpool.new(numThreads = min(countProcessors(), 16))
   info "Threadpool started", numThreads = taskpool.numThreads
 
   let com = CommonRef.new(
@@ -293,7 +336,8 @@ proc runExeClient*(nimbus: NimbusNode, conf: NimbusConf) =
   of NimbusCmd.`import`:
     importBlocks(conf, com)
   of NimbusCmd.`import-rlp`:
-    waitFor importRlpBlocks(conf, com)
+    QuitFailure.onCancelledException("Import of RLP blocks cancelled"):
+      waitFor importRlpBlocks(conf, com)
   else:
     basicServices(nimbus, conf, com)
     manageAccounts(nimbus, conf)
@@ -314,9 +358,10 @@ proc runExeClient*(nimbus: NimbusNode, conf: NimbusConf) =
         poll()
 
     # Stop loop
-    waitFor nimbus.closeWait()
+    QuitFailure.onException("Exception while shutting down"):
+      waitFor nimbus.closeWait()
 
-proc setupExeClientNode*(conf: NimbusConf): NimbusNode =
+proc setupExeClientNode*(conf: NimbusConf): NimbusNode {.gcsafe.} =
   ## Prepare for running `runExeClient()`.
   ##
   ## This function returns the node config of type `NimbusNode` which might
@@ -324,8 +369,13 @@ proc setupExeClientNode*(conf: NimbusConf): NimbusNode =
   ##
   ProcessState.setupStopHandlers()
 
-  # Set up logging before everything else
-  setupLogging(conf.logLevel, conf.logStdout, none(OutFile))
+  # The function `setupLogging()` calls `setTopicState()` which in turn
+  # accesses a global `Table` variable. The latter function is synchronised
+  # against an internal lock via a `guard` annotation and is considered
+  # thread safe, here.
+  {.gcsafe.}:
+    # Set up logging before everything else
+    setupLogging(conf.logLevel, conf.logStdout, none(OutFile))
   setupFileLimits()
 
   # TODO provide option for fixing / ignoring permission errors
@@ -336,6 +386,9 @@ proc setupExeClientNode*(conf: NimbusConf): NimbusNode =
 
   NimbusNode(ctx: newEthContext())
 
+# ------------------------------------------------------------------------------
+# MAIN (if any)
+# ------------------------------------------------------------------------------
 
 when isMainModule:
   let
@@ -343,3 +396,7 @@ when isMainModule:
     nodeConf = optsConf.setupExeClientNode()
 
   nodeConf.runExeClient(optsConf)
+
+# ------------------------------------------------------------------------------
+# End
+# ------------------------------------------------------------------------------
