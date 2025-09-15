@@ -795,13 +795,11 @@ func dbOptions*(conf: NimbusConf, noKeyCache = false): DbOptions =
     rdbPrintStats = conf.rdbPrintStats,
   )
 
+{.pop.}
+
 #-------------------------------------------------------------------
 # Constructor
 #-------------------------------------------------------------------
-
-# KLUDGE: The `load()` template does currently not work within any exception
-#         annotated environment.
-{.pop.}
 
 proc makeConfig*(cmdLine = commandLineParams()): NimbusConf =
   ## Note: this function is not gc-safe
