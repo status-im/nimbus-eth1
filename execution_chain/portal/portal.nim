@@ -90,7 +90,7 @@ proc getBlockBodyByHeader*(historyExpiry: HistoryExpiryRef, header: Header): Res
   let rpc = historyExpiry.rpcProvider.valueOr:
     return err("Portal RPC is not available")
 
-  (waitFor rpc.historyGetBlockBody(header.number, header)).mapErr(
+  (waitFor rpc.historyGetBlockBody(header)).mapErr(
     proc(e: PortalRpcError): string =
       "Portal request failed: " & $e
   )
