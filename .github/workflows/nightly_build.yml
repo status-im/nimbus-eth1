@@ -72,6 +72,31 @@ jobs:
           path: ./dist/${{ steps.make_dist.outputs.archive_dir }}/build/nimbus_execution_client.sha512sum
           retention-days: 2
 
+  run-binary:
+    needs: [build, matrix_config]
+
+    strategy:
+      fail-fast: false
+      matrix: ${{ fromJSON(needs.matrix_config.outputs.matrix) }}
+
+    defaults:
+      run:
+        shell: bash
+
+    name: '${{ matrix.os }}-${{ matrix.cpu }}'
+    runs-on: ${{ matrix.builder }}
+
+    steps:
+      - name: Download artefacts
+        uses: actions/download-artifact@v5
+        with:
+          name: ${{ matrix.os }}-${{ matrix.cpu }}-archive
+
+      - name: Run binary
+        run: |
+          tar -xvzf nimbus-eth1-${{ matrix.os }}-${{ matrix.cpu }}-nightly-latest.tar.gz --strip-components=1
+          build/nimbus_execution_client --help
+
   nightly-build-release:
     name: Nightly build release
     needs: build

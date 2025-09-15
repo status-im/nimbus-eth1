@@ -117,7 +117,7 @@ elif [[ "${PLATFORM}" == "linux_arm64" ]]; then
     LOG_LEVEL="TRACE" \
     CC="${CC}" \
     CXX="${CXX}" \
-    NIMFLAGS="${NIMFLAGS_COMMON} --cpu:arm64 --arm64.linux.gcc.exe=${CC} --arm64.linux.gcc.linkerexe=${CXX} --gcc.exe=${CC} --gcc.linkerexe=${CXX} --passL:'-static-libstdc++'" \
+    NIMFLAGS="${NIMFLAGS_COMMON} --cpu:arm64 --arm64.linux.gcc.exe=${CC} --arm64.linux.gcc.linkerexe=${CXX} --passL:'-static-libstdc++'" \
     PARTIAL_STATIC_LINKING=1 \
     USE_SYSTEM_ROCKSDB=0 \
     ${BINARIES}
@@ -126,7 +126,7 @@ elif [[ "${PLATFORM}" == "macos_arm64" ]]; then
   export PATH="/osxcross/bin:${PATH}"
   export LD_LIBRARY_PATH="/osxcross/lib:$LD_LIBRARY_PATH"
   export OSXCROSS_MP_INC=1 # sets up include and library paths
-  export ZERO_AR_DATE=1 # avoid timestamps in binaries
+  export ZERO_AR_DATE=1    # avoid timestamps in binaries
   DARWIN_VER="24.5"
   CC="aarch64-apple-darwin${DARWIN_VER}-clang"
   CXX="aarch64-apple-darwin${DARWIN_VER}-clang++"
@@ -216,19 +216,19 @@ for BINARY in ${BINARIES}; do
     #
     # First two also happen with a native "dsymutil", while the next two only
     # with the "llvm-dsymutil" we use when cross-compiling.
-    "${DSYMUTIL}" build/${BINARY} 2>&1 \
-      | grep -v "failed to insert symbol" \
-      | grep -v "could not find object file symbol for symbol" \
-      | grep -v "while processing" \
-      | grep -v "warning: line table parameters mismatch. Cannot emit." \
-      || true
+    "${DSYMUTIL}" build/${BINARY} 2>&1 |
+      grep -v "failed to insert symbol" |
+      grep -v "could not find object file symbol for symbol" |
+      grep -v "while processing" |
+      grep -v "warning: line table parameters mismatch. Cannot emit." ||
+      true
     cp -a "./build/${BINARY}.dSYM" "${DIST_PATH}/build/"
   fi
   cd "${DIST_PATH}/build"
-  sha512sum "${BINARY}${EXT}" > "${BINARY}.sha512sum"
+  sha512sum "${BINARY}${EXT}" >"${BINARY}.sha512sum"
   cd - >/dev/null
 done
-sed -e "s/GIT_COMMIT/${GIT_COMMIT}/" docker/dist/README.md.tpl > "${DIST_PATH}/README.md"
+sed -e "s/GIT_COMMIT/${GIT_COMMIT}/" docker/dist/README.md.tpl >"${DIST_PATH}/README.md"
 
 if [[ "${PLATFORM}" == "linux_amd64" ]]; then
   sed -i -e 's/^make dist$/make dist-linux-amd64/' "${DIST_PATH}/README.md"
