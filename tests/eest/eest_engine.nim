@@ -10,7 +10,6 @@
 {.push raises: [], gcsafe.}
 
 import
-  unittest2,
   eth/common/headers_rlp,
   web3/eth_api_types,
   web3/engine_api_types,
@@ -106,7 +105,9 @@ proc processFile*(fileName: string): bool =
   return testPass
 
 when isMainModule:
-  import std/[cmdline, os]
+  import
+    std/[cmdline, os],
+    unittest2
 
   if paramCount() == 0:
     let testFile = getAppFilename().splitPath().tail
