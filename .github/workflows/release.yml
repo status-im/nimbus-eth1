@@ -82,6 +82,10 @@ jobs:
           tar -czf "${NEC_TAR}" --exclude="build/nimbus_verified_proxy*" -C "${ARCHIVE_DIR}" .
           tar -czf "${NVP_TAR}" --exclude="build/nimbus_execution_client*" -C "${ARCHIVE_DIR}" .
 
+          # Generate sha512 for the tarballs themselves
+          sha512sum "${NEC_TAR}" > "${NEC_TAR}.sha512sum"
+          sha512sum "${NVP_TAR}" > "${NVP_TAR}.sha512sum"
+
           echo "nec_tar=${NEC_TAR}" >> $GITHUB_OUTPUT
           echo "nvp_tar=${NVP_TAR}" >> $GITHUB_OUTPUT
 
