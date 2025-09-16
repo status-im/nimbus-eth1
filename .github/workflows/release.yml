@@ -80,14 +80,10 @@ jobs:
           # Pack only the relevant binaries (and their checksums) from build/
           # Add additional files (LICENSE, README, configs) if desired with extra -C args.
           tar -czf "${NEC_TAR}" -C "${ARCHIVE_DIR}/build" \
-            nimbus_execution_client nimbus_execution_client.sha512sum
+            nimbus_execution_client*
 
           tar -czf "${NVP_TAR}" -C "${ARCHIVE_DIR}/build" \
-            nimbus_verified_proxy nimbus_verified_proxy.sha512sum
-
-          # Optional: generate sha512 for the tarballs themselves (not required by GH)
-          sha512sum "${NEC_TAR}" > "${NEC_TAR}.sha512sum"
-          sha512sum "${NVP_TAR}" > "${NVP_TAR}.sha512sum"
+            nimbus_verified_proxy*
 
           echo "nec_tar=${NEC_TAR}" >> $GITHUB_OUTPUT
           echo "nvp_tar=${NVP_TAR}" >> $GITHUB_OUTPUT
