@@ -25,7 +25,7 @@ import
   ../../execution_chain/core/tx_pool,
   ../../execution_chain/beacon/beacon_engine,
   ../../execution_chain/common/common,
-  ../../hive_integration/nodocker/engine/engine_client,
+  ../../hive_integration/engine_client,
   ./eest_helpers
 
 proc sendNewPayload(env: TestEnv, version: uint64, param: PayloadParam): Result[PayloadStatusV1, string] =
@@ -111,5 +111,5 @@ when isMainModule:
     let testFile = getAppFilename().splitPath().tail
     echo "Usage: " & testFile & " vector.json"
     quit(QuitFailure)
-  
+
   check processFile(paramStr(1))

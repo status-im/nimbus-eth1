@@ -27,7 +27,7 @@ import
   ../../execution_chain/core/tx_pool,
   ../../execution_chain/beacon/beacon_engine,
   ../../execution_chain/common/common,
-  ../../hive_integration/nodocker/engine/engine_client
+  ../../hive_integration/engine_client
 
 import ../../tools/common/helpers as chp except HardFork
 import ../../tools/evmstate/helpers except HardFork

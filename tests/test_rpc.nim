@@ -14,7 +14,7 @@ import
   json_rpc/[rpcserver, rpcclient],
   eth/rlp,
   eth/common/[transaction_utils, addresses],
-  ../hive_integration/nodocker/engine/engine_client,
+  ../hive_integration/engine_client,
   ../execution_chain/[constants, transaction, config, version_info],
   ../execution_chain/db/[ledger, storage_types],
   ../execution_chain/sync/wire_protocol,

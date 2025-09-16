@@ -21,7 +21,7 @@ import
   ../../execution_chain/core/chain/forked_chain,
   ../../execution_chain/beacon/beacon_engine,
   ../../execution_chain/common/common,
-  ../../hive_integration/nodocker/engine/engine_client,
+  ../../hive_integration/engine_client,
   ./eest_helpers,
   stew/byteutils,
   chronos
