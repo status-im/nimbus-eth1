@@ -28,7 +28,7 @@ export
   worker_desc
 
 const
-  TraceVersionID* = 20250915
+  TraceVersionID* = 20250917
 
   TraceSetupID* = 1                   ## Phase 1 layout ID, prepare
   TraceRunnerID* = 10                 ## Phase 2 layout ID, full execution
@@ -75,36 +75,45 @@ type
     ImportBlock
     SyncBlock
 
+  TraceHdrUnproc* = object
+    ## Optional sub-object for `TraceRecBase`
+    hLen*: uint64                     ## # unprocessed header entries
+    hChunks*: uint                    ## # unprocessed header iv segments
+    hLast*: BlockNumber               ## last avail block number
+    hLastLen*: uint64                 ## size of last block number interval
+
+  TraceBlkUnproc* = object
+    ## Optional sub-object for `TraceRecBase`
+    bLen*: uint64                     ## # unprocessed block entries
+    bChunks*: uint                    ## # unprocessed block iv segments
+    bLeast*: BlockNumber              ## least avail block number
+    bLeastLen*: uint64                ## size of first interval
+
+  TracePeerCtx* = object
+    ## Optional sub-object for `TraceRecBase`
+    peerCtrl*: BuddyRunState          ## Sync peer run state
+    peerID*: Hash                     ## Sync peer ID (if any)
+    nHdrErrors*: uint8                ## Header tranfer errors
+    nBlkErrors*: uint8                ## Body tranfer errors
+
   TraceRecBase* = object of RootObj
     ## Trace context applicable with and without known peer
     time*: Duration                   ## Relative to `TraceRef.started`
-    serial*: uint                     ## Increasing serial number
-    frameID*: uint                    ## Begin/end frame
-    nPeers*: uint
-    syncState*: SyncState
-    chainMode*: HeaderChainMode
-    poolMode*: bool
+    serial*: uint                     ## Capture record ID
+    frameID*: Opt[uint]               ## Begin/end frame for scheduler tasks
 
+    nPeers*: uint                     ## Number of sync peers (buddies)
+    syncState*: SyncState             ## Headers/bodies preocessing state
+    chainMode*: HeaderChainMode       ## Headers cache/DB state
+    poolMode*: bool                   ## Mostly implied by `syncState`
     baseNum*: BlockNumber             ## Max finalised number from `FC` module
     latestNum*: BlockNumber           ## Number of latest branch head
     antecedent*: BlockNumber          ## Lower end of header chain cache
 
-    hdrUnprLen*: uint64               ## # unprocessed header entries
-    hdrUnprChunks*: uint              ## # unprocessed header iv segments
-    hdrUnprLast*: BlockNumber         ## last avail block number
-    hdrUnprLastLen*: uint64           ## size of last block number interval
-
-    blkUnprLen*: uint64               ## # unprocessed block entries
-    blkUnprChunks*: uint              ## # unprocessed block iv segments
-    blkUnprLeast*: BlockNumber        ## least avail block number
-    blkUnprLeastLen*: uint64          ## size of first interval
-
-    stateAvail*: int                  ## Bitmask: 1=peerCtrl, 2=peerID, etc.
-    peerCtrl*: BuddyRunState          ##  1) Rlp encoded `Opt[seq[xxx]]` would
-    peerID*: Hash                     ##  2) .. need manual decoder/reader
-    nHdrErrors*: uint8                ##  4) # header comm. errors
-    nBlkErrors*: uint8                ##  8) # body comm. errors
-    slowPeer*: Hash                   ## 16) Registered slow peer
+    hdrUnpr*: Opt[TraceHdrUnproc]     ## Optional unprocessed headers state
+    blkUnpr*: Opt[TraceBlkUnproc]     ## Optional unprocessed blocks state
+    peerCtx*: Opt[TracePeerCtx]       ## Sync peer specific ctx
+    slowPeer*: Opt[Hash]              ## Registered slow peer
 
   TraceVersionInfo* = object of TraceRecBase
     version*: uint
@@ -163,9 +172,8 @@ type
     ## Environment is captured after the `getBlockHeaders()` handler is run.
     req*: BlockHeadersRequest         ## Fetch request
     ivReq*: BnRange                   ## Request as interval of block numbers
-    fieldAvail*: uint                 ## Bitmask: 1=fetched, 2=error
-    fetched*: FetchHeadersData        ## If dowloaded successfully
-    error*: BeaconError
+    fetched*: Opt[FetchHeadersData]   ## If dowloaded successfully
+    error*: Opt[BeaconError]
 
   TraceSyncHeaders* = object of TraceRecBase
     ## Environment is captured when the `syncBlockHeaders()` handler is run.
@@ -175,9 +183,8 @@ type
     ## Environment is captured after the `getBlockBodies()` handler is run.
     req*: BlockBodiesRequest          ## Fetch request
     ivReq*: BnRange                   ## Request as interval of block numbers
-    fieldAvail*: uint                 ## Bitmask: 1=fetchd, 2=error
-    fetched*: FetchBodiesData         ## If dowloaded successfully
-    error*: BeaconError
+    fetched*: Opt[FetchBodiesData]    ## If dowloaded successfully
+    error*: Opt[BeaconError]
 
   TraceSyncBodies* = object of TraceRecBase
     ## Environment is captured when the `syncBlockBodies()` handler is run.
@@ -187,9 +194,8 @@ type
     ## Environment is captured after the `importBlock()` handler is run.
     ethBlock*: EthBlock               ## Request argument
     effPeerID*: Hash                  ## Request argument
-    fieldAvail*: uint                 ## Bitmask: 1=elapsed, 2=error
-    elapsed*: Duration                ## Processing time on success
-    error*: BeaconError
+    elapsed*: Opt[Duration]           ## Processing time on success
+    error*: Opt[BeaconError]
 
   TraceSyncBlock* = object of TraceRecBase
     ## Environment is captured after the `syncImportBlock()` handler is run.

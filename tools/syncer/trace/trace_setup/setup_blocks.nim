@@ -63,11 +63,9 @@ proc fetchBodiesTrace*(
   tRec.req = req
   tRec.ivReq = ivReq
   if data.isOk:
-    tRec.fieldAvail = 1
-    tRec.fetched = data.value
+    tRec.fetched = Opt.some(data.value)
   else:
-    tRec.fieldAvail = 2
-    tRec.error = data.error
+    tRec.error = Opt.some(data.error)
   buddy.traceWrite tRec
 
   trace "=BodiesFetch", peer=($buddy.peer), peerID=buddy.peerID.short,
@@ -103,15 +101,13 @@ proc importBlockTrace*(
   tRec.ethBlock = ethBlock
   tRec.effPeerID = effPeerID
   if data.isOk:
-    tRec.fieldAvail = 1
-    tRec.elapsed = data.value
+    tRec.elapsed = Opt.some(data.value)
   else:
-    tRec.fieldAvail = 2
-    tRec.error = data.error
+    tRec.error = Opt.some(data.error)
   buddy.traceWrite tRec
 
   trace "=BlockImport", peer=($buddy.peer), peerID=buddy.peerID.short,
-    effPeerID=tRec.peerID.short, serial=tRec.serial
+    effPeerID=effPeerID.short, serial=tRec.serial
   return data
 
 proc syncBlockTrace*(
@@ -123,7 +119,7 @@ proc syncBlockTrace*(
   buddy.traceWrite tRec
 
   trace "=BlockSync", peer=($buddy.peer), peerID=buddy.peerID.short,
-    effPeerID=tRec.peerID.short, serial=tRec.serial
+    serial=tRec.serial
 
 # ------------------------------------------------------------------------------
 # End

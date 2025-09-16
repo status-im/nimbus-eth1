@@ -79,13 +79,13 @@ type
     ## Replacement of `BeaconBuddyRef` in `runPeer()` and `runPool()`
     isNew*: bool                       ## Set in `getOrNewPeer()` when created
     run*: ReplayRunnerRef              ## Back-reference for convenience
-    frameID*: uint64                   ## Begin/end frame
+    frameID*: Opt[uint]                ## Begin/end frame
     message*: ReplayMsgRef             ## Data message channel
 
   ReplayDaemonRef* = ref object
     ## Daemeon job frame (similar to `ReplayBuddyRef`)
     run*: ReplayRunnerRef              ## Back-reference for convenience
-    frameID*: uint64                   ## Begin/end frame
+    frameID*: Opt[uint]                ## Begin/end frame
     message*: ReplayMsgRef             ## Data message channel
 
   # ---------

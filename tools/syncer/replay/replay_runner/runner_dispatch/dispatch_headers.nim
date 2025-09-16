@@ -40,10 +40,12 @@ proc `==`(a,b: BlockHeadersRequest): bool =
 func getResponse(
     instr: TraceFetchHeaders;
       ): Result[FetchHeadersData,BeaconError] =
-  if (instr.fieldAvail and 1) != 0:
-    ok(instr.fetched)
+  if instr.fetched.isSome():
+    ok(instr.fetched.value)
+  elif instr.error.isSome():
+    err(instr.error.value)
   else:
-    err(instr.error)
+    err((ENoException,"","Missing fetch headers return code",Duration()))
 
 func getBeaconError(e: ReplayWaitError): BeaconError =
   (e[0], e[1], e[2], Duration())
@@ -69,7 +71,6 @@ proc fetchHeadersHandler*(
       raiseAssert info & ": arguments differ" &
         ", n=" & $buddy.iNum &
         ", serial=" & $instr.serial &
-        ", frameID=" & instr.frameID.idStr &
         ", peer=" & $buddy.peer &
         # -----
         ", reverse=" & $req.reverse &
@@ -102,8 +103,7 @@ proc sendHeaders*(
   let buddy = run.getPeer(instr, info).valueOr:
     raiseAssert info & ": getPeer() failed" &
       ", n=" & $run.iNum &
-      ", serial=" & $instr.serial &
-      ", peerID=" & instr.peerID.short
+      ", serial=" & $instr.serial
   discard buddy.pushInstr(instr, info)
 
 # ------------------------------------------------------------------------------

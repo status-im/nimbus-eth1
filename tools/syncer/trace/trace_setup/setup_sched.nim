@@ -48,25 +48,25 @@ proc schedDaemonTrace*(
   ##
   var tBeg: TraceSchedDaemonBegin
   tBeg.init ctx
-  tBeg.frameID = tBeg.serial
+  tBeg.frameID = Opt.some(tBeg.serial)
   ctx.traceWrite tBeg
 
-  trace "+Daemon", serial=tBeg.serial, frameID=tBeg.frameID.idStr,
+  trace "+Daemon", serial=tBeg.serial, frameID=tBeg.frameID.value.idStr,
     syncState=tBeg.syncState
 
   let idleTime = await ctx.trace.backup.schedDaemon ctx
 
   var tEnd: TraceSchedDaemonEnd
   tEnd.init ctx
-  tEnd.frameID = tBeg.serial # refers back to `tBeg` capture
+  tEnd.frameID = Opt.some(tBeg.serial) # refers back to `tBeg` capture
   tEnd.idleTime = idleTime
   ctx.traceWrite tEnd
 
   if 0 < tEnd.serial:
-    trace "-Daemon", serial=tEnd.serial, frameID=tEnd.frameID.idStr,
+    trace "-Daemon", serial=tEnd.serial, frameID=tEnd.frameID.value.idStr,
       syncState=tBeg.syncState, idleTime=idleTime.toStr
   else:
-    trace "-Daemon (blind)", serial="n/a", frameID=tEnd.frameID.idStr,
+    trace "-Daemon (blind)", serial="n/a", frameID=tEnd.frameID.value.idStr,
       syncState=tBeg.syncState, idleTime=idleTime.toStr
 
   return idleTime
@@ -82,14 +82,14 @@ proc schedStartTrace*(buddy: BeaconBuddyRef): bool =
   if not ctx.hibernate:
     var tRec: TraceSchedStart
     tRec.init buddy
-    tRec.frameID = tRec.serial
+    tRec.frameID = Opt.some(tRec.serial)
     tRec.peerIP = buddy.getIP()
     tRec.peerPort = buddy.getPort()
     tRec.accept = acceptOk
     buddy.traceWrite tRec
 
     trace "=StartPeer", peer=($buddy.peer), peerID=buddy.peerID.short,
-      serial=tRec.serial, frameID=tRec.frameID.idStr,
+      serial=tRec.serial, frameID=tRec.frameID.value.idStr,
       syncState=tRec.syncState
 
   acceptOk
@@ -105,13 +105,13 @@ proc schedStopTrace*(buddy: BeaconBuddyRef) =
   if not ctx.hibernate:
     var tRec: TraceSchedStop
     tRec.init buddy
-    tRec.frameID = tRec.serial
+    tRec.frameID = Opt.some(tRec.serial)
     tRec.peerIP = buddy.getIP()
     tRec.peerPort = buddy.getPort()
     buddy.traceWrite tRec
 
     trace "=StopPeer", peer=($buddy.peer), peerID=buddy.peerID.short,
-      serial=tRec.serial, frameID=tRec.frameID.idStr,
+      serial=tRec.serial, frameID=tRec.frameID.value.idStr,
       syncState=tRec.syncState
 
 
@@ -122,7 +122,7 @@ proc schedPoolTrace*(buddy: BeaconBuddyRef; last: bool; laps: int): bool =
 
   var tRec: TraceSchedPool
   tRec.init buddy
-  tRec.frameID = tRec.serial
+  tRec.frameID = Opt.some(tRec.serial)
   tRec.peerIP = buddy.getIP()
   tRec.peerPort = buddy.getPort()
   tRec.last = last
@@ -131,7 +131,7 @@ proc schedPoolTrace*(buddy: BeaconBuddyRef; last: bool; laps: int): bool =
   buddy.traceWrite tRec
 
   trace "=Pool", peer=($buddy.peer), peerID=buddy.peerID.short,
-    serial=tRec.serial, frameID=tRec.frameID.idStr
+    serial=tRec.serial
 
   stopOk
 
@@ -149,26 +149,27 @@ proc schedPeerTrace*(
   var tBeg: TraceSchedPeerBegin
   if noisy:
     tBeg.init buddy
-    tBeg.frameID = tBeg.serial
+    tBeg.frameID = Opt.some(tBeg.serial)
     tBeg.peerIP = buddy.getIP()
     tBeg.peerPort = buddy.getPort()
     buddy.traceWrite tBeg
 
     trace "+Peer", peer=($buddy.peer), peerID=buddy.peerID.short,
-      serial=tBeg.serial, frameID=tBeg.frameID.idStr, syncState=tBeg.syncState
+      serial=tBeg.serial, frameID=tBeg.frameID.value.idStr,
+      syncState=tBeg.syncState
 
   let idleTime = await ctx.trace.backup.schedPeer(buddy)
 
   if noisy:
     var tEnd: TraceSchedPeerEnd
     tEnd.init buddy
-    tEnd.frameID = tBeg.serial # refers back to `tBeg` capture
+    tEnd.frameID = Opt.some(tBeg.serial) # refers back to `tBeg` capture
     tEnd.idleTime = idleTime
     buddy.traceWrite tEnd
 
     trace "-Peer", peer=($buddy.peer), peerID=buddy.peerID.short,
-      serial=tEnd.serial, frameID=tEnd.frameID.idStr, syncState=tBeg.syncState,
-      idleTime=idleTime.toStr
+      serial=tEnd.serial, frameID=tEnd.frameID.value.idStr,
+      syncState=tBeg.syncState, idleTime=idleTime.toStr
 
   return idleTime
 

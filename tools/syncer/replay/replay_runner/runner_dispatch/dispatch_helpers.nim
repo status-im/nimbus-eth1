@@ -116,27 +116,29 @@ func syncedEnvCondImpl(
   ##
   let ctx = desc.run.ctx
 
-  if instr.hdrUnprChunks != ctx.hdr.unprocessed.chunks().uint:
-    return false
-  if 0 < instr.hdrUnprChunks:
-    if instr.hdrUnprLen != ctx.hdr.unprocessed.total():
+  if instr.hdrUnpr.isSome():
+    if instr.hdrUnpr.value.hChunks != ctx.hdr.unprocessed.chunks().uint:
       return false
-    let iv = ctx.hdr.unprocessed.le().expect "valid iv"
-    if instr.hdrUnprLast != iv.maxPt or
-       instr.hdrUnprLastLen != iv.len:
-      return false
-    if instr.antecedent != ctx.hdrCache.antecedent.number:
-      return false
+    if 0 < instr.hdrUnpr.value.hChunks:
+      if instr.hdrUnpr.value.hLen != ctx.hdr.unprocessed.total():
+        return false
+      let iv = ctx.hdr.unprocessed.le().expect "valid iv"
+      if instr.hdrUnpr.value.hLast != iv.maxPt or
+         instr.hdrUnpr.value.hLastLen != iv.len:
+        return false
+      if instr.antecedent != ctx.hdrCache.antecedent.number:
+        return false
 
-  if instr.blkUnprChunks != ctx.blk.unprocessed.chunks().uint:
-    return false
-  if 0 < instr.blkUnprChunks:
-    if instr.blkUnprLen != ctx.blk.unprocessed.total():
+  if instr.blkUnpr.isSome():
+    if instr.blkUnpr.value.bChunks != ctx.blk.unprocessed.chunks().uint:
       return false
-    let iv = ctx.blk.unprocessed.ge().expect "valid iv"
-    if instr.blkUnprLeast != iv.minPt or
-       instr.blkUnprLeastLen != iv.len:
-      return false
+    if 0 < instr.blkUnpr.value.bChunks:
+      if instr.blkUnpr.value.bLen != ctx.blk.unprocessed.total():
+        return false
+      let iv = ctx.blk.unprocessed.ge().expect "valid iv"
+      if instr.blkUnpr.value.bLeast != iv.minPt or
+         instr.blkUnpr.value.bLeastLen != iv.len:
+        return false
 
   return true
 
@@ -145,23 +147,27 @@ proc newPeerImpl(
     run: ReplayRunnerRef;
     instr: TraceSchedStart|TraceSchedStop|TraceSchedPool|TraceSchedPeerBegin;
     info: static[string];
-      ): ReplayBuddyRef =
+      ): Opt[ReplayBuddyRef] =
   ## Register a new peer.
   ##
-  run.peers.withValue(instr.peerID, val):
+  if instr.peerCtx.isNone():
+    warn info & ": missing peer ctx", n=run.instrNumber, serial=instr.serial
+    return err()
+
+  run.peers.withValue(instr.peerCtx.value.peerID, val):
     warn info & ": peer exists already", n=run.instrNumber,
       serial=instr.serial, peer=($val.peer)
     val.isNew = false
-    return val[]
+    return ok(val[])
 
   var buddy = ReplayBuddyRef(
     isNew:            true,
     run:              run,
     ctx:              run.ctx,
     only: BeaconBuddyData(
-      nRespErrors:   (instr.nHdrErrors,
-                      instr.nBlkErrors)),
-    peerID:           instr.peerID,
+      nRespErrors:   (instr.peerCtx.value.nHdrErrors,
+                      instr.peerCtx.value.nBlkErrors)),
+    peerID:           instr.peerCtx.value.peerID,
     peer: Peer(
       dispatcher:     run.ethState.capa,
       peerStates:     run.ethState.prots,
@@ -172,8 +178,8 @@ proc newPeerImpl(
             tcpPort:  instr.peerPort,
             udpPort:  instr.peerPort)))))
 
-  run.peers[instr.peerID] = buddy
-  return (move buddy)
+  run.peers[instr.peerCtx.value.peerID] = buddy
+  return ok(move buddy)
 
 # ------------------------------------------------------------------------------
 # Private functions, environment checkers
@@ -262,74 +268,86 @@ proc unprocListsDifferImpl(
     statesDiffer = false
 
   # Unprocessed block numbers for header
-  if instr.hdrUnprChunks != ctx.hdr.unprocessed.chunks().uint:
-    statesDiffer = true
-    info info & ": unproc headers lists differ", n, serial, peer,
-      listChunks=ctx.hdr.unprocessed.chunks(), expected=instr.hdrUnprChunks
-  if 0 < instr.hdrUnprChunks:
-    if instr.hdrUnprLen != ctx.hdr.unprocessed.total():
+  if instr.hdrUnpr.isSome():
+    if instr.hdrUnpr.value.hChunks != ctx.hdr.unprocessed.chunks().uint:
       statesDiffer = true
       info info & ": unproc headers lists differ", n, serial, peer,
-        listLen=ctx.hdr.unprocessed.total(), expected=instr.hdrUnprLen
-    let iv = ctx.hdr.unprocessed.le().expect "valid iv"
-    if instr.hdrUnprLastLen != iv.len:
-      statesDiffer = true
-      info info & ": unproc headers lists differ", n, serial, peer,
-        lastIvLen=iv.len, expected=instr.hdrUnprLastLen
-    if instr.hdrUnprLast != iv.maxPt:
-      statesDiffer = true
-      info info & ": unproc headers lists differ", n, serial, peer,
-        lastIvMax=iv.maxPt, expected=instr.hdrUnprLast
+        listChunks=ctx.hdr.unprocessed.chunks(),
+        expected=instr.hdrUnpr.value.hChunks
+    if 0 < instr.hdrUnpr.value.hChunks:
+      if instr.hdrUnpr.value.hLen != ctx.hdr.unprocessed.total():
+        statesDiffer = true
+        info info & ": unproc headers lists differ", n, serial, peer,
+          listLen=ctx.hdr.unprocessed.total(),
+          expected=instr.hdrUnpr.value.hLen
+      let iv = ctx.hdr.unprocessed.le().expect "valid iv"
+      if instr.hdrUnpr.value.hLastLen != iv.len:
+        statesDiffer = true
+        info info & ": unproc headers lists differ", n, serial, peer,
+          lastIvLen=iv.len, expected=instr.hdrUnpr.value.hLastLen
+      if instr.hdrUnpr.value.hLast != iv.maxPt:
+        statesDiffer = true
+        info info & ": unproc headers lists differ", n, serial, peer,
+          lastIvMax=iv.maxPt, expected=instr.hdrUnpr.value.hLast
 
   # Unprocessed block numbers for blocks
-  if instr.blkUnprChunks != ctx.blk.unprocessed.chunks().uint:
-    statesDiffer = true
-    info info & ": unproc blocks lists differ", n, serial, peer,
-      listChunks=ctx.blk.unprocessed.chunks(), expected=instr.blkUnprChunks
-  if 0 < instr.blkUnprChunks:
-    if instr.blkUnprLen != ctx.blk.unprocessed.total():
+  if instr.blkUnpr.isSome():
+    if instr.blkUnpr.value.bChunks != ctx.blk.unprocessed.chunks().uint:
       statesDiffer = true
       info info & ": unproc blocks lists differ", n, serial, peer,
-        listLen=ctx.blk.unprocessed.total(), expected=instr.blkUnprLen
-    let iv = ctx.blk.unprocessed.ge().expect "valid iv"
-    if instr.blkUnprLeastLen != iv.len:
-      statesDiffer = true
-      info info & ": unproc blocks lists differ", n, serial, peer,
-        lastIvLen=iv.len, expected=instr.blkUnprLeastLen
-    if instr.blkUnprLeast != iv.minPt:
-      statesDiffer = true
-      info info & ": unproc blocks lists differ", n, serial, peer,
-        lastIvMax=iv.maxPt, expected=instr.blkUnprLeast
+        listChunks=ctx.blk.unprocessed.chunks(),
+        expected=instr.blkUnpr.value.bChunks
+    if 0 < instr.blkUnpr.value.bChunks:
+      if instr.blkUnpr.value.bLen != ctx.blk.unprocessed.total():
+        statesDiffer = true
+        info info & ": unproc blocks lists differ", n, serial, peer,
+          listLen=ctx.blk.unprocessed.total(),
+          expected=instr.blkUnpr.value.bLen
+      let iv = ctx.blk.unprocessed.ge().expect "valid iv"
+      if instr.blkUnpr.value.bLeastLen != iv.len:
+        statesDiffer = true
+        info info & ": unproc blocks lists differ", n, serial, peer,
+          lastIvLen=iv.len, expected=instr.blkUnpr.value.bLeastLen
+      if instr.blkUnpr.value.bLeast != iv.minPt:
+        statesDiffer = true
+        info info & ": unproc blocks lists differ", n, serial, peer,
+          lastIvMax=iv.maxPt, expected=instr.blkUnpr.value.bLeast
 
   return statesDiffer
 
 
 proc peerStatesDifferImpl(
-    desc: ReplayBuddyRef;
+    buddy: ReplayBuddyRef;
     instr: TraceRecBase;
     info: static[string];
       ): bool =
   let
-    peer = desc.peer
-    n = desc.run.instrNumber
+    peer = buddy.peer
+    n = buddy.run.instrNumber
     serial = instr.serial
   var
     statesDiffer = false
 
-  if desc.ctrl.state != instr.peerCtrl:
+  if instr.peerCtx.isNone():
     statesDiffer = true
-    info info & ": peer ctrl states differ", n, serial, peer,
-      ctrl=desc.ctrl.state, expected=instr.peerCtrl
+    info info & ": peer ctx values differ", n, serial, peer, ctx="n/a"
+  else:
+    if instr.peerCtx.value.peerCtrl != buddy.ctrl.state:
+      statesDiffer = true
+      info info & ": peer ctrl states differ", n, serial, peer,
+        ctrl=buddy.ctrl.state, expected=instr.peerCtx.value.peerCtrl
 
-  if instr.nHdrErrors != desc.only.nRespErrors.hdr:
-    statesDiffer = true
-    info info & ": peer header errors differ", n, serial, peer,
-      nHdrErrors=desc.only.nRespErrors.hdr, expected=instr.nHdrErrors
+    if instr.peerCtx.value.nHdrErrors != buddy.only.nRespErrors.hdr:
+      statesDiffer = true
+      info info & ": peer header errors differ", n, serial, peer,
+        nHdrErrors=buddy.only.nRespErrors.hdr,
+        expected=instr.peerCtx.value.nHdrErrors
 
-  if instr.nBlkErrors != desc.only.nRespErrors.blk:
-    statesDiffer = true
-    info info & ": peer body errors differ", n, serial, peer,
-      nBlkErrors=desc.only.nRespErrors.blk, expected=instr.nBlkErrors
+    if instr.peerCtx.value.nBlkErrors != buddy.only.nRespErrors.blk:
+      statesDiffer = true
+      info info & ": peer body errors differ", n, serial, peer,
+        nBlkErrors=buddy.only.nRespErrors.blk,
+        expected=instr.peerCtx.value.nBlkErrors
 
   return statesDiffer
 
@@ -358,6 +376,18 @@ func peerIdStr*(desc: ReplayInstance): string =
   when desc is ReplayBuddyRef:
     desc.peerID.short
   elif desc is ReplayDaemonRef:
+    "n/a"
+
+func frameIdStr*(instr: InstrType|TraceSchedStop|TraceSchedPool): string =
+  if instr.frameID.isSome():
+    instr.frameID.value.idStr
+  else:
+    "n/a"
+
+func frameIdStr*(desc: ReplayBuddyRef|ReplayDaemonRef): string =
+  if desc.frameID.isSome():
+    desc.frameID.value.idStr
+  else:
     "n/a"
 
 # -----------------
@@ -413,11 +443,13 @@ proc getPeer*(
     info: static[string];
       ): Opt[ReplayBuddyRef] =
   ## Get peer from peers table (if any)
-  run.peers.withValue(instr.peerID, buddy):
-    return ok(buddy[])
-
-  debug info & ": no peer", n=run.iNum, serial=instr.serial,
-    peerID=instr.peerID.short
+  if instr.peerCtx.isNone():
+    warn info & ": missing peer ctx", n=run.iNum, serial=instr.serial
+  else:
+    run.peers.withValue(instr.peerCtx.value.peerID, buddy):
+      return ok(buddy[])
+    debug info & ": no peer", n=run.iNum, serial=instr.serial,
+      peerID=instr.peerCtx.value.peerID.short
   return err()
 
 
@@ -425,7 +457,7 @@ proc newPeer*(
     run: ReplayRunnerRef;
     instr: TraceSchedStart;
     info: static[string];
-      ): ReplayBuddyRef =
+      ): Opt[ReplayBuddyRef] =
   ## Register a new peer.
   ##
   return run.newPeerImpl(instr, info)
@@ -435,22 +467,28 @@ proc getOrNewPeerFrame*(
     run: ReplayRunnerRef;
     instr: TraceSchedStop|TraceSchedPool|TraceSchedPeerBegin;
     info: static[string];
-      ): ReplayBuddyRef =
+      ): Opt[ReplayBuddyRef] =
   ## Get an existing one or register a new peer and set up `stage[0]`.
   ##
+  if instr.peerCtx.isNone():
+    return err()
+
   var buddy: ReplayBuddyRef
-  run.peers.withValue(instr.peerID, val):
+  run.peers.withValue(instr.peerCtx.value.peerID, val):
     buddy = val[]
     buddy.isNew = false
   do:
-    buddy = run.newPeerImpl(instr, info)
+    buddy = run.newPeerImpl(instr, info).expect "valid peer"
 
-  if buddy.frameID == 0:
-    buddy.frameID = instr.frameID
-  elif buddy.frameID != instr.frameID:
-    error info & ": frame unexpected", n=buddy.iNum, serial=instr.serial,
-      frameID=buddy.frameID.idStr, expected=instr.frameID.idStr
-  return move(buddy)
+  if buddy.frameID.isSome():
+    warn info & ": peer frameID unexpected", n=buddy.iNum,
+      serial=instr.serial, frameID=buddy.frameIdStr, expected="n/a"
+  if instr.frameID.isNone():
+    warn info & ": peer instr frameID missing", n=buddy.iNum,
+      serial=instr.serial, frameID="n/a"
+
+  buddy.frameID = instr.frameID
+  return ok(move buddy)
 
 
 proc delPeer*(
@@ -488,13 +526,16 @@ proc newDaemonFrame*(
       ): Opt[ReplayDaemonRef] =
   ## Similar to `getOrNewPeerFrame()` for daemon.
   if run.daemon.isNil:
+    if instr.frameID.isNone():
+      warn info & ": daemon instr frameID missing", n=run.iNum,
+        serial=instr.serial, frameID="n/a"
     run.daemon = ReplayDaemonRef(
       run:     run,
       frameID: instr.frameID)
     return ok(run.daemon)
 
   warn info & ": daemon already registered", n=run.iNum, serial=instr.serial,
-    frameID=instr.frameID.idStr
+    frameID=instr.frameIdStr
   return err()
 
 
@@ -525,7 +566,10 @@ proc waitForSyncedEnv*(
     # The scheduler (see `sync_sched.nim`)  might have disconnected the peer
     # already as is captured in the instruction environment. This does not
     # apply to `zombie` settings which will be done by the application.
-    if instr.peerCtrl == Stopped and not desc.ctrl.stopped:
+    if instr.peerCtx.isNone():
+      warn info & ": missing peer ctx", n=desc.iNum, serial=instr.serial
+      return err((ENoException,"",info&": missing peer ctx"))
+    if instr.peerCtx.value.peerCtrl == Stopped and not desc.ctrl.stopped:
       desc.ctrl.stopped = true
 
   let
@@ -554,21 +598,23 @@ proc waitForSyncedEnv*(
 
 # ------------------
 
-proc processFinished*(
+proc processFinishedClearFrame*(
     desc: ReplayInstance;
-    instr: TraceSchedDaemonBegin|TraceSchedPeerBegin;
+    instr: TraceSchedDaemonBegin|TraceSchedPeerBegin|TraceSchedPool;
     info: static[string];
       ) =
   ## Register that the process has finished
   ##
   # Verify that sub-processes did not change the environment
-  doAssert desc.frameID == instr.frameID
+  if desc.frameID != instr.frameID:
+    warn info & ": frameIDs differ", n=desc.iNum, serial=instr.serial,
+      peer=desc.peerStr, frameID=desc.frameIdStr, expected=instr.frameIdStr
 
   # Mark the pocess `done`
-  desc.frameID = 0
+  desc.frameID = Opt.none(uint)
 
   trace info & ": terminating", n=desc.iNum,
-    serial=instr.serial, frameID=instr.frameID.idStr, peer=desc.peerStr
+    serial=instr.serial, frameID=instr.frameIdStr, peer=desc.peerStr
 
 
 template whenProcessFinished*(
@@ -590,22 +636,22 @@ template whenProcessFinished*(
       peerID {.inject,used.} = desc.peerIdStr
       serial {.inject,used.} = instr.serial
 
-    if desc.frameID != 0:
+    if desc.frameID.isSome():
       doAssert desc.frameID == instr.frameID
 
     trace info & ": wait for terminated", n=desc.iNum, serial,
-      frameID=instr.frameID.idStr, peer, peerID
+      frameID=instr.frameIdStr, peer, peerID
 
     bodyRc = desc.run.waitForConditionImpl(info):
       if tmoPending:
         debug info & ": wait for terminated", n, serial, peer, count
-      desc.frameID == 0
+      desc.frameID.isNone()
 
     if bodyRc.isErr:
       break body
 
     trace info & ": terminated OK", n=desc.iNum, serial,
-      frameID=instr.frameID.idStr, peer
+      frameID=instr.frameIdStr, peer
     desc.checkSyncerState(instr, ignLatestNum=true, info) # relaxed check
 
     # Synchronise against captured environment
@@ -619,7 +665,7 @@ template whenProcessFinished*(
       break body
 
     trace info & ": finished", n=desc.iNum, serial,
-      frameID=instr.frameID.idStr, peer, peerID
+      frameID=instr.frameIdStr, peer, peerID
     # End body
 
   bodyRc # result
@@ -642,7 +688,7 @@ template pushInstr*(
     type M = (typeof instr).toReplayMsgType
 
     # Verify that the stage is based on a proper environment
-    doAssert desc.frameID != 0 # this is not `instr.frameID`
+    doAssert desc.frameID.isSome() # this is not `instr.frameID`
 
     let
       peer {.inject,used.} = desc.peerStr
@@ -741,7 +787,11 @@ template withInstr*(
         # peer already which would be captured in the instruction environment.
         # This does not apply to `zombie` settings which will be handled by
         # the application `code`.
-        if instr.peerCtrl == Stopped and not desc.ctrl.stopped:
+        if instr.peerCtx.isNone():
+          warn info & ": missing peer ctx", n=desc.iNum, serial=instr.serial,
+            frameID=instr.frameIdStr, peer, peerID, dataType
+          desc.ctrl.stopped = true
+        elif instr.peerCtx.value.peerCtrl == Stopped and not desc.ctrl.stopped:
           desc.ctrl.stopped = true
     else:
       iError = rc.error
@@ -758,7 +808,7 @@ template withInstr*(
       desc.checkSyncerState(instr, ignLatestNum, info)
 
       debug info & ": got data", n=desc.iNum, serial=instr.serial,
-        frameID=instr.frameID.idStr, peer, peerID, dataType
+        frameID=instr.frameIdStr, peer, peerID, dataType
 
     desc.message = M(nil)
 

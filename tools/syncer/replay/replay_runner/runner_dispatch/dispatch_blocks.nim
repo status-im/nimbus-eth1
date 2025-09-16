@@ -60,18 +60,22 @@ proc toStr(e: BeaconError; anyTime = false): string =
 func getResponse(
     instr: TraceFetchBodies;
       ): Result[FetchBodiesData,BeaconError] =
-  if (instr.fieldAvail and 1) != 0:
-    ok(instr.fetched)
+  if instr.fetched.isSome():
+    ok(instr.fetched.value)
+  elif instr.error.isSome():
+    err(instr.error.value)
   else:
-    err(instr.error)
+    err((ENoException,"","Missing fetch bodies return code",Duration()))
 
 func getResponse(
     instr: TraceImportBlock;
       ): Result[Duration,BeaconError] =
-  if (instr.fieldAvail and 1) != 0:
-    ok(instr.elapsed)
+  if instr.elapsed.isSome():
+    ok(instr.elapsed.value)
+  elif instr.error.isSome():
+    err(instr.error.value)
   else:
-    err(instr.error)
+    err((ENoException,"","Missing block import return code",Duration()))
 
 func getBeaconError(e: ReplayWaitError): BeaconError =
   (e[0], e[1], e[2], Duration())
@@ -162,19 +166,20 @@ proc importBlockHandler*(
     rpl = ctx.replay
   if not rpl.runner.fakeImport:
     let rc = await rpl.backup.importBlock(buddy, ethBlock, effPeerID)
-    if rc.isErr or (data.fieldAvail and 2) != 0:
+    if rc.isErr or data.error.isSome():
       const info = info & ": result values differ"
       let serial = data.serial
-      if rc.isErr and (data.fieldAvail and 2) == 0:
+      if rc.isErr and data.error.isNone():
         warn info, n, serial, peer, peerID,
           got="err" & rc.error.toStr, expected="ok"
-      elif rc.isOk and (data.fieldAvail and 2) != 0: 
+      elif rc.isOk and data.error.isSome():
         warn info, n, serial, peer, peerID,
-          got="ok", expected="err" & data.error.toStr(true)
-      elif rc.error.excp !=  data.error.excp or
-           rc.error.msg != data.error.msg:
+          got="ok", expected="err" & data.error.value.toStr(true)
+      elif rc.error.excp !=  data.error.value.excp or
+           rc.error.msg != data.error.value.msg:
         warn info, n, serial, peer, peerID,
-          got="err" & rc.error.toStr, expected="err" & data.error.toStr(true)
+          got="err" & rc.error.toStr,
+          expected="err" & data.error.value.toStr(true)
 
   buddy.withInstr(TraceSyncBlock, info):
     if not instr.isAvailable():
@@ -197,7 +202,7 @@ proc sendBodies*(
     raiseAssert info & ": getPeer() failed" &
       ", n=" & $run.iNum &
       ", serial=" & $instr.serial &
-      ", peerID=" & instr.peerID.short
+      ", peerID=" & instr.peerCtx.value.peerID.short
   discard buddy.pushInstr(instr, info)
 
 proc sendBlock*(
@@ -206,13 +211,13 @@ proc sendBlock*(
       ) {.async: (raises: []).} =
   ## Stage block request/response data
   const info = instr.replayLabel()
-  if (instr.stateAvail and 2) != 0:
+  if instr.peerCtx.isSome():
     # So it was captured run from a sync peer
     let buddy = run.getPeer(instr, info).valueOr:
       raiseAssert info & ": getPeer() failed" &
         ", n=" & $run.iNum &
         ", serial=" & $instr.serial &
-        ", peerID=" & instr.peerID.short
+        ", peerID=" & instr.peerCtx.value.peerID.short
     discard buddy.pushInstr(instr, info)
 
   # Verify that the daemon is properly initialised

@@ -41,8 +41,8 @@ proc addX(
   else:
     q.add $base.serial
 
-  if 0 < base.frameID:
-    q.add base.frameID.idStr
+  if base.frameID.isSome():
+    q.add base.frameID.value.idStr
   else:
     q.add "*"
   q.add $base.nPeers
@@ -57,28 +57,33 @@ proc addX(
   else:
     q.add "*"
 
-  q.add (if (base.stateAvail and 1) != 0: $base.peerCtrl else: "*")
-  q.add (if (base.stateAvail and 2) != 0: "peerID=" & base.peerID.short()
-         else: "*")
+  if base.peerCtx.isSome():
+    q.add $base.peerCtx.value.peerCtrl
+    q.add "peerID=" & base.peerCtx.value.peerID.short()
+  else:
+    q.add "*"
+    q.add "*"
 
-  if 0 < base.hdrUnprChunks:
-    q.add "uHdr=" & $base.hdrUnprLen & "/" &
-                    $base.hdrUnprChunks & "/" &
-                    $base.hdrUnprLastLen & ":" &
-                    $base.hdrUnprLast.bnStr
+  if base.hdrUnpr.isSome():
+    q.add "uHdr=" & $base.hdrUnpr.value.hLen & "/" &
+                    $base.hdrUnpr.value.hChunks & "/" &
+                    $base.hdrUnpr.value.hLastLen & ":" &
+                    $base.hdrUnpr.value.hLast.bnStr
 
-  if 0 < base.blkUnprChunks:
-    q.add "uBlk=" & $base.blkUnprLen & "/" &
-                    $base.blkUnprChunks & "/" &
-                    $base.blkUnprLeast.bnStr & ":" &
-                    $base.blkUnprLeastLen
+  if base.blkUnpr.isSome():
+    q.add "uBlk=" & $base.blkUnpr.value.bLen & "/" &
+                    $base.blkUnpr.value.bChunks & "/" &
+                    $base.blkUnpr.value.bLeast.bnStr & ":" &
+                    $base.blkUnpr.value.bLeastLen
 
-  if (base.stateAvail and 12) != 0 and
-     (0 < base.nHdrErrors or 0 < base.nBlkErrors):
-    q.add "nErr=(" & $base.nHdrErrors & "," & $base.nBlkErrors & ")"
+  if base.peerCtx.isSome() and
+     (0 < base.peerCtx.value.nHdrErrors or
+      0 < base.peerCtx.value.nBlkErrors):
+    q.add "nErr=(" & $base.peerCtx.value.nHdrErrors &
+               "," & $base.peerCtx.value.nBlkErrors & ")"
 
-  if (base.stateAvail and 16) != 0:
-    q.add "slowPeer=" & base.slowPeer.short()
+  if base.slowPeer.isSome():
+    q.add "slowPeer=" & base.slowPeer.value.short()
 
 # ------------------------------------------------------------------------------
 # Private record handlers
@@ -186,17 +191,17 @@ func toStrSeq(n: int; w: TraceFetchHeaders): seq[string] =
     res.add "req=" & w.req.startBlock.number.bnStr & "[" & $rLen & "]" & rRev
   if 0 < w.req.skip:
     res.add "skip=" & $w.req.skip
-  if (w.fieldAvail and 1) != 0:
-    res.add "res=[" & $w.fetched.packet.headers.len & "]"
-    res.add "ela=" & w.fetched.elapsed.toStr
-  if (w.fieldAvail and 2) != 0:
-    if w.error.excp.ord == 0:
+  if w.fetched.isSome():
+    res.add "res=[" & $w.fetched.value.packet.headers.len & "]"
+    res.add "ela=" & w.fetched.value.elapsed.toStr
+  if w.error.isSome():
+    if w.error.value.excp.ord == 0:
       res.add "failed"
     else:
-      res.add "excp=" & ($w.error.excp).substr(1)
-    if w.error.msg.len != 0:
-       res.add "error=" & w.error.name & "(" & w.error.msg & ")"
-    res.add "ela=" & w.error.elapsed.toStr
+      res.add "excp=" & ($w.error.value.excp).substr(1)
+    if w.error.value.msg.len != 0:
+       res.add "error=" & w.error.value.name & "(" & w.error.value.msg & ")"
+    res.add "ela=" & w.error.value.elapsed.toStr
   res
 
 func toStrSeq(n: int; w: TraceSyncHeaders): seq[string] =
@@ -209,18 +214,18 @@ func toStrSeq(n: int; w: TraceFetchBodies): seq[string] =
   var res = newSeqOfCap[string](20)
   res.addX(w.replayLabel, n, w)
   res.add "req=" & w.ivReq.bnStr & "[" & $w.req.blockHashes.len & "]"
-  if (w.fieldAvail and 1) != 0:
-    res.add "res=[" & $w.fetched.packet.bodies.len & "]"
-    res.add "size=" & w.fetched.packet.bodies.getEncodedLength.uint64.toSI
-    res.add "ela=" & w.fetched.elapsed.toStr
-  if (w.fieldAvail and 2) != 0:
-    if w.error.excp.ord == 0:
+  if w.fetched.isSome():
+    res.add "res=[" & $w.fetched.value.packet.bodies.len & "]"
+    res.add "size=" & w.fetched.value.packet.bodies.getEncodedLength.uint64.toSI
+    res.add "ela=" & w.fetched.value.elapsed.toStr
+  if w.error.isSome():
+    if w.error.value.excp.ord == 0:
       res.add "failed"
     else:
-      res.add "excp=" & ($w.error.excp).substr(1)
-    if w.error.msg.len != 0:
-       res.add "error=" & w.error.name & "(" & w.error.msg & ")"
-    res.add "ela=" & w.error.elapsed.toStr
+      res.add "excp=" & ($w.error.value.excp).substr(1)
+    if w.error.value.msg.len != 0:
+       res.add "error=" & w.error.value.name & "(" & w.error.value.msg & ")"
+    res.add "ela=" & w.error.value.elapsed.toStr
   res
 
 func toStrSeq(n: int; w: TraceSyncBodies): seq[string] =
@@ -235,16 +240,16 @@ func toStrSeq(n: int; w: TraceImportBlock): seq[string] =
   res.add "block=" & w.ethBlock.bnStr
   res.add "size=" & w.ethBlock.getEncodedLength.uint64.toSI
   res.add "effPeerID=" & w.effPeerID.short
-  if (w.fieldAvail and 1) != 0:
-    res.add "ela=" & w.elapsed.toStr
-  if (w.fieldAvail and 2) != 0:
-    if w.error.excp.ord == 0:
+  if w.elapsed.isSome():
+    res.add "ela=" & w.elapsed.value.toStr
+  if w.error.isSome():
+    if w.error.value.excp.ord == 0:
       res.add "failed"
     else:
-      res.add "excp=" & ($w.error.excp).substr(1)
-    if w.error.msg.len != 0:
-       res.add "error=" & w.error.name & "(" & w.error.msg & ")"
-    res.add "ela=" & w.error.elapsed.toStr
+      res.add "excp=" & ($w.error.value.excp).substr(1)
+    if w.error.value.msg.len != 0:
+       res.add "error=" & w.error.value.name & "(" & w.error.value.msg & ")"
+    res.add "ela=" & w.error.value.elapsed.toStr
   res
 
 func toStrSeq(n: int; w: TraceSyncBlock): seq[string] =

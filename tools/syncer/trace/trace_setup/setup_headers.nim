@@ -41,11 +41,9 @@ proc fetchHeadersTrace*(
     tRec.init buddy
     tRec.req = req
     if data.isOk:
-      tRec.fieldAvail = 1
-      tRec.fetched = data.value
+      tRec.fetched = Opt.some(data.value)
     else:
-      tRec.fieldAvail = 2
-      tRec.error = data.error
+      tRec.error = Opt.some(data.error)
     buddy.traceWrite tRec
 
     trace "=HeadersFetch", peer=($buddy.peer), peerID=buddy.peerID.short,

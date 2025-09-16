@@ -12,7 +12,7 @@
 
 import
   std/[strformat, strutils],
-  pkg/[chronos, stew/interval_set],
+  pkg/[chronos, results, stew/interval_set],
   ../../../../execution_chain/sync/beacon/worker/helpers as worker_helpers,
   ../trace_desc
 
@@ -38,25 +38,26 @@ proc init*(tb: var TraceRecBase; ctx: BeaconCtxRef) =
     tb.latestNum =  ctx.chain.latestNumber
     tb.antecedent = ctx.hdrCache.antecedent.number
 
-    tb.hdrUnprChunks = ctx.hdr.unprocessed.chunks().uint
-    if 0 < tb.hdrUnprChunks:
-      tb.hdrUnprLen = ctx.hdr.unprocessed.total()
+    let hChunks = ctx.hdr.unprocessed.chunks().uint
+    if 0 < hChunks:
       let iv = ctx.hdr.unprocessed.le().expect "valid iv"
-      tb.hdrUnprLast = iv.maxPt
-      tb.hdrUnprLastLen = iv.len
+      tb.hdrUnpr = Opt.some(TraceHdrUnproc(
+        hChunks:  hChunks,
+        hLen:     ctx.hdr.unprocessed.total(),
+        hLast:    iv.maxPt,
+        hLastLen: iv.len))
 
-    tb.blkUnprChunks = ctx.blk.unprocessed.chunks().uint
-    if 0 < tb.blkUnprChunks:
-      tb.blkUnprLen = ctx.blk.unprocessed.total()
+    let bChunks = ctx.blk.unprocessed.chunks().uint
+    if 0 < bChunks:
       let iv = ctx.blk.unprocessed.ge().expect "valid iv"
-      tb.blkUnprLeast = iv.minPt
-      tb.blkUnprLeastLen = iv.len
+      tb.blkUnpr = Opt.some(TraceBlkUnproc(
+        bChunks:   bChunks,
+        bLen:      ctx.blk.unprocessed.total(),
+        bLeast:    iv.minPt,
+        bLeastLen: iv.len))
 
-    if ctx.pool.lastSlowPeer.isOk():
-      tb.stateAvail = 16
-      tb.slowPeer = ctx.pool.lastSlowPeer.value
-    else:
-      tb.stateAvail = 0
+    tb.slowPeer = ctx.pool.lastSlowPeer
+
 
 proc init*(tb: var TraceRecBase; buddy: BeaconBuddyRef) =
   ## Variant of `init()` for `buddy` rather than `ctx`
@@ -65,11 +66,11 @@ proc init*(tb: var TraceRecBase; buddy: BeaconBuddyRef) =
     trc = ctx.trace
   if not trc.isNil:
     tb.init ctx
-    tb.stateAvail += 15
-    tb.peerCtrl = buddy.ctrl.state
-    tb.peerID = buddy.peerID
-    tb.nHdrErrors = buddy.only.nRespErrors.hdr
-    tb.nBlkErrors = buddy.only.nRespErrors.blk
+    tb.peerCtx = Opt.some(TracePeerCtx(
+      peerCtrl:   buddy.ctrl.state,
+      peerID:     buddy.peerID,
+      nHdrErrors: buddy.only.nRespErrors.hdr,
+      nBlkErrors: buddy.only.nRespErrors.blk))
 
 # ------------------------------------------------------------------------------
 # Public helpers

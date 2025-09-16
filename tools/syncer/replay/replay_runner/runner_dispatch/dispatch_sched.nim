@@ -35,13 +35,13 @@ proc schedDaemonProcessImpl(
   ##
   let run = daemon.run
   trace info & ": begin", n=run.iNum, serial=instr.serial,
-    frameID=instr.frameID.idStr, syncState=instr.syncState
+    frameID=instr.frameIdStr, syncState=instr.syncState
 
   discard await run.worker.schedDaemon(run.ctx)
-  daemon.processFinished(instr, info)
+  daemon.processFinishedClearFrame(instr, info)
 
   trace info & ": end", n=run.iNum, serial=instr.serial,
-    frameID=instr.frameID.idStr, syncState=instr.syncState
+    frameID=instr.frameIdStr, syncState=instr.syncState
 
 
 proc schedPeerProcessImpl(
@@ -54,17 +54,17 @@ proc schedPeerProcessImpl(
   ##
   let run = buddy.run
   trace info & ": begin", n=run.iNum, serial=instr.serial,
-    frameID=instr.frameID.idStr, peer=($buddy.peer), peerID=buddy.peerID.short,
+    frameID=instr.frameIdStr, peer=($buddy.peer), peerID=buddy.peerID.short,
     syncState=instr.syncState
 
   # Activate peer
   buddy.run.nPeers.inc
 
   discard await run.worker.schedPeer(buddy)
-  buddy.processFinished(instr, info)
+  buddy.processFinishedClearFrame(instr, info)
 
   trace info & ": end", n=run.iNum, serial=instr.serial,
-    frameID=instr.frameID.idStr, peer=($buddy.peer), peerID=buddy.peerID.short,
+    frameID=instr.frameIdStr, peer=($buddy.peer), peerID=buddy.peerID.short,
     syncState=instr.syncState
 
 # ------------------------------------------------------------------------------
@@ -105,11 +105,11 @@ proc schedStartWorker*(
   const
     info = instr.replayLabel()
   let
-    buddy = run.newPeer(instr, info)
+    buddy = run.newPeer(instr, info).valueOr: return
     accept = run.worker.schedStart(buddy)
 
   trace info & ": begin", n=run.iNum, serial=instr.serial,
-    frameID=instr.frameID.idStr, peer=($buddy.peer), peerID=buddy.peerID.short
+    peer=($buddy.peer), peerID=buddy.peerID.short
 
   if accept != instr.accept:
     warn info & ": result argument differs", n=run.iNum, serial=instr.serial,
@@ -122,7 +122,7 @@ proc schedStartWorker*(
     buddy.delPeer(info) # Clean up
 
   trace info & ": end", n=run.iNum, serial=instr.serial,
-    frameID=instr.frameID.idStr, peer=($buddy.peer), peerID=buddy.peerID.short
+    peer=($buddy.peer), peerID=buddy.peerID.short
 
 
 proc schedStopWorker*(
@@ -132,7 +132,7 @@ proc schedStopWorker*(
   ## Runs `schedStop()` in the foreground.
   ##
   const info = instr.replayLabel()
-  let buddy = run.getOrNewPeerFrame(instr, info)
+  let buddy = run.getOrNewPeerFrame(instr, info).valueOr: return
   run.worker.schedStop(buddy)
 
   # As the `schedStop()` function environment was captured only after the
@@ -141,7 +141,10 @@ proc schedStopWorker*(
   # which has its desciptor sort of unintialised (relative to `instr`.)
   if not buddy.isNew:
     # Syncer state was captured when leaving the `schedStop()` handler.
-    if instr.peerCtrl == Stopped and not buddy.ctrl.stopped:
+    if instr.peerCtx.isNone():
+      warn info & ": peer ctx missing", n=run.iNum, serial=instr.serial
+      return
+    if instr.peerCtx.value.peerCtrl == Stopped and not buddy.ctrl.stopped:
       buddy.ctrl.stopped = true
     buddy.checkSyncerState(instr, info)
 
@@ -149,7 +152,7 @@ proc schedStopWorker*(
   buddy.delPeer(info)
 
   trace info & ": done", n=run.iNum, serial=instr.serial,
-    frameID=instr.frameID.idStr, peer=($buddy.peer), peerID=buddy.peerID.short
+    peer=($buddy.peer), peerID=buddy.peerID.short
 
 
 proc schedPoolWorker*(
@@ -159,7 +162,7 @@ proc schedPoolWorker*(
   ## Runs `schedPool()` in the foreground.
   ##
   const info = instr.replayLabel()
-  let buddy = run.getOrNewPeerFrame(instr, info)
+  let buddy = run.getOrNewPeerFrame(instr, info).valueOr: return
 
   if 0 < run.nPeers:
     warn info & ": no active peers allowed", n=run.iNum, serial=instr.serial,
@@ -173,12 +176,10 @@ proc schedPoolWorker*(
 
   # Syncer state was captured when leaving the `schedPool()` handler.
   buddy.checkSyncerState(instr, info)
-
-  # Reset frame data
-  buddy.frameID = 0
+  buddy.processFinishedClearFrame(instr, info)
 
   info info & ": done", n=run.iNum, serial=instr.serial,
-    frameID=instr.frameID.idStr, peer=($buddy.peer), peerID=buddy.peerID.short
+    peer=($buddy.peer), peerID=buddy.peerID.short
 
 
 proc schedPeerBegin*(
@@ -189,7 +190,7 @@ proc schedPeerBegin*(
   ##
   # Synchronise against captured environment and start process
   const info = instr.replayLabel()
-  let buddy = run.getOrNewPeerFrame(instr, info)
+  let buddy = run.getOrNewPeerFrame(instr, info).valueOr: return
   discard await buddy.waitForSyncedEnv(instr, info)
   asyncSpawn buddy.schedPeerProcessImpl(instr, info)
 
