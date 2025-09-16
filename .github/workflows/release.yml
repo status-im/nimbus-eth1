@@ -93,9 +93,7 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: ${{ matrix.os }}-${{ matrix.cpu }}-execution
-          path: |
-            ./dist/${{ steps.make_dist.outputs.nec_tar }}
-            ./dist/${{ steps.make_dist.outputs.nec_tar }}.sha512sum
+          path: ./dist/${{ steps.make_dist.outputs.nec_tar }}
           retention-days: 2
 
       - name: Upload execution client checksum artefact
