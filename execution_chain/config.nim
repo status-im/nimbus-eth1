@@ -44,6 +44,7 @@ const
   NimbusCopyright* = "Copyright (c) 2018-" &
     CompileDate.split('-')[0] &
     " Status Research & Development GmbH"
+
   # e.g.:
   # nimbus_execution_client/v0.1.0-abcdef/os-cpu/nim-a.b.c/emvc
   # Copyright (c) 2018-2025 Status Research & Development GmbH
