@@ -158,6 +158,7 @@ if canEnableDebuggingSymbols:
 --define:nimOldCaseObjects # https://github.com/status-im/nim-confutils/issues/9
 
 switch("warningAsError", "BareExcept:on")
+switch("warningAsError", "UnusedImport:on")
 switch("hintAsError", "ConvFromXtoItselfNotNeeded:on")
 switch("hintAsError", "DuplicateModuleImport:on")
 

@@ -7,11 +7,9 @@
 # This file may not be copied, modified, or distributed except according to
 # those terms.
 
-{.push raises: [].}
+{.push raises: [], gcsafe.}
 
 import
-  std/[cmdline, os],
-  unittest2,
   eth/common/headers_rlp,
   web3/eth_api_types,
   web3/engine_api_types,
@@ -107,6 +105,10 @@ proc processFile*(fileName: string): bool =
   return testPass
 
 when isMainModule:
+  import
+    std/[cmdline, os],
+    unittest2
+
   if paramCount() == 0:
     let testFile = getAppFilename().splitPath().tail
     echo "Usage: " & testFile & " vector.json"
