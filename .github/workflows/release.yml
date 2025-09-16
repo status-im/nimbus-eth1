@@ -98,13 +98,25 @@ jobs:
             ./dist/${{ steps.make_dist.outputs.nec_tar }}.sha512sum
           retention-days: 2
 
+      - name: Upload execution client checksum artefact
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ matrix.os }}-${{ matrix.cpu }}-execution-checksum
+          path: ./dist/${{ steps.make_dist.outputs.nec_tar }}.sha512sum
+          retention-days: 2
+
       - name: Upload verified proxy tarball artefact
         uses: actions/upload-artifact@v4
         with:
           name: ${{ matrix.os }}-${{ matrix.cpu }}-proxy
-          path: |
-            ./dist/${{ steps.make_dist.outputs.nvp_tar }}
-            ./dist/${{ steps.make_dist.outputs.nvp_tar }}.sha512sum
+          path: ./dist/${{ steps.make_dist.outputs.nvp_tar }}
+          retention-days: 2
+
+      - name: Upload verified proxy checksum artefact
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ matrix.os }}-${{ matrix.cpu }}-proxy-checksum
+          path: ./dist/${{ steps.make_dist.outputs.nvp_tar }}.sha512sum
           retention-days: 2
 
       - name: Login to Docker Hub
@@ -153,26 +165,26 @@ jobs:
           \`\`\`text
           EOF
           echo '# Linux AMD64' >> release_notes.md
-          cat linux-amd64-checksum/* >> release_notes.md
+          cat linux-amd64-execution-checksum/* >> release_notes.md
           echo '# Linux ARM64' >> release_notes.md
-          cat linux-arm64-checksum/* >> release_notes.md
+          cat linux-arm64-execution-checksum/* >> release_notes.md
           echo '# Windows AMD64' >> release_notes.md
-          cat windows-amd64-checksum/* >> release_notes.md
+          cat windows-amd64-execution-checksum/* >> release_notes.md
           echo '# macOS ARM64' >> release_notes.md
-          cat macos-arm64-checksum/* >> release_notes.md
+          cat macos-arm64-execution-checksum/* >> release_notes.md
           echo '```' >> release_notes.md
           echo '' >> release_notes.md
           echo '### Nimbus Verified Proxy' >> release_notes.md
           echo '' >> release_notes.md
           echo '```' >> release_notes.md
           echo '# Linux AMD64' >> release_notes.md
-          cat proxy-linux-amd64-checksum/* >> release_notes.md
+          cat linux-amd64-proxy-checksum/* >> release_notes.md
           echo '# Linux ARM64' >> release_notes.md
-          cat proxy-linux-arm64-checksum/* >> release_notes.md
+          cat linux-arm64-proxy-checksum/* >> release_notes.md
           echo '# Windows AMD64' >> release_notes.md
-          cat proxy-windows-amd64-checksum/* >> release_notes.md
+          cat windows-amd6proxy-4-checksum/* >> release_notes.md
           echo '# macOS ARM64' >> release_notes.md
-          cat proxy-macos-arm64-checksum/* >> release_notes.md
+          cat macos-arm64-proxy-checksum/* >> release_notes.md
           echo '```' >> release_notes.md
 
       - name: Create release
@@ -200,18 +212,14 @@ jobs:
         with:
           failOnError: false
           name: |
-            linux-amd64-archive
-            linux-amd64-checksum
-            linux-arm64-archive
-            linux-arm64-checksum
-            windows-amd64-archive
-            windows-amd64-checksum
-            macos-arm64-archive
-            macos-arm64-checksum
-            proxy-linux-amd64-checksum
-            proxy-linux-arm64-checksum
-            proxy-windows-amd64-checksum
-            proxy-macos-arm64-checksum
+            linux-amd64-execution
+            linux-amd64-proxy
+            linux-arm64-execution
+            linux-arm64-proxy
+            windows-amd64-execution
+            windows-amd64-proxy
+            macos-arm64-execution
+            macos-arm64-proxy
 
       #- name: Login to Docker Hub
       #  uses: docker/login-action@v3
