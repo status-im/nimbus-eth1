@@ -14,10 +14,11 @@ import
   stew/endians2,
   nimcrypto/sha2,
   results,
-  ../../../../execution_chain/core/eip4844,
-  ../../../../execution_chain/core/lazy_kzg as kzg
+  ../execution_chain/core/eip4844,
+  ../execution_chain/core/lazy_kzg as kzg
 
 export base, hashes
+
 type
   BlobID* = uint64
   BlobIDs* = seq[BlobID]
@@ -31,72 +32,6 @@ type
     blobs*: seq[kzg.KzgBlob]
     commitments*: seq[kzg.KzgCommitment]
     proofs*: seq[kzg.KzgProof]
-
-func getBlobList*(startId: BlobID, count: int): BlobIDs =
-  result = newSeq[BlobID](count)
-  for i in 0..<count:
-    result[i] = startId + BlobID(i)
-
-func getBlobList*(startId: BlobID, count: int, addition: BlobID): BlobIDs =
-  result = newSeq[BlobID](count+1)
-  for i in 0..<count:
-    result[i] = startId + BlobID(i)
-  result[^1] = addition
-
-func getBlobListByIndex*(startIndex: BlobID, endIndex: BlobID): BlobIDs =
-  var count = uint64(0)
-  if endIndex > startIndex:
-    count = uint64(endIndex - startIndex + 1)
-  else:
-    count = uint64(startIndex - endIndex + 1)
-
-  result = newSeq[BlobID](count)
-  if endIndex > startIndex:
-    for i in 0..<count:
-      result[i] = startIndex + BlobID(i)
-  else:
-    for i in 0..<count:
-      result[i] = endIndex - BlobID(i)
-
-func verifyBlob*(blobId: BlobID, blob: kzg.KzgBlob): bool =
-  if blobId == 0:
-    # Blob zero is empty blob
-    var emptyFieldElem: kzg.KzgBlob
-    return emptyFieldElem == blob
-
-  # Check the blob against the deterministic data
-  let blobIdBytes = toBytesBE blobId
-
-  # First 32 bytes are the hash of the blob ID
-  var currentHashed = sha256.digest(blobIdBytes)
-
-  for chunkIdx in 0..<FIELD_ELEMENTS_PER_BLOB:
-    var expectedFieldElem = currentHashed.data
-
-    # Check that no 32 bytes chunks are greater than the BLS modulus
-    for i in 0..<32:
-      # blobByteIdx = 32 - i - 1
-      let blobByteIdx = i
-      if expectedFieldElem[blobByteIdx] < BLS_MODULUS[i]:
-        # done with this field element
-        break
-      elif expectedFieldElem[blobByteIdx] >= BLS_MODULUS[i]:
-        if BLS_MODULUS[i] > 0:
-          # This chunk is greater than the modulus, and we can reduce it in this byte position
-          expectedFieldElem[blobByteIdx] = BLS_MODULUS[i] - 1
-          # done with this field element
-          break
-        else:
-          # This chunk is greater than the modulus, but we can't reduce it in this byte position, so we will try in the next byte position
-          expectedFieldElem[blobByteIdx] = BLS_MODULUS[i]
-
-    if not equalMem(blob.bytes[chunkIdx*32].unsafeaddr, expectedFieldElem[0].addr, 32):
-      return false
-
-    # Hash the current hash
-    currentHashed = sha256.digest(currentHashed.data)
-
-  return true
 
 proc fillBlob(blobId: BlobID): KzgBlob =
   if blobId == 0:
