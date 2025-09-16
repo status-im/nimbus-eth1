@@ -74,8 +74,8 @@ jobs:
           OS="${{ matrix.os }}"
           CPU="${{ matrix.cpu }}"
 
-          NEC_TAR="nimbus_execution_client-${OS}-${CPU}-${TAG}.tar.gz"
-          NVP_TAR="nimbus_verified_proxy-${OS}-${CPU}-${TAG}.tar.gz"
+          NEC_TAR="nimbus_execution_client-${OS}-${CPU}-${TAG}-$(git rev-parse --short=8 HEAD).tar.gz"
+          NVP_TAR="nimbus_verified_proxy-${OS}-${CPU}-${TAG}-$(git rev-parse --short=8 HEAD).tar.gz"
 
           # Pack only the relevant binaries (and their checksums) from build/
           # Add additional files (LICENSE, README, configs) if desired with extra -C args.
