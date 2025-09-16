@@ -1,0 +1,3 @@
+# Ensure Github action's `hashFiles` produce consistent hash
+# of *.sh files used for cache key across OSes.
+*.sh text eol=lf

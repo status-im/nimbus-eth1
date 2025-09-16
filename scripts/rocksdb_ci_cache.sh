@@ -33,6 +33,13 @@ if [[ -n "$ROCKSDB_CI_CACHE" && -d "$ROCKSDB_CI_CACHE" ]]; then
   cp -a "$ROCKSDB_CI_CACHE"/* "$BUILD_DEST"/ || true # let this one fail with an empty cache dir
 fi
 
+if [ -f "${BUILD_DEST}/version.txt" ]; then
+  VERSION=$(cat "${BUILD_DEST}/version.txt")
+  echo "ROCKSDB CACHED VERSION: ${VERSION}"
+else
+  echo "ROCKSDB VERSION NOT FOUND"
+fi
+
 # This scripts has it's own logic to detect rebuilt or not
 if [[ "$ON_WINDOWS" == "0" ]]; then
   MAKE="${MAKE}" ${REPO_DIR}/vendor/nim-rocksdb/scripts/build_static_deps.sh
