@@ -43,8 +43,7 @@ proc containsOnlyHexDigits(hex: string): bool =
       return false
   true
 
-proc getNetKeys*(ctx: EthContext, netKey: string): Result[KeyPair, string]
-    {.gcsafe, raises: [OSError]} =
+proc getNetKeys*(ctx: EthContext, netKey: string): Result[KeyPair, string] =
   if netKey.len == 0 or netKey == "random":
     let privateKey = ctx.randomPrivateKey()
     return ok(privateKey.toKeyPair())
@@ -75,6 +74,8 @@ proc getNetKeys*(ctx: EthContext, netKey: string): Result[KeyPair, string]
       try:
         createDir(netKey.splitFile.dir)
         netKey.writeFile(privateKey.toRaw.to0xHex)
+      except OSError as e:
+        return err("could not create network key file: " & e.msg)
       except IOError as e:
         return err("could not write network key file: " & e.msg)
 
