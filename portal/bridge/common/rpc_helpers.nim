@@ -11,8 +11,7 @@ import
   std/[uri, strutils], chronicles, json_rpc/rpcclient, web3/[eth_api, eth_api_types]
 
 from stew/objects import checkedEnumAssign
-from ../../../hive_integration/engine_client import
-  toBlockHeader, toTransactions
+from ../../../hive_integration/engine_client import toBlockHeader, toTransactions
 
 export rpcclient
 
