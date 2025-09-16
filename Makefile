@@ -370,6 +370,9 @@ eest_blockchain: | build deps
 eest_blockchain_test: | build deps eest eest_blockchain
 	$(ENV_SCRIPT) nim c -r $(NIM_PARAMS) -d:chronicles_enabled:off -o:build/$@ "tests/eest/$@.nim"
 
+eest_stateless_execution_test: | build deps eest eest_blockchain
+	$(ENV_SCRIPT) nim c -r $(NIM_PARAMS) -d:chronicles_enabled:off -o:build/$@ "tests/eest/$@.nim"
+
 eest_full_test: | build deps eest_blockchain eest_engine
 	$(ENV_SCRIPT) nim c -r $(NIM_PARAMS) -d:chronicles_enabled:off -o:build/$@ "tests/eest/eest_blockchain_test.nim"
 	$(ENV_SCRIPT) nim c -r $(NIM_PARAMS) -d:chronicles_enabled:off -o:build/$@ "tests/eest/eest_engine_test.nim"

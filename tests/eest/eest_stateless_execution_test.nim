@@ -17,7 +17,7 @@ const
   baseFolder = "tests/fixtures"
   eestType = "blockchain_tests"
   eestReleases = [
-    "eest_stable"
+    "eest_develop"
   ]
 
 const skipFiles = [
