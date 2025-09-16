@@ -256,8 +256,8 @@ proc procBlkEpilogue(
         debug "LogIndex already populated, skipping",
           existingEntries = vmState.logIndex.next_index
       
-      # Choose validation method based on activation block
-      if shouldUseLogIndex(header.number):
+      # Choose validation method based on activation timestamp
+      if shouldUseLogIndex(header.timestamp.uint64):
         # Validate using LogIndexSummary for EIP-7745 blocks
         let summary = createLogIndexSummary(vmState.logIndex)
         

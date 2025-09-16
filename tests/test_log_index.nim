@@ -242,30 +242,30 @@ suite "Filter Coordinate Tracking":
 suite "EIP-7745 Activation Testing":
   
   test "Traditional bloom validation for pre-activation blocks":
-    # Test blocks below activation threshold use traditional bloom
-    let preActivationBlock = EIP7745_ACTIVATION_BLOCK - 1'u64
-    check not shouldUseLogIndex(preActivationBlock)
-    echo "Block ", preActivationBlock, " uses traditional bloom: ", not shouldUseLogIndex(preActivationBlock)
+    # Test timestamps below activation threshold use traditional bloom
+    let preActivationTimestamp = EIP7745_ACTIVATION_TIMESTAMP - 1'u64
+    check not shouldUseLogIndex(preActivationTimestamp)
+    echo "Timestamp ", preActivationTimestamp, " uses traditional bloom: ", not shouldUseLogIndex(preActivationTimestamp)
     
-    # Test some low block numbers
-    for blockNum in [0'u64, 1'u64, 100'u64, 1000'u64]:
-      if blockNum < EIP7745_ACTIVATION_BLOCK:
-        check not shouldUseLogIndex(blockNum)
-        echo "Block ", blockNum, " uses traditional bloom (correct)"
+    # Test some low timestamps (early blockchain timestamps)
+    for timestamp in [1609459200'u64, 1640995200'u64, 1672531200'u64, 1704067200'u64]:  # 2021, 2022, 2023, 2024
+      if timestamp < EIP7745_ACTIVATION_TIMESTAMP:
+        check not shouldUseLogIndex(timestamp)
+        echo "Timestamp ", timestamp, " uses traditional bloom (correct)"
   
-  test "LogIndex validation for post-activation blocks":
-    # Test blocks at and above activation threshold use LogIndex
-    check shouldUseLogIndex(EIP7745_ACTIVATION_BLOCK)
-    check shouldUseLogIndex(EIP7745_ACTIVATION_BLOCK + 1)
-    check shouldUseLogIndex(EIP7745_ACTIVATION_BLOCK + 1000)
-    echo "Activation block ", EIP7745_ACTIVATION_BLOCK, " and above use LogIndex"
+  test "LogIndex validation for post-activation timestamps":
+    # Test timestamps at and above activation threshold use LogIndex
+    check shouldUseLogIndex(EIP7745_ACTIVATION_TIMESTAMP)
+    check shouldUseLogIndex(EIP7745_ACTIVATION_TIMESTAMP + 1)
+    check shouldUseLogIndex(EIP7745_ACTIVATION_TIMESTAMP + 86400)  # +1 day
+    echo "Activation timestamp ", EIP7745_ACTIVATION_TIMESTAMP, " and above use LogIndex"
   
-  test "Test LogIndex functionality with high block numbers":
+  test "Test LogIndex functionality with high timestamps":
     # Create LogIndex with blocks that would use LogIndex validation
     var logIndex = LogIndex()
-    let activationBlock = EIP7745_ACTIVATION_BLOCK
+    let activationTimestamp = EIP7745_ACTIVATION_TIMESTAMP
     
-    # Add a log at activation block
+    # Add a log at activation timestamp
     var receipt = StoredReceipt()
     let topicBytes = Bytes32.fromHex("0x1234567890abcdef1234567890abcdef1234567890abcdef1234567890abcdef")
     var log = Log(
@@ -274,12 +274,12 @@ suite "EIP-7745 Activation Testing":
     )
     receipt.logs.add(log)
     
-    let header = BlockHeader(number: activationBlock.uint64)
+    let header = BlockHeader(number: 1000000'u64, timestamp: activationTimestamp.EthTime)
     logIndex.add_block_logs(header, @[receipt])
     
     # Test that LogIndex was populated
     check logIndex.next_index >= 1
-    echo "LogIndex populated for activation block ", activationBlock, ", entries: ", logIndex.next_index
+    echo "LogIndex populated for activation timestamp ", activationTimestamp, ", entries: ", logIndex.next_index
     
     # Test LogIndexSummary creation
     let summary = createLogIndexSummary(logIndex)
@@ -287,32 +287,31 @@ suite "EIP-7745 Activation Testing":
     
     let encoded = encodeLogIndexSummary(summary)
     check encoded.len == 256
-    echo "LogIndexSummary created and encoded successfully for activation block"
+    echo "LogIndexSummary created and encoded successfully for activation timestamp"
 
 suite "Mixed Block Type Processing":
   
-  test "Process both pre and post activation blocks":
+  test "Process both pre and post activation timestamps":
     var logIndex = LogIndex()
     
     # Process a pre-activation block (should use traditional bloom)
-    let preBlock = min(1000'u64, EIP7745_ACTIVATION_BLOCK - 1)
-    if preBlock < EIP7745_ACTIVATION_BLOCK:
-      var receipt1 = StoredReceipt()
-      receipt1.logs.add(Log(address: Address.fromHex("0x1111111111111111111111111111111111111111")))
-      
-      let header1 = BlockHeader(number: preBlock)
-      logIndex.add_block_logs(header1, @[receipt1])
-      check not shouldUseLogIndex(preBlock)
-      echo "Pre-activation block ", preBlock, " processed (traditional bloom)"
+    let preTimestamp = EIP7745_ACTIVATION_TIMESTAMP - 86400  # 1 day before activation
+    var receipt1 = StoredReceipt()
+    receipt1.logs.add(Log(address: Address.fromHex("0x1111111111111111111111111111111111111111")))
+    
+    let header1 = BlockHeader(number: 999999'u64, timestamp: preTimestamp.EthTime)
+    logIndex.add_block_logs(header1, @[receipt1])
+    check not shouldUseLogIndex(preTimestamp)
+    echo "Pre-activation timestamp ", preTimestamp, " processed (traditional bloom)"
     
     # Process a post-activation block (should use LogIndex)
-    let postBlock = EIP7745_ACTIVATION_BLOCK + 1
+    let postTimestamp = EIP7745_ACTIVATION_TIMESTAMP + 86400  # 1 day after activation
     var receipt2 = StoredReceipt()
     receipt2.logs.add(Log(address: Address.fromHex("0x2222222222222222222222222222222222222222")))
     
-    let header2 = BlockHeader(number: postBlock.uint64)
+    let header2 = BlockHeader(number: 1000001'u64, timestamp: postTimestamp.EthTime)
     logIndex.add_block_logs(header2, @[receipt2])
-    check shouldUseLogIndex(postBlock.uint64)
-    echo "Post-activation block ", postBlock, " processed (LogIndex)"
+    check shouldUseLogIndex(postTimestamp)
+    echo "Post-activation timestamp ", postTimestamp, " processed (LogIndex)"
     
-    echo "Mixed block processing completed, total entries: ", logIndex.next_index
+    echo "Mixed timestamp processing completed, total entries: ", logIndex.next_index

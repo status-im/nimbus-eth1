@@ -31,7 +31,7 @@ const
   VALUES_PER_MAP* = 1 shl 16         # 2^16 = 65,536     
   MAX_BASE_ROW_LENGTH* = 1 shl 3     # 2^3 = 8
   LAYER_COMMON_RATIO* = 2
-  EIP7745_ACTIVATION_BLOCK* = 999999999  # Very high block number for testing
+  EIP7745_ACTIVATION_TIMESTAMP* = 1800000000'u64  # January 1, 2027 - timestamp-based activation
 
 # ---------------------------------------------------------------------------
 # Types
@@ -127,8 +127,9 @@ type
 # ---------------------------------------------------------------------------
 # Helper Functions
 # ---------------------------------------------------------------------------
-proc shouldUseLogIndex*(blockNumber: uint64): bool =
-  result = blockNumber >= EIP7745_ACTIVATION_BLOCK
+proc shouldUseLogIndex*(timestamp: uint64): bool =
+  ## Check if EIP-7745 LogIndex should be used based on timestamp
+  result = timestamp >= EIP7745_ACTIVATION_TIMESTAMP
 
 proc zeroHash32(): Hash32 =
   ## Create a zero-filled Hash32
