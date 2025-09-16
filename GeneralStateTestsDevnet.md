@@ -165,10 +165,11 @@ OK: 1/1 Fail: 0/1 Skip: 0/1
 OK: 15/15 Fail: 0/15 Skip: 0/15
 ## call
 ```diff
++ call_large_args_offset_size_zero.json                           OK
 + call_large_offset_mstore.json                                   OK
 + call_memory_expands_on_early_revert.json                        OK
 ```
-OK: 2/2 Fail: 0/2 Skip: 0/2
+OK: 3/3 Fail: 0/3 Skip: 0/3
 ## calldatacopy
 ```diff
 + calldatacopy.json                                               OK
@@ -318,13 +319,15 @@ OK: 1/1 Fail: 0/1 Skip: 0/1
 ## p256verify
 ```diff
 + call_types.json                                                 OK
++ contract_creation_transaction.json                              OK
++ contract_initcode.json                                          OK
 + gas.json                                                        OK
 + invalid.json                                                    OK
 + modular_comparison.json                                         OK
 + precompile_as_tx_entry_point.json                               OK
 + valid.json                                                      OK
 ```
-OK: 6/6 Fail: 0/6 Skip: 0/6
+OK: 8/8 Fail: 0/8 Skip: 0/8
 ## p256verify_before_fork
 ```diff
 + precompile_before_fork.json                                     OK
@@ -554,4 +557,4 @@ OK: 2/2 Fail: 0/2 Skip: 0/2
 OK: 1/1 Fail: 0/1 Skip: 0/1
 
 ---TOTAL---
-OK: 264/264 Fail: 0/264 Skip: 0/264
+OK: 267/267 Fail: 0/267 Skip: 0/267

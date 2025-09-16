@@ -10,7 +10,7 @@
 {.push raises: [].}
 
 import
-  std/[tables, sequtils],
+  std/[tables, sets, sequtils],
   unittest2,
   stint,
   results,
@@ -64,6 +64,17 @@ suite "Aristo proof verification":
           leafValue.isSome()
           leafValue.get() == value
 
+      block:
+        var visitedNodes: HashSet[Hash32]
+        let leafValue = verifyProof(toNodesTable(proof), root, key, visitedNodes).expect("valid proof")
+        check:
+          leafValue.isSome()
+          leafValue.get() == value
+          visitedNodes.len() == proof.len()
+        for n in proof:
+          check visitedNodes.contains(keccak256(n))
+
+
   test "Validate proof for existing value using nodes table":
     for i in 1..numValues:
       let
@@ -92,11 +103,20 @@ suite "Aristo proof verification":
         indexBytes = getBytes(i)
         key = keccak256(indexBytes)
         value = indexBytes
+      
+      block:
+        let leafValue = verifyProof(nodes, root, key).expect("valid proof")
+        check:
+          leafValue.isSome()
+          leafValue.get() == value
 
-      let leafValue = verifyProof(nodes, root, key).expect("valid proof")
-      check:
-        leafValue.isSome()
-        leafValue.get() == value
+      block:
+        var visitedNodes: HashSet[Hash32]
+        let leafValue = verifyProof(nodes, root, key, visitedNodes).expect("valid proof")
+        check:
+          leafValue.isSome()
+          leafValue.get() == value
+          visitedNodes.len() > 0
 
   test "Validate proof for non-existing value":
     for i in 1..numValues:

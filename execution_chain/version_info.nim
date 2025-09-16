@@ -9,13 +9,22 @@
 {.push raises: [].}
 
 import
-  std/[strformat], stew/byteutils, ./compile_info, beacon_chain/buildinfo, ./version
+  std/[os, strutils, strformat],
+  stew/byteutils,
+  beacon_chain/buildinfo,
+  ./compile_info,
+  ./version
 
 export version
 
 const
   NimbusName* = "nimbus-eth1"
   ## project name string
+
+  #GitRevisionOverride {.strdefine.} = ""
+  sourcePath = currentSourcePath.rsplit({DirSep, AltSep}, 1)[0]
+
+  GitRevision* = generateGitRevision(sourcePath)
 
   # Please keep it 4 bytes long, used in `engine_ClientVersionV1`
   # https://github.com/ethereum/execution-apis/blob/v1.0.0-beta.4/src/engine/identification.md#clientversionv1

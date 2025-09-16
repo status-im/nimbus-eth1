@@ -1,5 +1,5 @@
 # Nimbus
-# Copyright (c) 2018-2024 Status Research & Development GmbH
+# Copyright (c) 2018-2025 Status Research & Development GmbH
 # Licensed under either of
 #  * Apache License, version 2.0, ([LICENSE-APACHE](LICENSE-APACHE) or
 #    http://www.apache.org/licenses/LICENSE-2.0)
@@ -54,8 +54,7 @@ proc calcEip1599BaseFee*(com: CommonRef; parent: Header): UInt256 =
 
 # consensus/misc/eip1559.go(32): func VerifyEip1559Header(config [..]
 proc verifyEip1559Header(com: CommonRef;
-                         parent, header: Header): Result[void, string]
-                        {.raises: [].} =
+                         parent, header: Header): Result[void, string] =
   ## Verify that the gas limit remains within allowed bounds
   let limit = if com.isLondonOrLater(parent.number):
                 parent.gasLimit

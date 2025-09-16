@@ -13,20 +13,22 @@ import
   stew/byteutils,
   ../common/common_types,
   ../network/wire/portal_protocol,
-  ../network/history/history_content,
+  ../network/history/history_network,
   ../network/history/history_validation,
+  ../network/history/history_endpoints,
   ./rpc_types
 
 export tables
 
 # Portal History Network JSON-RPC API
 # Note:
-# - This API is not part of the Portal Network specification yet.
-# - Lower level API calls are not implemented as they are typically only used for (Hive)
-# testing and it is not clear yet of this will be needed in the future.
-# - Added the header parameter so that validation can happen on json-rpc server side,
-# but it could also be moved to client side.
-# - Could also make a less generic API
+# - Not all lower level API calls are implemented as they are typically only used for (Hive)
+# testing and it is not clear yet if this will be needed in the future.
+# - Added two non specified methods:
+#   - portal_historyGetBlockBody
+#   - portal_historyGetReceipts
+# These methods to be used for EL client integration.
+# They require the Header parameter in order for validation on the JSON-RPC server side (= Portal node).
 
 ContentInfo.useDefaultSerializationIn JrpcConv
 TraceContentLookupResult.useDefaultSerializationIn JrpcConv
@@ -34,37 +36,24 @@ TraceObject.useDefaultSerializationIn JrpcConv
 NodeMetadata.useDefaultSerializationIn JrpcConv
 TraceResponse.useDefaultSerializationIn JrpcConv
 
-# TODO: It would be cleaner to use the existing getContent/getBlockBody/getReceipts calls for
+# TODO: It would be cleaner to use the existing getContent call for
 # less code duplication + automatic retries, but the specific error messages + extra content
 # info would need to be added to the existing calls.
-proc installPortalHistoryApiHandlers*(rpcServer: RpcServer, p: PortalProtocol) =
-  rpcServer.rpc("portal_historyGetContent") do(
-    contentKeyBytes: string, headerBytes: string
-  ) -> ContentInfo:
+proc installPortalHistoryApiHandlers*(rpcServer: RpcServer, n: HistoryNetwork) =
+  rpcServer.rpc("portal_historyGetContent") do(contentKeyBytes: string) -> ContentInfo:
     let
       contentKeyByteList = ContentKeyByteList.init(hexToSeqByte(contentKeyBytes))
       contentKey = decode(contentKeyByteList).valueOr:
         raise invalidKeyErr()
       contentId = toContentId(contentKey)
-      header = decodeRlp(hexToSeqByte(headerBytes), Header).valueOr:
-        raise invalidRequest((code: -39005, msg: "Failed to decode header: " & error))
 
-    p.getLocalContent(contentKeyByteList, contentId).isErrOr:
+    n.portalProtocol.getLocalContent(contentKeyByteList, contentId).isErrOr:
       return ContentInfo(content: value.to0xHex(), utpTransfer: false)
 
-    let contentLookupResult = (await p.contentLookup(contentKeyByteList, contentId)).valueOr:
+    let contentLookupResult = (
+      await n.portalProtocol.contentLookup(contentKeyByteList, contentId)
+    ).valueOr:
       raise contentNotFoundErr()
-
-    validateContent(contentKey, contentLookupResult.content, header).isOkOr:
-      p.banNode(
-        contentLookupResult.receivedFrom.id,
-        NodeBanDurationContentLookupFailedValidation,
-      )
-      raise invalidValueErr()
-
-    p.storeContent(
-      contentKeyByteList, contentId, contentLookupResult.content, cacheContent = true
-    )
 
     ContentInfo(
       content: contentLookupResult.content.to0xHex(),
@@ -72,43 +61,32 @@ proc installPortalHistoryApiHandlers*(rpcServer: RpcServer, p: PortalProtocol) =
     )
 
   rpcServer.rpc("portal_historyTraceGetContent") do(
-    contentKeyBytes: string, headerBytes: string
+    contentKeyBytes: string
   ) -> TraceContentLookupResult:
     let
       contentKeyByteList = ContentKeyByteList.init(hexToSeqByte(contentKeyBytes))
       contentKey = decode(contentKeyByteList).valueOr:
         raise invalidKeyErr()
       contentId = toContentId(contentKey)
-      header = decodeRlp(hexToSeqByte(headerBytes), Header).valueOr:
-        raise invalidRequest((code: -39005, msg: "Failed to decode header: " & error))
 
-    p.getLocalContent(contentKeyByteList, contentId).isErrOr:
+    n.portalProtocol.getLocalContent(contentKeyByteList, contentId).isErrOr:
       return TraceContentLookupResult(
         content: Opt.some(value),
         utpTransfer: false,
         trace: TraceObject(
-          origin: p.localNode.id,
+          origin: n.localNode.id,
           targetId: contentId,
-          receivedFrom: Opt.some(p.localNode.id),
+          receivedFrom: Opt.some(n.localNode.id),
         ),
       )
 
     # TODO: Might want to restructure the lookup result here. Potentially doing
     # the json conversion in this module.
     let
-      res = await p.traceContentLookup(contentKeyByteList, contentId)
+      res = await n.portalProtocol.traceContentLookup(contentKeyByteList, contentId)
       valueBytes = res.content.valueOr:
         let data = Opt.some(JrpcConv.encode(res.trace).JsonString)
         raise contentNotFoundErrWithTrace(data)
-
-    validateContent(contentKey, valueBytes, header).isOkOr:
-      if res.trace.receivedFrom.isSome():
-        p.banNode(
-          res.trace.receivedFrom.get(), NodeBanDurationContentLookupFailedValidation
-        )
-      raise invalidValueErr()
-
-    p.storeContent(contentKeyByteList, contentId, valueBytes, cacheContent = true)
 
     res
 
@@ -122,10 +100,8 @@ proc installPortalHistoryApiHandlers*(rpcServer: RpcServer, p: PortalProtocol) =
       offerValueBytes = hexToSeqByte(contentValueBytes)
 
       # Note: Not validating content as this would have a high impact on bridge
-      # gossip performance.
-      # As no validation is done here, the content is not stored locally.
-      # TODO: Add default on validation by optional validation parameter.
-      gossipMetadata = await p.neighborhoodGossip(
+      # gossip performance. It is also not possible without having the Header
+      gossipMetadata = await n.portalProtocol.neighborhoodGossip(
         Opt.none(NodeId),
         ContentKeysList(@[contentKeyByteList]),
         @[offerValueBytes],
@@ -144,3 +120,21 @@ proc installPortalHistoryApiHandlers*(rpcServer: RpcServer, p: PortalProtocol) =
         transferInProgressCount: gossipMetadata.transferInProgressCount,
       ),
     )
+
+  rpcServer.rpc("portal_historyGetBlockBody") do(headerBytes: string) -> string:
+    let header = decodeRlp(hexToSeqByte(headerBytes), Header).valueOr:
+      raise invalidRequest((code: -39005, msg: "Failed to decode header: " & error))
+
+    let blockBody = (await n.getBlockBody(header)).valueOr:
+      raise contentNotFoundErr()
+
+    rlp.encode(blockBody).to0xHex()
+
+  rpcServer.rpc("portal_historyGetReceipts") do(headerBytes: string) -> string:
+    let header = decodeRlp(hexToSeqByte(headerBytes), Header).valueOr:
+      raise invalidRequest((code: -39005, msg: "Failed to decode header: " & error))
+
+    let receipts = (await n.getReceipts(header)).valueOr:
+      raise contentNotFoundErr()
+
+    rlp.encode(receipts).to0xHex()

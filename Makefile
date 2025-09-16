@@ -122,7 +122,11 @@ VERIF_PROXY_OUT_PATH ?= build/libverifproxy/
 	dist-windows-amd64 \
 	dist-macos-arm64 \
 	dist \
-	eest
+	eest \
+	t8n \
+	t8n_test \
+	evmstate \
+	evmstate_test
 
 ifeq ($(NIM_PARAMS),)
 # "variables.mk" was not included, so we update the submodules.
@@ -210,6 +214,9 @@ $(TOOLS): | build deps rocksdb
 nimbus_execution_client: | build deps rocksdb
 	echo -e $(BUILD_MSG) "build/nimbus_execution_client" && \
 		$(ENV_SCRIPT) nim c $(NIM_PARAMS) -d:chronicles_log_level=TRACE -o:build/nimbus_execution_client "execution_chain/nimbus_execution_client.nim"
+
+check_revision: nimbus_execution_client
+	scripts/check_revision.sh
 
 nimbus: nimbus_execution_client
 	echo "The nimbus target is deprecated and will soon change meaning, use 'nimbus_execution_client' instead"
@@ -354,13 +361,13 @@ libverifproxy: | build deps
 eest_engine: | build deps
 	$(ENV_SCRIPT) nim c $(NIM_PARAMS) -d:chronicles_enabled:off -o:build/$@ "tests/eest/$@.nim"
 
-eest_engine_test: | build deps eest_engine
+eest_engine_test: | build deps eest eest_engine
 	$(ENV_SCRIPT) nim c -r $(NIM_PARAMS) -d:chronicles_enabled:off -o:build/$@ "tests/eest/$@.nim"
 
 eest_blockchain: | build deps
 	$(ENV_SCRIPT) nim c $(NIM_PARAMS) -d:chronicles_enabled:off -o:build/$@ "tests/eest/$@.nim"
 
-eest_blockchain_test: | build deps eest_blockchain
+eest_blockchain_test: | build deps eest eest_blockchain
 	$(ENV_SCRIPT) nim c -r $(NIM_PARAMS) -d:chronicles_enabled:off -o:build/$@ "tests/eest/$@.nim"
 
 eest_full_test: | build deps eest_blockchain eest_engine

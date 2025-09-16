@@ -11,7 +11,7 @@
 {.push raises: [].}
 
 import
-  std/[tables, algorithm],
+  std/[tables, algorithm, strformat],
   chronicles,
   results,
   chronos,
@@ -311,7 +311,22 @@ proc updateBase(c: ForkedChainRef, base: BlockRef): uint =
     # No update, return
     return
 
-  c.com.db.persist(base.txFrame, Opt.some(base.stateRoot))
+  # State root sanity check is performed to verify, before writing to disk,
+  # that optimistically checked blocks indeed end up being stored with a
+  # consistent state root.
+  # TODO State root checking cost is amortized by performing it only at the
+  #      end of a batch of blocks - is there something better the client can
+  #      do than shutting down? Either it's a bug or consensus finalized an
+  #      invalid block, both of which require attention.
+  let frameRoot = base.txFrame.getStateRoot().expect("State root to be readable")
+  if frameRoot != base.stateRoot:
+    raiseAssert &"""State root sanity check failed, bug?
+Expected: {base.stateRoot}, got: {frameRoot}
+Either the consensus client gave invalid information about finalized blocks or
+something else needs attention! Shutting down to preserve the database - restart
+with --debug-eager-state-root."""
+
+  c.com.db.persist(base.txFrame)
 
   # Update baseTxFrame when we about to yield to the event loop
   # and prevent other modules accessing expired baseTxFrame.
@@ -437,8 +452,13 @@ proc validateBlock(c: ForkedChainRef,
       c.latestFinalizedBlockNumber)
 
   let
+    # As a memory optimization we move the HashKeys (kMap) stored in the
+    # parent txFrame to the new txFrame unless the block number is one
+    # greater than a block which is expected to be persisted based on the
+    # persistBatchSize
+    moveParentHashKeys = c.persistBatchSize > 1 and (blk.header.number mod c.persistBatchSize) != 1
     parentFrame = parent.txFrame
-    txFrame = parentFrame.txFrameBegin
+    txFrame = parentFrame.txFrameBegin(moveParentHashKeys)
 
   # TODO shortLog-equivalent for eth types
   debug "Validating block",
@@ -895,16 +915,15 @@ proc blockByHash*(c: ForkedChainRef, blockHash: Hash32): Result[Block, string] =
   c.hashToBlock.withValue(blockHash, loc):
     return ok(loc[].blk)
   var header = ?c.baseTxFrame.getBlockHeader(blockHash)
-  var blockBody = c.baseTxFrame.getBlockBody(header)
-  # Serves portal data if block not found in db
-  if blockBody.isErr or (blockBody.get.transactions.len == 0 and header.transactionsRoot != zeroHash32):
+  var blockBody = c.baseTxFrame.getBlockBody(header).valueOr:
+    # Serve portal data if block not found in db
     if c.isPortalActive:
       var blockBodyPortal = ?c.portal.getBlockBodyByHeader(header)
       return ok(EthBlock.init(move(header), move(blockBodyPortal)))
     else:
-      return err(blockBody.error)
+      return err(error)
 
-  ok(EthBlock.init(move(header), move(blockBody.get())))
+  ok(EthBlock.init(move(header), move(blockBody)))
 
 proc payloadBodyV1ByHash*(c: ForkedChainRef, blockHash: Hash32): Result[ExecutionPayloadBodyV1, string] =
   c.hashToBlock.withValue(blockHash, loc):
@@ -913,8 +932,8 @@ proc payloadBodyV1ByHash*(c: ForkedChainRef, blockHash: Hash32): Result[Executio
   var header = ?c.baseTxFrame.getBlockHeader(blockHash)
   var blk = c.baseTxFrame.getExecutionPayloadBodyV1(header)
 
-  # Serves portal data if block not found in db
-  if blk.isErr or (blk.get.transactions.len == 0 and header.transactionsRoot != zeroHash32):
+  if blk.isErr:
+    # Serve portal data if block not found in db
     if c.isPortalActive:
       var blockBodyPortal = ?c.portal.getBlockBodyByHeader(header)
       # Same as above
@@ -930,9 +949,8 @@ proc payloadBodyV1ByNumber*(c: ForkedChainRef, number: BlockNumber): Result[Exec
     var header = ?c.baseTxFrame.getBlockHeader(number)
     let blk = c.baseTxFrame.getExecutionPayloadBodyV1(header)
 
-    # Txs not there in db - Happens during era1/era import, when we don't store txs and receipts
-    if blk.isErr or (blk.get.transactions.len == 0 and header.transactionsRoot != emptyRoot):
-      # Serves portal data if block not found in database
+    if blk.isErr:
+      # Serve portal data if block not found in db
       if c.isPortalActive:
         var blockBodyPortal = ?c.portal.getBlockBodyByHeader(header)
         # same as above
@@ -952,17 +970,15 @@ proc blockByNumber*(c: ForkedChainRef, number: BlockNumber): Result[Block, strin
 
   if number <= c.base.number:
     var header = ?c.baseTxFrame.getBlockHeader(number)
-    var blockBody = c.baseTxFrame.getBlockBody(header)
-    # Txs not there in db - Happens during era1/era import, when we don't store txs and receipts
-    if blockBody.isErr or (blockBody.get.transactions.len == 0 and header.transactionsRoot != emptyRoot):
-      # Serves portal data if block not found in database
+    var blockBody = c.baseTxFrame.getBlockBody(header).valueOr:
+      # Serve portal data if block not found in db
       if c.isPortalActive:
         var blockBodyPortal = ?c.portal.getBlockBodyByHeader(header)
         return ok(EthBlock.init(move(header), move(blockBodyPortal)))
       else:
-        return err(blockBody.error)
-    else:
-      return ok(EthBlock.init(move(header), move(blockBody.get())))
+        return err(error)
+
+    return ok(EthBlock.init(move(header), move(blockBody)))
 
   loopIt(c.latest):
     if number >= it.number:

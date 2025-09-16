@@ -11,7 +11,7 @@
 # syntax=docker/dockerfile:1
 
 # The build is reproducible only if this base image stays the same.
-FROM statusim/nimbus-eth1:dist_base_eth1_v2_macos_arm64@sha256:1277b1967b5ef3b0001f9c1bfea551025662b9b70e64b1d45eda79551cc5a34f AS osx-cross
+FROM statusim/nimbus-eth1:dist_base_eth1_v2_macos_arm64@sha256:986267752d5c4def09a66f30a3e84549a9557bf8996cc1d2acf3b2e6e0710666 AS osx-cross
 
 FROM ubuntu:24.04
 

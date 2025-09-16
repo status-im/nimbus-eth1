@@ -18,8 +18,6 @@ const
   eestType = "blockchain_tests"
   eestReleases = [
     "eest_develop",
-    "eest_static",
-    "eest_stable",
     "eest_devnet"
   ]
 

@@ -8,7 +8,7 @@
 # at your option. This file may not be copied, modified, or distributed except
 # according to those terms.
 
-FROM debian:testing-slim AS build
+FROM debian:trixie-slim AS build
 
 SHELL ["/bin/bash", "-c"]
 
@@ -26,7 +26,7 @@ RUN cd /root/nimbus-eth1 \
 # --------------------------------- #
 # Starting new image to reduce size #
 # --------------------------------- #
-FROM debian:testing-slim AS deploy
+FROM debian:trixie-slim AS deploy
 
 SHELL ["/bin/bash", "-c"]
 RUN apt-get clean && apt update \
