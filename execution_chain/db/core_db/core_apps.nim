@@ -402,6 +402,11 @@ proc getTransactions*(
     var res: seq[Transaction]
     for encodedTx in db.getBlockTransactionData(txRoot):
       res.add(rlp.decode(encodedTx, Transaction))
+
+    # Txs not there in db - Happens during era1/era import, when we don't store txs and receipts
+    if (res.len == 0 and txRoot != emptyRoot):
+      return err("No transactions found in db for txRoot " & $txRoot)
+
     return ok(move(res))
 
 proc getBlockBody*(
@@ -450,8 +455,10 @@ proc getUncleHashes*(
       ): Result[seq[Hash32], string] =
   var res: seq[Hash32]
   for blockHash in blockHashes:
-    let body = ?db.getBlockBody(blockHash)
-    res &= body.uncles.mapIt(it.computeRlpHash)
+    let header = ?db.getBlockHeader(blockHash)
+    let uncles = ?db.getUncles(header.ommersHash)
+
+    res &= uncles.mapIt(it.computeRlpHash)
   ok(res)
 
 proc getUncleHashes*(

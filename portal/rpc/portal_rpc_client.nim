@@ -50,16 +50,6 @@ func toPortalRpcError(e: ref CatchableError): PortalRpcError =
   else:
     raiseAssert(e.msg)
 
-proc portal_historyGetContent(
-    client: PortalRpcClient, contentKey: string, headerBytes: string
-): Future[Result[string, PortalRpcError]] {.async: (raises: []).} =
-  try:
-    let contentInfo =
-      await RpcClient(client).portal_historyGetContent(contentKey, headerBytes)
-    ok(contentInfo.content)
-  except CatchableError as e:
-    err(e.toPortalRpcError())
-
 template toBytes(content: string): seq[byte] =
   try:
     hexToSeqByte(content)
@@ -67,37 +57,39 @@ template toBytes(content: string): seq[byte] =
     raiseAssert(e.msg)
 
 proc historyGetBlockBody*(
-    client: PortalRpcClient, blockNumber: uint64, header: Header
+    client: PortalRpcClient, header: Header
 ): Future[Result[BlockBody, PortalRpcError]] {.async: (raises: []).} =
-  ## Fetches the block body for the given block number from the Portal History
+  ## Fetches the block body for the given block header from the Portal History
   ## Network. The data is first looked up in the node's local database before
   ## trying to fetch it from the network. The block header needs to be passed
   ## in order to run the content validation.
-
   let
-    contentKey = blockBodyContentKey(blockNumber).encode().asSeq().to0xHex()
     headerBytes = rlp.encode(header).to0xHex()
-    content = ?await client.portal_historyGetContent(contentKey, headerBytes)
-
-  let blockBody = decodeRlp(content.toBytes(), BlockBody).valueOr:
-    return err(InvalidContentValue)
+    content =
+      try:
+        await RpcClient(client).portal_historyGetBlockBody(headerBytes)
+      except CatchableError as e:
+        return err(e.toPortalRpcError())
+    blockBody = decodeRlp(content.toBytes(), BlockBody).valueOr:
+      return err(InvalidContentValue)
 
   ok(blockBody)
 
 proc historyGetReceipts*(
-    client: PortalRpcClient, blockNumber: uint64, header: Header
+    client: PortalRpcClient, header: Header
 ): Future[Result[StoredReceipts, PortalRpcError]] {.async: (raises: []).} =
-  ## Fetches the receipts for the given block number from the Portal History
+  ## Fetches the receipts for the given block header from the Portal History
   ## Network. The data is first looked up in the node's local database before
   ## trying to fetch it from the network. The block header needs to be passed
   ## in order to run the content validation.
-
   let
-    contentKey = receiptsContentKey(blockNumber).encode().asSeq().to0xHex()
     headerBytes = rlp.encode(header).to0xHex()
-    content = ?await client.portal_historyGetContent(contentKey, headerBytes)
-
-  let receipts = decodeRlp(content.toBytes(), StoredReceipts).valueOr:
-    return err(InvalidContentValue)
+    content =
+      try:
+        await RpcClient(client).portal_historyGetReceipts(headerBytes)
+      except CatchableError as e:
+        return err(e.toPortalRpcError())
+    receipts = decodeRlp(content.toBytes(), StoredReceipts).valueOr:
+      return err(InvalidContentValue)
 
   ok(receipts)

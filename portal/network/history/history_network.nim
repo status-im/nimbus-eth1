@@ -105,7 +105,7 @@ func localNode*(n: HistoryNetwork): Node =
 
 proc getContent*(
     n: HistoryNetwork, contentKey: ContentKey, V: type ContentValueType, header: Header
-): Future[Opt[V]] {.async: (raises: [CancelledError]).} =
+): Future[Result[V, string]] {.async: (raises: [CancelledError]).} =
   ## Get the decoded content for the given content key.
   ##
   ## When the content is found locally, no validation is performed.
@@ -118,8 +118,7 @@ proc getContent*(
     contentKeyBytes
 
   let contentId = contentKeyBytes.toContentId().valueOr:
-    warn "Received invalid content key", contentKeyBytes
-    return Opt.none(V)
+    return err("Invalid content key")
 
   # Check first locally
   n.portalProtocol.getLocalContent(contentKeyBytes, contentId).isErrOr:
@@ -127,16 +126,15 @@ proc getContent*(
       raiseAssert("Unable to decode history local content value")
 
     debug "Fetched local content value"
-    return Opt.some(contentValue)
+    return ok(contentValue)
 
   for i in 0 ..< (1 + n.contentRequestRetries):
     let
       lookupRes = (await n.portalProtocol.contentLookup(contentKeyBytes, contentId)).valueOr:
-        warn "Failed fetching content from the network"
-        return Opt.none(V)
+        return err("Failed fetching content from the network")
 
       contentValue = decodeRlp(lookupRes.content, V).valueOr:
-        warn "Unable to decode content value from content lookup"
+        warn "Unable to decode content value from content lookup", error = error
         continue
 
     validateContent(contentValue, header).isOkOr:
@@ -155,10 +153,10 @@ proc getContent*(
       lookupRes.nodesInterestedInContent, contentKeyBytes, lookupRes.content
     )
 
-    return Opt.some(contentValue)
+    return ok(contentValue)
 
   # Content was requested `1 + requestRetries` times and all failed on validation
-  Opt.none(V)
+  err("Failed to fetch content after multiple attempts")
 
 proc validateContent(
     n: HistoryNetwork, content: seq[byte], contentKeyBytes: ContentKeyByteList

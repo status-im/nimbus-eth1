@@ -89,9 +89,7 @@ proc setupTest(rng: ref HmacDrbgContext): Future[TestCase] {.async.} =
 
   let rpcHttpServer = RpcHttpServer.new()
   rpcHttpServer.addHttpServer(ta, maxRequestBodySize = 16 * 1024 * 1024)
-  rpcHttpServer.installPortalHistoryApiHandlers(
-    historyNode1.historyNetwork.portalProtocol
-  )
+  rpcHttpServer.installPortalHistoryApiHandlers(historyNode1.historyNetwork)
   rpcHttpServer.start()
 
   await client.connect(localSrvAddress, rpcHttpServer.localAddress[0].port, false)
@@ -121,7 +119,7 @@ procSuite "Portal RPC Client":
 
     # Test content not found
     block:
-      let blockBodyRes = await tc.client.historyGetBlockBody(blockNumber, blockHeader)
+      let blockBodyRes = await tc.client.historyGetBlockBody(blockHeader)
       check:
         blockBodyRes.isErr()
         blockBodyRes.error() == ContentNotFound
@@ -130,16 +128,16 @@ procSuite "Portal RPC Client":
     block:
       tc.historyNode2.store(blockNumber, blockBody)
 
-      let blockBodyRes = await tc.client.historyGetBlockBody(blockNumber, blockHeader)
+      let blockBodyRes = await tc.client.historyGetBlockBody(blockHeader)
       check:
         blockBodyRes.isErr()
-        blockBodyRes.error() == ContentValidationFailed
+        blockBodyRes.error() == ContentNotFound
 
     # When local node has the content the validation is skipped
     block:
       tc.historyNode1.store(blockNumber, blockBody)
 
-      let blockBodyRes = await tc.client.historyGetBlockBody(blockNumber, blockHeader)
+      let blockBodyRes = await tc.client.historyGetBlockBody(blockHeader)
       check:
         blockBodyRes.isOk()
 
@@ -154,7 +152,7 @@ procSuite "Portal RPC Client":
 
     # Test content not found
     block:
-      let receiptsRes = await tc.client.historyGetReceipts(blockNumber, blockHeader)
+      let receiptsRes = await tc.client.historyGetReceipts(blockHeader)
       check:
         receiptsRes.isErr()
         receiptsRes.error() == ContentNotFound
@@ -163,16 +161,16 @@ procSuite "Portal RPC Client":
     block:
       tc.historyNode2.store(blockNumber, receipts)
 
-      let receiptsRes = await tc.client.historyGetReceipts(blockNumber, blockHeader)
+      let receiptsRes = await tc.client.historyGetReceipts(blockHeader)
       check:
         receiptsRes.isErr()
-        receiptsRes.error() == ContentValidationFailed
+        receiptsRes.error() == ContentNotFound
 
     # When local node has the content the validation is skipped
     block:
       tc.historyNode1.store(blockNumber, receipts)
 
-      let receiptsRes = await tc.client.historyGetReceipts(blockNumber, blockHeader)
+      let receiptsRes = await tc.client.historyGetReceipts(blockHeader)
       check:
         receiptsRes.isOk()
 
