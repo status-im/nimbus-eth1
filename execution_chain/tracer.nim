@@ -26,10 +26,9 @@ import
   ./transaction,
   ./utils/utils
 
-type
-  CaptCtxRef = ref object
-    db: CoreDbRef               # not `nil`
-    root: common.Hash32
+type CaptCtxRef = ref object
+  db: CoreDbRef               # not `nil`
+  root: common.Hash32
 
 const
   senderName = "sender"
