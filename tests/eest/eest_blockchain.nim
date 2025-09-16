@@ -73,7 +73,7 @@ proc runTest(env: TestEnv, unit: BlockchainUnitEnv): Future[Result[void, string]
 
   ok()
 
-proc processFile*(fileName: string): bool =
+proc processFile*(fileName: string, statelessEnabled = false): bool =
   let
     fixture = parseFixture(fileName, BlockchainFixture)
 
@@ -81,7 +81,7 @@ proc processFile*(fileName: string): bool =
   for unit in fixture.units:
     let header = unit.unit.genesisBlockHeader.to(Header)
     doAssert(unit.unit.genesisBlockHeader.hash == header.computeRlpHash)
-    let env = prepareEnv(unit.unit, header)
+    let env = prepareEnv(unit.unit, header, rpcEnabled = false, statelessEnabled)
     (waitFor env.runTest(unit.unit)).isOkOr:
       echo "\nTestName: ", unit.name, " RunTest error: ", error, "\n"
       testPass = false
@@ -100,4 +100,3 @@ when isMainModule:
     quit(QuitFailure)
 
   check processFile(paramStr(1))
-
