@@ -45,23 +45,3 @@ E.g. run latest + backfill with audit mode:
 WEB3_URL="http://127.0.0.1:8548" # Replace with your provider.
 ./build/nimbus_portal_bridge history --latest:true --backfill:true --audit:true --era1-dir:/somedir/era1/ --web3-url:${WEB3_URL}
 ```
-
-## Seeding directly from the Nimbus Portal client
-
-This method currently only supports seeding block content from before the merge.
-It uses `era1` files as source for the content.
-
-1. Run the Nimbus Portal client and enable `portal_debug` JSON-RPC API:
-```bash
-./build/nimbus_portal_client --rpc --rpc-api:portal,portal_debug
-```
-
-2. Trigger the seeding of the content with the `portal_debug_historyGossipHeaders` and `portal_debug_historyGossipBlockContent` JSON-RPC methods.
-The first method will gossip in the block headers, the second method will gossip the block bodies and receipts. It is important to first trigger the gossip of the headers because these are required for the validation of the bodies and the receipts.
-
-```bash
-curl -s -X POST -H 'Content-Type: application/json' -d '{"jsonrpc":"2.0","id":"1",
-"method":"portal_debug_historyGossipHeaders","params":["/somedir/era1/"]}' http://localhost:8545 | jq
-
-curl -s -X POST -H 'Content-Type: application/json' -d '{"jsonrpc":"2.0","id":"1","method":"portal_debug_historyGossipBlockContent","params":["/somedir/era1/"]}' http://localhost:8545 | jq
-```
