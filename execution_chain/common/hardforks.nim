@@ -186,6 +186,7 @@ type
     bpo4Time*           : Opt[EthTime]
     bpo5Time*           : Opt[EthTime]
     amsterdamTime*      : Opt[EthTime]
+    eip7745Time*        : Opt[EthTime]
 
     terminalTotalDifficulty*: Opt[UInt256]
     depositContractAddress*: Opt[Address]

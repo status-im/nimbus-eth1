@@ -251,7 +251,7 @@ proc vmExecCommit(pst: var TxPacker, xp: TxPoolRef): Result[void, string] =
   vmState.logIndex.add_block_logs(tempHeader, vmState.receipts)
 
   # Choose between LogIndex and traditional bloom based on activation timestamp
-  if shouldUseLogIndex(xp.timestamp.uint64):
+  if vmState.com.isEip7745OrLater(xp.timestamp):
     # Use LogIndexSummary for EIP-7745 blocks
     let summary = createLogIndexSummary(vmState.logIndex)
     let encoded = encodeLogIndexSummary(summary)
