@@ -182,7 +182,7 @@ jobs:
           echo '# Linux ARM64' >> release_notes.md
           cat linux-arm64-proxy-checksum/* >> release_notes.md
           echo '# Windows AMD64' >> release_notes.md
-          cat windows-amd6proxy-4-checksum/* >> release_notes.md
+          cat windows-amd6-proxy-4-checksum/* >> release_notes.md
           echo '# macOS ARM64' >> release_notes.md
           cat macos-arm64-proxy-checksum/* >> release_notes.md
           echo '```' >> release_notes.md
