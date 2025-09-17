@@ -240,8 +240,8 @@ proc getRecType(s: string; info: static[string]): TraceRecType =
 
 proc init(T: type; s: string; info: static[string]): T =
   (info & ".init()").onException(DontQuit):
-    var rec = Json.decode(s, JTraceRecord[typeof result.data])
-    return T(recType: rec.kind, data: rec.bag)
+    var rec = Json.decode(s, JTraceRecord[typeof result.bag])
+    return T(recType: rec.kind, bag: rec.bag)
   T(nil)
 
 # ------------------------------------------------------------------------------

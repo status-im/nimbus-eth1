@@ -42,49 +42,49 @@ proc dispatch*(
     warn "dispatch(): Oops, unexpected void record", n=run.instrNumber
 
   of VersionInfo:
-    run.versionInfoWorker(pyl.ReplayVersionInfo.data)
+    run.versionInfoWorker(pyl.ReplayVersionInfo)
     
   of SyncActvFailed:
-    run.syncActvFailedWorker(pyl.ReplaySyncActvFailed.data)
+    run.syncActvFailedWorker(pyl.ReplaySyncActvFailed)
   of SyncActivated:
-    run.syncActivateWorker(pyl.ReplaySyncActivated.data)
+    run.syncActivateWorker(pyl.ReplaySyncActivated)
   of SyncHibernated:
-    run.syncSuspendWorker(pyl.ReplaySyncHibernated.data)
+    run.syncSuspendWorker(pyl.ReplaySyncHibernated)
 
   # Simple scheduler single run (no begin/end) functions
   of SchedStart:
-    run.schedStartWorker(pyl.ReplaySchedStart.data)
+    run.schedStartWorker(pyl.ReplaySchedStart)
   of SchedStop:
-    run.schedStopWorker(pyl.ReplaySchedStop.data)
+    run.schedStopWorker(pyl.ReplaySchedStop)
   of SchedPool:
-    run.schedPoolWorker(pyl.ReplaySchedPool.data)
+    run.schedPoolWorker(pyl.ReplaySchedPool)
 
   # Workers, complex run in background
   of SchedDaemonBegin:
-    await run.schedDaemonBegin(pyl.ReplaySchedDaemonBegin.data)
+    await run.schedDaemonBegin(pyl.ReplaySchedDaemonBegin)
   of SchedDaemonEnd:
-    await run.schedDaemonEnd(pyl.ReplaySchedDaemonEnd.data)
+    await run.schedDaemonEnd(pyl.ReplaySchedDaemonEnd)
   of SchedPeerBegin:
-    await run.schedPeerBegin(pyl.ReplaySchedPeerBegin.data)
+    await run.schedPeerBegin(pyl.ReplaySchedPeerBegin)
   of SchedPeerEnd:
-    await run.schedPeerEnd(pyl.ReplaySchedPeerEnd.data)
+    await run.schedPeerEnd(pyl.ReplaySchedPeerEnd)
 
   # Leaf handlers providing input data to background tasks `runDaemon()`
   # and/or `runPeer()`.
   of FetchHeaders:
-    await run.sendHeaders(pyl.ReplayFetchHeaders.data)
+    await run.sendHeaders(pyl.ReplayFetchHeaders)
   of SyncHeaders:
-    await run.sendHeaders(pyl.ReplaySyncHeaders.data)
+    await run.sendHeaders(pyl.ReplaySyncHeaders)
 
   of FetchBodies:
-    await run.sendBodies(pyl.ReplayFetchBodies.data)
+    await run.sendBodies(pyl.ReplayFetchBodies)
   of SyncBodies:
-    await run.sendBodies(pyl.ReplaySyncBodies.data)
+    await run.sendBodies(pyl.ReplaySyncBodies)
 
   of ImportBlock:
-    await run.sendBlock(pyl.ReplayImportBlock.data)
+    await run.sendBlock(pyl.ReplayImportBlock)
   of SyncBlock:
-    await run.sendBlock(pyl.ReplaySyncBlock.data)
+    await run.sendBlock(pyl.ReplaySyncBlock)
 
   trace "-dispatch()", n=run.instrNumber, recType=pyl.recType,
     nBuddies=run.peers.len, nDaemons=(if run.daemon.isNil: 0 else: 1)

@@ -94,167 +94,173 @@ func toStrOops(n: int): seq[string] =
 
 # -----------
 
-func toStrSeq(n: int; w: TraceVersionInfo): seq[string] =
+func toStrSeq(n: int; w: ReplayVersionInfo): seq[string] =
   var res = newSeqOfCap[string](15)
-  res.addX(w.replayLabel, n, w)
-  let moan = if w.version < TraceVersionID: "(<" & $TraceVersionID & ")"
-             elif TraceVersionID < w.version: "(>" & $TraceVersionID & ")"
+  res.addX(w.replayLabel, n, w.bag)
+  let moan = if w.bag.version < TraceVersionID: "(<" & $TraceVersionID & ")"
+             elif TraceVersionID < w.bag.version: "(>" & $TraceVersionID & ")"
              else: ""
-  res.add "version=" & $w.version & moan
-  res.add "network=" & $w.networkId
-  res.add "base=" & w.baseNum.bnStr
-  res.add "latest=" & w.latestNum.bnStr
+  res.add "version=" & $w.bag.version & moan
+  res.add "network=" & $w.bag.networkId
+  res.add "base=" & w.bag.baseNum.bnStr
+  res.add "latest=" & w.bag.latestNum.bnStr
   res
 
 # -----------
 
-func toStrSeq(n: int; w: TraceSyncActvFailed): seq[string] =
+func toStrSeq(n: int; w: ReplaySyncActvFailed): seq[string] =
   var res = newSeqOfCap[string](15)
-  res.addX(w.replayLabel, n, w)
-  res.add "base=" & w.baseNum.bnStr
-  res.add "latest=" & w.latestNum.bnStr
+  res.addX(w.replayLabel, n, w.bag)
+  res.add "base=" & w.bag.baseNum.bnStr
+  res.add "latest=" & w.bag.latestNum.bnStr
   res
 
-func toStrSeq(n: int; w: TraceSyncActivated): seq[string] =
+func toStrSeq(n: int; w: ReplaySyncActivated): seq[string] =
   var res = newSeqOfCap[string](20)
-  res.addX(w.replayLabel, n, w)
-  res.add "head=" & w.head.bnStr
-  res.add "finHash=" & w.finHash.short
-  res.add "base=" & w.baseNum.bnStr
-  res.add "latest=" & w.latestNum.bnStr
+  res.addX(w.replayLabel, n, w.bag)
+  res.add "head=" & w.bag.head.bnStr
+  res.add "finHash=" & w.bag.finHash.short
+  res.add "base=" & w.bag.baseNum.bnStr
+  res.add "latest=" & w.bag.latestNum.bnStr
   res
 
-func toStrSeq(n: int; w: TraceSyncHibernated): seq[string] =
+func toStrSeq(n: int; w: ReplaySyncHibernated): seq[string] =
   var res = newSeqOfCap[string](15)
-  res.addX(w.replayLabel, n, w)
-  res.add "base=" & w.baseNum.bnStr
-  res.add "latest=" & w.latestNum.bnStr
+  res.addX(w.replayLabel, n, w.bag)
+  res.add "base=" & w.bag.baseNum.bnStr
+  res.add "latest=" & w.bag.latestNum.bnStr
   res
 
 # -----------
 
-func toStrSeq(n: int; w: TraceSchedDaemonBegin): seq[string] =
+func toStrSeq(n: int; w: ReplaySchedDaemonBegin): seq[string] =
   var res = newSeqOfCap[string](15)
-  res.addX(w.replayLabel, n, w)
+  res.addX(w.replayLabel, n, w.bag)
   res
 
-func toStrSeq(n: int; w: TraceSchedDaemonEnd): seq[string] =
+func toStrSeq(n: int; w: ReplaySchedDaemonEnd): seq[string] =
   var res = newSeqOfCap[string](15)
-  res.addX(w.replayLabel, n, w)
+  res.addX(w.replayLabel, n, w.bag)
   res
 
-func toStrSeq(n: int; w: TraceSchedStart): seq[string] =
+func toStrSeq(n: int; w: ReplaySchedStart): seq[string] =
   var res = newSeqOfCap[string](20)
-  res.addX(w.replayLabel, n, w)
-  res.add "peer=" & $w.peerIP & ":" & $w.peerPort
-  if not w.accept:
+  res.addX(w.replayLabel, n, w.bag)
+  res.add "peer=" & $w.bag.peerIP & ":" & $w.bag.peerPort
+  if not w.bag.accept:
     res.add "rejected"
   res
 
-func toStrSeq(n: int; w: TraceSchedStop): seq[string] =
+func toStrSeq(n: int; w: ReplaySchedStop): seq[string] =
   var res = newSeqOfCap[string](20)
-  res.addX(w.replayLabel, n, w)
-  res.add "peer=" & $w.peerIP & ":" & $w.peerPort
+  res.addX(w.replayLabel, n, w.bag)
+  res.add "peer=" & $w.bag.peerIP & ":" & $w.bag.peerPort
   res
 
-func toStrSeq(n: int; w: TraceSchedPool): seq[string] =
+func toStrSeq(n: int; w: ReplaySchedPool): seq[string] =
   var res = newSeqOfCap[string](20)
-  res.addX(w.replayLabel, n, w)
-  res.add "peer=" & $w.peerIP & ":" & $w.peerPort
-  res.add "last=" & $w.last
-  res.add "laps=" & $w.laps
-  res.add "stop=" & $w.stop
+  res.addX(w.replayLabel, n, w.bag)
+  res.add "peer=" & $w.bag.peerIP & ":" & $w.bag.peerPort
+  res.add "last=" & $w.bag.last
+  res.add "laps=" & $w.bag.laps
+  res.add "stop=" & $w.bag.stop
   res
 
-func toStrSeq(n: int; w: TraceSchedPeerBegin): seq[string] =
+func toStrSeq(n: int; w: ReplaySchedPeerBegin): seq[string] =
   var res = newSeqOfCap[string](20)
-  res.addX(w.replayLabel, n, w)
-  res.add "peer=" & $w.peerIP & ":" & $w.peerPort
+  res.addX(w.replayLabel, n, w.bag)
+  res.add "peer=" & $w.bag.peerIP & ":" & $w.bag.peerPort
   res
 
-func toStrSeq(n: int; w: TraceSchedPeerEnd): seq[string] =
+func toStrSeq(n: int; w: ReplaySchedPeerEnd): seq[string] =
   var res = newSeqOfCap[string](15)
-  res.addX(w.replayLabel, n, w)
+  res.addX(w.replayLabel, n, w.bag)
   res
 
 # -----------
 
-func toStrSeq(n: int; w: TraceFetchHeaders): seq[string] =
+func toStrSeq(n: int; w: ReplayFetchHeaders): seq[string] =
   var res = newSeqOfCap[string](20)
-  res.addX(w.replayLabel, n, w)
+  res.addX(w.replayLabel, n, w.bag)
   let
-    rLen = w.req.maxResults
-    rRev = if w.req.reverse: "rev" else: ""
-  if w.req.startBlock.isHash:
-    res.add "req=" & w.req.startBlock.hash.short & "[" & $rLen & "]" & rRev
+    rLen = w.bag.req.maxResults
+    rRev = if w.bag.req.reverse: "rev" else: ""
+  if w.bag.req.startBlock.isHash:
+    res.add "req=" &
+      w.bag.req.startBlock.hash.short & "[" & $rLen & "]" & rRev
   else:
-    res.add "req=" & w.req.startBlock.number.bnStr & "[" & $rLen & "]" & rRev
-  if 0 < w.req.skip:
-    res.add "skip=" & $w.req.skip
-  if w.fetched.isSome():
-    res.add "res=[" & $w.fetched.value.packet.headers.len & "]"
-    res.add "ela=" & w.fetched.value.elapsed.toStr
-  if w.error.isSome():
-    if w.error.value.excp.ord == 0:
+    res.add "req=" &
+      w.bag.req.startBlock.number.bnStr & "[" & $rLen & "]" & rRev
+  if 0 < w.bag.req.skip:
+    res.add "skip=" & $w.bag.req.skip
+  if w.bag.fetched.isSome():
+    res.add "res=[" & $w.bag.fetched.value.packet.headers.len & "]"
+    res.add "ela=" & w.bag.fetched.value.elapsed.toStr
+  if w.bag.error.isSome():
+    if w.bag.error.value.excp.ord == 0:
       res.add "failed"
     else:
-      res.add "excp=" & ($w.error.value.excp).substr(1)
-    if w.error.value.msg.len != 0:
-       res.add "error=" & w.error.value.name & "(" & w.error.value.msg & ")"
-    res.add "ela=" & w.error.value.elapsed.toStr
+      res.add "excp=" & ($w.bag.error.value.excp).substr(1)
+    if w.bag.error.value.msg.len != 0:
+       res.add "error=" & w.bag.error.value.name &
+                         "(" & w.bag.error.value.msg & ")"
+    res.add "ela=" & w.bag.error.value.elapsed.toStr
   res
 
-func toStrSeq(n: int; w: TraceSyncHeaders): seq[string] =
+func toStrSeq(n: int; w: ReplaySyncHeaders): seq[string] =
   var res = newSeqOfCap[string](20)
-  res.addX(w.replayLabel, n, w)
+  res.addX(w.replayLabel, n, w.bag)
   res
 
 
-func toStrSeq(n: int; w: TraceFetchBodies): seq[string] =
+func toStrSeq(n: int; w: ReplayFetchBodies): seq[string] =
   var res = newSeqOfCap[string](20)
-  res.addX(w.replayLabel, n, w)
-  res.add "req=" & w.ivReq.bnStr & "[" & $w.req.blockHashes.len & "]"
-  if w.fetched.isSome():
-    res.add "res=[" & $w.fetched.value.packet.bodies.len & "]"
-    res.add "size=" & w.fetched.value.packet.bodies.getEncodedLength.uint64.toSI
-    res.add "ela=" & w.fetched.value.elapsed.toStr
-  if w.error.isSome():
-    if w.error.value.excp.ord == 0:
+  res.addX(w.replayLabel, n, w.bag)
+  res.add "req=" & w.bag.ivReq.bnStr & "[" & $w.bag.req.blockHashes.len & "]"
+  if w.bag.fetched.isSome():
+    res.add "res=[" & $w.bag.fetched.value.packet.bodies.len & "]"
+    res.add "size=" &
+      w.bag.fetched.value.packet.bodies.getEncodedLength.uint64.toSI
+    res.add "ela=" & w.bag.fetched.value.elapsed.toStr
+  if w.bag.error.isSome():
+    if w.bag.error.value.excp.ord == 0:
       res.add "failed"
     else:
-      res.add "excp=" & ($w.error.value.excp).substr(1)
-    if w.error.value.msg.len != 0:
-       res.add "error=" & w.error.value.name & "(" & w.error.value.msg & ")"
-    res.add "ela=" & w.error.value.elapsed.toStr
+      res.add "excp=" & ($w.bag.error.value.excp).substr(1)
+    if w.bag.error.value.msg.len != 0:
+       res.add "error=" &
+         w.bag.error.value.name & "(" & w.bag.error.value.msg & ")"
+    res.add "ela=" & w.bag.error.value.elapsed.toStr
   res
 
-func toStrSeq(n: int; w: TraceSyncBodies): seq[string] =
+func toStrSeq(n: int; w: ReplaySyncBodies): seq[string] =
   var res = newSeqOfCap[string](20)
-  res.addX(w.replayLabel, n, w)
+  res.addX(w.replayLabel, n, w.bag)
   res
 
 
-func toStrSeq(n: int; w: TraceImportBlock): seq[string] =
+func toStrSeq(n: int; w: ReplayImportBlock): seq[string] =
   var res = newSeqOfCap[string](20)
-  res.addX(w.replayLabel, n, w)
-  res.add "block=" & w.ethBlock.bnStr
-  res.add "size=" & w.ethBlock.getEncodedLength.uint64.toSI
-  res.add "effPeerID=" & w.effPeerID.short
-  if w.elapsed.isSome():
-    res.add "ela=" & w.elapsed.value.toStr
-  if w.error.isSome():
-    if w.error.value.excp.ord == 0:
+  res.addX(w.replayLabel, n, w.bag)
+  res.add "block=" & w.bag.ethBlock.bnStr
+  res.add "size=" & w.bag.ethBlock.getEncodedLength.uint64.toSI
+  res.add "effPeerID=" & w.bag.effPeerID.short
+  if w.bag.elapsed.isSome():
+    res.add "ela=" & w.bag.elapsed.value.toStr
+  if w.bag.error.isSome():
+    if w.bag.error.value.excp.ord == 0:
       res.add "failed"
     else:
-      res.add "excp=" & ($w.error.value.excp).substr(1)
-    if w.error.value.msg.len != 0:
-       res.add "error=" & w.error.value.name & "(" & w.error.value.msg & ")"
-    res.add "ela=" & w.error.value.elapsed.toStr
+      res.add "excp=" & ($w.bag.error.value.excp).substr(1)
+    if w.bag.error.value.msg.len != 0:
+      res.add "error=" &
+        w.bag.error.value.name & "(" & w.bag.error.value.msg & ")"
+    res.add "ela=" & w.bag.error.value.elapsed.toStr
   res
 
-func toStrSeq(n: int; w: TraceSyncBlock): seq[string] =
+func toStrSeq(n: int; w: ReplaySyncBlock): seq[string] =
   var res = newSeqOfCap[string](20)
-  res.addX(w.replayLabel, n, w)
+  res.addX(w.replayLabel, n, w.bag)
   res
 
 # ------------------------------------------------------------------------------
@@ -315,7 +321,7 @@ proc recLogToStrList*(pyl: ReplayPayloadRef; lnr = 0): seq[string] =
     when t == TraceRecType(0):
       lnr.toStrOops()
     else:
-      lnr.toStrSeq(pyl.T.data)
+      lnr.toStrSeq(pyl.T)
 
   pyl.recType.withReplayTypeExpr()
 

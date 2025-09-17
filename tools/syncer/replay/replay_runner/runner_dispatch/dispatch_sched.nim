@@ -27,35 +27,35 @@ logScope:
 
 proc schedDaemonProcessImpl(
     daemon: ReplayDaemonRef;
-    instr: TraceSchedDaemonBegin;
+    instr: ReplaySchedDaemonBegin;
     info: static[string];
       ) {.async: (raises: []).} =
   ## Run the task `schedDaemon()`. This function has to be run background
   ## process (using `asyncSpawn`.)
   ##
   let run = daemon.run
-  trace info & ": begin", n=run.iNum, serial=instr.serial,
-    frameID=instr.frameIdStr, syncState=instr.syncState
+  trace info & ": begin", n=run.iNum, serial=instr.bag.serial,
+    frameID=instr.frameIdStr, syncState=instr.bag.syncState
 
   discard await run.backup.schedDaemon(run.ctx)
   daemon.processFinishedClearFrame(instr, info)
 
-  trace info & ": end", n=run.iNum, serial=instr.serial,
-    frameID=instr.frameIdStr, syncState=instr.syncState
+  trace info & ": end", n=run.iNum, serial=instr.bag.serial,
+    frameID=instr.frameIdStr, syncState=instr.bag.syncState
 
 
 proc schedPeerProcessImpl(
     buddy: ReplayBuddyRef;
-    instr: TraceSchedPeerBegin;
+    instr: ReplaySchedPeerBegin;
     info: static[string];
       ) {.async: (raises: []).} =
   ## Run the task `schedPeer()`. This function has to be run background
   ## process (using `asyncSpawn`.)
   ##
   let run = buddy.run
-  trace info & ": begin", n=run.iNum, serial=instr.serial,
+  trace info & ": begin", n=run.iNum, serial=instr.bag.serial,
     frameID=instr.frameIdStr, peer=($buddy.peer), peerID=buddy.peerID.short,
-    syncState=instr.syncState
+    syncState=instr.bag.syncState
 
   # Activate peer
   buddy.run.nPeers.inc
@@ -63,9 +63,9 @@ proc schedPeerProcessImpl(
   discard await run.backup.schedPeer(buddy)
   buddy.processFinishedClearFrame(instr, info)
 
-  trace info & ": end", n=run.iNum, serial=instr.serial,
+  trace info & ": end", n=run.iNum, serial=instr.bag.serial,
     frameID=instr.frameIdStr, peer=($buddy.peer), peerID=buddy.peerID.short,
-    syncState=instr.syncState
+    syncState=instr.bag.syncState
 
 # ------------------------------------------------------------------------------
 # Public dispatcher handlers
@@ -73,7 +73,7 @@ proc schedPeerProcessImpl(
 
 proc schedDaemonBegin*(
     run: ReplayRunnerRef;
-    instr: TraceSchedDaemonBegin;
+    instr: ReplaySchedDaemonBegin;
       ) {.async: (raises: []).} =
   ## Run the `schedDaemon()` task.
   ##
@@ -86,7 +86,7 @@ proc schedDaemonBegin*(
 
 proc schedDaemonEnd*(
     run: ReplayRunnerRef;
-    instr: TraceSchedDaemonEnd;
+    instr: ReplaySchedDaemonEnd;
       ) {.async: (raises: []).} =
   ## Clean up (in foreground) after `schedDaemon()` process has terminated.
   ##
@@ -98,7 +98,7 @@ proc schedDaemonEnd*(
 
 proc schedStartWorker*(
     run: ReplayRunnerRef;
-    instr: TraceSchedStart;
+    instr: ReplaySchedStart;
       ) =
   ## Runs `schedStart()` in the foreground.
   ##
@@ -108,12 +108,13 @@ proc schedStartWorker*(
     buddy = run.newPeer(instr, info).valueOr: return
     accept = run.backup.schedStart(buddy)
 
-  trace info & ": begin", n=run.iNum, serial=instr.serial,
+  trace info & ": begin", n=run.iNum, serial=instr.bag.serial,
     peer=($buddy.peer), peerID=buddy.peerID.short
 
-  if accept != instr.accept:
-    warn info & ": result argument differs", n=run.iNum, serial=instr.serial,
-      peer=buddy.peer, expected=instr.accept, result=accept
+  if accept != instr.bag.accept:
+    warn info & ": result argument differs", n=run.iNum,
+      serial=instr.bag.serial, peer=buddy.peer, expected=instr.bag.accept,
+      result=accept
 
   # Syncer state was captured when leaving the `schedStart()` handler.
   buddy.checkSyncerState(instr, ignLatestNum=true, info) # relaxed check
@@ -121,13 +122,13 @@ proc schedStartWorker*(
   if not accept:
     buddy.delPeer(info) # Clean up
 
-  trace info & ": end", n=run.iNum, serial=instr.serial,
+  trace info & ": end", n=run.iNum, serial=instr.bag.serial,
     peer=($buddy.peer), peerID=buddy.peerID.short
 
 
 proc schedStopWorker*(
     run: ReplayRunnerRef;
-    instr: TraceSchedStop;
+    instr: ReplaySchedStop;
       ) =
   ## Runs `schedStop()` in the foreground.
   ##
@@ -141,23 +142,23 @@ proc schedStopWorker*(
   # which has its desciptor sort of unintialised (relative to `instr`.)
   if not buddy.isNew:
     # Syncer state was captured when leaving the `schedStop()` handler.
-    if instr.peerCtx.isNone():
-      warn info & ": peer ctx missing", n=run.iNum, serial=instr.serial
+    if instr.bag.peerCtx.isNone():
+      warn info & ": peer ctx missing", n=run.iNum, serial=instr.bag.serial
       return
-    if instr.peerCtx.value.peerCtrl == Stopped and not buddy.ctrl.stopped:
+    if instr.bag.peerCtx.value.peerCtrl == Stopped and not buddy.ctrl.stopped:
       buddy.ctrl.stopped = true
     buddy.checkSyncerState(instr, info)
 
   # Clean up
   buddy.delPeer(info)
 
-  trace info & ": done", n=run.iNum, serial=instr.serial,
+  trace info & ": done", n=run.iNum, serial=instr.bag.serial,
     peer=($buddy.peer), peerID=buddy.peerID.short
 
 
 proc schedPoolWorker*(
     run: ReplayRunnerRef;
-    instr: TraceSchedPool;
+    instr: ReplaySchedPool;
       ) =
   ## Runs `schedPool()` in the foreground.
   ##
@@ -165,26 +166,26 @@ proc schedPoolWorker*(
   let buddy = run.getOrNewPeerFrame(instr, info).valueOr: return
 
   if 0 < run.nPeers:
-    warn info & ": no active peers allowed", n=run.iNum, serial=instr.serial,
-      peer=buddy.peer, nPeers=run.nPeers, expected=0
+    warn info & ": no active peers allowed", n=run.iNum,
+      serial=instr.bag.serial, peer=buddy.peer, nPeers=run.nPeers, expected=0
 
   # The scheduler will reset the `poolMode` flag before starting the
   # `schedPool()` function.
   run.ctx.poolMode = false
 
-  discard run.backup.schedPool(buddy, instr.last, instr.laps.int)
+  discard run.backup.schedPool(buddy, instr.bag.last, instr.bag.laps.int)
 
   # Syncer state was captured when leaving the `schedPool()` handler.
   buddy.checkSyncerState(instr, info)
   buddy.processFinishedClearFrame(instr, info)
 
-  info info & ": done", n=run.iNum, serial=instr.serial,
+  info info & ": done", n=run.iNum, serial=instr.bag.serial,
     peer=($buddy.peer), peerID=buddy.peerID.short
 
 
 proc schedPeerBegin*(
     run: ReplayRunnerRef;
-    instr: TraceSchedPeerBegin;
+    instr: ReplaySchedPeerBegin;
       ) {.async: (raises: []).} =
   ## Run the `schedPeer()` task.
   ##
@@ -197,7 +198,7 @@ proc schedPeerBegin*(
 
 proc schedPeerEnd*(
     run: ReplayRunnerRef;
-    instr: TraceSchedPeerEnd;
+    instr: ReplaySchedPeerEnd;
       ) {.async: (raises: []).} =
   ## Clean up (in foreground) after `schedPeer()` process has terminated.
   ##

@@ -25,22 +25,16 @@ logScope:
 # Public dispatcher handlers
 # ------------------------------------------------------------------------------
 
-proc syncActvFailedWorker*(
-    run: ReplayRunnerRef;
-    instr: TraceSyncActvFailed;
-      ) =
+proc syncActvFailedWorker*(run: ReplayRunnerRef; instr: ReplaySyncActvFailed) =
   const info = instr.replayLabel()
-  trace info, n=run.iNum, serial=instr.serial
+  trace info, n=run.iNum, serial=instr.bag.serial
 
 
-proc syncActivateWorker*(
-    run: ReplayRunnerRef;
-    instr: TraceSyncActivated;
-      ) =
+proc syncActivateWorker*(run: ReplayRunnerRef; instr: ReplaySyncActivated) =
   const
     info = instr.replayLabel()
   let
-    serial = instr.serial
+    serial = instr.bag.serial
     ctx = run.ctx
 
   if not ctx.hibernate:
@@ -48,16 +42,16 @@ proc syncActivateWorker*(
     return
 
   var activationOK = true
-  if ctx.chain.baseNumber != instr.baseNum:
+  if ctx.chain.baseNumber != instr.bag.baseNum:
     error info & ": cannot activate (bases must match)", n=run.iNum, serial,
-      base=ctx.chain.baseNumber.bnStr, expected=instr.baseNum.bnStr
+      base=ctx.chain.baseNumber.bnStr, expected=instr.bag.baseNum.bnStr
     activationOK = false
 
   if activationOK:
-    ctx.hdrCache.headTargetUpdate(instr.head, instr.finHash)
+    ctx.hdrCache.headTargetUpdate(instr.bag.head, instr.bag.finHash)
 
   # Set the number of active buddies (avoids some moaning.)
-  run.ctx.pool.nBuddies = instr.nPeers.int
+  run.ctx.pool.nBuddies = instr.bag.nPeers.int
   run.checkSyncerState(instr, info)
 
   if ctx.hibernate or not activationOK:
@@ -70,17 +64,14 @@ proc syncActivateWorker*(
     debug info, n=run.iNum, serial
 
 
-proc syncSuspendWorker*(
-    run: ReplayRunnerRef;
-    instr: TraceSyncHibernated;
-      ) =
+proc syncSuspendWorker*(run: ReplayRunnerRef; instr: ReplaySyncHibernated) =
   const info = instr.replayLabel()
   if not run.ctx.hibernate:
     run.stopError(info & ": suspend failed")
     return
 
   run.checkSyncerState(instr, info)
-  debug info, n=run.iNum, serial=instr.serial
+  debug info, n=run.iNum, serial=instr.bag.serial
 
   # Shutdown if there are no remaining sessions left
   if 1 < run.nSessions:

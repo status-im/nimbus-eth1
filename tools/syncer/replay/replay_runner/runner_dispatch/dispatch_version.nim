@@ -25,14 +25,11 @@ logScope:
 # Public dispatcher handlers
 # ------------------------------------------------------------------------------
 
-proc versionInfoWorker*(
-    run: ReplayRunnerRef;
-    instr: TraceVersionInfo;
-      ) =
+proc versionInfoWorker*(run: ReplayRunnerRef; instr: ReplayVersionInfo) =
   const
     info = instr.replayLabel()
   let
-    serial = instr.serial
+    serial = instr.bag.serial
     ctx = run.ctx
   var
     versionOK = true
@@ -41,23 +38,23 @@ proc versionInfoWorker*(
     error info & ": not the first record", serial, expected=1
     versionOK = false
 
-  if run.instrNumber != 1:
-    error info & ": record count mismatch", n=run.instrNumber, expected=1
+  if run.iNum != 1:
+    error info & ": record count mismatch", n=run.iNum, expected=1
     versionOK = false
 
-  if instr.version != TraceVersionID:
+  if instr.bag.version != TraceVersionID:
     error info & ": wrong version", serial,
-      traceLayoutVersion=instr.version, expected=TraceVersionID
+      traceLayoutVersion=instr.bag.version, expected=TraceVersionID
     versionOK = false
 
-  if instr.networkId != ctx.chain.com.networkId:
+  if instr.bag.networkId != ctx.chain.com.networkId:
     error info & ": wrong network", serial,
-      networkId=instr.networkId, expected=ctx.chain.com.networkId
+      networkId=instr.bag.networkId, expected=ctx.chain.com.networkId
     versionOK = false
 
-  if ctx.chain.baseNumber < instr.baseNum:
+  if ctx.chain.baseNumber < instr.bag.baseNum:
     error info & ": cannot start (base too low)", serial,
-      base=ctx.chain.baseNumber.bnStr, replayBase=instr.baseNum.bnStr
+      base=ctx.chain.baseNumber.bnStr, replayBase=instr.bag.baseNum.bnStr
     versionOK = false
 
   if not ctx.hibernate:

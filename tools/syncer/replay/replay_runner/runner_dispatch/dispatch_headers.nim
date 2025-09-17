@@ -38,12 +38,12 @@ proc `==`(a,b: BlockHeadersRequest): bool =
         return true
 
 func getResponse(
-    instr: TraceFetchHeaders;
+    instr: ReplayFetchHeaders;
       ): Result[FetchHeadersData,BeaconError] =
-  if instr.fetched.isSome():
-    ok(instr.fetched.value)
-  elif instr.error.isSome():
-    err(instr.error.value)
+  if instr.bag.fetched.isSome():
+    ok(instr.bag.fetched.value)
+  elif instr.bag.error.isSome():
+    err(instr.bag.error.value)
   else:
     err((ENoException,"","Missing fetch headers return code",Duration()))
 
@@ -63,27 +63,27 @@ proc fetchHeadersHandler*(
   const info = "&fetchHeaders"
   let buddy = ReplayBuddyRef(buddy)
 
-  var data: TraceFetchHeaders
+  var data: ReplayFetchHeaders
   buddy.withInstr(typeof data, info):
     if not instr.isAvailable():
       return err(iError.getBeaconError()) # Shutdown?
-    if req != instr.req:
+    if req != instr.bag.req:
       raiseAssert info & ": arguments differ" &
         ", n=" & $buddy.iNum &
-        ", serial=" & $instr.serial &
+        ", serial=" & $instr.bag.serial &
         ", peer=" & $buddy.peer &
         # -----
         ", reverse=" & $req.reverse &
-        ", expected=" & $instr.req.reverse &
+        ", expected=" & $instr.bag.req.reverse &
         # -----
         ", reqStart=" & req.startBlock.toStr &
-        ", expected=" & instr.req.startBlock.toStr &
+        ", expected=" & instr.bag.req.startBlock.toStr &
         # -----
         ", reqLen=" & $req.maxResults &
-        ", expected=" & $instr.req.maxResults
+        ", expected=" & $instr.bag.req.maxResults
     data = instr
 
-  buddy.withInstr(TraceSyncHeaders, info):
+  buddy.withInstr(ReplaySyncHeaders, info):
     if not instr.isAvailable():
       return err(iError.getBeaconError()) # Shutdown?
     discard # no-op, visual alignment
@@ -96,14 +96,14 @@ proc fetchHeadersHandler*(
 
 proc sendHeaders*(
     run: ReplayRunnerRef;
-    instr: TraceFetchHeaders|TraceSyncHeaders;
+    instr: ReplayFetchHeaders|ReplaySyncHeaders;
       ) {.async: (raises: []).} =
   ## Stage headers request/response data
   const info = instr.replayLabel()
   let buddy = run.getPeer(instr, info).valueOr:
     raiseAssert info & ": getPeer() failed" &
       ", n=" & $run.iNum &
-      ", serial=" & $instr.serial
+      ", serial=" & $instr.bag.serial
   discard buddy.pushInstr(instr, info)
 
 # ------------------------------------------------------------------------------

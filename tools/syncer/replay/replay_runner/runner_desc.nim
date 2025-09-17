@@ -47,36 +47,6 @@ type
     name: string
     msg: string
 
-  # --------- internal data message types ---------
-
-  ReplayMsgRef* = ref object of RootRef
-    ## Sub task context                ## Identifies captured environment
-    recType*: TraceRecType             ## Sub-type selector
-
-  ReplayFetchHeadersMsgRef* = ref object of ReplayMsgRef
-    ## Headers fetch data message
-    instr*: TraceFetchHeaders          ## Full context/environment
-
-  ReplaySyncHeadersMsgRef* = ref object of ReplayMsgRef
-    ## Headers fetch sync message
-    instr*: TraceSyncHeaders           ## Full context/environment
-
-  ReplayFetchBodiesMsgRef* = ref object of ReplayMsgRef
-    ## Bodies fetch data message
-    instr*: TraceFetchBodies           ## Full context/environment
-
-  ReplaySyncBodiesMsgRef* = ref object of ReplayMsgRef
-    ## Bodies fetch sync message
-    instr*: TraceSyncBodies            ## Full context/environment
-
-  ReplayImportBlockMsgRef* = ref object of ReplayMsgRef
-    ## Block import data message
-    instr*: TraceImportBlock           ## Full context/environment
-
-  ReplaySyncBlockMsgRef* = ref object of ReplayMsgRef
-    ## Block import sync message
-    instr*: TraceSyncBlock             ## Full context/environment
-
   # --------- internal context types ---------
 
   ReplayBuddyRef* = ref object of BeaconBuddyRef
@@ -84,13 +54,13 @@ type
     isNew*: bool                       ## Set in `getOrNewPeer()` when created
     run*: ReplayRunnerRef              ## Back-reference for convenience
     frameID*: Opt[uint]                ## Begin/end frame
-    message*: ReplayMsgRef             ## Data message channel
+    message*: ReplayPayloadRef         ## Data message channel
 
   ReplayDaemonRef* = ref object
     ## Daemeon job frame (similar to `ReplayBuddyRef`)
     run*: ReplayRunnerRef              ## Back-reference for convenience
     frameID*: Opt[uint]                ## Begin/end frame
-    message*: ReplayMsgRef             ## Data message channel
+    message*: ReplayPayloadRef         ## Data message channel
 
   # ---------
 
@@ -114,27 +84,6 @@ type
     # Instruction handling
     instrNumber*: uint                 ## Instruction counter
 
-# ------------------------------------------------------------------------------
-# Public helpers
-# ------------------------------------------------------------------------------
-
-template toReplayMsgType*(trc: type): untyped =
-  ## Derive replay record type from trace capture record type
-  when trc is TraceFetchHeaders:
-    ReplayFetchHeadersMsgRef
-  elif trc is TraceSyncHeaders:
-    ReplaySyncHeadersMsgRef
-  elif trc is TraceFetchBodies:
-    ReplayFetchBodiesMsgRef
-  elif trc is TraceSyncBodies:
-    ReplaySyncBodiesMsgRef
-  elif trc is TraceImportBlock:
-    ReplayImportBlockMsgRef
-  elif trc is TraceSyncBlock:
-    ReplaySyncBlockMsgRef
-  else:
-    {.error: "Unsupported trace record type".}
- 
 # ------------------------------------------------------------------------------
 # End
 # ------------------------------------------------------------------------------

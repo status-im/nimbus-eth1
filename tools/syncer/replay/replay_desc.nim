@@ -71,63 +71,63 @@ type
     recType*: TraceRecType
 
   ReplayVersionInfo* = ref object of ReplayPayloadRef
-    data*: TraceVersionInfo
+    bag*: TraceVersionInfo
 
   # -------------
 
   ReplaySyncActvFailed* = ref object of ReplayPayloadRef
-    data*: TraceSyncActvFailed
+    bag*: TraceSyncActvFailed
 
   ReplaySyncActivated* = ref object of ReplayPayloadRef
-    data*: TraceSyncActivated
+    bag*: TraceSyncActivated
 
   ReplaySyncHibernated* = ref object of ReplayPayloadRef
-    data*: TraceSyncHibernated
+    bag*: TraceSyncHibernated
 
   # -------------
 
   ReplaySchedDaemonBegin* = ref object of ReplayPayloadRef
-    data*: TraceSchedDaemonBegin
+    bag*: TraceSchedDaemonBegin
 
   ReplaySchedDaemonEnd* = ref object of ReplayPayloadRef
-    data*: TraceSchedDaemonEnd
+    bag*: TraceSchedDaemonEnd
 
   ReplaySchedStart* = ref object of ReplayPayloadRef
-    data*: TraceSchedStart
+    bag*: TraceSchedStart
 
   ReplaySchedStop* = ref object of ReplayPayloadRef
-    data*: TraceSchedStop
+    bag*: TraceSchedStop
 
   ReplaySchedPool* = ref object of ReplayPayloadRef
-    data*: TraceSchedPool
+    bag*: TraceSchedPool
 
   ReplaySchedPeerBegin* = ref object of ReplayPayloadRef
-    data*: TraceSchedPeerBegin
+    bag*: TraceSchedPeerBegin
 
   ReplaySchedPeerEnd* = ref object of ReplayPayloadRef
-    data*: TraceSchedPeerEnd
+    bag*: TraceSchedPeerEnd
 
   # -------------
 
   ReplayFetchHeaders* = ref object of ReplayPayloadRef
-    data*: TraceFetchHeaders
+    bag*: TraceFetchHeaders
 
   ReplaySyncHeaders* = ref object of ReplayPayloadRef
-    data*: TraceSyncHeaders
+    bag*: TraceSyncHeaders
 
 
   ReplayFetchBodies* = ref object of ReplayPayloadRef
-    data*: TraceFetchBodies
+    bag*: TraceFetchBodies
 
   ReplaySyncBodies* = ref object of ReplayPayloadRef
-    data*: TraceSyncBodies
+    bag*: TraceSyncBodies
 
 
   ReplayImportBlock* = ref object of ReplayPayloadRef
-    data*: TraceImportBlock
+    bag*: TraceImportBlock
 
   ReplaySyncBlock* = ref object of ReplayPayloadRef
-    data*: TraceSyncBlock
+    bag*: TraceSyncBlock
 
 # ------------------------------------------------------------------------------
 # Public helpers
@@ -135,7 +135,7 @@ type
 
 template replayLabel*(w: untyped): string =
   ## Static getter, retrieve replay type label
-  ReplayTypeLabel[(typeof w).toTraceRecType]
+  ReplayTypeLabel[(typeof w.bag).toTraceRecType]
 
 # ------------------------------------------------------------------------------
 # End
