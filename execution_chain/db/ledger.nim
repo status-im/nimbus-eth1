@@ -45,8 +45,13 @@ type
     slot: Opt[UInt256]
   ]
 
+  WitnessMeta* = tuple[
+    codeTouched: bool,
+    deleted: bool
+  ]
+
   # Maps witness keys to the codeTouched flag
-  WitnessTable* = OrderedTable[WitnessKey, bool]
+  WitnessTable* = OrderedTable[WitnessKey, WitnessMeta]
 
   BlockHashesCache* = LruCache[BlockNumber, Hash32]
 
@@ -175,7 +180,7 @@ proc getAccount(
   if ac.collectWitness:
     let lookupKey = (address, Opt.none(UInt256))
     if not ac.witnessKeys.contains(lookupKey):
-      ac.witnessKeys[lookupKey] = false
+      ac.witnessKeys[lookupKey] = (false, false)
 
   # search account from layers of cache
   var sp = ac.savePoint
@@ -467,9 +472,9 @@ proc getCode*(ac: LedgerRef,
               returnHash: static[bool] = false): auto =
   if ac.collectWitness:
     let lookupKey = (address, Opt.none(UInt256))
-    # We overwrite any existing record here so that codeTouched is always set to
-    # true even if an account was previously accessed without touching the code
-    ac.witnessKeys[lookupKey] = true
+    var witnessMeta = ac.witnessKeys.getOrDefault(lookupKey)
+    witnessMeta.codeTouched = true
+    ac.witnessKeys[lookupKey] = witnessMeta
 
   let acc = ac.getAccount(address, false)
   if acc.isNil:
@@ -532,7 +537,7 @@ proc getCommittedStorage*(ac: LedgerRef, address: Address, slot: UInt256): UInt2
   if ac.collectWitness:
     let lookupKey = (address, Opt.some(slot))
     if not ac.witnessKeys.contains(lookupKey):
-      ac.witnessKeys[lookupKey] = false
+      ac.witnessKeys[lookupKey] = (false, false)
 
   if acc.isNil:
     return
@@ -544,7 +549,7 @@ proc getStorage*(ac: LedgerRef, address: Address, slot: UInt256): UInt256 =
   if ac.collectWitness:
     let lookupKey = (address, Opt.some(slot))
     if not ac.witnessKeys.contains(lookupKey):
-      ac.witnessKeys[lookupKey] = false
+      ac.witnessKeys[lookupKey] = (false, false)
 
   if acc.isNil:
     return
@@ -631,7 +636,7 @@ proc setStorage*(ac: LedgerRef, address: Address, slot, value: UInt256) =
   if ac.collectWitness:
     let lookupKey = (address, Opt.some(slot))
     if not ac.witnessKeys.contains(lookupKey):
-      ac.witnessKeys[lookupKey] = false
+      ac.witnessKeys[lookupKey] = (false, false)
 
   let oldValue = acc.storageValue(slot, ac)
   if oldValue != value:
@@ -671,6 +676,12 @@ proc deleteAccount*(ac: LedgerRef, address: Address) =
 proc selfDestruct*(ac: LedgerRef, address: Address) =
   ac.setBalance(address, 0.u256)
   ac.savePoint.selfDestruct.incl address
+
+  if ac.collectWitness:
+    let lookupKey = (address, Opt.none(UInt256))
+    var witnessMeta = ac.witnessKeys.getOrDefault(lookupKey)
+    witnessMeta.deleted = true
+    ac.witnessKeys[lookupKey] = witnessMeta
 
 proc selfDestruct6780*(ac: LedgerRef, address: Address) =
   let acc = ac.getAccount(address, false)
