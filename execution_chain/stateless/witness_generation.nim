@@ -33,7 +33,7 @@ proc build*(
     stoPreimages: Table[Hash32, array[32, byte]]
     witness = Witness.init()
 
-  for key, codeTouched in witnessKeys:
+  for key, (codeTouched, _) in witnessKeys:
     let
       addressBytes = key.address.data()
       accPath = keccak256(addressBytes)

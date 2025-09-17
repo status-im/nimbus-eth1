@@ -187,7 +187,7 @@ proc callFetchingState(
       # state queries are still issued in the background just incase the state is
       # needed in the next iteration.
       var stateFetchDone = false
-      for k, codeTouched in witnessKeys:
+      for k, (codeTouched, _) in witnessKeys:
         let (adr, maybeSlot) = k
         if adr == default(Address):
           continue
@@ -355,7 +355,7 @@ proc createAccessList*(
   # returned in the callResult.
 
   var al = access_list.AccessList.init()
-  for k, codeTouched in witnessKeys:
+  for k, (codeTouched, _) in witnessKeys:
     let (adr, maybeSlot) = k
     if adr == fromAdr:
       continue
