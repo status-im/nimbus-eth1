@@ -17,7 +17,7 @@ import
   ../../../db/core_db,
   ../../../evm/types,
   ../../../evm/state,
-  ../../../stateless/[witness_generation, witness_verification],
+  ../../../stateless/[witness_generation, witness_verification, stateless_execution],
   ./chain_branch
 
 proc writeBaggage*(c: ForkedChainRef,
@@ -99,8 +99,9 @@ proc processBlock*(c: ForkedChainRef,
 
     # Convert the witness to ExecutionWitness format and verify against the pre-stateroot.
     if vmState.com.statelessWitnessValidation:
+      doAssert witness.validateKeys(vmState.ledger.getWitnessKeys()).isOk()
       let executionWitness = ExecutionWitness.build(witness, vmState.ledger)
-      ?executionWitness.verify(preStateLedger.getStateRoot())
+      ?executionWitness.statelessProcessBlock(c.com, parentBlk.header, blk)
 
     ?vmState.ledger.txFrame.persistWitness(blkHash, witness)
 

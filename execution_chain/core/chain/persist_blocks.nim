@@ -16,7 +16,7 @@ import
   ../../evm/[state, types],
   ../../common,
   ../../db/ledger,
-  ../../stateless/[witness_generation, witness_verification],
+  ../../stateless/[witness_generation, witness_verification, stateless_execution],
   ../../db/storage_types,
   ../[executor, validate],
   chronicles,
@@ -187,7 +187,7 @@ proc persistBlock*(p: var Persister, blk: Block): Result[void, string] =
     if vmState.com.statelessWitnessValidation:
       doAssert witness.validateKeys(vmState.ledger.getWitnessKeys()).isOk()
       let executionWitness = ExecutionWitness.build(witness, vmState.ledger)
-      ?executionWitness.verify(preStateLedger.getStateRoot())
+      ?executionWitness.statelessProcessBlock(com, p.parent, blk)
 
     ?vmState.ledger.txFrame.persistWitness(header.computeBlockHash(), witness)
 

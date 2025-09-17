@@ -213,7 +213,12 @@ proc setupClient*(port: Port): RpcHttpClient =
     debugEcho "CONNECT ERROR: ", exc.msg
     quit(QuitFailure)
 
-proc prepareEnv*(unit: UnitEnv, genesis: Header, rpcEnabled: bool = false): TestEnv =
+proc prepareEnv*(
+    unit: UnitEnv,
+    genesis: Header,
+    rpcEnabled = false,
+    statelessEnabled = false): TestEnv =
+
   try:
     let
       memDB = newCoreDbRef DefaultDbMemory
@@ -233,7 +238,9 @@ proc prepareEnv*(unit: UnitEnv, genesis: Header, rpcEnabled: bool = false): Test
     var testEnv = TestEnv()
 
     let
-      com = CommonRef.new(memDB, nil, config)
+      com = CommonRef.new(memDB, nil, config,
+        statelessProviderEnabled = statelessEnabled,
+        statelessWitnessValidation = statelessEnabled)
       chain = ForkedChainRef.init(com, enableQueue = true, persistBatchSize = 0)
 
     testEnv.chain = chain
@@ -299,6 +306,7 @@ template runEESTSuite*(
     skipFiles: openArray[string],
     baseFolder: string,
     eestType: string,
+    statelessEnabled = false
 ) =
   for eest in eestReleases:
     suite eest & ": " & eestType:
@@ -307,7 +315,7 @@ template runEESTSuite*(
         if last in skipFiles:
           continue
         test last:
-          let res = processFile(fileName)
+          let res = processFile(fileName, statelessEnabled)
           if not res:
             debugEcho fileName.splitPath().tail
           check res
