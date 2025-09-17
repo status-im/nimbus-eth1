@@ -21,7 +21,8 @@ import
   eth/p2p/discoveryv5/protocol as discv5_protocol,
   ../common/common_utils,
   ../database/content_db,
-  ../network/wire/[portal_protocol, portal_stream, portal_protocol_config],
+  ../network/wire/
+    [portal_protocol, portal_stream, portal_protocol_config, portal_protocol_version],
   ../network/history/[history_content, history_network]
 
 const
@@ -232,6 +233,7 @@ proc run(config: PortalCliConf) =
     extIp,
     Opt.none(Port),
     extUdpPort,
+    localEnrFields = {portalEnrKey: rlp.encode(localPortalEnrField)},
     bootstrapRecords = bootstrapRecords,
     bindIp = bindIp,
     bindPort = udpPort,

@@ -35,7 +35,9 @@ const
     "Copyright (c) 2021-" & compileYear & " Status Research & Development GmbH"
 
   # Short debugging identifier to be placed in the ENR
-  enrClientInfoShort* = toBytes("f")
+  # Note: This got replaced by the ping extension containing the client_info.
+  # Once no longer used it can be deprecated.
+  enrClientInfoShort* = toBytes("n")
 
 declareGauge versionGauge,
   "nimbus_portal_client version info (as metric labels)",
