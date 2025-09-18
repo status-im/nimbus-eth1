@@ -32,6 +32,9 @@ createRpcSigsFromNim(RpcClient):
     contentKey: string, contentValue: string
   ): PutContentResult
 
+  proc portal_historyStore(contentKey: string, contentValue: string): bool
+  proc portal_historyLocalContent(contentKey: string): string
+
   proc portal_historyGetBlockBody(headerBytes: string): string
   proc portal_historyGetReceipts(headerBytes: string): string
 
