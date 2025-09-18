@@ -52,11 +52,12 @@ proc subOp(cpt: VmCpt): EvmResultVoid =
 proc divideOp(cpt: VmCpt): EvmResultVoid =
   ## 0x04, Division
   template div256(top, lhs, rhs) =
-    if rhs.isZero:
-      # EVM special casing of div by 0
-      top = zero(UInt256)
-    else:
+    if rhs.isZero.not:
       top = lhs div rhs
+    #else:
+      # EVM special casing of div by zero. In this case, top == rhs.
+      # Therefore no need to set the top(result) to zero anymore.
+      #top = zero(UInt256)
 
   cpt.stack.binaryWithTop(div256)
 
@@ -69,6 +70,10 @@ proc sdivOp(cpt: VmCpt): EvmResultVoid =
       extractSign(rhs, signB)
       top = lhs div rhs
       setSign(top, signA xor signB)
+    #else:
+      # EVM special casing of sdiv by zero. In this case, top == rhs.
+      # Therefore no need to set the top(result) to zero anymore.
+      #top = zero(UInt256)
 
   cpt.stack.binaryWithTop(sdiv256)
 
@@ -86,7 +91,7 @@ proc smodOp(cpt: VmCpt): EvmResultVoid =
   ## 0x07, Signed modulo
   template smod256(top, lhs, rhs) =
     if rhs.isZero.not:
-      var sign: bool      
+      var sign: bool
       extractSign(rhs, sign)
       extractSign(lhs, sign)
       top = lhs mod rhs
@@ -153,7 +158,7 @@ proc signExtendOp(cpt: VmCpt): EvmResultVoid =
   template se256(top, bits, value) =
     const one = 1.u256
     if bits <= 31.u256:
-      let        
+      let
         testBit = bits.truncate(int) * 8 + 7
         bitPos = one shl testBit
         mask = bitPos - one
