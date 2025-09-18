@@ -188,6 +188,14 @@ proc opArithMain*() =
       success: false
       stack: "0x07"
 
+    assembler: # Div OP, division by zero produce zero
+      title: "DIV_7"
+      code:
+        Push1 "0x00"
+        Push1 "0x07"
+        Div
+      stack: "0x0000000000000000000000000000000000000000000000000000000000000000"
+
     assembler: # Sdiv OP
       title: "SDIV_1"
       code:
