@@ -15,7 +15,7 @@
 import
   pkg/[chronicles, chronos, eth/common],
   ../../../../../execution_chain/sync/wire_protocol,
-  ../../replay_desc,
+  ../runner_desc,
   ./dispatch_helpers
 
 logScope:

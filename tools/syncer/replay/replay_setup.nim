@@ -18,8 +18,8 @@ import
   ../../../execution_chain/sync/wire_protocol,
   ./replay_reader/reader_init,
   ./replay_runner/runner_dispatch/[dispatch_blocks, dispatch_headers],
-  ./replay_runner/runner_init,
-  ./[replay_desc, replay_runner]
+  ./replay_runner/[runner_desc, runner_init],
+  ./replay_runner
 
 logScope:
   topics = "beacon replay"
@@ -73,14 +73,13 @@ proc noOpSchedPeer(buddy: BeaconBuddyRef):
 # Private functions
 # ------------------------------------------------------------------------------
 
-proc checkStop(rpl: ReplayRef): ReplayStopIfFn =
+proc checkStop(rpl: ReplayRunnerRef): ReplayStopIfFn =
   proc(): bool =
-    if rpl.runner.isNil or
-       rpl.runner.stopRunner:
+    if rpl.stopRunner:
       return true
     false
 
-proc cleanUp(rpl: ReplayRef): ReplayEndUpFn =
+proc cleanUp(rpl: ReplayRunnerRef): ReplayEndUpFn =
    proc() =
      rpl.stopSync(rpl)
      if rpl.stopQuit:
@@ -91,16 +90,14 @@ proc cleanUp(rpl: ReplayRef): ReplayEndUpFn =
 
 # --------------
 
-proc replayStartCB(rpl: ReplayRef) =
+proc replayStartCB(rpl: ReplayRunnerRef) =
   ## Start replay emulator
   ##
-  rpl.reader =           ReplayReaderRef.init(rpl.captStrm)
-  rpl.runner =           ReplayRunnerRef.init(rpl)
-
   # Set up redirect handlers for replay
   rpl.version =          ReplayRunnerID
   #   activate                               # use as is
   #   suspend                                # use as is
+  rpl.reader =           ReplayReaderRef.init(rpl.captStrm)
   rpl.schedDaemon =      noOpSchedDaemon
   rpl.schedStart =       noOpSchedStartFalse # `false` => don't register
   rpl.schedStop =        noOpBuddy
@@ -113,18 +110,20 @@ proc replayStartCB(rpl: ReplayRef) =
   rpl.importBlock =      importBlockHandler  # from dispatcher
   rpl.syncImportBlock =  noOpBuddy
 
+  rpl.initRunner()
+
   rpl.startSync = proc(self: BeaconHandlersSyncRef) =
     discard
 
   rpl.stopSync = proc(self: BeaconHandlersSyncRef) =
-    ReplayRef(self).reader.destroy()
-    ReplayRef(self).runner.destroy()
+    ReplayRunnerRef(self).reader.destroy()
+    ReplayRunnerRef(self).destroyRunner()
     stopInfo.onException(DontQuit):
-      ReplayRef(self).captStrm.close()
-    ReplayRef(self).ctx.pool.handlers = ReplayRef(self).backup
+      ReplayRunnerRef(self).captStrm.close()
+    ReplayRunnerRef(self).ctx.pool.handlers = ReplayRunnerRef(self).backup
 
   # Start fake scheduler
-  asyncSpawn rpl.runner.runDispatcher(
+  asyncSpawn rpl.runDispatcher(
     rpl.reader, stopIf=rpl.checkStop, endUp=rpl.cleanUp)
 
 # ------------------------------------------------------------------------------
@@ -137,7 +136,8 @@ proc replaySetup*(
     noStopQuit: bool;
     fakeImport: bool;
       ): Result[void,string] =
-  ## ..
+  ## setup replay emulator
+  ##
   const info = "replaySetup(): "
 
   if ctx.handler.version != 0:
@@ -149,7 +149,7 @@ proc replaySetup*(
     return err("Cannot open trace file for reading" &
                ", fileName=\"" & fileName & "\"")
 
-  let rpl = ReplayRef(
+  let rpl = ReplayRunnerRef(
     ctx:              ctx,
     captStrm:         strm,
     fakeImport:       fakeImport,
@@ -174,12 +174,12 @@ proc replaySetup*(
     syncImportBlock:  ctx.handler.syncImportBlock)
 
   rpl.startSync = proc(self: BeaconHandlersSyncRef) =
-    ReplayRef(self).replayStartCB()
+    ReplayRunnerRef(self).replayStartCB()
 
   rpl.stopSync = proc(self: BeaconHandlersSyncRef) =
     info.onException(DontQuit):
-      ReplayRef(self).captStrm.close()
-    ReplayRef(self).ctx.pool.handlers = ReplayRef(self).backup
+      ReplayRunnerRef(self).captStrm.close()
+    ReplayRunnerRef(self).ctx.pool.handlers = ReplayRunnerRef(self).backup
 
   ctx.pool.handlers = rpl
   ok()
@@ -188,7 +188,7 @@ proc replaySetup*(
 proc replayRelease*(ctx: BeaconCtxRef) =
   ## Stop replay and restore descriptors
   if ctx.pool.handlers.version in {ReplaySetupID, ReplayRunnerID}:
-    ReplayRef(ctx.pool.handlers).stopSync(nil)
+    ReplayRunnerRef(ctx.pool.handlers).stopSync(nil)
 
 # ------------------------------------------------------------------------------
 # End

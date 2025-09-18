@@ -16,7 +16,7 @@ import
   pkg/chronos,
   ../../../../execution_chain/networking/[p2p, p2p_peers, peer_pool],
   ../../../../execution_chain/sync/wire_protocol,
-  ../replay_desc
+  ./runner_desc
 
 logScope:
   topics = "replay"
@@ -58,7 +58,7 @@ proc init(T: type ReplayEthState): T =
 # Public constructor(s)
 # ------------------------------------------------------------------------------
 
-proc init*(T: type ReplayRunnerRef; rpl: ReplayRef): T =
+proc initRunner*(rpl: ReplayRunnerRef) =
   ## Initialise dispatcher
   const info = "ReplayRunnerRef(): "
   if ReplayRunnerID != rpl.ctx.handler.version:
@@ -66,13 +66,10 @@ proc init*(T: type ReplayRunnerRef; rpl: ReplayRef): T =
       handlerVersion=rpl.ctx.handler.version
     quit(QuitFailure)
 
-  T(ctx:        rpl.ctx,
-    worker:     rpl.backup,
-    ethState:   ReplayEthState.init(),
-    fakeImport: rpl.fakeImport)
+  rpl.ethState = ReplayEthState.init()
 
 
-proc destroy*(run: ReplayRunnerRef) =
+proc destroyRunner*(run: ReplayRunnerRef) =
   discard
 
 # ------------------------------------------------------------------------------

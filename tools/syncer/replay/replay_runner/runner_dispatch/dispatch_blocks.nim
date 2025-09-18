@@ -15,7 +15,7 @@
 import
   pkg/[chronicles, chronos, eth/common, stew/interval_set],
   ../../../../../execution_chain/sync/wire_protocol,
-  ../../replay_desc,
+  ../runner_desc,
   ./dispatch_helpers
 
 logScope:
@@ -161,11 +161,9 @@ proc importBlockHandler*(
         ", expected=%" & instr.ethBlock.computeRlpHash.short
     data = instr
 
-  let
-    ctx = buddy.run.ctx
-    rpl = ctx.replay
-  if not rpl.runner.fakeImport:
-    let rc = await rpl.backup.importBlock(buddy, ethBlock, effPeerID)
+  let run = buddy.run
+  if not run.fakeImport:
+    let rc = await run.backup.importBlock(buddy, ethBlock, effPeerID)
     if rc.isErr or data.error.isSome():
       const info = info & ": result values differ"
       let serial = data.serial

@@ -19,7 +19,11 @@ import
   ../../../../execution_chain/networking/p2p,
   ../../../../execution_chain/sync/wire_protocol,
   ../../../../execution_chain/sync/beacon/worker/worker_desc,
-  ../../trace/trace_desc
+  ../../trace/trace_desc,
+  ../replay_desc
+
+export
+  replay_desc
 
 const
   replayWaitForCompletion* = chronos.nanoseconds(100)
@@ -95,10 +99,8 @@ type
     capa*: Dispatcher                  ## Cabability `eth68`, `eth69`, etc.
     prots*: array[MAX_PROTOCOLS,RootRef] ## `capa` init flags, protocol states
 
-  ReplayRunnerRef* = ref object
+  ReplayRunnerRef* = ref object of ReplayRef
     # Global state
-    ctx*: BeaconCtxRef                 ## Beacon syncer descriptor
-    worker*: BeaconHandlersRef         ## Refers to original handlers table
     ethState*: ReplayEthState          ## For ethxx compatibility
     stopRunner*: bool                  ## Shut down request
     nSessions*: int                    ## Numer of sessions left
@@ -111,7 +113,6 @@ type
 
     # Instruction handling
     instrNumber*: uint                 ## Instruction counter
-    fakeImport*: bool                  ## No database import if `true`
 
 # ------------------------------------------------------------------------------
 # Public helpers
@@ -133,7 +134,7 @@ template toReplayMsgType*(trc: type): untyped =
     ReplaySyncBlockMsgRef
   else:
     {.error: "Unsupported trace record type".}
-
+ 
 # ------------------------------------------------------------------------------
 # End
 # ------------------------------------------------------------------------------

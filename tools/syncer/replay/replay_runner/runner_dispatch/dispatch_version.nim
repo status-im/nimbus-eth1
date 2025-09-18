@@ -15,7 +15,7 @@
 import
   pkg/chronicles,
   ../../../../../execution_chain/core/chain,
-  ../../replay_desc,
+  ../runner_desc,
   ./dispatch_helpers
 
 logScope:

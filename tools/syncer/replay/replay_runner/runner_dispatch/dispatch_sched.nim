@@ -15,7 +15,7 @@
 import
   std/tables,
   pkg/[chronicles, chronos, eth/common],
-  ../../replay_desc,
+  ../runner_desc,
   ./dispatch_helpers
 
 logScope:
@@ -37,7 +37,7 @@ proc schedDaemonProcessImpl(
   trace info & ": begin", n=run.iNum, serial=instr.serial,
     frameID=instr.frameIdStr, syncState=instr.syncState
 
-  discard await run.worker.schedDaemon(run.ctx)
+  discard await run.backup.schedDaemon(run.ctx)
   daemon.processFinishedClearFrame(instr, info)
 
   trace info & ": end", n=run.iNum, serial=instr.serial,
@@ -60,7 +60,7 @@ proc schedPeerProcessImpl(
   # Activate peer
   buddy.run.nPeers.inc
 
-  discard await run.worker.schedPeer(buddy)
+  discard await run.backup.schedPeer(buddy)
   buddy.processFinishedClearFrame(instr, info)
 
   trace info & ": end", n=run.iNum, serial=instr.serial,
@@ -106,7 +106,7 @@ proc schedStartWorker*(
     info = instr.replayLabel()
   let
     buddy = run.newPeer(instr, info).valueOr: return
-    accept = run.worker.schedStart(buddy)
+    accept = run.backup.schedStart(buddy)
 
   trace info & ": begin", n=run.iNum, serial=instr.serial,
     peer=($buddy.peer), peerID=buddy.peerID.short
@@ -133,7 +133,7 @@ proc schedStopWorker*(
   ##
   const info = instr.replayLabel()
   let buddy = run.getOrNewPeerFrame(instr, info).valueOr: return
-  run.worker.schedStop(buddy)
+  run.backup.schedStop(buddy)
 
   # As the `schedStop()` function environment was captured only after the
   # syncer was activated, there might still be some unregistered peers hanging
@@ -172,7 +172,7 @@ proc schedPoolWorker*(
   # `schedPool()` function.
   run.ctx.poolMode = false
 
-  discard run.worker.schedPool(buddy, instr.last, instr.laps.int)
+  discard run.backup.schedPool(buddy, instr.last, instr.laps.int)
 
   # Syncer state was captured when leaving the `schedPool()` handler.
   buddy.checkSyncerState(instr, info)

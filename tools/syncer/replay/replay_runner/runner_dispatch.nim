@@ -15,7 +15,7 @@
 import
   pkg/[chronicles, chronos],
   ../../../../execution_chain/networking/p2p,
-  ../replay_desc,
+  ./runner_desc,
   ./runner_dispatch/[dispatch_blocks, dispatch_headers, dispatch_sched,
                      dispatch_sync, dispatch_version]
 

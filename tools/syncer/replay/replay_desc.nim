@@ -14,14 +14,11 @@
 
 import
   std/streams,
-  pkg/chronos,
   ../trace/trace_desc,
-  ./replay_reader/reader_desc,
-  ./replay_runner/runner_desc
+  ./replay_reader/reader_desc
 
 export
   reader_desc,
-  runner_desc,
   trace_desc
 
 const
@@ -67,7 +64,6 @@ type
     stopQuit*: bool                     ## Quit after replay
     backup*: BeaconHandlersRef          ## Can restore previous handlers
     reader*: ReplayReaderRef            ## Input records
-    runner*: ReplayRunnerRef            ## Replay descriptor
 
 
   ReplayPayloadRef* = ref object of RootRef
@@ -136,11 +132,6 @@ type
 # ------------------------------------------------------------------------------
 # Public helpers
 # ------------------------------------------------------------------------------
-
-func replay*(ctx: BeaconCtxRef): ReplayRef =
-  ## Getter, get replay descriptor (if any)
-  if ctx.handler.version == ReplayRunnerID:
-    return ctx.handler.ReplayRef
 
 template replayLabel*(w: untyped): string =
   ## Static getter, retrieve replay type label

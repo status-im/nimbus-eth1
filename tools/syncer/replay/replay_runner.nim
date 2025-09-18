@@ -14,8 +14,8 @@
 
 import
   pkg/chronos,
-  ./replay_runner/runner_dispatch,
-  ./[replay_desc, replay_reader]
+  ./replay_runner/[runner_desc, runner_dispatch],
+  ./replay_reader
 
 # ------------------------------------------------------------------------------
 # Public functions

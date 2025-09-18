@@ -19,7 +19,7 @@ import
   ../../../../../execution_chain/sync/wire_protocol,
   ../../../../../execution_chain/sync/beacon/worker/helpers as worker_helpers,
   ../../../trace/trace_setup/setup_helpers as trace_helpers,
-  ../../replay_desc
+  ../runner_desc
 
 export
   trace_helpers.idStr,
@@ -355,11 +355,9 @@ proc peerStatesDifferImpl(
 # Public functions
 # ------------------------------------------------------------------------------
 
-func iNum*(desc: ReplayInstance|ReplayRunnerRef|BeaconCtxRef): uint =
+func iNum*(desc: ReplayInstance|ReplayRunnerRef): uint =
   when desc is ReplayRunnerRef:
     desc.instrNumber
-  elif desc is BeaconCtxRef:
-    desc.replay.runner.instrNumber
   else:
     desc.run.instrNumber
 
