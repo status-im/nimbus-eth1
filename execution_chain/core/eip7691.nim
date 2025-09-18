@@ -27,6 +27,7 @@ const
     Bpo4,
     Bpo5,
     Amsterdam,
+    Eip7745,
   ]
 
 func getMaxBlobsPerBlock*(com: CommonRef, fork: EVMFork): uint64 =

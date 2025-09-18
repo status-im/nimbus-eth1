@@ -53,6 +53,7 @@ const
     eth0, # Bpo4
     eth0, # Bpo5
     eth0, # Amsterdam
+    eth0, # Eip7745
   ]
 
 proc calculateReward*(vmState: BaseVMState; account: Address;

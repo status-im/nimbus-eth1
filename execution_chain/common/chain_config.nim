@@ -284,6 +284,7 @@ const
     "bpo4",
     "bpo5",
     "amsterdam",
+    "eip7745",
   ]
 
 func ofStmt(fork: HardFork, keyName: string, reader: NimNode, value: NimNode): NimNode =
@@ -480,6 +481,7 @@ func defaultBlobSchedule*(): array[Cancun..HardFork.high, Opt[BlobSchedule]] =
     Bpo4  : Opt.none(BlobSchedule),
     Bpo5  : Opt.none(BlobSchedule),
     Amsterdam: Opt.none(BlobSchedule),
+    Eip7745: Opt.none(BlobSchedule),
   ]
 
 func chainConfigForNetwork*(id: NetworkId): ChainConfig =
