@@ -167,7 +167,7 @@ apt install git make gcc
 # Clone repo and build Nimbus just like above
 git clone https://github.com/status-im/nimbus-eth1.git
 
-cd nimbus_execution_client
+cd nimbus-eth1
 
 make update
 
