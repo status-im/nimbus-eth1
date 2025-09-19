@@ -450,7 +450,7 @@ type
         name: "debug-history-expiry-limit" }: Option[BlockNumber]
 
       portalUrl* {.
-        desc: "URL of the Portal Network"
+        desc: "URL of the Portal JSON-RPC API"
         defaultValue: ""
         name: "portal-url" }: string
 
