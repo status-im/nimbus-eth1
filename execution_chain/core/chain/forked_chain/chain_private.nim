@@ -101,7 +101,7 @@ proc processBlock*(c: ForkedChainRef,
     if vmState.com.statelessWitnessValidation:
       doAssert witness.validateKeys(vmState.ledger.getWitnessKeys()).isOk()
       let executionWitness = ExecutionWitness.build(witness, vmState.ledger)
-      ?executionWitness.statelessProcessBlock(c.com, parentBlk.header, blk)
+      ?executionWitness.statelessProcessBlock(c.com, blk)
 
     ?vmState.ledger.txFrame.persistWitness(blkHash, witness)
 
