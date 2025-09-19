@@ -329,6 +329,7 @@ proc runExeClient*(nimbus: NimbusNode, conf: NimbusConf) {.gcsafe.} =
         txFrame = fc.baseTxFrame
       fc.serialize(txFrame).isOkOr:
         error "FC.serialize error: ", msg=error
+      txFrame.checkpoint(fc.base.blk.header.number)
       com.db.persist(txFrame)
     com.db.finish()
 
