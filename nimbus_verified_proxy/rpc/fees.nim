@@ -34,10 +34,10 @@ func median(prices: var openArray[GasInt]): GasInt =
   # default case
   return GasInt(0)
 
-proc suggestGasPrice*(vp: VerifiedRpcProxy): Future[Result[GasInt, string]] {.async.} =
+proc suggestGasPrice*(engine: RpcVerificationEngine): Future[Result[GasInt, string]] {.async.} =
   const minGasPrice = 30_000_000_000.GasInt
   let
-    blk = (await vp.getBlock(blockId("latest"), true)).valueOr:
+    blk = (await engine.getBlock(blockId("latest"), true)).valueOr:
       return err(error)
     txs = blk.transactions.toTransactions().valueOr:
       return err(error)
@@ -50,10 +50,10 @@ proc suggestGasPrice*(vp: VerifiedRpcProxy): Future[Result[GasInt, string]] {.as
   ok(max(minGasPrice, median(prices)))
 
 proc suggestMaxPriorityGasPrice*(
-    vp: VerifiedRpcProxy
+    engine: RpcVerificationEngine
 ): Future[Result[GasInt, string]] {.async.} =
   let
-    blk = (await vp.getBlock(blockId("latest"), true)).valueOr:
+    blk = (await engine.getBlock(blockId("latest"), true)).valueOr:
       return err(error)
     txs = blk.transactions.toTransactions().valueOr:
       return err(error)

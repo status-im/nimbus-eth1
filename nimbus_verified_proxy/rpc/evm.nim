@@ -20,14 +20,14 @@ logScope:
 
 export async_evm, async_evm_backend
 
-proc toAsyncEvmStateBackend*(vp: VerifiedRpcProxy): AsyncEvmStateBackend =
+proc toAsyncEvmStateBackend*(engine: RpcVerificationEngine): AsyncEvmStateBackend =
   let
     accProc = proc(
         header: Header, address: Address
     ): Future[Opt[Account]] {.async: (raises: [CancelledError]).} =
       let account =
         try:
-          (await vp.getAccount(address, header.number, header.stateRoot))
+          (await engine.getAccount(address, header.number, header.stateRoot))
         except CatchableError:
           error "error getting account"
           return Opt.none(Account)
@@ -42,7 +42,7 @@ proc toAsyncEvmStateBackend*(vp: VerifiedRpcProxy): AsyncEvmStateBackend =
     ): Future[Opt[UInt256]] {.async: (raises: [CancelledError]).} =
       let storageSlot =
         try:
-          (await vp.getStorageAt(address, slotKey, header.number, header.stateRoot))
+          (await engine.getStorageAt(address, slotKey, header.number, header.stateRoot))
         except CatchableError:
           error "error getting storage"
           return Opt.none(UInt256)
@@ -57,7 +57,7 @@ proc toAsyncEvmStateBackend*(vp: VerifiedRpcProxy): AsyncEvmStateBackend =
     ): Future[Opt[seq[byte]]] {.async: (raises: [CancelledError]).} =
       let code =
         try:
-          (await vp.getCode(address, header.number, header.stateRoot))
+          (await engine.getCode(address, header.number, header.stateRoot))
         except CatchableError:
           error "error getting code"
           return Opt.none(seq[byte])
@@ -70,6 +70,6 @@ proc toAsyncEvmStateBackend*(vp: VerifiedRpcProxy): AsyncEvmStateBackend =
     blockHashProc = proc(
         header: Header, number: BlockNumber
     ): Future[Opt[Hash32]] {.async: (raises: [CancelledError]).} =
-      vp.headerStore.getHash(number)
+      engine.headerStore.getHash(number)
 
   AsyncEvmStateBackend.init(accProc, storageProc, codeProc, blockHashProc)

@@ -39,20 +39,20 @@ suite "test receipts verification":
       vp.headerStore.add(convHeader(blk), blk.hash).isOk()
       vp.headerStore.updateFinalized(convHeader(blk), blk.hash).isOk()
 
-    var verified = waitFor vp.proxy.getClient().eth_getBlockReceipts(numberTag)
+    var verified = waitFor vp.frontend.eth_getBlockReceipts(numberTag)
     check rxs == verified.get()
 
-    verified = waitFor vp.proxy.getClient().eth_getBlockReceipts(finalTag)
+    verified = waitFor vp.frontend.eth_getBlockReceipts(finalTag)
     check rxs == verified.get()
 
-    verified = waitFor vp.proxy.getClient().eth_getBlockReceipts(earliestTag)
+    verified = waitFor vp.frontend.eth_getBlockReceipts(earliestTag)
     check rxs == verified.get()
 
-    verified = waitFor vp.proxy.getClient().eth_getBlockReceipts(latestTag)
+    verified = waitFor vp.frontend.eth_getBlockReceipts(latestTag)
     check rxs == verified.get()
 
     let verifiedReceipt =
-      waitFor vp.proxy.getClient().eth_getTransactionReceipt(rxs[0].transactionHash)
+      waitFor vp.frontend.eth_getTransactionReceipt(rxs[0].transactionHash)
     check rxs[0] == verifiedReceipt
 
     ts.clear()
@@ -92,7 +92,7 @@ suite "test receipts verification":
       )
 
       ts.loadLogs(filterOptions, logs)
-      let verifiedLogs = waitFor vp.proxy.getClient().eth_getLogs(filterOptions)
+      let verifiedLogs = waitFor vp.frontend.eth_getLogs(filterOptions)
       check verifiedLogs.len == logs.len
 
     ts.clear()
@@ -114,15 +114,15 @@ suite "test receipts verification":
 
     let
       # create a filter
-      newFilter = waitFor vp.proxy.getClient().eth_newFilter(filterOptions)
+      newFilter = waitFor vp.frontend.eth_newFilter(filterOptions)
       # deleting will prove if the filter was created
-      delStatus = waitFor vp.proxy.getClient().eth_uninstallFilter(newFilter)
+      delStatus = waitFor vp.frontend.eth_uninstallFilter(newFilter)
 
     check delStatus
 
     let
       unknownFilterId = "thisisacorrectfilterid"
-      delStatus2 = waitFor vp.proxy.getClient().eth_uninstallFilter(newFilter)
+      delStatus2 = waitFor vp.frontend.eth_uninstallFilter(newFilter)
 
     check not delStatus2
 
@@ -156,16 +156,16 @@ suite "test receipts verification":
 
     let
       # create a filter
-      newFilter = waitFor vp.proxy.getClient().eth_newFilter(filterOptions)
-      filterLogs = waitFor vp.proxy.getClient().eth_getFilterLogs(newFilter)
-      filterChanges = waitFor vp.proxy.getClient().eth_getFilterChanges(newFilter)
+      newFilter = waitFor vp.frontend.eth_newFilter(filterOptions)
+      filterLogs = waitFor vp.frontend.eth_getFilterLogs(newFilter)
+      filterChanges = waitFor vp.frontend.eth_getFilterChanges(newFilter)
 
     check filterLogs.len == logs.len
     check filterChanges.len == logs.len
 
     try:
       let againFilterChanges =
-        waitFor vp.proxy.getClient().eth_getFilterChanges(newFilter)
+        waitFor vp.frontend.eth_getFilterChanges(newFilter)
       check false
     except CatchableError as e:
       check true

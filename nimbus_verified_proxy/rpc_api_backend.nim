@@ -8,71 +8,105 @@
 {.push raises: [], gcsafe.}
 
 import
-  json_rpc/[rpcproxy, rpcclient],
-  web3/[eth_api, eth_api_types],
+  json_rpc/[rpcclient, rpcproxy],
+  web3/[eth_api, eth_api_types, conversions],
+  json_serialization,
   stint,
-  std/json,
-  ./types
+  ./types,
+  ./nimbus_verified_proxy_conf
 
-proc initNetworkApiBackend*(vp: VerifiedRpcProxy): EthApiBackend =
-  let
-    ethChainIdProc = proc(): Future[UInt256] {.async.} =
-      await vp.proxy.getClient.eth_chainId()
+type
+  JsonRpcBackend* = object of EthApiBackend
+    url: string
+    case kind*: ClientKind
+    of Http:
+      httpClient: RpcHttpClient
+    of WebSocket:
+      wsClient: RpcWebSocketClient
 
-    getBlockByHashProc = proc(
-        blkHash: Hash32, fullTransactions: bool
-    ): Future[BlockObject] {.async: (raw: true).} =
-      vp.proxy.getClient.eth_getBlockByHash(blkHash, fullTransactions)
+proc client(backend: JsonRpcBackend): RpcClient =
+  case backend.kind:
+  of Http:
+    backend.httpClient
+  of WebSocket:
+    backend.wsClient
 
-    getBlockByNumberProc = proc(
-        blkNum: BlockTag, fullTransactions: bool
-    ): Future[BlockObject] {.async: (raw: true).} =
-      vp.proxy.getClient.eth_getBlockByNumber(blkNum, fullTransactions)
+proc init*(T: type JsonRpcBackend, url: Web3Url): T =
+  var backend: JsonRpcBackend
 
-    getProofProc = proc(
-        address: Address, slots: seq[UInt256], blockId: BlockTag
-    ): Future[ProofResponse] {.async: (raw: true).} =
-      vp.proxy.getClient.eth_getProof(address, slots, blockId)
+  if url.kind == HttpUrl: 
+    backend = JsonRpcBackend(
+      kind: Http,
+      httpClient: newRpcHttpClient(),
+      url: url.web3Url
+    )
+  elif url.kind == WsUrl:
+    backend = JsonRpcBackend(
+      kind: WebSocket,
+      wsClient: newRpcWebSocketClient(),
+      url: url.web3Url
+    )
 
-    createAccessListProc = proc(
-        args: TransactionArgs, blockId: BlockTag
-    ): Future[AccessListResult] {.async: (raw: true).} =
-      vp.proxy.getClient.eth_createAccessList(args, blockId)
+  backend.eth_chainId = proc(): Future[UInt256] {.async: (raw: true).} =
+    backend.client.eth_chainId()
 
-    getCodeProc = proc(
-        address: Address, blockId: BlockTag
-    ): Future[seq[byte]] {.async: (raw: true).} =
-      vp.proxy.getClient.eth_getCode(address, blockId)
+  backend.eth_getBlockByHash = proc(
+      blkHash: Hash32, fullTransactions: bool
+  ): Future[BlockObject] {.async: (raw: true).} =
+    backend.client.eth_getBlockByHash(blkHash, fullTransactions)
 
-    getTransactionByHashProc = proc(
-        txHash: Hash32
-    ): Future[TransactionObject] {.async: (raw: true).} =
-      vp.proxy.getClient.eth_getTransactionByHash(txHash)
+  backend.eth_getBlockByNumber = proc(
+      blkNum: BlockTag, fullTransactions: bool
+  ): Future[BlockObject] {.async: (raw: true).} =
+    backend.client.eth_getBlockByNumber(blkNum, fullTransactions)
 
-    getTransactionReceiptProc = proc(
-        txHash: Hash32
-    ): Future[ReceiptObject] {.async: (raw: true).} =
-      vp.proxy.getClient.eth_getTransactionReceipt(txHash)
+  backend.eth_getProof = proc(
+      address: Address, slots: seq[UInt256], blockId: BlockTag
+  ): Future[ProofResponse] {.async: (raw: true).} =
+    backend.client.eth_getProof(address, slots, blockId)
 
-    getBlockReceiptsProc = proc(
-        blockId: BlockTag
-    ): Future[Opt[seq[ReceiptObject]]] {.async: (raw: true).} =
-      vp.proxy.getClient.eth_getBlockReceipts(blockId)
+  backend.eth_createAccessList = proc(
+      args: TransactionArgs, blockId: BlockTag
+  ): Future[AccessListResult] {.async: (raw: true).} =
+    backend.client.eth_createAccessList(args, blockId)
 
-    getLogsProc = proc(
-        filterOptions: FilterOptions
-    ): Future[seq[LogObject]] {.async: (raw: true).} =
-      vp.proxy.getClient.eth_getLogs(filterOptions)
+  backend.eth_getCode = proc(
+      address: Address, blockId: BlockTag
+  ): Future[seq[byte]] {.async: (raw: true).} =
+    backend.client.eth_getCode(address, blockId)
 
-  EthApiBackend(
-    eth_chainId: ethChainIdProc,
-    eth_getBlockByHash: getBlockByHashProc,
-    eth_getBlockByNumber: getBlockByNumberProc,
-    eth_getProof: getProofProc,
-    eth_createAccessList: createAccessListProc,
-    eth_getCode: getCodeProc,
-    eth_getBlockReceipts: getBlockReceiptsProc,
-    eth_getLogs: getLogsProc,
-    eth_getTransactionByHash: getTransactionByHashProc,
-    eth_getTransactionReceipt: getTransactionReceiptProc,
-  )
+  backend.eth_getTransactionByHash = proc(
+      txHash: Hash32
+  ): Future[TransactionObject] {.async: (raw: true).} =
+    backend.client.eth_getTransactionByHash(txHash)
+
+  backend.eth_getTransactionReceipt = proc(
+      txHash: Hash32
+  ): Future[ReceiptObject] {.async: (raw: true).} =
+    backend.client.eth_getTransactionReceipt(txHash)
+
+  backend.eth_getBlockReceipts = proc(
+      blockId: BlockTag
+  ): Future[Opt[seq[ReceiptObject]]] {.async: (raw: true).} =
+    backend.client.eth_getBlockReceipts(blockId)
+
+  backend.eth_getLogs = proc(
+      filterOptions: FilterOptions
+  ): Future[seq[LogObject]] {.async: (raw: true).} =
+    backend.client.eth_getLogs(filterOptions)
+
+  return backend
+
+proc start*(backend: JsonRpcBackend): Future[Result[void, string]] {.async.} =
+  try:
+    if backend.kind == Http:
+      await backend.httpClient.connect(backend.url)
+    elif backend.kind == WebSocket:
+      await backend.wsClient.connect(uri = backend.url, compression = false, flags = {})
+  except CatchableError as e:
+    return err(e.msg)
+
+  ok()
+
+proc stop*(backend: JsonRpcBackend) {.async.} = 
+  await backend.client.close()

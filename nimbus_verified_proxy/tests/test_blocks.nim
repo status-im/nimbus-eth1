@@ -37,8 +37,7 @@ suite "test verified blocks":
       ts.loadBlock(blk)
       check vp.headerStore.add(convHeader(blk), blk.hash).isOk()
 
-      # reuse verified proxy's internal client. Conveniently it is looped back to the proxy server
-      let verifiedBlk = waitFor vp.proxy.getClient().eth_getBlockByHash(blk.hash, true)
+      let verifiedBlk = waitFor vp.frontend.eth_getBlockByHash(blk.hash, true)
 
       check blk == verifiedBlk
 
@@ -62,16 +61,16 @@ suite "test verified blocks":
       vp.headerStore.add(convHeader(blk), blk.hash).isOk()
       vp.headerStore.updateFinalized(convHeader(blk), blk.hash).isOk()
 
-    var verifiedBlk = waitFor vp.proxy.getClient().eth_getBlockByNumber(numberTag, true)
+    var verifiedBlk = waitFor vp.frontend.eth_getBlockByNumber(numberTag, true)
     check blk == verifiedBlk
 
-    verifiedBlk = waitFor vp.proxy.getClient().eth_getBlockByNumber(finalTag, true)
+    verifiedBlk = waitFor vp.frontend.eth_getBlockByNumber(finalTag, true)
     check blk == verifiedBlk
 
-    verifiedBlk = waitFor vp.proxy.getClient().eth_getBlockByNumber(earliestTag, true)
+    verifiedBlk = waitFor vp.frontend.eth_getBlockByNumber(earliestTag, true)
     check blk == verifiedBlk
 
-    verifiedBlk = waitFor vp.proxy.getClient().eth_getBlockByNumber(latestTag, true)
+    verifiedBlk = waitFor vp.frontend.eth_getBlockByNumber(latestTag, true)
     check blk == verifiedBlk
 
   test "check block walk":
@@ -101,7 +100,7 @@ suite "test verified blocks":
     # TODO: catch the exact error 
     try:
       let verifiedBlk =
-        waitFor vp.proxy.getClient().eth_getBlockByNumber(unreachableTargetTag, true)
+        waitFor vp.frontend.eth_getBlockByNumber(unreachableTargetTag, true)
       check(false)
     except CatchableError as e:
       check(true)
@@ -109,7 +108,7 @@ suite "test verified blocks":
     # TODO: catch the exact error 
     try:
       let verifiedBlk =
-        waitFor vp.proxy.getClient().eth_getBlockByNumber(reachableTargetTag, true)
+        waitFor vp.frontend.eth_getBlockByNumber(reachableTargetTag, true)
       check(true)
     except CatchableError as e:
       check(false)
@@ -127,17 +126,17 @@ suite "test verified blocks":
     check vp.headerStore.add(convHeader(blk), blk.hash).isOk()
 
     let
-      uncleCountByHash = waitFor vp.proxy.getClient().eth_getUncleCountByBlockHash(hash)
+      uncleCountByHash = waitFor vp.frontend.eth_getUncleCountByBlockHash(hash)
       uncleCountByNum =
-        waitFor vp.proxy.getClient().eth_getUncleCountByBlockNumber(numberTag)
+        waitFor vp.frontend.eth_getUncleCountByBlockNumber(numberTag)
       txCountByHash =
-        waitFor vp.proxy.getClient().eth_getBlockTransactionCountByHash(hash)
+        waitFor vp.frontend.eth_getBlockTransactionCountByHash(hash)
       txCountByNum =
-        waitFor vp.proxy.getClient().eth_getBlockTransactionCountByNumber(numberTag)
-      txByHash = waitFor vp.proxy.getClient().eth_getTransactionByBlockHashAndIndex(
+        waitFor vp.frontend.eth_getBlockTransactionCountByNumber(numberTag)
+      txByHash = waitFor vp.frontend.eth_getTransactionByBlockHashAndIndex(
         hash, Quantity(0)
       )
-      txByNum = waitFor vp.proxy.getClient().eth_getTransactionByBlockNumberAndIndex(
+      txByNum = waitFor vp.frontend.eth_getTransactionByBlockNumberAndIndex(
         numberTag, Quantity(0)
       )
 

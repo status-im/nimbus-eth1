@@ -19,9 +19,6 @@ import
 export minilru
 
 const
-  ACCOUNTS_CACHE_SIZE = 128
-  CODE_CACHE_SIZE = 64
-  STORAGE_CACHE_SIZE = 256
   MAX_ID_TRIES* = 10
   MAX_FILTERS* = 256
 
@@ -37,24 +34,61 @@ type
 
   BlockTag* = eth_api_types.RtBlockIdentifier
 
+  # chain methods
   ChainIdProc* = proc(): Future[UInt256] {.async.}
+  BlockNumberProc* = proc(): Future[uint64] {.async.}
+
+  # state methods
+  GetBalanceProc* = proc(address: Address, blockId: BlockTag): Future[UInt256] {.async.}
+  GetStorageProc* = proc(address: Address, slot: UInt256, blockId: BlockTag): Future[FixedBytes[32]] {.async.}
+  GetTransactionCountProc* = proc(address: Address, blockId: BlockTag): Future[Quantity] {.async.}
+  GetCodeProc* = proc(address: Address, blockId: BlockTag): Future[seq[byte]] {.async.}
+  GetProofProc* = proc(address: Address, slots: seq[UInt256], blockId: BlockTag): Future[ProofResponse] {.async.}
+
+  # block methods
   GetBlockByHashProc* =
     proc(blkHash: Hash32, fullTransactions: bool): Future[BlockObject] {.async.}
   GetBlockByNumberProc* =
     proc(blkNum: BlockTag, fullTransactions: bool): Future[BlockObject] {.async.}
-  GetProofProc* = proc(
-    address: Address, slots: seq[UInt256], blockId: BlockTag
-  ): Future[ProofResponse] {.async.}
+  GetUncleCountByBlockHashProc* = proc(blkHash: Hash32): Future[Quantity] {.async.}
+  GetUncleCountByBlockNumberProc* = proc(blkNum: BlockTag): Future[Quantity] {.async.}
+  GetBlockTransactionCountByHashProc* = proc(blkHash: Hash32): Future[Quantity] {.async.}
+  GetBlockTransactionCountByNumberProc* = proc(blkNum: BlockTag): Future[Quantity] {.async.}
+
+  # transaction methods
+  GetTransactionByBlockHashAndIndexProc* = proc(blkHash: Hash32, index: Quantity): Future[TransactionObject] {.async.}
+  GetTransactionByBlockNumberAndIndexProc* = proc(blkNum: BlockTag, index: Quantity): Future[TransactionObject] {.async.}
+  GetTransactionByHashProc = proc(txHash: Hash32): Future[TransactionObject] {.async.}
+
+  # evm method types for frontend with extra parameter
+  FrontendCallProc* = proc(args: TransactionArgs, blockId: BlockTag, optimisticFetch: Opt[bool]): Future[seq[byte]] {.async.}
+  FrontendCreateAccessListProc* =
+    proc(args: TransactionArgs, blockId: BlockTag, optimisticFetch: Opt[bool]): Future[AccessListResult] {.async.}
+  FrontendEstimateGasProc* = proc(args: TransactionArgs, blockId: BlockTag, optimisticFetch: Opt[bool]): Future[Quantity] {.async.}
+
+  # evm method types for backend (standard)
+  CallProc* = proc(args: TransactionArgs, blockId: BlockTag): Future[seq[byte]] {.async.}
   CreateAccessListProc* =
     proc(args: TransactionArgs, blockId: BlockTag): Future[AccessListResult] {.async.}
-  GetCodeProc* = proc(address: Address, blockId: BlockTag): Future[seq[byte]] {.async.}
+  EstimateGasProc* = proc(args: TransactionArgs, blockId: BlockTag): Future[Quantity] {.async.}
+
+
+  # receipt methods
   GetBlockReceiptsProc =
     proc(blockId: BlockTag): Future[Opt[seq[ReceiptObject]]] {.async.}
   GetTransactionReceiptProc = proc(txHash: Hash32): Future[ReceiptObject] {.async.}
-  GetTransactionByHashProc = proc(txHash: Hash32): Future[TransactionObject] {.async.}
   GetLogsProc = proc(filterOptions: FilterOptions): Future[seq[LogObject]] {.async.}
+  NewFilterProc = proc(filterOptions: FilterOptions): Future[string] {.async.}
+  UninstallFilterProc = proc(filterId: string): Future[bool] {.async.}
+  GetFilterLogsProc = proc(filterId: string): Future[seq[LogObject]] {.async.}
+  GetFilterChangesProc = proc(filterId: string): Future[seq[LogObject]] {.async.}
 
-  EthApiBackend* = object
+  # fee based methods
+  BlobBaseFeeProc = proc(): Future[UInt256] {.async.}
+  GasPriceProc = proc(): Future[Quantity] {.async.}
+  MaxPriorityFeePerGasProc = proc(): Future[Quantity] {.async.}
+
+  EthApiBackend* = object of RootObj
     eth_chainId*: ChainIdProc
     eth_getBlockByHash*: GetBlockByHashProc
     eth_getBlockByNumber*: GetBlockByNumberProc
@@ -66,42 +100,78 @@ type
     eth_getTransactionByHash*: GetTransactionByHashProc
     eth_getLogs*: GetLogsProc
 
+  EthApiFrontend* = object
+    # Chain methods
+    eth_chainId*: ChainIdProc
+    eth_blockNumber*: BlockNumberProc
+
+    # State methods
+    eth_getBalance*: GetBalanceProc
+    eth_getStorageAt*: GetStorageProc
+    eth_getTransactionCount*: GetTransactionCountProc
+    eth_getCode*: GetCodeProc
+    eth_getProof*: GetProofProc
+
+    # Block methods
+    eth_getBlockByHash*: GetBlockByHashProc
+    eth_getBlockByNumber*: GetBlockByNumberProc
+    eth_getUncleCountByBlockHash*: GetUncleCountByBlockHashProc
+    eth_getUncleCountByBlockNumber*: GetUncleCountByBlockNumberProc
+    eth_getBlockTransactionCountByHash*: GetBlockTransactionCountByHashProc
+    eth_getBlockTransactionCountByNumber*: GetBlockTransactionCountByNumberProc
+
+    # Transaction methods
+    eth_getTransactionByBlockHashAndIndex*: GetTransactionByBlockHashAndIndexProc
+    eth_getTransactionByBlockNumberAndIndex*: GetTransactionByBlockNumberAndIndexProc
+    eth_getTransactionByHash*: GetTransactionByHashProc
+
+    # EVM methods
+    eth_call*: FrontendCallProc
+    eth_createAccessList*: FrontendCreateAccessListProc
+    eth_estimateGas*: FrontendEstimateGasProc
+
+    # Receipt methods
+    eth_getBlockReceipts*: GetBlockReceiptsProc
+    eth_getTransactionReceipt*: GetTransactionReceiptProc
+    eth_getLogs*: GetLogsProc
+    eth_newFilter*: NewFilterProc
+    eth_uninstallFilter*: UninstallFilterProc
+    eth_getFilterLogs*: GetFilterLogsProc
+    eth_getFilterChanges*: GetFilterChangesProc
+
+    # Fee-based methods
+    eth_blobBaseFee*: BlobBaseFeeProc
+    eth_gasPrice*: GasPriceProc
+    eth_maxPriorityFeePerGas*: MaxPriorityFeePerGasProc
+
   FilterStoreItem* = object
     filter*: FilterOptions
     blockMarker*: Opt[Quantity]
 
-  VerifiedRpcProxy* = ref object
+  RpcVerificationEngine* = ref object
     evm*: AsyncEvm
-    proxy*: RpcProxy
+
+    # chain stores
     headerStore*: HeaderStore
+    filterStore*: Table[string, FilterStoreItem]
+
+    # state caches
     accountsCache*: AccountsCache
     codeCache*: CodeCache
     storageCache*: StorageCache
-    rpcClient*: EthApiBackend
 
-    # TODO: when the list grows big add a config object instead
-    # config parameters
-    filterStore*: Table[string, FilterStoreItem]
+    # interfaces
+    backend*: EthApiBackend
+    frontend*: EthApiFrontend
+
+    # config items
     chainId*: UInt256
     maxBlockWalk*: uint64
 
-proc init*(
-    T: type VerifiedRpcProxy,
-    proxy: RpcProxy,
-    headerStore: HeaderStore,
-    chainId: UInt256,
-    maxBlockWalk: uint64,
-): T =
-  VerifiedRpcProxy(
-    proxy: proxy,
-    headerStore: headerStore,
-    accountsCache: AccountsCache.init(ACCOUNTS_CACHE_SIZE),
-    codeCache: CodeCache.init(CODE_CACHE_SIZE),
-    storageCache: StorageCache.init(STORAGE_CACHE_SIZE),
-    chainId: chainId,
-    maxBlockWalk: maxBlockWalk,
-  )
-
-createRpcSigsFromNim(RpcClient):
-  proc eth_estimateGas(args: TransactionArgs, blockTag: BlockTag): Quantity
-  proc eth_maxPriorityFeePerGas(): Quantity
+  RpcVerificationEngineConf* = ref object
+    chainId*: UInt256
+    maxBlockWalk*: uint64
+    headerStoreLen*: int
+    accountCacheLen*: int
+    codeCacheLen*: int
+    storageCacheLen*: int

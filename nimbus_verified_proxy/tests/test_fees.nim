@@ -30,8 +30,8 @@ suite "test fees verification":
     check vp.headerStore.add(convHeader(blk), blk.hash).isOk()
 
     let
-      gasPrice = waitFor vp.proxy.getClient().eth_gasPrice()
-      priorityFee = waitFor vp.proxy.getClient().eth_maxPriorityFeePerGas()
+      gasPrice = waitFor vp.frontend.eth_gasPrice()
+      priorityFee = waitFor vp.frontend.eth_maxPriorityFeePerGas()
 
     # we are only checking the API interface atm
     check:
@@ -39,7 +39,7 @@ suite "test fees verification":
       priorityFee > Quantity(0)
 
     try:
-      let blobFee = waitFor vp.proxy.getClient().eth_blobBaseFee()
+      let blobFee = waitFor vp.frontend.eth_blobBaseFee()
       # blobs weren't enables on paris
       check false
     except CatchableError:
@@ -54,7 +54,7 @@ suite "test fees verification":
     ts.loadBlock(blk2)
     check vp.headerStore.add(convHeader(blk2), blk2.hash).isOk()
 
-    let blobFeePrague = waitFor vp.proxy.getClient().eth_blobBaseFee()
+    let blobFeePrague = waitFor vp.frontend.eth_blobBaseFee()
 
     check:
       blobFeePrague > u256(0)

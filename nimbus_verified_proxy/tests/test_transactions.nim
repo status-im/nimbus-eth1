@@ -42,7 +42,7 @@ suite "test transaction verification":
       if tx.kind == tohTx:
         ts.loadTransaction(tx.tx.hash, tx.tx)
         let verifiedTx =
-          waitFor vp.proxy.getClient().eth_getTransactionByHash(tx.tx.hash)
+          waitFor vp.frontend.eth_getTransactionByHash(tx.tx.hash)
         check verifiedTx == tx.tx
         ts.clear()
 

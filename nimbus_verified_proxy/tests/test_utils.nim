@@ -87,8 +87,8 @@ proc startTestSetup*(
     vp = VerifiedRpcProxy.init(rpcProxy, headerStore, chainId, maxBlockWalk)
 
   vp.evm = AsyncEvm.init(vp.toAsyncEvmStateBackend(), networkId)
-  vp.rpcClient = initTestApiBackend(testState)
-  vp.installEthApiHandlers()
+  initTestApiBackend(testState)
+  vp.registerDefaultFrontend()
 
   waitFor vp.proxy.start()
   waitFor vp.verifyChaindId()

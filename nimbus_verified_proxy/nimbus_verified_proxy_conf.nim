@@ -57,16 +57,45 @@ type VerifiedProxyConf* = object
     defaultValueDesc: "mainnet"
     name: "network" .}: Option[string]
 
-  # In-Memory Cache Size
-  # In order to support the BLOCKHASH opcode for eth_call we need at least
-  # MAX_PREV_HEADER_DEPTH headers in the header cache.
-  cacheLen* {.
+  accountCacheLen* {.
     hidden,
-    desc: "Length of the header cache maintained in memory",
+    desc: "Length of the accounts cache maintained in memory",
+    defaultValue: 128,
+    defaultValueDesc: "128",
+    name: "dbg=acc-cache-len"
+  .}: int
+
+  codeCacheLen* {.
+    hidden,
+    desc: "Length of the code cache maintained in memory",
+    defaultValue: 64,
+    defaultValueDesc: "64",
+    name: "dbg-code-cache-len"
+  .}: int
+
+  storageCacheLen* {.
+    hidden,
+    desc: "Length of the storage cache maintained in memory",
+    defaultValue: 256,
+    defaultValueDesc: "256",
+    name: "dbg-sto-cache-len"
+  .}: int
+
+  headerStoreLen* {.
+    hidden,
+    desc: "Length of the header store maintained in memory",
     defaultValue: MAX_PREV_HEADER_DEPTH,
     defaultValueDesc: "256",
-    name: "debug-cache-len"
+    name: "dbg-header-store-len"
   .}: int
+
+  maxBlockWalk* {.
+    hidden,
+    desc: "Maximum number of blocks that will be traversed to serve a request",
+    defaultValue: 1000,
+    defaultValueDesc: "1000",
+    name: "dbg-max-walk"
+  .}: uint64
 
   # Consensus light sync
   # No default - Needs to be provided by the user
@@ -123,14 +152,6 @@ type VerifiedProxyConf* = object
     defaultValue: 160, # 5 (fanout) * 64 (subnets) / 2 (subs) for a healthy mesh
     name: "max-peers"
   .}: int
-
-  maxBlockWalk* {.
-    hidden,
-    desc: "Maximum number of blocks that will be queried to serve a request",
-    defaultValue: 1000,
-    defaultValueDesc: "1000",
-    name: "debug-max-walk"
-  .}: uint64
 
   hardMaxPeers* {.
     desc: "The maximum number of peers to connect to. Defaults to maxPeers * 1.5"

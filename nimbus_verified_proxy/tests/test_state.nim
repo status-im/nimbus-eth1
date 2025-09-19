@@ -60,16 +60,16 @@ suite "test state verification":
       vp.headerStore.updateFinalized(convHeader(blk), blk.hash).isOk()
 
     let
-      verifiedBalance = waitFor vp.proxy.getClient().eth_getBalance(address, latestTag)
+      verifiedBalance = waitFor vp.frontend.eth_getBalance(address, latestTag)
       verifiedNonce =
-        waitFor vp.proxy.getClient().eth_getTransactionCount(address, latestTag)
-      verifiedCode = waitFor vp.proxy.getClient().eth_getCode(address, latestTag)
+        waitFor vp.frontend.eth_getTransactionCount(address, latestTag)
+      verifiedCode = waitFor vp.frontend.eth_getCode(address, latestTag)
       verifiedSlot =
-        waitFor vp.proxy.getClient().eth_getStorageAt(address, slot, latestTag)
-      verifiedCall = waitFor vp.proxy.getClient().eth_call(tx, latestTag)
+        waitFor vp.frontend.eth_getStorageAt(address, slot, latestTag)
+      verifiedCall = waitFor vp.frontend.eth_call(tx, latestTag)
       verifiedAccessList =
-        waitFor vp.proxy.getClient().eth_createAccessList(tx, latestTag)
-      verifiedEstimate = waitFor vp.proxy.getClient().eth_estimateGas(tx, latestTag)
+        waitFor vp.frontend.eth_createAccessList(tx, latestTag)
+      verifiedEstimate = waitFor vp.frontend.eth_estimateGas(tx, latestTag)
 
     check:
       verifiedBalance == UInt256.fromHex("0x1d663f6a4afc5b01abb5d")

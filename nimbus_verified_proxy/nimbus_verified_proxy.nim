@@ -22,8 +22,7 @@ import
   ../execution_chain/rpc/cors,
   ../execution_chain/common/common,
   ./types,
-  ./rpc/evm,
-  ./rpc/rpc_eth_api,
+  ./engine,
   ./nimbus_verified_proxy_conf,
   ./header_store,
   ./rpc_api_backend
@@ -53,18 +52,6 @@ func getConfiguredChainId(networkMetadata: Eth2NetworkMetadata): UInt256 =
   else:
     return networkMetadata.cfg.DEPOSIT_CHAIN_ID.u256
 
-func chainIdToNetworkId(chainId: UInt256): Result[UInt256, string] =
-  if chainId == 1.u256:
-    ok(1.u256)
-  elif chainId == 11155111.u256:
-    ok(11155111.u256)
-  elif chainId == 17000.u256:
-    ok(17000.u256)
-  elif chainId == 560048.u256:
-    ok(560048.u256)
-  else:
-    return err("Unknown chainId")
-
 proc run*(
     config: VerifiedProxyConf, ctx: ptr Context
 ) {.raises: [CatchableError], gcsafe.} =
@@ -81,30 +68,19 @@ proc run*(
   let metadata = loadEth2Network(config.eth2Network)
 
   let
-    chainId = getConfiguredChainId(metadata)
-    authHooks = @[httpCors(@[])] # TODO: for now we serve all cross origin requests
-    # TODO: write a comment
-    clientConfig = config.web3url.asClientConfig()
-
-    rpcProxy = RpcProxy.new(
-      [initTAddress(config.rpcAddress, config.rpcPort)], clientConfig, authHooks
+    engineConf = RpcVerificationEngineConf(
+      chainId: getConfiguredChainId(metadata),
+      maxBlockWalk: config.maxBlockWalk,
+      headerStoreLen: config.headerStoreLen,
+      accountCacheLen: config.accountCacheLen,
+      codeCacheLen: config.codeCacheLen,
+      storageCacheLen: config.storageCacheLen
     )
+    engine = RpcVerificationEngine.init(engineConf)
+    jsonrpcBackend = JsonRpcBackend.init(config.web3url)
 
-    # header cache contains headers downloaded from p2p
-    headerStore = HeaderStore.new(config.cacheLen)
-
-    # TODO: add config object to verified proxy for future config options
-    verifiedProxy =
-      VerifiedRpcProxy.init(rpcProxy, headerStore, chainId, config.maxBlockWalk)
-
-    networkId = chainIdToNetworkId(chainId).valueOr:
-      raise newException(ValueError, error)
-
-  verifiedProxy.evm = AsyncEvm.init(verifiedProxy.toAsyncEvmStateBackend(), networkId)
-  verifiedProxy.rpcClient = verifiedProxy.initNetworkApiBackend()
-
-  # add handlers that verify RPC calls /rpc/rpc_eth_api.nim
-  verifiedProxy.installEthApiHandlers()
+  # the backend only needs the url to connect to
+  engine.backend = jsonrpcBackend
 
   # just for short hand convenience
   template cfg(): auto =
@@ -170,10 +146,10 @@ proc run*(
   # start the p2p network and rpcProxy
   waitFor network.startListening()
   waitFor network.start()
-  waitFor rpcProxy.start()
-
+  discard (waitFor jsonrpcBackend.start()).valueOr:
+    raise newException(ValueError, error)
   # verify chain id that the proxy is connected to
-  waitFor verifiedProxy.verifyChaindId()
+  waitFor engine.verifyChaindId()
 
   proc onFinalizedHeader(
       lightClient: LightClient, finalizedHeader: ForkedLightClientHeader
@@ -181,7 +157,7 @@ proc run*(
     withForkyHeader(finalizedHeader):
       when lcDataFork > LightClientDataFork.Altair:
         info "New LC finalized header", finalized_header = shortLog(forkyHeader)
-        let res = headerStore.updateFinalized(finalizedHeader)
+        let res = engine.headerStore.updateFinalized(finalizedHeader)
 
         if res.isErr():
           error "finalized header update error", error = res.error()
@@ -200,7 +176,7 @@ proc run*(
     withForkyHeader(optimisticHeader):
       when lcDataFork > LightClientDataFork.Altair:
         info "New LC optimistic header", optimistic_header = shortLog(forkyHeader)
-        let res = headerStore.add(optimisticHeader)
+        let res = engine.headerStore.add(optimisticHeader)
 
         if res.isErr():
           error "header store add error", error = res.error()
@@ -299,7 +275,7 @@ proc run*(
     if ctx != nil and ctx.stop:
       # Cleanup
       waitFor network.stop()
-      waitFor rpcProxy.stop()
+      waitFor jsonRpcBackend.stop()
       ctx.cleanup()
       # Notify client that cleanup is finished
       ctx.onHeader(nil, 2)
