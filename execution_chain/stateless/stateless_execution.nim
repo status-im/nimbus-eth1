@@ -25,17 +25,19 @@ export witness_types, common, headers, blocks, results
 proc statelessProcessBlock*(
     witness: ExecutionWitness,
     com: CommonRef,
-    parent: Header,
     blk: Block): Result[void, string] =
 
   template header(): Header =
     blk.header
 
-  let preStateRoot = parent.stateRoot
+  let
+    verifiedHeaders = ?witness.verifyHeaders(header) # Returns headers sorted by block number
+    parent = verifiedHeaders[^1] # The last header is the parent
+    preStateRoot = parent.stateRoot
 
   # Verify the witness against the parent header stateroot.
   # This validates the state against the keys, the code and headers in the witness.
-  ?witness.verify(preStateRoot)
+  ?witness.verifyState(preStateRoot)
 
   # Convert the list of trie nodes into a table keyed by node hash.
   var nodes: Table[Hash32, seq[byte]]
@@ -58,10 +60,9 @@ proc statelessProcessBlock*(
     doAssert memoryTxFrame.setCodeByHash(keccak256(c), c).isOk()
 
   # Load the block hashes into the database indexed by block number.
-  for h in witness.headers:
+  for h in verifiedHeaders:
     try:
-      let header = rlp.decode(h, Header)
-      memoryTxFrame.addBlockNumberToHashLookup(header.number, header.computeRlpHash())
+      memoryTxFrame.addBlockNumberToHashLookup(h.number, h.computeRlpHash())
     except RlpError as e:
       raiseAssert e.msg
 

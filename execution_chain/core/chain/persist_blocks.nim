@@ -187,7 +187,7 @@ proc persistBlock*(p: var Persister, blk: Block): Result[void, string] =
     if vmState.com.statelessWitnessValidation:
       doAssert witness.validateKeys(vmState.ledger.getWitnessKeys()).isOk()
       let executionWitness = ExecutionWitness.build(witness, vmState.ledger)
-      ?executionWitness.statelessProcessBlock(com, p.parent, blk)
+      ?executionWitness.statelessProcessBlock(com, blk)
 
     ?vmState.ledger.txFrame.persistWitness(header.computeBlockHash(), witness)
 

@@ -83,15 +83,52 @@ func validateKeys*(witness: Witness, expectedKeys: WitnessTable): Result[void, s
 
   ok()
 
-func verify*(witness: ExecutionWitness, preStateRoot: Hash32): Result[void, string] =
+func verifyHeaders*(witness: ExecutionWitness, header: Header): Result[seq[Header], string] =
 
+  if witness.headers.len() < 1:
+    return err("At least one header (the parent) is required in the witness")
+  if witness.headers.len() > 256:
+    return err("Too many headers in witness")
+
+  # Rlp decode the headers in the witness
+  var headers: seq[Header]
+  for header in witness.headers:
+    try:
+      headers.add(rlp.decode(header, Header))
+    except RlpError as e:
+      return err("Failed to decode header in witness: " & e.msg)
+
+  # Sort the headers in ascending order by block number
+  func compareByNumber(a, b: Header): int =
+    if a.number == b.number:
+      0
+    elif a.number > b.number:
+      1
+    else: # a.number < b.number
+      -1
+  headers.sort(compareByNumber)
+
+  # Check that the last header in the list (after sorting) is the parent header
+  if headers[headers.high].computeRlpHash() != header.parentHash:
+    return err("Parent header is required in the witness")
+
+  var i = headers.high
+  while i > 0:
+    if headers[i - 1].computeRlpHash() != headers[i].parentHash:
+      return err("Header chain verification failed")
+    dec i
+
+  ok(headers)
+
+func verifyState*(witness: ExecutionWitness, preStateRoot: Hash32): Result[void, string] =
+
+  # Verify state against keys in witness
   var keysTable: Table[Address, HashSet[UInt256]]
   ?keysTable.putAll(witness.keys)
 
   var stateTable: Table[Hash32, seq[byte]]
   stateTable.putAll(witness.state)
 
-  # Verify state against keys in witness
   var codeHashes: HashSet[Hash32]
   for address, slots in keysTable:
     let
@@ -120,36 +157,5 @@ func verify*(witness: ExecutionWitness, preStateRoot: Hash32): Result[void, stri
   for code in witness.codes:
     if keccak256(code) notin codeHashes:
       return err("Hash of code not found in witness state")
-
-  # Verify witness headers
-  if witness.headers.len() < 1:
-    return err("At least one header (the parent) is required in the witness")
-  if witness.headers.len() > 256:
-    return err("Too many headers in witness")
-
-  var headers: seq[Header]
-  for header in witness.headers:
-    try:
-      headers.add(rlp.decode(header, Header))
-    except RlpError as e:
-      return err("Failed to decode header in witness: " & e.msg)
-
-  func compareByNumber(a, b: Header): int =
-    if a.number == b.number:
-      0
-    elif a.number > b.number:
-      1
-    else: # a.number < b.number
-      -1
-  headers.sort(compareByNumber)
-
-  if headers[headers.high].stateRoot != preStateRoot:
-    return err("Parent header should match the pre-stateroot")
-
-  var i = headers.high
-  while i > 0:
-    if headers[i - 1].computeRlpHash() != headers[i].parentHash:
-      return err("Header chain verification failed")
-    dec i
 
   ok()
