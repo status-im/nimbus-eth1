@@ -224,9 +224,11 @@ proc setupDebugRpc*(com: CommonRef, txPool: TxPoolRef, server: RpcServer) =
     chain.getExecutionWitness(blockHash).valueOr:
       raise newException(ValueError, error)
 
-  server.rpc("debug_getBlockHeader") do(blockNumber: uint64) -> string:
-    ## Returns the rlp encoded block header in hex for the given block number.
-    let header = chain.baseTxFrame.getBlockHeader(blockNumber).valueOr:
+  server.rpc("debug_getHeaderByNumber") do(blockTag: BlockTag) -> string:
+    ## Returns the rlp encoded block header in hex for the given block number / tag.
+    # Note: When proposing this method for inclusion in the JSON-RPC spec,
+    # consider returning a header JSON object instead of RLP. Likely to be more accepted.
+    let header = chain.headerFromTag(blockTag).valueOr:
       raise newException(ValueError, error)
 
     rlp.encode(header).to0xHex()

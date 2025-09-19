@@ -22,6 +22,7 @@ import
   eth/common/keys,
   eth/net/nat,
   eth/p2p/discoveryv5/protocol as discv5_protocol,
+  web3/[eth_api_types, conversions],
   ../common/common_utils,
   ../rpc/[
     rpc_discovery_api, rpc_portal_common_api, rpc_portal_history_api,
@@ -45,7 +46,7 @@ chronicles.formatIt(IoErrorCode):
 
 createRpcSigsFromNim(RpcClient):
   # EL debug call to get header for validation
-  proc debug_getBlockHeader(blockNumber: uint64): string
+  proc debug_getHeaderByNumber(blockNumber: BlockIdentifier): string
 
 func optionToOpt[T](o: Option[T]): Opt[T] =
   if o.isSome():
@@ -202,7 +203,7 @@ proc run(portalClient: PortalClient, config: PortalConf) {.raises: [CatchableErr
           blockNumber: uint64
       ): Future[Result[Header, string]] {.async: (raises: [CancelledError]), gcsafe.} =
         try:
-          let header = await rpcClient.debug_getBlockHeader(blockNumber)
+          let header = await rpcClient.debug_getHeaderByNumber(blockId(blockNumber))
           decodeRlp(header.hexToSeqByte(), Header)
         except CatchableError as e:
           err(e.msg)
