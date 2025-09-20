@@ -34,7 +34,7 @@ func header(h: Hash32; c: ForkedChainRef): Header =
 func baseChains(c: ForkedChainRef): seq[seq[Hash32]] =
   for head in c.heads:
     var hs: seq[Hash32]
-    loopIt(head):
+    for it in ancestors(head):
       hs.add it.hash
     result.add move(hs)
 
@@ -102,7 +102,7 @@ func validate*(c: ForkedChainRef): Result[void,string] =
   var blocks = initHashSet[Hash32]()
   # Cursor heads must refer to items of `c.blocks[]`
   for head in c.heads:
-    loopIt(head):
+    for it in ancestors(head):
       if not c.hashToBlock.hasKey(it.hash):
         return err("stray block: " & pp(it))
 
