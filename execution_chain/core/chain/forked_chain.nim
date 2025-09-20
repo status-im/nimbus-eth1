@@ -126,7 +126,7 @@ func findFinalizedPos(
     if c.heads.len == 1:
       return ok(fin)
 
-    for it in  loopIt(head):
+    for it in  ancestors(head):
       if it == fin:
         return ok(fin)
 
@@ -189,7 +189,7 @@ func calculateNewBase(
   #
   # base will not move to A3 onward for this iteration
 
-  for it in loopIt(head):
+  for it in ancestors(head):
     if it.number == target:
       return it
 
@@ -208,8 +208,10 @@ proc removeBlockFromCache(c: ForkedChainRef, b: BlockRef) =
   b.receipts.reset
   b.txFrame.dispose()
 
-  # Mark it as deleted, don't delete it twice
+  # Mark it as removed, don't remove it twice
   b.txFrame = nil
+  # Clear parent and let GC claim the memory earlier
+  b.parent = nil
 
 proc updateHead(c: ForkedChainRef, head: BlockRef) =
   ## Update head if the new head is different from current head.
@@ -260,7 +262,7 @@ proc updateFinalized(c: ForkedChainRef, finalized: BlockRef, fcuHead: BlockRef) 
     # Any branches not reachable from finalized
     # should be removed.
     if not reachable(head, finalized):
-      for it in loopNotFinalizedAndClearParent(head):
+      for it in loopNotFinalized(head):
         if it.txFrame.isNil:
           # Has been deleted by previous branch
           break
@@ -280,7 +282,7 @@ proc updateFinalized(c: ForkedChainRef, finalized: BlockRef, fcuHead: BlockRef) 
     # based on longest chain reachable from fcuHead.
     var candidate: BlockRef
     for head in c.heads:
-      for it in loopIt(head):
+      for it in ancestors(head):
         if it == fcuHead:
           if candidate.isNil:
             candidate = head
@@ -338,7 +340,7 @@ with --debug-eager-state-root."""
   var
     count = 0'u
 
-  for it in loopItAndClearParent(base.parent):
+  for it in ancestors(base.parent):
     c.removeBlockFromCache(it)
     inc count
 
@@ -846,7 +848,7 @@ proc headerByNumber*(c: ForkedChainRef, number: BlockNumber): Result[Header, str
   if number < c.base.number:
     return c.baseTxFrame.getBlockHeader(number)
 
-  for it in loopIt(c.latest):
+  for it in ancestors(c.latest):
     if number == it.number:
       return ok(it.header)
 
@@ -955,7 +957,7 @@ proc payloadBodyV1ByNumber*(c: ForkedChainRef, number: BlockNumber): Result[Exec
 
     return blk
 
-  for it in loopIt(c.latest):
+  for it in ancestors(c.latest):
     if number >= it.number:
       return ok(toPayloadBody(it.blk))
 
@@ -977,7 +979,7 @@ proc blockByNumber*(c: ForkedChainRef, number: BlockNumber): Result[Block, strin
 
     return ok(EthBlock.init(move(header), move(blockBody)))
 
-  for it in loopIt(c.latest):
+  for it in ancestors(c.latest):
     if number >= it.number:
       return ok(it.blk)
 
@@ -1005,7 +1007,7 @@ func payloadBodyV1InMemory*(c: ForkedChainRef,
   var
     blocks = newSeqOfCap[BlockRef](last-first+1)
 
-  for it in loopIt(c.latest):
+  for it in ancestors(c.latest):
     if it.number >= first and it.number <= last:
       blocks.add(it)
 
@@ -1018,7 +1020,7 @@ func equalOrAncestorOf*(c: ForkedChainRef, blockHash: Hash32, headHash: Hash32):
     return true
 
   let head = c.hashToBlock.getOrDefault(headHash)
-  for it in loopIt(head):
+  for it in ancestors(head):
     if it.hash == blockHash:
       return true
 
@@ -1036,7 +1038,7 @@ proc isCanonicalAncestor*(c: ForkedChainRef,
   if c.base.number < c.latest.number:
     # The current canonical chain in memory is headed by
     # latest.header
-    for it in loopIt(c.latest):
+    for it in ancestors(c.latest):
       if it.hash == blockHash and it.number == blockNumber:
         return true
 
@@ -1051,7 +1053,7 @@ iterator txHashInRange*(c: ForkedChainRef, fromHash: Hash32, toHash: Hash32): Ha
   ## exclude base from iteration, new block produced by txpool
   ## should not reach base
   let head = c.hashToBlock.getOrDefault(fromHash)
-  for it in loopIt(head):
+  for it in ancestors(head):
     if toHash == it.hash:
       break
     for tx in it.blk.transactions:

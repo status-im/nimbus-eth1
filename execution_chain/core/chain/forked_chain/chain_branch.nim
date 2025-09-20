@@ -45,16 +45,9 @@ template isOk*(b: BlockRef): bool =
 template loopItImpl(condition: untyped, init: BlockRef) =
   var it = init
   while it.condition:
+    let next = it.parent
     yield it
-    it = it.parent
-
-template loopItAndClearParentImpl(condition: untyped, init: BlockRef) =
-  var it = init
-  while it.condition:
-    yield it
-    let tmp = it
-    it = it.parent
-    tmp.parent = nil
+    it = next 
 
 template stateRoot*(b: BlockRef): Hash32 =
   b.blk.header.stateRoot
@@ -68,15 +61,9 @@ template finalize*(b: BlockRef) =
 template notFinalized*(b: BlockRef): bool =
   b.index != DAG_NODE_FINALIZED
 
-iterator loopIt*(init: BlockRef): BlockRef =
+iterator ancestors*(init: BlockRef): BlockRef =
   loopItImpl(isOk, init)
-
-iterator loopItAndClearParent*(init: BlockRef): BlockRef =
-  loopItAndClearParentImpl(isOk, init)
 
 iterator loopNotFinalized*(init: BlockRef): BlockRef =
   loopItImpl(notFinalized, init)
-
-iterator loopNotFinalizedAndClearParent*(init: BlockRef): BlockRef =
-  loopItAndClearParentImpl(notFinalized, init)
 
