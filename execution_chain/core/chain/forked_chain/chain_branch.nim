@@ -42,46 +42,41 @@ func `==`*(a, b: BlockRef): bool =
 template isOk*(b: BlockRef): bool =
   b.isNil.not
 
-template loopItImpl(condition: untyped, init: BlockRef, body: untyped) =
-  block:
-    var it{.inject.} = init
-    while it.condition:
-      body
-      it = it.parent
+template loopItImpl(condition: untyped, init: BlockRef) =
+  var it = init
+  while it.condition:
+    yield it
+    it = it.parent
 
-template loopItAndClearParentImpl(condition: untyped, init: BlockRef, body: untyped) =
-  block:
-    var it{.inject.} = init
-    while it.condition:
-      body
-      let tmp = it
-      it = it.parent
-      tmp.parent = nil
+template loopItAndClearParentImpl(condition: untyped, init: BlockRef) =
+  var it = init
+  while it.condition:
+    yield it
+    let tmp = it
+    it = it.parent
+    tmp.parent = nil
 
 template stateRoot*(b: BlockRef): Hash32 =
   b.blk.header.stateRoot
 
 const
   DAG_NODE_FINALIZED = 1
-  DAG_NODE_CLEAR = 0
 
 template finalize*(b: BlockRef) =
   b.index = DAG_NODE_FINALIZED
 
-template unFinalize*(b: BlockRef) =
-  b.index = DAG_NODE_CLEAR
-
 template notFinalized*(b: BlockRef): bool =
   b.index != DAG_NODE_FINALIZED
 
-template loopIt*(init: BlockRef, body: untyped) =
-  loopItImpl(isOk, init, body)
+iterator loopIt*(init: BlockRef): BlockRef =
+  loopItImpl(isOk, init)
 
-template loopItAndClearParent*(init: BlockRef, body: untyped) =
-  loopItAndClearParentImpl(isOk, init, body)
+iterator loopItAndClearParent*(init: BlockRef): BlockRef =
+  loopItAndClearParentImpl(isOk, init)
 
-template loopFinalized*(init: BlockRef, body: untyped) =
-  loopItImpl(notFinalized, init, body)
+iterator loopNotFinalized*(init: BlockRef): BlockRef =
+  loopItImpl(notFinalized, init)
 
-template loopFinalizedAndClearParent*(init: BlockRef, body: untyped) =
-  loopItAndClearParentImpl(notFinalized, init, body)
+iterator loopNotFinalizedAndClearParent*(init: BlockRef): BlockRef =
+  loopItAndClearParentImpl(notFinalized, init)
+
