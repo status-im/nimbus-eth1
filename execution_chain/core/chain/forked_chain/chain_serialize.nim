@@ -144,7 +144,7 @@ proc replayBranch(fc: ForkedChainRef;
     ): Result[void, string] =
 
   var blocks = newSeqOfCap[BlockRef](head.number - parent.number)
-  loopIt(head):
+  for it in  ancestors(head):
     if it.number > parent.number:
       blocks.add it
     else:
@@ -169,7 +169,7 @@ proc replay(fc: ForkedChainRef): Result[void, string] =
   fc.base.finalize()
 
   for head in fc.heads:
-    loopIt(head):
+    for it in ancestors(head):
       if it.txFrame.isNil.not:
         ?fc.replayBranch(it, head)
         break
