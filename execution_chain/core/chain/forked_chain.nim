@@ -330,6 +330,17 @@ something else needs attention! Shutting down to preserve the database - restart
 with --debug-eager-state-root."""
 
   c.com.db.persist(base.txFrame)
+  block:
+    # Write block contents to txFrame at the last moment - otherwise, they would
+    # stay both in BlockRef and TxFrame memory
+    # TODO probably makes sense to do it the other way around, removing blk
+    #      from BlockRef
+    var blk = base
+    while blk.isOk:
+      c.writeBaggage(blk.blk, blk.hash, blk.txFrame, blk.receipts)
+      blk = blk.parent
+
+  c.com.db.persist(base.txFrame, Opt.some(base.stateRoot))
 
   # Update baseTxFrame when we about to yield to the event loop
   # and prevent other modules accessing expired baseTxFrame.
@@ -485,9 +496,7 @@ proc validateBlock(c: ForkedChainRef,
     txFrame.dispose()
     return err(error)
 
-  c.writeBaggage(blk, blkHash, txFrame, receipts)
-
-  c.updateSnapshot(blk, txFrame)
+  c.updateSnapshot(blk.header.number, txFrame)
 
   let newBlock = c.appendBlock(parent, blk, blkHash, txFrame, move(receipts))
 
