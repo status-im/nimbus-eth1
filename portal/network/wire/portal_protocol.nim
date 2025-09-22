@@ -258,6 +258,10 @@ type
     enr*: Record
     distance*: UInt256
 
+  FailureInfo* = object
+    durationMs*: int64
+    failure*: string
+
   TraceObject* = object
     origin*: NodeId
     targetId*: UInt256
@@ -265,6 +269,7 @@ type
     responses*: Table[string, TraceResponse]
     metadata*: Table[string, NodeMetadata]
     cancelled*: seq[NodeId]
+    failures*: Table[string, FailureInfo]
     startedAtMs*: int64
 
   TraceContentLookupResult* = object
@@ -1493,14 +1498,14 @@ proc traceContentLookup*(
   var responses = Table[string, TraceResponse]()
   var metadata = Table[string, NodeMetadata]()
   # Local node should be part of the responses
-  responses["0x" & $p.localNode.id] =
+  responses["0x" & p.localNode.id.dumpHex()] =
     TraceResponse(durationMs: 0, respondedWith: seen.toSeq())
-  metadata["0x" & $p.localNode.id] = NodeMetadata(
+  metadata["0x" & p.localNode.id.dumpHex()] = NodeMetadata(
     enr: p.localNode.record, distance: p.distance(p.localNode.id, targetId)
   )
   # And metadata for all the nodes local node closestNodes
   for node in closestNodes:
-    metadata["0x" & $node.id] =
+    metadata["0x" & node.id.dumpHex()] =
       NodeMetadata(enr: node.record, distance: p.distance(node.id, targetId))
 
   var pendingQueries = newSeqOfCap[
@@ -1564,7 +1569,7 @@ proc traceContentLookup*(
         for n in content.nodes:
           let dist = p.distance(n.id, targetId)
 
-          metadata["0x" & $n.id] = NodeMetadata(enr: n.record, distance: dist)
+          metadata["0x" & n.id.dumpHex()] = NodeMetadata(enr: n.record, distance: dist)
           respondedWith.add(n.id)
 
           if not seen.containsOrIncl(n.id):
@@ -1584,10 +1589,10 @@ proc traceContentLookup*(
 
         let distance = p.distance(content.src.id, targetId)
 
-        responses["0x" & $content.src.id] =
+        responses["0x" & content.src.id.dumpHex()] =
           TraceResponse(durationMs: duration, respondedWith: respondedWith)
 
-        metadata["0x" & $content.src.id] =
+        metadata["0x" & content.src.id.dumpHex()] =
           NodeMetadata(enr: content.src.record, distance: distance)
       of Content:
         let duration = chronos.milliseconds(Moment.now() - startedAt)
@@ -1601,17 +1606,17 @@ proc traceContentLookup*(
 
         let distance = p.distance(content.src.id, targetId)
 
-        responses["0x" & $content.src.id] =
+        responses["0x" & content.src.id.dumpHex()] =
           TraceResponse(durationMs: duration, respondedWith: newSeq[NodeId]())
 
-        metadata["0x" & $content.src.id] =
+        metadata["0x" & content.src.id.dumpHex()] =
           NodeMetadata(enr: content.src.record, distance: distance)
 
         var pendingNodeIds = newSeq[NodeId]()
 
         for pn in pendingNodes:
           pendingNodeIds.add(pn.id)
-          metadata["0x" & $pn.id] =
+          metadata["0x" & pn.id.dumpHex()] =
             NodeMetadata(enr: pn.record, distance: p.distance(pn.id, targetId))
 
         return TraceContentLookupResult(

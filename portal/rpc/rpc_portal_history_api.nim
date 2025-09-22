@@ -33,6 +33,7 @@ export tables
 ContentInfo.useDefaultSerializationIn JrpcConv
 TraceContentLookupResult.useDefaultSerializationIn JrpcConv
 TraceObject.useDefaultSerializationIn JrpcConv
+FailureInfo.useDefaultSerializationIn JrpcConv
 NodeMetadata.useDefaultSerializationIn JrpcConv
 TraceResponse.useDefaultSerializationIn JrpcConv
 
