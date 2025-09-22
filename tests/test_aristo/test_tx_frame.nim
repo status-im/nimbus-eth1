@@ -227,3 +227,52 @@ suite "Aristo TxFrame":
     db.persist(batch, tx2)
     check:
       db.putEndFn(batch).isOk()
+
+  test "Get state root on a txFrame which has lower level than the baseTxFrame":
+    # level 1
+    let tx1 = db.txFrameBegin(db.baseTxFrame())
+    for i in 1..<100:
+      let acc = makeAccount(i.uint64)
+      check tx1.mergeAccountRecord(acc[0], acc[1]).isOk()
+    tx1.checkpoint(1, skipSnapshot = false)
+
+    # level 2
+    let tx2 = db.txFrameBegin(tx1)
+    for i in 100..<200:
+      let acc = makeAccount(i.uint64)
+      check tx2.mergeAccountRecord(acc[0], acc[1]).isOk()
+    tx2.checkpoint(2, skipSnapshot = false)
+
+    # level 3
+    let tx3 = db.txFrameBegin(tx2)
+    for i in 200..<300:
+      let acc = makeAccount(i.uint64)
+      check tx3.mergeAccountRecord(acc[0], acc[1]).isOk()
+    tx3.checkpoint(3, skipSnapshot = false)
+
+    # level 4
+    let tx4 = db.txFrameBegin(tx3)
+    for i in 300..<400:
+      let acc = makeAccount(i.uint64)
+      check tx4.mergeAccountRecord(acc[0], acc[1]).isOk()
+    tx4.checkpoint(4, skipSnapshot = false)
+
+    # level 3
+    let tx5 = db.txFrameBegin(tx2)
+    for i in 400..<500:
+      let acc = makeAccount(i.uint64)
+      check tx5.mergeAccountRecord(acc[0], acc[1]).isOk()
+    tx5.checkpoint(5, skipSnapshot = false)
+
+    block:
+      let batch = db.putBegFn().expect("working batch")
+      db.persist(batch, tx4) # after this the baseTxFrame is at level 4
+      check:
+        db.putEndFn(batch).isOk()
+
+    # Verify that getting the state root of the level 3 txFrame does not impact
+    # the persisted state in the database.
+    let stateRootBefore = tx4.fetchStateRoot().get()
+    discard tx5.fetchStateRoot().get()
+    let stateRootAfter = tx4.fetchStateRoot().get()
+    check stateRootBefore == stateRootAfter
