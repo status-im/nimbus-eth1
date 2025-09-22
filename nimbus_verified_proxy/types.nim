@@ -9,7 +9,7 @@
 
 import
   std/tables,
-  json_rpc/[rpcproxy, rpcclient],
+  json_rpc/rpcclient,
   web3/[eth_api, eth_api_types],
   stint,
   minilru,

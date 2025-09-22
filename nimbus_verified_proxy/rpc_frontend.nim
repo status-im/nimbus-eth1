@@ -9,10 +9,9 @@
 
 import
   results,
-  chronicles,
   stew/byteutils,
   nimcrypto/sysrand,
-  json_rpc/[rpcserver, rpcclient, rpcproxy],
+  json_rpc/[rpcserver, rpcclient],
   eth/common/accounts,
   web3/[eth_api, eth_api_types],
   ../execution_chain/core/eip4844,

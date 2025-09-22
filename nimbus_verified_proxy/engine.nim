@@ -8,7 +8,6 @@
 {.push raises: [], gcsafe.}
 
 import
-  stint,
   ./types,
   ./header_store,
   ./utils,

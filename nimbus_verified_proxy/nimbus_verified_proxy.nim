@@ -19,10 +19,10 @@ import
   beacon_chain/networking/topic_params,
   beacon_chain/spec/beaconstate,
   beacon_chain/[beacon_clock, light_client, nimbus_binary_common, version],
-  ../execution_chain/rpc/cors,
   ../execution_chain/common/common,
   ./types,
   ./engine,
+  ./utils,
   ./nimbus_verified_proxy_conf,
   ./header_store,
   ./rpc_api_backend
@@ -77,10 +77,11 @@ proc run*(
       storageCacheLen: config.storageCacheLen
     )
     engine = RpcVerificationEngine.init(engineConf)
-    jsonrpcBackend = JsonRpcBackend.init(config.web3url)
+    jsonRpcBackend = (waitFor JsonRpcBackend.start(config.web3url)).valueOr:
+      raise newException(ValueError, error)
 
   # the backend only needs the url to connect to
-  engine.backend = jsonrpcBackend
+  engine.backend = jsonRpcBackend.getEthApiBackend()
 
   # just for short hand convenience
   template cfg(): auto =
@@ -146,8 +147,6 @@ proc run*(
   # start the p2p network and rpcProxy
   waitFor network.startListening()
   waitFor network.start()
-  discard (waitFor jsonrpcBackend.start()).valueOr:
-    raise newException(ValueError, error)
   # verify chain id that the proxy is connected to
   waitFor engine.verifyChaindId()
 
