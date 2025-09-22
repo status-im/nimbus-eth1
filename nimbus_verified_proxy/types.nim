@@ -88,7 +88,7 @@ type
   GasPriceProc = proc(): Future[Quantity] {.async.}
   MaxPriorityFeePerGasProc = proc(): Future[Quantity] {.async.}
 
-  EthApiBackend* = object of RootObj
+  EthApiBackend* = object
     eth_chainId*: ChainIdProc
     eth_getBlockByHash*: GetBlockByHashProc
     eth_getBlockByNumber*: GetBlockByNumberProc
