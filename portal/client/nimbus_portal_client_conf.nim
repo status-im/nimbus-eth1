@@ -198,7 +198,7 @@ type
     .}: IpAddress
 
     rpcPort* {.
-      desc: "Port for the HTTP JSON-RPC server", defaultValue: 8545, name: "rpc-port"
+      desc: "Port for the HTTP JSON-RPC server", defaultValue: 8565, name: "rpc-port"
     .}: Port
 
     rpcApi* {.
@@ -222,7 +222,7 @@ type
 
     wsPort* {.
       desc: "Port for the WebSocket JSON-RPC server",
-      defaultValue: 8546,
+      defaultValue: 8566,
       name: "ws-port"
     .}: Port
 

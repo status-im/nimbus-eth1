@@ -41,6 +41,7 @@ suite "Stateless: Witness Verification":
       header1 = Header(number: 1)
       header2 = Header(number: 2, parentHash: header1.computeRlpHash())
       header3 = Header(number: 3, parentHash: header2.computeRlpHash(), stateRoot: stateRoot)
+      header4 = Header(number: 4, parentHash: header3.computeRlpHash())
 
     ledger.txFrame.persistHeader(header1.computeRlpHash(), header1).expect("success")
     ledger.txFrame.persistHeader(header2.computeRlpHash(), header2).expect("success")
@@ -69,5 +70,12 @@ suite "Stateless: Witness Verification":
 
     let
       executionWitness = ExecutionWitness.build(witness, ledger)
-      verificationResult = executionWitness.verify(stateRoot)
-    check verificationResult.isOk()
+      headersRes = executionWitness.verifyHeaders(header4)
+
+    check:
+      headersRes.isOk()
+      headersRes[].len() == 3
+      headersRes[][0] == header1
+      headersRes[][1] == header2
+      headersRes[][2] == header3
+    check executionWitness.verifyState(stateRoot).isOk()

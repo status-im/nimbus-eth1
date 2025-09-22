@@ -61,10 +61,9 @@ func appendBlock(c: ForkedChainRef,
     receipts: move(receipts),
     hash    : blkHash,
     parent  : parent,
+    index   : 0, # Only finalized segment have finalized marker
   )
 
-  # Only finalized segment have finalized marker
-  newBlock.notFinalized()
   c.hashToBlock[blkHash] = newBlock
   c.latest = newBlock
 
@@ -127,7 +126,7 @@ func findFinalizedPos(
     if c.heads.len == 1:
       return ok(fin)
 
-    loopIt(head):
+    for it in  ancestors(head):
       if it == fin:
         return ok(fin)
 
@@ -190,7 +189,7 @@ func calculateNewBase(
   #
   # base will not move to A3 onward for this iteration
 
-  loopIt(head):
+  for it in ancestors(head):
     if it.number == target:
       return it
 
@@ -205,10 +204,14 @@ proc removeBlockFromCache(c: ForkedChainRef, b: BlockRef) =
     if v == b.txFrame:
       v = nil
 
+  b.blk.reset
+  b.receipts.reset
   b.txFrame.dispose()
 
-  # Mark it as deleted, don't delete it twice
+  # Mark it as removed, don't remove it twice
   b.txFrame = nil
+  # Clear parent and let GC claim the memory earlier
+  b.parent = nil
 
 proc updateHead(c: ForkedChainRef, head: BlockRef) =
   ## Update head if the new head is different from current head.
@@ -241,12 +244,12 @@ proc updateFinalized(c: ForkedChainRef, finalized: BlockRef, fcuHead: BlockRef) 
 
   func reachable(head, fin: BlockRef): bool =
     var it = head
-    while not it.finalized:
+    while it.isOk and it.notFinalized:
       it = it.parent
     it == fin
 
   # Only finalized segment have finalized marker
-  loopFinalized(finalized):
+  for it in loopNotFinalized(finalized):
     it.finalize()
 
   var
@@ -259,7 +262,7 @@ proc updateFinalized(c: ForkedChainRef, finalized: BlockRef, fcuHead: BlockRef) 
     # Any branches not reachable from finalized
     # should be removed.
     if not reachable(head, finalized):
-      loopFinalized(head):
+      for it in loopNotFinalized(head):
         if it.txFrame.isNil:
           # Has been deleted by previous branch
           break
@@ -279,7 +282,7 @@ proc updateFinalized(c: ForkedChainRef, finalized: BlockRef, fcuHead: BlockRef) 
     # based on longest chain reachable from fcuHead.
     var candidate: BlockRef
     for head in c.heads:
-      loopIt(head):
+      for it in ancestors(head):
         if it == fcuHead:
           if candidate.isNil:
             candidate = head
@@ -336,14 +339,10 @@ with --debug-eager-state-root."""
   # e.g. B2 backward.
   var
     count = 0'u
-    it = base.parent
 
-  while it.isOk:
+  for it in ancestors(base.parent):
     c.removeBlockFromCache(it)
     inc count
-    let b = it
-    it = it.parent
-    b.parent = nil
 
   # Update base branch
   c.base = base
@@ -354,7 +353,7 @@ with --debug-eager-state-root."""
 
   count
 
-proc processUpdateBase(c: ForkedChainRef) {.async: (raises: [CancelledError]).} =
+proc processUpdateBase(c: ForkedChainRef): Future[Result[void, string]] {.async: (raises: [CancelledError]).} =
   if c.baseQueue.len > 0:
     let base = c.baseQueue.popFirst()
     c.persistedCount += c.updateBase(base)
@@ -387,16 +386,17 @@ proc processUpdateBase(c: ForkedChainRef) {.async: (raises: [CancelledError]).} 
           resolvedFin= c.latestFinalizedBlockNumber
       c.lastBaseLogTime = time
       c.persistedCount = 0
-    return
+    return ok()
 
   if c.queue.isNil:
     # This recursive mode only used in test env with small set of blocks
-    await c.processUpdateBase()
+    discard await c.processUpdateBase()
   else:
-    proc asyncHandler(): Future[Result[void, string]] {.async: (raises: [CancelledError]).} =
-      await c.processUpdateBase()
-      ok()
+    proc asyncHandler(): Future[Result[void, string]] {.async: (raises: [CancelledError], raw: true).} =
+      c.processUpdateBase()
     await c.queue.addLast(QueueItem(handler: asyncHandler))
+
+  ok()
 
 proc queueUpdateBase(c: ForkedChainRef, base: BlockRef)
      {.async: (raises: [CancelledError]).} =
@@ -411,8 +411,8 @@ proc queueUpdateBase(c: ForkedChainRef, base: BlockRef)
 
   var
     number = base.number - min(base.number, PersistBatchSize)
-    steps  = newSeqOfCap[BlockRef]((base.number-c.base.number) div PersistBatchSize + 1)
-    it = prevQueuedBase
+    steps  = newSeqOfCap[BlockRef]((base.number-prevQueuedBase.number) div PersistBatchSize + 1)
+    it = base
 
   steps.add base
 
@@ -427,11 +427,10 @@ proc queueUpdateBase(c: ForkedChainRef, base: BlockRef)
 
   if c.queue.isNil:
     # This recursive mode only used in test env with small set of blocks
-    await c.processUpdateBase()
+    discard await c.processUpdateBase()
   else:
-    proc asyncHandler(): Future[Result[void, string]] {.async: (raises: [CancelledError]).} =
-      await c.processUpdateBase()
-      ok()
+    proc asyncHandler(): Future[Result[void, string]] {.async: (raises: [CancelledError], raw: true).} =
+      c.processUpdateBase()
     await c.queue.addLast(QueueItem(handler: asyncHandler))
 
 proc validateBlock(c: ForkedChainRef,
@@ -517,32 +516,31 @@ proc validateBlock(c: ForkedChainRef,
 template queueOrphan(c: ForkedChainRef, parent: BlockRef, finalized = false): auto =
   if c.queue.isNil:
     # This recursive mode only used in test env with small set of blocks
-    c.processOrphan(parent, finalized)
+    discard await c.processOrphan(parent, finalized)
   else:
-    proc asyncHandler(): Future[Result[void, string]] {.async: (raises: [CancelledError]).} =
-      await c.processOrphan(parent, finalized)
-      ok()
-    c.queue.addLast(QueueItem(handler: asyncHandler))
+    proc asyncHandler(): Future[Result[void, string]] {.async: (raises: [CancelledError], raw: true).} =
+      c.processOrphan(parent, finalized)
+    await c.queue.addLast(QueueItem(handler: asyncHandler))
 
-proc processOrphan(c: ForkedChainRef, parent: BlockRef, finalized = false)
+proc processOrphan(c: ForkedChainRef, parent: BlockRef, finalized = false): Future[Result[void, string]]
   {.async: (raises: [CancelledError]).} =
   if parent.txFrame.isNil:
     # This can happen if `processUpdateBase` put `updateBase`
     # before `processOrphan` and the `updateBase` remove orphan's parent.txFrame
     # But because of async nature, very hard to replicate or to make a test case.
     # https://github.com/status-im/nimbus-eth1/issues/3526
-    return
+    return ok()
 
   let
     orphan = c.quarantine.popOrphan(parent.hash).valueOr:
       # No more orphaned block
-      return
+      return ok()
     parent = (await c.validateBlock(parent, orphan, finalized)).valueOr:
       # Silent?
       # We don't return error here because the import is still ok()
       # but the quarantined blocks may not linked
-      return
-  await c.queueOrphan(parent, finalized)
+      return ok()
+  c.queueOrphan(parent, finalized)
 
 proc processQueue(c: ForkedChainRef) {.async: (raises: [CancelledError]).} =
   while true:
@@ -656,7 +654,7 @@ proc importBlock*(c: ForkedChainRef, blk: Block, finalized = false):
 
     let parent = ?(await c.validateBlock(parent, blk, finalized))
     if c.quarantine.hasOrphans():
-      await c.queueOrphan(parent, finalized)
+      c.queueOrphan(parent, finalized)
 
   else:
     # If its parent is an invalid block
@@ -730,8 +728,8 @@ proc stopProcessingQueue*(c: ForkedChainRef) {.async: (raises: []).} =
   await noCancel c.processingQueueLoop.cancelAndWait()
 
 template queueImportBlock*(c: ForkedChainRef, blk: Block, finalized = false): auto =
-  proc asyncHandler(): Future[Result[void, string]] {.async: (raises: [CancelledError]).} =
-    await c.importBlock(blk, finalized)
+  proc asyncHandler(): Future[Result[void, string]] {.async: (raises: [CancelledError], raw: true).} =
+    c.importBlock(blk, finalized)
 
   let item = QueueItem(
     responseFut: Future[Result[void, string]].Raising([CancelledError]).init(),
@@ -744,8 +742,8 @@ template queueForkChoice*(c: ForkedChainRef,
                  headHash: Hash32,
                  finalizedHash: Hash32,
                  safeHash: Hash32 = zeroHash32): auto =
-  proc asyncHandler(): Future[Result[void, string]] {.async: (raises: [CancelledError]).} =
-    await c.forkChoice(headHash, finalizedHash, safeHash)
+  proc asyncHandler(): Future[Result[void, string]] {.async: (raises: [CancelledError], raw: true).} =
+    c.forkChoice(headHash, finalizedHash, safeHash)
 
   let item = QueueItem(
     responseFut: Future[Result[void, string]].Raising([CancelledError]).init(),
@@ -849,7 +847,7 @@ proc headerByNumber*(c: ForkedChainRef, number: BlockNumber): Result[Header, str
   if number < c.base.number:
     return c.baseTxFrame.getBlockHeader(number)
 
-  loopIt(c.latest):
+  for it in ancestors(c.latest):
     if number == it.number:
       return ok(it.header)
 
@@ -958,7 +956,7 @@ proc payloadBodyV1ByNumber*(c: ForkedChainRef, number: BlockNumber): Result[Exec
 
     return blk
 
-  loopIt(c.latest):
+  for it in ancestors(c.latest):
     if number >= it.number:
       return ok(toPayloadBody(it.blk))
 
@@ -980,7 +978,7 @@ proc blockByNumber*(c: ForkedChainRef, number: BlockNumber): Result[Block, strin
 
     return ok(EthBlock.init(move(header), move(blockBody)))
 
-  loopIt(c.latest):
+  for it in ancestors(c.latest):
     if number >= it.number:
       return ok(it.blk)
 
@@ -1008,7 +1006,7 @@ func payloadBodyV1InMemory*(c: ForkedChainRef,
   var
     blocks = newSeqOfCap[BlockRef](last-first+1)
 
-  loopIt(c.latest):
+  for it in ancestors(c.latest):
     if it.number >= first and it.number <= last:
       blocks.add(it)
 
@@ -1021,7 +1019,7 @@ func equalOrAncestorOf*(c: ForkedChainRef, blockHash: Hash32, headHash: Hash32):
     return true
 
   let head = c.hashToBlock.getOrDefault(headHash)
-  loopIt(head):
+  for it in ancestors(head):
     if it.hash == blockHash:
       return true
 
@@ -1039,7 +1037,7 @@ proc isCanonicalAncestor*(c: ForkedChainRef,
   if c.base.number < c.latest.number:
     # The current canonical chain in memory is headed by
     # latest.header
-    loopIt(c.latest):
+    for it in ancestors(c.latest):
       if it.hash == blockHash and it.number == blockNumber:
         return true
 
@@ -1054,7 +1052,7 @@ iterator txHashInRange*(c: ForkedChainRef, fromHash: Hash32, toHash: Hash32): Ha
   ## exclude base from iteration, new block produced by txpool
   ## should not reach base
   let head = c.hashToBlock.getOrDefault(fromHash)
-  loopIt(head):
+  for it in ancestors(head):
     if toHash == it.hash:
       break
     for tx in it.blk.transactions:

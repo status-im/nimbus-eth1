@@ -92,7 +92,7 @@ if [[ "${PLATFORM}" == "windows_amd64" ]]; then
     USE_VENDORED_LIBUNWIND=1 \
     LOG_LEVEL="TRACE" \
     USE_SYSTEM_ROCKSDB=0 \
-    NIMFLAGS="${NIMFLAGS_COMMON} -d:PREFER_HASHTREE_SHA256:false --os:windows --gcc.exe=${CC} --gcc.linkerexe=${CXX} --passL:'-static -lshlwapi -lrpcrt4' -d:BLSTuseSSSE3=1" \
+    NIMFLAGS="${NIMFLAGS_COMMON} -d:PREFER_HASHTREE_SHA256:false --os:windows --gcc.exe=${CC} --gcc.linkerexe=${CXX} --passL:-static --passL:-lshlwapi --passL:-lrpcrt4 -d:BLSTuseSSSE3=1" \
     ${BINARIES}
 
 elif [[ "${PLATFORM}" == "linux_arm64" ]]; then
@@ -167,7 +167,7 @@ elif [[ "${PLATFORM}" == "macos_arm64" ]]; then
     FORCE_DSYMUTIL=1 \
     USE_VENDORED_LIBUNWIND=1 \
     USE_SYSTEM_ROCKSDB=0 \
-    NIMFLAGS="${NIMFLAGS_COMMON} --os:macosx --cpu:arm64 --passC:'-mcpu=apple-a14' --passL:'-mcpu=apple-a14 -static-libstdc++' --clang.exe=${CC} --clang.linkerexe=${CXX}" \
+    NIMFLAGS="${NIMFLAGS_COMMON} --os:macosx --cpu:arm64 --passC:'-mcpu=apple-a14' --passL:-mcpu=apple-a14 --passL:-static-libstdc++ --clang.exe=${CC} --clang.linkerexe=${CXX}" \
     ${BINARIES}
 
 else # linux_amd64

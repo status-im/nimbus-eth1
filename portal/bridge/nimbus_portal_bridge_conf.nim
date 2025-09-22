@@ -57,7 +57,7 @@ type
 
     portalRpcUrl* {.
       desc: "Portal node JSON-RPC API URL",
-      defaultValue: JsonRpcUrl(kind: HttpUrl, value: "http://127.0.0.1:8545"),
+      defaultValue: JsonRpcUrl(kind: HttpUrl, value: "http://127.0.0.1:8565"),
       name: "portal-rpc-url"
     .}: JsonRpcUrl
 
@@ -84,8 +84,11 @@ type
         name: "trusted-block-root"
       .}: Option[TrustedDigest]
     of PortalBridgeCmd.history:
-      web3Url* {.desc: "Execution layer JSON-RPC API URL", name: "web3-url".}:
-        JsonRpcUrl
+      web3Url* {.
+        desc: "Execution layer JSON-RPC API URL",
+        defaultValue: JsonRpcUrl(kind: HttpUrl, value: "http://127.0.0.1:8545"),
+        name: "web3-url"
+      .}: JsonRpcUrl
 
       blockVerify* {.
         desc: "Verify the block header, body and receipts",

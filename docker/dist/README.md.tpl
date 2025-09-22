@@ -1,13 +1,14 @@
 # Binary Nimbus distribution
 
-This binary distribution of the Nimbus eth1 package is compiled
+This binary distribution of the Nimbus Execution Client & Verified Proxy package is compiled
 in a [reproducible way](https://reproducible-builds.org/) from source files
 hosted at https://github.com/status-im/nimbus-eth1.
 
 The tarball containing this README uses the following naming scheme:
 
 ```bash
-nimbus-eth1_<TARGET OS>_<TARGET CPU>_<VERSION>_<GIT COMMIT>.tar.gz
+nimbus_execution_client-<TARGET OS>-<TARGET CPU>-<VERSION>-<GIT COMMIT>.tar.gz
+nimbus_verified_proxy-<TARGET OS>-<TARGET CPU>-<VERSION>-<GIT COMMIT>.tar.gz
 ```
 
 ## Reproducing the build

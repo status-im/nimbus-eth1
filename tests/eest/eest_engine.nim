@@ -7,11 +7,9 @@
 # This file may not be copied, modified, or distributed except according to
 # those terms.
 
-{.push raises: [].}
+{.push raises: [], gcsafe.}
 
 import
-  std/[cmdline, os],
-  unittest2,
   eth/common/headers_rlp,
   web3/eth_api_types,
   web3/engine_api_types,
@@ -25,7 +23,7 @@ import
   ../../execution_chain/core/tx_pool,
   ../../execution_chain/beacon/beacon_engine,
   ../../execution_chain/common/common,
-  ../../hive_integration/nodocker/engine/engine_client,
+  ../../hive_integration/engine_client,
   ./eest_helpers
 
 proc sendNewPayload(env: TestEnv, version: uint64, param: PayloadParam): Result[PayloadStatusV1, string] =
@@ -90,7 +88,7 @@ proc runTest(env: TestEnv, unit: EngineUnitEnv): Result[void, string] =
 
   ok()
 
-proc processFile*(fileName: string): bool =
+proc processFile*(fileName: string, statelessEnabled = false): bool =
   let
     fixture = parseFixture(fileName, EngineFixture)
 
@@ -98,7 +96,7 @@ proc processFile*(fileName: string): bool =
   for unit in fixture.units:
     let header = unit.unit.genesisBlockHeader.to(Header)
     doAssert(unit.unit.genesisBlockHeader.hash == header.computeRlpHash)
-    let env = prepareEnv(unit.unit, header, true)
+    let env = prepareEnv(unit.unit, header, rpcEnabled = true, statelessEnabled)
     env.runTest(unit.unit).isOkOr:
       echo "\nTestName: ", unit.name, " RunTest error: ", error, "\n"
       testPass = false
@@ -107,9 +105,13 @@ proc processFile*(fileName: string): bool =
   return testPass
 
 when isMainModule:
+  import
+    std/[cmdline, os],
+    unittest2
+
   if paramCount() == 0:
     let testFile = getAppFilename().splitPath().tail
     echo "Usage: " & testFile & " vector.json"
     quit(QuitFailure)
-  
+
   check processFile(paramStr(1))

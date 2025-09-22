@@ -15,11 +15,11 @@ import
   nimcrypto/sha2,
   chronicles,
   ./engine_client,
-  ./cancun/blobs,
-  ../../../execution_chain/transaction,
-  ../../../execution_chain/common,
-  ../../../execution_chain/utils/utils,
-  ../../../execution_chain/core/pooled_txs
+  ./blobs,
+  ../execution_chain/transaction,
+  ../execution_chain/common,
+  ../execution_chain/utils/utils,
+  ../execution_chain/core/pooled_txs
 
 from std/sequtils import mapIt
 

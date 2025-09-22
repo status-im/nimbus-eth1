@@ -25,7 +25,7 @@ from eth/common/accounts import EMPTY_ROOT_HASH
 export history_content, headers
 
 logScope:
-  topics = "portal_fin_hist"
+  topics = "portal_hist"
 
 const pingExtensionCapabilities = {CapabilitiesType, HistoryRadiusType}
 

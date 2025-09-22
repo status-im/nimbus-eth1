@@ -121,6 +121,28 @@ proc installPortalHistoryApiHandlers*(rpcServer: RpcServer, n: HistoryNetwork) =
       ),
     )
 
+  rpcServer.rpc("portal_historyStore") do(
+    contentKeyBytes: string, contentValueBytes: string
+  ) -> bool:
+    let
+      contentKeyByteList = ContentKeyByteList.init(hexToSeqByte(contentKeyBytes))
+      offerValueBytes = hexToSeqByte(contentValueBytes)
+      contentId = n.portalProtocol.toContentId(contentKeyByteList).valueOr:
+        raise invalidKeyErr()
+
+    n.portalProtocol.storeContent(contentKeyByteList, contentId, offerValueBytes)
+
+  rpcServer.rpc("portal_historyLocalContent") do(contentKeyBytes: string) -> string:
+    let
+      contentKeyByteList = ContentKeyByteList.init(hexToSeqByte(contentKeyBytes))
+      contentId = n.portalProtocol.toContentId(contentKeyByteList).valueOr:
+        raise invalidKeyErr()
+
+      valueBytes = n.portalProtocol.getLocalContent(contentKeyByteList, contentId).valueOr:
+        raise contentNotFoundErr()
+
+    valueBytes.to0xHex()
+
   rpcServer.rpc("portal_historyGetBlockBody") do(headerBytes: string) -> string:
     let header = decodeRlp(hexToSeqByte(headerBytes), Header).valueOr:
       raise invalidRequest((code: -39005, msg: "Failed to decode header: " & error))

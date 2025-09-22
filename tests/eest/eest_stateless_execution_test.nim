@@ -17,8 +17,7 @@ const
   baseFolder = "tests/fixtures"
   eestType = "blockchain_tests"
   eestReleases = [
-    "eest_develop",
-    "eest_devnet"
+    "eest_develop"
   ]
 
 const skipFiles = [
@@ -29,5 +28,6 @@ runEESTSuite(
   eestReleases,
   skipFiles,
   baseFolder,
-  eestType
+  eestType,
+  statelessEnabled = true
 )

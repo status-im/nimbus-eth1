@@ -11,13 +11,12 @@
 {.push raises:[].}
 
 import
-  std/[times, json, strutils],
   stew/byteutils,
   eth/rlp,
   eth/common/eth_types_rlp, chronos,
   json_rpc/[rpcclient, errors, jsonmarshal],
-  ../../../execution_chain/beacon/web3_eth_conv,
-  ../../../execution_chain/core/pooled_txs_rlp,
+  ../execution_chain/beacon/web3_eth_conv,
+  ../execution_chain/core/pooled_txs_rlp,
   ./types
 
 import
@@ -393,23 +392,6 @@ proc toRPCTx(tx: eth_api.TransactionObject): RPCTx =
     authorizationList: tx.authorizationList,
   )
 
-proc waitForTTD*(client: RpcClient,
-      ttd: DifficultyInt): Future[(Header, bool)] {.async.} =
-  let period = chronos.seconds(5)
-  var loop = 0
-  var emptyHeader: Header
-  while loop < 5:
-    let bc = await client.eth_getBlockByNumber("latest", false)
-    if bc.isNil:
-      return (emptyHeader, false)
-    if bc.totalDifficulty >= ttd:
-      return (toBlockHeader(bc), true)
-
-    await sleepAsync(period)
-    inc loop
-
-  return (emptyHeader, false)
-
 proc blockNumber*(client: RpcClient): Result[uint64, string] =
   wrapTry:
     let res = waitFor client.eth_blockNumber()
@@ -523,100 +505,3 @@ proc storageAt*(client: RpcClient, address: Address, slot: UInt256, number: eth_
   wrapTry:
     let res = waitFor client.eth_getStorageAt(address, slot, blockId(number))
     return ok(res)
-
-proc verifyPoWProgress*(client: RpcClient, lastBlockHash: Hash32): Future[Result[void, string]] {.async.} =
-  let res = await client.eth_getBlockByHash(lastBlockHash, false)
-  if res.isNil:
-    return err("cannot get block by hash " & lastBlockHash.data.toHex)
-
-  let header = res
-  let number = header.number.u256
-
-  let period = chronos.seconds(3)
-  var loop = 0
-  while loop < 5:
-    let res = await client.eth_getBlockByNumber(blockId("latest"), false)
-    if res.isNil:
-      return err("cannot get latest block")
-
-    # Chain has progressed, check that the next block is also PoW
-    # Difficulty must NOT be zero
-    let bc = res
-    let diff = bc.difficulty
-    if diff.isZero:
-      return err("Expected PoW chain to progress in PoW mode, but following block difficulty: " & $diff)
-
-    if bc.number.u256 > number:
-      return ok()
-
-    await sleepAsync(period)
-    inc loop
-
-  return err("verify PoW Progress timeout")
-
-type
-  TraceOpts = object
-    disableStorage: bool
-    disableMemory: bool
-    disableState: bool
-    disableStateDiff: bool
-
-TraceOpts.useDefaultSerializationIn JrpcConv
-
-createRpcSigsFromNim(RpcClient):
-  proc debug_traceTransaction(hash: Hash32, opts: TraceOpts): JsonNode
-
-proc debugPrevRandaoTransaction*(
-    client: RpcClient,
-    tx: PooledTransaction,
-    expectedPrevRandao: Bytes32): Result[void, string] =
-  wrapTry:
-    let hash = tx.computeRlpHash
-    # we only interested in stack, disable all other elems
-    let opts = TraceOpts(
-      disableStorage: true,
-      disableMemory: true,
-      disableState: true,
-      disableStateDiff: true
-    )
-
-    let res = waitFor client.debug_traceTransaction(hash, opts)
-    let structLogs = res["structLogs"]
-
-    var prevRandaoFound = false
-    for i, x in structLogs.elems:
-      let op = x["op"].getStr
-      if op != "DIFFICULTY": continue
-
-      if i+1 >= structLogs.len:
-        return err("No information after PREVRANDAO operation")
-
-      prevRandaoFound = true
-      let stack = structLogs[i+1]["stack"]
-      if stack.len < 1:
-        return err("Invalid stack after PREVRANDAO operation")
-
-      let stackHash = Bytes32(hexToByteArray[32](stack[0].getStr))
-      if stackHash != expectedPrevRandao:
-        return err("Invalid stack after PREVRANDAO operation $1 != $2" % [stackHash.data.toHex, expectedPrevRandao.data.toHex])
-
-    if not prevRandaoFound:
-      return err("PREVRANDAO opcode not found")
-
-    return ok()
-
-template expectBalanceEqual*(res: Result[UInt256, string], account: Address,
-                             expectedBalance: UInt256): auto =
-  if res.isErr:
-    return err(res.error)
-  if res.get != expectedBalance:
-    return err("invalid wd balance at $1, expect $2, get $3" % [
-      account.toHex, $expectedBalance, $res.get])
-
-template expectStorageEqual*(res: Result[FixedBytes[32], string], account: Address,
-                             expectedValue: FixedBytes[32]): auto =
-  if res.isErr:
-    return err(res.error)
-  if res.get != expectedValue:
-    return err("invalid wd storage at $1 is $2, expect $3" % [
-    account.toHex, $res.get, $expectedValue])

@@ -25,7 +25,7 @@ import
   ../execution_chain/core/tx_pool,
   ../execution_chain/beacon/beacon_engine,
   ../execution_chain/beacon/web3_eth_conv,
-  ../hive_integration/nodocker/engine/engine_client
+  ../hive_integration/engine_client
 
 type
   TestEnv = ref object

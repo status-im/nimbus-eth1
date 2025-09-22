@@ -92,5 +92,6 @@ proc getBlockBodyByHeader*(historyExpiry: HistoryExpiryRef, header: Header): Res
 
   (waitFor rpc.historyGetBlockBody(header)).mapErr(
     proc(e: PortalRpcError): string =
+      debug "Portal request failed", error = $e
       "Portal request failed: " & $e
   )
