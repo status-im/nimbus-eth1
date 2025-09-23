@@ -36,3 +36,5 @@ proc init*(
     raise newException(ValueError, error)
   # since AsyncEvm requires a few transport methods (getStorage, getCode etc.) for initialization, we initialize the proxy first then the evm within it
   engine.evm = AsyncEvm.init(engine.toAsyncEvmStateBackend(), networkId)
+
+  engine
