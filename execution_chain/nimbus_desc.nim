@@ -8,7 +8,6 @@
 # those terms.
 
 import
-  std/sequtils,
   chronos,
   chronicles,
   ./networking/p2p,
