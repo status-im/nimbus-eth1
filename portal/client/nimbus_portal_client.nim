@@ -152,11 +152,12 @@ proc run(portalClient: PortalClient, config: PortalConf) {.raises: [CatchableErr
       extIp,
       Opt.none(Port),
       extUdpPort,
-      # Note: The addition of default clientInfo to the ENR is a temporary
-      # measure to easily identify & debug the clients used in the testnet.
-      # Might make this into a, default off, cli option.
-      localEnrFields =
-        {"c": enrClientInfoShort, portalEnrKey: rlp.encode(localPortalEnrField)},
+      # Note: usage of the client field "c" is replaced with ping extensions client_info.
+      # This can be removed in the future when no more tooling relies on it.
+      localEnrFields = [
+        toFieldPair("c", enrClientInfoShort),
+        toFieldPair(portalEnrKey, localPortalEnrField),
+      ],
       bootstrapRecords = bootstrapRecords,
       previousRecord = previousEnr,
       bindIp = bindIp,

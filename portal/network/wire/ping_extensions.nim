@@ -22,8 +22,8 @@ const
   MAX_ERROR_BYTE_LENGTH* = 300
 
   NIMBUS_PORTAL_CLIENT_INFO* =
-    # Only provide client name, not version/OS-CPU/language
-    ByteList[MAX_CLIENT_INFO_BYTE_LENGTH].init((clientName & "///").toBytes())
+    # Only provide client name, not version-gitrev/OS-CPU/language
+    ByteList[MAX_CLIENT_INFO_BYTE_LENGTH].init((clientName & "/-/-/").toBytes())
 
 # Different ping extension payloads, TODO: could be moved to each their own file?
 type
