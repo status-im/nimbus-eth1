@@ -493,8 +493,6 @@ proc validateBlock(c: ForkedChainRef,
 
   c.writeBaggage(blk, blkHash, txFrame, receipts)
 
-
-
   let newBlock = c.appendBlock(parent, blk, blkHash, txFrame, move(receipts))
 
   for i, tx in blk.transactions:
