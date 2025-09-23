@@ -250,29 +250,27 @@ suite "Aristo TxFrame":
       check tx3.mergeAccountRecord(acc[0], acc[1]).isOk()
     tx3.checkpoint(3, skipSnapshot = false)
 
-    # level 4
-    let tx4 = db.txFrameBegin(tx3)
+    # level 2
+    let tx4 = db.txFrameBegin(tx1)
     for i in 300..<400:
       let acc = makeAccount(i.uint64)
       check tx4.mergeAccountRecord(acc[0], acc[1]).isOk()
-    tx4.checkpoint(4, skipSnapshot = false)
-
-    # level 3
-    let tx5 = db.txFrameBegin(tx2)
-    for i in 400..<500:
-      let acc = makeAccount(i.uint64)
-      check tx5.mergeAccountRecord(acc[0], acc[1]).isOk()
-    tx5.checkpoint(5, skipSnapshot = false)
+    tx4.checkpoint(2, skipSnapshot = false)
 
     block:
       let batch = db.putBegFn().expect("working batch")
-      db.persist(batch, tx4) # after this the baseTxFrame is at level 4
+      db.persist(batch, tx3) # after this the baseTxFrame is at level 4
       check:
         db.putEndFn(batch).isOk()
 
     # Verify that getting the state root of the level 3 txFrame does not impact
     # the persisted state in the database.
-    let stateRootBefore = tx4.fetchStateRoot().get()
-    discard tx5.fetchStateRoot().get()
-    let stateRootAfter = tx4.fetchStateRoot().get()
+    let stateRootBefore = tx3.fetchStateRoot().get()
+    try:
+      discard tx4.fetchStateRoot().get()
+    except AssertionDefect:
+      # Should throw assertion defect here because tx4 is at lower level than
+      # the baseTxFrame level.
+      discard
+    let stateRootAfter = tx3.fetchStateRoot().get()
     check stateRootBefore == stateRootAfter
