@@ -7,8 +7,9 @@
 # This file may not be copied, modified, or distributed except according to
 # those terms.
 
+{.push raises: [].}
+
 import
-  std/sequtils,
   chronos,
   chronicles,
   ./networking/p2p,
@@ -23,6 +24,9 @@ import
   ./common,
   ./config
 
+when enabledLogLevel == TRACE:
+  import std/sequtils
+
 export
   chronos,
   p2p,
@@ -35,8 +39,6 @@ export
   beacon_engine,
   common,
   config
-
-{.push raises: [].}
 
 type
   NimbusNode* = ref object
