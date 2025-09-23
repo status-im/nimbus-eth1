@@ -127,6 +127,7 @@ JrpcConv.automaticSerialization(uint16, true)
 JrpcConv.automaticSerialization(seq, true)
 JrpcConv.automaticSerialization(string, true)
 JrpcConv.automaticSerialization(bool, true)
+JrpcConv.automaticSerialization(JsonString, true)
 
 func getNodeInfo*(r: RoutingTable): NodeInfo =
   NodeInfo(enr: r.localNode.record, nodeId: r.localNode.id)
@@ -169,7 +170,7 @@ proc writeValue*(
   if v.isSome():
     w.writeValue(v.get())
   else:
-    w.writeValue("0x")
+    w.writeValue(JsonString("null"))
 
 proc readValue*(
     r: var JsonReader[JrpcConv], val: var NodeId
