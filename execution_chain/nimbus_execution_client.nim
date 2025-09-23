@@ -44,19 +44,6 @@ const
 # Private helpers
 # ------------------------------------------------------------------------------
 
-template onCancelledException(
-    quitCode: static[int];
-    info: static[string];
-    code: untyped) =
-  try:
-    code
-  except CancelledError as e:
-    when quitCode == DontQuit:
-      error info, error=($e.name), msg=e.msg
-    else:
-      fatal info, error=($e.name), msg=e.msg
-      quit(quitCode)
-
 template onException(
     quitCode: static[int];
     info: static[string];
@@ -279,12 +266,7 @@ proc runExeClient*(nimbus: NimbusNode, conf: NimbusConf) {.gcsafe.} =
       fatal "Cannot load Kzg trusted setup from file", msg=res.error
       quit(QuitFailure)
 
-  # The constructor `newCoreDbRef()` calls `addExitProc()` which in turn
-  # accesses a global variable holding a call back function. This function
-  # `addExitProc()` is synchronised against an internal tread lock and is
-  # considered safe, here.
-  {.gcsafe.}:
-    let coreDB = AristoDbRocks.newCoreDbRef(
+  let coreDB = AristoDbRocks.newCoreDbRef(
       conf.dataDir,
       conf.dbOptions(noKeyCache = conf.cmd == NimbusCmd.`import`))
 
@@ -339,8 +321,10 @@ proc runExeClient*(nimbus: NimbusNode, conf: NimbusConf) {.gcsafe.} =
   of NimbusCmd.`import`:
     importBlocks(conf, com)
   of NimbusCmd.`import-rlp`:
-    QuitFailure.onCancelledException("Import of RLP blocks cancelled"):
+    try:
       waitFor importRlpBlocks(conf, com)
+    except CancelledError:
+      raiseAssert "Nothing cancels the future"
   else:
     basicServices(nimbus, conf, com)
     manageAccounts(nimbus, conf)
@@ -372,13 +356,8 @@ proc setupExeClientNode*(conf: NimbusConf): NimbusNode {.gcsafe.} =
   ##
   ProcessState.setupStopHandlers()
 
-  # The function `setupLogging()` calls `setTopicState()` which in turn
-  # accesses a global `Table` variable. The latter function is synchronised
-  # against an internal lock via a `guard` annotation and is considered
-  # thread safe, here.
-  {.gcsafe.}:
-    # Set up logging before everything else
-    setupLogging(conf.logLevel, conf.logStdout, none(OutFile))
+  # Set up logging before everything else
+  setupLogging(conf.logLevel, conf.logStdout, none(OutFile))
   setupFileLimits()
 
   # TODO provide option for fixing / ignoring permission errors
