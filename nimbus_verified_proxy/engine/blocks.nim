@@ -17,8 +17,8 @@ import
   eth/rlp,
   eth/trie/[ordered_trie, trie_defs],
   ../../execution_chain/beacon/web3_eth_conv,
-  ../types,
-  ../header_store,
+  ./types,
+  ./header_store,
   ./transactions
 
 proc resolveBlockTag*(

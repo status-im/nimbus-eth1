@@ -12,8 +12,8 @@ import
   ../../execution_chain/evm/async_evm_backend,
   ../../execution_chain/evm/async_evm,
   ./accounts,
-  ../header_store,
-  ../types
+  ./header_store,
+  ./types
 
 logScope:
   topics = "verified_proxy_evm"

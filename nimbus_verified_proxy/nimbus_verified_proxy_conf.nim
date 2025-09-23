@@ -105,19 +105,19 @@ type VerifiedProxyConf* = object
 
   # (Untrusted) web3 provider
   # No default - Needs to be provided by the user
-  web3url* {.desc: "URL of the web3 data provider", name: "web3-url".}: Web3Url
+  backendUrl* {.
+    desc: "URL of the web3 data provider",
+    name: "backend-url"
+  .}: Web3Url
 
-  # Local JSON-RPC server
-  rpcAddress* {.
-    desc: "Listening address of the JSON-RPC server",
-    defaultValue: defaultAdminListenAddress,
-    defaultValueDesc: $defaultAdminListenAddressDesc,
-    name: "rpc-address"
-  .}: IpAddress
-
-  rpcPort* {.
-    desc: "Listening port of the JSON-RPC server", defaultValue: 8545, name: "rpc-port"
-  .}: Port
+  # Listening endpoint of the proxy
+  # (verified) web3 end
+  frontendUrl* {.
+    desc: "URL for the listening end of the proxy - [http/ws]://[address]:[port]",
+    defaultValue: Web3Url(kind: HttpUrl, web3Url: "http://127.0.0.1:8545"),
+    defaultValueDesc: "http://127.0.0.1:8545",
+    name: "frontend-url"
+  .}: Web3Url
 
   # Libp2p
   bootstrapNodes* {.
@@ -224,7 +224,7 @@ func asLightClientConf*(pc: VerifiedProxyConf): LightClientConf =
     discv5Enabled: pc.discv5Enabled,
     directPeers: pc.directPeers,
     trustedBlockRoot: pc.trustedBlockRoot,
-    web3Urls: @[EngineApiUrlConfigValue(url: pc.web3url.web3Url)],
+    web3Urls: @[EngineApiUrlConfigValue(url: pc.backendUrl.web3Url)],
     jwtSecret: none(InputFile),
     stopAtEpoch: 0,
   )

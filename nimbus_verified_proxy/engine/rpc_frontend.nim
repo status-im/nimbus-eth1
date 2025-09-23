@@ -14,16 +14,16 @@ import
   json_rpc/[rpcserver, rpcclient],
   eth/common/accounts,
   web3/[eth_api, eth_api_types],
-  ../execution_chain/core/eip4844,
-  ../execution_chain/common/common,
+  ../../execution_chain/core/eip4844,
+  ../../execution_chain/common/common,
   ./types,
   ./header_store,
-  ./rpc/accounts,
-  ./rpc/blocks,
-  ./rpc/evm,
-  ./rpc/transactions,
-  ./rpc/receipts,
-  ./rpc/fees
+  ./accounts,
+  ./blocks,
+  ./evm,
+  ./transactions,
+  ./receipts,
+  ./fees
 
 proc registerDefaultFrontend*(engine: RpcVerificationEngine) =
   engine.frontend.eth_chainId = proc(): Future[UInt256] {.async.} =

@@ -14,7 +14,7 @@ import
   web3/[eth_api_types, eth_api],
   std/algorithm,
   ../../execution_chain/beacon/web3_eth_conv,
-  ../types,
+  ./types,
   ./blocks,
   ./transactions
 

@@ -13,8 +13,9 @@ import
   ./utils,
   ./rpc_frontend,
   ./header_store,
-  ../execution_chain/evm/async_evm,
-  ./rpc/evm
+  ./evm
+
+export types, header_store, utils
 
 proc init*(
     T: type RpcVerificationEngine,

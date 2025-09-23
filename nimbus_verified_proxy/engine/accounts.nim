@@ -18,7 +18,7 @@ import
   json_rpc/[rpcserver, rpcclient],
   web3/[primitives, eth_api_types, eth_api],
   ../../execution_chain/beacon/web3_eth_conv,
-  ../types
+  ./types
 
 proc getAccountFromProof*(
     stateRoot: Hash32,

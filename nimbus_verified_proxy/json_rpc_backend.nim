@@ -8,11 +8,10 @@
 {.push raises: [], gcsafe.}
 
 import
-  json_rpc/[rpcclient, rpcproxy, jsonmarshal],
-  web3/[eth_api, eth_api_types, conversions],
-  json_serialization,
   stint,
-  ./types,
+  json_rpc/[rpcclient, rpcproxy],
+  web3/[eth_api, eth_api_types],
+  ./engine/types,
   ./nimbus_verified_proxy_conf
 
 type
@@ -24,7 +23,7 @@ type
     of WebSocket:
       wsClient: RpcWebSocketClient
 
-proc start*(T: type JsonRpcBackend, url: Web3Url): Future[Result[JsonRpcBackend, string]] {.async.} =
+proc init*(T: type JsonRpcBackend, url: Web3Url): JsonRpcBackend =
   var backend: JsonRpcBackend
 
   if url.kind == HttpUrl: 
@@ -40,6 +39,9 @@ proc start*(T: type JsonRpcBackend, url: Web3Url): Future[Result[JsonRpcBackend,
       url: url.web3Url
     )
 
+  backend
+
+proc start*(backend: JsonRpcBackend): Future[Result[void, string]] {.async.} =
   try:
     if backend.kind == Http:
       await backend.httpClient.connect(backend.url)
@@ -48,7 +50,7 @@ proc start*(T: type JsonRpcBackend, url: Web3Url): Future[Result[JsonRpcBackend,
   except CatchableError as e:
     return err(e.msg)
 
-  ok(backend)
+  ok()
 
 
 proc getEthApiBackend*(backend: JsonRpcBackend): EthApiBackend =
@@ -141,6 +143,8 @@ proc getEthApiBackend*(backend: JsonRpcBackend): EthApiBackend =
       of WebSocket:
         backend.wsClient.eth_getLogs(filterOptions)
 
+  debugEcho "here we are"
+
   EthApiBackend(
     eth_chainId: ethChainIdProc,
     eth_getBlockByHash: getBlockByHashProc,
@@ -151,7 +155,7 @@ proc getEthApiBackend*(backend: JsonRpcBackend): EthApiBackend =
     eth_getBlockReceipts: getBlockReceiptsProc,
     eth_getLogs: getLogsProc,
     eth_getTransactionByHash: getTransactionByHashProc,
-    eth_getTransactionReceipt: getTransactionReceiptProc,
+    eth_getTransactionReceipt: getTransactionReceiptProc
   )
 
 proc stop*(backend: JsonRpcBackend) {.async.} = 

@@ -13,8 +13,8 @@ import
   web3/[eth_api, eth_api_types],
   stint,
   minilru,
-  ./header_store,
-  ../execution_chain/evm/async_evm
+  ../../execution_chain/evm/async_evm,
+  ./header_store
 
 export minilru
 

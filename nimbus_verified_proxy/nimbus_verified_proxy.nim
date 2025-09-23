@@ -20,12 +20,10 @@ import
   beacon_chain/spec/beaconstate,
   beacon_chain/[beacon_clock, light_client, nimbus_binary_common, version],
   ../execution_chain/common/common,
-  ./types,
-  ./engine,
-  ./utils,
   ./nimbus_verified_proxy_conf,
-  ./header_store,
-  ./rpc_api_backend
+  ./engine/engine,
+  ./json_rpc_backend,
+  ./json_rpc_frontend
 
 type OnHeaderCallback* = proc(s: cstring, t: int) {.cdecl, raises: [], gcsafe.}
 type Context* = object
@@ -37,6 +35,23 @@ type Context* = object
 proc cleanup*(ctx: ptr Context) =
   dealloc(ctx.configJson)
   freeShared(ctx)
+
+proc verifyChaindId(engine: RpcVerificationEngine): Future[void] {.async.} =
+  let localId = engine.chainId
+
+  let providerId = 
+    try:
+      await engine.backend.eth_chainId()
+    except CatchableError as e:
+      0.u256
+
+  # This is a chain/network mismatch error between the Nimbus verified proxy and
+  # the application using it. Fail fast to avoid misusage. The user must fix
+  # the configuration.
+  if localId != providerId:
+    fatal "The specified data provider serves data for a different chain",
+      expectedChain = localId, providerChain = providerId
+    quit 1
 
 func getConfiguredChainId(networkMetadata: Eth2NetworkMetadata): UInt256 =
   if networkMetadata.eth1Network.isSome():
@@ -77,11 +92,21 @@ proc run*(
       storageCacheLen: config.storageCacheLen
     )
     engine = RpcVerificationEngine.init(engineConf)
-    jsonRpcBackend = (waitFor JsonRpcBackend.start(config.web3url)).valueOr:
-      raise newException(ValueError, error)
+    jsonRpcBackend = JsonRpcBackend.init(config.backendUrl)
+    jsonRpcFrontend = JsonRpcFrontend.init(config.frontendUrl)
 
   # the backend only needs the url to connect to
   engine.backend = jsonRpcBackend.getEthApiBackend()
+
+  # inject frontend
+  jsonRpcFrontend.injectEngineFrontend(engine.frontend)
+
+  # start frontend and backend
+  if (waitFor jsonRpcBackend.start()).isErr():
+    raise newException(ValueError, "Couldn't start the jsonRpcBackend")
+
+  if jsonRpcFrontend.start().isErr():
+    raise newException(ValueError, "Couldn't start the jsonRpcBackend")
 
   # just for short hand convenience
   template cfg(): auto =
@@ -275,6 +300,7 @@ proc run*(
       # Cleanup
       waitFor network.stop()
       waitFor jsonRpcBackend.stop()
+      waitFor jsonRpcFrontend.stop()
       ctx.cleanup()
       # Notify client that cleanup is finished
       ctx.onHeader(nil, 2)
