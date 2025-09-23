@@ -259,18 +259,14 @@ suite "Aristo TxFrame":
 
     block:
       let batch = db.putBegFn().expect("working batch")
-      db.persist(batch, tx3) # after this the baseTxFrame is at level 4
+      db.persist(batch, tx3) # after this the baseTxFrame is at level 3
       check:
         db.putEndFn(batch).isOk()
 
     # Verify that getting the state root of the level 3 txFrame does not impact
     # the persisted state in the database.
     let stateRootBefore = tx3.fetchStateRoot().get()
-    try:
-      discard tx4.fetchStateRoot().get()
-    except AssertionDefect:
-      # Should throw assertion defect here because tx4 is at lower level than
-      # the baseTxFrame level.
-      discard
+    expect(Defect):
+      discard tx4.fetchStateRoot()
     let stateRootAfter = tx3.fetchStateRoot().get()
     check stateRootBefore == stateRootAfter
