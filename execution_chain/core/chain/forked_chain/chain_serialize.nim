@@ -126,12 +126,16 @@ proc replayBlock(fc: ForkedChainRef;
     parentFrame = parent.txFrame
     txFrame = parentFrame.txFrameBegin
 
+  # Update the snapshot before processing the block so that any vertexes in snapshots
+  # from lower levels than the baseTxFrame are removed from the snapshot before running
+  # the stateroot computation.
+  fc.updateSnapshot(blk.blk, txFrame)
+
   var receipts = fc.processBlock(parent, txFrame, blk.blk, blk.hash, false).valueOr:
     txFrame.dispose()
     return err(error)
 
   fc.writeBaggage(blk.blk, blk.hash, txFrame, receipts)
-  fc.updateSnapshot(blk.blk, txFrame)
 
   blk.txFrame = txFrame
   blk.receipts = move(receipts)
@@ -233,11 +237,11 @@ proc deserialize*(fc: ForkedChainRef): Result[void, string] =
 
   # Sanity Checks for the FC state
   if state.latest > state.numBlocks or
-     state.base > state.numBlocks: 
+     state.base > state.numBlocks:
     warn "TODO: Inconsistent state found"
     fc.reset(prevBase)
     return err("Invalid state: latest block is greater than number of blocks")
-  
+
   # Sanity Checks for all the heads in FC state
   for head in state.heads:
     if head > state.numBlocks:

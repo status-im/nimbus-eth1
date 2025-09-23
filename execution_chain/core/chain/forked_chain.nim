@@ -482,13 +482,18 @@ proc validateBlock(c: ForkedChainRef,
     parentTxFrame=cast[uint](parentFrame),
     txFrame=cast[uint](txFrame)
 
+  # Update the snapshot before processing the block so that any vertexes in snapshots
+  # from lower levels than the baseTxFrame are removed from the snapshot before running
+  # the stateroot computation.
+  c.updateSnapshot(blk, txFrame)
+
   var receipts = c.processBlock(parent, txFrame, blk, blkHash, finalized).valueOr:
     txFrame.dispose()
     return err(error)
 
   c.writeBaggage(blk, blkHash, txFrame, receipts)
 
-  c.updateSnapshot(blk, txFrame)
+
 
   let newBlock = c.appendBlock(parent, blk, blkHash, txFrame, move(receipts))
 
