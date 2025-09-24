@@ -209,6 +209,13 @@ proc jwtSharedSecret*(
   # startup, or show error and continue without exposing the authenticated
   # port.
   #
+  if config.jwtSecretValue.isSome():
+    var key: JwtSharedKey
+    let rc = key.fromHex(config.jwtSecretValue.get())
+    if rc.isErr:
+      return err(rc.error)
+    return ok(key)
+
   var jwtSecretPath = config.dataDir / jwtSecretFile # default path
   let jwtDoesNotExist = not fileExists(jwtSecretPath)
   if config.jwtSecret.isNone and jwtDoesNotExist:
