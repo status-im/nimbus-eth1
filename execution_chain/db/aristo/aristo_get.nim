@@ -91,6 +91,13 @@ proc getKeyRc*(
       # There was no vertex on the cache. So there must be one the backend (the
       # reason for the key label to exists, at all.)
       return err(GetKeyNotFound)
+
+    # If the vertex came from a lower level than the baseTxFrame it means that
+    # there might be a newer value in the database so we fetch it directly from the
+    # database in this case.
+    if vtx[1] < db.db.baseTxFrame().level:
+      break body
+
     if vtx[0].isValid:
       return ok ((VOID_HASH_KEY, vtx[0]), vtx[1])
     else:

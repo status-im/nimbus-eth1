@@ -126,16 +126,12 @@ proc replayBlock(fc: ForkedChainRef;
     parentFrame = parent.txFrame
     txFrame = parentFrame.txFrameBegin
 
-  # Update the snapshot before processing the block so that any vertexes in snapshots
-  # from lower levels than the baseTxFrame are removed from the snapshot before running
-  # the stateroot computation.
-  fc.updateSnapshot(blk.blk, txFrame)
-
   var receipts = fc.processBlock(parent, txFrame, blk.blk, blk.hash, false).valueOr:
     txFrame.dispose()
     return err(error)
 
   fc.writeBaggage(blk.blk, blk.hash, txFrame, receipts)
+  fc.updateSnapshot(blk.blk, txFrame)
 
   blk.txFrame = txFrame
   blk.receipts = move(receipts)
