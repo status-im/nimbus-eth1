@@ -92,21 +92,23 @@ proc run*(
       storageCacheLen: config.storageCacheLen
     )
     engine = RpcVerificationEngine.init(engineConf)
-    jsonRpcBackend = JsonRpcBackend.init(config.backendUrl)
-    jsonRpcFrontend = JsonRpcFrontend.init(config.frontendUrl)
+    jsonRpcClient = JsonRpcClient.init(config.backendUrl)
+    jsonRpcServer = JsonRpcServer.init(config.frontendUrl)
 
   # the backend only needs the url to connect to
-  engine.backend = jsonRpcBackend.getEthApiBackend()
+  engine.backend = jsonRpcClient.getEthApiBackend()
 
   # inject frontend
-  jsonRpcFrontend.injectEngineFrontend(engine.frontend)
+  jsonRpcServer.injectEngineFrontend(engine.frontend)
 
   # start frontend and backend
-  if (waitFor jsonRpcBackend.start()).isErr():
-    raise newException(ValueError, "Couldn't start the jsonRpcBackend")
+  var status = waitFor jsonRpcClient.start()
+  if status.isErr():
+    raise newException(ValueError, status.error)
 
-  if jsonRpcFrontend.start().isErr():
-    raise newException(ValueError, "Couldn't start the jsonRpcBackend")
+  status = jsonRpcServer.start()
+  if status.isErr():
+    raise newException(ValueError, status.error)
 
   # just for short hand convenience
   template cfg(): auto =
@@ -299,8 +301,8 @@ proc run*(
     if ctx != nil and ctx.stop:
       # Cleanup
       waitFor network.stop()
-      waitFor jsonRpcBackend.stop()
-      waitFor jsonRpcFrontend.stop()
+      waitFor jsonRpcClient.stop()
+      waitFor jsonRpcServer.stop()
       ctx.cleanup()
       # Notify client that cleanup is finished
       ctx.onHeader(nil, 2)
