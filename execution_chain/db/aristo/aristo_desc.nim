@@ -218,7 +218,7 @@ iterator rstack*(tx: AristoTxRef, stopAtSnapshot = false, stopAtBaseLevel = fals
 
     if stopAtSnapshot and tx.snapshot.level.isSome():
       break
-    if stopAtBaseLevel and tx.level < tx.db.baseTxFrame().level:
+    if stopAtBaseLevel and tx.level <= tx.db.baseTxFrame().level:
       break
 
     tx = tx.parent
