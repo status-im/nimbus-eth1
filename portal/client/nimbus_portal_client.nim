@@ -344,9 +344,7 @@ when isMainModule:
   # {.push raises: [].}
 
   let portalClient = PortalClient.init()
-  case config.cmd
-  of PortalCmd.noCommand:
-    portalClient.run(config)
+  portalClient.run(config)
 
   while not ProcessState.stopIt(notice("Shutting down", reason = it)):
     poll()

@@ -56,7 +56,6 @@ type
       longDesc:
         "- mainnet/1       : Ethereum main network\n" &
         "- sepolia/11155111: Test network (proof-of-work)\n" &
-        "- holesky/17000   : The holesovice post-merge testnet\n" &
         "- hoodi/560048    : The second long-standing, merged-from-genesis, public Ethereum testnet\n" &
         "- path            : Custom config for private Ethereum Network (as /path/to/metadata)\n" &
         "                    Path to a folder containing custom network configuration files\n" &
@@ -160,7 +159,6 @@ proc getNetworkId(conf: NRpcConf): Opt[NetworkId] =
   case network
   of "mainnet": return Opt.some MainNet
   of "sepolia": return Opt.some SepoliaNet
-  of "holesky": return Opt.some HoleskyNet
   of "hoodi"  : return Opt.some HoodiNet
   else:
     if decOrHex(network):

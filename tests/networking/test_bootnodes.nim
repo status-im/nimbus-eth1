@@ -18,7 +18,6 @@ suite "Bootnodes":
   test "Bootnodes test":
     var boot: BootstrapNodes
     check getBootstrapNodes("mainnet", boot).isOk
-    check getBootstrapNodes("holesky", boot).isOk
     check getBootstrapNodes("sepolia", boot).isOk
     check getBootstrapNodes("hoodi", boot).isOk
 

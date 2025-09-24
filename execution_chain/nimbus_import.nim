@@ -65,15 +65,6 @@ proc getMetadata(networkId: NetworkId): auto =
       1450408'u64, # Last pre-merge block number
       115193'u64, # First post-merge slot
     )
-  elif networkId == HoleskyNet:
-    (
-      getMetadataForNetwork("holesky").cfg,
-      Eth2Digest.fromHex(
-        "0x9143aa7c615a7f7115e2b6aac319c03529df8242ae705fba9df39b79c59fa8b1"
-      ),
-      0'u64, # Last pre-merge block number
-      0'u64, # First post-merge slot
-    )
   elif networkId == HoodiNet:
     (
       getMetadataForNetwork("hoodi").cfg,
