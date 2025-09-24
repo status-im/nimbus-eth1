@@ -69,7 +69,7 @@ proc run*(
     config: VerifiedProxyConf, ctx: ptr Context
 ) {.raises: [CatchableError], gcsafe.} =
   {.gcsafe.}:
-    setupLogging(config.logLevel, config.logStdout, none(OutFile))
+    setupLogging(config.logLevel, config.logStdout)
 
     try:
       notice "Launching Nimbus verified proxy",
@@ -306,8 +306,13 @@ proc run*(
       break
 
 when isMainModule:
-  {.pop.}
-  var config =
-    makeBannerAndConfig("Nimbus verified proxy " & fullVersionStr, VerifiedProxyConf)
-  {.push raises: [].}
+  const
+    banner = "Nimbus verified proxy " & fullVersionStr
+    copyright =
+      "Copyright (c) 2022-" & compileYear & " Status Research & Development GmbH"
+
+  var config = VerifiedProxyConf.loadWithBanners(banner, copyright, [], true).valueOr:
+    stderr.writeLine error # Logging not yet set up
+    quit QuitFailure
+
   run(config, nil)

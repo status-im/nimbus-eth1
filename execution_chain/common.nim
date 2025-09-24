@@ -10,9 +10,9 @@
 import
   ./common/common,
   ./common/genesis,
-  ./common/context
+  ./common/manager
 
 export
   common,
   genesis,
-  context
+  manager

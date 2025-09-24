@@ -39,24 +39,8 @@ import
 
 export net, defs, jsdefs, jsnet, nimbus_binary_common
 
-const
-  # e.g.: Copyright (c) 2018-2025 Status Research & Development GmbH
-  NimbusCopyright* = "Copyright (c) 2018-" &
-    CompileDate.split('-')[0] &
-    " Status Research & Development GmbH"
-
-  # e.g.:
-  # nimbus_execution_client/v0.1.0-abcdef/os-cpu/nim-a.b.c/emvc
-  # Copyright (c) 2018-2025 Status Research & Development GmbH
-  NimbusBuild* = "$#\p$#" % [
-    ClientId,
-    NimbusCopyright,
-  ]
-
-  NimbusHeader* = "$#\p\pNim version $#" % [
-    NimbusBuild,
-    nimBanner()
-  ]
+const NimbusCopyright* =
+  "Copyright (c) 2018-" & compileYear & " Status Research & Development GmbH"
 
 func getLogLevels(): string =
   var logLevels: seq[string]
@@ -196,16 +180,6 @@ type
       defaultValue: StdoutLogKind.Auto
       name: "log-format" .}: StdoutLogKind
 
-    logMetricsEnabled* {.
-      desc: "Enable metrics logging"
-      defaultValue: false
-      name: "log-metrics" .}: bool
-
-    logMetricsInterval* {.
-      desc: "Interval at which to log metrics, in seconds"
-      defaultValue: 10
-      name: "log-metrics-interval" .}: int
-
     metricsEnabled* {.
       desc: "Enable the built-in metrics HTTP server"
       defaultValue: false
@@ -320,7 +294,7 @@ type
       separator: "\pPERFORMANCE OPTIONS",
       defaultValue: 0,
       desc: "Number of worker threads (\"0\" = use as many threads as there are CPU cores available)"
-      name: "num-threads" .}: uint
+      name: "num-threads" .}: int
 
     persistBatchSize* {.
       hidden
@@ -802,31 +776,13 @@ func dbOptions*(conf: NimbusConf, noKeyCache = false): DbOptions =
 # Constructor
 #-------------------------------------------------------------------
 
-proc makeConfig*(cmdLine = commandLineParams()): NimbusConf =
+proc makeConfig*(cmdLine = commandLineParams(), ignoreUnknown = false): NimbusConf =
   ## Note: this function is not gc-safe
-  try:
-    result = NimbusConf.load(
-      cmdLine,
-      version = NimbusBuild,
-      copyrightBanner = NimbusHeader,
-      secondarySources = proc (
-        conf: NimbusConf, sources: ref SecondarySources
-      ) {.raises: [ConfigurationError].} =
-        if conf.configFile.isSome:
-          sources.addConfigFile(Toml, conf.configFile.get)
-    )
-  except CatchableError as err:
-    if err[] of ConfigurationError and err.parent != nil:
-      if err.parent[] of TomlFieldReadingError:
-        let fieldName = ((ref TomlFieldReadingError)(err.parent)).field
-        echo "Error when parsing ", fieldName, ": ", err.msg
-      elif err.parent[] of TomlReaderError:
-        type TT = ref TomlReaderError
-        echo TT(err).formatMsg("")
-      else:
-        echo "Error when parsing config file: ", err.msg
-    else:
-      echo "Error when parsing command line params: ", err.msg
+  result = NimbusConf.loadWithBanners(ClientId, NimbusCopyright, [], ignoreUnknown, cmdLine).valueOr:
+    try:
+      stderr.writeLine error # Logging not yet set up
+    except IOError:
+      discard
     quit QuitFailure
 
   processNetworkParamsAndNetworkId(result)

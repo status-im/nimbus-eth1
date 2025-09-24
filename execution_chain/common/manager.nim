@@ -27,9 +27,6 @@ type
   AccountsManager* = object
     accounts: Table[Address, NimbusAccount]
 
-proc init*(_: type AccountsManager): AccountsManager =
-  discard
-
 proc loadKeystores*(am: var AccountsManager, path: string):
                       Result[void, string] =
   try:

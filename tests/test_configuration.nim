@@ -315,8 +315,6 @@ proc configurationMain*() =
 
       check conf.logLevel == "DEBUG"
       check conf.logStdout == StdoutLogKind.Json
-      check conf.logMetricsEnabled == true
-      check conf.logMetricsInterval == 15
 
       check conf.metricsEnabled == true
       check conf.metricsPort == 127.Port
