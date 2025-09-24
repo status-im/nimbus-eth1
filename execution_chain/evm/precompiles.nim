@@ -11,6 +11,7 @@
 import
   std/[macros],
   results,
+  constantine/ethereum_evm_precompiles,
   "."/[types, blake2b_f, blscurve],
   ./interpreter/[gas_meter, gas_costs, utils/utils_numeric],
   eth/common/keys,
@@ -203,8 +204,8 @@ func getPoint[T: G1|G2](_: typedesc[T], data: openArray[byte]): EvmResult[Point[
       return err(prcErr(PrcInvalidPoint))
     ok(ap.toJacobian())
 
-func getFR(data: openArray[byte]): EvmResult[FR] =
-  var res: FR
+func getFR(data: openArray[byte]): EvmResult[fp.FR] =
+  var res: fp.FR
   if not res.fromBytes2(data):
     return err(prcErr(PrcInvalidPoint))
   ok(res)
@@ -385,19 +386,16 @@ func bn256ecAdd(c: Computation, fork: EVMFork = FkByzantium): EvmResultVoid =
   let gasFee = if fork < FkIstanbul: GasECAdd else: GasECAddIstanbul
   ? c.gasMeter.consumeGas(gasFee, reason = "ecAdd Precompile")
 
-  var
-    input: array[128, byte]
   # Padding data
   let len = min(c.msg.data.len, 128) - 1
-  input[0..len] = c.msg.data[0..len]
-  var p1 = ? G1.getPoint(input.toOpenArray(0, 63))
-  var p2 = ? G1.getPoint(input.toOpenArray(64, 127))
-  var apo = (p1 + p2).toAffine()
-
   c.output.setLen(64)
-  if isSome(apo):
-    # we can discard here because we supply proper buffer
-    discard apo.get().toBytes(c.output)
+
+  let status = eth_evm_bn254_g1add(c.output,  c.msg.data.toOpenArray(0, len))
+
+  if status == CttEVMStatus.cttEVM_PointNotOnCurve:
+    return err(EvmErrorObj(code: PrcInvalidPoint))
+  elif status != CttEVMStatus.cttEVM_Success:
+    return err(EvmErrorObj(code: PrcInvalidParam))
 
   ok()
 
@@ -410,15 +408,14 @@ func bn256ecMul(c: Computation, fork: EVMFork = FkByzantium): EvmResultVoid =
 
   # Padding data
   let len = min(c.msg.data.len, 96) - 1
-  assign(input.toOpenArray(0, len), c.msg.data.toOpenArray(0, len))
-  var p1 = ? G1.getPoint(input.toOpenArray(0, 63))
-  var fr = ? getFR(input.toOpenArray(64, 95))
-  var apo = (p1 * fr).toAffine()
-
   c.output.setLen(64)
-  if isSome(apo):
-    # we can discard here because we supply buffer of proper size
-    discard apo.get().toBytes(c.output)
+  
+  let status = eth_evm_bn254_g1mul(c.output, c.msg.data.toOpenArray(0, len))
+
+  if status == CttEVMStatus.cttEVM_PointNotOnCurve:
+    return err(EvmErrorObj(code: PrcInvalidPoint))
+  elif status != CttEVMStatus.cttEVM_Success:
+    return err(EvmErrorObj(code: PrcInvalidParam))
 
   ok()
 
