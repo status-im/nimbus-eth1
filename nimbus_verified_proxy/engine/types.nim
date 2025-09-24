@@ -61,10 +61,10 @@ type
   GetTransactionByHashProc = proc(txHash: Hash32): Future[TransactionObject] {.async.}
 
   # evm method types for frontend with extra parameter
-  FrontendCallProc* = proc(args: TransactionArgs, blockId: BlockTag, optimisticFetch: Opt[bool]): Future[seq[byte]] {.async.}
+  FrontendCallProc* = proc(args: TransactionArgs, blockId: BlockTag, optimisticFetch: bool = true): Future[seq[byte]] {.async.}
   FrontendCreateAccessListProc* =
-    proc(args: TransactionArgs, blockId: BlockTag, optimisticFetch: Opt[bool]): Future[AccessListResult] {.async.}
-  FrontendEstimateGasProc* = proc(args: TransactionArgs, blockId: BlockTag, optimisticFetch: Opt[bool]): Future[Quantity] {.async.}
+    proc(args: TransactionArgs, blockId: BlockTag, optimisticFetch: bool = true): Future[AccessListResult] {.async.}
+  FrontendEstimateGasProc* = proc(args: TransactionArgs, blockId: BlockTag, optimisticFetch: bool = true): Future[Quantity] {.async.}
 
   # evm method types for backend (standard)
   CallProc* = proc(args: TransactionArgs, blockId: BlockTag): Future[seq[byte]] {.async.}

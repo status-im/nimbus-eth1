@@ -10,7 +10,7 @@
 
 import
   unittest2,
-  json_rpc/[rpcclient, rpcserver, rpcproxy],
+  chronos,
   web3/[eth_api_types, eth_api],
   ../engine/header_store,
   ../engine/blocks,

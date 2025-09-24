@@ -117,13 +117,13 @@ proc injectEngineFrontend*(server: JsonRpcServer, frontend: EthApiFrontend) =
     await frontend.eth_getTransactionByBlockHashAndIndex(blockHash, index)
 
   server.getServer().rpc("eth_call") do(tx: TransactionArgs, blockTag: BlockTag, optimisticStateFetch: Opt[bool]) -> seq[byte]:
-    await frontend.eth_call(tx, blockTag, optimisticStateFetch)
+    await frontend.eth_call(tx, blockTag, optimisticStateFetch.get(true))
 
   server.getServer().rpc("eth_createAccessList") do(tx: TransactionArgs, blockTag: BlockTag, optimisticStateFetch: Opt[bool]) -> AccessListResult:
-    await frontend.eth_createAccessList(tx, blockTag, optimisticStateFetch)
+    await frontend.eth_createAccessList(tx, blockTag, optimisticStateFetch.get(true))
 
   server.getServer().rpc("eth_estimateGas") do(tx: TransactionArgs, blockTag: BlockTag, optimisticStateFetch: Opt[bool]) -> Quantity:
-    await frontend.eth_estimateGas(tx, blockTag, optimisticStateFetch)
+    await frontend.eth_estimateGas(tx, blockTag, optimisticStateFetch.get(true))
 
   server.getServer().rpc("eth_getTransactionByHash") do(txHash: Hash32) -> TransactionObject:
     await frontend.eth_getTransactionByHash(txHash)

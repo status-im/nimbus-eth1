@@ -10,6 +10,7 @@
 
 import
   unittest2,
+  chronos,
   stint/endians2,
   eth/common/headers_rlp,
   ../engine/header_store,

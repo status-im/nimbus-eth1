@@ -128,15 +128,13 @@ proc registerDefaultFrontend*(engine: RpcVerificationEngine) =
 
     x.tx
 
-  engine.frontend.eth_call = proc(tx: TransactionArgs, blockTag: BlockTag, optimisticStateFetch: Opt[bool]): Future[seq[byte]] {.async.} =
+  engine.frontend.eth_call = proc(tx: TransactionArgs, blockTag: BlockTag, optimisticStateFetch: bool = true): Future[seq[byte]] {.async.} =
     if tx.to.isNone():
       raise newException(ValueError, "to address is required")
 
     let
       header = (await engine.getHeader(blockTag)).valueOr:
         raise newException(ValueError, error)
-      optimisticStateFetch = optimisticStateFetch.valueOr:
-        true
 
     # Start fetching code to get it in the code cache
     discard engine.getCode(tx.to.get(), header.number, header.stateRoot)
@@ -159,15 +157,13 @@ proc registerDefaultFrontend*(engine: RpcVerificationEngine) =
 
     return callResult.output
 
-  engine.frontend.eth_createAccessList = proc(tx: TransactionArgs, blockTag: BlockTag, optimisticStateFetch: Opt[bool]): Future[AccessListResult] {.async.} =
+  engine.frontend.eth_createAccessList = proc(tx: TransactionArgs, blockTag: BlockTag, optimisticStateFetch: bool = true): Future[AccessListResult] {.async.} =
     if tx.to.isNone():
       raise newException(ValueError, "to address is required")
 
     let
       header = (await engine.getHeader(blockTag)).valueOr:
         raise newException(ValueError, error)
-      optimisticStateFetch = optimisticStateFetch.valueOr:
-        true
 
     # Start fetching code to get it in the code cache
     discard engine.getCode(tx.to.get(), header.number, header.stateRoot)
@@ -186,16 +182,13 @@ proc registerDefaultFrontend*(engine: RpcVerificationEngine) =
     return
       AccessListResult(accessList: accessList, error: error, gasUsed: gasUsed.Quantity)
 
-  engine.frontend.eth_estimateGas = proc(tx: TransactionArgs, blockTag: BlockTag, optimisticStateFetch: Opt[bool]): Future[Quantity] {.async.} =
+  engine.frontend.eth_estimateGas = proc(tx: TransactionArgs, blockTag: BlockTag, optimisticStateFetch: bool = true): Future[Quantity] {.async.} =
     if tx.to.isNone():
       raise newException(ValueError, "to address is required")
 
     let
       header = (await engine.getHeader(blockTag)).valueOr:
         raise newException(ValueError, error)
-
-      optimisticStateFetch = optimisticStateFetch.valueOr:
-        true
 
     # Start fetching code to get it in the code cache
     discard engine.getCode(tx.to.get(), header.number, header.stateRoot)

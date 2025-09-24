@@ -10,8 +10,8 @@
 
 import
   unittest2,
+  chronos,
   web3/[eth_api, eth_api_types],
-  json_rpc/[rpcclient, rpcserver, rpcproxy],
   eth/common/eth_types_rlp,
   ../engine/transactions,
   ./test_utils,

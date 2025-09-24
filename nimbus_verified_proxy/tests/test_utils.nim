@@ -10,11 +10,11 @@
 
 import
   stint,
-  json_rpc/[rpcclient, rpcproxy, rpcserver, jsonmarshal],
+  chronos,
+  json_rpc/jsonmarshal,
   stew/[io2, byteutils],
   web3/[eth_api_types, conversions],
   eth/common/eth_types_rlp,
-  ../../execution_chain/rpc/cors,
   ../../execution_chain/common/common,
   ../engine/types,
   ../engine/engine,
@@ -71,7 +71,7 @@ template `==`*(logs1: seq[LogObject], logs2: seq[LogObject]): bool =
 
 proc initTestEngine*(
     testState: TestApiState, headerCacheLen: int, maxBlockWalk: uint64
-): VerifiedRpcProxy {.raises: [CatchableError].} =
+): RpcVerificationEngine {.raises: [CatchableError].} =
 
   let
     engineConf = RpcVerificationEngineConf(
