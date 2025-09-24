@@ -12,7 +12,7 @@ import
   unittest2,
   stint/endians2,
   eth/common/headers_rlp,
-  ../header_store,
+  ../engine/header_store,
   beacon_chain/spec/[forks, digest, helpers]
 
 func headerGenerator(number: int): ForkedLightClientHeader =

@@ -11,7 +11,7 @@ import
   std/tables,
   web3/[eth_api, eth_api_types],
   stint,
-  ../types,
+  ../engine/types,
   json_rpc/[rpcserver, rpcclient]
 
 type

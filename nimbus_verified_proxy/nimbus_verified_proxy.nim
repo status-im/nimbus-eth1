@@ -22,6 +22,9 @@ import
   ../execution_chain/common/common,
   ./nimbus_verified_proxy_conf,
   ./engine/engine,
+  ./engine/header_store,
+  ./engine/utils,
+  ./engine/types,
   ./json_rpc_backend,
   ./json_rpc_frontend
 

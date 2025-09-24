@@ -16,11 +16,8 @@ import
   eth/common/eth_types_rlp,
   ../../execution_chain/rpc/cors,
   ../../execution_chain/common/common,
-  ../types,
-  ../rpc/evm,
-  ../rpc/rpc_eth_api,
-  ../nimbus_verified_proxy_conf,
-  ../header_store,
+  ../engine/types,
+  ../engine/engine,
   ./test_api_backend
 
 proc getBlockFromJson*(filepath: string): BlockObject {.raises: [SerializationError].} =
@@ -72,27 +69,21 @@ template `==`*(rxs1: seq[ReceiptObject], rxs2: seq[ReceiptObject]): bool =
 template `==`*(logs1: seq[LogObject], logs2: seq[LogObject]): bool =
   JrpcConv.encode(logs1).JsonString == JrpcConv.encode(logs2).JsonString
 
-proc startTestSetup*(
-    testState: TestApiState, headerCacheLen: int, maxBlockWalk: uint64, port: int = 8545
+proc initTestEngine*(
+    testState: TestApiState, headerCacheLen: int, maxBlockWalk: uint64
 ): VerifiedRpcProxy {.raises: [CatchableError].} =
+
   let
-    chainId = 1.u256
-    networkId = 1.u256
-    authHooks = @[httpCors(@[])] # TODO: for now we serve all cross origin requests
-    web3Url = Web3Url(kind: Web3UrlKind.HttpUrl, web3Url: "http://127.0.0.1:" & $port)
-    clientConfig = web3Url.asClientConfig()
-    rpcProxy = RpcProxy.new([initTAddress("127.0.0.1", port)], clientConfig, authHooks)
-    headerStore = HeaderStore.new(headerCacheLen)
+    engineConf = RpcVerificationEngineConf(
+      chainId: 1.u256,
+      maxBlockWalk: maxBlockWalk,
+      headerStoreLen: headerCacheLen,
+      accountCacheLen: 1,
+      codeCacheLen: 1,
+      storageCacheLen: 1
+    )
+    engine = RpcVerificationEngine.init(engineConf)
 
-    vp = VerifiedRpcProxy.init(rpcProxy, headerStore, chainId, maxBlockWalk)
+  engine.backend = initTestApiBackend(testState)
 
-  vp.evm = AsyncEvm.init(vp.toAsyncEvmStateBackend(), networkId)
-  initTestApiBackend(testState)
-  vp.registerDefaultFrontend()
-
-  waitFor vp.proxy.start()
-  waitFor vp.verifyChaindId()
-  return vp
-
-proc stopTestSetup*(vp: VerifiedRpcProxy) {.raises: [CatchableError].} =
-  waitFor vp.proxy.stop()
+  return engine

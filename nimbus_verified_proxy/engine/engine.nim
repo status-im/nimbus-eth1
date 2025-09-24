@@ -15,8 +15,6 @@ import
   ./header_store,
   ./evm
 
-export types, header_store, utils
-
 proc init*(
     T: type RpcVerificationEngine,
     config: RpcVerificationEngineConf

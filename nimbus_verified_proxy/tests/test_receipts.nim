@@ -11,18 +11,17 @@
 import
   unittest2,
   web3/[eth_api, eth_api_types],
-  json_rpc/[rpcclient, rpcserver, rpcproxy],
   eth/common/eth_types_rlp,
-  ../rpc/blocks,
-  ../types,
-  ../header_store,
+  ../engine/blocks,
+  ../engine/types,
+  ../engine/header_store,
   ./test_utils,
   ./test_api_backend
 
 suite "test receipts verification":
   let
     ts = TestApiState.init(1.u256)
-    vp = startTestSetup(ts, 1, 1, 8887)
+    engine = initTestEngine(ts, 1, 1)
 
   test "get receipts using block tags":
     let
@@ -36,27 +35,27 @@ suite "test receipts verification":
     ts.loadBlockReceipts(blk, rxs)
     ts.loadReceipt(rxs[0].transactionHash, rxs[0])
     check:
-      vp.headerStore.add(convHeader(blk), blk.hash).isOk()
-      vp.headerStore.updateFinalized(convHeader(blk), blk.hash).isOk()
+      engine.headerStore.add(convHeader(blk), blk.hash).isOk()
+      engine.headerStore.updateFinalized(convHeader(blk), blk.hash).isOk()
 
-    var verified = waitFor vp.frontend.eth_getBlockReceipts(numberTag)
+    var verified = waitFor engine.frontend.eth_getBlockReceipts(numberTag)
     check rxs == verified.get()
 
-    verified = waitFor vp.frontend.eth_getBlockReceipts(finalTag)
+    verified = waitFor engine.frontend.eth_getBlockReceipts(finalTag)
     check rxs == verified.get()
 
-    verified = waitFor vp.frontend.eth_getBlockReceipts(earliestTag)
+    verified = waitFor engine.frontend.eth_getBlockReceipts(earliestTag)
     check rxs == verified.get()
 
-    verified = waitFor vp.frontend.eth_getBlockReceipts(latestTag)
+    verified = waitFor engine.frontend.eth_getBlockReceipts(latestTag)
     check rxs == verified.get()
 
     let verifiedReceipt =
-      waitFor vp.frontend.eth_getTransactionReceipt(rxs[0].transactionHash)
+      waitFor engine.frontend.eth_getTransactionReceipt(rxs[0].transactionHash)
     check rxs[0] == verifiedReceipt
 
     ts.clear()
-    vp.headerStore.clear()
+    engine.headerStore.clear()
 
   test "get logs using tags":
     let
@@ -72,8 +71,8 @@ suite "test receipts verification":
     # update block tags because getLogs (uses)-> getReceipts (uses)-> getHeader
     ts.loadBlockReceipts(blk, rxs)
     check:
-      vp.headerStore.add(convHeader(blk), blk.hash).isOk()
-      vp.headerStore.updateFinalized(convHeader(blk), blk.hash).isOk()
+      engine.headerStore.add(convHeader(blk), blk.hash).isOk()
+      engine.headerStore.updateFinalized(convHeader(blk), blk.hash).isOk()
 
     for tag in tags:
       let filterOptions = FilterOptions(
@@ -92,11 +91,11 @@ suite "test receipts verification":
       )
 
       ts.loadLogs(filterOptions, logs)
-      let verifiedLogs = waitFor vp.frontend.eth_getLogs(filterOptions)
+      let verifiedLogs = waitFor engine.frontend.eth_getLogs(filterOptions)
       check verifiedLogs.len == logs.len
 
     ts.clear()
-    vp.headerStore.clear()
+    engine.headerStore.clear()
 
   test "create filters and uninstall filters":
     # filter options without any tags would test resolving default "latest"
@@ -114,15 +113,15 @@ suite "test receipts verification":
 
     let
       # create a filter
-      newFilter = waitFor vp.frontend.eth_newFilter(filterOptions)
+      newFilter = waitFor engine.frontend.eth_newFilter(filterOptions)
       # deleting will prove if the filter was created
-      delStatus = waitFor vp.frontend.eth_uninstallFilter(newFilter)
+      delStatus = waitFor engine.frontend.eth_uninstallFilter(newFilter)
 
     check delStatus
 
     let
       unknownFilterId = "thisisacorrectfilterid"
-      delStatus2 = waitFor vp.frontend.eth_uninstallFilter(newFilter)
+      delStatus2 = waitFor engine.frontend.eth_uninstallFilter(newFilter)
 
     check not delStatus2
 
@@ -136,8 +135,8 @@ suite "test receipts verification":
     ts.loadBlockReceipts(blk, rxs)
 
     check:
-      vp.headerStore.add(convHeader(blk), blk.hash).isOk()
-      vp.headerStore.updateFinalized(convHeader(blk), blk.hash).isOk()
+      engine.headerStore.add(convHeader(blk), blk.hash).isOk()
+      engine.headerStore.updateFinalized(convHeader(blk), blk.hash).isOk()
 
     # filter options without any tags would test resolving default "latest"
     let filterOptions = FilterOptions(
@@ -156,19 +155,19 @@ suite "test receipts verification":
 
     let
       # create a filter
-      newFilter = waitFor vp.frontend.eth_newFilter(filterOptions)
-      filterLogs = waitFor vp.frontend.eth_getFilterLogs(newFilter)
-      filterChanges = waitFor vp.frontend.eth_getFilterChanges(newFilter)
+      newFilter = waitFor engine.frontend.eth_newFilter(filterOptions)
+      filterLogs = waitFor engine.frontend.eth_getFilterLogs(newFilter)
+      filterChanges = waitFor engine.frontend.eth_getFilterChanges(newFilter)
 
     check filterLogs.len == logs.len
     check filterChanges.len == logs.len
 
     try:
       let againFilterChanges =
-        waitFor vp.frontend.eth_getFilterChanges(newFilter)
+        waitFor engine.frontend.eth_getFilterChanges(newFilter)
       check false
     except CatchableError as e:
       check true
 
     ts.clear()
-    vp.headerStore.clear()
+    engine.headerStore.clear()
