@@ -227,7 +227,7 @@ proc preventLoadingDataDirForTheWrongNetwork(db: CoreDbRef; conf: NimbusConf) =
       expected=calculatedId
     quit(QuitFailure)
 
-proc setupCommonRef(conf: NimbusConf, taskpool: Taskpool): CommonRef =
+proc setupCommonRef*(conf: NimbusConf, taskpool: Taskpool): CommonRef =
   # Trusted setup is needed for processing Cancun+ blocks
   # If user not specify the trusted setup, baked in
   # trusted setup will be loaded, lazily.
@@ -314,7 +314,7 @@ proc main*() {.noinline.} =
   ProcessState.setupStopHandlers()
 
   # TODO provide option for fixing / ignoring permission errors
-  if not (checkAndCreateDataDir(string(config.dataDir))):
+  if not (checkAndCreateDataDir(config.dataDir)):
     # We are unable to access/create data folder or data folder's
     # permissions are insecure.
     quit QuitFailure
