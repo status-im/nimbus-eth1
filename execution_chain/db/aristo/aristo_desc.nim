@@ -209,7 +209,7 @@ proc baseTxFrame*(db: AristoDbRef): AristoTxRef =
 # Public helpers
 # ------------------------------------------------------------------------------
 
-iterator rstack*(tx: AristoTxRef, stopAtSnapshot = false, stopAtBaseLevel = false): AristoTxRef =
+iterator rstack*(tx: AristoTxRef, stopAtSnapshot = false): AristoTxRef =
   # Stack in reverse order, ie going from tx to base
   var tx = tx
 
@@ -217,8 +217,6 @@ iterator rstack*(tx: AristoTxRef, stopAtSnapshot = false, stopAtBaseLevel = fals
     yield tx
 
     if stopAtSnapshot and tx.snapshot.level.isSome():
-      break
-    if stopAtBaseLevel and tx.level <= tx.db.baseTxFrame().level:
       break
 
     tx = tx.parent

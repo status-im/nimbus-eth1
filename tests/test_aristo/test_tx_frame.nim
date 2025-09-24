@@ -266,6 +266,7 @@ suite "Aristo TxFrame":
     # Verify that getting the state root of the level 3 txFrame does not impact
     # the persisted state in the database.
     let stateRootBefore = tx3.fetchStateRoot().get()
-    discard tx4.fetchStateRoot().get()
+    expect(Defect):
+      discard tx4.fetchStateRoot()
     let stateRootAfter = tx3.fetchStateRoot().get()
     check stateRootBefore == stateRootAfter

@@ -25,11 +25,10 @@ func layersGetVtx*(db: AristoTxRef; rvid: RootedVertexID): Opt[(VertexRef, int)]
   ## Find a vertex on the cache layers. An `ok()` result might contain a
   ## `nil` vertex if it is stored on the cache  that way.
   ##
-  for w in db.rstack(stopAtSnapshot = true, stopAtBaseLevel = true):
+  for w in db.rstack(stopAtSnapshot = true):
     if w.snapshot.level.isSome():
       w.snapshot.vtx.withValue(rvid, item):
-        if item[][2] >= db.db.baseTxFrame().level:
-          return Opt.some((item[][0], item[][2]))
+        return Opt.some((item[][0], item[][2]))
       break
 
     w.sTab.withValue(rvid, item):
@@ -42,11 +41,10 @@ func layersGetKey*(db: AristoTxRef; rvid: RootedVertexID): Opt[(HashKey, int)] =
   ## hash key if it is stored on the cache that way.
   ##
 
-  for w in db.rstack(stopAtSnapshot = true, stopAtBaseLevel = true):
+  for w in db.rstack(stopAtSnapshot = true):
     if w.snapshot.level.isSome():
       w.snapshot.vtx.withValue(rvid, item):
-        if item[][2] >= db.db.baseTxFrame().level:
-          return Opt.some((item[][1], item[][2]))
+        return Opt.some((item[][1], item[][2]))
       break
 
     w.kMap.withValue(rvid, item):
