@@ -18,7 +18,7 @@ import
 {.warning[UnusedImport]: off.}
 import json_rpc/errors
 
-export portal_protocol_config
+export portal_protocol_config, rpc_types
 
 # Portal Network JSON-RPC implementation as per specification:
 # https://github.com/ethereum/portal-network-specs/tree/master/jsonrpc
@@ -107,7 +107,9 @@ proc installPortalCommonApiHandlers*(
         capabilitiesPayload.capabilities.asSeq(),
       )
 
-    return PingResult(enrSeq: enrSeq, payloadType: payloadType, payload: payload)
+    return PingResult(
+      enrSeq: EnrSeqNumber(enrSeq), payloadType: payloadType, payload: payload
+    )
 
   rpcServer.rpc("portal_" & networkStr & "FindNodes") do(
     enr: Record, distances: seq[uint16]

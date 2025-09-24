@@ -88,8 +88,13 @@ type
   CapabilitiesPayload* =
     tuple[clientInfo: string, dataRadius: UInt256, capabilities: seq[uint16]]
 
+  # Note:
+  # Need to add a distinct type here with its own readValue & writeValue to avoid
+  # using the default one of JrpcConv which uses hex strings. Needs to be a JSON number.
+  EnrSeqNumber* = distinct uint64
+
   PingResult* = object
-    enrSeq*: uint64
+    enrSeq*: EnrSeqNumber
     payloadType*: uint16
     payload*: CapabilitiesPayload
 
@@ -151,6 +156,16 @@ func toNodeWithAddress*(enr: Record): Node {.raises: [ValueError].} =
     raise newException(ValueError, "ENR without address")
   else:
     node
+
+proc readValue*(
+    r: var JsonReader[JrpcConv], val: var EnrSeqNumber
+) {.gcsafe, raises: [IOError, JsonReaderError].} =
+  val = EnrSeqNumber(r.parseInt(uint64))
+
+proc writeValue*(
+    w: var JsonWriter[JrpcConv], v: EnrSeqNumber
+) {.gcsafe, raises: [IOError].} =
+  w.writeValue(uint64(v))
 
 proc writeValue*(w: var JsonWriter[JrpcConv], v: Record) {.gcsafe, raises: [IOError].} =
   w.writeValue(v.toURI())

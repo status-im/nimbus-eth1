@@ -1,11 +1,13 @@
 # Nimbus - Portal Network
-# Copyright (c) 2021-2024 Status Research & Development GmbH
+# Copyright (c) 2021-2025 Status Research & Development GmbH
 # Licensed and distributed under either of
 #   * MIT license (license terms in the root directory or at https://opensource.org/licenses/MIT).
 #   * Apache v2 license (license terms in the root directory or at https://www.apache.org/licenses/LICENSE-2.0).
 # at your option. This file may not be copied, modified, or distributed except according to those terms.
 
 {.used.}
+
+{.push raises: [].}
 
 import
   chronos,
@@ -25,28 +27,48 @@ type TestCase = ref object
   server: RpcHttpServer
   client: RpcHttpClient
 
-proc setupTest(rng: ref HmacDrbgContext): Future[TestCase] {.async.} =
+proc setupTest(
+    rng: ref HmacDrbgContext
+): Future[TestCase] {.async: (raises: [CancelledError]).} =
   let
     localSrvAddress = "127.0.0.1"
     localSrvPort = 0 # let the OS choose a port
-    ta = initTAddress(localSrvAddress, localSrvPort)
+    ta =
+      try:
+        initTAddress(localSrvAddress, localSrvPort)
+      except TransportAddressError as e:
+        raiseAssert(e.msg)
     localDiscoveryNode =
-      initDiscoveryNode(rng, PrivateKey.random(rng[]), localAddress(20332))
+      try:
+        initDiscoveryNode(rng, PrivateKey.random(rng[]), localAddress(20332))
+      except CatchableError as e:
+        raiseAssert "Failed to initialize discovery node: " & e.msg
     client = newRpcHttpClient()
 
   let rpcHttpServer = RpcHttpServer.new()
-  rpcHttpServer.addHttpServer(ta, maxRequestBodySize = 16 * 1024 * 1024)
+
+  try:
+    rpcHttpServer.addHttpServer(ta, maxRequestBodySize = 16 * 1024 * 1024)
+  except JsonRpcError as e:
+    raiseAssert("Failed to add HTTP server: " & e.msg)
 
   rpcHttpServer.installDiscoveryApiHandlers(localDiscoveryNode)
 
   rpcHttpServer.start()
-  await client.connect(localSrvAddress, rpcHttpServer.localAddress[0].port, false)
-  return
-    TestCase(localDiscovery: localDiscoveryNode, server: rpcHttpServer, client: client)
+  try:
+    await client.connect(localSrvAddress, rpcHttpServer.localAddress[0].port, false)
+  except CatchableError as e:
+    raiseAssert("Failed to connect to RPC server: " & e.msg)
 
-proc stop(testCase: TestCase) {.async.} =
-  await testCase.server.stop()
-  await testCase.server.closeWait()
+  TestCase(localDiscovery: localDiscoveryNode, server: rpcHttpServer, client: client)
+
+proc stop(testCase: TestCase) {.async: (raises: [CancelledError]).} =
+  try:
+    await testCase.server.stop()
+    await testCase.server.closeWait()
+  except CatchableError as e:
+    raiseAssert("Failed to stop RPC server: " & e.msg)
+
   await testCase.localDiscovery.closeWait()
 
 procSuite "Discovery v5 JSON-RPC API":
@@ -70,4 +92,4 @@ procSuite "Discovery v5 JSON-RPC API":
       nodeEnr == tc.localDiscovery.localNode.record.toURI()
       nodeId == tc.localDiscovery.localNode.id.toBytesBE().to0xHex()
 
-    waitFor tc.stop()
+    await tc.stop()
