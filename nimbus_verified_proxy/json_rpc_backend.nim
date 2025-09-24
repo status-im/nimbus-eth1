@@ -14,29 +14,22 @@ import
   ./engine/types,
   ./nimbus_verified_proxy_conf
 
-type
-  JsonRpcClient* = ref object
-    url: string
-    case kind*: ClientKind
-    of Http:
-      httpClient: RpcHttpClient
-    of WebSocket:
-      wsClient: RpcWebSocketClient
+type JsonRpcClient* = ref object
+  url: string
+  case kind*: ClientKind
+  of Http:
+    httpClient: RpcHttpClient
+  of WebSocket:
+    wsClient: RpcWebSocketClient
 
 proc init*(T: type JsonRpcClient, url: Web3Url): JsonRpcClient =
   var client: JsonRpcClient
 
-  if url.kind == HttpUrl: 
-    client = JsonRpcClient(
-      kind: Http,
-      httpClient: newRpcHttpClient(),
-      url: url.web3Url
-    )
+  if url.kind == HttpUrl:
+    client = JsonRpcClient(kind: Http, httpClient: newRpcHttpClient(), url: url.web3Url)
   elif url.kind == WsUrl:
     client = JsonRpcClient(
-      kind: WebSocket,
-      wsClient: newRpcWebSocketClient(),
-      url: url.web3Url
+      kind: WebSocket, wsClient: newRpcWebSocketClient(), url: url.web3Url
     )
 
   client
@@ -53,11 +46,9 @@ proc start*(client: JsonRpcClient): Future[Result[void, string]] {.async.} =
   ok()
 
 template getClient(client: JsonRpcClient): RpcClient =
-  case client.kind:
-  of Http:
-    client.httpClient
-  of WebSocket:
-    client.wsClient
+  case client.kind
+  of Http: client.httpClient
+  of WebSocket: client.wsClient
 
 proc getEthApiBackend*(client: JsonRpcClient): EthApiBackend =
   let
@@ -119,11 +110,11 @@ proc getEthApiBackend*(client: JsonRpcClient): EthApiBackend =
     eth_getBlockReceipts: getBlockReceiptsProc,
     eth_getLogs: getLogsProc,
     eth_getTransactionByHash: getTransactionByHashProc,
-    eth_getTransactionReceipt: getTransactionReceiptProc
+    eth_getTransactionReceipt: getTransactionReceiptProc,
   )
 
-proc stop*(client: JsonRpcClient) {.async.} = 
-  case client.kind:
+proc stop*(client: JsonRpcClient) {.async.} =
+  case client.kind
   of Http:
     await client.httpClient.close()
   of WebSocket:

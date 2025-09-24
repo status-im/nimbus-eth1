@@ -72,7 +72,6 @@ template `==`*(logs1: seq[LogObject], logs2: seq[LogObject]): bool =
 proc initTestEngine*(
     testState: TestApiState, headerCacheLen: int, maxBlockWalk: uint64
 ): RpcVerificationEngine {.raises: [CatchableError].} =
-
   let
     engineConf = RpcVerificationEngineConf(
       chainId: 1.u256,
@@ -80,7 +79,7 @@ proc initTestEngine*(
       headerStoreLen: headerCacheLen,
       accountCacheLen: 1,
       codeCacheLen: 1,
-      storageCacheLen: 1
+      storageCacheLen: 1,
     )
     engine = RpcVerificationEngine.init(engineConf)
 

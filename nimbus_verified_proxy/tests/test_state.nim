@@ -64,11 +64,9 @@ suite "test state verification":
       verifiedNonce =
         waitFor engine.frontend.eth_getTransactionCount(address, latestTag)
       verifiedCode = waitFor engine.frontend.eth_getCode(address, latestTag)
-      verifiedSlot =
-        waitFor engine.frontend.eth_getStorageAt(address, slot, latestTag)
+      verifiedSlot = waitFor engine.frontend.eth_getStorageAt(address, slot, latestTag)
       verifiedCall = waitFor engine.frontend.eth_call(tx, latestTag)
-      verifiedAccessList =
-        waitFor engine.frontend.eth_createAccessList(tx, latestTag)
+      verifiedAccessList = waitFor engine.frontend.eth_createAccessList(tx, latestTag)
       verifiedEstimate = waitFor engine.frontend.eth_estimateGas(tx, latestTag)
 
     check:

@@ -40,10 +40,15 @@ type
 
   # state methods
   GetBalanceProc* = proc(address: Address, blockId: BlockTag): Future[UInt256] {.async.}
-  GetStorageProc* = proc(address: Address, slot: UInt256, blockId: BlockTag): Future[FixedBytes[32]] {.async.}
-  GetTransactionCountProc* = proc(address: Address, blockId: BlockTag): Future[Quantity] {.async.}
+  GetStorageProc* = proc(
+    address: Address, slot: UInt256, blockId: BlockTag
+  ): Future[FixedBytes[32]] {.async.}
+  GetTransactionCountProc* =
+    proc(address: Address, blockId: BlockTag): Future[Quantity] {.async.}
   GetCodeProc* = proc(address: Address, blockId: BlockTag): Future[seq[byte]] {.async.}
-  GetProofProc* = proc(address: Address, slots: seq[UInt256], blockId: BlockTag): Future[ProofResponse] {.async.}
+  GetProofProc* = proc(
+    address: Address, slots: seq[UInt256], blockId: BlockTag
+  ): Future[ProofResponse] {.async.}
 
   # block methods
   GetBlockByHashProc* =
@@ -52,26 +57,36 @@ type
     proc(blkNum: BlockTag, fullTransactions: bool): Future[BlockObject] {.async.}
   GetUncleCountByBlockHashProc* = proc(blkHash: Hash32): Future[Quantity] {.async.}
   GetUncleCountByBlockNumberProc* = proc(blkNum: BlockTag): Future[Quantity] {.async.}
-  GetBlockTransactionCountByHashProc* = proc(blkHash: Hash32): Future[Quantity] {.async.}
-  GetBlockTransactionCountByNumberProc* = proc(blkNum: BlockTag): Future[Quantity] {.async.}
+  GetBlockTransactionCountByHashProc* =
+    proc(blkHash: Hash32): Future[Quantity] {.async.}
+  GetBlockTransactionCountByNumberProc* =
+    proc(blkNum: BlockTag): Future[Quantity] {.async.}
 
   # transaction methods
-  GetTransactionByBlockHashAndIndexProc* = proc(blkHash: Hash32, index: Quantity): Future[TransactionObject] {.async.}
-  GetTransactionByBlockNumberAndIndexProc* = proc(blkNum: BlockTag, index: Quantity): Future[TransactionObject] {.async.}
+  GetTransactionByBlockHashAndIndexProc* =
+    proc(blkHash: Hash32, index: Quantity): Future[TransactionObject] {.async.}
+  GetTransactionByBlockNumberAndIndexProc* =
+    proc(blkNum: BlockTag, index: Quantity): Future[TransactionObject] {.async.}
   GetTransactionByHashProc = proc(txHash: Hash32): Future[TransactionObject] {.async.}
 
   # evm method types for frontend with extra parameter
-  FrontendCallProc* = proc(args: TransactionArgs, blockId: BlockTag, optimisticFetch: bool = true): Future[seq[byte]] {.async.}
-  FrontendCreateAccessListProc* =
-    proc(args: TransactionArgs, blockId: BlockTag, optimisticFetch: bool = true): Future[AccessListResult] {.async.}
-  FrontendEstimateGasProc* = proc(args: TransactionArgs, blockId: BlockTag, optimisticFetch: bool = true): Future[Quantity] {.async.}
+  FrontendCallProc* = proc(
+    args: TransactionArgs, blockId: BlockTag, optimisticFetch: bool = true
+  ): Future[seq[byte]] {.async.}
+  FrontendCreateAccessListProc* = proc(
+    args: TransactionArgs, blockId: BlockTag, optimisticFetch: bool = true
+  ): Future[AccessListResult] {.async.}
+  FrontendEstimateGasProc* = proc(
+    args: TransactionArgs, blockId: BlockTag, optimisticFetch: bool = true
+  ): Future[Quantity] {.async.}
 
   # evm method types for backend (standard)
-  CallProc* = proc(args: TransactionArgs, blockId: BlockTag): Future[seq[byte]] {.async.}
+  CallProc* =
+    proc(args: TransactionArgs, blockId: BlockTag): Future[seq[byte]] {.async.}
   CreateAccessListProc* =
     proc(args: TransactionArgs, blockId: BlockTag): Future[AccessListResult] {.async.}
-  EstimateGasProc* = proc(args: TransactionArgs, blockId: BlockTag): Future[Quantity] {.async.}
-
+  EstimateGasProc* =
+    proc(args: TransactionArgs, blockId: BlockTag): Future[Quantity] {.async.}
 
   # receipt methods
   GetBlockReceiptsProc =
@@ -100,8 +115,7 @@ type
     eth_getTransactionByHash*: GetTransactionByHashProc
     eth_getLogs*: GetLogsProc
 
-  EthApiFrontend* = object
-    # Chain methods
+  EthApiFrontend* = object # Chain methods
     eth_chainId*: ChainIdProc
     eth_blockNumber*: BlockNumberProc
 

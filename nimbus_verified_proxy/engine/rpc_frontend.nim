@@ -36,7 +36,9 @@ proc registerDefaultFrontend*(engine: RpcVerificationEngine) =
 
     latest.number.uint64
 
-  engine.frontend.eth_getBalance = proc(address: Address, quantityTag: BlockTag): Future[UInt256] {.async.} =
+  engine.frontend.eth_getBalance = proc(
+      address: Address, quantityTag: BlockTag
+  ): Future[UInt256] {.async.} =
     let
       header = (await engine.getHeader(quantityTag)).valueOr:
         raise newException(ValueError, error)
@@ -45,16 +47,22 @@ proc registerDefaultFrontend*(engine: RpcVerificationEngine) =
 
     account.balance
 
-  engine.frontend.eth_getStorageAt = proc(address: Address, slot: UInt256, quantityTag: BlockTag): Future[FixedBytes[32]] {.async.} =
+  engine.frontend.eth_getStorageAt = proc(
+      address: Address, slot: UInt256, quantityTag: BlockTag
+  ): Future[FixedBytes[32]] {.async.} =
     let
       header = (await engine.getHeader(quantityTag)).valueOr:
         raise newException(ValueError, error)
-      storage = (await engine.getStorageAt(address, slot, header.number, header.stateRoot)).valueOr:
+      storage = (
+        await engine.getStorageAt(address, slot, header.number, header.stateRoot)
+      ).valueOr:
         raise newException(ValueError, error)
 
     storage.to(Bytes32)
 
-  engine.frontend.eth_getTransactionCount = proc(address: Address, quantityTag: BlockTag): Future[Quantity] {.async.} =
+  engine.frontend.eth_getTransactionCount = proc(
+      address: Address, quantityTag: BlockTag
+  ): Future[Quantity] {.async.} =
     let
       header = (await engine.getHeader(quantityTag)).valueOr:
         raise newException(ValueError, error)
@@ -63,7 +71,9 @@ proc registerDefaultFrontend*(engine: RpcVerificationEngine) =
 
     Quantity(account.nonce)
 
-  engine.frontend.eth_getCode = proc(address: Address, quantityTag: BlockTag): Future[seq[byte]] {.async.} =
+  engine.frontend.eth_getCode = proc(
+      address: Address, quantityTag: BlockTag
+  ): Future[seq[byte]] {.async.} =
     let
       header = (await engine.getHeader(quantityTag)).valueOr:
         raise newException(ValueError, error)
@@ -72,39 +82,53 @@ proc registerDefaultFrontend*(engine: RpcVerificationEngine) =
 
     code
 
-  engine.frontend.eth_getBlockByHash = proc(blockHash: Hash32, fullTransactions: bool): Future[BlockObject] {.async.} =
+  engine.frontend.eth_getBlockByHash = proc(
+      blockHash: Hash32, fullTransactions: bool
+  ): Future[BlockObject] {.async.} =
     (await engine.getBlock(blockHash, fullTransactions)).valueOr:
       raise newException(ValueError, error)
 
-  engine.frontend.eth_getBlockByNumber = proc(blockTag: BlockTag, fullTransactions: bool): Future[BlockObject] {.async.} =
+  engine.frontend.eth_getBlockByNumber = proc(
+      blockTag: BlockTag, fullTransactions: bool
+  ): Future[BlockObject] {.async.} =
     (await engine.getBlock(blockTag, fullTransactions)).valueOr:
       raise newException(ValueError, error)
 
-  engine.frontend.eth_getUncleCountByBlockNumber = proc(blockTag: BlockTag): Future[Quantity] {.async.} =
+  engine.frontend.eth_getUncleCountByBlockNumber = proc(
+      blockTag: BlockTag
+  ): Future[Quantity] {.async.} =
     let blk = (await engine.getBlock(blockTag, false)).valueOr:
       raise newException(ValueError, error)
 
     Quantity(blk.uncles.len())
 
-  engine.frontend.eth_getUncleCountByBlockHash = proc(blockHash: Hash32): Future[Quantity] {.async.} =
+  engine.frontend.eth_getUncleCountByBlockHash = proc(
+      blockHash: Hash32
+  ): Future[Quantity] {.async.} =
     let blk = (await engine.getBlock(blockHash, false)).valueOr:
       raise newException(ValueError, error)
 
     Quantity(blk.uncles.len())
 
-  engine.frontend.eth_getBlockTransactionCountByNumber = proc(blockTag: BlockTag): Future[Quantity] {.async.} =
+  engine.frontend.eth_getBlockTransactionCountByNumber = proc(
+      blockTag: BlockTag
+  ): Future[Quantity] {.async.} =
     let blk = (await engine.getBlock(blockTag, true)).valueOr:
       raise newException(ValueError, error)
 
     Quantity(blk.transactions.len)
 
-  engine.frontend.eth_getBlockTransactionCountByHash = proc(blockHash: Hash32): Future[Quantity] {.async.} =
+  engine.frontend.eth_getBlockTransactionCountByHash = proc(
+      blockHash: Hash32
+  ): Future[Quantity] {.async.} =
     let blk = (await engine.getBlock(blockHash, true)).valueOr:
       raise newException(ValueError, error)
 
     Quantity(blk.transactions.len)
 
-  engine.frontend.eth_getTransactionByBlockNumberAndIndex = proc(blockTag: BlockTag, index: Quantity): Future[TransactionObject] {.async.} =
+  engine.frontend.eth_getTransactionByBlockNumberAndIndex = proc(
+      blockTag: BlockTag, index: Quantity
+  ): Future[TransactionObject] {.async.} =
     let blk = (await engine.getBlock(blockTag, true)).valueOr:
       raise newException(ValueError, error)
 
@@ -116,7 +140,9 @@ proc registerDefaultFrontend*(engine: RpcVerificationEngine) =
 
     x.tx
 
-  engine.frontend.eth_getTransactionByBlockHashAndIndex = proc(blockHash: Hash32, index: Quantity): Future[TransactionObject] {.async.} =
+  engine.frontend.eth_getTransactionByBlockHashAndIndex = proc(
+      blockHash: Hash32, index: Quantity
+  ): Future[TransactionObject] {.async.} =
     let blk = (await engine.getBlock(blockHash, true)).valueOr:
       raise newException(ValueError, error)
 
@@ -128,13 +154,14 @@ proc registerDefaultFrontend*(engine: RpcVerificationEngine) =
 
     x.tx
 
-  engine.frontend.eth_call = proc(tx: TransactionArgs, blockTag: BlockTag, optimisticStateFetch: bool = true): Future[seq[byte]] {.async.} =
+  engine.frontend.eth_call = proc(
+      tx: TransactionArgs, blockTag: BlockTag, optimisticStateFetch: bool = true
+  ): Future[seq[byte]] {.async.} =
     if tx.to.isNone():
       raise newException(ValueError, "to address is required")
 
-    let
-      header = (await engine.getHeader(blockTag)).valueOr:
-        raise newException(ValueError, error)
+    let header = (await engine.getHeader(blockTag)).valueOr:
+      raise newException(ValueError, error)
 
     # Start fetching code to get it in the code cache
     discard engine.getCode(tx.to.get(), header.number, header.stateRoot)
@@ -157,13 +184,14 @@ proc registerDefaultFrontend*(engine: RpcVerificationEngine) =
 
     return callResult.output
 
-  engine.frontend.eth_createAccessList = proc(tx: TransactionArgs, blockTag: BlockTag, optimisticStateFetch: bool = true): Future[AccessListResult] {.async.} =
+  engine.frontend.eth_createAccessList = proc(
+      tx: TransactionArgs, blockTag: BlockTag, optimisticStateFetch: bool = true
+  ): Future[AccessListResult] {.async.} =
     if tx.to.isNone():
       raise newException(ValueError, "to address is required")
 
-    let
-      header = (await engine.getHeader(blockTag)).valueOr:
-        raise newException(ValueError, error)
+    let header = (await engine.getHeader(blockTag)).valueOr:
+      raise newException(ValueError, error)
 
     # Start fetching code to get it in the code cache
     discard engine.getCode(tx.to.get(), header.number, header.stateRoot)
@@ -182,13 +210,14 @@ proc registerDefaultFrontend*(engine: RpcVerificationEngine) =
     return
       AccessListResult(accessList: accessList, error: error, gasUsed: gasUsed.Quantity)
 
-  engine.frontend.eth_estimateGas = proc(tx: TransactionArgs, blockTag: BlockTag, optimisticStateFetch: bool = true): Future[Quantity] {.async.} =
+  engine.frontend.eth_estimateGas = proc(
+      tx: TransactionArgs, blockTag: BlockTag, optimisticStateFetch: bool = true
+  ): Future[Quantity] {.async.} =
     if tx.to.isNone():
       raise newException(ValueError, "to address is required")
 
-    let
-      header = (await engine.getHeader(blockTag)).valueOr:
-        raise newException(ValueError, error)
+    let header = (await engine.getHeader(blockTag)).valueOr:
+      raise newException(ValueError, error)
 
     # Start fetching code to get it in the code cache
     discard engine.getCode(tx.to.get(), header.number, header.stateRoot)
@@ -204,7 +233,9 @@ proc registerDefaultFrontend*(engine: RpcVerificationEngine) =
 
     return gasEstimate.Quantity
 
-  engine.frontend.eth_getTransactionByHash = proc(txHash: Hash32): Future[TransactionObject] {.async.} =
+  engine.frontend.eth_getTransactionByHash = proc(
+      txHash: Hash32
+  ): Future[TransactionObject] {.async.} =
     let tx =
       try:
         await engine.backend.eth_getTransactionByHash(txHash)
@@ -223,12 +254,16 @@ proc registerDefaultFrontend*(engine: RpcVerificationEngine) =
 
     return tx
 
-  engine.frontend.eth_getBlockReceipts = proc(blockTag: BlockTag): Future[Opt[seq[ReceiptObject]]] {.async.} =
+  engine.frontend.eth_getBlockReceipts = proc(
+      blockTag: BlockTag
+  ): Future[Opt[seq[ReceiptObject]]] {.async.} =
     let rxs = (await engine.getReceipts(blockTag)).valueOr:
       raise newException(ValueError, error)
     return Opt.some(rxs)
 
-  engine.frontend.eth_getTransactionReceipt = proc(txHash: Hash32): Future[ReceiptObject] {.async.} =
+  engine.frontend.eth_getTransactionReceipt = proc(
+      txHash: Hash32
+  ): Future[ReceiptObject] {.async.} =
     let
       rx =
         try:
@@ -244,11 +279,15 @@ proc registerDefaultFrontend*(engine: RpcVerificationEngine) =
 
     raise newException(ValueError, "receipt couldn't be verified")
 
-  engine.frontend.eth_getLogs = proc(filterOptions: FilterOptions): Future[seq[LogObject]] {.async.} =
+  engine.frontend.eth_getLogs = proc(
+      filterOptions: FilterOptions
+  ): Future[seq[LogObject]] {.async.} =
     (await engine.getLogs(filterOptions)).valueOr:
       raise newException(ValueError, error)
 
-  engine.frontend.eth_newFilter = proc(filterOptions: FilterOptions): Future[string] {.async.} =
+  engine.frontend.eth_newFilter = proc(
+      filterOptions: FilterOptions
+  ): Future[string] {.async.} =
     if engine.filterStore.len >= MAX_FILTERS:
       raise newException(ValueError, "FilterStore already full")
 
@@ -283,14 +322,18 @@ proc registerDefaultFrontend*(engine: RpcVerificationEngine) =
 
     return false
 
-  engine.frontend.eth_getFilterLogs = proc(filterId: string): Future[seq[LogObject]] {.async.} =
+  engine.frontend.eth_getFilterLogs = proc(
+      filterId: string
+  ): Future[seq[LogObject]] {.async.} =
     if filterId notin engine.filterStore:
       raise newException(ValueError, "Filter doesn't exist")
 
     (await engine.getLogs(engine.filterStore[filterId].filter)).valueOr:
       raise newException(ValueError, error)
 
-  engine.frontend.eth_getFilterChanges = proc(filterId: string): Future[seq[LogObject]] {.async.} =
+  engine.frontend.eth_getFilterChanges = proc(
+      filterId: string
+  ): Future[seq[LogObject]] {.async.} =
     if filterId notin engine.filterStore:
       raise newException(ValueError, "Filter doesn't exist")
 

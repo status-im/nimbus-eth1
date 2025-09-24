@@ -164,8 +164,7 @@ suite "test receipts verification":
     check filterChanges.len == logs.len
 
     try:
-      let againFilterChanges =
-        waitFor engine.frontend.eth_getFilterChanges(newFilter)
+      let againFilterChanges = waitFor engine.frontend.eth_getFilterChanges(newFilter)
       check false
     except CatchableError as e:
       check true

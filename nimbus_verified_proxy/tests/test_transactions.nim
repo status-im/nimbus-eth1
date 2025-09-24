@@ -41,7 +41,6 @@ suite "test transaction verification":
     for tx in blk.transactions:
       if tx.kind == tohTx:
         ts.loadTransaction(tx.tx.hash, tx.tx)
-        let verifiedTx =
-          waitFor engine.frontend.eth_getTransactionByHash(tx.tx.hash)
+        let verifiedTx = waitFor engine.frontend.eth_getTransactionByHash(tx.tx.hash)
         check verifiedTx == tx.tx
         ts.clear()

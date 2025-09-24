@@ -129,13 +129,11 @@ suite "test verified blocks":
       uncleCountByHash = waitFor engine.frontend.eth_getUncleCountByBlockHash(hash)
       uncleCountByNum =
         waitFor engine.frontend.eth_getUncleCountByBlockNumber(numberTag)
-      txCountByHash =
-        waitFor engine.frontend.eth_getBlockTransactionCountByHash(hash)
+      txCountByHash = waitFor engine.frontend.eth_getBlockTransactionCountByHash(hash)
       txCountByNum =
         waitFor engine.frontend.eth_getBlockTransactionCountByNumber(numberTag)
-      txByHash = waitFor engine.frontend.eth_getTransactionByBlockHashAndIndex(
-        hash, Quantity(0)
-      )
+      txByHash =
+        waitFor engine.frontend.eth_getTransactionByBlockHashAndIndex(hash, Quantity(0))
       txByNum = waitFor engine.frontend.eth_getTransactionByBlockNumberAndIndex(
         numberTag, Quantity(0)
       )

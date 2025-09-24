@@ -34,7 +34,9 @@ func median(prices: var openArray[GasInt]): GasInt =
   # default case
   return GasInt(0)
 
-proc suggestGasPrice*(engine: RpcVerificationEngine): Future[Result[GasInt, string]] {.async.} =
+proc suggestGasPrice*(
+    engine: RpcVerificationEngine
+): Future[Result[GasInt, string]] {.async.} =
   const minGasPrice = 30_000_000_000.GasInt
   let
     blk = (await engine.getBlock(blockId("latest"), true)).valueOr:

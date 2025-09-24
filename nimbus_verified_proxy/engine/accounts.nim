@@ -213,9 +213,7 @@ proc populateCachesForAccountAndSlots(
     let
       proof =
         try:
-          await engine.backend.eth_getProof(
-            address, slotsToFetch, blockId(blockNumber)
-          )
+          await engine.backend.eth_getProof(address, slotsToFetch, blockId(blockNumber))
         except CatchableError as e:
           return err(e.msg)
       account = getAccountFromProof(

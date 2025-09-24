@@ -42,7 +42,7 @@ proc cleanup*(ctx: ptr Context) =
 proc verifyChaindId(engine: RpcVerificationEngine): Future[void] {.async.} =
   let localId = engine.chainId
 
-  let providerId = 
+  let providerId =
     try:
       await engine.backend.eth_chainId()
     except CatchableError as e:
@@ -92,7 +92,7 @@ proc run*(
       headerStoreLen: config.headerStoreLen,
       accountCacheLen: config.accountCacheLen,
       codeCacheLen: config.codeCacheLen,
-      storageCacheLen: config.storageCacheLen
+      storageCacheLen: config.storageCacheLen,
     )
     engine = RpcVerificationEngine.init(engineConf)
     jsonRpcClient = JsonRpcClient.init(config.backendUrl)

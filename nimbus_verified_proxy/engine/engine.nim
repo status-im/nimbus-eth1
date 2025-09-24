@@ -7,17 +7,10 @@
 
 {.push raises: [], gcsafe.}
 
-import
-  ./types,
-  ./header_store,
-  ./utils,
-  ./rpc_frontend,
-  ./header_store,
-  ./evm
+import ./types, ./header_store, ./utils, ./rpc_frontend, ./header_store, ./evm
 
 proc init*(
-    T: type RpcVerificationEngine,
-    config: RpcVerificationEngineConf
+    T: type RpcVerificationEngine, config: RpcVerificationEngineConf
 ): T {.raises: [ValueError].} =
   let engine = RpcVerificationEngine(
     chainId: config.chainId,
