@@ -779,10 +779,7 @@ func dbOptions*(conf: NimbusConf, noKeyCache = false): DbOptions =
 proc makeConfig*(cmdLine = commandLineParams(), ignoreUnknown = false): NimbusConf =
   ## Note: this function is not gc-safe
   result = NimbusConf.loadWithBanners(ClientId, NimbusCopyright, [], ignoreUnknown, cmdLine).valueOr:
-    try:
-      stderr.writeLine error # Logging not yet set up
-    except IOError:
-      discard
+    writePanicLine error # Logging not yet set up
     quit QuitFailure
 
   processNetworkParamsAndNetworkId(result)
