@@ -35,8 +35,8 @@ proc writeBaggage*(c: ForkedChainRef,
       header.withdrawalsRoot.expect("WithdrawalsRoot should be verified before"),
       blk.withdrawals.get)
 
-template updateSnapshot*(c: ForkedChainRef,
-            blk: Block,
+proc updateSnapshot*(c: ForkedChainRef,
+            number: BlockNumber,
             txFrame: CoreDbTxRef) =
   let pos = c.lastSnapshotPos
   c.lastSnapshotPos = (c.lastSnapshotPos + 1) mod c.lastSnapshots.len
@@ -51,7 +51,7 @@ template updateSnapshot*(c: ForkedChainRef,
   # Checkpoint creates a snapshot of ancestor changes in txFrame - it is an
   # expensive operation, specially when creating a new branch (ie when blk
   # is being applied to a block that is currently not a head)
-  txFrame.checkpoint(blk.header.number)
+  txFrame.checkpoint(number)
 
   c.lastSnapshots[pos] = txFrame
 
