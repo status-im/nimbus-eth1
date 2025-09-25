@@ -296,9 +296,14 @@ proc runExeClient*(conf: NimbusConf, com: CommonRef, stopper: StopFuture) =
   if ProcessState.stopping.isNone:
     ProcessState.notifyRunning()
 
-    while not ProcessState.stopIt(notice("Shutting down", reason = it)) and
-        (stopper == nil or stopper.finished()):
-      poll()
+  while true:
+    if (let reason = ProcessState.stopping(); reason.isSome()):
+      notice "Shutting down", reason = reason[]
+      break
+    if stopper != nil or stopper.finished():
+      break
+
+    chronos.poll()
 
   # Stop loop
   QuitFailure.onException("Exception while shutting down"):

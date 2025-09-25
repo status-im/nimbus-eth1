@@ -18,7 +18,7 @@ import
   beacon_chain/networking/network_metadata,
   beacon_chain/networking/topic_params,
   beacon_chain/spec/beaconstate,
-  beacon_chain/[beacon_clock, light_client, nimbus_binary_common, version],
+  beacon_chain/[beacon_clock, buildinfo, light_client, nimbus_binary_common],
   ../execution_chain/rpc/cors,
   ../execution_chain/common/common,
   ./types,
