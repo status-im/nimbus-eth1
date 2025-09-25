@@ -41,7 +41,7 @@ type
     server   : RpcHttpServer
     client   : RpcHttpClient
     chain    : ForkedChainRef
-    ctx      : EthContext
+    am       : ref AccountsManager
     node     : EthereumNode
     txHash   : Hash32
     blockHash: Hash32
@@ -135,8 +135,8 @@ proc makeBlobTx(env: var TestEnv, nonce: int): PooledTransaction =
     blobs     = @[pooled_txs.KzgBlob(blob.bytes)]
 
   let
-    ctx = env.ctx
-    acc = ctx.am.getAccount(signer).tryGet()
+    am = env.am
+    acc = am[].getAccount(signer).tryGet()
     commitment = blobToKzgCommitment(blob).expect("good blob")
     proof = computeBlobKzgProof(blob, commitment).expect("good commitment")
     digest = kzgToVersionedHash(commitment.bytes)
@@ -210,22 +210,23 @@ proc setupEnv(envFork: HardFork = MergeFork): TestEnv =
       quit(QuitFailure)
     serverApi = newServerAPI(txPool)
     client = setupClient(server.localAddress[0].port)
-    ctx    = newEthContext()
-    node   = setupEthNode(conf, ctx, eth68, eth69)
+    rng    = newRng()
+    am     = new AccountsManager
+    node   = setupEthNode(conf, rng[], eth68, eth69)
     nimbus = NimbusNode(
       ethNode: node,
     )
 
-  ctx.am.loadKeystores(keyStore).isOkOr:
+  am[].loadKeystores(keyStore).isOkOr:
     debugEcho error
     quit(QuitFailure)
 
-  let acc1 = ctx.am.getAccount(signer).tryGet()
-  ctx.am.unlockAccount(signer, acc1.keystore["password"].getStr()).isOkOr:
+  let acc1 = am[].getAccount(signer).tryGet()
+  am[].unlockAccount(signer, acc1.keystore["password"].getStr()).isOkOr:
     debugEcho error
     quit(QuitFailure)
 
-  setupServerAPI(serverApi, server, ctx)
+  setupServerAPI(serverApi, server, am)
   setupCommonRpc(node, conf, server)
   setupAdminRpc(nimbus, conf, server)
   server.start()
@@ -237,7 +238,7 @@ proc setupEnv(envFork: HardFork = MergeFork): TestEnv =
     server : server,
     client : client,
     chain  : chain,
-    ctx    : ctx,
+    am     : am,
     node   : node,
     chainId: conf.networkParams.config.chainId,
   )
@@ -246,9 +247,9 @@ proc generateBlock(env: var TestEnv) =
   let
     com = env.com
     xp  = env.txPool
-    ctx = env.ctx
+    am =  env.am
     txFrame = com.db.baseTxFrame()
-    acc = ctx.am.getAccount(signer).tryGet()
+    acc = am[].getAccount(signer).tryGet()
     tx1 = env.makeTx(acc.privateKey, zeroAddress, 1.u256, 30_000_000_000'u64)
     tx2 = env.makeTx(acc.privateKey, zeroAddress, 2.u256, 30_000_000_100'u64)
     chain = env.chain

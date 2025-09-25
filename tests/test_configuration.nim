@@ -15,8 +15,8 @@ import
   eth/net/nat,
   eth/p2p/discoveryv5/enr,
   stew/byteutils,
-  ../execution_chain/config,
-  ../execution_chain/common/[chain_config, context, manager],
+  ../execution_chain/[common, config],
+  ../execution_chain/networking/netkeys,
   ./test_helpers
 
 func `==`*(a, b: OutDir): bool =
@@ -235,17 +235,17 @@ proc configurationMain*() =
         conf.engineApiServerEnabled == false
         conf.shareServerWithEngineApi == false
 
-    let ctx = newEthContext()
+    let rng = newRng()
     test "net-key random":
       let conf = makeConfig(@["--net-key:random"])
       check conf.netKey == "random"
-      let rc = ctx.getNetKeys(conf.netKey)
+      let rc = rng[].getNetKeys(conf.netKey)
       check rc.isOk
 
     test "net-key hex without 0x prefix":
       let conf = makeConfig(@["--net-key:9c647b8b7c4e7c3490668fb6c11473619db80c93704c70893d3813af4090c39c"])
       check conf.netKey == "9c647b8b7c4e7c3490668fb6c11473619db80c93704c70893d3813af4090c39c"
-      let rc = ctx.getNetKeys(conf.netKey)
+      let rc = rng[].getNetKeys(conf.netKey)
       check rc.isOk
       let pkhex = rc.get.seckey.toRaw.to0xHex
       check pkhex == "0x9c647b8b7c4e7c3490668fb6c11473619db80c93704c70893d3813af4090c39c"
@@ -253,7 +253,7 @@ proc configurationMain*() =
     test "net-key hex with 0x prefix":
       let conf = makeConfig(@["--net-key:0x9c647b8b7c4e7c3490668fb6c11473619db80c93704c70893d3813af4090c39c"])
       check conf.netKey == "0x9c647b8b7c4e7c3490668fb6c11473619db80c93704c70893d3813af4090c39c"
-      let rc = ctx.getNetKeys(conf.netKey)
+      let rc = rng[].getNetKeys(conf.netKey)
       check rc.isOk
       let pkhex = rc.get.seckey.toRaw.to0xHex
       check pkhex == "0x9c647b8b7c4e7c3490668fb6c11473619db80c93704c70893d3813af4090c39c"
@@ -261,10 +261,10 @@ proc configurationMain*() =
     test "net-key path":
       let conf = makeConfig(@["--net-key:nimcache/key.txt"])
       check conf.netKey == "nimcache/key.txt"
-      let rc1 = ctx.getNetKeys(conf.netKey)
+      let rc1 = rng[].getNetKeys(conf.netKey)
       check rc1.isOk
       let pkhex1 = rc1.get.seckey.toRaw.to0xHex
-      let rc2 = ctx.getNetKeys(conf.netKey)
+      let rc2 = rng[].getNetKeys(conf.netKey)
       check rc2.isOk
       let pkhex2 = rc2.get.seckey.toRaw.to0xHex
       check pkhex1 == pkhex2
@@ -289,13 +289,13 @@ proc configurationMain*() =
       check conf.keyStoreDir() == "banana"
 
     test "loadKeystores missing address":
-      var am = AccountsManager.init()
+      var am = AccountsManager()
       let res = am.loadKeystores("tests/invalid_keystore/missingaddress")
       check res.isErr
       check res.error.find("no 'address' field in keystore data:") == 0
 
     test "loadKeystores not an object":
-      var am = AccountsManager.init()
+      var am = AccountsManager()
       let res = am.loadKeystores("tests/invalid_keystore/notobject")
       check res.isErr
       check res.error.find("expect json object of keystore data:") == 0
