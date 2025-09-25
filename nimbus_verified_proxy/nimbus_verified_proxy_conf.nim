@@ -62,7 +62,7 @@ type VerifiedProxyConf* = object
     desc: "Length of the accounts cache maintained in memory",
     defaultValue: 128,
     defaultValueDesc: "128",
-    name: "dbg=acc-cache-len"
+    name: "dbg-acc-cache-len"
   .}: int
 
   codeCacheLen* {.
