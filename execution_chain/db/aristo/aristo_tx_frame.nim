@@ -91,15 +91,9 @@ proc buildSnapshot(txFrame: AristoTxRef, minLevel: int) =
 
   txFrame.snapshot.level = Opt.some(minLevel)
 
-proc txFrameBegin*(db: AristoDbRef, parent: AristoTxRef, moveParentHashKeys = false): AristoTxRef =
+proc txFrameBegin*(db: AristoDbRef, parent: AristoTxRef): AristoTxRef =
   let parent = if parent == nil: db.txRef else: parent
-
-  AristoTxRef(
-    db: db,
-    parent: parent,
-    kMap: if moveParentHashKeys: move(parent.kMap) else: default(parent.kMap.type),
-    vTop: parent.vTop,
-    level: parent.level + 1)
+  AristoTxRef(db: db, parent: parent, vTop: parent.vTop, level: parent.level + 1)
 
 proc dispose*(tx: AristoTxRef) =
   tx[].reset()
