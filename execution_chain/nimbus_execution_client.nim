@@ -300,7 +300,7 @@ proc runExeClient*(conf: NimbusConf, com: CommonRef, stopper: StopFuture) =
     if (let reason = ProcessState.stopping(); reason.isSome()):
       notice "Shutting down", reason = reason[]
       break
-    if stopper != nil or stopper.finished():
+    if stopper != nil and stopper.finished():
       break
 
     chronos.poll()
