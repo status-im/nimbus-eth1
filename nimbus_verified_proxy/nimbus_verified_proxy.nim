@@ -45,7 +45,7 @@ proc verifyChaindId(engine: RpcVerificationEngine): Future[void] {.async.} =
   let providerId =
     try:
       await engine.backend.eth_chainId()
-    except CatchableError as e:
+    except CatchableError:
       0.u256
 
   # This is a chain/network mismatch error between the Nimbus verified proxy and

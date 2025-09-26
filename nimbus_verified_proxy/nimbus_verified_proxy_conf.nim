@@ -61,40 +61,35 @@ type VerifiedProxyConf* = object
     hidden,
     desc: "Length of the accounts cache maintained in memory",
     defaultValue: 128,
-    defaultValueDesc: "128",
-    name: "dbg-acc-cache-len"
+    name: "account-cache-len"
   .}: int
 
   codeCacheLen* {.
     hidden,
     desc: "Length of the code cache maintained in memory",
     defaultValue: 64,
-    defaultValueDesc: "64",
-    name: "dbg-code-cache-len"
+    name: "code-cache-len"
   .}: int
 
   storageCacheLen* {.
     hidden,
     desc: "Length of the storage cache maintained in memory",
     defaultValue: 256,
-    defaultValueDesc: "256",
-    name: "dbg-sto-cache-len"
+    name: "storage-cache-len"
   .}: int
 
   headerStoreLen* {.
     hidden,
     desc: "Length of the header store maintained in memory",
-    defaultValue: MAX_PREV_HEADER_DEPTH,
-    defaultValueDesc: "256",
-    name: "dbg-header-store-len"
+    defaultValue: 256,
+    name: "header-store-len"
   .}: int
 
   maxBlockWalk* {.
     hidden,
     desc: "Maximum number of blocks that will be traversed to serve a request",
     defaultValue: 1000,
-    defaultValueDesc: "1000",
-    name: "dbg-max-walk"
+    name: "max-walk"
   .}: uint64
 
   # Consensus light sync
