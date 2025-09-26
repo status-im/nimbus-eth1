@@ -865,4 +865,6 @@ proc execPrecompile*(c: Computation, precompile: Precompiles) =
         c.setError(StatusCode.PrecompileFailure, $res.error.code, true)
       else:
         # swallow any other precompiles errors
-        debug "execPrecompiles validation error", errCode = $res.error.code
+        debug "execPrecompiles validation error", 
+          errCode = $res.error.code, 
+          precompile = precompile
