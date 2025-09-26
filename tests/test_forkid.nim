@@ -43,12 +43,12 @@ const
     (number: 15049999'u64, time: 0'u64, id: (crc: 0x20c327fc'u32, next: 15050000'u64)), # Last Arrow Glacier block
     (number: 15050000'u64, time: 0'u64, id: (crc: 0xf0afd0e3'u32, next: 1681338455'u64)), # First Gray Glacier block
     (number: 15050000'u64, time: 1681338454'u64, id: (crc: 0xf0afd0e3'u32, next: 1681338455'u64)), # Last Gray Glacier block
-    (number: 15050000'u64, time: 1681338455'u64, id: (crc: 0xdce96c2d'u32, next: 1710338135'u64)), # First Shanghai block
-    (number: 15050000'u64, time: 1710338134'u64, id: (crc: 0xdce96c2d'u32, next: 1710338135'u64)), # Last Shanghai block
-    (number: 15050000'u64, time: 1710338135'u64, id: (crc: 0x9f3d2254'u32, next: 1746612311'u64)), # First Cancun block
-    (number: 15050000'u64, time: 1746612310'u64, id: (crc: 0x9f3d2254'u32, next: 1746612311'u64)), # Last Cancun block
-    (number: 15050000'u64, time: 1746612311'u64, id: (crc: 0xc376cf8b'u32, next: 0'u64)),          # First Prague block
-    (number: 15050000'u64, time: 2746612311'u64, id: (crc: 0xc376cf8b'u32, next: 0'u64)),          # Future Prague block
+    (number: 15050000'u64, time: 1681338455'u64, id: (crc: 0xdce96c2d'u32, next: 1710338135'u64)), # First Shanghai time
+    (number: 15050000'u64, time: 1710338134'u64, id: (crc: 0xdce96c2d'u32, next: 1710338135'u64)), # Last Shanghai time
+    (number: 15050000'u64, time: 1710338135'u64, id: (crc: 0x9f3d2254'u32, next: 1746612311'u64)), # First Cancun time
+    (number: 15050000'u64, time: 1746612310'u64, id: (crc: 0x9f3d2254'u32, next: 1746612311'u64)), # Last Cancun time
+    (number: 15050000'u64, time: 1746612311'u64, id: (crc: 0xc376cf8b'u32, next: 0'u64)),          # First Prague time
+    (number: 15050000'u64, time: 2746612311'u64, id: (crc: 0xc376cf8b'u32, next: 0'u64)),          # Future Prague time
   ]
 
   SepoliaNetIDs = [
@@ -56,29 +56,48 @@ const
     (number: 1450408'u64, time: 0'u64, id: (crc: 0xfe3366e7'u32, next: 1450409'u64)),             # Last London block
     (number: 1450409'u64, time: 0'u64, id: (crc: 0x4a85c09c'u32, next: 1677557088'u64)),          # First MergeNetsplit block
     (number: 1450410'u64, time: 1677557087'u64, id: (crc: 0x4a85c09c'u32, next: 1677557088'u64)), # Last MergeNetsplit block
-    (number: 1450410'u64, time: 1677557088'u64, id: (crc: 0xce82fa52'u32, next: 1706655072'u64)), # First Shanghai block
-    (number: 1450410'u64, time: 1706655071'u64, id: (crc: 0xce82fa52'u32, next: 1706655072'u64)), # Last Shanghai block
-    (number: 1450410'u64, time: 1706655072'u64, id: (crc: 0xa6260961'u32, next: 1741159776'u64)), # First Cancun block
-    (number: 1450410'u64, time: 1741159775'u64, id: (crc: 0xa6260961'u32, next: 1741159776'u64)), # Last Cancun block
-    (number: 1450410'u64, time: 1741159776'u64, id: (crc: 0x1cd80755'u32, next: 0'u64)),          # First Prague block
-    (number: 1450410'u64, time: 2741159776'u64, id: (crc: 0x1cd80755'u32, next: 0'u64)),          # Future Prague block
+    (number: 1450410'u64, time: 1677557088'u64, id: (crc: 0xce82fa52'u32, next: 1706655072'u64)), # First Shanghai time
+    (number: 1450410'u64, time: 1706655071'u64, id: (crc: 0xce82fa52'u32, next: 1706655072'u64)), # Last Shanghai time
+    (number: 1450410'u64, time: 1706655072'u64, id: (crc: 0xa6260961'u32, next: 1741159776'u64)), # First Cancun time
+    (number: 1450410'u64, time: 1741159775'u64, id: (crc: 0xa6260961'u32, next: 1741159776'u64)), # Last Cancun time
+    (number: 1450410'u64, time: 1741159776'u64, id: (crc: 0x1cd80755'u32, next: 1760427360'u64)), # First Prague time
+    (number: 1450410'u64, time: 1760427359'u64, id: (crc: 0x1cd80755'u32, next: 1760427360'u64)), # Last Prague time
+    (number: 1450410'u64, time: 1760427360'u64, id: (crc: 0x55369A33'u32, next: 1761017184'u64)), # First Osaka time
+    (number: 1450410'u64, time: 1761017183'u64, id: (crc: 0x55369A33'u32, next: 1761017184'u64)), # Last Osaka time
+    (number: 1450410'u64, time: 1761017184'u64, id: (crc: 0xA47328A8'u32, next: 1761607008'u64)), # First BPO1 time
+    (number: 1450410'u64, time: 1761607007'u64, id: (crc: 0xA47328A8'u32, next: 1761607008'u64)), # Last BPO1 time
+    (number: 1450410'u64, time: 1761607008'u64, id: (crc: 0x4463073B'u32, next: 0'u64)),          # First BPO2 time
+    (number: 1450410'u64, time: 1761607009'u64, id: (crc: 0x4463073B'u32, next: 0'u64)),          # Future BPO2 time
   ]
 
   HoleskyNetIDs = [
-    (number: 0'u64,   time: 0'u64, id: (crc: 0xc61a6098'u32, next: 1696000704'u64)), # Unsynced, last Frontier, Homestead, Tangerine, Spurious, Byzantium, Constantinople, Petersburg, Istanbul, Berlin, London, Paris block
-    (number: 123'u64, time: 0'u64, id: (crc: 0xc61a6098'u32, next: 1696000704'u64)), # First MergeNetsplit block
-    (number: 123'u64, time: 1696000704'u64, id: (crc: 0xfd4f016b'u32, next: 1707305664'u64)), # First Shanghai block
-    (number: 123'u64, time: 1707305663'u64, id: (crc: 0xfd4f016b'u32, next: 1707305664'u64)), # Last Shanghai block
-    (number: 123'u64, time: 1707305664'u64, id: (crc: 0x9b192ad0'u32, next: 1740434112'u64)), # First Cancun block
-    (number: 123'u64, time: 1740434111'u64, id: (crc: 0x9b192ad0'u32, next: 1740434112'u64)), # Last Cancun block
-    (number: 123'u64, time: 1740434112'u64, id: (crc: 0xdfbd9bed'u32, next: 0'u64)), # First Prague block
-    (number: 123'u64, time: 2740434112'u64, id: (crc: 0xdfbd9bed'u32, next: 0'u64)), # Future Prague block
+    (number: 0'u64,   time: 0'u64, id: (crc: 0xc61a6098'u32, next: 1696000704'u64)),          # Unsynced, last Frontier, Homestead, Tangerine, Spurious, Byzantium, Constantinople, Petersburg, Istanbul, Berlin, London, Paris block
+    (number: 123'u64, time: 1696000703'u64, id: (crc: 0xc61a6098'u32, next: 1696000704'u64)), # Last MergeNetsplit block
+    (number: 123'u64, time: 1696000704'u64, id: (crc: 0xfd4f016b'u32, next: 1707305664'u64)), # First Shanghai time
+    (number: 123'u64, time: 1707305663'u64, id: (crc: 0xfd4f016b'u32, next: 1707305664'u64)), # Last Shanghai time
+    (number: 123'u64, time: 1707305664'u64, id: (crc: 0x9b192ad0'u32, next: 1740434112'u64)), # First Cancun time
+    (number: 123'u64, time: 1740434111'u64, id: (crc: 0x9b192ad0'u32, next: 1740434112'u64)), # Last Cancun time
+    (number: 123'u64, time: 1740434112'u64, id: (crc: 0xdfbd9bed'u32, next: 1759308480'u64)), # First Prague time
+    (number: 123'u64, time: 1759308479'u64, id: (crc: 0xdfbd9bed'u32, next: 1759308480'u64)), # Last Prague time
+    (number: 123'u64, time: 1759308480'u64, id: (crc: 0x783DEF52'u32, next: 1759800000'u64)), # First Osaka time
+    (number: 123'u64, time: 1759799999'u64, id: (crc: 0x783DEF52'u32, next: 1759800000'u64)), # Last Osaka time
+    (number: 123'u64, time: 1759800000'u64, id: (crc: 0xA280A45C'u32, next: 1760389824'u64)), # First BPO1 time
+    (number: 123'u64, time: 1760389823'u64, id: (crc: 0xA280A45C'u32, next: 1760389824'u64)), # Last BPO1 time
+    (number: 123'u64, time: 1760389824'u64, id: (crc: 0x9BC6CB31'u32, next: 0'u64)),          # First BPO2 time
+    (number: 123'u64, time: 1760389825'u64, id: (crc: 0x9BC6CB31'u32, next: 0'u64)),          # Future BPO2 time
   ]
 
   HoodiNetIDs = [
-    (number: 0'u64,   time: 0'u64, id: (crc: 0xBEF71D30'u32, next: 1742999832'u64)), # Unsynced, last Frontier, Homestead, Tangerine, Spurious, Byzantium, Constantinople, Petersburg, Istanbul, Berlin, London, Paris, Shanghai, Cancun block
-    (number: 123'u64, time: 0'u64, id: (crc: 0xBEF71D30'u32, next: 1742999832'u64)), # First Prague block
-    (number: 123'u64, time: 2740434112'u64, id: (crc: 0x0929E24E'u32, next: 0'u64)), # Future Prague block
+    (number: 0'u64,   time: 0'u64, id: (crc: 0xBEF71D30'u32, next: 1742999832'u64)),          # Unsynced, last Frontier, Homestead, Tangerine, Spurious, Byzantium, Constantinople, Petersburg, Istanbul, Berlin, London, Paris, Shanghai, Cancun block
+    (number: 123'u64, time: 1742999831'u64, id: (crc: 0xBEF71D30'u32, next: 1742999832'u64)), # Last Cancun time
+    (number: 123'u64, time: 1742999832'u64, id: (crc: 0x0929E24E'u32, next: 1761677592'u64)), # First Prague time
+    (number: 123'u64, time: 1761677591'u64, id: (crc: 0x0929E24E'u32, next: 1761677592'u64)), # Last Prague time
+    (number: 123'u64, time: 1761677592'u64, id: (crc: 0xE7E0E7FF'u32, next: 1762365720'u64)), # First Osaka time
+    (number: 123'u64, time: 1762365719'u64, id: (crc: 0xE7E0E7FF'u32, next: 1762365720'u64)), # Last Osaka time
+    (number: 123'u64, time: 1762365720'u64, id: (crc: 0x3893353E'u32, next: 1762955544'u64)), # First BPO1 time
+    (number: 123'u64, time: 1762955543'u64, id: (crc: 0x3893353E'u32, next: 1762955544'u64)), # Last BPO1 time
+    (number: 123'u64, time: 1762955544'u64, id: (crc: 0x23AA1351'u32, next: 0'u64)),          # First BPO2 time
+    (number: 123'u64, time: 1762955545'u64, id: (crc: 0x23AA1351'u32, next: 0'u64)),          # Future BPO2 time
   ]
 
 template runTest(network: untyped, name: string) =
