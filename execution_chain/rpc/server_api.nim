@@ -135,7 +135,7 @@ proc blockFromTag(api: ServerAPIRef, blockTag: BlockTag): Result[Block, string] 
     let blockNum = base.BlockNumber blockTag.number
     return api.chain.blockByNumber(blockNum)
 
-proc setupServerAPI*(api: ServerAPIRef, server: RpcServer, ctx: EthContext) =
+proc setupServerAPI*(api: ServerAPIRef, server: RpcServer, am: ref AccountsManager) =
   server.rpc("eth_getBalance") do(data: Address, blockTag: BlockTag) -> UInt256:
     ## Returns the balance of the account of given address.
     let
@@ -394,8 +394,8 @@ proc setupServerAPI*(api: ServerAPIRef, server: RpcServer, ctx: EthContext) =
 
   server.rpc("eth_accounts") do() -> seq[Address]:
     ## Returns a list of addresses owned by client.
-    result = newSeqOfCap[Address](ctx.am.numAccounts)
-    for k in ctx.am.addresses:
+    result = newSeqOfCap[Address](am[].numAccounts)
+    for k in am[].addresses:
       result.add k
 
   server.rpc("eth_getBlockTransactionCountByHash") do(data: Hash32) -> Quantity:
@@ -456,7 +456,7 @@ proc setupServerAPI*(api: ServerAPIRef, server: RpcServer, ctx: EthContext) =
     ## Returns signature.
     let
       address = data
-      acc = ctx.am.getAccount(address).tryGet()
+      acc = am[].getAccount(address).tryGet()
 
     if not acc.unlocked:
       raise newException(ValueError, "Account locked, please unlock it first")
@@ -467,7 +467,7 @@ proc setupServerAPI*(api: ServerAPIRef, server: RpcServer, ctx: EthContext) =
     ## eth_sendRawTransaction
     let
       address = data.`from`.get()
-      acc = ctx.am.getAccount(address).tryGet()
+      acc = am[].getAccount(address).tryGet()
 
     if not acc.unlocked:
       raise newException(ValueError, "Account locked, please unlock it first")
@@ -488,7 +488,7 @@ proc setupServerAPI*(api: ServerAPIRef, server: RpcServer, ctx: EthContext) =
     ## Note: Use eth_getTransactionReceipt to get the contract address, after the transaction was mined, when you created a contract.
     let
       address = data.`from`.get()
-      acc = ctx.am.getAccount(address).tryGet()
+      acc = am[].getAccount(address).tryGet()
 
     if not acc.unlocked:
       raise newException(ValueError, "Account locked, please unlock it first")

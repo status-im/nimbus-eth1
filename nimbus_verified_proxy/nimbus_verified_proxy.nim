@@ -18,7 +18,7 @@ import
   beacon_chain/networking/network_metadata,
   beacon_chain/networking/topic_params,
   beacon_chain/spec/beaconstate,
-  beacon_chain/[beacon_clock, light_client, nimbus_binary_common, version],
+  beacon_chain/[beacon_clock, buildinfo, light_client, nimbus_binary_common],
   ../execution_chain/rpc/cors,
   ../execution_chain/common/common,
   ./types,
@@ -26,7 +26,8 @@ import
   ./rpc/rpc_eth_api,
   ./nimbus_verified_proxy_conf,
   ./header_store,
-  ./rpc_api_backend
+  ./rpc_api_backend,
+  ../execution_chain/version_info
 
 type OnHeaderCallback* = proc(s: cstring, t: int) {.cdecl, raises: [], gcsafe.}
 type Context* = object
@@ -69,7 +70,7 @@ proc run*(
     config: VerifiedProxyConf, ctx: ptr Context
 ) {.raises: [CatchableError], gcsafe.} =
   {.gcsafe.}:
-    setupLogging(config.logLevel, config.logStdout, none(OutFile))
+    setupLogging(config.logLevel, config.logStdout)
 
     try:
       notice "Launching Nimbus verified proxy",
@@ -305,9 +306,18 @@ proc run*(
       ctx.onHeader(nil, 2)
       break
 
-when isMainModule:
-  {.pop.}
-  var config =
-    makeBannerAndConfig("Nimbus verified proxy " & fullVersionStr, VerifiedProxyConf)
-  {.push raises: [].}
+# noinline to keep it in stack traces
+proc main() {.noinline, raises: [CatchableError].} =
+  const
+    banner = "Nimbus Verified Proxy " & FullVersionStr
+    copyright =
+      "Copyright (c) 2022-" & compileYear & " Status Research & Development GmbH"
+
+  var config = VerifiedProxyConf.loadWithBanners(banner, copyright, [], true).valueOr:
+    writePanicLine error # Logging not yet set up
+    quit QuitFailure
+
   run(config, nil)
+
+when isMainModule:
+  main()
