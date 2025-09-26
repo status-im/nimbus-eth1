@@ -37,7 +37,7 @@ proc importBlock*(
       B=ctx.chain.baseNumber.bnStr, L=ctx.chain.latestNumber.bnStr
   else:
     try:
-      (await ctx.chain.queueImportBlock blk).isOkOr:
+      (await ctx.chain.queueImportBlock(blk, finalized = true)).isOkOr:
         return err((ENoException,"",error,Moment.now()-start))
     except CancelledError as e:
       return err((ECancelledError,$e.name,e.msg,Moment.now()-start))
@@ -61,4 +61,3 @@ proc importBlock*(
 # ------------------------------------------------------------------------------
 # End
 # ------------------------------------------------------------------------------
-
