@@ -26,7 +26,8 @@ import
   ./rpc/rpc_eth_api,
   ./nimbus_verified_proxy_conf,
   ./header_store,
-  ./rpc_api_backend
+  ./rpc_api_backend,
+  ../execution_chain/version_info
 
 type OnHeaderCallback* = proc(s: cstring, t: int) {.cdecl, raises: [], gcsafe.}
 type Context* = object
@@ -308,7 +309,7 @@ proc run*(
 # noinline to keep it in stack traces
 proc main() {.noinline, raises: [CatchableError].} =
   const
-    banner = "Nimbus verified proxy " & fullVersionStr
+    banner = "Nimbus Verified Proxy " & FullVersionStr
     copyright =
       "Copyright (c) 2022-" & compileYear & " Status Research & Development GmbH"
 
