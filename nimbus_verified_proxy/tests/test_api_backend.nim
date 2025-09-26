@@ -217,7 +217,8 @@ proc initTestApiBackend*(t: TestApiState): EthApiBackend =
     getProofProc = proc(
         address: Address, slots: seq[UInt256], blkNum: BlockTag
     ): Future[ProofResponse] {.async: (raises: [CancelledError]).} =
-      try:# we directly use number here because the verified proxy should never use aliases
+      try:
+        # we directly use number here because the verified proxy should never use aliases
         let blkHash = t.nums[blkNum.number]
         t.proofs[(address, slots, blkHash)]
       except CatchableError as e:
