@@ -17,52 +17,76 @@ export history_content
 func validateBlockBody*(body: BlockBody, header: Header): Result[void, string] =
   ## Validate the block body against the txRoot, ommersHash and withdrawalsRoot
   ## from the header.
-  ## TODO: could add block number vs empty ommersHash + existing withdrawalsRoot check
-  let calculatedOmmersHash = keccak256(rlp.encode(body.uncles))
-    # TODO: avoid having to re-encode the uncles
-  if calculatedOmmersHash != header.ommersHash:
-    return err(
-      "Invalid ommers hash: expected " & $header.ommersHash & " - got " &
-        $calculatedOmmersHash
-    )
+  ## The header is considered trusted, as in no checks are required whether the
+  ## header fields are valid according to the rules of the applicable forks.
 
-  let calculatedTxsRoot = orderedTrieRoot(body.transactions)
-  if calculatedTxsRoot != header.txRoot:
-    return err(
-      "Invalid transactions root: expected " & $header.txRoot & " - got " &
-        $calculatedTxsRoot
-    )
+  # Short-path in case of no uncles
+  if header.ommersHash == EMPTY_UNCLE_HASH:
+    if body.uncles.len > 0:
+      return err("Invalid ommers: expected no uncles")
+  else:
+    let calculatedOmmersHash = keccak256(rlp.encode(body.uncles))
+      # TODO: avoid having to re-encode the uncles
+    if calculatedOmmersHash != header.ommersHash:
+      return err(
+        "Invalid ommers hash: expected " & $header.ommersHash & " - got " &
+          $calculatedOmmersHash
+      )
+
+  # Short-path in case of no transactions
+  if header.txRoot == emptyRoot:
+    if body.transactions.len > 0:
+      return err("Invalid transactions: expected no transactions")
+  else:
+    let calculatedTxsRoot = orderedTrieRoot(body.transactions)
+    if calculatedTxsRoot != header.txRoot:
+      return err(
+        "Invalid transactions root: expected " & $header.txRoot & " - got " &
+          $calculatedTxsRoot
+      )
 
   if header.withdrawalsRoot.isSome() and body.withdrawals.isNone() or
       header.withdrawalsRoot.isNone() and body.withdrawals.isSome():
     return err("Invalid withdrawals")
 
   if header.withdrawalsRoot.isSome() and body.withdrawals.isSome():
-    let
-      calculatedWithdrawalsRoot = orderedTrieRoot(body.withdrawals.value())
-      headerWithdrawalsRoot = header.withdrawalsRoot.get()
-    if calculatedWithdrawalsRoot != headerWithdrawalsRoot:
-      return err(
-        "Invalid withdrawals root: expected " & $headerWithdrawalsRoot & " - got " &
-          $calculatedWithdrawalsRoot
-      )
+    let headerWithdrawalsRoot = header.withdrawalsRoot.value()
+    # short-path in case of no withdrawals
+    if headerWithdrawalsRoot == emptyRoot:
+      if body.withdrawals.value().len > 0:
+        return err("Invalid withdrawals: expected no withdrawals")
+    else:
+      let calculatedWithdrawalsRoot = orderedTrieRoot(body.withdrawals.value())
+      if calculatedWithdrawalsRoot != headerWithdrawalsRoot:
+        return err(
+          "Invalid withdrawals root: expected " & $headerWithdrawalsRoot & " - got " &
+            $calculatedWithdrawalsRoot
+        )
 
   ok()
 
 func validateReceipts*(
     storedReceipts: StoredReceipts, header: Header
 ): Result[void, string] =
-  let receipts = storedReceipts.to(seq[Receipt])
-
   ## Validate the receipts against the receiptsRoot from the header.
-  let calculatedReceiptsRoot = orderedTrieRoot(receipts)
-  if calculatedReceiptsRoot != header.receiptsRoot:
-    err(
-      "Unexpected receipt root: expected " & $header.receiptsRoot & " - got " &
-        $calculatedReceiptsRoot
-    )
+
+  # Short-path in case of no receipts
+  if header.receiptsRoot == emptyRoot:
+    if storedReceipts.len > 0:
+      err("Invalid receipts: expected no receipts")
+    else:
+      ok()
   else:
-    ok()
+    let receipts = storedReceipts.to(seq[Receipt])
+
+    let calculatedReceiptsRoot = orderedTrieRoot(receipts)
+    if calculatedReceiptsRoot != header.receiptsRoot:
+      err(
+        "Unexpected receipt root: expected " & $header.receiptsRoot & " - got " &
+          $calculatedReceiptsRoot
+      )
+    else:
+      ok()
 
 func validateContent*(
     content: BlockBody | StoredReceipts, header: Header
