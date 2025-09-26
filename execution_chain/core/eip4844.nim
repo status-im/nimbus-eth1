@@ -13,13 +13,16 @@ import
   nimcrypto/sha2,
   results,
   stint,
+  kzg4844/kzg,
   ./eip7691,
   ./pooled_txs,
-  ./lazy_kzg as kzg,
   ../constants,
   ../common/common
 
 from std/sequtils import mapIt
+
+export
+  kzg
 
 {.push raises: [].}
 
