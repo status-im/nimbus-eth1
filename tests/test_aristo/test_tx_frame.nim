@@ -138,6 +138,55 @@ suite "Aristo TxFrame":
       tx3.kMap.len() == 0
       tx2.fetchStateRoot() == tx3.fetchStateRoot()
 
+  test "Frames using moveParentHashKeys parameter with snapshots":
+    let
+      tx0 = db.txFrameBegin(db.baseTxFrame())
+      tx1 = db.txFrameBegin(tx0)
+
+    check:
+      tx0.mergeAccountRecord(acc1[0], acc1[1]).isOk()
+      tx1.mergeAccountRecord(acc2[0], acc2[1]).isOk()
+      tx0.fetchStateRoot() != tx1.fetchStateRoot()
+      tx0.kMap.len() == 0
+      tx1.kMap.len() == 1
+    tx1.checkpoint(1, skipSnapshot = false)
+
+    let tx2 = db.txFrameBegin(tx1, moveParentHashKeys = true)
+    tx2.checkpoint(2, skipSnapshot = false)
+
+    block:
+      var hashKey: HashKey
+      for v in tx2.kMap.values():
+        if v.isValid():
+          hashKey = v
+      check hashKey != default(HashKey)
+      var snapshotContainsHashKey = false
+      for k, v in tx2.snapshot.vtx:
+        if v[1] == hashKey:
+          snapshotContainsHashKey = true
+
+      check:
+        snapshotContainsHashKey
+        tx1.fetchStateRoot() == tx2.fetchStateRoot()
+
+    let tx3 = db.txFrameBegin(tx2, moveParentHashKeys = false)
+    tx3.checkpoint(3, skipSnapshot = false)
+
+    block:
+      var hashKey: HashKey
+      for v in tx2.kMap.values():
+        if v.isValid():
+          hashKey = v
+      check hashKey != default(HashKey)
+      var snapshotContainsHashKey = false
+      for k, v in tx3.snapshot.vtx:
+        if v[1] == hashKey:
+          snapshotContainsHashKey = true
+
+      check:
+        snapshotContainsHashKey
+        tx2.fetchStateRoot() == tx3.fetchStateRoot()
+
   test "Frames using moveParentHashKeys parameter - moved from persist":
     let
       tx0 = db.txFrameBegin(db.baseTxFrame())
