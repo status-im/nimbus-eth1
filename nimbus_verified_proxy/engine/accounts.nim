@@ -18,7 +18,7 @@ import
   json_rpc/[rpcserver, rpcclient],
   web3/[primitives, eth_api_types, eth_api],
   ../../execution_chain/beacon/web3_eth_conv,
-  ../types
+  ./types
 
 proc getAccountFromProof*(
     stateRoot: Hash32,
@@ -99,14 +99,14 @@ proc getStorageFromProof*(
   getStorageFromProof(account, storageProof)
 
 proc getAccount*(
-    lcProxy: VerifiedRpcProxy,
+    engine: RpcVerificationEngine,
     address: Address,
     blockNumber: base.BlockNumber,
     stateRoot: Root,
 ): Future[Result[Account, string]] {.async: (raises: []).} =
   let
     cacheKey = (stateRoot, address)
-    cachedAcc = lcProxy.accountsCache.get(cacheKey)
+    cachedAcc = engine.accountsCache.get(cacheKey)
   if cachedAcc.isSome():
     return ok(cachedAcc.get())
 
@@ -115,7 +115,7 @@ proc getAccount*(
   let
     proof =
       try:
-        await lcProxy.rpcClient.eth_getProof(address, @[], blockId(blockNumber))
+        await engine.backend.eth_getProof(address, @[], blockId(blockNumber))
       except CatchableError as e:
         return err(e.msg)
 
@@ -125,18 +125,18 @@ proc getAccount*(
     )
 
   if account.isOk():
-    lcProxy.accountsCache.put(cacheKey, account.get())
+    engine.accountsCache.put(cacheKey, account.get())
 
   return account
 
 proc getCode*(
-    lcProxy: VerifiedRpcProxy,
+    engine: RpcVerificationEngine,
     address: Address,
     blockNumber: base.BlockNumber,
     stateRoot: Root,
-): Future[Result[seq[byte], string]] {.async.} =
+): Future[Result[seq[byte], string]] {.async: (raises: []).} =
   # get verified account details for the address at blockNumber
-  let account = (await lcProxy.getAccount(address, blockNumber, stateRoot)).valueOr:
+  let account = (await engine.getAccount(address, blockNumber, stateRoot)).valueOr:
     return err(error)
 
   # if the account does not have any code, return empty hex data
@@ -145,7 +145,7 @@ proc getCode*(
 
   let
     cacheKey = (stateRoot, address)
-    cachedCode = lcProxy.codeCache.get(cacheKey)
+    cachedCode = engine.codeCache.get(cacheKey)
   if cachedCode.isSome():
     return ok(cachedCode.get())
 
@@ -153,20 +153,20 @@ proc getCode*(
 
   let code =
     try:
-      await lcProxy.rpcClient.eth_getCode(address, blockId(blockNumber))
+      await engine.backend.eth_getCode(address, blockId(blockNumber))
     except CatchableError as e:
       return err(e.msg)
 
   # verify the byte code. since we verified the account against
   # the state root we just need to verify the code hash
   if account.codeHash == keccak256(code):
-    lcProxy.codeCache.put(cacheKey, code)
+    engine.codeCache.put(cacheKey, code)
     return ok(code)
   else:
     return err("received code doesn't match the account code hash")
 
 proc getStorageAt*(
-    lcProxy: VerifiedRpcProxy,
+    engine: RpcVerificationEngine,
     address: Address,
     slot: UInt256,
     blockNumber: base.BlockNumber,
@@ -174,7 +174,7 @@ proc getStorageAt*(
 ): Future[Result[UInt256, string]] {.async: (raises: []).} =
   let
     cacheKey = (stateRoot, address, slot)
-    cachedSlotValue = lcProxy.storageCache.get(cacheKey)
+    cachedSlotValue = engine.storageCache.get(cacheKey)
   if cachedSlotValue.isSome():
     return ok(cachedSlotValue.get())
 
@@ -183,19 +183,19 @@ proc getStorageAt*(
   let
     proof =
       try:
-        await lcProxy.rpcClient.eth_getProof(address, @[slot], blockId(blockNumber))
+        await engine.backend.eth_getProof(address, @[slot], blockId(blockNumber))
       except CatchableError as e:
         return err(e.msg)
 
     slotValue = getStorageFromProof(stateRoot, slot, proof)
 
   if slotValue.isOk():
-    lcProxy.storageCache.put(cacheKey, slotValue.get())
+    engine.storageCache.put(cacheKey, slotValue.get())
 
   return slotValue
 
 proc populateCachesForAccountAndSlots(
-    lcProxy: VerifiedRpcProxy,
+    engine: RpcVerificationEngine,
     address: Address,
     slots: seq[UInt256],
     blockNumber: base.BlockNumber,
@@ -204,18 +204,16 @@ proc populateCachesForAccountAndSlots(
   var slotsToFetch: seq[UInt256]
   for s in slots:
     let storageCacheKey = (stateRoot, address, s)
-    if lcProxy.storageCache.get(storageCacheKey).isNone():
+    if engine.storageCache.get(storageCacheKey).isNone():
       slotsToFetch.add(s)
 
   let accountCacheKey = (stateRoot, address)
 
-  if lcProxy.accountsCache.get(accountCacheKey).isNone() or slotsToFetch.len() > 0:
+  if engine.accountsCache.get(accountCacheKey).isNone() or slotsToFetch.len() > 0:
     let
       proof =
         try:
-          await lcProxy.rpcClient.eth_getProof(
-            address, slotsToFetch, blockId(blockNumber)
-          )
+          await engine.backend.eth_getProof(address, slotsToFetch, blockId(blockNumber))
         except CatchableError as e:
           return err(e.msg)
       account = getAccountFromProof(
@@ -224,33 +222,33 @@ proc populateCachesForAccountAndSlots(
       )
 
     if account.isOk():
-      lcProxy.accountsCache.put(accountCacheKey, account.get())
+      engine.accountsCache.put(accountCacheKey, account.get())
 
     for i, s in slotsToFetch:
       let slotValue = getStorageFromProof(stateRoot, s, proof, i)
 
       if slotValue.isOk():
         let storageCacheKey = (stateRoot, address, s)
-        lcProxy.storageCache.put(storageCacheKey, slotValue.get())
+        engine.storageCache.put(storageCacheKey, slotValue.get())
 
   ok()
 
 proc populateCachesUsingAccessList*(
-    lcProxy: VerifiedRpcProxy,
+    engine: RpcVerificationEngine,
     blockNumber: base.BlockNumber,
     stateRoot: Root,
     tx: TransactionArgs,
 ): Future[Result[void, string]] {.async: (raises: []).} =
   let accessListRes: AccessListResult =
     try:
-      await lcProxy.rpcClient.eth_createAccessList(tx, blockId(blockNumber))
+      await engine.backend.eth_createAccessList(tx, blockId(blockNumber))
     except CatchableError as e:
       return err(e.msg)
 
   var futs = newSeqOfCap[Future[Result[void, string]]](accessListRes.accessList.len())
   for accessPair in accessListRes.accessList:
     let slots = accessPair.storageKeys.mapIt(UInt256.fromBytesBE(it.data))
-    futs.add lcProxy.populateCachesForAccountAndSlots(
+    futs.add engine.populateCachesForAccountAndSlots(
       accessPair.address, slots, blockNumber, stateRoot
     )
 
