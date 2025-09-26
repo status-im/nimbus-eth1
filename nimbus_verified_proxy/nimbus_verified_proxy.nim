@@ -39,7 +39,7 @@ proc cleanup*(ctx: ptr Context) =
   dealloc(ctx.configJson)
   freeShared(ctx)
 
-proc verifyChaindId(engine: RpcVerificationEngine): Future[void] {.async.} =
+proc verifyChaindId(engine: RpcVerificationEngine): Future[void] {.async: (raises: []).} =
   let localId = engine.chainId
 
   let providerId =

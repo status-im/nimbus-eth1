@@ -44,7 +44,7 @@ func toReceipts(recs: openArray[ReceiptObject]): seq[Receipt] =
 
 proc getReceipts(
     engine: RpcVerificationEngine, header: Header, blockTag: types.BlockTag
-): Future[Result[seq[ReceiptObject], string]] {.async.} =
+): Future[Result[seq[ReceiptObject], string]] {.async: (raises: []).} =
   let rxs =
     try:
       await engine.backend.eth_getBlockReceipts(blockTag)
@@ -61,7 +61,7 @@ proc getReceipts(
 
 proc getReceipts*(
     engine: RpcVerificationEngine, blockTag: types.BlockTag
-): Future[Result[seq[ReceiptObject], string]] {.async.} =
+): Future[Result[seq[ReceiptObject], string]] {.async: (raises: []).} =
   let
     header = (await engine.getHeader(blockTag)).valueOr:
       return err(error)
@@ -74,7 +74,7 @@ proc getReceipts*(
 
 proc getReceipts*(
     engine: RpcVerificationEngine, blockHash: Hash32
-): Future[Result[seq[ReceiptObject], string]] {.async.} =
+): Future[Result[seq[ReceiptObject], string]] {.async: (raises: []).} =
   let
     header = (await engine.getHeader(blockHash)).valueOr:
       return err(error)
@@ -109,7 +109,7 @@ proc resolveFilterTags*(
 
 proc verifyLogs*(
     engine: RpcVerificationEngine, filter: FilterOptions, logObjs: seq[LogObject]
-): Future[Result[void, string]] {.async.} =
+): Future[Result[void, string]] {.async: (raises: []).} =
   # store block hashes contains the logs so that we can batch receipt requests
   var
     prevBlockHash: Hash32
@@ -142,7 +142,7 @@ proc verifyLogs*(
 
 proc getLogs*(
     engine: RpcVerificationEngine, filter: FilterOptions
-): Future[Result[seq[LogObject], string]] {.async.} =
+): Future[Result[seq[LogObject], string]] {.async: (raises: []).} =
   let
     resolvedFilter = engine.resolveFilterTags(filter).valueOr:
       return err(error)

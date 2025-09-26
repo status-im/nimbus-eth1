@@ -134,7 +134,7 @@ proc getCode*(
     address: Address,
     blockNumber: base.BlockNumber,
     stateRoot: Root,
-): Future[Result[seq[byte], string]] {.async.} =
+): Future[Result[seq[byte], string]] {.async: (raises: []).} =
   # get verified account details for the address at blockNumber
   let account = (await engine.getAccount(address, blockNumber, stateRoot)).valueOr:
     return err(error)

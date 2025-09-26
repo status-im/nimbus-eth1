@@ -123,7 +123,7 @@ proc walkBlocks(
 
 proc verifyHeader(
     engine: RpcVerificationEngine, header: Header, hash: Hash32
-): Future[Result[void, string]] {.async.} =
+): Future[Result[void, string]] {.async: (raises: []).} =
   # verify calculated hash with the requested hash
   if header.computeBlockHash != hash:
     return err("hashed block header doesn't match with blk.hash(downloaded)")
@@ -143,7 +143,7 @@ proc verifyHeader(
 
 proc verifyBlock(
     engine: RpcVerificationEngine, blk: BlockObject, fullTransactions: bool
-): Future[Result[void, string]] {.async.} =
+): Future[Result[void, string]] {.async: (raises: []).} =
   let header = convHeader(blk)
 
   ?(await engine.verifyHeader(header, blk.hash))
@@ -164,7 +164,7 @@ proc verifyBlock(
 
 proc getBlock*(
     engine: RpcVerificationEngine, blockHash: Hash32, fullTransactions: bool
-): Future[Result[BlockObject, string]] {.async.} =
+): Future[Result[BlockObject, string]] {.async: (raises: []).} =
   # get the target block
   let blk =
     try:
@@ -183,7 +183,7 @@ proc getBlock*(
 
 proc getBlock*(
     engine: RpcVerificationEngine, blockTag: BlockTag, fullTransactions: bool
-): Future[Result[BlockObject, string]] {.async.} =
+): Future[Result[BlockObject, string]] {.async: (raises: []).} =
   let numberTag = engine.resolveBlockTag(blockTag).valueOr:
     return err(error)
 
@@ -205,7 +205,7 @@ proc getBlock*(
 
 proc getHeader*(
     engine: RpcVerificationEngine, blockHash: Hash32
-): Future[Result[Header, string]] {.async.} =
+): Future[Result[Header, string]] {.async: (raises: []).} =
   let cachedHeader = engine.headerStore.get(blockHash)
 
   if cachedHeader.isNone():
@@ -231,7 +231,7 @@ proc getHeader*(
 
 proc getHeader*(
     engine: RpcVerificationEngine, blockTag: BlockTag
-): Future[Result[Header, string]] {.async.} =
+): Future[Result[Header, string]] {.async: (raises: []).} =
   let
     numberTag = engine.resolveBlockTag(blockTag).valueOr:
       return err(error)

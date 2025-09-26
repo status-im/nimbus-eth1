@@ -187,7 +187,7 @@ proc injectEngineFrontend*(server: JsonRpcServer, frontend: EthApiFrontend) =
   server.getServer().rpc("eth_maxPriorityFeePerGas") do() -> Quantity:
     await frontend.eth_maxPriorityFeePerGas()
 
-proc stop*(server: JsonRpcServer) {.async.} =
+proc stop*(server: JsonRpcServer) {.async: (raises: []).} =
   case server.kind
   of Http:
     await server.httpServer.closeWait()
