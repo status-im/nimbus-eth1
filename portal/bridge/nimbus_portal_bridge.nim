@@ -61,7 +61,7 @@ when isMainModule:
 
   let config = PortalBridgeConf.load()
 
-  setupLogging(config.logLevel, config.logStdout, none(OutFile))
+  setupLogging(config.logLevel, config.logStdout)
 
   case config.cmd
   of PortalBridgeCmd.beacon:

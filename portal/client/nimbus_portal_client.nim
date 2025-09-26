@@ -34,7 +34,7 @@ import
   ../version,
   ../logging,
   ../bridge/common/rpc_helpers,
-  beacon_chain/process_state,
+  beacon_chain/[nimbus_binary_common, process_state],
   ./nimbus_portal_client_conf
 
 const
@@ -64,7 +64,7 @@ proc init(T: type PortalClient): T =
   PortalClient()
 
 proc run(portalClient: PortalClient, config: PortalConf) {.raises: [CatchableError].} =
-  setupLogging(config.logLevel, config.logStdout, none(OutFile))
+  setupLogging(config.logLevel, config.logStdout)
 
   notice "Launching Nimbus Portal client",
     version = fullVersionStr, cmdParams = commandLineParams()
@@ -106,15 +106,9 @@ proc run(portalClient: PortalClient, config: PortalConf) {.raises: [CatchableErr
     bindIp = config.listenAddress
     udpPort = Port(config.udpPort)
     # TODO: allow for no TCP port mapping!
-    (extIp, _, extUdpPort) =
-      try:
-        setupAddress(
-          config.nat, config.listenAddress, udpPort, udpPort, "nimbus_portal_client"
-        )
-      except CatchableError as exc:
-        raise exc # TODO: Ideally we don't have the Exception here
-      except Exception as exc:
-        raiseAssert exc.msg
+    (extIp, _, extUdpPort) = setupAddress(
+      config.nat, config.listenAddress, udpPort, udpPort, "nimbus_portal_client"
+    )
     (netkey, newNetKey) =
       if config.networkKey.isSome():
         (config.networkKey.get(), true)
@@ -244,31 +238,11 @@ proc run(portalClient: PortalClient, config: PortalConf) {.raises: [CatchableErr
   let enrFile = dataDir / enrFileName
   if io2.writeFile(enrFile, d.localNode.record.toURI()).isErr:
     fatal "Failed to write the enr file", file = enrFile
-    quit 1
+    quit QuitFailure
 
   ## Start metrics HTTP server
-  let metricsServer =
-    if config.metricsEnabled:
-      let
-        address = config.metricsAddress
-        port = config.metricsPort
-        url = "http://" & $address & ":" & $port & "/metrics"
-
-        server = MetricsHttpServerRef.new($address, port).valueOr:
-          error "Could not instantiate metrics HTTP server", url, error
-          quit QuitFailure
-
-      info "Starting metrics HTTP server", url
-      try:
-        waitFor server.start()
-      except MetricsError as exc:
-        fatal "Could not start metrics HTTP server",
-          url, error_msg = exc.msg, error_name = exc.name
-        quit QuitFailure
-
-      Opt.some(server)
-    else:
-      Opt.none(MetricsHttpServerRef)
+  let metricsServer = waitFor(initMetricsServer(config)).valueOr:
+    quit QuitFailure # Logged in initMetricsServer
 
   ## Start the Portal node.
   node.start()
@@ -310,12 +284,12 @@ proc run(portalClient: PortalClient, config: PortalConf) {.raises: [CatchableErr
       if config.rpcEnabled:
         let
           ta = initTAddress(config.rpcAddress, config.rpcPort)
-          rpcHttpServer = RpcHttpServer.new()
+          server = RpcHttpServer.new()
         # 16mb to comfortably fit 2-3mb blocks + blobs + json overhead
-        rpcHttpServer.addHttpServer(ta, maxRequestBodySize = 16 * 1024 * 1024)
-        rpcHttpServer.setupRpcServer(rpcFlags)
+        server.addHttpServer(ta, maxRequestBodySize = 16 * 1024 * 1024)
+        server.setupRpcServer(rpcFlags)
 
-        Opt.some(rpcHttpServer)
+        Opt.some(server)
       else:
         Opt.none(RpcHttpServer)
 
@@ -354,14 +328,7 @@ proc stop(f: PortalClient) {.async: (raises: []).} =
     except CatchableError as e:
       warn "Failed to stop rpc HTTP server", exc = e.name, err = e.msg
 
-  if f.metricsServer.isSome():
-    let server = f.metricsServer.get()
-    try:
-      await server.stop()
-      await server.close()
-    except CatchableError as e:
-      warn "Failed to stop metrics HTTP server", exc = e.name, err = e.msg
-
+  await f.metricsServer.stopMetricsServer()
   await f.portalNode.stop()
 
 when isMainModule:

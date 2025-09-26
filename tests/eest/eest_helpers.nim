@@ -256,7 +256,7 @@ proc prepareEnv*(
         beaconEngine = BeaconEngineRef.new(txPool)
         serverApi = newServerAPI(txPool)
 
-      setupServerAPI(serverApi, server, newEthContext())
+      setupServerAPI(serverApi, server, new AccountsManager)
       setupEngineAPI(beaconEngine, server)
 
       server.start()

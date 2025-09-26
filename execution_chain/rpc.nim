@@ -51,7 +51,7 @@ func installRPC(server: RpcServer,
   setupCommonRpc(nimbus.ethNode, conf, server)
 
   if RpcFlag.Eth in flags:
-    setupServerAPI(serverApi, server, nimbus.ctx)
+    setupServerAPI(serverApi, server, nimbus.accountsManager)
 
   if RpcFlag.Admin in flags:
     setupAdminRpc(nimbus, conf, server)
@@ -214,7 +214,7 @@ proc setupRpc*(nimbus: NimbusNode, conf: NimbusConf,
   # Provide JWT authentication handler for rpcHttpServer
   let jwtKey = block:
     # Create or load shared secret
-    let rc = nimbus.ctx.rng.jwtSharedSecret(conf)
+    let rc = nimbus.rng.jwtSharedSecret(conf)
     if rc.isErr:
       fatal "Failed create or load shared secret",
         msg = $(rc.unsafeError) # avoid side effects

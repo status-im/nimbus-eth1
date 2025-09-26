@@ -6,7 +6,7 @@
 # at your option. This file may not be copied, modified, or distributed except according to those terms.
 
 import
-  std/[atomics, json, strutils, net],
+  std/[atomics, json, net],
   eth/net/nat,
   beacon_chain/spec/[digest, network],
   beacon_chain/nimbus_binary_common,

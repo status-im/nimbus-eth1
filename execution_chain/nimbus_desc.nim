@@ -45,14 +45,14 @@ type
     httpServer*: NimbusHttpServerRef
     engineApiServer*: NimbusHttpServerRef
     ethNode*: EthereumNode
-    ctx*: EthContext
     fc*: ForkedChainRef
     txPool*: TxPoolRef
     peerManager*: PeerManagerRef
     beaconSyncRef*: BeaconSyncRef
     beaconEngine*: BeaconEngineRef
-    metricsServer*: MetricsHttpServerRef
     wire*: EthWireRef
+    accountsManager*: ref AccountsManager
+    rng*: ref HmacDrbgContext
 
 proc closeWait*(nimbus: NimbusNode) {.async.} =
   trace "Graceful shutdown"
@@ -67,8 +67,6 @@ proc closeWait*(nimbus: NimbusNode) {.async.} =
     waitedFutures.add nimbus.peerManager.stop()
   if nimbus.beaconSyncRef.isNil.not:
     waitedFutures.add nimbus.beaconSyncRef.stop()
-  if nimbus.metricsServer.isNil.not:
-    waitedFutures.add nimbus.metricsServer.stop()
   if nimbus.wire.isNil.not:
     waitedFutures.add nimbus.wire.stop()
 

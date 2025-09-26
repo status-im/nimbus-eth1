@@ -12,8 +12,6 @@ network = ["hoodi", "777"]
 
 log-level = "DEBUG"
 log-format = "json"
-log-metrics = true
-log-metrics-interval = 15
 
 metrics = true
 metrics-port = 127

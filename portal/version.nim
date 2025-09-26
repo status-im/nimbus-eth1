@@ -30,7 +30,6 @@ const
     clientName & "/" & fullVersionStr & "/" & hostOS & "-" & hostCPU & "/" & "Nim" &
     NimVersion
 
-  compileYear = CompileDate[0 ..< 4] # YYYY-MM-DD (UTC)
   copyrightBanner* =
     "Copyright (c) 2021-" & compileYear & " Status Research & Development GmbH"
 
