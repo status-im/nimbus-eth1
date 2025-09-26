@@ -192,64 +192,90 @@ proc initTestApiBackend*(t: TestApiState): EthApiBackend =
     getBlockByHashProc = proc(
         blkHash: Hash32, fullTransactions: bool
     ): Future[BlockObject] {.async: (raises: [CancelledError]).} =
-      if fullTransactions:
-        return t.blocks[blkHash]
-      else:
-        return convToPartialBlock(t.blocks[blkHash])
+      try:
+        if fullTransactions:
+          return t.blocks[blkHash]
+        else:
+          return convToPartialBlock(t.blocks[blkHash])
+      except CatchableError as e:
+        raise newException(CancelledError, e.msg)
 
     getBlockByNumberProc = proc(
         blkNum: BlockTag, fullTransactions: bool
     ): Future[BlockObject] {.async: (raises: [CancelledError]).} =
-      # we directly use number here because the verified proxy should never use aliases
-      let blkHash = t.nums[blkNum.number]
+      try:
+        # we directly use number here because the verified proxy should never use aliases
+        let blkHash = t.nums[blkNum.number]
 
-      if fullTransactions:
-        return t.blocks[blkHash]
-      else:
-        return convToPartialBlock(t.blocks[blkHash])
+        if fullTransactions:
+          return t.blocks[blkHash]
+        else:
+          return convToPartialBlock(t.blocks[blkHash])
+      except CatchableError as e:
+        raise newException(CancelledError, e.msg)
 
     getProofProc = proc(
         address: Address, slots: seq[UInt256], blkNum: BlockTag
     ): Future[ProofResponse] {.async: (raises: [CancelledError]).} =
-      # we directly use number here because the verified proxy should never use aliases
-      let blkHash = t.nums[blkNum.number]
-      t.proofs[(address, slots, blkHash)]
+      try:# we directly use number here because the verified proxy should never use aliases
+        let blkHash = t.nums[blkNum.number]
+        t.proofs[(address, slots, blkHash)]
+      except CatchableError as e:
+        raise newException(CancelledError, e.msg)
 
     createAccessListProc = proc(
         args: TransactionArgs, blkNum: BlockTag
     ): Future[AccessListResult] {.async: (raises: [CancelledError]).} =
-      # we directly use number here because the verified proxy should never use aliases
-      let blkHash = t.nums[blkNum.number]
-      t.accessLists[(args, blkHash)]
+      try:
+        # we directly use number here because the verified proxy should never use aliases
+        let blkHash = t.nums[blkNum.number]
+        t.accessLists[(args, blkHash)]
+      except CatchableError as e:
+        raise newException(CancelledError, e.msg)
 
     getCodeProc = proc(
         address: Address, blkNum: BlockTag
     ): Future[seq[byte]] {.async: (raises: [CancelledError]).} =
-      # we directly use number here because the verified proxy should never use aliases
-      let blkHash = t.nums[blkNum.number]
-      t.codes[(address, blkHash)]
+      try:
+        # we directly use number here because the verified proxy should never use aliases
+        let blkHash = t.nums[blkNum.number]
+        t.codes[(address, blkHash)]
+      except CatchableError as e:
+        raise newException(CancelledError, e.msg)
 
     getBlockReceiptsProc = proc(
         blockId: BlockTag
     ): Future[Opt[seq[ReceiptObject]]] {.async: (raises: [CancelledError]).} =
-      # we directly use number here because the verified proxy should never use aliases
-      let blkHash = t.nums[blockId.number]
-      Opt.some(t.blockReceipts[blkHash])
+      try:
+        # we directly use number here because the verified proxy should never use aliases
+        let blkHash = t.nums[blockId.number]
+        Opt.some(t.blockReceipts[blkHash])
+      except CatchableError as e:
+        raise newException(CancelledError, e.msg)
 
     getLogsProc = proc(
         filterOptions: FilterOptions
     ): Future[seq[LogObject]] {.async: (raises: [CancelledError]).} =
-      t.logs[filterOptions]
+      try:
+        t.logs[filterOptions]
+      except CatchableError as e:
+        raise newException(CancelledError, e.msg)
 
     getTransactionByHashProc = proc(
         txHash: Hash32
     ): Future[TransactionObject] {.async: (raises: [CancelledError]).} =
-      t.transactions[txHash]
+      try:
+        t.transactions[txHash]
+      except CatchableError as e:
+        raise newException(CancelledError, e.msg)
 
     getTransactionReceiptProc = proc(
         txHash: Hash32
     ): Future[ReceiptObject] {.async: (raises: [CancelledError]).} =
-      t.receipts[txHash]
+      try:
+        t.receipts[txHash]
+      except CatchableError as e:
+        raise newException(CancelledError, e.msg)
 
   EthApiBackend(
     eth_chainId: ethChainIdProc,
