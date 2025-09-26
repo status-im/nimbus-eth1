@@ -51,7 +51,7 @@ func getLogLevels(): string =
   join(logLevels, ", ")
 
 const
-  defaultPort              = 30303
+  defaultExecutionPort*    = 30303
   defaultMetricsServerPort = 9093
   defaultHttpPort          = 8545
   # https://github.com/ethereum/execution-apis/blob/v1.0.0-beta.4/src/engine/authentication.md#jwt-specifications
@@ -242,8 +242,8 @@ type
 
     tcpPort* {.
       desc: "Ethereum P2P network listening TCP port"
-      defaultValue: defaultPort
-      defaultValueDesc: $defaultPort
+      defaultValue: defaultExecutionPort
+      defaultValueDesc: $defaultExecutionPort
       name: "tcp-port" }: Port
 
     udpPort* {.
@@ -463,6 +463,12 @@ type
           " is auto-generated."
         defaultValueDesc: "\"jwt.hex\" in the data directory (see --data-dir)"
         name: "jwt-secret" .}: Option[InputFile]
+
+      jwtSecretValue* {.
+        hidden
+        desc: "Hex string with jwt secret"
+        defaultValueDesc: "\"jwt.hex\" in the data directory (see --data-dir)"
+        name: "debug-jwt-secret-value" .}: Option[string]
 
       beaconSyncTarget* {.
         hidden
