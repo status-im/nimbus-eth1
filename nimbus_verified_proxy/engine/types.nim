@@ -34,129 +34,119 @@ type
 
   BlockTag* = eth_api_types.RtBlockIdentifier
 
-  # chain methods
-  ChainIdProc* = proc(): Future[UInt256] {.async: (raises: [])}
-  BlockNumberProc* = proc(): Future[uint64] {.async: (raises: [])}
-
-  # state methods
-  GetBalanceProc* = proc(address: Address, blockId: BlockTag): Future[UInt256] {.async: (raises: [])}
-  GetStorageProc* = proc(
-    address: Address, slot: UInt256, blockId: BlockTag
-  ): Future[FixedBytes[32]] {.async: (raises: [])}
-  GetTransactionCountProc* =
-    proc(address: Address, blockId: BlockTag): Future[Quantity] {.async: (raises: [])}
-  GetCodeProc* = proc(address: Address, blockId: BlockTag): Future[seq[byte]] {.async: (raises: [])}
-  GetProofProc* = proc(
-    address: Address, slots: seq[UInt256], blockId: BlockTag
-  ): Future[ProofResponse] {.async: (raises: [])}
-
-  # block methods
-  GetBlockByHashProc* =
-    proc(blkHash: Hash32, fullTransactions: bool): Future[BlockObject] {.async: (raises: [])}
-  GetBlockByNumberProc* =
-    proc(blkNum: BlockTag, fullTransactions: bool): Future[BlockObject] {.async: (raises: [])}
-  GetUncleCountByBlockHashProc* = proc(blkHash: Hash32): Future[Quantity] {.async: (raises: [])}
-  GetUncleCountByBlockNumberProc* = proc(blkNum: BlockTag): Future[Quantity] {.async: (raises: [])}
-  GetBlockTransactionCountByHashProc* =
-    proc(blkHash: Hash32): Future[Quantity] {.async: (raises: [])}
-  GetBlockTransactionCountByNumberProc* =
-    proc(blkNum: BlockTag): Future[Quantity] {.async: (raises: [])}
-
-  # transaction methods
-  GetTransactionByBlockHashAndIndexProc* =
-    proc(blkHash: Hash32, index: Quantity): Future[TransactionObject] {.async: (raises: [])}
-  GetTransactionByBlockNumberAndIndexProc* =
-    proc(blkNum: BlockTag, index: Quantity): Future[TransactionObject] {.async: (raises: [])}
-  GetTransactionByHashProc = proc(txHash: Hash32): Future[TransactionObject] {.async: (raises: [])}
-
-  # evm method types for frontend with extra parameter
-  FrontendCallProc* = proc(
-    args: TransactionArgs, blockId: BlockTag, optimisticFetch: bool = true
-  ): Future[seq[byte]] {.async: (raises: [])}
-  FrontendCreateAccessListProc* = proc(
-    args: TransactionArgs, blockId: BlockTag, optimisticFetch: bool = true
-  ): Future[AccessListResult] {.async: (raises: [])}
-  FrontendEstimateGasProc* = proc(
-    args: TransactionArgs, blockId: BlockTag, optimisticFetch: bool = true
-  ): Future[Quantity] {.async: (raises: [])}
-
-  # evm method types for backend (standard)
-  CallProc* =
-    proc(args: TransactionArgs, blockId: BlockTag): Future[seq[byte]] {.async: (raises: [])}
-  CreateAccessListProc* =
-    proc(args: TransactionArgs, blockId: BlockTag): Future[AccessListResult] {.async: (raises: [])}
-  EstimateGasProc* =
-    proc(args: TransactionArgs, blockId: BlockTag): Future[Quantity] {.async: (raises: [])}
-
-  # receipt methods
-  GetBlockReceiptsProc =
-    proc(blockId: BlockTag): Future[Opt[seq[ReceiptObject]]] {.async: (raises: [])}
-  GetTransactionReceiptProc = proc(txHash: Hash32): Future[ReceiptObject] {.async: (raises: [])}
-  GetLogsProc = proc(filterOptions: FilterOptions): Future[seq[LogObject]] {.async: (raises: [])}
-  NewFilterProc = proc(filterOptions: FilterOptions): Future[string] {.async: (raises: [])}
-  UninstallFilterProc = proc(filterId: string): Future[bool] {.async: (raises: [])}
-  GetFilterLogsProc = proc(filterId: string): Future[seq[LogObject]] {.async: (raises: [])}
-  GetFilterChangesProc = proc(filterId: string): Future[seq[LogObject]] {.async: (raises: [])}
-
-  # fee based methods
-  BlobBaseFeeProc = proc(): Future[UInt256] {.async: (raises: [])}
-  GasPriceProc = proc(): Future[Quantity] {.async: (raises: [])}
-  MaxPriorityFeePerGasProc = proc(): Future[Quantity] {.async: (raises: [])}
-
+  # Backend API
   EthApiBackend* = object
-    eth_chainId*: ChainIdProc
-    eth_getBlockByHash*: GetBlockByHashProc
-    eth_getBlockByNumber*: GetBlockByNumberProc
-    eth_getProof*: GetProofProc
-    eth_createAccessList*: CreateAccessListProc
-    eth_getCode*: GetCodeProc
-    eth_getBlockReceipts*: GetBlockReceiptsProc
-    eth_getTransactionReceipt*: GetTransactionReceiptProc
-    eth_getTransactionByHash*: GetTransactionByHashProc
-    eth_getLogs*: GetLogsProc
+    eth_chainId*: proc(): Future[UInt256] {.async: (raises: [CancelledError]).}
+    eth_getBlockByHash*: proc(
+      blkHash: Hash32, fullTransactions: bool
+    ): Future[BlockObject] {.async: (raises: [CancelledError]).}
+    eth_getBlockByNumber*: proc(
+      blkNum: BlockTag, fullTransactions: bool
+    ): Future[BlockObject] {.async: (raises: [CancelledError]).}
+    eth_getProof*: proc(
+      address: Address, slots: seq[UInt256], blockId: BlockTag
+    ): Future[ProofResponse] {.async: (raises: [CancelledError]).}
+    eth_createAccessList*: proc(
+      args: TransactionArgs, blockId: BlockTag
+    ): Future[AccessListResult] {.async: (raises: [CancelledError]).}
+    eth_getCode*: proc(address: Address, blockId: BlockTag): Future[seq[byte]] {.
+      async: (raises: [CancelledError])
+    .}
+    eth_getBlockReceipts*: proc(blockId: BlockTag): Future[Opt[seq[ReceiptObject]]] {.
+      async: (raises: [CancelledError])
+    .}
+    eth_getTransactionReceipt*:
+      proc(txHash: Hash32): Future[ReceiptObject] {.async: (raises: [CancelledError]).}
+    eth_getTransactionByHash*: proc(txHash: Hash32): Future[TransactionObject] {.
+      async: (raises: [CancelledError])
+    .}
+    eth_getLogs*: proc(filterOptions: FilterOptions): Future[seq[LogObject]] {.
+      async: (raises: [CancelledError])
+    .}
 
-  EthApiFrontend* = object # Chain methods
-    eth_chainId*: ChainIdProc
-    eth_blockNumber*: BlockNumberProc
+  # Frontend API
+  EthApiFrontend* = object # Chain
+    eth_chainId*: proc(): Future[UInt256] {.async: (raises: [ValueError]).}
+    eth_blockNumber*: proc(): Future[uint64] {.async: (raises: [ValueError]).}
 
-    # State methods
-    eth_getBalance*: GetBalanceProc
-    eth_getStorageAt*: GetStorageProc
-    eth_getTransactionCount*: GetTransactionCountProc
-    eth_getCode*: GetCodeProc
-    eth_getProof*: GetProofProc
+    # State
+    eth_getBalance*: proc(address: Address, blockId: BlockTag): Future[UInt256] {.
+      async: (raises: [ValueError])
+    .}
+    eth_getStorageAt*: proc(
+      address: Address, slot: UInt256, blockId: BlockTag
+    ): Future[FixedBytes[32]] {.async: (raises: [ValueError]).}
+    eth_getTransactionCount*: proc(
+      address: Address, blockId: BlockTag
+    ): Future[Quantity] {.async: (raises: [ValueError]).}
+    eth_getCode*: proc(address: Address, blockId: BlockTag): Future[seq[byte]] {.
+      async: (raises: [ValueError])
+    .}
+    eth_getProof*: proc(
+      address: Address, slots: seq[UInt256], blockId: BlockTag
+    ): Future[ProofResponse] {.async: (raises: [ValueError]).}
 
-    # Block methods
-    eth_getBlockByHash*: GetBlockByHashProc
-    eth_getBlockByNumber*: GetBlockByNumberProc
-    eth_getUncleCountByBlockHash*: GetUncleCountByBlockHashProc
-    eth_getUncleCountByBlockNumber*: GetUncleCountByBlockNumberProc
-    eth_getBlockTransactionCountByHash*: GetBlockTransactionCountByHashProc
-    eth_getBlockTransactionCountByNumber*: GetBlockTransactionCountByNumberProc
+    # Block
+    eth_getBlockByHash*: proc(
+      blkHash: Hash32, fullTransactions: bool
+    ): Future[BlockObject] {.async: (raises: [ValueError]).}
+    eth_getBlockByNumber*: proc(
+      blkNum: BlockTag, fullTransactions: bool
+    ): Future[BlockObject] {.async: (raises: [ValueError]).}
+    eth_getUncleCountByBlockHash*:
+      proc(blkHash: Hash32): Future[Quantity] {.async: (raises: [ValueError]).}
+    eth_getUncleCountByBlockNumber*:
+      proc(blkNum: BlockTag): Future[Quantity] {.async: (raises: [ValueError]).}
+    eth_getBlockTransactionCountByHash*:
+      proc(blkHash: Hash32): Future[Quantity] {.async: (raises: [ValueError]).}
+    eth_getBlockTransactionCountByNumber*:
+      proc(blkNum: BlockTag): Future[Quantity] {.async: (raises: [ValueError]).}
 
-    # Transaction methods
-    eth_getTransactionByBlockHashAndIndex*: GetTransactionByBlockHashAndIndexProc
-    eth_getTransactionByBlockNumberAndIndex*: GetTransactionByBlockNumberAndIndexProc
-    eth_getTransactionByHash*: GetTransactionByHashProc
+    # Transaction
+    eth_getTransactionByBlockHashAndIndex*: proc(
+      blkHash: Hash32, index: Quantity
+    ): Future[TransactionObject] {.async: (raises: [ValueError]).}
+    eth_getTransactionByBlockNumberAndIndex*: proc(
+      blkNum: BlockTag, index: Quantity
+    ): Future[TransactionObject] {.async: (raises: [ValueError]).}
+    eth_getTransactionByHash*:
+      proc(txHash: Hash32): Future[TransactionObject] {.async: (raises: [ValueError]).}
 
-    # EVM methods
-    eth_call*: FrontendCallProc
-    eth_createAccessList*: FrontendCreateAccessListProc
-    eth_estimateGas*: FrontendEstimateGasProc
+    # EVM
+    eth_call*: proc(
+      args: TransactionArgs, blockId: BlockTag, optimisticFetch: bool = true
+    ): Future[seq[byte]] {.async: (raises: [CancelledError, ValueError]).}
+    eth_createAccessList*: proc(
+      args: TransactionArgs, blockId: BlockTag, optimisticFetch: bool = true
+    ): Future[AccessListResult] {.async: (raises: [CancelledError, ValueError]).}
+    eth_estimateGas*: proc(
+      args: TransactionArgs, blockId: BlockTag, optimisticFetch: bool = true
+    ): Future[Quantity] {.async: (raises: [CancelledError, ValueError]).}
 
-    # Receipt methods
-    eth_getBlockReceipts*: GetBlockReceiptsProc
-    eth_getTransactionReceipt*: GetTransactionReceiptProc
-    eth_getLogs*: GetLogsProc
-    eth_newFilter*: NewFilterProc
-    eth_uninstallFilter*: UninstallFilterProc
-    eth_getFilterLogs*: GetFilterLogsProc
-    eth_getFilterChanges*: GetFilterChangesProc
+    # Receipts
+    eth_getBlockReceipts*: proc(blockId: BlockTag): Future[Opt[seq[ReceiptObject]]] {.
+      async: (raises: [ValueError])
+    .}
+    eth_getTransactionReceipt*:
+      proc(txHash: Hash32): Future[ReceiptObject] {.async: (raises: [ValueError]).}
+    eth_getLogs*: proc(filterOptions: FilterOptions): Future[seq[LogObject]] {.
+      async: (raises: [ValueError])
+    .}
+    eth_newFilter*: proc(filterOptions: FilterOptions): Future[string] {.
+      async: (raises: [ValueError])
+    .}
+    eth_uninstallFilter*:
+      proc(filterId: string): Future[bool] {.async: (raises: [ValueError]).}
+    eth_getFilterLogs*:
+      proc(filterId: string): Future[seq[LogObject]] {.async: (raises: [ValueError]).}
+    eth_getFilterChanges*:
+      proc(filterId: string): Future[seq[LogObject]] {.async: (raises: [ValueError]).}
 
-    # Fee-based methods
-    eth_blobBaseFee*: BlobBaseFeeProc
-    eth_gasPrice*: GasPriceProc
-    eth_maxPriorityFeePerGas*: MaxPriorityFeePerGasProc
+    # Fee-based
+    eth_blobBaseFee*: proc(): Future[UInt256] {.async: (raises: [ValueError]).}
+    eth_gasPrice*: proc(): Future[Quantity] {.async: (raises: [ValueError]).}
+    eth_maxPriorityFeePerGas*:
+      proc(): Future[Quantity] {.async: (raises: [ValueError]).}
 
   FilterStoreItem* = object
     filter*: FilterOptions

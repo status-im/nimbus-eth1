@@ -23,22 +23,20 @@ type JsonRpcClient* = ref object
     wsClient: RpcWebSocketClient
 
 proc init*(T: type JsonRpcClient, url: Web3Url): JsonRpcClient =
-  var client: JsonRpcClient
+  case url.kind
+  of HttpUrl:
+    JsonRpcClient(kind: Http, httpClient: newRpcHttpClient(), url: url.web3Url)
+  of WsUrl:
+    JsonRpcClient(kind: WebSocket, wsClient: newRpcWebSocketClient(), url: url.web3Url)
 
-  if url.kind == HttpUrl:
-    client = JsonRpcClient(kind: Http, httpClient: newRpcHttpClient(), url: url.web3Url)
-  elif url.kind == WsUrl:
-    client = JsonRpcClient(
-      kind: WebSocket, wsClient: newRpcWebSocketClient(), url: url.web3Url
-    )
-
-  client
-
-proc start*(client: JsonRpcClient): Future[Result[void, string]] {.async: (raises: []).} =
+proc start*(
+    client: JsonRpcClient
+): Future[Result[void, string]] {.async: (raises: []).} =
   try:
-    if client.kind == Http:
+    case client.kind
+    of Http:
       await client.httpClient.connect(client.url)
-    elif client.kind == WebSocket:
+    of WebSocket:
       await client.wsClient.connect(uri = client.url, compression = false, flags = {})
   except CatchableError as e:
     return err(e.msg)
@@ -52,53 +50,83 @@ template getClient(client: JsonRpcClient): RpcClient =
 
 proc getEthApiBackend*(client: JsonRpcClient): EthApiBackend =
   let
-    ethChainIdProc = proc(): Future[UInt256] {.async: (raw: true, raises: []).} =
-      client.getClient().eth_chainId()
+    ethChainIdProc = proc(): Future[UInt256] {.async: (raises: [CancelledError]).} =
+      try:
+        await client.getClient().eth_chainId()
+      except CatchableError as e:
+        raise newException(CancelledError, e.msg)
 
     getBlockByHashProc = proc(
         blkHash: Hash32, fullTransactions: bool
-    ): Future[BlockObject] {.async: (raw: true, raises: []).} =
-      client.getClient().eth_getBlockByHash(blkHash, fullTransactions)
+    ): Future[BlockObject] {.async: (raises: [CancelledError]).} =
+      try:
+        await client.getClient().eth_getBlockByHash(blkHash, fullTransactions)
+      except CatchableError as e:
+        raise newException(CancelledError, e.msg)
 
     getBlockByNumberProc = proc(
         blkNum: BlockTag, fullTransactions: bool
-    ): Future[BlockObject] {.async: (raw: true, raises: []).} =
-      client.getClient().eth_getBlockByNumber(blkNum, fullTransactions)
+    ): Future[BlockObject] {.async: (raises: [CancelledError]).} =
+      try:
+        await client.getClient().eth_getBlockByNumber(blkNum, fullTransactions)
+      except CatchableError as e:
+        raise newException(CancelledError, e.msg)
 
     getProofProc = proc(
         address: Address, slots: seq[UInt256], blockId: BlockTag
-    ): Future[ProofResponse] {.async: (raw: true, raises: []).} =
-      client.getClient().eth_getProof(address, slots, blockId)
+    ): Future[ProofResponse] {.async: (raises: [CancelledError]).} =
+      try:
+        await client.getClient().eth_getProof(address, slots, blockId)
+      except CatchableError as e:
+        raise newException(CancelledError, e.msg)
 
     createAccessListProc = proc(
         args: TransactionArgs, blockId: BlockTag
-    ): Future[AccessListResult] {.async: (raw: true, raises: []).} =
-      client.getClient().eth_createAccessList(args, blockId)
+    ): Future[AccessListResult] {.async: (raises: [CancelledError]).} =
+      try:
+        await client.getClient().eth_createAccessList(args, blockId)
+      except CatchableError as e:
+        raise newException(CancelledError, e.msg)
 
     getCodeProc = proc(
         address: Address, blockId: BlockTag
-    ): Future[seq[byte]] {.async: (raw: true, raises: []).} =
-      client.getClient().eth_getCode(address, blockId)
+    ): Future[seq[byte]] {.async: (raises: [CancelledError]).} =
+      try:
+        await client.getClient().eth_getCode(address, blockId)
+      except CatchableError as e:
+        raise newException(CancelledError, e.msg)
 
     getTransactionByHashProc = proc(
         txHash: Hash32
-    ): Future[TransactionObject] {.async: (raw: true, raises: []).} =
-      client.getClient().eth_getTransactionByHash(txHash)
+    ): Future[TransactionObject] {.async: (raises: [CancelledError]).} =
+      try:
+        await client.getClient().eth_getTransactionByHash(txHash)
+      except CatchableError as e:
+        raise newException(CancelledError, e.msg)
 
     getTransactionReceiptProc = proc(
         txHash: Hash32
-    ): Future[ReceiptObject] {.async: (raw: true, raises: []).} =
-      client.getClient().eth_getTransactionReceipt(txHash)
+    ): Future[ReceiptObject] {.async: (raises: [CancelledError]).} =
+      try:
+        await client.getClient().eth_getTransactionReceipt(txHash)
+      except CatchableError as e:
+        raise newException(CancelledError, e.msg)
 
     getBlockReceiptsProc = proc(
         blockId: BlockTag
-    ): Future[Opt[seq[ReceiptObject]]] {.async: (raw: true, raises: []).} =
-      client.getClient().eth_getBlockReceipts(blockId)
+    ): Future[Opt[seq[ReceiptObject]]] {.async: (raises: [CancelledError]).} =
+      try:
+        await client.getClient().eth_getBlockReceipts(blockId)
+      except CatchableError as e:
+        raise newException(CancelledError, e.msg)
 
     getLogsProc = proc(
         filterOptions: FilterOptions
-    ): Future[seq[LogObject]] {.async: (raw: true, raises: []).} =
-      client.getClient().eth_getLogs(filterOptions)
+    ): Future[seq[LogObject]] {.async: (raises: [CancelledError]).} =
+      try:
+        await client.getClient().eth_getLogs(filterOptions)
+      except CatchableError as e:
+        raise newException(CancelledError, e.msg)
 
   EthApiBackend(
     eth_chainId: ethChainIdProc,
@@ -113,9 +141,8 @@ proc getEthApiBackend*(client: JsonRpcClient): EthApiBackend =
     eth_getTransactionReceipt: getTransactionReceiptProc,
   )
 
-proc stop*(client: JsonRpcClient) {.async: (raises: []).} =
-  case client.kind
-  of Http:
-    await client.httpClient.close()
-  of WebSocket:
-    await client.wsClient.close()
+proc stop*(client: JsonRpcClient) {.async: (raises: [CancelledError]).} =
+  try:
+    await client.getClient().close()
+  except CatchableError:
+    raise newException(CancelledError, "coudln't close the json rpc client")

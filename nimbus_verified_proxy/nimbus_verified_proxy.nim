@@ -39,9 +39,9 @@ proc cleanup*(ctx: ptr Context) =
   dealloc(ctx.configJson)
   freeShared(ctx)
 
-proc verifyChaindId(engine: RpcVerificationEngine): Future[void] {.async: (raises: []).} =
-  let localId = engine.chainId
-
+proc verifyChaindId(
+    engine: RpcVerificationEngine
+): Future[void] {.async: (raises: []).} =
   let providerId =
     try:
       await engine.backend.eth_chainId()
@@ -51,9 +51,9 @@ proc verifyChaindId(engine: RpcVerificationEngine): Future[void] {.async: (raise
   # This is a chain/network mismatch error between the Nimbus verified proxy and
   # the application using it. Fail fast to avoid misusage. The user must fix
   # the configuration.
-  if localId != providerId:
+  if engine.chainId != providerId:
     fatal "The specified data provider serves data for a different chain",
-      expectedChain = localId, providerChain = providerId
+      expectedChain = engine.chainId, providerChain = providerId
     quit 1
 
 func getConfiguredChainId(networkMetadata: Eth2NetworkMetadata): UInt256 =

@@ -186,12 +186,12 @@ func convToPartialBlock(blk: BlockObject): BlockObject =
 
 proc initTestApiBackend*(t: TestApiState): EthApiBackend =
   let
-    ethChainIdProc = proc(): Future[UInt256] {.async.} =
+    ethChainIdProc = proc(): Future[UInt256] {.async: (raises: [CancelledError]).} =
       return t.chainId
 
     getBlockByHashProc = proc(
         blkHash: Hash32, fullTransactions: bool
-    ): Future[BlockObject] {.async.} =
+    ): Future[BlockObject] {.async: (raises: [CancelledError]).} =
       if fullTransactions:
         return t.blocks[blkHash]
       else:
@@ -199,7 +199,7 @@ proc initTestApiBackend*(t: TestApiState): EthApiBackend =
 
     getBlockByNumberProc = proc(
         blkNum: BlockTag, fullTransactions: bool
-    ): Future[BlockObject] {.async.} =
+    ): Future[BlockObject] {.async: (raises: [CancelledError]).} =
       # we directly use number here because the verified proxy should never use aliases
       let blkHash = t.nums[blkNum.number]
 
@@ -210,41 +210,45 @@ proc initTestApiBackend*(t: TestApiState): EthApiBackend =
 
     getProofProc = proc(
         address: Address, slots: seq[UInt256], blkNum: BlockTag
-    ): Future[ProofResponse] {.async.} =
+    ): Future[ProofResponse] {.async: (raises: [CancelledError]).} =
       # we directly use number here because the verified proxy should never use aliases
       let blkHash = t.nums[blkNum.number]
       t.proofs[(address, slots, blkHash)]
 
     createAccessListProc = proc(
         args: TransactionArgs, blkNum: BlockTag
-    ): Future[AccessListResult] {.async.} =
+    ): Future[AccessListResult] {.async: (raises: [CancelledError]).} =
       # we directly use number here because the verified proxy should never use aliases
       let blkHash = t.nums[blkNum.number]
       t.accessLists[(args, blkHash)]
 
     getCodeProc = proc(
         address: Address, blkNum: BlockTag
-    ): Future[seq[byte]] {.async.} =
+    ): Future[seq[byte]] {.async: (raises: [CancelledError]).} =
       # we directly use number here because the verified proxy should never use aliases
       let blkHash = t.nums[blkNum.number]
       t.codes[(address, blkHash)]
 
     getBlockReceiptsProc = proc(
         blockId: BlockTag
-    ): Future[Opt[seq[ReceiptObject]]] {.async.} =
+    ): Future[Opt[seq[ReceiptObject]]] {.async: (raises: [CancelledError]).} =
       # we directly use number here because the verified proxy should never use aliases
       let blkHash = t.nums[blockId.number]
       Opt.some(t.blockReceipts[blkHash])
 
-    getLogsProc = proc(filterOptions: FilterOptions): Future[seq[LogObject]] {.async.} =
+    getLogsProc = proc(
+        filterOptions: FilterOptions
+    ): Future[seq[LogObject]] {.async: (raises: [CancelledError]).} =
       t.logs[filterOptions]
 
     getTransactionByHashProc = proc(
         txHash: Hash32
-    ): Future[TransactionObject] {.async.} =
+    ): Future[TransactionObject] {.async: (raises: [CancelledError]).} =
       t.transactions[txHash]
 
-    getTransactionReceiptProc = proc(txHash: Hash32): Future[ReceiptObject] {.async.} =
+    getTransactionReceiptProc = proc(
+        txHash: Hash32
+    ): Future[ReceiptObject] {.async: (raises: [CancelledError]).} =
       t.receipts[txHash]
 
   EthApiBackend(

@@ -26,8 +26,6 @@ type JsonRpcServer* = ref object
 proc init*(
     T: type JsonRpcServer, url: Web3Url
 ): JsonRpcServer {.raises: [JsonRpcError, ValueError, TransportAddressError].} =
-  var server: JsonRpcServer
-
   let
     auth = @[httpCors(@[])] # TODO: for now we serve all cross origin requests
     parsedUrl = parseUri(url.web3Url)
@@ -39,33 +37,34 @@ proc init*(
         parseInt(parsedUrl.port)
     listenAddress = initTAddress(hostname, port)
 
-  if url.kind == HttpUrl:
-    server = JsonRpcServer(
+  case url.kind
+  of HttpUrl:
+    JsonRpcServer(
       kind: Http, httpServer: newRpcHttpServer([listenAddress], RpcRouter.init(), auth)
     )
-  elif url.kind == WsUrl:
-    server =
+  of WsUrl:
+    let server =
       JsonRpcServer(kind: WebSocket, wsServer: newRpcWebSocketServer(listenAddress))
 
     server.wsServer.router = RpcRouter.init()
+    server
 
-  server
+func getServer(server: JsonRpcServer): RpcServer =
+  case server.kind
+  of Http: server.httpServer
+  of WebSocket: server.wsServer
 
 proc start*(server: JsonRpcServer): Result[void, string] =
   try:
-    if server.kind == Http:
+    case server.kind
+    of Http:
       server.httpServer.start()
-    elif server.kind == WebSocket:
+    of WebSocket:
       server.wsServer.start()
   except CatchableError as e:
     return err(e.msg)
 
   ok()
-
-proc getServer(server: JsonRpcServer): RpcServer =
-  case server.kind
-  of Http: server.httpServer
-  of WebSocket: server.wsServer
 
 proc injectEngineFrontend*(server: JsonRpcServer, frontend: EthApiFrontend) =
   server.getServer().rpc("eth_blockNumber") do() -> uint64:
@@ -187,9 +186,12 @@ proc injectEngineFrontend*(server: JsonRpcServer, frontend: EthApiFrontend) =
   server.getServer().rpc("eth_maxPriorityFeePerGas") do() -> Quantity:
     await frontend.eth_maxPriorityFeePerGas()
 
-proc stop*(server: JsonRpcServer) {.async: (raises: []).} =
-  case server.kind
-  of Http:
-    await server.httpServer.closeWait()
-  of WebSocket:
-    await server.wsServer.closeWait()
+proc stop*(server: JsonRpcServer) {.async: (raises: [CancelledError]).} =
+  try:
+    case server.kind
+    of Http:
+      await server.httpServer.closeWait()
+    of WebSocket:
+      await server.wsServer.closeWait()
+  except CatchableError as e:
+    raise newException(CancelledError, e.msg)

@@ -7,10 +7,7 @@
 
 {.push raises: [], gcsafe.}
 
-import stint, chronos, ./types, chronicles
-
-logScope:
-  topics = "verified_proxy"
+import results, stint
 
 func chainIdToNetworkId*(chainId: UInt256): Result[UInt256, string] =
   if chainId == 1.u256:
@@ -22,4 +19,4 @@ func chainIdToNetworkId*(chainId: UInt256): Result[UInt256, string] =
   elif chainId == 560048.u256:
     ok(560048.u256)
   else:
-    return err("Unknown chainId")
+    err("Unknown chainId")

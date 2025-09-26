@@ -166,7 +166,7 @@ suite "test receipts verification":
     try:
       let againFilterChanges = waitFor engine.frontend.eth_getFilterChanges(newFilter)
       check false
-    except CatchableError as e:
+    except CatchableError:
       check true
 
     ts.clear()

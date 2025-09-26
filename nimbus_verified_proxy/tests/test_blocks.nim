@@ -102,7 +102,7 @@ suite "test verified blocks":
       let verifiedBlk =
         waitFor engine.frontend.eth_getBlockByNumber(unreachableTargetTag, true)
       check(false)
-    except CatchableError as e:
+    except CatchableError:
       check(true)
 
     # TODO: catch the exact error 
@@ -110,7 +110,7 @@ suite "test verified blocks":
       let verifiedBlk =
         waitFor engine.frontend.eth_getBlockByNumber(reachableTargetTag, true)
       check(true)
-    except CatchableError as e:
+    except CatchableError:
       check(false)
 
   test "check block related API methods":

@@ -28,9 +28,8 @@ proc toAsyncEvmStateBackend*(engine: RpcVerificationEngine): AsyncEvmStateBacken
       let account =
         try:
           (await engine.getAccount(address, header.number, header.stateRoot))
-        except CatchableError:
-          error "error getting account"
-          return Opt.none(Account)
+        except CatchableError as e:
+          raise newException(CancelledError, e.msg)
 
       if account.isOk():
         return Opt.some(account.get())
@@ -43,9 +42,8 @@ proc toAsyncEvmStateBackend*(engine: RpcVerificationEngine): AsyncEvmStateBacken
       let storageSlot =
         try:
           (await engine.getStorageAt(address, slotKey, header.number, header.stateRoot))
-        except CatchableError:
-          error "error getting storage"
-          return Opt.none(UInt256)
+        except CatchableError as e:
+          raise newException(CancelledError, e.msg)
 
       if storageSlot.isOk():
         return Opt.some(storageSlot.get())
@@ -58,9 +56,8 @@ proc toAsyncEvmStateBackend*(engine: RpcVerificationEngine): AsyncEvmStateBacken
       let code =
         try:
           (await engine.getCode(address, header.number, header.stateRoot))
-        except CatchableError:
-          error "error getting code"
-          return Opt.none(seq[byte])
+        except CatchableError as e:
+          raise newException(CancelledError, e.msg)
 
       if code.isOk():
         return Opt.some(code.get())
