@@ -473,9 +473,9 @@ func defaultBlobSchedule*(): array[Cancun..HardFork.high, Opt[BlobSchedule]] =
   [
     Cancun: Opt.some(BlobSchedule(target: 3'u64, max: 6'u64, baseFeeUpdateFraction: 3_338_477'u64)),
     Prague: Opt.some(BlobSchedule(target: 6'u64, max: 9'u64, baseFeeUpdateFraction: 5_007_716'u64)),
-    Osaka : Opt.some(BlobSchedule(target: 9'u64, max: 12'u64, baseFeeUpdateFraction: 5_007_716'u64)),
-    Bpo1  : Opt.none(BlobSchedule),
-    Bpo2  : Opt.none(BlobSchedule),
+    Osaka : Opt.some(BlobSchedule(target: 6'u64, max: 9'u64, baseFeeUpdateFraction: 5_007_716'u64)),
+    Bpo1  : Opt.some(BlobSchedule(target: 10'u64, max: 15'u64, baseFeeUpdateFraction: 8_346_193'u64)),
+    Bpo2  : Opt.some(BlobSchedule(target: 14'u64, max: 21'u64, baseFeeUpdateFraction: 11_684_671'u64)),
     Bpo3  : Opt.none(BlobSchedule),
     Bpo4  : Opt.none(BlobSchedule),
     Bpo5  : Opt.none(BlobSchedule),
@@ -540,9 +540,12 @@ func chainConfigForNetwork*(id: NetworkId): ChainConfig =
       londonBlock:         Opt.some(0.BlockNumber),
       mergeNetsplitBlock:  Opt.some(1450409.BlockNumber),
       terminalTotalDifficulty: Opt.some(sepoliaTTD),
-      shanghaiTime:        Opt.some(1_677_557_088.EthTime),
-      cancunTime:          Opt.some(1_706_655_072.EthTime), # 2024-01-30 22:51:12
-      pragueTime:          Opt.some(1_741_159_776.EthTime),
+      shanghaiTime:        Opt.some(1_677_557_088.EthTime), # Tuesday, 28 February 2023 04:04:48
+      cancunTime:          Opt.some(1_706_655_072.EthTime), # Tuesday, 30 January 2024 22:51:12
+      pragueTime:          Opt.some(1_741_159_776.EthTime), # Wednesday, 5 March 2025 07:29:36
+      osakaTime:           Opt.some(1_760_427_360.EthTime), # Tuesday, 14 October 2025 07:36:00
+      bpo1Time:            Opt.some(1_761_017_184.EthTime), # Tuesday, 21 October 2025 03:26:24
+      bpo2Time:            Opt.some(1_761_607_008.EthTime), # Monday, 27 October 2025 23:16:48
       depositContractAddress: Opt.some(SEPOLIANET_DEPOSIT_CONTRACT_ADDRESS),
       blobSchedule:        defaultBlobSchedule(),
     )
@@ -564,9 +567,12 @@ func chainConfigForNetwork*(id: NetworkId): ChainConfig =
       londonBlock:         Opt.some(0.BlockNumber),
       mergeNetsplitBlock:  Opt.some(0.BlockNumber),
       terminalTotalDifficulty: Opt.some(0.u256),
-      shanghaiTime:        Opt.some(1_696_000_704.EthTime),
-      cancunTime:          Opt.some(1_707_305_664.EthTime), # 2024-02-07 11:34:24
-      pragueTime:          Opt.some(1_740_434_112.EthTime),
+      shanghaiTime:        Opt.some(1_696_000_704.EthTime), # Friday, 29 September 2023 15:18:24
+      cancunTime:          Opt.some(1_707_305_664.EthTime), # Wednesday, 7 February 2024 11:34:24
+      pragueTime:          Opt.some(1_740_434_112.EthTime), # Monday, 24 February 2025 21:55:12
+      osakaTime:           Opt.some(1_759_308_480.EthTime), # Wednesday, 1 October 2025 08:48:00
+      bpo1Time:            Opt.some(1_759_800_000.EthTime), # Tuesday, 7 October 2025 01:20:00
+      bpo2Time:            Opt.some(1_760_389_824.EthTime), # Monday, 13 October 2025 21:10:24
       depositContractAddress: Opt.some(HOLESKYNET_DEPOSIT_CONTRACT_ADDRESS),
       blobSchedule:        defaultBlobSchedule(),
     )
@@ -589,7 +595,10 @@ func chainConfigForNetwork*(id: NetworkId): ChainConfig =
       terminalTotalDifficulty: Opt.some(0.u256),
       shanghaiTime:        Opt.some(0.EthTime),
       cancunTime:          Opt.some(0.EthTime),
-      pragueTime:          Opt.some(1_742_999_832.EthTime),
+      pragueTime:          Opt.some(1_742_999_832.EthTime), # Wednesday, 26 March 2025 14:37:12
+      osakaTime:           Opt.some(1_761_677_592.EthTime), # Tuesday, 28 October 2025 18:53:12
+      bpo1Time:            Opt.some(1_762_365_720.EthTime), # Wednesday, 5 November 2025 18:02:00
+      bpo2Time:            Opt.some(1_762_955_544.EthTime), # Wednesday, 12 November 2025 13:52:24
       depositContractAddress: Opt.some(HOODI_DEPOSIT_CONTRACT_ADDRESS),
       blobSchedule:        defaultBlobSchedule(),
     )
