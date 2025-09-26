@@ -8,7 +8,7 @@
 # at your option. This file may not be copied, modified, or distributed except
 # according to those terms.
 
-name: Nimbus verified proxy CI
+name: Lint CI
 on:
   push:
     branches:
@@ -51,7 +51,7 @@ jobs:
           ./nph portal/
           git diff --exit-code
 
-      - name: Check copyright year
+      - name: Check copyright year & version
         if: ${{ !cancelled() }} && github.event_name == 'pull_request'
         run: |
           bash scripts/check_copyright_year.sh
