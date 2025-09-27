@@ -77,10 +77,10 @@ template evmErr*(errCode): auto =
 
 
 # revertSelector is a special function selector for revert reason unpacking
-const revertSelector = keccak256(toBytes("Error(string)")).data[0..3]
+const revertSelector = @[byte 8, byte 195, byte 121, byte 160] # keccak256(toBytes("Error(string)")).data[0..3]
 
 # panicSelector is a special function selector for panic reason unpacking
-const panicSelector = keccak256(toBytes("Panic(uint256)")).data[0..3]
+const panicSelector  = @[byte 78, byte 72, byte 123, byte 113] # keccak256(toBytes("Panic(uint256)")).data[0..3]
 
 # panicReasons map is for readable panic codes
 # see this linkage for the details
