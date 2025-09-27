@@ -37,8 +37,13 @@ proc importBlock*(
       B=ctx.chain.baseNumber.bnStr, L=ctx.chain.latestNumber.bnStr
   else:
     try:
-      (await ctx.chain.queueImportBlock(blk, finalized = true)).isOkOr:
-        return err((ENoException,"",error,Moment.now()-start))
+      # At this point the header chain has already been verifed and so we know
+      # the block is finalized as long as the block number is less than or equal
+      # to the latest finalized block. Setting the finalized flag to true here
+      # has the effect of skipping the stateroot check for performance reasons.
+      let isFinalized = blk.header.number <= ctx.chain.latestFinalizedBlockNumber
+      (await ctx.chain.queueImportBlock(blk, isFinalized)).isOkOr:
+        return err((ENoException, "", error, Moment.now() - start))
     except CancelledError as e:
       return err((ECancelledError,$e.name,e.msg,Moment.now()-start))
 
