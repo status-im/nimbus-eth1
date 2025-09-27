@@ -255,7 +255,7 @@ suite "TxPool test suite":
     var ptx = mx.makeTx(tc, 0)
     var z = ptx.blobsBundle.blobs[0].bytes
     z[0] = not z[0]
-    ptx.blobsBundle.blobs[0] = KzgBlob z
+    ptx.blobsBundle.blobs[0] = pooled_txs.KzgBlob z
     xp.checkAddTx(ptx, txErrorInvalidBlob)
 
   test "Bad chainId":

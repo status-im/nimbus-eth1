@@ -18,13 +18,13 @@ import
   eth/net/nat,
   metrics,
   stew/byteutils,
+  kzg4844/kzg,
   ./rpc,
   ./version_info,
   ./constants,
   ./nimbus_desc,
   ./nimbus_import,
   ./core/block_import,
-  ./core/lazy_kzg,
   ./core/chain/forked_chain/chain_serialize,
   ./db/core_db/persistent,
   ./db/storage_types,
@@ -233,7 +233,7 @@ proc setupCommonRef*(conf: NimbusConf, taskpool: Taskpool): CommonRef =
   # trusted setup will be loaded, lazily.
   if conf.trustedSetupFile.isSome:
     let fileName = conf.trustedSetupFile.get()
-    let res = lazy_kzg.loadTrustedSetup(fileName, 0)
+    let res = kzg.loadTrustedSetup(fileName, 0)
     if res.isErr:
       fatal "Cannot load Kzg trusted setup from file", msg=res.error
       quit(QuitFailure)

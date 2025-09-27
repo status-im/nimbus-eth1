@@ -20,7 +20,6 @@ import
   ../execution_chain/sync/wire_protocol,
   ../execution_chain/core/[tx_pool, chain, pow/difficulty],
   ../execution_chain/core/pooled_txs_rlp,
-  ../execution_chain/core/lazy_kzg as kzg,
   ../execution_chain/core/eip4844,
   ../execution_chain/utils/utils,
   ../execution_chain/[common, rpc],

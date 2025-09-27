@@ -14,8 +14,7 @@ import
   stew/endians2,
   nimcrypto/sha2,
   results,
-  ../execution_chain/core/eip4844,
-  ../execution_chain/core/lazy_kzg as kzg
+  ../execution_chain/core/eip4844
 
 export base, hashes
 
