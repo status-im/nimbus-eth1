@@ -220,7 +220,7 @@ proc procBlkEpilogue(
       # TODO replace logging with better error
       debug "wrong state root in block",
         blockNumber = header.number,
-        blockHash = header.blockHash,
+        blockHash = header.computeBlockHash,
         parentHash = header.parentHash,
         expected = header.stateRoot,
         actual = stateRoot,
@@ -242,7 +242,7 @@ proc procBlkEpilogue(
         debug "wrong receiptRoot in block",
           blockNumber = header.number,
           parentHash = header.parentHash.short,
-          blockHash = header.blockHash.short,
+          blockHash = header.computeBlockHash.short,
           actual = receiptsRoot,
           expected = header.receiptsRoot
         return err("receiptRoot mismatch")
@@ -263,7 +263,7 @@ proc procBlkEpilogue(
         debug "wrong requestsHash in block",
           blockNumber = header.number,
           parentHash = header.parentHash.short,
-          blockHash = header.blockHash.short,
+          blockHash = header.computeBlockHash.short,
           actual = requestsHash,
           expected = header.requestsHash.get
         return err("requestsHash mismatch")

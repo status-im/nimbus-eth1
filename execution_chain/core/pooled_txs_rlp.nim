@@ -7,7 +7,7 @@
 # This file may not be copied, modified, or distributed except according to
 # those terms.
 
-{.push raises: [].}
+{.push raises: [], gcsafe.}
 
 import
   eth/common/transactions_rlp {.all.},
@@ -42,7 +42,7 @@ proc append*(w: var RlpWriter, tx: PooledTransaction) =
     w.append(tx.blobsBundle)
 
 proc read(rlp: var Rlp, T: type Blob): T {.raises: [RlpError].} =
-  rlp.read(result.bytes)
+  rlp.read(result.data)
 
 proc readTxTyped(rlp: var Rlp, tx: var PooledTransaction) {.raises: [RlpError].} =
   let
