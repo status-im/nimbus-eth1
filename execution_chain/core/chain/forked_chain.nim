@@ -486,9 +486,7 @@ proc validateBlock(c: ForkedChainRef,
   # the stateroot computation.
   c.updateSnapshot(blk, txFrame)
 
-  var receipts = c.processBlock(parent, txFrame, blk, blkHash, finalized).valueOr:
-    txFrame.dispose()
-    return err(error)
+  var receipts = ?c.processBlock(parent, txFrame, blk, blkHash, finalized)
 
   c.writeBaggage(blk, blkHash, txFrame, receipts)
 
