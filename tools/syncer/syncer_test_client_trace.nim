@@ -100,13 +100,12 @@ let
 
   leftConf = makeConfig(cmdLine = leftOpts)
 
-  nodeConf = leftConf.setupExeClientNode()
-
-# Update node config for lazy beacon sync update
-nodeConf.beaconSyncRef = BeaconSyncRef.init rightConf.beaconSyncConfig
+  # Update node config for lazy beacon sync update
+  nodeConf = NimbusNode(
+    beaconSyncRef: BeaconSyncRef.init rightConf.beaconSyncConfig)
 
 # Run execution client
-nodeConf.runExeClient(leftConf)
+leftConf.main(nodeConf)
 
 # ------------------------------------------------------------------------------
 # End
