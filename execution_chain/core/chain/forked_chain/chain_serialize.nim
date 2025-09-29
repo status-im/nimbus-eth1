@@ -315,6 +315,9 @@ proc deserialize*(fc: ForkedChainRef): Result[void, string] =
     ?txFrame.fcuSafe(fc.fcuSafe.hash, fc.fcuSafe.number)
 
   fc.hashToBlock.withValue(fc.pendingFCU, val) do:
+    # Restore finalized marker
+    for it in loopNotFinalized(val[]):
+      it.finalize()
     let txFrame = val[].txFrame
     ?txFrame.fcuFinalized(fc.pendingFCU, fc.latestFinalizedBlockNumber)
 
