@@ -269,17 +269,21 @@ proc setupCommonRef*(conf: NimbusConf, taskpool: Taskpool): CommonRef =
 
   com
 
+template displayLaunchingInfo(conf: NimbusConf) =
+  info "Launching execution client", version = FullVersionStr, conf
+
 # ------------------------------------------------------------------------------
 # Public functions, `main()` API
 # ------------------------------------------------------------------------------
 
 type StopFuture = Future[void].Raising([CancelledError])
 
-proc runExeClient*(conf: NimbusConf, com: CommonRef, stopper: StopFuture) =
+proc runExeClient*(conf: NimbusConf, com: CommonRef, stopper: StopFuture, displayLaunchingInfo: static[bool] = false) =
   ## Launches and runs the execution client for pre-configured `nimbus` and
   ## `conf` argument descriptors.
   ##
-  info "Launching execution client", version = FullVersionStr, conf
+  when displayLaunchingInfo:
+    displayLaunchingInfo(conf)
 
   let nimbus = NimbusNode.init(conf, com)
   defer:
@@ -314,6 +318,7 @@ proc main*() {.noinline.} =
   var config = makeConfig()
   # Set up logging before everything else
   setupLogging(config.logLevel, config.logStdout)
+  displayLaunchingInfo(config)
   setupFileLimits()
 
   ProcessState.setupStopHandlers()
