@@ -15,7 +15,7 @@ import
   stew/byteutils,
   json_rpc/servers/httpserver,
   eth/p2p/discoveryv5/protocol,
-  eth/p2p/discoveryv5/enr,
+  eth/enr/enr,
   eth/utp/[utp_discv5_protocol, utp_router],
   eth/common/keys,
   ../../rpc/rpc_discovery_api,

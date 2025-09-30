@@ -12,7 +12,7 @@ import
   eth/common/hashes,
   chronicles,
   stew/[io2, byteutils],
-  eth/p2p/discoveryv5/enr
+  eth/enr/enr
 
 iterator strippedLines(filename: string): string {.raises: [ref IOError].} =
   for line in lines(filename):

@@ -13,7 +13,7 @@ import
   json_rpc/rpcserver,
   json_rpc/clients/httpclient,
   stint,
-  eth/p2p/discoveryv5/enr,
+  eth/enr/enr,
   eth/common/keys,
   eth/common/[headers_rlp, blocks_rlp, receipts_rlp],
   eth/p2p/discoveryv5/protocol as discv5_protocol,

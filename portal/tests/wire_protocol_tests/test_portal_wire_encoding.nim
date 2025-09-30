@@ -12,7 +12,7 @@ import
   stint,
   stew/byteutils,
   results,
-  eth/p2p/discoveryv5/enr,
+  eth/enr/enr,
   ../../network/wire/messages
 
 # According to test vectors:
