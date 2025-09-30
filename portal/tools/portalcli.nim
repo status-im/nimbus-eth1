@@ -17,7 +17,7 @@ import
   results,
   nimcrypto/[hash, sha2],
   eth/[common/keys, net/nat],
-  eth/p2p/discoveryv5/[node],
+  eth/p2p/discoveryv5/node,
   eth/p2p/discoveryv5/protocol as discv5_protocol,
   ../common/common_utils,
   ../database/content_db,

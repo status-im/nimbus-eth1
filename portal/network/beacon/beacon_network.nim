@@ -18,7 +18,7 @@ import
   chronicles,
   metrics,
   eth/enr/enr,
-  eth/p2p/discoveryv5/[protocol],
+  eth/p2p/discoveryv5/protocol,
   beacon_chain/spec/forks,
   beacon_chain/gossip_processing/light_client_processor,
   ../wire/[portal_protocol, portal_stream, portal_protocol_config, ping_extensions],

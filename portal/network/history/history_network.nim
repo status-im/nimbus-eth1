@@ -14,7 +14,7 @@ import
   metrics,
   eth/common/headers,
   eth/enr/enr,
-  eth/p2p/discoveryv5/[protocol],
+  eth/p2p/discoveryv5/protocol,
   ../../common/common_types,
   ../../database/content_db,
   # ../network_metadata,

@@ -10,7 +10,7 @@
 {.used.}
 
 import
-  std/[net],
+  std/net,
   unittest2,
   ../../execution_chain/networking/bootnodes
 
