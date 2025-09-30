@@ -181,11 +181,9 @@ proc setupP2P(nimbus: NimbusNode, conf: NimbusConf, com: CommonRef) =
   if not syncerShouldRun:
     nimbus.beaconSyncRef = BeaconSyncRef(nil)
 
-proc init*(T: type NimbusNode, conf: NimbusConf, com: CommonRef): T =
-  let nimbus = NimbusNode(
-    accountsManager: new AccountsManager,
-    rng: newRng(),
-  )
+proc init*(nimbus: NimbusNode, conf: NimbusConf, com: CommonRef) =
+  nimbus.accountsManager = new AccountsManager
+  nimbus.rng = newRng()
 
   basicServices(nimbus, conf, com)
   manageAccounts(nimbus, conf)
@@ -198,8 +196,10 @@ proc init*(T: type NimbusNode, conf: NimbusConf, com: CommonRef): T =
       not nimbus.beaconSyncRef.start():
     nimbus.beaconSyncRef = BeaconSyncRef(nil)
 
+proc init*(T: type NimbusNode, conf: NimbusConf, com: CommonRef): T =
+  let nimbus = T()
+  nimbus.init(conf, com)
   nimbus
-
 
 proc preventLoadingDataDirForTheWrongNetwork(db: CoreDbRef; conf: NimbusConf) =
   proc writeDataDirId(kvt: CoreDbTxRef, calculatedId: Hash32) =
@@ -278,14 +278,19 @@ template displayLaunchingInfo(conf: NimbusConf) =
 
 type StopFuture = Future[void].Raising([CancelledError])
 
-proc runExeClient*(conf: NimbusConf, com: CommonRef, stopper: StopFuture, displayLaunchingInfo: static[bool] = false) =
+proc runExeClient*(conf: NimbusConf, com: CommonRef, stopper: StopFuture, displayLaunchingInfo: static[bool] = false, nimbus = NimbusNode(nil)) =
   ## Launches and runs the execution client for pre-configured `nimbus` and
   ## `conf` argument descriptors.
   ##
   when displayLaunchingInfo:
     displayLaunchingInfo(conf)
 
-  let nimbus = NimbusNode.init(conf, com)
+  var nimbus = nimbus
+  if nimbus.isNil:
+    nimbus = NimbusNode.init(conf, com)
+  else:
+    nimbus.init(conf, com)
+
   defer:
     let
       fc = nimbus.fc
@@ -314,8 +319,7 @@ proc runExeClient*(conf: NimbusConf, com: CommonRef, stopper: StopFuture, displa
     waitFor nimbus.closeWait()
 
 # noinline to keep it in stack traces
-proc main*() {.noinline.} =
-  var config = makeConfig()
+proc main*(config = makeConfig(), nimbus = NimbusNode(nil)) {.noinline.} =
   # Set up logging before everything else
   setupLogging(config.logLevel, config.logStdout)
   displayLaunchingInfo(config)
@@ -355,7 +359,7 @@ proc main*() {.noinline.} =
     except CancelledError:
       raiseAssert "Nothing cancels the future"
   else:
-    runExeClient(config, com, nil)
+    runExeClient(config, com, nil, nimbus=nimbus)
 
 when isMainModule:
   main()
