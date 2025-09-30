@@ -192,6 +192,10 @@ proc copyFrom*(snapshot: var Snapshot, tx: AristoTxRef) =
     do:
       snapshot.vtx[rvid] = (vtx, VOID_HASH_KEY, tx.level)
 
+  for rvid, key in tx.kMap:
+    snapshot.vtx.withValue(rvid, v):
+      v[][1] = key
+
   for k, v in tx.accLeaves:
     snapshot.acc[k] = (v, tx.level)
   for k, v in tx.stoLeaves:

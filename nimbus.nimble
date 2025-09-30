@@ -8,7 +8,7 @@
 mode = ScriptMode.Verbose
 
 packageName   = "nimbus"
-version       = "0.2.0"
+version       = "0.2.1"
 author        = "Status Research & Development GmbH"
 description   = "An Ethereum 2.0 Sharding Client for Resource-Restricted Devices"
 license       = "Apache License 2.0"
@@ -16,7 +16,7 @@ skipDirs      = @["tests", "examples"]
 # we can't have the result of a custom task in the "bin" var - https://github.com/nim-lang/nimble/issues/542
 # bin           = @["build/nimbus"]
 
-requires "nim >= 2.2.0",
+requires "nim >= 2.2.4",
   "bncurve",
   "chronicles",
   "chronos",

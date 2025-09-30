@@ -64,6 +64,8 @@ type
     rdBranchLru*: LruCache[VertexID, (VertexID, uint16)]
     rdBranchSize*: int
 
+    rdbPrintStats*: bool               ## Print statistics on closure
+
   AristoCFs* = enum
     ## Column family symbols/handles and names used on the database
     AdmCF = "AriAdm"                   ## Admin column family name (deprecated)

@@ -8,20 +8,23 @@
 # at your option. This file may not be copied, modified, or distributed except
 # according to those terms.
 
+{.push raises: [], gcsafe.}
+
 import
   stew/arrayops,
   nimcrypto/sha2,
   results,
   stint,
+  kzg4844/kzg,
   ./eip7691,
   ./pooled_txs,
-  ./lazy_kzg as kzg,
   ../constants,
   ../common/common
 
 from std/sequtils import mapIt
 
-{.push raises: [].}
+export
+  kzg
 
 type
   Bytes64 = array[64, byte]
@@ -201,7 +204,7 @@ proc validateBlobTransactionWrapper4844*(tx: PooledTransaction):
 
   # Verify that commitments match the blobs by checking the KZG proof
   let res = kzg.verifyBlobKzgProofBatch(
-              tx.blobsBundle.blobs.mapIt(kzg.KzgBlob(bytes: it.bytes)),
+              tx.blobsBundle.blobs.mapIt(kzg.KzgBlob(bytes: it.data)),
               commitments,
               tx.blobsBundle.proofs.mapIt(kzg.KzgProof(bytes: it.data)))
 

@@ -138,6 +138,55 @@ suite "Aristo TxFrame":
       tx3.kMap.len() == 0
       tx2.fetchStateRoot() == tx3.fetchStateRoot()
 
+  test "Frames using moveParentHashKeys parameter with snapshots":
+    let
+      tx0 = db.txFrameBegin(db.baseTxFrame())
+      tx1 = db.txFrameBegin(tx0)
+
+    check:
+      tx0.mergeAccountRecord(acc1[0], acc1[1]).isOk()
+      tx1.mergeAccountRecord(acc2[0], acc2[1]).isOk()
+      tx0.fetchStateRoot() != tx1.fetchStateRoot()
+      tx0.kMap.len() == 0
+      tx1.kMap.len() == 1
+    tx1.checkpoint(1, skipSnapshot = false)
+
+    let tx2 = db.txFrameBegin(tx1, moveParentHashKeys = true)
+    tx2.checkpoint(2, skipSnapshot = false)
+
+    block:
+      var hashKey: HashKey
+      for v in tx2.kMap.values():
+        if v.isValid():
+          hashKey = v
+      check hashKey != default(HashKey)
+      var snapshotContainsHashKey = false
+      for k, v in tx2.snapshot.vtx:
+        if v[1] == hashKey:
+          snapshotContainsHashKey = true
+
+      check:
+        snapshotContainsHashKey
+        tx1.fetchStateRoot() == tx2.fetchStateRoot()
+
+    let tx3 = db.txFrameBegin(tx2, moveParentHashKeys = false)
+    tx3.checkpoint(3, skipSnapshot = false)
+
+    block:
+      var hashKey: HashKey
+      for v in tx2.kMap.values():
+        if v.isValid():
+          hashKey = v
+      check hashKey != default(HashKey)
+      var snapshotContainsHashKey = false
+      for k, v in tx3.snapshot.vtx:
+        if v[1] == hashKey:
+          snapshotContainsHashKey = true
+
+      check:
+        snapshotContainsHashKey
+        tx2.fetchStateRoot() == tx3.fetchStateRoot()
+
   test "Frames using moveParentHashKeys parameter - moved from persist":
     let
       tx0 = db.txFrameBegin(db.baseTxFrame())
@@ -227,3 +276,46 @@ suite "Aristo TxFrame":
     db.persist(batch, tx2)
     check:
       db.putEndFn(batch).isOk()
+
+  test "Get state root on a txFrame which has lower level than the baseTxFrame":
+    # level 1
+    let tx1 = db.txFrameBegin(db.baseTxFrame())
+    for i in 1..<100:
+      let acc = makeAccount(i.uint64)
+      check tx1.mergeAccountRecord(acc[0], acc[1]).isOk()
+    tx1.checkpoint(1, skipSnapshot = false)
+
+    # level 2
+    let tx2 = db.txFrameBegin(tx1)
+    for i in 100..<200:
+      let acc = makeAccount(i.uint64)
+      check tx2.mergeAccountRecord(acc[0], acc[1]).isOk()
+    tx2.checkpoint(2, skipSnapshot = false)
+
+    # level 3
+    let tx3 = db.txFrameBegin(tx2)
+    for i in 200..<300:
+      let acc = makeAccount(i.uint64)
+      check tx3.mergeAccountRecord(acc[0], acc[1]).isOk()
+    tx3.checkpoint(3, skipSnapshot = false)
+
+    # level 2
+    let tx4 = db.txFrameBegin(tx1)
+    for i in 300..<400:
+      let acc = makeAccount(i.uint64)
+      check tx4.mergeAccountRecord(acc[0], acc[1]).isOk()
+    tx4.checkpoint(2, skipSnapshot = false)
+
+    block:
+      let batch = db.putBegFn().expect("working batch")
+      db.persist(batch, tx3) # after this the baseTxFrame is at level 3
+      check:
+        db.putEndFn(batch).isOk()
+
+    # Verify that getting the state root of the level 3 txFrame does not impact
+    # the persisted state in the database.
+    let stateRootBefore = tx3.fetchStateRoot().get()
+    expect(Defect):
+      discard tx4.fetchStateRoot()
+    let stateRootAfter = tx3.fetchStateRoot().get()
+    check stateRootBefore == stateRootAfter

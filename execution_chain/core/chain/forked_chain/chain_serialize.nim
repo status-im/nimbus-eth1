@@ -126,12 +126,19 @@ proc replayBlock(fc: ForkedChainRef;
     parentFrame = parent.txFrame
     txFrame = parentFrame.txFrameBegin
 
-  var receipts = fc.processBlock(parent, txFrame, blk.blk, blk.hash, false).valueOr:
+  # Update the snapshot before processing the block so that any vertexes in snapshots
+  # from lower levels than the baseTxFrame are removed from the snapshot before running
+  # the stateroot computation.
+  fc.updateSnapshot(blk.blk, txFrame)
+
+  # Set finalized to true in order to skip the stateroot check when replaying the
+  # block because the blocks should have already been checked previously during
+  # the initial block execution.
+  var receipts = fc.processBlock(parent, txFrame, blk.blk, blk.hash, finalized = true).valueOr:
     txFrame.dispose()
     return err(error)
 
   fc.writeBaggage(blk.blk, blk.hash, txFrame, receipts)
-  fc.updateSnapshot(blk.blk, txFrame)
 
   blk.txFrame = txFrame
   blk.receipts = move(receipts)
@@ -233,11 +240,11 @@ proc deserialize*(fc: ForkedChainRef): Result[void, string] =
 
   # Sanity Checks for the FC state
   if state.latest > state.numBlocks or
-     state.base > state.numBlocks: 
+     state.base > state.numBlocks:
     warn "TODO: Inconsistent state found"
     fc.reset(prevBase)
     return err("Invalid state: latest block is greater than number of blocks")
-  
+
   # Sanity Checks for all the heads in FC state
   for head in state.heads:
     if head > state.numBlocks:
@@ -311,6 +318,9 @@ proc deserialize*(fc: ForkedChainRef): Result[void, string] =
     ?txFrame.fcuSafe(fc.fcuSafe.hash, fc.fcuSafe.number)
 
   fc.hashToBlock.withValue(fc.pendingFCU, val) do:
+    # Restore finalized marker
+    for it in loopNotFinalized(val[]):
+      it.finalize()
     let txFrame = val[].txFrame
     ?txFrame.fcuFinalized(fc.pendingFCU, fc.latestFinalizedBlockNumber)
 

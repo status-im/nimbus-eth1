@@ -91,6 +91,7 @@ proc getKeyRc*(
       # There was no vertex on the cache. So there must be one the backend (the
       # reason for the key label to exists, at all.)
       return err(GetKeyNotFound)
+
     if vtx[0].isValid:
       return ok ((VOID_HASH_KEY, vtx[0]), vtx[1])
     else:

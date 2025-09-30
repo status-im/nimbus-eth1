@@ -74,7 +74,10 @@ proc putKeyAtLevel(
   ## set (vertex data may have been committed to disk without computing the
   ## corresponding hash!)
 
-  if level < db.db.baseTxFrame().level:
+  if level >= db.db.baseTxFrame().level:
+    let txRef = db.deltaAtLevel(level)
+    txRef.layersPutKey(rvid, vtx, key)
+  elif level == dbLevel:
     ?batch.putVtx(db.db, rvid, vtx, key)
 
     if batch.count mod batchSize == 0:
@@ -84,8 +87,11 @@ proc putKeyAtLevel(
         info "Writing computeKey cache", keys = batch.count, accounts = batch.progress
       else:
         debug "Writing computeKey cache", keys = batch.count, accounts = batch.progress
-  else:
-    db.deltaAtLevel(level).layersPutKey(rvid, vtx, key)
+  else: # level > dbLevel but less than baseTxFrame level
+    # Throw defect here because we should not be writing vertexes to the database if
+    # from a lower level than the baseTxFrame level.
+    raiseAssert("Cannot write keys at level < baseTxFrame level. Found level = " &
+        $level & ", baseTxFrame level = " & $db.db.baseTxFrame().level)
 
   ok()
 
