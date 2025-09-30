@@ -26,7 +26,7 @@ import
   ./engine/utils,
   ./engine/types,
   ./json_rpc_backend,
-  ./json_rpc_frontend
+  ./json_rpc_frontend,
   ../execution_chain/version_info
 
 type OnHeaderCallback* = proc(s: cstring, t: int) {.cdecl, raises: [], gcsafe.}
