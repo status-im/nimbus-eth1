@@ -11,8 +11,8 @@ import
   testutils/markdown_reports,
   ../execution_chain/[constants, config, transaction, errors],
   ../execution_chain/db/ledger,
-  ../execution_chain/common/[context, common],
-  ../execution_chain/networking/p2p
+  ../execution_chain/common,
+  ../execution_chain/networking/[netkeys, p2p]
 
 func revTable(list: array[FkFrontier..FkLatest, string]): Table[string, EVMFork] =
   for k, v in list:
@@ -147,9 +147,9 @@ proc verifyLedger*(wantedState: JsonNode, ledger: ReadOnlyLedger) =
       raise newException(ValidationError, &"{ac} nonceDiff {wantedNonce.toHex} != {actualNonce.toHex}")
 
 proc setupEthNode*(
-    conf: NimbusConf, ctx: EthContext,
+    conf: NimbusConf, rng: var HmacDrbgContext,
     capabilities: varargs[ProtocolInfo, `protocolInfo`]): EthereumNode =
-  let keypair = ctx.getNetKeys(conf.netKey).tryGet()
+  let keypair = getNetKeys(rng, conf.netKey).tryGet()
   let srvAddress = enode.Address(
     ip: conf.listenAddress, tcpPort: conf.tcpPort, udpPort: conf.udpPort)
 

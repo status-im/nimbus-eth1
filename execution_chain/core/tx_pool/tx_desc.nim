@@ -441,6 +441,7 @@ func getBlobAndProofV1*(xp: TxPoolRef, v: VersionedHash): Opt[BlobAndProofV1] =
   Opt.none(BlobAndProofV1)
 
 func getBlobAndProofV2*(xp: TxPoolRef, v: VersionedHash): Opt[BlobAndProofV2] =
+  type KzgProof = engine_api_types.KzgProof
   func getProofs(list: openArray[KzgProof], index: int): array[CELLS_PER_EXT_BLOB, KzgProof] =
     let
       startIndex = index * CELLS_PER_EXT_BLOB

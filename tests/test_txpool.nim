@@ -8,6 +8,8 @@
 # at your option. This file may not be copied, modified, or distributed except
 # according to those terms.
 
+{.push raises: [].}
+
 import
   std/math,
   eth/common/keys,
@@ -253,9 +255,9 @@ suite "TxPool test suite":
       blobID: 0.BlobID
     )
     var ptx = mx.makeTx(tc, 0)
-    var z = ptx.blobsBundle.blobs[0].bytes
+    var z = ptx.blobsBundle.blobs[0].data
     z[0] = not z[0]
-    ptx.blobsBundle.blobs[0] = KzgBlob z
+    ptx.blobsBundle.blobs[0] = pooled_txs.KzgBlob z
     xp.checkAddTx(ptx, txErrorInvalidBlob)
 
   test "Bad chainId":

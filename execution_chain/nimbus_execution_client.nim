@@ -13,26 +13,25 @@ import
   ../execution_chain/compile_info
 
 import
-  std/[osproc, net, options],
+  std/[net, options],
   chronicles,
   eth/net/nat,
   metrics,
-  metrics/chronicles_support,
   stew/byteutils,
+  kzg4844/kzg,
   ./rpc,
   ./version_info,
   ./constants,
   ./nimbus_desc,
   ./nimbus_import,
   ./core/block_import,
-  ./core/lazy_kzg,
   ./core/chain/forked_chain/chain_serialize,
   ./db/core_db/persistent,
   ./db/storage_types,
   ./sync/wire_protocol,
   ./common/chain_config_hash,
   ./portal/portal,
-  ./networking/bootnodes,
+  ./networking/[bootnodes, netkeys],
   beacon_chain/[nimbus_binary_common, process_state],
   beacon_chain/validators/keystore_management
 
@@ -84,37 +83,30 @@ proc basicServices(nimbus: NimbusNode, conf: NimbusConf, com: CommonRef) =
 
 proc manageAccounts(nimbus: NimbusNode, conf: NimbusConf) =
   if conf.keyStoreDir.len > 0:
-    let res = nimbus.ctx.am.loadKeystores(conf.keyStoreDir)
-    if res.isErr:
-      fatal "Load keystore error", msg = res.error()
+    nimbus.accountsManager[].loadKeystores(conf.keyStoreDir).isOkOr:
+      fatal "Load keystore error", msg = error
       quit(QuitFailure)
 
   if string(conf.importKey).len > 0:
-    let res = nimbus.ctx.am.importPrivateKey(string conf.importKey)
-    if res.isErr:
-      fatal "Import private key error", msg = res.error()
+    nimbus.accountsManager[].importPrivateKey(string conf.importKey).isOkOr:
+      fatal "Import private key error", msg = error
       quit(QuitFailure)
 
 proc setupP2P(nimbus: NimbusNode, conf: NimbusConf, com: CommonRef) =
   ## Creating P2P Server
-  let kpres = nimbus.ctx.getNetKeys(conf.netKey)
-  if kpres.isErr:
-    fatal "Get network keys error", msg = kpres.error
-    quit(QuitFailure)
-
-  let keypair = kpres.get()
-
-  let (extIp, extTcpPort, extUdpPort) =
-    setupAddress(conf.nat, conf.listenAddress, conf.tcpPort,
-                 conf.udpPort, NimbusName & " " & NimbusVersion)
-
-  var address = enode.Address(
-    ip: extIp.valueOr(conf.listenAddress),
-    tcpPort: extTcpPort.valueOr(conf.tcpPort),
-    udpPort: extUdpPort.valueOr(conf.udpPort),
-  )
-
   let
+    keypair = nimbus.rng[].getNetKeys(conf.netKey).valueOr:
+      fatal "Get network keys error", msg = error
+      quit(QuitFailure)
+    natId = NimbusName & " " & NimbusVersion
+    (extIp, extTcpPort, extUdpPort) =
+      setupAddress(conf.nat, conf.listenAddress, conf.tcpPort, conf.udpPort, natId)
+    address = enode.Address(
+      ip: extIp.valueOr(conf.listenAddress),
+      tcpPort: extTcpPort.valueOr(conf.tcpPort),
+      udpPort: extUdpPort.valueOr(conf.udpPort),
+    )
+
     bootstrapNodes = conf.getBootstrapNodes()
     fc = nimbus.fc
 
@@ -136,7 +128,7 @@ proc setupP2P(nimbus: NimbusNode, conf: NimbusConf, com: CommonRef) =
     bootstrapNodes = bootstrapNodes,
     bindUdpPort = conf.udpPort, bindTcpPort = conf.tcpPort,
     bindIp = conf.listenAddress,
-    rng = nimbus.ctx.rng,
+    rng = nimbus.rng,
     forkIdProcs = forkIdProcs)
 
   # Add protocol capabilities
@@ -189,34 +181,25 @@ proc setupP2P(nimbus: NimbusNode, conf: NimbusConf, com: CommonRef) =
   if not syncerShouldRun:
     nimbus.beaconSyncRef = BeaconSyncRef(nil)
 
-proc setupMetrics(nimbus: NimbusNode, conf: NimbusConf) =
-  # metrics logging
-  if conf.logMetricsEnabled:
-    let tmo = conf.logMetricsInterval.seconds
-    proc setLogMetrics(udata: pointer) {.gcsafe.}
-    proc runLogMetrics(udata: pointer) {.gcsafe.} =
-      {.gcsafe.}:
-        let registry = defaultRegistry
-      info "metrics", registry
-      udata.setLogMetrics()
-    # Store the `runLogMetrics()` in a closure to avoid some garbage
-    # collection memory corruption issues that might occur otherwise.
-    proc setLogMetrics(udata: pointer) =
-      discard setTimer(Moment.fromNow(tmo), runLogMetrics)
-    # Start the logger
-    discard setTimer(Moment.fromNow(tmo), runLogMetrics)
+proc init*(T: type NimbusNode, conf: NimbusConf, com: CommonRef): T =
+  let nimbus = NimbusNode(
+    accountsManager: new AccountsManager,
+    rng: newRng(),
+  )
 
-  # metrics server
-  if conf.metricsEnabled:
-    info "Starting metrics HTTP server", address = conf.metricsAddress, port = conf.metricsPort
-    let res = MetricsHttpServerRef.new($conf.metricsAddress, conf.metricsPort)
-    if res.isErr:
-      fatal "Failed to create metrics server", msg=res.error
-      quit(QuitFailure)
+  basicServices(nimbus, conf, com)
+  manageAccounts(nimbus, conf)
+  setupP2P(nimbus, conf, com)
+  setupRpc(nimbus, conf, com)
 
-    nimbus.metricsServer = res.get
-    QuitFailure.onException("Cannot start metrics services"):
-      waitFor nimbus.metricsServer.start()
+  # Not starting syncer if there is definitely no way to run it. This
+  # avoids polling (i.e. waiting for instructions) and some logging.
+  if not nimbus.beaconSyncRef.isNil and
+      not nimbus.beaconSyncRef.start():
+    nimbus.beaconSyncRef = BeaconSyncRef(nil)
+
+  nimbus
+
 
 proc preventLoadingDataDirForTheWrongNetwork(db: CoreDbRef; conf: NimbusConf) =
   proc writeDataDirId(kvt: CoreDbTxRef, calculatedId: Hash32) =
@@ -244,24 +227,13 @@ proc preventLoadingDataDirForTheWrongNetwork(db: CoreDbRef; conf: NimbusConf) =
       expected=calculatedId
     quit(QuitFailure)
 
-# ------------------------------------------------------------------------------
-# Public functions, `main()` API
-# ------------------------------------------------------------------------------
-
-proc runExeClient*(nimbus: NimbusNode, conf: NimbusConf) {.gcsafe.} =
-  ## Launches and runs the execution client for pre-configured `nimbus` and
-  ## `conf` argument descriptors.
-  ##
-  info "Launching execution client",
-      version = FullVersionStr,
-      conf
-
+proc setupCommonRef*(conf: NimbusConf, taskpool: Taskpool): CommonRef =
   # Trusted setup is needed for processing Cancun+ blocks
   # If user not specify the trusted setup, baked in
   # trusted setup will be loaded, lazily.
   if conf.trustedSetupFile.isSome:
     let fileName = conf.trustedSetupFile.get()
-    let res = lazy_kzg.loadTrustedSetup(fileName, 0)
+    let res = kzg.loadTrustedSetup(fileName, 0)
     if res.isErr:
       fatal "Cannot load Kzg trusted setup from file", msg=res.error
       quit(QuitFailure)
@@ -271,15 +243,6 @@ proc runExeClient*(nimbus: NimbusNode, conf: NimbusConf) {.gcsafe.} =
       conf.dbOptions(noKeyCache = conf.cmd == NimbusCmd.`import`))
 
   preventLoadingDataDirForTheWrongNetwork(coreDB, conf)
-  setupMetrics(nimbus, conf)
-
-  var taskpool: Taskpool
-  QuitFailure.onException("Cannot start task pool"):
-    if 0 < conf.numThreads:
-      taskpool = Taskpool.new(numThreads = conf.numThreads.int)
-    else:
-      taskpool = Taskpool.new(numThreads = min(countProcessors(), 16))
-  info "Threadpool started", numThreads = taskpool.numThreads
 
   let com = CommonRef.new(
     db = coreDB,
@@ -304,81 +267,95 @@ proc runExeClient*(nimbus: NimbusNode, conf: NimbusConf) {.gcsafe.} =
   com.extraData = conf.extraData
   com.gasLimit = conf.gasLimit
 
+  com
+
+template displayLaunchingInfo(conf: NimbusConf) =
+  info "Launching execution client", version = FullVersionStr, conf
+
+# ------------------------------------------------------------------------------
+# Public functions, `main()` API
+# ------------------------------------------------------------------------------
+
+type StopFuture = Future[void].Raising([CancelledError])
+
+proc runExeClient*(conf: NimbusConf, com: CommonRef, stopper: StopFuture, displayLaunchingInfo: static[bool] = false) =
+  ## Launches and runs the execution client for pre-configured `nimbus` and
+  ## `conf` argument descriptors.
+  ##
+  when displayLaunchingInfo:
+    displayLaunchingInfo(conf)
+
+  let nimbus = NimbusNode.init(conf, com)
   defer:
-    if not nimbus.fc.isNil:
-      let
-        fc = nimbus.fc
-        txFrame = fc.baseTxFrame
+    let
+      fc = nimbus.fc
+      txFrame = fc.baseTxFrame
 
-      fc.serialize(txFrame).isOkOr:
-        error "FC.serialize error: ", msg=error
-      txFrame.checkpoint(fc.base.blk.header.number, skipSnapshot = true)
-      com.db.persist(txFrame)
+    fc.serialize(txFrame).isOkOr:
+      error "FC.serialize error: ", msg = error
+    txFrame.checkpoint(fc.base.blk.header.number, skipSnapshot = true)
+    com.db.persist(txFrame)
 
-    com.db.finish()
+  # Be graceful about ctrl-c during init
+  if ProcessState.stopping.isNone:
+    ProcessState.notifyRunning()
 
-  case conf.cmd
-  of NimbusCmd.`import`:
-    importBlocks(conf, com)
-  of NimbusCmd.`import-rlp`:
-    try:
-      waitFor importRlpBlocks(conf, com)
-    except CancelledError:
-      raiseAssert "Nothing cancels the future"
-  else:
-    basicServices(nimbus, conf, com)
-    manageAccounts(nimbus, conf)
-    setupP2P(nimbus, conf, com)
-    setupRpc(nimbus, conf, com)
+  while true:
+    if (let reason = ProcessState.stopping(); reason.isSome()):
+      notice "Shutting down", reason = reason[]
+      break
+    if stopper != nil and stopper.finished():
+      break
 
-    # Not starting syncer if there is definitely no way to run it. This
-    # avoids polling (i.e. waiting for instructions) and some logging.
-    if not nimbus.beaconSyncRef.isNil and
-       not nimbus.beaconSyncRef.start():
-      nimbus.beaconSyncRef = BeaconSyncRef(nil)
+    chronos.poll()
 
-    # Be graceful about ctrl-c during init
-    if ProcessState.stopping.isNone:
-      ProcessState.notifyRunning()
+  # Stop loop
+  QuitFailure.onException("Exception while shutting down"):
+    waitFor nimbus.closeWait()
 
-      while not ProcessState.stopIt(notice("Shutting down", reason = it)):
-        poll()
-
-    # Stop loop
-    QuitFailure.onException("Exception while shutting down"):
-      waitFor nimbus.closeWait()
-
-proc setupExeClientNode*(conf: NimbusConf): NimbusNode {.gcsafe.} =
-  ## Prepare for running `runExeClient()`.
-  ##
-  ## This function returns the node config of type `NimbusNode` which might
-  ## be further amended before passing it to the runner `runExeClient()`.
-  ##
-  ProcessState.setupStopHandlers()
-
+# noinline to keep it in stack traces
+proc main*() {.noinline.} =
+  var config = makeConfig()
   # Set up logging before everything else
-  setupLogging(conf.logLevel, conf.logStdout, none(OutFile))
+  setupLogging(config.logLevel, config.logStdout)
+  displayLaunchingInfo(config)
   setupFileLimits()
 
+  ProcessState.setupStopHandlers()
+
   # TODO provide option for fixing / ignoring permission errors
-  if not checkAndCreateDataDir(conf.dataDir):
+  if not (checkAndCreateDataDir(config.dataDir)):
     # We are unable to access/create data folder or data folder's
     # permissions are insecure.
     quit QuitFailure
 
-  NimbusNode(ctx: newEthContext())
+  # Metrics are useful not just when running node but also during import
+  let metricsServer =
+    try:
+      waitFor(initMetricsServer(config)).valueOr:
+        quit(QuitFailure)
+    except CancelledError:
+      raiseAssert "Never cancelled"
+  defer:
+    waitFor metricsServer.stopMetricsServer()
 
-# ------------------------------------------------------------------------------
-# MAIN (if any)
-# ------------------------------------------------------------------------------
+  let
+    taskpool = setupTaskpool(config.numThreads)
+    com = setupCommonRef(config, taskpool)
+
+  defer:
+    com.db.finish()
+
+  case config.cmd
+  of NimbusCmd.`import`:
+    importBlocks(config, com)
+  of NimbusCmd.`import - rlp`:
+    try:
+      waitFor importRlpBlocks(config, com)
+    except CancelledError:
+      raiseAssert "Nothing cancels the future"
+  else:
+    runExeClient(config, com, nil)
 
 when isMainModule:
-  let
-    optsConf = makeConfig()
-    nodeConf = optsConf.setupExeClientNode()
-
-  nodeConf.runExeClient(optsConf)
-
-# ------------------------------------------------------------------------------
-# End
-# ------------------------------------------------------------------------------
+  main()

@@ -1,5 +1,5 @@
 # Nimbus
-# Copyright (c) 2021-2024 Status Research & Development GmbH
+# Copyright (c) 2021-2025 Status Research & Development GmbH
 # Licensed under either of
 #  * Apache License, version 2.0, ([LICENSE-APACHE](LICENSE-APACHE))
 #  * MIT license ([LICENSE-MIT](LICENSE-MIT))
@@ -26,9 +26,6 @@ type
 
   AccountsManager* = object
     accounts: Table[Address, NimbusAccount]
-
-proc init*(_: type AccountsManager): AccountsManager =
-  discard
 
 proc loadKeystores*(am: var AccountsManager, path: string):
                       Result[void, string] =

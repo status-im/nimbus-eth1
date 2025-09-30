@@ -131,7 +131,10 @@ proc replayBlock(fc: ForkedChainRef;
   # the stateroot computation.
   fc.updateSnapshot(blk.blk, txFrame)
 
-  var receipts = fc.processBlock(parent, txFrame, blk.blk, blk.hash, false).valueOr:
+  # Set finalized to true in order to skip the stateroot check when replaying the
+  # block because the blocks should have already been checked previously during
+  # the initial block execution.
+  var receipts = fc.processBlock(parent, txFrame, blk.blk, blk.hash, finalized = true).valueOr:
     txFrame.dispose()
     return err(error)
 
@@ -315,6 +318,9 @@ proc deserialize*(fc: ForkedChainRef): Result[void, string] =
     ?txFrame.fcuSafe(fc.fcuSafe.hash, fc.fcuSafe.number)
 
   fc.hashToBlock.withValue(fc.pendingFCU, val) do:
+    # Restore finalized marker
+    for it in loopNotFinalized(val[]):
+      it.finalize()
     let txFrame = val[].txFrame
     ?txFrame.fcuFinalized(fc.pendingFCU, fc.latestFinalizedBlockNumber)
 

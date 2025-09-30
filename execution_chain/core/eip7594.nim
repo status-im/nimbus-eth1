@@ -12,8 +12,7 @@
 import
   ../constants,
   ./eip4844,
-  ./pooled_txs,
-  /lazy_kzg as kzg
+  ./pooled_txs
 
 from std/sequtils import mapIt
 
