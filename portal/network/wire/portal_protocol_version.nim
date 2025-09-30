@@ -9,7 +9,7 @@
 
 import
   eth/rlp,
-  eth/p2p/discoveryv5/[enr, node],
+  eth/p2p/discoveryv5/[node],
   eth/common/base_rlp,
   ../../common/common_types
 
