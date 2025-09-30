@@ -13,9 +13,9 @@ import
   std/[tables, algorithm, typetraits, strutils, net],
   chronos, chronos/timer, chronicles,
   eth/common/keys,
+  eth/enode/enode,
   results,
   ./[peer_pool, rlpx, p2p_types, bootnodes],
-  ./discoveryv4/enode,
   ./eth1_discovery
 
 export

@@ -12,7 +12,7 @@ import
   std/[tables, hashes, times, algorithm, sets, sequtils],
   chronos, chronicles, stint, nimcrypto/keccak, metrics, results,
   eth/common/keys, eth/p2p/discoveryv5/random2,
-  ./enode
+  eth/enode/enode
 
 export enode, sets
 

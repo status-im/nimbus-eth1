@@ -32,7 +32,7 @@ import
   ],
   toml_serialization,
   eth/[common, net/nat, net/nat_toml],
-  ./networking/[bootnodes, eth1_enr as enr],
+  ./networking/bootnodes,
   ./[constants, compile_info, version_info],
   ./common/chain_config,
   ./db/opts
