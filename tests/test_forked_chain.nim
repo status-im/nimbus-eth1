@@ -820,3 +820,22 @@ suite "ForkedChain mainnet replay":
         # for the purpose of the test, this should be good enough
         blocks[0] = blocks[1]
         blocks[1] = hash
+
+  test "Replay mainnet era, invalid blocks":
+    var
+      blk1: EthBlock
+      invalidBlk: EthBlock
+      blk2: EthBlock
+      blk3: EthBlock
+
+    era0.getEthBlock(1.BlockNumber, blk1).expect("block in test database")
+    era0.getEthBlock(2.BlockNumber, invalidBlk).expect("block in test database")
+    invalidBlk.header.stateRoot = blk2.header.transactionsRoot
+    era0.getEthBlock(2.BlockNumber, blk2).expect("block in test database")
+    era0.getEthBlock(3.BlockNumber, blk3).expect("block in test database")
+
+    check (waitFor fc.importBlock(blk1, finalized = false)).isOk()
+    for i in 1..10:
+      check (waitFor fc.importBlock(invalidBlk, finalized = false)).isErr()
+    check (waitFor fc.importBlock(blk2, finalized = false)).isOk()
+    check (waitFor fc.importBlock(blk3, finalized = false)).isOk()
