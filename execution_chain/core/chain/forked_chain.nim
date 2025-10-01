@@ -635,7 +635,7 @@ proc init*(
 
   fc
 
-proc importBlock*(c: ForkedChainRef, blk: Block, finalized = false):
+proc importBlock*(c: ForkedChainRef, blk: Block):
        Future[Result[void, string]] {.async: (raises: [CancelledError]).} =
   ## Try to import block to canonical or side chain.
   ## return error if the block is invalid
@@ -656,9 +656,13 @@ proc importBlock*(c: ForkedChainRef, blk: Block, finalized = false):
     # to a "staging area" or disk-backed memory but it must not afect `base`.
     # `base` is the point of no return, we only update it on finality.
 
-    let parent = ?(await c.validateBlock(parent, blk, finalized))
+    # Setting the finalized flag to true here has the effect of skipping the
+    # stateroot check for performance reasons.
+    let
+      isFinalized = blk.header.number <= c.latestFinalizedBlockNumber
+      parent = ?(await c.validateBlock(parent, blk, isFinalized))
     if c.quarantine.hasOrphans():
-      c.queueOrphan(parent, finalized)
+      c.queueOrphan(parent, isFinalized)
 
   else:
     # If its parent is an invalid block
@@ -731,9 +735,9 @@ proc stopProcessingQueue*(c: ForkedChainRef) {.async: (raises: []).} =
   # at the same time FC.serialize modify the state, crash can happen.
   await noCancel c.processingQueueLoop.cancelAndWait()
 
-template queueImportBlock*(c: ForkedChainRef, blk: Block, finalized = false): auto =
+template queueImportBlock*(c: ForkedChainRef, blk: Block): auto =
   proc asyncHandler(): Future[Result[void, string]] {.async: (raises: [CancelledError], raw: true).} =
-    c.importBlock(blk, finalized)
+    c.importBlock(blk)
 
   let item = QueueItem(
     responseFut: Future[Result[void, string]].Raising([CancelledError]).init(),
