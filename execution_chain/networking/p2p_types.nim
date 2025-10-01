@@ -12,8 +12,9 @@
 import
   chronos,
   eth/common/[base, keys],
+  eth/enode/enode,
   ./rlpx/rlpxtransport,
-  ./discoveryv4/[enode, kademlia],
+  ./discoveryv4/kademlia,
   ./p2p_peers,
   ./peer_pool,
   json_serialization/std/net as jsnet

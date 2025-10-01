@@ -19,7 +19,8 @@ import
   results,
   eth/rlp,
   eth/common/keys,
-  ./discoveryv4/[kademlia, enode]
+  eth/enode/enode,
+  ./discoveryv4/kademlia
 
 export
   Node,

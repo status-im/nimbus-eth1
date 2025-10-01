@@ -12,6 +12,6 @@ import
   ./networking/test_crypt,
   ./networking/test_discoveryv4,
   ./networking/test_ecies,
-  ./networking/test_enode,
+  ./networking/test_bootnodes,
   ./networking/test_rlpx_thunk,
   ./networking/test_rlpxtransport

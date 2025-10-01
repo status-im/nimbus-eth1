@@ -12,9 +12,12 @@
 import
   std/[strutils, os],
   stew/[io2, base64],
-  eth/p2p/discoveryv5/enr,
-  ./discoveryv4/enode
+  eth/enr/enr,
+  eth/enode/enode
 
+export
+  enode, enr
+  
 type
   BootstrapNodes* = object
     enrs*: seq[enr.Record]
@@ -70,10 +73,10 @@ func bootData(numLines: static[int], enrsText, enodesText: string): array[numLin
       result[i] = line.substr(2)
       inc i
 
-    if line.startsWith("enr:"): 
+    if line.startsWith("enr:"):
       result[i] = line
       inc i
-  
+
   for line in splitLines(enodesText):
     if line.startsWith("- enode:"):
       result[i] = line.substr(2)
@@ -87,7 +90,7 @@ template loadBootstrapNodes(name: static[string]): auto =
   block one:
     const
       (enrs, enodes) = bootNodeFile(name)
-      enrsText = staticRead(enrs) 
+      enrsText = staticRead(enrs)
       enodesText = staticRead(enodes)
       numLines = countLines(enrsText, enodesText)
     bootData(numLines, enrsText, enodesText)

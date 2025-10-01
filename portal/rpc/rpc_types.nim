@@ -12,7 +12,7 @@ import
   json_rpc/[jsonmarshal, errors],
   stew/byteutils,
   results,
-  eth/p2p/discoveryv5/[routing_table, enr, node],
+  eth/p2p/discoveryv5/[routing_table, node],
   json_serialization/pkg/results
 
 export jsonmarshal, routing_table, enr, node, results

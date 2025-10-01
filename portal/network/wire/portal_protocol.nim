@@ -24,7 +24,7 @@ import
   faststreams,
   minilru,
   eth/rlp,
-  eth/p2p/discoveryv5/[protocol, node, enr, routing_table, random2, nodes_verification],
+  eth/p2p/discoveryv5/[protocol, node, routing_table, random2, nodes_verification],
   "."/[portal_stream, portal_protocol_config, ping_extensions, portal_protocol_version],
   ./messages
 

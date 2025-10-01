@@ -16,9 +16,9 @@ import
   results,
   metrics,
   eth/common/base_rlp,
+  eth/enode/enode_utils,
   ./discoveryv5,
   ./discoveryv4,
-  ./eth1_enr,
   ./chain_forkid,
   ./bootnodes
 

@@ -8,12 +8,7 @@
 {.used.}
 
 import
-  unittest2,
-  stint,
-  stew/byteutils,
-  results,
-  eth/p2p/discoveryv5/enr,
-  ../../network/wire/messages
+  unittest2, stint, stew/byteutils, results, eth/enr/enr, ../../network/wire/messages
 
 # According to test vectors:
 # https://github.com/ethereum/portal-network-specs/blob/master/portal-wire-test-vectors.md
