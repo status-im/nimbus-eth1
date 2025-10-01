@@ -795,7 +795,7 @@ suite "ForkedChain mainnet replay":
     for i in 1..<fc.baseDistance * 2:
       era0.getEthBlock(i.BlockNumber, blk).expect("block in test database")
       check:
-        (waitFor fc.importBlock(blk, finalized = true)) == Result[void, string].ok()
+        (waitFor fc.importBlock(blk)) == Result[void, string].ok()
 
     check:
       (waitFor fc.forkChoice(blk.blockHash, blk.blockHash)) == Result[void, string].ok()
@@ -834,8 +834,8 @@ suite "ForkedChain mainnet replay":
     era0.getEthBlock(2.BlockNumber, blk2).expect("block in test database")
     era0.getEthBlock(3.BlockNumber, blk3).expect("block in test database")
 
-    check (waitFor fc.importBlock(blk1, finalized = false)).isOk()
+    check (waitFor fc.importBlock(blk1)).isOk()
     for i in 1..10:
-      check (waitFor fc.importBlock(invalidBlk, finalized = false)).isErr()
-    check (waitFor fc.importBlock(blk2, finalized = false)).isOk()
-    check (waitFor fc.importBlock(blk3, finalized = false)).isOk()
+      check (waitFor fc.importBlock(invalidBlk)).isErr()
+    check (waitFor fc.importBlock(blk2)).isOk()
+    check (waitFor fc.importBlock(blk3)).isOk()
