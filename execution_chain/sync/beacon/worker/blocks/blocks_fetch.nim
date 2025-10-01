@@ -32,8 +32,9 @@ proc getBlockBodies(
   var resp: BlockBodiesPacket
 
   try:
-    resp = (await buddy.peer.getBlockBodies(req)).valueOr:
-      return err((ENoException,"","",Moment.now()-start))
+    resp = (await buddy.peer.getBlockBodies(
+      req, fetchBodiesRlpxTimeout)).valueOr:
+        return err((ENoException,"","",Moment.now()-start))
   except PeerDisconnected as e:
     return err((EPeerDisconnected,$e.name,$e.msg,Moment.now()-start))
   except CancelledError as e:

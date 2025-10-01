@@ -32,8 +32,9 @@ proc getBlockHeaders(
   var resp: BlockHeadersPacket
 
   try:
-    resp = (await buddy.peer.getBlockHeaders(req)).valueOr:
-      return err((ENoException,"","",Moment.now()-start))
+    resp = (await buddy.peer.getBlockHeaders(
+      req, fetchHeadersRlpxTimeout)).valueOr:
+        return err((ENoException,"","",Moment.now()-start))
   except PeerDisconnected as e:
     return err((EPeerDisconnected,$e.name,$e.msg,Moment.now()-start))
   except CancelledError as e:

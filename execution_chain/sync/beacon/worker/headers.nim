@@ -200,7 +200,7 @@ template headersCollect*(buddy: BeaconBuddyRef; info: static[string]) =
 
     # This message might run in addition to the `chronicles.info` part
     trace info & ": queued/staged or DB/stored headers", peer,
-      unprocTop=ctx.headersUnprocAvailTop.bnStrIfAvail(ctx),
+      unprocAvailTop=ctx.headersUnprocAvailTop.bnStrIfAvail(ctx),
       nQueued, nStashed, nStagedQ=ctx.hdr.staged.len,
       nSyncPeers=ctx.pool.nBuddies
     # End block: `body`
@@ -238,10 +238,14 @@ proc headersUnstage*(buddy: BeaconBuddyRef; info: static[string]): bool =
       maxNum = qItem.data.revHdrs[0].number
       dangling = ctx.hdrCache.antecedent.number
     if maxNum + 1 < dangling:
+      let unprocTop = ctx.headersUnprocTotalTop()
       trace info & ": gap, serialisation postponed", peer,
-        qItem=qItem.data.revHdrs.bnStr, D=dangling.bnStr, nStashed,
-        nStagedQ=ctx.hdr.staged.len, nSyncPeers=ctx.pool.nBuddies
+        qItem=qItem.data.revHdrs.bnStr, unprocTop=unprocTop.bnStr,
+        D=dangling.bnStr, nStashed, nStagedQ=ctx.hdr.staged.len,
+        nSyncPeers=ctx.pool.nBuddies
       switchPeer = true # there is a gap -- come back later
+      # Impossible situation => deadlock
+      doAssert dangling <= unprocTop + 1
       break
 
     # Remove from queue
