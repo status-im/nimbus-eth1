@@ -329,6 +329,7 @@ Either the consensus client gave invalid information about finalized blocks or
 something else needs attention! Shutting down to preserve the database - restart
 with --debug-eager-state-root."""
 
+  base.txFrame.checkpoint(base.number, skipSnapshot = true)
   c.com.db.persist(base.txFrame)
 
   # Update baseTxFrame when we about to yield to the event loop
@@ -484,7 +485,7 @@ proc validateBlock(c: ForkedChainRef,
   # Update the snapshot before processing the block so that any vertexes in snapshots
   # from lower levels than the baseTxFrame are removed from the snapshot before running
   # the stateroot computation.
-  c.updateSnapshot(blk, txFrame)
+  c.updateSnapshot(parent.blk, parentFrame)
 
   var receipts = c.processBlock(parent, txFrame, blk, blkHash, finalized).valueOr:
     txFrame.dispose()

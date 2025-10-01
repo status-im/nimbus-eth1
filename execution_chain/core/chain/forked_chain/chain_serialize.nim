@@ -124,12 +124,12 @@ proc replayBlock(fc: ForkedChainRef;
                  blk: BlockRef): Result[void, string] =
   let
     parentFrame = parent.txFrame
-    txFrame = parentFrame.txFrameBegin
+    txFrame = parentFrame.txFrameBegin()
 
   # Update the snapshot before processing the block so that any vertexes in snapshots
   # from lower levels than the baseTxFrame are removed from the snapshot before running
   # the stateroot computation.
-  fc.updateSnapshot(blk.blk, txFrame)
+  fc.updateSnapshot(parent.blk, parentFrame)
 
   # Set finalized to true in order to skip the stateroot check when replaying the
   # block because the blocks should have already been checked previously during
