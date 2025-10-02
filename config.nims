@@ -57,6 +57,9 @@ if defined(release) and not defined(disableLTO):
 switch("passC", "-fvisibility=hidden")
 
 if defined(windows):
+  # Constantine
+  switch("passC", "-fomit-frame-pointer")
+  switch("passL", "-fomit-frame-pointer")
   # disable timestamps in Windows PE headers - https://wiki.debian.org/ReproducibleBuilds/TimestampsInPEBinaries
   switch("passL", "-Wl,--no-insert-timestamp")
   # increase stack size, unless something else is setting the stack size
@@ -169,6 +172,9 @@ switch("warning", "CaseTransition:off")
 # disable nim-kzg's blst
 switch("define", "kzgExternalBlst")
 
+# Constantine missing operand zero assumed error suppression
+switch("warning", "User:off")
+
 # We lock down rocksdb to a particular version
 # TODO self-build rocksdb dll on windows
 when not defined(use_system_rocksdb) and not defined(windows):
@@ -197,6 +203,27 @@ put("secp256k1.always", "-fno-lto -fomit-frame-pointer")
 # which do not support {.localPassC: "-fno-lto".}
 # Unfortunately this is filename based instead of path-based
 # Assumes GCC
+
+# Constantine
+put("limbs_asm_bigint_arm64.always", "-fno-lto")
+put("limbs_asm_bigint_x86.always", "-fno-lto")
+put("limbs_asm_crandall_x86.always", "-fno-lto")
+put("limbs_asm_crandall_x86_adx_bmi2.always", "-fno-lto")
+put("limbs_asm_modular_arm64.always", "-fno-lto")
+put("limbs_asm_modular_dbl_prec_x86.always", "-fno-lto")
+put("limbs_asm_modular_x86.always", "-fno-lto")
+put("limbs_asm_mul_arm64.always", "-fno-lto")
+put("limbs_asm_mul_mont_arm64.always", "-fno-lto")
+put("limbs_asm_mul_mont_x86.always", "-fno-lto")
+put("limbs_asm_mul_mont_x86_adx_bmi2.always", "-fno-lto")
+put("limbs_asm_mul_x86.always", "-fno-lto")
+put("limbs_asm_mul_x86_adx_bmi2.always", "-fno-lto")
+put("limbs_asm_redc_mont_arm64.always", "-fno-lto")
+put("limbs_asm_redc_mont_x86.always", "-fno-lto")
+put("limbs_asm_redc_mont_x86_adx_bmi2.always", "-fno-lto")
+
+put("bls12_381_pairings.always", "-fno-lto")
+put("ec_multi_scalar_mul_scheduler.always", "-fno-lto")
 
 # BLST
 put("server.always", "-fno-lto")

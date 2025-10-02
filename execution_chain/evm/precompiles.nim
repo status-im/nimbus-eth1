@@ -11,6 +11,7 @@
 import
   std/[macros],
   results,
+  constantine/ethereum_evm_precompiles,
   "."/[types, blake2b_f, blscurve],
   ./interpreter/[gas_meter, gas_costs, utils/utils_numeric],
   eth/common/keys,
@@ -233,7 +234,11 @@ func sha256(c: Computation): EvmResultVoid =
     gasFee = GasSHA256 + wordCount.GasInt * GasSHA256Word
 
   ? c.gasMeter.consumeGas(gasFee, reason="SHA256 Precompile")
-  assign(c.output, sha2.sha256.digest(c.msg.data).data)
+  c.output.setLen(32)
+  let res = c.output.eth_evm_sha256(c.msg.data)
+
+  if res != cttEVM_Success:
+    return err(prcErr(PrcInvalidParam))
   ok()
 
 func ripemd160(c: Computation): EvmResultVoid =
@@ -243,7 +248,10 @@ func ripemd160(c: Computation): EvmResultVoid =
 
   ? c.gasMeter.consumeGas(gasFee, reason="RIPEMD160 Precompile")
   c.output.setLen(32)
-  assign(c.output.toOpenArray(12, 31), ripemd.ripemd160.digest(c.msg.data).data)
+  let res =c.output.eth_evm_ripemd160(c.msg.data)
+
+  if res != cttEVM_Success:
+    return err(prcErr(PrcInvalidParam))
   ok()
 
 func identity(c: Computation): EvmResultVoid =
@@ -385,19 +393,14 @@ func bn256ecAdd(c: Computation, fork: EVMFork = FkByzantium): EvmResultVoid =
   let gasFee = if fork < FkIstanbul: GasECAdd else: GasECAddIstanbul
   ? c.gasMeter.consumeGas(gasFee, reason = "ecAdd Precompile")
 
-  var
-    input: array[128, byte]
-  # Padding data
-  let len = min(c.msg.data.len, 128) - 1
-  input[0..len] = c.msg.data[0..len]
-  var p1 = ? G1.getPoint(input.toOpenArray(0, 63))
-  var p2 = ? G1.getPoint(input.toOpenArray(64, 127))
-  var apo = (p1 + p2).toAffine()
+  var output: array[64, byte]
+  let res = output.eth_evm_bn254_g1add(c.msg.data)
+
+  if res != cttEVM_Success:
+    return err(prcErr(PrcInvalidParam))
 
   c.output.setLen(64)
-  if isSome(apo):
-    # we can discard here because we supply proper buffer
-    discard apo.get().toBytes(c.output)
+  assign(c.output, output)
 
   ok()
 
@@ -405,20 +408,14 @@ func bn256ecMul(c: Computation, fork: EVMFork = FkByzantium): EvmResultVoid =
   let gasFee = if fork < FkIstanbul: GasECMul else: GasECMulIstanbul
   ? c.gasMeter.consumeGas(gasFee, reason="ecMul Precompile")
 
-  var
-    input: array[96, byte]
+  var output: array[64, byte]
+  let res = output.eth_evm_bn254_g1mul(c.msg.data)
 
-  # Padding data
-  let len = min(c.msg.data.len, 96) - 1
-  assign(input.toOpenArray(0, len), c.msg.data.toOpenArray(0, len))
-  var p1 = ? G1.getPoint(input.toOpenArray(0, 63))
-  var fr = ? getFR(input.toOpenArray(64, 95))
-  var apo = (p1 * fr).toAffine()
+  if res != cttEVM_Success:
+    return err(prcErr(PrcInvalidParam))
 
   c.output.setLen(64)
-  if isSome(apo):
-    # we can discard here because we supply buffer of proper size
-    discard apo.get().toBytes(c.output)
+  assign(c.output, output)
 
   ok()
 
@@ -457,7 +454,7 @@ func bn256ecPairing(c: Computation, fork: EVMFork = FkByzantium): EvmResultVoid 
     if acc == FQ12.one():
       # we can discard here because we supply buffer of proper size
       discard BNU256.one().toBytesBE(c.output)
-
+      
   ok()
 
 func blake2bf(c: Computation): EvmResultVoid =
@@ -485,18 +482,15 @@ func blsG1Add(c: Computation): EvmResultVoid =
 
   ? c.gasMeter.consumeGas(Bls12381G1AddGas, reason="blsG1Add Precompile")
 
-  var a, b: BLS_G1
-  if not a.decodePoint(input.toOpenArray(0, 127)):
-    return err(prcErr(PrcInvalidPoint))
+  var output: array[128, byte]
+  let res = output.eth_evm_bls12381_g1add(c.msg.data)
 
-  if not b.decodePoint(input.toOpenArray(128, 255)):
-    return err(prcErr(PrcInvalidPoint))
-
-  a.add b
+  if res != cttEVM_Success:
+    return err(prcErr(PrcInvalidParam))
 
   c.output.setLen(128)
-  if not encodePoint(a, c.output):
-    return err(prcErr(PrcInvalidPoint))
+  assign(c.output, output)
+
   ok()
 
 const
@@ -560,35 +554,15 @@ func blsG1MultiExp(c: Computation): EvmResultVoid =
 
   ? c.gasMeter.consumeGas(gas, reason="blsG1MultiExp Precompile")
 
-  var
-    p: BLS_G1
-    s: BLS_SCALAR
-    acc: BLS_G1
+  var output: array[128, byte]
+  let res = output.eth_evm_bls12381_g1msm(input)
 
-  # Decode point scalar pairs
-  for i in 0..<K:
-    let off = L * i
-
-    # Decode G1 point
-    if not p.decodePoint(input.toOpenArray(off, off+127)):
-      return err(prcErr(PrcInvalidPoint))
-
-    if not p.subgroupCheck:
-      return err(prcErr(PrcInvalidPoint))
-
-    # Decode scalar value
-    if not s.fromBytes(input.toOpenArray(off+128, off+159)):
-      return err(prcErr(PrcInvalidParam))
-
-    p.mul(s)
-    if i == 0:
-      acc = p
-    else:
-      acc.add(p)
+  if res != cttEVM_Success:
+    return err(prcErr(PrcInvalidParam))
 
   c.output.setLen(128)
-  if not encodePoint(acc, c.output):
-    return err(prcErr(PrcInvalidPoint))
+  assign(c.output, output)
+
   ok()
 
 func blsG2Add(c: Computation): EvmResultVoid =
@@ -600,18 +574,15 @@ func blsG2Add(c: Computation): EvmResultVoid =
 
   ? c.gasMeter.consumeGas(Bls12381G2AddGas, reason="blsG2Add Precompile")
 
-  var a, b: BLS_G2
-  if not a.decodePoint(input.toOpenArray(0, 255)):
-    return err(prcErr(PrcInvalidPoint))
+  var output: array[256, byte]
+  let res = output.eth_evm_bls12381_g2add(c.msg.data)
 
-  if not b.decodePoint(input.toOpenArray(256, 511)):
-    return err(prcErr(PrcInvalidPoint))
-
-  a.add b
+  if res != cttEVM_Success:
+    return err(prcErr(PrcInvalidParam))
 
   c.output.setLen(256)
-  if not encodePoint(a, c.output):
-    return err(prcErr(PrcInvalidPoint))
+  assign(c.output, output)
+
   ok()
 
 func blsG2MultiExp(c: Computation): EvmResultVoid =
@@ -628,35 +599,15 @@ func blsG2MultiExp(c: Computation): EvmResultVoid =
 
   ? c.gasMeter.consumeGas(gas, reason="blsG2MultiExp Precompile")
 
-  var
-    p: BLS_G2
-    s: BLS_SCALAR
-    acc: BLS_G2
+  var output: array[256, byte]
+  let res = output.eth_evm_bls12381_g2msm(input)
 
-  # Decode point scalar pairs
-  for i in 0..<K:
-    let off = L * i
-
-    # Decode G1 point
-    if not p.decodePoint(input.toOpenArray(off, off+255)):
-      return err(prcErr(PrcInvalidPoint))
-
-    if not p.subgroupCheck:
-      return err(prcErr(PrcInvalidPoint))
-
-    # Decode scalar value
-    if not s.fromBytes(input.toOpenArray(off+256, off+287)):
-      return err(prcErr(PrcInvalidParam))
-
-    p.mul(s)
-    if i == 0:
-      acc = p
-    else:
-      acc.add(p)
+  if res != cttEVM_Success:
+    return err(prcErr(PrcInvalidParam))
 
   c.output.setLen(256)
-  if not encodePoint(acc, c.output):
-    return err(prcErr(PrcInvalidPoint))
+  assign(c.output, output)
+  
   ok()
 
 func blsPairing(c: Computation): EvmResultVoid =
@@ -673,40 +624,15 @@ func blsPairing(c: Computation): EvmResultVoid =
 
   ? c.gasMeter.consumeGas(gas, reason="blsG2Pairing Precompile")
 
-  var
-    g1: BLS_G1P
-    g2: BLS_G2P
-    acc: BLS_ACC
+  var output: array[32, byte]
+  let res = output.eth_evm_bls12381_pairingcheck(input)
 
-  # Decode pairs
-  for i in 0..<K:
-    let off = L * i
-
-    # Decode G1 point
-    if not g1.decodePoint(input.toOpenArray(off, off+127)):
-      return err(prcErr(PrcInvalidPoint))
-
-    # Decode G2 point
-    if not g2.decodePoint(input.toOpenArray(off+128, off+383)):
-      return err(prcErr(PrcInvalidPoint))
-
-    # 'point is on curve' check already done,
-    # Here we need to apply subgroup checks.
-    if not g1.subgroupCheck:
-      return err(prcErr(PrcInvalidPoint))
-
-    if not g2.subgroupCheck:
-      return err(prcErr(PrcInvalidPoint))
-
-    # Update pairing engine with G1 and G2 points
-    if i == 0:
-      acc = millerLoop(g1, g2)
-    else:
-      acc.mul(millerLoop(g1, g2))
+  if res != cttEVM_Success:
+    return err(prcErr(PrcInvalidParam))
 
   c.output.setLen(32)
-  if acc.check():
-    c.output[^1] = 1.byte
+  assign(c.output, output)
+
   ok()
 
 func blsMapG1(c: Computation): EvmResultVoid =
@@ -718,15 +644,15 @@ func blsMapG1(c: Computation): EvmResultVoid =
 
   ? c.gasMeter.consumeGas(Bls12381MapG1Gas, reason="blsMapG1 Precompile")
 
-  var fe: BLS_FE
-  if not fe.decodeFE(input):
-    return err(prcErr(PrcInvalidPoint))
+  var output: array[128, byte]
+  let res = output.eth_evm_bls12381_map_fp_to_g1(input)
 
-  let p = fe.mapFPToG1()
+  if res != cttEVM_Success:
+    return err(prcErr(PrcInvalidParam))
 
   c.output.setLen(128)
-  if not encodePoint(p, c.output):
-    return err(prcErr(PrcInvalidPoint))
+  assign(c.output, output)
+
   ok()
 
 func blsMapG2(c: Computation): EvmResultVoid =
@@ -738,15 +664,15 @@ func blsMapG2(c: Computation): EvmResultVoid =
 
   ? c.gasMeter.consumeGas(Bls12381MapG2Gas, reason="blsMapG2 Precompile")
 
-  var fe: BLS_FE2
-  if not fe.decodeFE(input):
-    return err(prcErr(PrcInvalidPoint))
+  var output: array[256, byte]
+  let res = output.eth_evm_bls12381_map_fp2_to_g2(input)
 
-  let p = fe.mapFPToG2()
+  if res != cttEVM_Success:
+    return err(prcErr(PrcInvalidParam))
 
   c.output.setLen(256)
-  if not encodePoint(p, c.output):
-    return err(prcErr(PrcInvalidPoint))
+  assign(c.output, output)
+
   ok()
 
 proc pointEvaluation(c: Computation): EvmResultVoid =
