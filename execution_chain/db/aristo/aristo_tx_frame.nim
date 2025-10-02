@@ -16,10 +16,10 @@
 import results, ./[aristo_desc, aristo_layers]
 
 # ------------------------------------------------------------------------------
-# Public functions
+# Private functions
 # ------------------------------------------------------------------------------
 
-template isDisposed*(txFrame: AristoTxRef): bool =
+template isDisposed(txFrame: AristoTxRef): bool =
   txFrame.level == disposedLevel
 
 proc isKeyframe(txFrame: AristoTxRef): bool =
@@ -95,6 +95,10 @@ proc buildSnapshot(txFrame: AristoTxRef, minLevel: int) =
     txFrame.snapshot.copyFrom(frame)
 
   txFrame.snapshot.level = Opt.some(minLevel)
+
+# ------------------------------------------------------------------------------
+# Public functions
+# ------------------------------------------------------------------------------
 
 proc txFrameBegin*(
     db: AristoDbRef,
