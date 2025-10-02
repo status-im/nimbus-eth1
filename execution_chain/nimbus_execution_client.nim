@@ -341,12 +341,12 @@ proc main*(config = makeConfig(), nimbus = NimbusNode(nil)) {.noinline.} =
     except CancelledError:
       raiseAssert "Never cancelled"
   defer:
-    waitFor metricsServer.stopMetricsServer()
+    if metricsServer.isSome():
+      waitFor metricsServer.stopMetricsServer()
 
   let
     taskpool = setupTaskpool(config.numThreads)
     com = setupCommonRef(config, taskpool)
-
   defer:
     com.db.finish()
 
