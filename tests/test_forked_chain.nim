@@ -12,6 +12,7 @@ import
   pkg/chronicles,
   pkg/chronos,
   pkg/unittest2,
+  testutils,
   std/[os, strutils],
   ../execution_chain/common,
   ../execution_chain/config,
@@ -778,7 +779,7 @@ suite "ForkedChainRef tests":
     check fc.latestHash == chain.latestHash
     check fc.validate info & " (4)"
 
-suite "ForkedChain mainnet replay":
+procSuite "ForkedChain mainnet replay":
   # A short mainnet replay test to check that the first few hundred blocks can
   # be imported using a typical importBlock / fcu sequence - this does not
   # test any transactions since these blocks are practically empty, but thanks
@@ -788,40 +789,36 @@ suite "ForkedChain mainnet replay":
     let
       era0 = Era1DbRef.init(sourcePath / "replay", "mainnet").expect("Era files present")
       com = CommonRef.new(AristoDbMemory.newCoreDbRef(), nil)
-      fc = ForkedChainRef.init(com)
+      fc = ForkedChainRef.init(com, enableQueue = true)
 
-  test "Replay mainnet era, single FCU":
+  asyncTest "Replay mainnet era, single FCU":
     var blk: EthBlock
-    for i in 1..<fc.baseDistance * 2:
+    for i in 1..<fc.baseDistance * 10:
       era0.getEthBlock(i.BlockNumber, blk).expect("block in test database")
-      check:
-        (waitFor fc.importBlock(blk)) == Result[void, string].ok()
+      check (await fc.queueImportBlock(blk)).isOk()
 
-    check:
-      (waitFor fc.forkChoice(blk.blockHash, blk.blockHash)) == Result[void, string].ok()
+    check (await fc.queueForkChoice(blk.blockHash, blk.blockHash)).isOk()
 
-  test "Replay mainnet era, multiple FCU":
+  asyncTest "Replay mainnet era, multiple FCU":
     # Simulates the typical case where fcu comes after the block
     var blk: EthBlock
     era0.getEthBlock(0.BlockNumber, blk).expect("block in test database")
 
     var blocks = [blk.blockHash, blk.blockHash]
 
-    for i in 1..<fc.baseDistance * 2:
+    for i in 1..<fc.baseDistance * 10:
       era0.getEthBlock(i.BlockNumber, blk).expect("block in test database")
-      check:
-        (waitFor fc.importBlock(blk)) == Result[void, string].ok()
+      check (await fc.queueImportBlock(blk)).isOk()
 
       let hash = blk.blockHash
-      check:
-        (waitFor fc.forkChoice(hash, blocks[0])) == Result[void, string].ok()
+      check (await fc.queueForkChoice(hash, blocks[0])).isOk()
       if i mod 32 == 0:
         # in reality, finalized typically lags a bit more than this, but
         # for the purpose of the test, this should be good enough
         blocks[0] = blocks[1]
         blocks[1] = hash
 
-  test "Replay mainnet era, invalid blocks":
+  asyncTest "Replay mainnet era, invalid blocks":
     var
       blk1: EthBlock
       invalidBlk: EthBlock
@@ -834,8 +831,33 @@ suite "ForkedChain mainnet replay":
     era0.getEthBlock(2.BlockNumber, blk2).expect("block in test database")
     era0.getEthBlock(3.BlockNumber, blk3).expect("block in test database")
 
-    check (waitFor fc.importBlock(blk1)).isOk()
+    check (await fc.queueImportBlock(blk1)).isOk()
     for i in 1..10:
-      check (waitFor fc.importBlock(invalidBlk)).isErr()
-    check (waitFor fc.importBlock(blk2)).isOk()
-    check (waitFor fc.importBlock(blk3)).isOk()
+      check (await fc.queueImportBlock(invalidBlk)).isErr()
+    check (await fc.queueImportBlock(blk2)).isOk()
+    check (await fc.queueImportBlock(blk3)).isOk()
+
+  asyncTest "Concurrent block imports - stateroot check enabled":
+    let fc = ForkedChainRef.init(com, eagerStateRoot = true)
+
+    var
+      blk1: EthBlock
+      invalidBlk: EthBlock
+      blk2: EthBlock
+
+    era0.getEthBlock(1.BlockNumber, blk1).expect("block in test database")
+    era0.getEthBlock(2.BlockNumber, invalidBlk).expect("block in test database")
+    invalidBlk.header.coinbase = blk1.header.coinbase
+    era0.getEthBlock(2.BlockNumber, blk2).expect("block in test database")
+
+    check (await fc.importBlock(blk1)).isOk()
+
+    var futs: seq[Future[Result[void, string]]]
+    for i in 1..10:
+      futs.add fc.importBlock(invalidBlk)
+
+    let finishedFuts = await allFinished(futs)
+    for f in finishedFuts:
+      check (await f).isErr()
+
+    check (await fc.importBlock(blk2)).isOk()
