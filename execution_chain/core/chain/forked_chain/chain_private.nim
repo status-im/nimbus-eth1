@@ -35,26 +35,6 @@ proc writeBaggage*(c: ForkedChainRef,
       header.withdrawalsRoot.expect("WithdrawalsRoot should be verified before"),
       blk.withdrawals.get)
 
-template updateSnapshot*(c: ForkedChainRef,
-            blk: Block,
-            txFrame: CoreDbTxRef) =
-  let pos = c.lastSnapshotPos
-  c.lastSnapshotPos = (c.lastSnapshotPos + 1) mod c.lastSnapshots.len
-  if not isNil(c.lastSnapshots[pos]):
-    # Put a cap on frame memory usage by clearing out the oldest snapshots -
-    # this works at the expense of making building on said branches slower.
-    # 10 is quite arbitrary.
-    c.lastSnapshots[pos].clearSnapshot()
-    c.lastSnapshots[pos] = nil
-
-  # Block fully written to txFrame, mark it as such
-  # Checkpoint creates a snapshot of ancestor changes in txFrame - it is an
-  # expensive operation, specially when creating a new branch (ie when blk
-  # is being applied to a block that is currently not a head)
-  txFrame.checkpoint(blk.header.number)
-
-  c.lastSnapshots[pos] = txFrame
-
 proc processBlock*(c: ForkedChainRef,
                   parentBlk: BlockRef,
                   txFrame: CoreDbTxRef,
