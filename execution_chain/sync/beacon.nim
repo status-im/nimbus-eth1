@@ -15,8 +15,10 @@ import
   pkg/stew/[interval_set, sorted_set],
   ../core/chain,
   ../networking/p2p,
-  ./beacon/worker/headers/headers_target,
   ./beacon/[beacon_desc, worker],
+  ./beacon/worker/blocks/[blocks_fetch, blocks_import],
+  ./beacon/worker/headers/[headers_fetch, headers_target],
+  ./beacon/worker/update,
   ./[sync_sched, wire_protocol]
 
 export
@@ -26,32 +28,61 @@ logScope:
   topics = "beacon sync"
 
 # ------------------------------------------------------------------------------
+# Interceptable handlers
+# ------------------------------------------------------------------------------
+
+proc schedDaemonCB(
+    ctx: BeaconCtxRef;
+      ): Future[Duration]
+      {.async: (raises: []).} =
+  return worker.runDaemon(ctx, "RunDaemon") # async/template
+
+proc schedStartCB(buddy: BeaconBuddyRef): bool =
+  return worker.start(buddy, "RunStart")
+
+proc schedStopCB(buddy: BeaconBuddyRef) =
+  worker.stop(buddy, "RunStop")
+
+proc schedPoolCB(buddy: BeaconBuddyRef; last: bool; laps: int): bool =
+  return worker.runPool(buddy, last, laps, "RunPool")
+
+proc schedPeerCB(
+    buddy: BeaconBuddyRef;
+      ): Future[Duration]
+      {.async: (raises: []).} =
+  return worker.runPeer(buddy, "RunPeer") # async/template
+
+proc noOpFn(buddy: BeaconBuddyRef) = discard
+proc noOpEx(self: BeaconHandlersSyncRef) = discard
+
+# ------------------------------------------------------------------------------
 # Virtual methods/interface, `mixin` functions
 # ------------------------------------------------------------------------------
 
 proc runSetup(ctx: BeaconCtxRef): bool =
-  worker.setup(ctx, "RunSetup")
+  return worker.setup(ctx, "RunSetup")
 
 proc runRelease(ctx: BeaconCtxRef) =
   worker.release(ctx, "RunRelease")
 
-proc runDaemon(ctx: BeaconCtxRef): Future[Duration] {.async: (raises: []).} =
-  return worker.runDaemon(ctx, "RunDaemon")
-
 proc runTicker(ctx: BeaconCtxRef) =
   worker.runTicker(ctx, "RunTicker")
 
+
+proc runDaemon(ctx: BeaconCtxRef): Future[Duration] {.async: (raises: []).} =
+  return await ctx.handler.schedDaemon(ctx)
+
 proc runStart(buddy: BeaconBuddyRef): bool =
-  worker.start(buddy, "RunStart")
+  return buddy.ctx.handler.schedStart(buddy)
 
 proc runStop(buddy: BeaconBuddyRef) =
-  worker.stop(buddy, "RunStop")
+  buddy.ctx.handler.schedStop(buddy)
 
 proc runPool(buddy: BeaconBuddyRef; last: bool; laps: int): bool =
-  worker.runPool(buddy, last, laps, "RunPool")
+  return buddy.ctx.handler.schedPool(buddy, last, laps)
 
 proc runPeer(buddy: BeaconBuddyRef): Future[Duration] {.async: (raises: []).} =
-  return worker.runPeer(buddy, "RunPeer")
+  return await buddy.ctx.handler.schedPeer(buddy)
 
 # ------------------------------------------------------------------------------
 # Public functions
@@ -83,6 +114,25 @@ proc config*(
   desc.initSync(ethNode, maxPeers)
   desc.ctx.pool.chain = chain
 
+  # Set up handlers so they can be overlayed
+  desc.ctx.pool.handlers = BeaconHandlersSyncRef(
+    version:          0,
+    activate:         updateActivateCB,
+    suspend:          updateSuspendCB,
+    schedDaemon:      schedDaemonCB,
+    schedStart:       schedStartCB,
+    schedStop:        schedStopCB,
+    schedPool:        schedPoolCB,
+    schedPeer:        schedPeerCB,
+    getBlockHeaders:  getBlockHeadersCB,
+    syncBlockHeaders: noOpFn,
+    getBlockBodies:   getBlockBodiesCB,
+    syncBlockBodies:  noOpFn,
+    importBlock:      importBlockCB,
+    syncImportBlock:  noOpFn,
+    startSync:        noOpEx,
+    stopSync:         noOpEx)
+
   if not desc.lazyConfigHook.isNil:
     desc.lazyConfigHook(desc)
     desc.lazyConfigHook = nil
@@ -99,10 +149,16 @@ proc configTarget*(desc: BeaconSyncRef; hex: string; isFinal: bool): bool =
 
 proc start*(desc: BeaconSyncRef): bool =
   doAssert not desc.ctx.isNil
-  desc.startSync()
+  if desc.startSync():
+    let w = BeaconHandlersSyncRef(desc.ctx.pool.handlers)
+    w.startSync(w)
+    return true
+  # false
 
 proc stop*(desc: BeaconSyncRef) {.async.} =
   doAssert not desc.ctx.isNil
+  let w = BeaconHandlersSyncRef(desc.ctx.pool.handlers)
+  w.stopSync(w)
   await desc.stopSync()
 
 # ------------------------------------------------------------------------------
