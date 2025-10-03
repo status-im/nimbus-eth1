@@ -22,7 +22,7 @@ iterator undumpBlocksEra1*(
     stopAfter = high(uint64), # Last block to extract
     doAssertOk = false;
 ): seq[EthBlock] =
-  let db = Era1DbRef.init(dir, "mainnet").expect("Era files present")
+  let db = Era1DbRef.init(dir, "mainnet", 15537394'u64,).expect("Era files present")
   defer:
     db.dispose()
 

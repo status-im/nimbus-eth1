@@ -9,7 +9,7 @@
 
 import
   chronos,
-  eth/keys,
+  eth/common/keys,
   eth/p2p/discoveryv5/protocol,
   ../../database/content_db,
   ../../network/wire/[portal_protocol, portal_stream],

@@ -275,7 +275,7 @@ proc importBlocks*(conf: NimbusConf, com: CommonRef) =
           "sepolia"
         else:
           raiseAssert "Other networks are unsupported or do not have an era1"
-      db = Era1DbRef.init(conf.era1Dir, era1Name).valueOr:
+      db = Era1DbRef.init(conf.era1Dir, era1Name, lastEra1Block + 1).valueOr:
         fatal "Could not open era1 database",
           era1Dir = conf.era1Dir, era1Name = era1Name, error = error
         quit(QuitFailure)

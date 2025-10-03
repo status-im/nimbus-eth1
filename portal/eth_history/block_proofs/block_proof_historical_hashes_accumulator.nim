@@ -12,10 +12,12 @@ import
   ssz_serialization,
   ssz_serialization/[proofs, merkleization],
   ../../common/common_types,
+  ../../network/network_metadata,
   ./historical_hashes_accumulator
 
 export
-  ssz_serialization, merkleization, proofs, common_types, historical_hashes_accumulator
+  ssz_serialization, merkleization, proofs, common_types, historical_hashes_accumulator,
+  network_metadata
 
 #
 # Implementation of pre-merge block proofs by making use of the frozen HistoricalHashesAccumulator
@@ -60,12 +62,6 @@ func getHeaderRecordIndex*(header: Header, epochIndex: uint64): uint64 =
   ## Get the relative header index for the epoch accumulator
   getHeaderRecordIndex(header.number, epochIndex)
 
-func isPreMerge*(blockNumber: uint64): bool =
-  blockNumber < mergeBlockNumber
-
-func isPreMerge*(header: Header): bool =
-  isPreMerge(header.number)
-
 func verifyProof*(
     a: FinishedHistoricalHashesAccumulator,
     header: Header,
@@ -95,9 +91,11 @@ func verifyProof*(
   verify_merkle_multiproof(@[leave], proof, @[gIndex], epochRecordHash)
 
 func buildProof*(
-    header: Header, epochRecord: EpochRecord | EpochRecordCached
+    chainConfig: ChainConfig,
+    header: Header,
+    epochRecord: EpochRecord | EpochRecordCached,
 ): Result[HistoricalHashesAccumulatorProof, string] =
-  doAssert(header.isPreMerge(), "Must be pre merge header")
+  doAssert(not chainConfig.isPoSBlock(header), "Must be pre merge header")
 
   let
     epochIndex = getEpochIndex(header)
