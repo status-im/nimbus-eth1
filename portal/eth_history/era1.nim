@@ -156,7 +156,7 @@ proc skipRecord*(f: IoHandle): Result[void, string] =
 func startNumber*(era: Era1): uint64 =
   era * MaxEra1Size
 
-func endNumber*(era: Era1): uint64 =
+func endNumber*(era: Era1, mergeBlockNumber: uint64): uint64 =
   if (era + 1) * MaxEra1Size - 1'u64 >= mergeBlockNumber:
     # The incomplete era just before the merge
     mergeBlockNumber - 1'u64
@@ -169,7 +169,7 @@ func endNumber*(blockIdx: BlockIndex): uint64 =
 func era*(blockNumber: uint64): Era1 =
   Era1(blockNumber div MaxEra1Size)
 
-func offsetsLen(startNumber: uint64): int =
+func offsetsLen(startNumber: uint64, mergeBlockNumber: uint64): int =
   # For the era where the merge happens the era files only holds the blocks
   # until the merge block so the offsets length needs to be adapted too.
   if startNumber.era() >= mergeBlockNumber.era():
@@ -187,13 +187,16 @@ proc fromCompressedRlpBytes[T](bytes: openArray[byte], v: var T): Result[void, s
   except RlpError as e:
     err("Invalid compressed RLP data for " & $T & ": " & e.msg)
 
-proc init*(T: type Era1Group, f: IoHandle, startNumber: uint64): Result[T, string] =
+proc init*(
+    T: type Era1Group, f: IoHandle, startNumber: uint64, mergeBlockNumber: uint64
+): Result[T, string] =
   discard ?f.appendHeader(E2Version, 0)
 
   ok(
     Era1Group(
       blockIndex: BlockIndex(
-        startNumber: startNumber, offsets: newSeq[int64](startNumber.offsetsLen())
+        startNumber: startNumber,
+        offsets: newSeq[int64](offsetsLen(startNumber, mergeBlockNumber)),
       )
     )
   )
@@ -268,7 +271,9 @@ type
   BlockTuple* =
     tuple[header: headers.Header, body: BlockBody, receipts: seq[Receipt], td: UInt256]
 
-proc open*(_: type Era1File, name: string): Result[Era1File, string] =
+proc open*(
+    _: type Era1File, name: string, mergeBlockNumber: uint64
+): Result[Era1File, string] =
   var f = Opt[IoHandle].ok(?openFile(name, {OpenFlags.Read}).mapErr(ioErrorMsg))
 
   defer:
@@ -284,8 +289,11 @@ proc open*(_: type Era1File, name: string): Result[Era1File, string] =
   ?f[].setFilePos(blockIdxPos, SeekPosition.SeekCurrent).mapErr(ioErrorMsg)
 
   let blockIdx = ?f[].readBlockIndex()
-  if blockIdx.offsets.len() != blockIdx.startNumber.offsetsLen():
-    return err("Block index length invalid")
+  # TODO: Re-enable this check when Sepolia era files are fixed
+  # let offsetLen = offsetsLen(blockIdx.startNumber, mergeBlockNumber)
+  # if blockIdx.offsets.len() != offsetLen:
+  #   return err("Block index length invalid: " & $blockIdx.offsets.len() & " vs expected " &
+  #     $offsetLen)
 
   let res = Era1File(handle: f, blockIdx: blockIdx)
   reset(f)

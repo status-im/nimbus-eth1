@@ -22,11 +22,13 @@ import
   ../../rpc/portal_rpc_client,
   ../../network/history/[history_content, history_validation],
   ../../eth_history/block_proofs/historical_hashes_accumulator,
-  ../../network/network_metadata,
   ../../eth_history/[era1, history_data_ssz_e2s],
   ../../database/era1_db,
+  ../../../execution_chain/common/[hardforks, chain_config],
   ../common/rpc_helpers,
   ../nimbus_portal_bridge_conf
+
+from ../../network/network_metadata import loadAccumulator
 
 const newHeadPollInterval = 6.seconds # Slot with potential block is every 12s
 
@@ -34,6 +36,7 @@ type PortalHistoryBridge = ref object
   portalClient: RpcClient
   web3Client: RpcClient
   gossipQueue: AsyncQueue[(seq[byte], seq[byte])]
+  cfg*: ChainConfig
 
 proc gossipBlockBody(
     bridge: PortalHistoryBridge, blockNumber: uint64, body: BlockBody
@@ -106,7 +109,7 @@ proc runLatestLoop(
 proc gossipBlockContent(
     bridge: PortalHistoryBridge, era1File: string, verifyEra = false
 ): Future[Result[void, string]] {.async: (raises: [CancelledError]).} =
-  let f = ?Era1File.open(era1File)
+  let f = ?Era1File.open(era1File, bridge.cfg.posBlock.get())
 
   if verifyEra:
     let _ = ?f.verify()
@@ -143,7 +146,7 @@ proc runBackfillLoopAuditMode(
 ) {.async: (raises: [CancelledError]).} =
   let
     rng = newRng()
-    db = Era1DB.new(era1Dir, "mainnet", loadAccumulator())
+    db = Era1DB.new(era1Dir, "mainnet", loadAccumulator(), bridge.cfg.posBlock.get())
     blockLowerBound = startEra * EPOCH_SIZE # inclusive
     blockUpperBound = ((endEra + 1) * EPOCH_SIZE) - 1 # inclusive
     blockRange = blockUpperBound - blockLowerBound
@@ -207,6 +210,7 @@ proc runHistory*(config: PortalBridgeConf) =
     portalClient: newRpcClientConnect(config.portalRpcUrl),
     web3Client: newRpcClientConnect(config.web3Url),
     gossipQueue: newAsyncQueue[(seq[byte], seq[byte])](config.gossipConcurrency),
+    cfg: chainConfigForNetwork(MainNet),
   )
 
   proc gossipWorker(bridge: PortalHistoryBridge) {.async: (raises: []).} =
