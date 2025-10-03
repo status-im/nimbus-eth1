@@ -818,6 +818,26 @@ procSuite "ForkedChain mainnet replay":
         blocks[0] = blocks[1]
         blocks[1] = hash
 
+  asyncTest "Replay mainnet era, multiple FCU - stateroot check enabled & custom persist batch size":
+    let fc = ForkedChainRef.init(com, enableQueue = true, eagerStateRoot = true, persistBatchSize = 10)
+
+    var blk: EthBlock
+    era0.getEthBlock(0.BlockNumber, blk).expect("block in test database")
+
+    var blocks = [blk.blockHash, blk.blockHash]
+
+    for i in 1..<fc.baseDistance * 2:
+      era0.getEthBlock(i.BlockNumber, blk).expect("block in test database")
+      check (await fc.queueImportBlock(blk)).isOk()
+
+      let hash = blk.blockHash
+      check (await fc.queueForkChoice(hash, blocks[0])).isOk()
+      if i mod 32 == 0:
+        # in reality, finalized typically lags a bit more than this, but
+        # for the purpose of the test, this should be good enough
+        blocks[0] = blocks[1]
+        blocks[1] = hash
+
   asyncTest "Replay mainnet era, invalid blocks":
     var
       blk1: EthBlock

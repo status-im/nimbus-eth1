@@ -501,8 +501,15 @@ proc validateBlock(c: ForkedChainRef,
   # Entering base auto forward mode while avoiding forkChoice
   # handled region(head - baseDistance)
   # e.g. live syncing with the tip very far from from our latest head
+  let
+    offset = c.baseDistance + c.persistBatchSize
+    number =
+      if offset >= c.latestFinalizedBlockNumber:
+        0.uint64
+      else:
+        c.latestFinalizedBlockNumber - offset
   if c.pendingFCU != zeroHash32 and
-     c.base.number < c.latestFinalizedBlockNumber - c.baseDistance - c.persistBatchSize:
+     c.base.number < number:
     let
       base = c.calculateNewBase(c.latestFinalizedBlockNumber, c.latest)
       prevBase = c.base.number
