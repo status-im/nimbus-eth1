@@ -38,12 +38,11 @@ proc runContext(ctx: ptr Context) {.thread.} =
 
     let rpcAddr = jsonNode["RpcAddress"].getStr()
     let myConfig = VerifiedProxyConf(
-      rpcAddress: parseIpAddress(rpcAddr),
       listenAddress: some(defaultListenAddress),
       eth2Network: some(jsonNode["Eth2Network"].getStr()),
       trustedBlockRoot: Eth2Digest.fromHex(jsonNode["TrustedBlockRoot"].getStr()),
-      web3Url: parseCmdArg(Web3Url, jsonNode["Web3Url"].getStr()),
-      rpcPort: Port(jsonNode["RpcPort"].getInt()),
+      backendUrl: parseCmdArg(Web3Url, jsonNode["Web3Url"].getStr()),
+      frontendUrl: parseCmdArg(Web3Url, jsonNode["Web3Url"].getStr()),
       logLevel: jsonNode["LogLevel"].getStr(),
       maxPeers: 160,
       nat: NatConfig(hasExtIp: false, nat: NatAny),
