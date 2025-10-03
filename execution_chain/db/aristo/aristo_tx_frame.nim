@@ -16,8 +16,11 @@
 import results, ./[aristo_desc, aristo_layers]
 
 # ------------------------------------------------------------------------------
-# Public functions
+# Private functions
 # ------------------------------------------------------------------------------
+
+template isDisposed(txFrame: AristoTxRef): bool =
+  txFrame.level == disposedLevel
 
 proc isKeyframe(txFrame: AristoTxRef): bool =
   txFrame == txFrame.db.txRef
@@ -27,6 +30,8 @@ proc buildSnapshot(txFrame: AristoTxRef, minLevel: int) =
   # ancestor changes as well as the changes in txFrame itself
   for frame in txFrame.stack(stopAtSnapshot = true):
     if frame != txFrame:
+      assert not frame.isDisposed()
+
       # Keyframes keep their snapshot insted of it being transferred to the new
       # frame - right now, only the base frame is a keyframe but this support
       # could be extended for example to epoch boundary frames which are likely
@@ -91,8 +96,16 @@ proc buildSnapshot(txFrame: AristoTxRef, minLevel: int) =
 
   txFrame.snapshot.level = Opt.some(minLevel)
 
-proc txFrameBegin*(db: AristoDbRef, parent: AristoTxRef, moveParentHashKeys = false): AristoTxRef =
-  let parent = if parent == nil: db.txRef else: parent
+# ------------------------------------------------------------------------------
+# Public functions
+# ------------------------------------------------------------------------------
+
+proc txFrameBegin*(
+    db: AristoDbRef,
+    parentFrame: AristoTxRef,
+    moveParentHashKeys = false): AristoTxRef =
+  let parent = if parentFrame == nil: db.txRef else: parentFrame
+  doAssert not parent.isDisposed()
 
   AristoTxRef(
     db: db,
@@ -101,23 +114,28 @@ proc txFrameBegin*(db: AristoDbRef, parent: AristoTxRef, moveParentHashKeys = fa
     vTop: parent.vTop,
     level: parent.level + 1)
 
-proc dispose*(tx: AristoTxRef) =
-  tx[].reset()
+proc dispose*(txFrame: AristoTxRef) =
+  txFrame[].reset()
+  txFrame.level = disposedLevel
 
-proc checkpoint*(tx: AristoTxRef, blockNumber: uint64, skipSnapshot: bool) =
-  tx.blockNumber = Opt.some(blockNumber)
+proc checkpoint*(txFrame: AristoTxRef, blockNumber: uint64, skipSnapshot: bool) =
+  doAssert not txFrame.isDisposed()
 
+  txFrame.blockNumber = Opt.some(blockNumber)
   if not skipSnapshot:
     # Snapshots are expensive, therefore we only do it at checkpoints (which
     # presumably have gone through enough validation)
-    tx.buildSnapshot(tx.db.txRef.level)
+    txFrame.buildSnapshot(txFrame.db.txRef.level)
 
 proc clearSnapshot*(txFrame: AristoTxRef) =
+  doAssert not txFrame.isDisposed()
+
   if not txFrame.isKeyframe():
     txFrame.snapshot.reset()
 
-proc persist*(
-    db: AristoDbRef, batch: PutHdlRef, txFrame: AristoTxRef) =
+proc persist*(db: AristoDbRef, batch: PutHdlRef, txFrame: AristoTxRef) =
+  doAssert not txFrame.isDisposed()
+
   if txFrame == db.txRef and txFrame.isEmpty():
     # No changes in frame - no `checkpoint` requirement - nothing to do here
     return
@@ -137,6 +155,8 @@ proc persist*(
     var bottom: AristoTxRef
 
     for frame in txFrame.stack(stopAtSnapshot = true):
+      assert not frame.isDisposed()
+
       if bottom == nil:
         # db.txRef always is a snapshot, therefore we're guaranteed to end up
         # here
