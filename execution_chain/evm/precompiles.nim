@@ -8,24 +8,30 @@
 # at your option. This file may not be copied, modified, or distributed except
 # according to those terms.
 
+{.push raises: [].}
+
 import
-  std/[macros],
   results,
-  "."/[types, blake2b_f, blscurve],
+  ./[types, blake2b_f, blscurve],
   ./interpreter/[gas_meter, gas_costs, utils/utils_numeric],
   eth/common/keys,
   chronicles,
   nimcrypto/[ripemd, sha2, utils],
-  bncurve/[fields, groups],
-  stew/[assign2, endians2, byteutils],
+  stew/assign2,
   libp2p/crypto/ecnist,
   ../common/evmforks,
   ../core/eip4844,
+  ../compile_info,
   ./modexp,
   ./evm_errors,
   ./computation,
   ./secp256r1verify,
   eth/common/[base, addresses]
+
+when enable_mcl_lib:
+  import ./bncurve_mcl
+else:
+  import ./bncurve_nim
 
 type
   Precompiles* = enum
@@ -54,9 +60,9 @@ type
     # Osaka
     paP256Verify
 
-  SigRes = object
-    msgHash: array[32, byte]
-    sig: Signature
+  SigRes* = object
+    msgHash*: array[32, byte]
+    sig*: Signature
 
 const
   # Frontier to Spurious Dragron
@@ -132,7 +138,6 @@ const
     "P256VERIFY"
   ]
 
-
 # ------------------------------------------------------------------------------
 # Private functions
 # ------------------------------------------------------------------------------
@@ -169,44 +174,6 @@ func getSignature(c: Computation): EvmResult[SigRes]  =
 
   # extract message hash, only need to copy when there is a valid signature
   assign(res.msgHash, data.toOpenArray(0, 31))
-  ok(res)
-
-func simpleDecode(dst: var FQ2, src: openArray[byte]): bool {.noinit.} =
-  # bypassing FQ2.fromBytes
-  # because we want to check `value > modulus`
-  result = false
-  if dst.c1.fromBytes(src.toOpenArray(0, 31)) and
-     dst.c0.fromBytes(src.toOpenArray(32, 63)):
-    result = true
-
-template simpleDecode(dst: var FQ, src: openArray[byte]): bool =
-  fromBytes(dst, src)
-
-func getPoint[T: G1|G2](_: typedesc[T], data: openArray[byte]): EvmResult[Point[T]] =
-  when T is G1:
-    const nextOffset = 32
-    var px, py: FQ
-  else:
-    const nextOffset = 64
-    var px, py: FQ2
-
-  if not px.simpleDecode(data.toOpenArray(0, nextOffset - 1)):
-    return err(prcErr(PrcInvalidPoint))
-  if not py.simpleDecode(data.toOpenArray(nextOffset, nextOffset * 2 - 1)):
-    return err(prcErr(PrcInvalidPoint))
-
-  if px.isZero() and py.isZero():
-    ok(T.zero())
-  else:
-    var ap: AffinePoint[T]
-    if not ap.init(px, py):
-      return err(prcErr(PrcInvalidPoint))
-    ok(ap.toJacobian())
-
-func getFR(data: openArray[byte]): EvmResult[FR] =
-  var res: FR
-  if not res.fromBytes2(data):
-    return err(prcErr(PrcInvalidPoint))
   ok(res)
 
 # ------------------------------------------------------------------------------
@@ -384,43 +351,12 @@ func modExp(c: Computation, fork: EVMFork = FkByzantium): EvmResultVoid =
 func bn256ecAdd(c: Computation, fork: EVMFork = FkByzantium): EvmResultVoid =
   let gasFee = if fork < FkIstanbul: GasECAdd else: GasECAddIstanbul
   ? c.gasMeter.consumeGas(gasFee, reason = "ecAdd Precompile")
-
-  var
-    input: array[128, byte]
-  # Padding data
-  let len = min(c.msg.data.len, 128) - 1
-  input[0..len] = c.msg.data[0..len]
-  var p1 = ? G1.getPoint(input.toOpenArray(0, 63))
-  var p2 = ? G1.getPoint(input.toOpenArray(64, 127))
-  var apo = (p1 + p2).toAffine()
-
-  c.output.setLen(64)
-  if isSome(apo):
-    # we can discard here because we supply proper buffer
-    discard apo.get().toBytes(c.output)
-
-  ok()
+  bn256ecAddImpl(c)
 
 func bn256ecMul(c: Computation, fork: EVMFork = FkByzantium): EvmResultVoid =
   let gasFee = if fork < FkIstanbul: GasECMul else: GasECMulIstanbul
   ? c.gasMeter.consumeGas(gasFee, reason="ecMul Precompile")
-
-  var
-    input: array[96, byte]
-
-  # Padding data
-  let len = min(c.msg.data.len, 96) - 1
-  assign(input.toOpenArray(0, len), c.msg.data.toOpenArray(0, len))
-  var p1 = ? G1.getPoint(input.toOpenArray(0, 63))
-  var fr = ? getFR(input.toOpenArray(64, 95))
-  var apo = (p1 * fr).toAffine()
-
-  c.output.setLen(64)
-  if isSome(apo):
-    # we can discard here because we supply buffer of proper size
-    discard apo.get().toBytes(c.output)
-
-  ok()
+  bn256ecMulImpl(c)
 
 func bn256ecPairing(c: Computation, fork: EVMFork = FkByzantium): EvmResultVoid =
   let msglen = c.msg.data.len
@@ -433,32 +369,7 @@ func bn256ecPairing(c: Computation, fork: EVMFork = FkByzantium): EvmResultVoid 
                else:
                  GasECPairingBaseIstanbul + numPoints * GasECPairingPerPointIstanbul
   ? c.gasMeter.consumeGas(gasFee, reason="ecPairing Precompile")
-
-  if msglen == 0:
-    # we can discard here because we supply buffer of proper size
-    c.output.setLen(32)
-    discard BNU256.one().toBytesBE(c.output)
-  else:
-    # Calculate number of pairing pairs
-    let count = msglen div 192
-    # Pairing accumulator
-    var acc = FQ12.one()
-
-    for i in 0..<count:
-      let s = i * 192
-      # Loading AffinePoint[G1], bytes from [0..63]
-      let p1 = ?G1.getPoint(c.msg.data.toOpenArray(s, s + 63))
-      # Loading AffinePoint[G2], bytes from [64..191]
-      let p2 = ?G2.getPoint(c.msg.data.toOpenArray(s + 64, s + 191))
-      # Accumulate pairing result
-      acc = acc * pairing(p1, p2)
-
-    c.output.setLen(32)
-    if acc == FQ12.one():
-      # we can discard here because we supply buffer of proper size
-      discard BNU256.one().toBytesBE(c.output)
-
-  ok()
+  bn256ecPairingImpl(c)
 
 func blake2bf(c: Computation): EvmResultVoid =
   template input: untyped =
@@ -865,6 +776,6 @@ proc execPrecompile*(c: Computation, precompile: Precompiles) =
         c.setError(StatusCode.PrecompileFailure, $res.error.code, true)
       else:
         # swallow any other precompiles errors
-        debug "execPrecompiles validation error", 
-          errCode = $res.error.code, 
+        debug "execPrecompiles validation error",
+          errCode = $res.error.code,
           precompile = precompile
