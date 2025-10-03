@@ -7,7 +7,7 @@
 # This file may not be copied, modified, or distributed except according to
 # those terms.
 
-{.push raises: [].}
+{.push raises: [], gcsafe.}
 
 import
   chronicles,
@@ -54,14 +54,14 @@ proc importRlpBlocks*(blocksRlp:seq[byte],
 
     if not printBanner:
       info "Start importing block",
-        hash=blk.header.blockHash.short,
+        hash=blk.header.computeBlockHash.short,
         number=blk.header.number
       printBanner = true
 
-    let res = await chain.importBlock(blk, finalized = false)
+    let res = await chain.importBlock(blk)
     if res.isErr:
       error "Error occured when importing block",
-        hash=blk.header.blockHash.short,
+        hash=blk.header.computeBlockHash.short,
         number=blk.header.number,
         msg=res.error
       if finalize:

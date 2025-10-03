@@ -10,7 +10,7 @@
 import
   std/net,
   unittest2,
-  eth/p2p/discoveryv5/enr,
+  eth/enr/enr,
   eth/common/keys,
   ../../network/wire/portal_protocol_version
 

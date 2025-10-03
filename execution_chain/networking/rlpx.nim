@@ -30,13 +30,14 @@ import
   chronicles,
   chronos,
   eth/rlp,
+  eth/enode/enode,
   snappy,
   ./protocol_dsl,
   ./peer_pool,
   ./devp2p_wire,
   ./p2p_metrics,
   ./rlpx/[auth, rlpxcrypt],
-  ./discoveryv4/[kademlia, enode]
+  ./discoveryv4/kademlia
 
 const
   maxMsgSize = 1024 * 1024 * 16

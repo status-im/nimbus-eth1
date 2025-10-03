@@ -13,13 +13,12 @@ import
   std/[importutils, tables],
   metrics,
   chronicles,
-  eth/p2p/discoveryv5/enr,
   eth/p2p/discoveryv5/encoding,
   eth/p2p/discoveryv5/sessions,
   eth/p2p/discoveryv5/protocol {.all.}
 
 export
-  Protocol, Node, Address, enr, newProtocol, open, close, seedTable, start, queryRandom, closeWait,
+  Protocol, Node, Address, enr, newProtocol, open, seedTable, start, queryRandom, closeWait,
   updateRecord
 
 proc receiveV5*(d: Protocol, a: Address, packet: openArray[byte]): Result[void, cstring] =

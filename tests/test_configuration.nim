@@ -13,7 +13,7 @@ import
   pkg/[unittest2],
   eth/common/[base, keys],
   eth/net/nat,
-  eth/p2p/discoveryv5/enr,
+  eth/enr/enr,
   stew/byteutils,
   ../execution_chain/[common, config],
   ../execution_chain/networking/netkeys,

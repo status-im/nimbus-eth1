@@ -15,7 +15,7 @@ import
   chronicles,
   eth/common/keys,
   eth/net/nat,
-  eth/p2p/discoveryv5/[enr, node, routing_table],
+  eth/p2p/discoveryv5/[node, routing_table],
   nimcrypto/hash,
   stew/byteutils,
   stew/io2,

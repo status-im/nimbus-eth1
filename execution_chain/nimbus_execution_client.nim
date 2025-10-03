@@ -18,13 +18,13 @@ import
   eth/net/nat,
   metrics,
   stew/byteutils,
+  kzg4844/kzg,
   ./rpc,
   ./version_info,
   ./constants,
   ./nimbus_desc,
   ./nimbus_import,
   ./core/block_import,
-  ./core/lazy_kzg,
   ./core/chain/forked_chain/chain_serialize,
   ./db/core_db/persistent,
   ./db/storage_types,
@@ -181,11 +181,9 @@ proc setupP2P(nimbus: NimbusNode, conf: NimbusConf, com: CommonRef) =
   if not syncerShouldRun:
     nimbus.beaconSyncRef = BeaconSyncRef(nil)
 
-proc init*(T: type NimbusNode, conf: NimbusConf, com: CommonRef): T =
-  let nimbus = NimbusNode(
-    accountsManager: new AccountsManager,
-    rng: newRng(),
-  )
+proc init*(nimbus: NimbusNode, conf: NimbusConf, com: CommonRef) =
+  nimbus.accountsManager = new AccountsManager
+  nimbus.rng = newRng()
 
   basicServices(nimbus, conf, com)
   manageAccounts(nimbus, conf)
@@ -198,8 +196,10 @@ proc init*(T: type NimbusNode, conf: NimbusConf, com: CommonRef): T =
       not nimbus.beaconSyncRef.start():
     nimbus.beaconSyncRef = BeaconSyncRef(nil)
 
+proc init*(T: type NimbusNode, conf: NimbusConf, com: CommonRef): T =
+  let nimbus = T()
+  nimbus.init(conf, com)
   nimbus
-
 
 proc preventLoadingDataDirForTheWrongNetwork(db: CoreDbRef; conf: NimbusConf) =
   proc writeDataDirId(kvt: CoreDbTxRef, calculatedId: Hash32) =
@@ -233,7 +233,7 @@ proc setupCommonRef*(conf: NimbusConf, taskpool: Taskpool): CommonRef =
   # trusted setup will be loaded, lazily.
   if conf.trustedSetupFile.isSome:
     let fileName = conf.trustedSetupFile.get()
-    let res = lazy_kzg.loadTrustedSetup(fileName, 0)
+    let res = kzg.loadTrustedSetup(fileName, 0)
     if res.isErr:
       fatal "Cannot load Kzg trusted setup from file", msg=res.error
       quit(QuitFailure)
@@ -269,19 +269,28 @@ proc setupCommonRef*(conf: NimbusConf, taskpool: Taskpool): CommonRef =
 
   com
 
+template displayLaunchingInfo(conf: NimbusConf) =
+  info "Launching execution client", version = FullVersionStr, conf
+
 # ------------------------------------------------------------------------------
 # Public functions, `main()` API
 # ------------------------------------------------------------------------------
 
 type StopFuture = Future[void].Raising([CancelledError])
 
-proc runExeClient*(conf: NimbusConf, com: CommonRef, stopper: StopFuture) =
+proc runExeClient*(conf: NimbusConf, com: CommonRef, stopper: StopFuture, displayLaunchingInfo: static[bool] = false, nimbus = NimbusNode(nil)) =
   ## Launches and runs the execution client for pre-configured `nimbus` and
   ## `conf` argument descriptors.
   ##
-  info "Launching execution client", version = FullVersionStr, conf
+  when displayLaunchingInfo:
+    displayLaunchingInfo(conf)
 
-  let nimbus = NimbusNode.init(conf, com)
+  var nimbus = nimbus
+  if nimbus.isNil:
+    nimbus = NimbusNode.init(conf, com)
+  else:
+    nimbus.init(conf, com)
+
   defer:
     let
       fc = nimbus.fc
@@ -310,10 +319,10 @@ proc runExeClient*(conf: NimbusConf, com: CommonRef, stopper: StopFuture) =
     waitFor nimbus.closeWait()
 
 # noinline to keep it in stack traces
-proc main*() {.noinline.} =
-  var config = makeConfig()
+proc main*(config = makeConfig(), nimbus = NimbusNode(nil)) {.noinline.} =
   # Set up logging before everything else
   setupLogging(config.logLevel, config.logStdout)
+  displayLaunchingInfo(config)
   setupFileLimits()
 
   ProcessState.setupStopHandlers()
@@ -332,12 +341,12 @@ proc main*() {.noinline.} =
     except CancelledError:
       raiseAssert "Never cancelled"
   defer:
-    waitFor metricsServer.stopMetricsServer()
+    if metricsServer.isSome():
+      waitFor metricsServer.stopMetricsServer()
 
   let
     taskpool = setupTaskpool(config.numThreads)
     com = setupCommonRef(config, taskpool)
-
   defer:
     com.db.finish()
 
@@ -350,7 +359,7 @@ proc main*() {.noinline.} =
     except CancelledError:
       raiseAssert "Nothing cancels the future"
   else:
-    runExeClient(config, com, nil)
+    runExeClient(config, com, nil, nimbus=nimbus)
 
 when isMainModule:
   main()

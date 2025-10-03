@@ -28,9 +28,23 @@ VERSION=$(echo "$($EL --version | head -n 1)" | cut -d '/' -f 2)
 # Get second field after split by '-'
 BINARY_REVISION=$(echo $VERSION | cut -d '-' -f 2)
 
-if [[ $REPO_REVISION -ne $BINARY_REVISION ]]; then
+if [[ $REPO_REVISION != $BINARY_REVISION ]]; then
   echo "Binary revision differ from repository revision. Expect $REPO_REVISION, get $BINARY_REVISION."
   exit 1 # Exit the script with an error code
 fi
 
-# TODO: check copyright year start from 2018, the current 2019 is from nimbus-eth2
+COPYRIGHT_YEAR_START_EXPECT="Copyright (c) 2018-"
+COPYRIGHT_YEAR_START_GET=$(echo "$($EL --version | head -n 2)")
+
+if [[ $COPYRIGHT_YEAR_START_GET != *$COPYRIGHT_YEAR_START_EXPECT*  ]]; then
+  echo "Copyright year should start with 2018-"
+  exit 1
+fi
+
+LAUNCHING_INFO_EXPECT="Launching execution client"
+LAUNCHING_INFO_GET=$($EL import-rlp | head -n 1)
+
+if [[ $LAUNCHING_INFO_GET != *$LAUNCHING_INFO_EXPECT*  ]]; then
+  echo "\"Launching execution client\" should appear at first line"
+  exit 1
+fi

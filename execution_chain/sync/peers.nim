@@ -13,7 +13,8 @@ import
   std/[hashes, tables],
   chronicles,
   chronos,
-  ../networking/[p2p, peer_pool, bootnodes, eth1_enr],
+  eth/enode/enode_utils,
+  ../networking/[p2p, peer_pool, bootnodes],
   ./wire_protocol
 
 # Currently, this module only handles static peers

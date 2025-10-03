@@ -8,7 +8,7 @@
 # at your option. This file may not be copied, modified, or distributed except
 # according to those terms.
 
-{.push raises: [].}
+{.push raises: [], gcsafe.}
 
 import
   stew/assign2,
@@ -79,11 +79,11 @@ proc getVmState(
 
   ok(p.vmState)
 
-proc dispose*(p: var Persister) =
+func dispose*(p: var Persister) =
   p.vmState.ledger.txFrame.dispose()
   p.vmState = nil
 
-proc init*(T: type Persister, com: CommonRef, flags: PersistBlockFlags): T =
+func init*(T: type Persister, com: CommonRef, flags: PersistBlockFlags): T =
   T(com: com, flags: flags)
 
 proc checkpoint*(p: var Persister): Result[void, string] =
@@ -95,7 +95,7 @@ proc checkpoint*(p: var Persister): Result[void, string] =
       # TODO replace logging with better error
       debug "wrong state root in block",
         blockNumber = p.parent.number,
-        blockHash = p.parent.blockHash,
+        blockHash = p.parent.computeBlockHash,
         parentHash = p.parent.parentHash,
         expected = p.parent.stateRoot,
         actual = stateRoot

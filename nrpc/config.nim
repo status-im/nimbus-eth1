@@ -21,10 +21,9 @@ import
     confutils/defs,
     confutils/std/net
   ],
-  eth/[common, net/nat, p2p/discoveryv5/enr],
+  eth/[common, net/nat, enr/enr, enode/enode],
   ../execution_chain/[constants, compile_info],
   ../execution_chain/common/chain_config,
-  ../execution_chain/networking/discoveryv4/enode,
   ../execution_chain/db/opts
 
 export net, defs

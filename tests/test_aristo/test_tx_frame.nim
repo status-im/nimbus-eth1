@@ -319,3 +319,51 @@ suite "Aristo TxFrame":
       discard tx4.fetchStateRoot()
     let stateRootAfter = tx3.fetchStateRoot().get()
     check stateRootBefore == stateRootAfter
+
+  test "Create snapshot on existing snapshot":
+    let tx1 = db.txFrameBegin(db.baseTxFrame())
+
+    for i in 1..<10:
+      let acc = makeAccount(i.uint64)
+      check tx1.mergeAccountRecord(acc[0], acc[1]).isOk()
+    tx1.checkpoint(1, skipSnapshot = false)
+
+    let
+      stateRootBefore = tx1.fetchStateRoot().get()
+      snapshotBefore = tx1.snapshot
+    tx1.checkpoint(1, skipSnapshot = false)
+    let
+      stateRootAfter = tx1.fetchStateRoot().get()
+      snapshotAfter = tx1.snapshot
+
+    check:
+      stateRootBefore == stateRootAfter
+      snapshotBefore == snapshotAfter
+
+  test "Existing snapshot is moved when new snapshot created":
+    let tx1 = db.txFrameBegin(db.baseTxFrame())
+
+    for i in 1..<10:
+      let acc = makeAccount(i.uint64)
+      check tx1.mergeAccountRecord(acc[0], acc[1]).isOk()
+      
+    tx1.checkpoint(1, skipSnapshot = false)
+
+    let
+      stateRootBefore = tx1.fetchStateRoot().get()
+      snapshotBefore = tx1.snapshot
+
+    let tx2 = db.txFrameBegin(tx1)
+    tx2.checkpoint(2, skipSnapshot = false)
+
+    let
+      stateRootAfter = tx2.fetchStateRoot().get()
+      snapshotAfter = tx2.snapshot
+
+    check:
+      snapshotAfter.level.isSome()
+      snapshotAfter.vtx.len() > 0
+      stateRootBefore == stateRootAfter
+      snapshotBefore == snapshotAfter
+      tx1.snapshot.level.isNone()
+      tx1.snapshot.vtx.len() == 0
