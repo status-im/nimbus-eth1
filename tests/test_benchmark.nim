@@ -6,7 +6,7 @@
 # at your option. This file may not be copied, modified, or distributed except according to those terms.
 
 import
-  std/[monotimes, times, math, strformat],
+  std/[monotimes, times, strformat],
   eth/common,
   nimcrypto/keccak,
   constantine/hashes/h_keccak
