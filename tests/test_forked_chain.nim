@@ -248,7 +248,7 @@ suite "ForkedChainRef tests":
   test "newBase on activeBranch":
     const info = "newBase on activeBranch"
     let com = env.newCom()
-    var chain = ForkedChainRef.init(com, baseDistance = 3, persistBatchSize = 0)
+    var chain = ForkedChainRef.init(com, baseDistance = 3, persistBatchSize = 1)
     checkImportBlock(chain, blk1)
     checkImportBlock(chain, blk2)
     checkImportBlock(chain, blk3)
@@ -281,7 +281,7 @@ suite "ForkedChainRef tests":
   test "newBase between oldBase and head":
     const info = "newBase between oldBase and head"
     let com = env.newCom()
-    var chain = ForkedChainRef.init(com, baseDistance = 3, persistBatchSize = 0)
+    var chain = ForkedChainRef.init(com, baseDistance = 3, persistBatchSize = 1)
     checkImportBlock(chain, blk1)
     checkImportBlock(chain, blk2)
     checkImportBlock(chain, blk3)
@@ -330,7 +330,7 @@ suite "ForkedChainRef tests":
   test "newBase move forward, fork and stay on that fork":
     const info = "newBase move forward, fork .."
     let com = env.newCom()
-    var chain = ForkedChainRef.init(com, baseDistance = 3, persistBatchSize = 0)
+    var chain = ForkedChainRef.init(com, baseDistance = 3, persistBatchSize = 1)
     checkImportBlock(chain, blk1)
     checkImportBlock(chain, blk2)
     checkImportBlock(chain, blk3)
@@ -355,7 +355,7 @@ suite "ForkedChainRef tests":
   test "newBase on shorter canonical arc, remove oldBase branches":
     const info = "newBase on shorter canonical, remove oldBase branches"
     let com = env.newCom()
-    var chain = ForkedChainRef.init(com, baseDistance = 3, persistBatchSize = 0)
+    var chain = ForkedChainRef.init(com, baseDistance = 3, persistBatchSize = 1)
     checkImportBlock(chain, blk1)
     checkImportBlock(chain, blk2)
     checkImportBlock(chain, blk3)
@@ -379,7 +379,7 @@ suite "ForkedChainRef tests":
   test "newBase on curbed non-canonical arc":
     const info = "newBase on curbed non-canonical .."
     let com = env.newCom()
-    var chain = ForkedChainRef.init(com, baseDistance = 5, persistBatchSize = 0)
+    var chain = ForkedChainRef.init(com, baseDistance = 5, persistBatchSize = 1)
     checkImportBlock(chain, blk1)
     checkImportBlock(chain, blk2)
     checkImportBlock(chain, blk3)
@@ -454,7 +454,7 @@ suite "ForkedChainRef tests":
        " (ign dup block)":
     const info = "newBase on shorter canonical .."
     let com = env.newCom()
-    var chain = ForkedChainRef.init(com, baseDistance = 3, persistBatchSize = 0)
+    var chain = ForkedChainRef.init(com, baseDistance = 3, persistBatchSize = 1)
     checkImportBlock(chain, blk1)
     checkImportBlock(chain, blk2)
     checkImportBlock(chain, blk3)
@@ -479,7 +479,7 @@ suite "ForkedChainRef tests":
   test "newBase on longer canonical arc, discard new branch":
     const info = "newBase on longer canonical .."
     let com = env.newCom()
-    var chain = ForkedChainRef.init(com, baseDistance = 3, persistBatchSize = 0)
+    var chain = ForkedChainRef.init(com, baseDistance = 3, persistBatchSize = 1)
     checkImportBlock(chain, blk1)
     checkImportBlock(chain, blk2)
     checkImportBlock(chain, blk3)
@@ -566,14 +566,14 @@ suite "ForkedChainRef tests":
   test "importing blocks with new CommonRef and FC instance, 3 blocks":
     const info = "importing blocks with new CommonRef and FC instance, 3 blocks"
     let com = env.newCom()
-    let chain = ForkedChainRef.init(com, baseDistance = 0, persistBatchSize = 0)
+    let chain = ForkedChainRef.init(com, baseDistance = 0, persistBatchSize = 1)
     checkImportBlock(chain, blk1)
     checkImportBlock(chain, blk2)
     checkImportBlock(chain, blk3)
     checkForkChoice(chain, blk3, blk3)
     check chain.validate info & " (1)"
     let cc = env.newCom(com.db)
-    let fc = ForkedChainRef.init(cc, baseDistance = 0, persistBatchSize = 0)
+    let fc = ForkedChainRef.init(cc, baseDistance = 0, persistBatchSize = 1)
     checkHeadHash fc, blk3.blockHash
     checkImportBlock(fc, blk4)
     checkForkChoice(fc, blk4, blk4)
@@ -582,12 +582,12 @@ suite "ForkedChainRef tests":
   test "importing blocks with new CommonRef and FC instance, 1 block":
     const info = "importing blocks with new CommonRef and FC instance, 1 block"
     let com = env.newCom()
-    let chain = ForkedChainRef.init(com, baseDistance = 0, persistBatchSize = 0)
+    let chain = ForkedChainRef.init(com, baseDistance = 0, persistBatchSize = 1)
     checkImportBlock(chain, blk1)
     checkForkChoice(chain, blk1, blk1)
     check chain.validate info & " (1)"
     let cc = env.newCom(com.db)
-    let fc = ForkedChainRef.init(cc, baseDistance = 0, persistBatchSize = 0)
+    let fc = ForkedChainRef.init(cc, baseDistance = 0, persistBatchSize = 1)
     checkHeadHash fc, blk1.blockHash
     checkImportBlock(fc, blk2)
     checkForkChoice(fc, blk2, blk2)
