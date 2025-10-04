@@ -407,12 +407,12 @@ proc queueUpdateBase(c: ForkedChainRef, base: BlockRef)
                      else:
                        c.base
 
-  if prevQueuedBase.number == base.number:
+  if prevQueuedBase.number >= base.number:
     return
 
   var
-    number = base.number - min(base.number, PersistBatchSize)
-    steps  = newSeqOfCap[BlockRef]((base.number-prevQueuedBase.number) div PersistBatchSize + 1)
+    number = base.number - min(base.number, c.persistBatchSize)
+    steps  = newSeqOfCap[BlockRef]((base.number - prevQueuedBase.number) div c.persistBatchSize + 1)
     it = base
 
   steps.add base
@@ -420,7 +420,7 @@ proc queueUpdateBase(c: ForkedChainRef, base: BlockRef)
   while it.number > prevQueuedBase.number:
     if it.number == number:
       steps.add it
-      number -= min(number, PersistBatchSize)
+      number -= min(number, c.persistBatchSize)
     it = it.parent
 
   for i in countdown(steps.len-1, 0):
@@ -501,8 +501,15 @@ proc validateBlock(c: ForkedChainRef,
   # Entering base auto forward mode while avoiding forkChoice
   # handled region(head - baseDistance)
   # e.g. live syncing with the tip very far from from our latest head
+  let
+    offset = c.baseDistance + c.persistBatchSize
+    number =
+      if offset >= c.latestFinalizedBlockNumber:
+        0.uint64
+      else:
+        c.latestFinalizedBlockNumber - offset
   if c.pendingFCU != zeroHash32 and
-     c.base.number < c.latestFinalizedBlockNumber - c.baseDistance - c.persistBatchSize:
+     c.base.number < number:
     let
       base = c.calculateNewBase(c.latestFinalizedBlockNumber, c.latest)
       prevBase = c.base.number
@@ -594,6 +601,8 @@ proc init*(
   ## This constructor also works well when resuming import after running
   ## `persistentBlocks()` used for `Era1` or `Era` import.
   ##
+  doAssert(persistBatchSize > 0)
+
   let
     baseTxFrame = com.db.baseTxFrame()
     base = baseTxFrame.getSavedStateBlockNumber
@@ -610,19 +619,19 @@ proc init*(
     fcuSafe = baseTxFrame.fcuSafe().valueOr:
       FcuHashAndNumber(hash: baseHash, number: base)
     fc = T(
-      com:             com,
-      base:            baseBlock,
-      latest:          baseBlock,
-      heads:           @[baseBlock],
-      hashToBlock:     {baseHash: baseBlock}.toTable,
-      baseTxFrame:     baseTxFrame,
-      baseDistance:    baseDistance,
-      persistBatchSize:persistBatchSize,
-      quarantine:      Quarantine.init(),
-      fcuHead:         fcuHead,
-      fcuSafe:         fcuSafe,
-      baseQueue:       initDeque[BlockRef](),
-      lastBaseLogTime: EthTime.now(),
+      com:              com,
+      base:             baseBlock,
+      latest:           baseBlock,
+      heads:            @[baseBlock],
+      hashToBlock:      {baseHash: baseBlock}.toTable,
+      baseTxFrame:      baseTxFrame,
+      baseDistance:     baseDistance,
+      persistBatchSize: persistBatchSize,
+      quarantine:       Quarantine.init(),
+      fcuHead:          fcuHead,
+      fcuSafe:          fcuSafe,
+      baseQueue:        initDeque[BlockRef](),
+      lastBaseLogTime:  EthTime.now(),
     )
 
   # updateFinalized will stop ancestor lineage
@@ -712,10 +721,8 @@ proc forkChoice*(c: ForkedChainRef,
   c.updateHead(head)
   c.updateFinalized(finalized, head)
 
-  let
-    base = c.calculateNewBase(finalized.number, head)
-
-  if base.number == c.base.number:
+  let base = c.calculateNewBase(finalized.number, head)
+  if base.number <= c.base.number:
     # The base is not updated, return.
     return ok()
 
