@@ -17,7 +17,6 @@ import
   eth/p2p/discoveryv5/protocol,
   ../../common/common_types,
   ../../database/content_db,
-  # ../network_metadata,
   ../wire/[portal_protocol, portal_stream, portal_protocol_config, ping_extensions],
   "."/[history_content, history_validation]
 
@@ -40,7 +39,6 @@ type
     contentDB*: ContentDB
     contentQueue*: AsyncQueue[(Opt[NodeId], ContentKeysList, seq[seq[byte]])]
     getHeader*: GetHeaderCallback
-    # cfg*: RuntimeConfig
     processContentLoops: seq[Future[void]]
     statusLogLoop: Future[void]
     contentRequestRetries: int
@@ -64,7 +62,6 @@ proc new*(
     contentDB: ContentDB,
     streamManager: StreamManager,
     getHeaderCallback: GetHeaderCallback = defaultNoGetHeader,
-    # cfg: RuntimeConfig,
     bootstrapRecords: openArray[Record] = [],
     portalConfig: PortalProtocolConfig = defaultPortalProtocolConfig,
     contentRequestRetries = 1,
@@ -79,7 +76,8 @@ proc new*(
 
     portalProtocol = PortalProtocol.new(
       baseProtocol,
-      getProtocolId(portalNetwork, PortalSubnetwork.history),
+      getProtocolId(PortalSubnetwork.history),
+      getPortalEnrField(portalNetwork),
       toContentIdHandler,
       createGetHandler(contentDB),
       createStoreHandler(contentDB, portalConfig.radiusConfig),

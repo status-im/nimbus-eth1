@@ -7,7 +7,14 @@
 
 {.push raises: [].}
 
-import std/strutils, confutils, chronos, stint, eth/p2p/discoveryv5/routing_table
+import
+  std/strutils,
+  confutils,
+  chronos,
+  stint,
+  stew/byteutils,
+  eth/p2p/discoveryv5/routing_table,
+  ./portal_protocol_version
 
 type
   PortalNetwork* = enum
@@ -18,6 +25,8 @@ type
   PortalSubnetwork* = enum
     history
     beacon
+
+  PortalProtocolId* = array[2, byte]
 
   RadiusConfigKind* = enum
     Static
@@ -113,6 +122,27 @@ proc init*(
 func fromLogRadius*(T: type UInt256, logRadius: uint16): T =
   # Get the max value of the logRadius range
   pow((2).stuint(256), logRadius) - 1
+
+func getProtocolId*(subnetwork: PortalSubnetwork): PortalProtocolId =
+  ## Return the network's protocol ID for the given subnetwork
+  const portalPrefix = byte(0x50)
+
+  case subnetwork
+  of PortalSubnetwork.history:
+    [portalPrefix, 0x00]
+  of PortalSubnetwork.beacon:
+    [portalPrefix, 0x0C]
+
+func `$`*(id: PortalProtocolId): string =
+  id.toHex()
+
+func getPortalEnrField*(network: PortalNetwork): PortalEnrField =
+  ## Return the node's Portal ENR field based on the network
+  case network
+  of PortalNetwork.none:
+    PortalEnrField.init(localSupportedVersionMin, localSupportedVersionMax, 0.chainId())
+  of PortalNetwork.mainnet:
+    PortalEnrField.init(localSupportedVersionMin, localSupportedVersionMax, 1.chainId())
 
 ## Confutils parsers
 
