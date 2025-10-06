@@ -290,17 +290,13 @@ portal-test-reproducibility:
 		[ "$$MD5SUM1" = "$$MD5SUM2" ] && echo -e "\e[92mSuccess: identical binaries.\e[39m" || \
 			{ echo -e "\e[91mFailure: the binary changed between builds.\e[39m"; exit 1; }
 
-# Portal tests
-all_eth_history_custom_chain_tests: | build deps
-	echo -e $(BUILD_MSG) "build/$@" && \
-	$(ENV_SCRIPT) nim c -r $(NIM_PARAMS) -d:chronicles_log_level=ERROR -d:mergeBlockNumber:38130 -o:build/$@ "portal/tests/eth_history_tests/$@.nim"
-
+# builds and runs the Portal test suite
 all_portal_tests: | build deps
 	echo -e $(BUILD_MSG) "build/$@" && \
 	$(ENV_SCRIPT) nim c -r $(NIM_PARAMS) -d:chronicles_log_level=ERROR -o:build/$@ "portal/tests/$@.nim"
 
-# builds and runs the Portal test suite
-portal-test: | all_portal_tests all_eth_history_custom_chain_tests
+# alias for all_portal_tests
+portal-test: | all_portal_tests
 
 # builds the Portal tools, wherever they are
 $(PORTAL_TOOLS): | build deps rocksdb

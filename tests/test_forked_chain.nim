@@ -787,7 +787,7 @@ procSuite "ForkedChain mainnet replay":
   # smoke test
   setup:
     let
-      era0 = Era1DbRef.init(sourcePath / "replay", "mainnet").expect("Era files present")
+      era0 = Era1DbRef.init(sourcePath / "replay", "mainnet", 15537394'u64).expect("Era files present")
       com = CommonRef.new(AristoDbMemory.newCoreDbRef(), nil)
       fc = ForkedChainRef.init(com, enableQueue = true)
 

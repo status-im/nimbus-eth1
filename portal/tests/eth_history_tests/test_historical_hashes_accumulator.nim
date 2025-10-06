@@ -20,8 +20,9 @@ import
 suite "Historical Hashes Accumulator":
   test "Historical Hashes Accumulator Canonical Verification":
     const
+      chainConfig = ChainConfig(mergeNetsplitBlock: 38130)
       # Amount of headers to be created and added to the accumulator
-      amount = mergeBlockNumber
+      amount = chainConfig.mergeNetsplitBlock
       # Headers to test verification for.
       # Note: This test assumes at least 5 epochs
       headersToTest = [
@@ -43,14 +44,14 @@ suite "Historical Hashes Accumulator":
       # is not the way the headers are verified with the accumulator.
       headers.add(Header(number: i, difficulty: 1.stuint(256)))
 
-    let accumulatorRes = buildAccumulatorData(headers)
+    let accumulatorRes = buildAccumulatorData(chainConfig, headers)
     check accumulatorRes.isOk()
     let (accumulator, epochRecords) = accumulatorRes.get()
 
     block: # Test valid headers
       for i in headersToTest:
         let header = headers[i]
-        let proof = buildProof(header, epochRecords)
+        let proof = buildProof(chainConfig, header, epochRecords)
         check:
           proof.isOk()
           verifyProof(accumulator, header, proof.get())
@@ -58,12 +59,12 @@ suite "Historical Hashes Accumulator":
     block: # Test invalid headers
       # Post merge block number must fail (> than latest header in accumulator)
       var proof: HistoricalHashesAccumulatorProof
-      let header = Header(number: mergeBlockNumber)
+      let header = Header(number: chainConfig.mergeNetsplitBlock)
       check verifyProof(accumulator, header, proof) == false
 
       # Test altered block headers by altering the difficulty
       for i in headersToTest:
-        let proof = buildProof(headers[i], epochRecords)
+        let proof = buildProof(chainConfig, headers[i], epochRecords)
         check:
           proof.isOk()
         # Alter the block header so the proof no longer matches
@@ -79,12 +80,14 @@ suite "Historical Hashes Accumulator":
 
   test "Historical Hashes Accumulator - Not Finished":
     # Less headers than needed to finish the accumulator
-    const amount = mergeBlockNumber - 1
+    const
+      chainConfig = ChainConfig(mergeNetsplitBlock: 38130)
+      amount = chainConfig.mergeNetsplitBlock - 1
 
     var headers: seq[Header]
     for i in 0 ..< amount:
       headers.add(Header(number: i, difficulty: 1.stuint(256)))
 
-    let accumulatorRes = buildAccumulator(headers)
+    let accumulatorRes = buildAccumulator(chainConfig, headers)
 
     check accumulatorRes.isErr()
