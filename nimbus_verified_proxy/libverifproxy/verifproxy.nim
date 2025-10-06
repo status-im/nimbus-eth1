@@ -5,16 +5,35 @@
 #   * Apache v2 license (license terms in the root directory or at https://www.apache.org/licenses/LICENSE-2.0).
 # at your option. This file may not be copied, modified, or distributed except according to those terms.
 
-import
-  std/[atomics, json, net],
-  eth/net/nat,
-  beacon_chain/spec/[digest, network],
-  beacon_chain/nimbus_binary_common,
+import 
+  algorithm,
+  json_serialization,
+  chronos,
+  std/[atomics, locks, json],
+  beacon_chain/spec/digest,
+  ../engine/types,
+  ../engine/engine,
   ../nimbus_verified_proxy,
-  ../nimbus_verified_proxy_conf
+  ../nimbus_verified_proxy_conf,
+  ../json_rpc_backend
 
-proc quit*() {.exportc, dynlib.} =
-  echo "Quitting"
+{.pragma: exported, cdecl, exportc, dynlib, raises: [].}
+{.pragma: exportedConst, exportc, dynlib.}
+
+type
+  CallBackProc = proc(status: int, res: cstring) {.cdecl, gcsafe, raises: [].}
+
+  Task = ref object 
+    status: int
+    response: string
+    finished: bool
+    cb: CallBackProc
+
+  Context = object
+    lock: Lock
+    tasks: seq[Task]
+    stop: bool
+    frontend : EthApiFrontend
 
 proc NimMain() {.importc, exportc, dynlib.}
 
@@ -30,63 +49,210 @@ proc initLib() =
     locals = addr(locals)
     nimGC_setStackBottom(locals)
 
-proc runContext(ctx: ptr Context) {.thread.} =
-  const defaultListenAddress = (static parseIpAddress("0.0.0.0"))
-  let str = $ctx.configJson
-  try:
-    let jsonNode = parseJson(str)
+proc toUnmanagedPtr[T](x: ref T): ptr T =
+  GC_ref(x)
+  addr x[]
 
-    let rpcAddr = jsonNode["RpcAddress"].getStr()
-    let myConfig = VerifiedProxyConf(
-      listenAddress: some(defaultListenAddress),
-      eth2Network: some(jsonNode["Eth2Network"].getStr()),
-      trustedBlockRoot: Eth2Digest.fromHex(jsonNode["TrustedBlockRoot"].getStr()),
-      backendUrl: parseCmdArg(Web3Url, jsonNode["Web3Url"].getStr()),
-      frontendUrl: parseCmdArg(Web3Url, jsonNode["Web3Url"].getStr()),
-      logLevel: jsonNode["LogLevel"].getStr(),
-      maxPeers: 160,
-      nat: NatConfig(hasExtIp: false, nat: NatAny),
-      logStdout: StdoutLogKind.Auto,
-      dataDirFlag: none(OutDir),
-      tcpPort: Port(defaultEth2TcpPort),
-      udpPort: Port(defaultEth2TcpPort),
-      agentString: "nimbus",
-      discv5Enabled: true,
+func asRef[T](x: ptr T): ref T =
+  cast[ref T](x)
+
+proc destroy[T](x: ptr T) =
+  x[].reset()
+  GC_unref(asRef(x))
+
+proc createAsyncTaskContext(): ptr Context {.exported.} =
+  let ctx = Context.new()
+  ctx.lock.initLock()
+  ctx.toUnmanagedPtr()
+
+proc createTask(cb: CallBackProc): Task =
+  let task = Task()
+  task.finished = false
+  task.cb = cb
+  task
+
+proc freeResponse(res: cstring) {.exported.} =
+  deallocShared(res)
+
+proc freeContext(ctx: ptr Context) {.exported.} =
+  ctx.destroy()
+
+proc alloc(str: string): cstring =
+  var ret = cast[cstring](allocShared(str.len + 1))
+  let s = cast[seq[char]](str)
+  for i in 0 ..< str.len:
+    ret[i] = s[i]
+  ret[str.len] = '\0'
+  return ret
+
+proc eth_blockNumber(ctx: ptr Context, cb: CallBackProc) {.exported.} =
+  let task = createTask(cb)
+
+  try:
+    ctx.lock.acquire()
+    ctx.tasks.add(task)
+  finally:
+    ctx.lock.release()
+
+  let fut = ctx.frontend.eth_blockNumber()
+
+  fut.addCallback proc (_: pointer) {.gcsafe.} =
+    try:
+      ctx.lock.acquire()
+      if fut.cancelled:
+        task.response = "{\"error\": \"cancelled\"}"
+        task.finished = true
+        task.status = -2
+      elif fut.failed():
+        task.response = "{\"error\": \"failed\"}"
+        task.finished = true
+        task.status = -1
+      else:
+        try:
+          task.response = Json.encode(fut.read())
+          task.status = 0
+        except CatchableError as e:
+          task.response = "{\"error\": \"" & e.msg & "\"}"
+          task.status = -1
+        finally:
+          task.finished = true
+    finally:
+      ctx.lock.release()
+
+proc pollAsyncTaskEngine(ctx: ptr Context) {.exported.} =
+  var delList: seq[int] = @[]
+
+  let taskLen = ctx.tasks.len
+  for idx in 0..<taskLen:
+    let task = ctx.tasks[idx]
+    if task.finished:
+      try:
+        ctx.lock.acquire()
+        task.cb(task.status, alloc(task.response))
+        delList.add(idx)
+      finally:
+        ctx.lock.release()
+
+  # sequence changes as we delete so delting in descending order
+  for i in delList.sorted(SortOrder.Descending):
+    try:
+      ctx.lock.acquire()
+      ctx.tasks.delete(i)
+    finally:
+      ctx.lock.release()
+
+  if ctx.tasks.len > 0:
+    poll()
+
+proc run(ctx: ptr Context, configJson: string) {.async: (raises: [ValueError, CancelledError, CatchableError]).} =
+  try:
+    initLib()
+  except Exception as err:
+    raise newException(CancelledError, err.msg)
+
+  let jsonNode = parseJson($configJson)
+
+  let config = VerifiedProxyConf(
+    eth2Network: some(jsonNode["Eth2Network"].getStr()),
+    trustedBlockRoot: Eth2Digest.fromHex(jsonNode["TrustedBlockRoot"].getStr()),
+    backendUrl: parseCmdArg(Web3Url, jsonNode["Web3Url"].getStr()),
+    logLevel: jsonNode["LogLevel"].getStr(),
+  )
+
+  let
+    engineConf = RpcVerificationEngineConf(
+      chainId: getConfiguredChainId(config.eth2Network),
+      maxBlockWalk: config.maxBlockWalk,
+      headerStoreLen: config.headerStoreLen,
+      accountCacheLen: config.accountCacheLen,
+      codeCacheLen: config.codeCacheLen,
+      storageCacheLen: config.storageCacheLen,
     )
+    engine = RpcVerificationEngine.init(engineConf)
+    jsonRpcClient = JsonRpcClient.init(config.backendUrl)
 
-    run(myConfig, ctx)
-  except Exception as err:
-    echo "Exception when running ", getCurrentExceptionMsg(), err.getStackTrace()
-    ctx.onHeader(getCurrentExceptionMsg(), 3)
-    ctx.cleanup()
+  # the backend only needs the url to connect to
+  engine.backend = jsonRpcClient.getEthApiBackend()
 
-  #[let node = parseConfigAndRun(ctx.configJson)
+  ctx.frontend = engine.frontend
 
-  while not ctx[].stop: # and node.running:
-    let timeout = sleepAsync(100.millis)
-    waitFor timeout
+  # start frontend and backend
+  var status = await jsonRpcClient.start()
+  if status.isErr():
+    raise newException(ValueError, status.error)
 
-  # do cleanup
-  node.stop()]#
+  await startLightClient(config, engine)
 
-proc startVerifProxy*(
-    configJson: cstring, onHeader: OnHeaderCallback
-): ptr Context {.exportc, dynlib.} =
-  initLib()
-
-  let ctx = createShared(Context, 1)
-  ctx.configJson = cast[cstring](allocShared0(len(configJson) + 1))
-  ctx.onHeader = onHeader
-  copyMem(ctx.configJson, configJson, len(configJson))
+proc startVerifProxy(ctx: ptr Context, configJson: cstring, cb: CallBackProc) {.exported.} =
+  let task = createTask(cb)
 
   try:
-    createThread(ctx.thread, runContext, ctx)
-  except Exception as err:
-    echo "Exception when attempting to invoke createThread ",
-      getCurrentExceptionMsg(), err.getStackTrace()
-    ctx.onHeader(getCurrentExceptionMsg(), 3)
-    ctx.cleanup()
-  return ctx
+    ctx.lock.acquire()
+    ctx.tasks.add(task)
+  finally:
+    ctx.lock.release()
 
-proc stopVerifProxy*(ctx: ptr Context) {.exportc, dynlib.} =
+  let fut = run(ctx,$configJson)
+
+  fut.addCallback proc (_: pointer) {.gcsafe.} =
+    try:
+      ctx.lock.acquire()
+      if fut.cancelled:
+        task.response = "{\"error\": \"cancelled\"}"
+        task.finished = true
+        task.status = -2
+      elif fut.failed():
+        task.response = "{\"error\": \"failed\"}"
+        task.finished = true
+        task.status = -1
+      else:
+        try:
+          task.response = "{\"result\": \"finished\"}"
+          task.status = 0
+        except CatchableError as e:
+          task.response = "{\"error\": \"" & e.msg & "\"}"
+          task.status = -1
+        finally:
+          task.finished = true
+    finally:
+      ctx.lock.release()
+
+proc stopVerifProxy*(ctx: ptr Context) {.exported.} =
+  ctx.lock.acquire()
   ctx.stop = true
+  ctx.lock.release()
+
+# C-callable: downloads a page and returns a heap-allocated C string.
+proc nonBusySleep(ctx: ptr Context, secs: cint, cb: CallBackProc) {.exported.} =
+  let task = createTask(cb)
+
+  try:
+    ctx.lock.acquire()
+    ctx.tasks.add(task)
+  finally:
+    ctx.lock.release()
+
+  let fut = sleepAsync((secs).seconds)
+
+  fut.addCallback proc (_: pointer) {.gcsafe.} =
+    try:
+      ctx.lock.acquire()
+      if fut.cancelled:
+        task.response = "cancelled"
+        task.finished = true
+        task.status = -2
+      elif fut.failed():
+        task.response = "failed"
+        task.finished = true
+        task.status = -1
+      else:
+        try:
+          task.response = "slept"
+          task.status = 0
+        except CatchableError as e:
+          task.response = e.msg
+          task.status = -1
+        finally:
+          task.finished = true
+    finally:
+      ctx.lock.release()
