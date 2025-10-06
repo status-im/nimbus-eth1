@@ -12,7 +12,7 @@
 
 import
   pkg/[chronicles, chronos, results],
-  pkg/eth/common,
+  pkg/eth/[common, rlp],
   pkg/stew/interval_set,
   ../../../wire_protocol,
   ../worker_desc,
@@ -108,6 +108,9 @@ template fetchBodies*(
         nRespErrors=buddy.only.nRespErrors.blk
       break body                                    # return err()
 
+    # Update download statistics
+    let bps = buddy.only.thruPutStats.blk.bpsSample(elapsed, b.getEncodedLength)
+
     # Ban an overly slow peer for a while when seen in a row. Also there is a
     # mimimum share of the number of requested headers expected, typically 10%.
     if fetchBodiesErrTimeout < elapsed or
@@ -118,8 +121,8 @@ template fetchBodies*(
       buddy.ctx.pool.lastSlowPeer = Opt.none(Hash)  # not last one or not error
 
     trace trEthRecvReceivedBlockBodies, peer, nReq, nResp=b.len,
-      elapsed=elapsed.toStr, syncState=($buddy.syncState),
-      bdyErrors=buddy.bdyErrors
+      elapsed=elapsed.toStr, throughput=(bps.toIECb(1) & "ps"),
+      syncState=($buddy.syncState), bdyErrors=buddy.bdyErrors
 
     bodyRc = Opt[seq[BlockBody]].ok(b)
 

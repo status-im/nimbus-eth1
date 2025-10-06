@@ -40,6 +40,10 @@ func blkSessionStopped*(ctx: BeaconCtxRef): bool =
   ctx.poolMode or
   ctx.pool.lastState != SyncState.blocks
 
+func blkThroughput*(buddy: BeaconBuddyRef): string =
+  ## Print throuhput sratistics
+  buddy.only.thruPutStats.blk.toMeanVar.psStr
+
 # ------------------------------------------------------------------------------
 # End
 # ------------------------------------------------------------------------------

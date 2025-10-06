@@ -115,6 +115,22 @@ type
 
   # -------------------
 
+  StatsCollect* = object
+    ## Statistics collector record
+    sum*, sum2*: float
+    samples*: uint
+    total*: uint64
+
+  BuddyThruPutStats* = object
+    ## Throughput statistice for fetching headers and bodies. The fileds
+    ## have the following meaning:
+    ##    sum:      -- Sum of samples, throuhputs per sec
+    ##    sum2:     -- Squares of samples, throuhputs per sec
+    ##    samples:  -- Number of samples in sum/sum2
+    ##    total:    -- Total number of bytes tranfered
+    ##
+    hdr*, blk*: StatsCollect
+
   BuddyError* = tuple
     ## Count fetching or processing errors
     hdr, blk: uint8
@@ -123,6 +139,7 @@ type
     ## Local descriptor data extension
     nRespErrors*: BuddyError         ## Number of errors/slow responses in a row
     nProcErrors*: BuddyError         ## Ditto for processing errors
+    thruPutStats*: BuddyThruPutStats ## Throughput statistics
 
   InitTarget* = tuple
     hash: Hash32                     ## Some block hash to sync towards to
@@ -214,6 +231,48 @@ func syncState*(
    buddy.ctx.pool.lastState,
    buddy.ctx.hdrCache.state,
    buddy.ctx.poolMode)
+
+# -----
+
+func toMeanVar*(w: StatsCollect): MeanVarStats =
+  ## Calculate standard statistics.
+  if 0 < w.samples:
+    let
+      samples = w.samples.float
+      mean = w.sum / samples
+      #            __________   ______   ______   |
+      # Variance = sum(x * x) - sum(x) * sum(x)   | x = sample values
+      #            ____
+      #          = sum2 - mean * mean
+      #
+    result.mean = mean
+    result.variance = w.sum2 / samples - mean * mean
+    result.samples = w.samples
+    result.total = w.total
+
+func toMeanVar*(w: BuddyThruPutStats): MeanVarStats =
+  ## Combined statistics for headers and bodies
+  toMeanVar StatsCollect(
+    sum:     w.hdr.sum +     w.blk.sum,
+    sum2:    w.hdr.sum2 +    w.blk.sum2,
+    samples: w.hdr.samples + w.blk.samples,
+    total:   w.hdr.total +   w.blk.total)
+
+proc bpsSample*(
+    stats: var StatsCollect;
+    elapsed: chronos.Duration;
+    dataSize: int;
+      ): uint =
+  ## Helper for updating download statistics counters. It returns the current
+  ## bytes/sec calculation.
+  let ns = elapsed.nanoseconds
+  if 0 < ns:
+    let bps = dataSize.float * 1_000_000_000f / ns.float
+    stats.sum += bps
+    stats.sum2 +=  bps * bps
+    stats.samples.inc
+    stats.total += dataSize.uint64
+    return bps.uint
 
 # ------------------------------------------------------------------------------
 # End

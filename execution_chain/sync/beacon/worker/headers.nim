@@ -137,7 +137,8 @@ template headersCollect*(buddy: BeaconBuddyRef; info: static[string]) =
               nStagedQ=ctx.hdr.staged.len,
               base=ctx.chain.baseNumber.bnStr,
               head=ctx.chain.latestNumber.bnStr,
-              target=ctx.hdrCache.latestConsHeadNumber.bnStrIfAvail(ctx),
+              target=ctx.hdrCache.head.bnStr,
+              throughput=buddy.hdrThroughput,
               nSyncPeers=ctx.pool.nBuddies
             ctx.pool.lastSyncUpdLog = Moment.now()
             nStashed = 0
@@ -181,7 +182,8 @@ template headersCollect*(buddy: BeaconBuddyRef; info: static[string]) =
           nStagedQ=ctx.hdr.staged.len,
           base=ctx.chain.baseNumber.bnStr,
           head=ctx.chain.latestNumber.bnStr,
-          target=ctx.hdrCache.latestConsHeadNumber.bnStrIfAvail(ctx),
+          target=ctx.hdrCache.head.bnStr,
+          throughput=buddy.hdrThroughput,
           nSyncPeers=ctx.pool.nBuddies
         ctx.pool.lastSyncUpdLog = Moment.now()
 
@@ -262,11 +264,10 @@ proc headersUnstage*(buddy: BeaconBuddyRef; info: static[string]): bool =
     # End while loop
 
   if 0 < nStashed:
-    chronicles.info "Headers stashed", nStashed, nUnpoc=ctx.nUnprocStr(),
-      nStagedQ=ctx.hdr.staged.len,
+    chronicles.info "Headers stashed (from queue)", nStashed,
+     nUnpoc=ctx.nUnprocStr(), nStagedQ=ctx.hdr.staged.len,
       base=ctx.chain.baseNumber.bnStr, head=ctx.chain.latestNumber.bnStr,
-      target=ctx.hdrCache.latestConsHeadNumber.bnStrIfAvail(ctx),
-      nSyncPeers=ctx.pool.nBuddies
+      target=ctx.hdrCache.head.bnStr, nSyncPeers=ctx.pool.nBuddies
 
   elif switchPeer or 0 < ctx.hdr.staged.len:
     trace info & ": no headers processed", peer,
