@@ -28,7 +28,7 @@ type HeaderStore* = ref object
   earliest: Opt[Header]
   earliestHash: Opt[Hash32]
 
-func convLCHeader*(lcHeader: ForkedLightClientHeader): Result[Header, string] =
+func convLCHeader(lcHeader: ForkedLightClientHeader): Result[Header, string] =
   withForkyHeader(lcHeader):
     when lcDataFork > LightClientDataFork.Altair:
       template p(): auto =

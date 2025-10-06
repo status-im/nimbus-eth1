@@ -10,20 +10,20 @@
 
 import
   unittest2,
+  chronos,
   web3/[eth_api, eth_api_types],
-  json_rpc/[rpcclient, rpcserver, rpcproxy],
   stew/byteutils,
   eth/common/[base, eth_types_rlp],
-  ../rpc/blocks,
-  ../types,
-  ../header_store,
+  ../engine/blocks,
+  ../engine/types,
+  ../engine/header_store,
   ./test_utils,
   ./test_api_backend
 
 suite "test state verification":
   let
     ts = TestApiState.init(1.u256)
-    vp = startTestSetup(ts, 1, 1, 8897)
+    engine = initTestEngine(ts, 1, 1)
 
   test "test EVM-based methods":
     let
@@ -56,20 +56,18 @@ suite "test state verification":
     ts.loadAccessList(tx, blk, accessList)
 
     check:
-      vp.headerStore.add(convHeader(blk), blk.hash).isOk()
-      vp.headerStore.updateFinalized(convHeader(blk), blk.hash).isOk()
+      engine.headerStore.add(convHeader(blk), blk.hash).isOk()
+      engine.headerStore.updateFinalized(convHeader(blk), blk.hash).isOk()
 
     let
-      verifiedBalance = waitFor vp.proxy.getClient().eth_getBalance(address, latestTag)
+      verifiedBalance = waitFor engine.frontend.eth_getBalance(address, latestTag)
       verifiedNonce =
-        waitFor vp.proxy.getClient().eth_getTransactionCount(address, latestTag)
-      verifiedCode = waitFor vp.proxy.getClient().eth_getCode(address, latestTag)
-      verifiedSlot =
-        waitFor vp.proxy.getClient().eth_getStorageAt(address, slot, latestTag)
-      verifiedCall = waitFor vp.proxy.getClient().eth_call(tx, latestTag)
-      verifiedAccessList =
-        waitFor vp.proxy.getClient().eth_createAccessList(tx, latestTag)
-      verifiedEstimate = waitFor vp.proxy.getClient().eth_estimateGas(tx, latestTag)
+        waitFor engine.frontend.eth_getTransactionCount(address, latestTag)
+      verifiedCode = waitFor engine.frontend.eth_getCode(address, latestTag)
+      verifiedSlot = waitFor engine.frontend.eth_getStorageAt(address, slot, latestTag)
+      verifiedCall = waitFor engine.frontend.eth_call(tx, latestTag)
+      verifiedAccessList = waitFor engine.frontend.eth_createAccessList(tx, latestTag)
+      verifiedEstimate = waitFor engine.frontend.eth_estimateGas(tx, latestTag)
 
     check:
       verifiedBalance == UInt256.fromHex("0x1d663f6a4afc5b01abb5d")
@@ -85,4 +83,4 @@ suite "test state verification":
       verifiedEstimate == Quantity(22080)
 
     ts.clear()
-    vp.headerStore.clear()
+    engine.headerStore.clear()
