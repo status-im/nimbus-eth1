@@ -38,7 +38,7 @@ int main() {
     "{"
     "\"Eth2Network\": \"mainnet\","
     "\"TrustedBlockRoot\": \"0x6e2b0d0725949a5ce977b61646cc4353a8c789f6c2b8fc8bfc98fcfdb99b3d0\","
-    "\"Web3Url\": \"https://eth.llamarpc.com\","
+    "\"BackendUrl\": \"https://eth.llamarpc.com\","
     "\"LogLevel\": \"info\""
     "}";
   startVerifProxy(ctx, jsonConfig, onStart);

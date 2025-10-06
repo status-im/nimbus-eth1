@@ -9,8 +9,10 @@ import
   algorithm,
   json_serialization,
   chronos,
-  std/[atomics, locks, json],
-  beacon_chain/spec/digest,
+  eth/net/nat,
+  std/[atomics, locks, json, net],
+  beacon_chain/spec/[digest, network],
+  beacon_chain/nimbus_binary_common,
   ../engine/types,
   ../engine/engine,
   ../nimbus_verified_proxy,
@@ -144,20 +146,50 @@ proc pollAsyncTaskEngine(ctx: ptr Context) {.exported.} =
   if ctx.tasks.len > 0:
     poll()
 
+
+proc load(T: type VerifiedProxyConf, configJson: string): T {.raises: [CatchableError, ValueError]}=
+  let jsonNode = parseJson($configJson)
+
+  let
+    eth2Network = some(jsonNode.getOrDefault("Eth2Network").getStr("mainnet"))
+    trustedBlockRoot = 
+      if jsonNode.contains("TrustedBlockRoot"):
+        Eth2Digest.fromHex(jsonNode["TrustedBlockRoot"].getStr())
+      else:
+        raise newException(ValueError, "`TrustedBlockRoot` not specified in JSON config")
+    backendUrl = 
+      if jsonNode.contains("BackendUrl"):
+        parseCmdArg(Web3Url, jsonNode["BackendUrl"].getStr())
+      else:
+        raise newException(ValueError, "`BackendUrl` not specified in JSON config")
+    logLevel = jsonNode.getOrDefault("LogLevel").getStr("INFO")
+    defaultListenAddress = (static parseIpAddress("0.0.0.0"))
+
+  return VerifiedProxyConf(
+    listenAddress: some(defaultListenAddress),
+    eth2Network: eth2Network,
+    trustedBlockRoot: trustedBlockRoot,
+    backendUrl: backendUrl,
+    logLevel: logLevel,
+    maxPeers: 160,
+    nat: NatConfig(hasExtIp: false, nat: NatAny),
+    logStdout: StdoutLogKind.Auto,
+    dataDirFlag: none(OutDir),
+    tcpPort: Port(defaultEth2TcpPort),
+    udpPort: Port(defaultEth2TcpPort),
+    agentString: "nimbus",
+    discv5Enabled: true,
+  )
+
 proc run(ctx: ptr Context, configJson: string) {.async: (raises: [ValueError, CancelledError, CatchableError]).} =
   try:
     initLib()
   except Exception as err:
     raise newException(CancelledError, err.msg)
 
-  let jsonNode = parseJson($configJson)
+  let config = VerifiedProxyConf.load($configJson)
 
-  let config = VerifiedProxyConf(
-    eth2Network: some(jsonNode["Eth2Network"].getStr()),
-    trustedBlockRoot: Eth2Digest.fromHex(jsonNode["TrustedBlockRoot"].getStr()),
-    backendUrl: parseCmdArg(Web3Url, jsonNode["Web3Url"].getStr()),
-    logLevel: jsonNode["LogLevel"].getStr(),
-  )
+  echo $config
 
   let
     engineConf = RpcVerificationEngineConf(
@@ -174,6 +206,7 @@ proc run(ctx: ptr Context, configJson: string) {.async: (raises: [ValueError, Ca
   # the backend only needs the url to connect to
   engine.backend = jsonRpcClient.getEthApiBackend()
 
+  # inject the frontend into c context
   ctx.frontend = engine.frontend
 
   # start frontend and backend
@@ -184,38 +217,10 @@ proc run(ctx: ptr Context, configJson: string) {.async: (raises: [ValueError, Ca
   await startLightClient(config, engine)
 
 proc startVerifProxy(ctx: ptr Context, configJson: cstring, cb: CallBackProc) {.exported.} =
-  let task = createTask(cb)
-
   try:
-    ctx.lock.acquire()
-    ctx.tasks.add(task)
-  finally:
-    ctx.lock.release()
-
-  let fut = run(ctx,$configJson)
-
-  fut.addCallback proc (_: pointer) {.gcsafe.} =
-    try:
-      ctx.lock.acquire()
-      if fut.cancelled:
-        task.response = "{\"error\": \"cancelled\"}"
-        task.finished = true
-        task.status = -2
-      elif fut.failed():
-        task.response = "{\"error\": \"failed\"}"
-        task.finished = true
-        task.status = -1
-      else:
-        try:
-          task.response = "{\"result\": \"finished\"}"
-          task.status = 0
-        except CatchableError as e:
-          task.response = "{\"error\": \"" & e.msg & "\"}"
-          task.status = -1
-        finally:
-          task.finished = true
-    finally:
-      ctx.lock.release()
+    waitFor run(ctx, $configJson)
+  except:
+    quit(QuitFailure)
 
 proc stopVerifProxy*(ctx: ptr Context) {.exported.} =
   ctx.lock.acquire()
