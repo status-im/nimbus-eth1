@@ -72,11 +72,7 @@ jobs:
       - name: Run verified proxy tests
         run: |
           gcc --version
-          #if [[ '${{ matrix.cpu }}' == 'arm64' ]]; then
-          #  # mcl on arm64 needs clang compiler
-          #  NIMFLAGS="--cc:clang"
-          #fi
-          DEFAULT_MAKE_FLAGS="-j${ncpu} NIMFLAGS=${NIMFLAGS}"
+          DEFAULT_MAKE_FLAGS="-j${ncpu}"
           make ${DEFAULT_MAKE_FLAGS} nimbus_verified_proxy libverifproxy
           build/nimbus_verified_proxy --help
           # "-static" option will not work for osx unless static system libraries are provided
