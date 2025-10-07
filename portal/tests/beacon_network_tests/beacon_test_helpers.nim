@@ -28,7 +28,7 @@ proc newLCNode*(
     db = BeaconDb.new(networkData, "", inMemory = true)
     streamManager = StreamManager.new(node)
     network = BeaconNetwork.new(
-      PortalNetwork.none,
+      PortalNetwork.mainnet,
       node,
       db,
       streamManager,

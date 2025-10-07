@@ -150,7 +150,7 @@ proc run(portalClient: PortalClient, config: PortalConf) {.raises: [CatchableErr
       # This can be removed in the future when no more tooling relies on it.
       localEnrFields = [
         toFieldPair("c", enrClientInfoShort),
-        toFieldPair(portalEnrKey, localPortalEnrField),
+        toFieldPair(portalEnrKey, getPortalEnrField(config.network)),
       ],
       bootstrapRecords = bootstrapRecords,
       previousRecord = previousEnr,

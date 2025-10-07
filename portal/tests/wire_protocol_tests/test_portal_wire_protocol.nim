@@ -56,6 +56,7 @@ proc initPortalProtocol(
   let proto = PortalProtocol.new(
     d,
     protocolId,
+    getPortalEnrField(PortalNetwork.mainnet),
     toContentId,
     createGetHandler(db),
     createStoreHandler(db, defaultRadiusConfig),
@@ -515,6 +516,7 @@ procSuite "Portal Wire Protocol Tests":
       proto1 = PortalProtocol.new(
         node1,
         protocolId,
+        getPortalEnrField(PortalNetwork.mainnet),
         toContentId,
         createGetHandler(db),
         createStoreHandler(db, defaultRadiusConfig),

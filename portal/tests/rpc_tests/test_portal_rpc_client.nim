@@ -34,7 +34,7 @@ proc newHistoryNode(rng: ref HmacDrbgContext, port: int): HistoryNode =
       "", uint32.high, RadiusConfig(kind: Dynamic), node.localNode.id, inMemory = true
     )
     streamManager = StreamManager.new(node)
-    historyNetwork = HistoryNetwork.new(PortalNetwork.none, node, db, streamManager)
+    historyNetwork = HistoryNetwork.new(PortalNetwork.mainnet, node, db, streamManager)
 
   return HistoryNode(discv5: node, historyNetwork: historyNetwork)
 

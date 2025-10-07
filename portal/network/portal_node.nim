@@ -87,8 +87,14 @@ proc new*(
       radiusConfig = config.portalConfig.radiusConfig,
       localId = discovery.localNode.id,
     )
-    # TODO: Portal works only over mainnet data currently
-    networkData = loadNetworkData("mainnet")
+
+    networkData =
+      case network
+      of PortalNetwork.mainnet:
+        loadNetworkData("mainnet")
+      of PortalNetwork.none:
+        loadNetworkData("mainnet")
+
     streamManager = StreamManager.new(discovery)
 
     historyNetwork =

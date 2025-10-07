@@ -217,7 +217,8 @@ proc new*(
 
     portalProtocol = PortalProtocol.new(
       baseProtocol,
-      getProtocolId(portalNetwork, PortalSubnetwork.beacon),
+      getProtocolId(PortalSubnetwork.beacon),
+      getPortalEnrField(portalNetwork),
       toContentIdHandler,
       createGetHandler(beaconDb),
       createStoreHandler(beaconDb),
