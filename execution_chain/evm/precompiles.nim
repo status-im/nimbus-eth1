@@ -60,9 +60,9 @@ type
     # Osaka
     paP256Verify
 
-  SigRes* = object
-    msgHash*: array[32, byte]
-    sig*: Signature
+  SigRes = object
+    msgHash: array[32, byte]
+    sig: Signature
 
 const
   # Frontier to Spurious Dragron

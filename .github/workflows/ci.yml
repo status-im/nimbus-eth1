@@ -79,4 +79,3 @@ jobs:
           find . -type d -name "nimcache" -exec rm -rf {} +
           # "-static" option will not work for osx unless static system libraries are provided
           make ${DEFAULT_MAKE_FLAGS} test t8n_test eest_full_test
-
