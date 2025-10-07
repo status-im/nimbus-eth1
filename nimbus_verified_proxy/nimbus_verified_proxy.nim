@@ -114,12 +114,6 @@ proc startLightClient*(config: VerifiedProxyConf, engine: RpcVerificationEngine)
       LightClientFinalizationMode.Optimistic,
     )
 
-  # registerbasic p2p protocols for maintaing peers ping/status/get_metadata/... etc.
-  network.registerProtocol(
-    PeerSync,
-    PeerSync.NetworkState.init(cfg, forkDigests, genesisBlockRoot, getBeaconTime),
-  )
-
   await network.startListening()
   await network.start()
 

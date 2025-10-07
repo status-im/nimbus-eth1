@@ -101,23 +101,18 @@ proc eth_blockNumber(ctx: ptr Context, cb: CallBackProc) {.exported.} =
   fut.addCallback proc (_: pointer) {.gcsafe.} =
     try:
       ctx.lock.acquire()
-      if fut.cancelled:
-        task.response = "{\"error\": \"cancelled\"}"
+      if fut.cancelled():
+        task.response = Json.encode(fut.error())
         task.finished = true
         task.status = -2
       elif fut.failed():
-        task.response = "{\"error\": \"failed\"}"
+        task.response = Json.encode(fut.error())
         task.finished = true
         task.status = -1
       else:
-        try:
-          task.response = Json.encode(fut.read())
-          task.status = 0
-        except CatchableError as e:
-          task.response = "{\"error\": \"" & e.msg & "\"}"
-          task.status = -1
-        finally:
-          task.finished = true
+        task.response = Json.encode(fut.value())
+        task.status = 0
+        task.finished = true
     finally:
       ctx.lock.release()
 
@@ -203,7 +198,7 @@ proc run(ctx: ptr Context, configJson: string) {.async: (raises: [ValueError, Ca
     engine = RpcVerificationEngine.init(engineConf)
     jsonRpcClient = JsonRpcClient.init(config.backendUrl)
 
-  # the backend only needs the url to connect to
+ # the backend only needs the url to connect to
   engine.backend = jsonRpcClient.getEthApiBackend()
 
   # inject the frontend into c context
@@ -213,8 +208,8 @@ proc run(ctx: ptr Context, configJson: string) {.async: (raises: [ValueError, Ca
   var status = await jsonRpcClient.start()
   if status.isErr():
     raise newException(ValueError, status.error)
-
-  await startLightClient(config, engine)
+  # FIXME: throws illegal storage access SEGFAULT when used as a library but not when run as a nim program.
+  # await startLightClient(config, engine)
 
 proc startVerifProxy(ctx: ptr Context, configJson: cstring, cb: CallBackProc) {.exported.} =
   try:
