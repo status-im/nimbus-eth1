@@ -34,6 +34,8 @@ on:
       - 'Makefile'
       - 'nimbus.nimble'
 
+  workflow_dispatch:
+
 concurrency: # Cancel stale PR builds (but not push builds)
   group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.sha }}
   cancel-in-progress: true
@@ -70,10 +72,10 @@ jobs:
       - name: Run verified proxy tests
         run: |
           gcc --version
-          if [[ '${{ matrix.cpu }}' == 'arm64' ]]; then
-            # mcl on arm64 needs clang compiler
-            NIMFLAGS="--cc:clang"
-          fi
+          #if [[ '${{ matrix.cpu }}' == 'arm64' ]]; then
+          #  # mcl on arm64 needs clang compiler
+          #  NIMFLAGS="--cc:clang"
+          #fi
           DEFAULT_MAKE_FLAGS="-j${ncpu} NIMFLAGS=${NIMFLAGS}"
           make ${DEFAULT_MAKE_FLAGS} nimbus_verified_proxy libverifproxy
           build/nimbus_verified_proxy --help
