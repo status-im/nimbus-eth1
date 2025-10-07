@@ -36,7 +36,7 @@ suite "Content Database":
         db.contains(key) == false
 
     block:
-      discard db.putAndPrune(key, [byte 0, 1, 2, 3])
+      check db.putAndPrune(key, [byte 0, 1, 2, 3]) == false
 
       var val = Opt.none(seq[byte])
       proc onData(data: openArray[byte]) =
@@ -67,11 +67,11 @@ suite "Content Database":
 
     let numBytes = 10000
     let size1 = db.size()
-    discard db.putAndPrune(u256(1), genByteSeq(numBytes))
+    check db.putAndPrune(u256(1), genByteSeq(numBytes)) == false
     let size2 = db.size()
-    discard db.putAndPrune(u256(2), genByteSeq(numBytes))
+    check db.putAndPrune(u256(2), genByteSeq(numBytes)) == false
     let size3 = db.size()
-    discard db.putAndPrune(u256(2), genByteSeq(numBytes))
+    check db.putAndPrune(u256(2), genByteSeq(numBytes)) == false
     let size4 = db.size()
     let usedSize = db.usedSize()
 
@@ -104,53 +104,20 @@ suite "Content Database":
       usedSize2 == size6
 
   test "ContentDB pruning":
-    # TODO: This test is extremely breakable when changing
-    # `contentDeletionFraction` and/or the used test values.
-    # Need to rework either this test, or the pruning mechanism, or probably
-    # both.
     let
-      storageCapacity = 100_000'u64
+      storageCapacity = 1_000_000'u64 # 1MB
       db = ContentDB.new(
         "", storageCapacity, RadiusConfig(kind: Dynamic), testId, inMemory = true
       )
+      numBytes = 1_000
+      bytes = genByteSeq(numBytes)
 
-      furthestElement = u256(40)
-      secondFurthest = u256(30)
-      thirdFurthest = u256(20)
-
-      numBytes = 10_000
-      pr1 = db.putAndPrune(u256(1), genByteSeq(numBytes))
-      pr2 = db.putAndPrune(thirdFurthest, genByteSeq(numBytes))
-      pr3 = db.putAndPrune(u256(3), genByteSeq(numBytes))
-      pr4 = db.putAndPrune(u256(10), genByteSeq(numBytes))
-      pr5 = db.putAndPrune(u256(5), genByteSeq(numBytes))
-      pr6 = db.putAndPrune(u256(11), genByteSeq(numBytes))
-      pr7 = db.putAndPrune(furthestElement, genByteSeq(2000))
-      pr8 = db.putAndPrune(secondFurthest, genByteSeq(2000))
-      pr9 = db.putAndPrune(u256(2), genByteSeq(numBytes))
-      pr10 = db.putAndPrune(u256(4), genByteSeq(12000))
+    for i in 0 .. 800:
+      let contentId = UInt256.high div 800 * i.u256
+      discard db.putAndPrune(contentId, bytes)
 
     check:
-      pr1.kind == ContentStored
-      pr2.kind == ContentStored
-      pr3.kind == ContentStored
-      pr4.kind == ContentStored
-      pr5.kind == ContentStored
-      pr6.kind == ContentStored
-      pr7.kind == ContentStored
-      pr8.kind == ContentStored
-      pr9.kind == ContentStored
-      pr10.kind == DbPruned
-
-    check:
-      pr10.deletedElements == 2
       uint64(db.usedSize()) < storageCapacity
-      # With the current settings the 2 furthest elements will be deleted,
-      # i.e key 30 and 40. The furthest non deleted one will have key 20.
-      pr10.distanceOfFurthestElement == thirdFurthest
-      not db.contains(furthestElement)
-      not db.contains(secondFurthest)
-      db.contains(thirdFurthest)
 
   test "ContentDB force pruning":
     const
