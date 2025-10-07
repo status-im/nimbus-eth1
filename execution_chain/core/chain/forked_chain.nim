@@ -353,22 +353,30 @@ with --debug-eager-state-root."""
   # Base block always have finalized marker
   c.base.finalize()
 
-  # Dynamicly adjust the persistBatchSize based on the recorded run time.
-  # The goal here is use the maximum batch size possible without blocking the
-  # event loop for too long which could negatively impact the p2p networking.
-  # Increasing the batch size can improve performance because the stateroot
-  # computation and persist calls are performed less frequently.
-  let
-    finishTime = EthTime.now()
-    runTime = finishTime - startTime
+  if c.dynamicBatchSize:
+    # Dynamicly adjust the persistBatchSize based on the recorded run time.
+    # The goal here is use the maximum batch size possible without blocking the
+    # event loop for too long which could negatively impact the p2p networking.
+    # Increasing the batch size can improve performance because the stateroot
+    # computation and persist calls are performed less frequently.
+    const
+      targetTime = 1 # seconds
+      batchSizeLowerBound = 5
+      batchSizeUpperBound = 995
 
-  const targetTime = 1 # seconds
-  if runTime < targetTime and c.persistBatchSize <= 995:
-    c.persistBatchSize += 5
-    debug "Increased persistBatchSize", runTime, targetTime, persistBatchSize = c.persistBatchSize
-  elif runTime > targetTime and c.persistBatchSize > 5:
-    c.persistBatchSize -= 5
-    debug "Decreased persistBatchSize", runTime, targetTime, persistBatchSize = c.persistBatchSize
+    let
+      finishTime = EthTime.now()
+      runTime = finishTime - startTime
+
+
+    if runTime < targetTime and c.persistBatchSize <= batchSizeUpperBound:
+      c.persistBatchSize += 5
+      debug "Increased persistBatchSize", runTime, targetTime,
+        persistBatchSize = c.persistBatchSize
+    elif runTime > targetTime and c.persistBatchSize > batchSizeLowerBound:
+      c.persistBatchSize -= 5
+      debug "Decreased persistBatchSize", runTime, targetTime,
+        persistBatchSize = c.persistBatchSize
 
   count
 
@@ -604,6 +612,7 @@ proc init*(
     com: CommonRef;
     baseDistance = BaseDistance;
     persistBatchSize = PersistBatchSize;
+    dynamicBatchSize = true;
     eagerStateRoot = false;
     enableQueue = false;
       ): T =
@@ -645,6 +654,7 @@ proc init*(
       baseTxFrame:      baseTxFrame,
       baseDistance:     baseDistance,
       persistBatchSize: persistBatchSize,
+      dynamicBatchSize: dynamicBatchSize,
       quarantine:       Quarantine.init(),
       fcuHead:          fcuHead,
       fcuSafe:          fcuSafe,
