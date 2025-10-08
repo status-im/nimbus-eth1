@@ -314,7 +314,7 @@ proc updateBase(c: ForkedChainRef, base: BlockRef): uint =
     # No update, return
     return
 
-  let startTime = EthTime.now()
+  let startTime = Moment.now()
 
   # State root sanity check is performed to verify, before writing to disk,
   # that optimistically checked blocks indeed end up being stored with a
@@ -360,22 +360,24 @@ with --debug-eager-state-root."""
     # Increasing the batch size can improve performance because the stateroot
     # computation and persist calls are performed less frequently.
     const
-      targetTime = 1 # seconds
-      batchSizeLowerBound = 5
-      batchSizeUpperBound = 995
+      targetTime = 200.milliseconds
+      targetTimeDelta = 100.milliseconds
+      targetTimeLowerBound = (targetTime - targetTimeDelta).milliseconds
+      targetTimeUpperBound = (targetTime + targetTimeDelta).milliseconds
+      batchSizeLowerBound = 10
+      batchSizeUpperBound = 500
 
     let
-      finishTime = EthTime.now()
-      runTime = finishTime - startTime
+      finishTime = Moment.now()
+      runTime = (finishTime - startTime).milliseconds
 
-
-    if runTime < targetTime and c.persistBatchSize <= batchSizeUpperBound:
-      c.persistBatchSize += 5
-      debug "Increased persistBatchSize", runTime, targetTime,
+    if runTime < targetTimeLowerBound and c.persistBatchSize <= batchSizeUpperBound:
+      c.persistBatchSize *= 2
+      info "Increased persistBatchSize", runTime, targetTime,
         persistBatchSize = c.persistBatchSize
-    elif runTime > targetTime and c.persistBatchSize > batchSizeLowerBound:
-      c.persistBatchSize -= 5
-      debug "Decreased persistBatchSize", runTime, targetTime,
+    elif runTime > targetTimeUpperBound and c.persistBatchSize >= batchSizeLowerBound:
+      c.persistBatchSize = c.persistBatchSize div 2
+      info "Decreased persistBatchSize", runTime, targetTime,
         persistBatchSize = c.persistBatchSize
 
   count

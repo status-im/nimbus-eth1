@@ -303,7 +303,7 @@ type
 
     dynamicBatchSize* {.
       hidden
-      defaultValue: true
+      defaultValue: false
       name: "debug-dynamic-batch-size" .}: bool
 
     rocksdbMaxOpenFiles {.
