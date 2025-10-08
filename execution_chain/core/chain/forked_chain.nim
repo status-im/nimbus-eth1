@@ -364,8 +364,8 @@ with --debug-eager-state-root."""
       targetTimeDelta = 100.milliseconds
       targetTimeLowerBound = (targetTime - targetTimeDelta).milliseconds
       targetTimeUpperBound = (targetTime + targetTimeDelta).milliseconds
-      batchSizeLowerBound = 10
-      batchSizeUpperBound = 500
+      batchSizeLowerBound = 4
+      batchSizeUpperBound = 512
 
     let
       finishTime = Moment.now()
@@ -614,7 +614,7 @@ proc init*(
     com: CommonRef;
     baseDistance = BaseDistance;
     persistBatchSize = PersistBatchSize;
-    dynamicBatchSize = true;
+    dynamicBatchSize = false;
     eagerStateRoot = false;
     enableQueue = false;
       ): T =

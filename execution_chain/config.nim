@@ -298,7 +298,7 @@ type
 
     persistBatchSize* {.
       hidden
-      defaultValue: 5'u64
+      defaultValue: 4'u64
       name: "debug-persist-batch-size" .}: uint64
 
     dynamicBatchSize* {.
