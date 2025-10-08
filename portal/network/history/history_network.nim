@@ -237,6 +237,7 @@ proc statusLogLoop(n: HistoryNetwork) {.async: (raises: []).} =
       await sleepAsync(60.seconds)
 
       info "History network status",
+        dbSize = $(n.contentDB.size() div 1_000_000) & "mb",
         routingTableNodes = n.portalProtocol.routingTable.len()
   except CancelledError:
     trace "statusLogLoop canceled"
@@ -262,6 +263,8 @@ proc stop*(n: HistoryNetwork) {.async: (raises: []).} =
   if not n.statusLogLoop.isNil:
     futures.add(n.statusLogLoop.cancelAndWait())
   await noCancel(allFutures(futures))
+
+  n.contentDB.close()
 
   n.processContentLoops.setLen(0)
   n.statusLogLoop = nil

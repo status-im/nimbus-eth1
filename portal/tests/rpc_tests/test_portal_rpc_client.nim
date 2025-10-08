@@ -31,7 +31,12 @@ proc newHistoryNode(rng: ref HmacDrbgContext, port: int): HistoryNode =
   let
     node = initDiscoveryNode(rng, PrivateKey.random(rng[]), localAddress(port))
     db = ContentDB.new(
-      "", uint32.high, RadiusConfig(kind: Dynamic), node.localNode.id, inMemory = true
+      "",
+      uint32.high,
+      RadiusConfig(kind: Dynamic),
+      node.localNode.id,
+      PortalSubnetwork.history,
+      inMemory = true,
     )
     streamManager = StreamManager.new(node)
     historyNetwork = HistoryNetwork.new(PortalNetwork.mainnet, node, db, streamManager)

@@ -36,6 +36,7 @@ proc newHistoryNetwork*(
       uint32.high,
       RadiusConfig(kind: Static, logRadius: 256),
       node.localNode.id,
+      PortalSubnetwork.history,
       inMemory = true,
     )
     streamManager = StreamManager.new(node)

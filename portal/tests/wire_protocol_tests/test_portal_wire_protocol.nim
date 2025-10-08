@@ -44,7 +44,12 @@ proc initPortalProtocol(
   let
     d = initDiscoveryNode(rng, privKey, address, bootstrapRecords)
     db = ContentDB.new(
-      "", uint32.high, RadiusConfig(kind: Dynamic), d.localNode.id, inMemory = true
+      "",
+      uint32.high,
+      RadiusConfig(kind: Dynamic),
+      d.localNode.id,
+      PortalSubnetwork.history,
+      inMemory = true,
     )
     manager = StreamManager.new(d)
     q = newAsyncQueue[(Opt[NodeId], ContentKeysList, seq[seq[byte]])](50)
@@ -503,7 +508,12 @@ procSuite "Portal Wire Protocol Tests":
 
       dbLimit = 400_000'u32
       db = ContentDB.new(
-        "", dbLimit, RadiusConfig(kind: Dynamic), node1.localNode.id, inMemory = true
+        "",
+        dbLimit,
+        RadiusConfig(kind: Dynamic),
+        node1.localNode.id,
+        PortalSubnetwork.history,
+        inMemory = true,
       )
       m = StreamManager.new(node1)
       q = newAsyncQueue[(Opt[NodeId], ContentKeysList, seq[seq[byte]])](50)

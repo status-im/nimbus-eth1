@@ -8,6 +8,7 @@
 {.push raises: [].}
 
 import
+  std/os,
   chronicles,
   metrics,
   stint,
@@ -19,18 +20,27 @@ import
 
 export kvstore_sqlite3, portal_protocol_config
 
-# This version of content db is the most basic, simple solution where data is
-# stored no matter what content type or content network in the same kvstore with
-# the content id as key. The content id is derived from the content key, and the
-# deriviation is different depending on the content type. As we use content id,
-# this part is currently out of the scope / API of the ContentDB.
-# In the future it is likely that that either:
-# 1. More kvstores are added per network, and thus depending on the network a
-# different kvstore needs to be selected.
-# 2. Or more kvstores are added per network and per content type, and thus
-# content key fields are required to access the data.
-# 3. Or databases are created per network (and kvstores pre content type) and
-# thus depending on the network the right db needs to be selected.
+# ContentDB stores all content types in a single kvstore, using the content id
+# as the key. The content id is derived from the content key, with derivation
+# logic varying by content type. ContentDB does not handle content key
+# derivation; it only stores and retrieves by content id.
+#
+# Each Portal subnetwork should use a separate ContentDB instance, resulting in
+# a distinct sqlite database file per subnetwork. This design was chosen for
+# several reasons:
+# - Storing all subnetworks in a single ContentDB would complicate queries and
+#   slow down access, as unrelated content would be mixed and require more
+#   complex key logic or additional columns.
+# - Using multiple tables (kvstores) within a single database would make manual
+#   deletion of a specific subnetwork's data more difficult, which is useful for
+#   experimental or disabled networks.
+#
+# Note:
+# Currently, only one ContentDB instance is used for the history subnetwork.
+# When additional subnetworks that use ContentDB are supported, a global manager
+# (e.g., ContentDBManager or CommonRadiusManager) will be needed to coordinate
+# radius, storage capacity, and pruning across all ContentDBs.
+#
 
 declareCounter portal_pruning_counter,
   "Number of pruning events which occured during the node's uptime",
@@ -50,6 +60,7 @@ type
     storageCapacity*: uint64
     dataRadius*: UInt256
     localId: NodeId
+    subnetwork: PortalSubnetwork
     sizeStmt: SqliteStmt[NoParams, int64]
     unusedSizeStmt: SqliteStmt[NoParams, int64]
     vacuumStmt: SqliteStmt[NoParams, void]
@@ -187,18 +198,23 @@ proc new*(
     storageCapacity: uint64,
     radiusConfig: RadiusConfig,
     localId: NodeId,
+    subnetwork: PortalSubnetwork,
     inMemory = false,
     manualCheckpoint = false,
 ): ContentDB =
   doAssert(storageCapacity <= uint64(int64.high))
-
-  let db =
-    if inMemory:
-      SqStoreRef.init("", "contentdb-test", inMemory = true).expect(
-        "working database (out of memory?)"
-      )
-    else:
-      SqStoreRef.init(path, "contentdb", manualCheckpoint = false).expectDb()
+  let
+    subnetworkName = subnetwork.symbolName()
+    fullPath = path / "contentdb-" & subnetworkName
+    db =
+      if inMemory:
+        SqStoreRef.init("", "contentdb_test_" & subnetworkName, inMemory = true).expect(
+          "working database (out of memory?)"
+        )
+      else:
+        SqStoreRef
+        .init(fullPath, "contentdb_" & subnetworkName, manualCheckpoint = false)
+        .expectDb()
 
   db.createCustomFunction("xorDistance", 2, xorDistance).expect(
     "Custom function xorDistance creation OK"
@@ -244,6 +260,7 @@ proc new*(
     manualCheckpoint: manualCheckpoint,
     storageCapacity: storageCapacity,
     localId: localId,
+    subnetwork: subnetwork,
     sizeStmt: sizeStmt,
     unusedSizeStmt: unusedSizeStmt,
     vacuumStmt: vacuumStmt,
@@ -258,6 +275,7 @@ proc new*(
 
 proc close*(db: ContentDB) =
   discard db.kv.close()
+  db.backend.close()
 
 ## Private ContentDB calls
 
