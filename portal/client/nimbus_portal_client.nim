@@ -165,13 +165,14 @@ proc run(portalClient: PortalClient, config: PortalConf) {.raises: [CatchableErr
   d.open()
 
   ## Force pruning - optional
+  ## Forced on history network database only currently
   if config.forcePrune:
     let db = ContentDB.new(
-      dataDir / config.network.getDbDirectory() / "contentdb_" &
-        d.localNode.id.toBytesBE().toOpenArray(0, 8).toHex(),
+      dataDir / dbDir,
       storageCapacity = config.storageCapacityMB * 1_000_000,
       radiusConfig = config.radiusConfig,
       localId = d.localNode.id,
+      subnetwork = PortalSubnetwork.history,
       manualCheckpoint = true,
     )
 

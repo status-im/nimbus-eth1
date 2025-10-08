@@ -6,7 +6,13 @@
 # at your option. This file may not be copied, modified, or distributed except according to those terms.
 
 import
-  chronicles, confutils, stint, eth/common/keys, ../database/content_db, ./benchmark
+  chronicles,
+  confutils,
+  stint,
+  eth/common/keys,
+  ../database/content_db,
+  ../network/wire/portal_protocol_config,
+  ./benchmark
 
 when defined(posix):
   import system/ansi_c
@@ -75,6 +81,7 @@ proc cmdGenerate(conf: DbConf) =
       maxDbSize,
       RadiusConfig(kind: Dynamic),
       u256(0),
+      subnetwork = PortalSubnetwork.history,
       inMemory = false,
     )
     bytes = newSeq[byte](conf.contentSize)
@@ -93,6 +100,7 @@ proc cmdBench(conf: DbConf) =
       4_000_000_000'u64,
       RadiusConfig(kind: Dynamic),
       u256(0),
+      subnetwork = PortalSubnetwork.history,
       inMemory = false,
     )
     bytes = newSeq[byte](conf.contentSize)
@@ -149,6 +157,7 @@ proc cmdPrune(conf: DbConf) =
       storageCapacity = 1_000_000, # Doesn't matter if only space reclaiming is done
       RadiusConfig(kind: Dynamic),
       u256(0),
+      subnetwork = PortalSubnetwork.history,
       manualCheckpoint = true,
     )
 

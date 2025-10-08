@@ -10,18 +10,22 @@
 import
   unittest2,
   stint,
+  ../network/wire/portal_protocol_config,
   ../network/beacon/beacon_content,
   ../database/content_db,
   ./test_helpers
 
 suite "Content Database":
   const testId = u256(0)
-  # Note: We are currently not really testing something new here just basic
-  # underlying kvstore.
   test "ContentDB basic API":
     let
       db = ContentDB.new(
-        "", uint32.high, RadiusConfig(kind: Dynamic), testId, inMemory = true
+        "",
+        uint32.high,
+        RadiusConfig(kind: Dynamic),
+        testId,
+        PortalSubnetwork.history,
+        inMemory = true,
       )
       key = ContentId(UInt256.high()) # Some key
 
@@ -62,7 +66,12 @@ suite "Content Database":
 
   test "ContentDB size":
     let db = ContentDB.new(
-      "", uint32.high, RadiusConfig(kind: Dynamic), testId, inMemory = true
+      "",
+      uint32.high,
+      RadiusConfig(kind: Dynamic),
+      testId,
+      PortalSubnetwork.history,
+      inMemory = true,
     )
 
     let numBytes = 10000
@@ -107,7 +116,12 @@ suite "Content Database":
     let
       storageCapacity = 1_000_000'u64 # 1MB
       db = ContentDB.new(
-        "", storageCapacity, RadiusConfig(kind: Dynamic), testId, inMemory = true
+        "",
+        storageCapacity,
+        RadiusConfig(kind: Dynamic),
+        testId,
+        PortalSubnetwork.history,
+        inMemory = true,
       )
       numBytes = 1_000
       bytes = genByteSeq(numBytes)
@@ -129,7 +143,12 @@ suite "Content Database":
 
     let
       db = ContentDB.new(
-        "", startCapacity, RadiusConfig(kind: Dynamic), testId, inMemory = true
+        "",
+        startCapacity,
+        RadiusConfig(kind: Dynamic),
+        testId,
+        PortalSubnetwork.history,
+        inMemory = true,
       )
       localId = UInt256.fromHex(
         "30994892f3e4889d99deb5340050510d1842778acc7a7948adffa475fed51d6e"
@@ -162,7 +181,12 @@ suite "Content Database":
     let
       storageCapacity = 100_000'u64
       db = ContentDB.new(
-        "", storageCapacity, RadiusConfig(kind: Dynamic), testId, inMemory = true
+        "",
+        storageCapacity,
+        RadiusConfig(kind: Dynamic),
+        testId,
+        PortalSubnetwork.history,
+        inMemory = true,
       )
       radiusHandler = createRadiusHandler(db)
 
@@ -170,7 +194,14 @@ suite "Content Database":
 
   test "ContentDB radius - 0 capacity":
     let
-      db = ContentDB.new("", 0, RadiusConfig(kind: Dynamic), testId, inMemory = true)
+      db = ContentDB.new(
+        "",
+        0,
+        RadiusConfig(kind: Dynamic),
+        testId,
+        PortalSubnetwork.history,
+        inMemory = true,
+      )
       radiusHandler = createRadiusHandler(db)
 
     check radiusHandler() == UInt256.low()

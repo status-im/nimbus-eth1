@@ -248,7 +248,12 @@ proc run(config: PortalCliConf) =
 
   let
     db = ContentDB.new(
-      "", config.storageSize, defaultRadiusConfig, d.localNode.id, inMemory = true
+      "",
+      config.storageSize,
+      defaultRadiusConfig,
+      d.localNode.id,
+      PortalSubnetwork.history,
+      inMemory = true,
     )
     sm = StreamManager.new(d)
     cq = newAsyncQueue[(Opt[NodeId], ContentKeysList, seq[seq[byte]])](50)
