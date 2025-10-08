@@ -25,7 +25,7 @@ type
   BeaconBuddyRef* = BuddyRef[BeaconCtxData,BeaconBuddyData]
     ## Extended worker peer descriptor
 
-  BeaconCtxRef* = CtxRef[BeaconCtxData]
+  BeaconCtxRef* = CtxRef[BeaconCtxData,BeaconBuddyData]
     ## Extended global descriptor
 
   # -------------------
