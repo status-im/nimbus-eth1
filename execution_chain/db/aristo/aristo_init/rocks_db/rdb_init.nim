@@ -101,9 +101,6 @@ proc init*(rdb: var RdbInst, opts: DbOptions, baseDb: RocksDbInstanceRef) =
   rdb.rdBranchLru = typeof(rdb.rdBranchLru).init(rdb.rdBranchSize)
   rdb.rdbPrintStats =  opts.rdbPrintStats
 
-  # Initialise column handlers (this stores implicitely `baseDb`)
-  rdb.admCol = baseDb.db.getColFamily($AdmCF).valueOr(default(ColFamilyReadWrite))
-
   rdb.vtxCol = baseDb.db.getColFamily($VtxCF).valueOr:
     raiseAssert "Cannot initialise VtxCF descriptor: " & error
 
