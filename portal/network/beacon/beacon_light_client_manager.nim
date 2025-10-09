@@ -26,7 +26,6 @@ logScope:
   topics = "beacon_lc_man"
 
 type
-  Nothing = object
   ResponseError = object of CatchableError
 
   NetRes*[T] = Result[T, void]
@@ -173,11 +172,7 @@ proc workerTask[E](
 ): Future[bool] {.async: (raises: [CancelledError]).} =
   var didProgress = false
   try:
-    let value =
-      when E.K is Nothing:
-        await E.doRequest(self.network)
-      else:
-        await E.doRequest(self.network, key)
+    let value = await E.doRequest(self.network, key)
     if value.isOk:
       for val in value.get().values:
         let res = await self.valueVerifier(E)(val)
