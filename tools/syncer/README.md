@@ -172,15 +172,15 @@ with contents
            # a set of traffic into the tunnel interface. Routing tables "main"
            # or "8" are selected by the policy set up via
            # "ip rules add ... lookup <table>"
-           up ip rule add from 192.168.122.1 lookup main || true
-           up ip rule add from 192.168.122.0/24 lookup 8 || true
-           up ip rule add from 10.3.4.2 lookup 8 || true
+           up ip rule add prio 5001 from 192.168.122.1 lookup main || true
+           up ip rule add prio 5002 from 192.168.122.0/24 lookup 8 || true
+           up ip rule add prio 5003 from 10.3.4.2 lookup 8 || true
            up ip route add default via 10.3.4.1 table 8 || true
            up ip route add 192.168.122.0/24 via 192.168.122.1 table 8 || true
 
-           down ip rule del from 192.168.122.1 lookup main || true
-           down ip rule del from 192.168.122.0/24 || true
-           down ip rule del from 10.3.4.2 lookup 8 || true
+           down ip rule del prio 5001 from 192.168.122.1 lookup main || true
+           down ip rule del prio 5002 from 192.168.122.0/24 lookup 8 || true
+           down ip rule del prio 5003 from 10.3.4.2 lookup 8 || true
            down ip route flush table 8 || true
 
          # End
@@ -229,7 +229,7 @@ on either system. In order to verify, try running
          ping 10.3.4.1   # on LOCAL
 
 
-Configuring `iptables` on the *EXTERN* server
+Configuring `nftables` on the *EXTERN* server
 ---------------------------------------------
 
 As a suggestion for an `nftables` filter and NAT rules set on a *Linux* host
@@ -237,9 +237,9 @@ As a suggestion for an `nftables` filter and NAT rules set on a *Linux* host
 
          #! /usr/sbin/nft -f
 
-         define wan_if   = <server-interface>
+         define wan_if   = "<server-interface>"
          define wan_ip   = <server-address>
-         define tun_if   = tun0
+         define tun_if   = "tun0"
 
          define gw_ip    = 10.3.4.2
          define gw_ports = { 30600-30699, 9010-9019 }
