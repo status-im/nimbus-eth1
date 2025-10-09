@@ -358,6 +358,11 @@ type
       desc: "Eagerly check state roots when syncing finalized blocks"
       name: "debug-eager-state-root".}: bool
 
+    deserializeFcState* {.
+      hidden
+      defaultValue: true
+      name: "debug-deserialize-fc-state" .}: bool
+
     statelessProviderEnabled* {.
       separator: "\pSTATELESS PROVIDER OPTIONS:"
       hidden
