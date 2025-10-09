@@ -360,8 +360,8 @@ with --debug-eager-state-root."""
     # Increasing the batch size can improve performance because the stateroot
     # computation and persist calls are performed less frequently.
     const
-      targetTime = 200.milliseconds
-      targetTimeDelta = 100.milliseconds
+      targetTime = 500.milliseconds
+      targetTimeDelta = 200.milliseconds
       targetTimeLowerBound = (targetTime - targetTimeDelta).milliseconds
       targetTimeUpperBound = (targetTime + targetTimeDelta).milliseconds
       batchSizeLowerBound = 4
