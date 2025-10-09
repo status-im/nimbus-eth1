@@ -18,7 +18,7 @@ import
 # ------------------------------------------------------------------------------
 
 func bdyErrors*(buddy: BeaconBuddyRef): string =
-  $buddy.only.nRespErrors.blk & "/" & $buddy.nBlkProcErrors()
+  $buddy.only.nRespErrors.blk & "/" & $buddy.only.nProcErrors.blk
 
 proc bdyFetchRegisterError*(buddy: BeaconBuddyRef, slowPeer = false) =
   buddy.only.nRespErrors.blk.inc

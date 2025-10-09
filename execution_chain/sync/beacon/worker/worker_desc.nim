@@ -122,6 +122,7 @@ type
   BeaconBuddyData* = object
     ## Local descriptor data extension
     nRespErrors*: BuddyError         ## Number of errors/slow responses in a row
+    nProcErrors*: BuddyError         ## Ditto for processing errors
 
   InitTarget* = tuple
     hash: Hash32                     ## Some block hash to sync towards to
@@ -141,7 +142,6 @@ type
     hdrCache*: HeaderChainRef        ## Currently in tandem with `chain`
 
     # Info, debugging, and error handling stuff
-    nProcError*: Table[Hash,BuddyError] ## Per peer processing error
     lastSlowPeer*: Opt[Hash]         ## Register slow peer when the last one
     failedPeers*: HashSet[Hash]      ## Detect dead end sync by collecting peers
     seenData*: bool                  ## Set `true` if data were fetched, already
@@ -175,6 +175,10 @@ func chain*(ctx: BeaconCtxRef): ForkedChainRef =
 func hdrCache*(ctx: BeaconCtxRef): HeaderChainRef =
   ## Shortcut
   ctx.pool.hdrCache
+
+proc getPeer*(buddy: BeaconBuddyRef; peerID: Hash): BeaconBuddyRef =
+  ## Getter, retrieve syncer peer (aka buddy) by `peerID` argument
+  if buddy.peerID == peerID: buddy else: buddy.ctx.getPeer peerID
 
 # -----
 
@@ -210,69 +214,6 @@ func syncState*(
    buddy.ctx.pool.lastState,
    buddy.ctx.hdrCache.state,
    buddy.ctx.poolMode)
-
-# -----
-
-proc initProcErrors*(buddy: BeaconBuddyRef) =
-  ## Create error slot for argument `buddy`
-  buddy.ctx.pool.nProcError[buddy.peerID] = (0u8,0u8)
-
-proc clearProcErrors*(buddy: BeaconBuddyRef) =
-  ## Delete error slot for argument `buddy`
-  buddy.ctx.pool.nProcError.del buddy.peerID
-  doAssert buddy.ctx.pool.nProcError.len <= buddy.ctx.pool.nBuddies
-
-# -----
-
-proc nHdrProcErrors*(buddy: BeaconBuddyRef): int =
-  ## Getter, returns the number of `proc` errors for argument `buddy`
-  buddy.ctx.pool.nProcError.withValue(buddy.peerID, val):
-    return val.hdr.int
-
-proc incHdrProcErrors*(buddy: BeaconBuddyRef) =
-  ## Increment `proc` error count for for argument `buddy`. Due to
-  ## (hypothetical) hash collisions, the error register might have
-  ## vanished in case a new one is instantiated.
-  buddy.ctx.pool.nProcError.withValue(buddy.peerID, val):
-    val.hdr.inc
-  do:
-    buddy.ctx.pool.nProcError[buddy.peerID] = (1u8,0u8)
-
-proc setHdrProcFail*(ctx: BeaconCtxRef; peerID: Hash) =
-  ## Set `proc` error count high enough so that the implied sync peer will
-  ## be zombified on the next attempt to download data.
-  ctx.pool.nProcError.withValue(peerID, val):
-    val.hdr = nProcHeadersErrThreshold + 1
-
-proc resetHdrProcErrors*(ctx: BeaconCtxRef; peerID: Hash) =
-  ## Reset `proc` error count.
-  ctx.pool.nProcError.withValue(peerID, val):
-    val.hdr = 0
-
-# -----
-
-proc nBlkProcErrors*(buddy: BeaconBuddyRef): int =
-  ## Getter, similar to `nHdrProcErrors()`
-  buddy.ctx.pool.nProcError.withValue(buddy.peerID, val):
-    return val.blk.int
-
-proc incBlkProcErrors*(buddy: BeaconBuddyRef) =
-  ## Increment `proc` error count, similar to `incHdrProcErrors()`
-  buddy.ctx.pool.nProcError.withValue(buddy.peerID, val):
-    val.blk.inc
-  do:
-    buddy.ctx.pool.nProcError[buddy.peerID] = (0u8,1u8)
-
-proc setBlkProcFail*(ctx: BeaconCtxRef; peerID: Hash) =
-  ## Set `proc` error count high enough so that the implied sync peer will
-  ## be zombified on the next attempt to download data.
-  ctx.pool.nProcError.withValue(peerID, val):
-    val.blk = nProcBlocksErrThreshold + 1
-
-proc resetBlkProcErrors*(ctx: BeaconCtxRef; peerID: Hash) =
-  ## Reset `proc` error count.
-  ctx.pool.nProcError.withValue(peerID, val):
-    val.blk = 0
 
 # ------------------------------------------------------------------------------
 # End

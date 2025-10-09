@@ -117,7 +117,7 @@ template blocksFetchCheckImpl(
     if 0 < blocks.len.uint64:
       bodyRc = Opt[seq[EthBlock]].ok(blocks)               # return ok()
 
-    buddy.incBlkProcErrors()
+    buddy.only.nProcErrors.blk.inc
     break body                                             # return err()
 
   bodyRc # return
@@ -141,7 +141,7 @@ template blocksFetch*(
   block body:
     # Make sure that this sync peer is not banned from block processing,
     # already.
-    if nProcBlocksErrThreshold < buddy.nBlkProcErrors():
+    if nProcBlocksErrThreshold < buddy.only.nProcErrors.blk:
       buddy.ctrl.zombie = true
       break body                                      # return err()
 
@@ -206,7 +206,9 @@ template blocksImport*(
             isError = true
 
             # Mark peer that produced that unusable headers list as a zombie
-            ctx.setBlkProcFail peerID
+            let srcPeer = buddy.getPeer peerID
+            if not srcPeer.isNil:
+              srcPeer.only.nProcErrors.blk = nProcBlocksErrThreshold + 1
 
             # Check whether it is enough to skip the current blocks list, only
             if ctx.subState.procFailNum != nBn:
@@ -244,7 +246,9 @@ template blocksImport*(
         # End block: `loop`
 
     if not isError:
-      ctx.resetBlkProcErrors peerID
+      let srcPeer = buddy.getPeer peerID
+      if not srcPeer.isNil:
+        srcPeer.only.nProcErrors.blk = 0
 
     nBlocks = ctx.subState.top - iv.minPt + 1      # number of blocks imported
 

@@ -20,9 +20,9 @@ import
 proc updateErrorState(buddy: BeaconBuddyRef) =
   ## Helper/wrapper
   if ((0 < buddy.only.nRespErrors.hdr or
-       0 < buddy.nHdrProcErrors()) and buddy.ctrl.stopped) or
+       0 < buddy.only.nProcErrors.hdr) and buddy.ctrl.stopped) or
      nFetchHeadersErrThreshold < buddy.only.nRespErrors.hdr or
-     nProcHeadersErrThreshold < buddy.nHdrProcErrors():
+     nProcHeadersErrThreshold < buddy.only.nProcErrors.hdr:
 
     # Make sure that this peer does not immediately reconnect
     buddy.ctrl.zombie = true
@@ -32,7 +32,7 @@ proc updateErrorState(buddy: BeaconBuddyRef) =
 # ------------------------------------------------------------------------------
 
 func hdrErrors*(buddy: BeaconBuddyRef): string =
-  $buddy.only.nRespErrors.hdr & "/" & $buddy.nHdrProcErrors()
+  $buddy.only.nRespErrors.hdr & "/" & $buddy.only.nProcErrors.hdr
 
 proc hdrFetchRegisterError*(buddy: BeaconBuddyRef, slowPeer = false) =
   buddy.only.nRespErrors.hdr.inc
@@ -47,7 +47,7 @@ proc hdrFetchRegisterError*(buddy: BeaconBuddyRef, slowPeer = false) =
       buddy.ctrl.zombie = true # abandon slow peer unless last one
 
 proc hdrProcRegisterError*(buddy: BeaconBuddyRef) =
-  buddy.incHdrProcErrors()
+  buddy.only.nProcErrors.hdr.inc
   buddy.updateErrorState()
 
 # -----------------

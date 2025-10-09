@@ -42,7 +42,7 @@ template headersFetch*(
   block body:
     # Make sure that this sync peer is not banned from header processing,
     # already
-    if nStashHeadersErrThreshold < buddy.nHdrProcErrors():
+    if nStashHeadersErrThreshold < buddy.only.nProcErrors.hdr:
       buddy.ctrl.zombie = true
       break body
 
@@ -100,7 +100,9 @@ proc headersStashOnDisk*(
 
   if rc.isErr:
     # Mark peer that produced that unusable headers list as a zombie
-    ctx.setHdrProcFail peerID
+    let srcPeer = buddy.getPeer peerID
+    if not srcPeer.isNil:
+      srcPeer.only.nProcErrors.hdr = nProcHeadersErrThreshold + 1
 
     # Check whether it is enough to skip the current headers list, only
     if ctx.subState.procFailNum != dTop:
@@ -137,7 +139,10 @@ proc headersStashOnDisk*(
     base=ctx.chain.baseNumber.bnStr, head=ctx.chain.latestNumber.bnStr,
     target=ctx.subState.head.bnStr, targetHash=ctx.subState.headHash.short
 
-  ctx.resetHdrProcErrors peerID                  # reset error count
+  let srcPeer = buddy.getPeer peerID
+  if not srcPeer.isNil:
+    srcPeer.only.nProcErrors.hdr = 0             # reset error count
+
   ok(dTop - dBottom)
 
 # ------------------------------------------------------------------------------
