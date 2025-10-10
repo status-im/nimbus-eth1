@@ -393,8 +393,19 @@ evmstate_test: | build deps evmstate
 txparse: | build deps
 	$(ENV_SCRIPT) nim c $(NIM_PARAMS) "tools/txparse/$@.nim"
 
+# build syncer debugging and analysis tools
+SYNCER_TOOLS_DIR := tools/syncer
+SYNCER_TOOLS :=  $(foreach name,trace inspect replay,syncer_test_client_$(name))
+.PHONY: syncer-tools syncer-tools-clean $(SYNCER_TOOLS)
+syncer-tools: $(SYNCER_TOOLS)
+syncer-tools-clean:
+	rm -f $(foreach exe,$(SYNCER_TOOLS),build/$(exe))
+$(SYNCER_TOOLS): | build deps rocksdb
+	echo -e $(BUILD_MSG) "build/$@"
+	$(ENV_SCRIPT) nim c $(NIM_PARAMS) -o:build/$@ "$(SYNCER_TOOLS_DIR)/$@.nim"
+
 # usual cleaning
-clean: | clean-common
+clean: | clean-common syncer-tools-clean
 	rm -rf build/{nimbus,nimbus_execution_client,nimbus_portal_client,fluffy,portal_bridge,libverifproxy,nimbus_verified_proxy,$(TOOLS_CSV),$(PORTAL_TOOLS_CSV),all_tests,test_kvstore_rocksdb,test_rpc,all_portal_tests,all_history_network_custom_chain_tests,test_portal_testnet,utp_test_app,utp_test,*.dSYM}
 	rm -rf tools/t8n/{t8n,t8n_test}
 	rm -rf tools/evmstate/{evmstate,evmstate_test}
