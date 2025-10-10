@@ -12,7 +12,7 @@
 
 import
   pkg/[chronicles, chronos, results],
-  pkg/eth/common,
+  pkg/eth/[common, rlp],
   pkg/stew/interval_set,
   ../../../wire_protocol,
   ../worker_desc,
@@ -32,8 +32,9 @@ proc getBlockHeaders(
   var resp: BlockHeadersPacket
 
   try:
-    resp = (await buddy.peer.getBlockHeaders(req)).valueOr:
-      return err((ENoException,"","",Moment.now()-start))
+    resp = (await buddy.peer.getBlockHeaders(
+      req, fetchHeadersRlpxTimeout)).valueOr:
+        return err((ENoException,"","",Moment.now()-start))
   except PeerDisconnected as e:
     return err((EPeerDisconnected,$e.name,$e.msg,Moment.now()-start))
   except CancelledError as e:
@@ -135,6 +136,9 @@ template fetchHeadersReversed*(
         syncState=($buddy.syncState), hdrErrors=buddy.hdrErrors
       break body
 
+    # Update download statistics
+    let bps = buddy.only.thruPutStats.hdr.bpsSample(elapsed, h.getEncodedLength)
+
     # Ban an overly slow peer for a while when seen in a row. Also there is a
     # mimimum share of the number of requested headers expected, typically 10%.
     if fetchHeadersErrTimeout < elapsed or
@@ -146,8 +150,8 @@ template fetchHeadersReversed*(
 
     trace trEthRecvReceivedBlockHeaders, peer, nReq=req.maxResults,
       hash=topHash.toStr, ivResp=BnRange.new(h[^1].number,h[0].number),
-      nResp=h.len, elapsed=elapsed.toStr, syncState=($buddy.syncState),
-      hdrErrors=buddy.hdrErrors
+      nResp=h.len, elapsed=elapsed.toStr, throughput=(bps.toIECb(1) & "ps"),
+      syncState=($buddy.syncState), hdrErrors=buddy.hdrErrors
 
     bodyRc = Opt[seq[Header]].ok(h)
 

@@ -125,6 +125,7 @@ template blocksCollect*(
               head=ctx.chain.latestNumber.bnStr,
               target=ctx.subState.head.bnStr,
               targetHash=ctx.subState.headHash.short,
+              throughput=buddy.blkThroughput,
               nSyncPeers=ctx.pool.nBuddies
             ctx.pool.lastSyncUpdLog = Moment.now()
             nImported = 0
@@ -176,6 +177,7 @@ template blocksCollect*(
           head=ctx.chain.latestNumber.bnStr,
           target=ctx.subState.head.bnStr,
           targetHash=ctx.subState.headHash.short,
+          throughput=buddy.blkThroughput,
           nSyncPeers=ctx.pool.nBuddies
         ctx.pool.lastSyncUpdLog = Moment.now()
 
@@ -261,7 +263,7 @@ template blocksUnstage*(
       if 0 < nImported:
         importedOK = true
         if ctx.pool.lastSyncUpdLog + syncUpdateLogWaitInterval < Moment.now():
-          chronicles.info "Imported blocks", nImported,
+          chronicles.info "Imported blocks (from queue)", nImported,
             nUnproc=ctx.nUnprocStr(),
             nStagedQ=ctx.blk.staged.len,
             base=ctx.chain.baseNumber.bnStr,
@@ -283,7 +285,7 @@ template blocksUnstage*(
       # Sync status logging
       if 0 < nImported:
         # Note that `nImported` might have been reset above.
-        chronicles.info "Imported blocks", nImported,
+        chronicles.info "Imported blocks (from queue)", nImported,
           nUnproc=ctx.nUnprocStr(),
           nStagedQ=ctx.blk.staged.len,
           base=ctx.chain.baseNumber.bnStr,

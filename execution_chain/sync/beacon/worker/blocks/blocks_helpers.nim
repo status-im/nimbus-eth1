@@ -18,7 +18,7 @@ import
 # ------------------------------------------------------------------------------
 
 func bdyErrors*(buddy: BeaconBuddyRef): string =
-  $buddy.only.nRespErrors.blk & "/" & $buddy.nBlkProcErrors()
+  $buddy.only.nRespErrors.blk & "/" & $buddy.only.nProcErrors.blk
 
 proc bdyFetchRegisterError*(buddy: BeaconBuddyRef, slowPeer = false) =
   buddy.only.nRespErrors.blk.inc
@@ -39,6 +39,10 @@ func blkSessionStopped*(ctx: BeaconCtxRef): bool =
   ## state settings (not on sync peer ctrl as `buddy.ctrl.running`.)
   ctx.poolMode or
   ctx.pool.lastState != SyncState.blocks
+
+func blkThroughput*(buddy: BeaconBuddyRef): string =
+  ## Print throuhput sratistics
+  buddy.only.thruPutStats.blk.toMeanVar.psStr
 
 # ------------------------------------------------------------------------------
 # End
