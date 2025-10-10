@@ -711,7 +711,10 @@ suite "ForkedChainRef tests":
   test "newBase move forward, auto mode, base finalized marker needed":
     const info = "newBase move forward, auto mode, base finalized marker needed"
     let com = env.newCom()
-    var chain = ForkedChainRef.init(com, baseDistance = 2, persistBatchSize = 1)
+    var chain = ForkedChainRef.init(com,
+      baseDistance = 2,
+      persistBatchSize = 1,
+      dynamicBatchSize = false)
     check (waitFor chain.forkChoice(blk8.blockHash, blk8.blockHash)).isErr
     check chain.tryUpdatePendingFCU(blk8.blockHash, blk8.header.number)
     checkImportBlock(chain, blk1)

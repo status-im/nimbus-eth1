@@ -65,6 +65,7 @@ proc basicServices(nimbus: NimbusNode, conf: NimbusConf, com: CommonRef) =
   let fc = ForkedChainRef.init(com,
     eagerStateRoot = conf.eagerStateRootCheck,
     persistBatchSize = conf.persistBatchSize,
+    dynamicBatchSize = conf.dynamicBatchSize,
     enableQueue = true)
   if conf.deserializeFcState:
     fc.deserialize().isOkOr:

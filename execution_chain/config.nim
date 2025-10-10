@@ -301,6 +301,11 @@ type
       defaultValue: 4'u64
       name: "debug-persist-batch-size" .}: uint64
 
+    dynamicBatchSize* {.
+      hidden
+      defaultValue: false
+      name: "debug-dynamic-batch-size" .}: bool
+
     rocksdbMaxOpenFiles {.
       hidden
       defaultValue: defaultMaxOpenFiles

@@ -88,6 +88,10 @@ type
       # to move the base. And the bulk writing can works
       # efficiently.
 
+    dynamicBatchSize*: bool
+      # Enable adjusting the persistBatchSize dynamically based on the
+      # time it takes to update base.
+
     portal*: HistoryExpiryRef
       # History Expiry tracker and portal access entry point
 

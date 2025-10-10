@@ -314,6 +314,8 @@ proc updateBase(c: ForkedChainRef, base: BlockRef): uint =
     # No update, return
     return
 
+  let startTime = Moment.now()
+
   # State root sanity check is performed to verify, before writing to disk,
   # that optimistically checked blocks indeed end up being stored with a
   # consistent state root.
@@ -338,8 +340,7 @@ with --debug-eager-state-root."""
 
   # Cleanup in-memory blocks starting from base backward
   # e.g. B2 backward.
-  var
-    count = 0'u
+  var count = 0'u
 
   for it in ancestors(base.parent):
     c.removeBlockFromCache(it)
@@ -351,6 +352,33 @@ with --debug-eager-state-root."""
 
   # Base block always have finalized marker
   c.base.finalize()
+
+  if c.dynamicBatchSize:
+    # Dynamicly adjust the persistBatchSize based on the recorded run time.
+    # The goal here is use the maximum batch size possible without blocking the
+    # event loop for too long which could negatively impact the p2p networking.
+    # Increasing the batch size can improve performance because the stateroot
+    # computation and persist calls are performed less frequently.
+    const
+      targetTime = 500.milliseconds
+      targetTimeDelta = 200.milliseconds
+      targetTimeLowerBound = (targetTime - targetTimeDelta).milliseconds
+      targetTimeUpperBound = (targetTime + targetTimeDelta).milliseconds
+      batchSizeLowerBound = 4
+      batchSizeUpperBound = 512
+
+    let
+      finishTime = Moment.now()
+      runTime = (finishTime - startTime).milliseconds
+
+    if runTime < targetTimeLowerBound and c.persistBatchSize <= batchSizeUpperBound:
+      c.persistBatchSize *= 2
+      info "Increased persistBatchSize", runTime, targetTime,
+        persistBatchSize = c.persistBatchSize
+    elif runTime > targetTimeUpperBound and c.persistBatchSize >= batchSizeLowerBound:
+      c.persistBatchSize = c.persistBatchSize div 2
+      info "Decreased persistBatchSize", runTime, targetTime,
+        persistBatchSize = c.persistBatchSize
 
   count
 
@@ -586,6 +614,7 @@ proc init*(
     com: CommonRef;
     baseDistance = BaseDistance;
     persistBatchSize = PersistBatchSize;
+    dynamicBatchSize = false;
     eagerStateRoot = false;
     enableQueue = false;
       ): T =
@@ -627,6 +656,7 @@ proc init*(
       baseTxFrame:      baseTxFrame,
       baseDistance:     baseDistance,
       persistBatchSize: persistBatchSize,
+      dynamicBatchSize: dynamicBatchSize,
       quarantine:       Quarantine.init(),
       fcuHead:          fcuHead,
       fcuSafe:          fcuSafe,
