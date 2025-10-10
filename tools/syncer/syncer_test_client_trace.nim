@@ -10,7 +10,7 @@
 import
   std/[cmdline, os, strutils, terminal],
   pkg/[chronicles, confutils, results],
-  ../../execution_chain/[config, nimbus_desc, nimbus_execution_client],
+  ../../execution_chain/[conf, nimbus_desc, nimbus_execution_client],
   ../../execution_chain/sync/beacon,
   ./helpers/sync_ticker,
   ./trace/trace_setup

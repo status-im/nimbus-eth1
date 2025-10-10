@@ -175,8 +175,7 @@ proc newPeerImpl(
     run:              run,
     ctx:              run.ctx,
     only: BeaconBuddyData(
-      nRespErrors:   (instr.bag.peerCtx.value.nHdrErrors,
-                      instr.bag.peerCtx.value.nBlkErrors)),
+      nErrors:        instr.bag.peerCtx.value.nErrors),
     peerID:           instr.bag.peerCtx.value.peerID,
     peer: Peer(
       dispatcher:     run.ethState.capa,
@@ -348,17 +347,17 @@ proc peerStatesDifferImpl(
       info info & ": peer ctrl states differ", n, serial, peer,
         ctrl=buddy.ctrl.state, expected=instr.bag.peerCtx.value.peerCtrl
 
-    if instr.bag.peerCtx.value.nHdrErrors != buddy.only.nRespErrors.hdr:
+    if instr.bag.peerCtx.value.nErrors.fetch != buddy.nErrors.fetch:
       statesDiffer = true
-      info info & ": peer header errors differ", n, serial, peer,
-        nHdrErrors=buddy.only.nRespErrors.hdr,
-        expected=instr.bag.peerCtx.value.nHdrErrors
+      info info & ": peer fetch errors differ", n, serial, peer,
+        nHdrErrors=buddy.nErrors.fetch,
+        expected=instr.bag.peerCtx.value.nErrors
 
-    if instr.bag.peerCtx.value.nBlkErrors != buddy.only.nRespErrors.blk:
+    if instr.bag.peerCtx.value.nErrors.apply != buddy.only.nErrors.apply:
       statesDiffer = true
-      info info & ": peer body errors differ", n, serial, peer,
-        nBlkErrors=buddy.only.nRespErrors.blk,
-        expected=instr.bag.peerCtx.value.nBlkErrors
+      info info & ": peer apply errors differ", n, serial, peer,
+        nHdrErrors=buddy.nErrors.apply,
+        expected=instr.bag.peerCtx.value.nErrors.apply
 
   return statesDiffer
 

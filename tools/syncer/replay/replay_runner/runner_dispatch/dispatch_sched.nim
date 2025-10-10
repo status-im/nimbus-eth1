@@ -60,7 +60,7 @@ proc schedPeerProcessImpl(
   # Activate peer
   buddy.run.nPeers.inc
 
-  discard await run.backup.schedPeer(buddy)
+  discard await run.backup.schedPeer(buddy, instr.bag.rank)
   buddy.processFinishedClearFrame(instr, info)
 
   trace info & ": end", n=run.iNum, serial=instr.bag.serial,

@@ -56,6 +56,12 @@ type
   ReplayEndUpFn* = proc() {.gcsafe, raises: [].}
     ## Terminator control directive for runner/dispatcher
 
+  ReplayGetPeerFn* = GetPeerFn[BeaconCtxData,BeaconBuddyData]
+    ## Shortcut
+
+  ReplayGetPeersFn* = GetPeersFn[BeaconCtxData,BeaconBuddyData]
+    ## Shortcut
+
   ReplayRef* = ref object of BeaconHandlersSyncRef
     ## Overlay handlers extended by descriptor data for caching replay state
     ctx*: BeaconCtxRef                  ## Parent context
@@ -64,7 +70,7 @@ type
     stopQuit*: bool                     ## Quit after replay
     backup*: BeaconHandlersRef          ## Can restore previous handlers
     reader*: ReplayReaderRef            ## Input records
-
+    getPeerSave*: ReplayGetPeerFn       ## Additionsl restore settings
 
   ReplayPayloadRef* = ref object of RootRef
     ## Decoded payload base record

@@ -67,10 +67,9 @@ proc init*(tb: var TraceRecBase; buddy: BeaconBuddyRef) =
   if not trc.isNil:
     tb.init ctx
     tb.peerCtx = Opt.some(TracePeerCtx(
-      peerCtrl:   buddy.ctrl.state,
-      peerID:     buddy.peerID,
-      nHdrErrors: buddy.only.nRespErrors.hdr,
-      nBlkErrors: buddy.only.nRespErrors.blk))
+      peerCtrl: buddy.ctrl.state,
+      peerID:   buddy.peerID,
+      nErrors:  buddy.nErrors))
 
 # ------------------------------------------------------------------------------
 # Public helpers

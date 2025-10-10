@@ -138,6 +138,7 @@ proc schedPoolTrace*(buddy: BeaconBuddyRef; last: bool; laps: int): bool =
 
 proc schedPeerTrace*(
     buddy: BeaconBuddyRef;
+    rank: PeerRanking;
       ): Future[Duration]
       {.async: (raises: []).} =
   ## Similar to `schedDaemonTrace()`
@@ -152,13 +153,15 @@ proc schedPeerTrace*(
     tBeg.frameID = Opt.some(tBeg.serial)
     tBeg.peerIP = buddy.getIP()
     tBeg.peerPort = buddy.getPort()
+    tBeg.rank = rank
     buddy.traceWrite tBeg
 
     trace "+Peer", peer=($buddy.peer), peerID=buddy.peerID.short,
+      rankInfo=($rank.assessed), rank=($rank.ranking),
       serial=tBeg.serial, frameID=tBeg.frameID.value.idStr,
       syncState=tBeg.syncState
 
-  let idleTime = await ctx.trace.backup.schedPeer(buddy)
+  let idleTime = await ctx.trace.backup.schedPeer(buddy, rank)
 
   if noisy:
     var tEnd: TraceSchedPeerEnd

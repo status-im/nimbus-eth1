@@ -65,7 +65,7 @@ proc noOpSchedDaemon(ctx: BeaconCtxRef):
     Future[Duration] {.async: (raises: []).} =
   return replayWaitMuted
 
-proc noOpSchedPeer(buddy: BeaconBuddyRef):
+proc noOpSchedPeer(buddy: BeaconBuddyRef; rank: PeerRanking):
     Future[Duration] {.async: (raises: []).} =
   return replayWaitMuted
 
@@ -95,20 +95,21 @@ proc replayStartCB(rpl: ReplayRunnerRef) =
   ##
   # Set up redirect handlers for replay
   rpl.version =          ReplayRunnerID
-  #   activate                               # use as is
-  #   suspend                                # use as is
+  #   activate                                  # use as is
+  #   suspend                                   # use as is
   rpl.reader =           ReplayReaderRef.init(rpl.captStrm)
   rpl.schedDaemon =      noOpSchedDaemon
-  rpl.schedStart =       noOpSchedStartFalse # `false` => don't register
+  rpl.schedStart =       noOpSchedStartFalse    # `false` => don't register
   rpl.schedStop =        noOpBuddy
-  rpl.schedPool =        noOpSchedPoolTrue   # `true` => stop repeating
+  rpl.schedPool =        noOpSchedPoolTrue      # `true` => stop repeating
   rpl.schedPeer =        noOpSchedPeer
-  rpl.getBlockHeaders =  fetchHeadersHandler # from dispatcher
+  rpl.getBlockHeaders =  fetchHeadersHandler    # from dispatcher
   rpl.syncBlockHeaders = noOpBuddy
-  rpl.getBlockBodies =   fetchBodiesHandler  # from dispatcher
+  rpl.getBlockBodies =   fetchBodiesHandler     # from dispatcher
   rpl.syncBlockBodies =  noOpBuddy
-  rpl.importBlock =      importBlockHandler  # from dispatcher
+  rpl.importBlock =      importBlockHandler     # from dispatcher
   rpl.syncImportBlock =  noOpBuddy
+  rpl.ctx.getPeer =      rpl.replayGetPeerFn()  # normally provided by scheduler
 
   rpl.initRunner()
 
@@ -120,6 +121,7 @@ proc replayStartCB(rpl: ReplayRunnerRef) =
     ReplayRunnerRef(self).destroyRunner()
     stopInfo.onException(DontQuit):
       ReplayRunnerRef(self).captStrm.close()
+    ReplayRunnerRef(self).ctx.getPeer =       ReplayRunnerRef(self).getPeerSave
     ReplayRunnerRef(self).ctx.pool.handlers = ReplayRunnerRef(self).backup
 
   # Start fake scheduler
@@ -155,6 +157,7 @@ proc replaySetup*(
     fakeImport:       fakeImport,
     stopQuit:         not noStopQuit,
     backup:           ctx.pool.handlers,
+    getPeerSave:      ctx.getPeer,
 
     # This is still the old descriptor which will be updated when
     # `startSync()` is run.

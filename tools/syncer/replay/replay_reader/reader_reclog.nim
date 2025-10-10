@@ -77,10 +77,14 @@ proc addX(
                     $base.blkUnpr.value.bLeastLen
 
   if base.peerCtx.isSome() and
-     (0 < base.peerCtx.value.nHdrErrors or
-      0 < base.peerCtx.value.nBlkErrors):
-    q.add "nErr=(" & $base.peerCtx.value.nHdrErrors &
-               "," & $base.peerCtx.value.nBlkErrors & ")"
+     (0 < base.peerCtx.value.nErrors.fetch.hdr or
+      0 < base.peerCtx.value.nErrors.fetch.bdy or
+      0 < base.peerCtx.value.nErrors.apply.hdr or
+      0 < base.peerCtx.value.nErrors.apply.blk):
+    q.add "nErr=(" & $base.peerCtx.value.nErrors.fetch.hdr &
+               "," & $base.peerCtx.value.nErrors.fetch.bdy &
+               ";" & $base.peerCtx.value.nErrors.apply.hdr &
+               "," & $base.peerCtx.value.nErrors.apply.blk & ")"
 
   if base.slowPeer.isSome():
     q.add "slowPeer=" & base.slowPeer.value.short()
@@ -170,6 +174,8 @@ func toStrSeq(n: int; w: ReplaySchedPeerBegin): seq[string] =
   var res = newSeqOfCap[string](20)
   res.addX(w.replayLabel, n, w.bag)
   res.add "peer=" & $w.bag.peerIP & ":" & $w.bag.peerPort
+  res.add "info=" & $w.bag.rank.assessed
+  res.add "rank=" & $w.bag.rank.ranking
   res
 
 func toStrSeq(n: int; w: ReplaySchedPeerEnd): seq[string] =
@@ -186,8 +192,8 @@ func toStrSeq(n: int; w: ReplayFetchHeaders): seq[string] =
     rLen = w.bag.req.maxResults
     rRev = if w.bag.req.reverse: "rev" else: ""
   if w.bag.req.startBlock.isHash:
-    res.add "req=" &
-      w.bag.req.startBlock.hash.short & "[" & $rLen & "]" & rRev
+    res.add "req=" & w.bag.req.startBlock.hash.short & "[" & $rLen & "]" & rRev
+    res.add "bn=" & w.bag.bn.bnStr
   else:
     res.add "req=" &
       w.bag.req.startBlock.number.bnStr & "[" & $rLen & "]" & rRev

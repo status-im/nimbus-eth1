@@ -85,5 +85,14 @@ type
     instrNumber*: uint                 ## Instruction counter
 
 # ------------------------------------------------------------------------------
+# Fake scheduler `getPeer()` and `getPeers()` for replay runner
+# ------------------------------------------------------------------------------
+
+proc replayGetPeerFn*(run: ReplayRunnerRef): ReplayGetPeerFn =
+  result = proc(peerID: Hash): BeaconBuddyRef =
+    run.peers.withValue(peerID,val):
+      return val[]
+
+# ------------------------------------------------------------------------------
 # End
 # ------------------------------------------------------------------------------

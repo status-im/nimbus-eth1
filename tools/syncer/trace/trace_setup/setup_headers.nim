@@ -29,17 +29,19 @@ logScope:
 proc fetchHeadersTrace*(
     buddy: BeaconBuddyRef;
     req: BlockHeadersRequest;
+    bn: BlockNumber;
       ): Future[Result[FetchHeadersData,BeaconError]]
       {.async: (raises: []).} =
   ## Replacement for `getBlockHeaders()` handler which in addition writes data
   ## to the output stream for tracing.
   ##
-  let data = await buddy.ctx.trace.backup.getBlockHeaders(buddy, req)
+  let data = await buddy.ctx.trace.backup.getBlockHeaders(buddy, req, bn)
 
   if not buddy.ctx.hibernate:
     var tRec: TraceFetchHeaders
     tRec.init buddy
     tRec.req = req
+    tRec.bn = bn
     if data.isOk:
       tRec.fetched = Opt.some(data.value)
     else:

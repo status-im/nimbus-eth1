@@ -57,6 +57,7 @@ func getBeaconError(e: ReplayWaitError): BeaconError =
 proc fetchHeadersHandler*(
     buddy: BeaconBuddyRef;
     req: BlockHeadersRequest;
+    bn: BlockNumber;
       ): Future[Result[FetchHeadersData,BeaconError]]
       {.async: (raises: []).} =
   ## Replacement for `getBlockHeaders()` handler.
@@ -80,7 +81,10 @@ proc fetchHeadersHandler*(
         ", expected=" & instr.bag.req.startBlock.toStr &
         # -----
         ", reqLen=" & $req.maxResults &
-        ", expected=" & $instr.bag.req.maxResults
+        ", expected=" & $instr.bag.req.maxResults &
+        # -----
+        ", bn=" & bn.bnStr &
+        ", expected=" & instr.bag.bn.bnStr
     data = instr
 
   buddy.withInstr(ReplaySyncHeaders, info):

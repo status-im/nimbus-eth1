@@ -11,8 +11,7 @@
 {.push raises: [].}
 
 import
-  std/strutils,
-  pkg/[chronos, chronicles, eth/common, stint, stew/interval_set],
+  pkg/[chronos, chronicles, eth/common, stew/interval_set],
   ../../../execution_chain/sync/beacon/worker/[blocks, headers, worker_desc]
 
 logScope:

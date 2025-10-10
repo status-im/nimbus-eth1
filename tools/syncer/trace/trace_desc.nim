@@ -28,7 +28,7 @@ export
   worker_desc
 
 const
-  TraceVersionID* = 20250917
+  TraceVersionID* = 20251022
 
   TraceSetupID* = 1                   ## Phase 1 layout ID, prepare
   TraceRunnerID* = 10                 ## Phase 2 layout ID, full execution
@@ -93,8 +93,7 @@ type
     ## Optional sub-object for `TraceRecBase`
     peerCtrl*: BuddyRunState          ## Sync peer run state
     peerID*: Hash                     ## Sync peer ID (if any)
-    nHdrErrors*: uint8                ## Header tranfer errors
-    nBlkErrors*: uint8                ## Body tranfer errors
+    nErrors*: BuddyErrors             ## Peer errors
 
   TraceRecBase* = object of RootObj
     ## Trace context applicable with and without known peer
@@ -160,7 +159,8 @@ type
   TraceSchedPeerBegin* = object of TraceRecBase
     ## Environment is captured before the peer handler body is executed.
     peerIP*: IpAddress                ## Descriptor argument
-    peerPort*: Port                   ## Descriptor argument
+    peerPort*: Port                   ## Ditto
+    rank*: PeerRanking                ## Prototype argument
 
   TraceSchedPeerEnd* = object of TraceRecBase
     ## Environment is captured when leaving peer handler.
@@ -172,6 +172,7 @@ type
     ## Environment is captured after the `getBlockHeaders()` handler is run.
     req*: BlockHeadersRequest         ## Fetch request
     ivReq*: BnRange                   ## Request as interval of block numbers
+    bn*: BlockNumber                  ## Ditto
     fetched*: Opt[FetchHeadersData]   ## If dowloaded successfully
     error*: Opt[BeaconError]
 
