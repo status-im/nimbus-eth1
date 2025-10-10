@@ -28,6 +28,7 @@ PrecompileTests
 OK: 22/22 Fail: 0/22 Skip: 0/22
 ## eest
 ```diff
+- P256Verify.json                                                 Fail
 + add_G1_bls.json                                                 OK
 + add_G2_bls.json                                                 OK
 + fail-add_G1_bls.json                                            OK
@@ -47,7 +48,7 @@ OK: 22/22 Fail: 0/22 Skip: 0/22
 + mul_G2_bls.json                                                 OK
 + pairing_check_bls.json                                          OK
 ```
-OK: 18/18 Fail: 0/18 Skip: 0/18
+OK: 18/19 Fail: 1/19 Skip: 0/19
 
 ---TOTAL---
-OK: 40/40 Fail: 0/40 Skip: 0/40
+OK: 40/41 Fail: 1/41 Skip: 0/41

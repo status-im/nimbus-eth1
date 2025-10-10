@@ -9,9 +9,21 @@
 # according to those terms.
 
 import
-  libp2p/crypto/ecnist,
-  bearssl/ec
+  bearssl/secp256r1_verify as ec,
+  stew/assign2
 
+type
+  EcPublicKey* = object
+    buf: array[65, byte]
+    pk: ec.EcPublicKey
+
+func initRaw*(_: type EcPublicKey, data: openArray[byte]): EcPublicKey =
+  result.buf[0] = 4.byte
+  assign(result.buf.toOpenArray(1, 64), data)
+  result.pk.curve = EC_secp256r1
+  result.pk.q = result.buf[0].addr
+  result.pk.qlen = 65
+  
 proc isInfinityByte*(data: openArray[byte]): bool =
   ## Check if all values in ``data`` are zero.
   for b in data:
@@ -19,24 +31,10 @@ proc isInfinityByte*(data: openArray[byte]): bool =
       return false
   return true
 
-proc verifyRaw*[T: byte | char](
-    sig: EcSignature, message: openArray[T], pubkey: ecnist.EcPublicKey
-): bool {.inline.} =
-  ## Verify ECDSA signature ``sig`` using public key ``pubkey`` and data
-  ## ``message``.
-  ##
-  ## Return ``true`` if message verification succeeded, ``false`` if
-  ## verification failed.
-  doAssert((not isNil(sig)) and (not isNil(pubkey)))
-  let impl = ecGetDefault()
-  if pubkey.key.curve in EcSupportedCurvesCint:
-    let res = ecdsaI31VrfyRaw(
-      impl,
-      addr message[0],
-      uint(len(message)),
-      unsafeAddr pubkey.key,
-      addr sig.buffer[0],
-      uint(len(sig.buffer)),
-    )
-    # Clear context with initial value
-    result = (res == 1)
+func verifyRaw*(sig: openArray[byte], hash: openArray[byte], pk: EcPublicKey): bool =
+  secp256r1_i31_vrfy_raw(
+    hash[0].addr,
+    hash.len.uint,
+    pk.pk.addr,
+    sig[0].addr,
+    sig.len.uint) == 1
