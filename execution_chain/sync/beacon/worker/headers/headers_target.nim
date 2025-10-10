@@ -16,7 +16,7 @@ import
   pkg/stew/interval_set,
   ../../../../networking/p2p,
   ../worker_desc,
-  ./[headers_fetch, headers_helpers]
+  ./headers_fetch
 
 logScope:
   topics = "beacon sync"
@@ -89,7 +89,7 @@ template headersTargetActivate*(
         trace info & ": peer failed on syncer target", peer,
           targetHash=trg.hash.short, isFinal=trg.isFinal,
           failedPeers=ctx.pool.failedPeers.len, nSyncPeers=ctx.pool.nBuddies,
-          hdrErrors=buddy.hdrErrors, syncState=($buddy.syncState)
+          nErrors=buddy.nErrors.fetch.hdr, syncState=($buddy.syncState)
         ctx.pool.initTarget = Opt.some(trg)                # restore target
 
       else:
@@ -101,7 +101,7 @@ template headersTargetActivate*(
           warn "No such syncer target, abandoning it", peer,
             targetHash=trg.hash.short, isFinal=trg.isFinal,
             failedPeers=ctx.pool.failedPeers.len, nSyncPeers=ctx.pool.nBuddies,
-            hdrErrors=buddy.hdrErrors
+            nErrors=buddy.nErrors.fetch.hdr
           ctx.pool.failedPeers.clear()
           # not restoring target
 
@@ -109,7 +109,7 @@ template headersTargetActivate*(
           trace info & ": peer repeatedly failed", peer,
             targetHash=trg.hash.short, isFinal=trg.isFinal,
             failedPeers=ctx.pool.failedPeers.len, nSyncPeers=ctx.pool.nBuddies,
-            hdrErrors=buddy.hdrErrors, syncState=($buddy.syncState)
+            nErrors=buddy.nErrors.fetch.hdr, syncState=($buddy.syncState)
           ctx.pool.initTarget = Opt.some(trg)              # restore target
 
       break body                                           # return

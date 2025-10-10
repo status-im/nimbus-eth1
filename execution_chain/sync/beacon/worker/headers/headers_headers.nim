@@ -42,7 +42,7 @@ template headersFetch*(
   block body:
     # Make sure that this sync peer is not banned from header processing,
     # already
-    if nStashHeadersErrThreshold < buddy.only.nProcErrors.hdr:
+    if nStashHeadersErrThreshold < buddy.nErrors.apply.hdr:
       buddy.ctrl.zombie = true
       break body
 
@@ -73,7 +73,7 @@ template headersFetch*(
       ctx.headersUnprocCommit(iv, iv)               # clean up, revert `iv`
       debug info & ": Garbled header list", peer, iv, headers=rc.value.bnStr,
         expected=(ivBottom,iv.maxPt).bnStr, syncState=($buddy.syncState),
-        hdrErrors=buddy.hdrErrors
+        nErrors=buddy.hdrErrors()
       break body                                   # stop, exit function
 
     # Commit blocks received (and revert lower unused block numbers)
@@ -102,7 +102,7 @@ proc headersStashOnDisk*(
     # Mark peer that produced that unusable headers list as a zombie
     let srcPeer = buddy.getPeer peerID
     if not srcPeer.isNil:
-      srcPeer.only.nProcErrors.hdr = nProcHeadersErrThreshold + 1
+      srcPeer.only.nErrors.apply.hdr = nProcHeadersErrThreshold + 1
 
     # Check whether it is enough to skip the current headers list, only
     if ctx.subState.procFailNum != dTop:
@@ -119,12 +119,12 @@ proc headersStashOnDisk*(
     # Proper logging ..
     if ctx.subState.cancelRequest:
       warn "Header stash error (cancel this session)", iv=revHdrs.bnStr,
-        syncState=($buddy.syncState), hdrErrors=buddy.hdrErrors,
+        syncState=($buddy.syncState), nErrors=buddy.hdrErrors(),
         hdrFailCount=ctx.subState.procFailCount, error=rc.error
     else:
       debug info & ": Header stash error (skip remaining)", peer,
         iv=revHdrs.bnStr,
-        syncState=($buddy.syncState), hdrErrors=buddy.hdrErrors,
+        syncState=($buddy.syncState), nErrors=buddy.hdrErrors(),
         hdrFailCount=ctx.subState.procFailCount, error=rc.error
 
     return err()                                 # stop
@@ -141,7 +141,7 @@ proc headersStashOnDisk*(
 
   let srcPeer = buddy.getPeer peerID
   if not srcPeer.isNil:
-    srcPeer.only.nProcErrors.hdr = 0             # reset error count
+    srcPeer.only.nErrors.apply.hdr = 0           # reset error count
 
   ok(dTop - dBottom)
 

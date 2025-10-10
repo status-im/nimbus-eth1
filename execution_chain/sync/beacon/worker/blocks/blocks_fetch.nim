@@ -69,7 +69,7 @@ template fetchBodies*(
       nReq {.inject,used.} = request.blockHashes.len
 
     trace trEthSendSendingGetBlockBodies,
-      peer, nReq, bdyErrors=buddy.bdyErrors
+      peer, nReq, nErrors=buddy.nErrors.fetch.bdy
 
     let rc = await buddy.getBlockBodies(request)
     var elapsed: Duration
@@ -82,14 +82,14 @@ template fetchBodies*(
         of ENoException:
           break evalError
         of EPeerDisconnected, ECancelledError:
-          buddy.only.nRespErrors.blk.inc
+          buddy.nErrors.fetch.bdy.inc
           buddy.ctrl.zombie = true
         of ECatchableError:
           buddy.bdyFetchRegisterError()
 
         chronicles.info trEthRecvReceivedBlockBodies & " error", peer, nReq,
           elapsed=rc.error.elapsed.toStr, syncState=($buddy.syncState),
-          error=rc.error.name, msg=rc.error.msg, bdyErrors=buddy.bdyErrors
+          error=rc.error.name, msg=rc.error.msg, nErrors=buddy.nErrors.fetch.bdy
         break body                                  # return err()
 
     # Evaluate result
@@ -97,7 +97,7 @@ template fetchBodies*(
       buddy.bdyFetchRegisterError()
       trace trEthRecvReceivedBlockBodies, peer, nReq, nResp=0,
         elapsed=elapsed.toStr, syncState=($buddy.syncState),
-        bdyErrors=buddy.bdyErrors
+        nErrors=buddy.nErrors.fetch.bdy
       break body                                    # return err()
 
     let b = rc.value.packet.bodies
@@ -105,7 +105,7 @@ template fetchBodies*(
       buddy.bdyFetchRegisterError()
       trace trEthRecvReceivedBlockBodies, peer, nReq, nResp=b.len,
         elapsed=elapsed.toStr, syncState=($buddy.syncState),
-        nRespErrors=buddy.only.nRespErrors.blk
+        nErrors=buddy.nErrors.fetch.bdy
       break body                                    # return err()
 
     # Update download statistics
@@ -117,12 +117,12 @@ template fetchBodies*(
        b.len.uint64 * 100 < nReq.uint64 * fetchBodiesMinResponsePC:
       buddy.bdyFetchRegisterError(slowPeer=true)
     else:
-      buddy.only.nRespErrors.blk = 0                # reset error count
+      buddy.nErrors.fetch.bdy = 0                   # reset error count
       buddy.ctx.pool.lastSlowPeer = Opt.none(Hash)  # not last one or not error
 
     trace trEthRecvReceivedBlockBodies, peer, nReq, nResp=b.len,
       elapsed=elapsed.toStr, throughput=(bps.toIECb(1) & "ps"),
-      syncState=($buddy.syncState), bdyErrors=buddy.bdyErrors
+      syncState=($buddy.syncState), nErrors=buddy.nErrors.fetch.bdy
 
     bodyRc = Opt[seq[BlockBody]].ok(b)
 

@@ -131,14 +131,16 @@ type
     ##
     hdr*, blk*: StatsCollect
 
-  BuddyError* = tuple
-    ## Count fetching or processing errors
-    hdr, blk: uint8
+  BuddyErrors* = tuple
+    ## Count fetching and processing errors
+    fetch: tuple[
+      hdr, bdy: uint8]
+    apply: tuple[
+      hdr, blk: uint8]
 
   BeaconBuddyData* = object
     ## Local descriptor data extension
-    nRespErrors*: BuddyError         ## Number of errors/slow responses in a row
-    nProcErrors*: BuddyError         ## Ditto for processing errors
+    nErrors*: BuddyErrors            ## Error register
     thruPutStats*: BuddyThruPutStats ## Throughput statistics
 
   InitTarget* = tuple
@@ -192,6 +194,10 @@ func chain*(ctx: BeaconCtxRef): ForkedChainRef =
 func hdrCache*(ctx: BeaconCtxRef): HeaderChainRef =
   ## Shortcut
   ctx.pool.hdrCache
+
+func nErrors*(buddy: BeaconBuddyRef): var BuddyErrors =
+  ## Shortcut
+  buddy.only.nErrors
 
 proc getPeer*(buddy: BeaconBuddyRef; peerID: Hash): BeaconBuddyRef =
   ## Getter, retrieve syncer peer (aka buddy) by `peerID` argument

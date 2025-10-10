@@ -191,7 +191,7 @@ template blocksCollect*(
 
       debug info & ": no blocks yet (failed peer)", peer,
         failedPeers=ctx.pool.failedPeers.len,
-        syncState=($buddy.syncState), bdyErrors=buddy.bdyErrors
+        syncState=($buddy.syncState), nErrors=buddy.blkErrors()
       break body                                    # return
 
     # This message might run in addition to the `chronicles.info` part
