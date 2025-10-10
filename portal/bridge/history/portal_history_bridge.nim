@@ -221,18 +221,62 @@ proc runHistory*(config: PortalBridgeConf) =
           contentKeyHex = contentKey.toHex()
           contentValueHex = contentValue.toHex()
 
-        try:
-          let putContentResult = await bridge.portalClient.portal_historyPutContent(
-            contentKeyHex, contentValueHex
-          )
-          debug "Content gossiped",
-            peers = putContentResult.peerCount, contentKey = contentKeyHex
-        except CancelledError as e:
-          trace "Cancelled gossipWorker"
-          raise e
-        except CatchableError as e:
-          error "JSON-RPC portal_historyPutContent failed",
-            error = $e.msg, contentKey = contentKeyHex
+        while true:
+          try:
+            let putContentResult = await bridge.portalClient.portal_historyPutContent(
+              contentKeyHex, contentValueHex
+            )
+            let
+              peers = putContentResult.peerCount
+              accepted = putContentResult.acceptMetadata.acceptedCount
+              alreadyStored = putContentResult.acceptMetadata.alreadyStoredCount
+              notWithinRadius = putContentResult.acceptMetadata.notWithinRadiusCount
+              genericDecline = putContentResult.acceptMetadata.genericDeclineCount
+              rateLimited = putContentResult.acceptMetadata.rateLimitedCount
+              transferInProgress =
+                putContentResult.acceptMetadata.transferInProgressCount
+
+            logScope:
+              contentKey = contentKeyHex
+
+            debug "Content gossiped",
+              peers, accepted, genericDecline, alreadyStored, notWithinRadius,
+              rateLimited, transferInProgress
+
+            # Conditions below are assumed on correct and non malicious behavior of the peers.
+            if peers == genericDecline + rateLimited + transferInProgress:
+              # No peers accepted or already stored the content.
+              # Decline reasons are likely temporary, so retry.
+              warn "All peers declined, rate limited, or transfer in progress; retrying...",
+                contentKey = contentKeyHex
+              # Sleep 5 seconds to back off a bit before retrying
+              await sleepAsync(5.seconds)
+              # Note i: might want to introduce exponential backoff here
+              # Note ii: Due to the fact that consecutive block numbers have consecutive content
+              # ids until the hash function wraps around, it is likely that (some of) the same peers
+              # will be selected for the next content and thus remain busy. A potential improvement
+              # could be to stream content from multiple "content id ranges".
+              continue
+
+            if peers == notWithinRadius:
+              # No peers were found within radius. Retrying is unlikely to help,
+              # as new searches probably won't find peers in radius. This is a
+              # network-wide issue due to insufficient storage.
+              warn "No peers were found within radius for content",
+                contentKey = contentKeyHex
+              break
+
+            if accepted + alreadyStored >= 1:
+              # At least one peer either accepted or already has the content,
+              # data should be in the network.
+              debug "At least one peer accepted or already stored the content"
+              break
+          except CancelledError as e:
+            trace "Cancelled gossipWorker"
+            raise e
+          except CatchableError as e:
+            error "JSON-RPC portal_historyPutContent failed",
+              error = $e.msg, contentKey = contentKeyHex
     except CancelledError:
       trace "gossipWorker canceled"
 
