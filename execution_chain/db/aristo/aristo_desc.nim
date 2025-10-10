@@ -125,10 +125,15 @@ type
     lookups*: tuple[lower, hits, higher: int]
 
     snapshots*: HeapQueue[AristoTxRef]
-      ## TODO
+      ## A priority queue of txFrames holding snapshots. Used to limit the number
+      ## of snapshots that can be taken and therefore limit memory usage and also
+      ## to support cleaning old values out of snapshots after persisting to the
+      ## database. txFrames in the queue are sorted by their level in ascending order.
 
     maxSnapshots*: int
-      ## TODO
+      ## The maximum number of snapshots to hold in the snapshots queue. When the queue
+      ## is full (queue.len == maxSnapshots) then the oldest snapshot is removed from
+      ## the queue and cleaned up.
 
   Leg* = object
     ## For constructing a `VertexPath`
