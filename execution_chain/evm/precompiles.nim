@@ -692,13 +692,12 @@ proc p256verify(c: Computation): EvmResultVoid =
   if c.msg.data.len != 160:
     failed()
 
-  # Validations
-  if isInfinityByte(data[96, 159]):
-    failed()
-
   # Check scalar and field bounds (r, s ∈ (0, n), qx, qy ∈ [0, p))
-  let
-    pk = EcPublicKey.initRaw(data[96, 159])
+  var
+    pk: EcPublicKey
+
+  if not pk.initRaw(data[96, 159]):
+    failed()
 
   if verifyRaw(data[32, 95], data[0, 31], pk):
     c.output.setLen(32)

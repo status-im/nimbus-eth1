@@ -17,19 +17,29 @@ type
     buf: array[65, byte]
     pk: ec.EcPublicKey
 
-func initRaw*(_: type EcPublicKey, data: openArray[byte]): EcPublicKey =
-  result.buf[0] = 4.byte
-  assign(result.buf.toOpenArray(1, 64), data)
-  result.pk.curve = EC_secp256r1
-  result.pk.q = result.buf[0].addr
-  result.pk.qlen = 65
-  
-proc isInfinityByte*(data: openArray[byte]): bool =
+proc isInfinityByte(data: openArray[byte]): bool =
   ## Check if all values in ``data`` are zero.
   for b in data:
     if b != 0:
       return false
   return true
+
+func checkPublicKey(key: openArray[byte]): bool =
+  ## Return ``true`` if public key ``key`` is on curve.
+  let
+    x = [byte 0x00, 0x01]
+    impl = ecGetDefault()
+  impl.mul(key[0].addr, key.len.uint, x[0].addr, x.len.uint, EC_secp256r1) != 0
+
+func initRaw*(pk: var EcPublicKey, data: openArray[byte]): bool =
+  if data.isInfinityByte:
+    return false
+  pk.buf[0] = 4.byte
+  assign(pk.buf.toOpenArray(1, 64), data)      
+  pk.pk.curve = EC_secp256r1
+  pk.pk.q = pk.buf[0].addr
+  pk.pk.qlen = 65
+  checkPublicKey(pk.buf)
 
 func verifyRaw*(sig: openArray[byte], hash: openArray[byte], pk: EcPublicKey): bool =
   secp256r1_i31_vrfy_raw(
