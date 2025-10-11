@@ -22,7 +22,7 @@
 {.push raises: [].}
 
 import
-  std/[hashes, sequtils, sets, tables],
+  std/[hashes, sequtils, sets, tables, heapqueue],
   eth/common/hashes, eth/trie/nibbles,
   results,
   ./aristo_constants,
@@ -34,7 +34,7 @@ import
 # Not auto-exporting backend
 export
   tables, aristo_constants, desc_error, desc_identifiers, nibbles,
-  desc_structural, minilru, hashes, PutHdlRef
+  desc_structural, minilru, hashes, heapqueue, PutHdlRef
 
 type
   AristoTxRef* = ref object
@@ -124,6 +124,17 @@ type
       ## MPT level where "most" leaves can be found, for static vid lookups
     lookups*: tuple[lower, hits, higher: int]
 
+    snapshots*: HeapQueue[AristoTxRef]
+      ## A priority queue of txFrames holding snapshots. Used to limit the number
+      ## of snapshots that can be taken and therefore limit memory usage and also
+      ## to support cleaning old values out of snapshots after persisting to the
+      ## database. txFrames in the queue are sorted by their level in ascending order.
+
+    maxSnapshots*: int
+      ## The maximum number of snapshots to hold in the snapshots queue. When the queue
+      ## is full (queue.len == maxSnapshots) then the oldest snapshot is removed from
+      ## the queue and cleaned up.
+
   Leg* = object
     ## For constructing a `VertexPath`
     wp*: VidVtxPair                ## Vertex ID and data ref
@@ -139,9 +150,7 @@ const
   dbLevel* = -1
   disposedLevel* = int.low
 
-# ------------------------------------------------------------------------------
-# Public helpers
-# ------------------------------------------------------------------------------
+proc `<`*(a, b: AristoTxRef): bool = a.level < b.level
 
 template mixUp*(accPath, stoPath: Hash32): Hash32 =
   # Insecure but fast way of mixing the values of two hashes, for the purpose
@@ -170,8 +179,6 @@ func getOrVoid*[W](tab: Table[W,RootedVertexID]; w: W): RootedVertexID =
 func getOrVoid*[W](tab: Table[W,HashSet[RootedVertexID]]; w: W): HashSet[RootedVertexID] =
   tab.getOrDefault(w, default(HashSet[RootedVertexID]))
 
-# --------
-
 func isValid*(vtx: VertexRef): bool =
   not isNil(vtx)
 
@@ -197,19 +204,11 @@ func isValid*(rvid: RootedVertexID): bool =
 func isValid*(sqv: HashSet[RootedVertexID]): bool =
   sqv.len > 0
 
-# ------------------------------------------------------------------------------
-# Public functions, miscellaneous
-# ------------------------------------------------------------------------------
-
 func hash*(db: AristoDbRef): Hash {.error.}
 func hash*(db: AristoTxRef): Hash {.error.}
 
 proc baseTxFrame*(db: AristoDbRef): AristoTxRef =
   db.txRef
-
-# ------------------------------------------------------------------------------
-# Public helpers
-# ------------------------------------------------------------------------------
 
 iterator rstack*(tx: AristoTxRef, stopAtSnapshot = false): AristoTxRef =
   # Stack in reverse order, ie going from tx to base
@@ -254,8 +253,3 @@ func getStaticLevel*(db: AristoDbRef): int =
     db.staticLevel = 1
 
   db.staticLevel
-
-
-# ------------------------------------------------------------------------------
-# End
-# ------------------------------------------------------------------------------
