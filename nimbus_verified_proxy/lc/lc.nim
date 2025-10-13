@@ -14,7 +14,6 @@ import
   beacon_chain/beacon_clock,
   ./lc_manager # use the modified light client manager
 
-
 type
   LightClientHeaderCallback* = proc(
     lightClient: LightClient, header: ForkedLightClientHeader
@@ -55,7 +54,6 @@ proc new*(
     forkDigests: ref ForkDigests,
     getBeaconTime: GetBeaconTimeFn,
     genesis_validators_root: Eth2Digest,
-    trustedBlockRoot: Option[Eth2Digest],
     finalizationMode: LightClientFinalizationMode,
 ): T =
   let lightClient = LightClient(
@@ -63,7 +61,6 @@ proc new*(
     forkDigests: forkDigests,
     getBeaconTime: getBeaconTime,
     store: (ref ForkedLightClientStore)(),
-    trustedBlockRoot: trustedBlockRoot
   )
 
   func getTrustedBlockRoot(): Option[Eth2Digest] =
@@ -83,7 +80,7 @@ proc new*(
   # initialize without dumping 
   lightClient.processor = LightClientProcessor.new(
     false, ".", ".", cfg, genesis_validators_root,
-    finalizationMode, lightClient.store, getBeaconTime, trustedBlockRoot,
+    finalizationMode, lightClient.store, getBeaconTime, getTrustedBlockRoot,
     onStoreInitialized, onFinalizedHeader, onOptimisticHeader,
   )
 
@@ -119,31 +116,30 @@ proc new*(
         forkyStore.is_next_sync_committee_known
       else:
         false
-
-  func getFinalizedSlot(): Slot =
+  func getFinalizedPeriod(): SyncCommitteePeriod =
     withForkyStore(lightClient.store[]):
       when lcDataFork > LightClientDataFork.None:
-        forkyStore.finalized_header.beacon.slot
+        forkyStore.finalized_header.beacon.slot.sync_committee_period
       else:
-        GENESIS_SLOT
+        GENESIS_SLOT.sync_committee_period
 
-  func getOptimisticSlot(): Slot =
+  func getOptimisticPeriod(): SyncCommitteePeriod =
     withForkyStore(lightClient.store[]):
       when lcDataFork > LightClientDataFork.None:
-        forkyStore.optimistic_header.beacon.slot
+        forkyStore.optimistic_header.beacon.slot.sync_committee_period
       else:
-        GENESIS_SLOT
+        GENESIS_SLOT.sync_committee_period
 
   lightClient.manager = LightClientManager.init(
     rng, getTrustedBlockRoot, bootstrapVerifier, updateVerifier,
     finalityVerifier, optimisticVerifier, isLightClientStoreInitialized,
-    isNextSyncCommitteeKnown, getFinalizedSlot, getOptimisticSlot, getBeaconTime,
+    isNextSyncCommitteeKnown, getFinalizedPeriod, getOptimisticPeriod, getBeaconTime,
   )
 
   lightClient
 
 proc start*(lightClient: LightClient) =
-  info "Starting beacon light client", trusted_block_root = lightClient.trustedBlockRoot()
+  info "Starting beacon light client", trusted_block_root = lightClient.trustedBlockRoot
   lightClient.manager.start()
 
 proc stop*(lightClient: LightClient) {.async: (raises: []).} =
