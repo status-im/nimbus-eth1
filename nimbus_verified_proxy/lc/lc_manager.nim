@@ -11,10 +11,13 @@ import chronos, chronicles
 import
   beacon_chain/beacon_clock,
   beacon_chain/networking/peer_scores,
-  beacon_chain/[light_client_sync_helpers, sync_manager]
+  beacon_chain/sync/[light_client_sync_helpers, sync_manager]
 
 logScope:
   topics = "lcman"
+
+const
+  MAX_REQUEST_LIGHT_CLIENT_UPDATES = 128
 
 type
   Nothing = object
@@ -32,6 +35,7 @@ type
   OptimisticUpdate =
     Endpoint[Nothing, ForkedLightClientOptimisticUpdate]
 
+  NetRes*[T] = Result[T, void]
   ValueVerifier[V] =
     proc(v: V): Future[Result[void, LightClientVerifierError]] {.async: (raises: [CancelledError]).}
   BootstrapVerifier* =
@@ -50,16 +54,18 @@ type
   GetSyncCommitteePeriodCallback* =
     proc(): SyncCommitteePeriod {.gcsafe, raises: [].}
 
-  LightClientBootstrapProc = proc(id: uint64, blockRoot: Eth2Digest): Future[NetRes[ForkedLightClientBootstrap]]
-  LightClientUpdatesByRangeProc = proc(id: uint64, startPeriod: SyncCommitteePeriod, count: uint64): Future[NetRes[ForkedLightClientUpdateList]]
-  LightClientFinalityUpdateProc = proc(id: uint64): Future[NetRes[ForkedLightClientFinalityUpdate]]
-  LightClientOptimisticUpdateProc = proc(id: uint64): Future[NetRes[ForkedLightClientOptimisticUpdate]]
-  ReportResponseQualityProc = proc(id: uint64, value: int)
+  LightClientUpdatesByRangeResponse = NetRes[List[ForkedLightClientUpdate, MAX_REQUEST_LIGHT_CLIENT_UPDATES]]
+
+  LightClientBootstrapProc = proc(id: uint64, blockRoot: Eth2Digest): Future[NetRes[ForkedLightClientBootstrap]] {.async: (raises: [CancelledError]).}
+  LightClientUpdatesByRangeProc = proc(id: uint64, startPeriod: SyncCommitteePeriod, count: uint64): Future[LightClientUpdatesByRangeResponse] {.async: (raises: [CancelledError]).}
+  LightClientFinalityUpdateProc = proc(id: uint64): Future[NetRes[ForkedLightClientFinalityUpdate]] {.async: (raises: [CancelledError]).}
+  LightClientOptimisticUpdateProc = proc(id: uint64): Future[NetRes[ForkedLightClientOptimisticUpdate]] {.async: (raises: [CancelledError]).}
+  ReportRequestQualityProc = proc(id: uint64, value: int) {.gcsafe, raises: [].}
 
   EthLCBackend* = object
     getLightClientBootstrap: LightClientBootstrapProc
     getLightClientUpdatesByRange: LightClientUpdatesByRangeProc
-    getLightClientFinalityUpdate: LightClientFInalityUpdateProc
+    getLightClientFinalityUpdate: LightClientFinalityUpdateProc
     getLightClientOptimisticUpdate: LightClientOptimisticUpdateProc
     reportRequestQuality: ReportRequestQualityProc
 
@@ -116,8 +122,6 @@ proc doRequest(
   backend.getLightClientBootstrap(reqId, blockRoot)
 
 # https://github.com/ethereum/consensus-specs/blob/v1.6.0-alpha.3/specs/altair/light-client/p2p-interface.md#lightclientupdatesbyrange
-type LightClientUpdatesByRangeResponse =
-  NetRes[List[ForkedLightClientUpdate, MAX_REQUEST_LIGHT_CLIENT_UPDATES]]
 proc doRequest(
     e: typedesc[UpdatesByRange],
     backend: EthLCBackend,
@@ -180,8 +184,8 @@ proc workerTask[E](
 ): Future[bool] {.async: (raises: [CancelledError]).} =
   var
     didProgress = false
+    reqId: uint64
   try:
-    var reqId: uint64
     self.rng[].generate(reqId)
 
     let value =
@@ -232,8 +236,8 @@ proc workerTask[E](
       self.backend.reportRequestQuality(reqId, PeerScoreNoValues)
       debug "Failed to receive value on request", value, endpoint = E.name
   except ResponseError as exc:
-    warn "Received invalid response", error = exc.msg, endpoint = E.name
     self.backend.reportRequestQuality(reqId, PeerScoreBadValues)
+    warn "Received invalid response", error = exc.msg, endpoint = E.name
   except CancelledError as exc:
     raise exc
 
@@ -360,7 +364,6 @@ proc loop(self: LightClientManager) {.async: (raises: [CancelledError]).} =
           await self.query(UpdatesByRange,
             (startPeriod: syncTask.startPeriod, count: syncTask.count))
         of LcSyncKind.FinalityUpdate:
-          haveFinalityUpdate = true
           await self.query(FinalityUpdate)
         of LcSyncKind.OptimisticUpdate:
           await self.query(OptimisticUpdate)
