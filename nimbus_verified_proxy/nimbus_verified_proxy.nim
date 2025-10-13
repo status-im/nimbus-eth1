@@ -14,17 +14,18 @@ import
   confutils,
   eth/common/[keys, eth_types_rlp],
   json_rpc/rpcproxy,
-  beacon_chain/gossip_processing/optimistic_processor,
+  beacon_chain/gossip_processing/light_client_processor,
   beacon_chain/networking/network_metadata,
-  beacon_chain/networking/topic_params,
   beacon_chain/spec/beaconstate,
-  beacon_chain/[beacon_clock, buildinfo, light_client, nimbus_binary_common],
+  beacon_chain/conf,
+  beacon_chain/[beacon_clock, buildinfo, nimbus_binary_common],
   ../execution_chain/common/common,
   ./nimbus_verified_proxy_conf,
   ./engine/engine,
   ./engine/header_store,
   ./engine/utils,
   ./engine/types,
+  ./lc/lc,
   ./json_rpc_backend,
   ./json_rpc_frontend,
   ../execution_chain/version_info
@@ -46,14 +47,31 @@ proc verifyChainId(
       expectedChain = engine.chainId, providerChain = providerId
     quit 1
 
-func getConfiguredChainId*(chain: Option[string]): UInt256 =
-  let net = chain.get("mainnet").toLowerAscii()
-  case net
-  of "mainnet": 1.u256
-  of "sepolia": 11155111.u256
-  of "holesky": 17000.u256
-  of "hoodi": 560048.u256
-  else: 1.u256
+func getConfiguredChainId(networkMetadata: Eth2NetworkMetadata): UInt256 =
+  if networkMetadata.eth1Network.isSome():
+    let
+      net = networkMetadata.eth1Network.get()
+      chainId =
+        case net
+        of mainnet: 1.u256
+        of sepolia: 11155111.u256
+        of holesky: 17000.u256
+        of hoodi: 560048.u256
+    return chainId
+  else:
+    return networkMetadata.cfg.DEPOSIT_CHAIN_ID.u256
+
+proc run*(
+    config: VerifiedProxyConf, ctx: ptr Context
+) {.raises: [CatchableError], gcsafe.} =
+  {.gcsafe.}:
+    setupLogging(config.logLevel, config.logStdout)
+
+    try:
+      notice "Launching Nimbus verified proxy",
+        version = FullVersionStr, cmdParams = commandLineParams(), config
+    except Exception:
+      notice "commandLineParams() exception"
 
 proc startLightClient*(config: VerifiedProxyConf, engine: RpcVerificationEngine) {.async.} =
   # load constants and metadata for the selected chain
@@ -102,20 +120,13 @@ proc startLightClient*(config: VerifiedProxyConf, engine: RpcVerificationEngine)
   let
     rng = keys.newRng()
 
-    netKeys = getRandomNetKeys(rng[])
-
-    network = createEth2Node(
-      rng, lcConfig, netKeys, cfg, forkDigests, getBeaconTime, genesis_validators_root
-    )
-
     # light client is set to optimistic finalization mode
-    lightClient = createLightClient(
-      network, rng, lcConfig, cfg, forkDigests, getBeaconTime, genesis_validators_root,
-      LightClientFinalizationMode.Optimistic,
+    lightClient = LightClient.new(
+      rng, cfg, forkDigests, getBeaconTime, genesis_validators_root, LightClientFinalizationMode.Optimistic,
     )
 
-  await network.startListening()
-  await network.start()
+  # verify chain id that the proxy is connected to
+  waitFor engine.verifyChaindId()
 
   proc onFinalizedHeader(
       lightClient: LightClient, finalizedHeader: ForkedLightClientHeader
@@ -148,118 +159,21 @@ proc startLightClient*(config: VerifiedProxyConf, engine: RpcVerificationEngine)
   lightClient.onFinalizedHeader = onFinalizedHeader
   lightClient.onOptimisticHeader = onOptimisticHeader
   lightClient.trustedBlockRoot = some config.trustedBlockRoot
-  lightClient.installMessageValidators()
 
-  func shouldSyncOptimistically(wallSlot: Slot): bool =
-    let optimisticHeader = lightClient.optimisticHeader
-    withForkyHeader(optimisticHeader):
-      when lcDataFork > LightClientDataFork.None:
-        # Check whether light client has synced sufficiently close to wall slot
-        const maxAge = 2 * SLOTS_PER_EPOCH
-        forkyHeader.beacon.slot >= max(wallSlot, maxAge.Slot) - maxAge
-      else:
-        false
-
-  var blocksGossipState: GossipState
-  proc updateBlocksGossipStatus(slot: Slot) =
-    let
-      isBehind = not shouldSyncOptimistically(slot)
-
-      targetGossipState = getTargetGossipState(slot.epoch, cfg, isBehind)
-
-    template currentGossipState(): auto =
-      blocksGossipState
-
-    if currentGossipState == targetGossipState:
-      return
-
-    if currentGossipState.card == 0 and targetGossipState.card > 0:
-      debug "Enabling blocks topic subscriptions", wallSlot = slot, targetGossipState
-    elif currentGossipState.card > 0 and targetGossipState.card == 0:
-      debug "Disabling blocks topic subscriptions", wallSlot = slot
-    else:
-      # Individual forks added / removed
-      discard
-
-    let
-      newGossipEpochs = targetGossipState - currentGossipState
-      oldGossipEpochs = currentGossipState - targetGossipState
-
-    for gossipEpoch in oldGossipEpochs:
-      let forkDigest = forkDigests[].atEpoch(gossipEpoch, cfg)
-      network.unsubscribe(getBeaconBlocksTopic(forkDigest))
-
-    for gossipEpoch in newGossipEpochs:
-      let forkDigest = forkDigests[].atEpoch(gossipEpoch, cfg)
-      network.subscribe(
-        getBeaconBlocksTopic(forkDigest),
-        getBlockTopicParams(cfg.timeParams),
-        enableTopicMetrics = true,
-      )
-
-    blocksGossipState = targetGossipState
-
-  proc updateGossipStatus(time: Moment) =
-    let wallSlot = getBeaconTime().slotOrZero(cfg.timeParams)
-    updateBlocksGossipStatus(wallSlot + 1)
-    lightClient.updateGossipStatus(wallSlot + 1)
-
-  # update gossip status before starting the light client
-  updateGossipStatus(Moment.now())
   # start the light client
   lightClient.start()
 
-  let sleepTime = chronos.seconds(1)
+  # run an infinite loop and wait for a stop signal
   while true:
-    let start = chronos.now(chronos.Moment)
-    await chronos.sleepAsync(sleepTime)
-    let afterSleep = chronos.now(chronos.Moment)
-    let sleepTime = afterSleep - start
-    updateGossipStatus(start)
-    let finished = chronos.now(chronos.Moment)
-    let processingTime = finished - afterSleep
-    trace "onSecond task completed", sleepTime, processingTime
-
-proc run(config: VerifiedProxyConf) {.async: (raises: [ValueError, CatchableError]), gcsafe.} =
-  {.gcsafe.}:
-    setupLogging(config.logLevel, config.logStdout)
-
-    try:
-      notice "Launching Nimbus verified proxy",
-        version = fullVersionStr, cmdParams = commandLineParams(), config
-    except Exception:
-      notice "commandLineParams() exception"
-
-  let
-    engineConf = RpcVerificationEngineConf(
-      chainId: getConfiguredChainId(config.eth2Network),
-      maxBlockWalk: config.maxBlockWalk,
-      headerStoreLen: config.headerStoreLen,
-      accountCacheLen: config.accountCacheLen,
-      codeCacheLen: config.codeCacheLen,
-      storageCacheLen: config.storageCacheLen,
-    )
-    engine = RpcVerificationEngine.init(engineConf)
-    jsonRpcClient = JsonRpcClient.init(config.backendUrl)
-    jsonRpcServer = JsonRpcServer.init(config.frontendUrl)
-
-  # the backend only needs the url to connect to
-  engine.backend = jsonRpcClient.getEthApiBackend()
-  # inject frontend
-  jsonRpcServer.injectEngineFrontend(engine.frontend)
-
-  # start frontend and backend
-  var status = await jsonRpcClient.start()
-  if status.isErr():
-    raise newException(ValueError, status.error)
-
-  status = jsonRpcServer.start()
-  if status.isErr():
-    raise newException(ValueError, status.error)
-
-  # verify chain id that the proxy is connected to
-  await engine.verifyChainId()
-  await startLightClient(config, engine)
+    poll()
+    if ctx != nil and ctx.stop:
+      # Cleanup
+      waitFor jsonRpcClient.stop()
+      waitFor jsonRpcServer.stop()
+      ctx.cleanup()
+      # Notify client that cleanup is finished
+      ctx.onHeader(nil, 2)
+      break
 
 # noinline to keep it in stack traces
 proc main() {.noinline, raises: [CatchableError].} =
