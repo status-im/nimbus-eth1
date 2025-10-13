@@ -37,7 +37,6 @@ type
   UpdateVerifier* = ValueVerifier[ForkedLightClientUpdate]
   FinalityUpdateVerifier* = ValueVerifier[ForkedLightClientFinalityUpdate]
   OptimisticUpdateVerifier* = ValueVerifier[ForkedLightClientOptimisticUpdate]
-
   GetTrustedBlockRootCallback* = proc(): Option[Eth2Digest] {.gcsafe, raises: [].}
   GetBoolCallback* = proc(): bool {.gcsafe, raises: [].}
   GetSlotCallback* = proc(): Slot {.gcsafe, raises: [].}
