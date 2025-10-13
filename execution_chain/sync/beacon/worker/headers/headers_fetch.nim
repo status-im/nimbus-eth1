@@ -107,7 +107,7 @@ template fetchHeadersReversed*(
 
         chronicles.info trEthRecvReceivedBlockHeaders & ": error", peer,
           req=ivReq, nReq=req.maxResults, hash=topHash.toStr,
-          elapsed=rc.error.elapsed.toStr, syncState=($buddy.syncState),
+          elapsed=rc.error.elapsed.toStr, state=($buddy.syncState),
           error=rc.error.name, msg=rc.error.msg,
           nErrors=buddy.nErrors.fetch.hdr
         break body                                 # return err()
@@ -117,7 +117,7 @@ template fetchHeadersReversed*(
       buddy.hdrFetchRegisterError()
       trace trEthRecvReceivedBlockHeaders, peer, nReq=req.maxResults,
         hash=topHash.toStr, nResp=0, elapsed=elapsed.toStr,
-        syncState=($buddy.syncState), nErrors=buddy.nErrors.fetch.hdr
+        state=($buddy.syncState), nErrors=buddy.nErrors.fetch.hdr
       break body                                   # return err()
 
     let h = rc.value.packet.headers
@@ -125,7 +125,7 @@ template fetchHeadersReversed*(
       buddy.hdrFetchRegisterError()
       trace trEthRecvReceivedBlockHeaders, peer, nReq=req.maxResults,
         hash=topHash.toStr, nResp=h.len, elapsed=elapsed.toStr,
-        syncState=($buddy.syncState), nErrors=buddy.nErrors.fetch.hdr
+        state=($buddy.syncState), nErrors=buddy.nErrors.fetch.hdr
       break body                                   # return err()
 
     # Verify that first block number matches
@@ -134,7 +134,7 @@ template fetchHeadersReversed*(
       trace trEthRecvReceivedBlockHeaders, peer, nReq=req.maxResults,
         hash=topHash.toStr, reqMinPt=ivReq.minPt.bnStr,
         respMinPt=h[^1].bnStr, nResp=h.len, elapsed=elapsed.toStr,
-        syncState=($buddy.syncState), nErrors=buddy.nErrors.fetch.hdr
+        state=($buddy.syncState), nErrors=buddy.nErrors.fetch.hdr
       break body
 
     # Update download statistics
@@ -152,7 +152,7 @@ template fetchHeadersReversed*(
     trace trEthRecvReceivedBlockHeaders, peer, nReq=req.maxResults,
       hash=topHash.toStr, ivResp=BnRange.new(h[^1].number,h[0].number),
       nResp=h.len, elapsed=elapsed.toStr, throughput=(bps.toIECb(1) & "ps"),
-      syncState=($buddy.syncState), nErrors=buddy.nErrors.fetch.hdr
+      state=($buddy.syncState), nErrors=buddy.nErrors.fetch.hdr
 
     bodyRc = Opt[seq[Header]].ok(h)
 

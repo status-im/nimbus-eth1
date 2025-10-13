@@ -51,7 +51,7 @@ template blocksFetchCheckImpl(
       iv {.inject,used.} = iv
       peer {.inject,used.} = buddy.peer
 
-    # Preset/append headers to be completed with bodies. Also collect block
+    # Preset headers to be completed with bodies. Also collect block
     # hashes for fetching missing blocks.
     var
       request = BlockBodiesRequest(blockHashes: newSeqUninit[Hash32](iv.len))
@@ -195,7 +195,7 @@ template blocksImport*(
 
     var isError = false
     block loop:
-      trace info & ": Start importing blocks", peer, iv,
+      trace info & ": start importing blocks", peer, iv,
         nBlocks=iv.len, base=ctx.chain.baseNumber.bnStr,
         head=ctx.chain.latestNumber.bnStr
 

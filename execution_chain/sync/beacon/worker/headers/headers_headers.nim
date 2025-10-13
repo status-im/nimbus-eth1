@@ -72,7 +72,7 @@ template headersFetch*(
       buddy.hdrProcRegisterError()
       ctx.headersUnprocCommit(iv, iv)               # clean up, revert `iv`
       debug info & ": Garbled header list", peer, iv, headers=rc.value.bnStr,
-        expected=(ivBottom,iv.maxPt).bnStr, syncState=($buddy.syncState),
+        expected=(ivBottom,iv.maxPt).bnStr, state=($buddy.syncState),
         nErrors=buddy.hdrErrors()
       break body                                   # stop, exit function
 
@@ -119,12 +119,11 @@ proc headersStashOnDisk*(
     # Proper logging ..
     if ctx.subState.cancelRequest:
       warn "Header stash error (cancel this session)", iv=revHdrs.bnStr,
-        syncState=($buddy.syncState), nErrors=buddy.hdrErrors(),
+        state=($buddy.syncState), nErrors=buddy.hdrErrors(),
         hdrFailCount=ctx.subState.procFailCount, error=rc.error
     else:
       debug info & ": Header stash error (skip remaining)", peer,
-        iv=revHdrs.bnStr,
-        syncState=($buddy.syncState), nErrors=buddy.hdrErrors(),
+        iv=revHdrs.bnStr, state=($buddy.syncState), nErrors=buddy.hdrErrors(),
         hdrFailCount=ctx.subState.procFailCount, error=rc.error
 
     return err()                                 # stop

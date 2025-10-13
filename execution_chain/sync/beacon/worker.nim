@@ -68,7 +68,7 @@ proc stop*(buddy: BeaconBuddyRef; info: static[string]) =
   ## Clean up this peer
   if not buddy.ctx.hibernate: debug info & ": release peer", peer=buddy.peer,
     throughput=buddy.only.thruPutStats.toMeanVar.psStr,
-    nSyncPeers=(buddy.ctx.pool.nBuddies-1), syncState=($buddy.syncState)
+    nSyncPeers=(buddy.ctx.pool.nBuddies-1), state=($buddy.syncState)
   buddy.stopBuddy()
 
 # ------------------------------------------------------------------------------

@@ -197,7 +197,7 @@ template headersCollect*(buddy: BeaconBuddyRef; info: static[string]) =
 
       debug info & ": no headers yet (failed peer)", peer,
         failedPeers=ctx.pool.failedPeers.len, nSyncPeers=ctx.pool.nBuddies,
-        syncState=($buddy.syncState), nErrors=buddy.hdrErrors()
+        state=($buddy.syncState), nErrors=buddy.hdrErrors()
       break body
 
     # This message might run in addition to the `chronicles.info` part

@@ -88,7 +88,7 @@ template fetchBodies*(
           buddy.bdyFetchRegisterError()
 
         chronicles.info trEthRecvReceivedBlockBodies & " error", peer, nReq,
-          elapsed=rc.error.elapsed.toStr, syncState=($buddy.syncState),
+          elapsed=rc.error.elapsed.toStr, state=($buddy.syncState),
           error=rc.error.name, msg=rc.error.msg, nErrors=buddy.nErrors.fetch.bdy
         break body                                  # return err()
 
@@ -96,7 +96,7 @@ template fetchBodies*(
     if rc.isErr or buddy.ctrl.stopped:
       buddy.bdyFetchRegisterError()
       trace trEthRecvReceivedBlockBodies, peer, nReq, nResp=0,
-        elapsed=elapsed.toStr, syncState=($buddy.syncState),
+        elapsed=elapsed.toStr, state=($buddy.syncState),
         nErrors=buddy.nErrors.fetch.bdy
       break body                                    # return err()
 
@@ -104,7 +104,7 @@ template fetchBodies*(
     if b.len == 0 or nReq < b.len:
       buddy.bdyFetchRegisterError()
       trace trEthRecvReceivedBlockBodies, peer, nReq, nResp=b.len,
-        elapsed=elapsed.toStr, syncState=($buddy.syncState),
+        elapsed=elapsed.toStr, state=($buddy.syncState),
         nErrors=buddy.nErrors.fetch.bdy
       break body                                    # return err()
 
@@ -122,7 +122,7 @@ template fetchBodies*(
 
     trace trEthRecvReceivedBlockBodies, peer, nReq, nResp=b.len,
       elapsed=elapsed.toStr, throughput=(bps.toIECb(1) & "ps"),
-      syncState=($buddy.syncState), nErrors=buddy.nErrors.fetch.bdy
+      state=($buddy.syncState), nErrors=buddy.nErrors.fetch.bdy
 
     bodyRc = Opt[seq[BlockBody]].ok(b)
 

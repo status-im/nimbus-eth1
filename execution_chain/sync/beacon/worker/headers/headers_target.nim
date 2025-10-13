@@ -64,14 +64,14 @@ template headersTargetActivate*(
     if ctx.pool.nBuddies < ctx.pool.minInitBuddies:
       trace info & ": not enough buddies required to start sync", peer,
         targetHash=trg.hash.short, isFinal=trg.isFinal,
-        syncState=($buddy.syncState), nSyncPeers=ctx.pool.nBuddies
+        state=($buddy.syncState), nSyncPeers=ctx.pool.nBuddies
       break body                                           # return
 
     # Can be used only before first activation
     if ctx.pool.lastState != SyncState.idle:
       debug info & ": cannot setup target while syncer is activated", peer,
         targetHash=trg.hash.short, isFinal=trg.isFinal,
-        syncState=($buddy.syncState), nSyncPeers=ctx.pool.nBuddies
+        state=($buddy.syncState), nSyncPeers=ctx.pool.nBuddies
       ctx.pool.initTarget = Opt.none(InitTarget)
       break body                                           # return
 
@@ -89,7 +89,7 @@ template headersTargetActivate*(
         trace info & ": peer failed on syncer target", peer,
           targetHash=trg.hash.short, isFinal=trg.isFinal,
           failedPeers=ctx.pool.failedPeers.len, nSyncPeers=ctx.pool.nBuddies,
-          nErrors=buddy.nErrors.fetch.hdr, syncState=($buddy.syncState)
+          nErrors=buddy.nErrors.fetch.hdr, state=($buddy.syncState)
         ctx.pool.initTarget = Opt.some(trg)                # restore target
 
       else:
@@ -109,7 +109,7 @@ template headersTargetActivate*(
           trace info & ": peer repeatedly failed", peer,
             targetHash=trg.hash.short, isFinal=trg.isFinal,
             failedPeers=ctx.pool.failedPeers.len, nSyncPeers=ctx.pool.nBuddies,
-            nErrors=buddy.nErrors.fetch.hdr, syncState=($buddy.syncState)
+            nErrors=buddy.nErrors.fetch.hdr, state=($buddy.syncState)
           ctx.pool.initTarget = Opt.some(trg)              # restore target
 
       break body                                           # return
