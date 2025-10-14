@@ -26,6 +26,7 @@ import
   ./engine/utils,
   ./engine/types,
   ./lc/lc,
+  ./json_lc_backend,
   ./json_rpc_backend,
   ./json_rpc_frontend,
   ../execution_chain/version_info
@@ -148,19 +149,21 @@ proc run*(
 
     genesisBlockRoot = get_initial_beacon_block(genesisState[]).root
 
-  # transform the config to fit as a light client config and as a p2p node(Eth2Node) config
-  var lcConfig = config.asLightClientConf()
-  for node in metadata.bootstrapNodes:
-    lcConfig.bootstrapNodes.add node
-
-  # create new network keys, create a p2p node(Eth2Node) and create a light client
-  let
     rng = keys.newRng()
 
     # light client is set to optimistic finalization mode
     lightClient = LightClient.new(
       rng, cfg, forkDigests, getBeaconTime, genesis_validators_root, LightClientFinalizationMode.Optimistic,
     )
+
+    # REST client for json LC updates
+    lcRestClient = LCRestClient.new(cfg, forkDigests)
+
+  debugEcho config.lcEndpoint
+
+  # add endpoints to the client
+  lcRestClient.addEndpoint(config.lcEndpoint)
+  lightClient.setBackend(lcRestClient.getEthLCBackend())
 
   # verify chain id that the proxy is connected to
   waitFor engine.verifyChaindId()
@@ -215,6 +218,7 @@ proc run*(
     poll()
     if ctx != nil and ctx.stop:
       # Cleanup
+      waitFor lcRestClient.closeAll()
       waitFor jsonRpcClient.stop()
       waitFor jsonRpcServer.stop()
       ctx.cleanup()
