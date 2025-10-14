@@ -247,7 +247,7 @@ proc runHistory*(config: PortalBridgeConf) =
             if peers == genericDecline + rateLimited + transferInProgress:
               # No peers accepted or already stored the content.
               # Decline reasons are likely temporary, so retry.
-              warn "All peers declined, rate limited, or transfer in progress; retrying...",
+              debug "All peers declined, rate limited, or transfer in progress; retrying...",
                 contentKey = contentKeyHex
               # Sleep 5 seconds to back off a bit before retrying
               await sleepAsync(5.seconds)

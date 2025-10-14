@@ -63,7 +63,7 @@ const
   defaultDisableContentCache* = false
   defaultOfferCacheSize* = 1024
   defaultDisableOfferCache* = false
-  defaultMaxConcurrentOffers* = 50
+  defaultMaxConcurrentOffers* = 100
   defaultAlpha* = 3
   revalidationTimeout* = chronos.seconds(30)
   defaultDisableBanNodes* = true
