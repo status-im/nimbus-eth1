@@ -10,7 +10,8 @@
 
 import
   bearssl/secp256r1_verify as ec,
-  stew/assign2
+  stew/assign2,
+  stint
 
 type
   EcPublicKey* = object
@@ -32,10 +33,23 @@ func checkPublicKey(key: openArray[byte]): bool =
   impl.mul(key[0].addr, key.len.uint, x[0].addr, x.len.uint, EC_secp256r1) != 0
 
 func initRaw*(pk: var EcPublicKey, data: openArray[byte]): bool =
+  # bearSSL have no infinity check for public key
   if data.isInfinityByte:
     return false
+
+  # bearSSL have no range check for public key
+  const
+    P = UInt256.fromHex("0xffffffff00000001000000000000000000000000ffffffffffffffffffffffff")
+
+  let
+    x = UInt256.fromBytesBE(data.toOpenArray(0, 31))
+    y = UInt256.fromBytesBE(data.toOpenArray(32, 63))
+
+  if x >= P or y >= P:
+    return false
+
   pk.buf[0] = 4.byte
-  assign(pk.buf.toOpenArray(1, 64), data)      
+  assign(pk.buf.toOpenArray(1, 64), data)
   pk.pk.curve = EC_secp256r1
   pk.pk.q = pk.buf[0].addr
   pk.pk.qlen = 65
