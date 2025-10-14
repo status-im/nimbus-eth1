@@ -211,6 +211,13 @@ template headersCollect*(buddy: BeaconBuddyRef; info: static[string]) =
 
 # --------------
 
+proc headersUnstageOk*(buddy: BeaconBuddyRef): bool =
+  ## Check whether import processing is possible
+  ##
+  let ctx = buddy.ctx
+  not ctx.poolMode and
+  0 < ctx.hdr.staged.len
+
 proc headersUnstage*(buddy: BeaconBuddyRef; info: static[string]): bool =
   ## Store headers from the `staged` queue onto the header chain cache.
   ##

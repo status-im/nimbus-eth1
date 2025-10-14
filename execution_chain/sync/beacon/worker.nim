@@ -18,19 +18,7 @@ import
   ../../networking/p2p,
   ./worker/headers/headers_target,
   ./worker/update/metrics,
-  ./worker/[blocks, headers, start_stop, update, worker_desc]
-
-# ------------------------------------------------------------------------------
-# Private functions
-# ------------------------------------------------------------------------------
-
-proc somethingToCollect(buddy: BeaconBuddyRef): bool =
-  if buddy.ctx.hibernate:                        # not activated yet?
-    return false
-  if buddy.headersCollectOk() or                 # something on TODO list
-     buddy.blocksCollectOk():
-    return true
-  false
+  ./worker/[blocks, classify, headers, start_stop, update, worker_desc]
 
 # ------------------------------------------------------------------------------
 # Public start/stop and admin functions
@@ -151,7 +139,7 @@ template runPeer*(buddy: BeaconBuddyRef; info: static[string]): Duration =
   ##
   var bodyRc = chronos.nanoseconds(0)
   block body:
-    if buddy.somethingToCollect():
+    if buddy.somethingToCollectOrUnstage():
 
       # Download and process headers and blocks
       while buddy.headersCollectOk():
@@ -163,7 +151,7 @@ template runPeer*(buddy: BeaconBuddyRef; info: static[string]): Duration =
 
         # Store serialised headers from the `staged` queue onto the header
         # chain cache.
-        if not buddy.headersUnstage info:
+        if not buddy.headersUnstage(info):     # async/template
           # Need to proceed with another peer (e.g. gap between queue and
           # header chain cache.)
           bodyRc = workerIdleWaitInterval
@@ -175,13 +163,12 @@ template runPeer*(buddy: BeaconBuddyRef; info: static[string]): Duration =
       # These staged blocks are then excuted by the daemon process (no `peer`
       # needed.)
       while buddy.blocksCollectOk():
-
         # Collect bodies and either import them via `FC` module, or stage on
         # the blocks queue to get them serialised and imported, later.
         buddy.blocksCollect info # async/template
 
         # Import bodies from the `staged` queue.
-        if not buddy.blocksUnstage info: # async/template
+        if not buddy.blocksUnstage(info):      # async/template
           # Need to proceed with another peer (e.g. gap between top imported
           # block and blocks queue.)
           bodyRc = workerIdleWaitInterval
@@ -190,13 +177,13 @@ template runPeer*(buddy: BeaconBuddyRef; info: static[string]): Duration =
         # End `while()`
 
     else:
-      # Potential manual target set up
+      # Potentially a manual sync target set up
       buddy.headersTargetActivate info
 
     # End block: `body`
 
   # Idle sleep unless there is something to do
-  if not buddy.somethingToCollect():
+  if not buddy.somethingToCollectOrUnstage():
     bodyRc = workerIdleWaitInterval
 
   bodyRc

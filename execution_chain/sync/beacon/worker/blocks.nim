@@ -205,9 +205,10 @@ template blocksCollect*(
 
 # --------------
 
-proc blocksUnstageOk*(ctx: BeaconCtxRef): bool =
+proc blocksUnstageOk*(buddy: BeaconBuddyRef): bool =
   ## Check whether import processing is possible
   ##
+  let ctx = buddy.ctx
   not ctx.poolMode and
   0 < ctx.blk.staged.len
 
