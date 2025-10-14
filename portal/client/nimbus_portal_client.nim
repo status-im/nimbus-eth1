@@ -150,7 +150,7 @@ proc run(portalClient: PortalClient, config: PortalConf) {.raises: [CatchableErr
       # This can be removed in the future when no more tooling relies on it.
       localEnrFields = [
         toFieldPair("c", enrClientInfoShort),
-        toFieldPair(portalEnrKey, localPortalEnrField),
+        toFieldPair(portalEnrKey, getPortalEnrField(config.network)),
       ],
       bootstrapRecords = bootstrapRecords,
       previousRecord = previousEnr,
@@ -165,13 +165,14 @@ proc run(portalClient: PortalClient, config: PortalConf) {.raises: [CatchableErr
   d.open()
 
   ## Force pruning - optional
+  ## Forced on history network database only currently
   if config.forcePrune:
     let db = ContentDB.new(
-      dataDir / config.network.getDbDirectory() / "contentdb_" &
-        d.localNode.id.toBytesBE().toOpenArray(0, 8).toHex(),
+      dataDir / dbDir,
       storageCapacity = config.storageCapacityMB * 1_000_000,
       radiusConfig = config.radiusConfig,
       localId = d.localNode.id,
+      subnetwork = PortalSubnetwork.history,
       manualCheckpoint = true,
     )
 

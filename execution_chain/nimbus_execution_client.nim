@@ -65,9 +65,13 @@ proc basicServices(nimbus: NimbusNode, conf: NimbusConf, com: CommonRef) =
   let fc = ForkedChainRef.init(com,
     eagerStateRoot = conf.eagerStateRootCheck,
     persistBatchSize = conf.persistBatchSize,
+    dynamicBatchSize = conf.dynamicBatchSize,
     enableQueue = true)
-  fc.deserialize().isOkOr:
-    warn "Loading block DAG from database", msg=error
+  if conf.deserializeFcState:
+    fc.deserialize().isOkOr:
+      warn "Loading block DAG from database", msg=error
+  else:
+    warn "Skipped loading of block DAG from database", deserializeFcState = conf.deserializeFcState
 
   nimbus.fc = fc
   # Setup history expiry and portal

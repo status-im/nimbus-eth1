@@ -79,12 +79,6 @@ type
     vid*: VertexID                   ## Table lookup vertex ID (if any)
     vtx*: VertexRef                  ## Reference to vertex
 
-  SavedStateV0* = object
-    ## Legacy saved state from when state lived in separate column family
-    ## TODO remove before beta
-    key*: Hash32                     ## Some state hash (if any)
-    serial*: uint64                  ## Generic identifier from application
-
   SavedState* = object
     ## Last saved state
     vTop*: VertexID                   ## Top used VertexID

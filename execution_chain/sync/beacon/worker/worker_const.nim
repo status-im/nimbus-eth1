@@ -68,15 +68,30 @@ const
     ## On `Geth`, responses to larger requests are all truncted to 1024 header
     ## entries (see `Geth` constant `maxHeadersServe`.)
 
-  fetchHeadersErrTimeout* = chronos.seconds(2)
+  fetchHeadersRlpxTimeout* = chronos.seconds(40)
+    ## Timeout cap for the `RLPX` handler when fetching header. This value
+    ## should pretty large so that even in case that the peer is delaying
+    ## (typically due to downloading from here), there will be a valid data
+    ## response in many cases.
+    ##
+    ## The system calculates the elapsed time which covers request, response,
+    ## and some kind of actions in-between including some peer download
+    ## data provided by this system.
+    ##
+    ## The elapsed time is then used to assess a peer so that low performing
+    ## peers (over the network) can be assigned `slow` (meant figuratively,
+    ## not literally `slow`, but nevertheless leading to long download delays.)
+
+  fetchHeadersErrTimeout* = chronos.seconds(15)
   nFetchHeadersErrThreshold* = 2
-    ## Response time allowance. If the response time for the set of headers
-    ## exceeds this threshold for more than `nFetchHeadersErrThreshold`
-    ## times in a row, then this peer will be banned for a while.
+    ## Response time allowance (see also comment on `fetchHeadersRlpxTimeout`.)
+    ## If the response time for the set of headers exceeds this threshold for
+    ## more than `nFetchHeadersErrThreshold` times in a row, then this peer will
+    ## be banned for a while.
 
   nProcHeadersErrThreshold* = 2
-    ## Similar to `nFetchHeadersErrThreshold` but for the later part
-    ## when errors occur while block headers are queued and further processed.
+    ## Similar to `nFetchHeadersErrThreshold` but for the later part when
+    ## errors occur while block headers are queued and further processed.
 
   fetchHeadersMinResponsePC* = 10
     ## Some peers only returned one header at a time. If these peers sit on a
@@ -101,7 +116,10 @@ const
   nFetchBodiesRequest* = 40
     ## Similar to `nFetchHeadersRequest`.
 
-  fetchBodiesErrTimeout* = chronos.seconds(4)
+  fetchBodiesRlpxTimeout* = chronos.seconds(30)
+    ## Similar to `nFetchHeadersRlpxThreshold`
+
+  fetchBodiesErrTimeout* = chronos.seconds(20)
   nFetchBodiesErrThreshold* = 2
     ## Similar to `nFetchHeadersErrThreshold`.
 

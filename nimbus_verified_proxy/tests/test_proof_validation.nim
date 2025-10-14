@@ -9,7 +9,7 @@
 
 {.push raises: [], gcsafe.}
 
-import unittest2, stint, stew/byteutils, web3, ../rpc/accounts
+import unittest2, stint, stew/byteutils, web3, ../engine/accounts
 
 suite "Merkle proof of inclusion validation":
   test "Validate account proof":

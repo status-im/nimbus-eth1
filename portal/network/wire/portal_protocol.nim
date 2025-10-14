@@ -166,8 +166,6 @@ type
 
   DbRadiusHandler* = proc(): UInt256 {.raises: [], gcsafe.}
 
-  PortalProtocolId* = array[2, byte]
-
   RadiusCache* = LruCache[NodeId, UInt256]
 
   # Caches content fetched from the network during lookups.
@@ -207,6 +205,7 @@ type
 
   PortalProtocol* = ref object of TalkProtocol
     protocolId*: PortalProtocolId
+    portalEnrField*: PortalEnrField
     routingTable*: RoutingTable
     baseProtocol*: protocol.Protocol
     toContentId*: ToContentIdHandler
@@ -305,28 +304,12 @@ func init*(
     nodesInterestedInContent: nodesInterestedInContent,
   )
 
-func getProtocolId*(
-    network: PortalNetwork, subnetwork: PortalSubnetwork
-): PortalProtocolId =
-  const portalPrefix = byte(0x50)
-
-  case network
-  of PortalNetwork.none, PortalNetwork.mainnet:
-    case subnetwork
-    of PortalSubnetwork.history:
-      [portalPrefix, 0x00]
-    of PortalSubnetwork.beacon:
-      [portalPrefix, 0x0C]
-
 proc banNode*(p: PortalProtocol, nodeId: NodeId, period: chronos.Duration) =
   if not p.config.disableBanNodes:
     p.routingTable.banNode(nodeId, period)
 
 proc isBanned*(p: PortalProtocol, nodeId: NodeId): bool =
   p.config.disableBanNodes == false and p.routingTable.isBanned(nodeId)
-
-func `$`*(id: PortalProtocolId): string =
-  id.toHex()
 
 func fromNodeStatus(T: type NodeAddResult, status: NodeStatus): T =
   case status
@@ -340,7 +323,7 @@ func fromNodeStatus(T: type NodeAddResult, status: NodeStatus): T =
   of NodeStatus.Banned: T.Banned
 
 proc addNode*(p: PortalProtocol, node: Node): NodeAddResult =
-  if node.highestCommonPortalVersionAndChain(localPortalEnrField).isOk():
+  if node.highestCommonPortalVersionAndChain(p.portalEnrField).isOk():
     let status = p.routingTable.addNode(node)
     trace "Adding node to routing table", status, node
     NodeAddResult.fromNodeStatus(status)
@@ -677,7 +660,7 @@ proc messageHandler(
     warn "No ENR found for node", srcId, srcUdpAddress
     return @[]
 
-  let _ = enr.highestCommonPortalVersionAndChain(localPortalEnrField).valueOr:
+  let _ = enr.highestCommonPortalVersionAndChain(p.portalEnrField).valueOr:
     debug "Incompatible protocols", error, srcId, srcUdpAddress
     return @[]
 
@@ -729,6 +712,7 @@ proc new*(
     T: type PortalProtocol,
     baseProtocol: protocol.Protocol,
     protocolId: PortalProtocolId,
+    portalEnrField: PortalEnrField,
     toContentId: ToContentIdHandler,
     dbGet: DbGetHandler,
     dbPut: DbStoreHandler,
@@ -743,6 +727,7 @@ proc new*(
   let proto = PortalProtocol(
     protocolHandler: messageHandler,
     protocolId: protocolId,
+    portalEnrField: portalEnrField,
     routingTable: RoutingTable.init(
       baseProtocol.localNode, config.bitsPerHop, config.tableIpLimits, baseProtocol.rng,
       distanceCalculator,
@@ -889,7 +874,7 @@ proc ping*(
     async: (raises: [CancelledError])
 .} =
   # Fail if no common portal version is found
-  let _ = ?dst.highestCommonPortalVersionAndChain(localPortalEnrField)
+  let _ = ?dst.highestCommonPortalVersionAndChain(p.portalEnrField)
 
   if p.isBanned(dst.id):
     return err("destination node is banned")
@@ -915,7 +900,7 @@ proc findNodes*(
     p: PortalProtocol, dst: Node, distances: seq[uint16]
 ): Future[PortalResult[seq[Node]]] {.async: (raises: [CancelledError]).} =
   # Fail if no common portal version is found
-  let _ = ?dst.highestCommonPortalVersionAndChain(localPortalEnrField)
+  let _ = ?dst.highestCommonPortalVersionAndChain(p.portalEnrField)
 
   if p.isBanned(dst.id):
     return err("destination node is banned")
@@ -933,7 +918,7 @@ proc findContent*(
     p: PortalProtocol, dst: Node, contentKey: ContentKeyByteList
 ): Future[PortalResult[FoundContent]] {.async: (raises: [CancelledError]).} =
   # Fail if no common portal version is found
-  let _ = ?dst.highestCommonPortalVersionAndChain(localPortalEnrField)
+  let _ = ?dst.highestCommonPortalVersionAndChain(p.portalEnrField)
 
   logScope:
     node = dst
@@ -1058,7 +1043,7 @@ proc offer(
   ## guarantee content transfer.
 
   # Fail if no common portal version is found
-  let _ = ?o.dst.highestCommonPortalVersionAndChain(localPortalEnrField)
+  let _ = ?o.dst.highestCommonPortalVersionAndChain(p.portalEnrField)
 
   let contentKeys = getContentKeys(o)
 

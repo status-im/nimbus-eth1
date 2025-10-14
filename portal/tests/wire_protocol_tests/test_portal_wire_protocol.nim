@@ -8,7 +8,7 @@
 {.used.}
 
 import
-  std/[algorithm, sequtils],
+  std/sequtils,
   minilru,
   chronos,
   testutils/unittests,
@@ -44,7 +44,12 @@ proc initPortalProtocol(
   let
     d = initDiscoveryNode(rng, privKey, address, bootstrapRecords)
     db = ContentDB.new(
-      "", uint32.high, RadiusConfig(kind: Dynamic), d.localNode.id, inMemory = true
+      "",
+      uint32.high,
+      RadiusConfig(kind: Dynamic),
+      d.localNode.id,
+      PortalSubnetwork.history,
+      inMemory = true,
     )
     manager = StreamManager.new(d)
     q = newAsyncQueue[(Opt[NodeId], ContentKeysList, seq[seq[byte]])](50)
@@ -56,6 +61,7 @@ proc initPortalProtocol(
   let proto = PortalProtocol.new(
     d,
     protocolId,
+    getPortalEnrField(PortalNetwork.mainnet),
     toContentId,
     createGetHandler(db),
     createStoreHandler(db, defaultRadiusConfig),
@@ -497,16 +503,17 @@ procSuite "Portal Wire Protocol Tests":
     await node2.stopPortalProtocol()
 
   asyncTest "Adjusting radius after hitting full database":
-    # TODO: This test is extremely breakable when changing
-    # `contentDeletionFraction` and/or the used test values.
-    # Need to rework either this test, or the pruning mechanism, or probably
-    # both.
     let
       node1 = initDiscoveryNode(rng, PrivateKey.random(rng[]), localAddress(20303))
 
       dbLimit = 400_000'u32
       db = ContentDB.new(
-        "", dbLimit, RadiusConfig(kind: Dynamic), node1.localNode.id, inMemory = true
+        "",
+        dbLimit,
+        RadiusConfig(kind: Dynamic),
+        node1.localNode.id,
+        PortalSubnetwork.history,
+        inMemory = true,
       )
       m = StreamManager.new(node1)
       q = newAsyncQueue[(Opt[NodeId], ContentKeysList, seq[seq[byte]])](50)
@@ -515,6 +522,7 @@ procSuite "Portal Wire Protocol Tests":
       proto1 = PortalProtocol.new(
         node1,
         protocolId,
+        getPortalEnrField(PortalNetwork.mainnet),
         toContentId,
         createGetHandler(db),
         createStoreHandler(db, defaultRadiusConfig),
@@ -524,29 +532,25 @@ procSuite "Portal Wire Protocol Tests":
       )
 
     let item = genByteSeq(10_000)
-    var distances: seq[UInt256] = @[]
+    var contentIds: seq[UInt256] = @[]
+    let startRadius = db.dataRadius
 
     for i in 0 ..< 40:
+      let contentId = UInt256.high div 39 * i.u256
       proto1.storeContent(
-        ByteList[2048].init(@[uint8(i)]), u256(i), item, cacheOffer = true
+        ByteList[2048].init(@[uint8(i)]), contentId, item, cacheOffer = true
       )
-      distances.add(u256(i) xor proto1.localNode.id)
+      contentIds.add(contentId)
 
-    distances.sort(order = SortOrder.Descending)
+    check db.dataRadius < startRadius
 
-    # With the selected db limit of 100_000 bytes and added elements of 10_000
-    # bytes each, the two furthest elements should be prined, i.e index 0 and 1.
-    # Index 2 should be still be in database and its distance should be <=
-    # updated radius
-    check:
-      not db.contains((distances[0] xor proto1.localNode.id))
-      not db.contains((distances[1] xor proto1.localNode.id))
-      not db.contains((distances[2] xor proto1.localNode.id))
-      db.contains((distances[3] xor proto1.localNode.id))
-      # The radius has been updated and is lower than the maximum start value.
-      proto1.dataRadius() < UInt256.high
-      # Yet higher than or equal to the furthest non deleted element.
-      proto1.dataRadius() >= distances[3]
+    for contentId in contentIds:
+      if db.dataRadius >= (contentId xor proto1.localNode.id):
+        check db.contains(contentId)
+      else:
+        check not db.contains(contentId)
+
+    check db.usedSize() < int64(dbLimit)
 
     await proto1.stop()
     await node1.closeWait()

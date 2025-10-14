@@ -241,7 +241,7 @@ proc prepareEnv*(
       com = CommonRef.new(memDB, nil, config,
         statelessProviderEnabled = statelessEnabled,
         statelessWitnessValidation = statelessEnabled)
-      chain = ForkedChainRef.init(com, enableQueue = true, persistBatchSize = 0)
+      chain = ForkedChainRef.init(com, enableQueue = true, persistBatchSize = 1)
 
     testEnv.chain = chain
     testEnv.client = Opt.none(RpcHttpClient)

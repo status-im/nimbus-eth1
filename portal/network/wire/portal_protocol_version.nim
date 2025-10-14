@@ -18,14 +18,9 @@ type PortalEnrField* = object
 
 const
   portalEnrKey* = "p"
+  # Note: These Min/Max values must be updated as new protocol versions are supported/removed
   localSupportedVersionMin* = 2'u8
   localSupportedVersionMax* = 2'u8
-  localChainId* = 1.chainId() # Mainnet by default, TODO: runtime configuration
-  localPortalEnrField* = PortalEnrField(
-    pvMin: localSupportedVersionMin,
-    pvMax: localSupportedVersionMax,
-    chainId: localChainId,
-  )
 
 func init*(T: type PortalEnrField, pvMin: uint8, pvMax: uint8, chainId: ChainId): T =
   T(pvMin: pvMin, pvMax: pvMax, chainId: chainId)

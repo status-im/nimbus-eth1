@@ -8,6 +8,7 @@
 {.push raises: [].}
 
 import
+  std/os,
   chronicles,
   metrics,
   eth/db/kvstore,
@@ -57,6 +58,7 @@ type
     forkDigests: ForkDigests
     cfg*: RuntimeConfig
     beaconDbCache*: BeaconDbCache
+    sizeStmt: SqliteStmt[NoParams, int64]
 
   BeaconDbCache* = ref object
     finalityUpdateCache*: Opt[LightClientFinalityUpdateCache]
@@ -317,6 +319,13 @@ proc initHistoricalSummariesStore(
     keepFromStmt: keepFromStmt,
   )
 
+proc size*(db: BeaconDb): int64 =
+  var size: int64 = 0
+  discard (
+    db.sizeStmt.exec do(res: int64):
+      size = res).expectDb()
+  return size
+
 func close(store: var BestLightClientUpdateStore) =
   store.getStmt.disposeSafe()
   store.getBulkStmt.disposeSafe()
@@ -340,19 +349,25 @@ proc new*(
     T: type BeaconDb, networkData: NetworkInitData, path: string, inMemory = false
 ): BeaconDb =
   let
+    fullPath = path / "beacondb"
     db =
       if inMemory:
-        SqStoreRef.init("", "lc-test", inMemory = true).expect(
+        SqStoreRef.init("", "beacondb_test", inMemory = true).expect(
           "working database (out of memory?)"
         )
       else:
-        SqStoreRef.init(path, "lc").expectDb()
+        SqStoreRef.init(fullPath, "beacondb").expectDb()
 
     kvStore = kvStore db.openKvStore().expectDb()
     bootstraps = initBootstrapStore(db, "lc_bootstraps").expectDb()
     bestUpdates = initBestUpdateStore(db, "lc_best_updates").expectDb()
     historicalSummaries =
       initHistoricalSummariesStore(db, "beacon_historical_summaries").expectDb()
+
+    sizeStmt = db.prepareStmt(
+      "SELECT page_count * page_size as size FROM pragma_page_count(), pragma_page_size();",
+      NoParams, int64,
+    )[]
 
   BeaconDb(
     backend: db,
@@ -364,6 +379,7 @@ proc new*(
     cfg: networkData.metadata.cfg,
     forkDigests: (newClone networkData.forks)[],
     beaconDbCache: BeaconDbCache(),
+    sizeStmt: sizeStmt,
   )
 
 proc close*(db: BeaconDb) =

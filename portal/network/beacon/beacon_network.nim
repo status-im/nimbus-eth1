@@ -217,7 +217,8 @@ proc new*(
 
     portalProtocol = PortalProtocol.new(
       baseProtocol,
-      getProtocolId(portalNetwork, PortalSubnetwork.beacon),
+      getProtocolId(PortalSubnetwork.beacon),
+      getPortalEnrField(portalNetwork),
       toContentIdHandler,
       createGetHandler(beaconDb),
       createStoreHandler(beaconDb),
@@ -480,6 +481,7 @@ proc statusLogLoop(n: BeaconNetwork) {.async: (raises: []).} =
       await sleepAsync(60.seconds)
 
       info "Beacon network status",
+        dbSize = $(n.beaconDb.size() div 1_000_000) & "mb",
         routingTableNodes = n.portalProtocol.routingTable.len()
   except CancelledError:
     trace "statusLogLoop canceled"

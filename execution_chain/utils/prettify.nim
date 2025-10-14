@@ -1,6 +1,6 @@
 # Nimbus - Types, data structures and shared utilities used in network sync
 #
-# Copyright (c) 2018-2021 Status Research & Development GmbH
+# Copyright (c) 2018-2025 Status Research & Development GmbH
 # Licensed under either of
 #  * Apache License, version 2.0, ([LICENSE-APACHE](LICENSE-APACHE) or
 #    http://www.apache.org/licenses/LICENSE-2.0)
@@ -11,64 +11,72 @@
 
 ## Some logging helper moved here in absence of a known better place.
 
-import
-  std/[math, strutils]
-
 {.push raises: [].}
 
-proc toSI*(num: SomeUnsignedInt): string =
-  ## Prints `num` argument value greater than 99 as rounded SI unit.
-  const
-    siUnits = [
-      #                   <limit>                 <multiplier>   <symbol>
-      (                   100_000u64,                     1000f64, 'k'),
-      (               100_000_000u64,                 1000_000f64, 'm'),
-      (           100_000_000_000u64,             1000_000_000f64, 'g'),
-      (       100_000_000_000_000u64,         1000_000_000_000f64, 't'),
-      (   100_000_000_000_000_000u64,     1000_000_000_000_000f64, 'p'),
-      (10_000_000_000_000_000_000u64, 1000_000_000_000_000_000f64, 'e')]
+import
+  std/[math, strformat]
 
-    lastUnit =
-      #           <no-limit-here>                 <multiplier>   <symbol>
-      (                           1000_000_000_000_000_000_000f64, 'z')
+proc dotFormat(w: float; digitsAfterDot: static[int]): string =
+  when digitsAfterDot == 0:
+    let rnd = if 0f < w: 0.5 else: -0.5
+    $(w + rnd).int64
+  elif digitsAfterDot == 1:
+    &"{w:.1f}"
+  elif digitsAfterDot == 2:
+    &"{w:.2f}"
+  elif digitsAfterDot == 3:
+    &"{w:.3f}"
+  elif digitsAfterDot == 4:
+    &"{w:.3f}"
+  else:
+    {.error: "unsupported digitsAfterDot setting".}
 
-  if num < 1000:
-    return $num
-
-  block checkRange:
-    let
-      uNum = num.uint64
-      fRnd = (num.float + 5) * 100
-    for (top, base, sig) in siUnits:
-      if uNum < top:
-        result = (fRnd / base).int.intToStr(3) & $sig
-        break checkRange
-    result = (fRnd / lastUnit[0]).int.intToStr(3) & $lastUnit[1]
-
-  result.insert(".", result.len - 3)
-
-proc toPC*(
-    num: float;
-    digitsAfterDot: static[int] = 2;
-    rounding: static[float] = 5.0
+proc unitFormat(
+    num: SomeInteger;
+    denom: static[float];
+    uFirst: static[string];
+    units: static[seq[char]];
+    digitsAfterDot: static[int];
       ): string =
+  ## Prints `num` argument value greater than 99 as rounded SI unit.
+  const denomUint = denom.uint
+  if num < denomUint:
+    when uFirst.len == 0:
+      return $num
+    else:
+      return $num & uFirst
+  var w = num.float
+  for u in units:
+    w /= denom
+    if w < denom:
+      return w.dotFormat(digitsAfterDot) & $u
+  when digitsAfterDot == 0:
+    w.dotFormat(0) & $units[^1]
+  else:
+    w.dotFormat(1) & $units[^1]
+
+# -----------
+
+proc toPC*(num: float; digitsAfterDot: static[int] = 2): string =
   ## Convert argument number `num` to percent string with decimal precision
-  ## stated as argument `digitsAfterDot`. Standard rounding is enabled by
-  ## default adjusting the first invisible digit, set `rounding = 0` to disable.
-  const
-    minDigits = digitsAfterDot + 1
-    multiplier = (10 ^ (minDigits + 1)).float
-    roundUp = rounding / 10.0
-  let
-    sign = if num < 0: "-" else: ""
-    preTruncated = (num.abs * multiplier) + roundUp
+  ## given as `digitsAfterDot`.
+  (num * 100f).dotFormat(digitsAfterDot) & "%"
 
-  if int.high.float <= preTruncated:
-    return "NaN"
-  # `intToStr` will do `abs` which throws overflow exception when value of low()
-  if preTruncated.int <= int.low():
-    return "NaN"
+proc toSI*(num: SomeUnsignedInt; digitsAfterDot: static[int] = 2): string =
+  ## Prints `num` argument as rounded SI unit.
+  unitFormat(num, 1000f, "", @['k', 'm', 'g' , 't', 'p', 'e'], digitsAfterDot)
 
-  result = sign & preTruncated.int.intToStr(minDigits) & "%"
-  when 0 < digitsAfterDot:
-    result.insert(".", result.len - minDigits)
+proc toSI*(num: SomeInteger; digitsAfterDot: static[int] = 2): string =
+  ## Ditto for possibly negative integers.
+  var (pfx, sign) = if 0 <= num: ("", 1) else: ("-", -1)
+  pfx & (sign * num).uint64.toSI(digitsAfterDot)
+
+proc toIEC*(num: SomeUnsignedInt; digitsAfterDot: static[int] = 2): string =
+  ## K=KiB, M=MiB, G=GiB, etc. (sort of standrdised by IEC).
+  unitFormat(num, 1024f, "", @['K', 'M', 'G' , 'T', 'P', 'E'], digitsAfterDot)
+
+proc toIECb*(num: SomeUnsignedInt; digitsAfterDot: static[int] = 2): string =
+  ## Similar to `toIEC()` but with the unit `B` for `num` values smaller
+  ## than 1024. This is useful for throughput pretty printing as in
+  ## `toIECb() & "ps"`
+  unitFormat(num, 1024f, "B", @['K', 'M', 'G' , 'T', 'P', 'E'], digitsAfterDot)

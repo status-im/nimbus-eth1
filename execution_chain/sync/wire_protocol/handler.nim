@@ -187,7 +187,7 @@ proc getBlockHeaders*(ctx: EthWireRef,
     chain = ctx.chain
 
   var
-    list = newSeqOfCap[Header](req.maxResults)
+    list = newSeqOfCap[Header](min(req.maxResults, MAX_HEADERS_SERVE))
     header = chain.blockHeader(req.startBlock).valueOr:
       return move(list)
     totalBytes = 0

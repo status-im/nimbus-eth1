@@ -119,7 +119,7 @@ type
     .}: Port
 
     protocolId* {.
-      defaultValue: getProtocolId(PortalNetwork.mainnet, PortalSubnetwork.history),
+      defaultValue: getProtocolId(PortalSubnetwork.history),
       desc: "Portal wire protocol id for the network to connect to",
       name: "protocol-id"
     .}: PortalProtocolId
@@ -228,6 +228,8 @@ proc run(config: PortalCliConf) =
   loadBootstrapFile(string config.bootstrapNodesFile, bootstrapRecords)
   bootstrapRecords.add(config.bootstrapNodes)
 
+  let localPortalEnrField = getPortalEnrField(PortalNetwork.mainnet)
+
   let d = newProtocol(
     config.networkKey,
     extIp,
@@ -246,7 +248,12 @@ proc run(config: PortalCliConf) =
 
   let
     db = ContentDB.new(
-      "", config.storageSize, defaultRadiusConfig, d.localNode.id, inMemory = true
+      "",
+      config.storageSize,
+      defaultRadiusConfig,
+      d.localNode.id,
+      PortalSubnetwork.history,
+      inMemory = true,
     )
     sm = StreamManager.new(d)
     cq = newAsyncQueue[(Opt[NodeId], ContentKeysList, seq[seq[byte]])](50)
@@ -254,6 +261,7 @@ proc run(config: PortalCliConf) =
     portal = PortalProtocol.new(
       d,
       config.protocolId,
+      localPortalEnrField,
       testContentIdHandler,
       createGetHandler(db),
       createStoreHandler(db, defaultRadiusConfig),

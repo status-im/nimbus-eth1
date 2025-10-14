@@ -12,7 +12,6 @@ import
   chronos,
   eth/p2p/discoveryv5/protocol,
   beacon_chain/spec/forks,
-  stew/byteutils,
   ../eth_history/history_data_ssz_e2s,
   ../database/content_db,
   ./wire/[portal_stream, portal_protocol_config],
@@ -35,7 +34,6 @@ type
 
   PortalNode* = ref object
     discovery: protocol.Protocol
-    contentDB: ContentDB
     streamManager: StreamManager
     historyNetwork*: Opt[HistoryNetwork]
     beaconNetwork*: Opt[BeaconNetwork]
@@ -58,13 +56,7 @@ proc onOptimisticHeader(
     when lcDataFork > LightClientDataFork.None:
       info "New LC optimistic header", optimistic_header = shortLog(forkyHeader)
 
-proc getDbDirectory*(network: PortalNetwork): string =
-  if network == PortalNetwork.mainnet:
-    "db"
-  else:
-    "db_" & network.symbolName()
-
-const dbDir = "portaldb"
+const dbDir* = "portaldb"
 
 proc new*(
     T: type PortalNode,
@@ -77,22 +69,27 @@ proc new*(
     rng = newRng(),
 ): T =
   let
-    # Store the database at contentdb prefixed with the first 8 chars of node id.
-    # This is done because the content in the db is dependant on the `NodeId` and
-    # the selected `Radius`.
-    contentDB = ContentDB.new(
-      config.dataDir / dbDir / "contentdb_" &
-        discovery.localNode.id.toBytesBE().toOpenArray(0, 8).toHex(),
-      storageCapacity = config.storageCapacity,
-      radiusConfig = config.portalConfig.radiusConfig,
-      localId = discovery.localNode.id,
-    )
-    # TODO: Portal works only over mainnet data currently
-    networkData = loadNetworkData("mainnet")
+    networkData =
+      case network
+      of PortalNetwork.mainnet:
+        loadNetworkData("mainnet")
+      of PortalNetwork.none:
+        loadNetworkData("mainnet")
+
     streamManager = StreamManager.new(discovery)
 
     historyNetwork =
       if PortalSubnetwork.history in subnetworks:
+        # Store the database at contentdb prefixed with the first 8 chars of node id.
+        # This is done because the content in the db is dependant on the `NodeId` and
+        # the selected `Radius`.
+        let contentDB = ContentDB.new(
+          config.dataDir / dbDir,
+          storageCapacity = config.storageCapacity,
+          radiusConfig = config.portalConfig.radiusConfig,
+          localId = discovery.localNode.id,
+          subnetwork = PortalSubnetwork.history,
+        )
         Opt.some(
           HistoryNetwork.new(
             network,
@@ -113,7 +110,7 @@ proc new*(
     beaconNetwork =
       if PortalSubnetwork.beacon in subnetworks:
         let
-          beaconDb = BeaconDb.new(networkData, config.dataDir / dbDir / "beacondb")
+          beaconDb = BeaconDb.new(networkData, config.dataDir / dbDir)
           beaconNetwork = BeaconNetwork.new(
             network,
             discovery,
@@ -152,7 +149,6 @@ proc new*(
 
   PortalNode(
     discovery: discovery,
-    contentDB: contentDB,
     streamManager: streamManager,
     historyNetwork: historyNetwork,
     beaconNetwork: beaconNetwork,
@@ -166,16 +162,16 @@ proc statusLogLoop(n: PortalNode) {.async: (raises: []).} =
       # drop a lot when using the logbase2 scale, namely `/ 2` per 1 logaritmic
       # radius drop.
       # TODO: Get some float precision calculus?
-      let
-        radius = n.contentDB.dataRadius
-        radiusPercentage = radius div (UInt256.high() div u256(100))
-        logRadius = logDistance(radius, u256(0))
+      if n.historyNetwork.isSome():
+        let
+          radius = n.historyNetwork.value.contentDB.dataRadius
+          radiusPercentage = radius div (UInt256.high() div u256(100))
+          logRadius = logDistance(radius, u256(0))
 
-      info "Portal node status",
-        dbSize = $(n.contentDB.size() div 1_000_000) & "mb",
-        radiusPercentage = radiusPercentage.toString(10) & "%",
-        radius = radius.toHex(),
-        logRadius
+        info "Portal node status",
+          radiusPercentage = radiusPercentage.toString(10) & "%",
+          radius = radius.toHex(),
+          logRadius
 
       await sleepAsync(60.seconds)
   except CancelledError:
@@ -200,17 +196,16 @@ proc stop*(n: PortalNode) {.async: (raises: []).} =
 
   var futures: seq[Future[void]]
 
+  if not n.statusLogLoop.isNil():
+    futures.add(n.statusLogLoop.cancelAndWait())
   if n.historyNetwork.isSome():
     futures.add(n.historyNetwork.value.stop())
   if n.beaconNetwork.isSome():
     futures.add(n.beaconNetwork.value.stop())
   if n.beaconLightClient.isSome():
     futures.add(n.beaconLightClient.value.stop())
-  if not n.statusLogLoop.isNil():
-    futures.add(n.statusLogLoop.cancelAndWait())
 
   await noCancel(allFutures(futures))
 
   await n.discovery.closeWait()
-  n.contentDB.close()
   n.statusLogLoop = nil

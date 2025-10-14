@@ -8,15 +8,13 @@
 # at your option. This file may not be copied, modified, or distributed except
 # according to those terms.
 
+{.push raises: [], gcsafe.}
 {.used.}
 
 import
   stint,
   eth/common/[addresses, hashes, base]
 
-# proc default(t: typedesc): t = discard -- notused
-
-# constants
 const
   UINT_256_MAX*: UInt256 =                  high(UInt256)
   INT_256_MAX_AS_UINT256* =                 high(UInt256) shr 1
@@ -43,7 +41,7 @@ const
 
   GAS_LIMIT_MINIMUM* =                      5000
   GAS_LIMIT_MAXIMUM* =                      int64.high.GasInt # Maximum the gas limit (2^63-1).
-  DEFAULT_GAS_LIMIT* =                      45_000_000
+  DEFAULT_GAS_LIMIT* =                      60_000_000
 
   # https://eips.ethereum.org/EIPS/eip-7825
   TX_GAS_LIMIT* =                           1 shl 24 # 2^24

@@ -94,6 +94,10 @@ elif defined(riscv64):
   # and seems to be the minimum extensions needed to build.
   switch("passC", "-march=rv64gc")
   switch("passL", "-march=rv64gc")
+elif defined(linux) and defined(arm64):
+  # clang can't handle "-march=native"
+  switch("passC", "-march=armv8-a")
+  switch("passL", "-march=armv8-a")
 else:
   switch("passC", "-march=native")
   switch("passL", "-march=native")

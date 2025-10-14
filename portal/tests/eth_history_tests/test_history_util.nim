@@ -12,6 +12,7 @@ import
   stew/io2,
   eth/common/headers,
   ../../network/history/history_content,
+  ../../network/network_metadata,
   ../../eth_history/block_proofs/
     [block_proof_historical_summaries, block_proof_historical_hashes_accumulator]
 
@@ -20,19 +21,19 @@ from eth/rlp import computeRlpHash
 export results, block_proof_historical_hashes_accumulator, history_content
 
 func buildAccumulator*(
-    headers: seq[Header]
+    chainConfig: ChainConfig, headers: seq[Header]
 ): Result[FinishedHistoricalHashesAccumulator, string] =
   var accumulator: HistoricalHashesAccumulator
   for header in headers:
     updateAccumulator(accumulator, header)
 
-    if header.number == mergeBlockNumber - 1:
+    if header.number == chainConfig.mergeNetsplitBlock - 1:
       return ok(finishAccumulator(accumulator))
 
   err("Not enough headers provided to finish the accumulator")
 
 func buildAccumulatorData*(
-    headers: seq[Header]
+    chainConfig: ChainConfig, headers: seq[Header]
 ): Result[(FinishedHistoricalHashesAccumulator, seq[EpochRecord]), string] =
   var accumulator: HistoricalHashesAccumulator
   var epochRecords: seq[EpochRecord]
@@ -42,7 +43,7 @@ func buildAccumulatorData*(
     if accumulator.currentEpoch.len() == EPOCH_SIZE:
       epochRecords.add(accumulator.currentEpoch)
 
-    if header.number == mergeBlockNumber - 1:
+    if header.number == chainConfig.mergeNetsplitBlock - 1:
       epochRecords.add(accumulator.currentEpoch)
 
       return ok((finishAccumulator(accumulator), epochRecords))
@@ -50,13 +51,13 @@ func buildAccumulatorData*(
   err("Not enough headers provided to finish the accumulator")
 
 func buildProof*(
-    header: Header, epochRecords: seq[EpochRecord]
+    chainConfig: ChainConfig, header: Header, epochRecords: seq[EpochRecord]
 ): Result[HistoricalHashesAccumulatorProof, string] =
   let epochIndex = getEpochIndex(header)
   doAssert(epochIndex < uint64(epochRecords.len()))
   let epochRecord = epochRecords[epochIndex]
 
-  buildProof(header, epochRecord)
+  buildProof(chainConfig, header, epochRecord)
 
 proc toString(v: IoErrorCode): string =
   try:

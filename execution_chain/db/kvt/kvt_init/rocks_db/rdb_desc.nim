@@ -21,7 +21,6 @@ export rocksdb_desc
 type
   RdbInst* = object
     baseDb*: RocksDbInstanceRef
-
     store*: KvtCfStore               ## Rocks DB database handler
 
   KvtCFs* = enum

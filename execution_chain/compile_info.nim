@@ -14,3 +14,7 @@
 const chronicles_line_numbers {.strdefine.} = "0"
 when chronicles_line_numbers notin ["0", "off"]:
   {.hint: "*** Compiling with logger line numbers enabled".}
+
+const enable_mcl_lib* {.booldefine.} = true
+when enable_mcl_lib:
+  {.hint: "*** Compiling with mcl library".}

@@ -93,7 +93,6 @@ proc startBuddy*(buddy: BeaconBuddyRef): bool =
     ctx.pool.nBuddies.inc
     metrics.set(nec_sync_peers, buddy.ctx.pool.nBuddies)
     ctx.pool.lastSlowPeer = Opt.none(Hash)
-    buddy.initProcErrors()
     return true
 
 
@@ -107,7 +106,6 @@ proc stopBuddy*(buddy: BeaconBuddyRef) =
     ctx.pool.lastPeerSeen = Moment.now()
     ctx.pool.lastNoPeersLog = ctx.pool.lastPeerSeen
   metrics.set(nec_sync_peers, ctx.pool.nBuddies)
-  buddy.clearProcErrors()
 
 # ------------------------------------------------------------------------------
 # End

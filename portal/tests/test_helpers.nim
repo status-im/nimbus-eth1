@@ -12,7 +12,7 @@ import
   eth/common/keys,
   eth/p2p/discoveryv5/[node, routing_table],
   eth/p2p/discoveryv5/protocol as discv5_protocol,
-  ../network/wire/portal_protocol_version
+  ../network/wire/[portal_protocol_version, portal_protocol_config]
 
 proc localAddress*(port: int): Address {.raises: [ValueError].} =
   Address(ip: parseIpAddress("127.0.0.1"), port: Port(port))
@@ -32,7 +32,7 @@ proc initDiscoveryNode*(
   enrFields.add(localEnrFields)
   # Always inject the portal wire version field into the ENR
   # When no field, it would mean v0 only support
-  enrFields.add((portalEnrKey, rlp.encode(localPortalEnrField)))
+  enrFields.add((portalEnrKey, rlp.encode(getPortalEnrField(PortalNetwork.mainnet))))
 
   result = newProtocol(
     privKey,

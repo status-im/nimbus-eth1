@@ -229,3 +229,7 @@
 [submodule "vendor/constantine"]
 	path = vendor/constantine
 	url = https://github.com/mratsim/constantine
+[submodule "vendor/nim-mcl"]
+	path = vendor/nim-mcl
+	url = https://github.com/status-im/nim-mcl
+  branch = main
