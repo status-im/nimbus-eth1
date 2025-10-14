@@ -195,7 +195,10 @@ proc newRocksDbCoreDbRef*(basePath: string, opts: DbOptions): CoreDbRef =
 
     adb = AristoDbRef.init(opts, baseDb).valueOr:
       raiseAssert "Could not initialize aristo: " & $error
-    kdb = KvtDbRef.init(baseDb)
+
+  var kvts: array[KvtCFs, KvtDbRef]
+  kvts[KvtGeneric] = KvtDbRef.init(baseDb, KvtGeneric)
+  kvts[KvtContractCode] = KvtDbRef.init(baseDb, KvtContractCode)
 
   if opts.rdbKeyCacheSize > 0:
     # Make sure key cache isn't empty
@@ -203,7 +206,7 @@ proc newRocksDbCoreDbRef*(basePath: string, opts: DbOptions): CoreDbRef =
       fatal "Cannot compute root keys", msg = error
       quit(QuitFailure)
 
-  AristoDbRocks.create(kdb, adb)
+  AristoDbRocks.create(adb, kvts)
 
 # ------------------------------------------------------------------------------
 # End

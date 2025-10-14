@@ -642,13 +642,13 @@ proc getWitness*(db: CoreDbTxRef, blockHash: Hash32): Result[Witness, string] =
   Witness.decode(witnessBytes)
 
 proc getCodeByHash*(db: CoreDbTxRef, codeHash: Hash32): Result[seq[byte], string] =
-  let code = db.get(contractHashKey(codeHash).toOpenArray).valueOr:
+  let code = db.get(codeHash.data, KvtCFs.KvtContractCode).valueOr:
     return err("getCodeByHash: " & $$error)
 
   ok(code)
 
 proc setCodeByHash*(db: CoreDbTxRef, codeHash: Hash32, code: openArray[byte]): Result[void, string] =
-  db.put(contractHashKey(codeHash).toOpenArray, code).isOkOr:
+  db.put(codeHash.data, code, KvtCFs.KvtContractCode).isOkOr:
     return err("setCodeByHash: " & $$error)
 
   ok()

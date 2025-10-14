@@ -23,14 +23,16 @@ export base_desc
 # Public constructors
 # ------------------------------------------------------------------------------
 
-proc create*(dbType: CoreDbType; kvt: KvtDbRef; mpt: AristoDbRef): CoreDbRef =
+proc create*(dbType: CoreDbType; mpt: AristoDbRef; kvts: array[KvtCFs, KvtDbRef]): CoreDbRef =
   ## Constructor helper
-  CoreDbRef(dbType: dbType, mpt: mpt, kvt: kvt)
+  CoreDbRef(dbType: dbType, mpt: mpt, kvts: kvts)
 
 proc newMemoryCoreDbRef*(): CoreDbRef =
-  AristoDbMemory.create(
-    KvtDbRef.init(),
-    AristoDbRef.init())
+  var kvts: array[KvtCFs, KvtDbRef]
+  kvts[KvtGeneric] = KvtDbRef.init()
+  kvts[KvtContractCode] = KvtDbRef.init()
+
+  AristoDbMemory.create(AristoDbRef.init(), kvts)
 
 # ------------------------------------------------------------------------------
 # End

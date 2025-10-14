@@ -27,6 +27,7 @@ type
     ## Column family symbols/handles and names used on the database
     KvtGeneric = "KvtGen"            ## Generic column family
     KvtSynchro = "KvtSync"
+    KvtContractCode = "KvtCode"
 
   KvtCfStore* = array[KvtCFs, ColFamilyReadWrite]
     ## List of column family handlers

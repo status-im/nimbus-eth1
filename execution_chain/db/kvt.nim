@@ -19,11 +19,13 @@ export
   kvt_constants
 
 import
-  kvt/kvt_init/memory_only
+  kvt/kvt_init/memory_only,
+  kvt/kvt_init/rocks_db/rdb_desc
 export
   MemBackendRef,
   finish,
-  init
+  init,
+  KvtCFs
 
 import
   kvt/kvt_desc
