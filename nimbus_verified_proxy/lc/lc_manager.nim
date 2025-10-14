@@ -51,23 +51,23 @@ type
     proc(): Option[Eth2Digest] {.gcsafe, raises: [].}
   GetBoolCallback* =
     proc(): bool {.gcsafe, raises: [].}
-  GetSyncCommitteePeriodCallback* =
-    proc(): SyncCommitteePeriod {.gcsafe, raises: [].}
+  GetSlotCallback* =
+    proc(): Slot {.gcsafe, raises: [].}
 
-  LightClientUpdatesByRangeResponse = NetRes[List[ForkedLightClientUpdate, MAX_REQUEST_LIGHT_CLIENT_UPDATES]]
+  LightClientUpdatesByRangeResponse* = NetRes[seq[ForkedLightClientUpdate]]
 
   LightClientBootstrapProc = proc(id: uint64, blockRoot: Eth2Digest): Future[NetRes[ForkedLightClientBootstrap]] {.async: (raises: [CancelledError]).}
   LightClientUpdatesByRangeProc = proc(id: uint64, startPeriod: SyncCommitteePeriod, count: uint64): Future[LightClientUpdatesByRangeResponse] {.async: (raises: [CancelledError]).}
   LightClientFinalityUpdateProc = proc(id: uint64): Future[NetRes[ForkedLightClientFinalityUpdate]] {.async: (raises: [CancelledError]).}
   LightClientOptimisticUpdateProc = proc(id: uint64): Future[NetRes[ForkedLightClientOptimisticUpdate]] {.async: (raises: [CancelledError]).}
-  ReportRequestQualityProc = proc(id: uint64, value: int) {.gcsafe, raises: [].}
+  UpdateScoreProc = proc(id: uint64, value: int) {.gcsafe, raises: [].}
 
   EthLCBackend* = object
-    getLightClientBootstrap: LightClientBootstrapProc
-    getLightClientUpdatesByRange: LightClientUpdatesByRangeProc
-    getLightClientFinalityUpdate: LightClientFinalityUpdateProc
-    getLightClientOptimisticUpdate: LightClientOptimisticUpdateProc
-    reportRequestQuality: ReportRequestQualityProc
+    getLightClientBootstrap*: LightClientBootstrapProc
+    getLightClientUpdatesByRange*: LightClientUpdatesByRangeProc
+    getLightClientFinalityUpdate*: LightClientFinalityUpdateProc
+    getLightClientOptimisticUpdate*: LightClientOptimisticUpdateProc
+    updateScore*: UpdateScoreProc
 
   LightClientManager* = object
     rng: ref HmacDrbgContext
@@ -79,8 +79,8 @@ type
     optimisticUpdateVerifier: OptimisticUpdateVerifier
     isLightClientStoreInitialized: GetBoolCallback
     isNextSyncCommitteeKnown: GetBoolCallback
-    getFinalizedPeriod: GetSyncCommitteePeriodCallback
-    getOptimisticPeriod: GetSyncCommitteePeriodCallback
+    getFinalizedSlot: GetSlotCallback
+    getOptimisticSlot: GetSlotCallback
     getBeaconTime: GetBeaconTimeFn
     loopFuture: Future[void].Raising([CancelledError])
 
@@ -94,8 +94,8 @@ func init*(
     optimisticUpdateVerifier: OptimisticUpdateVerifier,
     isLightClientStoreInitialized: GetBoolCallback,
     isNextSyncCommitteeKnown: GetBoolCallback,
-    getFinalizedPeriod: GetSyncCommitteePeriodCallback,
-    getOptimisticPeriod: GetSyncCommitteePeriodCallback,
+    getFinalizedSlot: GetSlotCallback,
+    getOptimisticSlot: GetSlotCallback,
     getBeaconTime: GetBeaconTimeFn,
 ): LightClientManager =
   ## Initialize light client manager.
@@ -108,8 +108,8 @@ func init*(
     optimisticUpdateVerifier: optimisticUpdateVerifier,
     isLightClientStoreInitialized: isLightClientStoreInitialized,
     isNextSyncCommitteeKnown: isNextSyncCommitteeKnown,
-    getFinalizedPeriod: getFinalizedPeriod,
-    getOptimisticPeriod: getOptimisticPeriod,
+    getFinalizedSlot: getFinalizedSlot,
+    getOptimisticSlot: getOptimisticSlot,
     getBeaconTime: getBeaconTime)
 
 # https://github.com/ethereum/consensus-specs/blob/v1.6.0-alpha.3/specs/altair/light-client/p2p-interface.md#getlightclientbootstrap
@@ -171,7 +171,7 @@ template valueVerifier[E](
 iterator values(v: auto): auto =
   ## Local helper for `workerTask` to share the same implementation for both
   ## scalar and aggregate values, by treating scalars as 1-length aggregates.
-  when v is List:
+  when v is seq:
     for i in v:
       yield i
   else:
@@ -215,7 +215,7 @@ proc workerTask[E](
                 notice "Received value from an unviable fork", value = forkyObject, endpoint = E.name
               else:
                 notice "Received value from an unviable fork", endpoint = E.name
-            self.backend.reportRequestQuality(reqId, PeerScoreUnviableFork)
+            self.backend.updateScore(reqId, PeerScoreUnviableFork)
             return didProgress
           of LightClientVerifierError.Invalid:
             # Descore, received data is malformed
@@ -224,19 +224,19 @@ proc workerTask[E](
                 warn "Received invalid value", value = forkyObject.shortLog, endpoint = E.name
               else:
                 warn "Received invalid value", endpoint = E.name
-            self.backend.reportRequestQuality(reqId, PeerScoreBadValues)
+            self.backend.updateScore(reqId, PeerScoreBadValues)
             return didProgress
         else:
           # Reward, peer returned something useful
           applyReward = true
           didProgress = true
       if applyReward:
-        self.backend.reportRequestQuality(reqId, PeerScoreGoodValues)
+        self.backend.updateScore(reqId, PeerScoreGoodValues)
     else:
-      self.backend.reportRequestQuality(reqId, PeerScoreNoValues)
+      self.backend.updateScore(reqId, PeerScoreNoValues)
       debug "Failed to receive value on request", value, endpoint = E.name
   except ResponseError as exc:
-    self.backend.reportRequestQuality(reqId, PeerScoreBadValues)
+    self.backend.updateScore(reqId, PeerScoreBadValues)
     warn "Received invalid response", error = exc.msg, endpoint = E.name
   except CancelledError as exc:
     raise exc
@@ -324,59 +324,77 @@ template query[E](
 
 # https://github.com/ethereum/consensus-specs/blob/v1.5.0-beta.0/specs/altair/light-client/light-client.md#light-client-sync-process
 proc loop(self: LightClientManager) {.async: (raises: [CancelledError]).} =
-  var nextSyncTaskTime = self.getBeaconTime()
+  var 
+    downloadOptimistic = true
+    downloadFinality = false
+    didOptimisticProgress = false
+    didFinalityProgress = false
 
   while true:
-    # Periodically wake and check for changes
-    let wallTime = self.getBeaconTime()
-    if wallTime < nextSyncTaskTime:
-      await sleepAsync(chronos.seconds(2))
-      continue
+    let
+      wallTime = self.getBeaconTime()
+      currentSlot = wallTime.slotOrZero()
+      currentEpoch = (currentSlot mod SLOTS_PER_EPOCH)
+      currentPeriod = currentSlot.sync_committee_period
+      finalizedSlot = self.getFinalizedSlot()
+      finalizedPeriod = finalizedSlot.sync_committee_period
+      finalizedEpoch = (finalizedSlot mod SLOTS_PER_EPOCH)
+      optimisticSlot = self.getOptimisticSlot()
+      optimisticPeriod = optimisticSlot.sync_committee_period
+      optimisitcEpoch = (optimisticSlot mod SLOTS_PER_EPOCH)
 
     # Obtain bootstrap data once a trusted block root is supplied
     if not self.isLightClientStoreInitialized():
       let trustedBlockRoot = self.getTrustedBlockRoot()
+
+      # reattempt bootstrap download in 2 seconds
       if trustedBlockRoot.isNone:
+        debug "TrustedBlockRoot unavaialble re-attempting bootstrap download"
         await sleepAsync(chronos.seconds(2))
         continue
 
       let didProgress = await self.query(Bootstrap, trustedBlockRoot.get)
-      nextSyncTaskTime =
-        if didProgress:
-          wallTime
-        else:
-          wallTime + self.rng.computeDelayWithJitter(chronos.seconds(0))
-      continue
 
-    # Fetch updates
-    let
-      current = wallTime.slotOrZero().sync_committee_period
+      # reattempt bootstrap download in 2 seconds
+      if not didProgress:
+        debug "Re-attempting bootstrap download"
+        await sleepAsync(chronos.seconds(2))
+        continue
 
-      syncTask = nextLightClientSyncTask(
-        current = current,
-        finalized = self.getFinalizedPeriod(),
-        optimistic = self.getOptimisticPeriod(),
-        isNextSyncCommitteeKnown = self.isNextSyncCommitteeKnown())
+    # check and download sync committee updates
+    if finalizedPeriod == optimisticPeriod and not self.isNextSyncCommitteeKnown():
+      if finalizedPeriod >= currentPeriod:
+        debug "Downloading light client sync committee updates", start_period=finalizedPeriod, count=1
+        discard await self.query(UpdatesByRange, (startPeriod: finalizedPeriod, count: uint64(1)))
+      else:
+        let count = min(currentPeriod - finalizedPeriod, MAX_REQUEST_LIGHT_CLIENT_UPDATES)
+        debug "Downloading light client sync committee updates", start_period=finalizedPeriod, count=count
+        discard await self.query(UpdatesByRange, (startPeriod: finalizedPeriod, count: uint64(count)))
+    elif finalizedPeriod + 1 < currentPeriod:
+      let count = min(currentPeriod - (finalizedPeriod + 1), MAX_REQUEST_LIGHT_CLIENT_UPDATES)
+      debug "Downloading light client sync committee updates", start_period=finalizedPeriod, count=count
+      discard await self.query(UpdatesByRange, (startPeriod: finalizedPeriod, count: uint64(count)))
 
-      didProgress =
-        case syncTask.kind
-        of LcSyncKind.UpdatesByRange:
-          await self.query(UpdatesByRange,
-            (startPeriod: syncTask.startPeriod, count: syncTask.count))
-        of LcSyncKind.FinalityUpdate:
-          await self.query(FinalityUpdate)
-        of LcSyncKind.OptimisticUpdate:
-          await self.query(OptimisticUpdate)
+    # check and download optimistic update
+    if optimisticSlot < currentSlot:
+      debug "Downloading light client optimistic updates", slot=currentSlot
+      let didProgress = await self.query(OptimisticUpdate)
+      if not didProgress:
+        # retry in 2 seconds
+        await sleepAsync(chronos.seconds(2))
+        continue
 
-    nextSyncTaskTime =
-      wallTime +
-      self.rng.nextLcSyncTaskDelay(
-        wallTime,
-        finalized = self.getFinalizedPeriod(),
-        optimistic = self.getOptimisticPeriod(),
-        isNextSyncCommitteeKnown = self.isNextSyncCommitteeKnown(),
-        didLatestSyncTaskProgress = didProgress
-      )
+    # check and download finality update
+    if currentEpoch > finalizedEpoch + 2:
+      debug "Downloading light client finality updates", slot=currentSlot
+      let didProgress =  await self.query(FinalityUpdate)
+      if not didProgress:
+        # retry in two seconds
+        await sleepAsync(chronos.seconds(2))
+        continue
+
+    # check for updates every slot
+    await sleepAsync(chronos.seconds(int64(SECONDS_PER_SLOT)))
 
 proc start*(self: var LightClientManager) =
   ## Start light client manager's loop.
