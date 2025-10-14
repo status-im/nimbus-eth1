@@ -116,27 +116,31 @@ proc new*(
         forkyStore.is_next_sync_committee_known
       else:
         false
-  func getFinalizedPeriod(): SyncCommitteePeriod =
-    withForkyStore(lightClient.store[]):
-      when lcDataFork > LightClientDataFork.None:
-        forkyStore.finalized_header.beacon.slot.sync_committee_period
-      else:
-        GENESIS_SLOT.sync_committee_period
 
-  func getOptimisticPeriod(): SyncCommitteePeriod =
+  func getFinalizedSlot(): Slot =
     withForkyStore(lightClient.store[]):
       when lcDataFork > LightClientDataFork.None:
-        forkyStore.optimistic_header.beacon.slot.sync_committee_period
+        forkyStore.finalized_header.beacon.slot
       else:
-        GENESIS_SLOT.sync_committee_period
+        GENESIS_SLOT
+
+  func getOptimisticSlot(): Slot =
+    withForkyStore(lightClient.store[]):
+      when lcDataFork > LightClientDataFork.None:
+        forkyStore.optimistic_header.beacon.slot
+      else:
+        GENESIS_SLOT
 
   lightClient.manager = LightClientManager.init(
     rng, getTrustedBlockRoot, bootstrapVerifier, updateVerifier,
     finalityVerifier, optimisticVerifier, isLightClientStoreInitialized,
-    isNextSyncCommitteeKnown, getFinalizedPeriod, getOptimisticPeriod, getBeaconTime,
+    isNextSyncCommitteeKnown, getFinalizedSlot, getOptimisticSlot, getBeaconTime,
   )
 
   lightClient
+
+proc setBackend*(lightClient: LightClient, backend: EthLCBackend) =
+  lightClient.manager.backend = backend
 
 proc start*(lightClient: LightClient) =
   info "Starting beacon light client", trusted_block_root = lightClient.trustedBlockRoot
