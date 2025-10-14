@@ -13,14 +13,22 @@
 import
   pkg/chronos
 
-type SyncState* = enum
-  idle = 0                         ## see clause *(8)*, *(12)* of `README.md`
-  headers                          ## see clauses *(5)*, *(9)* of `README.md`
-  headersCancel                    ## stop this scrum
-  headersFinish                    ## see clause *(10)* of `README.md`
-  blocks                           ## see clause *(11)* of `README.md`
-  blocksCancel                     ## stop this syncer scrum
-  blocksFinish                     ## get ready for `idle`
+type
+  SyncState* = enum
+    idle = 0                       ## see clause *(8)*, *(12)* of `README.md`
+    headers                        ## see clauses *(5)*, *(9)* of `README.md`
+    headersCancel                  ## stop this scrum
+    headersFinish                  ## see clause *(10)* of `README.md`
+    blocks                         ## see clause *(11)* of `README.md`
+    blocksCancel                   ## stop this syncer scrum
+    blocksFinish                   ## get ready for `idle`
+
+  DownloadPerformance* = enum
+    rankingTooLow = 0              ## Lower mean throughput than others
+    rankingOk                      ## Better mean throughput than some others
+    notEnoughData                  ## Not enough data to assess
+    qSlotsAvail                    ## No assessment needed (e.g. few peers)
+    notApplicable                  ## Not useful here
 
 const
   metricsUpdateInterval* = chronos.seconds(10)

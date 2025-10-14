@@ -141,50 +141,65 @@ template runPeer*(buddy: BeaconBuddyRef; info: static[string]): Duration =
   block body:
     if buddy.somethingToCollectOrUnstage():
 
+      # Classify sync peer (aka buddy) performance
+      let (fetchPerf {.inject.}, rank) = buddy.classifyForFetching()
+
+      trace info & ": start processing", peer=buddy.peer,
+        throughput=buddy.only.thruPutStats.toMeanVar.psStr,
+        fetchPerf, rank=(if rank < 0: "n/a" else: $rank),
+        nSyncPeers=buddy.ctx.pool.nBuddies, state=($buddy.syncState)
+
+      if fetchPerf == rankingTooLow:
+        bodyRc = workerIdleWaitInterval
+        break body                                # done, exit
+
       # Download and process headers and blocks
-      while buddy.headersCollectOk():
+      block downloadAndProcess:
+        while buddy.headersCollectOk():
 
-        # Collect headers and either stash them on the header chain cache
-        # directly, or stage on the header queue to get them serialised and
-        # stashed, later.
-        buddy.headersCollect info # async/template
+          # Collect headers and either stash them on the header chain cache
+          # directly, or stage on the header queue to get them serialised and
+          # stashed, later.
+          buddy.headersCollect info               # async/template
 
-        # Store serialised headers from the `staged` queue onto the header
-        # chain cache.
-        if not buddy.headersUnstage(info):     # async/template
-          # Need to proceed with another peer (e.g. gap between queue and
-          # header chain cache.)
-          bodyRc = workerIdleWaitInterval
-          break body
+          # Store serialised headers from the `staged` queue onto the header
+          # chain cache.
+          if not buddy.headersUnstage info:       # async/template
+            # Need to proceed with another peer (e.g. gap between queue and
+            # header chain cache.)
+            bodyRc = workerIdleWaitInterval
+            break downloadAndProcess
 
-        # End `while()`
+          # End `while()`
 
-      # Fetch bodies and combine them with headers to blocks to be staged.
-      # These staged blocks are then excuted by the daemon process (no `peer`
-      # needed.)
-      while buddy.blocksCollectOk():
-        # Collect bodies and either import them via `FC` module, or stage on
-        # the blocks queue to get them serialised and imported, later.
-        buddy.blocksCollect info # async/template
+        # Fetch bodies and combine them with headers to blocks to be staged.
+        # These staged blocks are then excuted by the daemon process (no `peer`
+        # needed.)
+        while buddy.blocksCollectOk():
+          # Collect bodies and either import them via `FC` module, or stage on
+          # the blocks queue to get them serialised and imported, later.
+          buddy.blocksCollect info                # async/template
 
-        # Import bodies from the `staged` queue.
-        if not buddy.blocksUnstage(info):      # async/template
-          # Need to proceed with another peer (e.g. gap between top imported
-          # block and blocks queue.)
-          bodyRc = workerIdleWaitInterval
-          break body
+          # Import bodies from the `staged` queue.
+          if not buddy.blocksUnstage info:        # async/template
+            # Need to proceed with another peer (e.g. gap between top imported
+            # block and blocks queue.)
+            bodyRc = workerIdleWaitInterval
+            break downloadAndProcess
 
-        # End `while()`
+          # End `while()`
+
+      # End block: `actionLoop`
 
     else:
       # Potentially a manual sync target set up
       buddy.headersTargetActivate info
 
-    # End block: `body`
+    # Idle sleep unless there is something to do
+    if not buddy.somethingToCollectOrUnstage():
+      bodyRc = workerIdleWaitInterval
 
-  # Idle sleep unless there is something to do
-  if not buddy.somethingToCollectOrUnstage():
-    bodyRc = workerIdleWaitInterval
+    # End block: `body`
 
   bodyRc
 
