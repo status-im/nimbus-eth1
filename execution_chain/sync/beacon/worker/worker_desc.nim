@@ -273,12 +273,13 @@ proc bpsSample*(
   ## bytes/sec calculation.
   let ns = elapsed.nanoseconds
   if 0 < ns:
-    let bps = dataSize.float * 1_000_000_000f / ns.float
-    stats.sum += bps
-    stats.sum2 +=  bps * bps
     stats.samples.inc
-    stats.total += dataSize.uint64
-    return bps.uint
+    if 0 < dataSize:
+      let bps = dataSize.float * 1_000_000_000f / ns.float
+      stats.sum += bps
+      stats.sum2 +=  bps * bps
+      stats.total += dataSize.uint64
+      return bps.uint
 
 # ------------------------------------------------------------------------------
 # End

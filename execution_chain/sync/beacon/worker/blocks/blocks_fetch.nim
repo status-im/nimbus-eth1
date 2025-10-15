@@ -100,9 +100,18 @@ template fetchBodies*(
         nErrors=buddy.nErrors.fetch.bdy
       break body                                    # return err()
 
+    # Verify the correct number of block bodies received
     let b = rc.value.packet.bodies
     if b.len == 0 or nReq < b.len:
-      buddy.bdyFetchRegisterError()
+      if 0 < b.len:
+        # Bogus peer returning additional rubbish
+        buddy.bdyFetchRegisterError(forceZombie=true)
+      elif elapsed < fetchBodiesErrTimeout:
+        # Data not avail but fast enough answer: degrade througput stats
+        discard buddy.only.thruPutStats.blk.bpsSample(elapsed, 0)
+      else:
+        # Slow rejection response
+        buddy.bdyFetchRegisterError(slowPeer=true)
       trace trEthRecvReceivedBlockBodies, peer, nReq, nResp=b.len,
         elapsed=elapsed.toStr, state=($buddy.syncState),
         nErrors=buddy.nErrors.fetch.bdy
@@ -111,10 +120,8 @@ template fetchBodies*(
     # Update download statistics
     let bps = buddy.only.thruPutStats.blk.bpsSample(elapsed, b.getEncodedLength)
 
-    # Ban an overly slow peer for a while when seen in a row. Also there is a
-    # mimimum share of the number of requested headers expected, typically 10%.
-    if fetchBodiesErrTimeout < elapsed or
-       b.len.uint64 * 100 < nReq.uint64 * fetchBodiesMinResponsePC:
+    # Ban an overly slow peer for a while when observed consecutively.
+    if fetchBodiesErrTimeout < elapsed:
       buddy.bdyFetchRegisterError(slowPeer=true)
     else:
       buddy.nErrors.fetch.bdy = 0                   # reset error count

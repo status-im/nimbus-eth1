@@ -20,10 +20,13 @@ import
 func blkErrors*(buddy: BeaconBuddyRef): string =
   $buddy.nErrors.fetch.bdy & "/" & $buddy.nErrors.apply.blk
 
-proc bdyFetchRegisterError*(buddy: BeaconBuddyRef, slowPeer = false) =
+proc bdyFetchRegisterError*(
+    buddy: BeaconBuddyRef;
+    slowPeer = false;
+    forceZombie = false) =
   buddy.nErrors.fetch.bdy.inc
   if nFetchBodiesErrThreshold < buddy.nErrors.fetch.bdy:
-    if buddy.ctx.pool.nBuddies == 1 and slowPeer:
+    if not forceZombie and buddy.ctx.pool.nBuddies == 1 and slowPeer:
       # Remember that the current peer is the last one and is lablelled slow.
       # It would have been zombified if it were not the last one. This can be
       # used in functions -- depending on context -- that will trigger if the

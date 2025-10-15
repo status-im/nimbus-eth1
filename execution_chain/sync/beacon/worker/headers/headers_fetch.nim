@@ -120,17 +120,26 @@ template fetchHeadersReversed*(
         state=($buddy.syncState), nErrors=buddy.nErrors.fetch.hdr
       break body                                   # return err()
 
+    # Verify the correct number of block headers received
     let h = rc.value.packet.headers
     if h.len == 0 or ivReq.len < h.len.uint64:
-      buddy.hdrFetchRegisterError()
+      if 0 < h.len:
+        # Bogus peer returning additional rubbish
+        buddy.hdrFetchRegisterError(forceZombie=true)
+      elif elapsed < fetchHeadersErrTimeout:
+        # Data not avail but fast enough answer: degrade througput stats
+        discard buddy.only.thruPutStats.hdr.bpsSample(elapsed, 0)
+      else:
+        # Slow rejection response
+        buddy.hdrFetchRegisterError(slowPeer=true)
       trace trEthRecvReceivedBlockHeaders, peer, nReq=req.maxResults,
         hash=topHash.toStr, nResp=h.len, elapsed=elapsed.toStr,
         state=($buddy.syncState), nErrors=buddy.nErrors.fetch.hdr
       break body                                   # return err()
 
-    # Verify that first block number matches
+    # Verify that the first block number matches the request
     if h[^1].number != ivReq.minPt and ivReq.minPt != 0:
-      buddy.hdrFetchRegisterError()
+      buddy.hdrFetchRegisterError(forceZombie=true)
       trace trEthRecvReceivedBlockHeaders, peer, nReq=req.maxResults,
         hash=topHash.toStr, reqMinPt=ivReq.minPt.bnStr,
         respMinPt=h[^1].bnStr, nResp=h.len, elapsed=elapsed.toStr,
@@ -140,10 +149,8 @@ template fetchHeadersReversed*(
     # Update download statistics
     let bps = buddy.only.thruPutStats.hdr.bpsSample(elapsed, h.getEncodedLength)
 
-    # Ban an overly slow peer for a while when seen in a row. Also there is a
-    # mimimum share of the number of requested headers expected, typically 10%.
-    if fetchHeadersErrTimeout < elapsed or
-       h.len.uint64 * 100 < req.maxResults * fetchHeadersMinResponsePC:
+    # Ban an overly slow peer for a while when observed consecutively.
+    if fetchHeadersErrTimeout < elapsed:
       buddy.hdrFetchRegisterError(slowPeer=true)
     else:
       buddy.nErrors.fetch.hdr = 0                  # reset error count

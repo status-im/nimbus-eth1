@@ -34,10 +34,13 @@ proc updateErrorState(buddy: BeaconBuddyRef) =
 func hdrErrors*(buddy: BeaconBuddyRef): string =
   $buddy.nErrors.fetch.hdr & "/" & $buddy.nErrors.apply.hdr
 
-proc hdrFetchRegisterError*(buddy: BeaconBuddyRef, slowPeer = false) =
+proc hdrFetchRegisterError*(buddy: BeaconBuddyRef;
+     slowPeer = false;
+     forceZombie = false;
+       ) =
   buddy.nErrors.fetch.hdr.inc
   if nFetchHeadersErrThreshold < buddy.nErrors.fetch.hdr:
-    if buddy.ctx.pool.nBuddies == 1 and slowPeer:
+    if not forceZombie and buddy.ctx.pool.nBuddies == 1 and slowPeer:
       # The current peer is the last one and is lablelled `slow`. It would
       # have been zombified if it were not the last one. So it can still
       # keep download going untill the peer pool is replenished with
