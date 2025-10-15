@@ -188,7 +188,7 @@ proc newRocksDbCoreDbRef*(basePath: string, opts: DbOptions): CoreDbRef =
     kcfOpts = opts.toCfOpts(cache, false)
 
     cfDescs =
-      @[($AristoCFs.VtxCF, acfOpts)] & KvtCFs.items().toSeq().mapIt(($it, kcfOpts))
+      @[($AristoCFs.VtxCF, acfOpts)] & KvtType.items().toSeq().mapIt(($it, kcfOpts))
     baseDb = RocksDbInstanceRef.open(basePath, dbOpts, cfDescs).expect(
         "Open database from " & basePath
       )
@@ -196,9 +196,9 @@ proc newRocksDbCoreDbRef*(basePath: string, opts: DbOptions): CoreDbRef =
     adb = AristoDbRef.init(opts, baseDb).valueOr:
       raiseAssert "Could not initialize aristo: " & $error
 
-  var kvts: array[KvtCFs, KvtDbRef]
-  kvts[KvtCFs.Generic] = KvtDbRef.init(baseDb, KvtCFs.Generic)
-  kvts[KvtCFs.ContractCode] = KvtDbRef.init(baseDb, KvtCFs.ContractCode)
+  var kvts: array[KvtType, KvtDbRef]
+  kvts[KvtType.Generic] = KvtDbRef.init(baseDb, KvtType.Generic)
+  kvts[KvtType.ContractCode] = KvtDbRef.init(baseDb, KvtType.ContractCode)
 
   if opts.rdbKeyCacheSize > 0:
     # Make sure key cache isn't empty

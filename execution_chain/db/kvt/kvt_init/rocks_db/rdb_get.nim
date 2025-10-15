@@ -36,7 +36,7 @@ when extraTraceMessages:
 proc get*(
     rdb: RdbInst;
     key: openArray[byte],
-    cf: static[KvtCFs]): Result[seq[byte],(KvtError,string)] =
+    cf: static[KvtType]): Result[seq[byte],(KvtError,string)] =
   var res: seq[byte]
   let onData: DataProc = proc(data: openArray[byte]) =
     res = @data
@@ -54,7 +54,7 @@ proc get*(
 proc len*(
     rdb: RdbInst;
     key: openArray[byte],
-    cf: static[KvtCFs]): Result[int,(KvtError,string)] =
+    cf: static[KvtType]): Result[int,(KvtError,string)] =
   var res: int
   let onData: DataProc = proc(data: openArray[byte]) =
     res = data.len

@@ -292,7 +292,7 @@ proc persistMode(acc: AccountRef): PersistMode =
 proc persistCode(acc: AccountRef, ac: LedgerRef) =
   if acc.code.len != 0 and not acc.code.persisted:
     let rc = ac.txFrame.put(
-        acc.statement.codeHash.data, acc.code.bytes(), CoreDbKvtType.ContractCode)
+        acc.statement.codeHash.data, acc.code.bytes(), KvtType.ContractCode)
     if rc.isErr:
       warn logTxt "persistCode()",
        codeHash=acc.statement.codeHash, error=($$rc.error)
@@ -482,7 +482,7 @@ proc getCode*(ac: LedgerRef,
     acc.code =
       if acc.statement.codeHash != EMPTY_CODE_HASH:
         ac.code.get(acc.statement.codeHash).valueOr:
-          var rc = ac.txFrame.get(acc.statement.codeHash.data, CoreDbKvtType.ContractCode)
+          var rc = ac.txFrame.get(acc.statement.codeHash.data, KvtType.ContractCode)
           if rc.isErr:
             warn logTxt "getCode()", codeHash=acc.statement.codeHash, error=($$rc.error)
             CodeBytesRef()
@@ -512,7 +512,7 @@ proc getCodeSize*(ac: LedgerRef, address: Address): int =
       # cached and easily accessible in the database layer - this is to prevent
       # EXTCODESIZE calls from messing up the code cache and thus causing
       # recomputation of the jump destination table
-      var rc = ac.txFrame.len(acc.statement.codeHash.data, CoreDbKvtType.ContractCode)
+      var rc = ac.txFrame.len(acc.statement.codeHash.data, KvtType.ContractCode)
 
       return rc.valueOr:
         warn logTxt "getCodeSize()", codeHash=acc.statement.codeHash, error=($$rc.error)

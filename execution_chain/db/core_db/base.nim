@@ -28,7 +28,7 @@ export
   CoreDbRef,
   CoreDbTxRef,
   CoreDbType,
-  CoreDbKvtType
+  KvtType
 
 import
   ../aristo/[
@@ -47,7 +47,7 @@ proc baseTxFrame*(db: CoreDbRef): CoreDbTxRef =
   ## up in the base txframe before being persisted to the database with a
   ## persist call.
 
-  var kTxs: array[CoreDbKvtType, KvtTxRef]
+  var kTxs: array[KvtType, KvtTxRef]
   for i, kvt in db.kvts:
     if not kvt.isNil():
       kTxs[i] = kvt.baseTxFrame()
@@ -58,7 +58,7 @@ proc baseTxFrame*(db: CoreDbRef): CoreDbTxRef =
 
 proc kvtBackend*(db: CoreDbRef): TypedBackendRef =
   ## Get KVT backend
-  db.kvts[CoreDbKvtType.Generic].getBackendFn()
+  db.kvts[KvtType.Generic].getBackendFn()
 
 # ------------------------------------------------------------------------------
 # Public base descriptor methods
@@ -94,7 +94,7 @@ proc persist*(db: CoreDbRef, txFrame: CoreDbTxRef) =
   let mptBatch = db.mpt.putBegFn()
 
   var
-    kvtBatches: array[CoreDbKvtType, Result[init_common.PutHdlRef, KvtError]]
+    kvtBatches: array[KvtType, Result[init_common.PutHdlRef, KvtError]]
     kvtBatchesOk = true
 
   for i, kvt in db.kvts:
@@ -166,9 +166,9 @@ proc verifyProof*(
 
 # ----------- KVT ---------------
 
-proc get*(kvt: CoreDbTxRef; key: openArray[byte], cf = CoreDbKvtType.Generic): CoreDbRc[seq[byte]] =
+proc get*(kvt: CoreDbTxRef; key: openArray[byte], kvtType = KvtType.Generic): CoreDbRc[seq[byte]] =
   ## This function always returns a non-empty `seq[byte]` or an error code.
-  let rc = kvt.kTxs[cf].get(key)
+  let rc = kvt.kTxs[kvtType].get(key)
   if rc.isOk:
     ok(rc.value)
   elif rc.error == GetNotFound:
@@ -176,11 +176,11 @@ proc get*(kvt: CoreDbTxRef; key: openArray[byte], cf = CoreDbKvtType.Generic): C
   else:
     err(rc.error.toError(""))
 
-proc getOrEmpty*(kvt: CoreDbTxRef; key: openArray[byte], cf = CoreDbKvtType.Generic): CoreDbRc[seq[byte]] =
+proc getOrEmpty*(kvt: CoreDbTxRef; key: openArray[byte], kvtType = KvtType.Generic): CoreDbRc[seq[byte]] =
   ## Variant of `get()` returning an empty `seq[byte]` if the key is not found
   ## on the database.
   ##
-  let rc = kvt.kTxs[cf].get(key)
+  let rc = kvt.kTxs[kvtType].get(key)
   if rc.isOk:
     ok(rc.value)
   elif rc.error == GetNotFound:
@@ -188,9 +188,9 @@ proc getOrEmpty*(kvt: CoreDbTxRef; key: openArray[byte], cf = CoreDbKvtType.Gene
   else:
     err(rc.error.toError(""))
 
-proc len*(kvt: CoreDbTxRef; key: openArray[byte], cf = CoreDbKvtType.Generic): CoreDbRc[int] =
+proc len*(kvt: CoreDbTxRef; key: openArray[byte], kvtType = KvtType.Generic): CoreDbRc[int] =
   ## This function returns the size of the value associated with `key`.
-  let rc = kvt.kTxs[cf].len(key)
+  let rc = kvt.kTxs[kvtType].len(key)
   if rc.isOk:
     ok(rc.value)
   elif rc.error == GetNotFound:
@@ -198,8 +198,8 @@ proc len*(kvt: CoreDbTxRef; key: openArray[byte], cf = CoreDbKvtType.Generic): C
   else:
     err(rc.error.toError(""))
 
-proc del*(kvt: CoreDbTxRef; key: openArray[byte], cf = CoreDbKvtType.Generic): CoreDbRc[void] =
-  kvt.kTxs[cf].del(key).isOkOr:
+proc del*(kvt: CoreDbTxRef; key: openArray[byte], kvtType = KvtType.Generic): CoreDbRc[void] =
+  kvt.kTxs[kvtType].del(key).isOkOr:
     return err(error.toError(""))
 
   ok()
@@ -208,31 +208,31 @@ proc put*(
     kvt: CoreDbTxRef;
     key: openArray[byte];
     val: openArray[byte];
-    cf = CoreDbKvtType.Generic;
+    kvtType = KvtType.Generic;
       ): CoreDbRc[void] =
-  kvt.kTxs[cf].put(key, val).isOkOr:
+  kvt.kTxs[kvtType].put(key, val).isOkOr:
     return err(error.toError(""))
 
   ok()
 
-proc hasKeyRc*(kvt: CoreDbTxRef; key: openArray[byte], cf = CoreDbKvtType.Generic): CoreDbRc[bool] =
+proc hasKeyRc*(kvt: CoreDbTxRef; key: openArray[byte], kvtType = KvtType.Generic): CoreDbRc[bool] =
   ## For the argument `key` return `true` if `get()` returned a value on
   ## that argument, `false` if it returned `GetNotFound`, and an error
   ## otherwise.
   ##
-  let rc = kvt.kTxs[cf].hasKeyRc(key).valueOr:
+  let rc = kvt.kTxs[kvtType].hasKeyRc(key).valueOr:
     return err(error.toError(""))
 
   ok(rc)
 
-proc hasKey*(kvt: CoreDbTxRef; key: openArray[byte], cf = CoreDbKvtType.Generic): bool =
+proc hasKey*(kvt: CoreDbTxRef; key: openArray[byte], kvtType = KvtType.Generic): bool =
   ## Simplified version of `hasKeyRc` where `false` is returned instead of
   ## an error.
   ##
   ## This function prototype is in line with the `hasKey` function for
   ## `Tables`.
   ##
-  result = kvt.kTxs[cf].hasKeyRc(key).valueOr: false
+  result = kvt.kTxs[kvtType].hasKeyRc(key).valueOr: false
 
 # ------------------------------------------------------------------------------
 # Public methods for accounts
@@ -489,7 +489,7 @@ proc txFrameBegin*(db: CoreDbRef): CoreDbTxRef =
   ##
   let aTx = db.mpt.txFrameBegin(nil, false)
 
-  var kTxs: array[CoreDbKvtType, KvtTxRef]
+  var kTxs: array[KvtType, KvtTxRef]
   for i, kvt in db.kvts:
     if not kvt.isNil():
       kTxs[i] = kvt.txFrameBegin(nil)
@@ -504,7 +504,7 @@ proc txFrameBegin*(
   ##
   let aTx = parent.aTx.db.txFrameBegin(parent.aTx, moveParentHashKeys)
 
-  var kTxs: array[CoreDbKvtType, KvtTxRef]
+  var kTxs: array[KvtType, KvtTxRef]
   for i, kTx in parent.kTxs:
     if not kTx.isNil():
       kTxs[i] = kTx.db.txFrameBegin(kTx)

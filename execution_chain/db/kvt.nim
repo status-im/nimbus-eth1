@@ -19,13 +19,11 @@ export
   kvt_constants
 
 import
-  kvt/kvt_init/memory_only,
-  kvt/kvt_init/rocks_db/rdb_desc
+  kvt/kvt_init/memory_only
 export
   MemBackendRef,
   finish,
-  init,
-  KvtCFs
+  init
 
 import
   kvt/kvt_desc
@@ -33,6 +31,7 @@ export
   KvtDbRef,
   KvtError,
   KvtTxRef,
+  KvtType,
   isValid
 
 # End

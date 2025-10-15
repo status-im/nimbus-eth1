@@ -69,7 +69,7 @@ proc endSession(hdl: PutHdlRef; db: RdbBackendRef): RdbPutHdlRef =
 # Private functions: standard interface
 # ------------------------------------------------------------------------------
 
-proc getKvpFn(db: RdbBackendRef, cf: static[KvtCFs]): GetKvpFn =
+proc getKvpFn(db: RdbBackendRef, cf: static[KvtType]): GetKvpFn =
   result =
     proc(key: openArray[byte]): Result[seq[byte],KvtError] =
 
@@ -85,7 +85,7 @@ proc getKvpFn(db: RdbBackendRef, cf: static[KvtCFs]): GetKvpFn =
 
       err(GetNotFound)
 
-proc lenKvpFn(db: RdbBackendRef, cf: static[KvtCFs]): LenKvpFn =
+proc lenKvpFn(db: RdbBackendRef, cf: static[KvtType]): LenKvpFn =
   result =
     proc(key: openArray[byte]): Result[int,KvtError] =
 
@@ -109,7 +109,7 @@ proc putBegFn(db: RdbBackendRef): PutBegFn =
       ok db.newSession(db.rdb.begin())
 
 
-proc putKvpFn(db: RdbBackendRef, cf: static[KvtCFs]): PutKvpFn =
+proc putKvpFn(db: RdbBackendRef, cf: static[KvtType]): PutKvpFn =
   result =
     proc(hdl: PutHdlRef; k, v: openArray[byte]) =
       let hdl = hdl.getSession db
@@ -122,7 +122,7 @@ proc putKvpFn(db: RdbBackendRef, cf: static[KvtCFs]): PutKvpFn =
           return
 
 
-proc putEndFn(db: RdbBackendRef, cf: static[KvtCFs]): PutEndFn =
+proc putEndFn(db: RdbBackendRef, cf: static[KvtType]): PutEndFn =
   result =
     proc(hdl: PutHdlRef): Result[void,KvtError] =
       let hdl = hdl.endSession db
@@ -157,7 +157,7 @@ proc getBackendFn(db: RdbBackendRef): GetBackendFn =
 # Public functions
 # ------------------------------------------------------------------------------
 
-proc rocksDbKvtBackend*(baseDb: RocksDbInstanceRef, cf: static[KvtCFs]): KvtDbRef =
+proc rocksDbKvtBackend*(baseDb: RocksDbInstanceRef, cf: static[KvtType]): KvtDbRef =
   let
     be = RdbBackendRef(beKind: BackendRocksDB)
     db = KvtDbRef()
