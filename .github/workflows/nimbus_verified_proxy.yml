@@ -72,7 +72,7 @@ jobs:
       - name: Run verified proxy tests
         run: |
           gcc --version
-          DEFAULT_MAKE_FLAGS="-j${ncpu}"
+          DEFAULT_MAKE_FLAGS="-j${ncpu} ROCKSDB_CI_CACHE=RocksBinCache"
           make ${DEFAULT_MAKE_FLAGS} nimbus_verified_proxy libverifproxy
           build/nimbus_verified_proxy --help
           # "-static" option will not work for osx unless static system libraries are provided
