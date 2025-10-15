@@ -15,14 +15,14 @@ FIXTURES_DIR="${REPO_DIR}/tests/fixtures"
 
 # --- Current Release Develop ---
 EEST_DEVELOP_NAME="Mainnet Develop"
-EEST_DEVELOP_VERSION="v5.0.0"
+EEST_DEVELOP_VERSION="v5.3.0"
 EEST_DEVELOP_DIR="${FIXTURES_DIR}/eest_develop"
 EEST_DEVELOP_ARCHIVE="fixtures_develop.tar.gz"
 EEST_DEVELOP_URL="https://github.com/ethereum/execution-spec-tests/releases/download/${EEST_DEVELOP_VERSION}/${EEST_DEVELOP_ARCHIVE}"
 
 # --- Devnet Release ---
 EEST_DEVNET_NAME="fusaka-devnet-5"
-EEST_DEVNET_VERSION="v2.0.0"
+EEST_DEVNET_VERSION="v2.1.0"
 EEST_DEVNET_DIR="${FIXTURES_DIR}/eest_devnet"
 EEST_DEVNET_ARCHIVE="fixtures_fusaka-devnet-5.tar.gz"
 EEST_DEVNET_URL="https://github.com/ethereum/execution-spec-tests/releases/download/${EEST_DEVNET_NAME}%40${EEST_DEVNET_VERSION}/${EEST_DEVNET_ARCHIVE}"
