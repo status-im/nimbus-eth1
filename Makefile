@@ -299,7 +299,7 @@ all_portal_tests: | build deps
 portal-test: | all_portal_tests
 
 # builds the Portal tools, wherever they are
-$(PORTAL_TOOLS): | build deps rocksdb
+$(PORTAL_TOOLS): | build deps
 	for D in $(PORTAL_TOOLS_DIRS); do [ -e "$${D}/$@.nim" ] && TOOL_DIR="$${D}" && break; done && \
 		echo -e $(BUILD_MSG) "build/$@" && \
 		$(ENV_SCRIPT) nim c $(NIM_PARAMS) -d:chronicles_log_level=TRACE -o:build/$@ "$${TOOL_DIR}/$@.nim"
@@ -329,7 +329,7 @@ fluffy: | build deps
 		$(ENV_SCRIPT) nim c $(NIM_PARAMS) -d:chronicles_log_level=TRACE -o:build/$@ "portal/client/nimbus_portal_client.nim"
 
 # Legacy target, same as nimbus_portal_bridge, deprecated
-portal_bridge: | build deps rocksdb
+portal_bridge: | build deps
 	echo -e "\033[0;31mWarning:\033[0m The portal_bridge target and binary is deprecated, use 'make nimbus_portal_bridge' instead"
 	echo -e $(BUILD_MSG) "build/$@" && \
 		$(ENV_SCRIPT) nim c $(NIM_PARAMS) -d:chronicles_log_level=TRACE -o:build/$@ "portal/bridge/nimbus_portal_bridge.nim"
