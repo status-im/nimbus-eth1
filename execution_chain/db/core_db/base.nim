@@ -28,18 +28,13 @@ export
   CoreDbRef,
   CoreDbTxRef,
   CoreDbType,
-  KvtCFs
+  CoreDbKvtType
 
 import
   ../aristo/[
     aristo_delete, aristo_desc, aristo_fetch, aristo_merge, aristo_proof,
     aristo_tx_frame],
   ../kvt/[kvt_desc, kvt_utils, kvt_tx_frame]
-
-iterator pairsNotNil[T](elements: array[KvtCFs, T]): (KvtCFs, T) =
-  for i, v in elements:
-    if not v.isNil():
-      yield (i, v)
 
 # ------------------------------------------------------------------------------
 # Public context constructors and administration
@@ -52,9 +47,10 @@ proc baseTxFrame*(db: CoreDbRef): CoreDbTxRef =
   ## up in the base txframe before being persisted to the database with a
   ## persist call.
 
-  var kTxs: array[KvtCFs, KvtTxRef]
-  for i, kvt in db.kvts.pairsNotNil():
-    kTxs[i] = kvt.baseTxFrame()
+  var kTxs: array[CoreDbKvtType, KvtTxRef]
+  for i, kvt in db.kvts:
+    if not kvt.isNil():
+      kTxs[i] = kvt.baseTxFrame()
 
   CoreDbTxRef(
     aTx: db.mpt.baseTxFrame(),
@@ -62,7 +58,7 @@ proc baseTxFrame*(db: CoreDbRef): CoreDbTxRef =
 
 proc kvtBackend*(db: CoreDbRef): TypedBackendRef =
   ## Get KVT backend
-  db.kvts[KvtGeneric].getBackendFn()
+  db.kvts[CoreDbKvtType.Generic].getBackendFn()
 
 # ------------------------------------------------------------------------------
 # Public base descriptor methods
@@ -98,7 +94,7 @@ proc persist*(db: CoreDbRef, txFrame: CoreDbTxRef) =
   let mptBatch = db.mpt.putBegFn()
 
   var
-    kvtBatches: array[KvtCFs, Result[init_common.PutHdlRef, KvtError]]
+    kvtBatches: array[CoreDbKvtType, Result[init_common.PutHdlRef, KvtError]]
     kvtBatchesOk = true
 
   for i, kvt in db.kvts:
@@ -170,7 +166,7 @@ proc verifyProof*(
 
 # ----------- KVT ---------------
 
-proc get*(kvt: CoreDbTxRef; key: openArray[byte], cf: KvtCFs = KvtGeneric): CoreDbRc[seq[byte]] =
+proc get*(kvt: CoreDbTxRef; key: openArray[byte], cf = CoreDbKvtType.Generic): CoreDbRc[seq[byte]] =
   ## This function always returns a non-empty `seq[byte]` or an error code.
   let rc = kvt.kTxs[cf].get(key)
   if rc.isOk:
@@ -180,7 +176,7 @@ proc get*(kvt: CoreDbTxRef; key: openArray[byte], cf: KvtCFs = KvtGeneric): Core
   else:
     err(rc.error.toError(""))
 
-proc getOrEmpty*(kvt: CoreDbTxRef; key: openArray[byte], cf: KvtCFs = KvtGeneric): CoreDbRc[seq[byte]] =
+proc getOrEmpty*(kvt: CoreDbTxRef; key: openArray[byte], cf = CoreDbKvtType.Generic): CoreDbRc[seq[byte]] =
   ## Variant of `get()` returning an empty `seq[byte]` if the key is not found
   ## on the database.
   ##
@@ -192,7 +188,7 @@ proc getOrEmpty*(kvt: CoreDbTxRef; key: openArray[byte], cf: KvtCFs = KvtGeneric
   else:
     err(rc.error.toError(""))
 
-proc len*(kvt: CoreDbTxRef; key: openArray[byte], cf: KvtCFs = KvtGeneric): CoreDbRc[int] =
+proc len*(kvt: CoreDbTxRef; key: openArray[byte], cf = CoreDbKvtType.Generic): CoreDbRc[int] =
   ## This function returns the size of the value associated with `key`.
   let rc = kvt.kTxs[cf].len(key)
   if rc.isOk:
@@ -202,7 +198,7 @@ proc len*(kvt: CoreDbTxRef; key: openArray[byte], cf: KvtCFs = KvtGeneric): Core
   else:
     err(rc.error.toError(""))
 
-proc del*(kvt: CoreDbTxRef; key: openArray[byte], cf: KvtCFs = KvtGeneric): CoreDbRc[void] =
+proc del*(kvt: CoreDbTxRef; key: openArray[byte], cf = CoreDbKvtType.Generic): CoreDbRc[void] =
   kvt.kTxs[cf].del(key).isOkOr:
     return err(error.toError(""))
 
@@ -212,14 +208,14 @@ proc put*(
     kvt: CoreDbTxRef;
     key: openArray[byte];
     val: openArray[byte];
-    cf: KvtCFs = KvtGeneric;
+    cf = CoreDbKvtType.Generic;
       ): CoreDbRc[void] =
   kvt.kTxs[cf].put(key, val).isOkOr:
     return err(error.toError(""))
 
   ok()
 
-proc hasKeyRc*(kvt: CoreDbTxRef; key: openArray[byte], cf: KvtCFs = KvtGeneric): CoreDbRc[bool] =
+proc hasKeyRc*(kvt: CoreDbTxRef; key: openArray[byte], cf = CoreDbKvtType.Generic): CoreDbRc[bool] =
   ## For the argument `key` return `true` if `get()` returned a value on
   ## that argument, `false` if it returned `GetNotFound`, and an error
   ## otherwise.
@@ -229,7 +225,7 @@ proc hasKeyRc*(kvt: CoreDbTxRef; key: openArray[byte], cf: KvtCFs = KvtGeneric):
 
   ok(rc)
 
-proc hasKey*(kvt: CoreDbTxRef; key: openArray[byte], cf: KvtCFs = KvtGeneric): bool =
+proc hasKey*(kvt: CoreDbTxRef; key: openArray[byte], cf = CoreDbKvtType.Generic): bool =
   ## Simplified version of `hasKeyRc` where `false` is returned instead of
   ## an error.
   ##
@@ -493,7 +489,7 @@ proc txFrameBegin*(db: CoreDbRef): CoreDbTxRef =
   ##
   let aTx = db.mpt.txFrameBegin(nil, false)
 
-  var kTxs: array[KvtCFs, KvtTxRef]
+  var kTxs: array[CoreDbKvtType, KvtTxRef]
   for i, kvt in db.kvts:
     if not kvt.isNil():
       kTxs[i] = kvt.txFrameBegin(nil)
@@ -508,7 +504,7 @@ proc txFrameBegin*(
   ##
   let aTx = parent.aTx.db.txFrameBegin(parent.aTx, moveParentHashKeys)
 
-  var kTxs: array[KvtCFs, KvtTxRef]
+  var kTxs: array[CoreDbKvtType, KvtTxRef]
   for i, kTx in parent.kTxs:
     if not kTx.isNil():
       kTxs[i] = kTx.db.txFrameBegin(kTx)

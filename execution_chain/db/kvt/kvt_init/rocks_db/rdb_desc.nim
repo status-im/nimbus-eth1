@@ -23,11 +23,11 @@ type
     baseDb*: RocksDbInstanceRef
     store*: KvtCfStore               ## Rocks DB database handler
 
-  KvtCFs* = enum
+  KvtCFs* {.pure.}  = enum
     ## Column family symbols/handles and names used on the database
-    KvtGeneric = "KvtGen"            ## Generic column family
-    KvtSynchro = "KvtSync"
-    KvtContractCode = "KvtCode"
+    Generic = "KvtGen"            ## Generic column family
+    Synchro = "KvtSync"           ## Syncer block headers column family
+    ContractCode = "KvtCode"      ## Contract code column family
 
   KvtCfStore* = array[KvtCFs, ColFamilyReadWrite]
     ## List of column family handlers

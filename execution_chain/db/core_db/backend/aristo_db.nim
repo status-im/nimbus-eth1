@@ -29,8 +29,8 @@ proc create*(dbType: CoreDbType; mpt: AristoDbRef; kvts: array[KvtCFs, KvtDbRef]
 
 proc newMemoryCoreDbRef*(): CoreDbRef =
   var kvts: array[KvtCFs, KvtDbRef]
-  kvts[KvtGeneric] = KvtDbRef.init()
-  kvts[KvtContractCode] = KvtDbRef.init()
+  kvts[KvtCFs.Generic] = KvtDbRef.init()
+  kvts[KvtCFs.ContractCode] = KvtDbRef.init()
 
   AristoDbMemory.create(AristoDbRef.init(), kvts)
 

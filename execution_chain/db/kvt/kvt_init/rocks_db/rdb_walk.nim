@@ -36,7 +36,7 @@ iterator walk*(rdb: RdbInst): tuple[key: seq[byte], data: seq[byte]] =
   ##
   ## Non-decodable entries are stepped over and ignored.
   block walkBody:
-    let rit = rdb.store[KvtGeneric].openIterator().valueOr:
+    let rit = rdb.store[KvtCFs.Generic].openIterator().valueOr:
       when extraTraceMessages:
         trace logTxt "walk", pfx="all", error
       break walkBody

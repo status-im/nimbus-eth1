@@ -49,6 +49,8 @@ type
     StoNotFound
     TxPending
 
+  CoreDbKvtType* = KvtCFs
+
   # --------------------------------------------------
   # Production descriptors
   # --------------------------------------------------
@@ -56,12 +58,12 @@ type
     ## Database descriptor
     dbType*: CoreDbType            ## Type of database backend
     mpt*: AristoDbRef              ## `Aristo` database
-    kvts*: array[KvtCFs, KvtDbRef] ## `KVT` key-value tables
+    kvts*: array[CoreDbKvtType, KvtDbRef] ## `KVT` key-value tables
 
   CoreDbTxRef* = ref object
     ## Transaction descriptor
     aTx*: AristoTxRef              ## `Aristo` transaction (if any)
-    kTxs*: array[KvtCFs, KvtTxRef] ## `KVT` transactions (if any)
+    kTxs*: array[CoreDbKvtType, KvtTxRef] ## `KVT` transactions (if any)
 
   CoreDbError* = object
     ## Generic error object

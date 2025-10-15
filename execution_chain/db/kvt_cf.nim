@@ -21,6 +21,6 @@ proc synchronizerKvt*(be: TypedBackendRef): KvtTxRef =
   doAssert be.beKind == BackendRocksDB
   let
     baseDb = RdbBackendRef(be).getBaseDb()
-    rdb = rocksDbKvtBackend(baseDb, KvtSynchro)
+    rdb = rocksDbKvtBackend(baseDb, KvtCFs.Synchro)
   rdb.txRef = KvtTxRef(db: rdb)
   rdb.txRef

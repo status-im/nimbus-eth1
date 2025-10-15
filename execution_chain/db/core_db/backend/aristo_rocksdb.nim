@@ -197,8 +197,8 @@ proc newRocksDbCoreDbRef*(basePath: string, opts: DbOptions): CoreDbRef =
       raiseAssert "Could not initialize aristo: " & $error
 
   var kvts: array[KvtCFs, KvtDbRef]
-  kvts[KvtGeneric] = KvtDbRef.init(baseDb, KvtGeneric)
-  kvts[KvtContractCode] = KvtDbRef.init(baseDb, KvtContractCode)
+  kvts[KvtCFs.Generic] = KvtDbRef.init(baseDb, KvtCFs.Generic)
+  kvts[KvtCFs.ContractCode] = KvtDbRef.init(baseDb, KvtCFs.ContractCode)
 
   if opts.rdbKeyCacheSize > 0:
     # Make sure key cache isn't empty
