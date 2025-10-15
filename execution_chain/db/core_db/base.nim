@@ -36,6 +36,11 @@ import
     aristo_tx_frame],
   ../kvt/[kvt_desc, kvt_utils, kvt_tx_frame]
 
+iterator pairsNotNil[T](elements: array[KvtCFs, T]): (KvtCFs, T) =
+  for i, v in elements:
+    if not v.isNil():
+      yield (i, v)
+
 # ------------------------------------------------------------------------------
 # Public context constructors and administration
 # ------------------------------------------------------------------------------
@@ -48,9 +53,8 @@ proc baseTxFrame*(db: CoreDbRef): CoreDbTxRef =
   ## persist call.
 
   var kTxs: array[KvtCFs, KvtTxRef]
-  for i, kvt in db.kvts:
-    if not kvt.isNil():
-      kTxs[i] = kvt.baseTxFrame()
+  for i, kvt in db.kvts.pairsNotNil():
+    kTxs[i] = kvt.baseTxFrame()
 
   CoreDbTxRef(
     aTx: db.mpt.baseTxFrame(),
