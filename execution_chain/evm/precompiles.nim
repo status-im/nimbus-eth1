@@ -18,7 +18,6 @@ import
   chronicles,
   nimcrypto/[ripemd, sha2, utils],
   stew/assign2,
-  libp2p/crypto/ecnist,
   ../common/evmforks,
   ../core/eip4844,
   ../compile_info,
@@ -679,6 +678,10 @@ proc pointEvaluation(c: Computation): EvmResultVoid =
   ok()
 
 proc p256verify(c: Computation): EvmResultVoid =
+  template data(): auto = c.msg.data
+
+  template `[]`(x: openArray[byte], a, b: int): auto =
+    x.toOpenArray(a, b)
 
   template failed() =
     c.output.setLen(0)
@@ -689,27 +692,14 @@ proc p256verify(c: Computation): EvmResultVoid =
   if c.msg.data.len != 160:
     failed()
 
-  var inputPubKey: array[65, byte]
-
-  # Validations
-  if isInfinityByte(c.msg.data.toOpenArray(96, 159)):
-    failed()
-
   # Check scalar and field bounds (r, s ∈ (0, n), qx, qy ∈ [0, p))
-  var sig: EcSignature
-  if not sig.initRaw(c.msg.data.toOpenArray(32, 95)):
+  var
+    pk: EcPublicKey
+
+  if not pk.initRaw(data[96, 159]):
     failed()
 
-  var pubkey: EcPublicKey
-  inputPubKey[0] = 4.byte
-  assign(inputPubKey.toOpenArray(1, 64), c.msg.data.toOpenArray(96, 159))
-
-  if not pubkey.initRaw(inputPubKey):
-    failed()
-
-  let isValid = sig.verifyRaw(c.msg.data.toOpenArray(0, 31), pubkey)
-
-  if isValid:
+  if verifyRaw(data[32, 95], data[0, 31], pk):
     c.output.setLen(32)
     c.output[^1] = 1.byte  # return 0x...01
   else:
