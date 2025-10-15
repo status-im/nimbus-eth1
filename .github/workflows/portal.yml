@@ -132,14 +132,14 @@ jobs:
         with:
           llvm-mingw: true
           nim-cache: true
-          rocksdb-cache: true
+          rocksdb-cache: false
           eest-cache: false
 
       - name: Run Nimbus Portal tests (Windows)
         if: runner.os == 'Windows'
         run: |
           gcc --version
-          DEFAULT_MAKE_FLAGS="-j${ncpu} ROCKSDB_CI_CACHE=RocksBinCache"
+          DEFAULT_MAKE_FLAGS="-j${ncpu}"
           mingw32-make ${DEFAULT_MAKE_FLAGS} nimbus_portal_client
           build/nimbus_portal_client.exe --help
           # find . -type d -name ".git" -exec rm -rf {} +
@@ -156,7 +156,7 @@ jobs:
           ./env.sh nim -v
           ldd --version
           export LD_LIBRARY_PATH="${LD_LIBRARY_PATH}:/usr/local/lib"
-          DEFAULT_MAKE_FLAGS="-j${ncpu} ROCKSDB_CI_CACHE=RocksBinCache"
+          DEFAULT_MAKE_FLAGS="-j${ncpu}"
           env CC=gcc make ${DEFAULT_MAKE_FLAGS} nimbus_portal_client
           build/nimbus_portal_client --help
           env CC=gcc make ${DEFAULT_MAKE_FLAGS} portal-tools
@@ -166,7 +166,7 @@ jobs:
       - name: Run Nimbus Portal tests (Macos)
         if: runner.os == 'Macos'
         run: |
-          DEFAULT_MAKE_FLAGS="-j${ncpu} ROCKSDB_CI_CACHE=RocksBinCache"
+          DEFAULT_MAKE_FLAGS="-j${ncpu}"
           make ${DEFAULT_MAKE_FLAGS} nimbus_portal_client
           build/nimbus_portal_client --help
           make ${DEFAULT_MAKE_FLAGS} portal-tools
