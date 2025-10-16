@@ -19,8 +19,6 @@ on:
       - 'portal/docs/**'
       - '**/*.md'
       - 'hive_integration/**'
-      - 'nimbus_verified_proxy/**'
-      - '.github/workflows/nimbus_verified_proxy.yml'
       - '.github/workflows/build_base_image.yml'
       - 'docker/**'
 
@@ -30,8 +28,6 @@ on:
       - 'portal/docs/**'
       - '**/*.md'
       - 'hive_integration/**'
-      - 'nimbus_verified_proxy/**'
-      - '.github/workflows/nimbus_verified_proxy.yml'
       - '.github/workflows/build_base_image.yml'
       - 'docker/**'
 
