@@ -13,26 +13,26 @@ on:
   push:
     branches:
       - master
-    paths:
-      - '.github/workflows/nimbus_verified_proxy.yml'
-      - 'nimbus_verified_proxy/**'
-      - '!nimbus_verified_proxy/**.md'
-      - '!nimbus_verified_proxy/docs/**'
-      - 'execution_chain/db/**'
-      - 'vendor/**'
-      - 'Makefile'
-      - 'nimbus.nimble'
+    paths-ignore:
+      - 'doc/**'
+      - 'portal/docs/**'
+      - '**/*.md'
+      - 'portal/**'
+      - '.github/workflows/portal.yml'
+      - '.github/workflows/portal_docs.yml'
+      - '.github/workflows/build_base_image.yml'
+      - 'docker/**'
 
   pull_request:
-    paths:
-      - '.github/workflows/nimbus_verified_proxy.yml'
-      - 'nimbus_verified_proxy/**'
-      - '!nimbus_verified_proxy/**.md'
-      - '!nimbus_verified_proxy/docs/**'
-      - 'execution_chain/db/**'
-      - 'vendor/**'
-      - 'Makefile'
-      - 'nimbus.nimble'
+    paths-ignore:
+      - 'doc/**'
+      - 'portal/docs/**'
+      - '**/*.md'
+      - 'portal/**'
+      - '.github/workflows/portal.yml'
+      - '.github/workflows/portal_docs.yml'
+      - '.github/workflows/build_base_image.yml'
+      - 'docker/**'
 
   workflow_dispatch:
 
