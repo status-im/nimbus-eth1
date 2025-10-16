@@ -88,6 +88,7 @@ type
     Generic = "KvtGen"            ## Generic kvt
     Synchro = "KvtSync"           ## Syncer block headers kvt
     ContractCode = "KvtCode"      ## Contract code kvt
+    Witness = "KvtWitness"        ## Witness kvt
 
 # ------------------------------------------------------------------------------
 # Public helpers

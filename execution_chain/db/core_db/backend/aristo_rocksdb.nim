@@ -183,22 +183,20 @@ proc newRocksDbCoreDbRef*(basePath: string, opts: DbOptions): CoreDbRef =
         nil
     dbOpts = opts.toDbOpts()
     acfOpts = opts.toCfOpts(cache, true)
-    # The KVT is is not bulk-flushed so we have to use a skiplist memtable for
-    # it
+    # The KVT is is not bulk-flushed so we have to use a skiplist memtable for it
     kcfOpts = opts.toCfOpts(cache, false)
 
     cfDescs =
       @[($AristoCFs.VtxCF, acfOpts)] & KvtType.items().toSeq().mapIt(($it, kcfOpts))
     baseDb = RocksDbInstanceRef.open(basePath, dbOpts, cfDescs).expect(
-        "Open database from " & basePath
-      )
-
+        "Open database from " & basePath)
     adb = AristoDbRef.init(opts, baseDb).valueOr:
       raiseAssert "Could not initialize aristo: " & $error
 
   var kvts: array[KvtType, KvtDbRef]
   kvts[KvtType.Generic] = KvtDbRef.init(baseDb, KvtType.Generic)
   kvts[KvtType.ContractCode] = KvtDbRef.init(baseDb, KvtType.ContractCode)
+  kvts[KvtType.Witness] = KvtDbRef.init(baseDb, KvtType.Witness)
 
   if opts.rdbKeyCacheSize > 0:
     # Make sure key cache isn't empty

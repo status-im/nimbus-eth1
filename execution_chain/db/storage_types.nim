@@ -22,13 +22,13 @@ type
     transactionHashToBlock = 3
     canonicalHeadHash = 4
     slotHashToSlot = 5
-    contractHash = 6
+    contractHash = 6 # deprecated - separate KvtType used instead
     dataDirId = 7
     fcuNumAndHash = 8
     fcState = 9
     beaconHeader = 10
     wdKey = 11
-    witness = 12
+    witness = 12 # deprecated - separate KvtType used instead
 
   DbKey* = object
     # The first byte stores the key type. The rest are key-specific values
@@ -71,11 +71,6 @@ func slotHashToSlotKey*(h: Hash32): DbKey {.inline.} =
   result.data[1 .. 32] = h.data()
   result.dataEndPos = uint8 32
 
-func contractHashKey*(h: Hash32): DbKey {.inline.} =
-  result.data[0] = byte ord(contractHash)
-  result.data[1 .. 32] = h.data
-  result.dataEndPos = uint8 32
-
 template uint64KeyImpl(keyEnum) =
   result.data[0] = byte ord(keyEnum)
   doAssert sizeof(u) <= 32
@@ -102,11 +97,6 @@ func fcStateKey*(u: uint64): DbKey {.inline.} =
 
 func withdrawalsKey*(h: Hash32): DbKey {.inline.} =
   result.data[0] = byte ord(wdKey)
-  result.data[1 .. 32] = h.data
-  result.dataEndPos = uint8 32
-
-func blockHashToWitnessKey*(h: Hash32): DbKey {.inline.} =
-  result.data[0] = byte ord(witness)
   result.data[1 .. 32] = h.data
   result.dataEndPos = uint8 32
 

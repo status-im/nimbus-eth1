@@ -31,6 +31,7 @@ proc newMemoryCoreDbRef*(): CoreDbRef =
   var kvts: array[KvtType, KvtDbRef]
   kvts[KvtType.Generic] = KvtDbRef.init()
   kvts[KvtType.ContractCode] = KvtDbRef.init()
+  kvts[KvtType.Witness] = KvtDbRef.init()
 
   AristoDbMemory.create(AristoDbRef.init(), kvts)
 
