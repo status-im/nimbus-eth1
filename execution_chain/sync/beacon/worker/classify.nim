@@ -64,7 +64,9 @@ func classifyForFetching*(
     let (bSum, bSamples) = (buddy.hdr.sum, buddy.hdr.samples.float)
     for w in buddy.ctx.getPeers():
       if buddy.peerID != w.peerID and
-         w.hdr.sum * bSamples < bSum * w.hdr.samples.float:
+         # Mind fringe case when most higher throughputs are equal in which
+         # case all ranks must be the topmost rank (i.e. `<=`, here.)
+         w.hdr.sum * bSamples <= bSum * w.hdr.samples.float:
         ranking.inc
 
     # Test against better performing peers. Choose those if there are enough.
@@ -87,7 +89,7 @@ func classifyForFetching*(
     let (bSum, bSamples) = (buddy.blk.sum, buddy.blk.samples.float)
     for w in buddy.ctx.getPeers():
       if buddy.peerID != w.peerID and
-         w.blk.sum * bSamples < bSum * w.blk.samples.float:
+         w.blk.sum * bSamples <= bSum * w.blk.samples.float:
         ranking.inc
 
     if ranking < buddy.ctx.pool.nBuddies - blocksStagedQueueLengthMax:
