@@ -73,7 +73,7 @@ template headersFetch*(
       ctx.headersUnprocCommit(iv, iv)               # clean up, revert `iv`
       debug info & ": Garbled header list", peer, iv, headers=rc.value.bnStr,
         expected=(ivBottom,iv.maxPt).bnStr, state=($buddy.syncState),
-        nErrors=buddy.hdrErrors()
+        nErrors=buddy.nErrors.fetch.hdr
       break body                                   # stop, exit function
 
     # Commit blocks received (and revert lower unused block numbers)

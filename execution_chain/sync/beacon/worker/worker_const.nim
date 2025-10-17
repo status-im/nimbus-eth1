@@ -91,7 +91,7 @@ const
     ## not literally `slow`, but nevertheless leading to long download delays.)
 
   fetchHeadersErrTimeout* = chronos.seconds(25)
-  nFetchHeadersErrThreshold* = 5
+  nFetchHeadersErrThreshold* = 4
     ## Response time allowance (see also comment on `fetchHeadersRlpxTimeout`.)
     ## If the response time for the set of headers exceeds this threshold for
     ## more than `nFetchHeadersErrThreshold` times in a row, then this peer will
@@ -121,7 +121,7 @@ const
     ## Similar to `nFetchHeadersRlpxThreshold`
 
   fetchBodiesErrTimeout* = chronos.seconds(25)
-  nFetchBodiesErrThreshold* = 5
+  nFetchBodiesErrThreshold* = 4
     ## Similar to `nFetchHeadersErrThreshold`.
 
   nProcBlocksErrThreshold* = 2

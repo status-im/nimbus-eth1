@@ -103,15 +103,14 @@ template fetchBodies*(
     # Verify the correct number of block bodies received
     let b = rc.value.packet.bodies
     if b.len == 0 or nReq < b.len:
-      if 0 < b.len:
+      if nReq < b.len:
         # Bogus peer returning additional rubbish
         buddy.bdyFetchRegisterError(forceZombie=true)
-      elif elapsed < fetchBodiesErrTimeout:
-        # Data not avail but fast enough answer: degrade througput stats
-        discard buddy.only.thruPutStats.blk.bpsSample(elapsed, 0)
       else:
-        # Slow rejection response
-        buddy.bdyFetchRegisterError(slowPeer=true)
+        # Data not avail but fast enough answer: degrade througput stats only
+        discard buddy.only.thruPutStats.blk.bpsSample(elapsed, 0)
+        if fetchBodiesErrTimeout <= elapsed:
+          buddy.bdyFetchRegisterError(slowPeer=true)
       trace trEthRecvReceivedBlockBodies, peer, nReq, nResp=b.len,
         elapsed=elapsed.toStr, state=($buddy.syncState),
         nErrors=buddy.nErrors.fetch.bdy

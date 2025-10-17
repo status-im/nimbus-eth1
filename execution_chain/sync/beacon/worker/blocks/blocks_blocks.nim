@@ -98,7 +98,8 @@ template blocksFetchCheckImpl(
           blocks.setLen(n)                                 # curb off junk
           buddy.bdyFetchRegisterError()
           trace info & ": Cut off junk blocks", peer, iv, n=n,
-            nTxs=bodies[n].transactions.len, nBodies, nErrors=buddy.blkErrors()
+            nTxs=bodies[n].transactions.len, nBodies,
+            nErrors=buddy.nErrors.fetch.bdy
           break loop
 
         # In order to avoid extensive checking here and also within the `FC`

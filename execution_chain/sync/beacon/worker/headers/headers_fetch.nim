@@ -123,15 +123,15 @@ template fetchHeadersReversed*(
     # Verify the correct number of block headers received
     let h = rc.value.packet.headers
     if h.len == 0 or ivReq.len < h.len.uint64:
-      if 0 < h.len:
+      if ivReq.len < h.len.uint64:
         # Bogus peer returning additional rubbish
         buddy.hdrFetchRegisterError(forceZombie=true)
-      elif elapsed < fetchHeadersErrTimeout:
-        # Data not avail but fast enough answer: degrade througput stats
-        discard buddy.only.thruPutStats.hdr.bpsSample(elapsed, 0)
       else:
-        # Slow rejection response
-        buddy.hdrFetchRegisterError(slowPeer=true)
+        # Data not avail but fast enough answer: degrade througput stats only
+        discard buddy.only.thruPutStats.hdr.bpsSample(elapsed, 0)
+        if fetchHeadersErrTimeout <= elapsed:
+          # Slow rejection response
+          buddy.hdrFetchRegisterError(slowPeer=true)
       trace trEthRecvReceivedBlockHeaders, peer, nReq=req.maxResults,
         hash=topHash.toStr, nResp=h.len, elapsed=elapsed.toStr,
         state=($buddy.syncState), nErrors=buddy.nErrors.fetch.hdr
