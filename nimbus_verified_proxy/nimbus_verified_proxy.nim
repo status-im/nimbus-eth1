@@ -29,18 +29,7 @@ import
   ./json_rpc_frontend,
   ../execution_chain/version_info
 
-type OnHeaderCallback* = proc(s: cstring, t: int) {.cdecl, raises: [], gcsafe.}
-type Context* = object
-  thread*: Thread[ptr Context]
-  configJson*: cstring
-  stop*: bool
-  onHeader*: OnHeaderCallback
-
-proc cleanup*(ctx: ptr Context) =
-  dealloc(ctx.configJson)
-  freeShared(ctx)
-
-proc verifyChaindId(
+proc verifyChainId(
     engine: RpcVerificationEngine
 ): Future[void] {.async: (raises: []).} =
   let providerId =
@@ -57,62 +46,18 @@ proc verifyChaindId(
       expectedChain = engine.chainId, providerChain = providerId
     quit 1
 
-func getConfiguredChainId(networkMetadata: Eth2NetworkMetadata): UInt256 =
-  if networkMetadata.eth1Network.isSome():
-    let
-      net = networkMetadata.eth1Network.get()
-      chainId =
-        case net
-        of mainnet: 1.u256
-        of sepolia: 11155111.u256
-        of holesky: 17000.u256
-        of hoodi: 560048.u256
-    return chainId
-  else:
-    return networkMetadata.cfg.DEPOSIT_CHAIN_ID.u256
+func getConfiguredChainId*(chain: Option[string]): UInt256 =
+  let net = chain.get("mainnet").toLowerAscii()
+  case net
+  of "mainnet": 1.u256
+  of "sepolia": 11155111.u256
+  of "holesky": 17000.u256
+  of "hoodi": 560048.u256
+  else: 1.u256
 
-proc run*(
-    config: VerifiedProxyConf, ctx: ptr Context
-) {.raises: [CatchableError], gcsafe.} =
-  {.gcsafe.}:
-    setupLogging(config.logLevel, config.logStdout)
-
-    try:
-      notice "Launching Nimbus verified proxy",
-        version = fullVersionStr, cmdParams = commandLineParams(), config
-    except Exception:
-      notice "commandLineParams() exception"
-
+proc startLightClient*(config: VerifiedProxyConf, engine: RpcVerificationEngine) {.async.} =
   # load constants and metadata for the selected chain
   let metadata = loadEth2Network(config.eth2Network)
-
-  let
-    engineConf = RpcVerificationEngineConf(
-      chainId: getConfiguredChainId(metadata),
-      maxBlockWalk: config.maxBlockWalk,
-      headerStoreLen: config.headerStoreLen,
-      accountCacheLen: config.accountCacheLen,
-      codeCacheLen: config.codeCacheLen,
-      storageCacheLen: config.storageCacheLen,
-    )
-    engine = RpcVerificationEngine.init(engineConf)
-    jsonRpcClient = JsonRpcClient.init(config.backendUrl)
-    jsonRpcServer = JsonRpcServer.init(config.frontendUrl)
-
-  # the backend only needs the url to connect to
-  engine.backend = jsonRpcClient.getEthApiBackend()
-
-  # inject frontend
-  jsonRpcServer.injectEngineFrontend(engine.frontend)
-
-  # start frontend and backend
-  var status = waitFor jsonRpcClient.start()
-  if status.isErr():
-    raise newException(ValueError, status.error)
-
-  status = jsonRpcServer.start()
-  if status.isErr():
-    raise newException(ValueError, status.error)
 
   # just for short hand convenience
   template cfg(): auto =
@@ -169,17 +114,8 @@ proc run*(
       LightClientFinalizationMode.Optimistic,
     )
 
-  # registerbasic p2p protocols for maintaing peers ping/status/get_metadata/... etc.
-  network.registerProtocol(
-    PeerSync,
-    PeerSync.NetworkState.init(cfg, forkDigests, genesisBlockRoot, getBeaconTime),
-  )
-
-  # start the p2p network and rpcProxy
-  waitFor network.startListening()
-  waitFor network.start()
-  # verify chain id that the proxy is connected to
-  waitFor engine.verifyChaindId()
+  await network.startListening()
+  await network.start()
 
   proc onFinalizedHeader(
       lightClient: LightClient, finalizedHeader: ForkedLightClientHeader
@@ -192,11 +128,6 @@ proc run*(
         if res.isErr():
           error "finalized header update error", error = res.error()
 
-        if ctx != nil:
-          try:
-            ctx.onHeader(cstring(Json.encode(forkyHeader)), 0)
-          except SerializationError as e:
-            error "finalizedHeaderCallback exception", error = e.msg
       else:
         error "pre-bellatrix light client headers do not have the execution payload header"
 
@@ -211,11 +142,6 @@ proc run*(
         if res.isErr():
           error "header store add error", error = res.error()
 
-        if ctx != nil:
-          try:
-            ctx.onHeader(cstring(Json.encode(forkyHeader)), 1)
-          except SerializationError as e:
-            error "optimisticHeaderCallback exception", error = e.msg
       else:
         error "pre-bellatrix light client headers do not have the execution payload header"
 
@@ -278,39 +204,62 @@ proc run*(
     updateBlocksGossipStatus(wallSlot + 1)
     lightClient.updateGossipStatus(wallSlot + 1)
 
-  # updates gossip status every second every second
-  proc runOnSecondLoop() {.async.} =
-    let sleepTime = chronos.seconds(1)
-    while true:
-      let start = chronos.now(chronos.Moment)
-      await chronos.sleepAsync(sleepTime)
-      let afterSleep = chronos.now(chronos.Moment)
-      let sleepTime = afterSleep - start
-      updateGossipStatus(start)
-      let finished = chronos.now(chronos.Moment)
-      let processingTime = finished - afterSleep
-      trace "onSecond task completed", sleepTime, processingTime
-
   # update gossip status before starting the light client
   updateGossipStatus(Moment.now())
   # start the light client
   lightClient.start()
 
-  # launch a async routine
-  asyncSpawn runOnSecondLoop()
-
-  # run an infinite loop and wait for a stop signal
+  let sleepTime = chronos.seconds(1)
   while true:
-    poll()
-    if ctx != nil and ctx.stop:
-      # Cleanup
-      waitFor network.stop()
-      waitFor jsonRpcClient.stop()
-      waitFor jsonRpcServer.stop()
-      ctx.cleanup()
-      # Notify client that cleanup is finished
-      ctx.onHeader(nil, 2)
-      break
+    let start = chronos.now(chronos.Moment)
+    await chronos.sleepAsync(sleepTime)
+    let afterSleep = chronos.now(chronos.Moment)
+    let sleepTime = afterSleep - start
+    updateGossipStatus(start)
+    let finished = chronos.now(chronos.Moment)
+    let processingTime = finished - afterSleep
+    trace "onSecond task completed", sleepTime, processingTime
+
+proc run(config: VerifiedProxyConf) {.async: (raises: [ValueError, CatchableError]), gcsafe.} =
+  {.gcsafe.}:
+    setupLogging(config.logLevel, config.logStdout)
+
+    try:
+      notice "Launching Nimbus verified proxy",
+        version = fullVersionStr, cmdParams = commandLineParams(), config
+    except Exception:
+      notice "commandLineParams() exception"
+
+  let
+    engineConf = RpcVerificationEngineConf(
+      chainId: getConfiguredChainId(config.eth2Network),
+      maxBlockWalk: config.maxBlockWalk,
+      headerStoreLen: config.headerStoreLen,
+      accountCacheLen: config.accountCacheLen,
+      codeCacheLen: config.codeCacheLen,
+      storageCacheLen: config.storageCacheLen,
+    )
+    engine = RpcVerificationEngine.init(engineConf)
+    jsonRpcClient = JsonRpcClient.init(config.backendUrl)
+    jsonRpcServer = JsonRpcServer.init(config.frontendUrl)
+
+  # the backend only needs the url to connect to
+  engine.backend = jsonRpcClient.getEthApiBackend()
+  # inject frontend
+  jsonRpcServer.injectEngineFrontend(engine.frontend)
+
+  # start frontend and backend
+  var status = await jsonRpcClient.start()
+  if status.isErr():
+    raise newException(ValueError, status.error)
+
+  status = jsonRpcServer.start()
+  if status.isErr():
+    raise newException(ValueError, status.error)
+
+  # verify chain id that the proxy is connected to
+  await engine.verifyChainId()
+  await startLightClient(config, engine)
 
 # noinline to keep it in stack traces
 proc main() {.noinline, raises: [CatchableError].} =
@@ -323,7 +272,7 @@ proc main() {.noinline, raises: [CatchableError].} =
     writePanicLine error # Logging not yet set up
     quit QuitFailure
 
-  run(config, nil)
+  waitFor run(config)
 
 when isMainModule:
   main()
