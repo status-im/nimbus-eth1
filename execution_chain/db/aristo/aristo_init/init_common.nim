@@ -86,6 +86,7 @@ proc initInstance*(db: AristoDbRef): Result[void, AristoError] =
   db.txRef = AristoTxRef(db: db, vTop: vTop, snapshot: Snapshot(level: Opt.some(0)))
   db.accLeaves = LruCache[Hash32, AccLeafRef].init(ACC_LRU_SIZE)
   db.stoLeaves = LruCache[Hash32, StoLeafRef].init(ACC_LRU_SIZE)
+  db.maxSnapshots = 10
   ok()
 
 proc finish*(db: AristoDbRef; eradicate = false) =
