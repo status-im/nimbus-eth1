@@ -19,10 +19,10 @@ import
 
 proc updateErrorState(buddy: BeaconBuddyRef) =
   ## Helper/wrapper
-  if ((0 < buddy.only.nRespErrors.hdr or
-       0 < buddy.only.nProcErrors.hdr) and buddy.ctrl.stopped) or
-     nFetchHeadersErrThreshold < buddy.only.nRespErrors.hdr or
-     nProcHeadersErrThreshold < buddy.only.nProcErrors.hdr:
+  if ((0 < buddy.nErrors.fetch.hdr or
+       0 < buddy.nErrors.apply.hdr) and buddy.ctrl.stopped) or
+     nFetchHeadersErrThreshold < buddy.nErrors.fetch.hdr or
+     nProcHeadersErrThreshold < buddy.nErrors.apply.hdr:
 
     # Make sure that this peer does not immediately reconnect
     buddy.ctrl.zombie = true
@@ -32,12 +32,15 @@ proc updateErrorState(buddy: BeaconBuddyRef) =
 # ------------------------------------------------------------------------------
 
 func hdrErrors*(buddy: BeaconBuddyRef): string =
-  $buddy.only.nRespErrors.hdr & "/" & $buddy.only.nProcErrors.hdr
+  $buddy.nErrors.fetch.hdr & "/" & $buddy.nErrors.apply.hdr
 
-proc hdrFetchRegisterError*(buddy: BeaconBuddyRef, slowPeer = false) =
-  buddy.only.nRespErrors.hdr.inc
-  if nFetchHeadersErrThreshold < buddy.only.nRespErrors.hdr:
-    if buddy.ctx.pool.nBuddies == 1 and slowPeer:
+proc hdrFetchRegisterError*(buddy: BeaconBuddyRef;
+     slowPeer = false;
+     forceZombie = false;
+       ) =
+  buddy.nErrors.fetch.hdr.inc
+  if nFetchHeadersErrThreshold < buddy.nErrors.fetch.hdr:
+    if not forceZombie and buddy.ctx.pool.nBuddies == 1 and slowPeer:
       # The current peer is the last one and is lablelled `slow`. It would
       # have been zombified if it were not the last one. So it can still
       # keep download going untill the peer pool is replenished with
@@ -48,7 +51,7 @@ proc hdrFetchRegisterError*(buddy: BeaconBuddyRef, slowPeer = false) =
       buddy.ctrl.zombie = true
 
 proc hdrProcRegisterError*(buddy: BeaconBuddyRef) =
-  buddy.only.nProcErrors.hdr.inc
+  buddy.nErrors.apply.hdr.inc
   buddy.updateErrorState()
 
 # -----------------

@@ -13,14 +13,22 @@
 import
   pkg/chronos
 
-type SyncState* = enum
-  idle = 0                         ## see clause *(8)*, *(12)* of `README.md`
-  headers                          ## see clauses *(5)*, *(9)* of `README.md`
-  headersCancel                    ## stop this scrum
-  headersFinish                    ## see clause *(10)* of `README.md`
-  blocks                           ## see clause *(11)* of `README.md`
-  blocksCancel                     ## stop this syncer scrum
-  blocksFinish                     ## get ready for `idle`
+type
+  SyncState* = enum
+    idle = 0                       ## see clause *(8)*, *(12)* of `README.md`
+    headers                        ## see clauses *(5)*, *(9)* of `README.md`
+    headersCancel                  ## stop this scrum
+    headersFinish                  ## see clause *(10)* of `README.md`
+    blocks                         ## see clause *(11)* of `README.md`
+    blocksCancel                   ## stop this syncer scrum
+    blocksFinish                   ## get ready for `idle`
+
+  DownloadPerformance* = enum
+    rankingTooLow = 0              ## Lower mean throughput than others
+    rankingOk                      ## Better mean throughput than some others
+    notEnoughData                  ## Not enough data to assess
+    qSlotsAvail                    ## No assessment needed (e.g. few peers)
+    notApplicable                  ## Not useful here
 
 const
   metricsUpdateInterval* = chronos.seconds(10)
@@ -68,7 +76,7 @@ const
     ## On `Geth`, responses to larger requests are all truncted to 1024 header
     ## entries (see `Geth` constant `maxHeadersServe`.)
 
-  fetchHeadersRlpxTimeout* = chronos.seconds(40)
+  fetchHeadersRlpxTimeout* = chronos.seconds(50)
     ## Timeout cap for the `RLPX` handler when fetching header. This value
     ## should pretty large so that even in case that the peer is delaying
     ## (typically due to downloading from here), there will be a valid data
@@ -82,8 +90,8 @@ const
     ## peers (over the network) can be assigned `slow` (meant figuratively,
     ## not literally `slow`, but nevertheless leading to long download delays.)
 
-  fetchHeadersErrTimeout* = chronos.seconds(15)
-  nFetchHeadersErrThreshold* = 2
+  fetchHeadersErrTimeout* = chronos.seconds(25)
+  nFetchHeadersErrThreshold* = 4
     ## Response time allowance (see also comment on `fetchHeadersRlpxTimeout`.)
     ## If the response time for the set of headers exceeds this threshold for
     ## more than `nFetchHeadersErrThreshold` times in a row, then this peer will
@@ -92,13 +100,6 @@ const
   nProcHeadersErrThreshold* = 2
     ## Similar to `nFetchHeadersErrThreshold` but for the later part when
     ## errors occur while block headers are queued and further processed.
-
-  fetchHeadersMinResponsePC* = 10
-    ## Some peers only returned one header at a time. If these peers sit on a
-    ## farm, they might collectively slow down the download process. So this
-    ## constant sets a percentage of minimum headers needed to response with
-    ## so that the peers is not treated as a slow responder (see also above
-    ## for slow responder timeout.)
 
   nStashHeadersErrThreshold* = 2
     ## Abort headers download and the whole sync session with it if too many
@@ -116,15 +117,12 @@ const
   nFetchBodiesRequest* = 40
     ## Similar to `nFetchHeadersRequest`.
 
-  fetchBodiesRlpxTimeout* = chronos.seconds(30)
+  fetchBodiesRlpxTimeout* = chronos.seconds(50)
     ## Similar to `nFetchHeadersRlpxThreshold`
 
-  fetchBodiesErrTimeout* = chronos.seconds(20)
-  nFetchBodiesErrThreshold* = 2
+  fetchBodiesErrTimeout* = chronos.seconds(25)
+  nFetchBodiesErrThreshold* = 4
     ## Similar to `nFetchHeadersErrThreshold`.
-
-  fetchBodiesMinResponsePC* = 10
-    ## Similar to ``fetchHeadersMinResponsePC`.
 
   nProcBlocksErrThreshold* = 2
     ## Similar to `nProcHeadersErrThreshold`.

@@ -191,7 +191,7 @@ template blocksCollect*(
 
       debug info & ": no blocks yet (failed peer)", peer,
         failedPeers=ctx.pool.failedPeers.len,
-        syncState=($buddy.syncState), bdyErrors=buddy.bdyErrors
+        state=($buddy.syncState), nErrors=buddy.blkErrors()
       break body                                    # return
 
     # This message might run in addition to the `chronicles.info` part
@@ -205,9 +205,10 @@ template blocksCollect*(
 
 # --------------
 
-proc blocksUnstageOk*(ctx: BeaconCtxRef): bool =
+proc blocksUnstageOk*(buddy: BeaconBuddyRef): bool =
   ## Check whether import processing is possible
   ##
+  let ctx = buddy.ctx
   not ctx.poolMode and
   0 < ctx.blk.staged.len
 

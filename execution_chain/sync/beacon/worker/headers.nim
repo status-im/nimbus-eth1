@@ -197,7 +197,7 @@ template headersCollect*(buddy: BeaconBuddyRef; info: static[string]) =
 
       debug info & ": no headers yet (failed peer)", peer,
         failedPeers=ctx.pool.failedPeers.len, nSyncPeers=ctx.pool.nBuddies,
-        syncState=($buddy.syncState), hdrErrors=buddy.hdrErrors
+        state=($buddy.syncState), nErrors=buddy.hdrErrors()
       break body
 
     # This message might run in addition to the `chronicles.info` part
@@ -210,6 +210,13 @@ template headersCollect*(buddy: BeaconBuddyRef; info: static[string]) =
   discard
 
 # --------------
+
+proc headersUnstageOk*(buddy: BeaconBuddyRef): bool =
+  ## Check whether import processing is possible
+  ##
+  let ctx = buddy.ctx
+  not ctx.poolMode and
+  0 < ctx.hdr.staged.len
 
 proc headersUnstage*(buddy: BeaconBuddyRef; info: static[string]): bool =
   ## Store headers from the `staged` queue onto the header chain cache.
