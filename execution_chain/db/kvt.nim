@@ -31,6 +31,7 @@ export
   KvtDbRef,
   KvtError,
   KvtTxRef,
+  KvtType,
   isValid
 
 # End

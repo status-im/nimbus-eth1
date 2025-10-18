@@ -172,7 +172,9 @@ proc init(com         : CommonRef,
           initializeDb: bool,
           statelessProviderEnabled: bool,
           statelessWitnessValidation: bool) =
-
+  # When stateless is not enabled, disable the witness kvt which is created by default.
+  if not statelessProviderEnabled:
+    db.kvts[KvtType.Witness] = nil
 
   config.daoCheck()
 

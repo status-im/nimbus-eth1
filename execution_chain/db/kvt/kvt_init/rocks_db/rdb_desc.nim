@@ -13,22 +13,18 @@
 
 {.push raises: [].}
 
-import
-  ../../../core_db/backend/rocksdb_desc
+import ../../../core_db/backend/rocksdb_desc
 
-export rocksdb_desc
+from ../../kvt_desc import KvtType
+
+export rocksdb_desc, KvtType
 
 type
   RdbInst* = object
     baseDb*: RocksDbInstanceRef
     store*: KvtCfStore               ## Rocks DB database handler
 
-  KvtCFs* = enum
-    ## Column family symbols/handles and names used on the database
-    KvtGeneric = "KvtGen"            ## Generic column family
-    KvtSynchro = "KvtSync"
-
-  KvtCfStore* = array[KvtCFs, ColFamilyReadWrite]
+  KvtCfStore* = array[KvtType, ColFamilyReadWrite]
     ## List of column family handlers
 
 # ------------------------------------------------------------------------------

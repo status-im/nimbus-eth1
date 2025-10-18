@@ -50,7 +50,7 @@ proc rollback*(rdb: var RdbInst, session: SharedWriteBatchRef) =
     session.close()
 
 proc commit*(
-    rdb: var RdbInst, session: SharedWriteBatchRef, cf: static[KvtCFs]
+    rdb: var RdbInst, session: SharedWriteBatchRef, cf: static[KvtType]
 ): Result[void, (KvtError, string)] =
   if not session.isClosed():
     defer: session.close()
@@ -65,7 +65,7 @@ proc put*(
     rdb: RdbInst;
     session: SharedWriteBatchRef,
     key, val: openArray[byte];
-    cf: static[KvtCFs]): Result[void,(KvtError,string)] =
+    cf: static[KvtType]): Result[void,(KvtError,string)] =
   if val.len == 0:
     session.batch.delete(key, rdb.store[cf].handle()).isOkOr:
       const errSym = RdbBeDriverDelError

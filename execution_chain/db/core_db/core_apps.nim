@@ -631,24 +631,24 @@ proc persistUncles*(db: CoreDbTxRef, uncles: openArray[Header]): Hash32 =
     return EMPTY_ROOT_HASH
 
 proc persistWitness*(db: CoreDbTxRef, blockHash: Hash32, witness: Witness): Result[void, string] =
-  db.put(blockHashToWitnessKey(blockHash).toOpenArray, witness.encode()).isOkOr:
+  db.put(blockHash.data, witness.encode(), KvtType.Witness).isOkOr:
     return err("persistWitness: " & $$error)
   ok()
 
 proc getWitness*(db: CoreDbTxRef, blockHash: Hash32): Result[Witness, string] =
-  let witnessBytes = db.get(blockHashToWitnessKey(blockHash).toOpenArray).valueOr:
+  let witnessBytes = db.get(blockHash.data, KvtType.Witness).valueOr:
     return err("getWitness: " & $$error)
 
   Witness.decode(witnessBytes)
 
 proc getCodeByHash*(db: CoreDbTxRef, codeHash: Hash32): Result[seq[byte], string] =
-  let code = db.get(contractHashKey(codeHash).toOpenArray).valueOr:
+  let code = db.get(codeHash.data, KvtType.ContractCode).valueOr:
     return err("getCodeByHash: " & $$error)
 
   ok(code)
 
 proc setCodeByHash*(db: CoreDbTxRef, codeHash: Hash32, code: openArray[byte]): Result[void, string] =
-  db.put(contractHashKey(codeHash).toOpenArray, code).isOkOr:
+  db.put(codeHash.data, code, KvtType.ContractCode).isOkOr:
     return err("setCodeByHash: " & $$error)
 
   ok()

@@ -1,5 +1,5 @@
 # nimbus-eth1
-# Copyright (c) 2023-2024 Status Research & Development GmbH
+# Copyright (c) 2023-2025 Status Research & Development GmbH
 # Licensed under either of
 #  * Apache License, version 2.0, ([LICENSE-APACHE](LICENSE-APACHE) or
 #    http://www.apache.org/licenses/LICENSE-2.0)
@@ -36,7 +36,7 @@ iterator walk*(rdb: RdbInst): tuple[key: seq[byte], data: seq[byte]] =
   ##
   ## Non-decodable entries are stepped over and ignored.
   block walkBody:
-    let rit = rdb.store[KvtGeneric].openIterator().valueOr:
+    let rit = rdb.store[KvtType.Generic].openIterator().valueOr:
       when extraTraceMessages:
         trace logTxt "walk", pfx="all", error
       break walkBody

@@ -79,10 +79,16 @@ type
     closeFn*: CloseFn                ## Generic destructor
 
     getBackendFn*: GetBackendFn
-    
+
     txRef*: KvtTxRef
       ## Tx holding data scheduled to be written to disk during the next
       ## `persist` call
+
+  KvtType* {.pure.}  = enum
+    Generic = "KvtGen"            ## Generic kvt
+    Synchro = "KvtSync"           ## Syncer block headers kvt
+    ContractCode = "KvtCode"      ## Contract code kvt
+    Witness = "KvtWitness"        ## Witness kvt
 
 # ------------------------------------------------------------------------------
 # Public helpers

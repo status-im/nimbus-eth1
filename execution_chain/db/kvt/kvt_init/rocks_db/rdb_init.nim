@@ -30,7 +30,7 @@ proc init*(
   ##
   rdb.baseDb = baseDb
 
-  for col in KvtCFs:
+  for col in KvtType:
     # Failure here would indicate that the database was incorrectly opened which
     # shouldn't happen
     rdb.store[col] = baseDb.db.getColFamily($col).valueOr:
