@@ -17,6 +17,7 @@ import
   ../networking/p2p,
   ./beacon/worker/headers/headers_target,
   ./beacon/[beacon_desc, worker],
+  ./beacon/worker/classify,
   ./[sync_sched, wire_protocol]
 
 export
@@ -51,7 +52,8 @@ proc runPool(buddy: BeaconBuddyRef; last: bool; laps: int): bool =
   worker.runPool(buddy, last, laps, "RunPool")
 
 proc runPeer(buddy: BeaconBuddyRef): Future[Duration] {.async: (raises: []).} =
-  return worker.runPeer(buddy, "RunPeer")
+  let rank = buddy.classifyForFetching()
+  return worker.runPeer(buddy, rank, "RunPeer")
 
 # ------------------------------------------------------------------------------
 # Public functions

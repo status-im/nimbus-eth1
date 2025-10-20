@@ -129,7 +129,11 @@ proc runPool*(
   true # stop
 
 
-template runPeer*(buddy: BeaconBuddyRef; info: static[string]): Duration =
+template runPeer*(
+    buddy: BeaconBuddyRef;
+    rank: PeerRanking;
+    info: static[string];
+      ): Duration =
   ## Async/template
   ##
   ## This peer worker method is repeatedly invoked (exactly one per peer) while
@@ -141,15 +145,13 @@ template runPeer*(buddy: BeaconBuddyRef; info: static[string]): Duration =
   block body:
     if buddy.somethingToCollectOrUnstage():
 
-      # Classify sync peer (aka buddy) performance
-      let (fetchPerf {.inject.}, rank) = buddy.classifyForFetching()
-
       trace info & ": start processing", peer=buddy.peer,
         throughput=buddy.only.thruPutStats.toMeanVar.psStr,
-        fetchPerf, rank=(if rank < 0: "n/a" else: $rank),
+        rankInfo=($rank.assessed),
+        rank=(if rank.ranking < 0: "n/a" else: $rank.ranking),
         nSyncPeers=buddy.ctx.pool.nBuddies, state=($buddy.syncState)
 
-      if fetchPerf == rankingTooLow:
+      if rank.assessed == rankingTooLow:
         bodyRc = workerIdleWaitInterval
         break body                                # done, exit
 

@@ -28,9 +28,7 @@ func somethingToCollectOrUnstage*(buddy: BeaconBuddyRef): bool =
   false
 
 
-func classifyForFetching*(
-    buddy: BeaconBuddyRef;
-      ): tuple[info: DownloadPerformance, ranking: int] =
+func classifyForFetching*(buddy: BeaconBuddyRef): PeerRanking =
   ## Rank and classify peers by whether they should be used for fetching
   ## data.
   ##

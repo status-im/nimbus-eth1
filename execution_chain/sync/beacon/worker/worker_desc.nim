@@ -52,6 +52,10 @@ type
     packet: BlockBodiesPacket
     elapsed: Duration
 
+  PeerRanking* = tuple
+    assessed: DownloadPerformance
+    ranking: int
+
   BackgroundTicker* =
     proc(ctx: BeaconCtxRef) {.gcsafe, raises: [].}
       ## Some function that is invoked regularly
