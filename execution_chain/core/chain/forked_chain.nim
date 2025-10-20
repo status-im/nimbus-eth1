@@ -315,6 +315,15 @@ proc updateBase(c: ForkedChainRef, base: BlockRef): uint =
     return
 
   let startTime = Moment.now()
+  block:
+    # Write block contents to txFrame at the last moment - otherwise, they would
+    # stay both in BlockRef and TxFrame memory
+    # TODO probably makes sense to do it the other way around, removing blk
+    #      from BlockRef
+    var blk = base
+    while blk.isOk:
+      c.writeBaggage(blk.blk, blk.hash, blk.txFrame, blk.receipts)
+      blk = blk.parent
 
   # State root sanity check is performed to verify, before writing to disk,
   # that optimistically checked blocks indeed end up being stored with a
@@ -513,7 +522,7 @@ proc validateBlock(c: ForkedChainRef,
   # Update the snapshot before processing the block so that any vertexes in snapshots
   # from lower levels than the baseTxFrame are removed from the snapshot before running
   # the stateroot computation.
-  c.updateSnapshot(parent.blk, parentFrame)
+  c.updateSnapshot(parent.blk.header.number, parentFrame)
 
   var receipts = c.processBlock(parent, txFrame, blk, blkHash, finalized).valueOr:
     txFrame.dispose()
