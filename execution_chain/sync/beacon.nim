@@ -31,29 +31,29 @@ logScope:
 # ------------------------------------------------------------------------------
 
 proc runSetup(ctx: BeaconCtxRef): bool =
-  worker.setup(ctx, "RunSetup")
+  worker.setup(ctx, "Setup")
 
 proc runRelease(ctx: BeaconCtxRef) =
-  worker.release(ctx, "RunRelease")
+  worker.release(ctx, "Release")
 
 proc runDaemon(ctx: BeaconCtxRef): Future[Duration] {.async: (raises: []).} =
-  return worker.runDaemon(ctx, "RunDaemon")
+  return worker.runDaemon(ctx, "Daemon")
 
 proc runTicker(ctx: BeaconCtxRef) =
-  worker.runTicker(ctx, "RunTicker")
+  worker.runTicker(ctx, "Ticker")
 
 proc runStart(buddy: BeaconBuddyRef): bool =
-  worker.start(buddy, "RunStart")
+  worker.start(buddy, "Start")
 
 proc runStop(buddy: BeaconBuddyRef) =
-  worker.stop(buddy, "RunStop")
+  worker.stop(buddy, "Stop")
 
 proc runPool(buddy: BeaconBuddyRef; last: bool; laps: int): bool =
-  worker.runPool(buddy, last, laps, "RunPool")
+  worker.runPool(buddy, last, laps, "SyncMode")
 
 proc runPeer(buddy: BeaconBuddyRef): Future[Duration] {.async: (raises: []).} =
   let rank = buddy.classifyForFetching()
-  return worker.runPeer(buddy, rank, "RunPeer")
+  return worker.runPeer(buddy, rank, "Peer")
 
 # ------------------------------------------------------------------------------
 # Public functions

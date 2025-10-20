@@ -55,7 +55,7 @@ proc start*(buddy: BeaconBuddyRef; info: static[string]): bool =
 proc stop*(buddy: BeaconBuddyRef; info: static[string]) =
   ## Clean up this peer
   if not buddy.ctx.hibernate: debug info & ": release peer", peer=buddy.peer,
-    throughput=buddy.only.thruPutStats.toMeanVar.psStr,
+    thPut=buddy.only.thPutStats.toMeanVar.psStr,
     nSyncPeers=(buddy.ctx.pool.nBuddies-1), state=($buddy.syncState)
   buddy.stopBuddy()
 
@@ -76,7 +76,7 @@ proc runTicker*(ctx: BeaconCtxRef; info: static[string]) =
     if ctx.pool.lastNoPeersLog + noPeersLogWaitInterval < now:
       ctx.pool.lastNoPeersLog = now
       debug info & ": no sync peers yet",
-        elapsed=(now - ctx.pool.lastPeerSeen).toStr,
+        ela=(now - ctx.pool.lastPeerSeen).toStr,
         nOtherPeers=ctx.node.peerPool.connectedNodes.len
 
 
@@ -146,7 +146,7 @@ template runPeer*(
     if buddy.somethingToCollectOrUnstage():
 
       trace info & ": start processing", peer=buddy.peer,
-        throughput=buddy.only.thruPutStats.toMeanVar.psStr,
+        thPut=buddy.only.thPutStats.toMeanVar.psStr,
         rankInfo=($rank.assessed),
         rank=(if rank.ranking < 0: "n/a" else: $rank.ranking),
         nSyncPeers=buddy.ctx.pool.nBuddies, state=($buddy.syncState)

@@ -118,7 +118,7 @@ type
     samples*: uint
     total*: uint64
 
-  BuddyThruPutStats* = object
+  BuddyThPutStats* = object
     ## Throughput statistice for fetching headers and bodies. The fileds
     ## have the following meaning:
     ##    sum:      -- Sum of samples, throuhputs per sec
@@ -149,7 +149,7 @@ type
   BeaconBuddyData* = object
     ## Local descriptor data extension
     nErrors*: BuddyErrors            ## Error register
-    thruPutStats*: BuddyThruPutStats ## Throughput statistics
+    thPutStats*: BuddyThPutStats     ## Throughput statistics
     failedReq*: BuddyFirstFetchReq   ## Avoid sending the same request twice
 
   InitTarget* = tuple
@@ -265,7 +265,7 @@ func toMeanVar*(w: StatsCollect): MeanVarStats =
     result.samples = w.samples
     result.total = w.total
 
-func toMeanVar*(w: BuddyThruPutStats): MeanVarStats =
+func toMeanVar*(w: BuddyThPutStats): MeanVarStats =
   ## Combined statistics for headers and bodies
   toMeanVar StatsCollect(
     sum:     w.hdr.sum +     w.blk.sum,

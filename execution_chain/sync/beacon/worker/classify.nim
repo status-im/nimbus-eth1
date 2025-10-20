@@ -47,7 +47,7 @@ func classifyForFetching*(buddy: BeaconBuddyRef): PeerRanking =
       return (qSlotsAvail, -1)
 
     template hdr(b: BeaconBuddyRef): StatsCollect =
-      b.only.thruPutStats.hdr
+      b.only.thPutStats.hdr
 
     # Are there throughput data available for this peer (aka buddy), at all?
     if buddy.hdr.samples == 0:
@@ -77,7 +77,7 @@ func classifyForFetching*(buddy: BeaconBuddyRef): PeerRanking =
       return (qSlotsAvail, -1)
 
     template blk(b: BeaconBuddyRef): StatsCollect =
-      b.only.thruPutStats.blk
+      b.only.thPutStats.blk
 
     if buddy.blk.samples == 0:
       return (notEnoughData, -1)
