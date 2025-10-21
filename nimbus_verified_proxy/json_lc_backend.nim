@@ -41,15 +41,16 @@ func new*(
 ): LCRestClient =
   LCRestClient(cfg: cfg, forkDigests: forkDigests, peers: @[])
 
-proc addEndpoint*(client: LCRestClient, endpoint: string) {.raises: [ValueError].} =
-  if endpoint in client.urls:
-    raise newException(ValueError, "Endpoint already added")
+proc addEndpoints*(client: LCRestClient, urlList: UrlList) {.raises: [ValueError].} =
+  for endpoint in urlList.urls:
+    if endpoint in client.urls:
+      continue
 
-  let restClient = RestClientRef.new(endpoint).valueOr:
-    raise newException(ValueError, $error)
+    let restClient = RestClientRef.new(endpoint).valueOr:
+      raise newException(ValueError, $error)
 
-  client.peers.add(LCRestPeer(score: 0, restClient: restClient))
-  client.urls.add(endpoint)
+    client.peers.add(LCRestPeer(score: 0, restClient: restClient))
+    client.urls.add(endpoint)
 
 proc closeAll*(client: LCRestClient) {.async: (raises: []).} =
   for peer in client.peers:
