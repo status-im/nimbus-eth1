@@ -117,13 +117,19 @@ func eligibleNode(proto: Eth1Discovery, rec: Record): bool =
 proc new*(
     _: type Eth1Discovery,
     privKey: PrivateKey,
-    address: AddressV4,
+    enrIp: Opt[IpAddress],
+    enrTcpPort, enrUdpPort: Opt[Port],
     bootstrapNodes: BootstrapNodes,
     bindPort: Port,
     bindIp = IPv6_any(),
     rng = newRng(),
     compatibleForkId = CompatibleForkIdProc(nil)
 ): Eth1Discovery =
+  let address = enode.Address(
+      ip: enrIp.valueOr(bindIp),
+      tcpPort: enrTcpPort.valueOr(bindPort),
+      udpPort: enrUdpPort.valueOr(bindPort),
+    )
   Eth1Discovery(
     discv4: discoveryv4.newDiscoveryV4(
       privKey = privKey,
@@ -135,9 +141,9 @@ proc new*(
     ),
     discv5: discoveryv5.newProtocol(
       privKey = privKey,
-      enrIp = Opt.some(address.ip),
-      enrTcpPort = Opt.some(address.tcpPort),
-      enrUdpPort = Opt.some(address.udpPort),
+      enrIp = enrIp,
+      enrTcpPort = enrTcpPort,
+      enrUdpPort = enrUdpPort,
       bootstrapRecords = bootstrapNodes.enrs,
       bindPort = bindPort,
       bindIp = bindIp,

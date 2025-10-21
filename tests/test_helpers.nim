@@ -154,7 +154,10 @@ proc setupEthNode*(
     ip: conf.listenAddress, tcpPort: conf.tcpPort, udpPort: conf.udpPort)
 
   var node = newEthereumNode(
-    keypair, srvAddress,
+    keypair,
+    Opt.some(conf.listenAddress),
+    Opt.some(conf.tcpPort),
+    Opt.some(conf.udpPort),
     conf.networkId,
     conf.agentString,
     bindUdpPort = conf.udpPort,
