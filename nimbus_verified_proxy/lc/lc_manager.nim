@@ -248,14 +248,14 @@ proc workerTask[E](
 proc query[E](
     self: LightClientManager, e: typedesc[E], key: E.K
 ): Future[bool] {.async: (raises: [CancelledError]).} =
-  const PARALLEL_REQUESTS = 2
-  var workers: array[PARALLEL_REQUESTS, Future[bool]]
+  const NUM_WORKERS = 2
+  var workers: array[NUM_WORKERS, Future[bool]]
 
   let
     progressFut = Future[void].Raising([CancelledError]).init("lcmanProgress")
-    doneFut = Future[void].Raising([CancelledError]).init("lcmanDone")
   var
     numCompleted = 0
+    success = false
     maxCompleted = workers.len
 
   proc handleFinishedWorker(future: pointer) =
@@ -263,58 +263,33 @@ proc query[E](
       let didProgress = cast[Future[bool]](future).read()
       if didProgress and not progressFut.finished:
         progressFut.complete()
-    except CancelledError:
-      if not progressFut.finished:
-        progressFut.cancelSoon()
+        success = true
     except CatchableError:
       discard
     finally:
       inc numCompleted
       if numCompleted == maxCompleted:
-        doneFut.complete()
+        progressFut.cancelSoon()
 
-  try:
-    # Start concurrent workers
-    for i in 0 ..< workers.len:
-      try:
-        workers[i] = self.workerTask(e, key)
-        workers[i].addCallback(handleFinishedWorker)
-      except CancelledError as exc:
-        raise exc
-      except CatchableError:
-        workers[i] = newFuture[bool]()
-        workers[i].complete(false)
-
-    # Wait for any worker to report progress, or for all workers to finish
+  # Start concurrent workers
+  for i in 0 ..< workers.len:
     try:
-      discard await race(progressFut, doneFut)
-    except ValueError:
-      raiseAssert "race API invariant"
-  finally:
-    for i in 0 ..< maxCompleted:
-      if workers[i] == nil:
-        maxCompleted = i
-        if numCompleted == maxCompleted:
-          doneFut.complete()
-        break
-      if not workers[i].finished:
-        workers[i].cancelSoon()
-    while true:
-      try:
-        await allFutures(workers[0 ..< maxCompleted])
-        break
-      except CancelledError:
-        continue
-    while true:
-      try:
-        await doneFut
-        break
-      except CancelledError:
-        continue
+      workers[i] = self.workerTask(e, key)
+      workers[i].addCallback(handleFinishedWorker)
+    except CancelledError as exc:
+      raise exc
+    except CatchableError:
+      workers[i] = newFuture[bool]()
+      workers[i].complete(false)
 
-  if not progressFut.finished:
-    progressFut.cancelSoon()
-  return progressFut.completed
+  # Wait for any worker to report progress, or for all workers to finish
+  waitFor progressFut
+
+  # cancel all workers
+  for i in 0 ..< NUM_WORKERS:
+    workers[i].cancelSoon()
+
+  return success
 
 template query[E](
     self: LightClientManager, e: typedesc[E]
@@ -358,7 +333,8 @@ proc loop(self: LightClientManager) {.async: (raises: [CancelledError]).} =
       if not didProgress:
         debug "Re-attempting bootstrap download"
         await sleepAsync(chronos.seconds(2))
-        continue
+
+      continue
 
     # check and download sync committee updates
     if finalizedPeriod == optimisticPeriod and not self.isNextSyncCommitteeKnown():
