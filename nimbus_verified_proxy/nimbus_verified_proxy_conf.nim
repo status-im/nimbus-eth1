@@ -12,7 +12,8 @@ import
   json_rpc/rpcproxy, # must be early (compilation annoyance)
   json_serialization/std/net,
   beacon_chain/conf_light_client,
-  beacon_chain/nimbus_binary_common
+  beacon_chain/nimbus_binary_common,
+  std/strutils
 
 export net
 
@@ -25,37 +26,45 @@ type
     kind*: Web3UrlKind
     web3Url*: string
 
+  UrlList* = object
+    urls*: seq[string]
+
 #!fmt: off
 type VerifiedProxyConf* = object
   # Config
   configFile* {.
-    desc: "Loads the configuration from a TOML file"
-    name: "config-file" .}: Option[InputFile]
+    desc: "Loads the configuration from a TOML file",
+    name: "config-file"
+  .}: Option[InputFile]
 
   # Logging
   logLevel* {.
-    desc: "Sets the log level"
-    defaultValue: "INFO"
-    name: "log-level" .}: string
+    desc: "Sets the log level",
+    defaultValue: "INFO",
+    name: "log-level"
+  .}: string
 
   logStdout* {.
-    hidden
-    desc: "Specifies what kind of logs should be written to stdout (auto, colors, nocolors, json)"
-    defaultValueDesc: "auto"
-    defaultValue: StdoutLogKind.Auto
-    name: "log-format" .}: StdoutLogKind
+    hidden,
+    desc: "Specifies what kind of logs should be written to stdout (auto, colors, nocolors, json)",
+    defaultValueDesc: "auto",
+    defaultValue: StdoutLogKind.Auto,
+    name: "log-format"
+  .}: StdoutLogKind
 
   # Storage
   dataDirFlag* {.
-    desc: "The directory where nimbus will store all blockchain data"
-    abbr: "d"
-    name: "data-dir" .}: Option[OutDir]
+    desc: "The directory where nimbus will store all blockchain data",
+    abbr: "d",
+    name: "data-dir"
+  .}: Option[OutDir]
 
   # Network
   eth2Network* {.
-    desc: "The Eth2 network to join"
-    defaultValueDesc: "mainnet"
-    name: "network" .}: Option[string]
+    desc: "The Eth2 network to join",
+    defaultValueDesc: "mainnet",
+    name: "network"
+  .}: Option[string]
 
   accountCacheLen* {.
     hidden,
@@ -95,8 +104,9 @@ type VerifiedProxyConf* = object
   # Consensus light sync
   # No default - Needs to be provided by the user
   trustedBlockRoot* {.
-    desc: "Recent trusted finalized block root to initialize light client from"
-    name: "trusted-block-root" .}: Eth2Digest
+    desc: "Recent trusted finalized block root to initialize light client from",
+    name: "trusted-block-root"
+  .}: Eth2Digest
 
   # (Untrusted) web3 provider
   # No default - Needs to be provided by the user
@@ -116,10 +126,10 @@ type VerifiedProxyConf* = object
 
   # (Untrusted) web3 provider
   # No default - Needs to be provided by the user
-  lcEndpoint* {.
+  lcEndpoints* {.
     desc: "command seperated URLs of the light client data provider",
-    name: "lc-endpoint"
-  .}: string
+    name: "lc-endpoints"
+  .}: UrlList
 
 #!fmt: on
 
@@ -137,7 +147,23 @@ proc parseCmdArg*(T: type Web3Url, p: string): T {.raises: [ValueError].} =
       ValueError, "Web3 url should have defined scheme (http/https/ws/wss)"
     )
 
+proc parseCmdArg*(T: type UrlList, p: string): T {.raises: [ValueError].} =
+  let urls = p.split(',')
+
+  for u in urls:
+    let
+      parsed = parseUri(u)
+      normalizedScheme = parsed.scheme.toLowerAscii()
+
+    if not (normalizedScheme == "http" or normalizedScheme == "https"):
+      raise newException(ValueError, "Light Client Endpoint should be a http(s) url")
+
+  UrlList(urls: urls)
+
 proc completeCmdArg*(T: type Web3Url, val: string): seq[string] =
+  return @[]
+
+proc completeCmdArg*(T: type UrlList, val: string): seq[string] =
   return @[]
 
 # TODO: Cannot use ClientConfig in VerifiedProxyConf due to the fact that
