@@ -41,7 +41,7 @@ proc runContext(ctx: ptr Context) {.thread.} =
       trustedBlockRoot: Eth2Digest.fromHex(jsonNode["TrustedBlockRoot"].getStr()),
       backendUrl: parseCmdArg(Web3Url, jsonNode["backendUrl"].getStr()),
       frontendUrl: parseCmdArg(Web3Url, jsonNode["frontendUrl"].getStr()),
-      lcEndpoint: jsonNode["lcEndpoint"].getStr(),
+      lcEndpoints: jsonNode["lcEndpoints"].getStr(),
       logLevel: jsonNode["LogLevel"].getStr(),
       logStdout: StdoutLogKind.Auto,
       dataDirFlag: none(OutDir),
