@@ -21,9 +21,9 @@ import
 logScope:
   topics = "SSZLCRestClient"
 
-const 
-  MaxMessageBodyBytes* = 128 * 1024 * 1024  # 128 MB (JSON encoded)
-  BASE_URL="/eth/v1/beacon/light_client"
+const
+  MaxMessageBodyBytes* = 128 * 1024 * 1024 # 128 MB (JSON encoded)
+  BASE_URL = "/eth/v1/beacon/light_client"
 
 type
   LCRestPeer = ref object
@@ -36,7 +36,9 @@ type
     peers: seq[LCRestPeer]
     urls: seq[string]
 
-func new*(T: type LCRestClient, cfg: RuntimeConfig, forkDigests: ref ForkDigests): LCRestClient =
+func new*(
+    T: type LCRestClient, cfg: RuntimeConfig, forkDigests: ref ForkDigests
+): LCRestClient =
   LCRestClient(cfg: cfg, forkDigests: forkDigests, peers: @[])
 
 proc addEndpoint*(client: LCRestClient, endpoint: string) {.raises: [ValueError].} =
@@ -57,53 +59,72 @@ proc closeAll*(client: LCRestClient) {.async: (raises: []).} =
   client.urls.setLen(0)
 
 proc getEthLCBackend*(client: LCRestClient): EthLCBackend =
-
   let
-    getLCBootstrapProc = proc(reqId: uint64, blockRoot: Eth2Digest): Future[NetRes[ForkedLightClientBootstrap]] {.async: (raises: [CancelledError]).} = 
+    getLCBootstrapProc = proc(
+        reqId: uint64, blockRoot: Eth2Digest
+    ): Future[NetRes[ForkedLightClientBootstrap]] {.async: (raises: [CancelledError]).} =
       let
         peer = client.peers[reqId mod uint64(client.peers.len)]
-        res = 
+        res =
           try:
-            await peer.restClient.getLightClientBootstrap(blockRoot, client.cfg, client.forkDigests)
+            await peer.restClient.getLightClientBootstrap(
+              blockRoot, client.cfg, client.forkDigests
+            )
           except CatchableError as e:
             raise newException(CancelledError, e.msg)
 
       ok(res)
 
-    getLCUpdatesProc = proc(reqId: uint64, startPeriod: SyncCommitteePeriod, count: uint64): Future[LightClientUpdatesByRangeResponse] {.async: (raises: [CancelledError]).} = 
+    getLCUpdatesProc = proc(
+        reqId: uint64, startPeriod: SyncCommitteePeriod, count: uint64
+    ): Future[LightClientUpdatesByRangeResponse] {.async: (raises: [CancelledError]).} =
       let
         peer = client.peers[reqId mod uint64(client.peers.len)]
-        res = 
+        res =
           try:
-            await peer.restClient.getLightClientUpdatesByRange(startPeriod, count, client.cfg, client.forkDigests)
+            await peer.restClient.getLightClientUpdatesByRange(
+              startPeriod, count, client.cfg, client.forkDigests
+            )
           except CatchableError as e:
             raise newException(CancelledError, e.msg)
 
       ok(res)
 
-    getLCFinalityProc = proc(reqId: uint64): Future[NetRes[ForkedLightClientFinalityUpdate]] {.async: (raises: [CancelledError]).} = 
+    getLCFinalityProc = proc(
+        reqId: uint64
+    ): Future[NetRes[ForkedLightClientFinalityUpdate]] {.
+        async: (raises: [CancelledError])
+    .} =
       let
         peer = client.peers[reqId mod uint64(client.peers.len)]
-        res = 
+        res =
           try:
-            await peer.restClient.getLightClientFinalityUpdate(client.cfg, client.forkDigests)
+            await peer.restClient.getLightClientFinalityUpdate(
+              client.cfg, client.forkDigests
+            )
           except CatchableError as e:
             raise newException(CancelledError, e.msg)
 
       ok(res)
 
-    getLCOptimisticProc = proc(reqId: uint64): Future[NetRes[ForkedLightClientOptimisticUpdate]] {.async: (raises: [CancelledError]).} = 
+    getLCOptimisticProc = proc(
+        reqId: uint64
+    ): Future[NetRes[ForkedLightClientOptimisticUpdate]] {.
+        async: (raises: [CancelledError])
+    .} =
       let
         peer = client.peers[reqId mod uint64(client.peers.len)]
-        res = 
+        res =
           try:
-            await peer.restClient.getLightClientOptimisticUpdate(client.cfg, client.forkDigests)
+            await peer.restClient.getLightClientOptimisticUpdate(
+              client.cfg, client.forkDigests
+            )
           except CatchableError as e:
             raise newException(CancelledError, e.msg)
 
       ok(res)
 
-    updateScoreProc = proc(reqId: uint64, value: int) = 
+    updateScoreProc = proc(reqId: uint64, value: int) =
       let peer = client.peers[reqId mod uint64(client.peers.len)]
       peer.score += value
 
@@ -114,5 +135,3 @@ proc getEthLCBackend*(client: LCRestClient): EthLCBackend =
     getLightClientOptimisticUpdate: getLCOptimisticProc,
     updateScore: updateScoreProc,
   )
-
-
