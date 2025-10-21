@@ -153,7 +153,8 @@ proc run*(
 
     # light client is set to optimistic finalization mode
     lightClient = LightClient.new(
-      rng, cfg, forkDigests, getBeaconTime, genesis_validators_root, LightClientFinalizationMode.Optimistic,
+      rng, cfg, forkDigests, getBeaconTime, genesis_validators_root,
+      LightClientFinalizationMode.Optimistic,
     )
 
     # REST client for json LC updates
