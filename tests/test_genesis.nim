@@ -196,6 +196,14 @@ proc customGenesisTest() =
       validateBlobSchedule(cg, Bpo4, 6, 9, 5007716)
       validateBlobSchedule(cg, Bpo5, 15, 20, 5007716)
 
+      check loadNetworkParams("blobschedule_amsterdam_fallback.json".findFilePath, cg)
+      validateBlobSchedule(cg, Cancun, 3, 6, 3338477)
+      validateBlobSchedule(cg, Prague, 6, 9, 5007716)
+      validateBlobSchedule(cg, Osaka, 6, 9, 5007716) # fallback to Prague
+      validateBlobSchedule(cg, Bpo1, 9, 12, 5008888)
+      validateBlobSchedule(cg, Amsterdam, 6, 9, 5007716) # fallback to Osaka, not Bpo1
+
+
 proc genesisMain() =
   genesisTest()
   customGenesisTest()
