@@ -123,10 +123,8 @@ proc startLightClient*(config: VerifiedProxyConf, engine: RpcVerificationEngine)
     # REST client for json LC updates
     lcRestClient = LCRestClient.new(cfg, forkDigests)
 
-  debugEcho config.lcEndpoint
-
   # add endpoints to the client
-  lcRestClient.addEndpoint(config.lcEndpoint)
+  lcRestClient.addEndpoints(config.lcEndpoints)
   lightClient.setBackend(lcRestClient.getEthLCBackend())
 
   # verify chain id that the proxy is connected to
