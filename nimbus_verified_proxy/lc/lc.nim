@@ -79,9 +79,9 @@ proc new*(
 
   # initialize without dumping 
   lightClient.processor = LightClientProcessor.new(
-    false, ".", ".", cfg, genesis_validators_root,
-    finalizationMode, lightClient.store, getBeaconTime, getTrustedBlockRoot,
-    onStoreInitialized, onFinalizedHeader, onOptimisticHeader,
+    false, ".", ".", cfg, genesis_validators_root, finalizationMode, lightClient.store,
+    getBeaconTime, getTrustedBlockRoot, onStoreInitialized, onFinalizedHeader,
+    onOptimisticHeader,
   )
 
   proc lightClientVerifier(
@@ -132,9 +132,9 @@ proc new*(
         GENESIS_SLOT
 
   lightClient.manager = LightClientManager.init(
-    rng, getTrustedBlockRoot, bootstrapVerifier, updateVerifier,
-    finalityVerifier, optimisticVerifier, isLightClientStoreInitialized,
-    isNextSyncCommitteeKnown, getFinalizedSlot, getOptimisticSlot, getBeaconTime,
+    rng, getTrustedBlockRoot, bootstrapVerifier, updateVerifier, finalityVerifier,
+    optimisticVerifier, isLightClientStoreInitialized, isNextSyncCommitteeKnown,
+    getFinalizedSlot, getOptimisticSlot, getBeaconTime,
   )
 
   lightClient
