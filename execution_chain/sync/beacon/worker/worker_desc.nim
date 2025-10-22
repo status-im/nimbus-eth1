@@ -30,13 +30,6 @@ type
 
   # -------------------
 
-  BeaconErrorType* = enum
-    ## For `FetchError` return code object/tuple
-    ENoException = 0
-    EPeerDisconnected                ## Exception
-    ECatchableError                  ## Exception
-    ECancelledError                  ## Exception
-
   BeaconError* = tuple
     ## Capture exception context for heders/bodies fetcher logging
     excp: BeaconErrorType
@@ -142,10 +135,22 @@ type
     apply: tuple[
       hdr, blk: uint8]
 
+  BuddyFirstFetchReq* = object
+    ## Register fetch request. This is intended to avoid sending the same (or
+    ## similar) fetch request again from the same peer that sent it previously.
+    case state*: SyncState
+    of SyncState.headers:
+      blockNumber*: BlockNumber      ## First block number
+    of SyncState.blocks:
+      blockHash*: Hash32             ## First block hash
+    else:
+      discard
+
   BeaconBuddyData* = object
     ## Local descriptor data extension
     nErrors*: BuddyErrors            ## Error register
     thruPutStats*: BuddyThruPutStats ## Throughput statistics
+    failedReq*: BuddyFirstFetchReq   ## Avoid sending the same request twice
 
   InitTarget* = tuple
     hash: Hash32                     ## Some block hash to sync towards to

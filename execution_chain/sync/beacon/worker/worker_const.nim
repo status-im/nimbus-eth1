@@ -30,6 +30,14 @@ type
     qSlotsAvail                    ## No assessment needed (e.g. few peers)
     notApplicable                  ## Not useful here
 
+  BeaconErrorType* = enum
+    ## For `FetchError` return code object/tuple
+    ENoException = 0
+    EAlreadyTriedAndFailed         ## The same action failed before
+    EPeerDisconnected              ## Exception
+    ECatchableError                ## Exception
+    ECancelledError                ## Exception
+
 const
   metricsUpdateInterval* = chronos.seconds(10)
     ## Wait at least this time before next update
