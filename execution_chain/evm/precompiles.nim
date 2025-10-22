@@ -235,17 +235,8 @@ func modExpFee(c: Computation,
 
   func mulComplexityEIP2565(x: UInt256): UInt256 =
     # gas = ceil(x div 8) ^ 2
-    result = x + 7
-    result = result div 8
+    result = (x + 7) shr 3
     result = result * result
-
-  func mulComplexityEIP7883(maxLen: UInt256): UInt256 =
-    result = 16.u256
-    if maxLen > 32.u256:
-      result = maxLen + 7
-      result = result div 8
-      result = result * result
-      result = result * 2
 
   let adjExpLen = block:
     let
@@ -260,12 +251,11 @@ func modExpFee(c: Computation,
       if first32.isZero(): 0.u256
       else: first32.log2.u256    # highest-bit in exponent
     else:
-      let expMul = if fork >= FkOsaka: 16.u256
-                   else: 8.u256
+      # shl 3 means multiply by 8
       if not first32.isZero:
-        expMul * (expLen - 32.u256) + first32.log2.u256
+        (expLen - 32.u256) shl 3 + first32.log2.u256
       else:
-        expMul * (expLen - 32.u256)
+        (expLen - 32.u256) shl 3
 
   template gasCalc(comp, divisor: untyped): untyped =
     (
@@ -273,26 +263,55 @@ func modExpFee(c: Computation,
       max(adjExpLen, 1.u256)
     ) div divisor
 
-  template gasCalc7883(comp): untyped =
-    # multiplication_complexity * iteration_count
-    max(modLen, baseLen).comp * max(adjExpLen, 1.u256)
-
   # EIP2565: modExp gas cost
-  let gasFee = if fork >= FkOsaka: gasCalc7883(mulComplexityEIP7883)
-               elif fork >= FkBerlin: gasCalc(mulComplexityEIP2565, GasQuadDivisorEIP2565)
+  let gasFee = if fork >= FkBerlin: gasCalc(mulComplexityEIP2565, GasQuadDivisorEIP2565)
                else: gasCalc(mulComplexity, GasQuadDivisor)
 
   if gasFee > high(GasInt).u256:
     return err(gasErr(OutOfGas))
 
-  let minPrice = if fork >= FkOsaka: 500.GasInt
-                 else: 200.GasInt
-
+  const minPrice =  200.GasInt
   var res = gasFee.truncate(GasInt)
   # EIP2565: modExp gas cost
   if fork >= FkBerlin and res < minPrice:
     res = minPrice
   ok(res)
+
+func modExpFeeOsaka(c: Computation,
+               baseLen, expLen, modLen: int): GasInt =
+  template data: untyped {.dirty.} =
+    c.msg.data
+
+  func mulComplexityEIP7883(maxLen: int): int =
+    result = 16
+    if maxLen > 32:
+      # complexity = ceil(maxLen div 8) ^ 2 * 2
+      result = (maxLen + 7) shr 3
+      result = (result * result) shl 1
+
+  let adjExpLen = block:
+    let
+      first32 = if baseLen < data.len:
+                  data.rangeToPadded[:UInt256](96 + baseLen, 95 + baseLen + expLen, min(expLen, 32))
+                else:
+                  0.u256
+
+    if expLen <= 32:
+      if first32.isZero(): 0
+      else: first32.log2    # highest-bit in exponent
+    else:
+      # shl 4 means multiply by 16
+      if not first32.isZero:
+        (expLen - 32) shl 4 + first32.log2
+      else:
+        (expLen - 32) shl 4
+
+  template gasCalc7883(comp): untyped =
+    # multiplication_complexity * iteration_count
+    max(modLen, baseLen).comp * max(adjExpLen, 1)
+
+  const minPrice = 500
+  max(minPrice, gasCalc7883(mulComplexityEIP7883)).GasInt
 
 func modExp(c: Computation, fork: EVMFork = FkByzantium): EvmResultVoid =
   ## Modular exponentiation precompiled contract
@@ -303,9 +322,9 @@ func modExp(c: Computation, fork: EVMFork = FkByzantium): EvmResultVoid =
     c.msg.data
 
   let # lengths Base, Exponent, Modulus
-    baseL = data.rangeToPadded[:UInt256](0, 31, 32)
-    expL  = data.rangeToPadded[:UInt256](32, 63, 32)
-    modL  = data.rangeToPadded[:UInt256](64, 95, 32)
+    baseL = data.rangeToPaddedU256(0, 31)
+    expL  = data.rangeToPaddedU256(32, 63)
+    modL  = data.rangeToPaddedU256(64, 95)
     baseLen = baseL.safeInt
     expLen  = expL.safeInt
     modLen  = modL.safeInt
@@ -314,9 +333,11 @@ func modExp(c: Computation, fork: EVMFork = FkByzantium): EvmResultVoid =
     # EIP-7823
     if baseLen > 1024 or expLen > 1024 or modLen > 1024:
       return err(prcErr(PrcInvalidParam))
-
-  let gasFee = ? modExpFee(c, baseL, expL, modL, fork)
-  ? c.gasMeter.consumeGas(gasFee, reason="ModExp Precompile")
+    let gasFee = modExpFeeOsaka(c, baseLen, expLen, modLen)
+    ? c.gasMeter.consumeGas(gasFee, reason="ModExp Precompile")
+  else:
+    let gasFee = ? modExpFee(c, baseL, expL, modL, fork)
+    ? c.gasMeter.consumeGas(gasFee, reason="ModExp Precompile")
 
   if baseLen == 0 and modLen == 0:
     # This is a special case where expLength can be very big.
