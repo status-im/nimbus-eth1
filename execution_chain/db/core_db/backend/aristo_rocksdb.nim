@@ -123,6 +123,10 @@ proc toCfOpts*(opts: DbOptions, cache: CacheRef, bulk: bool): ColFamilyOptionsRe
     cfOpts.memtableWholeKeyFiltering = true
     cfOpts.memtablePrefixBloomSizeRatio = 0.1
 
+    # Use blob files for large values to reduce write amplification.
+    cfOpts.enableBlobFiles = true
+    cfOpts.minBlobSize = 100
+
   # L0 files may overlap, so we want to push them down to L1 quickly so as to
   # not have to read/examine too many files to find data
   cfOpts.level0FileNumCompactionTrigger = 2
