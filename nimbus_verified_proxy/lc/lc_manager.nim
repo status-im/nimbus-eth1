@@ -251,8 +251,7 @@ proc query[E](
   const NUM_WORKERS = 2
   var workers: array[NUM_WORKERS, Future[bool]]
 
-  let
-    progressFut = Future[void].Raising([CancelledError]).init("lcmanProgress")
+  let progressFut = Future[void].Raising([CancelledError]).init("lcmanProgress")
   var
     numCompleted = 0
     success = false
