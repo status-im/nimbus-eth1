@@ -15,7 +15,6 @@ import
   metrics,
   std/[os, strutils],
   stew/io2,
-  ../config,
   utils,
   eth/common/[hashes, headers, blocks, transactions_rlp],
   eth/common/transactions as tx_types,

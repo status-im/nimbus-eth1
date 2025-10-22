@@ -12,10 +12,10 @@
 ## ====================================
 
 import
-  ../execution_chain/config,
+  std/[sequtils, strformat],
+  ../execution_chain/conf,
   ../execution_chain/rpc/jwt_auth,
   ../execution_chain/rpc {.all.},
-  ./replay/pp,
   chronicles,
   chronos/apps/http/httpclient as chronoshttpclient,
   nimcrypto/[hmac, sha2, utils],
