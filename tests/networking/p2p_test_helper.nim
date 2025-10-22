@@ -46,16 +46,17 @@ proc envConfig(): NimbusConf =
 
 var nextPort = 30303
 
-proc localAddress*(port: int): enode.Address =
-  let port = Port(port)
-  result = enode.Address(udpPort: port, tcpPort: port,
-                   ip: parseIpAddress("127.0.0.1"))
+func localAddress*(port: int): enode.Address =
+  enode.Address(udpPort: Port(port), tcpPort: Port(port), ip: parseIpAddress("127.0.0.1"))
 
 proc setupTestNode(rng: ref HmacDrbgContext): EthereumNode {.gcsafe.} =
   # Don't create new RNG every time in production code!
   let keys1 = KeyPair.random(rng[])
   var node = newEthereumNode(
-    keys1, localAddress(nextPort),
+    keys1,
+    Opt.some(parseIpAddress("127.0.0.1")),
+    Opt.some(Port(nextPort)),
+    Opt.some(Port(nextPort)),
     networkId = 1.u256,
     bindUdpPort = Port(nextPort),
     bindTcpPort = Port(nextPort),

@@ -105,11 +105,6 @@ proc setupP2P(nimbus: NimbusNode, conf: NimbusConf, com: CommonRef) =
     natId = NimbusName & " " & NimbusVersion
     (extIp, extTcpPort, extUdpPort) =
       setupAddress(conf.nat, conf.listenAddress, conf.tcpPort, conf.udpPort, natId)
-    address = enode.Address(
-      ip: extIp.valueOr(conf.listenAddress),
-      tcpPort: extTcpPort.valueOr(conf.tcpPort),
-      udpPort: extUdpPort.valueOr(conf.udpPort),
-    )
 
     bootstrapNodes = conf.getBootstrapNodes()
     fc = nimbus.fc
@@ -127,7 +122,7 @@ proc setupP2P(nimbus: NimbusNode, conf: NimbusConf, com: CommonRef) =
   )
 
   nimbus.ethNode = newEthereumNode(
-    keypair, address, conf.networkId, conf.agentString,
+    keypair, extIp, extTcpPort, extUdpPort, conf.networkId, conf.agentString,
     minPeers = conf.maxPeers,
     bootstrapNodes = bootstrapNodes,
     bindUdpPort = conf.udpPort, bindTcpPort = conf.tcpPort,

@@ -31,7 +31,8 @@ type
 
 proc newEthereumNode*(
     keys: KeyPair,
-    address: Address,
+    enrIp: Opt[IpAddress],
+    enrTcpPort, enrUdpPort: Opt[Port],
     networkId: NetworkId,
     clientId = "nim-eth-p2p",
     minPeers = 10,
@@ -46,8 +47,13 @@ proc newEthereumNode*(
     raiseAssert "Cannot initialize RNG"
 
   let
+    address = enode.Address(
+      ip: enrIp.valueOr(bindIp),
+      tcpPort: enrTcpPort.valueOr(bindTcpPort),
+      udpPort: enrUdpPort.valueOr(bindUdpPort),
+    )
     discovery = Eth1Discovery.new(
-      keys.seckey, address, bootstrapNodes, bindUdpPort, bindIp, rng, forkIdProcs.compatibleForkId)
+      keys.seckey, enrIp, enrTcpPort, enrUdpPort, bootstrapNodes, bindUdpPort, bindIp, rng, forkIdProcs.compatibleForkId)
     node = EthereumNode(
       keys: keys,
       networkId: networkId,
