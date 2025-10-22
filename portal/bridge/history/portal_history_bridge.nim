@@ -181,13 +181,14 @@ proc runBackfillLoopSyncMode(
 
       block bodyBlock:
         let _ = (await historyGetBlockBody(bridge.portalClient, blockTuple.header)).valueOr:
-          info "Failed to find block body content, gossiping..", error = $error
+          debug "Failed to find block body content, gossiping..", error = $error.message
           await bridge.gossipBlockBody(blockNumber, blockTuple.body)
           break bodyBlock
 
       block receiptsBlock:
         let _ = (await historyGetReceipts(bridge.portalClient, blockTuple.header)).valueOr:
-          info "Failed to find block receipts content, gossiping..", error = $error
+          debug "Failed to find block receipts content, gossiping..",
+            error = $error.message
           await bridge.gossipReceipts(
             blockNumber, blockTuple.receipts.to(StoredReceipts)
           )

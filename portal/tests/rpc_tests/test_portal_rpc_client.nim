@@ -127,7 +127,7 @@ procSuite "Portal RPC Client":
       let blockBodyRes = await tc.client.historyGetBlockBody(blockHeader)
       check:
         blockBodyRes.isErr()
-        blockBodyRes.error() == ContentNotFound
+        blockBodyRes.error().code == ContentNotFoundError.code
 
     # Test content validation failed
     block:
@@ -136,7 +136,7 @@ procSuite "Portal RPC Client":
       let blockBodyRes = await tc.client.historyGetBlockBody(blockHeader)
       check:
         blockBodyRes.isErr()
-        blockBodyRes.error() == ContentNotFound
+        blockBodyRes.error().code == ContentNotFoundError.code
 
     # When local node has the content the validation is skipped
     block:
@@ -160,7 +160,7 @@ procSuite "Portal RPC Client":
       let receiptsRes = await tc.client.historyGetReceipts(blockHeader)
       check:
         receiptsRes.isErr()
-        receiptsRes.error() == ContentNotFound
+        receiptsRes.error().code == ContentNotFoundError.code
 
     # Test content validation failed
     block:
@@ -169,7 +169,7 @@ procSuite "Portal RPC Client":
       let receiptsRes = await tc.client.historyGetReceipts(blockHeader)
       check:
         receiptsRes.isErr()
-        receiptsRes.error() == ContentNotFound
+        receiptsRes.error().code == ContentNotFoundError.code
 
     # When local node has the content the validation is skipped
     block:
