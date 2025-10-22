@@ -45,7 +45,9 @@ const
     ## Control log chatter for update messages
 
   workerIdleWaitInterval* = chronos.seconds(1)
-    ## Sleep some time in multi-mode if there is nothing to do
+  workerIdleLongWaitInterval* = chronos.seconds(5)
+    ## Sleep some time in multi-mode (i.e. concurrently running peers) if
+    ## there is nothing else to do
 
   asyncThreadSwitchTimeSlot* = chronos.nanoseconds(1)
     ## Nano-sleep to allows pseudo/async thread switch

@@ -152,7 +152,11 @@ template runPeer*(
         nSyncPeers=buddy.ctx.pool.nBuddies, state=($buddy.syncState)
 
       if rank.assessed == rankingTooLow:
-        bodyRc = workerIdleWaitInterval
+        # Tell the scheduler to wait a bit longer before next invocation.
+        # The reasoning is that in case of a low rank labelling, all slots
+        # for peers downloading can be filled with higher ranking peers. And
+        # this situation would not change immediately.
+        bodyRc = workerIdleLongWaitInterval
         break body                                # done, exit
 
       # Download and process headers and blocks
@@ -196,7 +200,7 @@ template runPeer*(
     elif buddy.ctx.pool.lastState == SyncState.idle:
       # Potentially a manual sync target set up
       if not buddy.headersTargetActivate info:
-        bodyRc = workerIdleWaitInterval
+        bodyRc = workerIdleLongWaitInterval
       break body
 
     # Idle sleep unless there is something to do
