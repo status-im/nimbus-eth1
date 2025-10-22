@@ -37,7 +37,7 @@ import
   ./common/chain_config,
   ./db/opts
 
-export net, defs, jsdefs, jsnet, nimbus_binary_common
+export net, defs, jsdefs, jsnet, nimbus_binary_common, options
 
 const NimbusCopyright* =
   "Copyright (c) 2018-" & compileYear & " Status Research & Development GmbH"
@@ -80,7 +80,7 @@ type
     V4
     V5
 
-  NimbusConf* = object of RootObj
+  ExecutionClientConf* = object
     ## Main Nimbus configuration object
     configFile {.
       separator: "ETHEREUM OPTIONS:"
@@ -553,11 +553,11 @@ func parseHexOrDec256(p: string): UInt256 {.raises: [ValueError].} =
   else:
     parse(p, UInt256, 10)
 
-proc dataDir*(config: NimbusConf): string =
+proc dataDir*(config: ExecutionClientConf): string =
   # TODO load network name from directory, when using custom network?
   string config.dataDirFlag.get(OutDir defaultDataDir("", config.networkId.name()))
 
-proc keyStoreDir*(config: NimbusConf): string =
+proc keyStoreDir*(config: ExecutionClientConf): string =
   string config.keyStoreDirFlag.get(OutDir config.dataDir() / "keystore")
 
 func parseCmdArg(T: type NetworkId, p: string): T
@@ -624,11 +624,11 @@ proc parseNetworkParams(network: string): (NetworkParams, bool) =
       quit QuitFailure
     (params, true)
 
-proc processNetworkParamsAndNetworkId(conf: var NimbusConf) =
-  if conf.network.len == 0 and conf.customNetwork.isNone:
+proc processNetworkParamsAndNetworkId(config: var ExecutionClientConf) =
+  if config.network.len == 0 and config.customNetwork.isNone:
     # Default value if none is set
-    conf.networkId = MainNet
-    conf.networkParams = networkParams(MainNet)
+    config.networkId = MainNet
+    config.networkParams = networkParams(MainNet)
     return
 
   var
@@ -636,7 +636,7 @@ proc processNetworkParamsAndNetworkId(conf: var NimbusConf) =
     id: Opt[NetworkId]
     simulatedCustomNetwork = false
 
-  for network in conf.network:
+  for network in config.network:
     if decOrHex(network):
       if id.isSome:
         warn "Network ID already set, ignore new value", id=network
@@ -650,15 +650,15 @@ proc processNetworkParamsAndNetworkId(conf: var NimbusConf) =
       params = Opt.some parsedParams
       # Simulate --custom-network while it is still not disabled.
       if custom:
-        conf.customNetwork = some parsedParams
+        config.customNetwork = some parsedParams
         simulatedCustomNetwork = true
 
-  if conf.customNetwork.isSome:
+  if config.customNetwork.isSome:
     if params.isNone:
       warn "`--custom-network` is deprecated, please use `--network`"
     elif not simulatedCustomNetwork:
       warn "Network configuration already set by `--network`, `--custom-network` override it"
-    params = if conf.customNetwork.isSome: Opt.some conf.customNetwork.get
+    params = if config.customNetwork.isSome: Opt.some config.customNetwork.get
              else: Opt.none(NetworkParams)
     if id.isNone:
       # WARNING: networkId and chainId are two distinct things
@@ -672,11 +672,11 @@ proc processNetworkParamsAndNetworkId(conf: var NimbusConf) =
   if id.isNone and params.isSome:
     id = Opt.some NetworkId(params.value.config.chainId)
 
-  if conf.customNetwork.isNone and params.isNone:
+  if config.customNetwork.isNone and params.isNone:
     params = Opt.some networkParams(id.value)
 
-  conf.networkParams = params.expect("Network params exists")
-  conf.networkId = id.expect("Network ID exists")
+  config.networkParams = params.expect("Network params exists")
+  config.networkId = id.expect("Network ID exists")
 
 proc getRpcFlags(api: openArray[string]): set[RpcFlag] =
   if api.len == 0:
@@ -691,11 +691,11 @@ proc getRpcFlags(api: openArray[string]): set[RpcFlag] =
       error "Unknown RPC API: ", name=item
       quit QuitFailure
 
-proc getRpcFlags*(conf: NimbusConf): set[RpcFlag] =
-  getRpcFlags(conf.rpcApi)
+proc getRpcFlags*(config: ExecutionClientConf): set[RpcFlag] =
+  getRpcFlags(config.rpcApi)
 
-proc getWsFlags*(conf: NimbusConf): set[RpcFlag] =
-  getRpcFlags(conf.wsApi)
+proc getWsFlags*(config: ExecutionClientConf): set[RpcFlag] =
+  getRpcFlags(config.wsApi)
 
 proc getDiscoveryFlags(api: openArray[string]): set[DiscoveryType] =
   if api.len == 0:
@@ -711,73 +711,73 @@ proc getDiscoveryFlags(api: openArray[string]): set[DiscoveryType] =
       error "Unknown discovery type: ", name=item
       quit QuitFailure
 
-proc getDiscoveryFlags*(conf: NimbusConf): set[DiscoveryType] =
-  getDiscoveryFlags(conf.discovery)
+proc getDiscoveryFlags*(config: ExecutionClientConf): set[DiscoveryType] =
+  getDiscoveryFlags(config.discovery)
 
-proc getBootstrapNodes*(conf: NimbusConf): BootstrapNodes =
+proc getBootstrapNodes*(config: ExecutionClientConf): BootstrapNodes =
   # Ignore standard bootnodes if customNetwork is loaded
-  if conf.customNetwork.isNone:
-    if conf.networkId == MainNet:
+  if config.customNetwork.isNone:
+    if config.networkId == MainNet:
       getBootstrapNodes("mainnet", result).expect("no error")
-    elif conf.networkId == SepoliaNet:
+    elif config.networkId == SepoliaNet:
       getBootstrapNodes("sepolia", result).expect("no error")
-    elif conf.networkId == HoleskyNet:
+    elif config.networkId == HoleskyNet:
       getBootstrapNodes("holesky", result).expect("no error")
-    elif conf.networkId == HoodiNet:
+    elif config.networkId == HoodiNet:
       getBootstrapNodes("hoodi", result).expect("no error")
 
-  let list = breakRepeatingList(conf.bootstrapNodes)
+  let list = breakRepeatingList(config.bootstrapNodes)
   parseBootstrapNodes(list, result).isOkOr:
     warn "Error when parsing bootstrap nodes", msg=error
 
-  if conf.bootstrapFile.string.len > 0:
-    loadBootstrapNodes(conf.bootstrapFile.string, result).isOkOr:
-      warn "Error when parsing bootstrap nodes from file", msg=error, file=conf.bootstrapFile.string
+  if config.bootstrapFile.string.len > 0:
+    loadBootstrapNodes(config.bootstrapFile.string, result).isOkOr:
+      warn "Error when parsing bootstrap nodes from file", msg=error, file=config.bootstrapFile.string
 
-proc getStaticPeers*(conf: NimbusConf): BootstrapNodes =
-  let list = breakRepeatingList(conf.staticPeers)
+proc getStaticPeers*(config: ExecutionClientConf): BootstrapNodes =
+  let list = breakRepeatingList(config.staticPeers)
   parseBootstrapNodes(list, result).isOkOr:
     warn "Error when parsing static peers", msg=error
 
-  if conf.staticPeersFile.string.len > 0:
-    loadBootstrapNodes(conf.staticPeersFile.string, result).isOkOr:
-      warn "Error when parsing static peers from file", msg=error, file=conf.staticPeersFile.string
+  if config.staticPeersFile.string.len > 0:
+    loadBootstrapNodes(config.staticPeersFile.string, result).isOkOr:
+      warn "Error when parsing static peers from file", msg=error, file=config.staticPeersFile.string
 
-func getAllowedOrigins*(conf: NimbusConf): seq[Uri] =
-  for item in repeatingList(conf.allowedOrigins):
+func getAllowedOrigins*(config: ExecutionClientConf): seq[Uri] =
+  for item in repeatingList(config.allowedOrigins):
     result.add parseUri(item)
 
-func engineApiServerEnabled*(conf: NimbusConf): bool =
-  conf.engineApiEnabled or conf.engineApiWsEnabled
+func engineApiServerEnabled*(config: ExecutionClientConf): bool =
+  config.engineApiEnabled or config.engineApiWsEnabled
 
-func shareServerWithEngineApi*(conf: NimbusConf): bool =
-  conf.engineApiServerEnabled and
-    conf.engineApiPort == conf.httpPort
+func shareServerWithEngineApi*(config: ExecutionClientConf): bool =
+  config.engineApiServerEnabled and
+    config.engineApiPort == config.httpPort
 
-func httpServerEnabled*(conf: NimbusConf): bool =
-  conf.wsEnabled or conf.rpcEnabled
+func httpServerEnabled*(config: ExecutionClientConf): bool =
+  config.wsEnabled or config.rpcEnabled
 
-proc era1Dir*(conf: NimbusConf): string =
-  string conf.era1DirFlag.get(OutDir conf.dataDir / "era1")
+proc era1Dir*(config: ExecutionClientConf): string =
+  string config.era1DirFlag.get(OutDir config.dataDir / "era1")
 
-proc eraDir*(conf: NimbusConf): string =
-  string conf.eraDirFlag.get(OutDir conf.dataDir / "era")
+proc eraDir*(config: ExecutionClientConf): string =
+  string config.eraDirFlag.get(OutDir config.dataDir / "era")
 
-func dbOptions*(conf: NimbusConf, noKeyCache = false): DbOptions =
+func dbOptions*(config: ExecutionClientConf, noKeyCache = false): DbOptions =
   DbOptions.init(
-    maxOpenFiles = conf.rocksdbMaxOpenFiles,
-    writeBufferSize = conf.rocksdbWriteBufferSize,
-    rowCacheSize = conf.rocksdbRowCacheSize,
-    blockCacheSize = conf.rocksdbBlockCacheSize,
+    maxOpenFiles = config.rocksdbMaxOpenFiles,
+    writeBufferSize = config.rocksdbWriteBufferSize,
+    rowCacheSize = config.rocksdbRowCacheSize,
+    blockCacheSize = config.rocksdbBlockCacheSize,
     rdbKeyCacheSize =
-      if noKeyCache: 0 else: conf.rdbKeyCacheSize,
-    rdbVtxCacheSize = conf.rdbVtxCacheSize,
+      if noKeyCache: 0 else: config.rdbKeyCacheSize,
+    rdbVtxCacheSize = config.rdbVtxCacheSize,
     rdbBranchCacheSize =
       # The import command does not use the key cache - better give it to branch
-      if noKeyCache: conf.rdbKeyCacheSize + conf.rdbBranchCacheSize
-      else: conf.rdbBranchCacheSize,
+      if noKeyCache: config.rdbKeyCacheSize + config.rdbBranchCacheSize
+      else: config.rdbBranchCacheSize,
 
-    rdbPrintStats = conf.rdbPrintStats,
+    rdbPrintStats = config.rdbPrintStats,
   )
 
 {.pop.}
@@ -786,9 +786,11 @@ func dbOptions*(conf: NimbusConf, noKeyCache = false): DbOptions =
 # Constructor
 #-------------------------------------------------------------------
 
-proc makeConfig*(cmdLine = commandLineParams(), ignoreUnknown = false): NimbusConf =
+proc makeConfig*(cmdLine = commandLineParams(), ignoreUnknown = false): ExecutionClientConf =
   ## Note: this function is not gc-safe
-  result = NimbusConf.loadWithBanners(ClientId, NimbusCopyright, [], ignoreUnknown, cmdLine).valueOr:
+  result = ExecutionClientConf.loadWithBanners(
+    ClientId, NimbusCopyright, [], ignoreUnknown, cmdLine
+  ).valueOr:
     writePanicLine error # Logging not yet set up
     quit QuitFailure
 
