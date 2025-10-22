@@ -264,18 +264,19 @@ proc updateActivateSyncer*(ctx: BeaconCtxRef) =
         nSyncPeers=ctx.pool.nBuddies
       return
 
-  # Failed somewhere on the way
-  ctx.hdrCache.clear()
-
-  if ctx.pool.minInitBuddies <= ctx.pool.nBuddies and
-     ctx.pool.initTarget.isNone():
-    debug "Syncer activation rejected", base=ctx.chain.baseNumber.bnStr,
-      head=ctx.chain.latestNumber.bnStr, state=ctx.hdrCache.state,
-      initTarget=ctx.pool.initTarget.isSome(), nSyncPeers=ctx.pool.nBuddies
+  if 0 < ctx.pool.minInitBuddies:
+    trace "Syncer activation rejected", base=ctx.chain.baseNumber.bnStr,
+      head=ctx.chain.latestNumber.bnStr, target=ctx.hdrCache.head.bnStr,
+      initTarget=(if ctx.pool.initTarget.isNone(): "n/a"
+                  else: ctx.pool.initTarget.get.hash.short),
+      nSyncPeersMin=ctx.pool.minInitBuddies, nSyncPeers=ctx.pool.nBuddies
   else:
     trace "Syncer activation rejected", base=ctx.chain.baseNumber.bnStr,
-      head=ctx.chain.latestNumber.bnStr, state=ctx.hdrCache.state,
+      head=ctx.chain.latestNumber.bnStr, target=ctx.hdrCache.head.bnStr,
       initTarget=ctx.pool.initTarget.isSome(), nSyncPeers=ctx.pool.nBuddies
+
+  # Failed somewhere on the way
+  ctx.hdrCache.clear()
 
 # ------------------------------------------------------------------------------
 # End

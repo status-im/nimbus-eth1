@@ -193,9 +193,11 @@ template runPeer*(
 
       # End block: `actionLoop`
 
-    else:
+    elif buddy.ctx.pool.lastState == SyncState.idle:
       # Potentially a manual sync target set up
-      buddy.headersTargetActivate info
+      if not buddy.headersTargetActivate info:
+        bodyRc = workerIdleWaitInterval
+      break body
 
     # Idle sleep unless there is something to do
     if not buddy.somethingToCollectOrUnstage():
