@@ -221,6 +221,9 @@ proc runBeaconNode(p: BeaconThreadConfig) {.thread.} =
   for node in metadata.bootstrapNodes:
     config.bootstrapNodes.add node
 
+  if config.syncHorizon.isNone:
+    config.syncHorizon = some(metadata.cfg.timeParams.defaultSyncHorizon)
+
   block:
     let res =
       if config.trustedSetupFile.isNone:
