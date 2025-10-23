@@ -47,6 +47,10 @@ type
     discv5: DiscV5
     compatibleForkId: CompatibleForkIdProc
 
+declareCounter disc_incoming_packets, "Number of incoming packets on discovery port", labels = ["type"]
+declareCounter discv5_nodes_discovered, "Number of nodes discovered via discv5", labels = ["type"]
+declareCounter discv4_nodes_discovered, "Number of nodes discovered via discv4"
+
 #------------------------------------------------------------------------------
 # Private functions
 #------------------------------------------------------------------------------
@@ -65,6 +69,7 @@ func to(node: NodeV5, _: type NodeV4): ENodeResult[NodeV4] =
   let v4 = NodeV4(
     id: node.id,
     node: ?ENode.fromEnr(node.record),
+    fromDiscv5: true,
   )
   ok(v4)
 
@@ -90,8 +95,15 @@ proc processClient(
   if discv4.isErr:
     # unhandled buf will be handled by discv5
     let addrv5 = raddr.to(AddressV5)
-    proto.discv5.receiveV5(addrv5, buf).isOkOr:
-      debug "Discovery receive error", discv4=discv4.error, discv5=error
+    let res = proto.discv5.receiveV5(addrv5, buf)
+    if res.isErr:
+      debug "Discovery receive error", discv4=discv4.error, discv5=res.error, address=addrv5
+      disc_incoming_packets.inc(labelValues = ["spam"])
+    else:
+      disc_incoming_packets.inc(labelValues = ["discv5"])
+
+  else:
+    disc_incoming_packets.inc(labelValues = ["discv4"])
 
 func eligibleNode(proto: Eth1Discovery, rec: Record): bool =
   # Filter out non `eth` node
@@ -201,15 +213,18 @@ proc lookupRandomNode*(proto: Eth1Discovery, queue: AsyncQueue[NodeV4]) {.async:
   if proto.discv4.isNil.not:
     let nodes = await proto.discv4.lookupRandom()
     for node in nodes:
+      discv4_nodes_discovered.inc()
       await queue.addLast(node)
 
   if proto.discv5.isNil.not:
     let nodes = await proto.discv5.queryRandom()
     for node in nodes:
+      discv5_nodes_discovered.inc()
       if not proto.eligibleNode(node.record):
         continue
       let v4 = node.to(NodeV4).valueOr:
         continue
+      discv5_nodes_discovered.inc(labelValues = ["eligible"])
       await queue.addLast(v4)
 
 proc getRandomBootnode*(proto: Eth1Discovery): Opt[NodeV4] =

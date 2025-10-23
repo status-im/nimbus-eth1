@@ -41,6 +41,7 @@ type
   Node* = ref object
     node*: ENode
     id*: NodeId
+    fromDiscv5*: bool
 
   RoutingTable = object
     thisNode: Node
