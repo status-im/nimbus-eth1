@@ -62,74 +62,7 @@ func getConfiguredChainId(networkMetadata: Eth2NetworkMetadata): UInt256 =
   else:
     return networkMetadata.cfg.DEPOSIT_CHAIN_ID.u256
 
-proc run*(
-    config: VerifiedProxyConf, ctx: ptr Context
-) {.raises: [CatchableError], gcsafe.} =
-  {.gcsafe.}:
-    setupLogging(config.logLevel, config.logStdout)
-
-    try:
-      notice "Launching Nimbus verified proxy",
-        version = FullVersionStr, cmdParams = commandLineParams(), config
-    except Exception:
-      notice "commandLineParams() exception"
-
-proc startLightClient*(config: VerifiedProxyConf, engine: RpcVerificationEngine) {.async.} =
-  # load constants and metadata for the selected chain
-  let metadata = loadEth2Network(config.eth2Network)
-
-  # just for short hand convenience
-  template cfg(): auto =
-    metadata.cfg
-
-  # initialize beacon node genesis data, beacon clock and forkDigests
-  let
-    genesisState =
-      try:
-        template genesisData(): auto =
-          metadata.genesis.bakedBytes
-
-        newClone(
-          readSszForkedHashedBeaconState(
-            cfg, genesisData.toOpenArray(genesisData.low, genesisData.high)
-          )
-        )
-      except CatchableError as err:
-        raiseAssert "Invalid baked-in state: " & err.msg
-
-    # getStateField reads seeks info directly from a byte array
-    # get genesis time and instantiate the beacon clock
-    genesisTime = getStateField(genesisState[], genesis_time)
-    beaconClock = BeaconClock.init(cfg.timeParams, genesisTime).valueOr:
-      error "Invalid genesis time in state", genesisTime
-      quit QuitFailure
-
-    # get the function that itself get the current beacon time
-    getBeaconTime = beaconClock.getBeaconTimeFn()
-
-    genesis_validators_root = getStateField(genesisState[], genesis_validators_root)
-    forkDigests = newClone ForkDigests.init(cfg, genesis_validators_root)
-
-    genesisBlockRoot = get_initial_beacon_block(genesisState[]).root
-
-    rng = keys.newRng()
-
-    # light client is set to optimistic finalization mode
-    lightClient = LightClient.new(
-      rng, cfg, forkDigests, getBeaconTime, genesis_validators_root,
-      LightClientFinalizationMode.Optimistic,
-    )
-
-    # REST client for json LC updates
-    lcRestClient = LCRestClient.new(cfg, forkDigests)
-
-  # add endpoints to the client
-  lcRestClient.addEndpoints(config.lcEndpoints)
-  lightClient.setBackend(lcRestClient.getEthLCBackend())
-
-  # verify chain id that the proxy is connected to
-  waitFor engine.verifyChaindId()
-
+proc connectLCToEngine*(lightClient: LightClient, engine: RpcVerificationEngine) =
   proc onFinalizedHeader(
       lightClient: LightClient, finalizedHeader: ForkedLightClientHeader
   ) =
@@ -140,7 +73,6 @@ proc startLightClient*(config: VerifiedProxyConf, engine: RpcVerificationEngine)
 
         if res.isErr():
           error "finalized header update error", error = res.error()
-
       else:
         error "pre-bellatrix light client headers do not have the execution payload header"
 
@@ -154,7 +86,6 @@ proc startLightClient*(config: VerifiedProxyConf, engine: RpcVerificationEngine)
 
         if res.isErr():
           error "header store add error", error = res.error()
-
       else:
         error "pre-bellatrix light client headers do not have the execution payload header"
 
@@ -162,21 +93,70 @@ proc startLightClient*(config: VerifiedProxyConf, engine: RpcVerificationEngine)
   lightClient.onOptimisticHeader = onOptimisticHeader
   lightClient.trustedBlockRoot = some config.trustedBlockRoot
 
-  # start the light client
-  lightClient.start()
+proc run(
+    config: VerifiedProxyConf
+) {.async: (raises: [ValueError, CatchableError]), gcsafe.} =
+  {.gcsafe.}:
+    setupLogging(config.logLevel, config.logStdout)
 
-  # run an infinite loop and wait for a stop signal
-  while true:
-    poll()
-    if ctx != nil and ctx.stop:
-      # Cleanup
-      waitFor lcRestClient.closeAll()
-      waitFor jsonRpcClient.stop()
-      waitFor jsonRpcServer.stop()
-      ctx.cleanup()
-      # Notify client that cleanup is finished
-      ctx.onHeader(nil, 2)
-      break
+    try:
+      notice "Launching Nimbus verified proxy",
+        version = FullVersionStr, cmdParams = commandLineParams(), config
+    except Exception:
+      notice "commandLineParams() exception"
+
+  let
+    engineConf = RpcVerificationEngineConf(
+      chainId: getConfiguredChainId(config.eth2Network),
+      maxBlockWalk: config.maxBlockWalk,
+      headerStoreLen: config.headerStoreLen,
+      accountCacheLen: config.accountCacheLen,
+      codeCacheLen: config.codeCacheLen,
+      storageCacheLen: config.storageCacheLen,
+    )
+    engine = RpcVerificationEngine.init(engineConf)
+    lc = LightClient.new(config.eth2Network, some config.trustedBlockRoot)
+
+    #initialize frontend and backend for JSON-RPC
+    jsonRpcClient = JsonRpcClient.init(config.backendUrl)
+    jsonRpcServer = JsonRpcServer.init(config.frontendUrl)
+
+    # initialize backend for light client updates
+    lcRestClient = LCRestClient.new(lc.cfg, lc.forkDigests)
+
+  # connect light client to LC by registering on header methods 
+  # to use engine header store
+  connectLCToEngine(lc, engine)
+
+  # add light client backend
+  lc.setBackend(lcRestClient.getEthLCBackend())
+
+  # the backend only needs the url of the RPC provider
+  engine.backend = jsonRpcClient.getEthApiBackend()
+  # inject frontend
+  jsonRpcServer.injectEngineFrontend(engine.frontend)
+
+  # start frontend and backend for JSON-RPC
+  var status = await jsonRpcClient.start()
+  if status.isErr():
+    raise newException(ValueError, status.error)
+
+  status = jsonRpcServer.start()
+  if status.isErr():
+    raise newException(ValueError, status.error)
+
+  # adding endpoints will also start the backend
+  lcRestClient.addEndpoints(config.lcEndpoints)
+
+  # verify chain id that the proxy is connected to
+  await engine.verifyChainId()
+
+  # this starts the light client manager which is
+  # an endless loop
+  try:
+    await lc.start()
+  except CancelledError as e:
+    debugEcho e.msg
 
 # noinline to keep it in stack traces
 proc main() {.noinline, raises: [CatchableError].} =

@@ -5,7 +5,7 @@
 #   * Apache v2 license (license terms in the root directory or at https://www.apache.org/licenses/LICENSE-2.0).
 # at your option. This file may not be copied, modified, or distributed except according to those terms.
 
-import 
+import
   algorithm,
   json_serialization,
   chronos,
@@ -25,7 +25,7 @@ import
 type
   CallBackProc = proc(status: int, res: cstring) {.cdecl, gcsafe, raises: [].}
 
-  Task = ref object 
+  Task = ref object
     status: int
     response: string
     finished: bool
@@ -35,7 +35,7 @@ type
     lock: Lock
     tasks: seq[Task]
     stop: bool
-    frontend : EthApiFrontend
+    frontend: EthApiFrontend
 
 proc NimMain() {.importc, exportc, dynlib.}
 
@@ -98,7 +98,7 @@ proc eth_blockNumber(ctx: ptr Context, cb: CallBackProc) {.exported.} =
 
   let fut = ctx.frontend.eth_blockNumber()
 
-  fut.addCallback proc (_: pointer) {.gcsafe.} =
+  fut.addCallback proc(_: pointer) {.gcsafe.} =
     try:
       ctx.lock.acquire()
       if fut.cancelled():
@@ -120,7 +120,7 @@ proc pollAsyncTaskEngine(ctx: ptr Context) {.exported.} =
   var delList: seq[int] = @[]
 
   let taskLen = ctx.tasks.len
-  for idx in 0..<taskLen:
+  for idx in 0 ..< taskLen:
     let task = ctx.tasks[idx]
     if task.finished:
       try:
@@ -141,22 +141,29 @@ proc pollAsyncTaskEngine(ctx: ptr Context) {.exported.} =
   if ctx.tasks.len > 0:
     poll()
 
-
-proc load(T: type VerifiedProxyConf, configJson: string): T {.raises: [CatchableError, ValueError]}=
+proc load(
+    T: type VerifiedProxyConf, configJson: string
+): T {.raises: [CatchableError, ValueError].} =
   let jsonNode = parseJson($configJson)
 
   let
     eth2Network = some(jsonNode.getOrDefault("Eth2Network").getStr("mainnet"))
-    trustedBlockRoot = 
+    trustedBlockRoot =
       if jsonNode.contains("TrustedBlockRoot"):
         Eth2Digest.fromHex(jsonNode["TrustedBlockRoot"].getStr())
       else:
-        raise newException(ValueError, "`TrustedBlockRoot` not specified in JSON config")
-    backendUrl = 
+        raise
+          newException(ValueError, "`TrustedBlockRoot` not specified in JSON config")
+    backendUrl =
       if jsonNode.contains("BackendUrl"):
         parseCmdArg(Web3Url, jsonNode["BackendUrl"].getStr())
       else:
         raise newException(ValueError, "`BackendUrl` not specified in JSON config")
+    lcEndpoints =
+      if jsonNode.contains("LcEndpoints"):
+        parseCmdArg(UrlList, jsonNode["LcEndpoints"].getStr())
+      else:
+        raise newException(ValueError, "`LcEndpoints` not specified in JSON config")
     logLevel = jsonNode.getOrDefault("LogLevel").getStr("INFO")
     defaultListenAddress = (static parseIpAddress("0.0.0.0"))
 
@@ -176,7 +183,9 @@ proc load(T: type VerifiedProxyConf, configJson: string): T {.raises: [Catchable
     discv5Enabled: true,
   )
 
-proc run(ctx: ptr Context, configJson: string) {.async: (raises: [ValueError, CancelledError, CatchableError]).} =
+proc run(
+    ctx: ptr Context, configJson: string
+) {.async: (raises: [ValueError, CancelledError, CatchableError]).} =
   try:
     initLib()
   except Exception as err:
@@ -198,7 +207,7 @@ proc run(ctx: ptr Context, configJson: string) {.async: (raises: [ValueError, Ca
     engine = RpcVerificationEngine.init(engineConf)
     jsonRpcClient = JsonRpcClient.init(config.backendUrl)
 
- # the backend only needs the url to connect to
+  # the backend only needs the url to connect to
   engine.backend = jsonRpcClient.getEthApiBackend()
 
   # inject the frontend into c context
@@ -211,7 +220,9 @@ proc run(ctx: ptr Context, configJson: string) {.async: (raises: [ValueError, Ca
   # FIXME: throws illegal storage access SEGFAULT when used as a library but not when run as a nim program.
   # await startLightClient(config, engine)
 
-proc startVerifProxy(ctx: ptr Context, configJson: cstring, cb: CallBackProc) {.exported.} =
+proc startVerifProxy(
+    ctx: ptr Context, configJson: cstring, cb: CallBackProc
+) {.exported.} =
   try:
     waitFor run(ctx, $configJson)
   except:
@@ -234,7 +245,7 @@ proc nonBusySleep(ctx: ptr Context, secs: cint, cb: CallBackProc) {.exported.} =
 
   let fut = sleepAsync((secs).seconds)
 
-  fut.addCallback proc (_: pointer) {.gcsafe.} =
+  fut.addCallback proc(_: pointer) {.gcsafe.} =
     try:
       ctx.lock.acquire()
       if fut.cancelled:

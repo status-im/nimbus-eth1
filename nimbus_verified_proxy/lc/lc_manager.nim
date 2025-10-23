@@ -82,7 +82,6 @@ type
     getFinalizedSlot: GetSlotCallback
     getOptimisticSlot: GetSlotCallback
     getBeaconTime: GetBeaconTimeFn
-    loopFuture: Future[void].Raising([CancelledError])
 
 func init*(
     T: type LightClientManager,
@@ -282,7 +281,10 @@ proc query[E](
       workers[i].complete(false)
 
   # Wait for any worker to report progress, or for all workers to finish
-  waitFor progressFut
+  try:
+    waitFor progressFut
+  except CancelledError as e:
+    discard # will only cancel because all workers failed
 
   # cancel all workers
   for i in 0 ..< NUM_WORKERS:
@@ -381,13 +383,6 @@ proc loop(self: LightClientManager) {.async: (raises: [CancelledError]).} =
     # check for updates every slot
     await sleepAsync(chronos.seconds(int64(SECONDS_PER_SLOT)))
 
-proc start*(self: var LightClientManager) =
+proc start*(self: LightClientManager) {.async: (raises: [CancelledError]).} =
   ## Start light client manager's loop.
-  doAssert self.loopFuture == nil
-  self.loopFuture = self.loop()
-
-proc stop*(self: var LightClientManager) {.async: (raises: []).} =
-  ## Stop light client manager's loop.
-  if self.loopFuture != nil:
-    await noCancel self.loopFuture.cancelAndWait()
-    self.loopFuture = nil
+  await self.loop()
