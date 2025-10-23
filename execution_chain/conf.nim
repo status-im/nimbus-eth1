@@ -37,7 +37,7 @@ import
   ./common/chain_config,
   ./db/opts
 
-export net, defs, jsdefs, jsnet, nimbus_binary_common, options
+export net, defs, jsdefs, jsnet, nat_toml, nimbus_binary_common, options
 
 const NimbusCopyright* =
   "Copyright (c) 2018-" & compileYear & " Status Research & Development GmbH"
@@ -471,6 +471,12 @@ type
           " is auto-generated."
         defaultValueDesc: "\"jwt.hex\" in the data directory (see --data-dir)"
         name: "jwt-secret" .}: Option[InputFile]
+
+      jwtSecretValue* {.
+        hidden
+        desc: "Hex string with jwt secret"
+        defaultValueDesc: "\"jwt.hex\" in the data directory (see --data-dir)"
+        name: "debug-jwt-secret-value" .}: Option[string]
 
       beaconSyncTarget* {.
         hidden

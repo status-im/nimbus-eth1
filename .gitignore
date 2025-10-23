@@ -51,3 +51,5 @@ tests/fixtures/eest_static
 tests/fixtures/eest_stable
 tests/fixtures/eest_develop
 tests/fixtures/eest_devnet
+
+execution_chain/nimbus
