@@ -1,15 +1,15 @@
 let
-  nixpkgsFn = import (fetchTarball {
-    url = https://github.com/NixOS/nixpkgs/archive/85f3d86bea70fe0d76a7e3520966c58604f8e5e9.tar.gz;
-    sha256 = "1iacnd7ym6c5s9vizyiff0lmxjrlgh5gpya88mlavgvdppkcaiyn";
-  });
+  # nixpkgsFn = import (fetchTarball {
+  #   url = https://github.com/NixOS/nixpkgs/archive/85f3d86bea70fe0d76a7e3520966c58604f8e5e9.tar.gz;
+  #   sha256 = "1iacnd7ym6c5s9vizyiff0lmxjrlgh5gpya88mlavgvdppkcaiyn";
+  # });
 
   # nixcrpkgs = import (fetchTarball {
   #  url = https://github.com/DavidEGrayson/nixcrpkgs/archive/606e5fac74204643c8ca48dd73ce239b2f821d69.tar.gz;
   #  sha256 = "19dn7i200xsv8s92kxymv3nd87jncmp3ki8pw77v2rxfvn8ldg34";
   # }) {};
 
-  nixpkgs = nixpkgsFn {};
+  nixpkgs = import <nixpkgs>;
 
   targets = {
     windows = {
