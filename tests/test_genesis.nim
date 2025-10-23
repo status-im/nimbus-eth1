@@ -11,7 +11,6 @@
 import
   std/[os],
   unittest2,
-  ../execution_chain/config,
   ../execution_chain/utils/utils,
   ../execution_chain/common/common
 

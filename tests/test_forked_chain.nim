@@ -15,7 +15,7 @@ import
   testutils,
   std/[os, strutils],
   ../execution_chain/common,
-  ../execution_chain/config,
+  ../execution_chain/conf,
   ../execution_chain/utils/utils,
   ../execution_chain/core/chain/forked_chain,
   ../execution_chain/core/chain/forked_chain/chain_desc,
@@ -33,30 +33,30 @@ const
 
 type
   TestEnv = object
-    conf: NimbusConf
+    config: ExecutionClientConf
 
 proc setupEnv(): TestEnv =
   let
-    conf = makeConfig(@[
+    config = makeConfig(@[
       "--network:" & genesisFile
     ])
 
-  TestEnv(conf: conf)
+  TestEnv(config: config)
 
 proc newCom(env: TestEnv): CommonRef =
   CommonRef.new(
       newCoreDbRef DefaultDbMemory,
       nil,
-      env.conf.networkId,
-      env.conf.networkParams
+      env.config.networkId,
+      env.config.networkParams
     )
 
 proc newCom(env: TestEnv, db: CoreDbRef): CommonRef =
   CommonRef.new(
       db,
       nil,
-      env.conf.networkId,
-      env.conf.networkParams
+      env.config.networkId,
+      env.config.networkParams
     )
 
 proc makeBlk(txFrame: CoreDbTxRef, number: BlockNumber, parentBlk: Block): Block =

@@ -13,17 +13,12 @@ import
   ../execution_chain/compile_info
 
 import
-  std/[net, options],
   chronicles,
   eth/net/nat,
   metrics,
   stew/byteutils,
   kzg4844/kzg,
-  ./rpc,
-  ./version_info,
-  ./constants,
-  ./nimbus_desc,
-  ./nimbus_import,
+  ./[conf, constants, nimbus_desc, nimbus_import, rpc, version_info],
   ./core/block_import,
   ./core/chain/forked_chain/chain_serialize,
   ./db/core_db/persistent,
@@ -60,24 +55,24 @@ template onException(
 # Private functions
 # ------------------------------------------------------------------------------
 
-proc basicServices(nimbus: NimbusNode, conf: NimbusConf, com: CommonRef) =
+proc basicServices(nimbus: NimbusNode, config: ExecutionClientConf, com: CommonRef) =
   # Setup the chain
   let fc = ForkedChainRef.init(com,
-    eagerStateRoot = conf.eagerStateRootCheck,
-    persistBatchSize = conf.persistBatchSize,
-    dynamicBatchSize = conf.dynamicBatchSize,
+    eagerStateRoot = config.eagerStateRootCheck,
+    persistBatchSize = config.persistBatchSize,
+    dynamicBatchSize = config.dynamicBatchSize,
     enableQueue = true)
-  if conf.deserializeFcState:
+  if config.deserializeFcState:
     fc.deserialize().isOkOr:
       warn "Loading block DAG from database", msg=error
   else:
-    warn "Skipped loading of block DAG from database", deserializeFcState = conf.deserializeFcState
+    warn "Skipped loading of block DAG from database", deserializeFcState = config.deserializeFcState
 
   nimbus.fc = fc
   # Setup history expiry and portal
 
   QuitFailure.onException("Cannot initialise RPC client history"):
-    nimbus.fc.portal = HistoryExpiryRef.init(conf, com)
+    nimbus.fc.portal = HistoryExpiryRef.init(config, com)
 
   # txPool must be informed of active head
   # so it can know the latest account state
@@ -85,33 +80,28 @@ proc basicServices(nimbus: NimbusNode, conf: NimbusConf, com: CommonRef) =
   nimbus.txPool = TxPoolRef.new(nimbus.fc)
   nimbus.beaconEngine = BeaconEngineRef.new(nimbus.txPool)
 
-proc manageAccounts(nimbus: NimbusNode, conf: NimbusConf) =
-  if conf.keyStoreDir.len > 0:
-    nimbus.accountsManager[].loadKeystores(conf.keyStoreDir).isOkOr:
+proc manageAccounts(nimbus: NimbusNode, config: ExecutionClientConf) =
+  if config.keyStoreDir.len > 0:
+    nimbus.accountsManager[].loadKeystores(config.keyStoreDir).isOkOr:
       fatal "Load keystore error", msg = error
       quit(QuitFailure)
 
-  if string(conf.importKey).len > 0:
-    nimbus.accountsManager[].importPrivateKey(string conf.importKey).isOkOr:
+  if string(config.importKey).len > 0:
+    nimbus.accountsManager[].importPrivateKey(string config.importKey).isOkOr:
       fatal "Import private key error", msg = error
       quit(QuitFailure)
 
-proc setupP2P(nimbus: NimbusNode, conf: NimbusConf, com: CommonRef) =
+proc setupP2P(nimbus: NimbusNode, config: ExecutionClientConf, com: CommonRef) =
   ## Creating P2P Server
   let
-    keypair = nimbus.rng[].getNetKeys(conf.netKey).valueOr:
+    keypair = nimbus.rng[].getNetKeys(config.netKey).valueOr:
       fatal "Get network keys error", msg = error
       quit(QuitFailure)
     natId = NimbusName & " " & NimbusVersion
     (extIp, extTcpPort, extUdpPort) =
-      setupAddress(conf.nat, conf.listenAddress, conf.tcpPort, conf.udpPort, natId)
-    address = enode.Address(
-      ip: extIp.valueOr(conf.listenAddress),
-      tcpPort: extTcpPort.valueOr(conf.tcpPort),
-      udpPort: extUdpPort.valueOr(conf.udpPort),
-    )
+      setupAddress(config.nat, config.listenAddress, config.tcpPort, config.udpPort, natId)
 
-    bootstrapNodes = conf.getBootstrapNodes()
+    bootstrapNodes = config.getBootstrapNodes()
     fc = nimbus.fc
 
   func forkIdProc(): ForkID =
@@ -127,11 +117,11 @@ proc setupP2P(nimbus: NimbusNode, conf: NimbusConf, com: CommonRef) =
   )
 
   nimbus.ethNode = newEthereumNode(
-    keypair, address, conf.networkId, conf.agentString,
-    minPeers = conf.maxPeers,
+    keypair, extIp, extTcpPort, extUdpPort, config.networkId, config.agentString,
+    minPeers = config.maxPeers,
     bootstrapNodes = bootstrapNodes,
-    bindUdpPort = conf.udpPort, bindTcpPort = conf.tcpPort,
-    bindIp = conf.listenAddress,
+    bindUdpPort = config.udpPort, bindTcpPort = config.tcpPort,
+    bindIp = config.listenAddress,
     rng = nimbus.rng,
     forkIdProcs = forkIdProcs)
 
@@ -139,27 +129,27 @@ proc setupP2P(nimbus: NimbusNode, conf: NimbusConf, com: CommonRef) =
   nimbus.wire = nimbus.ethNode.addEthHandlerCapability(nimbus.txPool)
 
   # Connect directly to the static nodes
-  let staticPeers = conf.getStaticPeers()
+  let staticPeers = config.getStaticPeers()
   if staticPeers.len > 0:
     nimbus.peerManager = PeerManagerRef.new(
       nimbus.ethNode.peerPool,
-      conf.reconnectInterval,
-      conf.reconnectMaxRetry,
+      config.reconnectInterval,
+      config.reconnectMaxRetry,
       staticPeers
     )
     nimbus.peerManager.start()
 
   # Start Eth node
-  if conf.maxPeers > 0:
-    let discovery = conf.getDiscoveryFlags()
+  if config.maxPeers > 0:
+    let discovery = config.getDiscoveryFlags()
     nimbus.ethNode.connectToNetwork(
       enableDiscV4 = DiscoveryType.V4 in discovery,
       enableDiscV5 = DiscoveryType.V5 in discovery,
     )
 
   # Initalise beacon sync descriptor.
-  var syncerShouldRun = (conf.maxPeers > 0 or staticPeers.len > 0) and
-                        conf.engineApiServerEnabled()
+  var syncerShouldRun = (config.maxPeers > 0 or staticPeers.len > 0) and
+                        config.engineApiServerEnabled()
 
   # The beacon sync descriptor might have been pre-allocated with additional
   # features. So do not override.
@@ -169,13 +159,13 @@ proc setupP2P(nimbus: NimbusNode, conf: NimbusConf, com: CommonRef) =
     syncerShouldRun = true
 
   # Configure beacon syncer.
-  nimbus.beaconSyncRef.config(nimbus.ethNode, nimbus.fc, conf.maxPeers)
+  nimbus.beaconSyncRef.config(nimbus.ethNode, nimbus.fc, config.maxPeers)
 
   # Optional for pre-setting the sync target (e.g. for debugging)
-  if conf.beaconSyncTarget.isSome():
+  if config.beaconSyncTarget.isSome():
     syncerShouldRun = true
-    let hex = conf.beaconSyncTarget.unsafeGet
-    if not nimbus.beaconSyncRef.configTarget(hex, conf.beaconSyncTargetIsFinal):
+    let hex = config.beaconSyncTarget.unsafeGet
+    if not nimbus.beaconSyncRef.configTarget(hex, config.beaconSyncTargetIsFinal):
       fatal "Error parsing hash32 argument for --debug-beacon-sync-target",
         hash32=hex
       quit QuitFailure
@@ -185,14 +175,14 @@ proc setupP2P(nimbus: NimbusNode, conf: NimbusConf, com: CommonRef) =
   if not syncerShouldRun:
     nimbus.beaconSyncRef = BeaconSyncRef(nil)
 
-proc init*(nimbus: NimbusNode, conf: NimbusConf, com: CommonRef) =
+proc init*(nimbus: NimbusNode, config: ExecutionClientConf, com: CommonRef) =
   nimbus.accountsManager = new AccountsManager
   nimbus.rng = newRng()
 
-  basicServices(nimbus, conf, com)
-  manageAccounts(nimbus, conf)
-  setupP2P(nimbus, conf, com)
-  setupRpc(nimbus, conf, com)
+  basicServices(nimbus, config, com)
+  manageAccounts(nimbus, config)
+  setupP2P(nimbus, config, com)
+  setupRpc(nimbus, config, com)
 
   # Not starting syncer if there is definitely no way to run it. This
   # avoids polling (i.e. waiting for instructions) and some logging.
@@ -200,12 +190,12 @@ proc init*(nimbus: NimbusNode, conf: NimbusConf, com: CommonRef) =
       not nimbus.beaconSyncRef.start():
     nimbus.beaconSyncRef = BeaconSyncRef(nil)
 
-proc init*(T: type NimbusNode, conf: NimbusConf, com: CommonRef): T =
+proc init*(T: type NimbusNode, config: ExecutionClientConf, com: CommonRef): T =
   let nimbus = T()
-  nimbus.init(conf, com)
+  nimbus.init(config, com)
   nimbus
 
-proc preventLoadingDataDirForTheWrongNetwork(db: CoreDbRef; conf: NimbusConf) =
+proc preventLoadingDataDirForTheWrongNetwork(db: CoreDbRef; config: ExecutionClientConf) =
   proc writeDataDirId(kvt: CoreDbTxRef, calculatedId: Hash32) =
     info "Writing data dir ID", ID=calculatedId
     kvt.put(dataDirIdKey().toOpenArray, calculatedId.data).isOkOr:
@@ -215,13 +205,13 @@ proc preventLoadingDataDirForTheWrongNetwork(db: CoreDbRef; conf: NimbusConf) =
 
   let
     kvt = db.baseTxFrame()
-    calculatedId = calcHash(conf.networkId, conf.networkParams)
+    calculatedId = calcHash(config.networkId, config.networkParams)
     dataDirIdBytes = kvt.get(dataDirIdKey().toOpenArray).valueOr:
       # an empty database
       writeDataDirId(kvt, calculatedId)
       return
 
-  if conf.rewriteDatadirId:
+  if config.rewriteDatadirId:
     writeDataDirId(kvt, calculatedId)
     return
 
@@ -231,50 +221,50 @@ proc preventLoadingDataDirForTheWrongNetwork(db: CoreDbRef; conf: NimbusConf) =
       expected=calculatedId
     quit(QuitFailure)
 
-proc setupCommonRef*(conf: NimbusConf, taskpool: Taskpool): CommonRef =
+proc setupCommonRef*(config: ExecutionClientConf, taskpool: Taskpool): CommonRef =
   # Trusted setup is needed for processing Cancun+ blocks
   # If user not specify the trusted setup, baked in
   # trusted setup will be loaded, lazily.
-  if conf.trustedSetupFile.isSome:
-    let fileName = conf.trustedSetupFile.get()
+  if config.trustedSetupFile.isSome:
+    let fileName = config.trustedSetupFile.get()
     let res = kzg.loadTrustedSetup(fileName, 0)
     if res.isErr:
       fatal "Cannot load Kzg trusted setup from file", msg=res.error
       quit(QuitFailure)
 
   let coreDB = AristoDbRocks.newCoreDbRef(
-      conf.dataDir,
-      conf.dbOptions(noKeyCache = conf.cmd == NimbusCmd.`import`))
+      config.dataDir,
+      config.dbOptions(noKeyCache = config.cmd == NimbusCmd.`import`))
 
-  preventLoadingDataDirForTheWrongNetwork(coreDB, conf)
+  preventLoadingDataDirForTheWrongNetwork(coreDB, config)
 
   let com = CommonRef.new(
     db = coreDB,
     taskpool = taskpool,
-    networkId = conf.networkId,
-    params = conf.networkParams,
-    statelessProviderEnabled = conf.statelessProviderEnabled,
-    statelessWitnessValidation = conf.statelessWitnessValidation)
+    networkId = config.networkId,
+    params = config.networkParams,
+    statelessProviderEnabled = config.statelessProviderEnabled,
+    statelessWitnessValidation = config.statelessWitnessValidation)
 
-  if conf.extraData.len > 32:
+  if config.extraData.len > 32:
     warn "ExtraData exceeds 32 bytes limit, truncate",
-      extraData=conf.extraData,
-      len=conf.extraData.len
+      extraData=config.extraData,
+      len=config.extraData.len
 
-  if conf.gasLimit > GAS_LIMIT_MAXIMUM or
-     conf.gasLimit < GAS_LIMIT_MINIMUM:
+  if config.gasLimit > GAS_LIMIT_MAXIMUM or
+     config.gasLimit < GAS_LIMIT_MINIMUM:
     warn "GasLimit not in expected range, truncate",
       min=GAS_LIMIT_MINIMUM,
       max=GAS_LIMIT_MAXIMUM,
-      get=conf.gasLimit
+      get=config.gasLimit
 
-  com.extraData = conf.extraData
-  com.gasLimit = conf.gasLimit
+  com.extraData = config.extraData
+  com.gasLimit = config.gasLimit
 
   com
 
-template displayLaunchingInfo(conf: NimbusConf) =
-  info "Launching execution client", version = FullVersionStr, conf
+template displayLaunchingInfo(config: ExecutionClientConf) =
+  info "Launching execution client", version = FullVersionStr, config
 
 # ------------------------------------------------------------------------------
 # Public functions, `main()` API
@@ -282,18 +272,24 @@ template displayLaunchingInfo(conf: NimbusConf) =
 
 type StopFuture = Future[void].Raising([CancelledError])
 
-proc runExeClient*(conf: NimbusConf, com: CommonRef, stopper: StopFuture, displayLaunchingInfo: static[bool] = false, nimbus = NimbusNode(nil)) =
+proc runExeClient*(
+    config: ExecutionClientConf,
+    com: CommonRef,
+    stopper: StopFuture,
+    displayLaunchingInfo: static[bool] = false,
+    nimbus = NimbusNode(nil),
+) =
   ## Launches and runs the execution client for pre-configured `nimbus` and
   ## `conf` argument descriptors.
   ##
   when displayLaunchingInfo:
-    displayLaunchingInfo(conf)
+    displayLaunchingInfo(config)
 
   var nimbus = nimbus
   if nimbus.isNil:
-    nimbus = NimbusNode.init(conf, com)
+    nimbus = NimbusNode.init(config, com)
   else:
-    nimbus.init(conf, com)
+    nimbus.init(config, com)
 
   defer:
     let
