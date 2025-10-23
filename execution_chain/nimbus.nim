@@ -16,7 +16,7 @@ proc workaround*(): int {.exportc.} =
   return int(Future[Quantity]().internalValue)
 
 import
-  std/[os, net, options, terminal, typetraits],
+  std/[os, net, options, strformat, terminal, typetraits],
   stew/io2,
   chronos/threadsync,
   chronicles,
@@ -50,6 +50,9 @@ type NStartUpCmd* {.pure.} = enum
 
 #!fmt: off
 type
+  # Some of these parameters are here for their --help value only - a second
+  # parsing will happen within each thread assigning them to their actual end
+  # targets
   NimbusConf = object
     configFile* {.
       desc: "Loads the configuration from a TOML file"
@@ -59,7 +62,6 @@ type
       desc: "The directory where nimbus will store all blockchain data"
       abbr: "d"
       name: "data-dir" .}: Option[OutDir]
-
 
     eth2Network* {.
       desc: "The network to join (mainnet, hoodi, sepolia, custom/folder)"
@@ -132,6 +134,12 @@ type
       defaultValue: true
       name: "el-sync" .}: bool
 
+    engineApiEnabled* {.
+      hidden
+      desc: "Enable the Engine API"
+      defaultValue: false
+      name: "engine-api" .}: bool
+
     case cmd* {.command, defaultValue: NStartUpCmd.nimbus.}: NStartUpCmd
     of nimbus:
       discard
@@ -186,8 +194,9 @@ proc runBeaconNode(p: BeaconThreadConfig) {.thread.} =
 
   let rng = HmacDrbgContext.new()
 
-  let engineUrl =
-    EngineApiUrl.init("http://127.0.0.1:8551/", Opt.some(@(distinctBase(jwtKey))))
+  let engineUrl = EngineApiUrl.init(
+    &"http://127.0.0.1:{defaultEngineApiPort}/", Opt.some(@(distinctBase(jwtKey)))
+  )
 
   config.metricsEnabled = false
   config.elUrls =
@@ -257,6 +266,9 @@ proc runExecutionClient(p: ExecutionThreadConfig) {.thread.} =
   var config = makeConfig(ignoreUnknown = true)
   config.metricsEnabled = false
   config.engineApiEnabled = true
+  config.engineApiPort = Port(defaultEngineApiPort)
+  config.engineApiAddress = defaultAdminListenAddress
+  config.jwtSecret.reset()
   config.jwtSecretValue = some toHex(distinctBase(jwtKey))
   config.agentString = "nimbus"
   config.tcpPort = p.tcpPort
@@ -341,6 +353,9 @@ proc main() {.noinline, raises: [CatchableError].} =
     # Nim GC metrics (for the main thread) will be collected in onSecond(), but
     # we disable piggy-backing on other metrics here.
     setSystemMetricsAutomaticUpdate(false)
+
+    if config.engineApiEnabled:
+      warn "Engine API is not available when running internal beacon node"
 
     var bnThread: Thread[BeaconThreadConfig]
     let bnStop = ThreadSignalPtr.new().expect("working ThreadSignalPtr")
