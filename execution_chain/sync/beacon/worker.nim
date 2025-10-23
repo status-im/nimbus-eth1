@@ -55,7 +55,7 @@ proc start*(buddy: BeaconBuddyRef; info: static[string]): bool =
 proc stop*(buddy: BeaconBuddyRef; info: static[string]) =
   ## Clean up this peer
   if not buddy.ctx.hibernate: debug info & ": release peer", peer=buddy.peer,
-    throughput=buddy.only.thruPutStats.toMeanVar.psStr,
+    thPut=buddy.only.thPutStats.toMeanVar.psStr,
     nSyncPeers=(buddy.ctx.pool.nBuddies-1), state=($buddy.syncState)
   buddy.stopBuddy()
 
@@ -76,7 +76,7 @@ proc runTicker*(ctx: BeaconCtxRef; info: static[string]) =
     if ctx.pool.lastNoPeersLog + noPeersLogWaitInterval < now:
       ctx.pool.lastNoPeersLog = now
       debug info & ": no sync peers yet",
-        elapsed=(now - ctx.pool.lastPeerSeen).toStr,
+        ela=(now - ctx.pool.lastPeerSeen).toStr,
         nOtherPeers=ctx.node.peerPool.connectedNodes.len
 
 
@@ -129,7 +129,11 @@ proc runPool*(
   true # stop
 
 
-template runPeer*(buddy: BeaconBuddyRef; info: static[string]): Duration =
+template runPeer*(
+    buddy: BeaconBuddyRef;
+    rank: PeerRanking;
+    info: static[string];
+      ): Duration =
   ## Async/template
   ##
   ## This peer worker method is repeatedly invoked (exactly one per peer) while
@@ -141,16 +145,18 @@ template runPeer*(buddy: BeaconBuddyRef; info: static[string]): Duration =
   block body:
     if buddy.somethingToCollectOrUnstage():
 
-      # Classify sync peer (aka buddy) performance
-      let (fetchPerf {.inject.}, rank) = buddy.classifyForFetching()
-
       trace info & ": start processing", peer=buddy.peer,
-        throughput=buddy.only.thruPutStats.toMeanVar.psStr,
-        fetchPerf, rank=(if rank < 0: "n/a" else: $rank),
+        thPut=buddy.only.thPutStats.toMeanVar.psStr,
+        rankInfo=($rank.assessed),
+        rank=(if rank.ranking < 0: "n/a" else: $rank.ranking),
         nSyncPeers=buddy.ctx.pool.nBuddies, state=($buddy.syncState)
 
-      if fetchPerf == rankingTooLow:
-        bodyRc = workerIdleWaitInterval
+      if rank.assessed == rankingTooLow:
+        # Tell the scheduler to wait a bit longer before next invocation.
+        # The reasoning is that in case of a low rank labelling, all slots
+        # for peers downloading can be filled with higher ranking peers. And
+        # this situation would not change immediately.
+        bodyRc = workerIdleLongWaitInterval
         break body                                # done, exit
 
       # Download and process headers and blocks
@@ -191,9 +197,11 @@ template runPeer*(buddy: BeaconBuddyRef; info: static[string]): Duration =
 
       # End block: `actionLoop`
 
-    else:
+    elif buddy.ctx.pool.lastState == SyncState.idle:
       # Potentially a manual sync target set up
-      buddy.headersTargetActivate info
+      if not buddy.headersTargetActivate info:
+        bodyRc = workerIdleLongWaitInterval
+      break body
 
     # Idle sleep unless there is something to do
     if not buddy.somethingToCollectOrUnstage():

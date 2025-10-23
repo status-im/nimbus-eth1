@@ -25,12 +25,17 @@ import
 proc getBlockHeaders(
     buddy: BeaconBuddyRef;
     req: BlockHeadersRequest;
+    bn: BlockNumber;
       ): Future[Result[FetchHeadersData,BeaconError]]
       {.async: (raises: []).} =
   ## Wrapper around `getBlockHeaders()`
   let start = Moment.now()
-  var resp: BlockHeadersPacket
 
+  if buddy.only.failedReq.state == SyncState.headers and
+     buddy.only.failedReq.blockNumber == bn:
+    return err((EAlreadyTriedAndFailed,"","",Moment.now()-start))
+
+  var resp: BlockHeadersPacket
   try:
     resp = (await buddy.peer.getBlockHeaders(
       req, fetchHeadersRlpxTimeout)).valueOr:
@@ -89,7 +94,7 @@ template fetchHeadersReversed*(
     trace trEthSendSendingGetBlockHeaders & " reverse", peer, req=ivReq,
       nReq=req.maxResults, hash=topHash.toStr, nErrors=buddy.nErrors.fetch.hdr
 
-    let rc = await buddy.getBlockHeaders(req)
+    let rc = await buddy.getBlockHeaders(req, BlockNumber ivReq.maxPt)
     var elapsed: Duration
     if rc.isOk:
       elapsed = rc.value.elapsed
@@ -104,10 +109,14 @@ template fetchHeadersReversed*(
           buddy.ctrl.zombie = true
         of ECatchableError:
           buddy.hdrFetchRegisterError()
+          discard buddy.only.thPutStats.hdr.bpsSample(elapsed, 0)
+        of EAlreadyTriedAndFailed:
+          # Just return `failed` (no error count or throughput stats)
+          discard
 
         chronicles.info trEthRecvReceivedBlockHeaders & ": error", peer,
           req=ivReq, nReq=req.maxResults, hash=topHash.toStr,
-          elapsed=rc.error.elapsed.toStr, state=($buddy.syncState),
+          ela=rc.error.elapsed.toStr, state=($buddy.syncState),
           error=rc.error.name, msg=rc.error.msg,
           nErrors=buddy.nErrors.fetch.hdr
         break body                                 # return err()
@@ -116,7 +125,7 @@ template fetchHeadersReversed*(
     if rc.isErr or buddy.ctrl.stopped:
       buddy.hdrFetchRegisterError()
       trace trEthRecvReceivedBlockHeaders, peer, nReq=req.maxResults,
-        hash=topHash.toStr, nResp=0, elapsed=elapsed.toStr,
+        hash=topHash.toStr, nResp=0, ela=elapsed.toStr,
         state=($buddy.syncState), nErrors=buddy.nErrors.fetch.hdr
       break body                                   # return err()
 
@@ -127,13 +136,21 @@ template fetchHeadersReversed*(
         # Bogus peer returning additional rubbish
         buddy.hdrFetchRegisterError(forceZombie=true)
       else:
-        # Data not avail but fast enough answer: degrade througput stats only
-        discard buddy.only.thruPutStats.hdr.bpsSample(elapsed, 0)
+        # No data available. For a fast enough rejection response, the
+        # througput stats are degraded, only.
+        discard buddy.only.thPutStats.hdr.bpsSample(elapsed, 0)
+
+        # Slow response, definitely not fast enough
         if fetchHeadersErrTimeout <= elapsed:
-          # Slow rejection response
           buddy.hdrFetchRegisterError(slowPeer=true)
+
+          # Do not repeat the same time-consuming failed request
+          buddy.only.failedReq = BuddyFirstFetchReq(
+            state:       SyncState.headers,
+            blockNumber: BlockNumber ivReq.maxPt)
+
       trace trEthRecvReceivedBlockHeaders, peer, nReq=req.maxResults,
-        hash=topHash.toStr, nResp=h.len, elapsed=elapsed.toStr,
+        hash=topHash.toStr, nResp=h.len, ela=elapsed.toStr,
         state=($buddy.syncState), nErrors=buddy.nErrors.fetch.hdr
       break body                                   # return err()
 
@@ -142,12 +159,15 @@ template fetchHeadersReversed*(
       buddy.hdrFetchRegisterError(forceZombie=true)
       trace trEthRecvReceivedBlockHeaders, peer, nReq=req.maxResults,
         hash=topHash.toStr, reqMinPt=ivReq.minPt.bnStr,
-        respMinPt=h[^1].bnStr, nResp=h.len, elapsed=elapsed.toStr,
+        respMinPt=h[^1].bnStr, nResp=h.len, ela=elapsed.toStr,
         state=($buddy.syncState), nErrors=buddy.nErrors.fetch.hdr
       break body
 
     # Update download statistics
-    let bps = buddy.only.thruPutStats.hdr.bpsSample(elapsed, h.getEncodedLength)
+    let bps = buddy.only.thPutStats.hdr.bpsSample(elapsed, h.getEncodedLength)
+
+    # Request did not fail
+    buddy.only.failedReq.reset
 
     # Ban an overly slow peer for a while when observed consecutively.
     if fetchHeadersErrTimeout < elapsed:
@@ -158,7 +178,7 @@ template fetchHeadersReversed*(
 
     trace trEthRecvReceivedBlockHeaders, peer, nReq=req.maxResults,
       hash=topHash.toStr, ivResp=BnRange.new(h[^1].number,h[0].number),
-      nResp=h.len, elapsed=elapsed.toStr, throughput=(bps.toIECb(1) & "ps"),
+      nResp=h.len, ela=elapsed.toStr, thPut=(bps.toIECb(1) & "ps"),
       state=($buddy.syncState), nErrors=buddy.nErrors.fetch.hdr
 
     bodyRc = Opt[seq[Header]].ok(h)

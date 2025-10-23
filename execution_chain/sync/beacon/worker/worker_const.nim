@@ -30,6 +30,14 @@ type
     qSlotsAvail                    ## No assessment needed (e.g. few peers)
     notApplicable                  ## Not useful here
 
+  BeaconErrorType* = enum
+    ## For `FetchError` return code object/tuple
+    ENoException = 0
+    EAlreadyTriedAndFailed         ## The same action failed before
+    EPeerDisconnected              ## Exception
+    ECatchableError                ## Exception
+    ECancelledError                ## Exception
+
 const
   metricsUpdateInterval* = chronos.seconds(10)
     ## Wait at least this time before next update
@@ -45,7 +53,9 @@ const
     ## Control log chatter for update messages
 
   workerIdleWaitInterval* = chronos.seconds(1)
-    ## Sleep some time in multi-mode if there is nothing to do
+  workerIdleLongWaitInterval* = chronos.seconds(5)
+    ## Sleep some time in multi-mode (i.e. concurrently running peers) if
+    ## there is nothing else to do
 
   asyncThreadSwitchTimeSlot* = chronos.nanoseconds(1)
     ## Nano-sleep to allows pseudo/async thread switch

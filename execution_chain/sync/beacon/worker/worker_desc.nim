@@ -30,13 +30,6 @@ type
 
   # -------------------
 
-  BeaconErrorType* = enum
-    ## For `FetchError` return code object/tuple
-    ENoException = 0
-    EPeerDisconnected                ## Exception
-    ECatchableError                  ## Exception
-    ECancelledError                  ## Exception
-
   BeaconError* = tuple
     ## Capture exception context for heders/bodies fetcher logging
     excp: BeaconErrorType
@@ -51,6 +44,10 @@ type
   FetchBodiesData* = tuple
     packet: BlockBodiesPacket
     elapsed: Duration
+
+  PeerRanking* = tuple
+    assessed: DownloadPerformance
+    ranking: int
 
   BackgroundTicker* =
     proc(ctx: BeaconCtxRef) {.gcsafe, raises: [].}
@@ -121,7 +118,7 @@ type
     samples*: uint
     total*: uint64
 
-  BuddyThruPutStats* = object
+  BuddyThPutStats* = object
     ## Throughput statistice for fetching headers and bodies. The fileds
     ## have the following meaning:
     ##    sum:      -- Sum of samples, throuhputs per sec
@@ -138,10 +135,22 @@ type
     apply: tuple[
       hdr, blk: uint8]
 
+  BuddyFirstFetchReq* = object
+    ## Register fetch request. This is intended to avoid sending the same (or
+    ## similar) fetch request again from the same peer that sent it previously.
+    case state*: SyncState
+    of SyncState.headers:
+      blockNumber*: BlockNumber      ## First block number
+    of SyncState.blocks:
+      blockHash*: Hash32             ## First block hash
+    else:
+      discard
+
   BeaconBuddyData* = object
     ## Local descriptor data extension
     nErrors*: BuddyErrors            ## Error register
-    thruPutStats*: BuddyThruPutStats ## Throughput statistics
+    thPutStats*: BuddyThPutStats     ## Throughput statistics
+    failedReq*: BuddyFirstFetchReq   ## Avoid sending the same request twice
 
   InitTarget* = tuple
     hash: Hash32                     ## Some block hash to sync towards to
@@ -256,7 +265,7 @@ func toMeanVar*(w: StatsCollect): MeanVarStats =
     result.samples = w.samples
     result.total = w.total
 
-func toMeanVar*(w: BuddyThruPutStats): MeanVarStats =
+func toMeanVar*(w: BuddyThPutStats): MeanVarStats =
   ## Combined statistics for headers and bodies
   toMeanVar StatsCollect(
     sum:     w.hdr.sum +     w.blk.sum,
