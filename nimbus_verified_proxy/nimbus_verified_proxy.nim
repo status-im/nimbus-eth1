@@ -266,14 +266,14 @@ proc run*(
       let forkDigest = forkDigests[].atEpoch(gossipEpoch, cfg)
       network.subscribe(
         getBeaconBlocksTopic(forkDigest),
-        getBlockTopicParams(),
+        getBlockTopicParams(cfg.timeParams),
         enableTopicMetrics = true,
       )
 
     blocksGossipState = targetGossipState
 
   proc updateGossipStatus(time: Moment) =
-    let wallSlot = getBeaconTime().slotOrZero()
+    let wallSlot = getBeaconTime().slotOrZero(cfg.timeParams)
     updateBlocksGossipStatus(wallSlot + 1)
     lightClient.updateGossipStatus(wallSlot + 1)
 
