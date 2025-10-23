@@ -394,22 +394,52 @@ proc validateChainConfig(conf: ChainConfig): bool =
     if cur.time.isSome:
       lastTimeBasedFork = cur
 
+func numBPOForks(): int {.compileTime.} =
+  for x in Prague..HardFork.high:
+    if toLowerAscii($x).startsWith("bpo"):
+      inc result
+
+func getBPOForks(N: static[int]): array[N, HardFork] {.compileTime.} =
+  var i = 0
+  for x in Prague..HardFork.high:
+    if toLowerAscii($x).startsWith("bpo"):
+      result[i] = x
+      inc i
+
+func getRegularForks(N: static[int]): array[N, HardFork] {.compileTime.} =
+  var i = 0
+  for x in Prague..HardFork.high:
+    if not toLowerAscii($x).startsWith("bpo"):
+      result[i] = x
+      inc i
+
+const
+  NumForksWithBlobSchedule = HardFork.high.int - Prague.int + 1 # minus Cancun, but cardinal + 1
+  NumBPOForks = numBPOForks()
+  NumRegularForks = NumForksWithBlobSchedule - NumBPOForks
+  BPOForks = getBPOForks(NumBPOForks)
+  RegularForks = getRegularForks(NumRegularForks)
+  
 proc configureBlobSchedule(conf: ChainConfig) =
-  var prevFork = Cancun
   if conf.blobSchedule[Cancun].isNone:
     conf.blobSchedule[Cancun] = Opt.some(BlobSchedule(target: 3'u64, max: 6'u64, baseFeeUpdateFraction: 3_338_477'u64))
   else:
     if conf.blobSchedule[Cancun].value.baseFeeUpdateFraction == 0:
       conf.blobSchedule[Cancun].value.baseFeeUpdateFraction = 3_338_477'u64
 
-  for fork in Prague..HardFork.high:
-    if conf.blobSchedule[fork].isNone:
-      conf.blobSchedule[fork] = conf.blobSchedule[prevFork]
-    if conf.blobSchedule[fork].value.baseFeeUpdateFraction == 0:
-      # Set fallback to Cancun's baseFeeUpdateFraction and prevent division by zero
-      warn "baseFeeUpdateFraction not set, fallback to Cancun's", fork=fork
-      conf.blobSchedule[fork].value.baseFeeUpdateFraction = 3_338_477'u64
-    prevFork = fork
+  template setBlobScheduleWithFallback(forks) =
+    var prevFork = Cancun
+    for fork in forks:
+      if conf.blobSchedule[fork].isNone:
+        conf.blobSchedule[fork] = conf.blobSchedule[prevFork]
+      if conf.blobSchedule[fork].value.baseFeeUpdateFraction == 0:
+        # Set fallback to Cancun's baseFeeUpdateFraction and prevent division by zero
+        warn "baseFeeUpdateFraction not set, fallback to Cancun's", fork=fork
+        conf.blobSchedule[fork].value.baseFeeUpdateFraction = 3_338_477'u64
+      prevFork = fork
+
+  setBlobScheduleWithFallback(RegularForks)
+  setBlobScheduleWithFallback(BPOForks)
 
 proc parseGenesis*(data: string): Genesis
      {.gcsafe.} =

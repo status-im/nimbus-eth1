@@ -39,7 +39,7 @@ proc loadNetworkData*(networkName: string): NetworkInitData =
         raiseAssert "Invalid baked-in state: " & err.msg
 
     genesisTime = getStateField(genesisState[], genesis_time)
-    beaconClock = BeaconClock.init(genesisTime).valueOr:
+    beaconClock = BeaconClock.init(metadata.cfg.timeParams, genesisTime).valueOr:
       error "Invalid genesis time in state", genesisTime
       quit QuitFailure
 

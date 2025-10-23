@@ -125,7 +125,7 @@ template blocksCollect*(
               head=ctx.chain.latestNumber.bnStr,
               target=ctx.subState.head.bnStr,
               targetHash=ctx.subState.headHash.short,
-              throughput=buddy.blkThroughput,
+              thPut=buddy.blkThroughput,
               nSyncPeers=ctx.pool.nBuddies
             ctx.pool.lastSyncUpdLog = Moment.now()
             nImported = 0
@@ -177,7 +177,7 @@ template blocksCollect*(
           head=ctx.chain.latestNumber.bnStr,
           target=ctx.subState.head.bnStr,
           targetHash=ctx.subState.headHash.short,
-          throughput=buddy.blkThroughput,
+          thPut=buddy.blkThroughput,
           nSyncPeers=ctx.pool.nBuddies
         ctx.pool.lastSyncUpdLog = Moment.now()
 

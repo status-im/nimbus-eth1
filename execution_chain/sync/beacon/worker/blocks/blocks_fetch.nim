@@ -29,8 +29,12 @@ proc getBlockBodies(
       {.async: (raises: []).} =
   ## Wrapper around `getBlockHeaders()`
   let start = Moment.now()
-  var resp: BlockBodiesPacket
 
+  if buddy.only.failedReq.state == SyncState.blocks and
+     buddy.only.failedReq.blockHash == req.blockHashes[0]:
+    return err((EAlreadyTriedAndFailed,"","",Moment.now()-start))
+
+  var resp: BlockBodiesPacket
   try:
     resp = (await buddy.peer.getBlockBodies(
       req, fetchBodiesRlpxTimeout)).valueOr:
@@ -86,9 +90,13 @@ template fetchBodies*(
           buddy.ctrl.zombie = true
         of ECatchableError:
           buddy.bdyFetchRegisterError()
+          discard buddy.only.thPutStats.hdr.bpsSample(elapsed, 0)
+        of EAlreadyTriedAndFailed:
+          # Just return `failed` (no error count or throughput stats)
+          discard
 
         chronicles.info trEthRecvReceivedBlockBodies & " error", peer, nReq,
-          elapsed=rc.error.elapsed.toStr, state=($buddy.syncState),
+          ela=rc.error.elapsed.toStr, state=($buddy.syncState),
           error=rc.error.name, msg=rc.error.msg, nErrors=buddy.nErrors.fetch.bdy
         break body                                  # return err()
 
@@ -96,7 +104,7 @@ template fetchBodies*(
     if rc.isErr or buddy.ctrl.stopped:
       buddy.bdyFetchRegisterError()
       trace trEthRecvReceivedBlockBodies, peer, nReq, nResp=0,
-        elapsed=elapsed.toStr, state=($buddy.syncState),
+        ela=elapsed.toStr, state=($buddy.syncState),
         nErrors=buddy.nErrors.fetch.bdy
       break body                                    # return err()
 
@@ -107,17 +115,29 @@ template fetchBodies*(
         # Bogus peer returning additional rubbish
         buddy.bdyFetchRegisterError(forceZombie=true)
       else:
-        # Data not avail but fast enough answer: degrade througput stats only
-        discard buddy.only.thruPutStats.blk.bpsSample(elapsed, 0)
+        # No data available. For a fast enough rejection response, the
+        # througput stats are degraded, only.
+        discard buddy.only.thPutStats.blk.bpsSample(elapsed, 0)
+
+        # Slow response, definitely not fast enough
         if fetchBodiesErrTimeout <= elapsed:
           buddy.bdyFetchRegisterError(slowPeer=true)
+
+          # Do not repeat the same time-consuming failed request
+          buddy.only.failedReq = BuddyFirstFetchReq(
+            state:     SyncState.blocks,
+            blockHash: request.blockHashes[0])
+
       trace trEthRecvReceivedBlockBodies, peer, nReq, nResp=b.len,
-        elapsed=elapsed.toStr, state=($buddy.syncState),
+        ela=elapsed.toStr, state=($buddy.syncState),
         nErrors=buddy.nErrors.fetch.bdy
       break body                                    # return err()
 
     # Update download statistics
-    let bps = buddy.only.thruPutStats.blk.bpsSample(elapsed, b.getEncodedLength)
+    let bps = buddy.only.thPutStats.blk.bpsSample(elapsed, b.getEncodedLength)
+
+    # Request did not fail
+    buddy.only.failedReq.reset
 
     # Ban an overly slow peer for a while when observed consecutively.
     if fetchBodiesErrTimeout < elapsed:
@@ -127,7 +147,7 @@ template fetchBodies*(
       buddy.ctx.pool.lastSlowPeer = Opt.none(Hash)  # not last one or not error
 
     trace trEthRecvReceivedBlockBodies, peer, nReq, nResp=b.len,
-      elapsed=elapsed.toStr, throughput=(bps.toIECb(1) & "ps"),
+      ela=elapsed.toStr, thPut=(bps.toIECb(1) & "ps"),
       state=($buddy.syncState), nErrors=buddy.nErrors.fetch.bdy
 
     bodyRc = Opt[seq[BlockBody]].ok(b)

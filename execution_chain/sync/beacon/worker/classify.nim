@@ -28,9 +28,7 @@ func somethingToCollectOrUnstage*(buddy: BeaconBuddyRef): bool =
   false
 
 
-func classifyForFetching*(
-    buddy: BeaconBuddyRef;
-      ): tuple[info: DownloadPerformance, ranking: int] =
+func classifyForFetching*(buddy: BeaconBuddyRef): PeerRanking =
   ## Rank and classify peers by whether they should be used for fetching
   ## data.
   ##
@@ -49,7 +47,7 @@ func classifyForFetching*(
       return (qSlotsAvail, -1)
 
     template hdr(b: BeaconBuddyRef): StatsCollect =
-      b.only.thruPutStats.hdr
+      b.only.thPutStats.hdr
 
     # Are there throughput data available for this peer (aka buddy), at all?
     if buddy.hdr.samples == 0:
@@ -79,7 +77,7 @@ func classifyForFetching*(
       return (qSlotsAvail, -1)
 
     template blk(b: BeaconBuddyRef): StatsCollect =
-      b.only.thruPutStats.blk
+      b.only.thPutStats.blk
 
     if buddy.blk.samples == 0:
       return (notEnoughData, -1)

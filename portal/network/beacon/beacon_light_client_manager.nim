@@ -283,7 +283,7 @@ proc loop(self: LightClientManager) {.async: (raises: [CancelledError]).} =
 
     # Fetch updates
     let
-      current = wallTime.slotOrZero().sync_committee_period
+      current = wallTime.slotOrZero(self.network.cfg.timeParams).sync_committee_period
 
       syncTask = nextLightClientSyncTask(
         current = current,
@@ -299,15 +299,17 @@ proc loop(self: LightClientManager) {.async: (raises: [CancelledError]).} =
             UpdatesByRange, (startPeriod: syncTask.startPeriod, count: syncTask.count)
           )
         of LcSyncKind.FinalityUpdate:
-          let finalizedSlot = start_slot(epoch(wallTime.slotOrZero()) - 2)
+          let finalizedSlot =
+            start_slot(epoch(wallTime.slotOrZero(self.network.cfg.timeParams)) - 2)
           await self.query(FinalityUpdate, finalizedSlot)
         of LcSyncKind.OptimisticUpdate:
-          let optimisticSlot = wallTime.slotOrZero()
+          let optimisticSlot = wallTime.slotOrZero(self.network.cfg.timeParams)
           await self.query(OptimisticUpdate, optimisticSlot)
 
     nextSyncTaskTime =
       wallTime +
       self.rng.nextLcSyncTaskDelay(
+        self.network.cfg.timeParams,
         wallTime,
         finalized = self.getFinalizedPeriod(),
         optimistic = self.getOptimisticPeriod(),
