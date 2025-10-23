@@ -126,10 +126,17 @@ proc connect[Network](p: PeerPoolRef[Network], remote: Node): Future[PeerRef[Net
   # TODO: Probably should move all this logic to rlpx.nim
   if res.isOk():
     rlpx_connect_success.inc()
+    if remote.fromDiscv5:
+      rlpx_connect_success.inc(labelValues = ["discv5"])
+    else:
+      rlpx_connect_success.inc(labelValues = ["discv4"])
     return res.get()
   else:
     rlpx_connect_failure.inc()
-    rlpx_connect_failure.inc(labelValues = [$res.error])
+    if remote.fromDiscv5:
+      rlpx_connect_failure.inc(labelValues = [$res.error, "discv5"])
+    else:
+      rlpx_connect_failure.inc(labelValues = [$res.error, "discv4"])
     case res.error():
     of UselessRlpxPeerError:
       p.addSeen(remote.id, SeenTableTimeUselessPeer)
