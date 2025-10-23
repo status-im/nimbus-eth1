@@ -45,7 +45,7 @@ func blkSessionStopped*(ctx: BeaconCtxRef): bool =
 
 func blkThroughput*(buddy: BeaconBuddyRef): string =
   ## Print throuhput sratistics
-  buddy.only.thruPutStats.blk.toMeanVar.psStr
+  buddy.only.thPutStats.blk.toMeanVar.psStr
 
 # ------------------------------------------------------------------------------
 # End
