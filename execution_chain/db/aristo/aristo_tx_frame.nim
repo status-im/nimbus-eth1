@@ -34,6 +34,9 @@ proc removeSnapshotFrame(db: AristoDbRef, txFrame: AristoTxRef) =
 
 proc addSnapshotFrame(db: AristoDbRef, txFrame: AristoTxRef) =
   doAssert txFrame.snapshot.level.isSome()
+  if db.snapshots.contains(txFrame):
+    # No-op if the queue already contains the snapshot
+    return
 
   if db.snapshots.len() == db.maxSnapshots:
     let frame = db.snapshots.pop()
