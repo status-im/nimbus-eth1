@@ -45,7 +45,7 @@ type
   ReplaySchedInstrType = ReplaySchedDaemonBegin | ReplaySchedDaemonEnd |
                          ReplayPeerInstrType
 
-  ReplayAnyInstrType =   ReplayVersionInfo    | ReplaySyncActvFailed |
+  ReplayAnyInstrType =   ReplayVersionInfo    |
                          ReplaySyncActivated  | ReplaySyncHibernated |
                          ReplaySchedInstrType |
                          ReplayMsgInstrType

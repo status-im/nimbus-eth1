@@ -51,8 +51,8 @@ proc schedDaemonTrace*(
   tBeg.frameID = Opt.some(tBeg.serial)
   ctx.traceWrite tBeg
 
-  trace "+Daemon", serial=tBeg.serial, frameID=tBeg.frameID.value.idStr,
-    syncState=tBeg.syncState
+  trace TraceTypeLabel[SchedDaemonBegin], serial=tBeg.serial,
+    frameID=tBeg.frameID.value.idStr, syncState=tBeg.syncState
 
   let idleTime = await ctx.trace.backup.schedDaemon ctx
 
@@ -63,11 +63,13 @@ proc schedDaemonTrace*(
   ctx.traceWrite tEnd
 
   if 0 < tEnd.serial:
-    trace "-Daemon", serial=tEnd.serial, frameID=tEnd.frameID.value.idStr,
-      syncState=tBeg.syncState, idleTime=idleTime.toStr
+    trace TraceTypeLabel[SchedDaemonEnd], serial=tEnd.serial,
+      frameID=tEnd.frameID.value.idStr, syncState=tBeg.syncState,
+      idleTime=idleTime.toStr
   else:
-    trace "-Daemon (blind)", serial="n/a", frameID=tEnd.frameID.value.idStr,
-      syncState=tBeg.syncState, idleTime=idleTime.toStr
+    trace TraceTypeLabel[SchedDaemonEnd] & " (blind)", serial="n/a",
+      frameID=tEnd.frameID.value.idStr, syncState=tBeg.syncState,
+      idleTime=idleTime.toStr
 
   return idleTime
 
@@ -88,9 +90,9 @@ proc schedStartTrace*(buddy: BeaconBuddyRef): bool =
     tRec.accept = acceptOk
     buddy.traceWrite tRec
 
-    trace "=StartPeer", peer=($buddy.peer), peerID=buddy.peerID.short,
-      serial=tRec.serial, frameID=tRec.frameID.value.idStr,
-      syncState=tRec.syncState
+    trace TraceTypeLabel[SchedStart], peer=($buddy.peer),
+      peerID=buddy.peerID.short, serial=tRec.serial,
+      frameID=tRec.frameID.value.idStr, syncState=tRec.syncState
 
   acceptOk
 
@@ -110,9 +112,9 @@ proc schedStopTrace*(buddy: BeaconBuddyRef) =
     tRec.peerPort = buddy.getPort()
     buddy.traceWrite tRec
 
-    trace "=StopPeer", peer=($buddy.peer), peerID=buddy.peerID.short,
-      serial=tRec.serial, frameID=tRec.frameID.value.idStr,
-      syncState=tRec.syncState
+    trace TraceTypeLabel[SchedStop], peer=($buddy.peer),
+      peerID=buddy.peerID.short, serial=tRec.serial,
+      frameID=tRec.frameID.value.idStr, syncState=tRec.syncState
 
 
 proc schedPoolTrace*(buddy: BeaconBuddyRef; last: bool; laps: int): bool =
@@ -130,8 +132,8 @@ proc schedPoolTrace*(buddy: BeaconBuddyRef; last: bool; laps: int): bool =
   tRec.stop = stopOk
   buddy.traceWrite tRec
 
-  trace "=Pool", peer=($buddy.peer), peerID=buddy.peerID.short,
-    serial=tRec.serial
+  trace TraceTypeLabel[SchedPool], peer=($buddy.peer),
+    peerID=buddy.peerID.short, serial=tRec.serial
 
   stopOk
 
@@ -156,10 +158,10 @@ proc schedPeerTrace*(
     tBeg.rank = rank
     buddy.traceWrite tBeg
 
-    trace "+Peer", peer=($buddy.peer), peerID=buddy.peerID.short,
-      rankInfo=($rank.assessed), rank=($rank.ranking),
-      serial=tBeg.serial, frameID=tBeg.frameID.value.idStr,
-      syncState=tBeg.syncState
+    trace TraceTypeLabel[SchedPeerBegin], peer=($buddy.peer),
+      peerID=buddy.peerID.short, rankInfo=($rank.assessed),
+      rank=($rank.ranking), serial=tBeg.serial,
+      frameID=tBeg.frameID.value.idStr, syncState=tBeg.syncState
 
   let idleTime = await ctx.trace.backup.schedPeer(buddy, rank)
 
@@ -170,9 +172,10 @@ proc schedPeerTrace*(
     tEnd.idleTime = idleTime
     buddy.traceWrite tEnd
 
-    trace "-Peer", peer=($buddy.peer), peerID=buddy.peerID.short,
-      serial=tEnd.serial, frameID=tEnd.frameID.value.idStr,
-      syncState=tBeg.syncState, idleTime=idleTime.toStr
+    trace TraceTypeLabel[SchedPeerEnd], peer=($buddy.peer),
+      peerID=buddy.peerID.short, serial=tEnd.serial,
+      frameID=tEnd.frameID.value.idStr, syncState=tBeg.syncState,
+      idleTime=idleTime.toStr
 
   return idleTime
 

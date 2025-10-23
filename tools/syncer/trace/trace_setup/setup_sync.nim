@@ -31,22 +31,14 @@ proc activateTrace*(ctx: BeaconCtxRef) =
   let hdl = ctx.trace.backup
   hdl.activate ctx
 
-  if ctx.hibernate:
-    var tRec: TraceSyncActvFailed
-    tRec.init ctx
-    ctx.traceWrite tRec
-
-    trace "=ActvFailed", serial=tRec.serial
-
-  else:
-    let chn = ctx.chain
+  if not ctx.hibernate:
     var tRec: TraceSyncActivated
     tRec.init ctx
     tRec.head = ctx.hdrCache.head
-    tRec.finHash = chn.finHash
+    tRec.finHash = ctx.chain.finHash
     ctx.traceWrite tRec
 
-    trace "=Activated", serial=tRec.serial
+    trace TraceTypeLabel[SyncActivated], serial=tRec.serial
 
 
 proc suspendTrace*(ctx: BeaconCtxRef) =
@@ -60,7 +52,7 @@ proc suspendTrace*(ctx: BeaconCtxRef) =
   tRec.init ctx
   ctx.traceWrite tRec
 
-  trace "=Suspended", serial=tRec.serial
+  trace TraceTypeLabel[SyncHibernated], serial=tRec.serial
 
   let trc = ctx.trace
   if not trc.isNil:

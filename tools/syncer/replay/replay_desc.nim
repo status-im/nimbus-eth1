@@ -25,30 +25,6 @@ const
   ReplaySetupID* = 2                    ## Phase 1 layout ID, prepare
   ReplayRunnerID* = 20                  ## Phase 2 layout ID, full execution
 
-  ReplayTypeLabel* = block:
-    var a: array[TraceRecType,string]
-    a[TraceRecType(0)] =  "=Oops"
-    a[VersionInfo] =      "=Version"
-    a[SyncActvFailed] =   "=ActvFailed"
-    a[SyncActivated] =    "=Activated"
-    a[SyncHibernated] =   "=Suspended"
-    a[SchedStart] =       "=StartPeer"
-    a[SchedStop] =        "=StopPeer"
-    a[SchedPool] =        "=Pool"
-    a[SchedDaemonBegin] = "+Daemon"
-    a[SchedDaemonEnd] =   "-Daemon"
-    a[SchedPeerBegin] =   "+Peer"
-    a[SchedPeerEnd] =     "-Peer"
-    a[FetchHeaders] =     "=HeadersFetch"
-    a[SyncHeaders] =      "=HeadersSync"
-    a[FetchBodies] =      "=BodiesFetch"
-    a[SyncBodies] =       "=BodiesSync"
-    a[ImportBlock] =      "=BlockImport"
-    a[SyncBlock] =        "=BlockSync"
-    for w in a:
-      doAssert 0 < w.len
-    a
-
 type
   ReplayStopIfFn* = proc(): bool {.gcsafe, raises: [].}
     ## Loop control directive for runner/dispatcher
@@ -78,11 +54,6 @@ type
 
   ReplayVersionInfo* = ref object of ReplayPayloadRef
     bag*: TraceVersionInfo
-
-  # -------------
-
-  ReplaySyncActvFailed* = ref object of ReplayPayloadRef
-    bag*: TraceSyncActvFailed
 
   ReplaySyncActivated* = ref object of ReplayPayloadRef
     bag*: TraceSyncActivated
@@ -141,7 +112,7 @@ type
 
 template replayLabel*(w: untyped): string =
   ## Static getter, retrieve replay type label
-  ReplayTypeLabel[(typeof w.bag).toTraceRecType]
+  TraceTypeLabel[(typeof w.bag).toTraceRecType]
 
 # ------------------------------------------------------------------------------
 # End

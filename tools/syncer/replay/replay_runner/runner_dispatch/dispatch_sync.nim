@@ -25,11 +25,6 @@ logScope:
 # Public dispatcher handlers
 # ------------------------------------------------------------------------------
 
-proc syncActvFailedWorker*(run: ReplayRunnerRef; instr: ReplaySyncActvFailed) =
-  const info = instr.replayLabel()
-  trace info, n=run.iNum, serial=instr.bag.serial
-
-
 proc syncActivateWorker*(run: ReplayRunnerRef; instr: ReplaySyncActivated) =
   const
     info = instr.replayLabel()

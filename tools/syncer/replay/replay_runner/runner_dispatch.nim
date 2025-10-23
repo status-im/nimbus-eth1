@@ -43,9 +43,6 @@ proc dispatch*(
 
   of VersionInfo:
     run.versionInfoWorker(pyl.ReplayVersionInfo)
-    
-  of SyncActvFailed:
-    run.syncActvFailedWorker(pyl.ReplaySyncActvFailed)
   of SyncActivated:
     run.syncActivateWorker(pyl.ReplaySyncActivated)
   of SyncHibernated:

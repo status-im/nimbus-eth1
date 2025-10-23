@@ -28,7 +28,7 @@ export
   worker_desc
 
 const
-  TraceVersionID* = 20251022
+  TraceVersionID* = 20251023
 
   TraceSetupID* = 1                   ## Phase 1 layout ID, prepare
   TraceRunnerID* = 10                 ## Phase 2 layout ID, full execution
@@ -53,8 +53,6 @@ type
   TraceRecType* = enum
     RecBase = 0
     VersionInfo = 1
-
-    SyncActvFailed
     SyncActivated
     SyncHibernated
 
@@ -119,8 +117,6 @@ type
     networkId*: NetworkId
 
   # -------------
-
-  TraceSyncActvFailed* = object of TraceRecBase
 
   TraceSyncActivated* = object of TraceRecBase
     head*: Header                     ## Part of environment
@@ -208,6 +204,29 @@ type
     kind*: TraceRecType
     bag*: T
 
+const
+  TraceTypeLabel* = block:
+    var a: array[TraceRecType,string]
+    a[TraceRecType(0)] =  "=Oops"
+    a[VersionInfo] =      "=Version"
+    a[SyncActivated] =    "=Activated"
+    a[SyncHibernated] =   "=Suspended"
+    a[SchedStart] =       "=StartPeer"
+    a[SchedStop] =        "=StopPeer"
+    a[SchedPool] =        "=Pool"
+    a[SchedDaemonBegin] = "+Daemon"
+    a[SchedDaemonEnd] =   "-Daemon"
+    a[SchedPeerBegin] =   "+Peer"
+    a[SchedPeerEnd] =     "-Peer"
+    a[FetchHeaders] =     "=HeadersFetch"
+    a[SyncHeaders] =      "=HeadersSync"
+    a[FetchBodies] =      "=BodiesFetch"
+    a[SyncBodies] =       "=BodiesSync"
+    a[ImportBlock] =      "=BlockImport"
+    a[SyncBlock] =        "=BlockSync"
+    for w in a:
+      doAssert 0 < w.len
+    a
 # ------------------------------------------------------------------------------
 # Public helpers
 # ------------------------------------------------------------------------------
@@ -227,8 +246,6 @@ func toTraceRecType*(T: type): TraceRecType =
   ## Derive capture type from record layout
   when T is TraceVersionInfo:
     VersionInfo
-  elif T is TraceSyncActvFailed:
-    SyncActvFailed
   elif T is TraceSyncActivated:
     SyncActivated
   elif T is TraceSyncHibernated:

@@ -48,8 +48,8 @@ proc fetchHeadersTrace*(
       tRec.error = Opt.some(data.error)
     buddy.traceWrite tRec
 
-    trace "=HeadersFetch", peer=($buddy.peer), peerID=buddy.peerID.short,
-      serial=tRec.serial
+    trace TraceTypeLabel[FetchHeaders], peer=($buddy.peer),
+      peerID=buddy.peerID.short, serial=tRec.serial
 
   return data
 
@@ -63,8 +63,8 @@ proc syncHeadersTrace*(
     tRec.init buddy
     buddy.traceWrite tRec
 
-    trace "=HeadersSync", peer=($buddy.peer), peerID=buddy.peerID.short,
-      serial=tRec.serial
+    trace TraceTypeLabel[SyncHeaders], peer=($buddy.peer),
+      peerID=buddy.peerID.short, serial=tRec.serial
 
 # ------------------------------------------------------------------------------
 # End

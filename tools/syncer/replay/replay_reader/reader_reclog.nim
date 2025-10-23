@@ -112,13 +112,6 @@ func toStrSeq(n: int; w: ReplayVersionInfo): seq[string] =
 
 # -----------
 
-func toStrSeq(n: int; w: ReplaySyncActvFailed): seq[string] =
-  var res = newSeqOfCap[string](15)
-  res.addX(w.replayLabel, n, w.bag)
-  res.add "base=" & w.bag.baseNum.bnStr
-  res.add "latest=" & w.bag.latestNum.bnStr
-  res
-
 func toStrSeq(n: int; w: ReplaySyncActivated): seq[string] =
   var res = newSeqOfCap[string](20)
   res.addX(w.replayLabel, n, w.bag)

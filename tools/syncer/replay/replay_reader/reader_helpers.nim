@@ -82,9 +82,6 @@ template withReplayTypeExpr*(recType: TraceRecType): untyped =
     replayTypeExpr(TraceRecType(0), ReplayPayloadRef)
   of VersionInfo:
     replayTypeExpr(VersionInfo, ReplayVersionInfo)
-
-  of SyncActvFailed:
-    replayTypeExpr(SyncActvFailed,ReplaySyncActvFailed)
   of SyncActivated:
     replayTypeExpr(SyncActivated, ReplaySyncActivated)
   of SyncHibernated:

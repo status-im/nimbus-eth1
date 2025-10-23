@@ -68,8 +68,8 @@ proc fetchBodiesTrace*(
     tRec.error = Opt.some(data.error)
   buddy.traceWrite tRec
 
-  trace "=BodiesFetch", peer=($buddy.peer), peerID=buddy.peerID.short,
-    serial=tRec.serial, ivReq=ivReq.bnStr
+  trace TraceTypeLabel[FetchBodies], peer=($buddy.peer),
+    peerID=buddy.peerID.short, serial=tRec.serial, ivReq=ivReq.bnStr
   return data
 
 proc syncBodiesTrace*(
@@ -80,8 +80,8 @@ proc syncBodiesTrace*(
   tRec.init buddy
   buddy.traceWrite tRec
 
-  trace "=BodiesSync", peer=($buddy.peer), peerID=buddy.peerID.short,
-    serial=tRec.serial
+  trace TraceTypeLabel[SyncBodies], peer=($buddy.peer),
+    peerID=buddy.peerID.short, serial=tRec.serial
 
 
 proc importBlockTrace*(
@@ -106,8 +106,8 @@ proc importBlockTrace*(
     tRec.error = Opt.some(data.error)
   buddy.traceWrite tRec
 
-  trace "=BlockImport", peer=($buddy.peer), peerID=buddy.peerID.short,
-    effPeerID=effPeerID.short, serial=tRec.serial
+  trace TraceTypeLabel[ImportBlock], peer=($buddy.peer),
+    peerID=buddy.peerID.short, effPeerID=effPeerID.short, serial=tRec.serial
   return data
 
 proc syncBlockTrace*(
@@ -118,8 +118,8 @@ proc syncBlockTrace*(
   tRec.init buddy
   buddy.traceWrite tRec
 
-  trace "=BlockSync", peer=($buddy.peer), peerID=buddy.peerID.short,
-    serial=tRec.serial
+  trace TraceTypeLabel[SyncBlock], peer=($buddy.peer),
+    peerID=buddy.peerID.short, serial=tRec.serial
 
 # ------------------------------------------------------------------------------
 # End
