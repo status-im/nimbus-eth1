@@ -135,7 +135,7 @@ proc run*(
     # getStateField reads seeks info directly from a byte array
     # get genesis time and instantiate the beacon clock
     genesisTime = getStateField(genesisState[], genesis_time)
-    beaconClock = BeaconClock.init(genesisTime).valueOr:
+    beaconClock = BeaconClock.init(cfg.timeParams, genesisTime).valueOr:
       error "Invalid genesis time in state", genesisTime
       quit QuitFailure
 

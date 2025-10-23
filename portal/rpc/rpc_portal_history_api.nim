@@ -49,17 +49,16 @@ proc installPortalHistoryApiHandlers*(rpcServer: RpcServer, n: HistoryNetwork) =
       contentId = toContentId(contentKey)
 
     n.portalProtocol.getLocalContent(contentKeyByteList, contentId).isErrOr:
-      return ContentInfo(content: value.to0xHex(), utpTransfer: false)
+      let content = value.to0xHex()
+      return ContentInfo(content: content, utpTransfer: false)
 
-    let contentLookupResult = (
-      await n.portalProtocol.contentLookup(contentKeyByteList, contentId)
-    ).valueOr:
-      raise contentNotFoundErr()
-
-    ContentInfo(
-      content: contentLookupResult.content.to0xHex(),
-      utpTransfer: contentLookupResult.utpTransfer,
-    )
+    let
+      contentLookupResult = (
+        await n.portalProtocol.contentLookup(contentKeyByteList, contentId)
+      ).valueOr:
+        raise contentNotFoundErr()
+      content = contentLookupResult.content.to0xHex()
+    ContentInfo(content: content, utpTransfer: contentLookupResult.utpTransfer)
 
   rpcServer.rpc("portal_historyTraceGetContent") do(
     contentKeyBytes: string
