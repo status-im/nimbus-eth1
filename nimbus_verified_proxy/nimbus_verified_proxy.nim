@@ -156,7 +156,8 @@ proc run(
   try:
     await lc.start()
   except CancelledError as e:
-    debugEcho e.msg
+    debug "light client cancelled"
+    raise e
 
 # noinline to keep it in stack traces
 proc main() {.noinline, raises: [CatchableError].} =

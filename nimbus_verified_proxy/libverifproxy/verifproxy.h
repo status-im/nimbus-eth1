@@ -34,7 +34,7 @@ typedef struct Context Context;
 
 ETH_RESULT_USE_CHECK Context *createAsyncTaskContext();
 
-typedef void (*CallBackProc) (int status, char *res);
+typedef void (*CallBackProc) (Context *ctx, int status, char *res);
 
 void eth_blockNumber(Context *ctx, CallBackProc cb);
 void freeResponse(char *res);

@@ -3,49 +3,51 @@
 #include <unistd.h>
 #include <stdbool.h>
 
-static bool wait = false;
+static bool waitOver = true;
 
-void onBlockNumber(int status, char *res) {
+void onBlockNumber(Context *ctx, int status, char *res) {
   printf("response: %s\n", res);
   freeResponse(res);
 }
 
-void onStart(int status, char *res) {
+void onStart(Context *ctx, int status, char *res) {
   printf("Verified Proxy started successfully\n");
+  printf("status: %d\n", status);
+  printf("response: %s\n", res);
+  if (status < 0) stopVerifProxy(ctx);
   freeResponse(res);
 }
 
-void waitIsOver(int status, char *res) {
+void waitIsOver(Context *ctx, int status, char *res) {
   printf("waiting finished successfully\n");
   printf("status: %d\n", status);
-  
-  wait = false;
 
-  // printf("response: %s\n", res);
-  freeResponse(res);
-}
-
-void doMultipleAsyncTasks(Context *ctx) {
   eth_blockNumber(ctx, onBlockNumber);
-  nonBusySleep(ctx, 4, waitIsOver);
+  waitOver = true;
+
+  freeResponse(res);
 }
 
 int main() {
   NimMain();
   Context *ctx = createAsyncTaskContext(); 
 
-  const char* jsonConfig =
+  char* jsonConfig =
     "{"
-    "\"Eth2Network\": \"mainnet\","
-    "\"TrustedBlockRoot\": \"0x6e2b0d0725949a5ce977b61646cc4353a8c789f6c2b8fc8bfc98fcfdb99b3d0\","
-    "\"BackendUrl\": \"https://eth.llamarpc.com\","
-    "\"LogLevel\": \"info\""
+    "\"eth2Network\": \"mainnet\","
+    "\"trustedBlockRoot\": \"0xdd8db7bfd8c96c993a4cb78e0e6607cf1dcca3f379764388248c63d2bc40443b\","
+    "\"backendUrl\": \"https://eth.llamarpc.com\","
+    "\"lcEndpoints\": \"http://testing.mainnet.beacon-api.nimbus.team\","
+    "\"logLevel\": \"FATAL\","
+    "\"logStdout\": \"None\""
     "}";
+
   startVerifProxy(ctx, jsonConfig, onStart);
+
   while(true) {
-    if (!wait) {
-      wait = true;
-      doMultipleAsyncTasks(ctx);
+    if (waitOver) {
+      waitOver = false;
+      nonBusySleep(ctx, 10, waitIsOver);
     }
     pollAsyncTaskEngine(ctx);
   }

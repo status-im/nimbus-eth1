@@ -15,6 +15,8 @@ import
   beacon_chain/nimbus_binary_common,
   ../engine/types,
   ../engine/engine,
+  ../lc/lc,
+  ../json_lc_backend,
   ../nimbus_verified_proxy,
   ../nimbus_verified_proxy_conf,
   ../json_rpc_backend
@@ -23,8 +25,6 @@ import
 {.pragma: exportedConst, exportc, dynlib.}
 
 type
-  CallBackProc = proc(status: int, res: cstring) {.cdecl, gcsafe, raises: [].}
-
   Task = ref object
     status: int
     response: string
@@ -32,10 +32,12 @@ type
     cb: CallBackProc
 
   Context = object
-    lock: Lock
     tasks: seq[Task]
     stop: bool
     frontend: EthApiFrontend
+
+  CallBackProc =
+    proc(ctx: ptr Context, status: int, res: cstring) {.cdecl, gcsafe, raises: [].}
 
 proc NimMain() {.importc, exportc, dynlib.}
 
@@ -64,7 +66,6 @@ proc destroy[T](x: ptr T) =
 
 proc createAsyncTaskContext(): ptr Context {.exported.} =
   let ctx = Context.new()
-  ctx.lock.initLock()
   ctx.toUnmanagedPtr()
 
 proc createTask(cb: CallBackProc): Task =
@@ -90,31 +91,23 @@ proc alloc(str: string): cstring =
 proc eth_blockNumber(ctx: ptr Context, cb: CallBackProc) {.exported.} =
   let task = createTask(cb)
 
-  try:
-    ctx.lock.acquire()
-    ctx.tasks.add(task)
-  finally:
-    ctx.lock.release()
+  ctx.tasks.add(task)
 
   let fut = ctx.frontend.eth_blockNumber()
 
   fut.addCallback proc(_: pointer) {.gcsafe.} =
-    try:
-      ctx.lock.acquire()
-      if fut.cancelled():
-        task.response = Json.encode(fut.error())
-        task.finished = true
-        task.status = -2
-      elif fut.failed():
-        task.response = Json.encode(fut.error())
-        task.finished = true
-        task.status = -1
-      else:
-        task.response = Json.encode(fut.value())
-        task.status = 0
-        task.finished = true
-    finally:
-      ctx.lock.release()
+    if fut.cancelled():
+      task.response = Json.encode(fut.error())
+      task.finished = true
+      task.status = -2
+    elif fut.failed():
+      task.response = Json.encode(fut.error())
+      task.finished = true
+      task.status = -1
+    else:
+      task.response = Json.encode(fut.value())
+      task.status = 0
+      task.finished = true
 
 proc pollAsyncTaskEngine(ctx: ptr Context) {.exported.} =
   var delList: seq[int] = @[]
@@ -123,20 +116,12 @@ proc pollAsyncTaskEngine(ctx: ptr Context) {.exported.} =
   for idx in 0 ..< taskLen:
     let task = ctx.tasks[idx]
     if task.finished:
-      try:
-        ctx.lock.acquire()
-        task.cb(task.status, alloc(task.response))
-        delList.add(idx)
-      finally:
-        ctx.lock.release()
+      task.cb(ctx, task.status, alloc(task.response))
+      delList.add(idx)
 
   # sequence changes as we delete so delting in descending order
   for i in delList.sorted(SortOrder.Descending):
-    try:
-      ctx.lock.acquire()
-      ctx.tasks.delete(i)
-    finally:
-      ctx.lock.release()
+    ctx.tasks.delete(i)
 
   if ctx.tasks.len > 0:
     poll()
@@ -147,25 +132,36 @@ proc load(
   let jsonNode = parseJson($configJson)
 
   let
-    eth2Network = some(jsonNode.getOrDefault("Eth2Network").getStr("mainnet"))
+    eth2Network = some(jsonNode.getOrDefault("eth2Network").getStr("mainnet"))
     trustedBlockRoot =
-      if jsonNode.contains("TrustedBlockRoot"):
-        Eth2Digest.fromHex(jsonNode["TrustedBlockRoot"].getStr())
+      if jsonNode.contains("trustedBlockRoot"):
+        Eth2Digest.fromHex(jsonNode["trustedBlockRoot"].getStr())
       else:
         raise
-          newException(ValueError, "`TrustedBlockRoot` not specified in JSON config")
+          newException(ValueError, "`trustedBlockRoot` not specified in JSON config")
     backendUrl =
-      if jsonNode.contains("BackendUrl"):
-        parseCmdArg(Web3Url, jsonNode["BackendUrl"].getStr())
+      if jsonNode.contains("backendUrl"):
+        parseCmdArg(Web3Url, jsonNode["backendUrl"].getStr())
       else:
-        raise newException(ValueError, "`BackendUrl` not specified in JSON config")
+        raise newException(ValueError, "`backendUrl` not specified in JSON config")
     lcEndpoints =
-      if jsonNode.contains("LcEndpoints"):
-        parseCmdArg(UrlList, jsonNode["LcEndpoints"].getStr())
+      if jsonNode.contains("lcEndpoints"):
+        parseCmdArg(UrlList, jsonNode["lcEndpoints"].getStr())
       else:
-        raise newException(ValueError, "`LcEndpoints` not specified in JSON config")
-    logLevel = jsonNode.getOrDefault("LogLevel").getStr("INFO")
-    defaultListenAddress = (static parseIpAddress("0.0.0.0"))
+        raise newException(ValueError, "`lcEndpoints` not specified in JSON config")
+    logLevel = jsonNode.getOrDefault("logLevel").getStr("INFO")
+    logStdout =
+      case jsonNode.getOrDefault("logStdout").getStr("None")
+      of "Colors": StdoutLogKind.Colors
+      of "NoColors": StdoutLogKind.NoColors
+      of "Json": StdoutLogKind.Json
+      of "Auto": StdoutLogKind.Auto
+      else: StdoutLogKind.None
+    maxBlockWalk = jsonNode.getOrDefault("maxBlockWalk").getInt(1000)
+    headerStoreLen = jsonNode.getOrDefault("headerStoreLen").getInt(256)
+    storageCacheLen = jsonNode.getOrDefault("storageCacheLen").getInt(256)
+    codeCacheLen = jsonNode.getOrDefault("codeCacheLen").getInt(64)
+    accountCacheLen = jsonNode.getOrDefault("accountCacheLen").getInt(128)
 
   return VerifiedProxyConf(
     listenAddress: none(IpAddress),
@@ -173,14 +169,13 @@ proc load(
     trustedBlockRoot: trustedBlockRoot,
     backendUrl: backendUrl,
     logLevel: logLevel,
-    maxPeers: 160,
-    nat: NatConfig(hasExtIp: false, nat: NatAny),
-    logStdout: StdoutLogKind.Auto,
+    logStdout: logStdout,
     dataDirFlag: none(OutDir),
-    tcpPort: Port(defaultEth2TcpPort),
-    udpPort: Port(defaultEth2TcpPort),
-    agentString: "nimbus",
-    discv5Enabled: true,
+    maxBlockWalk: uint64(maxBlockWalk),
+    headerStoreLen: headerStoreLen,
+    storageCacheLen: storageCacheLen,
+    codeCacheLen: codeCacheLen,
+    accountCacheLen: accountCacheLen,
   )
 
 proc run(
@@ -193,7 +188,7 @@ proc run(
 
   let config = VerifiedProxyConf.load($configJson)
 
-  echo $config
+  setupLogging(config.logLevel, config.logStdout)
 
   let
     engineConf = RpcVerificationEngineConf(
@@ -205,7 +200,20 @@ proc run(
       storageCacheLen: config.storageCacheLen,
     )
     engine = RpcVerificationEngine.init(engineConf)
+    lc = LightClient.new(config.eth2Network, some config.trustedBlockRoot)
+
+    # initialize backend for JSON-RPC
     jsonRpcClient = JsonRpcClient.init(config.backendUrl)
+
+    # initialize backend for light client updates
+    lcRestClient = LCRestClient.new(lc.cfg, lc.forkDigests)
+
+  # connect light client to LC by registering on header methods 
+  # to use engine header store
+  connectLCToEngine(lc, engine)
+
+  # add light client backend
+  lc.setBackend(lcRestClient.getEthLCBackend())
 
   # the backend only needs the url to connect to
   engine.backend = jsonRpcClient.getEthApiBackend()
@@ -217,53 +225,68 @@ proc run(
   var status = await jsonRpcClient.start()
   if status.isErr():
     raise newException(ValueError, status.error)
-  # FIXME: throws illegal storage access SEGFAULT when used as a library but not when run as a nim program.
-  # await startLightClient(config, engine)
 
+  # adding endpoints will also start the backend
+  lcRestClient.addEndpoints(config.lcEndpoints)
+
+  # this starts the light client manager which is
+  # an endless loop
+  try:
+    await lc.start()
+  except CancelledError as e:
+    raise e
+
+# TODO: if frontend is accessed if this fails then it throws a sefault
+# TODO: there is log leakage(at WARN level) even when logging is set to FATAL and stdout is set to None
 proc startVerifProxy(
     ctx: ptr Context, configJson: cstring, cb: CallBackProc
 ) {.exported.} =
-  try:
-    waitFor run(ctx, $configJson)
-  except:
-    quit(QuitFailure)
+  let task = createTask(cb)
 
-proc stopVerifProxy*(ctx: ptr Context) {.exported.} =
-  ctx.lock.acquire()
+  ctx.tasks.add(task)
+
+  let fut = run(ctx, $configJson)
+
+  fut.addCallback proc(udata: pointer) {.gcsafe.} =
+    if fut.cancelled():
+      task.response = Json.encode(fut.error())
+      task.finished = true
+      task.status = -2
+    elif fut.failed():
+      task.response = Json.encode(fut.error())
+      task.finished = true
+      task.status = -1
+    else:
+      task.response = "success"
+      task.status = 0
+      task.finished = true
+
+proc stopVerifProxy(ctx: ptr Context) {.exported.} =
   ctx.stop = true
-  ctx.lock.release()
 
 # C-callable: downloads a page and returns a heap-allocated C string.
 proc nonBusySleep(ctx: ptr Context, secs: cint, cb: CallBackProc) {.exported.} =
   let task = createTask(cb)
 
-  try:
-    ctx.lock.acquire()
-    ctx.tasks.add(task)
-  finally:
-    ctx.lock.release()
+  ctx.tasks.add(task)
 
   let fut = sleepAsync((secs).seconds)
 
   fut.addCallback proc(_: pointer) {.gcsafe.} =
-    try:
-      ctx.lock.acquire()
-      if fut.cancelled:
-        task.response = "cancelled"
-        task.finished = true
-        task.status = -2
-      elif fut.failed():
-        task.response = "failed"
-        task.finished = true
+    if fut.cancelled:
+      task.response = "cancelled"
+      task.finished = true
+      task.status = -2
+    elif fut.failed():
+      task.response = "failed"
+      task.finished = true
+      task.status = -1
+    else:
+      try:
+        task.response = "slept"
+        task.status = 0
+      except CatchableError as e:
+        task.response = e.msg
         task.status = -1
-      else:
-        try:
-          task.response = "slept"
-          task.status = 0
-        except CatchableError as e:
-          task.response = e.msg
-          task.status = -1
-        finally:
-          task.finished = true
-    finally:
-      ctx.lock.release()
+      finally:
+        task.finished = true
