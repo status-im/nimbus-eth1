@@ -131,16 +131,13 @@ VERIF_PROXY_OUT_PATH ?= build/libverifproxy/
 ifeq ($(NIM_PARAMS),)
 # "variables.mk" was not included, so we update the submodules.
 # selectively download nimbus-eth2 submodules because we don't need all of it's modules
-# also holesky already exceeds github LFS quota
+# also hoodi already exceeds github LFS quota
 
-# We don't need these `vendor/holesky` files but fetching them
-# may trigger 'This repository is over its data quota' from GitHub
 GIT_SUBMODULE_CONFIG := -c lfs.fetchexclude=/public-keys/all.txt,/metadata/genesis.ssz,/parsed/parsedConsensusGenesis.json
 
 GIT_SUBMODULE_UPDATE := git -c submodule."vendor/nimbus-eth2".update=none submodule update --init --recursive; \
   git $(GIT_SUBMODULE_CONFIG) submodule update vendor/nimbus-eth2; \
   cd vendor/nimbus-eth2; \
-  git $(GIT_SUBMODULE_CONFIG) submodule update --init vendor/holesky; \
   git $(GIT_SUBMODULE_CONFIG) submodule update --init vendor/sepolia; \
   git $(GIT_SUBMODULE_CONFIG) submodule update --init vendor/hoodi; \
   git $(GIT_SUBMODULE_CONFIG) submodule update --init vendor/gnosis-chain-configs; \
