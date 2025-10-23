@@ -56,9 +56,6 @@ type
 
   TrustedDigest* = MDigest[32 * 8]
 
-  PortalCmd* = enum
-    noCommand
-
   PortalConf* = object
     logLevel* {.
       desc:
@@ -417,10 +414,6 @@ type
       defaultValue: 50,
       name: "debug-content-queue-size"
     .}: int
-
-    case cmd* {.command, defaultValue: noCommand.}: PortalCmd
-    of noCommand:
-      discard
 
 proc dataDir*(config: PortalConf): string =
   string config.dataDirFlag.get(OutDir defaultDataDir("", $config.network))

@@ -51,7 +51,7 @@ func getLogLevels(): string =
   join(logLevels, ", ")
 
 const
-  defaultPort              = 30303
+  defaultExecutionPort*    = 30303
   defaultMetricsServerPort = 9093
   defaultHttpPort          = 8545
   # https://github.com/ethereum/execution-apis/blob/v1.0.0-beta.4/src/engine/authentication.md#jwt-specifications
@@ -66,7 +66,7 @@ let
 
 type
   NimbusCmd* {.pure.} = enum
-    noCommand
+    executionClient
     `import`
     `import-rlp`
 
@@ -81,8 +81,9 @@ type
     V5
 
   ExecutionClientConf* = object
-    ## Main Nimbus configuration object
-    configFile {.
+    ## Main configuration for the execution client - when updating, coordinate
+    ## options shared with other executables (logging, metrics etc)
+    configFile* {.
       separator: "ETHEREUM OPTIONS:"
       desc: "Loads the configuration from a TOML file"
       name: "config-file" .}: Option[InputFile]
@@ -90,29 +91,29 @@ type
     dataDirFlag* {.
       desc: "The directory where nimbus will store all blockchain data"
       abbr: "d"
-      name: "data-dir" }: Option[OutDir]
+      name: "data-dir" .}: Option[OutDir]
 
     era1DirFlag* {.
       desc: "Directory where era1 (pre-merge) archive can be found"
       defaultValueDesc: "<data-dir>/era1"
-      name: "era1-dir" }: Option[OutDir]
+      name: "era1-dir" .}: Option[OutDir]
 
     eraDirFlag* {.
       desc: "Directory where era (post-merge) archive can be found"
       defaultValueDesc: "<data-dir>/era"
-      name: "era-dir" }: Option[OutDir]
+      name: "era-dir" .}: Option[OutDir]
 
     keyStoreDirFlag* {.
       desc: "Load one or more keystore files from this directory"
       defaultValueDesc: "inside datadir"
       abbr: "k"
-      name: "key-store" }: Option[OutDir]
+      name: "key-store" .}: Option[OutDir]
 
     importKey* {.
       desc: "Import unencrypted 32 bytes hex private key from a file"
       defaultValue: ""
       abbr: "e"
-      name: "import-key" }: InputFile
+      name: "import-key" .}: InputFile
 
     trustedSetupFile* {.
       desc: "Load EIP-4844 trusted setup file"
@@ -139,39 +140,37 @@ type
       longDesc:
         "- mainnet/1       : Ethereum main network\n" &
         "- sepolia/11155111: Test network (proof-of-work)\n" &
-        "- holesky/17000   : The holesovice post-merge testnet\n" &
         "- hoodi/560048    : The second long-standing, merged-from-genesis, public Ethereum testnet\n" &
         "- path            : /path/to/genesis-or-network-configuration.json\n" &
         "Both --network: name/path --network:id can be set at the same time to override network id number"
       defaultValue: @[] # the default value is set in makeConfig
       defaultValueDesc: "mainnet(1)"
       abbr: "i"
-      name: "network" }: seq[string]
+      name: "network" .}: seq[string]
 
     customNetwork {.
       ignore
       desc: "Use custom genesis block for private Ethereum Network (as /path/to/genesis.json)"
       defaultValueDesc: ""
       abbr: "c"
-      name: "custom-network" }: Option[NetworkParams]
+      name: "custom-network" .}: Option[NetworkParams]
 
     networkId* {.
       ignore # this field is not processed by confutils
       defaultValue: MainNet # the defaultValue value is set by `makeConfig`
       defaultValueDesc: "MainNet"
-      name: "network-id"}: NetworkId
+      name: "network-id" .}: NetworkId
 
     networkParams* {.
       ignore # this field is not processed by confutils
       defaultValue: NetworkParams() # the defaultValue value is set by `makeConfig`
-      name: "network-params"}: NetworkParams
+      name: "network-params" .}: NetworkParams
 
     logLevel* {.
       separator: "\pLOGGING AND DEBUGGING OPTIONS:"
       desc: "Sets the log level for process and topics (" & logLevelDesc & ")"
       defaultValue: "INFO"
-      defaultValueDesc: "Info topic level logging"
-      name: "log-level" }: string
+      name: "log-level" .}: string
 
     logStdout* {.
       hidden
@@ -183,19 +182,19 @@ type
     metricsEnabled* {.
       desc: "Enable the built-in metrics HTTP server"
       defaultValue: false
-      name: "metrics" }: bool
+      name: "metrics" .}: bool
 
     metricsPort* {.
       desc: "Listening port of the built-in metrics HTTP server"
       defaultValue: defaultMetricsServerPort
       defaultValueDesc: $defaultMetricsServerPort
-      name: "metrics-port" }: Port
+      name: "metrics-port" .}: Port
 
     metricsAddress* {.
       desc: "Listening IP address of the built-in metrics HTTP server"
       defaultValue: defaultAdminListenAddress
       defaultValueDesc: $defaultAdminListenAddressDesc
-      name: "metrics-address" }: IpAddress
+      name: "metrics-address" .}: IpAddress
 
     bootstrapNodes {.
       separator: "\pNETWORKING OPTIONS:"
@@ -203,59 +202,58 @@ type
       defaultValue: @[]
       defaultValueDesc: ""
       abbr: "b"
-      name: "bootstrap-node" }: seq[string]
+      name: "bootstrap-node" .}: seq[string]
 
     bootstrapFile {.
       desc: "Specifies a file of bootstrap Ethereum network addresses(ENR or enode URL). " &
             "Both line delimited or YAML format are supported"
       defaultValue: ""
-      name: "bootstrap-file" }: InputFile
+      name: "bootstrap-file" .}: InputFile
 
     staticPeers {.
       desc: "Connect to one or more trusted peers(ENR or enode URL)"
       defaultValue: @[]
       defaultValueDesc: ""
-      name: "static-peers" }: seq[string]
+      name: "static-peers" .}: seq[string]
 
     staticPeersFile {.
       desc: "Specifies a file of trusted peers addresses(ENR or enode URL). " &
             "Both line delimited or YAML format are supported"
       defaultValue: ""
-      name: "static-peers-file" }: InputFile
+      name: "static-peers-file" .}: InputFile
 
     reconnectMaxRetry* {.
       desc: "Specifies max number of retries if static peers disconnected/not connected. " &
             "0 = infinite."
       defaultValue: 0
-      name: "reconnect-max-retry" }: int
+      name: "reconnect-max-retry" .}: int
 
     reconnectInterval* {.
       desc: "Interval in seconds before next attempt to reconnect to static peers. Min 5 seconds."
       defaultValue: 15
-      name: "reconnect-interval" }: int
+      name: "reconnect-interval" .}: int
 
     listenAddress* {.
       desc: "Listening IP address for Ethereum P2P and Discovery traffic"
       defaultValue: defaultListenAddress
       defaultValueDesc: $defaultListenAddressDesc
-      name: "listen-address" }: IpAddress
+      name: "listen-address" .}: IpAddress
 
     tcpPort* {.
       desc: "Ethereum P2P network listening TCP port"
-      defaultValue: defaultPort
-      defaultValueDesc: $defaultPort
-      name: "tcp-port" }: Port
+      defaultValue: defaultExecutionPort
+      defaultValueDesc: $defaultExecutionPort
+      name: "tcp-port" .}: Port
 
-    udpPort* {.
+    udpPortFlag* {.
       desc: "Ethereum P2P network listening UDP port"
-      defaultValue: 0 # set udpPort defaultValue in `makeConfig`
       defaultValueDesc: "default to --tcp-port"
-      name: "udp-port" }: Port
+      name: "udp-port" .}: Option[Port]
 
     maxPeers* {.
       desc: "Maximum number of peers to connect to"
       defaultValue: 25
-      name: "max-peers" }: int
+      name: "max-peers" .}: int
 
     nat* {.
       desc: "Specify method to use for determining public address. " &
@@ -375,68 +373,68 @@ type
         " by stateless clients such as generation and storage of block witnesses" &
         " and serving these witnesses to peers over the p2p network."
       defaultValue: false
-      name: "stateless-provider" }: bool
+      name: "stateless-provider" .}: bool
 
     statelessWitnessValidation* {.
       hidden
       desc: "Enable full validation of execution witnesses."
       defaultValue: false
-      name: "stateless-witness-validation" }: bool
+      name: "stateless-witness-validation" .}: bool
 
     case cmd* {.
       command
-      defaultValue: NimbusCmd.noCommand }: NimbusCmd
+      defaultValue: NimbusCmd.executionClient .}: NimbusCmd
 
-    of noCommand:
+    of NimbusCmd.executionClient:
       httpPort* {.
         separator: "\pLOCAL SERVICES OPTIONS:"
         desc: "Listening port of the HTTP server(rpc, ws)"
         defaultValue: defaultHttpPort
         defaultValueDesc: $defaultHttpPort
-        name: "http-port" }: Port
+        name: "http-port" .}: Port
 
       httpAddress* {.
         desc: "Listening IP address of the HTTP server(rpc, ws)"
         defaultValue: defaultAdminListenAddress
         defaultValueDesc: $defaultAdminListenAddressDesc
-        name: "http-address" }: IpAddress
+        name: "http-address" .}: IpAddress
 
       rpcEnabled* {.
         desc: "Enable the JSON-RPC server"
         defaultValue: false
-        name: "rpc" }: bool
+        name: "rpc" .}: bool
 
       rpcApi {.
         desc: "Enable specific set of RPC API (available: eth, debug, admin)"
         defaultValue: @[]
         defaultValueDesc: $RpcFlag.Eth
-        name: "rpc-api" }: seq[string]
+        name: "rpc-api" .}: seq[string]
 
       wsEnabled* {.
         desc: "Enable the Websocket JSON-RPC server"
         defaultValue: false
-        name: "ws" }: bool
+        name: "ws" .}: bool
 
       wsApi {.
         desc: "Enable specific set of Websocket RPC API (available: eth, debug, admin)"
         defaultValue: @[]
         defaultValueDesc: $RpcFlag.Eth
-        name: "ws-api" }: seq[string]
+        name: "ws-api" .}: seq[string]
 
       historyExpiry* {.
         desc: "Enable the data from Portal Network"
         defaultValue: false
-        name: "history-expiry" }: bool
+        name: "history-expiry" .}: bool
 
       historyExpiryLimit* {.
         hidden
         desc: "Limit the number of blocks to be kept in history"
-        name: "debug-history-expiry-limit" }: Option[BlockNumber]
+        name: "debug-history-expiry-limit" .}: Option[BlockNumber]
 
       portalUrl* {.
         desc: "URL of the Portal JSON-RPC API"
         defaultValue: ""
-        name: "portal-url" }: string
+        name: "portal-url" .}: string
 
       engineApiEnabled* {.
         desc: "Enable the Engine API"
@@ -545,7 +543,7 @@ type
       blocksFile* {.
         argument
         desc: "One or more RLP encoded block(s) files"
-        name: "blocks-file" }: seq[InputFile]
+        name: "blocks-file" .}: seq[InputFile]
 
 func parseHexOrDec256(p: string): UInt256 {.raises: [ValueError].} =
   if startsWith(p, "0x"):
@@ -615,7 +613,6 @@ proc parseNetworkParams(network: string): (NetworkParams, bool) =
   case toLowerAscii(network)
   of "mainnet": (networkParams(MainNet), false)
   of "sepolia": (networkParams(SepoliaNet), false)
-  of "holesky": (networkParams(HoleskyNet), false)
   of "hoodi"  : (networkParams(HoodiNet), false)
   else:
     var params: NetworkParams
@@ -721,8 +718,6 @@ proc getBootstrapNodes*(config: ExecutionClientConf): BootstrapNodes =
       getBootstrapNodes("mainnet", result).expect("no error")
     elif config.networkId == SepoliaNet:
       getBootstrapNodes("sepolia", result).expect("no error")
-    elif config.networkId == HoleskyNet:
-      getBootstrapNodes("holesky", result).expect("no error")
     elif config.networkId == HoodiNet:
       getBootstrapNodes("hoodi", result).expect("no error")
 
@@ -763,6 +758,9 @@ proc era1Dir*(config: ExecutionClientConf): string =
 proc eraDir*(config: ExecutionClientConf): string =
   string config.eraDirFlag.get(OutDir config.dataDir / "era")
 
+func udpPort*(config: ExecutionClientConf): Port =
+  config.udpPortFlag.get(config.tcpPort)
+
 func dbOptions*(config: ExecutionClientConf, noKeyCache = false): DbOptions =
   DbOptions.init(
     maxOpenFiles = config.rocksdbMaxOpenFiles,
@@ -795,11 +793,6 @@ proc makeConfig*(cmdLine = commandLineParams(), ignoreUnknown = false): Executio
     quit QuitFailure
 
   processNetworkParamsAndNetworkId(result)
-
-  if result.cmd == noCommand:
-    if result.udpPort == Port(0):
-      # if udpPort not set in cli, then
-      result.udpPort = result.tcpPort
 
 when isMainModule:
   # for testing purpose
