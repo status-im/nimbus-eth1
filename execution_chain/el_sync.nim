@@ -116,7 +116,13 @@ proc syncToEngineApi*(dag: ChainDAGRef, url: EngineApiUrl) {.async.} =
     return
 
   # Load the latest state from the CL
-  var clBlockNumber = dag.getForkedBlock(dag.head.slot).expect("head block").blockNumber
+  var clBlockNumber = block:
+    let blck = dag.getForkedBlock(dag.head.slot).valueOr:
+      # When starting from a checkpoint, the CL might not yet have the head
+      # block in the database
+      debug "CL has not yet downloaded head block", head = dag.head
+      return
+    blck.blockNumber
 
   # Check if the EL is already in sync or about to become so (ie processing a
   # payload already, most likely)
