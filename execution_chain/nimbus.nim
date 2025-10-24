@@ -37,7 +37,15 @@ import
     process_state,
   ],
   ./rpc/jwt_auth,
-  ./[constants, conf as ecconf, el_sync, nimbus_desc, el_sync, nimbus_execution_client]
+  ./[
+    constants,
+    conf as ecconf,
+    el_sync,
+    nimbus_desc,
+    el_sync,
+    nimbus_execution_client,
+    version_info,
+  ]
 
 const
   defaultMetricsServerPort = 8008
@@ -276,6 +284,8 @@ proc runExecutionClient(p: ExecutionThreadConfig) {.thread.} =
   config.tcpPort = p.tcpPort
   config.udpPortFlag = p.udpPort
 
+  info "Launching execution client", version = FullVersionStr, config
+
   # TODO https://github.com/status-im/nim-taskpools/issues/6
   #      share taskpool between bn and ec
   let
@@ -284,9 +294,7 @@ proc runExecutionClient(p: ExecutionThreadConfig) {.thread.} =
 
   {.gcsafe.}:
     dynamicLogScope(comp = "ec"):
-      nimbus_execution_client.runExeClient(
-        config, com, p.tsp.justWait(), displayLaunchingInfo = true
-      )
+      nimbus_execution_client.runExeClient(config, com, p.tsp.justWait())
 
 # noinline to keep it in stack traces
 proc main() {.noinline, raises: [CatchableError].} =
