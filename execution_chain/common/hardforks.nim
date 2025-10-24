@@ -351,6 +351,7 @@ type
     cache: seq[ForkID]
 
 func newID*(calc: ForkIdCalculator, head, time: uint64): ForkID =
+  # Create a fork ID for a specific block height and timestamp:
   var crc = calc.genesisCRC
   for fork in calc.byBlock:
     if fork <= head:
@@ -370,15 +371,24 @@ func newID*(calc: ForkIdCalculator, head, time: uint64): ForkID =
 
 func compatible*(calc: var ForkIdCalculator, forkId: ForkID): bool =
   if calc.cache.len == 0:
-    calc.cache = newSeqOfCap[ForkID](calc.byBlock.len + calc.byTime.len)
+    calc.cache = newSeqOfCap[ForkID](calc.byBlock.len + calc.byTime.len + 1)
     var crc = calc.genesisCRC
+
+    # Build cache of all valid ForkIds
+    # Each entry is (crc before fork, fork number)
     for fork in calc.byBlock:
-      crc = crc32(crc, fork.toBytesBE)
+      debugEcho toHex(crc), " → ", $fork
       calc.cache.add( (crc, fork) )
+      crc = crc32(crc, fork.toBytesBE)
 
     for fork in calc.byTime:
-      crc = crc32(crc, fork.toBytesBE)
+      debugEcho toHex(crc), " → ", $fork
       calc.cache.add( (crc, fork) )
+      crc = crc32(crc, fork.toBytesBE)
+
+    # Add last fork ID (after all forks, next=0)
+    debugEcho toHex(crc), " → ", $0'u64
+    calc.cache.add( (crc, 0'u64) )
 
   for id in calc.cache:
     if id == forkId:
@@ -389,6 +399,7 @@ func compatible*(calc: var ForkIdCalculator, forkId: ForkID): bool =
 func initForkIdCalculator*(map: ForkTransitionTable,
                            genesisCRC: uint32,
                            genesisTime: uint64): ForkIdCalculator =
+  # Build ForkIdCalculator from the chain's fork configuration
 
   # Extract the fork rule block number aggregate it
   var forksByBlock: seq[uint64]
