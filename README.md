@@ -310,7 +310,7 @@ make nimbus_execution_client
 # the Prometheus daemon will create its data dir in the current dir, so give it its own directory
 mkdir ../my_metrics
 # copy the basic config file over there
-cp -a examples/prometheus.yml ../my_metrics/
+cp -a metrics/prometheus.yml ../my_metrics/
 # start Prometheus in a separate terminal
 cd ../my_metrics
 prometheus --config.file=prometheus.yml # loads ./prometheus.yml, writes metric data to ./data
@@ -327,7 +327,7 @@ the form field, unless you click on it.
 
 Create a new dashboard. Click on its default title in the upper left corner
 ("New Dashboard"). In the new page, click "Import dashboard" in the right
-column and upload "examples/Nimbus-Grafana-dashboard.json".
+column and upload "metrics/grafana/grafana.infra.status.im.json".
 
 In the main panel, there's a hidden button used to assign metrics to the left
 or right Y-axis - it's the coloured line on the left of the metric name, in the
