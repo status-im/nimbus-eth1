@@ -32,8 +32,7 @@ proc getForkedBlock(dag: ChainDAGRef, slot: Slot): Opt[ForkedTrustedSignedBeacon
 
 proc blockNumber(blck: ForkedTrustedSignedBeaconBlock): uint64 =
   withBlck(blck):
-    when consensusFork >= ConsensusFork.Bellatrix and
-        consensusFork < ConsensusFork.Gloas:
+    when consensusFork >= ConsensusFork.Bellatrix and consensusFork < ConsensusFork.Gloas:
       forkyBlck.message.body.execution_payload.block_number
     else:
       0'u64

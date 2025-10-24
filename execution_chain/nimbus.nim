@@ -284,7 +284,9 @@ proc runExecutionClient(p: ExecutionThreadConfig) {.thread.} =
 
   {.gcsafe.}:
     dynamicLogScope(comp = "ec"):
-      nimbus_execution_client.runExeClient(config, com, p.tsp.justWait())
+      nimbus_execution_client.runExeClient(
+        config, com, p.tsp.justWait(), displayLaunchingInfo = true
+      )
 
 # noinline to keep it in stack traces
 proc main() {.noinline, raises: [CatchableError].} =
