@@ -48,8 +48,7 @@ func validate*(bal: BlockAccessList, expectedHash: Hash32): Result[void, string]
   # Validate ordering of fields for each account
   for accountChanges in bal:
     # Validate storage changes slots are sorted lexicographically
-    let storageChangesSlots = accountChanges.storageChanges.mapIt(
-        UInt256.fromBytesBE(it.slot.data))
+    let storageChangesSlots = accountChanges.storageChanges.mapIt(it.slot)
     if storageChangesSlots != storageChangesSlots.sorted():
       return err("Storage changes slots should be sorted lexicographically")
 
@@ -59,11 +58,10 @@ func validate*(bal: BlockAccessList, expectedHash: Hash32): Result[void, string]
       if indices != indices.sorted():
         return err("Slot changes should be sorted by blockAccessIndex")
 
-    # Validate storage reads are sorted within each account
-    let storageReadsSlots = accountChanges.storageReads.mapIt(
-        UInt256.fromBytesBE(it.data))
+    # Validate storage reads are sorted lexicographically
+    let storageReadsSlots = accountChanges.storageReads
     if storageReadsSlots != storageReadsSlots.sorted():
-      return err("Storage reads should be sorted by blockAccessIndex")
+      return err("Storage reads should be sorted lexicographically")
 
     # Check balance changes are sorted by blockAccessIndex
     let balanceIndices = accountChanges.balanceChanges.mapIt(it.blockAccessIndex)
