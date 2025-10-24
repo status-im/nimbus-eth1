@@ -215,8 +215,9 @@ nimbus_execution_client: | build deps rocksdb
 check_revision: nimbus_execution_client
 	scripts/check_revision.sh
 
-nimbus: nimbus_execution_client
-	echo "The nimbus target is deprecated and will soon change meaning, use 'nimbus_execution_client' instead"
+nimbus: | build deps rocksdb
+	echo -e $(BUILD_MSG) "build/nimbus" && \
+		$(ENV_SCRIPT) nim c $(NIM_PARAMS) -d:chronicles_log_level=TRACE -o:build/nimbus "execution_chain/nimbus.nim"
 
 # symlink
 nimbus.nims:

@@ -276,14 +276,11 @@ proc runExeClient*(
     config: ExecutionClientConf,
     com: CommonRef,
     stopper: StopFuture,
-    displayLaunchingInfo: static[bool] = false,
     nimbus = NimbusNode(nil),
 ) =
   ## Launches and runs the execution client for pre-configured `nimbus` and
   ## `conf` argument descriptors.
   ##
-  when displayLaunchingInfo:
-    displayLaunchingInfo(config)
 
   var nimbus = nimbus
   if nimbus.isNil:
@@ -322,7 +319,9 @@ proc runExeClient*(
 proc main*(config = makeConfig(), nimbus = NimbusNode(nil)) {.noinline.} =
   # Set up logging before everything else
   setupLogging(config.logLevel, config.logStdout)
-  displayLaunchingInfo(config)
+
+  info "Launching execution client", version = FullVersionStr, config
+
   setupFileLimits()
 
   ProcessState.setupStopHandlers()
