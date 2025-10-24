@@ -104,9 +104,12 @@ func eligibleNode(proto: Eth1Discovery, rec: Record): bool =
     return true
 
   let
-    chainForkIds = try: rlp.decode(bytes, array[1, ChainForkId])
-              except RlpError: return false
-    chainForkId  = chainForkIds[0]
+    ethValue =
+      try:
+        rlp.decode(bytes, array[1, ChainForkId])
+      except RlpError:
+        return false
+    chainForkId  = ethValue[0]
 
   proto.compatibleForkId(chainForkId.to(ForkID))
 
