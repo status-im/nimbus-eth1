@@ -185,7 +185,9 @@ proc elSyncLoop(
     try:
       await syncToEngineApi(dag, url)
     except CatchableError as exc:
-      notice "oops", err = exc.msg
+      # This can happen when the EL is busy doing some work, specially on
+      # startup
+      debug "Execution client not ready", err = exc.msg
 
 proc runBeaconNode(p: BeaconThreadConfig) {.thread.} =
   var config = BeaconNodeConf.loadWithBanners(clientId, copyright, [specBanner], true).valueOr:
