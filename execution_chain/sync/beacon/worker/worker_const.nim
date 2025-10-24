@@ -33,6 +33,7 @@ type
   BeaconErrorType* = enum
     ## For `FetchError` return code object/tuple
     ENoException = 0
+    ESyncerTermination             ## Syncer was stopped
     EAlreadyTriedAndFailed         ## The same action failed before
     EPeerDisconnected              ## Exception
     ECatchableError                ## Exception

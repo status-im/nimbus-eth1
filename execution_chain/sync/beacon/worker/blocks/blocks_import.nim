@@ -52,7 +52,7 @@ proc importBlock*(
       return err((ECancelledError,$e.name,e.msg,Moment.now()-start))
 
     if not ctx.daemon: # Daemon will be up unless shutdown
-      return err((ENoException,"","syncer shutdown",Moment.now()-start))
+      return err((ESyncerTermination,"","",Moment.now()-start))
 
     ctx.pool.nextAsyncNanoSleep = Moment.now() + asyncThreadSwitchGap
 

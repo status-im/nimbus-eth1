@@ -27,6 +27,14 @@ proc getNthHash(ctx: BeaconCtxRef; blocks: seq[EthBlock]; n: int): Hash32 =
   ctx.hdrCache.getHash(blocks[n].header.number).valueOr:
     return zeroHash32
 
+func toStr(e: BeaconError): string =
+  result = "(" & $e.excp & ","
+  if 0 < e.name.len:
+    result &= e.name & "(" & e.msg & "),"
+  elif 0 < e.msg.len:
+    result &= e.msg & ","
+  result &= e.elapsed.toStr
+
 # ------------------------------------------------------------------------------
 # Private functions
 # ------------------------------------------------------------------------------
@@ -230,14 +238,21 @@ template blocksImport*(
                 nthHash=ctx.getNthHash(blocks, n).short,
                 base=ctx.chain.baseNumber.bnStr,
                 head=ctx.chain.latestNumber.bnStr,
-                blkFailCount=ctx.subState.procFailCount, error=error
+                blkFailCount=ctx.subState.procFailCount, error=error.toStr
+            elif error.excp == ESyncerTermination:
+              chronicles.debug "Blocks import error (skip remaining)", n=n, iv,
+                nBlocks=iv.len, nthBn=nBn.bnStr,
+                nthHash=ctx.getNthHash(blocks, n).short,
+                base=ctx.chain.baseNumber.bnStr,
+                head=ctx.chain.latestNumber.bnStr,
+                blkFailCount=ctx.subState.procFailCount, error=error.toStr
             else:
               chronicles.info "Blocks import error (skip remaining)", n=n, iv,
                 nBlocks=iv.len, nthBn=nBn.bnStr,
                 nthHash=ctx.getNthHash(blocks, n).short,
                 base=ctx.chain.baseNumber.bnStr,
                 head=ctx.chain.latestNumber.bnStr,
-                blkFailCount=ctx.subState.procFailCount, error=error
+                blkFailCount=ctx.subState.procFailCount, error=error.toStr
 
           break loop                               # stop
           # End `importBlock(..).valueOr`

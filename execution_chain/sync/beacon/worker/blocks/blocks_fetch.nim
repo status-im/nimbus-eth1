@@ -83,7 +83,7 @@ template fetchBodies*(
       elapsed = rc.error.elapsed
       block evalError:
         case rc.error.excp:
-        of ENoException:
+        of ENoException, ESyncerTermination:
           break evalError
         of EPeerDisconnected, ECancelledError:
           buddy.nErrors.fetch.bdy.inc
