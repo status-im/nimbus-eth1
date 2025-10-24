@@ -71,6 +71,7 @@ type
 
   LightClientManager* = object
     rng: ref HmacDrbgContext
+    timeParams: TimeParams
     backend*: EthLCBackend
     getTrustedBlockRoot: GetTrustedBlockRootCallback
     bootstrapVerifier: BootstrapVerifier
@@ -86,6 +87,7 @@ type
 func init*(
     T: type LightClientManager,
     rng: ref HmacDrbgContext,
+    timeParams: TimeParams,
     getTrustedBlockRoot: GetTrustedBlockRootCallback,
     bootstrapVerifier: BootstrapVerifier,
     updateVerifier: UpdateVerifier,
@@ -100,6 +102,7 @@ func init*(
   ## Initialize light client manager.
   LightClientManager(
     rng: rng,
+    timeParams: timeParams,
     getTrustedBlockRoot: getTrustedBlockRoot,
     bootstrapVerifier: bootstrapVerifier,
     updateVerifier: updateVerifier,
@@ -308,7 +311,7 @@ proc loop(self: LightClientManager) {.async: (raises: [CancelledError]).} =
   while true:
     let
       wallTime = self.getBeaconTime()
-      currentSlot = wallTime.slotOrZero()
+      currentSlot = wallTime.slotOrZero(self.timeParams)
       currentEpoch = (currentSlot mod SLOTS_PER_EPOCH)
       currentPeriod = currentSlot.sync_committee_period
       finalizedSlot = self.getFinalizedSlot()

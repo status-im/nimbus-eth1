@@ -21,8 +21,8 @@ type
   ) {.gcsafe, raises: [].}
 
   LightClient* = ref object
-    cfg: RuntimeConfig
-    forkDigests: ref ForkDigests
+    cfg*: RuntimeConfig
+    forkDigests*: ref ForkDigests
     getBeaconTime*: GetBeaconTimeFn
     store*: ref ForkedLightClientStore
     processor*: ref LightClientProcessor
@@ -133,9 +133,9 @@ proc new*(
         GENESIS_SLOT
 
   lightClient.manager = LightClientManager.init(
-    rng, getTrustedBlockRoot, bootstrapVerifier, updateVerifier, finalityVerifier,
-    optimisticVerifier, isLightClientStoreInitialized, isNextSyncCommitteeKnown,
-    getFinalizedSlot, getOptimisticSlot, getBeaconTime,
+    rng, cfg.timeParams, getTrustedBlockRoot, bootstrapVerifier, updateVerifier,
+    finalityVerifier, optimisticVerifier, isLightClientStoreInitialized,
+    isNextSyncCommitteeKnown, getFinalizedSlot, getOptimisticSlot, getBeaconTime,
   )
 
   lightClient
@@ -167,7 +167,7 @@ proc new*(
     # getStateField reads seeks info directly from a byte array
     # get genesis time and instantiate the beacon clock
     genesisTime = getStateField(genesisState[], genesis_time)
-    beaconClock = BeaconClock.init(genesisTime).valueOr:
+    beaconClock = BeaconClock.init(cfg.timeParams, genesisTime).valueOr:
       error "Invalid genesis time in state", genesisTime
       quit QuitFailure
 

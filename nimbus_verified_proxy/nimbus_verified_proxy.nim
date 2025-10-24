@@ -48,19 +48,13 @@ proc verifyChainId(
       expectedChain = engine.chainId, providerChain = providerId
     quit 1
 
-func getConfiguredChainId(networkMetadata: Eth2NetworkMetadata): UInt256 =
-  if networkMetadata.eth1Network.isSome():
-    let
-      net = networkMetadata.eth1Network.get()
-      chainId =
-        case net
-        of mainnet: 1.u256
-        of sepolia: 11155111.u256
-        of holesky: 17000.u256
-        of hoodi: 560048.u256
-    return chainId
-  else:
-    return networkMetadata.cfg.DEPOSIT_CHAIN_ID.u256
+func getConfiguredChainId*(chain: Option[string]): UInt256 =
+  let net = chain.get("mainnet").toLowerAscii()
+  case net
+  of "mainnet": 1.u256
+  of "sepolia": 11155111.u256
+  of "hoodi": 560048.u256
+  else: 1.u256
 
 proc connectLCToEngine*(lightClient: LightClient, engine: RpcVerificationEngine) =
   proc onFinalizedHeader(
@@ -91,7 +85,6 @@ proc connectLCToEngine*(lightClient: LightClient, engine: RpcVerificationEngine)
 
   lightClient.onFinalizedHeader = onFinalizedHeader
   lightClient.onOptimisticHeader = onOptimisticHeader
-  lightClient.trustedBlockRoot = some config.trustedBlockRoot
 
 proc run(
     config: VerifiedProxyConf
@@ -127,6 +120,7 @@ proc run(
   # connect light client to LC by registering on header methods 
   # to use engine header store
   connectLCToEngine(lc, engine)
+  lc.trustedBlockRoot = some config.trustedBlockRoot
 
   # add light client backend
   lc.setBackend(lcRestClient.getEthLCBackend())

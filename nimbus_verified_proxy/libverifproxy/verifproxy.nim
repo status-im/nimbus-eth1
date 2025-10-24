@@ -164,7 +164,6 @@ proc load(
     accountCacheLen = jsonNode.getOrDefault("accountCacheLen").getInt(128)
 
   return VerifiedProxyConf(
-    listenAddress: none(IpAddress),
     eth2Network: eth2Network,
     trustedBlockRoot: trustedBlockRoot,
     backendUrl: backendUrl,
