@@ -11,15 +11,51 @@
 
 import
   chronicles,
+  results,
+  ./db/core_db,
   # metrics,
   # chronos/timer,
   # std/[strformat, strutils],
   # stew/io2,
+  beacon_chain/process_state,
   ./conf,
-  ./common/common,
+  ./common,
   ./core/chain
+
+proc running(): bool =
+  not ProcessState.stopIt(notice("Shutting down", reason = it))
 
 proc purge*(config: ExecutionClientConf, com: CommonRef) =
   let
     start = com.db.baseTxFrame().getSavedStateBlockNumber()
+    begin = 437036 # 1
+    batchSize = 150
+    # last = begin + (batchSize*600)
+
   notice "Current database at", blockNumber = start
+  notice "Purging all block bodies till", start
+
+  var
+    txFrame = com.db.baseTxFrame().txFrameBegin()
+    currentBlock = begin
+
+  proc checkpoint() =
+    txFrame.checkpoint(start, skipSnapshot = true)
+    com.db.persist(txFrame)
+    txFrame = com.db.baseTxFrame().txFrameBegin()
+
+  
+  while running() and currentBlock <= int(start):
+    txFrame.deleteBlockBodyAndReceipts(currentBlock.BlockNumber).isOkOr:
+      warn "Failed", blkNum=currentBlock, error
+    
+    if (currentBlock mod batchSize) == 0:
+      checkpoint()
+      notice "Deletion of blocks persisted", blks=currentBlock 
+    
+    currentBlock += 1
+  
+  checkpoint()
+  notice "Completed Purging", blocksExistFrom=currentBlock-1, till=start
+
+  
