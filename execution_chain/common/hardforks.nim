@@ -377,17 +377,14 @@ func compatible*(calc: var ForkIdCalculator, forkId: ForkID): bool =
     # Build cache of all valid ForkIds
     # Each entry is (crc before fork, fork number)
     for fork in calc.byBlock:
-      debugEcho toHex(crc), " → ", $fork
       calc.cache.add( (crc, fork) )
       crc = crc32(crc, fork.toBytesBE)
 
     for fork in calc.byTime:
-      debugEcho toHex(crc), " → ", $fork
       calc.cache.add( (crc, fork) )
       crc = crc32(crc, fork.toBytesBE)
 
     # Add last fork ID (after all forks, next=0)
-    debugEcho toHex(crc), " → ", $0'u64
     calc.cache.add( (crc, 0'u64) )
 
   for id in calc.cache:
