@@ -40,6 +40,9 @@ type
     ECancelledError                ## Exception
 
 const
+  twoHundredYears* = chronos.days(365 * 200 + 48)
+    ## Large Duration constant considered sort of infinite.
+
   metricsUpdateInterval* = chronos.seconds(10)
     ## Wait at least this time before next update
 

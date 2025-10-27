@@ -11,6 +11,7 @@
 {.push raises:[].}
 
 import
+  pkg/chronos,
   ../worker_desc
 
 # ------------------------------------------------------------------------------
@@ -66,6 +67,21 @@ func hdrSessionStopped*(ctx: BeaconCtxRef): bool =
 func hdrThroughput*(buddy: BeaconBuddyRef): string =
   ## Print throuhput sratistics
   buddy.only.thPutStats.hdr.toMeanVar.psStr
+
+# -------------
+
+proc hdrNoSampleSize*(
+    buddy: BeaconBuddyRef;
+    elapsed: chronos.Duration;
+      ) =
+  discard buddy.only.thPutStats.hdr.bpsSample(elapsed, 0)
+
+proc hdrSampleSize*(
+    buddy: BeaconBuddyRef;
+    elapsed: chronos.Duration;
+    size: int;
+      ): uint =
+  buddy.only.thPutStats.hdr.bpsSample(elapsed, size)
 
 # ------------------------------------------------------------------------------
 # End

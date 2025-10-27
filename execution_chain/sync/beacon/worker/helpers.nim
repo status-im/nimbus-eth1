@@ -60,6 +60,8 @@ func bnStr*(w: Interval[BlockNumber,uint64]): string =
 
 
 func toStr*(a: chronos.Duration): string =
+  if twoHundredYears <= a:
+    return "n/a"
   var s = a.toString 2
   if s.len == 0: s="0"
   s

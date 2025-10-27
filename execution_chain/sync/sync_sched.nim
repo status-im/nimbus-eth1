@@ -184,53 +184,8 @@ proc getPeersFn[S,W](dsc: RunnerSyncRef[S,W]): GetPeersFn[S,W] =
     list
 
 # ------------------------------------------------------------------------------
-# Private functions
+# Private handlers, action loops
 # ------------------------------------------------------------------------------
-
-proc terminate[S,W](dsc: RunnerSyncRef[S,W]) {.async: (raises: []).} =
-  ## Request termination and wait for sub-tasks to finish
-  mixin runRelease
-
-  if dsc.runCtrl == running:
-    # Gracefully shut down async services
-    dsc.runCtrl = shutdown
-    dsc.ctx.daemon = false
-
-    # Wait for workers and daemon to have terminated
-    while 0 < dsc.buddies.len:
-      for w in dsc.buddies.nextPairs:
-        if w.data.isRunning:
-          w.data.worker.ctrl.stopped = true
-        else:
-          dsc.buddies.del w.key # this is OK to delete
-      # Activate async jobs so they can finish
-      try:
-        waitFor sleepAsync termWaitPollingTime
-      except CancelledError:
-        trace "Shutdown: peer timeout was cancelled",
-          nCachedWorkers=dsc.buddies.len
-
-    while dsc.daemonRunning or
-          dsc.tickerRunning:
-      # Activate async job so it can finish
-      try:
-        await sleepAsync termWaitPollingTime
-      except CancelledError:
-        trace "Shutdown: daemon timeout was cancelled",
-          nCachedWorkers=dsc.buddies.len
-
-    # Final shutdown
-    dsc.ctx.runRelease()
-
-    # Remove call back from pool manager. This comes last as it will
-    # potentially unlink references which are used in the worker instances
-    # (e.g. peer for logging.)
-    dsc.pool.delObserver(dsc)
-
-    # Clean up, free memory from sub-objects
-    dsc.ctx = CtxRef[S,W]()
-    dsc.runCtrl = terminated
-
 
 proc daemonLoop[S,W](dsc: RunnerSyncRef[S,W]) {.async: (raises: []).} =
   mixin runDaemon
@@ -409,6 +364,55 @@ proc workerLoop[S,W](buddy: RunnerBuddyRef[S,W]) {.async: (raises: []).} =
   # Note that `runStart()` was dispatched in `onPeerConnected()`
   worker.runStop()                # tell worker that this peer is done with
   buddy.isRunning = false         # mark it terminated for the scheduler
+
+
+# ------------------------------------------------------------------------------
+# Private functions
+# ------------------------------------------------------------------------------
+
+proc terminate[S,W](dsc: RunnerSyncRef[S,W]) {.async: (raises: []).} =
+  ## Request termination and wait for sub-tasks to finish
+  mixin runRelease
+
+  if dsc.runCtrl == running:
+    # Gracefully shut down async services
+    dsc.runCtrl = shutdown
+    dsc.ctx.daemon = false
+
+    # Wait for workers and daemon to have terminated
+    while 0 < dsc.buddies.len:
+      for w in dsc.buddies.nextPairs:
+        if w.data.isRunning:
+          w.data.worker.ctrl.stopped = true
+        else:
+          dsc.buddies.del w.key # this is OK to delete
+      # Activate async jobs so they can finish
+      try:
+        waitFor sleepAsync termWaitPollingTime
+      except CancelledError:
+        trace "Shutdown: peer timeout was cancelled",
+          nCachedWorkers=dsc.buddies.len
+
+    while dsc.daemonRunning or
+          dsc.tickerRunning:
+      # Activate async job so it can finish
+      try:
+        await sleepAsync termWaitPollingTime
+      except CancelledError:
+        trace "Shutdown: daemon timeout was cancelled",
+          nCachedWorkers=dsc.buddies.len
+
+    # Final shutdown
+    dsc.ctx.runRelease()
+
+    # Remove call back from pool manager. This comes last as it will
+    # potentially unlink references which are used in the worker instances
+    # (e.g. peer for logging.)
+    dsc.pool.delObserver(dsc)
+
+    # Clean up, free memory from sub-objects
+    dsc.ctx = CtxRef[S,W]()
+    dsc.runCtrl = terminated
 
 
 proc onPeerConnected[S,W](dsc: RunnerSyncRef[S,W]; peer: Peer) =

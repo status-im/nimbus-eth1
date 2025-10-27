@@ -90,7 +90,7 @@ template fetchBodies*(
           buddy.ctrl.zombie = true
         of ECatchableError:
           buddy.bdyFetchRegisterError()
-          discard buddy.only.thPutStats.hdr.bpsSample(elapsed, 0)
+          buddy.blkNoSampleSize(elapsed)
         of EAlreadyTriedAndFailed:
           # Just return `failed` (no error count or throughput stats)
           discard
@@ -117,7 +117,7 @@ template fetchBodies*(
       else:
         # No data available. For a fast enough rejection response, the
         # througput stats are degraded, only.
-        discard buddy.only.thPutStats.blk.bpsSample(elapsed, 0)
+        buddy.blkNoSampleSize(elapsed)
 
         # Slow response, definitely not fast enough
         if fetchBodiesErrTimeout <= elapsed:
@@ -134,7 +134,7 @@ template fetchBodies*(
       break body                                    # return err()
 
     # Update download statistics
-    let bps = buddy.only.thPutStats.blk.bpsSample(elapsed, b.getEncodedLength)
+    let bps = buddy.blkSampleSize(elapsed, b.getEncodedLength)
 
     # Request did not fail
     buddy.only.failedReq.reset

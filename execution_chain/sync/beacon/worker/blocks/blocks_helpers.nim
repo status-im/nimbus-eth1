@@ -11,6 +11,7 @@
 {.push raises:[].}
 
 import
+  pkg/chronos,
   ../worker_desc
 
 # ------------------------------------------------------------------------------
@@ -46,6 +47,21 @@ func blkSessionStopped*(ctx: BeaconCtxRef): bool =
 func blkThroughput*(buddy: BeaconBuddyRef): string =
   ## Print throuhput sratistics
   buddy.only.thPutStats.blk.toMeanVar.psStr
+
+# -------------
+
+proc blkNoSampleSize*(
+    buddy: BeaconBuddyRef;
+    elapsed: chronos.Duration;
+      ) =
+  discard buddy.only.thPutStats.blk.bpsSample(elapsed, 0)
+
+proc blkSampleSize*(
+    buddy: BeaconBuddyRef;
+    elapsed: chronos.Duration;
+    size: int;
+      ): uint =
+  buddy.only.thPutStats.blk.bpsSample(elapsed, size)
 
 # ------------------------------------------------------------------------------
 # End

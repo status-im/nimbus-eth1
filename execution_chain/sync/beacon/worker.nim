@@ -17,7 +17,6 @@ import
   ../../common,
   ../../networking/p2p,
   ./worker/headers/headers_target,
-  ./worker/update/metrics,
   ./worker/[blocks, classify, headers, start_stop, update, worker_desc]
 
 # ------------------------------------------------------------------------------

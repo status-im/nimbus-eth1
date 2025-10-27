@@ -15,7 +15,11 @@ import
   pkg/[chronicles, chronos, metrics],
   pkg/eth/common,
   ./blocks/blocks_unproc,
+  ./update/update_metrics,
   ./[headers, worker_desc]
+
+export
+  update_metrics
 
 logScope:
   topics = "beacon sync"
