@@ -22,6 +22,7 @@ on:
       - '.github/workflows/portal_docs.yml'
       - '.github/workflows/build_base_image.yml'
       - 'docker/**'
+      - 'metrics/**'
 
   pull_request:
     paths-ignore:
@@ -33,6 +34,7 @@ on:
       - '.github/workflows/portal_docs.yml'
       - '.github/workflows/build_base_image.yml'
       - 'docker/**'
+      - 'metrics/**'
 
   workflow_dispatch:
 
