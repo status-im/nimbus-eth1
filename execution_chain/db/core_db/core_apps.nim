@@ -691,10 +691,21 @@ proc deleteReceipts*(
   
   for idx in 0'u16..<uint16.high:
     let key = hashIndexKey(receiptsRoot, idx)
-    if not db.hasKey(key): # if key is not there doesn't makes sense deleting
-      break
     db.del(key).isOkOr:
       warn info, idx, error=($$error)
+
+proc deleteReceipts*(
+    db: CoreDbTxRef;
+    blockNumber: BlockNumber;   
+      ): Result[void, string] =
+  const info = "deleteReceipts()"
+  let
+    header = ?db.getBlockHeader(blockNumber)
+    receiptsRoot = header.receiptsRoot
+
+  db.deleteReceipts(receiptsRoot)
+
+  ok()
 
 proc deleteTransactions*(
     db: CoreDbTxRef;
@@ -706,8 +717,6 @@ proc deleteTransactions*(
 
   for idx in 0'u16..<uint16.high:
     let key = hashIndexKey(txRoot, idx)
-    if not db.hasKey(key): # if key is not there doesn't makes sense deleting
-      break
     db.del(key).isOkOr:
       warn info, idx, error=($$error)
 
@@ -721,8 +730,6 @@ proc deleteUncles*(
 
   for idx in 0'u16..<uint16.high:
     let key = hashIndexKey(ommersHash, idx)
-    if not db.hasKey(key):
-      break
     db.del(key).isOkOr:
       warn info, idx, error=($$error)
 
@@ -736,8 +743,6 @@ proc deleteWithdrawals*(
   
   for idx in 0'u16..<uint16.high:
     let key = hashIndexKey(withdrawalsRoot, idx)
-    if not db.hasKey(key):
-      break
     db.del(key).isOkOr:
       warn info, idx, error=($$error)
 
@@ -754,9 +759,40 @@ proc deleteBlockBody*(
     if header.withdrawalsRoot.isSome:
       db.deleteWithdrawals(header.withdrawalsRoot.get(EMPTY_ROOT_HASH))
   except:
-    warn info, blockHash, error="Unknown Exception occurred"
+    warn info, blkNum=header.number, error="Unknown Exception occurred"
 
   ok()
+
+proc deleteBlockBody*(
+    db: CoreDbTxRef;
+    blockNumber: BlockNumber;
+      ): Result[void, string] =
+  const info = "deleteBlockBody()"
+  let header = ?db.getBlockHeader(blockNumber)
+
+  db.deleteTransactions(header.transactionsRoot)
+  db.deleteUncles(header.ommersHash)
+  if header.withdrawalsRoot.isSome:
+    db.deleteWithdrawals(header.withdrawalsRoot.get())
+
+  ok()
+
+proc deleteBlockBodyAndReceipts*(
+    db: CoreDbTxRef;
+    blockNumber: BlockNumber;
+      ): Result[void, string] =
+  const info = "deleteBlockBodyAndReceipts()"
+  let
+    header = ?db.getBlockHeader(blockNumber)
+
+  db.deleteTransactions(header.transactionsRoot)
+  db.deleteUncles(header.ommersHash)
+  if header.withdrawalsRoot.isSome:
+    db.deleteWithdrawals(header.withdrawalsRoot.get())
+  db.deleteReceipts(header.receiptsRoot)
+
+  ok()
+
 
 # ------------------------------------------------------------------------------
 # End
