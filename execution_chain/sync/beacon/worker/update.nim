@@ -15,11 +15,11 @@ import
   pkg/[chronicles, chronos, metrics],
   pkg/eth/common,
   ./blocks/blocks_unproc,
-  ./update/update_metrics,
+  ./update/[update_eta, update_metrics],
   ./[headers, worker_desc]
 
 export
-  update_metrics
+  update_eta, update_metrics
 
 logScope:
   topics = "beacon sync"
@@ -42,6 +42,7 @@ proc updateSuspendSyncer(ctx: BeaconCtxRef) =
 
   ctx.pool.failedPeers.clear()
   ctx.pool.seenData = false
+  ctx.pool.syncEta.lastUpdate = low(chronos.Moment)
 
   ctx.hibernate = true
 
@@ -210,6 +211,7 @@ proc updateSyncState*(ctx: BeaconCtxRef; info: static[string]) =
 
   let prevState = ctx.pool.lastState
   ctx.pool.lastState = newState
+  ctx.subState.stateSince = Moment.now()
 
   case newState:
   of idle:
@@ -239,7 +241,7 @@ proc updateLastBlockImported*(ctx: BeaconCtxRef; bn: BlockNumber) =
   metrics.set(nec_sync_last_block_imported, bn.int64)
 
 # ------------------------------------------------------------------------------
-# Public functions, call-back handler ready
+# Public functions, call-back handlers
 # ------------------------------------------------------------------------------
 
 proc updateActivateSyncer*(ctx: BeaconCtxRef) =
@@ -254,6 +256,8 @@ proc updateActivateSyncer*(ctx: BeaconCtxRef) =
     if b+1 < t:
       ctx.pool.minInitBuddies = 0               # reset
       ctx.pool.lastState = SyncState.headers    # state transition
+      ctx.subState.stateSince = Moment.now()
+      ctx.pool.syncEta.lastUpdate = ctx.subState.stateSince
       ctx.hibernate = false                     # wake up
 
       # Update range

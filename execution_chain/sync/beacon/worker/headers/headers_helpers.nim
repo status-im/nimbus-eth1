@@ -12,6 +12,7 @@
 
 import
   pkg/chronos,
+  ../update/update_eta,
   ../worker_desc
 
 # ------------------------------------------------------------------------------
@@ -81,7 +82,8 @@ proc hdrSampleSize*(
     elapsed: chronos.Duration;
     size: int;
       ): uint =
-  buddy.only.thPutStats.hdr.bpsSample(elapsed, size)
+  result = buddy.only.thPutStats.hdr.bpsSample(elapsed, size)
+  buddy.ctx.updateEtaHeaders()
 
 # ------------------------------------------------------------------------------
 # End

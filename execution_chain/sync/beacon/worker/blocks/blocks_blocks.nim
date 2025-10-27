@@ -259,6 +259,7 @@ template blocksImport*(
 
         # isOk => next instruction
         ctx.updateLastBlockImported nBn            # block imported OK
+        ctx.updateEtaBlocks()                      # metrics, eta estimate
         # End block: `loop`
 
     if not isError:

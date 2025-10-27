@@ -68,25 +68,25 @@ symbol on the left. Single letter symbol have the following meaning:
 
 * *B* -- **base**, current value of this entity (with the same name) of the
          **FC** module (i.e. the current value when looked up.) *B* is an
-		 ancestor or equal of *L* and would be somewhere between *0* and *L*
-		 on the diagram *(5)*.
+         ancestor or equal of *L* and would be somewhere between *0* and *L*
+         on the diagram *(5)*.
 
 * *C* -- coupler, least possible endpoint *D* of the chain of headers to be
          fetched and and linked.
 
 * *I* -- imported, last block that was sucsessfully imported into the **FC**
          module (this symbol is potentally used in code comments of the
-		 implementation, only.)
+         implementation, only.)
 
 * *L* -- **latest**, current value of this entity (with the same name) of the
          **FC** module (i.e. the current value when looked up.) *L* need not
          be a parent of any header of the linked chain `D..H` as both, *L* and
-		 *H* might be heads of different chains.
+         *H* might be heads of different chains.
 
 * *D* -- dangling, header with the least block number of the linked chain in
          progress ending at *H*. This variable is used to record the download
          state. When successful, downloading ends when header *D* has a parent
-		 on the **FC** database.
+         on the **FC** database.
 
 * *H* -- head, sync target header which locks the value of *T* (see below)
          while processing.
@@ -94,7 +94,7 @@ symbol on the left. Single letter symbol have the following meaning:
 * *T* -- cached value of the last *consensus head* request (interpreted as
          *sync to new head* instruction) sent from the **CL** via RPC (this
          symbol is potentally used in code comments of the implementation,
-		 only.)
+         only.)
 
 ### Sync Processing
 
@@ -263,12 +263,14 @@ be available if *nimbus* is compiled with the additional make flags
 |:-----------------------------|:------------:|:---------------------|
 |                              |              |                      |
 | nec_base                     | block height | **B**, *increasing*  |
-| nec_execution_head           | block height | **L**, *increasing*  |
+| nec_execution_head           | block height | **L**                |
 | nec_sync_coupler             | block height | **C**, *0 when idle* |
 | nec_sync_dangling            | block height | **D**, *0 when idle* |
 | nec_sync_last_block_imported | block height | **I**, *0 when idle* |
 | nec_sync_head                | block height | **H**, *0 when idle* |
 | nec_sync_consensus_head      | block height | **T**, *increasing*  |
+| nec_sync_distance_to_sync    | block diff   | **T** - **L**        |
+| nec_sync_eta_secs            | time seconds | estimated ETA        |
 |                              |              |                      |
 | nec_sync_header_lists_staged | size | # of staged header list records      |
 | nec_sync_headers_unprocessed | size | # of accumulated header block numbers|

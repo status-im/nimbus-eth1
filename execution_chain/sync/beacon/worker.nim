@@ -66,6 +66,7 @@ proc runTicker*(ctx: BeaconCtxRef; info: static[string]) =
   ## Global background job that is started every few seconds. It is to be
   ## intended for updating metrics, debug logging etc.
   ##
+  ctx.updateEtaIdle()
   ctx.updateMetrics()
   ctx.pool.ticker(ctx)
 

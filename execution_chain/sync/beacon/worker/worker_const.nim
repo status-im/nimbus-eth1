@@ -150,6 +150,31 @@ const
 
   # ----------------------
 
+  etaHeaderTimeDefault* = 25_000_000f
+    ## Nanoseconds per header used for early ETA estimate. When available,
+    ## this value will be replaced by the real one derived from calulating
+    ## elapsed time over number of blocks.
+
+  etaBlockTimeDefault* = 2_000_000_000f
+    ## Similar to `etaHeaderTimeDefault`
+
+
+  etaIdleMaxDensity* = chronos.seconds(5)
+    ## Minimal time distance beween two ETA measurements while the syncer
+    ## is hibernating
+
+  etaHeaderMaxDensity* = chronos.seconds(3)
+    ## Minimal time distance beween two ETA measurements while the syncer
+    ## is downloading headers.
+
+  etaBlockMaxDensity* = chronos.seconds(10)
+    ## imilar to `etaHeaderMaxDensity`
+
+
+  etaAvgPoints* = 6
+    ## Number of sample points when calculating the ETA average. More ample
+    ## points tend to smoothen the resulting curve when plotting the average.
+
 static:
   doAssert 0 < nFetchHeadersRequest
   doAssert 0 < headersStagedQueueLengthMax

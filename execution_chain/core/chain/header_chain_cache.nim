@@ -77,6 +77,9 @@ declareGauge nec_sync_dangling, "" &
 declareGauge nec_sync_consensus_head, "" &
   "Block number of latest consensus head"
 
+declareGauge nec_sync_distance_to_sync, "" &
+  "Distance from execution head to consensus head"
+
 type
   HccDbInfo = object
     ## For database table storage and clean up
@@ -310,10 +313,10 @@ proc headUpdateFromCL(hc: HeaderChainRef; h: Header; f: Hash32) =
   ## This function prepares a new session and notifies some registered
   ## client app.
   ##
-  if f != zeroHash32 and                            # finalised hash is set
-     hc.chain.baseNumber() + 1 < h.number:          # otherwise useless
+  if f != zeroHash32:                               # finalised hash is set
 
-    if hc.session.mode == closed:
+    if hc.chain.baseNumber() + 1 < h.number and     # otherwise useless
+       hc.session.mode == closed:
       # Set new session environment
       hc.session = HccSession(                      # start new session
         mode:     collecting,
@@ -335,6 +338,9 @@ proc headUpdateFromCL(hc: HeaderChainRef; h: Header; f: Hash32) =
     # For logging and metrics
     hc.session.consHeadNum = h.number
     metrics.set(nec_sync_consensus_head, h.number.int64)
+    if hc.chain.latestNumber <= h.number:
+      metrics.set(nec_sync_distance_to_sync,
+        (h.number - hc.chain.latestNumber).int64)
 
 # ------------------------------------------------------------------------------
 # Public constructor/destructor et al.
@@ -361,7 +367,6 @@ proc clear*(hc: HeaderChainRef) =
   ##
   hc.session.reset                        # clear session state object
   hc.persistClear()                       # clear database
-  metrics.set(nec_sync_consensus_head, 0) # clear metrics register
   metrics.set(nec_sync_dangling, 0)       # ditto
 
 proc stop*(hc: HeaderChainRef) =
@@ -641,6 +646,12 @@ func latestConsHeadNumber*(hc: HeaderChainRef): BlockNumber =
   ## remains constant (for the current session.)
   ##
   hc.session.consHeadNum
+
+proc updateMetrics*(hc: HeaderChainRef) =
+  ## Update/adjust some metrics, i.p. `nec_sync_distance_to_sync`
+  if hc.chain.latestNumber <= hc.session.consHeadNum:
+    metrics.set(nec_sync_distance_to_sync,
+      (hc.session.consHeadNum - hc.chain.latestNumber).int64)
 
 # ------------------------------------------------------------------------------
 # Public debugging helpers
