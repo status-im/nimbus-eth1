@@ -139,6 +139,11 @@ OK: 5/5 Fail: 0/5 Skip: 0/5
 + valid_multi_inf.json                                            OK
 ```
 OK: 6/6 Fail: 0/6 Skip: 0/6
+## bls12_precompiles_before_fork
+```diff
++ precompile_before_fork.json                                     OK
+```
+OK: 1/1 Fail: 0/1 Skip: 0/1
 ## bls12_variable_length_input_contracts
 ```diff
 + invalid_gas_g1msm.json                                          OK
@@ -165,6 +170,11 @@ OK: 15/15 Fail: 0/15 Skip: 0/15
 + call_memory_expands_on_early_revert.json                        OK
 ```
 OK: 3/3 Fail: 0/3 Skip: 0/3
+## call_and_callcode_gas_calculation
+```diff
++ value_transfer_gas_calculation.json                             OK
+```
+OK: 1/1 Fail: 0/1 Skip: 0/1
 ## calldatacopy
 ```diff
 + calldatacopy.json                                               OK
@@ -461,9 +471,10 @@ OK: 50/50 Fail: 0/50 Skip: 0/50
 + pointer_to_precompile.json                                      OK
 + pointer_to_static.json                                          OK
 + pointer_to_static_reentry.json                                  OK
++ set_code_type_tx_pre_fork.json                                  OK
 + static_to_pointer.json                                          OK
 ```
-OK: 15/15 Fail: 0/15 Skip: 0/15
+OK: 16/16 Fail: 0/16 Skip: 0/16
 ## shift_combinations
 ```diff
 + combinations.json                                               OK
@@ -551,4 +562,4 @@ OK: 2/2 Fail: 0/2 Skip: 0/2
 OK: 1/1 Fail: 0/1 Skip: 0/1
 
 ---TOTAL---
-OK: 265/265 Fail: 0/265 Skip: 0/265
+OK: 268/268 Fail: 0/268 Skip: 0/268

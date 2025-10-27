@@ -65,7 +65,6 @@ func getConfiguredChainId(networkMetadata: Eth2NetworkMetadata): UInt256 =
         case net
         of mainnet: 1.u256
         of sepolia: 11155111.u256
-        of holesky: 17000.u256
         of hoodi: 560048.u256
     return chainId
   else:
@@ -136,7 +135,7 @@ proc run*(
     # getStateField reads seeks info directly from a byte array
     # get genesis time and instantiate the beacon clock
     genesisTime = getStateField(genesisState[], genesis_time)
-    beaconClock = BeaconClock.init(genesisTime).valueOr:
+    beaconClock = BeaconClock.init(cfg.timeParams, genesisTime).valueOr:
       error "Invalid genesis time in state", genesisTime
       quit QuitFailure
 
@@ -267,14 +266,14 @@ proc run*(
       let forkDigest = forkDigests[].atEpoch(gossipEpoch, cfg)
       network.subscribe(
         getBeaconBlocksTopic(forkDigest),
-        getBlockTopicParams(),
+        getBlockTopicParams(cfg.timeParams),
         enableTopicMetrics = true,
       )
 
     blocksGossipState = targetGossipState
 
   proc updateGossipStatus(time: Moment) =
-    let wallSlot = getBeaconTime().slotOrZero()
+    let wallSlot = getBeaconTime().slotOrZero(cfg.timeParams)
     updateBlocksGossipStatus(wallSlot + 1)
     lightClient.updateGossipStatus(wallSlot + 1)
 

@@ -46,7 +46,7 @@ proc configurationMain*() =
 
     test "import-rlp":
       let aa = makeTestConfig()
-      check aa.cmd == NimbusCmd.noCommand
+      check aa.cmd == NimbusCmd.executionClient
 
       let bb = makeConfig(@["import-rlp", genesisFile])
       check bb.cmd == NimbusCmd.`import-rlp`

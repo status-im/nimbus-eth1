@@ -127,8 +127,8 @@ const
     ## Insert `persist()` statements in bulk action every `MaxDeleteBatch`
     ## `del()` directives.
 
-  RaisePfx = "Header Cache: "
-    ## Message prefix used when bailing out raising an exception
+  MsgPfx = "Header Cache: "
+    ## Message prefix used when logging or raising an exception
 
 const
   HccDbInfoKey = 0.beaconHeaderKey
@@ -163,7 +163,7 @@ func decodePayload(data: seq[byte]; T: type): T =
   try:
     result = rlp.decode(data, T)
   except RlpError as e:
-    raiseAssert RaisePfx & "rlp.decode(" & $T & ") failed:" &
+    raiseAssert MsgPfx & "rlp.decode(" & $T & ") failed:" &
       " name=" & $e.name & " error=" & e.msg
 
 # ------------------------------------------------------------------------------
@@ -172,7 +172,7 @@ func decodePayload(data: seq[byte]; T: type): T =
 
 proc putInfo(db: KvtTxRef; state: HccDbInfo) =
   db.put(HccDbInfoKey.toOpenArray, encodePayload(state)).isOkOr:
-    raiseAssert RaisePfx & "put(info) failed: " & $error
+    raiseAssert MsgPfx & "put(info) failed: " & $error
 
 proc getInfo(db: KvtTxRef): Opt[HccDbInfo] =
   let data = db.get(HccDbInfoKey.toOpenArray).valueOr:
@@ -194,11 +194,11 @@ proc putHeader(db: KvtTxRef; h: Header) =
   ## of the parent header.
   let data = encodePayload(h)
   db.put(beaconHeaderKey(h.number).toOpenArray, data).isOkOr:
-    raiseAssert RaisePfx & "put(header) failed: " & $error
+    raiseAssert MsgPfx & "put(header) failed: " & $error
 
   let parNumData = (h.number-1).toBytesBE
   db.put(genericHashKey(h.parentHash).toOpenArray, parNumData).isOkOr:
-    raiseAssert RaisePfx & "put(number-1) failed: " & $error
+    raiseAssert MsgPfx & "put(number-1) failed: " & $error
 
 
 proc getNumber(db: KvtTxRef, hash: Hash32): Opt[BlockNumber] =
@@ -300,7 +300,7 @@ proc resolveFinHash(hc: HeaderChainRef, f: Hash32) =
     return
 
   if hc.chain.tryUpdatePendingFCU(f, number):
-    debug "PendingFCU resolved to block number",
+    debug MsgPfx & "pendingFCU resolved to block number",
       hash = f.short,
       number = number.bnStr
 
@@ -480,7 +480,7 @@ proc put*(
   if rev.len == 0:
     return ok()                                    # nothing to do
 
-  debug "HC updated",
+  debug MsgPfx & "updated",
     minNum=rev[^1].bnStr,
     maxNum=rev[0].bnStr,
     numHeaders=rev.len
@@ -598,8 +598,11 @@ proc commit*(hc: HeaderChainRef): Result[void,string] =
         return ok()
 
       # Impossible situation!
-      raiseAssert RaisePfx &
-        "Missing finalised " & fin.bnStr & " parent on FC module"
+      raiseAssert MsgPfx &
+        "Missing finalised " & fin.bnStr & " parent on FC module" &
+           ", base=" & hc.chain.baseNumber.bnStr &
+           ", head=" & hc.session.head.bnStr &
+           ", finalized=" & hc.chain.latestFinalizedBlockNumber.bnStr
 
   hc.session.mode = orphan
   err("Parent on FC module has been lost: obsolete branch segment")

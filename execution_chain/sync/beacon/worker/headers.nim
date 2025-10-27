@@ -138,7 +138,7 @@ template headersCollect*(buddy: BeaconBuddyRef; info: static[string]) =
               base=ctx.chain.baseNumber.bnStr,
               head=ctx.chain.latestNumber.bnStr,
               target=ctx.hdrCache.head.bnStr,
-              throughput=buddy.hdrThroughput,
+              thPut=buddy.hdrThroughput,
               nSyncPeers=ctx.pool.nBuddies
             ctx.pool.lastSyncUpdLog = Moment.now()
             nStashed = 0
@@ -183,7 +183,7 @@ template headersCollect*(buddy: BeaconBuddyRef; info: static[string]) =
           base=ctx.chain.baseNumber.bnStr,
           head=ctx.chain.latestNumber.bnStr,
           target=ctx.hdrCache.head.bnStr,
-          throughput=buddy.hdrThroughput,
+          thPut=buddy.hdrThroughput,
           nSyncPeers=ctx.pool.nBuddies
         ctx.pool.lastSyncUpdLog = Moment.now()
 

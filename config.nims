@@ -83,8 +83,20 @@ if defined(windows):
 #
 if defined(disableMarchNative):
   if defined(i386) or defined(amd64):
-    switch("passC", "-mssse3")
-    switch("passL", "-mssse3")
+    if defined(macosx):
+      # https://support.apple.com/en-us/105113
+      # "macOS Sonoma is compatible with these computers" lists current oldest
+      # supported x86 models, all of which have Kaby Lake or newer CPUs.
+      switch("passC", "-march=skylake -mtune=generic")
+      switch("passL", "-march=skylake -mtune=generic")
+    else:
+      if defined(marchOptimized):
+        # https://github.com/status-im/nimbus-eth2/blob/stable/docs/cpu_features.md#bmi2--adx
+        switch("passC", "-march=broadwell -mtune=generic")
+        switch("passL", "-march=broadwell -mtune=generic")
+      else:
+        switch("passC", "-mssse3")
+        switch("passL", "-mssse3")
 elif defined(macosx) and defined(arm64):
   # Apple's Clang can't handle "-march=native" on M1: https://github.com/status-im/nimbus-eth2/issues/2758
   switch("passC", "-mcpu=apple-m1")
@@ -101,24 +113,22 @@ elif defined(linux) and defined(arm64):
 else:
   switch("passC", "-march=native")
   switch("passL", "-march=native")
-  if defined(windows):
+  if defined(i386) or defined(amd64):
     # https://gcc.gnu.org/bugzilla/show_bug.cgi?id=65782
     # ("-fno-asynchronous-unwind-tables" breaks Nim's exception raising, sometimes)
+    # For non-Windows targets, https://github.com/bitcoin-core/secp256k1/issues/1623
+    # also suggests disabling the same flag to address Ubuntu 22.04/recent AMD CPUs.
     switch("passC", "-mno-avx512f")
     switch("passL", "-mno-avx512f")
 
-# Omitting frame pointers in nim breaks the GC:
+# omitting frame pointers in nim breaks the GC
 # https://github.com/nim-lang/Nim/issues/10625
-if not defined(windows):
-  # ...except on Windows where the Nim bug doesn't manifest and the option
-  # crashes GCC in some Mingw-w64 versions:
-  # https://sourceforge.net/p/mingw-w64/bugs/880/
-  # https://gcc.gnu.org/bugzilla/show_bug.cgi?id=86593
-  switch("passC", "-fno-omit-frame-pointer")
-  switch("passL", "-fno-omit-frame-pointer")
+switch("passC", "-fno-omit-frame-pointer")
+switch("passL", "-fno-omit-frame-pointer")
 
 --threads:on
 --opt:speed
+--mm:refc
 --excessiveStackTrace:on
 # enable metric collection
 --define:metrics
@@ -126,8 +136,8 @@ if not defined(windows):
 --define:nimTypeNames
 --styleCheck:usages
 --styleCheck:error
---mm:refc
 
+switch("define", "nim_compiler_path=" & currentDir & "env.sh nim")
 switch("define", "withoutPCRE")
 
 when not defined(disable_libbacktrace):
@@ -188,7 +198,6 @@ when not defined(use_system_rocksdb) and not defined(windows):
 # Unfortunately this is filename based instead of path-based
 # Assumes GCC
 
-# -fomit-frame-pointer for https://github.com/status-im/nimbus-eth1/issues/2127
 put("secp256k1.always", "-fno-lto -fomit-frame-pointer")
 
 # ############################################################
@@ -206,6 +215,11 @@ put("secp256k1.always", "-fno-lto -fomit-frame-pointer")
 put("server.always", "-fno-lto")
 put("assembly.always", "-fno-lto")
 
+# Secp256k1
+# -fomit-frame-pointer for:
+# https://github.com/status-im/nimbus-eth1/issues/2127
+# https://github.com/status-im/nimbus-eth2/issues/6324
+put("secp256k1.always", "-fno-lto -fomit-frame-pointer")
 
 # BearSSL - only RNGs
 put("aesctr_drbg.always", "-fno-lto")

@@ -1,7 +1,7 @@
 # based on https://github.com/nim-lang/Nim/blob/v0.18.0/.travis.yml
 
 { stdenv, lib, makeWrapper, git, clang, nodejs, openssl, pcre, readline,
-  boehmgc, sfml, sqlite }:
+  boehmgc, sfml, sqlite, python3, openjdk, zstd }:
 
 let
   csources = fetchTarball {
@@ -55,6 +55,7 @@ in stdenv.mkDerivation rec {
   buildInputs = [
     nodejs git
     clang openssl pcre readline boehmgc sfml sqlite
+    python3 openjdk zstd
   ];
 
   buildPhase = ''

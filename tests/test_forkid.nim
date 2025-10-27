@@ -70,23 +70,6 @@ const
     (number: 1450410'u64, time: 1761607009'u64, id: (crc: 0x4463073B'u32, next: 0'u64)),          # Future BPO2 time
   ]
 
-  HoleskyNetIDs = [
-    (number: 0'u64,   time: 0'u64, id: (crc: 0xc61a6098'u32, next: 1696000704'u64)),          # Unsynced, last Frontier, Homestead, Tangerine, Spurious, Byzantium, Constantinople, Petersburg, Istanbul, Berlin, London, Paris block
-    (number: 123'u64, time: 1696000703'u64, id: (crc: 0xc61a6098'u32, next: 1696000704'u64)), # Last MergeNetsplit block
-    (number: 123'u64, time: 1696000704'u64, id: (crc: 0xfd4f016b'u32, next: 1707305664'u64)), # First Shanghai time
-    (number: 123'u64, time: 1707305663'u64, id: (crc: 0xfd4f016b'u32, next: 1707305664'u64)), # Last Shanghai time
-    (number: 123'u64, time: 1707305664'u64, id: (crc: 0x9b192ad0'u32, next: 1740434112'u64)), # First Cancun time
-    (number: 123'u64, time: 1740434111'u64, id: (crc: 0x9b192ad0'u32, next: 1740434112'u64)), # Last Cancun time
-    (number: 123'u64, time: 1740434112'u64, id: (crc: 0xdfbd9bed'u32, next: 1759308480'u64)), # First Prague time
-    (number: 123'u64, time: 1759308479'u64, id: (crc: 0xdfbd9bed'u32, next: 1759308480'u64)), # Last Prague time
-    (number: 123'u64, time: 1759308480'u64, id: (crc: 0x783DEF52'u32, next: 1759800000'u64)), # First Osaka time
-    (number: 123'u64, time: 1759799999'u64, id: (crc: 0x783DEF52'u32, next: 1759800000'u64)), # Last Osaka time
-    (number: 123'u64, time: 1759800000'u64, id: (crc: 0xA280A45C'u32, next: 1760389824'u64)), # First BPO1 time
-    (number: 123'u64, time: 1760389823'u64, id: (crc: 0xA280A45C'u32, next: 1760389824'u64)), # Last BPO1 time
-    (number: 123'u64, time: 1760389824'u64, id: (crc: 0x9BC6CB31'u32, next: 0'u64)),          # First BPO2 time
-    (number: 123'u64, time: 1760389825'u64, id: (crc: 0x9BC6CB31'u32, next: 0'u64)),          # Future BPO2 time
-  ]
-
   HoodiNetIDs = [
     (number: 0'u64,   time: 0'u64, id: (crc: 0xBEF71D30'u32, next: 1742999832'u64)),          # Unsynced, last Frontier, Homestead, Tangerine, Spurious, Byzantium, Constantinople, Petersburg, Istanbul, Berlin, London, Paris, Shanghai, Cancun block
     (number: 123'u64, time: 1742999831'u64, id: (crc: 0xBEF71D30'u32, next: 1742999832'u64)), # Last Cancun time
@@ -162,7 +145,6 @@ template runGenesisTimeIdTests() =
 suite "Fork ID tests":
   runTest(MainNet, "MainNet")
   runTest(SepoliaNet, "SepoliaNet")
-  runTest(HoleskyNet, "HoleskyNet")
   runTest(HoodiNet, "HoodiNet")
   test "Genesis Time Fork ID":
     runGenesisTimeIdTests()

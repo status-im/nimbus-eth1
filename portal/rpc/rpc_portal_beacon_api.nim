@@ -81,11 +81,9 @@ proc installPortalBeaconApiHandlers*(rpcServer: RpcServer, p: PortalProtocol) =
 
       contentLookupResult = (await p.contentLookup(keyBytes, contentId)).valueOr:
         raise contentNotFoundErr()
+      content = contentLookupResult.content.to0xHex()
 
-    ContentInfo(
-      content: contentLookupResult.content.to0xHex(),
-      utpTransfer: contentLookupResult.utpTransfer,
-    )
+    ContentInfo(content: content, utpTransfer: contentLookupResult.utpTransfer)
 
   rpcServer.rpc("portal_beaconTraceGetContent") do(
     contentKey: string
