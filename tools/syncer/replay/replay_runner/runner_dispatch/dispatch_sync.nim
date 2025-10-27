@@ -26,8 +26,8 @@ logScope:
 # ------------------------------------------------------------------------------
 
 proc syncActivateWorker*(run: ReplayRunnerRef; instr: ReplaySyncActivated) =
-  const
-    info = instr.replayLabel()
+  const info = instr.replayLabel()
+
   let
     serial = instr.bag.serial
     ctx = run.ctx
@@ -39,14 +39,14 @@ proc syncActivateWorker*(run: ReplayRunnerRef; instr: ReplaySyncActivated) =
   var activationOK = true
   if ctx.chain.baseNumber != instr.bag.baseNum:
     error info & ": cannot activate (bases must match)", n=run.iNum, serial,
-      base=ctx.chain.baseNumber.bnStr, expected=instr.bag.baseNum.bnStr
+      base=ctx.chain.baseNumber, expected=instr.bag.baseNum
     activationOK = false
 
   if activationOK:
     ctx.hdrCache.headTargetUpdate(instr.bag.head, instr.bag.finHash)
 
   # Set the number of active buddies (avoids some moaning.)
-  run.ctx.pool.nBuddies = instr.bag.nPeers.int
+  run.nSyncPeers = instr.bag.nSyncPeers.int
   run.checkSyncerState(instr, info)
 
   if ctx.hibernate or not activationOK:
@@ -61,10 +61,12 @@ proc syncActivateWorker*(run: ReplayRunnerRef; instr: ReplaySyncActivated) =
 
 proc syncSuspendWorker*(run: ReplayRunnerRef; instr: ReplaySyncHibernated) =
   const info = instr.replayLabel()
+
   if not run.ctx.hibernate:
     run.stopError(info & ": suspend failed")
     return
 
+  run.nSyncPeers = instr.bag.nSyncPeers.int
   run.checkSyncerState(instr, info)
   debug info, n=run.iNum, serial=instr.bag.serial
 

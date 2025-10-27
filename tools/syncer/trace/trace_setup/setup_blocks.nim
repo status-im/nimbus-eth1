@@ -39,7 +39,7 @@ proc toBnRange(
         ", hash=" & w.short
     if rs.merge(h.number,h.number) != 1:
       raiseAssert info & ": dulplicate hash" &
-        ", hash=" & w.short & ", number=" & h.bnStr
+        ", hash=" & w.short & ", number=" & $h.number
   rs.ge().expect "valid BnRange"
 
 # ------------------------------------------------------------------------------
@@ -69,7 +69,7 @@ proc fetchBodiesTrace*(
   buddy.traceWrite tRec
 
   trace TraceTypeLabel[FetchBodies], peer=($buddy.peer),
-    peerID=buddy.peerID.short, serial=tRec.serial, ivReq=ivReq.bnStr
+    peerID=buddy.peerID.short, serial=tRec.serial, ivReq
   return data
 
 proc syncBodiesTrace*(

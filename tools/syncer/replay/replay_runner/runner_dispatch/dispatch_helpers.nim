@@ -50,6 +50,8 @@ type
                          ReplaySchedInstrType |
                          ReplayMsgInstrType
 
+func peerStr*(desc: ReplayInstance): string
+
 # ------------------------------------------------------------------------------
 # Private helper(s)
 # ------------------------------------------------------------------------------
@@ -99,7 +101,7 @@ template waitForConditionImpl(
         bodyRc = ReplayWaitResult.err((ECancelledError,$e.name,e.msg))
         break
 
-      if replayFailTimeout < Moment.now() - start:
+      if run.failTimeout < Moment.now() - start:
         tmoPending = true
 
       # End `while()`
@@ -133,10 +135,10 @@ func syncedEnvCondImpl(
       if instr.bag.hdrUnpr.value.hLen != ctx.hdr.unprocessed.total():
         return false
       let iv = ctx.hdr.unprocessed.le().expect "valid iv"
-      if instr.bag.hdrUnpr.value.hLast != iv.maxPt or
+      if instr.bag.hdrUnpr.value.hLastNum != iv.maxPt or
          instr.bag.hdrUnpr.value.hLastLen != iv.len:
         return false
-      if instr.bag.antecedent != ctx.hdrCache.antecedent.number:
+      if instr.bag.anteNum != ctx.hdrCache.antecedent.number:
         return false
 
   if instr.bag.blkUnpr.isSome():
@@ -146,7 +148,7 @@ func syncedEnvCondImpl(
       if instr.bag.blkUnpr.value.bLen != ctx.blk.unprocessed.total():
         return false
       let iv = ctx.blk.unprocessed.ge().expect "valid iv"
-      if instr.bag.blkUnpr.value.bLeast != iv.minPt or
+      if instr.bag.blkUnpr.value.bLeastNum != iv.minPt or
          instr.bag.blkUnpr.value.bLeastLen != iv.len:
         return false
 
@@ -197,15 +199,14 @@ proc newPeerImpl(
 proc baseStatesDifferImpl(
     desc: ReplayRunnerRef|ReplayInstance;
     instr: ReplayAnyInstrType;
+    rlxBaseNum: static[bool];
     ignLatestNum: static[bool];
     info: static[string];
       ): bool =
   when desc is ReplayRunnerRef:
     let (run, peer) = (desc, "n/a")
-  when desc is ReplayDaemonRef:
-    let (run, peer) = (desc.run, "n/a")
-  when desc is ReplayBuddyRef:
-    let (run, peer) = (desc.run, desc.peer)
+  else:
+    let (run, peer) = (desc.run, desc.peerStr)
 
   let
     ctx = run.ctx
@@ -218,37 +219,42 @@ proc baseStatesDifferImpl(
     statesDiffer = true
     info info & ": serial numbers differ", n, peer, serial, expected=n
 
-  if ctx.chain.baseNumber != instr.bag.baseNum:
-    statesDiffer = true
-    info info & ": base blocks differ", n, serial, peer,
-      base=instr.bag.baseNum.bnStr, expected=ctx.chain.baseNumber.bnStr
+  when rlxBaseNum:
+    if ctx.chain.baseNumber != instr.bag.baseNum:
+      debug info & ": base blocks differ", n, serial, peer,
+        base=ctx.chain.baseNumber, expected=instr.bag.baseNum
+  else:
+    if ctx.chain.baseNumber != instr.bag.baseNum:
+      statesDiffer = true
+      info info & ": base blocks differ", n, serial, peer,
+        base=ctx.chain.baseNumber, expected=instr.bag.baseNum
 
   when not ignLatestNum:
     if ctx.chain.latestNumber != instr.bag.latestNum:
       statesDiffer = true
       info info & ": latest blocks differ", n, serial, peer,
-        latest=instr.bag.latestNum.bnStr, expected=ctx.chain.latestNumber.bnStr
+        latest=ctx.chain.latestNumber, expected=instr.bag.latestNum
 
-  if ctx.pool.lastState != instr.bag.syncState:
+  if ctx.pool.syncState != instr.bag.syncState:
     statesDiffer = true
     info info & ": sync states differ", n, serial, peer,
-      state=ctx.pool.lastState, expected=instr.bag.syncState
+      state=ctx.pool.syncState, expected=instr.bag.syncState
 
   if ctx.hdrCache.state != instr.bag.chainMode:
     statesDiffer = true
     info info & ": header chain modes differ", n, serial, peer,
       chainMode=ctx.hdrCache.state, expected=instr.bag.chainMode
   elif instr.bag.chainMode in {collecting,ready,orphan} and
-       instr.bag.antecedent != ctx.hdrCache.antecedent.number:
+       instr.bag.anteNum != ctx.hdrCache.antecedent.number:
     statesDiffer = true
     info info & ": header chain antecedents differ", n, serial, peer,
-      antecedent=ctx.hdrCache.antecedent.bnStr,
-      expected=instr.bag.antecedent.bnStr
+      antecedent=ctx.hdrCache.antecedent.number,
+      expected=instr.bag.anteNum
 
-  if ctx.pool.nBuddies != instr.bag.nPeers.int:
+  if run.nSyncPeers != instr.bag.nSyncPeers.int:
     statesDiffer = true
     info info & ": number of active peers differs", n, serial, peer,
-      nBuddies=ctx.pool.nBuddies, expected=instr.bag.nPeers
+      nSyncPeers=run.nSyncPeers, expected=instr.bag.nSyncPeers
 
   if ctx.poolMode != instr.bag.poolMode:
     statesDiffer = true
@@ -265,10 +271,8 @@ proc unprocListsDifferImpl(
       ): bool =
   when desc is ReplayRunnerRef:
     let (run, peer) = (desc, "n/a")
-  when desc is ReplayDaemonRef:
-    let (run, peer) = (desc.run, "n/a")
-  when desc is ReplayBuddyRef:
-    let (run, peer) = (desc.run, desc.peer)
+  else:
+    let (run, peer) = (desc.run, desc.peerStr)
 
   let
     ctx = run.ctx
@@ -295,10 +299,10 @@ proc unprocListsDifferImpl(
         statesDiffer = true
         info info & ": unproc headers lists differ", n, serial, peer,
           lastIvLen=iv.len, expected=instr.bag.hdrUnpr.value.hLastLen
-      if instr.bag.hdrUnpr.value.hLast != iv.maxPt:
+      if instr.bag.hdrUnpr.value.hLastNum != iv.maxPt:
         statesDiffer = true
         info info & ": unproc headers lists differ", n, serial, peer,
-          lastIvMax=iv.maxPt, expected=instr.bag.hdrUnpr.value.hLast
+          lastIvMax=iv.maxPt, expected=instr.bag.hdrUnpr.value.hLastNum
 
   # Unprocessed block numbers for blocks
   if instr.bag.blkUnpr.isSome():
@@ -318,10 +322,10 @@ proc unprocListsDifferImpl(
         statesDiffer = true
         info info & ": unproc blocks lists differ", n, serial, peer,
           lastIvLen=iv.len, expected=instr.bag.blkUnpr.value.bLeastLen
-      if instr.bag.blkUnpr.value.bLeast != iv.minPt:
+      if instr.bag.blkUnpr.value.bLeastNum != iv.minPt:
         statesDiffer = true
         info info & ": unproc blocks lists differ", n, serial, peer,
-          lastIvMax=iv.maxPt, expected=instr.bag.blkUnpr.value.bLeast
+          lastIvMax=iv.maxPt, expected=instr.bag.blkUnpr.value.bLeastNum
 
   return statesDiffer
 
@@ -372,7 +376,7 @@ func iNum*(desc: ReplayInstance|ReplayRunnerRef): uint =
     desc.run.instrNumber
 
 func toStr*(w: BlockHashOrNumber): string =
-  if w.isHash: w.hash.short else: w.number.bnStr
+  if w.isHash: w.hash.short else: $w.number
 
 func peerStr*(desc: ReplayInstance): string =
   when desc is ReplayBuddyRef:
@@ -413,6 +417,7 @@ proc stopOk*(run: ReplayRunnerRef; info: static[string]) =
 proc checkSyncerState*(
     desc: ReplayRunnerRef|ReplayInstance;
     instr: ReplayAnyInstrType;
+    rlxBaseNum: static[bool];
     ignLatestNum: static[bool];
     info: static[string];
       ): bool
@@ -421,7 +426,7 @@ proc checkSyncerState*(
   ## `instr` argument.
   var statesDiffer = false
 
-  if desc.baseStatesDifferImpl(instr, ignLatestNum, info):
+  if desc.baseStatesDifferImpl(instr, rlxBaseNum, ignLatestNum, info):
     statesDiffer = true
 
   if desc.unprocListsDifferImpl(instr, info):
@@ -436,10 +441,19 @@ proc checkSyncerState*(
 proc checkSyncerState*(
     desc: ReplayRunnerRef|ReplayInstance;
     instr: ReplayAnyInstrType;
+    ignLatestNum: static[bool];
     info: static[string];
       ): bool
       {.discardable.} =
-  desc.checkSyncerState(instr, false, info)
+  desc.checkSyncerState(instr, false, ignLatestNum, info)
+
+proc checkSyncerState*(
+    desc: ReplayRunnerRef|ReplayInstance;
+    instr: ReplayAnyInstrType;
+    info: static[string];
+      ): bool
+      {.discardable.} =
+  desc.checkSyncerState(instr, false, false, info)
 
 # ------------------------------------------------------------------------------
 # Public functions, peer/daemon descriptor management
@@ -655,7 +669,7 @@ template whenProcessFinished*(
 
     trace info & ": terminated OK", n=desc.iNum, serial,
       frameID=instr.frameIdStr, peer
-    desc.checkSyncerState(instr, ignLatestNum=true, info) # relaxed check
+    desc.checkSyncerState(instr, rlxBaseNum=true, ignLatestNum=true, info)
 
     # Synchronise against captured environment
     bodyRc = desc.run.waitForConditionImpl(info):
@@ -736,6 +750,8 @@ template pushInstr*(
 template withInstr*(
     desc: ReplayInstance;
     R: type ReplayMsgInstrType;
+    rlxBaseNum: static[bool];
+    ignLatestNum: static[bool];
     info: static[string];
     code: untyped;
       ) =
@@ -748,13 +764,6 @@ template withInstr*(
   ##
   block:
     const dataType {.inject.} = (typeof R().bag).toTraceRecType
-
-    when R is ReplayFetchBodies or
-         R is ReplaySyncBodies or
-         R is ReplayImportBlock:
-      const ignLatestNum = true # relax, de-noise
-    else:
-      const ignLatestNum = false
 
     let
       run = desc.run
@@ -803,7 +812,7 @@ template withInstr*(
       doAssert desc.message.recType == dataType
       doAssert instr.bag.serial == desc.iNum
 
-      desc.checkSyncerState(instr, ignLatestNum, info)
+      desc.checkSyncerState(instr, rlxBaseNum, ignLatestNum, info)
 
       debug info & ": got data", n=desc.iNum, serial=instr.bag.serial,
         peer, peerID, dataType

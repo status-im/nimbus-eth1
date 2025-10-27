@@ -65,7 +65,7 @@ proc fetchHeadersHandler*(
   let buddy = ReplayBuddyRef(buddy)
 
   var data: ReplayFetchHeaders
-  buddy.withInstr(typeof data, info):
+  buddy.withInstr(typeof data, rlxBaseNum=false, ignLatestNum=false, info):
     if not instr.isAvailable():
       return err(iError.getBeaconError()) # Shutdown?
     if req != instr.bag.req:
@@ -83,11 +83,11 @@ proc fetchHeadersHandler*(
         ", reqLen=" & $req.maxResults &
         ", expected=" & $instr.bag.req.maxResults &
         # -----
-        ", bn=" & bn.bnStr &
-        ", expected=" & instr.bag.bn.bnStr
+        ", bn=" & $bn &
+        ", expected=" & $instr.bag.bn
     data = instr
 
-  buddy.withInstr(ReplaySyncHeaders, info):
+  buddy.withInstr(ReplaySyncHeaders, rlxBaseNum=false,ignLatestNum=false, info):
     if not instr.isAvailable():
       return err(iError.getBeaconError()) # Shutdown?
     discard # no-op, visual alignment
@@ -104,6 +104,7 @@ proc sendHeaders*(
       ) {.async: (raises: []).} =
   ## Stage headers request/response data
   const info = instr.replayLabel()
+  run.nSyncPeers = instr.bag.nSyncPeers.int
   let buddy = run.getPeer(instr, info).valueOr:
     raiseAssert info & ": getPeer() failed" &
       ", n=" & $run.iNum &

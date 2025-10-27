@@ -27,6 +27,13 @@ type
             " syncer session"
       name: "capture-file" .}: InputFile
 
+    syncFailTimeout {.
+      desc: "Maximal time in seconds waiting for internal event to happen," &
+            " e.g. waiting for block fetch or import to complete. This" &
+            " timeout should cover the maximum time needed to import a block"
+      defaultValue: 50
+      name: "sync-fail-timeout" .}: uint
+
     noStopQuit {.
       desc: "Continue as normal after the captured replay states are " &
             "exhausted. If the option is given, the program will terminate"
@@ -72,11 +79,12 @@ proc beaconSyncConfig(conf: ToolConfig): BeaconSyncConfigHook =
     if not conf.noSyncTicker:
       desc.ctx.pool.ticker = syncTicker()
     desc.ctx.replaySetup(
-               fileName = conf.captureFile.string,
-               noStopQuit = conf.noStopQuit,
-               fakeImport = conf.fakeImport).isOkOr:
-      fatal "Cannot set up replay handlers", error
-      quit(QuitFailure)
+      fileName = conf.captureFile.string,
+      failTimeout = min(conf.syncFailTimeout,high(int).uint).int,
+      noStopQuit = conf.noStopQuit,
+      fakeImport = conf.fakeImport).isOkOr:
+        fatal "Cannot set up replay handlers", error
+        quit(QuitFailure)
 
 # ------------------------------------------------------------------------------
 # Main

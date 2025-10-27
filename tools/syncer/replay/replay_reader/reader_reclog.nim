@@ -45,15 +45,15 @@ proc addX(
     q.add base.frameID.value.idStr
   else:
     q.add "*"
-  q.add $base.nPeers
+  q.add $base.nSyncPeers
   q.add ($base.syncState).toUpperFirst()
   q.add ($base.chainMode).toUpperFirst()
 
-  q.add base.baseNum.bnStr()
-  q.add base.latestNum.bnStr()
+  q.add $base.baseNum
+  q.add $base.latestNum
 
   if base.chainMode in {collecting,ready,orphan}:
-    q.add base.antecedent.bnStr()
+    q.add $base.anteNum
   else:
     q.add "*"
 
@@ -67,13 +67,13 @@ proc addX(
   if base.hdrUnpr.isSome():
     q.add "uHdr=" & $base.hdrUnpr.value.hLen & "/" &
                     $base.hdrUnpr.value.hChunks & "/" &
-                    $base.hdrUnpr.value.hLastLen & ":" &
-                    $base.hdrUnpr.value.hLast.bnStr
+                    $base.hdrUnpr.value.hLastNum & ":" &
+                    $base.hdrUnpr.value.hLastLen
 
   if base.blkUnpr.isSome():
     q.add "uBlk=" & $base.blkUnpr.value.bLen & "/" &
                     $base.blkUnpr.value.bChunks & "/" &
-                    $base.blkUnpr.value.bLeast.bnStr & ":" &
+                    $base.blkUnpr.value.bLeastNum & ":" &
                     $base.blkUnpr.value.bLeastLen
 
   if base.peerCtx.isSome() and
@@ -106,8 +106,8 @@ func toStrSeq(n: int; w: ReplayVersionInfo): seq[string] =
              else: ""
   res.add "version=" & $w.bag.version & moan
   res.add "network=" & $w.bag.networkId
-  res.add "base=" & w.bag.baseNum.bnStr
-  res.add "latest=" & w.bag.latestNum.bnStr
+  res.add "base=" & $w.bag.baseNum
+  res.add "latest=" & $w.bag.latestNum
   res
 
 # -----------
@@ -115,17 +115,17 @@ func toStrSeq(n: int; w: ReplayVersionInfo): seq[string] =
 func toStrSeq(n: int; w: ReplaySyncActivated): seq[string] =
   var res = newSeqOfCap[string](20)
   res.addX(w.replayLabel, n, w.bag)
-  res.add "head=" & w.bag.head.bnStr
+  res.add "head=" & $w.bag.head.number
   res.add "finHash=" & w.bag.finHash.short
-  res.add "base=" & w.bag.baseNum.bnStr
-  res.add "latest=" & w.bag.latestNum.bnStr
+  res.add "base=" & $w.bag.baseNum
+  res.add "latest=" & $w.bag.latestNum
   res
 
 func toStrSeq(n: int; w: ReplaySyncHibernated): seq[string] =
   var res = newSeqOfCap[string](15)
   res.addX(w.replayLabel, n, w.bag)
-  res.add "base=" & w.bag.baseNum.bnStr
-  res.add "latest=" & w.bag.latestNum.bnStr
+  res.add "base=" & $w.bag.baseNum
+  res.add "latest=" & $w.bag.latestNum
   res
 
 # -----------
@@ -167,8 +167,12 @@ func toStrSeq(n: int; w: ReplaySchedPeerBegin): seq[string] =
   var res = newSeqOfCap[string](20)
   res.addX(w.replayLabel, n, w.bag)
   res.add "peer=" & $w.bag.peerIP & ":" & $w.bag.peerPort
-  res.add "info=" & $w.bag.rank.assessed
-  res.add "rank=" & $w.bag.rank.ranking
+  let info = ($w.bag.rank.assessed)
+    .multiReplace [("rankingT","t"),("rankingO","o")]
+  if w.bag.rank.ranking < 0:
+    res.add "rank=" & info
+  else:
+    res.add "rank=" & info & "(" & $w.bag.rank.ranking & ")"
   res
 
 func toStrSeq(n: int; w: ReplaySchedPeerEnd): seq[string] =
@@ -186,10 +190,9 @@ func toStrSeq(n: int; w: ReplayFetchHeaders): seq[string] =
     rRev = if w.bag.req.reverse: "rev" else: ""
   if w.bag.req.startBlock.isHash:
     res.add "req=" & w.bag.req.startBlock.hash.short & "[" & $rLen & "]" & rRev
-    res.add "bn=" & w.bag.bn.bnStr
+    res.add "bn=" & $w.bag.bn
   else:
-    res.add "req=" &
-      w.bag.req.startBlock.number.bnStr & "[" & $rLen & "]" & rRev
+    res.add "req=" & $w.bag.req.startBlock.number & "[" & $rLen & "]" & rRev
   if 0 < w.bag.req.skip:
     res.add "skip=" & $w.bag.req.skip
   if w.bag.fetched.isSome():
@@ -215,7 +218,7 @@ func toStrSeq(n: int; w: ReplaySyncHeaders): seq[string] =
 func toStrSeq(n: int; w: ReplayFetchBodies): seq[string] =
   var res = newSeqOfCap[string](20)
   res.addX(w.replayLabel, n, w.bag)
-  res.add "req=" & w.bag.ivReq.bnStr & "[" & $w.bag.req.blockHashes.len & "]"
+  res.add "req=" & $w.bag.ivReq & "[" & $w.bag.req.blockHashes.len & "]"
   if w.bag.fetched.isSome():
     res.add "res=[" & $w.bag.fetched.value.packet.bodies.len & "]"
     res.add "size=" &
@@ -241,7 +244,7 @@ func toStrSeq(n: int; w: ReplaySyncBodies): seq[string] =
 func toStrSeq(n: int; w: ReplayImportBlock): seq[string] =
   var res = newSeqOfCap[string](20)
   res.addX(w.replayLabel, n, w.bag)
-  res.add "block=" & w.bag.ethBlock.bnStr
+  res.add "block=" & $w.bag.ethBlock.header.number
   res.add "size=" & w.bag.ethBlock.getEncodedLength.uint64.toSI
   res.add "effPeerID=" & w.bag.effPeerID.short
   if w.bag.elapsed.isSome():

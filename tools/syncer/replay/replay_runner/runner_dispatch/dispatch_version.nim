@@ -54,7 +54,7 @@ proc versionInfoWorker*(run: ReplayRunnerRef; instr: ReplayVersionInfo) =
 
   if ctx.chain.baseNumber < instr.bag.baseNum:
     error info & ": cannot start (base too low)", serial,
-      base=ctx.chain.baseNumber.bnStr, replayBase=instr.bag.baseNum.bnStr
+      base=ctx.chain.baseNumber, replayBase=instr.bag.baseNum
     versionOK = false
 
   if not ctx.hibernate:
@@ -66,7 +66,7 @@ proc versionInfoWorker*(run: ReplayRunnerRef; instr: ReplayVersionInfo) =
     return
 
   chronicles.info info, n=run.iNum, serial, TraceVersionID,
-    base=ctx.chain.baseNumber.bnStr, latest=ctx.chain.latestNumber.bnStr
+    base=ctx.chain.baseNumber, latest=ctx.chain.latestNumber
   run.checkSyncerState(instr, info)
 
 # ------------------------------------------------------------------------------

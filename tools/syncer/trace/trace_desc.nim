@@ -28,7 +28,7 @@ export
   worker_desc
 
 const
-  TraceVersionID* = 20251023
+  TraceVersionID* = 20251119
 
   TraceSetupID* = 1                   ## Phase 1 layout ID, prepare
   TraceRunnerID* = 10                 ## Phase 2 layout ID, full execution
@@ -77,14 +77,14 @@ type
     ## Optional sub-object for `TraceRecBase`
     hLen*: uint64                     ## # unprocessed header entries
     hChunks*: uint                    ## # unprocessed header iv segments
-    hLast*: BlockNumber               ## last avail block number
+    hLastNum*: BlockNumber            ## last avail block number
     hLastLen*: uint64                 ## size of last block number interval
 
   TraceBlkUnproc* = object
     ## Optional sub-object for `TraceRecBase`
     bLen*: uint64                     ## # unprocessed block entries
     bChunks*: uint                    ## # unprocessed block iv segments
-    bLeast*: BlockNumber              ## least avail block number
+    bLeastNum*: BlockNumber           ## least avail block number
     bLeastLen*: uint64                ## size of first interval
 
   TracePeerCtx* = object
@@ -99,13 +99,13 @@ type
     serial*: uint                     ## Capture record ID
     frameID*: Opt[uint]               ## Begin/end frame for scheduler tasks
 
-    nPeers*: uint                     ## Number of sync peers (buddies)
+    nSyncPeers*: uint                 ## Number of sync peers
     syncState*: SyncState             ## Headers/bodies preocessing state
     chainMode*: HeaderChainMode       ## Headers cache/DB state
     poolMode*: bool                   ## Mostly implied by `syncState`
     baseNum*: BlockNumber             ## Max finalised number from `FC` module
     latestNum*: BlockNumber           ## Number of latest branch head
-    antecedent*: BlockNumber          ## Lower end of header chain cache
+    anteNum*: BlockNumber             ## Lower end of header chain cache
 
     hdrUnpr*: Opt[TraceHdrUnproc]     ## Optional unprocessed headers state
     blkUnpr*: Opt[TraceBlkUnproc]     ## Optional unprocessed blocks state

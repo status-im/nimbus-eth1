@@ -109,7 +109,8 @@ proc replayStartCB(rpl: ReplayRunnerRef) =
   rpl.syncBlockBodies =  noOpBuddy
   rpl.importBlock =      importBlockHandler     # from dispatcher
   rpl.syncImportBlock =  noOpBuddy
-  rpl.ctx.getPeer =      rpl.replayGetPeerFn()  # normally provided by scheduler
+  rpl.ctx.getSyncPeer =  rpl.replayGetSyncPeerFn() # normally a scheduler sevice
+  rpl.ctx.nSyncPeers =   rpl.replayNSyncPeersFn()
 
   rpl.initRunner()
 
@@ -117,12 +118,14 @@ proc replayStartCB(rpl: ReplayRunnerRef) =
     discard
 
   rpl.stopSync = proc(self: BeaconHandlersSyncRef) =
-    ReplayRunnerRef(self).reader.destroy()
-    ReplayRunnerRef(self).destroyRunner()
+    template replaySelf: auto = ReplayRunnerRef(self)
+    replaySelf.reader.destroy()
+    replaySelf.destroyRunner()
     stopInfo.onException(DontQuit):
-      ReplayRunnerRef(self).captStrm.close()
-    ReplayRunnerRef(self).ctx.getPeer =       ReplayRunnerRef(self).getPeerSave
-    ReplayRunnerRef(self).ctx.pool.handlers = ReplayRunnerRef(self).backup
+      replaySelf.captStrm.close()
+    replaySelf.ctx.getSyncPeer = replaySelf.getSyncPeerSave
+    replaySelf.ctx.nSyncPeers = replaySelf.nSyncPeersSave
+    replaySelf.ctx.pool.handlers = replaySelf.backup
 
   # Start fake scheduler
   asyncSpawn rpl.runDispatcher(
@@ -135,6 +138,7 @@ proc replayStartCB(rpl: ReplayRunnerRef) =
 proc replaySetup*(
     ctx: BeaconCtxRef;
     fileName: string;
+    failTimeout: int;
     noStopQuit: bool;
     fakeImport: bool;
       ): Result[void,string] =
@@ -157,7 +161,9 @@ proc replaySetup*(
     fakeImport:       fakeImport,
     stopQuit:         not noStopQuit,
     backup:           ctx.pool.handlers,
-    getPeerSave:      ctx.getPeer,
+    getSyncPeerSave:  ctx.getSyncPeer,
+    nSyncPeersSave:   ctx.nSyncPeers,
+    failTimeout:      chronos.seconds(failTimeout),
 
     # This is still the old descriptor which will be updated when
     # `startSync()` is run.

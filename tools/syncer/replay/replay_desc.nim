@@ -14,6 +14,7 @@
 
 import
   std/streams,
+  pkg/chronos,
   ../trace/trace_desc,
   ./replay_reader/reader_desc
 
@@ -22,8 +23,8 @@ export
   trace_desc
 
 const
-  ReplaySetupID* = 2                    ## Phase 1 layout ID, prepare
-  ReplayRunnerID* = 20                  ## Phase 2 layout ID, full execution
+  ReplaySetupID* = 2                      ## Phase 1 layout ID, prepare
+  ReplayRunnerID* = 20                    ## Phase 2 layout ID, full execution
 
 type
   ReplayStopIfFn* = proc(): bool {.gcsafe, raises: [].}
@@ -32,21 +33,23 @@ type
   ReplayEndUpFn* = proc() {.gcsafe, raises: [].}
     ## Terminator control directive for runner/dispatcher
 
-  ReplayGetPeerFn* = GetPeerFn[BeaconCtxData,BeaconBuddyData]
+  ReplayGetSyncPeerFn* = GetSyncPeerFn[BeaconCtxData,BeaconBuddyData]
     ## Shortcut
 
-  ReplayGetPeersFn* = GetPeersFn[BeaconCtxData,BeaconBuddyData]
+  ReplayNSyncPeersFn* = NSyncPeersFn[BeaconCtxData,BeaconBuddyData]
     ## Shortcut
 
   ReplayRef* = ref object of BeaconHandlersSyncRef
     ## Overlay handlers extended by descriptor data for caching replay state
-    ctx*: BeaconCtxRef                  ## Parent context
-    captStrm*: Stream                   ## Input stream, capture file
-    fakeImport*: bool                   ## No database import if `true`
-    stopQuit*: bool                     ## Quit after replay
-    backup*: BeaconHandlersRef          ## Can restore previous handlers
-    reader*: ReplayReaderRef            ## Input records
-    getPeerSave*: ReplayGetPeerFn       ## Additionsl restore settings
+    ctx*: BeaconCtxRef                    ## Parent context
+    captStrm*: Stream                     ## Input stream, capture file
+    fakeImport*: bool                     ## No database import if `true`
+    failTimeout*: chronos.Duration        ## Internal waiting loop timeout
+    stopQuit*: bool                       ## Quit after replay
+    backup*: BeaconHandlersRef            ## Can restore previous handlers
+    reader*: ReplayReaderRef              ## Input records
+    getSyncPeerSave*: ReplayGetSyncPeerFn ## Additionsl restore settings
+    nSyncPeersSave*: ReplayNSyncPeersFn   ## Ditto
 
   ReplayPayloadRef* = ref object of RootRef
     ## Decoded payload base record

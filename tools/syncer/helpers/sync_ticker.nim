@@ -42,7 +42,8 @@ type
     blkStagedBottom: BlockNumber
 
     state: SyncState
-    nBuddies: int
+    nSyncPeers: int
+    eta: chronos.Duration
 
   TickerRef* = ref object of RootRef
     ## Ticker descriptor object
@@ -65,10 +66,10 @@ proc updater(ctx: BeaconCtxRef): TickerStats =
     latest:          ctx.chain.latestNumber,
     coupler:         ctx.headersUnprocTotalBottom(),
     dangling:        ctx.hdrCache.antecedent.number,
-    top:             ctx.subState.top,
-    head:            ctx.subState.head,
+    top:             ctx.subState.topNum,
+    head:            ctx.subState.headNum,
     target:          ctx.hdrCache.latestConsHeadNumber,
-    activeOk:        ctx.pool.lastState != idle,
+    activeOk:        ctx.pool.syncState != idle,
 
     nHdrStaged:      ctx.headersStagedQueueLen(),
     hdrStagedTop:    ctx.headersStagedQueueTopKey(),
@@ -82,8 +83,9 @@ proc updater(ctx: BeaconCtxRef): TickerStats =
     nBlkUnprocessed: ctx.blocksUnprocTotal(),
     nBlkUnprocFragm: ctx.blk.unprocessed.chunks,
 
-    state:           ctx.pool.lastState,
-    nBuddies:        ctx.pool.nBuddies)
+    state:           ctx.pool.syncState,
+    nSyncPeers:      ctx.nSyncPeers(),
+    eta:             ctx.pool.syncEta.avg)
 
 proc tickerLogger(t: TickerRef; ctx: BeaconCtxRef) =
   let
@@ -96,37 +98,35 @@ proc tickerLogger(t: TickerRef; ctx: BeaconCtxRef) =
   if data != t.lastStats or
     tickerLogSuppressMax < (now - t.visited):
     let
-      B = if data.base == data.latest: "L" else: data.base.bnStr
-      L = if data.latest == data.coupler: "C" else: data.latest.bnStr
-      I = if data.top == 0: "n/a" else : data.top.bnStr
+      B = if data.base == data.latest: "L" else: $data.base
+      L = if data.latest == data.coupler: "C" else: $data.latest
+      I = if data.top == 0: "n/a" else : $data.top
       C = if data.coupler == data.dangling: "D"
-          elif data.coupler < high(int64).uint64: data.coupler.bnStr
+          elif data.coupler < high(int64).uint64: $data.coupler
           else: "n/a"
-      D = if data.dangling == data.head: "H" else: data.dangling.bnStr
+      D = if data.dangling == data.head: "H" else: $data.dangling
       H = if data.head == data.target: "T"
-          elif data.activeOk: data.head.bnStr
+          elif data.activeOk: $data.head
           else: "?" & $data.head
-      T = if data.activeOk: data.target.bnStr else: "?" & $data.target
+      T = if data.activeOk: $data.target else: "?" & $data.target
 
       hS = if data.nHdrStaged == 0: "n/a"
-          else: data.hdrStagedTop.bnStr & "[" & $data.nHdrStaged & "]"
+          else: $data.hdrStagedTop & "[" & $data.nHdrStaged & "]"
       hU = if data.nHdrUnprocFragm == 0 and data.nHdrUnprocessed == 0: "n/a"
           elif data.hdrUnprocTop == 0:
-            "(" & data.nHdrUnprocessed.toSI & "," &
-                  $data.nHdrUnprocFragm & ")"
-          else: data.hdrUnprocTop.bnStr & "(" &
+            "(" & data.nHdrUnprocessed.toSI & "," & $data.nHdrUnprocFragm & ")"
+          else: $data.hdrUnprocTop & "(" &
                 data.nHdrUnprocessed.toSI & "," & $data.nHdrUnprocFragm & ")"
       hQ = if hS == "n/a": hU
            elif hU == "n/a": hS
            else: hS & "<-" & hU
 
       bS = if data.nBlkStaged == 0: "n/a"
-          else: data.blkStagedBottom.bnStr & "[" & $data.nBlkStaged & "]"
+          else: $data.blkStagedBottom & "[" & $data.nBlkStaged & "]"
       bU = if data.nBlkUnprocFragm == 0 and data.nBlkUnprocessed == 0: "n/a"
           elif data.blkUnprocBottom == high(BlockNumber):
-            "(" & data.nBlkUnprocessed.toSI & "," &
-                  $data.nBlkUnprocFragm & ")"
-          else: data.blkUnprocBottom.bnStr & "(" &
+            "(" & data.nBlkUnprocessed.toSI & "," & $data.nBlkUnprocFragm & ")"
+          else: $data.blkUnprocBottom & "(" &
                 data.nBlkUnprocessed.toSI & "," & $data.nBlkUnprocFragm & ")"
       bQ = if bS == "n/a": bU
            elif bU == "n/a": bS
@@ -141,30 +141,27 @@ proc tickerLogger(t: TickerRef; ctx: BeaconCtxRef) =
         of blocksCancel: "x"
         of blocksFinish: "f"
 
-      nP = data.nBuddies
+      nP = data.nSyncPeers
 
       # With `int64`, there are more than 29*10^10 years range for seconds
-      up = (now - t.started).seconds.uint64.toSI
-      mem = getTotalMem().uint.toSI
+      up = (now - t.started).toStr
+      eta = data.eta.toStr
 
     t.lastStats = data
     t.visited = now
 
     case data.state
     of idle:
-      debug "Sync state idle", up, nP, B, L,
-        D, H, T, hQ, bQ,
-        mem
+      debug "Sync state idle", up, eta, nP, B, L,
+        D, H, T
 
     of headers, headersCancel, headersFinish:
-      debug "Sync state headers", up, nP, st, B, L,
-        C, D, H, T, hQ,
-        mem
+      debug "Sync state headers", up, eta, nP, st, B, L,
+        C, D, H, T, hQ
 
     of blocks, blocksCancel, blocksFinish:
-      debug "Sync state blocks", up, nP, st, B, L,
-        D, I, H, T, bQ,
-        mem
+      debug "Sync state blocks", up, eta, nP, st, B, L,
+        D, I, H, T, bQ
 
 # ------------------------------------------------------------------------------
 # Public function

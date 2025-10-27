@@ -57,9 +57,6 @@ proc schedPeerProcessImpl(
     frameID=instr.frameIdStr, peer=($buddy.peer), peerID=buddy.peerID.short,
     syncState=instr.bag.syncState
 
-  # Activate peer
-  buddy.run.nPeers.inc
-
   discard await run.backup.schedPeer(buddy, instr.bag.rank)
   buddy.processFinishedClearFrame(instr, info)
 
@@ -79,6 +76,8 @@ proc schedDaemonBegin*(
   ##
   # Synchronise against captured environment and start process
   const info = instr.replayLabel()
+  run.nSyncPeers = instr.bag.nSyncPeers.int
+
   let daemon = run.newDaemonFrame(instr, info).valueOr: return
   discard await daemon.waitForSyncedEnv(instr, info)
   asyncSpawn daemon.schedDaemonProcessImpl(instr, info)
@@ -91,6 +90,8 @@ proc schedDaemonEnd*(
   ## Clean up (in foreground) after `schedDaemon()` process has terminated.
   ##
   const info = instr.replayLabel()
+  run.nSyncPeers = instr.bag.nSyncPeers.int
+
   let daemon = run.getDaemon(info).valueOr: return
   daemon.whenProcessFinished(instr, info).isErrOr:
     daemon.delDaemon(info) # Clean up
@@ -102,8 +103,9 @@ proc schedStartWorker*(
       ) =
   ## Runs `schedStart()` in the foreground.
   ##
-  const
-    info = instr.replayLabel()
+  const info = instr.replayLabel()
+  run.nSyncPeers = instr.bag.nSyncPeers.int
+
   let
     buddy = run.newPeer(instr, info).valueOr: return
     accept = run.backup.schedStart(buddy)
@@ -133,6 +135,8 @@ proc schedStopWorker*(
   ## Runs `schedStop()` in the foreground.
   ##
   const info = instr.replayLabel()
+  run.nSyncPeers = instr.bag.nSyncPeers.int
+
   let buddy = run.getOrNewPeerFrame(instr, info).valueOr: return
   run.backup.schedStop(buddy)
 
@@ -147,7 +151,7 @@ proc schedStopWorker*(
       return
     if instr.bag.peerCtx.value.peerCtrl == Stopped and not buddy.ctrl.stopped:
       buddy.ctrl.stopped = true
-    buddy.checkSyncerState(instr, info)
+    buddy.checkSyncerState(instr, rlxBaseNum=false, ignLatestNum=true, info)
 
   # Clean up
   buddy.delPeer(info)
@@ -163,11 +167,9 @@ proc schedPoolWorker*(
   ## Runs `schedPool()` in the foreground.
   ##
   const info = instr.replayLabel()
-  let buddy = run.getOrNewPeerFrame(instr, info).valueOr: return
+  run.nSyncPeers = instr.bag.nSyncPeers.int
 
-  if 0 < run.nPeers:
-    warn info & ": no active peers allowed", n=run.iNum,
-      serial=instr.bag.serial, peer=buddy.peer, nPeers=run.nPeers, expected=0
+  let buddy = run.getOrNewPeerFrame(instr, info).valueOr: return
 
   # The scheduler will reset the `poolMode` flag before starting the
   # `schedPool()` function.
@@ -191,6 +193,8 @@ proc schedPeerBegin*(
   ##
   # Synchronise against captured environment and start process
   const info = instr.replayLabel()
+  run.nSyncPeers = instr.bag.nSyncPeers.int
+
   let buddy = run.getOrNewPeerFrame(instr, info).valueOr: return
   discard await buddy.waitForSyncedEnv(instr, info)
   asyncSpawn buddy.schedPeerProcessImpl(instr, info)
@@ -203,9 +207,10 @@ proc schedPeerEnd*(
   ## Clean up (in foreground) after `schedPeer()` process has terminated.
   ##
   const info = instr.replayLabel()
+  run.nSyncPeers = instr.bag.nSyncPeers.int
+
   let buddy = run.getPeer(instr, info).valueOr: return
-  buddy.whenProcessFinished(instr, info).isErrOr:
-    buddy.run.nPeers.dec # peer is not active, anymore
+  discard buddy.whenProcessFinished(instr, info)
 
 # ------------------------------------------------------------------------------
 # End

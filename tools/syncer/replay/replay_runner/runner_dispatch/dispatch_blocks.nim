@@ -38,15 +38,15 @@ proc toBnRange(
         ", hash=" & w.short
     if rs.merge(h.number,h.number) != 1:
       raiseAssert info & ": dulplicate hash" &
-        ", hash=" & w.short & ", number=" & h.bnStr
+        ", hash=" & w.short & ", number=" & $h.number
   rs.ge().expect "valid BnRange"
 
-proc bnStr(
+proc toStr(
     lst: openArray[Hash32];
     buddy: BeaconBuddyRef;
     info: static[string];
       ): string =
-  buddy.ctx.toBnRange(lst, info).bnStr
+  buddy.ctx.toBnRange(lst, info).toStr
 
 proc toStr(e: BeaconError; anyTime = false): string =
   "(" & $e[0] &
@@ -90,10 +90,11 @@ proc fetchBodiesHandler*(
       ): Future[Result[FetchBodiesData,BeaconError]]
       {.async: (raises: []).} =
   const info = "&fetchBodies"
+
   let buddy = ReplayBuddyRef(buddy)
 
   var data: ReplayFetchBodies
-  buddy.withInstr(typeof data, info):
+  buddy.withInstr(typeof data, rlxBaseNum=true, ignLatestNum=true, info):
     if not instr.isAvailable():
       return err(iError.getBeaconError()) # Shutdown?
     if req != instr.bag.req:
@@ -104,11 +105,11 @@ proc fetchBodiesHandler*(
         ", nBlockHashes=" & $req.blockHashes.len &
         ", expected=" & $instr.bag.ivReq.len &
         # -----
-        ", blockHashes=" & req.blockHashes.bnStr(buddy, info)  &
-        ", expected=" & instr.bag.ivReq.bnStr
+        ", blockHashes=" & req.blockHashes.toStr(buddy, info)  &
+        ", expected=" & instr.bag.ivReq.toStr
     data = instr
 
-  buddy.withInstr(ReplaySyncBodies, info):
+  buddy.withInstr(ReplaySyncBodies, rlxBaseNum=true, ignLatestNum=true, info):
     if not instr.isAvailable():
       return err(iError.getBeaconError()) # Shutdown?
     discard # no-op, visual alignment
@@ -131,7 +132,7 @@ proc importBlockHandler*(
     peerID = buddy.peerIdStr
     
   var data: ReplayImportBlock
-  buddy.withInstr(typeof data, info):
+  buddy.withInstr(typeof data, rlxBaseNum=true, ignLatestNum=true, info):
     if not instr.isAvailable():
       return err(iError.getBeaconError()) # Shutdown?
 
@@ -141,7 +142,7 @@ proc importBlockHandler*(
         ", serial=" & $instr.bag.serial &
         ", peer=" & $peer &
         ", peerID=" & $peerID &
-        ", ethBlock=" & ethBlock.bnStr &
+        ", ethBlock=" & $ethBlock.header.number &
         # -----
         ", effPeerID=" & effPeerID.short &
         ", expected=" & instr.bag.effPeerID.short
@@ -154,8 +155,8 @@ proc importBlockHandler*(
         ", peerID=" & $peerID &
         ", effPeerID=" & effPeerID.short &
         # -----
-        ", ethBlock=" & ethBlock.bnStr &
-        ", expected=%" & instr.bag.ethBlock.bnStr &
+        ", ethBlock=" & $ethBlock.header.number &
+        ", expected=%" & $instr.bag.ethBlock.header.number &
         # -----
         ", ethBlock=%" & ethBlock.computeRlpHash.short &
         ", expected=%" & instr.bag.ethBlock.computeRlpHash.short
@@ -179,7 +180,7 @@ proc importBlockHandler*(
           got="err" & rc.error.toStr,
           expected="err" & data.bag.error.value.toStr(true)
 
-  buddy.withInstr(ReplaySyncBlock, info):
+  buddy.withInstr(ReplaySyncBlock, rlxBaseNum=true, ignLatestNum=false, info):
     if not instr.isAvailable():
       return err(iError.getBeaconError()) # Shutdown?
     discard # no-op, visual alignment
@@ -196,6 +197,7 @@ proc sendBodies*(
       ) {.async: (raises: []).} =
   ## Stage bodies request/response data
   const info = instr.replayLabel()
+  run.nSyncPeers = instr.bag.nSyncPeers.int
   let buddy = run.getPeer(instr, info).valueOr:
     raiseAssert info & ": getPeer() failed" &
       ", n=" & $run.iNum &
@@ -209,6 +211,7 @@ proc sendBlock*(
       ) {.async: (raises: []).} =
   ## Stage block request/response data
   const info = instr.replayLabel()
+  run.nSyncPeers = instr.bag.nSyncPeers.int
   if instr.bag.peerCtx.isSome():
     # So it was captured run from a sync peer
     let buddy = run.getPeer(instr, info).valueOr:

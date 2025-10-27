@@ -29,10 +29,6 @@ const
   replayWaitForCompletion* = chronos.nanoseconds(100)
     ## Wait for other pseudo/async thread to have completed something
 
-  replayFailTimeout* = chronos.seconds(50)
-    ## Bail out after waiting this long for an event to happen. This
-    ## timeout should cover the maximum time needed to import a block.
-
   replayFailTmoMinLog* = chronos.milliseconds(1)
     ## Log maximum elapsed time when it exceeds this threshold.
 
@@ -78,7 +74,7 @@ type
     # Local state
     daemon*: ReplayDaemonRef           ## Currently active daemon, or `nil`
     peers*: Table[Hash,ReplayBuddyRef] ## Begin/End for base frames
-    nPeers*: uint                      ## Track active peer instances
+    nSyncPeers*: int                   ## Track active peer instances
     failTmoMax*: chronos.Duration      ## Keep track of largest timeout
 
     # Instruction handling
@@ -88,10 +84,14 @@ type
 # Fake scheduler `getPeer()` and `getPeers()` for replay runner
 # ------------------------------------------------------------------------------
 
-proc replayGetPeerFn*(run: ReplayRunnerRef): ReplayGetPeerFn =
+proc replayGetSyncPeerFn*(run: ReplayRunnerRef): ReplayGetSyncPeerFn =
   result = proc(peerID: Hash): BeaconBuddyRef =
     run.peers.withValue(peerID,val):
       return val[]
+
+proc replayNSyncPeersFn*(run: ReplayRunnerRef): ReplayNSyncPeersFn =
+  result = proc(): int =
+    run.nSyncPeers
 
 # ------------------------------------------------------------------------------
 # End

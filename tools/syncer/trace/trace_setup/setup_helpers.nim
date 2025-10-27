@@ -30,13 +30,13 @@ proc init*(tb: var TraceRecBase; ctx: BeaconCtxRef) =
   if not trc.isNil:
     tb.serial =     trc.newSerial
     tb.time =       Moment.now() - trc.started
-    tb.syncState =  ctx.pool.lastState
-    tb.nPeers =     ctx.pool.nBuddies.uint
+    tb.syncState =  ctx.pool.syncState
+    tb.nSyncPeers = ctx.nSyncPeers().uint
     tb.chainMode =  ctx.hdrCache.state
     tb.poolMode =   ctx.poolMode
     tb.baseNum =    ctx.chain.baseNumber
     tb.latestNum =  ctx.chain.latestNumber
-    tb.antecedent = ctx.hdrCache.antecedent.number
+    tb.anteNum =    ctx.hdrCache.antecedent.number
 
     let hChunks = ctx.hdr.unprocessed.chunks().uint
     if 0 < hChunks:
@@ -44,7 +44,7 @@ proc init*(tb: var TraceRecBase; ctx: BeaconCtxRef) =
       tb.hdrUnpr = Opt.some(TraceHdrUnproc(
         hChunks:  hChunks,
         hLen:     ctx.hdr.unprocessed.total(),
-        hLast:    iv.maxPt,
+        hLastNum: iv.maxPt,
         hLastLen: iv.len))
 
     let bChunks = ctx.blk.unprocessed.chunks().uint
@@ -53,7 +53,7 @@ proc init*(tb: var TraceRecBase; ctx: BeaconCtxRef) =
       tb.blkUnpr = Opt.some(TraceBlkUnproc(
         bChunks:   bChunks,
         bLen:      ctx.blk.unprocessed.total(),
-        bLeast:    iv.minPt,
+        bLeastNum: iv.minPt,
         bLeastLen: iv.len))
 
     tb.slowPeer = ctx.pool.lastSlowPeer
