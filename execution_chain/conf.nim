@@ -116,10 +116,11 @@ type
       name: "import-key" .}: InputFile
 
     trustedSetupFile* {.
-      desc: "Load EIP-4844 trusted setup file"
+      hidden
+      desc: "Alternative EIP-4844 trusted setup file"
       defaultValue: none(string)
       defaultValueDesc: "Baked in trusted setup"
-      name: "trusted-setup-file" .}: Option[string]
+      name: "debug-trusted-setup-file" .}: Option[string]
 
     extraData* {.
       separator: "\pPAYLOAD BUILDING OPTIONS:"

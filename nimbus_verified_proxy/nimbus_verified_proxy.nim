@@ -160,7 +160,9 @@ proc run*(
 
     network = createEth2Node(
       rng, lcConfig, netKeys, cfg, forkDigests, getBeaconTime, genesis_validators_root
-    )
+    ).valueOr:
+      fatal "Failed to initialize node", err = error
+      quit QuitFailure
 
     # light client is set to optimistic finalization mode
     lightClient = createLightClient(
