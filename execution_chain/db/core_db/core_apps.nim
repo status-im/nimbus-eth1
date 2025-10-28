@@ -691,8 +691,6 @@ proc deleteReceipts*(
   
   for idx in 0'u16..<uint16.high:
     let key = hashIndexKey(receiptsRoot, idx)
-    if not db.hasKey(key):
-      break
     db.del(key).isOkOr:
       warn info, idx, error=($$error)
 
@@ -719,8 +717,6 @@ proc deleteTransactions*(
 
   for idx in 0'u16..<uint16.high:
     let key = hashIndexKey(txRoot, idx)
-    if not db.hasKey(key):
-      break
     db.del(key).isOkOr:
       warn info, idx, error=($$error)
 
@@ -734,8 +730,6 @@ proc deleteUncles*(
 
   for idx in 0'u16..<uint16.high:
     let key = hashIndexKey(ommersHash, idx)
-    if not db.hasKey(key):
-      break
     db.del(key).isOkOr:
       warn info, idx, error=($$error)
 
@@ -749,8 +743,6 @@ proc deleteWithdrawals*(
   
   for idx in 0'u16..<uint16.high:
     let key = hashIndexKey(withdrawalsRoot, idx)
-    if not db.hasKey(key):
-      break
     db.del(key).isOkOr:
       warn info, idx, error=($$error)
 
