@@ -18,13 +18,6 @@ import
 
 export block_access_lists, hashes, results
 
-# TODO: Consider setting max values and adding to the validation.
-# This is not yet defined in the EIP.
-# MAX_TXS = 30_000
-# MAX_SLOTS = 300_000
-# MAX_ACCOUNTS = 300_000
-# MAX_CODE_SIZE = 24_576
-# MAX_CODE_CHANGES = 1
 
 func validate*(bal: BlockAccessList, expectedHash: Hash32): Result[void, string] =
   ## Validate that a block access list is structurally correct and matches the expected hash.
@@ -78,8 +71,8 @@ func validate*(bal: BlockAccessList, expectedHash: Hash32): Result[void, string]
     if codeIndices != codeIndices.sorted():
       return err("Code changes should be sorted by blockAccessIndex")
 
-    # Check that the block access list matches the expected hash.
-    if bal.computeBlockAccessListHash() != expectedHash:
-      return err("Computed block access list hash does not match the expected hash")
+  # Check that the block access list matches the expected hash.
+  if bal.computeBlockAccessListHash() != expectedHash:
+    return err("Computed block access list hash does not match the expected hash")
 
   ok()

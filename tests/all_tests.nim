@@ -44,6 +44,7 @@ import
     test_stateless_witness_generation,
     test_stateless_witness_verification,
     test_block_access_list_builder,
-    # These two suites are much slower than all the rest, so run them last
+    test_block_access_list_validation,
+    # These suites below are much slower than all the rest, so run them last
     test_generalstate_json,
 ]

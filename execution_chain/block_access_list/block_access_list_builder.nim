@@ -18,10 +18,10 @@ import
 export block_access_lists
 
 type
-  # Account data stored in the builder during block execution.
-  # This type tracks all changes made to a single account throughout
-  # the execution of a block, organized by the type of change and the
-  # block access list index where it occurred.
+  # Account data stored in the builder during block execution. This type tracks
+  # all changes made to a single account throughout the execution of a block,
+  # organized by the type of change and the block access list index where it
+  # occurred.
   AccountData = object
     storageChanges: Table[UInt256, Table[int, UInt256]]
       ## Maps storage key -> block access list index -> storage value
@@ -35,11 +35,10 @@ type
       ## Maps block access list index -> code
 
   # Builder for constructing a BlockAccessList efficiently during transaction
-  # execution.
-  # The builder accumulates all account and storage accesses during block
-  # execution and constructs a deterministic access list. Changes are tracked
-  # by address, field type, and block access list index to enable efficient
-  # reconstruction of state changes.
+  # execution. The builder accumulates all account and storage accesses during
+  # block execution and constructs a deterministic access list. Changes are
+  # tracked by address, field type, and block access list index to enable
+  # efficient reconstruction of state changes.
   BlockAccessListBuilderRef* = ref object
     accounts: Table[Address, AccountData]
       ## Maps address -> account data
