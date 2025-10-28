@@ -57,7 +57,7 @@ proc statelessProcessBlock*(
 
   # Load the contract code into the database indexed by code hash.
   for c in witness.codes:
-    doAssert memoryTxFrame.setCodeByHash(keccak256(c), c).isOk()
+    doAssert memoryTxFrame.persistCodeByHash(keccak256(c), c).isOk()
 
   # Load the block hashes into the database indexed by block number.
   for h in verifiedHeaders:

@@ -409,6 +409,20 @@ proc getTransactions*(
 
     return ok(move(res))
 
+proc persistBlockAccessList*(
+    db: CoreDbTxRef, blockAccessListHash: Hash32, bal: BlockAccessList) =
+  db.put(blockAccessListHashKey(blockAccessListHash).toOpenArray, bal.encode())
+    .expect("persistBlockAccessList should succeed")
+
+proc getBlockAccessList*(
+    db: CoreDbTxRef,
+    blockAccessListHash: Hash32): Result[BlockAccessList, string] =
+  let balBytes = db.get(blockAccessListHashKey(blockAccessListHash).toOpenArray).valueOr:
+    return err("getBlockAccessList: " & $$error)
+
+  wrapRlpException "getBlockAccessList":
+    return ok(BlockAccessList.decode(balBytes))
+
 proc getBlockBody*(
     db: CoreDbTxRef;
     header: Header;
@@ -421,6 +435,11 @@ proc getBlockBody*(
     if header.withdrawalsRoot.isSome:
       let wds = ?db.getWithdrawals(header.withdrawalsRoot.get)
       body.withdrawals = Opt.some(wds)
+
+    if header.blockAccessListHash.isSome:
+      let bal = ?db.getBlockAccessList(header.blockAccessListHash.get)
+      body.blockAccessList = Opt.some(bal)
+
     return ok(move(body))
 
 proc getBlockBody*(
@@ -447,7 +466,6 @@ proc getEthBlock*(
     header = ?db.getBlockHeader(blockNumber)
     blockBody = ?db.getBlockBody(header)
   ok(EthBlock.init(move(header), move(blockBody)))
-
 
 proc getUncleHashes*(
     db: CoreDbTxRef;
@@ -641,17 +659,17 @@ proc getWitness*(db: CoreDbTxRef, blockHash: Hash32): Result[Witness, string] =
 
   Witness.decode(witnessBytes)
 
+proc persistCodeByHash*(db: CoreDbTxRef, codeHash: Hash32, code: openArray[byte]): Result[void, string] =
+  db.put(contractHashKey(codeHash).toOpenArray, code).isOkOr:
+    return err("persistCodeByHash: " & $$error)
+
+  ok()
+
 proc getCodeByHash*(db: CoreDbTxRef, codeHash: Hash32): Result[seq[byte], string] =
   let code = db.get(contractHashKey(codeHash).toOpenArray).valueOr:
     return err("getCodeByHash: " & $$error)
 
   ok(code)
-
-proc setCodeByHash*(db: CoreDbTxRef, codeHash: Hash32, code: openArray[byte]): Result[void, string] =
-  db.put(contractHashKey(codeHash).toOpenArray, code).isOkOr:
-    return err("setCodeByHash: " & $$error)
-
-  ok()
 
 # ------------------------------------------------------------------------------
 # End
