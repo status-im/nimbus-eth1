@@ -26,10 +26,11 @@ proc running(): bool =
   not ProcessState.stopIt(notice("Shutting down", reason = it))
 
 proc purge*(config: ExecutionClientConf, com: CommonRef) =
+
   let
     start = com.db.baseTxFrame().getSavedStateBlockNumber()
-    begin = 437036 # 1
-    batchSize = 150
+    begin = com.db.baseTxFrame().getHistoryExpired()
+    batchSize = 150'u64
     # last = begin + (batchSize*600)
 
   notice "Current database at", blockNumber = start
@@ -45,8 +46,8 @@ proc purge*(config: ExecutionClientConf, com: CommonRef) =
     txFrame = com.db.baseTxFrame().txFrameBegin()
 
   
-  while running() and currentBlock <= int(start):
-    txFrame.deleteBlockBodyAndReceipts(currentBlock.BlockNumber).isOkOr:
+  while running() and currentBlock <= start:
+    txFrame.deleteBlockBodyAndReceipts(currentBlock).isOkOr:
       warn "Failed", blkNum=currentBlock, error
     
     if (currentBlock mod batchSize) == 0:
@@ -55,6 +56,7 @@ proc purge*(config: ExecutionClientConf, com: CommonRef) =
     
     currentBlock += 1
   
+  txFrame.setHistoryExpired(currentBlock)
   checkpoint()
   notice "Completed Purging", blocksExistFrom=currentBlock-1, till=start
 
