@@ -69,7 +69,7 @@ type
     executionClient
     `import`
     `import-rlp`
-    `purge`
+    `prune`
 
   RpcFlag* {.pure.} = enum
     ## RPC flags
@@ -552,7 +552,7 @@ type
         desc: "One or more RLP encoded block(s) files"
         name: "blocks-file" .}: seq[InputFile]
 
-    of NimbusCmd.`purge`:
+    of NimbusCmd.`prune`:
       purgeLimit* {.
         desc: "Purge history in database till this block number"
         defaultValue: 0'u64

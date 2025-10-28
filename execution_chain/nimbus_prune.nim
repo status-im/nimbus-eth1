@@ -25,13 +25,12 @@ import
 proc running(): bool =
   not ProcessState.stopIt(notice("Shutting down", reason = it))
 
-proc purge*(config: ExecutionClientConf, com: CommonRef) =
+proc prune*(config: ExecutionClientConf, com: CommonRef) =
 
   let
     start = com.db.baseTxFrame().getSavedStateBlockNumber()
     begin = com.db.baseTxFrame().getHistoryExpired()
     batchSize = 150'u64
-    # last = begin + (batchSize*600)
 
   notice "Current database at", blockNumber = start
   notice "Purging all block bodies till", start
