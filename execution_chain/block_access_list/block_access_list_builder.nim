@@ -15,6 +15,8 @@ import
   stint,
   stew/byteutils
 
+export block_access_lists
+
 type
   # Account data stored in the builder during block execution.
   # This type tracks all changes made to a single account throughout
@@ -55,6 +57,9 @@ proc init*(T: type BlockAccessListBuilderRef): T =
 proc ensureAccount(builder: BlockAccessListBuilderRef, address: Address) =
   if address notin builder.accounts:
     builder.accounts[address] = AccountData.init()
+
+template addTouchedAccount*(builder: BlockAccessListBuilderRef, address: Address) =
+  ensureAccount(builder, address)
 
 proc addStorageWrite*(
     builder: BlockAccessListBuilderRef,
@@ -107,9 +112,6 @@ proc addCodeChange*(
   builder.accounts.withValue(address, accData):
     accData[].codeChanges[blockAccessIndex] = newCode
 
-proc addTouchedAccount*(builder: BlockAccessListBuilderRef, address: Address) =
-  ensureAccount(builder, address)
-
 proc balIndexCmp(x, y: StorageChange | BalanceChange | NonceChange | CodeChange): int =
   cmp(x.blockAccessIndex, y.blockAccessIndex)
 
@@ -122,7 +124,7 @@ proc addressCmp(x, y: AccountChanges): int =
 proc buildBlockAccessList*(builder: BlockAccessListBuilderRef): BlockAccessList =
   var blockAccessList: BlockAccessList
 
-  for address, accData in builder.accounts:
+  for address, accData in builder.accounts.mpairs():
     # Collect and sort storageChanges
     var storageChanges: seq[SlotChanges]
     for slot, changes in accData.storageChanges:
