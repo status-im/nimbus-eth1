@@ -60,7 +60,12 @@ type
   NimbusCmd* {.pure.} = enum
     executionClient
     `import`
+<<<<<<< HEAD
     `purge`
+=======
+    `import-rlp`
+    `prune`
+>>>>>>> a97b08a18 (rename to)
 
   RpcFlag* {.pure.} = enum
     ## RPC flags
