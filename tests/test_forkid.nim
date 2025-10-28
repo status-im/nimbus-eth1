@@ -83,16 +83,19 @@ const
     (number: 123'u64, time: 1762955545'u64, id: (crc: 0x23AA1351'u32, next: 0'u64)),          # Future BPO2 time
   ]
 
-template runTest(network: untyped, name: string) =
+template runForkIdTest(network: untyped, name: string) =
   test name:
     var
       params = networkParams(network)
       com    = CommonRef.new(newCoreDbRef DefaultDbMemory, nil, network, params)
 
-    for i, x in `network IDs`:
-      let id = com.forkId(x.number, x.time)
-      check toHex(id.crc) == toHex(x.id.crc)
-      check id.nextFork == x.id.next
+    for x in `network IDs`:
+      let computedId = com.forkId(x.number, x.time)
+      check toHex(computedId.crc) == toHex(x.id.crc)
+      check computedId.nextFork == x.id.next
+
+      # The computed ID should be compatible with the CommonRef ForkIdCalculator itself
+      check com.compatibleForkId(computedId) == true
 
 func config(shanghai, cancun: uint64): ChainConfig =
   ChainConfig(
@@ -143,8 +146,8 @@ template runGenesisTimeIdTests() =
     check get.nextFork == x.want.next
 
 suite "Fork ID tests":
-  runTest(MainNet, "MainNet")
-  runTest(SepoliaNet, "SepoliaNet")
-  runTest(HoodiNet, "HoodiNet")
+  runForkIdTest(MainNet, "MainNet")
+  runForkIdTest(SepoliaNet, "SepoliaNet")
+  runForkIdTest(HoodiNet, "HoodiNet")
   test "Genesis Time Fork ID":
     runGenesisTimeIdTests()
