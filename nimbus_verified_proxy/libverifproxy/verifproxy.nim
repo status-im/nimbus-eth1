@@ -35,10 +35,9 @@ proc runContext(ctx: ptr Context) {.thread.} =
   try:
     let jsonNode = parseJson(str)
 
-    let rpcAddr = jsonNode["RpcAddress"].getStr()
     let myConfig = VerifiedProxyConf(
-      eth2Network: some(jsonNode["Eth2Network"].getStr()),
-      trustedBlockRoot: Eth2Digest.fromHex(jsonNode["TrustedBlockRoot"].getStr()),
+      eth2Network: some(jsonNode["eth2Network"].getStr()),
+      trustedBlockRoot: Eth2Digest.fromHex(jsonNode["trustedBlockRoot"].getStr()),
       backendUrl: parseCmdArg(Web3Url, jsonNode["backendUrl"].getStr()),
       frontendUrl: parseCmdArg(Web3Url, jsonNode["frontendUrl"].getStr()),
       lcEndpoints: parseCmdArg(UrlList, jsonNode["lcEndpoints"].getStr()),
