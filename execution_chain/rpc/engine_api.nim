@@ -25,11 +25,13 @@ const supportedMethods: HashSet[string] =
     "engine_newPayloadV2",
     "engine_newPayloadV3",
     "engine_newPayloadV4",
+    "engine_newPayloadV5",
     "engine_getPayloadV1",
     "engine_getPayloadV2",
     "engine_getPayloadV3",
     "engine_getPayloadV4",
     "engine_getPayloadV5",
+    "engine_getPayloadV6",
     "engine_forkchoiceUpdatedV1",
     "engine_forkchoiceUpdatedV2",
     "engine_forkchoiceUpdatedV3",
@@ -66,6 +68,13 @@ proc setupEngineAPI*(engine: BeaconEngineRef, server: RpcServer) =
     await engine.newPayload(Version.V4, payload,
       expectedBlobVersionedHashes, parentBeaconBlockRoot, executionRequests)
 
+  server.rpc("engine_newPayloadV5") do(payload: ExecutionPayload,
+                                       expectedBlobVersionedHashes: Opt[seq[Hash32]],
+                                       parentBeaconBlockRoot: Opt[Hash32],
+                                       executionRequests: Opt[seq[seq[byte]]]) -> PayloadStatusV1:
+    await engine.newPayload(Version.V5, payload,
+      expectedBlobVersionedHashes, parentBeaconBlockRoot, executionRequests)
+
   server.rpc("engine_getPayloadV1") do(payloadId: Bytes8) -> ExecutionPayloadV1:
     return engine.getPayload(Version.V1, payloadId).executionPayload.V1
 
@@ -80,6 +89,9 @@ proc setupEngineAPI*(engine: BeaconEngineRef, server: RpcServer) =
 
   server.rpc("engine_getPayloadV5") do(payloadId: Bytes8) -> GetPayloadV5Response:
     return engine.getPayloadV5(payloadId)
+
+  server.rpc("engine_getPayloadV6") do(payloadId: Bytes8) -> GetPayloadV6Response:
+    return engine.getPayloadV6(payloadId)
 
   server.rpc("engine_forkchoiceUpdatedV1") do(update: ForkchoiceStateV1,
                     attrs: Opt[PayloadAttributesV1]) -> ForkchoiceUpdatedResponse:
