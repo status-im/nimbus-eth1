@@ -132,9 +132,9 @@ proc new*(
         GENESIS_SLOT
 
   lightClient.manager = LightClientManager.init(
-    rng, cfg.timeParams, getTrustedBlockRoot, bootstrapVerifier, updateVerifier, finalityVerifier,
-    optimisticVerifier, isLightClientStoreInitialized, isNextSyncCommitteeKnown,
-    getFinalizedSlot, getOptimisticSlot, getBeaconTime,
+    rng, cfg.timeParams, getTrustedBlockRoot, bootstrapVerifier, updateVerifier,
+    finalityVerifier, optimisticVerifier, isLightClientStoreInitialized,
+    isNextSyncCommitteeKnown, getFinalizedSlot, getOptimisticSlot, getBeaconTime,
   )
 
   lightClient
