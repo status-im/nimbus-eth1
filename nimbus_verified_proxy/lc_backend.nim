@@ -73,8 +73,10 @@ proc getEthLCBackend*(client: LCRestClientPool): EthLCBackend =
             await peer.restClient.getLightClientBootstrap(
               blockRoot, client.cfg, client.forkDigests
             )
+          except CancelledError as e:
+            raise e
           except CatchableError as e:
-            raise newException(CancelledError, e.msg)
+            err(e.msg)
 
       ok(res)
 
@@ -88,8 +90,10 @@ proc getEthLCBackend*(client: LCRestClientPool): EthLCBackend =
             await peer.restClient.getLightClientUpdatesByRange(
               startPeriod, count, client.cfg, client.forkDigests
             )
+          except CancelledError as e:
+            raise e
           except CatchableError as e:
-            raise newException(CancelledError, e.msg)
+            err(e.msg)
 
       ok(res)
 
@@ -105,8 +109,10 @@ proc getEthLCBackend*(client: LCRestClientPool): EthLCBackend =
             await peer.restClient.getLightClientFinalityUpdate(
               client.cfg, client.forkDigests
             )
+          except CancelledError as e:
+            raise e
           except CatchableError as e:
-            raise newException(CancelledError, e.msg)
+            err(e.msg)
 
       ok(res)
 
@@ -122,8 +128,10 @@ proc getEthLCBackend*(client: LCRestClientPool): EthLCBackend =
             await peer.restClient.getLightClientOptimisticUpdate(
               client.cfg, client.forkDigests
             )
+          except CancelledError as e:
+            raise e
           except CatchableError as e:
-            raise newException(CancelledError, e.msg)
+            err(e.msg)
 
       ok(res)
 
