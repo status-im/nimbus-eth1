@@ -41,6 +41,20 @@ func validateVersionedHashed(payload: ExecutionPayload,
   true
 
 template validateVersion(com, timestamp, payloadVersion, apiVersion) =
+  if apiVersion == Version.V5:
+    if not com.isAmsterdamOrLater(timestamp):
+      raise unsupportedFork("newPayloadV5 expect payload timestamp fall within Amsterdam")
+
+    if payloadVersion != Version.V4:
+      raise invalidParams("newPayload" & $apiVersion &
+      " expect ExecutionPayloadV4" &
+      " but got ExecutionPayload" & $payloadVersion)
+
+  if com.isAmsterdamOrLater(timestamp):
+    if payloadVersion != Version.V4:
+      raise invalidParams("if timestamp is Amsterdam or later, " &
+        "payload must be ExecutionPayloadV4, got ExecutionPayload" & $payloadVersion)
+
   if apiVersion == Version.V4:
     if not com.isPragueOrLater(timestamp):
       raise unsupportedFork("newPayloadV4 expect payload timestamp fall within Prague")
@@ -72,7 +86,7 @@ template validateVersion(com, timestamp, payloadVersion, apiVersion) =
     # both newPayloadV3 and newPayloadV4 expect ExecutionPayloadV3
     if payloadVersion != Version.V3:
       raise invalidParams("newPayload" & $apiVersion &
-      " expect ExecutionPayload3" &
+      " expect ExecutionPayloadV3" &
       " but got ExecutionPayload" & $payloadVersion)
 
 template validatePayload(apiVersion, payloadVersion, payload) =
@@ -88,6 +102,11 @@ template validatePayload(apiVersion, payloadVersion, payload) =
     if payload.excessBlobGas.isNone:
       raise invalidParams("newPayload" & $apiVersion &
         "excessBlobGas is expected from execution payload")
+
+  if apiVersion >= Version.V5 or payloadVersion >= Version.V4:
+    if payload.blockAccessList.isNone:
+      raise invalidParams("newPayload" & $apiVersion &
+        "blockAccessList is expected from execution payload")
 
 # https://github.com/ethereum/execution-apis/blob/40088597b8b4f48c45184da002e27ffc3c37641f/src/engine/prague.md#request
 func validateExecutionRequest(blockHash: Hash32,

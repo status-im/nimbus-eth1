@@ -80,7 +80,7 @@ proc forkchoiceUpdated*(client: RpcClient,
   of Version.V1: return client.forkchoiceUpdatedV1(update, attr.V1)
   of Version.V2: return client.forkchoiceUpdatedV2(update, attr)
   of Version.V3: return client.forkchoiceUpdatedV3(update, attr)
-  of Version.V4, Version.V5: discard
+  of Version.V4, Version.V5, Version.V6: discard
 
 proc getPayloadV1*(client: RpcClient, payloadId: Bytes8): Result[ExecutionPayloadV1, string] =
   wrapTrySimpleRes:
@@ -217,6 +217,8 @@ proc newPayload*(client: RpcClient,
       payload.versionedHashes,
       payload.beaconRoot,
       payload.executionRequests)
+  of Version.V6:
+    discard # TODO: Hive testing for Amsterdam
 
 proc exchangeCapabilities*(client: RpcClient,
       methods: seq[string]):
