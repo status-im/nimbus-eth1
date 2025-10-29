@@ -420,8 +420,10 @@ proc getBlockAccessList*(
   let balBytes = db.get(blockAccessListHashKey(blockAccessListHash).toOpenArray).valueOr:
     return err("getBlockAccessList: " & $$error)
 
-  wrapRlpException "getBlockAccessList":
-    return ok(BlockAccessList.decode(balBytes))
+  let bal = BlockAccessList.decode(balBytes).valueOr:
+    return err("getBlockAccessList: " & $error)
+
+  ok(bal)
 
 proc getBlockBody*(
     db: CoreDbTxRef;
