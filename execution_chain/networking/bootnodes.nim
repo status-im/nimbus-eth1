@@ -97,7 +97,6 @@ template loadBootstrapNodes(name: static[string]): auto =
 
 const
   mainnet = loadBootstrapNodes("mainnet")
-  holesky = loadBootstrapNodes("holesky")
   sepolia = loadBootstrapNodes("sepolia")
   hoodi = loadBootstrapNodes("hoodi")
 
@@ -145,7 +144,6 @@ func appendBootstrapNodes(list: openArray[string], boot: var BootstrapNodes): Re
 func getBootstrapNodes*(name: string, boot: var BootstrapNodes): Result[void, string] =
   case name:
   of "mainnet": appendBootstrapNodes(mainnet, boot)
-  of "holesky": appendBootstrapNodes(holesky, boot)
   of "sepolia": appendBootstrapNodes(sepolia, boot)
   of "hoodi":   appendBootstrapNodes(hoodi, boot)
   else: err("network not supported: " & name)

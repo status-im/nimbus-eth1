@@ -47,7 +47,7 @@ proc toTransactions*(txs: openArray[TxOrHash]): Result[seq[Transaction], string]
   return ok(convertedTxs)
 
 proc checkTxHash*(txObj: TransactionObject, txHash: Hash32): bool =
-  toTransaction(txObj).rlpHash == txHash
+  toTransaction(txObj).computeRlpHash() == txHash
 
 proc verifyTransactions*(
     txRoot: Hash32, transactions: seq[TxOrHash]

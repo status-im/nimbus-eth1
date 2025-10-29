@@ -18,19 +18,7 @@ import
   ../../networking/p2p,
   ./worker/headers/headers_target,
   ./worker/update/metrics,
-  ./worker/[blocks, headers, start_stop, update, worker_desc]
-
-# ------------------------------------------------------------------------------
-# Private functions
-# ------------------------------------------------------------------------------
-
-proc somethingToCollect(buddy: BeaconBuddyRef): bool =
-  if buddy.ctx.hibernate:                        # not activated yet?
-    return false
-  if buddy.headersCollectOk() or                 # something on TODO list
-     buddy.blocksCollectOk():
-    return true
-  false
+  ./worker/[blocks, classify, headers, start_stop, update, worker_desc]
 
 # ------------------------------------------------------------------------------
 # Public start/stop and admin functions
@@ -67,7 +55,8 @@ proc start*(buddy: BeaconBuddyRef; info: static[string]): bool =
 proc stop*(buddy: BeaconBuddyRef; info: static[string]) =
   ## Clean up this peer
   if not buddy.ctx.hibernate: debug info & ": release peer", peer=buddy.peer,
-    nSyncPeers=(buddy.ctx.pool.nBuddies-1), syncState=($buddy.syncState)
+    thPut=buddy.only.thPutStats.toMeanVar.psStr,
+    nSyncPeers=(buddy.ctx.pool.nBuddies-1), state=($buddy.syncState)
   buddy.stopBuddy()
 
 # ------------------------------------------------------------------------------
@@ -87,7 +76,7 @@ proc runTicker*(ctx: BeaconCtxRef; info: static[string]) =
     if ctx.pool.lastNoPeersLog + noPeersLogWaitInterval < now:
       ctx.pool.lastNoPeersLog = now
       debug info & ": no sync peers yet",
-        elapsed=(now - ctx.pool.lastPeerSeen).toStr,
+        ela=(now - ctx.pool.lastPeerSeen).toStr,
         nOtherPeers=ctx.node.peerPool.connectedNodes.len
 
 
@@ -140,7 +129,11 @@ proc runPool*(
   true # stop
 
 
-template runPeer*(buddy: BeaconBuddyRef; info: static[string]): Duration =
+template runPeer*(
+    buddy: BeaconBuddyRef;
+    rank: PeerRanking;
+    info: static[string];
+      ): Duration =
   ## Async/template
   ##
   ## This peer worker method is repeatedly invoked (exactly one per peer) while
@@ -150,53 +143,71 @@ template runPeer*(buddy: BeaconBuddyRef; info: static[string]): Duration =
   ##
   var bodyRc = chronos.nanoseconds(0)
   block body:
-    if buddy.somethingToCollect():
+    if buddy.somethingToCollectOrUnstage():
+
+      trace info & ": start processing", peer=buddy.peer,
+        thPut=buddy.only.thPutStats.toMeanVar.psStr,
+        rankInfo=($rank.assessed),
+        rank=(if rank.ranking < 0: "n/a" else: $rank.ranking),
+        nSyncPeers=buddy.ctx.pool.nBuddies, state=($buddy.syncState)
+
+      if rank.assessed == rankingTooLow:
+        # Tell the scheduler to wait a bit longer before next invocation.
+        # The reasoning is that in case of a low rank labelling, all slots
+        # for peers downloading can be filled with higher ranking peers. And
+        # this situation would not change immediately.
+        bodyRc = workerIdleLongWaitInterval
+        break body                                # done, exit
 
       # Download and process headers and blocks
-      while buddy.headersCollectOk():
+      block downloadAndProcess:
+        while buddy.headersCollectOk():
 
-        # Collect headers and either stash them on the header chain cache
-        # directly, or stage on the header queue to get them serialised and
-        # stashed, later.
-        buddy.headersCollect info # async/template
+          # Collect headers and either stash them on the header chain cache
+          # directly, or stage on the header queue to get them serialised and
+          # stashed, later.
+          buddy.headersCollect info               # async/template
 
-        # Store serialised headers from the `staged` queue onto the header
-        # chain cache.
-        if not buddy.headersUnstage info:
-          # Need to proceed with another peer (e.g. gap between queue and
-          # header chain cache.)
-          bodyRc = workerIdleWaitInterval
-          break body
+          # Store serialised headers from the `staged` queue onto the header
+          # chain cache.
+          if not buddy.headersUnstage info:       # async/template
+            # Need to proceed with another peer (e.g. gap between queue and
+            # header chain cache.)
+            bodyRc = workerIdleWaitInterval
+            break downloadAndProcess
 
-        # End `while()`
+          # End `while()`
 
-      # Fetch bodies and combine them with headers to blocks to be staged.
-      # These staged blocks are then excuted by the daemon process (no `peer`
-      # needed.)
-      while buddy.blocksCollectOk():
+        # Fetch bodies and combine them with headers to blocks to be staged.
+        # These staged blocks are then excuted by the daemon process (no `peer`
+        # needed.)
+        while buddy.blocksCollectOk():
+          # Collect bodies and either import them via `FC` module, or stage on
+          # the blocks queue to get them serialised and imported, later.
+          buddy.blocksCollect info                # async/template
 
-        # Collect bodies and either import them via `FC` module, or stage on
-        # the blocks queue to get them serialised and imported, later.
-        buddy.blocksCollect info # async/template
+          # Import bodies from the `staged` queue.
+          if not buddy.blocksUnstage info:        # async/template
+            # Need to proceed with another peer (e.g. gap between top imported
+            # block and blocks queue.)
+            bodyRc = workerIdleWaitInterval
+            break downloadAndProcess
 
-        # Import bodies from the `staged` queue.
-        if not buddy.blocksUnstage info: # async/template
-          # Need to proceed with another peer (e.g. gap between top imported
-          # block and blocks queue.)
-          bodyRc = workerIdleWaitInterval
-          break body
+          # End `while()`
 
-        # End `while()`
+      # End block: `actionLoop`
 
-    else:
-      # Potential manual target set up
-      buddy.headersTargetActivate info
+    elif buddy.ctx.pool.lastState == SyncState.idle:
+      # Potentially a manual sync target set up
+      if not buddy.headersTargetActivate info:
+        bodyRc = workerIdleLongWaitInterval
+      break body
+
+    # Idle sleep unless there is something to do
+    if not buddy.somethingToCollectOrUnstage():
+      bodyRc = workerIdleWaitInterval
 
     # End block: `body`
-
-  # Idle sleep unless there is something to do
-  if not buddy.somethingToCollect():
-    bodyRc = workerIdleWaitInterval
 
   bodyRc
 

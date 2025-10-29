@@ -27,18 +27,6 @@ const
   MAX_HISTORICAL_EPOCHS = 2048'u64 # Should be sufficient for all networks as for
   # mainnet this is not even reached: ceil(mergeBlockNumber / EPOCH_SIZE) = 1897
 
-  # Allow this to be adjusted at compile time for testing. If more constants
-  # need to be adjusted we can add some presets file.
-  mergeBlockNumber* {.intdefine.}: uint64 = 15537394
-
-  # Note: This is like a ceil(mergeBlockNumber / EPOCH_SIZE)
-  # Could use ceilDiv(mergeBlockNumber, EPOCH_SIZE) in future versions
-  preMergeEpochs* = (mergeBlockNumber + EPOCH_SIZE - 1) div EPOCH_SIZE
-
-  # TODO:
-  # Currently disabled, because issue when testing with other
-  # `mergeBlockNumber`, but it could be used as value to double check on at
-  # merge block.
   # TODO: Could also be used as value to actual finish the accumulator, instead
   # of `mergeBlockNumber`, but:
   # - Still need to store the actual `mergeBlockNumber` and run-time somewhere
@@ -84,10 +72,6 @@ func getEpochRecordRoot*(headerRecords: openArray[HeaderRecord]): Digest =
   hash_tree_root(epochRecord)
 
 func updateAccumulator*(a: var HistoricalHashesAccumulator, header: Header) =
-  doAssert(
-    header.number < mergeBlockNumber, "No post merge blocks for header accumulator"
-  )
-
   let lastTotalDifficulty =
     if a.currentEpoch.len() == 0:
       0.stuint(256)

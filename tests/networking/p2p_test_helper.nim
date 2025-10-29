@@ -12,15 +12,15 @@ import
   chronos,
   stint,
   eth/common/keys,
-  ../../execution_chain/networking/[p2p, discoveryv4],
+  ../../execution_chain/networking/p2p,
   ../../execution_chain/core/chain/forked_chain,
   ../../execution_chain/core/tx_pool,
   ../../execution_chain/sync/wire_protocol,
-  ../../execution_chain/config
+  ../../execution_chain/conf
 
 type
   TestEnv* = ref object
-    conf   : NimbusConf
+    config : ExecutionClientConf
     com    : CommonRef
     node*  : EthereumNode
     txPool : TxPoolRef
@@ -30,15 +30,15 @@ type
 const
   genesisFile = "tests/customgenesis/cancun123.json"
 
-proc makeCom(conf: NimbusConf): CommonRef =
+proc makeCom(config: ExecutionClientConf): CommonRef =
   CommonRef.new(
     newCoreDbRef DefaultDbMemory,
     Taskpool.new(),
-    conf.networkId,
-    conf.networkParams
+    config.networkId,
+    config.networkParams
   )
 
-proc envConfig(): NimbusConf =
+proc envConfig(): ExecutionClientConf =
   makeConfig(@[
     "--network:" & genesisFile,
     "--listen-address: 127.0.0.1",
@@ -46,16 +46,17 @@ proc envConfig(): NimbusConf =
 
 var nextPort = 30303
 
-proc localAddress*(port: int): enode.Address =
-  let port = Port(port)
-  result = enode.Address(udpPort: port, tcpPort: port,
-                   ip: parseIpAddress("127.0.0.1"))
+func localAddress*(port: int): enode.Address =
+  enode.Address(udpPort: Port(port), tcpPort: Port(port), ip: parseIpAddress("127.0.0.1"))
 
 proc setupTestNode(rng: ref HmacDrbgContext): EthereumNode {.gcsafe.} =
   # Don't create new RNG every time in production code!
   let keys1 = KeyPair.random(rng[])
   var node = newEthereumNode(
-    keys1, localAddress(nextPort),
+    keys1,
+    Opt.some(parseIpAddress("127.0.0.1")),
+    Opt.some(Port(nextPort)),
+    Opt.some(Port(nextPort)),
     networkId = 1.u256,
     bindUdpPort = Port(nextPort),
     bindTcpPort = Port(nextPort),
@@ -68,14 +69,14 @@ proc newTestEnv*(): TestEnv =
   let
     rng    = newRng()
     node   = setupTestNode(rng)
-    conf   = envConfig()
-    com    = makeCom(conf)
+    config = envConfig()
+    com    = makeCom(config)
     chain  = ForkedChainRef.init(com, enableQueue = true)
     txPool = TxPoolRef.new(chain)
     wire   = node.addEthHandlerCapability(txPool)
 
   TestEnv(
-    conf   : conf,
+    config : config,
     com    : com,
     node   : node,
     txPool : txPool,

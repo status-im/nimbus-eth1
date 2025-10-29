@@ -11,7 +11,6 @@
 import
   std/[os],
   unittest2,
-  ../execution_chain/config,
   ../execution_chain/utils/utils,
   ../execution_chain/common/common
 
@@ -47,11 +46,6 @@ proc genesisTest() =
     test "Correct sepolia hash":
       let b = makeGenesis(SepoliaNet)
       check b.computeBlockHash == hash32"25a5cc106eea7138acab33231d7160d69cb777ee0c2c553fcddf5138993e6dd9"
-
-    test "Correct holesky hash":
-      let b = makeGenesis(HoleskyNet)
-      check b.computeBlockHash == hash32"b5f7f912443c940f21fd611f12828d75b534364ed9e95ca4e307729a4661bde4"
-      check b.stateRoot == hash32"69D8C9D72F6FA4AD42D4702B433707212F90DB395EB54DC20BC85DE253788783"
 
     test "Correct hoodi hash":
       let b = makeGenesis(HoodiNet)
@@ -116,27 +110,6 @@ proc customGenesisTest() =
       check cg.config.mergeNetsplitBlock.isSome
       check cg.config.mergeNetsplitBlock.get == 14660963.BlockNumber
 
-    test "Holesky":
-      var cg: NetworkParams
-      check loadNetworkParams("holesky.json".findFilePath, cg)
-      let com = CommonRef.new(newCoreDbRef DefaultDbMemory, taskpool = nil, params = cg)
-      let stateRoot = hash32"69D8C9D72F6FA4AD42D4702B433707212F90DB395EB54DC20BC85DE253788783"
-      let genesisHash = hash32"b5f7f912443c940f21fd611f12828d75b534364ed9e95ca4e307729a4661bde4"
-      check com.genesisHeader.stateRoot == stateRoot
-      check com.genesisHeader.computeBlockHash == genesisHash
-      check com.chainId == 17000.u256
-
-    test "Geth Holesky":
-      # parse using geth format should produce the same result with nimbus format
-      var cg: NetworkParams
-      check loadNetworkParams("geth_holesky.json".findFilePath, cg)
-      let com = CommonRef.new(newCoreDbRef DefaultDbMemory, taskpool = nil, params = cg)
-      let stateRoot = hash32"69D8C9D72F6FA4AD42D4702B433707212F90DB395EB54DC20BC85DE253788783"
-      let genesisHash = hash32"b5f7f912443c940f21fd611f12828d75b534364ed9e95ca4e307729a4661bde4"
-      check com.genesisHeader.stateRoot == stateRoot
-      check com.genesisHeader.computeBlockHash == genesisHash
-      check com.chainId == 17000.u256
-
     test "Prague genesis":
       # pre Prague
       var cg: NetworkParams
@@ -195,6 +168,14 @@ proc customGenesisTest() =
       validateBlobSchedule(cg, Bpo3, 15, 18, 5007716)
       validateBlobSchedule(cg, Bpo4, 6, 9, 5007716)
       validateBlobSchedule(cg, Bpo5, 15, 20, 5007716)
+
+      check loadNetworkParams("blobschedule_amsterdam_fallback.json".findFilePath, cg)
+      validateBlobSchedule(cg, Cancun, 3, 6, 3338477)
+      validateBlobSchedule(cg, Prague, 6, 9, 5007716)
+      validateBlobSchedule(cg, Osaka, 6, 9, 5007716) # fallback to Prague
+      validateBlobSchedule(cg, Bpo1, 9, 12, 5008888)
+      validateBlobSchedule(cg, Amsterdam, 6, 9, 5007716) # fallback to Osaka, not Bpo1
+
 
 proc genesisMain() =
   genesisTest()

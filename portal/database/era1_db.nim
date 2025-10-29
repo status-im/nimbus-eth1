@@ -22,13 +22,14 @@ type Era1DB* = ref object
   network: string
   accumulator: FinishedHistoricalHashesAccumulator
   files: seq[Era1File]
+  mergeBlockNumber: uint64
 
 proc getEra1File(db: Era1DB, era: Era1): Result[Era1File, string] =
   for f in db.files:
     if f.blockIdx.startNumber.era == era:
       return ok(f)
 
-  if era > mergeBlockNumber.era():
+  if era > db.mergeBlockNumber.era():
     return err("Selected era1 past pre-merge data")
 
   let
@@ -41,7 +42,7 @@ proc getEra1File(db: Era1DB, era: Era1): Result[Era1File, string] =
 
   # TODO: The open call does not do full verification. It is assumed here that
   # trusted files are used. We might want to add a full validation option.
-  let f = Era1File.open(path).valueOr:
+  let f = Era1File.open(path, db.mergeBlockNumber).valueOr:
     return err(error)
 
   if db.files.len > 16: # TODO LRU
@@ -56,8 +57,15 @@ proc new*(
     path: string,
     network: string,
     accumulator: FinishedHistoricalHashesAccumulator,
+    mergeBlockNumber: uint64,
 ): Era1DB =
-  Era1DB(path: path, network: network, accumulator: accumulator)
+  # TODO: Calculate mergeBlockNumber from accumulator instead.
+  Era1DB(
+    path: path,
+    network: network,
+    accumulator: accumulator,
+    mergeBlockNumber: mergeBlockNumber,
+  )
 
 proc getEthBlock*(
     db: Era1DB, blockNumber: uint64, res: var Block

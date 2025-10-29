@@ -15,7 +15,7 @@ import
   stew/io2,
   chronos,
   ./chain,
-  ../config,
+  ../conf,
   ../utils/utils,
   beacon_chain/process_state
 
@@ -80,14 +80,14 @@ proc importRlpBlocks*(importFile: string,
     return err($error)
   await importRlpBlocks(bytes, chain, finalize)
 
-proc importRlpBlocks*(conf: NimbusConf, com: CommonRef): Future[void] {.async: (raises: [CancelledError]).} =
+proc importRlpBlocks*(config: ExecutionClientConf, com: CommonRef): Future[void] {.async: (raises: [CancelledError]).} =
   # Both baseDistance and persistBatchSize are 0,
   # we want changes persisted immediately
-  let chain = ForkedChainRef.init(com, baseDistance = 0, persistBatchSize = 0)
+  let chain = ForkedChainRef.init(com, baseDistance = 0, persistBatchSize = 1)
 
   # success or not, we quit after importing blocks
-  for i, blocksFile in conf.blocksFile:
-    (await importRlpBlocks(string blocksFile, chain, i == conf.blocksFile.len-1)).isOkOr:
+  for i, blocksFile in config.blocksFile:
+    (await importRlpBlocks(string blocksFile, chain, i == config.blocksFile.len-1)).isOkOr:
       warn "Error when importing blocks", msg=error
       # Finalize the existing chain in case of rlp read error
       (await chain.forkChoice(chain.latestHash, chain.latestHash)).isOkOr:

@@ -314,6 +314,8 @@ proc updateBase(c: ForkedChainRef, base: BlockRef): uint =
     # No update, return
     return
 
+  let startTime = Moment.now()
+
   # State root sanity check is performed to verify, before writing to disk,
   # that optimistically checked blocks indeed end up being stored with a
   # consistent state root.
@@ -338,8 +340,7 @@ with --debug-eager-state-root."""
 
   # Cleanup in-memory blocks starting from base backward
   # e.g. B2 backward.
-  var
-    count = 0'u
+  var count = 0'u
 
   for it in ancestors(base.parent):
     c.removeBlockFromCache(it)
@@ -351,6 +352,33 @@ with --debug-eager-state-root."""
 
   # Base block always have finalized marker
   c.base.finalize()
+
+  if c.dynamicBatchSize:
+    # Dynamicly adjust the persistBatchSize based on the recorded run time.
+    # The goal here is use the maximum batch size possible without blocking the
+    # event loop for too long which could negatively impact the p2p networking.
+    # Increasing the batch size can improve performance because the stateroot
+    # computation and persist calls are performed less frequently.
+    const
+      targetTime = 500.milliseconds
+      targetTimeDelta = 200.milliseconds
+      targetTimeLowerBound = (targetTime - targetTimeDelta).milliseconds
+      targetTimeUpperBound = (targetTime + targetTimeDelta).milliseconds
+      batchSizeLowerBound = 4
+      batchSizeUpperBound = 512
+
+    let
+      finishTime = Moment.now()
+      runTime = (finishTime - startTime).milliseconds
+
+    if runTime < targetTimeLowerBound and c.persistBatchSize <= batchSizeUpperBound:
+      c.persistBatchSize *= 2
+      info "Increased persistBatchSize", runTime, targetTime,
+        persistBatchSize = c.persistBatchSize
+    elif runTime > targetTimeUpperBound and c.persistBatchSize >= batchSizeLowerBound:
+      c.persistBatchSize = c.persistBatchSize div 2
+      info "Decreased persistBatchSize", runTime, targetTime,
+        persistBatchSize = c.persistBatchSize
 
   count
 
@@ -407,12 +435,12 @@ proc queueUpdateBase(c: ForkedChainRef, base: BlockRef)
                      else:
                        c.base
 
-  if prevQueuedBase.number == base.number:
+  if prevQueuedBase.number >= base.number:
     return
 
   var
-    number = base.number - min(base.number, PersistBatchSize)
-    steps  = newSeqOfCap[BlockRef]((base.number-prevQueuedBase.number) div PersistBatchSize + 1)
+    number = base.number - min(base.number, c.persistBatchSize)
+    steps  = newSeqOfCap[BlockRef]((base.number - prevQueuedBase.number) div c.persistBatchSize + 1)
     it = base
 
   steps.add base
@@ -420,7 +448,7 @@ proc queueUpdateBase(c: ForkedChainRef, base: BlockRef)
   while it.number > prevQueuedBase.number:
     if it.number == number:
       steps.add it
-      number -= min(number, PersistBatchSize)
+      number -= min(number, c.persistBatchSize)
     it = it.parent
 
   for i in countdown(steps.len-1, 0):
@@ -501,8 +529,15 @@ proc validateBlock(c: ForkedChainRef,
   # Entering base auto forward mode while avoiding forkChoice
   # handled region(head - baseDistance)
   # e.g. live syncing with the tip very far from from our latest head
+  let
+    offset = c.baseDistance + c.persistBatchSize
+    number =
+      if offset >= c.latestFinalizedBlockNumber:
+        0.uint64
+      else:
+        c.latestFinalizedBlockNumber - offset
   if c.pendingFCU != zeroHash32 and
-     c.base.number < c.latestFinalizedBlockNumber - c.baseDistance - c.persistBatchSize:
+     c.base.number < number:
     let
       base = c.calculateNewBase(c.latestFinalizedBlockNumber, c.latest)
       prevBase = c.base.number
@@ -579,6 +614,7 @@ proc init*(
     com: CommonRef;
     baseDistance = BaseDistance;
     persistBatchSize = PersistBatchSize;
+    dynamicBatchSize = false;
     eagerStateRoot = false;
     enableQueue = false;
       ): T =
@@ -594,6 +630,8 @@ proc init*(
   ## This constructor also works well when resuming import after running
   ## `persistentBlocks()` used for `Era1` or `Era` import.
   ##
+  doAssert(persistBatchSize > 0)
+
   let
     baseTxFrame = com.db.baseTxFrame()
     base = baseTxFrame.getSavedStateBlockNumber
@@ -610,19 +648,20 @@ proc init*(
     fcuSafe = baseTxFrame.fcuSafe().valueOr:
       FcuHashAndNumber(hash: baseHash, number: base)
     fc = T(
-      com:             com,
-      base:            baseBlock,
-      latest:          baseBlock,
-      heads:           @[baseBlock],
-      hashToBlock:     {baseHash: baseBlock}.toTable,
-      baseTxFrame:     baseTxFrame,
-      baseDistance:    baseDistance,
-      persistBatchSize:persistBatchSize,
-      quarantine:      Quarantine.init(),
-      fcuHead:         fcuHead,
-      fcuSafe:         fcuSafe,
-      baseQueue:       initDeque[BlockRef](),
-      lastBaseLogTime: EthTime.now(),
+      com:              com,
+      base:             baseBlock,
+      latest:           baseBlock,
+      heads:            @[baseBlock],
+      hashToBlock:      {baseHash: baseBlock}.toTable,
+      baseTxFrame:      baseTxFrame,
+      baseDistance:     baseDistance,
+      persistBatchSize: persistBatchSize,
+      dynamicBatchSize: dynamicBatchSize,
+      quarantine:       Quarantine.init(),
+      fcuHead:          fcuHead,
+      fcuSafe:          fcuSafe,
+      baseQueue:        initDeque[BlockRef](),
+      lastBaseLogTime:  EthTime.now(),
     )
 
   # updateFinalized will stop ancestor lineage
@@ -712,10 +751,8 @@ proc forkChoice*(c: ForkedChainRef,
   c.updateHead(head)
   c.updateFinalized(finalized, head)
 
-  let
-    base = c.calculateNewBase(finalized.number, head)
-
-  if base.number == c.base.number:
+  let base = c.calculateNewBase(finalized.number, head)
+  if base.number <= c.base.number:
     # The base is not updated, return.
     return ok()
 

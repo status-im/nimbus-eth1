@@ -12,7 +12,7 @@
 
 import
   pkg/[chronicles, chronos, results],
-  pkg/eth/common,
+  pkg/eth/[common, rlp],
   pkg/stew/interval_set,
   ../../../wire_protocol,
   ../worker_desc,
@@ -25,15 +25,21 @@ import
 proc getBlockHeaders(
     buddy: BeaconBuddyRef;
     req: BlockHeadersRequest;
+    bn: BlockNumber;
       ): Future[Result[FetchHeadersData,BeaconError]]
       {.async: (raises: []).} =
   ## Wrapper around `getBlockHeaders()`
   let start = Moment.now()
-  var resp: BlockHeadersPacket
 
+  if buddy.only.failedReq.state == SyncState.headers and
+     buddy.only.failedReq.blockNumber == bn:
+    return err((EAlreadyTriedAndFailed,"","",Moment.now()-start))
+
+  var resp: BlockHeadersPacket
   try:
-    resp = (await buddy.peer.getBlockHeaders(req)).valueOr:
-      return err((ENoException,"","",Moment.now()-start))
+    resp = (await buddy.peer.getBlockHeaders(
+      req, fetchHeadersRlpxTimeout)).valueOr:
+        return err((ENoException,"","",Moment.now()-start))
   except PeerDisconnected as e:
     return err((EPeerDisconnected,$e.name,$e.msg,Moment.now()-start))
   except CancelledError as e:
@@ -86,9 +92,9 @@ template fetchHeadersReversed*(
               number:   ivReq.maxPt))
 
     trace trEthSendSendingGetBlockHeaders & " reverse", peer, req=ivReq,
-      nReq=req.maxResults, hash=topHash.toStr, hdrErrors=buddy.hdrErrors
+      nReq=req.maxResults, hash=topHash.toStr, nErrors=buddy.nErrors.fetch.hdr
 
-    let rc = await buddy.getBlockHeaders(req)
+    let rc = await buddy.getBlockHeaders(req, BlockNumber ivReq.maxPt)
     var elapsed: Duration
     if rc.isOk:
       elapsed = rc.value.elapsed
@@ -99,55 +105,81 @@ template fetchHeadersReversed*(
         of ENoException:
           break evalError
         of EPeerDisconnected, ECancelledError:
-          buddy.only.nRespErrors.hdr.inc
+          buddy.nErrors.fetch.hdr.inc
           buddy.ctrl.zombie = true
         of ECatchableError:
           buddy.hdrFetchRegisterError()
+          discard buddy.only.thPutStats.hdr.bpsSample(elapsed, 0)
+        of EAlreadyTriedAndFailed:
+          # Just return `failed` (no error count or throughput stats)
+          discard
 
         chronicles.info trEthRecvReceivedBlockHeaders & ": error", peer,
           req=ivReq, nReq=req.maxResults, hash=topHash.toStr,
-          elapsed=rc.error.elapsed.toStr, syncState=($buddy.syncState),
-          error=rc.error.name, msg=rc.error.msg, hdrErrors=buddy.hdrErrors
+          ela=rc.error.elapsed.toStr, state=($buddy.syncState),
+          error=rc.error.name, msg=rc.error.msg,
+          nErrors=buddy.nErrors.fetch.hdr
         break body                                 # return err()
 
     # Evaluate result
     if rc.isErr or buddy.ctrl.stopped:
       buddy.hdrFetchRegisterError()
       trace trEthRecvReceivedBlockHeaders, peer, nReq=req.maxResults,
-        hash=topHash.toStr, nResp=0, elapsed=elapsed.toStr,
-        syncState=($buddy.syncState), hdrErrors=buddy.hdrErrors
+        hash=topHash.toStr, nResp=0, ela=elapsed.toStr,
+        state=($buddy.syncState), nErrors=buddy.nErrors.fetch.hdr
       break body                                   # return err()
 
+    # Verify the correct number of block headers received
     let h = rc.value.packet.headers
     if h.len == 0 or ivReq.len < h.len.uint64:
-      buddy.hdrFetchRegisterError()
+      if ivReq.len < h.len.uint64:
+        # Bogus peer returning additional rubbish
+        buddy.hdrFetchRegisterError(forceZombie=true)
+      else:
+        # No data available. For a fast enough rejection response, the
+        # througput stats are degraded, only.
+        discard buddy.only.thPutStats.hdr.bpsSample(elapsed, 0)
+
+        # Slow response, definitely not fast enough
+        if fetchHeadersErrTimeout <= elapsed:
+          buddy.hdrFetchRegisterError(slowPeer=true)
+
+          # Do not repeat the same time-consuming failed request
+          buddy.only.failedReq = BuddyFirstFetchReq(
+            state:       SyncState.headers,
+            blockNumber: BlockNumber ivReq.maxPt)
+
       trace trEthRecvReceivedBlockHeaders, peer, nReq=req.maxResults,
-        hash=topHash.toStr, nResp=h.len, elapsed=elapsed.toStr,
-        syncState=($buddy.syncState), hdrErrors=buddy.hdrErrors
+        hash=topHash.toStr, nResp=h.len, ela=elapsed.toStr,
+        state=($buddy.syncState), nErrors=buddy.nErrors.fetch.hdr
       break body                                   # return err()
 
-    # Verify that first block number matches
+    # Verify that the first block number matches the request
     if h[^1].number != ivReq.minPt and ivReq.minPt != 0:
-      buddy.hdrFetchRegisterError()
+      buddy.hdrFetchRegisterError(forceZombie=true)
       trace trEthRecvReceivedBlockHeaders, peer, nReq=req.maxResults,
         hash=topHash.toStr, reqMinPt=ivReq.minPt.bnStr,
-        respMinPt=h[^1].bnStr, nResp=h.len, elapsed=elapsed.toStr,
-        syncState=($buddy.syncState), hdrErrors=buddy.hdrErrors
+        respMinPt=h[^1].bnStr, nResp=h.len, ela=elapsed.toStr,
+        state=($buddy.syncState), nErrors=buddy.nErrors.fetch.hdr
       break body
 
-    # Ban an overly slow peer for a while when seen in a row. Also there is a
-    # mimimum share of the number of requested headers expected, typically 10%.
-    if fetchHeadersErrTimeout < elapsed or
-       h.len.uint64 * 100 < req.maxResults * fetchHeadersMinResponsePC:
+    # Update download statistics
+    let bps = buddy.only.thPutStats.hdr.bpsSample(elapsed, h.getEncodedLength)
+
+    # Request did not fail
+    buddy.only.failedReq.reset
+
+    # Ban an overly slow peer for a while when observed consecutively.
+    if fetchHeadersErrTimeout < elapsed:
       buddy.hdrFetchRegisterError(slowPeer=true)
     else:
-      buddy.only.nRespErrors.hdr = 0               # reset error count
+      buddy.nErrors.fetch.hdr = 0                  # reset error count
       buddy.ctx.pool.lastSlowPeer = Opt.none(Hash) # not last one or not error
 
     trace trEthRecvReceivedBlockHeaders, peer, nReq=req.maxResults,
       hash=topHash.toStr, ivResp=BnRange.new(h[^1].number,h[0].number),
-      nResp=h.len, elapsed=elapsed.toStr, syncState=($buddy.syncState),
-      hdrErrors=buddy.hdrErrors
+      nResp=h.len, ela=elapsed.toStr, thPut=(bps.toIECb(1) & "ps"),
+      state=($buddy.syncState), nErrors=buddy.nErrors.fetch.hdr
 
     bodyRc = Opt[seq[Header]].ok(h)
 

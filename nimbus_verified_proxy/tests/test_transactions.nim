@@ -10,10 +10,10 @@
 
 import
   unittest2,
+  chronos,
   web3/[eth_api, eth_api_types],
-  json_rpc/[rpcclient, rpcserver, rpcproxy],
   eth/common/eth_types_rlp,
-  ../rpc/transactions,
+  ../engine/transactions,
   ./test_utils,
   ./test_api_backend
 
@@ -34,16 +34,13 @@ suite "test transaction verification":
   test "check eth api methods":
     let
       ts = TestApiState.init(1.u256)
-      vp = startTestSetup(ts, 1, 1, 8888)
+      engine = initTestEngine(ts, 1, 1)
         # defining port 8888 is a hack for addr in use errors
       blk = getBlockFromJson("nimbus_verified_proxy/tests/data/Paris.json")
 
     for tx in blk.transactions:
       if tx.kind == tohTx:
         ts.loadTransaction(tx.tx.hash, tx.tx)
-        let verifiedTx =
-          waitFor vp.proxy.getClient().eth_getTransactionByHash(tx.tx.hash)
+        let verifiedTx = waitFor engine.frontend.eth_getTransactionByHash(tx.tx.hash)
         check verifiedTx == tx.tx
         ts.clear()
-
-    vp.stopTestSetup()

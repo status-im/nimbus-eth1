@@ -30,6 +30,7 @@ type Era1DbRef* = ref object
   network: string
   files: seq[Era1File]
   filenames: Table[uint64, string]
+  mergeBlockNumber: uint64
 
 proc getEra1File*(db: Era1DbRef, era: Era1): Result[Era1File, string] =
   for f in db.files:
@@ -49,7 +50,7 @@ proc getEra1File*(db: Era1DbRef, era: Era1): Result[Era1File, string] =
 
   # TODO: The open call does not do full verification. It is assumed here that
   # trusted files are used. We might want to add a full validation option.
-  let f = Era1File.open(path).valueOr:
+  let f = Era1File.open(path, db.mergeBlockNumber).valueOr:
     return err(path & ": " & error)
 
   if db.files.len > 16: # TODO LRU
@@ -60,7 +61,7 @@ proc getEra1File*(db: Era1DbRef, era: Era1): Result[Era1File, string] =
   ok(f)
 
 proc init*(
-    T: type Era1DbRef, path: string, network: string
+    T: type Era1DbRef, path: string, network: string, mergeBlockNumber: uint64
 ): Result[Era1DbRef, string] =
   var filenames: Table[uint64, string]
   try:
@@ -78,7 +79,7 @@ proc init*(
   if filenames.len == 0:
     return err "No era files found in " & path
 
-  ok Era1DbRef(path: path, network: network, filenames: filenames)
+  ok Era1DbRef(path: path, network: network, filenames: filenames, mergeBlockNumber: mergeBlockNumber)
 
 proc getEthBlock*(
     db: Era1DbRef, blockNumber: uint64, res: var Block

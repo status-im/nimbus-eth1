@@ -340,21 +340,6 @@ proc deblobify*(record: openArray[byte], T: type HashKey): Opt[HashKey] =
 
 proc deblobify*(
     data: openArray[byte];
-    T: type SavedStateV0;
-      ): Result[SavedStateV0,AristoError] =
-  ## De-serialise the last saved state data record previously encoded with
-  ## `blobify()`.
-  if data.len != 41:
-    return err(DeblobWrongSize)
-  if data[^1] != 0x7f:
-    return err(DeblobWrongType)
-
-  ok(SavedStateV0(
-    key: Hash32(array[32, byte].initCopyFrom(data.toOpenArray(0, 31))),
-    serial: uint64.fromBytesBE data.toOpenArray(32, 39)))
-
-proc deblobify*(
-    data: openArray[byte];
     T: type SavedState;
       ): Result[SavedState,AristoError] =
   ## De-serialise the last saved state data record previously encoded with

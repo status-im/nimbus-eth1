@@ -1,5 +1,5 @@
 # nimbus-eth1
-# Copyright (c) 2023-2024 Status Research & Development GmbH
+# Copyright (c) 2023-2025 Status Research & Development GmbH
 # Licensed under either of
 #  * Apache License, version 2.0, ([LICENSE-APACHE](LICENSE-APACHE) or
 #    http://www.apache.org/licenses/LICENSE-2.0)
@@ -14,7 +14,6 @@
 {.push raises: [].}
 
 import
-  stew/endians2,
   rocksdb,
   ./rdb_desc,
   ../../aristo_blobify,
@@ -34,22 +33,6 @@ when extraTraceMessages:
 # ------------------------------------------------------------------------------
 # Public iterators
 # ------------------------------------------------------------------------------
-
-iterator walkAdm*(rdb: RdbInst): tuple[xid: uint64, data: seq[byte]] =
-  ## Walk over key-value pairs of the admin column of the database.
-  ##
-  ## Non-decodable entries are are ignored.
-  ##
-  block walkBody:
-    let rit = rdb.admCol.openIterator().valueOr:
-      when extraTraceMessages:
-        trace logTxt "walkAdm()", error
-      break walkBody
-    defer: rit.close()
-
-    for (key,val) in rit.pairs:
-      if key.len == 8 and val.len != 0:
-        yield (uint64.fromBytesBE key, val)
 
 iterator walkKey*(rdb: RdbInst): tuple[rvid: RootedVertexID, data: HashKey] =
   ## Walk over key-value pairs of the hash key column of the database.

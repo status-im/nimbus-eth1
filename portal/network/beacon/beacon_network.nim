@@ -217,7 +217,8 @@ proc new*(
 
     portalProtocol = PortalProtocol.new(
       baseProtocol,
-      getProtocolId(portalNetwork, PortalSubnetwork.beacon),
+      getProtocolId(PortalSubnetwork.beacon),
+      getPortalEnrField(portalNetwork),
       toContentIdHandler,
       createGetHandler(beaconDb),
       createStoreHandler(beaconDb),
@@ -415,42 +416,47 @@ proc onPeriod(n: BeaconNetwork, wallTime: BeaconTime, wallPeriod: SyncCommitteeP
 proc onEpochLoop(n: BeaconNetwork) {.async: (raises: []).} =
   try:
     var
-      currentEpoch = n.getBeaconTime().slotOrZero().epoch()
+      currentEpoch = n.getBeaconTime().slotOrZero(n.cfg.timeParams).epoch()
       nextEpoch = currentEpoch + 1
-      timeToNextEpoch = nextEpoch.start_slot().start_beacon_time() - n.getBeaconTime()
+      timeToNextEpoch =
+        nextEpoch.start_slot().start_beacon_time(n.cfg.timeParams) - n.getBeaconTime()
     while true:
       await sleepAsync(timeToNextEpoch)
 
       let
         wallTime = n.getBeaconTime()
-        wallEpoch = wallTime.slotOrZero().epoch()
+        wallEpoch = wallTime.slotOrZero(n.cfg.timeParams).epoch()
 
       n.onEpoch(wallTime, wallEpoch)
 
       currentEpoch = wallEpoch
       nextEpoch = currentEpoch + 1
-      timeToNextEpoch = nextEpoch.start_slot().start_beacon_time() - n.getBeaconTime()
+      timeToNextEpoch =
+        nextEpoch.start_slot().start_beacon_time(n.cfg.timeParams) - n.getBeaconTime()
   except CancelledError:
     trace "onEpochLoop canceled"
 
 proc onPeriodLoop(n: BeaconNetwork) {.async: (raises: []).} =
   try:
     var
-      currentPeriod = n.getBeaconTime().slotOrZero().sync_committee_period()
+      currentPeriod =
+        n.getBeaconTime().slotOrZero(n.cfg.timeParams).sync_committee_period()
       nextPeriod = currentPeriod + 1
-      timeToNextPeriod = nextPeriod.start_slot().start_beacon_time() - n.getBeaconTime()
+      timeToNextPeriod =
+        nextPeriod.start_slot().start_beacon_time(n.cfg.timeParams) - n.getBeaconTime()
     while true:
       await sleepAsync(timeToNextPeriod)
 
       let
         wallTime = n.getBeaconTime()
-        wallPeriod = wallTime.slotOrZero().sync_committee_period()
+        wallPeriod = wallTime.slotOrZero(n.cfg.timeParams).sync_committee_period()
 
       n.onPeriod(wallTime, wallPeriod)
 
       currentPeriod = wallPeriod
       nextPeriod = currentPeriod + 1
-      timeToNextPeriod = nextPeriod.start_slot().start_beacon_time() - n.getBeaconTime()
+      timeToNextPeriod =
+        nextPeriod.start_slot().start_beacon_time(n.cfg.timeParams) - n.getBeaconTime()
   except CancelledError:
     trace "onPeriodLoop canceled"
 
@@ -480,6 +486,7 @@ proc statusLogLoop(n: BeaconNetwork) {.async: (raises: []).} =
       await sleepAsync(60.seconds)
 
       info "Beacon network status",
+        dbSize = $(n.beaconDb.size() div 1_000_000) & "mb",
         routingTableNodes = n.portalProtocol.routingTable.len()
   except CancelledError:
     trace "statusLogLoop canceled"

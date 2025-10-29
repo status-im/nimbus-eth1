@@ -15,7 +15,7 @@ import
   minilru,
   results,
   chronos,
-  ../execution_chain/config,
+  ../execution_chain/conf,
   ../execution_chain/db/storage_types,
   ../execution_chain/common/common,
   ../execution_chain/core/chain,

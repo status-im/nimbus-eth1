@@ -14,7 +14,7 @@ import
   web3/[eth_api_types, eth_api],
   std/algorithm,
   ../../execution_chain/beacon/web3_eth_conv,
-  ../types,
+  ./types,
   ./blocks,
   ./transactions
 
@@ -34,10 +34,12 @@ func median(prices: var openArray[GasInt]): GasInt =
   # default case
   return GasInt(0)
 
-proc suggestGasPrice*(vp: VerifiedRpcProxy): Future[Result[GasInt, string]] {.async.} =
+proc suggestGasPrice*(
+    engine: RpcVerificationEngine
+): Future[Result[GasInt, string]] {.async: (raises: []).} =
   const minGasPrice = 30_000_000_000.GasInt
   let
-    blk = (await vp.getBlock(blockId("latest"), true)).valueOr:
+    blk = (await engine.getBlock(blockId("latest"), true)).valueOr:
       return err(error)
     txs = blk.transactions.toTransactions().valueOr:
       return err(error)
@@ -50,10 +52,10 @@ proc suggestGasPrice*(vp: VerifiedRpcProxy): Future[Result[GasInt, string]] {.as
   ok(max(minGasPrice, median(prices)))
 
 proc suggestMaxPriorityGasPrice*(
-    vp: VerifiedRpcProxy
-): Future[Result[GasInt, string]] {.async.} =
+    engine: RpcVerificationEngine
+): Future[Result[GasInt, string]] {.async: (raises: []).} =
   let
-    blk = (await vp.getBlock(blockId("latest"), true)).valueOr:
+    blk = (await engine.getBlock(blockId("latest"), true)).valueOr:
       return err(error)
     txs = blk.transactions.toTransactions().valueOr:
       return err(error)

@@ -104,32 +104,6 @@ proc getKeyFn(db: RdbBackendRef): GetKeyFn =
 
       err(GetKeyNotFound)
 
-proc getTuv(db: RdbBackendRef): Result[VertexID,AristoError]=
-  # Fetch serialised data record.
-  let data = db.rdb.getAdm(AdmTabIdTuv).valueOr:
-    when extraTraceMessages:
-      trace logTxt "getTuvFn: failed", error=error[0], info=error[1]
-    return err(error[0])
-
-  # Decode data record
-  if data.len == 0:
-    return ok VertexID(0)
-
-  # Decode data record
-  data.deblobify VertexID
-
-proc getLstV0(db: RdbBackendRef): Result[SavedStateV0,AristoError] =
-  let data = db.rdb.getAdm(AdmTabIdLst).valueOr:
-    when extraTraceMessages:
-      trace logTxt "getTuvFn: failed", error=error[0], info=error[1]
-    return err(error[0])
-
-  if data.len == 0:
-    return ok default(SavedStateV0)
-
-  # Decode data record
-  data.deblobify SavedStateV0
-
 proc getLstFn(db: RdbBackendRef): GetLstFn =
   result =
     proc(): Result[SavedState,AristoError]=
@@ -141,12 +115,7 @@ proc getLstFn(db: RdbBackendRef): GetLstFn =
         return err(error[0])
 
       if data.len == 0:
-        # TODO legacy database support, remove before beta
-        let
-          lst = ?db.getLstV0()
-          vTop = ?db.getTuv()
-
-        return ok(SavedState(vTop: vTop, serial: lst.serial))
+        return ok default(SavedState)
 
       # Decode data record
       data.deblobify SavedState

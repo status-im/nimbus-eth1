@@ -20,7 +20,7 @@ import
 
 import
   ../execution_chain/rpc,
-  ../execution_chain/config,
+  ../execution_chain/conf,
   ../execution_chain/core/chain,
   ../execution_chain/core/tx_pool,
   ../execution_chain/beacon/beacon_engine,
@@ -52,18 +52,18 @@ const
   defaultGenesisFile = "tests/customgenesis/engine_api_genesis.json"
   mekongGenesisFile = "tests/customgenesis/mekong.json"
 
-proc setupConfig(genesisFile: string): NimbusConf =
+proc setupConfig(genesisFile: string): ExecutionClientConf =
   makeConfig(@[
     "--network:" & genesisFile,
     "--listen-address: 127.0.0.1",
   ])
 
-proc setupCom(conf: NimbusConf): CommonRef =
+proc setupCom(config: ExecutionClientConf): CommonRef =
   CommonRef.new(
     newCoreDbRef DefaultDbMemory,
     nil,
-    conf.networkId,
-    conf.networkParams
+    config.networkId,
+    config.networkParams
   )
 
 proc setupClient(port: Port): RpcHttpClient =
@@ -76,19 +76,19 @@ proc setupEnv(envFork: HardFork = MergeFork,
   doAssert(envFork >= MergeFork)
 
   let
-    conf  = setupConfig(genesisFile)
+    config  = setupConfig(genesisFile)
 
   if envFork >= Shanghai:
-    conf.networkParams.config.shanghaiTime = Opt.some(0.EthTime)
+    config.networkParams.config.shanghaiTime = Opt.some(0.EthTime)
 
   if envFork >= Cancun:
-    conf.networkParams.config.cancunTime = Opt.some(0.EthTime)
+    config.networkParams.config.cancunTime = Opt.some(0.EthTime)
 
   if envFork >= Prague:
-    conf.networkParams.config.pragueTime = Opt.some(0.EthTime)
+    config.networkParams.config.pragueTime = Opt.some(0.EthTime)
 
   let
-    com   = setupCom(conf)
+    com   = setupCom(config)
     chain = ForkedChainRef.init(com, enableQueue = true)
     txPool = TxPoolRef.new(chain)
 

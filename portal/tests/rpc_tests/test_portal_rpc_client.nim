@@ -31,10 +31,15 @@ proc newHistoryNode(rng: ref HmacDrbgContext, port: int): HistoryNode =
   let
     node = initDiscoveryNode(rng, PrivateKey.random(rng[]), localAddress(port))
     db = ContentDB.new(
-      "", uint32.high, RadiusConfig(kind: Dynamic), node.localNode.id, inMemory = true
+      "",
+      uint32.high,
+      RadiusConfig(kind: Dynamic),
+      node.localNode.id,
+      PortalSubnetwork.history,
+      inMemory = true,
     )
     streamManager = StreamManager.new(node)
-    historyNetwork = HistoryNetwork.new(PortalNetwork.none, node, db, streamManager)
+    historyNetwork = HistoryNetwork.new(PortalNetwork.mainnet, node, db, streamManager)
 
   return HistoryNode(discv5: node, historyNetwork: historyNetwork)
 
@@ -122,7 +127,7 @@ procSuite "Portal RPC Client":
       let blockBodyRes = await tc.client.historyGetBlockBody(blockHeader)
       check:
         blockBodyRes.isErr()
-        blockBodyRes.error() == ContentNotFound
+        blockBodyRes.error().code == ContentNotFoundError.code
 
     # Test content validation failed
     block:
@@ -131,7 +136,7 @@ procSuite "Portal RPC Client":
       let blockBodyRes = await tc.client.historyGetBlockBody(blockHeader)
       check:
         blockBodyRes.isErr()
-        blockBodyRes.error() == ContentNotFound
+        blockBodyRes.error().code == ContentNotFoundError.code
 
     # When local node has the content the validation is skipped
     block:
@@ -155,7 +160,7 @@ procSuite "Portal RPC Client":
       let receiptsRes = await tc.client.historyGetReceipts(blockHeader)
       check:
         receiptsRes.isErr()
-        receiptsRes.error() == ContentNotFound
+        receiptsRes.error().code == ContentNotFoundError.code
 
     # Test content validation failed
     block:
@@ -164,7 +169,7 @@ procSuite "Portal RPC Client":
       let receiptsRes = await tc.client.historyGetReceipts(blockHeader)
       check:
         receiptsRes.isErr()
-        receiptsRes.error() == ContentNotFound
+        receiptsRes.error().code == ContentNotFoundError.code
 
     # When local node has the content the validation is skipped
     block:
