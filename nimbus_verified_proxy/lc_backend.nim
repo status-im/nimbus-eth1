@@ -41,7 +41,9 @@ func new*(
 ): LCRestClientPool =
   LCRestClientPool(cfg: cfg, forkDigests: forkDigests, peers: @[])
 
-proc addEndpoints*(client: LCRestClientPool, urlList: UrlList) {.raises: [ValueError].} =
+proc addEndpoints*(
+    client: LCRestClientPool, urlList: UrlList
+) {.raises: [ValueError].} =
   for endpoint in urlList.urls:
     if endpoint in client.urls:
       continue

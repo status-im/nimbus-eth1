@@ -308,9 +308,10 @@ proc loop(self: LightClientManager) {.async: (raises: [CancelledError]).} =
     didFinalityProgress = false
 
   # try atleast twice
-  let 
+  let
     NUM_RETRIES = 2
-    RETRY_TIMEOUT = chronos.seconds(int64(self.timeParams.SECONDS_PER_SLOT) div (NUM_RETRIES + 1))
+    RETRY_TIMEOUT =
+      chronos.seconds(int64(self.timeParams.SECONDS_PER_SLOT) div (NUM_RETRIES + 1))
 
   while true:
     let
@@ -337,28 +338,36 @@ proc loop(self: LightClientManager) {.async: (raises: [CancelledError]).} =
       continue
 
     # check and download sync committee updates
-    if finalized.sync_committee_period == optimistic.sync_committee_period and not self.isNextSyncCommitteeKnown():
+    if finalized.sync_committee_period == optimistic.sync_committee_period and
+        not self.isNextSyncCommitteeKnown():
       if finalized.sync_committee_period >= current.sync_committee_period:
         debug "Downloading light client sync committee updates",
           start_period = finalized.sync_committee_period, count = 1
         discard await self.query(
-          UpdatesByRange, (startPeriod: finalized.sync_committee_period, count: uint64(1))
+          UpdatesByRange,
+          (startPeriod: finalized.sync_committee_period, count: uint64(1)),
         )
       else:
-        let count =
-          min(current.sync_committee_period - finalized.sync_committee_period, MAX_REQUEST_LIGHT_CLIENT_UPDATES)
+        let count = min(
+          current.sync_committee_period - finalized.sync_committee_period,
+          MAX_REQUEST_LIGHT_CLIENT_UPDATES,
+        )
         debug "Downloading light client sync committee updates",
           start_period = finalized.sync_committee_period, count = count
         discard await self.query(
-          UpdatesByRange, (startPeriod: finalized.sync_committee_period, count: uint64(count))
+          UpdatesByRange,
+          (startPeriod: finalized.sync_committee_period, count: uint64(count)),
         )
     elif finalized.sync_committee_period + 1 < current.sync_committee_period:
-      let count =
-        min(current.sync_committee_period - (finalized.sync_committee_period + 1), MAX_REQUEST_LIGHT_CLIENT_UPDATES)
+      let count = min(
+        current.sync_committee_period - (finalized.sync_committee_period + 1),
+        MAX_REQUEST_LIGHT_CLIENT_UPDATES,
+      )
       debug "Downloading light client sync committee updates",
         start_period = finalized.sync_committee_period, count = count
       discard await self.query(
-        UpdatesByRange, (startPeriod: finalized.sync_committee_period, count: uint64(count))
+        UpdatesByRange,
+        (startPeriod: finalized.sync_committee_period, count: uint64(count)),
       )
 
     # check and download optimistic update
