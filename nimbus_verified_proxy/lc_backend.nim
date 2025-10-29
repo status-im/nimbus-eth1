@@ -19,29 +19,29 @@ import
   ./nimbus_verified_proxy_conf
 
 logScope:
-  topics = "SSZLCRestClient"
+  topics = "LCRestClientPool"
 
 const
   MaxMessageBodyBytes* = 128 * 1024 * 1024 # 128 MB (JSON encoded)
   BASE_URL = "/eth/v1/beacon/light_client"
 
 type
-  LCRestPeer = ref object
+  LCRestClient = ref object
     score: int
     restClient: RestClientRef
 
-  LCRestClient* = ref object
+  LCRestClientPool* = ref object
     cfg: RuntimeConfig
     forkDigests: ref ForkDigests
-    peers: seq[LCRestPeer]
+    peers: seq[LCRestClient]
     urls: seq[string]
 
 func new*(
-    T: type LCRestClient, cfg: RuntimeConfig, forkDigests: ref ForkDigests
-): LCRestClient =
-  LCRestClient(cfg: cfg, forkDigests: forkDigests, peers: @[])
+    T: type LCRestClientPool, cfg: RuntimeConfig, forkDigests: ref ForkDigests
+): LCRestClientPool =
+  LCRestClientPool(cfg: cfg, forkDigests: forkDigests, peers: @[])
 
-proc addEndpoints*(client: LCRestClient, urlList: UrlList) {.raises: [ValueError].} =
+proc addEndpoints*(client: LCRestClientPool, urlList: UrlList) {.raises: [ValueError].} =
   for endpoint in urlList.urls:
     if endpoint in client.urls:
       continue
@@ -49,23 +49,23 @@ proc addEndpoints*(client: LCRestClient, urlList: UrlList) {.raises: [ValueError
     let restClient = RestClientRef.new(endpoint).valueOr:
       raise newException(ValueError, $error)
 
-    client.peers.add(LCRestPeer(score: 0, restClient: restClient))
+    client.peers.add(LCRestClient(score: 0, restClient: restClient))
     client.urls.add(endpoint)
 
-proc closeAll*(client: LCRestClient) {.async: (raises: []).} =
+proc closeAll*(client: LCRestClientPool) {.async: (raises: []).} =
   for peer in client.peers:
     await peer.restClient.closeWait()
 
   client.peers.setLen(0)
   client.urls.setLen(0)
 
-proc getEthLCBackend*(client: LCRestClient): EthLCBackend =
+proc getEthLCBackend*(client: LCRestClientPool): EthLCBackend =
   let
     getLCBootstrapProc = proc(
         reqId: uint64, blockRoot: Eth2Digest
     ): Future[NetRes[ForkedLightClientBootstrap]] {.async: (raises: [CancelledError]).} =
       let
-        peer = client.peers[reqId mod uint64(client.peers.len)]
+        peer = client.peers[reqId mod client.peers.lenu64]
         res =
           try:
             await peer.restClient.getLightClientBootstrap(
@@ -80,7 +80,7 @@ proc getEthLCBackend*(client: LCRestClient): EthLCBackend =
         reqId: uint64, startPeriod: SyncCommitteePeriod, count: uint64
     ): Future[LightClientUpdatesByRangeResponse] {.async: (raises: [CancelledError]).} =
       let
-        peer = client.peers[reqId mod uint64(client.peers.len)]
+        peer = client.peers[reqId mod client.peers.lenu64]
         res =
           try:
             await peer.restClient.getLightClientUpdatesByRange(
@@ -97,7 +97,7 @@ proc getEthLCBackend*(client: LCRestClient): EthLCBackend =
         async: (raises: [CancelledError])
     .} =
       let
-        peer = client.peers[reqId mod uint64(client.peers.len)]
+        peer = client.peers[reqId mod client.peers.lenu64]
         res =
           try:
             await peer.restClient.getLightClientFinalityUpdate(
@@ -114,7 +114,7 @@ proc getEthLCBackend*(client: LCRestClient): EthLCBackend =
         async: (raises: [CancelledError])
     .} =
       let
-        peer = client.peers[reqId mod uint64(client.peers.len)]
+        peer = client.peers[reqId mod client.peers.lenu64]
         res =
           try:
             await peer.restClient.getLightClientOptimisticUpdate(
@@ -126,7 +126,7 @@ proc getEthLCBackend*(client: LCRestClient): EthLCBackend =
       ok(res)
 
     updateScoreProc = proc(reqId: uint64, value: int) =
-      let peer = client.peers[reqId mod uint64(client.peers.len)]
+      let peer = client.peers[reqId mod client.peers.lenu64]
       peer.score += value
 
   EthLCBackend(
