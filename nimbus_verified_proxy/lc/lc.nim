@@ -77,11 +77,16 @@ proc new*(
     if lightClient.onOptimisticHeader != nil:
       lightClient.onOptimisticHeader(lightClient, lightClient.getOptimisticHeader)
 
+  const
+    dumpEnabled = false
+    dumpDirInvalid = "."
+    dumpDirIncoming = "."
+
   # initialize without dumping 
   lightClient.processor = LightClientProcessor.new(
-    false, ".", ".", cfg, genesis_validators_root, finalizationMode, lightClient.store,
-    getBeaconTime, getTrustedBlockRoot, onStoreInitialized, onFinalizedHeader,
-    onOptimisticHeader,
+    dumpEnabled, dumpDirInvalid, dumpDirIncoming, cfg, genesis_validators_root,
+    finalizationMode, lightClient.store, getBeaconTime, getTrustedBlockRoot,
+    onStoreInitialized, onFinalizedHeader, onOptimisticHeader,
   )
 
   proc lightClientVerifier(
