@@ -26,7 +26,7 @@ import
   ./engine/utils,
   ./engine/types,
   ./lc/lc,
-  ./json_lc_backend,
+  ./lc_backend,
   ./json_rpc_backend,
   ./json_rpc_frontend,
   ../execution_chain/version_info
@@ -158,11 +158,11 @@ proc run*(
     )
 
     # REST client for json LC updates
-    lcRestClient = LCRestClient.new(cfg, forkDigests)
+    lcRestClientPool = LCRestClientPool.new(cfg, forkDigests)
 
   # add endpoints to the client
-  lcRestClient.addEndpoints(config.lcEndpoints)
-  lightClient.setBackend(lcRestClient.getEthLCBackend())
+  lcRestClientPool.addEndpoints(config.beaconApiUrls)
+  lightClient.setBackend(lcRestClientPool.getEthLCBackend())
 
   # verify chain id that the proxy is connected to
   waitFor engine.verifyChaindId()
@@ -212,14 +212,17 @@ proc run*(
   # start the light client
   lightClient.start()
 
+  proc stopProxy() {.async: (raises: [CancelledError]).} =
+    await lcRestClientPool.closeAll()
+    await jsonRpcClient.stop()
+    await jsonRpcServer.stop()
+
   # run an infinite loop and wait for a stop signal
   while true:
     poll()
     if ctx != nil and ctx.stop:
+      waitFor stopProxy()
       # Cleanup
-      waitFor lcRestClient.closeAll()
-      waitFor jsonRpcClient.stop()
-      waitFor jsonRpcServer.stop()
       ctx.cleanup()
       # Notify client that cleanup is finished
       ctx.onHeader(nil, 2)

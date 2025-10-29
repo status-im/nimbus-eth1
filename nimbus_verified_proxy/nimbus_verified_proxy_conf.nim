@@ -9,11 +9,11 @@
 
 import
   std/os,
+  std/strutils,
   json_rpc/rpcproxy, # must be early (compilation annoyance)
   json_serialization/std/net,
   beacon_chain/conf_light_client,
-  beacon_chain/nimbus_binary_common,
-  std/strutils
+  beacon_chain/nimbus_binary_common
 
 export net
 
@@ -126,9 +126,9 @@ type VerifiedProxyConf* = object
 
   # (Untrusted) web3 provider
   # No default - Needs to be provided by the user
-  lcEndpoints* {.
-    desc: "command seperated URLs of the light client data provider",
-    name: "lc-endpoints"
+  beaconApiUrls* {.
+    desc: "command separated URLs of the light client data provider",
+    name: "external-beacon-api-urls"
   .}: UrlList
 
 #!fmt: on
@@ -156,15 +156,15 @@ proc parseCmdArg*(T: type UrlList, p: string): T {.raises: [ValueError].} =
       normalizedScheme = parsed.scheme.toLowerAscii()
 
     if not (normalizedScheme == "http" or normalizedScheme == "https"):
-      raise newException(ValueError, "Light Client Endpoint should be a http(s) url")
+      raise newException(ValueError, "Light Client Endpoint should be a http(s) URL")
 
   UrlList(urls: urls)
 
 proc completeCmdArg*(T: type Web3Url, val: string): seq[string] =
-  return @[]
+  @[]
 
 proc completeCmdArg*(T: type UrlList, val: string): seq[string] =
-  return @[]
+  @[]
 
 # TODO: Cannot use ClientConfig in VerifiedProxyConf due to the fact that
 # it contain `set[TLSFlags]` which does not have proper toml serialization

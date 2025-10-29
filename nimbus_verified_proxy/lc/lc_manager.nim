@@ -72,6 +72,7 @@ type
   LightClientManager* = object
     rng: ref HmacDrbgContext
     backend*: EthLCBackend
+    timeParams: TimeParams
     getTrustedBlockRoot: GetTrustedBlockRootCallback
     bootstrapVerifier: BootstrapVerifier
     updateVerifier: UpdateVerifier
@@ -87,6 +88,7 @@ type
 func init*(
     T: type LightClientManager,
     rng: ref HmacDrbgContext,
+    timeParams: TimeParams,
     getTrustedBlockRoot: GetTrustedBlockRootCallback,
     bootstrapVerifier: BootstrapVerifier,
     updateVerifier: UpdateVerifier,
@@ -101,6 +103,7 @@ func init*(
   ## Initialize light client manager.
   LightClientManager(
     rng: rng,
+    timeParams: timeParams,
     getTrustedBlockRoot: getTrustedBlockRoot,
     bootstrapVerifier: bootstrapVerifier,
     updateVerifier: updateVerifier,
@@ -113,7 +116,7 @@ func init*(
     getBeaconTime: getBeaconTime,
   )
 
-# https://github.com/ethereum/consensus-specs/blob/v1.6.0-alpha.3/specs/altair/light-client/p2p-interface.md#getlightclientbootstrap
+# https://github.com/ethereum/consensus-specs/blob/v1.6.0-beta.1/specs/altair/light-client/p2p-interface.md#getlightclientbootstrap
 proc doRequest(
     e: typedesc[Bootstrap], backend: EthLCBackend, reqId: uint64, blockRoot: Eth2Digest
 ): Future[NetRes[ForkedLightClientBootstrap]] {.
@@ -121,7 +124,7 @@ proc doRequest(
 .} =
   backend.getLightClientBootstrap(reqId, blockRoot)
 
-# https://github.com/ethereum/consensus-specs/blob/v1.6.0-alpha.3/specs/altair/light-client/p2p-interface.md#lightclientupdatesbyrange
+# https://github.com/ethereum/consensus-specs/blob/v1.6.0-beta.1/specs/altair/light-client/p2p-interface.md#lightclientupdatesbyrange
 proc doRequest(
     e: typedesc[UpdatesByRange],
     backend: EthLCBackend,
@@ -139,7 +142,7 @@ proc doRequest(
       raise newException(ResponseError, e.error)
   return response
 
-# https://github.com/ethereum/consensus-specs/blob/v1.6.0-alpha.3/specs/altair/light-client/p2p-interface.md#getlightclientfinalityupdate
+# https://github.com/ethereum/consensus-specs/blob/v1.6.0-beta.1/specs/altair/light-client/p2p-interface.md#getlightclientfinalityupdate
 proc doRequest(
     e: typedesc[FinalityUpdate], backend: EthLCBackend, reqId: uint64
 ): Future[NetRes[ForkedLightClientFinalityUpdate]] {.
@@ -147,7 +150,7 @@ proc doRequest(
 .} =
   backend.getLightClientFinalityUpdate(reqId)
 
-# https://github.com/ethereum/consensus-specs/blob/v1.4.0-beta.5/specs/altair/light-client/p2p-interface.md#getlightclientoptimisticupdate
+# https://github.com/ethereum/consensus-specs/blob/v1.6.0-beta.1/specs/altair/light-client/p2p-interface.md#getlightclientoptimisticupdate
 proc doRequest(
     e: typedesc[OptimisticUpdate], backend: EthLCBackend, reqId: uint64
 ): Future[NetRes[ForkedLightClientOptimisticUpdate]] {.
@@ -170,6 +173,7 @@ template valueVerifier[E](
     static:
       doAssert false
 
+# NOTE: Do not export this iterator it is just for shorthand convenience
 iterator values(v: auto): auto =
   ## Local helper for `workerTask` to share the same implementation for both
   ## scalar and aggregate values, by treating scalars as 1-length aggregates.
@@ -295,7 +299,7 @@ template query[E](
 ): Future[bool].Raising([CancelledError]) =
   self.query(e, Nothing())
 
-# https://github.com/ethereum/consensus-specs/blob/v1.5.0-beta.0/specs/altair/light-client/light-client.md#light-client-sync-process
+# https://github.com/ethereum/consensus-specs/blob/v1.6.0-beta.1/specs/altair/light-client/light-client.md#light-client-sync-process
 proc loop(self: LightClientManager) {.async: (raises: [CancelledError]).} =
   var
     downloadOptimistic = true
@@ -303,83 +307,78 @@ proc loop(self: LightClientManager) {.async: (raises: [CancelledError]).} =
     didOptimisticProgress = false
     didFinalityProgress = false
 
+  # try atleast twice
+  let 
+    NUM_RETRIES = 2
+    RETRY_TIMEOUT = chronos.seconds(int64(self.timeParams.SECONDS_PER_SLOT) div (NUM_RETRIES + 1))
+
   while true:
     let
       wallTime = self.getBeaconTime()
-      currentSlot = wallTime.slotOrZero()
-      currentEpoch = (currentSlot mod SLOTS_PER_EPOCH)
-      currentPeriod = currentSlot.sync_committee_period
-      finalizedSlot = self.getFinalizedSlot()
-      finalizedPeriod = finalizedSlot.sync_committee_period
-      finalizedEpoch = (finalizedSlot mod SLOTS_PER_EPOCH)
-      optimisticSlot = self.getOptimisticSlot()
-      optimisticPeriod = optimisticSlot.sync_committee_period
-      optimisitcEpoch = (optimisticSlot mod SLOTS_PER_EPOCH)
+      current = wallTime.slotOrZero(self.timeParams)
+      finalized = self.getFinalizedSlot()
+      optimistic = self.getOptimisticSlot()
 
     # Obtain bootstrap data once a trusted block root is supplied
     if not self.isLightClientStoreInitialized():
       let trustedBlockRoot = self.getTrustedBlockRoot()
 
-      # reattempt bootstrap download in 2 seconds
       if trustedBlockRoot.isNone:
         debug "TrustedBlockRoot unavaialble re-attempting bootstrap download"
-        await sleepAsync(chronos.seconds(2))
+        await sleepAsync(RETRY_TIMEOUT)
         continue
 
       let didProgress = await self.query(Bootstrap, trustedBlockRoot.get)
 
-      # reattempt bootstrap download in 2 seconds
       if not didProgress:
         debug "Re-attempting bootstrap download"
-        await sleepAsync(chronos.seconds(2))
+        await sleepAsync(RETRY_TIMEOUT)
 
       continue
 
     # check and download sync committee updates
-    if finalizedPeriod == optimisticPeriod and not self.isNextSyncCommitteeKnown():
-      if finalizedPeriod >= currentPeriod:
+    if finalized.sync_committee_period == optimistic.sync_committee_period and not self.isNextSyncCommitteeKnown():
+      if finalized.sync_committee_period >= current.sync_committee_period:
         debug "Downloading light client sync committee updates",
-          start_period = finalizedPeriod, count = 1
+          start_period = finalized.sync_committee_period, count = 1
         discard await self.query(
-          UpdatesByRange, (startPeriod: finalizedPeriod, count: uint64(1))
+          UpdatesByRange, (startPeriod: finalized.sync_committee_period, count: uint64(1))
         )
       else:
         let count =
-          min(currentPeriod - finalizedPeriod, MAX_REQUEST_LIGHT_CLIENT_UPDATES)
+          min(current.sync_committee_period - finalized.sync_committee_period, MAX_REQUEST_LIGHT_CLIENT_UPDATES)
         debug "Downloading light client sync committee updates",
-          start_period = finalizedPeriod, count = count
+          start_period = finalized.sync_committee_period, count = count
         discard await self.query(
-          UpdatesByRange, (startPeriod: finalizedPeriod, count: uint64(count))
+          UpdatesByRange, (startPeriod: finalized.sync_committee_period, count: uint64(count))
         )
-    elif finalizedPeriod + 1 < currentPeriod:
+    elif finalized.sync_committee_period + 1 < current.sync_committee_period:
       let count =
-        min(currentPeriod - (finalizedPeriod + 1), MAX_REQUEST_LIGHT_CLIENT_UPDATES)
+        min(current.sync_committee_period - (finalized.sync_committee_period + 1), MAX_REQUEST_LIGHT_CLIENT_UPDATES)
       debug "Downloading light client sync committee updates",
-        start_period = finalizedPeriod, count = count
+        start_period = finalized.sync_committee_period, count = count
       discard await self.query(
-        UpdatesByRange, (startPeriod: finalizedPeriod, count: uint64(count))
+        UpdatesByRange, (startPeriod: finalized.sync_committee_period, count: uint64(count))
       )
 
     # check and download optimistic update
-    if optimisticSlot < currentSlot:
-      debug "Downloading light client optimistic updates", slot = currentSlot
+    if optimistic < current:
+      debug "Downloading light client optimistic updates", slot = current
       let didProgress = await self.query(OptimisticUpdate)
       if not didProgress:
-        # retry in 2 seconds
-        await sleepAsync(chronos.seconds(2))
+        await sleepAsync(RETRY_TIMEOUT)
         continue
 
     # check and download finality update
-    if currentEpoch > finalizedEpoch + 2:
-      debug "Downloading light client finality updates", slot = currentSlot
+    if current.epoch > finalized.epoch + 2:
+      debug "Downloading light client finality updates", slot = current
       let didProgress = await self.query(FinalityUpdate)
       if not didProgress:
-        # retry in two seconds
-        await sleepAsync(chronos.seconds(2))
+        await sleepAsync(RETRY_TIMEOUT)
         continue
 
     # check for updates every slot
-    await sleepAsync(chronos.seconds(int64(SECONDS_PER_SLOT)))
+    await sleepAsync(chronos.seconds(int64(self.timeParams.SECONDS_PER_SLOT)))
 
 proc start*(self: var LightClientManager) =
   ## Start light client manager's loop.
