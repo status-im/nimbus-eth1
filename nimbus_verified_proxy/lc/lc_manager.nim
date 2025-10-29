@@ -308,6 +308,11 @@ proc loop(self: LightClientManager) {.async: (raises: [CancelledError]).} =
     NUM_RETRIES = 2
     RETRY_TIMEOUT = self.timeParams.SLOT_DURATION div (NUM_RETRIES + 1)
 
+  # try atleast twice
+  let 
+    NUM_RETRIES = 2
+    RETRY_TIMEOUT = chronos.seconds(int64(self.timeParams.SECONDS_PER_SLOT) div (NUM_RETRIES + 1))
+
   while true:
     let
       wallTime = self.getBeaconTime()
