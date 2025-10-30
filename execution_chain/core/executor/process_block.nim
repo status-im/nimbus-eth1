@@ -146,7 +146,7 @@ proc procBlkPreamble(
       return err("Post-Amsterdam block header must have blockAccessListHash")
     elif blk.blockAccessList.isNone:
       return err("Post-Amsterdam block body must have blockAccessList")
-    else:
+    elif not skipValidation:
       if blk.blockAccessList.get.validate(header.blockAccessListHash.get).isErr():
         return err("Mismatched blockAccessListHash")
   else:
