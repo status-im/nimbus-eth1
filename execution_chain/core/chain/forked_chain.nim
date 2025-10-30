@@ -506,6 +506,7 @@ proc validateBlock(c: ForkedChainRef,
       excessBlobGas: blk.header.excessBlobGas,
       parentBeaconBlockRoot: blk.header.parentBeaconBlockRoot,
       requestsHash: blk.header.requestsHash,
+      blockAccessListHash: blk.header.blockAccessListHash
     ),
     parentTxFrame=cast[uint](parentFrame),
     txFrame=cast[uint](txFrame)
@@ -948,6 +949,7 @@ proc blockBodyByHash*(c: ForkedChainRef, blockHash: Hash32): Result[BlockBody, s
       transactions: blk.transactions,
       uncles: blk.uncles,
       withdrawals: blk.withdrawals,
+      blockAccessList: blk.blockAccessList,
     ))
   c.baseTxFrame.getBlockBody(blockHash)
 
