@@ -158,7 +158,7 @@ proc buildBlockAccessList*(builder: BlockAccessListBuilderRef): BlockAccessList 
     # Collect and sort codeChanges
     var codeChanges: seq[CodeChange]
     for balIndex, code in accData.codeChanges:
-      codeChanges.add((BlockAccessIndex(balIndex), CodeData(code)))
+      codeChanges.add((BlockAccessIndex(balIndex), Bytecode(code)))
     codeChanges.sort(balIndexCmp)
 
     blockAccessList.add(AccountChanges(
