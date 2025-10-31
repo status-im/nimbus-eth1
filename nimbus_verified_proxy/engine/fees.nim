@@ -36,29 +36,25 @@ func median(prices: var openArray[GasInt]): GasInt =
 
 proc suggestGasPrice*(
     engine: RpcVerificationEngine
-): Future[Result[GasInt, string]] {.async: (raises: []).} =
+): Future[GasInt] {.async: (raises: [CancelledError, EngineError]).} =
   const minGasPrice = 30_000_000_000.GasInt
   let
-    blk = (await engine.getBlock(blockId("latest"), true)).valueOr:
-      return err(error)
-    txs = blk.transactions.toTransactions().valueOr:
-      return err(error)
+    blk = await engine.getBlock(blockId("latest"), true)
+    txs = blk.transactions.toTransactions()
 
   var prices = newSeqOfCap[GasInt](64)
   for tx in txs:
     if tx.gasPrice > GasInt(0):
       prices.add(tx.gasPrice)
 
-  ok(max(minGasPrice, median(prices)))
+  max(minGasPrice, median(prices))
 
 proc suggestMaxPriorityGasPrice*(
     engine: RpcVerificationEngine
-): Future[Result[GasInt, string]] {.async: (raises: []).} =
+): Future[GasInt] {.async: (raises: [CancelledError, EngineError]).} =
   let
-    blk = (await engine.getBlock(blockId("latest"), true)).valueOr:
-      return err(error)
-    txs = blk.transactions.toTransactions().valueOr:
-      return err(error)
+    blk = await engine.getBlock(blockId("latest"), true)
+    txs = blk.transactions.toTransactions()
 
   var prices = newSeqOfCap[GasInt](64)
 
@@ -66,4 +62,4 @@ proc suggestMaxPriorityGasPrice*(
     if tx.maxPriorityFeePerGas > GasInt(0):
       prices.add(tx.maxPriorityFeePerGas)
 
-  ok(median(prices))
+  median(prices)

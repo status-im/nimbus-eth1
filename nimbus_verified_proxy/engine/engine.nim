@@ -11,7 +11,7 @@ import ./types, ./utils, ./rpc_frontend, ./header_store, ./evm
 
 proc init*(
     T: type RpcVerificationEngine, config: RpcVerificationEngineConf
-): T {.raises: [ValueError].} =
+): T {.raises: [EngineError].} =
   let engine = RpcVerificationEngine(
     chainId: config.chainId,
     maxBlockWalk: config.maxBlockWalk,
@@ -24,7 +24,7 @@ proc init*(
   engine.registerDefaultFrontend()
 
   let networkId = chainIdToNetworkId(config.chainId).valueOr:
-    raise newException(ValueError, error)
+    raise newException(EngineError, error)
   # since AsyncEvm requires a few transport methods (getStorage, getCode etc.) for initialization, we initialize the proxy first then the evm within it
   engine.evm = AsyncEvm.init(engine.toAsyncEvmStateBackend(), networkId)
 
