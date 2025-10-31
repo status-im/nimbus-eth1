@@ -24,15 +24,15 @@ type
   # occurred.
   AccountData = object
     storageChanges: Table[UInt256, Table[int, UInt256]]
-      ## Maps storage key -> block access list index -> storage value
+      ## Maps storage key -> block access index -> storage value
     storageReads: HashSet[UInt256]
       ## Set of storage keys
     balanceChanges: Table[int, UInt256]
-      ## Maps block access list index -> balance
+      ## Maps block access index -> balance
     nonceChanges: Table[int, AccountNonce]
-      ## Maps block access list index -> nonce
+      ## Maps block access index -> nonce
     codeChanges: Table[int, seq[byte]]
-      ## Maps block access list index -> code
+      ## Maps block access index -> code
 
   # Builder for constructing a BlockAccessList efficiently during transaction
   # execution. The builder accumulates all account and storage accesses during
@@ -66,7 +66,6 @@ proc addStorageWrite*(
     slot: UInt256,
     blockAccessIndex: int,
     newValue: UInt256) =
-
   builder.ensureAccount(address)
 
   builder.accounts.withValue(address, accData):
