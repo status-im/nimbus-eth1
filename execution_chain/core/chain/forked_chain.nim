@@ -200,10 +200,6 @@ proc removeBlockFromCache(c: ForkedChainRef, b: BlockRef) =
   for tx in b.blk.transactions:
     c.txRecords.del(computeRlpHash(tx))
 
-  for v in c.lastSnapshots.mitems():
-    if v == b.txFrame:
-      v = nil
-
   b.blk.reset
   b.receipts.reset
   b.txFrame.dispose()
@@ -511,10 +507,13 @@ proc validateBlock(c: ForkedChainRef,
     parentTxFrame=cast[uint](parentFrame),
     txFrame=cast[uint](txFrame)
 
-  # Update the snapshot before processing the block so that any vertexes in snapshots
+  # Checkpoint creates a snapshot of ancestor changes in txFrame - it is an
+  # expensive operation, specially when creating a new branch (ie when blk
+  # is being applied to a block that is currently not a head).
+  # Create the snapshot before processing the block so that any vertexes in snapshots
   # from lower levels than the baseTxFrame are removed from the snapshot before running
   # the stateroot computation.
-  c.updateSnapshot(parent.blk, parentFrame)
+  parentFrame.checkpoint(parent.blk.header.number, skipSnapshot = false)
 
   var receipts = c.processBlock(parent, txFrame, blk, blkHash, finalized).valueOr:
     txFrame.dispose()
