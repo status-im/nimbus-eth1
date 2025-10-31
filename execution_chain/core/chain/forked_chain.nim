@@ -506,19 +506,18 @@ proc validateBlock(c: ForkedChainRef,
     parentTxFrame=cast[uint](parentFrame),
     txFrame=cast[uint](txFrame)
 
-  # Checkpoint creates a snapshot of ancestor changes in txFrame - it is an
-  # expensive operation, specially when creating a new branch (ie when blk
-  # is being applied to a block that is currently not a head).
-  # Create the snapshot before processing the block so that any vertexes in snapshots
-  # from lower levels than the baseTxFrame are removed from the snapshot before running
-  # the stateroot computation.
-  parentFrame.checkpoint(parent.blk.header.number, skipSnapshot = false)
+
 
   var receipts = c.processBlock(parent, txFrame, blk, blkHash, finalized).valueOr:
     txFrame.dispose()
     return err(error)
 
   c.writeBaggage(blk, blkHash, txFrame, receipts)
+
+  # Checkpoint creates a snapshot of ancestor changes in txFrame - it is an
+  # expensive operation, specially when creating a new branch (ie when blk
+  # is being applied to a block that is currently not a head).
+  parentFrame.checkpoint(blk.header.number, skipSnapshot = false)
 
   let newBlock = c.appendBlock(parent, blk, blkHash, txFrame, move(receipts))
 
