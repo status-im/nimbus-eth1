@@ -9,6 +9,7 @@
 {.push raises: [], gcsafe.}
 
 import
+  unittest2,
   stint,
   chronos,
   json_rpc/jsonmarshal,
@@ -19,6 +20,16 @@ import
   ../engine/types,
   ../engine/engine,
   ./test_api_backend
+
+template checkNoEngineError*(body: untyped) =
+  let status =
+    try:
+      body
+      true
+    except EngineError as e:
+      false
+
+  check(status)
 
 proc getBlockFromJson*(filepath: string): BlockObject {.raises: [SerializationError].} =
   let blkBytes = readAllBytes(filepath)
@@ -71,7 +82,7 @@ template `==`*(logs1: seq[LogObject], logs2: seq[LogObject]): bool =
 
 proc initTestEngine*(
     testState: TestApiState, headerCacheLen: int, maxBlockWalk: uint64
-): RpcVerificationEngine {.raises: [CatchableError].} =
+): RpcVerificationEngine {.raises: [EngineError].} =
   let
     engineConf = RpcVerificationEngineConf(
       chainId: 1.u256,

@@ -97,20 +97,18 @@ suite "test verified blocks":
         kind: BlockIdentifierKind.bidNumber, number: Quantity(targetBlockNum + 1)
       )
 
-    # TODO: catch the exact error 
     try:
       let verifiedBlk =
         waitFor engine.frontend.eth_getBlockByNumber(unreachableTargetTag, true)
       check(false)
-    except CatchableError:
+    except EngineError:
       check(true)
 
-    # TODO: catch the exact error 
     try:
       let verifiedBlk =
         waitFor engine.frontend.eth_getBlockByNumber(reachableTargetTag, true)
       check(true)
-    except CatchableError:
+    except EngineError:
       check(false)
 
   test "check block related API methods":

@@ -25,11 +25,10 @@ suite "test transaction verification":
         check checkTxHash(tx.tx, tx.tx.hash)
 
   test "check tx trie root":
-    let
-      blk = getBlockFromJson("nimbus_verified_proxy/tests/data/Istanbul.json")
-      res = verifyTransactions(blk.transactionsRoot, blk.transactions)
+    let blk = getBlockFromJson("nimbus_verified_proxy/tests/data/Istanbul.json")
 
-    check res.isOk()
+    checkNoEngineError:
+      verifyTransactions(blk.transactionsRoot, blk.transactions)
 
   test "check eth api methods":
     let

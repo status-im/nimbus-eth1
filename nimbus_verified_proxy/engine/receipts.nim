@@ -44,27 +44,30 @@ func toReceipts(recs: openArray[ReceiptObject]): seq[Receipt] =
 
 proc getReceipts(
     engine: RpcVerificationEngine, header: Header, blockTag: types.BlockTag
-): Future[Result[seq[ReceiptObject], string]] {.async: (raises: []).} =
+): Future[seq[ReceiptObject]] {.async: (raises: [CancelledError, EngineError]).} =
   let rxs =
     try:
       await engine.backend.eth_getBlockReceipts(blockTag)
-    except CatchableError as e:
-      return err(e.msg)
+    except EthBackendError as e:
+      e.msg = "Receipts fetch failed: " & e.msg
+      raise e
+
   if rxs.isSome():
     if orderedTrieRoot(toReceipts(rxs.get())) != header.receiptsRoot:
-      return
-        err("downloaded receipts do not evaluate to the receipts root of the block")
+      raise newException(
+        VerificationError,
+        "downloaded receipts do not evaluate to the receipts root of the block",
+      )
   else:
-    return err("error downloading the receipts")
+    raise newException(UnavailableDataError, "error downloading the receipts")
 
-  return ok(rxs.get())
+  rxs.get()
 
 proc getReceipts*(
     engine: RpcVerificationEngine, blockTag: types.BlockTag
-): Future[Result[seq[ReceiptObject], string]] {.async: (raises: []).} =
+): Future[seq[ReceiptObject]] {.async: (raises: [CancelledError, EngineError]).} =
   let
-    header = (await engine.getHeader(blockTag)).valueOr:
-      return err(error)
+    header = await engine.getHeader(blockTag)
     # all other tags are automatically resolved while getting the header
     numberTag = types.BlockTag(
       kind: BlockIdentifierKind.bidNumber, number: Quantity(header.number)
@@ -74,10 +77,9 @@ proc getReceipts*(
 
 proc getReceipts*(
     engine: RpcVerificationEngine, blockHash: Hash32
-): Future[Result[seq[ReceiptObject], string]] {.async: (raises: []).} =
+): Future[seq[ReceiptObject]] {.async: (raises: [CancelledError, EngineError]).} =
   let
-    header = (await engine.getHeader(blockHash)).valueOr:
-      return err(error)
+    header = await engine.getHeader(blockHash)
     numberTag = types.BlockTag(
       kind: BlockIdentifierKind.bidNumber, number: Quantity(header.number)
     )
@@ -86,30 +88,27 @@ proc getReceipts*(
 
 proc resolveFilterTags*(
     engine: RpcVerificationEngine, filter: FilterOptions
-): Result[FilterOptions, string] =
+): FilterOptions {.raises: [UnavailableDataError].} =
   if filter.blockHash.isSome():
-    return ok(filter)
+    return filter
+
   let
     fromBlock = filter.fromBlock.get(types.BlockTag(kind: bidAlias, alias: "latest"))
     toBlock = filter.toBlock.get(types.BlockTag(kind: bidAlias, alias: "latest"))
-    fromBlockNumberTag = engine.resolveBlockTag(fromBlock).valueOr:
-      return err(error)
-    toBlockNumberTag = engine.resolveBlockTag(toBlock).valueOr:
-      return err(error)
+    fromBlockNumberTag = engine.resolveBlockTag(fromBlock)
+    toBlockNumberTag = engine.resolveBlockTag(toBlock)
 
-  return ok(
-    FilterOptions(
-      fromBlock: Opt.some(fromBlockNumberTag),
-      toBlock: Opt.some(toBlockNumberTag),
-      address: filter.address,
-      topics: filter.topics,
-      blockHash: filter.blockHash,
-    )
+  FilterOptions(
+    fromBlock: Opt.some(fromBlockNumberTag),
+    toBlock: Opt.some(toBlockNumberTag),
+    address: filter.address,
+    topics: filter.topics,
+    blockHash: filter.blockHash,
   )
 
 proc verifyLogs*(
     engine: RpcVerificationEngine, filter: FilterOptions, logObjs: seq[LogObject]
-): Future[Result[void, string]] {.async: (raises: []).} =
+) {.async: (raises: [CancelledError, EngineError]).} =
   # store block hashes contains the logs so that we can batch receipt requests
   var
     prevBlockHash: Hash32
@@ -121,8 +120,7 @@ proc verifyLogs*(
       # exploit sequentiality of logs 
       if prevBlockHash != lg.blockHash.get():
         # TODO: a cache will solve downloading the same block receipts for multiple logs
-        rxs = (await engine.getReceipts(lg.blockHash.get())).valueOr:
-          return err(error)
+        rxs = await engine.getReceipts(lg.blockHash.get())
         prevBlockHash = lg.blockHash.get()
       let
         txIdx = distinctBase(lg.transactionIndex.get())
@@ -136,22 +134,20 @@ proc verifyLogs*(
           lg.blockNumber.get() < filter.fromBlock.get().number or
           lg.blockNumber.get() > filter.toBlock.get().number or
           (not match(toLog(lg), filter.address, filter.topics)):
-        return err("one of the returned logs is invalid")
-
-  ok()
+        raise newException(VerificationError, "one of the returned logs is invalid")
 
 proc getLogs*(
     engine: RpcVerificationEngine, filter: FilterOptions
-): Future[Result[seq[LogObject], string]] {.async: (raises: []).} =
+): Future[seq[LogObject]] {.async: (raises: [CancelledError, EngineError]).} =
   let
-    resolvedFilter = engine.resolveFilterTags(filter).valueOr:
-      return err(error)
+    resolvedFilter = engine.resolveFilterTags(filter)
     logObjs =
       try:
         await engine.backend.eth_getLogs(resolvedFilter)
-      except CatchableError as e:
-        return err(e.msg)
+      except EthBackendError as e:
+        e.msg = "Logs fetch failed: " & e.msg
+        raise e
 
-  ?(await engine.verifyLogs(resolvedFilter, logObjs))
+  await engine.verifyLogs(resolvedFilter, logObjs)
 
-  return ok(logObjs)
+  logObjs

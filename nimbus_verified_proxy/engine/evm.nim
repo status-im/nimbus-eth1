@@ -27,42 +27,35 @@ proc toAsyncEvmStateBackend*(engine: RpcVerificationEngine): AsyncEvmStateBacken
     ): Future[Opt[Account]] {.async: (raises: [CancelledError]).} =
       let account =
         try:
-          (await engine.getAccount(address, header.number, header.stateRoot))
-        except CatchableError as e:
-          raise newException(CancelledError, e.msg)
+          Opt.some(await engine.getAccount(address, header.number, header.stateRoot))
+        except EngineError as e:
+          Opt.none(Account)
 
-      if account.isOk():
-        return Opt.some(account.get())
-
-      Opt.none(Account)
+      account
 
     storageProc = proc(
         header: Header, address: Address, slotKey: UInt256
     ): Future[Opt[UInt256]] {.async: (raises: [CancelledError]).} =
-      let storageSlot =
+      let slot =
         try:
-          (await engine.getStorageAt(address, slotKey, header.number, header.stateRoot))
-        except CatchableError as e:
-          raise newException(CancelledError, e.msg)
+          Opt.some(
+            await engine.getStorageAt(address, slotKey, header.number, header.stateRoot)
+          )
+        except EngineError as e:
+          Opt.none(UInt256)
 
-      if storageSlot.isOk():
-        return Opt.some(storageSlot.get())
-
-      Opt.none(UInt256)
+      slot
 
     codeProc = proc(
         header: Header, address: Address
     ): Future[Opt[seq[byte]]] {.async: (raises: [CancelledError]).} =
       let code =
         try:
-          (await engine.getCode(address, header.number, header.stateRoot))
-        except CatchableError as e:
-          raise newException(CancelledError, e.msg)
+          Opt.some(await engine.getCode(address, header.number, header.stateRoot))
+        except EngineError as e:
+          Opt.none(seq[byte])
 
-      if code.isOk():
-        return Opt.some(code.get())
-
-      Opt.none(seq[byte])
+      code
 
     blockHashProc = proc(
         header: Header, number: BlockNumber
