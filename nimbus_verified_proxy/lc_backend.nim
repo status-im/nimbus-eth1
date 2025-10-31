@@ -76,7 +76,7 @@ proc getEthLCBackend*(client: LCRestClientPool): EthLCBackend =
           except CancelledError as e:
             raise e
           except CatchableError as e:
-            err(e.msg)
+            return err()
 
       ok(res)
 
@@ -93,7 +93,7 @@ proc getEthLCBackend*(client: LCRestClientPool): EthLCBackend =
           except CancelledError as e:
             raise e
           except CatchableError as e:
-            err(e.msg)
+            return err()
 
       ok(res)
 
@@ -112,7 +112,7 @@ proc getEthLCBackend*(client: LCRestClientPool): EthLCBackend =
           except CancelledError as e:
             raise e
           except CatchableError as e:
-            err(e.msg)
+            return err()
 
       ok(res)
 
@@ -131,7 +131,7 @@ proc getEthLCBackend*(client: LCRestClientPool): EthLCBackend =
           except CancelledError as e:
             raise e
           except CatchableError as e:
-            err(e.msg)
+            return err()
 
       ok(res)
 
