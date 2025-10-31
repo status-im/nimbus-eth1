@@ -11,6 +11,7 @@
 import
   std/strutils,
   unittest2,
+  stew/endians2,
   ../execution_chain/common/common,
   ../execution_chain/utils/utils
 
@@ -83,8 +84,8 @@ const
     (number: 123'u64, time: 1762955545'u64, id: (crc: 0x23AA1351'u32, next: 0'u64)),          # Future BPO2 time
   ]
 
-template runForkIdTest(network: untyped, name: string) =
-  test name:
+template runComputeForkIdTest(network: untyped, name: string) =
+  test name & " Compute ForkId test":
     var
       params = networkParams(network)
       com    = CommonRef.new(newCoreDbRef DefaultDbMemory, nil, network, params)
@@ -95,7 +96,231 @@ template runForkIdTest(network: untyped, name: string) =
       check computedId.nextFork == x.id.next
 
       # The computed ID should be compatible with the CommonRef ForkIdCalculator itself
-      check com.compatibleForkId(computedId) == true
+      check com.compatibleForkId(computedId, BlockNumber(x.number), EthTime(x.time)) == true
+      # And also when set to current fork timestamp
+      check com.compatibleForkId(computedId, BlockNumber(0'u64), EthTime(1761921403'u64)) == true
+
+const
+  ValidationTests = [
+
+    # from
+    # https://github.com/ethereum/go-ethereum/blob/0413af40f60290cf689b4ecca4e51fef0ec11119/core/forkid/forkid_test.go#L304
+
+    #------------------
+    # Block based tests
+    #------------------
+
+    # Local is mainnet Gray Glacier, remote announces the same. No future fork is announced.
+    (config: MainNet, head: 15050000'u64, time: 0'u64, id: (crc: 0xf0afd0e3'u32, next: 0'u64), compatible: true),
+
+    # Local is mainnet Gray Glacier, remote announces the same. Remote also announces a next fork
+    # at block 0xffffffff, but that is uncertain.
+    (config: MainNet, head: 15050000'u64, time: 0'u64, id: (crc: 0xf0afd0e3'u32, next: uint64.high()), compatible: true),
+
+    # Local is mainnet currently in Byzantium only (so it's aware of Petersburg), remote announces
+    # also Byzantium, but it's not yet aware of Petersburg (e.g. non updated node before the fork).
+    # In this case we don't know if Petersburg passed yet or not.
+    (config: MainNet, head: 7279999'u64, time: 0'u64, id: (crc: 0xa00bc324'u32, next: 0'u64), compatible: true),
+
+    # Local is mainnet currently in Byzantium only (so it's aware of Petersburg), remote announces
+    # also Byzantium, and it's also aware of Petersburg (e.g. updated node before the fork). We
+    # don't know if Petersburg passed yet (will pass) or not.
+    (config: MainNet, head: 7279999'u64, time: 0'u64, id: (crc: 0xa00bc324'u32, next: 7280000'u64), compatible: true),
+
+    # Local is mainnet currently in Byzantium only (so it's aware of Petersburg), remote announces
+    # also Byzantium, and it's also aware of some random fork (e.g. misconfigured Petersburg). As
+    # neither forks passed at neither nodes, they may mismatch, but we still connect for now.
+    (config: MainNet, head: 7279999'u64, time: 0'u64, id: (crc: 0xa00bc324'u32, next: uint64.high()), compatible: true),
+
+    # Local is mainnet exactly on Petersburg, remote announces Byzantium + knowledge about Petersburg. Remote
+    # is simply out of sync, accept.
+    (config: MainNet, head: 7280000'u64, time: 0'u64, id: (crc: 0xa00bc324'u32, next: 7280000'u64), compatible: true),
+
+    # Local is mainnet Petersburg, remote announces Byzantium + knowledge about Petersburg. Remote
+    # is simply out of sync, accept.
+    (config: MainNet, head: 7987396'u64, time: 0'u64, id: (crc: 0xa00bc324'u32, next: 7280000'u64), compatible: true),
+
+    # Local is mainnet Petersburg, remote announces Spurious + knowledge about Byzantium. Remote
+    # is definitely out of sync. It may or may not need the Petersburg update, we don't know yet.
+    (config: MainNet, head: 7987396'u64, time: 0'u64, id: (crc: 0x3edd5b10'u32, next: 4370000'u64), compatible: true),
+
+    # Local is mainnet Byzantium, remote announces Petersburg. Local is out of sync, accept.
+    (config: MainNet, head: 7279999'u64, time: 0'u64, id: (crc: 0x668db0af'u32, next: 0'u64), compatible: true),
+
+    # Local is mainnet Spurious, remote announces Byzantium, but is not aware of Petersburg. Local
+    # out of sync. Local also knows about a future fork, but that is uncertain yet.
+    (config: MainNet, head: 4369999'u64, time: 0'u64, id: (crc: 0xa00bc324'u32, next: 0'u64), compatible: true),
+
+    # Local is mainnet Petersburg. remote announces Byzantium but is not aware of further forks.
+    # Remote needs software update.
+    (config: MainNet, head: 7987396'u64, time: 0'u64, id: (crc: 0xa00bc324'u32, next: 0'u64), compatible: false),
+
+    # Local is mainnet Petersburg, and isn't aware of more forks. Remote announces Petersburg +
+    # 0xffffffff. Local needs software update, reject.
+    (config: MainNet, head: 7987396'u64, time: 0'u64, id: (crc: 0x5cddc0e1'u32, next: 0'u64), compatible: false),
+
+    # Local is mainnet Byzantium, and is aware of Petersburg. Remote announces Petersburg +
+    # 0xffffffff. Local needs software update, reject.
+    (config: MainNet, head: 7279999'u64, time: 0'u64, id: (crc: 0x5cddc0e1'u32, next: 0'u64), compatible: false),
+
+    # Local is mainnet Petersburg, remote is Rinkeby Petersburg.
+    (config: MainNet, head: 7987396'u64, time: 0'u64, id: (crc: 0xafec6b27'u32, next: 0'u64), compatible: false),
+
+    # Local is mainnet Gray Glacier, far in the future. Remote announces Gopherium (non existing fork)
+    # at some future block 88888888, for itself, but past block for local. Local is incompatible.
+    #
+    # This case detects non-upgraded nodes with majority hash power (typical Ropsten mess).
+    # Note: disable this test as it needs to be tested with a configuration without Shanghai and later forks
+    # It would turn true now because time is set to 0, and thus Paris is not considered passed yet.
+    # In practise time would not get to 0.
+    # (config: MainNet, head: 88888888'u64, time: 0'u64, id: (crc: 0xf0afd0e3'u32, next: 88888888'u64), compatible: false),
+
+    # Local is mainnet Byzantium. Remote is also in Byzantium, but announces Gopherium (non existing
+    # fork) at block 7279999, before Petersburg. Local is incompatible.
+    (config: MainNet, head: 7279999'u64, time: 0'u64, id: (crc: 0xa00bc324'u32, next: 7279999'u64), compatible: false),
+
+    #------------------------------------
+    # Block to timestamp transition tests
+    #-----------------------------------
+
+    # Local is mainnet currently in Gray Glacier only (so it's aware of Shanghai), remote announces
+    # also Gray Glacier, but it's not yet aware of Shanghai (e.g. non updated node before the fork).
+    # In this case we don't know if Shanghai passed yet or not.
+    (config: MainNet, head: 15050000'u64, time: 0'u64, id: (crc: 0xf0afd0e3'u32, next: 0'u64), compatible: true),
+
+    # Local is mainnet currently in Gray Glacier only (so it's aware of Shanghai), remote announces
+    # also Gray Glacier, and it's also aware of Shanghai (e.g. updated node before the fork). We
+    # don't know if Shanghai passed yet (will pass) or not.
+    (config: MainNet, head: 15050000'u64, time: 0'u64, id: (crc: 0xf0afd0e3'u32, next: 1681338455'u64), compatible: true),
+
+    # Local is mainnet currently in Gray Glacier only (so it's aware of Shanghai), remote announces
+    # also Gray Glacier, and it's also aware of some random fork (e.g. misconfigured Shanghai). As
+    # neither forks passed at neither nodes, they may mismatch, but we still connect for now.
+    (config: MainNet, head: 15050000'u64, time: 0'u64, id: (crc: 0xf0afd0e3'u32, next: uint64.high()), compatible: true),
+
+    # Local is mainnet exactly on Shanghai, remote announces Gray Glacier + knowledge about Shanghai. Remote
+    # is simply out of sync, accept.
+    (config: MainNet, head: 20000000'u64, time: 1681338455'u64, id: (crc: 0xf0afd0e3'u32, next: 1681338455'u64), compatible: true),
+
+    # Local is mainnet Shanghai, remote announces Gray Glacier + knowledge about Shanghai. Remote
+    # is simply out of sync, accept.
+    (config: MainNet, head: 20123456'u64, time: 1681338456'u64, id: (crc: 0xf0afd0e3'u32, next: 1681338455'u64), compatible: true),
+
+    # Local is mainnet Shanghai, remote announces Arrow Glacier + knowledge about Gray Glacier. Remote
+    # is definitely out of sync. It may or may not need the Shanghai update, we don't know yet.
+    (config: MainNet, head: 20000000'u64, time: 1681338455'u64, id: (crc: 0x20c327fc'u32, next: 15050000'u64), compatible: true),
+
+    # Local is mainnet Gray Glacier, remote announces Shanghai. Local is out of sync, accept.
+    (config: MainNet, head: 15050000'u64, time: 0'u64, id: (crc: 0xdce96c2d'u32, next: 0'u64), compatible: true),
+
+    # Local is mainnet Arrow Glacier, remote announces Gray Glacier, but is not aware of Shanghai. Local
+    # out of sync. Local also knows about a future fork, but that is uncertain yet.
+    (config: MainNet, head: 13773000'u64, time: 0'u64, id: (crc: 0xf0afd0e3'u32, next: 0'u64), compatible: true),
+
+    # Local is mainnet Shanghai. remote announces Gray Glacier but is not aware of further forks.
+    # Remote needs software update.
+    (config: MainNet, head: 20000000'u64, time: 1681338455'u64, id: (crc: 0xf0afd0e3'u32, next: 0'u64), compatible: false),
+
+    # Local is mainnet Gray Glacier, and isn't aware of more forks. Remote announces Gray Glacier +
+    # 0xffffffff. Local needs software update, reject.
+    (config: MainNet, head: 15050000'u64, time: 0'u64, id: (crc: crc32(0xf0afd0e3'u32, uint64.high().toBytesBE), next: 0'u64), compatible: false),
+
+    # Local is mainnet Gray Glacier, and is aware of Shanghai. Remote announces Shanghai +
+    # 0xffffffff. Local needs software update, reject.
+    (config: MainNet, head: 15050000'u64, time: 0'u64, id: (crc: crc32(0xdce96c2d'u32, uint64.high().toBytesBE), next: 0'u64), compatible: false),
+
+    # Local is mainnet Gray Glacier, far in the future. Remote announces Gopherium (non existing fork)
+    # at some future timestamp 8888888888, for itself, but past block for local. Local is incompatible.
+    # This case detects non-upgraded nodes with majority hash power (typical Ropsten mess).
+    (config: MainNet, head: 888888888'u64, time: 1660000000'u64, id: (crc: 0xf0afd0e3'u32, next: 1660000000'u64), compatible: false),
+
+    # Local is mainnet Gray Glacier. Remote is also in Gray Glacier, but announces Gopherium (non existing
+    # fork) at block 7279999, before Shanghai. Local is incompatible.
+    (config: MainNet, head: 19999999'u64, time: 1667999999'u64, id: (crc: 0xf0afd0e3'u32, next: 1667999999'u64), compatible: false),
+
+    #----------------------
+    # Timestamp based tests
+    #----------------------
+
+    # Local is mainnet Shanghai, remote announces the same. No future fork is announced.
+    (config: MainNet, head: 1681338455'u64, time: 1681338455'u64, id: (crc: 0xdce96c2d'u32, next: 0'u64), compatible: true),
+
+    # Local is mainnet Shanghai, remote announces the same. Remote also announces a next fork
+    # at time 0xffffffff, but that is uncertain.
+    (config: MainNet, head: 20000000'u64, time: 1681338455'u64, id: (crc: 0xdce96c2d'u32, next: uint64.high()), compatible: true),
+
+    # Local is mainnet currently in Shanghai only (so it's aware of Cancun), remote announces
+    # also Shanghai, but it's not yet aware of Cancun (e.g. non updated node before the fork).
+    # In this case we don't know if Cancun passed yet or not.
+    (config: MainNet, head: 20000000'u64, time: 1668000000'u64, id: (crc: 0xdce96c2d'u32, next: 0'u64), compatible: true),
+
+    # Local is mainnet currently in Shanghai only (so it's aware of Cancun), remote announces
+    # also Shanghai, and it's also aware of Cancun (e.g. updated node before the fork). We
+    # don't know if Cancun passed yet (will pass) or not.
+    (config: MainNet, head: 20000000'u64, time: 1668000000'u64, id: (crc: 0xdce96c2d'u32, next: 1710338135'u64), compatible: true),
+
+    # Local is mainnet currently in Shanghai only (so it's aware of Cancun), remote announces
+    # also Shanghai, and it's also aware of some random fork (e.g. misconfigured Cancun). As
+    # neither forks passed at neither nodes, they may mismatch, but we still connect for now.
+    (config: MainNet, head: 20000000'u64, time: 1668000000'u64, id: (crc: 0xdce96c2d'u32, next: uint64.high()), compatible: true),
+
+    # Local is mainnet exactly on Cancun, remote announces Shanghai + knowledge about Cancun. Remote
+    # is simply out of sync, accept.
+    (config: MainNet, head: 21000000'u64, time: 1710338135'u64, id: (crc: 0xdce96c2d'u32, next: 1710338135'u64), compatible: true),
+
+    # Local is mainnet Cancun, remote announces Shanghai + knowledge about Cancun. Remote
+    # is simply out of sync, accept.
+    (config: MainNet, head: 21123456'u64, time: 1710338136'u64, id: (crc: 0xdce96c2d'u32, next: 1710338135'u64), compatible: true),
+
+    # Local is mainnet Prague, remote announces Shanghai + knowledge about Cancun. Remote
+    # is definitely out of sync. It may or may not need the Prague update, we don't know yet.
+    (config: MainNet, head: 0'u64, time: 0'u64, id: (crc: 0x3edd5b10'u32, next: 1710338135'u64), compatible: true),
+
+    # Local is mainnet Shanghai, remote announces Cancun. Local is out of sync, accept.
+    (config: MainNet, head: 21000000'u64, time: 1700000000'u64, id: (crc: 0x9f3d2254'u32, next: 0'u64), compatible: true),
+
+    # Local is mainnet Shanghai, remote announces Cancun, but is not aware of Prague. Local
+    # out of sync. Local also knows about a future fork, but that is uncertain yet.
+    (config: MainNet, head: 21000000'u64, time: 1678000000'u64, id: (crc: 0xc376cf8b'u32, next: 0'u64), compatible: true),
+
+    # Local is mainnet Cancun. remote announces Shanghai but is not aware of further forks.
+    # Remote needs software update.
+    (config: MainNet, head: 21000000'u64, time: 1710338135'u64, id: (crc: 0xdce96c2d'u32, next: 0'u64), compatible: false),
+
+    # Local is mainnet Shanghai, and isn't aware of more forks. Remote announces Shanghai +
+    # 0xffffffff. Local needs software update, reject.
+    (config: MainNet, head: 20000000'u64, time: 1681338455'u64, id: (crc: crc32(0xdce96c2d'u32, uint64.high().toBytesBE), next: 0'u64), compatible: false),
+
+    # Local is mainnet Shanghai, and is aware of Cancun. Remote announces Cancun +
+    # 0xffffffff. Local needs software update, reject.
+    (config: MainNet, head: 20000000'u64, time: 1668000000'u64, id: (crc: crc32(0x9f3d2254'u32, uint64.high().toBytesBE), next: 0'u64), compatible: false),
+
+    # Local is mainnet Shanghai, remote is random Shanghai.
+    (config: MainNet, head: 20000000'u64, time: 1681338455'u64, id: (crc: 0x12345678'u32, next: 0'u64), compatible: false),
+
+    # Local is mainnet Prague, far in the future. Remote announces Gopherium (non existing fork)
+    # at some future timestamp 8888888888, for itself, but past block for local. Local is incompatible.
+    #
+    # This case detects non-upgraded nodes with majority hash power (typical Ropsten mess).
+    (config: MainNet, head: 88888888'u64, time: 8888888888'u64, id: (crc: 0xc376cf8b'u32, next: 8888888888'u64), compatible: false),
+
+    # Local is mainnet Shanghai. Remote is also in Shanghai, but announces Gopherium (non existing
+    # fork) at timestamp 1668000000, before Cancun. Local is incompatible.
+    (config: MainNet, head: 20999999'u64, time: 1699999999'u64, id: (crc: 0x71147644'u32, next: 1700000000'u64), compatible: false),
+
+  ]
+
+proc runCompatibleForkIdTest() =
+  test "Compatible ForkId validation test":
+    for testcase in ValidationTests:
+      var
+        params = networkParams(testcase.config)
+        com = CommonRef.new(newCoreDbRef DefaultDbMemory, nil, testcase.config, params)
+
+      let fid: ForkID = (crc: testcase.id.crc, nextFork: testcase.id.next)
+      let compatible = com.compatibleForkId(fid, BlockNumber(testcase.head), EthTime(testcase.time))
+
+      check compatible == testcase.compatible
 
 func config(shanghai, cancun: uint64): ChainConfig =
   ChainConfig(
@@ -146,8 +371,9 @@ template runGenesisTimeIdTests() =
     check get.nextFork == x.want.next
 
 suite "Fork ID tests":
-  runForkIdTest(MainNet, "MainNet")
-  runForkIdTest(SepoliaNet, "SepoliaNet")
-  runForkIdTest(HoodiNet, "HoodiNet")
+  runComputeForkIdTest(MainNet, "MainNet")
+  runComputeForkIdTest(SepoliaNet, "SepoliaNet")
+  runComputeForkIdTest(HoodiNet, "HoodiNet")
+  runCompatibleForkIdTest()
   test "Genesis Time Fork ID":
     runGenesisTimeIdTests()

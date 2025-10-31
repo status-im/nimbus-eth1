@@ -348,7 +348,7 @@ type
     byBlock: seq[uint64]
     byTime: seq[uint64]
     genesisCRC: uint32
-    cache: seq[ForkID]
+    forkHistory: seq[ForkID]
 
 func newID*(calc: ForkIdCalculator, head, time: uint64): ForkID =
   # Create a fork ID for a specific block height and timestamp:
@@ -369,28 +369,82 @@ func newID*(calc: ForkIdCalculator, head, time: uint64): ForkID =
 
   (crc, 0'u64)
 
-func compatible*(calc: var ForkIdCalculator, forkId: ForkID): bool =
-  if calc.cache.len == 0:
-    calc.cache = newSeqOfCap[ForkID](calc.byBlock.len + calc.byTime.len + 1)
+func calculateForkHistory(calc: var ForkIdCalculator) =
+  if calc.forkHistory.len == 0:
+    calc.forkHistory = newSeqOfCap[ForkID](calc.byBlock.len + calc.byTime.len + 1)
     var crc = calc.genesisCRC
 
     # Build cache of all valid ForkIds
     # Each entry is (crc before fork, fork number)
     for fork in calc.byBlock:
-      calc.cache.add( (crc, fork) )
+      calc.forkHistory.add( (crc, fork) )
       crc = crc32(crc, fork.toBytesBE)
 
     for fork in calc.byTime:
-      calc.cache.add( (crc, fork) )
+      calc.forkHistory.add( (crc, fork) )
       crc = crc32(crc, fork.toBytesBE)
 
     # Add last fork ID (after all forks, next=0)
-    calc.cache.add( (crc, 0'u64) )
+    calc.forkHistory.add( (crc, 0'u64) )
 
-  for id in calc.cache:
-    if id == forkId:
+func compatible*(calc: var ForkIdCalculator, forkId: ForkID, number: uint64, time: uint64): bool =
+  # Check forkId compatibility at a specific head position according to EIP-2124 / EIP-6122.
+  # The number and time represent the local chain state at which compatibility needs to be checked
+  # In regular use this should be the current header block number and timestamp, but for testing
+  # arbitrary points in history can be used.
+  calc.calculateForkHistory()
+
+  # Calculate our current local fork ID at the given head position (= block and/or time)
+  let localId = calc.newID(number, time)
+
+  # Calculate position of local fork ID in history
+  var localForkPos = -1
+  for i, historicalId in calc.forkHistory:
+    if localId.crc == historicalId.crc:
+      localForkPos = i
+      break
+
+  # Based on position of local fork ID, determine if the head is block or time based
+  let head =
+    if localForkPos >= calc.byBlock.len():
+      time
+    else:
+      number
+
+  # 1: local and remote FORK_HASH matches
+  if forkId.crc == localId.crc:
+    if forkId.nextFork != 0: # announced fork
+      if head >= forkId.nextFork:
+        # 1a - next fork already passed locally
+        return false
+      else:
+        # 1b - next fork not yet passed locally
+        return true
+
+    else:
+      # 1b - no next fork announced
       return true
+      # TODO: should we have a condition here about our nextFork already beeing passed based on actual time?
+      # return localId.nextFork == 0 or localId.nextFork > "current time"
 
+  # 2 + 3: FORK_HASH is subset or superset of local past forks
+  for i, historicalId in calc.forkHistory:
+    if forkId.crc == historicalId.crc:
+      # Need to know if remote (=forkId) is ahead or behind localId
+      if i > localForkPos:
+        # 3: Remote is at a future fork we also know about
+        # (local is syncing)
+        return true
+        # TODO: Should we still check its next fork?
+      if forkId.nextFork == historicalId.nextFork:
+        # 2: Remote is at a past fork we also know about and its nextFork matches the one for that past fork
+        # (remote is syncing)
+        return true
+      else:
+        # 4: Remote is at a past fork we also know about but its nextFork doesn't match
+        return false
+
+  # 4: incompatible
   false
 
 func initForkIdCalculator*(map: ForkTransitionTable,
