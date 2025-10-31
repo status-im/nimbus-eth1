@@ -25,17 +25,10 @@ type
   BeaconBuddyRef* = BuddyRef[BeaconCtxData,BeaconBuddyData]
     ## Extended worker peer descriptor
 
-  BeaconCtxRef* = CtxRef[BeaconCtxData]
+  BeaconCtxRef* = CtxRef[BeaconCtxData,BeaconBuddyData]
     ## Extended global descriptor
 
   # -------------------
-
-  BeaconErrorType* = enum
-    ## For `FetchError` return code object/tuple
-    ENoException = 0
-    EPeerDisconnected                ## Exception
-    ECatchableError                  ## Exception
-    ECancelledError                  ## Exception
 
   BeaconError* = tuple
     ## Capture exception context for heders/bodies fetcher logging
@@ -51,6 +44,10 @@ type
   FetchBodiesData* = tuple
     packet: BlockBodiesPacket
     elapsed: Duration
+
+  PeerRanking* = tuple
+    assessed: DownloadPerformance
+    ranking: int
 
   BackgroundTicker* =
     proc(ctx: BeaconCtxRef) {.gcsafe, raises: [].}
@@ -115,13 +112,45 @@ type
 
   # -------------------
 
-  BuddyError* = tuple
-    ## Count fetching or processing errors
-    hdr, blk: uint8
+  StatsCollect* = object
+    ## Statistics collector record
+    sum*, sum2*: float
+    samples*: uint
+    total*: uint64
+
+  BuddyThPutStats* = object
+    ## Throughput statistice for fetching headers and bodies. The fileds
+    ## have the following meaning:
+    ##    sum:      -- Sum of samples, throuhputs per sec
+    ##    sum2:     -- Squares of samples, throuhputs per sec
+    ##    samples:  -- Number of samples in sum/sum2
+    ##    total:    -- Total number of bytes tranfered
+    ##
+    hdr*, blk*: StatsCollect
+
+  BuddyErrors* = tuple
+    ## Count fetching and processing errors
+    fetch: tuple[
+      hdr, bdy: uint8]
+    apply: tuple[
+      hdr, blk: uint8]
+
+  BuddyFirstFetchReq* = object
+    ## Register fetch request. This is intended to avoid sending the same (or
+    ## similar) fetch request again from the same peer that sent it previously.
+    case state*: SyncState
+    of SyncState.headers:
+      blockNumber*: BlockNumber      ## First block number
+    of SyncState.blocks:
+      blockHash*: Hash32             ## First block hash
+    else:
+      discard
 
   BeaconBuddyData* = object
     ## Local descriptor data extension
-    nRespErrors*: BuddyError         ## Number of errors/slow responses in a row
+    nErrors*: BuddyErrors            ## Error register
+    thPutStats*: BuddyThPutStats     ## Throughput statistics
+    failedReq*: BuddyFirstFetchReq   ## Avoid sending the same request twice
 
   InitTarget* = tuple
     hash: Hash32                     ## Some block hash to sync towards to
@@ -141,7 +170,6 @@ type
     hdrCache*: HeaderChainRef        ## Currently in tandem with `chain`
 
     # Info, debugging, and error handling stuff
-    nProcError*: Table[Hash,BuddyError] ## Per peer processing error
     lastSlowPeer*: Opt[Hash]         ## Register slow peer when the last one
     failedPeers*: HashSet[Hash]      ## Detect dead end sync by collecting peers
     seenData*: bool                  ## Set `true` if data were fetched, already
@@ -175,6 +203,14 @@ func chain*(ctx: BeaconCtxRef): ForkedChainRef =
 func hdrCache*(ctx: BeaconCtxRef): HeaderChainRef =
   ## Shortcut
   ctx.pool.hdrCache
+
+func nErrors*(buddy: BeaconBuddyRef): var BuddyErrors =
+  ## Shortcut
+  buddy.only.nErrors
+
+proc getPeer*(buddy: BeaconBuddyRef; peerID: Hash): BeaconBuddyRef =
+  ## Getter, retrieve syncer peer (aka buddy) by `peerID` argument
+  if buddy.peerID == peerID: buddy else: buddy.ctx.getPeer peerID
 
 # -----
 
@@ -213,66 +249,46 @@ func syncState*(
 
 # -----
 
-proc initProcErrors*(buddy: BeaconBuddyRef) =
-  ## Create error slot for argument `buddy`
-  buddy.ctx.pool.nProcError[buddy.peerID] = (0u8,0u8)
+func toMeanVar*(w: StatsCollect): MeanVarStats =
+  ## Calculate standard statistics.
+  if 0 < w.samples:
+    let
+      samples = w.samples.float
+      mean = w.sum / samples
+      #            __________   ______   ______   |
+      # Variance = sum(x * x) - sum(x) * sum(x)   | x = sample values
+      #            ____
+      #          = sum2 - mean * mean
+      #
+    result.mean = mean
+    result.variance = w.sum2 / samples - mean * mean
+    result.samples = w.samples
+    result.total = w.total
 
-proc clearProcErrors*(buddy: BeaconBuddyRef) =
-  ## Delete error slot for argument `buddy`
-  buddy.ctx.pool.nProcError.del buddy.peerID
-  doAssert buddy.ctx.pool.nProcError.len <= buddy.ctx.pool.nBuddies
+func toMeanVar*(w: BuddyThPutStats): MeanVarStats =
+  ## Combined statistics for headers and bodies
+  toMeanVar StatsCollect(
+    sum:     w.hdr.sum +     w.blk.sum,
+    sum2:    w.hdr.sum2 +    w.blk.sum2,
+    samples: w.hdr.samples + w.blk.samples,
+    total:   w.hdr.total +   w.blk.total)
 
-# -----
-
-proc nHdrProcErrors*(buddy: BeaconBuddyRef): int =
-  ## Getter, returns the number of `proc` errors for argument `buddy`
-  buddy.ctx.pool.nProcError.withValue(buddy.peerID, val):
-    return val.hdr.int
-
-proc incHdrProcErrors*(buddy: BeaconBuddyRef) =
-  ## Increment `proc` error count for for argument `buddy`. Due to
-  ## (hypothetical) hash collisions, the error register might have
-  ## vanished in case a new one is instantiated.
-  buddy.ctx.pool.nProcError.withValue(buddy.peerID, val):
-    val.hdr.inc
-  do:
-    buddy.ctx.pool.nProcError[buddy.peerID] = (1u8,0u8)
-
-proc setHdrProcFail*(ctx: BeaconCtxRef; peerID: Hash) =
-  ## Set `proc` error count high enough so that the implied sync peer will
-  ## be zombified on the next attempt to download data.
-  ctx.pool.nProcError.withValue(peerID, val):
-    val.hdr = nProcHeadersErrThreshold + 1
-
-proc resetHdrProcErrors*(ctx: BeaconCtxRef; peerID: Hash) =
-  ## Reset `proc` error count.
-  ctx.pool.nProcError.withValue(peerID, val):
-    val.hdr = 0
-
-# -----
-
-proc nBlkProcErrors*(buddy: BeaconBuddyRef): int =
-  ## Getter, similar to `nHdrProcErrors()`
-  buddy.ctx.pool.nProcError.withValue(buddy.peerID, val):
-    return val.blk.int
-
-proc incBlkProcErrors*(buddy: BeaconBuddyRef) =
-  ## Increment `proc` error count, similar to `incHdrProcErrors()`
-  buddy.ctx.pool.nProcError.withValue(buddy.peerID, val):
-    val.blk.inc
-  do:
-    buddy.ctx.pool.nProcError[buddy.peerID] = (0u8,1u8)
-
-proc setBlkProcFail*(ctx: BeaconCtxRef; peerID: Hash) =
-  ## Set `proc` error count high enough so that the implied sync peer will
-  ## be zombified on the next attempt to download data.
-  ctx.pool.nProcError.withValue(peerID, val):
-    val.blk = nProcBlocksErrThreshold + 1
-
-proc resetBlkProcErrors*(ctx: BeaconCtxRef; peerID: Hash) =
-  ## Reset `proc` error count.
-  ctx.pool.nProcError.withValue(peerID, val):
-    val.blk = 0
+proc bpsSample*(
+    stats: var StatsCollect;
+    elapsed: chronos.Duration;
+    dataSize: int;
+      ): uint =
+  ## Helper for updating download statistics counters. It returns the current
+  ## bytes/sec calculation.
+  let ns = elapsed.nanoseconds
+  if 0 < ns:
+    stats.samples.inc
+    if 0 < dataSize:
+      let bps = dataSize.float * 1_000_000_000f / ns.float
+      stats.sum += bps
+      stats.sum2 +=  bps * bps
+      stats.total += dataSize.uint64
+      return bps.uint
 
 # ------------------------------------------------------------------------------
 # End

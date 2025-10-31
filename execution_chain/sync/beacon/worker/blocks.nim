@@ -125,6 +125,7 @@ template blocksCollect*(
               head=ctx.chain.latestNumber.bnStr,
               target=ctx.subState.head.bnStr,
               targetHash=ctx.subState.headHash.short,
+              thPut=buddy.blkThroughput,
               nSyncPeers=ctx.pool.nBuddies
             ctx.pool.lastSyncUpdLog = Moment.now()
             nImported = 0
@@ -176,6 +177,7 @@ template blocksCollect*(
           head=ctx.chain.latestNumber.bnStr,
           target=ctx.subState.head.bnStr,
           targetHash=ctx.subState.headHash.short,
+          thPut=buddy.blkThroughput,
           nSyncPeers=ctx.pool.nBuddies
         ctx.pool.lastSyncUpdLog = Moment.now()
 
@@ -189,7 +191,7 @@ template blocksCollect*(
 
       debug info & ": no blocks yet (failed peer)", peer,
         failedPeers=ctx.pool.failedPeers.len,
-        syncState=($buddy.syncState), bdyErrors=buddy.bdyErrors
+        state=($buddy.syncState), nErrors=buddy.blkErrors()
       break body                                    # return
 
     # This message might run in addition to the `chronicles.info` part
@@ -203,9 +205,10 @@ template blocksCollect*(
 
 # --------------
 
-proc blocksUnstageOk*(ctx: BeaconCtxRef): bool =
+proc blocksUnstageOk*(buddy: BeaconBuddyRef): bool =
   ## Check whether import processing is possible
   ##
+  let ctx = buddy.ctx
   not ctx.poolMode and
   0 < ctx.blk.staged.len
 
@@ -261,7 +264,7 @@ template blocksUnstage*(
       if 0 < nImported:
         importedOK = true
         if ctx.pool.lastSyncUpdLog + syncUpdateLogWaitInterval < Moment.now():
-          chronicles.info "Imported blocks", nImported,
+          chronicles.info "Imported blocks (from queue)", nImported,
             nUnproc=ctx.nUnprocStr(),
             nStagedQ=ctx.blk.staged.len,
             base=ctx.chain.baseNumber.bnStr,
@@ -283,7 +286,7 @@ template blocksUnstage*(
       # Sync status logging
       if 0 < nImported:
         # Note that `nImported` might have been reset above.
-        chronicles.info "Imported blocks", nImported,
+        chronicles.info "Imported blocks (from queue)", nImported,
           nUnproc=ctx.nUnprocStr(),
           nStagedQ=ctx.blk.staged.len,
           base=ctx.chain.baseNumber.bnStr,

@@ -17,13 +17,16 @@ import
 # Public functions
 # ------------------------------------------------------------------------------
 
-func bdyErrors*(buddy: BeaconBuddyRef): string =
-  $buddy.only.nRespErrors.blk & "/" & $buddy.nBlkProcErrors()
+func blkErrors*(buddy: BeaconBuddyRef): string =
+  $buddy.nErrors.fetch.bdy & "/" & $buddy.nErrors.apply.blk
 
-proc bdyFetchRegisterError*(buddy: BeaconBuddyRef, slowPeer = false) =
-  buddy.only.nRespErrors.blk.inc
-  if nFetchBodiesErrThreshold < buddy.only.nRespErrors.blk:
-    if buddy.ctx.pool.nBuddies == 1 and slowPeer:
+proc bdyFetchRegisterError*(
+    buddy: BeaconBuddyRef;
+    slowPeer = false;
+    forceZombie = false) =
+  buddy.nErrors.fetch.bdy.inc
+  if nFetchBodiesErrThreshold < buddy.nErrors.fetch.bdy:
+    if not forceZombie and buddy.ctx.pool.nBuddies == 1 and slowPeer:
       # Remember that the current peer is the last one and is lablelled slow.
       # It would have been zombified if it were not the last one. This can be
       # used in functions -- depending on context -- that will trigger if the
@@ -39,6 +42,10 @@ func blkSessionStopped*(ctx: BeaconCtxRef): bool =
   ## state settings (not on sync peer ctrl as `buddy.ctrl.running`.)
   ctx.poolMode or
   ctx.pool.lastState != SyncState.blocks
+
+func blkThroughput*(buddy: BeaconBuddyRef): string =
+  ## Print throuhput sratistics
+  buddy.only.thPutStats.blk.toMeanVar.psStr
 
 # ------------------------------------------------------------------------------
 # End

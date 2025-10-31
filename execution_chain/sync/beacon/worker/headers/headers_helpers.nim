@@ -19,10 +19,10 @@ import
 
 proc updateErrorState(buddy: BeaconBuddyRef) =
   ## Helper/wrapper
-  if ((0 < buddy.only.nRespErrors.hdr or
-       0 < buddy.nHdrProcErrors()) and buddy.ctrl.stopped) or
-     nFetchHeadersErrThreshold < buddy.only.nRespErrors.hdr or
-     nProcHeadersErrThreshold < buddy.nHdrProcErrors():
+  if ((0 < buddy.nErrors.fetch.hdr or
+       0 < buddy.nErrors.apply.hdr) and buddy.ctrl.stopped) or
+     nFetchHeadersErrThreshold < buddy.nErrors.fetch.hdr or
+     nProcHeadersErrThreshold < buddy.nErrors.apply.hdr:
 
     # Make sure that this peer does not immediately reconnect
     buddy.ctrl.zombie = true
@@ -32,22 +32,26 @@ proc updateErrorState(buddy: BeaconBuddyRef) =
 # ------------------------------------------------------------------------------
 
 func hdrErrors*(buddy: BeaconBuddyRef): string =
-  $buddy.only.nRespErrors.hdr & "/" & $buddy.nHdrProcErrors()
+  $buddy.nErrors.fetch.hdr & "/" & $buddy.nErrors.apply.hdr
 
-proc hdrFetchRegisterError*(buddy: BeaconBuddyRef, slowPeer = false) =
-  buddy.only.nRespErrors.hdr.inc
-  if nFetchHeadersErrThreshold < buddy.only.nRespErrors.hdr:
-    if buddy.ctx.pool.nBuddies == 1 and slowPeer:
-      # Remember that the current peer is the last one and is lablelled slow.
-      # It would have been zombified if it were not the last one. This can be
-      # used in functions -- depending on context -- that will trigger if the
-      # if the pool of available sync peers becomes empty.
+proc hdrFetchRegisterError*(buddy: BeaconBuddyRef;
+     slowPeer = false;
+     forceZombie = false;
+       ) =
+  buddy.nErrors.fetch.hdr.inc
+  if nFetchHeadersErrThreshold < buddy.nErrors.fetch.hdr:
+    if not forceZombie and buddy.ctx.pool.nBuddies == 1 and slowPeer:
+      # The current peer is the last one and is lablelled `slow`. It would
+      # have been zombified if it were not the last one. So it can still
+      # keep download going untill the peer pool is replenished with
+      # non-`slow` peers.
       buddy.ctx.pool.lastSlowPeer = Opt.some(buddy.peerID)
     else:
-      buddy.ctrl.zombie = true # abandon slow peer unless last one
+      # abandon `slow` peer as it is not the last one in the pool
+      buddy.ctrl.zombie = true
 
 proc hdrProcRegisterError*(buddy: BeaconBuddyRef) =
-  buddy.incHdrProcErrors()
+  buddy.nErrors.apply.hdr.inc
   buddy.updateErrorState()
 
 # -----------------
@@ -58,6 +62,10 @@ func hdrSessionStopped*(ctx: BeaconCtxRef): bool =
   ctx.poolMode or
   ctx.pool.lastState != SyncState.headers or
   ctx.hdrCache.state != collecting
+
+func hdrThroughput*(buddy: BeaconBuddyRef): string =
+  ## Print throuhput sratistics
+  buddy.only.thPutStats.hdr.toMeanVar.psStr
 
 # ------------------------------------------------------------------------------
 # End

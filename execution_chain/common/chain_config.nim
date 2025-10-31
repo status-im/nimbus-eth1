@@ -60,7 +60,6 @@ const
   # these are public network id
   MainNet*    = 1.u256
   SepoliaNet* = 11155111.u256
-  HoleskyNet* = 17000.u256
   HoodiNet*   = 560048.u256
 
 createJsonFlavor JGenesis,
@@ -395,22 +394,52 @@ proc validateChainConfig(conf: ChainConfig): bool =
     if cur.time.isSome:
       lastTimeBasedFork = cur
 
+func numBPOForks(): int {.compileTime.} =
+  for x in Prague..HardFork.high:
+    if toLowerAscii($x).startsWith("bpo"):
+      inc result
+
+func getBPOForks(N: static[int]): array[N, HardFork] {.compileTime.} =
+  var i = 0
+  for x in Prague..HardFork.high:
+    if toLowerAscii($x).startsWith("bpo"):
+      result[i] = x
+      inc i
+
+func getRegularForks(N: static[int]): array[N, HardFork] {.compileTime.} =
+  var i = 0
+  for x in Prague..HardFork.high:
+    if not toLowerAscii($x).startsWith("bpo"):
+      result[i] = x
+      inc i
+
+const
+  NumForksWithBlobSchedule = HardFork.high.int - Prague.int + 1 # minus Cancun, but cardinal + 1
+  NumBPOForks = numBPOForks()
+  NumRegularForks = NumForksWithBlobSchedule - NumBPOForks
+  BPOForks = getBPOForks(NumBPOForks)
+  RegularForks = getRegularForks(NumRegularForks)
+  
 proc configureBlobSchedule(conf: ChainConfig) =
-  var prevFork = Cancun
   if conf.blobSchedule[Cancun].isNone:
     conf.blobSchedule[Cancun] = Opt.some(BlobSchedule(target: 3'u64, max: 6'u64, baseFeeUpdateFraction: 3_338_477'u64))
   else:
     if conf.blobSchedule[Cancun].value.baseFeeUpdateFraction == 0:
       conf.blobSchedule[Cancun].value.baseFeeUpdateFraction = 3_338_477'u64
 
-  for fork in Prague..HardFork.high:
-    if conf.blobSchedule[fork].isNone:
-      conf.blobSchedule[fork] = conf.blobSchedule[prevFork]
-    if conf.blobSchedule[fork].value.baseFeeUpdateFraction == 0:
-      # Set fallback to Cancun's baseFeeUpdateFraction and prevent division by zero
-      warn "baseFeeUpdateFraction not set, fallback to Cancun's", fork=fork
-      conf.blobSchedule[fork].value.baseFeeUpdateFraction = 3_338_477'u64
-    prevFork = fork
+  template setBlobScheduleWithFallback(forks) =
+    var prevFork = Cancun
+    for fork in forks:
+      if conf.blobSchedule[fork].isNone:
+        conf.blobSchedule[fork] = conf.blobSchedule[prevFork]
+      if conf.blobSchedule[fork].value.baseFeeUpdateFraction == 0:
+        # Set fallback to Cancun's baseFeeUpdateFraction and prevent division by zero
+        warn "baseFeeUpdateFraction not set, fallback to Cancun's", fork=fork
+        conf.blobSchedule[fork].value.baseFeeUpdateFraction = 3_338_477'u64
+      prevFork = fork
+
+  setBlobScheduleWithFallback(RegularForks)
+  setBlobScheduleWithFallback(BPOForks)
 
 proc parseGenesis*(data: string): Genesis
      {.gcsafe.} =
@@ -549,33 +578,6 @@ func chainConfigForNetwork*(id: NetworkId): ChainConfig =
       depositContractAddress: Opt.some(SEPOLIANET_DEPOSIT_CONTRACT_ADDRESS),
       blobSchedule:        defaultBlobSchedule(),
     )
-  elif id == HoleskyNet:
-    #https://github.com/eth-clients/holesky
-    const
-      HOLESKYNET_DEPOSIT_CONTRACT_ADDRESS = address"0x4242424242424242424242424242424242424242"
-    ChainConfig(
-      chainId:             HoleskyNet,
-      homesteadBlock:      Opt.some(0.BlockNumber),
-      eip150Block:         Opt.some(0.BlockNumber),
-      eip155Block:         Opt.some(0.BlockNumber),
-      eip158Block:         Opt.some(0.BlockNumber),
-      byzantiumBlock:      Opt.some(0.BlockNumber),
-      constantinopleBlock: Opt.some(0.BlockNumber),
-      petersburgBlock:     Opt.some(0.BlockNumber),
-      istanbulBlock:       Opt.some(0.BlockNumber),
-      berlinBlock:         Opt.some(0.BlockNumber),
-      londonBlock:         Opt.some(0.BlockNumber),
-      mergeNetsplitBlock:  Opt.some(0.BlockNumber),
-      terminalTotalDifficulty: Opt.some(0.u256),
-      shanghaiTime:        Opt.some(1_696_000_704.EthTime), # Friday, 29 September 2023 15:18:24
-      cancunTime:          Opt.some(1_707_305_664.EthTime), # Wednesday, 7 February 2024 11:34:24
-      pragueTime:          Opt.some(1_740_434_112.EthTime), # Monday, 24 February 2025 21:55:12
-      osakaTime:           Opt.some(1_759_308_480.EthTime), # Wednesday, 1 October 2025 08:48:00
-      bpo1Time:            Opt.some(1_759_800_000.EthTime), # Tuesday, 7 October 2025 01:20:00
-      bpo2Time:            Opt.some(1_760_389_824.EthTime), # Monday, 13 October 2025 21:10:24
-      depositContractAddress: Opt.some(HOLESKYNET_DEPOSIT_CONTRACT_ADDRESS),
-      blobSchedule:        defaultBlobSchedule(),
-    )
   elif id == HoodiNet:
     const
       HOODI_DEPOSIT_CONTRACT_ADDRESS = address"0x00000000219ab540356cBB839Cbe05303d7705Fa"
@@ -631,14 +633,6 @@ func genesisBlockForNetwork*(id: NetworkId): Genesis
       difficulty: 0x20000.u256,
       alloc: decodePrealloc(sepoliaAllocData)
     )
-  elif id == HoleskyNet:
-    Genesis(
-      difficulty: 0x01.u256,
-      gasLimit: 0x17D7840,
-      nonce: uint64(0x1234).to(Bytes8),
-      timestamp: EthTime(0x65156994),
-      alloc: decodePrealloc(holeskyAllocData)
-    )
   elif id == HoodiNet:
     Genesis(
       difficulty: 0x01.u256,
@@ -655,8 +649,6 @@ func name*(id: NetworkId): string =
     "mainnet"
   elif id == SepoliaNet:
     "sepolia"
-  elif id == HoleskyNet:
-    "holesky"
   elif id == HoodiNet:
     "hoodi"
   else:

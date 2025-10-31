@@ -67,11 +67,6 @@ type
       # User can query for block state while it is still in memory.
       # Any state older than base block are purged.
 
-    lastSnapshots*: array[10, CoreDbTxRef]
-    lastSnapshotPos*: int
-      # The snapshot contains the cumulative changes of all ancestors and
-      # txFrame allowing the lookup recursion to stop whenever it is encountered.
-
     eagerStateRoot*: bool
 
     pendingFCU*  : Hash32
@@ -87,6 +82,10 @@ type
       # When move forward, this is the minimum distance
       # to move the base. And the bulk writing can works
       # efficiently.
+
+    dynamicBatchSize*: bool
+      # Enable adjusting the persistBatchSize dynamically based on the
+      # time it takes to update base.
 
     portal*: HistoryExpiryRef
       # History Expiry tracker and portal access entry point

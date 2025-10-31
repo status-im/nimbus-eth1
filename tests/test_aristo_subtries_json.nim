@@ -49,7 +49,6 @@ suite "Aristo subtries json tests":
     "merge.json",
     "devnet4.json",
     "devnet5.json",
-    "holesky.json",
     "prague.json",
     "mekong.json"
   ]

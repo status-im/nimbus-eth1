@@ -21,8 +21,7 @@ import
   ./sync/beacon as beacon_sync,
   ./sync/wire_protocol,
   ./beacon/beacon_engine,
-  ./common,
-  ./config
+  ./common
 
 when enabledLogLevel == TRACE:
   import std/sequtils
@@ -37,8 +36,7 @@ export
   peers,
   beacon_sync,
   beacon_engine,
-  common,
-  config
+  common
 
 type
   NimbusNode* = ref object

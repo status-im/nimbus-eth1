@@ -13,26 +13,28 @@ on:
   push:
     branches:
       - master
-    paths:
-      - '.github/workflows/nimbus_verified_proxy.yml'
-      - 'nimbus_verified_proxy/**'
-      - '!nimbus_verified_proxy/**.md'
-      - '!nimbus_verified_proxy/docs/**'
-      - 'execution_chain/db/**'
-      - 'vendor/**'
-      - 'Makefile'
-      - 'nimbus.nimble'
+    paths-ignore:
+      - 'doc/**'
+      - 'portal/docs/**'
+      - '**/*.md'
+      - 'portal/**'
+      - '.github/workflows/portal.yml'
+      - '.github/workflows/portal_docs.yml'
+      - '.github/workflows/build_base_image.yml'
+      - 'docker/**'
+      - 'metrics/**'
 
   pull_request:
-    paths:
-      - '.github/workflows/nimbus_verified_proxy.yml'
-      - 'nimbus_verified_proxy/**'
-      - '!nimbus_verified_proxy/**.md'
-      - '!nimbus_verified_proxy/docs/**'
-      - 'execution_chain/db/**'
-      - 'vendor/**'
-      - 'Makefile'
-      - 'nimbus.nimble'
+    paths-ignore:
+      - 'doc/**'
+      - 'portal/docs/**'
+      - '**/*.md'
+      - 'portal/**'
+      - '.github/workflows/portal.yml'
+      - '.github/workflows/portal_docs.yml'
+      - '.github/workflows/build_base_image.yml'
+      - 'docker/**'
+      - 'metrics/**'
 
   workflow_dispatch:
 
@@ -66,7 +68,7 @@ jobs:
         with:
           llvm-mingw: true
           nim-cache: true
-          rocksdb-cache: true
+          rocksdb-cache: false
           eest-cache: false
 
       - name: Run verified proxy tests

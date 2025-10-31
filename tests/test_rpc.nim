@@ -15,7 +15,7 @@ import
   eth/rlp,
   eth/common/[transaction_utils, addresses],
   ../hive_integration/engine_client,
-  ../execution_chain/[constants, transaction, config, version_info],
+  ../execution_chain/[constants, transaction, conf, version_info],
   ../execution_chain/db/[ledger, storage_types],
   ../execution_chain/sync/wire_protocol,
   ../execution_chain/core/[tx_pool, chain, pow/difficulty],
@@ -34,7 +34,7 @@ import
 
 type
   TestEnv = object
-    conf     : NimbusConf
+    conf     : ExecutionClientConf
     com      : CommonRef
     txPool   : TxPoolRef
     server   : RpcHttpServer
@@ -78,17 +78,17 @@ proc persistFixtureBlock(chainDB: CoreDbTxRef) =
   chainDB.persistTransactions(header.number, header.txRoot, getBlockBody4514995().transactions)
   chainDB.persistReceipts(header.receiptsRoot, getReceipts4514995())
 
-proc setupConfig(): NimbusConf =
+proc setupConfig(): ExecutionClientConf =
   makeConfig(@[
     "--network:" & genesisFile
   ])
 
-proc setupCom(conf: NimbusConf): CommonRef =
+proc setupCom(config: ExecutionClientConf): CommonRef =
   CommonRef.new(
     newCoreDbRef DefaultDbMemory,
     nil,
-    conf.networkId,
-    conf.networkParams
+    config.networkId,
+    config.networkParams
   )
 
 proc setupClient(port: Port): RpcHttpClient =

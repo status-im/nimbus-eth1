@@ -17,7 +17,7 @@ import
   stew/io2,
   beacon_chain/[era_db, process_state],
   beacon_chain/networking/network_metadata,
-  ./config,
+  ./conf,
   ./common/common,
   ./core/chain,
   ./db/era1_db,
@@ -65,15 +65,6 @@ proc getMetadata(networkId: NetworkId): auto =
       1450408'u64, # Last pre-merge block number
       115193'u64, # First post-merge slot
     )
-  elif networkId == HoleskyNet:
-    (
-      getMetadataForNetwork("holesky").cfg,
-      Eth2Digest.fromHex(
-        "0x9143aa7c615a7f7115e2b6aac319c03529df8242ae705fba9df39b79c59fa8b1"
-      ),
-      0'u64, # Last pre-merge block number
-      0'u64, # First post-merge slot
-    )
   elif networkId == HoodiNet:
     (
       getMetadataForNetwork("hoodi").cfg,
@@ -96,11 +87,11 @@ template boolFlag(flags, b): PersistBlockFlags =
 proc running(): bool =
   not ProcessState.stopIt(notice("Shutting down", reason = it))
 
-proc importBlocks*(conf: NimbusConf, com: CommonRef) =
+proc importBlocks*(config: ExecutionClientConf, com: CommonRef) =
   let
     start = com.db.baseTxFrame().getSavedStateBlockNumber() + 1
     (cfg, genesis_validators_root, lastEra1Block, firstSlotAfterMerge) =
-      getMetadata(conf.networkId)
+      getMetadata(config.networkId)
     time0 = Moment.now()
 
   # These variables are used from closures on purpose, so as to place them on
@@ -109,16 +100,16 @@ proc importBlocks*(conf: NimbusConf, com: CommonRef) =
     slot = 1'u64
     time1 = Moment.now() # time at start of chunk
     csv =
-      if conf.csvStats.isSome:
-        openCsv(conf.csvStats.get())
+      if config.csvStats.isSome:
+        openCsv(config.csvStats.get())
       else:
         File(nil)
     flags =
-      boolFlag({PersistBlockFlag.NoValidation}, conf.noValidation) +
-      boolFlag({PersistBlockFlag.NoFullValidation}, not conf.fullValidation) +
-      boolFlag(NoPersistBodies, not conf.storeBodies) +
-      boolFlag({PersistBlockFlag.NoPersistReceipts}, not conf.storeReceipts) +
-      boolFlag({PersistBlockFlag.NoPersistSlotHashes}, not conf.storeSlotHashes)
+      boolFlag({PersistBlockFlag.NoValidation}, config.noValidation) +
+      boolFlag({PersistBlockFlag.NoFullValidation}, not config.fullValidation) +
+      boolFlag(NoPersistBodies, not config.storeBodies) +
+      boolFlag({PersistBlockFlag.NoPersistReceipts}, not config.storeReceipts) +
+      boolFlag({PersistBlockFlag.NoPersistSlotHashes}, not config.storeSlotHashes)
     blk: Block
     persister = Persister.init(com, flags)
     cstats: PersistStats # stats at start of chunk
@@ -150,7 +141,7 @@ proc importBlocks*(conf: NimbusConf, com: CommonRef) =
   proc checkpoint(force: bool = false) =
     let (blocks, txs, gas) = persister.stats
 
-    if not force and blocks.uint64 mod conf.chunkSize != 0:
+    if not force and blocks.uint64 mod config.chunkSize != 0:
       return
 
     persister.checkpoint().isOkOr:
@@ -269,19 +260,19 @@ proc importBlocks*(conf: NimbusConf, com: CommonRef) =
   if lastEra1Block > 0 and start <= lastEra1Block:
     let
       era1Name =
-        if conf.networkId == MainNet:
+        if config.networkId == MainNet:
           "mainnet"
-        elif conf.networkId == SepoliaNet:
+        elif config.networkId == SepoliaNet:
           "sepolia"
         else:
           raiseAssert "Other networks are unsupported or do not have an era1"
-      db = Era1DbRef.init(conf.era1Dir, era1Name, lastEra1Block + 1).valueOr:
+      db = Era1DbRef.init(config.era1Dir, era1Name, lastEra1Block + 1).valueOr:
         fatal "Could not open era1 database",
-          era1Dir = conf.era1Dir, era1Name = era1Name, error = error
+          era1Dir = config.era1Dir, era1Name = era1Name, error = error
         quit(QuitFailure)
 
     notice "Importing era1 archive",
-      start, dataDir = conf.dataDir, era1Dir = conf.era1Dir
+      start, dataDir = config.dataDir, era1Dir = config.era1Dir
 
     defer:
       db.dispose()
@@ -292,7 +283,7 @@ proc importBlocks*(conf: NimbusConf, com: CommonRef) =
         return false
       true
 
-    while running() and persister.stats.blocks.uint64 < conf.maxBlocks and
+    while running() and persister.stats.blocks.uint64 < config.maxBlocks and
         blockNumber <= lastEra1Block:
       if not loadEraBlock(blockNumber):
         notice "No more `era1` blocks to import", blockNumber, slot
@@ -302,26 +293,26 @@ proc importBlocks*(conf: NimbusConf, com: CommonRef) =
 
   block era1Import:
     if blockNumber > lastEra1Block:
-      if not isDir(conf.eraDir):
+      if not isDir(config.eraDir):
         if blockNumber == 0:
           fatal "`era` directory not found, cannot start import",
-            blockNumber, eraDir = conf.eraDir
+            blockNumber, eraDir = config.eraDir
           quit(QuitFailure)
         else:
           notice "`era` directory not found, stopping import at merge boundary",
-            blockNumber, eraDir = conf.eraDir
+            blockNumber, eraDir = config.eraDir
           break era1Import
 
       notice "Importing era archive",
-        blockNumber, dataDir = conf.dataDir, eraDir = conf.eraDir
+        blockNumber, dataDir = config.dataDir, eraDir = config.eraDir
 
       let
-        eraDB = EraDB.new(cfg, conf.eraDir, genesis_validators_root)
+        eraDB = EraDB.new(cfg, config.eraDir, genesis_validators_root)
         (historical_roots, historical_summaries, endSlot) = loadHistoricalRootsFromEra(
-          conf.eraDir, cfg
+          config.eraDir, cfg
         ).valueOr:
           fatal "Could not load historical summaries",
-            eraDir = conf.eraDir, error
+            eraDir = config.eraDir, error
           quit(QuitFailure)
 
       # Load the last slot number
@@ -350,7 +341,7 @@ proc importBlocks*(conf: NimbusConf, com: CommonRef) =
         true
 
       while running() and moreEraAvailable and
-          persister.stats.blocks.uint64 < conf.maxBlocks and slot < endSlot:
+          persister.stats.blocks.uint64 < config.maxBlocks and slot < endSlot:
         if not loadEra1Block():
           slot += 1
           continue

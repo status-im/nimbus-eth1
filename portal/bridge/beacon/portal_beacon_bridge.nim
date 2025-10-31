@@ -326,7 +326,7 @@ proc runBeacon*(config: PortalBridgeConf) {.raises: [CatchableError].} =
     const updatesPerRequest = 16
 
     let
-      wallSlot = getBeaconTime().slotOrZero()
+      wallSlot = getBeaconTime().slotOrZero(cfg.timeParams)
       currentPeriod = wallSlot div (SLOTS_PER_EPOCH * EPOCHS_PER_SYNC_COMMITTEE_PERIOD)
       requestAmount = backfillAmount div updatesPerRequest
       leftOver = backfillAmount mod updatesPerRequest
@@ -371,7 +371,7 @@ proc runBeacon*(config: PortalBridgeConf) {.raises: [CatchableError].} =
 
   proc onSlotGossip(wallTime: BeaconTime, lastSlot: Slot) {.async.} =
     let
-      wallSlot = wallTime.slotOrZero()
+      wallSlot = wallTime.slotOrZero(cfg.timeParams)
       wallEpoch = epoch(wallSlot)
       wallPeriod = sync_committee_period(wallSlot)
 
@@ -442,21 +442,21 @@ proc runBeacon*(config: PortalBridgeConf) {.raises: [CatchableError].} =
 
   proc runOnSlotLoop() {.async.} =
     var
-      curSlot = getBeaconTime().slotOrZero()
+      curSlot = getBeaconTime().slotOrZero(cfg.timeParams)
       nextSlot = curSlot + 1
-      timeToNextSlot = nextSlot.start_beacon_time() - getBeaconTime()
+      timeToNextSlot = nextSlot.start_beacon_time(cfg.timeParams) - getBeaconTime()
     while true:
       await sleepAsync(timeToNextSlot)
 
       let
         wallTime = getBeaconTime()
-        wallSlot = wallTime.slotOrZero()
+        wallSlot = wallTime.slotOrZero(cfg.timeParams)
 
       await onSlotGossip(wallTime, curSlot)
 
       curSlot = wallSlot
       nextSlot = wallSlot + 1
-      timeToNextSlot = nextSlot.start_beacon_time() - getBeaconTime()
+      timeToNextSlot = nextSlot.start_beacon_time(cfg.timeParams) - getBeaconTime()
 
   waitFor backfill(
     restClient, portalRpcClient, config.backfillAmount, config.trustedBlockRoot

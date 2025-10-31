@@ -19,10 +19,9 @@ on:
       - 'portal/docs/**'
       - '**/*.md'
       - 'hive_integration/**'
-      - 'nimbus_verified_proxy/**'
-      - '.github/workflows/nimbus_verified_proxy.yml'
       - '.github/workflows/build_base_image.yml'
       - 'docker/**'
+      - 'metrics/**'
 
   pull_request:
     paths-ignore:
@@ -30,10 +29,9 @@ on:
       - 'portal/docs/**'
       - '**/*.md'
       - 'hive_integration/**'
-      - 'nimbus_verified_proxy/**'
-      - '.github/workflows/nimbus_verified_proxy.yml'
       - '.github/workflows/build_base_image.yml'
       - 'docker/**'
+      - 'metrics/**'
 
 concurrency: # Cancel stale PR builds (but not push builds)
   group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.sha }}

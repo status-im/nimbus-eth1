@@ -95,7 +95,6 @@ suite "Get proof json tests":
     "merge.json",
     "devnet4.json",
     "devnet5.json",
-    "holesky.json"
   ]
 
   test "Get proofs for existing leafs":

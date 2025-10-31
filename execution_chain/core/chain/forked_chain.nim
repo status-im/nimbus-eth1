@@ -200,10 +200,6 @@ proc removeBlockFromCache(c: ForkedChainRef, b: BlockRef) =
   for tx in b.blk.transactions:
     c.txRecords.del(computeRlpHash(tx))
 
-  for v in c.lastSnapshots.mitems():
-    if v == b.txFrame:
-      v = nil
-
   b.blk.reset
   b.receipts.reset
   b.txFrame.dispose()
@@ -314,6 +310,8 @@ proc updateBase(c: ForkedChainRef, base: BlockRef): uint =
     # No update, return
     return
 
+  let startTime = Moment.now()
+
   # State root sanity check is performed to verify, before writing to disk,
   # that optimistically checked blocks indeed end up being stored with a
   # consistent state root.
@@ -338,8 +336,7 @@ with --debug-eager-state-root."""
 
   # Cleanup in-memory blocks starting from base backward
   # e.g. B2 backward.
-  var
-    count = 0'u
+  var count = 0'u
 
   for it in ancestors(base.parent):
     c.removeBlockFromCache(it)
@@ -351,6 +348,33 @@ with --debug-eager-state-root."""
 
   # Base block always have finalized marker
   c.base.finalize()
+
+  if c.dynamicBatchSize:
+    # Dynamicly adjust the persistBatchSize based on the recorded run time.
+    # The goal here is use the maximum batch size possible without blocking the
+    # event loop for too long which could negatively impact the p2p networking.
+    # Increasing the batch size can improve performance because the stateroot
+    # computation and persist calls are performed less frequently.
+    const
+      targetTime = 500.milliseconds
+      targetTimeDelta = 200.milliseconds
+      targetTimeLowerBound = (targetTime - targetTimeDelta).milliseconds
+      targetTimeUpperBound = (targetTime + targetTimeDelta).milliseconds
+      batchSizeLowerBound = 4
+      batchSizeUpperBound = 512
+
+    let
+      finishTime = Moment.now()
+      runTime = (finishTime - startTime).milliseconds
+
+    if runTime < targetTimeLowerBound and c.persistBatchSize <= batchSizeUpperBound:
+      c.persistBatchSize *= 2
+      info "Increased persistBatchSize", runTime, targetTime,
+        persistBatchSize = c.persistBatchSize
+    elif runTime > targetTimeUpperBound and c.persistBatchSize >= batchSizeLowerBound:
+      c.persistBatchSize = c.persistBatchSize div 2
+      info "Decreased persistBatchSize", runTime, targetTime,
+        persistBatchSize = c.persistBatchSize
 
   count
 
@@ -482,10 +506,13 @@ proc validateBlock(c: ForkedChainRef,
     parentTxFrame=cast[uint](parentFrame),
     txFrame=cast[uint](txFrame)
 
-  # Update the snapshot before processing the block so that any vertexes in snapshots
+  # Checkpoint creates a snapshot of ancestor changes in txFrame - it is an
+  # expensive operation, specially when creating a new branch (ie when blk
+  # is being applied to a block that is currently not a head).
+  # Create the snapshot before processing the block so that any vertexes in snapshots
   # from lower levels than the baseTxFrame are removed from the snapshot before running
   # the stateroot computation.
-  c.updateSnapshot(parent.blk, parentFrame)
+  parentFrame.checkpoint(parent.blk.header.number, skipSnapshot = false)
 
   var receipts = c.processBlock(parent, txFrame, blk, blkHash, finalized).valueOr:
     txFrame.dispose()
@@ -586,6 +613,7 @@ proc init*(
     com: CommonRef;
     baseDistance = BaseDistance;
     persistBatchSize = PersistBatchSize;
+    dynamicBatchSize = false;
     eagerStateRoot = false;
     enableQueue = false;
       ): T =
@@ -627,6 +655,7 @@ proc init*(
       baseTxFrame:      baseTxFrame,
       baseDistance:     baseDistance,
       persistBatchSize: persistBatchSize,
+      dynamicBatchSize: dynamicBatchSize,
       quarantine:       Quarantine.init(),
       fcuHead:          fcuHead,
       fcuSafe:          fcuSafe,

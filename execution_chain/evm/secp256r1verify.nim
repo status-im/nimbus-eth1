@@ -9,34 +9,56 @@
 # according to those terms.
 
 import
-  libp2p/crypto/ecnist,
-  bearssl/ec
+  bearssl/secp256r1_verify as ec,
+  stew/assign2,
+  stint
 
-proc isInfinityByte*(data: openArray[byte]): bool =
+type
+  EcPublicKey* = object
+    buf: array[65, byte]
+    pk: ec.EcPublicKey
+
+proc isInfinityByte(data: openArray[byte]): bool =
   ## Check if all values in ``data`` are zero.
   for b in data:
     if b != 0:
       return false
   return true
 
-proc verifyRaw*[T: byte | char](
-    sig: EcSignature, message: openArray[T], pubkey: ecnist.EcPublicKey
-): bool {.inline.} =
-  ## Verify ECDSA signature ``sig`` using public key ``pubkey`` and data
-  ## ``message``.
-  ##
-  ## Return ``true`` if message verification succeeded, ``false`` if
-  ## verification failed.
-  doAssert((not isNil(sig)) and (not isNil(pubkey)))
-  let impl = ecGetDefault()
-  if pubkey.key.curve in EcSupportedCurvesCint:
-    let res = ecdsaI31VrfyRaw(
-      impl,
-      addr message[0],
-      uint(len(message)),
-      unsafeAddr pubkey.key,
-      addr sig.buffer[0],
-      uint(len(sig.buffer)),
-    )
-    # Clear context with initial value
-    result = (res == 1)
+func checkPublicKey(key: openArray[byte]): bool =
+  ## Return ``true`` if public key ``key`` is on curve.
+  let
+    x = [byte 0x00, 0x01]
+    impl = ecGetDefault()
+  impl.mul(key[0].addr, key.len.uint, x[0].addr, x.len.uint, EC_secp256r1) != 0
+
+func initRaw*(pk: var EcPublicKey, data: openArray[byte]): bool =
+  # bearSSL have no infinity check for public key
+  if data.isInfinityByte:
+    return false
+
+  # bearSSL have no range check for public key
+  const
+    P = UInt256.fromHex("0xffffffff00000001000000000000000000000000ffffffffffffffffffffffff")
+
+  let
+    x = UInt256.fromBytesBE(data.toOpenArray(0, 31))
+    y = UInt256.fromBytesBE(data.toOpenArray(32, 63))
+
+  if x >= P or y >= P:
+    return false
+
+  pk.buf[0] = 4.byte
+  assign(pk.buf.toOpenArray(1, 64), data)
+  pk.pk.curve = EC_secp256r1
+  pk.pk.q = pk.buf[0].addr
+  pk.pk.qlen = 65
+  checkPublicKey(pk.buf)
+
+func verifyRaw*(sig: openArray[byte], hash: openArray[byte], pk: EcPublicKey): bool =
+  secp256r1_i31_vrfy_raw(
+    hash[0].addr,
+    hash.len.uint,
+    pk.pk.addr,
+    sig[0].addr,
+    sig.len.uint) == 1
