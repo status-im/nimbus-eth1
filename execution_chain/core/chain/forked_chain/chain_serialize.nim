@@ -138,7 +138,7 @@ proc replayBlock(fc: ForkedChainRef;
   # Checkpoint creates a snapshot of ancestor changes in txFrame - it is an
   # expensive operation, specially when creating a new branch (ie when blk
   # is being applied to a block that is currently not a head).
-  parentFrame.checkpoint(blk.header.number, skipSnapshot = false)
+  txFrame.checkpoint(blk.header.number, skipSnapshot = false)
 
   blk.txFrame = txFrame
   blk.receipts = move(receipts)
