@@ -301,12 +301,6 @@ template query[E](
 
 # https://github.com/ethereum/consensus-specs/blob/v1.6.0-beta.1/specs/altair/light-client/light-client.md#light-client-sync-process
 proc loop(self: LightClientManager) {.async: (raises: [CancelledError]).} =
-  var
-    downloadOptimistic = true
-    downloadFinality = false
-    didOptimisticProgress = false
-    didFinalityProgress = false
-
   # try atleast twice
   let
     NUM_RETRIES = 2
