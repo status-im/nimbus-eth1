@@ -28,6 +28,7 @@ import
     block_quarantine]
 
 from std/sequtils import mapIt
+from std/heapqueue import len
 from web3/engine_api_types import ExecutionPayloadBodyV1
 
 logScope:
@@ -400,7 +401,8 @@ proc processUpdateBase(c: ForkedChainRef): Future[Result[void, string]] {.async:
           base = c.base.number,
           baseHash = c.base.hash.short,
           pendingFCU = c.pendingFCU.short,
-          resolvedFin= c.latestFinalizedBlockNumber
+          resolvedFin = c.latestFinalizedBlockNumber,
+          dbSnapshotsCount = c.baseTxFrame.aTx.db.snapshots.len()
       else:
         debug "Finalized blocks persisted",
           nBlocks = c.persistedCount,
@@ -408,7 +410,8 @@ proc processUpdateBase(c: ForkedChainRef): Future[Result[void, string]] {.async:
           base = c.base.number,
           baseHash = c.base.hash.short,
           pendingFCU = c.pendingFCU.short,
-          resolvedFin= c.latestFinalizedBlockNumber
+          resolvedFin = c.latestFinalizedBlockNumber,
+          dbSnapshotsCount = c.baseTxFrame.aTx.db.snapshots.len()
       c.lastBaseLogTime = time
       c.persistedCount = 0
     return ok()
@@ -505,8 +508,6 @@ proc validateBlock(c: ForkedChainRef,
     ),
     parentTxFrame=cast[uint](parentFrame),
     txFrame=cast[uint](txFrame)
-
-
 
   var receipts = c.processBlock(parent, txFrame, blk, blkHash, finalized).valueOr:
     txFrame.dispose()
