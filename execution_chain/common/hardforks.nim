@@ -7,6 +7,8 @@
 # This file may not be copied, modified, or distributed except according to
 # those terms.
 
+{.push raises: [].}
+
 import
   std/[strutils],
   eth/common/[headers],
@@ -14,8 +16,6 @@ import
   json_serialization,
   ../utils/utils,
   ./evmforks
-
-{.push raises: [].}
 
 type
   HardFork* = enum
@@ -351,7 +351,7 @@ type
     forkHistory: seq[ForkID]
 
 func newID*(calc: ForkIdCalculator, head, time: uint64): ForkID =
-  # Create a fork ID for a specific block height and timestamp:
+  ## Create a fork ID for a specific block height and timestamp
   var crc = calc.genesisCRC
   for fork in calc.byBlock:
     if fork <= head:
@@ -369,30 +369,11 @@ func newID*(calc: ForkIdCalculator, head, time: uint64): ForkID =
 
   (crc, 0'u64)
 
-func calculateForkHistory(calc: var ForkIdCalculator) =
-  if calc.forkHistory.len == 0:
-    calc.forkHistory = newSeqOfCap[ForkID](calc.byBlock.len + calc.byTime.len + 1)
-    var crc = calc.genesisCRC
-
-    # Build cache of all valid ForkIds
-    # Each entry is (crc before fork, fork number)
-    for fork in calc.byBlock:
-      calc.forkHistory.add( (crc, fork) )
-      crc = crc32(crc, fork.toBytesBE)
-
-    for fork in calc.byTime:
-      calc.forkHistory.add( (crc, fork) )
-      crc = crc32(crc, fork.toBytesBE)
-
-    # Add last fork ID (after all forks, next=0)
-    calc.forkHistory.add( (crc, 0'u64) )
-
-func compatible*(calc: var ForkIdCalculator, forkId: ForkID, number: uint64, time: uint64): bool =
-  # Check forkId compatibility at a specific head position according to EIP-2124 / EIP-6122.
-  # The number and time represent the local chain state at which compatibility needs to be checked
-  # In regular use this should be the current header block number and timestamp, but for testing
-  # arbitrary points in history can be used.
-  calc.calculateForkHistory()
+func compatible*(calc: ForkIdCalculator, forkId: ForkID, number: uint64, time: uint64): bool =
+  ## Check forkId compatibility at a specific head position according to EIP-2124 / EIP-6122.
+  ## The number and time represent the local chain state at which compatibility needs to be checked
+  ## In regular use this should be the current header block number and timestamp, but for testing
+  ## arbitrary points in history can be used.
 
   # Calculate our current local fork ID at the given head position (= block and/or time)
   let localId = calc.newID(number, time)
@@ -424,8 +405,6 @@ func compatible*(calc: var ForkIdCalculator, forkId: ForkID, number: uint64, tim
     else:
       # 1b - no next fork announced
       return true
-      # TODO: should we have a condition here about our nextFork already beeing passed based on actual time?
-      # return localId.nextFork == 0 or localId.nextFork > "current time"
 
   # 2 + 3: FORK_HASH is subset or superset of local past forks
   for i, historicalId in calc.forkHistory:
@@ -447,15 +426,19 @@ func compatible*(calc: var ForkIdCalculator, forkId: ForkID, number: uint64, tim
   # 4: incompatible
   false
 
-func initForkIdCalculator*(map: ForkTransitionTable,
-                           genesisCRC: uint32,
-                           genesisTime: uint64): ForkIdCalculator =
-  # Build ForkIdCalculator from the chain's fork configuration
+func init*(
+    _: type ForkIdCalculator,
+    map: ForkTransitionTable,
+    genesisCRC: uint32,
+    genesisTime: uint64,
+): ForkIdCalculator =
+  ## Build ForkIdCalculator from the chain's fork configuration
 
   # Extract the fork rule block number aggregate it
   var forksByBlock: seq[uint64]
   for fork, val in map.blockNumberThresholds:
-    if val.isNone: continue
+    if val.isNone:
+      continue
     let val64 = val.get
     if forksByBlock.len == 0:
       forksByBlock.add val64
@@ -478,7 +461,8 @@ func initForkIdCalculator*(map: ForkTransitionTable,
   # Extract the fork rule timestamp number aggregate it
   var forksByTime: seq[uint64]
   for fork, val in map.timeThresholds:
-    if val.isNone: continue
+    if val.isNone:
+      continue
     let val64 = val.get.uint64
     if forksByTime.len == 0:
       forksByTime.add val64
@@ -489,9 +473,28 @@ func initForkIdCalculator*(map: ForkTransitionTable,
   while forksByTime.len > 0 and forksByTime[0] <= genesisTime:
     forksByTime.delete(0)
 
-  result.genesisCRC = genesisCRC
-  result.byBlock = system.move(forksByBlock)
-  result.byTime = system.move(forksByTime)
+  # Calculate the fork ids for the full fork history
+  var forkHistory = newSeqOfCap[ForkID](forksByBlock.len + forksByTime.len + 1)
+  var crc = genesisCRC
+
+  # Each entry is (crc before fork, fork number)
+  for fork in forksByBlock:
+    forkHistory.add((crc, fork))
+    crc = crc32(crc, fork.toBytesBE)
+
+  for fork in forksByTime:
+    forkHistory.add((crc, fork))
+    crc = crc32(crc, fork.toBytesBE)
+
+  # Add last fork ID (after all forks, next=0)
+  forkHistory.add((crc, 0'u64))
+
+  ForkIdCalculator(
+    genesisCRC: genesisCRC,
+    byBlock: system.move(forksByBlock),
+    byTime: system.move(forksByTime),
+    forkHistory: system.move(forkHistory),
+  )
 
 # ------------------------------------------------------------------------------
 # End

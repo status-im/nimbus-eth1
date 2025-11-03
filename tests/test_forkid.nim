@@ -345,8 +345,8 @@ func config(shanghai, cancun: uint64): ChainConfig =
   )
 
 func calcID(conf: ChainConfig, crc: uint32, time: uint64): ForkID =
-  let map  = conf.toForkTransitionTable
-  let calc = map.initForkIdCalculator(crc, time)
+  let map = conf.toForkTransitionTable
+  let calc = ForkIdCalculator.init(map, crc, time)
   calc.newID(0, time)
 
 template runGenesisTimeIdTests() =

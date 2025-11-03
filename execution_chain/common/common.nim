@@ -105,7 +105,7 @@ type
 func setForkId(com: CommonRef, genesis: Header) =
   com.genesisHash = genesis.computeBlockHash
   let genesisCRC = crc32(0, com.genesisHash.data)
-  com.forkIdCalculator = initForkIdCalculator(
+  com.forkIdCalculator = ForkIdCalculator.init(
     com.forkTransitionTable,
     genesisCRC,
     genesis.timestamp.uint64)
