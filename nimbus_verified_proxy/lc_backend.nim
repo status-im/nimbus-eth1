@@ -33,45 +33,53 @@ type
   LCRestClientPool* = ref object
     cfg: RuntimeConfig
     forkDigests: ref ForkDigests
-    peers: seq[LCRestClient]
+    clients: seq[LCRestClient]
+    idMap: Table[uint64, LCRestClient]
     urls: seq[string]
 
 func new*(
     T: type LCRestClientPool, cfg: RuntimeConfig, forkDigests: ref ForkDigests
 ): LCRestClientPool =
-  LCRestClientPool(cfg: cfg, forkDigests: forkDigests, peers: @[])
+  LCRestClientPool(cfg: cfg, forkDigests: forkDigests, clients: @[])
 
-proc addEndpoints*(
-    client: LCRestClientPool, urlList: UrlList
-) {.raises: [ValueError].} =
+proc addEndpoints*(pool: LCRestClientPool, urlList: UrlList) {.raises: [ValueError].} =
   for endpoint in urlList.urls:
-    if endpoint in client.urls:
+    if endpoint in pool.urls:
       continue
 
     let restClient = RestClientRef.new(endpoint).valueOr:
       raise newException(ValueError, $error)
 
-    client.peers.add(LCRestClient(score: 0, restClient: restClient))
-    client.urls.add(endpoint)
+    pool.clients.add(LCRestClient(score: 0, restClient: restClient))
+    pool.urls.add(endpoint)
 
-proc closeAll*(client: LCRestClientPool) {.async: (raises: []).} =
-  for peer in client.peers:
-    await peer.restClient.closeWait()
+proc closeAll*(pool: LCRestClientPool) {.async: (raises: []).} =
+  for client in pool.clients:
+    await client.restClient.closeWait()
 
-  client.peers.setLen(0)
-  client.urls.setLen(0)
+  pool.clients.setLen(0)
+  pool.urls.setLen(0)
 
-proc getEthLCBackend*(client: LCRestClientPool): EthLCBackend =
+proc getClientForReqId(pool: LCRestClientPool, reqId: uint64): LCRestClient =
+  if pool.idMap.contains(reqId):
+    return pool.idMap.getOrDefault(reqId)
+
+  let client = pool.clients[reqId mod pool.clients.lenu64]
+  pool.idMap[reqId] = client
+
+  client
+
+proc getEthLCBackend*(pool: LCRestClientPool): EthLCBackend =
   let
     getLCBootstrapProc = proc(
         reqId: uint64, blockRoot: Eth2Digest
     ): Future[NetRes[ForkedLightClientBootstrap]] {.async: (raises: [CancelledError]).} =
       let
-        peer = client.peers[reqId mod client.peers.lenu64]
+        client = pool.getClientForReqId(reqId)
         res =
           try:
-            await peer.restClient.getLightClientBootstrap(
-              blockRoot, client.cfg, client.forkDigests
+            await client.restClient.getLightClientBootstrap(
+              blockRoot, pool.cfg, pool.forkDigests
             )
           except CancelledError as e:
             raise e
@@ -84,11 +92,11 @@ proc getEthLCBackend*(client: LCRestClientPool): EthLCBackend =
         reqId: uint64, startPeriod: SyncCommitteePeriod, count: uint64
     ): Future[LightClientUpdatesByRangeResponse] {.async: (raises: [CancelledError]).} =
       let
-        peer = client.peers[reqId mod client.peers.lenu64]
+        client = pool.getClientForReqId(reqId)
         res =
           try:
-            await peer.restClient.getLightClientUpdatesByRange(
-              startPeriod, count, client.cfg, client.forkDigests
+            await client.restClient.getLightClientUpdatesByRange(
+              startPeriod, count, pool.cfg, pool.forkDigests
             )
           except CancelledError as e:
             raise e
@@ -103,11 +111,11 @@ proc getEthLCBackend*(client: LCRestClientPool): EthLCBackend =
         async: (raises: [CancelledError])
     .} =
       let
-        peer = client.peers[reqId mod client.peers.lenu64]
+        client = pool.getClientForReqId(reqId)
         res =
           try:
-            await peer.restClient.getLightClientFinalityUpdate(
-              client.cfg, client.forkDigests
+            await client.restClient.getLightClientFinalityUpdate(
+              pool.cfg, pool.forkDigests
             )
           except CancelledError as e:
             raise e
@@ -122,11 +130,11 @@ proc getEthLCBackend*(client: LCRestClientPool): EthLCBackend =
         async: (raises: [CancelledError])
     .} =
       let
-        peer = client.peers[reqId mod client.peers.lenu64]
+        client = pool.getClientForReqId(reqId)
         res =
           try:
-            await peer.restClient.getLightClientOptimisticUpdate(
-              client.cfg, client.forkDigests
+            await client.restClient.getLightClientOptimisticUpdate(
+              pool.cfg, pool.forkDigests
             )
           except CancelledError as e:
             raise e
@@ -136,8 +144,10 @@ proc getEthLCBackend*(client: LCRestClientPool): EthLCBackend =
       ok(res)
 
     updateScoreProc = proc(reqId: uint64, value: int) =
-      let peer = client.peers[reqId mod client.peers.lenu64]
-      peer.score += value
+      let client = pool.getClientForReqId(reqId)
+      client.score += value
+
+      pool.idMap.del(reqId)
 
   EthLCBackend(
     getLightClientBootstrap: getLCBootstrapProc,
