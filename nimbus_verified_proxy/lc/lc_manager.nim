@@ -390,13 +390,6 @@ proc loop(self: LightClientManager) {.async: (raises: [CancelledError]).} =
     # check for updates every slot
     await sleepAsync(self.timeParams.SLOT_DURATION)
 
-proc start*(self: var LightClientManager) =
+proc start*(self: LightClientManager) {.async: (raises: [CancelledError]).} =
   ## Start light client manager's loop.
-  doAssert self.loopFuture == nil
-  self.loopFuture = self.loop()
-
-proc stop*(self: var LightClientManager) {.async: (raises: []).} =
-  ## Stop light client manager's loop.
-  if self.loopFuture != nil:
-    await noCancel self.loopFuture.cancelAndWait()
-    self.loopFuture = nil
+  await self.loop()
