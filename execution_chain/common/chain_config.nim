@@ -7,7 +7,7 @@
 # This file may not be copied, modified, or distributed except according to
 # those terms.
 
-{.push raises: [].}
+{.push raises: [], gcsafe.}
 
 import
   std/[tables, strutils, times, macros],
@@ -103,7 +103,7 @@ type
     address: Address
     account: GenesisAccount
 
-proc read*(rlp: var Rlp, T: type AddressBalance): T {.gcsafe, raises: [RlpError].}=
+proc read*(rlp: var Rlp, T: type AddressBalance): T {.raises: [RlpError].}=
   let listLen = rlp.listLen
   rlp.tryEnterList()
   let abytes = rlp.read(UInt256).to(Bytes32)
@@ -544,6 +544,9 @@ func chainConfigForNetwork*(id: NetworkId): ChainConfig =
       shanghaiTime:        Opt.some(1_681_338_455.EthTime),  # 2023-04-12 10:27:35 UTC
       cancunTime:          Opt.some(1_710_338_135.EthTime),  # 2024-03-13 13:55:35 UTC
       pragueTime:          Opt.some(1_746_612_311.EthTime),  # 2025-05-07 10:05:11 UTC
+      osakaTime:           Opt.some(1_764_798_551.EthTime),  # 2025-12-03 21:49:11 UTC
+      bpo1Time:            Opt.some(1_765_290_071.EthTime),  # 2025-12-09 14:21:11 UTC
+      bpo2Time:            Opt.some(1_767_747_671.EthTime),  # 2026-01-07 01:01:11 UTC
       depositContractAddress: Opt.some(MAINNET_DEPOSIT_CONTRACT_ADDRESS),
       blobSchedule:        defaultBlobSchedule(),
     )
