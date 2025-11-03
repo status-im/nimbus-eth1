@@ -8,6 +8,8 @@
 # at your option. This file may not be copied, modified, or distributed except
 # according to those terms.
 
+{.push raises: [], gcsafe.}
+
 import
   std/strutils,
   unittest2,
@@ -47,8 +49,14 @@ const
     (number: 15050000'u64, time: 1710338134'u64, id: (crc: 0xdce96c2d'u32, next: 1710338135'u64)), # Last Shanghai time
     (number: 15050000'u64, time: 1710338135'u64, id: (crc: 0x9f3d2254'u32, next: 1746612311'u64)), # First Cancun time
     (number: 15050000'u64, time: 1746612310'u64, id: (crc: 0x9f3d2254'u32, next: 1746612311'u64)), # Last Cancun time
-    (number: 15050000'u64, time: 1746612311'u64, id: (crc: 0xc376cf8b'u32, next: 0'u64)),          # First Prague time
-    (number: 15050000'u64, time: 2746612311'u64, id: (crc: 0xc376cf8b'u32, next: 0'u64)),          # Future Prague time
+    (number: 15050000'u64, time: 1746612311'u64, id: (crc: 0xc376cf8b'u32, next: 1764798551'u64)), # First Prague time
+    (number: 15050000'u64, time: 1764798550'u64, id: (crc: 0xc376cf8b'u32, next: 1764798551'u64)), # Last Prague time
+    (number: 15050000'u64, time: 1764798551'u64, id: (crc: 0x5167e2a6'u32, next: 1765290071'u64)), # First Osaka time
+    (number: 15050000'u64, time: 1765290070'u64, id: (crc: 0x5167e2a6'u32, next: 1765290071'u64)), # Last Osaka time
+    (number: 15050000'u64, time: 1765290071'u64, id: (crc: 0xcba2a1c0'u32, next: 1767747671'u64)), # First BPO1 time
+    (number: 15050000'u64, time: 1767747670'u64, id: (crc: 0xcba2a1c0'u32, next: 1767747671'u64)), # Last BPO1 time
+    (number: 15050000'u64, time: 1767747671'u64, id: (crc: 0x07c9462e'u32, next: 0'u64)),          # First BPO2 time
+    (number: 15050000'u64, time: 1767747672'u64, id: (crc: 0x07c9462e'u32, next: 0'u64)),          # Future BPO2 time
   ]
 
   SepoliaNetIDs = [
