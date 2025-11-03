@@ -356,6 +356,12 @@ type
       desc: "Rewrite selected network config hash to database"
       name: "debug-rewrite-datadir-id".}: bool
 
+    aristoDbMaxSnapshots* {.
+      hidden
+      defaultValue: defaultMaxSnapshots
+      defaultValueDesc: $defaultMaxSnapshots
+      name: "debug-aristo-db-max-snapshots" .}: int
+
     eagerStateRootCheck* {.
       hidden
       desc: "Eagerly check state roots when syncing finalized blocks"
@@ -780,8 +786,8 @@ func dbOptions*(config: ExecutionClientConf, noKeyCache = false): DbOptions =
       # The import command does not use the key cache - better give it to branch
       if noKeyCache: config.rdbKeyCacheSize + config.rdbBranchCacheSize
       else: config.rdbBranchCacheSize,
-
     rdbPrintStats = config.rdbPrintStats,
+    maxSnapshots = config.aristoDbMaxSnapshots,
   )
 
 {.pop.}
