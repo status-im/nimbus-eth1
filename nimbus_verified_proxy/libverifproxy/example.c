@@ -46,9 +46,9 @@ int main() {
     "\"eth2Network\": \"mainnet\","
     "\"trustedBlockRoot\": \"0xdd8db7bfd8c96c993a4cb78e0e6607cf1dcca3f379764388248c63d2bc40443b\","
     "\"backendUrl\": \"https://eth.llamarpc.com\","
-    "\"beaconApiUrls\": \"http://testing.mainnet.beacon-api.nimbus.team,http://lightclientdata.org\","
-    "\"logLevel\": \"INFO\","
-    "\"logStdout\": \"Auto\""
+    "\"beaconApiUrls\": \"http://testing.mainnet.beacon-api.nimbus.team,http://www.lightclientdata.org\","
+    "\"logLevel\": \"FATAL\","
+    "\"logStdout\": \"None\""
     "}";
 
   startVerifProxy(ctx, jsonConfig, onStart);
