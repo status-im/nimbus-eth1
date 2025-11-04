@@ -84,6 +84,7 @@ proc finishSession*(hdl: TypedPutHdlRef; db: TypedBackendRef) =
     db.txId = 0
 
 proc initInstance*(db: AristoDbRef, maxSnapshots = defaultMaxSnapshots): Result[void, AristoError] =
+  doAssert maxSnapshots > 0
   let vTop = (?db.getLstFn()).vTop
   db.txRef = AristoTxRef(db: db, vTop: vTop, snapshot: Snapshot(level: Opt.some(0)))
   db.accLeaves = LruCache[Hash32, AccLeafRef].init(ACC_LRU_SIZE)
