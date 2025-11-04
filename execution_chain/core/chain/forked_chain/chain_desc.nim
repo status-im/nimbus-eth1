@@ -67,11 +67,6 @@ type
       # User can query for block state while it is still in memory.
       # Any state older than base block are purged.
 
-    lastSnapshots*: array[10, CoreDbTxRef]
-    lastSnapshotPos*: int
-      # The snapshot contains the cumulative changes of all ancestors and
-      # txFrame allowing the lookup recursion to stop whenever it is encountered.
-
     eagerStateRoot*: bool
 
     pendingFCU*  : Hash32

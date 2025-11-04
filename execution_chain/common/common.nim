@@ -105,7 +105,7 @@ type
 func setForkId(com: CommonRef, genesis: Header) =
   com.genesisHash = genesis.computeBlockHash
   let genesisCRC = crc32(0, com.genesisHash.data)
-  com.forkIdCalculator = initForkIdCalculator(
+  com.forkIdCalculator = ForkIdCalculator.init(
     com.forkTransitionTable,
     genesisCRC,
     genesis.timestamp.uint64)
@@ -351,19 +351,21 @@ func isLondonOrLater*(com: CommonRef, number: BlockNumber): bool =
   com.toHardFork(number.forkDeterminationInfo) >= London
 
 func forkId*(com: CommonRef, head, time: uint64): ForkID {.gcsafe.} =
-  ## EIP 2364/2124
+  ## Get ForkId for given block number / timestamp (EIP 2364/2124)
   com.forkIdCalculator.newID(head, time)
 
 func forkId*(com: CommonRef, forkActivationTime: EthTime): ForkID {.gcsafe.} =
-  # Only works for timestamp based forks
+  ## Get ForkId for given timestamp (EIP 2364/2124)
+  ## Only works for timestamp based forks
   com.forkIdCalculator.newID(0'u64, forkActivationTime.uint64)
 
 func forkId*(com: CommonRef, head: BlockNumber, time: EthTime): ForkID {.gcsafe.} =
-  ## EIP 2364/2124
+  ## Get ForkId for given block number / timestamp (EIP-2124 + EIP-6122)
   com.forkIdCalculator.newID(head, time.uint64)
 
-func compatibleForkId*(com: CommonRef, id: ForkID): bool =
-  com.forkIdCalculator.compatible(id)
+func compatibleForkId*(com: CommonRef, forkId: ForkID, blockNumber: BlockNumber, time: EthTime): bool =
+  ## Check if a fork ID is compatible at a specific head position
+  com.forkIdCalculator.compatible(forkId, blockNumber, time.uint64)
 
 func isEIP155*(com: CommonRef, number: BlockNumber): bool =
   com.config.eip155Block.isSome and number >= com.config.eip155Block.value

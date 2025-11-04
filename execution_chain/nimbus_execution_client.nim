@@ -109,7 +109,8 @@ proc setupP2P(nimbus: NimbusNode, config: ExecutionClientConf, com: CommonRef) =
     com.forkId(header.number, header.timestamp)
 
   func compatibleForkIdProc(id: ForkID): bool =
-    com.compatibleForkId(id)
+    let header = fc.latestHeader()
+    com.compatibleForkId(id, header.number, header.timestamp)
 
   let forkIdProcs = ForkIdProcs(
     forkId: forkIdProc,

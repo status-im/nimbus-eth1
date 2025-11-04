@@ -3,7 +3,7 @@ era1-dir = "basic/era1/dir"
 era-dir  = "basic/era/dir"
 key-store = "basic/keystore"
 import-key = "basic_import_key"
-trusted-setup-file = "basic_trusted_setup_file"
+debug-trusted-setup-file = "basic_trusted_setup_file"
 extra-data = "basic_extra_data"
 gas-limit = 5678
 

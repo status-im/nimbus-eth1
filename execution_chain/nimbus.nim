@@ -42,7 +42,6 @@ import
     conf as ecconf,
     el_sync,
     nimbus_desc,
-    el_sync,
     nimbus_execution_client,
     version_info,
   ]
@@ -299,7 +298,7 @@ proc runCombinedClient() =
 
   ProcessState.setupStopHandlers()
 
-  if not (checkAndCreateDataDir(string(config.dataDir))):
+  if not checkAndCreateDataDir(config.dataDir):
     # We are unable to access/create data folder or data folder's
     # permissions are insecure.
     quit QuitFailure

@@ -315,8 +315,7 @@ suite "Aristo TxFrame":
     # Verify that getting the state root of the level 3 txFrame does not impact
     # the persisted state in the database.
     let stateRootBefore = tx3.fetchStateRoot().get()
-    expect(Defect):
-      discard tx4.fetchStateRoot()
+    discard tx4.fetchStateRoot()
     let stateRootAfter = tx3.fetchStateRoot().get()
     check stateRootBefore == stateRootAfter
 
@@ -346,7 +345,7 @@ suite "Aristo TxFrame":
     for i in 1..<10:
       let acc = makeAccount(i.uint64)
       check tx1.mergeAccountRecord(acc[0], acc[1]).isOk()
-      
+
     tx1.checkpoint(1, skipSnapshot = false)
 
     let

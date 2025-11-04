@@ -18,6 +18,7 @@ on:
       - '.github/workflows/nimbus_verified_proxy.yml'
       - '.github/workflows/build_base_image.yml'
       - 'docker/**'
+      - 'metrics/**'
 
   pull_request:
     paths-ignore:
@@ -28,6 +29,7 @@ on:
       - '.github/workflows/nimbus_verified_proxy.yml'
       - '.github/workflows/build_base_image.yml'
       - 'docker/**'
+      - 'metrics/**'
 
   workflow_dispatch:
 
