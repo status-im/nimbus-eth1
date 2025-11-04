@@ -286,7 +286,10 @@ proc query[E](
       workers[i].complete(false)
 
   # Wait for any worker to report progress, or for all workers to finish
-  waitFor progressFut
+  try:
+    waitFor progressFut
+  except CancelledError as e:
+    discard # cancellation only occurs when all workers have failed
 
   # cancel all workers
   for i in 0 ..< NUM_WORKERS:
