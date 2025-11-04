@@ -87,7 +87,7 @@
 {.push raises: [].}
 
 import
-  std/[hashes, strutils],
+  std/[algorithm, hashes, sets, sequtils, strutils],
   pkg/[chronos, minilru],
   ../networking/[p2p, peer_pool],
   ../utils/utils,
@@ -96,6 +96,10 @@ import
 type
   ActivePeers[S,W] = LruCache[Hash,RunnerBuddyRef[S,W]]
     ## List of active workers, using `Hash(Peer)` rather than `Peer` as a key.
+
+  PeerByIP = LruCache[IpAddress,HashSet[Port]]
+    ## Register active peers by IP address. This allows to identify peers
+    ## with the same IP address but different ports.
 
   RunCtrl = enum
     terminated = 0
@@ -108,6 +112,8 @@ type
     peerPool: PeerPool          ## For starting the system
     syncPeers: ActivePeers[S,W] ## LRU cache with worker descriptors
     orphans: ActivePeers[S,W]   ## Temporary overflow cache for LRU
+    peerByIP: PeerByIP          ## By IP address registry
+    maxPortsPerIp: int          ## Max size of `HashSet[Port]` in `peerByIP{}`
     daemonRunning: bool         ## Running background job (in async mode)
     tickerRunning: bool         ## Running background ticker
     monitorLock: bool           ## Monitor mode is activated (non-async mode)
@@ -157,6 +163,9 @@ template noisy[S,W](dsc: RunnerSyncRef[S,W]): bool =
 func short(w: Hash): string =
   w.toHex(8).toLowerAscii # strips leading 8 bytes
 
+func toStr(w: HashSet[Port]): string =
+  "{" & w.toSeq.mapIt(it.uint).sorted.mapIt($it).join(",") & "}"
+
 # --------------
 
 proc key(peer: Peer): Hash =
@@ -189,6 +198,78 @@ proc getPeersFn[S,W](dsc: RunnerSyncRef[S,W]): GetPeersFn[S,W] =
     for w in dsc.orphans.values:
       list.add w.worker
     list
+
+# --------------
+
+proc unregisterByIP[S,W](dsc: RunnerSyncRef[S,W], peer: Peer) =
+  ## Remove peer from IP address list
+  ##
+  var ports = dsc.peerByIP.peek(peer.remote.node.address.ip).valueOr:
+    return
+  let pLen = ports.len
+  ports.excl peer.remote.node.address.tcpPort
+  ports.excl peer.remote.node.address.udpPort
+  if ports.len == 0:
+    dsc.peerByIP.del peer.remote.node.address.ip
+  elif ports.len != pLen:
+    dsc.peerByIP.put(peer.remote.node.address.ip, ports)
+
+proc registerByIP[S,W](dsc: RunnerSyncRef[S,W], peer: Peer) =
+  ## Add peer to IP address list
+  ##
+  var ports: HashSet[Port]
+  dsc.peerByIP.peek(peer.remote.node.address.ip).isErrOr:
+    ports = value
+  if 0 < peer.remote.node.address.udpPort.uint:
+    ports.incl peer.remote.node.address.udpPort
+  if 0 < peer.remote.node.address.tcpPort.uint:
+    ports.incl peer.remote.node.address.tcpPort
+  dsc.peerByIP.put(peer.remote.node.address.ip, ports)
+
+proc acceptByIP[S,W](dsc: RunnerSyncRef[S,W], peer: Peer): bool =
+  ## Check, whether a new peer can be registered by the following criteria:
+  ## * Peer must not have been registered in the `syncPeers[]` table
+  ## * There must be a free slot in the `peerByIP[]` table
+  ##
+  let peerID = peer.key
+  dsc.syncPeers.peek(peerID).isErrOr:
+    if value.worker.isNil:
+      let elapsed = Moment.now() - value.zombified
+      if elapsed < zombieTimeToLinger:
+        if dsc.noisy: trace "Reconnecting zombie peer ignored", peer,
+          nSyncPeers=dsc.syncPeers.len, nPeers=dsc.peerPool.len,
+          nSyncPeersMax=dsc.syncPeers.capacity,
+          canReconnectIn=(zombieTimeToLinger-elapsed).toString(2)
+        return false
+      # Otherwise this slot can be re-used
+
+    elif value.isRunning:
+      # Not really a zombie (potenially a hash collision): reject the new peer.
+      info "Same peer ID active, rejecting new peer",
+        peer=value.worker.peer, newPeer=peer, nSyncPeers=dsc.syncPeers.len,
+        nSyncPeersMax=dsc.syncPeers.capacity, nPoolPeers=dsc.peerPool.len
+      return false
+
+    # The zombie status has expired. The peer can be removed from the table
+    # and re-allocated
+    dsc.unregisterByIP peer
+    dsc.syncPeers.del peerID
+    if dsc.noisy: trace "Zombie peer timeout, ready for requeuing", peer,
+      nSyncPeers=dsc.syncPeers.len, nPeers=dsc.peerPool.len,
+      nSyncPeersMax=dsc.syncPeers.capacity
+    return true
+
+  var ports = dsc.peerByIP.peek(peer.remote.node.address.ip).valueOr:
+    return true
+
+  if ports.len < dsc.maxPortsPerIp:
+    return true
+
+  # Port table full. Cannot add this peer.
+  if dsc.noisy: trace "Too many peers with same IP, rejected", peer,
+    otherPorts=ports.toStr, nSyncPeers=dsc.syncPeers.len,
+    nPeers=dsc.peerPool.len, nSyncPeersMax=dsc.syncPeers.capacity
+  return false
 
 # ------------------------------------------------------------------------------
 # Private handlers, action loops
@@ -379,6 +460,7 @@ proc workerLoop[S,W](buddy: RunnerBuddyRef[S,W]) {.async: (raises: []).} =
   # Note that `runStart()` was dispatched in `onPeerConnected()`
   worker.runStop()                # tell worker that this peer is done with
   buddy.isRunning = false         # mark it terminated for the scheduler
+  dsc.unregisterByIP peer         # unregister from IP list
 
   if worker.ctrl.zombie:
     buddy.worker = nil            # complete zombification
@@ -461,38 +543,18 @@ proc onPeerConnected[S,W](dsc: RunnerSyncRef[S,W]; peer: Peer) =
     return
 
   # Check for known entry (which should not exist.)
+  if not dsc.acceptByIP peer:
+    return
+
+  # Initialise worker for this peer
   let
     peerID = peer.key
-    zombie = dsc.syncPeers.peek peerID
-  if zombie.isOk:
-    if zombie.value.worker.isNil:
-      let elapsed = Moment.now() - zombie.value.zombified
-      if elapsed < zombieTimeToLinger:
-        if dsc.noisy: trace "Reconnecting zombie peer ignored", peer,
-          nSyncPeers=dsc.syncPeers.len, nPeers=dsc.peerPool.len,
-          nSyncPeersMax=dsc.syncPeers.capacity,
-          canReconnectIn=(zombieTimeToLinger-elapsed).toString(2)
-        return
-      # Otherwise this slot can be re-used
-    elif zombie.value.isRunning:
-      # Not really a zombie (potenially a hash collision): reject the new peer.
-      info "Same peer ID active, rejecting new peer",
-        peer=zombie.value.worker.peer, newPeer=peer,
-        nSyncPeers=dsc.syncPeers.len, nPeers=dsc.peerPool.len,
-        nSyncPeersMax=dsc.syncPeers.capacity
-      return
-    # Peer can be removed from the database and re-allocated
-    dsc.syncPeers.del peerID
-    if dsc.noisy: trace "Zombie peer timeout, ready for requeing", peer,
-      nSyncPeers=dsc.syncPeers.len, nPeers=dsc.peerPool.len,
-      nSyncPeersMax=dsc.syncPeers.capacity
-
-  let buddy = RunnerBuddyRef[S,W](
-    dsc:      dsc,
-    worker:   BuddyRef[S,W](
-      ctx:    dsc.ctx,
-      peer:   peer,
-      peerID: peerID))
+    buddy = RunnerBuddyRef[S,W](
+      dsc:      dsc,
+      worker:   BuddyRef[S,W](
+        ctx:    dsc.ctx,
+        peer:   peer,
+        peerID: peerID))
   if not buddy.worker.runStart():
     if dsc.noisy: trace "Ignoring useless peer", peer,
       nSyncPeers=dsc.syncPeers.len, nPeers=dsc.peerPool.len,
@@ -500,6 +562,7 @@ proc onPeerConnected[S,W](dsc: RunnerSyncRef[S,W]; peer: Peer) =
     return
 
   # Add peer entry. This might evict the least used entry from the LRU table.
+  dsc.registerByIP peer
   for (evOk, evKey, evBuddy) in dsc.syncPeers.putWithEvicted(peerID, buddy):
     if evOk:
       if evBuddy.worker.isNil:               # zombified
@@ -507,6 +570,7 @@ proc onPeerConnected[S,W](dsc: RunnerSyncRef[S,W]; peer: Peer) =
           peerID=evKey.short
       else:
         let evPeer = evBuddy.worker.peer
+        dsc.unregisterByIP evPeer
 
         if evBuddy.isRunning and
            evBuddy.worker.ctrl.running:      # not deactivated yet
@@ -569,6 +633,8 @@ proc initSync*[S,W](
   dsc.peerPool = node.peerPool
   dsc.syncPeers = ActivePeers[S,W].init max(1, slots + 1)
   dsc.orphans = ActivePeers[S,W].init dsc.syncPeers.capacity
+  dsc.peerByIP = PeerByIP.init dsc.syncPeers.capacity
+  dsc.maxPortsPerIp = max(1,maxPortsPerIp)
   dsc.ctx = CtxRef[S,W](
     node:     node,
     getPeer:  dsc.getPeerFn(),
