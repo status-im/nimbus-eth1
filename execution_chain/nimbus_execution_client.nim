@@ -104,11 +104,11 @@ proc setupP2P(nimbus: NimbusNode, config: ExecutionClientConf, com: CommonRef) =
     bootstrapNodes = config.getBootstrapNodes()
     fc = nimbus.fc
 
-  func forkIdProc(): ForkID =
+  func forkIdProc(): ForkId =
     let header = fc.latestHeader()
     com.forkId(header.number, header.timestamp)
 
-  func compatibleForkIdProc(id: ForkID): bool =
+  func compatibleForkIdProc(id: ForkId): bool =
     let header = fc.latestHeader()
     com.compatibleForkId(id, header.number, header.timestamp)
 

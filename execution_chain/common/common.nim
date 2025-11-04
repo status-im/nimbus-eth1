@@ -350,20 +350,20 @@ func isLondonOrLater*(com: CommonRef, number: BlockNumber): bool =
   # TODO: Fixme, use only London comparator
   com.toHardFork(number.forkDeterminationInfo) >= London
 
-func forkId*(com: CommonRef, head, time: uint64): ForkID {.gcsafe.} =
+func forkId*(com: CommonRef, head, time: uint64): ForkId {.gcsafe.} =
   ## Get ForkId for given block number / timestamp (EIP 2364/2124)
-  com.forkIdCalculator.newID(head, time)
+  com.forkIdCalculator.calculateForkId(head, time)
 
-func forkId*(com: CommonRef, forkActivationTime: EthTime): ForkID {.gcsafe.} =
+func forkId*(com: CommonRef, forkActivationTime: EthTime): ForkId {.gcsafe.} =
   ## Get ForkId for given timestamp (EIP 2364/2124)
   ## Only works for timestamp based forks
-  com.forkIdCalculator.newID(0'u64, forkActivationTime.uint64)
+  com.forkIdCalculator.calculateForkId(0'u64, forkActivationTime.uint64)
 
-func forkId*(com: CommonRef, head: BlockNumber, time: EthTime): ForkID {.gcsafe.} =
+func forkId*(com: CommonRef, head: BlockNumber, time: EthTime): ForkId {.gcsafe.} =
   ## Get ForkId for given block number / timestamp (EIP-2124 + EIP-6122)
-  com.forkIdCalculator.newID(head, time.uint64)
+  com.forkIdCalculator.calculateForkId(head, time.uint64)
 
-func compatibleForkId*(com: CommonRef, forkId: ForkID, blockNumber: BlockNumber, time: EthTime): bool =
+func compatibleForkId*(com: CommonRef, forkId: ForkId, blockNumber: BlockNumber, time: EthTime): bool =
   ## Check if a fork ID is compatible at a specific head position
   com.forkIdCalculator.compatible(forkId, blockNumber, time.uint64)
 
