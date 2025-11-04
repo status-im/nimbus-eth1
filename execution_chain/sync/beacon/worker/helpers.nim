@@ -34,7 +34,7 @@ type
 
 
 func bnStr*(w: BlockNumber): string =
-  "#" & $w
+  $w
 
 func bnStr*(h: Header): string =
   h.number.bnStr

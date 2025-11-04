@@ -184,7 +184,7 @@ proc updateSyncState*(ctx: BeaconCtxRef; info: static[string]) =
   #     blocksFinish --------------------'
   #
   let newState =
-    case ctx.pool.lastState:
+    case ctx.pool.syncState:
     of idle:
       ctx.idleNext info
 
@@ -206,11 +206,11 @@ proc updateSyncState*(ctx: BeaconCtxRef; info: static[string]) =
     of blocksFinish:
       ctx.blocksFinishNext info
 
-  if ctx.pool.lastState == newState:
+  if ctx.pool.syncState == newState:
     return
 
-  let prevState = ctx.pool.lastState
-  ctx.pool.lastState = newState
+  let prevState = ctx.pool.syncState
+  ctx.pool.syncState = newState
   ctx.subState.stateSince = Moment.now()
 
   case newState:
@@ -255,7 +255,7 @@ proc updateActivateSyncer*(ctx: BeaconCtxRef) =
     # Exclude the case of a single header chain which would be `T` only
     if b+1 < t:
       ctx.pool.minInitBuddies = 0               # reset
-      ctx.pool.lastState = SyncState.headers    # state transition
+      ctx.pool.syncState = SyncState.headers    # state transition
       ctx.subState.stateSince = Moment.now()
       ctx.pool.syncEta.lastUpdate = ctx.subState.stateSince
       ctx.hibernate = false                     # wake up

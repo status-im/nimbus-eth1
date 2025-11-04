@@ -43,7 +43,7 @@ func blkSessionStopped*(ctx: BeaconCtxRef): bool =
   ## Helper, checks whether there is a general stop conditions based on
   ## state settings (not on sync peer ctrl as `buddy.ctrl.running`.)
   ctx.poolMode or
-  ctx.pool.lastState != SyncState.blocks
+  ctx.pool.syncState != SyncState.blocks
 
 func blkThroughput*(buddy: BeaconBuddyRef): string =
   ## Print throuhput sratistics

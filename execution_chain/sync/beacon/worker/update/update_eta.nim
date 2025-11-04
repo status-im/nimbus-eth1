@@ -49,7 +49,7 @@ proc updateEtaIdle*(ctx: BeaconCtxRef) =
   # Update some metrics
   ctx.hdrCache.updateMetrics()
 
-  if ctx.pool.lastState == SyncState.idle and
+  if ctx.pool.syncState == SyncState.idle and
      ctx.chain.latestNumber <= ctx.hdrCache.latestConsHeadNumber and
      ctx.pool.syncEta.lastUpdate + etaIdleMaxDensity <= Moment.now():
 

@@ -169,9 +169,9 @@ type
   BeaconCtxData* = object
     ## Globally shared data extension
     nBuddies*: int                   ## Number of active workers
-    lastState*: SyncState            ## Last known layout state
     hdrSync*: HeaderFetchSync        ## Syncing by linked header chains
     blkSync*: BlocksFetchSync        ## For importing/executing blocks
+    syncState*: SyncState            ## Last known layout state
     subState*: SyncSubState          ## Additional state variables
     nextMetricsUpdate*: Moment       ## For updating metrics
     nextAsyncNanoSleep*: Moment      ## Use nano-sleeps for task switch
@@ -245,7 +245,7 @@ func syncState*(
     ctx: BeaconCtxRef;
       ): (SyncState,HeaderChainMode,bool) =
   ## Getter, triple of relevant run-time states
-  (ctx.pool.lastState,
+  (ctx.pool.syncState,
    ctx.hdrCache.state,
    ctx.poolMode)
 
@@ -254,7 +254,7 @@ func syncState*(
       ): (BuddyRunState,SyncState,HeaderChainMode,bool) =
   ## Getter, also includes buddy state
   (buddy.ctrl.state,
-   buddy.ctx.pool.lastState,
+   buddy.ctx.pool.syncState,
    buddy.ctx.hdrCache.state,
    buddy.ctx.poolMode)
 

@@ -98,7 +98,7 @@ template runDaemon*(ctx: BeaconCtxRef; info: static[string]): Duration =
     ctx.updateSyncState info
 
     # Extra waiting time unless immediate change expected.
-    if ctx.pool.lastState in {headers,blocks}:
+    if ctx.pool.syncState in {headers,blocks}:
       bodyRc = daemonWaitInterval
 
   bodyRc
@@ -197,7 +197,7 @@ template runPeer*(
 
       # End block: `actionLoop`
 
-    elif buddy.ctx.pool.lastState == SyncState.idle:
+    elif buddy.ctx.pool.syncState == SyncState.idle:
       # Potentially a manual sync target set up
       if not buddy.headersTargetActivate info:
         bodyRc = workerIdleLongWaitInterval

@@ -62,7 +62,7 @@ func hdrSessionStopped*(ctx: BeaconCtxRef): bool =
   ## Helper, checks whether there is a general stop conditions based on
   ## state settings (not on sync peer ctrl as `buddy.ctrl.running`.)
   ctx.poolMode or
-  ctx.pool.lastState != SyncState.headers or
+  ctx.pool.syncState != SyncState.headers or
   ctx.hdrCache.state != collecting
 
 func hdrThroughput*(buddy: BeaconBuddyRef): string =
