@@ -13,6 +13,8 @@ import
   ../aristo_desc,
   ../aristo_desc/desc_backend
 
+from ../../opts import defaultMaxSnapshots
+
 const
   verifyIxId = true # and false
     ## Enforce session tracking
@@ -81,12 +83,13 @@ proc finishSession*(hdl: TypedPutHdlRef; db: TypedBackendRef) =
     doAssert db.txId == hdl.txId
     db.txId = 0
 
-proc initInstance*(db: AristoDbRef): Result[void, AristoError] =
+proc initInstance*(db: AristoDbRef, maxSnapshots = defaultMaxSnapshots): Result[void, AristoError] =
+  doAssert maxSnapshots > 0
   let vTop = (?db.getLstFn()).vTop
   db.txRef = AristoTxRef(db: db, vTop: vTop, snapshot: Snapshot(level: Opt.some(0)))
   db.accLeaves = LruCache[Hash32, AccLeafRef].init(ACC_LRU_SIZE)
   db.stoLeaves = LruCache[Hash32, StoLeafRef].init(ACC_LRU_SIZE)
-  db.maxSnapshots = 10
+  db.maxSnapshots = maxSnapshots
   ok()
 
 proc finish*(db: AristoDbRef; eradicate = false) =
