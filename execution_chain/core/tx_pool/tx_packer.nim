@@ -251,7 +251,14 @@ proc vmExecCommit(pst: var TxPacker, xp: TxPoolRef): Result[void, string] =
   vmState.logIndex.add_block_logs(tempHeader, vmState.receipts)
 
   # Choose between LogIndex and traditional bloom based on activation timestamp
-  if vmState.com.isEip7745OrLater(xp.timestamp):
+  # DEBUG: Log the activation check details
+  let eip7745Active = vmState.com.isEip7745OrLater(xp.timestamp)
+  debug "EIP-7745 activation check in tx_packer",
+    blockNumber = vmState.blockNumber,
+    blockTimestamp = xp.timestamp,
+    isActive = eip7745Active
+
+  if eip7745Active:
     # Use LogIndexSummary for EIP-7745 blocks
     let summary = createLogIndexSummary(vmState.logIndex)
     let encoded = encodeLogIndexSummary(summary)

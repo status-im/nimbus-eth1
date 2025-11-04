@@ -257,7 +257,14 @@ proc procBlkEpilogue(
           existingEntries = vmState.logIndex.next_index
       
       # Choose validation method based on activation timestamp
-      if vmState.com.isEip7745OrLater(header.timestamp):
+      # DEBUG: Log the activation check details
+      let eip7745Active = vmState.com.isEip7745OrLater(header.timestamp)
+      debug "EIP-7745 activation check in process_block",
+        blockNumber = header.number,
+        blockTimestamp = header.timestamp,
+        isActive = eip7745Active
+
+      if eip7745Active:
         # Validate using LogIndexSummary for EIP-7745 blocks
         let summary = createLogIndexSummary(vmState.logIndex)
         
