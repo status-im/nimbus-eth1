@@ -15,7 +15,7 @@
 static bool waitOver = true;
 
 void onBlockNumber(Context *ctx, int status, char *res) {
-  printf("response: %s\n", res);
+  printf("Blocknumber: %s\n", res);
   freeResponse(res);
 }
 
@@ -27,11 +27,17 @@ void onStart(Context *ctx, int status, char *res) {
   freeResponse(res);
 }
 
+void onBalance(Context *ctx, int status, char *res) {
+  printf("Balance: %s\n", res);
+  freeResponse(res);
+}
+
 void waitIsOver(Context *ctx, int status, char *res) {
   printf("waiting finished successfully\n");
   printf("status: %d\n", status);
 
   eth_blockNumber(ctx, onBlockNumber);
+  eth_getBalance(ctx, "0x954a86C613fd1fBaC9C7A43a071A68254C75E4AC", "latest", onBalance);
   waitOver = true;
 
   freeResponse(res);
@@ -44,8 +50,8 @@ int main() {
   char* jsonConfig =
     "{"
     "\"eth2Network\": \"mainnet\","
-    "\"trustedBlockRoot\": \"0xdd8db7bfd8c96c993a4cb78e0e6607cf1dcca3f379764388248c63d2bc40443b\","
-    "\"backendUrl\": \"https://eth.llamarpc.com\","
+    "\"trustedBlockRoot\": \"0xd9e4f5b2e7a8e50f9348a1890114ae522d3771ddfb44d8b7e7e2978c21869e91\","
+    "\"backendUrl\": \"https://eth.blockrazor.xyz\","
     "\"beaconApiUrls\": \"http://testing.mainnet.beacon-api.nimbus.team,http://www.lightclientdata.org\","
     "\"logLevel\": \"FATAL\","
     "\"logStdout\": \"None\""
