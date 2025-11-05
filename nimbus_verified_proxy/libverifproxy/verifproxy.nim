@@ -10,9 +10,10 @@ import
   json_serialization,
   chronos,
   eth/net/nat,
-  std/[atomics, locks, json, net],
+  std/[atomics, locks, json, net, strutils],
   beacon_chain/spec/[digest, network],
   beacon_chain/nimbus_binary_common,
+  web3/[eth_api_types, conversions],
   ../engine/types,
   ../engine/engine,
   ../lc/lc,
@@ -88,12 +89,12 @@ proc alloc(str: string): cstring =
   ret[str.len] = '\0'
   return ret
 
-proc eth_blockNumber(ctx: ptr Context, cb: CallBackProc) {.exported.} =
+# NOTE: this is not the C callback. This is just a callback for the future
+template callbackToC(ctx: ptr Context, cb: CallBackProc, asyncCall: untyped) =
   let task = createTask(cb)
-
   ctx.tasks.add(task)
 
-  let fut = ctx.frontend.eth_blockNumber()
+  let fut = asyncCall
 
   fut.addCallback proc(_: pointer) {.gcsafe.} =
     if fut.cancelled():
@@ -108,6 +109,30 @@ proc eth_blockNumber(ctx: ptr Context, cb: CallBackProc) {.exported.} =
       task.response = Json.encode(fut.value())
       task.status = 0
       task.finished = true
+
+proc eth_blockNumber(ctx: ptr Context, cb: CallBackProc) {.exported.} =
+  callbackToC(ctx, cb):
+    ctx.frontend.eth_blockNumber()
+
+proc eth_getBalance(
+    ctx: ptr Context, address: cstring, blockTag: cstring, cb: CallBackProc
+) {.exported.} =
+  let
+    addressTyped =
+      try:
+        Address.fromHex($address)
+      except ValueError as e:
+        cb(ctx, -3, alloc(e.msg))
+        return
+
+    blockTagTyped =
+      try:
+        BlockTag(kind: bidNumber, number: Quantity(parseBiggestUInt($blockTag)))
+      except ValueError:
+        BlockTag(kind: bidAlias, alias: $blockTag)
+
+  callbackToC(ctx, cb):
+    ctx.frontend.eth_getBalance(addressTyped, blockTagTyped)
 
 proc pollAsyncTaskEngine(ctx: ptr Context) {.exported.} =
   var delList: seq[int] = @[]
@@ -254,7 +279,7 @@ proc startVerifProxy(
       task.finished = true
       task.status = -1
     else:
-      task.response = "success"
+      task.response = "success" #result is void hence we just provide a string
       task.status = 0
       task.finished = true
 
