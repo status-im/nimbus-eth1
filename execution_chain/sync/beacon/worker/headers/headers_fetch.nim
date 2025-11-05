@@ -135,7 +135,7 @@ template fetchHeadersReversed*(
         chronicles.info trEthRecvReceivedBlockHeaders & ": error", peer,
           req=ivReq, nReq=req.maxResults, hash=topHash.toStr,
           ela=rc.error.elapsed.toStr, state=($buddy.syncState),
-          error=rc.error.name, msg=rc.error.msg,
+          errorClass=rc.error.excp, error=rc.error.name, msg=rc.error.msg,
           nErrors=buddy.nErrors.fetch.hdr
         break body                                 # return err()
 
@@ -145,7 +145,9 @@ template fetchHeadersReversed*(
         buddy.hdrFetchRegisterError()
       trace trEthRecvReceivedBlockHeaders, peer, nReq=req.maxResults,
         hash=topHash.toStr, nResp=0, ela=elapsed.toStr,
-        state=($buddy.syncState), nErrors=buddy.nErrors.fetch.hdr
+        state=($buddy.syncState),
+        errorClass=(if rc.isErr: $rc.error.excp else: "n/a"),
+        nErrors=buddy.nErrors.fetch.hdr
       break body                                   # return err()
 
     # Verify the correct number of block headers received
