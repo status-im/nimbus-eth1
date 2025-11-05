@@ -19,7 +19,7 @@ import
   ./p2p_metrics,
   ./[eth1_discovery, p2p_peers]
 
-export sets, tables, CompatibleForkIdProc
+export sets, tables, CompatibleForkIdProc, base
 
 logScope:
   topics = "p2p peer_pool"
